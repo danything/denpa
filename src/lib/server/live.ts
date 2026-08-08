@@ -30,8 +30,8 @@ import {
     captionOutput,
     frame,
     NO_SUBTITLE,
-    TROUBLE,
     TrackList,
+    worthLogging,
 } from './captions';
 import { config } from './config';
 import { queryOne } from './db';
@@ -681,8 +681,9 @@ class Session {
      * 捨てていると「映像が出ない」としか分からなくなる。
      *
      * `-loglevel` は下げられない (選べる字幕が info で出る) ので、要らない行も
-     * 流れてくる。**残すのは本当に失敗した行だけ** — 全部出すと、選局のたびに
-     * 数十行が記録に積まれて読めなくなる
+     * 流れてくる。**残すのは本当に失敗した行だけ** (`worthLogging`) — 放送の
+     * 欠けは日常的にあって復号器がそのたびに喋るので、そこまで残すと
+     * **本当の失敗が埋もれる**
      */
     private async watch(proc: ReturnType<typeof Bun.spawn>): Promise<void> {
         for await (const line of lines(proc.stderr as ReadableStream<Uint8Array>)) {
@@ -697,7 +698,7 @@ class Session {
             }
             // 字幕が無い放送。**映像ごと落ちる**ので、字幕なしで焼き直す (`run`)
             if (NO_SUBTITLE.test(line)) this.noSubtitle = true;
-            if (TROUBLE.test(line)) {
+            if (worthLogging(line)) {
                 console.warn(`[live] ${this.channelType}:${this.channel} ffmpeg: ${line.trim()}`);
             }
         }

@@ -88,8 +88,26 @@ export const CANVAS = { width: 1920, height: 1080 };
 /** 字幕に使う字。録画と同じものを使う (見た目を揃えるため) */
 const FONTS = 'Rounded M+ 1m for ARIB';
 
-/** 記録に残す価値のある行。**それ以外は入り口の説明なので捨てる** */
-export const TROUBLE = /error|Error|failed|Failed|Cannot|Unable|No such|Invalid data/;
+/** 失敗を言っている行。**それ以外は入り口の説明なので捨てる** */
+const TROUBLE = /error|Error|failed|Failed|Cannot|Unable|No such|Invalid data/;
+
+/**
+ * 放送の欠けにいちいち言われるぶん。**残さない。**
+ *
+ * 電波の欠けは日常的にあり、復号器はそのたびに「直した」「捨てた」を喋る。
+ * `-loglevel error` で黙らせていた頃は見えなかったが、**選べる字幕を入口の
+ * 見出しから拾うために info まで開けた**ので、そのまま流れてくるようになった。
+ * 実機の弱い局では毎秒何行も出て、**本当の失敗がその中に埋もれる**。
+ *
+ * 消すのは「1パケットぶんの取りこぼし」だけ。組み立てや符号器の失敗
+ * (`Error opening output`, `Error binding filtergraph`) は残る
+ */
+const NOISE = /concealing|Error submitting packet to decoder|Decode error rate|Last message repeated/;
+
+/** その行を記録に残すか */
+export function worthLogging(line: string): boolean {
+    return TROUBLE.test(line) && !NOISE.test(line);
+}
 
 /**
  * 字幕を絵で受け取るための、**入口の指定**。

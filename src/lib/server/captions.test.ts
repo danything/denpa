@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { CHANNEL } from '$lib/live';
-import { CANVAS, captionInput, captionOutput, frame, NO_SUBTITLE, TrackList } from './captions';
+import { CANVAS, captionInput, captionOutput, frame, NO_SUBTITLE, TrackList, worthLogging } from './captions';
 
 /**
  * PNG 1枚ぶん。**かたまりの形まで真似る** — 切れ目を `IEND` で見つけるので、
@@ -214,5 +214,44 @@ describe('frame', () => {
         // 1.5 秒 = 135000
         expect(frame({ at: 1500, data: png(0x11) }).pts).toBe(135_000n);
         expect(frame({ at: 1500.4, data: png(0x11) }).pts).toBe(135_036n);
+    });
+});
+
+/**
+ * **放送の欠けにいちいち言われるぶんは残さない。**
+ *
+ * 選べる字幕を入口の見出しから拾うために `-loglevel` を info まで開けたので、
+ * 復号器の「直した」「捨てた」がそのまま流れてくるようになった。実機の弱い局
+ * では毎秒何行も出て、**本当の失敗がその中に埋もれる**。
+ */
+describe('worthLogging', () => {
+    /** 実機の T15 / T26 がそのまま出したもの */
+    test('放送の欠けは残さない', () => {
+        for (const line of [
+            '[live] [mpeg2video @ 0x1] concealing 3150 DC, 3150 AC, 3150 MV errors in I frame',
+            '[aist#0:2/aac @ 0x1] [dec:aac @ 0x2] Error submitting packet to decoder: Invalid data found when processing input',
+            '[vist#0:1/mpeg2video @ 0x1] [dec:mpeg2video @ 0x2] Decode error rate 1 exceeds maximum 0.666667',
+            '    Last message repeated 13 times',
+        ]) {
+            expect(worthLogging(line), line).toBe(false);
+        }
+    });
+
+    /** 本当に焼けないときは残す。ここが消えると「映像が出ない」としか分からない */
+    test('組み立てや符号器の失敗は残す', () => {
+        for (const line of [
+            "Failed to set value '0:p:24632:v:0' for option 'map': Invalid argument",
+            'Error binding filtergraph inputs/outputs: Invalid argument',
+            '[libsvtav1 @ 0x1] Error initializing the encoder',
+            'Error opening output files: Invalid argument',
+        ]) {
+            expect(worthLogging(line), line).toBe(true);
+        }
+    });
+
+    /** 入口の見出しはただの説明。全部残すと選局のたびに数十行積まれる */
+    test('入口の説明は残さない', () => {
+        expect(worthLogging('  Stream #0:2[0x130]: Subtitle: arib_caption')).toBe(false);
+        expect(worthLogging("Input #0, mpegts, from 'pipe:0':")).toBe(false);
     });
 });
