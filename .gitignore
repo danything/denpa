@@ -10,3 +10,6 @@ playwright-report/
 *.db
 *.db-wal
 *.db-shm
+
+# 偽 ffmpeg が `pipe:1` を出力先と読んで作ってしまう置き土産
+pipe:*

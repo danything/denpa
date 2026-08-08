@@ -4,16 +4,13 @@ import { SERVICES } from '../fake/services';
 import { airing, cellOf, expect, goto, syncEpg, test, upcoming } from './helpers';
 
 /**
- * 偽 ffmpeg が残した引数を1回ぶんずつに切って、探しているものを選ぶ。
+ * 偽 ffmpeg が残した引数を1回ぶんずつに切って、最後の1回を返す。
  *
- * **ライブ視聴は ffmpeg を2本起こす** — 映像と字幕。同じファイルに順に足して
- * いくので (`tests/fake/ffmpeg.sh`)、どちらを見たいかで選び分ける
+ * **ライブ視聴で起きる ffmpeg は1本。** 映像も字幕も同じ1本が焼く
+ * (そうしないと時刻が揃わない。`server/captions.ts`)。同じファイルに選局の
+ * たびに足していくので (`tests/fake/ffmpeg.sh`)、見るのはいちばん新しい1回
  */
-async function ffmpegArgs(
-    file: string,
-    kind: 'video' | 'captions',
-    expect_: typeof expect,
-): Promise<string[]> {
+async function ffmpegArgs(file: string, expect_: typeof expect): Promise<string[]> {
     let found: string[] | undefined;
     await expect_(() => {
         expect_(existsSync(file)).toBe(true);
@@ -21,9 +18,8 @@ async function ffmpegArgs(
             .split('---\n')
             .filter((run) => run.trim() !== '')
             .map((run) => run.split('\n'));
-        const wanted = kind === 'video' ? 'libx264' : 'image2pipe';
-        found = runs.find((run) => run.includes(wanted));
-        expect_(found, `${kind} の ffmpeg が起きていない`).toBeDefined();
+        found = runs.findLast((run) => run.includes('libx264'));
+        expect_(found, 'ライブの ffmpeg が起きていない').toBeDefined();
     }).toPass({ timeout: 15_000 });
     return found ?? [];
 }
@@ -530,7 +526,7 @@ test.describe('ライブ視聴', () => {
         await target.click();
         await expect(page.getByTestId('live-title')).toBeVisible();
 
-        const args = await ffmpegArgs(stack.liveArgsFile, 'video', expect);
+        const args = await ffmpegArgs(stack.liveArgsFile, expect);
 
         // 名指ししている先が、内部IDではなく放送の番号になっていること
         const video = args.find((a) => a.startsWith('0:p:') && a.endsWith(':v:0'));
@@ -556,7 +552,7 @@ test.describe('ライブ視聴', () => {
         await page.getByTestId('live-channel').first().click();
         await expect(page.getByTestId('live-title')).toBeVisible();
 
-        const args = await ffmpegArgs(stack.liveArgsFile, 'video', expect);
+        const args = await ffmpegArgs(stack.liveArgsFile, expect);
 
         expect(args).not.toContain('-af');
         // 何も頼まれていないので主音声。何本目かを名指ししていること自体は要る
@@ -601,7 +597,7 @@ test.describe('ライブ視聴', () => {
         await page.getByTestId('live-channel').first().click();
         await expect(page.getByTestId('live-title')).toBeVisible();
         // 既定は H.264。どの端末でも出るほうから始める
-        expect(await ffmpegArgs(stack.liveArgsFile, 'video', expect)).toContain('libx264');
+        expect(await ffmpegArgs(stack.liveArgsFile, expect)).toContain('libx264');
 
         await page.getByTestId('live-codec').click();
         await page.locator('[data-testid="live-codec-option"][data-codec="av1"]').click();
@@ -689,28 +685,40 @@ test.describe('ライブ視聴', () => {
     });
 
     /*
-     * **字幕は映像とは別の ffmpeg で取り出す。** 局を選ぶと2本起きる。
+     * **字幕は映像と同じ ffmpeg が焼く。** 出口を2つ持つ1本しか起きない。
+     *
+     * **それが時刻を揃える唯一の道だった。** 別々に起こした2本は入口で時刻を
+     * 0 に寄せる幅が違うので、出てきた時刻を突き合わせても意味を持たない
+     * (装置を5通り作って -60〜+450ms とばらけた)。1本なら寄せは1回で、
+     * 両方の出口に同じだけ効く — 実機で 1ms 以内に一致した。
      *
      * ここで固定するのは、間違えても**絵は出てしまう**種類の指定。
      *
-     * - `-copyts` … 無いと ffmpeg は字幕1枚目を 0 秒として数え直す
-     *   (フィルタに入れるのが字幕1本だけで、基準になる映像がこちら側に無い)。
-     *   映像と同じ物差しでなくなるので、字幕が丸ごとずれる
+     * - `-copyts` を**付けない** … 付けると放送の絶対時刻が mp4 の多重化器まで
+     *   届き、あれが 0 に詰め直すので受け側から見た 0 の意味が分からなくなる
      * - `-canvas_size` … 無いと libaribcaption は 1440x1080 とみなすので、
      *   1920x1080 の放送では字幕だけ横に伸びる
      * - PNG で受ける … 生の RGBA だと毎秒 13MB 流れる。実機で測ると PNG のほうが
      *   速い (30秒ぶんで 1.05秒 対 1.94秒)
+     * - Matroska で受ける … **時刻をコマと一緒に運ばせる**。生の PNG を並べる
+     *   だけでは時刻が乗らず、別の口 (`showinfo`) に喋らせると数が合わずにずれる
      */
-    test('字幕は別の ffmpeg で、映像と同じ物差しで取り出す', async ({ page, stack }) => {
+    test('字幕は映像と同じ ffmpeg で、同じ物差しで取り出す', async ({ page, stack }) => {
         await goto(page, '/live');
         await page.getByTestId('live-channel').first().click();
         await expect(page.getByTestId('live-title')).toBeVisible();
 
-        const args = await ffmpegArgs(stack.liveArgsFile, 'captions', expect);
-        expect(args).toContain('-copyts');
+        const args = await ffmpegArgs(stack.liveArgsFile, expect);
+        // 映像と字幕が同じ1回の中に居ること
+        expect(args).toContain('libx264');
+        expect(args).toContain('pipe:1');
+        expect(args).toContain('pipe:3');
+        expect(args).not.toContain('-copyts');
+
         expect(args[args.indexOf('-canvas_size') + 1]).toMatch(/^\d+x\d+$/);
         expect(args[args.indexOf('-sub_type') + 1]).toBe('bitmap');
         expect(args).not.toContain('rawvideo');
+        expect(args[args.indexOf('-f', args.indexOf('pipe:1')) + 1]).toBe('matroska');
 
         // 字幕も局を名指しする。1本の物理チャンネルに複数の局が乗っている
         const filter = args[args.indexOf('-filter_complex') + 1];

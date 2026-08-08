@@ -3,9 +3,9 @@
  *
  *     エージェント (MPEG-TS) → ffmpeg (fMP4) → 割る → WebSocket → MSE
  *
- * [stream.md](../../../docs/stream.md) §4 の1番目にあたる。**字幕は同じ
- * WebSocket に相乗りする** (`captions.ts`)。あちらは局までで決まるので、
- * 焼き方 (コマ数・音声) では分けない。データ放送 (§5.5) はまだ。
+ * [stream.md](../../../docs/stream.md) §4 の1番目にあたる。**字幕も同じ
+ * ffmpeg が焼き、同じ WebSocket に相乗りする** (`captions.ts`) — 別々に
+ * 起こすと時刻が揃わないため。データ放送 (§5.5) はまだ。
  *
  * ## 同じチャンネルは1本で焼く
  *
@@ -22,8 +22,17 @@
 import { type Audio, type AudioTrack, audioTracks, pickTrack } from '$lib/arib';
 import { CHANNEL, type LiveCodec, type Notice } from '$lib/live';
 import { Fmp4Splitter } from '$lib/ts/fmp4';
+import { MkvSplitter } from '$lib/ts/mkv';
 import { ServiceFilter } from '$lib/ts/service-filter';
-import { frame, TROUBLE, watchCaptions } from './captions';
+import {
+    type Caption,
+    captionInput,
+    captionOutput,
+    frame,
+    NO_SUBTITLE,
+    TROUBLE,
+    TrackList,
+} from './captions';
 import { config } from './config';
 import { queryOne } from './db';
 import { deinterlace, smoothMotionFor } from './encoder';
@@ -38,12 +47,14 @@ import type { Connection } from './ws';
  *
  * - `-fflags nobuffer` … 読む側で溜めない
  * - `-probesize` … **開いてから絵が出るまでの待ちの、削れる部分。**
- *   渡す前に1局へ絞ってあるので 20KB で足りる (下の「渡す前に1局へ絞る」に実測)
+ *   渡す前に1局へ絞ってあるが、**字幕まで見つけさせる**ので 100KB 採る
+ *   (下の「渡す前に1局へ絞る」に実測)
  * - `-frag_duration` … 0.05秒ぶんずつ moof/mdat を出す。既定では ffmpeg が
  *   数秒溜めてから出すので、その場でライブでなくなる
- * - `-copyts` … 元TSの時刻を保つ。**受け側は使わない** (mp4 は 0 から始まるので
- *   物差しが違う) が、外すと**サーバ側で映像と字幕を突き合わせて測れなくなる** —
- *   `captionLead` の値はこれがあるから測れた
+ * - `-copyts` は**付けない**。付けると放送の絶対時刻が mp4 の多重化器まで届き、
+ *   あれが 0 に詰め直すので受け側から見た 0 の意味が分からなくなる。
+ *   付けないと ffmpeg が入口で1回だけ 0 に寄せ、**その寄せが字幕の出口にも
+ *   同じだけ効く** — 映像と字幕が同じ物差しに乗る (`captions.ts` に実測)
  *
  * ## コマごとに切らない
  *
@@ -78,20 +89,23 @@ import type { Connection } from './ws';
  * コマ数を倍にしないのも録画と揃える — 元が毎秒24コマ前後なので、倍にしても
  * 同じ絵が並ぶだけで、CPU だけ倍かかる。
  *
- * ## 字幕とは時刻を突き合わせない。**待たせる量だけ渡す**
+ * ## 字幕も同じ ffmpeg で焼く。**出口を2つ持つ**
  *
- * **絶対の時刻では合わせられない。** `-copyts` で放送の時刻を保っているのは
- * ffmpeg の中までで、mp4 の多重化器は最初のパケットを 0 に詰め直す
- * (`-avoid_negative_ts disabled` も `-muxdelay 0` も `-output_ts_offset` も
- * 効かない。実機で確認)。しかもその「最初のパケット」は**音声**のことが多い —
- * 焼かれた1コマ目の放送時刻を引く手を採ったときは、実機で 2.4 秒ずれた。
- * 「いま焼いている絵より何秒前か」を添える手も、フィルタが符号器より先を走る
- * ぶん 5 秒ずれた。**どちらもこちらの都合で動く量**だった。
+ * 映像は `pipe:1` に fMP4、字幕は `pipe:3` に Matroska
+ * ([captions.ts](captions.ts) の `captionOutput`)。
  *
- * 添えるのは時刻ではなく、**どれだけ待たせるか**にした (`captionLead`)。
- * 受け側はそれを、いま映っている絵に足して置く。
+ * **時刻を揃えるにはこうするしかなかった。** 別々に起こした2本の ffmpeg は
+ * 入口の寄せ幅が違うので、出てきた時刻を突き合わせても意味を持たない。
+ * 1本にすれば寄せは1回で、両方の出口に同じだけ効く — 実機で突き合わせると
+ * 1ms 以内で一致した (`captions.ts` に実測)。**費用はほぼ無い**
+ * (同じ20秒で 10.6秒 対 10.7秒)。
  *
- * そのため `showinfo` は要らない — コマごとに喋らせるものが無い。
+ * 引き換えに、音声や焼き方を選び直すと**字幕も焼き直し**になる。
+ * 字幕は次が来るまで出しっぱなしのものなので、その間は最後の1枚を配り直す。
+ *
+ * **`-loglevel` は下げない。** 選べる字幕は入口の見出しから拾っていて
+ * (`TrackList`)、あれは info で出る。騒がしいぶんは読む側で落とす (`watch`)。
+ * 数字の進み具合だけは要らないので `-nostats` で止める。
  *
  * ## 局を名指しで選ぶ。**渡す前にも絞る**
  *
@@ -115,18 +129,18 @@ import type { Connection } from './ws';
  *     probesize 400KB   丸ごと 3/3 通る    1局に絞る 3/3
  *
  * **渡す前に1局へ絞れば 20KB でも通る。** 録画と同じ `ServiceFilter` を通すだけで、
- * ffmpeg が受け取るのは局が1つだけの TS になる。局を探す仕事が消えるので、
- * **20KB まで下げてある**。
+ * ffmpeg が受け取るのは局が1つだけの TS になる。局を探す仕事が消える。
  *
- * 余裕を見て 100KB にしていたが、6回ずつ測ると縮むぶんが見えた:
+ * 映像だけを焼いていた頃は 20KB まで下げてあった。6回ずつ測った差:
  *
  *     100KB   最短 474ms  中央 839ms  (6/6 通る)
  *      20KB   最短 441ms  中央 752ms  (6/6 通る)
  *
- * **中央値の差はばらつき** (放送の GOP 待ち 0〜501ms) だが、**最短どうしの
- * 33ms は固定の費用**。20KB は 0.01 秒ぶんで、絞った TS の PAT は最初の
- * パケットから入っている (`ServiceFilter` が書き直したものを同じ回数だけ出す)
- * ので、探すものが無い。**絞っていなければこの値では落ちる** — 上の表のとおり
+ * **中央値の差はばらつき** (放送の GOP 待ち 0〜501ms) で、**最短どうしの
+ * 33ms が固定の費用**。いまは 100KB に戻してある — **字幕まで見つけさせる**
+ * ので、映像だけのときの値では足りない (字幕だけを別の ffmpeg で取っていた
+ * 頃も 100KB を使っていた)。33ms は、字幕が丸ごと出ないことと引き換えにできる
+ * 額ではない
  *
  * 名指し (`0:p:<局>`) はそのまま残す。絞ったものに万一違う局が入っていたら、
  * **黙って別の局を映すより、そこで落ちるほうがいい**。
@@ -149,12 +163,16 @@ import type { Connection } from './ws';
  *   最初に見つけた映像 (従来どおり)
  * @param smooth 60コマ/秒で出すか。国内アニメだけ false
  * @param audio どの音声を、どちら側で出すか
+ * @param caption 何本目の字幕を出すか。**null なら字幕の出口を付けない** —
+ *   字幕を持たない放送に頼むと ffmpeg は組み立ての時点で降りるので、
+ *   そうと分かったらこちらで焼き直す (`Session.run`)
  */
 export function encodeArgs(
     program: number,
     smooth: boolean,
     audio: AudioTrack,
     codec: LiveCodec = 'h264',
+    caption: number | null = 0,
 ): string[] {
     const from = Number.isFinite(program) && program > 0 ? `0:p:${program}` : '0';
     // デュアルモノは片側だけを両耳へ。そのままだと左右から別の言語が同時に鳴る
@@ -167,18 +185,18 @@ export function encodeArgs(
     return [
         '-hide_banner',
         /*
-         * **失敗だけ残す。** 入口の見出しも進み具合も要らない (見ているのは
-         * 焼けない理由だけ)。字幕側は `showinfo` が info で喋るぶん下げられないが、
-         * こちらは喋らせるものが無い
+         * **数字の進み具合だけ止める。** `-loglevel` は下げられない —
+         * 選べる字幕は入口の見出しから拾っていて (`TrackList`)、あれは info。
+         * 要らない行は読む側で落とす (`watch`)
          */
-        '-loglevel',
-        'error',
+        '-nostats',
         '-fflags',
         'nobuffer',
-        // 渡す前に1局へ絞ってあるので、これで足りる (上の説明)
+        // 1局に絞ってあるが、字幕まで見つけさせるぶん要る (上の説明)
         '-probesize',
-        '20000',
-        '-copyts',
+        '100000',
+        // 字幕を絵で受け取るための指定。映像には効かない
+        ...(caption === null ? [] : captionInput()),
         '-i',
         'pipe:0',
         // インタレ解除。放送は 1080i なので、解かずに渡すと動きが櫛状になる
@@ -189,7 +207,7 @@ export function encodeArgs(
         /*
          * **コマ数の上限を言っておく。**
          *
-         * `-probesize` を 20KB まで削ったので、ffmpeg は入口でコマ数を読み切れず、
+         * `-probesize` を削ってあるので、ffmpeg は入口でコマ数を読み切れず、
          * 時間の刻み (90kHz) から**でたらめな値**を起こすことがある。x264 は黙って
          * 受けるが、**SVT-AV1 は突っぱねる**:
          *
@@ -223,6 +241,8 @@ export function encodeArgs(
         '-flush_packets',
         '1',
         'pipe:1',
+        // **2つ目の出口。** 字幕の絵を、映像と同じ物差しの時刻付きで出す
+        ...(caption === null ? [] : captionOutput(from, caption)),
     ];
 }
 
@@ -259,7 +279,7 @@ export function encodeArgs(
  * 目に見えて粗く、遅い 10 は間に合わなくなる。
  *
  * **付けてもまだ溜め込む。** 電波が届いてから塊が出るまで H.264 の 0.24〜0.49秒
- * に対し **1.1〜1.5秒** (`captionLead` に実測)。低遅延指定 (`pred-struct=1`) は
+ * に対し **1.1〜1.5秒**。低遅延指定 (`pred-struct=1`) は
  * 実時間に間に合わなくなるので使えない。**AV1 を選ぶと放送の今から1秒ぶん
  * 離れる** — 切り替えにもそう出してある (`LIVE_CODECS`)。
  */
@@ -332,69 +352,47 @@ export function codecsFor(codec: LiveCodec): string {
         : 'video/mp4; codecs="avc1.640029,mp4a.40.2"';
 }
 
-/**
- * **字幕を出すまで待たせる量 (秒)。焼き方で決まるので、ここで決めて画面へ渡す。**
- *
- * 受け側は「いちばん新しく届いている映像」に、この量を足したところへ字幕を置く
- * ([stream.md](../../../docs/stream.md) §5.4)。
- *
- * ## H.264 は待たせない
- *
- * **字幕が届いたときには、その字幕が属する映像はもう届いている。** 放送は
- * 字幕も映像も前もって送るが (字幕は描く手間ぶん、映像は復号器の溜めぶん)、
- * 映像を焼いて包む手間がそれを食う。差し引きで待ちは残らない。
- *
- * **ここは2回外した。値ではなく、見方を間違えた。**
- *
- * - 1回目は「字幕の先回り」だけを見た。映像も先送りされていることを忘れて
- *   いて、0.5秒 待たせた。**局差が消えたように見えたのは偶然** — 字幕と
- *   映像の先回りは局ごとに同じ方向へ動くので、片方だけ見ても揃って見える
- * - 2回目は両方を見て差を採った (0.42秒)。**今度は焼く手間を数え落とした。**
- *   差そのものは実測で 292〜321ms と堅いのに、それを足すのが誤り
- *
- * **どちらも実機の出口どうしを突き合わせて測っていた。** 焼いた mp4 の中身が
- * どの放送時刻に当たるかは多重化器が握っていて外から見えず、別々に起こした
- * ffmpeg は焼き始めの鍵フレームが 0〜0.5秒 ずれる。装置を5通り作って
- * -60〜+450ms とばらけ、同じ局の2回で 150ms 動いた。**測れないものを
- * 測ろうとしていた。**
- *
- * 決めたのは**画面を見た人**。0 / 0.2 / 0.45 秒を出し比べて 0 がいちばん
- * 合った。数えるための仕掛け (`ts/caption-lead.ts`) は、そういうわけで消した。
- *
- * ## AV1 は待たせる
- *
- * **SVT-AV1 が溜め込むぶん、映像だけが遅れて届く。** `lookahead=0` は指定済みで、
- * 低遅延指定 (`pred-struct=1`) は実機で追いつかなくなった (出口が 6秒 → 22秒 と
- * 離れていく)。電波が届いてから塊が出るまで H.264 の 0.24〜0.49秒 に対し
- * 1.1〜1.5秒 かかるので、その差だけ字幕を待たせる。コマ数で変わるのは
- * 溜める量が枚数で決まっているから。
- *
- * **こちらは出し比べていない。** H.264 との差から起こした値なので、
- * ずれていたら合わせ直す
- */
-export function captionLead(codec: LiveCodec, smooth: boolean): number {
-    if (codec === 'av1') return smooth ? AV1_WAIT : AV1_WAIT_30;
-    return 0;
-}
-
-/** AV1 で待たせる量 (秒)。60コマ。H.264 との焼く手間の差 */
-const AV1_WAIT = 0.9;
-/** 同 30コマ。溜める量は枚数で決まるので、コマが半分なら尺は長くなる */
-const AV1_WAIT_30 = 1.25;
-
 interface Viewer {
     connection: Connection;
     /** init を渡したか。渡す前に中身を送っても MSE は捨てる */
     ready: boolean;
 }
 
+/**
+ * 字幕を持っていないと分かった局。**同じ間違いを繰り返さないため。**
+ *
+ * 字幕を頼んだ ffmpeg は、その放送に字幕が無いと**組み立ての時点で降りる** —
+ * 映像も出ない。1回目は字幕なしで焼き直して繋ぐが (`Session.run`)、覚えて
+ * おかないと選局のたびに 2回起こすことになる。
+ *
+ * **番組が変われば付くことがある**ので、しばらくしたら忘れる
+ */
+const captionless = new Map<number, number>();
+/** 忘れるまで (ms)。番組の変わり目より短く採る */
+const FORGET_CAPTIONLESS = 15 * 60_000;
+
 class Session {
     private readonly viewers = new Set<Viewer>();
     private readonly splitter = new Fmp4Splitter();
+    /** 字幕の器を割る。時刻はコマに付いてくる ([ts/mkv.ts](../ts/mkv.ts)) */
+    private readonly frames = new MkvSplitter();
+    /** 入口の見出しから拾った、選べる字幕 */
+    private readonly list: TrackList;
     private readonly aborter = new AbortController();
     private proc: ReturnType<typeof Bun.spawn> | null = null;
     /** 最後に流した init。途中から入ってきた人に真っ先に渡す */
     private init: Uint8Array | null = null;
+    /**
+     * いま出ている字幕。**途中から入ってきた人に真っ先に渡す。**
+     *
+     * 字幕は次が来るまで出しっぱなしなので、渡さないとその人には
+     * 次の字幕まで何も出ない (数十秒あく)
+     */
+    private showing: Caption | null = null;
+    /** 前に配った絵。**同じものを配り直さない** (sub2video は出し直しが多い) */
+    private last: string | null = null;
+    /** 字幕が無いと言われたか。言われたら字幕なしで焼き直す */
+    private noSubtitle = false;
     private stopped = false;
 
     constructor(
@@ -410,7 +408,11 @@ class Session {
         readonly audio: AudioTrack,
         /** どの形で焼くか。**見ている人が選ぶ** */
         readonly codec: LiveCodec,
-    ) {}
+        /** その局の中で何本目の字幕を出すか */
+        readonly track: number,
+    ) {
+        this.list = new TrackList(program);
+    }
 
     get empty(): boolean {
         return this.viewers.size === 0;
@@ -430,6 +432,11 @@ class Session {
     add(viewer: Viewer): void {
         this.viewers.add(viewer);
         if (this.init !== null) this.hand(viewer, CHANNEL.videoInit, this.init);
+        // 選べる字幕と、いま出ている1枚。**どちらも待たせない**
+        if (this.list.tracks.length > 0) {
+            this.tellOne(viewer, { type: 'captions', tracks: this.list.tracks, track: this.track });
+        }
+        if (this.showing !== null) this.handCaption(viewer, this.showing);
     }
 
     remove(viewer: Viewer): void {
@@ -469,30 +476,71 @@ class Session {
                 () => this.stopped,
             );
 
-            const proc = Bun.spawn(
-                [config.ffmpeg, ...encodeArgs(this.program, this.smooth, this.audio, this.codec)],
-                {
-                    stdin: 'pipe',
-                    stdout: 'pipe',
-                    stderr: 'pipe',
-                },
-            );
-            this.proc = proc;
-
             /*
-             * **流し込みと汲み出しを同時に回す。** 順にやると、ffmpeg の
-             * 出力を誰も読まないまま入力を書き続けることになり、パイプが詰まって
-             * 両方止まる (放送は止まってくれない)。
+             * **字幕なしで焼き直せるようにしておく。**
              *
-             * **終わりは ffmpeg の終了で見る。** 汲み出しは相手が死ねば
-             * すぐ終わるが、**流し込みは終わらない** — 書き込み先が閉じても
-             * 例外にならないことがあり、放送は止まらないので回り続ける。
-             * 3つ揃うのを待っていると、死んだことに永久に気づかない
+             * 字幕を持たない放送に `[0:p:X:s:0]` を頼むと、ffmpeg は組み立ての
+             * 時点で降りる — **映像も出ない**。そうと分かったら字幕を外して
+             * もう一度起こす。TS は流れ続けているので、掴み直しは要らない
              */
-            const running = Promise.all([this.pump(stream, proc), this.drain(proc), this.watch(proc)]);
-            await Promise.race([running, proc.exited]);
-            // ここまで来たのは ffmpeg が自分で降りたとき。畳んだのなら stopped が立つ
-            this.died(label, `ffmpeg が終了しました (${proc.exitCode ?? '不明'})`, '映像を出せませんでした');
+            const forgotten = captionless.get(this.serviceId);
+            let wanted =
+                forgotten !== undefined && Date.now() - forgotten < FORGET_CAPTIONLESS ? null : this.track;
+            for (;;) {
+                const proc = Bun.spawn(
+                    [config.ffmpeg, ...encodeArgs(this.program, this.smooth, this.audio, this.codec, wanted)],
+                    // 字幕は3本目の口へ出させる。**stdio の配列でしか増やせない**
+                    { stdio: ['pipe', 'pipe', 'pipe', ...(wanted === null ? [] : ['pipe'])] as never },
+                );
+                this.proc = proc;
+
+                /*
+                 * **流し込みと汲み出しを同時に回す。** 順にやると、ffmpeg の
+                 * 出力を誰も読まないまま入力を書き続けることになり、パイプが詰まって
+                 * 両方止まる (放送は止まってくれない)。**字幕の口も汲み続ける** —
+                 * 片方を放っておくと、そこが詰まったときに映像まで止まる。
+                 *
+                 * **終わりは ffmpeg の終了で見る。** 汲み出しは相手が死ねば
+                 * すぐ終わるが、**流し込みは終わらない** — 書き込み先が閉じても
+                 * 例外にならないことがあり、放送は止まらないので回り続ける。
+                 * 揃うのを待っていると、死んだことに永久に気づかない
+                 */
+                let trouble: unknown = null;
+                const watching = this.watch(proc);
+                const running = Promise.all([
+                    this.pump(stream, proc),
+                    this.drain(proc),
+                    watching,
+                    wanted === null ? Promise.resolve() : this.subtitles(proc),
+                ]).catch((error: unknown) => {
+                    // 相手が降りたあとの EPIPE。**ここで拾わないと焼き直しに来られない**
+                    trouble = error;
+                });
+                await Promise.race([running, proc.exited]);
+                if (this.stopped) return;
+                /*
+                 * **降りた理由を読み終えてから決める。** `proc.exited` は最後の
+                 * 言い分より先に来るので、待たずに見ると「字幕が無い」を取り
+                 * こぼして、**焼き直しに来られない**。標準エラーは相手が死ねば
+                 * 必ず閉じるので、ここで待つのは安全 (流し込みのほうは閉じても
+                 * 例外にならないことがあるので待てない)
+                 */
+                if (wanted !== null) await watching.catch(() => undefined);
+                if (wanted === null || !this.noSubtitle) {
+                    // ここまで来たのは ffmpeg が自分で降りたとき
+                    this.died(
+                        label,
+                        trouble === null
+                            ? `ffmpeg が終了しました (${proc.exitCode ?? '不明'})`
+                            : String(trouble),
+                        '映像を出せませんでした',
+                    );
+                    return;
+                }
+                console.warn(`[live] ${label}: 字幕が無いので字幕なしで焼き直します`);
+                captionless.set(this.serviceId, Date.now());
+                wanted = null;
+            }
         } catch (error) {
             this.died(label, String(error), '選局できませんでした');
         } finally {
@@ -591,16 +639,64 @@ class Session {
     }
 
     /**
-     * ffmpeg の言い分から失敗だけ残す。
+     * ffmpeg が出した字幕を割って配る。**時刻はコマに付いてくる。**
+     *
+     * 器は Matroska ([ts/mkv.ts](../ts/mkv.ts))。生の PNG を並べただけでは
+     * 時刻が乗らず、別の口に喋らせると数が合わずにずれる (`captions.ts`)
+     */
+    private async subtitles(proc: ReturnType<typeof Bun.spawn>): Promise<void> {
+        const fd = (proc.stdio as unknown as number[])[3];
+        if (typeof fd !== 'number') return;
+        for await (const chunk of chunks(Bun.file(fd).stream())) {
+            for (const found of this.frames.feed(chunk)) this.deliver(found);
+        }
+    }
+
+    /**
+     * 1枚配る。**同じ絵は配り直さない。**
+     *
+     * sub2video は同じものを何度も出す。映像と同じ ffmpeg にしてからは映像の
+     * コマが心拍になるので、実機で毎秒8枚ほど出てくるが、**中身が変わって
+     * いるのはごく一部**。そのまま流すと帯域を食うだけになる。
+     *
+     * **空の枚も配る。** 全部透明な絵を重ねるのは「消す」と同じ結果になる
+     */
+    private deliver(caption: Caption): void {
+        const seen = Bun.hash(caption.data).toString(36);
+        if (seen === this.last) return;
+        this.last = seen;
+        this.showing = caption;
+        for (const viewer of this.viewers) this.handCaption(viewer, caption);
+    }
+
+    private handCaption(viewer: Viewer, caption: Caption): void {
+        const { kind, pts, data } = frame(caption);
+        viewer.connection.send(kind, pts, data);
+    }
+
+    /**
+     * ffmpeg の言い分から、**選べる字幕と失敗**を拾う。
      *
      * 焼けない理由 (音声が無い・解像度が変わった) はここにしか出ない。
      * 捨てていると「映像が出ない」としか分からなくなる。
      *
-     * `-loglevel error` にしてあってもなお、復号器は直せた程度のことまで
-     * 喋る (放送の欠けは日常的にある)。**残すのは本当に失敗した行だけ**
+     * `-loglevel` は下げられない (選べる字幕が info で出る) ので、要らない行も
+     * 流れてくる。**残すのは本当に失敗した行だけ** — 全部出すと、選局のたびに
+     * 数十行が記録に積まれて読めなくなる
      */
     private async watch(proc: ReturnType<typeof Bun.spawn>): Promise<void> {
         for await (const line of lines(proc.stderr as ReadableStream<Uint8Array>)) {
+            /*
+             * **選べる字幕は入口の見出しに出ている。** 1枚も来ていなくても
+             * 分かるので、画面は待たずに切り替えを出せる (間隔の空く番組で
+             * ボタンが出なかったのはこれを見ていなかったため)
+             */
+            if (this.list.feed(line)) {
+                this.tell({ type: 'captions', tracks: this.list.tracks, track: this.track });
+                continue;
+            }
+            // 字幕が無い放送。**映像ごと落ちる**ので、字幕なしで焼き直す (`run`)
+            if (NO_SUBTITLE.test(line)) this.noSubtitle = true;
             if (TROUBLE.test(line)) {
                 console.warn(`[live] ${this.channelType}:${this.channel} ffmpeg: ${line.trim()}`);
             }
@@ -621,13 +717,21 @@ class Session {
         this.aborter.abort();
         this.proc?.kill();
         sessions.delete(
-            key(this.channelType, this.channel, this.serviceId, this.smooth, this.audio, this.codec),
+            key(
+                this.channelType,
+                this.channel,
+                this.serviceId,
+                this.smooth,
+                this.audio,
+                this.codec,
+                this.track,
+            ),
         );
     }
 }
 
 /**
- * 焼いているものの目印。**局・コマ数・音声まで含める。**
+ * 焼いているものの目印。**局・コマ数・音声・字幕まで含める。**
  *
  * 1本の物理チャンネルに複数の局が乗っているので、チャンネルだけでは足りない —
  * 局を名指しで選んでいる以上、出てくる絵が局ごとに違う。コマ数も同じで、
@@ -636,6 +740,10 @@ class Session {
  * **焼き方 (H.264 / AV1) も同じ** — 選んだ形が違えば別のものになる。
  * 混ぜると片方が意図しないものを見ることになる。チューナーはエージェント側で
  * 相乗りになるので、増えるのは ffmpeg だけ。
+ *
+ * **字幕も入る。** 映像と同じ ffmpeg で焼くようになったので、何本目の字幕を
+ * 出すかが違えば別のものになる (`encodeArgs`)。言語が複数ある放送でしか
+ * 動かないところなので、そのために起こし直すのは年に数回のこと
  */
 const key = (
     type: string,
@@ -644,7 +752,8 @@ const key = (
     smooth: boolean,
     audio: AudioTrack,
     codec: LiveCodec,
-) => `${type}:${channel}:${serviceId}:${smooth ? 60 : 30}:${audio.id}:${codec}`;
+    track: number,
+) => `${type}:${channel}:${serviceId}:${smooth ? 60 : 30}:${audio.id}:${codec}:${track}`;
 const sessions = new Map<string, Session>();
 
 /** 見に行く。既に同じものを焼いていれば相乗りする */
@@ -654,12 +763,22 @@ function watch(
     serviceId: number,
     now: NowPlaying,
     codec: LiveCodec,
+    track: number,
     viewer: Viewer,
 ): Session {
-    const id = key(channelType, channel, serviceId, now.smooth, now.audio, codec);
+    const id = key(channelType, channel, serviceId, now.smooth, now.audio, codec, track);
     let session = sessions.get(id);
     if (session === undefined) {
-        session = new Session(channelType, channel, serviceId, now.program, now.smooth, now.audio, codec);
+        session = new Session(
+            channelType,
+            channel,
+            serviceId,
+            now.program,
+            now.smooth,
+            now.audio,
+            codec,
+            track,
+        );
         sessions.set(id, session);
         // 畳むのは見ている人が居なくなったとき。ここでは待たない
         void session.run();
@@ -707,11 +826,21 @@ export function warm(
     if (channelType === '' || channel === '' || !Number.isFinite(serviceId)) return;
 
     const now = nowPlaying(serviceId, audio);
-    const id = key(channelType, channel, serviceId, now.smooth, now.audio, codec);
+    // 字幕は1本目で温める。**選び直す人は稀**で、そのときは焼き直しになる
+    const id = key(channelType, channel, serviceId, now.smooth, now.audio, codec, 0);
     // 既に焼いていれば何もしない。開き直すたびに増やさない
     if (sessions.has(id)) return;
 
-    const session = new Session(channelType, channel, serviceId, now.program, now.smooth, now.audio, codec);
+    const session = new Session(
+        channelType,
+        channel,
+        serviceId,
+        now.program,
+        now.smooth,
+        now.audio,
+        codec,
+        0,
+    );
     sessions.set(id, session);
     void session.run();
 
@@ -734,9 +863,6 @@ export function warm(
 export function attend(connection: Connection): void {
     const viewer: Viewer = { connection, ready: false };
     let current: Session | null = null;
-    /** いま字幕を受けている局。**焼き方が変わっても、局が同じなら切らない** */
-    let captionKey = '';
-    let dropCaptions: (() => void) | null = null;
 
     const leave = () => {
         if (current === null) return;
@@ -744,41 +870,6 @@ export function attend(connection: Connection): void {
         // **最後の1人が抜けたら畳む。** 残すとチューナーを掴んだままになる
         if (current.empty) current.stop();
         current = null;
-    };
-
-    /**
-     * 字幕を受け直す。**局が同じなら何もしない。**
-     *
-     * 字幕は局で決まるので、音声を選び直しただけで切ってはいけない。
-     * 切ると ffmpeg を起こし直すことになり、次の字幕が出るまで数十秒あく
-     * (字幕は次が来るまで出しっぱなしのものなので、途切れがそのまま見える)
-     */
-    const followCaptions = (
-        channelType: string,
-        channel: string,
-        serviceId: number,
-        program: number,
-        track: number,
-    ) => {
-        const id = `${channelType}:${channel}:${serviceId}:${track}`;
-        if (id === captionKey) return;
-        dropCaptions?.();
-        captionKey = id;
-        const tell = (notice: Notice) =>
-            connection.send(CHANNEL.control, 0n, new TextEncoder().encode(JSON.stringify(notice)));
-        dropCaptions = watchCaptions(
-            channelType,
-            channel,
-            serviceId,
-            program,
-            track,
-            (caption) => {
-                const { kind, pts, data } = frame(caption);
-                connection.send(kind, pts, data);
-            },
-            // 選べる字幕。**1枚も届いていなくても分かる** (入口の見出しに出ている)
-            (tracks) => tell({ type: 'captions', tracks, track }),
-        );
     };
 
     connection.onmessage = (message) => {
@@ -789,33 +880,11 @@ export function attend(connection: Connection): void {
         const audio = typeof message.audio === 'string' ? message.audio : undefined;
         // 知らない形を頼まれたら H.264。**画面から来る値をそのまま信じない**
         const codec: LiveCodec = message.codec === 'av1' ? 'av1' : 'h264';
-        // 字幕は映像とは別の ffmpeg なので、選び直しても映像は焼き直しにならない
+        // **字幕も映像と同じ ffmpeg**。選び直すと焼き直しになる (`encodeArgs`)
         const caption = Number.isInteger(message.caption) ? Math.max(0, Number(message.caption)) : 0;
         if (channelType === '' || channel === '') return;
 
         const now = nowPlaying(serviceId, audio);
-
-        /*
-         * **物理チャンネルが変わるなら、前のを先に離す。**
-         *
-         * 字幕は映像とは別に TS をもう1本もらう (`captions.ts`)。前のチャンネルを
-         * 掴んだまま新しいチャンネルの字幕を頼むと、**その一瞬だけチューナーが
-         * 1本余分に要る** — 地上波は2本しかないので、番組表集めが1本使っていると
-         * そこで断られる (実機で `[captions] GR:T15: チューナーに空きがありません`)。
-         *
-         * 離すのは物理チャンネルが変わるときだけ。同じチャンネルの中で局や音声を
-         * 選び直すぶんには、エージェント側で相乗りになるので余分は要らない
-         */
-        if (current !== null && (current.channelType !== channelType || current.channel !== channel)) {
-            leave();
-        }
-
-        /*
-         * **字幕は映像より先に面倒をみる。** 映像とは別建てなので、焼き方が同じでも
-         * (=下の早戻りに掛かっても) 字幕だけ選び直せる。局が同じなら
-         * `followCaptions` の中で何もしない
-         */
-        followCaptions(channelType, channel, serviceId, now.program, caption);
 
         /*
          * **同じものを焼いているなら、そのまま。**
@@ -831,7 +900,8 @@ export function attend(connection: Connection): void {
             current.serviceId === serviceId &&
             current.smooth === now.smooth &&
             current.audio.id === now.audio.id &&
-            current.codec === codec
+            current.codec === codec &&
+            current.track === caption
         ) {
             return;
         }
@@ -855,19 +925,15 @@ export function attend(connection: Connection): void {
             channel,
             codecs: codecsFor(codec),
             codec,
-            lead: captionLead(codec, now.smooth),
             audio: now.audio.id,
             audios: now.audios,
         };
         connection.send(CHANNEL.control, 0n, new TextEncoder().encode(JSON.stringify(notice)));
-        current = watch(channelType, channel, serviceId, now, codec, viewer);
+        current = watch(channelType, channel, serviceId, now, codec, caption, viewer);
     };
 
     connection.onclose = () => {
         leave();
-        dropCaptions?.();
-        dropCaptions = null;
-        captionKey = '';
     };
 }
 

@@ -1,33 +1,16 @@
 import { describe, expect, test } from 'bun:test';
-import { type Cue, captionAt, currentCue, insertCue, KEEP_CUES, trimCues } from './captions';
+import { CLOCK, type Cue, currentCue, insertCue, KEEP_CUES, trimCues } from './captions';
 
 const cue = (at: number): Cue => ({ at, bitmap: null });
 
 /**
- * **合わせる先は「いま映っている絵」。**
- *
- * 「いちばん新しく届いている映像」(`buffered.end`) に置いていた頃は、貯めて
- * いるぶんだけ遅れて出ていた (実機で 0.2秒)。宅外だと貯めが伸びるので、
- * 遅れもそのぶん伸びる。
+ * **時刻はサーバが添えてくる。** 映像と同じ ffmpeg が付けた mp4 の物差しなので、
+ * 再生位置と直に比べられる (`server/captions.ts`)。取り決めの刻みは 90kHz。
  */
-describe('captionAt', () => {
-    /** H.264 は待たせないので、届いたら再生位置にそのまま置く */
-    test('待たせないなら再生位置そのもの', () => {
-        expect(captionAt(12.0, 0)).toBeCloseTo(12.0);
-    });
-
-    /** AV1 は符号器が溜め込むぶん、映像だけが遅れて届く */
-    test('待たせる量だけ後ろに置く', () => {
-        expect(captionAt(12.0, 0.9)).toBeCloseTo(12.9);
-    });
-
-    test('待たせる量が長いほど後ろに置く', () => {
-        expect(captionAt(10, 1.25)).toBeGreaterThan(captionAt(10, 0.9));
-    });
-
-    /** **貯めている量に触れない。** そこが遅れの出どころだった */
-    test('貯めている量は式に出てこない', () => {
-        expect(captionAt(10, 0)).toBeCloseTo(10);
+describe('CLOCK', () => {
+    test('90kHz を秒に直せる', () => {
+        expect(135_000 / CLOCK).toBeCloseTo(1.5);
+        expect(0 / CLOCK).toBe(0);
     });
 });
 

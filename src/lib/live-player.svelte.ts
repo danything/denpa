@@ -17,7 +17,7 @@ import {
     SOCKET_PATH,
     type Tuned,
 } from '$lib/live';
-import { type Cue, captionAt, currentCue, insertCue, trimCues } from '$lib/ts/captions';
+import { CLOCK, type Cue, currentCue, insertCue, trimCues } from '$lib/ts/captions';
 import { FLOOR, nextTarget, pacing } from '$lib/ts/pacing';
 
 export type LiveState = 'idle' | 'connecting' | 'playing' | 'error';
@@ -121,14 +121,6 @@ export function livePlayer() {
     /** いま焼いてもらっている形。**サーバが返してきたものを持つ** */
     let codec = $state<LiveCodec>('h264');
     /**
-     * 字幕を出すまで待たせる量 (秒)。**サーバが決めて寄越す。**
-     *
-     * **H.264 は 0** — 字幕が届いたときには、その字幕が属する映像も届いている。
-     * AV1 だけ符号器が溜め込むぶん待たせる (`server/live.ts` の `captionLead`)。
-     * ここに置いてあるのは `tuned` が届く前の繋ぎ
-     */
-    let lead = 0;
-    /**
      * 断り書き。**失敗ではないが、頼まれたとおりにできなかったとき。**
      *
      * いまのところ「AV1 を出せない端末なので H.264 に戻した」の1つだけ。
@@ -165,8 +157,9 @@ export function livePlayer() {
     /**
      * 待たせている字幕。**時刻の順に並べておく** ([ts/captions.ts](./ts/captions.ts))。
      *
-     * H.264 は届いた時点の再生位置に置くので、ほぼその場で出る。AV1 だけ
-     * 符号器が溜め込むぶん待たせるので、再生位置が追いつくまで持っておく
+     * 時刻はサーバが添えてくる — **映像と同じ ffmpeg が付けた、mp4 の物差し**
+     * なので、再生位置と直に比べられる。焼く手間のぶん字幕のほうが先に届くので、
+     * 再生位置が追いつくまで持っておく
      */
     let cues: Cue[] = [];
     /** いま重ねている1枚。同じものを描き直さない */
@@ -547,13 +540,15 @@ export function livePlayer() {
     /**
      * 字幕を選び直す。**言語が複数ある放送はたまにある。**
      *
-     * 音声と違って**映像は焼き直しにならない** — 字幕は別の ffmpeg なので、
-     * そちらだけ入れ替わる。待たせているぶんは捨てる (別の言語なので使えない)
+     * **音声と同じで焼き直しになる** — 字幕は映像と同じ ffmpeg で焼いている
+     * (そうしないと時刻が揃わない。`server/captions.ts`)。器から作り直すので、
+     * 待たせているぶんも映像も捨てる
      */
     function setCaptionTrack(index: number): void {
         if (tuned === null || index === captionTrack) return;
+        // 一覧は同じ局のものなので残す (`forget`)
+        forget(true);
         captionTrack = index;
-        clearCaptions();
         const command: Command = { type: 'tune', ...tuned, caption: index };
         if (socket !== null && socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify(command));
     }
@@ -619,21 +614,23 @@ export function livePlayer() {
     /**
      * 受け取ったものを忘れる。**繋ぎはそのまま。**
      *
-     * @param keepCaptions 字幕はそのままにするか。**音声を選び直したときだけ true** —
-     *   サーバ側の字幕は局で決まるので回り続けており (`captions.ts`)、捨てると
-     *   次の字幕まで何も出なくなる。映像の時刻も変わらないので待たせているぶんは使える
+     * **待たせている字幕は必ず捨てる。** 焼き直しになれば mp4 の時刻は 0 から
+     * 数え直しになるので、前の時刻で待たせているものは**どれも合わなくなる**
+     * (音声や焼き方を選び直しただけでも焼き直しになる。`server/live.ts`)。
+     *
+     * @param keepList 選べる字幕の一覧は残すか。**同じ局の中での選び直しだけ
+     *   true** — 局が変われば持っている字幕も変わる (字幕そのものが無い局もある)
      */
-    function forget(keepCaptions: boolean): void {
-        if (!keepCaptions) {
-            clearCaptions();
-            // 局が変われば、持っている字幕も変わる (字幕そのものが無い局もある)
+    function forget(keepList: boolean): void {
+        clearCaptions();
+        if (!keepList) {
             captionTracks = [];
             captionTrack = 0;
         }
         clear();
     }
 
-    /** 待たせている字幕を捨てる。**局を変えるときだけ** (`forget` の説明) */
+    /** 待たせている字幕を捨てる。**焼き直しのたび** (`forget` の説明) */
     function clearCaptions(): void {
         generation++;
         for (const cue of cues) cue.bitmap?.close();
@@ -668,7 +665,7 @@ export function livePlayer() {
      */
     function setAudio(id: string): void {
         if (tuned === null || element === null || id === audio) return;
-        // 局は変わらないので、待たせている字幕はそのまま使える
+        // 局は変わらないので、選べる字幕の一覧はそのまま使える (`forget`)
         void tune(element, { ...tuned, audio: id }, true);
     }
 
@@ -692,7 +689,7 @@ export function livePlayer() {
     /** 中身。**断り書きを消さない**ので、戻すときにも使える */
     function swapCodec(next: LiveCodec): void {
         if (tuned === null || element === null || next === codec) return;
-        // 局は変わらないので、待たせている字幕はそのまま使える
+        // 局は変わらないので、選べる字幕の一覧はそのまま使える (`forget`)
         void tune(element, { ...tuned, codec: next }, true);
     }
 
@@ -710,10 +707,10 @@ export function livePlayer() {
     /**
      * 選局する。**繋がっていれば繋ぎ直さない。**
      *
-     * @param keepCaptions 待たせている字幕を残すか。**音声の選び直しだけ true**
-     *   (`forget` の説明)
+     * @param keepList 選べる字幕の一覧を残すか。**同じ局の中での選び直しだけ
+     *   true** (`forget` の説明)。待たせている字幕はどの道いつも捨てる
      */
-    async function tune(video: HTMLVideoElement, target: Tuned, keepCaptions = false): Promise<void> {
+    async function tune(video: HTMLVideoElement, target: Tuned, keepList = false): Promise<void> {
         element = video;
         // 字幕は映した1枚ごとに貼り直す (`follow`)。2度目からは何もしない
         follow(video);
@@ -728,7 +725,7 @@ export function livePlayer() {
          * 札を取り直すのに 50ms、握手に 50ms 掛かっていた
          */
         const open = socket !== null && socket.readyState === WebSocket.OPEN;
-        if (open) forget(keepCaptions);
+        if (open) forget(keepList);
         else reset();
 
         state = 'connecting';
@@ -805,7 +802,6 @@ export function livePlayer() {
                     audios = notice.audios;
                     audio = notice.audio;
                     codec = notice.codec;
-                    lead = notice.lead;
                     start(video, notice.codecs, notice.codec);
                 }
                 return;
@@ -844,15 +840,16 @@ export function livePlayer() {
             if (kind === CHANNEL.subtitle || kind === CHANNEL.subtitleClear) {
                 if (element === null) return;
                 /*
-                 * **いま映っている絵に合わせる** ([ts/captions.ts](./ts/captions.ts)
-                 * の `captionAt`)。待たせる量はサーバが決めて寄越す (`lead`) が、
-                 * H.264 は 0 なので実質「届いたら出す」。
+                 * **添えられた時刻に置く** ([ts/captions.ts](./ts/captions.ts))。
                  *
-                 * 「いちばん新しく届いている映像」(`buffered.end`) に置いていた頃は、
-                 * **貯めているぶんだけ遅れて**いた。絶対の時刻で合わせられない理由は
-                 * [stream.md](../../docs/stream.md) §5.4
+                 * 映像と同じ ffmpeg が付けた mp4 の物差しなので、再生位置と
+                 * 直に比べられる ([stream.md](../../docs/stream.md) §5.4)。
+                 *
+                 * 前は「届いた時点の再生位置」に置いていた。**焼く手間のぶん
+                 * 字幕のほうが先に届く**ので、そのぶんだけ早く出ていた —
+                 * 時刻で置けば、その量を測ったり当てたりしなくてよくなる
                  */
-                const at = captionAt(element.currentTime, lead);
+                const at = Number(new DataView(data).getBigUint64(1)) / CLOCK;
 
                 if (kind === CHANNEL.subtitleClear) {
                     cues = insertCue(cues, { at, bitmap: null });

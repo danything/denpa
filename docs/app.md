@@ -37,8 +37,9 @@ EPGStation の置き換えとして作ったもので、エンコード設定は
 | `src/lib/server/serve.ts` | ファイルの配信 (Range 対応) |
 | `src/lib/server/scramble.ts` | スクランブルの検出と、チューナー側への解除依頼 |
 | `src/lib/server/live.ts` | ライブ視聴。焼き方・相乗り・見ている人の勘定 ([stream.md](stream.md)) |
-| `src/lib/server/captions.ts` | ライブの字幕。絵にして、**変わったときだけ**配る (局までで分ける) |
+| `src/lib/server/captions.ts` | ライブの字幕。**映像と同じ ffmpeg** で絵にして、**変わったときだけ**配る (別々に焼くと時刻が揃わない) |
 | `src/lib/ts/captions.ts` | 届いた字幕を、映像に合わせて出す順に並べる (DOM を触らない) |
+| `src/lib/ts/mkv.ts` | Matroska からコマと時刻を取り出す。ライブの字幕は**時刻をコマに付けて**運ぶ |
 | `src/lib/live.ts` | ライブ視聴でサーバと画面が取り決めていること (多重化の種別・指示・知らせ) |
 | `src/lib/live-player.svelte.ts` | ライブ視聴の受け側。WebSocket → MSE、音声の選び直し、切り替え中の絵 |
 | `src/lib/ts/pacing.ts` | ライブの再生位置の決め方 (どれだけ貯めるか。DOM を触らない) |

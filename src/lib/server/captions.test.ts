@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { CHANNEL } from '$lib/live';
-import { CANVAS, captionArgs, frame, PngSplitter, TrackList } from './captions';
+import { CANVAS, captionInput, captionOutput, frame, NO_SUBTITLE, TrackList } from './captions';
 
 /**
  * PNG 1枚ぶん。**かたまりの形まで真似る** — 切れ目を `IEND` で見つけるので、
@@ -24,116 +24,97 @@ const png = (fill: number, body = 8) => {
 
 describe('字幕の取り出し方', () => {
     /*
-     * **`-copyts` が要る。** 付けないと ffmpeg は字幕1枚目を 0 秒として数え直す
-     * (フィルタに入れるのが字幕1本だけで、基準になる映像がこちら側に無いため)。
-     * 映像側も同じにしてあるので、受け側は届いた時刻と再生位置を直に比べられる
-     */
-    test('元TSの時刻をそのまま持つ', () => {
-        expect(captionArgs(1024)).toContain('-copyts');
-    });
-
-    /*
      * **`-canvas_size` が要る。** 無いと libaribcaption は 1440x1080 (PROFILE_A)
      * とみなすので、1920x1080 の放送では字幕だけ横に伸びる
      */
     test('画面の大きさを渡す', () => {
-        const args = captionArgs(1024);
+        const args = captionInput();
         expect(args[args.indexOf('-canvas_size') + 1]).toBe(`${CANVAS.width}x${CANVAS.height}`);
+        expect(args[args.indexOf('-sub_type') + 1]).toBe('bitmap');
     });
 
     /*
      * **PNG まで ffmpeg に組ませる。** 実機で同じ TS 30秒ぶんを通した実測:
      * 生の RGBA 1.94秒 (406MB) / PNG 1.05秒 (1.76MB) / 256色 PNG 4.30秒 (0.94MB)。
-     * 生のほうが遅いのは書く量が桁違いだから。denpa 側の切り抜き・色数落とし・
-     * PNG 組み立ては、まるごと要らない
+     * 生のほうが遅いのは書く量が桁違いだから
      */
     test('絵は PNG で受け取る', () => {
-        const args = captionArgs(1024);
-        expect(args).toContain('image2pipe');
+        const args = captionOutput('0:p:1024', 0);
         expect(args[args.indexOf('-c:v') + 1]).toBe('png');
         expect(args).not.toContain('rawvideo');
     });
 
+    /*
+     * **時刻を運べる器で受ける。**
+     *
+     * 生の PNG を並べただけ (`image2pipe`) では時刻が乗らない。別の口
+     * (`showinfo`) に喋らせて来た順に組にしていた頃は**数が合わずにずれた** —
+     * 実機の日テレで70秒測ると PNG 77枚に対し showinfo 79行。一度ずれると
+     * 戻らず、字幕が遅れて出て消えるのも遅れる
+     */
+    test('時刻はコマと一緒に運ばせる', () => {
+        const args = captionOutput('0:p:1024', 0);
+        expect(args[args.indexOf('-f') + 1]).toBe('matroska');
+        expect(args).not.toContain('image2pipe');
+        expect(args).not.toContain('showinfo');
+    });
+
+    /** **映像とは別の口へ出す。** 同じ ffmpeg なので、口を分けるしかない */
+    test('映像とは別の口へ出す', () => {
+        expect(captionOutput('0:p:1024', 0)).toContain('pipe:3');
+    });
+
+    /** 溜められるとそのぶん遅れる。塊の上限を最小にして1枚ずつ書かせる */
+    test('溜めさせない', () => {
+        const args = captionOutput('0:p:1024', 0);
+        expect(args[args.indexOf('-cluster_time_limit') + 1]).toBe('1');
+        expect(args[args.indexOf('-flush_packets') + 1]).toBe('1');
+    });
+
     /** 局を名指しする。1本の物理チャンネルに複数の局が乗っている (映像と同じ) */
     test('選んだ局の字幕を採る', () => {
-        expect(captionArgs(1032).join(' ')).toContain('[0:p:1032:s:0]null');
+        expect(captionOutput('0:p:1032', 0).join(' ')).toContain('[0:p:1032:s:0]null');
     });
 
     test('局が分からなければ最初に見つけた字幕', () => {
-        expect(captionArgs(0).join(' ')).toContain('[0:s:0]null');
+        expect(captionOutput('0', 0).join(' ')).toContain('[0:s:0]null');
+    });
+
+    /** **言語が複数ある放送**では2本目を選べる */
+    test('何本目かを選べる', () => {
+        expect(captionOutput('0:p:1024', 1).join(' ')).toContain('[0:p:1024:s:1]null');
     });
 
     /** 出てきた枚をそのまま出す。詰め直させると時刻がずれる */
     test('コマ数を揃え直させない', () => {
-        const args = captionArgs(1024);
+        const args = captionOutput('0:p:1024', 0);
         expect(args[args.indexOf('-fps_mode') + 1]).toBe('passthrough');
-    });
-
-    /*
-     * **showinfo には喋らせない。**
-     *
-     * 時刻と「空かどうか」を標準エラーに喋らせて、標準出力の PNG と来た順に
-     * 組にしていた。**数が合わない** — 実機の日テレで70秒測ると PNG 77枚に対し
-     * showinfo 79行で、余ったぶんだけ以降ずっと1つずれる。ずれると字幕の出た枚に
-     * 1つ前の「空」が当たって「消す」に化け、**字幕が遅れて出て、消えるのも
-     * 遅れる**。いまは絵だけを見るので、組にするものが無い
-     */
-    test('別の口に喋らせない', () => {
-        expect(captionArgs(1024)).not.toContain('showinfo');
     });
 });
 
 /**
- * PNG は `IEND` で切る。
+ * **字幕を持たない放送は普通にある** (ショッピングやサブチャンネル)。
  *
- * **次の署名を待ってはいけない。** 待っていた頃は1枚が次の1枚に足止めされ、
- * 字幕が次に変わるまで前の字幕が出なかった — 間隔の空く番組ほど遅れる
- * (実機で「字幕が遅い」として出た)。
+ * そこに字幕を頼むと ffmpeg は組み立ての時点で降りる — **映像も出ない**。
+ * そうと分かったら字幕なしで焼き直すので、その言い分を見分けられること
  */
-describe('PngSplitter', () => {
-    /** ここが遅れの分かれ目。**1枚届いたら、その場で出す** */
-    test('1枚そろったら、次を待たずに出す', () => {
-        const splitter = new PngSplitter();
-        const a = png(0x11);
-        const out = splitter.feed(a);
-        expect(out).toHaveLength(1);
-        expect(out[0]).toEqual(a);
+describe('字幕が無いと分かる', () => {
+    /** 実機で出させたものそのまま */
+    test('ffmpeg の言い分から見分ける', () => {
+        expect(
+            NO_SUBTITLE.test(
+                "[fc#0 @ 0x1] Stream specifier ':s:0' in filtergraph description [0:s:0]null[s] matches no streams.",
+            ),
+        ).toBe(true);
+        expect(NO_SUBTITLE.test('Error binding filtergraph inputs/outputs: Invalid argument')).toBe(true);
+        expect(
+            NO_SUBTITLE.test('[fc#0 @ 0x1] No program with ID 1024 exists, stream specifier can never match'),
+        ).toBe(false);
     });
 
-    test('続けて来たぶんも順に出す', () => {
-        const splitter = new PngSplitter();
-        const a = png(0x11);
-        const b = png(0x22);
-        const joined = new Uint8Array(a.length + b.length);
-        joined.set(a);
-        joined.set(b, a.length);
-        const out = splitter.feed(joined);
-        expect(out).toHaveLength(2);
-        expect(out[0]).toEqual(a);
-        expect(out[1]).toEqual(b);
-    });
-
-    /** パイプなので、かたまりの切れ目で届くとは限らない */
-    test('途中で切れて届いても組み直す', () => {
-        const splitter = new PngSplitter();
-        const a = png(0x11, 40);
-        expect(splitter.feed(a.subarray(0, 5))).toHaveLength(0);
-        expect(splitter.feed(a.subarray(5, 30))).toHaveLength(0);
-        const out = splitter.feed(a.subarray(30));
-        expect(out).toHaveLength(1);
-        expect(out[0]).toEqual(a);
-    });
-
-    test('署名の前に来たごみは捨てる', () => {
-        const splitter = new PngSplitter();
-        const a = png(0x11);
-        const junk = new Uint8Array([1, 2, 3]);
-        const joined = new Uint8Array(junk.length + a.length);
-        joined.set(junk);
-        joined.set(a, junk.length);
-        const out = splitter.feed(joined);
-        expect(out).toHaveLength(1);
-        expect(out[0]).toEqual(a);
+    test('よくある行では立たない', () => {
+        expect(NO_SUBTITLE.test('[mpeg2video @ 0x1] Invalid frame dimensions 0x0.')).toBe(false);
+        expect(NO_SUBTITLE.test('  Stream #0:2[0x130]: Subtitle: arib_caption')).toBe(false);
     });
 });
 
@@ -208,7 +189,7 @@ describe('TrackList', () => {
 describe('frame', () => {
     test('絵は種別 0x20 で、頭に置き場所が付く', () => {
         const data = png(0x11);
-        const out = frame({ data });
+        const out = frame({ at: 0, data });
         expect(out.kind).toBe(CHANNEL.subtitle);
         const view = new DataView(out.data.buffer, out.data.byteOffset);
         expect([view.getUint16(0), view.getUint16(2), view.getUint16(4), view.getUint16(6)]).toEqual([
@@ -221,17 +202,17 @@ describe('frame', () => {
     });
 
     /*
-     * **いつ出すかは添えない。** 絶対の時刻で合わせる道は2回外している —
-     * mp4 の 0 は多重化器の都合で決まる (probe の間に溜まった音声に合う。実機で
-     * 2.4秒ずれた) し、「焼いている絵より何秒前か」を送る道もフィルタが符号器より
-     * 先を走るぶんずれた (実機で5秒)。受け側は**いちばん新しく届いている映像から、
-     * 決まった量だけ待たせて**出す (`live.ts` の `captionLead`)。
+     * **いつ出すかを添える。** 映像と同じ ffmpeg が付けた mp4 の物差しなので、
+     * 受け側は再生位置と直に比べられる。
      *
-     * 放送の時刻を添えるのもやめた。読むには `showinfo` を別の口で喋らせる
-     * ことになり、**その行と絵の数が合わずに字幕が遅れていた** (captions.ts)
+     * 添えずに「届いた時点の再生位置」に置いていた頃は、焼く手間のぶん字幕の
+     * ほうが先に届くぶんだけ早く出ていた。その量を測って足し引きしようとして
+     * 3回外している (docs/stream.md §5.4) — 別々の ffmpeg では測れなかった
      */
-    test('いつ出すかは添えない', () => {
-        expect(frame({ data: png(0x11) }).pts).toBe(0n);
-        expect(frame({ data: png(0x11) }).data.length).toBe(8 + png(0x11).length);
+    test('いつ出すかを 90kHz で添える', () => {
+        expect(frame({ at: 0, data: png(0x11) }).pts).toBe(0n);
+        // 1.5 秒 = 135000
+        expect(frame({ at: 1500, data: png(0x11) }).pts).toBe(135_000n);
+        expect(frame({ at: 1500.4, data: png(0x11) }).pts).toBe(135_036n);
     });
 });

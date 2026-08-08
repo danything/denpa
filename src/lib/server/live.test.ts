@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { type AudioSide, audioTracks } from '$lib/arib';
-import { captionLead, codecsFor, encodeArgs } from './live';
+import { codecsFor, encodeArgs } from './live';
 
 /** 1本目の音声をそのまま。番組表が何も言っていないときの既定 */
 const stereo = audioTracks([])[0];
@@ -47,12 +47,14 @@ describe('ライブの焼き方', () => {
      *     50KB   丸ごと 0/3 通る   1局に絞る 3/3
      *    120KB   丸ごと 1/3 通る   1局に絞る 3/3
      *
-     * 絞れば 20KB でも通る。**そこまで下げてある** — 6回ずつ測ると
-     * 100KB は最短 474ms、20KB は最短 441ms で、33ms は固定の費用
+     * 絞れば 20KB でも通る。映像だけを焼いていた頃はそこまで下げてあった
+     * (6回ずつ測ると 100KB は最短 474ms、20KB は最短 441ms で、33ms は固定の費用)。
+     * **いまは 100KB に戻してある** — 同じ ffmpeg に**字幕まで見つけさせる**ので、
+     * 映像だけのときの値では足りない
      */
-    test('入口の解析は 20KB まで', () => {
+    test('入口の解析は 100KB まで', () => {
         const args = plain();
-        expect(args[args.indexOf('-probesize') + 1]).toBe('20000');
+        expect(args[args.indexOf('-probesize') + 1]).toBe('100000');
     });
 
     /*
@@ -139,29 +141,72 @@ describe('ライブの焼き方', () => {
         expect(args).not.toContain('0:p:1032:a:0');
     });
 
-    /** 受け側は使わないが、サーバ側で字幕と突き合わせて測るのに要る (`captionLead`) */
-    test('元TSの時刻を保つ', () => {
-        expect(plain()).toContain('-copyts');
+    /*
+     * **`-copyts` は付けない。**
+     *
+     * 付けると放送の絶対時刻が mp4 の多重化器まで届き、あれが 0 に詰め直すので
+     * 受け側から見た 0 の意味が分からなくなる (実機では `next_dts` の assertion で
+     * 落ちもした)。付けなければ ffmpeg が入口で1回だけ 0 に寄せ、**その寄せが
+     * 字幕の出口にも同じだけ効く** — 映像と字幕が同じ物差しに乗る
+     */
+    test('放送の絶対時刻は持ち込まない', () => {
+        expect(plain()).not.toContain('-copyts');
     });
 
     /*
-     * **字幕と時刻を突き合わせないので、コマごとに喋らせるものが無い。**
+     * **字幕も同じ ffmpeg で焼く。** 出口を2つ持ち、字幕は `pipe:3` に出す。
+     * 別々に起こすと入口の寄せ幅が違って、時刻を突き合わせられない
+     */
+    test('字幕は2つ目の出口へ出す', () => {
+        const args = plain();
+        expect(args).toContain('pipe:1');
+        expect(args).toContain('pipe:3');
+        // 映像の出口が先。字幕はそのあと
+        expect(args.indexOf('pipe:1')).toBeLessThan(args.indexOf('pipe:3'));
+        expect(args.join(' ')).toContain('[0:p:1024:s:0]null');
+    });
+
+    /*
+     * **字幕を持たない放送はある** (ショッピングやサブチャンネル)。
+     * そこに頼むと ffmpeg は組み立ての時点で降りて**映像も出ない**ので、
+     * 字幕を外して焼き直せる形にしてある (`Session.run`)
+     */
+    test('字幕なしでも組める', () => {
+        const args = encodeArgs(1024, true, stereo, 'h264', null);
+        expect(args).not.toContain('pipe:3');
+        expect(args).not.toContain('-filter_complex');
+        expect(args).not.toContain('-sub_type');
+        // 映像はいつもどおり
+        expect(args).toContain('pipe:1');
+        expect(args).toContain('libx264');
+    });
+
+    /** **言語が複数ある放送**では2本目を選べる */
+    test('何本目の字幕かを選べる', () => {
+        expect(encodeArgs(1024, true, stereo, 'h264', 1).join(' ')).toContain('[0:p:1024:s:1]null');
+    });
+
+    /*
+     * **コマごとに showinfo を吐かせない。**
      *
-     * 絶対の時刻で合わせる道は2回外している (`live.ts` の説明)。いまは時刻では
-     * なく**待たせる量**を渡すので、コマごとに添えるものは何も無い。
-     * `showinfo` を挟んでいた頃は**毎秒60行**が標準エラーに流れていた
+     * 時刻と「空かどうか」を標準エラーに喋らせて標準出力の絵と組にしていた頃は、
+     * 数が合わずにずれた (`captions.ts`)。いまは時刻がコマに付いてくる
      */
     test('コマごとに showinfo を吐かせない', () => {
         expect(plain()[plain().indexOf('-vf') + 1]).not.toContain('showinfo');
+        expect(plain()).not.toContain('showinfo');
     });
 
     /*
-     * **失敗だけ残す。** `showinfo` を外したので絞れる。字幕側は絞れない
-     * (あちらは `showinfo` が info で喋る。`captions.ts`)
+     * **`-loglevel` は下げられない。** 選べる字幕は入口の見出しから拾っていて
+     * (`TrackList`)、あれは info で出る。字幕を映像と同じ ffmpeg で焼くように
+     * したので、こちらも下げられなくなった。要らない行は読む側で落とす。
+     * **数字の進み具合だけは止める** — 毎秒何行も流れるだけで読むものが無い
      */
-    test('記録は失敗だけに絞る', () => {
+    test('進み具合は喋らせない', () => {
         const args = plain();
-        expect(args[args.indexOf('-loglevel') + 1]).toBe('error');
+        expect(args).toContain('-nostats');
+        expect(args).not.toContain('-loglevel');
     });
 });
 
@@ -302,7 +347,7 @@ describe('H.264 は速さを優先する', () => {
 /**
  * **コマ数の上限を言っておく。**
  *
- * `-probesize` を 20KB まで削ったので、ffmpeg は入口でコマ数を読み切れず、
+ * `-probesize` を削ってあるので、ffmpeg は入口でコマ数を読み切れず、
  * 時間の刻み (90kHz) からでたらめな値を起こすことがある。x264 は黙って受けるが、
  * **SVT-AV1 は突っぱねる** (`The maximum allowed frame rate is 240 fps`)。
  * 実機で 20KB のまま AV1 を選ぶと 0/3、上限を付けると 3/3 通った。
@@ -330,35 +375,5 @@ describe('コマ数の上限', () => {
         for (const codec of ['h264', 'av1'] as const) {
             expect(encodeArgs(1024, true, stereo, codec)).toContain('-fpsmax');
         }
-    });
-});
-
-/**
- * **字幕を待たせる量。** 字幕は映像より先に出てくるので、そのぶん待たせる
- * (`captionLead` に実測の内訳)。
- */
-describe('字幕を待たせる量', () => {
-    /**
-     * **H.264 は待たせない。** 字幕が届いたときには、その字幕が属する映像も
-     * もう届いている (実機で 0 / 0.2 / 0.45秒 を出し比べて 0 がいちばん合った)
-     */
-    test('H.264 は待たせない', () => {
-        expect(captionLead('h264', true)).toBe(0);
-        expect(captionLead('h264', false)).toBe(0);
-    });
-
-    /** **局では変わらない。** 電波の中の先回りは字幕にも映像にも掛かって相殺する */
-    test('局では変わらない', () => {
-        expect(captionLead('h264', true)).toBe(captionLead('h264', false));
-        expect(captionLead('av1', true)).toBe(captionLead('av1', true));
-    });
-
-    /**
-     * **AV1 だけ待たせる。** SVT-AV1 が溜め込むぶん映像だけが遅れて届く。
-     * 溜める量は枚数で決まるので、コマ数を倍にすると待ちは縮む
-     */
-    test('AV1 は待たせる。コマ数が多いほど短い', () => {
-        expect(captionLead('av1', false)).toBeGreaterThan(captionLead('h264', false));
-        expect(captionLead('av1', true)).toBeLessThan(captionLead('av1', false));
     });
 });
