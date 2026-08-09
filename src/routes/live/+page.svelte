@@ -1,6 +1,5 @@
 <script lang="ts">
     import { onMount } from 'svelte';
-    import Brightness from '$lib/components/player/Brightness.svelte';
     import ControlBar from '$lib/components/player/ControlBar.svelte';
     import ControlButton from '$lib/components/player/ControlButton.svelte';
     import { screenAwake } from '$lib/components/player/awake.svelte';
@@ -134,12 +133,6 @@
     });
 
     /**
-     * 画面の明るさ (`Brightness`)。**出先の明るいところで暗い場面を読むため。**
-     * 覚えるのは端末ごとで、観る画面と同じ値を使う
-     */
-    let brightness = $state(1);
-
-    /**
      * 右の列に出す番組の中身。**モーダルにしない** — 絵の上に被さると
      * 観ながら読めない (観る画面と同じ。`detail.svelte.ts`)。
      *
@@ -238,12 +231,7 @@
                 中身が届くたびに右へ左へ動く。放送に終わりは無いのだから、
                 位置ではなく**張り付いているかどうか**を出すのが正しい
             -->
-            <video
-                bind:this={video}
-                class="h-full w-full bg-black"
-                style="filter: brightness({brightness})"
-                playsinline
-                data-testid="live-video"
+            <video bind:this={video} class="h-full w-full bg-black" playsinline data-testid="live-video"
             ></video>
 
             <!--
@@ -601,9 +589,6 @@
                                 </ul>
                             </div>
                         {/if}
-
-                        <!-- 画面の明るさ。観る画面と同じ部品・同じ値 -->
-                        <Brightness bind:value={brightness} testid="live-brightness" />
 
                         <ControlButton
                             path={fullscreened ? SHRINK : EXPAND}

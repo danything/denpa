@@ -167,6 +167,24 @@ describe('貯める量の決め直し', () => {
         expect(nextTarget(FLOOR, false, SETTLED * 10)).toBe(FLOOR);
         expect(nextTarget(CEILING, true, 0)).toBe(CEILING);
     });
+
+    /**
+     * **膨らんだぶんほど速く戻す。**
+     *
+     * 決め打ちで 0.15 ずつ戻していた頃は、一度増えた遅れが減っていかないように
+     * 見えた (実機)。1.4 秒から 0.2 秒まで 8回 = 40秒かかり、その間にもう一度
+     * 止まれば振り出しに戻る — 止まりがちな経路では、事実上ずっと増えっぱなし
+     */
+    test('大きく膨らんでいるときほど、1回で大きく戻る', () => {
+        const 大きい = 3 - nextTarget(3, false, SETTLED);
+        const 小さい = 0.5 - nextTarget(0.5, false, SETTLED);
+        expect(大きい).toBeGreaterThan(小さい);
+    });
+
+    /** 割合だけだと、小さいところで止まってしまう */
+    test('小さくても、必ずいくらかは戻る', () => {
+        expect(nextTarget(0.3, false, SETTLED)).toBeLessThanOrEqual(0.2);
+    });
 });
 
 /**

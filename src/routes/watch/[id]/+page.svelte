@@ -1,7 +1,6 @@
 <script lang="ts">
     import { onMount } from 'svelte';
     import { submitting } from '$lib/actions';
-    import Brightness from '$lib/components/player/Brightness.svelte';
     import ControlBar from '$lib/components/player/ControlBar.svelte';
     import ControlButton from '$lib/components/player/ControlButton.svelte';
     import { screenAwake } from '$lib/components/player/awake.svelte';
@@ -149,12 +148,6 @@
     const REMEMBER = 15_000;
     /** 続きから出したか。出したことを画面にも言う (黙って途中から始まると驚く) */
     let continued = $state(false);
-
-    /**
-     * 画面の明るさ (`Brightness`)。**出先の明るいところで暗い場面を読むため。**
-     * 覚えるのは端末ごとで、ライブと同じ値を使う
-     */
-    let brightness = $state(1);
 
     /** 押し間違い防止に2回押させる。一覧と同じ (`routes/+page.svelte` の `arm`) */
     let armed = $state(false);
@@ -715,7 +708,6 @@
                     class="w-full bg-black {full
                         ? 'h-full max-h-none'
                         : 'max-h-[calc(100dvh-9rem)] min-h-56 md:max-h-[calc(100dvh-7rem)]'}"
-                    style="filter: brightness({brightness})"
                     playsinline
                     onclick={press}
                     onplay={() => {
@@ -745,7 +737,6 @@
                 <canvas
                     bind:this={overlay}
                     class="pointer-events-none absolute"
-                    style="filter: brightness({brightness})"
                     data-testid="watch-captions-canvas"
                     data-on={captions && hasCaptions}
                     aria-hidden="true"
@@ -1003,9 +994,6 @@
                                 {/each}
                             </ul>
                         </div>
-
-                        <!-- 画面の明るさ。ライブと同じ部品・同じ値 -->
-                        <Brightness bind:value={brightness} testid="watch-brightness" />
 
                         <!--
                             **切り抜き。** 字幕ごと写して、そのまま貼れるようにする。
