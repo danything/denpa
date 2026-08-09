@@ -204,7 +204,7 @@
         <!-- 映像は高さのほうを上限にする。横幅いっぱいにすると縦がはみ出す -->
         <!-- svelte-ignore a11y_no_static_element_interactions -->
         <div
-            class="bg-base-300 relative aspect-video max-h-full overflow-hidden rounded-lg
+            class="bg-base-300 relative aspect-video max-h-full overflow-hidden
                    {controlsShown ? '' : 'cursor-none'}"
             onpointermove={wake}
             onpointerdown={wake}
@@ -286,45 +286,6 @@
                     キーボードで触っている間は残す。**観る画面と同じ帯**
                 -->
                 <ControlBar shown={controlsShown} testid="live-controls">
-                    {#if current}
-                        <!--
-                            **番組の名前もこの帯に入れる。**
-
-                            絵の下に置いていた頃は、**その行のぶんだけ絵が縮んで**
-                            いた (画面の高さで決まる作りなので、下に何か置くと上が
-                            削れる) うえ、全画面にすると付いてこなかった。絵の上に
-                            別の帯を作るのも、**同じことを言う場所が2つ**になる —
-                            ここは元から黒く敷いてあって、字を置く余地がある
-                        -->
-                        <div class="mb-1 truncate text-sm font-medium" data-testid="live-title">
-                            {current.now?.name ?? current.name}
-                        </div>
-                        <div class="mb-1 truncate text-xs text-white/70">
-                            {current.name}
-                            {#if current.now}
-                                ・ {time(current.now.startAt)} 〜 {time(current.now.endAt)}
-                            {/if}
-                            <!--
-                                **放送からどれだけ遅れているか。** 詰めていく作業をするのに、
-                                見えないと当てずっぽうになる
-                            -->
-                            {#if player.delay !== null}
-                                ・ <span data-testid="live-delay">遅延 {player.delay.toFixed(1)}秒</span>
-                            {/if}
-                            <!--
-                                **詰まった回数。止まったときだけ出る。**
-
-                                送り出す側は測ってある — 素の WebSocket で25分受けて
-                                **0.5秒以上の間が1回も無い** (中央 43ms / p99 194ms)。
-                                なので「一瞬止まって遅延が増える」が起きているなら
-                                こちら側で、その証拠がこの数
-                            -->
-                            {#if player.stalls > 0}
-                                ・ <span data-testid="live-stalls">途切れ {player.stalls}回</span>
-                            {/if}
-                        </div>
-                    {/if}
-
                     <!--
                         **上に位置、下に押すもの。観る画面と同じ二段。**
                         ([watch/[id]/+page.svelte](../watch/%5Bid%5D/+page.svelte))
@@ -551,8 +512,42 @@
                             ライブ
                         </button>
 
-                        <!-- ここから右は「どう出すか」。観る画面と同じ位置に置く -->
-                        <span class="grow"></span>
+                        <!--
+                            **番組の名前と遅れはここ。** 独立した行にしていた頃は、
+                            そのぶん帯が高くなって絵に掛かっていた。押すものの間は
+                            どのみち空いているので、そこに入れて縮む側にする。
+                            ここから右は「どう出すか」で、観る画面と同じ位置
+                        -->
+                        <span class="min-w-0 grow truncate px-2 text-xs text-white/80">
+                            {#if current}
+                                <span data-testid="live-title">
+                                    {current.now?.name ?? current.name}
+                                </span>
+                                ・ {current.name}
+                                {#if current.now}
+                                    ・ {time(current.now.startAt)} 〜 {time(current.now.endAt)}
+                                {/if}
+                            {/if}
+                            <!--
+                                **放送からどれだけ遅れているか。** 詰めていく作業をするのに、
+                                見えないと当てずっぽうになる
+                            -->
+                            {#if player.delay !== null}
+                                ・ <span data-testid="live-delay">遅延 {player.delay.toFixed(1)}秒</span>
+                            {/if}
+                            <!--
+                                **詰まった回数。止まったときだけ出る。**
+
+                                送り出す側は測ってある — 入口 (TLS) を通した素の
+                                WebSocket で受けて、**0.5秒以上の間が1回も無い**
+                                (H.264 25分 中央 43ms / AV1 4分 中央 34ms)。
+                                「一瞬止まって遅延が増える」が起きているならこちら側で、
+                                その証拠がこの数
+                            -->
+                            {#if player.stalls > 0}
+                                ・ <span data-testid="live-stalls">途切れ {player.stalls}回</span>
+                            {/if}
+                        </span>
 
                         <!--
                         **追っかけ中の速さ。追っかけている間だけ出す。**

@@ -43,6 +43,9 @@ export function playerControls(): PlayerControls {
     let byTouch = $state(false);
     let keyboard = $state(false);
     let held = $state(false);
+    /** 前に居た場所。**動いていない `pointermove` を捨てる**のに使う (`wake`) */
+    let lastX = Number.NaN;
+    let lastY = Number.NaN;
 
     /*
      * **見るのは「触ったか」と「止めているか」だけ。** 再生できているかどうかを
@@ -73,7 +76,18 @@ export function playerControls(): PlayerControls {
         set held(value: boolean) {
             held = value;
         },
+        /**
+         * **本当に動いたときだけ出す。**
+         *
+         * ブラウザは、止まっているカーソルの下で中身が動いただけでも
+         * `pointermove` を投げてくる。時計は毎秒書き換わるので、**全画面に
+         * したまま何もしなくても操作列が消えなくなって**いた (実機のPC)。
+         * 座標が変わっていないものは触ったことにしない
+         */
         wake(event: PointerEvent): void {
+            if (event.clientX === lastX && event.clientY === lastY) return;
+            lastX = event.clientX;
+            lastY = event.clientY;
             byTouch = event.pointerType !== 'mouse';
             touched = Date.now();
             now = touched;

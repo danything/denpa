@@ -673,7 +673,7 @@
             <!-- svelte-ignore a11y_no_noninteractive_element_interactions, a11y_no_static_element_interactions -->
             <section
                 bind:this={stage}
-                class="relative w-full overflow-hidden rounded-lg bg-black {full
+                class="relative w-full overflow-hidden bg-black {full
                     ? 'flex h-screen items-center justify-center'
                     : ''} {controls.shown ? '' : 'cursor-none'}"
                 onpointermove={controls.wake}
@@ -832,11 +832,6 @@
 
                 <!-- 下端。帯と押すもの。**ライブと同じ帯** (`ControlBar`) -->
                 <ControlBar shown={controls.shown} testid="watch-controls">
-                    <!-- 何を観ているか。ライブと同じ場所・同じ形 -->
-                    <div class="mb-1 truncate text-sm font-medium" data-testid="watch-name">
-                        {rec.name}
-                    </div>
-
                     <!--
                         **帯にはチャプターの切れ目を出す。** どこで CM が挟まって
                         いるかが見えると、送りのボタンを何回押すかが分かる
@@ -955,7 +950,17 @@
                             </span>
                         {/if}
 
-                        <span class="grow"></span>
+                        <!--
+                            **番組の名前はここ。** 独立した行にしていた頃は、その
+                            ぶん帯が高くなって絵に掛かっていた。押すものの間は
+                            どのみち空いているので、そこに入れて縮む側にする
+                        -->
+                        <span
+                            class="min-w-0 grow truncate px-2 text-xs text-white/80"
+                            data-testid="watch-name"
+                        >
+                            {rec.name}
+                        </span>
 
                         <!-- 早送り。**ライブの追っかけと同じ並び・同じ見た目** -->
                         <div class="dropdown dropdown-top dropdown-end">
