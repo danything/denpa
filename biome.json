@@ -16,7 +16,8 @@
             "!renovate.json",
             "!agent/Denpa.Agent",
             "!agent/Denpa.Agent.Tests",
-            "!agent/publish"
+            "!agent/publish",
+            "!src/lib/vendor"
         ]
     },
     "formatter": {

@@ -34,6 +34,7 @@ import {
     worthLogging,
 } from './captions';
 import { config } from './config';
+import { DataBroadcast, type ResponseMessage } from './databroadcast';
 import { queryOne } from './db';
 import { deinterlace, smoothMotionFor } from './encoder';
 import { chunks, lines } from './stream';
@@ -459,6 +460,13 @@ class Session {
     private last: string | null = null;
     /** 字幕が無いと言われたか。言われたら字幕なしで焼き直す */
     private noSubtitle = false;
+    /**
+     * データ放送を解く側 ([databroadcast.ts](./databroadcast.ts))。
+     *
+     * **1局に絞ったあとの TS を分ける。** ffmpeg に渡しているのと同じものを
+     * もう一方へ流すだけで、`tee` も別プロセスも要らない (stream.md §5.6)
+     */
+    private readonly data = new DataBroadcast(undefined, (message) => this.handData(message));
     private stopped = false;
 
     constructor(
@@ -503,6 +511,8 @@ class Session {
             this.tellOne(viewer, { type: 'captions', tracks: this.list.tracks, track: this.track });
         }
         if (this.showing !== null) this.handCaption(viewer, this.showing);
+        // データ放送も、いま出すのに要るものをまとめて渡す (`DataBroadcast.replay`)
+        for (const message of this.data.replay()) this.tellData(viewer, message);
     }
 
     remove(viewer: Viewer): void {
@@ -677,6 +687,8 @@ class Session {
                 if (this.stopped) break;
                 const out = filter === null ? chunk : filter.filter(chunk);
                 if (out.length === 0) continue;
+                // **絞ったあとを、もう一方へ分ける。** ffmpeg に渡すのと同じもの
+                this.data.feed(out);
                 // **書けたことを待つ** (上の説明)。待たないと、転んだときに拾い手が居ない
                 await writer.write(out);
                 await writer.flush();
@@ -735,6 +747,25 @@ class Session {
         for (const viewer of this.viewers) this.handCaption(viewer, caption);
     }
 
+    /**
+     * データ放送を配る。**中身は JSON** (組み立て終わったモジュールの中の絵や音は
+     * base64 で入っている — 借りている側がそう出す)。
+     *
+     * 映像と違って**捨てない**。落とすと、そのモジュールが次に回ってくるまで
+     * 画面が欠けたままになる (カルーセルは数秒から数十秒で一周する)
+     */
+    private handData(message: ResponseMessage): void {
+        if (this.viewers.size === 0) return;
+        // **組み立てるのは1回だけ。** `pcr` は毎秒50個ほど来るので、
+        // 人数ぶん JSON にすると人が増えたぶんだけ無駄に働く
+        const data = new TextEncoder().encode(JSON.stringify(message));
+        for (const viewer of this.viewers) viewer.connection.send(CHANNEL.data, 0n, data);
+    }
+
+    private tellData(viewer: Viewer, message: ResponseMessage): void {
+        viewer.connection.send(CHANNEL.data, 0n, new TextEncoder().encode(JSON.stringify(message)));
+    }
+
     private handCaption(viewer: Viewer, caption: Caption): void {
         const { kind, pts, data } = frame(caption);
         viewer.connection.send(kind, pts, data);
@@ -783,6 +814,7 @@ class Session {
         this.stopped = true;
         this.aborter.abort();
         this.proc?.kill();
+        this.data.close();
         sessions.delete(
             key(
                 this.channelType,
