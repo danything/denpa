@@ -846,10 +846,24 @@ export function decodeTS(options: {
 
 ffmpeg は1本のまま、チューナーも1つのまま、遅延も 0.6秒 のまま。
 
-**残っている読めていないところ**は、クライアントの描画側をどう抱えるか。あちらは
-ページまるごとを組む webpack のバンドルで、自前の `<video>` を持っている。
-**絵は denpa のものを使うので、その `<video>` は使わない**形にできるかを実物で
-確かめること。
+**描画側は、抱えられるように出来ている。** `client/bml_browser.ts` の `BMLBrowser`
+は差し込み口を並べて受け取る形 (`Indicator` / `EPG` / `IP` / `AudioNodeProvider`)、
+**映像は `client/player/video_player.ts` の抽象クラス**で、**既にある `<video>` と
+入れ物を渡して使う**:
+
+```ts
+export abstract class VideoPlayer {
+    constructor(video: HTMLVideoElement, container: HTMLElement)
+    public abstract setSource(source: string): void;
+    ...
+}
+```
+
+**何もしない実装 (`client/player/null.ts`) が既にある。** denpa の `<video>` を
+そのまま渡し、`setSource` で何もしなければ、**絵は denpa のまま BML だけが上に載る**。
+自分で書き直す理由がここには無い — 手書きのぶんだけでも `browser.ts` 58KB・
+`content.ts` 69KB・`drcs.ts` 31KB・`nvram.ts` 25KB・`binary_table.ts` 26KB あり、
+ES2 の処理系まで抱えている。
 
 セルフホスト前提なので、NVRAM は web-bml の既定実装（サーバローカル保存）をそのまま使う。
 
