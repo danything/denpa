@@ -84,6 +84,37 @@ test.describe('録画を観る', () => {
         await expect(page.getByTestId('watch-next-chapter')).toHaveCount(0);
     });
 
+    /**
+     * **字幕は動画の隣に置いた文字のほうから出す。**
+     *
+     * 入れ物に入っているのは PGS (絵) で、ブラウザに復号器が無い。焼くときに
+     * 同じ字幕を文字でも取り出して `<動画名>.ja.ass` に置いてあるので、
+     * それを WebVTT に直して `<track>` へ渡す (`server/subtitle.ts` の `buildText`)
+     */
+    test('字幕は WebVTT に直って届き、持っているときだけボタンが出る', async ({ page, request }) => {
+        test.setTimeout(180_000);
+        const { id } = await recordOne(page, request);
+
+        const res = await request.get(`/api/recordings/${id}/subtitle.vtt`);
+        expect(res.ok()).toBe(true);
+        expect(res.headers()['content-type']).toContain('text/vtt');
+        const vtt = await res.text();
+        expect(vtt.startsWith('WEBVTT')).toBe(true);
+        // 色は WebVTT が元から持っている名前で残す
+        expect(vtt).toContain('<c.yellow>にせの字幕です</c>');
+        // 「消す」だけの枚は出さない。終わりの時刻としてだけ残る
+        expect(vtt).toContain('--> 00:00:03.000');
+        expect(vtt).not.toContain('00:00:03.000 -->');
+
+        await goto(page, `/watch/${id}`);
+        await expect(page.getByTestId('watch-track')).toHaveCount(1);
+        // 最初は消えている。字幕は絵の上に重なるものなので、要る人が出す
+        const button = page.getByTestId('watch-captions');
+        await expect(button).toHaveAttribute('aria-pressed', 'false');
+        await button.click();
+        await expect(button).toHaveAttribute('aria-pressed', 'true');
+    });
+
     /** 無い録画を開いても、黙って空の画面を出さない */
     test('無い録画は 404', async ({ request }) => {
         const res = await request.get('/watch/999999');

@@ -22,6 +22,33 @@ if printf '%s\n' "$@" | grep -q silencedetect; then
     exit 0
 fi
 
+# 字幕を文字で取り出すパス (`server/subtitle.ts` の `buildText`)。
+# 目印は -fix_sub_duration で、これを渡すのはこの経路だけ。
+#
+# **時刻が揃っているかはここでは見ない** (`ts/ass.test.ts` が持っている)。
+# E2E で確かめたいのは「動画の隣に置かれて、WebVTT に直って画面まで届く」ところ。
+# 空の Dialogue を1つ混ぜてあるのは、「消す」が落とされることを通しでも見るため
+if printf '%s\n' "$@" | grep -qx -- '-fix_sub_duration'; then
+    mkdir -p "$(dirname "$output")"
+    cat > "$output" <<'ASS'
+[Script Info]
+ScriptType: v4.00+
+PlayResX: 960
+PlayResY: 540
+WrapStyle: 2
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+Style: Default,sans-serif,36,&Hffffff,&Hffffff,&H0,&H0,0,0,0,0,100,100,0,0,4,0,4,2,10,10,10,0
+
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+Dialogue: 0,0:00:01.00,0:00:03.00,Default,,0,0,0,,{\an7}{\pos(140,449)}{\1c&H00ffff&}にせの字幕です
+Dialogue: 0,0:00:03.00,0:00:05.00,Default,,0,0,0,,
+ASS
+    exit 0
+fi
+
 # CMを切るパス (-c copy で区間を切り出す / concat で繋ぐ)。
 # 進捗も Duration も出さず、出力ファイルだけ作って終わる本物と同じ振る舞いにする
 if printf '%s\n' "$@" | grep -qx -- '-c' && printf '%s\n' "$@" | grep -qx -- 'copy'; then

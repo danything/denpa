@@ -22,7 +22,7 @@ import { sidecarPaths, writeNfo, writeThumbnail } from './metadata';
 import { descramble, isScrambled } from './scramble';
 import { settings } from './settings';
 import { chunks } from './stream';
-import { buildPgs } from './subtitle';
+import { buildPgs, buildText } from './subtitle';
 import { notify } from './webhook';
 
 export function isVideoCodec(value: unknown): value is VideoCodec {
@@ -999,21 +999,36 @@ async function runJob(jobId: number): Promise<void> {
      * 字幕の 0 秒を**焼き上がりの 0 秒に合わせる。** 焼くほうは入れ物の始まりから
      * 数え直したうえで、映像が出るまで (`headSkip`) を捨てる。同じところを引く
      */
-    const pgs = await buildPgs(
-        source,
-        encodeOptions.canvasSize,
-        SUBTITLE_FONTS,
-        measured.formatStart + headSkip(encodeOptions.videoStart),
-        signal,
-    );
+    const startAt = measured.formatStart + headSkip(encodeOptions.videoStart);
+    const pgs = await buildPgs(source, encodeOptions.canvasSize, SUBTITLE_FONTS, startAt, signal);
     if (pgs !== null) {
         encodeOptions.pgsFile = pgs.path;
         // 名前も放送が名乗っているものにする (「字幕 (日本語)」)
         encodeOptions.captionTitle = pgs.label;
+    }
+
+    /*
+     * **同じ字幕を、文字でももう1本取り出す。**
+     *
+     * 入れ物の中は PGS のままで、こちらは動画の隣に置く付き添い (`.ja.ass`)。
+     * WebDAV 越しの Kodi が拾い、ブラウザには WebVTT に直して渡す
+     * (`api/recordings/<id>/subtitle.vtt`)。**引く値は絵と同じ** — 同じ録画に
+     * 2本付くので、片方だけずれると見比べたときに食い違う。
+     *
+     * 置くのは焼き上がりの名前が決まってから。ここではまだ中身だけ持っておく
+     */
+    const text = await buildText(source, startAt, signal);
+
+    if (pgs !== null || text !== null) {
+        const made = [
+            pgs === null ? null : `${pgs.captions} 枚を PGS`,
+            text === null ? null : `${text.captions} 枚を文字`,
+        ].filter((part) => part !== null);
         database()
             .prepare('UPDATE encode_jobs SET log = ? WHERE id = ?')
-            .run(`字幕 ${pgs.captions} 枚を PGS にしました`, jobId);
+            .run(`字幕 ${made.join('、')} にしました`, jobId);
     }
+
     if (canceled.has(jobId)) {
         removeIfExists(pgs?.path ?? null);
         removeIfExists(trimmed);
@@ -1112,6 +1127,22 @@ async function runJob(jobId: number): Promise<void> {
         const stale = sidecarPaths(recording.library_path);
         removeIfExists(stale.nfo);
         removeIfExists(stale.thumbnail);
+        removeIfExists(stale.subtitle);
+    }
+
+    /*
+     * 文字の字幕を動画の隣に置く。**焼き直しでは必ず置き換える** —
+     * 前の字幕が残ると、CMを切ったぶんだけずれたものが付いたままになる
+     */
+    const subtitlePath = sidecarPaths(output).subtitle;
+    removeIfExists(subtitlePath);
+    if (text !== null) {
+        try {
+            writeFileSync(subtitlePath, text.content);
+        } catch (error) {
+            // 置けなくても観るのに支障は無い (入れ物の中の PGS は無事)
+            console.error(`[encode] 字幕を置けませんでした: ${error}`);
+        }
     }
 
     let size = 0;

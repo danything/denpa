@@ -1,11 +1,13 @@
-import { statSync, writeFileSync } from 'node:fs';
+import { readFileSync, statSync, writeFileSync } from 'node:fs';
 import { SupWriter } from '../pgs';
+import { cleanAss, cleanCues, parseAss } from '../ts/ass';
 import { TrackList } from './captions';
 import { config } from './config';
+import { removeIfExists } from './fsx';
 import { chunks, lines } from './stream';
 
 /**
- * ARIB字幕を絵にして PGS (.sup) にする。
+ * ARIB字幕を絵にして PGS (.sup) にする。**文字のままの写しも1本作る。**
  *
  * 放送に絵が流れてくるわけではない。乗っているのは文字と「どこに・どの大きさで・
  * 何色で・背景の箱つきで」という指定で、テレビはそれを見て毎回自分で描いている。
@@ -18,6 +20,18 @@ import { chunks, lines } from './stream';
  * 入れる先を PGS にするのは、ffmpeg が作れるビットマップ字幕 (dvdsub/dvbsub/xsub)
  * ではどれも足りないため。dvdsub は1枚4色で、実測230色の字幕は文字・縁・箱で
  * 使い切ってしまう。PGS の符号器は ffmpeg に無いので denpa が書く (src/lib/pgs.ts)。
+ *
+ * ## 文字のままの写しも作る (`buildText`)
+ *
+ * 絵は放送どおりだが、**読めない相手がいる。** ブラウザには PGS の復号器が無く、
+ * `<track>` に渡せるのは WebVTT だけ。絵のままだと denpa 自身の観る画面で
+ * 字幕が出せない。そこで同じ字幕を**文字でももう1本**取り出して、動画の隣に
+ * `.ja.ass` として置く ([ass.ts](../ts/ass.ts))。**入れ物の中は PGS のまま**で、
+ * 文字は付き添い — Kodi は付き添いを拾い、ブラウザには WebVTT に直して渡す。
+ *
+ * 費用はほとんど無い。実機の30分番組で **2〜9秒** (エンコードは分単位)。
+ * 取り出しを PGS と同じ ffmpeg に相乗りさせられないのは、`-sub_type` が
+ * **復号のしかたの指定**だからで、絵と文字は別々に解かせるほかない。
  */
 
 /** 最後の1枚をどれだけ出しておくか。ふつうは「消す」が来るので使わない */
@@ -259,4 +273,103 @@ export async function buildPgs(
         return null;
     }
     return { path: output, captions: writer.captions, label: list.tracks[0]?.label ?? '字幕' };
+}
+
+/**
+ * 字幕を文字で取り出す ffmpeg の引数。
+ *
+ * **`-copyts` と `-output_ts_offset` を組にして使う。** 絵のほう (`pgsArgs`) と
+ * 同じ理由で放送の時刻をそのまま受け取るが、こちらは引くのも ffmpeg にやらせる —
+ * ASS の時刻は**10時間で頭打ち**になっていて、放送の絶対時刻 (実機で 46141 秒 =
+ * 12時間49分) をそのまま書かせると全部 `9:59:59.99` に潰れるため。
+ *
+ * `-fix_sub_duration` は終わりの時刻を入れさせるもの。ARIB字幕は「消す」が
+ * 別の指示で来るので、付けないと**全部が 9:59:59.99 まで出しっぱなし**になる。
+ * ASS の1行1行は互いに独立で、後から来た「消す」では消えない
+ */
+export function textArgs(input: string, output: string, startAt: number): string[] {
+    return [
+        '-hide_banner',
+        '-nostats',
+        '-y',
+        '-copyts',
+        // 終わりの時刻は「次が来るまで」。付けないと出しっぱなしになる
+        '-fix_sub_duration',
+        // 文字として解かせる。絵 (bitmap) とは別の解き方なので、同じ ffmpeg には相乗りできない
+        '-sub_type',
+        'ass',
+        '-analyzeduration',
+        '15000000',
+        '-probesize',
+        '30000000',
+        '-i',
+        input,
+        '-map',
+        '0:s:0',
+        // 焼き上がりの 0 秒に合わせる。絵のほうが引くのと同じ値 (`rebase`)
+        '-output_ts_offset',
+        String(-startAt),
+        '-c:s',
+        'ass',
+        output,
+    ];
+}
+
+export interface TextResult {
+    /** 整えた ASS そのもの。置き場所は焼き上がりが決まってから決まる */
+    content: string;
+    captions: number;
+}
+
+/**
+ * 字幕を文字で取り出す。字幕が無ければ null。
+ *
+ * **絵のほうと同じ `startAt` を渡すこと。** 同じ録画に絵と文字の2本が付くので、
+ * 片方だけずれると見比べたときに食い違う。
+ *
+ * 落ちても録画とエンコードは止めない。文字の付き添いが1本減るだけで、
+ * 入れ物の中の PGS には影響しない
+ */
+export async function buildText(
+    input: string,
+    startAt: number,
+    signal?: AbortSignal,
+): Promise<TextResult | null> {
+    const output = `${input}.ass`;
+    const base = Number.isFinite(startAt) ? startAt : 0;
+
+    let proc: Bun.Subprocess<'ignore', 'ignore', 'pipe'>;
+    try {
+        proc = Bun.spawn([config.ffmpeg, ...textArgs(input, output, base)], {
+            stdin: 'ignore',
+            stdout: 'ignore',
+            stderr: 'pipe',
+        });
+    } catch {
+        return null;
+    }
+    const kill = () => proc.kill();
+    signal?.addEventListener('abort', kill, { once: true });
+    const timer = setTimeout(kill, TIMEOUT);
+
+    try {
+        // 読み捨てても、溜まって止まらないように流し切る
+        await new Response(proc.stderr as ReadableStream<Uint8Array>).text();
+        await proc.exited;
+        const raw = readFileSync(output, 'utf8');
+        const ass = parseAss(raw);
+        const content = cleanAss(ass);
+        if (content === null) {
+            // 字幕の無い番組。「消す」だけが並んで来る (実機: 18枚すべてが空)
+            return null;
+        }
+        return { content, captions: cleanCues(ass.cues).length };
+    } catch (error) {
+        console.error(`[subtitle] 字幕を文字で取り出せませんでした: ${error}`);
+        return null;
+    } finally {
+        clearTimeout(timer);
+        signal?.removeEventListener('abort', kill);
+        removeIfExists(output);
+    }
 }

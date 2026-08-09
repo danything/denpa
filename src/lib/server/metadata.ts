@@ -23,10 +23,19 @@ function pad(n: number): string {
     return String(n).padStart(2, '0');
 }
 
-/** サイドカーの置き場。`foo.mkv` に対して `foo.nfo` / `foo-thumb.jpg` */
-export function sidecarPaths(videoPath: string): { nfo: string; thumbnail: string } {
+/**
+ * サイドカーの置き場。`foo.mkv` に対して `foo.nfo` / `foo-thumb.jpg` / `foo.ja.ass`。
+ *
+ * **字幕に言語を入れるのは、拾う側の決まりに合わせるため。** Kodi は動画と同じ
+ * 名前の字幕を隣から拾い、`.ja` の部分を言語として読む (`docs/library.md`)
+ */
+export function sidecarPaths(videoPath: string): {
+    nfo: string;
+    thumbnail: string;
+    subtitle: string;
+} {
     const base = videoPath.slice(0, videoPath.length - extname(videoPath).length);
-    return { nfo: `${base}.nfo`, thumbnail: `${base}-thumb.jpg` };
+    return { nfo: `${base}.nfo`, thumbnail: `${base}-thumb.jpg`, subtitle: `${base}.ja.ass` };
 }
 
 /**
@@ -117,7 +126,8 @@ export function writeNfo(recording: Recording, videoPath: string): void {
 /** 動画と一緒に消す。取り残すと幽霊のエピソードが残る */
 export function removeSidecars(videoPath: string | null): void {
     if (videoPath === null || videoPath === '') return;
-    const { nfo, thumbnail } = sidecarPaths(videoPath);
+    const { nfo, thumbnail, subtitle } = sidecarPaths(videoPath);
     removeIfExists(nfo);
     removeIfExists(thumbnail);
+    removeIfExists(subtitle);
 }

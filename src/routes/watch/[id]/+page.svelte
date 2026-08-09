@@ -33,6 +33,8 @@
     let length = $state(0);
     let muted = $state(false);
     let full = $state(false);
+    /** 字幕を出しているか。**持っている録画でだけ意味を持つ** (`data.subtitle`) */
+    let captions = $state(false);
     /** 読めなかったとき。**黙って黒いままにしない** */
     let broken = $state(false);
     let chapters = $state<Chapter[]>([]);
@@ -115,6 +117,21 @@
         else video.pause();
     }
 
+    /**
+     * 字幕の出し入れ。**出すのはブラウザ自身** (`<track>` の `mode`)。
+     *
+     * 消えているときは `hidden` に置く — `disabled` まで戻すと、次に出すときに
+     * 取り直しになる。**最初は消えている**のはテレビと同じ扱いで、
+     * 字幕は絵の上に重なるものなので、要る人が出す
+     */
+    function toggleCaptions(): void {
+        const track = video?.textTracks[0];
+        if (track === undefined) return;
+        captions = !captions;
+        track.mode = captions ? 'showing' : 'hidden';
+        flash();
+    }
+
     /** 秒で動かす。**端は超えさせない** (超えると勝手に終わる) */
     function seekBy(by: number): void {
         if (video === null) return;
@@ -192,6 +209,7 @@
             k: togglePlay,
             ArrowLeft: () => seekBy(-SKIP),
             ArrowRight: () => seekBy(SKIP),
+            c: toggleCaptions,
             f: toggleFull,
             m: () => {
                 if (video !== null) video.muted = !video.muted;
@@ -269,6 +287,8 @@
         'M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z';
     const SOUND_OFF =
         'M16.5 12c0-1.77-1.02-3.29-2.5-4.03v2.21l2.45 2.45c.03-.2.05-.41.05-.63zM19 12c0 .94-.2 1.82-.54 2.64l1.51 1.51C20.63 14.91 21 13.5 21 12c0-4.28-2.99-7.86-7-8.77v2.06c2.89.86 5 3.54 5 6.71zM4.27 3L3 4.27 7.73 9H3v6h4l5 5v-6.73l4.25 4.25c-.67.52-1.42.93-2.25 1.18v2.06c1.38-.31 2.63-.95 3.69-1.81L19.73 21 21 19.73l-9-9L4.27 3zM12 4L9.91 6.09 12 8.18V4z';
+    const CAPTIONS =
+        'M20 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zM4 12h4v2H4v-2zm10 6H4v-2h10v2zm6 0h-4v-2h4v2zm0-4H10v-2h10v2z';
     const EXPAND = 'M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z';
     const SHRINK = 'M5 16h3v3h2v-5H5v2zm3-8H5v2h5V5H8v3zm6 11h2v-3h3v-2h-5v5zm2-11V5h-2v5h5V8h-3z';
     const TRASH = 'M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z';
@@ -347,11 +367,11 @@
                 -->
                 <!-- svelte-ignore a11y_media_has_caption -->
                 <!--
-                    **`<track>` は付けられない。** 焼いたものに入っている字幕は
-                    PGS で、文字ではなく**絵**として持っている (docs/encode.md)。
-                    WebVTT に直すには絵を読む必要があり、ブラウザには PGS の
-                    復号器が無い。**ブラウザで観るときは字幕が出ない**
-                    (落としてお手元のプレイヤーで観れば出る)
+                    **入れ物の中の字幕は渡せない。** 焼いたものに入っているのは
+                    PGS で、文字ではなく**絵** (docs/encode.md)。ブラウザに復号器が
+                    無いので、渡すのは**動画の隣に置いた文字のほう**を WebVTT に
+                    直したもの (`api/recordings/<id>/subtitle.vtt`)。
+                    字幕を持たない録画では `<track>` ごと出さない
                 -->
                 <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_noninteractive_element_interactions -->
                 <video
@@ -373,7 +393,17 @@
                     onvolumechange={() => (muted = video?.muted ?? false)}
                     onerror={() => (broken = true)}
                     data-testid="watch-video"
-                ></video>
+                >
+                    {#if data.subtitle}
+                        <track
+                            kind="captions"
+                            srclang="ja"
+                            label="字幕"
+                            src="/api/recordings/{rec.id}/subtitle.vtt"
+                            data-testid="watch-track"
+                        />
+                    {/if}
+                </video>
 
                 {#if broken}
                     <!--
@@ -550,6 +580,25 @@
 
                         <span class="grow"></span>
 
+                        <!--
+                            **字幕を持っている録画でだけ出す。** 持っていないほうが
+                            多い (字幕の無い番組・この仕組みより前に焼いたもの) ので、
+                            押しても何も起きない操作を並べない。`/live` と同じ扱い
+                        -->
+                        {#if data.subtitle}
+                            <button
+                                type="button"
+                                class="btn btn-circle btn-sm {captions
+                                    ? 'btn-primary border-0 text-white shadow-none'
+                                    : OVERLAY}"
+                                onclick={toggleCaptions}
+                                aria-label={captions ? '字幕を消す' : '字幕を出す'}
+                                aria-pressed={captions}
+                                data-testid="watch-captions"
+                            >
+                                {@render icon(CAPTIONS)}
+                            </button>
+                        {/if}
                         <button
                             type="button"
                             class="btn btn-circle btn-sm {OVERLAY}"

@@ -1,6 +1,8 @@
+import { existsSync } from 'node:fs';
 import { error, fail, redirect } from '@sveltejs/kit';
 import { queryOne } from '$lib/server/db';
 import { deleteRecordingFiles } from '$lib/server/files';
+import { sidecarPaths } from '$lib/server/metadata';
 import type { Recording } from '$lib/types';
 
 /**
@@ -52,7 +54,15 @@ export function load({ params }) {
     if (recording === undefined) error(404, '録画が見つかりません');
     if (recording.deleted_at !== null) error(410, 'この録画は削除されています');
 
-    return { recording };
+    /*
+     * **字幕を持っているか。** 持っていない録画のほうが多い (字幕の無い番組・
+     * この仕組みより前に焼いたもの) ので、無ければボタンごと出さない。
+     * テレビの字幕ボタンと同じ考え方 (`/live` も同じ)
+     */
+    const subtitle =
+        recording.library_path !== null && existsSync(sidecarPaths(recording.library_path).subtitle);
+
+    return { recording, subtitle };
 }
 
 export const actions = {
