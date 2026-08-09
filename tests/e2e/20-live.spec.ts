@@ -437,6 +437,14 @@ test.describe('ライブ視聴', () => {
             { type: 'data', on: true },
             { type: 'data', on: false },
         ]);
+
+        /*
+         * **出し直せること。** 借りている側は渡された要素に**閉じた影**を張る
+         * ので、同じ要素を渡し直すと2度目で転ぶ。毎回まっさらな入れ物を
+         * 作っているのはそのため
+         */
+        await page.getByTestId('live-data-button').click();
+        await expect(overlay).toHaveAttribute('data-state', 'ready', { timeout: 15_000 });
     });
 
     /*

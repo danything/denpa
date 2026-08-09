@@ -34,6 +34,8 @@
     let loading = $state(false);
     /** 何度も作らないための世代。押して離してを繰り返しても混ざらない */
     let generation = 0;
+    /** その回ぶんの入れ物。**毎回作り直す** (`open` の説明) */
+    let mount: HTMLDivElement | null = null;
     /**
      * 渡した知らせの数。**画面には出さない** (切り分け用)。
      *
@@ -63,8 +65,19 @@
         // 待っている間に離されていたら、作らない
         if (mine !== generation || host === null || media === null) return;
 
+        /*
+         * **毎回まっさらな入れ物を作る。**
+         *
+         * 借りている側は渡された要素に**閉じた影 (`attachShadow`)** を張る。
+         * 影は外せないので、同じ要素に2度目を張ると転ぶ — 消して出し直すたびに
+         * 「データ放送が出なくなる」という壊れ方をする
+         */
+        mount = document.createElement('div');
+        mount.className = 'absolute inset-0';
+        host.appendChild(mount);
+
         const made = new BMLBrowser({
-            containerElement: host,
+            containerElement: mount,
             mediaElement: media,
             fonts: FONTS,
             // 覚えるもの (NVRAM) は局ごとに分ける。他の使い道と混ざらないように
@@ -88,6 +101,9 @@
         handed = 0;
         browser?.destroy();
         browser = null;
+        // 影ごと捨てる (上の説明)
+        mount?.remove();
+        mount = null;
     }
 
     $effect(() => {

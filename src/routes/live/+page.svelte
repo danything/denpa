@@ -38,8 +38,10 @@
     let still: HTMLCanvasElement;
     /** 放送の字幕を重ねる先 (`live-player` の `paint`) */
     let overlay: HTMLCanvasElement;
-    /** 映像が居る枠。**データ放送に「映像はここ」と伝えるのに要る** */
-    let frame = $state<HTMLElement | null>(null);
+    /** 映像が居る入れ物。**データ放送に「映像はここ」と伝えるのに要る** */
+    let mediaBox = $state<HTMLElement | null>(null);
+    /** 映像も重ねるものも入っている枠。全画面にするのはここ */
+    let frame: HTMLElement;
 
     /**
      * **サーバが決めた局で開く** (`+page.server.ts` の `start`)。
@@ -157,9 +159,9 @@
     /** 全画面。映像だけでなく操作列も一緒に大きくしたいので、箱ごと入れる */
     let fullscreened = $state(false);
     function full(): void {
-        const box = video?.parentElement;
-        if (box === null || box === undefined) return;
-        if (document.fullscreenElement === null) void box.requestFullscreen().catch(() => {});
+        // **枠ごと。** 映像だけでなく操作列も一緒に大きくする
+        if (frame === undefined) return;
+        if (document.fullscreenElement === null) void frame.requestFullscreen().catch(() => {});
         else void document.exitFullscreen().catch(() => {});
     }
     $effect(() => {
@@ -237,14 +239,22 @@
                 (`controls.svelte.ts` の `LINGER`) ので、消す口がここに要る。
                 マウスでは何も起きない — あちらは動かせば出て、しばらくで消える
             -->
-            <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_noninteractive_element_interactions -->
-            <video
-                bind:this={video}
-                class="h-full w-full bg-black"
-                playsinline
-                onclick={toggle}
-                data-testid="live-video"
-            ></video>
+            <!--
+                **映像だけを入れ物に分ける。** データ放送は「映像はこの入れ物」と
+                受け取って、BML の文書を組むときにそれを動かす。**枠そのものを
+                渡すと親子が循環する** (借りている側が `appendChild ... contains
+                the parent` で転ぶ)。実機で1日これを探した
+            -->
+            <div bind:this={mediaBox} class="absolute inset-0">
+                <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_noninteractive_element_interactions -->
+                <video
+                    bind:this={video}
+                    class="h-full w-full bg-black"
+                    playsinline
+                    onclick={toggle}
+                    data-testid="live-video"
+                ></video>
+            </div>
 
             <!--
                 **切り替えの間、前の絵を貼っておく。** 器を作り直すと `<video>` は
@@ -286,7 +296,7 @@
                 **データ放送。** 映像はここ (`frame`) に居るとだけ伝えて、
                 描くのは借りものに任せる。押されるまで 1.2MB を取りに行かない
             -->
-            <DataBroadcast on={player.showData} media={frame} listen={player.listenData} />
+            <DataBroadcast on={player.showData} media={mediaBox} listen={player.listenData} />
 
             {#if player.tuned !== null && player.state !== 'error'}
                 <!--
