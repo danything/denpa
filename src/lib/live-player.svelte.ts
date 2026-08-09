@@ -132,6 +132,20 @@ function rememberFloor(seconds: number): void {
     }
 }
 
+/**
+ * 忘れる。**まっさらな端末と同じ状態に戻す** (`relearn`)。
+ *
+ * 下限を書き込むのではなく消す。「一度も測っていない」と「測って下限だった」
+ * を分けて持つ意味が無い
+ */
+function clearFloor(): void {
+    try {
+        localStorage.removeItem(FLOOR_KEY);
+    } catch {
+        // 消せなくても観るのに支障は無い
+    }
+}
+
 export function livePlayer() {
     let state = $state<LiveState>('idle');
     let message = $state('');
@@ -164,7 +178,7 @@ export function livePlayer() {
      * **開き直しても持ち越す** (`storedFloor`)。0.2秒から始めていた頃は、
      * 開いて30秒以内に必ず1回止まっていた
      */
-    let floor = storedFloor();
+    let floor = $state(storedFloor());
     /** どれだけ貯めているか (秒)。詰まると伸び、無事が続くと縮む */
     let target = $state(floor);
     /**
@@ -695,6 +709,29 @@ export function livePlayer() {
         }
     }
 
+    /**
+     * 覚えた下限を捨てて、測り直す。**経路が変わったときのための出口。**
+     *
+     * 覚えているのは**その経路の性質**なので (`FLOOR_KEY`)、宅内から出先へ
+     * 持ち出したり、線を繋ぎ替えたりすると**前の経路の値のまま**になる。
+     * 高すぎる側に外れたときが厄介で、放っておいても下がるが
+     * **10分ごとに 0.3秒 ずつ**しか下がらない (`nextTarget` の `FORGET`) —
+     * 良い経路に戻ってきたのに、しばらく余計に遅れて見ることになる。
+     *
+     * 低すぎる側に外れたぶんは放っておいてよい。止まればその場で上がる。
+     *
+     * **貯めているぶんもその場で下げる。** 下限だけ下げても、縮むのは
+     * 15秒ごとに2割なので、1.5秒から下りきるのに2分半かかる。押した人が
+     * 見たいのは「いま詰まるかどうか」なので、下限まで詰めて放送の今へ戻す
+     */
+    function relearn(): void {
+        clearFloor();
+        floor = FLOOR;
+        lastFloor = Date.now();
+        target = FLOOR;
+        goLive();
+    }
+
     /** 放送の今へ追いつく。**追っかけをやめて、見ていたぶんを飛ばす** */
     function goLive(): void {
         if (element === null || buffer === null || buffer.buffered.length === 0) return;
@@ -1193,6 +1230,13 @@ export function livePlayer() {
         get dropped() {
             return dropped;
         },
+        /**
+         * 覚えている下限 (秒)。**測り直す口を出すかどうかの判断に使う** —
+         * 下限のままなら忘れるものが無い (`relearn`)
+         */
+        get remembered() {
+            return floor;
+        },
         /** 絵だけの遅れ (秒)。音と字幕は再生位置に乗っているので、ここが開くと口が合わない */
         get slip() {
             return slip;
@@ -1281,6 +1325,7 @@ export function livePlayer() {
         seek,
         toggle,
         goLive,
+        relearn,
         mute,
         tune,
         unmute,

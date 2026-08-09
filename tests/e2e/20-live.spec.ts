@@ -805,6 +805,35 @@ test.describe('ライブ視聴', () => {
     });
 
     /*
+     * **覚えた貯め方を捨てられる。**
+     *
+     * 貯める量の下限はその端末に覚えさせてある (`live-player` の `FLOOR_KEY`)。
+     * 覚えているのは**経路の性質**なので、持ち出したり線を繋ぎ替えたりすると
+     * 前の経路の値のまま残る。高すぎる側に外れると、放っておいても
+     * **10分ごとに 0.3秒 ずつ**しか下がらない (`pacing` の `FORGET`)。
+     *
+     * 出しっぱなしにはしない。**覚えているものが無いときに出しても押せない**
+     */
+    test('覚えた貯め方を捨てられる。覚えていなければ出さない', async ({ page }) => {
+        const stored = () => page.evaluate(() => localStorage.getItem('live-floor'));
+
+        await goto(page, '/live');
+        await page.getByTestId('live-channel').first().click();
+        await expect(page.getByTestId('live-title')).toBeVisible();
+        // まっさらな端末には忘れるものが無い
+        await expect(page.getByTestId('live-relearn')).toBeHidden();
+
+        await page.evaluate(() => localStorage.setItem('live-floor', '1.5'));
+        await page.reload();
+        await expect(page.getByTestId('live-title')).toBeVisible();
+        await expect(page.getByTestId('live-relearn')).toBeVisible();
+
+        await page.getByTestId('live-relearn').click();
+        await expect(page.getByTestId('live-relearn')).toBeHidden();
+        expect(await stored(), '覚えたものが残っている').toBeNull();
+    });
+
+    /*
      * **札は使い捨て。** URL は履歴にもログにも残るので、拾われても二度目は
      * 通らない。ここが緩むと、チューナーを掴む口が素通しになる
      */

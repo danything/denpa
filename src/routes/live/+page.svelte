@@ -23,7 +23,7 @@
     import { programDetail } from '$lib/detail.svelte';
     import { livePlayer } from '$lib/live-player.svelte';
     import { LIVE_CODECS } from '$lib/live';
-    import { SPEEDS } from '$lib/ts/pacing';
+    import { FLOOR, SPEEDS } from '$lib/ts/pacing';
     import { time } from '$lib/format';
     import type { LiveChannel } from './+page.server';
 
@@ -552,6 +552,25 @@
                                 -->
                                 {#if player.delay !== null}
                                     <span data-testid="live-delay">遅延 {player.delay.toFixed(1)}秒</span>
+                                {/if}
+                                <!--
+                                    **測り直す口。覚えているものがあるときだけ出す。**
+
+                                    経路が変わると前の値のままになる (`relearn`)。
+                                    **遅延のすぐ隣に置く** — この行は入りきらな
+                                    ければ後ろから切れるので、遅延の話だと分かる
+                                    位置であると同時に、消えにくい位置でもある。
+
+                                    押すものだが、丸いボタンにはしない。読みものの
+                                    行に 48px を置くと帯が厚くなる
+                                    ([ControlBar.svelte](../../lib/components/player/ControlBar.svelte))
+                                -->
+                                {#if player.remembered > FLOOR}
+                                    <button
+                                        class="underline decoration-dotted underline-offset-2 hover:text-white"
+                                        onclick={() => player.relearn()}
+                                        data-testid="live-relearn">覚え直す</button
+                                    >
                                 {/if}
                                 <!--
                                     **詰まった回数。止まったときだけ出る。**
