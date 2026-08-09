@@ -5,6 +5,7 @@ import {
     nextChapterAt,
     parseChapters,
     prevChapterAt,
+    resumePoint,
     SKIP,
     tap,
     zoneOf,
@@ -206,5 +207,27 @@ describe('ffprobe のチャプターを読む', () => {
             ],
         });
         expect(parseChapters(shuffled).map((c) => c.start)).toEqual([0, 60]);
+    });
+});
+
+describe('続きから観る', () => {
+    test('途中で止めたところは覚える', () => {
+        expect(resumePoint(600, 1800)).toBe(600);
+    });
+
+    /** 覚えると、次に開いたときエンドロールから始まる */
+    test('末尾まで観たものは覚えない', () => {
+        expect(resumePoint(1790, 1800)).toBeNull();
+        expect(resumePoint(1770, 1800)).toBe(1770);
+    });
+
+    /** 「続きがある」と見えるぶんだけ紛らわしい */
+    test('頭のすぐそばも覚えない', () => {
+        expect(resumePoint(5, 1800)).toBeNull();
+        expect(resumePoint(20, 1800)).toBe(20);
+    });
+
+    test('尺が分からなければ末尾の判断はしない', () => {
+        expect(resumePoint(600, 0)).toBe(600);
     });
 });

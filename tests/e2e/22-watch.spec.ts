@@ -115,6 +115,51 @@ test.describe('録画を観る', () => {
         await expect(button).toHaveAttribute('aria-pressed', 'true');
     });
 
+    /**
+     * **どこまで観たかを覚える。** 端末ではなく DB に置くので、別の端末でも続く。
+     *
+     * ここで見るのは「覚える・覚えない」の判断まで。**絵は出ません** —
+     * 偽 ffmpeg が置くのは中身の無いファイルで、位置を戻すところまでは行けない
+     * (戻す判断は `ts/watch.test.ts` が持っている)
+     */
+    test('途中で止めたところを覚え、観終えたら忘れる', async ({ page, request }) => {
+        test.setTimeout(180_000);
+        const { id } = await recordOne(page, request);
+
+        const put = async (at: number, length: number) => {
+            const res = await request.post(`/api/recordings/${id}/resume`, { data: { at, length } });
+            expect(res.ok()).toBe(true);
+            return (await res.json()).resume;
+        };
+
+        expect(await put(600, 1800)).toBe(600);
+        // 末尾まで観たものは忘れる。覚えるとエンドロールから始まってしまう
+        expect(await put(1790, 1800)).toBeNull();
+    });
+
+    /**
+     * **番組の中身は左に全部出す。モーダルにしない** — 映像の上に被さると
+     * 観ながら読めない。長ければそこだけが巻き取られ、押すものは外に残る
+     */
+    test('詳細は左に出たままで、押すものは巻き取られない', async ({ page, request }) => {
+        test.setTimeout(180_000);
+        const { id } = await recordOne(page, request);
+
+        await goto(page, `/watch/${id}`);
+        await expect(page.getByTestId('watch-facts')).toBeVisible();
+        // 開くための「詳細」は無い。押さなくても出ている
+        await expect(page.getByTestId('watch-detail')).toHaveCount(0);
+        await expect(page.getByTestId('program-detail')).toHaveCount(0);
+
+        // 押すものは巻き取られる箱の外。中身がどれだけ長くても見えている
+        const outside = await page.evaluate(() => {
+            const box = document.querySelector('[data-testid="watch-facts"]');
+            const link = document.querySelector('[data-testid="watch-download"]');
+            return box !== null && link !== null && !box.contains(link);
+        });
+        expect(outside).toBe(true);
+    });
+
     /** 無い録画を開いても、黙って空の画面を出さない */
     test('無い録画は 404', async ({ request }) => {
         const res = await request.get('/watch/999999');

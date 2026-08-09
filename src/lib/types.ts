@@ -184,6 +184,8 @@ export interface Recording {
     cm_note: string | null;
     /** 実際に録れた長さ。取れていなければ null (古い行) */
     duration_ms: number | null;
+    /** どこまで観たか (ms)。まだ観ていない・観終えたものは null */
+    resume_ms: number | null;
     deleted_at: number | null;
     acknowledged_at: number | null;
     created_at: number;

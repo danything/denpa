@@ -53,6 +53,13 @@ export const ADDED_COLUMNS: { table: string; column: string; definition: string 
     // CM検出が何をしたか。一覧には出さず、録画の詳細で見せる
     { table: 'recordings', column: 'cm_note', definition: 'TEXT' },
     /*
+     * どこまで観たか (ms)。**続きから観るためだけの目印。**
+     *
+     * 端末に持たせず DB に置くのは、居間のタブレットで観たものを机の PC で
+     * 続けられるようにするため。観終えたら消す (`api/recordings/<id>/resume`)
+     */
+    { table: 'recordings', column: 'resume_ms', definition: 'INTEGER' },
+    /*
      * 番組のジャンル (JSON: lv1 の配列)。番組表から写しておく。
      *
      * エンコードのコマ数をこれで決める (encoder.ts の deinterlace)。番組表の行は

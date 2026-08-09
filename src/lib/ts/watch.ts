@@ -180,3 +180,30 @@ export function parseChapters(json: string): Chapter[] {
     }
     return chapters.sort((a, b) => a.start - b.start);
 }
+
+/**
+ * 続きから観る、の「続き」をどこにするか。
+ *
+ * **端に来たら覚えない。**
+ *
+ * - 末尾の近く … 観終えたということ。覚えると**次はエンドロールから始まる**
+ * - 頭のすぐそば … まだ観はじめていない。覚えても頭から出すのと同じで、
+ *   「続きがある」と見えるぶんだけ紛らわしい
+ *
+ * サーバも画面も同じ判断をする必要がある (片方だけが「観終えた」と思うと、
+ * 目印が残ったり消えたりが噛み合わない) ので、ここ1箇所に置く。
+ *
+ * @param at いまの位置 (秒)
+ * @param length 尺 (秒)。分からなければ 0
+ * @returns 覚える位置。覚えないなら null
+ */
+export function resumePoint(at: number, length: number): number | null {
+    if (!Number.isFinite(at) || at < RESUME_HEAD) return null;
+    if (Number.isFinite(length) && length > 0 && at > length - RESUME_EDGE) return null;
+    return at;
+}
+
+/** 末尾のここから先は「観終えた」とみなす (秒) */
+export const RESUME_EDGE = 30;
+/** 頭のここまでは「まだ観ていない」とみなす (秒) */
+export const RESUME_HEAD = 15;

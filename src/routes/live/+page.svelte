@@ -1,5 +1,20 @@
 <script lang="ts">
     import { onMount } from 'svelte';
+    import ControlBar from '$lib/components/player/ControlBar.svelte';
+    import { playerControls } from '$lib/components/player/controls.svelte';
+    import Icon from '$lib/components/player/Icon.svelte';
+    import {
+        AUDIO,
+        CAPTION,
+        EXPAND,
+        OVERLAY,
+        OVERLAY_ON,
+        PAUSE,
+        PLAY,
+        SHRINK,
+        SOUND_OFF,
+        SOUND_ON,
+    } from '$lib/components/player/icons';
     import { livePlayer } from '$lib/live-player.svelte';
     import { LIVE_CODECS } from '$lib/live';
     import { SPEEDS } from '$lib/ts/pacing';
@@ -126,80 +141,18 @@
     });
 
     /**
-     * 操作列を出しておく時間 (ms)。**絵の上に居座るものなので、触っていない間は
-     * 引っ込める。** 止めている間と、キーボードで触っている間は残す。
-     *
-     * **指のほうを長くする。** マウスは動かしているだけで出しっぱなしにできるが
-     * (`pointermove` が絶えず飛ぶ)、指は置いた瞬間しか報せが来ない。同じ 2.5 秒だと
-     * 「触ったら消えた」ようにしか見えず、帯を掴みに行く間も無い
+     * 操作列の出し入れ。**観る画面と同じ部品**
+     * ([controls.svelte.ts](../../lib/components/player/controls.svelte.ts))。
+     * 触ったら出て、しばらくで消える。指のほうを長く待つ
      */
-    const LINGER = { mouse: 2500, touch: 5000 };
-    let touched = $state(Date.now());
-    let keyboard = $state(false);
-    let now = $state(Date.now());
-    /** 直前に触ったのが指 (かペン) か。**マウスの繋がっていない端末もある** */
-    let byTouch = $state(false);
-    /*
-     * **見るのは「触ったか」と「止めているか」だけ。** 再生できているかどうかを
-     * 混ぜていた頃は、繋いでいる間ずっと出たままになり、消える経路を
-     * 確かめようが無かった。繋いでいる間も、動かせばすぐ戻る
-     */
-    const controlsShown = $derived(
-        player.paused || keyboard || now - touched < (byTouch ? LINGER.touch : LINGER.mouse),
-    );
-    /** 消す時刻を跨ぐためだけの目覚まし。出ている間しか回さない */
+    const controls = playerControls();
     $effect(() => {
-        if (controlsShown === false) return;
-        const timer = setInterval(() => (now = Date.now()), 250);
-        return () => clearInterval(timer);
+        controls.held = player.paused;
     });
-    const wake = (event: PointerEvent) => {
-        byTouch = event.pointerType !== 'mouse';
-        touched = Date.now();
-        now = touched;
-    };
-    /**
-     * 出ていく先で消す。**指のときは消さない。**
-     *
-     * 指を離すとブラウザはその場でポインタを取り下げるので、`pointerleave` が
-     * **触った直後に必ず飛ぶ**。マウスと同じに扱っていたので、タッチの端末では
-     * **触った瞬間に操作列が消えて**いた (帯を掴むどころではない)。
-     * マウスは絵の外へ出たなら本当に離れているので、そちらは今までどおり消す
-     */
-    const away = (event: PointerEvent) => {
-        if (event.pointerType === 'mouse') touched = 0;
-    };
-
-    /**
-     * 絵の上に置くボタンの色。**自分で決める。**
-     *
-     * `btn-ghost` にしていた頃は daisyUI が主題の文字色を当てるので、暗い絵と
-     * 下の黒いぼかしに**アイコンが沈んで見えなく**なっていた
-     */
-    const OVERLAY = 'border-0 bg-black/45 text-white shadow-none hover:bg-black/70';
-
-    /**
-     * **アイコンは既存の画面と同じ書き方に揃える** (インラインの SVG)。
-     * 絵文字にしていた頃は、端末ごとに形も大きさも変わっていた
-     */
-    const PLAY = 'M8 5v14l11-7z';
-    const PAUSE = 'M6 19h4V5H6v14zm8-14v14h4V5h-4z';
-    const SOUND_ON =
-        'M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z';
-    const SOUND_OFF =
-        'M16.5 12c0-1.77-1.02-3.29-2.5-4.03v2.21l2.45 2.45c.03-.2.05-.41.05-.63zM19 12c0 .94-.2 1.82-.54 2.64l1.51 1.51C20.63 14.91 21 13.5 21 12c0-4.28-2.99-7.86-7-8.77v2.06c2.89.86 5 3.54 5 6.71zM4.27 3L3 4.27 7.73 9H3v6h4l5 5v-6.73l4.25 4.25c-.67.52-1.42.93-2.25 1.18v2.06c1.38-.31 2.63-.95 3.69-1.81L19.73 21 21 19.73l-9-9L4.27 3zM12 4L9.91 6.09 12 8.18V4z';
-    const AUDIO = 'M7 18h2V6H7v12zm4 4h2V2h-2v20zm-8-8h2v-4H3v4zm12 4h2V6h-2v12zm4-8v4h2v-4h-2z';
-    const CAPTION =
-        'M19 4H5c-1.11 0-2 .9-2 2v12c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm-8 7H9.5v-.5h-2v3h2V13H11v1c0 .55-.45 1-1 1H7c-.55 0-1-.45-1-1v-4c0-.55.45-1 1-1h3c.55 0 1 .45 1 1v1zm7 0h-1.5v-.5h-2v3h2V13H18v1c0 .55-.45 1-1 1h-3c-.55 0-1-.45-1-1v-4c0-.55.45-1 1-1h3c.55 0 1 .45 1 1v1z';
-    const EXPAND = 'M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z';
-    const SHRINK = 'M5 16h3v3h2v-5H5v2zm3-8H5v2h5V5H8v3zm6 11h2v-3h3v-2h-5v5zm2-11V5h-2v5h5V8h-3z';
+    const controlsShown = $derived(controls.shown);
+    const wake = controls.wake;
+    const away = controls.away;
 </script>
-
-{#snippet icon(path: string)}
-    <svg viewBox="0 0 24 24" class="size-5" fill="currentColor" aria-hidden="true">
-        <path d={path} />
-    </svg>
-{/snippet}
 
 <!--
     **映像を左、局を右。** 動画を見ながら次を選べる並びで、YouTube の再生画面と
@@ -220,8 +173,8 @@
             onpointermove={wake}
             onpointerdown={wake}
             onpointerleave={away}
-            onfocusin={() => (keyboard = true)}
-            onfocusout={() => (keyboard = false)}
+            onfocusin={() => (controls.keyboard = true)}
+            onfocusout={() => (controls.keyboard = false)}
         >
             <!-- svelte-ignore a11y_media_has_caption -->
             <!--
@@ -287,37 +240,31 @@
                     ところで動くことになる
                 -->
                 <!--
-                    **しばらく触らなければ消える。** 絵の上に居座るものなので、
-                    見ている間は引っ込んでいるほうがいい。止めている間と、
-                    キーボードで触っている間は残す
+                    **しばらく触らなければ消える** (`ControlBar`)。絵の上に居座る
+                    ものなので、見ている間は引っ込んでいるほうがいい。止めている間と、
+                    キーボードで触っている間は残す。**観る画面と同じ帯**
                 -->
-                <div
-                    class="absolute right-0 bottom-0 left-0 flex items-center gap-2
-                           bg-gradient-to-t from-black/80 to-transparent px-3 pt-8 pb-3 text-white
-                           transition-opacity duration-200
-                           {controlsShown ? 'opacity-100' : 'pointer-events-none opacity-0'}"
-                    data-testid="live-controls"
-                    data-shown={controlsShown}
-                >
-                    <button
-                        class="btn btn-circle btn-sm {OVERLAY}"
-                        onclick={() => player.toggle()}
-                        aria-label={player.paused ? '再生' : '一時停止'}
-                        data-testid="live-play"
-                    >
-                        {@render icon(player.paused ? PLAY : PAUSE)}
-                    </button>
+                <ControlBar shown={controlsShown} testid="live-controls">
+                    <div class="flex items-center gap-2">
+                        <button
+                            class="btn btn-circle btn-sm {OVERLAY}"
+                            onclick={() => player.toggle()}
+                            aria-label={player.paused ? '再生' : '一時停止'}
+                            data-testid="live-play"
+                        >
+                            <Icon path={player.paused ? PLAY : PAUSE} />
+                        </button>
 
-                    <button
-                        class="btn btn-circle btn-sm {OVERLAY}"
-                        onclick={() => (player.silenced ? player.unmute() : player.mute())}
-                        aria-label={player.silenced ? '音を出す' : '音を消す'}
-                        data-testid="live-sound"
-                    >
-                        {@render icon(player.silenced ? SOUND_OFF : SOUND_ON)}
-                    </button>
+                        <button
+                            class="btn btn-circle btn-sm {OVERLAY}"
+                            onclick={() => (player.silenced ? player.unmute() : player.mute())}
+                            aria-label={player.silenced ? '音を出す' : '音を消す'}
+                            data-testid="live-sound"
+                        >
+                            <Icon path={player.silenced ? SOUND_OFF : SOUND_ON} />
+                        </button>
 
-                    <!--
+                        <!--
                         **字幕の出し入れ。字幕を持っている番組でだけ出す。**
 
                         字幕の無い番組で押せる形にしておくと、押しても何も起きない
@@ -329,67 +276,69 @@
                         `TrackList`)。届いてから出していた頃は、間隔の空く番組で
                         ボタンが出なかった
                     -->
-                    {#if player.hasCaptions}
-                        <button
-                            class="btn btn-circle btn-sm {player.captions
-                                ? 'border-0 shadow-none btn-primary'
-                                : OVERLAY}"
-                            onclick={() => player.toggleCaptions()}
-                            aria-label={player.captions ? '字幕を消す' : '字幕を出す'}
-                            aria-pressed={player.captions}
-                            data-testid="live-caption"
-                        >
-                            {@render icon(CAPTION)}
-                        </button>
-                    {/if}
+                        {#if player.hasCaptions}
+                            <button
+                                class="btn btn-circle btn-sm {player.captions
+                                    ? 'border-0 shadow-none btn-primary'
+                                    : OVERLAY}"
+                                onclick={() => player.toggleCaptions()}
+                                aria-label={player.captions ? '字幕を消す' : '字幕を出す'}
+                                aria-pressed={player.captions}
+                                data-testid="live-caption"
+                            >
+                                <Icon path={CAPTION} />
+                            </button>
+                        {/if}
 
-                    <!--
+                        <!--
                         **字幕の選び直し。言語が2つ以上あるときだけ出す。**
 
                         音声と同じで**焼き直しになる** — 字幕は映像と同じ ffmpeg が
                         焼いているので (`server/live.ts` の `key`)。動くのは言語が
                         複数ある放送だけなので、起こし直すのは年に数回のこと
                     -->
-                    {#if player.captions && player.captionTracks.length > 1}
-                        <div class="dropdown dropdown-top">
-                            <button
-                                class="btn btn-sm {OVERLAY}"
-                                aria-label="字幕を選ぶ"
-                                data-testid="live-caption-track"
-                            >
-                                <span class="max-w-28 truncate">
-                                    {player.captionTracks.find((t) => t.index === player.captionTrack)
-                                        ?.label ?? '字幕'}
-                                </span>
-                            </button>
-                            <ul
-                                class="dropdown-content menu bg-base-100 text-base-content rounded-box
+                        {#if player.captions && player.captionTracks.length > 1}
+                            <div class="dropdown dropdown-top">
+                                <button
+                                    class="btn btn-sm {OVERLAY}"
+                                    aria-label="字幕を選ぶ"
+                                    data-testid="live-caption-track"
+                                >
+                                    <span class="max-w-28 truncate">
+                                        {player.captionTracks.find((t) => t.index === player.captionTrack)
+                                            ?.label ?? '字幕'}
+                                    </span>
+                                </button>
+                                <ul
+                                    class="dropdown-content menu bg-base-100 text-base-content rounded-box
                                        z-10 mb-1 w-52 p-2 shadow-lg"
-                                data-testid="live-caption-menu"
-                            >
-                                {#each player.captionTracks as track (track.index)}
-                                    <li>
-                                        <button
-                                            class={track.index === player.captionTrack ? 'menu-active' : ''}
-                                            onclick={(event) => {
-                                                player.setCaptionTrack(track.index);
-                                                event.currentTarget.blur();
-                                            }}
-                                            data-testid="live-caption-option"
-                                            data-track={track.index}
-                                            aria-current={track.index === player.captionTrack
-                                                ? 'true'
-                                                : undefined}
-                                        >
-                                            {track.label}
-                                        </button>
-                                    </li>
-                                {/each}
-                            </ul>
-                        </div>
-                    {/if}
+                                    data-testid="live-caption-menu"
+                                >
+                                    {#each player.captionTracks as track (track.index)}
+                                        <li>
+                                            <button
+                                                class={track.index === player.captionTrack
+                                                    ? 'menu-active'
+                                                    : ''}
+                                                onclick={(event) => {
+                                                    player.setCaptionTrack(track.index);
+                                                    event.currentTarget.blur();
+                                                }}
+                                                data-testid="live-caption-option"
+                                                data-track={track.index}
+                                                aria-current={track.index === player.captionTrack
+                                                    ? 'true'
+                                                    : undefined}
+                                            >
+                                                {track.label}
+                                            </button>
+                                        </li>
+                                    {/each}
+                                </ul>
+                            </div>
+                        {/if}
 
-                    <!--
+                        <!--
                         **焼き方の切り替え。**
 
                         絵の中身ではなく「その端末で出るかどうか」の話なので、
@@ -400,45 +349,46 @@
                         押すと焼き直しになるので絵が一瞬止まるが、チャンネルは
                         変わらないので前の絵を貼ったまま差し替わる
                     -->
-                    <div class="dropdown dropdown-top">
-                        <button
-                            class="btn btn-sm gap-1.5 {OVERLAY}"
-                            aria-label="焼き方を選ぶ"
-                            data-testid="live-codec"
-                        >
-                            <span class="text-xs font-semibold">
-                                {LIVE_CODECS.find((c) => c.id === player.codec)?.label ?? 'H.264'}
-                            </span>
-                        </button>
-                        <ul
-                            class="dropdown-content menu bg-base-100 text-base-content rounded-box
+                        <div class="dropdown dropdown-top">
+                            <button
+                                class="btn btn-sm gap-1.5 {OVERLAY}"
+                                aria-label="焼き方を選ぶ"
+                                data-testid="live-codec"
+                            >
+                                <span class="text-xs font-semibold">
+                                    {LIVE_CODECS.find((c) => c.id === player.codec)?.label ?? 'H.264'}
+                                </span>
+                            </button>
+                            <ul
+                                class="dropdown-content menu bg-base-100 text-base-content rounded-box
                                    z-10 mb-1 w-56 p-2 shadow-lg"
-                            data-testid="live-codec-menu"
-                        >
-                            {#each LIVE_CODECS as choice (choice.id)}
-                                <li>
-                                    <button
-                                        class={choice.id === player.codec ? 'menu-active' : ''}
-                                        onclick={(event) => {
-                                            player.setCodec(choice.id);
-                                            // 選んだら閉じる。開きっぱなしだと絵を覆う
-                                            event.currentTarget.blur();
-                                        }}
-                                        data-testid="live-codec-option"
-                                        data-codec={choice.id}
-                                        aria-current={choice.id === player.codec ? 'true' : undefined}
-                                    >
-                                        <span class="flex flex-col items-start">
-                                            <span>{choice.label}</span>
-                                            <span class="text-base-content/60 text-xs">{choice.note}</span>
-                                        </span>
-                                    </button>
-                                </li>
-                            {/each}
-                        </ul>
-                    </div>
+                                data-testid="live-codec-menu"
+                            >
+                                {#each LIVE_CODECS as choice (choice.id)}
+                                    <li>
+                                        <button
+                                            class={choice.id === player.codec ? 'menu-active' : ''}
+                                            onclick={(event) => {
+                                                player.setCodec(choice.id);
+                                                // 選んだら閉じる。開きっぱなしだと絵を覆う
+                                                event.currentTarget.blur();
+                                            }}
+                                            data-testid="live-codec-option"
+                                            data-codec={choice.id}
+                                            aria-current={choice.id === player.codec ? 'true' : undefined}
+                                        >
+                                            <span class="flex flex-col items-start">
+                                                <span>{choice.label}</span>
+                                                <span class="text-base-content/60 text-xs">{choice.note}</span
+                                                >
+                                            </span>
+                                        </button>
+                                    </li>
+                                {/each}
+                            </ul>
+                        </div>
 
-                    <!--
+                        <!--
                         **音声の選び直し。選べるものが2つ以上あるときだけ出す。**
 
                         二カ国語 (1本の中に主/副が左右で入っている) と、音声が
@@ -448,45 +398,45 @@
                         押すと焼き直しになるので絵が一瞬止まるが、チャンネルは
                         変わらないので前の絵を貼ったまま差し替わる
                     -->
-                    {#if player.audios.length > 1}
-                        <div class="dropdown dropdown-top">
-                            <button
-                                class="btn btn-sm gap-1.5 {OVERLAY}"
-                                aria-label="音声を選ぶ"
-                                data-testid="live-audio"
-                            >
-                                {@render icon(AUDIO)}
-                                <span class="hidden max-w-28 truncate sm:inline">
-                                    {player.audios.find((a) => a.id === player.audio)?.label ?? '音声'}
-                                </span>
-                            </button>
-                            <ul
-                                class="dropdown-content menu bg-base-100 text-base-content rounded-box
+                        {#if player.audios.length > 1}
+                            <div class="dropdown dropdown-top">
+                                <button
+                                    class="btn btn-sm gap-1.5 {OVERLAY}"
+                                    aria-label="音声を選ぶ"
+                                    data-testid="live-audio"
+                                >
+                                    <Icon path={AUDIO} />
+                                    <span class="hidden max-w-28 truncate sm:inline">
+                                        {player.audios.find((a) => a.id === player.audio)?.label ?? '音声'}
+                                    </span>
+                                </button>
+                                <ul
+                                    class="dropdown-content menu bg-base-100 text-base-content rounded-box
                                        z-10 mb-1 w-52 p-2 shadow-lg"
-                                data-testid="live-audio-menu"
-                            >
-                                {#each player.audios as track (track.id)}
-                                    <li>
-                                        <button
-                                            class={track.id === player.audio ? 'menu-active' : ''}
-                                            onclick={(event) => {
-                                                player.setAudio(track.id);
-                                                // 選んだら閉じる。開きっぱなしだと絵を覆う
-                                                event.currentTarget.blur();
-                                            }}
-                                            data-testid="live-audio-option"
-                                            data-audio={track.id}
-                                            aria-current={track.id === player.audio ? 'true' : undefined}
-                                        >
-                                            {track.label}
-                                        </button>
-                                    </li>
-                                {/each}
-                            </ul>
-                        </div>
-                    {/if}
+                                    data-testid="live-audio-menu"
+                                >
+                                    {#each player.audios as track (track.id)}
+                                        <li>
+                                            <button
+                                                class={track.id === player.audio ? 'menu-active' : ''}
+                                                onclick={(event) => {
+                                                    player.setAudio(track.id);
+                                                    // 選んだら閉じる。開きっぱなしだと絵を覆う
+                                                    event.currentTarget.blur();
+                                                }}
+                                                data-testid="live-audio-option"
+                                                data-audio={track.id}
+                                                aria-current={track.id === player.audio ? 'true' : undefined}
+                                            >
+                                                {track.label}
+                                            </button>
+                                        </li>
+                                    {/each}
+                                </ul>
+                            </div>
+                        {/if}
 
-                    <!--
+                        <!--
                         戻れる範囲の中のどこに居るか。押すとその時刻へ移る。
 
                         **放送の今に居る間は右端に張り付かせる。** 実際には
@@ -494,82 +444,87 @@
                         溜まりが増えるたびに摘みが左へ動く — 見ている人には
                         「勝手に戻っている」としか映らない
                     -->
-                    <input
-                        type="range"
-                        class="range range-xs range-error mx-1 flex-1"
-                        min={player.oldest}
-                        max={player.newest}
-                        step="0.1"
-                        value={player.live ? player.newest : player.position}
-                        oninput={(event) => player.seek(Number(event.currentTarget.value))}
-                        aria-label="再生位置"
-                        data-testid="live-seek"
-                    />
+                        <input
+                            type="range"
+                            class="range range-xs range-error mx-1 flex-1"
+                            min={player.oldest}
+                            max={player.newest}
+                            step="0.1"
+                            value={player.live ? player.newest : player.position}
+                            oninput={(event) => player.seek(Number(event.currentTarget.value))}
+                            aria-label="再生位置"
+                            data-testid="live-seek"
+                        />
 
-                    <!--
+                        <!--
                         **追っかけ中の速さ。追っかけている間だけ出す。**
 
                         ライブに張り付いているときは速められない (放送より先は
                         無い)。追いついたら自分でライブに戻るので、そのとき
                         この選択肢も消える
                     -->
-                    {#if player.chasing}
-                        <div class="dropdown dropdown-top dropdown-end">
-                            <button
-                                class="btn btn-sm tabular-nums {OVERLAY}"
-                                aria-label="追っかけの速さ"
-                                data-testid="live-speed"
-                            >
-                                {player.speed}×
-                            </button>
-                            <ul
-                                class="dropdown-content menu bg-base-100 text-base-content rounded-box
+                        {#if player.chasing}
+                            <div class="dropdown dropdown-top dropdown-end">
+                                <button
+                                    class="btn btn-sm tabular-nums {OVERLAY}"
+                                    aria-label="追っかけの速さ"
+                                    data-testid="live-speed"
+                                >
+                                    {player.speed}×
+                                </button>
+                                <ul
+                                    class="dropdown-content menu bg-base-100 text-base-content rounded-box
                                        z-10 mb-1 w-28 p-2 shadow-lg"
-                                data-testid="live-speed-menu"
-                            >
-                                {#each SPEEDS as value (value)}
-                                    <li>
-                                        <button
-                                            class="tabular-nums {value === player.speed ? 'menu-active' : ''}"
-                                            onclick={(event) => {
-                                                player.setSpeed(value);
-                                                event.currentTarget.blur();
-                                            }}
-                                            data-testid="live-speed-option"
-                                            data-speed={value}
-                                            aria-current={value === player.speed ? 'true' : undefined}
-                                        >
-                                            {value}×
-                                        </button>
-                                    </li>
-                                {/each}
-                            </ul>
-                        </div>
-                    {/if}
+                                    data-testid="live-speed-menu"
+                                >
+                                    {#each SPEEDS as value (value)}
+                                        <li>
+                                            <button
+                                                class="tabular-nums {value === player.speed
+                                                    ? 'menu-active'
+                                                    : ''}"
+                                                onclick={(event) => {
+                                                    player.setSpeed(value);
+                                                    event.currentTarget.blur();
+                                                }}
+                                                data-testid="live-speed-option"
+                                                data-speed={value}
+                                                aria-current={value === player.speed ? 'true' : undefined}
+                                            >
+                                                {value}×
+                                            </button>
+                                        </li>
+                                    {/each}
+                                </ul>
+                            </div>
+                        {/if}
 
-                    <!-- 放送の今に居るかどうか。離れていれば押して戻れる -->
-                    <button
-                        class="btn btn-sm gap-1.5 {player.live ? 'border-0 shadow-none btn-error' : OVERLAY}"
-                        onclick={() => player.goLive()}
-                        data-testid="live-edge"
-                    >
-                        <span
-                            class="inline-block size-2 rounded-full {player.live
-                                ? 'bg-error-content'
-                                : 'bg-error'}"
-                        ></span>
-                        ライブ
-                    </button>
+                        <!-- 放送の今に居るかどうか。離れていれば押して戻れる -->
+                        <button
+                            class="btn btn-sm gap-1.5 {player.live
+                                ? 'border-0 shadow-none btn-error'
+                                : OVERLAY}"
+                            onclick={() => player.goLive()}
+                            data-testid="live-edge"
+                        >
+                            <span
+                                class="inline-block size-2 rounded-full {player.live
+                                    ? 'bg-error-content'
+                                    : 'bg-error'}"
+                            ></span>
+                            ライブ
+                        </button>
 
-                    <button
-                        class="btn btn-circle btn-sm {OVERLAY}"
-                        onclick={() => full()}
-                        aria-label={fullscreened ? '全画面をやめる' : '全画面'}
-                        data-testid="live-full"
-                    >
-                        {@render icon(fullscreened ? SHRINK : EXPAND)}
-                    </button>
-                </div>
+                        <button
+                            class="btn btn-circle btn-sm {OVERLAY}"
+                            onclick={() => full()}
+                            aria-label={fullscreened ? '全画面をやめる' : '全画面'}
+                            data-testid="live-full"
+                        >
+                            <Icon path={fullscreened ? SHRINK : EXPAND} />
+                        </button>
+                    </div>
+                </ControlBar>
             {/if}
 
             {#if player.silenced && player.state === 'playing'}

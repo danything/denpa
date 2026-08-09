@@ -1,7 +1,26 @@
 <script lang="ts">
     import { onMount } from 'svelte';
     import { submitting } from '$lib/actions';
-    import ProgramDetail from '$lib/components/ProgramDetail.svelte';
+    import ControlBar from '$lib/components/player/ControlBar.svelte';
+    import ControlButton from '$lib/components/player/ControlButton.svelte';
+    import { playerControls } from '$lib/components/player/controls.svelte';
+    import Icon from '$lib/components/player/Icon.svelte';
+    import {
+        BACK10,
+        CAPTION,
+        CLOSE,
+        EXPAND,
+        FORWARD10,
+        NEXT,
+        OVERLAY,
+        PAUSE,
+        PLAY,
+        PREV,
+        SHRINK,
+        SOUND_OFF,
+        SOUND_ON,
+        TRASH,
+    } from '$lib/components/player/icons';
     import ProgramFacts from '$lib/components/ProgramFacts.svelte';
     import Toasts, { type Notice } from '$lib/components/Toasts.svelte';
     import { type DetailSeed, programDetail } from '$lib/detail.svelte';
@@ -11,6 +30,7 @@
         chapterAt,
         nextChapterAt,
         prevChapterAt,
+        resumePoint,
         SKIP,
         type Tap,
         tap,
@@ -48,10 +68,21 @@
      */
     let coarse = $state(false);
 
-    /** 操作列を出しているか。**指のときは自分で出し入れする** (`tap`) */
-    let showing = $state(true);
-    let hideTimer: ReturnType<typeof setTimeout> | null = null;
+    /**
+     * 操作列の出し入れ。**ライブと同じ部品**
+     * ([controls.svelte.ts](../../../lib/components/player/controls.svelte.ts))。
+     * 動かせば出て、しばらくで消える。止めている間は残る
+     */
+    const controls = playerControls();
+    $effect(() => {
+        controls.held = !playing;
+    });
     let lastTap: Tap | null = null;
+
+    /** どこまで観たかを書き送る間隔 (ms)。**細かく送るものではない** */
+    const REMEMBER = 15_000;
+    /** 続きから出したか。出したことを画面にも言う (黙って途中から始まると驚く) */
+    let continued = $state(false);
 
     /** 押し間違い防止に2回押させる。一覧と同じ (`routes/+page.svelte` の `arm`) */
     let armed = $state(false);
@@ -70,6 +101,7 @@
     onMount(() => {
         coarse = window.matchMedia('(pointer: coarse)').matches;
         void loadChapters();
+        loadDetail();
         if (!ready) return;
         video?.play().catch(() => undefined);
         // 指のときは最初から全画面。テレビと同じで、観るために置いてある画面なので
@@ -78,12 +110,66 @@
             full = document.fullscreenElement !== null;
         };
         document.addEventListener('fullscreenchange', onFull);
+        /*
+         * **閉じ際にも書き送る。** 数十秒おきの控えだけだと、最後に観た数十秒が
+         * 落ちる。`pagehide` は畳んだ・戻った・落ちた、のどれでも来る (`unload` は
+         * スマホで来ないことがある)
+         */
+        const onLeave = () => remember(true);
+        window.addEventListener('pagehide', onLeave);
+        const ticker = setInterval(() => {
+            if (playing) remember();
+        }, REMEMBER);
         return () => {
             document.removeEventListener('fullscreenchange', onFull);
-            if (hideTimer !== null) clearTimeout(hideTimer);
+            window.removeEventListener('pagehide', onLeave);
+            clearInterval(ticker);
+            remember(true);
             if (disarm !== null) clearTimeout(disarm);
         };
     });
+
+    /**
+     * **どこまで観たかを覚える。** 覚えるかどうかの判断は `ts/watch.ts` が持つ
+     * (サーバも同じものを見る)。
+     *
+     * 出ていく間際は `sendBeacon` で投げる — 画面を畳んだあとの `fetch` は
+     * ブラウザに捨てられることがあり、**最後に観たところがいちばん要る**
+     */
+    function remember(leaving = false): void {
+        if (video === null || !ready) return;
+        const body = JSON.stringify({ at: video.currentTime, length: video.duration });
+        const url = `/api/recordings/${rec.id}/resume`;
+        if (leaving && navigator.sendBeacon !== undefined) {
+            navigator.sendBeacon(url, new Blob([body], { type: 'application/json' }));
+            return;
+        }
+        void fetch(url, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body,
+            keepalive: true,
+        }).catch(() => undefined);
+    }
+
+    /**
+     * **観ていたところから出す。**
+     *
+     * 尺が分かってから動かす (`loadedmetadata`)。**1回だけ** — 跳んだあとに
+     * もう一度来ると、観ている最中に引き戻されることになる
+     */
+    let resumed = false;
+    function resume(): void {
+        length = video?.duration ?? 0;
+        if (resumed || video === null || rec.resume_ms === null) return;
+        resumed = true;
+        const at = rec.resume_ms / 1000;
+        if (resumePoint(at, video.duration) === null) return;
+        video.currentTime = at;
+        // **黙って途中から始めない。** 何が起きたか言って、しばらくで引っ込める
+        continued = true;
+        setTimeout(() => (continued = false), 4000);
+    }
 
     /**
      * チャプターの位置。**焼いたものから読む** (`api/recordings/<id>/chapters`)。
@@ -129,49 +215,20 @@
         if (track === undefined) return;
         captions = !captions;
         track.mode = captions ? 'showing' : 'hidden';
-        flash();
+        controls.stir();
     }
 
     /** 秒で動かす。**端は超えさせない** (超えると勝手に終わる) */
     function seekBy(by: number): void {
         if (video === null) return;
         video.currentTime = Math.min(Math.max(video.currentTime + by, 0), length || video.duration || 0);
-        flash();
+        controls.stir();
     }
 
     function seekTo(seconds: number | null): void {
         if (video === null || seconds === null) return;
         video.currentTime = seconds;
-        flash();
-    }
-
-    /**
-     * 操作列をしばらく出す。**動かしたら見えるように。**
-     *
-     * 出しっぱなしにすると絵の下端が隠れ続ける。止めている間は消さない —
-     * 止めて眺めているときに操作が消えると、出すためだけにもう一度押すことになる
-     */
-    function flash(): void {
-        showing = true;
-        if (hideTimer !== null) clearTimeout(hideTimer);
-        hideTimer = setTimeout(() => {
-            if (playing) showing = false;
-        }, 2600);
-    }
-
-    /**
-     * **マウスを動かしたら操作列を出す。**
-     *
-     * 出す手段が「押す」しか無かった頃は、10秒送りを押したいだけなのに
-     * **一度止めてから押す**ことになっていた (実機で見つけた。隠れた帯の上を
-     * 押すと、下の絵が受け取って再生が止まる)。動かしたら出るのは動画アプリの通例。
-     *
-     * **指のときは何もしない。** あちらは触った時点で `press` が読む —
-     * 指を置いただけで出すと、絵を見ている間ずっと出たままになる
-     */
-    function stir(): void {
-        if (coarse) return;
-        flash();
+        controls.stir();
     }
 
     /**
@@ -192,8 +249,8 @@
         lastTap = next;
         if (action.kind === 'play') togglePlay();
         else if (action.kind === 'controls') {
-            if (showing && playing) showing = false;
-            else flash();
+            if (controls.shown && playing) controls.hide();
+            else controls.stir();
         } else {
             // 2回目。マウスは1回目で再生を切り替えているので、それも戻す
             if (action.undo) togglePlay();
@@ -256,7 +313,13 @@
         is_free: 1,
     });
 
-    function openDetail(): void {
+    /**
+     * 番組表から引き直す。**押させずに、開いた時点で引く。**
+     *
+     * 出演者や詳細情報は番組表の側にあり、録画の行は持っていない。
+     * 引けなければ行のぶんだけが出たままになる (古い録画は消えている)
+     */
+    function loadDetail(): void {
         const seed: DetailSeed = {
             name: rec.name,
             service_name: rec.service_name,
@@ -273,40 +336,10 @@
             ? [{ key: 'watch-delete', kind: 'error', text: form.message }]
             : [],
     );
-
-    /** アイコンは他の画面と同じ書き方 (インラインの SVG) */
-    const PLAY = 'M8 5v14l11-7z';
-    const PAUSE = 'M6 19h4V5H6v14zm8-14v14h4V5h-4z';
-    const BACK10 =
-        'M12.5 8c-2.65 0-5.05.99-6.9 2.6L2 7v9h9l-3.62-3.62c1.39-1.16 3.16-1.88 5.12-1.88 3.54 0 6.55 2.31 7.6 5.5l2.37-.78C21.08 11.03 17.15 8 12.5 8z';
-    const FORWARD10 =
-        'M18.4 10.6C16.55 8.99 14.15 8 11.5 8c-4.65 0-8.58 3.03-9.96 7.22L3.9 16c1.05-3.19 4.06-5.5 7.6-5.5 1.95 0 3.73.72 5.12 1.88L13 16h9V7l-3.6 3.6z';
-    const PREV = 'M6 6h2v12H6zm3.5 6l8.5 6V6z';
-    const NEXT = 'M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z';
-    const SOUND_ON =
-        'M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z';
-    const SOUND_OFF =
-        'M16.5 12c0-1.77-1.02-3.29-2.5-4.03v2.21l2.45 2.45c.03-.2.05-.41.05-.63zM19 12c0 .94-.2 1.82-.54 2.64l1.51 1.51C20.63 14.91 21 13.5 21 12c0-4.28-2.99-7.86-7-8.77v2.06c2.89.86 5 3.54 5 6.71zM4.27 3L3 4.27 7.73 9H3v6h4l5 5v-6.73l4.25 4.25c-.67.52-1.42.93-2.25 1.18v2.06c1.38-.31 2.63-.95 3.69-1.81L19.73 21 21 19.73l-9-9L4.27 3zM12 4L9.91 6.09 12 8.18V4z';
-    const CAPTIONS =
-        'M20 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zM4 12h4v2H4v-2zm10 6H4v-2h10v2zm6 0h-4v-2h4v2zm0-4H10v-2h10v2z';
-    const EXPAND = 'M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z';
-    const SHRINK = 'M5 16h3v3h2v-5H5v2zm3-8H5v2h5V5H8v3zm6 11h2v-3h3v-2h-5v5zm2-11V5h-2v5h5V8h-3z';
-    const TRASH = 'M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z';
-    const CLOSE =
-        'M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z';
-
-    /** 絵の上に置くボタン。読めるように黒く敷く (ライブの画面と同じ) */
-    const OVERLAY = 'border-0 bg-black/45 text-white shadow-none hover:bg-black/70';
 </script>
 
 <svelte:head><title>{rec.name} - denpa</title></svelte:head>
 <svelte:window onclick={stand} onkeydown={keys} />
-
-{#snippet icon(path: string)}
-    <svg viewBox="0 0 24 24" class="size-5" fill="currentColor" aria-hidden="true">
-        <path d={path} />
-    </svg>
-{/snippet}
 
 <!--
     **タブレットからは2段組**にする (`md` = 768px)。縦のiPadでちょうど入る幅で、
@@ -350,7 +383,7 @@
             -->
             <!--
                 動かしたら操作列を出すためだけの `pointermove` なので、押すものでは
-                ない (`stir`)。押す先は中の `<video>` とボタンのほう
+                ない。押す先は中の `<video>` とボタンのほう
             -->
             <!-- svelte-ignore a11y_no_noninteractive_element_interactions, a11y_no_static_element_interactions -->
             <section
@@ -358,7 +391,9 @@
                 class="relative w-full overflow-hidden rounded-lg bg-black {full
                     ? 'flex h-screen items-center justify-center'
                     : ''}"
-                onpointermove={stir}
+                onpointermove={controls.wake}
+                onpointerdown={controls.wake}
+                onpointerleave={controls.away}
                 data-testid="watch-stage"
             >
                 <!--
@@ -382,14 +417,13 @@
                     onclick={press}
                     onplay={() => {
                         playing = true;
-                        flash();
+                        controls.stir();
                     }}
                     onpause={() => {
                         playing = false;
-                        showing = true;
                     }}
                     ontimeupdate={() => (at = video?.currentTime ?? 0)}
-                    onloadedmetadata={() => (length = video?.duration ?? 0)}
+                    onloadedmetadata={resume}
                     onvolumechange={() => (muted = video?.muted ?? false)}
                     onerror={() => (broken = true)}
                     data-testid="watch-video"
@@ -404,6 +438,19 @@
                         />
                     {/if}
                 </video>
+
+                {#if continued}
+                    <!--
+                        **続きから出したことを言う。** 黙って途中から始まると、
+                        壊れているのか飛んだのか分からない
+                    -->
+                    <div
+                        class="pointer-events-none absolute inset-x-0 top-14 z-10 flex justify-center"
+                        data-testid="watch-resumed"
+                    >
+                        <span class="badge badge-neutral badge-sm">続きから再生しています</span>
+                    </div>
+                {/if}
 
                 {#if broken}
                     <!--
@@ -427,7 +474,7 @@
                     操作列を隠していても戻るだけは出しておく
                 -->
                 <div
-                    class="pointer-events-none absolute inset-x-0 top-0 z-10 flex items-start justify-between gap-2 bg-gradient-to-b from-black/60 to-transparent p-2 transition-opacity {showing
+                    class="pointer-events-none absolute inset-x-0 top-0 z-10 flex items-start justify-between gap-2 bg-gradient-to-b from-black/60 to-transparent p-2 transition-opacity {controls.shown
                         ? 'opacity-100'
                         : 'opacity-0'}"
                 >
@@ -437,7 +484,7 @@
                         aria-label="一覧へ戻る"
                         data-testid="watch-close"
                     >
-                        {@render icon(CLOSE)}
+                        <Icon path={CLOSE} />
                     </a>
                     <span class="truncate pt-1 text-sm text-white/90 drop-shadow">{rec.name}</span>
                     <!--
@@ -451,15 +498,7 @@
                                 確定
                             </button>
                         {:else}
-                            <button
-                                type="button"
-                                class="btn btn-circle btn-sm {OVERLAY}"
-                                onclick={arm}
-                                aria-label="削除"
-                                data-testid="watch-delete"
-                            >
-                                {@render icon(TRASH)}
-                            </button>
+                            <ControlButton path={TRASH} label="削除" testid="watch-delete" onclick={arm} />
                         {/if}
                     </form>
                 </div>
@@ -469,7 +508,7 @@
                     (絵を押すのは操作列の出し入れなので)。マウスでも、止まって
                     いる間は出しておく — 何を押せば始まるかが一目で分かる
                 -->
-                {#if showing && (coarse || !playing)}
+                {#if controls.shown && (coarse || !playing)}
                     <button
                         type="button"
                         class="btn btn-circle btn-lg absolute top-1/2 left-1/2 z-10 -translate-x-1/2 -translate-y-1/2 {OVERLAY}"
@@ -477,16 +516,12 @@
                         aria-label={playing ? '一時停止' : '再生'}
                         data-testid="watch-play"
                     >
-                        {@render icon(playing ? PAUSE : PLAY)}
+                        <Icon path={playing ? PAUSE : PLAY} />
                     </button>
                 {/if}
 
-                <!-- 下端。帯と押すもの -->
-                <div
-                    class="absolute inset-x-0 bottom-0 z-10 bg-gradient-to-t from-black/70 to-transparent px-2 pt-6 pb-2 transition-opacity {showing
-                        ? 'opacity-100'
-                        : 'pointer-events-none opacity-0'}"
-                >
+                <!-- 下端。帯と押すもの。**ライブと同じ帯** (`ControlBar`) -->
+                <ControlBar shown={controls.shown} testid="watch-controls">
                     <!--
                         **帯にはチャプターの切れ目を出す。** どこで CM が挟まって
                         いるかが見えると、送りのボタンを何回押すかが分かる
@@ -516,32 +551,23 @@
                     </div>
 
                     <div class="mt-1 flex flex-wrap items-center gap-1 text-white">
-                        <button
-                            type="button"
-                            class="btn btn-circle btn-sm {OVERLAY}"
+                        <ControlButton
+                            path={playing ? PAUSE : PLAY}
+                            label={playing ? '一時停止' : '再生'}
                             onclick={togglePlay}
-                            aria-label={playing ? '一時停止' : '再生'}
-                        >
-                            {@render icon(playing ? PAUSE : PLAY)}
-                        </button>
-                        <button
-                            type="button"
-                            class="btn btn-circle btn-sm {OVERLAY}"
+                        />
+                        <ControlButton
+                            path={BACK10}
+                            label={`${SKIP}秒戻す`}
+                            testid="watch-back"
                             onclick={() => seekBy(-SKIP)}
-                            aria-label="{SKIP}秒戻す"
-                            data-testid="watch-back"
-                        >
-                            {@render icon(BACK10)}
-                        </button>
-                        <button
-                            type="button"
-                            class="btn btn-circle btn-sm {OVERLAY}"
+                        />
+                        <ControlButton
+                            path={FORWARD10}
+                            label={`${SKIP}秒送る`}
+                            testid="watch-forward"
                             onclick={() => seekBy(SKIP)}
-                            aria-label="{SKIP}秒送る"
-                            data-testid="watch-forward"
-                        >
-                            {@render icon(FORWARD10)}
-                        </button>
+                        />
 
                         <!--
                             **チャプター送りは、入っているときだけ出す。**
@@ -549,24 +575,18 @@
                             押せない操作が並ぶだけになる
                         -->
                         {#if chapters.length > 1}
-                            <button
-                                type="button"
-                                class="btn btn-circle btn-sm {OVERLAY}"
+                            <ControlButton
+                                path={PREV}
+                                label={'前のチャプター'}
+                                testid="watch-prev-chapter"
                                 onclick={() => seekTo(prevChapterAt(chapters, at))}
-                                aria-label="前のチャプター"
-                                data-testid="watch-prev-chapter"
-                            >
-                                {@render icon(PREV)}
-                            </button>
-                            <button
-                                type="button"
-                                class="btn btn-circle btn-sm {OVERLAY}"
+                            />
+                            <ControlButton
+                                path={NEXT}
+                                label={'次のチャプター'}
+                                testid="watch-next-chapter"
                                 onclick={() => seekTo(nextChapterAt(chapters, at))}
-                                aria-label="次のチャプター"
-                                data-testid="watch-next-chapter"
-                            >
-                                {@render icon(NEXT)}
-                            </button>
+                            />
                         {/if}
 
                         <span class="px-1 text-xs tabular-nums" data-testid="watch-clock">
@@ -586,89 +606,76 @@
                             押しても何も起きない操作を並べない。`/live` と同じ扱い
                         -->
                         {#if data.subtitle}
-                            <button
-                                type="button"
-                                class="btn btn-circle btn-sm {captions
-                                    ? 'btn-primary border-0 text-white shadow-none'
-                                    : OVERLAY}"
+                            <ControlButton
+                                path={CAPTION}
+                                label={captions ? '字幕を消す' : '字幕を出す'}
+                                on={captions}
+                                testid="watch-captions"
                                 onclick={toggleCaptions}
-                                aria-label={captions ? '字幕を消す' : '字幕を出す'}
-                                aria-pressed={captions}
-                                data-testid="watch-captions"
-                            >
-                                {@render icon(CAPTIONS)}
-                            </button>
+                            />
                         {/if}
-                        <button
-                            type="button"
-                            class="btn btn-circle btn-sm {OVERLAY}"
+                        <ControlButton
+                            path={muted ? SOUND_OFF : SOUND_ON}
+                            label={muted ? '音を出す' : '消音'}
                             onclick={() => {
                                 if (video !== null) video.muted = !video.muted;
                             }}
-                            aria-label={muted ? '音を出す' : '消音'}
-                        >
-                            {@render icon(muted ? SOUND_OFF : SOUND_ON)}
-                        </button>
-                        <button
-                            type="button"
-                            class="btn btn-circle btn-sm {OVERLAY}"
+                        />
+                        <ControlButton
+                            path={full ? SHRINK : EXPAND}
+                            label={full ? '全画面をやめる' : '全画面'}
+                            testid="watch-full"
                             onclick={toggleFull}
-                            aria-label={full ? '全画面をやめる' : '全画面'}
-                            data-testid="watch-full"
-                        >
-                            {@render icon(full ? SHRINK : EXPAND)}
-                        </button>
+                        />
                     </div>
-                </div>
+                </ControlBar>
             </section>
         {/if}
     </section>
 
     <!--
-        **左は番組の中身。** 一覧のモーダルと同じものを枠なしで置く
-        (`ProgramFacts`)。同じものを2つ書くと、片方だけ直したときにずれる
+        **左は番組の中身。全部ここに出す。**
+
+        以前はモーダルで開いていた。**映像の上に被さる**ので、観ながら読めない —
+        観る画面で「あらすじを読みながら流す」ができないのは本末転倒だった。
+        中身は一覧のモーダルと同じ部品 (`ProgramFacts`) で、枠だけこちらが持つ。
+
+        **中身が長ければ、ここだけが巻き取られる** (`overflow-y-auto`)。
+        番組の説明は数百字あるので、ページごと動くと映像が画面から出ていく。
+        **押すものは下に貼り付けて、いつでも見えるようにする** (`shrink-0`)
     -->
-    <aside class="md:order-1">
-        <div class="card bg-base-100 shadow">
-            <div class="card-body p-4">
-                <ProgramFacts program={facts} cmNote={cmNoteWorthShowing(rec.cm_note) ? rec.cm_note : null} />
+    <aside class="flex flex-col md:order-1 md:sticky md:top-4 md:h-[calc(100dvh-7rem)]">
+        <div class="card bg-base-100 flex min-h-0 flex-1 shadow">
+            <div class="card-body min-h-0 flex-1 gap-0 overflow-y-auto p-4" data-testid="watch-facts">
+                <!--
+                    **引き直せたらそちらを出す。** 録画の行が持っているのは名前と
+                    説明までで、出演者などは番組表の側にある。古い録画は番組表から
+                    消えているので引けず、そのときは行のぶんだけが出たままになる
+                -->
+                <ProgramFacts
+                    program={detail.current ?? facts}
+                    cmNote={cmNoteWorthShowing(rec.cm_note) ? rec.cm_note : null}
+                />
 
                 <div class="text-base-content/60 mt-3 text-sm" data-testid="watch-meta">
                     {recordedDuration(rec)} ・ {size(rec.ts_size)}
                 </div>
+            </div>
 
-                <div class="mt-3 flex flex-wrap gap-2">
-                    <!--
-                        **詳細は EPG から引き直す。** 録画の行が持っているのは
-                        名前と説明までで、出演者などは番組表の側にある
-                        (古い録画は消えているので引けない)
-                    -->
-                    <button
-                        type="button"
-                        class="btn btn-sm btn-outline"
-                        onclick={openDetail}
-                        data-testid="watch-detail"
-                    >
-                        詳細
-                    </button>
-                    <a
-                        class="btn btn-sm btn-outline"
-                        href="/api/recordings/{rec.id}/file?download=1&source=encoded"
-                        download
-                        data-testid="watch-download"
-                    >
-                        ダウンロード
-                    </a>
-                    <a class="btn btn-sm" href="/" data-testid="watch-back-list">一覧へ</a>
-                </div>
+            <!-- 押すものは常に見えるところに置く。巻き取られる中身の外 -->
+            <div class="border-base-300 flex shrink-0 flex-wrap gap-2 border-t p-4">
+                <a
+                    class="btn btn-sm btn-outline"
+                    href="/api/recordings/{rec.id}/file?download=1&source=encoded"
+                    download
+                    data-testid="watch-download"
+                >
+                    ダウンロード
+                </a>
+                <a class="btn btn-sm" href="/" data-testid="watch-back-list">一覧へ</a>
             </div>
         </div>
     </aside>
 </div>
-
-{#if detail.current}
-    <!-- 引き直した詳細。押すものは「閉じる」だけ (足すかどうかを決める画面ではない) -->
-    <ProgramDetail program={detail.current} onclose={() => detail.close()} />
-{/if}
 
 <Toasts {notices} source={form} />

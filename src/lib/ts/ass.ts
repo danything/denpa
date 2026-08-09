@@ -20,9 +20,9 @@
  *   それを `0:00:-9.-32` と書く (部品ごとに符号が付く) ので、足し合わせて読む
  * - **ルビが別の行として出てくる。** 放送では文字の上に小さく乗るものが、
  *   ASS では位置指定つきの独立した Dialogue になる。ASS のまま (Kodi) なら
- *   位置どおりに乗るので良いが、**WebVTT には位置が無い**ので、そのままだと
- *   「あかぎ」「(赤木)ニオう…」と2行に割れる。文字の大きさで見分けて落とす
- *   (実測: 本文 36 に対してルビ 18。617枚中10枚)
+ *   位置どおりに乗るので良いが、**WebVTT には座標が無い**ので、そのままだと
+ *   「あかぎ」「(赤木)ニオう…」と2行に割れる。文字の大きさで見分けて
+ *   (実測: 本文 36 に対してルビ 18)、**本文に畳み込む** (`attachRuby`)
  */
 
 /** ふりがなと見なす大きさの境目。本文の何割より小さければルビか */
@@ -193,58 +193,184 @@ function escapeVtt(text: string): string {
     return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
-/** 本文に書いてある指定を読む */
-function styleOf(text: string): { color: string | null; size: number | null; y: number | null } {
+/** 画面に出る1行。指定を読み解いたもの */
+interface Line {
+    /** 左端と上端。位置指定が無ければ左端 0・下端 (`lineOf`) */
+    x: number;
+    y: number;
+    /** 文字の大きさ。書いていなければ Style の既定 */
+    size: number;
+    /** 字と字の間 (`\fsp`) */
+    spacing: number;
+    color: string | null;
+    /** 指定を落とした本文 */
+    body: string;
+}
+
+/**
+ * 本文に書いてある指定を読む。
+ *
+ * **位置が書いていなければ下端**とみなす。字幕の定位置はそこで、
+ * 上に寄せるかどうかの判断 (`toVtt`) が「書いていない = 上」に転ばないようにする
+ */
+function lineOf(text: string, ass: Ass): Line {
     const color = /\\1c&H([0-9a-fA-F]{6})&/.exec(text);
     const size = /\\fs(\d+(?:\.\d+)?)/.exec(text);
-    const pos = /\\pos\(\s*[\d.]+\s*,\s*([\d.]+)\s*\)/.exec(text);
+    const spacing = /\\fsp(\d+(?:\.\d+)?)/.exec(text);
+    const pos = /\\pos\(\s*([\d.]+)\s*,\s*([\d.]+)\s*\)/.exec(text);
     return {
+        x: pos === null ? 0 : Number(pos[1]),
+        y: pos === null ? ass.playResY : Number(pos[2]),
+        size: size === null ? ass.fontSize : Number(size[1]),
+        spacing: spacing === null ? 0 : Number(spacing[1]),
         color: color === null ? null : color[1].toLowerCase(),
-        size: size === null ? null : Number(size[1]),
-        y: pos === null ? null : Number(pos[1]),
+        body: plain(text),
     };
+}
+
+/**
+ * 半分の幅で置かれる文字。ASCII と半角カナ。
+ *
+ * 放送は同じ字を全角でも半角でも出せて (MSZ)、libaribcaption は半角のほうを
+ * **半角の文字そのもの**に直して寄越す (`replace_msz_ascii`)。つまり
+ * **字を見れば幅が分かる**
+ */
+const HALF_WIDTH = /[ -~｡-ﾟ]/;
+
+/** 漢字。ルビが乗るのはここ */
+const HAN = /\p{Script=Han}/u;
+
+/** ルビの左端がここまでずれていても同じものとみなす。半文字ぶん */
+const SNAP = 0.5;
+
+/** 1文字ぶんの送り */
+function advance(char: string, step: number): number {
+    return HALF_WIDTH.test(char) ? step / 2 : step;
+}
+
+/** 本文の中の漢字の並び。ルビの行き先の候補 */
+interface Run {
+    /** 何文字目から何文字目まで */
+    from: number;
+    to: number;
+    /** 画面での左端と幅 */
+    left: number;
+    width: number;
+}
+
+function kanjiRuns(line: Line): Run[] {
+    const step = line.size + line.spacing;
+    const out: Run[] = [];
+    let at = line.x;
+    let run: Run | null = null;
+    for (const [index, char] of [...line.body].entries()) {
+        const width = advance(char, step);
+        if (HAN.test(char)) {
+            if (run === null) run = { from: index, to: index, left: at, width: 0 };
+            run.width += width;
+            run.to = index + 1;
+        } else if (run !== null) {
+            out.push(run);
+            run = null;
+        }
+        at += width;
+    }
+    if (run !== null) out.push(run);
+    return out;
+}
+
+/** 本文のどこに、どのルビを乗せるか */
+interface Mark extends Run {
+    text: string;
+}
+
+/**
+ * ルビを本文に結び付ける。**漢字の並びの上に中央寄せで置かれている**とみて、
+ * いちばん近い並びを選ぶ。
+ *
+ * 放送はルビを「本文の上の行に、その字の上に来るよう置いた独立した行」として
+ * 送ってくる。どの字に掛かるかは**座標にしか書いていない**ので、こちらで
+ * 突き合わせるほかない。実機の4本で 86個中81個が半文字ぶんの誤差に収まった。
+ *
+ * **当たらなかったものは捨てます。** 外れたところに振り仮名が付くくらいなら、
+ * 付かないほうがまし
+ */
+function attachRuby(bases: Line[], rubies: Line[]): Map<Line, Mark[]> {
+    const marks = new Map<Line, Mark[]>();
+    for (const ruby of rubies) {
+        const width = [...ruby.body].length * (ruby.size + ruby.spacing);
+        let best: { gap: number; base: Line; run: Run } | null = null;
+        for (const base of bases) {
+            // 掛かるのは**下の行**。ルビは本文の上に置かれる
+            if (base.y <= ruby.y) continue;
+            for (const run of kanjiRuns(base)) {
+                const gap = Math.abs(run.left + (run.width - width) / 2 - ruby.x);
+                if (best === null || gap < best.gap) best = { gap, base, run };
+            }
+        }
+        if (best === null || best.gap > (best.base.size + best.base.spacing) * SNAP) continue;
+        const list = marks.get(best.base) ?? [];
+        list.push({ ...best.run, text: ruby.body });
+        marks.set(best.base, list);
+    }
+    return marks;
+}
+
+/** 本文を組み立てる。ルビの掛かるところは `<ruby>` で包む */
+function render(line: Line, marks: Mark[]): string {
+    const chars = [...line.body];
+    let out = '';
+    let at = 0;
+    for (const mark of [...marks].sort((a, b) => a.from - b.from)) {
+        // 重なったら後のほうは捨てる (同じ字に2つは乗らない)
+        if (mark.from < at) continue;
+        out += escapeVtt(chars.slice(at, mark.from).join(''));
+        const base = escapeVtt(chars.slice(mark.from, mark.to).join(''));
+        out += `<ruby>${base}<rt>${escapeVtt(mark.text)}</rt></ruby>`;
+        at = mark.to;
+    }
+    return out + escapeVtt(chars.slice(at).join(''));
 }
 
 /**
  * WebVTT に直す。
  *
- * **落とすものが2つあります。**
+ * **ルビは本文に畳み込みます** (`<ruby>`)。放送は別の行として送ってくるが、
+ * そのまま並べると「あかぎ」「(赤木)ニオう…」と2行に割れる。どの字に掛かるかは
+ * 座標にしか書いていないので、こちらで突き合わせる (`attachRuby`)。
  *
- * - ルビ。位置が無い WebVTT では独立した1行になってしまう (上の説明)
- * - 位置そのもの。**上下だけ残す** — 放送の字幕は画面の文字を隠さないよう
- *   上に逃げることがあるので、そこだけ `line:0` で伝える。左右と細かい座標は
- *   捨てる (ブラウザの字幕は行として並ぶもので、座標で置くものではない)
+ * **捨てるのは位置です。上下だけ残す** — 放送の字幕は画面の文字を隠さないよう
+ * 上に逃げることがあるので、そこだけ `line:0` で伝える。左右と細かい座標は
+ * 捨てる (ブラウザの字幕は行として並ぶもので、座標で置くものではない)
  */
 export function toVtt(ass: Ass): string {
-    const cues = cleanCues(ass.cues).filter((cue) => {
-        const { size } = styleOf(cue.text);
-        return size === null || size >= ass.fontSize * RUBY;
-    });
-
     /** 同じ時刻に出るものは1つにまとめる。画面に同時に出る別々の行なので */
-    const groups: { start: number; end: number; cues: Cue[] }[] = [];
-    for (const cue of cues) {
+    const groups: { start: number; end: number; lines: Line[] }[] = [];
+    for (const cue of cleanCues(ass.cues)) {
+        const line = lineOf(cue.text, ass);
         const last = groups.at(-1);
         if (last !== undefined && last.start === cue.start && last.end === cue.end) {
-            last.cues.push(cue);
+            last.lines.push(line);
             continue;
         }
-        groups.push({ start: cue.start, end: cue.end, cues: [cue] });
+        groups.push({ start: cue.start, end: cue.end, lines: [line] });
     }
 
     const out = ['WEBVTT', ''];
     for (const group of groups) {
+        // 小さい字はルビ。本文と分けてから結び直す
+        const rubies = group.lines.filter((line) => line.size < ass.fontSize * RUBY);
+        const bases = group.lines.filter((line) => line.size >= ass.fontSize * RUBY);
+        if (bases.length === 0) continue;
+        const marks = attachRuby(bases, rubies);
+
         // 上に出ていた行が1つでもあれば上に寄せる。画面の文字を隠さないための位置なので
-        const top = group.cues.some((cue) => {
-            const { y } = styleOf(cue.text);
-            return y !== null && y < ass.playResY / 2;
-        });
-        const lines = [...group.cues]
-            .sort((a, b) => (styleOf(a.text).y ?? 0) - (styleOf(b.text).y ?? 0))
-            .map((cue) => {
-                const { color } = styleOf(cue.text);
-                const body = escapeVtt(plain(cue.text));
-                const name = color === null ? undefined : COLORS.get(color);
+        const top = bases.some((line) => line.y < ass.playResY / 2);
+        const lines = [...bases]
+            .sort((a, b) => a.y - b.y)
+            .map((line) => {
+                const body = render(line, marks.get(line) ?? []);
+                const name = line.color === null ? undefined : COLORS.get(line.color);
                 // 白はそのまま。既定の色なので包む意味が無い
                 return name === undefined || name === 'white' ? body : `<c.${name}>${body}</c>`;
             });
