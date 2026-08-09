@@ -84,6 +84,9 @@ internal static unsafe partial class Sys
 /// </summary>
 internal sealed unsafe class DeviceStream(SafeFileHandle handle) : Stream
 {
+    /// <summary>読み口そのもの。**環の大きさはここに言う** (<c>DvbTuner.StartFilter</c>)</summary>
+    public SafeFileHandle Handle => handle;
+
     /// <summary>この間隔で起きて、畳めと言われていないか見る</summary>
     private const int WakeMs = 200;
 
@@ -260,12 +263,33 @@ public sealed class DvbTuner : ITuneDevice
     /// <summary>読み口の溜め。詰まると取りこぼす (demux は待ってくれない)</summary>
     private const int DemuxBuffer = 8 * 1024 * 1024;
 
+    /// <summary>
+    /// **dvr の環の大きさ。溢れるのはこちら。**
+    ///
+    /// <para>
+    /// 全PIDを <c>DMX_OUT_TS_TAP</c> で流すと、中身は demux のフィルタではなく
+    /// **dvr の環**に積まれる。`DMX_SET_BUFFER_SIZE` を demux にだけ言っていた
+    /// 頃は、**大きくしたつもりのものが使われていなかった** — 実際に使われる
+    /// のはカーネルの既定 (10 × 188 × 1024 ≒ 1.8MB) で、地上波の 18Mbit/秒 では
+    /// **0.9 秒ぶん**しかない。読む側が GC などで一瞬止まるだけで溢れる。
+    /// </para>
+    ///
+    /// <para>
+    /// 実機の記録では24時間で 249 回。アダプタ4本すべて・チャンネルもばらばら・
+    /// 時間帯も均等だったので、特定の相手ではなく**溜めが浅い**ことのほうが疑わしい。
+    /// 8MB あれば 3.5 秒ぶん。1本あたり 8MB なので、4本でも 32MB で済む。
+    /// </para>
+    /// </summary>
+    private const int DvrBuffer = 8 * 1024 * 1024;
+
     /// <summary>同期を待つ上限。過ぎたら「電波が来ていない」</summary>
     private static readonly TimeSpan LockTimeout = TimeSpan.FromSeconds(5);
 
     private readonly SafeFileHandle _frontend;
     private readonly SafeFileHandle _demux;
     private readonly DeviceStream _dvr;
+    /// <summary>どのアダプタか。記録に添えるためだけに持つ</summary>
+    private readonly string _adapter;
     private readonly int? _voltage;
     private bool _streaming;
 
@@ -274,6 +298,7 @@ public sealed class DvbTuner : ITuneDevice
     public DvbTuner(string frontend, string? lnb)
     {
         var (adapter, number) = Split(frontend);
+        _adapter = $"{adapter}/{number}";
         _frontend = Sys.Must(frontend, Sys.ReadWrite);
         try
         {
@@ -403,6 +428,17 @@ public sealed class DvbTuner : ITuneDevice
     private void StartFilter()
     {
         Sys.Call(_demux, DmxSetBufferSize, DemuxBuffer, "demux の溜めの指定");
+        /*
+         * **本当に溜まるのは dvr のほう** (`DvrBuffer` の説明)。
+         *
+         * **断られても続ける。** 大きくできなくても選局そのものは通るので、
+         * ここで投げると「溢れにくくする」ために選局を落とすことになる。
+         * 古いカーネルや別のドライバが受け付けない目もある
+         */
+        if (Sys.Ioctl((int)_dvr.Handle.DangerousGetHandle(), DmxSetBufferSize, DvrBuffer) < 0)
+        {
+            Log.Write($"[{_adapter}] dvr の溜めを広げられませんでした ({Marshal.GetLastPInvokeErrorMessage()})");
+        }
 
         // struct dmx_pes_filter_params { __u16 pid; enum input; enum output; enum pes_type; __u32 flags; }
         var filter = new byte[20];

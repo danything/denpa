@@ -352,6 +352,56 @@ export function codecsFor(codec: LiveCodec): string {
         : 'video/mp4; codecs="avc1.640029,mp4a.40.2"';
 }
 
+/**
+ * 「放送休止」と読める番組名。
+ *
+ * 番組表がそう言っている局は、**電波そのものを止めていることがある**。
+ * 実機の NHK総合 (T27) は保守の晩に停波していて、その間の選局は必ず
+ * 同期しない — 同じ NHK でも Eテレ (T26) は休止中も搬送波を出したままで、
+ * 一度も同期に失敗していない (48時間の記録)
+ */
+const RESTING = /休止|停波|放送終了/;
+
+/**
+ * いま放送休止なら、明ける時刻 (ms)。そうでなければ null。
+ *
+ * **番組表が言っていることしか見ない。** 電波の有無は測れないので、
+ * 掴めなかったときの言い換えにだけ使う (`whyNotTuned`)
+ */
+function resting(serviceId: number): number | null {
+    if (!Number.isFinite(serviceId)) return null;
+    const at = Date.now();
+    const program = queryOne<{ name: string; end_at: number }>(
+        `SELECT name, end_at FROM programs WHERE service_id = ? AND start_at <= ? AND end_at > ?`,
+        serviceId,
+        at,
+        at,
+    );
+    if (program === undefined || !RESTING.test(program.name)) return null;
+    return program.end_at;
+}
+
+/**
+ * 掴めなかったことを、**画面に出す言葉にする。**
+ *
+ * エージェントの言い分 (「電波が来ていないか、その周波数に放送がありません」) は
+ * 言い切りとしては正しいが、**アンテナや配線を疑う文面**になる。放送そのものが
+ * 止まっているだけのときは、そうと言えるほうがいい — denpa は番組表を持っていて、
+ * エージェントは持っていないので、言い換えられるのはこちらだけ。
+ *
+ * **言い換えるのは「同期しなかった」ときだけ。** チューナーが塞がっていたときや
+ * ffmpeg が降りたときに「放送休止です」と出すと、今度はこちらが嘘をつく
+ *
+ * @param why エージェントから返ってきた理由
+ * @param until 放送休止が明ける時刻 (ms)。休止でなければ null
+ */
+export function whyNotTuned(why: string, until: number | null): string {
+    if (until === null || !why.includes('同期しませんでした')) return '選局できませんでした';
+    // コンテナの時計は Asia/Tokyo (`server/library.ts`)
+    const clock = new Date(until).toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' });
+    return `いまは放送休止です (${clock} まで)`;
+}
+
 interface Viewer {
     connection: Connection;
     /** init を渡したか。渡す前に中身を送っても MSE は捨てる */
@@ -542,7 +592,7 @@ class Session {
                 wanted = null;
             }
         } catch (error) {
-            this.died(label, String(error), '選局できませんでした');
+            this.died(label, String(error), whyNotTuned(String(error), resting(this.serviceId)));
         } finally {
             this.stop();
         }

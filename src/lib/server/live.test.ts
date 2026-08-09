@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { type AudioSide, audioTracks } from '$lib/arib';
-import { codecsFor, encodeArgs } from './live';
+import { codecsFor, encodeArgs, whyNotTuned } from './live';
 
 /** 1本目の音声をそのまま。番組表が何も言っていないときの既定 */
 const stereo = audioTracks([])[0];
@@ -375,5 +375,39 @@ describe('コマ数の上限', () => {
         for (const codec of ['h264', 'av1'] as const) {
             expect(encodeArgs(1024, true, stereo, codec)).toContain('-fpsmax');
         }
+    });
+});
+
+/**
+ * **掴めなかったことを、画面に出す言葉にする。**
+ *
+ * エージェントの言い分 (「電波が来ていないか、その周波数に放送がありません」) は
+ * 言い切りとしては正しいが、アンテナや配線を疑う文面になる。実機で「T27 が
+ * ときどき同期しない」として出たものは、調べると**NHK総合が保守の晩に停波して
+ * いた**だけだった (48時間で10回、全部 01:04〜02:54。番組表では 00:11〜05:00 が
+ * 放送休止。窓の外では一発で通り、5秒で 11.3MB 流れてきた)。
+ */
+describe('掴めなかった理由', () => {
+    const NOT_LOCKED =
+        '選局できません (500) 同期しませんでした (電波が来ていないか、その周波数に放送がありません)';
+    // その土地の 05:00。**時計はコンテナの TZ で読む** (`server/library.ts`) ので、
+    // ここも土地の時刻で組む
+    const until = new Date(2026, 7, 9, 5, 0).getTime();
+
+    test('番組表が休止だと言っていれば、そう言う', () => {
+        expect(whyNotTuned(NOT_LOCKED, until)).toBe('いまは放送休止です (05:00 まで)');
+    });
+
+    test('休止でなければ、いつもどおり', () => {
+        expect(whyNotTuned(NOT_LOCKED, null)).toBe('選局できませんでした');
+    });
+
+    /*
+     * **言い換えるのは「同期しなかった」ときだけ。** 塞がっていたときや
+     * ffmpeg が降りたときに「放送休止です」と出すと、今度はこちらが嘘をつく
+     */
+    test('別の理由で掴めなかったときは言い換えない', () => {
+        expect(whyNotTuned('チューナーに空きがありません', until)).toBe('選局できませんでした');
+        expect(whyNotTuned('ffmpeg が終了しました (1)', until)).toBe('選局できませんでした');
     });
 });
