@@ -829,31 +829,57 @@
                 <!-- 下端。帯と押すもの。**ライブと同じ帯** (`ControlBar`) -->
                 <ControlBar shown={controls.shown} testid="watch-controls">
                     <!--
-                        **帯にはチャプターの切れ目を出す。** どこで CM が挟まって
-                        いるかが見えると、送りのボタンを何回押すかが分かる
+                        **読むもの (時刻・チャプター名) は帯と同じ行に置く。**
+
+                        押すものの列に混ぜていた頃は、そこだけで 150px ほど使う
+                        ので、**縦のタブレットでは押すものが二段に折れて**いた
+                        (820px で絵の幅は 436px しかない)。時刻は帯のすぐ隣が
+                        いちばん読みやすい場所でもある
                     -->
-                    <div class="relative">
-                        <input
-                            type="range"
-                            class="range range-xs range-primary w-full"
-                            min="0"
-                            max={length || 0}
-                            step="0.1"
-                            value={at}
-                            oninput={(e) => seekTo(Number(e.currentTarget.value))}
-                            aria-label="再生位置"
-                            data-testid="watch-seek"
-                        />
-                        {#if chapters.length > 1 && length > 0}
-                            <div class="pointer-events-none absolute inset-x-0 top-0 h-1">
-                                {#each chapters.slice(1) as chapter (chapter.start)}
-                                    <span
-                                        class="absolute top-0 h-1 w-px bg-white/70"
-                                        style="left: {(chapter.start / length) * 100}%"
-                                    ></span>
-                                {/each}
-                            </div>
+                    <div class="flex items-center gap-2">
+                        <!--
+                            **帯にはチャプターの切れ目を出す。** どこで CM が挟まって
+                            いるかが見えると、送りのボタンを何回押すかが分かる
+                        -->
+                        <div class="relative flex-1">
+                            <input
+                                type="range"
+                                class="range range-xs range-primary w-full"
+                                min="0"
+                                max={length || 0}
+                                step="0.1"
+                                value={at}
+                                oninput={(e) => seekTo(Number(e.currentTarget.value))}
+                                aria-label="再生位置"
+                                data-testid="watch-seek"
+                            />
+                            {#if chapters.length > 1 && length > 0}
+                                <div class="pointer-events-none absolute inset-x-0 top-0 h-1">
+                                    {#each chapters.slice(1) as chapter (chapter.start)}
+                                        <span
+                                            class="absolute top-0 h-1 w-px bg-white/70"
+                                            style="left: {(chapter.start / length) * 100}%"
+                                        ></span>
+                                    {/each}
+                                </div>
+                            {/if}
+                        </div>
+
+                        {#if current !== null}
+                            <span class="badge badge-ghost max-w-24 shrink-0" data-testid="watch-chapter">
+                                <span class="truncate">{current.title}</span>
+                            </span>
                         {/if}
+
+                        <!--
+                            **残りも出す。** 「あと何分で終わるか」は、途中で
+                            観るのをやめるかどうかを決めるのに要る。倍速のときは
+                            **実際に掛かる時間**にする (1.5倍なら残りも1.5で割る)
+                        -->
+                        <span class="shrink-0 text-sm tabular-nums" data-testid="watch-clock">
+                            {clock(at)} / {clock(length)}
+                            <span class="text-white/70">残り {clock(remaining)}</span>
+                        </span>
                     </div>
 
                     <div class="mt-1 flex flex-wrap items-center gap-1 text-white">
@@ -928,21 +954,6 @@
                                 testid="watch-skip-cm"
                                 onclick={toggleSkipCm}
                             />
-                        {/if}
-
-                        <!--
-                            **残りも出す。** 「あと何分で終わるか」は、途中で
-                            観るのをやめるかどうかを決めるのに要る。倍速のときは
-                            **実際に掛かる時間**にする (1.5倍なら残りも1.5で割る)
-                        -->
-                        <span class="px-1 text-sm tabular-nums" data-testid="watch-clock">
-                            {clock(at)} / {clock(length)}
-                            <span class="text-white/70">残り {clock(remaining)}</span>
-                        </span>
-                        {#if current !== null}
-                            <span class="badge badge-ghost" data-testid="watch-chapter">
-                                {current.title}
-                            </span>
                         {/if}
 
                         <!--

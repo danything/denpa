@@ -241,12 +241,12 @@ describe('止まった高さを覚える', () => {
     test('長く無事なら、下限そのものが下がる', () => {
         const held = { target: 1.5, floor: 1.5 };
         expect(nextTarget(held, false, SETTLED, SETTLED).floor).toBe(1.5);
-        expect(nextTarget(held, false, 600, 600).floor).toBeLessThan(1.5);
+        expect(nextTarget(held, false, 1800, 1800).floor).toBeLessThan(1.5);
     });
 
     test('下げ直しても、下限より下へは行かない', () => {
         let now = { target: FLOOR, floor: FLOOR };
-        for (let i = 0; i < 50; i++) now = nextTarget(now, false, 600, 600);
+        for (let i = 0; i < 50; i++) now = nextTarget(now, false, 1800, 1800);
         expect(now.floor).toBe(FLOOR);
         expect(now.target).toBe(FLOOR);
     });
@@ -287,7 +287,7 @@ describe('貯める量の下限', () => {
      */
     test('無事が続けば下限まで戻る', () => {
         let now = nextTarget({ target: FLOOR, floor: FLOOR }, true, 0, 0);
-        for (let i = 0; i < 200; i++) now = nextTarget(now, false, 600, 600);
+        for (let i = 0; i < 200; i++) now = nextTarget(now, false, 1800, 1800);
         expect(now.target).toBe(FLOOR);
     });
 });

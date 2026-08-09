@@ -311,17 +311,48 @@
                         溜まりが増えるたびに摘みが左へ動く。見ている人には
                         「勝手に戻っている」としか映らない
                     -->
-                    <input
-                        type="range"
-                        class="range range-xs range-error w-full"
-                        min={player.oldest}
-                        max={player.newest}
-                        step="0.1"
-                        value={player.live ? player.newest : player.position}
-                        oninput={(event) => player.seek(Number(event.currentTarget.value))}
-                        aria-label="再生位置"
-                        data-testid="live-seek"
-                    />
+                    <!--
+                        **読むもの (遅れ・途切れ) は帯と同じ行に置く。** 押すものの
+                        列に混ぜていた頃は、**縦のタブレットで押すものが二段に
+                        折れて**いた (820px で絵の幅は 436px しかない)。観る画面が
+                        時刻をここに置いているのと同じ考え方
+                    -->
+                    <div class="flex items-center gap-2">
+                        <input
+                            type="range"
+                            class="range range-xs range-error flex-1"
+                            min={player.oldest}
+                            max={player.newest}
+                            step="0.1"
+                            value={player.live ? player.newest : player.position}
+                            oninput={(event) => player.seek(Number(event.currentTarget.value))}
+                            aria-label="再生位置"
+                            data-testid="live-seek"
+                        />
+                        <!--
+                            **放送からどれだけ遅れているか。** 詰めていく作業をするのに、
+                            見えないと当てずっぽうになる
+                        -->
+                        {#if player.delay !== null}
+                            <span class="shrink-0 text-sm tabular-nums" data-testid="live-delay">
+                                遅延 {player.delay.toFixed(1)}秒
+                            </span>
+                        {/if}
+                        <!--
+                            **詰まった回数。止まったときだけ出る。**
+
+                            送り出す側は測ってある — 入口 (TLS) を通した素の
+                            WebSocket で受けて、**0.5秒以上の間が1回も無い**
+                            (H.264 25分 中央 43ms / AV1 4分 中央 34ms)。
+                            「一瞬止まって遅延が増える」が起きているならこちら側で、
+                            その証拠がこの数
+                        -->
+                        {#if player.stalls > 0}
+                            <span class="shrink-0 text-sm tabular-nums" data-testid="live-stalls">
+                                途切れ {player.stalls}回
+                            </span>
+                        {/if}
+                    </div>
 
                     <!-- **並びは観る画面と同じ。** 再生・音・字幕が左から順で、全画面が右端 -->
                     <div class="mt-1 flex flex-wrap items-center gap-1 text-white">
@@ -544,25 +575,6 @@
                                 {#if current.now}
                                     ・ {time(current.now.startAt)} 〜 {time(current.now.endAt)}
                                 {/if}
-                            {/if}
-                            <!--
-                                **放送からどれだけ遅れているか。** 詰めていく作業をするのに、
-                                見えないと当てずっぽうになる
-                            -->
-                            {#if player.delay !== null}
-                                ・ <span data-testid="live-delay">遅延 {player.delay.toFixed(1)}秒</span>
-                            {/if}
-                            <!--
-                                **詰まった回数。止まったときだけ出る。**
-
-                                送り出す側は測ってある — 入口 (TLS) を通した素の
-                                WebSocket で受けて、**0.5秒以上の間が1回も無い**
-                                (H.264 25分 中央 43ms / AV1 4分 中央 34ms)。
-                                「一瞬止まって遅延が増える」が起きているならこちら側で、
-                                その証拠がこの数
-                            -->
-                            {#if player.stalls > 0}
-                                ・ <span data-testid="live-stalls">途切れ {player.stalls}回</span>
                             {/if}
                         </span>
 

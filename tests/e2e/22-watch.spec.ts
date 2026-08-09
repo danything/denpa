@@ -293,6 +293,8 @@ test.describe('録画を観る', () => {
                 return Math.round(row?.getBoundingClientRect().height ?? -1);
             });
         const before = await rowHeight();
+        // 押すものは一段に収まる (`btn-lg` = 48px。折れると倍になる)
+        expect(before).toBeLessThan(60);
         await page.getByTestId('watch-name').evaluate((el) => (el.textContent = 'あ'.repeat(200)));
         expect(await rowHeight()).toBe(before);
     });
