@@ -7,7 +7,6 @@
             "!.svelte-kit",
             "!test-results",
             "!playwright-report",
-            "!**/*.svelte",
             "!static",
             "!k3s",
             "!windows",
@@ -32,6 +31,16 @@
             "preset": "recommended",
             "style": {
                 "noNonNullAssertion": "off"
+            },
+            "a11y": {
+                // 字幕は放送が絵で送ってくる。canvas に重ねるので <track> に渡せるものが無い
+                "useMediaCaption": "off",
+                // 行そのものを押せるようにしていて、中にも押せるものが入っている。<button> は入れ子にできない
+                "useSemanticElements": "off"
+            },
+            "suspicious": {
+                // 覚えた局はサーバが SSR で読む。Cookie Store API では渡らない
+                "noDocumentCookie": "off"
             }
         }
     },
@@ -46,5 +55,8 @@
         "parser": {
             "tailwindDirectives": true
         }
+    },
+    "html": {
+        "experimentalFullSupportEnabled": true
     }
 }

@@ -3,15 +3,15 @@
     import { submitting } from '$lib/actions';
     import ProgramDetail from '$lib/components/ProgramDetail.svelte';
     import Toasts, { type Notice } from '$lib/components/Toasts.svelte';
-    import { liveUpdates } from '$lib/live-updates.svelte';
+    import { type DetailSeed, programDetail } from '$lib/detail.svelte';
     import { withCredentials } from '$lib/download';
     import {
         badgeClass,
+        cmNoteWorthShowing,
         date,
         dateTime,
         duration,
         eta,
-        cmNoteWorthShowing,
         logoUnusable,
         percent,
         recordedDuration,
@@ -20,7 +20,7 @@
         stateLabel,
         time,
     } from '$lib/format';
-    import { type DetailSeed, programDetail } from '$lib/detail.svelte';
+    import { liveUpdates } from '$lib/live-updates.svelte';
     import { encodeSource } from '$lib/source';
 
     let { data, form } = $props();
@@ -359,7 +359,7 @@
                                     {#if active.includes(res.state)}
                                         <form method="POST" action="?/cancel" use:submitting>
                                             <input type="hidden" name="id" value={res.id} />
-                                            <button
+                                            <button type="submit"
                                                 class="btn btn-error btn-outline"
                                                 data-testid="cancel-button"
                                             >
@@ -373,7 +373,7 @@
                                         -->
                                         <form method="POST" action="?/restore" use:submitting>
                                             <input type="hidden" name="id" value={res.id} />
-                                            <button class="btn" data-testid="restore-button">戻す</button>
+                                            <button type="submit" class="btn" data-testid="restore-button">戻す</button>
                                         </form>
                                     {/if}
                                 </div>
@@ -395,7 +395,7 @@
                         {data.showDeleted ? '削除済みを隠す' : '削除済みも表示'}
                     </a>
                     <form method="POST" action="?/reconcile" use:submitting>
-                        <button class="btn btn-sm" data-testid="reconcile-button">実体と照合</button>
+                        <button type="submit" class="btn btn-sm" data-testid="reconcile-button">実体と照合</button>
                     </form>
                 </div>
             </div>
@@ -452,7 +452,7 @@
                                         aria-hidden="true"
                                         data-testid="play-hint"
                                     >
-                                        <svg viewBox="0 0 24 24" class="size-4" fill="currentColor">
+                                        <svg viewBox="0 0 24 24" class="size-4" fill="currentColor" aria-hidden="true">
                                             <path d="M8 5v14l11-7z" />
                                         </svg>
                                     </span>
@@ -574,7 +574,7 @@
                                             -->
                                             <form method="POST" action="?/cancelEncode" use:submitting>
                                                 <input type="hidden" name="id" value={rec.job_id} />
-                                                <button
+                                                <button type="submit"
                                                     class="btn btn-error btn-outline"
                                                     data-testid="encode-cancel"
                                                 >
@@ -586,7 +586,7 @@
                                                 <input type="hidden" name="id" value={rec.id} />
                                                 {#if armed === rec.id}
                                                     <!-- 幅が変わるとボタンが動いて押し間違える。2文字で揃える -->
-                                                    <button
+                                                    <button type="submit"
                                                         class="btn btn-error"
                                                         data-testid="delete-confirm"
                                                     >
@@ -705,10 +705,10 @@
                     }}
                 >
                     <input type="hidden" name="id" value={rec.id} />
-                    <button class="btn btn-outline" data-testid="reencode-button">再エンコード</button>
+                    <button type="submit" class="btn btn-outline" data-testid="reencode-button">再エンコード</button>
                 </form>
             {/if}
         {/if}
     {/if}
-    <button class="btn" onclick={() => detail.close()} data-testid="detail-close">閉じる</button>
+    <button type="button" class="btn" onclick={() => detail.close()} data-testid="detail-close">閉じる</button>
 {/snippet}

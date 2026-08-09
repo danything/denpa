@@ -338,7 +338,7 @@
                 -->
                 <form method="POST" action="?/logoForget" use:submitting class="mt-1">
                     <input type="hidden" name="serviceId" value={serviceId} />
-                    <button class="btn btn-xs btn-ghost" data-testid="logo-forget">
+                    <button type="submit" class="btn btn-xs btn-ghost" data-testid="logo-forget">
                         この絵は違う (捨てて覚え直す)
                     </button>
                 </form>
@@ -475,7 +475,7 @@
             >
                 <input type="hidden" name="serviceId" value={serviceId} />
                 <input type="hidden" name="area" {value} />
-                <button
+                <button type="submit"
                     class="btn btn-sm btn-primary"
                     disabled={value === '' || unchanged}
                     data-testid="logo-save"

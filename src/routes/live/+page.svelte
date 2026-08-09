@@ -1,8 +1,9 @@
 <script lang="ts">
     import { onMount } from 'svelte';
+    import ProgramFacts from '$lib/components/ProgramFacts.svelte';
+    import { screenAwake } from '$lib/components/player/awake.svelte';
     import ControlBar from '$lib/components/player/ControlBar.svelte';
     import ControlButton from '$lib/components/player/ControlButton.svelte';
-    import { screenAwake } from '$lib/components/player/awake.svelte';
     import { playerControls } from '$lib/components/player/controls.svelte';
     import Icon from '$lib/components/player/Icon.svelte';
     import {
@@ -12,19 +13,17 @@
         INFO,
         OVERLAY,
         OVERLAY_BTN,
-        OVERLAY_ON,
         PAUSE,
         PLAY,
         SHRINK,
         SOUND_OFF,
         SOUND_ON,
     } from '$lib/components/player/icons';
-    import ProgramFacts from '$lib/components/ProgramFacts.svelte';
     import { programDetail } from '$lib/detail.svelte';
-    import { livePlayer } from '$lib/live-player.svelte';
-    import { LIVE_CODECS } from '$lib/live';
-    import { FLOOR, SPEEDS } from '$lib/ts/pacing';
     import { time } from '$lib/format';
+    import { LIVE_CODECS } from '$lib/live';
+    import { livePlayer } from '$lib/live-player.svelte';
+    import { FLOOR, SPEEDS } from '$lib/ts/pacing';
     import type { LiveChannel } from './+page.server';
 
     let { data } = $props();
@@ -365,7 +364,7 @@
                     -->
                         {#if player.captions && player.captionTracks.length > 1}
                             <div class="dropdown dropdown-top">
-                                <button
+                                <button type="button"
                                     class="{OVERLAY_BTN} {OVERLAY}"
                                     aria-label="字幕を選ぶ"
                                     data-testid="live-caption-track"
@@ -382,7 +381,7 @@
                                 >
                                     {#each player.captionTracks as track (track.index)}
                                         <li>
-                                            <button
+                                            <button type="button"
                                                 class={track.index === player.captionTrack
                                                     ? 'menu-active'
                                                     : ''}
@@ -416,7 +415,7 @@
                         変わらないので前の絵を貼ったまま差し替わる
                     -->
                         <div class="dropdown dropdown-top">
-                            <button
+                            <button type="button"
                                 class="{OVERLAY_BTN} gap-1.5 {OVERLAY}"
                                 aria-label="焼き方を選ぶ"
                                 data-testid="live-codec"
@@ -432,7 +431,7 @@
                             >
                                 {#each LIVE_CODECS as choice (choice.id)}
                                     <li>
-                                        <button
+                                        <button type="button"
                                             class={choice.id === player.codec ? 'menu-active' : ''}
                                             onclick={(event) => {
                                                 player.setCodec(choice.id);
@@ -466,7 +465,7 @@
                     -->
                         {#if player.audios.length > 1}
                             <div class="dropdown dropdown-top">
-                                <button
+                                <button type="button"
                                     class="{OVERLAY_BTN} gap-1.5 {OVERLAY}"
                                     aria-label="音声を選ぶ"
                                     data-testid="live-audio"
@@ -483,7 +482,7 @@
                                 >
                                     {#each player.audios as track (track.id)}
                                         <li>
-                                            <button
+                                            <button type="button"
                                                 class={track.id === player.audio ? 'menu-active' : ''}
                                                 onclick={(event) => {
                                                     player.setAudio(track.id);
@@ -503,7 +502,7 @@
                         {/if}
 
                         <!-- 放送の今に居るかどうか。離れていれば押して戻れる -->
-                        <button
+                        <button type="button"
                             class="{OVERLAY_BTN} gap-1.5 {player.live
                                 ? 'border-0 shadow-none btn-error'
                                 : OVERLAY}"
@@ -557,7 +556,7 @@
                                     ([ControlBar.svelte](../../lib/components/player/ControlBar.svelte))
                                 -->
                                 {#if player.remembered > FLOOR}
-                                    <button
+                                    <button type="button"
                                         class="underline decoration-dotted underline-offset-2 hover:text-white"
                                         onclick={() => player.relearn()}
                                         data-testid="live-relearn">覚え直す</button
@@ -603,7 +602,7 @@
                     -->
                         {#if player.chasing}
                             <div class="dropdown dropdown-top dropdown-end">
-                                <button
+                                <button type="button"
                                     class="{OVERLAY_BTN} tabular-nums {OVERLAY}"
                                     aria-label="追っかけの速さ"
                                     data-testid="live-speed"
@@ -617,7 +616,7 @@
                                 >
                                     {#each SPEEDS as value (value)}
                                         <li>
-                                            <button
+                                            <button type="button"
                                                 class="tabular-nums {value === player.speed
                                                     ? 'menu-active'
                                                     : ''}"
@@ -653,7 +652,7 @@
                     始める作りなので、開いた直後は「押した」ことになっておらず、
                     ブラウザが音ありの再生を断る。押せる場所を出す
                 -->
-                <button
+                <button type="button"
                     class="btn btn-sm btn-neutral absolute top-3 left-3 gap-2"
                     onclick={() => player.unmute()}
                     data-testid="live-unmute"
@@ -724,7 +723,7 @@
                     {:else if player.state === 'error'}
                         <div class="text-center">
                             <div class="text-error font-medium">{player.message}</div>
-                            <button
+                            <button type="button"
                                 class="btn pointer-events-auto btn-sm mt-3"
                                 onclick={() => current && select(current)}
                                 data-testid="live-retry">やり直す</button
@@ -760,7 +759,7 @@
                 </div>
                 <!-- 押すものは巻き取られる中身の外。中身がどれだけ長くても見えている -->
                 <div class="border-base-300 flex shrink-0 flex-wrap gap-2 border-t p-4">
-                    <button class="btn btn-sm" onclick={() => detail.close()} data-testid="live-detail-close">
+                    <button type="button" class="btn btn-sm" onclick={() => detail.close()} data-testid="live-detail-close">
                         チャンネルへ戻る
                     </button>
                 </div>
@@ -769,7 +768,7 @@
             <!-- 番組表と同じ並び・同じ見た目。探す場所がずれないようにする -->
             <div class="join mb-2" data-testid="live-type-tabs">
                 {#each types as type (type)}
-                    <button
+                    <button type="button"
                         class="btn join-item btn-sm {shown === type ? 'btn-active' : ''}"
                         onclick={() => (picked = type)}
                         data-testid="live-type-{type}"
@@ -792,7 +791,7 @@
                     <!-- いま映しているものかどうかは、この行の中で5回使う -->
                     {@const tuned = current?.id === channel.id}
                     <li class="flex items-stretch gap-1">
-                        <button
+                        <button type="button"
                             bind:this={rows[channel.id]}
                             class="flex min-w-0 flex-1 cursor-pointer items-center gap-3 rounded-lg border p-2
                                text-left transition-colors
@@ -857,7 +856,7 @@
                         番組の分からない局 (番組表がまだ薄い) には出さない
                     -->
                         {#if channel.now}
-                            <button
+                            <button type="button"
                                 class="btn btn-sm btn-ghost h-auto shrink-0 self-stretch"
                                 onclick={() => openDetail(channel)}
                                 aria-label="{channel.now.name} の詳細"

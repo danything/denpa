@@ -2,8 +2,8 @@
     import { preloadData } from '$app/navigation';
     import { dragScroll, submitting } from '$lib/actions';
     import ProgramDetail from '$lib/components/ProgramDetail.svelte';
-    import { genreTint, stateLabel, time } from '$lib/format';
     import { withCredentials } from '$lib/download';
+    import { genreTint, stateLabel, time } from '$lib/format';
 
     let { data, form } = $props();
 
@@ -383,7 +383,7 @@
                         どこに何があるのか目で追えない。予約したものだけは色より
                         「予約済み」であることのほうが大事なので、そちらを優先する
                     -->
-                        <button
+                        <button type="button"
                             class="flex h-full w-full flex-col overflow-hidden rounded border-l-2 px-1 py-0.5 text-left {program.reservation_state
                                 ? 'bg-primary/20 border-primary'
                                 : genreTint(program.genres)}"
@@ -520,7 +520,7 @@
                             }}
                     >
                         <input type="hidden" name="programId" value={program.id} />
-                        <button class="btn btn-error btn-outline" data-testid="detail-cancel">
+                        <button type="submit" class="btn btn-error btn-outline" data-testid="detail-cancel">
                             予約を取り消す
                         </button>
                     </form>
@@ -541,12 +541,12 @@
                             }}
                     >
                         <input type="hidden" name="programId" value={program.id} />
-                        <button class="btn btn-primary" data-testid="detail-reserve">予約する</button>
+                        <button type="submit" class="btn btn-primary" data-testid="detail-reserve">予約する</button>
                     </form>
                 {/if}
 
                 <!-- 位置を動かさないため、いつでもここが最後 -->
-                <button class="btn" onclick={() => (selected = null)} data-testid="detail-close">
+                <button type="button" class="btn" onclick={() => (selected = null)} data-testid="detail-close">
                     閉じる
                 </button>
             </div>

@@ -158,7 +158,7 @@
             横に並ぶ形にしたい
         -->
         <nav class="flex flex-none items-center gap-1">
-            <button
+            <button type="button"
                 class="btn btn-ghost btn-sm"
                 onclick={cycleTheme}
                 aria-label="テーマを切り替える"
@@ -196,6 +196,7 @@
                         stroke="currentColor"
                         stroke-width="2"
                         stroke-linecap="round"
+                        aria-hidden="true"
                     >
                         <path d="M4 6h16M4 12h16M4 18h16" />
                     </svg>

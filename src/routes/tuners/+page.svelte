@@ -91,7 +91,7 @@
                         押されている間は録画以外を蹴って、全チューナーで回る
                     -->
                     <form method="POST" action="?/collectNow" use:submitting>
-                        <button
+                        <button type="submit"
                             class="btn btn-sm"
                             disabled={data.collect.boosted}
                             data-testid="epg-collect-now"
@@ -231,7 +231,7 @@
                         狭めた結果 見つからない局が出るほうが困る
                     -->
                     <div class="flex flex-wrap items-center gap-2">
-                        <button
+                        <button type="submit"
                             class="btn btn-primary"
                             disabled={scan.state === 'running'}
                             data-testid="scan-start"
@@ -244,7 +244,7 @@
                                 中断しても設定は書き換えない (途中までの結果で上書きすると、
                                 まだ回っていない局の定義が消える)
                             -->
-                            <button
+                            <button type="submit"
                                 class="btn btn-error btn-outline"
                                 formaction="?/scanStop"
                                 data-testid="scan-stop"
@@ -438,7 +438,7 @@
                         {#if data.logos.pending > 0}
                             <dd>
                                 <form method="POST" action="?/logoSweep" use:submitting>
-                                    <button class="btn btn-xs" data-testid="logo-sweep">
+                                    <button type="submit" class="btn btn-xs" data-testid="logo-sweep">
                                         {data.logoSweep.running ? '取得中…' : '今すぐ取りに行く'}
                                     </button>
                                 </form>
@@ -645,10 +645,10 @@
                         </div>
                         <p class="text-base-content/60 mt-2 text-xs">名前を空にすると、その行は消えます。</p>
                         <div class="card-actions mt-2">
-                            <button class="btn btn-primary btn-sm" data-testid="tuner-config-save">
+                            <button type="submit" class="btn btn-primary btn-sm" data-testid="tuner-config-save">
                                 保存する
                             </button>
-                            <button
+                            <button type="submit"
                                 class="btn btn-ghost btn-sm"
                                 formaction="?/tunersAuto"
                                 data-testid="tuner-config-auto"

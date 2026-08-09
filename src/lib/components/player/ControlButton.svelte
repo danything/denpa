@@ -1,6 +1,6 @@
 <script lang="ts">
-    import { OVERLAY, OVERLAY_BTN, OVERLAY_DANGER, OVERLAY_ON } from './icons';
     import Icon from './Icon.svelte';
+    import { OVERLAY, OVERLAY_BTN, OVERLAY_DANGER, OVERLAY_ON } from './icons';
 
     /**
      * 映像の上に置くボタン。**ライブと観る画面で同じもの。**

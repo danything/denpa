@@ -85,7 +85,7 @@
         {#each shown as notice (notice.key)}
             <div class="alert {STYLE[notice.kind]} shadow-lg" data-testid={notice.key}>
                 <span class="whitespace-pre-wrap">{notice.text}</span>
-                <button
+                <button type="button"
                     class="btn btn-ghost btn-xs btn-circle"
                     onclick={() => dismiss(notice.key)}
                     aria-label="閉じる"

@@ -2,9 +2,9 @@
     import { untrack } from 'svelte';
     import { submitting } from '$lib/actions';
     import Toasts, { type Notice } from '$lib/components/Toasts.svelte';
+    import { dateTime } from '$lib/format';
     import { liveUpdates } from '$lib/live-updates.svelte';
     import { EVENT_LABEL } from '$lib/webhook-events';
-    import { dateTime } from '$lib/format';
 
     let { data, form } = $props();
 
@@ -210,7 +210,7 @@
                         </span>
                     </label>
                     <div class="sm:col-span-2">
-                        <button class="btn btn-primary" data-testid="save-recording">保存</button>
+                        <button type="submit" class="btn btn-primary" data-testid="save-recording">保存</button>
                     </div>
                 </form>
             </div>
@@ -277,7 +277,7 @@
                                 作って保存まで1回で済ませる。考えて入れるものではないし、
                                 入れたものを保存し忘れると、そのつもりで居るのに掛かっていない
                             -->
-                            <button
+                            <button type="submit"
                                 class="btn btn-xs"
                                 formaction="?/newPassword"
                                 title={data.auth.oidc
@@ -320,7 +320,7 @@
                                 </span>
                             {/if}
                         </div>
-                        <button class="btn btn-primary" data-testid="save-auth">保存</button>
+                        <button type="submit" class="btn btn-primary" data-testid="save-auth">保存</button>
                     </div>
                 </form>
             </div>
@@ -369,7 +369,7 @@
                     <p class="text-base-content/60 mt-1 text-xs">1つも選ばなければ全部送ります</p>
                 </div>
                 <div class="sm:col-span-2">
-                    <button class="btn btn-primary" data-testid="webhook-add">追加</button>
+                    <button type="submit" class="btn btn-primary" data-testid="webhook-add">追加</button>
                 </div>
             </form>
 
@@ -419,19 +419,19 @@
                                     <td class="flex flex-wrap gap-2">
                                         <form method="POST" action="?/testWebhook" use:submitting>
                                             <input type="hidden" name="id" value={webhook.id} />
-                                            <button class="btn btn-xs" data-testid="webhook-test"
+                                            <button type="submit" class="btn btn-xs" data-testid="webhook-test"
                                                 >テスト送信</button
                                             >
                                         </form>
                                         <form method="POST" action="?/toggleWebhook" use:submitting>
                                             <input type="hidden" name="id" value={webhook.id} />
-                                            <button class="btn btn-xs" data-testid="webhook-toggle">
+                                            <button type="submit" class="btn btn-xs" data-testid="webhook-toggle">
                                                 {webhook.enabled ? '無効化' : '有効化'}
                                             </button>
                                         </form>
                                         <form method="POST" action="?/deleteWebhook" use:submitting>
                                             <input type="hidden" name="id" value={webhook.id} />
-                                            <button
+                                            <button type="submit"
                                                 class="btn btn-xs btn-error btn-outline"
                                                 data-testid="webhook-delete"
                                             >
@@ -493,7 +493,7 @@
                             </span>
                         </span>
                     </label>
-                    <button
+                    <button type="submit"
                         class="btn btn-primary"
                         disabled={migrate.state === 'running'}
                         data-testid="migrate-run"

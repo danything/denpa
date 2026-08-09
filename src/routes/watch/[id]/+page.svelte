@@ -1,12 +1,12 @@
 <script lang="ts">
     import { onMount } from 'svelte';
     import { submitting } from '$lib/actions';
+    import ProgramFacts from '$lib/components/ProgramFacts.svelte';
+    import { screenAwake } from '$lib/components/player/awake.svelte';
     import ControlBar from '$lib/components/player/ControlBar.svelte';
     import ControlButton from '$lib/components/player/ControlButton.svelte';
-    import { screenAwake } from '$lib/components/player/awake.svelte';
     import { playerControls } from '$lib/components/player/controls.svelte';
     import Icon from '$lib/components/player/Icon.svelte';
-    import { clearOverlay, drawOverlay, fitRect } from '$lib/components/player/paint';
     import {
         CAMERA,
         CAPTION,
@@ -17,16 +17,16 @@
         NEXT,
         OVERLAY,
         OVERLAY_BTN,
+        OVERLAY_ON,
         PAUSE,
         PLAY,
-        OVERLAY_ON,
         PREV,
         SHRINK,
         SOUND_OFF,
         SOUND_ON,
         TRASH,
     } from '$lib/components/player/icons';
-    import ProgramFacts from '$lib/components/ProgramFacts.svelte';
+    import { clearOverlay, drawOverlay, fitRect } from '$lib/components/player/paint';
     import Toasts, { type Notice } from '$lib/components/Toasts.svelte';
     import { type DetailSeed, programDetail } from '$lib/detail.svelte';
     import { clock, cmNoteWorthShowing, recordedDuration, size, time } from '$lib/format';
@@ -1039,7 +1039,7 @@
 
                         <!-- 早送り。**ライブの追っかけと同じ並び・同じ見た目** -->
                         <div class="dropdown dropdown-top dropdown-end">
-                            <button
+                            <button type="button"
                                 class="btn btn-sm tabular-nums {speed === 1 ? OVERLAY : OVERLAY_ON}"
                                 aria-label="再生の速さ"
                                 data-testid="watch-speed"
@@ -1052,7 +1052,7 @@
                             >
                                 {#each SPEEDS as value (value)}
                                     <li>
-                                        <button
+                                        <button type="button"
                                             class="tabular-nums {value === speed ? 'menu-active' : ''}"
                                             onclick={(event) => {
                                                 setSpeed(value);

@@ -330,7 +330,7 @@
 
                     <!-- 巻き取られる中身の外。条件がどれだけ長くても見えている -->
                     <div class="border-base-300 flex shrink-0 flex-wrap gap-2 border-t p-4">
-                        <button
+                        <button type="submit"
                             class="btn btn-sm"
                             formmethod="GET"
                             formaction="/rules"
@@ -339,7 +339,7 @@
                             何が録れるか見る
                         </button>
                         {#if data.editing}
-                            <button
+                            <button type="submit"
                                 class="btn btn-sm btn-primary"
                                 formaction="?/update"
                                 data-testid="rule-update"
@@ -348,7 +348,7 @@
                             </button>
                             <a class="btn btn-sm" href="/rules" data-testid="rule-cancel-edit">やめる</a>
                         {:else}
-                            <button
+                            <button type="submit"
                                 class="btn btn-sm btn-primary"
                                 formaction="?/create"
                                 data-testid="rule-submit"
@@ -494,7 +494,7 @@
                                                     name="reservationId"
                                                     value={program.reservation_id}
                                                 />
-                                                <button
+                                                <button type="submit"
                                                     class="btn btn-xs btn-error btn-outline"
                                                     data-testid="rule-pending-cancel"
                                                 >
@@ -568,7 +568,7 @@
                                     >
                                     <form method="POST" action="?/toggle" use:submitting>
                                         <input type="hidden" name="id" value={rule.id} />
-                                        <button
+                                        <button type="submit"
                                             class="btn btn-sm whitespace-nowrap"
                                             data-testid="rule-toggle"
                                         >
@@ -577,7 +577,7 @@
                                     </form>
                                     <form method="POST" action="?/delete" use:submitting>
                                         <input type="hidden" name="id" value={rule.id} />
-                                        <button
+                                        <button type="submit"
                                             class="btn btn-sm btn-error btn-outline whitespace-nowrap"
                                             data-testid="rule-delete"
                                         >

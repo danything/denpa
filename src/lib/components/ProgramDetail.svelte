@@ -56,9 +56,9 @@
             {#if actions}
                 {@render actions()}
             {:else}
-                <button class="btn" onclick={onclose} data-testid="detail-close">閉じる</button>
+                <button type="button" class="btn" onclick={onclose} data-testid="detail-close">閉じる</button>
             {/if}
         </div>
     </div>
-    <button class="modal-backdrop" onclick={onclose} aria-label="閉じる"></button>
+    <button type="button" class="modal-backdrop" onclick={onclose} aria-label="閉じる"></button>
 </div>

@@ -72,4 +72,4 @@ done
 そのあと `bun run check` が**型だけの import** を言ってくるので、直します
 (`ws_api.ts` の `MediaType`)。**除外設定では逃げられません** — こちらから import して
 いる以上、型検査は追ってきます。整形からは外してあります
-([biome.json](../../../../biome.json) の `!src/lib/vendor`)。
+([biome.jsonc](../../../../biome.jsonc) の `!src/lib/vendor`)。
