@@ -40,6 +40,15 @@ const connectionConfig = {
     username: env('EPGSTATION_DB_USER', 'root'),
     password: env('EPGSTATION_DB_PASSWORD', 'epgstation'),
     database: env('EPGSTATION_DB_NAME', 'epgstation'),
+    /*
+     * **繋がらないときに待たせない。**
+     *
+     * `Bun.SQL` は**断られても繋ぎ直しに行く**ので、宛先が居ないと既定の30秒を
+     * 使い切ってから諦める (`mysql2` は ECONNREFUSED をその場で返していた)。
+     * 引き継ぎ元は同じクラスタの中に居るものなので、5秒あれば足りる。
+     * 待たせたぶんだけ「押したのに何も起きない」時間が延びるだけ
+     */
+    connectionTimeout: 5,
 };
 
 export const source = {
