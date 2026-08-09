@@ -293,9 +293,8 @@ export const actions = {
     /**
      * 機材の定義を書き換える。
      *
-     * **選局コマンドは受け取らない。** 画面から自由な文字列を渡せるようにすると、
-     * denpa に入れた人がチューナー側で好きなコマンドを走らせられることになる
-     * (しかもあちらは privileged)。エージェントがデバイスと種別から組み立てる。
+     * **選局コマンドは受け取らない** — 理由は `server/tuner.ts` の `putTuners`。
+     * 受け渡すのはデバイスと種別だけ
      */
     tuners: async ({ request }) => {
         const form = await request.formData();

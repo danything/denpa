@@ -552,12 +552,8 @@
         </section>
 
         <!--
-            チューナーの設定。**選局コマンドは出さない。**
-
-            画面から自由な文字列を渡せるようにすると、denpa に入れた人が
-            チューナー側で好きなコマンドを走らせられることになる (しかも
-            あちらは privileged)。受け渡すのはデバイスと種別だけで、
-            コマンドはエージェントが組み立てる。
+            チューナーの設定。**選局コマンドは出さない** — 理由は
+            `src/lib/server/tuner.ts` の `putTuners`。出すのはデバイスと種別だけ
         -->
         <section class="card bg-base-100 shadow" data-testid="tuner-config-card">
             <div class="card-body">

@@ -105,12 +105,7 @@
      */
     let coarse = $state(false);
 
-    /**
-     * 操作列の出し入れ。**ライブと同じ部品**
-     * ([controls.svelte.ts](../../../lib/components/player/controls.svelte.ts))。
-     * マウスは動かせば出て、指は押せば出る。**消えるまではどちらも同じ長さ**。
-     * 止めている間はどちらも残る
-     */
+    /** 操作列の出し入れ ([controls.svelte.ts](../../../lib/components/player/controls.svelte.ts))。ライブと同じ */
     const controls = playerControls();
     $effect(() => {
         controls.held = !playing;
@@ -889,11 +884,9 @@
                         CM なので、流したまま消せる。押し間違い防止に2回押させる
                         のは一覧と同じ。
 
-                        **2回目も同じ大きさの丸。** 「確定」の札に差し替えて
-                        いた頃は、そこだけ幅が変わって**隣のボタンが動いて**
-                        いた — 聞き返しは同じ場所をもう一度押すものなので、
-                        動くと押し直せない。変えるのは色と絵だけで、
-                        **赤いレ点は「これでいいか」以外に読みようが無い**
+                        **2回目も同じ大きさの丸** (`danger`)。見た目とその理由は
+                        [icons.ts](../../../lib/components/player/icons.ts) の
+                        `OVERLAY_DANGER`
                     -->
                     <form method="POST" action="?/delete" use:submitting>
                         <input type="hidden" name="id" value={rec.id} />
@@ -1018,12 +1011,7 @@
                             />
                         {/if}
 
-                        <!--
-                            **読みものはここに二段で。** 入れ方の決まりは
-                            [ControlBar.svelte](../../../lib/components/player/ControlBar.svelte)
-                            に書いてある (幅ゼロから伸ばす・縮むのは番組名だけ)。
-                            ライブも同じ形
-                        -->
+                        <!-- **読みものはここに二段で。** 決まりは [ControlBar.svelte](../../../lib/components/player/ControlBar.svelte) -->
                         <div class="min-w-0 grow basis-0 px-2 leading-tight text-white/80">
                             <div class="flex items-baseline overflow-hidden text-sm whitespace-nowrap">
                                 <span class="shrink-0">
@@ -1108,12 +1096,7 @@
         ([live/+page.svelte](../../live/+page.svelte))。映像の高さに揃えていた頃は、
         そのためだけに `absolute` で浮かせる作りをここだけ抱えていた (上の説明)
     -->
-    <!--
-        **二段組にした直後は細く** (`md:w-64`)、広い画面で 320px に戻す。
-        縦のiPad (820px) では、320px を先に取ると**絵が 436px しか残らず**、
-        48px の押しものが並びきらずに帯が二段に折れていた。読むものは細くても
-        読めるが、絵は狭いと見られない
-    -->
+    <!-- **二段組にした直後は細く** (`md:w-64`)。理由は [ControlBar.svelte](../../../lib/components/player/ControlBar.svelte) -->
     <aside class="flex flex-col md:w-64 md:min-h-0 md:shrink-0 lg:w-80">
         <div class="card bg-base-100 flex min-h-0 flex-1 shadow">
             <!--

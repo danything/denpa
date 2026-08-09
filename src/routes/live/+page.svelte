@@ -165,11 +165,7 @@
         return () => document.removeEventListener('fullscreenchange', update);
     });
 
-    /**
-     * 操作列の出し入れ。**観る画面と同じ部品**
-     * ([controls.svelte.ts](../../lib/components/player/controls.svelte.ts))。
-     * マウスは動かせば出て、指は押せば出る。**消えるまではどちらも同じ長さ**
-     */
+    /** 操作列の出し入れ ([controls.svelte.ts](../../lib/components/player/controls.svelte.ts))。観る画面と同じ */
     const controls = playerControls();
     $effect(() => {
         controls.held = player.paused;
@@ -522,12 +518,7 @@
                             ライブ
                         </button>
 
-                        <!--
-                            **読みものはここに二段で。** 入れ方の決まりは
-                            [ControlBar.svelte](../../lib/components/player/ControlBar.svelte)
-                            に書いてある (幅ゼロから伸ばす・縮むのは番組名だけ)。
-                            観る画面も同じ形
-                        -->
+                        <!-- **読みものはここに二段で。** 決まりは [ControlBar.svelte](../../lib/components/player/ControlBar.svelte) -->
                         <div class="min-w-0 grow basis-0 px-2 leading-tight text-white/80">
                             <div class="flex items-baseline overflow-hidden text-sm whitespace-nowrap">
                                 {#if current}
@@ -755,11 +746,7 @@
         **高さは残りぜんぶ。** `max-h-[70vh]` で切っていた頃は、画面の下に
         余白があるのに一覧のほうが先に終わっていた
     -->
-    <!--
-        **二段組にした直後は細く** (`md:w-64`)、広い画面で 320px に戻す。観る画面と
-        同じ。縦のiPad (820px) では、320px を先に取ると**絵が 436px しか残らず**、
-        48px の押しものが並びきらずに帯が二段に折れていた
-    -->
+    <!-- **二段組にした直後は細く** (`md:w-64`)。理由は [ControlBar.svelte](../../lib/components/player/ControlBar.svelte) -->
     <aside class="flex flex-col md:w-64 md:min-h-0 md:shrink-0 lg:w-80">
         {#if detail.current}
             <!--
