@@ -205,6 +205,43 @@ test.describe('録画を観る', () => {
         expect(outside).toBe(true);
     });
 
+    /**
+     * **左は映像と同じ高さで、ページごとは動かない。**
+     *
+     * 周りの余白を自分でも足していた頃は、外の `<main>` のぶんと重なって
+     * **他の画面より内側から始まり**、足したぶんだけ縦がはみ出して
+     * ページごとスクロールバーが出ていた。左の高さも画面の高さから引いた
+     * 決め打ちで、**映像の下端と揃っていなかった**
+     */
+    test('左は映像と同じ高さに揃い、ページごとは動かない', async ({ page, request }) => {
+        test.setTimeout(180_000);
+        const { id } = await recordOne(page, request);
+
+        await page.setViewportSize({ width: 1440, height: 900 });
+        await goto(page, `/watch/${id}`);
+        /*
+         * 偽 ffmpeg の置くファイルには絵が無く、`<video>` は既定の 300x150 に
+         * なる。**背の高い映像のときに揃うか**が見たいので、高さだけ与える
+         */
+        await page.getByTestId('watch-video').evaluate((v) => {
+            (v as HTMLElement).style.height = '520px';
+        });
+
+        const box = await page.evaluate(() => {
+            const stage = document.querySelector('[data-testid="watch-stage"]')?.getBoundingClientRect();
+            const aside = document.querySelector('aside')?.getBoundingClientRect();
+            const root = document.documentElement;
+            return {
+                ずれ: stage !== undefined && aside !== undefined ? Math.abs(aside.bottom - stage.bottom) : -1,
+                縦に動く: root.scrollHeight > root.clientHeight,
+                横に動く: root.scrollWidth > root.clientWidth,
+            };
+        });
+        expect(box.ずれ).toBeLessThanOrEqual(1);
+        expect(box.縦に動く).toBe(false);
+        expect(box.横に動く).toBe(false);
+    });
+
     /** 無い録画を開いても、黙って空の画面を出さない */
     test('無い録画は 404', async ({ request }) => {
         const res = await request.get('/watch/999999');

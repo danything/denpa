@@ -550,14 +550,24 @@
     置き、余ったぶんを全部映像にやる — 映像は横に広いほど見やすい。
 
     狭い画面では**映像が上、詳細が下**。指で開いたときはそもそも全画面に
-    入っているので、ここが見えるのは全画面を抜けたあと
+    入っているので、ここが見えるのは全画面を抜けたあと。
+
+    **周りの余白は足さない。** 外の `<main>` が既に `p-4 md:p-6` を持っている
+    ([+layout.svelte](../../+layout.svelte))。ここでも足していた頃は、他の画面より
+    一回り内側から始まっていたうえ、**その足したぶんだけ縦がはみ出して**
+    ページごとスクロールバーが出ていた
 -->
-<div class="mx-auto grid max-w-[1800px] gap-4 p-3 md:grid-cols-[minmax(15rem,20rem)_1fr] lg:p-4">
+<div class="mx-auto grid max-w-[1800px] gap-4 md:grid-cols-[minmax(15rem,20rem)_1fr]">
     <!--
         **映像を先に書く。** 縦積みになったときに上へ来るのはこちら。
         2段組では `md:order-2` で右へ回す
     -->
-    <section class="md:order-2">
+    <!--
+        **映像は自分の背丈のまま置く** (`self-start`)。縦長の画面では左のほうが
+        背が高くなる (下の `min-h`) ので、伸ばされるままにすると映像の下に
+        黒い帯が付く
+    -->
+    <section class="md:order-2 md:self-start">
         {#if !ready}
             <!--
                 **焼けていないものは観られない。** 生TSは MPEG-2 で、ブラウザに
@@ -614,7 +624,9 @@
                 <video
                     bind:this={video}
                     {src}
-                    class="max-h-[calc(100dvh-9rem)] w-full bg-black {full ? 'h-full' : ''}"
+                    class="max-h-[calc(100dvh-9rem)] w-full bg-black md:max-h-[calc(100dvh-7rem)] {full
+                        ? 'h-full'
+                        : ''}"
                     playsinline
                     onclick={press}
                     onplay={() => {
@@ -907,9 +919,24 @@
         **中身が長ければ、ここだけが巻き取られる** (`overflow-y-auto`)。
         番組の説明は数百字あるので、ページごと動くと映像が画面から出ていく。
         **押すものは下に貼り付けて、いつでも見えるようにする** (`shrink-0`)
+
+        **高さは映像に合わせる。** 画面の高さから引き算した値 (`100dvh-7rem`) を
+        持たせていた頃は、**映像の下端と揃わなかった** — 映像の高さは列の幅と
+        16:9で決まるので、画面の高さとは関係がない。
+
+        中身を `absolute` で浮かせて、この枠そのものは**高さを持たない**ように
+        する。すると grid の行の高さは映像だけで決まり、伸ばされた枠が
+        ちょうど映像と同じ高さになる。**高さが決まって初めて中が巻き取られる**
+        ので、浮かせるのは巻き取りのためでもある (中身の背丈のままだと
+        `overflow-y-auto` は効かない)。
+
+        **下限も要る。** 縦長の画面 (縦のiPad) では列が細く、映像もそのぶん
+        低くなる — 高さを映像に合わせるだけだと、下に画面半分の余りが
+        できているのに説明だけ 260px の窓から覗くことになる。焼けていない
+        録画は映像の代わりに短い札が出るだけなので、そちらにも効く
     -->
-    <aside class="flex flex-col md:order-1 md:sticky md:top-4 md:h-[calc(100dvh-7rem)]">
-        <div class="card bg-base-100 flex min-h-0 flex-1 shadow">
+    <aside class="flex flex-col md:relative md:order-1 md:min-h-[24rem]">
+        <div class="card bg-base-100 flex min-h-0 flex-1 shadow md:absolute md:inset-0">
             <div class="card-body min-h-0 flex-1 gap-0 overflow-y-auto p-4" data-testid="watch-facts">
                 <!--
                     **引き直せたらそちらを出す。** 録画の行が持っているのは名前と

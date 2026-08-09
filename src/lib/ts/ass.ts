@@ -158,24 +158,3 @@ export function cleanAss(ass: Ass): string | null {
     );
     return `${ass.head}\n${body.join('\n')}\n`;
 }
-
-/**
- * ARIB の8色 → WebVTT が元から持っている色の名前。
- *
- * ASS の色は `&HBBGGRR&` で、放送で使うのは8色だけ。WebVTT には同じ8色が
- * `<c.yellow>` の形で最初から入っているので、そのまま渡せば**話者ごとの色分けが残る**
- */
-const COLORS = new Map<string, string>([
-    ['ffffff', 'white'],
-    ['00ffff', 'yellow'],
-    ['00ff00', 'lime'],
-    ['ffff00', 'cyan'],
-    ['0000ff', 'red'],
-    ['ff00ff', 'magenta'],
-    ['ff0000', 'blue'],
-    ['000000', 'black'],
-]);
-
-function escapeVtt(text: string): string {
-    return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-}
