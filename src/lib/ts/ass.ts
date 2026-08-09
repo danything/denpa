@@ -189,7 +189,7 @@ const COLORS = new Map<string, string>([
     ['000000', 'black'],
 ]);
 
-function escape(text: string): string {
+function escapeVtt(text: string): string {
     return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
@@ -243,7 +243,7 @@ export function toVtt(ass: Ass): string {
             .sort((a, b) => (styleOf(a.text).y ?? 0) - (styleOf(b.text).y ?? 0))
             .map((cue) => {
                 const { color } = styleOf(cue.text);
-                const body = escape(plain(cue.text));
+                const body = escapeVtt(plain(cue.text));
                 const name = color === null ? undefined : COLORS.get(color);
                 // 白はそのまま。既定の色なので包む意味が無い
                 return name === undefined || name === 'white' ? body : `<c.${name}>${body}</c>`;
