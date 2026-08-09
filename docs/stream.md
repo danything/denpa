@@ -846,7 +846,38 @@ export function decodeTS(options: {
 
 ffmpeg は1本のまま、チューナーも1つのまま、遅延も 0.6秒 のまま。
 
-**描画側は、抱えられるように出来ている。** `client/bml_browser.ts` の `BMLBrowser`
+### いま入っているところ
+
+**解いてサイドチャネルに流すところまで入っています** (`server/databroadcast.ts`)。
+描画側はまだです。
+
+1局に絞った TS の写しを `decodeTS` へ分け (`Session.pump`)、出てきたものを
+`CHANNEL.data` (0x30) に JSON で載せます。覚えておくぶんは `ts/carousel.ts`。
+
+実機の録画 (テレビ朝日、1局に絞った 83MB = 約40秒ぶん) で測ったもの:
+
+| | |
+| --- | --- |
+| 出てきた知らせ | `pcr` 2,136 / `moduleDownloaded` 16 / `currentTime` 13 / `moduleListUpdated` 3 / `programInfo` 2 / `pmt` 1 |
+| 揃ったモジュール | 16個・約 1.4MB (application / image / text / audio) |
+| 速さ | 120 MB/s。放送の 17 Mbit/s に対して**1コアの 1.8%** |
+| 繋いできた人に配り直すぶん | 18個・2MB |
+
+**常に解きます。** 開いたときだけ回す形にすると、開いてから絵が出るまで
+カルーセルが一周するのを待つことになり、待たせる時間が番組ごとに変わります。
+1.8% ならそちらのほうが高くつきます。
+
+決めたことが3つ:
+
+- **`pcr` は通さない。** 毎秒50個ほど来るうえ、denpa では**映像そのものが時計**です
+- **`pmt` と `programInfo` は変わったときだけ。** 放送は同じ表を何度も送ります
+- **解く側が転んでも映像は止めない。** Node のストリームは `error` を誰も聞いて
+  いないと**投げる**ので、そのままだと TS を送り込んでいるところごと落ちて
+  **映像まで出なくなります** (作りものの放送で実際に落ちました)
+
+### 残っているのは、描画側をどう抱えるか
+
+**抱えられるようには出来ている。** `client/bml_browser.ts` の `BMLBrowser`
 は差し込み口を並べて受け取る形 (`Indicator` / `EPG` / `IP` / `AudioNodeProvider`)、
 **映像は `client/player/video_player.ts` の抽象クラス**で、**既にある `<video>` と
 入れ物を渡して使う**:
@@ -864,6 +895,20 @@ export abstract class VideoPlayer {
 自分で書き直す理由がここには無い — 手書きのぶんだけでも `browser.ts` 58KB・
 `content.ts` 69KB・`drcs.ts` 31KB・`nvram.ts` 25KB・`binary_table.ts` 26KB あり、
 ES2 の処理系まで抱えている。
+
+**決まっていないのは、どう持ってくるか。** 解く側は3ファイルで済んだので
+そのまま置いたが (`src/lib/vendor/web-bml/`)、描画側は `client/` 以下 700KB に
+`interpreter` 217KB・`es2` 205KB・`interface` 103KB が付く。しかも web-bml の
+package.json には `exports` が無く、`main` は生の TypeScript で、依存に koa・react・
+hls.js・mpegts.js が並ぶ (向こうはサーバも画面も1つの木で持っているため)。
+
+| 道 | 見るところ |
+| --- | --- |
+| npm の git 依存にして Vite に組ませる | `buffer` / `stream-browserify` / `process` / `browserify-zlib` の差し替えが要る (向こうは webpack で入れている)。要らない依存 (koa・react) まで引く |
+| webpack の束を Dockerfile で組んで、静的ファイルとして配る | ffmpeg や chapter_exe と同じやり方。束の中身を denpa 側から呼べるかを確かめる必要がある |
+
+**先にどちらかを決めてから手を動かすこと。** 解く側と違って、ここは選び直すと
+書いたものが丸ごと無駄になる。
 
 セルフホスト前提なので、NVRAM は web-bml の既定実装（サーバローカル保存）をそのまま使う。
 
