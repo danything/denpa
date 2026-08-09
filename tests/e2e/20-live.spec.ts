@@ -134,6 +134,31 @@ test.describe('ライブ視聴', () => {
         expect(shape.縦に動く).toBe(false);
     });
 
+    /**
+     * **番組の中身は右の列を入れ替えて出す。モーダルにしない** — 絵の上に
+     * 被さると観ながら読めない (観る画面と同じ考え方)。
+     *
+     * 開く口は**行とは別**に置いてある。行そのものは選局なので、あらすじを
+     * 見たいだけのときにチャンネルが変わっては困る
+     */
+    test('右の列で番組の中身を読める。チャンネルは変わらない', async ({ page }) => {
+        await goto(page, '/live');
+        const channels = page.getByTestId('live-channel');
+        await expect(channels.first()).toBeVisible();
+        const tuned = await page.getByTestId('live-title').textContent();
+
+        await page.getByTestId('live-channel-detail').first().click();
+        await expect(page.getByTestId('live-detail')).toBeVisible();
+        await expect(page.getByTestId('detail-badges')).toBeVisible();
+        // 読んでいる間は一覧を退ける (同じ列を使う)
+        await expect(page.getByTestId('live-channels')).toHaveCount(0);
+        // 押したのは選局ではない。映しているものは変わらない
+        await expect(page.getByTestId('live-title')).toHaveText(tuned ?? '');
+
+        await page.getByTestId('live-detail-close').click();
+        await expect(page.getByTestId('live-channels')).toBeVisible();
+    });
+
     /*
      * **一覧は残りの高さをぜんぶ使う。** 決め打ちで切っていた頃は、画面の下に
      * 余白があるのに一覧のほうが先に終わっていた

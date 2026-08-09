@@ -1,5 +1,5 @@
 <script lang="ts">
-    import { OVERLAY, OVERLAY_ON } from './icons';
+    import { OVERLAY, OVERLAY_BTN, OVERLAY_ON } from './icons';
     import Icon from './Icon.svelte';
 
     /**
@@ -34,7 +34,7 @@
 
 <button
     type="button"
-    class="btn btn-sm {children === undefined ? 'btn-circle' : 'gap-1.5'} {on ? OVERLAY_ON : OVERLAY}"
+    class="{OVERLAY_BTN} {children === undefined ? 'btn-circle' : 'gap-1.5'} {on ? OVERLAY_ON : OVERLAY}"
     {onclick}
     aria-label={label}
     aria-pressed={on}

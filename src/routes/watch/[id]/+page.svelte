@@ -1,6 +1,7 @@
 <script lang="ts">
     import { onMount } from 'svelte';
     import { submitting } from '$lib/actions';
+    import Brightness from '$lib/components/player/Brightness.svelte';
     import ControlBar from '$lib/components/player/ControlBar.svelte';
     import ControlButton from '$lib/components/player/ControlButton.svelte';
     import { playerControls } from '$lib/components/player/controls.svelte';
@@ -136,6 +137,12 @@
     const REMEMBER = 15_000;
     /** 続きから出したか。出したことを画面にも言う (黙って途中から始まると驚く) */
     let continued = $state(false);
+
+    /**
+     * 画面の明るさ (`Brightness`)。**出先の明るいところで暗い場面を読むため。**
+     * 覚えるのは端末ごとで、ライブと同じ値を使う
+     */
+    let brightness = $state(1);
 
     /** 押し間違い防止に2回押させる。一覧と同じ (`routes/+page.svelte` の `arm`) */
     let armed = $state(false);
@@ -609,6 +616,9 @@
     狭い画面では**映像が上、詳細が下**。指で開いたときはそもそも全画面に
     入っているので、ここが見えるのは全画面を抜けたあと。
 
+    **詳細は右。** ライブ (`/live`) も右に局の一覧を置いているので、画面を
+    移っても「絵は左、読むものは右」で揃う。
+
     **周りの余白は足さない。** 外の `<main>` が既に `p-4 md:p-6` を持っている
     ([+layout.svelte](../../+layout.svelte))。ここでも足していた頃は、他の画面より
     一回り内側から始まっていたうえ、**その足したぶんだけ縦がはみ出して**
@@ -620,17 +630,14 @@
     抑えてあるので、そこから先は黒い帯になるだけで、ライブ (`aspect-video
     max-h-full`) と同じ振る舞いになる
 -->
-<div class="grid gap-4 md:grid-cols-[minmax(15rem,20rem)_1fr]">
-    <!--
-        **映像を先に書く。** 縦積みになったときに上へ来るのはこちら。
-        2段組では `md:order-2` で右へ回す
-    -->
+<div class="grid gap-4 md:grid-cols-[1fr_minmax(15rem,20rem)]">
+    <!-- **映像を先に書く。** 縦積みになったときに上へ来るのはこちら -->
     <!--
         **映像は自分の背丈のまま置く** (`self-start`)。縦長の画面では左のほうが
         背が高くなる (下の `min-h`) ので、伸ばされるままにすると映像の下に
         黒い帯が付く
     -->
-    <section class="md:order-2 md:self-start">
+    <section class="md:self-start">
         {#if !ready}
             <!--
                 **焼けていないものは観られない。** 生TSは MPEG-2 で、ブラウザに
@@ -687,9 +694,10 @@
                 <video
                     bind:this={video}
                     {src}
-                    class="max-h-[calc(100dvh-9rem)] w-full bg-black md:max-h-[calc(100dvh-7rem)] {full
-                        ? 'h-full'
-                        : ''}"
+                    class="w-full bg-black {full
+                        ? 'h-full max-h-none'
+                        : 'max-h-[calc(100dvh-9rem)] md:max-h-[calc(100dvh-7rem)]'}"
+                    style="filter: brightness({brightness})"
                     playsinline
                     onclick={press}
                     onplay={() => {
@@ -719,6 +727,7 @@
                 <canvas
                     bind:this={overlay}
                     class="pointer-events-none absolute"
+                    style="filter: brightness({brightness})"
                     data-testid="watch-captions-canvas"
                     data-on={captions && hasCaptions}
                     aria-hidden="true"
@@ -975,6 +984,9 @@
                             </ul>
                         </div>
 
+                        <!-- 画面の明るさ。ライブと同じ部品・同じ値 -->
+                        <Brightness bind:value={brightness} testid="watch-brightness" />
+
                         <!--
                             **切り抜き。** 字幕ごと写して、そのまま貼れるようにする。
                             観ている場面を人に見せるのに、いちいち撮り直さずに済む
@@ -1023,7 +1035,7 @@
         できているのに説明だけ 260px の窓から覗くことになる。焼けていない
         録画は映像の代わりに短い札が出るだけなので、そちらにも効く
     -->
-    <aside class="flex flex-col md:relative md:order-1 md:min-h-[24rem]">
+    <aside class="flex flex-col md:relative md:min-h-[24rem]">
         <div class="card bg-base-100 flex min-h-0 flex-1 shadow md:absolute md:inset-0">
             <!--
                 **`card-body` は使わない。** daisyUI はあれの中の `<p>` に

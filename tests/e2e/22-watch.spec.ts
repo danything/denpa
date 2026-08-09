@@ -5,12 +5,12 @@ import { expect, goto, recordOne, test } from './helpers';
  *
  * **絵が出るところまでは見ません。** 偽 ffmpeg が置くのは中身の無いファイルで、
  * ブラウザは当然読めない。ここで確かめるのは**画面の作り**のほう —
- * 一覧から1回で来られるか、左に番組の中身が出るか、観たその場で消せるか。
+ * 一覧から1回で来られるか、右に番組の中身が出るか、観たその場で消せるか。
  * 押したときの読み方 (どこでも一時停止・左右2回で10秒・チャプター送り) は
  * `src/lib/ts/watch.test.ts` が持っている。
  */
 test.describe('録画を観る', () => {
-    test('一覧の行から観る画面へ行き、左に番組の中身が出る', async ({ page, request }) => {
+    test('一覧の行から観る画面へ行き、右に番組の中身が出る', async ({ page, request }) => {
         test.setTimeout(180_000);
         const { id } = await recordOne(page, request);
 
@@ -32,7 +32,7 @@ test.describe('録画を観る', () => {
         const video = page.getByTestId('watch-video');
         await expect(video).toHaveAttribute('src', `/api/recordings/${id}/file?source=encoded`);
 
-        // 左には番組の中身。一覧のモーダルと同じものを枠なしで置いてある
+        // 右には番組の中身。一覧のモーダルと同じものを枠なしで置いてある
         await expect(page.getByTestId('detail-badges')).toBeVisible();
         await expect(page.getByTestId('watch-meta')).toBeVisible();
         // 落とす口も残す。ブラウザが読めない形式でも手元のプレイヤーでは観られる
@@ -183,10 +183,10 @@ test.describe('録画を観る', () => {
     });
 
     /**
-     * **番組の中身は左に全部出す。モーダルにしない** — 映像の上に被さると
+     * **番組の中身は右に全部出す。モーダルにしない** — 映像の上に被さると
      * 観ながら読めない。長ければそこだけが巻き取られ、押すものは外に残る
      */
-    test('詳細は左に出たままで、押すものは巻き取られない', async ({ page, request }) => {
+    test('詳細は右に出たままで、押すものは巻き取られない', async ({ page, request }) => {
         test.setTimeout(180_000);
         const { id } = await recordOne(page, request);
 
@@ -206,14 +206,14 @@ test.describe('録画を観る', () => {
     });
 
     /**
-     * **左は映像と同じ高さで、ページごとは動かない。**
+     * **右は映像と同じ高さで、ページごとは動かない。**
      *
      * 周りの余白を自分でも足していた頃は、外の `<main>` のぶんと重なって
      * **他の画面より内側から始まり**、足したぶんだけ縦がはみ出して
-     * ページごとスクロールバーが出ていた。左の高さも画面の高さから引いた
+     * ページごとスクロールバーが出ていた。詳細の高さも画面の高さから引いた
      * 決め打ちで、**映像の下端と揃っていなかった**
      */
-    test('左は映像と同じ高さに揃い、ページごとは動かない', async ({ page, request }) => {
+    test('右は映像と同じ高さに揃い、ページごとは動かない', async ({ page, request }) => {
         test.setTimeout(180_000);
         const { id } = await recordOne(page, request);
 

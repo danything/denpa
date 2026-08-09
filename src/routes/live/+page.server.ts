@@ -29,7 +29,7 @@ export interface LiveChannel {
     number: number | null;
     hasLogo: boolean;
     /** いま流れている番組。無いこともある (番組表がまだ薄い局) */
-    now: { name: string; startAt: number; endAt: number } | null;
+    now: { id: number; name: string; startAt: number; endAt: number; description: string | null } | null;
 }
 
 /**
@@ -71,8 +71,16 @@ export function load({ url, cookies }) {
      * いま流れているものだけ引く。番組表を丸ごと持ってくると、局の数 × 8日ぶんに
      * なって画面が出るまで待たされる (実機で 25,000 件を超える)
      */
-    const now = queryAll<{ service_id: number; name: string; start_at: number; end_at: number }>(
-        `SELECT service_id, name, start_at, end_at FROM programs
+    const now = queryAll<{
+        id: number;
+        service_id: number;
+        name: string;
+        start_at: number;
+        end_at: number;
+        description: string | null;
+    }>(
+        // 番組の id と概要も採る。**右で詳細を出すのに要る** (`programDetail`)
+        `SELECT id, service_id, name, start_at, end_at, description FROM programs
          WHERE start_at <= ? AND end_at > ?`,
         at,
         at,
@@ -92,7 +100,13 @@ export function load({ url, cookies }) {
             now:
                 program === undefined
                     ? null
-                    : { name: program.name, startAt: program.start_at, endAt: program.end_at },
+                    : {
+                          id: program.id,
+                          name: program.name,
+                          startAt: program.start_at,
+                          endAt: program.end_at,
+                          description: program.description,
+                      },
         };
     });
 
