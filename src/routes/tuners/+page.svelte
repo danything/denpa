@@ -70,8 +70,6 @@
     });
 </script>
 
-<h1 class="mb-4 text-2xl font-bold">チューナー</h1>
-
 <Toasts {notices} source={form} />
 
 <div class="grid items-start gap-6 xl:grid-cols-2">

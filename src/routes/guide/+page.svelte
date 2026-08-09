@@ -171,7 +171,6 @@
 
 <div class="mb-4 flex flex-wrap items-center justify-between gap-2">
     <div class="flex flex-wrap items-center gap-2">
-        <h1 class="text-2xl font-bold">番組表</h1>
         <!-- 番組表が古いことに気づくのはこの画面なので、いま何件あるかは出す。
              集まり具合の内訳はチューナー画面にまとめてある -->
         <div class="badge badge-lg badge-ghost" data-testid="counts">

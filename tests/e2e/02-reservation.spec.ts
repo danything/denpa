@@ -41,13 +41,26 @@ test.describe('手動予約', () => {
         await goto(page, '/guide?type=GR');
         const cells = await upcoming(page);
 
-        // 同じ時間帯で局が違うものを2つ選ぶ。GRのチューナーは2本あるので、
-        // 時間が丸かぶりでも競合にはならない、というのがここで見たいこと
-        const first = cells[0];
-        const second = cells.find((c) => c.startAt === first.startAt && c.serviceId !== first.serviceId);
-        expect(second).toBeTruthy();
+        /*
+         * 同じ時間帯で局が違うものを2つ選ぶ。GRのチューナーは2本あるので、
+         * 時間が丸かぶりでも競合にはならない、というのがここで見たいこと。
+         *
+         * **先頭の番組を起点にしない。** 走らせた時刻によっては、いちばん近い
+         * 番組の枠に相手が居ないことがある (その局だけ番組が始まったばかり)。
+         * 組になるものを全体から探す
+         */
+        const pair = cells
+            .flatMap((a, i) =>
+                cells
+                    .slice(i + 1)
+                    .filter((b) => b.startAt === a.startAt && b.serviceId !== a.serviceId)
+                    .map((b) => [a, b] as const),
+            )
+            .at(0);
+        expect(pair, '同じ時刻に始まる局違いの番組が2つ要る').toBeTruthy();
+        const [first, second] = pair!;
 
-        for (const target of [first, second!]) {
+        for (const target of [first, second]) {
             const cell = cellOf(page, target.programId);
             await cell.getByTestId('program-button').click();
             await page.getByTestId('detail-reserve').click();
@@ -55,7 +68,7 @@ test.describe('手動予約', () => {
         }
 
         await goto(page, '/');
-        for (const target of [first, second!]) {
+        for (const target of [first, second]) {
             const reservation = page.locator(
                 `[data-testid="reservation-row"][data-program-id="${target.programId}"]`,
             );

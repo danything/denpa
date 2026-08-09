@@ -22,15 +22,21 @@ test.describe('ダッシュボードと画面遷移', () => {
         await goto(page, '/guide');
         await expect(page.getByTestId('counts')).toContainText('局 4');
 
-        for (const [name, heading] of [
+        /*
+         * **見出しは置いていない。** どの画面に居るかはナビの塗りとタブの名前で
+         * 分かるので、同じ言葉をもう一度大きく出す意味が無かった。
+         * ここで確かめるのもその2つ (`+layout.svelte` の `title`)
+         */
+        for (const [name, label] of [
             ['nav-guide', '番組表'],
-            ['nav-rules', '自動予約ルール'],
+            ['nav-rules', 'ルール'],
             ['nav-tuners', 'チューナー'],
             ['nav-settings', '設定'],
             ['nav-home', '予約と録画'],
         ] as const) {
             await page.getByTestId(name).click();
-            await expect(page.getByRole('heading', { level: 1 })).toHaveText(heading);
+            await expect(page).toHaveTitle(`${label} - denpa`);
+            await expect(page.getByTestId(name)).toHaveClass(/active/);
         }
     });
 

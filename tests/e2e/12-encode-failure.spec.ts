@@ -80,7 +80,7 @@ test.describe('エンコードの失敗', () => {
          * まだ構えたままで、その数秒のうちに同じ場所をもう一度押すと消える
          */
         // 画面から出ない場所を触る (行を押すと再生・詳細に行ってしまう)
-        await page.getByRole('heading', { name: '予約と録画' }).click();
+        await page.getByRole('heading', { name: '予約', exact: true }).click();
         await expect(failed.getByTestId('delete-confirm')).toHaveCount(0);
         await expect(failed.getByTestId('delete-button')).toBeVisible();
 

@@ -175,8 +175,25 @@ export async function setRecording(
     };
     if (patch.keepOriginal === true) form.keepOriginal = 'on';
     if (patch.freeOnly ?? true) form.freeOnly = 'on';
-    const res = await request.post('/settings?/saveRecording', { form });
-    await ok(res, '録画のしかたの保存');
+
+    /*
+     * **1回だけ投げ直す。**
+     *
+     * CI で 1回、**中身の空の 400** が返って落ちました (`saveRecording` は
+     * 不正な値でしか 400 を出さず、そのときは理由の入ったページを返すので、
+     * 出どころはこちらのフォームではない)。手元では同じ形で走らせても出ず、
+     * 4本並べて走らせている CI でだけ出ています。
+     *
+     * ここは**確かめたいことではなく前準備**なので、1回投げ直す。それでも
+     * 駄目なら落とす — 本当に壊れているならどのみち後の assert が落ちる
+     */
+    for (let 回 = 0; ; 回++) {
+        const res = await request.post('/settings?/saveRecording', { form });
+        if (res.ok() || 回 >= 1) {
+            await ok(res, '録画のしかたの保存');
+            return;
+        }
+    }
 }
 
 /**

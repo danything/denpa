@@ -68,8 +68,6 @@
     どちらも画面から出ていかない
 -->
 <div class="md:flex md:h-full md:flex-col">
-    <h1 class="mb-4 text-2xl font-bold">自動予約ルール</h1>
-
     <Toasts {notices} source={form} />
 
     <div class="grid gap-4 md:min-h-0 md:flex-1 md:grid-cols-[minmax(20rem,26rem)_1fr]">

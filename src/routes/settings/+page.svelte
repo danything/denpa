@@ -56,8 +56,6 @@
     }
 </script>
 
-<h1 class="mb-4 text-2xl font-bold">設定</h1>
-
 <Toasts {notices} source={form} />
 
 <!--

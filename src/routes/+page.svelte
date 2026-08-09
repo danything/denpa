@@ -283,8 +283,6 @@
     同じ幅なのに画面によって1段だったり2段だったりした
 -->
 <div class="md:flex md:h-full md:flex-col">
-    <h1 class="mb-4 text-2xl font-bold">予約と録画</h1>
-
     <Toasts {notices} source={form} />
 
     <div class="grid gap-6 md:min-h-0 md:flex-1 md:grid-cols-5">
