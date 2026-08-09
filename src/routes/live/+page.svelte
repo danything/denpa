@@ -302,6 +302,17 @@
                         {#if player.delay !== null}
                             ・ <span data-testid="live-delay">遅延 {player.delay.toFixed(1)}秒</span>
                         {/if}
+                        <!--
+                            **詰まった回数。止まったときだけ出る。**
+
+                            送り出す側は測ってある — 素の WebSocket で25分受けて
+                            **0.5秒以上の間が1回も無い** (中央 46ms / 最大 445ms)。
+                            なので「一瞬止まって遅延が増える」が起きているなら
+                            こちら側で、その証拠がこの数
+                        -->
+                        {#if player.stalls > 0}
+                            ・ <span data-testid="live-stalls">途切れ {player.stalls}回</span>
+                        {/if}
                     </div>
                 </div>
             {/if}

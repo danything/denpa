@@ -178,6 +178,17 @@ export function livePlayer() {
     let lastStall = 0;
     /** 前回 `nextTarget` を回してから詰まったか */
     let stalled = false;
+    /**
+     * 選局してから何回詰まったか。**画面に出す。**
+     *
+     * 「LAN内なのに一瞬止まって遅延が増えていく」を追うために置いた。
+     * 送り出す側は測ってあり、**25分で 0.5秒以上の間が1回も無い**
+     * (中央 46ms / 最大 445ms。素の WebSocket で受けた実測) ので、
+     * 止まっているならこちら側 — 受け取りが間に合っていないか、
+     * 復号が間に合っていないか。**どちらなのかは数だけでは分からない**が、
+     * 「そもそも `waiting` が出ているのか」が分かるだけで切り分けが進む
+     */
+    let stalls = $state(0);
     /** 最後に `nextTarget` を回した時刻 */
     let lastSettled = 0;
     /**
@@ -714,6 +725,8 @@ export function livePlayer() {
      */
     async function tune(video: HTMLVideoElement, target: Tuned, keepList = false): Promise<void> {
         element = video;
+        // 数え直す。焼き直しでも器から作り直しになるので、前の数は続きではない
+        stalls = 0;
         // 字幕は映した1枚ごとに貼り直す (`follow`)。2度目からは何もしない
         follow(video);
         // 次の絵が出るまで前の絵を貼る。**閉じる前に写す** (閉じると何も映らなくなる)
@@ -939,6 +952,7 @@ export function livePlayer() {
                 video.addEventListener('waiting', () => {
                     if (paused || Date.now() < quiet) return;
                     stalled = true;
+                    stalls += 1;
                     lastStall = Date.now();
                 });
                 drain();
@@ -964,6 +978,10 @@ export function livePlayer() {
         /** 放送からどれだけ遅れているか (秒)。再生していないときは null */
         get delay() {
             return delay;
+        },
+        /** 選局してから詰まった回数。0 のときは画面に出さない */
+        get stalls() {
+            return stalls;
         },
         /** 押して止めているか */
         get paused() {
