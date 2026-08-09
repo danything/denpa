@@ -169,39 +169,15 @@
     const CANCELABLE = ['scheduled', 'conflict', 'recording'];
 </script>
 
-<div class="mb-4 flex flex-wrap items-center justify-between gap-2">
-    <div class="flex flex-wrap items-center gap-2">
-        <!-- 番組表が古いことに気づくのはこの画面なので、いま何件あるかは出す。
-             集まり具合の内訳はチューナー画面にまとめてある -->
-        <div class="badge badge-lg badge-ghost" data-testid="counts">
-            番組 {data.counts.programs} / 局 {data.counts.services}
-        </div>
-        <!--
-            「EPGを今すぐ取得」は置いていない。30分ごとに「集め直すべき局」を
-            選び直して自分で集めるので (docs/data.md)、押す前に入っている
-        -->
-    </div>
-    <!--
-        検索と条件の編集はルール画面に寄せてある。条件を2箇所で書けるようにすると
-        判定がずれるので、ここは番組表の閲覧だけにする
-    -->
-    <form method="GET" action="/rules" class="flex flex-wrap items-end gap-2" data-testid="guide-filter">
-        <label class="flex flex-col gap-1">
-            <span class="text-sm font-medium">番組を探す</span>
-            <!-- 探す範囲(番組名/概要/詳細)はルール画面で切り替えられる。既定は番組名だけ -->
-            <input
-                type="search"
-                name="keyword"
-                placeholder="全チャンネルの番組名から"
-                class="input input-bordered"
-                data-testid="filter-keyword"
-            />
-        </label>
-        <button class="btn btn-primary" type="submit">検索</button>
-    </form>
-</div>
+<!--
+    **どこを見るかは1行にまとめる。** 種別・日送り・探すを3段に分けていた頃は、
+    絵の出ていない上半分に 130px 使っていた。番組表は縦に長いほど読めるもの
+    なので、**そのぶんを表に回す。**
 
-<div class="mb-3 flex flex-wrap items-center justify-between gap-2">
+    「番組 30343 / 局 125」も出していたが、番組表が入っているかどうかは
+    **表そのものを見れば分かる** (集まり具合の内訳はチューナー画面にある)
+-->
+<div class="mb-3 flex flex-wrap items-center gap-2">
     <div class="join" data-testid="type-tabs">
         {#each ['GR', 'BS', 'CS'] as type (type)}
             <a
@@ -213,6 +189,8 @@
             </a>
         {/each}
     </div>
+
+    <!-- 日送りは種別のすぐ隣。どちらも「表のどこを見るか」の操作なので離さない -->
     <div class="flex items-center gap-2">
         <a class="btn btn-sm" href={prevHref} data-testid="prev-day">← 前日</a>
         <span class="text-sm" data-testid="window-label">
@@ -222,6 +200,24 @@
         <a class="btn btn-sm" href={nextHref} data-testid="next-day">翌日 →</a>
         <a class="btn btn-sm" href={href({})}>今日</a>
     </div>
+
+    <!--
+        探すのは右端に寄せる。見るための操作とは別のことなので、間を空ける。
+
+        **見出しは置かない** — 枠の中の字が同じことを言っている。検索と条件の
+        編集はルール画面に寄せてあり (条件を2箇所で書けるようにすると判定が
+        ずれる)、探す範囲もあちらで切り替える。既定は番組名だけ
+    -->
+    <form method="GET" action="/rules" class="ms-auto flex items-center gap-2" data-testid="guide-filter">
+        <input
+            type="search"
+            name="keyword"
+            placeholder="全チャンネルの番組名から"
+            class="input input-bordered input-sm w-56"
+            data-testid="filter-keyword"
+        />
+        <button class="btn btn-sm btn-primary" type="submit">検索</button>
+    </form>
 </div>
 
 {#if data.services.length === 0}
@@ -269,6 +265,7 @@
                     class="bg-base-100 border-base-300 sticky top-0 z-20 flex items-center gap-1.5 truncate border-b px-2 py-2 text-sm font-medium"
                     style="grid-column: {i + 2}; grid-row: 1;"
                     title={service.name}
+                    data-testid="guide-service"
                 >
                     <!--
                         ロゴを持たない局もあるので、有るものだけ出す。場所は

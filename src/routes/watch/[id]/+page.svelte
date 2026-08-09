@@ -11,6 +11,7 @@
         CAMERA,
         CAPTION,
         CLOSE,
+        CUT,
         EXPAND,
         FORWARD10,
         NEXT,
@@ -33,10 +34,12 @@
     import {
         type Chapter,
         chapterAt,
+        isCm,
         nextChapterAt,
         prevChapterAt,
         resumePoint,
         SKIP,
+        skipTarget,
         type Tap,
         tap,
         zoneOf,
@@ -112,6 +115,23 @@
     const SPEED_KEY = 'watch-speed';
     let speed = $state(1);
 
+    /**
+     * CM を自動で飛ばすか。**切っていない録画のためのもの。**
+     *
+     * 焼くときに CM を落とす設定にしていれば要らないが、判定を当てにせず
+     * 残して焼いている場合 (既定はチャプターを入れるだけ) は、観るたびに
+     * 送りのボタンを押すことになる。
+     *
+     * **端末ごとに覚える** (速さと同じ理由。`SPEED_KEY` の項)。
+     * **既定は切っておく** — 判定が外れたときに本編を飛ばすので、
+     * 黙って始めるものではない
+     */
+    const SKIP_CM_KEY = 'watch-skip-cm';
+    let skipCm = $state(false);
+    /** CM を飛ばしたことを短く言う。黙って跳ぶと壊れたように見える */
+    let skipped = $state(false);
+    let skipNotice: ReturnType<typeof setTimeout> | null = null;
+
     /** どこまで観たかを書き送る間隔 (ms)。**細かく送るものではない** */
     const REMEMBER = 15_000;
     /** 続きから出したか。出したことを画面にも言う (黙って途中から始まると驚く) */
@@ -135,6 +155,7 @@
         coarse = window.matchMedia('(pointer: coarse)').matches;
         // 前に選んだ速さで始める。覚えるのは端末ごと
         setSpeed(storedSpeed(), false);
+        skipCm = stored(SKIP_CM_KEY) === '1';
         void loadChapters();
         loadDetail();
         // 字幕は既定で出す (ライブと同じ)。持っていない録画では何も起きない
@@ -169,6 +190,7 @@
             clearInterval(ticker);
             remember(true);
             if (disarm !== null) clearTimeout(disarm);
+            if (skipNotice !== null) clearTimeout(skipNotice);
         };
     });
 
@@ -248,24 +270,57 @@
     function setSpeed(value: number, remember = true): void {
         speed = value;
         if (video !== null) video.playbackRate = value;
-        if (remember) {
-            try {
-                localStorage.setItem(SPEED_KEY, String(value));
-            } catch {
-                // 覚えられなくても観るのに支障は無い (プライベート窓など)
-            }
-        }
+        if (remember) remind(SPEED_KEY, String(value));
         controls.stir();
+    }
+
+    /** 覚えているもの。読めない繋ぎ (プライベート窓) では黙って null */
+    function stored(key: string): string | null {
+        try {
+            return localStorage.getItem(key);
+        } catch {
+            return null;
+        }
+    }
+
+    function remind(key: string, value: string): void {
+        try {
+            localStorage.setItem(key, value);
+        } catch {
+            // 覚えられなくても観るのに支障は無い (プライベート窓など)
+        }
     }
 
     /** 前に選んだ速さを引き出す。読めない・知らない値なら等速 */
     function storedSpeed(): number {
-        try {
-            const saved = Number(localStorage.getItem(SPEED_KEY));
-            return SPEEDS.includes(saved as (typeof SPEEDS)[number]) ? saved : 1;
-        } catch {
-            return 1;
-        }
+        const saved = Number(stored(SPEED_KEY));
+        return SPEEDS.includes(saved as (typeof SPEEDS)[number]) ? saved : 1;
+    }
+
+    /**
+     * CM飛ばしの入り切り。切り替えた時点で、いま CM の中に居れば跳ぶ —
+     * 「CMが始まったから押した」がいちばん多い押し方なので
+     */
+    function toggleSkipCm(): void {
+        skipCm = !skipCm;
+        remind(SKIP_CM_KEY, skipCm ? '1' : '0');
+        if (skipCm) hopCm();
+        controls.stir();
+    }
+
+    /**
+     * CM の中に居たら、その終わりまで跳ぶ。**判断は `ts/watch.ts` が持つ。**
+     *
+     * 続いている CM はまとめて跨ぐので、15秒ごとに何度も跳ぶことはない
+     */
+    function hopCm(): void {
+        if (!skipCm || video === null) return;
+        const to = skipTarget(chapters, video.currentTime);
+        if (to === null) return;
+        video.currentTime = to;
+        skipped = true;
+        if (skipNotice !== null) clearTimeout(skipNotice);
+        skipNotice = setTimeout(() => (skipped = false), 2500);
     }
 
     /** 速さを1段ずつ動かす。端では止まる */
@@ -442,6 +497,8 @@
     }
 
     const current = $derived(chapterAt(chapters, at));
+    /** CM の入っている録画でだけ、飛ばす口を出す (押しても何も起きない操作を並べない) */
+    const hasCm = $derived(chapters.some((chapter) => isCm(chapter.title)));
 
     /**
      * あと何分で終わるか。**倍速のぶんは割る** — 2倍で観ているときに
@@ -644,6 +701,7 @@
                     }}
                     ontimeupdate={() => {
                         at = video?.currentTime ?? 0;
+                        hopCm();
                         paint();
                     }}
                     onloadedmetadata={resume}
@@ -676,6 +734,16 @@
                         data-testid="watch-resumed"
                     >
                         <span class="badge badge-neutral badge-sm">続きから再生しています</span>
+                    </div>
+                {/if}
+
+                {#if skipped}
+                    <!-- **黙って跳ばない。** 何が起きたか言わないと壊れて見える -->
+                    <div
+                        class="pointer-events-none absolute inset-x-0 top-14 z-10 flex justify-center"
+                        data-testid="watch-skipped"
+                    >
+                        <span class="badge badge-neutral badge-sm">CMを飛ばしました</span>
                     </div>
                 {/if}
 
@@ -845,6 +913,20 @@
                         {/if}
 
                         <!--
+                            **CM を自動で飛ばす。** チャプターに CM が入っている
+                            録画でだけ出す。押した時点で CM の中に居れば、そこで跳ぶ
+                        -->
+                        {#if hasCm}
+                            <ControlButton
+                                path={CUT}
+                                label={skipCm ? 'CM飛ばしをやめる' : 'CMを自動で飛ばす'}
+                                on={skipCm}
+                                testid="watch-skip-cm"
+                                onclick={toggleSkipCm}
+                            />
+                        {/if}
+
+                        <!--
                             **残りも出す。** 「あと何分で終わるか」は、途中で
                             観るのをやめるかどうかを決めるのに要る。倍速のときは
                             **実際に掛かる時間**にする (1.5倍なら残りも1.5で割る)
@@ -943,7 +1025,14 @@
     -->
     <aside class="flex flex-col md:relative md:order-1 md:min-h-[24rem]">
         <div class="card bg-base-100 flex min-h-0 flex-1 shadow md:absolute md:inset-0">
-            <div class="card-body min-h-0 flex-1 gap-0 overflow-y-auto p-4" data-testid="watch-facts">
+            <!--
+                **`card-body` は使わない。** daisyUI はあれの中の `<p>` に
+                `flex-grow: 1` を当てるので、**中身が枠より短いと段落が余白を
+                全部吸って**、局名と説明の下だけが不自然に空いていた
+                (実機の26分もの。局名の下に 60px、説明の下に 90px)。
+                ここは縦に積むだけの箱でよく、余白は自前で持つ
+            -->
+            <div class="min-h-0 flex-1 overflow-y-auto p-4" data-testid="watch-facts">
                 <!--
                     **引き直せたらそちらを出す。** 録画の行が持っているのは名前と
                     説明までで、出演者などは番組表の側にある。古い録画は番組表から

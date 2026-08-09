@@ -151,6 +151,38 @@ export function chapterAt(chapters: Chapter[], at: number): Chapter | null {
 }
 
 /**
+ * CM のチャプターか。
+ *
+ * 焼くときに「本編」と「CM」で入れている (`server/cm.ts` の `chapterMetadata`)。
+ * **引き継いだ録画 (EPGStation) は名前が違う**ことがあるので、そういうものは
+ * CM とみなさない — 飛ばし損なうより、本編を飛ばすほうが困る
+ */
+export function isCm(title: string): boolean {
+    return title.trim().toUpperCase() === 'CM';
+}
+
+/**
+ * いま CM の中に居るなら、**その終わり**。居なければ null。
+ *
+ * **続いている CM はまとめて跨ぐ。** 検出は CM を1本ずつの区間で返すので、
+ * 1回ずつ飛ばすと 15秒ごとに何度も跳ぶことになる。
+ *
+ * @param at いまの位置 (秒)
+ */
+export function skipTarget(chapters: Chapter[], at: number): number | null {
+    const now = chapterAt(chapters, at);
+    if (now === null || !isCm(now.title)) return null;
+    let end = now.end;
+    for (const chapter of chapters) {
+        // まだ手前のもの。`end` は跨いだぶんだけ伸びていく
+        if (chapter.start < end - 0.01) continue;
+        if (!isCm(chapter.title)) break;
+        end = chapter.end;
+    }
+    return end;
+}
+
+/**
  * ffprobe の `-show_chapters -print_format json` を読む。
  *
  * **時刻は秒の文字列で来る** (`start_time`)。刻み (`time_base`) から起こす手も

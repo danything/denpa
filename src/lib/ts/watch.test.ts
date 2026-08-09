@@ -2,11 +2,13 @@ import { describe, expect, test } from 'bun:test';
 import {
     chapterAt,
     DOUBLE_TAP,
+    isCm,
     nextChapterAt,
     parseChapters,
     prevChapterAt,
     resumePoint,
     SKIP,
+    skipTarget,
     tap,
     zoneOf,
 } from './watch';
@@ -142,6 +144,44 @@ describe('チャプター送り', () => {
         expect(chapterAt(CHAPTERS, 0)?.title).toBe('本編');
         // 最後のチャプターより後ろ (端数で行き過ぎたとき)
         expect(chapterAt(CHAPTERS, 400)).toBeNull();
+    });
+});
+
+describe('CMを自動で飛ばす', () => {
+    /** 検出はCMを1本ずつの区間で返す。**続いていればまとめて跨ぐ** */
+    const RUN = [
+        { start: 0, end: 60, title: '本編' },
+        { start: 60, end: 75, title: 'CM' },
+        { start: 75, end: 90, title: 'CM' },
+        { start: 90, end: 105, title: 'CM' },
+        { start: 105, end: 300, title: '本編' },
+    ];
+
+    test('CMの中に居たら、続いているぶんの終わりまで', () => {
+        expect(skipTarget(RUN, 65)).toBe(105);
+        expect(skipTarget(RUN, 80)).toBe(105);
+    });
+
+    test('本編に居るなら跳ばない', () => {
+        expect(skipTarget(RUN, 10)).toBeNull();
+        expect(skipTarget(RUN, 200)).toBeNull();
+    });
+
+    test('チャプターの外・空でも跳ばない', () => {
+        expect(skipTarget(RUN, 400)).toBeNull();
+        expect(skipTarget([], 10)).toBeNull();
+    });
+
+    /**
+     * **知らない名前はCMとみなさない。** 引き継いだ録画 (EPGStation) は
+     * 名前が違うことがあり、飛ばし損なうより本編を飛ばすほうが困る
+     */
+    test('CMという名前のものだけ飛ばす', () => {
+        expect(isCm('CM')).toBe(true);
+        expect(isCm(' cm ')).toBe(true);
+        expect(isCm('本編')).toBe(false);
+        expect(isCm('Chapter 1')).toBe(false);
+        expect(skipTarget([{ start: 0, end: 60, title: 'Chapter 1' }], 10)).toBeNull();
     });
 });
 

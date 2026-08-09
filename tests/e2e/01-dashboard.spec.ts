@@ -13,14 +13,21 @@ test.describe('ダッシュボードと画面遷移', () => {
         await syncEpg(request);
 
         /*
-         * 番組数は番組表に出す。古いことに気づくのはこの画面なので。
+         * 取り込めたかどうかは**表そのもの**で見る (件数の札は出していない —
+         * 表を見れば分かることなので)。**表は種別ごと**なので、両方を見る。
          *
-         * 局は4つ (データ放送の局は録画対象にならないので入らない)。
-         * うち1つは**番組表がまだ空**の局 — まだ集め終えていない局は
-         * 本物でも普通にあるので、それでも画面が出ることを一緒に見ておく
+         * 偽の局は5つで、出るのは 地上波2 + BS1。**データ放送の局**は録画対象に
+         * ならないので取り込まれず、**番組がまだ1本も無い BS の局**は列を出さない
+         * (`epg.airing`)。まだ集め終えていない局は本物でも普通にあるので、
+         * それでも表が出ることを一緒に見ておく
          */
-        await goto(page, '/guide');
-        await expect(page.getByTestId('counts')).toContainText('局 4');
+        for (const [type, count] of [
+            ['GR', 2],
+            ['BS', 1],
+        ] as const) {
+            await goto(page, `/guide?type=${type}`);
+            await expect(page.getByTestId('guide-service')).toHaveCount(count);
+        }
 
         /*
          * **見出しは置いていない。** どの画面に居るかはナビの塗りとタブの名前で
