@@ -85,10 +85,21 @@ export function load({ url }) {
      * 'done' / 'failed' を書き写していた頃は、録画が失敗しても予約が録画中のまま
      * 残ることがあった。持っているのは「録り始めた時刻」だけにしてある
      */
-    // まだ始まっていないものと、いま録っているものだけ。「完了分も表示」なら全部
+    /*
+     * まだ始まっていないものと、いま録っているものだけ。「完了分も表示」なら全部。
+     *
+     * **録り逃したものも残す。** 放送が終わると `missed` に変わる (`scheduler.ts`)
+     * ので、出さずにいると**黙って消えて**いた — チューナーが足りずに落とされた
+     * ものが、録れたつもりのまま気付かれずに終わる。いちばん知りたいのは
+     * 「録れなかった」ほうなのに、それだけが見えない画面になっていた。
+     *
+     * 溜まり続けはしない。終わった予約は履歴の片付けで消える
+     * (`server/files.ts`。既定で14日)。**取り消したものは出さない** —
+     * あちらは人が押した結果で、驚くことが無い
+     */
     const pending = showFinished
         ? '1 = 1'
-        : `((r.state IN ('scheduled','conflict') AND r.started_at IS NULL) OR rec.state = 'recording')`;
+        : `((r.state IN ('scheduled','conflict','missed') AND r.started_at IS NULL) OR rec.state = 'recording')`;
     const reservations = queryAll<ReservationRow>(
         // 最後の state が r.* の state を隠す。出したいのは録画から引いたほう
         `SELECT r.*, s.name AS service_name, rules.name AS rule_name,
