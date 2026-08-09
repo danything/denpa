@@ -1027,13 +1027,13 @@ export function attend(connection: Connection): void {
         const now = nowPlaying(serviceId, audio);
 
         /*
-         * **同じものを焼いているなら、そのまま。**
+         * **同じものを焼いているなら、焼き直さない。**
          *
          * ただし**畳まれていないことを確かめる** — ffmpeg が降りたセッションを
          * 指したままだと「もう見ている」と見なされ、選び直しても「やり直す」を
          * 押しても新しく起こさない。画面は待ち続けるだけになる
          */
-        if (
+        const same =
             current?.alive === true &&
             current.channelType === channelType &&
             current.channel === channel &&
@@ -1041,12 +1041,7 @@ export function attend(connection: Connection): void {
             current.smooth === now.smooth &&
             current.audio.id === now.audio.id &&
             current.codec === codec &&
-            current.track === caption
-        ) {
-            return;
-        }
-
-        leave();
+            current.track === caption;
 
         /*
          * **知らせるのも印を戻すのも、乗る前に済ませる。**
@@ -1069,6 +1064,25 @@ export function attend(connection: Connection): void {
             audios: now.audios,
         };
         connection.send(CHANNEL.control, 0n, new TextEncoder().encode(JSON.stringify(notice)));
+
+        /*
+         * **焼き直さなくても、頼まれたら必ず答える。**
+         *
+         * 黙って返していた頃は、**いま映している局をもう一度押すと絵が死んだ**。
+         * 画面側は `tune` のたびに器を捨てる作りで (`live-player.svelte.ts` の
+         * `forget`)、`tuned` と init が来て初めて作り直す。何も変わらないからと
+         * 黙ると、**捨てたきり二度と作られない** — 塊は届き続けるので、
+         * エラーも出ないまま黒い画面で止まる (実機で踏んだ)。
+         *
+         * 答えるだけなら焼き直しにはならない。`add` は持っている init を
+         * その場で渡すので、絵は 0.2秒 ほどで戻る
+         */
+        if (same && current !== null) {
+            current.add(viewer);
+            return;
+        }
+
+        leave();
         current = watch(channelType, channel, serviceId, now, codec, caption, viewer);
     };
 

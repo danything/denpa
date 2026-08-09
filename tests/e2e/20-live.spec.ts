@@ -323,6 +323,53 @@ test.describe('ライブ視聴', () => {
     });
 
     /*
+     * **同じ局を押し直したときこそ、答えないといけない。**
+     *
+     * 画面側は `tune` のたびに器を捨てて、`tuned` と init が来てから作り直す
+     * (`live-player.svelte.ts` の `forget`)。サーバが「何も変わらないから」と
+     * 黙っていた頃は、**いま映している局をもう一度押すと絵が死んだ** — 塊は
+     * 届き続けるので**エラーも出ないまま黒い画面**になり、実機で踏むまで
+     * 気付かなかった (押した先が、開いたときに自動で選局した局だった)。
+     *
+     * 見るのは `tuned` の数。焼き直しは起きないので ffmpeg の数では分からず、
+     * init は器を作り直す合図そのものなので `tuned` の後ろに続く
+     */
+    test('いま映している局をもう一度押しても、器を作り直せる', async ({ page }) => {
+        await page.addInitScript(() => {
+            const counted = window as unknown as { __tuned: number };
+            counted.__tuned = 0;
+            const Original = window.WebSocket;
+            window.WebSocket = class extends Original {
+                constructor(url: string | URL, protocols?: string | string[]) {
+                    super(url, protocols);
+                    this.addEventListener('message', (event) => {
+                        const data = (event as MessageEvent).data;
+                        // 多重化の頭1バイトが種別。0x40 が制御で、中身は9バイト目から JSON
+                        if (!(data instanceof ArrayBuffer) || new Uint8Array(data)[0] !== 0x40) return;
+                        const body = new TextDecoder().decode(new Uint8Array(data, 9));
+                        if ((JSON.parse(body) as { type: string }).type === 'tuned') counted.__tuned += 1;
+                    });
+                }
+            };
+        });
+        const tuned = () => page.evaluate(() => (window as unknown as { __tuned: number }).__tuned);
+
+        await goto(page, '/live');
+        const first = page.getByTestId('live-channel').first();
+        await first.click();
+        await expect(page.getByTestId('live-title')).toBeVisible();
+        await expect.poll(tuned).toBeGreaterThan(0);
+        const before = await tuned();
+
+        await expect(first).toHaveAttribute('data-current', 'true');
+        await first.click();
+
+        await expect
+            .poll(tuned, { message: '同じ局を押し直したのに答えが来ない (器を作り直せない)' })
+            .toBeGreaterThan(before);
+    });
+
+    /*
      * **渡す前に1局へ絞る。**
      *
      * ffmpeg は名指しした局を `-probesize` のぶん読む間に見つけられなければ、
