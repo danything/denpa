@@ -476,6 +476,8 @@ class Session {
      * 古くなるだけで、次に押した人はどのみち回ってくるのを待つ
      */
     private data: DataBroadcast | null = null;
+    /** 最後に伝えた番組。**同じものを伝え直さない** (`programInfo`) */
+    private toldEvent: number | null | undefined;
     private stopped = false;
 
     constructor(
@@ -552,6 +554,15 @@ class Session {
             this.data = new DataBroadcast((message) => this.handData(message));
         }
         if (viewer?.wantsData !== true) return;
+        /*
+         * **番組を先に伝える。** 描く側は入口の BML を開く前にこれを待つので、
+         * 後回しにすると画面が出ない (`programInfo` の説明)
+         */
+        const program = this.programInfo();
+        if (program?.type === 'programInfo') {
+            this.toldEvent = program.eventId;
+            this.tellData(viewer, program);
+        }
         for (const message of this.data.replay()) this.tellData(viewer, message);
     }
 
@@ -800,6 +811,17 @@ class Session {
     private handData(message: ResponseMessage): void {
         const wanting = [...this.viewers].filter((viewer) => viewer.wantsData);
         if (wanting.length === 0) return;
+        /*
+         * **番組が変わったら伝え直す。** カルーセルの一覧が来るたびに見る
+         * (数十秒に1回)。そのために時計を1つ増やすほどのことではない
+         */
+        if (message.type === 'moduleListUpdated') {
+            const program = this.programInfo();
+            if (program?.type === 'programInfo' && this.toldEvent !== program.eventId) {
+                this.toldEvent = program.eventId;
+                for (const viewer of wanting) this.tellData(viewer, program);
+            }
+        }
         // **組み立てるのは1回だけ。** 人数ぶん JSON にすると、人が増えたぶんだけ無駄に働く
         const data = new TextEncoder().encode(JSON.stringify(message));
         for (const viewer of wanting) viewer.connection.send(CHANNEL.data, 0n, data);
@@ -807,6 +829,48 @@ class Session {
 
     private tellData(viewer: Viewer, message: ResponseMessage): void {
         viewer.connection.send(CHANNEL.data, 0n, new TextEncoder().encode(JSON.stringify(message)));
+    }
+
+    /**
+     * いま流れている番組を、データ放送の側に伝える。**自前の番組表から作る。**
+     *
+     * **これが無いと画面が出ない。** 描く側は入口の BML を開く前に
+     * `getProgramInfoAsync()` で待つ作りで (`client/content.ts`)、番組が来るまで
+     * 待ち続ける。借りていた `decode_ts` は EIT/SDT/NIT を読んで組み立てて
+     * いたが、denpa は同じものを**もっと確かな形で持っている** (番組表は
+     * 溜め込んであり、放送を待たなくていい)。
+     *
+     * `transportStreamId` だけ持っていない。**中継の番号は番組表に要らない**ので
+     * 集めていない。BML 側は `null` を「いまのもの」として扱う
+     * (`resource.ts` の `parseServiceReference`)
+     */
+    private programInfo(): ResponseMessage | null {
+        const at = Date.now();
+        const service = queryOne<{ service_id: number; network_id: number }>(
+            `SELECT service_id, network_id FROM services WHERE id = ?`,
+            this.serviceId,
+        );
+        if (service === undefined) return null;
+        const program = queryOne<{ event_id: number; name: string; start_at: number; end_at: number }>(
+            `SELECT event_id, name, start_at, end_at FROM programs
+             WHERE service_id = ? AND start_at <= ? AND end_at > ?`,
+            this.serviceId,
+            at,
+            at,
+        );
+        return {
+            type: 'programInfo',
+            originalNetworkId: service.network_id,
+            networkId: service.network_id,
+            transportStreamId: null,
+            serviceId: service.service_id,
+            eventId: program?.event_id ?? null,
+            eventName: program?.name ?? null,
+            startTimeUnixMillis: program?.start_at ?? null,
+            durationSeconds:
+                program === undefined ? null : Math.round((program.end_at - program.start_at) / 1000),
+            indefiniteDuration: false,
+        };
     }
 
     private handCaption(viewer: Viewer, caption: Caption): void {

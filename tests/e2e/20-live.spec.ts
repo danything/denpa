@@ -381,13 +381,24 @@ test.describe('ライブ視聴', () => {
      */
     test('d ボタンでデータ放送の器が立ち上がり、サーバに伝わる', async ({ page }) => {
         await page.addInitScript(() => {
-            const asked = window as unknown as { __data: unknown[] };
-            asked.__data = [];
+            const seen = window as unknown as { __data: unknown[]; __info: unknown[] };
+            seen.__data = [];
+            seen.__info = [];
             const Original = window.WebSocket;
             window.WebSocket = class extends Original {
+                constructor(url: string | URL, protocols?: string | string[]) {
+                    super(url, protocols);
+                    this.addEventListener('message', (event) => {
+                        const data = (event as MessageEvent).data;
+                        // 0x30 がデータ放送。中身は9バイト目から JSON (stream.md §5.3)
+                        if (!(data instanceof ArrayBuffer) || new Uint8Array(data)[0] !== 0x30) return;
+                        const message = JSON.parse(new TextDecoder().decode(new Uint8Array(data, 9)));
+                        if (message.type === 'programInfo') seen.__info.push(message);
+                    });
+                }
                 send(payload: string | ArrayBufferLike | Blob | ArrayBufferView) {
                     if (typeof payload === 'string' && payload.includes('"data"')) {
-                        asked.__data.push(JSON.parse(payload));
+                        seen.__data.push(JSON.parse(payload));
                     }
                     super.send(payload);
                 }
@@ -407,6 +418,17 @@ test.describe('ライブ視聴', () => {
         // 700KB を取りに行って、器を立てるまで
         await expect(overlay).toHaveAttribute('data-state', 'ready', { timeout: 15_000 });
         expect(await asked()).toEqual([{ type: 'data', on: true }]);
+
+        /*
+         * **番組を伝えているか。** 描く側は入口の BML を開く前にこれを待つ
+         * (`client/content.ts` の `getProgramInfoAsync`)。抜けていると、
+         * モジュールが全部揃っていても**画面が出ない** — 実機で踏んだ
+         */
+        await expect
+            .poll(() => page.evaluate(() => (window as unknown as { __info: unknown[] }).__info), {
+                message: '番組 (programInfo) が来ない',
+            })
+            .not.toEqual([]);
 
         // もう一度押したら畳む。**掴んだままにしない**
         await page.getByTestId('live-data-button').click();
