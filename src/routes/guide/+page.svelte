@@ -170,6 +170,16 @@
 </script>
 
 <!--
+    **表は画面の残りをぜんぶ使う** (`+layout.svelte` の `FILLED`)。
+    `max-h-[75vh]` で切っていた頃は、**画面の下に余白があるのに表のほうが
+    先に終わって**いた (実測で 1880x960 の窓に 130px の余り)。番組表は縦に
+    長いほど読めるものなので、余りは表に回す。
+
+    畳まれる幅ではページごとスクロールさせるので、そちらは 75vh のまま —
+    小さい画面で中だけスクロールさせると、指の届く範囲が二重になる
+-->
+<div class="md:flex md:h-full md:flex-col">
+    <!--
     **どこを見るかは1行にまとめる。** 種別・日送り・探すを3段に分けていた頃は、
     絵の出ていない上半分に 130px 使っていた。番組表は縦に長いほど読めるもの
     なので、**そのぶんを表に回す。**
@@ -177,65 +187,66 @@
     「番組 30343 / 局 125」も出していたが、番組表が入っているかどうかは
     **表そのものを見れば分かる** (集まり具合の内訳はチューナー画面にある)
 -->
-<div class="mb-3 flex flex-wrap items-center gap-2">
-    <div class="join" data-testid="type-tabs">
-        {#each ['GR', 'BS', 'CS'] as type (type)}
-            <a
-                class="btn join-item btn-sm {data.type === type ? 'btn-active' : ''}"
-                href="/guide?type={type}&start={data.start}"
-                data-testid="type-{type}"
-            >
-                {TYPE_LABEL[type]}
-            </a>
-        {/each}
-    </div>
+    <div class="mb-3 flex flex-wrap items-center gap-2">
+        <div class="join" data-testid="type-tabs">
+            {#each ['GR', 'BS', 'CS'] as type (type)}
+                <a
+                    class="btn join-item btn-sm {data.type === type ? 'btn-active' : ''}"
+                    href="/guide?type={type}&start={data.start}"
+                    data-testid="type-{type}"
+                >
+                    {TYPE_LABEL[type]}
+                </a>
+            {/each}
+        </div>
 
-    <!-- 日送りは種別のすぐ隣。どちらも「表のどこを見るか」の操作なので離さない -->
-    <div class="flex items-center gap-2">
-        <a class="btn btn-sm" href={prevHref} data-testid="prev-day">← 前日</a>
-        <span class="text-sm" data-testid="window-label">
-            <!-- 日本の番組表の慣習で、1日は4時から翌4時まで -->
-            {dayLabel(data.start)} <span class="text-base-content/60">(4:00〜翌4:00)</span>
-        </span>
-        <a class="btn btn-sm" href={nextHref} data-testid="next-day">翌日 →</a>
-        <a class="btn btn-sm" href={href({})}>今日</a>
-    </div>
+        <!-- 日送りは種別のすぐ隣。どちらも「表のどこを見るか」の操作なので離さない -->
+        <div class="flex items-center gap-2">
+            <a class="btn btn-sm" href={prevHref} data-testid="prev-day">← 前日</a>
+            <span class="text-sm" data-testid="window-label">
+                <!-- 日本の番組表の慣習で、1日は4時から翌4時まで -->
+                {dayLabel(data.start)} <span class="text-base-content/60">(4:00〜翌4:00)</span>
+            </span>
+            <a class="btn btn-sm" href={nextHref} data-testid="next-day">翌日 →</a>
+            <a class="btn btn-sm" href={href({})}>今日</a>
+        </div>
 
-    <!--
+        <!--
         探すのは右端に寄せる。見るための操作とは別のことなので、間を空ける。
 
         **見出しは置かない** — 枠の中の字が同じことを言っている。検索と条件の
         編集はルール画面に寄せてあり (条件を2箇所で書けるようにすると判定が
         ずれる)、探す範囲もあちらで切り替える。既定は番組名だけ
     -->
-    <form method="GET" action="/rules" class="ms-auto flex items-center gap-2" data-testid="guide-filter">
-        <input
-            type="search"
-            name="keyword"
-            placeholder="全チャンネルの番組名から"
-            class="input input-bordered input-sm w-56"
-            data-testid="filter-keyword"
-        />
-        <button class="btn btn-sm btn-primary" type="submit">検索</button>
-    </form>
-</div>
-
-{#if data.services.length === 0}
-    <div class="rounded-box bg-base-100 p-6 text-center shadow" data-testid="empty-grid">
-        <p class="text-base-content/60">
-            {TYPE_LABEL[
-                data.type
-            ]}のチャンネルがありません。チューナー画面でチャンネルスキャンを実行してください。
-        </p>
+        <form method="GET" action="/rules" class="ms-auto flex items-center gap-2" data-testid="guide-filter">
+            <input
+                type="search"
+                name="keyword"
+                placeholder="全チャンネルの番組名から"
+                class="input input-bordered input-sm w-56"
+                data-testid="filter-keyword"
+            />
+            <button class="btn btn-sm btn-primary" type="submit">検索</button>
+        </form>
     </div>
-{:else}
-    <div
-        class="rounded-box bg-base-100 max-h-[75vh] cursor-grab overflow-auto shadow active:cursor-grabbing"
-        use:dragScroll
-        bind:this={grid}
-        data-testid="guide-grid"
-    >
-        <!--
+
+    {#if data.services.length === 0}
+        <div class="rounded-box bg-base-100 p-6 text-center shadow" data-testid="empty-grid">
+            <p class="text-base-content/60">
+                {TYPE_LABEL[
+                    data.type
+                ]}のチャンネルがありません。チューナー画面でチャンネルスキャンを実行してください。
+            </p>
+        </div>
+    {:else}
+        <div
+            class="rounded-box bg-base-100 max-h-[75vh] cursor-grab overflow-auto shadow
+               active:cursor-grabbing md:max-h-none md:min-h-0 md:flex-1"
+            use:dragScroll
+            bind:this={grid}
+            data-testid="guide-grid"
+        >
+            <!--
             **横幅を数えて入れておく。**
 
             列の合計 (5688px) より外側の枠が狭いままだと、grid はそこからはみ出して
@@ -247,27 +258,27 @@
             幅を列の合計にしておけば、端まで付いてくる。局が少なくて画面のほうが
             広いときは min-width で伸ばし、余りは 1fr が分け合う
         -->
-        <div
-            class="grid"
-            style="grid-template-columns: {TIME_COLUMN} repeat({data.services
-                .length}, minmax(11rem, 1fr)); grid-template-rows: auto repeat({slots}, 0.75rem); width: calc({TIME_COLUMN} + {data
-                .services.length} * 11rem); min-width: 100%;"
-            data-testid="guide-rows"
-        >
-            <!-- 左上の角。時刻列とチャンネル行の交点で、どちらにも追従させる -->
             <div
-                class="bg-base-100 border-base-300 sticky top-0 left-0 z-30 border-r"
-                style="grid-column: 1; grid-row: 1;"
-                bind:clientHeight={headHeight}
-            ></div>
-            {#each data.services as service, i (service.id)}
+                class="grid"
+                style="grid-template-columns: {TIME_COLUMN} repeat({data.services
+                    .length}, minmax(11rem, 1fr)); grid-template-rows: auto repeat({slots}, 0.75rem); width: calc({TIME_COLUMN} + {data
+                    .services.length} * 11rem); min-width: 100%;"
+                data-testid="guide-rows"
+            >
+                <!-- 左上の角。時刻列とチャンネル行の交点で、どちらにも追従させる -->
                 <div
-                    class="bg-base-100 border-base-300 sticky top-0 z-20 flex items-center gap-1.5 truncate border-b px-2 py-2 text-sm font-medium"
-                    style="grid-column: {i + 2}; grid-row: 1;"
-                    title={service.name}
-                    data-testid="guide-service"
-                >
-                    <!--
+                    class="bg-base-100 border-base-300 sticky top-0 left-0 z-30 border-r"
+                    style="grid-column: 1; grid-row: 1;"
+                    bind:clientHeight={headHeight}
+                ></div>
+                {#each data.services as service, i (service.id)}
+                    <div
+                        class="bg-base-100 border-base-300 sticky top-0 z-20 flex items-center gap-1.5 truncate border-b px-2 py-2 text-sm font-medium"
+                        style="grid-column: {i + 2}; grid-row: 1;"
+                        title={service.name}
+                        data-testid="guide-service"
+                    >
+                        <!--
                         ロゴを持たない局もあるので、有るものだけ出す。場所は
                         どちらでも空けておく — 局名の頭が列ごとにずれると、
                         横に並べたときにどれがどの局か追いにくい。
@@ -279,21 +290,21 @@
                         (ファイルは残っているのに)。`alt=""` なので、出せなければ
                         場所だけが残る = 持っていない局と同じ見た目になる
                     -->
-                    {#if service.has_logo}
-                        <img
-                            src="/api/services/{service.id}/logo"
-                            alt=""
-                            class="h-5 w-8 shrink-0 object-contain"
-                            loading="lazy"
-                        />
-                    {:else}
-                        <span class="h-5 w-8 shrink-0"></span>
-                    {/if}
-                    <span class="truncate">{service.name}</span>
-                </div>
-            {/each}
+                        {#if service.has_logo}
+                            <img
+                                src="/api/services/{service.id}/logo"
+                                alt=""
+                                class="h-5 w-8 shrink-0 object-contain"
+                                loading="lazy"
+                            />
+                        {:else}
+                            <span class="h-5 w-8 shrink-0"></span>
+                        {/if}
+                        <span class="truncate">{service.name}</span>
+                    </div>
+                {/each}
 
-            <!--
+                <!--
                 時刻の列。**横にも縦にも追従させる。**
 
                 横は列そのものを `sticky left-0` で置いておけば済む。縦は
@@ -306,25 +317,25 @@
                 下りてくるようにする。上端はチャンネル名の行のぶんだけ空ける
                 (高さは実測する。決め打ちだと1pxずれて数字が見出しの裏へ潜る)
             -->
-            {#each hourMarks as mark (mark.at)}
-                <div
-                    class="bg-base-100 border-base-300 sticky left-0 z-10 border-t border-r px-1 text-xs"
-                    style="grid-column: 1; grid-row: {mark.row} / span {mark.span};"
-                >
-                    <span class="sticky block" style="top: {headHeight}px;">
-                        {new Date(mark.at).getHours()}
-                    </span>
-                </div>
-            {/each}
+                {#each hourMarks as mark (mark.at)}
+                    <div
+                        class="bg-base-100 border-base-300 sticky left-0 z-10 border-t border-r px-1 text-xs"
+                        style="grid-column: 1; grid-row: {mark.row} / span {mark.span};"
+                    >
+                        <span class="sticky block" style="top: {headHeight}px;">
+                            {new Date(mark.at).getHours()}
+                        </span>
+                    </div>
+                {/each}
 
-            {#if nowRow !== null}
-                <div
-                    class="border-error pointer-events-none relative z-10 border-t-2"
-                    style="grid-column: 1 / -1; grid-row: {nowRow};"
-                    bind:this={nowMark}
-                    data-testid="now-line"
-                >
-                    <!--
+                {#if nowRow !== null}
+                    <div
+                        class="border-error pointer-events-none relative z-10 border-t-2"
+                        style="grid-column: 1 / -1; grid-row: {nowRow};"
+                        bind:this={nowMark}
+                        data-testid="now-line"
+                    >
+                        <!--
                         時刻の札は**時刻の列の中に置く。**
 
                         右へずらして番組の上に浮かせていた頃は、列の外へはみ出して
@@ -342,28 +353,28 @@
                         変わるので、マージンの値では合わせられない)。
                         `block` にして高さの半分だけ上げれば、字が変わっても線の上に乗る
                     -->
-                    <span
-                        class="bg-error text-error-content sticky left-0 z-20 block -translate-y-1/2 rounded text-center text-[10px] leading-4"
-                        style="width: {TIME_COLUMN};"
-                    >
-                        {time(clock)}
-                    </span>
-                </div>
-            {/if}
+                        <span
+                            class="bg-error text-error-content sticky left-0 z-20 block -translate-y-1/2 rounded text-center text-[10px] leading-4"
+                            style="width: {TIME_COLUMN};"
+                        >
+                            {time(clock)}
+                        </span>
+                    </div>
+                {/if}
 
-            {#each data.programs as program (program.id)}
-                {@const pos = place(program)}
-                <div
-                    class="overflow-hidden p-0.5"
-                    style="grid-column: {columnOf.get(
-                        program.service_id,
-                    )}; grid-row: {pos.row} / span {pos.span};"
-                    data-testid="grid-program"
-                    data-program-id={program.id}
-                    data-service-id={program.service_id}
-                    data-start-at={program.start_at}
-                >
-                    <!--
+                {#each data.programs as program (program.id)}
+                    {@const pos = place(program)}
+                    <div
+                        class="overflow-hidden p-0.5"
+                        style="grid-column: {columnOf.get(
+                            program.service_id,
+                        )}; grid-row: {pos.row} / span {pos.span};"
+                        data-testid="grid-program"
+                        data-program-id={program.id}
+                        data-service-id={program.service_id}
+                        data-start-at={program.start_at}
+                    >
+                        <!--
                         マスは上ぞろえ。button は中身を縦中央に置くので、短い番組と
                         長い番組で開始時刻の高さが揃わず、横に目で追えなかった。
                         flex-col にして上から積む。
@@ -372,37 +383,39 @@
                         どこに何があるのか目で追えない。予約したものだけは色より
                         「予約済み」であることのほうが大事なので、そちらを優先する
                     -->
-                    <button
-                        class="flex h-full w-full flex-col overflow-hidden rounded border-l-2 px-1 py-0.5 text-left {program.reservation_state
-                            ? 'bg-primary/20 border-primary'
-                            : genreTint(program.genres)}"
-                        onclick={() => (selected = program)}
-                        data-testid="program-button"
-                    >
-                        <span class="block text-xs leading-tight font-medium">
-                            {time(program.start_at)}
-                            {#if program.name}
-                                {program.name}
+                        <button
+                            class="flex h-full w-full flex-col overflow-hidden rounded border-l-2 px-1 py-0.5 text-left {program.reservation_state
+                                ? 'bg-primary/20 border-primary'
+                                : genreTint(program.genres)}"
+                            onclick={() => (selected = program)}
+                            data-testid="program-button"
+                        >
+                            <span class="block text-xs leading-tight font-medium">
+                                {time(program.start_at)}
+                                {#if program.name}
+                                    {program.name}
+                                {:else}
+                                    <span class="text-base-content/40">(番組情報なし)</span>
+                                {/if}
+                            </span>
+                            {#if program.reservation_state}
+                                <span class="text-primary block text-xs">
+                                    {stateLabel(program.reservation_state)}
+                                </span>
                             {:else}
-                                <span class="text-base-content/40">(番組情報なし)</span>
+                                <span class="text-base-content/60 block text-xs leading-tight">
+                                    {program.description}
+                                </span>
                             {/if}
-                        </span>
-                        {#if program.reservation_state}
-                            <span class="text-primary block text-xs">
-                                {stateLabel(program.reservation_state)}
-                            </span>
-                        {:else}
-                            <span class="text-base-content/60 block text-xs leading-tight">
-                                {program.description}
-                            </span>
-                        {/if}
-                    </button>
-                </div>
-            {/each}
+                        </button>
+                    </div>
+                {/each}
+            </div>
         </div>
-    </div>
-{/if}
+    {/if}
+</div>
 
+<!-- 番組の中身。**二段組の外に置く** (中に入れると巻き取る箱の中で開くことになる) -->
 {#if selected}
     {@const program = selected}
     <ProgramDetail
