@@ -311,48 +311,17 @@
                         溜まりが増えるたびに摘みが左へ動く。見ている人には
                         「勝手に戻っている」としか映らない
                     -->
-                    <!--
-                        **読むもの (遅れ・途切れ) は帯と同じ行に置く。** 押すものの
-                        列に混ぜていた頃は、**縦のタブレットで押すものが二段に
-                        折れて**いた (820px で絵の幅は 436px しかない)。観る画面が
-                        時刻をここに置いているのと同じ考え方
-                    -->
-                    <div class="flex items-center gap-2">
-                        <input
-                            type="range"
-                            class="range range-xs range-error flex-1"
-                            min={player.oldest}
-                            max={player.newest}
-                            step="0.1"
-                            value={player.live ? player.newest : player.position}
-                            oninput={(event) => player.seek(Number(event.currentTarget.value))}
-                            aria-label="再生位置"
-                            data-testid="live-seek"
-                        />
-                        <!--
-                            **放送からどれだけ遅れているか。** 詰めていく作業をするのに、
-                            見えないと当てずっぽうになる
-                        -->
-                        {#if player.delay !== null}
-                            <span class="shrink-0 text-sm tabular-nums" data-testid="live-delay">
-                                遅延 {player.delay.toFixed(1)}秒
-                            </span>
-                        {/if}
-                        <!--
-                            **詰まった回数。止まったときだけ出る。**
-
-                            送り出す側は測ってある — 入口 (TLS) を通した素の
-                            WebSocket で受けて、**0.5秒以上の間が1回も無い**
-                            (H.264 25分 中央 43ms / AV1 4分 中央 34ms)。
-                            「一瞬止まって遅延が増える」が起きているならこちら側で、
-                            その証拠がこの数
-                        -->
-                        {#if player.stalls > 0}
-                            <span class="shrink-0 text-sm tabular-nums" data-testid="live-stalls">
-                                途切れ {player.stalls}回
-                            </span>
-                        {/if}
-                    </div>
+                    <input
+                        type="range"
+                        class="range range-xs range-error w-full"
+                        min={player.oldest}
+                        max={player.newest}
+                        step="0.1"
+                        value={player.live ? player.newest : player.position}
+                        oninput={(event) => player.seek(Number(event.currentTarget.value))}
+                        aria-label="再生位置"
+                        data-testid="live-seek"
+                    />
 
                     <!-- **並びは観る画面と同じ。** 再生・音・字幕が左から順で、全画面が右端 -->
                     <div class="mt-1 flex flex-wrap items-center gap-1 text-white">
@@ -554,29 +523,62 @@
                         </button>
 
                         <!--
-                            **番組の名前と遅れはここ。** 独立した行にしていた頃は、
-                            そのぶん帯が高くなって絵に掛かっていた。押すものの間は
-                            どのみち空いているので、そこに入れて縮む側にする。
-                            ここから右は「どう出すか」で、観る画面と同じ位置。
+                            **読むものはここに二段で入れる。観る画面と同じ形。**
+                            ([watch/[id]/+page.svelte](../watch/%5Bid%5D/+page.svelte))
+
+                            独立した行にしていた頃は、そのぶん帯が高くなって絵に
+                            掛かっていた。押すものの間はどのみち空いているので、
+                            そこに入れて縮む側にする。**二段でも押すものより低い**
+                            (文字2行 36px < `btn-lg` 48px) ので、帯は厚くならない。
+
+                            **並びは時刻・局名・番組名。** 番組名を先に置いていた
+                            頃は、長い名前に押し出されて**いま何を映しているのかが
+                            見えなく**なっていた。狭いところで削るのは番組名 —
+                            局と時刻さえ出ていれば、何を映しているかは分かる。
 
                             **幅ゼロから伸ばす** (`basis-0`)。押すものと同じに
                             中身の幅で並べていた頃は、**名前が長いだけで帯が
                             二段になって**いた (実機のタブレット) — 折り返すかは
                             中身の幅で決まるので、縮む指定 (`truncate`) より先に
-                            行が分かれてしまう。ゼロから始めれば、余った幅を
-                            もらうだけの存在になり、行を割らない
+                            行が分かれてしまう
                         -->
-                        <span class="min-w-0 grow basis-0 truncate text-sm text-white/80">
-                            {#if current}
-                                <span data-testid="live-title">
-                                    {current.now?.name ?? current.name}
-                                </span>
-                                ・ {current.name}
-                                {#if current.now}
-                                    ・ {time(current.now.startAt)} 〜 {time(current.now.endAt)}
+                        <div class="min-w-0 grow basis-0 px-2 leading-tight text-white/80">
+                            <div class="truncate text-sm">
+                                {#if current}
+                                    {#if current.now}
+                                        {time(current.now.startAt)} 〜 {time(current.now.endAt)} ・
+                                    {/if}
+                                    {current.name}
+                                    {#if current.now}
+                                        <span class="hidden lg:inline">
+                                            ・ <span data-testid="live-title">{current.now.name}</span>
+                                        </span>
+                                    {/if}
                                 {/if}
-                            {/if}
-                        </span>
+                            </div>
+
+                            <div class="truncate text-xs tabular-nums text-white/60">
+                                <!--
+                                    **放送からどれだけ遅れているか。** 詰めていく作業を
+                                    するのに、見えないと当てずっぽうになる
+                                -->
+                                {#if player.delay !== null}
+                                    <span data-testid="live-delay">遅延 {player.delay.toFixed(1)}秒</span>
+                                {/if}
+                                <!--
+                                    **詰まった回数。止まったときだけ出る。**
+
+                                    送り出す側は測ってある — 入口 (TLS) を通した素の
+                                    WebSocket で受けて、**0.5秒以上の間が1回も無い**
+                                    (H.264 25分 中央 43ms / AV1 4分 中央 34ms)。
+                                    「一瞬止まって遅延が増える」が起きているならこちら側で、
+                                    その証拠がこの数
+                                -->
+                                {#if player.stalls > 0}
+                                    ・ <span data-testid="live-stalls">途切れ {player.stalls}回</span>
+                                {/if}
+                            </div>
+                        </div>
 
                         <!--
                         **追っかけ中の速さ。追っかけている間だけ出す。**

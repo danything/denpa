@@ -28,7 +28,7 @@
     import ProgramFacts from '$lib/components/ProgramFacts.svelte';
     import Toasts, { type Notice } from '$lib/components/Toasts.svelte';
     import { type DetailSeed, programDetail } from '$lib/detail.svelte';
-    import { clock, cmNoteWorthShowing, recordedDuration, size } from '$lib/format';
+    import { clock, cmNoteWorthShowing, recordedDuration, size, time } from '$lib/format';
     import { captionAt, type Drawn, pixels, readSup } from '$lib/pgs';
     import { SPEEDS } from '$lib/ts/pacing';
     import {
@@ -829,60 +829,37 @@
                 <!-- 下端。帯と押すもの。**ライブと同じ帯** (`ControlBar`) -->
                 <ControlBar shown={controls.shown} testid="watch-controls">
                     <!--
-                        **読むもの (時刻・チャプター名) は帯と同じ行に置く。**
-
-                        押すものの列に混ぜていた頃は、そこだけで 150px ほど使う
-                        ので、**縦のタブレットでは押すものが二段に折れて**いた
-                        (820px で絵の幅は 436px しかない)。時刻は帯のすぐ隣が
-                        いちばん読みやすい場所でもある
+                        **帯にはチャプターの切れ目を出す。** どこで CM が挟まって
+                        いるかが見えると、送りのボタンを何回押すかが分かる
                     -->
-                    <div class="flex items-center gap-2">
-                        <!--
-                            **帯にはチャプターの切れ目を出す。** どこで CM が挟まって
-                            いるかが見えると、送りのボタンを何回押すかが分かる
-                        -->
-                        <div class="relative flex-1">
-                            <input
-                                type="range"
-                                class="range range-xs range-primary w-full"
-                                min="0"
-                                max={length || 0}
-                                step="0.1"
-                                value={at}
-                                oninput={(e) => seekTo(Number(e.currentTarget.value))}
-                                aria-label="再生位置"
-                                data-testid="watch-seek"
-                            />
-                            {#if chapters.length > 1 && length > 0}
-                                <div class="pointer-events-none absolute inset-x-0 top-0 h-1">
-                                    {#each chapters.slice(1) as chapter (chapter.start)}
-                                        <span
-                                            class="absolute top-0 h-1 w-px bg-white/70"
-                                            style="left: {(chapter.start / length) * 100}%"
-                                        ></span>
-                                    {/each}
-                                </div>
-                            {/if}
-                        </div>
-
-                        {#if current !== null}
-                            <span class="badge badge-ghost max-w-24 shrink-0" data-testid="watch-chapter">
-                                <span class="truncate">{current.title}</span>
-                            </span>
+                    <div class="relative">
+                        <input
+                            type="range"
+                            class="range range-xs range-primary w-full"
+                            min="0"
+                            max={length || 0}
+                            step="0.1"
+                            value={at}
+                            oninput={(e) => seekTo(Number(e.currentTarget.value))}
+                            aria-label="再生位置"
+                            data-testid="watch-seek"
+                        />
+                        {#if chapters.length > 1 && length > 0}
+                            <div class="pointer-events-none absolute inset-x-0 top-0 h-1">
+                                {#each chapters.slice(1) as chapter (chapter.start)}
+                                    <span
+                                        class="absolute top-0 h-1 w-px bg-white/70"
+                                        style="left: {(chapter.start / length) * 100}%"
+                                    ></span>
+                                {/each}
+                            </div>
                         {/if}
-
-                        <!--
-                            **残りも出す。** 「あと何分で終わるか」は、途中で
-                            観るのをやめるかどうかを決めるのに要る。倍速のときは
-                            **実際に掛かる時間**にする (1.5倍なら残りも1.5で割る)
-                        -->
-                        <span class="shrink-0 text-sm tabular-nums" data-testid="watch-clock">
-                            {clock(at)} / {clock(length)}
-                            <span class="text-white/70">残り {clock(remaining)}</span>
-                        </span>
                     </div>
 
-                    <div class="mt-1 flex flex-wrap items-center gap-1 text-white">
+                    <div
+                        class="mt-1 flex flex-wrap items-center gap-1 text-white"
+                        data-testid="watch-buttons"
+                    >
                         <!--
                             **並びはライブと同じ。** 再生・音・字幕が左から順で、
                             全画面がいちばん右。画面を移っても同じ場所にあると、
@@ -957,9 +934,18 @@
                         {/if}
 
                         <!--
-                            **番組の名前はここ。** 独立した行にしていた頃は、その
-                            ぶん帯が高くなって絵に掛かっていた。押すものの間は
-                            どのみち空いているので、そこに入れて縮む側にする。
+                            **読むものはここに二段で入れる。ライブと同じ形。**
+                            ([live/+page.svelte](../../live/+page.svelte))
+
+                            独立した行にしていた頃は、そのぶん帯が高くなって絵に
+                            掛かっていた。押すものの間はどのみち空いているので、
+                            そこに入れて縮む側にする。**二段でも押すものより低い**
+                            (文字2行 36px < `btn-lg` 48px) ので、帯は厚くならない。
+
+                            **並びは時刻・局名・番組名。** 番組名を先に置いていた
+                            頃は、長い名前に押し出されて他が見えなくなっていた。
+                            狭いところで削るのは番組名 — 何を観ているかは絵を
+                            見れば分かるし、右の列にも出ている。
 
                             **幅ゼロから伸ばす** (`basis-0`)。押すものと同じに
                             中身の幅で並べていた頃は、**名前が長いだけで帯が
@@ -967,12 +953,28 @@
                             中身の幅で決まるので、縮む指定 (`truncate`) より先に
                             行が分かれてしまう
                         -->
-                        <span
-                            class="min-w-0 grow basis-0 truncate text-sm text-white/80"
-                            data-testid="watch-name"
-                        >
-                            {rec.name}
-                        </span>
+                        <div class="min-w-0 grow basis-0 px-2 leading-tight text-white/80">
+                            <div class="truncate text-sm">
+                                {time(rec.start_at)} 〜 {time(rec.end_at)} ・ {rec.service_name}
+                                <span class="hidden lg:inline">
+                                    ・ <span data-testid="watch-name">{rec.name}</span>
+                                </span>
+                            </div>
+
+                            <!--
+                                **残りも出す。** 「あと何分で終わるか」は、途中で
+                                観るのをやめるかどうかを決めるのに要る。倍速のときは
+                                **実際に掛かる時間**にする (1.5倍なら残りも1.5で割る)
+                            -->
+                            <div class="truncate text-xs tabular-nums text-white/60">
+                                <span data-testid="watch-clock">
+                                    {clock(at)} / {clock(length)} 残り {clock(remaining)}
+                                </span>
+                                {#if current !== null}
+                                    ・ <span data-testid="watch-chapter">{current.title}</span>
+                                {/if}
+                            </div>
+                        </div>
 
                         <!-- 早送り。**ライブの追っかけと同じ並び・同じ見た目** -->
                         <div class="dropdown dropdown-top dropdown-end">

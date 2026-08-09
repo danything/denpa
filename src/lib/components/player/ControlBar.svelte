@@ -21,10 +21,15 @@
         children,
     }: { shown?: boolean; side?: boolean; testid?: string; children: import('svelte').Snippet } = $props();
 
-    /** ぼかしは絵の端から内側へ。伸びる向きだけが違う */
+    /**
+     * ぼかしは絵の端から内側へ。伸びる向きだけが違う。
+     *
+     * **右の列は斜めに散らす** (`to-bl`)。左へ流すだけにしていた頃は、
+     * **下端が直線で切れて**、絵の上に黒い四角を貼ったように見えていた
+     */
     const place = $derived(
         side
-            ? 'top-0 right-0 flex flex-col items-center gap-1 bg-gradient-to-l from-black/70 to-transparent pt-3 pr-3 pb-8 pl-8'
+            ? 'top-0 right-0 flex flex-col items-center gap-1 bg-gradient-to-bl from-black/70 to-transparent pt-3 pr-3 pb-12 pl-12'
             : 'inset-x-0 bottom-0 bg-gradient-to-t from-black/80 to-transparent px-3 pt-8 pb-3',
     );
 </script>

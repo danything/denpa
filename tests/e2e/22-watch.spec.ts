@@ -284,18 +284,20 @@ test.describe('録画を観る', () => {
         await expect(page.getByTestId('watch-controls').getByTestId('watch-play')).toBeVisible();
 
         /*
-         * **名前が長くても帯を割らない。** 折り返すかは中身の幅で決まるので、
+         * **読むものが長くても帯を割らない。** 折り返すかは中身の幅で決まるので、
          * 縮む指定 (`truncate`) だけでは、縮む前に行が分かれてしまう
          */
         const rowHeight = async (): Promise<number> =>
-            page.evaluate(() => {
-                const row = document.querySelector('[data-testid="watch-name"]')?.parentElement;
-                return Math.round(row?.getBoundingClientRect().height ?? -1);
-            });
+            page.evaluate(() =>
+                Math.round(
+                    document.querySelector('[data-testid="watch-buttons"]')?.getBoundingClientRect().height ??
+                        -1,
+                ),
+            );
         const before = await rowHeight();
         // 押すものは一段に収まる (`btn-lg` = 48px。折れると倍になる)
         expect(before).toBeLessThan(60);
-        await page.getByTestId('watch-name').evaluate((el) => (el.textContent = 'あ'.repeat(200)));
+        await page.getByTestId('watch-clock').evaluate((el) => (el.textContent = 'あ'.repeat(200)));
         expect(await rowHeight()).toBe(before);
     });
 
