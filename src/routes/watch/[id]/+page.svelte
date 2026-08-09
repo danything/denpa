@@ -4,6 +4,7 @@
     import Brightness from '$lib/components/player/Brightness.svelte';
     import ControlBar from '$lib/components/player/ControlBar.svelte';
     import ControlButton from '$lib/components/player/ControlButton.svelte';
+    import { screenAwake } from '$lib/components/player/awake.svelte';
     import { playerControls } from '$lib/components/player/controls.svelte';
     import Icon from '$lib/components/player/Icon.svelte';
     import { clearOverlay, drawOverlay, fitRect } from '$lib/components/player/paint';
@@ -103,6 +104,15 @@
     const controls = playerControls();
     $effect(() => {
         controls.held = !playing;
+    });
+
+    /**
+     * 観ている間は画面を落とさせない ([awake.svelte.ts](../../../lib/components/player/awake.svelte.ts))。
+     * 動画は触らずに見るものなので、**再生中こそいちばん落とされる**
+     */
+    const awake = screenAwake();
+    $effect(() => {
+        awake.on = playing;
     });
     let lastTap: Tap | null = null;
 

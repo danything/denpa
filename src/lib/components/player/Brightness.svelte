@@ -4,19 +4,29 @@
     import Icon from './Icon.svelte';
 
     /**
-     * 画面の明るさ。**ライブと観る画面で同じもの。**
+     * 明るく出す。**ライブと観る画面で同じもの。**
      *
-     * 端末そのものの明るさは上げきっていても、**出先の明るいところでは
-     * 暗い場面が読めない**。そこを持ち上げるための飾り (CSS の `filter`) で、
-     * 送られてくる絵そのものには触らない — 焼き直しも要らないし、
-     * 切り抜き (`watch` の `snapshot`) は素のまま残る。
+     * ## 端末の輝度は変えられない
+     *
+     * **ブラウザから画面の輝度を触る道はありません。** W3C に Screen Brightness
+     * API の提案はありましたが、どのブラウザにも実装されていない (ネイティブの
+     * 殻をかぶせたときだけ触れる領域)。できるのは2つだけで、両方やっています:
+     *
+     * - **絵そのものを持ち上げる** (CSS の `filter`)。送られてくる絵には
+     *   触らないので、焼き直しも要らないし切り抜き (`watch` の `snapshot`) は
+     *   素のまま残る
+     * - **画面を暗くさせない** (`awake.svelte.ts` の Wake Lock)。出先で
+     *   読めなくなる原因の半分は、端末が勝手に落とす明るさのほう
+     *
+     * ## 目盛りではなく二択
+     *
+     * 摘みで 50〜200% を選べるようにしていたが、**選ぶ場面が「明るいところで
+     * 見えない」しか無い**。中間の値を選ぶ理由が誰にも無く、押すたびに
+     * 引き出しを開けて摘みを掴むぶんだけ手間だった。
      *
      * **覚えるのは端末ごと** (`localStorage`)。同じ人でも、居間のテレビと
-     * 出先のタブレットで要る明るさが違う。速さ (`watch-speed`) と同じ理由で、
-     * 続きの位置のようにサーバへは置かない。
-     *
-     * **画面をまたいで1つ**にしてある (鍵が同じ) — ライブで上げたのに録画で
-     * 戻っている、というのが無いように
+     * 出先のタブレットで要るものが違う。**画面をまたいで1つ** (鍵が同じ) —
+     * ライブで上げたのに録画で戻っている、というのが無いように
      */
     let {
         value = $bindable(1),
@@ -29,65 +39,36 @@
 
     const KEY = 'player-brightness';
     /**
-     * 動かせる幅。**暗くするほうも要る** — 寝る前に暗い部屋で観るときは
-     * 逆に眩しい。上は 2倍まで (それ以上は白飛びして、かえって読めない)
+     * 明るくしたときの倍率。
+     *
+     * **上げすぎると白く潰れる。** 1.4 は、暗い場面の輪郭が出るところと、
+     * 明るい場面が飛ばないところの間で採った値
      */
-    const MIN = 0.5;
-    const MAX = 2;
-    const STEP = 0.05;
+    const BOOST = 1.4;
 
     onMount(() => {
-        const saved = Number(localStorage.getItem(KEY));
-        if (Number.isFinite(saved) && saved >= MIN && saved <= MAX) value = saved;
+        if (localStorage.getItem(KEY) === 'on') value = BOOST;
     });
 
-    function set(next: number): void {
-        value = Math.min(Math.max(next, MIN), MAX);
+    function toggle(): void {
+        const on = value === 1;
+        value = on ? BOOST : 1;
         try {
-            localStorage.setItem(KEY, String(value));
+            localStorage.setItem(KEY, on ? 'on' : 'off');
         } catch {
             // 覚えられなくても観るのに支障は無い (プライベート窓など)
         }
     }
-
-    /** 素のままかどうか。変えている間だけボタンを塗る */
-    const touched = $derived(Math.abs(value - 1) > 0.001);
 </script>
 
-<div class="dropdown dropdown-top dropdown-end">
-    <button
-        class="{OVERLAY_BTN} btn-circle {touched ? OVERLAY_ON : OVERLAY}"
-        aria-label="画面の明るさ"
-        data-testid={testid}
-        data-brightness={value}
-    >
-        <Icon path={BRIGHT} />
-    </button>
-    <div
-        class="dropdown-content bg-base-100 text-base-content rounded-box z-10 mb-1 w-56 p-3 shadow-lg"
-        data-testid="{testid}-menu"
-    >
-        <div class="mb-2 flex items-center justify-between text-sm">
-            <span>明るさ</span>
-            <span class="tabular-nums">{Math.round(value * 100)}%</span>
-        </div>
-        <!--
-            **押した勢いを切らない。** `oninput` で効かせるので、摘みを
-            動かしている間そのまま絵が変わる
-        -->
-        <input
-            type="range"
-            class="range range-sm range-primary w-full"
-            min={MIN}
-            max={MAX}
-            step={STEP}
-            {value}
-            oninput={(event) => set(Number(event.currentTarget.value))}
-            aria-label="画面の明るさ"
-            data-testid="{testid}-range"
-        />
-        <button class="btn btn-sm btn-block mt-2" onclick={() => set(1)} data-testid="{testid}-reset">
-            素のまま
-        </button>
-    </div>
-</div>
+<button
+    type="button"
+    class="{OVERLAY_BTN} btn-circle {value === 1 ? OVERLAY : OVERLAY_ON}"
+    onclick={toggle}
+    aria-label={value === 1 ? '明るくする' : '明るさを元に戻す'}
+    aria-pressed={value !== 1}
+    data-testid={testid}
+    data-brightness={value}
+>
+    <Icon path={BRIGHT} />
+</button>
