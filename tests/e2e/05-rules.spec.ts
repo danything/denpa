@@ -2,6 +2,38 @@ import { BS11 } from '../fake/services';
 import { cancelAllReservations, clearRules, expect, goto, syncEpg, test } from './helpers';
 
 test.describe('自動予約ルール', () => {
+    /**
+     * **左に書く欄、右に一覧。** 縦に積んでいた頃は、条件をいじるたびに一覧まで
+     * 押し下げられて、**何が録れるようになったかを見るのに毎回スクロールで戻る**
+     * ことになっていた。
+     *
+     * 横に並べはじめる幅は**全画面で 768px** (`+layout.svelte` の `FILLED`)。
+     * 並べたらページごとは動かさず、左右がそれぞれ自分で巻き取る
+     */
+    test('広い画面では左に書く欄、右に一覧を並べる', async ({ page }) => {
+        await page.setViewportSize({ width: 1280, height: 720 });
+        await goto(page, '/rules');
+
+        const shape = await page.evaluate(() => {
+            const form = document.querySelector('[data-testid="rule-form"]');
+            const table = document.querySelector('[data-testid="rule-row"], table');
+            const add = document.querySelector('[data-testid="rule-submit"]');
+            const root = document.documentElement;
+            return {
+                横に並ぶ:
+                    form !== null && table !== null
+                        ? form.getBoundingClientRect().right <= table.getBoundingClientRect().left + 1
+                        : false,
+                // 押すものは巻き取られる中身の外。条件がどれだけ長くても見えている
+                押すものは外: form !== null && add !== null && !form.contains(add),
+                縦に動く: root.scrollHeight > root.clientHeight + 1,
+            };
+        });
+        expect(shape.横に並ぶ).toBe(true);
+        expect(shape.押すものは外).toBe(true);
+        expect(shape.縦に動く).toBe(false);
+    });
+
     test('条件が空のルールは作れない', async ({ page }) => {
         await goto(page, '/rules');
         await page.getByTestId('rule-submit').click();

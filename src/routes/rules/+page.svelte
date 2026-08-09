@@ -56,323 +56,402 @@
     );
 </script>
 
-<h1 class="mb-4 text-2xl font-bold">自動予約ルール</h1>
+<!--
+    **左に書く欄、右に一覧。** 縦に積んでいた頃は、条件をいじるたびに
+    一覧まで押し下げられて、**何が録れるようになったかを見るのに毎回
+    スクロールで戻る**ことになっていた。広い画面では横がまるまる余っていて、
+    キーワード1つの入力欄が 600px あるのに一覧は画面の外、という形だった。
 
-<Toasts {notices} source={form} />
+    **横に並べはじめる幅は全画面で `md` (768px)**
+    ([+layout.svelte](../+layout.svelte) の `FILLED`)。並べたらページごとは
+    動かさず、**左右がそれぞれ自分で巻き取る** — 書いている欄と一覧の
+    どちらも画面から出ていかない
+-->
+<div class="md:flex md:h-full md:flex-col">
+    <h1 class="mb-4 text-2xl font-bold">自動予約ルール</h1>
 
-<div class="card bg-base-100 mb-6 shadow">
-    <div class="card-body">
-        <h2 class="card-title">{data.editing ? 'ルールを編集' : 'ルールを追加'}</h2>
-        <p class="text-base-content/70 text-sm">
-            条件に合う番組を、これから放送されるぶんから自動で予約します。ルール名はキーワードから付きます。
-        </p>
+    <Toasts {notices} source={form} />
 
-        <!-- 横に広げて縦を詰める。条件を見比べながら決めるものなので、
-             スクロールしないと全体が見えないのは使いにくい -->
-        <form method="POST" use:submitting class="mt-2 space-y-4">
-            {#if data.editing}
-                <input type="hidden" name="id" value={data.editing.id} />
-                <!-- 「この条件で何が録れるか見る」は GET でこの画面に戻ってくる。
+    <div class="grid gap-4 md:min-h-0 md:flex-1 md:grid-cols-[minmax(20rem,26rem)_1fr]">
+        <!--
+            **書く欄。** 中身を浮かせて枠に高さを持たせないことで、右の一覧と
+            同じ高さに収まる (観る画面と同じ作り。`watch/[id]/+page.svelte`)
+        -->
+        <section class="flex flex-col md:relative md:min-h-0">
+            <div class="card bg-base-100 flex min-h-0 flex-1 shadow md:absolute md:inset-0">
+                <!--
+                    **押すものは巻き取られる中身の外に貼り付ける。** 条件が長い
+                    ときに「追加」まで探して降りることになるので、`<form>` 自身を
+                    縦の入れ物にして、上だけを巻き取る
+                -->
+                <form method="POST" use:submitting class="flex min-h-0 flex-1 flex-col">
+                    <div class="min-h-0 flex-1 space-y-4 overflow-y-auto p-4" data-testid="rule-form">
+                        <div class="space-y-1">
+                            <h2 class="card-title text-base">
+                                {data.editing ? 'ルールを編集' : 'ルールを追加'}
+                            </h2>
+                            <p class="text-base-content/70 text-sm">
+                                条件に合う番組を、これから放送されるぶんから自動で予約します。ルール名はキーワードから付きます。
+                            </p>
+                        </div>
+                        {#if data.editing}
+                            <input type="hidden" name="id" value={data.editing.id} />
+                            <!-- 「この条件で何が録れるか見る」は GET でこの画面に戻ってくる。
                      どのルールを編集していたかを持ち回らないと、追加の画面に戻ってしまう -->
-                <input type="hidden" name="edit" value={data.editing.id} />
-            {/if}
-            <!--
+                            <input type="hidden" name="edit" value={data.editing.id} />
+                        {/if}
+                        <!--
                 チェックを外した状態は GET だと「キー自体が無い」になって、
                 番組表から keyword だけ渡されたときと見分けが付かない。
                 この印があるときはチェックボックスの状態をそのまま信じる
             -->
-            <input type="hidden" name="form" value="rules" />
+                        <input type="hidden" name="form" value="rules" />
 
-            <div class="grid gap-4 lg:grid-cols-3">
-                <label class="flex flex-col gap-1">
-                    <span class="text-sm font-medium">キーワード</span>
-                    <input
-                        name="keyword"
-                        class="input input-bordered w-full"
-                        placeholder="例: 名探偵"
-                        value={data.seed?.keyword ?? ''}
-                        data-testid="rule-keyword"
-                    />
-                    <span class="text-base-content/60 text-xs">
-                        空白区切りは<strong>すべて含む</strong>もの
-                    </span>
-                    <!--
+                        <!-- 横に並べない。左の列は 26rem までなので、並べると入力欄が潰れる -->
+                        <div class="grid gap-4">
+                            <label class="flex flex-col gap-1">
+                                <span class="text-sm font-medium">キーワード</span>
+                                <input
+                                    name="keyword"
+                                    class="input input-bordered w-full"
+                                    placeholder="例: 名探偵"
+                                    value={data.seed?.keyword ?? ''}
+                                    data-testid="rule-keyword"
+                                />
+                                <span class="text-base-content/60 text-xs">
+                                    空白区切りは<strong>すべて含む</strong>もの
+                                </span>
+                                <!--
                         当てる範囲。既定は番組名だけ。概要まで広げると番宣で名前が出ただけの
                         番組を拾い、詳細まで広げると出演者でも拾える
                     -->
-                    <div class="mt-1 flex flex-wrap gap-x-4 gap-y-1" data-testid="rule-search-fields">
-                        {#each SEARCH_FIELDS as field (field)}
-                            <label class="flex cursor-pointer items-center gap-2">
-                                <input
-                                    type="checkbox"
-                                    name="searchFields"
-                                    value={field}
-                                    checked={seedFields.includes(field)}
-                                    class="checkbox checkbox-xs"
-                                />
-                                <span class="text-xs">{SEARCH_FIELD_LABEL[field]}</span>
+                                <div
+                                    class="mt-1 flex flex-wrap gap-x-4 gap-y-1"
+                                    data-testid="rule-search-fields"
+                                >
+                                    {#each SEARCH_FIELDS as field (field)}
+                                        <label class="flex cursor-pointer items-center gap-2">
+                                            <input
+                                                type="checkbox"
+                                                name="searchFields"
+                                                value={field}
+                                                checked={seedFields.includes(field)}
+                                                class="checkbox checkbox-xs"
+                                            />
+                                            <span class="text-xs">{SEARCH_FIELD_LABEL[field]}</span>
+                                        </label>
+                                    {/each}
+                                </div>
                             </label>
-                        {/each}
-                    </div>
-                </label>
-                <label class="flex flex-col gap-1">
-                    <span class="text-sm font-medium">除外キーワード</span>
-                    <input
-                        name="ignoreKeyword"
-                        class="input input-bordered w-full"
-                        placeholder="例: 再放送 総集編"
-                        value={data.seed?.ignore_keyword ?? ''}
-                        data-testid="rule-ignore"
-                    />
-                    <span class="text-base-content/60 text-xs">
-                        空白区切りは<strong>どれか1つでも含む</strong>ものを除外
-                    </span>
-                </label>
-                <label class="flex flex-col gap-1">
-                    <span class="text-sm font-medium">優先度</span>
-                    <input
-                        type="number"
-                        name="priority"
-                        value={data.seed?.priority ?? 1}
-                        min="0"
-                        max="9"
-                        class="input input-bordered w-full"
-                        data-testid="rule-priority"
-                    />
-                    <!--
+                            <label class="flex flex-col gap-1">
+                                <span class="text-sm font-medium">除外キーワード</span>
+                                <input
+                                    name="ignoreKeyword"
+                                    class="input input-bordered w-full"
+                                    placeholder="例: 再放送 総集編"
+                                    value={data.seed?.ignore_keyword ?? ''}
+                                    data-testid="rule-ignore"
+                                />
+                                <span class="text-base-content/60 text-xs">
+                                    空白区切りは<strong>どれか1つでも含む</strong>ものを除外
+                                </span>
+                            </label>
+                            <label class="flex flex-col gap-1">
+                                <span class="text-sm font-medium">優先度</span>
+                                <input
+                                    type="number"
+                                    name="priority"
+                                    value={data.seed?.priority ?? 1}
+                                    min="0"
+                                    max="9"
+                                    class="input input-bordered w-full"
+                                    data-testid="rule-priority"
+                                />
+                                <!--
                         **比べる相手は予約だけ。** チューナー画面に出ている「掴む強さ」
                         (番組表 3 / スキャン 5 …) とは別の物差しで、そちらとは比べない。
                         録画は必ずいちばん強い値で掴むので、番組表集めに負けることはない
                     -->
-                    <span class="text-base-content/60 text-xs">
-                        <strong>予約どうし</strong>を比べる数です。チューナーが足りないとき<strong
-                            >大きいほうを残します</strong
-                        >
-                        (手動予約は 2)。番組表集めやロゴ集めとは比べません — 録画は必ずそれらより強く掴みます。
-                    </span>
-                </label>
-            </div>
-
-            <div class="grid items-start gap-4 lg:grid-cols-2">
-                <details class="border-base-300 rounded-box border">
-                    <summary
-                        class="cursor-pointer px-4 py-3 text-sm font-medium"
-                        data-testid="channel-summary"
-                    >
-                        チャンネル
-                        <span class="text-base-content/60">
-                            ({seedTypes.length + seedServices.length === 0
-                                ? '全局'
-                                : `${seedTypes.length + seedServices.length} 件選択中`})
-                        </span>
-                    </summary>
-                    <div class="space-y-3 px-4 pb-4">
-                        <div>
-                            <div class="text-base-content/60 mb-1 text-xs font-bold">まとめて選ぶ</div>
-                            <div class="flex flex-wrap gap-x-4 gap-y-1" data-testid="rule-types">
-                                {#each grouped as group (group.type)}
-                                    <label class="flex cursor-pointer items-center gap-2">
-                                        <input
-                                            type="checkbox"
-                                            name="serviceTypes"
-                                            value={group.type}
-                                            checked={seedTypes.includes(group.type)}
-                                            class="checkbox checkbox-sm"
-                                        />
-                                        <span class="text-sm">
-                                            {TYPE_LABEL[group.type] ?? group.type}
-                                            <span class="text-base-content/60">
-                                                ({group.services.length})
-                                            </span>
-                                        </span>
-                                    </label>
-                                {/each}
-                            </div>
+                                <span class="text-base-content/60 text-xs">
+                                    <strong>予約どうし</strong>を比べる数です。チューナーが足りないとき<strong
+                                        >大きいほうを残します</strong
+                                    >
+                                    (手動予約は 2)。番組表集めやロゴ集めとは比べません — 録画は必ずそれらより強く掴みます。
+                                </span>
+                            </label>
                         </div>
-                        <div>
-                            <div class="text-base-content/60 mb-1 text-xs font-bold">個別に選ぶ</div>
-                            <div class="max-h-48 space-y-2 overflow-y-auto" data-testid="rule-services">
-                                {#each grouped as group (group.type)}
+
+                        <div class="grid items-start gap-4">
+                            <details class="border-base-300 rounded-box border">
+                                <summary
+                                    class="cursor-pointer px-4 py-3 text-sm font-medium"
+                                    data-testid="channel-summary"
+                                >
+                                    チャンネル
+                                    <span class="text-base-content/60">
+                                        ({seedTypes.length + seedServices.length === 0
+                                            ? '全局'
+                                            : `${seedTypes.length + seedServices.length} 件選択中`})
+                                    </span>
+                                </summary>
+                                <div class="space-y-3 px-4 pb-4">
                                     <div>
-                                        <div class="text-base-content/60 mb-1 text-xs">
-                                            {TYPE_LABEL[group.type] ?? group.type}
+                                        <div class="text-base-content/60 mb-1 text-xs font-bold">
+                                            まとめて選ぶ
                                         </div>
-                                        <div class="grid gap-x-4 gap-y-1 sm:grid-cols-2">
-                                            {#each group.services as service (service.id)}
+                                        <div class="flex flex-wrap gap-x-4 gap-y-1" data-testid="rule-types">
+                                            {#each grouped as group (group.type)}
                                                 <label class="flex cursor-pointer items-center gap-2">
                                                     <input
                                                         type="checkbox"
-                                                        name="serviceIds"
-                                                        value={service.id}
-                                                        checked={seedServices.includes(service.id)}
+                                                        name="serviceTypes"
+                                                        value={group.type}
+                                                        checked={seedTypes.includes(group.type)}
                                                         class="checkbox checkbox-sm"
                                                     />
-                                                    <span class="truncate text-sm">{service.name}</span>
+                                                    <span class="text-sm">
+                                                        {TYPE_LABEL[group.type] ?? group.type}
+                                                        <span class="text-base-content/60">
+                                                            ({group.services.length})
+                                                        </span>
+                                                    </span>
                                                 </label>
                                             {/each}
                                         </div>
                                     </div>
-                                {:else}
-                                    <p class="text-base-content/60 text-sm">
-                                        チャンネルがまだ取り込まれていません。チューナー画面でチャンネルスキャンを実行してください。
-                                    </p>
-                                {/each}
-                            </div>
-                        </div>
-                    </div>
-                </details>
+                                    <div>
+                                        <div class="text-base-content/60 mb-1 text-xs font-bold">
+                                            個別に選ぶ
+                                        </div>
+                                        <div
+                                            class="max-h-48 space-y-2 overflow-y-auto"
+                                            data-testid="rule-services"
+                                        >
+                                            {#each grouped as group (group.type)}
+                                                <div>
+                                                    <div class="text-base-content/60 mb-1 text-xs">
+                                                        {TYPE_LABEL[group.type] ?? group.type}
+                                                    </div>
+                                                    <div class="grid gap-x-4 gap-y-1 sm:grid-cols-2">
+                                                        {#each group.services as service (service.id)}
+                                                            <label
+                                                                class="flex cursor-pointer items-center gap-2"
+                                                            >
+                                                                <input
+                                                                    type="checkbox"
+                                                                    name="serviceIds"
+                                                                    value={service.id}
+                                                                    checked={seedServices.includes(
+                                                                        service.id,
+                                                                    )}
+                                                                    class="checkbox checkbox-sm"
+                                                                />
+                                                                <span class="truncate text-sm"
+                                                                    >{service.name}</span
+                                                                >
+                                                            </label>
+                                                        {/each}
+                                                    </div>
+                                                </div>
+                                            {:else}
+                                                <p class="text-base-content/60 text-sm">
+                                                    チャンネルがまだ取り込まれていません。チューナー画面でチャンネルスキャンを実行してください。
+                                                </p>
+                                            {/each}
+                                        </div>
+                                    </div>
+                                </div>
+                            </details>
 
-                <details class="border-base-300 rounded-box border">
-                    <summary class="cursor-pointer px-4 py-3 text-sm font-medium" data-testid="genre-summary">
-                        ジャンル
-                        <span class="text-base-content/60">
-                            ({seedGenres.length === 0 ? '全ジャンル' : `${seedGenres.length} 件選択中`})
-                        </span>
-                    </summary>
-                    <div class="px-4 pb-4">
-                        <!-- 大分類だけ選べば中分類は問わない。細かく絞りたいときだけ
+                            <details class="border-base-300 rounded-box border">
+                                <summary
+                                    class="cursor-pointer px-4 py-3 text-sm font-medium"
+                                    data-testid="genre-summary"
+                                >
+                                    ジャンル
+                                    <span class="text-base-content/60">
+                                        ({seedGenres.length === 0
+                                            ? '全ジャンル'
+                                            : `${seedGenres.length} 件選択中`})
+                                    </span>
+                                </summary>
+                                <div class="px-4 pb-4">
+                                    <!-- 大分類だけ選べば中分類は問わない。細かく絞りたいときだけ
                              中分類にチェックを入れる -->
-                        <div class="max-h-64 space-y-2 overflow-y-auto" data-testid="rule-genres">
-                            {#each GENRE_TREE as group (group.value)}
-                                <div>
-                                    <label class="flex cursor-pointer items-center gap-2">
-                                        <input
-                                            type="checkbox"
-                                            name="genres"
-                                            value={group.value}
-                                            checked={seedGenres.includes(group.value)}
-                                            class="checkbox checkbox-sm"
-                                        />
-                                        <span class="text-sm font-medium">{group.label}</span>
-                                        <span class="text-base-content/60 text-xs">(すべて)</span>
-                                    </label>
-                                    {#if group.children.length > 0}
-                                        <div class="mt-1 ml-6 grid gap-x-4 gap-y-1 sm:grid-cols-2">
-                                            {#each group.children as child (child.value)}
+                                    <div class="max-h-64 space-y-2 overflow-y-auto" data-testid="rule-genres">
+                                        {#each GENRE_TREE as group (group.value)}
+                                            <div>
                                                 <label class="flex cursor-pointer items-center gap-2">
                                                     <input
                                                         type="checkbox"
                                                         name="genres"
-                                                        value={child.value}
-                                                        checked={seedGenres.includes(child.value)}
-                                                        class="checkbox checkbox-xs"
+                                                        value={group.value}
+                                                        checked={seedGenres.includes(group.value)}
+                                                        class="checkbox checkbox-sm"
                                                     />
-                                                    <span class="truncate text-xs">{child.label}</span>
+                                                    <span class="text-sm font-medium">{group.label}</span>
+                                                    <span class="text-base-content/60 text-xs">(すべて)</span>
                                                 </label>
-                                            {/each}
-                                        </div>
-                                    {/if}
+                                                {#if group.children.length > 0}
+                                                    <div
+                                                        class="mt-1 ml-6 grid gap-x-4 gap-y-1 sm:grid-cols-2"
+                                                    >
+                                                        {#each group.children as child (child.value)}
+                                                            <label
+                                                                class="flex cursor-pointer items-center gap-2"
+                                                            >
+                                                                <input
+                                                                    type="checkbox"
+                                                                    name="genres"
+                                                                    value={child.value}
+                                                                    checked={seedGenres.includes(child.value)}
+                                                                    class="checkbox checkbox-xs"
+                                                                />
+                                                                <span class="truncate text-xs"
+                                                                    >{child.label}</span
+                                                                >
+                                                            </label>
+                                                        {/each}
+                                                    </div>
+                                                {/if}
+                                            </div>
+                                        {/each}
+                                    </div>
                                 </div>
-                            {/each}
+                            </details>
                         </div>
+
+                        <p class="text-base-content/60 text-sm">
+                            エンコードのしかたと無料放送の扱いは<a class="link" href="/settings">設定</a
+                            >で決めます ({data.defaults.codec.toUpperCase()}
+                            / CM: {CM_LABEL[data.defaults.cmCut]}{data.defaults.freeOnly
+                                ? ' / 無料放送のみ'
+                                : ''})
+                        </p>
                     </div>
-                </details>
-            </div>
 
-            <p class="text-base-content/60 text-sm">
-                エンコードのしかたと無料放送の扱いは<a class="link" href="/settings">設定</a>で決めます ({data.defaults.codec.toUpperCase()}
-                / CM: {CM_LABEL[data.defaults.cmCut]}{data.defaults.freeOnly ? ' / 無料放送のみ' : ''})
-            </p>
-
-            <div class="flex flex-wrap gap-2">
-                <button class="btn" formmethod="GET" formaction="/rules" data-testid="rule-preview">
-                    この条件で何が録れるか見る
-                </button>
-                {#if data.editing}
-                    <button class="btn btn-primary" formaction="?/update" data-testid="rule-update">
-                        更新
-                    </button>
-                    <a class="btn" href="/rules" data-testid="rule-cancel-edit">やめる</a>
-                {:else}
-                    <button class="btn btn-primary" formaction="?/create" data-testid="rule-submit">
-                        追加
-                    </button>
-                {/if}
+                    <!-- 巻き取られる中身の外。条件がどれだけ長くても見えている -->
+                    <div class="border-base-300 flex shrink-0 flex-wrap gap-2 border-t p-4">
+                        <button
+                            class="btn btn-sm"
+                            formmethod="GET"
+                            formaction="/rules"
+                            data-testid="rule-preview"
+                        >
+                            何が録れるか見る
+                        </button>
+                        {#if data.editing}
+                            <button
+                                class="btn btn-sm btn-primary"
+                                formaction="?/update"
+                                data-testid="rule-update"
+                            >
+                                更新
+                            </button>
+                            <a class="btn btn-sm" href="/rules" data-testid="rule-cancel-edit">やめる</a>
+                        {:else}
+                            <button
+                                class="btn btn-sm btn-primary"
+                                formaction="?/create"
+                                data-testid="rule-submit"
+                            >
+                                追加
+                            </button>
+                        {/if}
+                    </div>
+                </form>
             </div>
-        </form>
+        </section>
 
         <!--
-            このルールが押さえている予約。**フォームの外に出す。**
-            中に入れると form が入れ子になって、1件取り消すつもりで
-            ルールの更新まで送ってしまう。
+            **右は結果。** この条件で何が録れるか (プレビュー) と、いまあるルール。
+            ここだけが巻き取られるので、左で条件をいじっても書いている欄は
+            動かない。
 
-            条件を狭めても既に立った予約は残る (意図して個別に残していることが
-            あるので勝手には消さない) ので、要らないものだけここで外す
+            このルールが押さえている予約は**フォームの外**に出してある。中に
+            入れると form が入れ子になって、1件取り消すつもりでルールの更新まで
+            送ってしまう。条件を狭めても既に立った予約は残る (意図して個別に
+            残していることがあるので勝手には消さない) ので、要らないものだけ
+            ここで外す
         -->
-    </div>
-</div>
-
-{#if data.preview}
-    <!--
+        <section class="flex min-w-0 flex-col gap-4 md:min-h-0 md:overflow-y-auto">
+            {#if data.preview}
+                <!--
         **予約とプレビューは同じ表**。別々に並べていた頃は、同じ番組が2箇所に出るうえ、
         「押さえている予約」と「これから当たる番組」を頭の中で突き合わせることになっていた
     -->
-    <div class="card bg-base-100 mb-6 shadow" data-testid="preview">
-        <div class="card-body">
-            <h2 class="card-title text-base">
-                この条件で録れる番組は {data.preview.total} 件
-                {#if data.preview.total > data.preview.programs.length}
-                    <span class="text-base-content/60 text-sm font-normal">
-                        (先頭 {data.preview.programs.length} 件)
-                    </span>
-                {/if}
-                {#if data.preview.conflicts > 0}
-                    <span class="badge badge-sm badge-error badge-outline" data-testid="preview-conflicts">
-                        競合 {data.preview.conflicts} 件
-                    </span>
-                {/if}
-            </h2>
-            {#if data.preview.total === 0}
-                <p class="text-base-content/60 text-sm">
-                    いまの番組表では1件も当たりません。条件を緩めてください。
-                </p>
-            {:else}
-                <p class="text-base-content/60 text-xs">
-                    予約済みのものはここで取り消せます (取り消した番組をルールが取り直すことはありません)。
-                    条件を変えても既に立った予約は残るので、条件から外れたものも
-                    <span class="badge badge-xs badge-ghost">条件外</span> として並べます。
-                </p>
-                <ul class="divide-base-300 mt-1 divide-y" data-testid="preview-list">
-                    {#each data.preview.programs as program (program.id)}
-                        <li
-                            class="flex flex-wrap items-center gap-x-3 gap-y-1 py-1.5 text-sm"
-                            data-testid="preview-row"
-                            data-program-id={program.id}
-                        >
-                            <!--
+                <div class="card bg-base-100 shrink-0 shadow" data-testid="preview">
+                    <div class="card-body">
+                        <h2 class="card-title text-base">
+                            この条件で録れる番組は {data.preview.total} 件
+                            {#if data.preview.total > data.preview.programs.length}
+                                <span class="text-base-content/60 text-sm font-normal">
+                                    (先頭 {data.preview.programs.length} 件)
+                                </span>
+                            {/if}
+                            {#if data.preview.conflicts > 0}
+                                <span
+                                    class="badge badge-sm badge-error badge-outline"
+                                    data-testid="preview-conflicts"
+                                >
+                                    競合 {data.preview.conflicts} 件
+                                </span>
+                            {/if}
+                        </h2>
+                        {#if data.preview.total === 0}
+                            <p class="text-base-content/60 text-sm">
+                                いまの番組表では1件も当たりません。条件を緩めてください。
+                            </p>
+                        {:else}
+                            <p class="text-base-content/60 text-xs">
+                                予約済みのものはここで取り消せます
+                                (取り消した番組をルールが取り直すことはありません)。
+                                条件を変えても既に立った予約は残るので、条件から外れたものも
+                                <span class="badge badge-xs badge-ghost">条件外</span> として並べます。
+                            </p>
+                            <ul class="divide-base-300 mt-1 divide-y" data-testid="preview-list">
+                                {#each data.preview.programs as program (program.id)}
+                                    <li
+                                        class="flex flex-wrap items-center gap-x-3 gap-y-1 py-1.5 text-sm"
+                                        data-testid="preview-row"
+                                        data-program-id={program.id}
+                                    >
+                                        <!--
                                 押すと番組詳細が出る。予約一覧・番組表と同じもの。
 
                                 **押せるのは中身のところだけ。** 行ごと押せるようにすると
                                 取消ボタンまで詳細を開く的の中に入り、押し間違えたときに
                                 何が起きたのか分からなくなる
                             -->
-                            <div
-                                class="hover:bg-base-200/60 min-w-0 flex-1 basis-64 cursor-pointer rounded"
-                                data-testid="preview-open"
-                                role="button"
-                                tabindex="0"
-                                onclick={() => detail.open(program.id, program)}
-                                onkeydown={(event) =>
-                                    event.key === 'Enter' && detail.open(program.id, program)}
-                            >
-                                <div class="flex flex-wrap items-center gap-x-2 gap-y-1">
-                                    {#if program.reservation_state}
-                                        <span
-                                            class="badge badge-sm {badgeClass(program.reservation_state)}"
-                                            data-testid="preview-state"
+                                        <div
+                                            class="hover:bg-base-200/60 min-w-0 flex-1 basis-64 cursor-pointer rounded"
+                                            data-testid="preview-open"
+                                            role="button"
+                                            tabindex="0"
+                                            onclick={() => detail.open(program.id, program)}
+                                            onkeydown={(event) =>
+                                                event.key === 'Enter' && detail.open(program.id, program)}
                                         >
-                                            {stateLabel(program.reservation_state)}
-                                        </span>
-                                    {/if}
-                                    {#if !program.matched}
-                                        <span class="badge badge-xs badge-ghost">条件外</span>
-                                    {/if}
-                                    <span class="truncate">{program.name}</span>
-                                </div>
-                                <div class="text-base-content/60 text-xs">
-                                    {program.service_name} ・ {dateTime(program.start_at)}
-                                </div>
-                                <!--
+                                            <div class="flex flex-wrap items-center gap-x-2 gap-y-1">
+                                                {#if program.reservation_state}
+                                                    <span
+                                                        class="badge badge-sm {badgeClass(
+                                                            program.reservation_state,
+                                                        )}"
+                                                        data-testid="preview-state"
+                                                    >
+                                                        {stateLabel(program.reservation_state)}
+                                                    </span>
+                                                {/if}
+                                                {#if !program.matched}
+                                                    <span class="badge badge-xs badge-ghost">条件外</span>
+                                                {/if}
+                                                <span class="truncate">{program.name}</span>
+                                            </div>
+                                            <div class="text-base-content/60 text-xs">
+                                                {program.service_name} ・ {dateTime(program.start_at)}
+                                            </div>
+                                            <!--
                                     チューナーの取り合いは**録ろうとした時点で初めて分かる**
                                     ので、ここで先に見せる。出すのは本数が足りなくなるものだけ
                                     (`contending`)。ただ時間が重なっているだけのものを
@@ -383,61 +462,57 @@
                                     3本ぶつかっていても1本しか見えず、どれを諦めれば
                                     いいのかが読めなかった
                                 -->
-                                {#if program.conflict_reason}
-                                    <div class="text-error text-xs" data-testid="preview-conflict">
-                                        {program.conflict_reason}
-                                    </div>
-                                {/if}
-                                {#if program.conflicts.length > 0}
-                                    <!--
+                                            {#if program.conflict_reason}
+                                                <div
+                                                    class="text-error text-xs"
+                                                    data-testid="preview-conflict"
+                                                >
+                                                    {program.conflict_reason}
+                                                </div>
+                                            {/if}
+                                            {#if program.conflicts.length > 0}
+                                                <!--
                                         件数は本当の数、名前は先頭だけ。ゆるい条件だと
                                         1つの番組に何十本もぶつかることがあり、全部並べると
                                         1行が画面何個ぶんにもなる (件数さえ合っていれば
                                         「多すぎる」ことは伝わる)
                                     -->
-                                    <div class="text-error text-xs" data-testid="preview-conflict">
-                                        チューナーの取り合い {program.conflicts.length} 件: {program.conflicts
-                                            .slice(0, 3)
-                                            .join('、')}{program.conflicts.length > 3
-                                            ? ` ほか ${program.conflicts.length - 3} 件`
-                                            : ''}
-                                    </div>
-                                {/if}
-                            </div>
-                            {#if program.reservation_id !== null}
-                                <form method="POST" action="?/cancelReservation" use:submitting>
-                                    <input
-                                        type="hidden"
-                                        name="reservationId"
-                                        value={program.reservation_id}
-                                    />
-                                    <button
-                                        class="btn btn-xs btn-error btn-outline"
-                                        data-testid="rule-pending-cancel"
-                                    >
-                                        取消
-                                    </button>
-                                </form>
-                            {/if}
-                        </li>
-                    {/each}
-                </ul>
+                                                <div
+                                                    class="text-error text-xs"
+                                                    data-testid="preview-conflict"
+                                                >
+                                                    チューナーの取り合い {program.conflicts.length} 件: {program.conflicts
+                                                        .slice(0, 3)
+                                                        .join('、')}{program.conflicts.length > 3
+                                                        ? ` ほか ${program.conflicts.length - 3} 件`
+                                                        : ''}
+                                                </div>
+                                            {/if}
+                                        </div>
+                                        {#if program.reservation_id !== null}
+                                            <form method="POST" action="?/cancelReservation" use:submitting>
+                                                <input
+                                                    type="hidden"
+                                                    name="reservationId"
+                                                    value={program.reservation_id}
+                                                />
+                                                <button
+                                                    class="btn btn-xs btn-error btn-outline"
+                                                    data-testid="rule-pending-cancel"
+                                                >
+                                                    取消
+                                                </button>
+                                            </form>
+                                        {/if}
+                                    </li>
+                                {/each}
+                            </ul>
+                        {/if}
+                    </div>
+                </div>
             {/if}
-        </div>
-    </div>
-{/if}
 
-<!--
-    プレビューの行から開いた番組詳細。**押すものは「閉じる」だけ。**
-    予約・取消はここに出さない — 予約するかどうかはルールの条件が決めるところで、
-    1件ずつ手で足せると「ルールが作ったのか自分で足したのか」が後から分からなくなる
-    (取り消しだけは行に置いてある)
--->
-{#if detail.current}
-    <ProgramDetail program={detail.current} onclose={() => detail.close()} />
-{/if}
-
-<!--
+            <!--
     **「今すぐ全ルールを適用」は置かない。**
 
     ルールを当て直すのは番組表が動いたとき (`epg.settle`) と、ルールを
@@ -445,65 +520,92 @@
     番組表そのものを取りに行きたいなら、チューナー画面の
     「番組表をいますぐ集める」がその口で、集め終わりに当て直しまで通る
 -->
-<div class="overflow-x-auto rounded-box bg-base-100 shadow">
-    <table class="table table-zebra">
-        <thead>
-            <tr>
-                <th>ルール</th>
-                <th>除外</th>
-                <th>チャンネル</th>
-                <th>ジャンル</th>
-                <th>優先度</th>
-                <th>予約数</th>
-                <th class="w-56"></th>
-            </tr>
-        </thead>
-        <tbody data-testid="rule-list">
-            {#each data.rules as rule (rule.id)}
-                <tr data-testid="rule-row" data-rule-id={rule.id}>
-                    <td>
-                        <div class="font-medium">{rule.name}</div>
-                        <span class="badge badge-sm {rule.enabled ? 'badge-success' : 'badge-ghost'}">
-                            {rule.enabled ? '有効' : '無効'}
-                        </span>
-                        <!-- どこを見て当たったのか分からないと、絞り込みの直しようがない -->
-                        {#if rule.keyword}
-                            <span class="text-base-content/60 text-xs" data-testid="rule-search-scope">
-                                {searchFieldLabel(rule.search_fields)}から
-                            </span>
-                        {/if}
-                    </td>
-                    <td class="text-error text-sm">{rule.ignore_keyword || '-'}</td>
-                    <td class="max-w-48 text-sm" data-testid="rule-channels">{channels(rule)}</td>
-                    <td class="max-w-48 text-sm" data-testid="rule-genres-label">{genres(rule)}</td>
-                    <td>{rule.priority}</td>
-                    <td>{rule.reservations}</td>
-                    <td class="flex flex-nowrap gap-2">
-                        <a
-                            class="btn btn-sm whitespace-nowrap"
-                            href="/rules?edit={rule.id}"
-                            data-testid="rule-edit">編集</a
-                        >
-                        <form method="POST" action="?/toggle" use:submitting>
-                            <input type="hidden" name="id" value={rule.id} />
-                            <button class="btn btn-sm whitespace-nowrap" data-testid="rule-toggle">
-                                {rule.enabled ? '無効化' : '有効化'}
-                            </button>
-                        </form>
-                        <form method="POST" action="?/delete" use:submitting>
-                            <input type="hidden" name="id" value={rule.id} />
-                            <button
-                                class="btn btn-sm btn-error btn-outline whitespace-nowrap"
-                                data-testid="rule-delete"
-                            >
-                                削除
-                            </button>
-                        </form>
-                    </td>
-                </tr>
-            {:else}
-                <tr><td colspan="7" class="text-base-content/60">ルールはまだありません</td></tr>
-            {/each}
-        </tbody>
-    </table>
+            <div class="overflow-x-auto rounded-box bg-base-100 shrink-0 shadow">
+                <table class="table table-zebra">
+                    <thead>
+                        <tr>
+                            <th>ルール</th>
+                            <th>除外</th>
+                            <th>チャンネル</th>
+                            <th>ジャンル</th>
+                            <th>優先度</th>
+                            <th>予約数</th>
+                            <th class="w-56"></th>
+                        </tr>
+                    </thead>
+                    <tbody data-testid="rule-list">
+                        {#each data.rules as rule (rule.id)}
+                            <tr data-testid="rule-row" data-rule-id={rule.id}>
+                                <td>
+                                    <div class="font-medium">{rule.name}</div>
+                                    <span
+                                        class="badge badge-sm {rule.enabled
+                                            ? 'badge-success'
+                                            : 'badge-ghost'}"
+                                    >
+                                        {rule.enabled ? '有効' : '無効'}
+                                    </span>
+                                    <!-- どこを見て当たったのか分からないと、絞り込みの直しようがない -->
+                                    {#if rule.keyword}
+                                        <span
+                                            class="text-base-content/60 text-xs"
+                                            data-testid="rule-search-scope"
+                                        >
+                                            {searchFieldLabel(rule.search_fields)}から
+                                        </span>
+                                    {/if}
+                                </td>
+                                <td class="text-error text-sm">{rule.ignore_keyword || '-'}</td>
+                                <td class="max-w-48 text-sm" data-testid="rule-channels">{channels(rule)}</td>
+                                <td class="max-w-48 text-sm" data-testid="rule-genres-label"
+                                    >{genres(rule)}</td
+                                >
+                                <td>{rule.priority}</td>
+                                <td>{rule.reservations}</td>
+                                <td class="flex flex-nowrap gap-2">
+                                    <a
+                                        class="btn btn-sm whitespace-nowrap"
+                                        href="/rules?edit={rule.id}"
+                                        data-testid="rule-edit">編集</a
+                                    >
+                                    <form method="POST" action="?/toggle" use:submitting>
+                                        <input type="hidden" name="id" value={rule.id} />
+                                        <button
+                                            class="btn btn-sm whitespace-nowrap"
+                                            data-testid="rule-toggle"
+                                        >
+                                            {rule.enabled ? '無効化' : '有効化'}
+                                        </button>
+                                    </form>
+                                    <form method="POST" action="?/delete" use:submitting>
+                                        <input type="hidden" name="id" value={rule.id} />
+                                        <button
+                                            class="btn btn-sm btn-error btn-outline whitespace-nowrap"
+                                            data-testid="rule-delete"
+                                        >
+                                            削除
+                                        </button>
+                                    </form>
+                                </td>
+                            </tr>
+                        {:else}
+                            <tr><td colspan="7" class="text-base-content/60">ルールはまだありません</td></tr>
+                        {/each}
+                    </tbody>
+                </table>
+            </div>
+        </section>
+    </div>
 </div>
+
+<!--
+    プレビューの行から開いた番組詳細。**押すものは「閉じる」だけ。**
+    予約・取消はここに出さない — 予約するかどうかはルールの条件が決めるところで、
+    1件ずつ手で足せると「ルールが作ったのか自分で足したのか」が後から分からなくなる
+    (取り消しだけは行に置いてある)。
+
+    **二段組の外に置く。** 中に入れると、巻き取る箱の中で開くことになる
+-->
+{#if detail.current}
+    <ProgramDetail program={detail.current} onclose={() => detail.close()} />
+{/if}

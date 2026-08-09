@@ -96,11 +96,19 @@
      * - **ライブ** … 映像を見ながら選ぶものなので、**ページごと動くと絵が画面から
      *   出ていく**。右の一覧だけが動けばよい
      *
+     * - **ルール** … 左に書く欄、右に一覧。書きながら効き目を見るものなので、
+     *   ページごと動くと書いている欄が画面から出ていく
+     *
      * 他の画面まで同じにすると、スクロールするのが window ではなくなり、
      * 戻ったときに見ていた位置へ帰らなくなる。畳まれる幅ではどの画面も
-     * 普通にページごとスクロールさせる
+     * 普通にページごとスクロールさせる。
+     *
+     * **二段組にする幅は全画面で `md` (768px)。** 画面ごとに違えていた頃は、
+     * **同じ幅なのに画面によって形が変わって**いた (縦のiPad 820px で、
+     * ライブは1段・観る画面は2段。絵の大きさが 772px と 436px)。ここと、
+     * 各画面の `md:` がその1本の線で、**片方だけ動かさない**
      */
-    const FILLED = ['/', '/live'];
+    const FILLED = ['/', '/live', '/rules'];
     const fill = $derived(FILLED.includes(page.url.pathname));
 
     /**
@@ -134,7 +142,7 @@
     あちらは掴んで動かす枠の基準に使っている
 -->
 <div
-    class="flex min-h-[100dvh] flex-col bg-base-200 {fill ? 'lg:h-screen lg:min-h-0 lg:overflow-hidden' : ''}"
+    class="flex min-h-[100dvh] flex-col bg-base-200 {fill ? 'md:h-screen md:min-h-0 md:overflow-hidden' : ''}"
     data-hydrated={hydrated ? 'true' : undefined}
 >
     <div class="navbar bg-base-100 sticky top-0 z-40 shadow-sm">
@@ -233,7 +241,7 @@
         </div>
     </div>
 
-    <main class="p-4 md:p-6 {fill ? 'lg:min-h-0 lg:flex-1' : ''}">
+    <main class="p-4 md:p-6 {fill ? 'md:min-h-0 md:flex-1' : ''}">
         {@render children()}
     </main>
 </div>

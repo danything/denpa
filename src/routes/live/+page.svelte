@@ -161,10 +161,15 @@
     **広い画面ではページごとスクロールさせない** (`+layout.svelte` の `fill`)。
     映像を見ながら選ぶものなので、ページが動くと絵が画面から出ていく。
     動くのは右の一覧だけ。`min-h-0` が要る — 付けないと flex の子は中身の高さで
-    突っ張って、外側の `overflow` が効かない
+    突っ張って、外側の `overflow` が効かない。
+
+    **二段組にする幅は観る画面 (`/watch/<id>`) と同じ `md` (768px)。** 映像を左、
+    一覧を右に置く形は同じなのに、こちらだけ 1024px からにしていた頃は、
+    **同じ幅で絵の大きさが変わって**いた (縦のiPad 820px で、ライブ 772px に
+    対して観る画面 436px)
 -->
-<div class="flex flex-col gap-4 lg:h-full lg:min-h-0 lg:flex-row" data-testid="live">
-    <div class="flex min-w-0 flex-1 flex-col lg:min-h-0">
+<div class="flex flex-col gap-4 md:h-full md:min-h-0 md:flex-row" data-testid="live">
+    <div class="flex min-w-0 flex-1 flex-col md:min-h-0">
         <!-- 映像は高さのほうを上限にする。横幅いっぱいにすると縦がはみ出す -->
         <!-- svelte-ignore a11y_no_static_element_interactions -->
         <div
@@ -635,7 +640,7 @@
         **高さは残りぜんぶ。** `max-h-[70vh]` で切っていた頃は、画面の下に
         余白があるのに一覧のほうが先に終わっていた
     -->
-    <aside class="flex flex-col lg:min-h-0 lg:w-80 lg:shrink-0">
+    <aside class="flex flex-col md:w-80 md:min-h-0 md:shrink-0">
         <!-- 番組表と同じ並び・同じ見た目。探す場所がずれないようにする -->
         <div class="join mb-2" data-testid="live-type-tabs">
             {#each types as type (type)}
@@ -653,7 +658,7 @@
             だけに見えて押せると気付けなかった。枠を持たせ、指を乗せると浮かせ、
             いま映しているものは色で塗る
         -->
-        <ul bind:this={list} class="flex-1 space-y-1 overflow-y-auto lg:min-h-0" data-testid="live-channels">
+        <ul bind:this={list} class="flex-1 space-y-1 overflow-y-auto md:min-h-0" data-testid="live-channels">
             {#each listed as channel (channel.id)}
                 <!-- いま映しているものかどうかは、この行の中で5回使う -->
                 {@const tuned = current?.id === channel.id}

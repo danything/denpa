@@ -110,6 +110,31 @@ test.describe('ライブ視聴', () => {
     });
 
     /*
+     * **二段組にする幅は観る画面 (`/watch/<id>`) と同じ 768px。** 映像を左、
+     * 一覧を右に置く形は同じなのに、こちらだけ 1024px からにしていた頃は、
+     * **同じ幅で絵の大きさが変わって**いた (縦のiPad 820px で、ライブ 772px に
+     * 対して観る画面 436px)
+     */
+    test('縦のタブレットでも横に並べる (観る画面と同じ 768px から)', async ({ page }) => {
+        await page.setViewportSize({ width: 820, height: 1180 });
+        await goto(page, '/live');
+        await expect(page.getByTestId('live-channel').first()).toBeVisible();
+
+        const shape = await page.evaluate(() => {
+            const video = document.querySelector('video')?.getBoundingClientRect();
+            const aside = document.querySelector('aside')?.getBoundingClientRect();
+            const root = document.documentElement;
+            return {
+                横に並ぶ: video !== undefined && aside !== undefined ? video.right <= aside.left + 1 : false,
+                縦に動く: root.scrollHeight > root.clientHeight + 1,
+            };
+        });
+        expect(shape.横に並ぶ).toBe(true);
+        // 横に並べたら、ページごとは動かさない (広い画面と同じ扱いにする)
+        expect(shape.縦に動く).toBe(false);
+    });
+
+    /*
      * **一覧は残りの高さをぜんぶ使う。** 決め打ちで切っていた頃は、画面の下に
      * 余白があるのに一覧のほうが先に終わっていた
      */

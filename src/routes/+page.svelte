@@ -275,20 +275,24 @@
     高さをJSで測って入れていた頃は、測る前の当ての値で一度描かれるので
     読み込むたびに一覧が縮んだ状態から伸びて見えた。ここは全部 CSS で決める。
 
-    畳まれる幅 (lg 未満) では素直にページごとスクロールさせる。
-    小さい画面で中だけスクロールさせると、指の届く範囲が二重になって使いづらい
+    畳まれる幅 (md 未満) では素直にページごとスクロールさせる。
+    小さい画面で中だけスクロールさせると、指の届く範囲が二重になって使いづらい。
+
+    **横に並べはじめる幅は全画面で `md` (768px)**
+    ([+layout.svelte](./+layout.svelte) の `FILLED`)。画面ごとに違えていた頃は、
+    同じ幅なのに画面によって1段だったり2段だったりした
 -->
-<div class="lg:flex lg:h-full lg:flex-col">
+<div class="md:flex md:h-full md:flex-col">
     <h1 class="mb-4 text-2xl font-bold">予約と録画</h1>
 
     <Toasts {notices} source={form} />
 
-    <div class="grid gap-6 lg:min-h-0 lg:flex-1 lg:grid-cols-5">
+    <div class="grid gap-6 md:min-h-0 md:flex-1 md:grid-cols-5">
         <!--
         min-w-0 が無いと、中の表の幅にグリッドの列が引きずられてページごとはみ出す。
         1列に畳まれたときは録画を先に出す(見るのはたいてい録れたほうなので)
     -->
-        <section class="order-2 min-w-0 lg:order-none lg:col-span-2 lg:flex lg:min-h-0 lg:flex-col">
+        <section class="order-2 min-w-0 md:order-none md:col-span-2 md:flex md:min-h-0 md:flex-col">
             <div class="mb-2 flex min-h-8 flex-wrap items-center justify-between gap-2">
                 <h2 class="text-lg font-bold">予約</h2>
                 <!--
@@ -304,7 +308,7 @@
             残りいっぱいまで伸ばして、中だけスクロールさせる。2つ並べたときに、
             片方が長いともう片方が下に置いていかれるため
         -->
-            <div class="overflow-auto rounded-box bg-base-100 shadow lg:min-h-0 lg:flex-1">
+            <div class="overflow-auto rounded-box bg-base-100 shadow md:min-h-0 md:flex-1">
                 <div class="divide-base-300 divide-y" data-testid="reservation-list">
                     {#each data.reservations as res (res.id)}
                         <!-- 行を押すと番組表と同じ詳細が出る -->
@@ -384,7 +388,7 @@
             </div>
         </section>
 
-        <section class="order-1 min-w-0 lg:order-none lg:col-span-3 lg:flex lg:min-h-0 lg:flex-col">
+        <section class="order-1 min-w-0 md:order-none md:col-span-3 md:flex md:min-h-0 md:flex-col">
             <!-- 見出しの高さと下の余白は予約側と揃える。並べたときにずれて見えるため -->
             <div class="mb-2 flex min-h-8 flex-wrap items-center justify-between gap-2">
                 <h2 class="text-lg font-bold">録画</h2>
@@ -402,7 +406,7 @@
             残りいっぱいまで伸ばして、中だけスクロールさせる。2つ並べたときに、
             片方が長いともう片方が下に置いていかれるため
         -->
-            <div class="overflow-auto rounded-box bg-base-100 shadow lg:min-h-0 lg:flex-1">
+            <div class="overflow-auto rounded-box bg-base-100 shadow md:min-h-0 md:flex-1">
                 <div class="divide-base-300 divide-y" data-testid="recording-list">
                     {#each data.recordings as rec (rec.id)}
                         <!--
