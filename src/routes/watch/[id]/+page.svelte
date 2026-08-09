@@ -11,12 +11,14 @@
         BACK10,
         CAMERA,
         CAPTION,
+        CENTER_BTN,
         CLOSE,
         CUT,
         EXPAND,
         FORWARD10,
         NEXT,
         OVERLAY,
+        OVERLAY_BTN,
         PAUSE,
         PLAY,
         OVERLAY_ON,
@@ -673,7 +675,7 @@
                 bind:this={stage}
                 class="relative w-full overflow-hidden rounded-lg bg-black {full
                     ? 'flex h-screen items-center justify-center'
-                    : ''}"
+                    : ''} {controls.shown ? '' : 'cursor-none'}"
                 onpointermove={controls.wake}
                 onpointerdown={controls.wake}
                 onpointerleave={controls.away}
@@ -780,55 +782,52 @@
                 {/if}
 
                 <!--
-                    **上端は押すものだけ。** 戻ると削除。全画面のときはここしか
-                    出口が無いので、操作列を隠していても戻るだけは出しておく。
+                    **いちばん多く押すものは真ん中に、大きく。**
 
-                    **番組の名前は下の帯に移した** — 上下に分けて置くと、絵の
-                    上下が両方とも黒く塗られる。下の帯は元から敷いてあるので、
-                    そちらに寄せたほうが絵に掛かる面積が減る
+                    送る・止める・戻すを下の帯に他と同じ顔で並べていた頃は、
+                    10個ほどの丸から狙って探すことになっていた。絵の真ん中なら
+                    どこを見ていても目の隅に入るし、**指でも狙いやすい**
+                    (絵を押すのは操作列の出し入れなので、指はここを押す)。
+
+                    帯からは消してある。同じことをする口を2つ置くと、押した
+                    ほうによって癖が違うのではないかと疑わせる
                 -->
-                <div
-                    class="pointer-events-none absolute inset-x-0 top-0 z-10 flex items-start justify-between gap-2 bg-gradient-to-b from-black/60 to-transparent p-2 transition-opacity {controls.shown
-                        ? 'opacity-100'
-                        : 'opacity-0'}"
-                >
-                    <a
-                        class="btn btn-circle pointer-events-auto {OVERLAY}"
-                        href="/"
-                        aria-label="一覧へ戻る"
-                        data-testid="watch-close"
-                    >
-                        <Icon path={CLOSE} />
-                    </a>
-                    <!--
-                        **観終わったその場で消せるようにする。** 末尾はたいてい CM なので、
-                        流したまま消せる。押し間違い防止に2回押させるのは一覧と同じ
-                    -->
-                    <form method="POST" action="?/delete" use:submitting class="pointer-events-auto">
-                        <input type="hidden" name="id" value={rec.id} />
-                        {#if armed}
-                            <button class="btn btn-error" data-testid="watch-delete-confirm"> 確定 </button>
-                        {:else}
-                            <ControlButton path={TRASH} label="削除" testid="watch-delete" onclick={arm} />
-                        {/if}
-                    </form>
-                </div>
-
                 <!--
-                    **真ん中の再生ボタン。** 指のときはこれで再生と停止をする
-                    (絵を押すのは操作列の出し入れなので)。マウスでも、止まって
-                    いる間は出しておく — 何を押せば始まるかが一目で分かる
+                    **帯より上に置く** (`z-20`)。低い窓では真ん中と下の帯が
+                    重なるので、下にすると帯のほうが押されてしまう
                 -->
-                {#if controls.shown && (coarse || !playing)}
-                    <button
-                        type="button"
-                        class="btn btn-circle btn-lg absolute top-1/2 left-1/2 z-10 -translate-x-1/2 -translate-y-1/2 {OVERLAY}"
-                        onclick={togglePlay}
-                        aria-label={playing ? '一時停止' : '再生'}
-                        data-testid="watch-play"
+                {#if controls.shown}
+                    <div
+                        class="pointer-events-none absolute inset-0 z-20 flex items-center justify-center gap-4"
                     >
-                        <Icon path={playing ? PAUSE : PLAY} />
-                    </button>
+                        <button
+                            type="button"
+                            class="pointer-events-auto {CENTER_BTN} {OVERLAY}"
+                            onclick={() => seekBy(-SKIP)}
+                            aria-label="{SKIP}秒戻す"
+                            data-testid="watch-back"
+                        >
+                            <Icon path={BACK10} size="size-8" />
+                        </button>
+                        <button
+                            type="button"
+                            class="pointer-events-auto {CENTER_BTN} {OVERLAY}"
+                            onclick={togglePlay}
+                            aria-label={playing ? '一時停止' : '再生'}
+                            data-testid="watch-play"
+                        >
+                            <Icon path={playing ? PAUSE : PLAY} size="size-8" />
+                        </button>
+                        <button
+                            type="button"
+                            class="pointer-events-auto {CENTER_BTN} {OVERLAY}"
+                            onclick={() => seekBy(SKIP)}
+                            aria-label="{SKIP}秒送る"
+                            data-testid="watch-forward"
+                        >
+                            <Icon path={FORWARD10} size="size-8" />
+                        </button>
+                    </div>
                 {/if}
 
                 <!-- 下端。帯と押すもの。**ライブと同じ帯** (`ControlBar`) -->
@@ -868,15 +867,22 @@
 
                     <div class="mt-1 flex flex-wrap items-center gap-1 text-white">
                         <!--
-                            **並びはライブと同じ。** 再生・音・字幕が左から順で、
+                            **並びはライブと同じ。** 音・字幕が左から順で、
                             全画面がいちばん右。画面を移っても同じ場所にあると、
-                            見ないでも押せる
+                            見ないでも押せる。
+
+                            **送る・止める・戻すはここに無い** — 絵の真ん中に
+                            大きく置いてある (上の説明)。**出口と削除はここ** —
+                            上にも帯を出すと絵の上下が両方黒く塗られる
                         -->
-                        <ControlButton
-                            path={playing ? PAUSE : PLAY}
-                            label={playing ? '一時停止' : '再生'}
-                            onclick={togglePlay}
-                        />
+                        <a
+                            class="{OVERLAY_BTN} btn-circle {OVERLAY}"
+                            href="/"
+                            aria-label="一覧へ戻る"
+                            data-testid="watch-close"
+                        >
+                            <Icon path={CLOSE} />
+                        </a>
                         <ControlButton
                             path={muted ? SOUND_OFF : SOUND_ON}
                             label={muted ? '音を出す' : '消音'}
@@ -899,19 +905,6 @@
                                 onclick={toggleCaptions}
                             />
                         {/if}
-
-                        <ControlButton
-                            path={BACK10}
-                            label={`${SKIP}秒戻す`}
-                            testid="watch-back"
-                            onclick={() => seekBy(-SKIP)}
-                        />
-                        <ControlButton
-                            path={FORWARD10}
-                            label={`${SKIP}秒送る`}
-                            testid="watch-forward"
-                            onclick={() => seekBy(SKIP)}
-                        />
 
                         <!--
                             **チャプター送りは、入っているときだけ出す。**
@@ -1015,6 +1008,28 @@
                             testid="watch-full"
                             onclick={toggleFull}
                         />
+
+                        <!--
+                            **観終わったその場で消せるようにする。** 末尾はたいてい
+                            CM なので、流したまま消せる。押し間違い防止に2回押させる
+                            のは一覧と同じ。**いちばん端に置く** — 隣を押すつもりで
+                            当たっても、聞き返しがあるので消えはしない
+                        -->
+                        <form method="POST" action="?/delete" use:submitting>
+                            <input type="hidden" name="id" value={rec.id} />
+                            {#if armed}
+                                <button class="btn btn-error btn-lg" data-testid="watch-delete-confirm">
+                                    確定
+                                </button>
+                            {:else}
+                                <ControlButton
+                                    path={TRASH}
+                                    label="削除"
+                                    testid="watch-delete"
+                                    onclick={arm}
+                                />
+                            {/if}
+                        </form>
                     </div>
                 </ControlBar>
             </section>

@@ -57,13 +57,21 @@ export const OVERLAY = 'border-0 bg-black/45 text-white shadow-none hover:bg-bla
  *
  * `btn-sm` (32px) にしていた頃は、**タブレットでもPCでも小さすぎた** —
  * 絵の上に薄く敷くものなので、輪郭で狙うのではなく面で狙うことになる。
- * daisyUI の既定 (40px) にしてある。
  *
  * 引き出し (速さ・音声・焼き方) の口も同じ大きさで揃える。あちらは
  * `<div class="dropdown">` の中の生のボタンなので `ControlButton` が使えず、
  * ここの字を直に当てる
  */
-export const OVERLAY_BTN = 'btn';
+export const OVERLAY_BTN = 'btn btn-lg';
+
+/**
+ * 絵の真ん中に置く「送る・止める・戻す」の大きさ。**帯より一回り大きい。**
+ *
+ * いちばん多く押すものなので、下の帯に他と同じ顔で並べていた頃は、
+ * **狙って探す**ことになっていた。真ん中に大きく置けば、絵のどこを見ていても
+ * 目の隅に入る
+ */
+export const CENTER_BTN = 'btn btn-circle btn-xl';
 
 /** 押されている間の見た目 (字幕を出しているとき・ライブに居るとき) */
 export const OVERLAY_ON = 'btn-primary border-0 text-white shadow-none';
