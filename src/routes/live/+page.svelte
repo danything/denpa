@@ -5,10 +5,12 @@
     import ControlBar from '$lib/components/player/ControlBar.svelte';
     import ControlButton from '$lib/components/player/ControlButton.svelte';
     import { playerControls } from '$lib/components/player/controls.svelte';
+    import DataBroadcast from '$lib/components/player/DataBroadcast.svelte';
     import Icon from '$lib/components/player/Icon.svelte';
     import {
         AUDIO,
         CAPTION,
+        DATA,
         EXPAND,
         INFO,
         OVERLAY,
@@ -36,6 +38,8 @@
     let still: HTMLCanvasElement;
     /** 放送の字幕を重ねる先 (`live-player` の `paint`) */
     let overlay: HTMLCanvasElement;
+    /** 映像が居る枠。**データ放送に「映像はここ」と伝えるのに要る** */
+    let frame = $state<HTMLElement | null>(null);
 
     /**
      * **サーバが決めた局で開く** (`+page.server.ts` の `start`)。
@@ -203,6 +207,7 @@
         <!-- 映像は高さのほうを上限にする。横幅いっぱいにすると縦がはみ出す -->
         <!-- svelte-ignore a11y_no_static_element_interactions -->
         <div
+            bind:this={frame}
             class="bg-base-300 relative aspect-video max-h-full overflow-hidden
                    {controlsShown ? '' : 'cursor-none'}"
             onpointermove={wake}
@@ -276,6 +281,12 @@
                 data-on={player.captions && player.hasCaptions}
                 aria-hidden="true"
             ></canvas>
+
+            <!--
+                **データ放送。** 映像はここ (`frame`) に居るとだけ伝えて、
+                描くのは借りものに任せる。押されるまで 1.2MB を取りに行かない
+            -->
+            <DataBroadcast on={player.showData} media={frame} listen={player.listenData} />
 
             {#if player.tuned !== null && player.state !== 'error'}
                 <!--
@@ -354,6 +365,22 @@
                                 onclick={() => player.toggleCaptions()}
                             />
                         {/if}
+
+                        <!--
+                        **データ放送 (テレビの d ボタン)。**
+
+                        字幕と違って「持っているか」を先には出さない。サーバは
+                        頼まれてから解く作りなので (`server/databroadcast.ts`)、
+                        押されるまでは載っているかどうかも分からない。押しても
+                        何も出ない局はあるが、**テレビの d ボタンと同じ**
+                    -->
+                        <ControlButton
+                            path={DATA}
+                            label={player.showData ? 'データ放送を消す' : 'データ放送を出す'}
+                            on={player.showData}
+                            testid="live-data-button"
+                            onclick={() => player.setData(!player.showData)}
+                        />
 
                         <!--
                         **字幕の選び直し。言語が2つ以上あるときだけ出す。**

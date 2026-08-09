@@ -14,7 +14,7 @@
  * どれも自前のものがある ([eit.ts](eit.ts) / [psi.ts](psi.ts) / ffmpeg)。
  * その3割のために `@chinachu/aribts` (2.3MB) を抱えていた。
  *
- * **出す形は借りたまま。** [ws_api.ts](../vendor/web-bml/ws_api.ts) の
+ * **出す形は借りたまま。** [ws_api.ts](../vendor/web-bml/server/ws_api.ts) の
  * `ResponseMessage` をそのまま作るので、描画側 (web-bml のブラウザ) から見ると
  * 出どころが変わったことは分からない。**型が食い違いを見張ってくれる**のが、
  * ここを自前にできる理由でもある。
@@ -30,14 +30,14 @@ import {
     entityHeaderToString,
     parseMediaType,
     parseMediaTypeFromString,
-} from '$lib/vendor/web-bml/entity_parser';
+} from '$lib/vendor/web-bml/server/entity_parser';
 import type {
     AdditionalAribBXMLInfo,
     ComponentPMT,
     ESEvent,
     ModuleFile,
     ResponseMessage,
-} from '$lib/vendor/web-bml/ws_api';
+} from '$lib/vendor/web-bml/server/ws_api';
 import type { DiiModule } from './dsmcc';
 import {
     dataEventIdOf,

@@ -934,14 +934,36 @@ KosugiMaru を 4.4MB ぶん抱えている。積むかどうかは持ち込み�
 | **B. webpack の束を Dockerfile で組む** | 向こうのビルド設定 (`acorn` も `buffer` も) をそのまま使える。denpa 側の依存は**増えない**。ffmpeg や chapter_exe と同じやり方 | **型が切れる** (`window` 越しになるので `any`)。像を焼くのに node と npm が要り、25個の依存も落ちる。`ResponseMessage` の食い違いを**型検査が見張れなくなる** — 解く側を自前にした利点が半分消える |
 | **C. 借りものとして置く** (`src/lib/vendor/`。解く側と同じ) | Vite が他と一緒に組む。**型が最後まで通る**。増える依存は4つだけ。網の要らないビルド | **1,237 KB・46ファイル**をリポジトリに抱える。更新は取り直し。`acorn` の大域と `css` フォーク (git tarball) は自分で面倒を見る |
 
-**採るのは C。** 決め手は型で、`emitMessage(msg: ResponseMessage)` の食い違いを
+**C を採った。** 決め手は型で、`emitMessage(msg: ResponseMessage)` の食い違いを
 検査で止められるかどうかがそのまま「解く側を自前にした意味」に効く。A は
 `exports` が無い時点で結局 node_modules の中を名指しすることになり、抱えないぶんの
 利点が薄い。B は依存が増えないのが魅力だが、型が切れるのと像の焼き時間が伸びるのが
 重い。
 
 **1,237 KB は読むためではなく置くためのもの**で、biome の整形・検査からは
-`!src/lib/vendor` で外れる (解く側と同じ扱い)。
+`!src/lib/vendor` で外れる (解く側と同じ扱い)。型検査も1行目の `@ts-nocheck` で
+外してあるが、**denpa 側は効いたまま** — `ts/bml.ts` が `ResponseMessage` に無い物を
+入れれば `bun run check` が止める。
+
+#### 入れたあと
+
+**押されるまで 700KB を取りに行かない。** `import()` で分けてあるので
+(`components/player/DataBroadcast.svelte`)、d ボタンを押した人だけが落とす。
+どのみち押してからカルーセルが一周するのを待つので、そこに紛れる。
+
+| | |
+| --- | --- |
+| 束 | 700KB (gzip 前)。**押すまで落ちてこない** |
+| フォント | 積んでいない。`local('Hiragino Maru Gothic ProN')` などで端末のものを当てる |
+| 覚えるもの | NVRAM は localStorage。`denpa_nvram_` で他と混ざらないようにしてある |
+| リモコン | 十字・決定・戻る・数字・色をそのまま渡す (`keyCodeToAribKey`)。**`d` だけ渡さない** — 出し入れに使うので、渡すと抜けられなくなる |
+
+Vite で組むために2つだけ面倒を見ている。**借りものは書き換えていない。**
+
+- `import css from "../public/default.css"` を**文字列として**読ませる
+  (`vite.config.ts` の `denpa:bml-css`。向こうは webpack の `asset/source`)
+- `js_interpreter.ts` は写さず、denpa の1行に差し替える (向こうの README が
+  「未使用」と言っている道で、素の ESM に `require` は無い)
 
 セルフホスト前提なので、NVRAM は web-bml の既定実装（サーバローカル保存）をそのまま使う。
 

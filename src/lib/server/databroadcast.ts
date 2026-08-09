@@ -22,7 +22,7 @@
 
 import { BmlDecoder } from '$lib/ts/bml';
 import { Carousel } from '$lib/ts/carousel';
-import type { ResponseMessage } from '$lib/vendor/web-bml/ws_api';
+import type { ResponseMessage } from '$lib/vendor/web-bml/server/ws_api';
 
 export type { ResponseMessage };
 

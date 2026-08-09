@@ -1,3 +1,5 @@
+// @ts-nocheck
+// 借りもの。中身は書き換えない ([README](../README.md))。denpa 側の型検査は効いたまま
 // RFC2068 7.1 Entity Header Fields
 // 
 // entity-header  = Allow                    ; Section 14.7
@@ -513,4 +515,3 @@ export type MediaTypeParameter = {
     originalAttribute: string,
     value: string,
 };
-

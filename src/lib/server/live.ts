@@ -520,35 +520,45 @@ class Session {
             this.tellOne(viewer, { type: 'captions', tracks: this.list.tracks, track: this.track });
         }
         if (this.showing !== null) this.handCaption(viewer, this.showing);
+        // **出したままの人は、局を変えても出したまま** (`refreshData`)
+        if (viewer.wantsData) this.refreshData(viewer);
     }
 
-    /**
-     * データ放送を出す・やめる。**頼んだ人のぶんだけ。**
-     *
-     * 出すと言った人には、**いま揃っているものをまとめて渡す** — カルーセルは
-     * 回り続けるのでそのうち揃うが、`pmt` だけは1回しか来ないので、逃すと
-     * 何番のコンポーネントを出すかが分からないまま待つことになる
-     */
+    /** データ放送を出す・やめる。**頼んだ人のぶんだけ。** */
     wantData(viewer: Viewer, on: boolean): void {
         if (viewer.wantsData === on) return;
         viewer.wantsData = on;
-        if (on) {
-            if (this.data === null) {
-                this.data = new DataBroadcast((message) => this.handData(message));
-            }
-            for (const message of this.data.replay()) this.tellData(viewer, message);
+        this.refreshData(viewer);
+    }
+
+    /**
+     * いま解く必要があるかを見直す。**誰も出していなければ畳む。**
+     *
+     * `Viewer.wantsData` は**その人の意思**で、局を変えても消えない
+     * (セッションは作り直しになるが、押した本人にとっては同じ「出したまま」)。
+     * 解くかどうかはそのつど数え直す。
+     *
+     * @param viewer 出すと言った本人。**いま揃っているものをまとめて渡す** —
+     *   カルーセルは回り続けるのでそのうち揃うが、`pmt` だけは1回しか来ないので、
+     *   逃すと何番のコンポーネントを出すかが分からないまま待つことになる
+     */
+    private refreshData(viewer?: Viewer): void {
+        if (![...this.viewers].some((held) => held.wantsData)) {
+            this.data?.close();
+            this.data = null;
             return;
         }
-        // 誰も出していなければ畳む
-        if ([...this.viewers].some((held) => held.wantsData)) return;
-        this.data?.close();
-        this.data = null;
+        if (this.data === null) {
+            this.data = new DataBroadcast((message) => this.handData(message));
+        }
+        if (viewer?.wantsData !== true) return;
+        for (const message of this.data.replay()) this.tellData(viewer, message);
     }
 
     remove(viewer: Viewer): void {
         this.viewers.delete(viewer);
-        // 出していた人が抜けたら、誰も出していないかを見直す
-        if (viewer.wantsData) this.wantData(viewer, false);
+        // 出していた人が抜けたら、誰も出していないかを見直す (意思は消さない)
+        this.refreshData();
     }
 
     /**

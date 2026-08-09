@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { deflateSync } from 'node:zlib';
-import type { ResponseMessage } from '$lib/vendor/web-bml/ws_api';
+import type { ResponseMessage } from '$lib/vendor/web-bml/server/ws_api';
 import { BmlDecoder, inflate, moduleFiles, parseBxmlInfo } from './bml';
 import type { DiiModuleSpec } from './synth';
 import { bxmlDescriptor, ddbSection, diiSection, packetize, patSection, programMap, withCrc } from './synth';

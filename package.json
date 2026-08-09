@@ -28,5 +28,11 @@
         "lint": "biome check .",
         "format": "biome check --write ."
     },
-    "type": "module"
+    "type": "module",
+    "dependencies": {
+        "buffer": "^6.0.3",
+        "crc-32": "^1.2.2",
+        "css": "https://github.com/otya128/reworkcss-css/releases/download/v3.0.1/css-3.0.1.tgz",
+        "fast-xml-parser": "^5.10.1"
+    }
 }

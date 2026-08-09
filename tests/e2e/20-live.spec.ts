@@ -370,6 +370,54 @@ test.describe('ライブ視聴', () => {
     });
 
     /*
+     * **データ放送 (テレビの d ボタン)。**
+     *
+     * 描くのは借りもの (`vendor/web-bml` の `BMLBrowser`) で 700KB あるので、
+     * **押されるまで取りに行かない**。作りものの放送にはデータ放送が載って
+     * いないので中身は出ないが、**押して器が立ち上がるところ**までは見られる。
+     *
+     * サーバに「出す」と伝わっているかも見る — 頼まれてから解く作りなので、
+     * ここが抜けると押しても永久に何も来ない
+     */
+    test('d ボタンでデータ放送の器が立ち上がり、サーバに伝わる', async ({ page }) => {
+        await page.addInitScript(() => {
+            const asked = window as unknown as { __data: unknown[] };
+            asked.__data = [];
+            const Original = window.WebSocket;
+            window.WebSocket = class extends Original {
+                send(payload: string | ArrayBufferLike | Blob | ArrayBufferView) {
+                    if (typeof payload === 'string' && payload.includes('"data"')) {
+                        asked.__data.push(JSON.parse(payload));
+                    }
+                    super.send(payload);
+                }
+            };
+        });
+        const asked = () => page.evaluate(() => (window as unknown as { __data: unknown[] }).__data);
+
+        await goto(page, '/live');
+        await page.getByTestId('live-channel').first().click();
+        await expect(page.getByTestId('live-title')).toBeVisible();
+
+        const overlay = page.getByTestId('live-data');
+        // 押すまでは何も読み込まない
+        await expect(overlay).toHaveAttribute('data-state', 'off');
+
+        await page.getByTestId('live-data-button').click();
+        // 700KB を取りに行って、器を立てるまで
+        await expect(overlay).toHaveAttribute('data-state', 'ready', { timeout: 15_000 });
+        expect(await asked()).toEqual([{ type: 'data', on: true }]);
+
+        // もう一度押したら畳む。**掴んだままにしない**
+        await page.getByTestId('live-data-button').click();
+        await expect(overlay).toHaveAttribute('data-state', 'off');
+        expect(await asked()).toEqual([
+            { type: 'data', on: true },
+            { type: 'data', on: false },
+        ]);
+    });
+
+    /*
      * **渡す前に1局へ絞る。**
      *
      * ffmpeg は名指しした局を `-probesize` のぶん読む間に見つけられなければ、

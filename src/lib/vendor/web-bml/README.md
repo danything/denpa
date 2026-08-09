@@ -1,19 +1,33 @@
 # web-bml から借りているもの
 
 データ放送 (ARIB STD-B24 の BML) のために、[otya128/web-bml](https://github.com/otya128/web-bml)
-から**2つだけ**持ってきています。**中身は書き換えていません** — 上流を追いやすく
-するためで、denpa 側の都合は [ts/bml.ts](../../ts/bml.ts) に寄せてあります。
+から**描く側**を持ってきています。**中身は書き換えていません** — 上流を追いやすく
+するためで、denpa 側の都合は [ts/bml.ts](../../ts/bml.ts) と
+[DataBroadcast.svelte](../../components/player/DataBroadcast.svelte) に寄せてあります。
 
-直すのは取り込むときの**型だけの import** 1箇所だけです。denpa は
-`verbatimModuleSyntax` で組んでいるので、型を値と同じ形で import していると通りません
-(下の「更新のしかた」に手順)。
+置き方は**上流と同じ木の形**にしてあります (`client/` `es2/` `public/` `server/`)。
+向こうのファイルどうしが相対で指し合っているので、崩すと全部書き換えることになります。
 
 | | |
 | --- | --- |
 | 出どころ | <https://github.com/otya128/web-bml> |
 | 版 | `d784fd9e3376cf74dd85ba8b9879e6d2b714044c` (2026-07-23) |
 | 許諾 | MIT ([LICENSE](LICENSE)) |
-| 持ってきたもの | `server/entity_parser.ts` `server/ws_api.ts` |
+| 持ってきたもの | `BMLBrowser` から辿れるもの **44ファイル・1.4MB** |
+| 写していないもの | `client/interpreter/js_interpreter.ts` (下の説明)、単体ページ・サーバ・自前再生 |
+
+## 手を入れているのは2つだけ
+
+**1行目に `@ts-nocheck` を足しています。** denpa は `verbatimModuleSyntax` で
+組んでいるので、そのままでは型だけの import 64箇所を直して回ることになります。
+**借りものの中身を検査しても直せるものが無い**ので、丸ごと外しました。
+**denpa 側の検査は効いたままです** — 型そのものは読まれるので、`ts/bml.ts` が
+`ResponseMessage` に無い物を入れれば、いまでも `bun run check` が止めます
+(確かめてあります)。
+
+**`client/interpreter/js_interpreter.ts` だけ denpa が書いています。** 理由は
+そのファイルの頭に書いてあります (向こうの README が「未使用」と言っている道で、
+Vite では読み込んだ時点で転ぶ)。
 
 ## 何を借りていて、何を借りていないか
 
@@ -44,32 +58,53 @@ PES — どれも denpa に自前のものがあります ([eit.ts](../../ts/eit
   denpa は**自前の番組表を持っている**ので、そちらから作るほうが正確で安い
   (描画側を入れるときに繋ぐ)
 
-## 描画側は借りる
+## 描く側は借りる
 
 **BML を動かすところは自前で書きません。** スクリプトは ECMA-262 第3版どきの方言で、
 専用の DOM と `browser` オブジェクトと NVRAM の上で動くので、**ES2 の処理系まで
-抱える**ことになります (向こうは手書きのぶんだけでも `browser.ts` 58KB・
-`content.ts` 69KB・`drcs.ts` 31KB)。放送の仕様に当たり続ける仕事で、字幕を絵で出す
-ことにしたのと同じ理由で、自前で持つ価値がありません
+抱える**ことになります (`es2/index.ts` だけで 200KB)。放送の仕様に当たり続ける
+仕事で、字幕を絵で出すことにしたのと同じ理由で、自前で持つ価値がありません
 ([docs/stream.md](../../../../docs/stream.md#56-データ放送の統合))。
 
-**解く側と線を引けるのは `ws_api.ts` があるからです。** 解くのは自前、描画は借りもの、
-その間を型が見張る。
+繋ぎ口は `ResponseMessage` ひとつです:
+
+```ts
+const browser = new BMLBrowser({ containerElement, mediaElement, fonts });
+browser.emitMessage(message);   // ← ts/bml.ts が吐くものをそのまま
+browser.destroy();
+```
+
+**映像は渡すだけ。** `client/player/*.ts` は向こうの単体ページが hls.js /
+mpegts.js で自前再生するためのもので、`BMLBrowser` は受け取りません。
+denpa の `<video>` はそのまま、上に BML が載ります。
+
+**押されるまで読み込みません。** 1.4MB あるので `import()` で分けてあり
+(`DataBroadcast.svelte`)、d ボタンを押した人だけが取りに行きます。
+
+**フォントは積んでいません。** 向こうは Kosugi を 4.4MB ぶん抱えていますが、
+`local(...)` で端末のものを当てています。
+
+## Vite で組むための細工
+
+借りものを書き換えずに済ませるため、denpa 側で2つ面倒を見ています。
+
+- **`import css from "../public/default.css"`** は**文字列として**読ませます。
+  向こうは webpack の `asset/source`、こちらは
+  [vite.config.ts](../../../../vite.config.ts) の `denpa:bml-css`
+- **`js_interpreter.ts`** は写さず、denpa の1行に差し替えています (そのファイルの頭)
 
 ## 更新のしかた
 
-上流の差分を見てから、2つのファイルを取り直して版を書き換えます。`ws_api.ts` の型が
-変わったときだけ `bml.ts` に響きます。
+上流の差分を見てから、木ごと取り直します。**`BMLBrowser` から辿れるものだけ**で、
+`js_interpreter.ts` は写しません。
 
 ```sh
 SHA=<新しい commit>
-for f in entity_parser.ts ws_api.ts; do
-  gh api "repos/otya128/web-bml/contents/server/$f?ref=$SHA" --jq '.content' | base64 -d \
-    > "src/lib/vendor/web-bml/$f"
-done
+git clone --depth 1 https://github.com/otya128/web-bml.git /tmp/web-bml
+# client/ es2/ public/ server/ を、いまある形に合わせて写す
+# そのあと、写した .ts の1行目に `// @ts-nocheck` を足す
 ```
 
-そのあと `bun run check` が**型だけの import** を言ってくるので、直します
-(`ws_api.ts` の `MediaType`)。**除外設定では逃げられません** — こちらから import して
-いる以上、型検査は追ってきます。整形からは外してあります
+型が変わったときだけ `ts/bml.ts` と `DataBroadcast.svelte` に響きます
+(`ResponseMessage` と `BMLBrowserOptions`)。整形と検査からは外してあります
 ([biome.jsonc](../../../../biome.jsonc) の `!src/lib/vendor`)。

@@ -1,0 +1,299 @@
+/* STD-B24 Annex A Default Style Sheet */
+/* margin */
+div, p, input, object {margin: 0 !important}
+/* padding */
+div, object {padding-top : 0 !important; padding-right : 0 !important; padding-bottom : 0 !important; padding-left : 0 !important; }
+/* border */
+:where(div, p, span, a, input) { border-width: 0; }
+object {border-width : 0 !important; border-style : none !important}
+/* display */
+meta, title, script, style, head, bml, bevent, beitem { display: none !important }
+body, div, p, object, input { display : block !important }
+br, span, a { display : inline !important }
+/* position */
+p, div, object, input { position : absolute !important }
+br, span, a { position : static !important }
+/* top left width height*/
+:where(p, div, input, object) { top: 0; left: 0; width: 0; height: 0; }
+/* z-index */
+div, p, br, span, a, input, object, body { z-index : auto !important }
+/* line-height */
+/* br, span, a { line-height : inherit !important } */
+/* visibility */
+body { visibility : visible !important }
+span, a { visibility : inherit !important }
+/* overflow */
+p, div, input, object { overflow : hidden !important }
+/* background-repeat */
+body { background-repeat : repeat !important }
+/* text */
+:where(p, input) { font-family: "丸ゴシック"; --font-size: 24px; --font-size-raw: 24px; }
+:where(span, a) { font-family: inherit; }
+:where(p, input) { text-align: left; }
+/* letter-spacing */
+span, a { letter-spacing : inherit !important }
+/* white-space */
+/* CDATA? */
+/* p, input { white-space : normal !important } */
+/* background-color-index */
+:where(body) {
+    --resolution: 960x540;
+    /* 960x540の解像度のときは静止画プレーンの幅と高さは文字図形プレーンの半分 */
+    --still-picture-plane-scale: 0.5;
+    --clut-color-0: #000000ff;
+    --clut-color-1: #ff0000ff;
+    --clut-color-2: #00ff00ff;
+    --clut-color-3: #ffff00ff;
+    --clut-color-4: #0000ffff;
+    --clut-color-5: #ff00ffff;
+    --clut-color-6: #00ffffff;
+    --clut-color-7: #ffffffff;
+    --clut-color-8: #00000000;
+    --clut-color-9: #aa0000ff;
+    --clut-color-10: #00aa00ff;
+    --clut-color-11: #aaaa00ff;
+    --clut-color-12: #0000aaff;
+    --clut-color-13: #aa00aaff;
+    --clut-color-14: #00aaaaff;
+    --clut-color-15: #aaaaaaff;
+    --clut-color-16: #000055ff;
+    --clut-color-17: #005500ff;
+    --clut-color-18: #005555ff;
+    --clut-color-19: #0055aaff;
+    --clut-color-20: #0055ffff;
+    --clut-color-21: #00aa55ff;
+    --clut-color-22: #00aaffff;
+    --clut-color-23: #00ff55ff;
+    --clut-color-24: #00ffaaff;
+    --clut-color-25: #550000ff;
+    --clut-color-26: #550055ff;
+    --clut-color-27: #5500aaff;
+    --clut-color-28: #5500ffff;
+    --clut-color-29: #555500ff;
+    --clut-color-30: #555555ff;
+    --clut-color-31: #5555aaff;
+    --clut-color-32: #5555ffff;
+    --clut-color-33: #55aa00ff;
+    --clut-color-34: #55aa55ff;
+    --clut-color-35: #55aaaaff;
+    --clut-color-36: #55aaffff;
+    --clut-color-37: #55ff00ff;
+    --clut-color-38: #55ff55ff;
+    --clut-color-39: #55ffaaff;
+    --clut-color-40: #55ffffff;
+    --clut-color-41: #aa0055ff;
+    --clut-color-42: #aa00ffff;
+    --clut-color-43: #aa5500ff;
+    --clut-color-44: #aa5555ff;
+    --clut-color-45: #aa55aaff;
+    --clut-color-46: #aa55ffff;
+    --clut-color-47: #aaaa55ff;
+    --clut-color-48: #aaaaffff;
+    --clut-color-49: #aaff00ff;
+    --clut-color-50: #aaff55ff;
+    --clut-color-51: #aaffaaff;
+    --clut-color-52: #aaffffff;
+    --clut-color-53: #ff0055ff;
+    --clut-color-54: #ff00aaff;
+    --clut-color-55: #ff5500ff;
+    --clut-color-56: #ff5555ff;
+    --clut-color-57: #ff55aaff;
+    --clut-color-58: #ff55ffff;
+    --clut-color-59: #ffaa00ff;
+    --clut-color-60: #ffaa55ff;
+    --clut-color-61: #ffaaaaff;
+    --clut-color-62: #ffaaffff;
+    --clut-color-63: #ffff55ff;
+    --clut-color-64: #ffffaaff;
+    --clut-color-65: #00000080;
+    --clut-color-66: #ff000080;
+    --clut-color-67: #00ff0080;
+    --clut-color-68: #ffff0080;
+    --clut-color-69: #0000ff80;
+    --clut-color-70: #ff00ff80;
+    --clut-color-71: #00ffff80;
+    --clut-color-72: #ffffff80;
+    --clut-color-73: #aa000080;
+    --clut-color-74: #00aa0080;
+    --clut-color-75: #aaaa0080;
+    --clut-color-76: #0000aa80;
+    --clut-color-77: #aa00aa80;
+    --clut-color-78: #00aaaa80;
+    --clut-color-79: #aaaaaa80;
+    --clut-color-80: #00005580;
+    --clut-color-81: #00550080;
+    --clut-color-82: #00555580;
+    --clut-color-83: #0055aa80;
+    --clut-color-84: #0055ff80;
+    --clut-color-85: #00aa5580;
+    --clut-color-86: #00aaff80;
+    --clut-color-87: #00ff5580;
+    --clut-color-88: #00ffaa80;
+    --clut-color-89: #55000080;
+    --clut-color-90: #55005580;
+    --clut-color-91: #5500aa80;
+    --clut-color-92: #5500ff80;
+    --clut-color-93: #55550080;
+    --clut-color-94: #55555580;
+    --clut-color-95: #5555aa80;
+    --clut-color-96: #5555ff80;
+    --clut-color-97: #55aa0080;
+    --clut-color-98: #55aa5580;
+    --clut-color-99: #55aaaa80;
+    --clut-color-100: #55aaff80;
+    --clut-color-101: #55ff0080;
+    --clut-color-102: #55ff5580;
+    --clut-color-103: #55ffaa80;
+    --clut-color-104: #55ffff80;
+    --clut-color-105: #aa005580;
+    --clut-color-106: #aa00ff80;
+    --clut-color-107: #aa550080;
+    --clut-color-108: #aa555580;
+    --clut-color-109: #aa55aa80;
+    --clut-color-110: #aa55ff80;
+    --clut-color-111: #aaaa5580;
+    --clut-color-112: #aaaaff80;
+    --clut-color-113: #aaff0080;
+    --clut-color-114: #aaff5580;
+    --clut-color-115: #aaffaa80;
+    --clut-color-116: #aaffff80;
+    --clut-color-117: #ff005580;
+    --clut-color-118: #ff00aa80;
+    --clut-color-119: #ff550080;
+    --clut-color-120: #ff555580;
+    --clut-color-121: #ff55aa80;
+    --clut-color-122: #ff55ff80;
+    --clut-color-123: #ffaa0080;
+    --clut-color-124: #ffaa5580;
+    --clut-color-125: #ffaaaa80;
+    --clut-color-126: #ffaaff80;
+    --clut-color-127: #ffff5580;
+    background-color: var(--clut-color-0);
+    --background-color: var(--clut-color-0);
+    --background-color-index: 0;
+}
+:where(div, p, span, a, input) {
+    background-color: var(--clut-color-8);
+    --background-color: var(--clut-color-8);
+    --background-color-index: 8;
+}
+/* ?? これだとobjectが透過できなくなる */
+/* object { background-color : var(--clut-color-0) !important, --background-color: 0 !important;} */
+/* grayscale-color-index */
+:where(p, input) { --grayscale-color-index: 30 15; }
+
+/* reset UA CSS */
+:where(p) {
+    margin-block-start: 0;
+    margin-block-end: 0;
+    margin-inline-start: 0;
+    margin-inline-end: 0;
+}
+p {
+    line-break: anywhere !important;
+}
+body {
+    padding: 0!important; /* NHK BS1とかbodyにpadding: 6pt;があって崩れる? */
+    margin: 0!important;
+}
+
+:where(body) {
+    font-family: "丸ゴシック", monospace;
+}
+
+object[type="audio/X-arib-mpeg2-aac"] {
+    visibility: hidden;
+}
+
+object[type="image/X-arib-png"] {
+    visibility: hidden !important;
+}
+
+arib-style {
+    display: none;
+}
+
+arib-script {
+    display: none;
+}
+
+body[arib-loading] { display: none !important; }
+
+:where(html, bml) {
+    line-height: 1; /* Firefox */
+    --line-height: 1;
+    --line-height-raw: normal;
+}
+
+html {
+    position: absolute;
+    top: 0px;
+    left: 0px;
+    /* タブは空白一文字分 (STD-B24 第二分冊(2/2) 付属2 5.3.2 表5-12) */
+    tab-size: 1;
+}
+
+/*
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+    <filter id="bt601bt709">
+        <feColorMatrix in="SourceGraphic" type="matrix" values="
+         1.24452    -0.0671069  -0.0130327  0 -0.0730592157
+         0.117678    0.977255    0.0694469  0 -0.0730592157
+        -0.00828808 -0.0162712   1.18894    0 -0.0730592157
+         0           0           0          1  0" />
+    </filter>
+</svg>
+*/
+
+/*
+Firefoxだと上手く動かない?
+object[type="image/jpeg"] {
+    filter: url('data:image/svg+xml, <svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink"><filter id="bt601bt709"><feColorMatrix in="SourceGraphic" type="matrix" values="1.24452 -0.0671069 -0.0130327 0 -0.0730592157  0.117678 0.977255 0.0694469 0 -0.0730592157  -0.00828808 -0.0162712 1.18894 0 -0.0730592157  0 0 0 1 0" /></filter></svg>#bt601bt709');
+}
+*/
+
+/* 継承しない拡張特性の初期値 */
+:where(*) {
+    --used-key-list: basic data-button;
+    --border-left-color-index: 0;
+    --border-right-color-index: 0;
+    --border-top-color-index: 0;
+    --border-bottom-color-index: 0;
+}
+
+arib-bg {
+    background-color: var(--background-color) !important; /* 全称セレクタ対策 */
+    background-image: var(--background-image2) !important;
+    background-size: var(--background-size) !important;
+    width: 100% !important;
+    height: 100% !important;
+    position: absolute !important;
+    left: 0px !important;
+    top: 0px !important;
+    right: 0px !important;
+    bottom: 0px !important;
+    padding: 0px !important;
+    margin: 0px !important;
+}
+
+arib-text, arib-cdata {
+    display: inline !important;
+    font: inherit !important;
+    letter-spacing: inherit !important;
+    text-align: inherit !important;
+    visibility: unset !important;
+    border: none !important;
+    background: none !important;
+    padding: 0px !important;
+    margin: 0px !important;
+}
+
+p, input {
+    white-space: break-spaces !important;
+}
+
+html {
+    width: unset !important;
+    height: unset !important;
+    color-scheme: initial;
+}

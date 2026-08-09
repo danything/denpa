@@ -1,3 +1,5 @@
+// @ts-nocheck
+// 借りもの。中身は書き換えない ([README](../README.md))。denpa 側の型検査は効いたまま
 // /api/ws?param=JSON
 
 // Mirakurun系のAPIを使ってtsを取得
@@ -63,7 +65,7 @@ export type PMTMessage = {
     components: ComponentPMT[],
 };
 
-import type { MediaType as EMediaType } from "./entity_parser";
+import { MediaType as EMediaType } from "./entity_parser";
 
 export type MediaType = EMediaType;
 export type ModuleFile = {

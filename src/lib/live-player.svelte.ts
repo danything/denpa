@@ -20,6 +20,7 @@ import {
 } from '$lib/live';
 import { CLOCK, type Cue, currentCue, insertCue, trimCues } from '$lib/ts/captions';
 import { CEILING, FLOOR, nextTarget, pacing } from '$lib/ts/pacing';
+import type { ResponseMessage } from '$lib/vendor/web-bml/server/ws_api';
 
 export type LiveState = 'idle' | 'connecting' | 'playing' | 'error';
 
@@ -206,6 +207,16 @@ export function livePlayer() {
     let warning = $state('');
     /** 前の絵を貼っているか。**次の絵が出るまでの黒を埋める** */
     let holding = $state(false);
+    /**
+     * データ放送を出すか。**押して切り替える** (テレビの d ボタン)。
+     *
+     * サーバは頼まれてから解くので (`server/live.ts` の `wantData`)、押すまでは
+     * 何も届かない。**局を変えても押したままにする** — 押した人にとっては
+     * 「出している」が続いているので、そのつど押し直させる筋合いが無い
+     */
+    let showData = $state(false);
+    /** データ放送の知らせを渡す先。**描いているものが居るときだけ** */
+    let onData: ((message: ResponseMessage) => void) | null = null;
     /** 字幕を出すか。**押して切り替えられる** (テレビの字幕ボタン) */
     let captions = $state(true);
     /**
@@ -919,6 +930,29 @@ export function livePlayer() {
         swapCodec(next);
     }
 
+    /**
+     * データ放送を出す・やめる (テレビの d ボタン)。
+     *
+     * **サーバは頼まれてから解く。** 押すまでは1バイトも届かないかわりに、
+     * 押してから出るまでカルーセルが一周するのを待つことになる
+     * (`server/databroadcast.ts`)。
+     */
+    function setData(on: boolean): void {
+        if (showData === on) return;
+        showData = on;
+        socket?.send(JSON.stringify({ type: 'data', on } satisfies Command));
+    }
+
+    /**
+     * データ放送の知らせを受け取る先を預かる。**描く側が居るときだけ渡す。**
+     *
+     * 渡す形は借りものの取り決めそのまま (`ResponseMessage`) なので、
+     * ここは素通しでいい ([vendor/web-bml](./vendor/web-bml/README.md))
+     */
+    function listenData(handler: ((message: ResponseMessage) => void) | null): void {
+        onData = handler;
+    }
+
     /** 中身。**断り書きを消さない**ので、戻すときにも使える */
     function swapCodec(next: LiveCodec): void {
         if (tuned === null || element === null || next === codec) return;
@@ -1008,6 +1042,12 @@ export function livePlayer() {
              * 戻っていた。繋いだままの選び直しでは効くので、余計に分かりにくい)
              */
             ws.send(JSON.stringify({ type: 'tune', ...target } satisfies Command));
+            /*
+             * **繋ぎ直したら頼み直す。** データ放送を出すかどうかはサーバ側では
+             * 繋ぎ (Viewer) に紐づいているので、切れると忘れられる。局を変える
+             * だけなら覚えている (`Session.add`)
+             */
+            if (showData) ws.send(JSON.stringify({ type: 'data', on: true } satisfies Command));
         };
 
         ws.onerror = () => {
@@ -1075,6 +1115,19 @@ export function livePlayer() {
                     }
                 }
             }
+            /*
+             * **データ放送。** 中身は `ResponseMessage` の JSON
+             * ([ts/bml.ts](./ts/bml.ts) が組み立てたもの)。
+             *
+             * 描いているものが居ないときは捨てる — 押していなければサーバも
+             * 送ってこないが、押した直後にまとめて届くぶんが、器を作るより
+             * 先に来ることがある
+             */
+            if (kind === CHANNEL.data) {
+                onData?.(JSON.parse(new TextDecoder().decode(body)) as ResponseMessage);
+                return;
+            }
+
             if (kind === CHANNEL.videoInit || kind === CHANNEL.videoMedia) {
                 // 戻れる幅を決めるのに、どれだけ来ているかを数える (`keepFor`)
                 if (receivedFrom === 0) receivedFrom = Date.now();
@@ -1299,6 +1352,12 @@ export function livePlayer() {
             return speed;
         },
         setSpeed,
+        /** データ放送を出しているか */
+        get showData() {
+            return showData;
+        },
+        setData,
+        listenData,
         /** 字幕を出しているか */
         get captions() {
             return captions;

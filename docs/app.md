@@ -33,7 +33,8 @@ EPGStation の置き換えとして作ったもので、エンコード設定は
 | `src/lib/ts/bml.ts` | データ放送を解く (PMT の記述子 → カルーセル → ファイル) |
 | `src/lib/ts/dsmcc.ts` | データカルーセル (DSM-CC) の DII/DDB。**ロゴとデータ放送で分け合う** |
 | `src/lib/ts/carousel.ts` | 配ったものを覚えておく (遅れて繋いだ人に配り直すため) |
-| `src/lib/vendor/web-bml/` | 借りもの。渡す形の取り決めと multipart の解体 ([README](../src/lib/vendor/web-bml/README.md)) |
+| `src/lib/components/player/DataBroadcast.svelte` | データ放送を映像の上に重ねる (d ボタン。押されるまで読み込まない) |
+| `src/lib/vendor/web-bml/` | 借りもの。BML を描くところ ([README](../src/lib/vendor/web-bml/README.md)) |
 | `src/lib/pgs.ts` | PGS (Blu-ray の字幕) の**組み立てと読み出し**。ffmpeg に符号器が無いので自前。読むほうはブラウザで使う (`readSup`) |
 | `src/lib/download.ts` | 録画を落とすURLの組み立て (資格情報を埋める) |
 | `src/lib/ts/watch.ts` | 録画を観るときの押したことの読み方 (2回押し・チャプター送り・続きの位置。DOM を触らない) |
