@@ -1,10 +1,10 @@
 <script lang="ts">
+    import { goto } from '$app/navigation';
     import { submitting } from '$lib/actions';
     import ProgramDetail from '$lib/components/ProgramDetail.svelte';
     import Toasts, { type Notice } from '$lib/components/Toasts.svelte';
     import { liveUpdates } from '$lib/live-updates.svelte';
-    import { playLinks, withCredentials } from '$lib/play';
-    import { playTarget } from '$lib/play.svelte';
+    import { withCredentials } from '$lib/download';
     import {
         badgeClass,
         date,
@@ -30,22 +30,14 @@
 
     const active = ['scheduled', 'conflict', 'recording'];
 
-    // どのプレイヤーに渡すか (play.svelte.ts)。番組表の画面と同じ決め方
-    const target = playTarget(() => data);
-    const platform = $derived(target.platform);
-    const origin = $derived(target.origin);
-
-    /** プレイヤーに渡すので絶対URLにする */
-    const fileUrl = (id: number) => `${origin}/api/recordings/${id}/file`;
-
     /*
-     * ダウンロードも資格情報を URL に入れる。ブラウザは画面を開いたときの認証を
+     * ダウンロードは資格情報を URL に入れる。ブラウザは画面を開いたときの認証を
      * ダウンロードに引き継がないので、素のURLだと 401 になって落ちてこない。
      * ?download=1 でサーバが添付として返し、ファイル名も付く
      */
     const downloadUrl = (id: number, source?: 'ts' | 'encoded') =>
         withCredentials(
-            `${origin}/api/recordings/${id}/file?download=1${source === undefined ? '' : `&source=${source}`}`,
+            `${data.origin}/api/recordings/${id}/file?download=1${source === undefined ? '' : `&source=${source}`}`,
             data.credentials,
         );
 
@@ -153,45 +145,49 @@
      * 行のどこを押しても、その行でいちばんやりたいことをする。
      * ボタンやリンクを押したときは邪魔しない。
      *
-     * 録画なら**再生**。一覧を開くのは観るためなので、そこを1回で通す。
-     * 中身を読みたいときは行の中の「詳細」から。
-     * 予約は再生するものが無いので、そのまま詳細を出す。
+     * 録画なら**観る画面へ** (`/watch/<id>`)。一覧を開くのは観るためなので、
+     * そこを1回で通す。中身を読みたいときは行の中の「詳細」から。
+     * 予約は観るものが無いので、そのまま詳細を出す。
+     *
+     * 跳ぶのは `goto` で — `location.href` だと**文書ごと読み込み直しになり、
+     * 押した勢い (user activation) がそこで切れる**。観る画面は開いた時点で
+     * 再生と全画面を始めるので (`watch/[id]`)、そこが切れると
+     * 「押したのに何も起きない」になる
      */
-    function rowClick(event: MouseEvent | KeyboardEvent, play: string | null, open: () => void): void {
+    function rowClick(event: MouseEvent | KeyboardEvent, watch: string | null, open: () => void): void {
         if (event instanceof KeyboardEvent && event.key !== 'Enter') return;
         if ((event.target as HTMLElement).closest('a, button, input, label')) return;
-        if (play !== null) location.href = play;
+        if (watch !== null) void goto(watch);
         else open();
     }
 
     /**
-     * その録画を開くリンク。再生できないものには無い。
+     * その録画を観る画面。**観られないものには無い。**
      *
-     * ブラウザは MPEG-2 も AV1+Opus の mkv も素直には再生できないので、
-     * 端末に入っているプレイヤーに URL を渡して開かせる (play.ts)
+     * **観られるのは焼いたものだけ。** 生TSは MPEG-2 で、ブラウザに復号器が
+     * 無い (docs/stream.md §5.5)。焼き上がるまでは詳細から落として観てもらう。
+     *
+     * 消したものと、**録画そのものが失敗したもの**も外す。後者は途中まで書けた
+     * ファイルが残っていることはあるが、頭からスクランブルが掛かっていたり
+     * 中身が空だったりで、押しても何も映らない
      */
-    function playLink(rec: (typeof data.recordings)[number]) {
-        if (!playable(rec)) return null;
-        return playLinks(fileUrl(rec.id), rec.name, platform, data.credentials)[0] ?? null;
+    function watchLink(rec: (typeof data.recordings)[number]): string | null {
+        if (rec.deleted_at !== null || rec.state === 'failed') return null;
+        if (rec.library_path === null) return null;
+        return `/watch/${rec.id}`;
     }
 
     /**
-     * 観られる録画かどうか。
+     * ファイルを持っているか。**落とす口を出すかどうか。**
      *
-     * **録画そのものが失敗したものは観られない。** 途中まで書けたファイルが
-     * 残っていることはあるが、頭からスクランブルが掛かっていたり中身が空だったりで、
-     * 押してもプレイヤーが黙って閉じるだけだった。録り直しの口も同じ理由で出さない
-     * (元になる生TSが使えないので、やり直しても同じところで失敗する)
+     * **エンコードの失敗はここに出てこない。** 落ちたのは焼き直しのほうで
+     * 生TSは無事なので、落とせるし録り直しもできる。エンコードで落ちると
+     * 録画の状態まで 'failed' にしていた頃は、中身のあるTSを持っているのに
+     * ダウンロードまで消えていた
      */
     function playable(rec: (typeof data.recordings)[number]): boolean {
         if (rec.deleted_at !== null) return false;
         if ((rec.library_path ?? rec.ts_path) === null) return false;
-        /*
-         * **エンコードの失敗はここに出てこない。** 落ちたのは焼き直しのほうで
-         * 生TSは無事なので、観られるし、やり直しもできる。
-         * エンコードで落ちると録画の状態まで 'failed' にしていた頃は、
-         * 中身のあるTSを持っているのに再生もダウンロードもできなかった
-         */
         return rec.state !== 'failed';
     }
 
@@ -414,7 +410,7 @@
                             戻らないので、生TSがあるときだけ出す。
                             録画中は元がまだ書かれている最中なので触らせない
                         -->
-                        {@const link = playLink(rec)}
+                        {@const link = watchLink(rec)}
                         {@const canPlay = link !== null}
                         {@const shown = rowState(rec)}
                         <!--
@@ -438,9 +434,8 @@
                             class="group hover:bg-base-200/60 relative cursor-pointer p-3"
                             role="button"
                             tabindex="0"
-                            onclick={(event) => rowClick(event, link?.href ?? null, () => openRecording(rec))}
-                            onkeydown={(event) =>
-                                rowClick(event, link?.href ?? null, () => openRecording(rec))}
+                            onclick={(event) => rowClick(event, link, () => openRecording(rec))}
+                            onkeydown={(event) => rowClick(event, link, () => openRecording(rec))}
                         >
                             <div class="flex flex-wrap items-start gap-x-3 gap-y-2">
                                 <!--

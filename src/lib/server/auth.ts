@@ -102,13 +102,31 @@ export function enabled(): boolean {
  *
  * 唯一の例外が OIDC で、**画面のぶんはそちらに譲る**。両方掛けると、ブラウザの
  * 認証ダイアログを閉じないとログイン画面にすら行けない。ファイルの口は
- * どちらにせよベーシック認証のままなので、守りに穴は空かない。
+ * どちらにせよベーシック認証**も**受けるので、守りに穴は空かない。
  */
 export function protects(pathname: string): boolean {
     if (!enabled()) return false;
     if (isOpenPath(pathname)) return false;
     if (isFilePath(pathname)) return true;
     return !oidcEnabled();
+}
+
+/**
+ * ファイルの口を、**ログイン済みの画面にも開けるか**。
+ *
+ * ファイルの口だけはベーシック認証で守ってある — VLC も Kodi も Infuse も
+ * ログイン画面へのリダイレクトを扱えないため。**そこは変えない。**
+ *
+ * ただし `<video>` が同じ口を取りに来るようになった (録画をブラウザで観る)。
+ * OIDC で入った人はベーシック認証の資格情報を持っていないので、そのままだと
+ * **映像を出そうとした瞬間にブラウザの認証ダイアログが立つ**。
+ *
+ * **足すのは「ログイン済みなら通す」だけ。** 資格情報を持っている相手は
+ * これまでどおり通り、持っていない相手が増えることはない (どちらも
+ * 「この denpa に入れる人」であることに変わりはない)
+ */
+export function sessionMayRead(pathname: string, loggedIn: boolean): boolean {
+    return loggedIn && oidcEnabled() && isFilePath(pathname);
 }
 
 /**

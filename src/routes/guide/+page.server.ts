@@ -1,7 +1,7 @@
 import { fail } from '@sveltejs/kit';
 import { queryAll, queryOne } from '$lib/server/db';
+import { downloadContext } from '$lib/server/download';
 import { airing, CURRENT_SERVICES, SERVICE_ORDER } from '$lib/server/epg';
-import { playContext } from '$lib/server/play';
 import { cancel, reserve } from '$lib/server/reservations';
 import { RESERVATION_STATE } from '$lib/server/schema';
 import type { ChannelType, Program, Service } from '$lib/types';
@@ -41,7 +41,7 @@ interface GridProgram extends Program {
  * キーワードなし: 時間×チャンネルのグリッド。並びを眺めて選ぶとき用
  * キーワードあり: 全チャンネル横断のリスト。探しているものが決まっているとき用
  */
-export async function load({ url, request }) {
+export async function load({ url }) {
     const type = (TYPES.find((t) => t === url.searchParams.get('type')) ?? 'GR') as ChannelType;
 
     // 既定は今日の放送日。めくるときだけ start が付く
@@ -114,8 +114,8 @@ export async function load({ url, request }) {
         counts: queryOne<{ programs: number; services: number }>(
             'SELECT (SELECT COUNT(*) FROM programs) AS programs, (SELECT COUNT(*) FROM services) AS services',
         )!,
-        // 録れた番組は詳細からそのまま再生できる。宛先の決め方は録画一覧と同じ (server/play.ts)
-        ...playContext(request, url),
+        // 録れた番組は詳細からそのまま観られる。落とすときの資格情報は録画一覧と同じ
+        ...downloadContext(url),
     };
 }
 

@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { duration, durationMs, eta, percent, recordedDuration } from './format';
+import { clock, duration, durationMs, eta, percent, recordedDuration } from './format';
 
 const MIN = 60_000;
 
@@ -19,6 +19,27 @@ describe('長さの表示', () => {
 
     test('放送日時からも出せる', () => {
         expect(duration(0, 30 * MIN)).toBe('30分');
+    });
+});
+
+describe('再生位置の表示', () => {
+    test('分と秒。秒は2桁に揃える', () => {
+        expect(clock(0)).toBe('0:00');
+        expect(clock(9)).toBe('0:09');
+        expect(clock(754)).toBe('12:34');
+    });
+
+    /** 短いものに「0:12:34」と出ると、位を数えないと読めない */
+    test('1時間を超えたときだけ時間を出す', () => {
+        expect(clock(3599)).toBe('59:59');
+        expect(clock(3723)).toBe('1:02:03');
+    });
+
+    /** 尺が読めるまで duration は NaN。押した拍子に負になることもある */
+    test('読めない値でも 0:00 を返す', () => {
+        expect(clock(Number.NaN)).toBe('0:00');
+        expect(clock(-5)).toBe('0:00');
+        expect(clock(Number.POSITIVE_INFINITY)).toBe('0:00');
     });
 });
 

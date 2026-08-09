@@ -1,5 +1,5 @@
 import { redirect } from '@sveltejs/kit';
-import { authorized, challenge, needsLogin, protects, trusted } from '$lib/server/auth';
+import { authorized, challenge, needsLogin, protects, sessionMayRead, trusted } from '$lib/server/auth';
 import { handleDav } from '$lib/server/dav';
 import { start } from '$lib/server/runtime';
 import { COOKIE, find } from '$lib/server/session';
@@ -35,7 +35,20 @@ export async function handle({ event, resolve }) {
      */
     const open = trusted(clientAddress(event));
 
-    if (!open && protects(pathname) && !authorized(event.request.headers.get('authorization'))) {
+    /*
+     * **ログインの控えは先に読む。** ファイルの口 (`/api/recordings/<id>/file`) は
+     * ベーシック認証で守ってあるが、**録画をブラウザで観るようになったので
+     * `<video>` もそこを取りに来る**。OIDC で入った人は資格情報を持っていないので、
+     * このままだと映像を出そうとした瞬間に認証ダイアログが立つ (`sessionMayRead`)
+     */
+    const session = find(event.cookies.get(COOKIE));
+
+    if (
+        !open &&
+        protects(pathname) &&
+        !authorized(event.request.headers.get('authorization')) &&
+        !sessionMayRead(pathname, session !== null)
+    ) {
         return challenge();
     }
 
@@ -46,7 +59,6 @@ export async function handle({ event, resolve }) {
      * `/login/callback` に閉じてあり、普段のリクエストで外へ出ることはない。
      */
     if (!open && needsLogin(pathname)) {
-        const session = find(event.cookies.get(COOKIE));
         if (session !== null) {
             event.locals.user = { subject: session.subject, name: session.name };
         } else {

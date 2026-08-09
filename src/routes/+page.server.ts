@@ -1,10 +1,10 @@
 import { statSync } from 'node:fs';
 import { fail } from '@sveltejs/kit';
 import { database, queryAll, queryOne } from '$lib/server/db';
+import { downloadContext } from '$lib/server/download';
 import { cancel as cancelEncode, enqueue, pump } from '$lib/server/encoder';
 import { emit } from '$lib/server/events';
 import { deleteRecordingFiles, reconcile } from '$lib/server/files';
-import { playContext } from '$lib/server/play';
 import { cancel, restore } from '$lib/server/reservations';
 import { RESERVATION_STATE } from '$lib/server/schema';
 import { settings } from '$lib/server/settings';
@@ -70,7 +70,7 @@ function rawSize(row: Recording): number | null {
  * 「これから何が録れるか」と「録れたものが今どうなっているか」は続きものなので、
  * 行き来せずに見えるほうがいい。左に予約、右に録画。
  */
-export function load({ url, request }) {
+export function load({ url }) {
     const showFinished = url.searchParams.get('all') === '1';
     const showDeleted = url.searchParams.get('deleted') === '1';
 
@@ -162,8 +162,8 @@ export function load({ url, request }) {
         recordings,
         showFinished,
         showDeleted,
-        // 再生リンクの宛先と資格情報 (server/play.ts)。番組表の画面にも同じものを渡す
-        ...playContext(request, url),
+        // ダウンロードURLに埋める資格情報 (server/download.ts)。番組表の画面にも同じものを渡す
+        ...downloadContext(url),
     };
 }
 

@@ -45,8 +45,13 @@ test.describe('エンコードの失敗', () => {
             .first();
         await expect(failed.getByTestId('recording-state')).toHaveText('エンコード失敗');
 
-        // **生TSは無事なので観られる** (行そのものが再生)
-        await expect(failed.getByTestId('play-hint')).toHaveCount(1);
+        /*
+         * **ブラウザでは観られない。** 焼けていないので残っているのは生TSだけで、
+         * あれは MPEG-2 — ブラウザに復号器が無い (docs/stream.md §5.5)。
+         * 行に再生の印を出すと、押しても何も映らないところへ連れて行くことになる。
+         * **落とす口は残る** (生TSは無事なので、手元のプレイヤーでは観られる)
+         */
+        await expect(failed.getByTestId('play-hint')).toHaveCount(0);
 
         // 理由は行の「詳細」から。ffmpeg の出力は長いので一覧には貼らない
         await failed.getByTestId('detail-button').click();

@@ -33,6 +33,23 @@ export function duration(startAt: number, endAt: number): string {
 }
 
 /**
+ * 再生位置の表示。**`12:34` / `1:02:03`。**
+ *
+ * `durationMs` は「27分」のように読み物の書き方をするもので、動かしている間の
+ * 表示には向かない (秒が見えないと、10秒送ったことが分からない)。
+ * **1時間を超えたときだけ時間を出す** — 短いものに `0:12:34` と出ると、
+ * 位を数えないと読めない
+ */
+export function clock(seconds: number): string {
+    if (!Number.isFinite(seconds) || seconds < 0) seconds = 0;
+    const whole = Math.floor(seconds);
+    const s = whole % 60;
+    const m = Math.floor(whole / 60) % 60;
+    const h = Math.floor(whole / 3600);
+    return h > 0 ? `${h}:${pad(m)}:${pad(s)}` : `${m}:${pad(s)}`;
+}
+
+/**
  * 録画の長さ。実際に録れた長さがあればそちらを出す。
  *
  * 番組表の尺 (end_at - start_at) は予定でしかなく、途中で止めたときや

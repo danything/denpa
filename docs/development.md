@@ -72,36 +72,6 @@ CI では**台を増やして**います。3つに割って別のランナーに
 偽番組の尺 (BSは5秒) と録画の前後マージンに当たります。詰めると
 「録り始めより先に番組が終わる」ようになって、かえって不安定になります。
 
-## 再生の受け口 (Windows / Mac)
-
-入れ方と中身は [player.md](player.md)。`denpa://` を登録する側は、**壊れていても OS が黙って何もしないだけ**という
-一番わかりにくい壊れ方をします。どちらも Windows / Mac でなくても確かめられる
-検証スクリプトを付けてあるので、触ったら必ず通してください。
-
-```sh
-docker run --rm -v "$PWD/windows:/w:ro" mcr.microsoft.com/powershell:latest \
-    pwsh -NoProfile -File /w/verify.ps1
-sh mac/verify.sh
-```
-
-`verify.ps1` は、レジストリに入れる1行が **Windows の引数分解 (CommandLineToArgvW) を
-通っても欠けないこと**まで見ます。`-Command "..."` の中に二重引用符が1つでもあると
-そこで値が打ち切られ、PowerShell は残りを空白で繋いで動かしてしまうので、
-構文エラーも出ないまま「番組名がくくられていない」状態だけが残ります。
-`denpa.ps1` の中で二重引用符を書かず `$q` を組み立てているのはこのためです。
-
-`verify.sh` は `curl … | sh` で流し込まれた場合 (自分の場所が分からない状態) も
-見ています。
-
-> `.ps1` は **UTF-8 BOM 付き + CRLF** で置いてあります。PowerShell 5.1 は BOM が
-> 無いと ANSI (日本語環境では CP932) として読み、CP932 の先行バイトが次の ASCII 文字を
-> 巻き込むので `'` や `}` が消えて構文エラーになります。`.gitattributes` で保っています。
-> WSL のパスから直接実行すると「セキュリティの警告」が出ます。
-
-> **Mac は実機での確認が取れていません。** `verify.sh` が見ているのはリンクの処理までで、
-> アプレットの組み立てと登録 (`osacompile` / `PlistBuddy` / `lsregister`) は
-> macOS がないと走らせられません。
-
 ## イメージ
 
 `Dockerfile` が denpa 本体、`agent/Dockerfile` がチューナー側です。

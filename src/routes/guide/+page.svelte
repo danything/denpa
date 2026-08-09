@@ -3,8 +3,7 @@
     import { dragScroll, submitting } from '$lib/actions';
     import ProgramDetail from '$lib/components/ProgramDetail.svelte';
     import { genreTint, stateLabel, time } from '$lib/format';
-    import { playLinks, withCredentials } from '$lib/play';
-    import { playTarget } from '$lib/play.svelte';
+    import { withCredentials } from '$lib/download';
 
     let { data, form } = $props();
 
@@ -165,11 +164,6 @@
         const handle = requestIdleCallback(fetchBoth, { timeout: 3000 });
         return () => cancelIdleCallback(handle);
     });
-
-    // 番組表からそのまま再生できるようにする。宛先の決め方は録画一覧と同じ
-    const target = playTarget(() => data);
-    const platform = $derived(target.platform);
-    const origin = $derived(target.origin);
 
     /** 予約を取り消せるのはこれから録るものだけ。録り終わったものに出しても何も起きない */
     const CANCELABLE = ['scheduled', 'conflict', 'recording'];
@@ -453,22 +447,25 @@
                     <!--
                         録れているなら、ここからそのまま観られるようにする。
                         番組表で見つけた番組を観るのに、録画一覧へ戻って同じ番組を
-                        探し直させるのは遠回り
+                        探し直させるのは遠回り。
+
+                        **観られるのは焼けたものだけ** (`library_path`)。生TSは
+                        MPEG-2 で、ブラウザに復号器が無い (docs/stream.md §5.5)。
+                        焼き上がるまでは落として観てもらう
                     -->
-                    {#each playLinks(`${origin}/api/recordings/${program.recording_id}/file`, program.recording_name ?? program.name, platform, data.credentials) as link (link.href)}
+                    {#if program.library_path !== null}
                         <a
                             class="btn btn-primary"
-                            href={link.href}
+                            href="/watch/{program.recording_id}"
                             data-testid="detail-play"
-                            title={link.note ?? ''}
                         >
-                            {link.label}
+                            再生
                         </a>
-                    {/each}
+                    {/if}
                     <a
                         class="btn btn-ghost"
                         href={withCredentials(
-                            `${origin}/api/recordings/${program.recording_id}/file?download=1`,
+                            `${data.origin}/api/recordings/${program.recording_id}/file?download=1`,
                             data.credentials,
                         )}
                         download

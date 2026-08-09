@@ -5,13 +5,11 @@ on:
     branches: [main]
     paths-ignore:
       - 'k3s/**'
-      - 'windows/**'
       - 'docs/**'
       - '**.md'
   pull_request:
     paths-ignore:
       - 'k3s/**'
-      - 'windows/**'
       - 'docs/**'
       - '**.md'
   workflow_dispatch: {}

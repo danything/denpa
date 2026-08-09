@@ -171,7 +171,7 @@ spec:
               valueFrom:
                 secretKeyRef: { name: denpa-oidc, key: group }
             # **LAN の網から来たときだけ、何も聞かずに通す。**
-            # ベーシック認証も OIDC も掛からないので、プレイヤー (VLC / Kodi /
+            # ベーシック認証も OIDC も掛からないので、プレイヤー (Kodi /
             # Infuse) に資格情報を入れずに使える。
             #
             # **見るのは住所だけ。** どの名前で来たかは問わない (LAN からは
