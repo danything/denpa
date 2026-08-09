@@ -101,8 +101,14 @@
 
     /**
      * 早送りの速さ。**ライブの追っかけと同じ並び** (`ts/pacing` の `SPEEDS`)。
-     * 録画は放送より先が無いという縛りが無いので、いつでも選べる
+     * 録画は放送より先が無いという縛りが無いので、いつでも選べる。
+     *
+     * **選んだ値は覚える。** 倍速で観る人はたいてい次も倍速で、開くたびに
+     * 選び直すことになる。覚えるのは端末ごと (`localStorage`) — 同じ人でも
+     * 手元の端末と居間のテレビで好みが違う。続きの位置 (`resume_ms`) を
+     * サーバに置いているのとは逆の理由
      */
+    const SPEED_KEY = 'watch-speed';
     let speed = $state(1);
 
     /** どこまで観たかを書き送る間隔 (ms)。**細かく送るものではない** */
@@ -126,6 +132,8 @@
      */
     onMount(() => {
         coarse = window.matchMedia('(pointer: coarse)').matches;
+        // 前に選んだ速さで始める。覚えるのは端末ごと
+        setSpeed(storedSpeed(), false);
         void loadChapters();
         loadDetail();
         // 字幕は既定で出す (ライブと同じ)。持っていない録画では何も起きない
@@ -236,10 +244,27 @@
      * 早送りの速さを変える。**音は残す** — ブラウザは倍速でも音程を保つので、
      * 消してしまうと早く観たいだけの人が黙って観ることになる
      */
-    function setSpeed(value: number): void {
+    function setSpeed(value: number, remember = true): void {
         speed = value;
         if (video !== null) video.playbackRate = value;
+        if (remember) {
+            try {
+                localStorage.setItem(SPEED_KEY, String(value));
+            } catch {
+                // 覚えられなくても観るのに支障は無い (プライベート窓など)
+            }
+        }
         controls.stir();
+    }
+
+    /** 前に選んだ速さを引き出す。読めない・知らない値なら等速 */
+    function storedSpeed(): number {
+        try {
+            const saved = Number(localStorage.getItem(SPEED_KEY));
+            return SPEEDS.includes(saved as (typeof SPEEDS)[number]) ? saved : 1;
+        } catch {
+            return 1;
+        }
     }
 
     /** 速さを1段ずつ動かす。端では止まる */
@@ -415,6 +440,12 @@
     }
 
     const current = $derived(chapterAt(chapters, at));
+
+    /**
+     * あと何分で終わるか。**倍速のぶんは割る** — 2倍で観ているときに
+     * 「残り30分」と出ても、掛かるのは15分なので当てにならない
+     */
+    const remaining = $derived(Math.max(0, (length - at) / (speed || 1)));
 
     /**
      * 左に出す中身。**録画の行が持っているぶんだけ**で組み立てる。
@@ -746,8 +777,14 @@
                             />
                         {/if}
 
+                        <!--
+                            **残りも出す。** 「あと何分で終わるか」は、途中で
+                            観るのをやめるかどうかを決めるのに要る。倍速のときは
+                            **実際に掛かる時間**にする (1.5倍なら残りも1.5で割る)
+                        -->
                         <span class="px-1 text-xs tabular-nums" data-testid="watch-clock">
                             {clock(at)} / {clock(length)}
+                            <span class="text-white/70">残り {clock(remaining)}</span>
                         </span>
                         {#if current !== null}
                             <span class="badge badge-sm badge-ghost" data-testid="watch-chapter">

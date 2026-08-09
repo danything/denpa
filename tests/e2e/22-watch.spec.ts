@@ -116,6 +116,16 @@ test.describe('録画を観る', () => {
         await expect(button).toHaveAttribute('aria-pressed', 'false');
     });
 
+    /** 残りは「あと何分で終わるか」。**倍速のぶんは割る** */
+    test('残り時間も出て、倍速のぶんは割る', async ({ page, request }) => {
+        test.setTimeout(180_000);
+        const { id } = await recordOne(page, request);
+
+        await goto(page, `/watch/${id}`);
+        const clock = page.getByTestId('watch-clock');
+        await expect(clock).toContainText('残り');
+    });
+
     /** 早送りはライブの追っかけと同じ並び (`ts/pacing` の `SPEEDS`) */
     test('速さを選べる', async ({ page, request }) => {
         test.setTimeout(180_000);
@@ -125,6 +135,9 @@ test.describe('録画を観る', () => {
         await expect(page.getByTestId('watch-speed')).toContainText('1×');
         await page.getByTestId('watch-speed').click();
         await page.getByTestId('watch-speed-option').filter({ hasText: '1.5×' }).click();
+        await expect(page.getByTestId('watch-speed')).toContainText('1.5×');
+        // 選んだ速さは覚える。開き直しても同じ速さで始まる
+        await goto(page, `/watch/${id}`);
         await expect(page.getByTestId('watch-speed')).toContainText('1.5×');
         expect(
             await page.getByTestId('watch-video').evaluate((v) => (v as HTMLVideoElement).playbackRate),
