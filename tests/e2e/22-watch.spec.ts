@@ -217,8 +217,23 @@ test.describe('録画を観る', () => {
         test.setTimeout(180_000);
         const { id } = await recordOne(page, request);
 
-        await page.setViewportSize({ width: 1440, height: 900 });
+        await page.setViewportSize({ width: 1920, height: 960 });
+
+        /*
+         * **周りの余白は他の画面と同じ。** 外の `<main>` が持っているぶんだけで、
+         * ここでは足さない・頭打ちにもしない。広い画面で中央に寄せていた頃は、
+         * 左右だけ他より広かった
+         */
+        const edge = async (): Promise<number> =>
+            page.evaluate(() => {
+                const box = document.querySelector('main')?.firstElementChild;
+                return Math.round(box?.getBoundingClientRect().left ?? -1);
+            });
+        await goto(page, '/');
+        const other = await edge();
+
         await goto(page, `/watch/${id}`);
+        expect(await edge()).toBe(other);
         /*
          * 偽 ffmpeg の置くファイルには絵が無く、`<video>` は既定の 300x150 に
          * なる。**背の高い映像のときに揃うか**が見たいので、高さだけ与える
