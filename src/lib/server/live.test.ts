@@ -337,26 +337,28 @@ describe('H.264 は速さを優先する', () => {
     });
 
     /**
-     * **山だけは抑える。**
+     * **山も抑えない。**
      *
-     * 上の 8.2 Mbit/s は動きの少ない場面での値で、高校野球の中継を25分受けた
-     * ときの平均は **14.5 Mbit/s** だった (素の WebSocket で 2.3GB)。実機で
-     * 「一瞬止まって遅延が増える」が出ていて、送り出す側は入口 (TLS) まで
-     * 含めて途切れ0、**AV1 (6.6 Mbit/s) に替えると目に見えて減る** —
-     * 宅内でも無線は割り込む、という話。
+     * 一時 `-maxrate 8M -bufsize 8M` を入れて、動きの多い場面の 14.5 Mbit/s を
+     * 8.4 Mbit/s まで削っていた — 実機の「一瞬止まって遅延が増えていく」が
+     * 流量の話だと見立てたため。**見立てが違った** — 削ったあとも変わらず、
+     * 手元のブラウザで測ると 8.4 Mbit/s のまま**ちょうど60秒ごと**に止まって
+     * いた。原因は受け側の貯め方 (`ts/pacing.ts` の `nextTarget`) で、
+     * **焼き方を触らずに 8分10回 → 6分0回**になった。
      *
-     * `-crf` は付けない (上げると遅くなる) まま、VBV で山だけ削る
+     * 削る理由が無くなったので外す。VBV を回すと動きの多い場面だけ絵が崩れる。
+     * 細い経路のためなら AV1 を選ぶ道がある (`LIVE_CODECS`)
      */
-    test('山だけ抑える。平らな場面は今までどおり', () => {
-        expect(plain()[plain().indexOf('-maxrate') + 1]).toBe('8M');
-        expect(plain()[plain().indexOf('-bufsize') + 1]).toBe('8M');
+    test('山も抑えない (途切れの原因ではなかった)', () => {
+        expect(plain()).not.toContain('-maxrate');
+        // `-bufsize` は `-maxrate` と対でしか効かない。片方だけ残さない
+        expect(plain()).not.toContain('-bufsize');
     });
 
     /** AV1 は量のほう。こちらの設定を持ち込まない */
     test('AV1 には持ち込まない', () => {
         const av1 = encodeArgs(1024, true, stereo, 'av1');
         expect(av1).not.toContain('ultrafast');
-        expect(av1).not.toContain('-maxrate');
         expect(av1).toContain('libsvtav1');
     });
 });
