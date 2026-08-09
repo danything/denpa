@@ -423,6 +423,8 @@ interface Viewer {
     connection: Connection;
     /** init を渡したか。渡す前に中身を送っても MSE は捨てる */
     ready: boolean;
+    /** データ放送を出しているか。**頼まれた人にだけ配る** */
+    wantsData: boolean;
 }
 
 /**
@@ -463,10 +465,17 @@ class Session {
     /**
      * データ放送を解く側 ([databroadcast.ts](./databroadcast.ts))。
      *
-     * **1局に絞ったあとの TS を分ける。** ffmpeg に渡しているのと同じものを
-     * もう一方へ流すだけで、`tee` も別プロセスも要らない (stream.md §5.6)
+     * **頼まれてから作る。** 1局に絞ったあとの TS を分けるだけなので `tee` も
+     * 別プロセスも要らない (stream.md §5.6) が、**見ている人のほとんどは
+     * 押さない**ものなので、全員のぶんを解き続ける理由が無い。
+     *
+     * 引き換えに、**押してから出るまでカルーセルが一周するのを待つ**ことになる
+     * (実測で数秒〜。大きいモジュールほど間隔が空く)。
+     *
+     * 誰も出していなければ畳む — 掴んだままにしても覚えているモジュールが
+     * 古くなるだけで、次に押した人はどのみち回ってくるのを待つ
      */
-    private readonly data = new DataBroadcast(undefined, (message) => this.handData(message));
+    private data: DataBroadcast | null = null;
     private stopped = false;
 
     constructor(
@@ -511,12 +520,35 @@ class Session {
             this.tellOne(viewer, { type: 'captions', tracks: this.list.tracks, track: this.track });
         }
         if (this.showing !== null) this.handCaption(viewer, this.showing);
-        // データ放送も、いま出すのに要るものをまとめて渡す (`DataBroadcast.replay`)
-        for (const message of this.data.replay()) this.tellData(viewer, message);
+    }
+
+    /**
+     * データ放送を出す・やめる。**頼んだ人のぶんだけ。**
+     *
+     * 出すと言った人には、**いま揃っているものをまとめて渡す** — カルーセルは
+     * 回り続けるのでそのうち揃うが、`pmt` だけは1回しか来ないので、逃すと
+     * 何番のコンポーネントを出すかが分からないまま待つことになる
+     */
+    wantData(viewer: Viewer, on: boolean): void {
+        if (viewer.wantsData === on) return;
+        viewer.wantsData = on;
+        if (on) {
+            if (this.data === null) {
+                this.data = new DataBroadcast(undefined, (message) => this.handData(message));
+            }
+            for (const message of this.data.replay()) this.tellData(viewer, message);
+            return;
+        }
+        // 誰も出していなければ畳む
+        if ([...this.viewers].some((held) => held.wantsData)) return;
+        this.data?.close();
+        this.data = null;
     }
 
     remove(viewer: Viewer): void {
         this.viewers.delete(viewer);
+        // 出していた人が抜けたら、誰も出していないかを見直す
+        if (viewer.wantsData) this.wantData(viewer, false);
     }
 
     /**
@@ -687,8 +719,9 @@ class Session {
                 if (this.stopped) break;
                 const out = filter === null ? chunk : filter.filter(chunk);
                 if (out.length === 0) continue;
-                // **絞ったあとを、もう一方へ分ける。** ffmpeg に渡すのと同じもの
-                this.data.feed(out);
+                // **絞ったあとを、もう一方へ分ける。** ffmpeg に渡すのと同じもの。
+                // 誰も出していなければ解かない (`wantData`)
+                this.data?.feed(out);
                 // **書けたことを待つ** (上の説明)。待たないと、転んだときに拾い手が居ない
                 await writer.write(out);
                 await writer.flush();
@@ -755,11 +788,11 @@ class Session {
      * 画面が欠けたままになる (カルーセルは数秒から数十秒で一周する)
      */
     private handData(message: ResponseMessage): void {
-        if (this.viewers.size === 0) return;
-        // **組み立てるのは1回だけ。** `pcr` は毎秒50個ほど来るので、
-        // 人数ぶん JSON にすると人が増えたぶんだけ無駄に働く
+        const wanting = [...this.viewers].filter((viewer) => viewer.wantsData);
+        if (wanting.length === 0) return;
+        // **組み立てるのは1回だけ。** 人数ぶん JSON にすると、人が増えたぶんだけ無駄に働く
         const data = new TextEncoder().encode(JSON.stringify(message));
-        for (const viewer of this.viewers) viewer.connection.send(CHANNEL.data, 0n, data);
+        for (const viewer of wanting) viewer.connection.send(CHANNEL.data, 0n, data);
     }
 
     private tellData(viewer: Viewer, message: ResponseMessage): void {
@@ -814,7 +847,7 @@ class Session {
         this.stopped = true;
         this.aborter.abort();
         this.proc?.kill();
-        this.data.close();
+        this.data?.close();
         sessions.delete(
             key(
                 this.channelType,
@@ -960,7 +993,7 @@ export function warm(
  * HTTP のストリームだと切断の検出が遅れるが、WebSocket なら閉じた時点で分かる。
  */
 export function attend(connection: Connection): void {
-    const viewer: Viewer = { connection, ready: false };
+    const viewer: Viewer = { connection, ready: false, wantsData: false };
     let current: Session | null = null;
 
     const leave = () => {
@@ -972,6 +1005,14 @@ export function attend(connection: Connection): void {
     };
 
     connection.onmessage = (message) => {
+        /*
+         * **データ放送は頼まれてから解く** (`Session.wantData`)。選局の指示とは
+         * 別に受ける — 押すたびに焼き直していたら絵が途切れる
+         */
+        if (message.type === 'data') {
+            current?.wantData(viewer, message.on === true);
+            return;
+        }
         if (message.type !== 'tune') return;
         const channelType = typeof message.channelType === 'string' ? message.channelType : '';
         const channel = typeof message.channel === 'string' ? message.channel : '';

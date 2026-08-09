@@ -12,7 +12,7 @@
  */
 import { copyFileSync, existsSync, mkdirSync, renameSync, statSync, unlinkSync } from 'node:fs';
 import { dirname, join } from 'node:path';
-import mysql from 'mysql2/promise';
+import { SQL } from 'bun';
 import { parseSearchFields, SEARCH_FIELDS } from '$lib/search';
 import type { Recording } from '$lib/types';
 import { database, now, queryOne } from './db';
@@ -24,17 +24,26 @@ import { parseTitle, toHalfWidth } from './title';
 
 const env = (key: string, fallback: string) => process.env[key] ?? fallback;
 
-/** EPGStation の MariaDB。mysql2 は知らないキーを渡すと文句を言うので他と混ぜない */
+/**
+ * EPGStation の MariaDB。**繋ぐのは bun 自身** (`Bun.SQL`)。
+ *
+ * `mysql2` を入れていたが、bun が MySQL を話せるので外した。使っているのは
+ * **引数の無い SELECT を3本と、開いて閉じるだけ** — そのために依存を1つ
+ * 抱える理由が無い。
+ *
+ * 読むだけで、書き込みはしない ([migrate.md](../../../docs/migrate.md))。
+ */
 const connectionConfig = {
-    host: env('EPGSTATION_DB_HOST', 'db'),
+    adapter: 'mysql' as const,
+    hostname: env('EPGSTATION_DB_HOST', 'db'),
     port: Number(env('EPGSTATION_DB_PORT', '3306')),
-    user: env('EPGSTATION_DB_USER', 'root'),
+    username: env('EPGSTATION_DB_USER', 'root'),
     password: env('EPGSTATION_DB_PASSWORD', 'epgstation'),
     database: env('EPGSTATION_DB_NAME', 'epgstation'),
 };
 
 export const source = {
-    host: connectionConfig.host,
+    host: connectionConfig.hostname,
     /** EPGStation のPVCを denpa 側にマウントした場所 */
     recordedDir: env('EPGSTATION_RECORDED_DIR', '/epgstation-recorded'),
 };
@@ -132,10 +141,10 @@ function sourcePath(filePath: string): string | null {
 }
 
 async function fetchRows(): Promise<Row[]> {
-    const db = await mysql.createConnection(connectionConfig);
+    const db = new SQL(connectionConfig);
     try {
         // EPGStation v2 のテーブル構成。エンコード済みがあればそちらを優先して取る
-        const [rows] = await db.query<(Row & mysql.RowDataPacket)[]>(
+        const rows = (await db.unsafe(
             `SELECT r.id, r.name, r.description, r.startAt, r.endAt,
                     r.channelId, c.name AS channelName, c.serviceId, c.networkId,
                     v.filePath, v.type AS fileType, v.size AS fileSize
@@ -144,7 +153,7 @@ async function fetchRows(): Promise<Row[]> {
              LEFT JOIN video_file v ON v.recordedId = r.id
              WHERE r.isRecording = 0
              ORDER BY r.startAt`,
-        );
+        )) as Row[];
         // 1つの録画に生TSとエンコード済みが両方あることがある。エンコード済みを優先
         const best = new Map<number, Row>();
         for (const row of rows) {
@@ -155,7 +164,7 @@ async function fetchRows(): Promise<Row[]> {
         }
         return [...best.values()];
     } finally {
-        await db.end();
+        await db.close();
     }
 }
 
@@ -333,12 +342,12 @@ export function parseGenres(json: string | null): string[] {
  * 重複回避など)がある。落ちるものは落ちると分かるように記録に残す。
  * 時刻指定のルールは番組を探すのではなく時計で録るもので、denpa に対応がないので飛ばす。
  */
-async function importRules(connection: mysql.Connection, options: MigrateOptions): Promise<void> {
-    const [rows] = await connection.query<(RuleRow & mysql.RowDataPacket)[]>(
+async function importRules(connection: SQL, options: MigrateOptions): Promise<void> {
+    const rows = (await connection.unsafe(
         `SELECT id, keyword, ignoreKeyword, GR, BS, CS, SKY, channelIds, genres,
                 isFree, enable, isTimeSpecification, name, description, extended
          FROM rule ORDER BY id`,
-    );
+    )) as RuleRow[];
 
     for (const row of rows) {
         const source = `epgstation:${row.id}`;
@@ -412,11 +421,11 @@ async function importRules(connection: mysql.Connection, options: MigrateOptions
  * ルール由来の予約は、ルールを取り込んだあとに denpa が自分で立て直すので触らない。
  * EPGStation の programId は denpa の番組ID (`programKey`) と作り方が同じなので、直に照合できる。
  */
-async function importReservations(connection: mysql.Connection, options: MigrateOptions): Promise<void> {
-    const [rows] = await connection.query<(ReserveRow & mysql.RowDataPacket)[]>(
+async function importReservations(connection: SQL, options: MigrateOptions): Promise<void> {
+    const rows = (await connection.unsafe(
         `SELECT programId, ruleId, startAt, endAt, name
          FROM reserve WHERE ruleId IS NULL AND isSkip = 0 ORDER BY startAt`,
-    );
+    )) as ReserveRow[];
 
     const at = now();
     for (const row of rows) {
@@ -465,12 +474,12 @@ export async function run(options: MigrateOptions): Promise<MigrateStatus> {
     try {
         // ルールと手動予約を先に入れる。録画のコピーは時間がかかるので、
         // 先にこちらを済ませておけば途中で止めても予約は動き出す
-        const connection = await mysql.createConnection(connectionConfig);
+        const connection = new SQL(connectionConfig);
         try {
             await importRules(connection, options);
             await importReservations(connection, options);
         } finally {
-            await connection.end();
+            await connection.close();
         }
         record(
             `ルール 取り込み ${status_.rules.imported} 件 / 対象外 ${status_.rules.skipped} 件、` +

@@ -32,7 +32,6 @@
         "vite": "^8.0.0"
     },
     "dependencies": {
-        "@chinachu/aribts": "^1.3.5-mirakurun.18",
-        "mysql2": "^3.23.2"
+        "@chinachu/aribts": "^1.3.5-mirakurun.18"
     }
 }

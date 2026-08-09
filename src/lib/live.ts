@@ -131,7 +131,18 @@ export type Notice =
  * **音声もここで頼む。** 選び直しは焼き直しになる (下の説明) ので、
  * 選局と同じ指示に乗せる
  */
-export type Command = {
+export type Command =
+    | TuneCommand
+    /**
+     * データ放送を出す・やめる。
+     *
+     * **頼まれてから解く。** 見ている人のほとんどは押さないものなので、
+     * 全員のぶんを解き続ける理由が無い (`server/databroadcast.ts`)。
+     * 引き換えに、**押してから出るまでカルーセルが一周するのを待つ**
+     */
+    | { type: 'data'; on: boolean };
+
+export type TuneCommand = {
     type: 'tune';
     channelType: string;
     channel: string;
