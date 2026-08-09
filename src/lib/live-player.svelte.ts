@@ -107,6 +107,12 @@ export function livePlayer() {
     /** どれだけ貯めているか (秒)。詰まると伸び、無事が続くと縮む */
     let target = $state(FLOOR);
     /**
+     * 縮めるときの行き先の下限 (秒)。**止まった高さを覚えている** (`nextTarget`)。
+     *
+     * 選局しても持ち越す。変わったのは映すものであって、経路ではない
+     */
+    let floor = FLOOR;
+    /**
      * どこまで戻れて、いまどこに居るか。**操作の帯を描くのに使う。**
      *
      * 0.1秒刻みで入れ直す。塊は毎秒20個来るので、そのたびに動かすと
@@ -191,6 +197,8 @@ export function livePlayer() {
     let stalls = $state(0);
     /** 最後に `nextTarget` を回した時刻 */
     let lastSettled = 0;
+    /** 下限を最後に動かした時刻。**下げ直すのはゆっくり** (`pacing` の `FORGET`) */
+    let lastFloor = 0;
     /**
      * この時刻まで、詰まっても数えない。**自分で起こした詰まりを数えないため。**
      *
@@ -472,11 +480,19 @@ export function livePlayer() {
     function settle(): void {
         const now = Date.now();
         if (!stalled && now - lastSettled < SETTLE_EVERY) return;
-        const settledFor = (now - lastStall) / 1000;
-        const next = nextTarget(target, stalled, settledFor);
+        const next = nextTarget(
+            { target, floor },
+            stalled,
+            (now - lastStall) / 1000,
+            (now - lastFloor) / 1000,
+        );
         stalled = false;
         lastSettled = now;
-        if (next !== target) target = next;
+        if (next.floor !== floor) {
+            floor = next.floor;
+            lastFloor = now;
+        }
+        if (next.target !== target) target = next.target;
     }
 
     /**

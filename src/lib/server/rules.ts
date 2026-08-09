@@ -179,6 +179,8 @@ export interface RuleSync {
     dropped: number;
     /** 別のルールが引き取った予約 */
     moved: number;
+    /** ルールの優先度が変わって、付け替えた予約 */
+    repriced: number;
 }
 
 /**
@@ -188,6 +190,7 @@ interface Held {
     id: number;
     program_id: number;
     rule_id: number | null;
+    priority: number;
     start_at: number;
 }
 
@@ -225,7 +228,7 @@ interface Held {
  *   全ルール × 全番組 (実機で 318 × 25,608) を回し直さずに済む
  */
 export function applyRules(options: { rule?: number } = {}): RuleSync {
-    const result: RuleSync = { created: 0, dropped: 0, moved: 0 };
+    const result: RuleSync = { created: 0, dropped: 0, moved: 0, repriced: 0 };
     const rules = database().prepare('SELECT * FROM rules WHERE enabled = 1').all() as Rule[];
     const adding = options.rule !== undefined;
     if (rules.length === 0 && adding) return result;
@@ -292,7 +295,7 @@ export function applyRules(options: { rule?: number } = {}): RuleSync {
     const held = adding
         ? []
         : queryAll<Held>(
-              `SELECT id, program_id, rule_id, start_at FROM reservations
+              `SELECT id, program_id, rule_id, priority, start_at FROM reservations
                 WHERE manual = 0 AND started_at IS NULL AND state IN ('scheduled', 'conflict')`,
           );
     /** 番組表にまだ載っている番組。読めていないだけのものと区別する */
@@ -329,6 +332,21 @@ export function applyRules(options: { rule?: number } = {}): RuleSync {
                 if (owner.rule.id !== reservation.rule_id) {
                     move.run(owner.rule.id, owner.rule.priority, at, reservation.id);
                     result.moved++;
+                } else if (owner.rule.priority !== reservation.priority) {
+                    /*
+                     * **同じルールでも、優先度は当て直す。**
+                     *
+                     * 予約は `INSERT OR IGNORE` で立てるので、**もう立っている
+                     * ぶんは作った日の優先度のまま**だった。ルールの優先度を
+                     * 上げても効くのは次に立つ予約からで、いま競合している
+                     * 予約はいくら上げても負けたまま — 実機で、優先度2に
+                     * 上げた「片田舎のおっさん」が優先度1の裏番組に負け続けて
+                     * いた (予約側は3件とも1のまま)。
+                     *
+                     * 優先度はルールが持つものなので、こちらを本物として扱う
+                     */
+                    move.run(owner.rule.id, owner.rule.priority, at, reservation.id);
+                    result.repriced++;
                 }
                 continue;
             }

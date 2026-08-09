@@ -13,8 +13,14 @@
  * 出す・消すを決めるだけで、DOM も映像も触りません
  */
 
-/** 触らなくなってから消えるまで (ms)。**指のほうを長く待つ** */
-const LINGER = { mouse: 2500, touch: 5000 };
+/**
+ * 触らなくなってから消えるまで (ms)。**これはマウスだけの話。**
+ *
+ * 指には時計を持たせない (`pinned`)。マウスは絵の上を通り過ぎるだけでも
+ * 出てしまうので放っておけば消えてほしいが、**指は押さなければ何も起きない** —
+ * 出したのが意思なら、消すのも意思のはず
+ */
+const LINGER = 2500;
 
 /** 消す時刻を跨ぐためだけの目覚まし。出ている間しか回さない */
 const TICK = 250;
@@ -34,6 +40,11 @@ export interface PlayerControls {
     stir: () => void;
     /** その場で消す (指で1回押して引っ込めるとき) */
     hide: () => void;
+    /**
+     * 指で絵を押した。**押す前に出ていたかで決める** (`wake` の項)。
+     * マウスのときは何もしない
+     */
+    toggle: () => void;
 }
 
 export function playerControls(): PlayerControls {
@@ -41,6 +52,13 @@ export function playerControls(): PlayerControls {
     let now = $state(Date.now());
     /** 直前に触ったのが指 (かペン) か。**マウスの繋がっていない端末もある** */
     let byTouch = $state(false);
+    /**
+     * 指で出したまま留めているか。**指には時計を持たせない** (`LINGER` の項)。
+     * 降ろすのは、もう一度絵を押されたときだけ (`toggle`)
+     */
+    let pinned = $state(false);
+    /** 押される直前に出ていたか。`toggle` が読む */
+    let wasShown = false;
     let keyboard = $state(false);
     let held = $state(false);
     /** 前に居た場所。**動いていない `pointermove` を捨てる**のに使う (`wake`) */
@@ -52,7 +70,7 @@ export function playerControls(): PlayerControls {
      * 混ぜていた頃は、繋いでいる間ずっと出たままになり、消える経路を
      * 確かめようが無かった
      */
-    const shown = $derived(held || keyboard || now - touched < (byTouch ? LINGER.touch : LINGER.mouse));
+    const shown = $derived(held || keyboard || pinned || now - touched < LINGER);
 
     $effect(() => {
         if (!shown) return;
@@ -77,18 +95,32 @@ export function playerControls(): PlayerControls {
             held = value;
         },
         /**
-         * **本当に動いたときだけ出す。**
+         * **指とマウスで別の出し方をする。**
          *
+         * *指* … 押したときだけ出して、**そのまま留める** (`pinned`)。時計で
+         * 消していた頃は、押した数秒後に必ず引っ込むので、**止めない限り
+         * 出しっぱなしにできなかった** (実機のタブレット)。指を滑らせただけ
+         * (`pointermove`) では何もしない — 出し入れは押したときの1回で決める。
+         *
+         * *マウス* … 動かせば出て、しばらくで消える。**本当に動いたときだけ** —
          * ブラウザは、止まっているカーソルの下で中身が動いただけでも
          * `pointermove` を投げてくる。時計は毎秒書き換わるので、**全画面に
-         * したまま何もしなくても操作列が消えなくなって**いた (実機のPC)。
-         * 座標が変わっていないものは触ったことにしない
+         * したまま何もしなくても操作列が消えなくなって**いた (実機のPC)
          */
         wake(event: PointerEvent): void {
+            if (event.pointerType !== 'mouse') {
+                if (event.type !== 'pointerdown') return;
+                byTouch = true;
+                // 留める前に読む。`toggle` は「押す前に出ていたか」で決める
+                wasShown = shown;
+                pinned = true;
+                return;
+            }
             if (event.clientX === lastX && event.clientY === lastY) return;
             lastX = event.clientX;
             lastY = event.clientY;
-            byTouch = event.pointerType !== 'mouse';
+            byTouch = false;
+            pinned = false;
             touched = Date.now();
             now = touched;
         },
@@ -106,6 +138,19 @@ export function playerControls(): PlayerControls {
             now = touched;
         },
         hide(): void {
+            pinned = false;
+            touched = 0;
+            now = Date.now();
+        },
+        /*
+         * **押す前に出ていたかで決める。** いまの状態で決めていた頃は、
+         * 押した瞬間に `wake` が出したものを見て「出ている→消す」と読み、
+         * **指では二度と出せなかった** (止めている間だけ `held` で残っていた)
+         */
+        toggle(): void {
+            if (!byTouch) return;
+            if (!wasShown) return;
+            pinned = false;
             touched = 0;
             now = Date.now();
         },

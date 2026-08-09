@@ -206,14 +206,16 @@ test.describe('録画を観る', () => {
     });
 
     /**
-     * **右は映像と同じ高さで、ページごとは動かない。**
+     * **形はライブと同じ。** 絵が左、読むものが右で、右は**画面の残りをぜんぶ**
+     * 使う。ページごとは動かない。
      *
      * 周りの余白を自分でも足していた頃は、外の `<main>` のぶんと重なって
      * **他の画面より内側から始まり**、足したぶんだけ縦がはみ出して
-     * ページごとスクロールバーが出ていた。詳細の高さも画面の高さから引いた
-     * 決め打ちで、**映像の下端と揃っていなかった**
+     * ページごとスクロールバーが出ていた。詳細の高さは**映像に揃えていた** —
+     * そのためだけに `absolute` で浮かせる作りをここだけ抱えていたうえ、
+     * 縦長の画面では下に余りがあるのに説明だけ狭い窓から覗くことになっていた
      */
-    test('右は映像と同じ高さに揃い、ページごとは動かない', async ({ page, request }) => {
+    test('右は画面の残りをぜんぶ使い、ページごとは動かない', async ({ page, request }) => {
         test.setTimeout(180_000);
         const { id } = await recordOne(page, request);
 
@@ -234,27 +236,65 @@ test.describe('録画を観る', () => {
 
         await goto(page, `/watch/${id}`);
         expect(await edge()).toBe(other);
-        /*
-         * 偽 ffmpeg の置くファイルには絵が無く、`<video>` は既定の 300x150 に
-         * なる。**背の高い映像のときに揃うか**が見たいので、高さだけ与える
-         */
-        await page.getByTestId('watch-video').evaluate((v) => {
-            (v as HTMLElement).style.height = '520px';
-        });
 
         const box = await page.evaluate(() => {
             const stage = document.querySelector('[data-testid="watch-stage"]')?.getBoundingClientRect();
             const aside = document.querySelector('aside')?.getBoundingClientRect();
+            const board = document.querySelector('main')?.firstElementChild?.getBoundingClientRect();
             const root = document.documentElement;
             return {
-                ずれ: stage !== undefined && aside !== undefined ? Math.abs(aside.bottom - stage.bottom) : -1,
-                縦に動く: root.scrollHeight > root.clientHeight,
+                横に並ぶ: stage !== undefined && aside !== undefined ? stage.right <= aside.left + 1 : false,
+                // 下まで使い切る。決め打ちで切っていた頃は、下に余白があるのに先に終わっていた
+                余り:
+                    aside !== undefined && board !== undefined ? Math.round(board.bottom - aside.bottom) : -1,
+                縦に動く: root.scrollHeight > root.clientHeight + 1,
                 横に動く: root.scrollWidth > root.clientWidth,
             };
         });
-        expect(box.ずれ).toBeLessThanOrEqual(1);
+        expect(box.横に並ぶ).toBe(true);
+        expect(box.余り).toBeLessThanOrEqual(1);
         expect(box.縦に動く).toBe(false);
         expect(box.横に動く).toBe(false);
+    });
+
+    /**
+     * **右端は「観るのをやめる」ための列。** 閉じる・切り抜く・消すは、
+     * 観ながら使う操作 (再生・音・字幕) とは押す頻度も並べる理由も違う。
+     *
+     * 1本の帯に混ぜていた頃は押すものが12個並び、**番組の名前が入る幅が
+     * 残らなかった** — 実機のタブレットで名前が折り返し、帯が二段になっていた
+     */
+    test('閉じる・切り抜き・削除は右の列。下の帯は一段のまま', async ({ page, request }) => {
+        test.setTimeout(180_000);
+        const { id } = await recordOne(page, request);
+
+        await page.setViewportSize({ width: 820, height: 1180 });
+        await goto(page, `/watch/${id}`);
+
+        const side = page.getByTestId('watch-side');
+        for (const testid of ['watch-close', 'watch-shot', 'watch-delete']) {
+            expect(await side.getByTestId(testid).count()).toBe(1);
+            // 下の帯には無い。同じことをする口を2つ置かない
+            expect(await page.getByTestId('watch-controls').getByTestId(testid).count()).toBe(0);
+        }
+        // 送り・戻しのボタンは置いていない (PCは矢印キー、指は端を素早く2回)
+        await expect(page.getByTestId('watch-back')).toHaveCount(0);
+        await expect(page.getByTestId('watch-forward')).toHaveCount(0);
+        // 再生停止は下の帯のいちばん左。ライブと同じ並び
+        await expect(page.getByTestId('watch-controls').getByTestId('watch-play')).toBeVisible();
+
+        /*
+         * **名前が長くても帯を割らない。** 折り返すかは中身の幅で決まるので、
+         * 縮む指定 (`truncate`) だけでは、縮む前に行が分かれてしまう
+         */
+        const rowHeight = async (): Promise<number> =>
+            page.evaluate(() => {
+                const row = document.querySelector('[data-testid="watch-name"]')?.parentElement;
+                return Math.round(row?.getBoundingClientRect().height ?? -1);
+            });
+        const before = await rowHeight();
+        await page.getByTestId('watch-name').evaluate((el) => (el.textContent = 'あ'.repeat(200)));
+        expect(await rowHeight()).toBe(before);
     });
 
     /** 無い録画を開いても、黙って空の画面を出さない */

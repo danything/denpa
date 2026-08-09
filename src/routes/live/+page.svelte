@@ -186,6 +186,7 @@
     const controlsShown = $derived(controls.shown);
     const wake = controls.wake;
     const away = controls.away;
+    const toggle = controls.toggle;
 </script>
 
 <!--
@@ -231,7 +232,18 @@
                 中身が届くたびに右へ左へ動く。放送に終わりは無いのだから、
                 位置ではなく**張り付いているかどうか**を出すのが正しい
             -->
-            <video bind:this={video} class="h-full w-full bg-black" playsinline data-testid="live-video"
+            <!--
+                **指で押したら操作列の出し入れ。** 指には時計を持たせていない
+                (`controls.svelte.ts` の `LINGER`) ので、消す口がここに要る。
+                マウスでは何も起きない — あちらは動かせば出て、しばらくで消える
+            -->
+            <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_noninteractive_element_interactions -->
+            <video
+                bind:this={video}
+                class="h-full w-full bg-black"
+                playsinline
+                onclick={toggle}
+                data-testid="live-video"
             ></video>
 
             <!--
@@ -514,9 +526,16 @@
                             **番組の名前と遅れはここ。** 独立した行にしていた頃は、
                             そのぶん帯が高くなって絵に掛かっていた。押すものの間は
                             どのみち空いているので、そこに入れて縮む側にする。
-                            ここから右は「どう出すか」で、観る画面と同じ位置
+                            ここから右は「どう出すか」で、観る画面と同じ位置。
+
+                            **幅ゼロから伸ばす** (`basis-0`)。押すものと同じに
+                            中身の幅で並べていた頃は、**名前が長いだけで帯が
+                            二段になって**いた (実機のタブレット) — 折り返すかは
+                            中身の幅で決まるので、縮む指定 (`truncate`) より先に
+                            行が分かれてしまう。ゼロから始めれば、余った幅を
+                            もらうだけの存在になり、行を割らない
                         -->
-                        <span class="min-w-0 grow truncate px-2 text-sm text-white/80">
+                        <span class="min-w-0 grow basis-0 truncate px-2 text-sm text-white/80">
                             {#if current}
                                 <span data-testid="live-title">
                                     {current.now?.name ?? current.name}

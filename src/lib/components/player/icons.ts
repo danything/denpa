@@ -20,11 +20,12 @@ export const CAPTION =
 export const EXPAND = 'M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z';
 export const SHRINK = 'M5 16h3v3h2v-5H5v2zm3-8H5v2h5V5H8v3zm6 11h2v-3h3v-2h-5v5zm2-11V5h-2v5h5V8h-3z';
 
-/** ここから下は観る画面だけで使うもの。ライブに「10秒送り」や「削除」は無い */
-export const BACK10 =
-    'M12.5 8c-2.65 0-5.05.99-6.9 2.6L2 7v9h9l-3.62-3.62c1.39-1.16 3.16-1.88 5.12-1.88 3.54 0 6.55 2.31 7.6 5.5l2.37-.78C21.08 11.03 17.15 8 12.5 8z';
-export const FORWARD10 =
-    'M18.4 10.6C16.55 8.99 14.15 8 11.5 8c-4.65 0-8.58 3.03-9.96 7.22L3.9 16c1.05-3.19 4.06-5.5 7.6-5.5 1.95 0 3.73.72 5.12 1.88L13 16h9V7l-3.6 3.6z';
+/**
+ * ここから下は観る画面だけで使うもの。ライブに「チャプター送り」や「削除」は無い。
+ *
+ * **10秒送り・戻しの絵は持たない。** PCは矢印キー、指は左右の端を素早く2回
+ * (`ts/watch.ts` の `tap`) でできるので、絵の上に常に2つ置くだけの用が無かった
+ */
 export const PREV = 'M6 6h2v12H6zm3.5 6l8.5 6V6z';
 export const NEXT = 'M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z';
 export const CAMERA =
@@ -59,15 +60,6 @@ export const OVERLAY = 'border-0 bg-black/45 text-white shadow-none hover:bg-bla
  * ここの字を直に当てる
  */
 export const OVERLAY_BTN = 'btn btn-lg';
-
-/**
- * 絵の真ん中に置く「送る・止める・戻す」の大きさ。**帯より一回り大きい。**
- *
- * いちばん多く押すものなので、下の帯に他と同じ顔で並べていた頃は、
- * **狙って探す**ことになっていた。真ん中に大きく置けば、絵のどこを見ていても
- * 目の隅に入る
- */
-export const CENTER_BTN = 'btn btn-circle btn-xl';
 
 /** 押されている間の見た目 (字幕を出しているとき・ライブに居るとき) */
 export const OVERLAY_ON = 'btn-primary border-0 text-white shadow-none';

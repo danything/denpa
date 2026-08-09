@@ -26,8 +26,9 @@
  * (`server/live.ts` の `-frag_duration`)、4つ貯めてから始めることになる。
  *
  * **小さすぎても壊れない。** 足りずに止まったら 0.6 ずつ増える (`nextTarget`)
- * ので、宅外のように荒れる経路では自分で伸びていく。戻るほうは割合で
- * (`SHRINK_RATIO`) — 迷ったら小さいほうから始める
+ * ので、宅外のように荒れる経路では自分で伸びていく。**ここまで戻ってくるのは
+ * 一度も止まらなかったときだけ** — 止まった高さは覚えていて、そこより下へは
+ * 戻さない (`PROBE`)。迷ったら小さいほうから始める
  */
 export const FLOOR = 0.2;
 /** 貯める量の上限。これ以上は、遅れが目に見えて増えるだけ */
@@ -56,6 +57,23 @@ const SHRINK_LEAST = 0.1;
  * 縮めにかかる前に次の1回が来て伸びる
  */
 export const SETTLED = 15;
+/**
+ * 下限を持ち上げる幅 (秒)。**止まった高さのすぐ上を、次の下限にする。**
+ *
+ * 下限を `FLOOR` に据え置いていた頃は、**同じ高さで止まり続けた** — 手元の
+ * ブラウザで実測すると、0.4秒まで縮める → 詰まる → 2.0秒まで伸びる →
+ * また0.4秒へ、を1分ごとに繰り返し、6分半で8回止まっていた。
+ * 縮め方をいくら直しても、**戻る先が駄目だと分かっている高さ**では意味がない
+ */
+const PROBE = 0.3;
+/**
+ * 下限そのものを下げ直すまでの静けさ (秒)。**覚えたままにしない。**
+ *
+ * 経路は変わる (宅外から宅内へ帰る・混んでいた時間帯が過ぎる)。2分無事なら
+ * `PROBE` ぶんだけ下げて試し直し、駄目ならまた上がる。**下げるのは
+ * 縮めるより8倍ゆっくり** — 覚えた意味が無くなるほど早く忘れては困る
+ */
+const FORGET = 120;
 
 /** これ以上離れたら跳ぶ。別のタブへ行って戻ってきたとき */
 export const JUMP = 8;
@@ -154,6 +172,14 @@ export function pacing({ start, end, at, playing, target, chasing, speed }: Buff
  */
 export const SPEEDS = [1, 1.25, 1.5, 2] as const;
 
+/** 貯める量と、その下限 */
+export interface Buffering {
+    /** どれだけ貯めてから出すか (秒) */
+    target: number;
+    /** ここより下へは戻さない (秒)。**止まった高さを覚えている** */
+    floor: number;
+}
+
 /**
  * 貯める量を決め直す。**止まったら伸ばし、無事が続いたら縮める。**
  *
@@ -161,16 +187,43 @@ export const SPEEDS = [1, 1.25, 1.5, 2] as const;
  * 決め打ちにすると、宅内に合わせれば宅外で止まり、宅外に合わせれば宅内が
  * 無駄に遅れる。**実際に止まったかどうかで決める**のがいちばん確か。
  *
- * 伸ばすのは一気に、戻すのは割合で。**膨らんだぶんほど速く戻る** —
- * 決め打ちで 0.15 ずつ戻していた頃は、一度増えた遅れが減っていかないように
- * 見えた (1.4 秒から 0.2 秒まで 40秒。その間にもう一度止まれば振り出し)。
+ * ## 戻る先を覚える
  *
- * @param target いまの量
+ * 縮める先をいつも `FLOOR` にしていた頃は、**同じ高さで止まり続けた。**
+ * 手元のブラウザ (入口込み・H.264) で8分測ると、こうなっていた —
+ *
+ * ```
+ * 0.4秒まで縮む → 詰まる → 3.1秒に跳ねる → 詰めて 0.4秒 → 詰まる …
+ * ```
+ *
+ * ちょうど60秒ごとに、8分で10回。縮め方をいくら直しても、**戻る先が
+ * 「そこでは止まる」と分かっている高さ**なら意味がない。止まった高さの
+ * すぐ上 (`PROBE`) を新しい下限にして、そこで打ち止めにする。
+ *
+ * 下限は据え置きにしない (`FORGET`)。経路は変わるので、長く無事なら
+ * 少しずつ下げて試し直す。
+ *
+ * @param now いまの量と下限
  * @param stalled 前回からこちら、詰まったか
  * @param settledFor 最後に詰まってから経った秒数
+ * @param floorFor 下限を最後に動かしてから経った秒数
  */
-export function nextTarget(target: number, stalled: boolean, settledFor: number): number {
-    if (stalled) return Math.min(CEILING, target + GROW);
-    if (settledFor < SETTLED) return target;
-    return Math.max(FLOOR, target - Math.max(SHRINK_LEAST, target * SHRINK_RATIO));
+export function nextTarget(
+    now: Buffering,
+    stalled: boolean,
+    settledFor: number,
+    floorFor: number,
+): Buffering {
+    if (stalled) {
+        return {
+            target: Math.min(CEILING, now.target + GROW),
+            // **いま居た高さは駄目だと分かった。** そのすぐ上から先は試さない
+            floor: Math.min(CEILING, Math.max(now.floor, now.target + PROBE)),
+        };
+    }
+    // 長く無事だった。下限そのものを少し下げて、もう一度試す
+    const floor = settledFor >= FORGET && floorFor >= FORGET ? Math.max(FLOOR, now.floor - PROBE) : now.floor;
+    if (settledFor < SETTLED) return { target: Math.max(floor, now.target), floor };
+    const shrunk = now.target - Math.max(SHRINK_LEAST, now.target * SHRINK_RATIO);
+    return { target: Math.max(floor, shrunk), floor };
 }

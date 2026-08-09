@@ -59,16 +59,21 @@ function program(id: number, name: string, startsIn = 3 * HOUR): void {
         .run(id, SERVICE, id, start, start + HOUR, name, now());
 }
 
-function rule(id: number, keyword: string, enabled = 1): void {
+function rule(id: number, keyword: string, enabled = 1, priority = 1): void {
     database()
         .prepare(
             `INSERT OR REPLACE INTO rules
                 (id, name, keyword, ignore_keyword, search_fields, service_ids, service_types,
                  genres, enabled, priority, created_at)
-             VALUES (?, ?, ?, '', 'name', NULL, NULL, NULL, ?, 1, ?)`,
+             VALUES (?, ?, ?, '', 'name', NULL, NULL, NULL, ?, ?, ?)`,
         )
-        .run(id, keyword, keyword, enabled, now());
+        .run(id, keyword, keyword, enabled, priority, now());
 }
+
+const priorityOf = (programId: number): number | undefined =>
+    database()
+        .query<{ priority: number }, [number]>('SELECT priority FROM reservations WHERE program_id = ?')
+        .get(programId)?.priority;
 
 const reservations = () =>
     database()
@@ -84,8 +89,32 @@ describe('ルールを当て直す', () => {
         program(10, '無職転生Ⅲ #6');
         program(11, 'まったく別の番組');
 
-        expect(applyRules()).toEqual({ created: 1, dropped: 0, moved: 0 });
+        expect(applyRules()).toEqual({ created: 1, dropped: 0, moved: 0, repriced: 0 });
         expect(reservations()).toEqual([{ program_id: 10, rule_id: 1, state: 'scheduled' }]);
+    });
+
+    /**
+     * **優先度はルールが持つもの。もう立っている予約にも当て直す。**
+     *
+     * 予約は `INSERT OR IGNORE` で立てるので、当て直していなかった頃は
+     * **作った日の優先度のまま**だった。上げても効くのは次に立つ予約からで、
+     * いま競合している予約はいくら上げても負けたまま — 実機で、優先度2に
+     * 上げたルールの予約が優先度1の裏番組に負け続けていた (予約の側は
+     * 3件とも 1 のままだった)
+     */
+    test('ルールの優先度を変えると、もう立っている予約にも効く', () => {
+        reset();
+        rule(1, '無職転生');
+        program(10, '無職転生Ⅲ #6');
+        applyRules();
+        expect(priorityOf(10)).toBe(1);
+
+        rule(1, '無職転生', 1, 2);
+        expect(applyRules()).toEqual({ created: 0, dropped: 0, moved: 0, repriced: 1 });
+        expect(priorityOf(10)).toBe(2);
+
+        // 変わっていなければ触らない
+        expect(applyRules()).toEqual({ created: 0, dropped: 0, moved: 0, repriced: 0 });
     });
 
     /*
@@ -239,7 +268,7 @@ describe('ルールを当て直す', () => {
         // 2 を足した。1 の予約には触らない (このとき 1 は当てにも行かない)
         rule(2, 'さよならララ');
 
-        expect(applyRules({ rule: 2 })).toEqual({ created: 1, dropped: 0, moved: 0 });
+        expect(applyRules({ rule: 2 })).toEqual({ created: 1, dropped: 0, moved: 0, repriced: 0 });
         expect(reservations()).toEqual([
             { program_id: 10, rule_id: 1, state: 'scheduled' },
             { program_id: 11, rule_id: 2, state: 'scheduled' },

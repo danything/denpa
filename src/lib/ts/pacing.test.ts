@@ -144,28 +144,33 @@ describe('追っかけ再生', () => {
  * 実際に止まったかどうかで決める。
  */
 describe('貯める量の決め直し', () => {
+    /** 覚えていない状態。**まだ一度も止まっていない** */
+    const fresh = (target: number) => ({ target, floor: FLOOR });
+    /** 落ち着いている時間。下限を下げ直す条件には届かない長さ */
+    const CALM = SETTLED;
+
     test('詰まったら伸ばす', () => {
-        expect(nextTarget(FLOOR, true, 0)).toBeGreaterThan(FLOOR);
+        expect(nextTarget(fresh(FLOOR), true, 0, 0).target).toBeGreaterThan(FLOOR);
     });
 
     test('無事が続いたら縮める', () => {
-        expect(nextTarget(2, false, SETTLED)).toBeLessThan(2);
+        expect(nextTarget(fresh(2), false, CALM, 0).target).toBeLessThan(2);
     });
 
     test('無事でも、すぐには縮めない', () => {
-        expect(nextTarget(2, false, SETTLED - 1)).toBe(2);
+        expect(nextTarget(fresh(2), false, CALM - 1, 0).target).toBe(2);
     });
 
     /** **伸ばすほうを大きく採る。** 縮めて止まると「直っていない」としか映らない */
     test('伸ばす量のほうが、縮める量より大きい', () => {
-        const grown = nextTarget(1, true, 0) - 1;
-        const shrunk = 1 - nextTarget(1, false, SETTLED);
+        const grown = nextTarget(fresh(1), true, 0, 0).target - 1;
+        const shrunk = 1 - nextTarget(fresh(1), false, CALM, 0).target;
         expect(grown).toBeGreaterThan(shrunk);
     });
 
     test('下限より下げず、上限より上げない', () => {
-        expect(nextTarget(FLOOR, false, SETTLED * 10)).toBe(FLOOR);
-        expect(nextTarget(CEILING, true, 0)).toBe(CEILING);
+        expect(nextTarget(fresh(FLOOR), false, CALM * 10, 0).target).toBe(FLOOR);
+        expect(nextTarget({ target: CEILING, floor: CEILING }, true, 0, 0).target).toBe(CEILING);
     });
 
     /**
@@ -176,14 +181,74 @@ describe('貯める量の決め直し', () => {
      * 止まれば振り出しに戻る — 止まりがちな経路では、事実上ずっと増えっぱなし
      */
     test('大きく膨らんでいるときほど、1回で大きく戻る', () => {
-        const 大きい = 3 - nextTarget(3, false, SETTLED);
-        const 小さい = 0.5 - nextTarget(0.5, false, SETTLED);
+        const 大きい = 3 - nextTarget(fresh(3), false, CALM, 0).target;
+        const 小さい = 0.5 - nextTarget(fresh(0.5), false, CALM, 0).target;
         expect(大きい).toBeGreaterThan(小さい);
     });
 
     /** 割合だけだと、小さいところで止まってしまう */
     test('小さくても、必ずいくらかは戻る', () => {
-        expect(nextTarget(0.3, false, SETTLED)).toBeLessThanOrEqual(0.2);
+        expect(nextTarget(fresh(0.3), false, CALM, 0).target).toBeLessThanOrEqual(0.2);
+    });
+});
+
+/**
+ * **戻る先を覚える。**
+ *
+ * いつも `FLOOR` まで戻していた頃は、**同じ高さで止まり続けた** — 手元の
+ * ブラウザ (入口込み・H.264) で8分測ると、0.4秒まで縮む→詰まる→3.1秒に
+ * 跳ねる→詰めて0.4秒、をちょうど60秒ごとに繰り返して10回。縮め方をいくら
+ * 直しても、**戻る先が「そこでは止まる」と分かっている高さ**なら意味がない
+ */
+describe('止まった高さを覚える', () => {
+    /** 止まるまで縮め、止まったら伸ばす、を繰り返す */
+    const cycle = (rounds: number) => {
+        let now = { target: FLOOR, floor: FLOOR };
+        for (let i = 0; i < rounds; i++) {
+            now = nextTarget(now, true, 0, 0);
+            // 落ち着いたので縮めにかかる。下限まで下りたら止まる
+            for (let k = 0; k < 20; k++) now = nextTarget(now, false, SETTLED, 0);
+        }
+        return now;
+    };
+
+    test('止まった高さより下へは戻さない', () => {
+        const after = nextTarget({ target: 1, floor: FLOOR }, true, 0, 0);
+        expect(after.floor).toBeGreaterThan(1);
+        // いくら無事が続いても、そこから下へは行かない
+        let settled = after;
+        for (let i = 0; i < 20; i++) settled = nextTarget(settled, false, SETTLED, 0);
+        expect(settled.target).toBe(after.floor);
+    });
+
+    /** **同じところで止まり続けない。** 止まるたびに戻る先が上がる */
+    test('止まるたびに、落ち着く高さが上がる', () => {
+        expect(cycle(2).target).toBeGreaterThan(cycle(1).target);
+        expect(cycle(3).target).toBeGreaterThan(cycle(2).target);
+    });
+
+    /** 荒れた経路でも、無限には伸びない */
+    test('上限は超えない', () => {
+        const far = cycle(40);
+        expect(far.target).toBeLessThanOrEqual(CEILING);
+        expect(far.floor).toBeLessThanOrEqual(CEILING);
+    });
+
+    /**
+     * **覚えたままにしない。** 経路は変わる (宅外から宅内へ帰る)。
+     * 長く無事なら下限そのものを下げて試し直す
+     */
+    test('長く無事なら、下限そのものが下がる', () => {
+        const held = { target: 1.5, floor: 1.5 };
+        expect(nextTarget(held, false, SETTLED, SETTLED).floor).toBe(1.5);
+        expect(nextTarget(held, false, 600, 600).floor).toBeLessThan(1.5);
+    });
+
+    test('下げ直しても、下限より下へは行かない', () => {
+        let now = { target: FLOOR, floor: FLOOR };
+        for (let i = 0; i < 50; i++) now = nextTarget(now, false, 600, 600);
+        expect(now.floor).toBe(FLOOR);
+        expect(now.target).toBe(FLOOR);
     });
 });
 
@@ -210,16 +275,19 @@ describe('貯める量の下限', () => {
      * (宅外) では自分で伸びていくので、下限は宅内に合わせてよい
      */
     test('足りなければ、そこから伸びる', () => {
-        let target = FLOOR;
-        for (let i = 0; i < 3; i++) target = nextTarget(target, true, 0);
-        expect(target).toBeGreaterThan(1);
-        expect(target).toBeLessThanOrEqual(CEILING);
+        let now = { target: FLOOR, floor: FLOOR };
+        for (let i = 0; i < 3; i++) now = nextTarget(now, true, 0, 0);
+        expect(now.target).toBeGreaterThan(1);
+        expect(now.target).toBeLessThanOrEqual(CEILING);
     });
 
-    /** 伸びたぶんは、無事が続けば下限まで戻る */
+    /**
+     * 伸びたぶんは、無事が続けば下限まで戻る。**下限そのものを下げ直すだけの
+     * 時間が要る** — 一度止まった高さは覚えている (`PROBE`)
+     */
     test('無事が続けば下限まで戻る', () => {
-        let target = nextTarget(FLOOR, true, 0);
-        for (let i = 0; i < 50; i++) target = nextTarget(target, false, SETTLED);
-        expect(target).toBe(FLOOR);
+        let now = nextTarget({ target: FLOOR, floor: FLOOR }, true, 0, 0);
+        for (let i = 0; i < 200; i++) now = nextTarget(now, false, 600, 600);
+        expect(now.target).toBe(FLOOR);
     });
 });

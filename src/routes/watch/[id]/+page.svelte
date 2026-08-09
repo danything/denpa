@@ -8,14 +8,11 @@
     import Icon from '$lib/components/player/Icon.svelte';
     import { clearOverlay, drawOverlay, fitRect } from '$lib/components/player/paint';
     import {
-        BACK10,
         CAMERA,
         CAPTION,
-        CENTER_BTN,
         CLOSE,
         CUT,
         EXPAND,
-        FORWARD10,
         NEXT,
         OVERLAY,
         OVERLAY_BTN,
@@ -461,10 +458,9 @@
         );
         lastTap = next;
         if (action.kind === 'play') togglePlay();
-        else if (action.kind === 'controls') {
-            if (controls.shown && playing) controls.hide();
-            else controls.stir();
-        } else {
+        // 出し入れの判断は `controls` が持つ (押す前に出ていたかで決める)
+        else if (action.kind === 'controls') controls.toggle();
+        else {
             // 2回目。マウスは1回目で再生を切り替えているので、それも戻す
             if (action.undo) togglePlay();
             seekBy(action.by);
@@ -614,15 +610,21 @@
 <svelte:window onclick={stand} onkeydown={keys} />
 
 <!--
-    **タブレットからは2段組**にする (`md` = 768px)。縦のiPadでちょうど入る幅で、
-    そこを境にすると「持ち替えたら形が変わる」ことがない。詳細は左に固定幅で
-    置き、余ったぶんを全部映像にやる — 映像は横に広いほど見やすい。
+    **ライブ (`/live`) と同じ形。** 映像が左、読むものが右。**中の作りまで同じ**
+    にしてある — 絵は `aspect-video max-h-full` の枠に入れ、右の列は固定幅で
+    残りの高さをぜんぶ使う。
 
-    狭い画面では**映像が上、詳細が下**。指で開いたときはそもそも全画面に
-    入っているので、ここが見えるのは全画面を抜けたあと。
+    **右を映像の高さに合わせない。** 揃えていた頃は、詳細を `absolute` で浮かせて
+    grid の行の高さを映像だけで決めさせていた。**揃いはするが、それだけのために
+    ライブと違う作りを1つ抱える**ことになるうえ、縦長の画面では絵が低くなるので、
+    下に画面半分が空いているのに説明だけ狭い窓から覗くことになっていた
+    (下限 `min-h-[24rem]` はその継ぎ当て)。**画面の残りをぜんぶ使う**ほうが、
+    読むものとしては素直。
 
-    **詳細は右。** ライブ (`/live`) も右に局の一覧を置いているので、画面を
-    移っても「絵は左、読むものは右」で揃う。
+    **タブレットからは2段組** (`md` = 768px)。縦のiPadでちょうど入る幅で、
+    そこを境にすると「持ち替えたら形が変わる」ことがない。狭い画面では
+    **映像が上、詳細が下**。指で開いたときはそもそも全画面に入っているので、
+    ここが見えるのは全画面を抜けたあと。
 
     **周りの余白は足さない。** 外の `<main>` が既に `p-4 md:p-6` を持っている
     ([+layout.svelte](../../+layout.svelte))。ここでも足していた頃は、他の画面より
@@ -631,18 +633,11 @@
 
     **横幅の頭打ちも置かない。** `max-w-[1800px]` で中央に寄せていた頃は、
     それより広い画面で**左右だけ余白が増えて**いた (実測 1880px でライブ 24px に
-    対して 40px)。広すぎて映像が縦に伸びきる心配は要らない — 高さのほうを
-    抑えてあるので、そこから先は黒い帯になるだけで、ライブ (`aspect-video
-    max-h-full`) と同じ振る舞いになる
+    対して 40px)
 -->
-<div class="grid gap-4 md:grid-cols-[1fr_minmax(15rem,20rem)]">
+<div class="flex flex-col gap-4 md:h-full md:min-h-0 md:flex-row" data-testid="watch">
     <!-- **映像を先に書く。** 縦積みになったときに上へ来るのはこちら -->
-    <!--
-        **映像は自分の背丈のまま置く** (`self-start`)。縦長の画面では左のほうが
-        背が高くなる (下の `min-h`) ので、伸ばされるままにすると映像の下に
-        黒い帯が付く
-    -->
-    <section class="md:self-start">
+    <section class="flex min-w-0 flex-1 flex-col md:min-h-0">
         {#if !ready}
             <!--
                 **焼けていないものは観られない。** 生TSは MPEG-2 で、ブラウザに
@@ -673,12 +668,22 @@
                 動かしたら操作列を出すためだけの `pointermove` なので、押すものでは
                 ない。押す先は中の `<video>` とボタンのほう
             -->
+            <!--
+                **枠の形はライブと同じ** (`aspect-video max-h-full`)。画面の高さから
+                引き算した決め打ち (`100dvh-9rem`) を持たせていた頃は、その値が
+                ヘッダーや帯の厚みと合っているかを目で確かめるしかなかった。
+                絵が 16:9 でないときは中で letterbox されるだけ (`<video>` は
+                既定で `object-fit: contain`)。
+
+                **低くしすぎない** (`min-h-56` = 224px)。上下と右に帯を重ねている
+                ので、絵がそれより低いと**帯どうしが重なって**押せなくなる
+            -->
             <!-- svelte-ignore a11y_no_noninteractive_element_interactions, a11y_no_static_element_interactions -->
             <section
                 bind:this={stage}
-                class="relative w-full overflow-hidden bg-black {full
-                    ? 'flex h-screen items-center justify-center'
-                    : ''} {controls.shown ? '' : 'cursor-none'}"
+                class="relative aspect-video max-h-full min-h-56 overflow-hidden bg-black {controls.shown
+                    ? ''
+                    : 'cursor-none'}"
                 onpointermove={controls.wake}
                 onpointerdown={controls.wake}
                 onpointerleave={controls.away}
@@ -695,19 +700,11 @@
                     放送どおりには出ない (左右の位置・背景の箱・外字が落ちる)。
                     絵のまま重ねる — ライブと同じやり方 (下の canvas)
                 -->
-                <!--
-                    **低くしすぎない** (`min-h-56` = 224px)。上下の帯を重ねて
-                    いるので、絵がそれより低いと**帯どうしが重なって**削除も
-                    再生も押せなくなる。16:9 なら 390px の端末で 219px なので、
-                    ここが効くのは縦の狭い窓と、絵の大きさが分からないとき
-                -->
                 <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_noninteractive_element_interactions -->
                 <video
                     bind:this={video}
                     {src}
-                    class="w-full bg-black {full
-                        ? 'h-full max-h-none'
-                        : 'max-h-[calc(100dvh-9rem)] min-h-56 md:max-h-[calc(100dvh-7rem)]'}"
+                    class="h-full w-full bg-black"
                     playsinline
                     onclick={press}
                     onplay={() => {
@@ -783,53 +780,51 @@
                 {/if}
 
                 <!--
-                    **いちばん多く押すものは真ん中に、大きく。**
+                    **右端は「観るのをやめる」ための列。**
 
-                    送る・止める・戻すを下の帯に他と同じ顔で並べていた頃は、
-                    10個ほどの丸から狙って探すことになっていた。絵の真ん中なら
-                    どこを見ていても目の隅に入るし、**指でも狙いやすい**
-                    (絵を押すのは操作列の出し入れなので、指はここを押す)。
+                    閉じる・切り抜く・消すは、観ながら使う操作 (音・字幕・送り) とは
+                    押す頻度も並べる理由も違う。1本の帯に混ぜていた頃は押すものが
+                    12個並び、**番組の名前が入る幅が残らなかった** (実機のタブレットで
+                    名前が折り返し、帯が二段になっていた)。
 
-                    帯からは消してある。同じことをする口を2つ置くと、押した
-                    ほうによって癖が違うのではないかと疑わせる
+                    **削除をいちばん下に置く。** 隣を押すつもりで当たっても、
+                    聞き返しがあるので消えはしない
                 -->
-                <!--
-                    **帯より上に置く** (`z-20`)。低い窓では真ん中と下の帯が
-                    重なるので、下にすると帯のほうが押されてしまう
-                -->
-                {#if controls.shown}
-                    <div
-                        class="pointer-events-none absolute inset-0 z-20 flex items-center justify-center gap-4"
+                <ControlBar side shown={controls.shown} testid="watch-side">
+                    <a
+                        class="{OVERLAY_BTN} btn-circle {OVERLAY}"
+                        href="/"
+                        aria-label="一覧へ戻る"
+                        data-testid="watch-close"
                     >
-                        <button
-                            type="button"
-                            class="pointer-events-auto {CENTER_BTN} {OVERLAY}"
-                            onclick={() => seekBy(-SKIP)}
-                            aria-label="{SKIP}秒戻す"
-                            data-testid="watch-back"
-                        >
-                            <Icon path={BACK10} size="size-8" />
-                        </button>
-                        <button
-                            type="button"
-                            class="pointer-events-auto {CENTER_BTN} {OVERLAY}"
-                            onclick={togglePlay}
-                            aria-label={playing ? '一時停止' : '再生'}
-                            data-testid="watch-play"
-                        >
-                            <Icon path={playing ? PAUSE : PLAY} size="size-8" />
-                        </button>
-                        <button
-                            type="button"
-                            class="pointer-events-auto {CENTER_BTN} {OVERLAY}"
-                            onclick={() => seekBy(SKIP)}
-                            aria-label="{SKIP}秒送る"
-                            data-testid="watch-forward"
-                        >
-                            <Icon path={FORWARD10} size="size-8" />
-                        </button>
-                    </div>
-                {/if}
+                        <Icon path={CLOSE} />
+                    </a>
+                    <!--
+                        **切り抜き。** 字幕ごと写して、そのまま貼れるようにする。
+                        観ている場面を人に見せるのに、いちいち撮り直さずに済む
+                    -->
+                    <ControlButton
+                        path={CAMERA}
+                        label="この場面を切り抜く"
+                        testid="watch-shot"
+                        onclick={() => void snapshot()}
+                    />
+                    <!--
+                        **観終わったその場で消せるようにする。** 末尾はたいてい
+                        CM なので、流したまま消せる。押し間違い防止に2回押させる
+                        のは一覧と同じ
+                    -->
+                    <form method="POST" action="?/delete" use:submitting>
+                        <input type="hidden" name="id" value={rec.id} />
+                        {#if armed}
+                            <button class="btn btn-error btn-lg" data-testid="watch-delete-confirm">
+                                確定
+                            </button>
+                        {:else}
+                            <ControlButton path={TRASH} label="削除" testid="watch-delete" onclick={arm} />
+                        {/if}
+                    </form>
+                </ControlBar>
 
                 <!-- 下端。帯と押すもの。**ライブと同じ帯** (`ControlBar`) -->
                 <ControlBar shown={controls.shown} testid="watch-controls">
@@ -863,22 +858,21 @@
 
                     <div class="mt-1 flex flex-wrap items-center gap-1 text-white">
                         <!--
-                            **並びはライブと同じ。** 音・字幕が左から順で、
+                            **並びはライブと同じ。** 再生・音・字幕が左から順で、
                             全画面がいちばん右。画面を移っても同じ場所にあると、
                             見ないでも押せる。
 
-                            **送る・止める・戻すはここに無い** — 絵の真ん中に
-                            大きく置いてある (上の説明)。**出口と削除はここ** —
-                            上にも帯を出すと絵の上下が両方黒く塗られる
+                            **10秒送り・戻しは置いていない。** PCは矢印キー、
+                            指は左右の端を素早く2回 (`ts/watch.ts` の `tap`) で
+                            できる — 絵の上に常に2つ置いておくほどの用ではない。
+                            **閉じる・切り抜き・削除は右の列** (上の `watch-side`)
                         -->
-                        <a
-                            class="{OVERLAY_BTN} btn-circle {OVERLAY}"
-                            href="/"
-                            aria-label="一覧へ戻る"
-                            data-testid="watch-close"
-                        >
-                            <Icon path={CLOSE} />
-                        </a>
+                        <ControlButton
+                            path={playing ? PAUSE : PLAY}
+                            label={playing ? '一時停止' : '再生'}
+                            testid="watch-play"
+                            onclick={togglePlay}
+                        />
                         <ControlButton
                             path={muted ? SOUND_OFF : SOUND_ON}
                             label={muted ? '音を出す' : '消音'}
@@ -954,10 +948,16 @@
                         <!--
                             **番組の名前はここ。** 独立した行にしていた頃は、その
                             ぶん帯が高くなって絵に掛かっていた。押すものの間は
-                            どのみち空いているので、そこに入れて縮む側にする
+                            どのみち空いているので、そこに入れて縮む側にする。
+
+                            **幅ゼロから伸ばす** (`basis-0`)。押すものと同じに
+                            中身の幅で並べていた頃は、**名前が長いだけで帯が
+                            二段になって**いた (実機のタブレット) — 折り返すかは
+                            中身の幅で決まるので、縮む指定 (`truncate`) より先に
+                            行が分かれてしまう
                         -->
                         <span
-                            class="min-w-0 grow truncate px-2 text-sm text-white/80"
+                            class="min-w-0 grow basis-0 truncate px-2 text-sm text-white/80"
                             data-testid="watch-name"
                         >
                             {rec.name}
@@ -995,44 +995,12 @@
                             </ul>
                         </div>
 
-                        <!--
-                            **切り抜き。** 字幕ごと写して、そのまま貼れるようにする。
-                            観ている場面を人に見せるのに、いちいち撮り直さずに済む
-                        -->
-                        <ControlButton
-                            path={CAMERA}
-                            label="この場面を切り抜く"
-                            testid="watch-shot"
-                            onclick={() => void snapshot()}
-                        />
                         <ControlButton
                             path={full ? SHRINK : EXPAND}
                             label={full ? '全画面をやめる' : '全画面'}
                             testid="watch-full"
                             onclick={toggleFull}
                         />
-
-                        <!--
-                            **観終わったその場で消せるようにする。** 末尾はたいてい
-                            CM なので、流したまま消せる。押し間違い防止に2回押させる
-                            のは一覧と同じ。**いちばん端に置く** — 隣を押すつもりで
-                            当たっても、聞き返しがあるので消えはしない
-                        -->
-                        <form method="POST" action="?/delete" use:submitting>
-                            <input type="hidden" name="id" value={rec.id} />
-                            {#if armed}
-                                <button class="btn btn-error btn-lg" data-testid="watch-delete-confirm">
-                                    確定
-                                </button>
-                            {:else}
-                                <ControlButton
-                                    path={TRASH}
-                                    label="削除"
-                                    testid="watch-delete"
-                                    onclick={arm}
-                                />
-                            {/if}
-                        </form>
                     </div>
                 </ControlBar>
             </section>
@@ -1040,7 +1008,7 @@
     </section>
 
     <!--
-        **左は番組の中身。全部ここに出す。**
+        **右は番組の中身。全部ここに出す。**
 
         以前はモーダルで開いていた。**映像の上に被さる**ので、観ながら読めない —
         観る画面で「あらすじを読みながら流す」ができないのは本末転倒だった。
@@ -1048,25 +1016,14 @@
 
         **中身が長ければ、ここだけが巻き取られる** (`overflow-y-auto`)。
         番組の説明は数百字あるので、ページごと動くと映像が画面から出ていく。
-        **押すものは下に貼り付けて、いつでも見えるようにする** (`shrink-0`)
+        **押すものは下に貼り付けて、いつでも見えるようにする** (`shrink-0`)。
 
-        **高さは映像に合わせる。** 画面の高さから引き算した値 (`100dvh-7rem`) を
-        持たせていた頃は、**映像の下端と揃わなかった** — 映像の高さは列の幅と
-        16:9で決まるので、画面の高さとは関係がない。
-
-        中身を `absolute` で浮かせて、この枠そのものは**高さを持たない**ように
-        する。すると grid の行の高さは映像だけで決まり、伸ばされた枠が
-        ちょうど映像と同じ高さになる。**高さが決まって初めて中が巻き取られる**
-        ので、浮かせるのは巻き取りのためでもある (中身の背丈のままだと
-        `overflow-y-auto` は効かない)。
-
-        **下限も要る。** 縦長の画面 (縦のiPad) では列が細く、映像もそのぶん
-        低くなる — 高さを映像に合わせるだけだと、下に画面半分の余りが
-        できているのに説明だけ 260px の窓から覗くことになる。焼けていない
-        録画は映像の代わりに短い札が出るだけなので、そちらにも効く
+        **高さは画面の残りぜんぶ。幅も枠の作りもライブの右の列と同じ**
+        ([live/+page.svelte](../../live/+page.svelte))。映像の高さに揃えていた頃は、
+        そのためだけに `absolute` で浮かせる作りをここだけ抱えていた (上の説明)
     -->
-    <aside class="flex flex-col md:relative md:min-h-[24rem]">
-        <div class="card bg-base-100 flex min-h-0 flex-1 shadow md:absolute md:inset-0">
+    <aside class="flex flex-col md:w-80 md:min-h-0 md:shrink-0">
+        <div class="card bg-base-100 flex min-h-0 flex-1 shadow">
             <!--
                 **`card-body` は使わない。** daisyUI はあれの中の `<p>` に
                 `flex-grow: 1` を当てるので、**中身が枠より短いと段落が余白を
