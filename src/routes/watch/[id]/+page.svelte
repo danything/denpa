@@ -5,7 +5,7 @@
     import ControlButton from '$lib/components/player/ControlButton.svelte';
     import { playerControls } from '$lib/components/player/controls.svelte';
     import Icon from '$lib/components/player/Icon.svelte';
-    import { clearOverlay, drawOverlay } from '$lib/components/player/paint';
+    import { clearOverlay, drawOverlay, fitRect } from '$lib/components/player/paint';
     import {
         BACK10,
         CAPTION,
@@ -136,8 +136,13 @@
         if (coarse) enterFull();
         const onFull = () => {
             full = document.fullscreenElement !== null;
+            // 全画面は枠が変わるので、描き終わってから測り直す
+            requestAnimationFrame(place);
         };
         document.addEventListener('fullscreenchange', onFull);
+        // 枠が変われば重ねる場所も変わる (全画面・持ち替え・窓の伸び縮み)
+        const onResize = () => place();
+        window.addEventListener('resize', onResize);
         /*
          * **閉じ際にも書き送る。** 数十秒おきの控えだけだと、最後に観た数十秒が
          * 落ちる。`pagehide` は畳んだ・戻った・落ちた、のどれでも来る (`unload` は
@@ -150,6 +155,7 @@
         }, REMEMBER);
         return () => {
             document.removeEventListener('fullscreenchange', onFull);
+            window.removeEventListener('resize', onResize);
             window.removeEventListener('pagehide', onLeave);
             clearInterval(ticker);
             remember(true);
@@ -189,6 +195,7 @@
     let resumed = false;
     function resume(): void {
         length = video?.duration ?? 0;
+        place();
         if (resumed || video === null || rec.resume_ms === null) return;
         resumed = true;
         const at = rec.resume_ms / 1000;
@@ -287,6 +294,24 @@
     }
 
     /**
+     * 字幕を**映像の絵が出ているところ**にぴったり重ねる。
+     *
+     * **字幕の面と映像は縦横比が違う。** 地上波は 1440x1080 の横長画素で、
+     * 焼くときに正方形 (1920x1080) へ直しているのに、字幕の面は放送のまま。
+     * `object-contain` で敷いていた頃は字幕だけ4:3に letterbox されて
+     * **横に縮み、位置もずれて**いた。プレイヤーと同じく、映像の枠いっぱいに
+     * 引き伸ばす (`fitRect`)
+     */
+    function place(): void {
+        if (video === null || overlay === null) return;
+        const rect = fitRect(video.clientWidth, video.clientHeight, video.videoWidth, video.videoHeight);
+        overlay.style.left = `${video.offsetLeft + rect.left}px`;
+        overlay.style.top = `${video.offsetTop + rect.top}px`;
+        overlay.style.width = `${rect.width}px`;
+        overlay.style.height = `${rect.height}px`;
+    }
+
+    /**
      * いまの位置に合う1枚を重ねる。**変わったときだけ描く。**
      *
      * canvas は**映像の画素そのままの大きさ**にして、CSS で伸ばす
@@ -302,6 +327,7 @@
             clearOverlay(overlay);
             return;
         }
+        place();
         drawOverlay(overlay, {
             x: next.x,
             y: next.y,
@@ -536,7 +562,7 @@
                 -->
                 <canvas
                     bind:this={overlay}
-                    class="pointer-events-none absolute inset-0 h-full w-full object-contain"
+                    class="pointer-events-none absolute"
                     data-testid="watch-captions-canvas"
                     data-on={captions && hasCaptions}
                     aria-hidden="true"
