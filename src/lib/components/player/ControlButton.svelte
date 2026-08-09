@@ -1,5 +1,5 @@
 <script lang="ts">
-    import { OVERLAY, OVERLAY_BTN, OVERLAY_ON } from './icons';
+    import { OVERLAY, OVERLAY_BTN, OVERLAY_DANGER, OVERLAY_ON } from './icons';
     import Icon from './Icon.svelte';
 
     /**
@@ -16,6 +16,8 @@
         path,
         label,
         on = false,
+        danger = false,
+        submit = false,
         testid,
         onclick,
         children,
@@ -26,15 +28,29 @@
         label: string;
         /** 押されている間か。字幕を出しているとき・ライブに居るときなど */
         on?: boolean;
+        /**
+         * 押すと戻せないもの。**聞き返しの2回目**に立てる。
+         *
+         * **大きさは変えない。** 文字の札に差し替えていた頃は、そこだけ幅が
+         * 変わって**隣のボタンが動いて**いた — 聞き返しは「同じ場所をもう一度
+         * 押す」ものなので、動くと押し直せない
+         */
+        danger?: boolean;
+        /** 中の `<form>` を送るボタンにする (削除など) */
+        submit?: boolean;
         testid?: string;
-        onclick: () => void;
+        onclick?: () => void;
         children?: import('svelte').Snippet;
     } = $props();
 </script>
 
 <button
-    type="button"
-    class="{OVERLAY_BTN} {children === undefined ? 'btn-circle' : 'gap-1.5'} {on ? OVERLAY_ON : OVERLAY}"
+    type={submit ? 'submit' : 'button'}
+    class="{OVERLAY_BTN} {children === undefined ? 'btn-circle' : 'gap-1.5'} {on
+        ? OVERLAY_ON
+        : danger
+          ? OVERLAY_DANGER
+          : OVERLAY}"
     {onclick}
     aria-label={label}
     aria-pressed={on}

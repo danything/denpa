@@ -168,7 +168,7 @@
     /**
      * 操作列の出し入れ。**観る画面と同じ部品**
      * ([controls.svelte.ts](../../lib/components/player/controls.svelte.ts))。
-     * 触ったら出て、しばらくで消える。指のほうを長く待つ
+     * マウスは動かせば出てしばらくで消える。**指は押したら出て、押すまで消えない**
      */
     const controls = playerControls();
     $effect(() => {
@@ -523,26 +523,10 @@
                         </button>
 
                         <!--
-                            **読むものはここに二段で入れる。観る画面と同じ形。**
-                            ([watch/[id]/+page.svelte](../watch/%5Bid%5D/+page.svelte))
-
-                            独立した行にしていた頃は、そのぶん帯が高くなって絵に
-                            掛かっていた。押すものの間はどのみち空いているので、
-                            そこに入れて縮む側にする。**二段でも押すものより低い**
-                            (文字2行 36px < `btn-lg` 48px) ので、帯は厚くならない。
-
-                            **並びは時刻・局名・番組名。** 番組名を先に置いていた
-                            頃は、長い名前に押し出されて**いま何を映しているのかが
-                            見えなく**なっていた。**縮むのは番組名だけ** — 時刻と
-                            局名は幅が知れているので先に確保し、余りを名前にやって、
-                            入らないぶんだけ省く。狭いと丸ごと隠していた頃は、
-                            少し足りないだけで名前が消えていた。
-
-                            **幅ゼロから伸ばす** (`basis-0`)。押すものと同じに
-                            中身の幅で並べていた頃は、**名前が長いだけで帯が
-                            二段になって**いた (実機のタブレット) — 折り返すかは
-                            中身の幅で決まるので、縮む指定 (`truncate`) より先に
-                            行が分かれてしまう
+                            **読みものはここに二段で。** 入れ方の決まりは
+                            [ControlBar.svelte](../../lib/components/player/ControlBar.svelte)
+                            に書いてある (幅ゼロから伸ばす・縮むのは番組名だけ)。
+                            観る画面も同じ形
                         -->
                         <div class="min-w-0 grow basis-0 px-2 leading-tight text-white/80">
                             <div class="flex items-baseline overflow-hidden text-sm whitespace-nowrap">
@@ -572,11 +556,8 @@
                                 <!--
                                     **詰まった回数。止まったときだけ出る。**
 
-                                    送り出す側は測ってある — 入口 (TLS) を通した素の
-                                    WebSocket で受けて、**0.5秒以上の間が1回も無い**
-                                    (H.264 25分 中央 43ms / AV1 4分 中央 34ms)。
-                                    「一瞬止まって遅延が増える」が起きているならこちら側で、
-                                    その証拠がこの数
+                                    出しておく理由は `live-player.svelte.ts` の
+                                    `stalls` に書いてある (実測は stream.md §4)
                                 -->
                                 {#if player.stalls > 0}
                                     ・ <span data-testid="live-stalls">途切れ {player.stalls}回</span>
@@ -696,8 +677,20 @@
                             `bg-*` を足すと**回っているものの色を上書きする** —
                             敷いたつもりが、見えなくなる
                         -->
-                        <span class={player.holding ? 'rounded-box bg-black/45 p-3 text-white' : 'contents'}>
+                        <!--
+                            **繋ぎ直しの最中は、そう言う。** サーバの入れ替え
+                            (デプロイ) で切れると数十秒帰ってこないので、
+                            回っているものだけだと壊れたように見える
+                        -->
+                        <span
+                            class="flex flex-col items-center gap-2 {player.holding
+                                ? 'rounded-box bg-black/45 p-3 text-white'
+                                : ''}"
+                        >
                             <span class="loading loading-spinner loading-lg"></span>
+                            {#if player.resuming}
+                                <span class="text-sm" data-testid="live-resuming">繋ぎ直しています</span>
+                            {/if}
                         </span>
                     {:else if player.state === 'error'}
                         <div class="text-center">

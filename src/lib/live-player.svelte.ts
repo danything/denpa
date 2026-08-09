@@ -61,6 +61,15 @@ const GRACE = 3_000;
  * 画面が残る。壊れているのに動いて見えるのがいちばん悪い
  */
 const HOLD_MOST = 6_000;
+/**
+ * 繋ぎが切れたときに待つ時間 (ms)。**倍々に伸ばして、この上限で頭打ち。**
+ *
+ * いちばん多いのは**サーバの入れ替え** (デプロイ)。器ごと作り直すので数十秒
+ * 帰ってこないが、帰ってくることは分かっている。切れた時点で諦めていた頃は、
+ * 観ている最中に「選んでください」に戻って**自分で選び直す**ことになっていた
+ */
+const RETRY_FIRST = 1_000;
+const RETRY_MOST = 10_000;
 
 /**
  * 見ている局を覚える。**置き場は cookie 1つ。**
@@ -214,19 +223,32 @@ export function livePlayer() {
     let generation = 0;
     /** もう再生を始めたか。始めるまでは貯める */
     let running = false;
+    /** 繋ぎ直しの目覚まし。**待っている間だけ入っている** */
+    let retry: ReturnType<typeof setTimeout> | null = null;
+    /**
+     * 続けて何回繋ぎ直しに失敗したか。**待ち時間を伸ばすのと、諦め方の分かれ目。**
+     *
+     * 0 でなければ「繋ぎ直しの最中」。その間は繋げなくても失敗にしない —
+     * サーバが帰ってくるのを待っているのだから、繋がらないのは当たり前
+     */
+    let attempts = $state(0);
+    /** 画面を離れた。**もう繋ぎ直さない** */
+    let left = false;
     /** 最後に詰まった時刻。無事が続いたかを見る */
     let lastStall = 0;
     /** 前回 `nextTarget` を回してから詰まったか */
     let stalled = false;
     /**
-     * 選局してから何回詰まったか。**画面に出す。**
+     * 選局してから何回詰まったか。**画面に出す** (`live/+page.svelte`)。
      *
-     * 「LAN内なのに一瞬止まって遅延が増えていく」を追うために置いた。
-     * 送り出す側は測ってあり、**25分で 0.5秒以上の間が1回も無い**
-     * (中央 46ms / 最大 445ms。素の WebSocket で受けた実測) ので、
-     * 止まっているならこちら側 — 受け取りが間に合っていないか、
-     * 復号が間に合っていないか。**どちらなのかは数だけでは分からない**が、
-     * 「そもそも `waiting` が出ているのか」が分かるだけで切り分けが進む
+     * 「LAN内なのに一瞬止まって遅延が増えていく」を追うために置いた。送り出す
+     * 側は入口 (TLS) まで含めて測ってあり **0.5秒以上の間が1回も無い**ので、
+     * 止まっているならこちら側だと分かる — その切り分けにこの数が要った
+     * ([stream.md](../../docs/stream.md) §4 に実測)。
+     *
+     * **見つかった原因は貯め方だった** (`ts/pacing.ts` の `nextTarget`)。
+     * 直ったあとも出しておく — 経路が荒れているかどうかは、遅延の値より
+     * この数のほうが早く出る
      */
     let stalls = $state(0);
     /** 最後に `nextTarget` を回した時刻 */
@@ -237,9 +259,9 @@ export function livePlayer() {
      * この時刻まで、詰まっても数えない。**自分で起こした詰まりを数えないため。**
      *
      * 選局した直後と、跳んだ直後は必ず `waiting` が上がる。数えていた頃は
-     * それだけで貯める量が増え、遅延が伸びたまま戻らなかった — **伸びるのは
-     * 一度に 0.6 秒、縮むのは 0.15 秒ずつ**なので (`pacing.ts`)、1回増えると
-     * 何十秒も残る。
+     * それだけで貯める量が増え、遅延が伸びたまま戻らなかった — 詰まりは
+     * **一度に 0.6 秒**伸ばし、しかも**伸ばした先が下限として残る**ので
+     * (`pacing.ts` の `PROBE`)、自分で起こした1回がずっと効いてしまう。
      */
     let quiet = 0;
     /**
@@ -709,6 +731,9 @@ export function livePlayer() {
 
     /** 画面を離れる。**貼った絵も剥がす** — 戻ってきたときに残っていては困る */
     function stop(): void {
+        left = true;
+        if (retry !== null) clearTimeout(retry);
+        retry = null;
         reset();
         thaw();
     }
@@ -717,7 +742,33 @@ export function livePlayer() {
     function fail(text: string): void {
         state = 'error';
         message = text;
+        attempts = 0;
         thaw();
+    }
+
+    /**
+     * 繋ぎ直す。**待ってから、また繋ぎに行く。**
+     *
+     * 切れる理由でいちばん多いのはサーバの入れ替え (デプロイ)。数十秒帰って
+     * こないが、帰ってくることは分かっているので、こちらから諦める理由が無い。
+     * 待ち時間は倍々に伸ばして `RETRY_MOST` で頭打ち。
+     *
+     * **上限は置かない。** 置くと「席を外している間に切れて、戻ったら止まって
+     * いる」が残る — テレビとして使う道具では、点けっぱなしで戻ってきたときに
+     * 映っていてほしい
+     */
+    function reconnect(): void {
+        if (retry !== null || left || tuned === null || element === null) return;
+        state = 'connecting';
+        message = '';
+        const wait = Math.min(RETRY_MOST, RETRY_FIRST * 2 ** attempts);
+        attempts++;
+        retry = setTimeout(() => {
+            retry = null;
+            if (left || tuned === null || element === null) return;
+            // 局は変わらないので、選べる字幕の一覧は残す
+            void tune(element, tuned, true);
+        }, wait);
     }
 
     /**
@@ -777,6 +828,7 @@ export function livePlayer() {
      */
     async function tune(video: HTMLVideoElement, target: Tuned, keepList = false): Promise<void> {
         element = video;
+        left = false;
         // 数え直す。焼き直しでも器から作り直しになるので、前の数は続きではない
         stalls = 0;
         // 字幕は映した1枚ごとに貼り直す (`follow`)。2度目からは何もしない
@@ -818,7 +870,9 @@ export function livePlayer() {
             if (!res.ok) throw new Error(String(res.status));
             ticket = ((await res.json()) as { ticket: string }).ticket;
         } catch {
-            fail('繋ぐ許可を取れませんでした');
+            // 繋ぎ直しの最中なら、サーバがまだ帰っていないだけ。待ち直す
+            if (attempts > 0) reconnect();
+            else fail('繋ぐ許可を取れませんでした');
             return;
         }
 
@@ -828,6 +882,8 @@ export function livePlayer() {
         socket = ws;
 
         ws.onopen = () => {
+            // 繋がった。次に切れたときはまた1秒から待ち直す
+            attempts = 0;
             /*
              * **`Tuned` をそのまま渡す。** 中身を書き写していた頃は、
              * `Tuned` に足したものをここへ足し忘れると**繋ぎ直したときだけ
@@ -838,11 +894,25 @@ export function livePlayer() {
         };
 
         ws.onerror = () => {
+            // 繋ぎ直しの最中。すぐ後ろに `onclose` が来るので、そちらで待ち直す
+            if (attempts > 0) return;
             if (state !== 'playing') fail('繋がりませんでした');
         };
 
+        /**
+         * **切れたら繋ぎ直す。** いちばん多いのはサーバの入れ替え (デプロイ)。
+         *
+         * `idle` に戻すだけだった頃は、観ている最中に画面が「選んでください」に
+         * なり、**自分で選び直す**ことになっていた
+         */
         ws.onclose = () => {
-            if (socket === ws && state !== 'error') state = 'idle';
+            if (socket !== ws || state === 'error') return;
+            socket = null;
+            if (left || tuned === null || element === null) {
+                state = 'idle';
+                return;
+            }
+            reconnect();
         };
 
         ws.onmessage = (event) => {
@@ -1034,6 +1104,10 @@ export function livePlayer() {
         /** 選局してから詰まった回数。0 のときは画面に出さない */
         get stalls() {
             return stalls;
+        },
+        /** 繋ぎ直しを待っている最中か。**待っていることを画面に出すため** */
+        get resuming() {
+            return attempts > 0;
         },
         /** 押して止めているか */
         get paused() {

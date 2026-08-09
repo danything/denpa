@@ -10,6 +10,7 @@
     import {
         CAMERA,
         CAPTION,
+        CHECK,
         CLOSE,
         CUT,
         EXPAND,
@@ -81,6 +82,18 @@
     let showing: Drawn | null = null;
     /** 読めなかったとき。**黙って黒いままにしない** */
     let broken = $state(false);
+    /**
+     * 繋ぎが切れて拾い直している最中か。**サーバの入れ替え (デプロイ) 用。**
+     *
+     * 器ごと作り直すので、観ている最中に配信が切れる。何もしないと**そこで
+     * 止まったまま**で、自分で開き直して位置を探し直すことになっていた
+     */
+    let resuming = $state(false);
+    /** 続けて何回拾い直したか。**諦める分かれ目** */
+    let retries = 0;
+    let retryTimer: ReturnType<typeof setTimeout> | null = null;
+    /** 拾い直したあとに戻る位置 (秒)。0 は「戻る先は無い」 */
+    let retryAt = 0;
     let chapters = $state<Chapter[]>([]);
 
     /**
@@ -95,7 +108,8 @@
     /**
      * 操作列の出し入れ。**ライブと同じ部品**
      * ([controls.svelte.ts](../../../lib/components/player/controls.svelte.ts))。
-     * 動かせば出て、しばらくで消える。止めている間は残る
+     * マウスは動かせば出てしばらくで消える。**指は押したら出て、押すまで
+     * 消えない**。止めている間はどちらも残る
      */
     const controls = playerControls();
     $effect(() => {
@@ -200,6 +214,7 @@
             remember(true);
             if (disarm !== null) clearTimeout(disarm);
             if (skipNotice !== null) clearTimeout(skipNotice);
+            if (retryTimer !== null) clearTimeout(retryTimer);
         };
     });
 
@@ -236,6 +251,13 @@
     function resume(): void {
         length = video?.duration ?? 0;
         place();
+        // 繋ぎが切れて読み直したところ。**観ていた位置へ戻して続ける** (`recover`)
+        if (retryAt > 0 && video !== null) {
+            video.currentTime = retryAt;
+            retryAt = 0;
+            void video.play().catch(() => undefined);
+            return;
+        }
         if (resumed || video === null || rec.resume_ms === null) return;
         resumed = true;
         const at = rec.resume_ms / 1000;
@@ -261,6 +283,39 @@
         } catch {
             // 出せないだけ。観るのに支障は無い
         }
+    }
+
+    /**
+     * 配信が切れたら拾い直す。**サーバの入れ替え (デプロイ) で切れるため。**
+     *
+     * `<video>` はファイルを少しずつ取りに来ているので、途中で口が無くなると
+     * そこで止まる。**同じ所から読み直して、観ていた位置へ戻す** — 開き直しでは
+     * ないので、覚えている続きの位置 (15秒おき) ではなく、切れた瞬間の位置。
+     *
+     * **理由を見て決める。** 読めない形式・壊れたファイルは何度やっても同じで、
+     * そちらは今までどおり落とす口を出す (`broken`)。拾い直すのは繋ぎが切れた
+     * ときだけ
+     */
+    const RETRIES = 8;
+    function recover(): void {
+        if (video === null) return;
+        const code = video.error?.code ?? 0;
+        if (code !== MediaError.MEDIA_ERR_NETWORK || retries >= RETRIES) {
+            broken = true;
+            resuming = false;
+            return;
+        }
+        retryAt = video.currentTime;
+        // 倍々に伸ばして 10秒で頭打ち。入れ替えは数十秒かかる
+        const wait = Math.min(10_000, 1000 * 2 ** retries);
+        retries++;
+        resuming = true;
+        if (retryTimer !== null) clearTimeout(retryTimer);
+        retryTimer = setTimeout(() => {
+            retryTimer = null;
+            // 同じ src を読み直す。位置を戻すのは尺が分かってから (`resume`)
+            video?.load();
+        }, wait);
     }
 
     function enterFull(): void {
@@ -709,6 +764,9 @@
                     onclick={press}
                     onplay={() => {
                         playing = true;
+                        // 出たので、拾い直しは済み。次に切れたらまた1秒から待つ
+                        retries = 0;
+                        resuming = false;
                         controls.stir();
                     }}
                     onpause={() => {
@@ -721,7 +779,7 @@
                     }}
                     onloadedmetadata={resume}
                     onvolumechange={() => (muted = video?.muted ?? false)}
-                    onerror={() => (broken = true)}
+                    onerror={recover}
                     data-testid="watch-video"
                 >
                 </video>
@@ -749,6 +807,23 @@
                         data-testid="watch-resumed"
                     >
                         <span class="badge badge-neutral badge-sm">続きから再生しています</span>
+                    </div>
+                {/if}
+
+                {#if resuming}
+                    <!--
+                        **繋ぎ直しの最中は、そう言う。** サーバの入れ替えで
+                        切れると数十秒帰ってこないので、黙って止まっていると
+                        壊れたように見える
+                    -->
+                    <div
+                        class="pointer-events-none absolute inset-0 z-10 flex items-center justify-center"
+                        data-testid="watch-resuming"
+                    >
+                        <span class="rounded-box flex items-center gap-2 bg-black/60 px-3 py-2 text-white">
+                            <span class="loading loading-spinner loading-sm"></span>
+                            繋ぎ直しています
+                        </span>
                     </div>
                 {/if}
 
@@ -812,14 +887,24 @@
                     <!--
                         **観終わったその場で消せるようにする。** 末尾はたいてい
                         CM なので、流したまま消せる。押し間違い防止に2回押させる
-                        のは一覧と同じ
+                        のは一覧と同じ。
+
+                        **2回目も同じ大きさの丸。** 「確定」の札に差し替えて
+                        いた頃は、そこだけ幅が変わって**隣のボタンが動いて**
+                        いた — 聞き返しは同じ場所をもう一度押すものなので、
+                        動くと押し直せない。変えるのは色と絵だけで、
+                        **赤いレ点は「これでいいか」以外に読みようが無い**
                     -->
                     <form method="POST" action="?/delete" use:submitting>
                         <input type="hidden" name="id" value={rec.id} />
                         {#if armed}
-                            <button class="btn btn-error btn-lg" data-testid="watch-delete-confirm">
-                                確定
-                            </button>
+                            <ControlButton
+                                path={CHECK}
+                                label="削除する"
+                                danger
+                                submit
+                                testid="watch-delete-confirm"
+                            />
                         {:else}
                             <ControlButton path={TRASH} label="削除" testid="watch-delete" onclick={arm} />
                         {/if}
@@ -934,26 +1019,10 @@
                         {/if}
 
                         <!--
-                            **読むものはここに二段で入れる。ライブと同じ形。**
-                            ([live/+page.svelte](../../live/+page.svelte))
-
-                            独立した行にしていた頃は、そのぶん帯が高くなって絵に
-                            掛かっていた。押すものの間はどのみち空いているので、
-                            そこに入れて縮む側にする。**二段でも押すものより低い**
-                            (文字2行 36px < `btn-lg` 48px) ので、帯は厚くならない。
-
-                            **並びは時刻・局名・番組名。** 番組名を先に置いていた
-                            頃は、長い名前に押し出されて他が見えなくなっていた。
-                            **縮むのは番組名だけ** — 時刻と局名は幅が知れている
-                            ので先に確保し、余りを名前にやって、入らないぶんだけ
-                            省く。狭いと丸ごと隠していた頃は、少し足りないだけで
-                            名前が消えていた。
-
-                            **幅ゼロから伸ばす** (`basis-0`)。押すものと同じに
-                            中身の幅で並べていた頃は、**名前が長いだけで帯が
-                            二段になって**いた (実機のタブレット) — 折り返すかは
-                            中身の幅で決まるので、縮む指定 (`truncate`) より先に
-                            行が分かれてしまう
+                            **読みものはここに二段で。** 入れ方の決まりは
+                            [ControlBar.svelte](../../../lib/components/player/ControlBar.svelte)
+                            に書いてある (幅ゼロから伸ばす・縮むのは番組名だけ)。
+                            ライブも同じ形
                         -->
                         <div class="min-w-0 grow basis-0 px-2 leading-tight text-white/80">
                             <div class="flex items-baseline overflow-hidden text-sm whitespace-nowrap">
