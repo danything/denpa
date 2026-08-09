@@ -26,7 +26,7 @@ fi
 # 目印は -fix_sub_duration で、これを渡すのはこの経路だけ。
 #
 # **時刻が揃っているかはここでは見ない** (`ts/ass.test.ts` が持っている)。
-# E2E で確かめたいのは「動画の隣に置かれて、WebVTT に直って画面まで届く」ところ。
+# E2E で確かめたいのは「動画の隣に置かれる」ところ (Kodi が拾う形)。
 # 空の Dialogue を1つ混ぜてあるのは、「消す」が落とされることを通しでも見るため
 if printf '%s\n' "$@" | grep -qx -- '-fix_sub_duration'; then
     mkdir -p "$(dirname "$output")"
@@ -46,6 +46,25 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 Dialogue: 0,0:00:01.00,0:00:03.00,Default,,0,0,0,,{\an7}{\pos(140,449)}{\1c&H00ffff&}にせの字幕です
 Dialogue: 0,0:00:03.00,0:00:05.00,Default,,0,0,0,,
 ASS
+    exit 0
+fi
+
+# 焼いたものから字幕の絵を抜くパス (`api/recordings/<id>/captions.sup`)。
+# 本物は入れ物の中の PGS をそのまま出す。ここでは作り置きの .sup を返す
+# (中身は `src/lib/pgs.ts` の writeSup で作った2枚。読むほうの試験と同じ形)
+if printf '%s\n' "$@" | grep -qx -- 'sup'; then
+    cat "$(dirname "$0")/captions.sup"
+    exit 0
+fi
+
+# 字幕を絵で取り出すパス (`server/subtitle.ts` の `buildPgs`)。
+# 目印は sub2video の filter で、これを渡すのはこの経路だけ。
+#
+# denpa 側が .sup を組み立てるので、ここで返すのは**showinfo の行と生の RGBA**。
+# 1枚だけ、4x2 の白い四角を返す (中身が透明だと切り抜きで消えて0枚になる)
+if printf '%s\n' "$@" | grep -q '0:s:0\]showinfo'; then
+    echo "[Parsed_showinfo_0 @ 0x1] n:0 pts:135000 pts_time:1.5 pos:-1 fmt:rgba sar:1/1 s:4x2 i:P iskey:1 type:I" >&2
+    for _ in $(seq 1 32); do printf '\377'; done
     exit 0
 fi
 

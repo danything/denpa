@@ -5,6 +5,7 @@
     import ControlButton from '$lib/components/player/ControlButton.svelte';
     import { playerControls } from '$lib/components/player/controls.svelte';
     import Icon from '$lib/components/player/Icon.svelte';
+    import { clearOverlay, drawOverlay } from '$lib/components/player/paint';
     import {
         BACK10,
         CAPTION,
@@ -15,6 +16,7 @@
         OVERLAY,
         PAUSE,
         PLAY,
+        OVERLAY_ON,
         PREV,
         SHRINK,
         SOUND_OFF,
@@ -25,6 +27,8 @@
     import Toasts, { type Notice } from '$lib/components/Toasts.svelte';
     import { type DetailSeed, programDetail } from '$lib/detail.svelte';
     import { clock, cmNoteWorthShowing, recordedDuration, size } from '$lib/format';
+    import { captionAt, type Drawn, pixels, readSup } from '$lib/pgs';
+    import { SPEEDS } from '$lib/ts/pacing';
     import {
         type Chapter,
         chapterAt,
@@ -53,8 +57,24 @@
     let length = $state(0);
     let muted = $state(false);
     let full = $state(false);
-    /** 字幕を出しているか。**持っている録画でだけ意味を持つ** (`data.subtitle`) */
-    let captions = $state(false);
+    /**
+     * 字幕を出しているか。**持っている録画でだけ意味を持つ** (`data.subtitle`)。
+     * **既定は出す** — ライブと同じ (`live-player` の `captions`)
+     */
+    let captions = $state(true);
+    /**
+     * 字幕の絵。**開いた時点で取りに行く** (既定で出すので)。
+     *
+     * 持っている番組かどうかは**取ってみるまで分からない** — 入れ物から抜くので、
+     * 無ければ 404 が返る。ライブと同じで、持っているときだけボタンを出す
+     * (`live-player` の `hasCaptions`)
+     */
+    let drawn = $state<Drawn[]>([]);
+    const hasCaptions = $derived(drawn.length > 0);
+    /** 重ねる先 (`/live` と同じやり方。`server/captions.ts`) */
+    let overlay = $state<HTMLCanvasElement | null>(null);
+    /** いま出している1枚。同じものを描き直さないため */
+    let showing: Drawn | null = null;
     /** 読めなかったとき。**黙って黒いままにしない** */
     let broken = $state(false);
     let chapters = $state<Chapter[]>([]);
@@ -79,6 +99,12 @@
     });
     let lastTap: Tap | null = null;
 
+    /**
+     * 早送りの速さ。**ライブの追っかけと同じ並び** (`ts/pacing` の `SPEEDS`)。
+     * 録画は放送より先が無いという縛りが無いので、いつでも選べる
+     */
+    let speed = $state(1);
+
     /** どこまで観たかを書き送る間隔 (ms)。**細かく送るものではない** */
     const REMEMBER = 15_000;
     /** 続きから出したか。出したことを画面にも言う (黙って途中から始まると驚く) */
@@ -102,6 +128,8 @@
         coarse = window.matchMedia('(pointer: coarse)').matches;
         void loadChapters();
         loadDetail();
+        // 字幕は既定で出す (ライブと同じ)。持っていない録画では何も起きない
+        if (captions) void loadCaptions();
         if (!ready) return;
         video?.play().catch(() => undefined);
         // 指のときは最初から全画面。テレビと同じで、観るために置いてある画面なので
@@ -197,6 +225,23 @@
         else enterFull();
     }
 
+    /**
+     * 早送りの速さを変える。**音は残す** — ブラウザは倍速でも音程を保つので、
+     * 消してしまうと早く観たいだけの人が黙って観ることになる
+     */
+    function setSpeed(value: number): void {
+        speed = value;
+        if (video !== null) video.playbackRate = value;
+        controls.stir();
+    }
+
+    /** 速さを1段ずつ動かす。端では止まる */
+    function stepSpeed(by: number): void {
+        const at = SPEEDS.indexOf(speed as (typeof SPEEDS)[number]);
+        const next = SPEEDS[Math.min(Math.max(at + by, 0), SPEEDS.length - 1)];
+        if (next !== undefined) setSpeed(next);
+    }
+
     function togglePlay(): void {
         if (video === null) return;
         if (video.paused) void video.play().catch(() => undefined);
@@ -204,18 +249,67 @@
     }
 
     /**
-     * 字幕の出し入れ。**出すのはブラウザ自身** (`<track>` の `mode`)。
+     * 字幕の出し入れ。**絵を canvas に重ねる** — ライブ (`/live`) と同じやり方。
      *
-     * 消えているときは `hidden` に置く — `disabled` まで戻すと、次に出すときに
-     * 取り直しになる。**最初は消えている**のはテレビと同じ扱いで、
-     * 字幕は絵の上に重なるものなので、要る人が出す
+     * 文字に直して `<track>` に渡す道も通したが、**放送どおりには出ない** —
+     * 左右の位置も、背景の箱も、外字も落ちる。焼くときに作った絵 (PGS) が
+     * 動画の隣に置いてあるので、それを denpa 自身が解いて重ねる
+     * ([pgs.ts](../../../lib/pgs.ts) の `readSup`)
      */
     function toggleCaptions(): void {
-        const track = video?.textTracks[0];
-        if (track === undefined) return;
         captions = !captions;
-        track.mode = captions ? 'showing' : 'hidden';
+        if (captions) void loadCaptions();
+        else clearCaptions();
         controls.stir();
+    }
+
+    /**
+     * 字幕の絵を取ってくる。**押されるまで取りに行かない。**
+     *
+     * 実機の30分もので 6.0MB (697枚)。動画そのものが 300MB なので誤差だが、
+     * 出さないと決めている人にまで運ばせる理由は無い
+     */
+    async function loadCaptions(): Promise<void> {
+        if (drawn.length > 0) return;
+        try {
+            const res = await fetch(`/api/recordings/${rec.id}/captions.sup`);
+            if (!res.ok) return;
+            drawn = readSup(new Uint8Array(await res.arrayBuffer()));
+            paint();
+        } catch {
+            // 出せないだけ。観るのに支障は無い
+        }
+    }
+
+    function clearCaptions(): void {
+        showing = null;
+        clearOverlay(overlay);
+    }
+
+    /**
+     * いまの位置に合う1枚を重ねる。**変わったときだけ描く。**
+     *
+     * canvas は**映像の画素そのままの大きさ**にして、CSS で伸ばす
+     * (`object-contain`)。位置合わせはブラウザ任せで、こちらは放送が言う座標に
+     * そのまま置けばよい — **左右の位置がそのまま出る**のはこのため
+     */
+    function paint(): void {
+        if (!captions || overlay === null) return;
+        const next = captionAt(drawn, video?.currentTime ?? 0);
+        if (next === showing) return;
+        showing = next;
+        if (next === null) {
+            clearOverlay(overlay);
+            return;
+        }
+        drawOverlay(overlay, {
+            x: next.x,
+            y: next.y,
+            videoWidth: next.videoWidth,
+            videoHeight: next.videoHeight,
+            // 広げるのはここだけ。持っているのは畳んだ形 (`pgs.ts` の `Drawn`)
+            source: new ImageData(new Uint8ClampedArray(pixels(next)), next.width, next.height),
+        });
     }
 
     /** 秒で動かす。**端は超えさせない** (超えると勝手に終わる) */
@@ -268,6 +362,9 @@
             ArrowRight: () => seekBy(SKIP),
             c: toggleCaptions,
             f: toggleFull,
+            // 早送りは順送り。**戻る側も付ける** (行き過ぎたら戻れないと不便)
+            '>': () => stepSpeed(1),
+            '<': () => stepSpeed(-1),
             m: () => {
                 if (video !== null) video.muted = !video.muted;
             },
@@ -402,11 +499,10 @@
                 -->
                 <!-- svelte-ignore a11y_media_has_caption -->
                 <!--
-                    **入れ物の中の字幕は渡せない。** 焼いたものに入っているのは
-                    PGS で、文字ではなく**絵** (docs/encode.md)。ブラウザに復号器が
-                    無いので、渡すのは**動画の隣に置いた文字のほう**を WebVTT に
-                    直したもの (`api/recordings/<id>/subtitle.vtt`)。
-                    字幕を持たない録画では `<track>` ごと出さない
+                    **字幕は `<track>` ではない。** 焼いたものに入っているのは PGS で、
+                    文字ではなく**絵** (docs/encode.md)。文字に直して渡す道も通したが、
+                    放送どおりには出ない (左右の位置・背景の箱・外字が落ちる)。
+                    絵のまま重ねる — ライブと同じやり方 (下の canvas)
                 -->
                 <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_noninteractive_element_interactions -->
                 <video
@@ -422,22 +518,29 @@
                     onpause={() => {
                         playing = false;
                     }}
-                    ontimeupdate={() => (at = video?.currentTime ?? 0)}
+                    ontimeupdate={() => {
+                        at = video?.currentTime ?? 0;
+                        paint();
+                    }}
                     onloadedmetadata={resume}
                     onvolumechange={() => (muted = video?.muted ?? false)}
                     onerror={() => (broken = true)}
                     data-testid="watch-video"
                 >
-                    {#if data.subtitle}
-                        <track
-                            kind="captions"
-                            srclang="ja"
-                            label="字幕"
-                            src="/api/recordings/{rec.id}/subtitle.vtt"
-                            data-testid="watch-track"
-                        />
-                    {/if}
                 </video>
+
+                <!--
+                    **放送の字幕。** 映像と同じ枠に、映像の画素そのままの大きさで
+                    敷いて、CSS で伸ばす (`object-contain`)。**押す邪魔をしない**
+                    (`pointer-events-none`) — 下の絵を押して止められなくなる
+                -->
+                <canvas
+                    bind:this={overlay}
+                    class="pointer-events-none absolute inset-0 h-full w-full object-contain"
+                    data-testid="watch-captions-canvas"
+                    data-on={captions && hasCaptions}
+                    aria-hidden="true"
+                ></canvas>
 
                 {#if continued}
                     <!--
@@ -551,11 +654,39 @@
                     </div>
 
                     <div class="mt-1 flex flex-wrap items-center gap-1 text-white">
+                        <!--
+                            **並びはライブと同じ。** 再生・音・字幕が左から順で、
+                            全画面がいちばん右。画面を移っても同じ場所にあると、
+                            見ないでも押せる
+                        -->
                         <ControlButton
                             path={playing ? PAUSE : PLAY}
                             label={playing ? '一時停止' : '再生'}
                             onclick={togglePlay}
                         />
+                        <ControlButton
+                            path={muted ? SOUND_OFF : SOUND_ON}
+                            label={muted ? '音を出す' : '消音'}
+                            onclick={() => {
+                                if (video !== null) video.muted = !video.muted;
+                            }}
+                        />
+
+                        <!--
+                            **字幕を持っている録画でだけ出す。** 持っていないほうが
+                            多い (字幕の無い番組・この仕組みより前に焼いたもの) ので、
+                            押しても何も起きない操作を並べない。`/live` と同じ扱い
+                        -->
+                        {#if hasCaptions}
+                            <ControlButton
+                                path={CAPTION}
+                                label={captions ? '字幕を消す' : '字幕を出す'}
+                                on={captions}
+                                testid="watch-captions"
+                                onclick={toggleCaptions}
+                            />
+                        {/if}
+
                         <ControlButton
                             path={BACK10}
                             label={`${SKIP}秒戻す`}
@@ -577,13 +708,13 @@
                         {#if chapters.length > 1}
                             <ControlButton
                                 path={PREV}
-                                label={'前のチャプター'}
+                                label="前のチャプター"
                                 testid="watch-prev-chapter"
                                 onclick={() => seekTo(prevChapterAt(chapters, at))}
                             />
                             <ControlButton
                                 path={NEXT}
-                                label={'次のチャプター'}
+                                label="次のチャプター"
                                 testid="watch-next-chapter"
                                 onclick={() => seekTo(nextChapterAt(chapters, at))}
                             />
@@ -600,27 +731,38 @@
 
                         <span class="grow"></span>
 
-                        <!--
-                            **字幕を持っている録画でだけ出す。** 持っていないほうが
-                            多い (字幕の無い番組・この仕組みより前に焼いたもの) ので、
-                            押しても何も起きない操作を並べない。`/live` と同じ扱い
-                        -->
-                        {#if data.subtitle}
-                            <ControlButton
-                                path={CAPTION}
-                                label={captions ? '字幕を消す' : '字幕を出す'}
-                                on={captions}
-                                testid="watch-captions"
-                                onclick={toggleCaptions}
-                            />
-                        {/if}
-                        <ControlButton
-                            path={muted ? SOUND_OFF : SOUND_ON}
-                            label={muted ? '音を出す' : '消音'}
-                            onclick={() => {
-                                if (video !== null) video.muted = !video.muted;
-                            }}
-                        />
+                        <!-- 早送り。**ライブの追っかけと同じ並び・同じ見た目** -->
+                        <div class="dropdown dropdown-top dropdown-end">
+                            <button
+                                class="btn btn-sm tabular-nums {speed === 1 ? OVERLAY : OVERLAY_ON}"
+                                aria-label="再生の速さ"
+                                data-testid="watch-speed"
+                            >
+                                {speed}×
+                            </button>
+                            <ul
+                                class="dropdown-content menu bg-base-100 text-base-content rounded-box z-10 mb-1 w-28 p-2 shadow-lg"
+                                data-testid="watch-speed-menu"
+                            >
+                                {#each SPEEDS as value (value)}
+                                    <li>
+                                        <button
+                                            class="tabular-nums {value === speed ? 'menu-active' : ''}"
+                                            onclick={(event) => {
+                                                setSpeed(value);
+                                                event.currentTarget.blur();
+                                            }}
+                                            data-testid="watch-speed-option"
+                                            data-speed={value}
+                                            aria-current={value === speed ? 'true' : undefined}
+                                        >
+                                            {value}×
+                                        </button>
+                                    </li>
+                                {/each}
+                            </ul>
+                        </div>
+
                         <ControlButton
                             path={full ? SHRINK : EXPAND}
                             label={full ? '全画面をやめる' : '全画面'}

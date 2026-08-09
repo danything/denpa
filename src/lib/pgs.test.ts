@@ -1,5 +1,17 @@
 import { describe, expect, test } from 'bun:test';
-import { type Bitmap, crop, isBt709, quantize, rle, SupWriter, writeSup } from './pgs';
+import {
+    type Bitmap,
+    captionAt,
+    crop,
+    isBt709,
+    pixels,
+    quantize,
+    readSup,
+    rle,
+    SupWriter,
+    unrle,
+    writeSup,
+} from './pgs';
 
 /** 指定した色で塗った四角を、透明な画面の中に置く */
 function bitmap(
@@ -230,5 +242,101 @@ describe('.sup の組み立て', () => {
         writer.add({ width: 8, height: 8, data: new Uint8Array(8 * 8 * 4) }, 0, 1);
         expect(writer.captions).toBe(0);
         expect(writer.bytes()).toHaveLength(0);
+    });
+});
+
+describe('.sup を読み戻す', () => {
+    /**
+     * **書いたものが、そのまま戻ること。** 読むほうは書くほうの裏返しなので、
+     * 往復で見るのがいちばん確か (ブラウザで観るときに使う。`readSup`)
+     */
+    test('位置・時刻・大きさが往復する', () => {
+        const sup = writeSup([
+            {
+                start: 1.5,
+                end: 3.5,
+                bitmap: bitmap(1920, 1080, { x: 100, y: 900, w: 40, h: 20, color: [255, 255, 0, 255] }),
+            },
+            {
+                start: 4,
+                end: 6,
+                bitmap: bitmap(1920, 1080, { x: 300, y: 800, w: 10, h: 10, color: [0, 255, 0, 128] }),
+            },
+        ]);
+        const drawn = readSup(sup);
+        expect(drawn).toHaveLength(2);
+        expect(drawn[0].start).toBeCloseTo(1.5, 3);
+        expect(drawn[0].end).toBeCloseTo(3.5, 3);
+        expect(drawn[0]).toMatchObject({ x: 100, y: 900, width: 40, height: 20 });
+        expect(drawn[0].videoWidth).toBe(1920);
+        expect(drawn[0].videoHeight).toBe(1080);
+        expect(drawn[1]).toMatchObject({ x: 300, y: 800, width: 10, height: 10 });
+    });
+
+    /** 色は YCrCb を通るので少しずれる。**目で見て同じ色**であればいい */
+    test('色が戻る', () => {
+        const sup = writeSup([
+            {
+                start: 0,
+                end: 1,
+                bitmap: bitmap(1920, 1080, { x: 10, y: 10, w: 4, h: 4, color: [255, 255, 0, 255] }),
+            },
+        ]);
+        const [first] = readSup(sup);
+        const [r, g, b, a] = pixels(first).subarray(0, 4);
+        expect(a).toBe(255);
+        expect(Math.abs(r - 255)).toBeLessThanOrEqual(3);
+        expect(Math.abs(g - 255)).toBeLessThanOrEqual(3);
+        expect(Math.abs(b - 0)).toBeLessThanOrEqual(3);
+    });
+
+    /** 透明のままのところは触らない (重ねたとき下の絵が見える) */
+    test('塗っていないところは透明のまま', () => {
+        const sup = writeSup([
+            {
+                start: 0,
+                end: 1,
+                bitmap: bitmap(200, 100, { x: 10, y: 10, w: 4, h: 2, color: [255, 0, 0, 255] }),
+            },
+        ]);
+        const [first] = readSup(sup);
+        // 切り抜かれているので、中は全部塗られている
+        expect(first.width).toBe(4);
+        expect(first.height).toBe(2);
+        const data = pixels(first);
+        expect(data.every((_, i) => i % 4 !== 3 || data[i] === 255)).toBe(true);
+    });
+
+    test('壊れたものは読めたところまで', () => {
+        expect(readSup(new Uint8Array([1, 2, 3]))).toEqual([]);
+        expect(readSup(new Uint8Array(0))).toEqual([]);
+    });
+
+    /** 走り書きは行ごとに畳まれる。長い並びも戻ること */
+    test('長い並びも戻る', () => {
+        const indices = new Uint8Array(300 * 2);
+        indices.fill(7, 0, 300);
+        const back = unrle(rle(indices, 300, 2), 300, 2);
+        expect([...back]).toEqual([...indices]);
+    });
+});
+
+describe('その時刻に出ているもの', () => {
+    const list = [
+        { start: 1, end: 2 },
+        { start: 4, end: 6 },
+    ] as ReturnType<typeof readSup>;
+
+    test('跨いでいる1枚を返す', () => {
+        expect(captionAt(list, 1.5)?.start).toBe(1);
+        expect(captionAt(list, 5)?.start).toBe(4);
+    });
+
+    /** 消したあとは何も出さない。**次が来るまで出しっぱなしにはしない** */
+    test('間と端では何も出さない', () => {
+        expect(captionAt(list, 0.5)).toBeNull();
+        expect(captionAt(list, 3)).toBeNull();
+        expect(captionAt(list, 2)).toBeNull();
+        expect(captionAt(list, 6)).toBeNull();
     });
 });

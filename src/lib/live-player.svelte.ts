@@ -7,6 +7,7 @@
  */
 
 import type { AudioTrack } from '$lib/arib';
+import { clearOverlay, drawOverlay } from '$lib/components/player/paint';
 import {
     type CaptionTrack,
     CHANNEL,
@@ -303,19 +304,23 @@ export function livePlayer() {
         if (next === shown) return false;
         shown = next;
 
-        const ctx = overlay.getContext('2d');
-        if (ctx === null) return true;
+        /*
+         * 置き方は観る画面と同じ (`components/player/paint.ts`)。
+         * **こちらの絵は画面まるごと**なので、置くのは左上 (0,0) になる
+         */
         const bitmap = next?.bitmap ?? null;
-        if (bitmap === null) {
-            ctx.clearRect(0, 0, overlay.width, overlay.height);
-            return true;
-        }
-        if (overlay.width !== bitmap.width || overlay.height !== bitmap.height) {
-            overlay.width = bitmap.width;
-            overlay.height = bitmap.height;
-        }
-        ctx.clearRect(0, 0, overlay.width, overlay.height);
-        ctx.drawImage(bitmap, 0, 0);
+        drawOverlay(
+            overlay,
+            bitmap === null
+                ? null
+                : {
+                      x: 0,
+                      y: 0,
+                      videoWidth: bitmap.width,
+                      videoHeight: bitmap.height,
+                      source: bitmap,
+                  },
+        );
         return true;
     }
 
@@ -636,10 +641,7 @@ export function livePlayer() {
         for (const cue of cues) cue.bitmap?.close();
         cues = [];
         shown = null;
-        const ctx = overlay?.getContext('2d');
-        if (ctx !== null && ctx !== undefined && overlay !== null) {
-            ctx.clearRect(0, 0, overlay.width, overlay.height);
-        }
+        clearOverlay(overlay);
     }
 
     /** 画面を離れる。**貼った絵も剥がす** — 戻ってきたときに残っていては困る */

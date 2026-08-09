@@ -475,3 +475,241 @@ export function writeSup(captions: Caption[]): Uint8Array {
     for (const caption of captions) writer.add(caption.bitmap, caption.start, caption.end);
     return writer.bytes();
 }
+
+/**
+ * ここから下は**読むほう**。書いたものを、そのまま絵に戻す。
+ *
+ * 要るのは**ブラウザで観るとき**です。焼いたものに入っている字幕は PGS で、
+ * ブラウザに復号器がありません。文字に直して `<track>` へ渡す道もありますが、
+ * それだと**放送どおりには出ません** — 位置も、背景の箱も、外字も落ちる。
+ * ライブ (`/live`) が絵を canvas に重ねているのと**同じやり方**にするために、
+ * denpa 自身が PGS を解いて絵に戻します ([library.md](../../docs/library.md))。
+ *
+ * 読むのは書いたものの裏返しなので、**試験は往復で見ます** (`writeSup` →
+ * `readSup` で位置と時刻が戻ること)。
+ */
+
+/**
+ * 読み出した字幕1枚。`Caption` と違い、置く場所まで持つ。
+ *
+ * **絵は畳んだまま持ちます** (`rle`)。広げると1枚 1MB を超えるので、番組ぶん
+ * (実機で697枚) 抱えると持ちきれない。畳んだままなら全部で 6MB で、
+ * 出す1枚だけ広げれば足りる (`pixels`)
+ */
+export interface Drawn {
+    start: number;
+    end: number;
+    /** 画面のどこに置くか (映像の画素で) */
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+    /** 元の映像の大きさ。重ねる先に合わせて伸ばすのに要る */
+    videoWidth: number;
+    videoHeight: number;
+    /** 畳んだままの絵と、そのときの色の表 */
+    rle: Uint8Array;
+    palette: Uint8Array;
+}
+
+/** 1枚を RGBA に広げる。**出すときに呼ぶ** */
+export function pixels(drawn: Drawn): Uint8Array {
+    const indices = unrle(drawn.rle, drawn.width, drawn.height);
+    return paint(indices, drawn.palette, drawn.videoHeight);
+}
+
+/**
+ * その時刻に出ているもの。**無ければ null。**
+ *
+ * PGS は「出す」と「消す」で挟まれているので、跨いでいる1枚を探すだけでよい
+ * (ライブの字幕は消す指示が別に来ないので、`ts/captions.ts` は別の探し方をする)
+ */
+export function captionAt(list: Drawn[], at: number): Drawn | null {
+    for (const drawn of list) {
+        if (drawn.start > at) break;
+        if (at < drawn.end) return drawn;
+    }
+    return null;
+}
+
+/** YCrCb (限定レンジ) を RGB に戻す。`toYCrCb` の裏返し */
+function fromYCrCb(y: number, cr: number, cb: number, bt709: boolean): [number, number, number] {
+    const luma = ((y - 16) * 255) / 219;
+    const toCb = bt709 ? 0.473_39 : 0.495_73;
+    const toCr = bt709 ? 0.557_8 : 0.626_56;
+    const r = luma + (cr - 128) / toCr;
+    const b = luma + (cb - 128) / toCb;
+    // 緑は残りから割り出す (書くときの式を g について解いたもの)
+    const kr = bt709 ? 0.2126 : 0.299;
+    const kg = bt709 ? 0.7152 : 0.587;
+    const kb = bt709 ? 0.0722 : 0.114;
+    const g = (luma - kr * r - kb * b) / kg;
+    const clamp = (v: number) => Math.max(0, Math.min(255, Math.round(v)));
+    return [clamp(r), clamp(g), clamp(b)];
+}
+
+/** 走り書きを色番号に戻す (`rle` の裏返し) */
+export function unrle(data: Uint8Array, width: number, height: number): Uint8Array {
+    const out = new Uint8Array(width * height);
+    let at = 0;
+    let x = 0;
+    let y = 0;
+    while (at < data.length && y < height) {
+        const first = data[at++];
+        if (first !== 0) {
+            if (x < width) out[y * width + x] = first;
+            x++;
+            continue;
+        }
+        const second = data[at++];
+        if (second === undefined || second === 0) {
+            // 行の終わり。**書いた幅に足りなくても次の行へ移る** (残りは透明)
+            y++;
+            x = 0;
+            continue;
+        }
+        const long = (second & 0x40) !== 0;
+        const colored = (second & 0x80) !== 0;
+        let run = second & 0x3f;
+        if (long) run = (run << 8) | data[at++];
+        const color = colored ? data[at++] : TRANSPARENT;
+        for (let i = 0; i < run && x < width; i++, x++) out[y * width + x] = color;
+    }
+    return out;
+}
+
+/** PGS の節をひとつずつ。壊れていたらそこで終わる */
+function* segments(bytes: Uint8Array): Generator<{ type: number; pts: number; body: Uint8Array }> {
+    const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+    let at = 0;
+    while (at + 13 <= bytes.length) {
+        if (bytes[at] !== 0x50 || bytes[at + 1] !== 0x47) return;
+        const pts = view.getUint32(at + 2) / CLOCK;
+        const type = bytes[at + 10];
+        const length = view.getUint16(at + 11);
+        if (at + 13 + length > bytes.length) return;
+        yield { type, pts, body: bytes.subarray(at + 13, at + 13 + length) };
+        at += 13 + length;
+    }
+}
+
+/**
+ * `.sup` を絵に戻す。
+ *
+ * PGS は「出す」と「消す」の組で出来ていて、**消すのは中身の無い構成 (PCS)**。
+ * 出す側で場所と絵を覚えておき、消すのが来たところで1枚として閉じる。
+ * 閉じないまま終わったものは、最後の時刻まで出しておく。
+ *
+ * 絵は節をまたぐことがある (1節 64KB まで) ので、continuation を繋いでから解く
+ */
+export function readSup(bytes: Uint8Array): Drawn[] {
+    const out: Drawn[] = [];
+    /** 色番号 → YCrCbA */
+    const palette = new Uint8Array(256 * 4);
+    /** 組み立て中の絵 */
+    let building: { width: number; height: number; parts: Uint8Array[] } | null = null;
+    /**
+     * 場所は決まったが、絵がまだ来ていないもの。
+     *
+     * **節の並びは「どこに出すか」が先、「何を出すか」が後** (PCS → WDS → PDS → ODS)。
+     * 絵が来た時点で1枚として立ち上げる
+     */
+    let pending: { start: number; x: number; y: number; videoWidth: number; videoHeight: number } | null =
+        null;
+    /** 出している最中のもの */
+    let open: Omit<Drawn, 'end'> | null = null;
+    let last = 0;
+
+    const close = (end: number) => {
+        if (open === null) return;
+        if (end > open.start) out.push({ ...open, end });
+        open = null;
+    };
+
+    for (const { type, pts, body } of segments(bytes)) {
+        last = Math.max(last, pts);
+        const view = new DataView(body.buffer, body.byteOffset, body.byteLength);
+
+        if (type === SEGMENT_PDS) {
+            // 番号ごとに YCrCbA が5バイト。書いていない番号は透明のまま
+            for (let at = 2; at + 5 <= body.length; at += 5) {
+                const slot = body[at];
+                palette[slot * 4] = body[at + 1];
+                palette[slot * 4 + 1] = body[at + 2];
+                palette[slot * 4 + 2] = body[at + 3];
+                palette[slot * 4 + 3] = body[at + 4];
+            }
+            continue;
+        }
+
+        if (type === SEGMENT_ODS) {
+            const flags = body[3];
+            if ((flags & 0x80) !== 0) {
+                // 最初の節。ここにだけ大きさが付く
+                building = {
+                    width: view.getUint16(7),
+                    height: view.getUint16(9),
+                    parts: [body.subarray(11)],
+                };
+            } else if (building !== null) {
+                building.parts.push(body.subarray(4));
+            }
+            // 最後の節が来たら組み立てる。ここで初めて1枚になる
+            if ((flags & 0x40) === 0 || building === null || pending === null) continue;
+            const { width, height } = building;
+            open = {
+                ...pending,
+                width,
+                height,
+                rle: concat(building.parts),
+                // **写しを持つ。** 色の表はこの後の字幕で書き換わる
+                palette: palette.slice(),
+            };
+            building = null;
+            pending = null;
+            continue;
+        }
+
+        if (type !== SEGMENT_PCS) continue;
+
+        // 中身が無ければ「消す」。出しているものをここで閉じる
+        close(pts);
+        const objects = body.length > 10 ? body[10] : 0;
+        if (objects === 0 || body.length < 19) {
+            pending = null;
+            continue;
+        }
+        pending = {
+            start: pts,
+            x: view.getUint16(15),
+            y: view.getUint16(17),
+            videoWidth: view.getUint16(0),
+            videoHeight: view.getUint16(2),
+        };
+    }
+    // 閉じないまま終わったものは、最後の時刻まで出しておく
+    close(last);
+    return out;
+}
+
+/** 色番号の並びを RGBA にする。**同じ番号は一度しか戻さない** (1枚に色は数百しか無い) */
+function paint(indices: Uint8Array, palette: Uint8Array, videoHeight: number): Uint8Array {
+    const bt709 = isBt709(videoHeight);
+    const data = new Uint8Array(indices.length * 4);
+    const cache = new Map<number, [number, number, number]>();
+    for (let i = 0; i < indices.length; i++) {
+        const slot = indices[i];
+        const alpha = palette[slot * 4 + 3];
+        if (alpha === 0) continue;
+        let rgb = cache.get(slot);
+        if (rgb === undefined) {
+            rgb = fromYCrCb(palette[slot * 4], palette[slot * 4 + 1], palette[slot * 4 + 2], bt709);
+            cache.set(slot, rgb);
+        }
+        data[i * 4] = rgb[0];
+        data[i * 4 + 1] = rgb[1];
+        data[i * 4 + 2] = rgb[2];
+        data[i * 4 + 3] = alpha;
+    }
+    return data;
+}

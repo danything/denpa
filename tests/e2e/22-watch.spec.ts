@@ -85,34 +85,50 @@ test.describe('録画を観る', () => {
     });
 
     /**
-     * **字幕は動画の隣に置いた文字のほうから出す。**
+     * **字幕は絵のまま重ねる。** ライブ (`/live`) と同じやり方。
      *
-     * 入れ物に入っているのは PGS (絵) で、ブラウザに復号器が無い。焼くときに
-     * 同じ字幕を文字でも取り出して `<動画名>.ja.ass` に置いてあるので、
-     * それを WebVTT に直して `<track>` へ渡す (`server/subtitle.ts` の `buildText`)
+     * 焼いたものに入っているのは PGS (絵) で、ブラウザに復号器が無い。文字に
+     * 直して `<track>` に渡す道も通したが、放送どおりには出ない (左右の位置・
+     * 背景の箱・外字が落ちる)。焼くときに作った絵を動画の隣に置いて、
+     * denpa 自身が解いて重ねる (`src/lib/pgs.ts` の `readSup`)
      */
-    test('字幕は WebVTT に直って届き、持っているときだけボタンが出る', async ({ page, request }) => {
+    test('字幕の絵が届き、持っているときだけボタンが出る', async ({ page, request }) => {
         test.setTimeout(180_000);
         const { id } = await recordOne(page, request);
 
-        const res = await request.get(`/api/recordings/${id}/subtitle.vtt`);
+        const res = await request.get(`/api/recordings/${id}/captions.sup`);
         expect(res.ok()).toBe(true);
-        expect(res.headers()['content-type']).toContain('text/vtt');
-        const vtt = await res.text();
-        expect(vtt.startsWith('WEBVTT')).toBe(true);
-        // 色は WebVTT が元から持っている名前で残す
-        expect(vtt).toContain('<c.yellow>にせの字幕です</c>');
-        // 「消す」だけの枚は出さない。終わりの時刻としてだけ残る
-        expect(vtt).toContain('--> 00:00:03.000');
-        expect(vtt).not.toContain('00:00:03.000 -->');
+        const sup = await res.body();
+        // PGS の節は 'PG' で始まる
+        expect(sup.length).toBeGreaterThan(0);
+        expect(String.fromCharCode(sup[0], sup[1])).toBe('PG');
 
         await goto(page, `/watch/${id}`);
-        await expect(page.getByTestId('watch-track')).toHaveCount(1);
-        // 最初は消えている。字幕は絵の上に重なるものなので、要る人が出す
+        // 重ねる先は映像と同じ枠に敷いてある。**押す邪魔をしない**
+        const canvas = page.getByTestId('watch-captions-canvas');
+        await expect(canvas).toHaveCount(1);
+        await expect(canvas).toHaveCSS('pointer-events', 'none');
+
+        // **既定で出す。** ライブと同じ (テレビの字幕ボタンとは違い、観る画面は出す側)
         const button = page.getByTestId('watch-captions');
-        await expect(button).toHaveAttribute('aria-pressed', 'false');
-        await button.click();
         await expect(button).toHaveAttribute('aria-pressed', 'true');
+        await button.click();
+        await expect(button).toHaveAttribute('aria-pressed', 'false');
+    });
+
+    /** 早送りはライブの追っかけと同じ並び (`ts/pacing` の `SPEEDS`) */
+    test('速さを選べる', async ({ page, request }) => {
+        test.setTimeout(180_000);
+        const { id } = await recordOne(page, request);
+
+        await goto(page, `/watch/${id}`);
+        await expect(page.getByTestId('watch-speed')).toContainText('1×');
+        await page.getByTestId('watch-speed').click();
+        await page.getByTestId('watch-speed-option').filter({ hasText: '1.5×' }).click();
+        await expect(page.getByTestId('watch-speed')).toContainText('1.5×');
+        expect(
+            await page.getByTestId('watch-video').evaluate((v) => (v as HTMLVideoElement).playbackRate),
+        ).toBe(1.5);
     });
 
     /**

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test';
-import { assClock, assTime, cleanAss, cleanCues, parseAss, toVtt, vttClock } from './ass';
+import { assClock, assTime, cleanAss, cleanCues, parseAss } from './ass';
 
 /** 実機の ffmpeg が出したものをそのまま (本好きの下剋上・冒頭) */
 const HEAD = `[Script Info]
@@ -38,11 +38,6 @@ describe('ASS の時刻', () => {
         expect(assClock(3723.5)).toBe('1:02:03.50');
         // 負は 0 に詰める。負を書ける入れ物ではない
         expect(assClock(-9.32)).toBe('0:00:00.00');
-    });
-
-    it('WebVTT は 1000分の1秒まで', () => {
-        expect(vttClock(10.28)).toBe('00:00:10.280');
-        expect(vttClock(3723.5)).toBe('01:02:03.500');
     });
 });
 
@@ -98,94 +93,5 @@ Dialogue: 0,0:00:10.00,0:00:12.00,Default,,0,0,0,,
 Dialogue: 0,0:00:12.00,0:00:14.00,Default,,0,0,0,,
 `;
         expect(cleanAss(parseAss(empty))).toBeNull();
-    });
-});
-
-describe('WebVTT に直す', () => {
-    const vtt = toVtt(parseAss(SAMPLE));
-
-    it('WEBVTT で始まる', () => {
-        expect(vtt.startsWith('WEBVTT\n')).toBe(true);
-    });
-
-    it('同じ時刻に出るものは1つにまとめる', () => {
-        expect(vtt).toContain(
-            '00:00:10.280 --> 00:00:12.320\n<c.yellow>(きむら)新！｢リセッシュ｣！</c>\n<c.yellow>ジャケットから 汗のニオイ｡</c>',
-        );
-    });
-
-    /**
-     * 放送はルビを独立した行として送ってくる。そのまま並べると2行に割れるので、
-     * 座標から掛かる字を探して本文に畳み込む
-     */
-    it('ルビは本文に畳み込む', () => {
-        expect(vtt).toContain('<c.lime>(<ruby>赤木<rt>あかぎ</rt></ruby>)ニオう… えっ…｡</c>');
-        // 独立した行としては出さない
-        expect(vtt).not.toContain('\nあかぎ\n');
-    });
-
-    /** 空の枚は「そこで消す」の意味なので、終わりの時刻としてだけ残る */
-    it('「消す」だけの枚は出さない', () => {
-        expect(vtt).not.toContain('00:00:14.360 -->');
-        expect(vtt).toContain('--> 00:00:14.360');
-    });
-
-    it('上に出ていたものは上に寄せる', () => {
-        const upper = `${HEAD}
-Dialogue: 0,0:00:01.00,0:00:02.00,Default,,0,0,0,,{\\an7}{\\pos(140,60)}うえ
-Dialogue: 0,0:00:03.00,0:00:04.00,Default,,0,0,0,,{\\an7}{\\pos(140,449)}した
-`;
-        const out = toVtt(parseAss(upper));
-        expect(out).toContain('00:00:01.000 --> 00:00:02.000 line:0');
-        expect(out).toContain('00:00:03.000 --> 00:00:04.000\n');
-        expect(out).not.toContain('00:00:03.000 --> 00:00:04.000 line:0');
-    });
-
-    it('印になる文字はそのまま出さない', () => {
-        const marks = `${HEAD}
-Dialogue: 0,0:00:01.00,0:00:02.00,Default,,0,0,0,,{\\an7}<a>&いろは
-`;
-        expect(toVtt(parseAss(marks))).toContain('&lt;a&gt;&amp;いろは');
-    });
-
-    /** 実機で拾ったもの。1行に2つ乗る・半角が混ざる・中央寄せになる、が全部入っている */
-    it('1行に2つ乗っても、それぞれの字に付く', () => {
-        const two = `${HEAD}
-Dialogue: 0,0:00:01.00,0:00:02.00,Default,,0,0,0,,{\\an7}{\\pos(120,419)}{\\fs18}{\\fsp2}なかの
-Dialogue: 0,0:00:01.00,0:00:02.00,Default,,0,0,0,,{\\an7}{\\pos(220,419)}{\\fs18}{\\fsp2}いっぺい
-Dialogue: 0,0:00:01.00,0:00:02.00,Default,,0,0,0,,{\\an7}{\\pos(100,449)}{\\fsp4}(仲野)一平ちゃんから
-`;
-        expect(toVtt(parseAss(two))).toContain(
-            '(<ruby>仲野<rt>なかの</rt></ruby>)<ruby>一平<rt>いっぺい</rt></ruby>ちゃんから',
-        );
-    });
-
-    /** ルビのほうが長いと本文より左から始まる。中央寄せなので */
-    it('本文より長いルビでも当たる', () => {
-        const wide = `${HEAD}
-Dialogue: 0,0:00:01.00,0:00:02.00,Default,,0,0,0,,{\\an7}{\\pos(80,419)}{\\fs18}{\\fsp2}きゅうきゅうにょりつりょう
-Dialogue: 0,0:00:01.00,0:00:02.00,Default,,0,0,0,,{\\an7}{\\pos(100,449)}{\\fsp4}急急如律令｡
-`;
-        expect(toVtt(parseAss(wide))).toContain(
-            '<ruby>急急如律令<rt>きゅうきゅうにょりつりょう</rt></ruby>｡',
-        );
-    });
-
-    /** 外れたところに振り仮名が付くくらいなら、付かないほうがまし */
-    it('どの字とも合わないルビは捨てる', () => {
-        const stray = `${HEAD}
-Dialogue: 0,0:00:01.00,0:00:02.00,Default,,0,0,0,,{\\an7}{\\pos(700,419)}{\\fs18}{\\fsp2}さくま
-Dialogue: 0,0:00:01.00,0:00:02.00,Default,,0,0,0,,{\\an7}{\\pos(100,449)}{\\fsp4}(目黒)
-`;
-        const out = toVtt(parseAss(stray));
-        expect(out).toContain('(目黒)');
-        expect(out).not.toContain('さくま');
-    });
-
-    it('白は包まない。既定の色なので', () => {
-        const white = `${HEAD}
-Dialogue: 0,0:00:01.00,0:00:02.00,Default,,0,0,0,,{\\1c&Hffffff&}しろ
-`;
-        expect(toVtt(parseAss(white))).toContain('00:00:01.000 --> 00:00:02.000\nしろ');
     });
 });

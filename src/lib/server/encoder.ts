@@ -958,6 +958,7 @@ async function runJob(jobId: number): Promise<void> {
     if (canceled.has(jobId)) {
         removeIfExists(trimmed);
         removeIfExists(encodeOptions.chaptersFile);
+        removeIfExists(encodeOptions.pgsFile ?? null);
         return finishCanceled(jobId, decoded);
     }
 
@@ -1011,9 +1012,8 @@ async function runJob(jobId: number): Promise<void> {
      * **同じ字幕を、文字でももう1本取り出す。**
      *
      * 入れ物の中は PGS のままで、こちらは動画の隣に置く付き添い (`.ja.ass`)。
-     * WebDAV 越しの Kodi が拾い、ブラウザには WebVTT に直して渡す
-     * (`api/recordings/<id>/subtitle.vtt`)。**引く値は絵と同じ** — 同じ録画に
-     * 2本付くので、片方だけずれると見比べたときに食い違う。
+     * WebDAV 越しの Kodi が拾う (観る画面は絵のほうを使う)。**引く値は絵と同じ** —
+     * 同じ録画に2本付くので、片方だけずれると見比べたときに食い違う。
      *
      * 置くのは焼き上がりの名前が決まってから。ここではまだ中身だけ持っておく
      */
@@ -1095,7 +1095,6 @@ async function runJob(jobId: number): Promise<void> {
     }
 
     removeIfExists(encodeOptions.chaptersFile);
-    removeIfExists(encodeOptions.pgsFile ?? null);
     // CMを切ったTSも解除したTSも作業用。元のTSは残したままなので、やり直せる
     removeIfExists(trimmed);
     removeIfExists(decoded);
@@ -1132,7 +1131,10 @@ async function runJob(jobId: number): Promise<void> {
 
     /*
      * 文字の字幕を動画の隣に置く。**焼き直しでは必ず置き換える** —
-     * 前の字幕が残ると、CMを切ったぶんだけずれたものが付いたままになる
+     * 前の字幕が残ると、CMを切ったぶんだけずれたものが付いたままになる。
+     *
+     * **絵のほうは置きません。** 入れ物の中に入っているので、要るときに抜く
+     * (`api/recordings/<id>/captions.sup`)
      */
     const subtitlePath = sidecarPaths(output).subtitle;
     removeIfExists(subtitlePath);
