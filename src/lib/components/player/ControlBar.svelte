@@ -22,14 +22,20 @@
     }: { shown?: boolean; side?: boolean; testid?: string; children: import('svelte').Snippet } = $props();
 
     /**
-     * ぼかしは絵の端から内側へ。伸びる向きだけが違う。
+     * ぼかしは絵の端から内側へ。
      *
-     * **右の列は斜めに散らす** (`to-bl`)。左へ流すだけにしていた頃は、
-     * **下端が直線で切れて**、絵の上に黒い四角を貼ったように見えていた
+     * **下端は絵の幅いっぱいなので、まっすぐ上へ流せばよい。** 逃げ場のある
+     * 端が上の1つしかないので、直線のぼかしで端が出ない。
+     *
+     * **右端は角から丸く散らす** (`radial`)。直線のぼかしは色の変わり目が
+     * 一方向にしか進まないので、横へ流すと**下端が、斜めへ流すと左端と下端が
+     * 直線で切れて**、絵の上に黒い四角を貼ったように見えていた。右上の角を
+     * 中心に散らせば、内側を向いている二辺 (左と下) が両方とも消えていく
      */
     const place = $derived(
         side
-            ? 'top-0 right-0 flex flex-col items-center gap-1 bg-gradient-to-bl from-black/70 to-transparent pt-3 pr-3 pb-12 pl-12'
+            ? 'top-0 right-0 flex flex-col items-center gap-1 pt-3 pr-3 pb-16 pl-16 ' +
+                  'bg-[radial-gradient(120%_120%_at_100%_0%,#000000b3_0%,#00000000_70%)]'
             : 'inset-x-0 bottom-0 bg-gradient-to-t from-black/80 to-transparent px-3 pt-8 pb-3',
     );
 </script>
