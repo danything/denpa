@@ -143,6 +143,21 @@
     }
 
     /**
+     * **マウスを動かしたら操作列を出す。**
+     *
+     * 出す手段が「押す」しか無かった頃は、10秒送りを押したいだけなのに
+     * **一度止めてから押す**ことになっていた (実機で見つけた。隠れた帯の上を
+     * 押すと、下の絵が受け取って再生が止まる)。動かしたら出るのは動画アプリの通例。
+     *
+     * **指のときは何もしない。** あちらは触った時点で `press` が読む —
+     * 指を置いただけで出すと、絵を見ている間ずっと出たままになる
+     */
+    function stir(): void {
+        if (coarse) return;
+        flash();
+    }
+
+    /**
      * 絵を押されたときの読み方は `ts/watch.ts` が決める。**ここは効かせるだけ。**
      *
      * - マウス … 1回で再生/一時停止、左右の端を素早く2回で 10秒
@@ -313,12 +328,17 @@
                 `<video>` だけを全画面にすると、上に重ねた操作が付いてこない
                 (iOS の `webkitEnterFullscreen` は端末の操作列になる)
             -->
-            <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+            <!--
+                動かしたら操作列を出すためだけの `pointermove` なので、押すものでは
+                ない (`stir`)。押す先は中の `<video>` とボタンのほう
+            -->
+            <!-- svelte-ignore a11y_no_noninteractive_element_interactions, a11y_no_static_element_interactions -->
             <section
                 bind:this={stage}
                 class="relative w-full overflow-hidden rounded-lg bg-black {full
                     ? 'flex h-screen items-center justify-center'
                     : ''}"
+                onpointermove={stir}
                 data-testid="watch-stage"
             >
                 <!--
