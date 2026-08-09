@@ -8,6 +8,7 @@
     import { clearOverlay, drawOverlay, fitRect } from '$lib/components/player/paint';
     import {
         BACK10,
+        CAMERA,
         CAPTION,
         CLOSE,
         EXPAND,
@@ -412,6 +413,7 @@
             ArrowLeft: () => seekBy(-SKIP),
             ArrowRight: () => seekBy(SKIP),
             c: toggleCaptions,
+            s: () => void snapshot(),
             f: toggleFull,
             // 早送りは順送り。**戻る側も付ける** (行き過ぎたら戻れないと不便)
             '>': () => stepSpeed(1),
@@ -484,12 +486,59 @@
         void detail.open(rec.program_id, seed);
     }
 
+    /** 切り抜きの結果。**貼れたかどうかは言う** (黙って何も起きないと分からない) */
+    let shot = $state<Notice | null>(null);
+
     /** 断られたときだけ知らせる。消せたときは一覧へ戻るので出す先が無い */
-    const notices = $derived<Notice[]>(
-        form !== null && form !== undefined && 'message' in form && typeof form.message === 'string'
-            ? [{ key: 'watch-delete', kind: 'error', text: form.message }]
-            : [],
-    );
+    const notices = $derived<Notice[]>([
+        ...(form !== null && form !== undefined && 'message' in form && typeof form.message === 'string'
+            ? [{ key: 'watch-delete', kind: 'error' as const, text: form.message }]
+            : []),
+        ...(shot === null ? [] : [shot]),
+    ]);
+
+    /**
+     * いまの1コマを**字幕ごと**切り抜いて、クリップボードへ。
+     *
+     * 字幕は別の canvas に重ねてあるので、映像の上にそれを重ねて焼き直すだけ。
+     * **面の大きさが違う** (字幕 1440x1080 / 映像 1920x1080) ので、画面で
+     * やっているのと同じように引き伸ばす。
+     *
+     * **貼れないことがある。** クリップボードに絵を置けるのは安全な繋ぎ
+     * (https か localhost) だけで、押した勢い (user activation) も要る。
+     * 断られたら**落とすほうに倒す** — 撮ったものを取り落とさない
+     */
+    async function snapshot(): Promise<void> {
+        if (video === null || video.videoWidth === 0) return;
+        controls.stir();
+        const shotCanvas = document.createElement('canvas');
+        shotCanvas.width = video.videoWidth;
+        shotCanvas.height = video.videoHeight;
+        const ctx = shotCanvas.getContext('2d');
+        if (ctx === null) return;
+        ctx.drawImage(video, 0, 0, shotCanvas.width, shotCanvas.height);
+        // 出している字幕をそのまま重ねる (消しているときは重ねない)
+        if (captions && overlay !== null && overlay.width > 1 && showing !== null) {
+            ctx.drawImage(overlay, 0, 0, shotCanvas.width, shotCanvas.height);
+        }
+
+        const blob = await new Promise<Blob | null>((resolve) => shotCanvas.toBlob(resolve, 'image/png'));
+        if (blob === null) return;
+
+        try {
+            await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
+            shot = { key: `shot-${Date.now()}`, kind: 'success', text: '切り抜きをコピーしました' };
+        } catch {
+            // 置けない繋ぎ (http) や断られたとき。落として渡す
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = `${rec.name} - ${clock(at)}.png`;
+            link.click();
+            URL.revokeObjectURL(url);
+            shot = { key: `shot-${Date.now()}`, kind: 'success', text: '切り抜きを保存しました' };
+        }
+    }
 </script>
 
 <svelte:head><title>{rec.name} - denpa</title></svelte:head>
@@ -826,6 +875,16 @@
                             </ul>
                         </div>
 
+                        <!--
+                            **切り抜き。** 字幕ごと写して、そのまま貼れるようにする。
+                            観ている場面を人に見せるのに、いちいち撮り直さずに済む
+                        -->
+                        <ControlButton
+                            path={CAMERA}
+                            label="この場面を切り抜く"
+                            testid="watch-shot"
+                            onclick={() => void snapshot()}
+                        />
                         <ControlButton
                             path={full ? SHRINK : EXPAND}
                             label={full ? '全画面をやめる' : '全画面'}

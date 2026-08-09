@@ -116,6 +116,22 @@ test.describe('録画を観る', () => {
         await expect(button).toHaveAttribute('aria-pressed', 'false');
     });
 
+    /**
+     * **切り抜きは字幕ごと。** 貼れるかどうか (クリップボード) は繋ぎ次第なので、
+     * ここで見るのは「押せて、断られても落とすほうに倒れる」ところまで
+     */
+    test('切り抜きのボタンが出る', async ({ page, request }) => {
+        test.setTimeout(180_000);
+        const { id } = await recordOne(page, request);
+
+        await goto(page, `/watch/${id}`);
+        const shot = page.getByTestId('watch-shot');
+        await expect(shot).toBeVisible();
+        // 押しても画面は壊れない (絵が無いので写るものは無い)
+        await shot.click();
+        await expect(page.getByTestId('watch-video')).toBeVisible();
+    });
+
     /** 残りは「あと何分で終わるか」。**倍速のぶんは割る** */
     test('残り時間も出て、倍速のぶんは割る', async ({ page, request }) => {
         test.setTimeout(180_000);

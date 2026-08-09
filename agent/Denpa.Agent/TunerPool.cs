@@ -698,6 +698,7 @@ internal sealed class Lease(int tuner, string type, string channel)
              * `Read` が永久に戻らず、蹴られてもここに居座る (Tuning.cs)
              */
             var ring = tuner.Output as DeviceStream;
+            var since = Stopwatch.StartNew();
             try
             {
                 while (!_stopped)
@@ -714,21 +715,17 @@ internal sealed class Lease(int tuner, string type, string channel)
                     {
                         foreach (var sink in Sinks.ToList()) sink.Push(chunk);
                     }
+
+                    if (since.Elapsed < OverflowReport) continue;
+                    since.Restart();
+                    ReportOverflows(ring);
                 }
             }
             catch (Exception error)
             {
                 Error = error.Message;
             }
-            /*
-             * **溢れたことは残す。** 溢れても選局は生きているので畳まないが、
-             * 溢れっぱなしなら読む側が遅い (番組表を一度に開きすぎ・B25 が重い)。
-             * 黙って捨てると、あとから「なぜ番組表に穴があるのか」を追えない。
-             */
-            if (ring is not null && ring.TakeOverflows() is > 0 and var overflows)
-            {
-                Log.Write($"[{Tuner}] {Channel}: 環が {overflows} 回溢れました (読むのが追いつきません)");
-            }
+            ReportOverflows(ring);
             /*
              * **同じ復号器に2本入りかけたら残す。** 静かに直しただけでは、
              * 直ったのか元々起きていなかったのかが分からない (AribB25.cs)
@@ -740,6 +737,33 @@ internal sealed class Lease(int tuner, string type, string channel)
             // 畳めと言われて終わったのなら、それは失敗ではない
             if (!_stopped) onExit();
         });
+    }
+
+    /**
+     * 溢れを報せる間隔。
+     *
+     * **終わりにだけ出していた頃は、長い選局が一度も報せなかった。** 番組表集めは
+     * 数分で終わるので出るが、**ライブ視聴と録画は終わるまで一度も出ない** —
+     * 実機で「観ている最中に一瞬止まる」と言われて記録を見ても、出ているのは
+     * 番組表のぶんだけで、観ている局が落としているのかどうかが分からなかった。
+     */
+    private static readonly TimeSpan OverflowReport = TimeSpan.FromMinutes(1);
+
+    /// <summary>
+    /// 溢れたぶんを吐き出して記録する。**溢れても選局は生きている**ので畳まない。
+    ///
+    /// <para>
+    /// **誰が読んでいたかも添える。** 溢れっぱなしなら読む側が遅いということで、
+    /// 相手が番組表集めなのか観ている人なのかで、次に見るところが変わる。
+    /// </para>
+    /// </summary>
+    private void ReportOverflows(DeviceStream? ring)
+    {
+        if (ring is null || ring.TakeOverflows() is not ( > 0 and var overflows)) return;
+        string[] uses;
+        lock (Sinks) uses = Sinks.Select(sink => sink.Use).Distinct().ToArray();
+        var who = uses.Length == 0 ? "読み手なし" : string.Join("・", uses);
+        Log.Write($"[{Tuner}] {Channel}: 環が {overflows} 回溢れました (読むのが追いつきません: {who})");
     }
 
     public void Start(string command, Action onExit)
