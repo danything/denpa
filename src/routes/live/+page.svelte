@@ -518,7 +518,7 @@
                             どのみち空いているので、そこに入れて縮む側にする。
                             ここから右は「どう出すか」で、観る画面と同じ位置
                         -->
-                        <span class="min-w-0 grow truncate px-2 text-xs text-white/80">
+                        <span class="min-w-0 grow truncate px-2 text-sm text-white/80">
                             {#if current}
                                 <span data-testid="live-title">
                                     {current.now?.name ?? current.name}

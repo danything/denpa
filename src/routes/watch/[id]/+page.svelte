@@ -940,12 +940,12 @@
                             観るのをやめるかどうかを決めるのに要る。倍速のときは
                             **実際に掛かる時間**にする (1.5倍なら残りも1.5で割る)
                         -->
-                        <span class="px-1 text-xs tabular-nums" data-testid="watch-clock">
+                        <span class="px-1 text-sm tabular-nums" data-testid="watch-clock">
                             {clock(at)} / {clock(length)}
                             <span class="text-white/70">残り {clock(remaining)}</span>
                         </span>
                         {#if current !== null}
-                            <span class="badge badge-sm badge-ghost" data-testid="watch-chapter">
+                            <span class="badge badge-ghost" data-testid="watch-chapter">
                                 {current.title}
                             </span>
                         {/if}
@@ -956,7 +956,7 @@
                             どのみち空いているので、そこに入れて縮む側にする
                         -->
                         <span
-                            class="min-w-0 grow truncate px-2 text-xs text-white/80"
+                            class="min-w-0 grow truncate px-2 text-sm text-white/80"
                             data-testid="watch-name"
                         >
                             {rec.name}

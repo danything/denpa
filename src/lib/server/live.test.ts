@@ -336,10 +336,27 @@ describe('H.264 は速さを優先する', () => {
         expect(plain()).not.toContain('-qp');
     });
 
+    /**
+     * **山だけは抑える。**
+     *
+     * 上の 8.2 Mbit/s は動きの少ない場面での値で、高校野球の中継を25分受けた
+     * ときの平均は **14.5 Mbit/s** だった (素の WebSocket で 2.3GB)。実機で
+     * 「一瞬止まって遅延が増える」が出ていて、送り出す側は入口 (TLS) まで
+     * 含めて途切れ0、**AV1 (6.6 Mbit/s) に替えると目に見えて減る** —
+     * 宅内でも無線は割り込む、という話。
+     *
+     * `-crf` は付けない (上げると遅くなる) まま、VBV で山だけ削る
+     */
+    test('山だけ抑える。平らな場面は今までどおり', () => {
+        expect(plain()[plain().indexOf('-maxrate') + 1]).toBe('8M');
+        expect(plain()[plain().indexOf('-bufsize') + 1]).toBe('8M');
+    });
+
     /** AV1 は量のほう。こちらの設定を持ち込まない */
     test('AV1 には持ち込まない', () => {
         const av1 = encodeArgs(1024, true, stereo, 'av1');
         expect(av1).not.toContain('ultrafast');
+        expect(av1).not.toContain('-maxrate');
         expect(av1).toContain('libsvtav1');
     });
 });
