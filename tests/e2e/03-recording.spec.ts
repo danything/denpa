@@ -116,7 +116,7 @@ test.describe('録画とエンコード', () => {
         await page.getByTestId('detail-close').click();
         await expect(detail).toHaveCount(0);
 
-        // ファイルは Range で取りに行ける。mpv も VLC もこれでシークするので、
+        // ファイルは Range で取りに行ける。Kodi はこれでシークするので、
         // 対応していないと全部落とし終わるまで早送りできない
         const id = await recording.getAttribute('data-recording-id');
         expect(id).toBeTruthy();

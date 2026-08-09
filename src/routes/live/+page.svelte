@@ -168,7 +168,7 @@
     /**
      * 操作列の出し入れ。**観る画面と同じ部品**
      * ([controls.svelte.ts](../../lib/components/player/controls.svelte.ts))。
-     * マウスは動かせば出てしばらくで消える。**指は押したら出て、押すまで消えない**
+     * マウスは動かせば出て、指は押せば出る。**消えるまではどちらも同じ長さ**
      */
     const controls = playerControls();
     $effect(() => {

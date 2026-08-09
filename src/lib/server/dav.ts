@@ -31,7 +31,7 @@ const CONTENT_TYPES: Record<string, string> = {
     '.mp4': 'video/mp4',
     '.jpg': 'image/jpeg',
     '.nfo': 'text/xml',
-    // 文字で取り出した字幕 (`<動画名>.ja.ass`)。Kodi は動画の隣から拾う
+    // denpa は字幕を隣に置かない (入れ物の中の PGS を使う)。人が置いたものは配る
     '.ass': 'text/x-ssa',
     '.srt': 'application/x-subrip',
     '.vtt': 'text/vtt',

@@ -108,8 +108,8 @@
     /**
      * 操作列の出し入れ。**ライブと同じ部品**
      * ([controls.svelte.ts](../../../lib/components/player/controls.svelte.ts))。
-     * マウスは動かせば出てしばらくで消える。**指は押したら出て、押すまで
-     * 消えない**。止めている間はどちらも残る
+     * マウスは動かせば出て、指は押せば出る。**消えるまではどちらも同じ長さ**。
+     * 止めている間はどちらも残る
      */
     const controls = playerControls();
     $effect(() => {

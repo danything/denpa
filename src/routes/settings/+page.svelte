@@ -222,7 +222,7 @@
             <div class="card-body">
                 <h2 class="card-title">ベーシック認証</h2>
                 <p class="text-base-content/70 text-sm">
-                    VLC も Kodi も、画面の前段に置くリダイレクト型の認証を扱えません。
+                    Kodi は、画面の前段に置くリダイレクト型の認証を扱えません。
                     プレイヤーが録画を取りに来る口は、これで守ります。
                     <strong>起動時に無ければ作る</strong>ので、常に掛かっています。
                 </p>
@@ -250,7 +250,7 @@
                     <label class="flex flex-col gap-1 sm:col-span-2">
                         <span class="text-sm font-medium">パスワード</span>
                         <!--
-                            いま入っているものを出す。Kodi や VLC に登録するときに要るのに
+                            いま入っているものを出す。Kodi に登録するときに要るのに
                             隠していると、思い出せないたびに作り直すことになり、
                             そのたびに登録済みの端末が全部つながらなくなる
                         -->

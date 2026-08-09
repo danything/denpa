@@ -464,17 +464,16 @@ test.describe('ライブ視聴', () => {
     });
 
     /*
-     * **指で触っても、その場では消えない。**
+     * **指で触ったら出て、離してもその場では消えない。消えるのはマウスと同じ長さ。**
      *
      * 指を離すとブラウザはポインタを取り下げるので、`pointerleave` が**触った
      * 直後に必ず飛ぶ**。マウスと同じに「出ていったら消す」で扱っていたので、
      * タッチの端末では**触った瞬間に操作列が消えて**いた — 帯を掴みに行く間が無い。
      *
-     * ついでに、指のほうは出しておく時間を長くしてある。マウスは動かしているだけで
-     * 出しっぱなしにできるが (`pointermove` が絶えず飛ぶ)、指は置いた瞬間しか
-     * 報せが来ない
+     * 押すまで留めていた時期もあるが、**消したいときに毎回絵を押すことになった**。
+     * 出し方は指とマウスで違ってよいが、消え方は同じでいい
      */
-    test('指で触ったときは、離しても消えない', async ({ browser }) => {
+    test('指で触ったら出て、しばらくで消える (マウスと同じ長さ)', async ({ browser }) => {
         // 指のある端末として開く。既定の枠にはタッチが無く、tap そのものが使えない
         const context = await browser.newContext({ hasTouch: true });
         const page = await context.newPage();
@@ -489,8 +488,10 @@ test.describe('ライブ視聴', () => {
 
         // 指を離したあとも出ている。ここが直る前は、離した時点で消えていた
         await expect(controls).toHaveAttribute('data-shown', 'true');
-        await page.waitForTimeout(3000);
-        await expect(controls, '指のときは 3 秒では引っ込めない').toHaveAttribute('data-shown', 'true');
+        // そのまま置いておけば、マウスと同じ 2.5 秒で引っ込む
+        await expect(controls, '指でも放っておけば消える').toHaveAttribute('data-shown', 'false', {
+            timeout: 6000,
+        });
         await context.close();
     });
 

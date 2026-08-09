@@ -901,7 +901,7 @@ Safari や AV1 非対応環境のための H.264 fallback は、段階ではな�
 ### MPEG-TS への AV1 多重 — 保留
 
 AOM 公式仕様（AOMediaCodec/av1-mpeg2-ts、stream_type 0x06 + format_identifier `AV01`）は存在するが、
-FFmpeg は PR、VLC は MR、GStreamer は WIP 段階。ブラウザ側デマクサも存在しない。継続監視する。
+FFmpeg は PR、GStreamer は WIP 段階。ブラウザ側デマクサも存在しない。継続監視する。
 
 ### Media over QUIC — 低遅延化の候補
 

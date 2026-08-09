@@ -28,8 +28,7 @@ EPGStation の置き換えとして作ったもので、エンコード設定は
 | `src/lib/server/cm.ts` | CM検出 (無音 + CM尺) |
 | `src/lib/server/cm-jls.ts` | CM検出 (join_logo_scp。任意) |
 | `src/lib/server/encoder.ts` | 録画のエンコード (AV1 / H.264) |
-| `src/lib/server/subtitle.ts` | ARIB字幕を絵にして `.sup` にする (sub2video)。**同じ字幕を文字でも取り出す** (`.ja.ass`) |
-| `src/lib/ts/ass.ts` | 文字の字幕 (ASS) を読んで整える。行き先は Kodi (DOM を触らない) |
+| `src/lib/server/subtitle.ts` | ARIB字幕を絵にして `.sup` にする (sub2video) |
 | `src/lib/pgs.ts` | PGS (Blu-ray の字幕) の**組み立てと読み出し**。ffmpeg に符号器が無いので自前。読むほうはブラウザで使う (`readSup`) |
 | `src/lib/download.ts` | 録画を落とすURLの組み立て (資格情報を埋める) |
 | `src/lib/ts/watch.ts` | 録画を観るときの押したことの読み方 (2回押し・チャプター送り・続きの位置。DOM を触らない) |

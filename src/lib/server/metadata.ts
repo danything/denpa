@@ -24,14 +24,14 @@ function pad(n: number): string {
 }
 
 /**
- * サイドカーの置き場。`foo.mkv` に対して `foo.nfo` / `foo-thumb.jpg` / `foo.ja.ass`。
+ * サイドカーの置き場。`foo.mkv` に対して `foo.nfo` / `foo-thumb.jpg`。
  *
- * **字幕の絵は置きません。** 入れ物の中に入っていて、抜くのは実測で0.1〜1秒
- * (`api/recordings/<id>/captions.sup`)。置くと動画1本につき6MB積む上に、
+ * **字幕は置きません。** 入れ物の中に入っていて、抜くのは実測で0.1〜1秒
+ * (`api/recordings/<id>/captions.sup`)。置くと動画1本ぶん場所を積む上に、
  * 焼き直しのたびに揃え直すことになる。
  *
- * **字幕に言語を入れるのは、拾う側の決まりに合わせるため。** Kodi は動画と同じ
- * 名前の字幕を隣から拾い、`.ja` の部分を言語として読む (`docs/library.md`)
+ * `subtitle` が残っているのは**片付けるため**。文字の写しを `.ja.ass` として
+ * 置いていた頃のものが、焼き直しても消えずに残るのを防ぐ (`subtitle.ts`)
  */
 export function sidecarPaths(videoPath: string): { nfo: string; thumbnail: string; subtitle: string } {
     const base = videoPath.slice(0, videoPath.length - extname(videoPath).length);

@@ -94,8 +94,8 @@ function settling(path: string, at: number): boolean {
  *
  * - `<動画>.dtvi` … chapter_exe / logoframe が作る索引 (1本3MB)
  * - `<動画>.sup` `<動画>.jls…` … 字幕とCM検出の作業ファイル
- * - `<動画から拡張子を取ったもの>.nfo` / `-thumb.jpg` / `.ja.ass` … プレイヤー向けの
- *   覚え書きと、文字で取り出した字幕
+ * - `<動画から拡張子を取ったもの>.nfo` / `-thumb.jpg` … プレイヤー向けの覚え書き。
+ *   `.ja.ass` は文字で取り出した字幕を置いていた頃のもの (いまは作らない)
  *
  * 実機では生TSの置き場に `.dtvi` が9本 (22MB) 残っていた。生TSを残さない設定だと
  * TS が消えたあとも索引だけが居座り、録るたびに積もる。
@@ -145,7 +145,8 @@ function orphan(path: string, videos: Set<string>): boolean {
     // 索引や作業ファイル。動画の名前をまるごと頭に持つ (`….m2ts.dtvi`)
     const trailing = /^(.+\.(?:m2ts|ts|mkv|mp4))\.[^/]+$/i.exec(path);
     if (trailing !== null) return !videos.has(trailing[1]);
-    // NFO・サムネイル・字幕。動画の拡張子を取り替えた形 (`….nfo` / `…-thumb.jpg` / `….ja.ass`)
+    // NFO・サムネイル。動画の拡張子を取り替えた形 (`….nfo` / `…-thumb.jpg`)。
+    // `.ja.ass` はもう作らないが、前に置いたものが残っているので拾う
     const base = /^(.+?)(?:-thumb\.jpg|\.nfo|\.ja\.ass)$/i.exec(path);
     if (base === null) return false;
     // どの入れ物で置いたかまでは名前から分からないので、当てはまるものを全部見る

@@ -22,7 +22,7 @@ import { sidecarPaths, writeNfo, writeThumbnail } from './metadata';
 import { descramble, isScrambled } from './scramble';
 import { settings } from './settings';
 import { chunks } from './stream';
-import { buildPgs, buildText } from './subtitle';
+import { buildPgs } from './subtitle';
 import { notify } from './webhook';
 
 export function isVideoCodec(value: unknown): value is VideoCodec {
@@ -104,7 +104,7 @@ function resolveCodec(codec: VideoCodec): 'av1' | 'h264' {
  * 別に添えて 16:9 に見せている。ffmpeg はその添え書きをそのまま写すので、
  * 出来上がりも 1440x1080 + SAR 4:3 になる。
  *
- * ところが**添え書きを見ないプレイヤーがある。** Android の VLC は
+ * ところが**添え書きを見ないプレイヤーがある。** 実機で試した Android のプレイヤーは
  * ハードウェア再生のとき画素の数だけを見るので、4:3 に潰れて出る (実機で確認)。
  *
  * **大きさはこちらで測って渡す** (`probeVideo` の width と sar)。
@@ -1008,25 +1008,10 @@ async function runJob(jobId: number): Promise<void> {
         encodeOptions.captionTitle = pgs.label;
     }
 
-    /*
-     * **同じ字幕を、文字でももう1本取り出す。**
-     *
-     * 入れ物の中は PGS のままで、こちらは動画の隣に置く付き添い (`.ja.ass`)。
-     * WebDAV 越しの Kodi が拾う (観る画面は絵のほうを使う)。**引く値は絵と同じ** —
-     * 同じ録画に2本付くので、片方だけずれると見比べたときに食い違う。
-     *
-     * 置くのは焼き上がりの名前が決まってから。ここではまだ中身だけ持っておく
-     */
-    const text = await buildText(source, startAt, signal);
-
-    if (pgs !== null || text !== null) {
-        const made = [
-            pgs === null ? null : `${pgs.captions} 枚を PGS`,
-            text === null ? null : `${text.captions} 枚を文字`,
-        ].filter((part) => part !== null);
+    if (pgs !== null) {
         database()
             .prepare('UPDATE encode_jobs SET log = ? WHERE id = ?')
-            .run(`字幕 ${made.join('、')} にしました`, jobId);
+            .run(`字幕 ${pgs.captions} 枚を PGS にしました`, jobId);
     }
 
     if (canceled.has(jobId)) {
@@ -1130,22 +1115,13 @@ async function runJob(jobId: number): Promise<void> {
     }
 
     /*
-     * 文字の字幕を動画の隣に置く。**焼き直しでは必ず置き換える** —
-     * 前の字幕が残ると、CMを切ったぶんだけずれたものが付いたままになる。
+     * **字幕は動画の隣に置きません。** 入れ物の中に入っているので、要るときに抜く
+     * (`api/recordings/<id>/captions.sup`)。
      *
-     * **絵のほうは置きません。** 入れ物の中に入っているので、要るときに抜く
-     * (`api/recordings/<id>/captions.sup`)
+     * 消すほうだけ残してある — 文字の写しを置いていた頃 (`.ja.ass`) のものが
+     * 残っていると、CMを切ったぶんだけずれた字幕が付いたままになる
      */
-    const subtitlePath = sidecarPaths(output).subtitle;
-    removeIfExists(subtitlePath);
-    if (text !== null) {
-        try {
-            writeFileSync(subtitlePath, text.content);
-        } catch (error) {
-            // 置けなくても観るのに支障は無い (入れ物の中の PGS は無事)
-            console.error(`[encode] 字幕を置けませんでした: ${error}`);
-        }
-    }
+    removeIfExists(sidecarPaths(output).subtitle);
 
     let size = 0;
     try {

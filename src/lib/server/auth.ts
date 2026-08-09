@@ -11,7 +11,7 @@ import { saveSettings, settings } from './settings';
  * | それ以外 | OIDC (設定してあれば)。無ければベーシック認証 |
  * | `/login` まわり | 素通し (ここを守ると入口が無くなる) |
  *
- * **プレイヤーはリダイレクトを扱えない。** VLC も Kodi も Infuse も、ログイン画面へ
+ * **プレイヤーはリダイレクトを扱えない。** Kodi は、ログイン画面へ
  * 飛ばされたところで何もできず「再生できません」で終わる。だからファイルを取りに
  * 来る口だけは、前段に何を置いていようと素のベーシック認証のまま残してある。
  *
@@ -60,7 +60,7 @@ export function ensureBasicAuth(): boolean {
     saveSettings({ basicAuthUser: BASIC_AUTH_USER, basicAuthPassword: password });
     console.log(
         `[boot] ベーシック認証を作りました: ${BASIC_AUTH_USER} / ${password}\n` +
-            '       設定画面から見直せます。プレイヤー (VLC / Kodi) にも同じものを入れてください',
+            '       設定画面から見直せます。プレイヤー (Kodi) にも同じものを入れてください',
     );
     return true;
 }
@@ -114,7 +114,7 @@ export function protects(pathname: string): boolean {
 /**
  * ファイルの口を、**ログイン済みの画面にも開けるか**。
  *
- * ファイルの口だけはベーシック認証で守ってある — VLC も Kodi も Infuse も
+ * ファイルの口だけはベーシック認証で守ってある — Kodi は
  * ログイン画面へのリダイレクトを扱えないため。**そこは変えない。**
  *
  * ただし `<video>` が同じ口を取りに来るようになった (録画をブラウザで観る)。
@@ -134,7 +134,7 @@ export function sessionMayRead(pathname: string, loggedIn: boolean): boolean {
  * カンマ区切り)。
  *
  * **ここに当たるとベーシック認証も OIDC も掛かりません。** プレイヤー
- * (VLC / Kodi / Infuse) に資格情報を入れずに使えるのが狙いです。
+ * (Kodi) に資格情報を入れずに使えるのが狙いです。
  *
  * **どの名前で来たかは問いません。** 名前で分けるのは前段 (Traefik) の仕事で、
  * LAN 用の名前には `ClientIP` を条件に付けてあります。ここで名前も見ると
