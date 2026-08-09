@@ -34,6 +34,14 @@
     let loading = $state(false);
     /** 何度も作らないための世代。押して離してを繰り返しても混ざらない */
     let generation = 0;
+    /**
+     * 渡した知らせの数。**画面には出さない** (切り分け用)。
+     *
+     * データ放送は「押しても何も出ない」という壊れ方をする。**届いていないのか、
+     * 届いても描かれないのか**が外から分からないと、どちらを追えばいいかが
+     * 決まらない (実機で1日それを探した)
+     */
+    let handed = $state(0);
 
     /**
      * 放送の丸ゴシックは端末のもので代用する。
@@ -66,13 +74,18 @@
         });
         browser = made;
         loading = false;
-        listen((message) => made.emitMessage(message));
+        handed = 0;
+        listen((message) => {
+            handed++;
+            made.emitMessage(message);
+        });
     }
 
     function close(): void {
         generation++;
         listen(null);
         loading = false;
+        handed = 0;
         browser?.destroy();
         browser = null;
     }
@@ -118,4 +131,5 @@
     class:hidden={!on}
     data-testid="live-data"
     data-state={browser !== null ? 'ready' : loading ? 'loading' : 'off'}
+    data-handed={handed}
 ></div>
