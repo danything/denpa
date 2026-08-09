@@ -533,8 +533,10 @@
 
                             **並びは時刻・局名・番組名。** 番組名を先に置いていた
                             頃は、長い名前に押し出されて**いま何を映しているのかが
-                            見えなく**なっていた。狭いところで削るのは番組名 —
-                            局と時刻さえ出ていれば、何を映しているかは分かる。
+                            見えなく**なっていた。**縮むのは番組名だけ** — 時刻と
+                            局名は幅が知れているので先に確保し、余りを名前にやって、
+                            入らないぶんだけ省く。狭いと丸ごと隠していた頃は、
+                            少し足りないだけで名前が消えていた。
 
                             **幅ゼロから伸ばす** (`basis-0`)。押すものと同じに
                             中身の幅で並べていた頃は、**名前が長いだけで帯が
@@ -543,15 +545,17 @@
                             行が分かれてしまう
                         -->
                         <div class="min-w-0 grow basis-0 px-2 leading-tight text-white/80">
-                            <div class="truncate text-sm">
+                            <div class="flex items-baseline overflow-hidden text-sm whitespace-nowrap">
                                 {#if current}
+                                    <span class="shrink-0">
+                                        {#if current.now}
+                                            {time(current.now.startAt)} 〜 {time(current.now.endAt)} ・
+                                        {/if}
+                                        {current.name}
+                                    </span>
                                     {#if current.now}
-                                        {time(current.now.startAt)} 〜 {time(current.now.endAt)} ・
-                                    {/if}
-                                    {current.name}
-                                    {#if current.now}
-                                        <span class="hidden lg:inline">
-                                            ・ <span data-testid="live-title">{current.now.name}</span>
+                                        <span class="min-w-0 truncate">
+                                            &nbsp;・ <span data-testid="live-title">{current.now.name}</span>
                                         </span>
                                     {/if}
                                 {/if}

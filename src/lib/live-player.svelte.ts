@@ -19,7 +19,7 @@ import {
     type Tuned,
 } from '$lib/live';
 import { CLOCK, type Cue, currentCue, insertCue, trimCues } from '$lib/ts/captions';
-import { FLOOR, nextTarget, pacing } from '$lib/ts/pacing';
+import { CEILING, FLOOR, nextTarget, pacing } from '$lib/ts/pacing';
 
 export type LiveState = 'idle' | 'connecting' | 'playing' | 'error';
 
@@ -79,6 +79,38 @@ function remember(target: Tuned): void {
     document.cookie = `${LAST_COOKIE}=${value}; path=/live; max-age=31536000; samesite=lax`;
 }
 
+/**
+ * 覚えておく「これより下へは貯めない量」の置き場 (`ts/pacing` の `nextTarget`)。
+ *
+ * **端末ごとに覚える。** 開くたびに `FLOOR` (0.2秒) から始めていた頃は、
+ * **開いて30秒以内に必ず1回止まって**いた — 0.2秒はどの経路でも足りないので、
+ * 毎回そこから当たりを探し直すことになる。前に落ち着いた高さから始めれば、
+ * 探し直しは経路が変わったときだけになる。
+ *
+ * サーバではなく端末に置く。**これは経路の性質**で、同じ人でも宅内のPCと
+ * 出先のタブレットでは別の値になる (続きの位置 `resume_ms` とは逆の理由)
+ */
+const FLOOR_KEY = 'live-floor';
+
+function storedFloor(): number {
+    try {
+        const saved = Number(localStorage.getItem(FLOOR_KEY));
+        if (!Number.isFinite(saved)) return FLOOR;
+        return Math.min(CEILING, Math.max(FLOOR, saved));
+    } catch {
+        // 読めない繋ぎ (プライベート窓)。今までどおり下限から始める
+        return FLOOR;
+    }
+}
+
+function rememberFloor(seconds: number): void {
+    try {
+        localStorage.setItem(FLOOR_KEY, String(seconds));
+    } catch {
+        // 覚えられなくても観るのに支障は無い
+    }
+}
+
 export function livePlayer() {
     let state = $state<LiveState>('idle');
     let message = $state('');
@@ -104,14 +136,16 @@ export function livePlayer() {
     let chasing = $state(false);
     /** 追っかけ中の速さ。ライブに戻れば 1 に戻す */
     let speed = $state(1);
-    /** どれだけ貯めているか (秒)。詰まると伸び、無事が続くと縮む */
-    let target = $state(FLOOR);
     /**
      * 縮めるときの行き先の下限 (秒)。**止まった高さを覚えている** (`nextTarget`)。
      *
-     * 選局しても持ち越す。変わったのは映すものであって、経路ではない
+     * 選局しても持ち越す — 変わったのは映すものであって、経路ではない。
+     * **開き直しても持ち越す** (`storedFloor`)。0.2秒から始めていた頃は、
+     * 開いて30秒以内に必ず1回止まっていた
      */
-    let floor = FLOOR;
+    let floor = storedFloor();
+    /** どれだけ貯めているか (秒)。詰まると伸び、無事が続くと縮む */
+    let target = $state(floor);
     /**
      * どこまで戻れて、いまどこに居るか。**操作の帯を描くのに使う。**
      *
@@ -491,6 +525,8 @@ export function livePlayer() {
         if (next.floor !== floor) {
             floor = next.floor;
             lastFloor = now;
+            // 次に開いたときはここから始める。探し直しは経路が変わったときだけ
+            rememberFloor(floor);
         }
         if (next.target !== target) target = next.target;
     }

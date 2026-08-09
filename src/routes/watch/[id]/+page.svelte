@@ -944,8 +944,10 @@
 
                             **並びは時刻・局名・番組名。** 番組名を先に置いていた
                             頃は、長い名前に押し出されて他が見えなくなっていた。
-                            狭いところで削るのは番組名 — 何を観ているかは絵を
-                            見れば分かるし、右の列にも出ている。
+                            **縮むのは番組名だけ** — 時刻と局名は幅が知れている
+                            ので先に確保し、余りを名前にやって、入らないぶんだけ
+                            省く。狭いと丸ごと隠していた頃は、少し足りないだけで
+                            名前が消えていた。
 
                             **幅ゼロから伸ばす** (`basis-0`)。押すものと同じに
                             中身の幅で並べていた頃は、**名前が長いだけで帯が
@@ -954,10 +956,12 @@
                             行が分かれてしまう
                         -->
                         <div class="min-w-0 grow basis-0 px-2 leading-tight text-white/80">
-                            <div class="truncate text-sm">
-                                {time(rec.start_at)} 〜 {time(rec.end_at)} ・ {rec.service_name}
-                                <span class="hidden lg:inline">
-                                    ・ <span data-testid="watch-name">{rec.name}</span>
+                            <div class="flex items-baseline overflow-hidden text-sm whitespace-nowrap">
+                                <span class="shrink-0">
+                                    {time(rec.start_at)} 〜 {time(rec.end_at)} ・ {rec.service_name}
+                                </span>
+                                <span class="min-w-0 truncate">
+                                    &nbsp;・ <span data-testid="watch-name">{rec.name}</span>
                                 </span>
                             </div>
 
