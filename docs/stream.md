@@ -46,9 +46,9 @@
                   │ 1局ぶんの TS          │ (データ放送はまだ)
                   ▼                      ▼
      ┌───────────────────────────┐  ┌──────────────────┐
-     │ ffmpeg + libaribcaption   │  │ psisiarc         │
-     │  ├→ pipe:1 fMP4 (映像音声) │  │ PSI/SI +         │
-     │  └→ pipe:3 mkv (字幕の絵) │  │ データカルーセル  │
+     │ ffmpeg + libaribcaption   │  │ decodeTS         │
+     │  ├→ pipe:1 fMP4 (映像音声) │  │ カルーセルを     │
+     │  └→ pipe:3 mkv (字幕の絵) │  │ 組み立てる       │
      └─────────────┬─────────────┘  └────────┬─────────┘
                    └───────────┬─────────────┘
                                ▼
@@ -117,8 +117,7 @@ ffmpeg が付けたものなので、受け側の再生位置と直に比べら�
 | --- | --- | --- | --- |
 | エンコード | FFmpeg（将来 QSVEncC/NVEncC/VCEEncC） | — | CLI パイプラインで差し替え可能 |
 | 字幕の描画 | xqq/libaribcaption | 127 | `-sub_type bitmap` + sub2video。録画側と同じ。denpa の ffmpeg は `--enable-libaribcaption` で組んである |
-| データ放送抽出 | xtne6f/psisiarc | 19 | PSI/SI + カルーセルを .psc に圧縮 |
-| データ放送描画 | otya128/web-bml | 246 | BMLブラウザ。サイドカーとして起動 |
+| データ放送 | otya128/web-bml | 246 | BMLブラウザ。**解く側 (`decodeTS`) と描画側だけ借りる** ([§5.6](#56-データ放送の統合)) |
 | 再生 | MSE 直接 / Vanilagy/mediabunny | 6,846 | AV1+Opus fMP4 |
 
 ★は 2026-08-02 時点。日本の放送関連ツールはスター数が2桁だが**代替が存在しない**ため、数値で評価しないこと。
@@ -139,7 +138,7 @@ ffmpeg 単体で足りた（[§4](#tsreadex-は挟まない)）。
 
 1. **メディア経路** — `ffmpeg → fMP4 → WebSocket → MSE`。まず映像音声だけ出す — **入っています**
 2. **字幕** — 同じ ffmpeg の2つ目の出口からサイドチャネルへ流し、canvas に重ねる — **入っています**
-3. **データ放送** — psisiarc → web-bml をサイドカーとして起動し、iframe で抱える
+3. **データ放送** — 1局に絞った TS の写しを web-bml の `decodeTS` に流し、組み立て済みのモジュールをサイドチャネルへ ([§5.6](#56-データ放送の統合))
 4. ~~**低遅延の追い込み（任意）**~~ — **やめました。** 縮むのは受け側の貯め (0.2秒〜) だけで、
    開いてから映るまではむしろ伸び、「止めた所から見られる」「5分戻れる」を捨てることになる
    （[§6](#webrtc--whep-による低遅延化--不採用)）
@@ -802,25 +801,57 @@ ffmpeg の立ち上がり 0.5〜0.7 秒が丸ごと消え、サーバの CPU も
 web-bml は Node.js サーバ + ブラウザクライアント構成（既定ポート 23234）。
 セルフホスト前提なので、NVRAM は web-bml の既定実装（サーバローカル保存）をそのまま使う。
 
-> **ここは実装前に読み直すこと。上の図と、下に書いてあったことが食い違っている。**
->
-> 図は「denpa が psisiarc で抜いたカルーセルをサイドチャネルへ流し、ブラウザ側の
-> web-bml が受け取る」形だが、web-bml が実際に受け取るのは **Mirakurun / EPGStation /
-> TSファイル**で、**自前の ffmpeg で HLS を作って自分の `<video>` に映す**
-> （`MIRAK_URL` / `EPG_URL` / `INPUT_FILE` / `FFMPEG`）。psisiarc の .psc を食べる口は無い。
->
-> つまり「サイドカーとして起動して iframe で抱える」を素直にやると、**映像を出す
-> プレイヤーが2つになる** — denpa 側の貯め方も字幕も焼き方の切り替えも、その画面では
-> 使われない。取りうる形は2つで、**どちらを採るかは映像をどちらが持つかの選択**:
->
-> | | 形 |
-> | --- | --- |
-> | **web-bml に持たせる** | denpa が Mirakurun 互換の口（`/channels` `/services` `/channels/{type}/{ch}/stream`）を出し、web-bml をサイドカーとして立てて iframe で抱える。実装は薄いが、その画面の映像は web-bml のもの |
-> | **denpa に持たせる** | web-bml の**クライアントだけ**を使い、カルーセルを denpa のサイドチャネルで流す（図のとおり）。映像・字幕・貯め方は今のまま使えるが、web-bml のサーバ側プロトコルを denpa に実装することになる |
->
-> チューナーの取り合いはどちらでも denpa が持つ（[architecture.md](architecture.md) の
-> 「視聴だけ外に出すと優先度の決め方が2箇所に割れる」）。Mirakurun 互換の口を出す形でも、
-> 配るのは**いま掴んでいる TS の写し**であって、掴み直しではない。
+**映像は denpa が持つ。web-bml からは「解く側」だけを借りる。**
+
+素直に「サイドカーとして起動して iframe で抱える」をやると**映像を出すプレイヤーが
+2つ**になる。web-bml が受け取るのは Mirakurun / EPGStation / TSファイルで、
+**自前の ffmpeg で HLS を作って自分の `<video>` に映す**ためで、そうすると
+denpa 側の貯め方も字幕も焼き方の切り替えも、その画面では使われない。HLS の遅延は
+数秒なので、denpa の 0.6秒 の絵に重ねることもできない。
+
+**借りるのは `server/decode_ts.ts` の `decodeTS()` と、クライアントの描画側。**
+中を読むと、あれは TS を流し込む Node のストリームで、**解いた結果**を
+`sendCallback` で吐く:
+
+```ts
+// web-bml/server/decode_ts.ts
+export function decodeTS(options: {
+    sendCallback: (msg: wsApi.ResponseMessage) => void;
+    serviceId?: number;
+    ...
+}): TsStream
+```
+
+出てくるのは生の TS でもセクションでもなく、**組み立て終わったもの**
+(`web-bml/server/ws_api.ts`):
+
+| 型 | 中身 |
+| --- | --- |
+| `pmt` | データ放送の component (PID・componentId・BXML の情報) |
+| `moduleDownloaded` | 揃ったモジュール。**ファイルごとに base64 と MIME** |
+| ほか | PES・時刻など |
+
+つまり **DSM-CC のカルーセルを組み立てるところまで向こうが持っている**。denpa は
+1局に絞った TS の写しをこれに流し、出てきたものを**いまあるサイドチャネルに
+乗せるだけ**でいい ([§5.3](#53-websocket-プロトコル))。字幕と同じ経路で、口が1つ増える。
+
+**psisiarc は要らない。** `decodeTS` が TS を直に読むので、間に挟むものが無い。
+(依存は npm の `@chinachu/aribts`。)
+
+```
+エージェント → denpa ┬→ ffmpeg   → fMP4 → MSE            (映像・音声)
+                     ├→ ffmpeg   → mkv  → canvas         (字幕の絵)
+                     └→ decodeTS → 組み立て済みモジュール → web-bml の描画側
+```
+
+ffmpeg は1本のまま、チューナーも1つのまま、遅延も 0.6秒 のまま。
+
+**残っている読めていないところ**は、クライアントの描画側をどう抱えるか。あちらは
+ページまるごとを組む webpack のバンドルで、自前の `<video>` を持っている。
+**絵は denpa のものを使うので、その `<video>` は使わない**形にできるかを実物で
+確かめること。
+
+セルフホスト前提なので、NVRAM は web-bml の既定実装（サーバローカル保存）をそのまま使う。
 
 ### 5.7 双方向（通信系コンテンツ）プロキシ
 
@@ -870,7 +901,7 @@ Safari や AV1 非対応環境のための H.264 fallback は、段階ではな�
 
 ### GStreamer — 不採用
 
-当初は「tsdemux の private pad で B24 を映像と同一クロック上で取得でき、tee が不要になる」ことを理由に有力視した。**データ放送要件の追加によりこの論拠は失効**（psisiarc が独立プロセスで TS を読むため tee は必須）。
+当初は「tsdemux の private pad で B24 を映像と同一クロック上で取得でき、tee が不要になる」ことを理由に有力視した。**データ放送要件の追加によりこの論拠は失効**（データ放送も TS をもう一方へ分けて読むため tee は必須）。
 
 残る比較では ffmpeg が優位:
 
@@ -959,7 +990,7 @@ FFmpeg は PR、GStreamer は WIP 段階。ブラウザ側デマクサも存在�
 | xqq/libaribcaption | 127 | **字幕の描画**（denpa の ffmpeg に組み込み済み） |
 | monyone/biim | 49 | LL-HLS 化する場合 |
 | xtne6f/tsreadex | 41 | TS 整形 |
-| xtne6f/psisiarc | 19 | データ放送抽出 |
+| xtne6f/psisiarc | 19 | データ放送抽出（**要らなくなった** — [§5.6](#56-データ放送の統合)） |
 | monyone/aribb24.js | 57 | ブラウザ側で字幕を描く場合（§6） |
 | xqq/mpegts.js | 2,262 | MPEG-TS を直接再生する場合（不採用） |
 
