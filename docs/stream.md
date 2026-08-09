@@ -885,38 +885,63 @@ ffmpeg は1本のまま、チューナーも1つのまま、遅延も 0.6秒 の
 
 ### 残っているのは、描画側をどう抱えるか
 
-**抱えられるようには出来ている。** `client/bml_browser.ts` の `BMLBrowser`
-は差し込み口を並べて受け取る形 (`Indicator` / `EPG` / `IP` / `AudioNodeProvider`)、
-**映像は `client/player/video_player.ts` の抽象クラス**で、**既にある `<video>` と
-入れ物を渡して使う**:
+**繋ぎ口はぴったり合っている。** `client/bml_browser.ts` の `BMLBrowser` は、
+denpa が既に作っている `ResponseMessage` をそのまま食べる:
 
 ```ts
-export abstract class VideoPlayer {
-    constructor(video: HTMLVideoElement, container: HTMLElement)
-    public abstract setSource(source: string): void;
-    ...
-}
+const browser = new BMLBrowser({
+    containerElement,        // BML を描く場所
+    mediaElement,            // 映像が居る入れ物。**denpa の <video> をそのまま渡す**
+    videoPlaneModeEnabled,   // BML が指す位置に映像を置き直すか
+});
+browser.emitMessage(msg);    // ← ts/bml.ts が吐くものをそのまま
+browser.destroy();
 ```
 
-**何もしない実装 (`client/player/null.ts`) が既にある。** denpa の `<video>` を
-そのまま渡し、`setSource` で何もしなければ、**絵は denpa のまま BML だけが上に載る**。
-自分で書き直す理由がここには無い — 手書きのぶんだけでも `browser.ts` 58KB・
-`content.ts` 69KB・`drcs.ts` 31KB・`nvram.ts` 25KB・`binary_table.ts` 26KB あり、
-ES2 の処理系まで抱えている。
+**映像は渡すだけ。** `VideoPlayer` の実装 (`client/player/*.ts`) は向こうの
+単体ページ (`client/index.ts`) が hls.js / mpegts.js で自前再生するためのもので、
+**`BMLBrowser` は受け取らない**。denpa の絵はそのまま、上に BML が載る。
 
-**決まっていないのは、どう持ってくるか。** 解く側は3ファイルで済んだので
-そのまま置いたが (`src/lib/vendor/web-bml/`)、描画側は `client/` 以下 700KB に
-`interpreter` 217KB・`es2` 205KB・`interface` 103KB が付く。しかも web-bml の
-package.json には `exports` が無く、`main` は生の TypeScript で、依存に koa・react・
-hls.js・mpegts.js が並ぶ (向こうはサーバも画面も1つの木で持っているため)。
+自分で書き直す道は無い。ES2 の処理系まで抱えることになる (下の実測)。
 
-| 道 | 見るところ |
+#### どれだけ持ち込むことになるか
+
+`BMLBrowser` から実際に辿れるものを数えた (2026-08-10 時点):
+
+| | |
 | --- | --- |
-| npm の git 依存にして Vite に組ませる | `buffer` / `stream-browserify` / `process` / `browserify-zlib` の差し替えが要る (向こうは webpack で入れている)。要らない依存 (koa・react) まで引く |
-| webpack の束を Dockerfile で組んで、静的ファイルとして配る | ffmpeg や chapter_exe と同じやり方。束の中身を denpa 側から呼べるかを確かめる必要がある |
+| ファイル | **46個・1,237 KB** の TypeScript |
+| 大きいもの | `es2/index.ts` 200KB / `jis_to_unicode_map` 122KB / `es2_dom_binding` 122KB / `unicode_to_jis_map` 121KB / `interface/DOM` 90KB / `romsound_data` 84KB / `content` 68KB / `browser` 56KB |
+| 外から引くもの | **4つだけ** — `buffer` / `crc-32` / `css` (otya128 のフォーク) / `fast-xml-parser` |
+| ほかに要るもの | `JS-Interpreter/interpreter.js` (117KB) と `acorn.js` (68KB)。`public/default.css` (9KB) と `default_c.css` (5KB) |
 
-**先にどちらかを決めてから手を動かすこと。** 解く側と違って、ここは選び直すと
-書いたものが丸ごと無駄になる。
+**koa・react・hls.js・mpegts.js は引かない。** あれらは向こうの package.json に
+並んでいるだけで、`BMLBrowser` の木には入っていない (サーバと単体ページのもの)。
+
+引っかかるのは1箇所だけ。`js_interpreter.ts` が
+`require("../../JS-Interpreter/interpreter")` を使い、その中が**大域の `acorn`** を
+見る。向こうは webpack の `ProvidePlugin` で入れているので、Vite で組むなら
+同じことをする必要がある。
+
+**フォントは別の話。** BML は丸ゴシックを指してくるので、向こうは Kosugi /
+KosugiMaru を 4.4MB ぶん抱えている。積むかどうかは持ち込み方とは独立に決める。
+
+#### 3つの道
+
+| 道 | 良いところ | 引き換え |
+| --- | --- | --- |
+| **A. npm の git 依存** (`github:otya128/web-bml`) | 更新が `bun update` で済む。ファイルを抱え込まない | **`exports` が無く `main` は生の TS**。node_modules の TS を Vite に組ませる設定が要る。入れるだけで**使わない25個の依存も落ちてくる** (koa・react ほか)。型は追えるが `acorn` の大域は自分で用意 |
+| **B. webpack の束を Dockerfile で組む** | 向こうのビルド設定 (`acorn` も `buffer` も) をそのまま使える。denpa 側の依存は**増えない**。ffmpeg や chapter_exe と同じやり方 | **型が切れる** (`window` 越しになるので `any`)。像を焼くのに node と npm が要り、25個の依存も落ちる。`ResponseMessage` の食い違いを**型検査が見張れなくなる** — 解く側を自前にした利点が半分消える |
+| **C. 借りものとして置く** (`src/lib/vendor/`。解く側と同じ) | Vite が他と一緒に組む。**型が最後まで通る**。増える依存は4つだけ。網の要らないビルド | **1,237 KB・46ファイル**をリポジトリに抱える。更新は取り直し。`acorn` の大域と `css` フォーク (git tarball) は自分で面倒を見る |
+
+**採るのは C。** 決め手は型で、`emitMessage(msg: ResponseMessage)` の食い違いを
+検査で止められるかどうかがそのまま「解く側を自前にした意味」に効く。A は
+`exports` が無い時点で結局 node_modules の中を名指しすることになり、抱えないぶんの
+利点が薄い。B は依存が増えないのが魅力だが、型が切れるのと像の焼き時間が伸びるのが
+重い。
+
+**1,237 KB は読むためではなく置くためのもの**で、biome の整形・検査からは
+`!src/lib/vendor` で外れる (解く側と同じ扱い)。
 
 セルフホスト前提なので、NVRAM は web-bml の既定実装（サーバローカル保存）をそのまま使う。
 
