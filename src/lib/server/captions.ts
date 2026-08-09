@@ -73,7 +73,9 @@
  * 絵を重ねるのは「消す」と同じ結果になるので、空かどうかを見分ける必要が無い。
  */
 
+import { LANGUAGE } from '$lib/arib';
 import { type CaptionTrack, CHANNEL } from '$lib/live';
+import type { MkvFrame } from '$lib/ts/mkv';
 
 /**
  * 字幕を描く画面の大きさ。
@@ -178,13 +180,13 @@ export function captionOutput(from: string, track: number): string[] {
  */
 export const NO_SUBTITLE = /matches no streams|Error binding filtergraph/;
 
-/** 字幕1枚 */
-export interface Caption {
-    /** いつ出すか (ミリ秒)。**映像の mp4 と同じ物差し** (stream.md §5.4) */
-    at: number;
-    /** パレットではない RGBA の PNG。画面まるごとの大きさ */
-    data: Uint8Array;
-}
+/**
+ * 字幕1枚。**器から出てきたコマそのもの** ([ts/mkv.ts](../ts/mkv.ts))。
+ *
+ * `at` は出す時刻 (ミリ秒。**映像の mp4 と同じ物差し** — stream.md §5.4)、
+ * `data` はパレットではない RGBA の PNG で、画面まるごとの大きさ
+ */
+export type Caption = MkvFrame;
 
 /** ffmpeg が入口の見出しに書く行 */
 const PROGRAM = /^\s*Program (\d+)/;
@@ -228,18 +230,6 @@ export class TrackList {
         return this.found;
     }
 }
-
-/** ISO 639-2 のうち字幕で出てくるもの。`arib.ts` の表と揃えてある */
-const LANGUAGE: Record<string, string> = {
-    jpn: '日本語',
-    eng: '英語',
-    kor: '韓国語',
-    zho: '中国語',
-    spa: 'スペイン語',
-    por: 'ポルトガル語',
-    fra: 'フランス語',
-    deu: 'ドイツ語',
-};
 
 function label(index: number, lang: string | null): string {
     const head = index === 0 ? '字幕' : `字幕${index + 1}`;

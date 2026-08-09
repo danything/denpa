@@ -260,7 +260,15 @@ public sealed class DvbTuner : ITuneDevice
     private const int DmxImmediateStart = 4;
     private const ushort AllPids = 0x2000;
 
-    /// <summary>読み口の溜め。詰まると取りこぼす (demux は待ってくれない)</summary>
+    /// <summary>
+    /// demux のフィルタの溜め。
+    ///
+    /// <para>
+    /// **いまの流し方では、ここには積まれない** — 全PIDを <c>DMX_OUT_TS_TAP</c> で
+    /// 出すので、中身は dvr の環へ行く (<c>DvrBuffer</c>)。出し方を変えたときに
+    /// 既定 (2KB) まで落ちないよう残してあるだけで、溢れの話とは別物
+    /// </para>
+    /// </summary>
     private const int DemuxBuffer = 8 * 1024 * 1024;
 
     /// <summary>

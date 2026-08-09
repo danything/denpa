@@ -29,7 +29,7 @@ import type { AudioTrack } from './arib';
  *
  * **生 (MPEG-2 のまま) は入っていない。** ブラウザに MPEG-2 の復号器が無い —
  * 実測で `MediaSource.isTypeSupported('video/mp4; codecs="mp2v.61,mp4a.40.2"')` も
- * `VideoDecoder.isConfigSupported({codec:'mp2v'})` も false ([stream.md](../../docs/stream.md) §6)
+ * `VideoDecoder.isConfigSupported({codec:'mp2v'})` も false ([stream.md](../../docs/stream.md) §5.5)
  */
 export type LiveCodec = 'h264' | 'av1';
 

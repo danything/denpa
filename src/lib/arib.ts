@@ -224,8 +224,13 @@ const AUDIO_TYPE: Record<number, string> = {
     17: '3/3/3-5/2/3-3/0/0.2',
 };
 
-/** ISO 639-2 のうち日本の放送で出てくるもの */
-const LANGUAGE: Record<string, string> = {
+/**
+ * ISO 639-2 のうち日本の放送で出てくるもの。
+ *
+ * **音声も字幕も同じ表を使う** — 字幕側 (`server/captions.ts`) で別に持っていた頃は
+ * 4つ足りず、同じ放送の音声が「イタリア語」、字幕が「ita」と出る形になっていた
+ */
+export const LANGUAGE: Record<string, string> = {
     jpn: '日本語',
     eng: '英語',
     deu: 'ドイツ語',

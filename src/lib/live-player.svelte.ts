@@ -298,7 +298,7 @@ export function livePlayer() {
      */
     function paint(at: number): boolean {
         if (overlay === null) return false;
-        // 原点が分かるまでは置き場所が決まらない。出すと合っていない時刻に出る
+        // 消しているときは何も選ばない (下で clearRect に落ちる)
         const next = captions ? currentCue(cues, at) : null;
         if (next === shown) return false;
         shown = next;

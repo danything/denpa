@@ -11,9 +11,10 @@
  * 見出しを組み立てるのに表を復元する必要があり、mp4 は PNG を入れられない。
  * ここが読むのは4つだけ:
  *
- *     Segment > Info > TimestampScale   時刻の刻み (既定 1ms)
- *     Segment > Cluster > Timestamp     その塊の頭の時刻
- *     Segment > Cluster > SimpleBlock   コマ本体 (頭からの差 + 中身)
+ *     Segment > Info > TimestampScale       時刻の刻み (既定 1ms)
+ *     Segment > Cluster > Timestamp         その塊の頭の時刻
+ *     Segment > Cluster > SimpleBlock       コマ本体 (頭からの差 + 中身)
+ *     Segment > Cluster > BlockGroup > Block  同上 (書き手によってはこちら)
  *
  * EBML は `[ID][大きさ][中身]` の入れ子。**中身に入るものと飛ばすものを
  * 決めておけば、知らない要素は大きさぶん飛ばせる**ので、全部を知らなくてよい。
