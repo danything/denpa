@@ -690,13 +690,19 @@
                     放送どおりには出ない (左右の位置・背景の箱・外字が落ちる)。
                     絵のまま重ねる — ライブと同じやり方 (下の canvas)
                 -->
+                <!--
+                    **低くしすぎない** (`min-h-56` = 224px)。上下の帯を重ねて
+                    いるので、絵がそれより低いと**帯どうしが重なって**削除も
+                    再生も押せなくなる。16:9 なら 390px の端末で 219px なので、
+                    ここが効くのは縦の狭い窓と、絵の大きさが分からないとき
+                -->
                 <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_noninteractive_element_interactions -->
                 <video
                     bind:this={video}
                     {src}
                     class="w-full bg-black {full
                         ? 'h-full max-h-none'
-                        : 'max-h-[calc(100dvh-9rem)] md:max-h-[calc(100dvh-7rem)]'}"
+                        : 'max-h-[calc(100dvh-9rem)] min-h-56 md:max-h-[calc(100dvh-7rem)]'}"
                     style="filter: brightness({brightness})"
                     playsinline
                     onclick={press}
@@ -774,8 +780,12 @@
                 {/if}
 
                 <!--
-                    **上端。** 戻ると削除。全画面のときはここしか出口が無いので、
-                    操作列を隠していても戻るだけは出しておく
+                    **上端は押すものだけ。** 戻ると削除。全画面のときはここしか
+                    出口が無いので、操作列を隠していても戻るだけは出しておく。
+
+                    **番組の名前は下の帯に移した** — 上下に分けて置くと、絵の
+                    上下が両方とも黒く塗られる。下の帯は元から敷いてあるので、
+                    そちらに寄せたほうが絵に掛かる面積が減る
                 -->
                 <div
                     class="pointer-events-none absolute inset-x-0 top-0 z-10 flex items-start justify-between gap-2 bg-gradient-to-b from-black/60 to-transparent p-2 transition-opacity {controls.shown
@@ -783,14 +793,13 @@
                         : 'opacity-0'}"
                 >
                     <a
-                        class="btn btn-circle btn-sm pointer-events-auto {OVERLAY}"
+                        class="btn btn-circle pointer-events-auto {OVERLAY}"
                         href="/"
                         aria-label="一覧へ戻る"
                         data-testid="watch-close"
                     >
                         <Icon path={CLOSE} />
                     </a>
-                    <span class="truncate pt-1 text-sm text-white/90 drop-shadow">{rec.name}</span>
                     <!--
                         **観終わったその場で消せるようにする。** 末尾はたいてい CM なので、
                         流したまま消せる。押し間違い防止に2回押させるのは一覧と同じ
@@ -798,9 +807,7 @@
                     <form method="POST" action="?/delete" use:submitting class="pointer-events-auto">
                         <input type="hidden" name="id" value={rec.id} />
                         {#if armed}
-                            <button class="btn btn-error btn-sm" data-testid="watch-delete-confirm">
-                                確定
-                            </button>
+                            <button class="btn btn-error" data-testid="watch-delete-confirm"> 確定 </button>
                         {:else}
                             <ControlButton path={TRASH} label="削除" testid="watch-delete" onclick={arm} />
                         {/if}
@@ -826,6 +833,11 @@
 
                 <!-- 下端。帯と押すもの。**ライブと同じ帯** (`ControlBar`) -->
                 <ControlBar shown={controls.shown} testid="watch-controls">
+                    <!-- 何を観ているか。ライブと同じ場所・同じ形 -->
+                    <div class="mb-1 truncate text-sm font-medium" data-testid="watch-name">
+                        {rec.name}
+                    </div>
+
                     <!--
                         **帯にはチャプターの切れ目を出す。** どこで CM が挟まって
                         いるかが見えると、送りのボタンを何回押すかが分かる
@@ -1060,7 +1072,12 @@
                 </div>
             </div>
 
-            <!-- 押すものは常に見えるところに置く。巻き取られる中身の外 -->
+            <!--
+                押すものは常に見えるところに置く。巻き取られる中身の外。
+
+                **「一覧へ」は置かない。** 絵の左上の「×」が同じ行き先で、
+                2つ並べる意味が無かった
+            -->
             <div class="border-base-300 flex shrink-0 flex-wrap gap-2 border-t p-4">
                 <a
                     class="btn btn-sm btn-outline"
@@ -1070,7 +1087,6 @@
                 >
                     ダウンロード
                 </a>
-                <a class="btn btn-sm" href="/" data-testid="watch-back-list">一覧へ</a>
             </div>
         </div>
     </aside>
