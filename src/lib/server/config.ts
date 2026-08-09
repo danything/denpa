@@ -160,7 +160,7 @@ export const config = {
      */
     cmCutMargin: num('CM_CUT_MARGIN', 0.8),
 
-    /** 番組情報の .nfo。Kodi など .nfo を読むプレイヤー向け */
+    /** 番組情報の .nfo。.nfo を読むプレイヤー (Nova) 向け */
     writeNfo: true,
     /** サムネイルを切り出す位置(秒)。頭は提供表示やCMのことが多いので少し進める */
     thumbnailPosition: 120,

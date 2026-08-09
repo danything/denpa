@@ -34,7 +34,7 @@ EPGStation の置き換えとして作ったもので、エンコード設定は
 | `src/lib/ts/watch.ts` | 録画を観るときの押したことの読み方 (2回押し・チャプター送り・続きの位置。DOM を触らない) |
 | `src/lib/components/player/` | 映像の上に置くもの。**ライブと観る画面で共通** (アイコン・重ねボタン・操作列・出し入れの決め方・**字幕の重ね方**) |
 | `src/lib/server/library.ts` | 保存先でのファイル配置 |
-| `src/lib/server/metadata.ts` | .nfo とサムネイル (Kodi など向け) |
+| `src/lib/server/metadata.ts` | .nfo とサムネイル (Kodi 仕様。Nova が読む) |
 | `src/lib/server/files.ts` | 録画の削除と、実体とDBの突き合わせ |
 | `src/lib/server/serve.ts` | ファイルの配信 (Range 対応) |
 | `src/lib/server/scramble.ts` | スクランブルの検出と、チューナー側への解除依頼 |
@@ -65,7 +65,7 @@ EPGStation の置き換えとして作ったもので、エンコード設定は
 | `src/lib/ts/logo-palette.ts` | 局ロゴPNGに ARIB の色の表 (PLTE/tRNS) を入れ直す |
 | `src/lib/ts/synth.ts` | TS のセクションを組み立てる (テストと偽エージェント用) |
 | `src/lib/server/migrate.ts` | EPGStation からの引き継ぎ ([migrate.md](migrate.md)) |
-| `src/lib/server/dav.ts` | WebDAV (Kodi 向け) |
+| `src/lib/server/dav.ts` | WebDAV (Nova 向け) |
 | `src/lib/server/auth.ts` | どの口をどう守るか ([auth.md](auth.md)) |
 | `src/lib/server/oidc.ts` | OIDC (discovery・PKCE・ID トークンの検証)。ライブラリは使っていない |
 | `src/lib/server/session.ts` | ログインの控え (DBに持つ。Cookie に入るのは32バイトだけ) |
@@ -189,7 +189,7 @@ k3s の manifest に書いてあるのは、**既定値では決められない�
 | `/api/recordings/<id>/frame?at=<秒>` | 録画から1コマ (JPEG)。ロゴの位置を指定するときに使う (既定で右上を 16:9 のまま拡大、覚えてある枠は掴んで動かせる) |
 | `/login` / `/login/callback` / `/logout` | OIDC でのログインとログアウト。設定していなければ 404 ([auth.md](auth.md)) |
 | `/api/services/<id>/logo-data` | **logoframe がいま覚えているロゴ** (白黒PNG)。番組表に出すロゴとは別物で、絵になっているかを確かめるためのもの |
-| `/dav` | WebDAV (PROPFIND / GET / HEAD)。Kodi 用。書き込みは受けない |
+| `/dav` | WebDAV (PROPFIND / GET / HEAD)。Nova 用。書き込みは受けない |
 | `/manifest.webmanifest` | PWA のマニフェスト。**来た名前で表示名が変わる**ので静的ファイルではない。ここだけ認証を掛けていない (ブラウザが資格情報を付けずに取りに来るため) |
 
 ## チューナーエージェント (`agent/`)

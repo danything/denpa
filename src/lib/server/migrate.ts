@@ -223,7 +223,7 @@ async function importOne(row: Row, options: MigrateOptions): Promise<'imported' 
      *
      * EPGStation の video_file.type は 'ts'(未エンコード) か 'encoded'。
      * 生TSを保存先に置くと denpa からは「エンコード済み」に見えてしまい、
-     * 録り直せず、Kodi にも巨大な MPEG-2 が並ぶ。denpa 自身が録ったときと
+     * 録り直せず、プレイヤーにも巨大な MPEG-2 が並ぶ。denpa 自身が録ったときと
      * 同じ形 (生TSは recorded、完成品は library) に揃える
      */
     const raw = row.fileType !== 'encoded';
@@ -248,7 +248,7 @@ async function importOne(row: Row, options: MigrateOptions): Promise<'imported' 
         .prepare(`UPDATE recordings SET ${column} = ?, ts_size = ?, updated_at = ? WHERE id = ?`)
         .run(to, statSync(to).size, now(), id);
 
-    // サイドカーは保存先に置いたものにだけ付ける。作業領域は Kodi から見えない
+    // サイドカーは保存先に置いたものにだけ付ける。作業領域は WebDAV からは見えない
     if (!raw) {
         const placed = queryOne<Recording>('SELECT * FROM recordings WHERE id = ?', id)!;
         writeNfo(placed, to);

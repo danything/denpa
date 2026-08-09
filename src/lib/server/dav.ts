@@ -89,7 +89,7 @@ export function children(path: string): Entry[] {
         names
             .map((name) => entryFor(trimmed === '' ? name : `${trimmed}/${name}`))
             .filter((entry): entry is Entry => entry !== null)
-            // フォルダを先に、あとは名前順。Kodi はサーバの並びをそのまま出す
+            // フォルダを先に、あとは名前順。読み手はサーバの並びをそのまま出す
             .sort((a, b) => Number(b.isDirectory) - Number(a.isDirectory) || a.name.localeCompare(b.name))
     );
 }
@@ -182,7 +182,7 @@ export function handleDav(request: Request, url: URL): Response | null {
         return new Response(null, {
             status: 204,
             headers: {
-                // Kodi はここを見てサーバの種類を決める
+                // 読み手はここを見てサーバの種類を決める
                 DAV: '1',
                 Allow: 'OPTIONS, GET, HEAD, PROPFIND, DELETE',
                 'MS-Author-Via': 'DAV',
@@ -194,7 +194,7 @@ export function handleDav(request: Request, url: URL): Response | null {
     if (entry === null) return new Response('not found', { status: 404 });
 
     if (request.method === 'PROPFIND') {
-        // Depth: 0 は自分だけ、1 は自分と直下。Kodi は 1 で聞いてくる
+        // Depth: 0 は自分だけ、1 は自分と直下。読み手はふつう 1 で聞いてくる
         const depth = request.headers.get('depth') ?? '1';
         const entries = depth === '0' || !entry.isDirectory ? [entry] : [entry, ...children(path)];
         return new Response(propfind(url.origin, entries), {
