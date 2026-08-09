@@ -1,6 +1,6 @@
 import { existsSync, mkdirSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
-import { DUAL_MONO } from '$lib/arib';
+import { type Audio, audioTitles, DUAL_MONO } from '$lib/arib';
 import { encodeSource } from '../source';
 import type { EncodeJob, EncodePhase, Recording, VideoCodec } from '../types';
 import {
@@ -206,6 +206,30 @@ export interface EncodeOptions {
      * 1440x1080 (SAR 4:3) なら 1920x1080。もともと正方形の素材では渡さない
      */
     displaySize?: { width: number; height: number };
+    /**
+     * 音声トラックの名前。**番組表と同じ言い方** (`arib.audioTitles`)。
+     *
+     * 入れていなかった頃は、プレイヤーの切り替えに「Audio 1」「Audio 2」しか
+     * 出なかった — 二カ国語や解説放送でどちらがどちらか分からない
+     */
+    audioTitles?: string[];
+    /** 字幕トラックの名前。放送が名乗っている言語まで入る (`buildPgs`) */
+    captionTitle?: string;
+}
+
+/**
+ * 録画に写してある音声の構成を読む。**壊れていても止まらない。**
+ *
+ * 写しているのは番組表から取ったものをそのままなので、形が違うことはありうる。
+ * 読めなければ何も無いことにする — どの道 `audioTitles` が既定の名前を返す
+ */
+function storedAudios(recording: Recording): Audio[] {
+    try {
+        const parsed: unknown = JSON.parse(recording.audios ?? 'null');
+        return Array.isArray(parsed) ? (parsed as Audio[]) : [];
+    } catch {
+        return [];
+    }
 }
 
 /** これ以下は捨てない。1コマにも満たないずれのために seek を掛けても得るものが無い */
@@ -285,7 +309,9 @@ export function buildArgs(
     args.push('-ignore_unknown');
     // 字幕。?は .sup が空だった場合でもエンコードを止めないため
     if (pgs >= 0) {
-        args.push('-map', `${pgs}:s:0?`, '-c:s:0', 'copy', '-metadata:s:s:0', 'title=字幕');
+        // 名前は放送が名乗っているものを使う (「字幕 (日本語)」)。無ければ「字幕」
+        const title = options.captionTitle ?? '字幕';
+        args.push('-map', `${pgs}:s:0?`, '-c:s:0', 'copy', '-metadata:s:s:0', `title=${title}`);
         args.push('-disposition:s:0', 'default');
     }
     // インタレ解除 (bwdif は yadif よりコーミング残りが少ない)。
@@ -314,6 +340,19 @@ export function buildArgs(
         args.push('-map', '0:a');
     }
     args.push('-c:a', 'libopus', '-b:a', '256k'); // 元放送(AAC 256kbps)と同じビットレート
+
+    /*
+     * **音声にも名前を付ける** (`arib.audioTitles`)。番組表と同じ言い方にするので、
+     * 「主音声」「解説」がそのままプレイヤーの切り替えに出る。
+     *
+     * **多すぎても困らない。** 番組表が言っている本数と実際に入っている本数は
+     * 食い違いうるが、ffmpeg は在りもしないトラックへの指定を黙って読み飛ばす
+     * (実機で確認)。言語はデュアルモノのところで別に付けてある
+     */
+    (options.audioTitles ?? []).forEach((title, index) => {
+        if (title === '') return;
+        args.push(`-metadata:s:a:${index}`, `title=${title}`);
+    });
 
     // トラックのdefaultフラグを明示(未設定だとプレイヤーが自動選択せず音声が出ないことがある。
     // 字幕は上で入れたときだけ立てる)
@@ -896,6 +935,14 @@ async function runJob(jobId: number): Promise<void> {
         ...(await prepareCm(jobId, recording, sourceTs, signal)),
         // コマ数は番組のジャンルで決まる。国内アニメだけ倍にしない (deinterlace)
         smoothMotion: smoothMotionFor(recording.genre_detail),
+        /*
+         * **音声トラックに番組表と同じ名前を入れる。**
+         *
+         * 番組表の行は24時間で消えるので、写しておいたものから引く
+         * (`recordings.audios`。ジャンルと同じ扱い)。古い録画には写しが無いので、
+         * そのときは `audioTitles` の既定 (「音声」/「主音声」「副音声」) に落ちる
+         */
+        audioTitles: audioTitles(storedAudios(recording), recording.audio_type === DUAL_MONO),
     };
     if (canceled.has(jobId)) return finishCanceled(jobId, decoded);
 
@@ -961,6 +1008,8 @@ async function runJob(jobId: number): Promise<void> {
     );
     if (pgs !== null) {
         encodeOptions.pgsFile = pgs.path;
+        // 名前も放送が名乗っているものにする (「字幕 (日本語)」)
+        encodeOptions.captionTitle = pgs.label;
         database()
             .prepare('UPDATE encode_jobs SET log = ? WHERE id = ?')
             .run(`字幕 ${pgs.captions} 枚を PGS にしました`, jobId);

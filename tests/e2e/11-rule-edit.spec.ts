@@ -62,6 +62,24 @@ test.describe('ルールの編集', () => {
         // 出ているのは保存済みの条件ではなく、いま入っている条件での結果
         await expect(page.getByTestId('rule-keyword')).toHaveValue('テストアニメ 決戦');
 
+        /*
+         * **打ち込んだ優先度も持ち回る。**
+         *
+         * ここを既定で埋めていた頃は、見るだけのつもりで押すたびに優先度が
+         * 1 に戻り、そのまま保存すると**静かに書き換わって**いた。往復は GET で
+         * この画面に戻ってくるので、フォームの値は全部 URL に乗っている
+         */
+        await page.getByTestId('rule-priority').fill('5');
+        await page.getByTestId('rule-preview').click();
+        await expect(page.getByTestId('preview')).toBeVisible();
+        await expect(page.getByTestId('rule-priority')).toHaveValue('5');
+
+        // 保存したものが一覧にもそのまま出る
+        await page.getByTestId('rule-update').click();
+        await expect(page.getByTestId('rule-row').first()).toContainText('5');
+        await page.getByTestId('rule-edit').first().click();
+        await expect(page.getByTestId('rule-priority')).toHaveValue('5');
+
         await page.getByTestId('rule-cancel-edit').click();
         await expect(page.getByTestId('rule-row')).toHaveCount(1);
         await page.getByTestId('rule-delete').first().click();

@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { audioLabel, audioTracks, genreLabel, genreName, pickTrack, videoLabel } from './arib';
+import { audioLabel, audioTitles, audioTracks, genreLabel, genreName, pickTrack, videoLabel } from './arib';
 
 /**
  * ルールの条件に出す名前。
@@ -209,5 +209,58 @@ describe('videoLabel', () => {
         expect(videoLabel('1080i', null)).toBe('1080i');
         expect(videoLabel(null, 'mpeg2')).toBe('MPEG-2');
         expect(videoLabel(null, null)).toBe('');
+    });
+});
+
+/**
+ * **焼いたものにも番組表と同じ名前を入れる。**
+ *
+ * 入れていなかった頃は、プレイヤーの音声切り替えに「Audio 1」「Audio 2」しか
+ * 出なかった — 二カ国語や解説放送でどちらがどちらか分からない。番組表には
+ * 「主音声」「解説」と出ているのに、焼いたものには残っていなかった。
+ */
+describe('audioTitles', () => {
+    /** デュアルモノは1本を左右に割るので、出てくるのは**必ず2本** */
+    test('デュアルモノは主音声と副音声の2本', () => {
+        expect(audioTitles([{ componentType: 2, langs: ['jpn', 'eng'] }], true)).toEqual([
+            '主音声 (日本語)',
+            '副音声 (英語)',
+        ]);
+    });
+
+    /** 番組表が何も言っていなくても、割る以上は2本ぶんの名前が要る */
+    test('番組表が黙っていても主副は付ける', () => {
+        expect(audioTitles([], true)).toEqual(['主音声', '副音声']);
+    });
+
+    /** それ以外は入っている音声をそのまま拾うので、放送が名乗っている順 */
+    test('複数の音声はそのまま並べる', () => {
+        expect(
+            audioTitles(
+                [
+                    { componentType: 3, langs: ['jpn'], text: '主音声', main: true },
+                    { componentType: 3, langs: ['jpn'], text: '解説' },
+                ],
+                false,
+            ),
+        ).toEqual(['主音声 (日本語)', '解説 (日本語)']);
+    });
+
+    /** 1本だけのときは「音声1」のような番号を足さない。長いだけで何も増えない */
+    test('1本なら番号を足さない', () => {
+        expect(audioTitles([{ componentType: 3, langs: ['jpn'] }], false)).toEqual(['ステレオ (日本語)']);
+    });
+
+    /** 古い録画には写しが無い。**それでも名前は付ける** */
+    test('何も分からなければ「音声」', () => {
+        expect(audioTitles([], false)).toEqual(['音声']);
+    });
+
+    /*
+     * **デュアルモノの番組でも、`side` の3つ目 (主+副) は出さない。**
+     * 焼いたものに入るのは主と副の2本だけで、混ぜたものは作らない
+     */
+    test('主+副は入れない', () => {
+        expect(audioTitles([{ componentType: 2, langs: ['jpn', 'eng'] }], true)).not.toContain('主+副');
     });
 });

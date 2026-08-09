@@ -361,6 +361,33 @@ export function audioTracks(audios: Audio[]): AudioTrack[] {
 }
 
 /**
+ * 焼いたものに入れる音声の名前。**番組表と同じ言い方をする。**
+ *
+ * 入れていなかった頃は、プレイヤーの音声切り替えに「Audio 1」「Audio 2」しか
+ * 出なかった — 二カ国語や解説放送で**どちらがどちらか分からない**。番組表では
+ * 「主音声」「解説」と出ているのに、焼いたものには残っていなかった。
+ *
+ * **数と並びは焼いたものに合わせる。**
+ *
+ * - デュアルモノ … 1本を左右に割るので、出てくるのは**必ず2本**
+ *   (`encoder.ts` の `channelsplit`)。名前は主音声・副音声
+ * - それ以外 … 入っている音声をそのまま全部拾うので、放送が名乗っている順
+ *
+ * 番組表が何も言っていなければ `audioTracks` の既定 (「音声」) に落ちる。
+ * **多すぎても困らない** — ffmpeg は在りもしないトラックへの指定を黙って
+ * 読み飛ばす (実機で確認)
+ */
+export function audioTitles(audios: Audio[], dualMono: boolean): string[] {
+    const tracks = audioTracks(audios);
+    if (dualMono) {
+        const side = (which: 'main' | 'sub') =>
+            tracks.find((track) => track.stream === 0 && track.side === which)?.label;
+        return [side('main') ?? '主音声', side('sub') ?? '副音声'];
+    }
+    return tracks.filter((track) => track.side === 'both').map((track) => track.label);
+}
+
+/**
  * 頼まれたものを選ぶ。**知らないものを頼まれたら主音声。**
  *
  * 番組が変われば音声の構成も変わる (二カ国語の映画が終わればステレオに戻る)。

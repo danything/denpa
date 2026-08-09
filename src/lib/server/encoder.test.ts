@@ -42,6 +42,52 @@ describe('録画エンコードの引数', () => {
     });
 });
 
+/**
+ * **焼いたものの音声と字幕に名前を入れる** (`arib.audioTitles` / `buildPgs`)。
+ *
+ * 入れていなかった頃は、プレイヤーの切り替えに「Audio 1」「Audio 2」しか
+ * 出なかった — 二カ国語や解説放送でどちらがどちらか分からない。
+ */
+describe('トラックの名前', () => {
+    const title = (args: string[], key: string) => argValue(args, key);
+
+    test('音声に番組表と同じ名前を入れる', () => {
+        const args = buildArgs('/in.m2ts', '/out.mkv', 1, null, 'av1', {
+            audioTitles: ['主音声 (日本語)', '解説 (日本語)'],
+        });
+        expect(title(args, '-metadata:s:a:0')).toBe('title=主音声 (日本語)');
+        expect(title(args, '-metadata:s:a:1')).toBe('title=解説 (日本語)');
+    });
+
+    /*
+     * **多すぎても困らない。** 番組表が言っている本数と実際に入っている本数は
+     * 食い違いうるが、ffmpeg は在りもしないトラックへの指定を黙って読み飛ばす
+     * (実機で確認)。名前が無いものは何も言わない
+     */
+    test('名前が無ければ何も言わない', () => {
+        const args = buildArgs('/in.m2ts', '/out.mkv', 1, null);
+        expect(args.some((arg) => arg.startsWith('-metadata:s:a:'))).toBe(false);
+    });
+
+    test('空の名前は入れない', () => {
+        const args = buildArgs('/in.m2ts', '/out.mkv', 1, null, 'av1', { audioTitles: ['', '副音声'] });
+        expect(args).not.toContain('-metadata:s:a:0');
+        expect(title(args, '-metadata:s:a:1')).toBe('title=副音声');
+    });
+
+    /** 字幕は放送が名乗っている言語まで入れる。無ければ「字幕」 */
+    test('字幕にも名前を入れる', () => {
+        const withLabel = buildArgs('/in.m2ts', '/out.mkv', 1, null, 'av1', {
+            pgsFile: '/x.sup',
+            captionTitle: '字幕 (日本語)',
+        });
+        expect(title(withLabel, '-metadata:s:s:0')).toBe('title=字幕 (日本語)');
+
+        const plain = buildArgs('/in.m2ts', '/out.mkv', 1, null, 'av1', { pgsFile: '/x.sup' });
+        expect(title(plain, '-metadata:s:s:0')).toBe('title=字幕');
+    });
+});
+
 describe('コマ数の決め方', () => {
     test('国内アニメだけコマ数を倍にしない', () => {
         // 元が毎秒24コマ前後なので、フィールドごとに起こしても同じ絵が並ぶだけ

@@ -1,5 +1,6 @@
 import { statSync, writeFileSync } from 'node:fs';
 import { SupWriter } from '../pgs';
+import { TrackList } from './captions';
 import { config } from './config';
 import { chunks, lines } from './stream';
 
@@ -31,6 +32,13 @@ const SIZE = /\ss:(\d+)x(\d+)/;
 export interface PgsResult {
     path: string;
     captions: number;
+    /**
+     * 字幕トラックの名前。**放送が名乗っている言語まで入れる** (「字幕 (日本語)」)。
+     *
+     * ffmpeg が入口の見出しに書いたものから拾う (`TrackList`) — 番組表と同じ
+     * 言い方になる。名乗っていなければ「字幕」だけ
+     */
+    label: string;
 }
 
 /**
@@ -127,10 +135,16 @@ export async function buildPgs(
     const writer = new SupWriter();
     /** showinfo が喋った順に溜める。絵の来る順と同じ */
     const stamps: { at: number; width: number; height: number }[] = [];
+    /*
+     * **名前も同じ口から拾う。** 焼くほうは `0:s:0` を採るので、局を名指ししない
+     * 一覧の1本目 (`TrackList(0)`) と同じものになる
+     */
+    const list = new TrackList(0);
     let read = 0;
 
     const readStderr = (async () => {
         for await (const line of lines(proc.stderr as ReadableStream<Uint8Array>)) {
+            list.feed(line);
             const time = line.match(PTS_TIME);
             const size = line.match(SIZE);
             if (time === null || size === null) continue;
@@ -244,5 +258,5 @@ export async function buildPgs(
         console.error(`[subtitle] .sup を書けませんでした: ${error}`);
         return null;
     }
-    return { path: output, captions: writer.captions };
+    return { path: output, captions: writer.captions, label: list.tracks[0]?.label ?? '字幕' };
 }

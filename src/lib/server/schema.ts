@@ -60,6 +60,14 @@ export const ADDED_COLUMNS: { table: string; column: string; definition: string 
      */
     { table: 'recordings', column: 'genre_detail', definition: 'TEXT' },
     /*
+     * 音声の構成 (JSON: audio_component_descriptor の配列)。番組表から写しておく。
+     *
+     * 焼いたものの音声トラックに**番組表と同じ名前**を入れるのに要る
+     * (「主音声」「解説」。`arib.audioTitles`)。ジャンルと同じで、番組表の行は
+     * 24時間で消えるので、録り直しのときには写しからしか引けない
+     */
+    { table: 'recordings', column: 'audios', definition: 'TEXT' },
+    /*
      * 録り終えた時刻 / 録り始めた時刻。
      *
      * どちらも「状態の文字列を持つのをやめる」ために足したもの。
@@ -249,6 +257,9 @@ CREATE TABLE IF NOT EXISTS recordings (
     cm_ranges TEXT,   -- 検出したCM区間の JSON。UIでの確認用
     -- JSON: [{lv1, lv2}]。エンコードのコマ数の判断に使う (国内アニメだけ30コマ)
     genre_detail TEXT,
+    -- JSON: [{componentType, langs, text?, main?}]。焼いたものの音声トラックに
+    -- 番組表と同じ名前を入れるのに使う (arib.audioTitles)
+    audios TEXT,
     -- 実際に録れた長さ。番組表の尺 (end_at - start_at) は予定でしかなく、
     -- 途中で止めたときやCMを切ったときは実物と合わない
     duration_ms INTEGER,

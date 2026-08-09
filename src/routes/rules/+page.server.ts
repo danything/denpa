@@ -94,7 +94,15 @@ function conditionsFrom(params: URLSearchParams): Rule | null {
         genres: conditions.genres,
         // 無料放送の扱いは**全体設定**。ルールごとには持たない (誰も読まない列)
         enabled: 1,
-        priority: 1,
+        /*
+         * **打ち込んだ値をそのまま持ち回る。**
+         *
+         * ここを 1 で埋めていた頃は、「この条件で何が録れるか見る」を押すたびに
+         * **優先度が 1 に戻って**いた (見るだけのつもりで押して、そのまま保存すると
+         * 静かに書き換わる)。あの往復は GET でこの画面に戻ってくるので、
+         * フォームの値は全部 URL に乗っている — 読まなければ落ちるだけ
+         */
+        priority: rulePriority(params),
         source: null,
         created_at: 0,
     };
@@ -336,9 +344,14 @@ export async function load({ url }) {
  * `Number(...) || 2` と書いていた頃は、0 を入れると既定に戻っていた
  * (`0 || 2` は 2)。「いちばん譲る」を選べないことになる。
  * 既定はルールの 1 で、手動予約はその上の 2。
+ *
+ * **空欄と 0 は別物。** `Number('')` は 0 なので、まとめて読むと**箱を空にした
+ * だけで「いちばん譲る」に落ちる**。無ければ既定に戻す
  */
-function rulePriority(form: FormData): number {
-    const value = Number(form.get('priority'));
+function rulePriority(fields: Fields): number {
+    const raw = fields.get('priority');
+    if (raw === null || raw === undefined || raw === '') return 1;
+    const value = Number(raw);
     return Number.isFinite(value) && value >= 0 ? Math.floor(value) : 1;
 }
 

@@ -171,6 +171,11 @@ export interface Recording {
     /** 番組表から写したジャンル (JSON: [{lv1, lv2}])。エンコードのコマ数を決めるのに使う */
     genre_detail: string | null;
     /**
+     * 番組表から写した音声の構成 (JSON: `audio_component_descriptor` の配列)。
+     * 焼いたものの音声トラックに**番組表と同じ名前**を入れるのに使う (`arib.audioTitles`)
+     */
+    audios: string | null;
+    /**
      * CM検出が何をしたか。詳細で見せる。
      *
      * **ロゴを使えたかどうかもここから読む** (`format.logoUnusable`)。別の列で
