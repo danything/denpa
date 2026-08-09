@@ -562,6 +562,25 @@
                                 {#if player.stalls > 0}
                                     ・ <span data-testid="live-stalls">途切れ {player.stalls}回</span>
                                 {/if}
+                                <!--
+                                    **描かれずに捨てられたコマ。** 「音と字幕は
+                                    合っているのに絵だけ遅れる」ときに要る —
+                                    遅延の数字は再生位置で測るので、絵が何コマ
+                                    遅れて出ていても変わらない (`live-player` の
+                                    `dropped`)
+                                -->
+                                {#if player.dropped > 0}
+                                    ・ <span data-testid="live-dropped">コマ落ち {player.dropped}</span>
+                                {/if}
+                                <!--
+                                    **絵だけの遅れ。** 音と字幕は再生位置に
+                                    乗っているので、ここが開くと口が合わなくなる。
+                                    開いたままにはせず跳び直す (`unslip`) ので、
+                                    出るのは直した回数のほう
+                                -->
+                                {#if player.slips > 0}
+                                    ・ <span data-testid="live-slips">絵の直し {player.slips}回</span>
+                                {/if}
                             </div>
                         </div>
 

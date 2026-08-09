@@ -70,6 +70,18 @@ const HOLD_MOST = 6_000;
  */
 const RETRY_FIRST = 1_000;
 const RETRY_MOST = 10_000;
+/**
+ * 絵だけがこれだけ遅れたら跳び直す (秒)。**口の動きが合わなくなる境目。**
+ *
+ * 1コマ (0.017秒) 遅れるのは普通で、そこで跳び直すと跳んでばかりになる。
+ * 声と口のずれが分かりはじめるのは 0.1 秒あたり、はっきり分かるのが 0.2 秒。
+ * その手前で直す
+ */
+const SLIP_MOST = 0.15;
+/** 跳び直す間隔の下限 (ms)。**復号が追いつかない状態は跳んでも直らない** */
+const UNSLIP_EVERY = 3_000;
+/** 跳び直すときに進める幅 (秒)。**1コマぶん** — 音が飛んだと分かる長さではない */
+const FRAME = 0.02;
 
 /**
  * 見ている局を覚える。**置き場は cookie 1つ。**
@@ -223,6 +235,29 @@ export function livePlayer() {
     let generation = 0;
     /** もう再生を始めたか。始めるまでは貯める */
     let running = false;
+    /**
+     * 描かれずに捨てられたコマの数。**画面に出す** (`live/+page.svelte`)。
+     *
+     * **「音と字幕は合っているのに、絵だけ遅れる」の切り分けに要る。**
+     * 出しているのは `currentTime` に合う字幕なので、音・字幕・再生位置は
+     * 同じ時計の上に乗っている。**絵だけが遅れるなら、遅れているのは復号**で、
+     * 貯め方でも運び方でもない (どちらも遅れれば時計ごと遅れる)。
+     *
+     * 遅延の数字にも出ない — あれは「放送の今と再生位置の差」なので、
+     * 絵が何コマ遅れて出ていても変わらない。**それでこの数が要る**
+     */
+    let dropped = $state(0);
+    /**
+     * 映した1枚が、再生位置からどれだけ遅れているか (秒)。**絵だけの遅れ。**
+     *
+     * 音と字幕は再生位置 (`currentTime`) に乗っているので、ここが開くと
+     * **口の動きだけが合わなくなる**。開いたままにしない (`unslip`)
+     */
+    let slip = $state(0);
+    /** 跳び直した回数。**画面に出す** — 直し続けているなら、まだ足りていない */
+    let slips = $state(0);
+    /** 次に跳び直してよい時刻 */
+    let unslipAfter = 0;
     /** 繋ぎ直しの目覚まし。**待っている間だけ入っている** */
     let retry: ReturnType<typeof setTimeout> | null = null;
     /**
@@ -346,20 +381,63 @@ export function livePlayer() {
     function follow(video: HTMLVideoElement): void {
         if (following === video) return;
         following = video;
-        const again = () => {
+        const again = (_at?: number, frame?: { mediaTime: number }) => {
             // 別の映像に移ったら、こちらは畳む
             if (following !== video) return;
+            /*
+             * **映した1枚の時刻と、再生位置の差。** ここが「絵だけ遅れる」の
+             * 正体 (`slip` の項)。`requestVideoFrameCallback` を持っている
+             * ブラウザでだけ測れる
+             */
+            if (frame !== undefined) {
+                const late = video.currentTime - frame.mediaTime;
+                slip = late > 0 ? late : 0;
+                if (slip > SLIP_MOST) unslip(video);
+            }
             paint(video.currentTime);
             step();
         };
         const step = () => {
             const request = (
-                video as HTMLVideoElement & { requestVideoFrameCallback?(cb: () => void): number }
+                video as HTMLVideoElement & {
+                    requestVideoFrameCallback?(
+                        cb: (at: number, frame: { mediaTime: number }) => void,
+                    ): number;
+                }
             ).requestVideoFrameCallback;
             if (typeof request === 'function') request.call(video, again);
-            else requestAnimationFrame(again);
+            else requestAnimationFrame(() => again());
         };
         step();
+    }
+
+    /**
+     * 絵だけ遅れているのを直す。**その場へ跳び直すだけ。**
+     *
+     * 復号が間に合わないと、**音と字幕は合っているのに絵だけ遅れる** — 再生位置
+     * (音の時計) は進み続け、映る絵だけが取り残される。しかも**戻らない**ので、
+     * 実機では「開き直すと直る」という形で出ていた。
+     *
+     * 跳び直すと復号器は積み残しを捨てて、いまの位置から出し直す。開き直しと
+     * 同じことを、繋ぎも溜まりもそのままでやる。
+     *
+     * **連発させない** (`UNSLIP_EVERY`)。復号が追いつかない状態そのものは
+     * 直らないので、間を置かないと跳び続けることになる
+     */
+    function unslip(video: HTMLVideoElement): void {
+        const now = Date.now();
+        if (now < unslipAfter || video.paused || video.seeking) return;
+        unslipAfter = now + UNSLIP_EVERY;
+        slips++;
+        slip = 0;
+        /*
+         * **これで起きる詰まりは数えない。** 跳べば復号器は読み込み直しになり、
+         * 必ず `waiting` が上がる。数えると**自分で跳んだぶんだけ貯める量が
+         * 増えて**、絵を直すたびに遅延が伸びていくことになる
+         */
+        quiet = now + GRACE;
+        // **1コマぶんだけ前へ。** 同じ値を入れ直すのは跳んだことにならない
+        video.currentTime += FRAME;
     }
 
     /**
@@ -536,6 +614,8 @@ export function livePlayer() {
     function settle(): void {
         const now = Date.now();
         if (!stalled && now - lastSettled < SETTLE_EVERY) return;
+        // 捨てられたコマも同じ間隔で読む。**選局からの通し** (器を作り直すと 0 に戻る)
+        dropped = element?.getVideoPlaybackQuality?.().droppedVideoFrames ?? dropped;
         const next = nextTarget(
             { target, floor },
             stalled,
@@ -1108,6 +1188,18 @@ export function livePlayer() {
         /** 繋ぎ直しを待っている最中か。**待っていることを画面に出すため** */
         get resuming() {
             return attempts > 0;
+        },
+        /** 描かれずに捨てられたコマ。**絵だけ遅れるときの切り分けに** */
+        get dropped() {
+            return dropped;
+        },
+        /** 絵だけの遅れ (秒)。音と字幕は再生位置に乗っているので、ここが開くと口が合わない */
+        get slip() {
+            return slip;
+        },
+        /** 絵の遅れを直すために跳び直した回数 */
+        get slips() {
+            return slips;
         },
         /** 押して止めているか */
         get paused() {
