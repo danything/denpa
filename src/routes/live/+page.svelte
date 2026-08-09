@@ -566,7 +566,7 @@
                             行が分かれてしまう。ゼロから始めれば、余った幅を
                             もらうだけの存在になり、行を割らない
                         -->
-                        <span class="min-w-0 grow basis-0 truncate px-2 text-sm text-white/80">
+                        <span class="min-w-0 grow basis-0 truncate text-sm text-white/80">
                             {#if current}
                                 <span data-testid="live-title">
                                     {current.now?.name ?? current.name}
@@ -718,7 +718,12 @@
         **高さは残りぜんぶ。** `max-h-[70vh]` で切っていた頃は、画面の下に
         余白があるのに一覧のほうが先に終わっていた
     -->
-    <aside class="flex flex-col md:w-80 md:min-h-0 md:shrink-0">
+    <!--
+        **二段組にした直後は細く** (`md:w-64`)、広い画面で 320px に戻す。観る画面と
+        同じ。縦のiPad (820px) では、320px を先に取ると**絵が 436px しか残らず**、
+        48px の押しものが並びきらずに帯が二段に折れていた
+    -->
+    <aside class="flex flex-col md:w-64 md:min-h-0 md:shrink-0 lg:w-80">
         {#if detail.current}
             <!--
                 **番組の中身は、この列を入れ替えて出す。モーダルにしない** —

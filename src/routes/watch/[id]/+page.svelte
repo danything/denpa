@@ -968,7 +968,7 @@
                             行が分かれてしまう
                         -->
                         <span
-                            class="min-w-0 grow basis-0 truncate px-2 text-sm text-white/80"
+                            class="min-w-0 grow basis-0 truncate text-sm text-white/80"
                             data-testid="watch-name"
                         >
                             {rec.name}
@@ -1033,7 +1033,13 @@
         ([live/+page.svelte](../../live/+page.svelte))。映像の高さに揃えていた頃は、
         そのためだけに `absolute` で浮かせる作りをここだけ抱えていた (上の説明)
     -->
-    <aside class="flex flex-col md:w-80 md:min-h-0 md:shrink-0">
+    <!--
+        **二段組にした直後は細く** (`md:w-64`)、広い画面で 320px に戻す。
+        縦のiPad (820px) では、320px を先に取ると**絵が 436px しか残らず**、
+        48px の押しものが並びきらずに帯が二段に折れていた。読むものは細くても
+        読めるが、絵は狭いと見られない
+    -->
+    <aside class="flex flex-col md:w-64 md:min-h-0 md:shrink-0 lg:w-80">
         <div class="card bg-base-100 flex min-h-0 flex-1 shadow">
             <!--
                 **`card-body` は使わない。** daisyUI はあれの中の `<p>` に
