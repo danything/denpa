@@ -1,7 +1,7 @@
 /**
  * データ放送で配ったものを覚えておく。**遅れて繋いだ人に配り直すため。**
  *
- * 解くのは [vendor/web-bml](../vendor/web-bml/README.md) の `decodeTS()` で、
+ * 解くのは [bml.ts](bml.ts) で、
  * ここはその出力を受けて「いま出すのに要るもの」だけを持つ。**流れ込む口も
  * 出ていく口も持たない** — 繋ぐのは [server/databroadcast.ts](../server/databroadcast.ts)。
  *

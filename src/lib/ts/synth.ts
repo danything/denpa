@@ -340,6 +340,24 @@ export function programMap(
     return withCrc(body);
 }
 
+/**
+ * データ符号化方式記述子 (0xFD)。**BML が載っている ES の目印。**
+ *
+ * 中身は「入口かどうか」と、カルーセルの回 (dataEventId)。
+ * 既定は地上波 (0x0C) の入口つき・960x540
+ */
+export function bxmlDescriptor(options: { dataComponentId?: number; entryPoint?: boolean } = {}): number[] {
+    const { dataComponentId = 0x0c, entryPoint = true } = options;
+    const body = [
+        ...be(dataComponentId),
+        // 伝送方式00 / 入口 / 自動起動 / 解像度0011 (960x540)
+        ...(entryPoint ? [0x33, 0x70] : [0x00, 0xff]),
+        0xf8, // dataEventId 0xF / event_section_flag
+        0xa0, // 即時取得あり / 蓄積不可 / 起動優先
+    ];
+    return [0xfd, body.length, ...body];
+}
+
 /** DSM-CC のセクションで包む */
 function dsmccSection(tableId: number, message: number[]): Uint8Array {
     return withCrc([tableId, 0x00, 0x00, ...be(0), 0xc1, 0x00, 0x00, ...message]);
@@ -349,7 +367,12 @@ export interface DiiModuleSpec {
     moduleId: number;
     moduleSize: number;
     moduleVersion: number;
-    name: string;
+    /** 名前 (記述子 0x02)。**ロゴだけが使う** */
+    name?: string;
+    /** Type 記述子 (0x01)。**データ放送だけが使う** */
+    contentType?: string;
+    /** Compression Type 記述子 (0xC2)。0 が zlib */
+    compression?: { type: number; originalSize: number };
 }
 
 /**
@@ -363,11 +386,24 @@ export function diiSection(
     downloadId: number,
     blockSize: number,
     modules: DiiModuleSpec | DiiModuleSpec[],
+    /** カルーセルの版。**同じ番号で送り直しても組み立て直されない** */
+    transactionId = 1,
 ): Uint8Array {
     const list = Array.isArray(modules) ? modules : [modules];
     const entries = list.flatMap((module) => {
-        const name = [...new TextEncoder().encode(module.name)];
-        const info = [0x02, name.length, ...name];
+        const info: number[] = [];
+        if (module.name !== undefined) {
+            const name = [...new TextEncoder().encode(module.name)];
+            info.push(0x02, name.length, ...name);
+        }
+        if (module.contentType !== undefined) {
+            const type = [...new TextEncoder().encode(module.contentType)];
+            info.push(0x01, type.length, ...type);
+        }
+        if (module.compression !== undefined) {
+            const { type, originalSize } = module.compression;
+            info.push(0xc2, 5, type & 0xff, ...be(originalSize >> 16), ...be(originalSize & 0xffff));
+        }
         return [
             ...be(module.moduleId),
             ...be(module.moduleSize >> 16),
@@ -400,10 +436,8 @@ export function diiSection(
         0x11, // protocolDiscriminator
         0x03, // dsmccType
         ...be(0x1002), // messageId: DII
-        0,
-        0,
-        0,
-        1, // transaction_id
+        ...be(transactionId >> 16),
+        ...be(transactionId & 0xffff),
         0xff,
         0x00, // reserved / adaptationLength
         ...be(rest.length),

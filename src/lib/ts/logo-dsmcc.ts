@@ -20,9 +20,13 @@
  *    ロゴデータモジュールになる
  * 5. モジュールの中に「どの局のロゴか」と PNG が入っている
  *
+ * 3〜4 は [dsmcc.ts](dsmcc.ts) が持っている。**データ放送も同じ運び方**なので、
+ * ここに残っているのはロゴの読み方 (どの ES を見るか、モジュールの中身) だけ。
+ *
  * PNG は地上波と同じく色の表が抜けているので、入れ直してから返す。
  */
 
+import { ModuleBuilder, parseDdb, parseDii, TABLE_DII, u16 } from './dsmcc';
 import { withPalette } from './logo-palette';
 import { descriptors, SectionAssembler } from './psi';
 
@@ -30,8 +34,6 @@ const PID_PAT = 0x0000;
 
 const TABLE_PAT = 0x00;
 const TABLE_PMT = 0x02;
-const TABLE_DII = 0x3b;
-const TABLE_DDB = 0x3c;
 
 /** エンジニアリングサービス。衛星のロゴはこのサービスで運ばれる (ARIB TR-B15) */
 const ESS_SERVICE_ID = 929;
@@ -40,20 +42,8 @@ const DESC_STREAM_IDENTIFIER = 0x52;
 /** ロゴのカルーセルが乗る ES の目印。0x79 が BS、0x7A が CS */
 const LOGO_COMPONENT_TAGS = new Set([0x79, 0x7a]);
 
-/** モジュール記述子の「名前」。ロゴかどうかはこれで見分ける */
-const MODULE_DESC_NAME = 0x02;
+/** モジュール記述子の名前。ロゴかどうかはこれで見分ける */
 const LOGO_MODULE_NAMES = new Set(['LOGO-05', 'CS_LOGO-05']);
-
-/** DII が blockSize を持っていないときの既定 (ARIB TR-B15) */
-const DEFAULT_BLOCK_SIZE = 4066;
-
-function u16(data: Uint8Array, at: number): number {
-    return (data[at] << 8) | data[at + 1];
-}
-
-function u32(data: Uint8Array, at: number): number {
-    return ((data[at] << 24) | (data[at + 1] << 16) | (data[at + 2] << 8) | data[at + 3]) >>> 0;
-}
 
 /** PAT から `サービスID → PMT の PID`。サービス0 は NIT なので飛ばす */
 function parsePat(section: Uint8Array): Map<number, number> {
@@ -91,102 +81,6 @@ function parseLogoEsPids(section: Uint8Array): { serviceId: number; pids: number
         }
     }
     return { serviceId, pids };
-}
-
-export interface DiiModule {
-    moduleId: number;
-    moduleSize: number;
-    moduleVersion: number;
-    /** モジュール記述子に入っている名前。ロゴかどうかの判定に使う */
-    name: string | null;
-}
-
-export interface Dii {
-    downloadId: number;
-    blockSize: number;
-    modules: DiiModule[];
-}
-
-export interface Ddb {
-    downloadId: number;
-    moduleId: number;
-    moduleVersion: number;
-    blockNumber: number;
-    block: Uint8Array;
-}
-
-/** DSM-CC セクションの中身 (メッセージ本体) を切り出す */
-function messageOf(section: Uint8Array): Uint8Array | null {
-    const length = ((section[1] & 0x0f) << 8) | section[2];
-    const end = 3 + length - 4;
-    if (end <= 8 || end > section.length) return null;
-    return section.subarray(8, end);
-}
-
-/**
- * DII (Download Info Indication)。
- *
- * 頭は共通で protocolDiscriminator/dsmccType/messageId/transaction_id と続き、
- * adaptationLength ぶん飛ばした先に本体が入っている。
- */
-function parseDii(section: Uint8Array): Dii | null {
-    if (section[0] !== TABLE_DII) return null;
-    const message = messageOf(section);
-    if (message === null || message.length < 20) return null;
-
-    const adaptationLength = message[9];
-    let at = 12 + adaptationLength;
-    if (at + 20 > message.length) return null;
-
-    const downloadId = u32(message, at);
-    const blockSize = u16(message, at + 4) || DEFAULT_BLOCK_SIZE;
-    at += 4 + 2 + 1 + 1 + 4 + 4;
-    // compatibilityDescriptor。中身は使わないので長さぶん飛ばす
-    if (at + 2 > message.length) return null;
-    at += 2 + u16(message, at);
-    if (at + 2 > message.length) return null;
-
-    const count = u16(message, at);
-    at += 2;
-    const modules: DiiModule[] = [];
-    for (let i = 0; i < count; i++) {
-        if (at + 8 > message.length) return null;
-        const moduleId = u16(message, at);
-        const moduleSize = u32(message, at + 2);
-        const moduleVersion = message[at + 6];
-        const infoLength = message[at + 7];
-        const info = message.subarray(at + 8, at + 8 + infoLength);
-        at += 8 + infoLength;
-
-        let name: string | null = null;
-        for (const [tag, descriptor] of descriptors(info)) {
-            if (tag === MODULE_DESC_NAME) name = new TextDecoder().decode(descriptor);
-        }
-        modules.push({ moduleId, moduleSize, moduleVersion, name });
-    }
-    return { downloadId, blockSize, modules };
-}
-
-/** DDB (Download Data Block)。モジュールを割ったブロックが1つ入っている */
-function parseDdb(section: Uint8Array): Ddb | null {
-    if (section[0] !== TABLE_DDB) return null;
-    const message = messageOf(section);
-    if (message === null || message.length < 12) return null;
-
-    const downloadId = u32(message, 4);
-    const adaptationLength = message[9];
-    const messageLength = u16(message, 10);
-    let at = 12 + adaptationLength;
-    if (at + 6 > message.length) return null;
-
-    const moduleId = u16(message, at);
-    const moduleVersion = message[at + 2];
-    const blockNumber = u16(message, at + 4);
-    at += 6;
-    const size = messageLength - adaptationLength - 6;
-    if (size < 0 || at + size > message.length) return null;
-
-    return { downloadId, moduleId, moduleVersion, blockNumber, block: message.subarray(at, at + size) };
 }
 
 export interface ModuleLogo {
@@ -237,17 +131,6 @@ export function parseLogoModule(data: Uint8Array): ModuleLogo[] {
     return logos;
 }
 
-/** 組み立て中のモジュール */
-interface Download {
-    moduleId: number;
-    moduleVersion: number;
-    blockSize: number;
-    data: Uint8Array;
-    /** 受け取ったブロック番号。全部揃ったかを数えるため */
-    blocks: Set<number>;
-    total: number;
-}
-
 /**
  * 組み立て中のモジュールの見分け。
  *
@@ -284,7 +167,7 @@ export class DsmccLogoCollector {
     private readonly carousels = new Map<number, SectionAssembler>();
 
     /** 組み立て中のモジュール (downloadId + moduleId ごと) */
-    private readonly downloads = new Map<string, Download>();
+    private readonly downloads = new Map<string, ModuleBuilder>();
     /** 揃ったロゴ */
     private readonly logos = new Map<string, ModuleLogo>();
     /** PAT を読んだか。読むまでは「この中継にロゴがあるか」を判断できない */
@@ -329,14 +212,10 @@ export class DsmccLogoCollector {
                 const building = this.downloads.get(key);
                 // 組み立て中のものを作り直さない (受け取ったブロックが消える)
                 if (building !== undefined && building.moduleVersion === module.moduleVersion) continue;
-                this.downloads.set(key, {
-                    moduleId: module.moduleId,
-                    moduleVersion: module.moduleVersion,
-                    blockSize: dii.blockSize,
-                    data: new Uint8Array(module.moduleSize),
-                    blocks: new Set(),
-                    total: Math.ceil(module.moduleSize / dii.blockSize),
-                });
+                this.downloads.set(
+                    key,
+                    new ModuleBuilder(module.moduleVersion, module.moduleSize, dii.blockSize),
+                );
             }
             return;
         }
@@ -351,11 +230,7 @@ export class DsmccLogoCollector {
             this.downloads.delete(key);
             return;
         }
-        const at = download.blockSize * ddb.blockNumber;
-        if (at + ddb.block.length > download.data.length) return;
-        download.data.set(ddb.block, at);
-        download.blocks.add(ddb.blockNumber);
-        if (download.blocks.size < download.total) return;
+        if (!download.add(ddb.blockNumber, ddb.block)) return;
 
         // 揃った。次の版が来るまで組み立て直さない
         this.downloads.delete(key);

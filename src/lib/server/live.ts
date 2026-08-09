@@ -534,7 +534,7 @@ class Session {
         viewer.wantsData = on;
         if (on) {
             if (this.data === null) {
-                this.data = new DataBroadcast(undefined, (message) => this.handData(message));
+                this.data = new DataBroadcast((message) => this.handData(message));
             }
             for (const message of this.data.replay()) this.tellData(viewer, message);
             return;

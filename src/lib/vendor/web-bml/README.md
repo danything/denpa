@@ -1,10 +1,10 @@
 # web-bml から借りているもの
 
-データ放送 (ARIB STD-B24 の BML) を出すために、[otya128/web-bml](https://github.com/otya128/web-bml)
-から**解く側だけ**を持ってきています。**中身は書き換えていません** — 上流を追いやすく
-するためで、denpa 側の都合は `src/lib/server/databroadcast.ts` に寄せてあります。
+データ放送 (ARIB STD-B24 の BML) のために、[otya128/web-bml](https://github.com/otya128/web-bml)
+から**2つだけ**持ってきています。**中身は書き換えていません** — 上流を追いやすく
+するためで、denpa 側の都合は [ts/bml.ts](../../ts/bml.ts) に寄せてあります。
 
-直すのは取り込むときの**型だけの import** 4箇所だけです。denpa は
+直すのは取り込むときの**型だけの import** 1箇所だけです。denpa は
 `verbatimModuleSyntax` で組んでいるので、型を値と同じ形で import していると通りません
 (下の「更新のしかた」に手順)。
 
@@ -13,64 +13,63 @@
 | 出どころ | <https://github.com/otya128/web-bml> |
 | 版 | `d784fd9e3376cf74dd85ba8b9879e6d2b714044c` (2026-07-23) |
 | 許諾 | MIT ([LICENSE](LICENSE)) |
-| 持ってきたもの | `server/decode_ts.ts` `server/entity_parser.ts` `server/ws_api.ts` |
+| 持ってきたもの | `server/entity_parser.ts` `server/ws_api.ts` |
 
-## なぜ借りるのか
+## 何を借りていて、何を借りていないか
 
-`decodeTS()` は **TS を流し込む Node のストリーム**で、出てくるのは生の TS でも
-セクションでもなく、**組み立て終わったモジュール**です。DSM-CC のカルーセルを
-束ね直すところまで向こうが持っています。
+**`ws_api.ts` は型だけ。** 解いた結果をどんな形で渡すかの取り決めで、
+**描画側 (web-bml のブラウザ) との契約**です。denpa は自前で解いた結果をこの形に
+詰めるので、**食い違えば型検査が止めてくれます**。ここを借りているからこそ、
+解く側を自前にできています。
 
-自分で書くなら、カルーセルの組み立てだけでは済みません。BML のスクリプトは
-ECMA-262 第3版どきの方言で、専用の DOM と `browser` オブジェクトと NVRAM の上で
-動くので、**ES2 の処理系まで抱える**ことになります (向こうは手書きのぶんだけでも
-`browser.ts` 58KB・`content.ts` 69KB・`drcs.ts` 31KB)。放送の仕様に当たり続ける
-仕事で、字幕を絵で出すことにしたのと同じ理由で、自前で持つ価値がありません
+**`entity_parser.ts` は multipart を解くだけ。** モジュール1つに BML と画像が
+`multipart/mixed` でまとめて入っているのを、ファイルごとに切り分けます。
+**依存の無いただの解析**で、書き直しても得るものがありません。
+
+**解く側 (`decode_ts.ts`) は借りていません。** 一度は借りましたが、998行のうち
+denpa が通るのは3割 (DSM-CC と PMT の記述子) だけで、残りは EIT/SDT/NIT や字幕の
+PES — どれも denpa に自前のものがあります ([eit.ts](../../ts/eit.ts) /
+[psi.ts](../../ts/psi.ts) / 字幕は ffmpeg が絵にする)。その3割のために
+`@chinachu/aribts` (2.3MB) を抱えることになるので、[dsmcc.ts](../../ts/dsmcc.ts) と
+[bml.ts](../../ts/bml.ts) に書き直しました。**運び方は衛星のロゴ
+([logo-dsmcc.ts](../../ts/logo-dsmcc.ts)) と同じ DSM-CC** で、denpa は既に持って
+いたものです。
+
+実機の録画 (79MB = 約40秒ぶん) で突き合わせて、**揃うモジュール16個・ファイル数・
+バイト数・種別まで完全に一致**しました (速さは 120 → 128 MB/s)。借りていた頃と違うのは
+2つだけです。
+
+- **`pcr` を出さない。** 毎秒50個来るうえ、denpa では**映像そのものが時計**
+- **`programInfo` を出さない。** 向こうは EIT/SDT/NIT から組み立てていたが、
+  denpa は**自前の番組表を持っている**ので、そちらから作るほうが正確で安い
+  (描画側を入れるときに繋ぐ)
+
+## 描画側は借りる
+
+**BML を動かすところは自前で書きません。** スクリプトは ECMA-262 第3版どきの方言で、
+専用の DOM と `browser` オブジェクトと NVRAM の上で動くので、**ES2 の処理系まで
+抱える**ことになります (向こうは手書きのぶんだけでも `browser.ts` 58KB・
+`content.ts` 69KB・`drcs.ts` 31KB)。放送の仕様に当たり続ける仕事で、字幕を絵で出す
+ことにしたのと同じ理由で、自前で持つ価値がありません
 ([docs/stream.md](../../../../docs/stream.md#56-データ放送の統合))。
 
-## `@chinachu/aribts` は何に使っているか
-
-**借りている `decode_ts.ts` の土台です。** MPEG-TS を解いて PSI/SI のセクションに
-するところ (`TsStream`)、放送の文字コードを読むところ (`TsChar`)、時刻 (`TsDate`)、
-表の面倒を見るところ (`TsUtil`) — カルーセルを組み立てる前段は全部これです。
-**借りている以上、外せません。**
-
-**版は web-bml が指しているものに合わせてあります** —
-`otya128/node-aribts` の v1.3.6 (npm に上がっている Mirakurun 版ではない)。
-借りている側のコードには `node-aribts側の問題で…` という但し書きが3箇所あり、
-どの版の癖に合わせて書かれているかで動きが変わります。**npm 版でも実機の TS は
-通りましたが、揃えておくほうを採りました。**
-
-denpa 自身は aribts を直に使っていません。TS を解くところは `src/lib/ts/psi.ts` と
-`service-filter.ts` に自前で持っています (録画も選局もそちらを通る)。
-
-## 実測
-
-実機の録画 (テレビ朝日、1局に絞った 83MB = 約40秒ぶん) を流したもの:
-
-| | |
-| --- | --- |
-| 出てきた知らせ | `pcr` 2,136 / `moduleDownloaded` 16 / `currentTime` 13 / `moduleListUpdated` 3 / `programInfo` 2 / `pmt` 1 |
-| 揃ったモジュール | 16個・約 1.4MB (中身は application / image / text / audio) |
-| 速さ | 120 MB/s。放送の 17 Mbit/s に対して **1コアの 1.8%** |
-
-**常に回していい安さ**です。データ放送を見ていない人のぶんまで解いても、
-映像を焼く手間に埋もれます。
+**解く側と線を引けるのは `ws_api.ts` があるからです。** 解くのは自前、描画は借りもの、
+その間を型が見張る。
 
 ## 更新のしかた
 
-上流の差分を見てから、3つのファイルを取り直して版を書き換えます。`ws_api.ts` の型が
-変わったときだけ `databroadcast.ts` に響きます。
+上流の差分を見てから、2つのファイルを取り直して版を書き換えます。`ws_api.ts` の型が
+変わったときだけ `bml.ts` に響きます。
 
 ```sh
 SHA=<新しい commit>
-for f in decode_ts.ts entity_parser.ts ws_api.ts; do
+for f in entity_parser.ts ws_api.ts; do
   gh api "repos/otya128/web-bml/contents/server/$f?ref=$SHA" --jq '.content' | base64 -d \
     > "src/lib/vendor/web-bml/$f"
 done
 ```
 
-そのあと `bun run check` が**型だけの import** を4箇所言ってくるので、直します
-(`ws_api.ts` の `MediaType`、`decode_ts.ts` の `MediaType` / `ComponentPMT` /
-`AdditionalAribBXMLInfo`)。**除外設定では逃げられません** — こちらから import して
-いる以上、型検査は追ってきます。
+そのあと `bun run check` が**型だけの import** を言ってくるので、直します
+(`ws_api.ts` の `MediaType`)。**除外設定では逃げられません** — こちらから import して
+いる以上、型検査は追ってきます。整形からは外してあります
+([biome.json](../../../../biome.json) の `!src/lib/vendor`)。

@@ -30,8 +30,5 @@
         "lint": "biome check . && prettier --check \"src/**/*.svelte\"",
         "format": "biome check --write . && prettier --write \"src/**/*.svelte\""
     },
-    "type": "module",
-    "dependencies": {
-        "@chinachu/aribts": "https://github.com/otya128/node-aribts/releases/download/v1.3.6/chinachu-aribts-1.3.6.tgz"
-    }
+    "type": "module"
 }
