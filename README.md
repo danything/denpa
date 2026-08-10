@@ -194,3 +194,18 @@ OIDC_GROUP=...   # このグループに居る人だけ通す (省くと入れ�
 - [docs/migrate.md](docs/migrate.md) — **EPGStation からの引き継ぎ**
 - [docs/roadmap.md](docs/roadmap.md) — これから入れるもの
 - [docs/stream.md](docs/stream.md) — **ライブ視聴** (放送中のものを観る)
+
+## ライセンス
+
+**AGPL-3.0-or-later** ([LICENSE](LICENSE))。
+
+denpa は**自分の家に置いて、外から使う**ものです。ネットワーク越しに使わせる形で
+配るなら、そのときの中身も同じ条件で渡せるようにしてほしい、という選び方です。
+
+抱えているものは出どころのままです:
+
+| | |
+| --- | --- |
+| [src/lib/vendor/web-bml](src/lib/vendor/web-bml) | MIT ([LICENSE](src/lib/vendor/web-bml/LICENSE))。データ放送を描くところ |
+| [patches/](patches) | ffmpeg に当てている直し。**上流に投げるつもりのものだけ** (LGPL/GPL) |
+| 像に入れるもの | ffmpeg (GPL)・libaribcaption (MIT)・join_logo_scp 一式・`rounded-mplus-1m-arib` (SIL OFL)。焼き方は [Dockerfile](Dockerfile) に |

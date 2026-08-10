@@ -40,7 +40,7 @@ SHELL ["/bin/bash", "-c"]
 ENV CURL="curl -fsSL --retry 5 --retry-delay 5 --retry-all-errors --connect-timeout 20"
 
 # woff2 は ARIB フォントをブラウザ用に縮めるのに使う (データ放送。下の説明)
-ENV DEV="curl ca-certificates build-essential cmake pkg-config nasm zlib1g-dev libfreetype6-dev libopus-dev libsvtav1enc-dev libx264-dev libdav1d-dev libfontconfig-dev woff2"
+ENV DEV="curl ca-certificates build-essential cmake pkg-config nasm patch zlib1g-dev libfreetype6-dev libopus-dev libsvtav1enc-dev libx264-dev libdav1d-dev libfontconfig-dev woff2"
 
 # renovate: datasource=github-tags depName=FFmpeg/FFmpeg extractVersion=^n(?<version>.*)$
 ENV FFMPEG_VERSION=9.0
@@ -54,6 +54,11 @@ ARG LIBARIBCAPTION_VERSION=v1.1.2
 # (借りている側は Kosugi を 4.4MB ぶん抱えているが、外字は入っていない)
 ARG ARIB_FONT_SHA=a9c834099818c59ba9c3721a2b1a860f6c0af61a
 
+# **上流に投げるつもりの直しだけを当てる** (理由は patches/README.md)。
+# `--fuzz=0` にしてあるのは、ffmpeg を上げたときに当たらなくなったら
+# **黙ってずれて当たるより、ビルドを止めてほしい**ため
+COPY patches/ /patches/
+
 RUN apt-get update && \
     apt-get -y --no-install-recommends install $DEV && \
     mkdir -p /usr/share/fonts/truetype/rounded-mplus-arib && \
@@ -65,6 +70,7 @@ RUN apt-get update && \
     mkdir build && cd build && cmake .. -DCMAKE_BUILD_TYPE=Release && cmake --build . -j$(nproc) && cmake --install . && \
     mkdir /tmp/ffmpeg_sources && cd /tmp/ffmpeg_sources && \
     $CURL https://ffmpeg.org/releases/ffmpeg-${FFMPEG_VERSION}.tar.bz2 | tar -xj --strip-components=1 && \
+    for p in /patches/*.patch; do patch -p1 --fuzz=0 < "$p"; done && \
     ./configure \
       --enable-gpl \
       --enable-libopus \

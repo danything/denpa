@@ -99,18 +99,28 @@ export async function tick(): Promise<void> {
     if (expired.changes > 0) emit('reservations');
 
     /*
-     * 止められている最中は新しく始めない。始めてしまうと、
-     * 「録画が終わるまで待つ」がいつまでも終わらない (shutdown.ts)。
-     * 始めそこねた予約は、次の Pod が起動した直後の tick が拾う
+     * **止められている最中でも始める。**
+     *
+     * 始めないでいた頃は、**居座っている間に始まる録画の頭が丸ごと落ちて**
+     * いた。居座りは「いま走っている録画が終わるまで」続くので、落ちる幅は
+     * 最長で番組1本ぶん — 実機では 00:00 の番組が 29秒、19:54 の番組が
+     * **9分42秒**欠けた (どちらも、その時刻にちょうど入れ替えが降りていた)。
+     *
+     * 始めれば居座りはそのぶん伸びるが、**Pod はどのみち残っている**ので
+     * 新しく待たせるものは無い。伸びすぎない歯止めは既にある —
+     * `SHUTDOWN_WAIT` (6時間) を過ぎれば `runtime.ts` が降ろす。そこで
+     * 切れた録画は追記で開いてあるので、次の Pod が続きから録る
      */
-    if (isDraining()) return;
-
     const due = database()
         .prepare(
             `SELECT * FROM reservations
              WHERE state = 'scheduled' AND started_at IS NULL AND start_at - ? <= ? AND end_at > ?`,
         )
         .all(config.startMargin, at, at) as Reservation[];
+    // 5秒ごとに言わない。**始めるものがあるときだけ**
+    if (due.length > 0 && isDraining()) {
+        console.log(`[録画] 止まる途中ですが ${due.length} 件始めます (頭を落とさないため)`);
+    }
 
     for (const reservation of due) {
         /*

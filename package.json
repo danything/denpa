@@ -1,5 +1,6 @@
 {
     "name": "denpa",
+    "license": "AGPL-3.0-or-later",
     "devDependencies": {
         "@biomejs/biome": "^2.5.6",
         "@playwright/test": "^1.56.1",
