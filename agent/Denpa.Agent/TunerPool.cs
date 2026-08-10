@@ -364,6 +364,8 @@ public sealed class TunerPool(
             onChange();
         });
         lease.Sinks.Add(sink);
+        // 溢れの報告に名前を残す。**抜けたあとに報告が回っても名乗れるように**
+        lease.Saw(use);
         Task.Run(onChange);
         return sink;
     }
@@ -651,6 +653,47 @@ internal sealed class Lease(int tuner, string type, string channel)
     public string Type { get; } = type;
     public string Channel { get; } = channel;
     public List<Sink> Sinks { get; } = [];
+
+    /// <summary>
+    /// **前の報告からあとに、読み手として居たもの。**
+    ///
+    /// <para>
+    /// 溢れの報告に添える名前を、報告した瞬間の <see cref="Sinks"/> から採って
+    /// いた頃は、**溢れた本人が名乗らない**ことがあった — 報告は1分に1回で、
+    /// その間に読み手が抜けていれば「読み手なし」になる。実機の24時間で
+    /// **302回のうち128回 (42%) が「読み手なし」**で、その多くは直後の報告に
+    /// 同じ局・同じチューナーで `live` が付いていた。
+    /// </para>
+    /// <para>
+    /// 名前を添えるのは「番組表集めなのか観ている人なのかで次に見るところが
+    /// 変わる」ためなので、**当てにならない名前は無いのと同じ**。居た者を
+    /// 覚えておいて、報告のたびに吐き出す。
+    /// </para>
+    /// </summary>
+    private readonly HashSet<string> _seen = [];
+
+    /// <summary>読み手が来たことを覚える (<see cref="Readers"/>)</summary>
+    public void Saw(string use)
+    {
+        lock (Sinks) _seen.Add(use);
+    }
+
+    /// <summary>
+    /// 報告に添える名前。**いま居る者と、前の報告からあとに居た者**を並べる。
+    /// 読んだら、いま居る者だけに戻す
+    /// </summary>
+    public string Readers()
+    {
+        lock (Sinks)
+        {
+            var now = Sinks.Select(sink => sink.Use).ToArray();
+            var who = _seen.Union(now).Order().ToArray();
+            _seen.Clear();
+            foreach (var use in now) _seen.Add(use);
+            return who.Length == 0 ? "読み手なし" : string.Join("・", who);
+        }
+    }
+
     public string? Error { get; private set; }
     public int? Pid => _child?.HasExited == false ? _child.Id : null;
 
@@ -755,15 +798,14 @@ internal sealed class Lease(int tuner, string type, string channel)
     /// <para>
     /// **誰が読んでいたかも添える。** 溢れっぱなしなら読む側が遅いということで、
     /// 相手が番組表集めなのか観ている人なのかで、次に見るところが変わる。
+    /// 名前は**その間に居た者**を並べる (<see cref="Readers"/>) — いま居る者だけを
+    /// 見ていた頃は、抜けたあとに報告が回って「読み手なし」になっていた。
     /// </para>
     /// </summary>
     private void ReportOverflows(DeviceStream? ring)
     {
         if (ring is null || ring.TakeOverflows() is not ( > 0 and var overflows)) return;
-        string[] uses;
-        lock (Sinks) uses = Sinks.Select(sink => sink.Use).Distinct().ToArray();
-        var who = uses.Length == 0 ? "読み手なし" : string.Join("・", uses);
-        Log.Write($"[{Tuner}] {Channel}: 環が {overflows} 回溢れました (読むのが追いつきません: {who})");
+        Log.Write($"[{Tuner}] {Channel}: 環が {overflows} 回溢れました (読むのが追いつきません: {Readers()})");
     }
 
     public void Start(string command, Action onExit)
