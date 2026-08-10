@@ -186,8 +186,17 @@ RUN ldconfig && fc-cache -f
 # 3つのコマンドは denpa (src/lib/server/cm-jls.ts) から直接起動する
 COPY --from=jls /opt/jls /opt/jls
 
+# **node_modules は載せない。**
+#
+# adapter-node の出力は要るものを畳み込んでいて、外から引くのは `node:*` と
+# bun の組み込み (`bun:sqlite`) だけ。実際に build/ と server.js だけを置いた
+# ところで起動するのを確かめてある。載せていた頃は playwright も vite も
+# typescript も像に入っていて、**312MB がまるごと無駄**だった。
+#
+# 引き換えに、**外から引くものを増やすなら畳み込ませること** — package.json の
+# `dependencies` に足すと adapter-node がそれを外に出すので、ここで転ぶ。
+# 借りものが使う4つを devDependencies に置いてあるのはそのため
 COPY --from=build /app/build ./build
-COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/package.json ./package.json
 # ライブ視聴の WebSocket を受ける入口。中身の理由はファイルの頭に書いてある
 COPY --from=build /app/server.js ./server.js
