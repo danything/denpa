@@ -221,6 +221,22 @@
         // 403 は「Ethernet で DHCP」。借りものの既定と同じ
         getConnectionType: () => 403,
         isIPConnected: () => (network ? 1 : 0),
+        /**
+         * **届くかどうかを確かめる。** `isIPConnected` に 1 と答えるだけでは
+         * 足りない — 放送のアプリはここも呼び、答えが無いと (借りものは
+         * 未実装だと `null` を返す)「インターネットに接続されていません」と
+         * 案内する。実機の NHK でそうなった
+         */
+        confirmIPNetwork: async (destination: string, _isICMP: boolean, timeoutMillis: number) => {
+            const params = new URLSearchParams({ to: destination, wait: String(timeoutMillis) });
+            const response = await fetch(`/api/bml/confirm?${params}`);
+            if (!response.ok) return { success: false, ipAddress: null, responseTimeMillis: null };
+            return (await response.json()) as {
+                success: boolean;
+                ipAddress: string | null;
+                responseTimeMillis: number | null;
+            };
+        },
         get: async (uri: string) => {
             const response = await fetch(`/api/bml/proxy?url=${encodeURIComponent(uri)}`);
             const body = new Uint8Array(await response.arrayBuffer());

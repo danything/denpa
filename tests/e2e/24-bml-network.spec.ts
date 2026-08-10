@@ -10,8 +10,9 @@ import { expect, goto, test } from './helpers';
  */
 test.describe('データ放送の双方向', () => {
     test('既定では中継しない', async ({ request }) => {
-        const res = await request.get('/api/bml/proxy?url=https://example.com/');
-        expect(res.status()).toBe(403);
+        expect((await request.get('/api/bml/proxy?url=https://example.com/')).status()).toBe(403);
+        // 疎通確認も同じ扱い。**入れるまで外へ出ない**
+        expect((await request.get('/api/bml/confirm?to=example.com')).status()).toBe(403);
     });
 
     test('入れると口が開くが、内側へは繋がない', async ({ page, request }) => {
@@ -34,6 +35,21 @@ test.describe('データ放送の双方向', () => {
         // **https だけ。** 中身を覗かれる道は開けない
         const plain = await request.get('/api/bml/proxy?url=http%3A%2F%2Fexample.com%2F');
         expect(plain.status()).toBe(502);
+
+        /*
+         * **疎通確認は、届かなくても失敗ではない。**
+         *
+         * 放送のアプリはこの答えを見て「繋がっているか」を出し分ける。
+         * 断られた (403/502) のと「届かなかった」は別のことなので、
+         * 200 で `success: false` を返す
+         */
+        const confirm = await request.get('/api/bml/confirm?to=192.168.1.1&wait=1000');
+        expect(confirm.status()).toBe(200);
+        expect(await confirm.json()).toEqual({
+            success: false,
+            ipAddress: null,
+            responseTimeMillis: null,
+        });
 
         // 後片付け。**入れっぱなしにしない** (他のテストと本番の既定を揃える)
         await goto(page, '/settings');

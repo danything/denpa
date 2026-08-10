@@ -32,6 +32,7 @@
  */
 
 import { lookup } from 'node:dns/promises';
+import { connect } from 'node:net';
 
 /** 追いかける上限。放送局は https へ寄せるのに1回挟むことがある */
 const HOPS = 3;
@@ -148,4 +149,47 @@ export async function fetchForBml(raw: string): Promise<Fetched> {
             body,
         };
     }
+}
+
+/**
+ * 相手まで届くかを確かめる (`browser.confirmIPNetwork`)。
+ *
+ * **放送のアプリはこれで「繋がっているか」を決めます。** `isIPConnected` に
+ * 1 と答えるだけでは足りません — 借りものは実装が無いと `null` (非対応) を
+ * 返し、アプリはそれを見て「インターネットに接続されていません」と案内します
+ * (実機の NHK でそうなりました)。
+ *
+ * **ICMP は使いません。** 器の中から生の socket は開けない (`CAP_NET_RAW` が
+ * 要る) ので、**443 番へ繋がるか**で代えます。放送局のサーバは https で
+ * 待っているので、目的 (相手まで届くか) には十分です。
+ *
+ * 繋ぎ先は `allowed` と同じ枠で見ます — 内側を確かめる道具にしない
+ */
+export async function confirmReachable(
+    destination: string,
+    timeoutMs: number,
+): Promise<{ success: boolean; ipAddress: string | null; responseTimeMillis: number | null }> {
+    // `example.jp` でも `https://example.jp/x` でも受ける
+    const host = destination.includes('://')
+        ? new URL(destination).hostname
+        : destination.replace(/^\/+/, '').split('/')[0];
+    if (host === '') throw new Refused('宛先がありません');
+    await resolvable(host);
+
+    const started = Date.now();
+    const { address } = await lookup(host);
+    return await new Promise((resolve) => {
+        const socket = connect({ host, port: 443, timeout: Math.max(1000, Math.min(timeoutMs, TIMEOUT)) });
+        const done = (success: boolean) => {
+            socket.destroy();
+            resolve({
+                success,
+                ipAddress: address,
+                responseTimeMillis: success ? Date.now() - started : null,
+            });
+        };
+        socket.once('connect', () => done(true));
+        socket.once('timeout', () => done(false));
+        socket.once('error', () => done(false));
+    });
 }
