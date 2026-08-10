@@ -37,9 +37,9 @@ test.describe('データ放送の双方向', () => {
             expect(res.status(), url).toBe(502);
         }
 
-        // **https だけ。** 中身を覗かれる道は開けない
-        const plain = await request.get('/api/bml/proxy?url=http%3A%2F%2Fexample.com%2F');
-        expect(plain.status()).toBe(502);
+        // **別の仕組みへ逃がす道は塞ぐ** (http は通す — 放送がそう作られている)
+        const file = await request.get('/api/bml/proxy?url=file%3A%2F%2F%2Fetc%2Fpasswd');
+        expect(file.status()).toBe(502);
 
         /*
          * **送るほうも同じ枠で見る。**
@@ -48,7 +48,7 @@ test.describe('データ放送の双方向', () => {
          * いるか」を決めることがある (NHK がそう)。だからといって内側へ
          * 投げてよいことにはならない
          */
-        for (const url of ['https://127.0.0.1/', 'http://example.com/']) {
+        for (const url of ['https://127.0.0.1/', 'http://192.168.1.1/']) {
             const res = await request.post(`/api/bml/post?url=${encodeURIComponent(url)}`, {
                 data: 'Denbun=x',
             });

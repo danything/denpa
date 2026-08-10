@@ -52,11 +52,20 @@ describe('繋いでよい住所か', () => {
 });
 
 describe('取りに行ってよい URL か', () => {
-    test('https でなければ断る', async () => {
-        expect(allowed('http://example.com/x')).rejects.toThrow(Refused);
-        // 別の仕組みへ逃がす道も塞ぐ
+    /*
+     * **http も通す。** 放送がそう作られている (NHK は
+     * `http://beacon.nhk.jp/` へ投げてくる)。https だけにすると、
+     * 双方向を入れても「接続されていません」のままになる
+     */
+    test('http と https は通す', async () => {
+        expect(allowed('http://example.com/x')).resolves.toBeInstanceOf(URL);
+        expect(allowed('https://example.com/x')).resolves.toBeInstanceOf(URL);
+    });
+
+    test('別の仕組みへ逃がす道は塞ぐ', async () => {
         expect(allowed('file:///etc/passwd')).rejects.toThrow(Refused);
         expect(allowed('ftp://example.com/x')).rejects.toThrow(Refused);
+        expect(allowed('data:text/plain,x')).rejects.toThrow(Refused);
     });
 
     test('URL として読めなければ断る', async () => {

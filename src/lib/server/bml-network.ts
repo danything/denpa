@@ -21,7 +21,7 @@
  * | --- | --- |
  * | 既定 | **切** (設定画面で入れる)。入れるまで `isIPConnected` は 0 を返す |
  * | 手 | GET と POST (`transmitTextDataOverIP`)。**中身は放送のアプリが組んだものをそのまま通すだけ** |
- * | 相手 | **https のみ・公開アドレスのみ**。私設・ループバック・リンクローカル・多重放送は断る |
+ * | 相手 | **公開アドレスのみ** (http も可 — 放送がそう作られている)。私設・ループバック・リンクローカル・多重放送は断る |
  * | 追いかけ | 3回まで。**行き先ごとに確かめ直す** — 1回目が公開でも、飛ばされた先が内側のことがある |
  * | 大きさ | 4MB まで |
  * | 待ち | 10秒 |
@@ -108,8 +108,25 @@ export async function allowed(raw: string): Promise<URL> {
     } catch {
         throw new Refused('URL として読めません');
     }
-    // **https だけ。** 放送の通信は暗号化された相手が前提で、http は中身を覗かれる
-    if (url.protocol !== 'https:') throw new Refused(`https だけです (${url.protocol})`);
+    /*
+     * **http も通す。**
+     *
+     * 最初は https だけにしていた。**放送がそう作られていない。** NHK は
+     * `http://beacon.nhk.jp/` へ投げてくるし、通信系コンテンツはおおむね
+     * 素の http で組まれている (受信機がそうしているから)。https だけに
+     * すると、双方向を入れても「接続されていません」のまま — 実機で
+     * そうなった。
+     *
+     * 覗かれる道を開けることは承知の上。ただし**これは放送のアプリの
+     * 通信**で、denpa の資格情報も利用者の秘密も乗らない (`credentials:
+     * 'omit'`)。実機のテレビが出す通信と同じもので、それ以上に危なくは
+     * ならない。
+     *
+     * `file:` や `data:` のような別の仕組みへ逃がす道は塞いだままにする
+     */
+    if (url.protocol !== 'https:' && url.protocol !== 'http:') {
+        throw new Refused(`http か https だけです (${url.protocol})`);
+    }
     await resolvable(url.hostname);
     return url;
 }
