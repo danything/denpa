@@ -13,7 +13,7 @@
 | 出どころ | <https://github.com/otya128/web-bml> |
 | 版 | `d784fd9e3376cf74dd85ba8b9879e6d2b714044c` (2026-07-23) |
 | 許諾 | MIT ([LICENSE](LICENSE)) |
-| 持ってきたもの | `BMLBrowser` から辿れるもの **44ファイル・1.4MB** |
+| 持ってきたもの | `BMLBrowser` から辿れるもの **44ファイル・1.2MB** |
 | 写していないもの | `client/interpreter/js_interpreter.ts` (下の説明)、単体ページ・サーバ・自前再生 |
 
 ## 手を入れているのは2つだけ
@@ -125,16 +125,27 @@ react と hls.js を引き連れていて、denpa の画面とは形が違いま
 
 ## 更新のしかた
 
-上流の差分を見てから、木ごと取り直します。**`BMLBrowser` から辿れるものだけ**で、
-`js_interpreter.ts` は写しません。
+**毎週、GitHub Actions が写し直して PR にします**
+([vendor-web-bml.yml](../../../../.github/workflows/vendor-web-bml.yml) と
+[vendor-web-bml.ts](../../../../.github/vendor-web-bml.ts))。手元でも走ります:
 
 ```sh
-SHA=<新しい commit>
-git clone --depth 1 https://github.com/otya128/web-bml.git /tmp/web-bml
-# client/ es2/ public/ server/ を、いまある形に合わせて写す
-# そのあと、写した .ts の1行目に `// @ts-nocheck` を足す
+git clone --filter=blob:none https://github.com/otya128/web-bml.git /tmp/web-bml
+bun .github/vendor-web-bml.ts /tmp/web-bml
 ```
 
-型が変わったときだけ `ts/bml.ts` と `DataBroadcast.svelte` に響きます
+**Renovate では見えません。** 木ごと写しているので、あちらからは「ただの
+`src/` の中のファイル」に見えます。仮に版だけ書き換える PR を出せたとしても、
+**中身は古いまま新しい版だと名乗るファイル**ができるだけです。
+
+写すのは**いま置いてあるのと同じ顔ぶれ**で、そのつど `BMLBrowser` から
+辿り直しはしません。**上流が依存を増やしたときは `bun run check` が
+「そんなファイルは無い」で落ちます** — それが「人が見て決め直せ」という札に
+なります (落ちても PR は出ます。結果は説明に書いてあります)。
+
+型が変わったときも同じで、`ts/bml.ts` と `DataBroadcast.svelte` に響きます
 (`ResponseMessage` と `BMLBrowserOptions`)。整形と検査からは外してあります
 ([biome.jsonc](../../../../biome.jsonc) の `!src/lib/vendor`)。
+
+**中身は上流と1バイトも違いません** (足すのは頭の2行だけ)。改行の有無まで
+揃えてあるので、PR の差分は**上流の変更そのもの**になります。

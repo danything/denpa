@@ -1,0 +1,91 @@
+name: Follow web-bml
+
+# 借りもの (src/lib/vendor/web-bml) を上流に追いつかせる。
+#
+# **Renovate では見えない。** 木ごと写しているので、あちらからは「ただの
+# src/ の中のファイル」に見える。仮に版だけ書き換える PR を出せたとしても、
+# **中身は古いまま「新しい版だ」と名乗るファイル**ができるだけで嘘になる。
+#
+# ここは中身ごと写し直して PR にする。写し方は README の「更新のしかた」
+# そのままで、判断が要るところ (上流が新しい依存を増やした・型を変えた) は
+# **CI が落ちることで人に回る**。
+on:
+  schedule:
+    # 毎週月曜 12:00 JST (03:00 UTC)。放送も録画も薄い時間
+    - cron: '0 3 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  follow:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Read bun version from Dockerfile
+        id: bun
+        run: echo "version=$(grep -oP 'oven/bun:\K[^-\s]+' Dockerfile | head -1)" >> "$GITHUB_OUTPUT"
+
+      - name: Set up bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ steps.bun.outputs.version }}
+
+      # 履歴が要る (前に写した版からの差分を PR の説明に貼るため)
+      - name: Clone upstream
+        run: git clone --filter=blob:none https://github.com/otya128/web-bml.git /tmp/web-bml
+
+      - name: Copy the tree
+        id: vendor
+        run: bun .github/vendor-web-bml.ts /tmp/web-bml
+
+      - name: Install dependencies
+        if: steps.vendor.outputs.changed == 'true'
+        run: bun install --frozen-lockfile
+
+      # **落ちても止めない。** 落ちること自体が知らせなので、PR は出したうえで
+      # 結果を説明に書く
+      - name: Type check
+        if: steps.vendor.outputs.changed == 'true'
+        id: check
+        continue-on-error: true
+        run: bun run check
+
+      - name: Unit tests
+        if: steps.vendor.outputs.changed == 'true'
+        id: unit
+        continue-on-error: true
+        run: bun run test:unit
+
+      - name: Note the results
+        if: steps.vendor.outputs.changed == 'true'
+        run: |
+          {
+            echo
+            echo '## この PR での結果'
+            echo
+            echo "- \`bun run check\` … ${{ steps.check.outcome }}"
+            echo "- \`bun run test:unit\` … ${{ steps.unit.outcome }}"
+          } >> /tmp/vendor-web-bml-body.md
+
+      - name: Open a pull request
+        if: steps.vendor.outputs.changed == 'true'
+        uses: peter-evans/create-pull-request@v7
+        with:
+          branch: vendor/web-bml
+          base: main
+          title: 'chore: 借りもの (web-bml) を ${{ steps.vendor.outputs.now }} に写し直した'
+          body-path: /tmp/vendor-web-bml-body.md
+          commit-message: |
+            chore: 借りもの (web-bml) を上流に追いつかせた
+
+            ${{ steps.vendor.outputs.was }} → ${{ steps.vendor.outputs.now }} (${{ steps.vendor.outputs.day }})
+
+            写し方は README の「更新のしかた」のまま — `.ts` の頭に `@ts-nocheck` と
+            断り書きを足し、`js_interpreter.ts` は denpa の1行を残してある。
+          labels: 借りもの
+          delete-branch: true
