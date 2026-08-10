@@ -85,6 +85,15 @@ const UNSLIP_EVERY = 3_000;
 const FRAME = 0.02;
 
 /**
+ * データ放送の知らせを、器ができるまでに取っておく数 (`heldData`)。
+ *
+ * **待つのは 700KB を落とす間だけ**なので、実測 (毎秒20通ほど) からすれば
+ * 数十で足りる。それでも上限を置くのは、**モジュールは1通が 100KB を超える**
+ * ことがあるため — 器がついに立たなかったときに、際限なく抱え込ませない
+ */
+const HOLD_DATA = 300;
+
+/**
  * 見ている局を覚える。**置き場は cookie 1つ。**
  *
  * **読むのはサーバ** (`live/+page.server.ts`)。次に開いたとき、画面が繋いで
@@ -217,6 +226,20 @@ export function livePlayer() {
     let showData = $state(false);
     /** データ放送の知らせを渡す先。**描いているものが居るときだけ** */
     let onData: ((message: ResponseMessage) => void) | null = null;
+    /**
+     * 器ができるまでの控え。**押した直後のぶんを捨てない。**
+     *
+     * サーバは押された瞬間に、番組・PMT・溜まっているモジュールをまとめて
+     * 送ってくる。ところが描く側は 700KB を落としてから立ち上がるので、
+     * **その間に来たぶんが宛先の無いまま捨てられていた**。入口の BML は
+     * 番組 (`programInfo`) を待ってから開くので、それを落とすと**押しても
+     * 何も出ない**。しかも捨てたものは二度と来ない (カルーセルが一周する
+     * までモジュールは繰り返すが、番組は一度きり)。
+     *
+     * 実機では「1局目は出ないのに、局を変えると出る」形で出た —
+     * 2度目は落とし済みで待ちが無いので、間に合っていた
+     */
+    let heldData: ResponseMessage[] = [];
     /** 字幕を出すか。**押して切り替えられる** (テレビの字幕ボタン) */
     let captions = $state(true);
     /**
@@ -940,6 +963,8 @@ export function livePlayer() {
     function setData(on: boolean): void {
         if (showData === on) return;
         showData = on;
+        // 畳んだら、待たせてあるぶんも捨てる
+        if (!on) heldData = [];
         socket?.send(JSON.stringify({ type: 'data', on } satisfies Command));
     }
 
@@ -947,10 +972,16 @@ export function livePlayer() {
      * データ放送の知らせを受け取る先を預かる。**描く側が居るときだけ渡す。**
      *
      * 渡す形は借りものの取り決めそのまま (`ResponseMessage`) なので、
-     * ここは素通しでいい ([vendor/web-bml](./vendor/web-bml/README.md))
+     * ここは素通しでいい ([vendor/web-bml](./vendor/web-bml/README.md))。
+     *
+     * **預かった時点で、待たせてあるぶんを先に流す** (`heldData`)
      */
     function listenData(handler: ((message: ResponseMessage) => void) | null): void {
         onData = handler;
+        const held = heldData;
+        heldData = [];
+        if (handler === null) return;
+        for (const message of held) handler(message);
     }
 
     /** 中身。**断り書きを消さない**ので、戻すときにも使える */
@@ -1119,12 +1150,14 @@ export function livePlayer() {
              * **データ放送。** 中身は `ResponseMessage` の JSON
              * ([ts/bml.ts](./ts/bml.ts) が組み立てたもの)。
              *
-             * 描いているものが居ないときは捨てる — 押していなければサーバも
-             * 送ってこないが、押した直後にまとめて届くぶんが、器を作るより
-             * 先に来ることがある
+             * **器がまだ無いときは取っておく** (`heldData`)。押した直後に
+             * まとめて届くぶんは、器を作るより先に来る
              */
             if (kind === CHANNEL.data) {
-                onData?.(JSON.parse(new TextDecoder().decode(body)) as ResponseMessage);
+                const message = JSON.parse(new TextDecoder().decode(body)) as ResponseMessage;
+                if (onData !== null) onData(message);
+                // 出すつもりが無いなら取っておく意味も無い
+                else if (showData && heldData.length < HOLD_DATA) heldData.push(message);
                 return;
             }
 

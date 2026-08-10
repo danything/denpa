@@ -381,9 +381,10 @@ test.describe('ライブ視聴', () => {
      */
     test('d ボタンでデータ放送の器が立ち上がり、サーバに伝わる', async ({ page }) => {
         await page.addInitScript(() => {
-            const seen = window as unknown as { __data: unknown[]; __info: unknown[] };
+            const seen = window as unknown as { __data: unknown[]; __info: unknown[]; __got: number };
             seen.__data = [];
             seen.__info = [];
+            seen.__got = 0;
             const Original = window.WebSocket;
             window.WebSocket = class extends Original {
                 constructor(url: string | URL, protocols?: string | string[]) {
@@ -392,6 +393,7 @@ test.describe('ライブ視聴', () => {
                         const data = (event as MessageEvent).data;
                         // 0x30 がデータ放送。中身は9バイト目から JSON (stream.md §5.3)
                         if (!(data instanceof ArrayBuffer) || new Uint8Array(data)[0] !== 0x30) return;
+                        seen.__got++;
                         const message = JSON.parse(new TextDecoder().decode(new Uint8Array(data, 9)));
                         if (message.type === 'programInfo') seen.__info.push(message);
                     });
@@ -429,6 +431,26 @@ test.describe('ライブ視聴', () => {
                 message: '番組 (programInfo) が来ない',
             })
             .not.toEqual([]);
+
+        /*
+         * **届いたものを1つも落としていないか。**
+         *
+         * サーバは押された瞬間に、番組・PMT・溜まっているモジュールをまとめて
+         * 送ってくる。ところが描く側は 700KB を落としてから立ち上がるので、
+         * **その間に来たぶんは宛先が無い**。捨てていた頃は番組が真っ先に
+         * 落ちて、実機では「1局目は出ないのに、局を変えると出る」形で出た
+         * (2度目は落とし済みで待ちが無いので、間に合っていた)
+         */
+        await expect
+            .poll(
+                async () => {
+                    const got = await page.evaluate(() => (window as unknown as { __got: number }).__got);
+                    const handed = Number(await overlay.getAttribute('data-handed'));
+                    return handed >= got;
+                },
+                { message: '器ができるまでに届いたぶんを捨てている' },
+            )
+            .toBe(true);
 
         // もう一度押したら畳む。**掴んだままにしない**
         await page.getByTestId('live-data-button').click();

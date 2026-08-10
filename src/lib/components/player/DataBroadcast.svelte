@@ -95,8 +95,6 @@
     let seat: { parent: Node; next: Node | null } | null = null;
     /** BML の画面の大きさ。`load` で分かる (960x540 / 720x480 など) */
     let plane: { width: number; height: number } | null = null;
-    /** d を叩き始めたか。**文書ができてから一度だけ** (`knock`) */
-    let knocked = false;
     /** 残りの叩く回数 */
     let knocks = 0;
     /** 次に叩く約束 */
@@ -233,16 +231,20 @@
         browser = made;
         loading = false;
         handed = 0;
-        knocked = false;
         showing = false;
         plane = null;
 
         made.addEventListener('load', (event) => {
             plane = event.detail.resolution;
             fit();
-            // 文書ができた。あとは出てくるまで d を叩く
-            if (knocked) return;
-            knocked = true;
+            /*
+             * **文書ができるたびに叩き直す。**
+             *
+             * 入口の文書はたいてい別の文書へ渡すだけで、その先は電波が
+             * 一周するまで届かない。最初の1回ぶんだけ叩いて諦めると、
+             * **本体が出てきた頃には叩き終わっている**
+             */
+            stopKnocking();
             knocks = KNOCK_TRIES;
             knocking = setTimeout(knock, KNOCK_WAIT);
         });
@@ -273,7 +275,6 @@
         loading = false;
         handed = 0;
         showing = false;
-        knocked = false;
         stopKnocking();
         plane = null;
         watcher?.disconnect();
