@@ -24,7 +24,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@v7
 
       - name: Read bun version from Dockerfile
         id: bun
@@ -74,7 +74,7 @@ jobs:
 
       - name: Open a pull request
         if: steps.vendor.outputs.changed == 'true'
-        uses: peter-evans/create-pull-request@v7
+        uses: peter-evans/create-pull-request@v8
         with:
           branch: vendor/web-bml
           base: main
