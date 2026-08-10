@@ -213,7 +213,7 @@
         if (settled || !showing) stopWaiting();
         else startWaiting();
         visible = want;
-        if (mount !== null) mount.style.visibility = want ? 'visible' : 'hidden';
+        if (mount !== null) mount.style.opacity = want ? '1' : '0';
         if (media === null) return;
         const box = want ? (browser?.getVideoElement() ?? null) : null;
         if (box !== null) {
@@ -291,8 +291,17 @@
         mount.style.left = '0';
         mount.style.top = '0';
         mount.style.transformOrigin = 'top left';
-        // 出せと言われるまでは隠しておく (`showing` の説明)
-        mount.style.visibility = 'hidden';
+        /*
+         * 出せと言われるまでは隠しておく (`showing` の説明)。
+         *
+         * **`visibility` では隠せない。** 借りものの既定のスタイルには
+         * `body { visibility : visible !important }` があって、**子のほうが
+         * 親の hidden を打ち消す** (visibility は継承するが、子で戻せる)。
+         * 実機では「d を押すと、出るまで映像が真っ白に覆われる」形で出た。
+         * `display:none` にすると寸法が測れなくなる (BML は自分で
+         * `offsetLeft` を読む) ので、透明にして場所は残す
+         */
+        mount.style.opacity = '0';
         host.appendChild(mount);
 
         seat = { parent: media.parentNode as Node, next: media.nextSibling };
