@@ -60,7 +60,11 @@
 
 <!--
     カードを縦に積むと1枚ずつが横に間延びして、下のほうは開かないと見えない。
-    広い画面では2列に並べ、表を持つものだけ幅いっぱいを使う。
+    広い画面では**全部を2列に収める**。
+
+    表を持つカードだけ幅いっぱいに広げていた頃は、2列の下に幅いっぱいの帯が
+    続く形になり、**どこまでが左の列の続きなのかが読めなかった**。表は中で
+    横に巻き取れる (`overflow-x-auto`) ので、半分の幅でも読める。
 
     列は grid の行ではなく独立した縦並びにしてある。行で組むと段ごとに
     高さが揃えられ、背の低いカードの隣に大きな穴が空く
@@ -215,6 +219,125 @@
                 </form>
             </div>
         </section>
+        <section class="card bg-base-100 shadow">
+            <div class="card-body">
+                <h2 class="card-title">通知</h2>
+                <p class="text-base-content/70 text-sm">
+                    録画の節目を外部に飛ばします。Discord や Slack の Incoming Webhook の URL
+                    をそのまま入れられます。
+                    録画の失敗は画面を開くまで気づけないので、少なくとも失敗だけでも入れておくと安心です。
+                </p>
+
+                {#if form?.tested}
+                    <div class="alert mb-2" data-testid="webhook-tested">テスト送信の結果: {form.tested}</div>
+                {/if}
+
+                <form method="POST" action="?/addWebhook" use:submitting class="grid gap-3 sm:grid-cols-2">
+                    <label class="flex flex-col gap-1 sm:col-span-2">
+                        <span class="text-sm font-medium">URL</span>
+                        <input
+                            name="url"
+                            class="input input-bordered w-full"
+                            placeholder="https://..."
+                            data-testid="webhook-url"
+                        />
+                    </label>
+                    <div class="sm:col-span-2">
+                        <span class="text-sm font-medium">送る通知</span>
+                        <div class="mt-1 flex flex-wrap gap-4" data-testid="webhook-events">
+                            {#each data.events as event (event)}
+                                <label class="flex cursor-pointer items-center gap-2">
+                                    <input
+                                        type="checkbox"
+                                        name="events"
+                                        value={event}
+                                        class="checkbox checkbox-sm"
+                                    />
+                                    <span class="text-sm">{EVENT_LABEL[event]}</span>
+                                </label>
+                            {/each}
+                        </div>
+                        <p class="text-base-content/60 mt-1 text-xs">1つも選ばなければ全部送ります</p>
+                    </div>
+                    <div class="sm:col-span-2">
+                        <button type="submit" class="btn btn-primary" data-testid="webhook-add">追加</button>
+                    </div>
+                </form>
+
+                {#if data.webhooks.length > 0}
+                    <div class="mt-4 overflow-x-auto">
+                        <table class="table-zebra table">
+                            <thead>
+                                <tr>
+                                    <th>URL</th>
+                                    <th>送る通知</th>
+                                    <th>直近の結果</th>
+                                    <th class="w-56"></th>
+                                </tr>
+                            </thead>
+                            <tbody data-testid="webhook-list">
+                                {#each data.webhooks as webhook (webhook.id)}
+                                    <tr data-testid="webhook-row" data-webhook-id={webhook.id}>
+                                        <td class="max-w-md">
+                                            <div class="truncate font-mono text-xs">{webhook.url}</div>
+                                            <span
+                                                class="badge badge-sm {webhook.enabled
+                                                    ? 'badge-success'
+                                                    : 'badge-ghost'}"
+                                            >
+                                                {webhook.enabled ? '有効' : '無効'}
+                                            </span>
+                                        </td>
+                                        <td class="text-sm">
+                                            {JSON.parse(webhook.events).length === 0
+                                                ? 'すべて'
+                                                : JSON.parse(webhook.events)
+                                                      .map((e: string) => EVENT_LABEL[e] ?? e)
+                                                      .join(', ')}
+                                        </td>
+                                        <td class="text-sm">
+                                            {#if webhook.last_sent_at}
+                                                <span class={webhook.last_status === 'ok' ? '' : 'text-error'}>
+                                                    {webhook.last_status}
+                                                </span>
+                                                <span class="text-base-content/60 block text-xs">
+                                                    {dateTime(webhook.last_sent_at)}
+                                                </span>
+                                            {:else}
+                                                <span class="text-base-content/60">未送信</span>
+                                            {/if}
+                                        </td>
+                                        <td class="flex flex-wrap gap-2">
+                                            <form method="POST" action="?/testWebhook" use:submitting>
+                                                <input type="hidden" name="id" value={webhook.id} />
+                                                <button type="submit" class="btn btn-xs" data-testid="webhook-test"
+                                                    >テスト送信</button
+                                                >
+                                            </form>
+                                            <form method="POST" action="?/toggleWebhook" use:submitting>
+                                                <input type="hidden" name="id" value={webhook.id} />
+                                                <button type="submit" class="btn btn-xs" data-testid="webhook-toggle">
+                                                    {webhook.enabled ? '無効化' : '有効化'}
+                                                </button>
+                                            </form>
+                                            <form method="POST" action="?/deleteWebhook" use:submitting>
+                                                <input type="hidden" name="id" value={webhook.id} />
+                                                <button type="submit"
+                                                    class="btn btn-xs btn-error btn-outline"
+                                                    data-testid="webhook-delete"
+                                                >
+                                                    削除
+                                                </button>
+                                            </form>
+                                        </td>
+                                    </tr>
+                                {/each}
+                            </tbody>
+                        </table>
+                    </div>
+                {/if}
+            </div>
+        </section>
     </div>
 
     <div class="flex min-w-0 flex-col gap-6">
@@ -325,238 +448,154 @@
                 </form>
             </div>
         </section>
-    </div>
 
-    <!-- 表を持つカードは畳むと読めないので、広い画面でも幅いっぱい使う -->
-    <section class="card bg-base-100 shadow xl:col-span-2">
-        <div class="card-body">
-            <h2 class="card-title">通知</h2>
-            <p class="text-base-content/70 text-sm">
-                録画の節目を外部に飛ばします。Discord や Slack の Incoming Webhook の URL
-                をそのまま入れられます。
-                録画の失敗は画面を開くまで気づけないので、少なくとも失敗だけでも入れておくと安心です。
-            </p>
+        <!--
+            **データ放送に渡すもの。** いまは郵便番号だけ。
 
-            {#if form?.tested}
-                <div class="alert mb-2" data-testid="webhook-tested">テスト送信の結果: {form.tested}</div>
-            {/if}
-
-            <form method="POST" action="?/addWebhook" use:submitting class="grid gap-3 sm:grid-cols-2">
-                <label class="flex flex-col gap-1 sm:col-span-2">
-                    <span class="text-sm font-medium">URL</span>
-                    <input
-                        name="url"
-                        class="input input-bordered w-full"
-                        placeholder="https://..."
-                        data-testid="webhook-url"
-                    />
-                </label>
-                <div class="sm:col-span-2">
-                    <span class="text-sm font-medium">送る通知</span>
-                    <div class="mt-1 flex flex-wrap gap-4" data-testid="webhook-events">
-                        {#each data.events as event (event)}
-                            <label class="flex cursor-pointer items-center gap-2">
-                                <input
-                                    type="checkbox"
-                                    name="events"
-                                    value={event}
-                                    class="checkbox checkbox-sm"
-                                />
-                                <span class="text-sm">{EVENT_LABEL[event]}</span>
-                            </label>
-                        {/each}
-                    </div>
-                    <p class="text-base-content/60 mt-1 text-xs">1つも選ばなければ全部送ります</p>
-                </div>
-                <div class="sm:col-span-2">
-                    <button type="submit" class="btn btn-primary" data-testid="webhook-add">追加</button>
-                </div>
-            </form>
-
-            {#if data.webhooks.length > 0}
-                <div class="mt-4 overflow-x-auto">
-                    <table class="table-zebra table">
-                        <thead>
-                            <tr>
-                                <th>URL</th>
-                                <th>送る通知</th>
-                                <th>直近の結果</th>
-                                <th class="w-56"></th>
-                            </tr>
-                        </thead>
-                        <tbody data-testid="webhook-list">
-                            {#each data.webhooks as webhook (webhook.id)}
-                                <tr data-testid="webhook-row" data-webhook-id={webhook.id}>
-                                    <td class="max-w-md">
-                                        <div class="truncate font-mono text-xs">{webhook.url}</div>
-                                        <span
-                                            class="badge badge-sm {webhook.enabled
-                                                ? 'badge-success'
-                                                : 'badge-ghost'}"
-                                        >
-                                            {webhook.enabled ? '有効' : '無効'}
-                                        </span>
-                                    </td>
-                                    <td class="text-sm">
-                                        {JSON.parse(webhook.events).length === 0
-                                            ? 'すべて'
-                                            : JSON.parse(webhook.events)
-                                                  .map((e: string) => EVENT_LABEL[e] ?? e)
-                                                  .join(', ')}
-                                    </td>
-                                    <td class="text-sm">
-                                        {#if webhook.last_sent_at}
-                                            <span class={webhook.last_status === 'ok' ? '' : 'text-error'}>
-                                                {webhook.last_status}
-                                            </span>
-                                            <span class="text-base-content/60 block text-xs">
-                                                {dateTime(webhook.last_sent_at)}
-                                            </span>
-                                        {:else}
-                                            <span class="text-base-content/60">未送信</span>
-                                        {/if}
-                                    </td>
-                                    <td class="flex flex-wrap gap-2">
-                                        <form method="POST" action="?/testWebhook" use:submitting>
-                                            <input type="hidden" name="id" value={webhook.id} />
-                                            <button type="submit" class="btn btn-xs" data-testid="webhook-test"
-                                                >テスト送信</button
-                                            >
-                                        </form>
-                                        <form method="POST" action="?/toggleWebhook" use:submitting>
-                                            <input type="hidden" name="id" value={webhook.id} />
-                                            <button type="submit" class="btn btn-xs" data-testid="webhook-toggle">
-                                                {webhook.enabled ? '無効化' : '有効化'}
-                                            </button>
-                                        </form>
-                                        <form method="POST" action="?/deleteWebhook" use:submitting>
-                                            <input type="hidden" name="id" value={webhook.id} />
-                                            <button type="submit"
-                                                class="btn btn-xs btn-error btn-outline"
-                                                data-testid="webhook-delete"
-                                            >
-                                                削除
-                                            </button>
-                                        </form>
-                                    </td>
-                                </tr>
-                            {/each}
-                        </tbody>
-                    </table>
-                </div>
-            {/if}
-        </div>
-    </section>
-
-    <section class="card bg-base-100 shadow xl:col-span-2" data-testid="migrate-card">
-        <div class="card-body">
-            <h2 class="card-title">EPGStation からの引き継ぎ</h2>
-            <p class="text-base-content/70 text-sm">
-                EPGStation のデータベースを読み、<strong>自動予約ルール・手で入れた予約・録画</strong>を
-                取り込みます。録画は denpa
-                の並びに置き直し、番組情報とサムネイルもここで作ります。何度実行しても取り込み済みのものは飛ばします。
-                ルール由来の予約は、ルールを取り込んだあと denpa が自分で立て直します。
-            </p>
-
-            {#if !data.migrate.available}
-                <div class="alert alert-warning mt-2" data-testid="migrate-unavailable">
-                    引き継ぎ元 <code>{data.migrate.source}</code> が見えません。 denpa の Pod に EPGStation の録画PVCをマウントしてください。
-                </div>
-            {:else}
-                <form method="POST" action="?/migrate" use:submitting class="mt-2 space-y-3">
-                    <label class="flex cursor-pointer items-start gap-2">
+            テレビの初期設定で必ず訊かれるあれで、放送のアプリはこれを読んで
+            天気・地域のニュース・防災情報をどこのものにするかを決める。
+            受け取るのは端末の中 (NVRAM = localStorage) だが、置き場をここに
+            してあるのは**端末ごとに訊き直さずに済ませる**ため
+        -->
+        <section class="card bg-base-100 shadow" data-testid="broadcast-card">
+            <div class="card-body">
+                <h2 class="card-title">データ放送</h2>
+                <p class="text-base-content/70 text-sm">
+                    テレビの初期設定で訊かれる郵便番号です。データ放送 (d ボタン) の
+                    <strong>天気・地域のニュース・防災情報</strong>は、これでどこの分を出すかが決まります。
+                    入れていないと「郵便番号が正しく設定されていません」と出て、その欄が空のままになります。
+                </p>
+                <form method="POST" action="?/saveBroadcast" use:submitting class="flex flex-wrap items-end gap-3">
+                    <label class="flex flex-col gap-1">
+                        <span class="text-sm font-medium">郵便番号</span>
                         <input
-                            type="checkbox"
-                            name="apply"
-                            class="checkbox checkbox-sm mt-0.5"
-                            data-testid="migrate-apply"
+                            name="postalCode"
+                            value={data.broadcast.postalCode}
+                            class="input input-bordered w-40 font-mono"
+                            placeholder="1000001"
+                            inputmode="numeric"
+                            data-testid="postal-code"
                         />
-                        <span class="text-sm">
-                            実際に取り込む
-                            <span class="text-base-content/60 block text-xs">
-                                外したままなら何が取り込まれるかを出すだけで、ファイルもデータベースも触りません
-                            </span>
-                        </span>
                     </label>
-                    <label class="flex cursor-pointer items-start gap-2">
-                        <input
-                            type="checkbox"
-                            name="move"
-                            class="checkbox checkbox-sm mt-0.5"
-                            data-testid="migrate-move"
-                        />
-                        <span class="text-sm">
-                            コピーではなく移動する
-                            <span class="text-base-content/60 block text-xs">
-                                既定はコピー。中身を確かめてから EPGStation 側を消せます。
-                                空き容量が足りないときだけ移動にしてください
-                            </span>
-                        </span>
-                    </label>
-                    <button type="submit"
-                        class="btn btn-primary"
-                        disabled={migrate.state === 'running'}
-                        data-testid="migrate-run"
-                    >
-                        {migrate.state === 'running' ? '実行中…' : '実行する'}
-                    </button>
+                    <button type="submit" class="btn btn-primary" data-testid="save-broadcast">保存</button>
+                    <!-- **空にできる。** 空は「渡さない」という選び方で、危なくない -->
+                    <span class="text-base-content/60 basis-full text-xs">
+                        数字7桁。ハイフンは入れても構いません。空にすると渡しません
+                    </span>
                 </form>
-            {/if}
+            </div>
+        </section>
 
-            {#if migrate.state !== 'idle'}
-                <div class="mt-4" data-testid="migrate-progress" data-state={migrate.state}>
-                    <div class="flex flex-wrap items-center gap-2 text-sm">
-                        <span class="badge" data-testid="migrate-state">
-                            {migrate.state === 'running'
-                                ? '実行中'
-                                : migrate.state === 'done'
-                                  ? '完了'
-                                  : '失敗'}
-                        </span>
-                        <span class="badge badge-ghost">{migrate.apply ? '取り込み' : '下見'}</span>
-                        {#if migrate.move}
-                            <span class="badge badge-ghost">移動</span>
-                        {/if}
-                        <span data-testid="migrate-counts">
-                            録画 {migrate.imported} 件 / 取り込み済み {migrate.skipped} 件 / ファイル無し {migrate.missing}
-                            件
-                        </span>
-                        <span data-testid="migrate-rule-counts">
-                            ルール {migrate.rules.imported} 件 / 対象外 {migrate.rules.skipped} 件
-                        </span>
-                        <span data-testid="migrate-reservation-counts">
-                            予約 {migrate.reservations.imported} 件 / 対象外 {migrate.reservations.skipped} 件
-                        </span>
+        <section class="card bg-base-100 shadow" data-testid="migrate-card">
+            <div class="card-body">
+                <h2 class="card-title">EPGStation からの引き継ぎ</h2>
+                <p class="text-base-content/70 text-sm">
+                    EPGStation のデータベースを読み、<strong>自動予約ルール・手で入れた予約・録画</strong>を
+                    取り込みます。録画は denpa
+                    の並びに置き直し、番組情報とサムネイルもここで作ります。何度実行しても取り込み済みのものは飛ばします。
+                    ルール由来の予約は、ルールを取り込んだあと denpa が自分で立て直します。
+                </p>
+
+                {#if !data.migrate.available}
+                    <div class="alert alert-warning mt-2" data-testid="migrate-unavailable">
+                        引き継ぎ元 <code>{data.migrate.source}</code> が見えません。 denpa の Pod に EPGStation の録画PVCをマウントしてください。
                     </div>
+                {:else}
+                    <form method="POST" action="?/migrate" use:submitting class="mt-2 space-y-3">
+                        <label class="flex cursor-pointer items-start gap-2">
+                            <input
+                                type="checkbox"
+                                name="apply"
+                                class="checkbox checkbox-sm mt-0.5"
+                                data-testid="migrate-apply"
+                            />
+                            <span class="text-sm">
+                                実際に取り込む
+                                <span class="text-base-content/60 block text-xs">
+                                    外したままなら何が取り込まれるかを出すだけで、ファイルもデータベースも触りません
+                                </span>
+                            </span>
+                        </label>
+                        <label class="flex cursor-pointer items-start gap-2">
+                            <input
+                                type="checkbox"
+                                name="move"
+                                class="checkbox checkbox-sm mt-0.5"
+                                data-testid="migrate-move"
+                            />
+                            <span class="text-sm">
+                                コピーではなく移動する
+                                <span class="text-base-content/60 block text-xs">
+                                    既定はコピー。中身を確かめてから EPGStation 側を消せます。
+                                    空き容量が足りないときだけ移動にしてください
+                                </span>
+                            </span>
+                        </label>
+                        <button type="submit"
+                            class="btn btn-primary"
+                            disabled={migrate.state === 'running'}
+                            data-testid="migrate-run"
+                        >
+                            {migrate.state === 'running' ? '実行中…' : '実行する'}
+                        </button>
+                    </form>
+                {/if}
 
-                    {#if migrate.total > 0}
-                        <progress
-                            class="progress progress-primary mt-2 w-full"
-                            value={done}
-                            max={migrate.total}
-                        ></progress>
-                        <div class="text-base-content/60 mt-1 text-xs">
-                            {done} / {migrate.total}
-                            {#if migrate.current}— {migrate.current}{/if}
+                {#if migrate.state !== 'idle'}
+                    <div class="mt-4" data-testid="migrate-progress" data-state={migrate.state}>
+                        <div class="flex flex-wrap items-center gap-2 text-sm">
+                            <span class="badge" data-testid="migrate-state">
+                                {migrate.state === 'running'
+                                    ? '実行中'
+                                    : migrate.state === 'done'
+                                      ? '完了'
+                                      : '失敗'}
+                            </span>
+                            <span class="badge badge-ghost">{migrate.apply ? '取り込み' : '下見'}</span>
+                            {#if migrate.move}
+                                <span class="badge badge-ghost">移動</span>
+                            {/if}
+                            <span data-testid="migrate-counts">
+                                録画 {migrate.imported} 件 / 取り込み済み {migrate.skipped} 件 / ファイル無し {migrate.missing}
+                                件
+                            </span>
+                            <span data-testid="migrate-rule-counts">
+                                ルール {migrate.rules.imported} 件 / 対象外 {migrate.rules.skipped} 件
+                            </span>
+                            <span data-testid="migrate-reservation-counts">
+                                予約 {migrate.reservations.imported} 件 / 対象外 {migrate.reservations.skipped} 件
+                            </span>
                         </div>
-                    {/if}
 
-                    {#if migrate.error}
-                        <div class="alert alert-error mt-2" data-testid="migrate-error">{migrate.error}</div>
-                    {/if}
+                        {#if migrate.total > 0}
+                            <progress
+                                class="progress progress-primary mt-2 w-full"
+                                value={done}
+                                max={migrate.total}
+                            ></progress>
+                            <div class="text-base-content/60 mt-1 text-xs">
+                                {done} / {migrate.total}
+                                {#if migrate.current}— {migrate.current}{/if}
+                            </div>
+                        {/if}
 
-                    {#if migrate.log.length > 0}
-                        <details class="border-base-300 rounded-box mt-3 border">
-                            <summary class="cursor-pointer px-4 py-2 text-sm font-medium">
-                                記録 ({migrate.log.length} 行)
-                            </summary>
-                            <pre
-                                class="max-h-64 overflow-auto px-4 pb-3 text-xs"
-                                data-testid="migrate-log">{migrate.log.join('\n')}</pre>
-                        </details>
-                    {/if}
-                </div>
-            {/if}
-        </div>
-    </section>
+                        {#if migrate.error}
+                            <div class="alert alert-error mt-2" data-testid="migrate-error">{migrate.error}</div>
+                        {/if}
+
+                        {#if migrate.log.length > 0}
+                            <details class="border-base-300 rounded-box mt-3 border">
+                                <summary class="cursor-pointer px-4 py-2 text-sm font-medium">
+                                    記録 ({migrate.log.length} 行)
+                                </summary>
+                                <pre
+                                    class="max-h-64 overflow-auto px-4 pb-3 text-xs"
+                                    data-testid="migrate-log">{migrate.log.join('\n')}</pre>
+                            </details>
+                        {/if}
+                    </div>
+                {/if}
+            </div>
+        </section>
+    </div>
 </div>

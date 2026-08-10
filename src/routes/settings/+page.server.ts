@@ -5,7 +5,7 @@ import { database, now, queryAll, queryOne } from '$lib/server/db';
 import { isVideoCodec } from '$lib/server/encoder';
 import { available as migrateAvailable, source, start, status } from '$lib/server/migrate';
 import { enabled as oidcEnabled } from '$lib/server/oidc';
-import { saveSettings, settings } from '$lib/server/settings';
+import { normalizePostalCode, saveSettings, settings } from '$lib/server/settings';
 import { send, type Webhook } from '$lib/server/webhook';
 import { EVENTS } from '$lib/webhook-events';
 
@@ -13,6 +13,8 @@ export function load() {
     const current = settings();
     return {
         recording: current,
+        /** データ放送に渡すもの。いまは郵便番号だけ */
+        broadcast: { postalCode: current.postalCode },
         auth: {
             user: current.basicAuthUser,
             /*
@@ -90,6 +92,23 @@ export const actions = {
             keepOriginal: form.get('keepOriginal') === 'on',
             freeOnly: form.get('freeOnly') === 'on',
         });
+        return { success: true, saved: true };
+    },
+
+    /**
+     * データ放送に渡す郵便番号。
+     *
+     * **空にできる** (「渡さない」という選択)。ベーシック認証と違って、
+     * 空にしても危なくない — 放送のアプリが地域を決められなくなるだけ
+     */
+    saveBroadcast: async ({ request }) => {
+        const form = await request.formData();
+        const raw = String(form.get('postalCode') ?? '').trim();
+        const postalCode = normalizePostalCode(raw);
+        if (raw !== '' && postalCode === '') {
+            return fail(400, { message: '郵便番号は数字7桁で入れてください (例 1000001)' });
+        }
+        saveSettings({ postalCode });
         return { success: true, saved: true };
     },
 

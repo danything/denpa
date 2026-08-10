@@ -2,6 +2,7 @@ import { LAST_COOKIE, type LiveCodec } from '$lib/live';
 import { queryAll } from '$lib/server/db';
 import { airing, CURRENT_SERVICES, SERVICE_ORDER, SERVICE_TYPE_ORDER } from '$lib/server/epg';
 import { warm } from '$lib/server/live';
+import { settings } from '$lib/server/settings';
 import type { Service } from '$lib/types';
 
 /**
@@ -155,5 +156,11 @@ export function load({ url, cookies }) {
         warm(start.channelType, start.channel, start.serviceId, start.audio, start.codec);
     }
 
-    return { channels, start };
+    /*
+     * **データ放送に渡す郵便番号** (設定画面で入れるもの)。放送のアプリは
+     * これで天気や地域のニュースをどこの分にするかを決める。受け取るのは
+     * 端末の中 (NVRAM) だが、置き場はサーバにしてある — 家の場所は端末では
+     * 変わらないので、端末ごとに訊き直すのは無駄
+     */
+    return { channels, start, postalCode: settings().postalCode };
 }

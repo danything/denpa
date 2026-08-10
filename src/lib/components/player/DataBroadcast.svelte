@@ -56,9 +56,16 @@
          * 器ができる前に出しても押せるものが無い
          */
         remote: (press: ((code: number) => void) | null) => void;
+        /**
+         * 郵便番号 (数字7桁。空なら渡さない)。**放送のアプリが地域を決めるのに読む。**
+         *
+         * 置き場はサーバの設定 (`server/settings.ts`) で、ここでは器を作る前に
+         * NVRAM へ写すだけ (`remember`)
+         */
+        postal: string;
     }
 
-    const { on, channel, media, listen, remote }: Props = $props();
+    const { on, channel, media, listen, remote, postal }: Props = $props();
 
     /**
      * リモコンの d。`AribKeyCode.DataButton` と同じ値。
@@ -67,6 +74,14 @@
      * あれを値として import すると、押される前に借りもの全体が落ちてくる
      */
     const DATA_BUTTON = 20;
+
+    /**
+     * 覚えるもの (NVRAM) の名前の頭。**借りものは
+     * `storagePrefix + nvramPrefix + …` で探す**ので、こちらから直に
+     * 置くとき (`remember`) にも同じものが要る
+     */
+    const STORAGE_PREFIX = 'denpa_bml_';
+    const NVRAM_PREFIX = 'denpa_nvram_';
 
     /**
      * d を叩き直す回数と間隔。
@@ -278,6 +293,29 @@
         knocking = setTimeout(knock, KNOCK_WAIT);
     }
 
+    /**
+     * 郵便番号を NVRAM に置いておく。**器を作る前に。**
+     *
+     * 放送のアプリは `nvram://receiverinfo/zipcode` を数字7桁で読み、
+     * 天気・地域のニュース・防災情報をどこのものにするかを決める。
+     * 借りものはそれを `localStorage` の**この名前**で探す
+     * (`vendor/web-bml/client/nvram.ts` の `readNVRAM`)。
+     *
+     * **書ける口が無いので、じかに置く。** 借りものが持っているのは
+     * 「放送のアプリから読み書きさせる」道だけで、受信機の設定として
+     * 外から入れる口は上流の単体ページ側にあった (denpa は借りていない)。
+     *
+     * 空なら**消す** — 入れたものを消したときに、前の番号が残らないように
+     */
+    function remember(): void {
+        const key = `${STORAGE_PREFIX}${NVRAM_PREFIX}prefix=receiverinfo%2Fzipcode`;
+        if (postal.length !== 7) {
+            localStorage.removeItem(key);
+            return;
+        }
+        localStorage.setItem(key, btoa(postal));
+    }
+
     async function open(): Promise<void> {
         if (host === null || media === null) return;
         const mine = ++generation;
@@ -316,6 +354,8 @@
 
         receiving = false;
         settled = false;
+        // 器ができる前に置く。入口の文書が真っ先に読みに来る
+        remember();
 
         const made = new BMLBrowser({
             containerElement: mount,
@@ -323,8 +363,8 @@
             fonts: FONTS,
             indicator,
             // 覚えるもの (NVRAM) は局ごとに分ける。他の使い道と混ざらないように
-            storagePrefix: 'denpa_bml_',
-            nvramPrefix: 'denpa_nvram_',
+            storagePrefix: STORAGE_PREFIX,
+            nvramPrefix: NVRAM_PREFIX,
             broadcasterDatabasePrefix: 'denpa_bcast_',
         });
         browser = made;

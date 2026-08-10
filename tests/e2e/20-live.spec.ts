@@ -498,6 +498,57 @@ test.describe('ライブ視聴', () => {
     });
 
     /*
+     * **郵便番号は、設定画面からデータ放送へ渡る。**
+     *
+     * 放送のアプリはこれを読んで、天気・地域のニュース・防災情報をどこの
+     * ものにするかを決める (`nvram://receiverinfo/zipcode`)。受け取るのは
+     * 端末の中 (localStorage) だが、置き場はサーバ — 家の場所は端末では
+     * 変わらないので、端末ごとに訊き直さない。
+     *
+     * **借りものには外から入れる口が無い**ので、denpa が名前を合わせて直に
+     * 置いている。名前がずれると、入れたのに「設定されていません」と出る
+     * という形で静かに壊れる
+     */
+    test('設定した郵便番号が、データ放送に渡る', async ({ page }) => {
+        const KEY = 'denpa_bml_denpa_nvram_prefix=receiverinfo%2Fzipcode';
+        const kept = () => page.evaluate((key) => localStorage.getItem(key), KEY);
+
+        await goto(page, '/settings');
+        // ハイフン付きで入れても、数字7桁として読む
+        await page.getByTestId('postal-code').fill('100-0001');
+        await page.getByTestId('save-broadcast').click();
+        await expect(page.getByTestId('postal-code')).toHaveValue('1000001');
+
+        await goto(page, '/live');
+        await page.getByTestId('live-channel').first().click();
+        await expect(page.getByTestId('live-title')).toBeVisible();
+        await page.getByTestId('live-data-button').click();
+        await expect(page.getByTestId('live-data')).toHaveAttribute('data-state', 'ready', {
+            timeout: 15_000,
+        });
+        // 借りものが読む形 (7バイトを base64 で)
+        expect(await kept()).toBe(btoa('1000001'));
+
+        /*
+         * **消したら残さない。** 引っ越したのに前の番号のままだと、
+         * 直したつもりで直っていないことになる
+         */
+        await goto(page, '/settings');
+        await page.getByTestId('postal-code').fill('');
+        await page.getByTestId('save-broadcast').click();
+        await expect(page.getByTestId('postal-code')).toHaveValue('');
+
+        await goto(page, '/live');
+        await page.getByTestId('live-channel').first().click();
+        await expect(page.getByTestId('live-title')).toBeVisible();
+        await page.getByTestId('live-data-button').click();
+        await expect(page.getByTestId('live-data')).toHaveAttribute('data-state', 'ready', {
+            timeout: 15_000,
+        });
+        expect(await kept()).toBeNull();
+    });
+
+    /*
      * **局を変えたら、データ放送も作り直す。**
      *
      * 借りものは一度に一つの放送しか持てない (カルーセルも覚えるものも局ごと)。

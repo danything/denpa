@@ -321,6 +321,7 @@
                 media={mediaBox}
                 listen={player.listenData}
                 remote={(press) => (dataPress = press)}
+                postal={data.postalCode}
             />
 
             {#if player.tuned !== null && player.state !== 'error'}

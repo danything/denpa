@@ -48,6 +48,29 @@ export interface Settings {
      */
     basicAuthUser: string;
     basicAuthPassword: string;
+    /**
+     * データ放送に渡す郵便番号 (数字7桁。空なら渡さない)。
+     *
+     * **テレビの初期設定で必ず訊かれるあれ。** 放送のアプリは
+     * `nvram://receiverinfo/zipcode` を読んで、天気・地域のニュース・
+     * 防災情報をどこのものにするかを決める。入っていないと NHK なら
+     * **「郵便番号が正しく設定されていません」**と出て、その欄が空のままになる。
+     *
+     * 受け取るのは端末の中 (localStorage) だが、置き場をここにしてあるのは
+     * **端末ごとに訊き直さずに済ませる**ため — 家の場所は端末では変わらない
+     */
+    postalCode: string;
+}
+
+/**
+ * 数字7桁だけを残す。`123-4567` でも `1234567` でも同じに読む。
+ *
+ * **7桁でなければ空にする。** 途中まで入った番号を渡すと、放送側は
+ * 「入っているが違う場所」として扱う — 入っていないほうがまだ分かりやすい
+ */
+export function normalizePostalCode(value: string): string {
+    const digits = value.replace(/[^0-9]/g, '');
+    return digits.length === 7 ? digits : '';
 }
 
 /** JL の logo_level。範囲の外は既定に倒す (規則ファイルに書き込む値なので) */
@@ -83,6 +106,7 @@ export function settings(): Settings {
         logoLevel: logoLevel(stored('logoLevel')),
         basicAuthUser: stored('basicAuthUser') ?? config.basicAuthUser,
         basicAuthPassword: stored('basicAuthPassword') ?? config.basicAuthPassword,
+        postalCode: normalizePostalCode(stored('postalCode') ?? ''),
     };
 }
 
