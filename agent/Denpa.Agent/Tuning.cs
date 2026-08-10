@@ -146,6 +146,23 @@ internal sealed unsafe class DeviceStream(SafeFileHandle handle) : Stream
         return taken;
     }
 
+    /// <summary>
+    /// **その選局のぶんだけ数えはじめる。**
+    ///
+    /// <para>
+    /// デバイスは選局を跨いで開きっぱなしなので、局を変えている間は誰も
+    /// 読んでいない。そのぶんを持ち越すと、**選局に掛かった時間が
+    /// 「読み手が空いていた時間」として出る** (実機で 4.1秒・4.3秒)。
+    /// 読み始めるところで測り直す (<c>Lease.StartNative</c>)。
+    /// </para>
+    /// </summary>
+    public void Begin()
+    {
+        _overflows = 0;
+        _worstGap = 0;
+        _handedAt = Stopwatch.GetTimestamp();
+    }
+
     public void Stop() => _closed = true;
 
     /// <summary>
