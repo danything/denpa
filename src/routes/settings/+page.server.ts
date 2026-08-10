@@ -14,7 +14,7 @@ export function load() {
     return {
         recording: current,
         /** データ放送に渡すもの。いまは郵便番号だけ */
-        broadcast: { postalCode: current.postalCode },
+        broadcast: { postalCode: current.postalCode, bmlNetwork: current.bmlNetwork },
         auth: {
             user: current.basicAuthUser,
             /*
@@ -108,7 +108,7 @@ export const actions = {
         if (raw !== '' && postalCode === '') {
             return fail(400, { message: '郵便番号は数字7桁で入れてください (例 1000001)' });
         }
-        saveSettings({ postalCode });
+        saveSettings({ postalCode, bmlNetwork: form.get('bmlNetwork') === 'on' });
         return { success: true, saved: true };
     },
 

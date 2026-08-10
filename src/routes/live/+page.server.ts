@@ -162,5 +162,6 @@ export function load({ url, cookies }) {
      * 端末の中 (NVRAM) だが、置き場はサーバにしてある — 家の場所は端末では
      * 変わらないので、端末ごとに訊き直すのは無駄
      */
-    return { channels, start, postalCode: settings().postalCode };
+    const current = settings();
+    return { channels, start, postalCode: current.postalCode, bmlNetwork: current.bmlNetwork };
 }

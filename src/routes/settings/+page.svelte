@@ -482,11 +482,42 @@
                             data-testid="postal-code"
                         />
                     </label>
-                    <button type="submit" class="btn btn-primary" data-testid="save-broadcast">保存</button>
                     <!-- **空にできる。** 空は「渡さない」という選び方で、危なくない -->
                     <span class="text-base-content/60 basis-full text-xs">
                         数字7桁。ハイフンは入れても構いません。空にすると渡しません
                     </span>
+
+                    <!--
+                        **双方向。既定は切。**
+
+                        入れると denpa のサーバが放送局のサーバへ代理で取りに
+                        行きます。何に繋いでよいかの決め方 (公開の相手・https・
+                        GET だけ) は `server/bml-network.ts` に書いてあります。
+                        切っている間は「インターネットに接続されていません」と
+                        放送側が案内します — **それは事実の通りなので、
+                        黙って入れない**
+                    -->
+                    <label class="flex basis-full cursor-pointer items-start gap-2">
+                        <input
+                            type="checkbox"
+                            name="bmlNetwork"
+                            checked={data.broadcast.bmlNetwork}
+                            class="checkbox checkbox-sm mt-0.5"
+                            data-testid="bml-network"
+                        />
+                        <span class="text-sm">
+                            双方向 (通信系コンテンツ) を使う
+                            <span class="text-base-content/60 block text-xs">
+                                入れると、この denpa が<strong>放送局のサーバへ代理で取りに行きます</strong>。
+                                取ってくるだけで、応募や投票は送りません。切っていると放送側は
+                                「インターネットに接続されていません」と案内します
+                            </span>
+                        </span>
+                    </label>
+
+                    <div class="basis-full">
+                        <button type="submit" class="btn btn-primary" data-testid="save-broadcast">保存</button>
+                    </div>
                 </form>
             </div>
         </section>

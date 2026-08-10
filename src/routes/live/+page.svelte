@@ -323,6 +323,7 @@
                 listen={player.listenData}
                 remote={(press) => (dataPress = press)}
                 postal={data.postalCode}
+                network={data.bmlNetwork}
             />
 
             {#if player.tuned !== null && player.state !== 'error'}

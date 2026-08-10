@@ -25,7 +25,7 @@
      * ([vendor/web-bml](../../vendor/web-bml/README.md#借りていないぶんこちらでやること))
      */
     import { onDestroy } from 'svelte';
-    import type { BMLBrowser, Indicator } from '$lib/vendor/web-bml/client/bml_browser';
+    import type { BMLBrowser, Indicator, IP } from '$lib/vendor/web-bml/client/bml_browser';
     import type { ResponseMessage } from '$lib/vendor/web-bml/server/ws_api';
 
     interface Props {
@@ -58,9 +58,19 @@
          * NVRAM へ写すだけ (`remember`)
          */
         postal: string;
+        /**
+         * 双方向 (通信系コンテンツ) を使うか。**既定は切**
+         * (`server/settings.ts` の `bmlNetwork`)。
+         *
+         * 切っている間は `isIPConnected` に 0 を返すので、放送のアプリは
+         * 「インターネットに接続されていません」と正しく案内します。
+         * **嘘をつかないのが大事** — 1 と答えて取りに行けないと、今度は
+         * 無言で失敗します
+         */
+        network: boolean;
     }
 
-    const { on, channel, media, listen, remote, postal }: Props = $props();
+    const { on, channel, media, listen, remote, postal, network }: Props = $props();
 
     /**
      * リモコンの d。`AribKeyCode.DataButton` と同じ値。
@@ -195,6 +205,27 @@
         setNetworkingGetStatus: () => {},
         setNetworkingPostStatus: () => {},
         setEventName: () => {},
+    };
+
+    /**
+     * 双方向 (通信系コンテンツ)。**中継はサーバがやる**
+     * (`/api/bml/proxy`。放送局のサーバは CORS を返さないので直には取れない)。
+     *
+     * **取ってくるだけ。** 応募・投票の送信 (`transmitTextDataOverIP`) と
+     * 疎通確認 (`confirmIPNetwork`) は渡さない — 正規の受信機以外からの
+     * 送信は放送側の想定外で、実装しないと決めてある
+     * ([docs/stream.md](../../../../docs/stream.md#57-双方向通信系コンテンツプロキシ))。
+     * 渡さなければ借りものは「その機能は無い」とアプリに答える
+     */
+    const ip: IP = {
+        // 403 は「Ethernet で DHCP」。借りものの既定と同じ
+        getConnectionType: () => 403,
+        isIPConnected: () => (network ? 1 : 0),
+        get: async (uri: string) => {
+            const response = await fetch(`/api/bml/proxy?url=${encodeURIComponent(uri)}`);
+            const body = new Uint8Array(await response.arrayBuffer());
+            return { response: body, headers: response.headers, statusCode: response.status };
+        },
     };
 
     /**
@@ -362,6 +393,7 @@
             mediaElement: media,
             fonts: FONTS,
             indicator,
+            ip,
             // 覚えるもの (NVRAM) は局ごとに分ける。他の使い道と混ざらないように
             storagePrefix: STORAGE_PREFIX,
             nvramPrefix: NVRAM_PREFIX,

@@ -60,6 +60,15 @@ export interface Settings {
      * **端末ごとに訊き直さずに済ませる**ため — 家の場所は端末では変わらない
      */
     postalCode: string;
+    /**
+     * データ放送の双方向 (通信系コンテンツ) を使うか。**既定は切。**
+     *
+     * 入れると denpa のサーバが**放送局のサーバへ代理で取りに行きます**
+     * (`server/bml-network.ts`)。取ってくるだけ (GET) で、応募・投票の送信は
+     * しません。切っている間は `isIPConnected` が 0 を返すので、放送のアプリは
+     * 「インターネットに接続されていません」と正しく案内します
+     */
+    bmlNetwork: boolean;
 }
 
 /**
@@ -107,6 +116,8 @@ export function settings(): Settings {
         basicAuthUser: stored('basicAuthUser') ?? config.basicAuthUser,
         basicAuthPassword: stored('basicAuthPassword') ?? config.basicAuthPassword,
         postalCode: normalizePostalCode(stored('postalCode') ?? ''),
+        // **入れるまで外へ出ない。** 黙って通信が始まらないようにする
+        bmlNetwork: flag('bmlNetwork', false),
     };
 }
 
