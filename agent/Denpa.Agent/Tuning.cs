@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Runtime.InteropServices;
 using Microsoft.Win32.SafeHandles;
 
@@ -115,18 +116,34 @@ internal sealed unsafe class DeviceStream(SafeFileHandle handle) : Stream
     private int _overflows;
 
     /// <summary>
-    /// 前に聞かれてから環が溢れた回数。**聞いたら 0 に戻る。**
+    /// **最後に中身を返した時刻。** 溢れたときに「どれだけ空いたか」を言うために持つ
+    /// </summary>
+    private long _handedAt = Stopwatch.GetTimestamp();
+
+    /// <summary>いちばん長く空いた時間 (ms)。<see cref="TakeOverflows"/> で 0 に戻る</summary>
+    private int _worstGap;
+
+    /// <summary>
+    /// 前に聞かれてから環が溢れた回数と、**そのとき読み手がどれだけ空いていたか**。
     ///
     /// <para>
-    /// デバイスは選局を跨いで開きっぱなしなので、溜めっぱなしにすると
-    /// どの選局のときに溢れたのか分からなくなる。
+    /// 回数だけでは、溜めが浅いのか読み手が止まっているのかが分けられない。
+    /// 環は 8MB = 地上波で 3.5 秒ぶん (<c>DvrBuffer</c>) なので、**空いた時間が
+    /// 3.5 秒に届いていなければ、広げたはずの溜めが効いていない** (カーネルの
+    /// 既定 1.8MB のままなら 0.9 秒で溢れる)。届いているなら、溜めの深さでは
+    /// なく**読み手が止まる理由**のほうが本題になる。
+    /// </para>
+    /// <para>
+    /// **聞いたら 0 に戻る。** デバイスは選局を跨いで開きっぱなしなので、
+    /// 溜めっぱなしにするとどの選局のときに溢れたのか分からなくなる。
     /// </para>
     /// </summary>
-    public int TakeOverflows()
+    public (int Count, int WorstGapMs) TakeOverflows()
     {
-        var count = _overflows;
+        var taken = (_overflows, _worstGap);
         _overflows = 0;
-        return count;
+        _worstGap = 0;
+        return taken;
     }
 
     public void Stop() => _closed = true;
@@ -180,7 +197,11 @@ internal sealed unsafe class DeviceStream(SafeFileHandle handle) : Stream
             fixed (byte* target = &buffer[offset])
             {
                 var read = Sys.ReadFd(fd, target, (nuint)count);
-                if (read > 0) return (int)read;
+                if (read > 0)
+                {
+                    _handedAt = Stopwatch.GetTimestamp();
+                    return (int)read;
+                }
                 // 本当に何も無くなった
                 if (read == 0) return 0;
 
@@ -189,6 +210,16 @@ internal sealed unsafe class DeviceStream(SafeFileHandle handle) : Stream
                 if (failure == EOverflow)
                 {
                     _overflows++;
+                    /*
+                     * **空いた時間も採る。** 溢れたということは、この時間ぶんの
+                     * 中身が環に積まれて一周したということ。環の深さ (3.5秒ぶん)
+                     * と突き合わせれば、溜めが効いていないのか読み手が止まって
+                     * いるのかが分かれる (`TakeOverflows`)
+                     */
+                    var gap = (int)Stopwatch.GetElapsedTime(_handedAt).TotalMilliseconds;
+                    if (gap > _worstGap) _worstGap = gap;
+                    // 溢れたぶんは捨てられている。ここからは新しい溜まり方になる
+                    _handedAt = Stopwatch.GetTimestamp();
                     continue;
                 }
                 throw new IOException($"読めません ({Marshal.GetLastPInvokeErrorMessage()})");

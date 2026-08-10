@@ -804,8 +804,18 @@ internal sealed class Lease(int tuner, string type, string channel)
     /// </summary>
     private void ReportOverflows(DeviceStream? ring)
     {
-        if (ring is null || ring.TakeOverflows() is not ( > 0 and var overflows)) return;
-        Log.Write($"[{Tuner}] {Channel}: 環が {overflows} 回溢れました (読むのが追いつきません: {Readers()})");
+        if (ring is null) return;
+        var (count, worstGap) = ring.TakeOverflows();
+        if (count == 0) return;
+        /*
+         * **空いた時間も出す。** 環は 8MB = 地上波で 3.5 秒ぶんなので、
+         * ここが 1 秒あたりで頭打ちなら**広げたはずの溜めが効いていない**
+         * (カーネルの既定 1.8MB のまま)。3.5 秒を超えているなら、
+         * 溜めの深さではなく読み手が止まる理由のほうが本題になる
+         */
+        Log.Write(
+            $"[{Tuner}] {Channel}: 環が {count} 回溢れました "
+                + $"(読むのが追いつきません: {Readers()}、いちばん空いたのは {worstGap / 1000.0:0.0}秒)");
     }
 
     public void Start(string command, Action onExit)
