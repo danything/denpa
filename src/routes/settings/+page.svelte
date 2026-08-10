@@ -265,14 +265,19 @@
                 </form>
 
                 {#if data.webhooks.length > 0}
+                    <!--
+                        **折らずに、はみ出したぶんだけ横に流す。** 列が半分の
+                        幅になったので、詰めさせると「送る通知」が1文字ずつ
+                        縦に折れて読めなくなる (URL だけは `truncate` で止める)
+                    -->
                     <div class="mt-4 overflow-x-auto">
-                        <table class="table-zebra table">
+                        <table class="table-zebra table whitespace-nowrap">
                             <thead>
                                 <tr>
                                     <th>URL</th>
                                     <th>送る通知</th>
                                     <th>直近の結果</th>
-                                    <th class="w-56"></th>
+                                    <th></th>
                                 </tr>
                             </thead>
                             <tbody data-testid="webhook-list">
