@@ -415,10 +415,21 @@ test.describe('ライブ視聴', () => {
         const overlay = page.getByTestId('live-data');
         // 押すまでは何も読み込まない
         await expect(overlay).toHaveAttribute('data-state', 'off');
+        // **指のリモコンも出さない。** 押しても行き先が無い
+        await expect(page.getByTestId('live-remote')).toBeHidden();
 
         await page.getByTestId('live-data-button').click();
         // 700KB を取りに行って、器を立てるまで
         await expect(overlay).toHaveAttribute('data-state', 'ready', { timeout: 15_000 });
+
+        /*
+         * **器ができたらリモコンを出す。右の列、一覧の上。**
+         *
+         * 絵の上に重ねない — 放送の作った画面は枠を下まで塗り潰すので、
+         * 重ねると押すものが放送の絵に埋もれる (操作列で踏んだのと同じ)
+         */
+        await expect(page.getByTestId('live-remote')).toBeVisible();
+        await expect(page.getByTestId('live-channels')).toBeVisible();
         expect(await asked()).toEqual([{ type: 'data', on: true }]);
 
         /*
@@ -471,6 +482,7 @@ test.describe('ライブ視聴', () => {
         // もう一度押したら畳む。**掴んだままにしない**
         await page.getByTestId('live-data-button').click();
         await expect(overlay).toHaveAttribute('data-state', 'off');
+        await expect(page.getByTestId('live-remote')).toBeHidden();
         expect(await asked()).toEqual([
             { type: 'data', on: true },
             { type: 'data', on: false },

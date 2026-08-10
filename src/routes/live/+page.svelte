@@ -21,6 +21,7 @@
         SOUND_OFF,
         SOUND_ON,
     } from '$lib/components/player/icons';
+    import Remote from '$lib/components/player/Remote.svelte';
     import { programDetail } from '$lib/detail.svelte';
     import { time } from '$lib/format';
     import { LIVE_CODECS } from '$lib/live';
@@ -40,6 +41,13 @@
     let overlay: HTMLCanvasElement;
     /** 映像が居る入れ物。**データ放送に「映像はここ」と伝えるのに要る** */
     let mediaBox = $state<HTMLElement | null>(null);
+    /**
+     * データ放送に押す口。**器ができてから預かる** (`DataBroadcast` の `remote`)。
+     *
+     * これが有るかどうかが、そのまま**指のリモコンを出すかどうか**になる —
+     * 押しても行き先が無いリモコンは出さない
+     */
+    let dataPress = $state<((code: number) => void) | null>(null);
     /** 映像も重ねるものも入っている枠。全画面にするのはここ */
     let frame: HTMLElement;
 
@@ -312,6 +320,7 @@
                     : `${player.tuned.channelType}/${player.tuned.channel}/${player.tuned.serviceId}`}
                 media={mediaBox}
                 listen={player.listenData}
+                remote={(press) => (dataPress = press)}
             />
 
             {#if player.tuned !== null && player.state !== 'error'}
@@ -818,6 +827,17 @@
                 </div>
             </div>
         {:else}
+            <!--
+                **データ放送を出している間だけ、リモコンを一覧の上に出す。**
+
+                番組の中身と違って**入れ替えない** — 押しながら局も変えたいし、
+                リモコンを引っ込める操作を覚えることにもなる。一覧は残りの高さで
+                巻き取られる (`flex-1`)
+            -->
+            {#if dataPress !== null}
+                <Remote press={dataPress} />
+            {/if}
+
             <!-- 番組表と同じ並び・同じ見た目。探す場所がずれないようにする -->
             <div class="join mb-2" data-testid="live-type-tabs">
                 {#each types as type (type)}

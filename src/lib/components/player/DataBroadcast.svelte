@@ -48,9 +48,17 @@
         media: HTMLElement | null;
         /** 知らせを受け取る口を預ける。`null` を渡すと外れる */
         listen: (handler: ((message: ResponseMessage) => void) | null) => void;
+        /**
+         * 指のリモコン (`Remote.svelte`) から押す口を預ける。
+         * `null` を渡すと外れる (`listen` と同じ形)。
+         *
+         * **口が有るかどうかが、そのままリモコンを出すかどうかになる** —
+         * 器ができる前に出しても押せるものが無い
+         */
+        remote: (press: ((code: number) => void) | null) => void;
     }
 
-    const { on, channel, media, listen }: Props = $props();
+    const { on, channel, media, listen, remote }: Props = $props();
 
     /**
      * リモコンの d。`AribKeyCode.DataButton` と同じ値。
@@ -358,11 +366,17 @@
             handed++;
             made.emitMessage(message);
         });
+        // 指のリモコンにも同じ口を渡す。押して離したことにするのは `knock` と同じ
+        remote((code) => {
+            made.content.processKeyDown(code);
+            made.content.processKeyUp(code);
+        });
     }
 
     function close(): void {
         generation++;
         listen(null);
+        remote(null);
         loading = false;
         handed = 0;
         showing = false;
