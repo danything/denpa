@@ -22,13 +22,15 @@
      * 2. **隠れている間、映像を元の場所へ戻す** (`place`)。借りものは文書を
      *    組むたびに映像の入れ物を BML の `<object>` へ**移す**
      * 3. **960x540 を枠に合わせて伸ばす** (`fit`)。上流は原寸のまま
+     * 4. **「データ取得中」を出す** (`indicator`)。denpa は押されてから
+     *    電波を解きはじめるので、テレビより待つ
      *
      * 移す先は**閉じた影の中**で、表の CSS は届かない。映像の入れ物の
      * 大きさを class ではなく style で書いてあるのはそのため
      * ([live/+page.svelte](../../../routes/live/+page.svelte))
      */
     import { onDestroy } from 'svelte';
-    import type { BMLBrowser } from '$lib/vendor/web-bml/client/bml_browser';
+    import type { BMLBrowser, Indicator } from '$lib/vendor/web-bml/client/bml_browser';
     import type { ResponseMessage } from '$lib/vendor/web-bml/server/ws_api';
 
     interface Props {
@@ -84,6 +86,8 @@
      * 変わらない、という壊れ方をする (実機でそうなった)
      */
     let showing = $state(false);
+    /** いま実際に映しているか (`place` が決める)。`showing` との違いは `settled` を見よ */
+    let visible = $state(false);
     /** 何度も作らないための世代。押して離してを繰り返しても混ざらない */
     let generation = 0;
     /** いま何を出しているか (`channel`)。出していなければ `null` */
@@ -99,6 +103,25 @@
     let seat: { parent: Node; next: Node | null } | null = null;
     /** BML の画面の大きさ。`load` で分かる (960x540 / 720x480 など) */
     let plane: { width: number; height: number } | null = null;
+    /**
+     * まだ電波から取っている最中か。**借りものが教えてくれる**
+     * (`Indicator.setReceivingStatus`)。テレビの「データ取得中…」と同じ札で、
+     * 入口の部品が載っていない局では立たないようになっている
+     */
+    let receiving = $state(false);
+    /**
+     * 一度でも出し切ったか。
+     *
+     * **最初の1枚が揃うまでは映像のままにしておく。** 入口の文書 (`startup.bml`)
+     * は本体へ渡すだけのほぼ白紙で、しかも自分で `invisible` を外してくる。
+     * 素直に映すと、**本体が届くまでの数秒が真っ白**になる (実機でそうなった)。
+     * テレビは電波をずっと拾い続けているのでこの待ちが無い — denpa は
+     * 押されてから解きはじめるぶん、ここが目に見える。
+     *
+     * ただし**出し切ったあとは引っ込めない**。中を渡り歩くたびに取得中には
+     * なるが、そこで映像に戻ってしまうと画面が点滅する
+     */
+    let settled = false;
     /** 残りの叩く回数 */
     let knocks = 0;
     /** 次に叩く約束 */
@@ -136,6 +159,27 @@
     };
 
     /**
+     * テレビが下のほうに出す「データ取得中…」。**借りものが持っている口。**
+     *
+     * 使うのは `setReceivingStatus` だけ。残りは上流の単体ページが画面の縁に
+     * 出していたもの (いま開いている URL・通信中の印・番組名) で、denpa には
+     * 既にそれぞれの置き場がある。
+     *
+     * 取り終わったかどうかは**こちらからは分からない** — 何個のモジュールで
+     * 揃うのかを知っているのは借りている側だけなので、教えてもらうしかない
+     */
+    const indicator: Indicator = {
+        setUrl: () => {},
+        setReceivingStatus: (on: boolean) => {
+            receiving = on;
+            place();
+        },
+        setNetworkingGetStatus: () => {},
+        setNetworkingPostStatus: () => {},
+        setEventName: () => {},
+    };
+
+    /**
      * BML の画面を枠いっぱいに伸ばす。
      *
      * BML は 960x540 のような**決まった大きさ**で組まれていて、借りものは
@@ -163,14 +207,44 @@
      * 放っておくと映像が小窓の形に潰れたまま戻らない
      */
     function place(): void {
-        if (mount !== null) mount.style.visibility = showing ? 'visible' : 'hidden';
+        // **出すと決まったら、そこから先は取得中でも出しっぱなし** (`settled`)
+        const want = showing && (settled || !receiving);
+        if (want) settled = true;
+        if (settled || !showing) stopWaiting();
+        else startWaiting();
+        visible = want;
+        if (mount !== null) mount.style.visibility = want ? 'visible' : 'hidden';
         if (media === null) return;
-        const box = showing ? (browser?.getVideoElement() ?? null) : null;
+        const box = want ? (browser?.getVideoElement() ?? null) : null;
         if (box !== null) {
             if (media.parentNode !== box) box.appendChild(media);
             return;
         }
         if (seat !== null && media.parentNode !== seat.parent) seat.parent.insertBefore(media, seat.next);
+    }
+
+    /**
+     * 取得中が終わるのを待つ上限。
+     *
+     * **待ち続けて出ないより、白くても出るほうがまし。** 借りものが
+     * 「取得中」を下ろし忘れる局があったとき、`settled` を立てる口が
+     * 他に無いと**d を押しても永久に何も起きない**ことになる
+     */
+    const SHOW_WAIT = 8000;
+    let waiting: ReturnType<typeof setTimeout> | null = null;
+
+    function startWaiting(): void {
+        if (waiting !== null) return;
+        waiting = setTimeout(() => {
+            waiting = null;
+            settled = true;
+            place();
+        }, SHOW_WAIT);
+    }
+
+    function stopWaiting(): void {
+        if (waiting !== null) clearTimeout(waiting);
+        waiting = null;
     }
 
     /** 叩くのをやめる。**出てきたら、そこで止める** */
@@ -223,10 +297,14 @@
 
         seat = { parent: media.parentNode as Node, next: media.nextSibling };
 
+        receiving = false;
+        settled = false;
+
         const made = new BMLBrowser({
             containerElement: mount,
             mediaElement: media,
             fonts: FONTS,
+            indicator,
             // 覚えるもの (NVRAM) は局ごとに分ける。他の使い道と混ざらないように
             storagePrefix: 'denpa_bml_',
             nvramPrefix: 'denpa_nvram_',
@@ -279,7 +357,10 @@
         loading = false;
         handed = 0;
         showing = false;
+        receiving = false;
+        settled = false;
         stopKnocking();
+        stopWaiting();
         plane = null;
         watcher?.disconnect();
         watcher = null;
@@ -328,15 +409,30 @@
 <!--
     **映像と同じ枠に重ねる。** BML の画面は中で自分の大きさを決めるので、
     こちらは場所だけ用意する。出していないときは触れないようにしておく
-    (押すのを邪魔しない)
+    (押すのを邪魔しない)。
+
+    **操作列より下に敷く** (`z-5` / `ControlBar` は `z-10`)。上に載せていた頃は、
+    データ放送を出した瞬間に操作列が隠れた — そこに d ボタンも居るので、
+    **出したら消せなくなる**
 -->
 <div
     bind:this={host}
-    class="pointer-events-none absolute inset-0 z-20 overflow-hidden"
+    class="pointer-events-none absolute inset-0 z-[5] overflow-hidden"
     class:hidden={!on}
     data-testid="live-data"
     data-state={browser !== null ? 'ready' : loading ? 'loading' : 'off'}
-    data-showing={showing}
+    data-showing={visible}
+    data-receiving={receiving}
     data-for={shown ?? ''}
     data-handed={handed}
-></div>
+>
+    <!--
+        **テレビと同じ「データ取得中」。** denpa は押されてから電波を解きはじめる
+        ので、テレビより待つ (実測で8秒)。何も言わずに待たせると壊れて見える
+    -->
+    {#if on && (loading || receiving)}
+        <div class="absolute top-3 right-3 z-10" data-testid="live-data-receiving">
+            <span class="rounded-box bg-black/60 px-3 py-1 text-xs text-white">データ取得中…</span>
+        </div>
+    {/if}
+</div>

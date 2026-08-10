@@ -452,6 +452,22 @@ test.describe('ライブ視聴', () => {
             )
             .toBe(true);
 
+        /*
+         * **操作列より下に敷いているか。**
+         *
+         * データ放送の面は枠いっぱいで、放送の作った画面は下まで塗り潰す。
+         * 上に載せていた頃は出した瞬間に操作列が隠れ、**そこに居る d ボタンごと
+         * 見えなくなって、出したら消せなくなった**。面は
+         * `pointer-events-none` なので押せてはいる — 押す場所が見えないだけで、
+         * 触って確かめる形では捕まらない
+         */
+        const layers = await page.evaluate(() => {
+            const z = (name: string) =>
+                Number(getComputedStyle(document.querySelector(`[data-testid="${name}"]`) as Element).zIndex);
+            return { data: z('live-data'), controls: z('live-controls') };
+        });
+        expect(layers.data, 'データ放送が操作列を覆っている').toBeLessThan(layers.controls);
+
         // もう一度押したら畳む。**掴んだままにしない**
         await page.getByTestId('live-data-button').click();
         await expect(overlay).toHaveAttribute('data-state', 'off');
