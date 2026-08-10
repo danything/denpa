@@ -271,43 +271,53 @@
                     onclick={toggle}
                     data-testid="live-video"
                 ></video>
+
+                <!--
+                    **切り替えの間、前の絵を貼っておく。** 器を作り直すと `<video>` は
+                    何も映さなくなるので、そのままだと 1.6 秒ほど真っ黒になる。
+                    待ち時間そのものは削れない (電波の同期待ちと GOP の頭待ち) が、
+                    黒い画面を見せずに済む。絵は止まって見えるが、それは正しい。
+
+                    **映像と字幕の間。** 映像より上 (黒を隠す) で、字幕より下
+                    (切り替え中も字幕は見えていてほしい)。字幕と同じ理由で、
+                    映像と同じ入れ物の中に、style で書く
+                -->
+                <canvas
+                    bind:this={still}
+                    style="position:absolute; inset:0; width:100%; height:100%;
+                           object-fit:contain; pointer-events:none;
+                           transition:opacity 150ms; opacity:{player.holding ? 1 : 0};"
+                    data-testid="live-still"
+                    data-holding={player.holding}
+                    aria-hidden="true"
+                ></canvas>
+
+                <!--
+                    **放送の字幕。** 文字ではなく絵で届く (放送に乗っているのは文字と
+                    描き方の指定で、テレビはそれを見て毎回自分で描いている)。
+                    サーバが libaribcaption に描かせたものを重ねるので、**録画で見る
+                    字幕と同じ絵**になる。絵は画面まるごと (1920x1080) で来るので、
+                    映像と同じ枠に敷いて引き伸ばすだけでよい。
+
+                    **映像と同じ入れ物の中に置く。** データ放送を出すと、借りものは
+                    この入れ物ごと BML の小窓へ移す — 外に置いていると、**映像だけが
+                    小窓へ行き、字幕は枠いっぱいのまま**データ放送の下に隠れる
+                    (実機で「データ放送を出すと字幕が消える」として出た)。
+                    中に入れておけば、テレビと同じで**映像と一緒に縮む**。
+
+                    大きさは class ではなく style で書く — 移された先は閉じた影の中で、
+                    表の CSS が届かない (`DataBroadcast.svelte`)
+                -->
+                <canvas
+                    bind:this={overlay}
+                    style="position:absolute; inset:0; width:100%; height:100%;
+                           object-fit:contain; pointer-events:none;"
+                    data-testid="live-captions"
+                    data-on={player.captions && player.hasCaptions}
+                    aria-hidden="true"
+                ></canvas>
             </div>
 
-            <!--
-                **切り替えの間、前の絵を貼っておく。** 器を作り直すと `<video>` は
-                何も映さなくなるので、そのままだと 1.6 秒ほど真っ黒になる。
-                待ち時間そのものは削れない (電波の同期待ちと GOP の頭待ち) が、
-                黒い画面を見せずに済む。
-
-                絵は止まって見えるが、それは正しい — 実際に止まっている
-            -->
-            <canvas
-                bind:this={still}
-                class="pointer-events-none absolute inset-0 h-full w-full object-contain
-                       transition-opacity duration-150
-                       {player.holding ? 'opacity-100' : 'opacity-0'}"
-                data-testid="live-still"
-                data-holding={player.holding}
-                aria-hidden="true"
-            ></canvas>
-
-            <!--
-                **放送の字幕。** 文字ではなく絵で届く (放送に乗っているのは文字と
-                描き方の指定で、テレビはそれを見て毎回自分で描いている)。
-                サーバが libaribcaption に描かせたものを重ねるので、**録画で見る
-                字幕と同じ絵**になる。
-
-                絵は画面まるごと (1920x1080) で来るので、映像と同じ枠に敷いて
-                引き伸ばすだけでよい。位置合わせはブラウザ任せ。
-                **前の絵より上に置く** — 切り替え中は字幕も一緒に止まってほしい
-            -->
-            <canvas
-                bind:this={overlay}
-                class="pointer-events-none absolute inset-0 h-full w-full object-contain"
-                data-testid="live-captions"
-                data-on={player.captions && player.hasCaptions}
-                aria-hidden="true"
-            ></canvas>
 
             <!--
                 **データ放送。** 映像はここ (`frame`) に居るとだけ伝えて、

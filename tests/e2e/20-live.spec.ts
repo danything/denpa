@@ -430,6 +430,34 @@ test.describe('ライブ視聴', () => {
          */
         await expect(page.getByTestId('live-remote')).toBeVisible();
         await expect(page.getByTestId('live-channels')).toBeVisible();
+
+        /*
+         * **字幕は映像と一緒に動く。**
+         *
+         * データ放送を出すと、借りものは映像の入れ物ごと BML の小窓へ移す。
+         * 字幕を外に置いていた頃は、**映像だけが小窓へ行き、字幕は枠いっぱいの
+         * まま**データ放送の下に隠れた (実機で「データ放送を出すと字幕が消える」)。
+         * 同じ入れ物の中に居れば、テレビと同じで映像と一緒に縮む
+         */
+        expect(
+            await page.evaluate(() => {
+                const video = document.querySelector('[data-testid="live-video"]');
+                const captions = document.querySelector('[data-testid="live-captions"]');
+                const still = document.querySelector('[data-testid="live-still"]');
+                return {
+                    字幕: captions?.parentElement === video?.parentElement,
+                    前の絵: still?.parentElement === video?.parentElement,
+                    // 重なりは 映像 → 前の絵 → 字幕 の順 (DOM の順がそのまま)
+                    順番: [...(video?.parentElement?.children ?? [])].map((e) =>
+                        e.getAttribute('data-testid'),
+                    ),
+                };
+            }),
+        ).toEqual({
+            字幕: true,
+            前の絵: true,
+            順番: ['live-video', 'live-still', 'live-captions'],
+        });
         expect(await asked()).toEqual([{ type: 'data', on: true }]);
 
         /*
