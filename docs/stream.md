@@ -956,7 +956,7 @@ KosugiMaru を 4.4MB ぶん抱えている。積むかどうかは持ち込み�
 | | |
 | --- | --- |
 | 束 | 700KB (gzip 前)。**押すまで落ちてこない** |
-| フォント | 積んでいない。`local('Hiragino Maru Gothic ProN')` などで端末のものを当てる |
+| フォント | **字幕を焼いているのと同じ `rounded-mplus-1m-arib`**。BML が要る**等幅・丸ゴシック・ARIB外字**を1本で満たす (借りている側の Kosugi 4.4MB は外字を持たない)。像には ttf と woff2 を置き、`/api/font` で配る |
 | 覚えるもの | NVRAM は localStorage。`denpa_nvram_` で他と混ざらないようにしてある |
 | リモコン | 十字・決定・戻る・数字・色をそのまま渡す (`keyCodeToAribKey`)。**`d` だけ渡さない** — 出し入れに使うので、渡すと抜けられなくなる |
 

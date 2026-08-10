@@ -39,13 +39,19 @@ SHELL ["/bin/bash", "-c"]
 # 一度これで ffmpeg の取得に失敗してデプロイが止まった
 ENV CURL="curl -fsSL --retry 5 --retry-delay 5 --retry-all-errors --connect-timeout 20"
 
-ENV DEV="curl ca-certificates build-essential cmake pkg-config nasm zlib1g-dev libfreetype6-dev libopus-dev libsvtav1enc-dev libx264-dev libdav1d-dev libfontconfig-dev"
+# woff2 は ARIB フォントをブラウザ用に縮めるのに使う (データ放送。下の説明)
+ENV DEV="curl ca-certificates build-essential cmake pkg-config nasm zlib1g-dev libfreetype6-dev libopus-dev libsvtav1enc-dev libx264-dev libdav1d-dev libfontconfig-dev woff2"
 
 # renovate: datasource=github-tags depName=FFmpeg/FFmpeg extractVersion=^n(?<version>.*)$
 ENV FFMPEG_VERSION=9.0
 # renovate: datasource=github-tags depName=xqq/libaribcaption
 ARG LIBARIBCAPTION_VERSION=v1.1.2
 # renovate: datasource=git-refs depName=https://github.com/5ym/arib-font branch=main
+#
+# **同じ字を2つの形で置く。** 字幕を焼くのは ffmpeg (fontconfig 経由の ttf)、
+# データ放送を描くのはブラウザなので web フォント (woff2) も要る。5.5MB → 2MB ほど。
+# BML は**等幅・丸ゴシック・ARIB外字**を要求していて、この1本が3つとも満たす
+# (借りている側は Kosugi を 4.4MB ぶん抱えているが、外字は入っていない)
 ARG ARIB_FONT_SHA=a9c834099818c59ba9c3721a2b1a860f6c0af61a
 
 RUN apt-get update && \
@@ -53,6 +59,7 @@ RUN apt-get update && \
     mkdir -p /usr/share/fonts/truetype/rounded-mplus-arib && \
     $CURL https://raw.githubusercontent.com/5ym/arib-font/${ARIB_FONT_SHA}/rounded-mplus-1m-arib.ttf \
       -o /usr/share/fonts/truetype/rounded-mplus-arib/rounded-mplus-1m-arib.ttf && \
+    woff2_compress /usr/share/fonts/truetype/rounded-mplus-arib/rounded-mplus-1m-arib.ttf && \
     mkdir /tmp/arib && cd /tmp/arib && \
     $CURL https://github.com/xqq/libaribcaption/archive/refs/tags/${LIBARIBCAPTION_VERSION}.tar.gz | tar -xz --strip-components=1 && \
     mkdir build && cd build && cmake .. -DCMAKE_BUILD_TYPE=Release && cmake --build . -j$(nproc) && cmake --install . && \
