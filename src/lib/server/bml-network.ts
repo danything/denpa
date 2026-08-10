@@ -20,7 +20,7 @@
  * | | |
  * | --- | --- |
  * | 既定 | **切** (設定画面で入れる)。入れるまで `isIPConnected` は 0 を返す |
- * | 手 | **GET だけ**。応募・投票の送信 (`transmitTextDataOverIP`) は実装しない |
+ * | 手 | GET と POST (`transmitTextDataOverIP`)。**中身は放送のアプリが組んだものをそのまま通すだけ** |
  * | 相手 | **https のみ・公開アドレスのみ**。私設・ループバック・リンクローカル・多重放送は断る |
  * | 追いかけ | 3回まで。**行き先ごとに確かめ直す** — 1回目が公開でも、飛ばされた先が内側のことがある |
  * | 大きさ | 4MB まで |
@@ -152,12 +152,64 @@ export async function fetchForBml(raw: string): Promise<Fetched> {
 }
 
 /**
+ * 送る (`browser.transmitTextDataOverIP`)。
+ *
+ * **「応募・投票」の口だと思っていたら、疎通の判定そのものだった。**
+ * NHK のデータ放送は `isIPConnected` に 1 と答えても信じず、ここへ一度
+ * 投げてみて、返らなければ「インターネットに接続されていません」と案内
+ * します (実機で確かめた。`confirmIPNetwork` は呼びに来もしない)。
+ * 実装しないという最初の決めでは、双方向を入れても入っていないのと同じ
+ * でした。
+ *
+ * **中身は組み立てません。** 借りものが `Denbun=<EUC-JP か Shift_JIS を
+ * %xx にしたもの>` まで作ってから渡してくるので、denpa はそれを
+ * `application/x-www-form-urlencoded` として素通しするだけです。
+ * 返りも解かずにそのまま返す (どちらの符号かは放送のアプリが知っている)。
+ *
+ * 飛ばされたときの手の変わりかたは web と同じ規則にします —
+ * 301/302/303 は GET へ、307/308 は POST のまま。**行き先は毎回確かめ直す**
+ */
+export async function postForBml(raw: string, body: Uint8Array): Promise<Fetched> {
+    let url = await allowed(raw);
+    let method = 'POST';
+    for (let hop = 0; ; hop++) {
+        const response = await fetch(url, {
+            method,
+            redirect: 'manual',
+            credentials: 'omit',
+            headers:
+                method === 'POST'
+                    ? { accept: '*/*', 'content-type': 'application/x-www-form-urlencoded' }
+                    : { accept: '*/*' },
+            body: method === 'POST' ? (body as BodyInit) : undefined,
+            signal: AbortSignal.timeout(TIMEOUT),
+        });
+
+        const next = response.headers.get('location');
+        if (response.status >= 300 && response.status < 400 && next !== null) {
+            if (hop >= HOPS) throw new Refused('飛ばされる回数が多すぎます');
+            if (response.status !== 307 && response.status !== 308) method = 'GET';
+            url = await allowed(new URL(next, url).toString());
+            continue;
+        }
+
+        const got = new Uint8Array(await response.arrayBuffer());
+        if (got.length > LIMIT) throw new Refused(`大きすぎます (${got.length} バイト)`);
+        return {
+            status: response.status,
+            contentType: response.headers.get('content-type') ?? 'application/octet-stream',
+            body: got,
+        };
+    }
+}
+
+/**
  * 相手まで届くかを確かめる (`browser.confirmIPNetwork`)。
  *
- * **放送のアプリはこれで「繋がっているか」を決めます。** `isIPConnected` に
- * 1 と答えるだけでは足りません — 借りものは実装が無いと `null` (非対応) を
- * 返し、アプリはそれを見て「インターネットに接続されていません」と案内します
- * (実機の NHK でそうなりました)。
+ * 「相手まで届くか」を訊かれたときに答える口です。**NHK は呼びに来ません**
+ * (実機で確かめた。あちらは [postForBml](#) の側で判断していた) が、
+ * 訊いてくる放送はあるので用意しておきます。借りものは実装が無いと `null`
+ * (非対応) を返し、`getBrowserSupport(… "Com.IP.confirmIP")` も 0 になります。
  *
  * **ICMP は使いません。** 器の中から生の socket は開けない (`CAP_NET_RAW` が
  * 要る) ので、**443 番へ繋がるか**で代えます。放送局のサーバは https で

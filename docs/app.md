@@ -36,7 +36,7 @@ EPGStation の置き換えとして作ったもので、エンコード設定は
 | `src/lib/components/player/DataBroadcast.svelte` | データ放送を映像の上に重ねる (d ボタン。押されるまで読み込まない) |
 | `src/lib/components/player/Remote.svelte` | 指で押すリモコン (十字・決定・色・数字)。**映像の上ではなく右の列** |
 | `src/lib/ts/ait.ts` | Hybridcast の在り処 (AIT)。**読むだけで動かさない** |
-| `src/lib/server/bml-network.ts` | データ放送の双方向の中継 (`/api/bml/proxy`)。**既定は切・GET だけ・公開の相手だけ** |
+| `src/lib/server/bml-network.ts` | データ放送の双方向の中継 (`/api/bml/proxy`・`/post`・`/confirm`)。**既定は切・https のみ・公開の相手だけ** |
 | `src/lib/vendor/web-bml/` | 借りもの。BML を描くところ ([README](../src/lib/vendor/web-bml/README.md)) |
 | `src/lib/pgs.ts` | PGS (Blu-ray の字幕) の**組み立てと読み出し**。ffmpeg に符号器が無いので自前。読むほうはブラウザで使う (`readSup`) |
 | `src/lib/download.ts` | 録画を落とすURLの組み立て (資格情報を埋める) |

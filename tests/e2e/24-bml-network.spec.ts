@@ -13,6 +13,11 @@ test.describe('データ放送の双方向', () => {
         expect((await request.get('/api/bml/proxy?url=https://example.com/')).status()).toBe(403);
         // 疎通確認も同じ扱い。**入れるまで外へ出ない**
         expect((await request.get('/api/bml/confirm?to=example.com')).status()).toBe(403);
+        // 送るほうも同じ
+        const post = await request.post('/api/bml/post?url=https%3A%2F%2Fexample.com%2F', {
+            data: 'Denbun=x',
+        });
+        expect(post.status()).toBe(403);
     });
 
     test('入れると口が開くが、内側へは繋がない', async ({ page, request }) => {
@@ -35,6 +40,20 @@ test.describe('データ放送の双方向', () => {
         // **https だけ。** 中身を覗かれる道は開けない
         const plain = await request.get('/api/bml/proxy?url=http%3A%2F%2Fexample.com%2F');
         expect(plain.status()).toBe(502);
+
+        /*
+         * **送るほうも同じ枠で見る。**
+         *
+         * 応募・投票の口だが、放送のアプリはここへ投げてみて「繋がって
+         * いるか」を決めることがある (NHK がそう)。だからといって内側へ
+         * 投げてよいことにはならない
+         */
+        for (const url of ['https://127.0.0.1/', 'http://example.com/']) {
+            const res = await request.post(`/api/bml/post?url=${encodeURIComponent(url)}`, {
+                data: 'Denbun=x',
+            });
+            expect(res.status(), url).toBe(502);
+        }
 
         /*
          * **疎通確認は、届かなくても失敗ではない。**

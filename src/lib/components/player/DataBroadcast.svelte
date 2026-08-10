@@ -211,21 +211,45 @@
      * 双方向 (通信系コンテンツ)。**中継はサーバがやる**
      * (`/api/bml/proxy`。放送局のサーバは CORS を返さないので直には取れない)。
      *
-     * **取ってくるだけ。** 応募・投票の送信 (`transmitTextDataOverIP`) と
-     * 疎通確認 (`confirmIPNetwork`) は渡さない — 正規の受信機以外からの
-     * 送信は放送側の想定外で、実装しないと決めてある
+     * 取る (`get`)・送る (`transmitTextDataOverIP`)・届くか確かめる
+     * (`confirmIPNetwork`) の三つを渡す
      * ([docs/stream.md](../../../../docs/stream.md#57-双方向通信系コンテンツプロキシ))。
-     * 渡さなければ借りものは「その機能は無い」とアプリに答える
+     *
+     * **送るほうは「応募・投票の口」だと思って外していたが、それでは足りない。**
+     * 放送のアプリは `isIPConnected` に 1 と答えても信じず、送る口へ一度
+     * 投げてみて繋がっているかを決めることがある (NHK がそう)。渡さないと
+     * 借りものは「その機能は無い」と答え、双方向を入れていても
+     * 「インターネットに接続されていません」と案内される
      */
     const ip: IP = {
         // 403 は「Ethernet で DHCP」。借りものの既定と同じ
         getConnectionType: () => 403,
         isIPConnected: () => (network ? 1 : 0),
         /**
-         * **届くかどうかを確かめる。** `isIPConnected` に 1 と答えるだけでは
-         * 足りない — 放送のアプリはここも呼び、答えが無いと (借りものは
-         * 未実装だと `null` を返す)「インターネットに接続されていません」と
-         * 案内する。実機の NHK でそうなった
+         * **送る。** 中身は借りものが `Denbun=…` まで組んでから渡してくるので、
+         * ここは中継口へ素通しするだけ。返りも解かずにそのまま返す
+         *
+         * `resultCode` は 1 が成功。**断られた (403/502) ときだけ NaN** に
+         * する — 相手が 404 を返したのは「送れた」ので、放送のアプリに
+         * そのまま渡して判断させる
+         */
+        transmitTextDataOverIP: async (uri: string, body: Uint8Array<ArrayBuffer>) => {
+            const response = await fetch(`/api/bml/post?url=${encodeURIComponent(uri)}`, {
+                method: 'POST',
+                headers: { 'content-type': 'application/x-www-form-urlencoded' },
+                body,
+            });
+            const got = new Uint8Array(await response.arrayBuffer());
+            const relayed = response.headers.get('x-bml-relayed') === '1';
+            return {
+                resultCode: relayed ? 1 : Number.NaN,
+                statusCode: String(response.status),
+                response: got,
+            };
+        },
+        /**
+         * **届くかどうかを確かめる。** NHK は呼びに来ないが、訊いてくる
+         * 放送はある。渡さないと借りものは `null` (非対応) を返す
          */
         confirmIPNetwork: async (destination: string, _isICMP: boolean, timeoutMillis: number) => {
             const params = new URLSearchParams({ to: destination, wait: String(timeoutMillis) });
