@@ -448,6 +448,49 @@ test.describe('ライブ視聴', () => {
     });
 
     /*
+     * **局を変えたら、データ放送も作り直す。**
+     *
+     * 借りものは一度に一つの放送しか持てない (カルーセルも覚えるものも局ごと)。
+     * それに、**借りものは映像の入れ物を BML の `<object>` の中へ移す** ので、
+     * 作り直さずにいると**前の局の文書が映像を掴んだまま**になる —
+     * 実機では「d を押したあと局を変えると、映像が左上に潰れる」形で出た
+     */
+    test('局を変えたら、データ放送を作り直す', async ({ page }) => {
+        await goto(page, '/live');
+        const channels = page.getByTestId('live-channel');
+        await expect(channels.first()).toBeVisible();
+        if ((await channels.count()) < 2) test.skip();
+
+        const first = await channels.nth(0).getAttribute('data-channel');
+        const second = await channels.nth(1).getAttribute('data-channel');
+        expect(first).not.toBe(second);
+
+        await channels.nth(0).click();
+        await expect(page.getByTestId('live-title')).toBeVisible();
+        const overlay = page.getByTestId('live-data');
+        await page.getByTestId('live-data-button').click();
+        await expect(overlay).toHaveAttribute('data-state', 'ready', { timeout: 15_000 });
+        const before = await overlay.getAttribute('data-for');
+        expect(before).toContain(first);
+
+        await channels.nth(1).click();
+        await expect(page.getByTestId('live-title')).toBeVisible();
+        // 局が変われば、器も別のものになっている
+        await expect(overlay).toHaveAttribute('data-state', 'ready', { timeout: 15_000 });
+        await expect
+            .poll(() => overlay.getAttribute('data-for'), { message: 'データ放送が前の局のまま' })
+            .toContain(second as string);
+
+        // **映像は枠に戻っている** (BML の小窓に入ったままにしない)
+        expect(
+            await page.evaluate(() => {
+                const video = document.querySelector('[data-testid="live-video"]');
+                return video !== null && video.getRootNode() === document;
+            }),
+        ).toBe(true);
+    });
+
+    /*
      * **渡す前に1局へ絞る。**
      *
      * ffmpeg は名指しした局を `-probesize` のぶん読む間に見つけられなければ、

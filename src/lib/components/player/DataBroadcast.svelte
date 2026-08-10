@@ -11,31 +11,98 @@
      * 借りものは 1.2MB ある。**入れっぱなしにすると、データ放送を見ない人の
      * ぶんまで毎回落ちてくる**ので、`import()` で押されてから取りに行く。
      * どのみち押してからカルーセルが一周するのを待つので、そこに紛れる。
+     *
+     * ## 借りものと denpa の間で、こちらが持つ3つ
+     *
+     * 借りものは**画面の器を持たない** — 上流のアプリ (`client/index.ts`、
+     * denpa は借りていない) がやっていた3つを、こちらでやる:
+     *
+     * 1. **d を BML に渡す** (`knock`)。BML は `invisible` で始まり、
+     *    `DataButtonPressed` を受けて自分で出てくる
+     * 2. **隠れている間、映像を元の場所へ戻す** (`place`)。借りものは文書を
+     *    組むたびに映像の入れ物を BML の `<object>` へ**移す**
+     * 3. **960x540 を枠に合わせて伸ばす** (`fit`)。上流は原寸のまま
      */
     import { onDestroy } from 'svelte';
+    import type { BMLBrowser } from '$lib/vendor/web-bml/client/bml_browser';
     import type { ResponseMessage } from '$lib/vendor/web-bml/server/ws_api';
 
     interface Props {
         /** 出すか。**押されたら読み込みが始まる** */
         on: boolean;
-        /** 映像が居る入れ物。BML から「ここに映像がある」と見える */
+        /**
+         * いま映している局。**変わったら作り直す。**
+         *
+         * 借りものは一度に一つの放送しか持てない (カルーセルも NVRAM も
+         * 局ごと)。局を変えても作り直さずにいると、**前の局の文書が
+         * 映像を掴んだまま**残り、映像が BML の小窓の形に潰れる
+         */
+        channel: string | null;
+        /** 映像が居る入れ物。**BML はこれを動かす** (`place`) */
         media: HTMLElement | null;
         /** 知らせを受け取る口を預ける。`null` を渡すと外れる */
         listen: (handler: ((message: ResponseMessage) => void) | null) => void;
     }
 
-    const { on, media, listen }: Props = $props();
+    const { on, channel, media, listen }: Props = $props();
+
+    /**
+     * リモコンの d。`AribKeyCode.DataButton` と同じ値。
+     *
+     * **番号で書くのは、`content.ts` を読み込まずに済ませるため** —
+     * あれを値として import すると、押される前に借りもの全体が落ちてくる
+     */
+    const DATA_BUTTON = 20;
+
+    /**
+     * d を叩き直す回数と間隔。
+     *
+     * **一度では届かない。** 文書が組み上がった時点ではまだ `beitem` が
+     * `subscribe` になっておらず (それを立てるのはアプリの `onload`)、
+     * `DataButtonPressed` は誰にも拾われずに消える。出てくるまで叩き続ける —
+     * 手でリモコンを押し直すのと同じこと
+     */
+    const KNOCK_TRIES = 12;
+    const KNOCK_WAIT = 400;
 
     /** 描く場所。BML の画面 (960x540 など) がこの中に入る */
     let host = $state<HTMLDivElement | null>(null);
-    /** いま動いている借りもの。型は読み込んでから決まるので緩く持つ */
-    let browser = $state<{ emitMessage: (m: ResponseMessage) => void; destroy: () => void } | null>(null);
+    /** いま動いている借りもの */
+    let browser = $state<BMLBrowser | null>(null);
     /** 読み込み中か。**押してすぐは何も出ないので、そう言う** */
     let loading = $state(false);
+    /**
+     * BML が「いま出ている」と言っているか。
+     *
+     * **BML は `invisible` で始まる。** テレビでは d を押すと
+     * `DataButtonPressed` が飛び、アプリが自分で `invisible` を外して出てくる。
+     * つまり**器を作っただけでは何も出ない** — 中では動いているのに画面は
+     * 変わらない、という壊れ方をする (実機でそうなった)
+     */
+    let showing = $state(false);
     /** 何度も作らないための世代。押して離してを繰り返しても混ざらない */
     let generation = 0;
+    /** いま何を出しているか (`channel`)。出していなければ `null` */
+    let shown = $state<string | null>(null);
     /** その回ぶんの入れ物。**毎回作り直す** (`open` の説明) */
     let mount: HTMLDivElement | null = null;
+    /**
+     * 映像の元の居場所。**順番まで覚える。**
+     *
+     * 末尾に付け直すと字幕の canvas より上に来てしまう。戻す先は
+     * 「どの親の、どれの前」
+     */
+    let seat: { parent: Node; next: Node | null } | null = null;
+    /** BML の画面の大きさ。`load` で分かる (960x540 / 720x480 など) */
+    let plane: { width: number; height: number } | null = null;
+    /** d を叩き始めたか。**文書ができてから一度だけ** (`knock`) */
+    let knocked = false;
+    /** 残りの叩く回数 */
+    let knocks = 0;
+    /** 次に叩く約束 */
+    let knocking: ReturnType<typeof setTimeout> | null = null;
+    /** 枠の大きさを見張る。全画面にすると変わる */
+    let watcher: ResizeObserver | null = null;
     /**
      * 渡した知らせの数。**画面には出さない** (切り分け用)。
      *
@@ -66,6 +133,67 @@
         squareGothic: { source: "local('Hiragino Kaku Gothic ProN'), local('Meiryo'), local('MS Gothic')" },
     };
 
+    /**
+     * BML の画面を枠いっぱいに伸ばす。
+     *
+     * BML は 960x540 のような**決まった大きさ**で組まれていて、借りものは
+     * 原寸のまま置く (上流のアプリには 100%/150%/200% のボタンが付いている)。
+     * denpa の枠は端末しだいで変わるので、こちらで合わせる。
+     *
+     * **縦横を別々に伸ばす** — 映像が枠を埋めているのだから、その上に重ねる
+     * ものも同じだけ伸びていないと位置がずれる
+     */
+    function fit(): void {
+        if (mount === null || host === null || plane === null) return;
+        const box = host.getBoundingClientRect();
+        if (box.width === 0 || box.height === 0) return;
+        mount.style.width = `${plane.width}px`;
+        mount.style.height = `${plane.height}px`;
+        mount.style.transform = `scale(${box.width / plane.width}, ${box.height / plane.height})`;
+    }
+
+    /**
+     * 映像をあるべき場所に置き直す。
+     *
+     * 借りものは文書を組むたびに、渡された入れ物を BML の `<object>` の中へ
+     * **移す** (`content.ts` の `videoElementNew.appendChild`)。データ放送が
+     * 「小窓に映せ」と言えばそれで正しいが、**隠れている間もそのまま**なので、
+     * 放っておくと映像が小窓の形に潰れたまま戻らない
+     */
+    function place(): void {
+        if (mount !== null) mount.style.visibility = showing ? 'visible' : 'hidden';
+        if (media === null) return;
+        const box = showing ? (browser?.getVideoElement() ?? null) : null;
+        if (box !== null) {
+            if (media.parentNode !== box) box.appendChild(media);
+            return;
+        }
+        if (seat !== null && media.parentNode !== seat.parent) seat.parent.insertBefore(media, seat.next);
+    }
+
+    /** 叩くのをやめる。**出てきたら、そこで止める** */
+    function stopKnocking(): void {
+        if (knocking !== null) clearTimeout(knocking);
+        knocking = null;
+        knocks = 0;
+    }
+
+    /**
+     * BML に d を叩いて見せる。
+     *
+     * denpa の d ボタンは**器の出し入れ**に使っているので、そのままでは
+     * BML に届かない。押して離したことにして、出てくるまで繰り返す
+     * (`KNOCK_TRIES`)
+     */
+    function knock(): void {
+        knocking = null;
+        if (browser === null || knocks <= 0) return;
+        knocks--;
+        browser.content.processKeyDown(DATA_BUTTON);
+        browser.content.processKeyUp(DATA_BUTTON);
+        knocking = setTimeout(knock, KNOCK_WAIT);
+    }
+
     async function open(): Promise<void> {
         if (host === null || media === null) return;
         const mine = ++generation;
@@ -83,8 +211,15 @@
          * 「データ放送が出なくなる」という壊れ方をする
          */
         mount = document.createElement('div');
-        mount.className = 'absolute inset-0';
+        mount.style.position = 'absolute';
+        mount.style.left = '0';
+        mount.style.top = '0';
+        mount.style.transformOrigin = 'top left';
+        // 出せと言われるまでは隠しておく (`showing` の説明)
+        mount.style.visibility = 'hidden';
         host.appendChild(mount);
+
+        seat = { parent: media.parentNode as Node, next: media.nextSibling };
 
         const made = new BMLBrowser({
             containerElement: mount,
@@ -98,6 +233,34 @@
         browser = made;
         loading = false;
         handed = 0;
+        knocked = false;
+        showing = false;
+        plane = null;
+
+        made.addEventListener('load', (event) => {
+            plane = event.detail.resolution;
+            fit();
+            // 文書ができた。あとは出てくるまで d を叩く
+            if (knocked) return;
+            knocked = true;
+            knocks = KNOCK_TRIES;
+            knocking = setTimeout(knock, KNOCK_WAIT);
+        });
+        /*
+         * **「いま出ているか」を教えてくれる唯一の口。**
+         *
+         * 文書を組み終えた直後に必ず一度飛んでくる (`content.ts` の
+         * `bmlBody.invisible = bmlBody.invisible`)
+         */
+        made.addEventListener('invisible', (event) => {
+            showing = event.detail !== true;
+            if (showing) stopKnocking();
+            place();
+        });
+
+        watcher = new ResizeObserver(fit);
+        watcher.observe(host);
+
         listen((message) => {
             handed++;
             made.emitMessage(message);
@@ -109,6 +272,18 @@
         listen(null);
         loading = false;
         handed = 0;
+        showing = false;
+        knocked = false;
+        stopKnocking();
+        plane = null;
+        watcher?.disconnect();
+        watcher = null;
+        /*
+         * **映像を先に戻す。** BML の `<object>` に入ったままの入れ物ごと
+         * 消すと、`<video>` が文書から抜けて画面から映像が消える
+         */
+        place();
+        seat = null;
         browser?.destroy();
         browser = null;
         // 影ごと捨てる (上の説明)
@@ -117,8 +292,11 @@
     }
 
     $effect(() => {
-        if (on && media !== null && host !== null) void open();
-        else close();
+        const want = on && media !== null && host !== null ? (channel ?? '') : null;
+        if (want === shown) return;
+        close();
+        shown = want;
+        if (want !== null) void open();
     });
 
     /**
@@ -133,18 +311,14 @@
         const code = keyCodeToAribKey(event.key);
         if (code === -1) return;
         event.preventDefault();
-        const content = (browser as unknown as { content: { processKeyDown(k: number): void; processKeyUp(k: number): void } }).content;
-        if (down) content.processKeyDown(code);
-        else content.processKeyUp(code);
+        if (down) browser.content.processKeyDown(code);
+        else browser.content.processKeyUp(code);
     }
 
     onDestroy(close);
 </script>
 
-<svelte:window
-    onkeydown={(event) => void key(event, true)}
-    onkeyup={(event) => void key(event, false)}
-/>
+<svelte:window onkeydown={(event) => void key(event, true)} onkeyup={(event) => void key(event, false)} />
 
 <!--
     **映像と同じ枠に重ねる。** BML の画面は中で自分の大きさを決めるので、
@@ -157,5 +331,7 @@
     class:hidden={!on}
     data-testid="live-data"
     data-state={browser !== null ? 'ready' : loading ? 'loading' : 'off'}
+    data-showing={showing}
+    data-for={shown ?? ''}
     data-handed={handed}
 ></div>

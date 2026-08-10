@@ -294,9 +294,17 @@
 
             <!--
                 **データ放送。** 映像はここ (`frame`) に居るとだけ伝えて、
-                描くのは借りものに任せる。押されるまで 1.2MB を取りに行かない
+                描くのは借りものに任せる。押されるまで 1.2MB を取りに行かない。
+                **局が変わったら作り直す** — カルーセルも覚えるものも局ごと
             -->
-            <DataBroadcast on={player.showData} media={mediaBox} listen={player.listenData} />
+            <DataBroadcast
+                on={player.showData}
+                channel={player.tuned === null
+                    ? null
+                    : `${player.tuned.channelType}/${player.tuned.channel}/${player.tuned.serviceId}`}
+                media={mediaBox}
+                listen={player.listenData}
+            />
 
             {#if player.tuned !== null && player.state !== 'error'}
                 <!--
