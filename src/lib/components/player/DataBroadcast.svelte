@@ -22,6 +22,10 @@
      * 2. **隠れている間、映像を元の場所へ戻す** (`place`)。借りものは文書を
      *    組むたびに映像の入れ物を BML の `<object>` へ**移す**
      * 3. **960x540 を枠に合わせて伸ばす** (`fit`)。上流は原寸のまま
+     *
+     * 移す先は**閉じた影の中**で、表の CSS は届かない。映像の入れ物の
+     * 大きさを class ではなく style で書いてあるのはそのため
+     * ([live/+page.svelte](../../../routes/live/+page.svelte))
      */
     import { onDestroy } from 'svelte';
     import type { BMLBrowser } from '$lib/vendor/web-bml/client/bml_browser';

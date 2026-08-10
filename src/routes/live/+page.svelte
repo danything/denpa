@@ -245,11 +245,19 @@
                 渡すと親子が循環する** (借りている側が `appendChild ... contains
                 the parent` で転ぶ)。実機で1日これを探した
             -->
-            <div bind:this={mediaBox} class="absolute inset-0">
+            <!--
+                **ここだけ class ではなく style で書く。** データ放送を出している
+                間、この入れ物は BML の**閉じた影の中へ移される** — 影の中には
+                表の CSS (Tailwind) が届かないので、class で書いた大きさはそこで
+                消える。しかも BML の既定のスタイルは `div` に
+                `width:0; height:0` を与えるので、**映像が消える**。
+                じかに書いた指定は影の中でも効く
+            -->
+            <div bind:this={mediaBox} style="position:absolute; inset:0; width:100%; height:100%;">
                 <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_noninteractive_element_interactions -->
                 <video
                     bind:this={video}
-                    class="h-full w-full bg-black"
+                    style="width:100%; height:100%; background:#000;"
                     playsinline
                     onclick={toggle}
                     data-testid="live-video"

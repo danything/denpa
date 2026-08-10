@@ -22,8 +22,17 @@ function bmlCss(): Plugin {
      * 食わせてしまう (`Unknown word export` で転ぶ)
      */
     const MARK = '\0denpa:bml-css:';
-    /** **`.css` で終わらせない。** Vite の CSS 係は名前の末尾だけを見る */
-    const TAIL = '.txt';
+    /**
+     * **`.css` で終わらせない。** Vite の CSS 係は名前の末尾だけを見る。
+     *
+     * **`.js` で終わらせる。** Rolldown は名前の末尾で「何のファイルか」を
+     * 決めていて、`.txt` にすると*テキスト*と見なし、こちらが返した JS を
+     * **もう一度まるごと文字列に包む** (`export default "export default \"…\";"`)。
+     * 中身が二重になっても JS としては通ってしまうので、組み上げでは気づかず、
+     * **画面で「BML の既定の見た目が丸ごと効いていない」**という形で出る
+     * (実機で、映像が拡大されて左上に貼り付いた)
+     */
+    const TAIL = '.js';
     return {
         name: 'denpa:bml-css',
         enforce: 'pre',
