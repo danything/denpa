@@ -30,6 +30,13 @@ export interface FakeService {
      * 集めていない状態**は本物でも普通に起きるので、無理は無い
      */
     noPrograms?: boolean;
+    /**
+     * Hybridcast が載っている局。**AIT を流す。**
+     *
+     * データ放送と違って、アプリの中身は電波に乗ってこない — 乗っているのは
+     * 住所だけなので、偽の放送でも本物と同じものが作れる ([ts/ait.ts](../../src/lib/ts/ait.ts))
+     */
+    hybridcast?: { name: string; base: string; path: string };
 }
 
 export const SERVICES: FakeService[] = [
@@ -42,6 +49,7 @@ export const SERVICES: FakeService[] = [
         channel: 'T16',
         slotMs: 30 * 60_000,
         serviceType: 1,
+        hybridcast: { name: 'テスト連動', base: 'https://hybridcast.example.jp/', path: 'app.html' },
     },
     {
         id: 3274301064,

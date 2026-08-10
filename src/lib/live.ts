@@ -119,7 +119,32 @@ export type Notice =
           /** いま出しているもの (`CaptionTrack.index`) */
           track: number;
       }
+    | {
+          /**
+           * **Hybridcast が載っている番組。** AIT を読んで分かる
+           * ([ts/ait.ts](ts/ait.ts))。
+           *
+           * denpa は**動かしません** — 在ることと行き先を出すだけです。
+           * 動かすには受信機の API をアプリの文脈に用意する必要があり、
+           * 別オリジンのページには手を入れられません
+           * ([docs/stream.md](../../docs/stream.md#58-hybridcast))。
+           *
+           * 載っていない局では**一度も来ません** (PMT に印が無いので、
+           * AIT を待つこともしない)
+           */
+          type: 'hybridcast';
+          apps: HybridcastLink[];
+      }
     | { type: 'error'; message: string };
+
+/** 画面に出す Hybridcast のアプリ。**押すと別のタブで開くだけ** */
+export interface HybridcastLink {
+    /** 放送が付けた名前。入っていなければ空 */
+    name: string;
+    url: string;
+    /** `true` なら「選局したら勝手に始めよ」(テレビはそうする) */
+    autostart: boolean;
+}
 
 /**
  * ブラウザ→サーバの指示。

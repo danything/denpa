@@ -498,6 +498,62 @@ test.describe('ライブ視聴', () => {
     });
 
     /*
+     * **Hybridcast は、載っている局でだけ出る。**
+     *
+     * データ放送と決定的に違うのは、**アプリが電波に乗っていない**こと。
+     * 乗っているのは住所だけ (AIT) で、中身は放送局のサーバにある。
+     * denpa は**動かさない** — 在ることと行き先を出すだけで、押すと別の
+     * タブが開く ([stream.md](../../docs/stream.md#58-hybridcast))。
+     *
+     * 偽の放送では TOKYO MX にだけ AIT を載せてある (`tests/fake/services.ts`)。
+     * **載せていない局で出ないこと**まで見ないと、「常に出す」でも通ってしまう
+     */
+    test('Hybridcast が載っている局でだけ、行き先を出す', async ({ page }) => {
+        /*
+         * **本当に開かせない。** 行き先は存在しない相手なので、押したら
+         * 空のタブが1枚残るだけ。**どこへ開こうとしたか**が見たいので、
+         * `window.open` の引数を控える
+         */
+        await page.addInitScript(() => {
+            const seen = window as unknown as { __opened: string[] };
+            seen.__opened = [];
+            window.open = ((url?: string | URL) => {
+                seen.__opened.push(String(url));
+                return null;
+            }) as typeof window.open;
+        });
+        await goto(page, '/live');
+        const channels = page.getByTestId('live-channel');
+        await expect(channels.first()).toBeVisible();
+
+        // 局は名前ではなくIDで指す。名前は SDT 由来で、表示のしかたに引きずられる
+        const mx = page.locator(`[data-testid=live-channel][data-service="${SERVICES[0].id}"]`);
+        await mx.click();
+        await expect(page.getByTestId('live-title')).toBeVisible();
+
+        const button = page.getByTestId('live-hybridcast');
+        // AIT は表なので、繋いでから流れてくるまで少し待つ
+        await expect(button).toBeVisible({ timeout: 15_000 });
+        // **名前は放送が付けたもの。** 何のアプリなのかは局しか知らない
+        await expect(button).toHaveAttribute('aria-label', /テスト連動/);
+
+        /*
+         * **押すと別のタブ。** denpa の中では開かない — 受信機の API を
+         * 用意していないので、中で開くと「動くもの」に見えてしまう
+         */
+        await button.click();
+        expect(await page.evaluate(() => (window as unknown as { __opened: string[] }).__opened)).toEqual([
+            'https://hybridcast.example.jp/app.html',
+        ]);
+
+        // 載せていない局に移ると消える。**前の局のぶんを出したままにしない**
+        const other = page.locator(`[data-testid=live-channel][data-service="${SERVICES[1].id}"]`);
+        await other.click();
+        await expect(page.getByTestId('live-title')).toBeVisible();
+        await expect(button).toBeHidden();
+    });
+
+    /*
      * **郵便番号は、設定画面からデータ放送へ渡る。**
      *
      * 放送のアプリはこれを読んで、天気・地域のニュース・防災情報をどこの

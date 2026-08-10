@@ -20,7 +20,8 @@
  */
 
 import { type Audio, type AudioTrack, audioTracks, pickTrack } from '$lib/arib';
-import { CHANNEL, type LiveCodec, type Notice } from '$lib/live';
+import { CHANNEL, type HybridcastLink, type LiveCodec, type Notice } from '$lib/live';
+import { AitReader, APPLICATION_TYPE_HTML5, CONTROL } from '$lib/ts/ait';
 import { Fmp4Splitter } from '$lib/ts/fmp4';
 import { MkvSplitter } from '$lib/ts/mkv';
 import { ServiceFilter } from '$lib/ts/service-filter';
@@ -476,6 +477,17 @@ class Session {
      * 古くなるだけで、次に押した人はどのみち回ってくるのを待つ
      */
     private data: DataBroadcast | null = null;
+    /**
+     * Hybridcast を見つける側 (`ts/ait.ts`)。**押されなくても読む。**
+     *
+     * データ放送と違って解く量がほとんど無い — PMT に印が無ければ AIT を
+     * 待つこともしないので、載っていない局では**表を1枚も組み立てません**。
+     * 頼まれてから読む形にすると「押すまで在ることが分からない」になり、
+     * 出したいもの (在るという事実) がそのまま出せなくなります
+     */
+    private ait: AitReader | null = null;
+    /** 最後に伝えた Hybridcast。**同じものを伝え直さない** */
+    private toldApps = '';
     /** 最後に伝えた番組。**同じものを伝え直さない** (`programInfo`) */
     private toldEvent: number | null | undefined;
     private stopped = false;
@@ -522,6 +534,10 @@ class Session {
             this.tellOne(viewer, { type: 'captions', tracks: this.list.tracks, track: this.track });
         }
         if (this.showing !== null) this.handCaption(viewer, this.showing);
+        // **待たせない。** 途中から来た人にも、分かっているぶんはその場で渡す
+        if (this.toldApps !== '') {
+            this.tellOne(viewer, { type: 'hybridcast', apps: JSON.parse(this.toldApps) });
+        }
         // **出したままの人は、局を変えても出したまま** (`refreshData`)
         if (viewer.wantsData) this.refreshData(viewer);
     }
@@ -743,6 +759,7 @@ class Session {
                 // **絞ったあとを、もう一方へ分ける。** ffmpeg に渡すのと同じもの。
                 // 誰も出していなければ解かない (`wantData`)
                 this.data?.feed(out);
+                this.findHybridcast(out);
                 // **書けたことを待つ** (上の説明)。待たないと、転んだときに拾い手が居ない
                 await writer.write(out);
                 await writer.flush();
@@ -905,6 +922,35 @@ class Session {
             if (worthLogging(line)) {
                 console.warn(`[live] ${this.channelType}:${this.channel} ffmpeg: ${line.trim()}`);
             }
+        }
+    }
+
+    /**
+     * Hybridcast が載っていれば、在ることと行き先を伝える。
+     *
+     * **同じものは伝え直さない。** 放送は同じ表を数秒ごとに繰り返し流すので、
+     * 素直に配ると毎秒の知らせになる。
+     *
+     * `autostart` のものだけ出す判断はしません — テレビが勝手に始めるかどうかの
+     * 違いでしかなく、`present` (人が呼んだら始めるもの) も**在ることに変わりは
+     * ない**ためです。押したときの言い方だけ変えます
+     */
+    private findHybridcast(chunk: Uint8Array): void {
+        if (this.program <= 0) return;
+        this.ait ??= new AitReader(this.program);
+        for (const ait of this.ait.feed(chunk)) {
+            if (ait.applicationType !== APPLICATION_TYPE_HTML5) continue;
+            const apps: HybridcastLink[] = ait.applications
+                .filter((app) => app.controlCode === CONTROL.autostart || app.controlCode === CONTROL.present)
+                .map((app) => ({
+                    name: app.name,
+                    url: app.url,
+                    autostart: app.controlCode === CONTROL.autostart,
+                }));
+            const mark = JSON.stringify(apps);
+            if (mark === this.toldApps) continue;
+            this.toldApps = mark;
+            this.tell({ type: 'hybridcast', apps });
         }
     }
 

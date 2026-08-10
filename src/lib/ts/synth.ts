@@ -485,3 +485,66 @@ export function logoModule(
     }
     return Uint8Array.from(body);
 }
+
+/** PMT の ES に付ける application_signalling_descriptor (0x6F)。**AIT の在り処の印** */
+export function aitSignallingDescriptor(applicationType = 0x0010, version = 1): number[] {
+    return [0x6f, 0x03, ...be(applicationType), version & 0x1f];
+}
+
+export interface SynthHybridcastApp {
+    organisationId: number;
+    applicationId: number;
+    /** `CONTROL` の値。既定は autostart */
+    controlCode?: number;
+    name?: string;
+    /** URL の頭。**通信路で運ぶもの** (protocol_id = 3) として入れる */
+    base?: string;
+    /** その先の道 */
+    path?: string;
+}
+
+/**
+ * AIT (table_id 0x74)。**Hybridcast のアプリの住所が載っている表。**
+ *
+ * 中身そのものは電波に乗っていないので、ここに入るのは URL と名前だけ
+ */
+export function aitSection(applications: SynthHybridcastApp[], applicationType = 0x0010): Uint8Array {
+    const loop: number[] = [];
+    for (const app of applications) {
+        const info: number[] = [];
+        if (app.name !== undefined) {
+            const name = encodeAribText(app.name);
+            // application_name_descriptor: 言語 + 長さ + 中身
+            info.push(0x01, 4 + name.length, 0x6a, 0x70, 0x6e, name.length, ...name);
+        }
+        if (app.base !== undefined) {
+            const base = [...new TextEncoder().encode(app.base)];
+            // transport_protocol_descriptor: protocol_id=3 (通信路)、label、URL の頭
+            info.push(0x02, 5 + base.length, ...be(0x0003), 0x01, base.length, ...base, 0x00);
+        }
+        if (app.path !== undefined) {
+            const path = [...new TextEncoder().encode(app.path)];
+            info.push(0x15, path.length, ...path);
+        }
+        loop.push(
+            ...be(app.organisationId >> 16),
+            ...be(app.organisationId & 0xffff),
+            ...be(app.applicationId),
+            app.controlCode ?? 0x01,
+            ...be(0xf000 | info.length),
+            ...info,
+        );
+    }
+    return withCrc([
+        0x74,
+        0x00,
+        0x00,
+        ...be(0x8000 | applicationType),
+        0xc1,
+        0x00,
+        0x00,
+        ...be(0xf000), // common_descriptors_length = 0
+        ...be(0xf000 | loop.length),
+        ...loop,
+    ]);
+}

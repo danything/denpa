@@ -13,6 +13,7 @@
         DATA,
         EXPAND,
         INFO,
+        OPEN_OUT,
         OVERLAY,
         OVERLAY_BTN,
         PAUSE,
@@ -417,6 +418,32 @@
                             testid="live-data-button"
                             onclick={() => player.setData(!player.showData)}
                         />
+
+                        <!--
+                        **Hybridcast。載っている番組でだけ出す。**
+
+                        データ放送と違って、**アプリは電波に乗っていません** —
+                        電波に乗っているのは住所だけ (AIT) で、中身は放送局の
+                        サーバから取ります (`ts/ait.ts`)。
+
+                        **denpa は動かしません。別のタブで開くだけ**です。
+                        動かすには受信機の API をアプリの文脈に用意する必要が
+                        あり、別オリジンのページには手を入れられません。放送局の
+                        サーバが認証された受信機を期待することも多いので、
+                        **多くはそのままでは動きません**
+                        ([stream.md](../../../docs/stream.md#58-hybridcast))。
+                        できないものをできる顔で出さないために、d ボタンと同じ
+                        形にはせず「外へ出ていく」印にしてあります
+                    -->
+                        {#if player.hybridcast.length > 0}
+                            {@const app = player.hybridcast[0]}
+                            <ControlButton
+                                path={OPEN_OUT}
+                                label="{app.name === '' ? 'Hybridcast' : app.name} を別のタブで開く"
+                                testid="live-hybridcast"
+                                onclick={() => window.open(app.url, '_blank', 'noopener,noreferrer')}
+                            />
+                        {/if}
 
                         <!--
                         **字幕の選び直し。言語が2つ以上あるときだけ出す。**

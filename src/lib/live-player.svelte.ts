@@ -12,6 +12,7 @@ import {
     type CaptionTrack,
     CHANNEL,
     type Command,
+    type HybridcastLink,
     LAST_COOKIE,
     type LiveCodec,
     type Notice,
@@ -252,6 +253,13 @@ export function livePlayer() {
     let captionTracks = $state<CaptionTrack[]>([]);
     /** いま出している字幕 (`CaptionTrack.index`) */
     let captionTrack = $state(0);
+    /**
+     * この番組に載っている Hybridcast。**在ることを言うだけ。**
+     *
+     * denpa は動かさない — 押すと別のタブで開くだけで、受信機の API は
+     * 用意していない ([docs/stream.md](../../docs/stream.md#58-hybridcast))
+     */
+    let hybridcast = $state<HybridcastLink[]>([]);
 
     let socket: WebSocket | null = null;
     let source: MediaSource | null = null;
@@ -867,6 +875,8 @@ export function livePlayer() {
         if (!keepList) {
             captionTracks = [];
             captionTrack = 0;
+            // **局ごとのもの。** 局を変えたら、前の局のアプリを出したままにしない
+            hybridcast = [];
         }
         clear();
     }
@@ -1119,6 +1129,8 @@ export function livePlayer() {
                      */
                     captionTracks = notice.tracks;
                     captionTrack = notice.track;
+                } else if (notice.type === 'hybridcast') {
+                    hybridcast = notice.apps;
                 } else if (notice.type === 'tuned') {
                     /*
                      * **選べる音声はここで初めて分かる。** どれが選べるかは
@@ -1398,6 +1410,10 @@ export function livePlayer() {
         /** 放送が字幕を持っているか。**1枚も届いていなくても分かる** */
         get hasCaptions() {
             return captionTracks.length > 0;
+        },
+        /** この番組に載っている Hybridcast。**動かさない。行き先を出すだけ** */
+        get hybridcast() {
+            return hybridcast;
         },
         /** 選べる字幕。2本以上あれば画面は選び直しを出す */
         get captionTracks() {

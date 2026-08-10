@@ -11,6 +11,8 @@
  * どうかをテストで確かめられない。
  */
 import {
+    aitSection,
+    aitSignallingDescriptor,
     ddbSection,
     diiSection,
     eitSection,
@@ -224,6 +226,8 @@ export const pidsOf = (index: number) => ({
     pmt: 0x1000 + index * 0x10,
     video: 0x1001 + index * 0x10,
     audio: 0x1002 + index * 0x10,
+    /** Hybridcast の在り処 (AIT)。載せている局だけ使う */
+    ait: 0x1003 + index * 0x10,
 });
 
 /**
@@ -337,9 +341,29 @@ export function tables(services: FakeService[]): Uint8Array {
                 programMap(service.serviceId, pids.video, [
                     [0x02, pids.video],
                     [0x0f, pids.audio],
+                    // **印が付いた ES があって初めて AIT を読みに行く** (`ts/ait.ts`)
+                    ...(service.hybridcast === undefined
+                        ? []
+                        : ([[0x0d, pids.ait, aitSignallingDescriptor()]] as [number, number, number[]][])),
                 ]),
             ),
         );
+        if (service.hybridcast !== undefined) {
+            parts.push(
+                ...packetize(
+                    pids.ait,
+                    aitSection([
+                        {
+                            organisationId: service.networkId,
+                            applicationId: 1,
+                            name: service.hybridcast.name,
+                            base: service.hybridcast.base,
+                            path: service.hybridcast.path,
+                        },
+                    ]),
+                ),
+            );
+        }
     }
 
     const first = services[0];
