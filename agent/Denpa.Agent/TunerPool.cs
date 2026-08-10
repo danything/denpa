@@ -819,8 +819,17 @@ internal sealed class Lease(int tuner, string type, string channel)
     private void ReportOverflows(DeviceStream? ring)
     {
         if (ring is null) return;
-        var (count, worstGap) = ring.TakeOverflows();
-        if (count == 0) return;
+        var (count, worstGap, stale) = ring.TakeOverflows();
+        if (count == 0)
+        {
+            /*
+             * **選局の前に埋まっていたぶんは、読み手のせいではない。**
+             * 数には入れないが、黙って捨てると「本当に落ちていないのか」が
+             * 分からなくなるので、そうと分かる言い方で残す
+             */
+            if (stale > 0) Log.Write($"[{Tuner}] {Channel}: 選局前に環が {stale} 回溢れていました");
+            return;
+        }
         /*
          * **空いた時間も出す。** 環は 8MB = 地上波で 3.5 秒ぶんなので、
          * ここが 1 秒あたりで頭打ちなら**広げたはずの溜めが効いていない**

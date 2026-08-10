@@ -124,6 +124,20 @@ internal sealed unsafe class DeviceStream(SafeFileHandle handle) : Stream
     private int _worstGap;
 
     /// <summary>
+    /// この選局で一度でも中身を受け取ったか (<see cref="Begin"/> で false に戻る)。
+    ///
+    /// <para>
+    /// **最初の1回の溢れは、この選局のせいではない。** デバイスは選局を跨いで
+    /// 開きっぱなしなので、局を変えている間に環が埋まり、その印が読み始めた
+    /// 最初の <c>read</c> で返る。数に入れると**選局のたびに1回**増える。
+    /// </para>
+    /// </summary>
+    private bool _handed;
+
+    /// <summary>選局の前に溢れていた回数。**読み手のせいではない**ので分けて数える</summary>
+    private int _stale;
+
+    /// <summary>
     /// 前に聞かれてから環が溢れた回数と、**そのとき読み手がどれだけ空いていたか**。
     ///
     /// <para>
@@ -138,11 +152,12 @@ internal sealed unsafe class DeviceStream(SafeFileHandle handle) : Stream
     /// 溜めっぱなしにするとどの選局のときに溢れたのか分からなくなる。
     /// </para>
     /// </summary>
-    public (int Count, int WorstGapMs) TakeOverflows()
+    public (int Count, int WorstGapMs, int Stale) TakeOverflows()
     {
-        var taken = (_overflows, _worstGap);
+        var taken = (_overflows, _worstGap, _stale);
         _overflows = 0;
         _worstGap = 0;
+        _stale = 0;
         return taken;
     }
 
@@ -160,6 +175,8 @@ internal sealed unsafe class DeviceStream(SafeFileHandle handle) : Stream
     {
         _overflows = 0;
         _worstGap = 0;
+        _stale = 0;
+        _handed = false;
         _handedAt = Stopwatch.GetTimestamp();
     }
 
@@ -216,6 +233,7 @@ internal sealed unsafe class DeviceStream(SafeFileHandle handle) : Stream
                 var read = Sys.ReadFd(fd, target, (nuint)count);
                 if (read > 0)
                 {
+                    _handed = true;
                     _handedAt = Stopwatch.GetTimestamp();
                     return (int)read;
                 }
@@ -226,6 +244,17 @@ internal sealed unsafe class DeviceStream(SafeFileHandle handle) : Stream
                 if (failure is EAgain or EIntr) continue;
                 if (failure == EOverflow)
                 {
+                    /*
+                     * **まだ1バイトも受け取っていないなら、この選局のせいではない。**
+                     * 局を変えている間に埋まった環の印が、読み始めた最初の
+                     * `read` で返っているだけ (`_handed`)
+                     */
+                    if (!_handed)
+                    {
+                        _stale++;
+                        _handedAt = Stopwatch.GetTimestamp();
+                        continue;
+                    }
                     _overflows++;
                     /*
                      * **空いた時間も採る。** 溢れたということは、この時間ぶんの
