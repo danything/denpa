@@ -8,26 +8,21 @@
      *
      * ## 押されるまで何も読み込まない
      *
-     * 借りものは 1.2MB ある。**入れっぱなしにすると、データ放送を見ない人の
-     * ぶんまで毎回落ちてくる**ので、`import()` で押されてから取りに行く。
-     * どのみち押してからカルーセルが一周するのを待つので、そこに紛れる。
+     * 組み上がると 700KB の塊になる。**入れっぱなしにすると、データ放送を
+     * 見ない人のぶんまで毎回落ちてくる**ので、`import()` で押されてから
+     * 取りに行く。どのみち押してからカルーセルが一周するのを待つので、
+     * そこに紛れる。
      *
-     * ## 借りものと denpa の間で、こちらが持つ3つ
+     * ## 借りものが持っていないぶんは、ここでやる
      *
-     * 借りものは**画面の器を持たない** — 上流のアプリ (`client/index.ts`、
-     * denpa は借りていない) がやっていた3つを、こちらでやる:
+     * `BMLBrowser` は**画面の器を持たない**。上流の単体ページ
+     * (`client/index.ts`、denpa は借りていない) がやっていたことを、この
+     * ファイルが肩代わりしている — `knock` (d を渡す)・`place` (映像を戻す)・
+     * `fit` (枠に合わせる)・`indicator` (データ取得中)・`remember` (郵便番号)。
      *
-     * 1. **d を BML に渡す** (`knock`)。BML は `invisible` で始まり、
-     *    `DataButtonPressed` を受けて自分で出てくる
-     * 2. **隠れている間、映像を元の場所へ戻す** (`place`)。借りものは文書を
-     *    組むたびに映像の入れ物を BML の `<object>` へ**移す**
-     * 3. **960x540 を枠に合わせて伸ばす** (`fit`)。上流は原寸のまま
-     * 4. **「データ取得中」を出す** (`indicator`)。denpa は押されてから
-     *    電波を解きはじめるので、テレビより待つ
-     *
-     * 移す先は**閉じた影の中**で、表の CSS は届かない。映像の入れ物の
-     * 大きさを class ではなく style で書いてあるのはそのため
-     * ([live/+page.svelte](../../../routes/live/+page.svelte))
+     * **どれも抜けると「押しても何も出ない」形で壊れる。** 何がどう壊れるかは
+     * 借りもの側の README に1箇所だけ書いてある
+     * ([vendor/web-bml](../../vendor/web-bml/README.md#借りていないぶんこちらでやること))
      */
     import { onDestroy } from 'svelte';
     import type { BMLBrowser, Indicator } from '$lib/vendor/web-bml/client/bml_browser';
@@ -277,19 +272,24 @@
         knocks = 0;
     }
 
+    /** 押して離したことにする。**BML は押しっぱなしを嫌う** (離すまで次が来ない) */
+    function tap(code: number): void {
+        if (browser === null) return;
+        browser.content.processKeyDown(code);
+        browser.content.processKeyUp(code);
+    }
+
     /**
      * BML に d を叩いて見せる。
      *
      * denpa の d ボタンは**器の出し入れ**に使っているので、そのままでは
-     * BML に届かない。押して離したことにして、出てくるまで繰り返す
-     * (`KNOCK_TRIES`)
+     * BML に届かない。出てくるまで繰り返す (`KNOCK_TRIES`)
      */
     function knock(): void {
         knocking = null;
         if (browser === null || knocks <= 0) return;
         knocks--;
-        browser.content.processKeyDown(DATA_BUTTON);
-        browser.content.processKeyUp(DATA_BUTTON);
+        tap(DATA_BUTTON);
         knocking = setTimeout(knock, KNOCK_WAIT);
     }
 
@@ -406,11 +406,8 @@
             handed++;
             made.emitMessage(message);
         });
-        // 指のリモコンにも同じ口を渡す。押して離したことにするのは `knock` と同じ
-        remote((code) => {
-            made.content.processKeyDown(code);
-            made.content.processKeyUp(code);
-        });
+        // 指のリモコンにも同じ口を渡す
+        remote(tap);
     }
 
     function close(): void {

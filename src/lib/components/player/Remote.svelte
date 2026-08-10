@@ -22,7 +22,7 @@
      * `AribKeyCode` (`vendor/web-bml/client/content.ts`) と同じ値。
      *
      * **番号で書くのは、`content.ts` を読み込まずに済ませるため** — 値として
-     * import すると、このリモコンが載っているだけで借りもの全体 (1.2MB) が
+     * import すると、このリモコンが載っているだけで借りもの全体 (700KB) が
      * 落ちてくる。データ放送を出す前から出ている画面なので、それは困る
      */
     const UP = 1;
@@ -50,21 +50,14 @@
         { code: YELLOW, name: '黄', paint: 'bg-yellow-400 text-black' },
     ];
 
-    /** 数字。**畳んである** — 使う放送のほうが少ない (投票や郵便番号の入力) */
-    const DIGITS = [
-        { code: 6, name: '1' },
-        { code: 7, name: '2' },
-        { code: 8, name: '3' },
-        { code: 9, name: '4' },
-        { code: 10, name: '5' },
-        { code: 11, name: '6' },
-        { code: 12, name: '7' },
-        { code: 13, name: '8' },
-        { code: 14, name: '9' },
-        { code: 5, name: '0' },
-        { code: 15, name: '10' },
-        { code: 16, name: '11' },
-    ];
+    /**
+     * 数字。**並びは実機のリモコンと同じ** (1〜9・0・10・11)。
+     * `AribKeyCode` は `Digit0` が 5 で、そこから数の順に並んでいる。
+     *
+     * **畳んである** — 使う放送のほうが少ない (投票や郵便番号の入力)
+     */
+    const DIGITS = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '0', '10', '11'];
+    const digit = (name: string): number => 5 + Number(name);
 </script>
 
 <!--
@@ -112,14 +105,14 @@
         <details class="text-sm">
             <summary class="cursor-pointer select-none" data-testid="live-remote-digits">数字</summary>
             <div class="mt-2 grid grid-cols-3 gap-1">
-                {#each DIGITS as digit (digit.code)}
+                {#each DIGITS as name (name)}
                     <button
                         type="button"
                         class="btn btn-sm"
-                        onclick={() => press(digit.code)}
-                        data-testid="live-remote-digit-{digit.name}"
+                        onclick={() => press(digit(name))}
+                        data-testid="live-remote-digit-{name}"
                     >
-                        {digit.name}
+                        {name}
                     </button>
                 {/each}
             </div>
