@@ -15,8 +15,7 @@
 | どこに何があるか (ファイル・環境変数・画面・DB) | [app.md](app.md) |
 | 誰を通すか (OIDC・ベーシック認証) | [auth.md](auth.md) |
 | EPGStation からの引き継ぎ | [migrate.md](migrate.md) |
-| ライブ視聴 (放送中のものを観る。**映像・音声・字幕が入っています**) | [stream.md](stream.md) |
-| これからやるもの | [roadmap.md](roadmap.md) |
+| ライブ視聴 (放送中のものを観る。**映像・音声・字幕・データ放送が入っています**) | [stream.md](stream.md) |
 
 コードの置き場や設定名はここには書きません (app.md と二重に持つと必ず片方が古くなる)。
 

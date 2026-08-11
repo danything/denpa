@@ -636,13 +636,6 @@ export function livePlayer() {
     }
 
     /**
-     * 溜まりすぎを刈る。**止めている間も受け取り続けるので、放っておくと際限なく太る。**
-     *
-     * ブラウザが抱えられる量には上限があり、超えると `appendBuffer` が
-     * `QuotaExceededError` で落ちる。落ちるとそこから絵が出なくなるので、
-     * 遅れて見られる長さに上限を設けて、古いほうから捨てる。
-     */
-    /**
      * どれだけ戻れるか (秒)。**太い絵ほど短くなる。**
      *
      * 受け取っている速さから、`BUDGET` に収まる長さを出す。まだ測れていない
@@ -655,6 +648,13 @@ export function livePlayer() {
         return Math.max(KEEP_LEAST, Math.min(KEEP, BUDGET / perSecond));
     }
 
+    /**
+     * 溜まりすぎを刈る。**止めている間も受け取り続けるので、放っておくと際限なく太る。**
+     *
+     * ブラウザが抱えられる量には上限があり、超えると `appendBuffer` が
+     * `QuotaExceededError` で落ちる。落ちるとそこから絵が出なくなるので、
+     * 遅れて見られる長さに上限を設けて、古いほうから捨てる。
+     */
     function trim(end: number): void {
         if (buffer === null || buffer.updating || buffer.buffered.length === 0) return;
         const cut = end - keepFor();

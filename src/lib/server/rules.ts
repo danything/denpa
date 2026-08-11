@@ -40,7 +40,6 @@ export function haystack(
     return toHalfWidth(parts.join(' ')).toLowerCase();
 }
 
-/** JSON配列の文字列版。種別(GR/BS/CS)の絞り込みに使う */
 /**
  * 番組のジャンル。中分類まで持っている genre_detail を使い、
  * 取り込みが古くて入っていないものは大分類だけの genres で代用する

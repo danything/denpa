@@ -30,12 +30,6 @@ export function isVideoCodec(value: unknown): value is VideoCodec {
 }
 
 /**
- * 映像コーデックごとの設定。
- * AV1 は同じ画質でファイルが小さいがエンコードが遅い。非力なマシンでは h264 を選ぶ。
- * **どちらも 8bit。** 元の放送が 8bit で、10bit にしても差は 2% しか無い
- * (`videoArgs` の実測)。
- */
-/**
  * インタレ解除の出し方。
  *
  * `bwdif` の既定は `send_field` で、**1フィールドから1コマ作って 59.94p にする**。

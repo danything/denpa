@@ -64,10 +64,6 @@ export async function reserve(
 }
 
 /**
- * 予約の取り消し。録画中なら止めて、そこまでの分は録画済みとして残す
- * (途中まででも見たいことがあるのでファイルは捨てない)。
- */
-/**
  * 取り消した予約を戻す。
  *
  * ルールが作った予約を手で取り消すと、以後ルールは作り直さない
@@ -85,6 +81,10 @@ export async function restore(reservationId: number): Promise<void> {
     await resolveConflicts();
 }
 
+/**
+ * 予約の取り消し。録画中なら止めて、そこまでの分は録画済みとして残す
+ * (途中まででも見たいことがあるのでファイルは捨てない)。
+ */
 export async function cancel(reservationId: number): Promise<void> {
     const reservation = queryOne<Reservation>('SELECT * FROM reservations WHERE id = ?', reservationId);
     if (reservation === undefined) return;

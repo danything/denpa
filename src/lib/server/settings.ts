@@ -73,9 +73,10 @@ export interface Settings {
     /**
      * データ放送の双方向 (通信系コンテンツ) を使うか。**既定は切。**
      *
-     * 入れると denpa のサーバが**放送局のサーバへ代理で取りに行きます**
-     * (`server/bml-network.ts`)。取ってくるだけ (GET) で、応募・投票の送信は
-     * しません。切っている間は `isIPConnected` が 0 を返すので、放送のアプリは
+     * 入れると denpa のサーバが**放送局のサーバへ代理で取りに行き、送りもします**
+     * (`server/bml-network.ts`)。取得 (GET) だけでなく、放送のアプリが組んだ
+     * 応募・投票の送信 (POST = `transmitTextDataOverIP`) もそのまま中継します。
+     * 切っている間は `isIPConnected` が 0 を返すので、放送のアプリは
      * 「インターネットに接続されていません」と正しく案内します
      */
     bmlNetwork: boolean;

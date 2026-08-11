@@ -37,7 +37,7 @@ import { connect } from 'node:net';
 /** 追いかける上限。放送局は https へ寄せるのに1回挟むことがある */
 const HOPS = 3;
 /** 受け取る上限 */
-export const LIMIT = 4 * 1024 * 1024;
+const LIMIT = 4 * 1024 * 1024;
 /** 待つ上限 */
 const TIMEOUT = 10_000;
 
@@ -87,7 +87,7 @@ export function isPublicAddress(address: string): boolean {
  * 名前で弾こうとすると `localhost` の別名や、内側を指す公開の名前
  * (いわゆる DNS リバインディング) が抜けます
  */
-export async function resolvable(host: string): Promise<void> {
+async function resolvable(host: string): Promise<void> {
     let found: { address: string }[];
     try {
         found = await lookup(host, { all: true });

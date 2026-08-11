@@ -189,6 +189,20 @@ OIDC_GROUP=...   # このグループに居る人だけ通す (省くと入れ�
 だから「画面は OIDC・プレイヤーはベーシック認証」の2本立てになります。
 入れ方は [docs/auth.md](docs/auth.md) に。
 
+## 確かめきれていないこと (情報を募っています)
+
+**手元の機材では当てられていないところです。** 動いた/動かなかったを
+[Issue](https://github.com/danything/denpa/issues) で教えてもらえると、ここを埋められます。
+
+- **`px4_drv` を chardev (`/dev/px4video*`) で使うチューナーでの選局。** 手元には
+  Linux DVB のチューナーしか無く、chardev のものは当てられていません。コードは
+  書いてありますが、値は `px4_drv` と `recisdb` の資料から取ったものです
+- **CM検出がどれくらい当たるか、数では言えていません。** 個々の録画では追えて
+  いますが (合致率・CM の割合・外したときの理由)、何本中何本が正しく切れたかは
+  集計していません
+- **局ロゴの学習に要る最短の尺。** 事前学習は5分で掴めていますが、下限は
+  測っていません
+
 ## もっと詳しく
 
 - [docs/architecture.md](docs/architecture.md) — **なぜこの形なのか** (決めたこと・踏んだ落とし穴)
@@ -200,7 +214,6 @@ OIDC_GROUP=...   # このグループに居る人だけ通す (省くと入れ�
 - [docs/encode.md](docs/encode.md) — CM とエンコード (字幕・AV1・CM検出)
 - [docs/auth.md](docs/auth.md) — **誰を通すか** (OIDC でのログイン・ベーシック認証)
 - [docs/migrate.md](docs/migrate.md) — **EPGStation からの引き継ぎ**
-- [docs/roadmap.md](docs/roadmap.md) — これから入れるもの
 - [docs/stream.md](docs/stream.md) — **ライブ視聴** (放送中のものを観る)
 
 ## ライセンス

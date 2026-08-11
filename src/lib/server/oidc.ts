@@ -55,7 +55,7 @@ export function forget(): void {
 
 const encoder = new TextEncoder();
 
-export function base64Url(bytes: Uint8Array): string {
+function base64Url(bytes: Uint8Array): string {
     return btoa(String.fromCharCode(...bytes))
         .replace(/\+/g, '-')
         .replace(/\//g, '_')

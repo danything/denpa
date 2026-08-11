@@ -30,7 +30,6 @@ interface GridProgram extends Program {
      * 録画一覧まで戻って同じ番組を探し直させないため
      */
     recording_id: number | null;
-    recording_name: string | null;
     /** 配信は library_path ?? ts_path を返すので、どちらかがあれば開ける */
     library_path: string | null;
     ts_path: string | null;
@@ -64,7 +63,7 @@ export async function load({ url }) {
          */
         `SELECT p.*,
                 CASE WHEN r.id IS NULL THEN NULL ELSE ${RESERVATION_STATE} END AS reservation_state,
-                rec.id AS recording_id, rec.name AS recording_name,
+                rec.id AS recording_id,
                 rec.library_path, rec.ts_path
          FROM programs p
          JOIN services s ON s.id = p.service_id
@@ -111,9 +110,6 @@ export async function load({ url }) {
         watchable,
         // 放送していない局は出さない (終わったチャンネル・相乗り中のサブチャンネル)
         services: airing(services, programs),
-        counts: queryOne<{ programs: number; services: number }>(
-            'SELECT (SELECT COUNT(*) FROM programs) AS programs, (SELECT COUNT(*) FROM services) AS services',
-        )!,
         // 録れた番組は詳細からそのまま観られる。落とすときの資格情報は録画一覧と同じ
         ...downloadContext(url),
     };

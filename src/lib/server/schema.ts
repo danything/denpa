@@ -196,9 +196,10 @@ CREATE TABLE IF NOT EXISTS rules (
     -- ルールは 1、手動予約は 2。前は 2/3 から始めていたが、
     -- 比べる相手は予約どうしだけなので小さいところから数える
     priority INTEGER NOT NULL DEFAULT 1,
-    -- **焼き方は持たない。** エンコードするか・生TSを残すか・CMの扱い・コーデックは
-    -- 全体設定 (settings) で、焼くときに読む。ルールにも予約にも写さない —
-    -- 同じ設定が2箇所にあると、片方だけ古くなって画面が嘘をつく
+    -- **焼き方の細目 (生TSを残すか・CMの扱い・コーデック) は持たない。** 全体設定
+    -- (settings) を焼くときに読む — 2箇所にあると片方だけ古くなって画面が嘘をつく。
+    -- 予約が写しで固定するのは「焼くか否か」(encode) だけで、予約した時点で決まる
+    -- (後から設定を変えても、積んである録画の焼く/焼かないは変えない)
     created_at INTEGER NOT NULL
 );
 
@@ -214,6 +215,8 @@ CREATE TABLE IF NOT EXISTS reservations (
     end_at INTEGER NOT NULL,
     priority INTEGER NOT NULL DEFAULT 2,
     manual INTEGER NOT NULL DEFAULT 0,
+    -- 「焼くか否か」は予約時に固定する (recorder が読む)。keep_original/cm_cut/codec は
+    -- 昔の写しの名残で、いまは読まない — 焼き方の細目は焼くときに settings を見る
     encode INTEGER NOT NULL DEFAULT 1,
     keep_original INTEGER NOT NULL DEFAULT 0,
     -- off / chapter / cut
