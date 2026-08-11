@@ -95,8 +95,13 @@
             while (stack.length > 0) {
                 const rule = stack.pop();
                 if (rule === undefined) break;
-                if (rule instanceof CSSMediaRule) {
-                    stack.push(...Array.from(rule.cssRules));
+                /*
+                 * **入れ子はぜんぶ潜る。** `@media` だけ見ていたら 0件だった —
+                 * Tailwind は中身を `@layer` に入れるので、そこで止まる
+                 */
+                const inner = (rule as CSSRule & { cssRules?: CSSRuleList }).cssRules;
+                if (inner !== undefined) {
+                    stack.push(...Array.from(inner));
                     continue;
                 }
                 if (rule instanceof CSSStyleRule) {
