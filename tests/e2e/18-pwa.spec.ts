@@ -64,6 +64,33 @@ test.describe('PWA', () => {
         expect(immutable.headers()['cache-control']).toContain('immutable');
     });
 
+    /*
+     * **中だけ動かす画面は、ページごと動かない。**
+     *
+     * 土台は `100dvh` (いま見えている高さ) で採る。ここに `vh`
+     * (アドレスバーが引っ込んだときの高さ) が混ざると、**中身のほうが土台より
+     * 高くなり**、バーが出ている間ずっとページごと少し動く。実機の PWA で
+     * 「リロードすると画面全体がスクロールできる」として出た。
+     *
+     * ブラウザの自動運転では引っ込むバーを作れないので、ここで見るのは
+     * 「はみ出していないこと」。単位の食い違いはこの形で表に出る
+     */
+    test('二段組の画面はページごとスクロールしない', async ({ page }) => {
+        for (const width of [768, 915, 1280]) {
+            await page.setViewportSize({ width, height: 700 });
+            for (const path of ['/', '/guide', '/rules']) {
+                await goto(page, path);
+                const doc = await page.evaluate(() => ({
+                    scrollH: document.documentElement.scrollHeight,
+                    clientH: document.documentElement.clientHeight,
+                }));
+                expect(doc.scrollH, `${path} が ${width}px で縦に流れる`).toBeLessThanOrEqual(
+                    doc.clientH + 1,
+                );
+            }
+        }
+    });
+
     test('サービスワーカーが登録され、APIは横取りしない', async ({ page }) => {
         await goto(page, '/');
         const registered = await page.evaluate(async () => {

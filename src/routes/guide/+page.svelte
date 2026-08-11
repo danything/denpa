@@ -175,8 +175,13 @@
     先に終わって**いた (実測で 1880x960 の窓に 130px の余り)。番組表は縦に
     長いほど読めるものなので、余りは表に回す。
 
-    畳まれる幅ではページごとスクロールさせるので、そちらは 75vh のまま —
-    小さい画面で中だけスクロールさせると、指の届く範囲が二重になる
+    畳まれる幅ではページごとスクロールさせるので、そちらは 75% のまま —
+    小さい画面で中だけスクロールさせると、指の届く範囲が二重になる。
+
+    **ただし `vh` ではなく `dvh` で採る。** 土台は `100dvh` (いま見えている
+    高さ) なのに、こちらだけ `vh` (アドレスバーが引っ込んだときの高さ) だと、
+    **中身のほうが土台より高くなる** — バーが出ている間ずっと、ページごと
+    少し動く画面になっていた
 -->
 <div class="md:flex md:h-full md:flex-col">
     <!--
@@ -240,7 +245,7 @@
         </div>
     {:else}
         <div
-            class="rounded-box bg-base-100 max-h-[75vh] cursor-grab overflow-auto shadow
+            class="rounded-box bg-base-100 max-h-[75dvh] cursor-grab overflow-auto shadow
                active:cursor-grabbing md:max-h-none md:min-h-0 md:flex-1"
             use:dragScroll
             bind:this={grid}

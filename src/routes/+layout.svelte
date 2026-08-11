@@ -143,15 +143,19 @@
 </svelte:head>
 
 <!--
-    **土台の高さも `dvh` で採る。** `100vh` はスマホでは**アドレスバーが
+    **土台の高さは上も下も `dvh` で採る。** `100vh` はスマホでは**アドレスバーが
     引っ込んだときの高さ**なので、バーが出ている間は中身が無くても画面より
     高くなり、いつも少し下へ動く。`dvh` は「いま見えている高さ」。
 
-    `lg:` のほうは `vh` のままでよい — 引っ込むバーがあるのは携帯だけで、
-    あちらは掴んで動かす枠の基準に使っている
+    **`md:` のほうも `vh` にしない。** 二段組にする線は 768px で、
+    **横に倒した携帯はここを越える** (915x412 など)。`h-screen` (= `100vh`)
+    のままだと、バーが出ている間は土台がバーのぶんだけ画面より高くなり、
+    中だけ動かすつもりの画面が**ページごと動く**
 -->
 <div
-    class="flex min-h-[100dvh] flex-col bg-base-200 {fill ? 'md:h-screen md:min-h-0 md:overflow-hidden' : ''}"
+    class="flex min-h-[100dvh] flex-col bg-base-200 {fill
+        ? 'md:h-[100dvh] md:min-h-0 md:overflow-hidden'
+        : ''}"
     data-hydrated={hydrated ? 'true' : undefined}
 >
     <div class="navbar bg-base-100 sticky top-0 z-40 shadow-sm">
