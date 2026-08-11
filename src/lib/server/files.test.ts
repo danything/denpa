@@ -168,6 +168,49 @@ describe('実体との照合', () => {
         expect(existsSync(join(config.libraryDir, '番組'))).toBe(false);
     });
 
+    /*
+     * **ファイルの無いフォルダは、掃除の目に入らない。** 付き添いの掃除は
+     * ファイルを消した道すがらでしか畳まないので、既に空のフォルダは
+     * 一生残っていた (実機の保存先に7組)。フォルダを辿るプレイヤーには
+     * 中身の無いシリーズとして並び続ける
+     */
+    test('すでに空のフォルダも畳む', () => {
+        fresh();
+        const season = join(config.libraryDir, '消した番組/Season 2026');
+        mkdirSync(season, { recursive: true });
+        const old = new Date(Date.now() - 2 * 60 * 60 * 1000);
+        utimesSync(season, old, old);
+        utimesSync(dirname(season), old, old);
+
+        expect(reconcile().pruned).toBe(2);
+        expect(existsSync(join(config.libraryDir, '消した番組'))).toBe(false);
+    });
+
+    /*
+     * **作りたてのフォルダは畳まない。** エンコードが `mkdir` してから
+     * ファイルを置くまでの間に照合が走ると、置き場を消してしまう
+     */
+    test('作りたての空フォルダは畳まない', () => {
+        fresh();
+        mkdirSync(join(config.libraryDir, '焼いている番組/Season 2026'), { recursive: true });
+
+        expect(reconcile().pruned).toBe(0);
+        expect(existsSync(join(config.libraryDir, '焼いている番組/Season 2026'))).toBe(true);
+    });
+
+    /** 動画の残っているフォルダは、当然そのまま */
+    test('中身のあるフォルダは畳まない', () => {
+        fresh();
+        put(config.libraryDir, '生きている番組/Season 2026/生きている番組 - 1.mkv');
+        // フォルダ自体も古くしておく (作りたて避けに引っかからないように)
+        const old = new Date(Date.now() - 2 * 60 * 60 * 1000);
+        utimesSync(join(config.libraryDir, '生きている番組/Season 2026'), old, old);
+        utimesSync(join(config.libraryDir, '生きている番組'), old, old);
+
+        expect(reconcile().pruned).toBe(0);
+        expect(existsSync(join(config.libraryDir, '生きている番組/Season 2026'))).toBe(true);
+    });
+
     test('DBに無い動画は数えるだけ。手で置いたものかもしれない', () => {
         fresh();
         put(config.libraryDir, '手で置いた/Season 2026/手で置いた - 1.mkv');

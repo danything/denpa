@@ -1,4 +1,4 @@
-import { type Dirent, existsSync, readdirSync, statSync } from 'node:fs';
+import { type Dirent, existsSync, readdirSync, rmdirSync, statSync } from 'node:fs';
 import { basename, dirname, join } from 'node:path';
 import type { Recording } from '../types';
 import { config } from './config';
@@ -42,7 +42,13 @@ export function deleteRecordingFiles(recording: Recording, reason: string): void
  * **動画そのものには触らない。** 行の無い動画は、手で置いたものかもしれない。
  * 数だけ数えて、消すかどうかは人が決める。
  */
-export function reconcile(): { checked: number; removed: number; swept: number; strays: number } {
+export function reconcile(): {
+    checked: number;
+    removed: number;
+    swept: number;
+    strays: number;
+    pruned: number;
+} {
     const recordings = queryAll<Recording>(
         `SELECT * FROM recordings WHERE library_path IS NOT NULL AND deleted_at IS NULL`,
     );
@@ -100,7 +106,7 @@ function settling(path: string, at: number): boolean {
  * 実機では生TSの置き場に `.dtvi` が9本 (22MB) 残っていた。生TSを残さない設定だと
  * TS が消えたあとも索引だけが居座り、録るたびに積もる。
  */
-function sweepLeftovers(): { swept: number; strays: number } {
+function sweepLeftovers(): { swept: number; strays: number; pruned: number } {
     const known = new Set(
         queryAll<{ path: string | null }>(
             `SELECT ts_path AS path FROM recordings WHERE ts_path IS NOT NULL
@@ -128,8 +134,40 @@ function sweepLeftovers(): { swept: number; strays: number } {
             swept++;
         }
     }
+
+    /*
+     * **すでに空のフォルダも畳む。**
+     *
+     * 上の掃除は「ファイルを消した道すがら」しか畳まない。ファイルの無い
+     * フォルダは `walk` (ファイルだけを返す) の目に入らず、**一生残る** —
+     * 実機の保存先に、中身が1つも無いシリーズのフォルダが7組残っていた。
+     * フォルダを辿るプレイヤー (WebDAV の Nova など) には、それが**中身の
+     * 無いシリーズとして並び続ける**。
+     *
+     * 深いものから試す。親は子が消えてはじめて空になる。**空でなければ
+     * `rmdir` が断ってくれる**ので、中身の確認はしない。作りたては飛ばす —
+     * エンコードがこれからファイルを置くところかもしれない。
+     *
+     * **古さは消す前にまとめて見る。** 子を `rmdir` すると親の mtime が
+     * いま になるので、消しながら見ると**自分の掃除で親が作りたてに化けて**
+     * シリーズのフォルダだけ残る
+     */
+    const dirs = walkDirs(config.libraryDir)
+        .filter((dir) => !settling(dir, at))
+        .sort((a, b) => b.length - a.length);
+    let pruned = 0;
+    for (const dir of dirs) {
+        try {
+            rmdirSync(dir);
+            pruned++;
+        } catch {
+            // 空でない。それが正常
+        }
+    }
+
     if (swept > 0) console.log(`[files] 連れ合いの無い付き添いを片付けました: ${swept} 件`);
-    return { swept, strays };
+    if (pruned > 0) console.log(`[files] 空のフォルダを畳みました: ${pruned} 件`);
+    return { swept, strays, pruned };
 }
 
 /** シリーズ全体の覚え書き。エピソードが1つでも残っていれば要る */
@@ -151,6 +189,23 @@ function orphan(path: string, videos: Set<string>): boolean {
     if (base === null) return false;
     // どの入れ物で置いたかまでは名前から分からないので、当てはまるものを全部見る
     return !['m2ts', 'ts', 'mkv', 'mp4'].some((extension) => videos.has(`${base[1]}.${extension}`));
+}
+
+/** フォルダだけを全部拾う。`walk` はファイルしか返さないので、空のフォルダ用 */
+function walkDirs(dir: string, out: string[] = []): string[] {
+    let entries: Dirent[];
+    try {
+        entries = readdirSync(dir, { withFileTypes: true });
+    } catch {
+        return out;
+    }
+    for (const entry of entries) {
+        if (!entry.isDirectory()) continue;
+        const path = join(dir, entry.name);
+        out.push(path);
+        walkDirs(path, out);
+    }
+    return out;
 }
 
 function walk(dir: string, out: string[] = []): string[] {
