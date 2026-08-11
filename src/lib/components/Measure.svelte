@@ -28,10 +28,22 @@
     }
 
     let inner = $state(0);
+    let width = $state(0);
     let client = $state(0);
     let scroll = $state(0);
     let units = $state<Units | null>(null);
     let mode = $state('');
+    let wide = $state(false);
+    /**
+     * 土台の実際の姿。
+     *
+     * **塞いであるはずのものが塞がっていないことがある。** 二段組の画面では
+     * 土台に `md:h-[100dvh] md:overflow-hidden` が当たっていて、当たっていれば
+     * ページごと動きようがない。**はみ出しが出ているのに当たっている**なら、
+     * はみ出させているのは土台の外に居るもの (`position: fixed` は塞ぎを
+     * すり抜ける)
+     */
+    let base = $state('');
     let culprits = $state<Culprit[]>([]);
 
     const over = $derived(scroll - client);
@@ -96,12 +108,25 @@
 
     function take(): void {
         inner = Math.round(window.innerHeight);
+        width = Math.round(window.innerWidth);
         client = document.documentElement.clientHeight;
         scroll = document.documentElement.scrollHeight;
         units = measureUnits();
-        mode = ['standalone', 'fullscreen', 'minimal-ui', 'browser'].find(
-            (m) => matchMedia(`(display-mode: ${m})`).matches,
-        ) ?? '?';
+        mode =
+            ['standalone', 'fullscreen', 'minimal-ui', 'browser'].find(
+                (m) => matchMedia(`(display-mode: ${m})`).matches,
+            ) ?? '?';
+        // 二段組にする線。ここを越えているかで、土台に当たる決まりが変わる
+        wide = matchMedia('(min-width: 768px)').matches;
+
+        const root = document.querySelector('body > div > div');
+        if (root === null) {
+            base = '土台が見つからない';
+        } else {
+            const style = getComputedStyle(root);
+            base = `土台 ${Math.round(root.getBoundingClientRect().height)} (h:${style.height} over:${style.overflowY})`;
+        }
+
         culprits = findCulprits(client);
     }
 
@@ -130,9 +155,10 @@
     data-testid="measure"
 >
     <div>
-        窓 {inner} / 枠 {client} / 中身 {scroll} =
+        窓 {width}x{inner} / 枠 {client} / 中身 {scroll} =
         <b class={over > 1 ? 'text-red-400' : 'text-green-400'}>はみ出し {over}</b>
     </div>
+    <div>{base} / {wide ? '二段組 (md)' : '一段 (md 未満)'}</div>
     {#if units !== null}
         <div>dvh {units.dvh} / svh {units.svh} / lvh {units.lvh} / vh {units.vh} — {mode}</div>
     {/if}
