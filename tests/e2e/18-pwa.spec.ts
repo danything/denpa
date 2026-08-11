@@ -110,6 +110,34 @@ test.describe('PWA', () => {
 
         // 読むための札が、下のものを触れなくしては本末転倒
         expect(await badge.evaluate((el) => getComputedStyle(el).pointerEvents)).toBe('none');
+
+        // **URL には居座らせない。** 1回だけ見たいときの手なので、外せば消える
+        await goto(page, '/guide');
+        await expect(page.getByTestId('measure')).toHaveCount(0);
+    });
+
+    /*
+     * **PWA にはアドレスバーが無い。**
+     *
+     * `?measure` を打つところがないので、設定画面から入れられないと
+     * ホーム画面から開いたアプリでは一生出せない (実機で詰まった)。
+     * 覚えるので、**リロードしても消えない** — 見たいのはまさにその後
+     */
+    test('高さの札は設定から入れられて、リロードしても消えない', async ({ page }) => {
+        await goto(page, '/settings');
+        await page.getByTestId('measure-toggle').check();
+        await expect(page.getByTestId('measure')).toBeVisible();
+
+        // アドレスバーを使わずに別の画面へ行っても付いてくる
+        await goto(page, '/guide');
+        await expect(page.getByTestId('measure')).toBeVisible();
+        await page.reload();
+        await expect(page.getByTestId('measure')).toBeVisible();
+
+        // 後片付け。**入れっぱなしにしない**
+        await goto(page, '/settings');
+        await page.getByTestId('measure-toggle').uncheck();
+        await expect(page.getByTestId('measure')).toHaveCount(0);
     });
 
     test('サービスワーカーが登録され、APIは横取りしない', async ({ page }) => {

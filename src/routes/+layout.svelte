@@ -5,17 +5,23 @@
     import { navigating, page } from '$app/state';
     import { busy } from '$lib/busy.svelte';
     import Measure from '$lib/components/Measure.svelte';
+    import { measure } from '$lib/measure.svelte';
 
     let { children, data } = $props();
 
     /**
-     * **その端末の高さを読む札** (`?measure` を付けたときだけ)。
+     * **その端末の高さを読む札。**
      *
      * 縦のはみ出しは端末でしか起きないことがある — 自動運転のブラウザには
      * 引っ込むアドレスバーが作れない。実機の PWA で「リロードすると画面全体が
-     * スクロールできる」として出たとき、**数を見る手が1つも無かった**
+     * スクロールできる」として出たとき、**数を見る手が1つも無かった**。
+     *
+     * 入り口は2つ。`?measure` (1回だけ見る) と、設定画面の入り切り
+     * (覚える) — **PWA にはアドレスバーが無い**ので、URL だけでは入れない
      */
-    const measuring = $derived(page.url.searchParams.has('measure'));
+    $effect(() => {
+        measure.start(page.url);
+    });
 
     // ハイドレーション完了の目印。SSR直後のDOMに入力しても、ハイドレーションで
     // 値が書き戻されて消える。E2Eはこの印が付くのを待ってから操作する
@@ -272,6 +278,6 @@
     </main>
 </div>
 
-{#if measuring}
+{#if measure.on}
     <Measure />
 {/if}

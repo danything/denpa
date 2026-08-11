@@ -4,6 +4,7 @@
     import Toasts, { type Notice } from '$lib/components/Toasts.svelte';
     import { dateTime } from '$lib/format';
     import { liveUpdates } from '$lib/live-updates.svelte';
+    import { measure } from '$lib/measure.svelte';
     import { EVENT_LABEL } from '$lib/webhook-events';
 
     let { data, form } = $props();
@@ -631,6 +632,44 @@
                         {/if}
                     </div>
                 {/if}
+            </div>
+        </section>
+
+        <!--
+            **端末でしか出ない食い違いを、その端末で読むための口。**
+
+            縦のはみ出し (ページごと動いてしまう) は、引っ込むアドレスバーや
+            画面の切り欠きが絡むと**その端末でしか起きない**。自動運転の
+            ブラウザには作れないので、手元では再現できない。
+
+            **入り口をここに置くのは、PWA にアドレスバーが無いため。**
+            `?measure` を付ければ同じものが出るが、ホーム画面から開いた
+            アプリでは URL を打つところがない。
+        -->
+        <section class="card bg-base-100 shadow" data-testid="measure-card">
+            <div class="card-body">
+                <h2 class="card-title">画面の高さを見る</h2>
+                <p class="text-base-content/70 text-sm">
+                    右下に、その端末での高さを出します。<strong>この端末だけ</strong>の設定で、
+                    サーバにも他の端末にも伝わりません。
+                </p>
+
+                <label class="label cursor-pointer justify-start gap-3">
+                    <input
+                        type="checkbox"
+                        class="toggle"
+                        checked={measure.on}
+                        onchange={(event) => measure.set(event.currentTarget.checked)}
+                        data-testid="measure-toggle"
+                    />
+                    <span class="label-text">高さの札を出す</span>
+                </label>
+
+                <p class="text-base-content/60 text-xs">
+                    出るのは「窓 / 枠 / 中身 = はみ出し」「dvh / svh / lvh / vh の実測」と、
+                    <strong>はみ出している要素</strong>。はみ出しが 0 でなければページごと動きます。
+                    単位の4つが同じ数なら、食い違いが原因ではありません。
+                </p>
             </div>
         </section>
     </div>
