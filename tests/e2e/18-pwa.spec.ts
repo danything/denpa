@@ -1,3 +1,4 @@
+import { readFile } from 'node:fs/promises';
 import { expect, goto, test } from './helpers';
 
 /**
@@ -80,19 +81,40 @@ test.describe('PWA', () => {
             await page.setViewportSize({ width, height: 700 });
             for (const path of ['/', '/guide', '/rules']) {
                 await goto(page, path);
-                const doc = await page.evaluate(() => ({
-                    scrollH: document.documentElement.scrollHeight,
-                    clientH: document.documentElement.clientHeight,
-                    // **土台の高さは測った値から採る。** 単位 (vh / dvh) が
-                    // 画面の高さと一致しない端末があった
-                    appH: getComputedStyle(document.documentElement).getPropertyValue('--app-h'),
-                }));
+                const doc = await page.evaluate(() => {
+                    const root = document.querySelector('[data-root]') as HTMLElement;
+                    return {
+                        scrollH: document.documentElement.scrollHeight,
+                        clientH: document.documentElement.clientHeight,
+                        rootH: Math.round(root.getBoundingClientRect().height),
+                    };
+                });
                 expect(doc.scrollH, `${path} が ${width}px で縦に流れる`).toBeLessThanOrEqual(
                     doc.clientH + 1,
                 );
-                expect(doc.appH.trim(), `${path} の --app-h`).toBe(`${doc.clientH}px`);
+                /*
+                 * **土台は画面ちょうど。** 単位 (`vh` / `dvh`) で言い当てず、
+                 * `html` から `%` で降ろしているので、ずれようがない。
+                 * 実機では `100dvh` が 56px 大きく出て、ここがずれていた
+                 */
+                expect(doc.rootH, `${path} の土台が ${width}px で画面と違う`).toBe(doc.clientH);
             }
         }
+    });
+
+    /*
+     * **土台は単位で高さを決めない。**
+     *
+     * `100vh` も `100dvh` も「画面の高さ」を*言い当てようとする*もので、
+     * 携帯では当たらないことがある (実機の PWA で 56px 大きく出た)。
+     * `html` に高さを与えて `%` で降ろせば、言い当てる余地が無い
+     */
+    test('土台の高さに画面単位を使わない', async () => {
+        const layout = await readFile('src/routes/+layout.svelte', 'utf8');
+        const root = /<div\s+class="(flex min-h-[^"]*)"/.exec(layout)?.[1];
+        expect(root, '土台の class が見つからない').toBeTruthy();
+        expect(root).toContain('min-h-full');
+        expect(root).not.toMatch(/\b\d+(dvh|svh|lvh|vh)\b|h-screen/);
     });
 
     /*

@@ -195,18 +195,17 @@
 </svelte:head>
 
 <!--
-    **土台の高さは上も下も `--app-h`。** 単位 (`vh` / `dvh`) に訊かず、
-    `documentElement.clientHeight` を測って写した値
-    (上の `$effect`)。`100vh` はアドレスバーが引っ込んだときの高さ、
-    `100dvh` は「いま見えている高さ」……のはずだが、**実機ではどちらも
-    画面の高さと一致しないことがあった** (PWA で 763.765px 対 708px)。
+    **土台の高さは `html` から `%` で降ろす** (`app.css` で `html, body` に
+    高さを与えてある)。単位で言い当てない — `100vh` も `100dvh` も**実機では
+    画面の高さと一致しないことがあった** (PWA で 763.765px 対 708px。差の
+    56px は Chrome for Android のアドレスバーの高さそのもの)。
 
-    測った値なら解釈の余地がない。**二段組の線 (768px) は横に倒した携帯も
-    越える** (915x412 など) ので、`md:` のほうも同じ値で採る
+    `%` なら JS も要らず、**描く前から正しい**。**二段組の線 (768px) は横に
+    倒した携帯も越える** (915x412 など) ので、`md:` のほうも同じ採り方
 -->
 <div
-    class="flex min-h-[var(--app-h)] flex-col bg-base-200 {fill
-        ? 'md:h-[var(--app-h)] md:min-h-0 md:overflow-hidden'
+    class="flex min-h-full flex-col bg-base-200 {fill
+        ? 'md:h-full md:min-h-0 md:overflow-hidden'
         : ''}"
     data-root
     data-fill={fill ? 'true' : undefined}

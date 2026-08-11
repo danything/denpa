@@ -29,7 +29,7 @@
 </script>
 
 <!--
-    **高さは測った値 (`--app-h`) で採る。**
+    **高さは `%` で採る** (`app.css` で `html` に高さを与えてある)。
 
     daisyUI の既定は、外枠が `position: fixed; inset: 0`、中身が `max-height: 100vh`。
     これは**アドレスバーが引っ込んだときの高さ**を指すので、スマホでバーが
@@ -37,12 +37,13 @@
     はみ出したぶんは上下とも切り落とされ、**題名も閉じるボタンも見えなくなる**
     (実機の Android Chrome)。
 
-    `dvh` に替えていたが、**それでも合わない端末があった** — 単位ではなく
-    `documentElement.clientHeight` を測って写す (`+layout.svelte`)。
+    `dvh` に替えていたが、**それでも合わない端末があった** — 単位で言い当てず、
+    外枠が `position: fixed; inset: 0` であることを使って `%` で採る
+    (その `%` はそのページが縦に動かずに出せる高さ そのもの)。
     上下に少し余白を置いて、中身はその中で巻き取らせる (`max-h-full` +
     daisyUI の `overflow-y: auto`)。
 -->
-<div class="modal modal-open h-[var(--app-h)] py-4" role="dialog" data-testid="program-detail">
+<div class="modal modal-open h-full py-4" role="dialog" data-testid="program-detail">
     <div class="modal-box max-h-full max-w-2xl">
         <ProgramFacts {program} {notes} {cmNote} />
 
