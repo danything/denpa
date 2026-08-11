@@ -60,6 +60,11 @@
      * `pageshow` も見るのは、履歴で戻ったとき (bfcache) が
      * `visibilitychange` を伴わないため。**取っておいた画面のときだけ** —
      * 素の読み込みでも来るので、見境なく読み直すと毎回2回読むことになる
+     *
+     * **`resume` も見る。** Android の Chrome は裏に回した画面を*凍らせ*、
+     * 戻すときに `resume` を出す。凍って戻るだけの往復では
+     * `visibilitychange` が出ないことがあり (実測で、凍結→復帰の間に
+     * 読み直しが1回も出なかった)、そのときは前のままの一覧を見せ続ける
      */
     onMount(() => {
         const refresh = () => {
@@ -70,9 +75,11 @@
             if (event.persisted) refresh();
         };
         document.addEventListener('visibilitychange', refresh);
+        document.addEventListener('resume', refresh);
         window.addEventListener('pageshow', restored);
         return () => {
             document.removeEventListener('visibilitychange', refresh);
+            document.removeEventListener('resume', refresh);
             window.removeEventListener('pageshow', restored);
         };
     });

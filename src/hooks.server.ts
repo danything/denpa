@@ -79,5 +79,27 @@ export async function handle({ event, resolve }) {
     const dav = handleDav(event.request, event.url);
     if (dav !== null) return dav;
 
-    return resolve(event);
+    const response = await resolve(event);
+
+    /*
+     * **画面の HTML は毎回聞き直させる。**
+     *
+     * SvelteKit は SSR した HTML に中身の指紋 (`etag`) だけを付け、
+     * 「どれくらい持っていていいか」は何も言わない。言われなかった端末は
+     * **自分で決める** — ホーム画面から入れたアプリ (PWA) を開き直したときに、
+     * 溜めてあった HTML をそのまま出すことがあり、**録画一覧が前に閉じた
+     * ときのまま**になる。
+     *
+     * `no-cache` は「持っていてよいが、出す前に必ず聞く」。指紋はそのままなので、
+     * 変わっていなければ 304 で中身は流れない — **遅くならずに古くならない**。
+     *
+     * 触るのは画面だけ (`x-sveltekit-page`)。`__data.json` は SvelteKit が
+     * 自分で `no-store` を付けているし、`_app/immutable/` は名前に指紋が
+     * 入っていて**永く持たせたい**ので、そこへ口を出さない
+     */
+    if (response.headers.get('x-sveltekit-page') === 'true' && !response.headers.has('cache-control')) {
+        response.headers.set('cache-control', 'no-cache');
+    }
+
+    return response;
 }

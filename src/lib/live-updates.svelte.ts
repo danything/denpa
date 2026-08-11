@@ -43,11 +43,15 @@ export function liveUpdates(events: string[]): void {
             if (source === null || source.readyState === EventSource.CLOSED) connect();
         };
         document.addEventListener('visibilitychange', revive);
+        // Android の Chrome は凍らせた画面を `resume` で戻す。凍って戻るだけの
+        // 往復では `visibilitychange` が出ないことがある (`+layout.svelte`)
+        document.addEventListener('resume', revive);
         window.addEventListener('pageshow', revive);
 
         return () => {
             if (timer !== null) clearTimeout(timer);
             document.removeEventListener('visibilitychange', revive);
+            document.removeEventListener('resume', revive);
             window.removeEventListener('pageshow', revive);
             source?.close();
         };

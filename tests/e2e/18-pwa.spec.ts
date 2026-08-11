@@ -29,6 +29,41 @@ test.describe('PWA', () => {
         expect((await request.get('/apple-touch-icon.png')).status()).toBe(200);
     });
 
+    /*
+     * **画面の HTML を溜め込ませない。**
+     *
+     * SvelteKit が付けるのは中身の指紋 (`etag`) だけで、どれくらい持って
+     * いてよいかは何も言わない。言われなかった端末は自分で決めるので、
+     * ホーム画面から入れたアプリを開き直したときに**前に閉じたときの一覧**
+     * が出ることがある。`no-cache` は「持ってよいが出す前に必ず聞く」で、
+     * 指紋はそのままなので変わっていなければ 304 (中身は流れない)
+     */
+    test('画面の HTML は毎回聞き直させる', async ({ request }) => {
+        for (const path of ['/', '/guide', '/settings']) {
+            const res = await request.get(path);
+            expect(res.status(), path).toBe(200);
+            expect(res.headers()['cache-control'], path).toBe('no-cache');
+            expect(res.headers().etag, path).toBeTruthy();
+        }
+
+        // 指紋が付いているものは、変わっていなければ中身を流さない
+        const first = await request.get('/');
+        const again = await request.get('/', {
+            headers: { 'if-none-match': first.headers().etag },
+        });
+        expect(again.status()).toBe(304);
+
+        /*
+         * **名前に指紋が入っているものには口を出さない。** 永く持たせたい側で、
+         * ここへ `no-cache` を撒くと毎回聞きに行くことになる
+         */
+        const chunk = await request.get('/');
+        const asset = /\/_app\/immutable\/[^"']+\.js/.exec(await chunk.text())?.[0];
+        expect(asset).toBeTruthy();
+        const immutable = await request.get(asset as string);
+        expect(immutable.headers()['cache-control']).toContain('immutable');
+    });
+
     test('サービスワーカーが登録され、APIは横取りしない', async ({ page }) => {
         await goto(page, '/');
         const registered = await page.evaluate(async () => {
