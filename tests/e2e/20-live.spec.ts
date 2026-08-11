@@ -87,7 +87,11 @@ test.describe('ライブ視聴', () => {
         await goto(page, '/live');
         const channels = page.getByTestId('live-channel');
         await expect(channels.first()).toBeVisible();
-        expect(await channels.count()).toBeGreaterThan(1);
+        /*
+         * **数えるのも待つ。** `expect(await count())` は撮った瞬間の数で
+         * 決めるので、1件目が出た直後だと 1 のまま落ちる (実際に揺れていた)
+         */
+        await expect.poll(() => channels.count()).toBeGreaterThan(1);
         // 番組表と同じ並び。地上波はリモコン番号順で先頭に来る
         await expect(channels.first()).toHaveAttribute('data-channel', /^GR\//);
     });

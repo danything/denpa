@@ -83,33 +83,36 @@ test.describe('PWA', () => {
                 const doc = await page.evaluate(() => ({
                     scrollH: document.documentElement.scrollHeight,
                     clientH: document.documentElement.clientHeight,
-                    // **動く側を止めてある。** 土台の高さが画面と一致しなくても、
-                    // 二段組の画面がページごと動くことはない
-                    locked: getComputedStyle(document.documentElement).overflowY,
+                    // **土台の高さは測った値から採る。** 単位 (vh / dvh) が
+                    // 画面の高さと一致しない端末があった
+                    appH: getComputedStyle(document.documentElement).getPropertyValue('--app-h'),
                 }));
                 expect(doc.scrollH, `${path} が ${width}px で縦に流れる`).toBeLessThanOrEqual(
                     doc.clientH + 1,
                 );
-                expect(doc.locked, `${path} が ${width}px で止まっていない`).toBe('hidden');
+                expect(doc.appH.trim(), `${path} の --app-h`).toBe(`${doc.clientH}px`);
             }
         }
+    });
 
-        /*
-         * **畳まれる幅では止めない。** そちらはページごと動くのが正しい形で、
-         * 止めると一覧の続きに手が届かなくなる
-         */
-        await page.setViewportSize({ width: 390, height: 700 });
-        await goto(page, '/');
-        expect(await page.evaluate(() => getComputedStyle(document.documentElement).overflowY)).not.toBe(
-            'hidden',
-        );
-
-        // 二段組でない画面も止めない
-        await page.setViewportSize({ width: 1280, height: 700 });
-        await goto(page, '/settings');
-        expect(await page.evaluate(() => getComputedStyle(document.documentElement).overflowY)).not.toBe(
-            'hidden',
-        );
+    /*
+     * **`html` を `overflow: hidden` で止めてはいけない。**
+     *
+     * はみ出しは消えるが、Android の「引っ張って更新」まで消える。
+     * PWA にはアドレスバーが無いので、**あれが唯一の更新手段** — 実機で
+     * 「リロードできなくなった」として出た。塞ぐ側ではなく高さを合わせる
+     */
+    test('ページを動かす側は止めない (引っ張って更新が死ぬ)', async ({ page }) => {
+        for (const width of [390, 1280]) {
+            await page.setViewportSize({ width, height: 700 });
+            for (const path of ['/', '/guide', '/settings']) {
+                await goto(page, path);
+                const overflow = await page.evaluate(
+                    () => getComputedStyle(document.documentElement).overflowY,
+                );
+                expect(overflow, `${path} が ${width}px で止められている`).not.toBe('hidden');
+            }
+        }
     });
 
     /*

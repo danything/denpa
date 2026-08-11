@@ -1,4 +1,16 @@
 @import "tailwindcss";
+
+/**
+ * 画面の高さ。**JS が測った値で上書きする** (`+layout.svelte`)。
+ *
+ * ここに書いてあるのは、まだ測れていないとき (サーバで組んだ直後・JS を
+ * 切っているとき) の当て。ふだんは `documentElement.clientHeight` が入る —
+ * `100dvh` が画面の高さと一致しない端末があり、そこで**中だけ動かすはずの
+ * 画面がページごと動いていた**ため
+ */
+:root {
+    --app-h: 100dvh;
+}
 @plugin "daisyui" {
     themes:
         dark --default,

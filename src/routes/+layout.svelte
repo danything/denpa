@@ -139,30 +139,36 @@
     const fill = $derived(FILLED.includes(page.url.pathname) || page.url.pathname.startsWith('/watch/'));
 
     /**
-     * **動かないことは、動かす側で止める。**
+     * **画面の高さは単位に訊かず、測る** (`--app-h`)。
      *
-     * 土台を画面ちょうどの高さにして中だけ動かす、という組み方をしている。
-     * それは「土台の高さが画面と一致していること」に頼っていて、**一致しな
-     * かったときに黙って崩れる** — 実機の PWA で土台が 763.765px になり
-     * (画面は 708px)、二段組のはずの画面がページごと 56px 動いていた。
+     * 土台を画面ちょうどの高さにして中だけ動かす、という組み方は
+     * 「`100dvh` が画面の高さと同じ」であることに頼っている。**実機で
+     * そうならなかった** — PWA (Android) で土台が 763.765px になり、画面は
+     * 708px。二段組のはずの画面がページごと 56px 動いていた。決まりは
+     * 配った CSS に載っていて (実機で確認)、`md:min-h-0` も
+     * `md:overflow-hidden` も効いていたのに、`height` だけ合わない。
      *
-     * 高さが合っているかに関わらず、**動く側 (`html`) を止める**。中の一覧は
-     * それぞれ自分で動くので、読めなくなるものは無い (土台にはもともと
-     * `overflow: hidden` が掛かっていて、はみ出したぶんは元から見えない)。
+     * `documentElement.clientHeight` は**そのページが縦に動かずに出せる
+     * 高さそのもの**で、解釈の余地がない。これを写して使う。
      *
-     * 畳まれる幅では止めない — そちらはページごと動くのが正しい形
+     * **`html` を `overflow: hidden` で止めるのは駄目だった。** はみ出しは
+     * 消えるが、Android の「引っ張って更新」まで消える — PWA には
+     * アドレスバーが無いので、**あれが唯一の更新手段**。塞ぐ側ではなく、
+     * 高さのほうを合わせる
      */
     $effect(() => {
-        if (!fill) return;
-        const wide = matchMedia('(min-width: 48rem)');
         const apply = () => {
-            document.documentElement.style.overflow = wide.matches ? 'hidden' : '';
+            document.documentElement.style.setProperty(
+                '--app-h',
+                `${document.documentElement.clientHeight}px`,
+            );
         };
         apply();
-        wide.addEventListener('change', apply);
+        window.addEventListener('resize', apply);
+        window.visualViewport?.addEventListener('resize', apply);
         return () => {
-            wide.removeEventListener('change', apply);
-            document.documentElement.style.overflow = '';
+            window.removeEventListener('resize', apply);
+            window.visualViewport?.removeEventListener('resize', apply);
         };
     });
 
@@ -189,18 +195,18 @@
 </svelte:head>
 
 <!--
-    **土台の高さは上も下も `dvh` で採る。** `100vh` はスマホでは**アドレスバーが
-    引っ込んだときの高さ**なので、バーが出ている間は中身が無くても画面より
-    高くなり、いつも少し下へ動く。`dvh` は「いま見えている高さ」。
+    **土台の高さは上も下も `--app-h`。** 単位 (`vh` / `dvh`) に訊かず、
+    `documentElement.clientHeight` を測って写した値
+    (上の `$effect`)。`100vh` はアドレスバーが引っ込んだときの高さ、
+    `100dvh` は「いま見えている高さ」……のはずだが、**実機ではどちらも
+    画面の高さと一致しないことがあった** (PWA で 763.765px 対 708px)。
 
-    **`md:` のほうも `vh` にしない。** 二段組にする線は 768px で、
-    **横に倒した携帯はここを越える** (915x412 など)。`h-screen` (= `100vh`)
-    のままだと、バーが出ている間は土台がバーのぶんだけ画面より高くなり、
-    中だけ動かすつもりの画面が**ページごと動く**
+    測った値なら解釈の余地がない。**二段組の線 (768px) は横に倒した携帯も
+    越える** (915x412 など) ので、`md:` のほうも同じ値で採る
 -->
 <div
-    class="flex min-h-[100dvh] flex-col bg-base-200 {fill
-        ? 'md:h-[100dvh] md:min-h-0 md:overflow-hidden'
+    class="flex min-h-[var(--app-h)] flex-col bg-base-200 {fill
+        ? 'md:h-[var(--app-h)] md:min-h-0 md:overflow-hidden'
         : ''}"
     data-root
     data-fill={fill ? 'true' : undefined}
