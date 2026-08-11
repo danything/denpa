@@ -14,6 +14,8 @@ export interface LibraryNameInput {
     start_at: number;
     /** いま置いてある場所。焼き直しのとき、自分自身を「衝突」と読まないために要る */
     library_path?: string | null;
+    /** もう一方のコーデックの置き場所。これも「自分自身」なので衝突と読まない */
+    alt_path?: string | null;
 }
 
 /**
@@ -56,8 +58,21 @@ function libraryRelPath(rec: LibraryNameInput, ext: string): string {
 export function libraryPath(rec: LibraryNameInput, ext: string): string {
     const rel = libraryRelPath(rec, ext);
     const abs = join(config.libraryDir, rel);
-    if (!existsSync(abs) || abs === rec.library_path) return abs;
+    // 自分がいま置いてある2本 (主・もう一方) は衝突ではない
+    if (!existsSync(abs) || abs === rec.library_path || abs === rec.alt_path) return abs;
     return join(config.libraryDir, libraryRelPath(rec, ` [${rec.id}]${ext}`));
+}
+
+/**
+ * コーデックごとの置き場所。
+ *
+ * どちらも Matroska (`.mkv`) — mp4 は放送どおりに描いた字幕 (PGS) を持てない
+ * ため、両方 mkv で揃える。**H.264 のほうは名前に印を付ける** (`[H264]`)。
+ * 同じフォルダに2本並ぶので、名前が違わないと衝突するのと、テレビで
+ * どちらを選べばよいか名前で分かるようにするため。
+ */
+export function encodedPath(rec: LibraryNameInput, codec: 'av1' | 'h264'): string {
+    return libraryPath(rec, codec === 'h264' ? ' [H264].mkv' : '.mkv');
 }
 
 /** 生TSの置き場。保存先と違い人が見るものではないので平置きでよい */

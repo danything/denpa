@@ -29,9 +29,13 @@ function respond(id: number, request: Request, download: boolean, source: string
             id,
         )?.n ?? 0;
     /*
-     * **どちらを寄越すか、名指しもできる** (`?source=ts` / `?source=encoded`)。
+     * **どちらを寄越すか、名指しもできる** (`?source=ts` / `encoded` / `alt`)。
      *
-     * 2つとも残っている録画では、画面がダウンロードの口を2つ出す
+     * - `ts` … 生TS
+     * - `encoded` … 主のエンコード済み (両方焼いたときは AV1)
+     * - `alt` … もう一方 (H.264)。両方焼いた録画でだけ在る。古いテレビはこちら
+     *
+     * 残っているものが複数ある録画では、画面がダウンロードの口を分けて出す
      * (`+page.svelte` の `recordingActions`)。上の「今いいほう」だけだと、
      * **押した先が同じファイル**になってしまう。プレイヤーに渡す URL は
      * 名指ししない — あちらは観られさえすればよく、選ばせるものではない
@@ -39,11 +43,13 @@ function respond(id: number, request: Request, download: boolean, source: string
     const path =
         source === 'ts'
             ? recording.ts_path
-            : source === 'encoded'
-              ? recording.library_path
-              : encoding > 0 && recording.ts_path !== null
-                ? recording.ts_path
-                : (recording.library_path ?? recording.ts_path);
+            : source === 'alt'
+              ? recording.alt_path
+              : source === 'encoded'
+                ? recording.library_path
+                : encoding > 0 && recording.ts_path !== null
+                  ? recording.ts_path
+                  : (recording.library_path ?? recording.ts_path);
     if (path === null) error(404, 'ファイルがありません');
 
     // ?download=1 のときだけ添付にする。プレイヤーは inline のほうが素直に開く

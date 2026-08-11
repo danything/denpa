@@ -2,11 +2,11 @@ import { fail } from '@sveltejs/kit';
 import { BASIC_AUTH_USER, generatePassword } from '$lib/server/auth';
 import { isCmMode } from '$lib/server/cm';
 import { database, now, queryAll, queryOne } from '$lib/server/db';
-import { isVideoCodec } from '$lib/server/encoder';
 import { available as migrateAvailable, source, start, status } from '$lib/server/migrate';
 import { enabled as oidcEnabled } from '$lib/server/oidc';
 import { normalizePostalCode, saveSettings, settings } from '$lib/server/settings';
 import { send, type Webhook } from '$lib/server/webhook';
+import type { VideoCodec } from '$lib/types';
 import { EVENTS } from '$lib/webhook-events';
 
 export function load() {
@@ -79,13 +79,23 @@ export const actions = {
     /** 録画のしかた。番組ごとに変えたくなることが実際にはほとんど無いので全体で1つ */
     saveRecording: async ({ request }) => {
         const form = await request.formData();
-        const codec = String(form.get('codec') ?? '');
+        /*
+         * **コーデックは複数選べる** (`av1` / `h264` を両方)。1つも選ばなければ
+         * 「エンコードしない」。カンマ区切りで持ち、`encode` も一緒に合わせて
+         * 書く — 古いDBに残っている `encode=false` を確実に上書きするため
+         */
+        const codecs = form
+            .getAll('codecs')
+            .map(String)
+            .filter((c): c is 'av1' | 'h264' => c === 'av1' || c === 'h264');
         const cmCut = String(form.get('cmCut') ?? '');
-        if (!isVideoCodec(codec) || !isCmMode(cmCut)) {
-            return fail(400, { message: 'コーデックかCMの指定が不正です' });
+        if (!isCmMode(cmCut)) {
+            return fail(400, { message: 'CMの指定が不正です' });
         }
         saveSettings({
-            codec,
+            // AV1 を先頭に寄せる (settings() が主を決めるときの順序と揃える)
+            codec: (codecs.length > 0 ? codecs.join(',') : 'none') as VideoCodec,
+            encode: codecs.length > 0,
             cmCut,
             cmDetector: form.get('cmDetector') === 'silence' ? 'silence' : 'jls',
             logoLevel: Number(form.get('logoLevel')),

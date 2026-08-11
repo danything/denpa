@@ -2,7 +2,6 @@ import type { CmMode, VideoCodec } from '../types';
 import { isCmMode } from './cm';
 import { config } from './config';
 import { database, now, queryOne } from './db';
-import { isVideoCodec } from './encoder';
 
 /**
  * 画面から変えられる設定。
@@ -13,8 +12,19 @@ import { isVideoCodec } from './encoder';
  */
 
 export interface Settings {
-    /** 録画のエンコードに使う映像コーデック。`none` ならエンコードしない */
+    /**
+     * 録画のエンコードに使う映像コーデック。`none` ならエンコードしない。
+     * **主のほう** — 両方焼くときは AV1 (小さいので既定の再生に向く)
+     */
     codec: VideoCodec;
+    /**
+     * 焼くコーデックの一覧。**両方選べる** (`['av1', 'h264']`)。
+     *
+     * 古いテレビは AV1 を解けないので、H.264 も一緒に焼いておくと同じ録画を
+     * どちらの端末でも観られる (`server/encoder.ts`)。`none` (エンコードしない)
+     * のときは空。AV1 を先頭に寄せる — 主 (`library_path`) はそちらにする
+     */
+    codecs: ('av1' | 'h264')[];
     /** CMの扱い。off / chapter / cut */
     cmCut: CmMode;
     /**
@@ -92,6 +102,21 @@ function stored(key: string): string | undefined {
     return queryOne<{ value: string }>('SELECT value FROM settings WHERE key = ?', key)?.value;
 }
 
+/**
+ * コーデックの選択を読む。**カンマ区切りで、1つだけの古い値も読める。**
+ *
+ * `av1,h264` → `['av1', 'h264']`、`av1` → `['av1']`、`none` や空 → `[]`。
+ * **AV1 を先頭に寄せる** — 主 (`library_path`) をそちらにするので、順序を固定する
+ */
+export function parseCodecs(value: string | undefined): ('av1' | 'h264')[] {
+    const raw = (value ?? config.encodeCodec).split(',').map((s) => s.trim());
+    const out: ('av1' | 'h264')[] = [];
+    for (const codec of ['av1', 'h264'] as const) {
+        if (raw.includes(codec)) out.push(codec);
+    }
+    return out;
+}
+
 export function settings(): Settings {
     const codec = stored('codec');
     const cmCut = stored('cmCut');
@@ -100,15 +125,21 @@ export function settings(): Settings {
         return value === undefined ? fallback : value === 'true';
     };
     /*
-     * 「エンコードする」のチェックを持っていた頃のDBは、そこに false が入っている。
-     * コーデックの選択に寄せたので、それを `none` として読む
+     * **コーデックはカンマ区切りで持つ** (`av1,h264`)。1つだけの古い値
+     * (`av1` / `h264` / `none`) もそのまま読める。
+     *
+     * 「エンコードする」のチェックを持っていた頃のDBは `encode=false` が入って
+     * いる。コーデックの選択に寄せたので、それを `none` として読む
      */
-    const chosen = isVideoCodec(codec) ? codec : config.encodeCodec;
-    const resolved = flag('encode', true) ? chosen : 'none';
+    const picked = parseCodecs(codec);
+    const codecs = flag('encode', true) ? picked : [];
+    // 主は AV1 を優先 (小さいので既定の再生に向く)。無ければ選んだほう
+    const primary: VideoCodec = codecs.length === 0 ? 'none' : codecs.includes('av1') ? 'av1' : codecs[0];
     return {
-        codec: resolved,
+        codec: primary,
+        codecs,
         cmCut: isCmMode(cmCut) ? cmCut : config.cmCutDefault,
-        encode: resolved !== 'none',
+        encode: codecs.length > 0,
         keepOriginal: flag('keepOriginal', false),
         freeOnly: flag('freeOnly', true),
         cmDetector: stored('cmDetector') === 'silence' ? 'silence' : 'jls',

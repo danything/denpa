@@ -2,9 +2,11 @@ import { readdirSync, statSync } from 'node:fs';
 import { extname, join, normalize } from 'node:path';
 import type { Recording } from '../types';
 import { config } from './config';
-import { queryOne } from './db';
+import { database, now, queryOne } from './db';
 import { emit } from './events';
 import { deleteRecordingFiles } from './files';
+import { pruneEmptyDirs, removeIfExists } from './fsx';
+import { removeSidecars } from './metadata';
 import { serveFile } from './serve';
 
 /**
@@ -153,7 +155,8 @@ function remove(entry: Entry): Response {
 
     const full = join(config.libraryDir, entry.path);
     const recording = queryOne<Recording>(
-        'SELECT * FROM recordings WHERE library_path = ? AND deleted_at IS NULL',
+        `SELECT * FROM recordings WHERE (library_path = ? OR alt_path = ?) AND deleted_at IS NULL`,
+        full,
         full,
     );
     if (recording === undefined) {
@@ -161,7 +164,30 @@ function remove(entry: Entry): Response {
         return new Response('not a recording', { status: 403 });
     }
 
-    deleteRecordingFiles(recording, 'WebDAV から削除されました');
+    /*
+     * **消したファイルだけを消す。** 両方のコーデックを焼いた録画は Nova に
+     * 2本並ぶ。片方だけ消したのに録画ごと消えると、消していないほうまで
+     * 消えてしまう。ファイルマネージャの直感どおり、消したものだけを消す。
+     */
+    if (recording.alt_path !== null && full === recording.alt_path) {
+        // もう一方 (H.264) を消した。主はそのまま残す
+        removeIfExists(recording.alt_path);
+        removeSidecars(recording.alt_path);
+        pruneEmptyDirs(recording.alt_path);
+        database()
+            .prepare('UPDATE recordings SET alt_path = NULL, updated_at = ? WHERE id = ?')
+            .run(now(), recording.id);
+    } else if (recording.alt_path !== null) {
+        // 主 (AV1) を消した。もう一方が残っているので、それを繰り上げる
+        removeIfExists(recording.library_path);
+        removeSidecars(recording.library_path);
+        database()
+            .prepare('UPDATE recordings SET library_path = ?, alt_path = NULL, updated_at = ? WHERE id = ?')
+            .run(recording.alt_path, now(), recording.id);
+    } else {
+        // 1本しか無い。録画そのものを削除済みに倒す
+        deleteRecordingFiles(recording, 'WebDAV から削除されました');
+    }
     emit('recordings');
     console.log(`[dav] 削除しました: ${recording.name}`);
     return new Response(null, { status: 204 });

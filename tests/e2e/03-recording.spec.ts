@@ -202,27 +202,69 @@ test.describe('CMの実カット', () => {
     });
 });
 
+test.describe('コーデックを両方焼く', () => {
+    test.afterEach(async ({ request }) => {
+        await setRecording(request);
+    });
+
+    /*
+     * **両方選ぶと1本の録画が2ファイルになる。** 古いテレビは AV1 を解けない
+     * ので H.264 も置いておくと、同じ録画をどちらの端末でも観られる。主は AV1
+     * (`library_path`)、もう一方は H.264 (`alt_path`)。どちらも同じフォルダに
+     * 並ぶので、H.264 のほうは名前に印を付けて分ける ([H264])。
+     */
+    test('AV1 と H.264 の2本ができて、どちらも落とせる', async ({ page, request }) => {
+        test.setTimeout(180_000);
+        await syncEpg(request);
+        await setRecording(request, { codecs: ['av1', 'h264'] });
+
+        const programId = await reserveSoon(page, request, 'BS');
+        const row = page.locator(`[data-testid="recording-row"][data-program-id="${programId}"]`);
+        await expect(async () => {
+            await goto(page, '/');
+            await expect(row.getByTestId('recording-state')).toHaveText('視聴可能');
+        }).toPass({ timeout: 120_000 });
+
+        // 主は AV1 (素の .mkv)、もう一方は H.264 ([H264] 付き)。実体も2本ある
+        const av1 = (await row.getAttribute('data-library-path')) ?? '';
+        const alt = (await row.getAttribute('data-alt-path')) ?? '';
+        expect(av1).toMatch(/\.mkv$/);
+        expect(av1).not.toContain('[H264]');
+        expect(alt).toContain('[H264].mkv');
+        expect(existsSync(av1)).toBe(true);
+        expect(existsSync(alt)).toBe(true);
+
+        // ダウンロードの口が AV1 と H.264 の2つに分かれる
+        await row.getByTestId('detail-button').click();
+        const detail = page.getByTestId('program-detail');
+        await expect(detail.getByTestId('download-link')).toHaveText('AV1');
+        await expect(detail.getByTestId('download-alt-link')).toHaveText('H.264');
+    });
+});
+
 test.describe('エンコードしない', () => {
     test.afterEach(async ({ request }) => {
         await setRecording(request);
     });
 
     /*
-     * 映像コーデックの選択に入っている。**別のチェックにはしない** —
-     * 「エンコードする」を外したときにコーデックの選択だけが残ると、
-     * どちらが効いているのか画面から読めなかった
+     * コーデックはチェックで選ぶ。**どちらも外すと「エンコードしない」** —
+     * 別に「エンコードする」のチェックを持たないので、外れていることが
+     * そのまま「焼かない」になる
      */
-    test('コーデックに「しない」を選ぶと、生TSのまま保存先に置く', async ({ page, request }) => {
+    test('コーデックをどちらも外すと、生TSのまま保存先に置く', async ({ page, request }) => {
         test.setTimeout(180_000);
         await syncEpg(request);
 
         await goto(page, '/settings');
-        await page.getByTestId('global-codec').selectOption('none');
+        await page.getByTestId('codec-av1').uncheck();
+        await page.getByTestId('codec-h264').uncheck();
         await page.getByTestId('save-recording').click();
         await expect(page.getByTestId('saved-result')).toBeVisible();
-        // 選び直しても残っていること (設定は1つしか無い)
+        // 選び直しても残っていること (どちらも外れたまま)
         await goto(page, '/settings');
-        await expect(page.getByTestId('global-codec')).toHaveValue('none');
+        await expect(page.getByTestId('codec-av1')).not.toBeChecked();
+        await expect(page.getByTestId('codec-h264')).not.toBeChecked();
 
         const programId = await reserveSoon(page, request, 'BS');
         const row = `[data-testid="recording-row"][data-program-id="${programId}"]`;
@@ -247,5 +289,11 @@ test.describe('エンコードしない', () => {
         await expect(detail.getByTestId('reencode-button')).toHaveCount(0);
         // 生TSでも観られるものは落とせる
         await expect(detail.getByTestId('download-link')).toHaveCount(1);
+
+        // 後片付け。**焼く設定に戻す** (他のテストや本番の既定に揃える)
+        await goto(page, '/settings');
+        await page.getByTestId('codec-av1').check();
+        await page.getByTestId('save-recording').click();
+        await expect(page.getByTestId('saved-result')).toBeVisible();
     });
 });

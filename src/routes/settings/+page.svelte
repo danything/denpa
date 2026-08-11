@@ -86,30 +86,52 @@
                     class="grid gap-4 sm:grid-cols-2"
                     data-testid="recording-form"
                 >
-                    <label class="flex flex-col gap-1">
+                    <!--
+                        **コーデックは複数選べる。** 両方入れると1本の録画を両方で
+                        焼く — 古いテレビは AV1 を解けないので H.264 も置いておくと、
+                        同じ録画をどちらの端末でも観られる。どちらも入れなければ
+                        「エンコードしない」(生TSのまま)。
+
+                        単一選択 (`<select>`) だった頃は「どちらか一方」しか持てず、
+                        テレビ用に H.264 を選ぶとブラウザ用の小さい AV1 を諦めることに
+                        なっていた
+                    -->
+                    <fieldset class="flex flex-col gap-1" data-testid="global-codec">
                         <span class="text-sm font-medium">映像コーデック</span>
-                        <select name="codec" class="select select-bordered w-full" data-testid="global-codec">
-                            <option value="av1" selected={recording.codec === 'av1'}>
-                                AV1 (小さい・遅い)
-                            </option>
-                            <option value="h264" selected={recording.codec === 'h264'}>
-                                H.264 (速い・非力なマシン向け)
-                            </option>
-                            <!--
-                                「エンコードする」のチェックを別に持っていた頃は、外したときに
-                                コーデックの選択だけが残って、どちらが効いているのか読めなかった
-                            -->
-                            <option value="none" selected={recording.codec === 'none'}>
-                                エンコードしない (生TSのまま置く)
-                            </option>
-                        </select>
-                        {#if recording.codec === 'none'}
+                        <label class="label cursor-pointer justify-start gap-2 py-1">
+                            <input
+                                type="checkbox"
+                                name="codecs"
+                                value="av1"
+                                class="checkbox checkbox-sm"
+                                checked={recording.codecs.includes('av1')}
+                                data-testid="codec-av1"
+                            />
+                            <span class="label-text">AV1 (小さい・遅い)</span>
+                        </label>
+                        <label class="label cursor-pointer justify-start gap-2 py-1">
+                            <input
+                                type="checkbox"
+                                name="codecs"
+                                value="h264"
+                                class="checkbox checkbox-sm"
+                                checked={recording.codecs.includes('h264')}
+                                data-testid="codec-h264"
+                            />
+                            <span class="label-text">H.264 (古いテレビ向け・大きい)</span>
+                        </label>
+                        {#if recording.codecs.length === 0}
                             <span class="text-base-content/60 text-xs">
-                                CM のチャプターも字幕トラックも付きません
-                                (どちらもエンコードのときに入れています)
+                                どちらも入れないと<strong>エンコードしません</strong>
+                                (生TSのまま置く)。CM のチャプターも字幕トラックも付きません
+                            </span>
+                        {:else if recording.codecs.length === 2}
+                            <span class="text-base-content/60 text-xs">
+                                1本の録画を両方で焼きます (再生・ダウンロードは既定で AV1、
+                                テレビからは H.264 を選べます)
                             </span>
                         {/if}
-                    </label>
+                    </fieldset>
                     <!--
                         **並びは話題ごとに。** 2列に流し込むので、DOM の順がそのまま
                         「どれとどれが同じ行に来るか」になる。CM の2つ (切り方・探し方) が

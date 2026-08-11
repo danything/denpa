@@ -35,11 +35,16 @@
      * ダウンロードに引き継がないので、素のURLだと 401 になって落ちてこない。
      * ?download=1 でサーバが添付として返し、ファイル名も付く
      */
-    const downloadUrl = (id: number, source?: 'ts' | 'encoded') =>
+    const downloadUrl = (id: number, source?: 'ts' | 'encoded' | 'alt') =>
         withCredentials(
             `${data.origin}/api/recordings/${id}/file?download=1${source === undefined ? '' : `&source=${source}`}`,
             data.credentials,
         );
+
+    /** もう一方のコーデック (H.264) も焼いてあるか。両方焼いた録画でだけ在る */
+    function hasAlt(rec: (typeof data.recordings)[number]): boolean {
+        return rec.job_id === null && rec.alt_path !== null;
+    }
 
     /**
      * 焼いたものと生TSが**両方とも残っている**か。
@@ -432,6 +437,7 @@
                             data-recording-id={rec.id}
                             data-program-id={rec.program_id}
                             data-library-path={rec.library_path}
+                            data-alt-path={rec.alt_path}
                             data-duration-ms={rec.duration_ms}
                             data-cm-ranges={rec.cm_ranges}
                             class="group hover:bg-base-200/60 relative cursor-pointer p-3"
@@ -666,13 +672,28 @@
             -->
             <a
                 class="btn btn-outline"
-                href={downloadUrl(rec.id, bothFiles(rec) ? 'encoded' : undefined)}
+                href={downloadUrl(rec.id, bothFiles(rec) || hasAlt(rec) ? 'encoded' : undefined)}
                 download
                 onclick={() => detail.close()}
                 data-testid="download-link"
             >
-                {bothFiles(rec) ? 'エンコード済み' : 'ダウンロード'}
+                {hasAlt(rec) ? 'AV1' : bothFiles(rec) ? 'エンコード済み' : 'ダウンロード'}
             </a>
+            {#if hasAlt(rec)}
+                <!--
+                    **H.264 も落とせるようにする。** 両方のコーデックを焼いた録画で
+                    だけ出す。古いテレビなど AV1 を解けない相手はこちら
+                -->
+                <a
+                    class="btn btn-outline"
+                    href={downloadUrl(rec.id, 'alt')}
+                    download
+                    onclick={() => detail.close()}
+                    data-testid="download-alt-link"
+                >
+                    H.264
+                </a>
+            {/if}
             {#if bothFiles(rec)}
                 <!--
                     **元も落とせるようにする。** 両方残っているときだけ出す

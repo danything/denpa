@@ -14,18 +14,20 @@ import { removeSidecars } from './metadata';
  */
 
 export function deleteRecordingFiles(recording: Recording, reason: string): void {
-    if (recording.library_path !== null) {
-        removeIfExists(recording.library_path);
+    // 両方のコーデックを焼いていれば2本ある。どちらもサイドカーごと消す
+    for (const path of [recording.library_path, recording.alt_path]) {
+        if (path === null) continue;
+        removeIfExists(path);
         // .nfo を取り残すと、.nfo を読むプレイヤーに中身の無いエピソードが並び続ける
-        removeSidecars(recording.library_path);
-        pruneEmptyDirs(recording.library_path);
+        removeSidecars(path);
+        pruneEmptyDirs(path);
     }
     removeIfExists(recording.ts_path);
     // 失敗した録画を消したときに理由を上書きすると、なぜ失敗したのかが分からなくなる。
     // 元の理由があるならそちらを残す
     database()
         .prepare(
-            `UPDATE recordings SET deleted_at = ?, library_path = NULL, ts_path = NULL,
+            `UPDATE recordings SET deleted_at = ?, library_path = NULL, alt_path = NULL, ts_path = NULL,
              error = COALESCE(NULLIF(error, ''), ?), updated_at = ? WHERE id = ?`,
         )
         .run(now(), reason, now(), recording.id);
@@ -56,6 +58,20 @@ export function reconcile(): {
     let removed = 0;
     for (const recording of recordings) {
         if (existsSync(recording.library_path!)) continue;
+        /*
+         * **主が外から消えても、もう一方が残っていれば繰り上げる。** 両方の
+         * コーデックを焼いた録画で、Nova からAV1のほうだけ消したときに録画ごと
+         * 消してしまわないため。もう一方も無ければ、いつもどおり削除済みに倒す
+         */
+        if (recording.alt_path !== null && existsSync(recording.alt_path)) {
+            database()
+                .prepare(
+                    'UPDATE recordings SET library_path = ?, alt_path = NULL, updated_at = ? WHERE id = ?',
+                )
+                .run(recording.alt_path, now(), recording.id);
+            console.log(`[files] 主が消えたので繰り上げました: ${recording.name}`);
+            continue;
+        }
         deleteRecordingFiles(recording, '保存先から消えていました');
         removed++;
         console.log(`[files] 保存先から消えていたので削除済みにしました: ${recording.name}`);
@@ -110,7 +126,8 @@ function sweepLeftovers(): { swept: number; strays: number; pruned: number } {
     const known = new Set(
         queryAll<{ path: string | null }>(
             `SELECT ts_path AS path FROM recordings WHERE ts_path IS NOT NULL
-             UNION SELECT library_path FROM recordings WHERE library_path IS NOT NULL`,
+             UNION SELECT library_path FROM recordings WHERE library_path IS NOT NULL
+             UNION SELECT alt_path FROM recordings WHERE alt_path IS NOT NULL`,
         ).map((row) => row.path as string),
     );
 

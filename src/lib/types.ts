@@ -158,7 +158,16 @@ export interface Recording {
     audio_type: number | null;
     ts_path: string | null;
     ts_size: number;
+    /**
+     * 焼いたもの (再生・ダウンロードで主に使う)。両方のコーデックを焼いたときは
+     * **AV1 のほう** (小さいので既定の再生に向く)
+     */
     library_path: string | null;
+    /**
+     * もう一方のコーデックで焼いたもの。両方を選んだときだけ入る (AV1 が主なら H.264)。
+     * 古いテレビのように AV1 を解けない相手はこちらを開く
+     */
+    alt_path: string | null;
     /** 録り終えた時刻。null なら**まだ掴んでいる最中** */
     finished_at: number | null;
     state: RecordingState;

@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, utimesSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, utimesSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 
@@ -252,5 +252,47 @@ describe('実体との照合', () => {
 
         // 生TSのほうはDBに無いので1件。書きたての .cut.ts は数えない
         expect(reconcile().strays).toBe(1);
+    });
+
+    /** 両方のコーデックを焼いた録画を1件入れる。返り値は {av1, h264} の実パス */
+    function twoCodec(): { av1: string; h264: string } {
+        const av1 = put(config.libraryDir, '二本立て/Season 2026/二本立て - 1.mkv');
+        const h264 = put(config.libraryDir, '二本立て/Season 2026/二本立て - 1 [H264].mkv');
+        database()
+            .prepare(
+                `INSERT INTO recordings (id, service_id, name, start_at, end_at, finished_at, library_path, alt_path, created_at, updated_at)
+                 VALUES (9, 1, '二本立て', 0, 0, 0, ?, ?, 0, 0)`,
+            )
+            .run(av1, h264);
+        return { av1, h264 };
+    }
+
+    /*
+     * **両方焼いた録画の H.264 は「DBに無い動画」ではない。** known 集合に
+     * `alt_path` も入れておかないと、もう一方が野良動画として数えられてしまう
+     */
+    test('もう一方のコーデックは stray に数えない', () => {
+        fresh();
+        twoCodec();
+        expect(reconcile().strays).toBe(0);
+    });
+
+    /*
+     * **主が外から消えても、もう一方が残っていれば繰り上げる。** Nova から
+     * AV1 のほうだけ消したときに録画ごと消してしまわないため
+     */
+    test('主が消えたら、もう一方を主に繰り上げる', () => {
+        fresh();
+        const { av1, h264 } = twoCodec();
+        rmSync(av1);
+
+        const result = reconcile();
+        // 削除済みには倒さない
+        expect(result.removed).toBe(0);
+        const row = database()
+            .query('SELECT library_path AS lib, alt_path AS alt FROM recordings WHERE id = 9')
+            .get() as { lib: string; alt: string | null };
+        expect(row.lib).toBe(h264);
+        expect(row.alt).toBeNull();
     });
 });

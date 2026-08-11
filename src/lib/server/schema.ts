@@ -19,6 +19,8 @@ export const ADDED_COLUMNS: { table: string; column: string; definition: string 
     { table: 'recordings', column: 'codec', definition: "TEXT NOT NULL DEFAULT 'av1'" },
     { table: 'recordings', column: 'cm_ranges', definition: 'TEXT' },
     { table: 'recordings', column: 'acknowledged_at', definition: 'INTEGER' },
+    // もう一方のコーデックで焼いたもの (両方を選んだとき)。AV1 が主なら H.264 のほう
+    { table: 'recordings', column: 'alt_path', definition: 'TEXT' },
     // 実際に録れた長さ。番組表の尺とは途中で止めた分だけずれる
     { table: 'recordings', column: 'duration_ms', definition: 'INTEGER' },
     // 番組詳細に出すためだけの情報。録画の判断には使わない
@@ -251,6 +253,8 @@ CREATE TABLE IF NOT EXISTS recordings (
     ts_path TEXT,
     ts_size INTEGER NOT NULL DEFAULT 0,
     library_path TEXT,
+    -- もう一方のコーデックで焼いたもの (両方を選んだとき)
+    alt_path TEXT,
     -- 録り終えた時刻。NULL なら**まだチューナーを掴んでいる**。
     -- 「録画中かどうか」を文字列で持たないための、ただ一つの事実
     finished_at INTEGER,

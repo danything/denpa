@@ -17,7 +17,7 @@ import { config } from './config';
 import { database, now, queryOne } from './db';
 import { emit } from './events';
 import { removeIfExists } from './fsx';
-import { libraryPath } from './library';
+import { encodedPath, libraryPath } from './library';
 import { sidecarPaths, writeNfo, writeThumbnail } from './metadata';
 import { descramble, isScrambled } from './scramble';
 import { settings } from './settings';
@@ -927,15 +927,12 @@ async function runJob(jobId: number): Promise<void> {
     mkdirSync(dirname(libraryPath(recording, '.mkv')), { recursive: true });
 
     /*
-     * いったん別名に書いてから置き換える。
-     * 同じ番組を録り直すと入力と出力が同じ場所になることがあり、
-     * そのまま書くと元を壊す。失敗したときに元が消えないのも同じ理由。
-     *
-     * **ジョブごとに別の名前にする。** ここを番組名だけで決めていた頃は、
-     * 同じ番組の2本が**1つの作業ファイルに同時に書き込み**、片方は
-     * 壊れたまま「成功」、もう片方は rename で `ENOENT` になっていた (実機)
+     * 焼くときは別名 (`.<jobId>.<codec>.encoding`) に書いてから置き換える
+     * (下の焼くループ)。同じ番組を録り直すと入力と出力が同じ場所になることが
+     * あり、そのまま書くと元を壊す。失敗したときに元が消えないのも同じ理由。
+     * **ジョブとコーデックで別の名前にする** — 番組名だけで決めていた頃は、
+     * 同じ番組の2本が1つの作業ファイルに同時に書き込んで壊していた (実機)。
      */
-    const working = `${libraryPath(recording, '.mkv')}.${jobId}.encoding`;
 
     // スクランブルが掛かったまま録れていたら、ここで解く (scramble.ts)
     /** 後始末で消す作業ファイル。生TSを置き換えたときは残す側になるので null のまま */
@@ -1076,38 +1073,96 @@ async function runJob(jobId: number): Promise<void> {
      * (そのとき生TSまで消える)。空けておけば照合の対象から外れ、
      * 画面でも「まだ保存先に無い」と正しく出る
      */
-    if (recording.library_path !== null) {
+    if (recording.library_path !== null || recording.alt_path !== null) {
         removeIfExists(recording.library_path);
+        removeIfExists(recording.alt_path);
         database()
-            .prepare('UPDATE recordings SET library_path = NULL, updated_at = ? WHERE id = ?')
+            .prepare(
+                'UPDATE recordings SET library_path = NULL, alt_path = NULL, updated_at = ? WHERE id = ?',
+            )
             .run(now(), recording.id);
         emit('recordings');
     }
 
-    let result = await runFfmpeg(
-        job,
-        source,
-        working,
-        recording.audio_type,
-        null,
-        settings().codec,
-        encodeOptions,
-        measured,
-    );
-    if (result.code !== 0 && !canceled.has(jobId)) {
-        // 録画開始直後の頭数百msだけ壊れているケースをここで拾う(詳細は buildArgs のコメント参照)。
-        // 別の理由での失敗もここに来るが、-ss を付けても同じ理由でもう一度失敗するだけなので無害
-        database().prepare('UPDATE encode_jobs SET attempts = attempts + 1 WHERE id = ?').run(jobId);
-        result = await runFfmpeg(
+    /*
+     * **選ばれたコーデックごとに焼く。** 両方選べば AV1 と H.264 の2本を作る
+     * (`settings().codecs`)。CM検出も字幕の絵起こしも上でひとまとめに済ませて
+     * あるので、ここは焼いて置くだけ — 二度手間にはならない。
+     *
+     * どれか1つでも失敗すれば、そのジョブごと失敗にする (途中まで置いたものは消す)。
+     */
+    const codecs = settings().codecs.length > 0 ? settings().codecs : (['av1'] as const);
+    const placed: { codec: 'av1' | 'h264'; path: string }[] = [];
+    // 測れなかったときの尺の当て。ffmpeg が言ってきた値 (下の duration_ms)
+    let lastOutTimeUs = 0;
+
+    /** 途中でやめる/失敗するときに、置きかけを全部片付ける */
+    const cleanup = (working: string | null): void => {
+        removeIfExists(working);
+        for (const p of placed) removeIfExists(p.path);
+        removeIfExists(encodeOptions.chaptersFile);
+        removeIfExists(trimmed);
+        removeIfExists(decoded);
+    };
+
+    for (const codec of codecs) {
+        const working = `${encodedPath(recording, codec)}.${jobId}.${codec}.encoding`;
+
+        let result = await runFfmpeg(
             job,
             source,
             working,
             recording.audio_type,
-            config.encodeRetrySeek,
-            settings().codec,
+            null,
+            codec,
             encodeOptions,
             measured,
         );
+        if (result.code !== 0 && !canceled.has(jobId)) {
+            // 録画開始直後の頭数百msだけ壊れているケースをここで拾う(詳細は buildArgs のコメント参照)。
+            // 別の理由での失敗もここに来るが、-ss を付けても同じ理由でもう一度失敗するだけなので無害
+            database().prepare('UPDATE encode_jobs SET attempts = attempts + 1 WHERE id = ?').run(jobId);
+            result = await runFfmpeg(
+                job,
+                source,
+                working,
+                recording.audio_type,
+                config.encodeRetrySeek,
+                codec,
+                encodeOptions,
+                measured,
+            );
+        }
+
+        // 出来かけを捨てるだけ。元のファイルには触らない
+        if (canceled.has(jobId)) {
+            cleanup(working);
+            return finishCanceled(jobId, null);
+        }
+        if (result.code !== 0) {
+            cleanup(working);
+            fail(jobId, recording, result.stderrTail);
+            return;
+        }
+
+        /*
+         * **ここで初めて置き場所を決める。**
+         *
+         * 同じ番組の別の録画が先に置き終えていれば、`encodedPath` がそれを見て
+         * `[録画ID]` を足した名前を返す。決めてから `renameSync` までの間に
+         * `await` を挟まないので、2本が同じ名前を掴むことはない (同じプロセスの中)
+         */
+        lastOutTimeUs = result.outTimeUs;
+        const output = encodedPath(recording, codec);
+        renameSync(working, output);
+        /*
+         * **字幕は動画の隣に置きません。** 入れ物の中に入っているので、要るときに抜く
+         * (`api/recordings/<id>/captions.sup`)。消すほうだけ残してある — 文字の
+         * 写しを置いていた頃 (`.ja.ass`) のものが残っていると、CMを切ったぶんだけ
+         * ずれた字幕が付いたままになる
+         */
+        removeIfExists(sidecarPaths(output).subtitle);
+        placed.push({ codec, path: output });
     }
 
     removeIfExists(encodeOptions.chaptersFile);
@@ -1115,44 +1170,25 @@ async function runJob(jobId: number): Promise<void> {
     removeIfExists(trimmed);
     removeIfExists(decoded);
 
-    // 出来かけを捨てるだけ。元のファイルには触らない
-    if (canceled.has(jobId)) return finishCanceled(jobId, working);
+    // 主は AV1 (小さいので既定の再生に向く)。無ければ焼いたほう
+    const primary = placed.find((p) => p.codec === 'av1') ?? placed[0];
+    const alt = placed.find((p) => p.path !== primary.path)?.path ?? null;
+    const output = primary.path;
 
-    if (result.code !== 0) {
-        removeIfExists(working);
-        fail(jobId, recording, result.stderrTail);
-        return;
+    /*
+     * 番組名が変わっていると置き場所も変わる。前に置いたエンコード済みが別名で
+     * 残ると同じ録画が並ぶので、いま作ったもの以外はサイドカーごと片付ける
+     */
+    const keptPaths = new Set(placed.map((p) => p.path));
+    for (const stalePath of [recording.library_path, recording.alt_path]) {
+        if (stalePath !== null && !keptPaths.has(stalePath)) {
+            removeIfExists(stalePath);
+            const stale = sidecarPaths(stalePath);
+            removeIfExists(stale.nfo);
+            removeIfExists(stale.thumbnail);
+            removeIfExists(stale.subtitle);
+        }
     }
-
-    /*
-     * **ここで初めて置き場所を決める。**
-     *
-     * 同じ番組の別の録画が先に置き終えていれば、`libraryPath` がそれを見て
-     * `[録画ID]` を足した名前を返す。決めてから `renameSync` までの間に
-     * `await` を挟まないので、2本が同じ名前を掴むことはない (同じプロセスの中)
-     */
-    const output = libraryPath(recording, '.mkv');
-    renameSync(working, output);
-    /*
-     * 番組名が変わっていると置き場所も変わる。前のエンコード済みが別名で残ると
-     * 同じ録画が2本並ぶので、サイドカーごと片付ける
-     */
-    if (recording.library_path !== null && recording.library_path !== output) {
-        removeIfExists(recording.library_path);
-        const stale = sidecarPaths(recording.library_path);
-        removeIfExists(stale.nfo);
-        removeIfExists(stale.thumbnail);
-        removeIfExists(stale.subtitle);
-    }
-
-    /*
-     * **字幕は動画の隣に置きません。** 入れ物の中に入っているので、要るときに抜く
-     * (`api/recordings/<id>/captions.sup`)。
-     *
-     * 消すほうだけ残してある — 文字の写しを置いていた頃 (`.ja.ass`) のものが
-     * 残っていると、CMを切ったぶんだけずれた字幕が付いたままになる
-     */
-    removeIfExists(sidecarPaths(output).subtitle);
 
     let size = 0;
     try {
@@ -1170,7 +1206,7 @@ async function runJob(jobId: number): Promise<void> {
      * (`parseProgressBlock`)。測れなかったときだけ、これまでどおり ffmpeg の値に落ちる
      */
     const made = (await probeVideo(output)).duration;
-    const length = Number.isFinite(made) ? made * 1000 : result.outTimeUs / 1000;
+    const length = Number.isFinite(made) ? made * 1000 : lastOutTimeUs / 1000;
     if (Number.isFinite(length) && length > 0) {
         database()
             .prepare('UPDATE recordings SET duration_ms = ? WHERE id = ?')
@@ -1197,18 +1233,21 @@ async function runJob(jobId: number): Promise<void> {
         },
     });
 
-    // 保存先が入った時点で「視聴可能」になる (recordings.state は生成列)
+    // 保存先が入った時点で「視聴可能」になる (recordings.state は生成列)。
+    // 主は AV1 (`output`)、もう一方は `alt` (両方焼いたときだけ)
     if (keepOriginal()) {
         database()
-            .prepare(`UPDATE recordings SET library_path = ?, ts_size = ?, updated_at = ? WHERE id = ?`)
-            .run(output, size, now(), recording.id);
+            .prepare(
+                `UPDATE recordings SET library_path = ?, alt_path = ?, ts_size = ?, updated_at = ? WHERE id = ?`,
+            )
+            .run(output, alt, size, now(), recording.id);
     } else {
         removeIfExists(recording.ts_path);
         database()
             .prepare(
-                `UPDATE recordings SET library_path = ?, ts_path = NULL, ts_size = ?, updated_at = ? WHERE id = ?`,
+                `UPDATE recordings SET library_path = ?, alt_path = ?, ts_path = NULL, ts_size = ?, updated_at = ? WHERE id = ?`,
             )
-            .run(output, size, now(), recording.id);
+            .run(output, alt, size, now(), recording.id);
     }
 }
 

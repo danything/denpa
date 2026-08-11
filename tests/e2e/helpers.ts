@@ -160,21 +160,33 @@ export async function recordOne(
 export async function setRecording(
     request: APIRequestContext,
     patch: {
+        /** 単一指定 (後方互換)。`none` なら焼かない */
         codec?: string;
+        /** 複数指定。両方焼くときはこちら (`['av1', 'h264']`) */
+        codecs?: string[];
         cmCut?: string;
         cmDetector?: string;
         keepOriginal?: boolean;
         freeOnly?: boolean;
     } = {},
 ): Promise<void> {
-    const form: Record<string, string> = {
-        codec: patch.codec ?? 'av1',
-        cmCut: patch.cmCut ?? 'chapter',
-        // 偽 ffmpeg しか居ないので、外部のコマンドを呼ばないほうで固定する
-        cmDetector: patch.cmDetector ?? 'silence',
-    };
-    if (patch.keepOriginal === true) form.keepOriginal = 'on';
-    if (patch.freeOnly ?? true) form.freeOnly = 'on';
+    // コーデックはチェックで複数選べる。`codecs` があればそれ、無ければ単一指定を畳む
+    const codecs = patch.codecs ?? (patch.codec === undefined || patch.codec === 'none' ? [] : [patch.codec]);
+    // `codec` を渡さなかったときの既定は av1 (焼く)
+    const chosen = patch.codecs === undefined && patch.codec === undefined ? ['av1'] : codecs;
+
+    /*
+     * **`codecs` は同じ名前で複数送る** (`codecs=av1&codecs=h264`)。
+     * サーバは `formData().getAll('codecs')` で拾う。Playwright の `form`
+     * オブジェクトは同じキーを繰り返せないので、body を手で組む
+     */
+    const body = new URLSearchParams();
+    for (const codec of chosen) body.append('codecs', codec);
+    body.append('cmCut', patch.cmCut ?? 'chapter');
+    // 偽 ffmpeg しか居ないので、外部のコマンドを呼ばないほうで固定する
+    body.append('cmDetector', patch.cmDetector ?? 'silence');
+    if (patch.keepOriginal === true) body.append('keepOriginal', 'on');
+    if ((patch.freeOnly ?? true) === true) body.append('freeOnly', 'on');
 
     /*
      * **1回だけ投げ直す。**
@@ -188,7 +200,10 @@ export async function setRecording(
      * 駄目なら落とす — 本当に壊れているならどのみち後の assert が落ちる
      */
     for (let 回 = 0; ; 回++) {
-        const res = await request.post('/settings?/saveRecording', { form });
+        const res = await request.post('/settings?/saveRecording', {
+            data: body.toString(),
+            headers: { 'content-type': 'application/x-www-form-urlencoded' },
+        });
         if (res.ok() || 回 >= 1) {
             await ok(res, '録画のしかたの保存');
             return;

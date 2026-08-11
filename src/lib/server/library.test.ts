@@ -11,10 +11,10 @@ import { dirname, join } from 'node:path';
 const { config } = await import('./config');
 config.libraryDir = mkdtempSync(join(tmpdir(), 'denpa-lib-'));
 
-const { libraryPath } = await import('./library');
+const { libraryPath, encodedPath } = await import('./library');
 
 /** 2026-08-03 22:30 開始の録画 */
-function recording(overrides: { library_path?: string | null } = {}) {
+function recording(overrides: { library_path?: string | null; alt_path?: string | null } = {}) {
     return {
         id: 39,
         series: '番組',
@@ -55,5 +55,29 @@ describe('保存先での名前', () => {
         place(PLAIN);
         // 自分はまだどこにも置いていない (初回) / 置き場が違う
         expect(libraryPath(recording({ library_path: null }), '.mkv')).toBe(join(config.libraryDir, WITH_ID));
+    });
+
+    /*
+     * **コーデックごとに名前を分ける。** 両方焼くと同じフォルダに2本並ぶので、
+     * H.264 のほうに印を付けて衝突を避ける。どちらも Matroska (mp4 は PGS 字幕を
+     * 持てない)。テレビでどちらを選べばよいかも名前で分かる
+     */
+    test('AV1 は素の .mkv、H.264 は [H264] 付き', () => {
+        // 他のテストが置いた PLAIN と衝突しないよう、別のシリーズで見る
+        const rec = { id: 7, series: '別番組', subtitle: '', start_at: recording().start_at };
+        expect(encodedPath(rec, 'av1')).toBe(
+            join(config.libraryDir, '別番組/Season 2026/別番組 - 2026-08-03 - 2230.mkv'),
+        );
+        expect(encodedPath(rec, 'h264')).toBe(
+            join(config.libraryDir, '別番組/Season 2026/別番組 - 2026-08-03 - 2230 [H264].mkv'),
+        );
+    });
+
+    test('いま置いてある2本 (主・もう一方) はどちらも衝突ではない', () => {
+        const av1 = place(PLAIN);
+        const h264 = place('番組/Season 2026/番組 - 2026-08-03 - 2230 [H264].mkv');
+        const rec = recording({ library_path: av1, alt_path: h264 });
+        expect(encodedPath(rec, 'av1')).toBe(av1);
+        expect(encodedPath(rec, 'h264')).toBe(h264);
     });
 });
