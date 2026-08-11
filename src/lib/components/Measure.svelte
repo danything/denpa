@@ -96,18 +96,20 @@
                 const rule = stack.pop();
                 if (rule === undefined) break;
                 /*
-                 * **入れ子はぜんぶ潜る。** `@media` だけ見ていたら 0件だった —
-                 * Tailwind は中身を `@layer` に入れるので、そこで止まる
+                 * **数えるほうが先。** `CSSStyleRule` にも `cssRules` がある
+                 * (入れ子が書けるようになったため、たいてい空)。潜るほうを
+                 * 先に見ると**規則が全部そちらへ流れて 0件になる** (実際なった)
                  */
-                const inner = (rule as CSSRule & { cssRules?: CSSRuleList }).cssRules;
-                if (inner !== undefined) {
-                    stack.push(...Array.from(inner));
-                    continue;
-                }
                 if (rule instanceof CSSStyleRule) {
                     seen++;
                     if (rule.selectorText.includes('h-\\[100dvh\\]')) found = true;
                 }
+                /*
+                 * **入れ子はぜんぶ潜る。** `@media` だけ見ていても届かない —
+                 * Tailwind は中身を `@layer` に入れるので、そこで止まる
+                 */
+                const inner = (rule as CSSRule & { cssRules?: CSSRuleList }).cssRules;
+                if (inner !== undefined) stack.push(...Array.from(inner));
             }
         }
         const href = Array.from(document.querySelectorAll<HTMLLinkElement>('link[rel=stylesheet]'))
