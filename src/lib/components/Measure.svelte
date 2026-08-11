@@ -142,15 +142,56 @@
 
     onMount(() => {
         take();
-        // 撮り直す口。バーの出入りでも切り替わるので、動くたびに測る
+
+        /*
+         * **測り続ける。**
+         *
+         * 1回だけ撮っていたが、**それでは組み上がる前の姿を報せうる** —
+         * 字が届く前、一覧が伸びる前、知らせで中身が入れ替わる前。実機から
+         * 「土台の高さが 763.765px」という、決まりとも中身とも合わない値が
+         * 返ってきた。読むための道具が嘘をつくと、そこから先が全部無駄になる。
+         *
+         * 形が変わったら測り直す (`ResizeObserver`) のに加えて、**中身が
+         * 入れ替わっても**測り直す (`MutationObserver`)。どちらもコマに
+         * 束ねてから測る — 測ること自体で組み直しを呼ぶので、そのまま
+         * 走らせると止まらなくなる
+         */
         const again = () => take();
+        let waiting = 0;
+        const later = () => {
+            if (waiting !== 0) return;
+            waiting = requestAnimationFrame(() => {
+                waiting = 0;
+                take();
+            });
+        };
+
         window.addEventListener('resize', again);
         window.addEventListener('scroll', again, { passive: true });
         window.visualViewport?.addEventListener('resize', again);
+
+        /*
+         * **見張るのは土台の中だけ。** この札も body の中に居るので、body ごと
+         * 見張ると**自分が書き換わったことで測り直しに来る**。コマに束ねても
+         * 毎コマ回り続けることになる
+         */
+        const root = document.querySelector('[data-root]');
+        const sizes = new ResizeObserver(later);
+        sizes.observe(document.documentElement);
+        if (root !== null) sizes.observe(root);
+
+        const changes = new MutationObserver(later);
+        if (root !== null) {
+            changes.observe(root, { childList: true, subtree: true, attributes: true });
+        }
+
         return () => {
+            if (waiting !== 0) cancelAnimationFrame(waiting);
             window.removeEventListener('resize', again);
             window.removeEventListener('scroll', again);
             window.visualViewport?.removeEventListener('resize', again);
+            sizes.disconnect();
+            changes.disconnect();
         };
     });
 </script>
