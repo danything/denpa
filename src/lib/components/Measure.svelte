@@ -46,6 +46,10 @@
     let base = $state('');
     /** 土台に実際に付いている class。**当たっているかどうかを、結果と別に見る** */
     let rootClass = $state('');
+    /** 決まりが載っている CSS に本当にあるか。**class が付いていることとは別** */
+    let rules = $state('');
+    /** 土台と同じ置かれ方で `100dvh` を測ったらいくつか。**浮かせた札との差を見る** */
+    let plain = $state(0);
     let culprits = $state<Culprit[]>([]);
 
     const over = $derived(scroll - client);
@@ -69,6 +73,45 @@
     }
 
     /**
+     * **その決まりが本当に届いているか。**
+     *
+     * 同じ `@media` の中の3つのうち2つだけ効く、ということは起こらない。
+     * 起きているように見えるなら、**片方の決まりがそこに無い** (配られた
+     * CSS が古い) を疑う。当てずっぽうで直す前に、載っている CSS を数える
+     */
+    function ruleState(): string {
+        const sheets = Array.from(document.styleSheets);
+        let seen = 0;
+        let found = false;
+        for (const sheet of sheets) {
+            let top: CSSRule[];
+            try {
+                top = Array.from(sheet.cssRules);
+            } catch {
+                // 別の出どころの CSS は中身を読めない。数えるだけ
+                continue;
+            }
+            const stack = [...top];
+            while (stack.length > 0) {
+                const rule = stack.pop();
+                if (rule === undefined) break;
+                if (rule instanceof CSSMediaRule) {
+                    stack.push(...Array.from(rule.cssRules));
+                    continue;
+                }
+                if (rule instanceof CSSStyleRule) {
+                    seen++;
+                    if (rule.selectorText.includes('h-\\[100dvh\\]')) found = true;
+                }
+            }
+        }
+        const href = Array.from(document.querySelectorAll<HTMLLinkElement>('link[rel=stylesheet]'))
+            .map((link) => link.href.split('/').pop())
+            .join(' ');
+        return `決まり ${found ? '有' : '無'} / ${seen}件 / ${href}`;
+    }
+
+    /**
      * 単位ごとの高さを実際に測る。
      *
      * `dvh` (いま見えている) と `lvh` (バーが引っ込んだとき) が食い違う端末では、
@@ -85,6 +128,17 @@
         };
         const found = { dvh: one('dvh'), svh: one('svh'), lvh: one('lvh'), vh: one('vh') };
         probe.remove();
+
+        /*
+         * **浮かせずにも測る。** 上のものは `position: absolute` で浮いている。
+         * 土台は流れの中に居るので、置かれ方で答えが変わるならそこが効いている
+         */
+        const flat = document.createElement('div');
+        flat.style.cssText = 'height:100dvh; visibility:hidden; pointer-events:none;';
+        document.body.appendChild(flat);
+        plain = Math.round(flat.getBoundingClientRect().height);
+        flat.remove();
+
         return found;
     }
 
@@ -137,6 +191,7 @@
             rootClass = root.className;
         }
 
+        rules = ruleState();
         culprits = findCulprits(client);
     }
 
@@ -212,8 +267,11 @@
     <div>{base} / {wide ? '二段組 (md)' : '一段 (md 未満)'}</div>
     <div class="max-w-[70ch] break-all">class: {rootClass}</div>
     {#if units !== null}
-        <div>dvh {units.dvh} / svh {units.svh} / lvh {units.lvh} / vh {units.vh} — {mode}</div>
+        <div>
+            dvh {units.dvh} / svh {units.svh} / lvh {units.lvh} / vh {units.vh} / 流れの中 {plain} — {mode}
+        </div>
     {/if}
+    <div class="max-w-[70ch] break-all">{rules}</div>
     {#each culprits as culprit (culprit.what + culprit.bottom)}
         <div>↳ {culprit.what} → {culprit.bottom}</div>
     {/each}
