@@ -125,9 +125,9 @@ RUN apt-get update && \
 # ので、上げるのは意識してやる (renovate.json の customManagers)。
 WORKDIR /src
 # renovate: datasource=git-refs depName=https://github.com/tobitti0/dtvindex branch=main
-ARG DTVINDEX_SHA=196272d2e1b8d8aa0d960b4245a8f3a419debfae
+ARG DTVINDEX_SHA=2fdbe1ba116b2ad6a018149716454635c7dfb7b9
 # renovate: datasource=git-refs depName=https://github.com/tobitti0/chapter_exe branch=master
-ARG CHAPTER_EXE_SHA=a32c8f06c3207f8d144b6be37110c63221d7e79a
+ARG CHAPTER_EXE_SHA=266ff66f1052a684552a0a3e962b4b796862b8ac
 # renovate: datasource=git-refs depName=https://github.com/tobitti0/logoframe branch=master
 ARG LOGOFRAME_SHA=8185bafc281e86d847d8084de53c7ae42acfb532
 # renovate: datasource=github-tags depName=yobibi/join_logo_scp extractVersion=^v(?<version>.*)$
