@@ -4,8 +4,18 @@
     import { invalidateAll } from '$app/navigation';
     import { navigating, page } from '$app/state';
     import { busy } from '$lib/busy.svelte';
+    import Measure from '$lib/components/Measure.svelte';
 
     let { children, data } = $props();
+
+    /**
+     * **その端末の高さを読む札** (`?measure` を付けたときだけ)。
+     *
+     * 縦のはみ出しは端末でしか起きないことがある — 自動運転のブラウザには
+     * 引っ込むアドレスバーが作れない。実機の PWA で「リロードすると画面全体が
+     * スクロールできる」として出たとき、**数を見る手が1つも無かった**
+     */
+    const measuring = $derived(page.url.searchParams.has('measure'));
 
     // ハイドレーション完了の目印。SSR直後のDOMに入力しても、ハイドレーションで
     // 値が書き戻されて消える。E2Eはこの印が付くのを待ってから操作する
@@ -261,3 +271,7 @@
         {@render children()}
     </main>
 </div>
+
+{#if measuring}
+    <Measure />
+{/if}

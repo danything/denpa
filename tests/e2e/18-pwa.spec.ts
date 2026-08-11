@@ -91,6 +91,27 @@ test.describe('PWA', () => {
         }
     });
 
+    /*
+     * **端末でしか出ない縦のはみ出しを、その端末で読むための札。**
+     *
+     * 自動運転のブラウザには引っ込むアドレスバーが作れないので、
+     * 「手元では出ないが実機では出る」を追う手が要る。ここで見るのは
+     * 「付けたときだけ出る」ことと「数がそろっている」ことまで
+     */
+    test('?measure を付けたときだけ高さの札が出る', async ({ page }) => {
+        await goto(page, '/guide');
+        await expect(page.getByTestId('measure')).toHaveCount(0);
+
+        await goto(page, '/guide?measure');
+        const badge = page.getByTestId('measure');
+        await expect(badge).toBeVisible();
+        await expect(badge).toContainText('はみ出し');
+        await expect(badge).toContainText('dvh');
+
+        // 読むための札が、下のものを触れなくしては本末転倒
+        expect(await badge.evaluate((el) => getComputedStyle(el).pointerEvents)).toBe('none');
+    });
+
     test('サービスワーカーが登録され、APIは横取りしない', async ({ page }) => {
         await goto(page, '/');
         const registered = await page.evaluate(async () => {

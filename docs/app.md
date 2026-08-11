@@ -200,6 +200,7 @@ k3s の manifest に書いてあるのは、**既定値では決められない�
 | `/login` / `/login/callback` / `/logout` | OIDC でのログインとログアウト。設定していなければ 404 ([auth.md](auth.md)) |
 | `/api/services/<id>/logo-data` | **logoframe がいま覚えているロゴ** (白黒PNG)。番組表に出すロゴとは別物で、絵になっているかを確かめるためのもの |
 | `/dav` | WebDAV (PROPFIND / GET / HEAD)。Nova 用。書き込みは受けない |
+| `?measure` (どの画面でも) | **その端末の高さを読む札** (`components/Measure.svelte`)。窓・枠・中身の高さと、`dvh`/`svh`/`lvh`/`vh` の実測、はみ出している要素を出す。縦のはみ出しは**端末でしか起きない**ことがあり (引っ込むアドレスバー、切り欠き)、自動運転のブラウザでは作れない |
 | `/manifest.webmanifest` | PWA のマニフェスト。**来た名前で表示名が変わる**ので静的ファイルではない。ここだけ認証を掛けていない (ブラウザが資格情報を付けずに取りに来るため) |
 
 ## チューナーエージェント (`agent/`)
