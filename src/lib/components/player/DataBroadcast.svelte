@@ -387,11 +387,34 @@
         localStorage.setItem(key, btoa(postal));
     }
 
+    /**
+     * **借りものに `Buffer` を渡す。**
+     *
+     * web-bml は Node の `Buffer` 前提で書かれている。多くのファイルは
+     * `buffer` を import して済むが、一部 (音声・**通信系コンテンツの取得**) は
+     * **グローバルの `Buffer`** を当てにしていて、ブラウザには無いので
+     * `ReferenceError: Buffer is not defined` で止まる。
+     *
+     * 実機で出た症状はこれ — データ放送の「通信機能について」を選ぶと
+     * `http://bml.nhk.jp/…` へ画面ごと飛び、取ってきた BML を包むところで
+     * `Buffer` を呼んで**画面が固まる** (中継は 200 で取れているのに描けない)。
+     *
+     * データ放送を開くときにだけ据える。**見ない人のぶんまで global を
+     * 汚さない**ため、`import()` と同じくここで遅延して積む
+     */
+    async function provideBuffer(): Promise<void> {
+        const target = globalThis as { Buffer?: unknown };
+        if (target.Buffer !== undefined) return;
+        const { Buffer } = await import('buffer');
+        target.Buffer = Buffer;
+    }
+
     async function open(): Promise<void> {
         if (host === null || media === null) return;
         const mine = ++generation;
         loading = true;
         // 押されてから取りに行く (上の説明)
+        await provideBuffer();
         const { BMLBrowser } = await import('$lib/vendor/web-bml/client/bml_browser');
         // 待っている間に離されていたら、作らない
         if (mine !== generation || host === null || media === null) return;
