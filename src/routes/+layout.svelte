@@ -139,6 +139,34 @@
     const fill = $derived(FILLED.includes(page.url.pathname) || page.url.pathname.startsWith('/watch/'));
 
     /**
+     * **動かないことは、動かす側で止める。**
+     *
+     * 土台を画面ちょうどの高さにして中だけ動かす、という組み方をしている。
+     * それは「土台の高さが画面と一致していること」に頼っていて、**一致しな
+     * かったときに黙って崩れる** — 実機の PWA で土台が 763.765px になり
+     * (画面は 708px)、二段組のはずの画面がページごと 56px 動いていた。
+     *
+     * 高さが合っているかに関わらず、**動く側 (`html`) を止める**。中の一覧は
+     * それぞれ自分で動くので、読めなくなるものは無い (土台にはもともと
+     * `overflow: hidden` が掛かっていて、はみ出したぶんは元から見えない)。
+     *
+     * 畳まれる幅では止めない — そちらはページごと動くのが正しい形
+     */
+    $effect(() => {
+        if (!fill) return;
+        const wide = matchMedia('(min-width: 48rem)');
+        const apply = () => {
+            document.documentElement.style.overflow = wide.matches ? 'hidden' : '';
+        };
+        apply();
+        wide.addEventListener('change', apply);
+        return () => {
+            wide.removeEventListener('change', apply);
+            document.documentElement.style.overflow = '';
+        };
+    });
+
+    /**
      * 狭い画面ではナビを畳む。
      *
      * 項目を横に並べると、スマートフォンの幅ではヘッダーそのものが画面より

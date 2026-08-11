@@ -83,12 +83,33 @@ test.describe('PWA', () => {
                 const doc = await page.evaluate(() => ({
                     scrollH: document.documentElement.scrollHeight,
                     clientH: document.documentElement.clientHeight,
+                    // **動く側を止めてある。** 土台の高さが画面と一致しなくても、
+                    // 二段組の画面がページごと動くことはない
+                    locked: getComputedStyle(document.documentElement).overflowY,
                 }));
                 expect(doc.scrollH, `${path} が ${width}px で縦に流れる`).toBeLessThanOrEqual(
                     doc.clientH + 1,
                 );
+                expect(doc.locked, `${path} が ${width}px で止まっていない`).toBe('hidden');
             }
         }
+
+        /*
+         * **畳まれる幅では止めない。** そちらはページごと動くのが正しい形で、
+         * 止めると一覧の続きに手が届かなくなる
+         */
+        await page.setViewportSize({ width: 390, height: 700 });
+        await goto(page, '/');
+        expect(await page.evaluate(() => getComputedStyle(document.documentElement).overflowY)).not.toBe(
+            'hidden',
+        );
+
+        // 二段組でない画面も止めない
+        await page.setViewportSize({ width: 1280, height: 700 });
+        await goto(page, '/settings');
+        expect(await page.evaluate(() => getComputedStyle(document.documentElement).overflowY)).not.toBe(
+            'hidden',
+        );
     });
 
     /*
