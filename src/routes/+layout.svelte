@@ -174,6 +174,8 @@
     class="flex min-h-[100dvh] flex-col bg-base-200 {fill
         ? 'md:h-[100dvh] md:min-h-0 md:overflow-hidden'
         : ''}"
+    data-root
+    data-fill={fill ? 'true' : undefined}
     data-hydrated={hydrated ? 'true' : undefined}
 >
     <div class="navbar bg-base-100 sticky top-0 z-40 shadow-sm">

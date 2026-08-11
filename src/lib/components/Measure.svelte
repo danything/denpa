@@ -44,6 +44,8 @@
      * すり抜ける)
      */
     let base = $state('');
+    /** 土台に実際に付いている class。**当たっているかどうかを、結果と別に見る** */
+    let rootClass = $state('');
     let culprits = $state<Culprit[]>([]);
 
     const over = $derived(scroll - client);
@@ -119,12 +121,20 @@
         // 二段組にする線。ここを越えているかで、土台に当たる決まりが変わる
         wide = matchMedia('(min-width: 768px)').matches;
 
-        const root = document.querySelector('body > div > div');
+        /*
+         * **土台は class で探す。** `body > div > div` で採っていたが、
+         * それが本当に土台かどうかは形しだいで、外すと**別のものの数を
+         * 土台として報せる**。実機で「`overflow:hidden` は効いているのに
+         * `height:100dvh` が効いていない」という辻褄の合わない値が出た
+         */
+        const root = document.querySelector('[data-root]');
         if (root === null) {
             base = '土台が見つからない';
         } else {
             const style = getComputedStyle(root);
-            base = `土台 ${Math.round(root.getBoundingClientRect().height)} (h:${style.height} over:${style.overflowY})`;
+            base = `土台 ${Math.round(root.getBoundingClientRect().height)} (h:${style.height} min:${style.minHeight} over:${style.overflowY})`;
+            // **決まりが当たっているかと、当たった結果は別。** class ごと出す
+            rootClass = root.className;
         }
 
         culprits = findCulprits(client);
@@ -159,6 +169,7 @@
         <b class={over > 1 ? 'text-red-400' : 'text-green-400'}>はみ出し {over}</b>
     </div>
     <div>{base} / {wide ? '二段組 (md)' : '一段 (md 未満)'}</div>
+    <div class="max-w-[70ch] break-all">class: {rootClass}</div>
     {#if units !== null}
         <div>dvh {units.dvh} / svh {units.svh} / lvh {units.lvh} / vh {units.vh} — {mode}</div>
     {/if}
