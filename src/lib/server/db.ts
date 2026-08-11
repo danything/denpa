@@ -127,6 +127,20 @@ export function dropStoredState(db: Database): void {
         console.log(`[db] rules.${column} を落としました (焼き方は設定で決めます)`);
     }
 
+    /*
+     * 予約と録画も同じ。焼き方の細目 (生TSを残すか・CMの扱い・コーデック) は
+     * どこからも読んでいなかった — 予約→録画へ写すだけで、焼くときは settings を見る。
+     * **予約の `encode` (焼くか否か) だけは残す。** これは recorder が実際に読む
+     */
+    for (const table of ['reservations', 'recordings']) {
+        const columns = db.query(`PRAGMA table_info(${table})`).all() as { name: string }[];
+        for (const column of ['keep_original', 'cm_cut', 'codec']) {
+            if (!columns.some((c) => c.name === column)) continue;
+            db.exec(`ALTER TABLE ${table} DROP COLUMN ${column}`);
+            console.log(`[db] ${table}.${column} を落としました (焼き方は設定で決めます)`);
+        }
+    }
+
     shiftPriorities(db);
 }
 

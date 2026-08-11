@@ -124,9 +124,6 @@ export interface Reservation {
     priority: number;
     manual: number;
     encode: number;
-    keep_original: number;
-    cm_cut: CmMode;
-    codec: VideoCodec;
     state: ReservationState;
     /** 録り始めた時刻。null なら**まだ始めていない**。二重に始めないための鍵でもある */
     started_at: number | null;
@@ -173,9 +170,6 @@ export interface Recording {
     state: RecordingState;
     /** 録画そのものが失敗した理由 (消したときは削除の理由)。エンコードの失敗は入らない */
     error: string | null;
-    keep_original: number;
-    cm_cut: CmMode;
-    codec: VideoCodec;
     cm_ranges: string | null;
     /** 番組表から写したジャンル (JSON: [{lv1, lv2}])。エンコードのコマ数を決めるのに使う */
     genre_detail: string | null;

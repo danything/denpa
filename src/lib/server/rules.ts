@@ -282,8 +282,8 @@ export function applyRules(options: { rule?: number } = {}): RuleSync {
     const insert = database().prepare(`
         INSERT OR IGNORE INTO reservations
             (program_id, rule_id, service_id, name, description, start_at, end_at,
-             priority, manual, encode, keep_original, cm_cut, codec, state, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, 'scheduled', ?, ?)
+             priority, manual, encode, state, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?, 'scheduled', ?, ?)
     `);
     const drop = database().prepare('DELETE FROM reservations WHERE id = ?');
     const move = database().prepare(
@@ -315,9 +315,6 @@ export function applyRules(options: { rule?: number } = {}): RuleSync {
                 program.end_at,
                 rule.priority,
                 recording.encode ? 1 : 0,
-                recording.keepOriginal ? 1 : 0,
-                recording.cmCut,
-                recording.codec,
                 at,
                 at,
             );

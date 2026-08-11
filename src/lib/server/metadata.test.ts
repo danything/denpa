@@ -22,8 +22,6 @@ function recording(over: Partial<Recording> = {}): Recording {
         library_path: null,
         state: 'available',
         error: null,
-        keep_original: 0,
-        cm_cut: 'chapter',
         cm_ranges: null,
         deleted_at: null,
         created_at: 0,

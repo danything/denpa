@@ -10,13 +10,9 @@
  */
 export const ADDED_COLUMNS: { table: string; column: string; definition: string }[] = [
     { table: 'services', column: 'has_logo', definition: 'INTEGER NOT NULL DEFAULT 0' },
-    { table: 'rules', column: 'cm_cut', definition: "TEXT NOT NULL DEFAULT 'chapter'" },
-    { table: 'rules', column: 'codec', definition: "TEXT NOT NULL DEFAULT 'av1'" },
     { table: 'rules', column: 'service_types', definition: 'TEXT' },
-    { table: 'reservations', column: 'cm_cut', definition: "TEXT NOT NULL DEFAULT 'chapter'" },
-    { table: 'reservations', column: 'codec', definition: "TEXT NOT NULL DEFAULT 'av1'" },
-    { table: 'recordings', column: 'cm_cut', definition: "TEXT NOT NULL DEFAULT 'chapter'" },
-    { table: 'recordings', column: 'codec', definition: "TEXT NOT NULL DEFAULT 'av1'" },
+    // 焼き方 (cm_cut/codec/keep_original) はどのテーブルにも持たせない。焼くときに
+    // settings を見る (db.dropStoredState が既存DBから落とす)。予約の encode だけ例外
     { table: 'recordings', column: 'cm_ranges', definition: 'TEXT' },
     { table: 'recordings', column: 'acknowledged_at', definition: 'INTEGER' },
     // もう一方のコーデックで焼いたもの (両方を選んだとき)。AV1 が主なら H.264 のほう
@@ -215,13 +211,9 @@ CREATE TABLE IF NOT EXISTS reservations (
     end_at INTEGER NOT NULL,
     priority INTEGER NOT NULL DEFAULT 2,
     manual INTEGER NOT NULL DEFAULT 0,
-    -- 「焼くか否か」は予約時に固定する (recorder が読む)。keep_original/cm_cut/codec は
-    -- 昔の写しの名残で、いまは読まない — 焼き方の細目は焼くときに settings を見る
+    -- 「焼くか否か」だけは予約した時点で固定する (recorder が読む)。焼き方の細目
+    -- (生TSを残すか・CMの扱い・コーデック) は持たず、焼くときに settings を見る
     encode INTEGER NOT NULL DEFAULT 1,
-    keep_original INTEGER NOT NULL DEFAULT 0,
-    -- off / chapter / cut
-    cm_cut TEXT NOT NULL DEFAULT 'chapter',
-    codec TEXT NOT NULL DEFAULT 'av1',
     /*
      * scheduled | conflict | canceled | missed
      * missed = 始まらないまま放送が終わったもの(アプリが止まっていた等)。
@@ -264,10 +256,6 @@ CREATE TABLE IF NOT EXISTS recordings (
     -- 録画そのものが失敗した理由。消したときは削除の理由も入る。
     -- **エンコードの失敗はここに書かない** (encode_jobs.error が持っている)
     error TEXT,
-    keep_original INTEGER NOT NULL DEFAULT 0,
-    -- off / chapter / cut
-    cm_cut TEXT NOT NULL DEFAULT 'chapter',
-    codec TEXT NOT NULL DEFAULT 'av1',
     cm_ranges TEXT,   -- 検出したCM区間の JSON。UIでの確認用
     -- JSON: [{lv1, lv2}]。エンコードのコマ数の判断に使う (国内アニメだけ30コマ)
     genre_detail TEXT,

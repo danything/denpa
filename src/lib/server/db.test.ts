@@ -23,15 +23,15 @@ describe('addMissingColumns', () => {
 
     test('既定値が入るので、既存の行も読める', () => {
         const db = new Database(':memory:');
-        db.exec(`CREATE TABLE recordings (id INTEGER PRIMARY KEY, name TEXT NOT NULL)`);
-        db.exec(`INSERT INTO recordings (id, name) VALUES (1, '既存の録画')`);
+        db.exec(`CREATE TABLE services (id INTEGER PRIMARY KEY, name TEXT NOT NULL)`);
+        db.exec(`INSERT INTO services (id, name) VALUES (1, 'NHK総合')`);
 
         addMissingColumns(db);
 
-        const row = db.query('SELECT * FROM recordings WHERE id = 1').get() as Record<string, unknown>;
-        expect(row.codec).toBe('av1');
-        expect(row.cm_cut).toBe('chapter');
-        expect(row.acknowledged_at).toBeNull();
+        // NOT NULL DEFAULT の列は、既にある行にも既定値が入る
+        const row = db.query('SELECT * FROM services WHERE id = 1').get() as Record<string, unknown>;
+        expect(row.has_logo).toBe(0);
+        expect(row.service_type).toBe(1);
     });
 
     test('前からあるルールは、それまでと同じ範囲を探し続ける', () => {
@@ -175,6 +175,43 @@ describe('状態を持つのをやめる', () => {
         dropStoredState(db);
         expect(() => dropStoredState(db)).not.toThrow();
         expect(stateOf(db, 1)).toBe('available');
+    });
+
+    test('焼き方の列は予約・録画から落ちる (encode は残す)', () => {
+        // 焼き方をテーブルに持っていた頃の形。recordings.state は生成列より前なので文字列
+        const db = new Database(':memory:');
+        db.exec(`CREATE TABLE recordings (
+            id INTEGER PRIMARY KEY, name TEXT NOT NULL, library_path TEXT,
+            state TEXT NOT NULL, error TEXT, deleted_at INTEGER, created_at INTEGER, updated_at INTEGER,
+            keep_original INTEGER NOT NULL DEFAULT 0,
+            cm_cut TEXT NOT NULL DEFAULT 'chapter', codec TEXT NOT NULL DEFAULT 'av1');
+        CREATE INDEX recordings_state ON recordings (state);
+        CREATE TABLE reservations (
+            id INTEGER PRIMARY KEY, state TEXT NOT NULL, encode INTEGER NOT NULL DEFAULT 1,
+            keep_original INTEGER NOT NULL DEFAULT 0, cm_cut TEXT NOT NULL DEFAULT 'chapter',
+            codec TEXT NOT NULL DEFAULT 'av1', created_at INTEGER, updated_at INTEGER)`);
+        db.exec(`INSERT INTO recordings (id, name, state, library_path, created_at, updated_at)
+                 VALUES (1, '録り終えた', 'available', '/library/a.mkv', 10, 20)`);
+        db.exec(
+            `INSERT INTO reservations (id, state, created_at, updated_at) VALUES (1, 'scheduled', 10, 20)`,
+        );
+
+        addMissingColumns(db);
+        dropStoredState(db);
+
+        // 生成列 state と同居していても、焼き方の列は両テーブルから落ちる
+        for (const table of ['recordings', 'reservations']) {
+            const cols = columnsOf(db, table);
+            expect(cols).not.toContain('keep_original');
+            expect(cols).not.toContain('cm_cut');
+            expect(cols).not.toContain('codec');
+        }
+        // 「焼くか否か」(encode) は残す — recorder が実際に読む
+        expect(columnsOf(db, 'reservations')).toContain('encode');
+        // 生成列の state は生きたまま
+        expect(stateOf(db, 1)).toBe('available');
+        // もう一度回しても壊れない
+        expect(() => dropStoredState(db)).not.toThrow();
     });
 
     /**

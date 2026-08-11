@@ -87,8 +87,8 @@ function createRecording(reservation: Reservation): Recording {
             `INSERT INTO recordings
                 (reservation_id, program_id, service_id, service_name, name, series, subtitle,
                  description, start_at, end_at, audio_type, genre_detail, audios,
-                 keep_original, cm_cut, codec, created_at, updated_at)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                 created_at, updated_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         )
         .run(
             reservation.id,
@@ -106,9 +106,6 @@ function createRecording(reservation: Reservation): Recording {
             program?.genre_detail ?? null,
             // 焼いたものの音声トラックに番組表と同じ名前を入れるのに要る (`audioTitles`)
             program?.audios ?? null,
-            reservation.keep_original,
-            reservation.cm_cut,
-            reservation.codec,
             at,
             at,
         );

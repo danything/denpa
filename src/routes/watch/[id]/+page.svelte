@@ -1040,7 +1040,7 @@
                         <!-- 早送り。**ライブの追っかけと同じ並び・同じ見た目** -->
                         <div class="dropdown dropdown-top dropdown-end">
                             <button type="button"
-                                class="btn btn-sm tabular-nums {speed === 1 ? OVERLAY : OVERLAY_ON}"
+                                class="{OVERLAY_BTN} tabular-nums {speed === 1 ? OVERLAY : OVERLAY_ON}"
                                 aria-label="再生の速さ"
                                 data-testid="watch-speed"
                             >

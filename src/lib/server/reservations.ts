@@ -10,7 +10,6 @@ export async function reserve(
     options: {
         priority?: number;
         encode?: boolean;
-        keepOriginal?: boolean;
     } = {},
 ): Promise<Reservation> {
     const program = queryOne<Program>('SELECT * FROM programs WHERE id = ?', programId);
@@ -21,25 +20,20 @@ export async function reserve(
     if (program.end_at <= at) throw new Error('この番組は放送が終わっています');
     // 手動で入れたものはルール由来 (既定 1) より上。**予約どうしだけの物差し**
     const priority = options.priority ?? 2;
-    // 録画のしかたは全体で1つ。指定が無ければ設定画面の値をそのまま使う
-    const current = settings();
-    const { cmCut, codec } = current;
-    const encode = (options.encode ?? current.encode) ? 1 : 0;
-    const keepOriginal = (options.keepOriginal ?? current.keepOriginal) ? 1 : 0;
+    // 録画のしかたは全体で1つ。「焼くか否か」だけ予約時に固定する (指定が無ければ設定の値)。
+    // 焼き方の細目 (生TSを残すか・CMの扱い・コーデック) は焼くときに settings を見る
+    const encode = (options.encode ?? settings().encode) ? 1 : 0;
 
     database()
         .prepare(
             `INSERT INTO reservations
             (program_id, rule_id, service_id, name, description, start_at, end_at,
-             priority, manual, encode, keep_original, cm_cut, codec, state, created_at, updated_at)
-         VALUES (?, NULL, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, 'scheduled', ?, ?)
+             priority, manual, encode, state, created_at, updated_at)
+         VALUES (?, NULL, ?, ?, ?, ?, ?, ?, 1, ?, 'scheduled', ?, ?)
          ON CONFLICT(program_id) DO UPDATE SET
             manual = 1,
             priority = excluded.priority,
             encode = excluded.encode,
-            keep_original = excluded.keep_original,
-            cm_cut = excluded.cm_cut,
-            codec = excluded.codec,
             state = CASE WHEN reservations.state = 'canceled' THEN 'scheduled' ELSE reservations.state END,
             updated_at = excluded.updated_at`,
         )
@@ -52,9 +46,6 @@ export async function reserve(
             program.end_at,
             priority,
             encode,
-            keepOriginal,
-            cmCut,
-            codec,
             at,
             at,
         );
