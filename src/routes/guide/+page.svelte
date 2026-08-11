@@ -178,9 +178,16 @@
     畳まれる幅ではページごとスクロールさせるので、そちらは 75% のまま —
     小さい画面で中だけスクロールさせると、指の届く範囲が二重になる。
 
-    **ただし単位ではなく、測った画面の高さ (`--app-h`) から採る。** 土台も
-    同じ値で組んである。`vh` や `dvh` を混ぜると**中身のほうが土台より
-    高くなり**、ページごと少し動く画面になる (実機で出た)
+    **ここだけ `%` で降ろせない。** 土台は `html` から `%` で採っているが、
+    畳まれる幅では途中の入れ物 (`main` と外枠) に高さが決まっておらず、
+    `%` が解決しない。
+
+    **そこは `svh` で採る。** 3つの単位のうち `svh` だけが「ブラウザの UI が
+    出ているとき」= いちばん小さい側で、**見えている範囲を超えない**。
+    `vh` と `dvh` は超えることがあり、実機の PWA で 56px ずれた
+    (Chrome for Android のアドレスバーの高さそのもの)。
+
+    ここは天井を決めているだけなので、少し小さく出る側に倒すのが正しい
 -->
 <div class="md:flex md:h-full md:flex-col">
     <!--
@@ -244,7 +251,7 @@
         </div>
     {:else}
         <div
-            class="rounded-box bg-base-100 max-h-[calc(var(--app-h)*0.75)] cursor-grab overflow-auto shadow
+            class="rounded-box bg-base-100 max-h-[75svh] cursor-grab overflow-auto shadow
                active:cursor-grabbing md:max-h-none md:min-h-0 md:flex-1"
             use:dragScroll
             bind:this={grid}

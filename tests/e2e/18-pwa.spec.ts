@@ -68,10 +68,9 @@ test.describe('PWA', () => {
     /*
      * **中だけ動かす画面は、ページごと動かない。**
      *
-     * 土台は `100dvh` (いま見えている高さ) で採る。ここに `vh`
-     * (アドレスバーが引っ込んだときの高さ) が混ざると、**中身のほうが土台より
-     * 高くなり**、バーが出ている間ずっとページごと少し動く。実機の PWA で
-     * 「リロードすると画面全体がスクロールできる」として出た。
+     * 土台は `html` から `%` で採る。単位 (`vh` / `dvh`) で言い当てると、
+     * **中身のほうが土台より高くなる**ことがある — 実機の PWA で
+     * `100dvh` が 56px 大きく出て、二段組の画面がページごと動いていた。
      *
      * ブラウザの自動運転では引っ込むバーを作れないので、ここで見るのは
      * 「はみ出していないこと」。単位の食い違いはこの形で表に出る
@@ -115,28 +114,6 @@ test.describe('PWA', () => {
         expect(root, '土台の class が見つからない').toBeTruthy();
         expect(root).toContain('min-h-full');
         expect(root).not.toMatch(/\b\d+(dvh|svh|lvh|vh)\b|h-screen/);
-    });
-
-    /*
-     * **高さは描く前に決まっている。**
-     *
-     * ハイドレーションを待って測ると、**その前に一度はみ出したものが
-     * 描かれて見える** (実機で「一瞬はみ出したのが見える」として出た)。
-     * 色を先に当てているのと同じ理由で、`app.html` の中で測る
-     */
-    test('画面の高さは組み上がりを待たずに入っている', async ({ page }) => {
-        await page.setViewportSize({ width: 1280, height: 700 });
-        await page.goto('/', { waitUntil: 'domcontentloaded' });
-
-        const early = await page.evaluate(() => ({
-            appH: getComputedStyle(document.documentElement).getPropertyValue('--app-h').trim(),
-            clientH: document.documentElement.clientHeight,
-            // ハイドレーションの印が付く前かどうか
-            hydrated: document.querySelector('[data-hydrated]') !== null,
-        }));
-        expect(early.appH).toBe(`${early.clientH}px`);
-        // 当ての `100dvh` のままではない (それが端末で合わないので測っている)
-        expect(early.appH).not.toBe('100dvh');
     });
 
     /*

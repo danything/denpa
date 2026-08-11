@@ -138,39 +138,6 @@
     const FILLED = ['/', '/live', '/rules', '/guide'];
     const fill = $derived(FILLED.includes(page.url.pathname) || page.url.pathname.startsWith('/watch/'));
 
-    /**
-     * **画面の高さは単位に訊かず、測る** (`--app-h`)。
-     *
-     * 土台を画面ちょうどの高さにして中だけ動かす、という組み方は
-     * 「`100dvh` が画面の高さと同じ」であることに頼っている。**実機で
-     * そうならなかった** — PWA (Android) で土台が 763.765px になり、画面は
-     * 708px。二段組のはずの画面がページごと 56px 動いていた。決まりは
-     * 配った CSS に載っていて (実機で確認)、`md:min-h-0` も
-     * `md:overflow-hidden` も効いていたのに、`height` だけ合わない。
-     *
-     * `documentElement.clientHeight` は**そのページが縦に動かずに出せる
-     * 高さそのもの**で、解釈の余地がない。これを写して使う。
-     *
-     * **`html` を `overflow: hidden` で止めるのは駄目だった。** はみ出しは
-     * 消えるが、Android の「引っ張って更新」まで消える — PWA には
-     * アドレスバーが無いので、**あれが唯一の更新手段**。塞ぐ側ではなく、
-     * 高さのほうを合わせる
-     */
-    $effect(() => {
-        const apply = () => {
-            document.documentElement.style.setProperty(
-                '--app-h',
-                `${document.documentElement.clientHeight}px`,
-            );
-        };
-        apply();
-        window.addEventListener('resize', apply);
-        window.visualViewport?.addEventListener('resize', apply);
-        return () => {
-            window.removeEventListener('resize', apply);
-            window.visualViewport?.removeEventListener('resize', apply);
-        };
-    });
 
     /**
      * 狭い画面ではナビを畳む。

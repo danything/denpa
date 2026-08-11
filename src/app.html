@@ -23,18 +23,6 @@
                 document.documentElement.dataset.themeMode = mode;
             })();
         </script>
-        <script>
-            // 画面の高さ。**描く前に測る。**
-            //
-            // CSS の単位 (`100dvh`) が画面の高さと一致しない端末がある
-            // (実機の PWA で、土台がアドレスバー1本ぶん = 56px 高くなった)。
-            // ハイドレーションを待って測ると、**その前に一度はみ出したものが
-            // 描かれて見える**。色を先に当てているのと同じ理由でここに置く
-            document.documentElement.style.setProperty(
-                '--app-h',
-                `${document.documentElement.clientHeight || innerHeight}px`,
-            );
-        </script>
         %sveltekit.head%
     </head>
     <body data-sveltekit-preload-data="hover">

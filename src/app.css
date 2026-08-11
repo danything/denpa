@@ -1,4 +1,9 @@
 @import "tailwindcss";
+@plugin "daisyui" {
+    themes:
+        dark --default,
+        light;
+}
 
 /**
  * **画面の高さは、単位ではなく `html` から採る。**
@@ -14,21 +19,4 @@
 html,
 body {
     height: 100%;
-}
-
-/**
- * 画面の高さ。**`%` で降ろせないところ用** (途中の入れ物に高さが決まって
- * いないと `%` は効かないため。番組表の表がそれ)。
- *
- * `app.html` が描く前に `documentElement.clientHeight` を入れ、
- * `+layout.svelte` が大きさの変わるたびに撮り直す。ここに書いてあるのは
- * JS を切っているときの当て
- */
-:root {
-    --app-h: 100dvh;
-}
-@plugin "daisyui" {
-    themes:
-        dark --default,
-        light;
 }
