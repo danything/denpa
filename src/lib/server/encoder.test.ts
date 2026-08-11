@@ -17,11 +17,11 @@ function argValue(args: string[], key: string): string | undefined {
 }
 
 describe('録画エンコードの引数', () => {
-    test('既定は AV1 10bit で、コマ数は増やさない', () => {
+    test('既定は AV1 8bit で、コマ数は増やさない', () => {
         const args = buildArgs('/in.m2ts', '/out.mkv', 1, null);
         expect(args).toContain('libsvtav1');
         // send_field だとコマ数が倍になり、時間もサイズも約2倍になる
-        expect(argValue(args, '-vf')).toBe('bwdif=mode=send_frame,format=yuv420p10le');
+        expect(argValue(args, '-vf')).toBe('bwdif=mode=send_frame,format=yuv420p');
         expect(args.at(-1)).toBe('/out.mkv');
     });
 
@@ -38,7 +38,23 @@ describe('録画エンコードの引数', () => {
 
     test('なめらかにすると1フィールドごとに1コマ出す', () => {
         const args = buildArgs('/in.m2ts', '/out.mkv', 1, null, 'av1', { smoothMotion: true });
-        expect(argValue(args, '-vf')).toBe('bwdif,format=yuv420p10le');
+        expect(argValue(args, '-vf')).toBe('bwdif,format=yuv420p');
+    });
+
+    /*
+     * **どちらのコーデックも 8bit。**
+     *
+     * AV1 は 10bit で出していた。根拠が残っていなかったので測ったところ、
+     * 10bit は 1.7% 小さく SSIM +0.0011 (実写100秒: 39秒 21.71MB 0.97582 ↔
+     * 34秒 22.09MB 0.97472)。**差はあるが 2% で、15% 遅くなるぶんと
+     * 引き合わない。** そのうえ Main10 を解ける相手が要る — 元の放送が
+     * 8bit なのだから、8bit で出す
+     */
+    test('10bit では出さない', () => {
+        for (const codec of ['av1', 'h264'] as const) {
+            const args = buildArgs('/in.m2ts', '/out.mkv', 1, null, codec);
+            expect(argValue(args, '-vf'), codec).not.toContain('10le');
+        }
     });
 });
 
@@ -246,15 +262,13 @@ describe('コマ数の決め方', () => {
         const args = buildArgs('/in.m2ts', '/out.mkv', 1, null, 'av1', {
             displaySize: { width: 1920, height: 1080 },
         });
-        expect(argValue(args, '-vf')).toBe(
-            'bwdif=mode=send_frame,scale=1920:1080,setsar=1,format=yuv420p10le',
-        );
+        expect(argValue(args, '-vf')).toBe('bwdif=mode=send_frame,scale=1920:1080,setsar=1,format=yuv420p');
     });
 
     test('渡されなければ引き伸ばさない', () => {
         // もともと正方形の素材。同じ大きさへの scale は仕事が増えるだけ
         expect(argValue(buildArgs('/in.m2ts', '/out.mkv', 1, null), '-vf')).toBe(
-            'bwdif=mode=send_frame,format=yuv420p10le',
+            'bwdif=mode=send_frame,format=yuv420p',
         );
     });
 
