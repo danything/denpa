@@ -36,10 +36,17 @@
 
     const over = $derived(scroll - client);
 
-    /** その要素の見分け。**class は先頭だけ** — 全部出すと札が画面を覆う */
+    /**
+     * その要素の見分け。**class は先頭だけ** — 全部出すと札が画面を覆う。
+     *
+     * `id` は属性から採る。`<form>` の `.id` は**中の入力欄**を指すことが
+     * あり (名前の付いた部品が同名の属性より前に出る古い決まり)、そのまま
+     * 出すと `form#[object HTMLInputElement]` になる
+     */
     function name(element: Element): string {
         const tag = element.tagName.toLowerCase();
-        const id = element.id === '' ? '' : `#${element.id}`;
+        const attr = element.getAttribute('id');
+        const id = attr === null || attr === '' ? '' : `#${attr}`;
         const testid = element.getAttribute('data-testid');
         if (testid !== null) return `${tag}${id}[${testid}]`;
         const cls = element.className;
@@ -67,8 +74,15 @@
         return found;
     }
 
-    /** 画面の下からはみ出している要素。**深いものから3つ** (浅いものは親の巻き添え) */
+    /**
+     * ページごとはみ出している要素。**深いものから3つ** (浅いものは親の巻き添え)。
+     *
+     * **ページが動かないなら何も出さない。** 中で自分だけスクロールする枠
+     * (番組表の表など) の中身は、画面の下より深いところに居るのが正しい。
+     * それを並べると、はみ出していない画面にまで犯人が出る
+     */
     function findCulprits(limit: number): Culprit[] {
+        if (scroll - client <= 1) return [];
         const found: Culprit[] = [];
         for (const element of document.querySelectorAll('body *')) {
             const box = element.getBoundingClientRect();
