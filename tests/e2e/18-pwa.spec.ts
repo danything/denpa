@@ -96,6 +96,28 @@ test.describe('PWA', () => {
     });
 
     /*
+     * **高さは描く前に決まっている。**
+     *
+     * ハイドレーションを待って測ると、**その前に一度はみ出したものが
+     * 描かれて見える** (実機で「一瞬はみ出したのが見える」として出た)。
+     * 色を先に当てているのと同じ理由で、`app.html` の中で測る
+     */
+    test('画面の高さは組み上がりを待たずに入っている', async ({ page }) => {
+        await page.setViewportSize({ width: 1280, height: 700 });
+        await page.goto('/', { waitUntil: 'domcontentloaded' });
+
+        const early = await page.evaluate(() => ({
+            appH: getComputedStyle(document.documentElement).getPropertyValue('--app-h').trim(),
+            clientH: document.documentElement.clientHeight,
+            // ハイドレーションの印が付く前かどうか
+            hydrated: document.querySelector('[data-hydrated]') !== null,
+        }));
+        expect(early.appH).toBe(`${early.clientH}px`);
+        // 当ての `100dvh` のままではない (それが端末で合わないので測っている)
+        expect(early.appH).not.toBe('100dvh');
+    });
+
+    /*
      * **`html` を `overflow: hidden` で止めてはいけない。**
      *
      * はみ出しは消えるが、Android の「引っ張って更新」まで消える。
