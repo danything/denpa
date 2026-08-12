@@ -156,8 +156,13 @@ export function feedFor(timeline: readonly PlacedMessage[], fromMs: number, toMs
  * 出す順は `Carousel` に委ねる (pmt → programInfo → モジュール)。シークで戻った
  * ときも、頭から積み直すだけで正しい状態になる — 変化ログなので、積む順は届いた順。
  *
- * @param timeline `captureDataBroadcast` の出力
- * @param at 放送の実時刻 (unix ms)。この時刻までに配られたものを積む
+ * `at` の意味は渡すタイムライン次第 — `captureDataBroadcast` の出力 (`TimedMessage[]`,
+ * 放送の実時刻 unix ms) をそのまま渡すテストと、`feedFor` が再生位置 (ms) つきの
+ * `PlacedMessage[]` を渡す本番の両方で使う。`PlacedMessage.at` は常に数値なので、
+ * `at === null` の枝は本番では通らない (頭の準備を積むためのテスト向け)。
+ *
+ * @param timeline `captureDataBroadcast` の出力、または `toPlaybackTimeline` で写したもの
+ * @param at その時刻 (放送の実時刻 unix ms / 再生位置 ms) までに配られたものを積む
  */
 export function replayAt(timeline: readonly TimedMessage[], at: number): ResponseMessage[] {
     const carousel = new Carousel();

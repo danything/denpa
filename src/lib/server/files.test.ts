@@ -205,33 +205,32 @@ describe('実体との照合', () => {
      */
     test('作りたての空フォルダは畳まない', () => {
         fresh();
-        mkdirSync(join(config.libraryDir, '焼いている番組/Season 2026'), { recursive: true });
+        mkdirSync(join(config.libraryDir, '焼いている番組'), { recursive: true });
 
         expect(reconcile().pruned).toBe(0);
-        expect(existsSync(join(config.libraryDir, '焼いている番組/Season 2026'))).toBe(true);
+        expect(existsSync(join(config.libraryDir, '焼いている番組'))).toBe(true);
     });
 
     /** 動画の残っているフォルダは、当然そのまま */
     test('中身のあるフォルダは畳まない', () => {
         fresh();
-        put(config.libraryDir, '生きている番組/Season 2026/生きている番組 - 1.mkv');
+        put(config.libraryDir, '生きている番組/生きている番組 - 1.mkv');
         // フォルダ自体も古くしておく (作りたて避けに引っかからないように)
         const old = new Date(Date.now() - 2 * 60 * 60 * 1000);
-        utimesSync(join(config.libraryDir, '生きている番組/Season 2026'), old, old);
         utimesSync(join(config.libraryDir, '生きている番組'), old, old);
 
         expect(reconcile().pruned).toBe(0);
-        expect(existsSync(join(config.libraryDir, '生きている番組/Season 2026'))).toBe(true);
+        expect(existsSync(join(config.libraryDir, '生きている番組'))).toBe(true);
     });
 
     test('DBに無い動画は数えるだけ。手で置いたものかもしれない', () => {
         fresh();
-        put(config.libraryDir, '手で置いた/Season 2026/手で置いた - 1.mkv');
+        put(config.libraryDir, '手で置いた/手で置いた - 1.mkv');
 
         const result = reconcile();
         expect(result.strays).toBe(1);
         expect(result.swept).toBe(0);
-        expect(existsSync(join(config.libraryDir, '手で置いた/Season 2026/手で置いた - 1.mkv'))).toBe(true);
+        expect(existsSync(join(config.libraryDir, '手で置いた/手で置いた - 1.mkv'))).toBe(true);
     });
 
     /*
@@ -244,7 +243,7 @@ describe('実体との照合', () => {
      */
     test('焼いている途中の .encoding は消さない', () => {
         fresh();
-        const working = put(config.libraryDir, '番組/Season 2026/番組 - 1.mkv.encoding', false);
+        const working = put(config.libraryDir, '番組/番組 - 1.mkv.encoding', false);
 
         expect(reconcile().swept).toBe(0);
         expect(existsSync(working)).toBe(true);
@@ -252,7 +251,7 @@ describe('実体との照合', () => {
 
     test('落ちて取り残された .encoding は、時間が経てば片付く', () => {
         fresh();
-        const left = put(config.libraryDir, '番組/Season 2026/番組 - 1.mkv.encoding');
+        const left = put(config.libraryDir, '番組/番組 - 1.mkv.encoding');
 
         expect(reconcile().swept).toBe(1);
         expect(existsSync(left)).toBe(false);
@@ -269,8 +268,8 @@ describe('実体との照合', () => {
 
     /** 両方のコーデックを焼いた録画を1件入れる。返り値は {av1, h264} の実パス */
     function twoCodec(): { av1: string; h264: string } {
-        const av1 = put(config.libraryDir, '二本立て/Season 2026/二本立て - 1.mkv');
-        const h264 = put(config.libraryDir, '二本立て/Season 2026/二本立て - 1 [H264].mkv');
+        const av1 = put(config.libraryDir, '二本立て/二本立て - 1.mkv');
+        const h264 = put(config.libraryDir, '二本立て/二本立て - 1 [H264].mkv');
         database()
             .prepare(
                 `INSERT INTO recordings (id, service_id, name, start_at, end_at, finished_at, library_path, alt_path, created_at, updated_at)

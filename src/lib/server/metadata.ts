@@ -124,11 +124,12 @@ export function writeNfo(recording: Recording, videoPath: string): void {
     writeFileSync(nfo, movieNfo(recording));
 }
 
-/** 動画と一緒に消す。取り残すと幽霊のエピソードが残る */
+/** 動画と一緒に、隣の付き添いを全部消す。取り残すと中身の無い録画がプレイヤーに残る */
 export function removeSidecars(videoPath: string | null): void {
     if (videoPath === null || videoPath === '') return;
-    const { nfo, thumbnail, subtitle } = sidecarPaths(videoPath);
+    const { nfo, thumbnail, subtitle, dataBroadcast } = sidecarPaths(videoPath);
     removeIfExists(nfo);
     removeIfExists(thumbnail);
     removeIfExists(subtitle);
+    removeIfExists(dataBroadcast);
 }

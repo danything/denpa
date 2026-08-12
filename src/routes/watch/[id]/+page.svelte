@@ -30,6 +30,7 @@
     } from '$lib/components/player/icons';
     import { clearOverlay, drawOverlay, fitRect } from '$lib/components/player/paint';
     import Remote from '$lib/components/player/Remote.svelte';
+    import { clipFrame } from '$lib/components/player/snapshot';
     import Toasts, { type Notice } from '$lib/components/Toasts.svelte';
     import { type DetailSeed, programDetail } from '$lib/detail.svelte';
     import { clock, cmNoteWorthShowing, recordedDuration, size, time } from '$lib/format';
@@ -699,35 +700,12 @@
      * 断られたら**落とすほうに倒す** — 撮ったものを取り落とさない
      */
     async function snapshot(): Promise<void> {
-        if (video === null || video.videoWidth === 0) return;
+        if (video === null) return;
         controls.stir();
-        const shotCanvas = document.createElement('canvas');
-        shotCanvas.width = video.videoWidth;
-        shotCanvas.height = video.videoHeight;
-        const ctx = shotCanvas.getContext('2d');
-        if (ctx === null) return;
-        ctx.drawImage(video, 0, 0, shotCanvas.width, shotCanvas.height);
-        // 出している字幕をそのまま重ねる (消しているときは重ねない)
-        if (captions && overlay !== null && overlay.width > 1 && showing !== null) {
-            ctx.drawImage(overlay, 0, 0, shotCanvas.width, shotCanvas.height);
-        }
-
-        const blob = await new Promise<Blob | null>((resolve) => shotCanvas.toBlob(resolve, 'image/png'));
-        if (blob === null) return;
-
-        try {
-            await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
-            shot = { key: `shot-${Date.now()}`, kind: 'success', text: '切り抜きをコピーしました' };
-        } catch {
-            // 置けない繋ぎ (http) や断られたとき。落として渡す
-            const url = URL.createObjectURL(blob);
-            const link = document.createElement('a');
-            link.href = url;
-            link.download = `${rec.name} - ${clock(at)}.png`;
-            link.click();
-            URL.revokeObjectURL(url);
-            shot = { key: `shot-${Date.now()}`, kind: 'success', text: '切り抜きを保存しました' };
-        }
+        // 字幕を出しているときだけ重ねる
+        const caption = captions && showing !== null ? overlay : null;
+        const notice = await clipFrame(video, caption, () => `${rec.name} - ${clock(at)}`);
+        if (notice !== null) shot = notice;
     }
 </script>
 
@@ -965,9 +943,9 @@
                     </a>
                     <!--
                         **データ放送 (d) は右上に置く。** 焼いてある録画でだけ出す
-                        (`data.hasData`)。ライブとボタンを揃えるため右側に出し、押すと
-                        右カラムにリモコン (`Remote`) が出る。ライブと違い、取りに行くのは
-                        サーバではなく焼いた変化ログ
+                        (`data.hasData`)。データ操作 (リモコン) を右カラムに出すので、
+                        入口の d も右にまとめた。押すと右カラムに `Remote` が出る。
+                        ライブと違い、取りに行くのはサーバではなく焼いた変化ログ
                     -->
                     {#if data.hasData}
                         <ControlButton

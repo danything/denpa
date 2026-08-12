@@ -18,7 +18,7 @@ import { database, now, queryOne } from './db';
 import { emit } from './events';
 import { removeIfExists } from './fsx';
 import { encodedPath, libraryFamily, libraryPath } from './library';
-import { sidecarPaths, writeNfo, writeThumbnail } from './metadata';
+import { removeSidecars, sidecarPaths, writeNfo, writeThumbnail } from './metadata';
 import { saveRecordedBml } from './recorded-bml';
 import { descramble, isScrambled } from './scramble';
 import { settings } from './settings';
@@ -1045,14 +1045,6 @@ async function runJob(jobId: number): Promise<void> {
     }
 
     /*
-     * **焼き方は焼くときの設定に従う。**
-     *
-     * 録画の行にもコーデックとCMの扱いが写してあるが、それは**録り始めた時点**の
-     * 値で、設定を変えても直らない。同じ設定が2箇所にあると、どちらで決まったのか
-     * 分からなくなる (生TSを残すかどうかは前から設定を見ていて、ここだけ
-     * 食い違っていた)。予約にもルールにも持たせない、が揃った形
-     */
-    /*
      * **焼き直す前に、いま置いてあるものを消す。**
      *
      * 出来上がるまで別名 (`.encoding`) に書くので、消さないと同じ番組の mkv が
@@ -1092,11 +1084,7 @@ async function runJob(jobId: number): Promise<void> {
     if (stalePaths.size > 0) {
         for (const stalePath of stalePaths) {
             removeIfExists(stalePath);
-            const stale = sidecarPaths(stalePath);
-            removeIfExists(stale.nfo);
-            removeIfExists(stale.thumbnail);
-            removeIfExists(stale.subtitle);
-            removeIfExists(stale.dataBroadcast);
+            removeSidecars(stalePath);
         }
         database()
             .prepare(
@@ -1216,21 +1204,8 @@ async function runJob(jobId: number): Promise<void> {
     removeIfExists(trimmed);
     removeIfExists(decoded);
 
-    /*
-     * 番組名が変わっていると置き場所も変わる。前に置いたエンコード済みが別名で
-     * 残ると同じ録画が並ぶので、いま作ったもの以外はサイドカーごと片付ける
-     */
-    const keptPaths = new Set(placed.map((p) => p.path));
-    for (const stalePath of [recording.library_path, recording.alt_path]) {
-        if (stalePath !== null && !keptPaths.has(stalePath)) {
-            removeIfExists(stalePath);
-            const stale = sidecarPaths(stalePath);
-            removeIfExists(stale.nfo);
-            removeIfExists(stale.thumbnail);
-            removeIfExists(stale.subtitle);
-            removeIfExists(stale.dataBroadcast);
-        }
-    }
+    // 番組名が変わって置き場所が動いたぶんは、焼き直す前の掃除
+    // (上の stalePaths) が library_path/alt_path ごと消してあるので、ここでは要らない
 
     let size = 0;
     try {

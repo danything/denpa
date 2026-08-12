@@ -38,7 +38,7 @@ function libraryRelPath(rec: LibraryNameInput, ext: string): string {
     const date = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
     const time = `${pad(d.getHours())}${pad(d.getMinutes())}`;
 
-    // 同一シリーズが同じ分に2本並ぶことはまず無いが、万一衝突したら録画IDで分ける
+    // 同一シリーズが同じ分に2本並ぶことはまず無い (万一衝突したら libraryPath が録画IDで分ける)
     const subtitle = rec.subtitle === '' ? '' : ` ${sanitizeFileName(rec.subtitle)}`;
     const base = `${series} - ${date} - ${time}${subtitle}`;
 

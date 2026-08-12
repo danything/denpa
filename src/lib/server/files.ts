@@ -18,7 +18,7 @@ export function deleteRecordingFiles(recording: Recording, reason: string): void
     for (const path of [recording.library_path, recording.alt_path]) {
         if (path === null) continue;
         removeIfExists(path);
-        // .nfo を取り残すと、.nfo を読むプレイヤーに中身の無いエピソードが並び続ける
+        // .nfo を取り残すと、.nfo を読むプレイヤーに中身の無い録画が並び続ける
         removeSidecars(path);
         pruneEmptyDirs(path);
     }
