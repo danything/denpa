@@ -23,6 +23,7 @@
         SOUND_OFF,
         SOUND_ON,
     } from '$lib/components/player/icons';
+    import OverlayMenu from '$lib/components/player/OverlayMenu.svelte';
     import Remote from '$lib/components/player/Remote.svelte';
     import { clipFrame } from '$lib/components/player/snapshot';
     import Toasts, { type Notice } from '$lib/components/Toasts.svelte';
@@ -490,44 +491,29 @@
                         複数ある放送だけなので、起こし直すのは年に数回のこと
                     -->
                         {#if player.captions && player.captionTracks.length > 1}
-                            <div class="dropdown dropdown-top">
-                                <button type="button"
-                                    class="{OVERLAY_BTN} {OVERLAY}"
-                                    aria-label="字幕を選ぶ"
-                                    data-testid="live-caption-track"
-                                >
-                                    <span class="max-w-28 truncate">
-                                        {player.captionTracks.find((t) => t.index === player.captionTrack)
-                                            ?.label ?? '字幕'}
-                                    </span>
-                                </button>
-                                <ul
-                                    class="dropdown-content menu bg-base-100 text-base-content rounded-box
-                                       z-10 mb-1 w-52 p-2 shadow-lg"
-                                    data-testid="live-caption-menu"
-                                >
-                                    {#each player.captionTracks as track (track.index)}
-                                        <li>
-                                            <button type="button"
-                                                class={track.index === player.captionTrack
-                                                    ? 'menu-active'
-                                                    : ''}
-                                                onclick={(event) => {
-                                                    player.setCaptionTrack(track.index);
-                                                    event.currentTarget.blur();
-                                                }}
-                                                data-testid="live-caption-option"
-                                                data-track={track.index}
-                                                aria-current={track.index === player.captionTrack
-                                                    ? 'true'
-                                                    : undefined}
-                                            >
-                                                {track.label}
-                                            </button>
-                                        </li>
-                                    {/each}
-                                </ul>
-                            </div>
+                            <OverlayMenu
+                                testid="live-caption"
+                                attrName="track"
+                                items={player.captionTracks.map((t) => ({
+                                    key: t.index,
+                                    label: t.label,
+                                    active: t.index === player.captionTrack,
+                                }))}
+                                onselect={(key) => player.setCaptionTrack(key)}
+                            >
+                                {#snippet trigger()}
+                                    <button type="button"
+                                        class="{OVERLAY_BTN} {OVERLAY}"
+                                        aria-label="字幕を選ぶ"
+                                        data-testid="live-caption-track"
+                                    >
+                                        <span class="max-w-28 truncate">
+                                            {player.captionTracks.find((t) => t.index === player.captionTrack)
+                                                ?.label ?? '字幕'}
+                                        </span>
+                                    </button>
+                                {/snippet}
+                            </OverlayMenu>
                         {/if}
 
                         <!--
@@ -541,40 +527,29 @@
                         押すと焼き直しになるので絵が一瞬止まるが、チャンネルは
                         変わらないので前の絵を貼ったまま差し替わる
                     -->
-                        <div class="dropdown dropdown-top">
-                            <button type="button"
-                                class="{OVERLAY_BTN} gap-1.5 {OVERLAY}"
-                                aria-label="焼き方を選ぶ"
-                                data-testid="live-codec"
-                            >
-                                <span class="text-xs font-semibold">
-                                    {LIVE_CODECS.find((c) => c.id === player.codec)?.label ?? 'H.264'}
-                                </span>
-                            </button>
-                            <ul
-                                class="dropdown-content menu bg-base-100 text-base-content rounded-box
-                                   z-10 mb-1 w-36 p-2 text-base shadow-lg"
-                                data-testid="live-codec-menu"
-                            >
-                                {#each LIVE_CODECS as choice (choice.id)}
-                                    <li>
-                                        <button type="button"
-                                            class={choice.id === player.codec ? 'menu-active' : ''}
-                                            onclick={(event) => {
-                                                player.setCodec(choice.id);
-                                                // 選んだら閉じる。開きっぱなしだと絵を覆う
-                                                event.currentTarget.blur();
-                                            }}
-                                            data-testid="live-codec-option"
-                                            data-codec={choice.id}
-                                            aria-current={choice.id === player.codec ? 'true' : undefined}
-                                        >
-                                            {choice.label}
-                                        </button>
-                                    </li>
-                                {/each}
-                            </ul>
-                        </div>
+                        <OverlayMenu
+                            testid="live-codec"
+                            attrName="codec"
+                            menuClass="w-36 text-base"
+                            items={LIVE_CODECS.map((c) => ({
+                                key: c.id,
+                                label: c.label,
+                                active: c.id === player.codec,
+                            }))}
+                            onselect={(key) => player.setCodec(key)}
+                        >
+                            {#snippet trigger()}
+                                <button type="button"
+                                    class="{OVERLAY_BTN} gap-1.5 {OVERLAY}"
+                                    aria-label="焼き方を選ぶ"
+                                    data-testid="live-codec"
+                                >
+                                    <span class="text-xs font-semibold">
+                                        {LIVE_CODECS.find((c) => c.id === player.codec)?.label ?? 'H.264'}
+                                    </span>
+                                </button>
+                            {/snippet}
+                        </OverlayMenu>
 
                         <!--
                         **音声の選び直し。選べるものが2つ以上あるときだけ出す。**
@@ -587,41 +562,29 @@
                         変わらないので前の絵を貼ったまま差し替わる
                     -->
                         {#if player.audios.length > 1}
-                            <div class="dropdown dropdown-top">
-                                <button type="button"
-                                    class="{OVERLAY_BTN} gap-1.5 {OVERLAY}"
-                                    aria-label="音声を選ぶ"
-                                    data-testid="live-audio"
-                                >
-                                    <Icon path={AUDIO} />
-                                    <span class="hidden max-w-28 truncate sm:inline">
-                                        {player.audios.find((a) => a.id === player.audio)?.label ?? '音声'}
-                                    </span>
-                                </button>
-                                <ul
-                                    class="dropdown-content menu bg-base-100 text-base-content rounded-box
-                                       z-10 mb-1 w-52 p-2 shadow-lg"
-                                    data-testid="live-audio-menu"
-                                >
-                                    {#each player.audios as track (track.id)}
-                                        <li>
-                                            <button type="button"
-                                                class={track.id === player.audio ? 'menu-active' : ''}
-                                                onclick={(event) => {
-                                                    player.setAudio(track.id);
-                                                    // 選んだら閉じる。開きっぱなしだと絵を覆う
-                                                    event.currentTarget.blur();
-                                                }}
-                                                data-testid="live-audio-option"
-                                                data-audio={track.id}
-                                                aria-current={track.id === player.audio ? 'true' : undefined}
-                                            >
-                                                {track.label}
-                                            </button>
-                                        </li>
-                                    {/each}
-                                </ul>
-                            </div>
+                            <OverlayMenu
+                                testid="live-audio"
+                                attrName="audio"
+                                items={player.audios.map((a) => ({
+                                    key: a.id,
+                                    label: a.label,
+                                    active: a.id === player.audio,
+                                }))}
+                                onselect={(key) => player.setAudio(key)}
+                            >
+                                {#snippet trigger()}
+                                    <button type="button"
+                                        class="{OVERLAY_BTN} gap-1.5 {OVERLAY}"
+                                        aria-label="音声を選ぶ"
+                                        data-testid="live-audio"
+                                    >
+                                        <Icon path={AUDIO} />
+                                        <span class="hidden max-w-28 truncate sm:inline">
+                                            {player.audios.find((a) => a.id === player.audio)?.label ?? '音声'}
+                                        </span>
+                                    </button>
+                                {/snippet}
+                            </OverlayMenu>
                         {/if}
 
                         <!-- 放送の今に居るかどうか。離れていれば押して戻れる -->
@@ -724,39 +687,29 @@
                         この選択肢も消える
                     -->
                         {#if player.chasing}
-                            <div class="dropdown dropdown-top dropdown-end">
-                                <button type="button"
-                                    class="{OVERLAY_BTN} tabular-nums {OVERLAY}"
-                                    aria-label="追っかけの速さ"
-                                    data-testid="live-speed"
-                                >
-                                    {player.speed}×
-                                </button>
-                                <ul
-                                    class="dropdown-content menu bg-base-100 text-base-content rounded-box
-                                       z-10 mb-1 w-24 gap-1 p-2 text-lg shadow-lg"
-                                    data-testid="live-speed-menu"
-                                >
-                                    {#each SPEEDS as value (value)}
-                                        <li>
-                                            <button type="button"
-                                                class="tabular-nums justify-center py-2 {value === player.speed
-                                                    ? 'menu-active'
-                                                    : ''}"
-                                                onclick={(event) => {
-                                                    player.setSpeed(value);
-                                                    event.currentTarget.blur();
-                                                }}
-                                                data-testid="live-speed-option"
-                                                data-speed={value}
-                                                aria-current={value === player.speed ? 'true' : undefined}
-                                            >
-                                                {value}×
-                                            </button>
-                                        </li>
-                                    {/each}
-                                </ul>
-                            </div>
+                            <OverlayMenu
+                                testid="live-speed"
+                                attrName="speed"
+                                position="dropdown-top dropdown-end"
+                                menuClass="w-24 gap-1 text-lg"
+                                optionClass="tabular-nums justify-center py-2"
+                                items={SPEEDS.map((value) => ({
+                                    key: value,
+                                    label: `${value}×`,
+                                    active: value === player.speed,
+                                }))}
+                                onselect={(key) => player.setSpeed(key)}
+                            >
+                                {#snippet trigger()}
+                                    <button type="button"
+                                        class="{OVERLAY_BTN} tabular-nums {OVERLAY}"
+                                        aria-label="追っかけの速さ"
+                                        data-testid="live-speed"
+                                    >
+                                        {player.speed}×
+                                    </button>
+                                {/snippet}
+                            </OverlayMenu>
                         {/if}
 
                         <!--

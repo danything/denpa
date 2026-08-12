@@ -29,6 +29,7 @@
         SOUND_ON,
         TRASH,
     } from '$lib/components/player/icons';
+    import OverlayMenu from '$lib/components/player/OverlayMenu.svelte';
     import { clearOverlay, drawOverlay, fitRect } from '$lib/components/player/paint';
     import Remote from '$lib/components/player/Remote.svelte';
     import { clipFrame } from '$lib/components/player/snapshot';
@@ -1163,43 +1164,30 @@
                             同じ見た目。1本しか無ければ出さない
                         -->
                         {#if audios.length > 1}
-                            <div class="dropdown dropdown-top">
-                                <button
-                                    type="button"
-                                    class="{OVERLAY_BTN} gap-1.5 {OVERLAY}"
-                                    aria-label="音声を選ぶ"
-                                    data-testid="watch-audio"
-                                >
-                                    <Icon path={AUDIO} />
-                                    <span class="hidden max-w-28 truncate sm:inline">
-                                        {audios[audioIndex]?.label ?? '音声'}
-                                    </span>
-                                </button>
-                                <ul
-                                    class="dropdown-content menu bg-base-100 text-base-content rounded-box
-                                       z-10 mb-1 w-52 p-2 shadow-lg"
-                                    data-testid="watch-audio-menu"
-                                >
-                                    {#each audios as track, i (i)}
-                                        <li>
-                                            <button
-                                                type="button"
-                                                class={i === audioIndex ? 'menu-active' : ''}
-                                                onclick={(event) => {
-                                                    selectAudio(i);
-                                                    // 選んだら閉じる。開きっぱなしだと絵を覆う
-                                                    event.currentTarget.blur();
-                                                }}
-                                                data-testid="watch-audio-option"
-                                                data-audio={i}
-                                                aria-current={i === audioIndex ? 'true' : undefined}
-                                            >
-                                                {track.label}
-                                            </button>
-                                        </li>
-                                    {/each}
-                                </ul>
-                            </div>
+                            <OverlayMenu
+                                testid="watch-audio"
+                                attrName="audio"
+                                items={audios.map((track, i) => ({
+                                    key: i,
+                                    label: track.label,
+                                    active: i === audioIndex,
+                                }))}
+                                onselect={(key) => selectAudio(key)}
+                            >
+                                {#snippet trigger()}
+                                    <button
+                                        type="button"
+                                        class="{OVERLAY_BTN} gap-1.5 {OVERLAY}"
+                                        aria-label="音声を選ぶ"
+                                        data-testid="watch-audio"
+                                    >
+                                        <Icon path={AUDIO} />
+                                        <span class="hidden max-w-28 truncate sm:inline">
+                                            {audios[audioIndex]?.label ?? '音声'}
+                                        </span>
+                                    </button>
+                                {/snippet}
+                            </OverlayMenu>
                         {/if}
 
                         <!--
@@ -1263,36 +1251,29 @@
                         </div>
 
                         <!-- 早送り。**ライブの追っかけと同じ並び・同じ見た目** -->
-                        <div class="dropdown dropdown-top dropdown-end">
-                            <button type="button"
-                                class="{OVERLAY_BTN} tabular-nums {speed === 1 ? OVERLAY : OVERLAY_ON}"
-                                aria-label="再生の速さ"
-                                data-testid="watch-speed"
-                            >
-                                {speed}×
-                            </button>
-                            <ul
-                                class="dropdown-content menu bg-base-100 text-base-content rounded-box z-10 mb-1 w-24 gap-1 p-2 text-lg shadow-lg"
-                                data-testid="watch-speed-menu"
-                            >
-                                {#each SPEEDS as value (value)}
-                                    <li>
-                                        <button type="button"
-                                            class="tabular-nums justify-center py-2 {value === speed ? 'menu-active' : ''}"
-                                            onclick={(event) => {
-                                                setSpeed(value);
-                                                event.currentTarget.blur();
-                                            }}
-                                            data-testid="watch-speed-option"
-                                            data-speed={value}
-                                            aria-current={value === speed ? 'true' : undefined}
-                                        >
-                                            {value}×
-                                        </button>
-                                    </li>
-                                {/each}
-                            </ul>
-                        </div>
+                        <OverlayMenu
+                            testid="watch-speed"
+                            attrName="speed"
+                            position="dropdown-top dropdown-end"
+                            menuClass="w-24 gap-1 text-lg"
+                            optionClass="tabular-nums justify-center py-2"
+                            items={SPEEDS.map((value) => ({
+                                key: value,
+                                label: `${value}×`,
+                                active: value === speed,
+                            }))}
+                            onselect={(key) => setSpeed(key)}
+                        >
+                            {#snippet trigger()}
+                                <button type="button"
+                                    class="{OVERLAY_BTN} tabular-nums {speed === 1 ? OVERLAY : OVERLAY_ON}"
+                                    aria-label="再生の速さ"
+                                    data-testid="watch-speed"
+                                >
+                                    {speed}×
+                                </button>
+                            {/snippet}
+                        </OverlayMenu>
 
                         <ControlButton
                             path={full ? SHRINK : EXPAND}
