@@ -1,6 +1,9 @@
+import { existsSync } from 'node:fs';
 import { error, fail, redirect } from '@sveltejs/kit';
 import { queryOne } from '$lib/server/db';
 import { deleteRecordingFiles } from '$lib/server/files';
+import { sidecarPaths } from '$lib/server/metadata';
+import { settings } from '$lib/server/settings';
 import type { Recording } from '$lib/types';
 
 /**
@@ -52,7 +55,12 @@ export function load({ params }) {
     if (recording === undefined) error(404, '録画が見つかりません');
     if (recording.deleted_at !== null) error(410, 'この録画は削除されています');
 
-    return { recording };
+    // データ放送を焼いてあるか (無い局・古い録画では出さない)。中身は d ボタンで別に取る
+    const hasData =
+        recording.library_path !== null && existsSync(sidecarPaths(recording.library_path).dataBroadcast);
+
+    // 郵便番号だけ、ライブと同じく器を作る前に NVRAM へ写すのに要る (`DataBroadcast`)
+    return { recording, broadcast: { postalCode: settings().postalCode }, hasData };
 }
 
 export const actions = {

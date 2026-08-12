@@ -950,6 +950,9 @@ class Session {
             const mark = JSON.stringify(apps);
             if (mark === this.toldApps) continue;
             this.toldApps = mark;
+            // 行き先をログにも出す。画面のボタンは window.open で URL をコピーできず、
+            // WS はバイナリ多重化なので DevTools でも読みにくい。切り分け (疎通確認など) に要る
+            for (const app of apps) console.log(`[hybridcast] ${app.name || '(名前なし)'}: ${app.url}`);
             this.tell({ type: 'hybridcast', apps });
         }
     }

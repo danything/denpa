@@ -19,6 +19,7 @@ import { emit } from './events';
 import { removeIfExists } from './fsx';
 import { encodedPath, libraryPath } from './library';
 import { sidecarPaths, writeNfo, writeThumbnail } from './metadata';
+import { saveRecordedBml } from './recorded-bml';
 import { descramble, isScrambled } from './scramble';
 import { settings } from './settings';
 import { chunks } from './stream';
@@ -1159,15 +1160,34 @@ async function runJob(jobId: number): Promise<void> {
         placed.push({ codec, path: output });
     }
 
-    removeIfExists(encodeOptions.chaptersFile);
-    // CMを切ったTSも解除したTSも作業用。元のTSは残したままなので、やり直せる
-    removeIfExists(trimmed);
-    removeIfExists(decoded);
-
     // 主は AV1 (小さいので既定の再生に向く)。無ければ焼いたほう
     const primary = placed.find((p) => p.codec === 'av1') ?? placed[0];
     const alt = placed.find((p) => p.path !== primary.path)?.path ?? null;
     const output = primary.path;
+
+    /*
+     * **decoded を消す前に、生TSからデータ放送を取り出してサイドカーに置く。**
+     * 録画でも d ボタンで出せるように、再生位置つきの変化ログを残す
+     * (server/recorded-bml.ts)。転んでもエンコードは落とさない — 付け足しなので
+     */
+    try {
+        const changes = saveRecordedBml(
+            sourceTs,
+            sidecarPaths(output).dataBroadcast,
+            recording.start_at,
+            encodeOptions.keep ?? null,
+        );
+        if (changes > 0) {
+            console.log(`[bml] 録画のデータ放送を保存しました: ${changes} 変化 (録画 ${recording.id})`);
+        }
+    } catch (error) {
+        console.error(`[bml] データ放送の取り出しに失敗しました (録画 ${recording.id}): ${error}`);
+    }
+
+    removeIfExists(encodeOptions.chaptersFile);
+    // CMを切ったTSも解除したTSも作業用。元のTSは残したままなので、やり直せる
+    removeIfExists(trimmed);
+    removeIfExists(decoded);
 
     /*
      * 番組名が変わっていると置き場所も変わる。前に置いたエンコード済みが別名で
@@ -1181,6 +1201,7 @@ async function runJob(jobId: number): Promise<void> {
             removeIfExists(stale.nfo);
             removeIfExists(stale.thumbnail);
             removeIfExists(stale.subtitle);
+            removeIfExists(stale.dataBroadcast);
         }
     }
 

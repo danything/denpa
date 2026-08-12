@@ -6,6 +6,7 @@
     import ControlBar from '$lib/components/player/ControlBar.svelte';
     import ControlButton from '$lib/components/player/ControlButton.svelte';
     import { playerControls } from '$lib/components/player/controls.svelte';
+    import DataBroadcast from '$lib/components/player/DataBroadcast.svelte';
     import Icon from '$lib/components/player/Icon.svelte';
     import {
         CAMERA,
@@ -13,6 +14,7 @@
         CHECK,
         CLOSE,
         CUT,
+        DATA,
         EXPAND,
         NEXT,
         OVERLAY,
@@ -27,10 +29,12 @@
         TRASH,
     } from '$lib/components/player/icons';
     import { clearOverlay, drawOverlay, fitRect } from '$lib/components/player/paint';
+    import Remote from '$lib/components/player/Remote.svelte';
     import Toasts, { type Notice } from '$lib/components/Toasts.svelte';
     import { type DetailSeed, programDetail } from '$lib/detail.svelte';
     import { clock, cmNoteWorthShowing, recordedDuration, size, time } from '$lib/format';
     import { captionAt, type Drawn, pixels, readSup } from '$lib/pgs';
+    import { feedFor, type PlacedMessage, replayAt } from '$lib/ts/data-timeline';
     import { SPEEDS } from '$lib/ts/pacing';
     import {
         type Chapter,
@@ -45,6 +49,7 @@
         tap,
         zoneOf,
     } from '$lib/ts/watch';
+    import type { ResponseMessage } from '$lib/vendor/web-bml/server/ws_api';
 
     let { data, form } = $props();
     const rec = $derived(data.recording);
@@ -56,6 +61,76 @@
     let video = $state<HTMLVideoElement | null>(null);
     /** 映像とその上の操作をまとめた箱。全画面にするのはこちら */
     let stage = $state<HTMLElement | null>(null);
+
+    /*
+     * --- 録画のデータ放送 ---
+     *
+     * ライブは今のカルーセルをそのまま流すが、録画は**焼くときに取り出しておいた
+     * 変化ログ**を、再生位置に合わせて流し直す (`ts/data-timeline`,
+     * `server/recorded-bml.ts`)。描くのはライブと同じ `DataBroadcast`。
+     */
+    /** d ボタンで出しているか */
+    let showData = $state(false);
+    /** 映像を入れる箱。**BML はこれを動かす** (`DataBroadcast` の place) */
+    let mediaBox = $state<HTMLElement | null>(null);
+    /** 指のリモコンの押す口。器ができてから預かる (`Remote`) */
+    let dataPress = $state<((code: number) => void) | null>(null);
+    /**
+     * データ放送を作り直す合図 (`DataBroadcast` の channel)。**戻ったら変える** —
+     * 器を作り直して、その時点まで積み直す
+     */
+    let dataChannel = $state<string | null>(null);
+    /** 焼いておいた変化ログ。**押されてから取りに行く** (字幕と同じ「頼まれてから」) */
+    let dataTimeline: PlacedMessage[] = [];
+    /** 借りものへ流す口。`DataBroadcast` が open のたびに預けてくる */
+    let dataEmit: ((message: ResponseMessage) => void) | null = null;
+    /** どこまで流したか (再生位置 ms)。まだなら -1 */
+    let dataFed = -1;
+
+    function nowMs(): number {
+        return Math.round((video?.currentTime ?? 0) * 1000);
+    }
+
+    async function toggleData(): Promise<void> {
+        showData = !showData;
+        if (!showData) {
+            dataChannel = null;
+            return;
+        }
+        if (dataTimeline.length === 0) {
+            const response = await fetch(`/api/recordings/${rec.id}/databroadcast`);
+            dataTimeline = response.ok ? await response.json() : [];
+        }
+        dataFed = -1;
+        // 器を作らせる。open のあと listenData が呼ばれて、いまの位置まで積み直す
+        dataChannel = `${rec.id}`;
+    }
+
+    /**
+     * `DataBroadcast` が器の口を預けてくる (作り直すたびに新しいものを)。
+     * **預かった直後に、いまの再生位置まで積んで追いつく** (`replayAt`)
+     */
+    function listenData(emit: ((message: ResponseMessage) => void) | null): void {
+        dataEmit = emit;
+        if (emit === null) return;
+        const to = nowMs();
+        for (const message of replayAt(dataTimeline, to)) emit(message);
+        dataFed = to;
+    }
+
+    /** 再生が進んだぶんのデータ放送を流す。**戻っていたら器を作り直す** */
+    function feedData(): void {
+        if (!showData || dataEmit === null) return;
+        const to = nowMs();
+        const feed = feedFor(dataTimeline, dataFed, to);
+        if (feed.reset) {
+            // channel を変えると close→open して listenData が積み直す
+            dataChannel = `${rec.id}:${to}`;
+            return;
+        }
+        for (const message of feed.messages) dataEmit(message);
+        dataFed = to;
+    }
 
     let playing = $state(false);
     let at = $state(0);
@@ -751,6 +826,8 @@
                     絵のまま重ねる — ライブと同じやり方 (下の canvas)
                 -->
                 <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_noninteractive_element_interactions -->
+                <!-- **映像の箱。BML はこれを動かす** (`DataBroadcast` の place)。ライブと同じ -->
+                <div bind:this={mediaBox} class="absolute inset-0">
                 <video
                     bind:this={video}
                     {src}
@@ -771,13 +848,33 @@
                         at = video?.currentTime ?? 0;
                         hopCm();
                         paint();
+                        feedData();
                     }}
+                    onseeked={feedData}
                     onloadedmetadata={resume}
                     onvolumechange={() => (muted = video?.muted ?? false)}
                     onerror={recover}
                     data-testid="watch-video"
                 >
                 </video>
+                </div>
+                <!--
+                    **録画のデータ放送。** 焼くときに取り出した変化ログ (`data.hasData`) を、
+                    再生位置に合わせて流す (`feedData`/`listenData`)。描くのはライブと同じ借りもの。
+                    双方向は録画では使わない (`network={false}`) — 送り先が生きていない
+                -->
+                <DataBroadcast
+                    on={showData}
+                    channel={dataChannel}
+                    media={mediaBox}
+                    listen={listenData}
+                    remote={(press) => (dataPress = press)}
+                    postal={data.broadcast.postalCode}
+                    network={false}
+                />
+                {#if dataPress !== null}
+                    <Remote press={dataPress} />
+                {/if}
 
                 <!--
                     **放送の字幕。** 映像と同じ枠に、映像の画素そのままの大きさで
@@ -1036,6 +1133,20 @@
                                 {/if}
                             </div>
                         </div>
+
+                        <!--
+                            **データ放送 (d)。焼いてある録画でだけ出す** (`data.hasData`)。
+                            ライブと違い、押しても取りに行くのはサーバではなく焼いた変化ログ
+                        -->
+                        {#if data.hasData}
+                            <ControlButton
+                                path={DATA}
+                                label={showData ? 'データ放送を消す' : 'データ放送を出す'}
+                                on={showData}
+                                testid="watch-data-button"
+                                onclick={toggleData}
+                            />
+                        {/if}
 
                         <!-- 早送り。**ライブの追っかけと同じ並び・同じ見た目** -->
                         <div class="dropdown dropdown-top dropdown-end">

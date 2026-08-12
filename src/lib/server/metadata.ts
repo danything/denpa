@@ -33,9 +33,20 @@ function pad(n: number): string {
  * `subtitle` が残っているのは**片付けるため**。文字の写しを `.ja.ass` として
  * 置いていた頃のものが、焼き直しても消えずに残るのを防ぐ (`subtitle.ts`)
  */
-export function sidecarPaths(videoPath: string): { nfo: string; thumbnail: string; subtitle: string } {
+export function sidecarPaths(videoPath: string): {
+    nfo: string;
+    thumbnail: string;
+    subtitle: string;
+    dataBroadcast: string;
+} {
     const base = videoPath.slice(0, videoPath.length - extname(videoPath).length);
-    return { nfo: `${base}.nfo`, thumbnail: `${base}-thumb.jpg`, subtitle: `${base}.ja.ass` };
+    return {
+        nfo: `${base}.nfo`,
+        thumbnail: `${base}-thumb.jpg`,
+        subtitle: `${base}.ja.ass`,
+        // 録画のデータ放送 (再生位置つきの変化ログ)。d ボタンで出す (server/recorded-bml.ts)
+        dataBroadcast: `${base}.bml.jsonl`,
+    };
 }
 
 /**
