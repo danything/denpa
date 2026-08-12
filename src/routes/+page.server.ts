@@ -75,8 +75,9 @@ export function load({ url }) {
     const showDeleted = url.searchParams.get('deleted') === '1';
     /*
      * **絞り込みの言葉。** 溜まると300件フラットは指のリモコンで辿れない。
-     * 番組名・シリーズ・副題・局名にかかる。空なら今までどおり全部出す。
-     * 探すときは完了分も対象にしたいので、言葉が入っていれば `pending` を広げる
+     * 番組名・シリーズ・副題・局名にかかる (下の録画クエリの `search`)。空なら
+     * 今までどおり全部出す。**録画の一覧は元から完了分も含む**ので、完了分を
+     * 出すための細工は要らない (`showFinished` が効くのは左の予約側だけ)
      */
     const q = (url.searchParams.get('q') ?? '').trim();
 

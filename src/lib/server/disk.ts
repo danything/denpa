@@ -1,4 +1,5 @@
 import { statfsSync } from 'node:fs';
+import { size } from '../format';
 import { config } from './config';
 import { notify } from './webhook';
 
@@ -28,10 +29,6 @@ function freeBytes(dir: string): number | null {
     }
 }
 
-function gib(bytes: number): string {
-    return `${(bytes / 1024 / 1024 / 1024).toFixed(1)}GB`;
-}
-
 /** 監視する置き場。生TSの作業領域とエンコード済みの保存先 */
 function watched(): string[] {
     // 同じパーティションに載っていることもあるので重複は畳む
@@ -49,15 +46,15 @@ export function checkDisk(): void {
             // すでに知らせてある置き場は、空けるまで黙る
             if (warned.has(dir)) continue;
             warned.add(dir);
-            console.warn(`[disk] 残量わずか: ${dir} (残り ${gib(free)})`);
+            console.warn(`[disk] 残量わずか: ${dir} (残り ${size(free)})`);
             notify({
                 event: 'disk.low',
-                text: `ディスクの残りがわずかです: ${dir} (残り ${gib(free)} / 閾値 ${gib(config.diskLowThreshold)})`,
+                text: `ディスクの残りがわずかです: ${dir} (残り ${size(free)} / 閾値 ${size(config.diskLowThreshold)})`,
             });
         } else if (warned.has(dir)) {
             // 閾値より上へ戻った。覚えを消して、次に下回ればまた鳴らす
             warned.delete(dir);
-            console.log(`[disk] 残量が戻りました: ${dir} (残り ${gib(free)})`);
+            console.log(`[disk] 残量が戻りました: ${dir} (残り ${size(free)})`);
         }
     }
 }

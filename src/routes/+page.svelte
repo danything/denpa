@@ -399,7 +399,7 @@
                 <div class="flex flex-wrap items-center gap-2">
                     <!--
                         **絞り込み。** 溜まると300件フラットは指のリモコンで辿れない。
-                        番組名・シリーズ・局にかかる (`+page.server.ts`)。GET なので
+                        番組名・シリーズ・副題・局にかかる (`+page.server.ts`)。GET なので
                         URL に残り、共有・戻るがそのまま効く。削除済み表示は引き継ぐ
                     -->
                     <form method="GET" action="/" class="join" data-sveltekit-keepfocus>
