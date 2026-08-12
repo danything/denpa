@@ -73,6 +73,12 @@ function rawSize(row: Recording): number | null {
 export function load({ url }) {
     const showFinished = url.searchParams.get('all') === '1';
     const showDeleted = url.searchParams.get('deleted') === '1';
+    /*
+     * **絞り込みの言葉。** 溜まると300件フラットは指のリモコンで辿れない。
+     * 番組名・シリーズ・副題・局名にかかる。空なら今までどおり全部出す。
+     * 探すときは完了分も対象にしたいので、言葉が入っていれば `pending` を広げる
+     */
+    const q = (url.searchParams.get('q') ?? '').trim();
 
     /*
      * 並びは**放送日時の近い順**で固定する。録画中だけは真っ先に見たいので先頭に置く。
@@ -122,6 +128,11 @@ export function load({ url }) {
      * ずれてページごとスクロールバーが生えていた。同じ番組が2箇所に並んでもいた。
      * 「録れたものが今どうなっているか」の一形態なので、行の状態として出すのが素直。
      */
+    // 番組名・シリーズ・副題・局名のどれかにかかればよい。同じ言葉を4か所へ (`?1`)
+    const search =
+        q === ''
+            ? ''
+            : 'AND (r.name LIKE ?1 OR r.series LIKE ?1 OR r.subtitle LIKE ?1 OR r.service_name LIKE ?1)';
     const recordings = database()
         .prepare(
             `SELECT r.*, (
@@ -158,6 +169,7 @@ export function load({ url }) {
               * 消したかどうかを確かめるのに一覧を行き来することになっていた
               */
              ${showDeleted ? '' : 'AND r.deleted_at IS NULL'}
+             ${search}
              /*
               * 並びは放送日順に固定する。エンコードが始まったものを上へ動かしていた頃は、
               * 眺めている間に行が飛んで、どれを見ていたのか分からなくなっていた
@@ -165,7 +177,7 @@ export function load({ url }) {
              ORDER BY r.start_at DESC
              LIMIT 300`,
         )
-        .all() as RecordingRow[];
+        .all(...(q === '' ? [] : [`%${q}%`])) as RecordingRow[];
     for (const row of recordings) row.raw_size = rawSize(row);
 
     return {
@@ -173,6 +185,7 @@ export function load({ url }) {
         recordings,
         showFinished,
         showDeleted,
+        q,
         // ダウンロードURLに埋める資格情報 (server/download.ts)。番組表の画面にも同じものを渡す
         ...downloadContext(url),
     };

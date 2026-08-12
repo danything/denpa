@@ -1,5 +1,14 @@
-import { copyFileSync, existsSync, mkdirSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
-import { dirname } from 'node:path';
+import {
+    copyFileSync,
+    existsSync,
+    mkdirSync,
+    readdirSync,
+    renameSync,
+    rmSync,
+    statSync,
+    writeFileSync,
+} from 'node:fs';
+import { basename, dirname, join } from 'node:path';
 import { type Audio, audioTitles, DUAL_MONO } from '$lib/arib';
 import { encodeSource } from '../source';
 import type { EncodeJob, EncodePhase, Recording, VideoCodec } from '../types';
@@ -839,6 +848,35 @@ async function trimCm(
 }
 
 /**
+ * ジョブの生TSから派生する中間ファイルを消す。
+ *
+ * `descramble` の `.decoded.ts` や CM切りの `.cut.ts` / `.partN.ts` は、
+ * 正常終了や失敗なら finally / cleanup で消えるが、**プロセスごと落ちたときは
+ * 取り残される**。しかもどれも `.ts` で終わるので、掃除機は動画と見なして消さない
+ * (`files.ts` の VIDEO)。生TSと同じ大きさの `.decoded.ts` が丸ごと居座る。
+ *
+ * これらは走らせ直せば作り直すものなので、ジョブを(再)実行する直前と、
+ * 諦めて failed にするときに、その生TSから派生するぶんをまとめて消しておく。
+ * 自分の入力に紐づくものだけ触るので、他の走っているエンコードには当たらない。
+ */
+function clearScratch(input: string): void {
+    removeIfExists(`${input}.decoded.ts`);
+    removeIfExists(`${input}.cut.ts`);
+    removeIfExists(`${input}.concat.txt`);
+    // CMの区間ファイルは本数ぶんある (`.part0.ts`, `.part1.ts`, …)
+    const prefix = `${basename(input)}.part`;
+    try {
+        for (const name of readdirSync(dirname(input))) {
+            if (name.startsWith(prefix) && /\.part\d+\.ts$/i.test(name)) {
+                removeIfExists(join(dirname(input), name));
+            }
+        }
+    } catch {
+        // 置き場ごと無ければ、片付けるものも無い
+    }
+}
+
+/**
  * 生TSを残すか。
  *
  * 録画ごとの指定ではなく全体設定に従う。録り直すたびに「あのときどうしたか」を
@@ -904,6 +942,9 @@ async function runJob(jobId: number): Promise<void> {
             .run('元にできる生TSがありません', now(), jobId);
         return;
     }
+
+    // 前の回が落ちて取り残した中間ファイルを片付けてから始める (この生TSぶんだけ)
+    clearScratch(input);
 
     /*
      * 「エンコード中」は録画の行には書かない。動いているジョブがあることが
@@ -1282,10 +1323,36 @@ async function runJob(jobId: number): Promise<void> {
 /** 同時実行数の空きぶんだけキューを消化する。録画完了時と定期tickの両方から呼ばれる */
 export function pump(): void {
     while (runningJobs.size < config.encodeConcurrency) {
-        const next = queryOne<{ id: number }>(
-            `SELECT id FROM encode_jobs WHERE state = 'queued' ORDER BY id LIMIT 1`,
+        const next = queryOne<{ id: number; attempts: number }>(
+            `SELECT id, attempts FROM encode_jobs WHERE state = 'queued' ORDER BY id LIMIT 1`,
         );
         if (next === undefined) return;
+
+        // **試し過ぎたジョブは諦める。** プロセスごと落とす毒ジョブは running→queued
+        // へ戻り続け、id順・同時実行1だと毎回ここで先頭に来る。上限を超えたら failed に
+        // して後ろを進める。failed の確定は runJob を呼ぶ前なので、直後にまた落ちても
+        // 同じジョブを掴み直すことはない
+        if (next.attempts >= config.encodeMaxAttempts) {
+            const recording = queryOne<Recording>(
+                'SELECT r.* FROM recordings r JOIN encode_jobs j ON j.recording_id = r.id WHERE j.id = ?',
+                next.id,
+            );
+            const reason = `エンコードを ${next.attempts} 回試して完了しませんでした`;
+            if (recording === undefined) {
+                database()
+                    .prepare(
+                        `UPDATE encode_jobs SET state = 'failed', error = ?, finished_at = ? WHERE id = ?`,
+                    )
+                    .run(reason, now(), next.id);
+                emit('recordings');
+            } else {
+                // もう走らせないので、この生TSの中間ファイルもここで片付ける
+                const input = encodeSource(recording);
+                if (input !== null) clearScratch(input);
+                fail(next.id, recording, reason);
+            }
+            continue;
+        }
 
         // 実際に走り出す前に状態を進めておく。次のループが同じジョブを拾わないため
         const claimed = database()

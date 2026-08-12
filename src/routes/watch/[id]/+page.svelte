@@ -9,6 +9,7 @@
     import DataBroadcast from '$lib/components/player/DataBroadcast.svelte';
     import Icon from '$lib/components/player/Icon.svelte';
     import {
+        AUDIO,
         CAMERA,
         CAPTION,
         CHECK,
@@ -138,6 +139,20 @@
     let length = $state(0);
     let muted = $state(false);
     let full = $state(false);
+    /**
+     * 選べる音声トラック。**ブラウザが器から出せたときだけ。**
+     *
+     * 焼いたものには主音声・副音声が両方入っている (二カ国語の映画・二重音声の
+     * アニメなど)。ブラウザが Matroska の音声を `video.audioTracks` に出せれば、
+     * ここで選んだものだけを有効にして切り替える。ライブと違い**サーバは焼き
+     * 直さない** — 器の中に入っているものを選ぶだけ。
+     *
+     * **出せない端末では空のまま = 切り替えは出さない。** `audioTracks` は
+     * ブラウザ任せで、Matroska の副音声を出さないものもある。押しても効かない
+     * 操作を並べないため、2本以上あるときだけ出す (`hasCaptions` と同じ考え)
+     */
+    let audios = $state<{ label: string }[]>([]);
+    let audioIndex = $state(0);
     /**
      * 字幕を出しているか。**持っている録画でだけ意味を持つ** (`data.subtitle`)。
      * **既定は出す** — ライブと同じ (`live-player` の `captions`)
@@ -289,6 +304,25 @@
         };
     });
 
+    /*
+     * **音声トラックは後から増えることがある。** ブラウザによっては
+     * `loadedmetadata` の時点ではまだ出そろっておらず、最初のフレームを
+     * 解いたあとで `addtrack` してくる。並びが変わったら読み直す
+     */
+    $effect(() => {
+        const tracks = audioTrackList();
+        if (tracks === null) return;
+        const update = (): void => syncAudio();
+        tracks.addEventListener('addtrack', update);
+        tracks.addEventListener('removetrack', update);
+        tracks.addEventListener('change', update);
+        return () => {
+            tracks.removeEventListener('addtrack', update);
+            tracks.removeEventListener('removetrack', update);
+            tracks.removeEventListener('change', update);
+        };
+    });
+
     /**
      * **どこまで観たかを覚える。** 覚えるかどうかの判断は `ts/watch.ts` が持つ
      * (サーバも同じものを見る)。
@@ -337,6 +371,60 @@
         // **黙って途中から始めない。** 何が起きたか言って、しばらくで引っ込める
         continued = true;
         setTimeout(() => (continued = false), 4000);
+    }
+
+    /**
+     * `video.audioTracks` を読める形にする。**標準の DOM 型に無いので自前で受ける** —
+     * `HTMLMediaElement.audioTracks` は仕様にはあるがブラウザ実装が揃っておらず、
+     * TypeScript の既定の型にも入っていない。無ければ `null`
+     */
+    interface AudioTrackLike {
+        label: string;
+        language: string;
+        enabled: boolean;
+    }
+    interface AudioTrackListLike {
+        readonly length: number;
+        [index: number]: AudioTrackLike;
+        addEventListener(type: string, listener: () => void): void;
+        removeEventListener(type: string, listener: () => void): void;
+    }
+    function audioTrackList(): AudioTrackListLike | null {
+        return (video as unknown as { audioTracks?: AudioTrackListLike } | null)?.audioTracks ?? null;
+    }
+
+    /** トラックの見出し。器に入っている名前 (主音声/副音声) → 言語 → 連番の順で拾う */
+    function audioLabel(track: AudioTrackLike, i: number): string {
+        const name = track.label.trim();
+        if (name !== '') return name;
+        const lang = track.language.trim();
+        if (lang !== '') return lang;
+        return `音声 ${i + 1}`;
+    }
+
+    /** いま器が持っている音声トラックを読み直す (`loadedmetadata` と `addtrack` から) */
+    function syncAudio(): void {
+        const tracks = audioTrackList();
+        if (tracks === null) {
+            audios = [];
+            return;
+        }
+        const list: { label: string }[] = [];
+        let enabled = 0;
+        for (let i = 0; i < tracks.length; i++) {
+            list.push({ label: audioLabel(tracks[i], i) });
+            if (tracks[i].enabled) enabled = i;
+        }
+        audios = list;
+        audioIndex = enabled;
+    }
+
+    /** 音声を選ぶ。**選んだものだけ有効にする** (ブラウザはそれで切り替える) */
+    function selectAudio(index: number): void {
+        const tracks = audioTrackList();
+        if (tracks === null) return;
+        for (let i = 0; i < tracks.length; i++) tracks[i].enabled = i === index;
+        audioIndex = index;
     }
 
     /**
@@ -790,6 +878,8 @@
                 onpointermove={controls.wake}
                 onpointerdown={controls.wake}
                 onpointerleave={controls.away}
+                onfocusin={() => (controls.keyboard = true)}
+                onfocusout={() => (controls.keyboard = false)}
                 data-testid="watch-stage"
             >
                 <!--
@@ -829,7 +919,10 @@
                         feedData();
                     }}
                     onseeked={feedData}
-                    onloadedmetadata={resume}
+                    onloadedmetadata={() => {
+                        resume();
+                        syncAudio();
+                    }}
                     onvolumechange={() => (muted = video?.muted ?? false)}
                     onerror={recover}
                     data-testid="watch-video"
@@ -1062,6 +1155,51 @@
                                 testid="watch-captions"
                                 onclick={toggleCaptions}
                             />
+                        {/if}
+
+                        <!--
+                            **音声トラックの切り替え。** ブラウザが器から2本以上
+                            出せたときだけ (二カ国語・二重音声)。`/live` の音声選びと
+                            同じ見た目。1本しか無ければ出さない
+                        -->
+                        {#if audios.length > 1}
+                            <div class="dropdown dropdown-top">
+                                <button
+                                    type="button"
+                                    class="{OVERLAY_BTN} gap-1.5 {OVERLAY}"
+                                    aria-label="音声を選ぶ"
+                                    data-testid="watch-audio"
+                                >
+                                    <Icon path={AUDIO} />
+                                    <span class="hidden max-w-28 truncate sm:inline">
+                                        {audios[audioIndex]?.label ?? '音声'}
+                                    </span>
+                                </button>
+                                <ul
+                                    class="dropdown-content menu bg-base-100 text-base-content rounded-box
+                                       z-10 mb-1 w-52 p-2 shadow-lg"
+                                    data-testid="watch-audio-menu"
+                                >
+                                    {#each audios as track, i (i)}
+                                        <li>
+                                            <button
+                                                type="button"
+                                                class={i === audioIndex ? 'menu-active' : ''}
+                                                onclick={(event) => {
+                                                    selectAudio(i);
+                                                    // 選んだら閉じる。開きっぱなしだと絵を覆う
+                                                    event.currentTarget.blur();
+                                                }}
+                                                data-testid="watch-audio-option"
+                                                data-audio={i}
+                                                aria-current={i === audioIndex ? 'true' : undefined}
+                                            >
+                                                {track.label}
+                                            </button>
+                                        </li>
+                                    {/each}
+                                </ul>
+                            </div>
                         {/if}
 
                         <!--

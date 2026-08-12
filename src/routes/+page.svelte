@@ -396,7 +396,36 @@
             <!-- 見出しの高さと下の余白は予約側と揃える。並べたときにずれて見えるため -->
             <div class="mb-2 flex min-h-8 flex-wrap items-center justify-between gap-2">
                 <h2 class="text-lg font-bold">録画</h2>
-                <div class="flex gap-2">
+                <div class="flex flex-wrap items-center gap-2">
+                    <!--
+                        **絞り込み。** 溜まると300件フラットは指のリモコンで辿れない。
+                        番組名・シリーズ・局にかかる (`+page.server.ts`)。GET なので
+                        URL に残り、共有・戻るがそのまま効く。削除済み表示は引き継ぐ
+                    -->
+                    <form method="GET" action="/" class="join" data-sveltekit-keepfocus>
+                        {#if data.showDeleted}
+                            <input type="hidden" name="deleted" value="1" />
+                        {/if}
+                        <input
+                            type="search"
+                            name="q"
+                            value={data.q}
+                            placeholder="番組名・シリーズ・局で絞り込み"
+                            aria-label="録画を絞り込む"
+                            class="input input-sm input-bordered join-item w-40 sm:w-56"
+                            data-testid="recording-search"
+                        />
+                        <button type="submit" class="btn btn-sm join-item">絞り込む</button>
+                    </form>
+                    {#if data.q !== ''}
+                        <a
+                            class="btn btn-sm btn-ghost"
+                            href={data.showDeleted ? '/?deleted=1' : '/'}
+                            data-testid="recording-search-clear"
+                        >
+                            解除
+                        </a>
+                    {/if}
                     <a class="btn btn-sm" href={data.showDeleted ? '/' : '/?deleted=1'}>
                         {data.showDeleted ? '削除済みを隠す' : '削除済みも表示'}
                     </a>
@@ -454,15 +483,44 @@
                                     行に指を乗せると色が反転して、押す先がここだと分かる
                                 -->
                                 {#if canPlay}
-                                    <span
-                                        class="bg-primary/15 text-primary group-hover:bg-primary group-hover:text-primary-content mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-full transition-colors"
-                                        aria-hidden="true"
+                                    <!--
+                                        **ポスターを出す。** 焼いたときに動画の隣へ置いた
+                                        `-poster.jpg` (`api/.../poster`)。Nova など外の
+                                        プレイヤーに読ませているのと同じ絵で、テレビの画面では
+                                        文字だけの行よりずっと選びやすい。**無い録画もある**
+                                        (ポスターより前に焼いたもの等) ので、読めなければ絵を
+                                        隠して枠だけ残す (`onerror`)。枠と再生印はいつでも出す
+                                    -->
+                                    <div
+                                        class="bg-base-300 relative mt-0.5 aspect-video w-16 shrink-0 overflow-hidden rounded sm:w-24"
                                         data-testid="play-hint"
                                     >
-                                        <svg viewBox="0 0 24 24" class="size-4" fill="currentColor" aria-hidden="true">
-                                            <path d="M8 5v14l11-7z" />
-                                        </svg>
-                                    </span>
+                                        {#if rec.library_path !== null}
+                                            <img
+                                                src="/api/recordings/{rec.id}/poster"
+                                                alt=""
+                                                loading="lazy"
+                                                class="h-full w-full object-cover"
+                                                onerror={(event) => {
+                                                    (event.currentTarget as HTMLImageElement).style.display =
+                                                        'none';
+                                                }}
+                                            />
+                                        {/if}
+                                        <span
+                                            class="text-primary-content absolute inset-0 flex items-center justify-center bg-black/0 transition-colors group-hover:bg-black/40"
+                                            aria-hidden="true"
+                                        >
+                                            <svg
+                                                viewBox="0 0 24 24"
+                                                class="size-6 opacity-0 drop-shadow transition-opacity group-hover:opacity-100"
+                                                fill="currentColor"
+                                                aria-hidden="true"
+                                            >
+                                                <path d="M8 5v14l11-7z" />
+                                            </svg>
+                                        </span>
+                                    </div>
                                 {/if}
                                 <div class="min-w-0 flex-1 basis-56" data-testid="row-body">
                                     <!--
@@ -491,6 +549,36 @@
                                             : `${size(rec.ts_size)} (生TS ${size(rec.raw_size)})`,
                                         rec.deleted_at !== null ? `${date(rec.deleted_at)} に削除` : '',
                                     ])}
+                                    <!--
+                                        **途中まで観たものは「続き」を出す。** 観た位置
+                                        (`resume_ms`) は続きから始めるために持っていて、末尾まで
+                                        観たものは消える (`api/.../resume`) ので、**残っている =
+                                        まだ途中**。押せば `/watch` が続きから始める。
+                                        分母は実際に録れた長さ。無ければ番組表の尺で代用する
+                                    -->
+                                    {#if canPlay && rec.deleted_at === null && rec.resume_ms !== null && rec.resume_ms > 0}
+                                        {@const total = rec.duration_ms ?? rec.end_at - rec.start_at}
+                                        {@const frac =
+                                            total > 0 ? Math.min(1, rec.resume_ms / total) : 0}
+                                        <div
+                                            class="mt-1.5 flex items-center gap-2"
+                                            data-testid="recording-progress"
+                                        >
+                                            <div
+                                                class="bg-base-300 h-1 min-w-0 flex-1 overflow-hidden rounded-full"
+                                            >
+                                                <div
+                                                    class="bg-primary h-full"
+                                                    style="width: {frac * 100}%"
+                                                ></div>
+                                            </div>
+                                            <span
+                                                class="text-base-content/60 shrink-0 text-xs tabular-nums"
+                                            >
+                                                続き {Math.round(frac * 100)}%
+                                            </span>
+                                        </div>
+                                    {/if}
                                     <!--
                                         何で録れた1本か。**予約から来たものだけ**。
                                         取り込んだ録画 (EPGStation から引き継いだもの) には
@@ -634,8 +722,23 @@
                             {/if}
                         </div>
                     {:else}
-                        <div class="text-base-content/60 p-3">録画はありません</div>
+                        <div class="text-base-content/60 p-3">
+                            {data.q === '' ? '録画はありません' : `「${data.q}」に一致する録画はありません`}
+                        </div>
                     {/each}
+                    <!--
+                        **300件で頭打ちなのを黙らない。** 溜まると古いものが黙って
+                        消え、「消えた」ように見える。上限に当たっていたら、絞り込みへ
+                        誘う一行を出す (`+page.server.ts` の LIMIT 300)
+                    -->
+                    {#if data.recordings.length >= 300}
+                        <div
+                            class="text-base-content/60 border-base-300 border-t p-3 text-sm"
+                            data-testid="recording-truncated"
+                        >
+                            新しい300件までを表示しています。古いものは絞り込みで探してください。
+                        </div>
+                    {/if}
                 </div>
             </div>
         </section>

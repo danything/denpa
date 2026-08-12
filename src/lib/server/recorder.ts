@@ -283,13 +283,30 @@ async function pump(recording: Recording, controller: AbortController): Promise<
              * 「掴み直せば続きが録れる」は変わらない
              */
             while (!controller.signal.aborted) {
-                const stream = await openWithRetry(
-                    (signal) => openChannelStream(service.type, service.channel, signal, use),
-                    controller.signal,
-                );
-
                 /** 切れた理由。EOF なら null のまま */
                 let broke: unknown = null;
+
+                let stream: ReadableStream<Uint8Array>;
+                try {
+                    stream = await openWithRetry(
+                        (signal) => openChannelStream(service.type, service.channel, signal, use),
+                        controller.signal,
+                    );
+                } catch (error) {
+                    // **掴み直せなくても諦めない。** エージェントの Pod 入れ替えは
+                    // openWithRetry の数十秒を超えることがあり、そこで失敗にすると
+                    // 「終了時刻まで掛け直す」という上の約束を破って番組を丸ごと
+                    // 落とす。終了時刻(=自分での abort)が来るまでは待って掛け直す
+                    if (controller.signal.aborted) break;
+                    interrupted++;
+                    console.warn(
+                        `[recorder] 録画 ${recording.id}: 選局を掴み直せません (${interrupted} 回目: ${error})。` +
+                            `待って掛け直します`,
+                    );
+                    await new Promise((resolve) => setTimeout(resolve, OPEN_RETRY_WAIT));
+                    continue;
+                }
+
                 try {
                     for await (const chunk of chunks(stream)) {
                         if (config.followOnair && epg.feed(chunk) && eventId !== null) {

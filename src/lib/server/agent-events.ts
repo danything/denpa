@@ -63,11 +63,24 @@ export async function* blocks(stream: ReadableStream<Uint8Array>): AsyncGenerato
 /**
  * 繋ぎっぱなしにして、届いたものを渡す。切れたら間を置いて繋ぎ直す。
  * 戻り値を呼ぶと止まる。
+ *
+ * `onReachable` は**繋がる/繋がらないが切り替わったときだけ**呼ぶ。一瞬の切れで
+ * 鳴らさないよう、繋がらない状態が `agentDownGrace` 続いて初めて `false`。起動時に
+ * すんなり繋がったときは何も呼ばない (「復帰」ではないため) — `false` を出した
+ * あとに繋がったときだけ `true`。エージェントが黙って落ちても、録画が失敗するまで
+ * 気付けなかったのを埋める (webhook は `runtime.ts` が繋ぐ)
  */
-export function listen(onEvent: (event: AgentEvent) => void): () => void {
+export function listen(
+    onEvent: (event: AgentEvent) => void,
+    onReachable?: (up: boolean) => void,
+): () => void {
     let stopped = false;
     const controller = new AbortController();
     let retry = RETRY_MIN;
+    /** いま繋がっていると報告済みか。null は起動直後 (まだどちらも報告していない) */
+    let reachable: boolean | null = null;
+    /** 繋がらなくなった時刻。猶予を測る起点。繋がっている間は null */
+    let downSince: number | null = null;
 
     const loop = async () => {
         while (!stopped) {
@@ -81,6 +94,10 @@ export function listen(onEvent: (event: AgentEvent) => void): () => void {
                 // 繋がった時点で待ち時間を戻す。長く繋がっていたのに1度切れただけで
                 // 1分待つ、ということにならないように
                 retry = RETRY_MIN;
+                downSince = null;
+                // 落ちていると知らせたあとに繋がったときだけ「復帰」を鳴らす
+                if (reachable === false) onReachable?.(true);
+                reachable = true;
                 console.log('[agent] 知らせの購読を開始しました');
 
                 for await (const block of blocks(res.body)) {
@@ -93,6 +110,12 @@ export function listen(onEvent: (event: AgentEvent) => void): () => void {
                 console.warn(
                     `[agent] 知らせに繋げません (${Math.round(retry / 1000)}秒後に再試行): ${error}`,
                 );
+            }
+            // 繋がらない状態が猶予を超えて続いたら、一度だけ「落ちている」を鳴らす
+            if (downSince === null) downSince = Date.now();
+            if (reachable !== false && Date.now() - downSince >= config.agentDownGrace) {
+                reachable = false;
+                onReachable?.(false);
             }
             if (stopped) return;
             await new Promise((resolve) => setTimeout(resolve, retry));

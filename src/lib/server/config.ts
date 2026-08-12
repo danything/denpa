@@ -86,6 +86,14 @@ export const config = {
     encodeConcurrency: num('ENCODE_CONCURRENCY', 1),
     /** 先頭が壊れていて初期化に失敗したときに頭を捨てて再試行する秒数 (enc.js 由来) */
     encodeRetrySeek: 0.2,
+    /**
+     * 1つのエンコードを何回まで試すか。**毒ジョブでキューを止めないため。**
+     *
+     * プロセスごと落とすジョブ (メモリ超過など) は、再起動のたびに running→queued
+     * へ戻され、同時実行1・id順だと毎回先頭に来て永久にキューを塞ぐ。掴むたびに
+     * attempts を数えていて、ここを超えたら諦めて failed にし、後ろを進める
+     */
+    encodeMaxAttempts: num('ENCODE_MAX_ATTEMPTS', 5),
     ffprobe: str('FFPROBE', '/usr/local/bin/ffprobe'),
 
     /** 録画エンコードの初期コーデック。設定画面で変えられる */
@@ -253,6 +261,17 @@ export const config = {
     schedulerTick: num('SCHEDULER_TICK', 5 * SEC),
     /** 保存先の実体とDBを突き合わせる間隔。外から消されたものをここで拾う */
     reconcileInterval: num('RECONCILE_INTERVAL', 5 * MIN),
+    /**
+     * ディスク残量がこれを下回ったら知らせる (バイト)。**録画が全部失敗して初めて
+     * 気付く**のを防ぐ。録画1本は数百MB〜数GBなので、既定は 20GB — 数本ぶんの余裕。
+     * 照合と同じ周期で見る (disk.ts)。0 にすると監視しない
+     */
+    diskLowThreshold: num('DISK_LOW_THRESHOLD', 20 * 1024 * 1024 * 1024),
+    /**
+     * チューナー(エージェント)に繋がらない状態がこれだけ続いたら知らせる。
+     * 一瞬の切れ (デプロイ・つなぎ直し) で鳴らさないための猶予 (agent-events.ts)
+     */
+    agentDownGrace: num('AGENT_DOWN_GRACE', 3 * MIN),
     /**
      * 局ロゴを取りに行く間隔。放送波に流れてくるのを待つので、急いでも取れない。
      * ただし1回に開けるのは数チャンネルなので、間隔が長いと BS/CS が埋まらない

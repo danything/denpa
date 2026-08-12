@@ -3,6 +3,7 @@ import { SOCKET_PATH } from '$lib/live';
 import { listen } from './agent-events';
 import { ensureBasicAuth } from './auth';
 import { config } from './config';
+import { checkDisk } from './disk';
 import { pump, requeueOrphanedJobs } from './encoder';
 import { sync, syncServicesOnly } from './epg';
 import { collectOnce } from './epg-collect';
@@ -17,6 +18,7 @@ import { tick } from './scheduler';
 import { prune as pruneSessions } from './session';
 import { beginDraining } from './shutdown';
 import { redeem } from './tickets';
+import { notify } from './webhook';
 import { serve } from './ws';
 
 let started = false;
@@ -123,6 +125,13 @@ export function start(): void {
     every(config.reconcileInterval, 'reconcile', reconcile);
 
     /*
+     * ディスク残量を見張る。埋まると始まる録画が片っ端から失敗するので、
+     * 下回ったところで知らせる (disk.ts)。照合と同じ周期でよい
+     */
+    void guard('disk', checkDisk);
+    every(config.reconcileInterval, 'disk', checkDisk);
+
+    /*
      * 古い履歴を畳む。終わった予約と、消した録画の行が対象。
      * 実体はもう無いので、消えて困るものはない。照合と同じ周期でよい
      */
@@ -173,28 +182,44 @@ export function start(): void {
  * 可能性まで消せるわけではないので、保険として置いておく。
  */
 function listenToAgent(): void {
-    unlisten = listen((event) => {
-        switch (event.name) {
-            case 'tuners':
-                emit('tuners');
-                /*
-                 * 誰かがチューナーを開いた、かもしれない。そこへ同じチャンネルを
-                 * 要求するとエージェントが相乗りさせるので、ロゴを只で読める。
-                 * 開いた瞬間に来る知らせなので、ここで乗る
-                 */
-                void guard('logo', ride);
-                break;
-            case 'channels':
-                // スキャンで局が入れ替わった。取り込み直して番組表も集め直す
-                void guard('epg', async () => {
-                    await sync();
-                    await collectOnce();
+    unlisten = listen(
+        (event) => {
+            switch (event.name) {
+                case 'tuners':
+                    emit('tuners');
+                    /*
+                     * 誰かがチューナーを開いた、かもしれない。そこへ同じチャンネルを
+                     * 要求するとエージェントが相乗りさせるので、ロゴを只で読める。
+                     * 開いた瞬間に来る知らせなので、ここで乗る
+                     */
+                    void guard('logo', ride);
+                    break;
+                case 'channels':
+                    // スキャンで局が入れ替わった。取り込み直して番組表も集め直す
+                    void guard('epg', async () => {
+                        await sync();
+                        await collectOnce();
+                    });
+                    break;
+                default:
+                    break;
+            }
+        },
+        // エージェントに繋がらない状態が続いたら知らせる。黙って落ちても、
+        // 次の録画が失敗するまで気付けなかったのを埋める (agent-events.ts が切り替えを判定)
+        (up) => {
+            if (up) {
+                console.log('[agent] チューナーに繋がりました');
+                notify({ event: 'agent.up', text: 'チューナー(エージェント)に繋がりました' });
+            } else {
+                console.error('[agent] チューナーに繋がりません');
+                notify({
+                    event: 'agent.down',
+                    text: 'チューナー(エージェント)に繋がりません。録画できない状態です',
                 });
-                break;
-            default:
-                break;
-        }
-    });
+            }
+        },
+    );
 }
 
 export function stop(): void {
