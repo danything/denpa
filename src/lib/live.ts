@@ -33,15 +33,10 @@ import type { AudioTrack } from './arib';
  */
 export type LiveCodec = 'h264' | 'av1';
 
-/** 選べる焼き方。画面の切り替えに並べる順そのまま */
-export const LIVE_CODECS: { id: LiveCodec; label: string; note: string }[] = [
-    { id: 'h264', label: 'H.264', note: 'どの端末でも出る' },
-    /*
-     * **遅れることも書く。** SVT-AV1 は溜め込むので、電波が届いてから塊が出る
-     * までが H.264 の数倍かかる (実測は `server/live.ts` の `videoArgs`)。
-     * 量は減るが、放送の今からは1秒ぶん離れる
-     */
-    { id: 'av1', label: 'AV1', note: '軽いが、1秒遅れる。出ない端末もある' },
+/** 選べる焼き方。画面の切り替えに並べる順そのまま (説明は付けない — 選ぶのは端末の相性だけ) */
+export const LIVE_CODECS: { id: LiveCodec; label: string }[] = [
+    { id: 'h264', label: 'H.264' },
+    { id: 'av1', label: 'AV1' },
 ];
 
 /**

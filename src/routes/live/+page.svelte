@@ -527,7 +527,7 @@
                             </button>
                             <ul
                                 class="dropdown-content menu bg-base-100 text-base-content rounded-box
-                                   z-10 mb-1 w-56 p-2 shadow-lg"
+                                   z-10 mb-1 w-36 p-2 text-base shadow-lg"
                                 data-testid="live-codec-menu"
                             >
                                 {#each LIVE_CODECS as choice (choice.id)}
@@ -543,11 +543,7 @@
                                             data-codec={choice.id}
                                             aria-current={choice.id === player.codec ? 'true' : undefined}
                                         >
-                                            <span class="flex flex-col items-start">
-                                                <span>{choice.label}</span>
-                                                <span class="text-base-content/60 text-xs">{choice.note}</span
-                                                >
-                                            </span>
+                                            {choice.label}
                                         </button>
                                     </li>
                                 {/each}
@@ -712,13 +708,13 @@
                                 </button>
                                 <ul
                                     class="dropdown-content menu bg-base-100 text-base-content rounded-box
-                                       z-10 mb-1 w-28 p-2 shadow-lg"
+                                       z-10 mb-1 w-24 gap-1 p-2 text-lg shadow-lg"
                                     data-testid="live-speed-menu"
                                 >
                                     {#each SPEEDS as value (value)}
                                         <li>
                                             <button type="button"
-                                                class="tabular-nums {value === player.speed
+                                                class="tabular-nums justify-center py-2 {value === player.speed
                                                     ? 'menu-active'
                                                     : ''}"
                                                 onclick={(event) => {

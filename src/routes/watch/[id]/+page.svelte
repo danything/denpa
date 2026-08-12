@@ -872,9 +872,6 @@
                     postal={data.broadcast.postalCode}
                     network={false}
                 />
-                {#if dataPress !== null}
-                    <Remote press={dataPress} />
-                {/if}
 
                 <!--
                     **放送の字幕。** 映像と同じ枠に、映像の画素そのままの大きさで
@@ -966,6 +963,21 @@
                     >
                         <Icon path={CLOSE} />
                     </a>
+                    <!--
+                        **データ放送 (d) は右上に置く。** 焼いてある録画でだけ出す
+                        (`data.hasData`)。ライブとボタンを揃えるため右側に出し、押すと
+                        右カラムにリモコン (`Remote`) が出る。ライブと違い、取りに行くのは
+                        サーバではなく焼いた変化ログ
+                    -->
+                    {#if data.hasData}
+                        <ControlButton
+                            path={DATA}
+                            label={showData ? 'データ放送を消す' : 'データ放送を出す'}
+                            on={showData}
+                            testid="watch-data-button"
+                            onclick={toggleData}
+                        />
+                    {/if}
                     <!--
                         **切り抜き。** 字幕ごと写して、そのまま貼れるようにする。
                         観ている場面を人に見せるのに、いちいち撮り直さずに済む
@@ -1134,20 +1146,6 @@
                             </div>
                         </div>
 
-                        <!--
-                            **データ放送 (d)。焼いてある録画でだけ出す** (`data.hasData`)。
-                            ライブと違い、押しても取りに行くのはサーバではなく焼いた変化ログ
-                        -->
-                        {#if data.hasData}
-                            <ControlButton
-                                path={DATA}
-                                label={showData ? 'データ放送を消す' : 'データ放送を出す'}
-                                on={showData}
-                                testid="watch-data-button"
-                                onclick={toggleData}
-                            />
-                        {/if}
-
                         <!-- 早送り。**ライブの追っかけと同じ並び・同じ見た目** -->
                         <div class="dropdown dropdown-top dropdown-end">
                             <button type="button"
@@ -1158,13 +1156,13 @@
                                 {speed}×
                             </button>
                             <ul
-                                class="dropdown-content menu bg-base-100 text-base-content rounded-box z-10 mb-1 w-28 p-2 shadow-lg"
+                                class="dropdown-content menu bg-base-100 text-base-content rounded-box z-10 mb-1 w-24 gap-1 p-2 text-lg shadow-lg"
                                 data-testid="watch-speed-menu"
                             >
                                 {#each SPEEDS as value (value)}
                                     <li>
                                         <button type="button"
-                                            class="tabular-nums {value === speed ? 'menu-active' : ''}"
+                                            class="tabular-nums justify-center py-2 {value === speed ? 'menu-active' : ''}"
                                             onclick={(event) => {
                                                 setSpeed(value);
                                                 event.currentTarget.blur();
@@ -1209,6 +1207,14 @@
     -->
     <!-- **二段組にした直後は細く** (`md:w-64`)。理由は [ControlBar.svelte](../../../lib/components/player/ControlBar.svelte) -->
     <aside class="flex flex-col md:w-64 md:min-h-0 md:shrink-0 lg:w-80">
+        <!--
+            **データ放送のリモコンは、映像の上ではなく右の列に出す** — ライブと同じ
+            (live/+page.svelte)。以前は映像に重ねていたので、上下の帯や字幕とぶつかっていた。
+            データ放送を出している間だけ、番組の中身の上に出す
+        -->
+        {#if dataPress !== null}
+            <Remote press={dataPress} />
+        {/if}
         <div class="card bg-base-100 flex min-h-0 flex-1 shadow">
             <!--
                 **`card-body` は使わない。** daisyUI はあれの中の `<p>` に
