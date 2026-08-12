@@ -9,6 +9,7 @@
     import Icon from '$lib/components/player/Icon.svelte';
     import {
         AUDIO,
+        CAMERA,
         CAPTION,
         DATA,
         EXPAND,
@@ -23,6 +24,7 @@
         SOUND_ON,
     } from '$lib/components/player/icons';
     import Remote from '$lib/components/player/Remote.svelte';
+    import Toasts, { type Notice } from '$lib/components/Toasts.svelte';
     import { programDetail } from '$lib/detail.svelte';
     import { time } from '$lib/format';
     import { LIVE_CODECS } from '$lib/live';
@@ -197,6 +199,48 @@
     const wake = controls.wake;
     const away = controls.away;
     const toggle = controls.toggle;
+
+    /**
+     * **いまの1コマを字幕ごと切り抜く。観る画面 (`/watch/<id>`) と同じやり方。**
+     *
+     * 映像に、出している字幕 (`overlay`) をそのまま重ねて1枚にする。
+     * クリップボードに絵を置けるのは安全な繋ぎ (https) と押した勢いが要るので、
+     * 断られたら**落とすほうに倒す** — 撮ったものを取り落とさない
+     */
+    let shot = $state<Notice | null>(null);
+    const notices = $derived<Notice[]>(shot === null ? [] : [shot]);
+
+    async function snapshot(): Promise<void> {
+        if (video === undefined || video.videoWidth === 0) return;
+        controls.stir();
+        const shotCanvas = document.createElement('canvas');
+        shotCanvas.width = video.videoWidth;
+        shotCanvas.height = video.videoHeight;
+        const ctx = shotCanvas.getContext('2d');
+        if (ctx === null) return;
+        ctx.drawImage(video, 0, 0, shotCanvas.width, shotCanvas.height);
+        // 出している字幕をそのまま重ねる (消しているときは重ねない)
+        if (player.captions && player.hasCaptions && overlay.width > 1) {
+            ctx.drawImage(overlay, 0, 0, shotCanvas.width, shotCanvas.height);
+        }
+
+        const blob = await new Promise<Blob | null>((resolve) => shotCanvas.toBlob(resolve, 'image/png'));
+        if (blob === null) return;
+
+        try {
+            await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
+            shot = { key: `shot-${Date.now()}`, kind: 'success', text: '切り抜きをコピーしました' };
+        } catch {
+            // 置けない繋ぎ (http) や断られたとき。落として渡す
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = `${current?.now?.name ?? current?.name ?? 'ライブ'} - ${time(Date.now())}.png`;
+            link.click();
+            URL.revokeObjectURL(url);
+            shot = { key: `shot-${Date.now()}`, kind: 'success', text: '切り抜きを保存しました' };
+        }
+    }
 </script>
 
 <!--
@@ -733,6 +777,16 @@
                             </div>
                         {/if}
 
+                        <!--
+                            **切り抜き。** いまの1コマを字幕ごとクリップボードへ (観る画面と同じ)。
+                            貼れない繋ぎ (http) では落とす
+                        -->
+                        <ControlButton
+                            path={CAMERA}
+                            label="この場面を切り抜く"
+                            testid="live-shot"
+                            onclick={() => void snapshot()}
+                        />
                         <ControlButton
                             path={fullscreened ? SHRINK : EXPAND}
                             label={fullscreened ? '全画面をやめる' : '全画面'}
@@ -979,3 +1033,5 @@
         {/if}
     </aside>
 </div>
+
+<Toasts {notices} />
