@@ -12,6 +12,7 @@ import { attend } from './live';
 import { reconcile as logoReconcile, ride, sweep } from './logo';
 import { sweep as learnSweep } from './logo-learn';
 import { activeRecordingIds, recoverOrphanedRecordings } from './recorder';
+import { relayoutLibrary } from './relayout';
 import { tick } from './scheduler';
 import { prune as pruneSessions } from './session';
 import { beginDraining } from './shutdown';
@@ -44,6 +45,13 @@ export function start(): void {
 
     mkdirSync(config.recordedDir, { recursive: true });
     mkdirSync(config.libraryDir, { recursive: true });
+
+    /*
+     * 昔の Jellyfin 流レイアウト (Season フォルダ + episodedetails + `-thumb.jpg`) の
+     * 録画を、Nova が番組情報とサムネを出せる映画型へ移す。要るものだけ・起動時に1回
+     * (relayout.ts)。DENPA_AUTOSTART=0 でも通す — 実体とDBを揃える片付けなので
+     */
+    relayoutLibrary();
 
     /*
      * **鍵を掛けてから開ける。** 何も設定しないまま立てると、録画も WebDAV も

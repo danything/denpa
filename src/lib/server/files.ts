@@ -1,5 +1,5 @@
 import { type Dirent, existsSync, readdirSync, rmdirSync, statSync } from 'node:fs';
-import { basename, dirname, join } from 'node:path';
+import { join } from 'node:path';
 import type { Recording } from '../types';
 import { config } from './config';
 import { database, now, queryAll } from './db';
@@ -116,8 +116,8 @@ function settling(path: string, at: number): boolean {
  *
  * - `<動画>.dtvi` … chapter_exe / logoframe が作る索引 (1本3MB)
  * - `<動画>.sup` `<動画>.jls…` … 字幕とCM検出の作業ファイル
- * - `<動画から拡張子を取ったもの>.nfo` / `-thumb.jpg` … プレイヤー向けの覚え書き。
- *   `.ja.ass` は文字で取り出した字幕を置いていた頃のもの (いまは作らない)
+ * - `<動画から拡張子を取ったもの>.nfo` / `-poster.jpg` / `.bml.jsonl` … プレイヤー向けの
+ *   覚え書き・ポスター・録画のデータ放送。`.ja.ass` と `-thumb.jpg` は昔の名残 (いまは作らない)
  *
  * 実機では生TSの置き場に `.dtvi` が9本 (22MB) 残っていた。生TSを残さない設定だと
  * TS が消えたあとも索引だけが居座り、録るたびに積もる。
@@ -187,22 +187,15 @@ function sweepLeftovers(): { swept: number; strays: number; pruned: number } {
     return { swept, strays, pruned };
 }
 
-/** シリーズ全体の覚え書き。エピソードが1つでも残っていれば要る */
-const SHOW_NFO = 'tvshow.nfo';
-
 /** 付き添いで、かつ連れ合いの動画が1つも無いか */
 function orphan(path: string, videos: Set<string>): boolean {
-    if (basename(path) === SHOW_NFO) {
-        // シリーズのフォルダに動画が1つでも残っていれば置いておく
-        const show = `${dirname(path)}/`;
-        return ![...videos].some((video) => video.startsWith(show));
-    }
     // 索引や作業ファイル。動画の名前をまるごと頭に持つ (`….m2ts.dtvi`)
     const trailing = /^(.+\.(?:m2ts|ts|mkv|mp4))\.[^/]+$/i.exec(path);
     if (trailing !== null) return !videos.has(trailing[1]);
-    // NFO・サムネイル。動画の拡張子を取り替えた形 (`….nfo` / `…-thumb.jpg`)。
-    // `.ja.ass` はもう作らないが、前に置いたものが残っているので拾う
-    const base = /^(.+?)(?:-thumb\.jpg|\.nfo|\.ja\.ass)$/i.exec(path);
+    // NFO・ポスター・データ放送。動画の拡張子を取り替えた形
+    // (`….nfo` / `…-poster.jpg` / `….bml.jsonl`)。`.ja.ass` と `-thumb.jpg` は
+    // もう作らないが、前に置いたものが残っているので拾う (tvshow.nfo も同じ道で片付く)
+    const base = /^(.+?)(?:-poster\.jpg|-thumb\.jpg|\.nfo|\.ja\.ass|\.bml\.jsonl)$/i.exec(path);
     if (base === null) return false;
     // どの入れ物で置いたかまでは名前から分からないので、当てはまるものを全部見る
     return !['m2ts', 'ts', 'mkv', 'mp4'].some((extension) => videos.has(`${base[1]}.${extension}`));

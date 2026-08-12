@@ -148,14 +148,27 @@ describe('実体との照合', () => {
         expect(files()).toEqual(['のこる.m2ts', 'のこる.m2ts.dtvi']);
     });
 
-    test('動画の残っている NFO とサムネイルは残す', () => {
+    test('動画の残っている NFO とポスターは残す', () => {
         fresh();
-        put(config.libraryDir, '番組/Season 2026/番組 - 1.mkv');
-        put(config.libraryDir, '番組/Season 2026/番組 - 1.nfo');
-        put(config.libraryDir, '番組/Season 2026/番組 - 1-thumb.jpg');
-        put(config.libraryDir, '番組/tvshow.nfo');
+        put(config.libraryDir, '番組/番組 - 1.mkv');
+        put(config.libraryDir, '番組/番組 - 1.nfo');
+        put(config.libraryDir, '番組/番組 - 1-poster.jpg');
 
         expect(reconcile().swept).toBe(0);
+    });
+
+    /*
+     * **もう使わない tvshow.nfo は、動画があっても片付ける。** 映画型に移して
+     * シリーズの覚え書きは書かなくなったので、連れ合いの動画を持たない付き添いとして掃く
+     */
+    test('使わなくなった tvshow.nfo は掃く', () => {
+        fresh();
+        put(config.libraryDir, '番組/番組 - 1.mkv');
+        put(config.libraryDir, '番組/tvshow.nfo');
+
+        expect(reconcile().swept).toBe(1);
+        expect(existsSync(join(config.libraryDir, '番組/tvshow.nfo'))).toBe(false);
+        expect(existsSync(join(config.libraryDir, '番組/番組 - 1.mkv'))).toBe(true);
     });
 
     test('動画の消えた NFO とサムネイルは、シリーズごと片付ける', () => {

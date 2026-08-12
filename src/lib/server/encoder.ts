@@ -17,7 +17,7 @@ import { config } from './config';
 import { database, now, queryOne } from './db';
 import { emit } from './events';
 import { removeIfExists } from './fsx';
-import { encodedPath, libraryPath } from './library';
+import { encodedPath, libraryFamily, libraryPath } from './library';
 import { sidecarPaths, writeNfo, writeThumbnail } from './metadata';
 import { saveRecordedBml } from './recorded-bml';
 import { descramble, isScrambled } from './scramble';
@@ -1068,9 +1068,36 @@ async function runJob(jobId: number): Promise<void> {
      * (そのとき生TSまで消える)。空けておけば照合の対象から外れ、
      * 画面でも「まだ保存先に無い」と正しく出る
      */
-    if (recording.library_path !== null || recording.alt_path !== null) {
-        removeIfExists(recording.library_path);
-        removeIfExists(recording.alt_path);
+    /*
+     * **DBが指す2本だけでなく、この録画が取りうる名前の“はぐれファイル”も消す。**
+     * 命名規則が `[録画ID]` 付きに変わる前の素名 AV1 などは library_path/alt_path に
+     * 載っていないので、これまで永久に残り、置き場所を毎回「衝突」と読ませて
+     * `[録画ID]` を剥がれなくしていた (library.ts の libraryFamily 参照)。
+     * **他の録画が現に使っている置き場所は消さない** — DBで確認して、はぐれ
+     * (誰も使っていないファイル) だけ片付ける
+     */
+    const stalePaths = new Set<string>();
+    if (recording.library_path !== null) stalePaths.add(recording.library_path);
+    if (recording.alt_path !== null) stalePaths.add(recording.alt_path);
+    for (const candidate of libraryFamily(recording)) {
+        if (stalePaths.has(candidate) || !existsSync(candidate)) continue;
+        const claimed = queryOne<{ id: number }>(
+            'SELECT id FROM recordings WHERE (library_path = ? OR alt_path = ?) AND id != ?',
+            candidate,
+            candidate,
+            recording.id,
+        );
+        if (claimed === undefined) stalePaths.add(candidate);
+    }
+    if (stalePaths.size > 0) {
+        for (const stalePath of stalePaths) {
+            removeIfExists(stalePath);
+            const stale = sidecarPaths(stalePath);
+            removeIfExists(stale.nfo);
+            removeIfExists(stale.thumbnail);
+            removeIfExists(stale.subtitle);
+            removeIfExists(stale.dataBroadcast);
+        }
         database()
             .prepare(
                 'UPDATE recordings SET library_path = NULL, alt_path = NULL, updated_at = ? WHERE id = ?',

@@ -19,13 +19,18 @@ export interface LibraryNameInput {
 }
 
 /**
- * 保存先での相対パスを組む。
+ * 保存先での相対パスを組む。`シリーズ名/シリーズ名 - YYYY-MM-DD - HHMM 副題{ext}`。
  *
- * .nfo を読むプレイヤー (Nova) が期待する `シリーズ名/Season 年/シリーズ名 - YYYY-MM-DD ...`
- * という日付ベースのエピソード命名を解釈できる。日本の放送番組は話数が付かないもの・
- * 話数がリセットされるものが多く SxxExx に落とせないため、放送日をエピソード識別子に使う。
+ * **1録画 = 1本の「映画」として置く** (`.nfo` は `<movie>`)。想定プレイヤーの
+ * Nova はローカルの `<movie>` NFO をオンライン照合なしでそのまま出し、動画と同名の
+ * ポスター (`-poster.jpg`) も録画ごとに読む。日本の放送番組は TMDB/TVDB に載らず、
+ * 話数も付かない/リセットされるものが多いので、TVエピソード扱い (Season/SxxExx) は
+ * やめた — エピソードは全話 S00E00 送りになり、しかも録画ごとのサムネが出せない。
  *
- * 日時はコンテナの TZ (Asia/Tokyo) のローカル時刻。放送日で並ぶことが期待値なので UTC にはしない。
+ * シリーズ名のフォルダにまとめるのは**ディスク上・WebDAV で見やすくするため**だけで、
+ * Nova の照合には効かない (NFO は動画1本ごとに読まれる)。
+ *
+ * 日時はコンテナの TZ (Asia/Tokyo) のローカル時刻。放送日で並ぶのが期待値なので UTC にはしない。
  */
 function libraryRelPath(rec: LibraryNameInput, ext: string): string {
     const d = new Date(rec.start_at);
@@ -37,7 +42,7 @@ function libraryRelPath(rec: LibraryNameInput, ext: string): string {
     const subtitle = rec.subtitle === '' ? '' : ` ${sanitizeFileName(rec.subtitle)}`;
     const base = `${series} - ${date} - ${time}${subtitle}`;
 
-    return join(series, `Season ${d.getFullYear()}`, `${base}${ext}`);
+    return join(series, `${base}${ext}`);
 }
 
 /**
@@ -73,6 +78,20 @@ export function libraryPath(rec: LibraryNameInput, ext: string): string {
  */
 export function encodedPath(rec: LibraryNameInput, codec: 'av1' | 'h264'): string {
     return libraryPath(rec, codec === 'h264' ? ' [H264].mkv' : '.mkv');
+}
+
+/**
+ * この録画が取りうる保存先の候補すべて。
+ *
+ * コーデック (素 = AV1 / `[H264]`) と、衝突回避の `[録画ID]` の有無で最大4通り。
+ * 焼き直す前に、DBの `library_path`/`alt_path` が指していない**はぐれファイル**まで
+ * 含めて片付けるために使う。命名規則が `[録画ID]` 付きに変わる前の素名 AV1 などは
+ * どちらの列にも載らないので残り続け、`libraryPath` が毎回それを「衝突」と読んで
+ * `[録画ID]` を剥がれなくしていた (`encodedPath` が素名を取れない)。
+ */
+export function libraryFamily(rec: LibraryNameInput): string[] {
+    const exts = ['.mkv', ` [${rec.id}].mkv`, ' [H264].mkv', ` [${rec.id}] [H264].mkv`];
+    return exts.map((ext) => join(config.libraryDir, libraryRelPath(rec, ext)));
 }
 
 /** 生TSの置き場。保存先と違い人が見るものではないので平置きでよい */

@@ -74,15 +74,16 @@ test.describe('録画とエンコード', () => {
         // 番組表の尺(BSの偽番組は10秒)から大きく外れていないこと
         expect(recorded).toBeLessThan(5 * 60_000);
 
-        // .nfo を読むプレイヤー (Nova) 向けに、サイドカーが揃っていること
+        // .nfo を読むプレイヤー (Nova) 向けに、サイドカーが揃っていること。
+        // 1録画=1映画として書く (<movie> + -poster.jpg)
         const base = videoPath.replace(/\.mkv$/, '');
         expect(existsSync(`${base}.nfo`)).toBe(true);
-        expect(existsSync(`${base}-thumb.jpg`)).toBe(true);
+        expect(existsSync(`${base}-poster.jpg`)).toBe(true);
 
         const nfo = readFileSync(`${base}.nfo`, 'utf8');
-        expect(nfo).toContain('<episodedetails>');
+        expect(nfo).toContain('<movie>');
         expect(nfo).toContain('<studio>BS11イレブン</studio>');
-        expect(nfo).toContain('<aired>');
+        expect(nfo).toContain('<premiered>');
 
         // 観られる録画には再生の印が出ていること。
         // 再生ボタンは置いていない (行そのものを押すと再生する)

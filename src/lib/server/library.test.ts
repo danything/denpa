@@ -11,7 +11,7 @@ import { dirname, join } from 'node:path';
 const { config } = await import('./config');
 config.libraryDir = mkdtempSync(join(tmpdir(), 'denpa-lib-'));
 
-const { libraryPath, encodedPath } = await import('./library');
+const { libraryPath, encodedPath, libraryFamily } = await import('./library');
 
 /** 2026-08-03 22:30 開始の録画 */
 function recording(overrides: { library_path?: string | null; alt_path?: string | null } = {}) {
@@ -24,8 +24,8 @@ function recording(overrides: { library_path?: string | null; alt_path?: string 
     };
 }
 
-const PLAIN = '番組/Season 2026/番組 - 2026-08-03 - 2230.mkv';
-const WITH_ID = '番組/Season 2026/番組 - 2026-08-03 - 2230 [39].mkv';
+const PLAIN = '番組/番組 - 2026-08-03 - 2230.mkv';
+const WITH_ID = '番組/番組 - 2026-08-03 - 2230 [39].mkv';
 
 function place(rel: string): string {
     const path = join(config.libraryDir, rel);
@@ -66,18 +66,35 @@ describe('保存先での名前', () => {
         // 他のテストが置いた PLAIN と衝突しないよう、別のシリーズで見る
         const rec = { id: 7, series: '別番組', subtitle: '', start_at: recording().start_at };
         expect(encodedPath(rec, 'av1')).toBe(
-            join(config.libraryDir, '別番組/Season 2026/別番組 - 2026-08-03 - 2230.mkv'),
+            join(config.libraryDir, '別番組/別番組 - 2026-08-03 - 2230.mkv'),
         );
         expect(encodedPath(rec, 'h264')).toBe(
-            join(config.libraryDir, '別番組/Season 2026/別番組 - 2026-08-03 - 2230 [H264].mkv'),
+            join(config.libraryDir, '別番組/別番組 - 2026-08-03 - 2230 [H264].mkv'),
         );
     });
 
     test('いま置いてある2本 (主・もう一方) はどちらも衝突ではない', () => {
         const av1 = place(PLAIN);
-        const h264 = place('番組/Season 2026/番組 - 2026-08-03 - 2230 [H264].mkv');
+        const h264 = place('番組/番組 - 2026-08-03 - 2230 [H264].mkv');
         const rec = recording({ library_path: av1, alt_path: h264 });
         expect(encodedPath(rec, 'av1')).toBe(av1);
         expect(encodedPath(rec, 'h264')).toBe(h264);
+    });
+
+    /*
+     * **焼き直す前の掃除が拾うべき候補。** コーデック (素/[H264]) × 録画IDの有無で
+     * 4通り。命名規則が変わる前の素名ファイルまで含めて片付けるために、この一覧を
+     * 使う (encoder.ts のはぐれ掃除)
+     */
+    test('取りうる置き場所4通りを列挙する', () => {
+        const dir = config.libraryDir;
+        expect(new Set(libraryFamily(recording()))).toEqual(
+            new Set([
+                join(dir, '番組/番組 - 2026-08-03 - 2230.mkv'),
+                join(dir, '番組/番組 - 2026-08-03 - 2230 [39].mkv'),
+                join(dir, '番組/番組 - 2026-08-03 - 2230 [H264].mkv'),
+                join(dir, '番組/番組 - 2026-08-03 - 2230 [39] [H264].mkv'),
+            ]),
+        );
     });
 });

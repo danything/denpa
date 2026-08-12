@@ -1,5 +1,5 @@
 import { existsSync, writeFileSync } from 'node:fs';
-import { dirname, extname, join } from 'node:path';
+import { extname } from 'node:path';
 import type { Recording } from '../types';
 import { config } from './config';
 import { removeIfExists } from './fsx';
@@ -11,7 +11,10 @@ import { removeIfExists } from './fsx';
  * インターネット取得に任せるとタイトルだけの一覧になってしまう。番組名・概要・
  * 放送日・放送局は EPG から取れているので、こちらから書いて渡す。
  *
- * NFO を読むプレイヤー (Nova) では、これがそのまま番組情報として使われる。
+ * **1録画 = 1本の「映画」として書く (`<movie>`)。** 想定プレイヤーの Nova は
+ * ローカルの `<movie>` NFO をオンライン照合なしでそのまま出し、`<episodedetails>`
+ * と違って**録画ごとのポスター (`-poster.jpg`) も読む**。TVエピソード扱いだと
+ * 話数の付かない日本の番組は全話 S00E00 送りになり、録画ごとのサムネも出せなかった。
  * インターネットのメタデータ取得は切っておくと、ここで書いた内容が上書きされない。
  */
 
@@ -24,7 +27,11 @@ function pad(n: number): string {
 }
 
 /**
- * サイドカーの置き場。`foo.mkv` に対して `foo.nfo` / `foo-thumb.jpg`。
+ * サイドカーの置き場。`foo.mkv` に対して `foo.nfo` / `foo-poster.jpg`。
+ *
+ * **サムネは `-poster.jpg`。** Nova は動画と同名の `{名前}-poster.jpg`
+ * (または `{名前}.jpg`) を映画のポスターとして読む。以前の `-thumb.jpg` は
+ * どの命名にも当てはまらず拾われなかった。
  *
  * **字幕は置きません。** 入れ物の中に入っていて、抜くのは実測で0.1〜1秒
  * (`api/recordings/<id>/captions.sup`)。置くと動画1本ぶん場所を積む上に、
@@ -42,7 +49,7 @@ export function sidecarPaths(videoPath: string): {
     const base = videoPath.slice(0, videoPath.length - extname(videoPath).length);
     return {
         nfo: `${base}.nfo`,
-        thumbnail: `${base}-thumb.jpg`,
+        thumbnail: `${base}-poster.jpg`,
         subtitle: `${base}.ja.ass`,
         // 録画のデータ放送 (再生位置つきの変化ログ)。d ボタンで出す (server/recorded-bml.ts)
         dataBroadcast: `${base}.bml.jsonl`,
@@ -50,45 +57,32 @@ export function sidecarPaths(videoPath: string): {
 }
 
 /**
- * エピソードのNFO。日付ベースのエピソードとして扱わせるため aired を必ず入れる。
- * plot には概要(description)に加えて詳細情報(extended)も畳み込む。
+ * 録画1本ぶんの映画NFO (`<movie>`)。
+ *
+ * タイトルは**カードだけで番組が分かるように**組む — 副題があれば
+ * `シリーズ名 副題`、無ければシリーズ名 (映画・単発はこれで完結する)。番組名
+ * (`name`) は「第6話…[字]」のような放送側の飾りが混じるので使わない。
+ * plot は概要 (description)。放送日は `<premiered>`、年は `<year>` に入れる。
  */
-export function episodeNfo(recording: Recording): string {
+export function movieNfo(recording: Recording): string {
     const start = new Date(recording.start_at);
-    const aired = `${start.getFullYear()}-${pad(start.getMonth() + 1)}-${pad(start.getDate())}`;
-    const runtime = Math.max(1, Math.round((recording.end_at - recording.start_at) / 60000));
-
-    let extended = '';
-    if (recording.description !== '') extended = recording.description;
+    const premiered = `${start.getFullYear()}-${pad(start.getMonth() + 1)}-${pad(start.getDate())}`;
+    const title = recording.subtitle === '' ? recording.series : `${recording.series} ${recording.subtitle}`;
 
     const lines = [
         '<?xml version="1.0" encoding="utf-8" standalone="yes"?>',
-        '<episodedetails>',
-        `  <title>${xml(recording.subtitle === '' ? recording.name : recording.subtitle)}</title>`,
-        `  <showtitle>${xml(recording.series)}</showtitle>`,
-        `  <plot>${xml(extended)}</plot>`,
-        `  <aired>${aired}</aired>`,
-        `  <premiered>${aired}</premiered>`,
-        `  <runtime>${runtime}</runtime>`,
+        '<movie>',
+        `  <title>${xml(title)}</title>`,
+        `  <plot>${xml(recording.description)}</plot>`,
+        `  <premiered>${premiered}</premiered>`,
+        `  <year>${start.getFullYear()}</year>`,
         `  <studio>${xml(recording.service_name)}</studio>`,
         // 再スキャンで別物として作り直されないよう、こちらのIDを持たせる
         `  <uniqueid type="denpa" default="true">${recording.id}</uniqueid>`,
-        '</episodedetails>',
+        '</movie>',
         '',
     ];
     return lines.join('\n');
-}
-
-/** シリーズのNFO。フォルダ名だけだとプレイヤーが英題を探しに行くので明示する */
-export function tvshowNfo(recording: Recording): string {
-    return [
-        '<?xml version="1.0" encoding="utf-8" standalone="yes"?>',
-        '<tvshow>',
-        `  <title>${xml(recording.series)}</title>`,
-        `  <studio>${xml(recording.service_name)}</studio>`,
-        '</tvshow>',
-        '',
-    ].join('\n');
 }
 
 /**
@@ -127,11 +121,7 @@ export async function writeThumbnail(videoPath: string, durationSec: number): Pr
 export function writeNfo(recording: Recording, videoPath: string): void {
     if (!config.writeNfo) return;
     const { nfo } = sidecarPaths(videoPath);
-    writeFileSync(nfo, episodeNfo(recording));
-
-    // シリーズのNFOは最初の1本のときだけ書く(既にあれば手で直した内容を尊重する)
-    const showNfo = join(dirname(dirname(videoPath)), 'tvshow.nfo');
-    if (!existsSync(showNfo)) writeFileSync(showNfo, tvshowNfo(recording));
+    writeFileSync(nfo, movieNfo(recording));
 }
 
 /** 動画と一緒に消す。取り残すと幽霊のエピソードが残る */
