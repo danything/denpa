@@ -116,19 +116,41 @@ describe('relayoutLibrary', () => {
         expect(libPath(1).lib).toBe(join(config.libraryDir, '番組/番組 - 2026-08-12 - 0000.mkv'));
     });
 
-    test('両コーデック: 主(AV1)と もう一方(H264)の両方を移す', () => {
+    test('両コーデック: 両方を移し、もう一方(H264)にも NFO とポスターを付ける', () => {
         reset();
         const av1 = put(`${OLD_DIR}/番組 - 2026-08-12 - 0000.mkv`);
         const h264 = put(`${OLD_DIR}/番組 - 2026-08-12 - 0000 [H264].mkv`);
+        put(`${OLD_DIR}/番組 - 2026-08-12 - 0000-thumb.jpg`, 'jpg');
         insert({ id: 1, library_path: av1, alt_path: h264 });
 
         relayoutLibrary();
 
         const row = libPath(1);
+        const altBase = join(config.libraryDir, '番組/番組 - 2026-08-12 - 0000 [H264]');
         expect(row.lib).toBe(join(config.libraryDir, '番組/番組 - 2026-08-12 - 0000.mkv'));
-        expect(row.alt).toBe(join(config.libraryDir, '番組/番組 - 2026-08-12 - 0000 [H264].mkv'));
+        expect(row.alt).toBe(`${altBase}.mkv`);
         expect(existsSync(row.lib as string)).toBe(true);
         expect(existsSync(row.alt as string)).toBe(true);
+        // もう一方にも番組情報とポスター (AV1 非対応の端末はこちらを観る)
+        expect(readFileSync(`${altBase}.nfo`, 'utf8')).toContain('<movie>');
+        expect(existsSync(`${altBase}-poster.jpg`)).toBe(true);
+    });
+
+    test('既に映画型でも、もう一方に番組情報が無ければ補う', () => {
+        reset();
+        const av1 = put('番組/番組 - 2026-08-12 - 0000.mkv');
+        put('番組/番組 - 2026-08-12 - 0000.nfo', '<movie/>');
+        put('番組/番組 - 2026-08-12 - 0000-poster.jpg', 'jpg');
+        const h264 = put('番組/番組 - 2026-08-12 - 0000 [H264].mkv'); // 情報なしの裸ファイル
+        insert({ id: 1, library_path: av1, alt_path: h264 });
+
+        relayoutLibrary();
+
+        const altBase = join(config.libraryDir, '番組/番組 - 2026-08-12 - 0000 [H264]');
+        expect(readFileSync(`${altBase}.nfo`, 'utf8')).toContain('<movie>');
+        expect(existsSync(`${altBase}-poster.jpg`)).toBe(true);
+        // 本体は動かさない (既に映画型)
+        expect(libPath(1).lib).toBe(av1);
     });
 
     test('他の録画が使っている置き場所は巻き添えにしない', () => {

@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdirSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { type Audio, audioTitles, DUAL_MONO } from '$lib/arib';
 import { encodeSource } from '../source';
@@ -1258,6 +1258,17 @@ async function runJob(jobId: number): Promise<void> {
     // 番組名・概要・放送日・サムネイルをサイドカーに書く。動画を置いた直後に作る
     writeNfo(recording, output);
     await writeThumbnail(output, (recording.end_at - recording.start_at) / 1000);
+    /*
+     * **もう一方 (H.264) の隣にも同じ NFO とポスターを置く。** 映画型の Nova は
+     * 動画1本ごとに `{名前}.nfo` / `{名前}-poster.jpg` を読むので、付けないと
+     * AV1 が再生できない端末で観る H.264 が「情報なしの裸ファイル」になる。
+     * ポスターは主から複製する (同じ絵。ffmpeg をもう一度は回さない)
+     */
+    if (alt !== null) {
+        writeNfo(recording, alt);
+        const primaryPoster = sidecarPaths(output).thumbnail;
+        if (existsSync(primaryPoster)) copyFileSync(primaryPoster, sidecarPaths(alt).thumbnail);
+    }
 
     database()
         .prepare(`UPDATE encode_jobs SET state = 'done', percent = 1, finished_at = ? WHERE id = ?`)

@@ -235,6 +235,14 @@ test.describe('コーデックを両方焼く', () => {
         expect(existsSync(av1)).toBe(true);
         expect(existsSync(alt)).toBe(true);
 
+        // どちらのコーデックも、隣に NFO とポスターを持つ (AV1 非対応の端末で観る
+        // H.264 が Nova で「情報なしの裸ファイル」にならないように)
+        for (const video of [av1, alt]) {
+            const base = video.replace(/\.mkv$/, '');
+            expect(existsSync(`${base}.nfo`)).toBe(true);
+            expect(existsSync(`${base}-poster.jpg`)).toBe(true);
+        }
+
         // ダウンロードの口が AV1 と H.264 の2つに分かれる
         await row.getByTestId('detail-button').click();
         const detail = page.getByTestId('program-detail');

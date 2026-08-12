@@ -15,7 +15,7 @@
  * (これが焼き直しのたびに `[録画ID]` を強制していた張本人)。空になった旧フォルダは畳む。
  */
 
-import { existsSync, writeFileSync } from 'node:fs';
+import { copyFileSync, existsSync, writeFileSync } from 'node:fs';
 import { basename, dirname, extname, join } from 'node:path';
 import type { Recording } from '../types';
 import { config } from './config';
@@ -87,21 +87,50 @@ function sweepOldStrays(rec: Recording, oldDir: string, moved: ReadonlySet<strin
     }
 }
 
-/** 1録画ぶんを移す。移すものが無ければ (既に新しい形なら) false */
-function relayoutOne(rec: Recording): boolean {
+/**
+ * もう一方 (H.264) の隣にも NFO とポスターを置く。無ければ補う (付けたら true)。
+ *
+ * 映画型の Nova は動画1本ごとに `{名前}.nfo` / `{名前}-poster.jpg` を読む。付けないと、
+ * AV1 を再生できない端末で観る H.264 が「情報なしの裸ファイル」になる。ポスターは
+ * 主から複製する (同じ絵)。
+ */
+function ensureAltSidecars(rec: Recording, altPath: string | null, primaryPath: string): boolean {
+    if (altPath === null || !config.writeNfo) return false;
+    let added = false;
+    const altNfo = sidecarPaths(altPath).nfo;
+    if (!existsSync(altNfo)) {
+        writeFileSync(altNfo, movieNfo(rec));
+        added = true;
+    }
+    const altPoster = sidecarPaths(altPath).thumbnail;
+    const primaryPoster = sidecarPaths(primaryPath).thumbnail;
+    if (!existsSync(altPoster) && existsSync(primaryPoster)) {
+        copyFileSync(primaryPoster, altPoster);
+        added = true;
+    }
+    return added;
+}
+
+/** 1録画ぶんを整える。'moved'=映画型へ移した / 'sidecar'=もう一方に情報を補った / 'none'=変化なし */
+function relayoutOne(rec: Recording): 'moved' | 'sidecar' | 'none' {
     const primary = rec.library_path;
-    if (primary === null) return false;
+    if (primary === null) return 'none';
 
     const newPrimary = encodedPath(rec, codecOf(primary));
     const newAlt = rec.alt_path === null ? null : encodedPath(rec, codecOf(rec.alt_path));
-    if (newPrimary === primary && newAlt === rec.alt_path) return false;
+
+    // 既に映画型。もう一方のサイドカーだけ、無ければ補う
+    if (newPrimary === primary && newAlt === rec.alt_path) {
+        return ensureAltSidecars(rec, rec.alt_path, primary) ? 'sidecar' : 'none';
+    }
 
     const oldPrimaryDir = dirname(primary);
     movePrimary(rec, primary, newPrimary);
-    // もう一方 (H.264) には付き添いは無い — NFO もポスターも主の隣にある
     if (rec.alt_path !== null && newAlt !== null && rec.alt_path !== newAlt) {
         if (existsSync(rec.alt_path)) moveFile(rec.alt_path, newAlt);
     }
+    // もう一方 (H.264) の隣にも同じ NFO とポスターを置く
+    ensureAltSidecars(rec, newAlt, newPrimary);
 
     sweepOldStrays(rec, oldPrimaryDir, new Set([newPrimary, newAlt].filter((p): p is string => p !== null)));
     // 旧シリーズフォルダ直下の tvshow.nfo はもう使わない
@@ -111,21 +140,25 @@ function relayoutOne(rec: Recording): boolean {
     database()
         .prepare('UPDATE recordings SET library_path = ?, alt_path = ?, updated_at = ? WHERE id = ?')
         .run(newPrimary, newAlt, now(), rec.id);
-    return true;
+    return 'moved';
 }
 
-/** 起動時に1回。旧レイアウトの録画があれば新しい形へ移す */
+/** 起動時に1回。旧レイアウトを映画型へ移し、もう一方のコーデックにも番組情報を揃える */
 export function relayoutLibrary(): void {
     const recordings = queryAll<Recording>(
         'SELECT * FROM recordings WHERE library_path IS NOT NULL AND deleted_at IS NULL',
     );
     let moved = 0;
+    let sidecar = 0;
     for (const rec of recordings) {
         try {
-            if (relayoutOne(rec)) moved += 1;
+            const result = relayoutOne(rec);
+            if (result === 'moved') moved += 1;
+            else if (result === 'sidecar') sidecar += 1;
         } catch (error) {
             console.error(`[relayout] 録画 ${rec.id} の移し替えに失敗しました: ${error}`);
         }
     }
     if (moved > 0) console.log(`[relayout] 保存先を映画型へ移しました: ${moved} 件`);
+    if (sidecar > 0) console.log(`[relayout] もう一方のコーデックに番組情報を補いました: ${sidecar} 件`);
 }
