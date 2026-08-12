@@ -150,6 +150,8 @@ export interface Recording {
     series: string;
     subtitle: string;
     description: string;
+    /** 詳細(拡張形式)。JSON {見出し:本文}。NFO の <plot> に概要と続けて出す */
+    extended: string | null;
     start_at: number;
     end_at: number;
     audio_type: number | null;

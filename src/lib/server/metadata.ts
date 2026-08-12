@@ -1,5 +1,5 @@
 import { existsSync, writeFileSync } from 'node:fs';
-import { extname } from 'node:path';
+import { basename, extname } from 'node:path';
 import type { Recording } from '../types';
 import { config } from './config';
 import { removeIfExists } from './fsx';
@@ -24,6 +24,30 @@ function xml(value: string): string {
 
 function pad(n: number): string {
     return String(n).padStart(2, '0');
+}
+
+/**
+ * `<plot>` に入れる本文。**概要 (短形式) に続けて、詳細 (拡張形式) を段落で足す。**
+ *
+ * 概要だけだと一文で終わり、Nova では番組詳細が一行しか出なかった。拡張形式は
+ * `{見出し:本文}` の JSON (出演者・番組内容など) なので、見出しごとに段落にして繋ぐ。
+ */
+function plot(recording: Recording): string {
+    const paragraphs: string[] = [];
+    if (recording.description !== '') paragraphs.push(recording.description);
+
+    if (recording.extended !== null && recording.extended !== '') {
+        try {
+            const sections = JSON.parse(recording.extended) as Record<string, string>;
+            for (const [heading, body] of Object.entries(sections)) {
+                const text = heading === '' ? body : `${heading}\n${body}`;
+                if (text.trim() !== '') paragraphs.push(text);
+            }
+        } catch {
+            // 壊れていれば概要だけで諦める
+        }
+    }
+    return paragraphs.join('\n\n');
 }
 
 /**
@@ -62,9 +86,14 @@ export function sidecarPaths(videoPath: string): {
  * タイトルは**カードだけで番組が分かるように**組む — 副題があれば
  * `シリーズ名 副題`、無ければシリーズ名 (映画・単発はこれで完結する)。番組名
  * (`name`) は「第6話…[字]」のような放送側の飾りが混じるので使わない。
- * plot は概要 (description)。放送日は `<premiered>`、年は `<year>` に入れる。
+ * plot は概要 (description) に詳細 (extended) を続けたもの。放送日は
+ * `<premiered>`、年は `<year>` に入れる。
+ *
+ * `posterName` を渡すと `<thumb>` にポスターのファイル名を書く。**WebDAV 経由の
+ * Nova は、名前規約 (`{名前}-poster.jpg`) だけではポスターを紐付けられず、NFO に
+ * `<thumb>` が要る**。同じフォルダに置くので相対のファイル名でよい。
  */
-export function movieNfo(recording: Recording): string {
+export function movieNfo(recording: Recording, posterName?: string): string {
     const start = new Date(recording.start_at);
     const premiered = `${start.getFullYear()}-${pad(start.getMonth() + 1)}-${pad(start.getDate())}`;
     const title = recording.subtitle === '' ? recording.series : `${recording.series} ${recording.subtitle}`;
@@ -73,15 +102,15 @@ export function movieNfo(recording: Recording): string {
         '<?xml version="1.0" encoding="utf-8" standalone="yes"?>',
         '<movie>',
         `  <title>${xml(title)}</title>`,
-        `  <plot>${xml(recording.description)}</plot>`,
+        `  <plot>${xml(plot(recording))}</plot>`,
         `  <premiered>${premiered}</premiered>`,
         `  <year>${start.getFullYear()}</year>`,
         `  <studio>${xml(recording.service_name)}</studio>`,
         // 再スキャンで別物として作り直されないよう、こちらのIDを持たせる
         `  <uniqueid type="denpa" default="true">${recording.id}</uniqueid>`,
-        '</movie>',
-        '',
     ];
+    if (posterName !== undefined) lines.push(`  <thumb>${xml(posterName)}</thumb>`);
+    lines.push('</movie>', '');
     return lines.join('\n');
 }
 
@@ -89,13 +118,27 @@ export function movieNfo(recording: Recording): string {
  * サムネイルを1枚切り出す。
  * 頭はたいてい提供表示やCMなので少し進めた位置から取る。番組が短いときは
  * 尺の1/3の位置にずらす(指定位置が尺を超えると ffmpeg が何も出力しないため)。
+ *
+ * **CM検出が効いていれば `content` (本編の最初の区間) を渡す。** 頭からの固定秒数だと、
+ * 冒頭がCMや提供表示のままの番組 (チャプター付けのみで切っていない録画) でCMの絵を
+ * 掴んでしまう。本編区間の頭から測り直し、区間が短ければその真ん中に寄せる。
  */
-export async function writeThumbnail(videoPath: string, durationSec: number): Promise<boolean> {
+export async function writeThumbnail(
+    videoPath: string,
+    durationSec: number,
+    content?: { start: number; end: number },
+): Promise<boolean> {
     const { thumbnail } = sidecarPaths(videoPath);
-    const at =
-        Number.isFinite(durationSec) && durationSec > 0
-            ? Math.min(config.thumbnailPosition, durationSec / 3)
-            : config.thumbnailPosition;
+    let at: number;
+    if (content !== undefined && Number.isFinite(content.start)) {
+        const segment = Math.max(0, content.end - content.start);
+        at = content.start + Math.min(config.thumbnailPosition, segment / 2);
+    } else {
+        at =
+            Number.isFinite(durationSec) && durationSec > 0
+                ? Math.min(config.thumbnailPosition, durationSec / 3)
+                : config.thumbnailPosition;
+    }
 
     const proc = Bun.spawn(
         [
@@ -120,8 +163,8 @@ export async function writeThumbnail(videoPath: string, durationSec: number): Pr
 /** NFO を書く。動画を置いた直後に呼ぶ */
 export function writeNfo(recording: Recording, videoPath: string): void {
     if (!config.writeNfo) return;
-    const { nfo } = sidecarPaths(videoPath);
-    writeFileSync(nfo, movieNfo(recording));
+    const { nfo, thumbnail } = sidecarPaths(videoPath);
+    writeFileSync(nfo, movieNfo(recording, basename(thumbnail)));
 }
 
 /** 動画と一緒に、隣の付き添いを全部消す。取り残すと中身の無い録画がプレイヤーに残る */

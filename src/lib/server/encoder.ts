@@ -31,7 +31,7 @@ import { removeSidecars, sidecarPaths, writeNfo, writeThumbnail } from './metada
 import { saveRecordedBml } from './recorded-bml';
 import { descramble, isScrambled } from './scramble';
 import { settings } from './settings';
-import { chunks } from './stream';
+import { chunks, text } from './stream';
 import { buildPgs } from './subtitle';
 import { notify } from './webhook';
 
@@ -86,6 +86,100 @@ export function smoothMotionFor(genreDetail: string | null): boolean {
     } catch {
         return true;
     }
+}
+
+/** idet の "Multi frame detection" の集計。読めなければ null */
+export function parseIdet(stderr: string): { tff: number; bff: number; progressive: number } | null {
+    // 最後の集計行を採る (フィルタが複数並ぶことは無いが、念のため末尾を見る)
+    const matches = stderr.matchAll(
+        /Multi frame detection:\s*TFF:\s*(\d+)\s*BFF:\s*(\d+)\s*Progressive:\s*(\d+)/g,
+    );
+    let last: RegExpMatchArray | null = null;
+    for (const m of matches) last = m;
+    if (last === null) return null;
+    return { tff: Number(last[1]), bff: Number(last[2]), progressive: Number(last[3]) };
+}
+
+/**
+ * 本編映像を idet にかけて、インターレース (60i) かプログレッシブ (フィルム/30p) かを測る。
+ * 本編の途中から一定コマだけ復号して数える。測れなければ null。
+ */
+async function probeInterlace(
+    input: string,
+    at: number,
+    frames: number,
+    signal: AbortSignal,
+): Promise<{ tff: number; bff: number; progressive: number } | null> {
+    const proc = Bun.spawn(
+        [
+            config.ffmpeg,
+            '-hide_banner',
+            '-nostats',
+            '-ss',
+            String(Math.max(0, at)),
+            '-i',
+            input,
+            // **主映像 (HD) に固定する。** GR には 1seg (H.264 320x180) が混じっていて、
+            // -map を付けないと idet がそちらに当たって0フレームになる (実測で判明)
+            '-map',
+            '0:v:0',
+            '-frames:v',
+            String(frames),
+            '-vf',
+            'idet',
+            '-an',
+            '-sn',
+            '-f',
+            'null',
+            '-',
+        ],
+        { stdout: 'ignore', stderr: 'pipe' },
+    );
+    const kill = () => proc.kill();
+    signal.addEventListener('abort', kill, { once: true });
+    try {
+        const stderr = await text(proc.stderr as ReadableStream<Uint8Array>);
+        await proc.exited;
+        return parseIdet(stderr);
+    } catch {
+        return null;
+    } finally {
+        signal.removeEventListener('abort', kill);
+    }
+}
+
+/**
+ * 30/60コマを最終的に決める。**ジャンルの判断を本編映像で裏取りする。**
+ *
+ * ジャンルで「30コマ (国内アニメ)」と確定しているものは実測しない — 判断は既に確か。
+ * ジャンルが 60コマ側 (実写・不明) のものだけ idet にかけ、**プログレッシブが濃厚
+ * (フィルム・24p/30p) なら30コマに落とす**。迷えばジャンルの判断 (60コマ) に従う —
+ * 本物の 60i を取りこぼすと動きが落ちるので、確信があるときだけ落とす。
+ */
+async function resolveSmoothMotion(
+    genreSmooth: boolean,
+    source: string,
+    content: Range | null,
+    signal: AbortSignal,
+): Promise<boolean> {
+    if (!genreSmooth || !config.fpsDetect) return genreSmooth;
+
+    const at = content !== null && Number.isFinite(content.start) ? content.start + 30 : 120;
+    const idet = await probeInterlace(source, at, config.fpsDetectFrames, signal);
+    const total = idet === null ? 0 : idet.tff + idet.bff + idet.progressive;
+    if (idet === null || total < 100) {
+        console.log('[fps] idet を測れず、ジャンルの判断 (60コマ) に従います');
+        return genreSmooth;
+    }
+
+    const progressiveRatio = idet.progressive / total;
+    const progressive = progressiveRatio >= config.fpsProgressiveRatio;
+    console.log(
+        `[fps] idet プログレッシブ ${(progressiveRatio * 100).toFixed(0)}% ` +
+            `(P=${idet.progressive} TFF=${idet.tff} BFF=${idet.bff}) → ` +
+            `${progressive ? '30コマ (プログレッシブ濃厚)' : '60コマ'}`,
+    );
+    return !progressive;
 }
 
 /**
@@ -729,8 +823,8 @@ async function prepareCm(
     recording: Recording,
     input: string,
     signal: AbortSignal,
-): Promise<EncodeOptions & { chaptersFile: string | null }> {
-    const none = { keep: null, chaptersFile: null };
+): Promise<EncodeOptions & { chaptersFile: string | null; contentStart: Range | null }> {
+    const none = { keep: null, chaptersFile: null, contentStart: null };
     /*
      * **CMの扱いは焼くときの設定に従う。** 録画の行にも写してあるが、それは
      * 録り始めた時点の値で、設定を変えても直らない (`keepOriginal` は前から
@@ -786,12 +880,16 @@ async function prepareCm(
         return {
             keep: widenKeep(invertRanges(detection.cm, detection.duration), config.cmCutMargin),
             chaptersFile: null,
+            // 切ってしまうので出来上がりは既にCMが無い。サムネは頭からの固定でよい
+            contentStart: null,
         };
     }
 
     const chaptersFile = `${input}.chapters.txt`;
     writeFileSync(chaptersFile, chapterMetadata(detection.cm, detection.duration));
-    return { keep: null, chaptersFile };
+    // 切らないぶん出来上がりにCMが残る。サムネを本編の最初の区間から取るために渡す
+    const content = invertRanges(detection.cm, detection.duration);
+    return { keep: null, chaptersFile, contentStart: content[0] ?? null };
 }
 
 /** ffmpeg を1回動かす。戻り値は終了コード */
@@ -995,9 +1093,10 @@ async function runJob(jobId: number): Promise<void> {
         }
     }
 
-    const encodeOptions: EncodeOptions & { chaptersFile: string | null } = {
+    const encodeOptions: EncodeOptions & { chaptersFile: string | null; contentStart: Range | null } = {
         ...(await prepareCm(jobId, recording, sourceTs, signal)),
-        // コマ数は番組のジャンルで決まる。国内アニメだけ倍にしない (deinterlace)
+        // コマ数は番組のジャンルで決まる。国内アニメだけ倍にしない (deinterlace)。
+        // このあと source が決まったら本編映像でも確かめる (resolveSmoothMotion)
         smoothMotion: smoothMotionFor(recording.genre_detail),
         /*
          * **音声トラックに番組表と同じ名前を入れる。**
@@ -1025,6 +1124,19 @@ async function runJob(jobId: number): Promise<void> {
         removeIfExists(encodeOptions.pgsFile ?? null);
         return finishCanceled(jobId, decoded);
     }
+
+    /*
+     * コマ数をジャンルだけでなく本編映像でも確かめる。ジャンルが 60コマ側のものを
+     * idet にかけ、プログレッシブが濃厚なら 30コマに落とす (resolveSmoothMotion)。
+     * source が決まってから測る (切ったものは切った後で測りたい)
+     */
+    setStep(jobId, 'コマ数を確かめています');
+    encodeOptions.smoothMotion = await resolveSmoothMotion(
+        encodeOptions.smoothMotion ?? true,
+        source,
+        encodeOptions.contentStart,
+        signal,
+    );
 
     setPhase(jobId, 'encode', '');
 
@@ -1271,9 +1383,14 @@ async function runJob(jobId: number): Promise<void> {
             .run(Math.round(length), recording.id);
     }
 
-    // 番組名・概要・放送日・サムネイルをサイドカーに書く。動画を置いた直後に作る
+    // 番組名・概要・放送日・サムネイルをサイドカーに書く。動画を置いた直後に作る。
+    // CMを切っていない録画は、本編の最初の区間からサムネを取る (CMの絵を避ける)
     writeNfo(recording, output);
-    await writeThumbnail(output, (recording.end_at - recording.start_at) / 1000);
+    await writeThumbnail(
+        output,
+        (recording.end_at - recording.start_at) / 1000,
+        encodeOptions.contentStart ?? undefined,
+    );
     /*
      * **もう一方 (H.264) の隣にも同じ NFO とポスターを置く。** 映画型の Nova は
      * 動画1本ごとに `{名前}.nfo` / `{名前}-poster.jpg` を読むので、付けないと

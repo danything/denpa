@@ -170,9 +170,36 @@ export const config = {
 
     /** 番組情報の .nfo。.nfo を読むプレイヤー (Nova) 向け */
     writeNfo: true,
-    /** サムネイルを切り出す位置(秒)。頭は提供表示やCMのことが多いので少し進める */
+    /**
+     * サムネイルを切り出す位置(秒)。頭は提供表示やCMのことが多いので少し進める。
+     * CM検出が効いているときは、この秒数を**本編の最初の区間の頭からの**位置として使う
+     */
     thumbnailPosition: 120,
     thumbnailWidth: 480,
+
+    /**
+     * 30/60コマの判定を本編映像からも確かめる。**既定は切っている。**
+     *
+     * ジャンルでは国内アニメだけ30コマにしている (encoder.deinterlace)。「映像から
+     * 実測できないか」を本番の実TSで確かめた結論はこうだった:
+     *
+     * - **TS の中に本当のコマ数は入っていない。** EIT の component_descriptor は
+     *   中身が何でも `1080i` (アニメ「おじゃる丸」も映画も同じ)、MPEG-2 の
+     *   avg_frame_rate も常に 30000/1001、field_order も常に `tt`、per-frame の
+     *   interlaced_frame もほぼ全部立つ。放送は**素材が何でも 1080i/60 で符号化**する。
+     * - **idet (画素から推定) だけが唯一の手掛かりだが、確実でない。** 本番の
+     *   おじゃる丸 (30p のはず) を測っても プログレッシブは 38% どまりで、閾値で
+     *   30/60 を切り分けられなかった。CM は実写 60i なので本編と混ざる (本編区間で
+     *   測るべきだが、それでも足りない)。
+     *
+     * よって**ジャンル判定を上書きするのは危険**なので既定では実測しない。実験用に
+     * `FPS_DETECT=1` で有効化できる (idet で 60コマ側→プログレッシブ濃厚なら30コマ)。
+     */
+    fpsDetect: bool('FPS_DETECT', false),
+    /** idet で「プログレッシブ濃厚」とみなす割合 (Multi frame detection) */
+    fpsProgressiveRatio: num('FPS_PROGRESSIVE_RATIO', 0.7),
+    /** idet にかけるコマ数。本編の途中から測る */
+    fpsDetectFrames: num('FPS_DETECT_FRAMES', 2000),
 
     /** 録画の前後マージン(ms)。放送時刻のズレを吸収する */
     startMargin: num('START_MARGIN', 10 * SEC),

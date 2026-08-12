@@ -7,6 +7,7 @@ import {
     failureReason,
     headSkip,
     isVideoCodec,
+    parseIdet,
     parseProgressBlock,
     smoothMotionFor,
 } from './encoder';
@@ -127,6 +128,20 @@ describe('コマ数の決め方', () => {
         expect(smoothMotionFor(null)).toBe(true);
         expect(smoothMotionFor('')).toBe(true);
         expect(smoothMotionFor('こわれている')).toBe(true);
+    });
+
+    test('idet の集計行から TFF/BFF/Progressive を読む', () => {
+        const stderr = [
+            '[Parsed_idet_0 @ 0x0] Repeated Fields: Neither: 1900 Top:   50 Bottom:   50',
+            '[Parsed_idet_0 @ 0x0] Single frame detection: TFF:  100 BFF:   20 Progressive: 1800 Undetermined:   80',
+            '[Parsed_idet_0 @ 0x0] Multi frame detection: TFF:   40 BFF:   10 Progressive: 1950 Undetermined:    0',
+        ].join('\n');
+        expect(parseIdet(stderr)).toEqual({ tff: 40, bff: 10, progressive: 1950 });
+    });
+
+    test('idet の集計が無ければ null', () => {
+        expect(parseIdet('')).toBeNull();
+        expect(parseIdet('frame= 100 fps= 25')).toBeNull();
     });
 
     test('入れ物は拡張子ではなく引数で決める', () => {

@@ -51,6 +51,21 @@ export interface Fetched {
 export class Refused extends Error {}
 
 /**
+ * **証明書は検証しない。**
+ *
+ * 放送局の通信系サーバは受信機の専用スタック前提で、証明書の鎖を最後まで
+ * 送ってこないことがある (実測: フジの `tvid-sha1.tver-tech.co.jp` が
+ * `unable to get local issuer certificate` で fetch ごと転ぶ → 502 →
+ * データ放送が `affiliationId == null` で描けない)。実機のテレビは厳密な
+ * PKI 検証をしないので、ここも同じにする。
+ *
+ * 覗かれる道が広がることは承知の上 — ただし**これは放送のアプリの通信**で、
+ * denpa の資格情報も利用者の秘密も乗らない (`credentials: 'omit'`)。そもそも
+ * 上で **素の http すら通している**ので、検証を外すことで新たに増える危険は無い。
+ */
+const TLS = { rejectUnauthorized: false } as const;
+
+/**
  * その住所へ繋いでよいか。**内側を向いていたら断る。**
  *
  * IPv4 は数で、IPv6 は綴りで見ます。`::ffff:` で始まるものは IPv4 を
@@ -147,6 +162,7 @@ export async function fetchForBml(raw: string): Promise<Fetched> {
             credentials: 'omit',
             headers: { accept: '*/*' },
             signal: AbortSignal.timeout(TIMEOUT),
+            tls: TLS,
         });
 
         const next = response.headers.get('location');
@@ -200,6 +216,7 @@ export async function postForBml(raw: string, body: Uint8Array): Promise<Fetched
                     : { accept: '*/*' },
             body: method === 'POST' ? (body as BodyInit) : undefined,
             signal: AbortSignal.timeout(TIMEOUT),
+            tls: TLS,
         });
 
         const next = response.headers.get('location');

@@ -56,7 +56,7 @@ function movePrimary(rec: Recording, from: string, to: string): void {
     // 旧 NFO (episodedetails) と、昔置いていた字幕の写しは捨てる
     removeIfExists(`${oldBase}.nfo`);
     removeIfExists(`${oldBase}.ja.ass`);
-    if (config.writeNfo) writeFileSync(dst.nfo, movieNfo(rec));
+    if (config.writeNfo) writeFileSync(dst.nfo, movieNfo(rec, basename(dst.thumbnail)));
 }
 
 /**
@@ -99,7 +99,7 @@ function ensureAltSidecars(rec: Recording, altPath: string | null, primaryPath: 
     let added = false;
     const altNfo = sidecarPaths(altPath).nfo;
     if (!existsSync(altNfo)) {
-        writeFileSync(altNfo, movieNfo(rec));
+        writeFileSync(altNfo, movieNfo(rec, basename(sidecarPaths(altPath).thumbnail)));
         added = true;
     }
     const altPoster = sidecarPaths(altPath).thumbnail;

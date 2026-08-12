@@ -78,6 +78,8 @@ function createRecording(reservation: Reservation): Recording {
      */
     const name = program?.name ?? reservation.name;
     const description = program?.description ?? reservation.description;
+    // 詳細(拡張形式)は番組表にしか無い。予約の行は持っていないので program からのみ
+    const extended = program?.extended ?? null;
     const parsed = parseTitle(name);
     const at = now();
 
@@ -86,9 +88,9 @@ function createRecording(reservation: Reservation): Recording {
             // finished_at を入れないので、この行は「録画中」として読まれる
             `INSERT INTO recordings
                 (reservation_id, program_id, service_id, service_name, name, series, subtitle,
-                 description, start_at, end_at, audio_type, genre_detail, audios,
+                 description, extended, start_at, end_at, audio_type, genre_detail, audios,
                  created_at, updated_at)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         )
         .run(
             reservation.id,
@@ -99,6 +101,7 @@ function createRecording(reservation: Reservation): Recording {
             parsed.series,
             parsed.subtitle,
             description,
+            extended,
             reservation.start_at,
             reservation.end_at,
             program?.audio_type ?? null,
