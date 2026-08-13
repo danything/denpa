@@ -1,15 +1,20 @@
 import { describe, expect, test } from 'bun:test';
+import { closeSync, mkdtempSync, openSync, readSync, realpathSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import {
     buildArgs,
     buildConcatArgs,
     buildSegmentArgs,
     concatList,
     failureReason,
+    findInputFd,
     headSkip,
+    inputProgress,
     isVideoCodec,
     parseOutFrames,
-    parseProgressBlock,
     pickSmooth,
+    readInputPos,
 } from './encoder';
 
 function argValue(args: string[], key: string): string | undefined {
@@ -293,30 +298,78 @@ describe('isVideoCodec', () => {
     });
 });
 
-describe('parseProgressBlock', () => {
-    test('経過時間から進捗を出す', () => {
-        const p = parseProgressBlock(
-            {
-                progress: 'continue',
-                out_time_us: '30000000',
-                total_size: '1048576',
-                bitrate: '2000.0',
-                speed: '8.0x',
-                drop_frames: '0',
-            },
-            60,
-            0,
-        );
+describe('inputProgress', () => {
+    /*
+     * out_time_us はわざとほぼ最後を指す値にしてある。実機の TOKYO MX 録画で、
+     * 入力を 65% しか読んでいないのに時刻だけ 99.1% に飛んで「あと1秒」のまま
+     * 数分止まって見えた。割合は読み位置だけを信じ、時刻には釣られないこと
+     */
+    const block = {
+        progress: 'continue',
+        out_time_us: '1810000000',
+        total_size: '1048576',
+        bitrate: '2000.0',
+        speed: '8.0x',
+        drop_frames: '0',
+    };
+
+    test('読み位置から割合を出す。ffmpeg の言う時刻には釣られない', () => {
+        const p = inputProgress(1000)(0, 500, block, 0);
         expect(p.percent).toBeCloseTo(0.5, 3);
     });
 
-    test('out_time_us が N/A の間は直前の値を保つ', () => {
-        const p = parseProgressBlock({ progress: 'continue', out_time_us: 'N/A' }, 60, 0.42);
-        expect(p.percent).toBe(0.42);
+    test('読み位置が取れない間は直前の値を保つ', () => {
+        expect(inputProgress(1000)(0, NaN, block, 0.42).percent).toBe(0.42);
+    });
+
+    test('入力の大きさが測れていなくても動じない', () => {
+        expect(inputProgress(NaN)(0, 500, block, 0.1).percent).toBe(0.1);
+    });
+
+    test('割合は巻き戻らない', () => {
+        const report = inputProgress(1000);
+        report(0, 800, block, 0);
+        expect(report(1000, 700, block, 0.8).percent).toBe(0.8);
     });
 
     test('progress=end で必ず100%にする', () => {
-        expect(parseProgressBlock({ progress: 'end', out_time_us: 'N/A' }, NaN, 0.9).percent).toBe(1);
+        expect(inputProgress(NaN)(0, NaN, { progress: 'end' }, 0.9).percent).toBe(1);
+    });
+
+    test('残り時間は直近の読み速度から出す。速さが読めないうちは null', () => {
+        const report = inputProgress(10_000);
+        expect(report(0, 1000, block, 0).etaMs).toBeNull(); // 窓がまだ短い
+        // 5秒で1000バイト読めた → 残り8000バイトは40秒
+        expect(report(5000, 2000, block, 0.1).etaMs).toBe(40_000);
+    });
+
+    test('読みが止まったら残り時間を出さない (「あと1秒」で張り付かせない)', () => {
+        const report = inputProgress(10_000);
+        report(0, 2000, block, 0);
+        report(31_000, 2000, block, 0.2); // 窓から最初の1点が落ちる
+        expect(report(36_000, 2000, block, 0.2).etaMs).toBeNull();
+    });
+});
+
+describe('入力の読み位置を /proc から覗く', () => {
+    test('自分が開いているファイルの fd と読み位置が見える', () => {
+        const dir = mkdtempSync(join(tmpdir(), 'denpa-pos-'));
+        const path = join(dir, 'input.ts');
+        writeFileSync(path, 'abcdefgh');
+
+        // /proc の fd は実体のパスで見えるので、実装と同じく解決してから探す
+        const fd = openSync(realpathSync(path), 'r');
+        try {
+            expect(findInputFd(process.pid, realpathSync(path))).toBe(fd);
+            expect(readInputPos(process.pid, fd)).toBe(0);
+            readSync(fd, Buffer.alloc(3), 0, 3, null);
+            expect(readInputPos(process.pid, fd)).toBe(3);
+        } finally {
+            closeSync(fd);
+        }
+        // 開いていない fd は読めない (ffmpeg は入力を読み終えると閉じる)
+        expect(readInputPos(process.pid, 999_999)).toBeNaN();
+        expect(findInputFd(process.pid, join(dir, 'closed.ts'))).toBeNull();
     });
 });
 

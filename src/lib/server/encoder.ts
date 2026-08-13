@@ -3,6 +3,9 @@ import {
     existsSync,
     mkdirSync,
     readdirSync,
+    readFileSync,
+    readlinkSync,
+    realpathSync,
     renameSync,
     rmSync,
     statSync,
@@ -27,7 +30,7 @@ import { database, now, queryOne } from './db';
 import { type EncodeProgress, emit } from './events';
 import { removeIfExists } from './fsx';
 import { encodedPath, libraryFamily, libraryPath } from './library';
-import { removeSidecars, sidecarPaths, writeNfo, writeThumbnail } from './metadata';
+import { removeSidecars, sidecarPaths, writeThumbnail } from './metadata';
 import { saveRecordedBml } from './recorded-bml';
 import { descramble, isScrambled } from './scramble';
 import { settings } from './settings';
@@ -616,75 +619,103 @@ interface Progress {
     log: string;
 }
 
+/** 残り時間を測る窓。直近の読み速度だけ見る (速度は素材や場面で途中から変わる) */
+const ETA_WINDOW_MS = 30_000;
+/** これより短い窓からは速度を出さない。起動直後の数点だけで暴れた値を出さないため */
+const ETA_MIN_SPAN_MS = 4_000;
+
 /**
- * `-progress pipe:1` が吐く key=value ブロックを1ブロック分解釈する。
+ * 進み具合は**入力TSの読み位置**だけから出す (読んだバイト数 / ファイルの大きさ)。
  *
- * **`out_time_us` は当てにならない。** 分かっているだけで2通りの外し方をする。
+ * 以前は ffmpeg の `-progress` が言う時刻 (`out_time_us`) とコマ数 (`frame=`) を
+ * 突き合わせて進んでいるほうを採っていたが、時刻は分かっているだけで3通りの外し方をする。
  *
  * - **`N/A` が続く。** AV1 (libsvtav1) は先読みを溜めてから出し始めるので、
  *   その間ずっと読めない。実機の30分番組では最初の数分がまるごとこれだった
- * - **途中で止まる。** ffmpeg が出すのは**いちばん後ろのストリームの時刻**で、
- *   壊れた副音声が1本混ざっているとそこで止まる。実機の TOKYO MX の録画は
- *   `Packet corrupt (stream = 3)` のあと **8.576 秒のまま**動かず、
+ * - **途中で止まる。** 壊れた副音声が1本混ざっているとそこで止まる。実機の
+ *   TOKYO MX の録画は `Packet corrupt (stream = 3)` のあと **8.576 秒のまま**動かず、
  *   30分焼き終わっても 0% のままだった (出来上がりは 30分ぶん正しく入っていた)
+ * - **先に飛んで張り付く。** 出てくるのは mux が最後に書いたパケットの時刻なので、
+ *   疎な字幕 (.sup の copy) が実映像より先に mux されると先に飛ぶ。実機では
+ *   入力を 65% しか読んでいないのに 99.1% に飛び、残り数分ずっと
+ *   「あと1秒」のまま止まって見えた
  *
- * そこで **`frame=`** と突き合わせて、**進んでいるほうを採る**。コマ数は
- * 最初から increment するので、少なくとも止まって見えることはない。総フレーム数は
- * 尺×出力fps (インタレ解除で倍になる) の見積もりなので、単独では当てにしない。
+ * コマ数のほうも分母 (尺×出力fps) が見積もりで、単独では信じられなかった。
+ *
+ * 読み位置はコーデックにもストリーム構成にも依らない。デマルチプレクサは入力を
+ * 頭から順に読むので、読んだ割合がそのまま消化した割合になる。放送TSは
+ * ビットレートがほぼ一定なので、時間で見た割合ともよく一致する。
+ * 残り時間も**同じ出どころ** (直近の読み速度) から出す — 出どころを混ぜると、
+ * 止まった時刻を動いている speed で割って「残り20時間」のような値が出る。
  */
-export function parseProgressBlock(
-    block: Record<string, string>,
-    durationSec: number,
-    prev: number,
-    totalFrames = NaN,
-): Progress {
-    const outTimeUs = parseFloat(block.out_time_us);
-    const frame = parseFloat(block.frame);
-    // percent は NaN 汚染を防ぐガードが要る (JSON上 typeof NaN === 'number' で素通りするため)
+export function inputProgress(inputBytes: number) {
+    const samples: { at: number; pos: number }[] = [];
+    // NaN 汚染を防ぐガードが要る (JSON上 typeof NaN === 'number' で素通りするため)
     const measurable = (value: number) => Number.isFinite(value) && value > 0;
 
-    const byTime =
-        Number.isFinite(outTimeUs) && measurable(durationSec)
-            ? Math.min(1, outTimeUs / 1e6 / durationSec)
-            : 0;
-    const byFrame = Number.isFinite(frame) && measurable(totalFrames) ? Math.min(1, frame / totalFrames) : 0;
-    /*
-     * **前の値より下げない。** 時刻とコマ数のどちらを採るかが途中で入れ替わるので、
-     * 素直に書くと割合が巻き戻る
-     */
-    const percent = block.progress === 'end' ? 1 : Math.max(prev, byTime, byFrame);
+    return (at: number, pos: number, block: Record<string, string>, prev: number): Progress => {
+        // 読み位置が取れない間 (/proc が無い・一瞬の読み損ね) は前の値を保ち、当てずっぽうを出さない
+        const readable = measurable(inputBytes) && Number.isFinite(pos) && pos >= 0;
+        const fraction = readable ? Math.min(1, pos / inputBytes) : prev;
+        // 前の値より下げない。読み損ねから復帰した直後などに割合が巻き戻って見えないように
+        const percent = block.progress === 'end' ? 1 : Math.max(prev, fraction);
 
-    /*
-     * 残り時間。**割合を出したのと同じ出どころで見積もる** — 時刻が止まっている
-     * のに `speed` (これも時刻から出る) で割ると、5倍速で焼けているものが
-     * 「残り20時間」になる。
-     *
-     * 時刻が読めているときは ffmpeg の speed (実時間比。"0.85x" のような形) で
-     * まだ通していない秒数を割る。AV1 だと 0.1x を切ることもあるので、
-     * 割合だけ出しても放っておいていいのか判断できない
-     */
-    const speed = parseFloat(block.speed);
-    const fps = parseFloat(block.fps);
-    let etaMs: number | null = null;
-    if (byFrame > byTime && measurable(fps) && measurable(totalFrames)) {
-        etaMs = Math.round(((totalFrames - frame) / fps) * 1000);
-    } else if (measurable(speed) && Number.isFinite(durationSec) && Number.isFinite(outTimeUs)) {
-        const leftSec = durationSec - outTimeUs / 1e6;
-        if (leftSec > 0) etaMs = Math.round((leftSec / speed) * 1000);
-    }
+        let etaMs: number | null = null;
+        if (readable) {
+            samples.push({ at, pos });
+            while (samples.length > 0 && at - samples[0]!.at > ETA_WINDOW_MS) samples.shift();
+            const oldest = samples[0]!;
+            const spanMs = at - oldest.at;
+            const gained = pos - oldest.pos;
+            // 速さが読めないうち (窓がまだ短い・読みが進んでいない) は null のまま
+            if (spanMs >= ETA_MIN_SPAN_MS && gained > 0) {
+                etaMs = Math.round(((inputBytes - pos) / gained) * spanMs);
+            }
+        }
 
-    const elapsedMin = (outTimeUs / 1e6 / 60).toFixed(2);
-    const totalMin = (durationSec / 60).toFixed(2);
-    const sizeMb = (parseInt(block.total_size, 10) / 1024 / 1024).toFixed(1);
-    const rateMbps = (parseFloat(block.bitrate) / 1000).toFixed(2);
-    return {
-        percent,
-        etaMs,
-        log: `elapsed: ${elapsedMin}min / ${totalMin}min, speed: ${block.speed}, size: ${sizeMb}MB, rate: ${rateMbps}Mbps, drop: ${block.drop_frames}`,
+        const mb = (bytes: number) => (bytes / 1024 / 1024).toFixed(0);
+        const sizeMb = (parseInt(block.total_size, 10) / 1024 / 1024).toFixed(1);
+        const rateMbps = (parseFloat(block.bitrate) / 1000).toFixed(2);
+        return {
+            percent,
+            etaMs,
+            log: `input: ${readable ? `${mb(pos)}/${mb(inputBytes)}MB` : '測れず'}, speed: ${block.speed}, size: ${sizeMb}MB, rate: ${rateMbps}Mbps, drop: ${block.drop_frames}`,
+        };
     };
 }
 
-const DURATION = /Duration:\s*(\d+):(\d+):(\d+(?:\.\d+)?)/;
+/**
+ * ffmpeg が入力ファイルをどこまで読んだかを /proc から覗く。
+ *
+ * 子プロセスとは同じ名前空間に居るので、/proc/<pid>/fd から入力ファイルを
+ * 指している fd を探せば、/proc/<pid>/fdinfo/<fd> の pos がそのまま読み位置。
+ * Linux 専用だが、本番はコンテナでしか動かさない。読めない環境では
+ * 割合が動かなくなるだけで、焼き上がりには影響しない。
+ */
+export function findInputFd(pid: number, path: string): number | null {
+    try {
+        for (const name of readdirSync(`/proc/${pid}/fd`)) {
+            try {
+                if (readlinkSync(`/proc/${pid}/fd/${name}`) === path) return Number(name);
+            } catch {
+                // 覗いている間に閉じられた fd。次を見る
+            }
+        }
+    } catch {
+        // プロセスがもう居ないか、/proc の無い環境
+    }
+    return null;
+}
+
+/** 読み位置(バイト)。fd が閉じられているなど、読めなければ NaN */
+export function readInputPos(pid: number, fd: number): number {
+    try {
+        const m = readFileSync(`/proc/${pid}/fdinfo/${fd}`, 'utf8').match(/^pos:\s*(\d+)/);
+        return m === null ? NaN : Number(m[1]);
+    } catch {
+        return NaN;
+    }
+}
 
 /**
  * 失敗の理由を stderr から拾う。
@@ -714,8 +745,6 @@ async function runFfmpeg(
     seek: number | null,
     codec: VideoCodec,
     options: EncodeOptions = {},
-    /** 先に測っておいた入力の尺と fps。進み具合の分母になる */
-    measured: { duration: number; fps: number } = { duration: NaN, fps: NaN },
 ) {
     const proc = Bun.spawn([config.ffmpeg, ...buildArgs(input, output, audioType, seek, codec, options)], {
         stdout: 'pipe',
@@ -723,13 +752,23 @@ async function runFfmpeg(
     });
     procs.set(job.id, proc);
 
-    // ffmpeg の stderr から拾えるとは限らないので、測った値を先に入れておく
-    let durationSec = measured.duration;
     /*
-     * 出力フレーム数の見積もり。60コマ/秒で出すときは、インタレ解除が
-     * フィールドごとに1枚作るので入力の倍になる
+     * 進み具合は入力の読み位置から出す (inputProgress)。`-progress` のブロックは
+     * 刻み (約0.5秒ごとに来る) と speed などの読み物としてだけ使う。
+     * /proc の fd は実体のパスで見えるので、シンボリックリンクはここで解いておく
      */
-    const totalFrames = measured.duration * measured.fps * (options.smoothMotion === true ? 2 : 1);
+    let inputPath = input;
+    let inputBytes = NaN;
+    try {
+        inputPath = realpathSync(input);
+        inputBytes = statSync(inputPath).size;
+    } catch {
+        // 測れなければ割合が動かないだけ。焼くほうはそのまま進める
+    }
+    const progress = inputProgress(inputBytes);
+    let inputFd: number | null = null;
+    let inputPos = NaN;
+
     // 出力し終えた時点の位置。CMを切ると入力より短くなるので、出来上がりの長さはこちら
     let outTimeUs = NaN;
     let percent = 0;
@@ -742,18 +781,10 @@ async function runFfmpeg(
         'UPDATE encode_jobs SET percent = ?, eta_ms = ?, log = ? WHERE id = ?',
     );
 
-    // 動画長は ffprobe を別に叩くとチャンネル切替直後のTSでハングして巻き込まれるため、
-    // ffmpeg 自身が起動時に stderr へ出す "Duration:" 行から取る
     const readStderr = (async () => {
         const decoder = new TextDecoder();
         for await (const chunk of chunks(proc.stderr as ReadableStream<Uint8Array>)) {
             stderrTail = (stderrTail + decoder.decode(chunk, { stream: true })).slice(-4000);
-            if (!Number.isFinite(durationSec)) {
-                const m = stderrTail.match(DURATION);
-                if (m !== null) {
-                    durationSec = Number(m[1]) * 3600 + Number(m[2]) * 60 + Number(m[3]);
-                }
-            }
         }
     })();
 
@@ -774,7 +805,15 @@ async function runFfmpeg(
                 const at = Number(block.out_time_us);
                 if (Number.isFinite(at) && at > 0) outTimeUs = at;
 
-                const p = parseProgressBlock(block, durationSec, percent, totalFrames);
+                if (inputFd === null) inputFd = findInputFd(proc.pid, inputPath);
+                if (inputFd !== null) {
+                    const pos = readInputPos(proc.pid, inputFd);
+                    // 読み終えると ffmpeg は fd を閉じる。最後に見えた位置 (≒末尾) を
+                    // 保ったまま、念のため次の刻みから探し直す
+                    if (Number.isFinite(pos)) inputPos = pos;
+                    else inputFd = null;
+                }
+                const p = progress(Date.now(), inputPos, block, percent);
                 percent = p.percent;
                 etaMs = p.etaMs;
                 log = p.log;
@@ -1143,10 +1182,8 @@ async function runJob(jobId: number): Promise<void> {
 
     setPhase(jobId, 'encode', '');
 
-    /*
-     * 尺と fps を先に測っておく。ffmpeg の stderr に出る Duration を当てにしていた頃は、
-     * 拾えない TS だと割合が最後まで 0% のままだった
-     */
+    // 画面の大きさ・画素の縦横比・頭の音声だけの区間を焼く前に測っておく。
+    // 進み具合はここの値を使わない (入力の読み位置から出す。inputProgress 参照)
     const measured = await probeVideo(source);
     // 字幕を絵で焼くときの画面の大きさ。渡さないと 1440x1080 とみなされ、
     // 1920x1080 の録画では字幕だけ横に伸びる
@@ -1274,16 +1311,7 @@ async function runJob(jobId: number): Promise<void> {
     for (const codec of codecs) {
         const working = `${encodedPath(recording, codec)}.${jobId}.${codec}.encoding`;
 
-        let result = await runFfmpeg(
-            job,
-            source,
-            working,
-            recording.audio_type,
-            null,
-            codec,
-            encodeOptions,
-            measured,
-        );
+        let result = await runFfmpeg(job, source, working, recording.audio_type, null, codec, encodeOptions);
         if (result.code !== 0 && !canceled.has(jobId)) {
             // 録画開始直後の頭数百msだけ壊れているケースをここで拾う(詳細は buildArgs のコメント参照)。
             // 別の理由での失敗もここに来るが、-ss を付けても同じ理由でもう一度失敗するだけなので無害
@@ -1296,7 +1324,6 @@ async function runJob(jobId: number): Promise<void> {
                 config.encodeRetrySeek,
                 codec,
                 encodeOptions,
-                measured,
             );
         }
 
@@ -1375,8 +1402,8 @@ async function runJob(jobId: number): Promise<void> {
      *
      * **出来上がったものを測る。** ffmpeg が言ってきた `out_time` を書いていた頃は、
      * 壊れた副音声が1本混ざっている録画で **8.576 秒**と入っていた
-     * (中身は 30分ぶん正しく入っていた)。理由は進み具合が止まるのと同じ
-     * (`parseProgressBlock`)。測れなかったときだけ、これまでどおり ffmpeg の値に落ちる
+     * (中身は 30分ぶん正しく入っていた)。理由は `out_time` が当てにならないのと同じ
+     * (`inputProgress` のコメント参照)。測れなかったときだけ、これまでどおり ffmpeg の値に落ちる
      */
     const made = (await probeVideo(output)).duration;
     const length = Number.isFinite(made) ? made * 1000 : lastOutTimeUs / 1000;
@@ -1386,22 +1413,19 @@ async function runJob(jobId: number): Promise<void> {
             .run(Math.round(length), recording.id);
     }
 
-    // 番組名・概要・放送日・サムネイルをサイドカーに書く。動画を置いた直後に作る。
+    // サムネイルを動画の隣に書く。動画を置いた直後に作る。
     // CMを切っていない録画は、本編の最初の区間からサムネを取る (CMの絵を避ける)
-    writeNfo(recording, output);
     await writeThumbnail(
         output,
         (recording.end_at - recording.start_at) / 1000,
         encodeOptions.contentStart ?? undefined,
     );
     /*
-     * **もう一方 (H.264) の隣にも同じ NFO とポスターを置く。** 映画型の Nova は
-     * 動画1本ごとに `{名前}.nfo` / `{名前}-poster.jpg` を読むので、付けないと
-     * AV1 が再生できない端末で観る H.264 が「情報なしの裸ファイル」になる。
-     * ポスターは主から複製する (同じ絵。ffmpeg をもう一度は回さない)
+     * **もう一方 (H.264) の隣にもポスターを複製しておく** (同じ絵。ffmpeg を
+     * もう一度は回さない)。主 (AV1) を消すと残ったほうが主に繰り上がるので、
+     * そのときも画面のサムネが途切れない
      */
     if (alt !== null) {
-        writeNfo(recording, alt);
         const primaryPoster = sidecarPaths(output).thumbnail;
         if (existsSync(primaryPoster)) copyFileSync(primaryPoster, sidecarPaths(alt).thumbnail);
     }
