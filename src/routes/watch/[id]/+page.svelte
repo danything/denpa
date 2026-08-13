@@ -1,6 +1,7 @@
 <script lang="ts">
     import { onMount } from 'svelte';
     import { submitting } from '$lib/actions';
+    import { arming } from '$lib/arming.svelte';
     import ProgramFacts from '$lib/components/ProgramFacts.svelte';
     import { screenAwake } from '$lib/components/player/awake.svelte';
     import ControlBar from '$lib/components/player/ControlBar.svelte';
@@ -33,7 +34,7 @@
     import { clearOverlay, drawOverlay, fitRect } from '$lib/components/player/paint';
     import Remote from '$lib/components/player/Remote.svelte';
     import { snapshotter } from '$lib/components/player/shot.svelte';
-    import Toasts, { type Notice } from '$lib/components/Toasts.svelte';
+    import Toasts, { errorNotice, type Notice } from '$lib/components/Toasts.svelte';
     import { type DetailSeed, programDetail } from '$lib/detail.svelte';
     import { clock, cmNoteWorthShowing, recordedDuration, size, time } from '$lib/format';
     import { write as remind, read as stored } from '$lib/keep';
@@ -281,9 +282,8 @@
     /** 続きから出したか。出したことを画面にも言う (黙って途中から始まると驚く) */
     let continued = $state(false);
 
-    /** 押し間違い防止に2回押させる。一覧と同じ (`routes/+page.svelte` の `arm`) */
-    let armed = $state(false);
-    let disarm: ReturnType<typeof setTimeout> | null = null;
+    /** 押し間違い防止に2回押させる。挙動は3画面共通 ([arming.svelte.ts](../../../lib/arming.svelte.ts)) */
+    const deleting = arming('[data-testid^="watch-delete"]');
 
     const detail = programDetail();
 
@@ -333,7 +333,7 @@
             window.removeEventListener('pagehide', onLeave);
             clearInterval(ticker);
             remember(true);
-            if (disarm !== null) clearTimeout(disarm);
+            deleting.fire();
             if (skipNotice !== null) clearTimeout(skipNotice);
             if (retryTimer !== null) clearTimeout(retryTimer);
         };
@@ -724,19 +724,6 @@
         run();
     }
 
-    function arm(): void {
-        armed = true;
-        if (disarm !== null) clearTimeout(disarm);
-        disarm = setTimeout(() => (armed = false), 5000);
-    }
-
-    /** 削除の聞き返しは、他所を触ったら取り下げる (一覧と同じ) */
-    function stand(event: MouseEvent): void {
-        if (!armed) return;
-        if ((event.target as HTMLElement | null)?.closest('[data-testid^="watch-delete"]')) return;
-        armed = false;
-    }
-
     const current = $derived(chapterAt(chapters, at));
     /** CM の入っている録画でだけ、飛ばす口を出す (押しても何も起きない操作を並べない) */
     const hasCm = $derived(chapters.some((chapter) => isCm(chapter.title)));
@@ -789,9 +776,7 @@
 
     /** 断られたときだけ知らせる。消せたときは一覧へ戻るので出す先が無い */
     const notices = $derived<Notice[]>([
-        ...(form !== null && form !== undefined && 'message' in form && typeof form.message === 'string'
-            ? [{ key: 'watch-delete', kind: 'error' as const, text: form.message }]
-            : []),
+        ...errorNotice(form, 'watch-delete'),
         ...shooter.notices,
     ]);
 
@@ -813,7 +798,7 @@
 </script>
 
 <svelte:head><title>{rec.name} - denpa</title></svelte:head>
-<svelte:window onclick={stand} onkeydown={keys} />
+<svelte:window onclick={deleting.stand} onkeydown={keys} />
 
 <!--
     **ライブ (`/live`) と同じ形。** 映像が左、読むものが右。**中の作りまで同じ**
@@ -1091,7 +1076,7 @@
                     -->
                     <form method="POST" action="?/delete" use:submitting>
                         <input type="hidden" name="id" value={rec.id} />
-                        {#if armed}
+                        {#if deleting.armed !== null}
                             <ControlButton
                                 path={CHECK}
                                 label="削除する"
@@ -1100,7 +1085,12 @@
                                 testid="watch-delete-confirm"
                             />
                         {:else}
-                            <ControlButton path={TRASH} label="削除" testid="watch-delete" onclick={arm} />
+                            <ControlButton
+                                path={TRASH}
+                                label="削除"
+                                testid="watch-delete"
+                                onclick={() => deleting.arm(rec.id)}
+                            />
                         {/if}
                     </form>
                 </ControlBar>

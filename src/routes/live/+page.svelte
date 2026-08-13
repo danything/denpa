@@ -32,7 +32,7 @@
     import PlayerVeil from '$lib/components/player/PlayerVeil.svelte';
     import Remote from '$lib/components/player/Remote.svelte';
     import { snapshotter } from '$lib/components/player/shot.svelte';
-    import Toasts, { type Notice } from '$lib/components/Toasts.svelte';
+    import Toasts, { errorNotice, type Notice } from '$lib/components/Toasts.svelte';
     import { programDetail } from '$lib/detail.svelte';
     import { SERVICE_TYPE_LABEL, time } from '$lib/format';
     import { LIVE_CODECS } from '$lib/live';
@@ -208,9 +208,7 @@
         ...(form?.recorded
             ? [{ key: `record-${form.recorded}`, kind: 'info' as const, text: `録画を始めます: ${form.recorded}` }]
             : []),
-        ...(form?.message
-            ? [{ key: 'record-error', kind: 'error' as const, text: form.message }]
-            : []),
+        ...errorNotice(form, 'record-error'),
     ]);
 
     function snapshot(): void {

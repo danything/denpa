@@ -1,8 +1,9 @@
 <script lang="ts">
     import { goto } from '$app/navigation';
     import { submitting } from '$lib/actions';
+    import { arming } from '$lib/arming.svelte';
     import ProgramDetail from '$lib/components/ProgramDetail.svelte';
-    import Toasts, { type Notice } from '$lib/components/Toasts.svelte';
+    import Toasts, { errorNotice, type Notice } from '$lib/components/Toasts.svelte';
     import { type DetailSeed, programDetail } from '$lib/detail.svelte';
     import { withCredentials } from '$lib/download';
     import { applyEncodeProgress, encodeLive } from '$lib/encode-live.svelte';
@@ -82,7 +83,7 @@
     const notices = $derived.by(() => {
         const list: Notice[] = [];
         if (offlineNote !== null) list.push(offlineNote);
-        if (form?.message) list.push({ key: 'dashboard-error', kind: 'error', text: form.message });
+        list.push(...errorNotice(form, 'dashboard-error'));
         if (form?.reconcile) {
             /*
              * **両方向ぶん出す。** 「実体が無く削除済み」だけ出していた頃は、
@@ -157,37 +158,8 @@
         void detail.open(programId, row);
     }
 
-    /**
-     * 削除は2回押させる。1回目で聞き返し、2回目で本当に消す。
-     * 行のすぐ隣に並んでいるので、押し間違いで消えると取り返しがつかない。
-     * 少し置いたら元に戻す(押したことを忘れた頃に消えないように)
-     */
-    let armed = $state<number | null>(null);
-    let disarm: ReturnType<typeof setTimeout> | undefined;
-    function arm(id: number): void {
-        armed = id;
-        clearTimeout(disarm);
-        disarm = setTimeout(() => (armed = null), 5000);
-    }
-
-    /**
-     * **他所を触ったら、聞き返しは取り下げる。**
-     *
-     * 聞き返しの間だけ「確定」が出ていて、押せば消える。時間で戻すだけだと、
-     * 間違えて押したことに気付いて別のところを触っても**まだ構えたまま**で、
-     * その5秒のうちに同じ場所をもう一度押すと消えてしまう。やめたことは
-     * 他所を触った時点で分かる。
-     *
-     * 削除まわりの2つだけ除く — 「削除」は次の行を構える押し方
-     * (この後 `arm` が入れ直す)、「確定」はまさに実行する押し方
-     */
-    function stand(event: MouseEvent): void {
-        if (armed === null) return;
-        const target = event.target as HTMLElement | null;
-        if (target?.closest('[data-testid="delete-button"], [data-testid="delete-confirm"]')) return;
-        clearTimeout(disarm);
-        armed = null;
-    }
+    /** 削除は2回押させる。挙動は3画面共通 ([arming.svelte.ts](../lib/arming.svelte.ts)) */
+    const deleting = arming('[data-testid="delete-button"], [data-testid="delete-confirm"]');
 
     /**
      * 行のどこを押しても、その行でいちばんやりたいことをする。
@@ -267,7 +239,7 @@
 </script>
 
 <!-- 聞き返しは他所を触ったら取り下げる (`stand`) -->
-<svelte:window onclick={stand} />
+<svelte:window onclick={deleting.stand} />
 
 <!--
     予約も録画も、行の形を揃える。
@@ -786,7 +758,7 @@
                                                 }}
                                             >
                                                 <input type="hidden" name="id" value={rec.id} />
-                                                {#if armed === rec.id}
+                                                {#if deleting.armed === rec.id}
                                                     <!-- 幅が変わるとボタンが動いて押し間違える。2文字で揃える -->
                                                     <button type="submit"
                                                         class="btn btn-error"
@@ -798,7 +770,7 @@
                                                     <button
                                                         type="button"
                                                         class="btn btn-error btn-outline"
-                                                        onclick={() => arm(rec.id)}
+                                                        onclick={() => deleting.arm(rec.id)}
                                                         data-testid="delete-button"
                                                     >
                                                         削除

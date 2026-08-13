@@ -6,6 +6,18 @@
         kind: 'error' | 'info' | 'success';
         text: string;
     }
+
+    /**
+     * `form?.message` (fail の言葉) をトーストの形に。無ければ空。
+     * どの画面も同じ1行を書いていたので、綴りをここに1本化した。
+     * スプレッドでも `push(...)` でもそのまま混ぜられるよう、配列で返す
+     */
+    export function errorNotice(form: unknown, key: string): Notice[] {
+        if (form === null || typeof form !== 'object' || !('message' in form)) return [];
+        const { message } = form as { message: unknown };
+        if (typeof message !== 'string' || message === '') return [];
+        return [{ key, kind: 'error', text: message }];
+    }
 </script>
 
 <script lang="ts">

@@ -1,5 +1,6 @@
 <script lang="ts">
     import { onMount } from 'svelte';
+    import { arming } from '$lib/arming.svelte';
     import { dateTime, durationMs, percent, size } from '$lib/format';
     import { offline, rememberResume, removeEverywhere, removeLocal, startOffline } from '$lib/offline.svelte';
     import type { OfflineVideo } from '$lib/offline-db';
@@ -22,8 +23,11 @@
     let src = $state<string | null>(null);
     let poster = $state<string | null>(null);
     let video = $state<HTMLVideoElement | null>(null);
-    /** 消すのは2回押し (一覧と同じ流儀)。サーバからも消えることが分かる言葉で */
-    let armed = $state<number | null>(null);
+    /**
+     * 消すのは2回押し。挙動は3画面共通 ([arming.svelte.ts](../../lib/arming.svelte.ts))。
+     * サーバからも消えることが分かる言葉で聞き返す
+     */
+    const deleting = arming('[data-testid="offline-delete"]');
 
     async function load(): Promise<void> {
         list = (await videos.all()).sort((a, b) => b.startAt - a.startAt);
@@ -75,14 +79,12 @@
     }
 
     async function remove(item: OfflineVideo): Promise<void> {
-        if (armed !== item.id) {
-            armed = item.id;
-            setTimeout(() => {
-                if (armed === item.id) armed = null;
-            }, 3000);
+        if (deleting.armed !== item.id) {
+            deleting.arm(item.id);
             return;
         }
-        armed = null;
+        // フォーム送信ではないので、消したら自分で構えを下ろす
+        deleting.fire();
         if (playing?.id === item.id) stop();
         await removeEverywhere(item);
         await load();
@@ -104,6 +106,9 @@
 <svelte:head>
     <title>端末に保存した録画 - denpa</title>
 </svelte:head>
+
+<!-- 聞き返しは他所を触ったら取り下げる (`stand`) -->
+<svelte:window onclick={deleting.stand} />
 
 <div class="mx-auto max-w-3xl">
     <h1 class="mb-1 text-xl font-bold">端末に保存した録画</h1>
@@ -199,11 +204,13 @@
                     {:else}
                         <button
                             type="button"
-                            class="btn btn-sm shrink-0 {armed === item.id ? 'btn-error' : 'btn-ghost'}"
+                            class="btn btn-sm shrink-0 {deleting.armed === item.id
+                                ? 'btn-error'
+                                : 'btn-ghost'}"
                             onclick={() => remove(item)}
                             data-testid="offline-delete"
                         >
-                            {armed === item.id ? '端末とサーバから消す' : '削除'}
+                            {deleting.armed === item.id ? '端末とサーバから消す' : '削除'}
                         </button>
                     {/if}
                 </li>

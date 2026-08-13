@@ -2,7 +2,7 @@
     import { submitting } from '$lib/actions';
     import { GENRE_TREE, genreName } from '$lib/arib';
     import ProgramDetail from '$lib/components/ProgramDetail.svelte';
-    import Toasts, { type Notice } from '$lib/components/Toasts.svelte';
+    import Toasts, { errorNotice, type Notice } from '$lib/components/Toasts.svelte';
     import { programDetail } from '$lib/detail.svelte';
     import { badgeClass, CM_LABEL, dateTime, SERVICE_TYPE_LABEL, stateLabel } from '$lib/format';
     import { jsonArray } from '$lib/json';
@@ -50,9 +50,7 @@
     );
 
     /** 押した結果 */
-    const notices = $derived<Notice[]>(
-        form?.message ? [{ key: 'rule-error', kind: 'error', text: form.message }] : [],
-    );
+    const notices = $derived<Notice[]>(errorNotice(form, 'rule-error'));
 </script>
 
 <!--

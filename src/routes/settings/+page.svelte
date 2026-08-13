@@ -1,7 +1,7 @@
 <script lang="ts">
     import { untrack } from 'svelte';
     import { submitting } from '$lib/actions';
-    import Toasts, { type Notice } from '$lib/components/Toasts.svelte';
+    import Toasts, { errorNotice, type Notice } from '$lib/components/Toasts.svelte';
     import { dateTime } from '$lib/format';
     import { liveUpdates } from '$lib/live-updates.svelte';
     import { measure } from '$lib/measure.svelte';
@@ -18,7 +18,7 @@
     const notices = $derived.by(() => {
         const list: Notice[] = [];
         if (form?.migrate) list.push({ key: 'migrate-started', kind: 'info', text: form.migrate });
-        if (form?.message) list.push({ key: 'settings-error', kind: 'error', text: form.message });
+        list.push(...errorNotice(form, 'settings-error'));
         if (form?.saved) list.push({ key: 'saved-result', kind: 'success', text: '保存しました。' });
         return list;
     });

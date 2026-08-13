@@ -1,7 +1,7 @@
 <script lang="ts">
     import { submitting } from '$lib/actions';
     import LogoArea from '$lib/components/LogoArea.svelte';
-    import Toasts, { type Notice } from '$lib/components/Toasts.svelte';
+    import Toasts, { errorNotice, type Notice } from '$lib/components/Toasts.svelte';
     import { SERVICE_TYPE_LABEL } from '$lib/format';
     import { held, liveUpdates } from '$lib/live-updates.svelte';
 
@@ -64,7 +64,7 @@
     /** 押した結果。スキャンの経過そのものは下のカードに出したままにする */
     const notices = $derived.by(() => {
         const list: Notice[] = [];
-        if (form?.message) list.push({ key: 'tuner-error', kind: 'error', text: form.message });
+        list.push(...errorNotice(form, 'tuner-error'));
         if (form?.scan) list.push({ key: 'tuner-notice', kind: 'info', text: form.scan });
         return list;
     });
