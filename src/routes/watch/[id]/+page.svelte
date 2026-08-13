@@ -62,22 +62,31 @@
     /** 焼けているか。**観るのは焼いたものだけ** (`+page.server.ts`) */
     const ready = $derived(rec.library_path !== null);
     /*
-     * 端末に保存してあればそちらを観る (docs/offline.md)。サーバから読み直さない
-     * ので、電波が細いところでも途切れない。字幕・チャプター・データ放送も
-     * 一緒に落としてあるものを使う (各 load が localCopy を先に見る)
+     * 端末に保存してあれば**オンラインでもそちらを観る** (docs/offline.md)。
+     * サーバから読み直さないので、帯域を使わず、電波が細いところでも途切れない。
+     * 字幕・チャプター・データ放送も一緒に落としてあるものを使う
+     * (各 load が localCopy を先に見る)。
+     *
+     * **確かめ終わるまで src を渡さない。** 渡してしまうと `<video>` が先に
+     * サーバから読み始め、あとから blob に差し替わって読み直しになる —
+     * 端末にあるのにサーバへ取りに行ったように見えるのもまぎらわしい
      */
     let localSrc = $state<string | null>(null);
+    let localChecked = $state(false);
     let localCopy: OfflineVideo | null = null;
     onMount(() => {
         void (async () => {
             localCopy = await loadOffline(rec.id);
             if (localCopy?.video !== undefined) localSrc = URL.createObjectURL(localCopy.video);
+            localChecked = true;
         })();
         return () => {
             if (localSrc !== null) URL.revokeObjectURL(localSrc);
         };
     });
-    const src = $derived(localSrc ?? `/api/recordings/${rec.id}/file?source=encoded`);
+    const src = $derived(
+        localChecked ? (localSrc ?? `/api/recordings/${rec.id}/file?source=encoded`) : undefined,
+    );
 
     let video = $state<HTMLVideoElement | null>(null);
     /** 映像とその上の操作をまとめた箱。全画面にするのはこちら */
@@ -383,6 +392,9 @@
     function resume(): void {
         length = video?.duration ?? 0;
         place();
+        // **速さを掛け直す。** 読み込むもの (src) が変わるとブラウザは 1 に戻す —
+        // 端末のコピーへ差し替えたときに、選んであった速さが黙って外れていた
+        if (video !== null && speed !== 1) video.playbackRate = speed;
         // 繋ぎが切れて読み直したところ。**観ていた位置へ戻して続ける** (`recover`)
         if (retryAt > 0 && video !== null) {
             video.currentTime = retryAt;
@@ -958,6 +970,12 @@
                         feedData();
                     }}
                     onseeked={feedData}
+                    onloadstart={() => {
+                        // **読み込みが始まった瞬間に速さを掛け直す。** src を入れ替えると
+                        // (端末のコピーへの差し替え) ブラウザは playbackRate を 1 に戻す。
+                        // metadata を待ってからでは、その間だけ選んだ速さが外れて見える
+                        if (video !== null && speed !== 1) video.playbackRate = speed;
+                    }}
                     onloadedmetadata={() => {
                         resume();
                         syncAudio();
@@ -1049,7 +1067,12 @@
                             このブラウザでは再生できませんでした。<br
                             />落としてお手元のプレイヤーで観てください。
                         </p>
-                        <a class="btn btn-sm" href="{src}&download=1" download>ダウンロード</a>
+                        <!-- src は端末のコピー (blob:) のことがあるので、落とす口は API を名指す -->
+                        <a
+                            class="btn btn-sm"
+                            href="/api/recordings/{rec.id}/file?source=encoded&download=1"
+                            download>ダウンロード</a
+                        >
                     </div>
                 {/if}
 
@@ -1371,6 +1394,12 @@
 
                 <div class="text-base-content/60 mt-3 text-sm" data-testid="watch-meta">
                     {recordedDuration(rec)} ・ {size(rec.ts_size)}
+                    {#if localSrc !== null}
+                        <!-- サーバではなく端末のコピーで観ている印。血の通った確かめ口 -->
+                        <span class="badge badge-success badge-sm align-middle" data-testid="watch-local">
+                            端末から再生中
+                        </span>
+                    {/if}
                 </div>
             </div>
 
