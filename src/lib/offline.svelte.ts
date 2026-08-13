@@ -11,13 +11,23 @@
  */
 
 import { browser } from '$app/environment';
-import { downloadRequests, fetchId, type OfflineVideo, outbox, resumeQueue, videos } from './offline-db';
+import {
+    downloadRequests,
+    fetchId,
+    type OfflineVideo,
+    outbox,
+    parseFetchId,
+    resumeQueue,
+    videos,
+} from './offline-db';
 
 /** 画面に映すぶんだけ。blob はここに持たない (要るときに IndexedDB から) */
 export interface OfflineEntry {
     id: number;
     state: 'downloading' | 'ready';
     source: 'encoded' | 'alt';
+    /** 落とせた割合 (0〜1)。測れない間は null (動いているだけのバーにする) */
+    progress: number | null;
 }
 
 let entries = $state<Record<number, OfflineEntry>>({});
@@ -42,12 +52,59 @@ export const offline = {
 async function refresh(): Promise<void> {
     const all = await videos.all();
     const next: Record<number, OfflineEntry> = {};
-    for (const v of all) next[v.id] = { id: v.id, state: v.state, source: v.source };
+    for (const v of all) {
+        // 進み具合は IndexedDB に無い (progress イベントから来る)。読み直しで消さない
+        next[v.id] = {
+            id: v.id,
+            state: v.state,
+            source: v.source,
+            progress: entries[v.id]?.progress ?? null,
+        };
+    }
     entries = next;
 
     const queued: Record<number, boolean> = {};
     for (const item of await outbox.all()) queued[item.id] = true;
     pendingDelete = queued;
+}
+
+/** 進み具合を1件ぶん書き換える。無い行には書かない (先に消されたもの) */
+function setProgress(id: number, progress: number | null): void {
+    const held = entries[id];
+    if (held === undefined) return;
+    entries = { ...entries, [id]: { ...held, progress } };
+}
+
+/**
+ * ブラウザに預けたダウンロードの進み具合を映す。
+ * **エンコードと同じ見せ方**をするために、`progress` イベントを行の割合に流し込む。
+ * downloadTotal が無い (大きさの分からない) ものは null のまま — バーは動くだけになる
+ */
+function watchProgress(reg: BackgroundFetchRegistration): void {
+    const update = () => {
+        const parsed = parseFetchId(reg.id);
+        if (parsed === null) return;
+        setProgress(
+            parsed.id,
+            reg.downloadTotal > 0 ? Math.min(1, reg.downloaded / reg.downloadTotal) : null,
+        );
+    };
+    update();
+    reg.addEventListener('progress', update);
+}
+
+/** 開き直したとき、運んでいる最中のものに追いつく (預けた側のタブはもう無いかもしれない) */
+async function watchRunning(): Promise<void> {
+    try {
+        const reg = await navigator.serviceWorker.ready;
+        if (reg.backgroundFetch === undefined) return;
+        for (const id of await reg.backgroundFetch.getIds()) {
+            const running = await reg.backgroundFetch.get(id);
+            if (running !== undefined) watchProgress(running);
+        }
+    } catch {
+        // 預けたものが無いだけ
+    }
 }
 
 /**
@@ -58,7 +115,7 @@ export function startOffline(): void {
     if (started || !offline.usable) return;
     started = true;
 
-    void refresh();
+    void refresh().then(() => watchRunning());
     window.addEventListener('online', () => void flush());
     navigator.serviceWorker.addEventListener('message', (event) => {
         const type = (event.data as { type?: string } | null)?.type;
@@ -134,17 +191,18 @@ export async function saveOffline(rec: SaveTarget): Promise<void> {
         downloadedAt: Date.now(),
     };
     await videos.put(held);
-    entries = { ...entries, [rec.id]: { id: rec.id, state: 'downloading', source } };
+    entries = { ...entries, [rec.id]: { id: rec.id, state: 'downloading', source, progress: null } };
 
     const requests = downloadRequests(rec.id, source);
     try {
         const reg = await navigator.serviceWorker.ready;
         if (reg.backgroundFetch !== undefined) {
             // ブラウザに預ける。受け取りは SW (service-worker.ts)
-            await reg.backgroundFetch.fetch(fetchId(rec.id, source), requests, {
+            const running = await reg.backgroundFetch.fetch(fetchId(rec.id, source), requests, {
                 title: `denpa: ${rec.name}`,
                 downloadTotal: rec.ts_size > 0 ? Math.round(rec.ts_size * 1.05) : undefined,
             });
+            watchProgress(running);
             return;
         }
         // 対応していないブラウザ。タブを開いたまま、ページで落とす
@@ -156,6 +214,24 @@ export async function saveOffline(rec: SaveTarget): Promise<void> {
     }
 }
 
+/** 進み具合を数えながら本体を受け取る。Content-Length が無ければ数えない */
+async function blobWithProgress(id: number, response: Response): Promise<Blob> {
+    const total = Number(response.headers.get('content-length'));
+    if (!Number.isFinite(total) || total <= 0 || response.body === null) return await response.blob();
+
+    const parts: BlobPart[] = [];
+    let got = 0;
+    const reader = response.body.getReader();
+    while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        parts.push(value);
+        got += value.length;
+        setProgress(id, Math.min(1, got / total));
+    }
+    return new Blob(parts);
+}
+
 /** ページ主導のフォールバック。SW の受け取りと同じ仕分けをこちらでやる */
 async function downloadInPage(held: OfflineVideo, requests: string[]): Promise<void> {
     for (const url of requests) {
@@ -164,7 +240,7 @@ async function downloadInPage(held: OfflineVideo, requests: string[]): Promise<v
             if (url.includes('/file?')) throw new Error('動画を取得できませんでした');
             continue; // 付き添いは無い録画もある
         }
-        if (url.includes('/file?')) held.video = await response.blob();
+        if (url.includes('/file?')) held.video = await blobWithProgress(held.id, response);
         else if (url.includes('captions.sup')) held.captions = await response.blob();
         else if (url.includes('poster')) held.poster = await response.blob();
         else if (url.includes('chapters')) held.chapters = await response.json().catch(() => undefined);

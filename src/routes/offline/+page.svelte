@@ -1,6 +1,6 @@
 <script lang="ts">
     import { onMount } from 'svelte';
-    import { dateTime, durationMs, size } from '$lib/format';
+    import { dateTime, durationMs, percent, size } from '$lib/format';
     import { offline, rememberResume, removeEverywhere, startOffline } from '$lib/offline.svelte';
     import type { OfflineVideo } from '$lib/offline-db';
     import { resumeQueue, videos } from '$lib/offline-db';
@@ -164,7 +164,10 @@
                         </div>
                     </div>
                     {#if item.state === 'downloading'}
-                        <span class="badge badge-ghost badge-sm shrink-0">取得中…</span>
+                        {@const progress = offline.entries[item.id]?.progress ?? null}
+                        <span class="badge badge-ghost badge-sm shrink-0">
+                            取得中{progress === null ? '…' : ` ${percent(progress)}`}
+                        </span>
                     {:else}
                         <button
                             type="button"

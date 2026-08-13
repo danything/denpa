@@ -574,17 +574,18 @@
                                     -->
                                     {@render title(shown.label, shown.badge, rec.name, 'recording-state')}
                                     {#if offline.entries[rec.id] !== undefined}
-                                        <!-- 端末に入っている印。押すと保存済み一覧 (/offline) へ -->
-                                        <a
-                                            href="/offline"
-                                            class="badge badge-sm mt-1 {offline.entries[rec.id].state === 'ready'
+                                        {@const held = offline.entries[rec.id]}
+                                        <!-- 端末に入っている印。保存中はエンコードと同じく割合を添える -->
+                                        <span
+                                            class="badge badge-sm mt-1 {held.state === 'ready'
                                                 ? 'badge-success'
                                                 : 'badge-ghost'}"
-                                            onclick={(event) => event.stopPropagation()}
                                             data-testid="offline-badge"
                                         >
-                                            {offline.entries[rec.id].state === 'ready' ? '端末に保存済み' : '端末へ保存中…'}
-                                        </a>
+                                            {held.state === 'ready'
+                                                ? '端末に保存済み'
+                                                : `端末へ保存中${held.progress === null ? '…' : ` ${percent(held.progress)}`}`}
+                                        </span>
                                     {/if}
                                     <!--
                                         放送日時・尺・サイズは1行にまとめる。列に分けていた頃は、
@@ -737,7 +738,20 @@
                                                 </button>
                                             </form>
                                         {:else}
-                                            <form method="POST" action="?/delete" use:submitting>
+                                            <!-- サーバから消したら、端末に落としてあったコピーも片付ける -->
+                                            <form
+                                                method="POST"
+                                                action="?/delete"
+                                                use:submitting={() => async (options) => {
+                                                    await options.update();
+                                                    if (
+                                                        options.result.type === 'success' &&
+                                                        offline.entries[rec.id] !== undefined
+                                                    ) {
+                                                        void removeLocal(rec.id);
+                                                    }
+                                                }}
+                                            >
                                                 <input type="hidden" name="id" value={rec.id} />
                                                 {#if armed === rec.id}
                                                     <!-- 幅が変わるとボタンが動いて押し間違える。2文字で揃える -->
@@ -778,6 +792,14 @@
                                         : undefined}
                                     max="1"
                                     data-testid="encode-bar"
+                                ></progress>
+                            {:else if offline.entries[rec.id]?.state === 'downloading'}
+                                <!-- 端末への保存もエンコードと同じ見せ方。測れない間は動くだけのバー -->
+                                <progress
+                                    class="progress progress-success absolute inset-x-0 bottom-0 h-1 w-full rounded-none"
+                                    value={offline.entries[rec.id].progress ?? undefined}
+                                    max="1"
+                                    data-testid="offline-bar"
                                 ></progress>
                             {/if}
                         </div>

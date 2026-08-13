@@ -106,11 +106,15 @@
         };
     });
 
+    /*
+     * `/offline` (端末に保存した録画) はここに並べない。ふだんの操作は一覧で
+     * 全部できて、あの画面が要るのは**電波が無いとき**だけ — そのときは
+     * サービスワーカーが勝手にあそこへ落とす (service-worker.ts)
+     */
     const links = [
         { href: '/', label: '予約と録画' },
         { href: '/guide', label: '番組表' },
         { href: '/live', label: 'ライブ' },
-        { href: '/offline', label: 'オフライン' },
         { href: '/rules', label: 'ルール' },
         { href: '/tuners', label: 'チューナー' },
         { href: '/settings', label: '設定' },
