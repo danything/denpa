@@ -1,5 +1,6 @@
 <script lang="ts">
     import { onMount } from 'svelte';
+    import { submitting } from '$lib/actions';
     import ProgramFacts from '$lib/components/ProgramFacts.svelte';
     import { screenAwake } from '$lib/components/player/awake.svelte';
     import ControlBar from '$lib/components/player/ControlBar.svelte';
@@ -19,6 +20,7 @@
         OVERLAY_BTN,
         PAUSE,
         PLAY,
+        RECORD,
         SHRINK,
         SOUND_OFF,
         SOUND_ON,
@@ -34,7 +36,7 @@
     import { FLOOR, SPEEDS } from '$lib/ts/pacing';
     import type { LiveChannel } from './+page.server';
 
-    let { data } = $props();
+    let { data, form } = $props();
     // 局が入れ替わると読み込み直されるので、値ではなく参照で持つ
     const channels = $derived(data.channels as LiveChannel[]);
 
@@ -210,7 +212,16 @@
      * 断られたら**落とすほうに倒す** — 撮ったものを取り落とさない
      */
     let shot = $state<Notice | null>(null);
-    const notices = $derived<Notice[]>(shot === null ? [] : [shot]);
+    const notices = $derived<Notice[]>([
+        ...(shot === null ? [] : [shot]),
+        // 録画ボタンの結果 (`?/record`)。押した本人へ、始まったか断られたかを言う
+        ...(form?.recorded
+            ? [{ key: `record-${form.recorded}`, kind: 'info' as const, text: `録画を始めます: ${form.recorded}` }]
+            : []),
+        ...(form?.message
+            ? [{ key: 'record-error', kind: 'error' as const, text: form.message }]
+            : []),
+    ]);
 
     async function snapshot(): Promise<void> {
         if (video === undefined) return;
@@ -365,6 +376,36 @@
 
             {#if player.tuned !== null && player.state !== 'error'}
                 <!--
+                    **右上の縦列。観る画面と同じ場所・同じ並び** (`watch-side`) —
+                    d ボタンと切り抜きが画面ごとに違う場所にあると、押すたびに
+                    探し直すことになる。いちばん上は録画 (観る画面では「閉じる」の位置)
+                -->
+                <ControlBar side shown={controlsShown} testid="live-side">
+                    <!--
+                        **いま観ている番組を録る。** 手動予約と同じ道 (`?/record`) に
+                        乗せるだけで、数秒後にはこの番組の録画が始まる。既に録って
+                        いれば二重にはならない (予約は番組ごとに1本)
+                    -->
+                    <form method="POST" action="?/record" use:submitting>
+                        <input type="hidden" name="service" value={player.tuned.serviceId} />
+                        <ControlButton path={RECORD} label="いまの番組を録画する" submit testid="live-record" />
+                    </form>
+                    <ControlButton
+                        path={DATA}
+                        label={player.showData ? 'データ放送を消す' : 'データ放送を出す'}
+                        on={player.showData}
+                        testid="live-data-button"
+                        onclick={() => player.setData(!player.showData)}
+                    />
+                    <ControlButton
+                        path={CAMERA}
+                        label="この場面を切り抜く"
+                        testid="live-shot"
+                        onclick={() => void snapshot()}
+                    />
+                </ControlBar>
+
+                <!--
                     自前の操作列。**放送の今に居るときは右端に張り付く。**
                     止めても受け取りは続くので、止めた所から見られる。
 
@@ -442,22 +483,10 @@
                         {/if}
 
                         <!--
-                        **データ放送 (テレビの d ボタン)。**
+                        データ放送 (d) と切り抜きは**右上の縦列** (`live-side`) —
+                        観る画面と同じ場所に揃えてある。
 
-                        字幕と違って「持っているか」を先には出さない。サーバは
-                        頼まれてから解く作りなので (`server/databroadcast.ts`)、
-                        押されるまでは載っているかどうかも分からない。押しても
-                        何も出ない局はあるが、**テレビの d ボタンと同じ**
-                    -->
-                        <ControlButton
-                            path={DATA}
-                            label={player.showData ? 'データ放送を消す' : 'データ放送を出す'}
-                            on={player.showData}
-                            testid="live-data-button"
-                            onclick={() => player.setData(!player.showData)}
-                        />
-
-                        <!--
+                        **Hybridcast。載っている番組でだけ出す。**
                         **Hybridcast。載っている番組でだけ出す。**
 
                         データ放送と違って、**アプリは電波に乗っていません** —
@@ -587,9 +616,13 @@
                             </OverlayMenu>
                         {/if}
 
-                        <!-- 放送の今に居るかどうか。離れていれば押して戻れる -->
+                        <!--
+                            放送の今に居るかどうか。離れていれば押して戻れる。
+                            **文字は焼き方のボタンと同じ大きさ・幅は詰める** —
+                            btn-lg のままだと帯の中でこれだけ太って見えていた
+                        -->
                         <button type="button"
-                            class="{OVERLAY_BTN} gap-1.5 {player.live
+                            class="{OVERLAY_BTN} gap-1 px-3 {player.live
                                 ? 'border-0 shadow-none btn-error'
                                 : OVERLAY}"
                             onclick={() => player.goLive()}
@@ -600,7 +633,7 @@
                                     ? 'bg-error-content'
                                     : 'bg-error'}"
                             ></span>
-                            ライブ
+                            <span class="text-xs font-semibold">ライブ</span>
                         </button>
 
                         <!-- **読みものはここに二段で。** 決まりは [ControlBar.svelte](../../lib/components/player/ControlBar.svelte) -->
@@ -712,16 +745,6 @@
                             </OverlayMenu>
                         {/if}
 
-                        <!--
-                            **切り抜き。** いまの1コマを字幕ごとクリップボードへ (観る画面と同じ)。
-                            貼れない繋ぎ (http) では落とす
-                        -->
-                        <ControlButton
-                            path={CAMERA}
-                            label="この場面を切り抜く"
-                            testid="live-shot"
-                            onclick={() => void snapshot()}
-                        />
                         <ControlButton
                             path={fullscreened ? SHRINK : EXPAND}
                             label={fullscreened ? '全画面をやめる' : '全画面'}

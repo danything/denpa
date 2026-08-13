@@ -34,6 +34,7 @@ import {
     TrackList,
     worthLogging,
 } from './captions';
+import { chasePlan, fileSize, followFile } from './chase';
 import { config } from './config';
 import { DataBroadcast, type ResponseMessage } from './databroadcast';
 import { queryOne } from './db';
@@ -508,6 +509,12 @@ class Session {
         readonly codec: LiveCodec,
         /** その局の中で何本目の字幕を出すか */
         readonly track: number,
+        /**
+         * 入力の差し替え口。無ければチューナーから (ライブ)。
+         * 追っかけ再生はこれで録画中のファイルを渡す (`openChase`)。
+         * 呼ぶたびに読み直しの口を返すこと — 字幕なしでの焼き直しに使う
+         */
+        private readonly source?: () => ReadableStream<Uint8Array>,
     ) {
         this.list = new TrackList(program);
     }
@@ -611,16 +618,21 @@ class Session {
              * 変える一瞬だけ、前のチャンネルと合わせてチューナーが2本要る —
              * 前のを離してから頼んでいるが、離れたことがエージェントに届くのは
              * 非同期なので重なる瞬間が残る。地上波は2本しかないので、録画か
-             * 番組表集めが1本使っていると、そこで断られていた
+             * 番組表集めが1本使っていると、そこで断られていた。
+             *
+             * 追っかけ (`source`) はチューナーを掴まない — 電波は録画が受けている
              */
-            const stream = await openWhenFree(
-                this.channelType,
-                this.channel,
-                this.aborter.signal,
-                `live ${this.channelType}/${this.channel}`,
-                config.priority.live,
-                () => this.stopped,
-            );
+            const tuned =
+                this.source !== undefined
+                    ? null
+                    : await openWhenFree(
+                          this.channelType,
+                          this.channel,
+                          this.aborter.signal,
+                          `live ${this.channelType}/${this.channel}`,
+                          config.priority.live,
+                          () => this.stopped,
+                      );
 
             /*
              * **字幕なしで焼き直せるようにしておく。**
@@ -633,6 +645,9 @@ class Session {
             let wanted =
                 forgotten !== undefined && Date.now() - forgotten < FORGET_CAPTIONLESS ? null : this.track;
             for (;;) {
+                // ライブは同じ TS が流れ続けている。追っかけは焼き直しのたびに読み直す
+                const stream = tuned ?? this.source?.();
+                if (stream === undefined) return;
                 const proc = Bun.spawn(
                     [config.ffmpeg, ...encodeArgs(this.program, this.audio, this.codec, wanted)],
                     // 字幕は3本目の口へ出させる。**stdio の配列でしか増やせない**
@@ -672,6 +687,15 @@ class Session {
                  * 例外にならないことがあるので待てない)
                  */
                 if (wanted !== null) await watching.catch(() => undefined);
+                /*
+                 * 追っかけが**録れているところまで読み切った** (ffmpeg が入力を
+                 * 食べ終えて 0 で終わる)。終わりであってエラーではない。
+                 * 画面はこれで器を締める (`MediaSource.endOfStream`)
+                 */
+                if (this.source !== undefined && (await proc.exited) === 0) {
+                    this.tell({ type: 'ended' });
+                    return;
+                }
                 if (wanted === null || !this.noSubtitle) {
                     // ここまで来たのは ffmpeg が自分で降りたとき
                     this.died(
@@ -688,7 +712,13 @@ class Session {
                 wanted = null;
             }
         } catch (error) {
-            this.died(label, String(error), whyNotTuned(String(error), resting(this.serviceId)));
+            this.died(
+                label,
+                String(error),
+                this.source === undefined
+                    ? whyNotTuned(String(error), resting(this.serviceId))
+                    : '録画を読めませんでした',
+            );
         } finally {
             this.stop();
         }
@@ -1109,6 +1139,16 @@ export function attend(connection: Connection): void {
             current?.wantData(viewer, message.on === true);
             return;
         }
+        /*
+         * **追っかけ再生** (issue #16)。シークも同じ指示の送り直しで、
+         * そのたびに焼き直す (ライブの選局し直しと同じ流儀)
+         */
+        if (message.type === 'chase') {
+            leave();
+            viewer.ready = false;
+            current = openChase(message, viewer, connection);
+            return;
+        }
         if (message.type !== 'tune') return;
         const channelType = typeof message.channelType === 'string' ? message.channelType : '';
         const channel = typeof message.channel === 'string' ? message.channel : '';
@@ -1184,6 +1224,114 @@ export function attend(connection: Connection): void {
     connection.onclose = () => {
         leave();
     };
+}
+
+/**
+ * 追っかけ再生を1本起こす — **録画中の録画を、いま録れているところまで観る**
+ * ([issue #16](https://github.com/danything/denpa/issues/16))。
+ *
+ * チューナーは掴まない。録画が書き足している生TSを追い読みして (`chase.ts`)、
+ * ライブと同じ `Session` に流し込む。**相乗りはしない** — 観る位置が人ごとに
+ * 違うので、同じものを観る2人はほぼ起きない。セッションの一覧 (`sessions`) にも
+ * 載せない (見ている人が switch れば `leave` が畳む)。
+ *
+ * シークはバイト比例で当たりを付ける (`chasePlan`)。生TSに時間の索引は無いが、
+ * 放送TSはレートがほぼ一定なので大きくは外れない。
+ */
+function openChase(message: Record<string, unknown>, viewer: Viewer, connection: Connection): Session | null {
+    const tell = (notice: Notice) =>
+        connection.send(CHANNEL.control, 0n, new TextEncoder().encode(JSON.stringify(notice)));
+    const refuse = (text: string): null => {
+        tell({ type: 'error', message: text });
+        return null;
+    };
+
+    const recordingId = Number(message.recordingId);
+    const at = Number.isFinite(Number(message.at)) ? Math.max(0, Number(message.at)) : 0;
+    const wanted = typeof message.audio === 'string' ? message.audio : undefined;
+    // 知らない形を頼まれたら H.264。**画面から来る値をそのまま信じない**
+    const codec: LiveCodec = message.codec === 'av1' ? 'av1' : 'h264';
+    const caption = Number.isInteger(message.caption) ? Math.max(0, Number(message.caption)) : 0;
+    if (!Number.isInteger(recordingId)) return refuse('録画が見つかりません');
+
+    const rec = queryOne<{
+        id: number;
+        service_id: number;
+        ts_path: string | null;
+        finished_at: number | null;
+        duration_ms: number | null;
+        start_at: number;
+        end_at: number;
+        created_at: number;
+        audio_type: number | null;
+        audios: string | null;
+        deleted_at: number | null;
+    }>(
+        `SELECT id, service_id, ts_path, finished_at, duration_ms, start_at, end_at,
+                created_at, audio_type, audios, deleted_at
+         FROM recordings WHERE id = ?`,
+        recordingId,
+    );
+    if (rec === undefined || rec.deleted_at !== null || rec.ts_path === null) {
+        return refuse('録画が見つかりません');
+    }
+    const size = fileSize(rec.ts_path);
+    if (size === null || size === 0) return refuse('まだ何も録れていません');
+
+    const finished = rec.finished_at !== null;
+    // 録れている長さ。録り終えていれば実測、まだなら**録り始めてからの経過**
+    const recordedSec = finished
+        ? (rec.duration_ms ?? rec.end_at - rec.start_at) / 1000
+        : (Date.now() - rec.created_at) / 1000;
+    const plan = chasePlan(size, recordedSec, at);
+
+    const tracks = audioTracks(parseAudios(rec));
+    const audio = pickTrack(tracks, wanted);
+    // ffmpeg に名指しさせる放送の番号。録画TSは絞ってあるが、探させない理屈はライブと同じ
+    const program =
+        queryOne<{ service_id: number }>(`SELECT service_id FROM services WHERE id = ?`, rec.service_id)
+            ?.service_id ?? 0;
+
+    tell({
+        type: 'tuned',
+        channelType: 'chase',
+        channel: String(rec.id),
+        codecs: codecsFor(codec),
+        codec,
+        audio: audio.id,
+        audios: tracks,
+    });
+    tell({
+        type: 'timeline',
+        at: plan.at,
+        recordedSec: plan.recordedSec,
+        // バーの全長。予定 (終わりのマージン込み) と録れたぶんの長いほう
+        totalSec: Math.max(plan.recordedSec, (rec.end_at + config.endMargin - rec.created_at) / 1000),
+        finished,
+    });
+
+    const path = rec.ts_path;
+    const session = new Session(
+        'chase',
+        `${rec.id}@${Math.round(plan.at)}`,
+        rec.service_id,
+        program,
+        audio,
+        codec,
+        caption,
+        () =>
+            followFile(path, plan.offset, plan.paceBytesPerSec, () => {
+                // 録り終えたら (行が消えたときも)、尻に着いた時点で読み終わり
+                const row = queryOne<{ finished_at: number | null }>(
+                    `SELECT finished_at FROM recordings WHERE id = ?`,
+                    rec.id,
+                );
+                return row === undefined || row.finished_at !== null;
+            }),
+    );
+    void session.run();
+    session.add(viewer);
+    return session;
 }
 
 export interface NowPlaying {

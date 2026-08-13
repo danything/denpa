@@ -1,9 +1,12 @@
+import { fail } from '@sveltejs/kit';
 import { LAST_COOKIE, type LiveCodec } from '$lib/live';
-import { queryAll } from '$lib/server/db';
+import { queryAll, queryOne } from '$lib/server/db';
 import { airing, CURRENT_SERVICES, SERVICE_ORDER, SERVICE_TYPE_ORDER } from '$lib/server/epg';
 import { warm } from '$lib/server/live';
+import { reserve } from '$lib/server/reservations';
 import { settings } from '$lib/server/settings';
 import type { Service } from '$lib/types';
+import type { Actions } from './$types';
 
 /**
  * ライブ視聴で選べる局と、いま流れている番組。
@@ -165,3 +168,37 @@ export function load({ url, cookies }) {
     const current = settings();
     return { channels, start, postalCode: current.postalCode, bmlNetwork: current.bmlNetwork };
 }
+
+export const actions = {
+    /**
+     * **いま観ている番組を録る** (絵の右上の録画ボタン)。
+     *
+     * 番組表からいま流れている番組を引いて、手動予約と同じ道に乗せる
+     * (`reserve`)。既に始まっている番組の予約は次のスケジューラ周期 (数秒) で
+     * そのまま録りはじめる。既に予約済み・録画中なら upsert されるだけで、
+     * 二重には録らない (`reservations` は program_id で1本)
+     */
+    record: async ({ request }) => {
+        const form = await request.formData();
+        const serviceId = Number(form.get('service'));
+        if (!Number.isInteger(serviceId)) return fail(400, { message: '局が分かりません' });
+
+        const at = Date.now();
+        const program = queryOne<{ id: number; name: string }>(
+            `SELECT id, name FROM programs WHERE service_id = ? AND start_at <= ? AND end_at > ?
+             ORDER BY start_at DESC LIMIT 1`,
+            serviceId,
+            at,
+            at,
+        );
+        if (program === undefined) {
+            return fail(404, { message: 'いま流れている番組が番組表に見つかりません' });
+        }
+        try {
+            await reserve(program.id);
+        } catch (error) {
+            return fail(400, { message: error instanceof Error ? error.message : String(error) });
+        }
+        return { recorded: program.name };
+    },
+} satisfies Actions;

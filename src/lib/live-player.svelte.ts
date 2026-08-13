@@ -260,6 +260,23 @@ export function livePlayer() {
      * 用意していない ([docs/stream.md](../../docs/stream.md#58-hybridcast))
      */
     let hybridcast = $state<HybridcastLink[]>([]);
+    /**
+     * 追っかけ再生 ([issue #16](https://github.com/danything/denpa/issues/16))。
+     * 観ている録画と、**いまの ffmpeg が 0 と数える位置** (base 秒)。
+     * シークで焼き直すたびに base が変わる。画面に見せる位置は base + position
+     */
+    let chase = $state<{ recordingId: number; base: number } | null>(null);
+    /** 追っかけの物差し (`timeline` の知らせ)。録画中は右端を壁時計で伸ばして読む */
+    let chaseTimeline = $state<{
+        recordedSec: number;
+        totalSec: number;
+        finished: boolean;
+        since: number;
+    } | null>(null);
+    /** 追っかけが録れているところまで読み切ったか */
+    let chaseEnded = $state(false);
+    /** 読み切ったら、流し残しが尽きたところで器を締める (`finishStream`) */
+    let ending = false;
 
     let socket: WebSocket | null = null;
     let source: MediaSource | null = null;
@@ -545,7 +562,11 @@ export function livePlayer() {
     }
 
     function drain(): void {
-        if (buffer === null || buffer.updating || pending.length === 0) return;
+        if (buffer === null || buffer.updating || pending.length === 0) {
+            // 追っかけを読み切っていて、流し残しも無ければ、ここで器を締める
+            finishStream();
+            return;
+        }
         const next = pending.shift();
         if (next === undefined) return;
         try {
@@ -553,6 +574,21 @@ export function livePlayer() {
         } catch {
             // 追いつけなくなった。次の init から入り直す
             pending.length = 0;
+        }
+    }
+
+    /**
+     * 追っかけを読み切ったら器を締める (`MediaSource.endOfStream`)。
+     * 締めないと、バッファの端で「読み込み中」のまま止まって見える。
+     * 流し残し (`pending`) があるうちは待つ — 締めると残りが入らなくなる
+     */
+    function finishStream(): void {
+        if (!ending || source === null || source.readyState !== 'open') return;
+        if (buffer === null || buffer.updating || pending.length > 0) return;
+        try {
+            source.endOfStream();
+        } catch {
+            // 追加中だった。次の updateend の drain で締め直す
         }
     }
 
@@ -602,6 +638,23 @@ export function livePlayer() {
          * 追いかけ直すのは「ライブへ」を押されたとき (`goLive`)
          */
         if (paused) return;
+
+        /*
+         * **追っかけは放送の今を追いかけない。** 右端は「録れているところ」で、
+         * 貯まりは倍速の送り込み (`server/chase.ts`) でどんどん伸びる。跳びも
+         * 詰めもせず、少し貯まったら選んだ速さで進むだけ。読み切った後は
+         * 貯まりを待たない (もう来ない)
+         */
+        if (chase !== null) {
+            if (!running && (end - video.currentTime >= 0.8 || chaseEnded)) {
+                running = true;
+                state = 'playing';
+                void play(video);
+                onFrame(video, thaw);
+            }
+            if (running && video.playbackRate !== speed) video.playbackRate = speed;
+            return;
+        }
 
         const next = pacing({
             start: buffer.buffered.start(0),
@@ -794,7 +847,14 @@ export function livePlayer() {
      * 待たせているぶんも映像も捨てる
      */
     function setCaptionTrack(index: number): void {
-        if (tuned === null || index === captionTrack) return;
+        if (index === captionTrack) return;
+        // 追っかけも同じ理屈で焼き直し。**居た場所から**開き直す
+        if (chase !== null && element !== null) {
+            captionTrack = index;
+            void openChase(element, chase.recordingId, chase.base + position, true);
+            return;
+        }
+        if (tuned === null) return;
         // 一覧は同じ局のものなので残す (`forget`)
         forget(true);
         captionTrack = index;
@@ -809,7 +869,8 @@ export function livePlayer() {
      * ここで選べるのは遅れて見ているときだけ。追いついたら 1 に戻す (`pace`)
      */
     function setSpeed(next: number): void {
-        if (!chasing) return;
+        // 追っかけ再生 (`chase`) では常に選べる — 放送の今より先が無いのはライブだけ
+        if (!chasing && chase === null) return;
         speed = next;
         if (element !== null) element.playbackRate = next;
     }
@@ -832,6 +893,28 @@ export function livePlayer() {
     }
 
     /**
+     * 追っかけのシーク。**二段構え。**
+     *
+     * 手元に残っている範囲なら `video.currentTime` を動かすだけ (一瞬)。
+     * 外なら `chase` を送り直してサーバに ffmpeg ごと立て直させる — 生TSに
+     * 時間の索引は無いので、跳び先はバイト比例で当たりを付ける (`server/chase.ts`)
+     */
+    function chaseSeek(to: number): void {
+        if (chase === null || element === null) return;
+        const local = to - chase.base;
+        if (buffer !== null && buffer.buffered.length > 0) {
+            const start = buffer.buffered.start(0);
+            const end = buffer.buffered.end(buffer.buffered.length - 1);
+            if (local >= start && local <= end) {
+                element.currentTime = Math.min(end, Math.max(start, local));
+                quiet = Date.now() + GRACE;
+                return;
+            }
+        }
+        void openChase(element, chase.recordingId, to, true);
+    }
+
+    /**
      * 再生の状態だけ初期に戻す。**繋ぎ直さない。**
      *
      * 音声を選び直したときはサーバが焼き直すので、器は作り直すが繋ぎ直す
@@ -851,6 +934,8 @@ export function livePlayer() {
         newest = 0;
         position = 0;
         pending.length = 0;
+        // 作り直した器は開いている。読み切りの印は次の `ended` が立て直す
+        ending = false;
     }
 
     /** 繋ぎも含めて畳む。**画面を離れるときと、繋ぎ直すとき** */
@@ -919,14 +1004,20 @@ export function livePlayer() {
      * 映っていてほしい
      */
     function reconnect(): void {
-        if (retry !== null || left || tuned === null || element === null) return;
+        if (retry !== null || left || (tuned === null && chase === null) || element === null) return;
         state = 'connecting';
         message = '';
         const wait = Math.min(RETRY_MOST, RETRY_FIRST * 2 ** attempts);
         attempts++;
         retry = setTimeout(() => {
             retry = null;
-            if (left || tuned === null || element === null) return;
+            if (left || element === null) return;
+            // 追っかけは**居た場所から**繋ぎ直す (焼き直しても通しの位置は分かる)
+            if (chase !== null) {
+                void openChase(element, chase.recordingId, chase.base + position, true);
+                return;
+            }
+            if (tuned === null) return;
             // 局は変わらないので、選べる字幕の一覧は残す
             void tune(element, tuned, true);
         }, wait);
@@ -941,7 +1032,14 @@ export function livePlayer() {
      * 黒くはならない
      */
     function setAudio(id: string): void {
-        if (tuned === null || element === null || id === audio) return;
+        if (element === null || id === audio) return;
+        // 追っかけも同じ理屈で焼き直し。**居た場所から**開き直す
+        if (chase !== null) {
+            audio = id;
+            void openChase(element, chase.recordingId, chase.base + position, true);
+            return;
+        }
+        if (tuned === null) return;
         // 局は変わらないので、選べる字幕の一覧はそのまま使える (`forget`)
         void tune(element, { ...tuned, audio: id }, true);
     }
@@ -996,7 +1094,14 @@ export function livePlayer() {
 
     /** 中身。**断り書きを消さない**ので、戻すときにも使える */
     function swapCodec(next: LiveCodec): void {
-        if (tuned === null || element === null || next === codec) return;
+        if (element === null || next === codec) return;
+        // 追っかけも同じ理屈で焼き直し。**居た場所から**開き直す
+        if (chase !== null) {
+            codec = next;
+            void openChase(element, chase.recordingId, chase.base + position, true);
+            return;
+        }
+        if (tuned === null) return;
         // 局は変わらないので、選べる字幕の一覧はそのまま使える (`forget`)
         void tune(element, { ...tuned, codec: next }, true);
     }
@@ -1019,6 +1124,55 @@ export function livePlayer() {
      *   true** (`forget` の説明)。待たせている字幕はどの道いつも捨てる
      */
     async function tune(video: HTMLVideoElement, target: Tuned, keepList = false): Promise<void> {
+        chase = null;
+        chaseTimeline = null;
+        tuned = target;
+        audio = target.audio ?? '';
+        codec = target.codec ?? 'h264';
+        remember(target);
+        await begin(video, keepList);
+    }
+
+    /**
+     * 追っかけ再生を開く ([issue #16](https://github.com/danything/denpa/issues/16))。
+     * **録画中の録画を、いま録れているところまで観る。** 器も繋ぎもライブと
+     * 同じで、送る指示だけ違う (`chase`)。範囲の外へのシークもこれ —
+     * サーバが ffmpeg ごと立て直す (選局し直しと同じ流儀)
+     */
+    async function openChase(
+        video: HTMLVideoElement,
+        recordingId: number,
+        at = 0,
+        keepList = false,
+    ): Promise<void> {
+        tuned = null;
+        chase = { recordingId, base: Math.max(0, at) };
+        chaseEnded = false;
+        await begin(video, keepList);
+    }
+
+    /**
+     * いま頼みたいこと。**繋いだ直後と繋ぎ直しで同じものを送る** —
+     * 中身を書き写していた頃は、足したものをどちらかへ足し忘れると
+     * 「繋ぎ直したときだけ抜ける」という出方をした
+     */
+    function wantedCommand(): Command | null {
+        if (chase !== null) {
+            return {
+                type: 'chase',
+                recordingId: chase.recordingId,
+                at: chase.base,
+                audio: audio === '' ? undefined : audio,
+                codec,
+                caption: captionTrack,
+            };
+        }
+        if (tuned !== null) return { type: 'tune', ...tuned };
+        return null;
+    }
+
+    /** 繋いで頼む。選局 (`tune`) と追っかけ (`openChase`) の共通の後半 */
+    async function begin(video: HTMLVideoElement, keepList: boolean): Promise<void> {
         element = video;
         left = false;
         // 数え直す。焼き直しでも器から作り直しになるので、前の数は続きではない
@@ -1030,7 +1184,7 @@ export function livePlayer() {
         /*
          * **繋がっていれば繋ぎ直さない。**
          *
-         * 取り決めは1本の WebSocket に何度でも `tune` を送れる形になっていて
+         * 取り決めは1本の WebSocket に何度でも指示を送れる形になっていて
          * (`server/live.ts` の `attend`)、音声の選び直しは前からそうしていた。
          * 局を変えるときだけ張り直していたのは**ただの取りこぼし**で、実測で
          * 札を取り直すのに 50ms、握手に 50ms 掛かっていた
@@ -1041,14 +1195,11 @@ export function livePlayer() {
 
         state = 'connecting';
         message = '';
-        tuned = target;
-        audio = target.audio ?? '';
-        codec = target.codec ?? 'h264';
         quiet = Date.now() + GRACE;
-        remember(target);
 
         if (open) {
-            socket?.send(JSON.stringify({ type: 'tune', ...target } satisfies Command));
+            const command = wantedCommand();
+            if (command !== null) socket?.send(JSON.stringify(command));
             return;
         }
 
@@ -1076,13 +1227,9 @@ export function livePlayer() {
         ws.onopen = () => {
             // 繋がった。次に切れたときはまた1秒から待ち直す
             attempts = 0;
-            /*
-             * **`Tuned` をそのまま渡す。** 中身を書き写していた頃は、
-             * `Tuned` に足したものをここへ足し忘れると**繋ぎ直したときだけ
-             * 抜ける**という出方をした (焼き方を選んで開き直すと H.264 に
-             * 戻っていた。繋いだままの選び直しでは効くので、余計に分かりにくい)
-             */
-            ws.send(JSON.stringify({ type: 'tune', ...target } satisfies Command));
+            // 頼みごとは1箇所で組む (`wantedCommand`)。書き写しは繋ぎ直しで抜ける
+            const command = wantedCommand();
+            if (command !== null) ws.send(JSON.stringify(command));
             /*
              * **繋ぎ直したら頼み直す。** データ放送を出すかどうかはサーバ側では
              * 繋ぎ (Viewer) に紐づいているので、切れると忘れられる。局を変える
@@ -1106,7 +1253,7 @@ export function livePlayer() {
         ws.onclose = () => {
             if (socket !== ws || state === 'error') return;
             socket = null;
-            if (left || tuned === null || element === null) {
+            if (left || (tuned === null && chase === null) || element === null) {
                 state = 'idle';
                 return;
             }
@@ -1131,6 +1278,23 @@ export function livePlayer() {
                     captionTrack = notice.track;
                 } else if (notice.type === 'hybridcast') {
                     hybridcast = notice.apps;
+                } else if (notice.type === 'timeline') {
+                    /*
+                     * 追っかけの物差し。**base はサーバが決めた実際の開始位置に
+                     * 合わせ直す** — 頼んだ位置は録れている範囲に収められることがある
+                     */
+                    if (chase !== null) chase = { ...chase, base: notice.at };
+                    chaseTimeline = {
+                        recordedSec: notice.recordedSec,
+                        totalSec: notice.totalSec,
+                        finished: notice.finished,
+                        since: Date.now(),
+                    };
+                } else if (notice.type === 'ended') {
+                    // 録れているところまで読み切った。流し残しが尽きたら器を締める
+                    chaseEnded = true;
+                    ending = true;
+                    finishStream();
                 } else if (notice.type === 'tuned') {
                     /*
                      * **選べる音声はここで初めて分かる。** どれが選べるかは
@@ -1439,5 +1603,24 @@ export function livePlayer() {
         unmute,
         setAudio,
         stop,
+        /* ---- 追っかけ再生 ([issue #16](https://github.com/danything/denpa/issues/16)) ---- */
+        openChase,
+        chaseSeek,
+        /** 追っかけ再生か。録画中の録画を観ている */
+        get chaseMode() {
+            return chase !== null;
+        },
+        /** 追っかけの再生位置 (秒)。焼き直しをまたいで通しで数える */
+        get chasePosition() {
+            return chase === null ? 0 : chase.base + position;
+        },
+        /** 追っかけの物差し。右端は送られた時点の値 — 録画中は画面が壁時計で伸ばす */
+        get chaseTimeline() {
+            return chaseTimeline;
+        },
+        /** 追っかけが録れているところまで読み切ったか */
+        get chaseEnded() {
+            return chaseEnded;
+        },
     };
 }

@@ -28,6 +28,8 @@ export const SHRINK = 'M5 16h3v3h2v-5H5v2zm3-8H5v2h5V5H8v3zm6 11h2v-3h3v-2h-5v5z
  * **10秒送り・戻しの絵は持たない。** PCは矢印キー、指は左右の端を素早く2回
  * (`ts/watch.ts` の `tap`) でできるので、絵の上に常に2つ置くだけの用が無かった
  */
+/** 録画 (ライブの右上)。押すといま流れている番組の録画が始まる */
+export const RECORD = 'M19,12A7,7 0 0,1 12,19A7,7 0 0,1 5,12A7,7 0 0,1 12,5A7,7 0 0,1 19,12Z';
 export const PREV = 'M6 6h2v12H6zm3.5 6l8.5 6V6z';
 export const NEXT = 'M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z';
 export const CAMERA =

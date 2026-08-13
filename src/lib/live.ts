@@ -116,6 +116,32 @@ export type Notice =
       }
     | {
           /**
+           * 追っかけ再生の物差し ([docs/stream.md](../../docs/stream.md)、issue #16)。
+           * `chase` に答えて `tuned` の直後に来る。
+           *
+           * **右端は伸び続ける。** 録画中は `recordedSec` を送った時点の値なので、
+           * 画面は壁時計で足しながら描く (`finished` になったら止める)
+           */
+          type: 'timeline';
+          /** 実際に始まる再生位置 (秒)。頼んだ位置が録れている範囲に収められた後 */
+          at: number;
+          /** いま録れている長さ (秒) */
+          recordedSec: number;
+          /** 予定の長さ (秒)。バーの全長。録れたほうが長ければそちらが勝つ */
+          totalSec: number;
+          /** 録り終わっているか。true なら右端はもう伸びない */
+          finished: boolean;
+      }
+    | {
+          /**
+           * 追っかけ再生が**録れているところまで読み切った**。エラーではない。
+           * 画面は器を締める (`MediaSource.endOfStream`) — 締めないと、
+           * バッファの端で「読み込み中」のまま止まって見える
+           */
+          type: 'ended';
+      }
+    | {
+          /**
            * **Hybridcast が載っている番組。** AIT を読んで分かる
            * ([ts/ait.ts](ts/ait.ts))。
            *
@@ -153,6 +179,7 @@ export interface HybridcastLink {
  */
 export type Command =
     | TuneCommand
+    | ChaseCommand
     /**
      * データ放送を出す・やめる。
      *
@@ -161,6 +188,29 @@ export type Command =
      * 引き換えに、**押してから出るまでカルーセルが一周するのを待つ**
      */
     | { type: 'data'; on: boolean };
+
+/**
+ * 追っかけ再生 — **録画中の録画を頭から観る** (issue #16)。
+ *
+ * チューナーは掴まない。録画が書き足している生TSをサーバが追い読みして、
+ * ライブと同じ形 (fMP4 → この WebSocket) で焼き直す (`server/chase.ts`)。
+ *
+ * **シークもこれを送り直す。** 生TSに時間の索引は無いので、跳ぶときは
+ * ffmpeg ごと立て直す (ライブの選局し直しと同じ流儀)。バッファに残っている
+ * 範囲内なら画面は送らずに `video.currentTime` だけ動かす
+ */
+export type ChaseCommand = {
+    type: 'chase';
+    recordingId: number;
+    /** 再生開始位置 (秒)。省くと頭から */
+    at?: number;
+    /** どの音声を出すか。`TuneCommand.audio` と同じ理屈 */
+    audio?: string;
+    /** どの形で焼くか。省くと `h264` */
+    codec?: LiveCodec;
+    /** 何本目の字幕か。省くと1本目 */
+    caption?: number;
+};
 
 export type TuneCommand = {
     type: 'tune';

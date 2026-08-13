@@ -51,6 +51,8 @@ interface ReservationRow extends Reservation {
     rule_name: string | null;
     /** 局ロゴを拾えているか。局名の隣に出す */
     has_logo: number | null;
+    /** 録画中の録画のID。追っかけ再生 (`/chase/<id>`) への入口 (issue #16) */
+    recording_id: number | null;
 }
 
 /**
@@ -114,7 +116,8 @@ export function load({ url }) {
     const reservations = queryAll<ReservationRow>(
         // 最後の state が r.* の state を隠す。出したいのは録画から引いたほう
         `SELECT r.*, s.name AS service_name, s.has_logo AS has_logo, rules.name AS rule_name,
-                ${RESERVATION_STATE} AS state
+                ${RESERVATION_STATE} AS state,
+                CASE WHEN rec.state = 'recording' THEN rec.id END AS recording_id
          FROM reservations r
          JOIN services s ON s.id = r.service_id
          LEFT JOIN rules ON rules.id = r.rule_id

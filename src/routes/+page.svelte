@@ -420,6 +420,16 @@
                                 </div>
 
                                 <div class="flex shrink-0 flex-wrap items-center gap-2">
+                                    {#if res.recording_id !== null}
+                                        <!-- 追っかけ再生 (issue #16)。録っている最中でも頭から観られる -->
+                                        <a
+                                            class="btn btn-primary"
+                                            href="/chase/{res.recording_id}"
+                                            data-testid="chase-button"
+                                        >
+                                            追っかけ
+                                        </a>
+                                    {/if}
                                     {#if active.includes(res.state)}
                                         <form method="POST" action="?/cancel" use:submitting>
                                             <input type="hidden" name="id" value={res.id} />
