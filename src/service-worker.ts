@@ -103,15 +103,21 @@ worker.addEventListener('backgroundfetchsuccess', (event) => {
             if (held === undefined) return; // 画面側の控えが無い (先に消された)
 
             for (const record of await event.registration.matchAll()) {
-                const kind = kindOf(record.request.url);
-                if (kind === null) continue;
-                const response = await record.responseReady.catch(() => null);
-                if (response === null || !response.ok) continue;
-                if (kind === 'video') held.video = await response.blob();
-                else if (kind === 'captions') held.captions = await response.blob();
-                else if (kind === 'poster') held.poster = await response.blob();
-                else if (kind === 'chapters') held.chapters = await response.json().catch(() => undefined);
-                else held.databroadcast = await response.json().catch(() => undefined);
+                // 1つ読めなくても他は仕舞う。動画さえあれば観られる (下の確認)
+                try {
+                    const kind = kindOf(record.request.url);
+                    if (kind === null) continue;
+                    const response = await record.responseReady.catch(() => null);
+                    if (response === null || !response.ok) continue;
+                    if (kind === 'video') held.video = await response.blob();
+                    else if (kind === 'captions') held.captions = await response.blob();
+                    else if (kind === 'poster') held.poster = await response.blob();
+                    else if (kind === 'chapters')
+                        held.chapters = await response.json().catch(() => undefined);
+                    else held.databroadcast = await response.json().catch(() => undefined);
+                } catch {
+                    // その1つを諦める
+                }
             }
 
             if (held.video === undefined) {

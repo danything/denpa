@@ -21,7 +21,7 @@
         time,
     } from '$lib/format';
     import { liveUpdates } from '$lib/live-updates.svelte';
-    import { offline, removeLocal, saveOffline } from '$lib/offline.svelte';
+    import { clearFailed, offline, removeLocal, saveOffline } from '$lib/offline.svelte';
     import { encodeSource } from '$lib/source';
 
     let { data, form } = $props();
@@ -63,6 +63,17 @@
 
     /** 端末への保存の結果。フォームではないので自前で持つ */
     let offlineNote = $state<Notice | null>(null);
+
+    /** 裏で失敗した保存 (Background Fetch)。黙って消えると「無かったことになった」ように見える */
+    $effect(() => {
+        if (offline.failed === null) return;
+        offlineNote = {
+            key: `offline-failed-${offline.failed}`,
+            kind: 'error',
+            text: '端末への保存に失敗しました。もう一度試してください',
+        };
+        clearFailed();
+    });
 
     /** 押した結果。出す場所と消え方は Toasts が持っている */
     const notices = $derived.by(() => {

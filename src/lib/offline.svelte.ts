@@ -33,6 +33,8 @@ export interface OfflineEntry {
 let entries = $state<Record<number, OfflineEntry>>({});
 /** サーバからも消すと決めたもの (outbox)。一覧で「消える予定」と出す */
 let pendingDelete = $state<Record<number, boolean>>({});
+/** 保存に失敗した録画。画面が読んだら消す (`clearFailed`) — 黙って消えると分からない */
+let failed = $state<number | null>(null);
 let started = false;
 
 export const offline = {
@@ -43,11 +45,19 @@ export const offline = {
     get pendingDelete(): Record<number, boolean> {
         return pendingDelete;
     },
+    /** 保存に失敗した録画のID。画面はこれを見て知らせを出す */
+    get failed(): number | null {
+        return failed;
+    },
     /** この端末で使えるか。IndexedDB と SW があれば、落とし方はどちらかで賄える */
     get usable(): boolean {
         return browser && 'indexedDB' in globalThis && 'serviceWorker' in navigator;
     },
 };
+
+export function clearFailed(): void {
+    failed = null;
+}
 
 async function refresh(): Promise<void> {
     const all = await videos.all();
@@ -118,8 +128,10 @@ export function startOffline(): void {
     void refresh().then(() => watchRunning());
     window.addEventListener('online', () => void flush());
     navigator.serviceWorker.addEventListener('message', (event) => {
-        const type = (event.data as { type?: string } | null)?.type;
-        if (type === 'offline-saved' || type === 'offline-failed') void refresh();
+        const data = event.data as { type?: string; id?: number } | null;
+        if (data?.type === 'offline-saved' || data?.type === 'offline-failed') void refresh();
+        // 失敗は黙って控えが消えるだけだと「無かったことになった」ように見える。画面に知らせる
+        if (data?.type === 'offline-failed' && typeof data.id === 'number') failed = data.id;
     });
     if (navigator.onLine) void flush();
 }
@@ -169,6 +181,40 @@ export interface SaveTarget {
 }
 
 /**
+ * これから落とすものを HEAD で下見して、**在るものだけ**に絞り、実サイズを足す。
+ *
+ * どちらも Background Fetch の仕様が理由 (実機の Edge で踏んだ):
+ *
+ * - **404 が1つでも混ざると全体が失敗になる** (`failureReason: bad-status`)。
+ *   付き添い (字幕・データ放送・ポスター) は無い録画もあるので、そのまま
+ *   渡すと**動画は落ち終わっているのに**全部が捨てられる。進みは 97% あたりで
+ *   止まり、控えごと消えて「無かったことになった」ように見えていた
+ * - **downloadTotal を超えた時点で打ち切られる。** 当てずっぽうの見積もりでは
+ *   なく、測った合計を渡す
+ */
+async function probeDownloads(requests: string[]): Promise<{ urls: string[]; total: number | null }> {
+    const urls: string[] = [];
+    let total = 0;
+    for (const url of requests) {
+        const video = url.includes('/file?');
+        try {
+            const res = await fetch(url, { method: 'HEAD' });
+            if (!res.ok) {
+                if (video) throw new Error('動画を取得できませんでした');
+                continue; // 無い付き添いは落とさない
+            }
+            urls.push(url);
+            const length = Number(res.headers.get('content-length'));
+            if (Number.isFinite(length) && length > 0) total += length;
+        } catch (error) {
+            if (video) throw error instanceof Error ? error : new Error('動画を取得できませんでした');
+            // 付き添いの下見に失敗しただけなら、そのぶんを諦めて先へ
+        }
+    }
+    return { urls, total: total > 0 ? total : null };
+}
+
+/**
  * 端末に保存する。**どちらを落とすかはここで決める** — 既定は AV1、
  * 端末が解けなければ H.264 (両方焼いた録画だけ)。
  */
@@ -178,7 +224,10 @@ export async function saveOffline(rec: SaveTarget): Promise<void> {
         if (rec.alt_path === null) throw new Error('この端末は AV1 を再生できず、H.264 版もありません');
         source = 'alt';
     }
-    await ensureRoom(rec.ts_size);
+
+    // 下見して、在るものだけに絞る (404 が混ざると全体が失敗になる)
+    const { urls, total } = await probeDownloads(downloadRequests(rec.id, source));
+    await ensureRoom(total ?? rec.ts_size);
 
     const held: OfflineVideo = {
         id: rec.id,
@@ -193,20 +242,20 @@ export async function saveOffline(rec: SaveTarget): Promise<void> {
     await videos.put(held);
     entries = { ...entries, [rec.id]: { id: rec.id, state: 'downloading', source, progress: null } };
 
-    const requests = downloadRequests(rec.id, source);
     try {
         const reg = await navigator.serviceWorker.ready;
         if (reg.backgroundFetch !== undefined) {
-            // ブラウザに預ける。受け取りは SW (service-worker.ts)
-            const running = await reg.backgroundFetch.fetch(fetchId(rec.id, source), requests, {
+            // ブラウザに預ける。受け取りは SW (service-worker.ts)。
+            // downloadTotal は実測の合計 + 2% (転送の揺れぶん。超えたら打ち切られる)
+            const running = await reg.backgroundFetch.fetch(fetchId(rec.id, source), urls, {
                 title: `denpa: ${rec.name}`,
-                downloadTotal: rec.ts_size > 0 ? Math.round(rec.ts_size * 1.05) : undefined,
+                downloadTotal: total === null ? undefined : Math.round(total * 1.02),
             });
             watchProgress(running);
             return;
         }
         // 対応していないブラウザ。タブを開いたまま、ページで落とす
-        await downloadInPage(held, requests);
+        await downloadInPage(held, urls);
     } catch (error) {
         await videos.remove(rec.id);
         await refresh();
