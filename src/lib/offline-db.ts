@@ -54,7 +54,7 @@ export interface OutboxItem {
 
 export interface ResumeItem {
     id: number;
-    /** 再生位置 (秒)。サーバの `PUT` と同じ形 */
+    /** 再生位置 (秒)。サーバの `POST …/resume` と同じ形 */
     at: number;
     length: number;
     updatedAt: number;
@@ -109,6 +109,26 @@ export function kindOf(url: string): 'video' | 'captions' | 'chapters' | 'databr
     return null;
 }
 
+/**
+ * 落としたものを控えの正しい置き場に仕舞う。**SW の受け取りとページ主導の
+ * フォールバックで同じ仕分け** (どちらか片方だけ直すと形が食い違う)。
+ * 動画だけは読み方を差し替えられる (ページ主導は進み具合を数えながら読む)
+ */
+export async function storeResponse(
+    held: OfflineVideo,
+    url: string,
+    response: Response,
+    readVideo: (response: Response) => Promise<Blob> = (r) => r.blob(),
+): Promise<void> {
+    const kind = kindOf(url);
+    if (kind === null) return;
+    if (kind === 'video') held.video = await readVideo(response);
+    else if (kind === 'captions') held.captions = await response.blob();
+    else if (kind === 'poster') held.poster = await response.blob();
+    else if (kind === 'chapters') held.chapters = await response.json().catch(() => undefined);
+    else held.databroadcast = await response.json().catch(() => undefined);
+}
+
 function openDb(): Promise<IDBDatabase> {
     return new Promise((resolve, reject) => {
         const req = indexedDB.open(DB, VERSION);
@@ -156,6 +176,7 @@ export const outbox = {
 };
 
 export const resumeQueue = {
+    get: (id: number) => tx<ResumeItem | undefined>('resume', 'readonly', (s) => s.get(id)),
     all: () => tx<ResumeItem[]>('resume', 'readonly', (s) => s.getAll()),
     put: (value: ResumeItem) => tx('resume', 'readwrite', (s) => s.put(value)),
     remove: (id: number) => tx('resume', 'readwrite', (s) => s.delete(id)),

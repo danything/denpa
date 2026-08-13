@@ -32,14 +32,17 @@
 
     onMount(() => {
         startOffline();
-        void load();
-        // SW が「保存できた」と言ってきたら映し直す
-        const onMessage = () => void load();
-        navigator.serviceWorker?.addEventListener('message', onMessage);
         return () => {
-            navigator.serviceWorker?.removeEventListener('message', onMessage);
             stop();
+            for (const url of posterUrls.values()) URL.revokeObjectURL(url);
+            posterUrls.clear();
         };
+    });
+
+    // 控えが変わったら映し直す。SW の「保存できた」も startOffline が拾って revision に出る
+    $effect(() => {
+        offline.revision;
+        void load();
     });
 
     function stop(): void {
@@ -57,7 +60,7 @@
         src = URL.createObjectURL(item.video);
         poster = item.poster === undefined ? null : URL.createObjectURL(item.poster);
         // 前回の続きから。オフライン中の位置は resumeQueue に覚えている
-        const kept = (await resumeQueue.all()).find((r) => r.id === item.id);
+        const kept = await resumeQueue.get(item.id);
         if (kept !== undefined && video !== null) video.currentTime = kept.at;
     }
 
@@ -86,7 +89,7 @@
     }
 
     const posterUrls = new Map<number, string>();
-    /** 一覧のサムネイル。blob から作った URL はページを離れるまで使い回す */
+    /** 一覧のサムネイル。blob から作った URL は使い回し、ページを離れるとき破棄する (onMount) */
     function posterUrl(item: OfflineVideo): string | null {
         if (item.poster === undefined) return null;
         let url = posterUrls.get(item.id);

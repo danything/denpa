@@ -19,14 +19,13 @@ import {
     outbox,
     parseFetchId,
     resumeQueue,
+    storeResponse,
     videos,
 } from './offline-db';
 
 /** 画面に映すぶんだけ。blob はここに持たない (要るときに IndexedDB から) */
 export interface OfflineEntry {
-    id: number;
     state: 'downloading' | 'ready' | 'failed';
-    source: 'encoded' | 'alt';
     /** 落とせた割合 (0〜1)。測れない間は null (動いているだけのバーにする) */
     progress: number | null;
 }
@@ -36,6 +35,8 @@ let entries = $state<Record<number, OfflineEntry>>({});
 let pendingDelete = $state<Record<number, boolean>>({});
 /** 保存に失敗した録画。画面が読んだら消す (`clearFailed`) — 黙って消えると分からない */
 let failed = $state<number | null>(null);
+/** 控えが変わるたびに増える。`/offline` の一覧はこれを見て読み直す */
+let revision = $state(0);
 let started = false;
 
 export const offline = {
@@ -49,6 +50,10 @@ export const offline = {
     /** 保存に失敗した録画のID。画面はこれを見て知らせを出す */
     get failed(): number | null {
         return failed;
+    },
+    /** 控えの読み直しの回数。一覧の映し直しの合図に使う */
+    get revision(): number {
+        return revision;
     },
     /** この端末で使えるか。IndexedDB と SW があれば、落とし方はどちらかで賄える */
     get usable(): boolean {
@@ -64,19 +69,15 @@ async function refresh(): Promise<void> {
     const all = await videos.all();
     const next: Record<number, OfflineEntry> = {};
     for (const v of all) {
-        // 進み具合は IndexedDB に無い (progress イベントから来る)。読み直しで消さない
-        next[v.id] = {
-            id: v.id,
-            state: v.state,
-            source: v.source,
-            progress: entries[v.id]?.progress ?? null,
-        };
+        // 進み具合は IndexedDB に無い (watchProgress が訊きに行く)。読み直しで消さない
+        next[v.id] = { state: v.state, progress: entries[v.id]?.progress ?? null };
     }
     entries = next;
 
     const queued: Record<number, boolean> = {};
     for (const item of await outbox.all()) queued[item.id] = true;
     pendingDelete = queued;
+    revision += 1;
 }
 
 /** 進み具合を1件ぶん書き換える。無い行には書かない (先に消されたもの) */
@@ -98,8 +99,7 @@ const polling = new Set<number>();
  * (開き直すと取り直すので直る)。get() で毎回新しく掴めば必ず今の値が読める。
  * 終わったかどうかはここでは決めない — 成否は SW の受け取りが伝えてくる
  */
-function watchProgress(reg: BackgroundFetchRegistration): void {
-    const parsed = parseFetchId(reg.id);
+function watchProgress(reg: BackgroundFetchRegistration, parsed = parseFetchId(reg.id)): void {
     if (parsed === null || polling.has(parsed.id)) return;
     polling.add(parsed.id);
 
@@ -143,9 +143,10 @@ async function watchRunning(): Promise<void> {
         for (const id of await reg.backgroundFetch.getIds()) {
             const running = await reg.backgroundFetch.get(id);
             if (running === undefined) continue;
-            watchProgress(running);
             const parsed = parseFetchId(running.id);
-            if (parsed !== null) alive.add(parsed.id);
+            if (parsed === null) continue;
+            watchProgress(running, parsed);
+            alive.add(parsed.id);
         }
 
         for (const held of await videos.all()) {
@@ -289,7 +290,7 @@ export async function saveOffline(rec: SaveTarget): Promise<void> {
         downloadedAt: Date.now(),
     };
     await videos.put(held);
-    entries = { ...entries, [rec.id]: { id: rec.id, state: 'downloading', source, progress: null } };
+    entries = { ...entries, [rec.id]: { state: 'downloading', progress: null } };
 
     try {
         const reg = await navigator.serviceWorker.ready;
@@ -332,7 +333,7 @@ async function blobWithProgress(id: number, response: Response): Promise<Blob> {
     return new Blob(parts);
 }
 
-/** ページ主導のフォールバック。SW の受け取りと同じ仕分けをこちらでやる */
+/** ページ主導のフォールバック。仕分けは SW の受け取りと同じ (`storeResponse`) */
 async function downloadInPage(held: OfflineVideo, requests: string[]): Promise<void> {
     for (const url of requests) {
         const response = await fetch(url).catch(() => null);
@@ -340,11 +341,8 @@ async function downloadInPage(held: OfflineVideo, requests: string[]): Promise<v
             if (url.includes('/file?')) throw new Error('動画を取得できませんでした');
             continue; // 付き添いは無い録画もある
         }
-        if (url.includes('/file?')) held.video = await blobWithProgress(held.id, response);
-        else if (url.includes('captions.sup')) held.captions = await response.blob();
-        else if (url.includes('poster')) held.poster = await response.blob();
-        else if (url.includes('chapters')) held.chapters = await response.json().catch(() => undefined);
-        else held.databroadcast = await response.json().catch(() => undefined);
+        // 動画だけは進み具合を数えながら読む
+        await storeResponse(held, url, response, (r) => blobWithProgress(held.id, r));
     }
     held.state = 'ready';
     held.downloadedAt = Date.now();
@@ -399,7 +397,7 @@ export async function rememberResume(id: number, at: number, length: number): Pr
  * 削除は `DELETE /api/recordings/<id>`、視聴位置は `POST …/resume`。
  * 404 は「もう無い」なので済んだことにする。他の失敗は残して次の復帰で再試行
  */
-export async function flush(): Promise<void> {
+async function flush(): Promise<void> {
     for (const item of await outbox.all()) {
         try {
             const res = await fetch(`/api/recordings/${item.id}`, { method: 'DELETE' });

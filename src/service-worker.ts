@@ -12,7 +12,7 @@
  * 預けたダウンロードが終わったら IndexedDB へ移す。配信のキャッシュはしない。
  */
 
-import { kindOf, parseFetchId, videos } from '$lib/offline-db';
+import { parseFetchId, storeResponse, videos } from '$lib/offline-db';
 import { build, files, version } from '$service-worker';
 
 const CACHE = `denpa-${version}`;
@@ -107,16 +107,9 @@ worker.addEventListener('backgroundfetchsuccess', (event) => {
             for (const record of await event.registration.matchAll()) {
                 // 1つ読めなくても他は仕舞う。動画さえあれば観られる (下の確認)
                 try {
-                    const kind = kindOf(record.request.url);
-                    if (kind === null) continue;
                     const response = await record.responseReady.catch(() => null);
                     if (response === null || !response.ok) continue;
-                    if (kind === 'video') held.video = await response.blob();
-                    else if (kind === 'captions') held.captions = await response.blob();
-                    else if (kind === 'poster') held.poster = await response.blob();
-                    else if (kind === 'chapters')
-                        held.chapters = await response.json().catch(() => undefined);
-                    else held.databroadcast = await response.json().catch(() => undefined);
+                    await storeResponse(held, record.request.url, response);
                 } catch {
                     // その1つを諦める
                 }
