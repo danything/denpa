@@ -23,8 +23,17 @@ export function GET() {
             };
 
             send(': connected\n\n');
-            unsubscribe = subscribe((event: DenpaEvent) => send(`event: ${event}\ndata: 1\n\n`));
-            timer = setInterval(() => send(': ping\n\n'), HEARTBEAT);
+            unsubscribe = subscribe((event: DenpaEvent, payload?: unknown) =>
+                send(`event: ${event}\ndata: ${payload === undefined ? '1' : JSON.stringify(payload)}\n\n`),
+            );
+            /*
+             * **名前付きイベントで送る。** コメント行 (`: ping`) は繋ぎを保つには
+             * 十分だが、**EventSource の API からは見えない** — 遅い回線で TCP が
+             * 黙って死ぬと、画面側は「開いているつもりで何も来ない」接続を
+             * 見分けられなかった。見えるイベントにすれば、画面側の番犬が
+             * 「しばらく何も届いていない」で死んだ繋ぎに気付ける (`live-updates`)
+             */
+            timer = setInterval(() => send('event: ping\ndata: 1\n\n'), HEARTBEAT);
             timer.unref?.();
         },
         cancel() {

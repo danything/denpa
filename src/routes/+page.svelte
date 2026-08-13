@@ -5,6 +5,7 @@
     import Toasts, { type Notice } from '$lib/components/Toasts.svelte';
     import { type DetailSeed, programDetail } from '$lib/detail.svelte';
     import { withCredentials } from '$lib/download';
+    import { applyEncodeProgress, encodeLive } from '$lib/encode-live.svelte';
     import {
         badgeClass,
         cmNoteWorthShowing,
@@ -27,8 +28,9 @@
 
     let { data, form } = $props();
 
-    // 予約・録画のどちらが動いてもサーバが知らせてくる
-    liveUpdates(['recordings', 'reservations']);
+    // 予約・録画のどちらが動いてもサーバが知らせてくる。
+    // エンコードの進み具合だけは中身ごと届き、読み直さず行の数字を書き換える
+    liveUpdates(['recordings', 'reservations'], { encode: applyEncodeProgress });
 
     const active = ['scheduled', 'conflict', 'recording'];
 
@@ -699,12 +701,15 @@
                                         段階の名前だけだと止まっているように見えていた
                                     -->
                                     {#if rec.job_state === 'running' && rec.job_phase === 'encode'}
+                                        <!-- SSE の生放送 (encode-live) があればそちら。読み直しを待たずに動く -->
+                                        {@const live = encodeLive.entries[rec.id]}
+                                        {@const liveEta = live !== undefined ? live.etaMs : rec.job_eta_ms}
                                         <div
                                             class="text-base-content/60 mt-0.5 text-xs"
                                             data-testid="encode-progress"
                                         >
-                                            {percent(rec.job_percent ?? 0)}
-                                            {#if eta(rec.job_eta_ms)}・{eta(rec.job_eta_ms)}{/if}
+                                            {percent(live?.percent ?? rec.job_percent ?? 0)}
+                                            {#if eta(liveEta)}・{eta(liveEta)}{/if}
                                         </div>
                                     {:else if rec.job_state === 'running' && rec.job_log}
                                         <div
@@ -803,10 +808,11 @@
                                 取れないものもあるので、そのときは動いているだけのバーにする
                             -->
                             {#if rec.job_id !== null}
+                                {@const barPercent = encodeLive.entries[rec.id]?.percent ?? rec.job_percent ?? 0}
                                 <progress
                                     class="progress progress-primary absolute inset-x-0 bottom-0 h-1 w-full rounded-none"
-                                    value={rec.job_state === 'running' && (rec.job_percent ?? 0) > 0
-                                        ? rec.job_percent
+                                    value={rec.job_state === 'running' && barPercent > 0
+                                        ? barPercent
                                         : undefined}
                                     max="1"
                                     data-testid="encode-bar"

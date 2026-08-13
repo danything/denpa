@@ -24,7 +24,7 @@ import {
 } from './cm';
 import { config } from './config';
 import { database, now, queryOne } from './db';
-import { emit } from './events';
+import { type EncodeProgress, emit } from './events';
 import { removeIfExists } from './fsx';
 import { encodedPath, libraryFamily, libraryPath } from './library';
 import { removeSidecars, sidecarPaths, writeNfo, writeThumbnail } from './metadata';
@@ -784,8 +784,18 @@ async function runFfmpeg(
                 if (wroteAt - lastWrite >= PROGRESS_INTERVAL) {
                     lastWrite = wroteAt;
                     updateProgress.run(percent, etaMs, log, job.id);
-                    // 進み具合を画面にも流す。書き込みと同じ間隔なので、これ以上細かくはならない
-                    emit('recordings');
+                    /*
+                     * 進み具合は**中身ごと**流す (`encode` イベント)。`recordings` で
+                     * 流していた頃は、数秒おきに一覧がページ全体を読み直していて、
+                     * 遅い回線では読み直しの往復ぶん数字が遅れた。中身が届けば
+                     * 画面は該当行の数字を書き換えるだけで済む
+                     */
+                    emit('encode', {
+                        recordingId: job.recording_id,
+                        percent,
+                        etaMs,
+                        log,
+                    } satisfies EncodeProgress);
                 }
             }
         }
