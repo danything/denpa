@@ -86,22 +86,44 @@ function setProgress(id: number, progress: number | null): void {
     entries = { ...entries, [id]: { ...held, progress } };
 }
 
+/** 進み具合を見ている最中の録画。同じものを二重に見ない */
+const polling = new Set<number>();
+
 /**
- * ブラウザに預けたダウンロードの進み具合を映す。
- * **エンコードと同じ見せ方**をするために、`progress` イベントを行の割合に流し込む。
- * downloadTotal が無い (大きさの分からない) ものは null のまま — バーは動くだけになる
+ * ブラウザに預けたダウンロードの進み具合を映す。**訊きに行く (2秒おき)。**
+ *
+ * `progress` イベントに任せていたが、**登録時に掴んだオブジェクトへの通知は
+ * 途中で途切れることがある** — 遅い回線でブラウザがダウンロードを止めて
+ * 再開すると、その後のイベントが届かず、割合が張り付いたままになっていた
+ * (開き直すと取り直すので直る)。get() で毎回新しく掴めば必ず今の値が読める。
+ * 終わったかどうかはここでは決めない — 成否は SW の受け取りが伝えてくる
  */
 function watchProgress(reg: BackgroundFetchRegistration): void {
-    const update = () => {
-        const parsed = parseFetchId(reg.id);
-        if (parsed === null) return;
-        setProgress(
-            parsed.id,
-            reg.downloadTotal > 0 ? Math.min(1, reg.downloaded / reg.downloadTotal) : null,
-        );
-    };
-    update();
-    reg.addEventListener('progress', update);
+    const parsed = parseFetchId(reg.id);
+    if (parsed === null || polling.has(parsed.id)) return;
+    polling.add(parsed.id);
+
+    void (async () => {
+        try {
+            const sw = await navigator.serviceWorker.ready;
+            while (true) {
+                const running = await sw.backgroundFetch?.get(reg.id);
+                // 終わった (成功・失敗どちらでも登録は消える)。表示は SW の知らせが変える
+                if (running === undefined || running.result !== '') return;
+                setProgress(
+                    parsed.id,
+                    running.downloadTotal > 0
+                        ? Math.min(1, running.downloaded / running.downloadTotal)
+                        : null,
+                );
+                // 控えが消えた・状態が変わったなら見続ける理由が無い
+                if (entries[parsed.id]?.state !== 'downloading') return;
+                await new Promise((resolve) => setTimeout(resolve, 2000));
+            }
+        } finally {
+            polling.delete(parsed.id);
+        }
+    })();
 }
 
 /**
