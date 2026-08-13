@@ -654,7 +654,7 @@
                                             <span
                                                 class="text-base-content/60 shrink-0 text-xs tabular-nums"
                                             >
-                                                続き 残り{durationMs(Math.max(0, total - rec.resume_ms))}
+                                                残り{durationMs(Math.max(0, total - rec.resume_ms))}
                                             </span>
                                         </div>
                                     {/if}
