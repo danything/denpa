@@ -101,6 +101,7 @@ export const actions = {
             logoLevel: Number(form.get('logoLevel')),
             keepOriginal: form.get('keepOriginal') === 'on',
             freeOnly: form.get('freeOnly') === 'on',
+            fpsDetect: form.get('fpsDetect') === 'on',
         });
         return { success: true, saved: true };
     },

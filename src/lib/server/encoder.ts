@@ -56,60 +56,56 @@ export function deinterlace(smooth: boolean): string {
 }
 
 /**
- * 国内アニメ (ARIB の大分類 7 / 中分類 0)。
+ * 30コマか60コマかは**本編の映像から測って決める** (`measureSmoothMotion`)。
  *
- * 同じ大分類でも、**海外アニメ (中分類 1) と特撮 (中分類 2) は倍にする。**
- * 海外のものは毎秒30コマで作られていることが多く、特撮は実写なので
- * もともと60フィールドぶんの動きが入っている。大分類だけで切っていた頃は
- * この2つまで30コマに落としていた。
- */
-const GENRE_ANIME = 7;
-const SUBGENRE_ANIME_JP = 0;
-
-/**
- * その録画を 60コマ/秒 で出すか。
+ * 以前はジャンル (国内アニメだけ30コマ) で決めていたが、実測に置き換えた。
+ * 放送の TS に「本当のコマ数」は入っていない — 本番の実測で、EIT の
+ * component_descriptor は中身が何でも `1080i`、avg_frame_rate は常に
+ * 30000/1001、MPEG-2 の interlaced_frame もほぼ全部立っていた。素材が
+ * 24p のアニメでも**全部 1080i/60 で符号化**されてくる。
  *
- * 番組表から写したジャンル (中分類まで) で決める。ジャンルが分からない録画
- * (引き継いだもの、番組情報の無い放送) は実写として扱う — 放送の大半は実写で、
- * アニメを実写扱いにしても絵は変わらない (無駄が出るだけ) が、逆は動きが落ちる。
+ * それでも見分けはつく。**60コマに起こして、同じ絵が続く割合を数える。**
+ * アニメ (24p/30p 由来) は同じ絵が2〜3枚ずつ並ぶので、重複を落とすと
+ * コマが大きく減る。本物の 60i (実写・生放送) は全コマ動くので減らない。
+ * 実録画での測定 (60p化 → mpdecimate 後の生存率):
+ *
+ * | 素材 | 生存率 |
+ * | --- | --- |
+ * | 乙女ゲー世界… (アニメ) | 21% |
+ * | 幼女戦記Ⅱ (アニメ) | 32% |
+ * | LV999の村人 (アニメ・テロップ多め) | 55% |
+ * | フジ生放送 (60i) | 71% |
+ *
+ * ちなみに idet (縞の検出) は使えなかった — アニメ本編ですら 0〜2% しか
+ * プログレッシブと出ず、60i と区別が付かない (パン・合成・ノイズで縞が出る)。
  */
-export function smoothMotionFor(genreDetail: string | null): boolean {
-    if (genreDetail === null || genreDetail === '') return true;
-    try {
-        const parsed = JSON.parse(genreDetail) as unknown;
-        if (!Array.isArray(parsed)) return true;
-        return !parsed.some(
-            (genre) =>
-                Number((genre as { lv1?: unknown }).lv1) === GENRE_ANIME &&
-                Number((genre as { lv2?: unknown }).lv2) === SUBGENRE_ANIME_JP,
-        );
-    } catch {
-        return true;
-    }
-}
 
-/** idet の "Multi frame detection" の集計。読めなければ null */
-export function parseIdet(stderr: string): { tff: number; bff: number; progressive: number } | null {
-    // 最後の集計行を採る (フィルタが複数並ぶことは無いが、念のため末尾を見る)
-    const matches = stderr.matchAll(
-        /Multi frame detection:\s*TFF:\s*(\d+)\s*BFF:\s*(\d+)\s*Progressive:\s*(\d+)/g,
-    );
-    let last: RegExpMatchArray | null = null;
-    for (const m of matches) last = m;
-    if (last === null) return null;
-    return { tff: Number(last[1]), bff: Number(last[2]), progressive: Number(last[3]) };
+/** 1窓の長さ(秒)。3窓測って中央値を採る */
+const FPS_WINDOW = 30;
+/** 測る窓の位置 (本編のどのあたりか)。端は OP/ED・提供に掛かりやすいので避ける */
+const FPS_POINTS = [0.2, 0.5, 0.8];
+
+/** ffmpeg (-f null) の stderr から、書き出したコマ数を読む。最後の frame= を採る */
+export function parseOutFrames(stderr: string): number {
+    let last = NaN;
+    for (const m of stderr.matchAll(/frame=\s*(\d+)/g)) last = Number(m[1]);
+    return last;
 }
 
 /**
- * 本編映像を idet にかけて、インターレース (60i) かプログレッシブ (フィルム/30p) かを測る。
- * 本編の途中から一定コマだけ復号して数える。測れなければ null。
+ * 生存率の中央値から 60コマにするか決める。**迷ったら 60コマ。**
+ * 本物の 60i を 30コマに落とすと動きが崩れるが、逆は無駄が出るだけで絵は変わらない。
  */
-async function probeInterlace(
-    input: string,
-    at: number,
-    frames: number,
-    signal: AbortSignal,
-): Promise<{ tff: number; bff: number; progressive: number } | null> {
+export function pickSmooth(ratios: number[], threshold = config.fpsSurvive): boolean {
+    const valid = ratios.filter((r) => Number.isFinite(r) && r > 0);
+    if (valid.length === 0) return true;
+    const sorted = [...valid].sort((a, b) => a - b);
+    const median = sorted[Math.floor(sorted.length / 2)];
+    return median > threshold;
+}
+
+/** 1窓ぶん測る。60p化 → 重複コマ落とし → 残った割合。測れなければ NaN */
+async function surviveRatio(input: string, at: number, signal: AbortSignal): Promise<number> {
     const proc = Bun.spawn(
         [
             config.ffmpeg,
@@ -117,18 +113,20 @@ async function probeInterlace(
             '-nostats',
             '-ss',
             String(Math.max(0, at)),
+            '-t',
+            String(FPS_WINDOW),
             '-i',
             input,
             // **主映像 (HD) に固定する。** GR には 1seg (H.264 320x180) が混じっていて、
-            // -map を付けないと idet がそちらに当たって0フレームになる (実測で判明)
+            // -map を付けないとフィルタがそちらに当たる (実測で判明)
             '-map',
             '0:v:0',
-            '-frames:v',
-            String(frames),
             '-vf',
-            'idet',
+            'bwdif=mode=send_field,mpdecimate',
             '-an',
             '-sn',
+            '-fps_mode',
+            'passthrough',
             '-f',
             'null',
             '-',
@@ -140,46 +138,45 @@ async function probeInterlace(
     try {
         const stderr = await text(proc.stderr as ReadableStream<Uint8Array>);
         await proc.exited;
-        return parseIdet(stderr);
+        const out = parseOutFrames(stderr);
+        // 60p に起こしたので、1窓の期待コマ数は 60000/1001 * 秒
+        return out / ((FPS_WINDOW * 60000) / 1001);
     } catch {
-        return null;
+        return NaN;
     } finally {
         signal.removeEventListener('abort', kill);
     }
 }
 
 /**
- * 30/60コマを最終的に決める。**ジャンルの判断を本編映像で裏取りする。**
- *
- * ジャンルで「30コマ (国内アニメ)」と確定しているものは実測しない — 判断は既に確か。
- * ジャンルが 60コマ側 (実写・不明) のものだけ idet にかけ、**プログレッシブが濃厚
- * (フィルム・24p/30p) なら30コマに落とす**。迷えばジャンルの判断 (60コマ) に従う —
- * 本物の 60i を取りこぼすと動きが落ちるので、確信があるときだけ落とす。
+ * 本編から3窓を測って 30/60 コマを決める。
+ * CM検出があれば本編区間の中で測る (CM は実写 60i なので混ぜると釣り上がる)。
  */
-async function resolveSmoothMotion(
-    genreSmooth: boolean,
+async function measureSmoothMotion(
     source: string,
+    durationSec: number,
     content: Range | null,
     signal: AbortSignal,
 ): Promise<boolean> {
-    if (!genreSmooth || !config.fpsDetect) return genreSmooth;
+    const start = content !== null && Number.isFinite(content.start) ? content.start : 0;
+    const end =
+        content !== null && Number.isFinite(content.end) && content.end > start
+            ? content.end
+            : Number.isFinite(durationSec) && durationSec > 0
+              ? durationSec
+              : start + FPS_WINDOW;
+    const span = Math.max(0, end - start - FPS_WINDOW);
 
-    const at = content !== null && Number.isFinite(content.start) ? content.start + 30 : 120;
-    const idet = await probeInterlace(source, at, config.fpsDetectFrames, signal);
-    const total = idet === null ? 0 : idet.tff + idet.bff + idet.progressive;
-    if (idet === null || total < 100) {
-        console.log('[fps] idet を測れず、ジャンルの判断 (60コマ) に従います');
-        return genreSmooth;
+    const ratios: number[] = [];
+    for (const point of FPS_POINTS) {
+        if (signal.aborted) break;
+        ratios.push(await surviveRatio(source, start + span * point, signal));
     }
-
-    const progressiveRatio = idet.progressive / total;
-    const progressive = progressiveRatio >= config.fpsProgressiveRatio;
+    const smooth = pickSmooth(ratios);
     console.log(
-        `[fps] idet プログレッシブ ${(progressiveRatio * 100).toFixed(0)}% ` +
-            `(P=${idet.progressive} TFF=${idet.tff} BFF=${idet.bff}) → ` +
-            `${progressive ? '30コマ (プログレッシブ濃厚)' : '60コマ'}`,
+        `[fps] 重複コマの実測: 生存率 ${ratios.map((r) => (Number.isFinite(r) ? `${(r * 100).toFixed(0)}%` : '測れず')).join(' / ')} → ${smooth ? '60' : '30'}コマ`,
     );
-    return !progressive;
+    return smooth;
 }
 
 /**
@@ -1095,9 +1092,9 @@ async function runJob(jobId: number): Promise<void> {
 
     const encodeOptions: EncodeOptions & { chaptersFile: string | null; contentStart: Range | null } = {
         ...(await prepareCm(jobId, recording, sourceTs, signal)),
-        // コマ数は番組のジャンルで決まる。国内アニメだけ倍にしない (deinterlace)。
-        // このあと source が決まったら本編映像でも確かめる (resolveSmoothMotion)
-        smoothMotion: smoothMotionFor(recording.genre_detail),
+        // コマ数の既定は 60。設定が入っていれば、source が決まったあとで
+        // 本編映像から実測して決め直す (measureSmoothMotion)
+        smoothMotion: true,
         /*
          * **音声トラックに番組表と同じ名前を入れる。**
          *
@@ -1126,17 +1123,22 @@ async function runJob(jobId: number): Promise<void> {
     }
 
     /*
-     * コマ数をジャンルだけでなく本編映像でも確かめる。ジャンルが 60コマ側のものを
-     * idet にかけ、プログレッシブが濃厚なら 30コマに落とす (resolveSmoothMotion)。
-     * source が決まってから測る (切ったものは切った後で測りたい)
+     * コマ数を本編映像から実測する (measureSmoothMotion)。切るなら切った後で
+     * 測る — CM は実写 60i なので、混ぜると生存率が釣り上がる。
+     * 設定で切ってあれば測らず、全部 60コマで出す
      */
-    setStep(jobId, 'コマ数を確かめています');
-    encodeOptions.smoothMotion = await resolveSmoothMotion(
-        encodeOptions.smoothMotion ?? true,
-        source,
-        encodeOptions.contentStart,
-        signal,
-    );
+    if (settings().fpsDetect) {
+        setStep(jobId, 'コマ数を確かめています');
+        // CM を切ったなら source は短くなっている。残した区間の合計が実際の尺
+        const keepTotal = (keep ?? []).reduce((sum, range) => sum + (range.end - range.start), 0);
+        const predicted = keepTotal > 0 ? keepTotal : (recording.end_at - recording.start_at) / 1000;
+        encodeOptions.smoothMotion = await measureSmoothMotion(
+            source,
+            predicted,
+            encodeOptions.contentStart,
+            signal,
+        );
+    }
 
     setPhase(jobId, 'encode', '');
 

@@ -42,11 +42,15 @@ interface RecordingRow extends Recording {
     rule_name: string | null;
     /** 手動予約なら 1。取り込んだ録画のように予約が無いものは null */
     from_manual: number | null;
+    /** 局ロゴを拾えているか。局名の隣に出す */
+    has_logo: number | null;
 }
 
 interface ReservationRow extends Reservation {
     service_name: string;
     rule_name: string | null;
+    /** 局ロゴを拾えているか。局名の隣に出す */
+    has_logo: number | null;
 }
 
 /**
@@ -109,7 +113,7 @@ export function load({ url }) {
         : `((r.state IN ('scheduled','conflict','missed') AND r.started_at IS NULL) OR rec.state = 'recording')`;
     const reservations = queryAll<ReservationRow>(
         // 最後の state が r.* の state を隠す。出したいのは録画から引いたほう
-        `SELECT r.*, s.name AS service_name, rules.name AS rule_name,
+        `SELECT r.*, s.name AS service_name, s.has_logo AS has_logo, rules.name AS rule_name,
                 ${RESERVATION_STATE} AS state
          FROM reservations r
          JOIN services s ON s.id = r.service_id
@@ -150,7 +154,7 @@ export function load({ url }) {
              ) AS encode_error,
              j.id AS job_id, j.state AS job_state, j.phase AS job_phase,
              j.percent AS job_percent, j.eta_ms AS job_eta_ms, j.log AS job_log,
-             s.logo_area AS logo_area,
+             s.logo_area AS logo_area, s.has_logo AS has_logo,
              -- 何で録れた1本か。予約とルールから引く (録画には持たせない)
              res.rule_id AS rule_id, res.manual AS from_manual, rules.name AS rule_name
              FROM recordings r

@@ -246,9 +246,22 @@
 {/snippet}
 
 <!-- 局名・放送日時・尺・サイズ。1行にまとめて、空のものは出さない -->
-{#snippet meta(parts: string[])}
-    <div class="text-base-content/60 mt-1 text-sm break-words">
-        {parts.filter(Boolean).join(' ・ ')}
+<!--
+    局ロゴは放送波から拾ったもの (`/api/services/<id>/logo`)。**まだ拾えていない局は
+    何も出さない** — ライブ画面と違って一覧は行が細く、代わりの箱を置くと局名より目立つ
+-->
+{#snippet meta(parts: string[], logo: { serviceId: number; has: boolean } | null = null)}
+    <div class="text-base-content/60 mt-1 flex flex-wrap items-center gap-x-1.5 text-sm break-words">
+        {#if logo?.has}
+            <img
+                src="/api/services/{logo.serviceId}/logo"
+                alt=""
+                loading="lazy"
+                class="inline-block h-4 w-auto shrink-0 rounded-xs object-contain"
+                data-testid="service-logo"
+            />
+        {/if}
+        <span>{parts.filter(Boolean).join(' ・ ')}</span>
     </div>
 {/snippet}
 
@@ -335,10 +348,13 @@
                                         res.name,
                                         'reservation-state',
                                     )}
-                                    {@render meta([
-                                        res.service_name,
-                                        `${dateTime(res.start_at)}〜${time(res.end_at)} (${duration(res.start_at, res.end_at)})`,
-                                    ])}
+                                    {@render meta(
+                                        [
+                                            res.service_name,
+                                            `${dateTime(res.start_at)}〜${time(res.end_at)} (${duration(res.start_at, res.end_at)})`,
+                                        ],
+                                        { serviceId: res.service_id, has: res.has_logo === 1 },
+                                    )}
                                     {#if res.conflict_reason}
                                         <div class="text-error mt-0.5 text-sm">{res.conflict_reason}</div>
                                     {/if}
@@ -534,21 +550,24 @@
                                         画面が狭いと表ごと横スクロールになって番組名まで隠れていた。
                                         ファイルの置き場所は普段は見ないので出さない (data-library-path)
                                     -->
-                                    {@render meta([
-                                        rec.service_name,
-                                        // 番組表の尺ではなく実際に録れた長さ。
-                                        // 途中で止めたときやCMを切ったときは合わない
-                                        `${dateTime(rec.start_at)} (${recordedDuration(rec)})`,
-                                        /*
-                                         * 生TSを残しているときは両方出す。片方しか
-                                         * 出していなかった頃は、消していいのか・
-                                         * どれだけ空くのかが画面から分からなかった
-                                         */
-                                        rec.raw_size === null
-                                            ? size(rec.ts_size)
-                                            : `${size(rec.ts_size)} (生TS ${size(rec.raw_size)})`,
-                                        rec.deleted_at !== null ? `${date(rec.deleted_at)} に削除` : '',
-                                    ])}
+                                    {@render meta(
+                                        [
+                                            rec.service_name,
+                                            // 番組表の尺ではなく実際に録れた長さ。
+                                            // 途中で止めたときやCMを切ったときは合わない
+                                            `${dateTime(rec.start_at)} (${recordedDuration(rec)})`,
+                                            /*
+                                             * 生TSを残しているときは両方出す。片方しか
+                                             * 出していなかった頃は、消していいのか・
+                                             * どれだけ空くのかが画面から分からなかった
+                                             */
+                                            rec.raw_size === null
+                                                ? size(rec.ts_size)
+                                                : `${size(rec.ts_size)} (生TS ${size(rec.raw_size)})`,
+                                            rec.deleted_at !== null ? `${date(rec.deleted_at)} に削除` : '',
+                                        ],
+                                        { serviceId: rec.service_id, has: rec.has_logo === 1 },
+                                    )}
                                     <!--
                                         **途中まで観たものは「続き」を出す。** 観た位置
                                         (`resume_ms`) は続きから始めるために持っていて、末尾まで

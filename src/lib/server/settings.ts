@@ -44,6 +44,14 @@ export interface Settings {
      */
     cmDetector: 'jls' | 'silence';
     /**
+     * コマ数 (30/60) を本編映像から実測して決めるか。
+     *
+     * 入り: 60p に起こして重複コマの割合を測り、同じ絵が並ぶ素材 (アニメ・
+     *       フィルム) は 30コマで出す (`encoder.measureSmoothMotion`)。
+     * 切り: 測らず**全部 60コマ**で出す。時間とサイズはかさむが、動きは絶対に落ちない
+     */
+    fpsDetect: boolean;
+    /**
      * **ロゴをどれだけ当てにするか** (1〜8、既定 6)。
      *
      * join_logo_scp は無音・シーンチェンジと「ロゴが出ているか」を突き合わせて
@@ -144,6 +152,7 @@ export function settings(): Settings {
         keepOriginal: flag('keepOriginal', false),
         freeOnly: flag('freeOnly', true),
         cmDetector: stored('cmDetector') === 'silence' ? 'silence' : 'jls',
+        fpsDetect: flag('fpsDetect', true),
         logoLevel: logoLevel(stored('logoLevel')),
         basicAuthUser: stored('basicAuthUser') ?? config.basicAuthUser,
         basicAuthPassword: stored('basicAuthPassword') ?? config.basicAuthPassword,

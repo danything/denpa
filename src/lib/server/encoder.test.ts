@@ -7,9 +7,9 @@ import {
     failureReason,
     headSkip,
     isVideoCodec,
-    parseIdet,
+    parseOutFrames,
     parseProgressBlock,
-    smoothMotionFor,
+    pickSmooth,
 } from './encoder';
 
 function argValue(args: string[], key: string): string | undefined {
@@ -106,42 +106,32 @@ describe('トラックの名前', () => {
 });
 
 describe('コマ数の決め方', () => {
-    test('国内アニメだけコマ数を倍にしない', () => {
-        // 元が毎秒24コマ前後なので、フィールドごとに起こしても同じ絵が並ぶだけ
-        expect(smoothMotionFor('[{"lv1":7,"lv2":0}]')).toBe(false);
-        expect(smoothMotionFor('[{"lv1":0,"lv2":1},{"lv1":7,"lv2":0}]')).toBe(false);
+    test('ffmpeg の stderr から書き出したコマ数を読む (最後の frame= を採る)', () => {
+        const stderr = 'frame=  100 fps=0.0 q=-0.0\nframe=  967 fps=120 q=-0.0 Lsize=N/A time=00:00:50';
+        expect(parseOutFrames(stderr)).toBe(967);
+        expect(Number.isNaN(parseOutFrames('no frames here'))).toBe(true);
     });
 
-    test('海外アニメと特撮は60コマで出す', () => {
-        // 同じ大分類7でも、海外のものは毎秒30コマ、特撮は実写
-        expect(smoothMotionFor('[{"lv1":7,"lv2":1}]')).toBe(true);
-        expect(smoothMotionFor('[{"lv1":7,"lv2":2}]')).toBe(true);
+    test('同じ絵が並ぶ素材 (生存率が低い) は30コマ', () => {
+        // 実測: アニメの本編は 21〜32% (乙女ゲー 21% / 幼女戦記 32%)
+        expect(pickSmooth([0.21, 0.32, 0.28], 0.45)).toBe(false);
     });
 
-    test('それ以外は60コマで出す', () => {
-        expect(smoothMotionFor('[{"lv1":0,"lv2":0}]')).toBe(true);
-        expect(smoothMotionFor('[{"lv1":9,"lv2":0}]')).toBe(true);
+    test('全コマ動く素材 (生存率が高い) は60コマ', () => {
+        // 実測: フジの生放送は 71%
+        expect(pickSmooth([0.71, 0.68, 0.75], 0.45)).toBe(true);
     });
 
-    test('ジャンルが分からないものは実写として扱う', () => {
-        // 引き継いだ録画や番組情報の無い放送。放送の大半は実写のほう
-        expect(smoothMotionFor(null)).toBe(true);
-        expect(smoothMotionFor('')).toBe(true);
-        expect(smoothMotionFor('こわれている')).toBe(true);
+    test('中央値で見る。1窓だけCMや白場に当たっても引きずられない', () => {
+        // 2窓が本編 (低い)、1窓がCM (高い) → 30コマ
+        expect(pickSmooth([0.25, 0.3, 0.8], 0.45)).toBe(false);
+        // 逆に1窓だけ静止画に当たった実写 → 60コマ
+        expect(pickSmooth([0.2, 0.7, 0.75], 0.45)).toBe(true);
     });
 
-    test('idet の集計行から TFF/BFF/Progressive を読む', () => {
-        const stderr = [
-            '[Parsed_idet_0 @ 0x0] Repeated Fields: Neither: 1900 Top:   50 Bottom:   50',
-            '[Parsed_idet_0 @ 0x0] Single frame detection: TFF:  100 BFF:   20 Progressive: 1800 Undetermined:   80',
-            '[Parsed_idet_0 @ 0x0] Multi frame detection: TFF:   40 BFF:   10 Progressive: 1950 Undetermined:    0',
-        ].join('\n');
-        expect(parseIdet(stderr)).toEqual({ tff: 40, bff: 10, progressive: 1950 });
-    });
-
-    test('idet の集計が無ければ null', () => {
-        expect(parseIdet('')).toBeNull();
-        expect(parseIdet('frame= 100 fps= 25')).toBeNull();
+    test('測れなければ60コマに倒す (動きは絶対に落とさない)', () => {
+        expect(pickSmooth([], 0.45)).toBe(true);
+        expect(pickSmooth([Number.NaN, 0], 0.45)).toBe(true);
     });
 
     test('入れ物は拡張子ではなく引数で決める', () => {

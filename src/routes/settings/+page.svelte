@@ -216,11 +216,27 @@
                         </span>
                     </label>
                     <!--
-                        コマ数は選ばせない。放送は毎秒60フィールドなので実写は60コマで
-                        撮られたとおりになるが、国内アニメは元が24コマ前後で、コマを起こしても
-                        同じ絵が並ぶだけで時間とサイズが倍になる。番組のジャンル (中分類まで)
-                        で決まる (src/lib/server/encoder.ts の smoothMotionFor)
+                        コマ数 (30/60) は本編映像から実測して決める (encoder.measureSmoothMotion)。
+                        放送は素材が何でも 1080i/60 で来るので、ジャンルにもTSのヘッダにも
+                        本当のコマ数は入っていない。60コマに起こして同じ絵が並ぶ割合を
+                        数えるのが唯一の見分け方だった (実測: アニメ 21〜55% / 生放送 71%)
                     -->
+                    <label class="flex cursor-pointer items-start gap-2">
+                        <input
+                            type="checkbox"
+                            name="fpsDetect"
+                            bind:checked={recording.fpsDetect}
+                            class="checkbox checkbox-sm mt-0.5"
+                            data-testid="global-fps-detect"
+                        />
+                        <span class="text-sm">
+                            コマ数を映像から決める
+                            <span class="text-base-content/60 block text-xs">
+                                同じ絵が並ぶ素材 (アニメなど) を 30コマで焼き、時間とサイズを
+                                半分にします。外すと全部 60コマで焼きます
+                            </span>
+                        </span>
+                    </label>
                     <label class="flex cursor-pointer items-start gap-2 sm:col-span-2">
                         <input
                             type="checkbox"

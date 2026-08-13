@@ -31,8 +31,11 @@
  * 作らないためで、切り分けのときにいちばん効きます。
  */
 
-import { lookup } from 'node:dns/promises';
+import { Resolver } from 'node:dns/promises';
+import { request as httpRequest } from 'node:http';
+import { request as httpsRequest } from 'node:https';
 import { connect } from 'node:net';
+import { config } from './config';
 
 /** 追いかける上限。放送局は https へ寄せるのに1回挟むことがある */
 const HOPS = 3;
@@ -51,19 +54,23 @@ export interface Fetched {
 export class Refused extends Error {}
 
 /**
- * **証明書は検証しない。**
+ * **名前は自前の DNS で引く** (`BML_DNS`、既定は公開 DNS)。
  *
- * 放送局の通信系サーバは受信機の専用スタック前提で、証明書の鎖を最後まで
- * 送ってこないことがある (実測: フジの `tvid-sha1.tver-tech.co.jp` が
- * `unable to get local issuer certificate` で fetch ごと転ぶ → 502 →
- * データ放送が `affiliationId == null` で描けない)。実機のテレビは厳密な
- * PKI 検証をしないので、ここも同じにする。
+ * 家庭の DNS フィルタ (AdGuard 等) は局の双方向ドメインをブラックホール
+ * (0.0.0.0 / ::) に落とすことがある — 実測で `view.fujitv.co.jp` と
+ * `recv-entry.tbs.co.jp` がそうなり、下の SSRF 防御が「内側の住所」として
+ * 正しく断った結果、TBS の TVer リンクが NAP エラーになっていた。
+ * 上流が複数あると答えがフラつくので、放送アプリの通信はここで固定する。
  *
- * 覗かれる道が広がることは承知の上 — ただし**これは放送のアプリの通信**で、
- * denpa の資格情報も利用者の秘密も乗らない (`credentials: 'omit'`)。そもそも
- * 上で **素の http すら通している**ので、検証を外すことで新たに増える危険は無い。
+ * **繋ぐのも引いた住所へ直に繋ぐ** (`doRequest` の host に IP を渡す)。
+ * 引き直しを OS に任せると、確かめた住所と繋ぐ住所がずれる (TOCTOU)
  */
-const TLS = { rejectUnauthorized: false } as const;
+const resolver = new Resolver();
+const BML_DNS = config.bmlDns
+    .split(',')
+    .map((server) => server.trim())
+    .filter((server) => server !== '');
+if (BML_DNS.length > 0) resolver.setServers(BML_DNS);
 
 /**
  * その住所へ繋いでよいか。**内側を向いていたら断る。**
@@ -98,21 +105,33 @@ export function isPublicAddress(address: string): boolean {
 
 /**
  * 取りに行ってよい住所か。**綴りではなく、引いた先で見る。**
+ * 通った住所を1つ返す (繋ぐのもその住所へ直に繋ぐ)。
  *
  * 名前で弾こうとすると `localhost` の別名や、内側を指す公開の名前
  * (いわゆる DNS リバインディング) が抜けます
  */
-async function resolvable(host: string): Promise<void> {
-    let found: { address: string }[];
+async function resolvable(host: string): Promise<string> {
+    // IP を直に書いてあるなら引かずに見る (IPv6 の [] は URL 側で剥がれている)
+    if (/^[\d.]+$/.test(host) || host.includes(':')) {
+        if (!isPublicAddress(host)) throw new Refused(`内側の住所です (${host})`);
+        return host;
+    }
+
+    let found: string[];
     try {
-        found = await lookup(host, { all: true });
+        found = await resolver.resolve4(host);
     } catch {
-        throw new Refused(`名前を引けません (${host})`);
+        try {
+            found = await resolver.resolve6(host);
+        } catch {
+            throw new Refused(`名前を引けません (${host})`);
+        }
     }
     if (found.length === 0) throw new Refused(`名前を引けません (${host})`);
-    for (const { address } of found) {
+    for (const address of found) {
         if (!isPublicAddress(address)) throw new Refused(`内側の住所です (${host} → ${address})`);
     }
+    return found[0];
 }
 
 /** その URL を取りに行ってよいか。行けるなら整えた URL を返す */
@@ -147,40 +166,94 @@ export async function allowed(raw: string): Promise<URL> {
 }
 
 /**
+ * 1回ぶんの HTTP。**確かめた住所へ直に繋ぐ。**
+ *
+ * fetch は名前引きを差し替えられないので node:http(s) で繋ぐ。Host と SNI には
+ * 元の名前を入れる (IP へ繋いでも相手には正しい名前で名乗る)。
+ *
+ * **証明書は検証しない。** 放送局の通信系サーバは受信機の専用スタック前提で、
+ * 証明書の鎖を最後まで送ってこないことがある (実測: フジの
+ * `tvid-sha1.tver-tech.co.jp` が `unable to get local issuer certificate` で
+ * 転び、502 → データ放送が `affiliationId == null` で描けなかった)。実機の
+ * テレビは厳密な PKI 検証をしないので、ここも同じにする。資格情報は何も
+ * 乗せないし、素の http すら通しているので、検証を外して増える危険は無い
+ */
+function doRequest(
+    url: URL,
+    address: string,
+    method: 'GET' | 'POST',
+    body: Uint8Array | undefined,
+): Promise<{ status: number; location: string | null; contentType: string; body: Uint8Array }> {
+    return new Promise((resolve, reject) => {
+        const https = url.protocol === 'https:';
+        const req = (https ? httpsRequest : httpRequest)(
+            {
+                host: address,
+                port: url.port === '' ? (https ? 443 : 80) : Number(url.port),
+                path: `${url.pathname}${url.search}`,
+                method,
+                setHost: false,
+                headers: {
+                    host: url.host,
+                    accept: '*/*',
+                    ...(method === 'POST' && body !== undefined
+                        ? {
+                              'content-type': 'application/x-www-form-urlencoded',
+                              'content-length': body.length,
+                          }
+                        : {}),
+                },
+                ...(https ? { servername: url.hostname, rejectUnauthorized: false } : {}),
+                timeout: TIMEOUT,
+            },
+            (res) => {
+                const chunks: Buffer[] = [];
+                let size = 0;
+                res.on('data', (chunk: Buffer) => {
+                    size += chunk.length;
+                    // **受け取りながら測る。** 上限を超えたぶんは渡さずに断る
+                    if (size > LIMIT) {
+                        req.destroy();
+                        reject(new Refused(`大きすぎます (${size} バイト)`));
+                        return;
+                    }
+                    chunks.push(chunk);
+                });
+                res.on('end', () => {
+                    resolve({
+                        status: res.statusCode ?? 0,
+                        location: res.headers.location ?? null,
+                        contentType: res.headers['content-type'] ?? 'application/octet-stream',
+                        body: new Uint8Array(Buffer.concat(chunks)),
+                    });
+                });
+                res.on('error', reject);
+            },
+        );
+        req.on('timeout', () => req.destroy(new Error('時間切れ')));
+        req.on('error', reject);
+        req.end(body);
+    });
+}
+
+/**
  * 取ってくる。**追いかけるぶんも1つずつ確かめる。**
  *
- * `redirect: 'follow'` に任せると、飛ばされた先が内側でも黙って繋ぎます。
+ * 自動の redirect に任せると、飛ばされた先が内側でも黙って繋ぎます。
  * 手で追いかけて、行き先ごとに `allowed` を通します
  */
 export async function fetchForBml(raw: string): Promise<Fetched> {
     let url = await allowed(raw);
     for (let hop = 0; ; hop++) {
-        const response = await fetch(url, {
-            method: 'GET',
-            redirect: 'manual',
-            // **何も持たせない。** denpa の資格情報を外へ出さない
-            credentials: 'omit',
-            headers: { accept: '*/*' },
-            signal: AbortSignal.timeout(TIMEOUT),
-            tls: TLS,
-        });
+        const address = await resolvable(url.hostname);
+        const got = await doRequest(url, address, 'GET', undefined);
 
-        const next = response.headers.get('location');
-        if (response.status >= 300 && response.status < 400 && next !== null) {
+        if (got.status >= 300 && got.status < 400 && got.location !== null) {
             if (hop >= HOPS) throw new Refused('飛ばされる回数が多すぎます');
-            url = await allowed(new URL(next, url).toString());
+            url = await allowed(new URL(got.location, url).toString());
             continue;
         }
-
-        const body = new Uint8Array(await response.arrayBuffer());
-        // **受け取ってから測るのでは遅い**が、fetch は先に長さを教えてくれないことがある。
-        // 上限を超えたぶんは渡さずに断る
-        if (body.length > LIMIT) throw new Refused(`大きすぎます (${body.length} バイト)`);
-        return {
-            status: response.status,
-            contentType: response.headers.get('content-type') ?? 'application/octet-stream',
-            body,
-        };
+        return { status: got.status, contentType: got.contentType, body: got.body };
     }
 }
 
@@ -204,36 +277,18 @@ export async function fetchForBml(raw: string): Promise<Fetched> {
  */
 export async function postForBml(raw: string, body: Uint8Array): Promise<Fetched> {
     let url = await allowed(raw);
-    let method = 'POST';
+    let method: 'GET' | 'POST' = 'POST';
     for (let hop = 0; ; hop++) {
-        const response = await fetch(url, {
-            method,
-            redirect: 'manual',
-            credentials: 'omit',
-            headers:
-                method === 'POST'
-                    ? { accept: '*/*', 'content-type': 'application/x-www-form-urlencoded' }
-                    : { accept: '*/*' },
-            body: method === 'POST' ? (body as BodyInit) : undefined,
-            signal: AbortSignal.timeout(TIMEOUT),
-            tls: TLS,
-        });
+        const address = await resolvable(url.hostname);
+        const got = await doRequest(url, address, method, method === 'POST' ? body : undefined);
 
-        const next = response.headers.get('location');
-        if (response.status >= 300 && response.status < 400 && next !== null) {
+        if (got.status >= 300 && got.status < 400 && got.location !== null) {
             if (hop >= HOPS) throw new Refused('飛ばされる回数が多すぎます');
-            if (response.status !== 307 && response.status !== 308) method = 'GET';
-            url = await allowed(new URL(next, url).toString());
+            if (got.status !== 307 && got.status !== 308) method = 'GET';
+            url = await allowed(new URL(got.location, url).toString());
             continue;
         }
-
-        const got = new Uint8Array(await response.arrayBuffer());
-        if (got.length > LIMIT) throw new Refused(`大きすぎます (${got.length} バイト)`);
-        return {
-            status: response.status,
-            contentType: response.headers.get('content-type') ?? 'application/octet-stream',
-            body: got,
-        };
+        return { status: got.status, contentType: got.contentType, body: got.body };
     }
 }
 
@@ -260,12 +315,16 @@ export async function confirmReachable(
         ? new URL(destination).hostname
         : destination.replace(/^\/+/, '').split('/')[0];
     if (host === '') throw new Refused('宛先がありません');
-    await resolvable(host);
 
     const started = Date.now();
-    const { address } = await lookup(host);
+    // 確かめた住所へ直に繋ぐ (名前で繋ぎ直すと、フィルタされた DNS に化かされうる)
+    const address = await resolvable(host);
     return await new Promise((resolve) => {
-        const socket = connect({ host, port: 443, timeout: Math.max(1000, Math.min(timeoutMs, TIMEOUT)) });
+        const socket = connect({
+            host: address,
+            port: 443,
+            timeout: Math.max(1000, Math.min(timeoutMs, TIMEOUT)),
+        });
         const done = (success: boolean) => {
             socket.destroy();
             resolve({

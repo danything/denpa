@@ -178,28 +178,25 @@ export const config = {
     thumbnailWidth: 480,
 
     /**
-     * 30/60コマの判定を本編映像からも確かめる。**既定は切っている。**
+     * データ放送の双方向 (bml-network) で名前を引く DNS。**家の DNS フィルタを迂回する。**
      *
-     * ジャンルでは国内アニメだけ30コマにしている (encoder.deinterlace)。「映像から
-     * 実測できないか」を本番の実TSで確かめた結論はこうだった:
-     *
-     * - **TS の中に本当のコマ数は入っていない。** EIT の component_descriptor は
-     *   中身が何でも `1080i` (アニメ「おじゃる丸」も映画も同じ)、MPEG-2 の
-     *   avg_frame_rate も常に 30000/1001、field_order も常に `tt`、per-frame の
-     *   interlaced_frame もほぼ全部立つ。放送は**素材が何でも 1080i/60 で符号化**する。
-     * - **idet (画素から推定) だけが唯一の手掛かりだが、確実でない。** 本番の
-     *   おじゃる丸 (30p のはず) を測っても プログレッシブは 38% どまりで、閾値で
-     *   30/60 を切り分けられなかった。CM は実写 60i なので本編と混ざる (本編区間で
-     *   測るべきだが、それでも足りない)。
-     *
-     * よって**ジャンル判定を上書きするのは危険**なので既定では実測しない。実験用に
-     * `FPS_DETECT=1` で有効化できる (idet で 60コマ側→プログレッシブ濃厚なら30コマ)。
+     * 広告ブロッカー (AdGuard/Pi-hole 等) は局の双方向ドメインをブラックホール
+     * (0.0.0.0 / ::) に落とすことがある — 実測で `view.fujitv.co.jp` と
+     * `recv-entry.tbs.co.jp` がそうなり、SSRF 防御が「内側の住所」として正しく
+     * 断った結果、データ放送が NAP エラーになっていた。放送アプリの通信だけ
+     * ここで引く。空にすると OS の DNS をそのまま使う
      */
-    fpsDetect: bool('FPS_DETECT', false),
-    /** idet で「プログレッシブ濃厚」とみなす割合 (Multi frame detection) */
-    fpsProgressiveRatio: num('FPS_PROGRESSIVE_RATIO', 0.7),
-    /** idet にかけるコマ数。本編の途中から測る */
-    fpsDetectFrames: num('FPS_DETECT_FRAMES', 2000),
+    bmlDns: str('BML_DNS', '1.1.1.1,8.8.8.8'),
+
+    /**
+     * 30コマとみなす生存率の上限 (encoder.pickSmooth)。
+     *
+     * 60p に起こして重複コマを落としたとき、これ以下しか残らなければ
+     * 「同じ絵が並ぶ素材 (アニメ・フィルム)」= 30コマで出す。実録画の実測は
+     * アニメ 21〜55% / 生放送 71% だった (encoder.ts の表)。**迷ったら 60 に
+     * 倒れる**よう、間より低めに引いてある
+     */
+    fpsSurvive: num('FPS_SURVIVE', 0.45),
 
     /** 録画の前後マージン(ms)。放送時刻のズレを吸収する */
     startMargin: num('START_MARGIN', 10 * SEC),

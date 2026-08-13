@@ -37,7 +37,7 @@ import {
 import { config } from './config';
 import { DataBroadcast, type ResponseMessage } from './databroadcast';
 import { queryOne } from './db';
-import { deinterlace, smoothMotionFor } from './encoder';
+import { deinterlace } from './encoder';
 import { chunks, lines } from './stream';
 import { openWhenFree } from './tuner';
 import type { Connection } from './ws';
@@ -1233,9 +1233,9 @@ export interface NowPlaying {
  * いま流れている番組から、焼き方を決める。**番組表を頼りにする。**
  *
  * - 局の番号 … ffmpeg に名指しさせる `program_number` (`NowPlaying.program`)
- * - コマ数 … 国内アニメだけ倍にしない (`smoothMotionFor`)。**分からなければ
- *   実写として扱う** — 放送の大半は実写で、アニメを実写扱いにしても絵は
- *   変わらないが、逆は動きが落ちる
+ * - コマ数 … **ライブは常に60コマ。** 録画は本編映像から実測して決めるが
+ *   (`encoder.measureSmoothMotion`)、ライブは映像が来る前に決めないといけない。
+ *   60 に倒しておけば動きは絶対に落ちない (アニメで無駄が出るだけ)
  * - 音声 … 番組表の `audios` から、選べるものを組み立てる (`arib.audioTracks`)。
  *   **古い行には `audios` が入っていない**ので、そのときは `audio_type` だけで
  *   デュアルモノかどうかを見る。どちらも無ければ「そのまま出す」1つ
@@ -1244,35 +1244,34 @@ export interface NowPlaying {
  * @param wanted 画面が頼んできた音声 (`AudioTrack.id`)。無いものなら先頭
  */
 function nowPlaying(serviceId: number, wanted: string | undefined): NowPlaying {
-    const decide = (program: number, genres: string | null, audios: Audio[]): NowPlaying => {
+    const decide = (program: number, audios: Audio[]): NowPlaying => {
         const tracks = audioTracks(audios);
         return {
             program,
-            smooth: smoothMotionFor(genres),
+            smooth: true,
             audios: tracks,
             audio: pickTrack(tracks, wanted),
         };
     };
 
-    if (!Number.isFinite(serviceId)) return decide(0, null, []);
+    if (!Number.isFinite(serviceId)) return decide(0, []);
     const at = Date.now();
     const service = queryOne<{ service_id: number }>(
         `SELECT service_id FROM services WHERE id = ?`,
         serviceId,
     );
     const program = queryOne<{
-        genre_detail: string | null;
         audio_type: number | null;
         audios: string | null;
     }>(
-        `SELECT genre_detail, audio_type, audios FROM programs
+        `SELECT audio_type, audios FROM programs
          WHERE service_id = ? AND start_at <= ? AND end_at > ?`,
         serviceId,
         at,
         at,
     );
 
-    return decide(service?.service_id ?? 0, program?.genre_detail ?? null, parseAudios(program));
+    return decide(service?.service_id ?? 0, parseAudios(program));
 }
 
 /**
