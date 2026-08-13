@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync } from 'node:fs';
 import type { Page } from '@playwright/test';
 import { cellOf, expect, goto, reserveSoon, setRecording, syncEpg, test, upcoming } from './helpers';
 
@@ -74,16 +74,11 @@ test.describe('録画とエンコード', () => {
         // 番組表の尺(BSの偽番組は10秒)から大きく外れていないこと
         expect(recorded).toBeLessThan(5 * 60_000);
 
-        // .nfo を読むプレイヤー (Nova) 向けに、サイドカーが揃っていること。
-        // 1録画=1映画として書く (<movie> + -poster.jpg)
+        // サムネイル (denpa の画面が出す絵) が隣に置かれていること。
+        // 番組情報の .nfo は書かなくなった (Nova/WebDAV 連携をやめた) ので、無いのが正
         const base = videoPath.replace(/\.mkv$/, '');
-        expect(existsSync(`${base}.nfo`)).toBe(true);
         expect(existsSync(`${base}-poster.jpg`)).toBe(true);
-
-        const nfo = readFileSync(`${base}.nfo`, 'utf8');
-        expect(nfo).toContain('<movie>');
-        expect(nfo).toContain('<studio>BS11イレブン</studio>');
-        expect(nfo).toContain('<premiered>');
+        expect(existsSync(`${base}.nfo`)).toBe(false);
 
         // 観られる録画には再生の印が出ていること。
         // 再生ボタンは置いていない (行そのものを押すと再生する)
@@ -235,12 +230,10 @@ test.describe('コーデックを両方焼く', () => {
         expect(existsSync(av1)).toBe(true);
         expect(existsSync(alt)).toBe(true);
 
-        // どちらのコーデックも、隣に NFO とポスターを持つ (AV1 非対応の端末で観る
-        // H.264 が Nova で「情報なしの裸ファイル」にならないように)
+        // どちらのコーデックにもサムネイルが付く (消したとき残ったほうへ主を
+        // 譲れるように、H.264 側へも写してある)
         for (const video of [av1, alt]) {
-            const base = video.replace(/\.mkv$/, '');
-            expect(existsSync(`${base}.nfo`)).toBe(true);
-            expect(existsSync(`${base}-poster.jpg`)).toBe(true);
+            expect(existsSync(`${video.replace(/\.mkv$/, '')}-poster.jpg`)).toBe(true);
         }
 
         // ダウンロードの口が AV1 と H.264 の2つに分かれる

@@ -1,3 +1,4 @@
+import { normalizeVlcHost } from '$lib/vlc-host';
 import { settings } from './settings';
 
 /**
@@ -20,7 +21,7 @@ export interface VlcTarget {
     host: string;
 }
 
-/** `名前=ホスト:ポート` のカンマ区切りを読む。ポート略なら VLC の既定 8080 */
+/** `名前=ホスト:ポート` のカンマ区切りを読む。ホストの整え方は `$lib/vlc-host` と共通 */
 export function parseTargets(text: string): VlcTarget[] {
     const out: VlcTarget[] = [];
     for (const part of text.split(',')) {
@@ -28,10 +29,10 @@ export function parseTargets(text: string): VlcTarget[] {
         if (trimmed === '') continue;
         const eq = trimmed.indexOf('=');
         const name = eq === -1 ? trimmed : trimmed.slice(0, eq).trim();
-        const host = (eq === -1 ? trimmed : trimmed.slice(eq + 1).trim()).replace(/^https?:\/\//, '');
-        // ホスト名が空 (':8080' だけ等) の崩れは黙って飛ばす
-        if (host.split(':')[0] === '') continue;
-        out.push({ name: name === '' ? host : name, host: host.includes(':') ? host : `${host}:8080` });
+        const host = normalizeVlcHost(eq === -1 ? trimmed : trimmed.slice(eq + 1));
+        // ホスト名が無い崩れは黙って飛ばす
+        if (host === '') continue;
+        out.push({ name: name === '' ? host : name, host });
     }
     return out;
 }

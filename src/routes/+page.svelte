@@ -27,6 +27,7 @@
     import { liveUpdates } from '$lib/live-updates.svelte';
     import { clearFailed, offline, removeLocal, saveOffline } from '$lib/offline.svelte';
     import { encodeSource } from '$lib/source';
+    import { normalizeVlcHost } from '$lib/vlc-host';
 
     let { data, form } = $props();
 
@@ -79,6 +80,12 @@
         vlcNote = { key: `vlc-${Date.now()}`, kind, text };
     }
 
+    /** 期限付きの再生リンクを作る (share.ts)。テレビへ飛ばすのもコピーするのも同じ1本 */
+    async function mintShareLink(id: number): Promise<{ url: string; expiresAt: number }> {
+        const res = await fetch(`/api/recordings/${id}/share`, { method: 'POST' });
+        return (await res.json()) as { url: string; expiresAt: number };
+    }
+
     /**
      * テレビの VLC へ、**この端末から**直接飛ばす。
      *
@@ -101,8 +108,7 @@
         const win = window.open('about:blank', '_blank');
         let shareUrl: string;
         try {
-            const res = await fetch(`/api/recordings/${id}/share`, { method: 'POST' });
-            ({ url: shareUrl } = (await res.json()) as { url: string });
+            ({ url: shareUrl } = await mintShareLink(id));
         } catch {
             win?.close();
             noteVlc('error', '再生リンクを作れませんでした');
@@ -135,10 +141,11 @@
      */
     async function copyShareLink(id: number): Promise<void> {
         try {
-            const res = await fetch(`/api/recordings/${id}/share`, { method: 'POST' });
-            const { url: shareUrl } = (await res.json()) as { url: string };
-            await navigator.clipboard.writeText(shareUrl);
-            noteVlc('info', '再生リンクをコピーしました (24時間有効)');
+            const { url, expiresAt } = await mintShareLink(id);
+            await navigator.clipboard.writeText(url);
+            // 有効な長さはサーバの決めごと (share.ts の SHARE_TTL)。文字で固定しない
+            const hours = Math.round((expiresAt - Date.now()) / 3_600_000);
+            noteVlc('info', `再生リンクをコピーしました (${hours}時間有効)`);
         } catch {
             // 貼れない繋ぎ (http) ではクリップボードが使えない (切り抜きと同じ制約)
             noteVlc('error', 'コピーできませんでした。https で開いているか確かめてください');
@@ -603,9 +610,8 @@
                                 {#if canPlay}
                                     <!--
                                         **ポスターを出す。** 焼いたときに動画の隣へ置いた
-                                        `-poster.jpg` (`api/.../poster`)。Nova など外の
-                                        プレイヤーに読ませているのと同じ絵で、テレビの画面では
-                                        文字だけの行よりずっと選びやすい。**無い録画もある**
+                                        `-poster.jpg` (`api/.../poster`)。文字だけの行より
+                                        ずっと選びやすい。**無い録画もある**
                                         (ポスターより前に焼いたもの等) ので、読めなければ絵を
                                         隠して枠だけ残す (`onerror`)。枠と再生印はいつでも出す
                                     -->
@@ -1010,11 +1016,11 @@
                     <button
                         type="button"
                         class="btn btn-primary join-item"
-                        disabled={tvHost.trim() === ''}
+                        disabled={normalizeVlcHost(tvHost) === ''}
                         onclick={() => {
-                            const raw = tvHost.trim();
-                            write('vlc-other-host', raw);
-                            void playOnTv(raw.includes(':') ? raw : `${raw}:8080`, rec.id);
+                            write('vlc-other-host', tvHost.trim());
+                            // 設定の一覧と同じ整え方 (http:// 剥がし・ポート補完)
+                            void playOnTv(normalizeVlcHost(tvHost), rec.id);
                         }}
                         data-testid="vlc-other-play"
                     >

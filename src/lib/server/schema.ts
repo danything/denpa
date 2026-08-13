@@ -80,7 +80,7 @@ export const ADDED_COLUMNS: { table: string; column: string; definition: string 
      */
     { table: 'recordings', column: 'finished_at', definition: 'INTEGER' },
     { table: 'reservations', column: 'started_at', definition: 'INTEGER' },
-    // 詳細(拡張形式)。NFO の <plot> に概要と続けて出す (Nova で一行しか出なかった)
+    // 詳細(拡張形式)。番組詳細の画面に概要と続けて出す
     { table: 'recordings', column: 'extended', definition: 'TEXT' },
 ];
 
@@ -244,7 +244,7 @@ CREATE TABLE IF NOT EXISTS recordings (
     series TEXT NOT NULL DEFAULT '',   -- 保存先でシリーズとしてまとめる単位
     subtitle TEXT NOT NULL DEFAULT '',
     description TEXT NOT NULL DEFAULT '',
-    -- 詳細(拡張形式)。番組表から写す。NFO の <plot> に概要と続けて出す
+    -- 詳細(拡張形式)。番組表から写し、番組詳細の画面に概要と続けて出す
     extended TEXT,
     start_at INTEGER NOT NULL,
     end_at INTEGER NOT NULL,

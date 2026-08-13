@@ -11,6 +11,7 @@
     import { playerControls } from '$lib/components/player/controls.svelte';
     import DataBroadcast from '$lib/components/player/DataBroadcast.svelte';
     import EdgeButton from '$lib/components/player/EdgeButton.svelte';
+    import FactsAside from '$lib/components/player/FactsAside.svelte';
     import Icon from '$lib/components/player/Icon.svelte';
     import InfoBlock from '$lib/components/player/InfoBlock.svelte';
     import {
@@ -636,26 +637,24 @@
         **高さは残りぜんぶ。** `max-h-[70vh]` で切っていた頃は、画面の下に
         余白があるのに一覧のほうが先に終わっていた
     -->
-    <!-- **二段組にした直後は細く** (`md:w-64`)。理由は [ControlBar.svelte](../../lib/components/player/ControlBar.svelte) -->
-    <aside class="flex flex-col md:w-64 md:min-h-0 md:shrink-0 lg:w-80">
-        {#if detail.current}
-            <!--
-                **番組の中身は、この列を入れ替えて出す。モーダルにしない** —
-                絵の上に被さると観ながら読めない (観る画面と同じ考え方)。
-                読んでいる間はチャンネルを選ばないので、一覧は退けてよい
-            -->
-            <div class="card bg-base-100 flex min-h-0 flex-1 shadow" data-testid="live-detail">
-                <div class="min-h-0 flex-1 overflow-y-auto p-4">
-                    <ProgramFacts program={detail.current} />
-                </div>
-                <!-- 押すものは巻き取られる中身の外。中身がどれだけ長くても見えている -->
-                <div class="border-base-300 flex shrink-0 flex-wrap gap-2 border-t p-4">
-                    <button type="button" class="btn btn-sm" onclick={() => detail.close()} data-testid="live-detail-close">
-                        チャンネルへ戻る
-                    </button>
-                </div>
-            </div>
-        {:else}
+    {#if detail.current}
+        <!--
+            **番組の中身は、この列を入れ替えて出す。モーダルにしない** —
+            絵の上に被さると観ながら読めない (観る画面と同じ考え方)。
+            読んでいる間はチャンネルを選ばないので、一覧は退けてよい。
+            枠は3画面共通 (FactsAside)
+        -->
+        <FactsAside testid="live-detail">
+            <ProgramFacts program={detail.current} />
+            {#snippet footer()}
+                <button type="button" class="btn btn-sm" onclick={() => detail.close()} data-testid="live-detail-close">
+                    チャンネルへ戻る
+                </button>
+            {/snippet}
+        </FactsAside>
+    {:else}
+        <!-- 幅と高さの決めごとは FactsAside と同じ (一覧は枠が違うので列だけ揃える) -->
+        <aside class="flex flex-col md:w-64 md:min-h-0 md:shrink-0 lg:w-80">
             <!--
                 **データ放送を出している間だけ、リモコンを一覧の上に出す。**
 
@@ -770,8 +769,8 @@
                     </li>
                 {/each}
             </ul>
-        {/if}
-    </aside>
+        </aside>
+    {/if}
 </div>
 
 <Toasts {notices} />

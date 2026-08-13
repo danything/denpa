@@ -116,8 +116,8 @@ function settling(path: string, at: number): boolean {
  *
  * - `<動画>.dtvi` … chapter_exe / logoframe が作る索引 (1本3MB)
  * - `<動画>.sup` `<動画>.jls…` … 字幕とCM検出の作業ファイル
- * - `<動画から拡張子を取ったもの>.nfo` / `-poster.jpg` / `.bml.jsonl` … プレイヤー向けの
- *   覚え書き・ポスター・録画のデータ放送。`.ja.ass` と `-thumb.jpg` は昔の名残 (いまは作らない)
+ * - `<動画から拡張子を取ったもの>-poster.jpg` / `.bml.jsonl` … サムネイルと録画のデータ放送。
+ *   `.nfo` `.ja.ass` `-thumb.jpg` は昔の名残 (いまは作らない)
  *
  * 実機では生TSの置き場に `.dtvi` が9本 (22MB) 残っていた。生TSを残さない設定だと
  * TS が消えたあとも索引だけが居座り、録るたびに積もる。

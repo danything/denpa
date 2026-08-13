@@ -74,7 +74,7 @@ function createRecording(reservation: Reservation): Recording {
      * ときにしか更新していないので、そのまま写すと**古い名前で保存先に並ぶ**。
      *
      * 逆に、録り終えたあとは動かさない。番組表の行は24時間で消えるうえ、
-     * ファイル名も .nfo も既に書いてある (docs/data.md)
+     * ファイル名も画面に出す番組情報 (DB) も既に固まっている (docs/data.md)
      */
     const name = program?.name ?? reservation.name;
     const description = program?.description ?? reservation.description;
