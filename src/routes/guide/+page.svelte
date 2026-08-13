@@ -3,7 +3,7 @@
     import { dragScroll, submitting } from '$lib/actions';
     import ProgramDetail from '$lib/components/ProgramDetail.svelte';
     import { withCredentials } from '$lib/download';
-    import { genreTint, stateLabel, time } from '$lib/format';
+    import { date, genreTint, SERVICE_TYPE_LABEL, stateLabel, time } from '$lib/format';
 
     let { data, form } = $props();
 
@@ -22,7 +22,6 @@
      */
     const watchable = $derived(new Set(data.watchable));
 
-    const TYPE_LABEL: Record<string, string> = { GR: '地上波', BS: 'BS', CS: 'CS' };
     const HOUR = 60 * 60 * 1000;
     /** 5分を1マスにする。細かすぎると行数が増えるだけ、粗いと短い番組が潰れる */
     const SLOT = 5 * 60 * 1000;
@@ -111,11 +110,6 @@
         })),
     );
 
-    const WEEKDAYS = ['日', '月', '火', '水', '木', '金', '土'];
-    function dayLabel(at: number): string {
-        const d = new Date(at);
-        return `${d.getMonth() + 1}/${d.getDate()}(${WEEKDAYS[d.getDay()]})`;
-    }
 
     function href(params: Record<string, string>): string {
         const query = new URLSearchParams({ type: data.type, ...params });
@@ -206,7 +200,7 @@
                     href="/guide?type={type}&start={data.start}"
                     data-testid="type-{type}"
                 >
-                    {TYPE_LABEL[type]}
+                    {SERVICE_TYPE_LABEL[type]}
                 </a>
             {/each}
         </div>
@@ -216,7 +210,7 @@
             <a class="btn btn-sm" href={prevHref} data-testid="prev-day">← 前日</a>
             <span class="text-sm" data-testid="window-label">
                 <!-- 日本の番組表の慣習で、1日は4時から翌4時まで -->
-                {dayLabel(data.start)} <span class="text-base-content/60">(4:00〜翌4:00)</span>
+                {date(data.start)} <span class="text-base-content/60">(4:00〜翌4:00)</span>
             </span>
             <a class="btn btn-sm" href={nextHref} data-testid="next-day">翌日 →</a>
             <a class="btn btn-sm" href={href({})}>今日</a>
@@ -244,7 +238,7 @@
     {#if data.services.length === 0}
         <div class="rounded-box bg-base-100 p-6 text-center shadow" data-testid="empty-grid">
             <p class="text-base-content/60">
-                {TYPE_LABEL[
+                {SERVICE_TYPE_LABEL[
                     data.type
                 ]}のチャンネルがありません。チューナー画面でチャンネルスキャンを実行してください。
             </p>

@@ -9,6 +9,8 @@
  * 別の端末や別の人に付いて回るものではない
  */
 
+import { forget, read, write } from '$lib/keep';
+
 const KEY = 'denpa_measure';
 
 let on = $state(false);
@@ -21,8 +23,8 @@ export const measure = {
     /** 入り切り。覚えるので、リロードしても消えない (それが要る場面で使う) */
     set(next: boolean): void {
         on = next;
-        if (next) localStorage.setItem(KEY, '1');
-        else localStorage.removeItem(KEY);
+        if (next) write(KEY, '1');
+        else forget(KEY);
     },
 
     /**
@@ -32,6 +34,6 @@ export const measure = {
      * 誰かに渡したときに相手の端末に居座らせない
      */
     start(url: URL): void {
-        on = url.searchParams.has('measure') || localStorage.getItem(KEY) === '1';
+        on = url.searchParams.has('measure') || read(KEY) === '1';
     },
 };

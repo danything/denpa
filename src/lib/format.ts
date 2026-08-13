@@ -1,5 +1,17 @@
 const WEEKDAYS = ['日', '月', '火', '水', '木', '金', '土'];
 
+/**
+ * チャンネル種別の見出し。**どれを出すか (並び) は画面ごとに決める** —
+ * ここは名前だけ。5画面が同じ表をコピーしていたのを1つに (SKY を選べるのは
+ * ルールの条件だけだが、余分に持っていても他画面の表示には出ない)
+ */
+export const SERVICE_TYPE_LABEL: Record<string, string> = {
+    GR: '地上波',
+    BS: 'BS',
+    CS: 'CS',
+    SKY: 'SKY',
+};
+
 function pad(n: number): string {
     return String(n).padStart(2, '0');
 }

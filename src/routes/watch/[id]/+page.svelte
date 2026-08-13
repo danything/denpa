@@ -20,7 +20,6 @@
         NEXT,
         OVERLAY,
         OVERLAY_BTN,
-        OVERLAY_ON,
         PAUSE,
         PLAY,
         PREV,
@@ -33,13 +32,15 @@
     import PlayerStage from '$lib/components/player/PlayerStage.svelte';
     import { clearOverlay, drawOverlay, fitRect } from '$lib/components/player/paint';
     import Remote from '$lib/components/player/Remote.svelte';
-    import { clipFrame } from '$lib/components/player/snapshot';
+    import { snapshotter } from '$lib/components/player/shot.svelte';
     import Toasts, { type Notice } from '$lib/components/Toasts.svelte';
     import { type DetailSeed, programDetail } from '$lib/detail.svelte';
     import { clock, cmNoteWorthShowing, recordedDuration, size, time } from '$lib/format';
-    import { loadOffline, rememberResume } from '$lib/offline.svelte';
+    import { write as remind, read as stored } from '$lib/keep';
+    import { loadOffline } from '$lib/offline.svelte';
     import type { OfflineVideo } from '$lib/offline-db';
     import { captionAt, type Drawn, pixels, readSup } from '$lib/pgs';
+    import { keepResume } from '$lib/resume';
     import { feedFor, type PlacedMessage, replayAt } from '$lib/ts/data-timeline';
     import { SPEEDS } from '$lib/ts/pacing';
     import {
@@ -359,28 +360,11 @@
 
     /**
      * **どこまで観たかを覚える。** 覚えるかどうかの判断は `ts/watch.ts` が持つ
-     * (サーバも同じものを見る)。
-     *
-     * 出ていく間際は `sendBeacon` で投げる — 画面を畳んだあとの `fetch` は
-     * ブラウザに捨てられることがあり、**最後に観たところがいちばん要る**
+     * (サーバも同じものを見る)。送り方は追っかけと共通 (`$lib/resume.ts`)
      */
     function remember(leaving = false): void {
         if (video === null || !ready) return;
-        const body = JSON.stringify({ at: video.currentTime, length: video.duration });
-        const url = `/api/recordings/${rec.id}/resume`;
-        if (leaving && navigator.sendBeacon !== undefined) {
-            navigator.sendBeacon(url, new Blob([body], { type: 'application/json' }));
-            return;
-        }
-        void fetch(url, {
-            method: 'POST',
-            headers: { 'content-type': 'application/json' },
-            body,
-            keepalive: true,
-        }).catch(() => {
-            // オフラインで観ている。位置は端末に覚えて、復帰時にまとめて送る
-            void rememberResume(rec.id, video?.currentTime ?? 0, video?.duration ?? 0);
-        });
+        keepResume(rec.id, video.currentTime, video.duration, leaving);
     }
 
     /**
@@ -541,23 +525,6 @@
         if (video !== null) video.playbackRate = value;
         if (remember) remind(SPEED_KEY, String(value));
         controls.stir();
-    }
-
-    /** 覚えているもの。読めない繋ぎ (プライベート窓) では黙って null */
-    function stored(key: string): string | null {
-        try {
-            return localStorage.getItem(key);
-        } catch {
-            return null;
-        }
-    }
-
-    function remind(key: string, value: string): void {
-        try {
-            localStorage.setItem(key, value);
-        } catch {
-            // 覚えられなくても観るのに支障は無い (プライベート窓など)
-        }
     }
 
     /** 前に選んだ速さを引き出す。読めない・知らない値なら等速 */
@@ -818,14 +785,14 @@
     }
 
     /** 切り抜きの結果。**貼れたかどうかは言う** (黙って何も起きないと分からない) */
-    let shot = $state<Notice | null>(null);
+    const shooter = snapshotter(controls);
 
     /** 断られたときだけ知らせる。消せたときは一覧へ戻るので出す先が無い */
     const notices = $derived<Notice[]>([
         ...(form !== null && form !== undefined && 'message' in form && typeof form.message === 'string'
             ? [{ key: 'watch-delete', kind: 'error' as const, text: form.message }]
             : []),
-        ...(shot === null ? [] : [shot]),
+        ...shooter.notices,
     ]);
 
     /**
@@ -839,13 +806,9 @@
      * (https か localhost) だけで、押した勢い (user activation) も要る。
      * 断られたら**落とすほうに倒す** — 撮ったものを取り落とさない
      */
-    async function snapshot(): Promise<void> {
-        if (video === null) return;
-        controls.stir();
+    function snapshot(): void {
         // 字幕を出しているときだけ重ねる
-        const caption = captions && showing !== null ? overlay : null;
-        const notice = await clipFrame(video, caption, () => `${rec.name} - ${clock(at)}`);
-        if (notice !== null) shot = notice;
+        void shooter.take(video, captions && showing !== null ? overlay : null, () => `${rec.name} - ${clock(at)}`);
     }
 </script>
 
@@ -1232,17 +1195,11 @@
                                 onselect={(key) => selectAudio(key)}
                             >
                                 {#snippet trigger()}
-                                    <button
-                                        type="button"
-                                        class="{OVERLAY_BTN} gap-1.5 {OVERLAY}"
-                                        aria-label="音声を選ぶ"
-                                        data-testid="watch-audio"
-                                    >
-                                        <Icon path={AUDIO} />
+                                    <ControlButton path={AUDIO} label="音声を選ぶ" testid="watch-audio">
                                         <span class="hidden max-w-28 truncate sm:inline">
                                             {audios[audioIndex]?.label ?? '音声'}
                                         </span>
-                                    </button>
+                                    </ControlButton>
                                 {/snippet}
                             </OverlayMenu>
                         {/if}
@@ -1331,13 +1288,9 @@
                             onselect={(key) => setSpeed(key)}
                         >
                             {#snippet trigger()}
-                                <button type="button"
-                                    class="{OVERLAY_BTN} tabular-nums {speed === 1 ? OVERLAY : OVERLAY_ON}"
-                                    aria-label="再生の速さ"
-                                    data-testid="watch-speed"
-                                >
-                                    {speed}×
-                                </button>
+                                <ControlButton label="再生の速さ" testid="watch-speed" on={speed !== 1}>
+                                    <span class="tabular-nums">{speed}×</span>
+                                </ControlButton>
                             {/snippet}
                         </OverlayMenu>
 

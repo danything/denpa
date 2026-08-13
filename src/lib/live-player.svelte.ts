@@ -8,6 +8,7 @@
 
 import type { AudioTrack } from '$lib/arib';
 import { clearOverlay, drawOverlay } from '$lib/components/player/paint';
+import { forget, read, write } from '$lib/keep';
 import {
     type CaptionTrack,
     CHANNEL,
@@ -125,22 +126,14 @@ function remember(target: Tuned): void {
 const FLOOR_KEY = 'live-floor';
 
 function storedFloor(): number {
-    try {
-        const saved = Number(localStorage.getItem(FLOOR_KEY));
-        if (!Number.isFinite(saved)) return FLOOR;
-        return Math.min(CEILING, Math.max(FLOOR, saved));
-    } catch {
-        // 読めない繋ぎ (プライベート窓)。今までどおり下限から始める
-        return FLOOR;
-    }
+    // 読めない繋ぎ (プライベート窓) では下限から始める (`keep.read`)
+    const saved = Number(read(FLOOR_KEY));
+    if (!Number.isFinite(saved)) return FLOOR;
+    return Math.min(CEILING, Math.max(FLOOR, saved));
 }
 
 function rememberFloor(seconds: number): void {
-    try {
-        localStorage.setItem(FLOOR_KEY, String(seconds));
-    } catch {
-        // 覚えられなくても観るのに支障は無い
-    }
+    write(FLOOR_KEY, String(seconds));
 }
 
 /**
@@ -150,11 +143,7 @@ function rememberFloor(seconds: number): void {
  * を分けて持つ意味が無い
  */
 function clearFloor(): void {
-    try {
-        localStorage.removeItem(FLOOR_KEY);
-    } catch {
-        // 消せなくても観るのに支障は無い
-    }
+    forget(FLOOR_KEY);
 }
 
 export function livePlayer() {

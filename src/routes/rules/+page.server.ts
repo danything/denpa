@@ -1,5 +1,6 @@
 import { fail, redirect } from '@sveltejs/kit';
 import { genreName } from '$lib/arib';
+import { SERVICE_TYPE_LABEL } from '$lib/format';
 import { parseSearchFields } from '$lib/search';
 import { config } from '$lib/server/config';
 import { contending, type Occupant, rivalsOf } from '$lib/server/conflict';
@@ -355,8 +356,6 @@ function rulePriority(fields: Fields): number {
     return Number.isFinite(value) && value >= 0 ? Math.floor(value) : 1;
 }
 
-const TYPE_LABEL: Record<string, string> = { GR: '地上波', BS: 'BS', CS: 'CS', SKY: 'SKY' };
-
 /**
  * ルール名はキーワードから決める。別で名前を付けさせても、結局キーワードと
  * 同じものを打ち込むだけになるため。キーワードが無いときは対象の局で表す。
@@ -371,7 +370,9 @@ function ruleName(conditions: Conditions): string {
     }
     if (conditions.serviceTypes !== null) {
         parts.push(
-            ...(JSON.parse(conditions.serviceTypes) as string[]).map((type) => TYPE_LABEL[type] ?? type),
+            ...(JSON.parse(conditions.serviceTypes) as string[]).map(
+                (type) => SERVICE_TYPE_LABEL[type] ?? type,
+            ),
         );
     }
     if (conditions.serviceIds !== null) {

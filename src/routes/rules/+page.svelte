@@ -4,7 +4,7 @@
     import ProgramDetail from '$lib/components/ProgramDetail.svelte';
     import Toasts, { type Notice } from '$lib/components/Toasts.svelte';
     import { programDetail } from '$lib/detail.svelte';
-    import { badgeClass, CM_LABEL, dateTime, stateLabel } from '$lib/format';
+    import { badgeClass, CM_LABEL, dateTime, SERVICE_TYPE_LABEL, stateLabel } from '$lib/format';
     import { jsonArray } from '$lib/json';
     import { parseSearchFields, SEARCH_FIELD_LABEL, SEARCH_FIELDS, searchFieldLabel } from '$lib/search';
 
@@ -16,7 +16,6 @@
     const seedGenres = $derived(jsonArray(data.seed?.genres).map(String));
     const seedFields = $derived(parseSearchFields(data.seed?.search_fields));
 
-    const TYPE_LABEL: Record<string, string> = { GR: '地上波', BS: 'BS', CS: 'CS', SKY: 'SKY' };
 
     /**
      * プレビューの行から開く番組詳細 (detail.svelte.ts)。予約一覧と同じ見せ方。
@@ -29,7 +28,7 @@
 
     function channels(rule: { service_types: string | null; service_ids: string | null }): string {
         const parts = [
-            ...jsonArray<string>(rule.service_types).map((t) => TYPE_LABEL[t] ?? t),
+            ...jsonArray<string>(rule.service_types).map((t) => SERVICE_TYPE_LABEL[t] ?? t),
             ...jsonArray<number>(rule.service_ids).map(
                 (id) => data.services.find((s) => s.id === id)?.name ?? String(id),
             ),
@@ -208,7 +207,7 @@
                                                         class="checkbox checkbox-sm"
                                                     />
                                                     <span class="text-sm">
-                                                        {TYPE_LABEL[group.type] ?? group.type}
+                                                        {SERVICE_TYPE_LABEL[group.type] ?? group.type}
                                                         <span class="text-base-content/60">
                                                             ({group.services.length})
                                                         </span>
@@ -228,7 +227,7 @@
                                             {#each grouped as group (group.type)}
                                                 <div>
                                                     <div class="text-base-content/60 mb-1 text-xs">
-                                                        {TYPE_LABEL[group.type] ?? group.type}
+                                                        {SERVICE_TYPE_LABEL[group.type] ?? group.type}
                                                     </div>
                                                     <div class="grid gap-x-4 gap-y-1 sm:grid-cols-2">
                                                         {#each group.services as service (service.id)}

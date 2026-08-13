@@ -57,6 +57,24 @@
     }
 </script>
 
+{#snippet checkRow(
+    name: string,
+    checked: boolean,
+    testid: string,
+    title: string,
+    hint: string,
+    wrap: string = '',
+)}
+    <!-- チェック + 見出し + 小さい説明。この画面の決まりの形 (6行が同じ骨格だった) -->
+    <label class="flex cursor-pointer items-start gap-2 {wrap}">
+        <input type="checkbox" {name} {checked} class="checkbox checkbox-sm mt-0.5" data-testid={testid} />
+        <span class="text-sm">
+            {title}
+            <span class="text-base-content/60 block text-xs">{hint}</span>
+        </span>
+    </label>
+{/snippet}
+
 <Toasts {notices} source={form} />
 
 <!--
@@ -142,21 +160,14 @@
                         画面に出していなかった頃は、保存を押すたびに未送信のチェックボックスとして
                         全部 false で上書きされていた
                     -->
-                    <label class="flex cursor-pointer items-start gap-2 sm:self-center">
-                        <input
-                            type="checkbox"
-                            name="keepOriginal"
-                            bind:checked={recording.keepOriginal}
-                            class="checkbox checkbox-sm mt-0.5"
-                            data-testid="global-keep"
-                        />
-                        <span class="text-sm">
-                            生TSも残す
-                            <span class="text-base-content/60 block text-xs">
-                                エンコードしたあとも元のTSを消しません。容量を食います
-                            </span>
-                        </span>
-                    </label>
+                    {@render checkRow(
+                        'keepOriginal',
+                        recording.keepOriginal,
+                        'global-keep',
+                        '生TSも残す',
+                        'エンコードしたあとも元のTSを消しません。容量を食います',
+                        'sm:self-center',
+                    )}
                     <label class="flex flex-col gap-1">
                         <span class="text-sm font-medium">CM</span>
                         <select name="cmCut" class="select select-bordered w-full" data-testid="global-cmcut">
@@ -221,37 +232,21 @@
                         本当のコマ数は入っていない。60コマに起こして同じ絵が並ぶ割合を
                         数えるのが唯一の見分け方だった (実測: アニメ 21〜55% / 生放送 71%)
                     -->
-                    <label class="flex cursor-pointer items-start gap-2">
-                        <input
-                            type="checkbox"
-                            name="fpsDetect"
-                            bind:checked={recording.fpsDetect}
-                            class="checkbox checkbox-sm mt-0.5"
-                            data-testid="global-fps-detect"
-                        />
-                        <span class="text-sm">
-                            コマ数を映像から決める
-                            <span class="text-base-content/60 block text-xs">
-                                同じ絵が並ぶ素材 (アニメなど) を 30コマで焼き、時間とサイズを
-                                半分にします。外すと全部 60コマで焼きます
-                            </span>
-                        </span>
-                    </label>
-                    <label class="flex cursor-pointer items-start gap-2 sm:col-span-2">
-                        <input
-                            type="checkbox"
-                            name="freeOnly"
-                            bind:checked={recording.freeOnly}
-                            class="checkbox checkbox-sm mt-0.5"
-                            data-testid="global-free-only"
-                        />
-                        <span class="text-sm">
-                            自動予約は無料放送だけにする
-                            <span class="text-base-content/60 block text-xs">
-                                有料放送は契約していないと中身が入りません
-                            </span>
-                        </span>
-                    </label>
+                    {@render checkRow(
+                        'fpsDetect',
+                        recording.fpsDetect,
+                        'global-fps-detect',
+                        'コマ数を映像から決める',
+                        '同じ絵が並ぶ素材 (アニメなど) を 30コマで焼き、時間とサイズを半分にします。外すと全部 60コマで焼きます',
+                    )}
+                    {@render checkRow(
+                        'freeOnly',
+                        recording.freeOnly,
+                        'global-free-only',
+                        '自動予約は無料放送だけにする',
+                        '有料放送は契約していないと中身が入りません',
+                        'sm:col-span-2',
+                    )}
                     <div class="sm:col-span-2">
                         <button type="submit" class="btn btn-primary" data-testid="save-recording">保存</button>
                     </div>
@@ -577,35 +572,20 @@
                     </div>
                 {:else}
                     <form method="POST" action="?/migrate" use:submitting class="mt-2 space-y-3">
-                        <label class="flex cursor-pointer items-start gap-2">
-                            <input
-                                type="checkbox"
-                                name="apply"
-                                class="checkbox checkbox-sm mt-0.5"
-                                data-testid="migrate-apply"
-                            />
-                            <span class="text-sm">
-                                実際に取り込む
-                                <span class="text-base-content/60 block text-xs">
-                                    外したままなら何が取り込まれるかを出すだけで、ファイルもデータベースも触りません
-                                </span>
-                            </span>
-                        </label>
-                        <label class="flex cursor-pointer items-start gap-2">
-                            <input
-                                type="checkbox"
-                                name="move"
-                                class="checkbox checkbox-sm mt-0.5"
-                                data-testid="migrate-move"
-                            />
-                            <span class="text-sm">
-                                コピーではなく移動する
-                                <span class="text-base-content/60 block text-xs">
-                                    既定はコピー。中身を確かめてから EPGStation 側を消せます。
-                                    空き容量が足りないときだけ移動にしてください
-                                </span>
-                            </span>
-                        </label>
+                        {@render checkRow(
+                            'apply',
+                            false,
+                            'migrate-apply',
+                            '実際に取り込む',
+                            '外したままなら何が取り込まれるかを出すだけで、ファイルもデータベースも触りません',
+                        )}
+                        {@render checkRow(
+                            'move',
+                            false,
+                            'migrate-move',
+                            'コピーではなく移動する',
+                            '既定はコピー。中身を確かめてから EPGStation 側を消せます。空き容量が足りないときだけ移動にしてください',
+                        )}
                         <button type="submit"
                             class="btn btn-primary"
                             disabled={migrate.state === 'running'}

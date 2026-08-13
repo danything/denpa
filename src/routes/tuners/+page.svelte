@@ -2,6 +2,7 @@
     import { submitting } from '$lib/actions';
     import LogoArea from '$lib/components/LogoArea.svelte';
     import Toasts, { type Notice } from '$lib/components/Toasts.svelte';
+    import { SERVICE_TYPE_LABEL } from '$lib/format';
     import { held, liveUpdates } from '$lib/live-updates.svelte';
 
     let { data, form } = $props();
@@ -22,7 +23,6 @@
      */
     const cmLogos = $derived([...data.cmLogos].sort((a, b) => Number(a.learned) - Number(b.learned)));
 
-    const TYPE_LABEL: Record<string, string> = { GR: '地上波', BS: 'BS', CS: 'CS' };
     /** チューナーが受けられる種別。設定の表で並べる順 */
     const TYPES = ['GR', 'BS', 'CS'] as const;
     const STATE_LABEL: Record<string, string> = {
@@ -169,7 +169,7 @@
                                     )}
                                     <tr data-testid="channel-row" data-channel={channel.channel}>
                                         <td class="whitespace-nowrap text-sm">
-                                            {TYPE_LABEL[channel.type] ?? channel.type}
+                                            {SERVICE_TYPE_LABEL[channel.type] ?? channel.type}
                                         </td>
                                         <td class="font-mono text-sm whitespace-nowrap">
                                             {channel.channel}
@@ -220,7 +220,7 @@
                                         checked={type === 'GR'}
                                         class="checkbox checkbox-sm"
                                     />
-                                    <span class="text-sm">{TYPE_LABEL[type]}</span>
+                                    <span class="text-sm">{SERVICE_TYPE_LABEL[type]}</span>
                                 </label>
                             {/each}
                         </div>
@@ -332,7 +332,7 @@
                                         <tr data-testid="tuner-row" data-tuner-index={tuner.index}>
                                             <td class="whitespace-nowrap">{tuner.name}</td>
                                             <td class="whitespace-nowrap text-sm">
-                                                {tuner.types.map((t) => TYPE_LABEL[t] ?? t).join('/')}
+                                                {tuner.types.map((t) => SERVICE_TYPE_LABEL[t] ?? t).join('/')}
                                             </td>
                                             <td class="whitespace-nowrap">
                                                 <!-- 何を掴んでいるかも出す。空き/使用中だけでは追えない -->
@@ -609,7 +609,7 @@
                                                             name={`type.${index}.${type}`}
                                                             checked={tuner?.types.includes(type) ?? false}
                                                         />
-                                                        <span class="text-xs">{TYPE_LABEL[type]}</span>
+                                                        <span class="text-xs">{SERVICE_TYPE_LABEL[type]}</span>
                                                     </label>
                                                 {/each}
                                             </td>

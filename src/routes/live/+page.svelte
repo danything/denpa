@@ -8,6 +8,7 @@
     import { centerTap } from '$lib/components/player/center-tap';
     import { playerControls } from '$lib/components/player/controls.svelte';
     import DataBroadcast from '$lib/components/player/DataBroadcast.svelte';
+    import EdgeButton from '$lib/components/player/EdgeButton.svelte';
     import Icon from '$lib/components/player/Icon.svelte';
     import {
         AUDIO,
@@ -18,9 +19,6 @@
         INFO,
         OPEN_OUT,
         OVERLAY,
-        OVERLAY_BTN,
-        OVERLAY_DANGER,
-        OVERLAY_ON,
         PAUSE,
         PLAY,
         RECORD,
@@ -33,10 +31,10 @@
     import PlayerStage from '$lib/components/player/PlayerStage.svelte';
     import PlayerVeil from '$lib/components/player/PlayerVeil.svelte';
     import Remote from '$lib/components/player/Remote.svelte';
-    import { clipFrame } from '$lib/components/player/snapshot';
+    import { snapshotter } from '$lib/components/player/shot.svelte';
     import Toasts, { type Notice } from '$lib/components/Toasts.svelte';
     import { programDetail } from '$lib/detail.svelte';
-    import { time } from '$lib/format';
+    import { SERVICE_TYPE_LABEL, time } from '$lib/format';
     import { LIVE_CODECS } from '$lib/live';
     import { livePlayer } from '$lib/live-player.svelte';
     import { FLOOR, SPEEDS } from '$lib/ts/pacing';
@@ -92,7 +90,6 @@
      * 100を超える環境では地上波が上のほうへ流れて見えなくなる。番組表と
      * 同じ並び・同じ見た目にしてあるので、探す場所がずれない
      */
-    const TYPE_LABEL: Record<string, string> = { GR: '地上波', BS: 'BS', CS: 'CS' };
     /** 局を持っている種別だけ出す。BS を繋いでいない環境で空の見出しを出さない */
     const types = $derived(['GR', 'BS', 'CS'].filter((t) => channels.some((c) => c.type === t)));
     /** **開いたときは、いま映している局の種別。** 選び直す手間を増やさない */
@@ -204,9 +201,9 @@
      * クリップボードに絵を置けるのは安全な繋ぎ (https) と押した勢いが要るので、
      * 断られたら**落とすほうに倒す** — 撮ったものを取り落とさない
      */
-    let shot = $state<Notice | null>(null);
+    const shooter = snapshotter(controls);
     const notices = $derived<Notice[]>([
-        ...(shot === null ? [] : [shot]),
+        ...shooter.notices,
         // 録画ボタンの結果 (`?/record`)。押した本人へ、始まったか断られたかを言う
         ...(form?.recorded
             ? [{ key: `record-${form.recorded}`, kind: 'info' as const, text: `録画を始めます: ${form.recorded}` }]
@@ -216,17 +213,13 @@
             : []),
     ]);
 
-    async function snapshot(): Promise<void> {
-        if (video === null) return;
-        controls.stir();
+    function snapshot(): void {
         // 字幕を出しているときだけ重ねる
-        const caption = player.captions && player.hasCaptions ? overlay : null;
-        const notice = await clipFrame(
+        void shooter.take(
             video,
-            caption,
+            player.captions && player.hasCaptions ? overlay : null,
             () => `${current?.now?.name ?? current?.name ?? 'ライブ'} - ${time(Date.now())}`,
         );
-        if (notice !== null) shot = notice;
     }
 </script>
 
@@ -441,16 +434,12 @@
                                 onselect={(key) => player.setCaptionTrack(key)}
                             >
                                 {#snippet trigger()}
-                                    <button type="button"
-                                        class="{OVERLAY_BTN} {OVERLAY}"
-                                        aria-label="字幕を選ぶ"
-                                        data-testid="live-caption-track"
-                                    >
+                                    <ControlButton label="字幕を選ぶ" testid="live-caption-track">
                                         <span class="max-w-28 truncate">
                                             {player.captionTracks.find((t) => t.index === player.captionTrack)
                                                 ?.label ?? '字幕'}
                                         </span>
-                                    </button>
+                                    </ControlButton>
                                 {/snippet}
                             </OverlayMenu>
                         {/if}
@@ -478,15 +467,11 @@
                             onselect={(key) => player.setCodec(key)}
                         >
                             {#snippet trigger()}
-                                <button type="button"
-                                    class="{OVERLAY_BTN} gap-1.5 {OVERLAY}"
-                                    aria-label="焼き方を選ぶ"
-                                    data-testid="live-codec"
-                                >
+                                <ControlButton label="焼き方を選ぶ" testid="live-codec">
                                     <span class="text-xs font-semibold">
                                         {LIVE_CODECS.find((c) => c.id === player.codec)?.label ?? 'H.264'}
                                     </span>
-                                </button>
+                                </ControlButton>
                             {/snippet}
                         </OverlayMenu>
 
@@ -512,16 +497,11 @@
                                 onselect={(key) => player.setAudio(key)}
                             >
                                 {#snippet trigger()}
-                                    <button type="button"
-                                        class="{OVERLAY_BTN} gap-1.5 {OVERLAY}"
-                                        aria-label="音声を選ぶ"
-                                        data-testid="live-audio"
-                                    >
-                                        <Icon path={AUDIO} />
+                                    <ControlButton path={AUDIO} label="音声を選ぶ" testid="live-audio">
                                         <span class="hidden max-w-28 truncate sm:inline">
                                             {player.audios.find((a) => a.id === player.audio)?.label ?? '音声'}
                                         </span>
-                                    </button>
+                                    </ControlButton>
                                 {/snippet}
                             </OverlayMenu>
                         {/if}
@@ -531,18 +511,12 @@
                             **文字は焼き方のボタンと同じ大きさ・幅は詰める** —
                             btn-lg のままだと帯の中でこれだけ太って見えていた
                         -->
-                        <button type="button"
-                            class="{OVERLAY_BTN} gap-1 px-3 {player.live ? OVERLAY_DANGER : OVERLAY}"
+                        <EdgeButton
+                            active={player.live}
+                            label="ライブ"
                             onclick={() => player.goLive()}
-                            data-testid="live-edge"
-                        >
-                            <span
-                                class="inline-block size-2 rounded-full {player.live
-                                    ? 'bg-white'
-                                    : 'bg-error'}"
-                            ></span>
-                            <span class="text-xs font-semibold">ライブ</span>
-                        </button>
+                            testid="live-edge"
+                        />
 
                         <!-- **読みものはここに二段で。** 決まりは [ControlBar.svelte](../../lib/components/player/ControlBar.svelte) -->
                         <div class="min-w-0 grow basis-0 px-2 leading-tight text-white/80">
@@ -642,15 +616,9 @@
                                 onselect={(key) => player.setSpeed(key)}
                             >
                                 {#snippet trigger()}
-                                    <button type="button"
-                                        class="{OVERLAY_BTN} tabular-nums {player.speed !== 1
-                                            ? OVERLAY_ON
-                                            : OVERLAY}"
-                                        aria-label="追っかけの速さ"
-                                        data-testid="live-speed"
-                                    >
-                                        {player.speed}×
-                                    </button>
+                                    <ControlButton label="追っかけの速さ" testid="live-speed" on={player.speed !== 1}>
+                                        <span class="tabular-nums">{player.speed}×</span>
+                                    </ControlButton>
                                 {/snippet}
                             </OverlayMenu>
                         {/if}
@@ -774,7 +742,7 @@
                         onclick={() => (picked = type)}
                         data-testid="live-type-{type}"
                     >
-                        {TYPE_LABEL[type]}
+                        {SERVICE_TYPE_LABEL[type]}
                     </button>
                 {/each}
             </div>

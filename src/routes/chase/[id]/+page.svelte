@@ -5,6 +5,7 @@
     import ControlButton from '$lib/components/player/ControlButton.svelte';
     import { centerTap } from '$lib/components/player/center-tap';
     import { playerControls } from '$lib/components/player/controls.svelte';
+    import EdgeButton from '$lib/components/player/EdgeButton.svelte';
     import Icon from '$lib/components/player/Icon.svelte';
     import {
         AUDIO,
@@ -14,8 +15,6 @@
         EXPAND,
         OVERLAY,
         OVERLAY_BTN,
-        OVERLAY_DANGER,
-        OVERLAY_ON,
         PAUSE,
         PLAY,
         SHRINK,
@@ -26,11 +25,12 @@
     import OverlayMenu from '$lib/components/player/OverlayMenu.svelte';
     import PlayerStage from '$lib/components/player/PlayerStage.svelte';
     import PlayerVeil from '$lib/components/player/PlayerVeil.svelte';
-    import { clipFrame } from '$lib/components/player/snapshot';
+    import { snapshotter } from '$lib/components/player/shot.svelte';
     import Toasts, { type Notice } from '$lib/components/Toasts.svelte';
-    import { time } from '$lib/format';
+    import { clock as clockLabel, time } from '$lib/format';
     import { LIVE_CODECS } from '$lib/live';
     import { livePlayer } from '$lib/live-player.svelte';
+    import { keepResume } from '$lib/resume';
     import { SPEEDS } from '$lib/ts/pacing';
 
     /**
@@ -57,14 +57,14 @@
         // 前に途中まで観ていたら、そこから
         if (video !== null) void player.openChase(video, data.rec.id, data.rec.resumeSec);
         const ticker = setInterval(() => (clock = Date.now()), 1000);
-        const keeper = setInterval(() => void sendResume(), 15_000);
-        const onLeave = () => void sendResume();
+        const keeper = setInterval(() => sendResume(), 15_000);
+        const onLeave = () => sendResume(true);
         window.addEventListener('pagehide', onLeave);
         return () => {
             clearInterval(ticker);
             clearInterval(keeper);
             window.removeEventListener('pagehide', onLeave);
-            void sendResume();
+            sendResume();
             player.stop();
         };
     });
@@ -86,15 +86,6 @@
     );
     const pos = $derived(player.chasePosition);
 
-    /** 分:秒。1時間を超える録画では時も出す */
-    function clockLabel(sec: number): string {
-        const s = Math.max(0, Math.floor(sec));
-        const h = Math.floor(s / 3600);
-        const m = Math.floor((s % 3600) / 60);
-        const ss = String(s % 60).padStart(2, '0');
-        return h > 0 ? `${h}:${String(m).padStart(2, '0')}:${ss}` : `${m}:${ss}`;
-    }
-
     /** シーク。**録れているところより先へは行かせない** (まだ無い) */
     function seekTo(value: number): void {
         player.chaseSeek(Math.min(value, Math.max(0, recorded - 5)));
@@ -102,19 +93,12 @@
 
     /**
      * 視聴位置をサーバへ (数十秒おき)。録り終えて焼き上がったら、観る画面の
-     * 続き再生がここから拾う — 追っかけで観たぶんを二度観ずに済む
+     * 続き再生がここから拾う — 追っかけで観たぶんを二度観ずに済む。
+     * 送り方は観る画面と共通 (`$lib/resume.ts`。閉じ際は sendBeacon)
      */
-    async function sendResume(): Promise<void> {
+    function sendResume(leaving = false): void {
         if (line === null || pos <= 0) return;
-        try {
-            await fetch(`/api/recordings/${data.rec.id}/resume`, {
-                method: 'POST',
-                headers: { 'content-type': 'application/json' },
-                body: JSON.stringify({ at: pos, length: total }),
-            });
-        } catch {
-            // 届かなくても観るのは続けられる。次の便で
-        }
+        keepResume(data.rec.id, pos, total, leaving);
     }
 
     /** 操作列の出し入れ。ライブ・観る画面と同じ */
@@ -133,14 +117,14 @@
     const stageTap = centerTap(() => player.toggle(), toggle);
 
     /** いまの1コマを字幕ごと切り抜く (ライブ・観る画面と同じ) */
-    let shot = $state<Notice | null>(null);
-    const notices = $derived<Notice[]>(shot === null ? [] : [shot]);
-    async function snapshot(): Promise<void> {
-        if (video === null) return;
-        controls.stir();
-        const caption = player.captions && player.hasCaptions ? overlay : null;
-        const notice = await clipFrame(video, caption, () => `${data.rec.name} - ${time(Date.now())}`);
-        if (notice !== null) shot = notice;
+    const shooter = snapshotter(controls);
+    const notices = $derived<Notice[]>(shooter.notices);
+    function snapshot(): void {
+        void shooter.take(
+            video,
+            player.captions && player.hasCaptions ? overlay : null,
+            () => `${data.rec.name} - ${time(Date.now())}`,
+        );
     }
 </script>
 
@@ -223,16 +207,11 @@
                         onselect={(key) => player.setAudio(key)}
                     >
                         {#snippet trigger()}
-                            <button type="button"
-                                class="{OVERLAY_BTN} gap-1.5 {OVERLAY}"
-                                aria-label="音声を選ぶ"
-                                data-testid="chase-audio"
-                            >
-                                <Icon path={AUDIO} />
+                            <ControlButton path={AUDIO} label="音声を選ぶ" testid="chase-audio">
                                 <span class="hidden max-w-28 truncate sm:inline">
                                     {player.audios.find((a) => a.id === player.audio)?.label ?? '音声'}
                                 </span>
-                            </button>
+                            </ControlButton>
                         {/snippet}
                     </OverlayMenu>
                 {/if}
@@ -269,15 +248,11 @@
                     onselect={(key) => player.setCodec(key)}
                 >
                     {#snippet trigger()}
-                        <button type="button"
-                            class="{OVERLAY_BTN} gap-1.5 {OVERLAY}"
-                            aria-label="焼き方を選ぶ"
-                            data-testid="chase-codec"
-                        >
+                        <ControlButton label="焼き方を選ぶ" testid="chase-codec">
                             <span class="text-xs font-semibold">
                                 {LIVE_CODECS.find((c) => c.id === player.codec)?.label ?? 'H.264'}
                             </span>
-                        </button>
+                        </ControlButton>
                     {/snippet}
                 </OverlayMenu>
 
@@ -296,29 +271,19 @@
                     onselect={(key) => player.setSpeed(key)}
                 >
                     {#snippet trigger()}
-                        <button type="button"
-                            class="{OVERLAY_BTN} tabular-nums {player.speed !== 1 ? OVERLAY_ON : OVERLAY}"
-                            aria-label="再生の速さ"
-                            data-testid="chase-speed"
-                        >
-                            {player.speed}×
-                        </button>
+                        <ControlButton label="再生の速さ" testid="chase-speed" on={player.speed !== 1}>
+                            <span class="tabular-nums">{player.speed}×</span>
+                        </ControlButton>
                     {/snippet}
                 </OverlayMenu>
 
-                <!-- いま録れているところへ。ライブの「ライブ」に相当 (見た目も同じ決まり) -->
-                <button type="button"
-                    class="{OVERLAY_BTN} gap-1 px-3 {recorded - pos < 20 ? OVERLAY_DANGER : OVERLAY}"
+                <!-- いま録れているところへ。ライブの「ライブ」に相当 -->
+                <EdgeButton
+                    active={recorded - pos < 20}
+                    label="最新"
                     onclick={() => seekTo(recorded)}
-                    data-testid="chase-edge"
-                >
-                    <span
-                        class="inline-block size-2 rounded-full {recorded - pos < 20
-                            ? 'bg-white'
-                            : 'bg-error'}"
-                    ></span>
-                    <span class="text-xs font-semibold">最新</span>
-                </button>
+                    testid="chase-edge"
+                />
 
                 <ControlButton
                     path={stage.fullscreened ? SHRINK : EXPAND}
