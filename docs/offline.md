@@ -96,11 +96,13 @@ DB 名 `denpa-offline`、ストア2つ:
 「この端末では再生できない」と断る (落とすだけ落とせても観られないため)。
 
 ### オフライン再生
+
 - `src` の `$derived` を「`videos` に `ready` があれば `URL.createObjectURL(blob)`、
   無ければ従来の API URL」に変える。字幕・チャプターも同様に blob / メモリから読む。
 - 使い終わったら `URL.revokeObjectURL` する ($effect のクリーンアップ)。
 
 ### 削除とサーバ同期
+
 - 端末で削除 → `videos` から除去し、`outbox` に `{op:'delete'}` を積む。
 - `online` イベント (と起動時の `navigator.onLine`) で `outbox` を処理:
   `DELETE /api/recordings/<id>` → サーバは [`deleteRecordingFiles`](../src/lib/server/files.ts) を呼ぶ。
@@ -116,18 +118,15 @@ DB 名 `denpa-offline`、ストア2つ:
 
 - **コーデック: 端末が解けるもの。既定は AV1** (上記)。
 - **ダウンロード: Background Fetch API** (上記)。非対応ブラウザはページ主導にフォールバック。
-
-## 判断が要るところ / 未決
-
-- **新規エンドポイント `DELETE /api/recordings/[id]`。** 認証は書き込み扱い
-  (form action と同じ経路)。CSRF: SvelteKit の form は保護されるが、`fetch` DELETE は
-  自前で確認 (同一オリジン・セッション必須)。
-- **容量。** 30分で約300MB。`navigator.storage.estimate()` で残量を見て、入らなければ
-  断る。永続化は `navigator.storage.persist()` を要求 (ブラウザが勝手に消さないように)。
-- **部分 DL の後始末。** Background Fetch はブラウザが面倒を見る (失敗イベントで捨てる)。
+- **削除の口: `DELETE /api/recordings/[id]` を新設。** 認証は書き込み扱い
+  (form action と同じ経路)。`fetch` DELETE は同一オリジン + セッション必須で自前確認。
+- **容量: 落とす前に確かめる。** 30分で約300MB。`navigator.storage.estimate()` で残量を
+  見て、入らなければ断る。`navigator.storage.persist()` を要求して、ブラウザが勝手に
+  消さないようにする。
+- **部分 DL の後始末:** Background Fetch はブラウザが面倒を見る (失敗イベントで捨てる)。
   ページ主導フォールバックの中断だけ、起動時に `downloading` を掃除する。
-- **視聴位置 (`resume_ms`)。** 現状サーバ DB で端末間同期している。オフライン中に進めた
-  位置は、復帰時にまとめて `PUT /api/…/resume` で送る (outbox に相乗り)。
+- **視聴位置 (`resume_ms`):** オフライン中に進めた位置は端末に覚えておき、復帰時に
+  まとめて `PUT /api/…/resume` で送る (outbox に相乗り)。端末間同期の仕組みは変えない。
 
 ## 影響範囲 (実装時の当たり所)
 
