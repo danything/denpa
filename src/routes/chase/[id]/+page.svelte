@@ -3,6 +3,7 @@
     import { screenAwake } from '$lib/components/player/awake.svelte';
     import ControlBar from '$lib/components/player/ControlBar.svelte';
     import ControlButton from '$lib/components/player/ControlButton.svelte';
+    import { centerTap } from '$lib/components/player/center-tap';
     import { playerControls } from '$lib/components/player/controls.svelte';
     import Icon from '$lib/components/player/Icon.svelte';
     import {
@@ -19,14 +20,15 @@
         SOUND_OFF,
         SOUND_ON,
     } from '$lib/components/player/icons';
+    import MediaStack from '$lib/components/player/MediaStack.svelte';
     import OverlayMenu from '$lib/components/player/OverlayMenu.svelte';
+    import PlayerStage from '$lib/components/player/PlayerStage.svelte';
     import { clipFrame } from '$lib/components/player/snapshot';
     import Toasts, { type Notice } from '$lib/components/Toasts.svelte';
     import { time } from '$lib/format';
     import { LIVE_CODECS } from '$lib/live';
     import { livePlayer } from '$lib/live-player.svelte';
     import { SPEEDS } from '$lib/ts/pacing';
-    import { DOUBLE_TAP } from '$lib/ts/watch';
 
     /**
      * 追っかけ再生 ([issue #16](https://github.com/danything/denpa/issues/16))。
@@ -39,18 +41,18 @@
     let { data } = $props();
 
     const player = livePlayer();
-    let video: HTMLVideoElement;
-    let still: HTMLCanvasElement;
-    let overlay: HTMLCanvasElement;
-    let frame: HTMLElement;
+    /** 映像と重ねもの (MediaStack が組む)。bind で受けるので開くまでは null */
+    let video = $state<HTMLVideoElement | null>(null);
+    let still = $state<HTMLCanvasElement | null>(null);
+    let overlay = $state<HTMLCanvasElement | null>(null);
 
     /** 右端を伸ばすための時計。1秒刻みで十分 (バーの目盛りより細かい) */
     let clock = $state(Date.now());
 
     onMount(() => {
-        player.attach(still, overlay);
+        if (still !== null && overlay !== null) player.attach(still, overlay);
         // 前に途中まで観ていたら、そこから
-        void player.openChase(video, data.rec.id, data.rec.resumeSec);
+        if (video !== null) void player.openChase(video, data.rec.id, data.rec.resumeSec);
         const ticker = setInterval(() => (clock = Date.now()), 1000);
         const keeper = setInterval(() => void sendResume(), 15_000);
         const onLeave = () => void sendResume();
@@ -112,19 +114,6 @@
         }
     }
 
-    /** 全画面。映像だけでなく操作列も一緒に大きくしたいので、箱ごと入れる */
-    let fullscreened = $state(false);
-    function full(): void {
-        if (frame === undefined) return;
-        if (document.fullscreenElement === null) void frame.requestFullscreen().catch(() => {});
-        else void document.exitFullscreen().catch(() => {});
-    }
-    $effect(() => {
-        const update = () => (fullscreened = document.fullscreenElement !== null);
-        document.addEventListener('fullscreenchange', update);
-        return () => document.removeEventListener('fullscreenchange', update);
-    });
-
     /** 操作列の出し入れ。ライブ・観る画面と同じ */
     const controls = playerControls();
     $effect(() => {
@@ -135,33 +124,16 @@
         awake.on = !player.paused && player.state === 'playing';
     });
     const controlsShown = $derived(controls.shown);
-    const wake = controls.wake;
-    const away = controls.away;
     const toggle = controls.toggle;
 
-    /** 真ん中あたりを素早く2回で再生/一時停止 (ライブ・観る画面と同じ癖)。指だけ */
-    let centerTapAt = 0;
-    function stageTap(event: MouseEvent): void {
-        if (window.matchMedia('(pointer: coarse)').matches) {
-            const box = (event.currentTarget as HTMLElement).getBoundingClientRect();
-            const ratio = (event.clientX - box.left) / Math.max(1, box.width);
-            const middle = ratio >= 0.3 && ratio <= 0.7;
-            const at = Date.now();
-            if (middle && at - centerTapAt < DOUBLE_TAP) {
-                centerTapAt = 0;
-                player.toggle();
-                return;
-            }
-            centerTapAt = middle ? at : 0;
-        }
-        toggle();
-    }
+    /** 真ん中あたりを素早く2回で再生/一時停止 (`center-tap.ts`)。1回目は操作列の出し入れ */
+    const stageTap = centerTap(() => player.toggle(), toggle);
 
     /** いまの1コマを字幕ごと切り抜く (ライブ・観る画面と同じ) */
     let shot = $state<Notice | null>(null);
     const notices = $derived<Notice[]>(shot === null ? [] : [shot]);
     async function snapshot(): Promise<void> {
-        if (video === undefined) return;
+        if (video === null) return;
         controls.stir();
         const caption = player.captions && player.hasCaptions ? overlay : null;
         const notice = await clipFrame(video, caption, () => `${data.rec.name} - ${time(Date.now())}`);
@@ -174,41 +146,18 @@
 </svelte:head>
 
 <div class="mx-auto max-w-5xl">
-    <!-- svelte-ignore a11y_no_static_element_interactions -->
-    <div
-        bind:this={frame}
-        class="bg-base-300 relative aspect-video max-h-full overflow-hidden
-               {controlsShown ? '' : 'cursor-none'}"
-        onpointermove={wake}
-        onpointerdown={wake}
-        onpointerleave={away}
-        onfocusin={() => (controls.keyboard = true)}
-        onfocusout={() => (controls.keyboard = false)}
-        data-testid="chase"
-    >
-        <!-- svelte-ignore a11y_media_has_caption -->
-        <!-- 器の作りはライブと同じ (`live/+page.svelte` の説明)。字幕は絵なので canvas に重ねる -->
-        <video
-            bind:this={video}
-            style="width:100%; height:100%; background:#000;"
-            playsinline
+    <!-- 舞台の配線と映像の束はライブと共通 (PlayerStage / MediaStack) -->
+    <PlayerStage {controls} testid="chase" stageClass="bg-base-300 aspect-video max-h-full">
+        {#snippet children(stage)}
+        <MediaStack
+            holding={player.holding}
+            captionsOn={player.captions && player.hasCaptions}
             onclick={stageTap}
-            data-testid="chase-video"
-        ></video>
-        <canvas
-            bind:this={still}
-            style="position:absolute; inset:0; width:100%; height:100%;
-                   object-fit:contain; pointer-events:none;
-                   transition:opacity 150ms; opacity:{player.holding ? 1 : 0};"
-            aria-hidden="true"
-        ></canvas>
-        <canvas
-            bind:this={overlay}
-            style="position:absolute; inset:0; width:100%; height:100%;
-                   object-fit:contain; pointer-events:none;"
-            data-testid="chase-captions"
-            aria-hidden="true"
-        ></canvas>
+            prefix="chase"
+            bind:video
+            bind:still
+            bind:overlay
+        />
 
         <!-- 右上の列。**観る画面と同じ並び** (閉じる・切り抜き) -->
         <ControlBar side shown={controlsShown} testid="chase-side">
@@ -364,10 +313,10 @@
                 </button>
 
                 <ControlButton
-                    path={fullscreened ? SHRINK : EXPAND}
-                    label={fullscreened ? '全画面をやめる' : '全画面'}
+                    path={stage.fullscreened ? SHRINK : EXPAND}
+                    label={stage.fullscreened ? '全画面をやめる' : '全画面'}
                     testid="chase-full"
-                    onclick={() => full()}
+                    onclick={() => stage.full()}
                 />
             </div>
         </ControlBar>
@@ -387,7 +336,7 @@
                     <p data-testid="chase-error">{player.message}</p>
                     <button type="button"
                         class="btn btn-sm"
-                        onclick={() => void player.openChase(video, data.rec.id, pos)}
+                        onclick={() => video !== null && void player.openChase(video, data.rec.id, pos)}
                     >
                         やり直す
                     </button>
@@ -396,7 +345,8 @@
                 {/if}
             </div>
         {/if}
-    </div>
+        {/snippet}
+    </PlayerStage>
 </div>
 
 <Toasts {notices} />

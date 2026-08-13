@@ -5,6 +5,7 @@
     import { screenAwake } from '$lib/components/player/awake.svelte';
     import ControlBar from '$lib/components/player/ControlBar.svelte';
     import ControlButton from '$lib/components/player/ControlButton.svelte';
+    import { centerTap } from '$lib/components/player/center-tap';
     import { playerControls } from '$lib/components/player/controls.svelte';
     import DataBroadcast from '$lib/components/player/DataBroadcast.svelte';
     import Icon from '$lib/components/player/Icon.svelte';
@@ -25,7 +26,9 @@
         SOUND_OFF,
         SOUND_ON,
     } from '$lib/components/player/icons';
+    import MediaStack from '$lib/components/player/MediaStack.svelte';
     import OverlayMenu from '$lib/components/player/OverlayMenu.svelte';
+    import PlayerStage from '$lib/components/player/PlayerStage.svelte';
     import Remote from '$lib/components/player/Remote.svelte';
     import { clipFrame } from '$lib/components/player/snapshot';
     import Toasts, { type Notice } from '$lib/components/Toasts.svelte';
@@ -34,7 +37,6 @@
     import { LIVE_CODECS } from '$lib/live';
     import { livePlayer } from '$lib/live-player.svelte';
     import { FLOOR, SPEEDS } from '$lib/ts/pacing';
-    import { DOUBLE_TAP } from '$lib/ts/watch';
     import type { LiveChannel } from './+page.server';
 
     let { data, form } = $props();
@@ -42,11 +44,12 @@
     const channels = $derived(data.channels as LiveChannel[]);
 
     const player = livePlayer();
-    let video: HTMLVideoElement;
+    /** 映像と重ねもの (MediaStack が組む)。bind で受けるので開くまでは null */
+    let video = $state<HTMLVideoElement | null>(null);
     /** 切り替えの間、前の絵を貼っておく先 (`live-player` の `freeze`) */
-    let still: HTMLCanvasElement;
+    let still = $state<HTMLCanvasElement | null>(null);
     /** 放送の字幕を重ねる先 (`live-player` の `paint`) */
-    let overlay: HTMLCanvasElement;
+    let overlay = $state<HTMLCanvasElement | null>(null);
     /** 映像が居る入れ物。**データ放送に「映像はここ」と伝えるのに要る** */
     let mediaBox = $state<HTMLElement | null>(null);
     /**
@@ -56,8 +59,6 @@
      * 押しても行き先が無いリモコンは出さない
      */
     let dataPress = $state<((code: number) => void) | null>(null);
-    /** 映像も重ねるものも入っている枠。全画面にするのはここ */
-    let frame: HTMLElement;
 
     /**
      * **サーバが決めた局で開く** (`+page.server.ts` の `start`)。
@@ -68,9 +69,9 @@
      * 使われないまま別の局が開く
      */
     onMount(() => {
-        // 重ねるものの置き場を先に渡す。選局はこのあと
-        player.attach(still, overlay);
-        if (data.start !== null) void player.tune(video, data.start);
+        // 重ねるものの置き場を先に渡す。選局はこのあと (bind は mount 時点で入っている)
+        if (still !== null && overlay !== null) player.attach(still, overlay);
+        if (data.start !== null && video !== null) void player.tune(video, data.start);
         return () => player.stop();
     });
 
@@ -106,6 +107,7 @@
      * 前の合言葉はもう指すものが無い (サーバが主音声に落とす)
      */
     function select(channel: LiveChannel): void {
+        if (video === null) return;
         void player.tune(video, {
             channelType: channel.type,
             channel: channel.channel,
@@ -172,20 +174,6 @@
         });
     }
 
-    /** 全画面。映像だけでなく操作列も一緒に大きくしたいので、箱ごと入れる */
-    let fullscreened = $state(false);
-    function full(): void {
-        // **枠ごと。** 映像だけでなく操作列も一緒に大きくする
-        if (frame === undefined) return;
-        if (document.fullscreenElement === null) void frame.requestFullscreen().catch(() => {});
-        else void document.exitFullscreen().catch(() => {});
-    }
-    $effect(() => {
-        const update = () => (fullscreened = document.fullscreenElement !== null);
-        document.addEventListener('fullscreenchange', update);
-        return () => document.removeEventListener('fullscreenchange', update);
-    });
-
     /** 操作列の出し入れ ([controls.svelte.ts](../../lib/components/player/controls.svelte.ts))。観る画面と同じ */
     const controls = playerControls();
     $effect(() => {
@@ -201,31 +189,10 @@
         awake.on = !player.paused && player.state === 'playing';
     });
     const controlsShown = $derived(controls.shown);
-    const wake = controls.wake;
-    const away = controls.away;
     const toggle = controls.toggle;
 
-    /**
-     * **真ん中あたりを素早く2回で再生/一時停止** (スマホの VLC と同じ癖。
-     * 観る画面の `ts/watch.ts` の `tap` と同じ決まり)。指だけ —
-     * マウスの1回目は何もしないので、2回目に意味を持たせるものが無い
-     */
-    let centerTapAt = 0;
-    function stageTap(event: MouseEvent): void {
-        if (window.matchMedia('(pointer: coarse)').matches) {
-            const box = (event.currentTarget as HTMLElement).getBoundingClientRect();
-            const ratio = (event.clientX - box.left) / Math.max(1, box.width);
-            const middle = ratio >= 0.3 && ratio <= 0.7;
-            const at = Date.now();
-            if (middle && at - centerTapAt < DOUBLE_TAP) {
-                centerTapAt = 0;
-                player.toggle();
-                return;
-            }
-            centerTapAt = middle ? at : 0;
-        }
-        toggle();
-    }
+    /** 真ん中あたりを素早く2回で再生/一時停止 (`center-tap.ts`)。1回目は操作列の出し入れ */
+    const stageTap = centerTap(() => player.toggle(), toggle);
 
     /**
      * **いまの1コマを字幕ごと切り抜く。観る画面 (`/watch/<id>`) と同じやり方。**
@@ -247,7 +214,7 @@
     ]);
 
     async function snapshot(): Promise<void> {
-        if (video === undefined) return;
+        if (video === null) return;
         controls.stir();
         // 字幕を出しているときだけ重ねる
         const caption = player.captions && player.hasCaptions ? overlay : null;
@@ -277,107 +244,23 @@
 <div class="flex flex-col gap-4 md:h-full md:min-h-0 md:flex-row" data-testid="live">
     <div class="flex min-w-0 flex-1 flex-col md:min-h-0">
         <!-- 映像は高さのほうを上限にする。横幅いっぱいにすると縦がはみ出す -->
-        <!-- svelte-ignore a11y_no_static_element_interactions -->
-        <div
-            bind:this={frame}
-            class="bg-base-300 relative aspect-video max-h-full overflow-hidden
-                   {controlsShown ? '' : 'cursor-none'}"
-            onpointermove={wake}
-            onpointerdown={wake}
-            onpointerleave={away}
-            onfocusin={() => (controls.keyboard = true)}
-            onfocusout={() => (controls.keyboard = false)}
-        >
-            <!-- svelte-ignore a11y_media_has_caption -->
-            <!--
-                字幕は `<track>` ではない。放送の字幕は文字ではなく**絵**として
-                届くので (docs/stream.md §5.2)、下の canvas に重ねる
-            -->
-            <!--
-                **`autoplay` と `muted` は付けない。** 鳴らし始めるのは
-                `live-player` の役目で、音ありで断られたときだけ自分で黙る。
-                ここで `muted` にすると、断られていないときまで無音になる
-            -->
-            <!--
-                **備え付けの操作は出さない** (`controls` を付けない)。あれの
-                再生位置は「持っている範囲」を尺として描くので、0.05秒ごとに
-                中身が届くたびに右へ左へ動く。放送に終わりは無いのだから、
-                位置ではなく**張り付いているかどうか**を出すのが正しい
-            -->
-            <!--
-                **指で押したら操作列の出し入れ。** 指には時計を持たせていない
-                (`controls.svelte.ts` の `LINGER`) ので、消す口がここに要る。
-                マウスでは何も起きない — あちらは動かせば出て、しばらくで消える
-            -->
-            <!--
-                **映像だけを入れ物に分ける。** データ放送は「映像はこの入れ物」と
-                受け取って、BML の文書を組むときにそれを動かす。**枠そのものを
-                渡すと親子が循環する** (借りている側が `appendChild ... contains
-                the parent` で転ぶ)。実機で1日これを探した
-            -->
-            <!--
-                **ここだけ class ではなく style で書く。** データ放送を出している
-                間、この入れ物は BML の**閉じた影の中へ移される** — 影の中には
-                表の CSS (Tailwind) が届かないので、class で書いた大きさはそこで
-                消える。しかも BML の既定のスタイルは `div` に
-                `width:0; height:0` を与えるので、**映像が消える**。
-                じかに書いた指定は影の中でも効く
-            -->
-            <div bind:this={mediaBox} style="position:absolute; inset:0; width:100%; height:100%;">
-                <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_noninteractive_element_interactions -->
-                <video
-                    bind:this={video}
-                    style="width:100%; height:100%; background:#000;"
-                    playsinline
-                    onclick={stageTap}
-                    data-testid="live-video"
-                ></video>
-
-                <!--
-                    **切り替えの間、前の絵を貼っておく。** 器を作り直すと `<video>` は
-                    何も映さなくなるので、そのままだと 1.6 秒ほど真っ黒になる。
-                    待ち時間そのものは削れない (電波の同期待ちと GOP の頭待ち) が、
-                    黒い画面を見せずに済む。絵は止まって見えるが、それは正しい。
-
-                    **映像と字幕の間。** 映像より上 (黒を隠す) で、字幕より下
-                    (切り替え中も字幕は見えていてほしい)。字幕と同じ理由で、
-                    映像と同じ入れ物の中に、style で書く
-                -->
-                <canvas
-                    bind:this={still}
-                    style="position:absolute; inset:0; width:100%; height:100%;
-                           object-fit:contain; pointer-events:none;
-                           transition:opacity 150ms; opacity:{player.holding ? 1 : 0};"
-                    data-testid="live-still"
-                    data-holding={player.holding}
-                    aria-hidden="true"
-                ></canvas>
-
-                <!--
-                    **放送の字幕。** 文字ではなく絵で届く (放送に乗っているのは文字と
-                    描き方の指定で、テレビはそれを見て毎回自分で描いている)。
-                    サーバが libaribcaption に描かせたものを重ねるので、**録画で見る
-                    字幕と同じ絵**になる。絵は画面まるごと (1920x1080) で来るので、
-                    映像と同じ枠に敷いて引き伸ばすだけでよい。
-
-                    **映像と同じ入れ物の中に置く。** データ放送を出すと、借りものは
-                    この入れ物ごと BML の小窓へ移す — 外に置いていると、**映像だけが
-                    小窓へ行き、字幕は枠いっぱいのまま**データ放送の下に隠れる
-                    (実機で「データ放送を出すと字幕が消える」として出た)。
-                    中に入れておけば、テレビと同じで**映像と一緒に縮む**。
-
-                    大きさは class ではなく style で書く — 移された先は閉じた影の中で、
-                    表の CSS が届かない (`DataBroadcast.svelte`)
-                -->
-                <canvas
-                    bind:this={overlay}
-                    style="position:absolute; inset:0; width:100%; height:100%;
-                           object-fit:contain; pointer-events:none;"
-                    data-testid="live-captions"
-                    data-on={player.captions && player.hasCaptions}
-                    aria-hidden="true"
-                ></canvas>
-            </div>
+        <!--
+            **舞台の配線は3画面で共通** ([PlayerStage.svelte](../../lib/components/player/PlayerStage.svelte))。
+            映像と重ねものの束も追っかけと共通 ([MediaStack.svelte](../../lib/components/player/MediaStack.svelte)) —
+            なぜ style で書くか・なぜ入れ物を分けるかはあちらに
+        -->
+        <PlayerStage {controls} testid="live-frame" stageClass="bg-base-300 aspect-video max-h-full">
+            {#snippet children(stage)}
+            <MediaStack
+                holding={player.holding}
+                captionsOn={player.captions && player.hasCaptions}
+                onclick={stageTap}
+                prefix="live"
+                bind:video
+                bind:still
+                bind:overlay
+                bind:box={mediaBox}
+            />
 
 
             <!--
@@ -769,10 +652,10 @@
                         {/if}
 
                         <ControlButton
-                            path={fullscreened ? SHRINK : EXPAND}
-                            label={fullscreened ? '全画面をやめる' : '全画面'}
+                            path={stage.fullscreened ? SHRINK : EXPAND}
+                            label={stage.fullscreened ? '全画面をやめる' : '全画面'}
                             testid="live-full"
-                            onclick={() => full()}
+                            onclick={() => stage.full()}
                         />
                     </div>
                 </ControlBar>
@@ -866,7 +749,8 @@
                     {/if}
                 </div>
             {/if}
-        </div>
+            {/snippet}
+        </PlayerStage>
     </div>
 
     <!--

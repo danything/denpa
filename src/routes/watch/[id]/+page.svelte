@@ -30,6 +30,7 @@
         TRASH,
     } from '$lib/components/player/icons';
     import OverlayMenu from '$lib/components/player/OverlayMenu.svelte';
+    import PlayerStage from '$lib/components/player/PlayerStage.svelte';
     import { clearOverlay, drawOverlay, fitRect } from '$lib/components/player/paint';
     import Remote from '$lib/components/player/Remote.svelte';
     import { clipFrame } from '$lib/components/player/snapshot';
@@ -920,19 +921,14 @@
                 **低くしすぎない** (`min-h-56` = 224px)。上下と右に帯を重ねている
                 ので、絵がそれより低いと**帯どうしが重なって**押せなくなる
             -->
-            <!-- svelte-ignore a11y_no_noninteractive_element_interactions, a11y_no_static_element_interactions -->
-            <section
-                bind:this={stage}
-                class="relative aspect-video max-h-full min-h-56 overflow-hidden bg-black {controls.shown
-                    ? ''
-                    : 'cursor-none'}"
-                onpointermove={controls.wake}
-                onpointerdown={controls.wake}
-                onpointerleave={controls.away}
-                onfocusin={() => (controls.keyboard = true)}
-                onfocusout={() => (controls.keyboard = false)}
-                data-testid="watch-stage"
+            <!-- 舞台の配線は3画面で共通 (PlayerStage)。全画面はこちら側の癖 (開いた時点で入る) が要るので自前のまま -->
+            <PlayerStage
+                {controls}
+                testid="watch-stage"
+                stageClass="aspect-video max-h-full min-h-56 bg-black"
+                bind:element={stage}
             >
+                {#snippet children(_stage)}
                 <!--
                     **押すのは絵そのもの。** ボタンを避けて敷くのではなく、
                     ボタンを上に重ねる (`z-10`)。`onclick` は `press` が読む
@@ -1353,7 +1349,8 @@
                         />
                     </div>
                 </ControlBar>
-            </section>
+                {/snippet}
+            </PlayerStage>
         {/if}
     </section>
 
