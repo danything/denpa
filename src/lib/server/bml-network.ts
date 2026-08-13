@@ -79,8 +79,24 @@ if (BML_DNS.length > 0) resolver.setServers(BML_DNS);
  * 被せただけなので、剥がしてから見ないと素通りします
  */
 export function isPublicAddress(address: string): boolean {
+    /*
+     * `::ffff:1.2.3.4` のほかに **16進の綴り (`::ffff:0102:0304`) も受ける** —
+     * `new URL()` は括弧の中のドット形をこちらに直すので、ドット形だけ見ていると
+     * `http://[::ffff:127.0.0.1]/` が素通りする
+     */
     const mapped = /^::ffff:(\d+\.\d+\.\d+\.\d+)$/i.exec(address);
-    const target = mapped === null ? address : mapped[1];
+    const hexMapped = /^::ffff:([\da-f]{1,4}):([\da-f]{1,4})$/i.exec(address);
+    const target =
+        mapped !== null
+            ? mapped[1]
+            : hexMapped !== null
+              ? [
+                    Number.parseInt(hexMapped[1], 16) >> 8,
+                    Number.parseInt(hexMapped[1], 16) & 255,
+                    Number.parseInt(hexMapped[2], 16) >> 8,
+                    Number.parseInt(hexMapped[2], 16) & 255,
+                ].join('.')
+              : address;
 
     if (target.includes(':')) {
         const lower = target.toLowerCase();
@@ -111,10 +127,16 @@ export function isPublicAddress(address: string): boolean {
  * (いわゆる DNS リバインディング) が抜けます
  */
 async function resolvable(host: string): Promise<string> {
-    // IP を直に書いてあるなら引かずに見る (IPv6 の [] は URL 側で剥がれている)
-    if (/^[\d.]+$/.test(host) || host.includes(':')) {
-        if (!isPublicAddress(host)) throw new Refused(`内側の住所です (${host})`);
-        return host;
+    /*
+     * IPv6 リテラルの [] を自分で剥がす。**`new URL().hostname` は剥がさない** —
+     * `[::1]` のままだと綴りの判定に1つも掛からず、内側の住所なのに
+     * 公開扱いで素通りしていた
+     */
+    const bare = host.startsWith('[') && host.endsWith(']') ? host.slice(1, -1) : host;
+    // IP を直に書いてあるなら引かずに見る
+    if (/^[\d.]+$/.test(bare) || bare.includes(':')) {
+        if (!isPublicAddress(bare)) throw new Refused(`内側の住所です (${host})`);
+        return bare;
     }
 
     let found: string[];
@@ -134,8 +156,11 @@ async function resolvable(host: string): Promise<string> {
     return found[0];
 }
 
-/** その URL を取りに行ってよいか。行けるなら整えた URL を返す */
-export async function allowed(raw: string): Promise<URL> {
+/**
+ * その URL を取りに行ってよいか。行けるなら整えた URL と、確かめた住所を返す。
+ * 繋ぐのはその住所へ直に — 引き直すと、確かめたのと違う先に化かされうる
+ */
+export async function allowed(raw: string): Promise<{ url: URL; address: string }> {
     let url: URL;
     try {
         url = new URL(raw);
@@ -161,8 +186,7 @@ export async function allowed(raw: string): Promise<URL> {
     if (url.protocol !== 'https:' && url.protocol !== 'http:') {
         throw new Refused(`http か https だけです (${url.protocol})`);
     }
-    await resolvable(url.hostname);
-    return url;
+    return { url, address: await resolvable(url.hostname) };
 }
 
 /**
@@ -243,14 +267,13 @@ function doRequest(
  * 手で追いかけて、行き先ごとに `allowed` を通します
  */
 export async function fetchForBml(raw: string): Promise<Fetched> {
-    let url = await allowed(raw);
+    let { url, address } = await allowed(raw);
     for (let hop = 0; ; hop++) {
-        const address = await resolvable(url.hostname);
         const got = await doRequest(url, address, 'GET', undefined);
 
         if (got.status >= 300 && got.status < 400 && got.location !== null) {
             if (hop >= HOPS) throw new Refused('飛ばされる回数が多すぎます');
-            url = await allowed(new URL(got.location, url).toString());
+            ({ url, address } = await allowed(new URL(got.location, url).toString()));
             continue;
         }
         return { status: got.status, contentType: got.contentType, body: got.body };
@@ -276,16 +299,15 @@ export async function fetchForBml(raw: string): Promise<Fetched> {
  * 301/302/303 は GET へ、307/308 は POST のまま。**行き先は毎回確かめ直す**
  */
 export async function postForBml(raw: string, body: Uint8Array): Promise<Fetched> {
-    let url = await allowed(raw);
+    let { url, address } = await allowed(raw);
     let method: 'GET' | 'POST' = 'POST';
     for (let hop = 0; ; hop++) {
-        const address = await resolvable(url.hostname);
         const got = await doRequest(url, address, method, method === 'POST' ? body : undefined);
 
         if (got.status >= 300 && got.status < 400 && got.location !== null) {
             if (hop >= HOPS) throw new Refused('飛ばされる回数が多すぎます');
             if (got.status !== 307 && got.status !== 308) method = 'GET';
-            url = await allowed(new URL(got.location, url).toString());
+            ({ url, address } = await allowed(new URL(got.location, url).toString()));
             continue;
         }
         return { status: got.status, contentType: got.contentType, body: got.body };

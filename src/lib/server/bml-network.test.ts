@@ -43,6 +43,10 @@ describe('繋いでよい住所か', () => {
         expect(isPublicAddress('::ffff:127.0.0.1')).toBe(false);
         expect(isPublicAddress('::ffff:10.1.2.3')).toBe(false);
         expect(isPublicAddress('::ffff:1.1.1.1')).toBe(true);
+        // 16進の綴り (URL が直した後の形) も同じ
+        expect(isPublicAddress('::ffff:7f00:1')).toBe(false); // 127.0.0.1
+        expect(isPublicAddress('::ffff:a01:203')).toBe(false); // 10.1.2.3
+        expect(isPublicAddress('::ffff:101:101')).toBe(true); // 1.1.1.1
     });
 
     test('172 は 16〜31 だけが私設', () => {
@@ -58,8 +62,8 @@ describe('取りに行ってよい URL か', () => {
      * 双方向を入れても「接続されていません」のままになる
      */
     test('http と https は通す', async () => {
-        expect(allowed('http://example.com/x')).resolves.toBeInstanceOf(URL);
-        expect(allowed('https://example.com/x')).resolves.toBeInstanceOf(URL);
+        expect((await allowed('http://example.com/x')).url).toBeInstanceOf(URL);
+        expect((await allowed('https://example.com/x')).url).toBeInstanceOf(URL);
     });
 
     test('別の仕組みへ逃がす道は塞ぐ', async () => {
@@ -79,5 +83,16 @@ describe('取りに行ってよい URL か', () => {
      */
     test('内側を指す名前は断る', async () => {
         expect(allowed('https://localhost/x')).rejects.toThrow(Refused);
+    });
+
+    /*
+     * **IPv6 リテラルの [] は自分で剥がす。** `new URL().hostname` は
+     * `[::1]` を括弧付きのまま返すので、そのまま綴りを見ると1つの判定にも
+     * 掛からず、内側なのに公開扱いで素通りしていた
+     */
+    test('括弧付きの IPv6 リテラルも中身で断る', async () => {
+        expect(allowed('http://[::1]:8080/x')).rejects.toThrow(Refused);
+        expect(allowed('http://[::ffff:127.0.0.1]/x')).rejects.toThrow(Refused);
+        expect(allowed('http://[fd00::1]/x')).rejects.toThrow(Refused);
     });
 });
