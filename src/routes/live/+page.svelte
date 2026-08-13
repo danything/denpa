@@ -19,6 +19,8 @@
         OPEN_OUT,
         OVERLAY,
         OVERLAY_BTN,
+        OVERLAY_DANGER,
+        OVERLAY_ON,
         PAUSE,
         PLAY,
         RECORD,
@@ -29,6 +31,7 @@
     import MediaStack from '$lib/components/player/MediaStack.svelte';
     import OverlayMenu from '$lib/components/player/OverlayMenu.svelte';
     import PlayerStage from '$lib/components/player/PlayerStage.svelte';
+    import PlayerVeil from '$lib/components/player/PlayerVeil.svelte';
     import Remote from '$lib/components/player/Remote.svelte';
     import { clipFrame } from '$lib/components/player/snapshot';
     import Toasts, { type Notice } from '$lib/components/Toasts.svelte';
@@ -249,7 +252,7 @@
             映像と重ねものの束も追っかけと共通 ([MediaStack.svelte](../../lib/components/player/MediaStack.svelte)) —
             なぜ style で書くか・なぜ入れ物を分けるかはあちらに
         -->
-        <PlayerStage {controls} testid="live-frame" stageClass="bg-base-300 aspect-video max-h-full">
+        <PlayerStage {controls} testid="live-frame">
             {#snippet children(stage)}
             <MediaStack
                 holding={player.holding}
@@ -339,9 +342,10 @@
                         溜まりが増えるたびに摘みが左へ動く。見ている人には
                         「勝手に戻っている」としか映らない
                     -->
+                    <!-- 操作の色は3画面同一 (`range-primary`)。ライブ中の赤は「ライブ」ボタンが言う -->
                     <input
                         type="range"
-                        class="range range-xs range-error w-full"
+                        class="range range-xs range-primary w-full"
                         min={player.oldest}
                         max={player.newest}
                         step="0.1"
@@ -528,15 +532,13 @@
                             btn-lg のままだと帯の中でこれだけ太って見えていた
                         -->
                         <button type="button"
-                            class="{OVERLAY_BTN} gap-1 px-3 {player.live
-                                ? 'border-0 shadow-none btn-error'
-                                : OVERLAY}"
+                            class="{OVERLAY_BTN} gap-1 px-3 {player.live ? OVERLAY_DANGER : OVERLAY}"
                             onclick={() => player.goLive()}
                             data-testid="live-edge"
                         >
                             <span
                                 class="inline-block size-2 rounded-full {player.live
-                                    ? 'bg-error-content'
+                                    ? 'bg-white'
                                     : 'bg-error'}"
                             ></span>
                             <span class="text-xs font-semibold">ライブ</span>
@@ -641,7 +643,9 @@
                             >
                                 {#snippet trigger()}
                                     <button type="button"
-                                        class="{OVERLAY_BTN} tabular-nums {OVERLAY}"
+                                        class="{OVERLAY_BTN} tabular-nums {player.speed !== 1
+                                            ? OVERLAY_ON
+                                            : OVERLAY}"
                                         aria-label="追っかけの速さ"
                                         data-testid="live-speed"
                                     >
@@ -667,8 +671,9 @@
                     始める作りなので、開いた直後は「押した」ことになっておらず、
                     ブラウザが音ありの再生を断る。押せる場所を出す
                 -->
+                <!-- 映像の上に置くものなので、色も他の重ねボタンと同じ (OVERLAY) -->
                 <button type="button"
-                    class="btn btn-sm btn-neutral absolute top-3 left-3 gap-2"
+                    class="btn btn-sm absolute top-3 left-3 gap-2 {OVERLAY}"
                     onclick={() => player.unmute()}
                     data-testid="live-unmute"
                 >
@@ -696,58 +701,27 @@
 
             {#if player.state !== 'playing'}
                 <!--
-                    何も出ていない間に何が起きているかを出す。黒いままだと壊れて見える。
-
-                    **前の絵を貼っている間は塗り潰さない。** 覆ってしまうと、
-                    貼っている意味が無くなる (実機で撮ると、前の絵が白くかすんだ
-                    だけの画面になっていた)。回っているものだけを、どんな絵の上でも
-                    見えるように小さく敷いて出す。
-
-                    **押せる邪魔をしない** (`pointer-events-none`)。箱いっぱいに
-                    広がるので、そのままだと下の操作列を覆って押せなくなる。
-                    中の「やり直す」だけは押せるように戻す
+                    何も出ていない間に何が起きているかを出す。黒いままだと壊れて
+                    見える。見た目の決まりは3画面共通 (`PlayerVeil`)。
+                    **繋ぎ直しの最中は、そう言う** — サーバの入れ替え (デプロイ) で
+                    切れると数十秒帰ってこないので、回っているものだけだと壊れて見える
                 -->
-                <div
-                    class="pointer-events-none absolute inset-0 flex items-center justify-center
-                           {player.holding ? '' : 'bg-base-300/80'}"
-                    data-testid="live-status"
-                    data-veiled={!player.holding}
+                <PlayerVeil
+                    holding={player.holding}
+                    busy={player.state === 'connecting'}
+                    note={player.resuming ? '繋ぎ直しています' : ''}
+                    error={player.state === 'error' ? player.message : ''}
+                    idle="選んでください"
+                    testid="live-status"
                 >
-                    {#if player.state === 'connecting'}
-                        <!--
-                            **敷くのは外側。** daisyUI の `loading` は自分の
-                            `background-color` で回る絵を塗っているので、そこへ
-                            `bg-*` を足すと**回っているものの色を上書きする** —
-                            敷いたつもりが、見えなくなる
-                        -->
-                        <!--
-                            **繋ぎ直しの最中は、そう言う。** サーバの入れ替え
-                            (デプロイ) で切れると数十秒帰ってこないので、
-                            回っているものだけだと壊れたように見える
-                        -->
-                        <span
-                            class="flex flex-col items-center gap-2 {player.holding
-                                ? 'rounded-box bg-black/45 p-3 text-white'
-                                : ''}"
+                    {#snippet actions()}
+                        <button type="button"
+                            class="btn btn-sm"
+                            onclick={() => current && select(current)}
+                            data-testid="live-retry">やり直す</button
                         >
-                            <span class="loading loading-spinner loading-lg"></span>
-                            {#if player.resuming}
-                                <span class="text-sm" data-testid="live-resuming">繋ぎ直しています</span>
-                            {/if}
-                        </span>
-                    {:else if player.state === 'error'}
-                        <div class="text-center">
-                            <div class="text-error font-medium">{player.message}</div>
-                            <button type="button"
-                                class="btn pointer-events-auto btn-sm mt-3"
-                                onclick={() => current && select(current)}
-                                data-testid="live-retry">やり直す</button
-                            >
-                        </div>
-                    {:else}
-                        <span class="text-base-content/60">選んでください</span>
-                    {/if}
-                </div>
+                    {/snippet}
+                </PlayerVeil>
             {/if}
             {/snippet}
         </PlayerStage>

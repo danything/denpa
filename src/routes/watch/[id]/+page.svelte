@@ -922,12 +922,7 @@
                 ので、絵がそれより低いと**帯どうしが重なって**押せなくなる
             -->
             <!-- 舞台の配線は3画面で共通 (PlayerStage)。全画面はこちら側の癖 (開いた時点で入る) が要るので自前のまま -->
-            <PlayerStage
-                {controls}
-                testid="watch-stage"
-                stageClass="aspect-video max-h-full min-h-56 bg-black"
-                bind:element={stage}
-            >
+            <PlayerStage {controls} testid="watch-stage" bind:element={stage}>
                 {#snippet children(_stage)}
                 <!--
                     **押すのは絵そのもの。** ボタンを避けて敷くのではなく、
@@ -1019,7 +1014,10 @@
                         class="pointer-events-none absolute inset-x-0 top-14 z-10 flex justify-center"
                         data-testid="watch-resumed"
                     >
-                        <span class="badge badge-neutral badge-sm">続きから再生しています</span>
+                        <!-- 映像の上の知らせは3画面同じ形 (rounded-box bg-black/60)。テーマ色を絵に乗せない -->
+                        <span class="rounded-box bg-black/60 px-3 py-1 text-xs text-white"
+                            >続きから再生しています</span
+                        >
                     </div>
                 {/if}
 
@@ -1046,7 +1044,9 @@
                         class="pointer-events-none absolute inset-x-0 top-14 z-10 flex justify-center"
                         data-testid="watch-skipped"
                     >
-                        <span class="badge badge-neutral badge-sm">CMを飛ばしました</span>
+                        <span class="rounded-box bg-black/60 px-3 py-1 text-xs text-white"
+                            >CMを飛ばしました</span
+                        >
                     </div>
                 {/if}
 

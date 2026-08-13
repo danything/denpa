@@ -14,6 +14,8 @@
         EXPAND,
         OVERLAY,
         OVERLAY_BTN,
+        OVERLAY_DANGER,
+        OVERLAY_ON,
         PAUSE,
         PLAY,
         SHRINK,
@@ -23,6 +25,7 @@
     import MediaStack from '$lib/components/player/MediaStack.svelte';
     import OverlayMenu from '$lib/components/player/OverlayMenu.svelte';
     import PlayerStage from '$lib/components/player/PlayerStage.svelte';
+    import PlayerVeil from '$lib/components/player/PlayerVeil.svelte';
     import { clipFrame } from '$lib/components/player/snapshot';
     import Toasts, { type Notice } from '$lib/components/Toasts.svelte';
     import { time } from '$lib/format';
@@ -147,7 +150,7 @@
 
 <div class="mx-auto max-w-5xl">
     <!-- 舞台の配線と映像の束はライブと共通 (PlayerStage / MediaStack) -->
-    <PlayerStage {controls} testid="chase" stageClass="bg-base-300 aspect-video max-h-full">
+    <PlayerStage {controls} testid="chase">
         {#snippet children(stage)}
         <MediaStack
             holding={player.holding}
@@ -226,6 +229,9 @@
                                 data-testid="chase-audio"
                             >
                                 <Icon path={AUDIO} />
+                                <span class="hidden max-w-28 truncate sm:inline">
+                                    {player.audios.find((a) => a.id === player.audio)?.label ?? '音声'}
+                                </span>
                             </button>
                         {/snippet}
                     </OverlayMenu>
@@ -239,7 +245,11 @@
                     <div class="truncate text-xs tabular-nums text-white/60">
                         <span data-testid="chase-clock">{clockLabel(pos)} / {clockLabel(recorded)}</span>
                         {#if line !== null && !line.finished}
-                            ・ <span class="text-error">録画中</span>
+                            <!-- 赤はライブの赤丸と同じ出し方。黒帯の上の text-error は沈む -->
+                            ・ <span class="inline-flex items-baseline gap-1"
+                                ><span class="bg-error inline-block size-1.5 self-center rounded-full"
+                                ></span>録画中</span
+                            >
                         {:else if line !== null}
                             ・ 録画済み
                         {/if}
@@ -287,7 +297,7 @@
                 >
                     {#snippet trigger()}
                         <button type="button"
-                            class="{OVERLAY_BTN} tabular-nums {OVERLAY}"
+                            class="{OVERLAY_BTN} tabular-nums {player.speed !== 1 ? OVERLAY_ON : OVERLAY}"
                             aria-label="再生の速さ"
                             data-testid="chase-speed"
                         >
@@ -298,15 +308,13 @@
 
                 <!-- いま録れているところへ。ライブの「ライブ」に相当 (見た目も同じ決まり) -->
                 <button type="button"
-                    class="{OVERLAY_BTN} gap-1 px-3 {recorded - pos < 20
-                        ? 'border-0 shadow-none btn-error'
-                        : OVERLAY}"
+                    class="{OVERLAY_BTN} gap-1 px-3 {recorded - pos < 20 ? OVERLAY_DANGER : OVERLAY}"
                     onclick={() => seekTo(recorded)}
                     data-testid="chase-edge"
                 >
                     <span
                         class="inline-block size-2 rounded-full {recorded - pos < 20
-                            ? 'bg-error-content'
+                            ? 'bg-white'
                             : 'bg-error'}"
                     ></span>
                     <span class="text-xs font-semibold">最新</span>
@@ -330,20 +338,25 @@
             </div>
         {/if}
 
-        {#if player.state !== 'playing' && !player.holding}
-            <div class="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-black/60 text-white">
-                {#if player.state === 'error'}
-                    <p data-testid="chase-error">{player.message}</p>
+        {#if player.state !== 'playing'}
+            <!-- 見た目の決まりは3画面共通 (`PlayerVeil`)。前の絵を貼っている間は塗り潰さない -->
+            <PlayerVeil
+                holding={player.holding}
+                busy={player.state !== 'error'}
+                note={player.resuming ? '繋ぎ直しています' : ''}
+                error={player.state === 'error' ? player.message : ''}
+                testid="chase-status"
+            >
+                {#snippet actions()}
                     <button type="button"
                         class="btn btn-sm"
                         onclick={() => video !== null && void player.openChase(video, data.rec.id, pos)}
+                        data-testid="chase-retry"
                     >
                         やり直す
                     </button>
-                {:else}
-                    <span class="loading loading-spinner loading-lg" data-testid="chase-loading"></span>
-                {/if}
-            </div>
+                {/snippet}
+            </PlayerVeil>
         {/if}
         {/snippet}
     </PlayerStage>
