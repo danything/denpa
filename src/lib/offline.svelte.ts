@@ -25,7 +25,7 @@ import {
 /** 画面に映すぶんだけ。blob はここに持たない (要るときに IndexedDB から) */
 export interface OfflineEntry {
     id: number;
-    state: 'downloading' | 'ready';
+    state: 'downloading' | 'ready' | 'failed';
     source: 'encoded' | 'alt';
     /** 落とせた割合 (0〜1)。測れない間は null (動いているだけのバーにする) */
     progress: number | null;
@@ -104,15 +104,34 @@ function watchProgress(reg: BackgroundFetchRegistration): void {
     reg.addEventListener('progress', update);
 }
 
-/** 開き直したとき、運んでいる最中のものに追いつく (預けた側のタブはもう無いかもしれない) */
+/**
+ * 開き直したとき、運んでいる最中のものに追いつく (預けた側のタブはもう無いかもしれない)。
+ *
+ * **突き合わせもする。** 控えは「保存中」なのに、ブラウザ側に対応する
+ * ダウンロードが無い — ページ主導のフォールバック中にタブを閉じた、
+ * SW が受け取りそこねた — なら、それはもう動いていない。失敗に倒して
+ * やり直す口にする (「保存中」のまま永遠に張り付かない)
+ */
 async function watchRunning(): Promise<void> {
     try {
         const reg = await navigator.serviceWorker.ready;
         if (reg.backgroundFetch === undefined) return;
+
+        const alive = new Set<number>();
         for (const id of await reg.backgroundFetch.getIds()) {
             const running = await reg.backgroundFetch.get(id);
-            if (running !== undefined) watchProgress(running);
+            if (running === undefined) continue;
+            watchProgress(running);
+            const parsed = parseFetchId(running.id);
+            if (parsed !== null) alive.add(parsed.id);
         }
+
+        for (const held of await videos.all()) {
+            if (held.state !== 'downloading' || alive.has(held.id)) continue;
+            held.state = 'failed';
+            await videos.put(held);
+        }
+        await refresh();
     } catch {
         // 預けたものが無いだけ
     }

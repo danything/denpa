@@ -1,7 +1,7 @@
 <script lang="ts">
     import { onMount } from 'svelte';
     import { dateTime, durationMs, percent, size } from '$lib/format';
-    import { offline, rememberResume, removeEverywhere, startOffline } from '$lib/offline.svelte';
+    import { offline, rememberResume, removeEverywhere, removeLocal, startOffline } from '$lib/offline.svelte';
     import type { OfflineVideo } from '$lib/offline-db';
     import { resumeQueue, videos } from '$lib/offline-db';
 
@@ -168,6 +168,8 @@
                         <span class="badge badge-ghost badge-sm shrink-0">
                             取得中{progress === null ? '…' : ` ${percent(progress)}`}
                         </span>
+                    {:else if item.state === 'failed'}
+                        <span class="badge badge-error badge-sm shrink-0">保存に失敗</span>
                     {:else}
                         <button
                             type="button"
@@ -178,14 +180,29 @@
                             観る
                         </button>
                     {/if}
-                    <button
-                        type="button"
-                        class="btn btn-sm shrink-0 {armed === item.id ? 'btn-error' : 'btn-ghost'}"
-                        onclick={() => remove(item)}
-                        data-testid="offline-delete"
-                    >
-                        {armed === item.id ? '端末とサーバから消す' : '削除'}
-                    </button>
+                    {#if item.state === 'failed'}
+                        <!-- 失敗した控えの片付け。**サーバの録画には触らない** (中身が無いだけ) -->
+                        <button
+                            type="button"
+                            class="btn btn-ghost btn-sm shrink-0"
+                            onclick={async () => {
+                                await removeLocal(item.id);
+                                await load();
+                            }}
+                            data-testid="offline-delete-failed"
+                        >
+                            片付ける
+                        </button>
+                    {:else}
+                        <button
+                            type="button"
+                            class="btn btn-sm shrink-0 {armed === item.id ? 'btn-error' : 'btn-ghost'}"
+                            onclick={() => remove(item)}
+                            data-testid="offline-delete"
+                        >
+                            {armed === item.id ? '端末とサーバから消す' : '削除'}
+                        </button>
+                    {/if}
                 </li>
             {/each}
         </ul>

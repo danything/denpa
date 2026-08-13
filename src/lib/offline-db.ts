@@ -28,8 +28,13 @@ export interface OfflineVideo {
      * 印が違えば新しい控えを消さない (service-worker.ts の drop)
      */
     attempt?: string;
-    /** `downloading` は Background Fetch がまだ運んでいる最中 */
-    state: 'downloading' | 'ready';
+    /**
+     * `downloading` は Background Fetch がまだ運んでいる最中。
+     * `failed` は**消さずに残す** — 失敗した瞬間の知らせ (トースト) は一瞬で、
+     * 控えごと消すと「無かったことになった」ように見える。行に残して、やり直す
+     * 口にする
+     */
+    state: 'downloading' | 'ready' | 'failed';
     downloadedAt: number;
     /** 動画の実体。downloading の間は無い */
     video?: Blob;

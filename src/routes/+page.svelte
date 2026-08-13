@@ -591,12 +591,16 @@
                                         <span
                                             class="badge badge-sm mt-1 {held.state === 'ready'
                                                 ? 'badge-success'
-                                                : 'badge-ghost'}"
+                                                : held.state === 'failed'
+                                                  ? 'badge-error'
+                                                  : 'badge-ghost'}"
                                             data-testid="offline-badge"
                                         >
                                             {held.state === 'ready'
                                                 ? '端末に保存済み'
-                                                : `端末へ保存中${held.progress === null ? '…' : ` ${percent(held.progress)}`}`}
+                                                : held.state === 'failed'
+                                                  ? '端末への保存に失敗 — 詳細からやり直せます'
+                                                  : `端末へ保存中${held.progress === null ? '…' : ` ${percent(held.progress)}`}`}
                                         </span>
                                     {/if}
                                     <!--
@@ -916,16 +920,17 @@
                     ので出さない。保存済みなら「端末から消す」に変わる —
                     こちらはサーバの録画に触らない (行の削除ボタンとは別)
                 -->
-                {#if offline.entries[rec.id] === undefined}
+                {#if offline.entries[rec.id] === undefined || offline.entries[rec.id].state === 'failed'}
                     <button
                         type="button"
                         class="btn btn-outline"
                         onclick={() => saveToDevice(rec)}
                         data-testid="offline-save-button"
                     >
-                        端末に保存
+                        {offline.entries[rec.id]?.state === 'failed' ? '保存をやり直す' : '端末に保存'}
                     </button>
-                {:else}
+                {/if}
+                {#if offline.entries[rec.id] !== undefined}
                     <button
                         type="button"
                         class="btn btn-outline"
@@ -935,7 +940,11 @@
                         }}
                         data-testid="offline-remove-button"
                     >
-                        {offline.entries[rec.id].state === 'downloading' ? '保存を取り消す' : '端末から消す'}
+                        {offline.entries[rec.id].state === 'downloading'
+                            ? '保存を取り消す'
+                            : offline.entries[rec.id].state === 'failed'
+                              ? '失敗した控えを消す'
+                              : '端末から消す'}
                     </button>
                 {/if}
             {/if}

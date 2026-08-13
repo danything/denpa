@@ -123,8 +123,9 @@ worker.addEventListener('backgroundfetchsuccess', (event) => {
             }
 
             if (held.video === undefined) {
-                // 肝心の動画が無いなら保存とは言えない。控えごと消す
-                await videos.remove(parsed.id);
+                // 肝心の動画が無いなら保存とは言えない。失敗として残す (やり直す口になる)
+                held.state = 'failed';
+                await videos.put(held);
                 await tellClients({ type: 'offline-failed', id: parsed.id });
                 return;
             }
@@ -137,7 +138,12 @@ worker.addEventListener('backgroundfetchsuccess', (event) => {
     );
 });
 
-/** 失敗と取り消しは同じ扱い — 途中まで運んだものは使えないので控えごと捨てる */
+/**
+ * 失敗と取り消しは同じ扱い — 途中まで運んだものは使えない。
+ * **控えは消さずに「失敗」として残す。** ネットが遅くて途中で切れたとき、
+ * 消してしまうと開き直したときに何も残らず「無かったことになった」ように
+ * 見えていた。残った行が、そのままやり直す口になる
+ */
 function drop(event: BackgroundFetchEvent): void {
     const parsed = parseFetchId(event.registration.id);
     if (parsed === null) return;
@@ -146,7 +152,8 @@ function drop(event: BackgroundFetchEvent): void {
             // やり直しの控えを、**前回の残骸を中止した知らせ**が消さないように印を照合する
             const held = await videos.get(parsed.id);
             if (held === undefined || (held.attempt ?? '') !== parsed.attempt) return;
-            await videos.remove(parsed.id);
+            held.state = 'failed';
+            await videos.put(held);
             await tellClients({ type: 'offline-failed', id: parsed.id });
         })(),
     );
