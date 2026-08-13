@@ -41,9 +41,10 @@
 ## 全体像
 
 ```
-[視聴/一覧 UI] ──押す──▶ ダウンロード
-     │                     fetch(cookie付き, Range可) で /file・字幕・ポスター・
-     │                     チャプター・データ放送を取得 → IndexedDB に blob 保存
+[視聴/一覧 UI] ──押す──▶ ダウンロード (Background Fetch)
+     │                     backgroundFetch.fetch() でブラウザに預ける (タブを閉じても続く)
+     │                     動画は端末が解けるコーデック (既定 AV1、無理なら H.264)
+     │                     SW の backgroundfetchsuccess → IndexedDB に blob 保存
      │                     メタ (id, サイズ, DL日時, 消したいフラグ) も IndexedDB
      │
      ├─観る──▶ src を差し替え: DL 済みなら URL.createObjectURL(blob)、無ければ従来の API URL
@@ -53,9 +54,9 @@
               online 復帰 ──▶ outbox を処理: DELETE /api/recordings/<id> → deleteRecordingFiles
 ```
 
-**Service Worker はキャッシュに使わない。** 現状の `/api/` 素通しは変えず、DL は
-ページ (またはSW) から**明示的に `fetch`** して blob を IndexedDB に積む。SW の
-「殻だけキャッシュ・一覧はキャッシュしない」方針を崩さないため。
+**Service Worker は配信のキャッシュには使わない。** 現状の `/api/` 素通しは変えず、
+SW に足すのは Background Fetch のイベント処理 (受け取って IndexedDB へ移す) だけ。
+「殻だけキャッシュ・一覧はキャッシュしない」方針は崩さない。
 
 ## データモデル (IndexedDB)
 
@@ -74,13 +75,25 @@ DB 名 `denpa-offline`、ストア2つ:
 
 ## 主要な流れ
 
-### ダウンロード
-1. `fetch('/api/recordings/<id>/file?source=encoded')` を Range で分割取得
-   (中断・再開できるように)。認証はセッション Cookie で通る
+### ダウンロード — Background Fetch API を使う (決定)
+
+1. `swReg.backgroundFetch.fetch(id, [動画, 字幕, ポスター, チャプター, データ放送], {title, downloadTotal})`
+   で**ブラウザにダウンロードを預ける**。アプリ (タブ) を閉じても続き、
+   進捗はブラウザ標準のダウンロード UI に出る。認証はセッション Cookie で通る
    ([auth.ts](../src/lib/server/auth.ts) の `sessionMayRead` で `/api/…/file` は緩和済み)。
-2. 併せて字幕・ポスター・チャプター・データ放送も取得
-   (視聴画面がそれぞれ別 fetch している。[watch/[id]/+page.svelte](../src/routes/watch/[id]/+page.svelte))。
-3. すべて IndexedDB に入れて `state='ready'`。進捗は一覧のバッジに出す。
+2. Service Worker の `backgroundfetchsuccess` で受け取り、IndexedDB へ移して
+   `state='ready'`。`backgroundfetchfail` / `backgroundfetchabort` は途中までを捨てる。
+   (SW が配信ルートをキャッシュしない方針は変えない — SW に足すのはこのイベント処理だけ)
+3. 対応していないブラウザ (Safari / Firefox) は**ページ主導の fetch にフォールバック**
+   (タブを開いたまま。進捗は一覧のバッジに出す)。機能検出は
+   `'backgroundFetch' in swReg`。
+
+### どちらを落とすか — 端末が解けるコーデック (決定)
+
+**既定は AV1** (`library_path`)。端末が AV1 を解けなければ H.264 (`alt_path`) に落とす。
+判定は `navigator.mediaCapabilities.decodingInfo()` (`video/mp4; codecs=av01.…` の
+`supported`)。H.264 しか解けない端末で `alt_path` が無い録画は、ダウンロード時に
+「この端末では再生できない」と断る (落とすだけ落とせても観られないため)。
 
 ### オフライン再生
 - `src` の `$derived` を「`videos` に `ready` があれば `URL.createObjectURL(blob)`、
@@ -99,21 +112,22 @@ DB 名 `denpa-offline`、ストア2つ:
 > 一瞬で本体からも消えることをユーザーが理解できる文言にする (「端末とサーバの両方から
 > 消えます」)。事故を防ぐため、`outbox` 処理の前に通知を1本出すのも検討。
 
+## 決めたこと
+
+- **コーデック: 端末が解けるもの。既定は AV1** (上記)。
+- **ダウンロード: Background Fetch API** (上記)。非対応ブラウザはページ主導にフォールバック。
+
 ## 判断が要るところ / 未決
 
 - **新規エンドポイント `DELETE /api/recordings/[id]`。** 認証は書き込み扱い
   (form action と同じ経路)。CSRF: SvelteKit の form は保護されるが、`fetch` DELETE は
   自前で確認 (同一オリジン・セッション必須)。
-- **コーデック。** 端末が AV1 を再生できるか。両方焼いた録画は H.264 (`alt_path`) も
-  あるので、[types.ts](../src/lib/types.ts) の `alt_path` を落とす選択肢を UI に出すか、
-  端末の再生可否 (`MediaCapabilities`) で自動で選ぶ。
 - **容量。** 30分で約300MB。`navigator.storage.estimate()` で残量を見て、入らなければ
   断る。永続化は `navigator.storage.persist()` を要求 (ブラウザが勝手に消さないように)。
-- **部分 DL の後始末。** 中断した `downloading` は起動時に掃除するか再開するか。
+- **部分 DL の後始末。** Background Fetch はブラウザが面倒を見る (失敗イベントで捨てる)。
+  ページ主導フォールバックの中断だけ、起動時に `downloading` を掃除する。
 - **視聴位置 (`resume_ms`)。** 現状サーバ DB で端末間同期している。オフライン中に進めた
   位置は、復帰時にまとめて `PUT /api/…/resume` で送る (outbox に相乗り)。
-- **SW を絡めるか。** 最初はページ主導 (fetch→IndexedDB) が単純。将来 Background Fetch API
-  (Chrome) を使えば、アプリを閉じても DL が続く — が対応ブラウザが限られるので後回し。
 
 ## 影響範囲 (実装時の当たり所)
 
