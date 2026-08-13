@@ -55,31 +55,6 @@ export function deinterlace(smooth: boolean): string {
     return smooth ? 'bwdif' : 'bwdif=mode=send_frame';
 }
 
-/**
- * 30コマか60コマかは**本編の映像から測って決める** (`measureSmoothMotion`)。
- *
- * 以前はジャンル (国内アニメだけ30コマ) で決めていたが、実測に置き換えた。
- * 放送の TS に「本当のコマ数」は入っていない — 本番の実測で、EIT の
- * component_descriptor は中身が何でも `1080i`、avg_frame_rate は常に
- * 30000/1001、MPEG-2 の interlaced_frame もほぼ全部立っていた。素材が
- * 24p のアニメでも**全部 1080i/60 で符号化**されてくる。
- *
- * それでも見分けはつく。**60コマに起こして、同じ絵が続く割合を数える。**
- * アニメ (24p/30p 由来) は同じ絵が2〜3枚ずつ並ぶので、重複を落とすと
- * コマが大きく減る。本物の 60i (実写・生放送) は全コマ動くので減らない。
- * 実録画での測定 (60p化 → mpdecimate 後の生存率):
- *
- * | 素材 | 生存率 |
- * | --- | --- |
- * | 乙女ゲー世界… (アニメ) | 21% |
- * | 幼女戦記Ⅱ (アニメ) | 32% |
- * | LV999の村人 (アニメ・テロップ多め) | 55% |
- * | フジ生放送 (60i) | 71% |
- *
- * ちなみに idet (縞の検出) は使えなかった — アニメ本編ですら 0〜2% しか
- * プログレッシブと出ず、60i と区別が付かない (パン・合成・ノイズで縞が出る)。
- */
-
 /** 1窓の長さ(秒)。3窓測って中央値を採る */
 const FPS_WINDOW = 30;
 /** 測る窓の位置 (本編のどのあたりか)。端は OP/ED・提供に掛かりやすいので避ける */
@@ -149,8 +124,17 @@ async function surviveRatio(input: string, at: number, signal: AbortSignal): Pro
 }
 
 /**
- * 本編から3窓を測って 30/60 コマを決める。
- * CM検出があれば本編区間の中で測る (CM は実写 60i なので混ぜると釣り上がる)。
+ * 30コマか60コマかを、本編から3窓測って決める。
+ *
+ * 以前はジャンル (国内アニメだけ30コマ) で決めていたが、放送の TS に
+ * 「本当のコマ数」は入っていない — EIT も符号化ヘッダも、素材が 24p の
+ * アニメでも**全部 1080i/60 と名乗る** (本番の実測)。それでも、**60コマに
+ * 起こして同じ絵が続く割合を数えれば**見分けはつく — アニメ (24p/30p 由来) は
+ * 同じ絵が2〜3枚ずつ並ぶので重複を落とすとコマが大きく減り、本物の 60i
+ * (実写・生放送) は全コマ動くので減らない。実測値の表と、idet (縞の検出) が
+ * 使えなかった話は [docs/encode.md](../../../docs/encode.md) に。
+ *
+ * CM検出があれば最初の本編区間の中で測る (CM は実写 60i なので混ぜると釣り上がる)。
  */
 async function measureSmoothMotion(
     source: string,
@@ -167,10 +151,12 @@ async function measureSmoothMotion(
               : start + FPS_WINDOW;
     const span = Math.max(0, end - start - FPS_WINDOW);
 
+    // 尺が窓より短いと3点が同じ位置に重なる。同じ30秒を測り直さない
+    const offsets = [...new Set(FPS_POINTS.map((point) => start + span * point))];
     const ratios: number[] = [];
-    for (const point of FPS_POINTS) {
+    for (const at of offsets) {
         if (signal.aborted) break;
-        ratios.push(await surviveRatio(source, start + span * point, signal));
+        ratios.push(await surviveRatio(source, at, signal));
     }
     const smooth = pickSmooth(ratios);
     console.log(
@@ -307,7 +293,7 @@ export interface EncodeOptions {
     keep?: Range[] | null;
     /** チャプター(CM位置)を書き込む ffmetadata ファイル */
     chaptersFile?: string | null;
-    /** 60コマ/秒で出す。滑らかになる代わりに時間もサイズも約2倍 (smoothMotionFor) */
+    /** 60コマ/秒で出す。滑らかになる代わりに時間もサイズも約2倍 (measureSmoothMotion で決める) */
     smoothMotion?: boolean;
     /**
      * 字幕を絵にするときの画面の大きさ ("1920x1080")。無ければ 1440x1080 とみなされる。
@@ -1114,6 +1100,9 @@ async function runJob(jobId: number): Promise<void> {
     if (keep !== null && keep.length > 0) {
         trimmed = await trimCm(jobId, sourceTs, keep, signal);
         if (trimmed !== null) source = trimmed;
+        // 切れなかったら CM 入りのまま進む。コマ数の実測とサムネイルが CM を
+        // 掴まないように、本編の最初の区間 (keep) を教えておく
+        else encodeOptions.contentStart = keep[0] ?? null;
     }
     if (canceled.has(jobId)) {
         removeIfExists(trimmed);
@@ -1129,8 +1118,10 @@ async function runJob(jobId: number): Promise<void> {
      */
     if (settings().fpsDetect) {
         setStep(jobId, 'コマ数を確かめています');
-        // CM を切ったなら source は短くなっている。残した区間の合計が実際の尺
-        const keepTotal = (keep ?? []).reduce((sum, range) => sum + (range.end - range.start), 0);
+        // CM を切れたなら source は短くなっている。残した区間の合計が実際の尺。
+        // 切り出しに失敗したときは元のままなので、録画の予定尺で見る
+        const keepTotal =
+            trimmed === null ? 0 : (keep ?? []).reduce((sum, range) => sum + (range.end - range.start), 0);
         const predicted = keepTotal > 0 ? keepTotal : (recording.end_at - recording.start_at) / 1000;
         encodeOptions.smoothMotion = await measureSmoothMotion(
             source,
