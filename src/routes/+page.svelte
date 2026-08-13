@@ -21,6 +21,7 @@
         time,
     } from '$lib/format';
     import { liveUpdates } from '$lib/live-updates.svelte';
+    import { offline, removeLocal, saveOffline } from '$lib/offline.svelte';
     import { encodeSource } from '$lib/source';
 
     let { data, form } = $props();
@@ -60,9 +61,13 @@
         return rec.job_id === null && rec.library_path !== null && rec.ts_path !== null;
     }
 
+    /** 端末への保存の結果。フォームではないので自前で持つ */
+    let offlineNote = $state<Notice | null>(null);
+
     /** 押した結果。出す場所と消え方は Toasts が持っている */
     const notices = $derived.by(() => {
         const list: Notice[] = [];
+        if (offlineNote !== null) list.push(offlineNote);
         if (form?.message) list.push({ key: 'dashboard-error', kind: 'error', text: form.message });
         if (form?.reconcile) {
             /*
@@ -79,6 +84,29 @@
         }
         return list;
     });
+
+    /**
+     * 端末に保存する ([docs/offline.md](../../docs/offline.md))。落とすものは
+     * `saveOffline` が決める (既定 AV1、端末が解けなければ H.264)。
+     * Background Fetch ならタブを閉じても続くので、押したら詳細は閉じる
+     */
+    async function saveToDevice(rec: (typeof data.recordings)[number]): Promise<void> {
+        try {
+            await saveOffline(rec);
+            offlineNote = {
+                key: `offline-save-${rec.id}`,
+                kind: 'info',
+                text: `端末への保存を始めました: ${rec.name}`,
+            };
+        } catch (error) {
+            offlineNote = {
+                key: `offline-save-${rec.id}`,
+                kind: 'error',
+                text: error instanceof Error ? error.message : '端末に保存できませんでした',
+            };
+        }
+        detail.close();
+    }
 
     /** 行から開いた番組詳細。番組表と同じ見せ方をする (detail.svelte.ts) */
     const detail = programDetail();
@@ -545,6 +573,19 @@
                                         決まるので、ここで書き分けることは何も無い
                                     -->
                                     {@render title(shown.label, shown.badge, rec.name, 'recording-state')}
+                                    {#if offline.entries[rec.id] !== undefined}
+                                        <!-- 端末に入っている印。押すと保存済み一覧 (/offline) へ -->
+                                        <a
+                                            href="/offline"
+                                            class="badge badge-sm mt-1 {offline.entries[rec.id].state === 'ready'
+                                                ? 'badge-success'
+                                                : 'badge-ghost'}"
+                                            onclick={(event) => event.stopPropagation()}
+                                            data-testid="offline-badge"
+                                        >
+                                            {offline.entries[rec.id].state === 'ready' ? '端末に保存済み' : '端末へ保存中…'}
+                                        </a>
+                                    {/if}
                                     <!--
                                         放送日時・尺・サイズは1行にまとめる。列に分けていた頃は、
                                         画面が狭いと表ごと横スクロールになって番組名まで隠れていた。
@@ -831,6 +872,36 @@
                 >
                     生TS
                 </a>
+            {/if}
+            {#if offline.usable && rec.library_path !== null}
+                <!--
+                    **端末に保存 (オフライン視聴)。** 落とすのは焼いたもの
+                    (docs/offline.md)。生TSしか無い録画はブラウザで再生できない
+                    ので出さない。保存済みなら「端末から消す」に変わる —
+                    こちらはサーバの録画に触らない (行の削除ボタンとは別)
+                -->
+                {#if offline.entries[rec.id] === undefined}
+                    <button
+                        type="button"
+                        class="btn btn-outline"
+                        onclick={() => saveToDevice(rec)}
+                        data-testid="offline-save-button"
+                    >
+                        端末に保存
+                    </button>
+                {:else}
+                    <button
+                        type="button"
+                        class="btn btn-outline"
+                        onclick={async () => {
+                            await removeLocal(rec.id);
+                            detail.close();
+                        }}
+                        data-testid="offline-remove-button"
+                    >
+                        {offline.entries[rec.id].state === 'downloading' ? '保存を取り消す' : '端末から消す'}
+                    </button>
+                {/if}
             {/if}
             {#if rec.job_id === null && encodeSource(rec) !== null}
                 <!--

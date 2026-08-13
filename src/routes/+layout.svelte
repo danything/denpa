@@ -6,8 +6,12 @@
     import { busy } from '$lib/busy.svelte';
     import Measure from '$lib/components/Measure.svelte';
     import { measure } from '$lib/measure.svelte';
+    import { startOffline } from '$lib/offline.svelte';
 
     let { children, data } = $props();
+
+    // オフライン視聴の控えを読み、オンラインに戻ったら outbox を流す (docs/offline.md)
+    onMount(() => startOffline());
 
     /**
      * **その端末の高さを読む札。**
@@ -106,6 +110,7 @@
         { href: '/', label: '予約と録画' },
         { href: '/guide', label: '番組表' },
         { href: '/live', label: 'ライブ' },
+        { href: '/offline', label: 'オフライン' },
         { href: '/rules', label: 'ルール' },
         { href: '/tuners', label: 'チューナー' },
         { href: '/settings', label: '設定' },

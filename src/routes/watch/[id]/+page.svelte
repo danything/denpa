@@ -36,6 +36,8 @@
     import Toasts, { type Notice } from '$lib/components/Toasts.svelte';
     import { type DetailSeed, programDetail } from '$lib/detail.svelte';
     import { clock, cmNoteWorthShowing, recordedDuration, size, time } from '$lib/format';
+    import { loadOffline, rememberResume } from '$lib/offline.svelte';
+    import type { OfflineVideo } from '$lib/offline-db';
     import { captionAt, type Drawn, pixels, readSup } from '$lib/pgs';
     import { feedFor, type PlacedMessage, replayAt } from '$lib/ts/data-timeline';
     import { SPEEDS } from '$lib/ts/pacing';
@@ -59,7 +61,23 @@
 
     /** 焼けているか。**観るのは焼いたものだけ** (`+page.server.ts`) */
     const ready = $derived(rec.library_path !== null);
-    const src = $derived(`/api/recordings/${rec.id}/file?source=encoded`);
+    /*
+     * 端末に保存してあればそちらを観る (docs/offline.md)。サーバから読み直さない
+     * ので、電波が細いところでも途切れない。字幕・チャプター・データ放送も
+     * 一緒に落としてあるものを使う (各 load が localCopy を先に見る)
+     */
+    let localSrc = $state<string | null>(null);
+    let localCopy: OfflineVideo | null = null;
+    onMount(() => {
+        void (async () => {
+            localCopy = await loadOffline(rec.id);
+            if (localCopy?.video !== undefined) localSrc = URL.createObjectURL(localCopy.video);
+        })();
+        return () => {
+            if (localSrc !== null) URL.revokeObjectURL(localSrc);
+        };
+    });
+    const src = $derived(localSrc ?? `/api/recordings/${rec.id}/file?source=encoded`);
 
     let video = $state<HTMLVideoElement | null>(null);
     /** 映像とその上の操作をまとめた箱。全画面にするのはこちら */
@@ -101,8 +119,13 @@
             return;
         }
         if (dataTimeline.length === 0) {
-            const response = await fetch(`/api/recordings/${rec.id}/databroadcast`);
-            dataTimeline = response.ok ? await response.json() : [];
+            if (Array.isArray(localCopy?.databroadcast)) {
+                // 端末に保存したものから。オフラインでも d が効く
+                dataTimeline = localCopy.databroadcast as PlacedMessage[];
+            } else {
+                const response = await fetch(`/api/recordings/${rec.id}/databroadcast`).catch(() => null);
+                dataTimeline = response?.ok ? await response.json() : [];
+            }
         }
         dataFed = -1;
         // 器を作らせる。open のあと listenData が呼ばれて、いまの位置まで積み直す
@@ -344,7 +367,10 @@
             headers: { 'content-type': 'application/json' },
             body,
             keepalive: true,
-        }).catch(() => undefined);
+        }).catch(() => {
+            // オフラインで観ている。位置は端末に覚えて、復帰時にまとめて送る
+            void rememberResume(rec.id, video?.currentTime ?? 0, video?.duration ?? 0);
+        });
     }
 
     /**
@@ -437,6 +463,12 @@
      */
     async function loadChapters(): Promise<void> {
         try {
+            // 端末に保存したものがあればそちら (オフラインでもCM飛ばしが効く)
+            const held = localCopy?.chapters as { chapters?: typeof chapters } | undefined;
+            if (held?.chapters !== undefined) {
+                chapters = held.chapters;
+                return;
+            }
             const res = await fetch(`/api/recordings/${rec.id}/chapters`);
             if (!res.ok) return;
             chapters = (await res.json()).chapters ?? [];
@@ -584,6 +616,12 @@
     async function loadCaptions(): Promise<void> {
         if (drawn.length > 0) return;
         try {
+            // 端末に保存したものがあればそちら (オフラインでも字幕が出る)
+            if (localCopy?.captions !== undefined) {
+                drawn = readSup(new Uint8Array(await localCopy.captions.arrayBuffer()));
+                paint();
+                return;
+            }
             const res = await fetch(`/api/recordings/${rec.id}/captions.sup`);
             if (!res.ok) return;
             drawn = readSup(new Uint8Array(await res.arrayBuffer()));

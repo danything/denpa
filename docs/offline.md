@@ -1,9 +1,20 @@
-# オフライン視聴 (PWA) — 設計メモ
+# オフライン視聴 (PWA)
 
-> [!NOTE]
-> **設計だけの覚え書き。まだ実装していない。** 「録画を端末に落として、電波の届かない
-> ところ (出先・機内) で観る。観終えて消したら、次にオンラインへ戻ったときにサーバ側の
-> 録画も自動で消える」を、**既存の視聴 UI そのまま**で成り立たせるための下ごしらえ。
+「録画を端末に落として、電波の届かないところ (出先・機内) で観る。観終えて消したら、
+次にオンラインへ戻ったときにサーバ側の録画も自動で消える」の設計と実装の覚え書き。
+
+実装の入口:
+
+- [src/lib/offline-db.ts](../src/lib/offline-db.ts) … IndexedDB (ページと SW の共有層)
+- [src/lib/offline.svelte.ts](../src/lib/offline.svelte.ts) … 画面側 (保存・削除・outbox)
+- [src/service-worker.ts](../src/service-worker.ts) … Background Fetch の受け取りとオフラインの入口
+- [src/routes/offline/+page.svelte](../src/routes/offline/+page.svelte) … 保存済み一覧 + 内蔵プレイヤー
+- [src/routes/api/recordings/[id]/+server.ts](../src/routes/api/recordings/[id]/+server.ts) … `DELETE` (outbox の宛先)
+
+オフラインでは `/watch/<id>` は開けない (あの画面はサーバが組む) ので、電波の無いときの
+視聴は `/offline` の内蔵プレイヤーで行う。ナビゲーションが繋がらないときは
+サービスワーカーが `/offline` へ落とす。オンラインの `/watch` は端末のコピーがあれば
+そちらを使う (動画・字幕・チャプター・データ放送)。
 
 ## やりたいこと
 
