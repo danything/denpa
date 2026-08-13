@@ -236,6 +236,44 @@ describe('savePrograms', () => {
 
         expect(db().query('SELECT name FROM programs').all()).toEqual([{ name: '[新]テスト番組' }]);
     });
+
+    test('延長で重なった番組は消える (あとから来たほうが勝つ)', async () => {
+        offered = [channel(23608, 'ＴＯＫＹＯ　ＭＸ')];
+        await syncServicesOnly();
+        db().exec('DELETE FROM programs');
+
+        const base = Date.now();
+        // 野球 10:15〜11:05 と、その後の2本
+        savePrograms([
+            event({ eventId: 1, name: '野球', startAt: base, duration: 50 * 60_000 }),
+            event({ eventId: 2, name: 'きょうの料理', startAt: base + 50 * 60_000, duration: 25 * 60_000 }),
+            event({ eventId: 3, name: 'うまいッ!', startAt: base + 75 * 60_000, duration: 24 * 60_000 }),
+        ]);
+
+        // 野球が 11:54 まで延長 (EIT[p/f])。潰された2本は局の送り直しまで書き換わらない
+        savePrograms([event({ eventId: 1, name: '野球', startAt: base, duration: 99 * 60_000 })]);
+
+        expect(db().query('SELECT name FROM programs ORDER BY start_at').all()).toEqual([{ name: '野球' }]);
+    });
+
+    test('隣り合っているだけ (境界が同じ) の番組は消えない', async () => {
+        offered = [channel(23608, 'ＴＯＫＹＯ　ＭＸ')];
+        await syncServicesOnly();
+        db().exec('DELETE FROM programs');
+
+        const base = Date.now();
+        savePrograms([
+            event({ eventId: 1, name: '前の番組', startAt: base, duration: 30 * 60_000 }),
+            event({ eventId: 2, name: '次の番組', startAt: base + 30 * 60_000, duration: 30 * 60_000 }),
+        ]);
+        // 同じものをもう一度読んでも (カルーセルは回り続ける) 隣は消えない
+        savePrograms([event({ eventId: 1, name: '前の番組', startAt: base, duration: 30 * 60_000 })]);
+
+        expect(db().query('SELECT name FROM programs ORDER BY start_at').all()).toEqual([
+            { name: '前の番組' },
+            { name: '次の番組' },
+        ]);
+    });
 });
 
 /**

@@ -276,6 +276,20 @@ export function savePrograms(events: EitEvent[]): number {
             video_resolution = excluded.video_resolution,
             updated_at = excluded.updated_at
     `);
+    /*
+     * **同じ局で時間が重なった行は、あとから来たほうが勝つ。**
+     *
+     * 野球が延びると、いま流れている番組の終わりが EIT で後ろへ動く (延長)。
+     * このとき**潰された側の番組はすぐには書き換わらない** — 局は後から新しい
+     * 時刻で送り直してくるが、それまでの間、古い行が延長された行の下に
+     * 重なったまま残り、番組表の1マスに2つ3つの番組が重なって出ていた。
+     * 受信機の流儀に合わせて、重なった古い行はここで消す (送り直しが来れば
+     * event_id ごと戻ってくる)
+     */
+    const sweep = database().prepare(`
+        DELETE FROM programs
+        WHERE service_id = ? AND id != ? AND start_at < ? AND end_at > ?
+    `);
     const at = now();
     let count = 0;
     const tx = database().transaction(() => {
@@ -286,8 +300,10 @@ export function savePrograms(events: EitEvent[]): number {
             const serviceId = index.get(`${event.originalNetworkId}:${event.serviceId}`);
             if (serviceId === undefined) continue;
             const extended = Object.keys(event.extended).length === 0 ? null : event.extended;
+            const key = programKey(event.originalNetworkId, event.serviceId, event.eventId);
+            sweep.run(serviceId, key, event.startAt + event.duration, event.startAt);
             stmt.run(
-                programKey(event.originalNetworkId, event.serviceId, event.eventId),
+                key,
                 serviceId,
                 event.originalNetworkId,
                 event.eventId,
