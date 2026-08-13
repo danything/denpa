@@ -1,5 +1,6 @@
 <script lang="ts">
     import { onMount } from 'svelte';
+    import ProgramFacts from '$lib/components/ProgramFacts.svelte';
     import AudioMenu from '$lib/components/player/AudioMenu.svelte';
     import { screenAwake } from '$lib/components/player/awake.svelte';
     import CodecMenu from '$lib/components/player/CodecMenu.svelte';
@@ -8,7 +9,9 @@
     import { centerTap } from '$lib/components/player/center-tap';
     import { playerControls } from '$lib/components/player/controls.svelte';
     import EdgeButton from '$lib/components/player/EdgeButton.svelte';
+    import FactsAside from '$lib/components/player/FactsAside.svelte';
     import Icon from '$lib/components/player/Icon.svelte';
+    import InfoBlock from '$lib/components/player/InfoBlock.svelte';
     import {
         CAMERA,
         CAPTION,
@@ -29,6 +32,7 @@
     import StageNote from '$lib/components/player/StageNote.svelte';
     import { snapshotter } from '$lib/components/player/shot.svelte';
     import Toasts, { type Notice } from '$lib/components/Toasts.svelte';
+    import { programDetail } from '$lib/detail.svelte';
     import { clock as clockLabel, time } from '$lib/format';
     import { livePlayer } from '$lib/live-player.svelte';
     import { keepResume } from '$lib/resume';
@@ -52,10 +56,38 @@
     /** 右端を伸ばすための時計。1秒刻みで十分 (バーの目盛りより細かい) */
     let clock = $state(Date.now());
 
+    /**
+     * 右に出す番組の中身 (観る画面と同じ考え方)。録画の行が持っているぶんで
+     * 組み立てて、番組表から引ければそちらで上書きする (`programDetail`)。
+     * 追っかけは放送中なので、たいてい引ける。
+     */
+    const detail = programDetail();
+    const facts = $derived({
+        name: data.rec.name,
+        service_name: data.rec.service_name,
+        start_at: data.rec.start_at,
+        end_at: data.rec.end_at,
+        description: data.rec.description,
+        extended: null,
+        genre_detail: data.rec.genre_detail,
+        audios: data.rec.audios,
+        video_type: null,
+        video_resolution: null,
+        is_free: 1,
+    });
+
     onMount(() => {
         if (still !== null && overlay !== null) player.attach(still, overlay);
         // 前に途中まで観ていたら、そこから
         if (video !== null) void player.openChase(video, data.rec.id, data.rec.resumeSec);
+        // 出演者などは番組表の側にある。押させずに、開いた時点で引く (観る画面と同じ)
+        void detail.open(data.rec.program_id, {
+            name: data.rec.name,
+            service_name: data.rec.service_name,
+            start_at: data.rec.start_at,
+            end_at: data.rec.end_at,
+            description: data.rec.description,
+        });
         const ticker = setInterval(() => (clock = Date.now()), 1000);
         const keeper = setInterval(() => sendResume(), 15_000);
         const onLeave = () => sendResume(true);
@@ -132,7 +164,9 @@
     <title>{data.rec.name} (追っかけ) - denpa</title>
 </svelte:head>
 
-<div class="mx-auto max-w-5xl">
+<!-- **ライブ・観る画面と同じ形。** 映像が左、番組の中身が右。決めごとは watch/[id] のコメント -->
+<div class="flex flex-col gap-4 md:h-full md:min-h-0 md:flex-row">
+    <section class="flex min-w-0 flex-1 flex-col md:min-h-0">
     <!-- 舞台の配線と映像の束はライブと共通 (PlayerStage / MediaStack) -->
     <PlayerStage {controls} testid="chase">
         {#snippet children(stage)}
@@ -173,6 +207,7 @@
                 data-testid="chase-seek"
             />
 
+            <!-- **並びはライブと同じ。** 再生・音・字幕、焼き方・音声・端 (最新)、読みもの、速さ、全画面 -->
             <div class="mt-1 flex flex-wrap items-center gap-1 text-white">
                 <ControlButton
                     path={player.paused ? PLAY : PAUSE}
@@ -195,6 +230,13 @@
                         onclick={() => player.toggleCaptions()}
                     />
                 {/if}
+
+                <!-- 焼き方。ライブと同じ場所・同じ見た目で、選び直すと居た場所から焼き直し -->
+                <CodecMenu
+                    testid="chase-codec"
+                    codec={player.codec}
+                    onselect={(key) => player.setCodec(key)}
+                />
                 {#if player.audios.length > 1}
                     <AudioMenu
                         testid="chase-audio"
@@ -207,12 +249,22 @@
                     />
                 {/if}
 
-                <!-- **読みものは二段で** (ライブと同じ)。上が番組、下が位置 -->
-                <div class="min-w-0 grow basis-0 px-2 leading-tight text-white/80">
-                    <div class="truncate text-sm whitespace-nowrap">
-                        {data.rec.service_name} ・ {data.rec.name}
-                    </div>
-                    <div class="truncate text-xs tabular-nums text-white/60">
+                <!-- いま録れているところへ。ライブの「ライブ」に相当し、場所も同じ -->
+                <EdgeButton
+                    active={recorded - pos < 20}
+                    label="最新"
+                    onclick={() => seekTo(recorded)}
+                    testid="chase-edge"
+                />
+
+                <!-- 読みものは3画面共通の二段 (InfoBlock)。上が番組、下が位置 -->
+                <InfoBlock
+                    range={{ start: data.rec.start_at, end: data.rec.end_at }}
+                    service={data.rec.service_name}
+                    title={data.rec.name}
+                    titleTestid="chase-title"
+                >
+                    {#snippet status()}
                         <span data-testid="chase-clock">{clockLabel(pos)} / {clockLabel(recorded)}</span>
                         {#if line !== null && !line.finished}
                             <!-- 赤はライブの赤丸と同じ出し方。黒帯の上の text-error は沈む -->
@@ -223,15 +275,8 @@
                         {:else if line !== null}
                             ・ 録画済み
                         {/if}
-                    </div>
-                </div>
-
-                <!-- 焼き方。ライブと同じで、選び直すと居た場所から焼き直し -->
-                <CodecMenu
-                    testid="chase-codec"
-                    codec={player.codec}
-                    onselect={(key) => player.setCodec(key)}
-                />
+                    {/snippet}
+                </InfoBlock>
 
                 <!-- 追っかけは常に速さを選べる (録れている範囲の中を進むだけ) -->
                 <SpeedMenu
@@ -239,14 +284,6 @@
                     label="再生の速さ"
                     speed={player.speed}
                     onselect={(speed) => player.setSpeed(speed)}
-                />
-
-                <!-- いま録れているところへ。ライブの「ライブ」に相当 -->
-                <EdgeButton
-                    active={recorded - pos < 20}
-                    label="最新"
-                    onclick={() => seekTo(recorded)}
-                    testid="chase-edge"
                 />
 
                 <ControlButton
@@ -285,6 +322,12 @@
         {/if}
         {/snippet}
     </PlayerStage>
+    </section>
+
+    <!-- 右は番組の中身。枠は観る画面と同じ部品 (FactsAside)、中身も同じ (ProgramFacts) -->
+    <FactsAside testid="chase-facts">
+        <ProgramFacts program={detail.current ?? facts} />
+    </FactsAside>
 </div>
 
 <Toasts {notices} />

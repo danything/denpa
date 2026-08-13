@@ -12,6 +12,7 @@
     import DataBroadcast from '$lib/components/player/DataBroadcast.svelte';
     import EdgeButton from '$lib/components/player/EdgeButton.svelte';
     import Icon from '$lib/components/player/Icon.svelte';
+    import InfoBlock from '$lib/components/player/InfoBlock.svelte';
     import {
         CAMERA,
         CAPTION,
@@ -479,25 +480,16 @@
                             testid="live-edge"
                         />
 
-                        <!-- **読みものはここに二段で。** 決まりは [ControlBar.svelte](../../lib/components/player/ControlBar.svelte) -->
-                        <div class="min-w-0 grow basis-0 px-2 leading-tight text-white/80">
-                            <div class="flex items-baseline overflow-hidden text-sm whitespace-nowrap">
-                                {#if current}
-                                    <span class="shrink-0">
-                                        {#if current.now}
-                                            {time(current.now.startAt)} 〜 {time(current.now.endAt)} ・
-                                        {/if}
-                                        {current.name}
-                                    </span>
-                                    {#if current.now}
-                                        <span class="min-w-0 truncate">
-                                            &nbsp;・ <span data-testid="live-title">{current.now.name}</span>
-                                        </span>
-                                    {/if}
-                                {/if}
-                            </div>
-
-                            <div class="truncate text-xs tabular-nums text-white/60">
+                        <!-- **読みものは3画面共通の二段** (InfoBlock)。決まりは [ControlBar.svelte](../../lib/components/player/ControlBar.svelte) -->
+                        <InfoBlock
+                            range={current?.now
+                                ? { start: current.now.startAt, end: current.now.endAt }
+                                : null}
+                            service={current?.name ?? ''}
+                            title={current?.now?.name ?? null}
+                            titleTestid="live-title"
+                        >
+                            {#snippet status()}
                                 <!--
                                     **放送からどれだけ遅れているか。** 詰めていく作業を
                                     するのに、見えないと当てずっぽうになる
@@ -552,8 +544,8 @@
                                 {#if player.slips > 0}
                                     ・ <span data-testid="live-slips">絵の直し {player.slips}回</span>
                                 {/if}
-                            </div>
-                        </div>
+                            {/snippet}
+                        </InfoBlock>
 
                         <!--
                         **追っかけ中の速さ。追っかけている間だけ出す。**

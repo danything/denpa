@@ -15,6 +15,7 @@ export const load: PageServerLoad = ({ params }) => {
 
     const rec = queryOne<{
         id: number;
+        program_id: number | null;
         name: string;
         service_name: string;
         start_at: number;
@@ -24,9 +25,12 @@ export const load: PageServerLoad = ({ params }) => {
         ts_path: string | null;
         resume_ms: number | null;
         deleted_at: number | null;
+        description: string;
+        genre_detail: string | null;
+        audios: string | null;
     }>(
-        `SELECT id, name, service_name, start_at, end_at, finished_at,
-                library_path, ts_path, resume_ms, deleted_at
+        `SELECT id, program_id, name, service_name, start_at, end_at, finished_at,
+                library_path, ts_path, resume_ms, deleted_at, description, genre_detail, audios
          FROM recordings WHERE id = ?`,
         id,
     );
@@ -38,6 +42,8 @@ export const load: PageServerLoad = ({ params }) => {
     return {
         rec: {
             id: rec.id,
+            // 右の番組の中身を番組表から引き直すのに使う (観る画面と同じ)
+            program_id: rec.program_id,
             name: rec.name,
             service_name: rec.service_name,
             start_at: rec.start_at,
@@ -45,6 +51,9 @@ export const load: PageServerLoad = ({ params }) => {
             finished: rec.finished_at !== null,
             // 前に途中まで観ていたら、そこから (観る画面の続き再生と同じ理屈)
             resumeSec: rec.resume_ms === null ? 0 : rec.resume_ms / 1000,
+            description: rec.description,
+            genre_detail: rec.genre_detail,
+            audios: rec.audios,
         },
     };
 };

@@ -9,7 +9,9 @@
     import ControlButton from '$lib/components/player/ControlButton.svelte';
     import { playerControls } from '$lib/components/player/controls.svelte';
     import DataBroadcast from '$lib/components/player/DataBroadcast.svelte';
+    import FactsAside from '$lib/components/player/FactsAside.svelte';
     import Icon from '$lib/components/player/Icon.svelte';
+    import InfoBlock from '$lib/components/player/InfoBlock.svelte';
     import {
         CAMERA,
         CAPTION,
@@ -37,7 +39,7 @@
     import { snapshotter } from '$lib/components/player/shot.svelte';
     import Toasts, { errorNotice, type Notice } from '$lib/components/Toasts.svelte';
     import { type DetailSeed, programDetail } from '$lib/detail.svelte';
-    import { clock, cmNoteWorthShowing, recordedDuration, size, time } from '$lib/format';
+    import { clock, cmNoteWorthShowing, recordedDuration, size } from '$lib/format';
     import { write as remind, read as stored } from '$lib/keep';
     import { loadOffline } from '$lib/offline.svelte';
     import type { OfflineVideo } from '$lib/offline-db';
@@ -1209,9 +1211,14 @@
                             />
                         {/if}
 
-                        <!-- **読みものはここに二段で。** 決まりは [ControlBar.svelte](../../../lib/components/player/ControlBar.svelte) -->
-                        <div class="min-w-0 grow basis-0 px-2 leading-tight text-white/80">
-                            <div class="flex items-baseline gap-1.5 overflow-hidden text-sm whitespace-nowrap">
+                        <!-- **読みものは3画面共通の二段** (InfoBlock)。決まりは [ControlBar.svelte](../../../lib/components/player/ControlBar.svelte) -->
+                        <InfoBlock
+                            range={{ start: rec.start_at, end: rec.end_at }}
+                            service={rec.service_name}
+                            title={rec.name}
+                            titleTestid="watch-name"
+                        >
+                            {#snippet badge()}
                                 {#if localSrc !== null}
                                     <!-- サーバではなく端末のコピーで観ている印。帯の題名の並びに出す -->
                                     <span
@@ -1221,28 +1228,21 @@
                                         端末
                                     </span>
                                 {/if}
-                                <span class="shrink-0">
-                                    {time(rec.start_at)} 〜 {time(rec.end_at)} ・ {rec.service_name}
-                                </span>
-                                <span class="min-w-0 truncate">
-                                    ・ <span data-testid="watch-name">{rec.name}</span>
-                                </span>
-                            </div>
-
-                            <!--
-                                **残りも出す。** 「あと何分で終わるか」は、途中で
-                                観るのをやめるかどうかを決めるのに要る。倍速のときは
-                                **実際に掛かる時間**にする (1.5倍なら残りも1.5で割る)
-                            -->
-                            <div class="truncate text-xs tabular-nums text-white/60">
+                            {/snippet}
+                            {#snippet status()}
+                                <!--
+                                    **残りも出す。** 「あと何分で終わるか」は、途中で
+                                    観るのをやめるかどうかを決めるのに要る。倍速のときは
+                                    **実際に掛かる時間**にする (1.5倍なら残りも1.5で割る)
+                                -->
                                 <span data-testid="watch-clock">
                                     {clock(at)} / {clock(length)} 残り {clock(remaining)}
                                 </span>
                                 {#if current !== null}
                                     ・ <span data-testid="watch-chapter">{current.title}</span>
                                 {/if}
-                            </div>
-                        </div>
+                            {/snippet}
+                        </InfoBlock>
 
                         <!-- 早送り。**ライブの追っかけと同じ並び・同じ見た目** -->
                         <SpeedMenu
@@ -1280,58 +1280,48 @@
         ([live/+page.svelte](../../live/+page.svelte))。映像の高さに揃えていた頃は、
         そのためだけに `absolute` で浮かせる作りをここだけ抱えていた (上の説明)
     -->
-    <!-- **二段組にした直後は細く** (`md:w-64`)。理由は [ControlBar.svelte](../../../lib/components/player/ControlBar.svelte) -->
-    <aside class="flex flex-col md:w-64 md:min-h-0 md:shrink-0 lg:w-80">
-        <!--
-            **データ放送のリモコンは、映像の上ではなく右の列に出す** — ライブと同じ
-            (live/+page.svelte)。以前は映像に重ねていたので、上下の帯や字幕とぶつかっていた。
-            データ放送を出している間だけ、番組の中身の上に出す
-        -->
-        {#if dataPress !== null}
-            <Remote press={dataPress} />
-        {/if}
-        <div class="card bg-base-100 flex min-h-0 flex-1 shadow">
+    <!-- 枠は追っかけと同じ部品 (FactsAside)。幅・巻き取り・貼り付けの決めごとはそちら -->
+    <FactsAside testid="watch-facts">
+        {#snippet top()}
             <!--
-                **`card-body` は使わない。** daisyUI はあれの中の `<p>` に
-                `flex-grow: 1` を当てるので、**中身が枠より短いと段落が余白を
-                全部吸って**、局名と説明の下だけが不自然に空いていた
-                (実機の26分もの。局名の下に 60px、説明の下に 90px)。
-                ここは縦に積むだけの箱でよく、余白は自前で持つ
+                **データ放送のリモコンは、映像の上ではなく右の列に出す** — ライブと同じ
+                (live/+page.svelte)。以前は映像に重ねていたので、上下の帯や字幕とぶつかっていた。
+                データ放送を出している間だけ、番組の中身の上に出す
             -->
-            <div class="min-h-0 flex-1 overflow-y-auto p-4" data-testid="watch-facts">
-                <!--
-                    **引き直せたらそちらを出す。** 録画の行が持っているのは名前と
-                    説明までで、出演者などは番組表の側にある。古い録画は番組表から
-                    消えているので引けず、そのときは行のぶんだけが出たままになる
-                -->
-                <ProgramFacts
-                    program={detail.current ?? facts}
-                    cmNote={cmNoteWorthShowing(rec.cm_note) ? rec.cm_note : null}
-                />
+            {#if dataPress !== null}
+                <Remote press={dataPress} />
+            {/if}
+        {/snippet}
 
-                <div class="text-base-content/60 mt-3 text-sm" data-testid="watch-meta">
-                    {recordedDuration(rec)} ・ {size(rec.ts_size)}
-                </div>
-            </div>
+        <!--
+            **引き直せたらそちらを出す。** 録画の行が持っているのは名前と
+            説明までで、出演者などは番組表の側にある。古い録画は番組表から
+            消えているので引けず、そのときは行のぶんだけが出たままになる
+        -->
+        <ProgramFacts
+            program={detail.current ?? facts}
+            cmNote={cmNoteWorthShowing(rec.cm_note) ? rec.cm_note : null}
+        />
 
+        <div class="text-base-content/60 mt-3 text-sm" data-testid="watch-meta">
+            {recordedDuration(rec)} ・ {size(rec.ts_size)}
+        </div>
+
+        {#snippet footer()}
             <!--
-                押すものは常に見えるところに置く。巻き取られる中身の外。
-
                 **「一覧へ」は置かない。** 絵の右上の「×」が同じ行き先で、
                 2つ並べる意味が無かった
             -->
-            <div class="border-base-300 flex shrink-0 flex-wrap gap-2 border-t p-4">
-                <a
-                    class="btn btn-sm btn-outline"
-                    href="/api/recordings/{rec.id}/file?download=1&source=encoded"
-                    download
-                    data-testid="watch-download"
-                >
-                    ダウンロード
-                </a>
-            </div>
-        </div>
-    </aside>
+            <a
+                class="btn btn-sm btn-outline"
+                href="/api/recordings/{rec.id}/file?download=1&source=encoded"
+                download
+                data-testid="watch-download"
+            >
+                ダウンロード
+            </a>
+        {/snippet}
+    </FactsAside>
 </div>
 
 <Toasts {notices} source={form} />
