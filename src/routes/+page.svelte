@@ -11,6 +11,7 @@
         date,
         dateTime,
         duration,
+        durationMs,
         eta,
         logoUnusable,
         percent,
@@ -622,11 +623,13 @@
                                         { serviceId: rec.service_id, has: rec.has_logo === 1 },
                                     )}
                                     <!--
-                                        **途中まで観たものは「続き」を出す。** 観た位置
+                                        **途中まで観たものは残りを出す。** 観た位置
                                         (`resume_ms`) は続きから始めるために持っていて、末尾まで
                                         観たものは消える (`api/.../resume`) ので、**残っている =
                                         まだ途中**。押せば `/watch` が続きから始める。
-                                        分母は実際に録れた長さ。無ければ番組表の尺で代用する
+                                        分母は実際に録れた長さ。無ければ番組表の尺で代用する。
+                                        添える言葉は割合ではなく**あと何分か** — 「観終わるのに
+                                        どれだけ掛かるか」が知りたいことで、4% では換算がいる
                                     -->
                                     {#if canPlay && rec.deleted_at === null && rec.resume_ms !== null && rec.resume_ms > 0}
                                         {@const total = rec.duration_ms ?? rec.end_at - rec.start_at}
@@ -647,7 +650,7 @@
                                             <span
                                                 class="text-base-content/60 shrink-0 text-xs tabular-nums"
                                             >
-                                                続き {Math.round(frac * 100)}%
+                                                続き 残り{durationMs(Math.max(0, total - rec.resume_ms))}
                                             </span>
                                         </div>
                                     {/if}
