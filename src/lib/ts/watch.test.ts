@@ -89,6 +89,20 @@ describe('押したときに何をするか', () => {
     test('真ん中は何回押しても送りにならない', () => {
         const first = tap(null, 1000, 'center', true);
         const { action } = tap(first.next, 1100, 'center', true);
+        expect(action).toEqual({ kind: 'play' });
+    });
+
+    /** スマホの VLC と同じ癖。1回目は操作列の出し入れで、2回目で再生に触る */
+    test('指は真ん中を素早く2回で再生・一時停止', () => {
+        const first = tap(null, 1000, 'center', true);
+        expect(first.action).toEqual({ kind: 'controls' });
+        const { action } = tap(first.next, 1000 + DOUBLE_TAP - 1, 'center', true);
+        expect(action).toEqual({ kind: 'play' });
+    });
+
+    test('真ん中でも間合いを過ぎたら操作列の出し入れのまま', () => {
+        const first = tap(null, 1000, 'center', true);
+        const { action } = tap(first.next, 1000 + DOUBLE_TAP, 'center', true);
         expect(action).toEqual({ kind: 'controls' });
     });
 

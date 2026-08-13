@@ -26,6 +26,7 @@
     import { LIVE_CODECS } from '$lib/live';
     import { livePlayer } from '$lib/live-player.svelte';
     import { SPEEDS } from '$lib/ts/pacing';
+    import { DOUBLE_TAP } from '$lib/ts/watch';
 
     /**
      * 追っかけ再生 ([issue #16](https://github.com/danything/denpa/issues/16))。
@@ -138,6 +139,24 @@
     const away = controls.away;
     const toggle = controls.toggle;
 
+    /** 真ん中あたりを素早く2回で再生/一時停止 (ライブ・観る画面と同じ癖)。指だけ */
+    let centerTapAt = 0;
+    function stageTap(event: MouseEvent): void {
+        if (window.matchMedia('(pointer: coarse)').matches) {
+            const box = (event.currentTarget as HTMLElement).getBoundingClientRect();
+            const ratio = (event.clientX - box.left) / Math.max(1, box.width);
+            const middle = ratio >= 0.3 && ratio <= 0.7;
+            const at = Date.now();
+            if (middle && at - centerTapAt < DOUBLE_TAP) {
+                centerTapAt = 0;
+                player.toggle();
+                return;
+            }
+            centerTapAt = middle ? at : 0;
+        }
+        toggle();
+    }
+
     /** いまの1コマを字幕ごと切り抜く (ライブ・観る画面と同じ) */
     let shot = $state<Notice | null>(null);
     const notices = $derived<Notice[]>(shot === null ? [] : [shot]);
@@ -173,7 +192,7 @@
             bind:this={video}
             style="width:100%; height:100%; background:#000;"
             playsinline
-            onclick={toggle}
+            onclick={stageTap}
             data-testid="chase-video"
         ></video>
         <canvas

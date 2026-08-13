@@ -34,6 +34,7 @@
     import { LIVE_CODECS } from '$lib/live';
     import { livePlayer } from '$lib/live-player.svelte';
     import { FLOOR, SPEEDS } from '$lib/ts/pacing';
+    import { DOUBLE_TAP } from '$lib/ts/watch';
     import type { LiveChannel } from './+page.server';
 
     let { data, form } = $props();
@@ -205,6 +206,28 @@
     const toggle = controls.toggle;
 
     /**
+     * **真ん中あたりを素早く2回で再生/一時停止** (スマホの VLC と同じ癖。
+     * 観る画面の `ts/watch.ts` の `tap` と同じ決まり)。指だけ —
+     * マウスの1回目は何もしないので、2回目に意味を持たせるものが無い
+     */
+    let centerTapAt = 0;
+    function stageTap(event: MouseEvent): void {
+        if (window.matchMedia('(pointer: coarse)').matches) {
+            const box = (event.currentTarget as HTMLElement).getBoundingClientRect();
+            const ratio = (event.clientX - box.left) / Math.max(1, box.width);
+            const middle = ratio >= 0.3 && ratio <= 0.7;
+            const at = Date.now();
+            if (middle && at - centerTapAt < DOUBLE_TAP) {
+                centerTapAt = 0;
+                player.toggle();
+                return;
+            }
+            centerTapAt = middle ? at : 0;
+        }
+        toggle();
+    }
+
+    /**
      * **いまの1コマを字幕ごと切り抜く。観る画面 (`/watch/<id>`) と同じやり方。**
      *
      * 映像に、出している字幕 (`overlay`) をそのまま重ねて1枚にする。
@@ -306,7 +329,7 @@
                     bind:this={video}
                     style="width:100%; height:100%; background:#000;"
                     playsinline
-                    onclick={toggle}
+                    onclick={stageTap}
                     data-testid="live-video"
                 ></video>
 

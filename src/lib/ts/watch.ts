@@ -86,6 +86,14 @@ export function tap(
          */
         return { action: { kind: 'seek', by: zone === 'left' ? -SKIP : SKIP, undo: !coarse }, next };
     }
+    /*
+     * **真ん中を素早く2回で再生/一時停止** (スマホの VLC と同じ癖)。
+     * 指の1回目は操作列の出し入れなので、2回目で初めて再生に触る。
+     * マウスは1回目で既に切り替えているので、ここには来なくてよい
+     */
+    if (again && coarse) {
+        return { action: { kind: 'play' }, next };
+    }
     return { action: coarse ? { kind: 'controls' } : { kind: 'play' }, next };
 }
 
