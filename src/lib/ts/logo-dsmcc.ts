@@ -28,11 +28,10 @@
 
 import { ModuleBuilder, parseDdb, parseDii, TABLE_DII, u16 } from './dsmcc';
 import { withPalette } from './logo-palette';
-import { descriptors, SectionAssembler } from './psi';
+import { descriptors, parsePat, SectionAssembler } from './psi';
 
 const PID_PAT = 0x0000;
 
-const TABLE_PAT = 0x00;
 const TABLE_PMT = 0x02;
 
 /** エンジニアリングサービス。衛星のロゴはこのサービスで運ばれる (ARIB TR-B15) */
@@ -44,19 +43,6 @@ const LOGO_COMPONENT_TAGS = new Set([0x79, 0x7a]);
 
 /** モジュール記述子の名前。ロゴかどうかはこれで見分ける */
 const LOGO_MODULE_NAMES = new Set(['LOGO-05', 'CS_LOGO-05']);
-
-/** PAT から `サービスID → PMT の PID`。サービス0 は NIT なので飛ばす */
-function parsePat(section: Uint8Array): Map<number, number> {
-    const programs = new Map<number, number>();
-    if (section[0] !== TABLE_PAT) return programs;
-    const end = section.length - 4;
-    for (let at = 8; at + 4 <= end; at += 4) {
-        const serviceId = u16(section, at);
-        if (serviceId === 0) continue;
-        programs.set(serviceId, ((section[at + 2] & 0x1f) << 8) | section[at + 3]);
-    }
-    return programs;
-}
 
 /**
  * PMT から、ロゴのカルーセルが流れている ES の PID を拾う。

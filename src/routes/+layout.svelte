@@ -5,6 +5,7 @@
     import { navigating, page } from '$app/state';
     import { busy } from '$lib/busy.svelte';
     import Measure from '$lib/components/Measure.svelte';
+    import { forget, write } from '$lib/keep';
     import { measure } from '$lib/measure.svelte';
     import { startOffline } from '$lib/offline.svelte';
 
@@ -59,8 +60,8 @@
     function cycleTheme() {
         mode = mode === 'system' ? 'light' : mode === 'light' ? 'dark' : 'system';
         // system のときは保存しない。そうしないと端末側を変えても追従しなくなる
-        if (mode === 'system') localStorage.removeItem('theme');
-        else localStorage.setItem('theme', mode);
+        if (mode === 'system') forget('theme');
+        else write('theme', mode);
         apply();
     }
 

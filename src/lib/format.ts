@@ -12,7 +12,7 @@ export const SERVICE_TYPE_LABEL: Record<string, string> = {
     SKY: 'SKY',
 };
 
-function pad(n: number): string {
+export function pad(n: number): string {
     return String(n).padStart(2, '0');
 }
 

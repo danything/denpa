@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { LogoCollector } from './logo';
 import { DsmccLogoCollector, parseLogoModule } from './logo-dsmcc';
-import { ddbSection, diiSection, logoModule, packetize, patSection, pmtSection } from './synth';
+import { ddbSection, diiSection, logoModule, packetize, patSection, pmtSection, stream } from './synth';
 
 /**
  * 衛星 (BS/CS) のロゴ。
@@ -19,17 +19,6 @@ const PMT_PID = 0x1f0;
 const ES_PID = 0x1f1;
 const DOWNLOAD_ID = 0x12345678;
 const MODULE_ID = 0x0001;
-
-function stream(...parts: Uint8Array[]): Uint8Array {
-    const total = parts.reduce((sum, part) => sum + part.length, 0);
-    const out = new Uint8Array(total);
-    let at = 0;
-    for (const part of parts) {
-        out.set(part, at);
-        at += part.length;
-    }
-    return out;
-}
 
 /** カルーセル一式。モジュールを `blockSize` ごとに割って DDB に載せる */
 function carousel(module: Uint8Array, blockSize: number, name = 'LOGO-05'): Uint8Array {

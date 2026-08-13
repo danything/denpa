@@ -1,7 +1,6 @@
 import { error } from '@sveltejs/kit';
 import { config } from '$lib/server/config';
-import { queryOne } from '$lib/server/db';
-import type { Recording } from '$lib/types';
+import { recordingOr404 } from '$lib/server/recording';
 
 /**
  * 録画から1コマだけ切り出して返す。
@@ -55,8 +54,7 @@ async function sourceSize(input: string): Promise<{ width: number; height: numbe
 }
 
 export async function GET({ params, url }) {
-    const recording = queryOne<Recording>('SELECT * FROM recordings WHERE id = ?', Number(params.id));
-    if (recording === undefined) throw error(404, '録画が見つかりません');
+    const recording = recordingOr404(params.id);
 
     // 生TSを優先する。ロゴの位置は放送そのままの絵で決めたい
     const source = recording.ts_path ?? recording.library_path;

@@ -1,7 +1,7 @@
 import { error } from '@sveltejs/kit';
-import { database, now, queryOne } from '$lib/server/db';
+import { database, now } from '$lib/server/db';
+import { recordingOr404 } from '$lib/server/recording';
 import { RESUME_EDGE, resumePoint } from '$lib/ts/watch';
-import type { Recording } from '$lib/types';
 
 /**
  * どこまで観たかを覚える。**続きから観るためだけの目印。**
@@ -16,16 +16,12 @@ import type { Recording } from '$lib/types';
  *
  * ## 知らせは出さない
  *
- * 数十秒おきに呼ばれるので、`emit('recordings')` すると一覧が繋いでいる人の
+ * 15秒おきに呼ばれるので、`emit('recordings')` すると一覧が繋いでいる人の
  * 画面がそのたびに書き換わる。**観た位置は一覧に出していない**ので、
  * 誰にも伝える必要が無い
  */
 export async function POST({ params, request }) {
-    const id = Number(params.id);
-    if (!Number.isFinite(id)) error(400, '録画IDが不正です');
-
-    const recording = queryOne<Recording>('SELECT * FROM recordings WHERE id = ? AND deleted_at IS NULL', id);
-    if (recording === undefined) error(404, '録画が見つかりません');
+    const recording = recordingOr404(params.id);
 
     let at: unknown;
     let length: unknown;
@@ -41,7 +37,7 @@ export async function POST({ params, request }) {
 
     database()
         .prepare('UPDATE recordings SET resume_ms = ?, updated_at = ? WHERE id = ?')
-        .run(keep === null ? null : Math.round(keep * 1000), now(), id);
+        .run(keep === null ? null : Math.round(keep * 1000), now(), recording.id);
 
     return Response.json({ resume: keep, edge: RESUME_EDGE });
 }

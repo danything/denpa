@@ -19,6 +19,7 @@
  */
 
 import { decodeAribText } from './aribtext';
+import { u16, u32 } from './dsmcc';
 import { descriptors, PacketStream, SectionAssembler } from './psi';
 
 /** AIT のセクション */
@@ -77,14 +78,6 @@ export interface Ait {
     /** `APPLICATION_TYPE_HTML5` なら Hybridcast */
     applicationType: number;
     applications: HybridcastApp[];
-}
-
-function u16(data: Uint8Array, at: number): number {
-    return (data[at] << 8) | data[at + 1];
-}
-
-function u32(data: Uint8Array, at: number): number {
-    return ((data[at] << 24) | (data[at + 1] << 16) | (data[at + 2] << 8) | data[at + 3]) >>> 0;
 }
 
 /**

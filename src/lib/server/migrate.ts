@@ -90,22 +90,28 @@ export interface MigrateStatus extends MigrateOptions {
 
 const LOG_LIMIT = 200;
 
-let status_: MigrateStatus = {
-    state: 'idle',
-    apply: false,
-    move: false,
-    total: 0,
-    imported: 0,
-    skipped: 0,
-    missing: 0,
-    rules: { imported: 0, skipped: 0 },
-    reservations: { imported: 0, skipped: 0 },
-    current: null,
-    log: [],
-    error: null,
-    startedAt: null,
-    finishedAt: null,
-};
+/** まっさらな進み具合。起動時と、走らせ直すたびに (`run`) この形に戻す */
+function freshStatus(over: Partial<MigrateStatus> = {}): MigrateStatus {
+    return {
+        state: 'idle',
+        apply: false,
+        move: false,
+        total: 0,
+        imported: 0,
+        skipped: 0,
+        missing: 0,
+        rules: { imported: 0, skipped: 0 },
+        reservations: { imported: 0, skipped: 0 },
+        current: null,
+        log: [],
+        error: null,
+        startedAt: null,
+        finishedAt: null,
+        ...over,
+    };
+}
+
+let status_: MigrateStatus = freshStatus();
 
 export function status(): MigrateStatus {
     return {
@@ -462,22 +468,12 @@ async function importReservations(connection: SQL, options: MigrateOptions): Pro
  * 呼び出し側を待たせないので、CLI から使うときは返り値を await すること。
  */
 export async function run(options: MigrateOptions): Promise<MigrateStatus> {
-    status_ = {
+    status_ = freshStatus({
         state: 'running',
         apply: options.apply,
         move: options.move,
-        total: 0,
-        imported: 0,
-        skipped: 0,
-        missing: 0,
-        rules: { imported: 0, skipped: 0 },
-        reservations: { imported: 0, skipped: 0 },
-        current: null,
-        log: [],
-        error: null,
         startedAt: Date.now(),
-        finishedAt: null,
-    };
+    });
     emit('migrate');
 
     try {

@@ -1,18 +1,15 @@
 import { basename } from 'node:path';
 import { error } from '@sveltejs/kit';
 import { queryOne } from '$lib/server/db';
+import { recordingOr404 } from '$lib/server/recording';
 import { contentDisposition, serveFile } from '$lib/server/serve';
-import type { Recording } from '$lib/types';
 
 /**
  * 録画ファイルをそのまま配る。
  * プレイヤーに URL を渡して直接再生させるための口。
  */
-function respond(id: number, request: Request, download: boolean, source: string | null): Response {
-    if (!Number.isFinite(id)) error(400, '録画IDが不正です');
-
-    const recording = queryOne<Recording>('SELECT * FROM recordings WHERE id = ? AND deleted_at IS NULL', id);
-    if (recording === undefined) error(404, '録画が見つかりません');
+function respond(id: string, request: Request, download: boolean, source: string | null): Response {
+    const recording = recordingOr404(id);
 
     /*
      * どのファイルを配るか。
@@ -26,7 +23,7 @@ function respond(id: number, request: Request, download: boolean, source: string
         queryOne<{ n: number }>(
             `SELECT COUNT(*) AS n FROM encode_jobs
              WHERE recording_id = ? AND state IN ('queued', 'running')`,
-            id,
+            recording.id,
         )?.n ?? 0;
     /*
      * **どちらを寄越すか、名指しもできる** (`?source=ts` / `encoded` / `alt`)。
@@ -63,7 +60,7 @@ function respond(id: number, request: Request, download: boolean, source: string
 
 export function GET({ params, request, url }) {
     return respond(
-        Number(params.id),
+        params.id,
         request,
         url.searchParams.get('download') === '1',
         url.searchParams.get('source'),
@@ -72,7 +69,7 @@ export function GET({ params, request, url }) {
 
 export function HEAD({ params, request, url }) {
     return respond(
-        Number(params.id),
+        params.id,
         request,
         url.searchParams.get('download') === '1',
         url.searchParams.get('source'),

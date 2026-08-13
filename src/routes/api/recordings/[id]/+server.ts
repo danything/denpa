@@ -1,8 +1,7 @@
 import { error } from '@sveltejs/kit';
-import { queryOne } from '$lib/server/db';
 import { emit } from '$lib/server/events';
 import { deleteRecordingFiles } from '$lib/server/files';
-import type { Recording } from '$lib/types';
+import { recordingOr404 } from '$lib/server/recording';
 
 /**
  * 録画を消す。**オフライン視聴の後片付けの口** ([docs/offline.md](../../../../../docs/offline.md))。
@@ -16,11 +15,8 @@ import type { Recording } from '$lib/types';
  * 行そのものが無ければ 404 (呼んだ側はこれも「済んだ」と読む)。
  */
 export async function DELETE({ params }) {
-    const id = Number(params.id);
-    if (!Number.isFinite(id)) error(400, '録画IDが不正です');
-
-    const recording = queryOne<Recording>('SELECT * FROM recordings WHERE id = ?', id);
-    if (recording === undefined) error(404, '録画が見つかりません');
+    // 消した行も引く (deleted)。「もう消えている」を 204 で伝えるため
+    const recording = recordingOr404(params.id, true);
     if (recording.deleted_at !== null) return new Response(null, { status: 204 });
 
     // 録画中のものは消させない。掴んでいるチューナーと書きかけのファイルが残る

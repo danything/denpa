@@ -8,7 +8,16 @@ import {
     replayAt,
     toPlaybackTimeline,
 } from './data-timeline';
-import { bxmlDescriptor, ddbSection, diiSection, packetize, patSection, programMap } from './synth';
+import {
+    BML_TS,
+    bmlHead,
+    ddbSection,
+    diiSection,
+    multipartModule,
+    packetize,
+    stream,
+    tdtPacket as tdt,
+} from './synth';
 
 /*
  * 録画のデータ放送。**ライブ (carousel.ts) と違って時間変化を持つ。**
@@ -17,41 +26,10 @@ import { bxmlDescriptor, ddbSection, diiSection, packetize, patSection, programM
  * 再生位置に当たる時刻までを積み直して画面を作る (replayAt)。ここはその中核。
  */
 
-const SERVICE = 1024;
-const PMT_PID = 0x1f0;
-const VIDEO_PID = 0x0111;
-const BML_PID = 0x0800;
-const DOWNLOAD_ID = 0xf0000001;
-const COMPONENT_TAG = 0x40;
+const { bmlPid: BML_PID, downloadId: DOWNLOAD_ID } = BML_TS;
 
-function stream(...parts: Uint8Array[]): Uint8Array {
-    const total = parts.reduce((sum, part) => sum + part.length, 0);
-    const out = new Uint8Array(total);
-    let at = 0;
-    for (const part of parts) {
-        out.set(part, at);
-        at += part.length;
-    }
-    return out;
-}
-
-/** BML の ES が1本だけ載った PMT */
-function bmlPmt(): Uint8Array {
-    return programMap(SERVICE, VIDEO_PID, [
-        [0x02, VIDEO_PID, [0x52, 0x01, 0x00]],
-        [0x0d, BML_PID, [0x52, 0x01, COMPONENT_TAG, ...bxmlDescriptor()]],
-    ]);
-}
-
-/** モジュール1つぶんの multipart */
-function multipart(body: string): Uint8Array {
-    const boundary = 'denpa';
-    const out =
-        `Content-Type: multipart/mixed; boundary=${boundary}\r\n\r\n` +
-        `--${boundary}\r\nContent-Type: text/X-arib-bml\r\nContent-Location: /startup.bml\r\n\r\n${body}\r\n` +
-        `--${boundary}--\r\n`;
-    return new TextEncoder().encode(out);
-}
+/** モジュール1つぶんの multipart (ファイル1枚の形) */
+const multipart = (body: string) => multipartModule([['/startup.bml', 'text/X-arib-bml', body]]);
 
 /** DII と DDB を並べて、1つのモジュールを配りきる。版ごとに回 (transaction) を変える */
 function carousel(module: Uint8Array, version: number): Uint8Array[] {
@@ -67,26 +45,7 @@ function carousel(module: Uint8Array, version: number): Uint8Array[] {
     ];
 }
 
-/** 放送の実時刻 (TDT)。unix ms を JST の MJD + BCD 時分秒にする */
-function tdt(unixMs: number): Uint8Array {
-    const jst = unixMs + 9 * 3600 * 1000;
-    const days = Math.floor(jst / 86400000) + 40587;
-    const ofDay = jst % 86400000;
-    const bcd = (n: number) => ((Math.floor(n / 10) << 4) | (n % 10)) & 0xff;
-    const section = Uint8Array.from([
-        0x70,
-        0x70,
-        0x05,
-        (days >> 8) & 0xff,
-        days & 0xff,
-        bcd(Math.floor(ofDay / 3600000)),
-        bcd(Math.floor((ofDay % 3600000) / 60000)),
-        bcd(Math.floor((ofDay % 60000) / 1000)),
-    ]);
-    return packetize(0x0014, section);
-}
-
-const head = [packetize(0x0000, patSection([[SERVICE, PMT_PID]])), packetize(PMT_PID, bmlPmt())];
+const head = bmlHead();
 
 function bmlBody(message: ResponseMessage): string | null {
     if (message.type !== 'moduleDownloaded') return null;

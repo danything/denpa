@@ -18,6 +18,7 @@ export const SYNC = 0x47;
 const PID_NIT = 0x0010;
 const PID_SDT = 0x0011;
 
+export const TABLE_PAT = 0x00;
 const TABLE_NIT_ACTUAL = 0x40;
 const TABLE_SDT_ACTUAL = 0x42;
 
@@ -234,6 +235,19 @@ export function* descriptors(data: Uint8Array): Generator<[number, Uint8Array]> 
         yield [tag, body];
         at += 2 + length;
     }
+}
+
+/** PAT から `サービスID → PMT の PID`。サービス0 は NIT なので飛ばす */
+export function parsePat(section: Uint8Array): Map<number, number> {
+    const programs = new Map<number, number>();
+    if (section[0] !== TABLE_PAT) return programs;
+    const end = section.length - 4;
+    for (let at = 8; at + 4 <= end; at += 4) {
+        const serviceId = (section[at] << 8) | section[at + 1];
+        if (serviceId === 0) continue;
+        programs.set(serviceId, ((section[at + 2] & 0x1f) << 8) | section[at + 3]);
+    }
+    return programs;
 }
 
 /**

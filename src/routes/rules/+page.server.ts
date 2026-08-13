@@ -406,16 +406,28 @@ async function reapply(rule?: number): Promise<number> {
     return dropped;
 }
 
+/** 条件が空だと全番組にマッチしてディスクを埋めるので作らせない */
+const EMPTY_RULE = 'キーワード・チャンネル・ジャンルのどれかは指定してください';
+
+/** create と update で並びが同じ8つ。SQL の `?` の順とここが対 */
+function ruleParams(conditions: ReturnType<typeof conditionsOf>, form: FormData) {
+    return [
+        ruleName(conditions),
+        conditions.keyword,
+        conditions.ignoreKeyword,
+        conditions.searchFields,
+        conditions.serviceIds,
+        conditions.serviceTypes,
+        conditions.genres,
+        rulePriority(form),
+    ] as const;
+}
+
 export const actions = {
     create: async ({ request }) => {
         const form = await request.formData();
         const conditions = conditionsOf(form);
-        // 条件が空だと全番組にマッチしてディスクを埋めるので作らせない
-        if (conditions.empty) {
-            return fail(400, {
-                message: 'キーワード・チャンネル・ジャンルのどれかは指定してください',
-            });
-        }
+        if (conditions.empty) return fail(400, { message: EMPTY_RULE });
 
         const created = database()
             .prepare(
@@ -424,17 +436,7 @@ export const actions = {
                                 genres, enabled, priority, created_at)
              VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?, ?)`,
             )
-            .run(
-                ruleName(conditions),
-                conditions.keyword,
-                conditions.ignoreKeyword,
-                conditions.searchFields,
-                conditions.serviceIds,
-                conditions.serviceTypes,
-                conditions.genres,
-                rulePriority(form),
-                now(),
-            );
+            .run(...ruleParams(conditions, form), now());
 
         // 足したルールは他の予約を外せないので、そのルールだけ当てれば足りる
         await reapply(Number(created.lastInsertRowid));
@@ -447,11 +449,7 @@ export const actions = {
         if (!Number.isFinite(id)) return fail(400, { message: 'ルールIDが不正です' });
 
         const conditions = conditionsOf(form);
-        if (conditions.empty) {
-            return fail(400, {
-                message: 'キーワード・チャンネル・ジャンルのどれかは指定してください',
-            });
-        }
+        if (conditions.empty) return fail(400, { message: EMPTY_RULE });
 
         database()
             .prepare(
@@ -459,17 +457,7 @@ export const actions = {
                 `UPDATE rules SET name = ?, keyword = ?, ignore_keyword = ?, search_fields = ?, service_ids = ?,
                  service_types = ?, genres = ?, priority = ? WHERE id = ?`,
             )
-            .run(
-                ruleName(conditions),
-                conditions.keyword,
-                conditions.ignoreKeyword,
-                conditions.searchFields,
-                conditions.serviceIds,
-                conditions.serviceTypes,
-                conditions.genres,
-                rulePriority(form),
-                id,
-            );
+            .run(...ruleParams(conditions, form), id);
 
         /*
          * 条件が変わったので、これから録るぶんは組み直す。

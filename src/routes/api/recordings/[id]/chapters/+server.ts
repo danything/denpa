@@ -1,8 +1,6 @@
-import { error } from '@sveltejs/kit';
 import { config } from '$lib/server/config';
-import { queryOne } from '$lib/server/db';
+import { recordingOr404 } from '$lib/server/recording';
 import { parseChapters } from '$lib/ts/watch';
-import type { Recording } from '$lib/types';
 
 /**
  * 焼いたものに入っているチャプターを返す。**CM飛ばしの行き先。**
@@ -29,11 +27,7 @@ import type { Recording } from '$lib/types';
 const TIMEOUT = 15_000;
 
 export async function GET({ params }) {
-    const id = Number(params.id);
-    if (!Number.isFinite(id)) error(400, '録画IDが不正です');
-
-    const recording = queryOne<Recording>('SELECT * FROM recordings WHERE id = ? AND deleted_at IS NULL', id);
-    if (recording === undefined) error(404, '録画が見つかりません');
+    const recording = recordingOr404(params.id);
     /*
      * **観るのは焼いたものだけ。** 生TSにチャプターは入らない (入れ物が持てない)
      * ので、まだ焼けていない録画では空を返す — 画面はチャプター送りを出さない

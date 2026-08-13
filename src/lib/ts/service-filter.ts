@@ -20,7 +20,7 @@
  * 落とすもの: 他局の PMT と ES、そして詰め物 (PID 0x1FFF)。
  */
 
-import { PACKET, PacketStream, SectionAssembler, SYNC, withCrc } from './psi';
+import { PACKET, PacketStream, SectionAssembler, SYNC, TABLE_PAT, withCrc } from './psi';
 
 const PID_PAT = 0x0000;
 const PID_NULL = 0x1fff;
@@ -39,7 +39,6 @@ const KEEP = new Set([
     0x0014, // TDT / TOT
 ]);
 
-const TABLE_PAT = 0x00;
 const TABLE_PMT = 0x02;
 const DESC_CA = 0x09;
 

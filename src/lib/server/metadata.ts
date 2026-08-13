@@ -1,5 +1,6 @@
 import { existsSync, writeFileSync } from 'node:fs';
 import { basename, extname } from 'node:path';
+import { pad } from '../format';
 import type { Recording } from '../types';
 import { config } from './config';
 import { removeIfExists } from './fsx';
@@ -20,10 +21,6 @@ import { removeIfExists } from './fsx';
 
 function xml(value: string): string {
     return value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-}
-
-function pad(n: number): string {
-    return String(n).padStart(2, '0');
 }
 
 /**

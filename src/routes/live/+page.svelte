@@ -2,7 +2,9 @@
     import { onMount } from 'svelte';
     import { submitting } from '$lib/actions';
     import ProgramFacts from '$lib/components/ProgramFacts.svelte';
+    import AudioMenu from '$lib/components/player/AudioMenu.svelte';
     import { screenAwake } from '$lib/components/player/awake.svelte';
+    import CodecMenu from '$lib/components/player/CodecMenu.svelte';
     import ControlBar from '$lib/components/player/ControlBar.svelte';
     import ControlButton from '$lib/components/player/ControlButton.svelte';
     import { centerTap } from '$lib/components/player/center-tap';
@@ -11,7 +13,6 @@
     import EdgeButton from '$lib/components/player/EdgeButton.svelte';
     import Icon from '$lib/components/player/Icon.svelte';
     import {
-        AUDIO,
         CAMERA,
         CAPTION,
         DATA,
@@ -31,13 +32,14 @@
     import PlayerStage from '$lib/components/player/PlayerStage.svelte';
     import PlayerVeil from '$lib/components/player/PlayerVeil.svelte';
     import Remote from '$lib/components/player/Remote.svelte';
+    import SpeedMenu from '$lib/components/player/SpeedMenu.svelte';
+    import StageNote from '$lib/components/player/StageNote.svelte';
     import { snapshotter } from '$lib/components/player/shot.svelte';
     import Toasts, { errorNotice, type Notice } from '$lib/components/Toasts.svelte';
     import { programDetail } from '$lib/detail.svelte';
     import { SERVICE_TYPE_LABEL, time } from '$lib/format';
-    import { LIVE_CODECS } from '$lib/live';
     import { livePlayer } from '$lib/live-player.svelte';
-    import { FLOOR, SPEEDS } from '$lib/ts/pacing';
+    import { FLOOR } from '$lib/ts/pacing';
     import type { LiveChannel } from './+page.server';
 
     let { data, form } = $props();
@@ -443,65 +445,26 @@
                         {/if}
 
                         <!--
-                        **焼き方の切り替え。**
-
-                        絵の中身ではなく「その端末で出るかどうか」の話なので、
-                        音声とは別に並べる。AV1 は実時間に間に合う (`server/live.ts`)
-                        が、**出ないブラウザもある** — 受け取れなければ H.264 に
-                        戻して、戻した理由を出す (`live-player.svelte.ts` の `start`)。
-
-                        押すと焼き直しになるので絵が一瞬止まるが、チャンネルは
-                        変わらないので前の絵を貼ったまま差し替わる
-                    -->
-                        <OverlayMenu
+                            焼き方。AV1 は実時間に間に合う (`server/live.ts`) が、
+                            **出ないブラウザもある** — 受け取れなければ H.264 に
+                            戻して、戻した理由を出す (`live-player.svelte.ts` の `start`)
+                        -->
+                        <CodecMenu
                             testid="live-codec"
-                            attrName="codec"
-                            menuClass="w-36 text-base"
-                            items={LIVE_CODECS.map((c) => ({
-                                key: c.id,
-                                label: c.label,
-                                active: c.id === player.codec,
-                            }))}
+                            codec={player.codec}
                             onselect={(key) => player.setCodec(key)}
-                        >
-                            {#snippet trigger()}
-                                <ControlButton label="焼き方を選ぶ" testid="live-codec">
-                                    <span class="text-xs font-semibold">
-                                        {LIVE_CODECS.find((c) => c.id === player.codec)?.label ?? 'H.264'}
-                                    </span>
-                                </ControlButton>
-                            {/snippet}
-                        </OverlayMenu>
+                        />
 
-                        <!--
-                        **音声の選び直し。選べるものが2つ以上あるときだけ出す。**
-
-                        二カ国語 (1本の中に主/副が左右で入っている) と、音声が
-                        2本以上入っているものの両方がここに平らに並ぶ — 見ている
-                        人にとってはどちらも「音声を選ぶ」1つの操作でしかない。
-
-                        押すと焼き直しになるので絵が一瞬止まるが、チャンネルは
-                        変わらないので前の絵を貼ったまま差し替わる
-                    -->
                         {#if player.audios.length > 1}
-                            <OverlayMenu
+                            <AudioMenu
                                 testid="live-audio"
-                                attrName="audio"
                                 items={player.audios.map((a) => ({
                                     key: a.id,
                                     label: a.label,
                                     active: a.id === player.audio,
                                 }))}
                                 onselect={(key) => player.setAudio(key)}
-                            >
-                                {#snippet trigger()}
-                                    <ControlButton path={AUDIO} label="音声を選ぶ" testid="live-audio">
-                                        <span class="hidden max-w-28 truncate sm:inline">
-                                            {player.audios.find((a) => a.id === player.audio)?.label ?? '音声'}
-                                        </span>
-                                    </ControlButton>
-                                {/snippet}
-                            </OverlayMenu>
+                            />
                         {/if}
 
                         <!--
@@ -600,25 +563,12 @@
                         この選択肢も消える
                     -->
                         {#if player.chasing}
-                            <OverlayMenu
+                            <SpeedMenu
                                 testid="live-speed"
-                                attrName="speed"
-                                position="dropdown-top dropdown-end"
-                                menuClass="w-24 gap-1 text-lg"
-                                optionClass="tabular-nums justify-center py-2"
-                                items={SPEEDS.map((value) => ({
-                                    key: value,
-                                    label: `${value}×`,
-                                    active: value === player.speed,
-                                }))}
-                                onselect={(key) => player.setSpeed(key)}
-                            >
-                                {#snippet trigger()}
-                                    <ControlButton label="追っかけの速さ" testid="live-speed" on={player.speed !== 1}>
-                                        <span class="tabular-nums">{player.speed}×</span>
-                                    </ControlButton>
-                                {/snippet}
-                            </OverlayMenu>
+                                label="追っかけの速さ"
+                                speed={player.speed}
+                                onselect={(speed) => player.setSpeed(speed)}
+                            />
                         {/if}
 
                         <ControlButton
@@ -655,14 +605,7 @@
                 切り替えが効かないのか分からない
             -->
             {#if player.warning}
-                <div
-                    class="pointer-events-none absolute inset-x-0 top-0 flex justify-center p-2"
-                    data-testid="live-warning"
-                >
-                    <span class="rounded-box bg-black/60 px-3 py-1 text-xs text-white">
-                        {player.warning}
-                    </span>
-                </div>
+                <StageNote testid="live-warning">{player.warning}</StageNote>
             {/if}
 
             {#if player.state !== 'playing'}

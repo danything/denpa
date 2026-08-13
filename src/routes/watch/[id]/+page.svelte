@@ -3,6 +3,7 @@
     import { submitting } from '$lib/actions';
     import { arming } from '$lib/arming.svelte';
     import ProgramFacts from '$lib/components/ProgramFacts.svelte';
+    import AudioMenu from '$lib/components/player/AudioMenu.svelte';
     import { screenAwake } from '$lib/components/player/awake.svelte';
     import ControlBar from '$lib/components/player/ControlBar.svelte';
     import ControlButton from '$lib/components/player/ControlButton.svelte';
@@ -10,7 +11,6 @@
     import DataBroadcast from '$lib/components/player/DataBroadcast.svelte';
     import Icon from '$lib/components/player/Icon.svelte';
     import {
-        AUDIO,
         CAMERA,
         CAPTION,
         CHECK,
@@ -29,10 +29,11 @@
         SOUND_ON,
         TRASH,
     } from '$lib/components/player/icons';
-    import OverlayMenu from '$lib/components/player/OverlayMenu.svelte';
     import PlayerStage from '$lib/components/player/PlayerStage.svelte';
     import { clearOverlay, drawOverlay, fitRect } from '$lib/components/player/paint';
     import Remote from '$lib/components/player/Remote.svelte';
+    import SpeedMenu from '$lib/components/player/SpeedMenu.svelte';
+    import StageNote from '$lib/components/player/StageNote.svelte';
     import { snapshotter } from '$lib/components/player/shot.svelte';
     import Toasts, { errorNotice, type Notice } from '$lib/components/Toasts.svelte';
     import { type DetailSeed, programDetail } from '$lib/detail.svelte';
@@ -318,7 +319,7 @@
         const onResize = () => place();
         window.addEventListener('resize', onResize);
         /*
-         * **閉じ際にも書き送る。** 数十秒おきの控えだけだと、最後に観た数十秒が
+         * **閉じ際にも書き送る。** 15秒おきの控えだけだと、最後に観た十数秒が
          * 落ちる。`pagehide` は畳んだ・戻った・落ちた、のどれでも来る (`unload` は
          * スマホで来ないことがある)
          */
@@ -956,17 +957,11 @@
                 {#if continued}
                     <!--
                         **続きから出したことを言う。** 黙って途中から始まると、
-                        壊れているのか飛んだのか分からない
+                        壊れているのか飛んだのか分からない。top-14 は操作列よけ
                     -->
-                    <div
-                        class="pointer-events-none absolute inset-x-0 top-14 z-10 flex justify-center"
-                        data-testid="watch-resumed"
-                    >
-                        <!-- 映像の上の知らせは3画面同じ形 (rounded-box bg-black/60)。テーマ色を絵に乗せない -->
-                        <span class="rounded-box bg-black/60 px-3 py-1 text-xs text-white"
-                            >続きから再生しています</span
-                        >
-                    </div>
+                    <StageNote testid="watch-resumed" wrap="inset-x-0 top-14 justify-center">
+                        続きから再生しています
+                    </StageNote>
                 {/if}
 
                 {#if resuming}
@@ -988,14 +983,9 @@
 
                 {#if skipped}
                     <!-- **黙って跳ばない。** 何が起きたか言わないと壊れて見える -->
-                    <div
-                        class="pointer-events-none absolute inset-x-0 top-14 z-10 flex justify-center"
-                        data-testid="watch-skipped"
-                    >
-                        <span class="rounded-box bg-black/60 px-3 py-1 text-xs text-white"
-                            >CMを飛ばしました</span
-                        >
-                    </div>
+                    <StageNote testid="watch-skipped" wrap="inset-x-0 top-14 justify-center">
+                        CMを飛ばしました
+                    </StageNote>
                 {/if}
 
                 {#if broken}
@@ -1174,24 +1164,15 @@
                             同じ見た目。1本しか無ければ出さない
                         -->
                         {#if audios.length > 1}
-                            <OverlayMenu
+                            <AudioMenu
                                 testid="watch-audio"
-                                attrName="audio"
                                 items={audios.map((track, i) => ({
                                     key: i,
                                     label: track.label,
                                     active: i === audioIndex,
                                 }))}
                                 onselect={(key) => selectAudio(key)}
-                            >
-                                {#snippet trigger()}
-                                    <ControlButton path={AUDIO} label="音声を選ぶ" testid="watch-audio">
-                                        <span class="hidden max-w-28 truncate sm:inline">
-                                            {audios[audioIndex]?.label ?? '音声'}
-                                        </span>
-                                    </ControlButton>
-                                {/snippet}
-                            </OverlayMenu>
+                            />
                         {/if}
 
                         <!--
@@ -1264,25 +1245,12 @@
                         </div>
 
                         <!-- 早送り。**ライブの追っかけと同じ並び・同じ見た目** -->
-                        <OverlayMenu
+                        <SpeedMenu
                             testid="watch-speed"
-                            attrName="speed"
-                            position="dropdown-top dropdown-end"
-                            menuClass="w-24 gap-1 text-lg"
-                            optionClass="tabular-nums justify-center py-2"
-                            items={SPEEDS.map((value) => ({
-                                key: value,
-                                label: `${value}×`,
-                                active: value === speed,
-                            }))}
-                            onselect={(key) => setSpeed(key)}
-                        >
-                            {#snippet trigger()}
-                                <ControlButton label="再生の速さ" testid="watch-speed" on={speed !== 1}>
-                                    <span class="tabular-nums">{speed}×</span>
-                                </ControlButton>
-                            {/snippet}
-                        </OverlayMenu>
+                            label="再生の速さ"
+                            {speed}
+                            onselect={(value) => setSpeed(value)}
+                        />
 
                         <ControlButton
                             path={full ? SHRINK : EXPAND}
@@ -1349,7 +1317,7 @@
             <!--
                 押すものは常に見えるところに置く。巻き取られる中身の外。
 
-                **「一覧へ」は置かない。** 絵の左上の「×」が同じ行き先で、
+                **「一覧へ」は置かない。** 絵の右上の「×」が同じ行き先で、
                 2つ並べる意味が無かった
             -->
             <div class="border-base-300 flex shrink-0 flex-wrap gap-2 border-t p-4">

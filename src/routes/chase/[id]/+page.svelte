@@ -1,6 +1,8 @@
 <script lang="ts">
     import { onMount } from 'svelte';
+    import AudioMenu from '$lib/components/player/AudioMenu.svelte';
     import { screenAwake } from '$lib/components/player/awake.svelte';
+    import CodecMenu from '$lib/components/player/CodecMenu.svelte';
     import ControlBar from '$lib/components/player/ControlBar.svelte';
     import ControlButton from '$lib/components/player/ControlButton.svelte';
     import { centerTap } from '$lib/components/player/center-tap';
@@ -8,7 +10,6 @@
     import EdgeButton from '$lib/components/player/EdgeButton.svelte';
     import Icon from '$lib/components/player/Icon.svelte';
     import {
-        AUDIO,
         CAMERA,
         CAPTION,
         CLOSE,
@@ -22,16 +23,15 @@
         SOUND_ON,
     } from '$lib/components/player/icons';
     import MediaStack from '$lib/components/player/MediaStack.svelte';
-    import OverlayMenu from '$lib/components/player/OverlayMenu.svelte';
     import PlayerStage from '$lib/components/player/PlayerStage.svelte';
     import PlayerVeil from '$lib/components/player/PlayerVeil.svelte';
+    import SpeedMenu from '$lib/components/player/SpeedMenu.svelte';
+    import StageNote from '$lib/components/player/StageNote.svelte';
     import { snapshotter } from '$lib/components/player/shot.svelte';
     import Toasts, { type Notice } from '$lib/components/Toasts.svelte';
     import { clock as clockLabel, time } from '$lib/format';
-    import { LIVE_CODECS } from '$lib/live';
     import { livePlayer } from '$lib/live-player.svelte';
     import { keepResume } from '$lib/resume';
-    import { SPEEDS } from '$lib/ts/pacing';
 
     /**
      * 追っかけ再生 ([issue #16](https://github.com/danything/denpa/issues/16))。
@@ -92,7 +92,7 @@
     }
 
     /**
-     * 視聴位置をサーバへ (数十秒おき)。録り終えて焼き上がったら、観る画面の
+     * 視聴位置をサーバへ (15秒おき)。録り終えて焼き上がったら、観る画面の
      * 続き再生がここから拾う — 追っかけで観たぶんを二度観ずに済む。
      * 送り方は観る画面と共通 (`$lib/resume.ts`。閉じ際は sendBeacon)
      */
@@ -196,24 +196,15 @@
                     />
                 {/if}
                 {#if player.audios.length > 1}
-                    <OverlayMenu
+                    <AudioMenu
                         testid="chase-audio"
-                        attrName="audio"
                         items={player.audios.map((a) => ({
                             key: a.id,
                             label: a.label,
                             active: a.id === player.audio,
                         }))}
                         onselect={(key) => player.setAudio(key)}
-                    >
-                        {#snippet trigger()}
-                            <ControlButton path={AUDIO} label="音声を選ぶ" testid="chase-audio">
-                                <span class="hidden max-w-28 truncate sm:inline">
-                                    {player.audios.find((a) => a.id === player.audio)?.label ?? '音声'}
-                                </span>
-                            </ControlButton>
-                        {/snippet}
-                    </OverlayMenu>
+                    />
                 {/if}
 
                 <!-- **読みものは二段で** (ライブと同じ)。上が番組、下が位置 -->
@@ -236,46 +227,19 @@
                 </div>
 
                 <!-- 焼き方。ライブと同じで、選び直すと居た場所から焼き直し -->
-                <OverlayMenu
+                <CodecMenu
                     testid="chase-codec"
-                    attrName="codec"
-                    menuClass="w-36 text-base"
-                    items={LIVE_CODECS.map((c) => ({
-                        key: c.id,
-                        label: c.label,
-                        active: c.id === player.codec,
-                    }))}
+                    codec={player.codec}
                     onselect={(key) => player.setCodec(key)}
-                >
-                    {#snippet trigger()}
-                        <ControlButton label="焼き方を選ぶ" testid="chase-codec">
-                            <span class="text-xs font-semibold">
-                                {LIVE_CODECS.find((c) => c.id === player.codec)?.label ?? 'H.264'}
-                            </span>
-                        </ControlButton>
-                    {/snippet}
-                </OverlayMenu>
+                />
 
                 <!-- 追っかけは常に速さを選べる (録れている範囲の中を進むだけ) -->
-                <OverlayMenu
+                <SpeedMenu
                     testid="chase-speed"
-                    attrName="speed"
-                    position="dropdown-top dropdown-end"
-                    menuClass="w-24 gap-1 text-lg"
-                    optionClass="tabular-nums justify-center py-2"
-                    items={SPEEDS.map((value) => ({
-                        key: value,
-                        label: `${value}×`,
-                        active: value === player.speed,
-                    }))}
-                    onselect={(key) => player.setSpeed(key)}
-                >
-                    {#snippet trigger()}
-                        <ControlButton label="再生の速さ" testid="chase-speed" on={player.speed !== 1}>
-                            <span class="tabular-nums">{player.speed}×</span>
-                        </ControlButton>
-                    {/snippet}
-                </OverlayMenu>
+                    label="再生の速さ"
+                    speed={player.speed}
+                    onselect={(speed) => player.setSpeed(speed)}
+                />
 
                 <!-- いま録れているところへ。ライブの「ライブ」に相当 -->
                 <EdgeButton
@@ -296,11 +260,7 @@
 
         {#if player.chaseEnded}
             <!-- 録れているところまで観た。録画が終わっていれば、この先はもう来ない -->
-            <div class="pointer-events-none absolute inset-x-0 top-0 flex justify-center p-2">
-                <span class="rounded-box bg-black/60 px-3 py-1 text-xs text-white" data-testid="chase-ended">
-                    録れているところまで観ました
-                </span>
-            </div>
+            <StageNote testid="chase-ended">録れているところまで観ました</StageNote>
         {/if}
 
         {#if player.state !== 'playing'}

@@ -50,13 +50,12 @@ import {
     u32,
 } from './dsmcc';
 import { parseMjdTime } from './eit';
-import { descriptors, PacketStream, SectionAssembler } from './psi';
+import { descriptors, PacketStream, parsePat, SectionAssembler } from './psi';
 
 const PID_PAT = 0x0000;
 /** TDT / TOT。放送の現在時刻。BML の `getCurrentDateTime` がこれを見る */
 const PID_TIME = 0x0014;
 
-const TABLE_PAT = 0x00;
 const TABLE_PMT = 0x02;
 const TABLE_TDT = 0x70;
 const TABLE_TOT = 0x73;
@@ -148,19 +147,6 @@ export function parseBxmlInfo(data: Uint8Array): AdditionalAribBXMLInfo {
         };
     }
     return info;
-}
-
-/** PAT から `サービスID → PMT の PID`。サービス0 は NIT なので飛ばす */
-function parsePat(section: Uint8Array): Map<number, number> {
-    const programs = new Map<number, number>();
-    if (section[0] !== TABLE_PAT) return programs;
-    const end = section.length - 4;
-    for (let at = 8; at + 4 <= end; at += 4) {
-        const serviceId = u16(section, at);
-        if (serviceId === 0) continue;
-        programs.set(serviceId, ((section[at + 2] & 0x1f) << 8) | section[at + 3]);
-    }
-    return programs;
 }
 
 /**

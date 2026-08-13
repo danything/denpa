@@ -269,6 +269,23 @@ export function packetize(pid: number, section: Uint8Array, counter = 0): Uint8A
     return Uint8Array.from(packets);
 }
 
+/** 部品を1本のバイト列に繋ぐ。組んだパケットを流し込むときの糊 */
+export function stream(...parts: Uint8Array[]): Uint8Array {
+    const total = parts.reduce((sum, part) => sum + part.length, 0);
+    const out = new Uint8Array(total);
+    let at = 0;
+    for (const part of parts) {
+        out.set(part, at);
+        at += part.length;
+    }
+    return out;
+}
+
+/** 放送の実時刻 (TDT) を1パケットに。BML の `getCurrentDateTime` が見る */
+export function tdtPacket(unixMs: number): Uint8Array {
+    return packetize(0x0014, Uint8Array.from([0x70, 0x70, 0x05, ...mjdTime(unixMs)]));
+}
+
 /** PAT。サービスID → PMT の PID */
 export function patSection(programs: [number, number][]): Uint8Array {
     const body = [0x00, 0x00, 0x00, ...be(1), 0xc1, 0x00, 0x00];
@@ -484,6 +501,50 @@ export function logoModule(
         body.push(...be(logo.data.length), ...logo.data);
     }
     return Uint8Array.from(body);
+}
+
+/*
+ * --- データ放送のテストで使う定番の割り振り ---
+ * bml / data-timeline / recorded-bml の3つのテストが、同じ表と同じ組み立てを
+ * それぞれに書いていた。番号そのものに意味は無く、揃っていることに意味がある。
+ */
+export const BML_TS = {
+    service: 1024,
+    pmtPid: 0x1f0,
+    videoPid: 0x0111,
+    bmlPid: 0x0800,
+    downloadId: 0xf0000001,
+    componentTag: 0x40,
+} as const;
+
+/** BML の ES が1本だけ載った PMT (`BML_TS` の割り振り) */
+export function bmlPmt(): Uint8Array {
+    return programMap(BML_TS.service, BML_TS.videoPid, [
+        [0x02, BML_TS.videoPid, [0x52, 0x01, 0x00]],
+        [0x0d, BML_TS.bmlPid, [0x52, 0x01, BML_TS.componentTag, ...bxmlDescriptor()]],
+    ]);
+}
+
+/** PAT と PMT。データ放送のストリームの頭 */
+export function bmlHead(): Uint8Array[] {
+    return [
+        packetize(0x0000, patSection([[BML_TS.service, BML_TS.pmtPid]])),
+        packetize(BML_TS.pmtPid, bmlPmt()),
+    ];
+}
+
+/**
+ * モジュール1つぶんの中身。**放送は multipart/mixed で複数のファイルを詰める。**
+ * 本物と同じく、頭に Content-Type、境界で区切って各ファイルに Content-Location
+ */
+export function multipartModule(files: [location: string, type: string, body: string][]): Uint8Array {
+    const boundary = 'denpa';
+    let out = `Content-Type: multipart/mixed; boundary=${boundary}\r\n\r\n`;
+    for (const [location, type, body] of files) {
+        out += `--${boundary}\r\nContent-Type: ${type}\r\nContent-Location: ${location}\r\n\r\n${body}\r\n`;
+    }
+    out += `--${boundary}--\r\n`;
+    return new TextEncoder().encode(out);
 }
 
 /** PMT の ES に付ける application_signalling_descriptor (0x6F)。**AIT の在り処の印** */

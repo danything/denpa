@@ -370,5 +370,3 @@ export const config = {
 if (config.dataDir === '') config.dataDir = config.dbPath.replace(/\/[^/]*$/, '') || '.';
 /** 局ロゴと同じ扱い。放送波から拾った PNG の隣に、jls 用の .lgd を置く */
 if (config.jlsLogoDir === '') config.jlsLogoDir = `${config.dataDir}/logos/jls`;
-
-export type Config = typeof config;

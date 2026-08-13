@@ -1406,8 +1406,3 @@ function parseAudios(row: { audio_type: number | null; audios: string | null } |
     }
     return row.audio_type === null ? [] : [{ componentType: row.audio_type }];
 }
-
-/** テスト用。掴んだままのものを残さない */
-export function stopAll(): void {
-    for (const session of [...sessions.values()]) session.stop();
-}

@@ -1,8 +1,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { error } from '@sveltejs/kit';
-import { queryOne } from '$lib/server/db';
 import { sidecarPaths } from '$lib/server/metadata';
-import type { Recording } from '$lib/types';
+import { recordingOr404 } from '$lib/server/recording';
 
 /**
  * 録画のポスターを返す。**一覧のサムネイル用。**
@@ -16,11 +15,7 @@ import type { Recording } from '$lib/types';
  * 失敗したもの。そのときは 404 を返して、一覧は絵を出さずに済ませる (`+page.svelte`)。
  */
 export function GET({ params }) {
-    const recording = queryOne<Recording>(
-        'SELECT * FROM recordings WHERE id = ? AND deleted_at IS NULL',
-        Number(params.id),
-    );
-    if (recording === undefined) error(404, '録画が見つかりません');
+    const recording = recordingOr404(params.id);
     if (recording.library_path === null) error(404, 'ポスターがありません');
 
     const poster = sidecarPaths(recording.library_path).thumbnail;

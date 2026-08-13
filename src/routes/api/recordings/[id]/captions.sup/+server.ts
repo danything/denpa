@@ -1,7 +1,6 @@
 import { error } from '@sveltejs/kit';
 import { config } from '$lib/server/config';
-import { queryOne } from '$lib/server/db';
-import type { Recording } from '$lib/types';
+import { recordingOr404 } from '$lib/server/recording';
 
 /**
  * 字幕の絵 (PGS) を渡す。**ブラウザが自分で解いて重ねる。**
@@ -33,11 +32,7 @@ import type { Recording } from '$lib/types';
 const TIMEOUT = 30_000;
 
 export async function GET({ params }) {
-    const id = Number(params.id);
-    if (!Number.isFinite(id)) error(400, '録画IDが不正です');
-
-    const recording = queryOne<Recording>('SELECT * FROM recordings WHERE id = ? AND deleted_at IS NULL', id);
-    if (recording === undefined) error(404, '録画が見つかりません');
+    const recording = recordingOr404(params.id);
     if (recording.library_path === null) error(404, '字幕がありません');
 
     let out: Uint8Array;

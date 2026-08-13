@@ -25,8 +25,10 @@
      * ([vendor/web-bml](../../vendor/web-bml/README.md#借りていないぶんこちらでやること))
      */
     import { onDestroy } from 'svelte';
+    import { forget, write } from '$lib/keep';
     import type { BMLBrowser, Indicator, IP } from '$lib/vendor/web-bml/client/bml_browser';
     import type { ResponseMessage } from '$lib/vendor/web-bml/server/ws_api';
+    import StageNote from './StageNote.svelte';
 
     interface Props {
         /** 出すか。**押されたら読み込みが始まる** */
@@ -381,10 +383,10 @@
     function remember(): void {
         const key = `${STORAGE_PREFIX}${NVRAM_PREFIX}prefix=receiverinfo%2Fzipcode`;
         if (postal.length !== 7) {
-            localStorage.removeItem(key);
+            forget(key);
             return;
         }
-        localStorage.setItem(key, btoa(postal));
+        write(key, btoa(postal));
     }
 
     /**
@@ -586,8 +588,6 @@
         ので、テレビより待つ (実測で8秒)。何も言わずに待たせると壊れて見える
     -->
     {#if on && (loading || receiving)}
-        <div class="absolute top-3 right-3 z-10" data-testid="live-data-receiving">
-            <span class="rounded-box bg-black/60 px-3 py-1 text-xs text-white">データ取得中…</span>
-        </div>
+        <StageNote testid="live-data-receiving" wrap="top-3 right-3">データ取得中…</StageNote>
     {/if}
 </div>

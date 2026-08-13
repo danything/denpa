@@ -3,7 +3,20 @@ import { deflateSync } from 'node:zlib';
 import type { ResponseMessage } from '$lib/vendor/web-bml/server/ws_api';
 import { BmlDecoder, inflate, moduleFiles, parseBxmlInfo } from './bml';
 import type { DiiModuleSpec } from './synth';
-import { bxmlDescriptor, ddbSection, diiSection, packetize, patSection, programMap, withCrc } from './synth';
+import {
+    BML_TS,
+    bmlHead,
+    bmlPmt,
+    bxmlDescriptor,
+    ddbSection,
+    diiSection,
+    multipartModule as multipart,
+    packetize,
+    patSection,
+    programMap,
+    stream,
+    withCrc,
+} from './synth';
 
 /**
  * データ放送 (ARIB STD-B24 の BML)。
@@ -13,45 +26,8 @@ import { bxmlDescriptor, ddbSection, diiSection, packetize, patSection, programM
  * 同じ DSM-CC で、[dsmcc.ts](dsmcc.ts) を分け合っている。
  */
 
-const SERVICE = 1024;
-const PMT_PID = 0x1f0;
-const VIDEO_PID = 0x0111;
-const BML_PID = 0x0800;
-const DOWNLOAD_ID = 0xf0000001;
-const COMPONENT_TAG = 0x40;
-
-function stream(...parts: Uint8Array[]): Uint8Array {
-    const total = parts.reduce((sum, part) => sum + part.length, 0);
-    const out = new Uint8Array(total);
-    let at = 0;
-    for (const part of parts) {
-        out.set(part, at);
-        at += part.length;
-    }
-    return out;
-}
-
-/** BML の ES が1本だけ載った PMT */
-function bmlPmt(): Uint8Array {
-    return programMap(SERVICE, VIDEO_PID, [
-        [0x02, VIDEO_PID, [0x52, 0x01, 0x00]],
-        [0x0d, BML_PID, [0x52, 0x01, COMPONENT_TAG, ...bxmlDescriptor()]],
-    ]);
-}
-
-/**
- * モジュール1つぶんの中身。**放送は multipart/mixed で複数のファイルを詰める。**
- * 本物と同じく、頭に Content-Type、境界で区切って各ファイルに Content-Location
- */
-function multipart(files: [location: string, type: string, body: string][]): Uint8Array {
-    const boundary = 'denpa';
-    let out = `Content-Type: multipart/mixed; boundary=${boundary}\r\n\r\n`;
-    for (const [location, type, body] of files) {
-        out += `--${boundary}\r\nContent-Type: ${type}\r\nContent-Location: ${location}\r\n\r\n${body}\r\n`;
-    }
-    out += `--${boundary}--\r\n`;
-    return new TextEncoder().encode(out);
-}
+const { service: SERVICE, pmtPid: PMT_PID, videoPid: VIDEO_PID } = BML_TS;
+const { bmlPid: BML_PID, downloadId: DOWNLOAD_ID, componentTag: COMPONENT_TAG } = BML_TS;
 
 /** DII と DDB を並べて、1つのモジュールを配りきる */
 function carousel(module: Uint8Array, options: Partial<DiiModuleSpec> = {}): Uint8Array[] {
@@ -89,7 +65,7 @@ function decode(...parts: Uint8Array[]): ResponseMessage[] {
     return out;
 }
 
-const head = [packetize(0x0000, patSection([[SERVICE, PMT_PID]])), packetize(PMT_PID, bmlPmt())];
+const head = bmlHead();
 
 describe('parseBxmlInfo', () => {
     test('入口の ES は起動のしかたまで持っている', () => {
