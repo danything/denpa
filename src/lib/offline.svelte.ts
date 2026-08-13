@@ -91,17 +91,23 @@ function setProgress(id: number, progress: number | null): void {
 const polling = new Set<number>();
 
 /**
- * ブラウザに預けたダウンロードの進み具合を映す。**訊きに行く (2秒おき)。**
+ * ブラウザに預けたダウンロードの進み具合を映す。**イベントとポーリングの両建て。**
  *
- * `progress` イベントに任せていたが、**登録時に掴んだオブジェクトへの通知は
+ * `progress` イベントだけに任せると、**登録時に掴んだオブジェクトへの通知は
  * 途中で途切れることがある** — 遅い回線でブラウザがダウンロードを止めて
  * 再開すると、その後のイベントが届かず、割合が張り付いたままになっていた
- * (開き直すと取り直すので直る)。get() で毎回新しく掴めば必ず今の値が読める。
- * 終わったかどうかはここでは決めない — 成否は SW の受け取りが伝えてくる
+ * (開き直すと取り直すので直る)。かといって訊きに行くだけでは、その間隔でしか
+ * 数字が動かない。
+ *
+ * そこで **2秒おきに get() で新しく掴み直し、掴んだものに毎回 `progress` も
+ * 付ける** — イベントが生きている間はコマ落ちなく動き、黙り込んだ個体は
+ * 次の掴み直しが引き取る。終わったかどうかはここでは決めない — 成否は
+ * SW の受け取りが伝えてくる
  */
 function watchProgress(reg: BackgroundFetchRegistration, parsed = parseFetchId(reg.id)): void {
     if (parsed === null || polling.has(parsed.id)) return;
     polling.add(parsed.id);
+    const id = parsed.id;
 
     void (async () => {
         try {
@@ -110,18 +116,25 @@ function watchProgress(reg: BackgroundFetchRegistration, parsed = parseFetchId(r
                 const running = await sw.backgroundFetch?.get(reg.id);
                 // 終わった (成功・失敗どちらでも登録は消える)。表示は SW の知らせが変える
                 if (running === undefined || running.result !== '') return;
-                setProgress(
-                    parsed.id,
-                    running.downloadTotal > 0
-                        ? Math.min(1, running.downloaded / running.downloadTotal)
-                        : null,
-                );
-                // 控えが消えた・状態が変わったなら見続ける理由が無い
-                if (entries[parsed.id]?.state !== 'downloading') return;
-                await new Promise((resolve) => setTimeout(resolve, 2000));
+                const show = () =>
+                    setProgress(
+                        id,
+                        running.downloadTotal > 0
+                            ? Math.min(1, running.downloaded / running.downloadTotal)
+                            : null,
+                    );
+                show();
+                running.addEventListener('progress', show);
+                try {
+                    // 控えが消えた・状態が変わったなら見続ける理由が無い
+                    if (entries[id]?.state !== 'downloading') return;
+                    await new Promise((resolve) => setTimeout(resolve, 2000));
+                } finally {
+                    running.removeEventListener('progress', show);
+                }
             }
         } finally {
-            polling.delete(parsed.id);
+            polling.delete(id);
         }
     })();
 }
