@@ -22,6 +22,12 @@ export interface OfflineVideo {
     durationMs: number | null;
     /** どちらを落としたか。端末が AV1 を解けなければ alt (H.264) */
     source: 'encoded' | 'alt';
+    /**
+     * 何回目の試みか (でたらめな文字列)。**やり直しと前回の残骸を見分ける印。**
+     * 前回の失敗を中止してからやり直すとき、その中止の知らせが遅れて届いても、
+     * 印が違えば新しい控えを消さない (service-worker.ts の drop)
+     */
+    attempt?: string;
     /** `downloading` は Background Fetch がまだ運んでいる最中 */
     state: 'downloading' | 'ready';
     downloadedAt: number;
@@ -49,16 +55,31 @@ export interface ResumeItem {
     updatedAt: number;
 }
 
-/** Background Fetch の登録ID。`rec-<録画ID>-<どちらを落とすか>` */
-export function fetchId(id: number, source: 'encoded' | 'alt'): string {
-    return `rec-${id}-${source}`;
+/**
+ * Background Fetch の登録ID。`rec-<録画ID>-<どちらを落とすか>-<試みの印>`。
+ *
+ * **試みの印を含める。** 同じIDが生きている間は再登録できない
+ * (`There already is a registration for the given id`) — 前回の失敗の残骸が
+ * ブラウザに残っていると、やり直しがそのまま断られていた。試みごとに
+ * 変えれば必ず登録でき、残骸は登録前に中止する (offline.svelte.ts)
+ */
+export function fetchId(id: number, source: 'encoded' | 'alt', attempt: string): string {
+    return `rec-${id}-${source}-${attempt}`;
+}
+
+/** その録画の登録IDか。残骸を探して中止するときの当たり判定 */
+export function fetchIdPrefix(id: number): string {
+    return `rec-${id}-`;
 }
 
 /** 登録IDを読み戻す。Background Fetch の成否イベントは ID しか持っていない */
-export function parseFetchId(value: string): { id: number; source: 'encoded' | 'alt' } | null {
-    const m = /^rec-(\d+)-(encoded|alt)$/.exec(value);
+export function parseFetchId(
+    value: string,
+): { id: number; source: 'encoded' | 'alt'; attempt: string } | null {
+    // 印の無い古い形 (rec-42-encoded) も読める。付ける前に預けたぶんが残っていることがある
+    const m = /^rec-(\d+)-(encoded|alt)(?:-([a-z0-9]+))?$/.exec(value);
     if (m === null) return null;
-    return { id: Number(m[1]), source: m[2] as 'encoded' | 'alt' };
+    return { id: Number(m[1]), source: m[2] as 'encoded' | 'alt', attempt: m[3] ?? '' };
 }
 
 /** 落とすものの一覧。動画 + 観るのに要る付き添い */

@@ -2,9 +2,17 @@ import { describe, expect, test } from 'bun:test';
 import { downloadRequests, fetchId, kindOf, parseFetchId } from './offline-db';
 
 describe('Background Fetch の登録ID', () => {
-    test('作って読み戻せる', () => {
-        expect(parseFetchId(fetchId(42, 'encoded'))).toEqual({ id: 42, source: 'encoded' });
-        expect(parseFetchId(fetchId(7, 'alt'))).toEqual({ id: 7, source: 'alt' });
+    test('作って読み戻せる (試みの印つき)', () => {
+        expect(parseFetchId(fetchId(42, 'encoded', 'a1b2'))).toEqual({
+            id: 42,
+            source: 'encoded',
+            attempt: 'a1b2',
+        });
+        expect(parseFetchId(fetchId(7, 'alt', 'zz9'))).toEqual({ id: 7, source: 'alt', attempt: 'zz9' });
+    });
+
+    test('印の無い古い形も読める (付ける前に預けたぶんの残骸)', () => {
+        expect(parseFetchId('rec-42-encoded')).toEqual({ id: 42, source: 'encoded', attempt: '' });
     });
 
     test('よそのIDは読まない', () => {

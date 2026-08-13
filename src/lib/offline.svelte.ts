@@ -14,6 +14,7 @@ import { browser } from '$app/environment';
 import {
     downloadRequests,
     fetchId,
+    fetchIdPrefix,
     type OfflineVideo,
     outbox,
     parseFetchId,
@@ -229,6 +230,12 @@ export async function saveOffline(rec: SaveTarget): Promise<void> {
     const { urls, total } = await probeDownloads(downloadRequests(rec.id, source));
     await ensureRoom(total ?? rec.ts_size);
 
+    /*
+     * 試みの印。やり直しのたびに変える — Background Fetch は**同じ登録IDが
+     * 生きている間は再登録できない**ので、前回の残骸が居ても必ず登録できる。
+     * 残骸の中止の知らせが遅れて届いても、印が違えばこの控えは消されない (SW の drop)
+     */
+    const attempt = Math.random().toString(36).slice(2, 10);
     const held: OfflineVideo = {
         id: rec.id,
         name: rec.name,
@@ -236,6 +243,7 @@ export async function saveOffline(rec: SaveTarget): Promise<void> {
         startAt: rec.start_at,
         durationMs: rec.duration_ms,
         source,
+        attempt,
         state: 'downloading',
         downloadedAt: Date.now(),
     };
@@ -245,9 +253,11 @@ export async function saveOffline(rec: SaveTarget): Promise<void> {
     try {
         const reg = await navigator.serviceWorker.ready;
         if (reg.backgroundFetch !== undefined) {
+            // 前回の残骸 (失敗して居座っている登録) を先に中止する
+            await abortRunning(reg, rec.id);
             // ブラウザに預ける。受け取りは SW (service-worker.ts)。
             // downloadTotal は実測の合計 + 2% (転送の揺れぶん。超えたら打ち切られる)
-            const running = await reg.backgroundFetch.fetch(fetchId(rec.id, source), urls, {
+            const running = await reg.backgroundFetch.fetch(fetchId(rec.id, source, attempt), urls, {
                 title: `denpa: ${rec.name}`,
                 downloadTotal: total === null ? undefined : Math.round(total * 1.02),
             });
@@ -309,15 +319,22 @@ export async function removeEverywhere(rec: { id: number; name: string }): Promi
     if (navigator.onLine) await flush();
 }
 
+/** その録画の Background Fetch を全部中止する (試みの印が何であっても) */
+async function abortRunning(reg: ServiceWorkerRegistration, id: number): Promise<void> {
+    if (reg.backgroundFetch === undefined) return;
+    const prefix = fetchIdPrefix(id);
+    for (const fetched of await reg.backgroundFetch.getIds()) {
+        if (!fetched.startsWith(prefix)) continue;
+        const running = await reg.backgroundFetch.get(fetched);
+        await running?.abort().catch(() => false);
+    }
+}
+
 /** 端末からだけ消す (サーバの録画は残す)。保存し直したいときや空けたいとき用 */
 export async function removeLocal(id: number): Promise<void> {
     // 運んでいる最中なら、ブラウザに預けたぶんも取り消す
     try {
-        const reg = await navigator.serviceWorker.ready;
-        for (const source of ['encoded', 'alt'] as const) {
-            const running = await reg.backgroundFetch?.get(fetchId(id, source));
-            await running?.abort();
-        }
+        await abortRunning(await navigator.serviceWorker.ready, id);
     } catch {
         // 預けていなければ何もない
     }

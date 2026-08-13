@@ -101,6 +101,8 @@ worker.addEventListener('backgroundfetchsuccess', (event) => {
         (async () => {
             const held = await videos.get(parsed.id);
             if (held === undefined) return; // 画面側の控えが無い (先に消された)
+            // 別の試み (やり直したあとに届いた前回の残骸) は仕舞わない
+            if ((held.attempt ?? '') !== parsed.attempt) return;
 
             for (const record of await event.registration.matchAll()) {
                 // 1つ読めなくても他は仕舞う。動画さえあれば観られる (下の確認)
@@ -141,6 +143,9 @@ function drop(event: BackgroundFetchEvent): void {
     if (parsed === null) return;
     event.waitUntil(
         (async () => {
+            // やり直しの控えを、**前回の残骸を中止した知らせ**が消さないように印を照合する
+            const held = await videos.get(parsed.id);
+            if (held === undefined || (held.attempt ?? '') !== parsed.attempt) return;
             await videos.remove(parsed.id);
             await tellClients({ type: 'offline-failed', id: parsed.id });
         })(),
