@@ -1,0 +1,39 @@
+name: バグ報告
+description: 動かない・おかしい動きをする
+labels: [bug]
+body:
+    - type: textarea
+      id: what
+      attributes:
+          label: 何が起きたか
+          description: 期待した動きと、実際の動き
+          placeholder: 録画一覧で〜すると〜になる。〜になってほしい
+      validations:
+          required: true
+    - type: textarea
+      id: steps
+      attributes:
+          label: 再現手順
+          placeholder: |
+              1. 〜を開く
+              2. 〜を押す
+              3. 〜になる
+      validations:
+          required: true
+    - type: textarea
+      id: logs
+      attributes:
+          label: ログ
+          description: サーバのログ (kubectl logs / docker logs) や、ブラウザのコンソール。長ければ関係しそうなところだけ
+          render: text
+    - type: input
+      id: version
+      attributes:
+          label: denpa のバージョン
+          placeholder: v0.7.2
+    - type: input
+      id: environment
+      attributes:
+          label: 環境
+          description: チューナー・OS・ブラウザなど、関係しそうなもの
+          placeholder: PX-W3U4 / k3s / Android Chrome

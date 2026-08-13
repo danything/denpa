@@ -1,0 +1,17 @@
+name: 機能要望
+description: こういうことがしたい
+labels: [enhancement]
+body:
+    - type: textarea
+      id: problem
+      attributes:
+          label: 困りごと・したいこと
+          description: 実装方法より先に「何がしたいか」を。そのほうが良い形を一緒に探せます
+          placeholder: 〜のとき〜できなくて困る / 〜できるようにしたい
+      validations:
+          required: true
+    - type: textarea
+      id: idea
+      attributes:
+          label: 案 (あれば)
+          description: こう動いたら嬉しい、他のソフトではこうなっている、など
