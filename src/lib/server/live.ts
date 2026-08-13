@@ -163,7 +163,6 @@ import type { Connection } from './ws';
  *
  * @param program 放送が名乗っている番号 (`NowPlaying.program`)。0以下なら
  *   最初に見つけた映像 (従来どおり)
- * @param smooth 60コマ/秒で出すか。国内アニメだけ false
  * @param audio どの音声を、どちら側で出すか
  * @param caption 何本目の字幕を出すか。**null なら字幕の出口を付けない** —
  *   字幕を持たない放送に頼むと ffmpeg は組み立ての時点で降りるので、
@@ -171,7 +170,6 @@ import type { Connection } from './ws';
  */
 export function encodeArgs(
     program: number,
-    smooth: boolean,
     audio: AudioTrack,
     codec: LiveCodec = 'h264',
     caption: number | null = 0,
@@ -201,9 +199,14 @@ export function encodeArgs(
         ...(caption === null ? [] : captionInput()),
         '-i',
         'pipe:0',
-        // インタレ解除。放送は 1080i なので、解かずに渡すと動きが櫛状になる
+        /*
+         * インタレ解除。放送は 1080i なので、解かずに渡すと動きが櫛状になる。
+         * **ライブは常に60コマ。** 録画は本編映像から実測して30に落とすことがあるが
+         * (`encoder.measureSmoothMotion`)、ライブは映像が来る前に決めないといけない。
+         * 60 に倒しておけば動きは絶対に落ちない (アニメで無駄が出るだけ)
+         */
         '-vf',
-        deinterlace(smooth),
+        deinterlace(true),
         '-map',
         `${from}:v:0`,
         /*
@@ -222,11 +225,11 @@ export function encodeArgs(
          * 本当に 59.94p だったとき (720p の局) にコマを落とす。上限なら、
          * まともな値のときは何も起きず、でたらめな値のときだけ抑える。
          *
-         * 値はインタレ解除の出方そのまま — 放送は 29.97 のインタレなので、
-         * フィールドを起こせば 59.94、フレームのままなら 29.97
+         * 値はインタレ解除の出方そのまま — 29.97 のインタレのフィールドを
+         * 起こすので 59.94
          */
         '-fpsmax',
-        smooth ? '60000/1001' : '30000/1001',
+        '60000/1001',
         ...videoArgs(codec),
         // 何本目の音声か。複数入っている放送では 0 が主とは限らない
         '-map',
@@ -499,8 +502,6 @@ class Session {
         readonly serviceId: number,
         /** 放送が名乗っている番号。**ffmpeg に渡すのはこちら** (NowPlaying の説明) */
         readonly program: number,
-        /** 60コマ/秒で出すか。国内アニメだけ false */
-        readonly smooth: boolean,
         /** どの音声を、どちら側で出すか */
         readonly audio: AudioTrack,
         /** どの形で焼くか。**見ている人が選ぶ** */
@@ -633,7 +634,7 @@ class Session {
                 forgotten !== undefined && Date.now() - forgotten < FORGET_CAPTIONLESS ? null : this.track;
             for (;;) {
                 const proc = Bun.spawn(
-                    [config.ffmpeg, ...encodeArgs(this.program, this.smooth, this.audio, this.codec, wanted)],
+                    [config.ffmpeg, ...encodeArgs(this.program, this.audio, this.codec, wanted)],
                     // 字幕は3本目の口へ出させる。**stdio の配列でしか増やせない**
                     { stdio: ['pipe', 'pipe', 'pipe', ...(wanted === null ? [] : ['pipe'])] as never },
                 );
@@ -972,25 +973,16 @@ class Session {
         this.proc?.kill();
         this.data?.close();
         sessions.delete(
-            key(
-                this.channelType,
-                this.channel,
-                this.serviceId,
-                this.smooth,
-                this.audio,
-                this.codec,
-                this.track,
-            ),
+            key(this.channelType, this.channel, this.serviceId, this.audio, this.codec, this.track),
         );
     }
 }
 
 /**
- * 焼いているものの目印。**局・コマ数・音声・字幕まで含める。**
+ * 焼いているものの目印。**局・音声・焼き方・字幕まで含める。**
  *
  * 1本の物理チャンネルに複数の局が乗っているので、チャンネルだけでは足りない —
- * 局を名指しで選んでいる以上、出てくる絵が局ごとに違う。コマ数も同じで、
- * 国内アニメを見ている人と実写を見ている人では違う。**音声も同じ** —
+ * 局を名指しで選んでいる以上、出てくる絵が局ごとに違う。**音声も同じ** —
  * 二カ国語を主音声で見ている人と副音声で見ている人は別のものを焼いている。
  * **焼き方 (H.264 / AV1) も同じ** — 選んだ形が違えば別のものになる。
  * 混ぜると片方が意図しないものを見ることになる。チューナーはエージェント側で
@@ -1004,11 +996,10 @@ const key = (
     type: string,
     channel: string,
     serviceId: number,
-    smooth: boolean,
     audio: AudioTrack,
     codec: LiveCodec,
     track: number,
-) => `${type}:${channel}:${serviceId}:${smooth ? 60 : 30}:${audio.id}:${codec}:${track}`;
+) => `${type}:${channel}:${serviceId}:${audio.id}:${codec}:${track}`;
 const sessions = new Map<string, Session>();
 
 /** 見に行く。既に同じものを焼いていれば相乗りする */
@@ -1021,19 +1012,10 @@ function watch(
     track: number,
     viewer: Viewer,
 ): Session {
-    const id = key(channelType, channel, serviceId, now.smooth, now.audio, codec, track);
+    const id = key(channelType, channel, serviceId, now.audio, codec, track);
     let session = sessions.get(id);
     if (session === undefined) {
-        session = new Session(
-            channelType,
-            channel,
-            serviceId,
-            now.program,
-            now.smooth,
-            now.audio,
-            codec,
-            track,
-        );
+        session = new Session(channelType, channel, serviceId, now.program, now.audio, codec, track);
         sessions.set(id, session);
         // 畳むのは見ている人が居なくなったとき。ここでは待たない
         void session.run();
@@ -1082,20 +1064,11 @@ export function warm(
 
     const now = nowPlaying(serviceId, audio);
     // 字幕は1本目で温める。**選び直す人は稀**で、そのときは焼き直しになる
-    const id = key(channelType, channel, serviceId, now.smooth, now.audio, codec, 0);
+    const id = key(channelType, channel, serviceId, now.audio, codec, 0);
     // 既に焼いていれば何もしない。開き直すたびに増やさない
     if (sessions.has(id)) return;
 
-    const session = new Session(
-        channelType,
-        channel,
-        serviceId,
-        now.program,
-        now.smooth,
-        now.audio,
-        codec,
-        0,
-    );
+    const session = new Session(channelType, channel, serviceId, now.program, now.audio, codec, 0);
     sessions.set(id, session);
     void session.run();
 
@@ -1161,7 +1134,6 @@ export function attend(connection: Connection): void {
             current.channelType === channelType &&
             current.channel === channel &&
             current.serviceId === serviceId &&
-            current.smooth === now.smooth &&
             current.audio.id === now.audio.id &&
             current.codec === codec &&
             current.track === caption;
@@ -1222,7 +1194,6 @@ export interface NowPlaying {
      * 探して見つけられず、**絵も音も出ない** (実機でやった)。ffmpeg に渡すのはこちら
      */
     program: number;
-    smooth: boolean;
     /** 選べる音声。画面へそのまま送る */
     audios: AudioTrack[];
     /** そのうち焼くもの */
@@ -1233,9 +1204,6 @@ export interface NowPlaying {
  * いま流れている番組から、焼き方を決める。**番組表を頼りにする。**
  *
  * - 局の番号 … ffmpeg に名指しさせる `program_number` (`NowPlaying.program`)
- * - コマ数 … **ライブは常に60コマ。** 録画は本編映像から実測して決めるが
- *   (`encoder.measureSmoothMotion`)、ライブは映像が来る前に決めないといけない。
- *   60 に倒しておけば動きは絶対に落ちない (アニメで無駄が出るだけ)
  * - 音声 … 番組表の `audios` から、選べるものを組み立てる (`arib.audioTracks`)。
  *   **古い行には `audios` が入っていない**ので、そのときは `audio_type` だけで
  *   デュアルモノかどうかを見る。どちらも無ければ「そのまま出す」1つ
@@ -1248,7 +1216,6 @@ function nowPlaying(serviceId: number, wanted: string | undefined): NowPlaying {
         const tracks = audioTracks(audios);
         return {
             program,
-            smooth: true,
             audios: tracks,
             audio: pickTrack(tracks, wanted),
         };

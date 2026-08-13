@@ -13,7 +13,7 @@ const dual = (side: AudioSide) => {
 };
 
 /** 実写・ステレオ・NHK総合1 (T27 に2局乗っている) */
-const plain = () => encodeArgs(1024, true, stereo);
+const plain = () => encodeArgs(1024, stereo);
 
 /**
  * **焼き方の指定は、間違えても絵は出る。** 出たうえで見づらいだけなので、
@@ -76,14 +76,13 @@ describe('ライブの焼き方', () => {
     });
 
     /*
-     * **インタレ解除は録画と同じ判断で行う。** 放送は 1080i なので、解かずに
-     * 渡すと動きのある場面が櫛状になる。国内アニメだけコマ数を倍にしない
+     * **インタレは常に60コマで解く。** 放送は 1080i なので、解かずに渡すと
+     * 動きのある場面が櫛状になる。録画と違い、ライブは映像が来る前に決める
+     * しかないので、動きが絶対に落ちない側 (60) に倒す
      */
-    test('インタレを解く。国内アニメだけコマ数を倍にしない', () => {
-        const live = encodeArgs(1024, true, stereo);
-        const anime = encodeArgs(1024, false, stereo);
+    test('インタレを60コマで解く', () => {
+        const live = encodeArgs(1024, stereo);
         expect(live[live.indexOf('-vf') + 1]).toBe('bwdif');
-        expect(anime[anime.indexOf('-vf') + 1]).toBe('bwdif=mode=send_frame');
     });
 
     /*
@@ -92,14 +91,14 @@ describe('ライブの焼き方', () => {
      * **ワンセグ** (320x180 の H.264) が並んでいて、それを掴む目まである
      */
     test('選んだ局の中から映像と音声を採る', () => {
-        const args = encodeArgs(1032, true, stereo);
+        const args = encodeArgs(1032, stereo);
         expect(args).toContain('0:p:1032:v:0');
         expect(args).toContain('0:p:1032:a:0');
     });
 
     /** 局が分からないときは従来どおり。**絵が出ないより、先頭の局のほうがまし** */
     test('局が分からなければ最初に見つけた映像を採る', () => {
-        const args = encodeArgs(0, true, stereo);
+        const args = encodeArgs(0, stereo);
         expect(args).toContain('0:v:0');
         expect(args).toContain('0:a:0');
     });
@@ -112,15 +111,15 @@ describe('ライブの焼き方', () => {
      * 言語が鳴る** — 絵は出るので、気付くのは音を聞いたときだけ
      */
     test('二カ国語は選ばれた側だけを両耳へ', () => {
-        const main = encodeArgs(1024, true, dual('main'));
-        const sub = encodeArgs(1024, true, dual('sub'));
+        const main = encodeArgs(1024, dual('main'));
+        const sub = encodeArgs(1024, dual('sub'));
         expect(main[main.indexOf('-af') + 1]).toBe('pan=stereo|c0=c0|c1=c0');
         expect(sub[sub.indexOf('-af') + 1]).toBe('pan=stereo|c0=c1|c1=c1');
     });
 
     /** 「主+副」はテレビと同じで、左右から別の言語が同時に鳴る状態 */
     test('主+副はそのまま出す', () => {
-        expect(encodeArgs(1024, true, dual('both'))).not.toContain('-af');
+        expect(encodeArgs(1024, dual('both'))).not.toContain('-af');
     });
 
     test('普通のステレオでは音をいじらない', () => {
@@ -136,7 +135,7 @@ describe('ライブの焼き方', () => {
             { componentType: 3, langs: ['jpn'] },
             { componentType: 3, langs: ['eng'] },
         ]);
-        const args = encodeArgs(1032, true, tracks[1]);
+        const args = encodeArgs(1032, tracks[1]);
         expect(args).toContain('0:p:1032:a:1');
         expect(args).not.toContain('0:p:1032:a:0');
     });
@@ -172,7 +171,7 @@ describe('ライブの焼き方', () => {
      * 字幕を外して焼き直せる形にしてある (`Session.run`)
      */
     test('字幕なしでも組める', () => {
-        const args = encodeArgs(1024, true, stereo, 'h264', null);
+        const args = encodeArgs(1024, stereo, 'h264', null);
         expect(args).not.toContain('pipe:3');
         expect(args).not.toContain('-filter_complex');
         expect(args).not.toContain('-sub_type');
@@ -183,7 +182,7 @@ describe('ライブの焼き方', () => {
 
     /** **言語が複数ある放送**では2本目を選べる */
     test('何本目の字幕かを選べる', () => {
-        expect(encodeArgs(1024, true, stereo, 'h264', 1).join(' ')).toContain('[0:p:1024:s:1]null');
+        expect(encodeArgs(1024, stereo, 'h264', 1).join(' ')).toContain('[0:p:1024:s:1]null');
     });
 
     /*
@@ -224,11 +223,11 @@ describe('ライブの焼き方', () => {
  * AV1 が 15% 小さく (3.3 → 2.8 Mbit/s)、別の25秒ではほぼ同じ (11.6 → 11.4) だった
  */
 describe('焼き方を選ぶ', () => {
-    const av1 = () => encodeArgs(1024, true, stereo, 'av1');
+    const av1 = () => encodeArgs(1024, stereo, 'av1');
 
     test('既定は H.264。**どの端末でも出る**', () => {
         expect(plain()).toContain('libx264');
-        expect(encodeArgs(1024, true, stereo, 'h264')).toContain('libx264');
+        expect(encodeArgs(1024, stereo, 'h264')).toContain('libx264');
     });
 
     test('AV1 を選ぶと SVT-AV1 で焼く', () => {
@@ -274,7 +273,7 @@ describe('焼き方を選ぶ', () => {
  * 音声まで替える理由が無い。
  */
 describe('音声も組で決まる', () => {
-    const args = (codec: 'h264' | 'av1') => encodeArgs(1024, true, stereo, codec);
+    const args = (codec: 'h264' | 'av1') => encodeArgs(1024, stereo, codec);
     const rate = (a: string[]) => a[a.indexOf('-b:a') + 1];
 
     test('AV1 は Opus 256k', () => {
@@ -293,7 +292,7 @@ describe('音声も組で決まる', () => {
     test('左右の配り直しは形によらず効く', () => {
         const sub = audioTracks([{ componentType: 2, langs: ['jpn', 'eng'] }])[1];
         for (const codec of ['h264', 'av1'] as const) {
-            const out = encodeArgs(1024, true, sub, codec);
+            const out = encodeArgs(1024, sub, codec);
             expect(out[out.indexOf('-af') + 1]).toContain('c0=c1');
         }
     });
@@ -354,7 +353,7 @@ describe('H.264 は速さを優先する', () => {
 
     /** AV1 は量のほう。こちらの設定を持ち込まない */
     test('AV1 には持ち込まない', () => {
-        const av1 = encodeArgs(1024, true, stereo, 'av1');
+        const av1 = encodeArgs(1024, stereo, 'av1');
         expect(av1).not.toContain('ultrafast');
         expect(av1).toContain('libsvtav1');
     });
@@ -373,9 +372,7 @@ describe('コマ数の上限', () => {
 
     test('インタレ解除の出方に合わせる', () => {
         // フィールドを起こす = 59.94
-        expect(cap(encodeArgs(1024, true, stereo))).toBe('60000/1001');
-        // フレームのまま = 29.97 (国内アニメ)
-        expect(cap(encodeArgs(1024, false, stereo))).toBe('30000/1001');
+        expect(cap(encodeArgs(1024, stereo))).toBe('60000/1001');
     });
 
     /*
@@ -383,13 +380,13 @@ describe('コマ数の上限', () => {
      * (720p の局) にコマを落とす
      */
     test('固定はしない', () => {
-        expect(encodeArgs(1024, true, stereo)).not.toContain('-r');
+        expect(encodeArgs(1024, stereo)).not.toContain('-r');
     });
 
     /** どちらの焼き方でも要る。読み切れないのは入口の話 */
     test('どちらの焼き方でも付ける', () => {
         for (const codec of ['h264', 'av1'] as const) {
-            expect(encodeArgs(1024, true, stereo, codec)).toContain('-fpsmax');
+            expect(encodeArgs(1024, stereo, codec)).toContain('-fpsmax');
         }
     });
 });
