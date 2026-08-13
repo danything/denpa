@@ -1287,12 +1287,21 @@
 
                         <!-- **読みものはここに二段で。** 決まりは [ControlBar.svelte](../../../lib/components/player/ControlBar.svelte) -->
                         <div class="min-w-0 grow basis-0 px-2 leading-tight text-white/80">
-                            <div class="flex items-baseline overflow-hidden text-sm whitespace-nowrap">
+                            <div class="flex items-baseline gap-1.5 overflow-hidden text-sm whitespace-nowrap">
+                                {#if localSrc !== null}
+                                    <!-- サーバではなく端末のコピーで観ている印。帯の題名の並びに出す -->
+                                    <span
+                                        class="badge badge-success badge-xs shrink-0 self-center"
+                                        data-testid="watch-local"
+                                    >
+                                        端末
+                                    </span>
+                                {/if}
                                 <span class="shrink-0">
                                     {time(rec.start_at)} 〜 {time(rec.end_at)} ・ {rec.service_name}
                                 </span>
                                 <span class="min-w-0 truncate">
-                                    &nbsp;・ <span data-testid="watch-name">{rec.name}</span>
+                                    ・ <span data-testid="watch-name">{rec.name}</span>
                                 </span>
                             </div>
 
@@ -1394,12 +1403,6 @@
 
                 <div class="text-base-content/60 mt-3 text-sm" data-testid="watch-meta">
                     {recordedDuration(rec)} ・ {size(rec.ts_size)}
-                    {#if localSrc !== null}
-                        <!-- サーバではなく端末のコピーで観ている印。血の通った確かめ口 -->
-                        <span class="badge badge-success badge-sm align-middle" data-testid="watch-local">
-                            端末から再生中
-                        </span>
-                    {/if}
                 </div>
             </div>
 
