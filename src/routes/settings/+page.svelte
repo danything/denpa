@@ -565,9 +565,11 @@
             <div class="card-body">
                 <h2 class="card-title">テレビで再生 (VLC)</h2>
                 <p class="text-base-content/70 text-sm">
-                    テレビの VLC の「リモートアクセス」に録画を飛ばして再生させます。
-                    VLC 側で <strong>その他 → リモートアクセス</strong> を有効にして、ここに居場所を書くと、
-                    録画詳細に「テレビで再生」が出ます。初回だけテレビに出る6桁のコードでペアリングします。
+                    テレビの VLC の「リモートアクセス」に、<strong>いま開いている端末から</strong>録画を飛ばして
+                    再生させます。VLC 側で <strong>その他 → リモートアクセス</strong> を有効にして、ここに
+                    家のテレビの居場所を書くと、録画詳細に「テレビで再生」が出ます (出先のテレビは
+                    詳細でIPをその場入力)。初回だけ、開いたタブの VLC ログインにテレビの6桁コードを
+                    入れます — その端末とテレビのペアリングで、以後は素通りです。
                 </p>
                 <form method="POST" action="?/saveVlc" use:submitting class="flex flex-wrap items-end gap-3">
                     <label class="flex grow flex-col gap-1">
@@ -585,9 +587,7 @@
                         空にすると「テレビで再生」は出ません
                         {#if data.vlc.targets.length > 0}
                             — いま読めているのは:
-                            {data.vlc.targets
-                                .map((t) => `${t.name} (${t.host}${t.paired ? '・ペアリング済み' : ''})`)
-                                .join(' / ')}
+                            {data.vlc.targets.map((t) => `${t.name} (${t.host})`).join(' / ')}
                         {/if}
                     </span>
                     <div class="basis-full">

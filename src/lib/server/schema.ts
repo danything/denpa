@@ -329,11 +329,7 @@ CREATE TABLE IF NOT EXISTS sessions (
 -- 切れたものを片付けるときに舐める
 CREATE INDEX IF NOT EXISTS sessions_expires ON sessions (expires_at);
 
--- テレビの VLC (リモートアクセス) とのペアリングの控え (vlc.ts)。
--- VLC 側の user_session Cookie をそのまま持つ。1台のテレビにつき1行
-CREATE TABLE IF NOT EXISTS vlc_sessions (
-    host TEXT PRIMARY KEY,            -- '192.168.x.x:8080' のような接続先
-    cookie TEXT NOT NULL,             -- 'user_session=...' (VLC が発行したまま)
-    updated_at INTEGER NOT NULL
-);
+-- テレビの VLC へはサーバではなく端末が直接飛ばす形にしたので (vlc.ts)、
+-- サーバがペアリングの控えを持っていた短命のテーブルは片付ける
+DROP TABLE IF EXISTS vlc_sessions;
 `;

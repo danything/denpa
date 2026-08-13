@@ -23,6 +23,7 @@
         stateLabel,
         time,
     } from '$lib/format';
+    import { read, write } from '$lib/keep';
     import { liveUpdates } from '$lib/live-updates.svelte';
     import { clearFailed, offline, removeLocal, saveOffline } from '$lib/offline.svelte';
     import { encodeSource } from '$lib/source';
@@ -70,70 +71,61 @@
 
     /** テレビ再生・リンクコピーの結果。こちらもフォームではないので自前で持つ */
     let vlcNote = $state<Notice | null>(null);
-    /** ペアリングの入力待ち。テレビの画面に6桁のコードが出ている間だけ入る */
-    let vlcPairing = $state<{ name: string; host: string } | null>(null);
-    let vlcCode = $state('');
-    let vlcBusy = $state(false);
+    /** 出先のテレビ用の入力欄。開いている間だけ入る (前回のIPは端末が覚えている) */
+    let tvInputShown = $state(false);
+    let tvHost = $state(read('vlc-other-host') ?? '');
 
     function noteVlc(kind: 'info' | 'error', text: string): void {
         vlcNote = { key: `vlc-${Date.now()}`, kind, text };
     }
 
-    async function vlcApi(path: string, body: unknown): Promise<Record<string, unknown> | null> {
-        try {
-            const res = await fetch(path, {
-                method: 'POST',
-                headers: { 'content-type': 'application/json' },
-                body: JSON.stringify(body),
-            });
-            return (await res.json()) as Record<string, unknown>;
-        } catch {
-            return null;
-        }
-    }
-
     /**
-     * テレビの VLC で再生させる (`/api/vlc/play`)。
+     * テレビの VLC へ、**この端末から**直接飛ばす。
      *
-     * まだペアリングしていなければ、その場で始める — このとき**テレビの画面に
-     * 6桁のコードが出る**ので、入力欄に切り替えて待つ (60秒で切れる)。
+     * VLC のリモートアクセスの `/play` はただの GET なので、`http://<テレビ>:8080/
+     * play?id=0&path=<再生URL>` を**トップレベルで開けば**そのまま再生が始まる。
+     * fetch だと混在コンテンツ・自己署名・CORS・Cookie の4つに塞がれるが、
+     * ページ遷移にはどれも掛からず、SameSite=Lax の合鍵 Cookie も付く。
+     * サーバから叩く形は落とした — 家のサーバからは出先のテレビに届かない
+     * (`server/vlc.ts` の先頭に経緯)。
+     *
+     * **窓は押した瞬間に開けておく。** リンク先はトークンを取ってから入れる —
+     * await の後の window.open はポップアップ扱いで塞がれることがある。
+     *
+     * **初回だけ、開いたタブに VLC のログインが出る** (テレビの画面に出る6桁の
+     * コードを入れる)。その端末と VLC のペアリングで、以後は Cookie (約1年) で
+     * 素通り。飛ばせたことのあるテレビなら、応答 (OK だけの白いタブ) は数秒で畳む
      */
-    async function playOnTv(target: { name: string; host: string }, id: number): Promise<void> {
-        vlcBusy = true;
-        const result = await vlcApi('/api/vlc/play', { host: target.host, id });
-        vlcBusy = false;
-        if (result?.ok === true) {
-            noteVlc('info', `${target.name} で再生を始めました`);
+    async function playOnTv(host: string, id: number): Promise<void> {
+        const paired = read(`vlc-fired:${host}`) === '1';
+        const win = window.open('about:blank', '_blank');
+        let shareUrl: string;
+        try {
+            const res = await fetch(`/api/recordings/${id}/share`, { method: 'POST' });
+            ({ url: shareUrl } = (await res.json()) as { url: string });
+        } catch {
+            win?.close();
+            noteVlc('error', '再生リンクを作れませんでした');
+            return;
+        }
+        const play = `http://${host}/play?id=0&path=${encodeURIComponent(shareUrl)}`;
+        if (win === null) {
+            // ポップアップを塞がれた。同じタブで開くしかない (戻るで帰れる)
+            location.href = play;
+            return;
+        }
+        win.location.href = play;
+        if (paired) {
+            // 中身は読めない (別オリジン) ので、閉じてよいかは「前に飛ばせたか」で判じる
+            setTimeout(() => win.close(), 4000);
+            noteVlc('info', 'テレビへ飛ばしました');
             detail.close();
-            return;
-        }
-        if (result?.reason === 'unpaired') {
-            vlcBusy = true;
-            const started = await vlcApi('/api/vlc/pair', { host: target.host });
-            vlcBusy = false;
-            if (started?.ok === true) {
-                vlcPairing = target;
-                vlcCode = '';
-            } else {
-                noteVlc('error', String(started?.message ?? 'テレビの VLC に繋がりませんでした'));
-            }
-            return;
-        }
-        noteVlc('error', String(result?.message ?? 'テレビの VLC に繋がりませんでした'));
-    }
-
-    /** テレビに出たコードでペアリングを仕上げ、そのまま再生まで進める */
-    async function confirmPairing(id: number): Promise<void> {
-        const target = vlcPairing;
-        if (target === null) return;
-        vlcBusy = true;
-        const result = await vlcApi('/api/vlc/pair', { host: target.host, code: vlcCode });
-        vlcBusy = false;
-        if (result?.ok === true) {
-            vlcPairing = null;
-            await playOnTv(target, id);
         } else {
-            noteVlc('error', String(result?.message ?? 'ペアリングに失敗しました'));
+            write(`vlc-fired:${host}`, '1');
+            noteVlc(
+                'info',
+                '開いたタブにログインが出たら、テレビの6桁コードを入れてもう一度押してください (初回だけ)',
+            );
         }
     }
 
@@ -925,8 +917,8 @@
         notes={detailNotes}
         cmNote={detailCmNote}
         onclose={() => {
-            // ペアリングの途中で閉じたら、入力待ちも畳む (コードは60秒で腐る)
-            vlcPairing = null;
+            // 出先テレビの入力欄は開いたままにしない
+            tvInputShown = false;
             detail.close();
         }}
         actions={detailRec === null ? undefined : recordingActions}
@@ -991,56 +983,65 @@
                     生TS
                 </a>
             {/if}
-            {#if vlcPairing !== null}
-                <!--
-                    ペアリングの入力待ち。**テレビの画面に6桁のコードが出ている**
-                    (60秒で切れる)。ここで仕上げれば以後は一発で飛ぶ (vlc.ts)
-                -->
-                <div class="join" data-testid="vlc-pair">
+            <!--
+                **テレビの VLC に、この端末から飛ばして再生させる** (`playOnTv`)。
+                渡すのは期限付きの再生リンクなので、テレビ側にパスワードは残らない。
+                設定に書いてあるテレビはボタンで、出先のテレビはIPを入れて飛ばす
+            -->
+            {#each data.vlcTargets as tv (tv.host)}
+                <button
+                    type="button"
+                    class="btn btn-outline"
+                    onclick={() => playOnTv(tv.host, rec.id)}
+                    data-testid="vlc-play-button"
+                >
+                    ▶ {data.vlcTargets.length === 1 ? 'テレビで再生' : tv.name}
+                </button>
+            {/each}
+            {#if tvInputShown}
+                <div class="join" data-testid="vlc-other">
                     <input
-                        class="input join-item w-28"
+                        class="input join-item w-44"
                         type="text"
-                        inputmode="numeric"
-                        maxlength="6"
-                        placeholder="テレビのコード"
-                        bind:value={vlcCode}
-                        data-testid="vlc-pair-code"
+                        placeholder="テレビのIP (例 192.168.1.20)"
+                        bind:value={tvHost}
+                        data-testid="vlc-other-host"
                     />
                     <button
                         type="button"
                         class="btn btn-primary join-item"
-                        disabled={vlcBusy || vlcCode.length < 6}
-                        onclick={() => confirmPairing(rec.id)}
-                        data-testid="vlc-pair-confirm"
+                        disabled={tvHost.trim() === ''}
+                        onclick={() => {
+                            const raw = tvHost.trim();
+                            write('vlc-other-host', raw);
+                            void playOnTv(raw.includes(':') ? raw : `${raw}:8080`, rec.id);
+                        }}
+                        data-testid="vlc-other-play"
                     >
-                        ペアリング
+                        飛ばす
                     </button>
                     <button
                         type="button"
                         class="btn join-item"
                         onclick={() => {
-                            vlcPairing = null;
+                            tvInputShown = false;
                         }}
                     >
                         やめる
                     </button>
                 </div>
             {:else}
-                <!--
-                    **テレビの VLC に飛ばして再生させる** (設定にテレビが書いてあるときだけ)。
-                    渡すのは期限付きの再生リンクなので、テレビ側にパスワードは残らない
-                -->
-                {#each data.vlcTargets as tv (tv.host)}
-                    <button
-                        type="button"
-                        class="btn btn-outline"
-                        disabled={vlcBusy}
-                        onclick={() => playOnTv(tv, rec.id)}
-                        data-testid="vlc-play-button"
-                    >
-                        ▶ {data.vlcTargets.length === 1 ? 'テレビで再生' : tv.name}
-                    </button>
-                {/each}
+                <!-- 出先のテレビ用。入れたIPは端末が覚える (家の分は設定に書く) -->
+                <button
+                    type="button"
+                    class="btn btn-outline"
+                    onclick={() => {
+                        tvInputShown = true;
+                    }}
+                    data-testid="vlc-other-open"
+                >
+                    {data.vlcTargets.length > 0 ? '別のテレビへ' : 'テレビのVLCで再生…'}
+                </button>
             {/if}
             <!--
                 **出先のプレイヤー向けの再生リンク** (share.ts)。24時間で切れるので、

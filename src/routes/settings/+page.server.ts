@@ -128,8 +128,8 @@ export const actions = {
 
     /**
      * テレビの VLC の居場所 (`名前=ホスト:ポート` のカンマ区切り)。
-     * 空にできる — 「テレビで再生」が出なくなるだけ。ペアリングの控え
-     * (vlc_sessions) は消さない。同じテレビを書き直したときに再ペアリング不要
+     * 空にできる — 詳細の「テレビで再生」ボタンが出なくなるだけ
+     * (出先用のIP入力はいつでも出る)
      */
     saveVlc: async ({ request }) => {
         const form = await request.formData();
