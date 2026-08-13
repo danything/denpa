@@ -11,7 +11,7 @@ import { savePrograms } from './epg';
 import { emit } from './events';
 import { moveFile } from './fsx';
 import { libraryPath, recordedPath } from './library';
-import { writeNfo, writeThumbnail } from './metadata';
+import { writeThumbnail } from './metadata';
 import { chunks } from './stream';
 import { parseTitle } from './title';
 import { openChannelStream } from './tuner';
@@ -416,7 +416,6 @@ export function finish(recordingId: number, size: number): void {
     // エンコードしない設定なら生TSをそのまま保存先へ移す
     const dest = libraryPath(recording, '.m2ts');
     moveFile(recording.ts_path!, dest);
-    writeNfo(recording, dest);
     void writeThumbnail(dest, (recording.end_at - recording.start_at) / 1000);
     database()
         .prepare(

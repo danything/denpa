@@ -9,10 +9,8 @@ import { config } from './config';
  * ログイン画面へのリダイレクトを扱えないので、ここを OIDC にすると再生できなくなる。
  */
 describe('ファイルを取りに来る口', () => {
-    test('録画の配信と WebDAV', () => {
+    test('録画の配信', () => {
         expect(isFilePath('/api/recordings/12/file')).toBe(true);
-        expect(isFilePath('/dav')).toBe(true);
-        expect(isFilePath('/dav/2026/番組.mkv')).toBe(true);
     });
 
     test('画面と、それ以外の API は含まない', () => {
@@ -22,7 +20,6 @@ describe('ファイルを取りに来る口', () => {
         expect(isFilePath('/api/recordings/12/frame')).toBe(false);
         // 似ているだけの道。前方一致で緩めない
         expect(isFilePath('/api/recordings/12/file/extra')).toBe(false);
-        expect(isFilePath('/davos')).toBe(false);
     });
 });
 

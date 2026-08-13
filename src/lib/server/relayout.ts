@@ -1,28 +1,27 @@
 /**
- * 保存先を「1録画 = 1本の映画」の新しい形へ移す。**起動時に1回、要るものだけ。**
+ * 保存先をいまの形へ整える。**起動時に1回、要るものだけ。**
  *
  * 昔は Jellyfin 流の日付ベースの TV エピソード扱いで、`シリーズ/Season 年/…` に
- * 置き、`.nfo` は `<episodedetails>`、サムネは `-thumb.jpg` だった。想定プレイヤーの
- * Nova ではこの形が弱く、番組情報もサムネも出なかった (episodedetails は全話
- * S00E00 送り・個別ポスターを読まない、`-thumb.jpg` はどの命名にも当てはまらない)。
+ * 置き、`.nfo` は `<episodedetails>`、サムネは `-thumb.jpg` だった。いまの形は
+ * `シリーズ/… .mkv` (Season フォルダをやめる) + `-poster.jpg` — 命名そのものは
+ * [library.ts](library.ts)、サイドカーは [metadata.ts](metadata.ts) が持つ。
  *
- * 新しい形は `シリーズ/… .mkv` (Season フォルダをやめる) + `<movie>` NFO +
- * `-poster.jpg`。ここは既にある録画を**その形へ移し替える**だけ — 命名そのものは
- * [library.ts](library.ts)、NFO は [metadata.ts](metadata.ts) が持つ。
+ * **`.nfo` はもう書かないので、置いてあるものは片付ける。** WebDAV 経由の
+ * プレイヤー (Nova) に読ませるためのものだったが、その道ごとやめた
+ * (手元のプレイヤーには URL を渡して再生させる)。
  *
  * **移すのは DB が指す本体 (`library_path`/`alt_path`) と、その付き添い。** ついでに、
  * 命名規則が変わる前に取り残された同じ録画の**はぐれ**も、旧フォルダから片付ける
  * (これが焼き直しのたびに `[録画ID]` を強制していた張本人)。空になった旧フォルダは畳む。
  */
 
-import { copyFileSync, existsSync, writeFileSync } from 'node:fs';
+import { copyFileSync, existsSync } from 'node:fs';
 import { basename, dirname, extname, join } from 'node:path';
 import type { Recording } from '../types';
-import { config } from './config';
 import { database, now, queryAll, queryOne } from './db';
 import { moveFile, pruneEmptyDirs, removeIfExists } from './fsx';
 import { encodedPath, libraryFamily } from './library';
-import { movieNfo, sidecarPaths } from './metadata';
+import { sidecarPaths } from './metadata';
 
 function stripExt(path: string): string {
     return path.slice(0, path.length - extname(path).length);
@@ -44,19 +43,26 @@ function removeSidecarsOf(videoPath: string): void {
 /**
  * 本体1本 (主) を新しい置き場へ移し、付き添いも連れていく。
  * データ放送ログは移し、旧サムネ (`-thumb.jpg`) は新ポスター (`-poster.jpg`) に化かす。
- * NFO は形が変わった (`<movie>`) ので、旧いのは捨てて書き直す。
+ * NFO はもう書かないので、旧いのは捨てるだけ。
  */
-function movePrimary(rec: Recording, from: string, to: string): void {
+function movePrimary(from: string, to: string): void {
     if (existsSync(from)) moveFile(from, to);
 
     const oldBase = stripExt(from);
     const dst = sidecarPaths(to);
     if (existsSync(`${oldBase}.bml.jsonl`)) moveFile(`${oldBase}.bml.jsonl`, dst.dataBroadcast);
     if (existsSync(`${oldBase}-thumb.jpg`)) moveFile(`${oldBase}-thumb.jpg`, dst.thumbnail);
-    // 旧 NFO (episodedetails) と、昔置いていた字幕の写しは捨てる
+    // 旧 NFO と、昔置いていた字幕の写しは捨てる
     removeIfExists(`${oldBase}.nfo`);
     removeIfExists(`${oldBase}.ja.ass`);
-    if (config.writeNfo) writeFileSync(dst.nfo, movieNfo(rec, basename(dst.thumbnail)));
+}
+
+/** 書かなくなった `.nfo` が残っていれば片付ける (消したら true) */
+function sweepNfo(videoPath: string): boolean {
+    const { nfo } = sidecarPaths(videoPath);
+    if (!existsSync(nfo)) return false;
+    removeIfExists(nfo);
+    return true;
 }
 
 /**
@@ -88,30 +94,21 @@ function sweepOldStrays(rec: Recording, oldDir: string, moved: ReadonlySet<strin
 }
 
 /**
- * もう一方 (H.264) の隣にも NFO とポスターを置く。無ければ補う (付けたら true)。
- *
- * 映画型の Nova は動画1本ごとに `{名前}.nfo` / `{名前}-poster.jpg` を読む。付けないと、
- * AV1 を再生できない端末で観る H.264 が「情報なしの裸ファイル」になる。ポスターは
- * 主から複製する (同じ絵)。
+ * もう一方 (H.264) の隣にもポスターを置く。無ければ主から複製する (付けたら true)。
+ * 主 (AV1) を消すと残ったほうが主に繰り上がるので、そのときも画面のサムネが途切れない。
  */
-function ensureAltSidecars(rec: Recording, altPath: string | null, primaryPath: string): boolean {
-    if (altPath === null || !config.writeNfo) return false;
-    let added = false;
-    const altNfo = sidecarPaths(altPath).nfo;
-    if (!existsSync(altNfo)) {
-        writeFileSync(altNfo, movieNfo(rec, basename(sidecarPaths(altPath).thumbnail)));
-        added = true;
-    }
+function ensureAltSidecars(altPath: string | null, primaryPath: string): boolean {
+    if (altPath === null) return false;
     const altPoster = sidecarPaths(altPath).thumbnail;
     const primaryPoster = sidecarPaths(primaryPath).thumbnail;
     if (!existsSync(altPoster) && existsSync(primaryPoster)) {
         copyFileSync(primaryPoster, altPoster);
-        added = true;
+        return true;
     }
-    return added;
+    return false;
 }
 
-/** 1録画ぶんを整える。'moved'=映画型へ移した / 'sidecar'=もう一方に情報を補った / 'none'=変化なし */
+/** 1録画ぶんを整える。'moved'=新しい形へ移した / 'sidecar'=.nfoを片付けた・ポスターを補った / 'none'=変化なし */
 function relayoutOne(rec: Recording): 'moved' | 'sidecar' | 'none' {
     const primary = rec.library_path;
     if (primary === null) return 'none';
@@ -119,18 +116,21 @@ function relayoutOne(rec: Recording): 'moved' | 'sidecar' | 'none' {
     const newPrimary = encodedPath(rec, codecOf(primary));
     const newAlt = rec.alt_path === null ? null : encodedPath(rec, codecOf(rec.alt_path));
 
-    // 既に映画型。もう一方のサイドカーだけ、無ければ補う
+    // 既に新しい形。書かなくなった .nfo を片付け、もう一方のポスターも無ければ補う
     if (newPrimary === primary && newAlt === rec.alt_path) {
-        return ensureAltSidecars(rec, rec.alt_path, primary) ? 'sidecar' : 'none';
+        let touched = sweepNfo(primary);
+        if (rec.alt_path !== null && sweepNfo(rec.alt_path)) touched = true;
+        if (ensureAltSidecars(rec.alt_path, primary)) touched = true;
+        return touched ? 'sidecar' : 'none';
     }
 
     const oldPrimaryDir = dirname(primary);
-    movePrimary(rec, primary, newPrimary);
+    movePrimary(primary, newPrimary);
     if (rec.alt_path !== null && newAlt !== null && rec.alt_path !== newAlt) {
         if (existsSync(rec.alt_path)) moveFile(rec.alt_path, newAlt);
     }
-    // もう一方 (H.264) の隣にも同じ NFO とポスターを置く
-    ensureAltSidecars(rec, newAlt, newPrimary);
+    // もう一方 (H.264) の隣にもポスターを置く
+    ensureAltSidecars(newAlt, newPrimary);
 
     sweepOldStrays(rec, oldPrimaryDir, new Set([newPrimary, newAlt].filter((p): p is string => p !== null)));
     // 旧シリーズフォルダ直下の tvshow.nfo はもう使わない
@@ -143,7 +143,7 @@ function relayoutOne(rec: Recording): 'moved' | 'sidecar' | 'none' {
     return 'moved';
 }
 
-/** 起動時に1回。旧レイアウトを映画型へ移し、もう一方のコーデックにも番組情報を揃える */
+/** 起動時に1回。旧レイアウトをいまの形へ移し、書かなくなった .nfo を片付ける */
 export function relayoutLibrary(): void {
     const recordings = queryAll<Recording>(
         'SELECT * FROM recordings WHERE library_path IS NOT NULL AND deleted_at IS NULL',
@@ -159,6 +159,7 @@ export function relayoutLibrary(): void {
             console.error(`[relayout] 録画 ${rec.id} の移し替えに失敗しました: ${error}`);
         }
     }
-    if (moved > 0) console.log(`[relayout] 保存先を映画型へ移しました: ${moved} 件`);
-    if (sidecar > 0) console.log(`[relayout] もう一方のコーデックに番組情報を補いました: ${sidecar} 件`);
+    if (moved > 0) console.log(`[relayout] 保存先を新しい形へ移しました: ${moved} 件`);
+    if (sidecar > 0)
+        console.log(`[relayout] 付き添いを整えました (.nfo 片付け・ポスター補い): ${sidecar} 件`);
 }

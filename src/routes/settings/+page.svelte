@@ -461,7 +461,7 @@
                         </div>
                     </label>
                     <!--
-                        **適用範囲は選ばせない。** 以前は「配信と WebDAV だけ / 画面も
+                        **適用範囲は選ばせない。** 以前は「配信だけ / 画面も
                         含めて全部」を選べたが、既定のままだと画面が誰にでも開き、
                         しかも掛かっているつもりでいられた
                     -->
@@ -472,12 +472,11 @@
                                     <strong>画面は OIDC で守っています。</strong>
                                     ベーシック認証が効くのは、プレイヤーが録画を取りに来る口 (<code
                                         >/api/recordings/…/file</code
-                                    >
-                                    と <code>/dav</code>) です — リダイレクトを扱えないため。
+                                    >) です — リダイレクトを扱えないため。
                                 </span>
                             {:else}
                                 <span>
-                                    <strong>画面も配信も WebDAV も、まとめて守ります。</strong>
+                                    <strong>画面も配信も、まとめて守ります。</strong>
                                     範囲は選べません。画面だけ外すと、再生リンクのURLに埋めた パスワードが誰にでも見えてしまいます。
                                 </span>
                             {/if}
@@ -551,6 +550,48 @@
 
                     <div class="basis-full">
                         <button type="submit" class="btn btn-primary" data-testid="save-broadcast">保存</button>
+                    </div>
+                </form>
+            </div>
+        </section>
+
+        <!--
+            **テレビの VLC で再生。** VLC for Android (3.6+) のリモートアクセスに
+            URL を投げて再生させる (server/vlc.ts)。相手の居場所だけここで決め、
+            ペアリング (テレビに出る6桁のコード) は録画詳細の「テレビで再生」を
+            初めて押したときにその場でやる
+        -->
+        <section class="card bg-base-100 shadow" data-testid="vlc-card">
+            <div class="card-body">
+                <h2 class="card-title">テレビで再生 (VLC)</h2>
+                <p class="text-base-content/70 text-sm">
+                    テレビの VLC の「リモートアクセス」に録画を飛ばして再生させます。
+                    VLC 側で <strong>その他 → リモートアクセス</strong> を有効にして、ここに居場所を書くと、
+                    録画詳細に「テレビで再生」が出ます。初回だけテレビに出る6桁のコードでペアリングします。
+                </p>
+                <form method="POST" action="?/saveVlc" use:submitting class="flex flex-wrap items-end gap-3">
+                    <label class="flex grow flex-col gap-1">
+                        <span class="text-sm font-medium">テレビの居場所</span>
+                        <input
+                            name="vlcTargets"
+                            value={data.vlc.targetsText}
+                            class="input input-bordered w-full font-mono"
+                            placeholder="リビング=192.168.10.20:8080"
+                            data-testid="vlc-targets"
+                        />
+                    </label>
+                    <span class="text-base-content/60 basis-full text-xs">
+                        「名前=ホスト:ポート」をカンマで並べます。ポートを略すと VLC の既定 (8080)。
+                        空にすると「テレビで再生」は出ません
+                        {#if data.vlc.targets.length > 0}
+                            — いま読めているのは:
+                            {data.vlc.targets
+                                .map((t) => `${t.name} (${t.host}${t.paired ? '・ペアリング済み' : ''})`)
+                                .join(' / ')}
+                        {/if}
+                    </span>
+                    <div class="basis-full">
+                        <button type="submit" class="btn btn-primary" data-testid="save-vlc">保存</button>
                     </div>
                 </form>
             </div>

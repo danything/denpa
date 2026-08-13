@@ -8,6 +8,7 @@ import { deleteRecordingFiles, reconcile } from '$lib/server/files';
 import { cancel, restore } from '$lib/server/reservations';
 import { RESERVATION_STATE } from '$lib/server/schema';
 import { settings } from '$lib/server/settings';
+import { targets } from '$lib/server/vlc';
 import { encodeSource } from '$lib/source';
 import type { EncodeJob, Recording, Reservation } from '$lib/types';
 
@@ -194,6 +195,8 @@ export function load({ url }) {
         showFinished,
         showDeleted,
         q,
+        // 「テレビで再生」を出すかどうか。設定にテレビが書いてあるときだけ (vlc.ts)
+        vlcTargets: targets(),
         // ダウンロードURLに埋める資格情報 (server/download.ts)。番組表の画面にも同じものを渡す
         ...downloadContext(url),
     };

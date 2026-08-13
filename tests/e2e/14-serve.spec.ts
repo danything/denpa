@@ -1,14 +1,14 @@
-import { expect, goto, recordOne, test } from './helpers';
+import { expect, goto, test } from './helpers';
 
 const CREDENTIALS = { username: 'denpa', password: 'ひみつ' };
 
 /**
- * 録画の配信と WebDAV。
+ * 録画の配信の守り。
  *
  * プレイヤーは、画面の前段に置くリダイレクト型の認証を扱えない。
  * ファイルを取りに来る口はベーシック認証で守る。
  *
- * **掛かる範囲は選べない。** 以前は「配信と WebDAV だけ / 画面も含めて全部」を
+ * **掛かる範囲は選べない。** 以前は「配信だけ / 画面も含めて全部」を
  * 選べたが、既定のままだと画面が誰にでも開き、しかも再生リンクのURLに
  * パスワードが埋まっているので、画面を開ければ全部見えていた。
  */
@@ -23,11 +23,6 @@ test.describe('資格情報が無いとき', () => {
         const res = await anonymous('/api/recordings/1/file');
         expect(res.status).toBe(401);
         expect(res.headers.get('www-authenticate')).toContain('Basic');
-    });
-
-    test('WebDAV も断る', async ({ anonymous }) => {
-        const res = await anonymous('/dav/', { method: 'PROPFIND' });
-        expect(res.status).toBe(401);
     });
 
     /*
@@ -64,7 +59,7 @@ test.describe('設定画面からの認証', () => {
     });
 
     test('パスワードは空にできない', async ({ page }) => {
-        // 空にすると録画も WebDAV も誰でも取れる状態になり、しかもそれが画面から分からない
+        // 空にすると録画のファイルが誰でも取れる状態になり、しかもそれが画面から分からない
         await goto(page, '/settings');
         await page.getByTestId('auth-password').fill('');
         await page.getByTestId('save-auth').click();
@@ -114,69 +109,5 @@ test.describe('設定画面からの認証', () => {
         expect(restored.status).toBeLessThan(400);
         await goto(page, '/settings');
         await expect(page.getByTestId('auth-password')).toHaveValue('ひみつ');
-    });
-});
-
-test.describe('WebDAV', () => {
-    test.use({ httpCredentials: CREDENTIALS });
-
-    test('OPTIONS で DAV サーバだと名乗る', async ({ request }) => {
-        const res = await request.fetch('/dav/', { method: 'OPTIONS' });
-        expect(res.status()).toBe(204);
-        expect(res.headers().dav).toBe('1');
-        expect(res.headers().allow).toContain('PROPFIND');
-    });
-
-    test('PROPFIND で保存先の中身を返す', async ({ request }) => {
-        const res = await request.fetch('/dav/', {
-            method: 'PROPFIND',
-            headers: { Depth: '1' },
-        });
-        expect(res.status()).toBe(207);
-        const body = await res.text();
-        expect(body).toContain('<D:multistatus');
-        // ルート自身はコレクションとして出る
-        expect(body).toContain('<D:collection/>');
-        expect(body).toContain('<D:href>');
-    });
-
-    test('保存先の外は見せない', async ({ request }) => {
-        const res = await request.fetch('/dav/../../etc/passwd', { method: 'PROPFIND' });
-        expect([404, 405]).toContain(res.status());
-    });
-
-    test('書き込みは断る', async ({ request }) => {
-        const res = await request.fetch('/dav/x.mkv', { method: 'PUT', data: 'x' });
-        expect([404, 405]).toContain(res.status());
-    });
-
-    test('DELETE を受けて、denpa 側の一覧からも消える', async ({ page, request, stack }) => {
-        test.setTimeout(180_000);
-        const { id, libraryPath: path } = await recordOne(page, request);
-        expect(path).toContain(stack.libraryDir);
-
-        // /dav からの相対パスに直す
-        const relative = path.replace(`${stack.libraryDir}/`, '');
-        const href = `/dav/${relative.split('/').map(encodeURIComponent).join('/')}`;
-
-        const res = await request.fetch(href, { method: 'DELETE' });
-        expect(res.status()).toBe(204);
-
-        // 実体だけでなく DB も更新される。定期照合を待たずに一覧から消える
-        await goto(page, '/');
-        await expect(page.locator(`[data-recording-id="${id}"]`)).toHaveCount(0);
-
-        // 消した理由は行ではなく詳細に出す (生の文言で行が分厚くならないように)
-        await goto(page, '/?deleted=1');
-        const row = page.locator(`[data-recording-id="${id}"]`);
-        await expect(row).toContainText('削除済み');
-        await row.getByTestId('detail-button').click();
-        await expect(page.getByTestId('detail-error')).toContainText('WebDAV から削除されました');
-    });
-
-    test('denpa が知らないファイルは消させない', async ({ request }) => {
-        // 手で置いたものを WebDAV 越しに消せると、denpa の外の都合で消える
-        const res = await request.fetch('/dav/', { method: 'DELETE' });
-        expect([403, 405]).toContain(res.status());
     });
 });

@@ -43,7 +43,7 @@ EPGStation の置き換えとして作ったもので、エンコード設定は
 | `src/lib/ts/watch.ts` | 録画を観るときの押したことの読み方 (2回押し・チャプター送り・続きの位置。DOM を触らない) |
 | `src/lib/components/player/` | 映像の上に置くもの。**3画面 (ライブ・追っかけ・観る画面) で共通** (アイコン・重ねボタン・操作列・出し入れの決め方・**字幕の重ね方**) |
 | `src/lib/server/library.ts` | 保存先でのファイル配置 |
-| `src/lib/server/metadata.ts` | .nfo とサムネイル (Kodi 仕様。Nova が読む) |
+| `src/lib/server/metadata.ts` | サムネイル (`-poster.jpg`) と、その置き場の決めごと |
 | `src/lib/server/files.ts` | 録画の削除と、実体とDBの突き合わせ |
 | `src/lib/server/serve.ts` | ファイルの配信 (Range 対応) |
 | `src/lib/server/scramble.ts` | スクランブルの検出と、チューナー側への解除依頼 |
@@ -75,7 +75,8 @@ EPGStation の置き換えとして作ったもので、エンコード設定は
 | `src/lib/ts/logo-palette.ts` | 局ロゴPNGに ARIB の色の表 (PLTE/tRNS) を入れ直す |
 | `src/lib/ts/synth.ts` | TS のセクションを組み立てる (テストと偽エージェント用) |
 | `src/lib/server/migrate.ts` | EPGStation からの引き継ぎ ([migrate.md](migrate.md)) |
-| `src/lib/server/dav.ts` | WebDAV (Nova 向け) |
+| `src/lib/server/share.ts` | 期限付きの再生リンク (出先のプレイヤーへ渡す) |
+| `src/lib/server/vlc.ts` | テレビの VLC (リモートアクセス) へ飛ばして再生 |
 | `src/lib/server/auth.ts` | どの口をどう守るか ([auth.md](auth.md)) |
 | `src/lib/server/oidc.ts` | OIDC (discovery・PKCE・ID トークンの検証)。ライブラリは使っていない |
 | `src/lib/server/session.ts` | ログインの控え (DBに持つ。Cookie に入るのは32バイトだけ) |
@@ -207,7 +208,8 @@ k3s の manifest に書いてあるのは、**既定値では決められない�
 | `/api/recordings/<id>/poster` | 焼いたときに動画の隣へ置いた `-poster.jpg` を返す (一覧のサムネイル用)。`frame` と違い ffmpeg を起こさず、ただ読んで返すだけ。無ければ 404 |
 | `/login` / `/login/callback` / `/logout` | OIDC でのログインとログアウト。設定していなければ 404 ([auth.md](auth.md)) |
 | `/api/services/<id>/logo-data` | **logoframe がいま覚えているロゴ** (白黒PNG)。番組表に出すロゴとは別物で、絵になっているかを確かめるためのもの |
-| `/dav` | WebDAV (PROPFIND / GET / HEAD)。Nova 用。書き込みは受けない |
+| `/api/recordings/<id>/share` | 期限付きの再生リンクを作る (share.ts) |
+| `/api/vlc/*` | テレビの VLC とのペアリングと再生 (vlc.ts) |
 | 画面の高さの採り方 | **単位で言い当てない。** `app.css` が `html, body` に高さを与え、土台も番組詳細の窓もそこから `%` で降りる (`min-h-full` / `md:h-full`)。`100vh` も `100dvh` も**実機の PWA (Android Chrome) で画面より 56px 大きく出た** — 56px は Chrome for Android のアドレスバーの高さそのもの。`%` なら JS も測り直しも要らず、**描く前から正しい**。`%` が届かないのは番組表の表だけ (畳まれる幅では途中の入れ物に高さが決まらない)。そこは `svh` — 3つの単位のうち**見えている範囲を超えない側**だから |
 | `?measure` (どの画面でも) | **その端末の高さを読む札** (`components/Measure.svelte`)。窓・枠・中身の高さと、`dvh`/`svh`/`lvh`/`vh` の実測、はみ出している要素を出す。縦のはみ出しは**端末でしか起きない**ことがあり (引っ込むアドレスバー、切り欠き)、自動運転のブラウザでは作れない。**PWA にはアドレスバーが無い**ので、設定画面にも入り切りがある (そちらは覚える。端末ごとで、サーバには置かない) |
 | `/manifest.webmanifest` | PWA のマニフェスト。**来た名前で表示名が変わる**ので静的ファイルではない。ここだけ認証を掛けていない (ブラウザが資格情報を付けずに取りに来るため) |

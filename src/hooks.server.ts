@@ -1,8 +1,8 @@
 import { redirect } from '@sveltejs/kit';
 import { authorized, challenge, needsLogin, protects, sessionMayRead, trusted } from '$lib/server/auth';
-import { handleDav } from '$lib/server/dav';
 import { start } from '$lib/server/runtime';
 import { COOKIE, find } from '$lib/server/session';
+import { shareTokenAllows } from '$lib/server/share';
 
 // SvelteKit のサーバ起動時に一度だけ走る。EPG取得・スケジューラ・エンコーダを立ち上げる
 start();
@@ -47,7 +47,9 @@ export async function handle({ event, resolve }) {
         !open &&
         protects(pathname) &&
         !authorized(event.request.headers.get('authorization')) &&
-        !sessionMayRead(pathname, session !== null)
+        !sessionMayRead(pathname, session !== null) &&
+        // 期限付きの再生リンク。効くのはファイルの口だけ (share.ts)
+        !shareTokenAllows(pathname, event.url.searchParams)
     ) {
         return challenge();
     }
@@ -74,10 +76,6 @@ export async function handle({ event, resolve }) {
             redirect(302, `/login?to=${encodeURIComponent(pathname + search)}`);
         }
     }
-
-    // WebDAV の PROPFIND は SvelteKit のルートでは受けられないのでここで捌く
-    const dav = handleDav(event.request, event.url);
-    if (dav !== null) return dav;
 
     const response = await resolve(event);
 

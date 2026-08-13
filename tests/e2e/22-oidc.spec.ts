@@ -192,21 +192,21 @@ test.describe('グループで絞る', () => {
 /**
  * **網の中なら素通しにする。**
  *
- * LAN のプレイヤー (Nova) に資格情報を入れずに使わせるためのもの。
+ * LAN のプレイヤー (テレビの VLC) に資格情報を入れずにファイルを取らせるためのもの。
  * ここに当たるとベーシック認証も OIDC も掛からない。
  */
 test.describe('網で素通し', () => {
     test('網の中なら、何も聞かずに通す', async ({ oidc }) => {
         const get = client(oidc, { xff: INSIDE });
         expect((await get('/')).res.status).toBe(200);
-        // ファイルの口も。ここが素通しになるのが狙い
-        expect((await get('/dav/', { method: 'PROPFIND' })).res.status).toBe(207);
+        // ファイルの口も。ここが素通しになるのが狙い (404 = 認証は抜けて、録画が無いだけ)
+        expect((await get('/api/recordings/1/file')).res.status).toBe(404);
     });
 
     test('網の外は通さない', async ({ oidc }) => {
         const get = client(oidc, { xff: OUTSIDE });
         expect((await get('/')).res.status).toBe(302);
-        expect((await get('/dav/', { method: 'PROPFIND' })).res.status).toBe(401);
+        expect((await get('/api/recordings/1/file')).res.status).toBe(401);
     });
 
     test('どの名前で来たかは問わない', async ({ oidc }) => {

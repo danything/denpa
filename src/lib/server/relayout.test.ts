@@ -4,13 +4,12 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 
 /**
- * 旧レイアウト (Season フォルダ + episodedetails + `-thumb.jpg`) を、映画型
- * (`シリーズ/… .mkv` + `<movie>` + `-poster.jpg`) へ移す。**本物を動かす。**
+ * 旧レイアウト (Season フォルダ + episodedetails + `-thumb.jpg`) をいまの形
+ * (`シリーズ/… .mkv` + `-poster.jpg`、NFOなし) へ移す。**本物を動かす。**
  */
 const { config } = await import('./config');
 config.dbPath = join(mkdtempSync(join(tmpdir(), 'denpa-relayout-')), 'denpa.db');
 config.libraryDir = mkdtempSync(join(tmpdir(), 'denpa-relayout-lib-'));
-config.writeNfo = true;
 
 const { database } = await import('./db');
 const { relayoutLibrary } = await import('./relayout');
@@ -95,8 +94,8 @@ describe('relayoutLibrary', () => {
         expect(existsSync(`${newBase}-thumb.jpg`)).toBe(false);
         // データ放送ログは連れていく
         expect(existsSync(`${newBase}.bml.jsonl`)).toBe(true);
-        // NFO は <movie> に書き直す
-        expect(readFileSync(`${newBase}.nfo`, 'utf8')).toContain('<movie>');
+        // NFO はもう書かない (旧いのを捨てるだけ)
+        expect(existsSync(`${newBase}.nfo`)).toBe(false);
         // 旧 Season フォルダと tvshow.nfo は残さない
         expect(existsSync(join(config.libraryDir, OLD_DIR))).toBe(false);
         expect(existsSync(join(config.libraryDir, '番組/tvshow.nfo'))).toBe(false);
@@ -116,7 +115,7 @@ describe('relayoutLibrary', () => {
         expect(libPath(1).lib).toBe(join(config.libraryDir, '番組/番組 - 2026-08-12 - 0000.mkv'));
     });
 
-    test('両コーデック: 両方を移し、もう一方(H264)にも NFO とポスターを付ける', () => {
+    test('両コーデック: 両方を移し、もう一方(H264)にもポスターを付ける', () => {
         reset();
         const av1 = put(`${OLD_DIR}/番組 - 2026-08-12 - 0000.mkv`);
         const h264 = put(`${OLD_DIR}/番組 - 2026-08-12 - 0000 [H264].mkv`);
@@ -131,26 +130,35 @@ describe('relayoutLibrary', () => {
         expect(row.alt).toBe(`${altBase}.mkv`);
         expect(existsSync(row.lib as string)).toBe(true);
         expect(existsSync(row.alt as string)).toBe(true);
-        // もう一方にも番組情報とポスター (AV1 非対応の端末はこちらを観る)
-        expect(readFileSync(`${altBase}.nfo`, 'utf8')).toContain('<movie>');
+        // もう一方にもポスター (主を消して繰り上がっても画面のサムネが途切れない)
         expect(existsSync(`${altBase}-poster.jpg`)).toBe(true);
     });
 
-    test('既に映画型でも、もう一方に番組情報が無ければ補う', () => {
+    test('既に新しい形でも、もう一方にポスターが無ければ補う', () => {
         reset();
         const av1 = put('番組/番組 - 2026-08-12 - 0000.mkv');
-        put('番組/番組 - 2026-08-12 - 0000.nfo', '<movie/>');
         put('番組/番組 - 2026-08-12 - 0000-poster.jpg', 'jpg');
-        const h264 = put('番組/番組 - 2026-08-12 - 0000 [H264].mkv'); // 情報なしの裸ファイル
+        const h264 = put('番組/番組 - 2026-08-12 - 0000 [H264].mkv'); // ポスターなしの裸ファイル
         insert({ id: 1, library_path: av1, alt_path: h264 });
 
         relayoutLibrary();
 
         const altBase = join(config.libraryDir, '番組/番組 - 2026-08-12 - 0000 [H264]');
-        expect(readFileSync(`${altBase}.nfo`, 'utf8')).toContain('<movie>');
         expect(existsSync(`${altBase}-poster.jpg`)).toBe(true);
-        // 本体は動かさない (既に映画型)
+        // 本体は動かさない (既に新しい形)
         expect(libPath(1).lib).toBe(av1);
+    });
+
+    test('書かなくなった .nfo が残っていれば片付ける', () => {
+        reset();
+        const av1 = put('番組/番組 - 2026-08-12 - 0000.mkv');
+        const nfo = put('番組/番組 - 2026-08-12 - 0000.nfo', '<movie/>');
+        insert({ id: 1, library_path: av1 });
+
+        relayoutLibrary();
+
+        expect(existsSync(nfo)).toBe(false);
+        expect(existsSync(av1)).toBe(true);
     });
 
     test('他の録画が使っている置き場所は巻き添えにしない', () => {
@@ -172,7 +180,6 @@ describe('relayoutLibrary', () => {
     test('既に新しい形の録画は動かさない (二度がけしても安全)', () => {
         reset();
         const av1 = put('番組/番組 - 2026-08-12 - 0000.mkv');
-        put('番組/番組 - 2026-08-12 - 0000.nfo', '<movie/>');
         insert({ id: 1, library_path: av1 });
 
         relayoutLibrary();

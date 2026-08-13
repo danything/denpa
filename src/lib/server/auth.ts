@@ -7,7 +7,7 @@ import { saveSettings, settings } from './settings';
  *
  * | 口 | 守り方 |
  * | --- | --- |
- * | `/api/recordings/<id>/file` と `/dav` | **ベーシック認証だけ** |
+ * | `/api/recordings/<id>/file` | **ベーシック認証だけ** |
  * | それ以外 | OIDC (設定してあれば)。無ければベーシック認証 |
  * | `/login` まわり | 素通し (ここを守ると入口が無くなる) |
  *
@@ -15,7 +15,7 @@ import { saveSettings, settings } from './settings';
  * 飛ばされたところで何もできず「再生できません」で終わる。だからファイルを取りに
  * 来る口だけは、前段に何を置いていようと素のベーシック認証のまま残してある。
  *
- * **適用範囲の設定は持たない。** 以前は「配信と WebDAV だけ / 画面も含めて全部」を
+ * **適用範囲の設定は持たない。** 以前は「配信だけ / 画面も含めて全部」を
  * 選べたが、既定 (files) のままだと**画面が誰にでも開く**。前段に別の認証を
  * 置いている構成でしか成り立たない既定で、しかも掛かっているつもりでいられた。
  * いまは掛けたら全部に掛かる (OIDC があるところだけ、そちらに譲る)。
@@ -47,7 +47,7 @@ export function generatePassword(): string {
 /**
  * **起動時に、無ければ作る。**
  *
- * 何も設定しないまま立てると、録画も WebDAV も誰でも取れる状態で上がっていた。
+ * 何も設定しないまま立てると、録画のファイルが誰でも取れる状態で上がっていた。
  * 「あとで設定画面から掛ける」は忘れるし、忘れたことに気付く手立てが無い。
  *
  * **作ったパスワードはログに1度だけ出す。** 掛かった以上どこかで受け取れないと、
@@ -60,13 +60,13 @@ export function ensureBasicAuth(): boolean {
     saveSettings({ basicAuthUser: BASIC_AUTH_USER, basicAuthPassword: password });
     console.log(
         `[boot] ベーシック認証を作りました: ${BASIC_AUTH_USER} / ${password}\n` +
-            '       設定画面から見直せます。プレイヤー (Nova) にも同じものを入れてください',
+            '       設定画面から見直せます。プレイヤーで直接開くときにも同じものを入れます',
     );
     return true;
 }
 
 /** ベーシック認証で守る口。**ここは OIDC にしない** */
-const FILE_PATHS = [/^\/api\/recordings\/\d+\/file$/, /^\/dav(\/|$)/];
+const FILE_PATHS = [/^\/api\/recordings\/\d+\/file$/];
 
 /**
  * 素通しにする口。
@@ -134,8 +134,8 @@ export function sessionMayRead(pathname: string, loggedIn: boolean): boolean {
  * **何も聞かずに通す相手か。** 見るのは住所だけ (`TRUSTED_NETWORKS`、CIDR の
  * カンマ区切り)。
  *
- * **ここに当たるとベーシック認証も OIDC も掛かりません。** プレイヤー
- * (Nova) に資格情報を入れずに使えるのが狙いです。
+ * **ここに当たるとベーシック認証も OIDC も掛かりません。** LAN のプレイヤー
+ * (テレビの VLC など) に資格情報を入れずにファイルを取らせるのが狙いです。
  *
  * **どの名前で来たかは問いません。** 名前で分けるのは前段 (Traefik) の仕事で、
  * LAN 用の名前には `ClientIP` を条件に付けてあります。ここで名前も見ると

@@ -68,6 +68,91 @@
     /** 端末への保存の結果。フォームではないので自前で持つ */
     let offlineNote = $state<Notice | null>(null);
 
+    /** テレビ再生・リンクコピーの結果。こちらもフォームではないので自前で持つ */
+    let vlcNote = $state<Notice | null>(null);
+    /** ペアリングの入力待ち。テレビの画面に6桁のコードが出ている間だけ入る */
+    let vlcPairing = $state<{ name: string; host: string } | null>(null);
+    let vlcCode = $state('');
+    let vlcBusy = $state(false);
+
+    function noteVlc(kind: 'info' | 'error', text: string): void {
+        vlcNote = { key: `vlc-${Date.now()}`, kind, text };
+    }
+
+    async function vlcApi(path: string, body: unknown): Promise<Record<string, unknown> | null> {
+        try {
+            const res = await fetch(path, {
+                method: 'POST',
+                headers: { 'content-type': 'application/json' },
+                body: JSON.stringify(body),
+            });
+            return (await res.json()) as Record<string, unknown>;
+        } catch {
+            return null;
+        }
+    }
+
+    /**
+     * テレビの VLC で再生させる (`/api/vlc/play`)。
+     *
+     * まだペアリングしていなければ、その場で始める — このとき**テレビの画面に
+     * 6桁のコードが出る**ので、入力欄に切り替えて待つ (60秒で切れる)。
+     */
+    async function playOnTv(target: { name: string; host: string }, id: number): Promise<void> {
+        vlcBusy = true;
+        const result = await vlcApi('/api/vlc/play', { host: target.host, id });
+        vlcBusy = false;
+        if (result?.ok === true) {
+            noteVlc('info', `${target.name} で再生を始めました`);
+            detail.close();
+            return;
+        }
+        if (result?.reason === 'unpaired') {
+            vlcBusy = true;
+            const started = await vlcApi('/api/vlc/pair', { host: target.host });
+            vlcBusy = false;
+            if (started?.ok === true) {
+                vlcPairing = target;
+                vlcCode = '';
+            } else {
+                noteVlc('error', String(started?.message ?? 'テレビの VLC に繋がりませんでした'));
+            }
+            return;
+        }
+        noteVlc('error', String(result?.message ?? 'テレビの VLC に繋がりませんでした'));
+    }
+
+    /** テレビに出たコードでペアリングを仕上げ、そのまま再生まで進める */
+    async function confirmPairing(id: number): Promise<void> {
+        const target = vlcPairing;
+        if (target === null) return;
+        vlcBusy = true;
+        const result = await vlcApi('/api/vlc/pair', { host: target.host, code: vlcCode });
+        vlcBusy = false;
+        if (result?.ok === true) {
+            vlcPairing = null;
+            await playOnTv(target, id);
+        } else {
+            noteVlc('error', String(result?.message ?? 'ペアリングに失敗しました'));
+        }
+    }
+
+    /**
+     * 期限付きの再生リンクを作ってクリップボードへ (`share.ts`)。
+     * 出先のプレイヤー (VLC 等) に貼るためのもの。パスワードは入っていない
+     */
+    async function copyShareLink(id: number): Promise<void> {
+        try {
+            const res = await fetch(`/api/recordings/${id}/share`, { method: 'POST' });
+            const { url: shareUrl } = (await res.json()) as { url: string };
+            await navigator.clipboard.writeText(shareUrl);
+            noteVlc('info', '再生リンクをコピーしました (24時間有効)');
+        } catch {
+            // 貼れない繋ぎ (http) ではクリップボードが使えない (切り抜きと同じ制約)
+            noteVlc('error', 'コピーできませんでした。https で開いているか確かめてください');
+        }
+    }
+
     /** 裏で失敗した保存 (Background Fetch)。黙って消えると「無かったことになった」ように見える */
     $effect(() => {
         if (offline.failed === null) return;
@@ -83,6 +168,7 @@
     const notices = $derived.by(() => {
         const list: Notice[] = [];
         if (offlineNote !== null) list.push(offlineNote);
+        if (vlcNote !== null) list.push(vlcNote);
         list.push(...errorNotice(form, 'dashboard-error'));
         if (form?.reconcile) {
             /*
@@ -838,7 +924,11 @@
         program={detail.current}
         notes={detailNotes}
         cmNote={detailCmNote}
-        onclose={() => detail.close()}
+        onclose={() => {
+            // ペアリングの途中で閉じたら、入力待ちも畳む (コードは60秒で腐る)
+            vlcPairing = null;
+            detail.close();
+        }}
         actions={detailRec === null ? undefined : recordingActions}
     />
 {/if}
@@ -901,6 +991,69 @@
                     生TS
                 </a>
             {/if}
+            {#if vlcPairing !== null}
+                <!--
+                    ペアリングの入力待ち。**テレビの画面に6桁のコードが出ている**
+                    (60秒で切れる)。ここで仕上げれば以後は一発で飛ぶ (vlc.ts)
+                -->
+                <div class="join" data-testid="vlc-pair">
+                    <input
+                        class="input join-item w-28"
+                        type="text"
+                        inputmode="numeric"
+                        maxlength="6"
+                        placeholder="テレビのコード"
+                        bind:value={vlcCode}
+                        data-testid="vlc-pair-code"
+                    />
+                    <button
+                        type="button"
+                        class="btn btn-primary join-item"
+                        disabled={vlcBusy || vlcCode.length < 6}
+                        onclick={() => confirmPairing(rec.id)}
+                        data-testid="vlc-pair-confirm"
+                    >
+                        ペアリング
+                    </button>
+                    <button
+                        type="button"
+                        class="btn join-item"
+                        onclick={() => {
+                            vlcPairing = null;
+                        }}
+                    >
+                        やめる
+                    </button>
+                </div>
+            {:else}
+                <!--
+                    **テレビの VLC に飛ばして再生させる** (設定にテレビが書いてあるときだけ)。
+                    渡すのは期限付きの再生リンクなので、テレビ側にパスワードは残らない
+                -->
+                {#each data.vlcTargets as tv (tv.host)}
+                    <button
+                        type="button"
+                        class="btn btn-outline"
+                        disabled={vlcBusy}
+                        onclick={() => playOnTv(tv, rec.id)}
+                        data-testid="vlc-play-button"
+                    >
+                        ▶ {data.vlcTargets.length === 1 ? 'テレビで再生' : tv.name}
+                    </button>
+                {/each}
+            {/if}
+            <!--
+                **出先のプレイヤー向けの再生リンク** (share.ts)。24時間で切れるので、
+                他人の機器のストリーム履歴に残っても腐るだけ。VLC ならそのまま貼れる
+            -->
+            <button
+                type="button"
+                class="btn btn-outline"
+                onclick={() => copyShareLink(rec.id)}
+                data-testid="share-link-button"
+            >
+                再生リンク
+            </button>
             {#if offline.usable && rec.library_path !== null}
                 <!--
                     **端末に保存 (オフライン視聴)。** 落とすのは焼いたもの

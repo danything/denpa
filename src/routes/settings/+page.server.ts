@@ -5,6 +5,7 @@ import { database, now, queryAll, queryOne } from '$lib/server/db';
 import { available as migrateAvailable, source, start, status } from '$lib/server/migrate';
 import { enabled as oidcEnabled } from '$lib/server/oidc';
 import { normalizePostalCode, saveSettings, settings } from '$lib/server/settings';
+import { targets } from '$lib/server/vlc';
 import { send, type Webhook } from '$lib/server/webhook';
 import type { VideoCodec } from '$lib/types';
 import { EVENTS } from '$lib/webhook-events';
@@ -15,6 +16,8 @@ export function load() {
         recording: current,
         /** データ放送に渡すもの。いまは郵便番号だけ */
         broadcast: { postalCode: current.postalCode, bmlNetwork: current.bmlNetwork },
+        /** テレビの VLC の居場所 (原文) と、読めた一覧。書式の確認に両方返す */
+        vlc: { targetsText: current.vlcTargets, targets: targets() },
         auth: {
             user: current.basicAuthUser,
             /*
@@ -120,6 +123,17 @@ export const actions = {
             return fail(400, { message: '郵便番号は数字7桁で入れてください (例 1000001)' });
         }
         saveSettings({ postalCode, bmlNetwork: form.get('bmlNetwork') === 'on' });
+        return { success: true, saved: true };
+    },
+
+    /**
+     * テレビの VLC の居場所 (`名前=ホスト:ポート` のカンマ区切り)。
+     * 空にできる — 「テレビで再生」が出なくなるだけ。ペアリングの控え
+     * (vlc_sessions) は消さない。同じテレビを書き直したときに再ペアリング不要
+     */
+    saveVlc: async ({ request }) => {
+        const form = await request.formData();
+        saveSettings({ vlcTargets: String(form.get('vlcTargets') ?? '').trim() });
         return { success: true, saved: true };
     },
 

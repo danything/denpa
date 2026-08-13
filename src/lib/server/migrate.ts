@@ -18,7 +18,7 @@ import type { Recording } from '$lib/types';
 import { database, now, queryOne } from './db';
 import { emit } from './events';
 import { libraryPath, recordedPath } from './library';
-import { writeNfo, writeThumbnail } from './metadata';
+import { writeThumbnail } from './metadata';
 import { reserve } from './reservations';
 import { parseTitle, toHalfWidth } from './title';
 
@@ -272,10 +272,8 @@ async function importOne(row: Row, options: MigrateOptions): Promise<'imported' 
         .prepare(`UPDATE recordings SET ${column} = ?, ts_size = ?, updated_at = ? WHERE id = ?`)
         .run(to, statSync(to).size, now(), id);
 
-    // サイドカーは保存先に置いたものにだけ付ける。作業領域は WebDAV からは見えない
+    // サムネイルは保存先に置いたものにだけ付ける。作業領域は画面に出ない
     if (!raw) {
-        const placed = queryOne<Recording>('SELECT * FROM recordings WHERE id = ?', id)!;
-        writeNfo(placed, to);
         await writeThumbnail(to, (Number(row.endAt) - Number(row.startAt)) / 1000);
     }
     return 'imported';
