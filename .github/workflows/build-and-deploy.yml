@@ -12,7 +12,11 @@ on:
       - 'bun.lock'
       - 'svelte.config.js'
       - 'vite.config.ts'
+      # 像にそのまま入るのに漏れていた2つ (.github/image-tags.sh の denpa_paths と揃える)
+      - 'server.js'
+      - 'patches/**'
       - '.github/workflows/build-and-deploy.yml'
+      - '.github/image-tags.sh'
   workflow_dispatch: {}
 
 # Only manifests under k3s/ are rewritten by this workflow, and that path is

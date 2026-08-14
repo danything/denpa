@@ -11,8 +11,10 @@
 # 使い方: . .github/image-tags.sh  → $AGENT_TAG と $DENPA_TAG が入る
 set -eu
 
-# denpa はリポジトリ直下なので、エージェントなど別物のパスを除いて見る
-denpa_paths="Dockerfile src static package.json bun.lock svelte.config.js vite.config.ts"
+# denpa はリポジトリ直下なので、エージェントなど別物のパスを除いて見る。
+# server.js (WebSocket の前段。像にそのまま入る) と patches (ffmpeg に当てる直し)
+# が漏れていて、server.js だけの修正が像に焼かれないまま release まで素通りしていた
+denpa_paths="Dockerfile src static package.json bun.lock svelte.config.js vite.config.ts server.js patches"
 
 AGENT_TAG="sha-$(git log -1 --format=%H -- agent | cut -c1-12)"
 DENPA_TAG="sha-$(git log -1 --format=%H -- $denpa_paths | cut -c1-12)"
