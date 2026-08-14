@@ -48,6 +48,16 @@ test.describe('テレビの VLC で再生', () => {
         await expect(page.getByTestId('vlc-ip').nth(1)).toHaveValue('192.168.1.98');
         await expect(page.getByTestId('vlc-codec').nth(1)).toHaveValue('ts');
 
+        /*
+         * **何も変えずに保存しても、入力欄が空に見えない。**
+         * enhance の既定 reset がバインド済みの欄をデフォルト (空) に戻し、
+         * サーバの一覧が変わらないと写し直しも走らないので、空のまま残っていた
+         */
+        await page.getByTestId('save-vlc').click();
+        await expect(page.getByTestId('saved-result')).toBeVisible();
+        await expect(page.getByTestId('vlc-ip').nth(0)).toHaveValue('192.168.1.99');
+        await expect(page.getByTestId('vlc-name').nth(0)).toHaveValue('リビング');
+
         // 2台になると、ボタンは名前で並ぶ
         await goto(page, '/');
         await row.getByTestId('detail-button').click();

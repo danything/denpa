@@ -1,4 +1,5 @@
 <script lang="ts">
+    import type { SubmitFunction } from '@sveltejs/kit';
     import { untrack } from 'svelte';
     import { submitting } from '$lib/actions';
     import Toasts, { errorNotice, type Notice } from '$lib/components/Toasts.svelte';
@@ -37,6 +38,18 @@
     let copied = $state(false);
     // untrack は「初期値としてだけ読む」印。下の $effect で追従させている
     let recording = $state(untrack(() => ({ ...data.recording })));
+
+    /**
+     * 「今の値を編集する」フォームは、保存してもフォームを reset させない。
+     *
+     * enhance の既定は成功後に `form.reset()` — 入力欄がデフォルト (空) に戻る。
+     * バインドした状態は reset を聞かないので、**何も変えずに保存すると入力欄
+     * だけが空に見える** (サーバの一覧が変わったときしか写し直さないため、
+     * 書き戻しも走らない)。空にしたいのは追加系 (Webhook) だけ
+     */
+    const keepValues: SubmitFunction = () => async (options) => {
+        await options.update({ reset: false });
+    };
 
     /**
      * テレビの一覧も同じ写し方 (名前+ホスト+コーデックの行編集)。名前がホストと
@@ -128,7 +141,7 @@
                 <form
                     method="POST"
                     action="?/saveRecording"
-                    use:submitting
+                    use:submitting={keepValues}
                     class="grid gap-4 sm:grid-cols-2"
                     data-testid="recording-form"
                 >
@@ -416,7 +429,7 @@
                     プレイヤーが録画を取りに来る口は、これで守ります。
                     <strong>起動時に無ければ作る</strong>ので、常に掛かっています。
                 </p>
-                <form method="POST" action="?/saveAuth" use:submitting class="grid gap-4 sm:grid-cols-3">
+                <form method="POST" action="?/saveAuth" use:submitting={keepValues} class="grid gap-4 sm:grid-cols-3">
                     <div class="flex flex-col gap-1">
                         <span class="text-sm font-medium">ユーザー名</span>
                         <!--
@@ -531,7 +544,7 @@
                     <strong>天気・地域のニュース・防災情報</strong>は、これでどこの分を出すかが決まります。
                     入れていないと「郵便番号が正しく設定されていません」と出て、その欄が空のままになります。
                 </p>
-                <form method="POST" action="?/saveBroadcast" use:submitting class="flex flex-wrap items-end gap-3">
+                <form method="POST" action="?/saveBroadcast" use:submitting={keepValues} class="flex flex-wrap items-end gap-3">
                     <label class="flex flex-col gap-1">
                         <span class="text-sm font-medium">郵便番号</span>
                         <input
@@ -602,7 +615,7 @@
                     AV1 の再生でつまずくテレビは、コーデックを H.264 や生TSにすると
                     そのテレビにだけ別のファイルを渡します。
                 </p>
-                <form method="POST" action="?/saveVlc" use:submitting class="flex flex-col gap-3">
+                <form method="POST" action="?/saveVlc" use:submitting={keepValues} class="flex flex-col gap-3">
                     {#each tvRows as row (row)}
                         <div class="flex flex-wrap items-center gap-2">
                             <input
