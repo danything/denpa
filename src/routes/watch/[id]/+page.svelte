@@ -1301,6 +1301,7 @@
         <ProgramFacts
             program={detail.current ?? facts}
             cmNote={cmNoteWorthShowing(rec.cm_note) ? rec.cm_note : null}
+            fps={rec.fps}
         />
 
         <div class="text-base-content/60 mt-3 text-sm" data-testid="watch-meta">

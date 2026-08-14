@@ -173,7 +173,7 @@ export interface Recording {
     /** 録画そのものが失敗した理由 (消したときは削除の理由)。エンコードの失敗は入らない */
     error: string | null;
     cm_ranges: string | null;
-    /** 番組表から写したジャンル (JSON: [{lv1, lv2}])。エンコードのコマ数を決めるのに使う */
+    /** 番組表から写したジャンル (JSON: [{lv1, lv2}])。番組詳細のジャンル札に使う */
     genre_detail: string | null;
     /**
      * 番組表から写した音声の構成 (JSON: `audio_component_descriptor` の配列)。
@@ -189,6 +189,8 @@ export interface Recording {
     cm_note: string | null;
     /** 実際に録れた長さ。取れていなければ null (古い行) */
     duration_ms: number | null;
+    /** 焼いたもののコマ数 (30/60)。未エンコード・fps記録前の古い行は null */
+    fps: number | null;
     /** どこまで観たか (ms)。まだ観ていない・観終えたものは null */
     resume_ms: number | null;
     deleted_at: number | null;

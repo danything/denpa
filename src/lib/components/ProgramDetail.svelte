@@ -18,12 +18,15 @@
         onclose,
         notes = [],
         cmNote = null,
+        fps = null,
         actions,
     }: {
         program: ProgramDetail;
         onclose: () => void;
         notes?: { title: string; text: string }[];
         cmNote?: string | null;
+        /** 焼いたもののコマ数。録画から開いたときだけ入る (ProgramFacts へ素通し) */
+        fps?: number | null;
         actions?: Snippet;
     } = $props();
 </script>
@@ -53,7 +56,7 @@
     -->
     <div class="modal-box flex max-h-full max-w-2xl flex-col">
         <div class="min-h-0 flex-1 overflow-y-auto">
-            <ProgramFacts {program} {notes} {cmNote} />
+            <ProgramFacts {program} {notes} {cmNote} {fps} />
         </div>
 
         <!--

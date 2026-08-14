@@ -16,6 +16,7 @@
         program,
         notes = [],
         cmNote = null,
+        fps = null,
     }: {
         program: ProgramDetail;
         /**
@@ -28,6 +29,11 @@
         notes?: { title: string; text: string }[];
         /** 何を使って検出したか (無音 / join_logo_scp)。判定の当てにできるか分かる */
         cmNote?: string | null;
+        /**
+         * 焼いたもののコマ数 (30/60、`recordings.fps`)。**番組ではなく録画の事実**なので
+         * `program` とは別に渡す — 番組詳細は EPG から引けると差し替わる (`detail.open`)
+         */
+        fps?: number | null;
     } = $props();
 
     /** 詳細情報。EIT から拾った「出演者」などの見出し付きテキスト */
@@ -91,6 +97,10 @@
     {/each}
     {#if video}
         <span class="badge badge-sm badge-ghost" data-testid="detail-video">{video}</span>
+    {/if}
+    {#if fps !== null}
+        <!-- 実測 (fpsDetect) がどちらに転んだか。ログにしか出ていなかった -->
+        <span class="badge badge-sm badge-ghost" data-testid="detail-fps">{fps}コマ</span>
     {/if}
     {#each audios as label, i (i)}
         <span class="badge badge-sm badge-ghost" data-testid="detail-audio">{label}</span>

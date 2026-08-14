@@ -60,10 +60,16 @@ export const ADDED_COLUMNS: { table: string; column: string; definition: string 
     /*
      * 番組のジャンル (JSON: lv1 の配列)。番組表から写しておく。
      *
-     * エンコードのコマ数をこれで決める (encoder.ts の deinterlace)。番組表の行は
-     * 24時間で消えるので、録り直しのたびに引き直せるようにしておく必要がある
+     * 番組詳細のジャンル札に使う (コマ数の判断に使っていた頃の名残だが、番組表の
+     * 行は24時間で消えるので、録画に写しがあること自体は今も要る)
      */
     { table: 'recordings', column: 'genre_detail', definition: 'TEXT' },
+    /*
+     * 焼いたもののコマ数 (30/60)。実測 (fpsDetect) か既定の60。NULL は未エンコード。
+     * 番組詳細に「60コマ」の札で出す — 実測がどちらに転んだかは、ここに出さないと
+     * サーバのログにしか残らない
+     */
+    { table: 'recordings', column: 'fps', definition: 'INTEGER' },
     /*
      * 音声の構成 (JSON: audio_component_descriptor の配列)。番組表から写しておく。
      *
@@ -261,7 +267,7 @@ CREATE TABLE IF NOT EXISTS recordings (
     -- **エンコードの失敗はここに書かない** (encode_jobs.error が持っている)
     error TEXT,
     cm_ranges TEXT,   -- 検出したCM区間の JSON。UIでの確認用
-    -- JSON: [{lv1, lv2}]。エンコードのコマ数の判断に使う (国内アニメだけ30コマ)
+    -- JSON: [{lv1, lv2}]。番組詳細のジャンル札に使う
     genre_detail TEXT,
     -- JSON: [{componentType, langs, text?, main?}]。焼いたものの音声トラックに
     -- 番組表と同じ名前を入れるのに使う (arib.audioTitles)
@@ -269,6 +275,8 @@ CREATE TABLE IF NOT EXISTS recordings (
     -- 実際に録れた長さ。番組表の尺 (end_at - start_at) は予定でしかなく、
     -- 途中で止めたときやCMを切ったときは実物と合わない
     duration_ms INTEGER,
+    -- 焼いたもののコマ数 (30/60)。実測 (fpsDetect) か既定の60。NULL は未エンコード
+    fps INTEGER,
     -- 消した時刻(denpa から、または外から)。行は履歴として残す
     deleted_at INTEGER,
     -- 失敗をユーザーが確認した時刻。以降ダッシュボードの通知に出さない

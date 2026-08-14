@@ -1453,20 +1453,22 @@ async function runJob(jobId: number): Promise<void> {
     });
 
     // 保存先が入った時点で「視聴可能」になる (recordings.state は生成列)。
-    // 主は AV1 (`output`)、もう一方は `alt` (両方焼いたときだけ)
+    // 主は AV1 (`output`)、もう一方は `alt` (両方焼いたときだけ)。
+    // コマ数 (実測か既定の60) も一緒に書く — 番組詳細の札はここからしか出せない
+    const fps = encodeOptions.smoothMotion === true ? 60 : 30;
     if (keepOriginal()) {
         database()
             .prepare(
-                `UPDATE recordings SET library_path = ?, alt_path = ?, ts_size = ?, updated_at = ? WHERE id = ?`,
+                `UPDATE recordings SET library_path = ?, alt_path = ?, ts_size = ?, fps = ?, updated_at = ? WHERE id = ?`,
             )
-            .run(output, alt, size, now(), recording.id);
+            .run(output, alt, size, fps, now(), recording.id);
     } else {
         removeIfExists(recording.ts_path);
         database()
             .prepare(
-                `UPDATE recordings SET library_path = ?, alt_path = ?, ts_path = NULL, ts_size = ?, updated_at = ? WHERE id = ?`,
+                `UPDATE recordings SET library_path = ?, alt_path = ?, ts_path = NULL, ts_size = ?, fps = ?, updated_at = ? WHERE id = ?`,
             )
-            .run(output, alt, size, now(), recording.id);
+            .run(output, alt, size, fps, now(), recording.id);
     }
 }
 

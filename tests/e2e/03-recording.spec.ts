@@ -92,11 +92,12 @@ test.describe('録画とエンコード', () => {
          */
         await expect(recording.getByTestId('rule-name')).toHaveText('手動予約');
 
-        // 行を押すと番組表と同じ詳細が出る
+        // 行を押すと番組表と同じ詳細が出る。焼いたもののコマ数の札も付く
         await recording.getByTestId('detail-button').click();
         const detail = page.getByTestId('program-detail');
         await expect(detail).toBeVisible();
         await expect(detail.getByTestId('detail-video')).toBeVisible();
+        await expect(detail.getByTestId('detail-fps')).toHaveText('60コマ');
 
         /*
          * ダウンロードのリンクは資格情報を URL に入れる。ブラウザは画面を開いた

@@ -1045,6 +1045,7 @@
         notes={detailNotes}
         cmNote={detailCmNote}
         onclose={() => detail.close()}
+        fps={detailRec?.fps ?? null}
         actions={detailRec === null ? undefined : recordingActions}
     />
 {/if}
