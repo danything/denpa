@@ -204,6 +204,19 @@ spec:
               mountPath: /app/recorded
             - name: library
               mountPath: /library
+          # **ノードごとフリーズさせないための頭打ち** (2026-08-14 の事故対策)。
+          # ffmpeg は 1 本で ~4GB 使う。ENCODE_CONCURRENCY=2 のエンコードに
+          # ライブ視聴の ffmpeg (局・音声・字幕の焼き方ごとに別プロセス) が
+          # 積み上がると、上限が無いと 46GB + swap を食い潰してノードごと固まる
+          # (それまでは resources 未指定 = besteffort で天井が無かった)。
+          # ここで頭打ちにすれば、溢れても このポッドだけ OOM-kill されて
+          # 再起動し、ノードと他の k3s ワークロードは巻き込まれない。
+          resources:
+            requests:
+              cpu: 500m
+              memory: 2Gi
+            limits:
+              memory: 24Gi
       volumes:
         - name: denpa-data
           persistentVolumeClaim:

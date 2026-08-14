@@ -321,6 +321,38 @@
         openDetail(rec.program_id, rec, notes, rec.cm_note);
         detailRec = rec;
     }
+
+    /**
+     * 右の一覧の並び。**録れたものと録り逃しを1本にして放送日順で出す。**
+     *
+     * 録り逃しは「これから録るもの」ではなく**録画の結果**なので、予約側では
+     * なくこちらに混ぜる。ただし録画の行を持たない (始まらないまま放送が
+     * 終わった — `+page.server.ts` の `missed`) ので、ここで差し込む。
+     * 鍵は種類ごとに接頭辞を付ける (録画と予約でIDの空間が別のため)
+     */
+    type RightRow =
+        | { kind: 'rec'; key: string; at: number; rec: (typeof data.recordings)[number] }
+        | { kind: 'missed'; key: string; at: number; res: (typeof data.missed)[number] };
+
+    /**
+     * 録り逃しの詳細。**失敗した録画と同じ形**で、開いたときに理由を出す。
+     * チューナー不足で落とされたものは予約が理由を持っている (conflict_reason)
+     */
+    function openMissed(res: (typeof data.missed)[number]): void {
+        const text =
+            res.conflict_reason ?? 'アプリが止まっていた等で、録り始めないまま放送が終わりました';
+        openDetail(res.program_id, res, [{ title: '録り逃しました', text }]);
+    }
+    const rightRows = $derived(
+        [
+            ...data.recordings.map(
+                (rec) => ({ kind: 'rec', key: `rec-${rec.id}`, at: rec.start_at, rec }) as RightRow,
+            ),
+            ...data.missed.map(
+                (res) => ({ kind: 'missed', key: `missed-${res.id}`, at: res.start_at, res }) as RightRow,
+            ),
+        ].sort((a, b) => b.at - a.at),
+    );
 </script>
 
 <!-- 聞き返しは他所を触ったら取り下げる (`stand`) -->
@@ -566,7 +598,38 @@
         -->
             <div class="overflow-auto rounded-box bg-base-100 shadow md:min-h-0 md:flex-1">
                 <div class="divide-base-300 divide-y" data-testid="recording-list">
-                    {#each data.recordings as rec (rec.id)}
+                    {#each rightRows as row (row.key)}
+                    {#if row.kind === 'missed'}
+                        {@const res = row.res}
+                        <!--
+                            録り逃し。観るものが無いので、押すと詳細だけ出す (予約の行と
+                            同じ扱い)。ボタンも置かない — 放送は終わっているので、
+                            この行からできることが無い (再放送は番組表から予約し直す)
+                        -->
+                        <div
+                            data-testid="missed-row"
+                            data-program-id={res.program_id}
+                            class="hover:bg-base-200/60 relative cursor-pointer p-3"
+                            role="button"
+                            tabindex="0"
+                            onclick={(event) => rowClick(event, null, () => openMissed(res))}
+                            onkeydown={(event) => rowClick(event, null, () => openMissed(res))}
+                        >
+                            <div class="min-w-0" data-testid="row-body">
+                                {@render title(stateLabel('missed'), badgeClass('missed'), res.name, 'missed-state')}
+                                {@render meta(
+                                    [
+                                        res.service_name,
+                                        `${dateTime(res.start_at)}〜${time(res.end_at)} (${duration(res.start_at, res.end_at)})`,
+                                    ],
+                                    { serviceId: res.service_id, has: res.has_logo === 1 },
+                                )}
+                                <!-- 録画側の流儀に合わせて手動とも書く (見返すものなので) -->
+                                {@render source(res.rule_id, res.rule_name, res.manual === 1)}
+                            </div>
+                        </div>
+                    {:else}
+                        {@const rec = row.rec}
                         <!--
                             録り直しの元になるのは生TS。エンコード済みを元にしても画質は
                             戻らないので、生TSがあるときだけ出す。
@@ -893,6 +956,7 @@
                                 ></progress>
                             {/if}
                         </div>
+                    {/if}
                     {:else}
                         <div class="text-base-content/60 p-3">
                             {data.q === '' ? '録画はありません' : `「${data.q}」に一致する録画はありません`}

@@ -47,6 +47,28 @@ interface RecordingRow extends Recording {
     has_logo: number | null;
 }
 
+/**
+ * 録り逃し。**録画の行を持たない** (始まらないまま放送が終わったので、録れた
+ * ファイルどころか recordings の行も無い)。予約の行から、録画一覧に差し込むのに
+ * 要る分だけ持ってくる。
+ */
+export interface MissedRow {
+    id: number;
+    program_id: number | null;
+    name: string;
+    description: string;
+    service_id: number;
+    service_name: string;
+    has_logo: number | null;
+    start_at: number;
+    end_at: number;
+    manual: number;
+    rule_id: number | null;
+    rule_name: string | null;
+    /** チューナー不足で落とされたものは理由を持っている。詳細で見せる */
+    conflict_reason: string | null;
+}
+
 interface ReservationRow extends Reservation {
     service_name: string;
     rule_name: string | null;
@@ -102,18 +124,16 @@ export function load({ url }) {
     /*
      * まだ始まっていないものと、いま録っているものだけ。「完了分も表示」なら全部。
      *
-     * **録り逃したものも残す。** 放送が終わると `missed` に変わる (`scheduler.ts`)
-     * ので、出さずにいると**黙って消えて**いた — チューナーが足りずに落とされた
-     * ものが、録れたつもりのまま気付かれずに終わる。いちばん知りたいのは
-     * 「録れなかった」ほうなのに、それだけが見えない画面になっていた。
+     * **録り逃したもの (`missed`) はここには出さない** — あれは「これから録るもの」
+     * ではなく**録画の結果**なので、録画の一覧のほうに出す (下の `missed`)。
+     * 予約側に出していた頃は、放送が終わった行が予約の列に居座って、
+     * 「これから何が録れるか」の中に過去が混ざっていた。
      *
-     * 溜まり続けはしない。終わった予約は履歴の片付けで消える
-     * (`server/files.ts`。既定で14日)。**取り消したものは出さない** —
-     * あちらは人が押した結果で、驚くことが無い
+     * **取り消したものは出さない** — あちらは人が押した結果で、驚くことが無い
      */
     const pending = showFinished
-        ? '1 = 1'
-        : `((r.state IN ('scheduled','conflict','missed') AND r.started_at IS NULL) OR rec.state = 'recording')`;
+        ? `NOT (r.state = 'missed' AND r.started_at IS NULL)`
+        : `((r.state IN ('scheduled','conflict') AND r.started_at IS NULL) OR rec.state = 'recording')`;
     const reservations = queryAll<ReservationRow>(
         // 最後の state が r.* の state を隠す。出したいのは録画から引いたほう
         `SELECT r.*, s.name AS service_name, s.has_logo AS has_logo, rules.name AS rule_name,
@@ -189,9 +209,34 @@ export function load({ url }) {
         .all(...(q === '' ? [] : [`%${q}%`])) as RecordingRow[];
     for (const row of recordings) row.raw_size = rawSize(row);
 
+    /*
+     * 録り逃し。**録画の一覧に混ぜて出す** (画面側で放送日順に差し込む)。
+     * チューナーが足りずに落とされたものが黙って消えると、録れたつもりのまま
+     * 気付かれずに終わる — いちばん知りたいのは「録れなかった」ほうなのに。
+     *
+     * 溜まり続けはしない。終わった予約は履歴の片付けで消える
+     * (`server/files.ts`。既定で14日)。絞り込みは録画側と同じ言葉を効かせる
+     * (予約はシリーズ・副題を持たないので、番組名と局名だけ)
+     */
+    const missed = database()
+        .prepare(
+            `SELECT r.id, r.program_id, r.name, r.description, r.service_id, r.start_at, r.end_at,
+                    r.manual, r.rule_id, r.conflict_reason, rules.name AS rule_name,
+                    s.name AS service_name, s.has_logo AS has_logo
+             FROM reservations r
+             JOIN services s ON s.id = r.service_id
+             LEFT JOIN rules ON rules.id = r.rule_id
+             WHERE r.state = 'missed' AND r.started_at IS NULL
+             ${q === '' ? '' : 'AND (r.name LIKE ?1 OR s.name LIKE ?1)'}
+             ORDER BY r.start_at DESC
+             LIMIT 100`,
+        )
+        .all(...(q === '' ? [] : [`%${q}%`])) as MissedRow[];
+
     return {
         reservations,
         recordings,
+        missed,
         showFinished,
         showDeleted,
         q,
