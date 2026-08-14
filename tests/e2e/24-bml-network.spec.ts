@@ -24,7 +24,13 @@ test.describe('データ放送の双方向', () => {
         await goto(page, '/settings');
         await page.getByTestId('bml-network').check();
         await page.getByTestId('save-broadcast').click();
-        await expect(page.getByTestId('bml-network')).toBeChecked();
+        /*
+         * **待つのは保存の完了。** チェック状態で待っていた頃は、自分で入れた
+         * チェックに即座に当たってしまい、設定がサーバに書かれる前に下の
+         * リクエストが飛んで 403 (既定の「入れるまで外へ出ない」) を踏んでいた
+         * (遅い CI ランナーでだけ出る)
+         */
+        await expect(page.getByTestId('saved-result')).toBeVisible();
 
         // **内側は断る。** 通ると宅内を覗く道具になる
         for (const url of [
