@@ -1115,7 +1115,7 @@ export function warm(
 /**
  * 1本ぶんの受け持ち。**繋いでいる間だけチューナーを掴む。**
  *
- * 接続そのものが在席の印になる (`stream.md` の「誰が見ているかが分かる」)。
+ * 接続そのものが在席の印になる (`stream.md` §4「入っているもの」の畳み方)。
  * HTTP のストリームだと切断の検出が遅れるが、WebSocket なら閉じた時点で分かる。
  */
 export function attend(connection: Connection): void {
