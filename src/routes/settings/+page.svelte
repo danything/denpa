@@ -41,13 +41,17 @@
     /**
      * テレビの一覧も同じ写し方 (名前+ホストの行編集)。名前がホストと同じなのは
      * 「名前を付けていない」印 (詳細のIP入力から自動で載ったもの等) なので、
-     * 名前の欄は空で出す
+     * 名前の欄は空で出す。
+     *
+     * **書き戻すのは、サーバの一覧そのものが変わったときだけ** (tvSeen)。
+     * load はどのフォームを保存しても走り直すので、素直に写すと**別のカードを
+     * 保存しただけで編集中の行が巻き戻って**いた (複数行をいじる編集では
+     * パスワード欄より実害が大きい)
      */
-    let tvRows = $state(
-        untrack(() =>
-            data.vlc.targets.map((t) => ({ name: t.name === t.host ? '' : t.name, host: t.host })),
-        ),
-    );
+    const tvRowsOf = () =>
+        data.vlc.targets.map((t) => ({ name: t.name === t.host ? '' : t.name, host: t.host }));
+    let tvRows = $state(untrack(tvRowsOf));
+    let tvSeen = JSON.stringify(untrack(tvRowsOf));
 
     $effect(() => {
         password = data.auth.password;
@@ -56,7 +60,11 @@
         recording = { ...data.recording };
     });
     $effect(() => {
-        tvRows = data.vlc.targets.map((t) => ({ name: t.name === t.host ? '' : t.name, host: t.host }));
+        const rows = tvRowsOf();
+        const key = JSON.stringify(rows);
+        if (key === tvSeen) return;
+        tvSeen = key;
+        tvRows = rows;
     });
 
     async function copy(): Promise<void> {

@@ -45,8 +45,16 @@
     daisyUI の `overflow-y: auto`)。
 -->
 <div class="modal modal-open h-full py-4" role="dialog" data-testid="program-detail">
-    <div class="modal-box max-h-full max-w-2xl">
-        <ProgramFacts {program} {notes} {cmNote} />
+    <!--
+        **巻き取るのは中身だけ。** 箱ごとスクロールさせていた頃は、番組の説明が
+        長いと押すもの (テレビで再生・閉じる) が下に流れて、**開いた時点では
+        見えなかった**。中身を自分の枠で巻き取らせ、押すものは箱の下端に
+        貼り付けたまま出しておく (FactsAside と同じ考え方)
+    -->
+    <div class="modal-box flex max-h-full max-w-2xl flex-col">
+        <div class="min-h-0 flex-1 overflow-y-auto">
+            <ProgramFacts {program} {notes} {cmNote} />
+        </div>
 
         <!--
             **枠はこちらで持つ。** 渡す側に任せていた頃は、フォームが行を占める
@@ -55,7 +63,7 @@
             **閉じるはいちばん右。** 並びの終わりがいつも同じところにあると、
             見ないでも押せる
         -->
-        <div class="modal-action">
+        <div class="modal-action shrink-0">
             {#if actions}
                 {@render actions()}
             {:else}

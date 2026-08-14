@@ -23,7 +23,7 @@
         stateLabel,
         time,
     } from '$lib/format';
-    import { read, write } from '$lib/keep';
+    import { forget, read, write } from '$lib/keep';
     import { liveUpdates } from '$lib/live-updates.svelte';
     import { clearFailed, offline, removeLocal, saveOffline } from '$lib/offline.svelte';
     import { encodeSource } from '$lib/source';
@@ -75,6 +75,8 @@
     /** 出先のテレビ用の入力欄。飛ばしたIPはサーバの一覧に載る (rememberTv) ので、覚えは持たない */
     let tvInputShown = $state(false);
     let tvHost = $state('');
+    // 旧版が端末に覚えていた出先のIP。いまはサーバに載せるので、残りは掃除する
+    forget('vlc-other-host');
 
     function noteVlc(kind: 'info' | 'error', text: string): void {
         vlcNote = { key: `vlc-${Date.now()}`, kind, text };
@@ -255,6 +257,8 @@
     ): void {
         // 予約から開いたときは録画のボタンを出さない (openRecording が入れ直す)
         detailRec = null;
+        // 前に開いた詳細でIP入力を出したままでも、次の詳細は畳んだ状態から
+        tvInputShown = false;
         detailNotes = notes;
         detailCmNote = cmNoteWorthShowing(cmNote) ? cmNote : null;
         void detail.open(programId, row);
@@ -1235,7 +1239,7 @@
                         再生リンクをコピー
                     </button>
                     {#if data.vlcTargets.length > 0 && !tvInputShown}
-                        <!-- 出先のテレビ用。入れたIPは端末が覚える (家の分は設定に書く) -->
+                        <!-- 出先のテレビ用。飛ばしたIPは設定の一覧に載る (rememberTv) -->
                         <button
                             type="button"
                             class="btn btn-ghost justify-start"

@@ -143,6 +143,9 @@ export const actions = {
             const host = normalizeVlcHost(raw);
             // ホストの無い行 (名前だけ・空行) は黙って落とす
             if (host === '') continue;
+            // 同じテレビを2行入れても1つに。録画詳細の {#each} がホストを
+            // 鍵にしているので、重複したまま保存すると一覧が描けなくなる
+            if (list.some((t) => t.host === host)) continue;
             // `,` と `=` は保存の書式の区切り。名前に混ざると読み直せない
             const name = (names[i] ?? '').trim().replace(/[,=]/g, '');
             list.push({ name: name === '' ? host : name, host });
