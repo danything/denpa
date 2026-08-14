@@ -236,6 +236,24 @@ export function widenKeep(keep: Range[], margin: number): Range[] {
 }
 
 /**
+ * 区間の時刻を、捨てた頭のぶんだけ前へ詰める。
+ *
+ * エンコードは頭 (映像が出るまでの音声だけの区間、実機で 0.5〜0.9 秒) を
+ * `-ss` で捨てて 0 秒から始める (`encoder.headSkip`)。検出した時刻をそのまま
+ * チャプターに書くと**全チャプターがそのぶん遅れて入り**、CMの自動スキップは
+ * 毎回そのぶんCMを見せてから跳んで、着地も本編に食い込んでいた
+ * (字幕は同じ引き算をしている。`subtitle.rebase`)。
+ *
+ * 詰めた結果ほとんど残らない区間は落とす (invertRanges の 0.5 秒と同じ判断)。
+ */
+export function shiftRanges(ranges: Range[], by: number): Range[] {
+    if (by <= 0) return ranges;
+    return ranges
+        .map((r) => ({ start: Math.max(0, r.start - by), end: r.end - by }))
+        .filter((r) => r.end - r.start > 0.5);
+}
+
+/**
  * ffmetadata 形式のチャプター定義。本編とCMを交互のチャプターにして、
  * プレイヤーのチャプター送りでCMを飛ばせるようにする(ファイルは切らない)。
  */

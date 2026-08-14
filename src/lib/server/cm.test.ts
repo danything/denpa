@@ -11,6 +11,7 @@ import {
     parseFrameRate,
     parseRatio,
     parseSilences,
+    shiftRanges,
     widenKeep,
 } from './cm';
 import { cmRatio, parseLogoFrames, parseTrimRanges, tooMuchCm } from './cm-jls';
@@ -99,6 +100,29 @@ describe('区間の裏返し', () => {
                 600,
             ),
         ).toEqual([{ start: 100, end: 160 }]);
+    });
+});
+
+/**
+ * エンコードは頭 (音声だけの区間) を捨てて 0 秒から始めるので、チャプターの
+ * 時刻も同じだけ詰める。そのままだと自動スキップが毎回そのぶんCMを見せていた
+ */
+describe('チャプターの時刻を頭出しに合わせる', () => {
+    test('捨てたぶんだけ前へ詰める', () => {
+        expect(shiftRanges([{ start: 300, end: 360 }], 0.9)).toEqual([{ start: 299.1, end: 359.1 }]);
+    });
+
+    test('0 より前には行かない (頭がCMの録画)', () => {
+        expect(shiftRanges([{ start: 0.2, end: 60 }], 0.9)).toEqual([{ start: 0, end: 59.1 }]);
+    });
+
+    test('詰めた結果ほとんど残らない区間は落とす', () => {
+        expect(shiftRanges([{ start: 0, end: 1 }], 0.9)).toEqual([]);
+    });
+
+    test('捨てるものが無ければそのまま', () => {
+        const cm = [{ start: 10, end: 20 }];
+        expect(shiftRanges(cm, 0)).toBe(cm);
     });
 });
 

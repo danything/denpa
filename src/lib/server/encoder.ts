@@ -23,6 +23,7 @@ import {
     probeLeadIn,
     probeVideo,
     type Range,
+    shiftRanges,
     widenKeep,
 } from './cm';
 import { config } from './config';
@@ -852,6 +853,17 @@ async function runFfmpeg(
     return { code, stderrTail: failureReason(stderrTail), outTimeUs };
 }
 
+/** prepareCm が持ち帰るCMまわりの一式 (EncodeOptions に足して runJob が使う) */
+interface CmPrep {
+    chaptersFile: string | null;
+    contentStart: Range | null;
+    /**
+     * チャプター時刻の元 (検出そのままの区間)。頭をどれだけ捨てるかは焼く直前まで
+     * 決まらないので、`rebaseChapters` がここから引き直して chaptersFile を書き直す
+     */
+    chapterSource: { cm: Range[]; duration: number } | null;
+}
+
 /**
  * エンコード前のCM検出。cm_cut の設定に応じて、実カット用の残す区間か
  * チャプター用の ffmetadata を用意する。検出できなかった場合は素通し。
@@ -861,8 +873,8 @@ async function prepareCm(
     recording: Recording,
     input: string,
     signal: AbortSignal,
-): Promise<EncodeOptions & { chaptersFile: string | null; contentStart: Range | null }> {
-    const none = { keep: null, chaptersFile: null, contentStart: null };
+): Promise<EncodeOptions & CmPrep> {
+    const none = { keep: null, chaptersFile: null, contentStart: null, chapterSource: null };
     /*
      * **CMの扱いは焼くときの設定に従う。** 録画の行にも写してあるが、それは
      * 録り始めた時点の値で、設定を変えても直らない (`keepOriginal` は前から
@@ -920,14 +932,25 @@ async function prepareCm(
             chaptersFile: null,
             // 切ってしまうので出来上がりは既にCMが無い。サムネは頭からの固定でよい
             contentStart: null,
+            chapterSource: null,
         };
     }
 
+    /*
+     * ファイルの中身はこの時点では仮 (検出そのままの時刻)。頭をどれだけ捨てるか
+     * (`headSkip`) はまだ分からないので、焼く直前に `rebaseChapters` が
+     * 捨てるぶんを引いて書き直す。元の区間はそのために持ち帰る
+     */
     const chaptersFile = `${input}.chapters.txt`;
     writeFileSync(chaptersFile, chapterMetadata(detection.cm, detection.duration));
     // 切らないぶん出来上がりにCMが残る。サムネを本編の最初の区間から取るために渡す
     const content = invertRanges(detection.cm, detection.duration);
-    return { keep: null, chaptersFile, contentStart: content[0] ?? null };
+    return {
+        keep: null,
+        chaptersFile,
+        contentStart: content[0] ?? null,
+        chapterSource: { cm: detection.cm, duration: detection.duration },
+    };
 }
 
 /** ffmpeg を1回動かす。戻り値は終了コード */
@@ -1131,7 +1154,7 @@ async function runJob(jobId: number): Promise<void> {
         }
     }
 
-    const encodeOptions: EncodeOptions & { chaptersFile: string | null; contentStart: Range | null } = {
+    const encodeOptions: EncodeOptions & CmPrep = {
         ...(await prepareCm(jobId, recording, sourceTs, signal)),
         // コマ数の既定は 60。設定が入っていれば、source が決まったあとで
         // 本編映像から実測して決め直す (measureSmoothMotion)
@@ -1305,6 +1328,22 @@ async function runJob(jobId: number): Promise<void> {
     // 測れなかったときの尺の当て。ffmpeg が言ってきた値 (下の duration_ms)
     let lastOutTimeUs = 0;
 
+    /**
+     * チャプターを、頭を捨てるぶん (`-ss` と同じ量) だけ前へ詰めて書き直す。
+     * 検出そのままの時刻で焼くと全チャプターが捨てたぶん遅れて入り、CMの
+     * 自動スキップが毎回そのぶんCMを見せてから跳んでいた (字幕は引いてある)。
+     * 捨てる量は attempt で変わる (`encodeRetrySeek`) ので、焼く直前に毎回引き直す
+     */
+    const rebaseChapters = (seek: number | null): void => {
+        const src = encodeOptions.chapterSource;
+        if (src === null || encodeOptions.chaptersFile === null) return;
+        const skip = (seek ?? 0) + headSkip(encodeOptions.videoStart);
+        writeFileSync(
+            encodeOptions.chaptersFile,
+            chapterMetadata(shiftRanges(src.cm, skip), src.duration - skip),
+        );
+    };
+
     /** 途中でやめる/失敗するときに、置きかけを全部片付ける */
     const cleanup = (working: string | null): void => {
         removeIfExists(working);
@@ -1317,11 +1356,13 @@ async function runJob(jobId: number): Promise<void> {
     for (const codec of codecs) {
         const working = `${encodedPath(recording, codec)}.${jobId}.${codec}.encoding`;
 
+        rebaseChapters(null);
         let result = await runFfmpeg(job, source, working, recording.audio_type, null, codec, encodeOptions);
         if (result.code !== 0 && !canceled.has(jobId)) {
             // 録画開始直後の頭数百msだけ壊れているケースをここで拾う(詳細は buildArgs のコメント参照)。
             // 別の理由での失敗もここに来るが、-ss を付けても同じ理由でもう一度失敗するだけなので無害
             database().prepare('UPDATE encode_jobs SET attempts = attempts + 1 WHERE id = ?').run(jobId);
+            rebaseChapters(config.encodeRetrySeek);
             result = await runFfmpeg(
                 job,
                 source,
