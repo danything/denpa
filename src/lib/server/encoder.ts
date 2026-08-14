@@ -657,8 +657,14 @@ export function inputProgress(inputBytes: number) {
         // 読み位置が取れない間 (/proc が無い・一瞬の読み損ね) は前の値を保ち、当てずっぽうを出さない
         const readable = measurable(inputBytes) && Number.isFinite(pos) && pos >= 0;
         const fraction = readable ? Math.min(1, pos / inputBytes) : prev;
-        // 前の値より下げない。読み損ねから復帰した直後などに割合が巻き戻って見えないように
-        const percent = block.progress === 'end' ? 1 : Math.max(prev, fraction);
+        /*
+         * 前の値より下げない (読み損ねからの復帰で巻き戻って見えないように)。
+         * **100% は ffmpeg が終わるまで出さない** — 入力を読み切っても、溜めた
+         * コマの吐き出しと mux の締めが残っている。読み切った時点で 100.0% と
+         * 出すと、そこで止まって見える (失敗して頭からやり直す時は特に、
+         * 100% → 0% と動いて二度おかしく見えた)
+         */
+        const percent = block.progress === 'end' ? 1 : Math.min(Math.max(prev, fraction), 0.99);
 
         let etaMs: number | null = null;
         if (readable) {

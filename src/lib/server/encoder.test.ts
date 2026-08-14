@@ -336,6 +336,12 @@ describe('inputProgress', () => {
         expect(inputProgress(NaN)(0, NaN, { progress: 'end' }, 0.9).percent).toBe(1);
     });
 
+    test('入力を読み切っても、終わるまでは99%で止める', () => {
+        // 読み切ったあとも溜めたコマの吐き出しが残っている。100.0% で止まって
+        // 見えるより、99% のまま「まだ終わっていない」と言うほうが正直
+        expect(inputProgress(1000)(0, 1000, block, 0).percent).toBe(0.99);
+    });
+
     test('残り時間は直近の読み速度から出す。速さが読めないうちは null', () => {
         const report = inputProgress(10_000);
         expect(report(0, 1000, block, 0).etaMs).toBeNull(); // 窓がまだ短い

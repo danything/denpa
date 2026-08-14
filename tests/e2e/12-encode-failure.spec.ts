@@ -54,7 +54,8 @@ test.describe('エンコードの失敗', () => {
         await expect(failed.getByTestId('play-hint')).toHaveCount(0);
 
         // 理由は行の「詳細」から。ffmpeg の出力は長いので一覧には貼らない
-        await failed.getByTestId('detail-button').click();
+        // 観られない行に詳細ボタンは無い — 行そのものが詳細の入口
+        await failed.click();
         const detail = page.getByTestId('program-detail');
         // 落とす口も詳細の中。生TSは無事なのでダウンロードできる
         await expect(detail.getByTestId('download-link')).toHaveCount(1);

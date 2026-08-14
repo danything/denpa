@@ -31,8 +31,9 @@ test.describe('外で消された録画の反映', () => {
         const row = page.locator(`[data-recording-id="${recordingId}"]`);
         await expect(row).toContainText('削除済み');
 
-        // 消えた理由は行ではなく詳細に出す (生の文言で行が分厚くならないように)
-        await row.getByTestId('detail-button').click();
+        // 消えた理由は行ではなく詳細に出す (生の文言で行が分厚くならないように)。
+        // 観られない行に詳細ボタンは無い — 行そのものが詳細の入口
+        await row.click();
         await expect(page.getByTestId('detail-error')).toContainText('保存先から消えていました');
     });
 });

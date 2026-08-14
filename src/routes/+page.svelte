@@ -901,17 +901,22 @@
                                 -->
                                 <div class="flex shrink-0 flex-wrap items-center gap-2">
                                     <!--
-                                        中身を読むのはこちら。行を押すと再生に行くので、
-                                        番組の説明やCMの位置を見たいときの入口を別に置く
+                                        中身を読む入口は、**行を押しても詳細にならない行だけ**に置く。
+                                        観られる行は押すと再生に行くので、説明やCMの位置を見たい
+                                        ときの別口が要る。観られない行 (失敗・削除済み・焼いて
+                                        いる最中) は行そのものが詳細の入口 (rowClick) なので、
+                                        同じ働きのボタンを並べない (録り逃しの行とも揃う)
                                     -->
-                                    <button
-                                        type="button"
-                                        class="btn btn-outline"
-                                        onclick={() => openRecording(rec)}
-                                        data-testid="detail-button"
-                                    >
-                                        詳細
-                                    </button>
+                                    {#if canPlay}
+                                        <button
+                                            type="button"
+                                            class="btn btn-outline"
+                                            onclick={() => openRecording(rec)}
+                                            data-testid="detail-button"
+                                        >
+                                            詳細
+                                        </button>
+                                    {/if}
                                     {#if rec.deleted_at === null}
                                         <!--
                                             **ダウンロードと録り直しは詳細の中に置いてある。**
