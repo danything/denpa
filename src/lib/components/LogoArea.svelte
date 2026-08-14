@@ -285,7 +285,7 @@
         {#if learned !== null}
             {serviceName} のロゴは覚えています。下の絵がロゴになっていれば位置は合っているので、 まずはそのまま様子を見てください。
         {:else if recordingId === null}
-            {serviceName} のロゴはまだ覚えていません。空いているチューナーで掴んで覚えます。
+            {serviceName} のロゴはまだ覚えていません。チューナーが空いたときに放送から自動で覚えます。
         {:else}
             ロゴが出ているコマまで送って、<strong>ロゴを四角で囲って</strong>ください。 枠は<strong
                 >掴んで動かせます</strong
@@ -330,7 +330,7 @@
                     を考えさせるだけで、答えは結局その隣の絵にしか無かった
                 -->
                 <div class="text-base-content/60 mt-0.5">
-                    濃さを明るさにした白黒です (いちばん濃いところが白)。
+                    この絵はロゴの濃さを明るさで表した白黒です (いちばん濃いところが白)。
                 </div>
                 <!--
                     **絵になっていないものは捨てられるようにする。捨てるだけでいい** —
@@ -401,7 +401,7 @@
                     />
                     右上を拡大
                 </label>
-                <span class="text-base-content/60 text-xs">ロゴが出ていない場面なら位置を変えてください</span>
+                <span class="text-base-content/60 text-xs">ロゴが出ていない場面なら「見る位置」を変えてください</span>
             </div>
 
             <!--
@@ -463,7 +463,7 @@
 
             {#if failed}
                 <div class="text-error mt-1 text-sm" data-testid="logo-frame-error">
-                    そのコマを取り出せませんでした。位置を変えてみてください。
+                    そのコマを取り出せませんでした。見る位置を変えてみてください。
                 </div>
             {/if}
 

@@ -145,7 +145,7 @@
                     <div class="text-base-content/60 text-xs">
                         1本の周波数に局が何局も相乗りしているので、本数と局数はそろいません。番組表は局ごとに、スキャンのあとを追って埋まります。
                         埋まるのを待てないときは<strong>「番組表をいますぐ集める」</strong
-                        >で、空いているチューナーを全部使って集められます (録画は蹴りません)。
+                        >で、空いているチューナーを全部使って集められます (録画中のチューナーは使いません)。
                     </div>
                     <div class="max-h-96 overflow-auto">
                         <table class="table-pin-rows table table-sm">
@@ -204,7 +204,7 @@
                 <p class="text-base-content/70 text-sm">
                     受信できるチャンネルを実際に選局して探します。<strong
                         >空いているチューナーを全部使います</strong
-                    >が、<strong>録画中でも実行できます</strong> (録画のほうが強いので、そのチューナーは 使いません)。見つかったものは保存され、終わると番組表も集め直します。
+                    >が、<strong>録画中でも実行できます</strong> (録画のほうが強いので、そのチューナーは使いません)。見つかったものは保存され、終わると番組表も集め直します。
                 </p>
 
                 <form method="POST" action="?/scan" use:submitting class="mt-2 space-y-3">
@@ -439,7 +439,7 @@
                             <dd>
                                 <form method="POST" action="?/logoSweep" use:submitting>
                                     <button type="submit" class="btn btn-xs" data-testid="logo-sweep">
-                                        {data.logoSweep.running ? '取得中…' : '今すぐ取りに行く'}
+                                        {data.logoSweep.running ? '取得中…' : 'いますぐ取りに行く'}
                                     </button>
                                 </form>
                             </dd>
@@ -449,9 +449,9 @@
                             <strong>衛星は十数分に一度</strong>です。普段は
                             <strong>番組表を集めるための選局に相乗りして</strong>拾うので、 denpa
                             がロゴのためにチューナーを増やすことはありません。一度取れたものも1週間経ったら取り直します。
-                            「今すぐ取りに行く」を押したときは衛星も回ります。<strong
+                            「いますぐ取りに行く」を押したときは衛星も回ります。<strong
                                 >BS も CS も同じ1つの中継から降ってくる</strong
-                            >ので、そこだけ最大20分開きます (他の中継は数秒で見切ります)。
+                            >ので、そこだけ最大20分かかります (他の中継は数秒で切り上げます)。
                             {#if data.logos.unavailable > 0}
                                 <!--
                                     取れないものを「まだ取れていない」と出し続けると、
@@ -508,8 +508,8 @@
                             {data.cmLogoStats.have} / {data.cmLogoStats.total} 局
                         </dd>
                         <dd class="text-base-content/60 w-full text-xs">
-                            録画より先に、空いているチューナーで数分ぶん掴んで覚えます。覚えられなかった局は、
-                            下から位置を教えてください (薄いロゴや動くロゴは自動では見つかりません)。
+                            録画より先に、チューナーが空いたときに放送を数分ぶん見て自動で覚えます。覚えられなかった局は、
+                            下の一覧から位置を教えてください (薄いロゴや動くロゴは自動では見つかりません)。
                         </dd>
                         {#if cmLogos.length > 0}
                             <dd class="w-full space-y-2" data-testid="cm-logo-missing">
@@ -561,7 +561,7 @@
                 {#await data.detected then detected}
                     {#if detected}
                         <p class="text-base-content/60 text-sm" data-testid="tuner-detected">
-                            いまは<strong>刺さっている機材を自動で見つけて</strong>使っています。
+                            いまは<strong>挿さっている機材を自動で見つけて</strong>使っています。
                             保存するとこの内容で固定されます。
                         </p>
                     {/if}
@@ -589,7 +589,7 @@
                                                     class="input input-sm input-bordered w-32"
                                                     name={`name.${index}`}
                                                     value={tuner?.name ?? ''}
-                                                    placeholder={tuner === null ? '足す' : ''}
+                                                    placeholder={tuner === null ? '名前を入れて足す' : ''}
                                                 />
                                             </td>
                                             <td>

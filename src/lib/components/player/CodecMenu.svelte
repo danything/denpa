@@ -28,7 +28,7 @@
     {onselect}
 >
     {#snippet trigger()}
-        <ControlButton label="焼き方を選ぶ" {testid}>
+        <ControlButton label="画質 (コーデック) を選ぶ" {testid}>
             <span class="text-xs font-semibold">
                 {LIVE_CODECS.find((c) => c.id === codec)?.label ?? 'H.264'}
             </span>

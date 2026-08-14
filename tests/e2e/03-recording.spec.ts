@@ -97,7 +97,7 @@ test.describe('録画とエンコード', () => {
         const detail = page.getByTestId('program-detail');
         await expect(detail).toBeVisible();
         await expect(detail.getByTestId('detail-video')).toBeVisible();
-        await expect(detail.getByTestId('detail-fps')).toHaveText('60コマ');
+        await expect(detail.getByTestId('detail-fps')).toHaveText('60コマ/秒');
 
         /*
          * ダウンロードのリンクは資格情報を URL に入れる。ブラウザは画面を開いた

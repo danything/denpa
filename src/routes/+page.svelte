@@ -124,7 +124,7 @@
             write(`vlc-paired:${host}`, '1');
             noteVlc(
                 'info',
-                '初回はテレビとのペア設定です。開いたタブで「セキュアな接続を使用」に進んで証明書を受け入れ、テレビの画面に出る6桁コードを入れたら、もう一度押してください',
+                '初回はテレビとのペア設定です。開いたタブで「セキュアな接続を使用」に進んで証明書を受け入れ、テレビの画面に出る6桁コードを入れたら、もう一度同じボタンを押してください',
             );
             return;
         }
@@ -202,9 +202,9 @@
              * 動画そのものには触らないので、その数だけは出しておく
              */
             const { checked, removed, swept, strays, pruned } = form.reconcile;
-            const parts = [`照合 ${checked} 件`, `実体が無く削除済み ${removed} 件`];
-            if (swept > 0) parts.push(`連れ合いの無い付き添いを片付け ${swept} 件`);
-            if (pruned > 0) parts.push(`空のフォルダを畳み ${pruned} 件`);
+            const parts = [`照合 ${checked} 件`, `ファイルが無く削除済みにした ${removed} 件`];
+            if (swept > 0) parts.push(`持ち主の居ない付属ファイルを削除 ${swept} 件`);
+            if (pruned > 0) parts.push(`空のフォルダを削除 ${pruned} 件`);
             if (strays > 0) parts.push(`DBに無い動画 ${strays} 件 (消していません)`);
             list.push({ key: 'reconcile-result', kind: 'info', text: parts.join(' / ') });
         }
@@ -593,7 +593,7 @@
                             type="search"
                             name="q"
                             value={data.q}
-                            placeholder="番組名・シリーズ・局で絞り込み"
+                            placeholder="番組名・シリーズ・副題・局で絞り込み"
                             aria-label="録画を絞り込む"
                             class="input input-sm input-bordered join-item w-40 sm:w-56"
                             data-testid="recording-search"
@@ -613,7 +613,7 @@
                         {data.showDeleted ? '削除済みを隠す' : '削除済みも表示'}
                     </a>
                     <form method="POST" action="?/reconcile" use:submitting>
-                        <button type="submit" class="btn btn-sm" data-testid="reconcile-button">実体と照合</button>
+                        <button type="submit" class="btn btn-sm" data-testid="reconcile-button">ファイルと照合</button>
                     </form>
                 </div>
             </div>
@@ -783,8 +783,8 @@
                                             {held.state === 'ready'
                                                 ? '端末に保存済み'
                                                 : held.state === 'failed'
-                                                  ? '端末への保存に失敗 — 詳細からやり直せます'
-                                                  : `端末へ保存中${held.progress === null ? '…' : ` ${percent(held.progress)}`}`}
+                                                  ? '端末に保存できませんでした — 詳細からやり直せます'
+                                                  : `端末に保存中${held.progress === null ? '…' : ` ${percent(held.progress)}`}`}
                                         </span>
                                     {/if}
                                     <!--
@@ -871,7 +871,7 @@
                                         <div class="text-warning mt-0.5 text-sm" data-testid="logo-missing">
                                             ロゴでのCM判定に失敗 (無音のみで判定)
                                             <span class="text-base-content/60"
-                                                >— チューナー画面から位置を教えられます</span
+                                                >— チューナー画面でロゴの位置を教えられます</span
                                             >
                                         </div>
                                     {/if}
@@ -1030,7 +1030,7 @@
                             class="text-base-content/60 border-base-300 border-t p-3 text-sm"
                             data-testid="recording-truncated"
                         >
-                            新しい300件までを表示しています。古いものは絞り込みで探してください。
+                            新しい順に300件まで表示しています。古いものは絞り込みで探してください。
                         </div>
                     {/if}
                 </div>
@@ -1114,7 +1114,7 @@
                         {offline.entries[rec.id].state === 'downloading'
                             ? '保存を取り消す'
                             : offline.entries[rec.id].state === 'failed'
-                              ? '失敗した控えを消す'
+                              ? '失敗した保存データを消す'
                               : '端末から消す'}
                     </button>
                 {/if}

@@ -1204,7 +1204,7 @@ export function livePlayer() {
         } catch {
             // 繋ぎ直しの最中なら、サーバがまだ帰っていないだけ。待ち直す
             if (attempts > 0) reconnect();
-            else fail('繋ぐ許可を取れませんでした');
+            else fail('繋がりませんでした');
             return;
         }
 

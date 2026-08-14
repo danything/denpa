@@ -100,7 +100,7 @@
     {/if}
     {#if fps !== null}
         <!-- 実測 (fpsDetect) がどちらに転んだか。ログにしか出ていなかった -->
-        <span class="badge badge-sm badge-ghost" data-testid="detail-fps">{fps}コマ</span>
+        <span class="badge badge-sm badge-ghost" data-testid="detail-fps">{fps}コマ/秒</span>
     {/if}
     {#each audios as label, i (i)}
         <span class="badge badge-sm badge-ghost" data-testid="detail-audio">{label}</span>

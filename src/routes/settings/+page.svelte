@@ -20,7 +20,7 @@
         const list: Notice[] = [];
         if (form?.migrate) list.push({ key: 'migrate-started', kind: 'info', text: form.migrate });
         list.push(...errorNotice(form, 'settings-error'));
-        if (form?.saved) list.push({ key: 'saved-result', kind: 'success', text: '保存しました。' });
+        if (form?.saved) list.push({ key: 'saved-result', kind: 'success', text: '保存しました' });
         return list;
     });
 
@@ -186,8 +186,8 @@
                             </span>
                         {:else if recording.codecs.length === 2}
                             <span class="text-base-content/60 text-xs">
-                                1本の録画を両方で焼きます (再生・ダウンロードは既定で AV1、
-                                テレビからは H.264 を選べます)
+                                1本の録画を両方でエンコードします (再生・ダウンロードは既定で AV1。
+                                テレビごとの設定で H.264 を渡せます)
                             </span>
                         {/if}
                     </fieldset>
@@ -227,7 +227,7 @@
                             data-testid="global-detector"
                         >
                             <option value="jls" selected={recording.cmDetector === 'jls'}>
-                                ロゴまで見る (確か・遅い)
+                                ロゴまで見る (確実・遅い)
                             </option>
                             <option value="silence" selected={recording.cmDetector === 'silence'}>
                                 無音だけ (速い)
@@ -247,7 +247,7 @@
                         だけなので、言葉で選ばせる
                     -->
                     <label class="flex flex-col gap-1">
-                        <span class="text-sm font-medium">ロゴの当てにしかた</span>
+                        <span class="text-sm font-medium">ロゴをどれだけ当てにするか</span>
                         <select
                             name="logoLevel"
                             class="select select-bordered w-full"
@@ -264,7 +264,7 @@
                             <option value="1" selected={recording.logoLevel <= 1}> ロゴを使わない </option>
                         </select>
                         <span class="text-base-content/60 text-xs">
-                            ロゴは合っているのにCMを取り違えるなら上げ、覚えたロゴが怪しいなら下げます
+                            ロゴは合っているのにCMを取り違えるなら「最優先」側に、取り込んであるロゴ自体が怪しいなら「参考程度」側にします
                         </span>
                     </label>
                     <!--
@@ -278,14 +278,14 @@
                         recording.fpsDetect,
                         'global-fps-detect',
                         'コマ数を映像から決める',
-                        '同じ絵が並ぶ素材 (アニメなど) を 30コマで焼き、時間とサイズを半分にします。外すと全部 60コマで焼きます',
+                        '同じ絵が並ぶ素材 (アニメなど) を 30コマでエンコードし、時間とサイズを半分にします。外すと全部 60コマになります',
                     )}
                     {@render checkRow(
                         'freeOnly',
                         recording.freeOnly,
                         'global-free-only',
                         '自動予約は無料放送だけにする',
-                        '有料放送は契約していないと中身が入りません',
+                        '契約していない有料放送は、録画してもスクランブルのままで観られません',
                         'sm:col-span-2',
                     )}
                     <div class="sm:col-span-2">
@@ -298,7 +298,7 @@
             <div class="card-body">
                 <h2 class="card-title">通知</h2>
                 <p class="text-base-content/70 text-sm">
-                    録画の節目を外部に飛ばします。Discord や Slack の Incoming Webhook の URL
+                    録画の開始・完了・失敗などの通知を外部に送ります。Discord や Slack の Incoming Webhook の URL
                     をそのまま入れられます。
                     録画の失敗は画面を開くまで気づけないので、少なくとも失敗だけでも入れておくと安心です。
                 </p>
@@ -485,7 +485,7 @@
                                 formaction="?/newPassword"
                                 title={data.auth.oidc
                                     ? '作り直すと、登録済みのプレイヤーは入れ直しが要ります'
-                                    : '作り直すと、この画面もいったん入れなくなります (新しいものは起動ログにも出ます)'}
+                                    : '作り直すと、この画面にもいったん入れなくなります (新しいものは起動ログにも出ます)'}
                                 data-testid="auth-generate"
                             >
                                 作り直して保存
@@ -540,7 +540,7 @@
             <div class="card-body">
                 <h2 class="card-title">データ放送</h2>
                 <p class="text-base-content/70 text-sm">
-                    テレビの初期設定で訊かれる郵便番号です。データ放送 (d ボタン) の
+                    テレビの初期設定で聞かれる郵便番号です。データ放送 (d ボタン) の
                     <strong>天気・地域のニュース・防災情報</strong>は、これでどこの分を出すかが決まります。
                     入れていないと「郵便番号が正しく設定されていません」と出て、その欄が空のままになります。
                 </p>
@@ -582,7 +582,7 @@
                         <span class="text-sm">
                             双方向 (通信系コンテンツ) を使う
                             <span class="text-base-content/60 block text-xs">
-                                入れると、この denpa が<strong>放送局のサーバへ代理で取りに行き、送りもします</strong>。
+                                入れると、denpa が<strong>放送局のサーバとの通信を代わりに行います</strong> (受け取りも送信もします)。
                                 番組の応募や投票もそのまま通ります。切っていると放送側は
                                 「インターネットに接続されていません」と案内します
                             </span>
@@ -612,7 +612,7 @@
                     テレビを登録すると、録画詳細に「テレビで再生」が出ます (登録が無いと出ません)。初回だけ
                     VLC のペア設定が開きます — セキュアな接続 (自己署名の証明書) を受け入れて、
                     テレビの画面に出る6桁コードを入れると、以後は素通りです。
-                    AV1 の再生でつまずくテレビは、コーデックを H.264 や生TSにすると
+                    AV1 を再生できないテレビは、コーデックを H.264 や生TSにすると
                     そのテレビにだけ別のファイルを渡します。
                 </p>
                 <form method="POST" action="?/saveVlc" use:submitting={keepValues} class="flex flex-col gap-3">
@@ -664,7 +664,7 @@
                             </button>
                         </div>
                     {:else}
-                        <p class="text-base-content/60 text-sm">まだテレビがありません。</p>
+                        <p class="text-base-content/60 text-sm">まだテレビがありません</p>
                     {/each}
                     <span class="text-base-content/60 text-xs">
                         名前は空でもかまいません (IPがそのままボタンの文字になります)。
@@ -697,7 +697,7 @@
 
                 {#if !data.migrate.available}
                     <div class="alert alert-warning mt-2" data-testid="migrate-unavailable">
-                        引き継ぎ元 <code>{data.migrate.source}</code> が見えません。 denpa の Pod に EPGStation の録画PVCをマウントしてください。
+                        引き継ぎ元 <code>{data.migrate.source}</code> が見えません。denpa の Pod に EPGStation の録画PVCをマウントしてください。
                     </div>
                 {:else}
                     <form method="POST" action="?/migrate" use:submitting class="mt-2 space-y-3">
@@ -735,12 +735,12 @@
                                       ? '完了'
                                       : '失敗'}
                             </span>
-                            <span class="badge badge-ghost">{migrate.apply ? '取り込み' : '下見'}</span>
+                            <span class="badge badge-ghost">{migrate.apply ? '取り込み' : '確認だけ (変更なし)'}</span>
                             {#if migrate.move}
                                 <span class="badge badge-ghost">移動</span>
                             {/if}
                             <span data-testid="migrate-counts">
-                                録画 {migrate.imported} 件 / 取り込み済み {migrate.skipped} 件 / ファイル無し {migrate.missing}
+                                新規 {migrate.imported} 件 / 取り込み済み {migrate.skipped} 件 / ファイル無し {migrate.missing}
                                 件
                             </span>
                             <span data-testid="migrate-rule-counts">
@@ -770,7 +770,7 @@
                         {#if migrate.log.length > 0}
                             <details class="border-base-300 rounded-box mt-3 border">
                                 <summary class="cursor-pointer px-4 py-2 text-sm font-medium">
-                                    記録 ({migrate.log.length} 行)
+                                    ログ ({migrate.log.length} 行)
                                 </summary>
                                 <pre
                                     class="max-h-64 overflow-auto px-4 pb-3 text-xs"
@@ -809,7 +809,7 @@
                         onchange={(event) => measure.set(event.currentTarget.checked)}
                         data-testid="measure-toggle"
                     />
-                    <span class="label-text">高さの札を出す</span>
+                    <span class="label-text">高さの表示を出す</span>
                 </label>
 
                 <p class="text-base-content/60 text-xs">

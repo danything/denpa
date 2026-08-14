@@ -843,11 +843,11 @@
                     <h2 class="card-title text-base">まだ観られません</h2>
                     <p class="text-base-content/70 text-sm">
                         {#if rec.job_id !== null}
-                            いまエンコードしています。焼き上がるとここで観られます。
+                            いまエンコードしています。終わるとここで観られます。
                         {:else if rec.encode_error}
-                            エンコードに失敗しています。生TSは残っているので、落として観られます。
+                            エンコードに失敗しています。生TSは残っているので、ダウンロードすれば観られます。
                         {:else}
-                            エンコードがまだです。焼き上がるとここで観られます。
+                            エンコードがまだです。終わるとここで観られます。
                         {/if}
                     </p>
                 </div>
@@ -1001,7 +1001,7 @@
                     >
                         <p class="text-sm">
                             このブラウザでは再生できませんでした。<br
-                            />落としてお手元のプレイヤーで観てください。
+                            />ダウンロードして、お手元のプレイヤーで観てください。
                         </p>
                         <!-- src は端末のコピー (blob:) のことがあるので、落とす口は API を名指す -->
                         <a
@@ -1139,7 +1139,7 @@
                         />
                         <ControlButton
                             path={muted ? SOUND_OFF : SOUND_ON}
-                            label={muted ? '音を出す' : '消音'}
+                            label={muted ? '音を出す' : '音を消す'}
                             onclick={() => {
                                 if (video !== null) video.muted = !video.muted;
                             }}

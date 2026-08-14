@@ -514,7 +514,7 @@
                                     <button type="button"
                                         class="underline decoration-dotted underline-offset-2 hover:text-white"
                                         onclick={() => player.relearn()}
-                                        data-testid="live-relearn">覚え直す</button
+                                        data-testid="live-relearn">測り直す</button
                                     >
                                 {/if}
                                 <!--
@@ -543,7 +543,7 @@
                                     出るのは直した回数のほう
                                 -->
                                 {#if player.slips > 0}
-                                    ・ <span data-testid="live-slips">絵の直し {player.slips}回</span>
+                                    ・ <span data-testid="live-slips">絵の遅れ直し {player.slips}回</span>
                                 {/if}
                             {/snippet}
                         </InfoBlock>
@@ -613,7 +613,7 @@
                     busy={player.state === 'connecting'}
                     note={player.resuming ? '繋ぎ直しています' : ''}
                     error={player.state === 'error' ? player.message : ''}
-                    idle="選んでください"
+                    idle="チャンネルを選んでください"
                     testid="live-status"
                 >
                     {#snippet actions()}
@@ -648,7 +648,7 @@
             <ProgramFacts program={detail.current} />
             {#snippet footer()}
                 <button type="button" class="btn btn-sm" onclick={() => detail.close()} data-testid="live-detail-close">
-                    チャンネルへ戻る
+                    チャンネル一覧へ戻る
                 </button>
             {/snippet}
         </FactsAside>

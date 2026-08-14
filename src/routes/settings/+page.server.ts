@@ -173,7 +173,7 @@ export const actions = {
         const form = await request.formData();
         const url = String(form.get('url') ?? '').trim();
         if (!/^https?:\/\//.test(url)) {
-            return fail(400, { message: 'http(s) で始まるURLを入力してください' });
+            return fail(400, { message: 'http(s) で始まるURLを入れてください' });
         }
         // 何も選ばなければ全部の通知を受け取る
         const events = form.getAll('events').map(String).filter(Boolean);

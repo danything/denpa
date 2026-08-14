@@ -181,7 +181,7 @@ export const actions = {
     record: async ({ request }) => {
         const form = await request.formData();
         const serviceId = Number(form.get('service'));
-        if (!Number.isInteger(serviceId)) return fail(400, { message: '局が分かりません' });
+        if (!Number.isInteger(serviceId)) return fail(400, { message: 'チャンネルが分かりません' });
 
         const at = Date.now();
         const program = queryOne<{ id: number; name: string }>(

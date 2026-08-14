@@ -9,7 +9,7 @@
         <div class="card-body items-center text-center">
             <h1 class="card-title">ログアウトしました</h1>
             <p class="text-base-content/60 text-sm">
-                この端末の控えは消しました。Microsoft からは出ていないので、
+                この端末のログイン情報は消しました。Microsoft からは出ていないので、
                 入り直すときはパスワードを聞かれないことがあります。
             </p>
             <div class="card-actions mt-2">

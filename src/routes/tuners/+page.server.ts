@@ -229,7 +229,10 @@ export const actions = {
             database().prepare('UPDATE services SET logo_area = ? WHERE id = ?').run(area, id);
             forgetLogoData(id);
         }
-        return { success: true, message: `ロゴの位置を覚えました (${area})。次に掴んだときに覚え直します` };
+        return {
+            success: true,
+            message: `ロゴの位置を受け取りました (${area})。次に掴んだときに、この範囲でロゴを覚え直します`,
+        };
     },
 
     /**
@@ -322,7 +325,7 @@ export const actions = {
                 return fail(400, { message: `${name}: 受けられる種別を1つ以上選んでください` });
             }
             const device = String(form.get(`device.${index}`) ?? '').trim();
-            if (device === '') return fail(400, { message: `${name}: デバイスを入れてください` });
+            if (device === '') return fail(400, { message: `${name}: デバイスのパスを入れてください` });
 
             tuners.push({
                 name,

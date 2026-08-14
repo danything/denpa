@@ -86,7 +86,7 @@
                                 {data.editing ? 'ルールを編集' : 'ルールを追加'}
                             </h2>
                             <p class="text-base-content/70 text-sm">
-                                条件に合う番組を、これから放送されるぶんから自動で予約します。ルール名はキーワードから付きます。
+                                条件に合う番組を、これから放送されるものから自動で予約します。ルール名はキーワードから付きます。
                             </p>
                         </div>
                         {#if data.editing}
@@ -114,7 +114,7 @@
                                     data-testid="rule-keyword"
                                 />
                                 <span class="text-base-content/60 text-xs">
-                                    空白区切りは<strong>すべて含む</strong>もの
+                                    空白で区切ると<strong>すべて含む</strong>ものに当たります
                                 </span>
                                 <!--
                         当てる範囲。既定は番組名だけ。概要まで広げると番宣で名前が出ただけの
@@ -250,7 +250,7 @@
                                                 </div>
                                             {:else}
                                                 <p class="text-base-content/60 text-sm">
-                                                    チャンネルがまだ取り込まれていません。チューナー画面でチャンネルスキャンを実行してください。
+                                                    チャンネルがまだありません。チューナー画面でチャンネルスキャンを実行してください。
                                                 </p>
                                             {/each}
                                         </div>
@@ -343,7 +343,7 @@
                             >
                                 更新
                             </button>
-                            <a class="btn btn-sm" href="/rules" data-testid="rule-cancel-edit">やめる</a>
+                            <a class="btn btn-sm" href="/rules" data-testid="rule-cancel-edit">編集をやめる</a>
                         {:else}
                             <button type="submit"
                                 class="btn btn-sm btn-primary"
@@ -400,8 +400,8 @@
                         {:else}
                             <p class="text-base-content/60 text-xs">
                                 予約済みのものはここで取り消せます
-                                (取り消した番組をルールが取り直すことはありません)。
-                                条件を変えても既に立った予約は残るので、条件から外れたものも
+                                (取り消した番組をルールがもう一度予約することはありません)。
+                                条件を変えても既に入っている予約は残るので、条件から外れたものも
                                 <span class="badge badge-xs badge-ghost">条件外</span> として並べます。
                             </p>
                             <ul class="divide-base-300 mt-1 divide-y" data-testid="preview-list">
@@ -476,7 +476,7 @@
                                                     class="text-error text-xs"
                                                     data-testid="preview-conflict"
                                                 >
-                                                    チューナーの取り合い {program.conflicts.length} 件: {program.conflicts
+                                                    チューナーの競合 {program.conflicts.length} 件: {program.conflicts
                                                         .slice(0, 3)
                                                         .join('、')}{program.conflicts.length > 3
                                                         ? ` ほか ${program.conflicts.length - 3} 件`

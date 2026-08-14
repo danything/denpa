@@ -216,7 +216,7 @@ async function ensureRoom(bytes: number): Promise<void> {
     try {
         const { usage, quota } = await navigator.storage.estimate();
         if (quota !== undefined && usage !== undefined && quota - usage < bytes * 1.2) {
-            throw new Error(`端末の空きが足りません (あと ${Math.round((quota - usage) / 1e6)}MB)`);
+            throw new Error(`端末の空きが足りません (空きは残り ${Math.round((quota - usage) / 1e6)}MB)`);
         }
     } catch (error) {
         if (error instanceof Error && error.message.startsWith('端末の空き')) throw error;
@@ -277,7 +277,7 @@ async function probeDownloads(requests: string[]): Promise<{ urls: string[]; tot
 export async function saveOffline(rec: SaveTarget): Promise<void> {
     let source: 'encoded' | 'alt' = 'encoded';
     if (!(await canPlayAv1())) {
-        if (rec.alt_path === null) throw new Error('この端末は AV1 を再生できず、H.264 版もありません');
+        if (rec.alt_path === null) throw new Error('この端末では AV1 を再生できず、H.264 版もありません');
         source = 'alt';
     }
 

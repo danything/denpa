@@ -144,7 +144,7 @@
         <div class="bg-base-100 rounded-lg p-6 text-center">
             <p class="mb-1">まだ何も保存していません。</p>
             <p class="text-base-content/60 text-sm">
-                録画一覧の「端末に保存」で、オフラインでも観られるようになります。
+                録画一覧の「端末に保存」を押すと、オフラインでも観られるようになります。
             </p>
         </div>
     {:else}
@@ -174,7 +174,7 @@
                     {#if item.state === 'downloading'}
                         {@const progress = offline.entries[item.id]?.progress ?? null}
                         <span class="badge badge-ghost badge-sm shrink-0">
-                            取得中{progress === null ? '…' : ` ${percent(progress)}`}
+                            保存中{progress === null ? '…' : ` ${percent(progress)}`}
                         </span>
                     {:else if item.state === 'failed'}
                         <span class="badge badge-error badge-sm shrink-0">保存に失敗</span>
@@ -199,7 +199,7 @@
                             }}
                             data-testid="offline-delete-failed"
                         >
-                            片付ける
+                            失敗した保存データを消す
                         </button>
                     {:else}
                         <button
@@ -220,7 +220,7 @@
 
     {#if Object.keys(offline.pendingDelete).length > 0}
         <p class="text-base-content/60 mt-3 text-xs">
-            サーバ側の削除が {Object.keys(offline.pendingDelete).length} 件、オンライン復帰待ちです。
+            サーバからの削除が {Object.keys(offline.pendingDelete).length} 件、次にオンラインへ戻ったときに行われます。
         </p>
     {/if}
 </div>

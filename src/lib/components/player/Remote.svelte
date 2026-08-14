@@ -119,7 +119,7 @@
         </details>
 
         <p class="text-base-content/60 text-xs">
-            キーボードでも押せます — 十字・Enter・BackSpace と、色は B / R / G / Y
+            キーボードでも押せます — 矢印キー・Enter・Backspace と、色は B / R / G / Y
         </p>
     </div>
 </div>

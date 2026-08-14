@@ -34,7 +34,7 @@ interface WatchRow extends Recording {
 
 export function load({ params }) {
     const id = Number(params.id);
-    if (!Number.isFinite(id)) error(400, '録画IDが不正です');
+    if (!Number.isFinite(id)) error(404, '録画が見つかりません');
 
     const recording = queryOne<WatchRow>(
         `SELECT r.*,

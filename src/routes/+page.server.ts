@@ -276,7 +276,7 @@ export const actions = {
          */
         if (settings().codec === 'none') {
             return fail(400, {
-                message: '設定が「エンコードしない」になっています。映像コーデックを選んでください',
+                message: '映像コーデックが選ばれていません。設定で AV1 か H.264 を入れてください',
             });
         }
         enqueue(recording.id);
@@ -328,7 +328,9 @@ export const actions = {
         try {
             await restore(id);
         } catch (error) {
-            return fail(400, { message: String(error) });
+            return fail(400, {
+                message: `予約に戻せませんでした: ${error instanceof Error ? error.message : String(error)}`,
+            });
         }
         return { success: true };
     },

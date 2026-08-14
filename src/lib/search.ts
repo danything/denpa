@@ -11,7 +11,7 @@ export type SearchField = (typeof SEARCH_FIELDS)[number];
 export const SEARCH_FIELD_LABEL: Record<SearchField, string> = {
     name: '番組名',
     description: '概要',
-    extended: '詳細',
+    extended: '詳細説明',
 };
 
 /** カンマ区切りを読む。全部外れているルールは全番組に当たるので番組名だけに戻す */
