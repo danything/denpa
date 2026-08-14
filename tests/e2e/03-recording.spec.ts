@@ -105,9 +105,9 @@ test.describe('録画とエンコード', () => {
          * 強く効いて閉じても display:flex のまま (opacity 0) になり、ボタンの真上の
          * 見えない項目がクリックを食っていた (実機で発覚)
          */
-        expect(
-            await detail.locator('.dropdown-content').evaluate((el) => getComputedStyle(el).display),
-        ).toBe('none');
+        expect(await detail.locator('.dropdown-content').evaluate((el) => getComputedStyle(el).display)).toBe(
+            'none',
+        );
 
         /*
          * ダウンロードのリンクは資格情報を URL に入れる。ブラウザは画面を開いた
