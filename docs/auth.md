@@ -90,6 +90,23 @@
 > **OIDC を設定してあれば起きません** — 画面はそちらが守っているので、
 > ベーシック認証を作り直しても画面には入ったままです。
 
+### パスワードが分からなくなったら
+
+**遠くのサーバに入れて、起動のログを流してしまったとき**です。画面を開くにも
+そのパスワードが要るので、DBから直に読みます (像に `bun` が入っています)。
+
+```sh
+docker compose exec denpa \
+  bun -e 'import {Database} from "bun:sqlite"; const db = new Database(process.env.DENPA_DB ?? "/app/data/denpa.db", {readonly: true}); console.log(db.query("SELECT value FROM settings WHERE key = ?").get("basicAuthPassword")?.value)'
+```
+
+```sh
+kubectl -n denpa exec deploy/denpa -- \
+  bun -e 'import {Database} from "bun:sqlite"; const db = new Database(process.env.DENPA_DB ?? "/app/data/denpa.db", {readonly: true}); console.log(db.query("SELECT value FROM settings WHERE key = ?").get("basicAuthPassword")?.value)'
+```
+
+**作り直すのは最後の手段です** — 登録済みのプレイヤーが全部つながらなくなります。
+
 ### 掛かる範囲は選べません
 
 以前は「配信だけ / 画面も含めて全部」を選べて、**既定が前者**でした。
