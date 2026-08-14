@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { parseTargets } from './vlc';
+import { parseTargets, serializeTargets } from './vlc';
 
 describe('parseTargets', () => {
     test('名前=ホスト:ポート のカンマ区切りを読む', () => {
@@ -30,5 +30,21 @@ describe('parseTargets', () => {
     test('空や崩れは黙って飛ばす', () => {
         expect(parseTargets('')).toEqual([]);
         expect(parseTargets(' , リビング= , =:')).toEqual([]);
+    });
+});
+
+describe('serializeTargets', () => {
+    test('parseTargets と往復して同じになる', () => {
+        const list = [
+            { name: 'リビング', host: '192.168.10.20:8080' },
+            { name: '10.0.0.5:9000', host: '10.0.0.5:9000' },
+        ];
+        expect(parseTargets(serializeTargets(list))).toEqual(list);
+    });
+
+    test('名前がホストと同じ (付けていない) ものは名前を書かない', () => {
+        expect(serializeTargets([{ name: '192.168.1.99:8080', host: '192.168.1.99:8080' }])).toBe(
+            '192.168.1.99:8080',
+        );
     });
 });

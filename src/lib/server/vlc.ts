@@ -40,3 +40,15 @@ export function parseTargets(text: string): VlcTarget[] {
 export function targets(): VlcTarget[] {
     return parseTargets(settings().vlcTargets);
 }
+
+/**
+ * 一覧を設定の文字列に戻す。読み直すのは `parseTargets` — 往復して同じに
+ * なることが書式の定義そのもの (`vlc.test.ts`)。名前がホストと同じ (=付けて
+ * いない) ものは名前を書かない。**名前に `,` と `=` は使えない** (区切りに
+ * 使っているため。書く側 [設定画面の saveVlc] が先に抜く)
+ */
+export function serializeTargets(list: VlcTarget[]): string {
+    return list
+        .map((t) => (t.name === t.host || t.name.trim() === '' ? t.host : `${t.name}=${t.host}`))
+        .join(', ');
+}

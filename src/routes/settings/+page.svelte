@@ -38,11 +38,25 @@
     // untrack は「初期値としてだけ読む」印。下の $effect で追従させている
     let recording = $state(untrack(() => ({ ...data.recording })));
 
+    /**
+     * テレビの一覧も同じ写し方 (名前+ホストの行編集)。名前がホストと同じなのは
+     * 「名前を付けていない」印 (詳細のIP入力から自動で載ったもの等) なので、
+     * 名前の欄は空で出す
+     */
+    let tvRows = $state(
+        untrack(() =>
+            data.vlc.targets.map((t) => ({ name: t.name === t.host ? '' : t.name, host: t.host })),
+        ),
+    );
+
     $effect(() => {
         password = data.auth.password;
     });
     $effect(() => {
         recording = { ...data.recording };
+    });
+    $effect(() => {
+        tvRows = data.vlc.targets.map((t) => ({ name: t.name === t.host ? '' : t.name, host: t.host }));
     });
 
     async function copy(): Promise<void> {
@@ -568,30 +582,53 @@
                 <p class="text-base-content/70 text-sm">
                     テレビの VLC の「リモートアクセス」に、<strong>いま開いている端末から</strong>録画を飛ばして
                     再生させます。VLC 側で <strong>その他 → リモートアクセス</strong> を有効にして、ここに
-                    家のテレビの居場所を書くと、録画詳細に「テレビで再生」が出ます (出先のテレビは
-                    詳細でIPをその場入力)。初回だけ、開いたタブの VLC ログインにテレビの6桁コードを
-                    入れます — その端末とテレビのペアリングで、以後は素通りです。
+                    テレビを並べると、録画詳細に「テレビで再生」が出ます。録画詳細のIP入力から飛ばした
+                    テレビも<strong>自動でここに載る</strong>ので、あとから名前を付けられます。初回だけ、
+                    開いたタブの VLC ログインにテレビの6桁コードを入れます — その端末とテレビの
+                    ペアリングで、以後は素通りです。
                 </p>
-                <form method="POST" action="?/saveVlc" use:submitting class="flex flex-wrap items-end gap-3">
-                    <label class="flex grow flex-col gap-1">
-                        <span class="text-sm font-medium">テレビの居場所</span>
-                        <input
-                            name="vlcTargets"
-                            value={data.vlc.targetsText}
-                            class="input input-bordered w-full font-mono"
-                            placeholder="リビング=192.168.10.20:8080"
-                            data-testid="vlc-targets"
-                        />
-                    </label>
-                    <span class="text-base-content/60 basis-full text-xs">
-                        「名前=ホスト:ポート」をカンマで並べます。ポートを略すと VLC の既定 (8080)。
-                        空にすると「テレビで再生」は出ません
-                        {#if data.vlc.targets.length > 0}
-                            — いま読めているのは:
-                            {data.vlc.targets.map((t) => `${t.name} (${t.host})`).join(' / ')}
-                        {/if}
+                <form method="POST" action="?/saveVlc" use:submitting class="flex flex-col gap-3">
+                    {#each tvRows as row (row)}
+                        <div class="flex flex-wrap items-center gap-2">
+                            <input
+                                name="vlcName"
+                                bind:value={row.name}
+                                class="input input-bordered w-40"
+                                placeholder="名前 (例 リビング)"
+                                data-testid="vlc-name"
+                            />
+                            <input
+                                name="vlcHost"
+                                bind:value={row.host}
+                                class="input input-bordered w-52 font-mono"
+                                placeholder="192.168.10.20"
+                                data-testid="vlc-host"
+                            />
+                            <button
+                                type="button"
+                                class="btn btn-ghost btn-sm"
+                                onclick={() => tvRows.splice(tvRows.indexOf(row), 1)}
+                                data-testid="vlc-remove"
+                            >
+                                外す
+                            </button>
+                        </div>
+                    {:else}
+                        <p class="text-base-content/60 text-sm">まだテレビがありません。</p>
+                    {/each}
+                    <span class="text-base-content/60 text-xs">
+                        名前は空でもかまいません (IPがそのままボタンの文字になります)。
+                        ポートを略すと VLC の既定 (8080)。全部外すと「テレビで再生」は出ません
                     </span>
-                    <div class="basis-full">
+                    <div class="flex gap-2">
+                        <button
+                            type="button"
+                            class="btn"
+                            onclick={() => tvRows.push({ name: '', host: '' })}
+                            data-testid="vlc-add"
+                        >
+                            テレビを足す
+                        </button>
                         <button type="submit" class="btn btn-primary" data-testid="save-vlc">保存</button>
                     </div>
                 </form>

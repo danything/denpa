@@ -5,9 +5,10 @@ import { database, now, queryAll, queryOne } from '$lib/server/db';
 import { available as migrateAvailable, source, start, status } from '$lib/server/migrate';
 import { enabled as oidcEnabled } from '$lib/server/oidc';
 import { normalizePostalCode, saveSettings, settings } from '$lib/server/settings';
-import { targets } from '$lib/server/vlc';
+import { serializeTargets, targets, type VlcTarget } from '$lib/server/vlc';
 import { send, type Webhook } from '$lib/server/webhook';
 import type { VideoCodec } from '$lib/types';
+import { normalizeVlcHost } from '$lib/vlc-host';
 import { EVENTS } from '$lib/webhook-events';
 
 export function load() {
@@ -16,8 +17,8 @@ export function load() {
         recording: current,
         /** データ放送に渡すもの。いまは郵便番号だけ */
         broadcast: { postalCode: current.postalCode, bmlNetwork: current.bmlNetwork },
-        /** テレビの VLC の居場所 (原文) と、読めた一覧。書式の確認に両方返す */
-        vlc: { targetsText: current.vlcTargets, targets: targets() },
+        /** テレビの VLC の居場所。画面は名前+ホストの行として編集する */
+        vlc: { targets: targets() },
         auth: {
             user: current.basicAuthUser,
             /*
@@ -127,13 +128,26 @@ export const actions = {
     },
 
     /**
-     * テレビの VLC の居場所 (`名前=ホスト:ポート` のカンマ区切り)。
-     * 空にできる — 詳細の「テレビで再生」ボタンが出なくなるだけ
-     * (出先用のIP入力はいつでも出る)
+     * テレビの VLC の居場所。画面からは**名前+ホストの行**で来る
+     * (vlcName / vlcHost の同順の配列)。DBには従来どおり
+     * `名前=ホスト:ポート` のカンマ区切りで置く (serializeTargets) —
+     * 読む側 (parseTargets) と古いDBがそのまま使えるため。
+     * 全部外して保存すれば空にできる — 「テレビで再生」ボタンが出なくなるだけ
      */
     saveVlc: async ({ request }) => {
         const form = await request.formData();
-        saveSettings({ vlcTargets: String(form.get('vlcTargets') ?? '').trim() });
+        const names = form.getAll('vlcName').map(String);
+        const hosts = form.getAll('vlcHost').map(String);
+        const list: VlcTarget[] = [];
+        for (const [i, raw] of hosts.entries()) {
+            const host = normalizeVlcHost(raw);
+            // ホストの無い行 (名前だけ・空行) は黙って落とす
+            if (host === '') continue;
+            // `,` と `=` は保存の書式の区切り。名前に混ざると読み直せない
+            const name = (names[i] ?? '').trim().replace(/[,=]/g, '');
+            list.push({ name: name === '' ? host : name, host });
+        }
+        saveSettings({ vlcTargets: serializeTargets(list) });
         return { success: true, saved: true };
     },
 

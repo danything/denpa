@@ -1,5 +1,5 @@
 <script lang="ts">
-    import { goto } from '$app/navigation';
+    import { goto, invalidateAll } from '$app/navigation';
     import { submitting } from '$lib/actions';
     import { arming } from '$lib/arming.svelte';
     import ProgramDetail from '$lib/components/ProgramDetail.svelte';
@@ -72,12 +72,29 @@
 
     /** テレビ再生・リンクコピーの結果。こちらもフォームではないので自前で持つ */
     let vlcNote = $state<Notice | null>(null);
-    /** 出先のテレビ用の入力欄。開いている間だけ入る (前回のIPは端末が覚えている) */
+    /** 出先のテレビ用の入力欄。飛ばしたIPはサーバの一覧に載る (rememberTv) ので、覚えは持たない */
     let tvInputShown = $state(false);
-    let tvHost = $state(read('vlc-other-host') ?? '');
+    let tvHost = $state('');
 
     function noteVlc(kind: 'info' | 'error', text: string): void {
         vlcNote = { key: `vlc-${Date.now()}`, kind, text };
+    }
+
+    /**
+     * 出先で入れたIPを設定の一覧にも覚えさせる (`?/addVlcTarget`)。
+     * サーバに載れば、**次からはどの端末でも**「テレビで再生」のボタンになる。
+     * 端末の localStorage に覚えていた頃は、端末を持ち替えると聞き直しだった。
+     * 読み直し (invalidateAll) で、開いたままの詳細にもボタンがその場で生える
+     */
+    async function rememberTv(host: string): Promise<void> {
+        const body = new FormData();
+        body.set('host', host);
+        try {
+            await fetch('/?/addVlcTarget', { method: 'POST', body });
+            await invalidateAll();
+        } catch {
+            // 覚えられなくても飛ばすほうは済んでいる。次に押したときにまた試す
+        }
     }
 
     /** 期限付きの再生リンクを作る (share.ts)。テレビへ飛ばすのもコピーするのも同じ1本 */
@@ -1069,9 +1086,12 @@
                         class="btn btn-primary join-item"
                         disabled={normalizeVlcHost(tvHost) === ''}
                         onclick={() => {
-                            write('vlc-other-host', tvHost.trim());
                             // 設定の一覧と同じ整え方 (http:// 剥がし・ポート補完)
-                            void playOnTv(normalizeVlcHost(tvHost), rec.id);
+                            const host = normalizeVlcHost(tvHost);
+                            void playOnTv(host, rec.id);
+                            // 飛ばしたテレビは設定にも覚える。ボタンが生えるので入力は畳む
+                            tvInputShown = false;
+                            void rememberTv(host);
                         }}
                         data-testid="vlc-other-play"
                     >

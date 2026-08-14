@@ -7,10 +7,11 @@ import { emit } from '$lib/server/events';
 import { deleteRecordingFiles, reconcile } from '$lib/server/files';
 import { cancel, restore } from '$lib/server/reservations';
 import { RESERVATION_STATE } from '$lib/server/schema';
-import { settings } from '$lib/server/settings';
-import { targets } from '$lib/server/vlc';
+import { saveSettings, settings } from '$lib/server/settings';
+import { serializeTargets, targets } from '$lib/server/vlc';
 import { encodeSource } from '$lib/source';
 import type { EncodeJob, Recording, Reservation } from '$lib/types';
+import { normalizeVlcHost } from '$lib/vlc-host';
 
 interface RecordingRow extends Recording {
     /** 直近のエンコード失敗の理由。詳細で見せる */
@@ -298,6 +299,26 @@ export const actions = {
         // 押した本人以外の画面も更新する。同じものを見ている端末が食い違うのを防ぐ
         emit('recordings');
         return { success: true, reconcile: result };
+    },
+
+    /**
+     * 詳細のIP入力から飛ばしたテレビを、設定の一覧にも覚える。
+     *
+     * 端末の localStorage に覚えていた頃は**他の端末に引き継がれず**、出先で
+     * 端末を持ち替えるたびにIPを聞かれていた。サーバに載せれば次からは
+     * どの端末でも「テレビで再生」のボタンになる。名前はホストのまま —
+     * 設定画面で付け替えられる
+     */
+    addVlcTarget: async ({ request }) => {
+        const form = await request.formData();
+        const host = normalizeVlcHost(String(form.get('host') ?? ''));
+        if (host === '') return fail(400, { message: 'テレビの居場所が読めません' });
+        const list = targets();
+        // 既にあるなら黙って何もしない (二重に並べない)
+        if (!list.some((t) => t.host === host)) {
+            saveSettings({ vlcTargets: serializeTargets([...list, { name: host, host }]) });
+        }
+        return { success: true };
     },
 
     /**
