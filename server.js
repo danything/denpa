@@ -103,6 +103,22 @@ Bun.serve({
         });
     },
     websocket: {
+        // **死んだ客を畳むための ping/pong を効かせる** (2026-08-14 フリーズの主因)。
+        //
+        // ライブ視聴の後片付けは `onclose → leave() → ffmpeg kill` に頼っている
+        // (`live.ts`)。ところが上の serve 直下 `idleTimeout: 0` を WebSocket も
+        // 継ぐと、Bun の自動 ping が止まり、**正常な close を送らずに消えた客**
+        // (モバイルのスリープ・Wi-Fi 断・タブの強制終了・クラッシュ) の close が
+        // TCP が諦めるまで (既定で十数分〜永久に) 来ない。その間そのセッションの
+        // ffmpeg は残り続け、ライブを繰り返すうちに ffmpeg が積み上がって
+        // ノードの 46GB + swap を食い潰し、フリーズに至っていた。
+        //
+        // 映像はサーバ→客の一方向なので、この値は「客からの pong が途切れて
+        // よい上限」。ブラウザは ping に自動で pong を返すため、**生きている客は
+        // 映像が流れているだけで切れない**。返さなくなった客だけを畳む。
+        // serve 直下は 0 のまま — HTTP 中継 (録画のダウンロードや SSE) は別勘定。
+        idleTimeout: 120,
+        sendPings: true,
         open(ws) {
             live()?.websocket.open(ws);
         },
