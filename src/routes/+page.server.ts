@@ -300,6 +300,26 @@ export const actions = {
         return { success: true, reconcile: result };
     },
 
+    /**
+     * 録り逃しを一覧から消す。**消すのは予約の行そのもの** — 録画の行が無い
+     * (始まらないまま終わった) ので、失敗した録画の削除とは消す先が違う。
+     * 放って置いても履歴の片付け (14日) で消えるが、見るたびに並んだままなのは
+     * 失敗した録画と同じで、確かめ終わったら畳みたい
+     */
+    deleteMissed: async ({ request }) => {
+        const form = await request.formData();
+        const id = Number(form.get('id'));
+        if (!Number.isFinite(id)) return fail(400, { message: 'IDが不正です' });
+        // 状態も見て消す。録り逃し以外 (これからの予約など) を同じ口で消させない
+        const gone = database()
+            .prepare(`DELETE FROM reservations WHERE id = ? AND state = 'missed' AND started_at IS NULL`)
+            .run(id);
+        if (gone.changes === 0) return fail(400, { message: '録り逃した予約ではありません' });
+        // 他の端末の画面にも反映する
+        emit('reservations');
+        return { success: true };
+    },
+
     /** 取り消した予約を戻す。ルールは作り直さないので、ここからしか戻せない */
     restore: async ({ request }) => {
         const form = await request.formData();

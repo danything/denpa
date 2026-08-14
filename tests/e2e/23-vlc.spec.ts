@@ -20,8 +20,9 @@ test.describe('テレビの VLC で再生', () => {
         await row.getByTestId('detail-button').click();
         const detail = page.getByTestId('program-detail');
         await expect(detail.getByTestId('vlc-play-button')).toHaveCount(0);
-        await expect(detail.getByTestId('vlc-other-open')).toHaveText('テレビのVLCで再生…');
-        // 期限付きの再生リンクをコピーする口も同じ並びにある
+        await expect(detail.getByTestId('vlc-other-open')).toHaveText('▶ テレビで再生…');
+        // 期限付きの再生リンクをコピーする口は「その他…」の中
+        await detail.getByTestId('detail-more').click();
         await expect(detail.getByTestId('share-link-button')).toBeVisible();
 
         // 居場所を書く。http:// 付きで貼っても剥がして読めること (設定画面の復唱で確かめる)
@@ -36,7 +37,8 @@ test.describe('テレビの VLC で再生', () => {
         await row.getByTestId('detail-button').click();
         await expect(detail.getByTestId('vlc-play-button')).toHaveText('▶ テレビで再生');
 
-        // 出先用: 押すとIP入力に変わり、入れると飛ばせる状態になる
+        // 出先用: テレビを書いてあるときは「その他…」の中。押すとIP入力に変わる
+        await detail.getByTestId('detail-more').click();
         await detail.getByTestId('vlc-other-open').click();
         const otherPlay = detail.getByTestId('vlc-other-play');
         await expect(otherPlay).toBeDisabled();

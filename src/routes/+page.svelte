@@ -615,17 +615,44 @@
                             onclick={(event) => rowClick(event, null, () => openMissed(res))}
                             onkeydown={(event) => rowClick(event, null, () => openMissed(res))}
                         >
-                            <div class="min-w-0" data-testid="row-body">
-                                {@render title(stateLabel('missed'), badgeClass('missed'), res.name, 'missed-state')}
-                                {@render meta(
-                                    [
-                                        res.service_name,
-                                        `${dateTime(res.start_at)}〜${time(res.end_at)} (${duration(res.start_at, res.end_at)})`,
-                                    ],
-                                    { serviceId: res.service_id, has: res.has_logo === 1 },
-                                )}
-                                <!-- 録画側の流儀に合わせて手動とも書く (見返すものなので) -->
-                                {@render source(res.rule_id, res.rule_name, res.manual === 1)}
+                            <div class="flex flex-wrap items-start gap-x-3 gap-y-2">
+                                <div class="min-w-0 flex-1 basis-56" data-testid="row-body">
+                                    {@render title(stateLabel('missed'), badgeClass('missed'), res.name, 'missed-state')}
+                                    {@render meta(
+                                        [
+                                            res.service_name,
+                                            `${dateTime(res.start_at)}〜${time(res.end_at)} (${duration(res.start_at, res.end_at)})`,
+                                        ],
+                                        { serviceId: res.service_id, has: res.has_logo === 1 },
+                                    )}
+                                    <!-- 録画側の流儀に合わせて手動とも書く (見返すものなので) -->
+                                    {@render source(res.rule_id, res.rule_name, res.manual === 1)}
+                                </div>
+                                <!--
+                                    確かめ終わったら畳める (録画の削除と同じ2回押し)。
+                                    消すのは予約の行 (`?/deleteMissed`) — 録画の行が無いので。
+                                    構えの鍵は負の値にして、録画のIDと混ざらないようにする
+                                    (deleting は録画と共用で、IDの空間が別のため)
+                                -->
+                                <div class="flex shrink-0 flex-wrap items-center gap-2">
+                                    <form method="POST" action="?/deleteMissed" use:submitting>
+                                        <input type="hidden" name="id" value={res.id} />
+                                        {#if deleting.armed === -res.id}
+                                            <button type="submit" class="btn btn-error" data-testid="delete-confirm">
+                                                確定
+                                            </button>
+                                        {:else}
+                                            <button
+                                                type="button"
+                                                class="btn btn-error btn-outline"
+                                                onclick={() => deleting.arm(-res.id)}
+                                                data-testid="delete-button"
+                                            >
+                                                削除
+                                            </button>
+                                        {/if}
+                                    </form>
+                                </div>
                             </div>
                         </div>
                     {:else}
@@ -1007,56 +1034,16 @@
         {@const rec = detailRec}
         {#if rec.deleted_at === null && playable(rec)}
             <!--
-                まだエンコードしていないものや、引き継いだ未エンコードの録画は
-                生TSしか無い。配信は library_path ?? ts_path を返すので、
-                どちらかがあれば落とせる。
-                **押したら閉じる** — 落とし始めたあとも詳細が残っていると、
-                押せたのかどうかが分からない
+                **並べるのはよく押すものだけ** — テレビへ飛ばすのと、端末に保存。
+                条件が揃うと10個のボタンが同じ見た目で並び、狭い画面では文字の
+                途中で折り返していた。めったに押さないもの (落とす・リンクを
+                コピー・焼き直し) は「その他…」に畳む。
             -->
-            <a
-                class="btn btn-outline"
-                href={downloadUrl(rec.id, bothFiles(rec) || hasAlt(rec) ? 'encoded' : undefined)}
-                download
-                onclick={() => detail.close()}
-                data-testid="download-link"
-            >
-                {hasAlt(rec) ? 'AV1' : bothFiles(rec) ? 'エンコード済み' : 'ダウンロード'}
-            </a>
-            {#if hasAlt(rec)}
-                <!--
-                    **H.264 も落とせるようにする。** 両方のコーデックを焼いた録画で
-                    だけ出す。古いテレビなど AV1 を解けない相手はこちら
-                -->
-                <a
-                    class="btn btn-outline"
-                    href={downloadUrl(rec.id, 'alt')}
-                    download
-                    onclick={() => detail.close()}
-                    data-testid="download-alt-link"
-                >
-                    H.264
-                </a>
-            {/if}
-            {#if bothFiles(rec)}
-                <!--
-                    **元も落とせるようにする。** 両方残っているときだけ出す
-                    (`bothFiles`)。片方しか無い録画は左の1つがそれを寄越すので、
-                    並べても同じものが2つになるだけ
-                -->
-                <a
-                    class="btn btn-outline"
-                    href={downloadUrl(rec.id, 'ts')}
-                    download
-                    onclick={() => detail.close()}
-                    data-testid="download-ts-link"
-                >
-                    生TS
-                </a>
-            {/if}
             <!--
                 **テレビの VLC に、この端末から飛ばして再生させる** (`playOnTv`)。
                 渡すのは期限付きの再生リンクなので、テレビ側にパスワードは残らない。
                 設定に書いてあるテレビはボタンで、出先のテレビはIPを入れて飛ばす
+                (テレビを1台も書いていないときは、このボタン自体がIP入力の入口)
             -->
             {#each data.vlcTargets as tv (tv.host)}
                 <button
@@ -1100,8 +1087,7 @@
                         やめる
                     </button>
                 </div>
-            {:else}
-                <!-- 出先のテレビ用。入れたIPは端末が覚える (家の分は設定に書く) -->
+            {:else if data.vlcTargets.length === 0}
                 <button
                     type="button"
                     class="btn btn-outline"
@@ -1110,21 +1096,9 @@
                     }}
                     data-testid="vlc-other-open"
                 >
-                    {data.vlcTargets.length > 0 ? '別のテレビへ' : 'テレビのVLCで再生…'}
+                    ▶ テレビで再生…
                 </button>
             {/if}
-            <!--
-                **出先のプレイヤー向けの再生リンク** (share.ts)。24時間で切れるので、
-                他人の機器のストリーム履歴に残っても腐るだけ。VLC ならそのまま貼れる
-            -->
-            <button
-                type="button"
-                class="btn btn-outline"
-                onclick={() => copyShareLink(rec.id)}
-                data-testid="share-link-button"
-            >
-                再生リンク
-            </button>
             {#if offline.usable && rec.library_path !== null}
                 <!--
                     **端末に保存 (オフライン視聴)。** 落とすのは焼いたもの
@@ -1160,26 +1134,120 @@
                     </button>
                 {/if}
             {/if}
-            {#if rec.job_id === null && encodeSource(rec) !== null}
-                <!--
-                    録り直しの元になるのは生TS。エンコード済みを元にしても
-                    画質は戻らないので、生TSがあるときだけ出す。
+            <!--
+                **めったに押さないものの置き場。** 上に開く (フッターは画面の
+                下端に居るので、下に開くと枠から出る)。中身は上から
+                「持ち出す」「渡す」「直す」の順。
 
-                    **閉じるのは投げ終わってから。** 先に閉じると、断られたときの
-                    知らせ (Toasts) が出る前に画面が変わってしまう
-                -->
-                <form
-                    method="POST"
-                    action="?/reencode"
-                    use:submitting={() => async (options) => {
-                        await options.update();
-                        detail.close();
-                    }}
+                **開閉は focus 任せ** (daisyUI の dropdown)。トリガーを button に
+                すると Safari がクリックで focus を入れず開かないので、
+                role="button" の div にしてある
+            -->
+            <div class="dropdown dropdown-top dropdown-end">
+                <div tabindex="0" role="button" class="btn btn-outline" data-testid="detail-more">その他…</div>
+                <div
+                    class="dropdown-content bg-base-100 rounded-box border-base-300 z-10 mb-1 flex w-64 flex-col border p-2 shadow-lg"
                 >
-                    <input type="hidden" name="id" value={rec.id} />
-                    <button type="submit" class="btn btn-outline" data-testid="reencode-button">再エンコード</button>
-                </form>
-            {/if}
+                    <!--
+                        まだエンコードしていないものや、引き継いだ未エンコードの録画は
+                        生TSしか無い。配信は library_path ?? ts_path を返すので、
+                        どちらかがあれば落とせる。形式が複数あるときはラベルに添えて
+                        並べる (「AV1」だけの札では、押すと何が起きるのか読めなかった)。
+                        **押したら閉じる** — 落とし始めたあとも詳細が残っていると、
+                        押せたのかどうかが分からない
+                    -->
+                    <a
+                        class="btn btn-ghost justify-start"
+                        href={downloadUrl(rec.id, bothFiles(rec) || hasAlt(rec) ? 'encoded' : undefined)}
+                        download
+                        onclick={() => detail.close()}
+                        data-testid="download-link"
+                    >
+                        {hasAlt(rec)
+                            ? 'ダウンロード (AV1)'
+                            : bothFiles(rec)
+                              ? 'ダウンロード (エンコード済み)'
+                              : 'ダウンロード'}
+                    </a>
+                    {#if hasAlt(rec)}
+                        <!-- 両方のコーデックを焼いた録画でだけ。AV1 を解けない相手はこちら -->
+                        <a
+                            class="btn btn-ghost justify-start"
+                            href={downloadUrl(rec.id, 'alt')}
+                            download
+                            onclick={() => detail.close()}
+                            data-testid="download-alt-link"
+                        >
+                            ダウンロード (H.264)
+                        </a>
+                    {/if}
+                    {#if bothFiles(rec)}
+                        <!-- 元も落とせるように。両方残っているときだけ (`bothFiles`) -->
+                        <a
+                            class="btn btn-ghost justify-start"
+                            href={downloadUrl(rec.id, 'ts')}
+                            download
+                            onclick={() => detail.close()}
+                            data-testid="download-ts-link"
+                        >
+                            ダウンロード (生TS)
+                        </a>
+                    {/if}
+                    <!--
+                        **出先のプレイヤー向けの再生リンク** (share.ts)。24時間で
+                        切れるので、他人の機器の履歴に残っても腐るだけ。
+                        コピーしたら畳む (blur) — 開いたままだと押せたのか分からない
+                    -->
+                    <button
+                        type="button"
+                        class="btn btn-ghost justify-start"
+                        onclick={(event) => {
+                            (event.currentTarget as HTMLElement).blur();
+                            void copyShareLink(rec.id);
+                        }}
+                        data-testid="share-link-button"
+                    >
+                        再生リンクをコピー
+                    </button>
+                    {#if data.vlcTargets.length > 0 && !tvInputShown}
+                        <!-- 出先のテレビ用。入れたIPは端末が覚える (家の分は設定に書く) -->
+                        <button
+                            type="button"
+                            class="btn btn-ghost justify-start"
+                            onclick={(event) => {
+                                (event.currentTarget as HTMLElement).blur();
+                                tvInputShown = true;
+                            }}
+                            data-testid="vlc-other-open"
+                        >
+                            別のテレビへ飛ばす…
+                        </button>
+                    {/if}
+                    {#if rec.job_id === null && encodeSource(rec) !== null}
+                        <!--
+                            録り直しの元になるのは生TS。エンコード済みを元にしても
+                            画質は戻らないので、生TSがあるときだけ出す。
+
+                            **閉じるのは投げ終わってから。** 先に閉じると、断られた
+                            ときの知らせ (Toasts) が出る前に画面が変わってしまう
+                        -->
+                        <form
+                            method="POST"
+                            action="?/reencode"
+                            class="contents"
+                            use:submitting={() => async (options) => {
+                                await options.update();
+                                detail.close();
+                            }}
+                        >
+                            <input type="hidden" name="id" value={rec.id} />
+                            <button type="submit" class="btn btn-ghost justify-start" data-testid="reencode-button">
+                                再エンコード
+                            </button>
+                        </form>
+                    {/if}
+                </div>
+            </div>
         {/if}
     {/if}
     <button type="button" class="btn" onclick={() => detail.close()} data-testid="detail-close">閉じる</button>

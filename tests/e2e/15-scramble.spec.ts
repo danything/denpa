@@ -85,8 +85,10 @@ test.describe('スクランブルされたまま録れたとき', () => {
              */
             await page.locator(row).getByTestId('detail-button').click();
             const detail = page.getByTestId('program-detail');
-            await expect(detail.getByTestId('download-link')).toHaveText('エンコード済み');
+            await expect(detail.getByTestId('download-link')).toHaveText('ダウンロード (エンコード済み)');
             const raw = detail.getByTestId('download-ts-link');
+            // 落とす口は「その他…」の中に畳んである。開けば見える
+            await detail.getByTestId('detail-more').click();
             await expect(raw).toBeVisible();
 
             /*

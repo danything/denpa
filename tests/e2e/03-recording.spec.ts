@@ -236,11 +236,11 @@ test.describe('コーデックを両方焼く', () => {
             expect(existsSync(`${video.replace(/\.mkv$/, '')}-poster.jpg`)).toBe(true);
         }
 
-        // ダウンロードの口が AV1 と H.264 の2つに分かれる
+        // ダウンロードの口が AV1 と H.264 の2つに分かれる (「その他…」の中)
         await row.getByTestId('detail-button').click();
         const detail = page.getByTestId('program-detail');
-        await expect(detail.getByTestId('download-link')).toHaveText('AV1');
-        await expect(detail.getByTestId('download-alt-link')).toHaveText('H.264');
+        await expect(detail.getByTestId('download-link')).toHaveText('ダウンロード (AV1)');
+        await expect(detail.getByTestId('download-alt-link')).toHaveText('ダウンロード (H.264)');
     });
 });
 
