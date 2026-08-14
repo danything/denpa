@@ -3,7 +3,10 @@
 # 本物と同じく stderr に Duration を、stdout に -progress の key=value ブロックを吐く。
 set -uo pipefail
 
-output="${!#}"   # 最後の引数が出力ファイル
+# 最後の引数が出力ファイル。ただし `-` は本物と同じく「ファイルではない」
+# (stdout の意味)。fps の実測が `-f null -` で呼ぶので、素直に書くと
+# リポジトリ直下に `-` という名前のゴミが生える (実際に2度 git に紛れ込んだ)
+output="${!#}"
 input=""
 prev=""
 for arg in "$@"; do
@@ -113,9 +116,11 @@ for i in $(seq 1 "$steps"); do
     sleep 0.2
 done
 
-mkdir -p "$(dirname "$output")"
-# 中身は問わないが、サイズ0だと「失敗」と見分けが付かないので少しだけ書く
-head -c 4096 /dev/zero > "$output"
+if [ "$output" != "-" ]; then
+    mkdir -p "$(dirname "$output")"
+    # 中身は問わないが、サイズ0だと「失敗」と見分けが付かないので少しだけ書く
+    head -c 4096 /dev/zero > "$output"
+fi
 
 printf 'frame=1200\nfps=120\nbitrate=2000.0kbits/s\ntotal_size=4096\nout_time_us=10000000\nspeed=8.0x\ndrop_frames=0\nprogress=end\n'
 exit 0
