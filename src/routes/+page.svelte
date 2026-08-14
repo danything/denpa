@@ -1130,9 +1130,18 @@
             -->
             <div class="dropdown dropdown-top dropdown-end">
                 <div tabindex="0" role="button" class="btn btn-outline" data-testid="detail-more">その他…</div>
+                <!--
+                    **dropdown-content 自身に display 系のクラスを載せない。**
+                    daisyUI は閉じている間を display:none にするが、Tailwind の
+                    `flex` はそれより強く効いて (utilities 直下 > daisyui のサブレイヤー)
+                    **常時 display:flex** になる。opacity は 0 のままなので、
+                    「その他…」の真上に見えないメニューが居座って、押すと見えない
+                    「ダウンロード」が発火していた (実機で発覚)。縦積みは内側の div で
+                -->
                 <div
-                    class="dropdown-content bg-base-100 rounded-box border-base-300 z-10 mb-1 flex w-64 flex-col border p-2 shadow-lg"
+                    class="dropdown-content bg-base-100 rounded-box border-base-300 z-10 mb-1 w-64 border p-2 shadow-lg"
                 >
+                    <div class="flex flex-col">
                     <!--
                         まだエンコードしていないものや、引き継いだ未エンコードの録画は
                         生TSしか無い。配信は library_path ?? ts_path を返すので、
@@ -1217,6 +1226,7 @@
                             </button>
                         </form>
                     {/if}
+                    </div>
                 </div>
             </div>
         {/if}

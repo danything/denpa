@@ -100,6 +100,16 @@ test.describe('録画とエンコード', () => {
         await expect(detail.getByTestId('detail-fps')).toHaveText('60コマ/秒');
 
         /*
+         * 畳んでいる「その他…」のメニューは display:none であること。
+         * dropdown-content に flex を直に載せていた頃、daisyUI の display:none より
+         * 強く効いて閉じても display:flex のまま (opacity 0) になり、ボタンの真上の
+         * 見えない項目がクリックを食っていた (実機で発覚)
+         */
+        expect(
+            await detail.locator('.dropdown-content').evaluate((el) => getComputedStyle(el).display),
+        ).toBe('none');
+
+        /*
          * ダウンロードのリンクは資格情報を URL に入れる。ブラウザは画面を開いた
          * ときの認証をダウンロードに引き継がないので、素のURLだと 401 になる。
          *
