@@ -16,23 +16,45 @@ import { settings } from './settings';
  * ここに残っているのは「設定に書いてあるテレビの一覧」だけ。
  */
 
+/**
+ * そのテレビに渡すファイルの選び方。`auto` は配信の「今いいほう」に任せる。
+ * `h264` は AV1 を解けないテレビ用 (両方焼いた録画で H.264 のほうを渡す)、
+ * `ts` はエンコード済みを解けないテレビ用 (生TSが残っていればそちらを渡す)
+ */
+export type VlcCodec = 'auto' | 'h264' | 'ts';
+
 export interface VlcTarget {
     name: string;
     host: string;
+    codec: VlcCodec;
 }
 
-/** `名前=ホスト:ポート` のカンマ区切りを読む。ホストの整え方は `$lib/vlc-host` と共通 */
+function asCodec(raw: string | undefined): VlcCodec {
+    return raw === 'h264' || raw === 'ts' ? raw : 'auto';
+}
+
+/**
+ * `名前=ホスト:ポート#コーデック` のカンマ区切りを読む。名前 (`=` から前) と
+ * コーデック (`#` から後ろ) はどちらも略せる — 旧書式 (`名前=ホスト:ポート`) は
+ * そのまま読める。ホストの整え方は `$lib/vlc-host` と共通
+ */
 export function parseTargets(text: string): VlcTarget[] {
     const out: VlcTarget[] = [];
     for (const part of text.split(',')) {
         const trimmed = part.trim();
         if (trimmed === '') continue;
         const eq = trimmed.indexOf('=');
-        const name = eq === -1 ? trimmed : trimmed.slice(0, eq).trim();
-        const host = normalizeVlcHost(eq === -1 ? trimmed : trimmed.slice(eq + 1));
+        const rest = eq === -1 ? trimmed : trimmed.slice(eq + 1);
+        const sharp = rest.indexOf('#');
+        const host = normalizeVlcHost(sharp === -1 ? rest : rest.slice(0, sharp));
         // ホスト名が無い崩れは黙って飛ばす
         if (host === '') continue;
-        out.push({ name: name === '' ? host : name, host });
+        const name = eq === -1 ? host : trimmed.slice(0, eq).trim();
+        out.push({
+            name: name === '' ? host : name,
+            host,
+            codec: asCodec(sharp === -1 ? undefined : rest.slice(sharp + 1).trim()),
+        });
     }
     return out;
 }
@@ -44,11 +66,15 @@ export function targets(): VlcTarget[] {
 /**
  * 一覧を設定の文字列に戻す。読み直すのは `parseTargets` — 往復して同じに
  * なることが書式の定義そのもの (`vlc.test.ts`)。名前がホストと同じ (=付けて
- * いない) ものは名前を書かない。**`,` と `=` は区切りなので中身には使えない** —
- * 名前からは saveVlc が抜き、ホストは normalizeVlcHost が混ざったものを弾く
+ * いない) ものは名前を書かず、コーデックも `auto` なら書かない。
+ * **`,` `=` `#` は区切りなので中身には使えない** — 名前からは saveVlc が抜き、
+ * ホストは normalizeVlcHost が混ざったものを弾く
  */
 export function serializeTargets(list: VlcTarget[]): string {
     return list
-        .map((t) => (t.name === t.host || t.name.trim() === '' ? t.host : `${t.name}=${t.host}`))
+        .map((t) => {
+            const base = t.name === t.host || t.name.trim() === '' ? t.host : `${t.name}=${t.host}`;
+            return t.codec === 'auto' ? base : `${base}#${t.codec}`;
+        })
         .join(', ');
 }

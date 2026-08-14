@@ -27,9 +27,10 @@ describe('normalizeVlcHost', () => {
         expect(normalizeVlcHost('http://')).toBe('');
     });
 
-    test('設定の書式の区切り (, =) が混ざったものは読めない扱い', () => {
+    test('設定の書式の区切り (, = #) が混ざったものは読めない扱い', () => {
         // 通すと保存 → 読み直しでカンマで割れてゴミに化ける (parseTargets)
         expect(normalizeVlcHost('a,b')).toBe('');
         expect(normalizeVlcHost('a=b')).toBe('');
+        expect(normalizeVlcHost('a#ts')).toBe('');
     });
 });

@@ -39,17 +39,23 @@
     let recording = $state(untrack(() => ({ ...data.recording })));
 
     /**
-     * テレビの一覧も同じ写し方 (名前+ホストの行編集)。名前がホストと同じなのは
-     * 「名前を付けていない」印 (詳細のIP入力から自動で載ったもの等) なので、
-     * 名前の欄は空で出す。
+     * テレビの一覧も同じ写し方 (名前+ホスト+コーデックの行編集)。名前がホストと
+     * 同じなのは「名前を付けていない」印なので、名前の欄は空で出す。
      *
      * **書き戻すのは、サーバの一覧そのものが変わったときだけ** (tvSeen)。
      * load はどのフォームを保存しても走り直すので、素直に写すと**別のカードを
      * 保存しただけで編集中の行が巻き戻って**いた (複数行をいじる編集では
      * パスワード欄より実害が大きい)
      */
+    // ホストは `IP:ポート` で持っている (parseTargets が補うのでポートは必ず在る)。
+    // 画面は欄を分けるので、ここで割って、保存 (saveVlc) がまた繋ぐ
     const tvRowsOf = () =>
-        data.vlc.targets.map((t) => ({ name: t.name === t.host ? '' : t.name, host: t.host }));
+        data.vlc.targets.map((t) => ({
+            name: t.name === t.host ? '' : t.name,
+            ip: t.host.split(':')[0],
+            port: t.host.split(':')[1] ?? '8080',
+            codec: t.codec,
+        }));
     let tvRows = $state(untrack(tvRowsOf));
     let tvSeen = JSON.stringify(untrack(tvRowsOf));
 
@@ -590,10 +596,11 @@
                 <p class="text-base-content/70 text-sm">
                     テレビの VLC の「リモートアクセス」に、<strong>いま開いている端末から</strong>録画を飛ばして
                     再生させます。VLC 側で <strong>その他 → リモートアクセス</strong> を有効にして、ここに
-                    テレビを並べると、録画詳細に「テレビで再生」が出ます。録画詳細のIP入力から飛ばした
-                    テレビも<strong>自動でここに載る</strong>ので、あとから名前を付けられます。初回だけ、
-                    開いたタブの VLC ログインにテレビの6桁コードを入れます — その端末とテレビの
-                    ペアリングで、以後は素通りです。
+                    テレビを並べると、録画詳細に「テレビで再生」が出ます (並べていないと出ません)。初回だけ
+                    VLC のペア設定が開きます — セキュアな接続 (自己署名の証明書) を受け入れて、
+                    テレビの画面に出る6桁コードを入れると、以後は素通りです。
+                    AV1 の再生でつまずくテレビは、コーデックを H.264 や生TSにすると
+                    そのテレビにだけ別のファイルを渡します。
                 </p>
                 <form method="POST" action="?/saveVlc" use:submitting class="flex flex-col gap-3">
                     {#each tvRows as row (row)}
@@ -606,12 +613,34 @@
                                 data-testid="vlc-name"
                             />
                             <input
-                                name="vlcHost"
-                                bind:value={row.host}
-                                class="input input-bordered w-52 font-mono"
-                                placeholder="192.168.10.20"
-                                data-testid="vlc-host"
+                                name="vlcIp"
+                                bind:value={row.ip}
+                                class="input input-bordered w-44 font-mono"
+                                placeholder="IP (例 192.168.10.20)"
+                                data-testid="vlc-ip"
                             />
+                            <input
+                                name="vlcPort"
+                                bind:value={row.port}
+                                class="input input-bordered w-24 font-mono"
+                                placeholder="8080"
+                                data-testid="vlc-port"
+                            />
+                            <!--
+                                そのテレビに渡すファイル。おまかせ (今いいほう) が既定で、
+                                AV1 を解けないテレビは H.264、エンコード済み自体が重い
+                                テレビは生TS。無い形式を選んでいたら、おまかせに落ちる
+                            -->
+                            <select
+                                name="vlcCodec"
+                                bind:value={row.codec}
+                                class="select select-bordered"
+                                data-testid="vlc-codec"
+                            >
+                                <option value="auto">おまかせ</option>
+                                <option value="h264">H.264</option>
+                                <option value="ts">生TS</option>
+                            </select>
                             <button
                                 type="button"
                                 class="btn btn-ghost btn-sm"
@@ -626,13 +655,13 @@
                     {/each}
                     <span class="text-base-content/60 text-xs">
                         名前は空でもかまいません (IPがそのままボタンの文字になります)。
-                        ポートを略すと VLC の既定 (8080)。全部外すと「テレビで再生」は出ません
+                        ポートを空にすると VLC の既定 (8080) になります
                     </span>
                     <div class="flex gap-2">
                         <button
                             type="button"
                             class="btn"
-                            onclick={() => tvRows.push({ name: '', host: '' })}
+                            onclick={() => tvRows.push({ name: '', ip: '', port: '8080', codec: 'auto' })}
                             data-testid="vlc-add"
                         >
                             テレビを足す

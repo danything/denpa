@@ -128,27 +128,42 @@ export const actions = {
     },
 
     /**
-     * テレビの VLC の居場所。画面からは**名前+ホストの行**で来る
-     * (vlcName / vlcHost の同順の配列)。DBには従来どおり
-     * `名前=ホスト:ポート` のカンマ区切りで置く (serializeTargets) —
-     * 読む側 (parseTargets) と古いDBがそのまま使えるため。
+     * テレビの VLC の居場所。画面からは**名前+IP+ポート+コーデックの行**で来る
+     * (vlcName / vlcIp / vlcPort / vlcCodec の同順の配列)。DBには
+     * `名前=ホスト:ポート#コーデック` のカンマ区切りで置く (serializeTargets) —
+     * 名前とコーデックは略せるので、古いDBの `名前=ホスト:ポート` もそのまま読める。
      * 全部外して保存すれば空にできる — 「テレビで再生」ボタンが出なくなるだけ
      */
     saveVlc: async ({ request }) => {
         const form = await request.formData();
         const names = form.getAll('vlcName').map(String);
-        const hosts = form.getAll('vlcHost').map(String);
+        const ips = form.getAll('vlcIp').map(String);
+        const ports = form.getAll('vlcPort').map(String);
+        const codecs = form.getAll('vlcCodec').map(String);
         const list: VlcTarget[] = [];
-        for (const [i, raw] of hosts.entries()) {
-            const host = normalizeVlcHost(raw);
-            // ホストの無い行 (名前だけ・空行) は黙って落とす
-            if (host === '') continue;
+        for (const [i, rawIp] of ips.entries()) {
+            /*
+             * IPの欄は貼り付けも受ける (http:// 剥がし等は normalizeVlcHost)。
+             * `IP:ポート` ごと貼っても読めるが、ポートの欄に入れた値が勝つ。
+             * ポートを空にしたら VLC の既定 (8080、normalizeVlcHost が補う)
+             */
+            const base = normalizeVlcHost(rawIp);
+            // IPの無い行 (名前だけ・空行) と、読めないポートの行は黙って落とす
+            if (base === '') continue;
+            const port = (ports[i] ?? '').trim();
+            if (port !== '' && !/^\d{1,5}$/.test(port)) continue;
+            const host = port === '' ? base : `${base.split(':')[0]}:${port}`;
             // 同じテレビを2行入れても1つに。録画詳細の {#each} がホストを
             // 鍵にしているので、重複したまま保存すると一覧が描けなくなる
             if (list.some((t) => t.host === host)) continue;
-            // `,` と `=` は保存の書式の区切り。名前に混ざると読み直せない
-            const name = (names[i] ?? '').trim().replace(/[,=]/g, '');
-            list.push({ name: name === '' ? host : name, host });
+            // `,` `=` `#` は保存の書式の区切り。名前に混ざると読み直せない
+            const name = (names[i] ?? '').trim().replace(/[,=#]/g, '');
+            const codec = codecs[i];
+            list.push({
+                name: name === '' ? host : name,
+                host,
+                codec: codec === 'h264' || codec === 'ts' ? codec : 'auto',
+            });
         }
         saveSettings({ vlcTargets: serializeTargets(list) });
         return { success: true, saved: true };

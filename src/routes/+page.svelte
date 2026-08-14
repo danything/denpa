@@ -1,5 +1,5 @@
 <script lang="ts">
-    import { goto, invalidateAll } from '$app/navigation';
+    import { goto } from '$app/navigation';
     import { submitting } from '$lib/actions';
     import { arming } from '$lib/arming.svelte';
     import ProgramDetail from '$lib/components/ProgramDetail.svelte';
@@ -23,11 +23,10 @@
         stateLabel,
         time,
     } from '$lib/format';
-    import { forget, read, write } from '$lib/keep';
+    import { forget, forgetPrefix, read, write } from '$lib/keep';
     import { liveUpdates } from '$lib/live-updates.svelte';
     import { clearFailed, offline, removeLocal, saveOffline } from '$lib/offline.svelte';
     import { encodeSource } from '$lib/source';
-    import { normalizeVlcHost } from '$lib/vlc-host';
 
     let { data, form } = $props();
 
@@ -72,36 +71,26 @@
 
     /** テレビ再生・リンクコピーの結果。こちらもフォームではないので自前で持つ */
     let vlcNote = $state<Notice | null>(null);
-    /** 出先のテレビ用の入力欄。飛ばしたIPはサーバの一覧に載る (rememberTv) ので、覚えは持たない */
-    let tvInputShown = $state(false);
-    let tvHost = $state('');
-    // 旧版が端末に覚えていた出先のIP。いまはサーバに載せるので、残りは掃除する
+    // 旧版が端末に覚えていた出先のIP (詳細のIP入力ごとやめた)。残りは掃除する
     forget('vlc-other-host');
+    // 旧版の「飛ばしたことがある」印。ペア設定を経ずに立つことがあり、当てにならない
+    forgetPrefix('vlc-fired:');
 
     function noteVlc(kind: 'info' | 'error', text: string): void {
         vlcNote = { key: `vlc-${Date.now()}`, kind, text };
     }
 
     /**
-     * 出先で入れたIPを設定の一覧にも覚えさせる (`?/addVlcTarget`)。
-     * サーバに載れば、**次からはどの端末でも**「テレビで再生」のボタンになる。
-     * 端末の localStorage に覚えていた頃は、端末を持ち替えると聞き直しだった。
-     * 読み直し (invalidateAll) で、開いたままの詳細にもボタンがその場で生える
+     * 期限付きの再生リンクを作る (share.ts)。テレビへ飛ばすのもコピーするのも同じ1本。
+     * `source` を渡すと、そのファイル (`?source=` の名指し) を指すリンクになる —
+     * テレビごとのコーデック設定 (settings) の実現手段
      */
-    async function rememberTv(host: string): Promise<void> {
-        const body = new FormData();
-        body.set('host', host);
-        try {
-            await fetch('/?/addVlcTarget', { method: 'POST', body });
-            await invalidateAll();
-        } catch {
-            // 覚えられなくても飛ばすほうは済んでいる。次に押したときにまた試す
-        }
-    }
-
-    /** 期限付きの再生リンクを作る (share.ts)。テレビへ飛ばすのもコピーするのも同じ1本 */
-    async function mintShareLink(id: number): Promise<{ url: string; expiresAt: number }> {
-        const res = await fetch(`/api/recordings/${id}/share`, { method: 'POST' });
+    async function mintShareLink(
+        id: number,
+        source?: 'ts' | 'alt',
+    ): Promise<{ url: string; expiresAt: number }> {
+        const query = source === undefined ? '' : `?source=${source}`;
+        const res = await fetch(`/api/recordings/${id}/share${query}`, { method: 'POST' });
         return (await res.json()) as { url: string; expiresAt: number };
     }
 
@@ -115,19 +104,46 @@
      * サーバから叩く形は落とした — 家のサーバからは出先のテレビに届かない
      * (`server/vlc.ts` の先頭に経緯)。
      *
+     * **初回はペア設定 (ログイン) の画面そのものを開く。** ペア前に `/play` を叩いても
+     * VLC は素の 401 ページを返すだけで、ログインへは誘導しない (作りがそう)。
+     * ログインは VLC の画面が https (自己署名・ポート8443) へ誘導するので、
+     * 証明書を受け入れてテレビの画面の6桁コードを入れる。できた Cookie (約1年) に
+     * Secure は付いておらず、以後は http の `/play` にもそのまま乗る。
+     *
      * **窓は押した瞬間に開けておく。** リンク先はトークンを取ってから入れる —
      * await の後の window.open はポップアップ扱いで塞がれることがある。
-     *
-     * **初回だけ、開いたタブに VLC のログインが出る** (テレビの画面に出る6桁の
-     * コードを入れる)。その端末と VLC のペアリングで、以後は Cookie (約1年) で
-     * 素通り。飛ばせたことのあるテレビなら、応答 (OK だけの白いタブ) は数秒で畳む
+     * 応答 (OK だけの白いタブ) は中身が読めない (別オリジン) ので、数秒で畳む
      */
-    async function playOnTv(host: string, id: number): Promise<void> {
-        const paired = read(`vlc-fired:${host}`) === '1';
+    async function playOnTv(
+        tv: (typeof data.vlcTargets)[number],
+        rec: (typeof data.recordings)[number],
+    ): Promise<void> {
+        const host = tv.host;
+        if (read(`vlc-paired:${host}`) !== '1') {
+            window.open(`http://${host}/`, '_blank');
+            write(`vlc-paired:${host}`, '1');
+            noteVlc(
+                'info',
+                '初回はテレビとのペア設定です。開いたタブで「セキュアな接続を使用」に進んで証明書を受け入れ、テレビの画面に出る6桁コードを入れたら、もう一度押してください',
+            );
+            return;
+        }
         const win = window.open('about:blank', '_blank');
+        /*
+         * そのテレビのコーデック設定 (settings のテレビ一覧) をファイルの名指しに写す。
+         * H.264 は両方焼いた録画の H.264 のほう (`alt`)、生TSは残っていれば `ts`。
+         * 指した形式が無い録画では黙っておまかせ (今いいほう) に落ちる —
+         * 押した人がテレビの前で選び直せるものではない
+         */
+        const source =
+            tv.codec === 'h264' && hasAlt(rec)
+                ? ('alt' as const)
+                : tv.codec === 'ts' && rec.ts_path !== null
+                  ? ('ts' as const)
+                  : undefined;
         let shareUrl: string;
         try {
-            ({ url: shareUrl } = await mintShareLink(id));
+            ({ url: shareUrl } = await mintShareLink(rec.id, source));
         } catch {
             win?.close();
             noteVlc('error', '再生リンクを作れませんでした');
@@ -140,18 +156,9 @@
             return;
         }
         win.location.href = play;
-        if (paired) {
-            // 中身は読めない (別オリジン) ので、閉じてよいかは「前に飛ばせたか」で判じる
-            setTimeout(() => win.close(), 4000);
-            noteVlc('info', 'テレビへ飛ばしました');
-            detail.close();
-        } else {
-            write(`vlc-fired:${host}`, '1');
-            noteVlc(
-                'info',
-                '開いたタブにログインが出たら、テレビの6桁コードを入れてもう一度押してください (初回だけ)',
-            );
-        }
+        setTimeout(() => win.close(), 4000);
+        noteVlc('info', 'テレビへ飛ばしました');
+        detail.close();
     }
 
     /**
@@ -257,8 +264,6 @@
     ): void {
         // 予約から開いたときは録画のボタンを出さない (openRecording が入れ直す)
         detailRec = null;
-        // 前に開いた詳細でIP入力を出したままでも、次の詳細は畳んだ状態から
-        tvInputShown = false;
         detailNotes = notes;
         detailCmNote = cmNoteWorthShowing(cmNote) ? cmNote : null;
         void detail.open(programId, row);
@@ -1039,11 +1044,7 @@
         program={detail.current}
         notes={detailNotes}
         cmNote={detailCmNote}
-        onclose={() => {
-            // 出先テレビの入力欄は開いたままにしない
-            tvInputShown = false;
-            detail.close();
-        }}
+        onclose={() => detail.close()}
         actions={detailRec === null ? undefined : recordingActions}
     />
 {/if}
@@ -1068,66 +1069,20 @@
             <!--
                 **テレビの VLC に、この端末から飛ばして再生させる** (`playOnTv`)。
                 渡すのは期限付きの再生リンクなので、テレビ側にパスワードは残らない。
-                設定に書いてあるテレビはボタンで、出先のテレビはIPを入れて飛ばす
-                (テレビを1台も書いていないときは、このボタン自体がIP入力の入口)
+                出るのは設定に並べたテレビだけ — 1台も無ければボタンごと出ない。
+                詳細でIPをその場入力する口も置いていた (自動で設定に載せる) が、
+                めったに使わないので落とした。テレビは設定で並べる
             -->
             {#each data.vlcTargets as tv (tv.host)}
                 <button
                     type="button"
                     class="btn btn-outline"
-                    onclick={() => playOnTv(tv.host, rec.id)}
+                    onclick={() => playOnTv(tv, rec)}
                     data-testid="vlc-play-button"
                 >
                     ▶ {data.vlcTargets.length === 1 ? 'テレビで再生' : tv.name}
                 </button>
             {/each}
-            {#if tvInputShown}
-                <div class="join" data-testid="vlc-other">
-                    <input
-                        class="input join-item w-44"
-                        type="text"
-                        placeholder="テレビのIP (例 192.168.1.20)"
-                        bind:value={tvHost}
-                        data-testid="vlc-other-host"
-                    />
-                    <button
-                        type="button"
-                        class="btn btn-primary join-item"
-                        disabled={normalizeVlcHost(tvHost) === ''}
-                        onclick={() => {
-                            // 設定の一覧と同じ整え方 (http:// 剥がし・ポート補完)
-                            const host = normalizeVlcHost(tvHost);
-                            void playOnTv(host, rec.id);
-                            // 飛ばしたテレビは設定にも覚える。ボタンが生えるので入力は畳む
-                            tvInputShown = false;
-                            void rememberTv(host);
-                        }}
-                        data-testid="vlc-other-play"
-                    >
-                        飛ばす
-                    </button>
-                    <button
-                        type="button"
-                        class="btn join-item"
-                        onclick={() => {
-                            tvInputShown = false;
-                        }}
-                    >
-                        やめる
-                    </button>
-                </div>
-            {:else if data.vlcTargets.length === 0}
-                <button
-                    type="button"
-                    class="btn btn-outline"
-                    onclick={() => {
-                        tvInputShown = true;
-                    }}
-                    data-testid="vlc-other-open"
-                >
-                    ▶ テレビで再生…
-                </button>
-            {/if}
             {#if offline.usable && rec.library_path !== null}
                 <!--
                     **端末に保存 (オフライン視聴)。** 落とすのは焼いたもの
@@ -1238,20 +1193,6 @@
                     >
                         再生リンクをコピー
                     </button>
-                    {#if data.vlcTargets.length > 0 && !tvInputShown}
-                        <!-- 出先のテレビ用。飛ばしたIPは設定の一覧に載る (rememberTv) -->
-                        <button
-                            type="button"
-                            class="btn btn-ghost justify-start"
-                            onclick={(event) => {
-                                (event.currentTarget as HTMLElement).blur();
-                                tvInputShown = true;
-                            }}
-                            data-testid="vlc-other-open"
-                        >
-                            別のテレビへ飛ばす…
-                        </button>
-                    {/if}
                     {#if rec.job_id === null && encodeSource(rec) !== null}
                         <!--
                             録り直しの元になるのは生TS。エンコード済みを元にしても

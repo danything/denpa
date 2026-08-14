@@ -30,3 +30,14 @@ export function forget(key: string): void {
         // 消せなくても支障は無い
     }
 }
+
+/** 前方一致で消す。鍵にホスト名などが入っていて、全部は列挙できないものの掃除用 */
+export function forgetPrefix(prefix: string): void {
+    try {
+        for (const key of Object.keys(localStorage)) {
+            if (key.startsWith(prefix)) localStorage.removeItem(key);
+        }
+    } catch {
+        // 消せなくても支障は無い
+    }
+}

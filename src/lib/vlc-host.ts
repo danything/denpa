@@ -17,8 +17,8 @@ export function normalizeVlcHost(raw: string): string {
         .replace(/\/.*$/, '');
     // ホスト名が無い (':8080' だけ等) 崩れは読めない扱い
     if (host.split(':')[0] === '') return '';
-    // 設定の書式の区切り (`,` `=`) が混ざったものも読めない扱い。
+    // 設定の書式の区切り (`,` `=` `#`) が混ざったものも読めない扱い。
     // 通すと、保存して読み直したときにカンマで割れてゴミ2件に化ける
-    if (/[,=]/.test(host)) return '';
+    if (/[,=#]/.test(host)) return '';
     return host.includes(':') ? host : `${host}:8080`;
 }
