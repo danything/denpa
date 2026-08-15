@@ -26,6 +26,19 @@ export function toHalfWidth(input: string): string {
         .replace(/[！-／：-＠［-｀｛-～]/g, (c) => String.fromCharCode(c.charCodeAt(0) - 0xfee0));
 }
 
+/**
+ * 人に見せる用の番組名。[字][デ] のような装飾記号だけ落とし、話数も
+ * サブタイトルも ARIB の囲み文字 (🈚🈑) も残す。エンコードの入れ物の title に
+ * 焼き込み、プレイヤー (テレビの VLC など) がURLではなく番組名を出せるようにする
+ */
+export function displayTitle(rawName: string): string {
+    const cleaned = toHalfWidth(rawName ?? '')
+        .replace(DECORATION, '')
+        .replace(/\s+/g, ' ')
+        .trim();
+    return cleaned === '' ? (rawName ?? '').trim() : cleaned;
+}
+
 export interface ParsedTitle {
     series: string;
     subtitle: string;

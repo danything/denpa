@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { parseTitle, sanitizeFileName, toHalfWidth } from './title';
+import { displayTitle, parseTitle, sanitizeFileName, toHalfWidth } from './title';
 
 describe('parseTitle', () => {
     test('装飾記号を落としてシリーズ名にする', () => {
@@ -36,6 +36,25 @@ describe('parseTitle', () => {
     test('話数もサブタイトルも無ければ番組名がそのままシリーズ名', () => {
         expect(parseTitle('ニュース').series).toBe('ニュース');
         expect(parseTitle('ニュース').subtitle).toBe('');
+    });
+});
+
+/** 入れ物の title に焼き込む番組名。プレイヤーがURLの代わりに出す */
+describe('displayTitle', () => {
+    test('装飾記号だけ落とし、話数もサブタイトルも残す', () => {
+        expect(displayTitle('【新】転生したらスライムだった件 第4期 #88[字][デ]')).toBe(
+            '転生したらスライムだった件 第4期 #88',
+        );
+    });
+
+    test('ARIB の囲み文字は残す', () => {
+        expect(displayTitle('🈚転生したらスライムだった件 #88 🈑')).toBe(
+            '🈚転生したらスライムだった件 #88 🈑',
+        );
+    });
+
+    test('全部消えたら元の名前のまま', () => {
+        expect(displayTitle('[字]')).toBe('[字]');
     });
 });
 

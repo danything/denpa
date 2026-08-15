@@ -38,6 +38,7 @@ import { descramble, isScrambled } from './scramble';
 import { settings } from './settings';
 import { chunks, text } from './stream';
 import { buildPgs } from './subtitle';
+import { displayTitle } from './title';
 import { notify } from './webhook';
 
 export function isVideoCodec(value: unknown): value is VideoCodec {
@@ -335,6 +336,12 @@ export interface EncodeOptions {
     audioTitles?: string[];
     /** 字幕トラックの名前。放送が名乗っている言語まで入る (`buildPgs`) */
     captionTitle?: string;
+    /**
+     * 入れ物 (mkv) の title に焼き込む番組名 (`title.displayTitle`)。
+     * URL で渡す再生 (テレビの VLC など) では、プレイヤーが出せる名前は
+     * これしか無い — リモートアクセスの /play は表示名を受け取らない
+     */
+    mediaTitle?: string;
 }
 
 /**
@@ -427,6 +434,11 @@ export function buildArgs(
     }
     // mapで解決できない(型が不明な)ストリームは黙ってスキップする。エンコード自体を止めないため
     args.push('-ignore_unknown');
+    // 入れ物の title に番組名を入れる。URL で渡す再生 (テレビの VLC など) は
+    // ここを読んで出すので、無いと URL の尻 (「file」) が名前になる
+    if (options.mediaTitle !== undefined && options.mediaTitle !== '') {
+        args.push('-metadata', `title=${options.mediaTitle}`);
+    }
     // インタレ解除 (bwdif は yadif よりコーミング残りが少ない)。
     // なめらかさの指定でコマ数が変わる (videoArgs)
     args.push('-vf', video.filter);
@@ -1199,6 +1211,8 @@ async function runJob(jobId: number): Promise<void> {
          * そのときは `audioTitles` の既定 (「音声」/「主音声」「副音声」) に落ちる
          */
         audioTitles: audioTitles(storedAudios(recording), recording.audio_type === DUAL_MONO),
+        // 入れ物の title は番組名。テレビの VLC は URL 再生だとこれしか出せない
+        mediaTitle: displayTitle(recording.name),
     };
     if (canceled.has(jobId)) return finishCanceled(jobId, decoded);
 
