@@ -8,6 +8,7 @@ import {
     invertRanges,
     isCmLength,
     leadIn,
+    longestRange,
     parseFrameRate,
     parseRatio,
     parseSilences,
@@ -123,6 +124,26 @@ describe('チャプターの時刻を頭出しに合わせる', () => {
     test('捨てるものが無ければそのまま', () => {
         const cm = [{ start: 10, end: 20 }];
         expect(shiftRanges(cm, 0)).toBe(cm);
+    });
+});
+
+/**
+ * コマ数の実測は一番長い本編区間で行う。最初の区間はアバン+OPに当たりやすく、
+ * OPの動きで60コマに誤判定していた (本番の実測)
+ */
+describe('一番長い区間を選ぶ', () => {
+    test('アバン+OPの短い先頭区間ではなく本編を選ぶ', () => {
+        expect(
+            longestRange([
+                { start: 7, end: 198 }, // アバン+OP (191秒)
+                { start: 388, end: 1088 }, // 本編A (700秒)
+                { start: 1178, end: 1420 }, // 本編B (242秒)
+            ]),
+        ).toEqual({ start: 388, end: 1088 });
+    });
+
+    test('区間が無ければ null', () => {
+        expect(longestRange([])).toBeNull();
     });
 });
 

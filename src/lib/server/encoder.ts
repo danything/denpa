@@ -20,6 +20,7 @@ import {
     chapterMetadata,
     detectCm,
     invertRanges,
+    longestRange,
     probeLeadIn,
     probeVideo,
     type Range,
@@ -138,7 +139,10 @@ async function surviveRatio(input: string, at: number, signal: AbortSignal): Pro
  * (実写・生放送) は全コマ動くので減らない。実測値の表と、idet (縞の検出) が
  * 使えなかった話は [docs/encode.md](../../../docs/encode.md) に。
  *
- * CM検出があれば最初の本編区間の中で測る (CM は実写 60i なので混ぜると釣り上がる)。
+ * CM検出があれば**一番長い本編区間**の中で測る (CM は実写 60i なので混ぜると
+ * 釣り上がる)。最初の区間で測っていた頃は、アニメのアバン+OPに窓が乗って
+ * OPの激しい動きが 57〜74% の生存率になり、30コマの本編 (実測 20〜32%) を
+ * 60コマと誤判定していた (本番の実測、2026-08)。一番長い区間は本編そのもの。
  */
 async function measureSmoothMotion(
     source: string,
@@ -858,6 +862,12 @@ interface CmPrep {
     chaptersFile: string | null;
     contentStart: Range | null;
     /**
+     * コマ数の実測に使う区間 = **一番長い本編区間**。サムネ (contentStart) とは
+     * わざと別 — サムネは頭に近いほうが番組の顔になるが、コマ数は最初の区間だと
+     * アバン+OPに当たり、OPの動きで60コマに誤判定する (measureSmoothMotion)
+     */
+    fpsBlock: Range | null;
+    /**
      * チャプター時刻の元 (検出そのままの区間)。頭をどれだけ捨てるかは焼く直前まで
      * 決まらないので、`rebaseChapters` がここから引き直して chaptersFile を書き直す
      */
@@ -874,7 +884,13 @@ async function prepareCm(
     input: string,
     signal: AbortSignal,
 ): Promise<EncodeOptions & CmPrep> {
-    const none = { keep: null, chaptersFile: null, contentStart: null, chapterSource: null };
+    const none = {
+        keep: null,
+        chaptersFile: null,
+        contentStart: null,
+        fpsBlock: null,
+        chapterSource: null,
+    };
     /*
      * **CMの扱いは焼くときの設定に従う。** 録画の行にも写してあるが、それは
      * 録り始めた時点の値で、設定を変えても直らない (`keepOriginal` は前から
@@ -932,6 +948,7 @@ async function prepareCm(
             chaptersFile: null,
             // 切ってしまうので出来上がりは既にCMが無い。サムネは頭からの固定でよい
             contentStart: null,
+            fpsBlock: null,
             chapterSource: null,
         };
     }
@@ -949,6 +966,7 @@ async function prepareCm(
         keep: null,
         chaptersFile,
         contentStart: content[0] ?? null,
+        fpsBlock: longestRange(content),
         chapterSource: { cm: detection.cm, duration: detection.duration },
     };
 }
@@ -1179,8 +1197,11 @@ async function runJob(jobId: number): Promise<void> {
         trimmed = await trimCm(jobId, sourceTs, keep, signal);
         if (trimmed !== null) source = trimmed;
         // 切れなかったら CM 入りのまま進む。コマ数の実測とサムネイルが CM を
-        // 掴まないように、本編の最初の区間 (keep) を教えておく
-        else encodeOptions.contentStart = keep[0] ?? null;
+        // 掴まないように、本編の区間 (keep) を教えておく
+        else {
+            encodeOptions.contentStart = keep[0] ?? null;
+            encodeOptions.fpsBlock = longestRange(keep);
+        }
     }
     if (canceled.has(jobId)) {
         removeIfExists(trimmed);
@@ -1204,7 +1225,7 @@ async function runJob(jobId: number): Promise<void> {
         encodeOptions.smoothMotion = await measureSmoothMotion(
             source,
             predicted,
-            encodeOptions.contentStart,
+            encodeOptions.fpsBlock,
             signal,
         );
     }

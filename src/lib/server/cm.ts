@@ -254,6 +254,19 @@ export function shiftRanges(ranges: Range[], by: number): Range[] {
 }
 
 /**
+ * 一番長い区間を返す。コマ数の実測 (encoder.measureSmoothMotion) が測る場所を
+ * 選ぶのに使う — 最初の本編区間はアバン+OPに当たりやすく、OPの激しい動きが
+ * 60コマ判定に化ける (本番の実測)。一番長い区間なら本編そのもの。
+ */
+export function longestRange(ranges: Range[]): Range | null {
+    let longest: Range | null = null;
+    for (const r of ranges) {
+        if (longest === null || r.end - r.start > longest.end - longest.start) longest = r;
+    }
+    return longest;
+}
+
+/**
  * ffmetadata 形式のチャプター定義。本編とCMを交互のチャプターにして、
  * プレイヤーのチャプター送りでCMを飛ばせるようにする(ファイルは切らない)。
  */
