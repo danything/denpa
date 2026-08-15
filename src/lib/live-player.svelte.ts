@@ -178,9 +178,14 @@ export function livePlayer() {
      * **開き直しても持ち越す** (`storedFloor`)。0.2秒から始めていた頃は、
      * 開いて30秒以内に必ず1回止まっていた
      */
-    let floor = $state(storedFloor());
-    /** どれだけ貯めているか (秒)。詰まると伸び、無事が続くと縮む */
-    let target = $state(floor);
+    const initialFloor = storedFloor();
+    let floor = $state(initialFloor);
+    /**
+     * どれだけ貯めているか (秒)。詰まると伸び、無事が続くと縮む。
+     * **始まりは下限と同じで、あとは別々に動く** (`floor` を写すのは最初だけ。
+     * `$state(floor)` と書くと Svelte が「初期値しか写さないが良いか」と聞く — 良い)
+     */
+    let target = $state(initialFloor);
     /**
      * どこまで戻れて、いまどこに居るか。**操作の帯を描くのに使う。**
      *
