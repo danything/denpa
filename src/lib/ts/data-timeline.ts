@@ -7,7 +7,9 @@
  * 新しいほうを出したい。
  *
  * そこで、エンコードのついでに元TSをもう一度 [bml.ts](bml.ts) に通し、**配る価値の
- * あった変化だけ**を放送の実時刻 (TDT/TOT) つきで並べておく (`captureDataBroadcast`)。
+ * あった変化だけ**を放送の実時刻 (TDT/TOT) つきで並べておく
+ * ([data-capture.ts](data-capture.ts) の `captureDataBroadcast`。**TS を解く側は
+ * サーバ専用**なので別ファイル — ここは観る画面 (ブラウザ) も読み込む)。
  * 再生時は、再生位置に当たる実時刻までの変化を新しい `Carousel` に流し込めば、
  * **その時点の画面**が復元できる (`replayAt`)。シークもこれで作り直すだけ。
  *
@@ -22,7 +24,6 @@
  */
 
 import type { ResponseMessage } from '$lib/vendor/web-bml/server/ws_api';
-import { BmlDecoder } from './bml';
 import { Carousel } from './carousel';
 
 export interface TimedMessage {
@@ -34,30 +35,6 @@ export interface TimedMessage {
      */
     at: number | null;
     message: ResponseMessage;
-}
-
-/**
- * TS を解いて、データ放送の変化を実時刻つきで並べる。
- *
- * @param chunks 1局に絞った TS のチャンク列 (録画の生TSをそのまま流してよい)
- */
-export function captureDataBroadcast(chunks: Iterable<Uint8Array>): TimedMessage[] {
-    const timeline: TimedMessage[] = [];
-    // 「配る価値があるか」の判定はライブと同じ土俵に乗せる (pcr は落ち、変わらない
-    // pmt/programInfo も落ちる)。中の記憶そのものは使わない — 使うのは take の判定だけ
-    const gate = new Carousel();
-    let at: number | null = null;
-    const decoder = new BmlDecoder((message) => {
-        // 時計は別に持つ。放送の実時刻はここでしか分からない
-        if (message.type === 'currentTime') {
-            at = message.timeUnixMillis;
-            return;
-        }
-        if (!gate.take(message)) return;
-        timeline.push({ at, message });
-    });
-    for (const chunk of chunks) decoder.feed(chunk);
-    return timeline;
 }
 
 /** CM を実カットした録画で残した区間 (秒)。off/chapter のときは切らないので null */

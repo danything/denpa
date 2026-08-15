@@ -1,13 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import type { ResponseMessage } from '$lib/vendor/web-bml/server/ws_api';
-import {
-    captureDataBroadcast,
-    feedFor,
-    type PlacedMessage,
-    playbackMsAt,
-    replayAt,
-    toPlaybackTimeline,
-} from './data-timeline';
+import { captureDataBroadcast } from './data-capture';
+import { feedFor, type PlacedMessage, playbackMsAt, replayAt, toPlaybackTimeline } from './data-timeline';
 import {
     BML_TS,
     bmlHead,

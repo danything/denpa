@@ -15,12 +15,8 @@
  */
 
 import { closeSync, existsSync, openSync, readFileSync, readSync, writeFileSync } from 'node:fs';
-import {
-    captureDataBroadcast,
-    type KeptRange,
-    type PlacedMessage,
-    toPlaybackTimeline,
-} from '$lib/ts/data-timeline';
+import { captureDataBroadcast } from '$lib/ts/data-capture';
+import { type KeptRange, type PlacedMessage, toPlaybackTimeline } from '$lib/ts/data-timeline';
 
 /** TS を 1MB ずつ読む。**丸ごと抱えない** — 録画は数GBになる */
 function* tsChunks(path: string, size = 1 << 20): Generator<Uint8Array> {
