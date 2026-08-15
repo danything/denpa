@@ -200,7 +200,7 @@ chart の `traefik.enabled`) は2つの名前を同じ Rule で denpa に届け�
 グループも同じなので、入れる人の集合は forward-auth のときと変わりません。
 
 値は **`denpa` 名前空間の Secret `denpa-oidc`** に入っていて、chart はその名前
-(`denpa.oidcSecretName`、この家の値は `k3s/application.yaml` の `helm.values`) を `secretKeyRef` で引くだけです。
+(`denpa.oidcSecretName`、この家の値は `k3s/application.yaml` の `helm.valuesObject`) を `secretKeyRef` で引くだけです。
 
 | 鍵 | 何 |
 | --- | --- |

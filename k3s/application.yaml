@@ -10,7 +10,7 @@
 #   - namespace.yaml   … Application より先に要る
 #   - argocd.yaml      … bootstrap の ApplicationSet が読む、この置き場の設定
 #
-# **この家の値は下の `helm.values` にインラインで持つ。** 別ファイルにしないのは、
+# **この家の値は下の `helm.valuesObject` にインラインで持つ。** 別ファイルにしないのは、
 # ApplicationSet が `k3s/*.yaml` を全部マニフェストとして読むため (値ファイルは
 # kind が無いので置けない)。chart の既定値 (charts/denpa/values.yaml) の上に重なる。
 # CI は imageMarks の2行だけを書き換える (.github/workflows/build-and-deploy.yml)
@@ -32,7 +32,7 @@ spec:
     path: charts/denpa
     helm:
       releaseName: denpa
-      values: |
+      valuesObject:
         image:
           denpa:
             # 動くタグ。入れ替えの合図は imageMarks

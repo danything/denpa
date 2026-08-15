@@ -2,7 +2,7 @@
 #
 # **ここは「誰の環境でも動く」値にしてある。** 自分の環境の値 (ドメイン・
 # 通すネットワーク・OIDC・PVC の大きさ) は別の values ファイルで上書きする
-# (このリポジトリ自身の本番は `k3s/application.yaml` の `helm.values`)。
+# (このリポジトリ自身の本番は `k3s/application.yaml` の `helm.valuesObject`)。
 #
 # 認証を何も設定しないと denpa は**全部断る** (docs/auth.md)。最低限
 # `denpa.trustedNetworks` に自分の LAN を入れること。

@@ -104,7 +104,7 @@ jobs:
       - name: Rewrite image marks and push
         run: |
           set -eu
-          # 印を書く先は k3s/application.yaml の helm.values の中 (imageMarks.agent /
+          # 印を書く先は k3s/application.yaml の helm.valuesObject の中 (imageMarks.agent /
           # imageMarks.denpa)。以前は k3s/deployment.yaml の Pod の注釈に直接書いていた。
           # values はインラインなのでインデントは深い — 行頭の空白は幾つでも許す
           FILES="k3s/application.yaml"

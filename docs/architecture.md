@@ -127,7 +127,7 @@ PreSync フックに置いています (`denpa-prepull`、中身は `/bin/true`)
 
 | タグ | いつ動くか | 誰が指しているか |
 | --- | --- | --- |
-| `develop` | **main へ入るたび** | `k3s/application.yaml` の `helm.values` (この構成。入れ替えの合図は `imageMarks`) |
+| `develop` | **main へ入るたび** | `k3s/application.yaml` の `helm.valuesObject` (この構成。入れ替えの合図は `imageMarks`) |
 | `latest` | **GitHub でリリースを作ったときだけ** | `compose.prod.yml` (入れて使う人) |
 | `0.1` | その系列でリリースを作るたび (0.1.1 を出せばそちらへ) | 版を決めて使う人 |
 | `0.1.0` | **動かない** | 固定して使う人・戻したいとき |
@@ -186,7 +186,7 @@ PreSync フックに置いています (`denpa-prepull`、中身は `/bin/true`)
 **入れ方は Helm chart** ([charts/denpa](../charts/denpa)。エージェントだけ置くなら
 [charts/denpa-agent](../charts/denpa-agent))。この家の本番は ArgoCD が
 [k3s/application.yaml](../k3s/application.yaml) を見て、同じ chart にそこの
-`helm.values` (インライン) を重ねて当てています — **chart の使い方の実例**として
+`helm.valuesObject` (インライン) を重ねて当てています — **chart の使い方の実例**として
 読めます。bootstrap の ApplicationSet は `k3s/` を「素のマニフェストの置き場」として
 読むので、そこには Application (chart を指す) と、chart に持てないもの — SealedSecret
 (名前空間と名前が鍵に絡む) と Namespace — だけを素のまま置いています。
