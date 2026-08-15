@@ -427,19 +427,6 @@ export function buildArgs(
     }
     // mapで解決できない(型が不明な)ストリームは黙ってスキップする。エンコード自体を止めないため
     args.push('-ignore_unknown');
-    // 字幕。?は .sup が空だった場合でもエンコードを止めないため
-    if (pgs >= 0) {
-        // 名前は放送が名乗っているものを使う (「字幕 (日本語)」)。無ければ「字幕」
-        const title = options.captionTitle ?? '字幕';
-        args.push('-map', `${pgs}:s:0?`, '-c:s:0', 'copy', '-metadata:s:s:0', `title=${title}`);
-        /*
-         * 言語も付ける。default の印だけだと、プレイヤーの字幕自動選択
-         * (「端末の言語に合う字幕を出す」設定) が言語不明の札を跳ばすことがある。
-         * 放送の字幕 (ARIB) は日本語しか来ない
-         */
-        args.push('-metadata:s:s:0', 'language=jpn');
-        args.push('-disposition:s:0', 'default');
-    }
     // インタレ解除 (bwdif は yadif よりコーミング残りが少ない)。
     // なめらかさの指定でコマ数が変わる (videoArgs)
     args.push('-vf', video.filter);
@@ -466,6 +453,27 @@ export function buildArgs(
         args.push('-map', '0:a');
     }
     args.push('-c:a', 'libopus', '-b:a', '256k'); // 元放送(AAC 256kbps)と同じビットレート
+
+    /*
+     * 字幕は**映像・音声のあと**に map する (= 出来上がりの最後のトラック)。
+     * ?は .sup が空だった場合でもエンコードを止めないため。
+     * 以前は最初に map していてトラック0が字幕になっていた — 慣習 (映像が先頭)
+     * から外れると、テレビ組み込みのデマルチプレクサが弱いことがある
+     * (実機のテレビ VLC で、字幕を選ぶと固まる症状の切り分けとして直した)。
+     * 指定は `s:0` (字幕の0番) 型なので、並べ替えてもここは変わらない
+     */
+    if (pgs >= 0) {
+        // 名前は放送が名乗っているものを使う (「字幕 (日本語)」)。無ければ「字幕」
+        const title = options.captionTitle ?? '字幕';
+        args.push('-map', `${pgs}:s:0?`, '-c:s:0', 'copy', '-metadata:s:s:0', `title=${title}`);
+        /*
+         * 言語も付ける。default の印だけだと、プレイヤーの字幕自動選択
+         * (「端末の言語に合う字幕を出す」設定) が言語不明の札を跳ばすことがある。
+         * 放送の字幕 (ARIB) は日本語しか来ない
+         */
+        args.push('-metadata:s:s:0', 'language=jpn');
+        args.push('-disposition:s:0', 'default');
+    }
 
     /*
      * **音声にも名前を付ける** (`arib.audioTitles`)。番組表と同じ言い方にするので、
