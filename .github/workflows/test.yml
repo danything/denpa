@@ -112,7 +112,9 @@ jobs:
       # 1つ落ちても残りは最後まで流す。落ち方を全部まとめて見たい
       fail-fast: false
       matrix:
-        shard: [1, 2, 3]
+        # 4分割。3分割の頃は重いスペック (録画完了を実時間で待つもの) が
+        # 1つのシャードに固まり、1.7分と4.1分の偏りが出ていた
+        shard: [1, 2, 3, 4]
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -164,7 +166,7 @@ jobs:
       # アプリを1度だけ組んでから、ワーカーの数だけ立てる。
       # 偽エージェント・偽通知先もワーカーごとに1式ずつ (tests/stack.ts)
       - name: E2E tests
-        run: bunx playwright test --shard=${{ matrix.shard }}/3
+        run: bunx playwright test --shard=${{ matrix.shard }}/4
 
       - name: Upload Playwright report
         if: failure()
