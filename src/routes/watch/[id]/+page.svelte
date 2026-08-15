@@ -128,8 +128,13 @@
         return Math.round((video?.currentTime ?? 0) * 1000);
     }
 
-    async function toggleData(): Promise<void> {
-        showData = !showData;
+    /** d を BML に渡す口 (`DataBroadcast` の data)。出ている文書が d を聞いていれば、閉じずにそちらへ */
+    let dataButton = $state<(() => boolean) | null>(null);
+
+    async function toggleData(off = false): Promise<void> {
+        // **テレビの d と同じ。** 出ている文書が d を待っている (待機ページ) なら、閉じずに渡す
+        if (!off && showData && dataButton?.() === true) return;
+        showData = off ? false : !showData;
         if (!showData) {
             dataChannel = null;
             return;
@@ -947,6 +952,7 @@
                     media={mediaBox}
                     listen={listenData}
                     remote={(press) => (dataPress = press)}
+                    data={(press) => (dataButton = press)}
                     postal={data.broadcast.postalCode}
                     network={false}
                 />
@@ -1053,7 +1059,7 @@
                             label={showData ? 'データ放送を消す' : 'データ放送を出す'}
                             on={showData}
                             testid="watch-data-button"
-                            onclick={toggleData}
+                            onclick={() => void toggleData()}
                         />
                     {/if}
                     <!--
@@ -1298,7 +1304,7 @@
                 データ放送を出している間だけ、番組の中身の上に出す
             -->
             {#if dataPress !== null}
-                <Remote press={dataPress} />
+                <Remote press={dataPress} close={() => void toggleData(true)} />
             {/if}
         {/snippet}
 

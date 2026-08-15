@@ -64,6 +64,8 @@
      * 押しても行き先が無いリモコンは出さない
      */
     let dataPress = $state<((code: number) => void) | null>(null);
+    /** d を BML に渡す口 (`DataBroadcast` の data) */
+    let dataButton = $state<(() => boolean) | null>(null);
 
     /**
      * **サーバが決めた局で開く** (`+page.server.ts` の `start`)。
@@ -274,6 +276,7 @@
                 media={mediaBox}
                 listen={player.listenData}
                 remote={(press) => (dataPress = press)}
+                data={(press) => (dataButton = press)}
                 postal={data.postalCode}
                 network={data.bmlNetwork}
             />
@@ -299,7 +302,11 @@
                         label={player.showData ? 'データ放送を消す' : 'データ放送を出す'}
                         on={player.showData}
                         testid="live-data-button"
-                        onclick={() => player.setData(!player.showData)}
+                        onclick={() => {
+                            // テレビの d と同じ。出ている文書が d を待っていれば、閉じずに渡す
+                            if (player.showData && dataButton?.() === true) return;
+                            player.setData(!player.showData);
+                        }}
                     />
                     <ControlButton
                         path={CAMERA}
@@ -663,7 +670,7 @@
                 巻き取られる (`flex-1`)
             -->
             {#if dataPress !== null}
-                <Remote press={dataPress} />
+                <Remote press={dataPress} close={() => player.setData(false)} />
             {/if}
 
             <!-- 番組表と同じ並び・同じ見た目。探す場所がずれないようにする -->

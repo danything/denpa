@@ -14,9 +14,14 @@
     interface Props {
         /** 押されたキーを BML へ渡す。`AribKeyCode` の番号 */
         press: (code: number) => void;
+        /**
+         * データ放送を消す。**テレビの d はまず放送の文書に渡る** (待機ページはそれで
+         * メニューを開く) ので、文書が d を掴んでいる間は d では消せない。ここに逃げ道を置く
+         */
+        close?: () => void;
     }
 
-    const { press }: Props = $props();
+    const { press, close }: Props = $props();
 
     /**
      * `AribKeyCode` (`vendor/web-bml/client/content.ts`) と同じ値。
@@ -25,6 +30,8 @@
      * import すると、このリモコンが載っているだけで借りもの全体 (700KB) が
      * 落ちてくる。データ放送を出す前から出ている画面なので、それは困る
      */
+    /** d (DataButton)。放送の文書に「d が押された」と伝える */
+    const DATA = 20;
     const UP = 1;
     const DOWN = 2;
     const LEFT = 3;
@@ -97,9 +104,20 @@
             <div></div>
         </div>
 
-        <button type="button" class="btn btn-sm" onclick={() => press(BACK)} data-testid="live-remote-back">
-            戻る
-        </button>
+        <div class="flex gap-2">
+            <button type="button" class="btn btn-sm flex-1" onclick={() => press(BACK)} data-testid="live-remote-back">
+                戻る
+            </button>
+            <!-- d は放送に渡す (DataButtonPressed)。待機ページからメニューを開くのはこれ -->
+            <button type="button" class="btn btn-sm" onclick={() => press(DATA)} data-testid="live-remote-data">
+                d
+            </button>
+            {#if close}
+                <button type="button" class="btn btn-sm btn-ghost" onclick={close} data-testid="live-remote-close">
+                    消す
+                </button>
+            {/if}
+        </div>
 
         <!-- **畳んでおく。** 使う放送のほうが少ないので、いつも場所を取らせない -->
         <details class="text-sm">

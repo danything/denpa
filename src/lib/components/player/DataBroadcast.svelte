@@ -54,6 +54,14 @@
          */
         remote: (press: ((code: number) => void) | null) => void;
         /**
+         * **d を BML に渡す口**を預ける (`null` で外れる)。呼ぶと、いま出ている文書が
+         * d (DataButtonPressed) を**聞いていれば**押して true、聞いていなければ何もせず
+         * false を返す。**テレビの d と同じ振る舞い**にするためのもの — 局の
+         * 「待機ページ」(日テレの beat) は d を押されて初めてメニューを開くので、
+         * 出ている間に d を押されたら、閉じる前にまず文書に渡す
+         */
+        data?: (press: (() => boolean) | null) => void;
+        /**
          * 郵便番号 (数字7桁。空なら渡さない)。**放送のアプリが地域を決めるのに読む。**
          *
          * 置き場はサーバの設定 (`server/settings.ts`) で、ここでは器を作る前に
@@ -72,7 +80,7 @@
         network: boolean;
     }
 
-    const { on, channel, media, listen, remote, postal, network }: Props = $props();
+    const { on, channel, media, listen, remote, data, postal, network }: Props = $props();
 
     /**
      * リモコンの d。`AribKeyCode.DataButton` と同じ値。
@@ -353,6 +361,21 @@
     }
 
     /**
+     * いま出ている文書が d を聞いていれば押す (`data` の説明)。
+     *
+     * 聞いているかは文書の `beitem[type="DataButtonPressed"]` で分かる。文書は
+     * 閉じた影の中だが、器 (`BMLBrowser`) が根を持っている — TS では private だが
+     * 実体はただのフィールドなので、そこから覗く (借りものに手を入れずに済ませる)
+     */
+    function pressData(): boolean {
+        if (browser === null || !visible) return false;
+        const root = (browser as unknown as { documentElement?: HTMLElement }).documentElement;
+        if (root?.querySelector('beitem[type="DataButtonPressed"][subscribe="subscribe"]') == null) return false;
+        tap(DATA_BUTTON);
+        return true;
+    }
+
+    /**
      * BML に d を叩いて見せる。
      *
      * denpa の d ボタンは**器の出し入れ**に使っているので、そのままでは
@@ -505,12 +528,14 @@
         });
         // 指のリモコンにも同じ口を渡す
         remote(tap);
+        data?.(pressData);
     }
 
     function close(): void {
         generation++;
         listen(null);
         remote(null);
+        data?.(null);
         loading = false;
         handed = 0;
         showing = false;
