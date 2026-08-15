@@ -12,6 +12,13 @@
 エージェントは**チャンネルを掴んで素のTSを流すだけ**です。番組表を読むのも、
 局を選り分けるのも、CMを見つけるのも denpa がやります。
 
+<p align="center">
+  <img src="docs/images/guide-anim.webp" alt="番組表から予約する" width="720">
+</p>
+
+番組表から押すだけで予約。録った番組はブラウザでそのまま観るか、テレビの VLC へ
+飛ばすか、落として好きなプレイヤーで。**画面の一覧は [docs/screens.md](docs/screens.md)。**
+
 ## 用意するもの
 
 - **チューナー** — Linux DVB (PT2/PT3、PX-S1UD など)。ドライバはホスト側に入れておく
@@ -133,6 +140,7 @@ AV1 が再生できないテレビには、テレビごとに H.264 や生TSを�
 
 ## もっと詳しく
 
+- [docs/screens.md](docs/screens.md) — **画面の一覧** (実機の絵)
 - [docs/architecture.md](docs/architecture.md) — **なぜこの形なのか** (決めたこと・踏んだ落とし穴)
 - [docs/app.md](docs/app.md) — **どこに何があるか** (ファイル・環境変数・画面・状態遷移)
 - [docs/data.md](docs/data.md) — エージェントに都度聞くもの / denpa が持つもの
