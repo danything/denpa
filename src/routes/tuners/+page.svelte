@@ -74,210 +74,6 @@
 
 <div class="grid items-start gap-6 xl:grid-cols-2">
     <div class="flex min-w-0 flex-col gap-6">
-        <!--
-            **左の列は「入れる順」。** 機材を決めて (ここ) → スキャンして → 何が取れたか、
-            の順に上から並べてある。右の列は「いまの様子」(空き・ロゴ)。
-
-            チューナーの設定。**選局コマンドは出さない** — 理由は
-            `src/lib/server/tuner.ts` の `putTuners`。出すのはデバイスと種別だけ
-        -->
-        <section class="card bg-base-100 shadow" data-testid="tuner-config-card">
-            <div class="card-body">
-                <h2 class="card-title">チューナーの設定</h2>
-                {#await data.detected then detected}
-                    {#if detected}
-                        <p class="text-base-content/60 text-sm" data-testid="tuner-detected">
-                            いまは<strong>挿さっている機材を自動で見つけて</strong>使っています。
-                            保存するとこの内容で固定されます。
-                        </p>
-                    {/if}
-                {/await}
-
-                {#if shownTuners.value !== undefined}
-                    {@const rows = [...shownTuners.value.list, null]}
-                    <form method="POST" action="?/tuners" use:submitting data-testid="tuner-config-form">
-                        <div class="overflow-x-auto">
-                            <table class="table table-sm">
-                                <thead>
-                                    <tr>
-                                        <th>名前</th>
-                                        <th>デバイス</th>
-                                        <th>受けられる種別</th>
-                                        <th>LNB</th>
-                                        <th>無効</th>
-                                    </tr>
-                                </thead>
-                                <tbody data-testid="tuner-config-list">
-                                    {#each rows as tuner, index (index)}
-                                        <tr data-testid="tuner-config-row">
-                                            <td>
-                                                <input
-                                                    class="input input-sm input-bordered w-32"
-                                                    name={`name.${index}`}
-                                                    value={tuner?.name ?? ''}
-                                                    placeholder={tuner === null ? '名前を入れて足す' : ''}
-                                                />
-                                            </td>
-                                            <td>
-                                                <input
-                                                    class="input input-sm input-bordered w-72 font-mono text-xs"
-                                                    name={`device.${index}`}
-                                                    value={tuner?.device ?? ''}
-                                                    placeholder="/dev/dvb/adapter0/frontend0"
-                                                />
-                                            </td>
-                                            <td class="whitespace-nowrap">
-                                                {#each TYPES as type (type)}
-                                                    <label class="mr-2 inline-flex items-center gap-1">
-                                                        <input
-                                                            type="checkbox"
-                                                            class="checkbox checkbox-xs"
-                                                            name={`type.${index}.${type}`}
-                                                            checked={tuner?.types.includes(type) ?? false}
-                                                        />
-                                                        <span class="text-xs">{SERVICE_TYPE_LABEL[type]}</span>
-                                                    </label>
-                                                {/each}
-                                            </td>
-                                            <td>
-                                                <input
-                                                    class="input input-sm input-bordered w-20"
-                                                    name={`lnb.${index}`}
-                                                    value={tuner?.lnb ?? ''}
-                                                    placeholder="15v"
-                                                />
-                                            </td>
-                                            <td>
-                                                <input
-                                                    type="checkbox"
-                                                    class="checkbox checkbox-sm"
-                                                    name={`disabled.${index}`}
-                                                    checked={tuner?.disabled ?? false}
-                                                />
-                                            </td>
-                                        </tr>
-                                        {#if tuner?.command}
-                                            <tr>
-                                                <td colspan="5" class="text-base-content/60 text-xs">
-                                                    設定ファイルに直に書いた選局コマンドが効いています
-                                                    (画面からは変えられません):
-                                                    <code class="font-mono">{tuner.command}</code>
-                                                </td>
-                                            </tr>
-                                        {/if}
-                                    {/each}
-                                </tbody>
-                            </table>
-                        </div>
-                        <p class="text-base-content/60 mt-2 text-xs">名前を空にすると、その行は消えます。</p>
-                        <div class="card-actions mt-2">
-                            <button type="submit" class="btn btn-primary btn-sm" data-testid="tuner-config-save">
-                                保存する
-                            </button>
-                            <button type="submit"
-                                class="btn btn-ghost btn-sm"
-                                formaction="?/tunersAuto"
-                                data-testid="tuner-config-auto"
-                            >
-                                自動検出に戻す
-                            </button>
-                        </div>
-                    </form>
-                {/if}
-            </div>
-        </section>
-
-        <section class="card bg-base-100 shadow" data-testid="scan-card">
-            <div class="card-body">
-                <h2 class="card-title">チャンネルスキャン</h2>
-                <p class="text-base-content/70 text-sm">
-                    受信できるチャンネルを実際に選局して探します。<strong
-                        >空いているチューナーを全部使います</strong
-                    >が、<strong>録画中でも実行できます</strong> (録画のほうが強いので、そのチューナーは使いません)。見つかったものは保存され、終わると番組表も集め直します。
-                </p>
-
-                <form method="POST" action="?/scan" use:submitting class="mt-2 space-y-3">
-                    <div>
-                        <span class="text-sm font-medium">種別</span>
-                        <div class="mt-1 flex flex-wrap gap-4" data-testid="scan-types">
-                            {#each ['GR', 'BS', 'CS'] as type (type)}
-                                <label class="flex cursor-pointer items-center gap-2">
-                                    <input
-                                        type="checkbox"
-                                        name="types"
-                                        value={type}
-                                        checked={type === 'GR'}
-                                        class="checkbox checkbox-sm"
-                                    />
-                                    <span class="text-sm">{SERVICE_TYPE_LABEL[type]}</span>
-                                </label>
-                            {/each}
-                        </div>
-                    </div>
-                    <!--
-                        探す範囲は決め打ち。放送で使う物理チャンネルは決まっていて、
-                        狭めても総当たりの時間が少し減るだけ。
-                        狭めた結果 見つからない局が出るほうが困る
-                    -->
-                    <div class="flex flex-wrap items-center gap-2">
-                        <button type="submit"
-                            class="btn btn-primary"
-                            disabled={scan.state === 'running'}
-                            data-testid="scan-start"
-                        >
-                            {scan.state === 'running' ? '実行中…' : '開始する'}
-                        </button>
-                        {#if scan.state === 'running'}
-                            <!--
-                                十数分かかるので、途中で降りられるようにしてある。
-                                中断しても設定は書き換えない (途中までの結果で上書きすると、
-                                まだ回っていない局の定義が消える)
-                            -->
-                            <button type="submit"
-                                class="btn btn-error btn-outline"
-                                formaction="?/scanStop"
-                                data-testid="scan-stop"
-                            >
-                                中断する
-                            </button>
-                        {/if}
-                    </div>
-                </form>
-
-                {#if scan.state !== 'idle'}
-                    <div class="mt-4" data-testid="scan-progress" data-state={scan.state}>
-                        <div class="flex flex-wrap items-center gap-2 text-sm">
-                            <span class="badge" data-testid="scan-state">{STATE_LABEL[scan.state]}</span>
-                            {#if scan.phase}
-                                <span class="badge badge-ghost">{scan.phase}</span>
-                            {/if}
-                            <span data-testid="scan-found">見つかったチャンネル {scan.channels}</span>
-                        </div>
-
-                        <!-- 総当たりなので何分かかるか分かりにくい。どこまで進んだかを出す -->
-                        <progress
-                            class="progress progress-primary mt-2 w-full"
-                            value={progress}
-                            max="1"
-                            data-testid="scan-bar"
-                        ></progress>
-                        <div class="text-base-content/60 mt-1 text-xs" data-testid="scan-count">
-                            {scan.scanned} / {scan.total} チャンネル
-                        </div>
-
-                        {#if scan.error}
-                            <div class="alert alert-error mt-2" data-testid="scan-failed">{scan.error}</div>
-                        {/if}
-                        {#if scan.log.length > 0}
-                            <pre
-                                class="bg-base-200 mt-2 max-h-64 overflow-auto rounded p-2 font-mono text-xs whitespace-pre-wrap"
-                                data-testid="scan-log">{scan.log.join('\n')}</pre>
-                        {/if}
-                    </div>
-                {/if}
-            </div>
-        </section>
-
         <section class="card bg-base-100 shadow" data-testid="channel-card">
             <div class="card-body">
                 <!--
@@ -399,6 +195,211 @@
                             </tbody>
                         </table>
                     </div>
+                {/if}
+            </div>
+        </section>
+
+        <section class="card bg-base-100 shadow" data-testid="scan-card">
+            <div class="card-body">
+                <h2 class="card-title">チャンネルスキャン</h2>
+                <p class="text-base-content/70 text-sm">
+                    受信できるチャンネルを実際に選局して探します。<strong
+                        >空いているチューナーを全部使います</strong
+                    >が、<strong>録画中でも実行できます</strong> (録画のほうが強いので、そのチューナーは使いません)。見つかったものは保存され、終わると番組表も集め直します。
+                </p>
+
+                <form method="POST" action="?/scan" use:submitting class="mt-2 space-y-3">
+                    <div>
+                        <span class="text-sm font-medium">種別</span>
+                        <div class="mt-1 flex flex-wrap gap-4" data-testid="scan-types">
+                            {#each ['GR', 'BS', 'CS'] as type (type)}
+                                <label class="flex cursor-pointer items-center gap-2">
+                                    <input
+                                        type="checkbox"
+                                        name="types"
+                                        value={type}
+                                        checked={type === 'GR'}
+                                        class="checkbox checkbox-sm"
+                                    />
+                                    <span class="text-sm">{SERVICE_TYPE_LABEL[type]}</span>
+                                </label>
+                            {/each}
+                        </div>
+                    </div>
+                    <!--
+                        探す範囲は決め打ち。放送で使う物理チャンネルは決まっていて、
+                        狭めても総当たりの時間が少し減るだけ。
+                        狭めた結果 見つからない局が出るほうが困る
+                    -->
+                    <div class="flex flex-wrap items-center gap-2">
+                        <button type="submit"
+                            class="btn btn-primary"
+                            disabled={scan.state === 'running'}
+                            data-testid="scan-start"
+                        >
+                            {scan.state === 'running' ? '実行中…' : '開始する'}
+                        </button>
+                        {#if scan.state === 'running'}
+                            <!--
+                                十数分かかるので、途中で降りられるようにしてある。
+                                中断しても設定は書き換えない (途中までの結果で上書きすると、
+                                まだ回っていない局の定義が消える)
+                            -->
+                            <button type="submit"
+                                class="btn btn-error btn-outline"
+                                formaction="?/scanStop"
+                                data-testid="scan-stop"
+                            >
+                                中断する
+                            </button>
+                        {/if}
+                    </div>
+                </form>
+
+                {#if scan.state !== 'idle'}
+                    <div class="mt-4" data-testid="scan-progress" data-state={scan.state}>
+                        <div class="flex flex-wrap items-center gap-2 text-sm">
+                            <span class="badge" data-testid="scan-state">{STATE_LABEL[scan.state]}</span>
+                            {#if scan.phase}
+                                <span class="badge badge-ghost">{scan.phase}</span>
+                            {/if}
+                            <span data-testid="scan-found">見つかったチャンネル {scan.channels}</span>
+                        </div>
+
+                        <!-- 総当たりなので何分かかるか分かりにくい。どこまで進んだかを出す -->
+                        <progress
+                            class="progress progress-primary mt-2 w-full"
+                            value={progress}
+                            max="1"
+                            data-testid="scan-bar"
+                        ></progress>
+                        <div class="text-base-content/60 mt-1 text-xs" data-testid="scan-count">
+                            {scan.scanned} / {scan.total} チャンネル
+                        </div>
+
+                        {#if scan.error}
+                            <div class="alert alert-error mt-2" data-testid="scan-failed">{scan.error}</div>
+                        {/if}
+                        {#if scan.log.length > 0}
+                            <pre
+                                class="bg-base-200 mt-2 max-h-64 overflow-auto rounded p-2 font-mono text-xs whitespace-pre-wrap"
+                                data-testid="scan-log">{scan.log.join('\n')}</pre>
+                        {/if}
+                    </div>
+                {/if}
+            </div>
+        </section>
+
+        <!--
+            **左の列は触る頻度の順。** 毎日見る「取れているチャンネル」が上、たまに回す
+            スキャン、入れたときしか触らないチューナーの設定は一番下。
+            右の列は「いまの様子」(空き・ロゴ)。
+
+            チューナーの設定。**選局コマンドは出さない** — 理由は
+            `src/lib/server/tuner.ts` の `putTuners`。出すのはデバイスと種別だけ
+        -->
+        <section class="card bg-base-100 shadow" data-testid="tuner-config-card">
+            <div class="card-body">
+                <h2 class="card-title">チューナーの設定</h2>
+                {#await data.detected then detected}
+                    {#if detected}
+                        <p class="text-base-content/60 text-sm" data-testid="tuner-detected">
+                            いまは<strong>挿さっている機材を自動で見つけて</strong>使っています。
+                            保存するとこの内容で固定されます。
+                        </p>
+                    {/if}
+                {/await}
+
+                {#if shownTuners.value !== undefined}
+                    {@const rows = [...shownTuners.value.list, null]}
+                    <form method="POST" action="?/tuners" use:submitting data-testid="tuner-config-form">
+                        <div class="overflow-x-auto">
+                            <table class="table table-sm">
+                                <thead>
+                                    <tr>
+                                        <th>名前</th>
+                                        <th>デバイス</th>
+                                        <th>受けられる種別</th>
+                                        <th>LNB</th>
+                                        <th>無効</th>
+                                    </tr>
+                                </thead>
+                                <tbody data-testid="tuner-config-list">
+                                    {#each rows as tuner, index (index)}
+                                        <tr data-testid="tuner-config-row">
+                                            <td>
+                                                <input
+                                                    class="input input-sm input-bordered w-32"
+                                                    name={`name.${index}`}
+                                                    value={tuner?.name ?? ''}
+                                                    placeholder={tuner === null ? '名前を入れて足す' : ''}
+                                                />
+                                            </td>
+                                            <td>
+                                                <input
+                                                    class="input input-sm input-bordered w-72 font-mono text-xs"
+                                                    name={`device.${index}`}
+                                                    value={tuner?.device ?? ''}
+                                                    placeholder="/dev/dvb/adapter0/frontend0"
+                                                />
+                                            </td>
+                                            <td class="whitespace-nowrap">
+                                                {#each TYPES as type (type)}
+                                                    <label class="mr-2 inline-flex items-center gap-1">
+                                                        <input
+                                                            type="checkbox"
+                                                            class="checkbox checkbox-xs"
+                                                            name={`type.${index}.${type}`}
+                                                            checked={tuner?.types.includes(type) ?? false}
+                                                        />
+                                                        <span class="text-xs">{SERVICE_TYPE_LABEL[type]}</span>
+                                                    </label>
+                                                {/each}
+                                            </td>
+                                            <td>
+                                                <input
+                                                    class="input input-sm input-bordered w-20"
+                                                    name={`lnb.${index}`}
+                                                    value={tuner?.lnb ?? ''}
+                                                    placeholder="15v"
+                                                />
+                                            </td>
+                                            <td>
+                                                <input
+                                                    type="checkbox"
+                                                    class="checkbox checkbox-sm"
+                                                    name={`disabled.${index}`}
+                                                    checked={tuner?.disabled ?? false}
+                                                />
+                                            </td>
+                                        </tr>
+                                        {#if tuner?.command}
+                                            <tr>
+                                                <td colspan="5" class="text-base-content/60 text-xs">
+                                                    設定ファイルに直に書いた選局コマンドが効いています
+                                                    (画面からは変えられません):
+                                                    <code class="font-mono">{tuner.command}</code>
+                                                </td>
+                                            </tr>
+                                        {/if}
+                                    {/each}
+                                </tbody>
+                            </table>
+                        </div>
+                        <p class="text-base-content/60 mt-2 text-xs">名前を空にすると、その行は消えます。</p>
+                        <div class="card-actions mt-2">
+                            <button type="submit" class="btn btn-primary btn-sm" data-testid="tuner-config-save">
+                                保存する
+                            </button>
+                            <button type="submit"
+                                class="btn btn-ghost btn-sm"
+                                formaction="?/tunersAuto"
+                                data-testid="tuner-config-auto"
+                            >
+                                自動検出に戻す
+                            </button>
+                        </div>
+                    </form>
                 {/if}
             </div>
         </section>
