@@ -3,9 +3,9 @@ name: denpa
 description: 地デジ・BS/CS の録画サーバ denpa と、チューナーを掴む tuner-agent の一式
 type: application
 # chart 自体の版。中身 (テンプレート・既定値) を変えたら上げる
-version: 0.1.0
+version: 1.0.0
 # 中に入るアプリの版。リリース (git tag) と揃える
-appVersion: "0.9.5"
+appVersion: "1.0.0"
 home: https://github.com/danything/denpa
 sources:
   - https://github.com/danything/denpa
