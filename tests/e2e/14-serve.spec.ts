@@ -6,12 +6,12 @@ import { expect, test } from './helpers';
  *
  * ベーシック認証は廃止した。入る道は **OIDC / TRUSTED_NETWORKS /
  * 期限付きの署名リンク (ファイルの口だけ)** で、どれも設定していなければ
- * **全部断る**。普段のスタックはローカルを信頼した網 (`TRUSTED_NETWORKS=127.0.0.1`)
+ * **全部断る**。普段のスタックはローカルを信頼したネットワーク (`TRUSTED_NETWORKS=127.0.0.1`)
  * にしてあるので、「何も設定していない」ほうは別の口 (`bootClosed`) で確かめる。
  */
-test.describe('信頼した網から来たとき', () => {
+test.describe('信頼したネットワークから来たとき', () => {
     test('何も聞かずに通る', async ({ anonymous }) => {
-        // ローカルからの素の fetch = 信頼した網から来た人
+        // ローカルからの素の fetch = 信頼したネットワークから来た人
         const res = await anonymous('/');
         expect(res.status).toBe(200);
     });

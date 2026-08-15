@@ -6,7 +6,7 @@ import { enabled as oidcEnabled } from './oidc';
  *
  * | 道 | 何者か |
  * | --- | --- |
- * | `TRUSTED_NETWORKS` | 信頼した網から来た人。何も聞かずに通す |
+ * | `TRUSTED_NETWORKS` | 信頼したネットワークから来た人。何も聞かずに通す |
  * | OIDC のログイン | 画面から入る人 (`docs/auth.md`) |
  * | 期限付きの署名リンク (`?token=`) | プレイヤー・ダウンロード。**ファイルの口だけ** |
  * | 使い捨ての札 | ライブ視聴の WebSocket だけ (`tickets.ts`) |
@@ -113,7 +113,7 @@ function entries(): string[] {
 }
 
 /**
- * 住所がその網の中か。IPv4 の CIDR (`10.10.0.0/16`) か、そのままの住所。
+ * 住所がそのネットワークの中か。IPv4 の CIDR (`10.10.0.0/16`) か、そのままの住所。
  * **IPv6 は書いたとおりに一致したときだけ**通す (前置き長での判定は入れていない)。
  */
 export function inNetwork(address: string, entry: string): boolean {

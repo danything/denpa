@@ -29,7 +29,7 @@ docker compose up -d
 ```
 
 1. **開く** — <http://localhost:3000>。誰を通すかは `TRUSTED_NETWORKS` で決めます —
-   compose.yml には**家の中 (プライベートな網) だけ通す**初期値が書いてあります。
+   compose.yml には**家の中 (プライベートネットワーク) だけ通す**初期値が書いてあります。
    設定を消すと全部のアクセスを断り、全部開けるなら `TRUSTED_NETWORKS=0.0.0.0/0`
    (下の「誰を通すか」の注意を読むこと)
 2. **チューナーを確かめる** — 「チューナー」に、見つかったものが並んでいます。
@@ -88,7 +88,7 @@ AV1 が再生できないテレビには、テレビごとに H.264 や生TSを�
 **入る道を設定するまで、全部のアクセスを断ります** (理由つきの 403)。
 入る道は2つで、どちらか (または両方) を設定します:
 
-- **`TRUSTED_NETWORKS`** — この網から来た人は何も聞かずに通します
+- **`TRUSTED_NETWORKS`** — このネットワークから来た人は何も聞かずに通します
   (例 `TRUSTED_NETWORKS=192.168.1.0/24`。テレビの VLC に資格情報を入れずに
   使わせるのもこれ)。**全部のアクセスを許可するなら `TRUSTED_NETWORKS=0.0.0.0/0`**
 - **OIDC** — 画面をログインで守ります。`OIDC_ISSUER` など3つ渡すと有効になります
@@ -124,7 +124,7 @@ AV1 が再生できないテレビには、テレビごとに H.264 や生TSを�
 - [docs/player.md](docs/player.md) — ホーム画面に置く、LAN でも https で開く
 - [docs/agent.md](docs/agent.md) — チューナーを掴むところ (エージェント・取り合い・B-CAS)
 - [docs/encode.md](docs/encode.md) — CM とエンコード (字幕・AV1・CM検出)
-- [docs/auth.md](docs/auth.md) — **誰を通すか** (OIDC でのログイン・信頼した網・署名リンク)
+- [docs/auth.md](docs/auth.md) — **誰を通すか** (OIDC でのログイン・信頼したネットワーク・署名リンク)
 - [docs/migrate.md](docs/migrate.md) — **EPGStation からの引き継ぎ**
 - [docs/stream.md](docs/stream.md) — **ライブ視聴** (放送中のものを観る)
 

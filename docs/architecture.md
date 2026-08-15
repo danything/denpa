@@ -13,7 +13,7 @@
 | 録画の置き場と配り方 (保存先・認証・削除・通知) | [library.md](library.md) |
 | エージェントに聞くもの / denpa が持つもの (番組表・スキャン・予約) | [data.md](data.md) |
 | どこに何があるか (ファイル・環境変数・画面・DB) | [app.md](app.md) |
-| 誰を通すか (OIDC・信頼した網・署名リンク) | [auth.md](auth.md) |
+| 誰を通すか (OIDC・信頼したネットワーク・署名リンク) | [auth.md](auth.md) |
 | EPGStation からの引き継ぎ | [migrate.md](migrate.md) |
 | ライブ視聴 (放送中のものを観る。**映像・音声・字幕・データ放送が入っています**) | [stream.md](stream.md) |
 

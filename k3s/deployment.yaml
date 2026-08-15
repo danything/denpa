@@ -163,7 +163,7 @@ spec:
             - name: OIDC_GROUP
               valueFrom:
                 secretKeyRef: { name: denpa-oidc, key: group }
-            # **LAN の網から来たときだけ、何も聞かずに通す。**
+            # **LAN から来たときだけ、何も聞かずに通す。**
             # OIDC も掛からないので、LAN のプレイヤー (テレビの VLC など) に
             # 資格情報を入れずに使える。
             #

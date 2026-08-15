@@ -2,7 +2,7 @@ import { bootOidc, type OidcStack } from '../stack';
 import { test as base, expect } from './helpers';
 
 /**
- * OIDC でのログインと、網で素通しにする口。
+ * OIDC でのログインと、ネットワークで素通しにする口。
  *
  * **普段の一式とは別に立てます。** `stack` を OIDC にしてしまうと、他の全部の
  * テストがログインを通らないと何もできなくなるため (`bootOidc`)。
@@ -21,7 +21,7 @@ const test = base.extend<{ oidc: OidcStack }>({
 
 /** LAN の外から来たことにする住所 */
 const OUTSIDE = '203.0.113.9';
-/** 素通しにしてある網の中 */
+/** 素通しにしてあるネットワークの中 */
 const INSIDE = '10.10.5.9';
 
 /** Cookie を持って回る、素の fetch */
@@ -190,20 +190,20 @@ test.describe('グループで絞る', () => {
 });
 
 /**
- * **網の中なら素通しにする。**
+ * **ネットワークの中なら素通しにする。**
  *
  * LAN のプレイヤー (テレビの VLC) に資格情報を入れずにファイルを取らせるためのもの。
  * ここに当たるとベーシック認証も OIDC も掛からない。
  */
-test.describe('網で素通し', () => {
-    test('網の中なら、何も聞かずに通す', async ({ oidc }) => {
+test.describe('ネットワークで素通し', () => {
+    test('ネットワークの中なら、何も聞かずに通す', async ({ oidc }) => {
         const get = client(oidc, { xff: INSIDE });
         expect((await get('/')).res.status).toBe(200);
         // ファイルの口も。ここが素通しになるのが狙い (404 = 認証は抜けて、録画が無いだけ)
         expect((await get('/api/recordings/1/file')).res.status).toBe(404);
     });
 
-    test('網の外は通さない', async ({ oidc }) => {
+    test('ネットワークの外は通さない', async ({ oidc }) => {
         const get = client(oidc, { xff: OUTSIDE });
         expect((await get('/')).res.status).toBe(302);
         // ファイルの口は控えの署名リンクかログインの控えだけ。どちらも無ければ

@@ -71,7 +71,7 @@
 (DNS-01 なので外から繋がる必要がありません)。
 
 `k3s/ingress.yaml` にその名前を足してあり、**https://dp.l.doany.io** です。
-Traefik 側で LAN 内 (10.10.0.0/16) からだけ通し、denpa 側もその網からは
+Traefik 側で LAN 内 (10.10.0.0/16) からだけ通し、denpa 側もそのネットワークからは
 何も聞きません (`TRUSTED_NETWORKS`、[auth.md](auth.md))。
 プレイヤー (テレビの VLC) が録画を取りに来るのも同じ口です。
 

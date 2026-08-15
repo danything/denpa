@@ -88,7 +88,7 @@ describe('入る道が設定してあるか', () => {
  *
  * 見るのは住所だけ。どの名前で来たかは問わない (名前で分けるのは前段の仕事)。
  */
-describe('網の中なら素通しにする', () => {
+describe('ネットワークの中なら素通しにする', () => {
     const original = config.trustedNetworks;
     beforeEach(() => {
         config.trustedNetworks = '10.10.0.0/16';
@@ -97,11 +97,11 @@ describe('網の中なら素通しにする', () => {
         config.trustedNetworks = original;
     });
 
-    test('網の中なら通す', () => {
+    test('ネットワークの中なら通す', () => {
         expect(trusted('10.10.5.9')).toBe(true);
     });
 
-    test('網の外は通さない', () => {
+    test('ネットワークの外は通さない', () => {
         expect(trusted('203.0.113.9')).toBe(false);
     });
 
@@ -125,7 +125,7 @@ describe('網の中なら素通しにする', () => {
     });
 });
 
-describe('住所が網の中か', () => {
+describe('住所がネットワークの中か', () => {
     test('CIDR の中と外', () => {
         expect(inNetwork('10.10.0.1', '10.10.0.0/16')).toBe(true);
         expect(inNetwork('10.10.255.254', '10.10.0.0/16')).toBe(true);

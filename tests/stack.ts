@@ -190,7 +190,7 @@ async function boot(index: number): Promise<{ stack: Stack; shutdown: () => Prom
             // 録画が終わるまで待たれるとテストが終わらない
             SHUTDOWN_WAIT: '0',
             ENCODE_CONCURRENCY: '2',
-            // ローカルからの接続は信頼した網として素通しにする。
+            // ローカルからの接続は信頼したネットワークとして素通しにする。
             // 入る道の無い構成 (全部断る) は 14-serve が別の口で確かめる
             TRUSTED_NETWORKS: '127.0.0.1',
         });
@@ -214,7 +214,7 @@ export interface OidcStack {
     idpUrl: string;
     /** OIDC を有効にした denpa。普段の `stack.appUrl` とは別の口 */
     appUrl: string;
-    /** 何も聞かずに通す網 (TRUSTED_NETWORKS に入れてある) */
+    /** 何も聞かずに通すネットワーク (TRUSTED_NETWORKS に入れてある) */
     trustedNetwork: string;
     clientId: string;
     group: string;
@@ -284,7 +284,7 @@ export async function bootOidc(
             OIDC_CLIENT_ID: oidc.clientId,
             OIDC_CLIENT_SECRET: 'e2e-secret',
             OIDC_GROUP: oidc.group,
-            // この網から来たら何も聞かない
+            // このネットワークから来たら何も聞かない
             TRUSTED_NETWORKS: oidc.trustedNetwork,
             ADDRESS_HEADER: 'x-forwarded-for',
         });
@@ -302,7 +302,7 @@ export async function bootOidc(
 /**
  * **入る道を何も設定していない denpa。** OIDC も TRUSTED_NETWORKS も無ければ
  * **全部のアクセスを断る**ことを確かめるための口 (`14-serve` だけが使う)。
- * 普段の `stack` はローカルを信頼した網にしてあるので、これは別に立てる。
+ * 普段の `stack` はローカルを信頼したネットワークにしてあるので、これは別に立てる。
  */
 export async function bootClosed(
     index: number,
