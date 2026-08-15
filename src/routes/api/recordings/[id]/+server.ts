@@ -1,7 +1,19 @@
-import { error } from '@sveltejs/kit';
+import { error, json } from '@sveltejs/kit';
 import { emit } from '$lib/server/events';
 import { deleteRecordingFiles } from '$lib/server/files';
 import { recordingOr404 } from '$lib/server/recording';
+
+/**
+ * 録画の状態を返す。**追っかけ再生の画面が「焼き上がったか」を聞く口** —
+ * 録り終えてから焼き上がるまでの間 (CM検出・エンコード) も追っかけの器で
+ * 観られるが、焼き上がれば普通の観る画面 (シークも字幕も揃う) に移りたい。
+ * 画面は `recordings` の知らせ (SSE) を受けるたびにここを読む。
+ * 中身は行そのものではなく、判断に要る2つだけ
+ */
+export function GET({ params }) {
+    const recording = recordingOr404(params.id);
+    return json({ id: recording.id, encoded: recording.library_path !== null, state: recording.state });
+}
 
 /**
  * 録画を消す。**オフライン視聴の後片付けの口** ([docs/offline.md](../../../../../docs/offline.md))。

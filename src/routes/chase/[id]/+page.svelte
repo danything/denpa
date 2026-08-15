@@ -35,6 +35,7 @@
     import { programDetail } from '$lib/detail.svelte';
     import { clock as clockLabel, time } from '$lib/format';
     import { livePlayer } from '$lib/live-player.svelte';
+    import { liveUpdates } from '$lib/live-updates.svelte';
     import { keepResume } from '$lib/resume';
 
     /**
@@ -55,6 +56,26 @@
 
     /** 右端を伸ばすための時計。1秒刻みで十分 (バーの目盛りより細かい) */
     let clock = $state(Date.now());
+
+    /**
+     * **焼き上がったら観る画面へ案内する。** 録り終えてから焼き上がるまでの間
+     * (CM検出・エンコード) もこの器で観られるが、焼き上がれば普通の観る画面の
+     * ほうがよい (シークも字幕も揃い、サーバの ffmpeg も要らない)。
+     * 録画の知らせ (SSE) が来るたびに1つの口を読み、焼けていれば札を出す。
+     * **勝手には移らない** — 観ている最中に画面が切り替わると位置が飛ぶ。
+     * 押して移れば、途中の位置は続き再生 (keepResume) が覚えている
+     */
+    let encoded = $state(false);
+    liveUpdates([], {
+        recordings: () => {
+            void fetch(`/api/recordings/${data.rec.id}`)
+                .then((res) => (res.ok ? res.json() : null))
+                .then((body: { encoded?: boolean } | null) => {
+                    if (body?.encoded === true) encoded = true;
+                })
+                .catch(() => {});
+        },
+    });
 
     /**
      * 右に出す番組の中身 (観る画面と同じ考え方)。録画の行が持っているぶんで
@@ -295,7 +316,22 @@
             </div>
         </ControlBar>
 
-        {#if player.chaseEnded}
+        {#if encoded}
+            <!--
+                焼き上がった。続きは観る画面で (位置は続き再生が覚えている)。
+                StageNote は押せない札 (pointer-events-none) なので、ここだけ押せる形で置く。
+                見た目の決まりは同じ (rounded-box bg-black/60)
+            -->
+            <div class="absolute inset-x-0 top-0 z-10 flex justify-center p-2" data-testid="chase-encoded">
+                <a
+                    class="rounded-box bg-black/60 px-3 py-1 text-xs text-white underline decoration-white/50 underline-offset-2 hover:bg-black/80"
+                    href="/watch/{data.rec.id}"
+                    data-testid="chase-to-watch"
+                >
+                    焼き上がりました — 観る画面で続きを ▶
+                </a>
+            </div>
+        {:else if player.chaseEnded}
             <!-- 録れているところまで観た。録画が終わっていれば、この先はもう来ない -->
             <StageNote testid="chase-ended">録れているところまで観ました</StageNote>
         {/if}

@@ -304,8 +304,16 @@
      */
     function watchLink(rec: (typeof data.recordings)[number]): string | null {
         if (rec.deleted_at !== null || rec.state === 'failed') return null;
-        if (rec.library_path === null) return null;
-        return `/watch/${rec.id}`;
+        if (rec.library_path !== null) return `/watch/${rec.id}`;
+        /*
+         * **焼き上がる前でも観られる。** 録っている最中はもちろん、録り終えて
+         * CM検出やエンコードを待っている間も、生TSはある。追っかけ再生の器
+         * (`/chase`。ライブと同じくサーバが焼き直して運ぶ) で頭から観られる。
+         * 以前は焼き上がるまで行が押せず、30分番組を録り終えたあと数分〜十数分
+         * 「観られるのに観られない」時間があった
+         */
+        if (rec.ts_path !== null) return `/chase/${rec.id}`;
+        return null;
     }
 
     /**
