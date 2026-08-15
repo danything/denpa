@@ -1,4 +1,4 @@
-import { expect, goto, syncEpg, test } from './helpers';
+import { clearRules, expect, goto, syncEpg, test } from './helpers';
 
 /**
  * ルールで立った予約まわり。
@@ -10,27 +10,15 @@ import { expect, goto, syncEpg, test } from './helpers';
 test.describe('ルールで立った予約', () => {
     test.beforeEach(async ({ page, request }) => {
         await syncEpg(request);
-        await goto(page, '/rules');
         // 前のテストが残したルールを片付ける
-        for (let i = 0; i < 20; i++) {
-            const rows = page.getByTestId('rule-row');
-            if ((await rows.count()) === 0) break;
-            await rows.first().getByTestId('rule-delete').click();
-            await page.waitForTimeout(100);
-        }
+        await clearRules(page);
         await page.getByTestId('rule-keyword').fill('テストアニメ');
         await page.getByTestId('rule-submit').click();
         await expect(page.getByTestId('rule-row').first()).toBeVisible();
     });
 
     test.afterEach(async ({ page }) => {
-        await goto(page, '/rules');
-        for (let i = 0; i < 20; i++) {
-            const rows = page.getByTestId('rule-row');
-            if ((await rows.count()) === 0) break;
-            await rows.first().getByTestId('rule-delete').click();
-            await page.waitForTimeout(100);
-        }
+        await clearRules(page);
     });
 
     test('取り消したあと戻せる', async ({ page }) => {

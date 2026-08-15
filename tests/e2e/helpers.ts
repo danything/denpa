@@ -232,13 +232,19 @@ export async function setRecording(
  */
 export async function clearRules(page: Page): Promise<void> {
     await goto(page, '/rules');
+    /*
+     * **消えるのを待ってから次を押す。** 数えた直後に前の削除が反映されて
+     * 行が消える (か、送信中で `disabled` になる) と、`first().click()` が
+     * 押せる要素をテストのタイムアウトいっぱい (2分) 待っていた
+     */
+    const rows = page.getByTestId('rule-row');
     for (let i = 0; i < 20; i++) {
-        const buttons = page.getByTestId('rule-delete');
-        if ((await buttons.count()) === 0) break;
-        await buttons.first().click();
-        await page.waitForTimeout(100);
+        const count = await rows.count();
+        if (count === 0) break;
+        await page.getByTestId('rule-delete').first().click();
+        await expect(rows).toHaveCount(count - 1);
     }
-    await expect(page.getByTestId('rule-row')).toHaveCount(0);
+    await expect(rows).toHaveCount(0);
 }
 
 /**
