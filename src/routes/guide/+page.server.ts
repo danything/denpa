@@ -1,6 +1,5 @@
 import { fail } from '@sveltejs/kit';
 import { queryAll, queryOne } from '$lib/server/db';
-import { downloadContext } from '$lib/server/download';
 import { airing, CURRENT_SERVICES, SERVICE_ORDER } from '$lib/server/epg';
 import { cancel, reserve } from '$lib/server/reservations';
 import { RESERVATION_STATE } from '$lib/server/schema';
@@ -110,8 +109,6 @@ export async function load({ url }) {
         watchable,
         // 放送していない局は出さない (終わったチャンネル・相乗り中のサブチャンネル)
         services: airing(services, programs),
-        // 録れた番組は詳細からそのまま観られる。落とすときの資格情報は録画一覧と同じ
-        ...downloadContext(url),
     };
 }
 

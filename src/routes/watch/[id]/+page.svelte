@@ -39,6 +39,7 @@
     import { snapshotter } from '$lib/components/player/shot.svelte';
     import Toasts, { errorNotice, type Notice } from '$lib/components/Toasts.svelte';
     import { type DetailSeed, programDetail } from '$lib/detail.svelte';
+    import { startDownload } from '$lib/download';
     import { clock, cmNoteWorthShowing, recordedDuration, size } from '$lib/format';
     import { write as remind, read as stored } from '$lib/keep';
     import { loadOffline } from '$lib/offline.svelte';
@@ -1003,11 +1004,12 @@
                             このブラウザでは再生できませんでした。<br
                             />ダウンロードして、お手元のプレイヤーで観てください。
                         </p>
-                        <!-- src は端末のコピー (blob:) のことがあるので、落とす口は API を名指す -->
-                        <a
+                        <!-- src は端末のコピー (blob:) のことがあるので、落とす口は API を名指す。
+                            押されてから期限付きの署名URLを作る ($lib/download) -->
+                        <button
+                            type="button"
                             class="btn btn-sm"
-                            href="/api/recordings/{rec.id}/file?source=encoded&download=1"
-                            download>ダウンロード</a
+                            onclick={() => void startDownload(rec.id, 'encoded')}>ダウンロード</button
                         >
                     </div>
                 {/if}
@@ -1313,14 +1315,15 @@
                 **「一覧へ」は置かない。** 絵の右上の「×」が同じ行き先で、
                 2つ並べる意味が無かった
             -->
-            <a
+            <!-- 押されてから期限付きの署名URLを作って落とす ($lib/download) -->
+            <button
+                type="button"
                 class="btn btn-sm btn-outline"
-                href="/api/recordings/{rec.id}/file?download=1&source=encoded"
-                download
+                onclick={() => void startDownload(rec.id, 'encoded')}
                 data-testid="watch-download"
             >
                 ダウンロード
-            </a>
+            </button>
         {/snippet}
     </FactsAside>
 </div>

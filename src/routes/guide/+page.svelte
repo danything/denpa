@@ -2,7 +2,7 @@
     import { preloadData } from '$app/navigation';
     import { dragScroll, submitting } from '$lib/actions';
     import ProgramDetail from '$lib/components/ProgramDetail.svelte';
-    import { withCredentials } from '$lib/download';
+    import { startDownload } from '$lib/download';
     import { date, genreTint, SERVICE_TYPE_LABEL, stateLabel, time } from '$lib/format';
 
     let { data, form } = $props();
@@ -476,17 +476,15 @@
                             再生
                         </a>
                     {/if}
-                    <a
+                    <!-- 押されてから期限付きの署名URLを作って落とす ($lib/download) -->
+                    <button
+                        type="button"
                         class="btn btn-ghost"
-                        href={withCredentials(
-                            `${data.origin}/api/recordings/${program.recording_id}/file?download=1`,
-                            data.credentials,
-                        )}
-                        download
+                        onclick={() => void startDownload(program.recording_id ?? -1)}
                         data-testid="detail-download"
                     >
                         ダウンロード
-                    </a>
+                    </button>
                 {/if}
 
                 {#if program.start_at <= clock && program.end_at > clock && watchable.has(program.service_id)}

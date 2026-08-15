@@ -5,7 +5,7 @@
     import ProgramDetail from '$lib/components/ProgramDetail.svelte';
     import Toasts, { errorNotice, type Notice } from '$lib/components/Toasts.svelte';
     import { type DetailSeed, programDetail } from '$lib/detail.svelte';
-    import { withCredentials } from '$lib/download';
+    import { startDownload } from '$lib/download';
     import { applyEncodeProgress, encodeLive } from '$lib/encode-live.svelte';
     import {
         badgeClass,
@@ -37,15 +37,15 @@
     const active = ['scheduled', 'conflict', 'recording'];
 
     /*
-     * ダウンロードは資格情報を URL に入れる。ブラウザは画面を開いたときの認証を
-     * ダウンロードに引き継がないので、素のURLだと 401 になって落ちてこない。
-     * ?download=1 でサーバが添付として返し、ファイル名も付く
+     * ダウンロードは押されてから期限付きの署名URLを作って始める (`$lib/download`)。
+     * 資格情報を URL に埋めていた頃は、パスワードがダウンロード履歴に残り続けた
      */
-    const downloadUrl = (id: number, source?: 'ts' | 'encoded' | 'alt') =>
-        withCredentials(
-            `${data.origin}/api/recordings/${id}/file?download=1${source === undefined ? '' : `&source=${source}`}`,
-            data.credentials,
-        );
+    function download(id: number, source?: 'ts' | 'encoded' | 'alt'): void {
+        void startDownload(id, source).then((ok) => {
+            if (!ok) noteVlc('error', 'ダウンロードのリンクを作れませんでした');
+        });
+        detail.close();
+    }
 
     /** もう一方のコーデック (H.264) も焼いてあるか。両方焼いた録画でだけ在る */
     function hasAlt(rec: (typeof data.recordings)[number]): boolean {
@@ -1150,11 +1150,10 @@
                         **押したら閉じる** — 落とし始めたあとも詳細が残っていると、
                         押せたのかどうかが分からない
                     -->
-                    <a
+                    <button
+                        type="button"
                         class="btn btn-ghost justify-start"
-                        href={downloadUrl(rec.id, bothFiles(rec) || hasAlt(rec) ? 'encoded' : undefined)}
-                        download
-                        onclick={() => detail.close()}
+                        onclick={() => download(rec.id, bothFiles(rec) || hasAlt(rec) ? 'encoded' : undefined)}
                         data-testid="download-link"
                     >
                         {hasAlt(rec)
@@ -1162,30 +1161,28 @@
                             : bothFiles(rec)
                               ? 'ダウンロード (エンコード済み)'
                               : 'ダウンロード'}
-                    </a>
+                    </button>
                     {#if hasAlt(rec)}
                         <!-- 両方のコーデックを焼いた録画でだけ。AV1 を解けない相手はこちら -->
-                        <a
+                        <button
+                            type="button"
                             class="btn btn-ghost justify-start"
-                            href={downloadUrl(rec.id, 'alt')}
-                            download
-                            onclick={() => detail.close()}
+                            onclick={() => download(rec.id, 'alt')}
                             data-testid="download-alt-link"
                         >
                             ダウンロード (H.264)
-                        </a>
+                        </button>
                     {/if}
                     {#if bothFiles(rec)}
                         <!-- 元も落とせるように。両方残っているときだけ (`bothFiles`) -->
-                        <a
+                        <button
+                            type="button"
                             class="btn btn-ghost justify-start"
-                            href={downloadUrl(rec.id, 'ts')}
-                            download
-                            onclick={() => detail.close()}
+                            onclick={() => download(rec.id, 'ts')}
                             data-testid="download-ts-link"
                         >
                             ダウンロード (生TS)
-                        </a>
+                        </button>
                     {/if}
                     <!--
                         **出先のプレイヤー向けの再生リンク** (share.ts)。24時間で

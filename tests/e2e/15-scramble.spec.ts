@@ -94,22 +94,27 @@ test.describe('スクランブルされたまま録れたとき', () => {
             /*
              * **名指しした側が本当に来ること。** 落ちてくる名前で分かる —
              * 焼いたほうは .mkv、元は .m2ts。ここが同じものを指していたら
-             * 口が2つある意味が無い
+             * 口が2つある意味が無い。押すと期限付きの署名URLが作られるので、
+             * その URL を**資格情報なしの Range** で叩いて名前を見る
+             * (token だけで通ることの確認も兼ねる)
              */
-            const fetchName = async (link: typeof raw) => {
-                const href = (await link.getAttribute('href')) ?? '';
-                const got = await request.get(href.replace(/^[^:]+:\/\/[^/]+/, ''), {
-                    headers: {
-                        Range: 'bytes=0-99',
-                        Authorization: `Basic ${Buffer.from('denpa:ひみつ', 'utf8').toString('base64')}`,
-                    },
+            const fetchName = async (testid: string) => {
+                const started = page.waitForEvent('download');
+                await detail.getByTestId(testid).click();
+                const download = await started;
+                const url = new URL(download.url());
+                await download.cancel();
+                const got = await request.get(url.pathname + url.search, {
+                    headers: { Range: 'bytes=0-99' },
                 });
                 expect(got.status()).toBe(206);
                 return got.headers()['content-disposition'] ?? '';
             };
-            expect(await fetchName(raw)).toContain('.m2ts');
-            expect(await fetchName(detail.getByTestId('download-link'))).toContain('.mkv');
-            await page.getByTestId('detail-close').click();
+            expect(await fetchName('download-ts-link')).toContain('.m2ts');
+            // 落とし始めると詳細が畳まれるので、もう一方は開き直してから
+            await page.locator(row).getByTestId('detail-button').click();
+            await detail.getByTestId('detail-more').click();
+            expect(await fetchName('download-link')).toContain('.mkv');
         } finally {
             await setRecording(request);
         }

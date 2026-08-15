@@ -1,7 +1,6 @@
 import { statSync } from 'node:fs';
 import { fail } from '@sveltejs/kit';
 import { database, queryAll, queryOne } from '$lib/server/db';
-import { downloadContext } from '$lib/server/download';
 import { cancel as cancelEncode, enqueue, pump } from '$lib/server/encoder';
 import { emit } from '$lib/server/events';
 import { deleteRecordingFiles, reconcile } from '$lib/server/files';
@@ -242,8 +241,6 @@ export function load({ url }) {
         q,
         // 「テレビで再生」を出すかどうか。設定にテレビが書いてあるときだけ (vlc.ts)
         vlcTargets: targets(),
-        // ダウンロードURLに埋める資格情報 (server/download.ts)。番組表の画面にも同じものを渡す
-        ...downloadContext(url),
     };
 }
 

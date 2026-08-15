@@ -39,7 +39,7 @@ EPGStation の置き換えとして作ったもので、エンコード設定は
 | `src/lib/server/bml-network.ts` | データ放送の双方向の中継 (`/api/bml/proxy`・`/post`・`/confirm`)。**既定は切・公開の相手だけ** |
 | `src/lib/vendor/web-bml/` | 借りもの。BML を描くところ ([README](../src/lib/vendor/web-bml/README.md)) |
 | `src/lib/pgs.ts` | PGS (Blu-ray の字幕) の**組み立てと読み出し**。ffmpeg に符号器が無いので自前。読むほうはブラウザで使う (`readSup`) |
-| `src/lib/download.ts` | 録画を落とすURLの組み立て (資格情報を埋める) |
+| `src/lib/download.ts` | 録画のダウンロード開始 (押されてから期限付きの署名URLを作る) |
 | `src/lib/ts/watch.ts` | 録画を観るときの押したことの読み方 (2回押し・チャプター送り・続きの位置。DOM を触らない) |
 | `src/lib/components/player/` | 映像の上に置くもの。**3画面 (ライブ・追っかけ・観る画面) で共通** (アイコン・重ねボタン・操作列・出し入れの決め方・**字幕の重ね方**) |
 | `src/lib/server/library.ts` | 保存先でのファイル配置 |

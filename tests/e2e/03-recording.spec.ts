@@ -110,17 +110,23 @@ test.describe('録画とエンコード', () => {
         );
 
         /*
-         * ダウンロードのリンクは資格情報を URL に入れる。ブラウザは画面を開いた
-         * ときの認証をダウンロードに引き継がないので、素のURLだと 401 になる。
+         * ダウンロードは押されてから**期限付きの署名URL** (?token=) を作って始める。
+         * 資格情報を URL に埋めていた頃は、パスワードがダウンロード履歴に残り続けた。
          *
          * **口は詳細の中にある。** 一覧の行に並べていた頃は、1行に4つも5つも
          * ボタンが載って狭い画面で横に流れていた
          */
-        const href = (await detail.getByTestId('download-link').getAttribute('href')) ?? '';
-        expect(href).toContain('denpa:');
-        expect(href).toContain('download=1');
+        await detail.getByTestId('detail-more').click();
+        const started = page.waitForEvent('download');
+        await detail.getByTestId('download-link').click();
+        const download = await started;
+        const minted = new URL(download.url());
+        expect(minted.search).toContain('token=');
+        expect(minted.search).toContain('download=1');
+        expect(download.url()).not.toContain('denpa:');
+        await download.cancel();
 
-        await page.getByTestId('detail-close').click();
+        // 落とし始めたら詳細は畳む (押せたかどうかが分かるように)
         await expect(detail).toHaveCount(0);
 
         // ファイルは Range で取りに行ける。プレイヤーはこれでシークするので、
@@ -138,8 +144,9 @@ test.describe('録画とエンコード', () => {
         expect(part.headers()['content-range']).toMatch(/^bytes 0-99\/\d+$/);
         expect((await part.body()).byteLength).toBe(100);
 
-        // 名前を付けないと「file」という拡張子の無いファイルとして落ちてくる
-        const attached = await request.get(href);
+        // 名前を付けないと「file」という拡張子の無いファイルとして落ちてくる。
+        // 署名URLは資格情報なしで通る (token が資格そのもの)
+        const attached = await request.get(minted.pathname + minted.search);
         expect(attached.status()).toBe(200);
         const disposition = attached.headers()['content-disposition'] ?? '';
         expect(disposition).toMatch(/^attachment;/);
