@@ -40,7 +40,13 @@ SHELL ["/bin/bash", "-c"]
 ENV CURL="curl -fsSL --retry 5 --retry-delay 5 --retry-all-errors --connect-timeout 20"
 
 # woff2 は ARIB フォントをブラウザ用に縮めるのに使う (データ放送。下の説明)
-ENV DEV="curl ca-certificates build-essential cmake pkg-config nasm patch zlib1g-dev libfreetype6-dev libopus-dev libx264-dev libdav1d-dev libfontconfig-dev woff2"
+# libvpl-dev / libva-dev は Intel の GPU (QSV) 向け。**いまはまだ使っていない** —
+# ffmpeg に libvpl (QSV = h264_qsv / av1_qsv) を組み込み、実行イメージにドライバを
+# 入れてあるだけで、エンコードの引数はソフトウェア (libsvtav1 / libx264) のまま。
+# **libva は QSV の下に必ず居る** (Linux では libvpl → libmfx-gen → libva → /dev/dri)。
+# vaapi も有効にしてあるのは、QSV が効かない機種の逃げ道 (h264_vaapi) のため。
+# 使うときは Pod に /dev/dri を渡して、encoder.ts の videoArgs で *_qsv を選ぶ
+ENV DEV="curl ca-certificates build-essential cmake pkg-config nasm patch zlib1g-dev libfreetype6-dev libopus-dev libx264-dev libdav1d-dev libfontconfig-dev woff2 libva-dev libvpl-dev"
 
 # renovate: datasource=github-tags depName=FFmpeg/FFmpeg extractVersion=^n(?<version>.*)$
 ENV FFMPEG_VERSION=9.0.1
@@ -87,6 +93,8 @@ RUN apt-get update && \
       --enable-libsvtav1 \
       --enable-libx264 \
       --enable-libdav1d \
+      --enable-vaapi \
+      --enable-libvpl \
     && \
     make -j$(nproc) && make install && \
     rm -rf /var/lib/apt/lists/* /tmp/*
@@ -182,10 +190,14 @@ ENV NODE_ENV=production \
 # 投げる(あちらにしか pcscd が居ないため)。recisdb も libpcsclite も要らない
 # libav* は join_logo_scp 一式のため。あちらは Debian の共有ライブラリに繋いである
 # (denpa 自身の ffmpeg は下で入れる自前ビルド)
+# libvpl2 + libmfx-gen1.2 (QSV のランタイム) + libva* + intel-media-va-driver (iHD) は
+# Intel の GPU (QSV) 向け。**まだ使っていない** (上の ffmpeg 段の説明)。入れておくだけで、
+# GPU の無い機械でも害は無い (ffmpeg は初期化に失敗したデバイスを使わないだけ)
 RUN apt-get update && \
     apt-get -y --no-install-recommends install \
       libopus0 libx264-164 libdav1d7 libfontconfig1 libfreetype6 \
       libavformat61 libavcodec61 libavutil59 libswscale8 libswresample5 \
+      libva2 libva-drm2 libvpl2 intel-media-va-driver libmfx-gen1.2 \
       fontconfig ca-certificates tzdata && \
     apt-get clean && rm -rf /var/lib/apt/lists/*
 
