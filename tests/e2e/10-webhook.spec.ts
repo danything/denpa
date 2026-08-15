@@ -1,4 +1,4 @@
-import { expect, goto, syncEpg, test } from './helpers';
+import { clearWebhooks, expect, goto, syncEpg, test } from './helpers';
 
 /**
  * 録画の節目を外部に飛ばす。
@@ -8,19 +8,8 @@ test.describe('通知', () => {
     test.beforeEach(async ({ page, request, stack }) => {
         await syncEpg(request);
         await request.post(`${stack.webhookUrl}/__control/reset`);
-        /*
-         * 前のテストが残した通知先を消す。**消えるのを待ってから次を押す** —
-         * 数えた直後に前の削除が反映されて行が消えると、`first().click()` が
-         * 存在しない要素をテストのタイムアウトいっぱい (2分) 待っていた
-         */
-        await goto(page, '/settings');
-        const rows = page.getByTestId('webhook-delete');
-        for (let i = 0; i < 10; i++) {
-            const count = await rows.count();
-            if (count === 0) break;
-            await rows.first().click();
-            await expect(rows).toHaveCount(count - 1);
-        }
+        // 前のテストが残した通知先を消す
+        await clearWebhooks(page);
     });
 
     test('通知先を追加してテスト送信すると、相手に届く', async ({ page, request, stack }) => {

@@ -18,6 +18,8 @@ services:
     tuner-agent:
         image: ghcr.io/danything/denpa-agent:latest
         restart: unless-stopped
+        # denpa と同じ (下の説明)。TS を流しているのはこちらなので、先に消えると録画ごと切れる
+        stop_grace_period: 6h5m
         # チューナーとカードリーダーに触るため
         privileged: true
         devices:

@@ -227,16 +227,6 @@ export async function retryWhileBusy<T>(
     }
 }
 
-/** エージェントが生きているか。ダッシュボードの表示用 */
-export async function ping(): Promise<{ ok: boolean; tuners?: number; error?: string }> {
-    try {
-        const tuners = await getTuners();
-        return { ok: true, tuners: tuners.length };
-    } catch (error) {
-        return { ok: false, error: String(error) };
-    }
-}
-
 /**
  * **同じ TS を指している枠か。** 指していれば、先に見つけたほうの名前を返す。
  *

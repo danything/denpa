@@ -163,8 +163,6 @@ async function boot(index: number): Promise<{ stack: Stack; shutdown: () => Prom
              */
             ORIGIN: stack.appUrl,
             DENPA_DB: `${root}/denpa.db`,
-            // 明示的に切った中継だけを見たいので、アイドル回収は長めに
-            LIVE_IDLE_TIMEOUT: '600000',
             RECORDED_DIR: stack.recordedDir,
             LIBRARY_DIR: stack.libraryDir,
             FFMPEG: './tests/fake/ffmpeg.sh',

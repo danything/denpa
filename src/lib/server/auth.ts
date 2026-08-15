@@ -97,9 +97,9 @@ export function sessionMayRead(pathname: string, loggedIn: boolean): boolean {
  * **ここに当たると OIDC も掛かりません。** LAN のプレイヤー (テレビの VLC など)
  * に資格情報を入れずにファイルを取らせるのが狙いです。
  *
- * **どの名前で来たかは問いません。** 名前で分けるのは前段 (Traefik) の仕事で、
- * LAN 用の名前には `ClientIP` を条件に付けてあります。ここで名前も見ると
- * 同じ条件を二か所に書くことになり、片方だけ直して食い違うほうが危ない。
+ * **どの名前で来たかは問いません。** 前段 (Traefik) は名前を届けるだけで、
+ * 名前ごとに何かを分けてはいない。ここで名前まで見ると条件が二か所に散り、
+ * 片方だけ直して食い違うほうが危ない。
  */
 export function trusted(address: string): boolean {
     return entries().some((network) => inNetwork(address, network));

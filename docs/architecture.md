@@ -13,7 +13,7 @@
 | 録画の置き場と配り方 (保存先・認証・削除・通知) | [library.md](library.md) |
 | エージェントに聞くもの / denpa が持つもの (番組表・スキャン・予約) | [data.md](data.md) |
 | どこに何があるか (ファイル・環境変数・画面・DB) | [app.md](app.md) |
-| 誰を通すか (OIDC・信頼したネットワーク・署名リンク) | [auth.md](auth.md) |
+| 誰を通すか (OIDC・信頼したネットワーク・期限付きのリンク) | [auth.md](auth.md) |
 | EPGStation からの引き継ぎ | [migrate.md](migrate.md) |
 | ライブ視聴 (放送中のものを観る。**映像・音声・字幕・データ放送が入っています**) | [stream.md](stream.md) |
 
@@ -189,18 +189,20 @@ PreSync フックに置いています (`denpa-prepull`、中身は `/bin/true`)
 `helm.valuesObject` (インライン) を重ねて当てています — **chart の使い方の実例**として
 読めます。bootstrap の ApplicationSet は `k3s/` を「素のマニフェストの置き場」として
 読むので、そこには Application (chart を指す) と、chart に持てないもの — SealedSecret
-(名前空間と名前が鍵に絡む) と Namespace — だけを素のまま置いています。
+(名前空間と名前が鍵に絡む) と、この置き場の設定 (`argocd.yaml`) — だけを素のまま
+置いています。Namespace は要りません (ApplicationSet の `CreateNamespace` が作る)。
 値を別ファイルにしないのも同じ理由 (kind が無いので ApplicationSet が読めない)。
 
 このリポジトリには `denpa` namespace のアプリ本体しか入っていません。k3sホストの初期構築や
 共通アドオンは別の(プライベートな) bootstrap リポジトリ側です。適用前に以下が要ります。
 
 - **StorageClass `local-path-retain`** — `reclaimPolicy: Retain` の local-path
-- **Traefik** — `mydnschallenge` certResolver (Cloudflare DNS-01)、
-  `allowCrossNamespace: true`
-- **ArgoCD** — push時に webhook が自動登録される運用。Application 自体はクラスタの
-  state.db バックアップから復元される前提でマニフェストとしては存在しません
-- **DNS** — `m.doany.io` / `dp.doany.io` が Traefik の外部IPを指すこと。
+- **Traefik** — `mydnschallenge` certResolver (Cloudflare DNS-01)。forward-auth を
+  外したので、名前空間をまたぐ参照はもうありません
+- **ArgoCD** — push時に webhook が自動登録される運用。Application 自体は
+  [k3s/application.yaml](../k3s/application.yaml) に置いてあり、bootstrap の
+  ApplicationSet が `k3s/argocd.yaml` を見て拾います
+- **DNS** — `dp.doany.io` が Traefik の外部IPを指すこと。
   LAN 用の `dp.l.doany.io` は `*.l.doany.io` の書き換えで内側のIPへ
 - **チューナードライバ** — エージェントは `privileged: true` かつ `/dev/bus`・`/dev/dvb` を
   hostPath でマウントするので、ノード側にドライバが読み込まれていること

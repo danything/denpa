@@ -158,7 +158,7 @@ AV1 が再生できないテレビには、テレビごとに H.264 や生TSを�
 - [docs/player.md](docs/player.md) — ホーム画面に置く、LAN でも https で開く
 - [docs/agent.md](docs/agent.md) — チューナーを掴むところ (エージェント・取り合い・B-CAS)
 - [docs/encode.md](docs/encode.md) — CM とエンコード (字幕・AV1・CM検出)
-- [docs/auth.md](docs/auth.md) — **誰を通すか** (OIDC でのログイン・信頼したネットワーク・署名リンク)
+- [docs/auth.md](docs/auth.md) — **誰を通すか** (OIDC でのログイン・信頼したネットワーク・期限付きのリンク)
 - [docs/migrate.md](docs/migrate.md) — **EPGStation からの引き継ぎ**
 - [docs/stream.md](docs/stream.md) — **ライブ視聴** (放送中のものを観る)
 

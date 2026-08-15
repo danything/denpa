@@ -1,5 +1,4 @@
 import { existsSync } from 'node:fs';
-import type { Page } from '@playwright/test';
 import {
     cellOf,
     expect,
@@ -9,6 +8,7 @@ import {
     syncEpg,
     test,
     upcoming,
+    waitRowState,
     waitWatchable,
 } from './helpers';
 
@@ -16,27 +16,6 @@ import {
  * 録画→エンコード→保存先に入るまでを通しで確認する。
  * 進行はサーバ側のタイマー任せなので、ページを読み直しながら状態が変わるのを待つ。
  */
-/**
- * 状態が変わるのを待つ。
- *
- * 以前は数百msごとに開き直していたが、画面はサーバからの知らせで自分で
- * 書き換わるので (liveUpdates)、1回開いて待てば足りる。開き直しをやめたぶん、
- * 裏で走っている録画とエンコードにCPUを回せる。
- */
-async function waitForRowState(
-    page: Page,
-    url: string,
-    selector: string,
-    stateTestId: string,
-    expected: string,
-    timeoutMs = 90_000,
-): Promise<void> {
-    await goto(page, url);
-    await expect(page.locator(selector).getByTestId(stateTestId).first()).toHaveText(expected, {
-        timeout: timeoutMs,
-    });
-}
-
 test.describe('録画とエンコード', () => {
     test('予約した番組が録画され、エンコードされて保存先に入る', async ({ page, request, stack }) => {
         test.setTimeout(180_000);
@@ -52,10 +31,10 @@ test.describe('録画とエンコード', () => {
         const programId = await reserveSoon(page, request, 'BS');
 
         const reservationRow = `[data-testid="reservation-row"][data-program-id="${programId}"]`;
-        await waitForRowState(page, '/?all=1', reservationRow, 'reservation-state', '完了');
+        await waitRowState(page, '/?all=1', page.locator(reservationRow), '完了');
 
         const recordingRow = `[data-testid="recording-row"][data-program-id="${programId}"]`;
-        await waitForRowState(page, '/', recordingRow, 'recording-state', '視聴可能');
+        await waitRowState(page, '/', page.locator(recordingRow), '視聴可能');
 
         // 保存先のパスが決まっていること。実体との突き合わせにこのパスを使う。
         // 画面には出さない(普段は見ないので)ので、行の属性から取る
@@ -208,7 +187,7 @@ test.describe('CMの実カット', () => {
         expect(res.ok()).toBeTruthy();
 
         const recordingRow = `[data-testid="recording-row"][data-program-id="${target.programId}"]`;
-        await waitForRowState(page, '/', recordingRow, 'recording-state', '視聴可能');
+        await waitRowState(page, '/', page.locator(recordingRow), '視聴可能');
 
         await goto(page, '/');
         const recording = page.locator(recordingRow);

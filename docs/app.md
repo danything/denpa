@@ -39,7 +39,7 @@ EPGStation の置き換えとして作ったもので、エンコード設定は
 | `src/lib/server/bml-network.ts` | データ放送の双方向の中継 (`/api/bml/proxy`・`/post`・`/confirm`)。**既定は切・公開の相手だけ** |
 | `src/lib/vendor/web-bml/` | 借りもの。BML を描くところ ([README](../src/lib/vendor/web-bml/README.md)) |
 | `src/lib/pgs.ts` | PGS (Blu-ray の字幕) の**組み立てと読み出し**。ffmpeg に符号器が無いので自前。読むほうはブラウザで使う (`readSup`) |
-| `src/lib/download.ts` | 録画のダウンロード開始 (押されてから期限付きの署名URLを作る) |
+| `src/lib/download.ts` | 録画のダウンロード開始 (押されてから期限付きのURLを作る) |
 | `src/lib/ts/watch.ts` | 録画を観るときの押したことの読み方 (2回押し・チャプター送り・続きの位置。DOM を触らない) |
 | `src/lib/components/player/` | 映像の上に置くもの。**3画面 (ライブ・追っかけ・観る画面) で共通** (アイコン・重ねボタン・操作列・出し入れの決め方・**字幕の重ね方**) |
 | `src/lib/server/library.ts` | 保存先でのファイル配置 |
@@ -141,9 +141,10 @@ SQLite が拒むので、事実と状態が食い違いようがありません�
 **画面から変えたいものは設定画面** (`src/lib/server/settings.ts`)。何があるかは
 [画面](#画面)の `/settings` の行に。
 
-k3s の manifest に書いてあるのは、**既定値では決められないものだけ**です
-(前段の渡し方・OIDC・素通しにするネットワーク・PWA の名前・エンコードの本数)。置き場所や
-エージェントの居場所は既定値がそのままあの構成なので書いていません — 同じ値を
+本番で差し替えているのは、**既定値では決められないものだけ**です
+(前段の渡し方・OIDC・素通しにするネットワーク・PWA の名前・エンコードの本数)。置き場所は
+`k3s/application.yaml` の `helm.valuesObject` (chart の既定値 `charts/denpa/values.yaml`
+に重なる)。置き場所やエージェントの居場所は既定値がそのままあの構成なので書いていません — 同じ値を
 書き写すと、片方だけ直したときにどちらが効いているのか分からなくなります。
 
 | 変数 | 既定値 | 説明 |
@@ -176,7 +177,9 @@ k3s の manifest に書いてあるのは、**既定値では決められない�
 | `OIDC_ISSUER` | (空) | OIDC の発行元。ここを含む3つが揃うと OIDC が有効になる ([auth.md](auth.md)) |
 | `OIDC_CLIENT_ID` / `OIDC_CLIENT_SECRET` | (空) | アプリ登録のIDと秘密 |
 | `OIDC_GROUP` | (空) | このグループに居る人だけ通す。空なら入れた人は全員 |
-| `TRUSTED_NETWORKS` | (空) | CIDR のカンマ区切り。**ここから来たら認証を掛けない** (`ADDRESS_HEADER` も要る) |
+| `TRUSTED_NETWORKS` | (空) | CIDR のカンマ区切り。**ここから来たら認証を掛けない** (前段が居るなら `ADDRESS_HEADER` も要る) |
+| `ADDRESS_HEADER` | (空) | 接続元の住所を読むヘッダ (adapter-node)。前段が居るときだけ `x-forwarded-for` を渡す。渡さないと `TRUSTED_NETWORKS` が誰にも当たらない ([auth.md](auth.md)) |
+| `PROTOCOL_HEADER` | — | **選べません。** `server.js` が常に `x-forwarded-proto` に固定します |
 | `OIDC_SESSION_TTL` | `2592000000` | ログインの有効期間(ms)。既定30日 |
 | `PWA_NAMES` | (空) | `ホスト名=表示名` のカンマ区切り。**ホーム画面に置いたときの名前を、来た名前ごとに変える** ([player.md](player.md#ホーム画面に置く)) |
 | `EPGSTATION_RECORDED_DIR` | `/epgstation-recorded` | 引き継ぎ元の録画置き場をマウントした場所 ([migrate.md](migrate.md)) |

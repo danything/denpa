@@ -3,7 +3,8 @@
 # SealedSecret はクラスタの中の鍵でしか開けません。封をした側 (この YAML) は
 # 公開リポジトリに置いても中身が読めず、`kube-system` の
 # `sealed-secrets-controller` が同じ名前・同じ名前空間の Secret `denpa-oidc` を
-# 作ります。deployment.yaml はそれを `secretKeyRef` で引きます。
+# 作ります。chart (charts/denpa/templates/denpa.yaml) はそれを `secretKeyRef` で引きます
+# (名前は k3s/application.yaml の `denpa.oidcSecretName`)。
 #
 # **名前と名前空間を変えると開けなくなります。** 既定の scope (strict) は
 # `denpa/denpa-oidc` を鍵の一部にしているためです。移すときは封をし直します。

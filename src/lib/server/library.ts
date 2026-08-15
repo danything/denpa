@@ -1,11 +1,8 @@
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
+import { pad } from '$lib/format';
 import { config } from './config';
 import { sanitizeFileName } from './title';
-
-function pad(n: number, width = 2): string {
-    return String(n).padStart(width, '0');
-}
 
 export interface LibraryNameInput {
     id: number;

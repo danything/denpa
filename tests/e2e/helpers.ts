@@ -128,6 +128,25 @@ export async function reserveSoon(page: Page, request: APIRequestContext, type: 
 }
 
 /**
+ * 1回開いて、行の状態が変わるのを待つ。**開き直さない** — 画面はサーバからの
+ * 知らせ (liveUpdates) で自分で書き換わるので、待っている間は裏の録画とエンコードに
+ * CPU を回せる。`waitWatchable` はこれの「視聴可能」専用で、あちらは開き直す
+ * (行が知らせで書き換わらない場面 = 予約が録画の行に化けるところ を跨ぐため)
+ */
+export async function waitRowState(
+    page: Page,
+    url: string,
+    row: Locator,
+    expected: string,
+    timeoutMs = 90_000,
+): Promise<void> {
+    await goto(page, url);
+    await expect(
+        row.getByTestId('recording-state').or(row.getByTestId('reservation-state')).first(),
+    ).toContainText(expected, { timeout: timeoutMs });
+}
+
+/**
  * 一覧を読み直しながら、その録画が「視聴可能」になるまで待つ。
  *
  * **短い間隔で見に行く。** 中の `toHaveText` に既定の待ち (30秒) を使わせると、
@@ -172,9 +191,7 @@ export async function recordOne(
 export async function setRecording(
     request: APIRequestContext,
     patch: {
-        /** 単一指定 (後方互換)。`none` なら焼かない */
-        codec?: string;
-        /** 複数指定。両方焼くときはこちら (`['av1', 'h264']`) */
+        /** 焼くコーデック。両方焼くなら `['av1', 'h264']`、焼かないなら `[]`。省けば av1 */
         codecs?: string[];
         cmCut?: string;
         cmDetector?: string;
@@ -182,10 +199,7 @@ export async function setRecording(
         freeOnly?: boolean;
     } = {},
 ): Promise<void> {
-    // コーデックはチェックで複数選べる。`codecs` があればそれ、無ければ単一指定を畳む
-    const codecs = patch.codecs ?? (patch.codec === undefined || patch.codec === 'none' ? [] : [patch.codec]);
-    // `codec` を渡さなかったときの既定は av1 (焼く)
-    const chosen = patch.codecs === undefined && patch.codec === undefined ? ['av1'] : codecs;
+    const chosen = patch.codecs ?? ['av1'];
 
     /*
      * **`codecs` は同じ名前で複数送る** (`codecs=av1&codecs=h264`)。
@@ -247,6 +261,18 @@ export async function clearRules(page: Page): Promise<void> {
     await expect(rows).toHaveCount(0);
 }
 
+/** 通知先を全部消す (10-webhook の後片付け)。消えるのを待ってから次を押す */
+export async function clearWebhooks(page: Page): Promise<void> {
+    await goto(page, '/settings');
+    const rows = page.getByTestId('webhook-delete');
+    for (let i = 0; i < 10; i++) {
+        const count = await rows.count();
+        if (count === 0) break;
+        await rows.first().click();
+        await expect(rows).toHaveCount(count - 1);
+    }
+}
+
 /**
  * 残っている予約を全部取り消す。
  *
@@ -255,11 +281,13 @@ export async function clearRules(page: Page): Promise<void> {
  */
 export async function cancelAllReservations(page: Page): Promise<void> {
     await goto(page, '/');
+    // 消えるのを待ってから次を押す (clearRules と同じ理由)
+    const buttons = page.getByTestId('cancel-button');
     for (let i = 0; i < 80; i++) {
-        const buttons = page.getByTestId('cancel-button');
-        if ((await buttons.count()) === 0) break;
+        const count = await buttons.count();
+        if (count === 0) break;
         await buttons.first().click();
-        await page.waitForTimeout(80);
+        await expect(buttons).toHaveCount(count - 1);
     }
     await expect(page.getByTestId('reservation-row')).toHaveCount(0);
 }

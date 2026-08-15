@@ -25,7 +25,7 @@
  *
  * **`Host` はそのまま渡す。** 書き換わると SvelteKit の CSRF 判定が自分の
  * origin と食い違い、フォーム送信が全部弾かれる。denpa は名前を2つ持っていて
- * `ORIGIN` で固定できないため、ここが効く (k3s/deployment.yaml)。
+ * `ORIGIN` で固定できないため、ここが効く (charts/denpa/templates/denpa.yaml)。
  */
 
 /** `src/lib/server/ws.ts` が置く名前 */

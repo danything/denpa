@@ -1,12 +1,5 @@
 import { existsSync, rmSync, writeFileSync } from 'node:fs';
-import type { Page } from '@playwright/test';
-import { expect, goto, reserveSoon, syncEpg, test } from './helpers';
-
-/** 状態が変わるのを待つ。画面は知らせで自分で書き換わるので、開き直さない */
-async function waitForRow(page: Page, selector: string, expected: string, timeoutMs = 90_000) {
-    await goto(page, '/');
-    await expect(page.locator(selector).first()).toContainText(expected, { timeout: timeoutMs });
-}
+import { expect, goto, reserveSoon, syncEpg, test, waitRowState } from './helpers';
 
 /**
  * エンコードが失敗したときの見え方と後始末。
@@ -32,9 +25,10 @@ test.describe('エンコードの失敗', () => {
          * 出るのは「エンコード失敗」であって「失敗」ではない。落ちたのは焼き直しの
          * ほうなので、録画そのものの状態 (録画済み) には手を付けない
          */
-        await waitForRow(
+        await waitRowState(
             page,
-            '[data-testid="recording-row"] [data-testid="recording-state"]',
+            '/',
+            page.locator('[data-testid="recording-row"]').first(),
             'エンコード失敗',
         );
         await goto(page, '/');
@@ -46,16 +40,15 @@ test.describe('エンコードの失敗', () => {
         await expect(failed.getByTestId('recording-state')).toHaveText('エンコード失敗');
 
         /*
-         * **ブラウザでは観られない。** 焼けていないので残っているのは生TSだけで、
-         * あれは MPEG-2 — ブラウザに復号器が無い (docs/stream.md §5.5)。
-         * 行に再生の印を出すと、押しても何も映らないところへ連れて行くことになる。
-         * **落とす口は残る** (生TSは無事なので、手元のプレイヤーでは観られる)
+         * **観られる。** 焼けていなくても生TSは無事で、追っかけ再生の器 (/chase) が
+         * サーバで焼き直して運ぶ (25-chase)。行には再生の印が出て、押すと追っかけへ。
+         * 以前は「焼けていない = 観られない」で印を消していたが、生TSがある限り観られる
          */
-        await expect(failed.getByTestId('play-hint')).toHaveCount(0);
+        await expect(failed.getByTestId('play-hint')).toBeVisible();
 
         // 理由は行の「詳細」から。ffmpeg の出力は長いので一覧には貼らない
-        // 観られない行に詳細ボタンは無い — 行そのものが詳細の入口
-        await failed.click();
+        // (観られる行は押すと再生に行くので、詳細は別のボタン)
+        await failed.getByTestId('detail-button').click();
         const detail = page.getByTestId('program-detail');
         // 落とす口も詳細の中。生TSは無事なのでダウンロードできる
         await expect(detail.getByTestId('download-link')).toHaveCount(1);

@@ -1,6 +1,6 @@
 import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { expect, goto, reserveSoon, setRecording, syncEpg, test, waitWatchable } from './helpers';
+import { expect, reserveSoon, setRecording, syncEpg, test, waitWatchable } from './helpers';
 
 /** 残っているTSのうち、スクランブルが掛かったままのもの */
 function scrambledFiles(dir: string): string[] {
