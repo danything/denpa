@@ -190,9 +190,9 @@ async function boot(index: number): Promise<{ stack: Stack; shutdown: () => Prom
             // 録画が終わるまで待たれるとテストが終わらない
             SHUTDOWN_WAIT: '0',
             ENCODE_CONCURRENCY: '2',
-            // ベーシック認証は設定画面から入れる。env は初期値として使えることの確認用
-            BASIC_AUTH_USER: 'denpa',
-            BASIC_AUTH_PASSWORD: 'ひみつ',
+            // ローカルからの接続は信頼した網として素通しにする。
+            // 入る道の無い構成 (全部断る) は 14-serve が別の口で確かめる
+            TRUSTED_NETWORKS: '127.0.0.1',
         });
         started.push(app);
 
@@ -266,7 +266,6 @@ export async function bootOidc(
              * (`redirect_uri`) は**来たリクエストから組み立てる**ので、本番と同じく
              * リクエストごとのヘッダから決めさせる
              */
-            PROTOCOL_HEADER: 'x-forwarded-proto',
             /*
              * **名前は `x-forwarded-host` から読ませる。** 本番は既定の `host` だが、
              * Node の fetch は `Host` を禁止ヘッダとして**黙って落とす**ので、
@@ -288,8 +287,6 @@ export async function bootOidc(
             // この網から来たら何も聞かない
             TRUSTED_NETWORKS: oidc.trustedNetwork,
             ADDRESS_HEADER: 'x-forwarded-for',
-            BASIC_AUTH_USER: 'denpa',
-            BASIC_AUTH_PASSWORD: 'ひみつ',
         });
         started.push(app);
         // 生死確認は守られていないので、ログインを通さずに待てる
@@ -300,6 +297,41 @@ export async function bootOidc(
     }
 
     return { oidc, shutdown };
+}
+
+/**
+ * **入る道を何も設定していない denpa。** OIDC も TRUSTED_NETWORKS も無ければ
+ * **全部のアクセスを断る**ことを確かめるための口 (`14-serve` だけが使う)。
+ * 普段の `stack` はローカルを信頼した網にしてあるので、これは別に立てる。
+ */
+export async function bootClosed(
+    index: number,
+    root: string,
+): Promise<{ appUrl: string; shutdown: () => Promise<void> }> {
+    const port = APP_PORT + index * STRIDE + 7;
+    const appUrl = `http://127.0.0.1:${port}`;
+    const app = start(['bun', './server.js'], {
+        TZ: 'Asia/Tokyo',
+        HOST: '127.0.0.1',
+        PORT: String(port),
+        DENPA_DB: `${root}/closed.db`,
+        RECORDED_DIR: `${root}/closed-recorded`,
+        LIBRARY_DIR: `${root}/closed-library`,
+        // 常駐処理は要らない。断り方だけを見る
+        DENPA_AUTOSTART: '0',
+        SHUTDOWN_WAIT: '0',
+    });
+    const shutdown = async () => {
+        await stop(app);
+    };
+    try {
+        // 生死確認は入る道が無くても通る (守ると livenessProbe が落ちるため)
+        await waitFor(`${appUrl}/api/health`, app, 'denpa (閉)');
+    } catch (error) {
+        await shutdown();
+        throw error;
+    }
+    return { appUrl, shutdown };
 }
 
 /**

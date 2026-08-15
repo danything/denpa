@@ -1,7 +1,7 @@
 import { mkdirSync } from 'node:fs';
 import { SOCKET_PATH } from '$lib/live';
 import { listen } from './agent-events';
-import { ensureBasicAuth } from './auth';
+import { warnIfClosed } from './auth';
 import { config } from './config';
 import { checkDisk } from './disk';
 import { pump, requeueOrphanedJobs } from './encoder';
@@ -56,13 +56,13 @@ export function start(): void {
     relayoutLibrary();
 
     /*
-     * **鍵を掛けてから開ける。** 何も設定しないまま立てると、録画のファイルが
-     * 誰でも取れる状態で上がっていた。無ければここで作る (作ったら1度だけログに出す)。
+     * **入る道が無ければ、無いことを起動ログに出す。** 何も設定していなければ
+     * 全アクセスを断る作り (auth.configured) なので、閉まっていること自体は安全 —
+     * ただし気付けないと「なぜか入れない」にしか見えない。
      *
-     * バックグラウンド処理より先にやる — `DENPA_AUTOSTART=0` でも掛かっていないと
-     * 意味が無い
+     * バックグラウンド処理より先にやる — `DENPA_AUTOSTART=0` でも出すべき
      */
-    ensureBasicAuth();
+    warnIfClosed();
 
     /*
      * **ライブ視聴の受け口を開ける。** ここは `DENPA_AUTOSTART=0` でも開ける —

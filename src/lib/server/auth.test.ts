@@ -1,11 +1,11 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
-import { generatePassword, inNetwork, isFilePath, isOpenPath, trusted } from './auth';
+import { configured, inNetwork, isFilePath, isOpenPath, trusted } from './auth';
 import { config } from './config';
 
 /**
  * どの口をどう守るか。
  *
- * **プレイヤーが来る口だけは、いつでもベーシック認証。** 相手は
+ * **プレイヤーが来る口は、期限付きの署名リンクで開ける。** 相手は
  * ログイン画面へのリダイレクトを扱えないので、ここを OIDC にすると再生できなくなる。
  */
 describe('ファイルを取りに来る口', () => {
@@ -61,32 +61,30 @@ describe('素通しにする口', () => {
     });
 });
 
-/*
- * **URLに埋め込める文字だけで作る。** このパスワードは再生リンクの URL に
- * 入る (`http://denpa:xxx@.../file`) ので、`:` `@` `/` `#` `?` が混ざると
- * URL として割れる。紛らわしい文字 (0/O、1/l/I) もプレイヤーで手入力するときに困る
+/**
+ * **入る道が1つも無ければ、全部断る** (fail-closed)。OIDC はこのテストでは
+ * 設定していないので、TRUSTED_NETWORKS の有無がそのまま答えになる。
  */
-describe('パスワードを作る', () => {
-    test('24文字。URLを壊さない文字だけ', () => {
-        for (let i = 0; i < 50; i++) {
-            expect(generatePassword()).toMatch(/^[a-zA-Z2-9]{24}$/);
-        }
+describe('入る道が設定してあるか', () => {
+    const original = config.trustedNetworks;
+    afterEach(() => {
+        config.trustedNetworks = original;
     });
 
-    test('紛らわしい文字は使わない', () => {
-        const all = Array.from({ length: 200 }, () => generatePassword()).join('');
-        for (const char of '0O1lI') expect(all).not.toContain(char);
+    test('TRUSTED_NETWORKS があれば設定済み', () => {
+        config.trustedNetworks = '10.10.0.0/16';
+        expect(configured()).toBe(true);
     });
 
-    test('毎回違う', () => {
-        const made = new Set(Array.from({ length: 100 }, () => generatePassword()));
-        expect(made.size).toBe(100);
+    test('何も無ければ未設定 (全部断る)', () => {
+        config.trustedNetworks = '';
+        expect(configured()).toBe(false);
     });
 });
 
 /**
  * **何も聞かずに通す相手。** 家の中のプレイヤーやテレビに資格情報を
- * 入れずに使わせるためのもの。ここに当たるとベーシック認証も OIDC も掛からない。
+ * 入れずに使わせるためのもの。ここに当たると OIDC も掛からない。
  *
  * 見るのは住所だけ。どの名前で来たかは問わない (名前で分けるのは前段の仕事)。
  */

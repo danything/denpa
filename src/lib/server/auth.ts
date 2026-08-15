@@ -1,72 +1,28 @@
 import { config } from './config';
 import { enabled as oidcEnabled } from './oidc';
-import { saveSettings, settings } from './settings';
 
 /**
- * 誰を通すか。**口によって守り方が違う。**
+ * 誰を通すか。**入る道は3つ + ファイル専用が1つ。**
  *
- * | 口 | 守り方 |
+ * | 道 | 何者か |
  * | --- | --- |
- * | `/api/recordings/<id>/file` | **ベーシック認証だけ** |
- * | それ以外 | OIDC (設定してあれば)。無ければベーシック認証 |
- * | `/login` まわり | 素通し (ここを守ると入口が無くなる) |
+ * | `TRUSTED_NETWORKS` | 信頼した網から来た人。何も聞かずに通す |
+ * | OIDC のログイン | 画面から入る人 (`docs/auth.md`) |
+ * | 期限付きの署名リンク (`?token=`) | プレイヤー・ダウンロード。**ファイルの口だけ** |
+ * | 使い捨ての札 | ライブ視聴の WebSocket だけ (`tickets.ts`) |
  *
- * **プレイヤーはリダイレクトを扱えない。** ログイン画面へ
- * 飛ばされたところで何もできず「再生できません」で終わる。だからファイルを取りに
- * 来る口だけは、前段に何を置いていようと素のベーシック認証のまま残してある。
+ * **どれも設定していなければ、全部断る** (`configured`)。以前はベーシック認証を
+ * 起動時に自動で掛けていたが、廃止した — パスワードを使う場面 (プレイヤー登録・
+ * ダウンロードURL) が全部署名リンクに置き換わり、残っていたのは「画面に出して
+ * 覚えさせるパスワード」だけだった。全部開けたいなら `TRUSTED_NETWORKS=0.0.0.0/0`
+ * (公開の注意は README)。
  *
- * **適用範囲の設定は持たない。** 以前は「配信だけ / 画面も含めて全部」を
- * 選べたが、既定 (files) のままだと**画面が誰にでも開く**。前段に別の認証を
- * 置いている構成でしか成り立たない既定で、しかも掛かっているつもりでいられた。
- * いまは掛けたら全部に掛かる (OIDC があるところだけ、そちらに譲る)。
+ * **プレイヤーはリダイレクトを扱えない。** ログイン画面へ飛ばされたところで
+ * 何もできず「再生できません」で終わる。だからファイルの口は、ログインではなく
+ * **URL そのものが資格になる**署名リンクで開ける。
  */
 
-/**
- * ベーシック認証のユーザー名。**変えられない。**
- *
- * 変えて嬉しいことが何も無い。プレイヤー側にも同じものを入れる必要があるだけで、
- * 忘れると登録済みの端末が全部つながらなくなる。
- */
-export const BASIC_AUTH_USER = 'denpa';
-
-/**
- * パスワードに使う文字。
- *
- * 記号は入れない。プレイヤーやテレビの画面で**手入力する**ことがあり、
- * 記号はリモコンで打ちにくい。紛らわしい文字 (0/O、1/l/I) も外す。
- * (以前は再生リンクのURLに埋めていたので URL で割れる字を避ける意味もあったが、
- * いまのリンクは期限付きトークンで、パスワードは URL に入らない)
- */
-const ALPHABET = 'abcdefghijkmnopqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-const PASSWORD_LENGTH = 24;
-
-export function generatePassword(): string {
-    const bytes = crypto.getRandomValues(new Uint8Array(PASSWORD_LENGTH));
-    return Array.from(bytes, (b) => ALPHABET[b % ALPHABET.length]).join('');
-}
-
-/**
- * **起動時に、無ければ作る。**
- *
- * 何も設定しないまま立てると、録画のファイルが誰でも取れる状態で上がっていた。
- * 「あとで設定画面から掛ける」は忘れるし、忘れたことに気付く手立てが無い。
- *
- * **作ったパスワードはログに1度だけ出す。** 掛かった以上どこかで受け取れないと、
- * 立てた本人が自分の画面に入れない。以降は設定画面から見る (OIDC を設定して
- * あれば Entra で入って読める。無ければここのログが唯一の手掛かり)。
- */
-export function ensureBasicAuth(): boolean {
-    if (enabled()) return false;
-    const password = generatePassword();
-    saveSettings({ basicAuthUser: BASIC_AUTH_USER, basicAuthPassword: password });
-    console.log(
-        `[boot] ベーシック認証を作りました: ${BASIC_AUTH_USER} / ${password}\n` +
-            '       設定画面から見直せます。プレイヤーで直接開くときにも同じものを入れます',
-    );
-    return true;
-}
-
-/** ベーシック認証で守る口。**ここは OIDC にしない** */
+/** 署名リンクとログインの控えで開けられる口。**ここは OIDC のリダイレクトにしない** */
 const FILE_PATHS = [/^\/api\/recordings\/\d+\/file$/];
 
 /**
@@ -94,38 +50,41 @@ export function isOpenPath(pathname: string): boolean {
     return OPEN_PATHS.some((pattern) => pattern.test(pathname));
 }
 
-export function enabled(): boolean {
-    const { basicAuthUser, basicAuthPassword } = settings();
-    return basicAuthUser !== '' && basicAuthPassword !== '';
-}
-
 /**
- * ベーシック認証で守る口か。**掛けたら全部に掛かる。**
+ * 入る道が1つでも設定してあるか。**無ければ全部断る** (fail-closed)。
  *
- * 唯一の例外が OIDC で、**画面のぶんはそちらに譲る**。両方掛けると、ブラウザの
- * 認証ダイアログを閉じないとログイン画面にすら行けない。ファイルの口は
- * どちらにせよベーシック認証**も**受けるので、守りに穴は空かない。
+ * 分からない状態で開けておくより、閉まっていることが起動ログとエラーページから
+ * はっきり分かるほうがいい。以前の「起動時にパスワードを自動生成して掛ける」は、
+ * 掛かってはいるが**受け取り損ねると誰も入れない**うえ、その状態と区別が付かなかった。
  */
-export function protects(pathname: string): boolean {
-    if (!enabled()) return false;
-    if (isOpenPath(pathname)) return false;
-    if (isFilePath(pathname)) return true;
-    return !oidcEnabled();
+export function configured(): boolean {
+    return oidcEnabled() || entries().length > 0;
+}
+
+/** 入る道が無いまま上がったときの案内。起動ログに1度だけ出す */
+export function warnIfClosed(): void {
+    if (configured()) return;
+    console.warn(
+        '[boot] 入る道が設定されていないため、すべてのアクセスを断ります。\n' +
+            '       OIDC (docs/auth.md) か TRUSTED_NETWORKS (CIDR のカンマ区切り) を設定してください。\n' +
+            '       すべて開けるなら TRUSTED_NETWORKS=0.0.0.0/0 (公開時の注意は README)',
+    );
+}
+
+/** 入る道が無い相手への返事。理由が分からない 403 にしない */
+export function denied(): Response {
+    const text = configured()
+        ? 'この口はログインか期限付きのリンクでしか開けません'
+        : '入る道が設定されていません。OIDC か TRUSTED_NETWORKS を設定してください (docs/auth.md)';
+    return new Response(text, { status: 403, headers: { 'content-type': 'text/plain; charset=utf-8' } });
 }
 
 /**
- * ファイルの口を、**ログイン済みの画面にも開けるか**。
+ * ファイルの口を、**ログイン済みの画面に開けるか**。
  *
- * ファイルの口だけはベーシック認証で守ってある — プレイヤーは
- * ログイン画面へのリダイレクトを扱えないため。**そこは変えない。**
- *
- * ただし `<video>` が同じ口を取りに来るようになった (録画をブラウザで観る)。
- * OIDC で入った人はベーシック認証の資格情報を持っていないので、そのままだと
- * **映像を出そうとした瞬間にブラウザの認証ダイアログが立つ**。
- *
- * **足すのは「ログイン済みなら通す」だけ。** 資格情報を持っている相手は
- * これまでどおり通り、持っていない相手が増えることはない (どちらも
- * 「この denpa に入れる人」であることに変わりはない)
+ * 録画をブラウザで観るようになったので、`<video>` がファイルの口を取りに来る。
+ * OIDC で入った人が映像を出そうとした瞬間に断られないように、ログインの控えを
+ * ここでも受ける。通る相手が増えるわけではない — 「この denpa に入れる人」のまま
  */
 export function sessionMayRead(pathname: string, loggedIn: boolean): boolean {
     return loggedIn && oidcEnabled() && isFilePath(pathname);
@@ -135,8 +94,8 @@ export function sessionMayRead(pathname: string, loggedIn: boolean): boolean {
  * **何も聞かずに通す相手か。** 見るのは住所だけ (`TRUSTED_NETWORKS`、CIDR の
  * カンマ区切り)。
  *
- * **ここに当たるとベーシック認証も OIDC も掛かりません。** LAN のプレイヤー
- * (テレビの VLC など) に資格情報を入れずにファイルを取らせるのが狙いです。
+ * **ここに当たると OIDC も掛かりません。** LAN のプレイヤー (テレビの VLC など)
+ * に資格情報を入れずにファイルを取らせるのが狙いです。
  *
  * **どの名前で来たかは問いません。** 名前で分けるのは前段 (Traefik) の仕事で、
  * LAN 用の名前には `ClientIP` を条件に付けてあります。ここで名前も見ると
@@ -191,40 +150,4 @@ export function needsLogin(pathname: string): boolean {
     if (!oidcEnabled()) return false;
     if (isOpenPath(pathname)) return false;
     return !isFilePath(pathname);
-}
-
-/** 長さの違いで早く返らないよう、桁数を揃えてから全桁比較する */
-function sameSecret(a: string, b: string): boolean {
-    if (a.length !== b.length) return false;
-    let diff = 0;
-    for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
-    return diff === 0;
-}
-
-export function authorized(header: string | null): boolean {
-    if (header === null || !header.startsWith('Basic ')) return false;
-    let decoded: string;
-    try {
-        // atob はバイト列を Latin-1 として返す。日本語のパスワードだと
-        // そのままでは元の文字列に戻らないので、UTF-8 として読み直す
-        const binary = atob(header.slice('Basic '.length));
-        const bytes = Uint8Array.from(binary, (char) => char.charCodeAt(0));
-        decoded = new TextDecoder().decode(bytes);
-    } catch {
-        return false;
-    }
-    // パスワードに : が入っていることがあるので、最初の : だけで割る
-    const at = decoded.indexOf(':');
-    if (at < 0) return false;
-    const user = decoded.slice(0, at);
-    const password = decoded.slice(at + 1);
-    const current = settings();
-    return sameSecret(user, current.basicAuthUser) && sameSecret(password, current.basicAuthPassword);
-}
-
-export function challenge(): Response {
-    return new Response('authentication required', {
-        status: 401,
-        headers: { 'WWW-Authenticate': 'Basic realm="denpa", charset="UTF-8"' },
-    });
 }

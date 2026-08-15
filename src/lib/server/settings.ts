@@ -61,12 +61,6 @@ export interface Settings {
      */
     logoLevel: number;
     /**
-     * ベーシック認証。両方入っているときだけ有効で、**起動時に無ければ作る**
-     * (`auth.ensureBasicAuth`)。掛かる範囲は選べない — 掛けたら全部に掛かる
-     */
-    basicAuthUser: string;
-    basicAuthPassword: string;
-    /**
      * データ放送に渡す郵便番号 (数字7桁。空なら渡さない)。
      *
      * **テレビの初期設定で必ず訊かれるあれ。** 放送のアプリは
@@ -159,8 +153,6 @@ export function settings(): Settings {
         cmDetector: stored('cmDetector') === 'silence' ? 'silence' : 'jls',
         fpsDetect: flag('fpsDetect', true),
         logoLevel: logoLevel(stored('logoLevel')),
-        basicAuthUser: stored('basicAuthUser') ?? config.basicAuthUser,
-        basicAuthPassword: stored('basicAuthPassword') ?? config.basicAuthPassword,
         postalCode: normalizePostalCode(stored('postalCode') ?? ''),
         vlcTargets: stored('vlcTargets') ?? '',
         // **入れるまで外へ出ない。** 黙って通信が始まらないようにする

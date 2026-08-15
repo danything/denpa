@@ -52,6 +52,11 @@ services:
             RECORDED_DIR: /app/recorded
             LIBRARY_DIR: /library
             ENCODE_CONCURRENCY: '2'
+            # **誰を通すか (docs/auth.md)。設定するまで全部のアクセスを断ります。**
+            # この網から来た人は何も聞かずに通す。自分の LAN に合わせて書き換えを。
+            # 全部開けるなら 0.0.0.0/0 — ただし**インターネットに向けて開くのと
+            # 同じ意味**なので、家の外に出す構成では OIDC を (README の注意も読むこと)
+            TRUSTED_NETWORKS: 192.168.0.0/16,10.0.0.0/8,172.16.0.0/12
         volumes:
             - denpa-data:/app/data
             - denpa-recorded:/app/recorded

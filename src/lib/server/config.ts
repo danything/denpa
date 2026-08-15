@@ -310,17 +310,8 @@ export const config = {
     historyRetention: 14 * 24 * 60 * MIN,
 
     /**
-     * ベーシック認証。ユーザー名とパスワードの両方が入っているときだけ有効になる。
-     *
-     * **初期値としてだけ読む。** 起動時に無ければ作るので (`auth.ensureBasicAuth`)、
-     * 何も渡さなくても掛かった状態で上がる。範囲は選べない — 掛けたら全部に掛かり、
-     * OIDC があるところだけそちらに譲る (docs/auth.md)
-     */
-    basicAuthUser: str('BASIC_AUTH_USER', 'denpa'),
-    basicAuthPassword: str('BASIC_AUTH_PASSWORD', ''),
-    /**
      * **OIDC でのログイン。** 3つ揃ったときだけ有効になり、揃っていなければ
-     * 画面もベーシック認証が守る。
+     * 全部のアクセスを断る (auth.configured)。
      *
      * 秘密を含むので**環境変数だけ**から読み、設定画面には出さない。
      * 使い方は docs/auth.md
@@ -338,7 +329,7 @@ export const config = {
     oidcGroup: str('OIDC_GROUP', ''),
     /**
      * **何も聞かずに通す網。** CIDR (か住所そのまま) のカンマ区切り
-     * (`10.10.0.0/16`)。当たるとベーシック認証も OIDC も掛からない
+     * (`10.10.0.0/16`)。当たると OIDC も掛からない
      * (どう効くかは `auth.trusted`)。
      *
      * **`ADDRESS_HEADER=x-forwarded-for` を一緒に渡すこと。** 渡さないと

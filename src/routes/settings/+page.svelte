@@ -33,9 +33,6 @@
      * 手元の入力が data の値に書き戻されて**いた (チェックが勝手に外れる)。
      * 写しておけば、書き戻るのは data そのものが変わったときだけになる
      */
-    let password = $state('');
-    let revealed = $state(false);
-    let copied = $state(false);
     // untrack は「初期値としてだけ読む」印。下の $effect で追従させている
     let recording = $state(untrack(() => ({ ...data.recording })));
 
@@ -73,9 +70,6 @@
     let tvSeen = JSON.stringify(untrack(tvRowsOf));
 
     $effect(() => {
-        password = data.auth.password;
-    });
-    $effect(() => {
         recording = { ...data.recording };
     });
     $effect(() => {
@@ -86,16 +80,6 @@
         tvRows = rows;
     });
 
-    async function copy(): Promise<void> {
-        try {
-            await navigator.clipboard.writeText(password);
-            copied = true;
-            setTimeout(() => (copied = false), 2000);
-        } catch {
-            // 平文の http では clipboard API が使えない。そのときは表示して手で選んでもらう
-            revealed = true;
-        }
-    }
 </script>
 
 {#snippet checkRow(
@@ -421,113 +405,6 @@
     </div>
 
     <div class="flex min-w-0 flex-col gap-6">
-        <section class="card bg-base-100 shadow">
-            <div class="card-body">
-                <h2 class="card-title">ベーシック認証</h2>
-                <p class="text-base-content/70 text-sm">
-                    プレイヤーは、画面の前段に置くリダイレクト型の認証を扱えません。
-                    プレイヤーが録画を取りに来る口は、これで守ります。
-                    <strong>起動時に無ければ作る</strong>ので、常に掛かっています。
-                </p>
-                <form method="POST" action="?/saveAuth" use:submitting={keepValues} class="grid gap-4 sm:grid-cols-3">
-                    <div class="flex flex-col gap-1">
-                        <span class="text-sm font-medium">ユーザー名</span>
-                        <!--
-                            変えられるようにしていたが、変えて嬉しいことが無い。
-                            プレイヤー側にも同じものを入れる必要があるだけで、
-                            忘れると全部の端末がつながらなくなる。denpa で固定する
-                        -->
-                        <div
-                            class="input input-bordered flex w-full items-center font-mono"
-                            data-testid="auth-user"
-                        >
-                            denpa
-                        </div>
-                        <span class="text-base-content/60 text-xs">固定です</span>
-                    </div>
-                    <!--
-                        **2列ぶん取る。** 適用範囲の選択を消したときに3列目が空いて、
-                        ユーザー名の右に何も無い隙間ができていた。24文字が入る欄なので、
-                        広げるほうが読みやすくもなる
-                    -->
-                    <label class="flex flex-col gap-1 sm:col-span-2">
-                        <span class="text-sm font-medium">パスワード</span>
-                        <!--
-                            いま入っているものを出す。プレイヤーに登録するときに要るのに
-                            隠していると、思い出せないたびに作り直すことになり、
-                            そのたびに登録済みの端末が全部つながらなくなる
-                        -->
-                        <div class="join w-full">
-                            <input
-                                type={revealed ? 'text' : 'password'}
-                                name="basicAuthPassword"
-                                class="input input-bordered join-item w-full font-mono"
-                                bind:value={password}
-                                data-testid="auth-password"
-                            />
-                            <button
-                                type="button"
-                                class="btn join-item"
-                                onclick={() => (revealed = !revealed)}
-                                data-testid="auth-reveal"
-                                title={revealed ? '隠す' : '表示する'}
-                            >
-                                {revealed ? '🙈' : '👁'}
-                            </button>
-                        </div>
-                        <div class="flex flex-wrap gap-2">
-                            <!--
-                                作って保存まで1回で済ませる。考えて入れるものではないし、
-                                入れたものを保存し忘れると、そのつもりで居るのに掛かっていない
-                            -->
-                            <button type="submit"
-                                class="btn btn-xs"
-                                formaction="?/newPassword"
-                                title={data.auth.oidc
-                                    ? '作り直すと、登録済みのプレイヤーは入れ直しが要ります'
-                                    : '作り直すと、この画面にもいったん入れなくなります (新しいものは起動ログにも出ます)'}
-                                data-testid="auth-generate"
-                            >
-                                作り直して保存
-                            </button>
-                            <button
-                                type="button"
-                                class="btn btn-xs"
-                                onclick={copy}
-                                disabled={password === ''}
-                                data-testid="auth-copy"
-                            >
-                                {copied ? 'コピーしました' : 'コピー'}
-                            </button>
-                        </div>
-                    </label>
-                    <!--
-                        **適用範囲は選ばせない。** 以前は「配信だけ / 画面も
-                        含めて全部」を選べたが、既定のままだと画面が誰にでも開き、
-                        しかも掛かっているつもりでいられた
-                    -->
-                    <div class="sm:col-span-3">
-                        <div class="alert alert-info mb-3" data-testid="auth-scope-note">
-                            {#if data.auth.oidc}
-                                <span>
-                                    <strong>画面は OIDC で守っています。</strong>
-                                    ベーシック認証が効くのは、プレイヤーが録画を取りに来る口 (<code
-                                        >/api/recordings/…/file</code
-                                    >) です — リダイレクトを扱えないため。
-                                </span>
-                            {:else}
-                                <span>
-                                    <strong>画面も配信も、まとめて守ります。</strong>
-                                    範囲は選べません。画面だけ外すと、設定にあるパスワードごと誰にでも見えてしまいます。
-                                </span>
-                            {/if}
-                        </div>
-                        <button type="submit" class="btn btn-primary" data-testid="save-auth">保存</button>
-                    </div>
-                </form>
-            </div>
-        </section>
-
         <!--
             **データ放送に渡すもの。** いまは郵便番号だけ。
 

@@ -135,16 +135,9 @@ spec:
           env:
             - name: TZ
               value: Asia/Tokyo
-            # SvelteKit の CSRF 判定は Origin ヘッダと自分の origin を突き合わせる。
-            # adapter-node は ORIGIN も PROTOCOL_HEADER も無いと http と決め打つので、
-            # https で来た POST が全部 403 になる
-            # (画面上は「押しても何も起きない」に見える)。
-            # **名前は2つある** (dp.doany.io と dp.l.doany.io) ので ORIGIN では書けない。
-            # Traefik が付ける x-forwarded-proto をリクエストごとに見る。
-            # HOST_HEADER は既定の host のままにする。Traefik は元の Host を渡すし、
-            # kubelet のヘルスチェックは x-forwarded-host を付けないため
-            - name: PROTOCOL_HEADER
-              value: x-forwarded-proto
+            # PROTOCOL_HEADER (x-forwarded-proto) は server.js が常に設定する。
+            # 以前はここで渡していた — 無いと adapter-node が http と決め打ち、
+            # https の POST が全部 403 になっていた (CSRF 判定の origin 食い違い)
             # エージェントの居場所も置き場所も、既定値がそのままここの構成になっている
             # (src/lib/server/config.ts)。同じ値を書き写すと、片方だけ直したときに
             # どちらが効いているのか分からなくなる。
@@ -171,8 +164,8 @@ spec:
               valueFrom:
                 secretKeyRef: { name: denpa-oidc, key: group }
             # **LAN の網から来たときだけ、何も聞かずに通す。**
-            # ベーシック認証も OIDC も掛からないので、プレイヤー (Kodi /
-            # Infuse) に資格情報を入れずに使える。
+            # OIDC も掛からないので、LAN のプレイヤー (テレビの VLC など) に
+            # 資格情報を入れずに使える。
             #
             # **見るのは住所だけ。** どの名前で来たかは問わない (LAN からは
             # 外向きの `dp.doany.io` で来ても通る)。名前で分けるのは前段の仕事で、

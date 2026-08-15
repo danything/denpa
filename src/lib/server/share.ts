@@ -5,7 +5,7 @@ import { database, now, queryOne } from './db';
  * 期限付きの再生リンク。
  *
  * 出先のプレイヤー (テレビの VLC など) に渡すための、時間で切れるURLを作る。
- * ベーシック認証入りのURLでも再生自体はできるが、**プレイヤーはURLを履歴に
+ * 恒久の資格情報入りのURLでも再生自体はできるが、**プレイヤーはURLを履歴に
  * 保存する** — 他人の機器に恒久パスワードを置いてくることになる。期限付きなら
  * 残っても切れたゴミにしかならない。
  *
@@ -18,7 +18,7 @@ import { database, now, queryOne } from './db';
 /** リンクの寿命。観るのに十分で、置き忘れても翌日には腐る長さ */
 export const SHARE_TTL = 24 * 60 * 60 * 1000;
 
-/** 署名の鍵。**ベーシック認証とは別** — パスワードを作り直しても発行済みのリンクは生きる */
+/** 署名の鍵。設定とは独立に起動時に作って持ち回る — 発行済みのリンクは設定を変えても生きる */
 function secret(): string {
     const stored = queryOne<{ value: string }>(`SELECT value FROM settings WHERE key = 'shareSecret'`)?.value;
     if (stored !== undefined && stored !== '') return stored;

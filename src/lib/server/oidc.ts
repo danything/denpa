@@ -13,7 +13,7 @@
 
 import { config } from './config';
 
-/** 有効かどうか。3つ揃っていなければ、画面もベーシック認証が守る (auth.ts) */
+/** 有効かどうか。3つ揃っていなければ、入る道は TRUSTED_NETWORKS だけ (auth.ts) */
 export function enabled(): boolean {
     return config.oidcIssuer !== '' && config.oidcClientId !== '' && config.oidcClientSecret !== '';
 }

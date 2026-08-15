@@ -43,6 +43,17 @@ const innerPort = Number(process.env.DENPA_INNER_PORT ?? publicPort + 1);
 // 内側へ渡す前に書き換える。adapter-node は読み込みの時点で環境変数を見る
 process.env.PORT = String(innerPort);
 process.env.HOST = '127.0.0.1';
+/*
+ * **https の目印は常に `x-forwarded-proto` から読む** (選べるオプションにしない)。
+ * 無いと adapter-node が http と決め打ち、前段が https を受ける構成 (Traefik 等)
+ * で CSRF 判定が食い違って POST が全部 403 になる。偽装されても得るものが無い —
+ * ブラウザ経由の CSRF ではこのヘッダを付けられないし、直に付けて来る相手が
+ * 変えられるのは自分に返る origin の見た目だけ。
+ * 接続元の住所 (`ADDRESS_HEADER`) は逆で、**信頼できる前段が居るときだけ**
+ * 明示的に設定する — TRUSTED_NETWORKS の判定材料なので、既定で信じると
+ * ヘッダを付けるだけで信頼ネットワークを名乗れてしまう
+ */
+process.env.PROTOCOL_HEADER = 'x-forwarded-proto';
 await import('./build/index.js');
 // こちらが公開する側なので、元に戻しておく (アプリが自分の口を見るとき用)
 process.env.PORT = String(publicPort);

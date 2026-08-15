@@ -133,12 +133,9 @@ test.describe('録画とエンコード', () => {
         // 対応していないと全部落とし終わるまで早送りできない
         const id = await recording.getAttribute('data-recording-id');
         expect(id).toBeTruthy();
+        // 信頼した網 (E2E はローカル) からは、資格情報なしでそのまま取れる
         const part = await request.get(`/api/recordings/${id}/file`, {
-            headers: {
-                Range: 'bytes=0-99',
-                // ファイルの口はベーシック認証をかけてある
-                Authorization: `Basic ${Buffer.from('denpa:ひみつ', 'utf8').toString('base64')}`,
-            },
+            headers: { Range: 'bytes=0-99' },
         });
         expect(part.status()).toBe(206);
         expect(part.headers()['content-range']).toMatch(/^bytes 0-99\/\d+$/);

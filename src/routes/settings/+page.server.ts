@@ -1,9 +1,7 @@
 import { fail } from '@sveltejs/kit';
-import { BASIC_AUTH_USER, generatePassword } from '$lib/server/auth';
 import { isCmMode } from '$lib/server/cm';
 import { database, now, queryAll, queryOne } from '$lib/server/db';
 import { available as migrateAvailable, source, start, status } from '$lib/server/migrate';
-import { enabled as oidcEnabled } from '$lib/server/oidc';
 import { normalizePostalCode, saveSettings, settings } from '$lib/server/settings';
 import { serializeTargets, targets, type VlcTarget } from '$lib/server/vlc';
 import { send, type Webhook } from '$lib/server/webhook';
@@ -19,21 +17,6 @@ export function load() {
         broadcast: { postalCode: current.postalCode, bmlNetwork: current.bmlNetwork },
         /** テレビの VLC の居場所。画面は名前+ホストの行として編集する */
         vlc: { targets: targets() },
-        auth: {
-            user: current.basicAuthUser,
-            /*
-             * パスワードそのものを返す。
-             *
-             * プレイヤーに登録するときに必要になるが、覚えていないと入れ直すしかなく、
-             * 入れ直せば既に登録した端末が全部つながらなくなる。
-             *
-             * 隠す意味も薄い。**この画面まで来られている時点で持っている人**
-             * (ベーシック認証か OIDC のどちらかを通っている)
-             */
-            password: current.basicAuthPassword,
-            /** OIDC があるなら画面はそちらが守っている。説明の書き分けに使う */
-            oidc: oidcEnabled(),
-        },
         webhooks: queryAll<Webhook>('SELECT * FROM webhooks ORDER BY id'),
         events: EVENTS,
         migrate: {
@@ -45,41 +28,6 @@ export function load() {
 }
 
 export const actions = {
-    /**
-     * ベーシック認証。**掛かる範囲は選べない** — 掛けたら全部に掛かる
-     * (OIDC を設定してあるところだけ、画面はそちらに譲る)。
-     *
-     * **空にはできない。** 空にすると録画のファイルが誰でも取れる状態になり、
-     * しかもそうなったことが画面から分からない。消したいなら作り直す
-     */
-    saveAuth: async ({ request }) => {
-        const form = await request.formData();
-        const password = String(form.get('basicAuthPassword') ?? '');
-        if (password === '') return fail(400, { message: 'パスワードは空にできません' });
-
-        // ユーザー名は denpa 固定 (画面から変えられない)
-        saveSettings({ basicAuthUser: BASIC_AUTH_USER, basicAuthPassword: password });
-        return { success: true, saved: true };
-    },
-
-    /**
-     * パスワードを作り直して、そのまま保存する。
-     *
-     * 考えて決めるものではないし、入れたのに保存を忘れると
-     * 「掛けたつもりで掛かっていない」になる。1回の操作で終わらせる。
-     */
-    newPassword: () => {
-        const password = generatePassword();
-        saveSettings({ basicAuthUser: BASIC_AUTH_USER, basicAuthPassword: password });
-        /*
-         * **ログにも出す。** 画面にもベーシック認証が掛かっているので、作り直した
-         * 瞬間から**その端末は入れなくなる** (ブラウザが持っているのは古いほう)。
-         * 新しいものを受け取る道が画面しか無いと、押した本人が締め出される
-         */
-        console.log(`[auth] パスワードを作り直しました: ${BASIC_AUTH_USER} / ${password}`);
-        return { success: true, saved: true };
-    },
-
     /** 録画のしかた。番組ごとに変えたくなることが実際にはほとんど無いので全体で1つ */
     saveRecording: async ({ request }) => {
         const form = await request.formData();
@@ -113,8 +61,8 @@ export const actions = {
     /**
      * データ放送に渡す郵便番号。
      *
-     * **空にできる** (「渡さない」という選択)。ベーシック認証と違って、
-     * 空にしても危なくない — 放送のアプリが地域を決められなくなるだけ
+     * **空にできる** (「渡さない」という選択)。空にしても危なくない —
+     * 放送のアプリが地域を決められなくなるだけ
      */
     saveBroadcast: async ({ request }) => {
         const form = await request.formData();
