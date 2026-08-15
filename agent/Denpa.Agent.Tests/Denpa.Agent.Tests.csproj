@@ -24,9 +24,10 @@
     </ItemGroup>
 
     <ItemGroup>
-        <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.9.0" />
+        <!-- MTP (global.json の test.runner) で回すので、旧 VSTest 系
+             (Microsoft.NET.Test.Sdk / xunit.runner.visualstudio) は持たない。
+             xunit.v3 だけで MTP のテストアプリとして完結する -->
         <PackageReference Include="xunit.v3" Version="4.0.0" />
-        <PackageReference Include="xunit.runner.visualstudio" Version="4.0.0" />
     </ItemGroup>
 
 </Project>
