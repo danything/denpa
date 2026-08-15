@@ -16,24 +16,6 @@
 # | `client-id` | アプリ登録のアプリケーションID |
 # | `client-secret` | クライアントシークレット |
 # | `group` | このグループに居る人だけ通す (オブジェクトID) |
-#
-# **作り直しかた** (main の上で):
-#
-#   umask 077
-#   cat > /tmp/oidc.yaml <<'YAML'
-#   apiVersion: v1
-#   kind: Secret
-#   metadata: { name: denpa-oidc, namespace: denpa }
-#   type: Opaque
-#   stringData:
-#     issuer: "..."
-#     client-id: "..."
-#     client-secret: "..."
-#     group: "..."
-#   YAML
-#   ~/bootstrap/kubeseal.sh /tmp/oidc.yaml k3s/oidc-sealed.yaml && rm /tmp/oidc.yaml
-#
-# **元の平文は消すこと。** git に入れてよいのは封をしたこちらだけです。
 apiVersion: bitnami.com/v1alpha1
 kind: SealedSecret
 metadata:
