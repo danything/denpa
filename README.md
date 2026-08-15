@@ -163,7 +163,6 @@ docker compose) で動かす構成なら `oci://ghcr.io/danything/charts/denpa-a
 
 ## もっと詳しく
 
-- [docs/screens.md](docs/screens.md) — **画面の一覧** (実機の絵)
 - [docs/architecture.md](docs/architecture.md) — **なぜこの形なのか** (決めたこと・踏んだ落とし穴)
 - [docs/app.md](docs/app.md) — **どこに何があるか** (ファイル・環境変数・画面・状態遷移)
 - [docs/data.md](docs/data.md) — エージェントに都度聞くもの / denpa が持つもの
@@ -174,7 +173,6 @@ docker compose) で動かす構成なら `oci://ghcr.io/danything/charts/denpa-a
 - [docs/auth.md](docs/auth.md) — **誰を通すか** (OIDC でのログイン・信頼したネットワーク・期限付きのリンク)
 - [docs/migrate.md](docs/migrate.md) — **EPGStation からの引き継ぎ**
 - [docs/stream.md](docs/stream.md) — **ライブ視聴** (放送中のものを観る)
-- [docs/licenses.md](docs/licenses.md) — **借りているもの** (同梱物とライセンスの一覧)
 
 ## ライセンス
 

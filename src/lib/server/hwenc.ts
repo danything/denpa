@@ -24,8 +24,6 @@ import { config } from './config';
  * 全体の話は docs/encode.md「GPU で焼く」
  */
 
-export { HW_CODECS, HW_KINDS, type HwAllow, type HwCodec, type HwKind, hwAllowed };
-
 /** 1つの口 (GPU) で何が焼けるか */
 export interface HwDevice {
     /** `/dev/dri/renderD128` のような口 */

@@ -9,7 +9,7 @@
     import ControlButton from '$lib/components/player/ControlButton.svelte';
     import { centerTap } from '$lib/components/player/center-tap';
     import { playerControls } from '$lib/components/player/controls.svelte';
-    import DataBroadcast from '$lib/components/player/DataBroadcast.svelte';
+    import DataBroadcast, { pressD } from '$lib/components/player/DataBroadcast.svelte';
     import EdgeButton from '$lib/components/player/EdgeButton.svelte';
     import FactsAside from '$lib/components/player/FactsAside.svelte';
     import Icon from '$lib/components/player/Icon.svelte';
@@ -57,14 +57,8 @@
     let overlay = $state<HTMLCanvasElement | null>(null);
     /** 映像が居る入れ物。**データ放送に「映像はここ」と伝えるのに要る** */
     let mediaBox = $state<HTMLElement | null>(null);
-    /**
-     * データ放送に押す口。**器ができてから預かる** (`DataBroadcast` の `remote`)。
-     *
-     * これが有るかどうかが、そのまま**指のリモコンを出すかどうか**になる —
-     * 押しても行き先が無いリモコンは出さない
-     */
+    /** リモコンの押す口と、d を文書へ渡す口。器ができてから入る (`DataBroadcast` の press / pressD)。前者が有るかどうかが、そのまま指のリモコンを出すかどうか */
     let dataPress = $state<((code: number) => void) | null>(null);
-    /** d を BML に渡す口 (`DataBroadcast` の data) */
     let dataButton = $state<(() => boolean) | null>(null);
 
     /**
@@ -275,8 +269,8 @@
                     : `${player.tuned.channelType}/${player.tuned.channel}/${player.tuned.serviceId}`}
                 media={mediaBox}
                 listen={player.listenData}
-                remote={(press) => (dataPress = press)}
-                data={(press) => (dataButton = press)}
+                bind:press={dataPress}
+                bind:pressD={dataButton}
                 postal={data.postalCode}
                 network={data.bmlNetwork}
             />
@@ -302,11 +296,7 @@
                         label={player.showData ? 'データ放送を消す' : 'データ放送を出す'}
                         on={player.showData}
                         testid="live-data-button"
-                        onclick={() => {
-                            // テレビの d と同じ。出ている文書が d を待っていれば、閉じずに渡す
-                            if (player.showData && dataButton?.() === true) return;
-                            player.setData(!player.showData);
-                        }}
+                        onclick={() => pressD(player.showData, dataButton, (on) => player.setData(on))}
                     />
                     <ControlButton
                         path={CAMERA}

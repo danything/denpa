@@ -1,3 +1,15 @@
+<script module lang="ts">
+    /**
+     * **画面の d ボタン。テレビと同じ振る舞い。** 出ている文書が d を聞いていれば
+     * (`pressD` が true) 渡して終わり — 局の待機ページはこれでメニューを開く。
+     * 聞いていなければ器を出し入れする。ライブと録画の両方がここを通る
+     */
+    export function pressD(on: boolean, press: (() => boolean) | null, set: (on: boolean) => void): void {
+        if (on && press?.() === true) return;
+        set(!on);
+    }
+</script>
+
 <script lang="ts">
     /**
      * データ放送を映像の上に重ねる。**描くのは借りもの** (`BMLBrowser`)。
@@ -46,21 +58,19 @@
         /** 知らせを受け取る口を預ける。`null` を渡すと外れる */
         listen: (handler: ((message: ResponseMessage) => void) | null) => void;
         /**
-         * 指のリモコン (`Remote.svelte`) から押す口を預ける。
-         * `null` を渡すと外れる (`listen` と同じ形)。
-         *
-         * **口が有るかどうかが、そのままリモコンを出すかどうかになる** —
+         * 指のリモコン (`Remote.svelte`) から押す口。器ができたら入れ、畳んだら null に戻す
+         * (bind で受け取る)。**口が有るかどうかが、そのままリモコンを出すかどうか** —
          * 器ができる前に出しても押せるものが無い
          */
-        remote: (press: ((code: number) => void) | null) => void;
+        press?: ((code: number) => void) | null;
         /**
-         * **d を BML に渡す口**を預ける (`null` で外れる)。呼ぶと、いま出ている文書が
-         * d (DataButtonPressed) を**聞いていれば**押して true、聞いていなければ何もせず
+         * **d を BML に渡す口** (bind で受け取る)。呼ぶと、いま出ている文書が d
+         * (DataButtonPressed) を**聞いていれば**押して true、聞いていなければ何もせず
          * false を返す。**テレビの d と同じ振る舞い**にするためのもの — 局の
          * 「待機ページ」(日テレの beat) は d を押されて初めてメニューを開くので、
-         * 出ている間に d を押されたら、閉じる前にまず文書に渡す
+         * 出ている間に d を押されたら、閉じる前にまず文書に渡す (`pressD`)
          */
-        data?: (press: (() => boolean) | null) => void;
+        pressD?: (() => boolean) | null;
         /**
          * 郵便番号 (数字7桁。空なら渡さない)。**放送のアプリが地域を決めるのに読む。**
          *
@@ -80,14 +90,18 @@
         network: boolean;
     }
 
-    const { on, channel, media, listen, remote, data, postal, network }: Props = $props();
+    let {
+        on,
+        channel,
+        media,
+        listen,
+        press = $bindable(null),
+        pressD = $bindable(null),
+        postal,
+        network,
+    }: Props = $props();
 
-    /**
-     * リモコンの d。`AribKeyCode.DataButton` と同じ値。
-     *
-     * **番号で書くのは、`content.ts` を読み込まずに済ませるため** —
-     * あれを値として import すると、押される前に借りもの全体が落ちてくる
-     */
+    /** リモコンの d。`AribKeyCode.DataButton` と同じ値 (番号で書く理由は `Remote.svelte`) */
     const DATA_BUTTON = 20;
 
     /**
@@ -99,12 +113,12 @@
     const NVRAM_PREFIX = 'denpa_nvram_';
 
     /**
-     * d を叩き直す回数と間隔。
+     * 押された d を届けようと見に行く回数と間隔。
      *
      * **一度では届かない。** 文書が組み上がった時点ではまだ `beitem` が
      * `subscribe` になっておらず (それを立てるのはアプリの `onload`)、
-     * `DataButtonPressed` は誰にも拾われずに消える。出てくるまで叩き続ける —
-     * 手でリモコンを押し直すのと同じこと
+     * `DataButtonPressed` は誰にも拾われずに消える。聞く文書が出てくるまで
+     * 見に行き、**最初に聞いた文書へ1回だけ**届ける — テレビで d を1回押したのと同じ
      */
     const KNOCK_TRIES = 12;
     const KNOCK_WAIT = 400;
@@ -160,8 +174,15 @@
      * なるが、そこで映像に戻ってしまうと画面が点滅する
      */
     let settled = false;
-    /** 残りの叩く回数 */
+    /** 残りの見に行く回数 */
     let knocks = 0;
+    /**
+     * **押された d をまだ届けていないか。** 出す操作 (画面の d) は文書にとっての d の
+     * 1押しでもある。器を作った時点では受け取る文書がまだ無いので、聞く文書が
+     * 出てくるまで持っておく (`knock`)。届けたら下ろす — 2回届けると、開いた
+     * メニューを閉じたり頭に戻したりする局がある
+     */
+    let dueD = false;
     /** 次に叩く約束 */
     let knocking: ReturnType<typeof setTimeout> | null = null;
     /** 枠の大きさを見張る。全画面にすると変わる */
@@ -361,31 +382,39 @@
     }
 
     /**
-     * いま出ている文書が d を聞いていれば押す (`data` の説明)。
-     *
-     * 聞いているかは文書の `beitem[type="DataButtonPressed"]` で分かる。文書は
-     * 閉じた影の中だが、器 (`BMLBrowser`) が根を持っている — TS では private だが
-     * 実体はただのフィールドなので、そこから覗く (借りものに手を入れずに済ませる)
+     * いま出ている文書が d を聞いているか。文書の `beitem[type="DataButtonPressed"]` で
+     * 分かる。文書は閉じた影の中だが、器 (`BMLBrowser`) が根を持っている — TS では
+     * private だが実体はただのフィールドなので、そこから覗く (借りものに手を入れずに済ませる)
      */
+    function listensD(): boolean {
+        const root = (browser as unknown as { documentElement?: HTMLElement } | null)?.documentElement;
+        return root?.querySelector('beitem[type="DataButtonPressed"][subscribe="subscribe"]') != null;
+    }
+
+    /** 画面の d (`pressD`)。出ている文書が d を聞いていれば押して true */
     function pressData(): boolean {
-        if (browser === null || !visible) return false;
-        const root = (browser as unknown as { documentElement?: HTMLElement }).documentElement;
-        if (root?.querySelector('beitem[type="DataButtonPressed"][subscribe="subscribe"]') == null) return false;
+        if (browser === null || !visible || !listensD()) return false;
         tap(DATA_BUTTON);
         return true;
     }
 
     /**
-     * BML に d を叩いて見せる。
+     * **押された d を、最初に聞いた文書へ届ける** (`dueD`)。
      *
-     * denpa の d ボタンは**器の出し入れ**に使っているので、そのままでは
-     * BML に届かない。出てくるまで繰り返す (`KNOCK_TRIES`)
+     * 局の待機ページ (日テレの beat・テレ朝の stream・フジの入口) は自分で出てきて
+     * (invisible=false)、d を押されて初めてメニューを開く。NHK は入口が隠れたまま
+     * d を待つ。どちらも「聞いている文書に1回」で足りるので、見えているかは問わない。
+     * 文書ができるたびに見に行き直す (`load`) — 入口はたいてい別の文書へ渡すだけ
      */
     function knock(): void {
         knocking = null;
-        if (browser === null || knocks <= 0) return;
+        if (browser === null || !dueD || knocks <= 0) return;
         knocks--;
-        tap(DATA_BUTTON);
+        if (listensD()) {
+            dueD = false;
+            tap(DATA_BUTTON);
+            return;
+        }
         knocking = setTimeout(knock, KNOCK_WAIT);
     }
 
@@ -471,10 +500,10 @@
 
         seat = { parent: media.parentNode as Node, next: media.nextSibling };
 
-        receiving = false;
-        settled = false;
         // 器ができる前に置く。入口の文書が真っ先に読みに来る
         remember();
+        // 出す操作は文書にとっての d の1押し。聞く文書が出てきたら届ける (`knock`)
+        dueD = true;
 
         const made = new BMLBrowser({
             containerElement: mount,
@@ -489,20 +518,11 @@
         });
         browser = made;
         loading = false;
-        handed = 0;
-        showing = false;
-        plane = null;
 
         made.addEventListener('load', (event) => {
             plane = event.detail.resolution;
             fit();
-            /*
-             * **文書ができるたびに叩き直す。**
-             *
-             * 入口の文書はたいてい別の文書へ渡すだけで、その先は電波が
-             * 一周するまで届かない。最初の1回ぶんだけ叩いて諦めると、
-             * **本体が出てきた頃には叩き終わっている**
-             */
+            // 文書ができるたびに見に行き直す (`knock`)。届け終えていれば何もしない
             stopKnocking();
             knocks = KNOCK_TRIES;
             knocking = setTimeout(knock, KNOCK_WAIT);
@@ -515,7 +535,6 @@
          */
         made.addEventListener('invisible', (event) => {
             showing = event.detail !== true;
-            if (showing) stopKnocking();
             place();
         });
 
@@ -527,15 +546,15 @@
             made.emitMessage(message);
         });
         // 指のリモコンにも同じ口を渡す
-        remote(tap);
-        data?.(pressData);
+        press = tap;
+        pressD = pressData;
     }
 
     function close(): void {
         generation++;
         listen(null);
-        remote(null);
-        data?.(null);
+        press = null;
+        pressD = null;
         loading = false;
         handed = 0;
         showing = false;
@@ -543,6 +562,7 @@
         settled = false;
         stopKnocking();
         stopWaiting();
+        dueD = false;
         plane = null;
         watcher?.disconnect();
         watcher = null;
@@ -568,10 +588,9 @@
     });
 
     /**
-     * リモコンの代わり。**十字・決定・戻る・数字・色**をそのまま渡す。
-     *
-     * `d` は出し入れに使うので渡さない (押しっぱなしで抜けられなくなる)。
-     * 借りものが持っている対応表をそのまま使う
+     * リモコンの代わり。**十字・決定・戻る・数字・色・d** をそのまま渡す
+     * (借りものが持っている対応表)。キーの d は文書へそのまま届く — 器の出し入れは
+     * 画面の d ボタンの側 (`pressD`)
      */
     async function key(event: KeyboardEvent, down: boolean): Promise<void> {
         if (browser === null || event.altKey || event.ctrlKey || event.metaKey) return;

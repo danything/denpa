@@ -26,13 +26,14 @@ function forScreen(hw: HwEncode) {
 
 export function load() {
     const current = settings();
+    const hw = hwEncode();
     return {
         recording: current,
         /**
          * GPU で焼けるか (server/hwenc.ts)。起動直後の確かめが終わっていなければ
          * promise のまま渡す — 画面は「確認中」を出して待つ
          */
-        hw: hwEncode().probed ? forScreen(hwEncode()) : probe().then(forScreen),
+        hw: hw.probed ? forScreen(hw) : probe().then(forScreen),
         /** データ放送に渡すもの。いまは郵便番号だけ */
         broadcast: { postalCode: current.postalCode, bmlNetwork: current.bmlNetwork },
         /** テレビの VLC の居場所。画面は名前+ホストの行として編集する */
@@ -88,17 +89,16 @@ export const actions = {
         const previous = settings().hwAllow;
         const next: HwAllow = { ...previous };
         for (const device of hwEncode().devices) {
-            next[device.path] = {
-                qsv: [],
-                vaapi: [],
-            };
-            for (const kind of HW_KINDS) {
-                next[device.path][kind] = HW_CODECS.filter((codec) =>
-                    device[kind].includes(codec)
-                        ? form.get(`hw.${device.path}.${kind}.${codec}`) === 'on'
-                        : hwAllowed(previous, device.path, kind, codec),
-                );
-            }
+            next[device.path] = Object.fromEntries(
+                HW_KINDS.map((kind) => [
+                    kind,
+                    HW_CODECS.filter((codec) =>
+                        device[kind].includes(codec)
+                            ? form.get(`hw.${device.path}.${kind}.${codec}`) === 'on'
+                            : hwAllowed(previous, device.path, kind, codec),
+                    ),
+                ]),
+            ) as HwAllow[string];
         }
         saveSettings({ hwAllow: next });
         return { success: true, saved: true };

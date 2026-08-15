@@ -29,7 +29,7 @@ const WEBHOOK_PORT = 8096;
 const BOOT_TIMEOUT = 120_000;
 const BOOT_POLL = 200;
 
-export interface Stack {
+interface Stack {
     /** このワーカーの作業領域 */
     root: string;
     appUrl: string;
@@ -62,7 +62,7 @@ export interface Stack {
 }
 
 /** 資格情報を持たずに叩く口。返るのは素の Response */
-export type Anonymous = (path: string, init?: RequestInit) => Promise<Response>;
+type Anonymous = (path: string, init?: RequestInit) => Promise<Response>;
 
 interface Started {
     proc: ChildProcess;

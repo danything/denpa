@@ -36,7 +36,7 @@
         return parts.length === 0 ? '全局' : parts.join(', ');
     }
 
-    /** 絞り込んでいるジャンル。条件のうち一番見落としやすいので独立した列に出す */
+    /** 絞り込んでいるジャンル。条件のうち一番見落としやすいので、名前と並べず条件の行に出す */
     function genres(rule: { genres: string | null }): string {
         const parts = jsonArray<string | number>(rule.genres).map(genreName);
         return parts.length === 0 ? '全ジャンル' : parts.join(', ');
@@ -372,7 +372,7 @@
         <section class="flex min-w-0 flex-col gap-4 md:min-h-0 md:overflow-y-auto">
             {#if data.preview}
                 <!--
-        **予約とプレビューは同じ表**。別々に並べていた頃は、同じ番組が2箇所に出るうえ、
+        **予約とプレビューは同じ一覧**。別々に並べていた頃は、同じ番組が2箇所に出るうえ、
         「押さえている予約」と「これから当たる番組」を頭の中で突き合わせることになっていた
     -->
                 <div class="card bg-base-100 shrink-0 shadow" data-testid="preview">

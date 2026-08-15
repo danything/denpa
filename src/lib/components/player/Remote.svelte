@@ -18,7 +18,7 @@
          * データ放送を消す。**テレビの d はまず放送の文書に渡る** (待機ページはそれで
          * メニューを開く) ので、文書が d を掴んでいる間は d では消せない。ここに逃げ道を置く
          */
-        close?: () => void;
+        close: () => void;
     }
 
     const { press, close }: Props = $props();
@@ -30,7 +30,7 @@
      * import すると、このリモコンが載っているだけで借りもの全体 (700KB) が
      * 落ちてくる。データ放送を出す前から出ている画面なので、それは困る
      */
-    /** d (DataButton)。放送の文書に「d が押された」と伝える */
+    /** d (DataButton)。放送の文書に「d が押された」と伝える (`DataBroadcast` の DATA_BUTTON と同じ) */
     const DATA = 20;
     const UP = 1;
     const DOWN = 2;
@@ -112,11 +112,9 @@
             <button type="button" class="btn btn-sm" onclick={() => press(DATA)} data-testid="live-remote-data">
                 d
             </button>
-            {#if close}
-                <button type="button" class="btn btn-sm btn-ghost" onclick={close} data-testid="live-remote-close">
-                    消す
-                </button>
-            {/if}
+            <button type="button" class="btn btn-sm btn-ghost" onclick={close} data-testid="live-remote-close">
+                消す
+            </button>
         </div>
 
         <!-- **畳んでおく。** 使う放送のほうが少ないので、いつも場所を取らせない -->

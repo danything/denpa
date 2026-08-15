@@ -11,7 +11,7 @@ image:
   denpa:
     repository: ghcr.io/danything/denpa
     # 動くタグ (develop / latest) を使うなら pullPolicy は Always のままにする。
-    # 固定タグ (0.9.5 など) なら IfNotPresent でよい
+    # 固定タグ (1.1.1 など) なら IfNotPresent でよい
     tag: latest
     pullPolicy: Always
   agent:

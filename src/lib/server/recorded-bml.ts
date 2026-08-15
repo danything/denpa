@@ -54,8 +54,8 @@ export function programInfoOf(recording: Recording): ResponseMessage | null {
 
 /**
  * 変化ログの頭に番組の名乗りを足す。**サイドカーに書くときも、読むときも通す** —
- * 書く側で足しておけば端末に保存した写しでも効き、読む側でも足すのは、
- * 名乗りを書いていなかった頃のサイドカーをそのまま生かすため
+ * 書く側は `event_id` が番組表から消える前に写し取るため (`epg.ts` の
+ * `pruneOldPrograms`)、読む側は名乗りを書いていなかった頃のサイドカーのため
  */
 export function withProgramInfo(timeline: PlacedMessage[], recording: Recording): PlacedMessage[] {
     if (timeline.length === 0 || timeline.some((item) => item.message.type === 'programInfo'))

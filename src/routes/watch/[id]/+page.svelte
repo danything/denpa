@@ -8,7 +8,7 @@
     import ControlBar from '$lib/components/player/ControlBar.svelte';
     import ControlButton from '$lib/components/player/ControlButton.svelte';
     import { playerControls } from '$lib/components/player/controls.svelte';
-    import DataBroadcast from '$lib/components/player/DataBroadcast.svelte';
+    import DataBroadcast, { pressD } from '$lib/components/player/DataBroadcast.svelte';
     import FactsAside from '$lib/components/player/FactsAside.svelte';
     import Icon from '$lib/components/player/Icon.svelte';
     import InfoBlock from '$lib/components/player/InfoBlock.svelte';
@@ -110,8 +110,9 @@
     let showData = $state(false);
     /** 映像を入れる箱。**BML はこれを動かす** (`DataBroadcast` の place) */
     let mediaBox = $state<HTMLElement | null>(null);
-    /** 指のリモコンの押す口。器ができてから預かる (`Remote`) */
+    /** リモコンの押す口と、d を文書へ渡す口 (ライブと同じ。`DataBroadcast` の press / pressD) */
     let dataPress = $state<((code: number) => void) | null>(null);
+    let dataButton = $state<(() => boolean) | null>(null);
     /**
      * データ放送を作り直す合図 (`DataBroadcast` の channel)。**戻ったら変える** —
      * 器を作り直して、その時点まで積み直す
@@ -128,13 +129,9 @@
         return Math.round((video?.currentTime ?? 0) * 1000);
     }
 
-    /** d を BML に渡す口 (`DataBroadcast` の data)。出ている文書が d を聞いていれば、閉じずにそちらへ */
-    let dataButton = $state<(() => boolean) | null>(null);
-
-    async function toggleData(off = false): Promise<void> {
-        // **テレビの d と同じ。** 出ている文書が d を待っている (待機ページ) なら、閉じずに渡す
-        if (!off && showData && dataButton?.() === true) return;
-        showData = off ? false : !showData;
+    /** データ放送を出す/消す。d ボタンの振る舞いは `pressD` (DataBroadcast) */
+    async function setData(on: boolean): Promise<void> {
+        showData = on;
         if (!showData) {
             dataChannel = null;
             return;
@@ -895,11 +892,8 @@
                 <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_noninteractive_element_interactions -->
                 <!--
                     **映像の箱。BML はこれを動かす** (`DataBroadcast` の place)。ライブと同じ。
-
-                    **class ではなく style で書く** (MediaStack と同じ理由) — d を押すとこの箱は
-                    BML の閉じた影の中へ移され、表の CSS (Tailwind) が届かない。しかも BML の
-                    既定は div に width:0 を与えるので、class のままだと箱が 0 幅になって
-                    映像が消える (実機で d を押すと真っ黒になった)
+                    **class ではなく style で書く** — 理由は `MediaStack.svelte` (影の中へ移されると
+                    Tailwind が届かず 0 幅になる。実機では d を押すと真っ黒になった)
                 -->
                 <div bind:this={mediaBox} style="position:absolute; inset:0; width:100%; height:100%;">
                 <video
@@ -951,8 +945,8 @@
                     channel={dataChannel}
                     media={mediaBox}
                     listen={listenData}
-                    remote={(press) => (dataPress = press)}
-                    data={(press) => (dataButton = press)}
+                    bind:press={dataPress}
+                    bind:pressD={dataButton}
                     postal={data.broadcast.postalCode}
                     network={false}
                 />
@@ -1059,7 +1053,7 @@
                             label={showData ? 'データ放送を消す' : 'データ放送を出す'}
                             on={showData}
                             testid="watch-data-button"
-                            onclick={() => void toggleData()}
+                            onclick={() => pressD(showData, dataButton, (on) => void setData(on))}
                         />
                     {/if}
                     <!--
@@ -1144,7 +1138,7 @@
                             **10秒送り・戻しは置いていない。** PCは矢印キー、
                             指は左右の端を素早く2回 (`ts/watch.ts` の `tap`) で
                             できる — 絵の上に常に2つ置いておくほどの用ではない。
-                            **閉じる・切り抜き・削除は右の列** (上の `watch-side`)
+                            **閉じる・d・切り抜き・削除は右の列** (上の `watch-side`)
                         -->
                         <ControlButton
                             path={playing ? PAUSE : PLAY}
@@ -1304,7 +1298,7 @@
                 データ放送を出している間だけ、番組の中身の上に出す
             -->
             {#if dataPress !== null}
-                <Remote press={dataPress} close={() => void toggleData(true)} />
+                <Remote press={dataPress} close={() => void setData(false)} />
             {/if}
         {/snippet}
 

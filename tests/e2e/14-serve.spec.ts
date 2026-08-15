@@ -59,7 +59,6 @@ test.describe('接続元の住所', () => {
         try {
             const spoofed = await fetch(`${closed.appUrl}/`, { headers: { 'x-denpa-remote': '10.10.5.9' } });
             expect(spoofed.status).toBe(403);
-            // 本当の接続元 (127.0.0.1) を信頼すれば通る — 中継が住所を伝えている
         } finally {
             await closed.shutdown();
         }
