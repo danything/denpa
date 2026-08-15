@@ -1,5 +1,5 @@
-import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
-import { database, now, queryOne } from './db';
+import { randomBytes, timingSafeEqual } from 'node:crypto';
+import { database, queryOne } from './db';
 
 /**
  * 期限付きの再生リンク。
@@ -9,40 +9,47 @@ import { database, now, queryOne } from './db';
  * 保存する** — 他人の機器に恒久パスワードを置いてくることになる。期限付きなら
  * 残っても切れたゴミにしかならない。
  *
- * 署名は HMAC-SHA256、鍵はDBに1つ (無ければ作る)。**録画IDを署名に練り込む**
- * ので、1本ぶんのリンクを別の録画に使い回すことはできない。控えは持たない —
- * 発行済みのリンクは期限まで生きる。全部を今すぐ切りたければ鍵の行
- * (`settings.shareSecret`) を消せば良い (次の発行で作り直される)。
+ * 控えはDBに持つ (`share_links`)。**1録画につき現役のリンクは1本**で、期限内に
+ * もう一度発行すると同じトークンのまま期限だけ延びる — テレビの履歴に残った
+ * URLが、使い続けているかぎり切れない。以前は HMAC の署名だけで控え無しに
+ * していたが、期限がトークンに焼き付いてしまい、延ばすにはURLごと変える
+ * しかなかった (履歴のURLは死ぬ)。全部を今すぐ切りたければ `share_links` の
+ * 行を消せば良い。
  */
 
 /** リンクの寿命。観るのに十分で、置き忘れても翌日には腐る長さ */
 export const SHARE_TTL = 24 * 60 * 60 * 1000;
 
-/** 署名の鍵。設定とは独立に起動時に作って持ち回る — 発行済みのリンクは設定を変えても生きる */
-function secret(): string {
-    const stored = queryOne<{ value: string }>(`SELECT value FROM settings WHERE key = 'shareSecret'`)?.value;
-    if (stored !== undefined && stored !== '') return stored;
-    const made = randomBytes(32).toString('hex');
-    database()
-        .prepare(
-            `INSERT INTO settings (key, value, updated_at) VALUES ('shareSecret', ?, ?)
-             ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`,
-        )
-        .run(made, now());
-    return made;
-}
-
-function sign(recordingId: number, expiresAt: number): string {
-    return createHmac('sha256', secret()).update(`file:${recordingId}:${expiresAt}`).digest('hex');
-}
-
-/** トークンは `<期限ms>.<署名>`。URLに素で置ける文字だけ */
+/**
+ * リンクを発行する。**生きているものが有ればそれを返し、期限を延ばす。**
+ * トークンは当て推量できない乱数 (128bit)。URLに素で置ける文字だけ
+ */
 export function mintShareToken(
     recordingId: number,
     at: number = Date.now(),
 ): { token: string; expiresAt: number } {
     const expiresAt = at + SHARE_TTL;
-    return { token: `${expiresAt}.${sign(recordingId, expiresAt)}`, expiresAt };
+    const db = database();
+    // 腐った控えはこの機会に片付ける (発行のたびで十分。行数は録画の数が上限)
+    db.prepare('DELETE FROM share_links WHERE expires_at <= ?').run(at);
+    const living = queryOne<{ token: string }>(
+        'SELECT token FROM share_links WHERE recording_id = ? AND expires_at > ?',
+        recordingId,
+        at,
+    );
+    if (living !== undefined) {
+        db.prepare('UPDATE share_links SET expires_at = ? WHERE recording_id = ?').run(
+            expiresAt,
+            recordingId,
+        );
+        return { token: living.token, expiresAt };
+    }
+    const token = randomBytes(16).toString('hex');
+    db.prepare(
+        `INSERT INTO share_links (recording_id, token, expires_at) VALUES (?, ?, ?)
+         ON CONFLICT(recording_id) DO UPDATE SET token = excluded.token, expires_at = excluded.expires_at`,
+    ).run(recordingId, token, expiresAt);
+    return { token, expiresAt };
 }
 
 export function verifyShareToken(
@@ -51,13 +58,14 @@ export function verifyShareToken(
     at: number = Date.now(),
 ): boolean {
     if (token === null || token === '') return false;
-    const dot = token.indexOf('.');
-    if (dot === -1) return false;
-    const expiresAt = Number(token.slice(0, dot));
-    if (!Number.isFinite(expiresAt) || expiresAt <= at) return false;
-
-    const given = Buffer.from(token.slice(dot + 1), 'utf8');
-    const wanted = Buffer.from(sign(recordingId, expiresAt), 'utf8');
+    const living = queryOne<{ token: string }>(
+        'SELECT token FROM share_links WHERE recording_id = ? AND expires_at > ?',
+        recordingId,
+        at,
+    );
+    if (living === undefined) return false;
+    const given = Buffer.from(token, 'utf8');
+    const wanted = Buffer.from(living.token, 'utf8');
     // 比較は一定時間で。文字ごとの比較は、当たった長さが応答時間に漏れる
     return given.length === wanted.length && timingSafeEqual(given, wanted);
 }
@@ -66,7 +74,8 @@ export function verifyShareToken(
  * 認証 (hooks) から呼ぶ入口。**効くのはファイルの口だけ。**
  *
  * トークンで開くのは「この録画を期限まで観られる」だけで、画面にも他の API にも
- * 手は届かない。パスの録画IDと署名の中のIDが同じときだけ通る。
+ * 手は届かない。パスの録画IDの控えと突き合わせるので、1本ぶんのリンクを
+ * 別の録画に使い回すことはできない。
  */
 export function shareTokenAllows(pathname: string, searchParams: URLSearchParams): boolean {
     const m = pathname.match(/^\/api\/recordings\/(\d+)\/file$/);

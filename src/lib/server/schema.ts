@@ -133,6 +133,15 @@ CREATE TABLE IF NOT EXISTS settings (
     updated_at INTEGER NOT NULL
 );
 
+-- 期限付きの再生リンクの控え (share.ts)。**1録画につき現役は1本。**
+-- 期限内にもう一度発行すると、同じトークンのまま期限だけ延びる —
+-- テレビの履歴に残ったURLが、使い続けているかぎり生き続ける
+CREATE TABLE IF NOT EXISTS share_links (
+    recording_id INTEGER PRIMARY KEY,
+    token TEXT NOT NULL,
+    expires_at INTEGER NOT NULL
+);
+
 -- 録画の節目を外部に飛ばす先。Discord や Slack の Incoming Webhook を想定している
 CREATE TABLE IF NOT EXISTS webhooks (
     id INTEGER PRIMARY KEY AUTOINCREMENT,

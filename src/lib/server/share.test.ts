@@ -23,19 +23,37 @@ describe('期限付きの再生リンク', () => {
         expect(verifyShareToken(42, token, expiresAt)).toBe(false);
     });
 
-    test('別の録画には使い回せない', () => {
-        const { token } = mintShareToken(42, 0);
-        expect(verifyShareToken(43, token, 0)).toBe(false);
+    /*
+     * テレビの履歴に残ったURLがそのまま生き続けるように、生きているうちに
+     * もう一度発行すると**同じトークンのまま期限だけ延びる**
+     */
+    test('期限内にもう一度作ると、同じリンクで期限が延びる', () => {
+        const at = 1_000_000;
+        const first = mintShareToken(43, at);
+        const second = mintShareToken(43, at + SHARE_TTL / 2);
+        expect(second.token).toBe(first.token);
+        expect(second.expiresAt).toBe(at + SHARE_TTL / 2 + SHARE_TTL);
+        // 最初の期限を過ぎても、延ばした期限までは通る
+        expect(verifyShareToken(43, first.token, first.expiresAt + 1)).toBe(true);
+        expect(verifyShareToken(43, first.token, second.expiresAt)).toBe(false);
     });
 
-    test('期限だけ書き換えても署名が合わない', () => {
+    test('切れたあとに作ると、新しいリンクになる', () => {
         const at = 1_000_000;
-        const { token } = mintShareToken(42, at);
-        const forged = `${at + SHARE_TTL * 2}.${token.split('.')[1]}`;
-        expect(verifyShareToken(42, forged, at)).toBe(false);
+        const first = mintShareToken(44, at);
+        const second = mintShareToken(44, first.expiresAt + 1);
+        expect(second.token).not.toBe(first.token);
+        expect(verifyShareToken(44, first.token, first.expiresAt + 2)).toBe(false);
+        expect(verifyShareToken(44, second.token, first.expiresAt + 2)).toBe(true);
+    });
+
+    test('別の録画には使い回せない', () => {
+        const { token } = mintShareToken(42, 0);
+        expect(verifyShareToken(45, token, 0)).toBe(false);
     });
 
     test('形が壊れていても落ちずに断る', () => {
+        mintShareToken(42, 0);
         expect(verifyShareToken(42, null, 0)).toBe(false);
         expect(verifyShareToken(42, '', 0)).toBe(false);
         expect(verifyShareToken(42, '署名なし', 0)).toBe(false);
@@ -44,11 +62,11 @@ describe('期限付きの再生リンク', () => {
 
     test('効くのはファイルの口だけ', () => {
         // hooks から呼ぶ入口は実時刻で見るので、作りたてのものを使う
-        const params = new URLSearchParams({ token: mintShareToken(42).token });
-        expect(shareTokenAllows('/api/recordings/42/file', params)).toBe(true);
-        expect(shareTokenAllows('/api/recordings/43/file', params)).toBe(false);
-        expect(shareTokenAllows('/api/recordings/42', params)).toBe(false);
+        const params = new URLSearchParams({ token: mintShareToken(46).token });
+        expect(shareTokenAllows('/api/recordings/46/file', params)).toBe(true);
+        expect(shareTokenAllows('/api/recordings/47/file', params)).toBe(false);
+        expect(shareTokenAllows('/api/recordings/46', params)).toBe(false);
         expect(shareTokenAllows('/settings', params)).toBe(false);
-        expect(shareTokenAllows('/api/recordings/42/file', new URLSearchParams())).toBe(false);
+        expect(shareTokenAllows('/api/recordings/46/file', new URLSearchParams())).toBe(false);
     });
 });
