@@ -1,0 +1,36 @@
+{{- /*
+置き場。**ArgoCD に消させない** (Prune=false,Delete=false)。ここが消えると録画が消える。
+existingClaim を渡したものは作らない
+*/ -}}
+{{- $root := . -}}
+{{- range $item := list
+    (dict "key" "agentConfig" "name" "agent-config" "note" "エージェントの設定 (tuners.json / channels.json)。denpa の画面から書く")
+    (dict "key" "data" "name" "denpa-data" "note" "denpa の DB")
+    (dict "key" "recorded" "name" "denpa-recorded" "note" "生TSの作業領域。エンコードが終われば消える")
+    (dict "key" "library" "name" "denpa-library" "note" "エンコード済みの置き場。denpa がここから配り、削除も denpa がやる")
+}}
+{{- $p := index $root.Values.persistence $item.key }}
+{{- if not $p.existingClaim }}
+---
+# {{ $item.note }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ $item.name }}
+  namespace: {{ $root.Release.Namespace }}
+  labels:
+    {{- include "denpa.labels" $root | nindent 4 }}
+  annotations:
+    argocd.argoproj.io/sync-options: Prune=false,Delete=false
+    helm.sh/resource-policy: keep
+spec:
+  accessModes:
+    - ReadWriteOnce
+  {{- with $root.Values.persistence.storageClassName }}
+  storageClassName: {{ . }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ $p.size }}
+{{- end }}
+{{- end }}

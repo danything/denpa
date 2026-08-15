@@ -16,11 +16,14 @@
 
 - **チューナー** — Linux DVB (PT2/PT3、PX-S1UD など)。ドライバはホスト側に入れておく
 - **B-CASカード** と PC/SC 対応のリーダー
-- **Docker** か **Kubernetes**
-
-イメージは公開してあるので、**リポジトリを持ってくる必要はありません。**
+- **Docker** (Compose) か **Kubernetes** (Helm)
 
 ## 立てる
+
+**Docker Compose** か **Helm** のどちらか。イメージは公開してあるので、
+リポジトリを持ってくる必要はありません。
+
+### Docker Compose
 
 ```sh
 mkdir denpa && cd denpa
@@ -28,10 +31,27 @@ curl -Lo compose.yml https://raw.githubusercontent.com/danything/denpa/main/comp
 docker compose up -d
 ```
 
+### Helm (Kubernetes)
+
+```sh
+# 本体 + チューナーエージェント (同じクラスタに置く)
+helm install denpa oci://ghcr.io/danything/charts/denpa \
+  --namespace denpa --create-namespace \
+  --set denpa.trustedNetworks=192.168.0.0/16 \
+  --set ingress.enabled=true --set 'ingress.hosts[0]=denpa.example.home'
+```
+
+チューナーの刺さった機械にはエージェントだけ置き、本体は別の所 (別ノードや
+docker compose) で動かす構成なら `oci://ghcr.io/danything/charts/denpa-agent` を
+(本体側は `TUNER_AGENT_URL` でそこを指す)。**値の一覧と意味は
+[charts/denpa/values.yaml](charts/denpa/values.yaml)** に全部コメントで書いてあります。
+
+### 立てたあと
+
 1. **開く** — <http://localhost:3000>。誰を通すかは `TRUSTED_NETWORKS` で決めます —
-   compose.yml には**家の中 (プライベートネットワーク) だけ通す**初期値が書いてあります。
-   設定を消すと全部のアクセスを断り、全部開けるなら `TRUSTED_NETWORKS=0.0.0.0/0`
-   (下の「誰を通すか」の注意を読むこと)
+   compose.yml には**家の中 (プライベートネットワーク) だけ通す**初期値が書いてあります
+   (Helm は `denpa.trustedNetworks`)。設定を消すと全部のアクセスを断り、全部開けるなら
+   `0.0.0.0/0` (下の「誰を通すか」の注意を読むこと)
 2. **チューナーを確かめる** — 「チューナー」に、見つかったものが並んでいます。
    本数と種別 (地上波 / 衛星) が合っていれば、そのまま次へ
 3. **スキャンする** — 同じ画面から。チャンネルは空で出荷しているので、これをやるまで
@@ -45,12 +65,8 @@ docker compose up -d
 具合が出ます。**カードリーダーが NG のまま録ると、成功したように見えて中身が
 スクランブルされたまま**になります。
 
-指しているのは `latest` で、リリースのたびに動きます。**版を固定したいなら `0.1.0` の
+指しているのは `latest` で、リリースのたびに動きます。**版を固定したいなら `0.9.5` の
 ように書けます** ([docs/architecture.md](docs/architecture.md#像のタグ))。
-
-Kubernetes なら [k3s/](k3s/) が自分のクラスタ向けの例です。**namespace・StorageClass・
-Ingress のホスト名**を書き換えてから当ててください
-([docs/architecture.md](docs/architecture.md#クラスタ側の前提条件))。
 
 ## いま流れているものを観る
 

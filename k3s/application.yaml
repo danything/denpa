@@ -1,0 +1,82 @@
+# **denpa 本体は Helm chart (charts/denpa) から出す。**
+#
+# bootstrap の ApplicationSet は `k3s/` を「素のマニフェストの置き場」として
+# 読むので、ここに Application を1つ置いて chart を指させる (App-of-Apps)。
+# ApplicationSet はこのファイルを素の YAML として同期し、この Application が
+# chart を展開する。bootstrap 側は触らずに済む。
+#
+# chart に入れていないもの (この家の事情) はこの階層に素のまま残す:
+#   - oidc-sealed.yaml … SealedSecret。名前空間と名前が鍵に絡むので chart に持てない
+#   - namespace.yaml   … Application より先に要る
+#   - argocd.yaml      … bootstrap の ApplicationSet が読む、この置き場の設定
+#
+# **この家の値は下の `helm.values` にインラインで持つ。** 別ファイルにしないのは、
+# ApplicationSet が `k3s/*.yaml` を全部マニフェストとして読むため (値ファイルは
+# kind が無いので置けない)。chart の既定値 (charts/denpa/values.yaml) の上に重なる。
+# CI は imageMarks の2行だけを書き換える (.github/workflows/build-and-deploy.yml)
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: denpa-chart
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: denpa
+  source:
+    repoURL: https://github.com/danything/denpa.git
+    targetRevision: main
+    path: charts/denpa
+    helm:
+      releaseName: denpa
+      values: |
+        image:
+          denpa:
+            # 動くタグ。入れ替えの合図は imageMarks
+            tag: develop
+            pullPolicy: Always
+          agent:
+            tag: develop
+            pullPolicy: Always
+
+        # **入れ替えの合図。** CI が「そのイメージの中身を最後に変えたコミット」を書く。
+        # 手で触らない
+        imageMarks:
+          denpa: sha-f59145709fbf
+          agent: sha-e867d3c3ef74
+
+        denpa:
+          encodeConcurrency: 2
+          # LAN から来たときだけ何も聞かずに通す (docs/auth.md)
+          trustedNetworks: 10.10.0.0/16
+          # Traefik の後ろに居るので、接続元は x-forwarded-for から読む
+          addressHeader: x-forwarded-for
+          # 同じ denpa を2つの名前で出しているので、ホーム画面の名前を分ける
+          pwaNames: dp.doany.io=denpa,dp.l.doany.io=denpa 宅内
+          # OIDC。中身は SealedSecret (k3s/oidc-sealed.yaml) が作る Secret
+          oidcSecretName: denpa-oidc
+
+        persistence:
+          storageClassName: local-path-retain
+
+        ingress:
+          hosts:
+            - dp.doany.io
+            - dp.l.doany.io
+        traefik:
+          enabled: true
+          entryPoints:
+            - websecure
+          certResolver: mydnschallenge
+          nativeLB: true
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      # 素のマニフェストで入っていた同名のリソースを chart 側が引き取る
+      - ServerSideApply=true

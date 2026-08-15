@@ -1,0 +1,18 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: tuner-agent
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "denpa-agent.labels" . | nindent 4 }}
+spec:
+  type: {{ .Values.service.type }}
+  selector:
+    app: tuner-agent
+  ports:
+    - name: agent
+      port: {{ .Values.service.port }}
+      targetPort: 25252
+      {{- with .Values.service.nodePort }}
+      nodePort: {{ . }}
+      {{- end }}

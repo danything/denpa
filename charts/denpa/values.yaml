@@ -1,0 +1,140 @@
+# denpa の Helm chart の既定値。
+#
+# **ここは「誰の環境でも動く」値にしてある。** 自分の環境の値 (ドメイン・
+# 通すネットワーク・OIDC・PVC の大きさ) は別の values ファイルで上書きする
+# (このリポジトリ自身の本番は `k3s/application.yaml` の `helm.values`)。
+#
+# 認証を何も設定しないと denpa は**全部断る** (docs/auth.md)。最低限
+# `denpa.trustedNetworks` に自分の LAN を入れること。
+
+image:
+  denpa:
+    repository: ghcr.io/danything/denpa
+    # 動くタグ (develop / latest) を使うなら pullPolicy は Always のままにする。
+    # 固定タグ (0.9.5 など) なら IfNotPresent でよい
+    tag: latest
+    pullPolicy: Always
+  agent:
+    repository: ghcr.io/danything/denpa-agent
+    tag: latest
+    pullPolicy: Always
+
+# **入れ替えの合図。** 動くタグ (develop) を指していると、マニフェストが
+# 変わらず ArgoCD には「何も変わっていない」ように見えて古い Pod が残る。
+# ここに「そのイメージの中身を最後に変えたコミット」を入れて Pod の注釈に
+# 書くと、注釈が変わるたびに Pod が入れ替わり、Always で新しいものを引く。
+# 固定タグで運用するなら空のままでよい (タグが変われば Pod は入れ替わる)
+imageMarks:
+  denpa: ""
+  agent: ""
+
+denpa:
+  # 同時に焼く本数。ffmpeg は 1 本で ~4GB 使う
+  encodeConcurrency: 2
+  timezone: Asia/Tokyo
+  # 何も聞かずに通すネットワーク (CIDR のカンマ区切り)。docs/auth.md。
+  # 空だと (OIDC も無ければ) 全部 403 で断る。全部開けるなら 0.0.0.0/0 —
+  # ただしそれはインターネットに向けて開くのと同じ意味
+  trustedNetworks: ""
+  # 前段 (Traefik など) が居るときだけ。無いと接続元が前段の住所になり
+  # trustedNetworks が誰にも当たらない。**前段を通さず直に届く経路があると
+  # 偽装できる**ので、前段経由でしか届かないことを確かめてから
+  addressHeader: ""
+  # ホーム画面に置いたときの名前。`ホスト=名前` のカンマ区切り (docs/player.md)
+  pwaNames: ""
+  # OIDC でのログイン (docs/auth.md)。**Secret の名前だけ渡す** — 中身
+  # (issuer / client-id / client-secret / group) は chart の外で作る
+  # (このリポジトリ自身は SealedSecret `k3s/oidc-sealed.yaml`)。空なら OIDC 無し
+  oidcSecretName: ""
+  # 追加の環境変数 (src/lib/server/config.ts の一覧)。そのまま container.env に入る
+  extraEnv: []
+  # 録画中に入れ替えが来たら、終わるまで居座ってから止まる (SHUTDOWN_WAIT)。
+  # 短いと待っている途中で SIGKILL されて意味が無くなる。録画していなければ即座に止まる
+  terminationGracePeriodSeconds: 21900
+  # ノードごとフリーズさせないための頭打ち。ffmpeg (エンコード + ライブ視聴) が
+  # 積み上がると 46GB + swap を食い潰してノードごと固まった (2026-08 の事故)。
+  # 上限があれば溢れてもこの Pod だけ OOM-kill されて再起動する
+  resources:
+    requests:
+      cpu: 500m
+      memory: 2Gi
+    limits:
+      memory: 24Gi
+  livenessProbe:
+    initialDelaySeconds: 20
+    periodSeconds: 30
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+
+agent:
+  timezone: Asia/Tokyo
+  # チューナーとカードリーダーに触るために特権が要る
+  privileged: true
+  # ホストのデバイス。/dev/bus (USB) と /dev/dvb (DVB 型のチューナー)
+  hostDevices:
+    - name: dev-bus
+      path: /dev/bus
+    - name: dev-dvb
+      path: /dev/dvb
+  # denpa と同じ (録画中は居座る)
+  terminationGracePeriodSeconds: 21900
+  resources: {}
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+
+# 新しいイメージを**入れ替える前に**ノードへ引いておく Job (ArgoCD の PreSync)。
+# denpa は新旧2Podを並べられない (Recreate) ので、入れ替えの間は録画が途切れる。
+# その隙間はほぼイメージの取得時間だった (実測 13.6 秒) ので、先に引いておく。
+# ArgoCD 以外で使うなら false に (フックの注釈が効かない)
+prepull:
+  enabled: true
+
+persistence:
+  # 既定の StorageClass。空ならクラスタの既定
+  storageClassName: ""
+  # PVC は ArgoCD に消させない (Prune=false,Delete=false)。ここが消えると録画が消える
+  data:
+    size: 5Gi
+    existingClaim: ""
+  # 生TSの作業領域。エンコードが終われば消えるのでライブラリほど要らない
+  recorded:
+    size: 300Gi
+    existingClaim: ""
+  # エンコード済みの置き場
+  library:
+    size: 1Ti
+    existingClaim: ""
+  # エージェントの設定 (tuners.json / channels.json)。denpa の画面から書く
+  agentConfig:
+    size: 128Mi
+    existingClaim: ""
+
+service:
+  port: 3000
+  # 止まりかけの Pod にも回す。denpa は録画中に入れ替えが来ると居座るが、
+  # Kubernetes は deletionTimestamp が付いた時点で Service から外すので、
+  # 録画は無事なのに画面だけ落ちていた。replicas は 1 で readinessProbe も
+  # 無いので、これを立てる副作用は無い
+  publishNotReadyAddresses: true
+
+# 入口。**denpa 自身が認証する**ので、前段は名前を届けるだけでよい。
+# 標準の Ingress か、Traefik の IngressRoute のどちらか (両方は要らない)
+ingress:
+  enabled: false
+  hosts: []
+  # 標準の Ingress
+  className: ""
+  annotations: {}
+  tls: []
+traefik:
+  # Traefik の IngressRoute (CRD)。標準の Ingress より前段の細かい指定ができる
+  enabled: false
+  entryPoints:
+    - websecure
+  certResolver: ""
+  # **宛先は Traefik に選ばせず ClusterIP へ渡す。** Traefik 3 は
+  # terminating の Pod を外すので、居座り中の Pod に届かず 503 になっていた。
+  # nativeLB なら kube-proxy が publishNotReadyAddresses を見て届ける
+  nativeLB: true

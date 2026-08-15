@@ -1,0 +1,53 @@
+# tuner-agent 単体の既定値。**denpa 本体は入っていない。**
+#
+# チューナーとカードリーダーが刺さっている機械にだけこれを置き、denpa 本体は
+# 別の所で動かす構成向け (denpa 側は TUNER_AGENT_URL でここを指す)。
+# 本体も同じクラスタに置くなら charts/denpa のほうが agent も一緒に出す。
+#
+# **掛かったまま録れた TS を解くには、denpa と同じ置き場が見えている必要がある**
+# (recordedClaim)。別の機械で動かすなら NFS などで同じ実体を両方に見せる。
+# 見せられないなら、denpa 側で `keepOriginal` を切ってスクランブル解除を
+# 録画中に済ませる (docs/agent.md)
+
+image:
+  repository: ghcr.io/danything/denpa-agent
+  tag: latest
+  pullPolicy: Always
+
+# 入れ替えの合図 (charts/denpa の imageMarks と同じ)。固定タグなら空でよい
+imageMark: ""
+
+timezone: Asia/Tokyo
+# チューナーとカードリーダーに触るために特権が要る
+privileged: true
+hostDevices:
+  - name: dev-bus
+    path: /dev/bus
+  - name: dev-dvb
+    path: /dev/dvb
+# 録画中に入れ替えが来たら、終わるまで居座ってから止まる
+terminationGracePeriodSeconds: 21900
+resources: {}
+nodeSelector: {}
+tolerations: []
+affinity: {}
+
+persistence:
+  storageClassName: ""
+  # エージェントの設定 (tuners.json / channels.json)
+  config:
+    size: 128Mi
+    existingClaim: ""
+  # denpa の生TSの置き場。**denpa と同じ実体を見せる** (上の説明)。
+  # existingClaim に denpa 側の PVC を渡す。空なら chart が自分の分を作る
+  # (= 別の機械で動かしていて共有できない構成)
+  recorded:
+    size: 300Gi
+    existingClaim: ""
+
+service:
+  # 選局・スキャン・スクランブル解除の口。denpa の TUNER_AGENT_URL がここを指す
+  port: 25252
+  type: ClusterIP
+  # 別のクラスタ/機械の denpa から届かせるなら NodePort か LoadBalancer にする
+  nodePort: null

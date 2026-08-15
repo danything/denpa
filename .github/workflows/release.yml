@@ -112,3 +112,50 @@ jobs:
             docker buildx imagetools create $args "${base}/${image}"
             echo "${name}: ${image#*:} → $names"
           done
+
+  # **Helm chart もリリースのたびに出す** (README が案内している `oci://ghcr.io/danything/charts/…`)。
+  # chart の版 (Chart.yaml の version) とアプリの版 (appVersion) をリリースの
+  # 版で揃えて焼き、GHCR の OCI レジストリに push する。像と同じく、chart 側の
+  # 既定の image.tag は `latest` なので、chart の版を上げなくても中身は動く —
+  # 版で固定したい人は values で `image.denpa.tag` を書く
+  charts:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.inputs.ref || github.event.release.tag_name }}
+
+      - name: Decide chart version
+        id: ver
+        run: |
+          set -eu
+          tag="${{ github.event.release.tag_name || github.event.inputs.ref }}"
+          version="${tag#v}"
+          if ! printf '%s' "$version" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+'; then
+            echo "x.y.z の形ではないので chart は出しません: $tag"
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Helm
+        if: steps.ver.outputs.skip != 'true'
+        uses: azure/setup-helm@v4
+
+      - name: Log in to GHCR (helm)
+        if: steps.ver.outputs.skip != 'true'
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | helm registry login ${{ env.REGISTRY }} --username ${{ github.actor }} --password-stdin
+
+      - name: Package and push charts
+        if: steps.ver.outputs.skip != 'true'
+        run: |
+          set -eu
+          v="${{ steps.ver.outputs.version }}"
+          for chart in charts/denpa charts/denpa-agent; do
+            helm lint "$chart"
+            helm package "$chart" --version "$v" --app-version "$v" --destination dist
+          done
+          for tgz in dist/*.tgz; do
+            helm push "$tgz" "oci://${{ env.REGISTRY }}/${{ github.repository_owner }}/charts"
+          done

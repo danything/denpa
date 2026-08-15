@@ -1,0 +1,113 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: denpa
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "denpa.labels" . | nindent 4 }}
+spec:
+  replicas: 1
+  # 録画とエンコードを抱えるので、新旧2Podが同時に走らないようにする
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: denpa
+  template:
+    metadata:
+      labels:
+        app: denpa
+      {{- with .Values.imageMarks.denpa }}
+      annotations:
+        # 入れ替えの合図 (values.yaml の imageMarks)
+        denpa.doany.io/denpa-image: {{ . | quote }}
+      {{- end }}
+    spec:
+      # 録画中に入れ替えが来たら、終わるまで居座ってから止まる (SHUTDOWN_WAIT)
+      terminationGracePeriodSeconds: {{ .Values.denpa.terminationGracePeriodSeconds }}
+      containers:
+        - name: denpa
+          image: "{{ .Values.image.denpa.repository }}:{{ .Values.image.denpa.tag }}"
+          imagePullPolicy: {{ .Values.image.denpa.pullPolicy }}
+          env:
+            - name: TZ
+              value: {{ .Values.denpa.timezone | quote }}
+            # エージェントの居場所も置き場所も、既定値がそのままこの構成になっている
+            # (src/lib/server/config.ts)。同じ値を書き写すと、片方だけ直したときに
+            # どちらが効いているのか分からなくなる。
+            # PROTOCOL_HEADER (x-forwarded-proto) は server.js が常に設定する
+            - name: ENCODE_CONCURRENCY
+              value: {{ .Values.denpa.encodeConcurrency | quote }}
+            {{- with .Values.denpa.oidcSecretName }}
+            # OIDC でのログイン (docs/auth.md)。中身は chart の外で作った Secret
+            - name: OIDC_ISSUER
+              valueFrom:
+                secretKeyRef: { name: {{ . }}, key: issuer }
+            - name: OIDC_CLIENT_ID
+              valueFrom:
+                secretKeyRef: { name: {{ . }}, key: client-id }
+            - name: OIDC_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef: { name: {{ . }}, key: client-secret }
+            - name: OIDC_GROUP
+              valueFrom:
+                secretKeyRef: { name: {{ . }}, key: group }
+            {{- end }}
+            {{- with .Values.denpa.trustedNetworks }}
+            # このネットワークから来たときだけ、何も聞かずに通す (docs/auth.md)
+            - name: TRUSTED_NETWORKS
+              value: {{ . | quote }}
+            {{- end }}
+            {{- with .Values.denpa.addressHeader }}
+            # 前段の後ろに居るときだけ。無いと接続元が前段の住所になる
+            - name: ADDRESS_HEADER
+              value: {{ . | quote }}
+            {{- end }}
+            {{- with .Values.denpa.pwaNames }}
+            - name: PWA_NAMES
+              value: {{ . | quote }}
+            {{- end }}
+            {{- with .Values.denpa.extraEnv }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          ports:
+            - containerPort: 3000
+          livenessProbe:
+            httpGet:
+              path: /api/health
+              port: 3000
+            initialDelaySeconds: {{ .Values.denpa.livenessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.denpa.livenessProbe.periodSeconds }}
+          volumeMounts:
+            - name: denpa-data
+              mountPath: /app/data
+            - name: denpa-recorded
+              mountPath: /app/recorded
+            - name: library
+              mountPath: /library
+          {{- with .Values.denpa.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+      {{- with .Values.denpa.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.denpa.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.denpa.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      volumes:
+        - name: denpa-data
+          persistentVolumeClaim:
+            claimName: {{ include "denpa.pvcName" (dict "Values" .Values "key" "data" "name" "denpa-data") }}
+        - name: denpa-recorded
+          persistentVolumeClaim:
+            claimName: {{ include "denpa.pvcName" (dict "Values" .Values "key" "recorded" "name" "denpa-recorded") }}
+        - name: library
+          persistentVolumeClaim:
+            claimName: {{ include "denpa.pvcName" (dict "Values" .Values "key" "library" "name" "denpa-library") }}

@@ -1,0 +1,45 @@
+{{- if not .Values.persistence.config.existingClaim }}
+# エージェントの設定 (tuners.json / channels.json)。ArgoCD に消させない
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: agent-config
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "denpa-agent.labels" . | nindent 4 }}
+  annotations:
+    argocd.argoproj.io/sync-options: Prune=false,Delete=false
+    helm.sh/resource-policy: keep
+spec:
+  accessModes:
+    - ReadWriteOnce
+  {{- with .Values.persistence.storageClassName }}
+  storageClassName: {{ . }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ .Values.persistence.config.size }}
+{{- end }}
+{{- if not .Values.persistence.recorded.existingClaim }}
+---
+# 生TSの置き場 (denpa と共有できない構成用の自分の分)
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: denpa-recorded
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "denpa-agent.labels" . | nindent 4 }}
+  annotations:
+    argocd.argoproj.io/sync-options: Prune=false,Delete=false
+    helm.sh/resource-policy: keep
+spec:
+  accessModes:
+    - ReadWriteOnce
+  {{- with .Values.persistence.storageClassName }}
+  storageClassName: {{ . }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ .Values.persistence.recorded.size }}
+{{- end }}

@@ -1,0 +1,76 @@
+# チューナーエージェント。**機材に触るのはここだけ。**
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: tuner-agent
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "denpa-agent.labels" . | nindent 4 }}
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: tuner-agent
+  template:
+    metadata:
+      labels:
+        app: tuner-agent
+      {{- with .Values.imageMark }}
+      annotations:
+        denpa.doany.io/agent-image: {{ . | quote }}
+      {{- end }}
+    spec:
+      terminationGracePeriodSeconds: {{ .Values.terminationGracePeriodSeconds }}
+      containers:
+        - name: tuner-agent
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          securityContext:
+            privileged: {{ .Values.privileged }}
+          env:
+            - name: TZ
+              value: {{ .Values.timezone | quote }}
+            - name: RECORDED_DIR
+              value: /denpa-recorded
+          ports:
+            - containerPort: 25252
+          volumeMounts:
+            - name: agent-config
+              mountPath: /app-config
+            - name: denpa-recorded
+              mountPath: /denpa-recorded
+            {{- range .Values.hostDevices }}
+            - name: {{ .name }}
+              mountPath: {{ .path }}
+            {{- end }}
+          {{- with .Values.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      volumes:
+        - name: agent-config
+          persistentVolumeClaim:
+            claimName: {{ .Values.persistence.config.existingClaim | default "agent-config" }}
+        - name: denpa-recorded
+          persistentVolumeClaim:
+            claimName: {{ .Values.persistence.recorded.existingClaim | default "denpa-recorded" }}
+        {{- range .Values.hostDevices }}
+        - name: {{ .name }}
+          hostPath:
+            path: {{ .path }}
+            type: Directory
+        {{- end }}

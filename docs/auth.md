@@ -154,10 +154,10 @@ TRUSTED_NETWORKS=0.0.0.0/0
 ```
 
 **見るのは住所だけです。どの名前で来たかは問いません** — LAN から外向きの
-`dp.doany.io` を開いても、そのまま通ります。名前で分けるのは前段 (Traefik) の
-仕事で、LAN 用の名前 `dp.l.doany.io` には `ClientIP(10.10.0.0/16)` を条件に
-付けてあります (`k3s/ingress.yaml`)。同じ条件を二か所に書くと、片方だけ直して
-食い違うほうが危ないので、こちらでは持ちません。
+`dp.doany.io` を開いても、そのまま通ります。前段 (Traefik の IngressRoute、
+chart の `traefik.enabled`) は2つの名前を同じ Rule で denpa に届けるだけで、
+名前ごとに何かを分けてはいません。LAN 用の名前 `dp.l.doany.io` が家の中でだけ
+引けるのは DNS の側の話です ([player.md](player.md))。
 
 > **`ADDRESS_HEADER=x-forwarded-for` を一緒に渡すこと。** 渡さないと adapter-node は
 > 接続元として Traefik の Pod の住所を返すので、住所の側が誰にも当たりません
@@ -199,8 +199,8 @@ TRUSTED_NETWORKS=0.0.0.0/0
 **oauth2-proxy (`auth` 名前空間) と同じアプリ登録を使い回しています。** テナントも
 グループも同じなので、入れる人の集合は forward-auth のときと変わりません。
 
-値は **`denpa` 名前空間の Secret `denpa-oidc`** に入っていて、`k3s/deployment.yaml`
-はそれを `secretKeyRef` で引くだけです。
+値は **`denpa` 名前空間の Secret `denpa-oidc`** に入っていて、chart はその名前
+(`denpa.oidcSecretName`、この家の値は `k3s/application.yaml` の `helm.values`) を `secretKeyRef` で引くだけです。
 
 | 鍵 | 何 |
 | --- | --- |
@@ -255,8 +255,8 @@ kubectl -n denpa annotate secret denpa-oidc sealedsecrets.bitnami.com/managed=tr
 
 ### 前段の forward-auth は外しました
 
-`k3s/ingress.yaml` から `forward-auth` と `forward-auth-errors` (oauth2-proxy) を
-落としてあります。denpa が自分でログインさせるので、前段に置く理由がなくなりました。
+IngressRoute から `forward-auth` と `forward-auth-errors` (oauth2-proxy) を
+落としてあります (いまは chart の `charts/denpa/templates/ingress.yaml`)。denpa が自分でログインさせるので、前段に置く理由がなくなりました。
 
 **順番が大事です。** 「denpa 側を設定 → **実機で入れることを確かめる** → ingress から
 外す」。先に外すと、OIDC の設定を間違えていたときに*誰も入れない*ではなく

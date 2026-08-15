@@ -1,0 +1,62 @@
+{{- if .Values.ingress.enabled }}
+# 標準の Ingress。**認証は denpa 自身がやる** (docs/auth.md) ので、前段は名前を届けるだけ
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: denpa
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "denpa.labels" . | nindent 4 }}
+  {{- with .Values.ingress.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  {{- with .Values.ingress.className }}
+  ingressClassName: {{ . }}
+  {{- end }}
+  {{- with .Values.ingress.tls }}
+  tls:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  rules:
+    {{- range .Values.ingress.hosts }}
+    - host: {{ . | quote }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: denpa
+                port:
+                  number: {{ $.Values.service.port }}
+    {{- end }}
+{{- end }}
+{{- if .Values.traefik.enabled }}
+---
+# Traefik の IngressRoute。名前ごとに分けず1つ — 通すかどうかは denpa が
+# 住所で決める (TRUSTED_NETWORKS) ので、前段は届けるだけでよい
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: denpa
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "denpa.labels" . | nindent 4 }}
+spec:
+  entryPoints:
+    {{- toYaml .Values.traefik.entryPoints | nindent 4 }}
+  {{- with .Values.traefik.certResolver }}
+  tls:
+    certResolver: {{ . }}
+  {{- end }}
+  routes:
+    - match: {{ range $i, $h := .Values.ingress.hosts }}{{ if $i }} || {{ end }}Host(`{{ $h }}`){{ end }}
+      kind: Rule
+      services:
+        - name: denpa
+          port: {{ .Values.service.port }}
+          # 宛先は Traefik に選ばせず ClusterIP へ (values.yaml の traefik.nativeLB)
+          nativeLB: {{ .Values.traefik.nativeLB }}
+{{- end }}

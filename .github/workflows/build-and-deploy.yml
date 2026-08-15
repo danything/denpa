@@ -19,9 +19,8 @@ on:
       - '.github/image-tags.sh'
   workflow_dispatch: {}
 
-# Only manifests under k3s/ are rewritten by this workflow, and that path is
-# not in the trigger filter above, so the rewrite-and-push step below can't
-# retrigger this same workflow.
+# この workflow が書き換えるのは k3s/application.yaml だけで、そのパスは上の
+# トリガーに入っていないので、下の書き換え→push が自分をもう一度動かすことは無い
 concurrency:
   group: build-and-deploy-${{ github.ref }}
   cancel-in-progress: false
@@ -105,7 +104,10 @@ jobs:
       - name: Rewrite image marks and push
         run: |
           set -eu
-          FILES="k3s/deployment.yaml"
+          # 印を書く先は k3s/application.yaml の helm.values の中 (imageMarks.agent /
+          # imageMarks.denpa)。以前は k3s/deployment.yaml の Pod の注釈に直接書いていた。
+          # values はインラインなのでインデントは深い — 行頭の空白は幾つでも許す
+          FILES="k3s/application.yaml"
 
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
@@ -114,8 +116,8 @@ jobs:
             git fetch origin main
             git reset --hard origin/main
 
-            sed -i -E "s#(denpa\.doany\.io/agent-image:).*#\1 ${{ steps.tag.outputs.agent }}#" ${FILES}
-            sed -i -E "s#(denpa\.doany\.io/denpa-image:).*#\1 ${{ steps.tag.outputs.denpa }}#" ${FILES}
+            sed -i -E "s#^( +agent:) sha-.*#\1 ${{ steps.tag.outputs.agent }}#" ${FILES}
+            sed -i -E "s#^( +denpa:) sha-.*#\1 ${{ steps.tag.outputs.denpa }}#" ${FILES}
 
             git add ${FILES}
             if git diff --cached --quiet; then

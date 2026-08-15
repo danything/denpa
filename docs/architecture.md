@@ -127,7 +127,7 @@ PreSync フックに置いています (`denpa-prepull`、中身は `/bin/true`)
 
 | タグ | いつ動くか | 誰が指しているか |
 | --- | --- | --- |
-| `develop` | **main へ入るたび** | `k3s/deployment.yaml` (この構成) |
+| `develop` | **main へ入るたび** | `k3s/application.yaml` の `helm.values` (この構成。入れ替えの合図は `imageMarks`) |
 | `latest` | **GitHub でリリースを作ったときだけ** | `compose.prod.yml` (入れて使う人) |
 | `0.1` | その系列でリリースを作るたび (0.1.1 を出せばそちらへ) | 版を決めて使う人 |
 | `0.1.0` | **動かない** | 固定して使う人・戻したいとき |
@@ -183,6 +183,15 @@ PreSync フックに置いています (`denpa-prepull`、中身は `/bin/true`)
 
 ## クラスタ側の前提条件
 
+**入れ方は Helm chart** ([charts/denpa](../charts/denpa)。エージェントだけ置くなら
+[charts/denpa-agent](../charts/denpa-agent))。この家の本番は ArgoCD が
+[k3s/application.yaml](../k3s/application.yaml) を見て、同じ chart にそこの
+`helm.values` (インライン) を重ねて当てています — **chart の使い方の実例**として
+読めます。bootstrap の ApplicationSet は `k3s/` を「素のマニフェストの置き場」として
+読むので、そこには Application (chart を指す) と、chart に持てないもの — SealedSecret
+(名前空間と名前が鍵に絡む) と Namespace — だけを素のまま置いています。
+値を別ファイルにしないのも同じ理由 (kind が無いので ApplicationSet が読めない)。
+
 このリポジトリには `denpa` namespace のアプリ本体しか入っていません。k3sホストの初期構築や
 共通アドオンは別の(プライベートな) bootstrap リポジトリ側です。適用前に以下が要ります。
 
@@ -193,10 +202,6 @@ PreSync フックに置いています (`denpa-prepull`、中身は `/bin/true`)
   state.db バックアップから復元される前提でマニフェストとしては存在しません
 - **DNS** — `m.doany.io` / `dp.doany.io` が Traefik の外部IPを指すこと。
   LAN 用の `dp.l.doany.io` は `*.l.doany.io` の書き換えで内側のIPへ
-- **`PROTOCOL_HEADER=x-forwarded-proto`** — SvelteKit の CSRF 判定は Origin ヘッダと
-  自分の origin を突き合わせるが、adapter-node は `ORIGIN` も `PROTOCOL_HEADER` も
-  無いと決め打ちになる。名前が2つある (`dp.doany.io` と `dp.l.doany.io`) ので
-  `ORIGIN` は使えず、リクエストごとに Traefik の付けたヘッダを見る
 - **チューナードライバ** — エージェントは `privileged: true` かつ `/dev/bus`・`/dev/dvb` を
   hostPath でマウントするので、ノード側にドライバが読み込まれていること
 - **GHCR** — `ghcr.io/danything/denpa-agent` と `.../denpa` を pull できること
