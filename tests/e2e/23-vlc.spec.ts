@@ -65,17 +65,22 @@ test.describe('テレビの VLC で再生', () => {
         await expect(detail.getByTestId('vlc-play-button').nth(1)).toHaveText('▶ 寝室');
 
         /*
-         * 押すと初回はペア設定のタブが開く — 相手は居ないので畳んで進む。
-         * **開いたページは触らない。** 行き先 (`http://192.168.1.99/`) は誰も
-         * 居ない住所で、`close()` を素直に待つとブラウザが接続を諦めるまで
-         * (2分強) 帰ってこなかった。開いた事実と行き先だけ見て、閉じるのは待たない
+         * 押すと初回はペア設定のタブが開く — 相手は居ないので**開かせない**。
+         * 行き先 (`http://192.168.1.99:8080/`) は誰も居ない住所で、本当に開くと
+         * ブラウザが接続を諦めるまで (実測 133 秒) `popup` の解決も `close()` も
+         * 帰ってこなかった。`window.open` を差し替えて、開こうとした先だけ見る
          */
-        const popup = await Promise.all([
-            page.waitForEvent('popup'),
-            detail.getByTestId('vlc-play-button').nth(0).click(),
-        ]).then(([p]) => p);
-        expect(popup.url()).toBe('http://192.168.1.99:8080/');
-        void popup.close().catch(() => {});
+        await page.evaluate(() => {
+            (window as unknown as { __opened: string[] }).__opened = [];
+            window.open = ((url: string | URL) => {
+                (window as unknown as { __opened: string[] }).__opened.push(String(url));
+                return null;
+            }) as typeof window.open;
+        });
+        await detail.getByTestId('vlc-play-button').nth(0).click();
+        await expect
+            .poll(() => page.evaluate(() => (window as unknown as { __opened: string[] }).__opened))
+            .toEqual(['http://192.168.1.99:8080/']);
 
         // 後片付け。全部外して保存すると行ごと消える (他のテストにボタンを残さない)
         await goto(page, '/settings');
