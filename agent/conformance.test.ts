@@ -348,6 +348,20 @@ describe('チューナー', () => {
 });
 
 describe('知らせ (SSE)', () => {
+    /**
+     * **繋いだ時点で応答が返る。** 何も起きていなくてもヘッダは先に送る — 最初の
+     * 知らせまで黙っていると、denpa の fetch は応答待ちのまま 5 分で切られ、
+     * 静かな時間帯に「チューナーに繋がりません」が鳴る (実機で 1 時間おきに鳴った)
+     */
+    test('何も起きていなくても、繋いだ時点で応答が返る', async () => {
+        const aborter = new AbortController();
+        const timer = setTimeout(() => aborter.abort(), 3000);
+        const res = await get('/denpa/events', aborter.signal);
+        clearTimeout(timer);
+        expect(res.headers.get('content-type')).toContain('text/event-stream');
+        aborter.abort();
+    });
+
     test('チューナーが動くと tuners が飛ぶ', async () => {
         const aborter = new AbortController();
         const res = await get('/denpa/events', aborter.signal);

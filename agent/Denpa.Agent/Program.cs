@@ -165,6 +165,9 @@ app.MapGet("/denpa/stream", async (HttpContext http) =>
 });
 
 // --- 知らせ (SSE) ---------------------------------------------------------
+
+// 知らせが無い間に流すコメントの間隔。denpa の fetch が黙った接続を切る 5 分より十分短く
+var eventsKeepAlive = TimeSpan.FromSeconds(30);
 app.MapGet("/denpa/events", async (HttpContext http) =>
 {
     http.Response.ContentType = "text/event-stream";
@@ -174,10 +177,35 @@ app.MapGet("/denpa/events", async (HttpContext http) =>
     var queue = events.Subscribe();
     try
     {
-        await foreach (var block in queue.Reader.ReadAllAsync(http.RequestAborted))
+        /*
+         * **繋がった時点でヘッダを送り、黙っている間もコメント行を流す。**
+         *
+         * 何も書かないうちはヘッダも出ないので、購読した側は最初の知らせが
+         * 来るまで「応答待ち」のまま。denpa (Bun の fetch) は黙っている接続を
+         * 5 分で切るので、深夜など選局の動きが 5 分止まると、切れる → 繋ぎ直しても
+         * 応答が来ない → 「チューナーに繋がりません」と鳴る、を繰り返していた
+         * (実機の Slack で 1 時間おきに鳴った)。SSE のコメント (`:` で始まる行) は
+         * 受け手が読み飛ばすものなので、それで生きていると伝える
+         */
+        var ct = http.RequestAborted;
+        await http.Response.Body.FlushAsync(ct);
+        Task<string>? pending = null;
+        while (true)
         {
-            await http.Response.WriteAsync(block, http.RequestAborted);
-            await http.Response.Body.FlushAsync(http.RequestAborted);
+            pending ??= queue.Reader.ReadAsync(ct).AsTask();
+            var done = await Task.WhenAny(pending, Task.Delay(eventsKeepAlive, ct));
+            string block;
+            if (done == pending)
+            {
+                block = await pending;
+                pending = null;
+            }
+            else
+            {
+                block = ": keep-alive\n\n";
+            }
+            await http.Response.WriteAsync(block, ct);
+            await http.Response.Body.FlushAsync(ct);
         }
     }
     catch (OperationCanceledException)
