@@ -40,10 +40,14 @@ SHELL ["/bin/bash", "-c"]
 ENV CURL="curl -fsSL --retry 5 --retry-delay 5 --retry-all-errors --connect-timeout 20"
 
 # woff2 は ARIB フォントをブラウザ用に縮めるのに使う (データ放送。下の説明)
-ENV DEV="curl ca-certificates build-essential cmake pkg-config nasm patch zlib1g-dev libfreetype6-dev libopus-dev libsvtav1enc-dev libx264-dev libdav1d-dev libfontconfig-dev woff2"
+ENV DEV="curl ca-certificates build-essential cmake pkg-config nasm patch zlib1g-dev libfreetype6-dev libopus-dev libx264-dev libdav1d-dev libfontconfig-dev woff2"
 
 # renovate: datasource=github-tags depName=FFmpeg/FFmpeg extractVersion=^n(?<version>.*)$
 ENV FFMPEG_VERSION=9.0.1
+# SVT-AV1 は**上流の最新をソースから組む** (Debian trixie のパッケージは 2 系で古い。
+# 3 系以降は速度も画質も別物)。静的に繋ぐので実行イメージに共有ライブラリは要らない
+# renovate: datasource=gitlab-tags depName=AOMediaCodec/SVT-AV1 registryUrl=https://gitlab.com
+ARG SVT_AV1_VERSION=v4.2.0
 # renovate: datasource=github-tags depName=xqq/libaribcaption
 ARG LIBARIBCAPTION_VERSION=v1.1.2
 # renovate: datasource=git-refs depName=https://github.com/5ym/arib-font branch=main
@@ -68,11 +72,16 @@ RUN apt-get update && \
     mkdir /tmp/arib && cd /tmp/arib && \
     $CURL https://github.com/xqq/libaribcaption/archive/refs/tags/${LIBARIBCAPTION_VERSION}.tar.gz | tar -xz --strip-components=1 && \
     mkdir build && cd build && cmake .. -DCMAKE_BUILD_TYPE=Release && cmake --build . -j$(nproc) && cmake --install . && \
+    mkdir /tmp/svtav1 && cd /tmp/svtav1 && \
+    $CURL https://gitlab.com/AOMediaCodec/SVT-AV1/-/archive/${SVT_AV1_VERSION}/SVT-AV1-${SVT_AV1_VERSION}.tar.gz | tar -xz --strip-components=1 && \
+    cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF -DBUILD_APPS=OFF && \
+    cmake --build build -j$(nproc) && cmake --install build && \
     mkdir /tmp/ffmpeg_sources && cd /tmp/ffmpeg_sources && \
     $CURL https://ffmpeg.org/releases/ffmpeg-${FFMPEG_VERSION}.tar.bz2 | tar -xj --strip-components=1 && \
     for p in /patches/*.patch; do patch -p1 --fuzz=0 < "$p"; done && \
     ./configure \
       --enable-gpl \
+      --pkg-config-flags="--static" \
       --enable-libopus \
       --enable-libaribcaption \
       --enable-libsvtav1 \
@@ -175,7 +184,7 @@ ENV NODE_ENV=production \
 # (denpa 自身の ffmpeg は下で入れる自前ビルド)
 RUN apt-get update && \
     apt-get -y --no-install-recommends install \
-      libopus0 libsvtav1enc2 libx264-164 libdav1d7 libfontconfig1 libfreetype6 \
+      libopus0 libx264-164 libdav1d7 libfontconfig1 libfreetype6 \
       libavformat61 libavcodec61 libavutil59 libswscale8 libswresample5 \
       fontconfig ca-certificates tzdata && \
     apt-get clean && rm -rf /var/lib/apt/lists/*
