@@ -1,3 +1,4 @@
+import type { APIRequestContext, Page } from '@playwright/test';
 import { expect, goto, recordOne, test } from './helpers';
 
 /**
@@ -9,10 +10,23 @@ import { expect, goto, recordOne, test } from './helpers';
  * 押したときの読み方 (どこでも一時停止・左右2回で10秒・チャプター送り) は
  * `src/lib/ts/watch.test.ts` が持っている。
  */
+
+/**
+ * 読み取りだけのテストは**1本の録画を使い回す**。全テストが `recordOne`
+ * (予約→録画→焼き上がり待ちで各15秒前後) を自前でやっていた頃は、この
+ * ファイルだけで3分近く掛かり、e2e の一番遅いシャードそのものだった。
+ * 録画を消すテストだけが自分のぶんを録る (使い回しの1本を壊さない)
+ */
+let shared: { id: string } | null = null;
+async function watchable(page: Page, request: APIRequestContext): Promise<string> {
+    if (shared === null) shared = await recordOne(page, request);
+    return shared.id;
+}
+
 test.describe('録画を観る', () => {
     test('一覧の行から観る画面へ行き、右に番組の中身が出る', async ({ page, request }) => {
         test.setTimeout(180_000);
-        const { id } = await recordOne(page, request);
+        const id = await watchable(page, request);
 
         await goto(page, '/');
         const row = page.locator(`[data-testid="recording-row"][data-recording-id="${id}"]`);
@@ -72,7 +86,7 @@ test.describe('録画を観る', () => {
      */
     test('チャプターが読めなくても観る画面は出る', async ({ page, request }) => {
         test.setTimeout(180_000);
-        const { id } = await recordOne(page, request);
+        const id = await watchable(page, request);
 
         const res = await request.get(`/api/recordings/${id}/chapters`);
         expect(res.ok()).toBe(true);
@@ -94,7 +108,7 @@ test.describe('録画を観る', () => {
      */
     test('字幕の絵が届き、持っているときだけボタンが出る', async ({ page, request }) => {
         test.setTimeout(180_000);
-        const { id } = await recordOne(page, request);
+        const id = await watchable(page, request);
 
         const res = await request.get(`/api/recordings/${id}/captions.sup`);
         expect(res.ok()).toBe(true);
@@ -122,7 +136,7 @@ test.describe('録画を観る', () => {
      */
     test('切り抜きのボタンが出る', async ({ page, request }) => {
         test.setTimeout(180_000);
-        const { id } = await recordOne(page, request);
+        const id = await watchable(page, request);
 
         await goto(page, `/watch/${id}`);
         const shot = page.getByTestId('watch-shot');
@@ -135,7 +149,7 @@ test.describe('録画を観る', () => {
     /** 残りは「あと何分で終わるか」。**倍速のぶんは割る** */
     test('残り時間も出て、倍速のぶんは割る', async ({ page, request }) => {
         test.setTimeout(180_000);
-        const { id } = await recordOne(page, request);
+        const id = await watchable(page, request);
 
         await goto(page, `/watch/${id}`);
         const clock = page.getByTestId('watch-clock');
@@ -145,7 +159,7 @@ test.describe('録画を観る', () => {
     /** 早送りはライブの追っかけと同じ並び (`ts/pacing` の `SPEEDS`) */
     test('速さを選べる', async ({ page, request }) => {
         test.setTimeout(180_000);
-        const { id } = await recordOne(page, request);
+        const id = await watchable(page, request);
 
         await goto(page, `/watch/${id}`);
         await expect(page.getByTestId('watch-speed')).toContainText('1×');
@@ -169,7 +183,7 @@ test.describe('録画を観る', () => {
      */
     test('途中で止めたところを覚え、観終えたら忘れる', async ({ page, request }) => {
         test.setTimeout(180_000);
-        const { id } = await recordOne(page, request);
+        const id = await watchable(page, request);
 
         const put = async (at: number, length: number) => {
             const res = await request.post(`/api/recordings/${id}/resume`, { data: { at, length } });
@@ -188,7 +202,7 @@ test.describe('録画を観る', () => {
      */
     test('詳細は右に出たままで、押すものは巻き取られない', async ({ page, request }) => {
         test.setTimeout(180_000);
-        const { id } = await recordOne(page, request);
+        const id = await watchable(page, request);
 
         await goto(page, `/watch/${id}`);
         await expect(page.getByTestId('watch-facts')).toBeVisible();
@@ -217,7 +231,7 @@ test.describe('録画を観る', () => {
      */
     test('右は画面の残りをぜんぶ使い、ページごとは動かない', async ({ page, request }) => {
         test.setTimeout(180_000);
-        const { id } = await recordOne(page, request);
+        const id = await watchable(page, request);
 
         await page.setViewportSize({ width: 1920, height: 960 });
 
@@ -266,7 +280,7 @@ test.describe('録画を観る', () => {
      */
     test('閉じる・切り抜き・削除は右の列。下の帯は一段のまま', async ({ page, request }) => {
         test.setTimeout(180_000);
-        const { id } = await recordOne(page, request);
+        const id = await watchable(page, request);
 
         await page.setViewportSize({ width: 820, height: 1180 });
         await goto(page, `/watch/${id}`);
