@@ -13,7 +13,7 @@
 局を選り分けるのも、CMを見つけるのも denpa がやります。
 
 <p align="center">
-  <img src="docs/images/guide-anim.webp" alt="番組表から予約する" width="720">
+  <img src="docs/images/home-watch-anim.webp" alt="録画の行を押すと、そのまま観る画面へ" width="720">
 </p>
 
 番組表から押すだけで予約。録った番組はブラウザでそのまま観るか、テレビの VLC へ
