@@ -1,4 +1,4 @@
-import { expect, goto, reserveSoon, syncEpg, test } from './helpers';
+import { expect, goto, reserveSoon, syncEpg, test, waitWatchable } from './helpers';
 
 /**
  * 放送の延長への追従のうち、**時間のかかるほう**。
@@ -96,9 +96,6 @@ test.describe('録画の途中で繋ぎが切れたとき', () => {
         expect((await cut.json()).cut).toBe(true);
 
         // 切れても失敗にしない。掴み直して録り終える
-        await expect(async () => {
-            await goto(page, '/?all=1');
-            await expect(row.getByTestId('recording-state')).toHaveText('視聴可能');
-        }).toPass({ timeout: 90_000 });
+        await waitWatchable(page, row, '/?all=1', 90_000);
     });
 });

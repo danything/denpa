@@ -8,13 +8,18 @@ test.describe('通知', () => {
     test.beforeEach(async ({ page, request, stack }) => {
         await syncEpg(request);
         await request.post(`${stack.webhookUrl}/__control/reset`);
-        // 前のテストが残した通知先を消す
+        /*
+         * 前のテストが残した通知先を消す。**消えるのを待ってから次を押す** —
+         * 数えた直後に前の削除が反映されて行が消えると、`first().click()` が
+         * 存在しない要素をテストのタイムアウトいっぱい (2分) 待っていた
+         */
         await goto(page, '/settings');
+        const rows = page.getByTestId('webhook-delete');
         for (let i = 0; i < 10; i++) {
-            const buttons = page.getByTestId('webhook-delete');
-            if ((await buttons.count()) === 0) break;
-            await buttons.first().click();
-            await page.waitForTimeout(100);
+            const count = await rows.count();
+            if (count === 0) break;
+            await rows.first().click();
+            await expect(rows).toHaveCount(count - 1);
         }
     });
 

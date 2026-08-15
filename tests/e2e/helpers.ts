@@ -1,4 +1,4 @@
-import type { APIRequestContext, APIResponse, Page } from '@playwright/test';
+import type { APIRequestContext, APIResponse, Locator, Page } from '@playwright/test';
 import { expect, test } from '../stack';
 
 export type { Stack } from '../stack';
@@ -128,6 +128,21 @@ export async function reserveSoon(page: Page, request: APIRequestContext, type: 
 }
 
 /**
+ * 一覧を読み直しながら、その録画が「視聴可能」になるまで待つ。
+ *
+ * **短い間隔で見に行く。** 中の `toHaveText` に既定の待ち (30秒) を使わせると、
+ * 「録画中」のうちは30秒粘ってから読み直すので、5秒で終わる録画に気づくのが
+ * 最悪90秒後になっていた (録画を待つテストが軒並み1〜2分掛かっていた正体)。
+ * 1秒待って読み直すほうが、待ち時間が録画の実尺に近づく
+ */
+export async function waitWatchable(page: Page, row: Locator, path = '/', timeout = 120_000): Promise<void> {
+    await expect(async () => {
+        await goto(page, path);
+        await expect(row.getByTestId('recording-state')).toHaveText('視聴可能', { timeout: 1_000 });
+    }).toPass({ timeout, intervals: [500] });
+}
+
+/**
  * 1本録って、視聴可能になるまで待つ。
  *
  * 「外から消されたとき」のような、実体のある録画が要る試験のためのもの。
@@ -142,10 +157,7 @@ export async function recordOne(
     // BS の偽番組は10秒。すぐ録り終わる
     const programId = await reserveSoon(page, request, 'BS');
     const row = page.locator(`[data-testid="recording-row"][data-program-id="${programId}"]`);
-    await expect(async () => {
-        await goto(page, '/');
-        await expect(row.getByTestId('recording-state')).toHaveText('視聴可能');
-    }).toPass({ timeout: 120_000 });
+    await waitWatchable(page, row);
     return {
         id: (await row.getAttribute('data-recording-id')) ?? '',
         libraryPath: (await row.getAttribute('data-library-path')) ?? '',

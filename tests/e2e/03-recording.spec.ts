@@ -1,6 +1,16 @@
 import { existsSync } from 'node:fs';
 import type { Page } from '@playwright/test';
-import { cellOf, expect, goto, reserveSoon, setRecording, syncEpg, test, upcoming } from './helpers';
+import {
+    cellOf,
+    expect,
+    goto,
+    reserveSoon,
+    setRecording,
+    syncEpg,
+    test,
+    upcoming,
+    waitWatchable,
+} from './helpers';
 
 /**
  * 録画→エンコード→保存先に入るまでを通しで確認する。
@@ -231,10 +241,7 @@ test.describe('コーデックを両方焼く', () => {
 
         const programId = await reserveSoon(page, request, 'BS');
         const row = page.locator(`[data-testid="recording-row"][data-program-id="${programId}"]`);
-        await expect(async () => {
-            await goto(page, '/');
-            await expect(row.getByTestId('recording-state')).toHaveText('視聴可能');
-        }).toPass({ timeout: 120_000 });
+        await waitWatchable(page, row);
 
         // 主は AV1 (素の .mkv)、もう一方は H.264 ([H264] 付き)。実体も2本ある
         const av1 = (await row.getAttribute('data-library-path')) ?? '';
@@ -285,10 +292,7 @@ test.describe('エンコードしない', () => {
 
         const programId = await reserveSoon(page, request, 'BS');
         const row = `[data-testid="recording-row"][data-program-id="${programId}"]`;
-        await expect(async () => {
-            await goto(page, '/');
-            await expect(page.locator(row).getByTestId('recording-state')).toHaveText('視聴可能');
-        }).toPass({ timeout: 120_000 });
+        await waitWatchable(page, page.locator(row));
 
         // 焼かずに置いたので mkv ではない。エンコードの進み具合も出ない
         const path = (await page.locator(row).getAttribute('data-library-path')) ?? '';

@@ -11,12 +11,21 @@ import { test as base, expect } from './helpers';
  * 素の `fetch` のほうが「何を送って何が返ったか」をそのまま押さえられます。
  * Playwright の APIRequestContext は資格情報を勝手に足してしまうので使えません。
  */
-const test = base.extend<{ oidc: OidcStack }>({
-    oidc: async ({ stack }, use) => {
-        const { oidc, shutdown } = await bootOidc(test.info().workerIndex, stack.root);
-        await use(oidc);
-        await shutdown();
-    },
+/*
+ * **OIDC の一式はワーカーごとに1回だけ立てる** (普段の `stack` と同じ寿命)。
+ * テストごとに立てていた頃は 14本 × 5秒強の起動待ちで、このファイルだけで
+ * 1分以上掛かっていた。どのテストも Cookie は自分の jar に閉じているので、
+ * 共有して困らない。偽 IdP の振る舞いを変えるテスト (グループ) だけが終わりに戻す
+ */
+const test = base.extend<Record<never, never>, { oidc: OidcStack }>({
+    oidc: [
+        async ({ stack }, use, workerInfo) => {
+            const { oidc, shutdown } = await bootOidc(workerInfo.workerIndex, stack.root);
+            await use(oidc);
+            await shutdown();
+        },
+        { scope: 'worker' },
+    ],
 });
 
 /** LAN の外から来たことにする住所 */
@@ -168,6 +177,11 @@ test.describe('グループで絞る', () => {
             headers: { 'content-type': 'application/json' },
             body: JSON.stringify(body),
         });
+
+    // 一式はワーカーで共有しているので、変えた振る舞いは戻す
+    test.afterEach(async ({ oidc }) => {
+        await setGroups(oidc, { groups: [oidc.group], omit: false });
+    });
 
     test('入っていなければ断り、理由を出す', async ({ oidc }) => {
         await setGroups(oidc, { groups: ['others'] });
