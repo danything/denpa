@@ -23,20 +23,27 @@ fi
 
 # GPU (QSV / VA-API) の道。`-init_hw_device` が付いていたら、それ。
 #
-# 本物は GPU が無ければ初期化で落ちる。ここでは FAKE_FFMPEG_HW_FILE が在るときだけ
-# 「GPU がある」ことにする — 起動時の試し焼き (server/hwenc.ts、入力は lavfi) は
-# 黙って通し、本番の焼きはそのまま下の普通の道へ流す。無ければ本物と同じく落ちる
-# (焼きの途中で GPU が駄目になったときの、ソフトウェアへの焼き直しもこれで通る)
-if printf '%s\n' "$@" | grep -qx -- '-init_hw_device'; then
-    if [ ! -f "${FAKE_FFMPEG_HW_FILE:-/nonexistent}" ]; then
-        echo "Device creation failed: -19." >&2
-        echo "Failed to set value 'qsv=hw:hw,child_device=/dev/dri/renderD128' for option 'init_hw_device': No such device" >&2
-        exit 1
+# 本物は口 (/dev/dri/renderD128) が無ければ初期化で落ちる。ここでも同じで、
+# **渡された口 (`child_device=…` / `vaapi=va:…`) がファイルとして在れば「GPU がある」**
+# ことにする — 起動時の試し焼き (server/hwenc.ts、入力は lavfi) は黙って通し、
+# 本番の焼きはそのまま下の普通の道へ流す。無ければ本物と同じく落ちる
+# (焼きの途中で GPU が駄目になったときの、次の道への焼き直しもこれで通る)
+prev=""
+for arg in "$@"; do
+    if [ "$prev" = "-init_hw_device" ]; then
+        dev="${arg##*child_device=}"
+        dev="${dev##*vaapi=va:}"
+        if [ ! -e "$dev" ]; then
+            echo "Device creation failed: -19." >&2
+            echo "Failed to set value '$arg' for option 'init_hw_device': No such device" >&2
+            exit 1
+        fi
+        if printf '%s\n' "$@" | grep -qx -- 'lavfi'; then
+            exit 0
+        fi
     fi
-    if printf '%s\n' "$@" | grep -qx -- 'lavfi'; then
-        exit 0
-    fi
-fi
+    prev="$arg"
+done
 
 # CM検出パス (silencedetect) は本編とは別物として応答する。
 # 300秒と360秒に境界が来るので、300-360 の 60 秒がCMブロックとして検出される。

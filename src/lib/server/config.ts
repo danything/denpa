@@ -96,10 +96,11 @@ export const config = {
     encodeMaxAttempts: num('ENCODE_MAX_ATTEMPTS', 5),
     ffprobe: str('FFPROBE', '/usr/local/bin/ffprobe'),
     /**
-     * GPU の口。ここが見えて QSV が初期化できれば、ハードウェアで焼く
-     * (server/hwenc.ts)。Pod / コンテナに `/dev/dri` を渡していなければ無いのが普通
+     * GPU の口を探す形 (最後の段に `*`)。当たった口を全部試して、QSV / VA-API が
+     * 初期化できたもので焼く (server/hwenc.ts)。Pod / コンテナに `/dev/dri` を
+     * 渡していなければ1つも無いのが普通
      */
-    hwDevice: str('HW_DEVICE', '/dev/dri/renderD128'),
+    hwDevices: str('HW_DEVICES', '/dev/dri/renderD*'),
     /** GPU の試し焼き1本に待つ上限 (ms)。ドライバが固まっても起動が止まらないように */
     hwProbeTimeout: num('HW_PROBE_TIMEOUT', 20000),
 

@@ -2,6 +2,7 @@ import type { CmMode, VideoCodec } from '../types';
 import { isCmMode } from './cm';
 import { config } from './config';
 import { database, now, queryOne } from './db';
+import type { HwAllow, HwKind } from './hwenc';
 
 /**
  * 画面から変えられる設定。
@@ -26,16 +27,14 @@ export interface Settings {
      */
     codecs: ('av1' | 'h264')[];
     /**
-     * **GPU で焼いてよいコーデック**、道 (QSV / VA-API) ごと。使えるかどうかは別
-     * (`server/hwenc.ts` が起動時に確かめる) で、実際に GPU で焼くのは
-     * 「使える かつ ここに入っている」もの。両方使えれば QSV を先に試す。
-     *
-     * 既定はどちらも両方 — GPU が見つかれば黙って使う (「自動でチェックが入る」)。
-     * 外したいときだけ設定画面で外す。使えないものの印は画面から触れないので、
-     * 保存しても入っている状態のまま残る (あとで GPU を挿せばそのまま効く)
+     * **GPU の口ごとに、GPU で焼いてよいコーデック** (道 QSV / VA-API 別)。使えるか
+     * どうかは別 (`server/hwenc.ts` が起動時に確かめる) で、実際に GPU で焼くのは
+     * 「使える かつ ここで許されている」もの。**載っていない口は全部よい** — GPU が
+     * 見つかれば黙って使う (「自動でチェックが入る」)。外したいものだけ設定画面で外す。
+     * 使えないものの印は画面から触れないので、保存しても前のまま残る
+     * (あとで GPU を挿し替えればそのまま効く)。JSON で1つの鍵に持つ
      */
-    hwQsv: ('av1' | 'h264')[];
-    hwVaapi: ('av1' | 'h264')[];
+    hwAllow: HwAllow;
     /** CMの扱い。off / chapter / cut */
     cmCut: CmMode;
     /**
@@ -136,6 +135,27 @@ export function parseCodecs(value: string | undefined): ('av1' | 'h264')[] {
     return out;
 }
 
+/**
+ * `hwAllow` を読む。壊れていれば空 (= 全部よい)。口ごとに `{ qsv: [...], vaapi: [...] }`
+ */
+export function parseHwAllow(value: string | undefined): HwAllow {
+    if (value === undefined || value === '') return {};
+    try {
+        const raw = JSON.parse(value) as Record<string, Partial<Record<HwKind, unknown>>>;
+        const out: HwAllow = {};
+        for (const [device, entry] of Object.entries(raw)) {
+            if (entry === null || typeof entry !== 'object') continue;
+            out[device] = {
+                qsv: parseCodecs(Array.isArray(entry.qsv) ? entry.qsv.join(',') : ''),
+                vaapi: parseCodecs(Array.isArray(entry.vaapi) ? entry.vaapi.join(',') : ''),
+            };
+        }
+        return out;
+    } catch {
+        return {};
+    }
+}
+
 export function settings(): Settings {
     const codec = stored('codec');
     const cmCut = stored('cmCut');
@@ -157,8 +177,7 @@ export function settings(): Settings {
     return {
         codec: primary,
         codecs,
-        hwQsv: parseCodecs(stored('hwQsv') ?? 'av1,h264'),
-        hwVaapi: parseCodecs(stored('hwVaapi') ?? 'av1,h264'),
+        hwAllow: parseHwAllow(stored('hwAllow')),
         cmCut: isCmMode(cmCut) ? cmCut : config.cmCutDefault,
         encode: codecs.length > 0,
         keepOriginal: flag('keepOriginal', false),
@@ -182,7 +201,12 @@ export function saveSettings(patch: Partial<Settings>): Settings {
     const tx = database().transaction(() => {
         for (const [key, value] of Object.entries(patch)) {
             if (value === undefined) continue;
-            upsert.run(key, String(value), at);
+            // 口ごとの GPU の設定だけ入れ子なので JSON。ほかは文字列で足りる
+            upsert.run(
+                key,
+                typeof value === 'object' && !Array.isArray(value) ? JSON.stringify(value) : String(value),
+                at,
+            );
         }
     });
     tx();

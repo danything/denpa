@@ -21,6 +21,11 @@
         ['av1', 'AV1'],
         ['h264', 'H.264'],
     ] as const;
+    /** その口・道・コーデックが設定で許されているか。載っていない口は全部よい (hwenc.hwAllowed と同じ) */
+    function allowed(device: string, kind: 'qsv' | 'vaapi', codec: 'av1' | 'h264'): boolean {
+        const entry = data.recording.hwAllow[device];
+        return entry === undefined || entry[kind].includes(codec);
+    }
 
     const migrate = $derived(data.migrate.status);
     const done = $derived(migrate.imported + migrate.skipped + migrate.missing);
@@ -184,60 +189,6 @@
                                 テレビごとの設定で H.264 を渡せます)
                             </span>
                         {/if}
-                        <!--
-                            **GPU で焼くか。** チューナーの設定と同じで、挿さっている機材を
-                            起動時に見つけて (server/hwenc.ts)、**使えるものには自動で印が付く**。
-                            外したいときだけ外す。使えないコーデックの印は触れない —
-                            押しても焼けないものにチェックを入れさせても嘘になるだけ
-                        -->
-                        <div class="border-base-300 mt-1 border-t pt-2" data-testid="hw-encode">
-                            <span class="text-sm font-medium">GPU で焼く</span>
-                            {#await data.hw}
-                                <span class="text-base-content/60 block text-xs" data-testid="hw-status">
-                                    GPU を確認中…
-                                </span>
-                            {:then hw}
-                                <span class="text-base-content/60 block text-xs" data-testid="hw-status">
-                                    {hw.message}
-                                </span>
-                                <!-- 道 × コーデックの4つ。両方付いていれば QSV → VA-API → ソフトウェアの順に試す -->
-                                {#each HW_KINDS as [kind, kindLabel] (kind)}
-                                    <div class="flex flex-wrap items-center gap-x-4 gap-y-1 py-1">
-                                        <span class="w-20 text-sm">{kindLabel}</span>
-                                        {#each HW_CODECS as [codec, label] (codec)}
-                                            {@const usable = hw[kind].includes(codec)}
-                                            <label
-                                                class="inline-flex items-center gap-2 {usable
-                                                    ? 'cursor-pointer'
-                                                    : 'cursor-not-allowed opacity-50'}"
-                                            >
-                                                <input
-                                                    type="checkbox"
-                                                    name={`hw.${kind}.${codec}`}
-                                                    class="checkbox checkbox-sm"
-                                                    checked={usable && recording[kind === 'qsv' ? 'hwQsv' : 'hwVaapi'].includes(codec)}
-                                                    disabled={!usable}
-                                                    data-testid={`hw-${kind}-${codec}`}
-                                                />
-                                                <span class="text-sm">{label}</span>
-                                            </label>
-                                        {/each}
-                                    </div>
-                                {/each}
-                                <span class="text-base-content/60 block text-xs">
-                                    使えるものには自動で印が付きます。両方に付いていれば QSV → VA-API →
-                                    ソフトウェアの順に試し、落ちたら次で焼き直します。
-                                    <button type="submit"
-                                        class="link"
-                                        formaction="?/probeHw"
-                                        formnovalidate
-                                        data-testid="hw-probe"
-                                    >
-                                        確かめ直す
-                                    </button>
-                                </span>
-                            {/await}
-                        </div>
                     </fieldset>
                     <!--
                         **並びは話題ごとに。** 2列に流し込むので、DOM の順がそのまま
@@ -342,6 +293,79 @@
                 </form>
             </div>
         </section>
+        <!--
+            **GPU は別のカード。** 口 (グラボ) が増えると行が増え、道 × コーデックの印も
+            口ごとに持つ。「録画のしかた」に混ぜると、コーデックの選択と GPU の割り振りが
+            同じ列に並んで読みにくかった。挿さっている機材を起動時に見つけて
+            (server/hwenc.ts)、**使えるものには自動で印が付く**。外したいものだけ外す。
+            使えないものの印は触れない — 押しても焼けないものにチェックを入れさせても嘘になるだけ
+        -->
+        <section class="card bg-base-100 shadow" data-testid="hw-card">
+            <div class="card-body">
+                <h2 class="card-title">GPU</h2>
+                <p class="text-base-content/70 text-sm">
+                    GPU (Intel QSV / VA-API) で焼くかを、口ごと・コーデックごとに決めます。
+                    使えるものには自動で印が付き、両方に付いていれば QSV → VA-API → ソフトウェアの
+                    順に試して、落ちたら次で焼き直します。グラボが2枚あれば「こちらは AV1、
+                    あちらは H.264」のように分けられ、同じコーデックを焼ける口が複数あれば順に回します。
+                </p>
+                {#await data.hw}
+                    <span class="text-base-content/60 text-xs" data-testid="hw-status">GPU を確認中…</span>
+                {:then hw}
+                    <form method="POST" action="?/saveHw" use:submitting={keepValues} data-testid="hw-form">
+                        <span class="text-base-content/60 text-xs" data-testid="hw-status">{hw.message}</span>
+                        {#if hw.devices.length > 0}
+                            <!-- 口ごとに1枚。表にすると半分の幅で横に巻くので、縦に積む -->
+                            <div class="divide-base-300 mt-2 divide-y">
+                                {#each hw.devices as device (device.path)}
+                                    {@const port = device.path.split('/').at(-1)}
+                                    <div class="space-y-1 py-2" data-testid="hw-device" data-device={device.path}>
+                                        <div class="font-mono text-sm">{device.label}</div>
+                                        <div class="text-base-content/60 text-xs">{device.summary}</div>
+                                        {#each HW_KINDS as [kind, kindLabel] (kind)}
+                                            <div class="flex flex-wrap items-center gap-x-3 gap-y-1">
+                                                <span class="w-20 text-sm">{kindLabel}</span>
+                                                {#each HW_CODECS as [codec, label] (codec)}
+                                                    {@const usable = device[kind].includes(codec)}
+                                                    <label
+                                                        class="inline-flex items-center gap-1 {usable
+                                                            ? 'cursor-pointer'
+                                                            : 'cursor-not-allowed opacity-50'}"
+                                                    >
+                                                        <input
+                                                            type="checkbox"
+                                                            name={`hw.${device.path}.${kind}.${codec}`}
+                                                            class="checkbox checkbox-sm"
+                                                            checked={usable && allowed(device.path, kind, codec)}
+                                                            disabled={!usable}
+                                                            data-testid={`hw-${port}-${kind}-${codec}`}
+                                                        />
+                                                        <span class="text-sm">{label}</span>
+                                                    </label>
+                                                {/each}
+                                            </div>
+                                        {/each}
+                                    </div>
+                                {/each}
+                            </div>
+                        {/if}
+                        <div class="card-actions mt-2">
+                            {#if hw.devices.length > 0}
+                                <button type="submit" class="btn btn-primary btn-sm" data-testid="hw-save">保存</button>
+                            {/if}
+                            <button type="submit"
+                                class="btn btn-ghost btn-sm"
+                                formaction="?/probeHw"
+                                formnovalidate
+                                data-testid="hw-probe"
+                            >
+                                確かめ直す
+                            </button>
+                        </div>
+                    </form>
+                {/await}
+            </div>
+        </section>
         <section class="card bg-base-100 shadow">
             <div class="card-body">
                 <h2 class="card-title">通知</h2>
@@ -389,79 +413,68 @@
 
                 {#if data.webhooks.length > 0}
                     <!--
-                        **折らずに、はみ出したぶんだけ横に流す。** 列が半分の
-                        幅になったので、詰めさせると「送る通知」が1文字ずつ
-                        縦に折れて読めなくなる (URL だけは `truncate` で止める)
+                        **表ではなく行のカード** (録画一覧と同じ形)。列にしていた頃は
+                        半分の幅で「送る通知」がはみ出して横に巻いていた。1件を
+                        URL・送る通知・直近の結果・ボタン の順に縦に積めば、幅がいくらでも
+                        横には出ない (URL だけは折らずに `truncate` で止める)
                     -->
-                    <div class="mt-4 overflow-x-auto">
-                        <table class="table-zebra table whitespace-nowrap">
-                            <thead>
-                                <tr>
-                                    <th>URL</th>
-                                    <th>送る通知</th>
-                                    <th>直近の結果</th>
-                                    <th></th>
-                                </tr>
-                            </thead>
-                            <tbody data-testid="webhook-list">
-                                {#each data.webhooks as webhook (webhook.id)}
-                                    <tr data-testid="webhook-row" data-webhook-id={webhook.id}>
-                                        <td class="max-w-md">
-                                            <div class="truncate font-mono text-xs">{webhook.url}</div>
-                                            <span
-                                                class="badge badge-sm {webhook.enabled
-                                                    ? 'badge-success'
-                                                    : 'badge-ghost'}"
-                                            >
-                                                {webhook.enabled ? '有効' : '無効'}
-                                            </span>
-                                        </td>
-                                        <td class="text-sm">
-                                            {JSON.parse(webhook.events).length === 0
-                                                ? 'すべて'
-                                                : JSON.parse(webhook.events)
-                                                      .map((e: string) => EVENT_LABEL[e] ?? e)
-                                                      .join(', ')}
-                                        </td>
-                                        <td class="text-sm">
-                                            {#if webhook.last_sent_at}
-                                                <span class={webhook.last_status === 'ok' ? '' : 'text-error'}>
-                                                    {webhook.last_status}
-                                                </span>
-                                                <span class="text-base-content/60 block text-xs">
-                                                    {dateTime(webhook.last_sent_at)}
-                                                </span>
-                                            {:else}
-                                                <span class="text-base-content/60">未送信</span>
-                                            {/if}
-                                        </td>
-                                        <td class="flex flex-wrap gap-2">
-                                            <form method="POST" action="?/testWebhook" use:submitting>
-                                                <input type="hidden" name="id" value={webhook.id} />
-                                                <button type="submit" class="btn btn-xs" data-testid="webhook-test"
-                                                    >テスト送信</button
-                                                >
-                                            </form>
-                                            <form method="POST" action="?/toggleWebhook" use:submitting>
-                                                <input type="hidden" name="id" value={webhook.id} />
-                                                <button type="submit" class="btn btn-xs" data-testid="webhook-toggle">
-                                                    {webhook.enabled ? '無効化' : '有効化'}
-                                                </button>
-                                            </form>
-                                            <form method="POST" action="?/deleteWebhook" use:submitting>
-                                                <input type="hidden" name="id" value={webhook.id} />
-                                                <button type="submit"
-                                                    class="btn btn-xs btn-error btn-outline"
-                                                    data-testid="webhook-delete"
-                                                >
-                                                    削除
-                                                </button>
-                                            </form>
-                                        </td>
-                                    </tr>
-                                {/each}
-                            </tbody>
-                        </table>
+                    <div class="divide-base-300 mt-4 divide-y" data-testid="webhook-list">
+                        {#each data.webhooks as webhook (webhook.id)}
+                            <div class="space-y-2 py-3" data-testid="webhook-row" data-webhook-id={webhook.id}>
+                                <div class="flex items-center gap-2">
+                                    <span
+                                        class="badge badge-sm shrink-0 {webhook.enabled
+                                            ? 'badge-success'
+                                            : 'badge-ghost'}"
+                                    >
+                                        {webhook.enabled ? '有効' : '無効'}
+                                    </span>
+                                    <span class="min-w-0 truncate font-mono text-xs">{webhook.url}</span>
+                                </div>
+                                <div class="text-sm">
+                                    <span class="text-base-content/60">送る通知:</span>
+                                    {JSON.parse(webhook.events).length === 0
+                                        ? 'すべて'
+                                        : JSON.parse(webhook.events)
+                                              .map((e: string) => EVENT_LABEL[e] ?? e)
+                                              .join(', ')}
+                                </div>
+                                <div class="text-sm">
+                                    <span class="text-base-content/60">直近の結果:</span>
+                                    {#if webhook.last_sent_at}
+                                        <span class={webhook.last_status === 'ok' ? '' : 'text-error'}>
+                                            {webhook.last_status}
+                                        </span>
+                                        <span class="text-base-content/60 text-xs">
+                                            {dateTime(webhook.last_sent_at)}
+                                        </span>
+                                    {:else}
+                                        <span class="text-base-content/60">未送信</span>
+                                    {/if}
+                                </div>
+                                <div class="flex flex-wrap gap-2">
+                                    <form method="POST" action="?/testWebhook" use:submitting>
+                                        <input type="hidden" name="id" value={webhook.id} />
+                                        <button type="submit" class="btn btn-xs" data-testid="webhook-test">テスト送信</button>
+                                    </form>
+                                    <form method="POST" action="?/toggleWebhook" use:submitting>
+                                        <input type="hidden" name="id" value={webhook.id} />
+                                        <button type="submit" class="btn btn-xs" data-testid="webhook-toggle">
+                                            {webhook.enabled ? '無効化' : '有効化'}
+                                        </button>
+                                    </form>
+                                    <form method="POST" action="?/deleteWebhook" use:submitting>
+                                        <input type="hidden" name="id" value={webhook.id} />
+                                        <button type="submit"
+                                            class="btn btn-xs btn-error btn-outline"
+                                            data-testid="webhook-delete"
+                                        >
+                                            削除
+                                        </button>
+                                    </form>
+                                </div>
+                            </div>
+                        {/each}
                     </div>
                 {/if}
             </div>

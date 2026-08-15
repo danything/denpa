@@ -31,7 +31,7 @@ import { config } from './config';
 import { database, now, queryOne } from './db';
 import { type EncodeProgress, emit } from './events';
 import { removeIfExists } from './fsx';
-import { type HwKind, hwArgs, hwChain } from './hwenc';
+import { type HwKind, type HwWay, hwArgs, hwChain } from './hwenc';
 import { encodedPath, libraryFamily, libraryPath } from './library';
 import { removeSidecars, sidecarPaths, writeThumbnail } from './metadata';
 import { saveRecordedBml } from './recorded-bml';
@@ -208,18 +208,19 @@ function squarePixels(size: { width: number; height: number } | undefined): stri
     return `scale=${size.width}:${size.height},setsar=1`;
 }
 
-/** 画面に出す、焼く道の名前 */
-const HW_NAME: Record<HwKind | 'software', string> = {
-    qsv: 'QSV',
-    vaapi: 'VA-API',
-    software: 'ソフトウェア',
-};
+/** 画面に出す、焼く道の名前。`renderD128 の QSV` / `ソフトウェア` */
+const HW_NAME: Record<HwKind, string> = { qsv: 'QSV', vaapi: 'VA-API' };
+function wayName(way: HwWay | undefined): string {
+    return way === undefined ? 'ソフトウェア' : `${basename(way.device)} の ${HW_NAME[way.kind]}`;
+}
+/** GPU の口を回す番。ジョブごとに先頭の口を入れ替える (hwenc.hwChain) */
+let hwTurn = 0;
 
 function videoArgs(
     codec: 'av1' | 'h264',
     smooth: boolean,
     scale: string | null,
-    hardware: HwKind | null,
+    hardware: HwWay | null,
 ): { filter: string; encoder: string[] } {
     const steps = [deinterlace(smooth), ...(scale === null ? [] : [scale])];
     if (hardware !== null) {
@@ -362,10 +363,11 @@ export interface EncodeOptions {
      */
     mediaTitle?: string;
     /**
-     * GPU で焼く道 (`qsv` / `vaapi`)。使えるかどうかは `hwenc.hwChain` が決めていて、
-     * runJob がその順に渡す。落ちたら次、最後はソフトウェア (undefined)
+     * GPU で焼く道 (どの口を `qsv` / `vaapi` のどちらで)。使えるかどうかは
+     * `hwenc.hwChain` が決めていて、runJob がその順に渡す。落ちたら次、
+     * 最後はソフトウェア (undefined)
      */
-    hardware?: HwKind;
+    hardware?: HwWay;
 }
 
 /**
@@ -1444,11 +1446,7 @@ async function runJob(jobId: number): Promise<void> {
          * ありうる (ドライバの対応していない大きさなど)。GPU が駄目なだけで録画が
          * 失敗になるのは避けたい。GPU の失敗は初期化で落ちるので、やり直しは速い
          */
-        const current = settings();
-        const ways: (HwKind | undefined)[] = [
-            ...hwChain(codec, { qsv: current.hwQsv, vaapi: current.hwVaapi }),
-            undefined,
-        ];
+        const ways: (HwWay | undefined)[] = [...hwChain(codec, settings().hwAllow, hwTurn++), undefined];
         const attempts = ways.flatMap((hardware) => [
             { seek: null, hardware },
             { seek: config.encodeRetrySeek, hardware },
@@ -1469,7 +1467,7 @@ async function runJob(jobId: number): Promise<void> {
                 if (attempt.hardware !== before) {
                     setStep(
                         jobId,
-                        `${HW_NAME[before ?? 'software']} で焼けなかったので、${HW_NAME[attempt.hardware ?? 'software']}で焼き直します (${codec})`,
+                        `${wayName(before)} で焼けなかったので、${wayName(attempt.hardware)}で焼き直します (${codec})`,
                     );
                 }
             }

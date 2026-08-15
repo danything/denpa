@@ -1,4 +1,5 @@
-import { existsSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
+import { basename, dirname } from 'node:path';
 import { config } from './config';
 
 /**
@@ -10,12 +11,14 @@ import { config } from './config';
  * `h264_qsv` は落ちる。**`ffmpeg -encoders` に載っているかでは分からない**
  * (あれは「組み込んであるか」で「動くか」ではない)。
  *
- * なので、**実際に1コマ焼かせてみる。** 道 (QSV / VA-API) × コーデック
- * (H.264 / AV1) の4通りを `nullsrc` で通し、exit 0 なら使える。世代でも違う
- * (Arc より前は AV1 のエンコードが無い) ので、コーデック別に持つ。
+ * なので、**実際に1コマ焼かせてみる。** `HW_DEVICES` (既定 `/dev/dri/renderD*`) に
+ * 当たる口を全部拾い、**口ごとに** 道 (QSV / VA-API) × コーデック (H.264 / AV1) の
+ * 4通りを `nullsrc` で通し、exit 0 なら使える。世代でも違う (Arc より前は AV1 の
+ * エンコードが無い) ので、コーデック別に持つ。
  *
- * 結果は設定画面 (「映像コーデック」の下) に出し、**使えるものには自動で
- * 印が付く** (`settings().hwQsv` / `hwVaapi` と突き合わせるのは `hwChain`)。
+ * 結果は設定画面の「GPU」カードに口ごとに出し、**使えるものには自動で印が付く**
+ * (`settings().hwAllow` と突き合わせるのは `hwChain`)。グラボが2枚あれば
+ * 「こちらは AV1、あちらは H.264」のように、口ごとに使うコーデックを選べる。
  * 差し直したときは画面の「確かめ直す」で `probe()` をもう一度回す。
  *
  * **QSV と VA-API の両方を持つ理由。** Linux では QSV の下に必ず VA-API が
@@ -30,26 +33,40 @@ export type HwCodec = 'av1' | 'h264';
 export const HW_KINDS = ['qsv', 'vaapi'] as const;
 export type HwKind = (typeof HW_KINDS)[number];
 
-export interface HwEncode {
-    /** 一度でも確かめ終わったか。起動直後は false のまま画面に「確認中」を出す */
-    probed: boolean;
-    /** 見に行ったデバイス (`HW_DEVICE`) */
-    device: string;
+/** 1つの口 (GPU) で何が焼けるか */
+export interface HwDevice {
+    /** `/dev/dri/renderD128` のような口 */
+    path: string;
+    /** 画面に出す名前。`renderD128 (Intel)` のように、口の名前と作り手 */
+    label: string;
     /** QSV で焼けたコーデック */
     qsv: HwCodec[];
     /** VA-API で焼けたコーデック */
     vaapi: HwCodec[];
+}
+
+export interface HwEncode {
+    /** 一度でも確かめ終わったか。起動直後は false のまま画面に「確認中」を出す */
+    probed: boolean;
+    /** 見つかった口、`HW_DEVICES` に当たった順。空なら GPU が見えていない */
+    devices: HwDevice[];
     /** 画面に出す一言。何が使えて、使えないなら何が理由か */
     message: string;
 }
 
-let state: HwEncode = {
-    probed: false,
-    device: config.hwDevice,
-    qsv: [],
-    vaapi: [],
-    message: '確認中…',
-};
+/**
+ * **口ごとに、GPU で焼いてよいコーデック** (設定 `hwAllow`)。口の path が鍵。
+ * 載っていない口は「使えるものは全部」
+ */
+export type HwAllow = Record<string, Record<HwKind, HwCodec[]>>;
+
+/** 焼く1回ぶんの道。どの口を、どちらの道で */
+export interface HwWay {
+    device: string;
+    kind: HwKind;
+}
+
+let state: HwEncode = { probed: false, devices: [], message: '確認中…' };
 let running: Promise<HwEncode> | null = null;
 
 /** いまの見立て。`probe()` が終わるまでは `probed: false` */
@@ -57,13 +74,31 @@ export function hwEncode(): HwEncode {
     return state;
 }
 
+/** その口・道・コーデックが、設定で許されているか。載っていない口は全部よい */
+export function hwAllowed(allow: HwAllow, device: string, kind: HwKind, codec: HwCodec): boolean {
+    const entry = allow[device];
+    return entry === undefined || entry[kind].includes(codec);
+}
+
 /**
  * **このコーデックを GPU で焼くときに試す道、順に。** 使える (試し焼きが通った)
- * かつ設定で外していない (`allowed[kind]`) もの。空ならソフトウェアだけ。
- * 設定の既定は「使えるものは全部」なので、GPU が見つかれば黙って使う
+ * かつ設定で外していない (`allow`) もの。空ならソフトウェアだけ。
+ *
+ * **口は `turn` で回す。** グラボが2枚あって両方が同じコーデックを焼けるなら、
+ * ジョブごとに先頭を入れ替えて、2本並べて焼くとき片方に寄らないようにする。
+ * 同じ口の中では QSV → VA-API
  */
-export function hwChain(codec: HwCodec, allowed: Record<HwKind, readonly HwCodec[]>): HwKind[] {
-    return HW_KINDS.filter((kind) => state[kind].includes(codec) && allowed[kind].includes(codec));
+export function hwChain(codec: HwCodec, allow: HwAllow, turn = 0, devices = state.devices): HwWay[] {
+    const perDevice = devices
+        .map((device) =>
+            HW_KINDS.filter(
+                (kind) => device[kind].includes(codec) && hwAllowed(allow, device.path, kind, codec),
+            ).map((kind) => ({ device: device.path, kind })),
+        )
+        .filter((ways) => ways.length > 0);
+    if (perDevice.length === 0) return [];
+    const start = ((turn % perDevice.length) + perDevice.length) % perDevice.length;
+    return [...perDevice.slice(start), ...perDevice.slice(0, start)].flat();
 }
 
 /**
@@ -84,19 +119,18 @@ export function hwChain(codec: HwCodec, allowed: Record<HwKind, readonly HwCodec
  * QSV の `-preset medium` は7段 (veryfast〜veryslow) の真ん中
  */
 export function hwArgs(
-    kind: HwKind,
+    way: HwWay,
     codec: HwCodec,
 ): { device: string[]; filter: string[]; encoder: string[] } {
-    const device = config.hwDevice;
-    if (kind === 'qsv') {
+    if (way.kind === 'qsv') {
         return {
-            device: ['-init_hw_device', `qsv=hw:hw,child_device=${device}`],
+            device: ['-init_hw_device', `qsv=hw:hw,child_device=${way.device}`],
             filter: ['format=nv12'],
             encoder: [`${codec}_qsv`, '-preset', 'medium', '-global_quality', '24'],
         };
     }
     return {
-        device: ['-init_hw_device', `vaapi=va:${device}`, '-filter_hw_device', 'va'],
+        device: ['-init_hw_device', `vaapi=va:${way.device}`, '-filter_hw_device', 'va'],
         filter: ['format=nv12', 'hwupload'],
         encoder: [`${codec}_vaapi`, '-rc_mode', 'ICQ', '-global_quality', '24'],
     };
@@ -123,12 +157,50 @@ async function tryEncode(args: string[]): Promise<boolean> {
 /** 試し焼きの素材。小さく短く — 何が使えるかを見るだけで、速さは測らない */
 const SOURCE = ['-f', 'lavfi', '-i', 'nullsrc=s=256x256:r=30:d=0.2'];
 
+/** PCI の作り手の番号 → 名前。sysfs から読めたときだけ添える */
+const VENDOR: Record<string, string> = { '0x8086': 'Intel', '0x1002': 'AMD', '0x10de': 'NVIDIA' };
+
+/** 口の名前。`renderD128 (Intel)` — 作り手は `/sys/class/drm/<口>/device/vendor` から */
+function labelOf(path: string): string {
+    const name = basename(path);
+    try {
+        const vendor = readFileSync(`/sys/class/drm/${name}/device/vendor`, 'utf8').trim();
+        return `${name} (${VENDOR[vendor] ?? vendor})`;
+    } catch {
+        return name;
+    }
+}
+
+/**
+ * `HW_DEVICES` に当たる口。名前順 (renderD128, renderD129, …)。
+ * 印は最後の段の `*` だけ (デバイスの名前は決まっている)。**readdir で拾う** —
+ * デバイスは普通のファイルでもフォルダでもないので、glob の道具に頼らない
+ */
+export function findDevices(pattern = config.hwDevices): string[] {
+    const dir = dirname(pattern);
+    const name = new RegExp(`^${basename(pattern).split('*').map(escapeRegExp).join('.*')}$`);
+    let entries: string[];
+    try {
+        entries = readdirSync(dir);
+    } catch {
+        return [];
+    }
+    return entries
+        .filter((entry) => name.test(entry))
+        .sort()
+        .map((entry) => `${dir}/${entry}`);
+}
+
+function escapeRegExp(text: string): string {
+    return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 /**
  * 探し直す。同時に2回押されても ffmpeg は1組しか走らせない
  */
 export function probe(): Promise<HwEncode> {
     if (running !== null) return running;
-    // 終わったら手を離す。**中で null にしない** — 待たずに終わる道 (デバイスが無い) では
+    // 終わったら手を離す。**中で null にしない** — 待たずに終わる道 (口が無い) では
     // 代入より先に走り終えてしまい、済んだ promise を握ったままになる
     running = probeOnce().finally(() => {
         running = null;
@@ -137,14 +209,12 @@ export function probe(): Promise<HwEncode> {
 }
 
 async function probeOnce(): Promise<HwEncode> {
-    const device = config.hwDevice;
-    const next: HwEncode = { probed: true, device, qsv: [], vaapi: [], message: '' };
-    if (!existsSync(device)) {
-        next.message = `GPU が見えません (${device} がありません)。ソフトウェアで焼きます`;
-    } else {
+    const devices: HwDevice[] = [];
+    for (const path of findDevices()) {
+        const device: HwDevice = { path, label: labelOf(path), qsv: [], vaapi: [] };
         for (const kind of HW_KINDS) {
             for (const codec of ['h264', 'av1'] as const) {
-                const hw = hwArgs(kind, codec);
+                const hw = hwArgs({ device: path, kind }, codec);
                 const ok = await tryEncode([
                     ...hw.device,
                     ...SOURCE,
@@ -153,11 +223,12 @@ async function probeOnce(): Promise<HwEncode> {
                     '-c:v',
                     ...hw.encoder,
                 ]);
-                if (ok) next[kind].push(codec);
+                if (ok) device[kind].push(codec);
             }
         }
-        next.message = describe(next);
+        devices.push(device);
     }
+    const next: HwEncode = { probed: true, devices, message: describe(devices) };
     state = next;
     console.log(`[hwenc] ${next.message}`);
     return next;
@@ -165,19 +236,22 @@ async function probeOnce(): Promise<HwEncode> {
 
 const NAME: Record<HwCodec, string> = { h264: 'H.264', av1: 'AV1' };
 
-function describe(hw: HwEncode): string {
-    const list = (codecs: HwCodec[]) => codecs.map((c) => NAME[c]).join(' / ');
-    if (hw.qsv.length > 0 || hw.vaapi.length > 0) {
-        const parts: string[] = [];
-        if (hw.qsv.length > 0) parts.push(`Intel QSV (${list(hw.qsv)})`);
-        if (hw.vaapi.length > 0) parts.push(`VA-API (${list(hw.vaapi)})`);
-        const missing = (['h264', 'av1'] as const).filter(
-            (c) => !hw.qsv.includes(c) && !hw.vaapi.includes(c),
-        );
-        return (
-            `GPU で焼けます: ${parts.join('、')}` +
-            (missing.length > 0 ? `。${list(missing)} はこの GPU では焼けません` : '')
-        );
+/** 口ごとの一言。「QSV: H.264 / AV1、VA-API: H.264」か「焼けません」 */
+export function describeDevice(device: HwDevice): string {
+    const parts = HW_KINDS.filter((kind) => device[kind].length > 0).map(
+        (kind) => `${kind === 'qsv' ? 'QSV' : 'VA-API'}: ${device[kind].map((c) => NAME[c]).join(' / ')}`,
+    );
+    return parts.length > 0
+        ? parts.join('、')
+        : 'GPU で焼けません (ドライバが合っていないか、権限がありません)';
+}
+
+function describe(devices: HwDevice[]): string {
+    if (devices.length === 0) {
+        return `GPU が見えません (${config.hwDevices} に当たる口がありません)。ソフトウェアで焼きます`;
     }
-    return `${hw.device} はありますが GPU で焼けません (ドライバが合っていないか、権限がありません)。ソフトウェアで焼きます`;
+    const usable = devices.filter((d) => d.qsv.length > 0 || d.vaapi.length > 0).length;
+    if (usable === 0)
+        return `${devices.length} 口見つかりましたが、どれも GPU で焼けません。ソフトウェアで焼きます`;
+    return `${devices.length} 口見つかり、${usable} 口で GPU で焼けます`;
 }

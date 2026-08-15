@@ -155,7 +155,7 @@ SQLite が拒むので、事実と状態が食い違いようがありません�
 | `LIBRARY_DIR` | `/library` | エンコード済みの置き場。ここから配る |
 | `FFMPEG` / `FFPROBE` | `/usr/local/bin/...` | 開発時は偽物に差し替える |
 | `ENCODE_CONCURRENCY` | `1` | 録画エンコードの同時実行数 |
-| `HW_DEVICE` | `/dev/dri/renderD128` | GPU の口。見えて QSV / VA-API が初期化できれば GPU で焼く ([encode.md](encode.md)「GPU で焼く」) |
+| `HW_DEVICES` | `/dev/dri/renderD*` | GPU の口を探す形。当たった口を全部試し、QSV / VA-API が初期化できたもので焼く ([encode.md](encode.md)「GPU で焼く」) |
 | `HW_PROBE_TIMEOUT` | `20000` | GPU の試し焼き1本に待つ上限(ms) |
 | `ENCODE_MAX_ATTEMPTS` | `5` | 1つのエンコードを試す上限。超えたら failed にして後ろを進める (プロセスごと落とす毒ジョブでキューを塞がないため) |
 | `START_MARGIN` / `END_MARGIN` | `10000` / `15000` | 録画の前後マージン(ms)。延長には EIT[p/f] で追従する |
