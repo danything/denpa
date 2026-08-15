@@ -65,6 +65,10 @@ services:
             - denpa-library:/library
         ports:
             - '3000:3000'
+        # Intel の GPU で焼くなら /dev/dri を渡す (docs/encode.md「GPU で焼く」)。
+        # 見えれば起動時に自分で見つけて使い、無ければソフトウェアで焼く
+        # devices:
+        #     - /dev/dri:/dev/dri
 
 volumes:
     denpa-data:

@@ -2,9 +2,9 @@ apiVersion: v2
 name: denpa
 description: 地デジ・BS/CS の録画サーバ denpa と、チューナーを掴む tuner-agent の一式
 type: application
-# chart 自体の版。中身 (テンプレート・既定値) を変えたら上げる
+# chart 自体の版。リリースのたびに CI (release.yml) がリリースの版に書き換える
 version: 1.0.0
-# 中に入るアプリの版。リリース (git tag) と揃える
+# 中に入るアプリの版。これも CI がリリースの版に揃える
 appVersion: "1.0.0"
 home: https://github.com/danything/denpa
 sources:

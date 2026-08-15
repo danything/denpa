@@ -31,6 +31,7 @@ import { config } from './config';
 import { database, now, queryOne } from './db';
 import { type EncodeProgress, emit } from './events';
 import { removeIfExists } from './fsx';
+import { type HwKind, hwArgs, hwChain } from './hwenc';
 import { encodedPath, libraryFamily, libraryPath } from './library';
 import { removeSidecars, sidecarPaths, writeThumbnail } from './metadata';
 import { saveRecordedBml } from './recorded-bml';
@@ -207,12 +208,30 @@ function squarePixels(size: { width: number; height: number } | undefined): stri
     return `scale=${size.width}:${size.height},setsar=1`;
 }
 
+/** 画面に出す、焼く道の名前 */
+const HW_NAME: Record<HwKind | 'software', string> = {
+    qsv: 'QSV',
+    vaapi: 'VA-API',
+    software: 'ソフトウェア',
+};
+
 function videoArgs(
     codec: 'av1' | 'h264',
     smooth: boolean,
     scale: string | null,
+    hardware: HwKind | null,
 ): { filter: string; encoder: string[] } {
     const steps = [deinterlace(smooth), ...(scale === null ? [] : [scale])];
+    if (hardware !== null) {
+        /*
+         * **GPU (Intel QSV / VA-API)。** インタレ解除も引き伸ばしも CPU のフィルタで
+         * 済ませ、焼くところだけ GPU に渡す。引数と画質の決め方は hwenc.hwArgs。
+         * 使うかどうかは `hwChain` (起動時の試し焼きと設定)。**落ちたら次の道か
+         * ソフトウェアで焼き直す** (runJob) ので、ここで保険はかけない
+         */
+        const hw = hwArgs(hardware, codec);
+        return { filter: [...steps, ...hw.filter].join(','), encoder: hw.encoder };
+    }
     if (codec === 'h264') {
         return {
             filter: [...steps, 'format=yuv420p'].join(','),
@@ -342,6 +361,11 @@ export interface EncodeOptions {
      * これしか無い — リモートアクセスの /play は表示名を受け取らない
      */
     mediaTitle?: string;
+    /**
+     * GPU で焼く道 (`qsv` / `vaapi`)。使えるかどうかは `hwenc.hwChain` が決めていて、
+     * runJob がその順に渡す。落ちたら次、最後はソフトウェア (undefined)
+     */
+    hardware?: HwKind;
 }
 
 /**
@@ -388,13 +412,18 @@ export function buildArgs(
     codec: VideoCodec = 'av1',
     options: EncodeOptions = {},
 ): string[] {
+    const hardware = options.hardware ?? null;
+    const resolved = resolveCodec(codec);
     const video = videoArgs(
-        resolveCodec(codec),
+        resolved,
         options.smoothMotion === true,
         squarePixels(options.displaySize),
+        hardware,
     );
 
     const args = ['-y'];
+    // GPU の口。入力より前に開いておくと、エンコーダ (とフィルタ) がこれを掴む
+    if (hardware !== null) args.push(...hwArgs(hardware, resolved).device);
 
     /*
      * **頭を捨てる。** 2つの理由が足し算になる。
@@ -1405,22 +1434,51 @@ async function runJob(jobId: number): Promise<void> {
     for (const codec of codecs) {
         const working = `${encodedPath(recording, codec)}.${jobId}.${codec}.encoding`;
 
-        rebaseChapters(null);
-        let result = await runFfmpeg(job, source, working, recording.audio_type, null, codec, encodeOptions);
-        if (result.code !== 0 && !canceled.has(jobId)) {
-            // 録画開始直後の頭数百msだけ壊れているケースをここで拾う(詳細は buildArgs のコメント参照)。
-            // 別の理由での失敗もここに来るが、-ss を付けても同じ理由でもう一度失敗するだけなので無害
-            database().prepare('UPDATE encode_jobs SET attempts = attempts + 1 WHERE id = ?').run(jobId);
-            rebaseChapters(config.encodeRetrySeek);
-            result = await runFfmpeg(
-                job,
-                source,
-                working,
-                recording.audio_type,
-                config.encodeRetrySeek,
-                codec,
-                encodeOptions,
-            );
+        /*
+         * **試す順。** まず頭からそのまま。落ちたら頭を少し捨てて (`-ss`) もう一度 —
+         * 録画開始直後の数百msだけ壊れているケースをここで拾う (buildArgs のコメント)。
+         * 別の理由での失敗もここに来るが、もう一度同じ理由で落ちるだけなので無害。
+         *
+         * **GPU で焼くときは、その2回が駄目なら次の道 (QSV → VA-API → ソフトウェア) で
+         * 同じ2回をやり直す。** 起動時の試し焼きは通っても、素材しだいで落ちることは
+         * ありうる (ドライバの対応していない大きさなど)。GPU が駄目なだけで録画が
+         * 失敗になるのは避けたい。GPU の失敗は初期化で落ちるので、やり直しは速い
+         */
+        const current = settings();
+        const ways: (HwKind | undefined)[] = [
+            ...hwChain(codec, { qsv: current.hwQsv, vaapi: current.hwVaapi }),
+            undefined,
+        ];
+        const attempts = ways.flatMap((hardware) => [
+            { seek: null, hardware },
+            { seek: config.encodeRetrySeek, hardware },
+        ]);
+
+        let result = { code: -1, stderrTail: '', outTimeUs: 0 };
+        for (const [i, attempt] of attempts.entries()) {
+            if (i > 0) {
+                if (canceled.has(jobId)) break;
+                // 数えるのは頭を捨てる再試行だけ (毒ジョブの見立て `encodeMaxAttempts` の物差し)。
+                // GPU から降りるのは、その素材ではその道が使えないというだけで、毒ではない
+                if (attempt.seek !== null) {
+                    database()
+                        .prepare('UPDATE encode_jobs SET attempts = attempts + 1 WHERE id = ?')
+                        .run(jobId);
+                }
+                const before = attempts[i - 1].hardware;
+                if (attempt.hardware !== before) {
+                    setStep(
+                        jobId,
+                        `${HW_NAME[before ?? 'software']} で焼けなかったので、${HW_NAME[attempt.hardware ?? 'software']}で焼き直します (${codec})`,
+                    );
+                }
+            }
+            rebaseChapters(attempt.seek);
+            result = await runFfmpeg(job, source, working, recording.audio_type, attempt.seek, codec, {
+                ...encodeOptions,
+                hardware: attempt.hardware,
+            });
+            if (result.code === 0) break;
         }
 
         // 出来かけを捨てるだけ。元のファイルには触らない

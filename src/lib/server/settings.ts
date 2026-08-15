@@ -25,6 +25,17 @@ export interface Settings {
      * のときは空。AV1 を先頭に寄せる — 主 (`library_path`) はそちらにする
      */
     codecs: ('av1' | 'h264')[];
+    /**
+     * **GPU で焼いてよいコーデック**、道 (QSV / VA-API) ごと。使えるかどうかは別
+     * (`server/hwenc.ts` が起動時に確かめる) で、実際に GPU で焼くのは
+     * 「使える かつ ここに入っている」もの。両方使えれば QSV を先に試す。
+     *
+     * 既定はどちらも両方 — GPU が見つかれば黙って使う (「自動でチェックが入る」)。
+     * 外したいときだけ設定画面で外す。使えないものの印は画面から触れないので、
+     * 保存しても入っている状態のまま残る (あとで GPU を挿せばそのまま効く)
+     */
+    hwQsv: ('av1' | 'h264')[];
+    hwVaapi: ('av1' | 'h264')[];
     /** CMの扱い。off / chapter / cut */
     cmCut: CmMode;
     /**
@@ -146,6 +157,8 @@ export function settings(): Settings {
     return {
         codec: primary,
         codecs,
+        hwQsv: parseCodecs(stored('hwQsv') ?? 'av1,h264'),
+        hwVaapi: parseCodecs(stored('hwVaapi') ?? 'av1,h264'),
         cmCut: isCmMode(cmCut) ? cmCut : config.cmCutDefault,
         encode: codecs.length > 0,
         keepOriginal: flag('keepOriginal', false),

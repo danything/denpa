@@ -1,6 +1,7 @@
 import { fail } from '@sveltejs/kit';
 import { isCmMode } from '$lib/server/cm';
 import { database, now, queryAll, queryOne } from '$lib/server/db';
+import { type HwCodec, type HwKind, hwEncode, probe } from '$lib/server/hwenc';
 import { available as migrateAvailable, source, start, status } from '$lib/server/migrate';
 import { normalizePostalCode, saveSettings, settings } from '$lib/server/settings';
 import { serializeTargets, targets, type VlcTarget } from '$lib/server/vlc';
@@ -13,6 +14,11 @@ export function load() {
     const current = settings();
     return {
         recording: current,
+        /**
+         * GPU で焼けるか (server/hwenc.ts)。起動直後の確かめが終わっていなければ
+         * promise のまま渡す — 画面は「確認中」を出して待つ
+         */
+        hw: hwEncode().probed ? hwEncode() : probe(),
         /** データ放送に渡すもの。いまは郵便番号だけ */
         broadcast: { postalCode: current.postalCode, bmlNetwork: current.bmlNetwork },
         /** テレビの VLC の居場所。画面は名前+ホストの行として編集する */
@@ -44,10 +50,23 @@ export const actions = {
         if (!isCmMode(cmCut)) {
             return fail(400, { message: 'CMの指定が不正です' });
         }
+        /*
+         * **GPU で焼くコーデック** (道ごと)。画面で触れるのは使えるものの印だけなので、
+         * 使えないほうは前の値をそのまま持ち越す (GPU を挿したときにそのまま効く)。
+         * 使えるほうは印のとおりに
+         */
+        const hw = hwEncode();
+        const previous = settings();
+        const keep = (kind: HwKind, before: readonly HwCodec[]) =>
+            (['av1', 'h264'] as const).filter((codec) =>
+                hw[kind].includes(codec) ? form.get(`hw.${kind}.${codec}`) === 'on' : before.includes(codec),
+            );
         saveSettings({
             // AV1 を先頭に寄せる (settings() が主を決めるときの順序と揃える)
             codec: (codecs.length > 0 ? codecs.join(',') : 'none') as VideoCodec,
             encode: codecs.length > 0,
+            hwQsv: keep('qsv', previous.hwQsv),
+            hwVaapi: keep('vaapi', previous.hwVaapi),
             cmCut,
             cmDetector: form.get('cmDetector') === 'silence' ? 'silence' : 'jls',
             logoLevel: Number(form.get('logoLevel')),
@@ -56,6 +75,12 @@ export const actions = {
             fpsDetect: form.get('fpsDetect') === 'on',
         });
         return { success: true, saved: true };
+    },
+
+    /** GPU を挿し直した・権限を直したあとに、再起動せずに確かめ直す */
+    probeHw: async () => {
+        await probe();
+        return { success: true, probed: true };
     },
 
     /**

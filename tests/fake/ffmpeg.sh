@@ -14,6 +14,30 @@ for arg in "$@"; do
     prev="$arg"
 done
 
+# **何を渡されたかを残す** (ライブの FAKE_FFMPEG_ARGS_FILE と同じ形)。焼くときに
+# GPU の道 (`h264_qsv` など) を選べているか、落ちたらソフトウェアへ倒れているかを
+# テストから見るため。**どの道でも、落ちる前に**残す。1回ぶんずつ足す
+if [ -n "${FAKE_FFMPEG_ENCODE_ARGS_FILE:-}" ]; then
+    printf -- '---\n%s\n' "$(printf '%s\n' "$@")" >> "$FAKE_FFMPEG_ENCODE_ARGS_FILE"
+fi
+
+# GPU (QSV / VA-API) の道。`-init_hw_device` が付いていたら、それ。
+#
+# 本物は GPU が無ければ初期化で落ちる。ここでは FAKE_FFMPEG_HW_FILE が在るときだけ
+# 「GPU がある」ことにする — 起動時の試し焼き (server/hwenc.ts、入力は lavfi) は
+# 黙って通し、本番の焼きはそのまま下の普通の道へ流す。無ければ本物と同じく落ちる
+# (焼きの途中で GPU が駄目になったときの、ソフトウェアへの焼き直しもこれで通る)
+if printf '%s\n' "$@" | grep -qx -- '-init_hw_device'; then
+    if [ ! -f "${FAKE_FFMPEG_HW_FILE:-/nonexistent}" ]; then
+        echo "Device creation failed: -19." >&2
+        echo "Failed to set value 'qsv=hw:hw,child_device=/dev/dri/renderD128' for option 'init_hw_device': No such device" >&2
+        exit 1
+    fi
+    if printf '%s\n' "$@" | grep -qx -- 'lavfi'; then
+        exit 0
+    fi
+fi
+
 # CM検出パス (silencedetect) は本編とは別物として応答する。
 # 300秒と360秒に境界が来るので、300-360 の 60 秒がCMブロックとして検出される。
 if printf '%s\n' "$@" | grep -q silencedetect; then

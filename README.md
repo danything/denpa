@@ -34,6 +34,8 @@
 - **チューナー** — Linux DVB (PT2/PT3、PX-S1UD など)。ドライバはホスト側に入れておく
 - **B-CASカード** と PC/SC 対応のリーダー
 - **Docker** (Compose) か **Kubernetes** (Helm)
+- あれば **Intel の GPU** — `/dev/dri` を渡しておけば起動時に見つけて GPU で焼きます
+  (無ければソフトウェア。[docs/encode.md](docs/encode.md)「GPU で焼く」)
 
 ## 立てる
 

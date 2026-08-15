@@ -63,6 +63,15 @@ denpa:
   livenessProbe:
     initialDelaySeconds: 20
     periodSeconds: 30
+  # **Intel の GPU で焼く** (docs/encode.md「GPU で焼く」)。像には QSV / VA-API の
+  # ドライバが入っていて、コンテナから /dev/dri が見えれば起動時に自分で見つけて使う。
+  # 渡し方は2つ。
+  #   - デバイスプラグイン (intel-device-plugins-for-kubernetes) を入れてあれば
+  #     上の resources.limits に `gpu.intel.com/i915: 1` を足すだけ (こちらが行儀がよい)
+  #   - プラグイン無しなら hostPath で /dev/dri をそのまま渡す。**Pod が privileged になる**
+  #     (そうしないとデバイスの cgroup が /dev/dri を開かせない)
+  gpu:
+    hostPath: false
   nodeSelector: {}
   tolerations: []
   affinity: {}

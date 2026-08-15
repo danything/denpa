@@ -40,12 +40,12 @@ SHELL ["/bin/bash", "-c"]
 ENV CURL="curl -fsSL --retry 5 --retry-delay 5 --retry-all-errors --connect-timeout 20"
 
 # woff2 は ARIB フォントをブラウザ用に縮めるのに使う (データ放送。下の説明)
-# libvpl-dev / libva-dev は Intel の GPU (QSV) 向け。**いまはまだ使っていない** —
+# libvpl-dev / libva-dev は Intel の GPU (QSV) 向け (docs/encode.md「GPU で焼く」)。
 # ffmpeg に libvpl (QSV = h264_qsv / av1_qsv) を組み込み、実行イメージにドライバを
-# 入れてあるだけで、エンコードの引数はソフトウェア (libsvtav1 / libx264) のまま。
+# 入れてある。コンテナから /dev/dri が見えれば、起動時に server/hwenc.ts が試し焼きで
+# 見つけて使い、無ければソフトウェア (libsvtav1 / libx264) で焼く。
 # **libva は QSV の下に必ず居る** (Linux では libvpl → libmfx-gen → libva → /dev/dri)。
-# vaapi も有効にしてあるのは、QSV が効かない機種の逃げ道 (h264_vaapi) のため。
-# 使うときは Pod に /dev/dri を渡して、encoder.ts の videoArgs で *_qsv を選ぶ
+# vaapi も有効にしてあるのは、QSV が初期化できない機種の逃げ道 (h264_vaapi) のため
 ENV DEV="curl ca-certificates build-essential cmake pkg-config nasm patch zlib1g-dev libfreetype6-dev libopus-dev libx264-dev libdav1d-dev libfontconfig-dev woff2 libva-dev libvpl-dev"
 
 # renovate: datasource=github-tags depName=FFmpeg/FFmpeg extractVersion=^n(?<version>.*)$
@@ -191,8 +191,8 @@ ENV NODE_ENV=production \
 # libav* は join_logo_scp 一式のため。あちらは Debian の共有ライブラリに繋いである
 # (denpa 自身の ffmpeg は下で入れる自前ビルド)
 # libvpl2 + libmfx-gen1.2 (QSV のランタイム) + libva* + intel-media-va-driver (iHD) は
-# Intel の GPU (QSV) 向け。**まだ使っていない** (上の ffmpeg 段の説明)。入れておくだけで、
-# GPU の無い機械でも害は無い (ffmpeg は初期化に失敗したデバイスを使わないだけ)
+# Intel の GPU (QSV / VA-API) 向け (上の ffmpeg 段の説明)。GPU の無い機械でも害は無い
+# (起動時の試し焼きが落ちて、ソフトウェアで焼くだけ)
 RUN apt-get update && \
     apt-get -y --no-install-recommends install \
       libopus0 libx264-164 libdav1d7 libfontconfig1 libfreetype6 \

@@ -50,6 +50,14 @@ export interface Stack {
     liveFailFile: string;
     /** ライブ視聴で偽 ffmpeg に渡された TS の頭。1局に絞れているかを見る */
     liveTsFile: string;
+    /**
+     * **偽の GPU。** これを置くと、denpa は `HW_DEVICE` として在ることを見て、
+     * 偽 ffmpeg は「GPU がある」と答える (QSV / VA-API の試し焼きが通る)。
+     * 消せば、焼こうとした GPU の道が本物と同じく初期化で落ちる
+     */
+    hwFile: string;
+    /** 焼くときに偽 ffmpeg へ渡された引数 (1回ずつ `---` で区切って足される) */
+    encodeArgsFile: string;
 }
 
 /** 資格情報を持たずに叩く口。返るのは素の Response */
@@ -124,6 +132,8 @@ async function boot(index: number): Promise<{ stack: Stack; shutdown: () => Prom
         liveArgsFile: `${root}/live-ffmpeg-args`,
         liveFailFile: `${root}/fail-live`,
         liveTsFile: `${root}/live-ffmpeg-ts`,
+        hwFile: `${root}/fake-gpu`,
+        encodeArgsFile: `${root}/encode-ffmpeg-args`,
     };
 
     rmSync(root, { recursive: true, force: true });
@@ -176,6 +186,10 @@ async function boot(index: number): Promise<{ stack: Stack; shutdown: () => Prom
             FAKE_FFMPEG_ARGS_FILE: stack.liveArgsFile,
             FAKE_FFMPEG_LIVE_FAIL_FILE: stack.liveFailFile,
             FAKE_FFMPEG_TS_FILE: stack.liveTsFile,
+            // 偽の GPU。denpa にはデバイスとして、偽 ffmpeg には「ある」印として同じ物を見せる
+            HW_DEVICE: stack.hwFile,
+            FAKE_FFMPEG_HW_FILE: stack.hwFile,
+            FAKE_FFMPEG_ENCODE_ARGS_FILE: stack.encodeArgsFile,
             // 定期処理は止め、テストからボタン/APIで明示的に走らせる(タイミング依存を避ける)
             RECONCILE_INTERVAL: '86400000',
             EPG_COLLECT_INTERVAL: '86400000',

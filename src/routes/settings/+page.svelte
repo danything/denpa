@@ -12,6 +12,16 @@
 
     liveUpdates(['migrate']);
 
+    /** GPU で焼く印を並べる順と、その呼び名。道 (QSV が先 = 先に試す) × コーデック */
+    const HW_KINDS = [
+        ['qsv', 'Intel QSV'],
+        ['vaapi', 'VA-API'],
+    ] as const;
+    const HW_CODECS = [
+        ['av1', 'AV1'],
+        ['h264', 'H.264'],
+    ] as const;
+
     const migrate = $derived(data.migrate.status);
     const done = $derived(migrate.imported + migrate.skipped + migrate.missing);
 
@@ -174,6 +184,60 @@
                                 テレビごとの設定で H.264 を渡せます)
                             </span>
                         {/if}
+                        <!--
+                            **GPU で焼くか。** チューナーの設定と同じで、挿さっている機材を
+                            起動時に見つけて (server/hwenc.ts)、**使えるものには自動で印が付く**。
+                            外したいときだけ外す。使えないコーデックの印は触れない —
+                            押しても焼けないものにチェックを入れさせても嘘になるだけ
+                        -->
+                        <div class="border-base-300 mt-1 border-t pt-2" data-testid="hw-encode">
+                            <span class="text-sm font-medium">GPU で焼く</span>
+                            {#await data.hw}
+                                <span class="text-base-content/60 block text-xs" data-testid="hw-status">
+                                    GPU を確認中…
+                                </span>
+                            {:then hw}
+                                <span class="text-base-content/60 block text-xs" data-testid="hw-status">
+                                    {hw.message}
+                                </span>
+                                <!-- 道 × コーデックの4つ。両方付いていれば QSV → VA-API → ソフトウェアの順に試す -->
+                                {#each HW_KINDS as [kind, kindLabel] (kind)}
+                                    <div class="flex flex-wrap items-center gap-x-4 gap-y-1 py-1">
+                                        <span class="w-20 text-sm">{kindLabel}</span>
+                                        {#each HW_CODECS as [codec, label] (codec)}
+                                            {@const usable = hw[kind].includes(codec)}
+                                            <label
+                                                class="inline-flex items-center gap-2 {usable
+                                                    ? 'cursor-pointer'
+                                                    : 'cursor-not-allowed opacity-50'}"
+                                            >
+                                                <input
+                                                    type="checkbox"
+                                                    name={`hw.${kind}.${codec}`}
+                                                    class="checkbox checkbox-sm"
+                                                    checked={usable && recording[kind === 'qsv' ? 'hwQsv' : 'hwVaapi'].includes(codec)}
+                                                    disabled={!usable}
+                                                    data-testid={`hw-${kind}-${codec}`}
+                                                />
+                                                <span class="text-sm">{label}</span>
+                                            </label>
+                                        {/each}
+                                    </div>
+                                {/each}
+                                <span class="text-base-content/60 block text-xs">
+                                    使えるものには自動で印が付きます。両方に付いていれば QSV → VA-API →
+                                    ソフトウェアの順に試し、落ちたら次で焼き直します。
+                                    <button type="submit"
+                                        class="link"
+                                        formaction="?/probeHw"
+                                        formnovalidate
+                                        data-testid="hw-probe"
+                                    >
+                                        確かめ直す
+                                    </button>
+                                </span>
+                            {/await}
+                        </div>
                     </fieldset>
                     <!--
                         **並びは話題ごとに。** 2列に流し込むので、DOM の順がそのまま

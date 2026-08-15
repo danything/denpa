@@ -9,6 +9,7 @@ import { sync, syncServicesOnly } from './epg';
 import { collectOnce } from './epg-collect';
 import { emit } from './events';
 import { pruneHistory, reconcile } from './files';
+import { probe } from './hwenc';
 import { attend } from './live';
 import { reconcile as logoReconcile, ride, sweep } from './logo';
 import { sweep as learnSweep } from './logo-learn';
@@ -63,6 +64,14 @@ export function start(): void {
      * バックグラウンド処理より先にやる — `DENPA_AUTOSTART=0` でも出すべき
      */
     warnIfClosed();
+
+    /*
+     * **GPU で焼けるか、ffmpeg に確かめさせておく** (hwenc.ts)。数秒かかるので
+     * 待たずに進む — 設定画面は終わるまで「確認中」を出し、焼くときは
+     * そのとき分かっている範囲で決める。`DENPA_AUTOSTART=0` でも回す:
+     * 触るのは ffmpeg だけで、チューナーには行かない
+     */
+    void probe();
 
     /*
      * **ライブ視聴の受け口を開ける。** ここは `DENPA_AUTOSTART=0` でも開ける —

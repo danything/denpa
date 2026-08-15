@@ -197,6 +197,8 @@ export async function setRecording(
         cmDetector?: string;
         keepOriginal?: boolean;
         freeOnly?: boolean;
+        /** GPU で焼く道ごとのコーデック。省けば両方とも全部 (画面の既定と同じ) */
+        hw?: { qsv?: string[]; vaapi?: string[] };
     } = {},
 ): Promise<void> {
     const chosen = patch.codecs ?? ['av1'];
@@ -212,6 +214,14 @@ export async function setRecording(
     // 偽 ffmpeg しか居ないので、外部のコマンドを呼ばないほうで固定する
     body.append('cmDetector', patch.cmDetector ?? 'silence');
     if (patch.keepOriginal === true) body.append('keepOriginal', 'on');
+    /*
+     * GPU で焼く印。画面は使えるものだけを送ってくる (使えないものは触れない) が、
+     * サーバも使えないものは無視して前の値を残すので、**全部 on で送っておけば
+     * 画面の既定と同じ** (使えるものは全部 GPU)。外したいテストは hw で絞る
+     */
+    for (const kind of ['qsv', 'vaapi'] as const) {
+        for (const codec of patch.hw?.[kind] ?? ['av1', 'h264']) body.append(`hw.${kind}.${codec}`, 'on');
+    }
     if ((patch.freeOnly ?? true) === true) body.append('freeOnly', 'on');
 
     /*

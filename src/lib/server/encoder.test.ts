@@ -169,6 +169,29 @@ describe('コマ数の決め方', () => {
         expect(args).toContain('-preset');
     });
 
+    test('GPU で焼くときは口を先に開け、CPU で作った nv12 を渡す', () => {
+        // QSV は自分で上げるので hwupload は無い。画質は ICQ で、コーデックが違っても同じ 24
+        for (const codec of ['av1', 'h264'] as const) {
+            const args = buildArgs('/in.m2ts', '/out.mkv', 1, null, codec, { hardware: 'qsv' });
+            expect(args.indexOf('-init_hw_device')).toBeLessThan(args.indexOf('-i'));
+            expect(argValue(args, '-init_hw_device')).toMatch(/^qsv=hw:hw,child_device=/);
+            expect(args).toContain(`${codec}_qsv`);
+            expect(argValue(args, '-global_quality')).toBe('24');
+            expect(argValue(args, '-vf')).toBe('bwdif=mode=send_frame,format=nv12');
+            expect(args).not.toContain('libx264');
+            expect(args).not.toContain('libsvtav1');
+        }
+        // VA-API は上げるところまで自分でやる
+        const va = buildArgs('/in.m2ts', '/out.mkv', 1, null, 'h264', { hardware: 'vaapi' });
+        expect(argValue(va, '-init_hw_device')).toMatch(/^vaapi=va:/);
+        expect(argValue(va, '-filter_hw_device')).toBe('va');
+        expect(argValue(va, '-vf')).toBe('bwdif=mode=send_frame,format=nv12,hwupload');
+        expect(va).toContain('h264_vaapi');
+        expect(argValue(va, '-rc_mode')).toBe('ICQ');
+        // 渡さなければソフトウェア。GPU の口も開けない
+        expect(buildArgs('/in.m2ts', '/out.mkv', 1, null, 'h264')).not.toContain('-init_hw_device');
+    });
+
     test('字幕は PGS 1本だけ。入力も1回しか開かない', () => {
         for (const codec of ['av1', 'h264'] as const) {
             const args = buildArgs('/in.m2ts', '/out.mkv', 1, null, codec, { pgsFile: '/tmp/s.sup' });

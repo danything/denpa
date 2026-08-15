@@ -85,6 +85,15 @@ spec:
               mountPath: /app/recorded
             - name: library
               mountPath: /library
+            {{- if .Values.denpa.gpu.hostPath }}
+            - name: dri
+              mountPath: /dev/dri
+            {{- end }}
+          {{- if .Values.denpa.gpu.hostPath }}
+          # /dev/dri を開けるのは privileged だけ (デバイスの cgroup)。plugin を使うなら要らない
+          securityContext:
+            privileged: true
+          {{- end }}
           {{- with .Values.denpa.resources }}
           resources:
             {{- toYaml . | nindent 12 }}
@@ -111,3 +120,8 @@ spec:
         - name: library
           persistentVolumeClaim:
             claimName: {{ include "denpa.pvcName" (dict "Values" .Values "key" "library" "name" "denpa-library") }}
+        {{- if .Values.denpa.gpu.hostPath }}
+        - name: dri
+          hostPath:
+            path: /dev/dri
+        {{- end }}

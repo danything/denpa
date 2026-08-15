@@ -35,7 +35,8 @@ on:
         required: true
 
 permissions:
-  contents: read
+  # write は charts ジョブが Chart.yaml の版を main に書き戻すため
+  contents: write
   packages: write
 
 env:
@@ -117,7 +118,11 @@ jobs:
   # chart の版 (Chart.yaml の version) とアプリの版 (appVersion) をリリースの
   # 版で揃えて焼き、GHCR の OCI レジストリに push する。像と同じく、chart 側の
   # 既定の image.tag は `latest` なので、chart の版を上げなくても中身は動く —
-  # 版で固定したい人は values で `image.denpa.tag` を書く
+  # 版で固定したい人は values で `image.denpa.tag` を書く。
+  #
+  # **Chart.yaml の版も main に書き戻す** (最後の段)。焼くときは `--version` で
+  # 上書きするので動きには関係ないが、リポジトリの Chart.yaml が古い版のままだと
+  # 「どれが出ているのか」が読めない。build-and-deploy が像の印を書き戻すのと同じ手
   charts:
     runs-on: ubuntu-latest
     steps:
@@ -159,3 +164,33 @@ jobs:
           for tgz in dist/*.tgz; do
             helm push "$tgz" "oci://${{ env.REGISTRY }}/${{ github.repository_owner }}/charts"
           done
+
+      # main の先頭に版を書いて push する。タグを付けたコミットではなく **いまの main** に
+      # 書く (その間に進んでいても、版はリリースしたものが最新なので同じ)。
+      # 手で回した (workflow_dispatch) ときも同じ — 貼り直しなら版も同じ
+      - name: Write the version back to Chart.yaml
+        if: steps.ver.outputs.skip != 'true'
+        run: |
+          set -eu
+          v="${{ steps.ver.outputs.version }}"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          for i in 1 2 3 4 5; do
+            git fetch origin main
+            git checkout -B main origin/main
+            for chart in charts/denpa charts/denpa-agent; do
+              sed -i -E "s#^version: .*#version: ${v}#; s#^appVersion: .*#appVersion: \"${v}\"#" "$chart/Chart.yaml"
+            done
+            git add charts/*/Chart.yaml
+            if git diff --cached --quiet; then
+              echo "Chart.yaml はもう ${v}"
+              exit 0
+            fi
+            git commit -m "chore: chart の版を ${v} に合わせる [skip ci]"
+            if git push origin main; then
+              exit 0
+            fi
+            echo "push rejected, retrying from the new origin/main (${i})"
+          done
+          echo "failed to push Chart.yaml after retries"
+          exit 1
