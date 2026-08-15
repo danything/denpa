@@ -14,7 +14,13 @@ import {
     stream,
     tdtPacket as tdt,
 } from '$lib/ts/synth';
-import { loadRecordedBml, saveRecordedBml } from './recorded-bml';
+import type { Recording } from '../types';
+
+// DB は一時ファイルへ (番組の名乗りを組むのに services を引く。files.test.ts と同じ手)
+const { config } = await import('./config');
+config.dbPath = join(mkdtempSync(join(tmpdir(), 'denpa-bml-db-')), 'denpa.db');
+const { database } = await import('./db');
+const { loadRecordedBml, saveRecordedBml, withProgramInfo } = await import('./recorded-bml');
 
 /*
  * 録画のデータ放送。**TS から取り出してサイドカーに置き、再生時に読み直す。**
@@ -41,6 +47,25 @@ afterAll(() => rmSync(dir, { recursive: true, force: true }));
 
 const T = Date.UTC(2026, 7, 12, 0, 0, 30);
 
+/** 録画の行の要るところだけ。局は services に 1 つ入れておく (network 4, service 1024) */
+function recording(startAt: number): Recording {
+    database().exec('DELETE FROM services');
+    database()
+        .prepare(
+            `INSERT INTO services (id, service_id, network_id, name, type, channel, updated_at)
+             VALUES (7, 1024, 4, 'テスト局', 'GR', 'T27', 0)`,
+        )
+        .run();
+    return {
+        id: 1,
+        service_id: 7,
+        program_id: 999,
+        name: '録画のテスト',
+        start_at: startAt,
+        end_at: startAt + 60_000,
+    } as unknown as Recording;
+}
+
 describe('saveRecordedBml / loadRecordedBml', () => {
     test('TS から取り出して書き、読み直すと同じ変化が並ぶ', () => {
         const ts = join(dir, 'rec.ts');
@@ -48,7 +73,7 @@ describe('saveRecordedBml / loadRecordedBml', () => {
         writeFileSync(ts, tsBytes(T, '<bml>録画のデータ放送</bml>'));
 
         // 基準を放送時刻の 10 秒前に置く → モジュールは再生位置 10000ms になる
-        const changes = saveRecordedBml(ts, sidecar, T - 10_000, null);
+        const changes = saveRecordedBml(ts, sidecar, recording(T - 10_000), null);
         expect(changes).toBeGreaterThan(0);
 
         const loaded = loadRecordedBml(sidecar);
@@ -58,6 +83,24 @@ describe('saveRecordedBml / loadRecordedBml', () => {
         expect(Buffer.from(done.message.files[0].dataBase64, 'base64').toString()).toContain(
             '録画のデータ放送',
         );
+        // **番組の名乗りが頭に入っている。** 描く側はこれが来るまで入口を開かない
+        const info = loaded[0].message;
+        if (info.type !== 'programInfo') throw new Error('programInfo が頭に無い');
+        expect(info.serviceId).toBe(1024);
+        expect(info.eventName).toBe('録画のテスト');
+        // 読む側でも足すが、既に在れば重ねない
+        expect(
+            withProgramInfo(loaded, recording(T)).filter((i) => i.message.type === 'programInfo'),
+        ).toHaveLength(1);
+    });
+
+    test('名乗りを書いていなかった頃のサイドカーには、読むときに足す', () => {
+        const old = [{ at: 0, message: { type: 'pmt' as const, components: [] } }];
+        const fixed = withProgramInfo(old, recording(T));
+        expect(fixed[0].message.type).toBe('programInfo');
+        expect(fixed).toHaveLength(2);
+        // 空 (データ放送を持たない録画) には足さない — 「出せない」のままにする
+        expect(withProgramInfo([], recording(T))).toEqual([]);
     });
 
     test('データ放送を持たない TS では書かない・読めば空', () => {
@@ -73,7 +116,7 @@ describe('saveRecordedBml / loadRecordedBml', () => {
             ),
         );
 
-        expect(saveRecordedBml(ts, sidecar, T, null)).toBe(0);
+        expect(saveRecordedBml(ts, sidecar, recording(T), null)).toBe(0);
         expect(loadRecordedBml(sidecar)).toEqual([]);
     });
 });

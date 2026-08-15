@@ -1514,7 +1514,7 @@ async function runJob(jobId: number): Promise<void> {
         const changes = saveRecordedBml(
             sourceTs,
             sidecarPaths(output).dataBroadcast,
-            recording.start_at,
+            recording,
             encodeOptions.keep ?? null,
         );
         if (changes > 0) {
