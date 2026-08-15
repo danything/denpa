@@ -888,12 +888,19 @@
                     絵のまま重ねる — ライブと同じやり方 (下の canvas)
                 -->
                 <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_noninteractive_element_interactions -->
-                <!-- **映像の箱。BML はこれを動かす** (`DataBroadcast` の place)。ライブと同じ -->
-                <div bind:this={mediaBox} class="absolute inset-0">
+                <!--
+                    **映像の箱。BML はこれを動かす** (`DataBroadcast` の place)。ライブと同じ。
+
+                    **class ではなく style で書く** (MediaStack と同じ理由) — d を押すとこの箱は
+                    BML の閉じた影の中へ移され、表の CSS (Tailwind) が届かない。しかも BML の
+                    既定は div に width:0 を与えるので、class のままだと箱が 0 幅になって
+                    映像が消える (実機で d を押すと真っ黒になった)
+                -->
+                <div bind:this={mediaBox} style="position:absolute; inset:0; width:100%; height:100%;">
                 <video
                     bind:this={video}
                     {src}
-                    class="h-full w-full bg-black"
+                    style="width:100%; height:100%; background:#000;"
                     playsinline
                     onclick={press}
                     onplay={() => {
