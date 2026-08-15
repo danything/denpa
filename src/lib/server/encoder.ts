@@ -432,6 +432,12 @@ export function buildArgs(
         // 名前は放送が名乗っているものを使う (「字幕 (日本語)」)。無ければ「字幕」
         const title = options.captionTitle ?? '字幕';
         args.push('-map', `${pgs}:s:0?`, '-c:s:0', 'copy', '-metadata:s:s:0', `title=${title}`);
+        /*
+         * 言語も付ける。default の印だけだと、プレイヤーの字幕自動選択
+         * (「端末の言語に合う字幕を出す」設定) が言語不明の札を跳ばすことがある。
+         * 放送の字幕 (ARIB) は日本語しか来ない
+         */
+        args.push('-metadata:s:s:0', 'language=jpn');
         args.push('-disposition:s:0', 'default');
     }
     // インタレ解除 (bwdif は yadif よりコーミング残りが少ない)。
