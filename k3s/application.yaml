@@ -5,9 +5,11 @@
 # ApplicationSet はこのファイルを素の YAML として同期し、この Application が
 # chart を展開する。bootstrap 側は触らずに済む。
 #
-# chart に入れていないもの (この家の事情) はこの階層に素のまま残す:
+# chart に入れていないもの (この家の事情) はこの階層に素のまま残す
+# (Namespace は要らない — ApplicationSet の CreateNamespace が argocd.yaml の
+# namespace を見て作る。実物には Prune=false を付けてあるので、消したときに
+# 中身ごと消されることも無い):
 #   - oidc-sealed.yaml … SealedSecret。名前空間と名前が鍵に絡むので chart に持てない
-#   - namespace.yaml   … Application より先に要る
 #   - argocd.yaml      … bootstrap の ApplicationSet が読む、この置き場の設定
 #
 # **この家の値は下の `helm.valuesObject` にインラインで持つ。** 別ファイルにしないのは、
