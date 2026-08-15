@@ -16,7 +16,7 @@ test.describe('自動予約ルール', () => {
 
         const shape = await page.evaluate(() => {
             const form = document.querySelector('[data-testid="rule-form"]');
-            const table = document.querySelector('[data-testid="rule-row"], table');
+            const table = document.querySelector('[data-testid="rule-list"]');
             const add = document.querySelector('[data-testid="rule-submit"]');
             const root = document.documentElement;
             return {

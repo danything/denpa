@@ -515,79 +515,53 @@
     番組表そのものを取りに行きたいなら、チューナー画面の
     「番組表をいますぐ集める」がその口で、集め終わりに当て直しまで通る
 -->
-            <div class="overflow-x-auto rounded-box bg-base-100 shrink-0 shadow">
-                <table class="table table-zebra">
-                    <thead>
-                        <tr>
-                            <th>ルール</th>
-                            <th>除外</th>
-                            <th>チャンネル</th>
-                            <th>ジャンル</th>
-                            <th>優先度</th>
-                            <th>予約数</th>
-                            <th class="w-56"></th>
-                        </tr>
-                    </thead>
-                    <tbody data-testid="rule-list">
-                        {#each data.rules as rule (rule.id)}
-                            <tr data-testid="rule-row" data-rule-id={rule.id}>
-                                <td>
-                                    <div class="font-medium">{rule.name}</div>
-                                    <span
-                                        class="badge badge-sm {rule.enabled
-                                            ? 'badge-success'
-                                            : 'badge-ghost'}"
-                                    >
-                                        {rule.enabled ? '有効' : '無効'}
-                                    </span>
-                                    <!-- どこを見て当たったのか分からないと、絞り込みの直しようがない -->
-                                    {#if rule.keyword}
-                                        <span
-                                            class="text-base-content/60 text-xs"
-                                            data-testid="rule-search-scope"
-                                        >
-                                            {searchFieldLabel(rule.search_fields)}から
-                                        </span>
-                                    {/if}
-                                </td>
-                                <td class="text-error text-sm">{rule.ignore_keyword || '-'}</td>
-                                <td class="max-w-48 text-sm" data-testid="rule-channels">{channels(rule)}</td>
-                                <td class="max-w-48 text-sm" data-testid="rule-genres-label"
-                                    >{genres(rule)}</td
-                                >
-                                <td>{rule.priority}</td>
-                                <td>{rule.reservations}</td>
-                                <td class="flex flex-nowrap gap-2">
-                                    <a
-                                        class="btn btn-sm whitespace-nowrap"
-                                        href="/rules?edit={rule.id}"
-                                        data-testid="rule-edit">編集</a
-                                    >
-                                    <form method="POST" action="?/toggle" use:submitting>
-                                        <input type="hidden" name="id" value={rule.id} />
-                                        <button type="submit"
-                                            class="btn btn-sm whitespace-nowrap"
-                                            data-testid="rule-toggle"
-                                        >
-                                            {rule.enabled ? '無効化' : '有効化'}
-                                        </button>
-                                    </form>
-                                    <form method="POST" action="?/delete" use:submitting>
-                                        <input type="hidden" name="id" value={rule.id} />
-                                        <button type="submit"
-                                            class="btn btn-sm btn-error btn-outline whitespace-nowrap"
-                                            data-testid="rule-delete"
-                                        >
-                                            削除
-                                        </button>
-                                    </form>
-                                </td>
-                            </tr>
-                        {:else}
-                            <tr><td colspan="7" class="text-base-content/60">ルールはまだありません</td></tr>
-                        {/each}
-                    </tbody>
-                </table>
+            <!--
+                **表ではなく行のカード** (録画一覧と同じ形)。7列の表にしていた頃は、
+                タブレットの幅で「チャンネル」「ジャンル」が1文字ずつ折れて読めなかった。
+                1件を 名前と札 → 条件 → 押すもの の順に縦に積めば、幅がいくらでも横には出ない
+            -->
+            <div class="rounded-box bg-base-100 divide-base-300 shrink-0 divide-y shadow" data-testid="rule-list">
+                {#each data.rules as rule (rule.id)}
+                    <div class="space-y-2 p-3" data-testid="rule-row" data-rule-id={rule.id}>
+                        <div class="flex flex-wrap items-center gap-2">
+                            <span class="font-medium">{rule.name}</span>
+                            <span class="badge badge-sm {rule.enabled ? 'badge-success' : 'badge-ghost'}">
+                                {rule.enabled ? '有効' : '無効'}
+                            </span>
+                            <!-- 優先度と予約数は札で。列にしていた頃は見出しが無いと何の数か分からなかった -->
+                            <span class="badge badge-sm badge-ghost">優先度 {rule.priority}</span>
+                            <span class="badge badge-sm badge-ghost">予約 {rule.reservations} 件</span>
+                        </div>
+                        <div class="text-base-content/70 flex flex-wrap gap-x-4 gap-y-1 text-sm">
+                            <!-- どこを見て当たったのか分からないと、絞り込みの直しようがない -->
+                            {#if rule.keyword}
+                                <span data-testid="rule-search-scope">{searchFieldLabel(rule.search_fields)}から</span>
+                            {/if}
+                            {#if rule.ignore_keyword}
+                                <span class="text-error">除外: {rule.ignore_keyword}</span>
+                            {/if}
+                            <span data-testid="rule-channels">チャンネル: {channels(rule)}</span>
+                            <span data-testid="rule-genres-label">ジャンル: {genres(rule)}</span>
+                        </div>
+                        <div class="flex flex-wrap gap-2">
+                            <a class="btn btn-sm" href="/rules?edit={rule.id}" data-testid="rule-edit">編集</a>
+                            <form method="POST" action="?/toggle" use:submitting>
+                                <input type="hidden" name="id" value={rule.id} />
+                                <button type="submit" class="btn btn-sm" data-testid="rule-toggle">
+                                    {rule.enabled ? '無効化' : '有効化'}
+                                </button>
+                            </form>
+                            <form method="POST" action="?/delete" use:submitting>
+                                <input type="hidden" name="id" value={rule.id} />
+                                <button type="submit" class="btn btn-sm btn-error btn-outline" data-testid="rule-delete">
+                                    削除
+                                </button>
+                            </form>
+                        </div>
+                    </div>
+                {:else}
+                    <div class="text-base-content/60 p-3 text-sm">ルールはまだありません</div>
+                {/each}
             </div>
         </section>
     </div>
