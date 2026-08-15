@@ -1,0 +1,6 @@
+{
+    "//": "dotnet test を Microsoft.Testing.Platform (MTP) の口で動かす。.NET 10 SDK は旧来の VSTest 経路で MTP のテスト (xunit.v3) を回せなくなった — これが無いと `Testing with VSTest target is no longer supported` で agent のテストが落ちる",
+    "test": {
+        "runner": "Microsoft.Testing.Platform"
+    }
+}

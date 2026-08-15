@@ -91,9 +91,10 @@ jobs:
         with:
           dotnet-version: '10.0.x'
 
-      # 設定の読み書き、選局表、チューナー自動検出の値の読み取り
+      # 設定の読み書き、選局表、チューナー自動検出の値の読み取り。
+      # MTP の口 (global.json の test.runner) ではプロジェクトは --project で渡す
       - name: Unit tests (.NET agent)
-        run: dotnet test agent/Denpa.Agent.Tests/Denpa.Agent.Tests.csproj
+        run: dotnet test --project agent/Denpa.Agent.Tests/Denpa.Agent.Tests.csproj
 
       # エージェントの口に直接当てるテスト。**本物を焼いて起こして**、偽の選局
       # コマンドで流す (bun 版が居た頃は、同じものを2つの実装に通していた)。
