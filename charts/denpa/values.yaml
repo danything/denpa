@@ -64,7 +64,7 @@ denpa:
   livenessProbe:
     initialDelaySeconds: 20
     periodSeconds: 30
-  # **Intel の GPU で焼く** (docs/encode.md「GPU で焼く」)。像には QSV / VA-API の
+  # **Intel の GPU で焼く** (docs/encode.md「GPU で焼く」)。イメージには QSV / VA-API の
   # ドライバが入っていて、コンテナから /dev/dri が見えれば起動時に自分で見つけて使う
   # (無ければソフトウェアで焼くだけ)。**既定で /dev/dri を hostPath で渡す** — GPU を
   # 挿したときに何もしなくても効くように。そのぶん Pod は privileged になる

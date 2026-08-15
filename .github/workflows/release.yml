@@ -7,7 +7,7 @@ name: Publish release tags
 # ところで、こちらの作業中のものが勝手に動かないようにするため)。
 #
 # **焼き直しません。** リリースにしたコミットの中身から出るタグ
-# (`sha-…`) は main への push のときに焼いてあるので、その像に名前を
+# (`sha-…`) は main への push のときに焼いてあるので、そのイメージに名前を
 # 貼り足すだけです。焼き直すと「試したものとリリースしたものが別」になります。
 #
 # 貼る名前は3つ。
@@ -19,7 +19,7 @@ name: Publish release tags
 # | `latest` | | リリースのたびに動く |
 #
 # **`v` は落とします** (`v0.1.0` → `0.1.0`)。git のタグには付けるのが習わしで、
-# 像のタグには付けないのが習わしなので、そのまま写さない。
+# イメージのタグには付けないのが習わしなので、そのまま写さない。
 #
 # 版の名前を貼らずに `latest` だけ動かしていた頃は、**入れた人が版を固定できません
 # でした** — 「いま動いているもの」を指す名前しか無く、戻したいときの戻し先が
@@ -55,7 +55,7 @@ jobs:
           fetch-depth: 0
 
       # main の build-and-deploy と同じ出し方 (.github/image-tags.sh)。
-      # ここが食い違うと、焼いたものと違う像に名前が付く
+      # ここが食い違うと、焼いたものと違うイメージに名前が付く
       - name: Compute image tags
         id: tag
         run: |
@@ -64,7 +64,7 @@ jobs:
           echo "denpa=$DENPA_TAG" >> "$GITHUB_OUTPUT"
 
       # 貼る名前を決める。**x.y.z の形をしていないタグには版の名前を貼らない** —
-      # `nightly` のような名前をそのまま像に貼ると、版だと思って固定されてしまう。
+      # `nightly` のような名前をそのままイメージに貼ると、版だと思って固定されてしまう。
       #
       # **試し版 (prerelease) には `latest` を貼りません。** compose.prod.yml が
       # 指しているのがそれなので、貼ると入れて使っている人のところへ降ってしまう。
@@ -91,8 +91,8 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      # `imagetools create` は像を引かずに、レジストリの中で名前を足すだけ。
-      # 元の像が無ければここで落ちる (黙って古い latest が残るより、そのほうがいい)
+      # `imagetools create` はイメージを引かずに、レジストリの中で名前を足すだけ。
+      # 元のイメージが無ければここで落ちる (黙って古い latest が残るより、そのほうがいい)
       - name: Point the names at this release
         run: |
           set -eu
@@ -116,13 +116,13 @@ jobs:
 
   # **Helm chart もリリースのたびに出す** (README が案内している `oci://ghcr.io/danything/charts/…`)。
   # chart の版 (Chart.yaml の version) とアプリの版 (appVersion) をリリースの
-  # 版で揃えて焼き、GHCR の OCI レジストリに push する。像と同じく、chart 側の
+  # 版で揃えて焼き、GHCR の OCI レジストリに push する。イメージと同じく、chart 側の
   # 既定の image.tag は `latest` なので、chart の版を上げなくても中身は動く —
   # 版で固定したい人は values で `image.denpa.tag` を書く。
   #
   # **Chart.yaml の版も main に書き戻す** (最後の段)。焼くときは `--version` で
   # 上書きするので動きには関係ないが、リポジトリの Chart.yaml が古い版のままだと
-  # 「どれが出ているのか」が読めない。build-and-deploy が像の印を書き戻すのと同じ手
+  # 「どれが出ているのか」が読めない。build-and-deploy がイメージの印を書き戻すのと同じ手
   charts:
     runs-on: ubuntu-latest
     steps:

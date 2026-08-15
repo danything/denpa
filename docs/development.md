@@ -82,8 +82,8 @@ CI が両方を焼いて `k3s/` の印を書き戻します。
 
 **main へ入れたぶんは `develop` に積み上がるだけで、`latest` は動きません。**
 `latest` が動くのは **GitHub でリリースを作ったとき**だけで、そのとき焼き直さずに
-リリースしたコミットの像へ貼り替えます。タグの決め方は
-[architecture.md](architecture.md#像のタグ)、出し方は `.github/image-tags.sh`
+リリースしたコミットのイメージへ貼り替えます。タグの決め方は
+[architecture.md](architecture.md#イメージのタグ)、出し方は `.github/image-tags.sh`
 (main のぶんとリリースのぶんで同じ答えが要るので、1箇所に置いてあります)。
 
 エージェントの口に当てる適合テストは `agent/conformance.test.ts`。

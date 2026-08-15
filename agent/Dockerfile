@@ -5,9 +5,9 @@
 # ください」が要らないことが条件なので、ここは外せない。
 #
 # denpa から見える口は agent/conformance.test.ts が押さえている
-# (本物を起こして HTTP で当てる)。入れ替えは像のタグを変えるだけ。
+# (本物を起こして HTTP で当てる)。入れ替えはイメージのタグを変えるだけ。
 # ---------------------------------------------------------------------------
-# 既定の像がそのまま trixie (`-trixie` という札は無い)
+# 既定のイメージがそのまま trixie (`-trixie` という札は無い)
 FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 WORKDIR /build
 # AOT のリンクに clang と zlib が要る

@@ -12,7 +12,7 @@ on:
       - 'bun.lock'
       - 'svelte.config.ts'
       - 'vite.config.ts'
-      # 像にそのまま入るのに漏れていた2つ (.github/image-tags.sh の denpa_paths と揃える)
+      # イメージにそのまま入るのに漏れていた2つ (.github/image-tags.sh の denpa_paths と揃える)
       - 'server.js'
       - 'patches/**'
       - '.github/workflows/build-and-deploy.yml'
@@ -91,7 +91,7 @@ jobs:
             ${{ env.REGISTRY }}/${{ github.repository_owner }}/denpa:${{ steps.tag.outputs.denpa }}
             ${{ env.REGISTRY }}/${{ github.repository_owner }}/denpa:develop
 
-      # **像のタグは `develop` のまま動かさず、印だけ書き換える。**
+      # **イメージのタグは `develop` のまま動かさず、印だけ書き換える。**
       # 動くタグを指しているとマニフェストが変わらず、ArgoCD には「何も
       # 変わっていない」ように見えて古い Pod が残る。Pod の注釈を書き換えれば
       # 入れ替わり、`imagePullPolicy: Always` で新しい develop を引く。

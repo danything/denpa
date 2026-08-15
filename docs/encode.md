@@ -286,7 +286,7 @@ Android 機はまだ少なく、実機 (Android TV のプレイヤー) で `1080
 
 ## GPU で焼く (Intel QSV / VA-API)
 
-**GPU が見えれば、起動時に自分で見つけて使います。** 像には Intel の GPU 向けの
+**GPU が見えれば、起動時に自分で見つけて使います。** イメージには Intel の GPU 向けの
 ものが入っていて (ffmpeg に libvpl と VA-API、実行イメージに `intel-media-va-driver` /
 `libmfx-gen`)、コンテナに `/dev/dri` を渡してあれば `src/lib/server/hwenc.ts` が
 起動のたびに **`HW_DEVICES` (既定 `/dev/dri/renderD*`) に当たる口を全部拾い、口ごとに
@@ -325,7 +325,7 @@ GPU に渡します。
 
 ## SVT-AV1 は上流をソースから組みます
 
-**上流の 4.2.0 をソースから組んで像に入れています** (Debian trixie のパッケージは
+**上流の 4.2.0 をソースから組んでイメージに入れています** (Debian trixie のパッケージは
 2.3.0 で止まっていて、3 系以降は速度も画質も別物のため。`Dockerfile` の
 `SVT_AV1_VERSION`。静的に繋ぐので実行イメージに共有ライブラリは増えない)。
 上げるかどうかは一度実測しました。**素材は実機の録画から100秒**(地上波の国内アニメ、

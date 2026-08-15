@@ -218,7 +218,7 @@ COPY --from=jls /opt/jls /opt/jls
 # adapter-node の出力は要るものを畳み込んでいて、外から引くのは `node:*` と
 # bun の組み込み (`bun:sqlite`) だけ。実際に build/ と server.js だけを置いた
 # ところで起動するのを確かめてある。載せていた頃は playwright も vite も
-# typescript も像に入っていて、**312MB がまるごと無駄**だった。
+# typescript もイメージに入っていて、**312MB がまるごと無駄**だった。
 #
 # 引き換えに、**外から引くものを増やすなら畳み込ませること** — package.json の
 # `dependencies` に足すと adapter-node がそれを外に出すので、ここで転ぶ。

@@ -127,7 +127,7 @@ docker compose) で動かす構成なら `oci://ghcr.io/danything/charts/denpa-a
 スクランブルされたまま**になります。
 
 イメージは `latest` を指していて、リリースのたびに動きます。**版を固定したいなら `1.1.1` の
-ように書けます** ([docs/architecture.md](docs/architecture.md#像のタグ))。
+ように書けます** ([docs/architecture.md](docs/architecture.md#イメージのタグ))。
 
 ## 誰を通すか
 
@@ -174,6 +174,7 @@ docker compose) で動かす構成なら `oci://ghcr.io/danything/charts/denpa-a
 - [docs/auth.md](docs/auth.md) — **誰を通すか** (OIDC でのログイン・信頼したネットワーク・期限付きのリンク)
 - [docs/migrate.md](docs/migrate.md) — **EPGStation からの引き継ぎ**
 - [docs/stream.md](docs/stream.md) — **ライブ視聴** (放送中のものを観る)
+- [docs/licenses.md](docs/licenses.md) — **借りているもの** (同梱物とライセンスの一覧)
 
 ## ライセンス
 
@@ -181,10 +182,16 @@ docker compose) で動かす構成なら `oci://ghcr.io/danything/charts/denpa-a
 ものです。ネットワーク越しに使わせる形で配るなら、そのときの中身も同じ条件で
 渡せるようにしてほしい、という選び方です。
 
-抱えているものは出どころのままです:
+借りているものは出どころのままです。主なもの:
 
-| | |
+| | ライセンス |
 | --- | --- |
-| [src/lib/vendor/web-bml](src/lib/vendor/web-bml) | MIT ([LICENSE](src/lib/vendor/web-bml/LICENSE))。データ放送を描くところ |
-| [patches/](patches) | ffmpeg に当てている直し。**上流に投げるつもりのものだけ** (LGPL/GPL) |
-| 像に入れるもの | ffmpeg (GPL)・libaribcaption (MIT)・join_logo_scp 一式・`rounded-mplus-1m-arib` (SIL OFL)。焼き方は [Dockerfile](Dockerfile) に |
+| **ffmpeg** (x264 / SVT-AV1 / dav1d / Opus / libaribcaption / libva / libvpl を繋いだ自前ビルド) | GPL-2.0+ (x264 のため) ほか BSD / MIT |
+| **CM 検出** — join_logo_scp・chapter_exe・logoframe・dtvindex | GPL-3.0 (join_logo_scp は正式なライセンス文書無し。「転載・改変は連絡不要」の表示に拠る) |
+| **rounded-mplus-1m-arib** (字幕とデータ放送のフォント) | M+ FONT LICENSE (無制限) |
+| **libaribb25** (エージェント。スクランブル解除) | Apache-2.0 |
+| **web-bml / es2** ([src/lib/vendor/web-bml](src/lib/vendor/web-bml)。データ放送を描く) | MIT |
+| **Svelte / SvelteKit / Tailwind / daisyUI** と束に入る npm 一式 | MIT (crc-32 は Apache-2.0、ieee754 は BSD-3) |
+| [patches/](patches) — ffmpeg に当てている直し (上流に投げる前提) | 当てる先と同じ |
+
+**全部の一覧 (出どころ・何に使っているか・根拠) は [docs/licenses.md](docs/licenses.md)。**

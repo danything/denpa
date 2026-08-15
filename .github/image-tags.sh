@@ -12,8 +12,8 @@
 set -eu
 
 # denpa はリポジトリ直下なので、エージェントなど別物のパスを除いて見る。
-# server.js (WebSocket の前段。像にそのまま入る) と patches (ffmpeg に当てる直し)
-# が漏れていて、server.js だけの修正が像に焼かれないまま release まで素通りしていた
+# server.js (WebSocket の前段。イメージにそのまま入る) と patches (ffmpeg に当てる直し)
+# が漏れていて、server.js だけの修正がイメージに焼かれないまま release まで素通りしていた
 denpa_paths="Dockerfile src static package.json bun.lock svelte.config.ts vite.config.ts server.js patches"
 
 AGENT_TAG="sha-$(git log -1 --format=%H -- agent | cut -c1-12)"
