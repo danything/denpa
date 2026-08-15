@@ -45,3 +45,23 @@ test.describe('入る道を何も設定していないとき', () => {
         }
     });
 });
+
+test.describe('接続元の住所', () => {
+    /*
+     * server.js の中継は、本当の接続元を `x-denpa-remote` に**上書きで**入れて内側へ渡す
+     * (前段が居ないときの ADDRESS_HEADER の既定)。外から同じ名前を付けて来ても消えるので、
+     * ヘッダを書くだけで信頼したネットワークを名乗ることはできない
+     */
+    test('外から x-denpa-remote を付けても、信頼したネットワークは名乗れない', async ({ stack }) => {
+        const closed = await bootClosed(test.info().workerIndex, stack.root, {
+            TRUSTED_NETWORKS: '10.10.0.0/16',
+        });
+        try {
+            const spoofed = await fetch(`${closed.appUrl}/`, { headers: { 'x-denpa-remote': '10.10.5.9' } });
+            expect(spoofed.status).toBe(403);
+            // 本当の接続元 (127.0.0.1) を信頼すれば通る — 中継が住所を伝えている
+        } finally {
+            await closed.shutdown();
+        }
+    });
+});

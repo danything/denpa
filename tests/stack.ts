@@ -320,6 +320,8 @@ export async function bootOidc(
 export async function bootClosed(
     index: number,
     root: string,
+    /** 入る道を足して試すとき (TRUSTED_NETWORKS など)。省けば何も設定しない = 全部断る */
+    extra: Record<string, string> = {},
 ): Promise<{ appUrl: string; shutdown: () => Promise<void> }> {
     const port = APP_PORT + index * STRIDE + 7;
     const appUrl = `http://127.0.0.1:${port}`;
@@ -333,10 +335,9 @@ export async function bootClosed(
         // 常駐処理は要らない。断り方だけを見る
         DENPA_AUTOSTART: '0',
         SHUTDOWN_WAIT: '0',
+        ...extra,
     });
-    const shutdown = async () => {
-        await stop(app);
-    };
+    const shutdown = async () => stop(app);
     try {
         // 生死確認は入る道が無くても通る (守ると livenessProbe が落ちるため)
         await waitFor(`${appUrl}/api/health`, app, 'denpa (閉)');

@@ -2,7 +2,7 @@
     import { submitting } from '$lib/actions';
     import LogoArea from '$lib/components/LogoArea.svelte';
     import Toasts, { errorNotice, type Notice } from '$lib/components/Toasts.svelte';
-    import { SERVICE_TYPE_LABEL } from '$lib/format';
+    import { SERVICE_TYPE_LABEL, STATE_LABEL as SHARED_STATE_LABEL } from '$lib/format';
     import { held, liveUpdates } from '$lib/live-updates.svelte';
 
     let { data, form } = $props();
@@ -25,13 +25,8 @@
 
     /** チューナーが受けられる種別。設定の表で並べる順 */
     const TYPES = ['GR', 'BS', 'CS'] as const;
-    const STATE_LABEL: Record<string, string> = {
-        running: '実行中',
-        done: '完了',
-        failed: '失敗',
-        canceled: '中断',
-        idle: '待機中',
-    };
+    /** スキャンの状態の呼び名。共通のものに、スキャンだけの2つを足す */
+    const STATE_LABEL: Record<string, string> = { ...SHARED_STATE_LABEL, canceled: '中断', idle: '待機中' };
 
     /** 進捗。総数が分かっているので割合で出せる */
     const progress = $derived(scan.total > 0 ? scan.scanned / scan.total : 0);
@@ -212,7 +207,7 @@
                     <div>
                         <span class="text-sm font-medium">種別</span>
                         <div class="mt-1 flex flex-wrap gap-4" data-testid="scan-types">
-                            {#each ['GR', 'BS', 'CS'] as type (type)}
+                            {#each TYPES as type (type)}
                                 <label class="flex cursor-pointer items-center gap-2">
                                     <input
                                         type="checkbox"

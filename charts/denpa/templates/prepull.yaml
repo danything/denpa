@@ -1,7 +1,6 @@
 {{- if .Values.prepull.enabled }}
-# 新しいイメージを**入れ替える前に**ノードへ引いておくだけの Job (ArgoCD の PreSync)。
-# 入れ替えの隙間はほぼイメージの取得時間 (実測 13.6 秒) だったので、先に引いておく。
-# 中身は動かさない (/bin/true)
+# 新しいイメージを入れ替える前にノードへ引いておくだけの Job (ArgoCD の PreSync)。
+# 理由は values.yaml の prepull。中身は動かさない (/bin/true)
 apiVersion: batch/v1
 kind: Job
 metadata:

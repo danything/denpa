@@ -1,37 +1,30 @@
 import { readdirSync, readFileSync } from 'node:fs';
 import { basename, dirname } from 'node:path';
+import {
+    CODEC_LABEL,
+    HW_CODECS,
+    HW_KIND_LABEL,
+    HW_KINDS,
+    type HwAllow,
+    type HwCodec,
+    type HwKind,
+    hwAllowed,
+} from '../hw';
 import { config } from './config';
 
 /**
  * **GPU でエンコードできるか、起動時に ffmpeg に確かめさせる。**
  *
- * 像には Intel の GPU 向けのもの (QSV と VA-API) が入れてある (Dockerfile) が、
- * 実際に使えるかは動かす機械しだい — GPU が無い、Pod に `/dev/dri` を
- * 渡していない、世代が古くて libmfx-gen が初期化できない、のどれでも
- * `h264_qsv` は落ちる。**`ffmpeg -encoders` に載っているかでは分からない**
- * (あれは「組み込んであるか」で「動くか」ではない)。
- *
- * なので、**実際に1コマ焼かせてみる。** `HW_DEVICES` (既定 `/dev/dri/renderD*`) に
- * 当たる口を全部拾い、**口ごとに** 道 (QSV / VA-API) × コーデック (H.264 / AV1) の
- * 4通りを `nullsrc` で通し、exit 0 なら使える。世代でも違う (Arc より前は AV1 の
- * エンコードが無い) ので、コーデック別に持つ。
- *
- * 結果は設定画面の「GPU」カードに口ごとに出し、**使えるものには自動で印が付く**
- * (`settings().hwAllow` と突き合わせるのは `hwChain`)。グラボが2枚あれば
- * 「こちらは AV1、あちらは H.264」のように、口ごとに使うコーデックを選べる。
- * 差し直したときは画面の「確かめ直す」で `probe()` をもう一度回す。
- *
- * **QSV と VA-API の両方を持つ理由。** Linux では QSV の下に必ず VA-API が
- * 居る (libvpl → libmfx-gen → libva → /dev/dri) ので、同じ GPU なら速さは変わらない。
- * QSV のほうがレート制御が豊富で Intel が手入れしているので**QSV を先に**使い、
- * QSV が初期化できない世代 (libmfx-gen の対応外) の逃げ道として VA-API を残す
+ * `ffmpeg -encoders` に載っているかでは「動くか」は分からないので、`HW_DEVICES`
+ * (既定 `/dev/dri/renderD*`) に当たる口を全部拾い、**口ごとに** 道 (QSV / VA-API) ×
+ * コーデックの4通りを `nullsrc` で実際に1コマ焼いて確かめる。結果は設定画面の
+ * 「GPU」カードに口ごとに出て、使えるものには自動で印が付く (`settings().hwAllow` と
+ * 突き合わせるのは `hwChain`)。**QSV を先に、VA-API は逃げ道** — 同じ GPU なら速さは
+ * 変わらないが、QSV のほうがレート制御が豊富で Intel が手入れしている。
+ * 全体の話は docs/encode.md「GPU で焼く」
  */
 
-export type HwCodec = 'av1' | 'h264';
-
-/** GPU で焼く道。並びがそのまま試す順 (encoder.ts の runJob) */
-export const HW_KINDS = ['qsv', 'vaapi'] as const;
-export type HwKind = (typeof HW_KINDS)[number];
+export { HW_CODECS, HW_KINDS, type HwAllow, type HwCodec, type HwKind, hwAllowed };
 
 /** 1つの口 (GPU) で何が焼けるか */
 export interface HwDevice {
@@ -46,7 +39,7 @@ export interface HwDevice {
 }
 
 export interface HwEncode {
-    /** 一度でも確かめ終わったか。起動直後は false のまま画面に「確認中」を出す */
+    /** 一度でも確かめ終わったか。false のうちは画面が `probe()` を待つ (settings/+page.server.ts) */
     probed: boolean;
     /** 見つかった口、`HW_DEVICES` に当たった順。空なら GPU が見えていない */
     devices: HwDevice[];
@@ -54,30 +47,18 @@ export interface HwEncode {
     message: string;
 }
 
-/**
- * **口ごとに、GPU で焼いてよいコーデック** (設定 `hwAllow`)。口の path が鍵。
- * 載っていない口は「使えるものは全部」
- */
-export type HwAllow = Record<string, Record<HwKind, HwCodec[]>>;
-
 /** 焼く1回ぶんの道。どの口を、どちらの道で */
 export interface HwWay {
     device: string;
     kind: HwKind;
 }
 
-let state: HwEncode = { probed: false, devices: [], message: '確認中…' };
+let state: HwEncode = { probed: false, devices: [], message: '' };
 let running: Promise<HwEncode> | null = null;
 
 /** いまの見立て。`probe()` が終わるまでは `probed: false` */
 export function hwEncode(): HwEncode {
     return state;
-}
-
-/** その口・道・コーデックが、設定で許されているか。載っていない口は全部よい */
-export function hwAllowed(allow: HwAllow, device: string, kind: HwKind, codec: HwCodec): boolean {
-    const entry = allow[device];
-    return entry === undefined || entry[kind].includes(codec);
 }
 
 /**
@@ -97,7 +78,7 @@ export function hwChain(codec: HwCodec, allow: HwAllow, turn = 0, devices = stat
         )
         .filter((ways) => ways.length > 0);
     if (perDevice.length === 0) return [];
-    const start = ((turn % perDevice.length) + perDevice.length) % perDevice.length;
+    const start = turn % perDevice.length;
     return [...perDevice.slice(start), ...perDevice.slice(0, start)].flat();
 }
 
@@ -213,7 +194,7 @@ async function probeOnce(): Promise<HwEncode> {
     for (const path of findDevices()) {
         const device: HwDevice = { path, label: labelOf(path), qsv: [], vaapi: [] };
         for (const kind of HW_KINDS) {
-            for (const codec of ['h264', 'av1'] as const) {
+            for (const codec of HW_CODECS) {
                 const hw = hwArgs({ device: path, kind }, codec);
                 const ok = await tryEncode([
                     ...hw.device,
@@ -234,12 +215,10 @@ async function probeOnce(): Promise<HwEncode> {
     return next;
 }
 
-const NAME: Record<HwCodec, string> = { h264: 'H.264', av1: 'AV1' };
-
 /** 口ごとの一言。「QSV: H.264 / AV1、VA-API: H.264」か「焼けません」 */
 export function describeDevice(device: HwDevice): string {
     const parts = HW_KINDS.filter((kind) => device[kind].length > 0).map(
-        (kind) => `${kind === 'qsv' ? 'QSV' : 'VA-API'}: ${device[kind].map((c) => NAME[c]).join(' / ')}`,
+        (kind) => `${HW_KIND_LABEL[kind]}: ${device[kind].map((c) => CODEC_LABEL[c]).join(' / ')}`,
     );
     return parts.length > 0
         ? parts.join('、')

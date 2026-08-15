@@ -13,6 +13,7 @@ import {
 } from 'node:fs';
 import { basename, dirname, join } from 'node:path';
 import { type Audio, audioTitles, DUAL_MONO } from '$lib/arib';
+import { HW_KIND_LABEL, type HwCodec } from '../hw';
 import { encodeSource } from '../source';
 import type { EncodeJob, EncodePhase, Recording, VideoCodec } from '../types';
 import {
@@ -31,7 +32,7 @@ import { config } from './config';
 import { database, now, queryOne } from './db';
 import { type EncodeProgress, emit } from './events';
 import { removeIfExists } from './fsx';
-import { type HwKind, type HwWay, hwArgs, hwChain } from './hwenc';
+import { type HwWay, hwArgs, hwChain } from './hwenc';
 import { encodedPath, libraryFamily, libraryPath } from './library';
 import { removeSidecars, sidecarPaths, writeThumbnail } from './metadata';
 import { saveRecordedBml } from './recorded-bml';
@@ -41,10 +42,6 @@ import { chunks, text } from './stream';
 import { buildPgs } from './subtitle';
 import { displayTitle } from './title';
 import { notify } from './webhook';
-
-export function isVideoCodec(value: unknown): value is VideoCodec {
-    return value === 'av1' || value === 'h264' || value === 'none';
-}
 
 /**
  * インタレ解除の出し方。
@@ -183,7 +180,7 @@ async function measureSmoothMotion(
  * 焼きたいのであって、録ったときの設定を再現したいわけではない。
  * 設定まで `none` なら、そもそも焼くものが決まらないので断る (enqueue 側)
  */
-function resolveCodec(codec: VideoCodec): 'av1' | 'h264' {
+function resolveCodec(codec: VideoCodec): HwCodec {
     if (codec === 'av1' || codec === 'h264') return codec;
     const chosen = settings().codec;
     return chosen === 'none' ? 'av1' : chosen;
@@ -209,15 +206,14 @@ function squarePixels(size: { width: number; height: number } | undefined): stri
 }
 
 /** 画面に出す、焼く道の名前。`renderD128 の QSV` / `ソフトウェア` */
-const HW_NAME: Record<HwKind, string> = { qsv: 'QSV', vaapi: 'VA-API' };
 function wayName(way: HwWay | undefined): string {
-    return way === undefined ? 'ソフトウェア' : `${basename(way.device)} の ${HW_NAME[way.kind]}`;
+    return way === undefined ? 'ソフトウェア' : `${basename(way.device)} の ${HW_KIND_LABEL[way.kind]}`;
 }
 /** GPU の口を回す番。ジョブごとに先頭の口を入れ替える (hwenc.hwChain) */
 let hwTurn = 0;
 
 function videoArgs(
-    codec: 'av1' | 'h264',
+    codec: HwCodec,
     smooth: boolean,
     scale: string | null,
     hardware: HwWay | null,
@@ -286,12 +282,6 @@ function videoArgs(
     };
 }
 
-/*
- * 「二カ国語」の見分け方は `$lib/arib` に1つだけ置いてある。**録画もライブも同じ** —
- * ライブは選べる音声を組み立てるのに同じ判定を使う (`arib.audioTracks`)
- */
-export { DUAL_MONO };
-
 /**
  * 字幕に使うフォント。
  */
@@ -314,7 +304,7 @@ const aborts = new Map<number, AbortController>();
 /** ユーザーが止めたジョブ。失敗と区別して再試行しないため */
 const canceled = new Set<number>();
 
-export interface EncodeOptions {
+interface EncodeOptions {
     /**
      * CM実カット時に残す区間。null なら全部残す。
      * 切るのは buildSegmentArgs 側で、buildArgs はこれを見ない
@@ -1404,7 +1394,7 @@ async function runJob(jobId: number): Promise<void> {
      * どれか1つでも失敗すれば、そのジョブごと失敗にする (途中まで置いたものは消す)。
      */
     const codecs = settings().codecs.length > 0 ? settings().codecs : (['av1'] as const);
-    const placed: { codec: 'av1' | 'h264'; path: string }[] = [];
+    const placed: { codec: HwCodec; path: string }[] = [];
     // 測れなかったときの尺の当て。ffmpeg が言ってきた値 (下の duration_ms)
     let lastOutTimeUs = 0;
 

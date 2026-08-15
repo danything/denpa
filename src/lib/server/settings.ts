@@ -1,8 +1,8 @@
+import { HW_CODECS, type HwAllow, type HwCodec, type HwKind } from '../hw';
 import type { CmMode, VideoCodec } from '../types';
 import { isCmMode } from './cm';
 import { config } from './config';
 import { database, now, queryOne } from './db';
-import type { HwAllow, HwKind } from './hwenc';
 
 /**
  * 画面から変えられる設定。
@@ -25,14 +25,11 @@ export interface Settings {
      * どちらの端末でも観られる (`server/encoder.ts`)。`none` (エンコードしない)
      * のときは空。AV1 を先頭に寄せる — 主 (`library_path`) はそちらにする
      */
-    codecs: ('av1' | 'h264')[];
+    codecs: HwCodec[];
     /**
-     * **GPU の口ごとに、GPU で焼いてよいコーデック** (道 QSV / VA-API 別)。使えるか
-     * どうかは別 (`server/hwenc.ts` が起動時に確かめる) で、実際に GPU で焼くのは
-     * 「使える かつ ここで許されている」もの。**載っていない口は全部よい** — GPU が
-     * 見つかれば黙って使う (「自動でチェックが入る」)。外したいものだけ設定画面で外す。
-     * 使えないものの印は画面から触れないので、保存しても前のまま残る
-     * (あとで GPU を挿し替えればそのまま効く)。JSON で1つの鍵に持つ
+     * **GPU の口ごとに、GPU で焼いてよいコーデック** (`$lib/hw` の HwAllow)。使えるかは
+     * 別 (`server/hwenc.ts`) で、焼くのは「使える かつ 許されている」もの。使えないものの
+     * 印は画面から触れないので保存しても残る (GPU を挿し替えればそのまま効く)。JSON で1つの鍵
      */
     hwAllow: HwAllow;
     /** CMの扱い。off / chapter / cut */
@@ -126,13 +123,9 @@ function stored(key: string): string | undefined {
  * `av1,h264` → `['av1', 'h264']`、`av1` → `['av1']`、`none` や空 → `[]`。
  * **AV1 を先頭に寄せる** — 主 (`library_path`) をそちらにするので、順序を固定する
  */
-export function parseCodecs(value: string | undefined): ('av1' | 'h264')[] {
+export function parseCodecs(value: string | undefined): HwCodec[] {
     const raw = (value ?? config.encodeCodec).split(',').map((s) => s.trim());
-    const out: ('av1' | 'h264')[] = [];
-    for (const codec of ['av1', 'h264'] as const) {
-        if (raw.includes(codec)) out.push(codec);
-    }
-    return out;
+    return HW_CODECS.filter((codec) => raw.includes(codec));
 }
 
 /**
@@ -145,10 +138,9 @@ export function parseHwAllow(value: string | undefined): HwAllow {
         const out: HwAllow = {};
         for (const [device, entry] of Object.entries(raw)) {
             if (entry === null || typeof entry !== 'object') continue;
-            out[device] = {
-                qsv: parseCodecs(Array.isArray(entry.qsv) ? entry.qsv.join(',') : ''),
-                vaapi: parseCodecs(Array.isArray(entry.vaapi) ? entry.vaapi.join(',') : ''),
-            };
+            const pick = (raw: unknown): HwCodec[] =>
+                HW_CODECS.filter((codec) => Array.isArray(raw) && raw.includes(codec));
+            out[device] = { qsv: pick(entry.qsv), vaapi: pick(entry.vaapi) };
         }
         return out;
     } catch {
@@ -172,8 +164,8 @@ export function settings(): Settings {
      */
     const picked = parseCodecs(codec);
     const codecs = flag('encode', true) ? picked : [];
-    // 主は AV1 を優先 (小さいので既定の再生に向く)。無ければ選んだほう
-    const primary: VideoCodec = codecs.length === 0 ? 'none' : codecs.includes('av1') ? 'av1' : codecs[0];
+    // 主は先頭 (parseCodecs が AV1 を先頭に寄せている — 小さいので既定の再生に向く)
+    const primary: VideoCodec = codecs.length === 0 ? 'none' : codecs[0];
     return {
         codec: primary,
         codecs,

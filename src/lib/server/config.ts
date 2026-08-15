@@ -199,7 +199,7 @@ export const config = {
      *
      * 60p に起こして重複コマを落としたとき、これ以下しか残らなければ
      * 「同じ絵が並ぶ素材 (アニメ・フィルム)」= 30コマで出す。実録画の実測は
-     * アニメ 21〜55% / 生放送 71% だった (encoder.ts の表)。**迷ったら 60 に
+     * アニメ 21〜55% / 生放送 71% だった (docs/encode.md の表)。**迷ったら 60 に
      * 倒れる**よう、間より低めに引いてある
      */
     fpsSurvive: num('FPS_SURVIVE', 0.45),
@@ -340,9 +340,10 @@ export const config = {
      * (`10.10.0.0/16`)。当たると OIDC も掛からない
      * (どう効くかは `auth.trusted`)。
      *
-     * **`ADDRESS_HEADER=x-forwarded-for` を一緒に渡すこと。** 渡さないと
-     * adapter-node は接続元として Traefik の Pod の住所を返すので、ここが
-     * 誰にも当たらない。逆に、denpa へ直に届く経路があると住所を詐称できる
+     * **前段 (Traefik など) が居るなら `ADDRESS_HEADER=x-forwarded-for` を一緒に渡す。**
+     * 渡さないと接続元が前段の住所になり、ここが誰にも当たらない。逆に、denpa へ
+     * 直に届く経路があると住所を詐称できる。前段が居なければ何も要らない
+     * (server.js の中継が本当の接続元を内側へ伝える)
      */
     trustedNetworks: str('TRUSTED_NETWORKS', ''),
     /** ログインしてからの有効期間。切れたらもう一度 Entra へ行く */

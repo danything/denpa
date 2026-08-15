@@ -112,7 +112,7 @@ ffmpeg が付けたものなので、受け側の再生位置と直に比べら�
 
 | 役割 | 採用 | ★ | 備考 |
 | --- | --- | --- | --- |
-| エンコード | FFmpeg（将来 QSVEncC/NVEncC/VCEEncC） | — | CLI パイプラインで差し替え可能 |
+| エンコード | FFmpeg (ライブはソフトウェア。録画のエンコードは GPU も使う — encode.md「GPU で焼く」) | — | CLI パイプラインで差し替え可能 |
 | 字幕の描画 | xqq/libaribcaption | 127 | `-sub_type bitmap` + sub2video。録画側と同じ。denpa の ffmpeg は `--enable-libaribcaption` で組んである |
 | データ放送 | otya128/web-bml | 246 | BMLブラウザ。**描画側だけ借りる** — 解く側は自前 ([§5.6](#56-データ放送の統合)) |
 | 再生 | MSE 直接 / Vanilagy/mediabunny | 6,846 | AV1+Opus fMP4 |

@@ -51,9 +51,17 @@ process.env.HOST = '127.0.0.1';
  * 変えられるのは自分に返る origin の見た目だけ。
  * 接続元の住所 (`ADDRESS_HEADER`) は逆で、**信頼できる前段が居るときだけ**
  * 明示的に設定する — TRUSTED_NETWORKS の判定材料なので、既定で信じると
- * ヘッダを付けるだけで信頼ネットワークを名乗れてしまう
+ * ヘッダを付けるだけで信頼ネットワークを名乗れてしまう。
+ *
+ * **前段が居ないときは、この中継が本当の接続元を内側へ伝える。** 内側の adapter-node
+ * から見える接続元は常にこの中継 (127.0.0.1) なので、何もしないと
+ * TRUSTED_NETWORKS が LAN の住所に一度も当たらない (compose の既定で開くはずの画面が
+ * 403 になっていた)。ここで見た相手の住所を `x-denpa-remote` に**上書きで**入れ
+ * (外から同名で付けて来ても消える)、`ADDRESS_HEADER` が無ければそれを読ませる
  */
 process.env.PROTOCOL_HEADER = 'x-forwarded-proto';
+const REMOTE_HEADER = 'x-denpa-remote';
+if (!process.env.ADDRESS_HEADER) process.env.ADDRESS_HEADER = REMOTE_HEADER;
 await import('./build/index.js');
 // こちらが公開する側なので、元に戻しておく (アプリが自分の口を見るとき用)
 process.env.PORT = String(publicPort);
@@ -105,6 +113,8 @@ Bun.serve({
         // **消すだけでは効かない。** `fetch` は無ければ自分で付け直すので、
         // 「圧縮しないでくれ」と明示する
         headers.set('accept-encoding', 'identity');
+        // 本当の接続元 (上の説明)。前段が居る構成では ADDRESS_HEADER が別を指すので読まれない
+        headers.set(REMOTE_HEADER, server.requestIP(request)?.address ?? '');
 
         return fetch(`${inner}${url.pathname}${url.search}`, {
             method: request.method,

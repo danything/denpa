@@ -11,7 +11,6 @@ import {
     findInputFd,
     headSkip,
     inputProgress,
-    isVideoCodec,
     parseOutFrames,
     pickSmooth,
     readInputPos,
@@ -31,11 +30,7 @@ describe('録画エンコードの引数', () => {
         expect(args.at(-1)).toBe('/out.mkv');
     });
 
-    /*
-     * **上流の既定に任せない。** SVT-AV1 の既定 preset は版で変わる (2.3.0 は 10、
-     * 4.2.0 は 8)。渡していなかった頃のまま入れ替えると、実測で時間 +32%・
-     * 大きさ +27% になった。値そのものは 2.3.0 の既定と同じ
-     */
+    // 上流の既定 preset は版で変わる (encoder.videoArgs の実測)。書いてあることを守る
     test('AV1 の preset と crf は書いてある', () => {
         const args = buildArgs('/in.m2ts', '/out.mkv', 1, null);
         expect(argValue(args, '-preset')).toBe('10');
@@ -47,15 +42,7 @@ describe('録画エンコードの引数', () => {
         expect(argValue(args, '-vf')).toBe('bwdif,format=yuv420p');
     });
 
-    /*
-     * **どちらのコーデックも 8bit。**
-     *
-     * AV1 は 10bit で出していた。根拠が残っていなかったので測ったところ、
-     * 10bit は 1.7% 小さく SSIM +0.0011 (実写100秒: 39秒 21.71MB 0.97582 ↔
-     * 34秒 22.09MB 0.97472)。**差はあるが 2% で、15% 遅くなるぶんと
-     * 引き合わない。** そのうえ Main10 を解ける相手が要る — 元の放送が
-     * 8bit なのだから、8bit で出す
-     */
+    // どちらも 8bit (理由と実測は encoder.videoArgs)
     test('10bit では出さない', () => {
         for (const codec of ['av1', 'h264'] as const) {
             const args = buildArgs('/in.m2ts', '/out.mkv', 1, null, codec);
@@ -328,15 +315,6 @@ describe('コマ数の決め方', () => {
         const args = buildArgs('/in.m2ts', '/out.mkv', 1, null);
         expect(argValue(args, '-c:s:0')).toBeUndefined();
         expect(args.filter((a) => a.startsWith('-disposition:s'))).toHaveLength(0);
-    });
-});
-
-describe('isVideoCodec', () => {
-    test('知っているコーデックだけ通す', () => {
-        expect(isVideoCodec('av1')).toBe(true);
-        expect(isVideoCodec('h264')).toBe(true);
-        expect(isVideoCodec('hevc')).toBe(false);
-        expect(isVideoCodec(null)).toBe(false);
     });
 });
 

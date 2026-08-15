@@ -4,6 +4,7 @@
     import { submitting } from '$lib/actions';
     import Toasts, { errorNotice, type Notice } from '$lib/components/Toasts.svelte';
     import { dateTime } from '$lib/format';
+    import { CODEC_LABEL, HW_CODECS, HW_KIND_LABEL, HW_KINDS, hwAllowed } from '$lib/hw';
     import { liveUpdates } from '$lib/live-updates.svelte';
     import { measure } from '$lib/measure.svelte';
     import { EVENT_LABEL } from '$lib/webhook-events';
@@ -12,20 +13,6 @@
 
     liveUpdates(['migrate']);
 
-    /** GPU で焼く印を並べる順と、その呼び名。道 (QSV が先 = 先に試す) × コーデック */
-    const HW_KINDS = [
-        ['qsv', 'Intel QSV'],
-        ['vaapi', 'VA-API'],
-    ] as const;
-    const HW_CODECS = [
-        ['av1', 'AV1'],
-        ['h264', 'H.264'],
-    ] as const;
-    /** その口・道・コーデックが設定で許されているか。載っていない口は全部よい (hwenc.hwAllowed と同じ) */
-    function allowed(device: string, kind: 'qsv' | 'vaapi', codec: 'av1' | 'h264'): boolean {
-        const entry = data.recording.hwAllow[device];
-        return entry === undefined || entry[kind].includes(codec);
-    }
 
     const migrate = $derived(data.migrate.status);
     const done = $derived(migrate.imported + migrate.skipped + migrate.missing);
@@ -38,8 +25,6 @@
         if (form?.saved) list.push({ key: 'saved-result', kind: 'success', text: '保存しました' });
         return list;
     });
-
-    // 引き継ぎは数百GBのコピーになる。進み具合はサーバから push される
 
     /**
      * 画面で触る値は、サーバから来たものを写して持つ。
@@ -295,10 +280,8 @@
         </section>
         <!--
             **GPU は別のカード。** 口 (グラボ) が増えると行が増え、道 × コーデックの印も
-            口ごとに持つ。「録画のしかた」に混ぜると、コーデックの選択と GPU の割り振りが
-            同じ列に並んで読みにくかった。挿さっている機材を起動時に見つけて
-            (server/hwenc.ts)、**使えるものには自動で印が付く**。外したいものだけ外す。
-            使えないものの印は触れない — 押しても焼けないものにチェックを入れさせても嘘になるだけ
+            口ごとに持つ。「録画のしかた」に混ぜると読みにくかった。使えないものの印は
+            触れない — 押しても焼けないものにチェックを入れさせても嘘になるだけ
         -->
         <section class="card bg-base-100 shadow" data-testid="hw-card">
             <div class="card-body">
@@ -318,14 +301,13 @@
                             <!-- 口ごとに1枚。表にすると半分の幅で横に巻くので、縦に積む -->
                             <div class="divide-base-300 mt-2 divide-y">
                                 {#each hw.devices as device (device.path)}
-                                    {@const port = device.path.split('/').at(-1)}
                                     <div class="space-y-1 py-2" data-testid="hw-device" data-device={device.path}>
                                         <div class="font-mono text-sm">{device.label}</div>
                                         <div class="text-base-content/60 text-xs">{device.summary}</div>
-                                        {#each HW_KINDS as [kind, kindLabel] (kind)}
+                                        {#each HW_KINDS as kind (kind)}
                                             <div class="flex flex-wrap items-center gap-x-3 gap-y-1">
-                                                <span class="w-20 text-sm">{kindLabel}</span>
-                                                {#each HW_CODECS as [codec, label] (codec)}
+                                                <span class="w-20 text-sm">{HW_KIND_LABEL[kind]}</span>
+                                                {#each HW_CODECS as codec (codec)}
                                                     {@const usable = device[kind].includes(codec)}
                                                     <label
                                                         class="inline-flex items-center gap-1 {usable
@@ -336,11 +318,12 @@
                                                             type="checkbox"
                                                             name={`hw.${device.path}.${kind}.${codec}`}
                                                             class="checkbox checkbox-sm"
-                                                            checked={usable && allowed(device.path, kind, codec)}
+                                                            checked={usable &&
+                                                                hwAllowed(data.recording.hwAllow, device.path, kind, codec)}
                                                             disabled={!usable}
-                                                            data-testid={`hw-${port}-${kind}-${codec}`}
+                                                            data-testid={`hw-${device.port}-${kind}-${codec}`}
                                                         />
-                                                        <span class="text-sm">{label}</span>
+                                                        <span class="text-sm">{CODEC_LABEL[codec]}</span>
                                                     </label>
                                                 {/each}
                                             </div>

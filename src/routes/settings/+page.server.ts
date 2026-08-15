@@ -1,15 +1,9 @@
+import { basename } from 'node:path';
 import { fail } from '@sveltejs/kit';
+import { HW_CODECS, HW_KINDS, type HwAllow, hwAllowed } from '$lib/hw';
 import { isCmMode } from '$lib/server/cm';
 import { database, now, queryAll, queryOne } from '$lib/server/db';
-import {
-    describeDevice,
-    HW_KINDS,
-    type HwAllow,
-    type HwEncode,
-    hwAllowed,
-    hwEncode,
-    probe,
-} from '$lib/server/hwenc';
+import { describeDevice, type HwEncode, hwEncode, probe } from '$lib/server/hwenc';
 import { available as migrateAvailable, source, start, status } from '$lib/server/migrate';
 import { normalizePostalCode, saveSettings, settings } from '$lib/server/settings';
 import { serializeTargets, targets, type VlcTarget } from '$lib/server/vlc';
@@ -18,9 +12,16 @@ import type { VideoCodec } from '$lib/types';
 import { normalizeVlcHost } from '$lib/vlc-host';
 import { EVENTS } from '$lib/webhook-events';
 
-/** 画面に渡す形。口ごとの一言 (`summary`) を添える */
+/** 画面に渡す形。口ごとの一言 (`summary`) と、testid に使う口の名前 (`port`) を添える */
 function forScreen(hw: HwEncode) {
-    return { ...hw, devices: hw.devices.map((device) => ({ ...device, summary: describeDevice(device) })) };
+    return {
+        ...hw,
+        devices: hw.devices.map((device) => ({
+            ...device,
+            summary: describeDevice(device),
+            port: basename(device.path),
+        })),
+    };
 }
 
 export function load() {
@@ -64,7 +65,7 @@ export const actions = {
             return fail(400, { message: 'CMの指定が不正です' });
         }
         saveSettings({
-            // AV1 を先頭に寄せる (settings() が主を決めるときの順序と揃える)
+            // 順序は読むとき (parseCodecs) に AV1 を先頭へ寄せる。ここは来たまま
             codec: (codecs.length > 0 ? codecs.join(',') : 'none') as VideoCodec,
             encode: codecs.length > 0,
             cmCut,
@@ -92,7 +93,7 @@ export const actions = {
                 vaapi: [],
             };
             for (const kind of HW_KINDS) {
-                next[device.path][kind] = (['av1', 'h264'] as const).filter((codec) =>
+                next[device.path][kind] = HW_CODECS.filter((codec) =>
                     device[kind].includes(codec)
                         ? form.get(`hw.${device.path}.${kind}.${codec}`) === 'on'
                         : hwAllowed(previous, device.path, kind, codec),

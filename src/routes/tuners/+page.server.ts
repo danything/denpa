@@ -11,7 +11,7 @@ import { type AgentTuner, getTuners, putTuners, type TunerConfig, tunersDetected
 import type { ChannelType } from '$lib/types';
 
 /** 局1つぶんの、CM検出ロゴの覚え具合 */
-export interface CmLogo {
+interface CmLogo {
     id: number;
     name: string;
     /** 画面から教えた範囲 ("x,y,w,h")。教えていなければ null */
@@ -72,7 +72,7 @@ function withLabels(tuners: AgentTuner[]): (Omit<AgentTuner, 'users'> & { users:
 }
 
 /** 物理チャンネル1本と、そこに乗っている局 */
-export interface Coverage {
+interface Coverage {
     type: ChannelType;
     channel: string;
     services: { id: number; name: string; programs: number; until: number }[];
@@ -143,7 +143,6 @@ export async function load() {
         tuners: getTuners()
             .then((list) => ({ list: withLabels(list), error: null as string | null }))
             .catch((error: unknown) => ({ list: [], error: String(error) })),
-        // 取れているチャンネルと、そこに乗っている局。**denpa 自身のDBから**
         channels: coverage(),
         card: cardStatus(),
         /** 番組表を集めている最中の様子。1チャンネルに数分かかる */

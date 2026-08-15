@@ -1,7 +1,6 @@
 import type { APIRequestContext, APIResponse, Locator, Page } from '@playwright/test';
 import { expect, test } from '../stack';
 
-export type { Stack } from '../stack';
 // テストは必ずここから test / expect を取る。素の @playwright/test から取ると
 // ワーカーごとのアプリ (tests/stack.ts) が立たず、宛先も決まらない
 export { expect, test };
@@ -34,7 +33,7 @@ export async function syncEpg(request: APIRequestContext): Promise<void> {
     expect(body.programs).toBeGreaterThan(0);
 }
 
-export interface Cell {
+interface Cell {
     programId: string;
     serviceId: string;
     startAt: number;

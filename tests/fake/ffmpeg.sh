@@ -134,12 +134,7 @@ if [ -f "${FAKE_FFMPEG_FAIL_FILE:-/nonexistent}" ]; then
     exit 1
 fi
 
-if [ "${FAKE_FFMPEG_FAIL:-0}" = "1" ]; then
-    echo "Error while opening encoder - fake failure" >&2
-    exit 1
-fi
-
-steps="${FAKE_FFMPEG_STEPS:-4}"
+steps=4
 for i in $(seq 1 "$steps"); do
     out_time_us=$((i * 10000000 / steps))
     printf 'frame=%d\nfps=120\nbitrate=2000.0kbits/s\ntotal_size=%d\nout_time_us=%d\nspeed=8.0x\ndrop_frames=0\nprogress=continue\n' \
