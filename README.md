@@ -17,7 +17,17 @@
 </p>
 
 番組表から押すだけで予約。録った番組はブラウザでそのまま観るか、テレビの VLC へ
-飛ばすか、落として好きなプレイヤーで。**画面の一覧は [docs/screens.md](docs/screens.md)。**
+飛ばすか、落として好きなプレイヤーで。
+
+<table>
+  <tr>
+    <td align="center"><a href="docs/screens.md#予約と録画"><img src="docs/images/dashboard.webp" alt="予約と録画" width="380"></a><br><sub><b>予約と録画</b> — サムネ付き。押せばその場で観る</sub></td>
+    <td align="center"><a href="docs/screens.md#ライブ"><img src="docs/images/live.webp" alt="ライブ" width="380"></a><br><sub><b>ライブ</b> — 字幕もデータ放送も。止めれば追っかけ</sub></td>
+    <td align="center"><a href="docs/screens.md#録画を観る"><img src="docs/images/watch.webp" alt="録画を観る" width="380"></a><br><sub><b>観る</b> — 放送どおりの字幕、CMはチャプターで飛ばす</sub></td>
+  </tr>
+</table>
+
+**画面の一覧は [docs/screens.md](docs/screens.md)** (実機の絵。番組表・ルール・チューナー・設定も)。
 
 ## 用意するもの
 
