@@ -121,24 +121,31 @@ describe('コマ数の決め方', () => {
 
     test('同じ絵が並ぶ素材 (生存率が低い) は30コマ', () => {
         // 実測: アニメの本編は 21〜32% (乙女ゲー 21% / 幼女戦記 32%)
-        expect(pickSmooth([0.21, 0.32, 0.28], 0.45)).toBe(false);
+        expect(pickSmooth([0.21, 0.32, 0.28], 0.5)).toBe(false);
     });
 
     test('全コマ動く素材 (生存率が高い) は60コマ', () => {
         // 実測: フジの生放送は 71%
-        expect(pickSmooth([0.71, 0.68, 0.75], 0.45)).toBe(true);
+        expect(pickSmooth([0.71, 0.68, 0.75], 0.5)).toBe(true);
+    });
+
+    test('毎秒30枚が違う絵のアニメ (中央値 48%) は 30コマ。閾値 50% はそのため', () => {
+        // 実測 (2026-08): 39% / 48% / 68% / 72% / 46%
+        expect(pickSmooth([0.39, 0.48, 0.68, 0.72, 0.46], 0.5)).toBe(false);
+        // 実写 (CM の窓を代わりに) は 5窓の中央値 60〜79%
+        expect(pickSmooth([0.6, 0.55, 0.53, 0.72, 0.66], 0.5)).toBe(true);
     });
 
     test('中央値で見る。窓の半分未満がCMや白場に当たっても引きずられない', () => {
         // 5窓のうち2窓がアイキャッチ/CM (高い) → 30コマ
-        expect(pickSmooth([0.25, 0.3, 0.8, 0.19, 0.6], 0.45)).toBe(false);
+        expect(pickSmooth([0.25, 0.3, 0.8, 0.19, 0.6], 0.5)).toBe(false);
         // 逆に2窓が静止画に当たった実写 → 60コマ (実測: CM の窓は静止で 42% まで落ちる)
-        expect(pickSmooth([0.42, 0.7, 0.75, 0.2, 0.64], 0.45)).toBe(true);
+        expect(pickSmooth([0.42, 0.7, 0.75, 0.2, 0.64], 0.5)).toBe(true);
     });
 
     test('測れなければ60コマに倒す (動きは絶対に落とさない)', () => {
-        expect(pickSmooth([], 0.45)).toBe(true);
-        expect(pickSmooth([Number.NaN, 0], 0.45)).toBe(true);
+        expect(pickSmooth([], 0.5)).toBe(true);
+        expect(pickSmooth([Number.NaN, 0], 0.5)).toBe(true);
     });
 
     test('入れ物は拡張子ではなく引数で決める', () => {
