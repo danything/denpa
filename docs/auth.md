@@ -11,7 +11,7 @@
 
 | 口 | 守り方 |
 | --- | --- |
-| `/api/recordings/<id>/file` | **期限付きのリンク** (`?token=…`、`share.ts`。控えは `share_links`)。OIDC で入った画面のぶんは**ログインの控えも受ける** |
+| `/api/recordings/<id>/file` (尻に `/<番組名>` が付いた形も同じ) | **期限付きのリンク** (`?token=…`、`share.ts`。控えは `share_links`)。OIDC で入った画面のぶんは**ログインの控えも受ける** |
 | `/api/live/socket` | **使い捨ての札** (下記)。ここだけ SvelteKit に届きません |
 | それ以外 (画面と API) | **OIDC** (設定してあれば) |
 | どの口も | **`TRUSTED_NETWORKS` に当たれば素通し** (下記) |

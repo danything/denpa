@@ -64,6 +64,8 @@ describe('期限付きの再生リンク', () => {
         // hooks から呼ぶ入口は実時刻で見るので、作りたてのものを使う
         const params = new URLSearchParams({ token: mintShareToken(46).token });
         expect(shareTokenAllows('/api/recordings/46/file', params)).toBe(true);
+        expect(shareTokenAllows('/api/recordings/46/file/name.mkv', params)).toBe(true);
+        expect(shareTokenAllows('/api/recordings/47/file/name.mkv', params)).toBe(false);
         expect(shareTokenAllows('/api/recordings/47/file', params)).toBe(false);
         expect(shareTokenAllows('/api/recordings/46', params)).toBe(false);
         expect(shareTokenAllows('/settings', params)).toBe(false);

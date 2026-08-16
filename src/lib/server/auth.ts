@@ -23,7 +23,8 @@ import { enabled as oidcEnabled } from './oidc';
  */
 
 /** 署名リンクとログインの控えで開けられる口。**ここは OIDC のリダイレクトにしない** */
-const FILE_PATHS = [/^\/api\/recordings\/\d+\/file$/];
+// 尻の1段は番組名 (プレイヤーの見出し用、share/+server.ts)。読み捨てるので何が来てもよいが、それより深くは通さない
+const FILE_PATHS = [/^\/api\/recordings\/\d+\/file(\/[^/]+)?$/];
 
 /**
  * 素通しにする口。

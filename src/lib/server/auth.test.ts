@@ -11,6 +11,8 @@ import { config } from './config';
 describe('ファイルを取りに来る口', () => {
     test('録画の配信', () => {
         expect(isFilePath('/api/recordings/12/file')).toBe(true);
+        // 尻に番組名を付けた形 (プレイヤーの見出し用)。読み捨てる1段だけ通す
+        expect(isFilePath('/api/recordings/12/file/%E7%95%AA%E7%B5%84.mkv')).toBe(true);
     });
 
     test('画面と、それ以外の API は含まない', () => {
@@ -19,7 +21,8 @@ describe('ファイルを取りに来る口', () => {
         // 同じ録画でも、コマの切り出しは画面から呼ぶもの
         expect(isFilePath('/api/recordings/12/frame')).toBe(false);
         // 似ているだけの道。前方一致で緩めない
-        expect(isFilePath('/api/recordings/12/file/extra')).toBe(false);
+        expect(isFilePath('/api/recordings/12/files')).toBe(false);
+        expect(isFilePath('/api/recordings/12/file/a/b')).toBe(false);
     });
 });
 
