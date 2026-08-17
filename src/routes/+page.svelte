@@ -156,7 +156,7 @@
             return;
         }
         win.location.href = play;
-        setTimeout(() => win.close(), 4000);
+        setTimeout(() => win.close(), 1500);
         noteVlc('info', 'テレビへ飛ばしました');
         detail.close();
     }
