@@ -18,7 +18,7 @@ Dockerfile の行・`package.json`) を優先し、上流の表示に拠るも�
 
 | 名前 | 何に | 出どころ | ライセンス |
 | --- | --- | --- | --- |
-| FFmpeg 9.0.1 | エンコード・字幕・サムネイル・ライブ | <https://ffmpeg.org> | LGPL-2.1+ (`--enable-gpl` で GPL-2.0+) |
+| FFmpeg 8.1 | エンコード・字幕・サムネイル・ライブ | <https://ffmpeg.org> | LGPL-2.1+ (`--enable-gpl` で GPL-2.0+) |
 | x264 | H.264 のエンコード | <https://www.videolan.org/developers/x264.html> | GPL-2.0+ |
 | SVT-AV1 4.2.0 (ソースから静的リンク) | AV1 のエンコード | <https://gitlab.com/AOMediaCodec/SVT-AV1> | BSD-3-Clause-Clear + AOM 特許ライセンス |
 | dav1d | AV1 のデコード | <https://code.videolan.org/videolan/dav1d> | BSD-2-Clause |
