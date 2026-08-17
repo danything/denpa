@@ -67,9 +67,13 @@
             見ないでも押せる。
             **入り切らなければ折り返す** (`flex-wrap`)。一列に押し込むと、
             スマホ幅で 4 つ並んだときにボタンが縮んで文字が縦に折れ、
-            左端が枠の外に切れていた
+            左端が枠の外に切れていた。
+            **`relative` は「その他…」のメニューの基準。** メニューはボタン
+            ではなくこの枠を基準に開く (渡す側で `.dropdown` を static に
+            している) ので、ボタンが枠の真ん中に折り返されても、メニューは
+            枠の右端に揃って枠の幅の中に収まる
         -->
-        <div class="modal-action shrink-0 flex-wrap">
+        <div class="modal-action relative shrink-0 flex-wrap">
             {#if actions}
                 {@render actions()}
             {:else}

@@ -1135,9 +1135,14 @@
 
                 **開閉は focus 任せ** (daisyUI の dropdown)。トリガーを button に
                 すると Safari がクリックで focus を入れず開かないので、
-                role="button" の div にしてある
+                role="button" の div にしてある。
+
+                **`static` で、メニューの基準をボタンから枠 (modal-action) に移す。**
+                ボタン基準だとメニュー (w-64) はボタンの右端から左へ伸びる。
+                スマホ幅でフッターが折り返してボタンが真ん中あたりに来ると、
+                左へ伸びた分が modal-box からはみ出して切れていた
             -->
-            <div class="dropdown dropdown-top dropdown-end">
+            <div class="dropdown dropdown-top dropdown-end static">
                 <div tabindex="0" role="button" class="btn btn-outline" data-testid="detail-more">その他…</div>
                 <!--
                     **dropdown-content 自身に display 系のクラスを載せない。**
@@ -1148,7 +1153,7 @@
                     「ダウンロード」が発火していた (実機で発覚)。縦積みは内側の div で
                 -->
                 <div
-                    class="dropdown-content bg-base-100 rounded-box border-base-300 z-10 mb-1 w-64 border p-2 shadow-lg"
+                    class="dropdown-content bg-base-100 rounded-box border-base-300 z-10 mb-1 w-64 max-w-full border p-2 shadow-lg"
                 >
                     <div class="flex flex-col">
                     <!--
