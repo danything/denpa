@@ -114,7 +114,7 @@ export function cellOf(page: Page, programId: string) {
 /**
  * 指定した局の「少し先の番組」を予約する。
  *
- * BSの偽番組は10秒しかなく、番組表のグリッドではマスが潰れて押せない。
+ * BSの偽番組は5秒しかなく、番組表のグリッドではマスが潰れて押せない。
  * ここで見たいのは録画そのものなので、予約は画面ではなくアクションに直接投げる。
  */
 export async function reserveSoon(page: Page, request: APIRequestContext, type: string, skip = 0) {
@@ -172,7 +172,7 @@ export async function recordOne(
     request: APIRequestContext,
 ): Promise<{ id: string; libraryPath: string }> {
     await syncEpg(request);
-    // BS の偽番組は10秒。すぐ録り終わる
+    // BS の偽番組は5秒。すぐ録り終わる
     const programId = await reserveSoon(page, request, 'BS');
     const row = page.locator(`[data-testid="recording-row"][data-program-id="${programId}"]`);
     await waitWatchable(page, row);

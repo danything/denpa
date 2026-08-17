@@ -307,4 +307,19 @@ describe('実体との照合', () => {
         expect(row.lib).toBe(h264);
         expect(row.alt).toBeNull();
     });
+
+    // もう一方 (H.264) だけが消えたときは、控えを外すだけで録画は残る
+    test('もう一方が消えたら、控えだけ外す', () => {
+        fresh();
+        const { av1, h264 } = twoCodec();
+        rmSync(h264);
+
+        const result = reconcile();
+        expect(result.removed).toBe(0);
+        const row = database()
+            .query('SELECT library_path AS lib, alt_path AS alt FROM recordings WHERE id = 9')
+            .get() as { lib: string; alt: string | null };
+        expect(row.lib).toBe(av1);
+        expect(row.alt).toBeNull();
+    });
 });

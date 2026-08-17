@@ -62,6 +62,14 @@ export function reconcile(): {
 
     let removed = 0;
     for (const recording of recordings) {
+        // もう一方 (H.264) だけが外から消えたら、その控えだけ外す。主は無事なので録画は残る
+        if (recording.alt_path !== null && !existsSync(recording.alt_path)) {
+            database()
+                .prepare('UPDATE recordings SET alt_path = NULL, updated_at = ? WHERE id = ?')
+                .run(now(), recording.id);
+            removeSidecars(recording.alt_path);
+            console.log(`[files] もう一方が消えていたので控えを外しました: ${recording.name}`);
+        }
         if (existsSync(recording.library_path!)) continue;
         /*
          * **主が外から消えても、もう一方が残っていれば繰り上げる。** 両方の

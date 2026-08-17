@@ -29,7 +29,7 @@ Dockerfile の行・`package.json`) を優先し、上流の表示に拠るも�
 | libvpl / libmfx-gen | Intel QSV (GPU で焼く) | <https://github.com/intel/libvpl> / <https://github.com/intel/vpl-gpu-rt> | MIT |
 | intel-media-va-driver (iHD) | Intel の VA-API ドライバ | <https://github.com/intel/media-driver> | MIT (一部 BSD) |
 | zlib | ffmpeg の依存 | <https://zlib.net> | zlib |
-| [patches/](../patches) | ffmpeg の libaribcaption 呼び出しに当てている直し (denpa が書いたもの。上流に投げる前提) | — | 当てる先と同じ (LGPL/GPL) |
+| [patches/](../patches) | ffmpeg に当てている直し 2 本 (libaribcaption の「消せ」、fftools の溢れ FIFO。denpa が書いたもの。上流に投げる前提) | — | 当てる先と同じ (LGPL/GPL) |
 
 ### CM 検出
 
