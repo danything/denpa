@@ -3,6 +3,7 @@ import { error, fail, redirect } from '@sveltejs/kit';
 import { queryOne } from '$lib/server/db';
 import { deleteRecordingFiles } from '$lib/server/files';
 import { sidecarPaths } from '$lib/server/metadata';
+import { recordingFromForm } from '$lib/server/recording';
 import { settings } from '$lib/server/settings';
 import type { Recording } from '$lib/types';
 
@@ -72,9 +73,7 @@ export const actions = {
      */
     delete: async ({ request }) => {
         const form = await request.formData();
-        const id = Number(form.get('id'));
-        if (!Number.isFinite(id)) return fail(400, { message: '録画が見つかりません' });
-        const recording = queryOne<Recording>('SELECT * FROM recordings WHERE id = ?', id);
+        const recording = recordingFromForm(form);
         if (recording === undefined) return fail(400, { message: '録画が見つかりません' });
         deleteRecordingFiles(recording, '手動削除');
         /*

@@ -1,14 +1,15 @@
 import { basename } from 'node:path';
 import { error } from '@sveltejs/kit';
-import { queryOne } from '$lib/server/db';
+import { activeEncodeJob } from '$lib/server/encoder';
 import { recordingOr404 } from '$lib/server/recording';
 import { contentDisposition, serveFile } from '$lib/server/serve';
+import { type FileSource, parseFileSource } from '$lib/source';
 
 /**
  * 録画ファイルをそのまま配る。
  * プレイヤーに URL を渡して直接再生させるための口。
  */
-function respond(id: string, request: Request, download: boolean, source: string | null): Response {
+function respond(id: string, request: Request, download: boolean, source: FileSource | null): Response {
     const recording = recordingOr404(id);
 
     /*
@@ -19,12 +20,7 @@ function respond(id: string, request: Request, download: boolean, source: string
      * 指していて、しかもその古いファイルは終わり際に消えるので、
      * 押した瞬間によって出るものが変わっていた
      */
-    const encoding =
-        queryOne<{ n: number }>(
-            `SELECT COUNT(*) AS n FROM encode_jobs
-             WHERE recording_id = ? AND state IN ('queued', 'running')`,
-            recording.id,
-        )?.n ?? 0;
+    const encoding = activeEncodeJob(recording.id) !== undefined;
     /*
      * **どちらを寄越すか、名指しもできる** (`?source=ts` / `encoded` / `alt`)。
      *
@@ -44,7 +40,7 @@ function respond(id: string, request: Request, download: boolean, source: string
               ? recording.alt_path
               : source === 'encoded'
                 ? recording.library_path
-                : encoding > 0 && recording.ts_path !== null
+                : encoding && recording.ts_path !== null
                   ? recording.ts_path
                   : (recording.library_path ?? recording.ts_path);
     if (path === null) error(404, 'ファイルがありません');
@@ -64,7 +60,7 @@ export function GET({ params, request, url }) {
         params.id,
         request,
         url.searchParams.get('download') === '1',
-        url.searchParams.get('source'),
+        parseFileSource(url.searchParams.get('source')),
     );
 }
 export const HEAD = GET;

@@ -11,6 +11,7 @@ import {
     hwAllowed,
 } from '../hw';
 import { config } from './config';
+import { run } from './stream';
 
 /**
  * **GPU でエンコードできるか、起動時に ffmpeg に確かめさせる。**
@@ -120,17 +121,10 @@ export function hwArgs(
  * (実機で見たことはないが) に起動が止まらないように
  */
 async function tryEncode(args: string[]): Promise<boolean> {
-    try {
-        const proc = Bun.spawn([config.ffmpeg, '-v', 'error', '-nostdin', ...args, '-f', 'null', '-'], {
-            stdout: 'ignore',
-            stderr: 'pipe',
-            signal: AbortSignal.timeout(config.hwProbeTimeout),
-        });
-        const code = await proc.exited;
-        return code === 0;
-    } catch {
-        return false;
-    }
+    const result = await run([config.ffmpeg, '-v', 'error', '-nostdin', ...args, '-f', 'null', '-'], {
+        timeoutMs: config.hwProbeTimeout,
+    });
+    return result.code === 0;
 }
 
 /** 試し焼きの素材。小さく短く — 何が使えるかを見るだけで、速さは測らない */

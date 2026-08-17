@@ -2,6 +2,7 @@ import { existsSync } from 'node:fs';
 import { extname } from 'node:path';
 import { config } from './config';
 import { removeIfExists } from './fsx';
+import { run } from './stream';
 
 /**
  * サムネイルを動画の隣にサイドカーとして置く。
@@ -115,11 +116,7 @@ export async function writeThumbnail(
                 : config.thumbnailPosition;
     }
 
-    const proc = Bun.spawn([config.ffmpeg, ...buildThumbnailArgs(videoPath, thumbnail, at)], {
-        stdout: 'ignore',
-        stderr: 'ignore',
-    });
-    const code = await proc.exited;
+    const { code } = await run([config.ffmpeg, ...buildThumbnailArgs(videoPath, thumbnail, at)]);
     return code === 0 && existsSync(thumbnail);
 }
 

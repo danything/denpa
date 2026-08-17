@@ -4,7 +4,7 @@ import { config } from './config';
 import { removeByPrefix } from './fsx';
 import { logoRepo } from './logo-data';
 import { settings } from './settings';
-import { text } from './stream';
+import { run as runProcess } from './stream';
 
 /**
  * join_logo_scp (JLS) による CM 検出。
@@ -104,23 +104,9 @@ async function run(argv: string[], signal: AbortSignal | undefined, deadline: nu
     const left = deadline - Date.now();
     if (left <= 0) return { code: 124, stderr: '時間切れ' };
 
-    let proc: Bun.Subprocess;
-    try {
-        proc = Bun.spawn(argv, { stdout: 'ignore', stderr: 'pipe' });
-    } catch (error) {
-        // 一式が入っていないイメージもある。無音検出に落ちれば録画は続く
-        return { code: 127, stderr: String(error) };
-    }
-    const timer = setTimeout(() => proc.kill(), left);
-    const kill = () => proc.kill();
-    signal?.addEventListener('abort', kill, { once: true });
-    try {
-        const stderr = await text(proc.stderr as ReadableStream<Uint8Array>);
-        return { code: await proc.exited, stderr };
-    } finally {
-        clearTimeout(timer);
-        signal?.removeEventListener('abort', kill);
-    }
+    // 一式が入っていないイメージもある (code 127 で返る)。無音検出に落ちれば録画は続く
+    const result = await runProcess(argv, { signal, timeoutMs: left, stderr: true });
+    return { code: result.code, stderr: result.stderr };
 }
 
 /**

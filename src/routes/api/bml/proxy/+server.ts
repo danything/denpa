@@ -16,12 +16,11 @@
  */
 
 import { error } from '@sveltejs/kit';
-import { fetchForBml, Refused } from '$lib/server/bml-network';
-import { settings } from '$lib/server/settings';
+import { fetchForBml, refusalMessage, requireBmlNetwork } from '$lib/server/bml-network';
 import type { RequestHandler } from './$types';
 
 export const GET: RequestHandler = async ({ url }) => {
-    if (!settings().bmlNetwork) error(403, 'データ放送の双方向は切ってあります');
+    requireBmlNetwork();
 
     const target = url.searchParams.get('url');
     if (target === null || target === '') error(400, 'url がありません');
@@ -41,7 +40,7 @@ export const GET: RequestHandler = async ({ url }) => {
             },
         });
     } catch (failure) {
-        const why = failure instanceof Refused ? failure.message : '取りに行けませんでした';
+        const why = refusalMessage(failure, '取りに行けませんでした');
         // **何に繋ごうとして断ったかを残す。** 切り分けのときにここがいちばん効く
         console.warn(`[bml] 中継を断りました: ${target} (${why})`);
         // 断りは 502 (相手ではなく、こちらが取りに行けなかった)

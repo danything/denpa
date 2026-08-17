@@ -1,9 +1,10 @@
 import { statSync } from 'node:fs';
 import { fail } from '@sveltejs/kit';
-import { database, queryAll, queryOne } from '$lib/server/db';
+import { database, queryAll } from '$lib/server/db';
 import { cancel as cancelEncode, enqueue, pump } from '$lib/server/encoder';
 import { emit } from '$lib/server/events';
 import { deleteRecordingFiles, reconcile } from '$lib/server/files';
+import { recordingFromForm } from '$lib/server/recording';
 import { cancel, restore } from '$lib/server/reservations';
 import { RESERVATION_STATE } from '$lib/server/schema';
 import { settings } from '$lib/server/settings';
@@ -244,12 +245,8 @@ export function load({ url }) {
     };
 }
 
-/** フォームの id から録画を引く。どのアクションも最初にこれを通る */
-function target(form: FormData): Recording | undefined {
-    const id = Number(form.get('id'));
-    if (!Number.isFinite(id)) return undefined;
-    return queryOne<Recording>('SELECT * FROM recordings WHERE id = ?', id);
-}
+// フォームの id から録画を引く。どのアクションも最初にこれを通る
+const target = recordingFromForm;
 
 export const actions = {
     delete: async ({ request }) => {

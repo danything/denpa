@@ -1,5 +1,6 @@
 import { config } from '$lib/server/config';
 import { recordingOr404 } from '$lib/server/recording';
+import { run } from '$lib/server/stream';
 import { parseChapters } from '$lib/ts/watch';
 
 /**
@@ -39,27 +40,11 @@ export async function GET({ params }) {
      * そもそもチャプターが無い、のどれでも画面のすることは同じ (送りを出さない)。
      * ここで転ぶと、**観られるはずの録画が観られなくなる**
      */
-    let out = '';
-    try {
-        const proc = Bun.spawn(
-            [
-                config.ffprobe,
-                '-v',
-                'error',
-                '-show_chapters',
-                '-print_format',
-                'json',
-                recording.library_path,
-            ],
-            { stdout: 'pipe', stderr: 'ignore' },
-        );
-        const timer = setTimeout(() => proc.kill(), TIMEOUT);
-        out = await new Response(proc.stdout as ReadableStream<Uint8Array>).text();
-        await proc.exited;
-        clearTimeout(timer);
-    } catch {
-        out = '';
-    }
+    const probed = await run(
+        [config.ffprobe, '-v', 'error', '-show_chapters', '-print_format', 'json', recording.library_path],
+        { timeoutMs: TIMEOUT, stdout: true },
+    );
+    const out = new TextDecoder().decode(probed.stdout);
 
     return Response.json(
         { chapters: parseChapters(out) },

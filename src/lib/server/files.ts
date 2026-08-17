@@ -148,7 +148,7 @@ function sweepLeftovers(): { swept: number; strays: number; pruned: number } {
     let swept = 0;
     let strays = 0;
     for (const root of [config.recordedDir, config.libraryDir]) {
-        const files = walk(root);
+        const { files } = walk(root);
         const videos = new Set(files.filter((path) => VIDEO.test(path)));
         for (const path of videos) {
             // 動画は消さない。手で置いたものかもしれないので、数えるだけ。
@@ -181,8 +181,8 @@ function sweepLeftovers(): { swept: number; strays: number; pruned: number } {
      * いま になるので、消しながら見ると**自分の掃除で親が作りたてに化けて**
      * シリーズのフォルダだけ残る
      */
-    const dirs = walkDirs(config.libraryDir)
-        .filter((dir) => !settling(dir, at))
+    const dirs = walk(config.libraryDir)
+        .dirs.filter((dir) => !settling(dir, at))
         .sort((a, b) => b.length - a.length);
     let pruned = 0;
     for (const dir of dirs) {
@@ -212,8 +212,11 @@ function orphan(path: string, videos: Set<string>): boolean {
     return !['m2ts', 'ts', 'mkv', 'mp4'].some((extension) => videos.has(`${base[1]}.${extension}`));
 }
 
-/** フォルダだけを全部拾う。`walk` はファイルしか返さないので、空のフォルダ用 */
-function walkDirs(dir: string, out: string[] = []): string[] {
+/** 置き場の下を全部拾う (ファイルとフォルダを分けて)。置き場がまだ無ければ空 */
+function walk(
+    dir: string,
+    out = { files: [] as string[], dirs: [] as string[] },
+): { files: string[]; dirs: string[] } {
     let entries: Dirent[];
     try {
         entries = readdirSync(dir, { withFileTypes: true });
@@ -221,26 +224,11 @@ function walkDirs(dir: string, out: string[] = []): string[] {
         return out;
     }
     for (const entry of entries) {
-        if (!entry.isDirectory()) continue;
         const path = join(dir, entry.name);
-        out.push(path);
-        walkDirs(path, out);
-    }
-    return out;
-}
-
-function walk(dir: string, out: string[] = []): string[] {
-    let entries: Dirent[];
-    try {
-        entries = readdirSync(dir, { withFileTypes: true });
-    } catch {
-        // 置き場がまだ無い。片付けるものも無い
-        return out;
-    }
-    for (const entry of entries) {
-        const path = join(dir, entry.name);
-        if (entry.isDirectory()) walk(path, out);
-        else out.push(path);
+        if (entry.isDirectory()) {
+            out.dirs.push(path);
+            walk(path, out);
+        } else out.files.push(path);
     }
     return out;
 }

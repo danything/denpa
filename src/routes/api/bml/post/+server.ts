@@ -14,12 +14,11 @@
  */
 
 import { error } from '@sveltejs/kit';
-import { postForBml, Refused } from '$lib/server/bml-network';
-import { settings } from '$lib/server/settings';
+import { postForBml, refusalMessage, requireBmlNetwork } from '$lib/server/bml-network';
 import type { RequestHandler } from './$types';
 
 export const POST: RequestHandler = async ({ url, request }) => {
-    if (!settings().bmlNetwork) error(403, 'データ放送の双方向は切ってあります');
+    requireBmlNetwork();
 
     const target = url.searchParams.get('url');
     if (target === null || target === '') error(400, 'url がありません');
@@ -42,7 +41,7 @@ export const POST: RequestHandler = async ({ url, request }) => {
             },
         });
     } catch (failure) {
-        const why = failure instanceof Refused ? failure.message : '送れませんでした';
+        const why = refusalMessage(failure, '送れませんでした');
         console.warn(`[bml] 送信を断りました: ${target} (${why})`);
         error(502, why);
     }

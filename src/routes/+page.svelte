@@ -26,7 +26,7 @@
     import { forget, forgetPrefix, read, write } from '$lib/keep';
     import { liveUpdates } from '$lib/live-updates.svelte';
     import { clearFailed, offline, removeLocal, saveOffline } from '$lib/offline.svelte';
-    import { encodeSource } from '$lib/source';
+    import { encodeSource, type FileSource } from '$lib/source';
 
     let { data, form } = $props();
 
@@ -40,7 +40,7 @@
      * ダウンロードは押されてから期限付きの署名URLを作って始める (`$lib/download`)。
      * 資格情報を URL に埋めていた頃は、パスワードがダウンロード履歴に残り続けた
      */
-    function download(id: number, source?: 'ts' | 'encoded' | 'alt'): void {
+    function download(id: number, source?: FileSource): void {
         void startDownload(id, source).then((ok) => {
             if (!ok) noteVlc('error', 'ダウンロードのリンクを作れませんでした');
         });

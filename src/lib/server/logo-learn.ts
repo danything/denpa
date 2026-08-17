@@ -7,7 +7,7 @@ import { config } from './config';
 import { queryAll } from './db';
 import { CURRENT_SERVICES } from './epg';
 import { logoRepo } from './logo-data';
-import { chunks } from './stream';
+import { chunks, run } from './stream';
 import { type AgentTuner, getTuners, openChannelStream } from './tuner';
 
 /**
@@ -194,7 +194,8 @@ async function remember(target: Target, sample: string, signal?: AbortSignal): P
     const work = mkdtempSync(join(tmpdir(), 'denpa-lgd-'));
 
     try {
-        const proc = Bun.spawn(
+        // 一式が入っていないイメージもある (起こせなければ code 127)。CM検出はエンコードのときに覚え直す
+        await run(
             [
                 `${config.jlsBin}/logoframe`,
                 sample,
@@ -215,18 +216,8 @@ async function remember(target: Target, sample: string, signal?: AbortSignal): P
                 // 自動で見つからなかった局だけ、画面から教わった範囲を渡す
                 ...logoArea(target.id),
             ],
-            { stdout: 'ignore', stderr: 'ignore' },
+            { signal, timeoutMs: FRAME_TIMEOUT },
         );
-
-        const timer = setTimeout(() => proc.kill(), FRAME_TIMEOUT);
-        const kill = () => proc.kill();
-        signal?.addEventListener('abort', kill, { once: true });
-        try {
-            await proc.exited;
-        } finally {
-            clearTimeout(timer);
-            signal?.removeEventListener('abort', kill);
-        }
 
         /*
          * **終了コードは当てにしない。** logoframe はロゴを見つけられなくても

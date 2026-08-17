@@ -2,7 +2,7 @@ import { JLS_UNUSABLE } from '../format';
 import type { CmMode } from '../types';
 import { config } from './config';
 import { settings } from './settings';
-import { lines as readLines, text } from './stream';
+import { lines as readLines, run, text } from './stream';
 
 /**
  * CM検出。
@@ -331,13 +331,8 @@ export function parseFrameRate(value: string | undefined): number {
 
 /** ffprobe を1回動かして、標準出力を返す */
 async function probe(input: string, args: string[]): Promise<string> {
-    const proc = Bun.spawn([config.ffprobe, '-v', 'error', ...args, input], {
-        stdout: 'pipe',
-        stderr: 'ignore',
-    });
-    const out = (await text(proc.stdout as ReadableStream<Uint8Array>)).trim();
-    await proc.exited;
-    return out;
+    const result = await run([config.ffprobe, '-v', 'error', ...args, input], { stdout: true });
+    return new TextDecoder().decode(result.stdout).trim();
 }
 
 /**

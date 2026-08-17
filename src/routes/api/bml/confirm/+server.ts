@@ -11,12 +11,11 @@
  */
 
 import { error, json } from '@sveltejs/kit';
-import { confirmReachable, Refused } from '$lib/server/bml-network';
-import { settings } from '$lib/server/settings';
+import { confirmReachable, refusalMessage, requireBmlNetwork } from '$lib/server/bml-network';
 import type { RequestHandler } from './$types';
 
 export const GET: RequestHandler = async ({ url }) => {
-    if (!settings().bmlNetwork) error(403, 'データ放送の双方向は切ってあります');
+    requireBmlNetwork();
 
     const to = url.searchParams.get('to');
     if (to === null || to === '') error(400, 'to がありません');
@@ -25,7 +24,7 @@ export const GET: RequestHandler = async ({ url }) => {
     try {
         return json(await confirmReachable(to, Number.isFinite(wait) ? wait : 4000));
     } catch (failure) {
-        const why = failure instanceof Refused ? failure.message : '確かめられませんでした';
+        const why = refusalMessage(failure, '確かめられませんでした');
         console.warn(`[bml] 疎通を確かめられません: ${to} (${why})`);
         // **届かないことは失敗ではない。** 放送のアプリはそれを見て出し分ける
         return json({ success: false, ipAddress: null, responseTimeMillis: null });

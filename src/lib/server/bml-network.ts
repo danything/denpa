@@ -35,7 +35,9 @@ import { Resolver } from 'node:dns/promises';
 import { request as httpRequest } from 'node:http';
 import { request as httpsRequest } from 'node:https';
 import { connect } from 'node:net';
+import { error } from '@sveltejs/kit';
 import { config } from './config';
+import { settings } from './settings';
 
 /** 追いかける上限。放送局は https へ寄せるのに1回挟むことがある */
 const HOPS = 3;
@@ -52,6 +54,19 @@ export interface Fetched {
 
 /** 断った理由。**画面にもログにも同じ言葉で出す** */
 export class Refused extends Error {}
+
+/**
+ * 断りの言葉。`Refused` ならその理由、それ以外 (繋がらない・切れた) は
+ * 口ごとの言い方 (`fallback`)。3 つの口 (proxy / post / confirm) で同じ形
+ */
+export function refusalMessage(failure: unknown, fallback: string): string {
+    return failure instanceof Refused ? failure.message : fallback;
+}
+
+/** 双方向を切ってあるなら 403。3 つの口の入口で同じ */
+export function requireBmlNetwork(): void {
+    if (!settings().bmlNetwork) error(403, 'データ放送の双方向は切ってあります');
+}
 
 /**
  * **名前は自前の DNS で引く** (`BML_DNS`、既定は公開 DNS)。

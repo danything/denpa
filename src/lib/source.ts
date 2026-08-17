@@ -12,3 +12,15 @@
 export function encodeSource(recording: { ts_path: string | null }): string | null {
     return recording.ts_path;
 }
+
+/**
+ * 配るファイルの名指し (`?source=`)。`ts` = 生TS、`encoded` = 主のエンコード済み
+ * (両方焼いたときは AV1)、`alt` = もう一方 (H.264)。名指しが無ければ「今いいほう」。
+ * 画面 (ダウンロードの口)・再生リンク作り・配る口で同じ語彙を使う
+ */
+export type FileSource = 'ts' | 'encoded' | 'alt';
+
+/** クエリの文字を語彙に直す。知らない値は null (= 名指しなし) */
+export function parseFileSource(raw: string | null): FileSource | null {
+    return raw === 'ts' || raw === 'encoded' || raw === 'alt' ? raw : null;
+}

@@ -96,8 +96,9 @@ export function denied(): Response {
  * OIDC で入った人が映像を出そうとした瞬間に断られないように、ログインの控えを
  * ここでも受ける。通る相手が増えるわけではない — 「この denpa に入れる人」のまま
  */
-export function sessionMayRead(pathname: string, loggedIn: boolean): boolean {
-    return loggedIn && oidcEnabled() && isFilePath(pathname);
+export function sessionMayRead(loggedIn: boolean): boolean {
+    // ファイルの口かどうかは呼ぶ側 (hooks) が振り分けてから来る
+    return loggedIn && oidcEnabled();
 }
 
 /**
@@ -155,9 +156,7 @@ function toIpv4(value: string): number | null {
     return out;
 }
 
-/** OIDC でログインを求める口か */
-export function needsLogin(pathname: string): boolean {
-    if (!oidcEnabled()) return false;
-    if (isOpenPath(pathname)) return false;
-    return !isFilePath(pathname);
+/** OIDC でログインを求めるか (素通しの口とファイルの口は呼ぶ側 (hooks) が先に振り分ける) */
+export function needsLogin(): boolean {
+    return oidcEnabled();
 }

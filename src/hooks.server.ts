@@ -50,13 +50,10 @@ export async function handle({ event, resolve }) {
              * リンクで開ける。ベーシック認証は廃止した — パスワードを使う場面が
              * 全部署名リンクに置き換わったため
              */
-            if (
-                !sessionMayRead(pathname, session !== null) &&
-                !shareTokenAllows(pathname, event.url.searchParams)
-            ) {
+            if (!sessionMayRead(session !== null) && !shareTokenAllows(pathname, event.url.searchParams)) {
                 return denied();
             }
-        } else if (needsLogin(pathname)) {
+        } else if (needsLogin()) {
             /*
              * **OIDC でのログイン。** 設定してあるときだけ効く (`auth.needsLogin`)。
              *

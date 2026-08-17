@@ -1,6 +1,7 @@
 import { error } from '@sveltejs/kit';
 import { config } from '$lib/server/config';
 import { recordingOr404 } from '$lib/server/recording';
+import { run } from '$lib/server/stream';
 
 /**
  * 録画から1コマだけ切り出して返す。
@@ -27,30 +28,24 @@ const WIDTH = 960;
  * 画面で囲ってもらった座標はここへ戻して渡す必要がある。
  */
 async function sourceSize(input: string): Promise<{ width: number; height: number } | null> {
-    try {
-        const proc = Bun.spawn(
-            [
-                config.ffprobe,
-                '-v',
-                'error',
-                '-select_streams',
-                'v:0',
-                '-show_entries',
-                'stream=width,height',
-                '-of',
-                'csv=p=0',
-                input,
-            ],
-            { stdout: 'pipe', stderr: 'ignore' },
-        );
-        const out = await new Response(proc.stdout as ReadableStream<Uint8Array>).text();
-        await proc.exited;
-        const [width, height] = out.trim().split(',').map(Number);
-        if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0) return null;
-        return { width, height };
-    } catch {
-        return null;
-    }
+    const probed = await run(
+        [
+            config.ffprobe,
+            '-v',
+            'error',
+            '-select_streams',
+            'v:0',
+            '-show_entries',
+            'stream=width,height',
+            '-of',
+            'csv=p=0',
+            input,
+        ],
+        { timeoutMs: TIMEOUT, stdout: true },
+    );
+    const [width, height] = new TextDecoder().decode(probed.stdout).trim().split(',').map(Number);
+    if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0) return null;
+    return { width, height };
 }
 
 export async function GET({ params, url }) {
@@ -65,7 +60,7 @@ export async function GET({ params, url }) {
 
     const size = await sourceSize(source);
 
-    const proc = Bun.spawn(
+    const shot = await run(
         [
             config.ffmpeg,
             '-v',
@@ -93,18 +88,14 @@ export async function GET({ params, url }) {
             'mjpeg',
             'pipe:1',
         ],
-        { stdout: 'pipe', stderr: 'ignore' },
+        { timeoutMs: TIMEOUT, stdout: true },
     );
-
-    const timer = setTimeout(() => proc.kill(), TIMEOUT);
-    const image = await new Response(proc.stdout as ReadableStream<Uint8Array>).arrayBuffer();
-    await proc.exited;
-    clearTimeout(timer);
+    const image = shot.stdout;
 
     // 指定した位置が録画の終わりより後ろだと1枚も出てこない
     if (image.byteLength === 0) throw error(404, 'その位置のコマを取り出せませんでした');
 
-    return new Response(image, {
+    return new Response(image as BodyInit, {
         headers: {
             'Content-Type': 'image/jpeg',
             // 同じ位置なら中身は変わらない

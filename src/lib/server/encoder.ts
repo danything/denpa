@@ -39,7 +39,7 @@ import { removeSidecars, sidecarPaths, writeThumbnail } from './metadata';
 import { saveRecordedBml } from './recorded-bml';
 import { descramble, isScrambled } from './scramble';
 import { settings } from './settings';
-import { chunks, text } from './stream';
+import { chunks, run } from './stream';
 import { buildPgs } from './subtitle';
 import { displayTitle } from './title';
 import { TS_PROBE } from './ts-probe';
@@ -92,7 +92,7 @@ export function pickSmooth(ratios: number[], threshold = config.fpsSurvive): boo
 
 /** 1窓ぶん測る。60p化 → 重複コマ落とし → 残った割合。測れなければ NaN */
 async function surviveRatio(input: string, at: number, signal: AbortSignal): Promise<number> {
-    const proc = Bun.spawn(
+    const result = await run(
         [
             config.ffmpeg,
             '-hide_banner',
@@ -117,21 +117,11 @@ async function surviveRatio(input: string, at: number, signal: AbortSignal): Pro
             'null',
             '-',
         ],
-        { stdout: 'ignore', stderr: 'pipe' },
+        { signal, stderr: true },
     );
-    const kill = () => proc.kill();
-    signal.addEventListener('abort', kill, { once: true });
-    try {
-        const stderr = await text(proc.stderr as ReadableStream<Uint8Array>);
-        await proc.exited;
-        const out = parseOutFrames(stderr);
-        // 60p に起こしたので、1窓の期待コマ数は 60000/1001 * 秒
-        return out / ((FPS_WINDOW * 60000) / 1001);
-    } catch {
-        return NaN;
-    } finally {
-        signal.removeEventListener('abort', kill);
-    }
+    const out = parseOutFrames(result.stderr);
+    // 60p に起こしたので、1窓の期待コマ数は 60000/1001 * 秒
+    return out / ((FPS_WINDOW * 60000) / 1001);
 }
 
 /**
@@ -550,12 +540,17 @@ export function concatList(parts: string[]): string {
     return parts.map((part) => `file '${part.replace(/'/g, "'\\''")}'`).join('\n');
 }
 
-export function enqueue(recordingId: number): number {
-    const existing = queryOne<{ id: number }>(
-        `SELECT id FROM encode_jobs WHERE recording_id = ? AND state IN ('queued','running')`,
+/** その録画で今生きているジョブ (待ち・実行中) の id。無ければ undefined */
+export function activeEncodeJob(recordingId: number): number | undefined {
+    return queryOne<{ id: number }>(
+        `SELECT id FROM encode_jobs WHERE recording_id = ? AND state IN ('queued', 'running')`,
         recordingId,
-    );
-    if (existing !== undefined) return existing.id;
+    )?.id;
+}
+
+export function enqueue(recordingId: number): number {
+    const existing = activeEncodeJob(recordingId);
+    if (existing !== undefined) return existing;
 
     const info = database()
         .prepare(`INSERT INTO encode_jobs (recording_id, state, created_at) VALUES (?, 'queued', ?)`)
@@ -954,14 +949,7 @@ async function prepareCm(
 
 /** ffmpeg を1回動かす。戻り値は終了コード */
 async function runOnce(args: string[], signal: AbortSignal): Promise<number> {
-    const proc = Bun.spawn([config.ffmpeg, ...args], { stdout: 'ignore', stderr: 'pipe' });
-    const kill = () => proc.kill();
-    signal.addEventListener('abort', kill, { once: true });
-    try {
-        return await proc.exited;
-    } finally {
-        signal.removeEventListener('abort', kill);
-    }
+    return (await run([config.ffmpeg, ...args], { signal })).code;
 }
 
 /**

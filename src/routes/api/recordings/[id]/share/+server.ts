@@ -2,6 +2,7 @@ import { json } from '@sveltejs/kit';
 import { recordingOr404 } from '$lib/server/recording';
 import { mintShareToken } from '$lib/server/share';
 import { displayTitle } from '$lib/server/title';
+import { parseFileSource } from '$lib/source';
 
 /**
  * 期限付きの再生リンクを1本作る (`share.ts`)。
@@ -25,8 +26,8 @@ import { displayTitle } from '$lib/server/title';
 export function POST({ params, url }) {
     const recording = recordingOr404(params.id);
     const { token, expiresAt } = mintShareToken(recording.id);
-    const source = url.searchParams.get('source');
-    const named = source === 'ts' || source === 'alt' || source === 'encoded' ? `&source=${source}` : '';
+    const source = parseFileSource(url.searchParams.get('source'));
+    const named = source === null ? '' : `&source=${source}`;
     // 名前の中の区切り文字はパスの段を増やすので寄せておく。見た目だけの部分なので厳密でなくてよい
     const label = displayTitle(recording.name).replace(/[/\\]/g, '／') || String(recording.id);
     const name = encodeURIComponent(`${label}.${source === 'ts' ? 'ts' : 'mkv'}`);

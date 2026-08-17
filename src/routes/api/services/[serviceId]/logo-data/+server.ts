@@ -13,7 +13,7 @@ import { readLearnedLogo } from '$lib/server/logo-data';
  * 出す側で拡大する。
  */
 export function GET({ params }) {
-    const logo = readLearnedLogo(Number(params.id));
+    const logo = readLearnedLogo(Number(params.serviceId));
     if (logo === null) throw error(404, 'まだロゴを覚えていません');
 
     return new Response(new Uint8Array(logo.png), {

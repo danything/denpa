@@ -11,6 +11,13 @@ import { queryOne } from './db';
  *   消したものを返さないように。削除 API だけは「もう消えている」を
  *   見分けたいので true で呼ぶ
  */
+/** フォームの `id` から録画を引く (画面のアクション用)。無ければ undefined。消した行も引く */
+export function recordingFromForm(form: FormData): Recording | undefined {
+    const id = Number(form.get('id'));
+    if (!Number.isFinite(id)) return undefined;
+    return queryOne<Recording>('SELECT * FROM recordings WHERE id = ?', id);
+}
+
 export function recordingOr404(idLike: string, deleted = false): Recording {
     const id = Number(idLike);
     if (!Number.isFinite(id)) error(400, '録画IDが不正です');
