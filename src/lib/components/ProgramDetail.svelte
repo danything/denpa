@@ -64,9 +64,12 @@
             箱なので押すものが縦に積み上がり、左端に寄っていた。
             `modal-action` は右下に横並びなので、どこから開いても同じ形になる。
             **閉じるはいちばん右。** 並びの終わりがいつも同じところにあると、
-            見ないでも押せる
+            見ないでも押せる。
+            **入り切らなければ折り返す** (`flex-wrap`)。一列に押し込むと、
+            スマホ幅で 4 つ並んだときにボタンが縮んで文字が縦に折れ、
+            左端が枠の外に切れていた
         -->
-        <div class="modal-action shrink-0">
+        <div class="modal-action shrink-0 flex-wrap">
             {#if actions}
                 {@render actions()}
             {:else}

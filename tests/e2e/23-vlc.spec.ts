@@ -65,6 +65,22 @@ test.describe('テレビの VLC で再生', () => {
         await expect(detail.getByTestId('vlc-play-button').nth(1)).toHaveText('▶ 寝室');
 
         /*
+         * **スマホ幅でもボタンが箱から出ない。** フッターが一列固定だった頃は
+         * 4 つ並ぶと縮められて、文字が縦に折れ・左端が枠の外に切れていた
+         * (実機の Android)。折り返して並ぶので、どれも箱の中に収まり、
+         * 高さは一行ぶんのまま
+         */
+        await page.setViewportSize({ width: 360, height: 740 });
+        const box = (await detail.locator('.modal-box').boundingBox())!;
+        for (const b of await detail.locator('.modal-action .btn').filter({ visible: true }).all()) {
+            const r = (await b.boundingBox())!;
+            expect(r.x).toBeGreaterThanOrEqual(box.x);
+            expect(r.x + r.width).toBeLessThanOrEqual(box.x + box.width + 0.5);
+            expect(r.height).toBeLessThan(60);
+        }
+        await page.setViewportSize({ width: 1280, height: 720 });
+
+        /*
          * 押すと初回はペア設定のタブが開く — 相手は居ないので**開かせない**。
          * 行き先 (`http://192.168.1.99:8080/`) は誰も居ない住所で、本当に開くと
          * ブラウザが接続を諦めるまで (実測 133 秒) `popup` の解決も `close()` も
