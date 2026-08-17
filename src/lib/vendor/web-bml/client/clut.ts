@@ -1,7 +1,7 @@
 // @ts-nocheck
 // 借りもの。中身は書き換えない ([README](../README.md))。denpa 側の型検査は効いたまま
 import { defaultCLUT } from './default_clut';
-export function readCLUT(clut: Buffer): number[][] {
+export function readCLUT(clut: Uint8Array<ArrayBuffer>): number[][] {
     let table = defaultCLUT.slice();
     const prevLength = table.length;
     table.length = 256;

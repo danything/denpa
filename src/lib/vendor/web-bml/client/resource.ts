@@ -3,6 +3,7 @@
 import { parseMediaTypeFromString } from "../server/entity_parser";
 import { ComponentPMT, MediaType, ModuleListEntry, ProgramInfoMessage, ResponseMessage } from "../server/ws_api";
 import { Indicator, IP } from "./bml_browser";
+import { type Logger } from "./util/logger";
 
 type Module = {
     moduleId: number,
@@ -154,6 +155,14 @@ class CacheMap {
     }
 }
 
+function fromBase64(input: string): Uint8Array<ArrayBuffer> {
+    if ("fromBase64" in globalThis.Uint8Array) {
+        return Uint8Array.fromBase64(input);
+    } else {
+        return Uint8Array.from(window.atob(input), c => c.charCodeAt(0));
+    }
+}
+
 export enum Profile {
     BS = 0x0007,
     CS = 0x000b,
@@ -169,10 +178,12 @@ export class Resources {
     // とりあえず10 MiB, 400ファイル
     private readonly cachedRemoteResources: CacheMap = new CacheMap(400, 1024 * 1024 * 10);
     private readonly remoteResourceRequests: Map<string, RemoteResourceRequest[]> = new Map();
+    private readonly logger: Logger;
 
-    public constructor(indicator: Indicator | undefined, ip: IP) {
+    public constructor(indicator: Indicator | undefined, ip: IP, logger: Logger) {
         this.indicator = indicator;
         this.ip = ip;
+        this.logger = logger;
     }
 
     private _profile?: Profile;
@@ -295,7 +306,7 @@ export class Resources {
                     // lockedByがlockModuleOnMemoryExならlockModuleOnMemoryExをキャンセル
                     if ((lockedBy == null && r.requestType != null) || (lockedBy != null && r.requestType === lockedBy)) {
                         requestCanceled = true;
-                        console.log(`${r.requestType} request was canceled due to unlockModules ${lockedBy ?? "lockModuleOnMemory+lockModuleOnMemoryEx"}`, moduleAndComponentToString(componentId, moduleId));
+                        this.logger.log(`${this.logger.prefix}${r.requestType} request was canceled due to unlockModules ${lockedBy ?? "lockModuleOnMemory+lockModuleOnMemoryEx"}`, moduleAndComponentToString(componentId, moduleId));
                         return false;
                     }
                     return true;
@@ -309,7 +320,7 @@ export class Resources {
 
     private revokeCachedFile(file: CachedFile): void {
         for (const blob of file.blobUrl.values()) {
-            console.log("revoke", blob.blobUrl);
+            this.logger.log(`${this.logger.prefix}revoke`, blob.blobUrl);
             URL.revokeObjectURL(blob.blobUrl);
         }
         file.blobUrl.clear();
@@ -323,7 +334,7 @@ export class Resources {
         if (this.lockedComponents.get(componentId)?.modules?.has(module.moduleId)) {
             return;
         }
-        console.log("revoke", moduleAndComponentToString(componentId, module.moduleId));
+        this.logger.log(`${this.logger.prefix}revoke`, moduleAndComponentToString(componentId, module.moduleId));
         for (const file of module.files.values()) {
             this.revokeCachedFile(file);
         }
@@ -343,7 +354,7 @@ export class Resources {
             moduleRequests.set(moduleId, moduleReq.filter((r) => {
                 if (r.requestType === lockedBy) {
                     requestCanceled = true;
-                    console.log(`${lockedBy} request was canceled due to unlockModule`, moduleAndComponentToString(componentId, moduleId));
+                    this.logger.log(`${this.logger.prefix}${lockedBy} request was canceled due to unlockModule`, moduleAndComponentToString(componentId, moduleId));
                     return false;
                 }
                 return true;
@@ -480,7 +491,7 @@ export class Resources {
                 files: new Map(msg.files.map(file => ([file.contentLocation?.toLowerCase() ?? null, {
                     contentLocation: file.contentLocation,
                     contentType: file.contentType,
-                    data: Uint8Array.from(window.atob(file.dataBase64), c => c.charCodeAt(0)),
+                    data: fromBase64(file.dataBase64),
                     blobUrl: new Map(),
                 }]))),
                 version: msg.version,
@@ -499,11 +510,11 @@ export class Resources {
                 creq.moduleRequests.delete(msg.moduleId);
                 for (const cb of callbacks) {
                     if (cb.filename == null) {
-                        console.warn("async fetch done", str);
+                        this.logger.log(`${this.logger.prefix}async fetch done`, str);
                         cb.resolve(cachedModule.files.get(null) ?? null);
                     } else {
                         const file = cachedModule.files.get(cb.filename);
-                        console.warn("async fetch done", str, cb.filename);
+                        this.logger.log(`${this.logger.prefix}async fetch done`, str, cb.filename);
                         cb.resolve(file ?? null);
                     }
                 }
@@ -535,7 +546,7 @@ export class Resources {
                     if (!component.modules.has(moduleId)) {
                         // DIIに存在しない
                         for (const mreq of mreqs) {
-                            console.warn("async fetch done (failed) DII", moduleAndComponentToString(msg.componentId, moduleId));
+                            this.logger.warn(`${this.logger.prefix}async fetch done (failed) DII`, moduleAndComponentToString(msg.componentId, moduleId));
                             mreq.resolve(null);
                         }
                         creqs.moduleRequests.delete(moduleId);
@@ -567,7 +578,7 @@ export class Resources {
                 for (const [moduleId, mreqs] of creqs.moduleRequests) {
                     // PMTに存在しない
                     for (const mreq of mreqs) {
-                        console.warn("async fetch done (failed) PMT", moduleAndComponentToString(componentId, moduleId));
+                        this.logger.warn(`${this.logger.prefix}async fetch done (failed) PMT`, moduleAndComponentToString(componentId, moduleId));
                         mreq.resolve(null);
                     }
                     creqs.moduleRequests.delete(moduleId);
@@ -696,7 +707,7 @@ export class Resources {
         if (cachedComponent == null) {
             cachedComponent = this.cachedComponents.get(componentId);
             if (cachedComponent == null) {
-                console.error("component not found failed to fetch ", url);
+                this.logger.log(`${this.logger.prefix}component not cached `, url);
                 return null;
             }
         }
@@ -705,7 +716,7 @@ export class Resources {
             cachedComponent = this.cachedComponents.get(componentId);
             cachedModule = cachedComponent?.modules?.get(moduleId);
             if (cachedModule == null) {
-                console.error("module not found ", url);
+                this.logger.log(`${this.logger.prefix}module not cached `, url);
                 return null;
             }
         }
@@ -821,7 +832,7 @@ export class Resources {
         }
         // PMTにcomponentが存在しかつDIIにmoduleが存在するまたはDIIが取得されていないときにコールバックを登録
         // TODO: ModuleUpdated用にDII取得後に存在しないことが判明したときの処理が必要
-        console.warn("async fetch requested", url);
+        this.logger.log(`${this.logger.prefix}async fetch requested`, url);
         return new Promise((resolve, _) => {
             const c = this.componentRequests.get(componentId);
             const entry = { filename, resolve, requestType };

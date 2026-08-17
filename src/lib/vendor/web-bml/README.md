@@ -11,9 +11,9 @@
 | | |
 | --- | --- |
 | 出どころ | <https://github.com/otya128/web-bml> |
-| 版 | `d784fd9e3376cf74dd85ba8b9879e6d2b714044c` (2026-07-23) |
+| 版 | `3c075c9d4c71142b5ba7bf0f71aeb4dfed775f11` (2026-08-16) |
 | 許諾 | MIT ([LICENSE](LICENSE)) |
-| 持ってきたもの | `BMLBrowser` から辿れるもの **44ファイル・1.2MB** |
+| 持ってきたもの | `BMLBrowser` から辿れるもの **41ファイル・1.2MB** |
 | 写していないもの | `client/interpreter/js_interpreter.ts` (下の説明)、単体ページ・サーバ・自前再生 |
 
 ## 手を入れているのは2つだけ

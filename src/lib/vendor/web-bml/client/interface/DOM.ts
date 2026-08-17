@@ -7,17 +7,17 @@ import { aribPNGToPNG } from "../arib_png";
 import { readCLUT } from "../clut";
 import { defaultCLUT } from "../default_clut";
 import { parseCSSValue } from "../transpile_css";
-import { Buffer } from "buffer";
 import { Interpreter } from "../interpreter/interpreter";
 import { AudioNodeProvider, BMLBrowserEventTarget, InputApplication, inputCharacters, InputCharacterType } from "../bml_browser";
 import { convertJPEG } from "../arib_jpeg";
 import { aribMNGToCSSAnimation } from "../arib_mng";
 import { playAIFF } from "../arib_aiff";
 import { unicodeToJISMap } from "../unicode_to_jis_map";
-import { ModuleListEntry } from "../../server/ws_api";
+import { type ModuleListEntry } from "../../server/ws_api";
 import { getTextDecoder, getTextEncoder } from "../text";
 import { DRCSGlyph, DRCSGlyphs } from "../drcs";
 import { jisToUnicodeMap } from "../jis_to_unicode_map";
+import { type Logger } from "../util/logger";
 
 export namespace BML {
     type DOMString = string;
@@ -351,6 +351,7 @@ export namespace BML {
             if (flowData == null) {
                 return;
             }
+            flowData.textData = text;
             const nextElement = flowData.textNode.nextElementSibling;
             const computedStyle = window.getComputedStyle(flowData.textNode);
             if (flowData.textNode.nodeName.toLowerCase() === "arib-text") {
@@ -601,7 +602,8 @@ export namespace BML {
         public readonly audioNodeProvider: AudioNodeProvider;
         public readonly inputApplication?: InputApplication;
         public readonly setMainAudioStreamCallback?: (componentId: number, channelId?: number) => boolean;
-        public constructor(node: globalThis.HTMLElement, interpreter: Interpreter, eventQueue: EventQueue, resources: Resources, browserEventTarget: BMLBrowserEventTarget, audioNodeProvider: AudioNodeProvider, inputApplication: InputApplication | undefined, setMainAudioStreamCallback: ((componentId: number, channelId?: number) => boolean) | undefined) {
+        public readonly logger: Logger;
+        public constructor(node: globalThis.HTMLElement, interpreter: Interpreter, eventQueue: EventQueue, resources: Resources, browserEventTarget: BMLBrowserEventTarget, audioNodeProvider: AudioNodeProvider, inputApplication: InputApplication | undefined, setMainAudioStreamCallback: ((componentId: number, channelId?: number) => boolean) | undefined, logger: Logger) {
             super(node as any, null!); // !
             this.ownerDocument = this; // !!
             this.interpreter = interpreter;
@@ -611,6 +613,7 @@ export namespace BML {
             this.audioNodeProvider = audioNodeProvider;
             this.inputApplication = inputApplication;
             this.setMainAudioStreamCallback = setMainAudioStreamCallback;
+            this.logger = logger;
         }
 
         private readonly _drcsGlyphs: Map<string, DRCSGlyph> = new Map();
@@ -1105,7 +1108,7 @@ export namespace BML {
             return this.node.method;
         }
         public submit(): void {
-            console.error("HTMLFormElement submit");
+            this.ownerDocument.logger.error(`${this.ownerDocument.logger.prefix}HTMLFormElement submit`);
         }
     }
 
@@ -1239,8 +1242,8 @@ export namespace BML {
                         return;
                     }
                     if (isMNG) {
-                        const clut = fetchedClut == null ? defaultCLUT : readCLUT(Buffer.from(fetchedClut?.buffer));
-                        const keyframes = aribMNGToCSSAnimation(Buffer.from(fetched.data), clut);
+                        const clut = fetchedClut == null ? defaultCLUT : readCLUT(fetchedClut);
+                        const keyframes = aribMNGToCSSAnimation(fetched.data, clut);
                         this.delete();
                         if (keyframes == null) {
                             return;
@@ -1255,15 +1258,15 @@ export namespace BML {
                         // streamstatus=stopのとき非表示 streampositionは0にリセットされる
                         // streamstatus=pauseのとき streampositionで指定されたフレームを表示
                         if (this.streamStatus !== "stop") {
-                            console.error("unexpected streamStatus", this.streamStatus, this.data);
+                            this.ownerDocument.logger.error(`${this.ownerDocument.logger.prefix}unexpected streamStatus`, this.streamStatus, this.data);
                         }
                         this.updateAnimation();
                         return;
                     } else {
                         imageUrl = fetched.blobUrl.get(fetchedClut);
                         if (imageUrl == null) {
-                            const clut = fetchedClut == null ? defaultCLUT : readCLUT(Buffer.from(fetchedClut?.buffer));
-                            const png = aribPNGToPNG(Buffer.from(fetched.data), clut);
+                            const clut = fetchedClut == null ? defaultCLUT : readCLUT(fetchedClut);
+                            const png = aribPNGToPNG(fetched.data, clut);
                             const blob = new Blob([png.data], { type: "image/png" });
                             imageUrl = { blobUrl: URL.createObjectURL(blob), width: png.width, height: png.height };
                             fetched.blobUrl.set(fetchedClut, imageUrl);
@@ -1443,7 +1446,7 @@ export namespace BML {
                         if (data == null) {
                             return;
                         }
-                        this.audioBufferSourceNode = playAIFF(this.ownerDocument.audioNodeProvider.getAudioDestinationNode(), Buffer.from(data)) ?? undefined;
+                        this.audioBufferSourceNode = playAIFF(this.ownerDocument.audioNodeProvider.getAudioDestinationNode(), data) ?? undefined;
                         this.node.setAttribute("streamstatus", "play");
                         if (this.audioBufferSourceNode != null) {
                             const sourceNode = this.audioBufferSourceNode;
@@ -1569,7 +1572,7 @@ export namespace BML {
                 // SOIがあればJPEG APP0はないことがあるので見ない
                 const isJPEG = fetched.data[0] === 0xff && fetched.data[1] === 0xd8 && fetched.data[2] === 0xff;
                 if (!isGIF && !isJPEG) {
-                    console.error("unknown media", value);
+                    this.ownerDocument.logger.error(`${this.ownerDocument.logger.prefix}unknown media`, value);
                     return;
                 }
                 let imageUrl: CachedFileMetadata | undefined;
@@ -1906,7 +1909,7 @@ export namespace BML {
             if (!this.subscribe) {
                 return;
             }
-            console.log("ModuleUpdated", module, status);
+            this.ownerDocument.logger.log(`${this.ownerDocument.logger.prefix}ModuleUpdated`, module, status);
             const onoccur = this.node.getAttribute("onoccur");
             if (!onoccur) {
                 return;
