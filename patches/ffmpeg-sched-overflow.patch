@@ -28,10 +28,15 @@
      dec->overflow = av_container_fifo_alloc_avpacket(0);
      if (!dec->overflow)
          return AVERROR(ENOMEM);
-@@ -2378,6 +2385,26 @@
+@@ -2377,9 +2384,34 @@
+     // we got a packet, but we're currently choked or have existing overflow
      // packets; so push it to the FIFO first
      if (atomic_load(&dec->waiter.choked) || av_container_fifo_can_read(dec->overflow)) {
-         ret = av_container_fifo_write(dec->overflow, pkt, 0);
+-        ret = av_container_fifo_write(dec->overflow, pkt, 0);
++        // Write a new reference rather than moving: the transfer into the
++        // pool object happens before the FIFO write, so a failed write would
++        // otherwise consume (and lose) the packet.
++        ret = av_container_fifo_write(dec->overflow, pkt, AV_CONTAINER_FIFO_FLAG_REF);
 +        if (ret == AVERROR(ENOSPC)) {
 +            // The overflow FIFO reached its growth limit (AVFifo auto-grow
 +            // caps at 1MB of pointers = 131072 packets). This happens when a
@@ -44,6 +49,7 @@
 +            ret = av_container_fifo_read(dec->overflow, dec->overflow_pkt, 0);
 +            if (ret < 0)
 +                return ret;
++            // one slot is free now; queue the new packet behind the others
 +            ret = av_container_fifo_write(dec->overflow, pkt, 0);
 +            if (ret < 0) {
 +                av_packet_unref(dec->overflow_pkt);
@@ -54,4 +60,7 @@
 +        }
          if (ret < 0)
              return ret;
++        av_packet_unref(pkt);
          goto retry;
+     }
+ 
