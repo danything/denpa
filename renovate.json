@@ -28,13 +28,6 @@
   ],
   "packageRules": [
     {
-      "description": "ffmpeg 9.0 / 9.0.1 は 60コマで焼くと 20〜25分で音声が黙って途切れる (Dockerfile の FFMPEG_VERSION の説明)。上流で直ったのを長尺の実機で確かめるまで 8 系に留める",
-      "matchDepNames": [
-        "FFmpeg/FFmpeg"
-      ],
-      "allowedVersions": "<9"
-    },
-    {
       "description": "svelte-check が TypeScript 7 (tsgo) に未対応で、上げると型チェックが丸ごと落ちる。対応が入るまで5系に留める",
       "matchPackageNames": [
         "typescript"

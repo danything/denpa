@@ -1,0 +1,57 @@
+--- a/fftools/ffmpeg_sched.c
++++ b/fftools/ffmpeg_sched.c
+@@ -100,6 +100,8 @@
+ 
+     // internal queue of undecoded packets used by sch_dec_receive()
+     AVContainerFifo    *overflow;
++    // temporary storage used by sch_dec_receive() when overflow is full
++    AVPacket           *overflow_pkt;
+ } SchDec;
+ 
+ typedef struct SchSyncQueue {
+@@ -554,6 +556,7 @@
+ 
+         av_thread_message_queue_free(&dec->queue_end_ts);
+         av_container_fifo_free(&dec->overflow);
++        av_packet_free(&dec->overflow_pkt);
+ 
+         for (unsigned j = 0; j < dec->nb_outputs; j++) {
+             SchDecOutput *o = &dec->outputs[j];
+@@ -817,6 +820,10 @@
+             return ret;
+     }
+ 
++    dec->overflow_pkt = av_packet_alloc();
++    if (!dec->overflow_pkt)
++        return AVERROR(ENOMEM);
++
+     dec->overflow = av_container_fifo_alloc_avpacket(0);
+     if (!dec->overflow)
+         return AVERROR(ENOMEM);
+@@ -2378,6 +2385,26 @@
+     // packets; so push it to the FIFO first
+     if (atomic_load(&dec->waiter.choked) || av_container_fifo_can_read(dec->overflow)) {
+         ret = av_container_fifo_write(dec->overflow, pkt, 0);
++        if (ret == AVERROR(ENOSPC)) {
++            // The overflow FIFO reached its growth limit (AVFifo auto-grow
++            // caps at 1MB of pointers = 131072 packets). This happens when a
++            // decoder stays choked for a long time while the demuxer keeps
++            // reading ahead (e.g. audio choked behind a slow video encoder for
++            // 20+ minutes). Returning the error here makes the decoder thread
++            // treat it as EOF and the rest of the stream is silently dropped.
++            // Instead, hand out the oldest queued packet now, ignoring the
++            // choke: bounded memory matters more than strict interleaving.
++            ret = av_container_fifo_read(dec->overflow, dec->overflow_pkt, 0);
++            if (ret < 0)
++                return ret;
++            ret = av_container_fifo_write(dec->overflow, pkt, 0);
++            if (ret < 0) {
++                av_packet_unref(dec->overflow_pkt);
++                return ret;
++            }
++            av_packet_move_ref(pkt, dec->overflow_pkt);
++            return 0;
++        }
+         if (ret < 0)
+             return ret;
+         goto retry;

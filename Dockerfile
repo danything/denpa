@@ -48,14 +48,11 @@ ENV CURL="curl -fsSL --retry 5 --retry-delay 5 --retry-all-errors --connect-time
 # vaapi も有効にしてあるのは、QSV が初期化できない機種の逃げ道 (h264_vaapi) のため
 ENV DEV="curl ca-certificates build-essential cmake pkg-config nasm patch zlib1g-dev libfreetype6-dev libopus-dev libx264-dev libdav1d-dev libfontconfig-dev woff2 libva-dev libvpl-dev"
 
-# **9.x に上げないこと** (renovate.json でも止めてある)。ffmpeg 9.0 / 9.0.1 は
-# 60コマ (bwdif の send_field) で焼くと **20〜25分あたりで音声トラックが黙って終わる**
-# (2026-08-17 実機: 2時間の映画で AV1 版 23:28・H.264 版 22:07 で音声が途切れ、
-# エラーは1行も出ない)。同じ引数・同じ生TSで 7.1.1 / 8.0 / 8.1 は最後まで音声が入る。
-# 30コマ (send_frame) や映像コピーでは起きず、位置が毎回ずれる (競合系) ので
-# ffmpeg 本体 (fftools) の退行と見ている。上流が直ったら実機の長尺で確かめて上げる
+# 9.0 / 9.0.1 は 60コマで焼くと 20〜25分で音声が黙って終わる。原因は CLI の溢れ FIFO の
+# 上限 (131,072 個) で、patches/ffmpeg-sched-overflow.patch で直して使う
+# (経緯と数字は patches/README.md)。上げるときはパッチが当たるかを CI が見る (--fuzz=0)
 # renovate: datasource=github-tags depName=FFmpeg/FFmpeg extractVersion=^n(?<version>.*)$
-ENV FFMPEG_VERSION=8.1
+ENV FFMPEG_VERSION=9.0.1
 # SVT-AV1 は**上流の最新をソースから組む** (Debian trixie のパッケージは 2 系で古い。
 # 3 系以降は速度も画質も別物)。静的に繋ぐので実行イメージに共有ライブラリは要らない
 # renovate: datasource=gitlab-tags depName=AOMediaCodec/SVT-AV1 registryUrl=https://gitlab.com
