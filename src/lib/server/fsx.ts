@@ -35,7 +35,7 @@ export function removeIfExists(path: string | null | undefined): boolean {
 
 /**
  * `<input><接尾辞>…` の形で始まるものを、同じフォルダから全部消す。
- * 本数の決まらない作業ファイル (CMの区間 `.part0.ts` `.part1.ts`…、
+ * 本数の決まらない作業ファイル (CMの区間 `.part0.m2ts` `.part1.m2ts`…、
  * jls の索引 `.jls…` `.dtvi…`) の片付け用。置き場ごと無ければ何もしない
  */
 export function removeByPrefix(input: string, suffixes: readonly string[]): void {

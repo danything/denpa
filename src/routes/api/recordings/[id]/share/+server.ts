@@ -30,7 +30,8 @@ export function POST({ params, url }) {
     const named = source === null ? '' : `&source=${source}`;
     // 名前の中の区切り文字はパスの段を増やすので寄せておく。見た目だけの部分なので厳密でなくてよい
     const label = displayTitle(recording.name).replace(/[/\\]/g, '／') || String(recording.id);
-    const name = encodeURIComponent(`${label}.${source === 'ts' ? 'ts' : 'mkv'}`);
+    // 拡張子は中身に合わせる (生TSは録画と同じ `.m2ts` — `.ts` は TypeScript と紛れる)
+    const name = encodeURIComponent(`${label}.${source === 'ts' ? 'm2ts' : 'mkv'}`);
     return json({
         url: `${url.origin}/api/recordings/${recording.id}/file/${name}?token=${token}${named}`,
         expiresAt,

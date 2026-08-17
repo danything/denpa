@@ -427,7 +427,7 @@ describe('failureReason', () => {
 
 describe('CMを切ったTSを作る', () => {
     test('区間ごとに -c copy で切り出す', () => {
-        const args = buildSegmentArgs('/in.m2ts', '/in.m2ts.part0.ts', { start: 12.5, end: 300 });
+        const args = buildSegmentArgs('/in.m2ts', '/in.m2ts.part0.m2ts', { start: 12.5, end: 300 });
         // 再エンコードしないので速く、字幕もデータも落ちない
         expect(args).toContain('-c');
         expect(args).toContain('copy');

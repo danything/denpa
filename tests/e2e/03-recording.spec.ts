@@ -200,7 +200,7 @@ test.describe('CMの実カット', () => {
         const videoPath = (await recording.getAttribute('data-library-path')) ?? '';
         expect(videoPath).toContain('.mkv');
         // 切るための作業ファイルは片付いていること
-        expect(existsSync(`${videoPath.replace(/\.mkv$/, '')}.cut.ts`)).toBe(false);
+        expect(existsSync(`${videoPath.replace(/\.mkv$/, '')}.cut.m2ts`)).toBe(false);
     });
 });
 

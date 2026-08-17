@@ -971,14 +971,14 @@ async function trimCm(
         for (const [i, range] of keep.entries()) {
             if (signal.aborted) throw new Error('中止されました');
             report(i / (keep.length + 1));
-            const part = `${input}.part${i}.ts`;
+            const part = `${input}.part${i}.m2ts`;
             const code = await runOnce(buildSegmentArgs(input, part, range), signal);
             if (code !== 0 || !existsSync(part)) throw new Error(`区間 ${i} の切り出しに失敗しました`);
             parts.push(part);
         }
 
         const listFile = `${input}.concat.txt`;
-        const trimmed = `${input}.cut.ts`;
+        const trimmed = `${input}.cut.m2ts`;
         writeFileSync(listFile, concatList(parts));
         const code = await runOnce(buildConcatArgs(listFile, trimmed), signal);
         rmSync(listFile, { force: true });
@@ -996,20 +996,24 @@ async function trimCm(
 /**
  * ジョブの生TSから派生する中間ファイルを消す。
  *
- * `descramble` の `.decoded.ts` や CM切りの `.cut.ts` / `.partN.ts` は、
+ * `descramble` の `.decoded.m2ts` や CM切りの `.cut.m2ts` / `.partN.m2ts` は、
  * 正常終了や失敗なら finally / cleanup で消えるが、**プロセスごと落ちたときは
- * 取り残される**。しかもどれも `.ts` で終わるので、掃除機は動画と見なして消さない
- * (`files.ts` の VIDEO)。生TSと同じ大きさの `.decoded.ts` が丸ごと居座る。
+ * 取り残される**。しかもどれも TS の拡張子で終わるので、掃除機は動画と見なして消さない
+ * (`files.ts` の VIDEO)。生TSと同じ大きさの `.decoded.m2ts` が丸ごと居座る。
+ * (拡張子は `.m2ts` に揃えてある — 録画そのものと同じで、`.ts` は TypeScript と紛れる。
+ * `.ts` で作っていた頃の取り残しも一緒に消す)
  *
  * これらは走らせ直せば作り直すものなので、ジョブを(再)実行する直前と、
  * 諦めて failed にするときに、その生TSから派生するぶんをまとめて消しておく。
  * 自分の入力に紐づくものだけ触るので、他の走っているエンコードには当たらない。
  */
 function clearScratch(input: string): void {
-    removeIfExists(`${input}.decoded.ts`);
-    removeIfExists(`${input}.cut.ts`);
+    for (const ext of ['m2ts', 'ts']) {
+        removeIfExists(`${input}.decoded.${ext}`);
+        removeIfExists(`${input}.cut.${ext}`);
+    }
     removeIfExists(`${input}.concat.txt`);
-    // CMの区間ファイルは本数ぶんある (`.part0.ts`, `.part1.ts`, …)
+    // CMの区間ファイルは本数ぶんある (`.part0.m2ts`, `.part1.m2ts`, …)
     removeByPrefix(input, ['.part']);
 }
 
@@ -1106,7 +1110,7 @@ async function runJob(jobId: number): Promise<void> {
     let sourceTs = input;
     if (isScrambled(input)) {
         setPhase(jobId, 'descramble', 'スクランブルを解いています');
-        const target = `${input}.decoded.ts`;
+        const target = `${input}.decoded.m2ts`;
         const result = await descramble(input, target, signal);
         if (!result.ok) {
             removeIfExists(target);

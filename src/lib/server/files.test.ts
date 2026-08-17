@@ -260,9 +260,9 @@ describe('実体との照合', () => {
     test('切り出したばかりのTSは「実体だけ」に数えない', () => {
         fresh();
         put(config.recordedDir, '番組.m2ts');
-        put(config.recordedDir, '番組.m2ts.cut.ts', false);
+        put(config.recordedDir, '番組.m2ts.cut.m2ts', false);
 
-        // 生TSのほうはDBに無いので1件。書きたての .cut.ts は数えない
+        // 生TSのほうはDBに無いので1件。書きたての .cut.m2ts は数えない
         expect(reconcile().strays).toBe(1);
     });
 
