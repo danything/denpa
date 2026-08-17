@@ -3,6 +3,7 @@ import { SupWriter } from '../pgs';
 import { TrackList } from './captions';
 import { config } from './config';
 import { chunks, lines } from './stream';
+import { TS_PROBE } from './ts-probe';
 
 /**
  * ARIB字幕を絵にして PGS (.sup) にする。
@@ -80,10 +81,7 @@ export function pgsArgs(input: string, canvasSize: string | undefined, fonts: st
         ...(canvasSize === undefined ? [] : ['-canvas_size', canvasSize]),
         '-font',
         fonts,
-        '-analyzeduration',
-        '15000000',
-        '-probesize',
-        '30000000',
+        ...TS_PROBE,
         '-i',
         input,
         // 字幕をフィルタに通すと1枚ずつ映像フレームになる (sub2video)。

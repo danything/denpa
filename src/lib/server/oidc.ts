@@ -34,7 +34,7 @@ export interface Discovery {
  */
 let discovered: Discovery | null = null;
 
-export async function discover(fetcher: typeof fetch = fetch): Promise<Discovery> {
+async function discover(fetcher: typeof fetch = fetch): Promise<Discovery> {
     if (discovered !== null) return discovered;
     const url = `${config.oidcIssuer}/.well-known/openid-configuration`;
     const res = await fetcher(url);

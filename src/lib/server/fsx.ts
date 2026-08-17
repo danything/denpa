@@ -1,5 +1,14 @@
-import { copyFileSync, existsSync, mkdirSync, renameSync, rmdirSync, unlinkSync } from 'node:fs';
-import { dirname } from 'node:path';
+import {
+    copyFileSync,
+    existsSync,
+    mkdirSync,
+    readdirSync,
+    renameSync,
+    rmdirSync,
+    rmSync,
+    unlinkSync,
+} from 'node:fs';
+import { basename, dirname, join } from 'node:path';
 import { config } from './config';
 
 /**
@@ -22,6 +31,23 @@ export function removeIfExists(path: string | null | undefined): boolean {
     if (!existsSync(path)) return false;
     unlinkSync(path);
     return true;
+}
+
+/**
+ * `<input><接尾辞>…` の形で始まるものを、同じフォルダから全部消す。
+ * 本数の決まらない作業ファイル (CMの区間 `.part0.ts` `.part1.ts`…、
+ * jls の索引 `.jls…` `.dtvi…`) の片付け用。置き場ごと無ければ何もしない
+ */
+export function removeByPrefix(input: string, suffixes: readonly string[]): void {
+    const dir = dirname(input);
+    const heads = suffixes.map((suffix) => `${basename(input)}${suffix}`);
+    try {
+        for (const name of readdirSync(dir)) {
+            if (heads.some((head) => name.startsWith(head))) rmSync(join(dir, name), { force: true });
+        }
+    } catch {
+        // 置き場ごと消えていることもある。片付けで録画を止めない
+    }
 }
 
 /**

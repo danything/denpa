@@ -1,7 +1,7 @@
-import { mkdirSync, readdirSync, readFileSync, rmSync } from 'node:fs';
-import { basename, dirname, join } from 'node:path';
-import { invertRanges, MAX_CM_RATIO, type Range } from './cm';
+import { mkdirSync, readFileSync } from 'node:fs';
+import { type CmOptions, invertRanges, MAX_CM_RATIO, type Range } from './cm';
 import { config } from './config';
+import { removeByPrefix } from './fsx';
 import { logoRepo } from './logo-data';
 import { settings } from './settings';
 import { text } from './stream';
@@ -151,14 +151,8 @@ function workFiles(input: string) {
     };
 }
 
-export interface JlsOptions {
-    signal?: AbortSignal;
-    /** 局名。logoframe に渡すとこの名前でロゴを覚える */
-    channel?: string;
-    /** 局のID。覚えたロゴの置き場を局ごとに分けるのに使う */
-    serviceId?: number;
-    /** 手で教えてもらったロゴの位置 ("x,y,w,h") */
-    area?: string;
+/** 無音ベース (cm.ts) と同じ材料に、コマ数だけ足したもの */
+export interface JlsOptions extends Omit<CmOptions, 'onProgress'> {
     /**
      * 動画のフレームレート。join_logo_scp が返す Trim はコマ番号なので、これで秒に直す。
      *
@@ -167,8 +161,6 @@ export interface JlsOptions {
      * 片方だけ直っていない状態を作った (cm.parseFrameRate の覚え書き)
      */
     fps?: number;
-    /** いま何をしているか。数分かかる道具を3つ順に回すので、その都度伝える */
-    onStep?: (label: string) => void;
 }
 
 export async function detectWithJls(
@@ -385,15 +377,7 @@ function byLogoAlone(
 const LEAVINGS = ['.jls', '.dtvi'];
 
 function cleanup(input: string): void {
-    const dir = dirname(input);
-    const heads = LEAVINGS.map((suffix) => `${basename(input)}${suffix}`);
-    try {
-        for (const name of readdirSync(dir)) {
-            if (heads.some((head) => name.startsWith(head))) rmSync(join(dir, name), { force: true });
-        }
-    } catch {
-        // 置き場ごと消えていることもある。片付けで録画を止めない
-    }
+    removeByPrefix(input, LEAVINGS);
 }
 
 /**

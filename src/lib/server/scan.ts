@@ -49,7 +49,7 @@ const LOG_LIMIT = 400;
 /** 総当たりできる種別。`SKY` (スカパー!プレミアム) は持っていないので対象外 */
 export type ScannableType = Extract<ChannelType, 'GR' | 'BS' | 'CS'>;
 
-export const CHANNEL_RANGES: Record<ScannableType, { min: number; max: number }> = {
+const CHANNEL_RANGES: Record<ScannableType, { min: number; max: number }> = {
     GR: { min: 13, max: 62 },
     BS: { min: 1, max: 23 },
     CS: { min: 2, max: 24 },

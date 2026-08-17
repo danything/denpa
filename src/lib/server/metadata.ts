@@ -32,7 +32,7 @@ export function sidecarPaths(videoPath: string): {
     subtitle: string;
     dataBroadcast: string;
 } {
-    const base = videoPath.slice(0, videoPath.length - extname(videoPath).length);
+    const base = sidecarBase(videoPath);
     return {
         nfo: `${base}.nfo`,
         thumbnail: `${base}-poster.jpg`,
@@ -41,6 +41,18 @@ export function sidecarPaths(videoPath: string): {
         dataBroadcast: `${base}.bml.jsonl`,
     };
 }
+
+/** 付き添いの名前の土台 (動画の拡張子を落としたもの) */
+export function sidecarBase(videoPath: string): string {
+    return videoPath.slice(0, videoPath.length - extname(videoPath).length);
+}
+
+/**
+ * 付き添いの接尾辞。**もう作らないもの (`.nfo` / `.ja.ass` / `-thumb.jpg`) も含む** —
+ * 前に置いたものが残っているので、片付けと拾い上げ (files.ts の孤児探し) は
+ * この一覧で見る。増やすときはここだけ
+ */
+export const SIDECAR_SUFFIXES = ['.nfo', '-poster.jpg', '-thumb.jpg', '.ja.ass', '.bml.jsonl'] as const;
 
 /**
  * 位置から数えて何コマの中から代表を選ぶか。60コマ/秒の録画で約7.5秒ぶん。
@@ -114,9 +126,6 @@ export async function writeThumbnail(
 /** 動画と一緒に、隣の付き添いを全部消す。取り残すと片付かないゴミになる */
 export function removeSidecars(videoPath: string | null): void {
     if (videoPath === null || videoPath === '') return;
-    const { nfo, thumbnail, subtitle, dataBroadcast } = sidecarPaths(videoPath);
-    removeIfExists(nfo);
-    removeIfExists(thumbnail);
-    removeIfExists(subtitle);
-    removeIfExists(dataBroadcast);
+    const base = sidecarBase(videoPath);
+    for (const suffix of SIDECAR_SUFFIXES) removeIfExists(`${base}${suffix}`);
 }

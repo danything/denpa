@@ -22,9 +22,18 @@ import { enabled as oidcEnabled } from './oidc';
  * **URL そのものが資格になる**署名リンクで開ける。
  */
 
-/** 署名リンクとログインの控えで開けられる口。**ここは OIDC のリダイレクトにしない** */
-// 尻の1段は番組名 (プレイヤーの見出し用、share/+server.ts)。読み捨てるので何が来てもよいが、それより深くは通さない
-const FILE_PATHS = [/^\/api\/recordings\/\d+\/file(\/[^/]+)?$/];
+/**
+ * 署名リンクとログインの控えで開けられる口。**ここは OIDC のリダイレクトにしない。**
+ * 尻の1段は番組名 (プレイヤーの見出し用、share/+server.ts)。読み捨てるので何が来ても
+ * よいが、それより深くは通さない。**形はここ1つ** — share.ts の突き合わせも同じものを使う
+ */
+const FILE_PATH = /^\/api\/recordings\/(\d+)\/file(?:\/[^/]+)?$/;
+
+/** ファイルの口なら、そのパスが指す録画ID。違えば null */
+export function fileRecordingId(pathname: string): number | null {
+    const m = FILE_PATH.exec(pathname);
+    return m === null ? null : Number(m[1]);
+}
 
 /**
  * 素通しにする口。
@@ -44,7 +53,7 @@ const FILE_PATHS = [/^\/api\/recordings\/\d+\/file(\/[^/]+)?$/];
 const OPEN_PATHS = [/^\/login(\/|$)/, /^\/logout$/, /^\/api\/health$/, /^\/manifest\.webmanifest$/];
 
 export function isFilePath(pathname: string): boolean {
-    return FILE_PATHS.some((pattern) => pattern.test(pathname));
+    return fileRecordingId(pathname) !== null;
 }
 
 export function isOpenPath(pathname: string): boolean {

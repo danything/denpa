@@ -34,7 +34,7 @@ import { queryOne } from './db';
  * ライブと同じく DB から組み立てる (`live.ts` の `programInfo`)。局の番号は
  * `services`、番組は録画の行が持っている
  */
-export function programInfoOf(recording: Recording): ResponseMessage | null {
+function programInfoOf(recording: Recording): ResponseMessage | null {
     const service = queryOne<{ service_id: number; network_id: number }>(
         'SELECT service_id, network_id FROM services WHERE id = ?',
         recording.service_id,

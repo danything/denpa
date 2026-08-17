@@ -16,28 +16,16 @@
  */
 
 import { copyFileSync, existsSync } from 'node:fs';
-import { basename, dirname, extname, join } from 'node:path';
+import { basename, dirname, join } from 'node:path';
 import type { Recording } from '../types';
 import { database, now, queryAll, queryOne } from './db';
 import { moveFile, pruneEmptyDirs, removeIfExists } from './fsx';
 import { encodedPath, libraryFamily } from './library';
-import { sidecarPaths } from './metadata';
-
-function stripExt(path: string): string {
-    return path.slice(0, path.length - extname(path).length);
-}
+import { removeSidecars, sidecarBase, sidecarPaths } from './metadata';
 
 /** 置き場の名前 (`… [H264].mkv`) からコーデックを見分ける。主は AV1、`[H264]` は H.264 */
 function codecOf(path: string): 'av1' | 'h264' {
     return / \[H264\]\.mkv$/i.test(path) ? 'h264' : 'av1';
-}
-
-/** 旧・新どちらの命名でも当てはまる付き添いを消す (動画のパスを土台に) */
-function removeSidecarsOf(videoPath: string): void {
-    const base = stripExt(videoPath);
-    for (const suffix of ['.nfo', '-poster.jpg', '-thumb.jpg', '.bml.jsonl', '.ja.ass']) {
-        removeIfExists(`${base}${suffix}`);
-    }
 }
 
 /**
@@ -48,7 +36,7 @@ function removeSidecarsOf(videoPath: string): void {
 function movePrimary(from: string, to: string): void {
     if (existsSync(from)) moveFile(from, to);
 
-    const oldBase = stripExt(from);
+    const oldBase = sidecarBase(from);
     const dst = sidecarPaths(to);
     if (existsSync(`${oldBase}.bml.jsonl`)) moveFile(`${oldBase}.bml.jsonl`, dst.dataBroadcast);
     if (existsSync(`${oldBase}-thumb.jpg`)) moveFile(`${oldBase}-thumb.jpg`, dst.thumbnail);
@@ -89,7 +77,7 @@ function sweepOldStrays(rec: Recording, oldDir: string, moved: ReadonlySet<strin
         );
         if (claimed !== undefined) continue;
         removeIfExists(stray);
-        removeSidecarsOf(stray);
+        removeSidecars(stray);
     }
 }
 

@@ -87,8 +87,8 @@ import type { MkvFrame } from '$lib/ts/mkv';
  */
 export const CANVAS = { width: 1920, height: 1080 };
 
-/** 字幕に使う字。録画と同じものを使う (見た目を揃えるため) */
-const FONTS = 'Rounded M+ 1m for ARIB';
+/** 字幕に使う字。ライブも録画 (encoder → buildPgs) も同じものを使う (見た目を揃えるため) */
+export const SUBTITLE_FONTS = 'Rounded M+ 1m for ARIB';
 
 /** 失敗を言っている行。**それ以外は入り口の説明なので捨てる** */
 const TROUBLE = /error|Error|failed|Failed|Cannot|Unable|No such|Invalid data/;
@@ -121,7 +121,14 @@ export function worthLogging(line: string): boolean {
  * - `-canvas_size` … 上の説明。無いと 1440x1080 とみなされる
  */
 export function captionInput(): string[] {
-    return ['-sub_type', 'bitmap', '-canvas_size', `${CANVAS.width}x${CANVAS.height}`, '-font', FONTS];
+    return [
+        '-sub_type',
+        'bitmap',
+        '-canvas_size',
+        `${CANVAS.width}x${CANVAS.height}`,
+        '-font',
+        SUBTITLE_FONTS,
+    ];
 }
 
 /**

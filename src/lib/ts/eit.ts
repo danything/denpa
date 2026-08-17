@@ -18,7 +18,7 @@ import type { Genre } from '../arib';
 import { decodeAribText } from './aribtext';
 import { descriptors, PacketStream, SectionAssembler } from './psi';
 
-export const PID_EIT = 0x0012;
+const PID_EIT = 0x0012;
 
 const TABLE_PF_ACTUAL = 0x4e;
 const SCHEDULE_ACTUAL_MIN = 0x50;
@@ -38,7 +38,7 @@ const DESC_CONTENT = 0x54;
 const DESC_AUDIO_COMPONENT = 0xc4;
 
 /** 自局のものだけ扱う。他局の番組表 (0x4F / 0x60〜0x6F) は選局し直せば取れる */
-export function isEitActual(tableId: number): boolean {
+function isEitActual(tableId: number): boolean {
     return tableId === TABLE_PF_ACTUAL || (tableId >= SCHEDULE_ACTUAL_MIN && tableId <= SCHEDULE_ACTUAL_MAX);
 }
 

@@ -131,7 +131,7 @@ export function parseCodecs(value: string | undefined): HwCodec[] {
 /**
  * `hwAllow` を読む。壊れていれば空 (= 全部よい)。口ごとに `{ qsv: [...], vaapi: [...] }`
  */
-export function parseHwAllow(value: string | undefined): HwAllow {
+function parseHwAllow(value: string | undefined): HwAllow {
     if (value === undefined || value === '') return {};
     try {
         const raw = JSON.parse(value) as Record<string, Partial<Record<HwKind, unknown>>>;

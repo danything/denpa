@@ -39,8 +39,3 @@ export function redeem(token: string | null, at: number = Date.now()): boolean {
     sweep(at);
     return issued.delete(token);
 }
-
-/** テスト用。持ち越した札で次のテストが通ってしまわないように */
-export function forget(): void {
-    issued.clear();
-}

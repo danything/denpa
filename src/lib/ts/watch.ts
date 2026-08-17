@@ -28,7 +28,7 @@ export const DOUBLE_TAP = 300;
  * **真ん中は空けておく。** ここまで端にすると、絵の真ん中を押したつもりが
  * 送りになる。3分割よりやや狭くして、中央に余白を残す
  */
-export const EDGE = 0.3;
+const EDGE = 0.3;
 
 export type Zone = 'left' | 'center' | 'right';
 
@@ -246,4 +246,4 @@ export function resumePoint(at: number, length: number): number | null {
 /** 末尾のここから先は「観終えた」とみなす (秒) */
 export const RESUME_EDGE = 30;
 /** 頭のここまでは「まだ観ていない」とみなす (秒) */
-export const RESUME_HEAD = 15;
+const RESUME_HEAD = 15;

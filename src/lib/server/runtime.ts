@@ -161,12 +161,8 @@ export function start(): void {
      * 起動のたびに、印 (`has_logo`) とファイルを突き合わせ直す。置き場ごと
      * 消えることは実際にあり、印だけ残っていると番組表に壊れた画像が並ぶ
      */
-    void guard('logo', async () => {
-        logoReconcile();
-    });
-    every(config.logoSweepInterval, 'logo', async () => {
-        await sweep();
-    });
+    void guard('logo', logoReconcile);
+    every(config.logoSweepInterval, 'logo', sweep);
 
     /*
      * CM検出のロゴを**録画より先に**覚えておく (logo-learn.ts)。
@@ -175,9 +171,7 @@ export function start(): void {
      * 落ちていた。空いているチューナーがあるときだけ、1局につき数分掴む。
      * 録画にも番組表にも譲る (優先度はロゴ集めと同じでいちばん下)
      */
-    every(config.logoLearnInterval, 'logo-learn', async () => {
-        await learnSweep();
-    });
+    every(config.logoLearnInterval, 'logo-learn', learnSweep);
 }
 
 /**

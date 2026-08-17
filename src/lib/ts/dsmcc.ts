@@ -21,7 +21,7 @@
 import { descriptors } from './psi';
 
 export const TABLE_DII = 0x3b;
-export const TABLE_DDB = 0x3c;
+const TABLE_DDB = 0x3c;
 /** ストリーム記述子。NPT と イベントメッセージが載る (データ放送だけが使う) */
 export const TABLE_STREAM_DESCRIPTOR = 0x3d;
 

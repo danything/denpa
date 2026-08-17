@@ -29,7 +29,7 @@
 import type { ServerWebSocket, WebSocketHandler } from 'bun';
 
 /** 入口が見る名前。`server.js` と揃えること */
-export const LIVE = '__denpaLive';
+const LIVE = '__denpaLive';
 
 /**
  * 溜まってよい量。**これを超えたら映像は捨てる。**

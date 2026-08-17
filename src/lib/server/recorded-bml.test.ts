@@ -43,7 +43,11 @@ function tsBytes(unixMs: number, body: string): Uint8Array {
 }
 
 const dir = mkdtempSync(join(tmpdir(), 'denpa-bml-'));
-afterAll(() => rmSync(dir, { recursive: true, force: true }));
+afterAll(() => {
+    rmSync(dir, { recursive: true, force: true });
+    // DB は同じプロセスの他のテストと共有になりうる (最初に開いた1本を使い回す)。入れた局は片付ける
+    database().exec('DELETE FROM services');
+});
 
 const T = Date.UTC(2026, 7, 12, 0, 0, 30);
 

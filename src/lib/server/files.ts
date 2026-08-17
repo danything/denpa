@@ -4,7 +4,12 @@ import type { Recording } from '../types';
 import { config } from './config';
 import { database, now, queryAll } from './db';
 import { pruneEmptyDirs, removeIfExists } from './fsx';
-import { removeSidecars } from './metadata';
+import { removeSidecars, SIDECAR_SUFFIXES } from './metadata';
+
+const SIDECAR_ORPHAN = new RegExp(
+    `^(.+?)(?:${SIDECAR_SUFFIXES.map((suffix) => suffix.replace(/[.-]/g, '\\$&')).join('|')})$`,
+    'i',
+);
 
 /**
  * 録画ファイルの実体まわり。
@@ -191,10 +196,9 @@ function orphan(path: string, videos: Set<string>): boolean {
     // 索引や作業ファイル。動画の名前をまるごと頭に持つ (`….m2ts.dtvi`)
     const trailing = /^(.+\.(?:m2ts|ts|mkv|mp4))\.[^/]+$/i.exec(path);
     if (trailing !== null) return !videos.has(trailing[1]);
-    // NFO・ポスター・データ放送。動画の拡張子を取り替えた形
-    // (`….nfo` / `…-poster.jpg` / `….bml.jsonl`)。`.ja.ass` と `-thumb.jpg` は
-    // もう作らないが、前に置いたものが残っているので拾う (tvshow.nfo も同じ道で片付く)
-    const base = /^(.+?)(?:-poster\.jpg|-thumb\.jpg|\.nfo|\.ja\.ass|\.bml\.jsonl)$/i.exec(path);
+    // NFO・ポスター・データ放送。動画の拡張子を取り替えた形 (metadata.ts の
+    // SIDECAR_SUFFIXES。もう作らないものも前に置いたのが残っているので拾う。tvshow.nfo も同じ道で片付く)
+    const base = SIDECAR_ORPHAN.exec(path);
     if (base === null) return false;
     // どの入れ物で置いたかまでは名前から分からないので、当てはまるものを全部見る
     return !['m2ts', 'ts', 'mkv', 'mp4'].some((extension) => videos.has(`${base[1]}.${extension}`));

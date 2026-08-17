@@ -58,6 +58,7 @@ function respond(id: string, request: Request, download: boolean, source: string
     );
 }
 
+// HEAD も同じ道 (中身を出すかは serveFile が request.method で決める)
 export function GET({ params, request, url }) {
     return respond(
         params.id,
@@ -66,12 +67,4 @@ export function GET({ params, request, url }) {
         url.searchParams.get('source'),
     );
 }
-
-export function HEAD({ params, request, url }) {
-    return respond(
-        params.id,
-        request,
-        url.searchParams.get('download') === '1',
-        url.searchParams.get('source'),
-    );
-}
+export const HEAD = GET;

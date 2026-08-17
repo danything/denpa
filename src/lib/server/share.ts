@@ -1,4 +1,5 @@
 import { randomBytes, timingSafeEqual } from 'node:crypto';
+import { fileRecordingId } from './auth';
 import { database, queryOne } from './db';
 
 /**
@@ -78,7 +79,6 @@ export function verifyShareToken(
  * 別の録画に使い回すことはできない。
  */
 export function shareTokenAllows(pathname: string, searchParams: URLSearchParams): boolean {
-    const m = pathname.match(/^\/api\/recordings\/(\d+)\/file(?:\/[^/]+)?$/);
-    if (m === null) return false;
-    return verifyShareToken(Number(m[1]), searchParams.get('token'));
+    const id = fileRecordingId(pathname);
+    return id !== null && verifyShareToken(id, searchParams.get('token'));
 }

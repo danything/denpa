@@ -11,11 +11,12 @@ import {
     statSync,
     writeFileSync,
 } from 'node:fs';
-import { basename, dirname, join } from 'node:path';
+import { basename, dirname } from 'node:path';
 import { type Audio, audioTitles, DUAL_MONO } from '$lib/arib';
 import { HW_KIND_LABEL, type HwCodec } from '../hw';
 import { encodeSource } from '../source';
-import type { EncodeJob, EncodePhase, Recording, VideoCodec } from '../types';
+import type { EncodeJob, EncodePhase, Recording } from '../types';
+import { SUBTITLE_FONTS } from './captions';
 import {
     type CmDetection,
     chapterMetadata,
@@ -31,7 +32,7 @@ import {
 import { config } from './config';
 import { database, now, queryOne } from './db';
 import { type EncodeProgress, emit } from './events';
-import { removeIfExists } from './fsx';
+import { removeByPrefix, removeIfExists } from './fsx';
 import { type HwWay, hwArgs, hwChain } from './hwenc';
 import { encodedPath, libraryFamily, libraryPath } from './library';
 import { removeSidecars, sidecarPaths, writeThumbnail } from './metadata';
@@ -41,6 +42,7 @@ import { settings } from './settings';
 import { chunks, text } from './stream';
 import { buildPgs } from './subtitle';
 import { displayTitle } from './title';
+import { TS_PROBE } from './ts-probe';
 import { notify } from './webhook';
 
 /**
@@ -184,20 +186,6 @@ async function measureSmoothMotion(
 }
 
 /**
- * 実際にエンコードに使うコーデック。
- *
- * 録画の行に `none` (エンコードしない) が入っていることがある。あとから
- * 「再エンコード」を押したときは、そのときの設定で焼く — 押した人は
- * 焼きたいのであって、録ったときの設定を再現したいわけではない。
- * 設定まで `none` なら、そもそも焼くものが決まらないので断る (enqueue 側)
- */
-function resolveCodec(codec: VideoCodec): HwCodec {
-    if (codec === 'av1' || codec === 'h264') return codec;
-    const chosen = settings().codec;
-    return chosen === 'none' ? 'av1' : chosen;
-}
-
-/**
  * **画素を正方形に直す。**
  *
  * 地上波のHDは 1440x1080 で送られてきて、画素が横長 (SAR 4:3) であることを
@@ -228,7 +216,7 @@ function videoArgs(
     smooth: boolean,
     scale: string | null,
     hardware: HwWay | null,
-): { filter: string; encoder: string[] } {
+): { filter: string; encoder: string[]; device: string[] } {
     const steps = [deinterlace(smooth), ...(scale === null ? [] : [scale])];
     if (hardware !== null) {
         /*
@@ -238,11 +226,12 @@ function videoArgs(
          * ソフトウェアで焼き直す** (runJob) ので、ここで保険はかけない
          */
         const hw = hwArgs(hardware, codec);
-        return { filter: [...steps, ...hw.filter].join(','), encoder: hw.encoder };
+        return { filter: [...steps, ...hw.filter].join(','), encoder: hw.encoder, device: hw.device };
     }
     if (codec === 'h264') {
         return {
             filter: [...steps, 'format=yuv420p'].join(','),
+            device: [],
             /*
              * **crf 24・preset medium。** AV1 の既定 (crf35) と**同じ画質の段**に
              * 揃えた値。実写100秒 (grain の多い映画・59.94p) で測った:
@@ -289,14 +278,11 @@ function videoArgs(
      */
     return {
         filter: [...steps, 'format=yuv420p'].join(','),
+        device: [],
         encoder: ['libsvtav1', '-preset', '10', '-crf', '35'],
     };
 }
 
-/**
- * 字幕に使うフォント。
- */
-const SUBTITLE_FONTS = 'Rounded M+ 1m for ARIB';
 /** 進捗をDBに書き戻す間隔。1フレームごとに書くとWAL肥大とUIのちらつきの原因になる */
 const PROGRESS_INTERVAL = 2000;
 
@@ -412,13 +398,12 @@ export function buildArgs(
     output: string,
     audioType: number | null,
     seek: number | null,
-    codec: VideoCodec = 'av1',
+    codec: HwCodec = 'av1',
     options: EncodeOptions = {},
 ): string[] {
     const hardware = options.hardware ?? null;
-    const resolved = resolveCodec(codec);
     const video = videoArgs(
-        resolved,
+        codec,
         options.smoothMotion === true,
         squarePixels(options.displaySize),
         hardware,
@@ -426,7 +411,7 @@ export function buildArgs(
 
     const args = ['-y'];
     // GPU の口。入力より前に開いておくと、エンコーダ (とフィルタ) がこれを掴む
-    if (hardware !== null) args.push(...hwArgs(hardware, resolved).device);
+    args.push(...video.device);
 
     /*
      * **頭を捨てる。** 2つの理由が足し算になる。
@@ -445,8 +430,7 @@ export function buildArgs(
      */
     const skip = (seek ?? 0) + headSkip(options.videoStart);
     if (skip > 0) args.push('-ss', String(skip));
-    // チャンネル切り替え直後は前番組のPAT/PMTの残骸が先頭に混ざるため、長めにprobeしてから構成を確定させる
-    args.push('-analyzeduration', '15000000', '-probesize', '30000000');
+    args.push(...TS_PROBE);
     args.push('-i', input);
 
     /*
@@ -564,10 +548,7 @@ export function buildArgs(
 export function buildSegmentArgs(input: string, output: string, range: Range): string[] {
     return [
         '-y',
-        '-analyzeduration',
-        '15000000',
-        '-probesize',
-        '30000000',
+        ...TS_PROBE,
         // -ss を -i の前に置くと、キーフレームまで飛んでから読み始めるので速い
         '-ss',
         String(range.start),
@@ -812,7 +793,7 @@ async function runFfmpeg(
     output: string,
     audioType: number | null,
     seek: number | null,
-    codec: VideoCodec,
+    codec: HwCodec,
     options: EncodeOptions = {},
 ) {
     const proc = Bun.spawn([config.ffmpeg, ...buildArgs(input, output, audioType, seek, codec, options)], {
@@ -1099,26 +1080,14 @@ function clearScratch(input: string): void {
     removeIfExists(`${input}.cut.ts`);
     removeIfExists(`${input}.concat.txt`);
     // CMの区間ファイルは本数ぶんある (`.part0.ts`, `.part1.ts`, …)
-    const prefix = `${basename(input)}.part`;
-    try {
-        for (const name of readdirSync(dirname(input))) {
-            if (name.startsWith(prefix) && /\.part\d+\.ts$/i.test(name)) {
-                removeIfExists(join(dirname(input), name));
-            }
-        }
-    } catch {
-        // 置き場ごと無ければ、片付けるものも無い
-    }
+    removeByPrefix(input, ['.part']);
 }
 
-/**
- * 生TSを残すか。
- *
- * 録画ごとの指定ではなく全体設定に従う。録り直すたびに「あのときどうしたか」を
- * 思い出す必要が無いようにするため。
- */
-function keepOriginal(): boolean {
-    return settings().keepOriginal;
+/** ジョブを失敗にする (行を書くだけ。知らせも画面の更新もしない) */
+function markFailed(jobId: number, reason: string): void {
+    database()
+        .prepare(`UPDATE encode_jobs SET state = 'failed', error = ?, finished_at = ? WHERE id = ?`)
+        .run(reason, now(), jobId);
 }
 
 /**
@@ -1129,9 +1098,7 @@ function keepOriginal(): boolean {
  * 理由はジョブが持ち、一覧は最新のジョブを見て出す
  */
 function fail(jobId: number, recording: Recording, reason: string): void {
-    database()
-        .prepare(`UPDATE encode_jobs SET state = 'failed', error = ?, finished_at = ? WHERE id = ?`)
-        .run(reason, now(), jobId);
+    markFailed(jobId, reason);
     emit('recordings');
     notify({
         event: 'encode.failed',
@@ -1172,9 +1139,7 @@ async function runJob(jobId: number): Promise<void> {
     const input = recording === undefined ? null : encodeSource(recording);
 
     if (recording === undefined || input === null) {
-        database()
-            .prepare(`UPDATE encode_jobs SET state = 'failed', error = ?, finished_at = ? WHERE id = ?`)
-            .run('元にできる生TSがありません', now(), jobId);
+        markFailed(jobId, '元にできる生TSがありません');
         return;
     }
 
@@ -1220,7 +1185,8 @@ async function runJob(jobId: number): Promise<void> {
             fail(jobId, recording, `スクランブルを解除できませんでした: ${result.error}`);
             return;
         }
-        if (keepOriginal()) {
+        // 生TSを残すかは録画ごとではなく全体設定 (settings.keepOriginal)
+        if (settings().keepOriginal) {
             // 生TSを残す設定なら、残すのは解けたほうだけにする。
             // 掛かったままのTSを取っておいても、あとから解ける保証は無い
             renameSync(target, input);
@@ -1263,10 +1229,14 @@ async function runJob(jobId: number): Promise<void> {
             encodeOptions.fpsBlock = longestRange(keep);
         }
     }
-    if (canceled.has(jobId)) {
+    /** 途中でやめるときに、ここまでの作業ファイル (切ったTS・チャプター・字幕) を片付ける */
+    const discardWork = (): void => {
         removeIfExists(trimmed);
         removeIfExists(encodeOptions.chaptersFile);
         removeIfExists(encodeOptions.pgsFile ?? null);
+    };
+    if (canceled.has(jobId)) {
+        discardWork();
         return finishCanceled(jobId, decoded);
     }
 
@@ -1341,9 +1311,7 @@ async function runJob(jobId: number): Promise<void> {
     }
 
     if (canceled.has(jobId)) {
-        removeIfExists(pgs?.path ?? null);
-        removeIfExists(trimmed);
-        removeIfExists(encodeOptions.chaptersFile);
+        discardWork();
         return finishCanceled(jobId, decoded);
     }
 
@@ -1429,8 +1397,7 @@ async function runJob(jobId: number): Promise<void> {
     const cleanup = (working: string | null): void => {
         removeIfExists(working);
         for (const p of placed) removeIfExists(p.path);
-        removeIfExists(encodeOptions.chaptersFile);
-        removeIfExists(trimmed);
+        discardWork();
         removeIfExists(decoded);
     };
 
@@ -1603,7 +1570,7 @@ async function runJob(jobId: number): Promise<void> {
     // 主は AV1 (`output`)、もう一方は `alt` (両方焼いたときだけ)。
     // コマ数 (実測か既定の60) も一緒に書く — 番組詳細の札はここからしか出せない
     const fps = encodeOptions.smoothMotion === true ? 60 : 30;
-    if (keepOriginal()) {
+    if (settings().keepOriginal) {
         database()
             .prepare(
                 `UPDATE recordings SET library_path = ?, alt_path = ?, ts_size = ?, fps = ?, updated_at = ? WHERE id = ?`,
@@ -1638,11 +1605,7 @@ export function pump(): void {
             );
             const reason = `エンコードを ${next.attempts} 回試して完了しませんでした`;
             if (recording === undefined) {
-                database()
-                    .prepare(
-                        `UPDATE encode_jobs SET state = 'failed', error = ?, finished_at = ? WHERE id = ?`,
-                    )
-                    .run(reason, now(), next.id);
+                markFailed(next.id, reason);
                 emit('recordings');
             } else {
                 // もう走らせないので、この生TSの中間ファイルもここで片付ける
@@ -1667,13 +1630,7 @@ export function pump(): void {
         // 待機中が走り出したことも伝える。押した直後に何も変わらないと止まって見える
         emit('recordings');
         void runJob(jobId)
-            .catch((error) => {
-                database()
-                    .prepare(
-                        `UPDATE encode_jobs SET state = 'failed', error = ?, finished_at = ? WHERE id = ?`,
-                    )
-                    .run(String(error), now(), jobId);
-            })
+            .catch((error) => markFailed(jobId, String(error)))
             .finally(() => {
                 runningJobs.delete(jobId);
                 procs.delete(jobId);

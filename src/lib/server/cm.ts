@@ -21,10 +21,8 @@ export interface Range {
     end: number;
 }
 
-export interface Silence {
-    start: number;
-    end: number;
-}
+/** 無音の区間。形は Range と同じで、名前で用途を言い分けているだけ */
+export type Silence = Range;
 
 /**
  * これ以上がCM判定になったら、その結果は信じない。
