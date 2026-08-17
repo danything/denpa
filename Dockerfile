@@ -29,8 +29,8 @@ RUN bunx playwright install --with-deps chromium && \
 CMD ["bun", "run", "test"]
 
 # ---------------------------------------------------------------------------
-# ffmpeg。EPGStation 用に組んでいたものと同じ構成
-# (ARIB字幕 libaribcaption + AV1 libsvtav1 + Opus)
+# ffmpeg (自前ビルド。ARIB字幕 libaribcaption + AV1 libsvtav1/dav1d + H.264 x264 +
+# Opus + Intel GPU (VA-API/QSV)。上流に投げる直しを patches/ から当てる)
 # ---------------------------------------------------------------------------
 FROM docker.io/library/debian:trixie-slim AS ffmpeg
 SHELL ["/bin/bash", "-c"]
@@ -105,30 +105,11 @@ RUN apt-get update && \
 # ---------------------------------------------------------------------------
 # join_logo_scp 一式 (CM検出。設定画面の「CMの探し方」の既定)
 #
-# Amatsukaze と同じ考え方で CM を判定する道具。無音とシーンチェンジ
-# (chapter_exe) に加えて**局ロゴが出ているか** (logoframe) を見て、
-# join_logo_scp が本編とCMを分ける。
-#
-# 本家は Windows + AviSynth+ 前提で、Linux 移植も AviSynth+ と
-# L-SMASH Works と Node の上に載っていた。いまの tobitti0 版は
-# **dtvindex (FFmpeg) で TS を直接読める**ので、そのどれも要らない。
-# WITH_AVISYNTH=no で組んで、ビルドは30秒ほどで終わる。
-#
-# **持ってくるのが4つあるのは、道具が4つあるからではない。**
-#   dtvindex      … 下の2つが TS を読むための静的ライブラリ (実行ファイルではない)
-#   chapter_exe   ┐ 本家 (nekopanda) の Linux 移植。tobitti0 版
-#   logoframe     ┘
-#   join_logo_scp … 実行ファイルと判定規則 (JL/)。**yobibi 版**
-#
-# **join_logo_scp だけ出どころが違う。** tobitti0 版は ver4.0 で 2021年に
-# 止まっているが、本家筋の yobibi 版は ver5.1.1 (2026年) まで続いていて、
-# **ver5.1 で Linux が本流に入った** — 移植版を使う理由がもう無い。
-# 効くのは 5.1.1 の「15秒単位からの差認識が正常にできていなかった所を修正」で、
-# ここは CM判定の芯にあたる。
-#
-# **実行ファイルと JL は必ず対で採る。** JL の文字コードが違い (4.0 は Shift-JIS、
-# 5.x は BOM付きUTF-8)、取り違えると `error: wrong command in` で
-# 「何も切らない」結果になる。実際に組んで確かめた。
+# 4つ持ってくる: dtvindex (下の2つが TS を読む静的ライブラリ)、chapter_exe と
+# logoframe (tobitti0 の Linux 移植)、join_logo_scp (本家筋の **yobibi 版** 5.1.1。
+# Linux が本流に入っていて移植版を使う理由が無い)。**実行ファイルと JL は必ず対で採る**
+# — JL の文字コードが版で違い (4.0 は Shift-JIS、5.x は BOM付きUTF-8)、取り違えると
+# 「何も切らない」。仕組みと出どころの経緯は docs/encode.md「検出方法は2つ」
 # ---------------------------------------------------------------------------
 FROM docker.io/library/debian:trixie-slim AS jls
 ENV DEBIAN_FRONTEND=noninteractive

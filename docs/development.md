@@ -81,14 +81,10 @@ CI では**台を増やして**います。4つに割って別のランナーに
 `Dockerfile` が denpa 本体、`agent/Dockerfile` がチューナー側です。
 CI が両方を焼いて `k3s/` の印を書き戻します。
 
-**main へ入れたぶんは `develop` に積み上がるだけで、`latest` は動きません。**
-`latest` が動くのは **GitHub でリリースを作ったとき**だけで、そのとき焼き直さずに
-リリースしたコミットのイメージへ貼り替えます。タグの決め方は
-[architecture.md](architecture.md#イメージのタグ)、出し方は `.github/image-tags.sh`
-(main のぶんとリリースのぶんで同じ答えが要るので、1箇所に置いてあります)。
+`latest` が動くのはリリースを作ったときだけ (焼き直さず貼り替える) — タグの決め方と
+理由は [architecture.md](architecture.md#イメージのタグ)、出し方は `.github/image-tags.sh`。
 
-エージェントの口に当てる適合テストは `agent/conformance.test.ts`。
-**本物を起こして**、偽の選局コマンド (`tests/fake/tune.ts`) で流します。
+エージェントの口に当てる適合テストは `agent/conformance.test.ts` ([app.md](app.md) のテストの表)。
 
 ### 外から持ってくるものは版で固定する
 
@@ -108,8 +104,4 @@ ffmpeg・libaribcaption・CM検出の一式・ARIB のフォント・libaribb25 
 bunx --package renovate renovate-config-validator   # 設定そのもの
 ```
 
-## もっと詳しく
-
-- [architecture.md](architecture.md) — **なぜこの形なのか**
-- [app.md](app.md) — **どこに何があるか** (ファイル・環境変数・画面・状態遷移)
-- [data.md](data.md) — エージェントに都度聞くもの / denpa が持つもの
+読む順は [architecture.md](architecture.md) の「もっと詳しく」に。
