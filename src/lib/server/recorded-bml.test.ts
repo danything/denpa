@@ -67,13 +67,13 @@ function recording(startAt: number): Recording {
 }
 
 describe('saveRecordedBml / loadRecordedBml', () => {
-    test('TS から取り出して書き、読み直すと同じ変化が並ぶ', () => {
+    test('TS から取り出して書き、読み直すと同じ変化が並ぶ', async () => {
         const ts = join(dir, 'rec.ts');
         const sidecar = join(dir, 'rec.bml.jsonl');
         writeFileSync(ts, tsBytes(T, '<bml>録画のデータ放送</bml>'));
 
         // 基準を放送時刻の 10 秒前に置く → モジュールは再生位置 10000ms になる
-        const changes = saveRecordedBml(ts, sidecar, recording(T - 10_000), null);
+        const changes = await saveRecordedBml(ts, sidecar, recording(T - 10_000), null);
         expect(changes).toBeGreaterThan(0);
 
         const loaded = loadRecordedBml(sidecar);
@@ -103,7 +103,7 @@ describe('saveRecordedBml / loadRecordedBml', () => {
         expect(withProgramInfo([], recording(T))).toEqual([]);
     });
 
-    test('データ放送を持たない TS では書かない・読めば空', () => {
+    test('データ放送を持たない TS では書かない・読めば空', async () => {
         const ts = join(dir, 'plain.ts');
         const sidecar = join(dir, 'plain.bml.jsonl');
         // BML の ES が無い PMT (映像だけ)
@@ -116,7 +116,7 @@ describe('saveRecordedBml / loadRecordedBml', () => {
             ),
         );
 
-        expect(saveRecordedBml(ts, sidecar, recording(T), null)).toBe(0);
+        expect(await saveRecordedBml(ts, sidecar, recording(T), null)).toBe(0);
         expect(loadRecordedBml(sidecar)).toEqual([]);
     });
 });

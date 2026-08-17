@@ -14,9 +14,15 @@
  * `BmlDecoder` にそのまま流せる。
  */
 
-import { closeSync, existsSync, openSync, readFileSync, readSync, writeFileSync } from 'node:fs';
-import { captureDataBroadcast } from '$lib/ts/data-capture';
-import { type KeptRange, type PlacedMessage, toPlaybackTimeline } from '$lib/ts/data-timeline';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { open } from 'node:fs/promises';
+import { DataBroadcastCapture } from '$lib/ts/data-capture';
+import {
+    type KeptRange,
+    type PlacedMessage,
+    type TimedMessage,
+    toPlaybackTimeline,
+} from '$lib/ts/data-timeline';
 import type { ResponseMessage } from '$lib/vendor/web-bml/server/ws_api';
 import type { Recording } from '../types';
 import { queryOne } from './db';
@@ -64,20 +70,30 @@ export function withProgramInfo(timeline: PlacedMessage[], recording: Recording)
     return info === null ? timeline : [{ at: 0, message: info }, ...timeline];
 }
 
-/** TS を 1MB ずつ読む。**丸ごと抱えない** — 録画は数GBになる */
-function* tsChunks(path: string, size = 1 << 20): Generator<Uint8Array> {
-    const fd = openSync(path, 'r');
+/**
+ * TS を 1MB ずつ読んで解く。**丸ごと抱えない** (録画は数GBになる) し、
+ * **読む間も息をつく** (チャンクごとに await)。
+ *
+ * 前は同期の `readSync` で回していた — 10GB の録画 (2時間の映画) では
+ * イベントループが数分止まり、その間 `/api/health` が返せず、Kubernetes の
+ * 生存確認 (1秒で3回) に落ちて SIGTERM → 再起動 → エンコードのやり直し、
+ * を **1周 2時間で 5回** 繰り返した (2026-08-17 実機)。エンコードそのものは
+ * 終わっていて、最後のこの一手で全部を捨てていた
+ */
+async function capture(path: string, size = 1 << 20): Promise<TimedMessage[]> {
+    const capture = new DataBroadcastCapture();
+    const file = await open(path, 'r');
     try {
         const buffer = Buffer.alloc(size);
         for (;;) {
-            const read = readSync(fd, buffer, 0, size, null);
-            if (read <= 0) break;
-            // 使い回すバッファなので、その回のぶんを写して渡す
-            yield Uint8Array.prototype.slice.call(buffer, 0, read);
+            const { bytesRead } = await file.read(buffer, 0, size, null);
+            if (bytesRead <= 0) break;
+            capture.feed(buffer.subarray(0, bytesRead));
         }
     } finally {
-        closeSync(fd);
+        await file.close();
     }
+    return capture.result();
 }
 
 /**
@@ -89,13 +105,13 @@ function* tsChunks(path: string, size = 1 << 20): Generator<Uint8Array> {
  * @param keep CM を実カットした録画で残した区間 (秒)。off/chapter なら null
  * @returns 書いた変化の数。**0 なら書かない** (データ放送を持たない録画)
  */
-export function saveRecordedBml(
+export async function saveRecordedBml(
     tsPath: string,
     sidecarPath: string,
     recording: Recording,
     keep: readonly KeptRange[] | null,
-): number {
-    const timeline = captureDataBroadcast(tsChunks(tsPath));
+): Promise<number> {
+    const timeline = await capture(tsPath);
     /*
      * **描けるモジュールが1つも無ければ書かない。** データ放送の載っていない局でも
      * `pmt` は必ず1つ出る (timeline は空にならない) ので、それだけでは持たせない —

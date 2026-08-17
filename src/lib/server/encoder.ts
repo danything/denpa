@@ -1522,7 +1522,7 @@ async function runJob(jobId: number): Promise<void> {
      * (server/recorded-bml.ts)。転んでもエンコードは落とさない — 付け足しなので
      */
     try {
-        const changes = saveRecordedBml(
+        const changes = await saveRecordedBml(
             sourceTs,
             sidecarPaths(output).dataBroadcast,
             recording,
