@@ -182,6 +182,21 @@ describe('CMを自動で飛ばす', () => {
         expect(skipTarget(RUN, 200)).toBeNull();
     });
 
+    /**
+     * **跨ぐ手前で跳ぶ。** 入ってから跳ぶと、気付くまでのコマが必ず見える。
+     * `lead` のぶん先を見て、CM の1コマ目を出す前に跳ぶ
+     */
+    test('先読みすると、跨ぐ直前でもう跳ぶ', () => {
+        // 60 から CM。59.98 はまだ本編だが、先読み 0.05 秒で CM に入る
+        expect(skipTarget(RUN, 59.98)).toBeNull();
+        expect(skipTarget(RUN, 59.98, 0.05)).toBe(105);
+    });
+
+    /** 先読みしても、CM から遠ければ跳ばない */
+    test('先読みしても本編の途中では跳ばない', () => {
+        expect(skipTarget(RUN, 10, 0.05)).toBeNull();
+    });
+
     test('チャプターの外・空でも跳ばない', () => {
         expect(skipTarget(RUN, 400)).toBeNull();
         expect(skipTarget([], 10)).toBeNull();

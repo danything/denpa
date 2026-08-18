@@ -179,8 +179,15 @@ export function isCm(title: string): boolean {
  *
  * @param at いまの位置 (秒)
  */
-export function skipTarget(chapters: Chapter[], at: number): number | null {
-    const now = chapterAt(chapters, at);
+export function skipTarget(chapters: Chapter[], at: number, lead = 0): number | null {
+    /*
+     * **`lead` のぶん先を見ます。** 入ってから跳ぶと、気付くまでのコマが必ず
+     * 見えます (画面は跳ぶまで今の絵を出し続けるため)。**跨ぐ直前に跳べば、
+     * 最後に映っているのは本編の1コマ**で、CM のコマは1枚も出ません。
+     * 早く跳んだぶん本編の末尾が欠けますが、境目は場面の切れ目なので
+     * 1コマぶんなら分かりません
+     */
+    const now = chapterAt(chapters, at + lead);
     if (now === null || !isCm(now.title)) return null;
     let end = now.end;
     for (const chapter of chapters) {

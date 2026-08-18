@@ -214,6 +214,8 @@
     let overlay = $state<HTMLCanvasElement | null>(null);
     /** いま出している1枚。同じものを描き直さないため */
     let showing: Drawn | null = null;
+    /** 貼り直しを追わせている映像。二重に回さないための目印 (`follow`) */
+    let following: HTMLVideoElement | null = null;
     /** 読めなかったとき。**黙って黒いままにしない** */
     let broken = $state(false);
     /**
@@ -311,6 +313,7 @@
         loadDetail();
         // 字幕は既定で出す (ライブと同じ)。持っていない録画では何も起きない
         if (captions) void loadCaptions();
+        if (video !== null) follow(video);
         if (!ready) return;
         video?.play().catch(() => undefined);
         // 指のときは最初から全画面。テレビと同じで、観るために置いてある画面なので
@@ -338,6 +341,8 @@
             document.removeEventListener('fullscreenchange', onFull);
             window.removeEventListener('resize', onResize);
             window.removeEventListener('pagehide', onLeave);
+            // 貼り直しの追いかけを畳む。外さないと画面を離れたあとも回り続ける
+            following = null;
             clearInterval(ticker);
             remember(true);
             deleting.fire();
@@ -556,9 +561,18 @@
      *
      * 続いている CM はまとめて跨ぐので、15秒ごとに何度も跳ぶことはない
      */
+    /**
+     * CM を跨ぐ**手前**で跳ぶための先読み (秒)。
+     *
+     * 60コマ/秒でも 2コマぶんある。**入ってから跳ぶと必ず CM のコマが見えます** —
+     * 画面は跳ぶまで今の絵を出し続けるので、気付くのが1コマ遅れれば1コマ映る。
+     * 跨ぐ直前に跳べば、最後に映っているのは本編の1コマになる
+     */
+    const CM_LEAD = 0.05;
+
     function hopCm(): void {
         if (!skipCm || video === null) return;
-        const to = skipTarget(chapters, video.currentTime);
+        const to = skipTarget(chapters, video.currentTime, CM_LEAD);
         if (to === null) return;
         video.currentTime = to;
         skipped = true;
@@ -635,6 +649,42 @@
     function clearCaptions(): void {
         showing = null;
         clearOverlay(overlay);
+    }
+
+    /**
+     * **字幕の貼り直しを、映した1枚ごとに追わせる。** ライブと同じ作り
+     * (`live-player` の `follow`)。
+     *
+     * `timeupdate` だけで貼り直していた頃は、**字幕が 0.1 秒ほど遅れて見えて**
+     * いました。あれはブラウザが 250ms ごとにしか出さないので、出るのが
+     * 最大 250ms・平均 125ms 遅れます。`requestVideoFrameCallback` は映した
+     * 1枚ごとに来るので、貼る時刻が見えている絵と揃う。持っていない
+     * ブラウザは画面の書き換えごとに代える (60Hz なら 16ms)。
+     *
+     * `paint` は出すものが変わっていなければその場で戻るので、空回りは安い
+     */
+    function follow(target: HTMLVideoElement): void {
+        if (following === target) return;
+        following = target;
+        const again = () => {
+            // 別の映像に移った (画面を閉じた) ら、こちらは畳む
+            if (following !== target) return;
+            paint();
+            // **CM の跨ぎもここで見ます。** `timeupdate` (250ms) 任せだった頃は、
+            // 気付くまでの 7コマぶん (30コマ/秒) CM が見えていた
+            hopCm();
+            step();
+        };
+        const step = () => {
+            const request = (
+                target as HTMLVideoElement & {
+                    requestVideoFrameCallback?(cb: () => void): number;
+                }
+            ).requestVideoFrameCallback;
+            if (typeof request === 'function') request.call(target, again);
+            else requestAnimationFrame(again);
+        };
+        step();
     }
 
     /**
@@ -919,6 +969,7 @@
                     onclick={press}
                     onplay={() => {
                         playing = true;
+                        if (video !== null) follow(video);
                         // 出たので、拾い直しは済み。次に切れたらまた1秒から待つ
                         retries = 0;
                         resuming = false;
