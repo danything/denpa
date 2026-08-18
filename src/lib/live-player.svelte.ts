@@ -79,11 +79,23 @@ const RETRY_MOST = 10_000;
  *
  * 1コマ (0.017秒) 遅れるのは普通で、そこで跳び直すと跳んでばかりになる。
  * 声と口のずれが分かりはじめるのは 0.1 秒あたり、はっきり分かるのが 0.2 秒。
- * その手前で直す
+ * その手前で直す。
+ *
+ * **0.15 から下げた。** 実機 (Chromium・切り替えと途切れを起こしながら 18000 コマ)
+ * で測ると、無事なときの遅れは中央 -0.015 秒・最大 0.058 秒でした。0.15 は
+ * 「はっきり分かる」に近すぎて、**分かるのに直らない帯**が残る
  */
-const SLIP_MOST = 0.15;
+const SLIP_MOST = 0.1;
 /** 跳び直す間隔の下限 (ms)。**復号が追いつかない状態は跳んでも直らない** */
 const UNSLIP_EVERY = 3_000;
+/**
+ * コマ落ちが**続けてこれだけ**出たら跳び直す。
+ *
+ * 1〜2コマは開いた直後などに普通に出るので、そのたびに跳ぶと**音が 0.02 秒
+ * ずつ飛ぶのが癖になる**。5コマ = 60コマ/秒で 0.08 秒ぶんで、絵の乱れとして
+ * 見える側の下限に合わせてある
+ */
+const DROP_BURST = 5;
 /** 跳び直すときに進める幅 (秒)。**1コマぶん** — 音が飛んだと分かる長さではない */
 const FRAME = 0.02;
 
@@ -324,8 +336,34 @@ export function livePlayer() {
     let slip = $state(0);
     /** 跳び直した回数。**画面に出す** — 直し続けているなら、まだ足りていない */
     let slips = $state(0);
+    /**
+     * 絵の遅れの、これまでの最大 (秒)。**器を作り直すと 0 に戻る。**
+     *
+     * いまの値 (`slip`) だけでは役に立ちません — 見て「ずれている」と思った
+     * ときには、たいてい `unslip` が既に直しています。**跳び直す前にどこまで
+     * 開いたか**が、口の合わなさの正体かどうかを分ける唯一の数です。
+     *
+     * ここが 0 のままなのに絵と音が合わないなら、遅れているのは**描く側では
+     * なく中身のほう** (焼いた時点で映像と音声がずれている) で、跳び直しても
+     * 直りません
+     */
+    let slipMost = $state(0);
     /** 次に跳び直してよい時刻 */
     let unslipAfter = 0;
+    /**
+     * 前に見たコマ落ちの数。**増えたら跳び直す** (`settle`)。
+     *
+     * **絵の遅れは JS からは見えないことがある。** `mediaTime` で分かるのは
+     * 「合成器へ渡したコマ」で、Windows の Chrome / Edge はそれを DOM とは
+     * 別の面に出すため、**面のほうが遅れていても数字には出ません**。実機では
+     * 「絵と音がずれるのに『絵の遅れ直し』は一度も出ない」という形で出ていて、
+     * 読み直すと直る (器ごと作り直すため)。
+     *
+     * 見えないものは測れないので、**起きる条件のほうで引く** — 途切れと
+     * コマ落ちです。どちらも跳び直しの元手は同じ (`unslip` の 1コマぶん) で、
+     * どのみち絵が乱れた直後なので、余計に見えることはない
+     */
+    let seenDropped = 0;
     /** 繋ぎ直しの目覚まし。**待っている間だけ入っている** */
     let retry: ReturnType<typeof setTimeout> | null = null;
     /**
@@ -459,6 +497,7 @@ export function livePlayer() {
             if (frame !== undefined) {
                 const late = video.currentTime - frame.mediaTime;
                 slip = late > 0 ? late : 0;
+                if (slip > slipMost) slipMost = slip;
                 if (slip > SLIP_MOST) unslip(video);
             }
             paint(video.currentTime);
@@ -707,6 +746,13 @@ export function livePlayer() {
         if (!stalled && now - lastSettled < SETTLE_EVERY) return;
         // 捨てられたコマも同じ間隔で読む。**選局からの通し** (器を作り直すと 0 に戻る)
         dropped = element?.getVideoPlaybackQuality?.().droppedVideoFrames ?? dropped;
+        /*
+         * **途切れたか、コマが落ちたら跳び直す** (`seenDropped` の説明)。
+         * 測れた遅れ (`slip`) を待たない — あれは見えないことがある
+         */
+        const lost = dropped - seenDropped >= DROP_BURST;
+        seenDropped = dropped;
+        if ((stalled || lost) && element !== null) unslip(element);
         const next = nextTarget(
             { target, floor },
             stalled,
@@ -915,6 +961,9 @@ export function livePlayer() {
         oldest = 0;
         newest = 0;
         position = 0;
+        slip = 0;
+        slipMost = 0;
+        seenDropped = 0;
         pending.length = 0;
         // 作り直した器は開いている。読み切りの印は次の `ended` が立て直す
         ending = false;
@@ -1486,6 +1535,9 @@ export function livePlayer() {
             return slip;
         },
         /** 絵の遅れを直すために跳び直した回数 */
+        get slipMost() {
+            return slipMost;
+        },
         get slips() {
             return slips;
         },

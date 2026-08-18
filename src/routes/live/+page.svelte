@@ -539,6 +539,11 @@
                                     開いたままにはせず跳び直す (`unslip`) ので、
                                     出るのは直した回数のほう
                                 -->
+                                {#if player.slipMost > 0}
+                                    ・ <span data-testid="live-slip"
+                                        >絵の遅れ 最大 {Math.round(player.slipMost * 1000)}ms</span
+                                    >
+                                {/if}
                                 {#if player.slips > 0}
                                     ・ <span data-testid="live-slips">絵の遅れ直し {player.slips}回</span>
                                 {/if}
