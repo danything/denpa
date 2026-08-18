@@ -270,13 +270,23 @@
                     />
                 {/if}
 
-                <!-- いま録れているところへ。ライブの「ライブ」に相当し、場所も同じ -->
-                <EdgeButton
-                    active={recorded - pos < 20}
-                    label="最新"
-                    onclick={() => seekTo(recorded)}
-                    testid="chase-edge"
-                />
+                <!--
+                    いま録れているところへ。ライブの「ライブ」に相当し、場所も同じ。
+
+                    **録り終わっていたら出しません。** 「最新」は伸びていく端に
+                    張り付くためのもので、録画が終われば端は動かず、ただの
+                    「終わりへ飛ぶ」になります。焼き上がる前の追っかけでは
+                    録り終えたあともこの画面に居られる (録画済みと出る) ので、
+                    そのとき意味の無いボタンが残っていました
+                -->
+                {#if line !== null && !line.finished}
+                    <EdgeButton
+                        active={recorded - pos < 20}
+                        label="最新"
+                        onclick={() => seekTo(recorded)}
+                        testid="chase-edge"
+                    />
+                {/if}
 
                 <!-- 読みものは3画面共通の二段 (InfoBlock)。上が番組、下が位置 -->
                 <InfoBlock
