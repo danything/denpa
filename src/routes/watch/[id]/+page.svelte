@@ -285,6 +285,27 @@
     /** CM を飛ばしたことを短く言う。黙って跳ぶと壊れたように見える */
     let skipped = $state(false);
     let skipNotice: ReturnType<typeof setTimeout> | null = null;
+    /**
+     * **跨いでいる間、最後の本編のコマで蓋をする面。**
+     *
+     * 先読み (`CM_LEAD`) だけでは 0コマにできません。`requestVideoFrameCallback`
+     * は**映したあと**に来るうえ、ブラウザは先のコマを何枚か合成器へ渡し終えて
+     * いるので、そこで位置を変えても**渡し済みのぶんは出てしまいます**。
+     * 実機で見えていた「一瞬の CM」はこれです。
+     *
+     * 予測で消せない以上、**隠します。** 跳ぶ直前のコマを写して被せ、跳んだ先が
+     * 映ってから外す。黒で塗らないのは、**止め絵のほうが跳んだように見える**ため
+     * (黒を挟むと切れたように見える)
+     */
+    let cover = $state<HTMLCanvasElement | null>(null);
+    /** 蓋をしているか */
+    let hopping = $state(false);
+    /** 跳んだ先 (秒)。ここまで来たら蓋を外す */
+    let hopTo = 0;
+    /** 蓋の外し忘れ止め。跳んだ先が来ないまま止まっても、いつかは外す */
+    let hopGiveUp: ReturnType<typeof setTimeout> | null = null;
+    /** 蓋をしておく上限 (ms)。読み込みが詰まっても止め絵で居座らせない */
+    const HOP_GIVE_UP = 2_000;
 
     /** どこまで観たかを書き送る間隔 (ms)。**細かく送るものではない** */
     const REMEMBER = 15_000;
@@ -347,6 +368,7 @@
             remember(true);
             deleting.fire();
             if (skipNotice !== null) clearTimeout(skipNotice);
+            if (hopGiveUp !== null) clearTimeout(hopGiveUp);
             if (retryTimer !== null) clearTimeout(retryTimer);
         };
     });
@@ -564,20 +586,61 @@
     /**
      * CM を跨ぐ**手前**で跳ぶための先読み (秒)。
      *
-     * 60コマ/秒でも 2コマぶんある。**入ってから跳ぶと必ず CM のコマが見えます** —
+     * 30コマ/秒で3コマぶん。**入ってから跳ぶと必ず CM のコマが見えます** —
      * 画面は跳ぶまで今の絵を出し続けるので、気付くのが1コマ遅れれば1コマ映る。
-     * 跨ぐ直前に跳べば、最後に映っているのは本編の1コマになる
+     *
+     * **合成器に渡し済みのコマぶんを見込んで取る。** ブラウザは先のコマを
+     * 何枚か渡し終えているので、蓋 (`cover`) を出しても効くのは次の合成から。
+     * 1コマぶんの先読みでは間に合わない。本編の末尾 0.1 秒が止め絵になるが、
+     * 境目は場面の切れ目なので分からない
      */
-    const CM_LEAD = 0.05;
+    const CM_LEAD = 0.1;
 
     function hopCm(): void {
-        if (!skipCm || video === null) return;
+        // 跨いでいる最中。着くまでは何もしない (蓋を撮り直すと CM のコマを写す)
+        if (hopping || !skipCm || video === null) return;
         const to = skipTarget(chapters, video.currentTime, CM_LEAD);
         if (to === null) return;
+        shut();
         video.currentTime = to;
+        hopTo = to;
         skipped = true;
         if (skipNotice !== null) clearTimeout(skipNotice);
         skipNotice = setTimeout(() => (skipped = false), 2500);
+    }
+
+    /**
+     * いま映っているコマを写して蓋をする。**跳ぶ前に呼ぶ** — この時点では
+     * まだ本編なので、写るのは本編の最後の1コマ。
+     *
+     * 字幕も一緒に消す。CM の字幕が蓋の外に出ては意味がない
+     */
+    function shut(): void {
+        if (video === null) return;
+        const ctx = cover?.getContext('2d') ?? null;
+        if (cover !== null && ctx !== null && video.videoWidth > 0) {
+            cover.width = video.videoWidth;
+            cover.height = video.videoHeight;
+            try {
+                ctx.drawImage(video, 0, 0, cover.width, cover.height);
+            } catch {
+                // 写せなくても蓋はする (黒いままになるだけ)
+            }
+        }
+        hopping = true;
+        clearCaptions();
+        place();
+        if (hopGiveUp !== null) clearTimeout(hopGiveUp);
+        hopGiveUp = setTimeout(open, HOP_GIVE_UP);
+    }
+
+    /** 蓋を外す。跳んだ先が映ったとき (`follow`) と、待ちくたびれたとき */
+    function open(): void {
+        hopping = false;
+        if (hopGiveUp !== null) {
+            clearTimeout(hopGiveUp);
+            hopGiveUp = null;
+        }
     }
 
     /** 速さを1段ずつ動かす。端では止まる */
@@ -669,6 +732,8 @@
         const again = () => {
             // 別の映像に移った (画面を閉じた) ら、こちらは畳む
             if (following !== target) return;
+            // 跳んだ先が映った。ここで蓋を外すと、**CM のコマは1枚も出ない**
+            if (hopping && !target.seeking && target.currentTime >= hopTo) open();
             paint();
             // **CM の跨ぎもここで見ます。** `timeupdate` (250ms) 任せだった頃は、
             // 気付くまでの 7コマぶん (30コマ/秒) CM が見えていた
@@ -697,12 +762,16 @@
      * 引き伸ばす (`fitRect`)
      */
     function place(): void {
-        if (video === null || overlay === null) return;
+        if (video === null) return;
         const rect = fitRect(video.clientWidth, video.clientHeight, video.videoWidth, video.videoHeight);
-        overlay.style.left = `${video.offsetLeft + rect.left}px`;
-        overlay.style.top = `${video.offsetTop + rect.top}px`;
-        overlay.style.width = `${rect.width}px`;
-        overlay.style.height = `${rect.height}px`;
+        // 字幕も CM の蓋も、映像の絵と同じ場所・同じ大きさに置く
+        for (const layer of [overlay, cover]) {
+            if (layer === null) continue;
+            layer.style.left = `${video.offsetLeft + rect.left}px`;
+            layer.style.top = `${video.offsetTop + rect.top}px`;
+            layer.style.width = `${rect.width}px`;
+            layer.style.height = `${rect.height}px`;
+        }
     }
 
     /**
@@ -713,6 +782,8 @@
      * そのまま置けばよい — **左右の位置がそのまま出る**のはこのため
      */
     function paint(): void {
+        // 蓋の下。いま描くと CM の字幕を仕込むことになる
+        if (hopping) return;
         if (!captions || overlay === null) return;
         const next = captionAt(drawn, video?.currentTime ?? 0);
         if (next === showing) return;
@@ -1027,6 +1098,18 @@
                     class="pointer-events-none absolute"
                     data-testid="watch-captions-canvas"
                     data-on={captions && hasCaptions}
+                    aria-hidden="true"
+                ></canvas>
+
+                <!--
+                    **CM を跨ぐ間の蓋。** 字幕より後ろに置く = 字幕の上に載る
+                    (CM の字幕まで隠すため)。帯や報せ (`z-10`) の下には残す
+                -->
+                <canvas
+                    bind:this={cover}
+                    class="pointer-events-none absolute"
+                    class:hidden={!hopping}
+                    data-testid="watch-cm-cover"
                     aria-hidden="true"
                 ></canvas>
 
