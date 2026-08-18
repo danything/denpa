@@ -117,6 +117,12 @@ export interface SynthEvent {
     name: string;
     description?: string;
     extended?: Record<string, string>;
+    /**
+     * 記述子をそのまま足す。**実際の放送から取ったバイトを試験に使うため。**
+     * `extended` は文字列から組み立てるので、分割して送られてきたものや
+     * 文字集合の切り替えが混ざったものを再現できない
+     */
+    rawDescriptors?: number[];
     genres?: [number, number][];
     /** 音声。並べたぶんだけ audio_component_descriptor を積む */
     audios?: SynthAudio[];
@@ -164,6 +170,8 @@ function eventDescriptors(event: SynthEvent): number[] {
         const body = [0x00, 0x6a, 0x70, 0x6e, items.length, ...items, 0x00];
         out.push(0x4e, body.length, ...body);
     }
+
+    if (event.rawDescriptors !== undefined) out.push(...event.rawDescriptors);
 
     if (event.genres !== undefined && event.genres.length > 0) {
         const body = event.genres.flatMap(([lv1, lv2]) => [(lv1 << 4) | lv2, 0xff]);

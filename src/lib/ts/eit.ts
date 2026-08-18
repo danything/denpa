@@ -157,16 +157,42 @@ const SAMPLING_RATE: Record<number, number> = { 1: 16000, 2: 22050, 3: 24000, 5:
 const lang = (data: Uint8Array, at: number) =>
     String.fromCharCode(data[at], data[at + 1], data[at + 2]).toLowerCase();
 
+/** バイト列を1つに繋ぐ */
+function joinBytes(parts: Uint8Array[]): Uint8Array {
+    if (parts.length === 1) return parts[0];
+    let total = 0;
+    for (const part of parts) total += part.length;
+    const out = new Uint8Array(total);
+    let at = 0;
+    for (const part of parts) {
+        out.set(part, at);
+        at += part.length;
+    }
+    return out;
+}
+
 /**
  * 記述子を読んで番組の中身を埋める。
  *
  * **extended_event は分割して送られてくる。** descriptor_number 順に並んだものを
  * 見出しごとに繋ぎ直さないと、長い説明が途中で切れる。見出しが空の項目は
  * 「直前の項目の続き」という意味なので、そこにも繋ぐ。
+ *
+ * **繋ぐのは復号する前、バイトのうちに。** 部分ごとに復号して文字列を繋いで
+ * いた頃は、続きが**別の文字で出て**いました (実機の「音楽制作ずはのづ ねふびどっ」。
+ * 正しくは「音楽制作:ONE MUSIC」)。分割点は
+ *
+ * - **二バイト文字の途中**に来ることがある (片割れだけでは字にならない)
+ * - **文字集合の状態を持ち越す** — G0〜G3 の指示も GL/GR の呼び出しも、
+ *   続きの側には書き直されない。前の状態のまま読む前提で送られてくる
+ *
+ * ので、部分だけを単独で復号すると、そこから先が崩れます。
  */
 function readDescriptors(event: EitEvent, body: Uint8Array): void {
     /** 見出しの出てきた順。Map は挿入順を保つので、そのまま出せる */
     const items = event.extended;
+    /** 見出しごとの生バイト。**全部揃ってから復号する** */
+    const pending = new Map<string, Uint8Array[]>();
     let lastHeading = '';
 
     for (const [tag, data] of descriptors(body)) {
@@ -187,13 +213,15 @@ function readDescriptors(event: EitEvent, body: Uint8Array): void {
                     const heading = decodeAribText(data.subarray(at + 1, at + 1 + headingLength));
                     at += 1 + headingLength;
                     const textLength = data[at];
-                    const text = decodeAribText(data.subarray(at + 1, at + 1 + textLength));
+                    const text = data.subarray(at + 1, at + 1 + textLength);
                     at += 1 + textLength;
 
                     // 見出しが空なら前の項目の続き。改行を挟まずそのまま繋ぐ
                     const key = heading === '' ? lastHeading : heading;
                     if (key === '') continue;
-                    items[key] = (items[key] ?? '') + text;
+                    const parts = pending.get(key);
+                    if (parts === undefined) pending.set(key, [text]);
+                    else parts.push(text);
                     lastHeading = key;
                 }
                 break;
@@ -247,6 +275,11 @@ function readDescriptors(event: EitEvent, body: Uint8Array): void {
             default:
                 break;
         }
+    }
+
+    // 全部揃ってから復号する (分割点が二バイト文字や文字集合の途中に来るため)
+    for (const [heading, parts] of pending) {
+        items[heading] = (items[heading] ?? '') + decodeAribText(joinBytes(parts));
     }
 }
 

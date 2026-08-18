@@ -72,6 +72,47 @@ describe('EIT の解析', () => {
         expect(parsed?.events[0].transportStreamId).toBe(TSID);
     });
 
+    /**
+     * **分割された項目は、繋いでから復号する。**
+     *
+     * バイトは実機の放送から取ったもの (テレ東 LIAR GAME の「番組概要」)。
+     * 部分ごとに復号して文字列を繋いでいた頃は、続きが別の文字で出ていた —
+     * 「音楽制作ずはのづ ねふびどっ」(正しくは「音楽制作:ONE MUSIC」)。
+     * 分割点が二バイト文字の途中に来ており、文字集合の状態も持ち越されるため
+     */
+    test('分割された詳細情報は、繋いでから復号する', () => {
+        const hex = (text: string) => (text.match(/../g) ?? []).map((pair) => Number.parseInt(pair, 16));
+        /** 見出し「番組概要」 */
+        const heading = hex('4856414833354d57');
+        /** 1つ目。上限いっぱいで「音楽:菅野祐」の途中まで */
+        const first = hex(
+            '38363a6e1b7eba39434865432b47260d416d34464644ba3a3446234d3a3b300d34464644ba406e4c6e4b63487e0d2537256a213c253a393d402eba313a482a432349270d1b7cade3e9afbf213cc7b6a4f3fe416d3a6e3268344646441b7eba455a3230373d0d487e3d51405f446aba3f793b333f383b4b0d3f273a4c405f3757ba436646623e48487e0d4a543d38ba444d3e6f3f3f4d7d3b520d323b364134464644ba3e2e4074352a32700d323b3641387a324cba3b33432b3e303f4d0d4f3f323b44344030ba45374c6e4e364d4e0d323b335aba3f7b4c6e4d3438',
+        );
+        /** 2つ目。**見出しが空** = 続き。頭は前の文字の片割れから始まる */
+        const second = hex(
+            '670d323b335a40293a6eba89cfcec58a2089cdd5d3c9c30d8a323b364140293a6eba1b7cd3c3c8b0eb213cd6d7ede2213cb7e7f30da2cbe1213cb7e7f340293a6e0e3adec3c9cfa6b90d',
+        );
+        const body = (numbering: number, items: number[]) => [
+            numbering,
+            0x6a,
+            0x70,
+            0x6e,
+            items.length,
+            ...items,
+            0x00,
+        ];
+        const one = body(0x01, [heading.length, ...heading, first.length, ...first]);
+        const two = body(0x11, [0x00, second.length, ...second]);
+
+        const parsed = parseEit(
+            section([event({ rawDescriptors: [0x4e, one.length, ...one, 0x4e, two.length, ...two] })]),
+        );
+
+        expect(parsed?.events[0].extended['番組概要']).toContain('音楽:菅野祐悟');
+        expect(parsed?.events[0].extended['番組概要']).toContain('音楽制作:ONE MUSIC');
+        expect(parsed?.events[0].extended['番組概要']).toContain('音響制作:ビットグルーブプロモーション');
+    });
+
     test('詳細情報は見出しごとに繋ぎ直す', () => {
         const parsed = parseEit(
             section([event({ extended: { 出演者: 'ゲスト太郎', 番組内容: 'あらすじ' } })]),
