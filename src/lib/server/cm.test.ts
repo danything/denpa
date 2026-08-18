@@ -3,6 +3,8 @@ import {
     boundaries,
     chapterMetadata,
     detectCmRanges,
+    droppedHead,
+    earliestFrameTime,
     fields,
     firstFrameTime,
     invertRanges,
@@ -234,6 +236,44 @@ describe('頭から捨てる長さの上限', () => {
     test('映像のほうが先なら 0', () => {
         expect(leadIn(10, 10.5)).toBe(0);
         expect(leadIn(Number.NaN, 0)).toBe(0);
+    });
+});
+
+/**
+ * 実機 (ブチ切れ令嬢 / 2026-08-18) の TS から取った並び。**先頭は表示の順に
+ * 並んでいない** — 先行 B のほうが I より早い時刻を持つ
+ */
+const HEAD_PACKETS = `pts_time=72575.629533
+pts_time=72575.562800
+pts_time=72575.596167
+pts_time=72575.729633
+pts_time=72575.662900
+pts_time=72575.696267
+`;
+
+describe('捨てられるコマぶん (チャプターを詰める量)', () => {
+    test('いちばん早い表示時刻を探す。頭の1つではない', () => {
+        expect(earliestFrameTime(HEAD_PACKETS)).toBeCloseTo(72575.5628, 4);
+        expect(Number.isNaN(earliestFrameTime('pts_time=N/A\n'))).toBe(true);
+    });
+
+    /*
+     * 引く量を `leadIn` (0.5825) と取り違えていた頃は 0.416 秒 = 12.5 コマ
+     * 引きすぎていて、跳んだ先が CM の途中に着地していた
+     */
+    test('復号できる1コマ目までに捨てられるコマぶんだけ', () => {
+        const first = 72575.729633;
+        expect(droppedHead(first, earliestFrameTime(HEAD_PACKETS))).toBeCloseTo(0.1668, 4);
+        // 入れ物の頭から数えたほうは、音声だけの区間まで含んでしまう
+        expect(leadIn(first, 72575.147089)).toBeCloseTo(0.5825, 4);
+    });
+
+    test('読めない・逆さま・大きすぎるときは 0', () => {
+        expect(droppedHead(Number.NaN, 10)).toBe(0);
+        expect(droppedHead(10, Number.NaN)).toBe(0);
+        expect(droppedHead(10, 10.5)).toBe(0);
+        // 1 GOP を超えるずれは読み違い
+        expect(droppedHead(12, 10)).toBe(0);
     });
 });
 

@@ -288,6 +288,14 @@ interface EncodeOptions {
      */
     videoStart?: number;
     /**
+     * 焼く前に捨てられるコマぶんの時間(秒)。**チャプターを詰める量** (`droppedHead`)。
+     *
+     * **`videoStart` とは別物。** あちらは入れ物の頭から数えた量で、CM 検出は
+     * そこを見ていない (絵を頭から数えている)。混ぜると引きすぎて、跳んだ先が
+     * CM の途中に着地する
+     */
+    chapterDrop?: number;
+    /**
      * 正方形の画素で出したときの大きさ。**渡されたときだけ引き伸ばす。**
      * 1440x1080 (SAR 4:3) なら 1920x1080。もともと正方形の素材では渡さない
      */
@@ -1211,7 +1219,10 @@ async function runJob(jobId: number): Promise<void> {
         encodeOptions.canvasSize = `${measured.width}x${measured.height}`;
     }
     // 映像が出るまでの音声だけの区間。頭から捨てて 0 秒から始める
-    encodeOptions.videoStart = await probeLeadIn(source, measured.formatStart, measured.packetStart);
+    const head = await probeLeadIn(source, measured.formatStart, measured.packetStart);
+    encodeOptions.videoStart = head.lead;
+    // チャプターを詰める量は別 (理由は cm.ts の droppedHead)
+    encodeOptions.chapterDrop = head.dropped;
 
     /*
      * 画素が横長なら、正方形に直した大きさで焼く (地上波HDは 1440x1080 の SAR 4:3)。
@@ -1318,15 +1329,21 @@ async function runJob(jobId: number): Promise<void> {
     let lastOutTimeUs = 0;
 
     /**
-     * チャプターを、頭を捨てるぶん (`-ss` と同じ量) だけ前へ詰めて書き直す。
-     * 検出そのままの時刻で焼くと全チャプターが捨てたぶん遅れて入り、CMの
-     * 自動スキップが毎回そのぶんCMを見せてから跳んでいた (字幕は引いてある)。
-     * 捨てる量は attempt で変わる (`encodeRetrySeek`) ので、焼く直前に毎回引き直す
+     * チャプターを、焼いたものの 0 秒に合わせて詰めて書き直す。
+     *
+     * **引く量は `-ss` と同じではない** (字幕とはここが違う)。CM 検出は TS の絵を
+     * 頭から数えていて、**音声だけの区間を見ていない** — 引くのは
+     * 「復号できないので捨てられるコマ」ぶんだけ (`droppedHead`)。`-ss` と同じ量を
+     * 引いていた頃は 0.4 秒引きすぎていて、**跳んだ先が CM の途中に着地し、
+     * 本編が始まるまでの CM が見えていた** (実機で 12.5 コマぶん)。
+     *
+     * やり直しの `-ss` (`encodeRetrySeek`) はそのぶん本当に頭が減るので、こちらは足す。
+     * attempt で変わるので、焼く直前に毎回引き直す
      */
     const rebaseChapters = (seek: number | null): void => {
         const src = encodeOptions.chapterSource;
         if (src === null || encodeOptions.chaptersFile === null) return;
-        const skip = (seek ?? 0) + headSkip(encodeOptions.videoStart);
+        const skip = (seek ?? 0) + (encodeOptions.chapterDrop ?? 0);
         writeFileSync(
             encodeOptions.chaptersFile,
             chapterMetadata(shiftRanges(src.cm, skip), src.duration - skip),
