@@ -300,6 +300,22 @@
     let cover = $state<HTMLCanvasElement | null>(null);
     /** 蓋をしているか */
     let hopping = $state(false);
+    /**
+     * 跳んだ先が映るのを待っているか。**`hopping` とは別**。
+     *
+     * 開いた直後は「跳ぶかどうかまだ分からない」ので、蓋だけ先に出して
+     * (`hopping`) チャプターを待ちます。そのとき跳ぶ判断は**まだしていない**ので、
+     * 蓋があることを理由に `hopCm` を止めてはいけない
+     */
+    let waiting = false;
+    /**
+     * 蓋が黒塗りか (写したコマではないか)。
+     *
+     * **写すのは本編のコマだけ。** CM の中で蓋をすると、写したものがそのまま
+     * CM の1コマになる — 開いた直後 (本編前の CM) がまさにそれで、
+     * 蓋をしているのに CM が見えていた
+     */
+    let blanked = false;
     /** 跳んだ先 (秒)。ここまで来たら蓋を外す */
     let hopTo = 0;
     /** 蓋の外し忘れ止め。跳んだ先が来ないまま止まっても、いつかは外す */
@@ -330,7 +346,10 @@
         // 前に選んだ速さで始める。覚えるのは端末ごと
         setSpeed(storedSpeed(), false);
         skipCm = skipCmAtStart(rec.cm_note, stored(SKIP_CM_KEY));
-        void loadChapters();
+        // **チャプターが来るまで蓋をしておく。** 頭が CM のことが多く、
+        // 取りに行っている間そのまま流れていた (`settle`)
+        if (skipCm) shut();
+        void loadChapters().then(settle);
         loadDetail();
         // 字幕は既定で出す (ライブと同じ)。持っていない録画では何も起きない
         if (captions) void loadCaptions();
@@ -597,36 +616,47 @@
     const CM_LEAD = 0.1;
 
     function hopCm(): void {
-        // 跨いでいる最中。着くまでは何もしない (蓋を撮り直すと CM のコマを写す)
-        if (hopping || !skipCm || video === null) return;
+        // 跳んだ先を待っている最中。着くまでは何もしない
+        if (waiting || !skipCm || video === null) return;
         const to = skipTarget(chapters, video.currentTime, CM_LEAD);
         if (to === null) return;
         shut();
         video.currentTime = to;
         hopTo = to;
+        waiting = true;
         skipped = true;
         if (skipNotice !== null) clearTimeout(skipNotice);
         skipNotice = setTimeout(() => (skipped = false), 2500);
     }
 
     /**
-     * いま映っているコマを写して蓋をする。**跳ぶ前に呼ぶ** — この時点では
-     * まだ本編なので、写るのは本編の最後の1コマ。
+     * いま映っているコマを写して蓋をする。**跳ぶ前に呼ぶ。**
+     *
+     * **本編に居るときだけ写します。** CM の中で写すと、蓋そのものが CM の
+     * 1コマになる。チャプターがまだ来ていないときも同じ扱い (中身が分からない)。
+     * 写せないときは黒で塗って、映像の枠ごと覆う。
      *
      * 字幕も一緒に消す。CM の字幕が蓋の外に出ては意味がない
      */
     function shut(): void {
-        if (video === null) return;
+        const here = video === null ? null : chapterAt(chapters, video.currentTime);
+        const shot = video !== null && here !== null && !isCm(here.title) && video.videoWidth > 0;
         const ctx = cover?.getContext('2d') ?? null;
-        if (cover !== null && ctx !== null && video.videoWidth > 0) {
-            cover.width = video.videoWidth;
-            cover.height = video.videoHeight;
-            try {
-                ctx.drawImage(video, 0, 0, cover.width, cover.height);
-            } catch {
-                // 写せなくても蓋はする (黒いままになるだけ)
+        if (cover !== null && ctx !== null) {
+            cover.width = shot ? (video as HTMLVideoElement).videoWidth : 16;
+            cover.height = shot ? (video as HTMLVideoElement).videoHeight : 9;
+            if (shot) {
+                try {
+                    ctx.drawImage(video as HTMLVideoElement, 0, 0, cover.width, cover.height);
+                } catch {
+                    // 写せなかった。黒いままなので、下は見えない
+                }
+            } else {
+                ctx.fillStyle = '#000';
+                ctx.fillRect(0, 0, cover.width, cover.height);
             }
         }
+        blanked = !shot;
         hopping = true;
         clearCaptions();
         place();
@@ -637,10 +667,25 @@
     /** 蓋を外す。跳んだ先が映ったとき (`follow`) と、待ちくたびれたとき */
     function open(): void {
         hopping = false;
+        waiting = false;
         if (hopGiveUp !== null) {
             clearTimeout(hopGiveUp);
             hopGiveUp = null;
         }
+    }
+
+    /**
+     * **観はじめの1回。** チャプターが揃ってから、始まりが CM なら跳ぶ。
+     *
+     * 開いた時点では**チャプターをまだ取れていません** (別に取りに行くため)。
+     * 何もしないと、取れるまでの間だけ**本編前の CM がそのまま流れます** —
+     * 実機で見えていた「一瞬の CM」はこれでした。取りに行っている間は
+     * 黒い蓋をしておいて、揃ってから跳ぶ・跳ばないを決める
+     */
+    function settle(): void {
+        hopCm();
+        // 跳ばなかった (CM ではなかった・切ってある)。蓋は要らない
+        if (!waiting) open();
     }
 
     /** 速さを1段ずつ動かす。端では止まる */
@@ -729,11 +774,21 @@
     function follow(target: HTMLVideoElement): void {
         if (following === target) return;
         following = target;
-        const again = () => {
+        const again = (_now?: number, meta?: { mediaTime?: number }) => {
             // 別の映像に移った (画面を閉じた) ら、こちらは畳む
             if (following !== target) return;
-            // 跳んだ先が映った。ここで蓋を外すと、**CM のコマは1枚も出ない**
-            if (hopping && !target.seeking && target.currentTime >= hopTo) open();
+            /*
+             * **映したコマの時刻で外す。** `currentTime` では早すぎます —
+             * 位置を代入した時点で `currentTime` は**跳んだ先を返す**のに
+             * (仕様どおり)、画面にはまだ手前のコマが出ています。それで外して
+             * いたので、蓋を出しても CM の尻が1コマ見えていた。
+             * `requestVideoFrameCallback` の `mediaTime` は**いま映した**コマの
+             * 時刻なので、これが跳んだ先を越えるまで待つ
+             */
+            if (waiting) {
+                const shown = meta?.mediaTime ?? target.currentTime;
+                if (!target.seeking && shown >= hopTo) open();
+            }
             paint();
             // **CM の跨ぎもここで見ます。** `timeupdate` (250ms) 任せだった頃は、
             // 気付くまでの 7コマぶん (30コマ/秒) CM が見えていた
@@ -771,6 +826,14 @@
             layer.style.top = `${video.offsetTop + rect.top}px`;
             layer.style.width = `${rect.width}px`;
             layer.style.height = `${rect.height}px`;
+        }
+        // 黒塗りの蓋は枠ごと覆う。**まだ絵の大きさが分からない**ことがあるため
+        // (開いた直後。`fitRect` は 0 を渡されると当てにならない)
+        if (blanked && cover !== null) {
+            cover.style.left = '0';
+            cover.style.top = '0';
+            cover.style.width = '100%';
+            cover.style.height = '100%';
         }
     }
 
@@ -1265,10 +1328,17 @@
                         />
                         {#if chapters.length > 1 && length > 0}
                             <div class="pointer-events-none absolute inset-x-0 top-0 h-1">
+                                <!--
+                                    **つまみの往復ぶんを引く。** つまみは幅の
+                                    ぶんだけ内側を動く (端で枠から出ないため) ので、
+                                    切れ目を素の百分率で置くと**つまみとずれます** —
+                                    実機では、まだ来ていない CM の印が再生位置の
+                                    左に出ていた。`range-xs` のつまみは 1rem
+                                -->
                                 {#each chapters.slice(1) as chapter (chapter.start)}
                                     <span
                                         class="absolute top-0 h-1 w-px bg-white/70"
-                                        style="left: {(chapter.start / length) * 100}%"
+                                        style="left: calc(0.5rem + {chapter.start / length} * (100% - 1rem))"
                                     ></span>
                                 {/each}
                             </div>
