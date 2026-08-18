@@ -22,8 +22,14 @@ import { run } from './stream';
  */
 const FRAMES = 60;
 
-/** コマを抜く間隔 (秒)。番組のあちこちから散らして取るため */
-const EVERY = 6;
+/**
+ * コマを抜く間隔の下限 (秒)。
+ *
+ * ふだんは**丸ごとの長さを `FRAMES` で割って**決めます — 頭から等間隔に
+ * 抜くと最初の数分しか見ないことになり、**その場面の輪郭をロゴと取り違えます**
+ * (試作で 90 秒ぶんだけ渡して実際に外した)。短い録画のときだけこちらが効く
+ */
+const EVERY_LEAST = 2;
 
 /** 抜くのに掛けてよい時間。壊れたファイルで居座らせない */
 const TIMEOUT = 120_000;
@@ -51,9 +57,12 @@ export function hasArea(serviceId: number): boolean {
  */
 export async function detectArea(input: string, signal?: AbortSignal): Promise<string | null> {
     let size: { width: number; height: number };
+    let every = EVERY_LEAST;
     try {
         const probed = await probeVideo(input);
         size = { width: probed.width, height: probed.height };
+        // 丸ごとの長さに散らす。頭に固まらせない
+        if (probed.duration > 0) every = Math.max(EVERY_LEAST, probed.duration / FRAMES);
     } catch {
         return null;
     }
@@ -67,7 +76,7 @@ export async function detectArea(input: string, signal?: AbortSignal): Promise<s
             '-i',
             input,
             '-vf',
-            `fps=1/${EVERY},format=gray`,
+            `fps=1/${every.toFixed(3)},format=gray`,
             '-frames:v',
             String(FRAMES),
             '-f',

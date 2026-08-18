@@ -2,6 +2,7 @@ import { mkdirSync, readFileSync } from 'node:fs';
 import { type CmOptions, invertRanges, MAX_CM_RATIO, type Range } from './cm';
 import { config } from './config';
 import { removeByPrefix } from './fsx';
+import { detectArea, hasArea, remember as rememberArea } from './logo-area';
 import { logoRepo } from './logo-data';
 import { settings } from './settings';
 import { run as runProcess } from './stream';
@@ -180,6 +181,27 @@ export async function detectWithJls(
          * 一覧に「ロゴを当てられませんでした」が出なかった (実機で2本)。
          * ロゴの当たり外れは局ごとに決まる話なので、先に確かめて必ず伝える
          */
+        /*
+         * **在り処が空なら、この録画から割り出して渡す** (`logo-area.ts`)。
+         *
+         * logoframe の自動検出は画面全体を見るので、半透明の細いロゴでは
+         * 本物より強い縁を別の場所で掴んで降ります (テレ東の実素材で家具の縁)。
+         * **覚え直しの仕事だけに入れていては届きません** — 既に `.lgd` を
+         * 持っている局は覚え直しの対象にならないので、空のまま CM検出に来ます。
+         *
+         * ここには**録画1本まるごと**という良い材料があるので、その場で割り出す。
+         * 出したものは覚えておき (`services.logo_area`)、次からは測り直さない
+         */
+        let logoAreaText = area;
+        if (logoAreaText === '' && serviceId !== undefined && !hasArea(serviceId)) {
+            step('局ロゴの在り処を探しています');
+            const found = await detectArea(input, signal);
+            if (found !== null) {
+                rememberArea(serviceId, found);
+                logoAreaText = found;
+            }
+        }
+
         const logoArgs =
             channel === ''
                 ? ['-logo', repo]
@@ -196,7 +218,7 @@ export async function detectWithJls(
                       '-logo-match',
                       String(config.jlsLogoMatch),
                       // 自動で見つからなかった局だけ、画面から教わった範囲を渡す
-                      ...(/^\d+,\d+,\d+,\d+$/.test(area) ? ['-logo-area', area] : []),
+                      ...(/^\d+,\d+,\d+,\d+$/.test(logoAreaText) ? ['-logo-area', logoAreaText] : []),
                   ];
         step('局ロゴが写っているコマを探しています');
         const frames = await run(
