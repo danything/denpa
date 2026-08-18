@@ -16,6 +16,7 @@
 
 import type { Genre } from '../arib';
 import { decodeAribText } from './aribtext';
+import { joinBytes } from './bytes';
 import { descriptors, PacketStream, SectionAssembler } from './psi';
 
 const PID_EIT = 0x0012;
@@ -156,20 +157,6 @@ const SAMPLING_RATE: Record<number, number> = { 1: 16000, 2: 22050, 3: 24000, 5:
 
 const lang = (data: Uint8Array, at: number) =>
     String.fromCharCode(data[at], data[at + 1], data[at + 2]).toLowerCase();
-
-/** バイト列を1つに繋ぐ */
-function joinBytes(parts: Uint8Array[]): Uint8Array {
-    if (parts.length === 1) return parts[0];
-    let total = 0;
-    for (const part of parts) total += part.length;
-    const out = new Uint8Array(total);
-    let at = 0;
-    for (const part of parts) {
-        out.set(part, at);
-        at += part.length;
-    }
-    return out;
-}
 
 /**
  * 記述子を読んで番組の中身を埋める。

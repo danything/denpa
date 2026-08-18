@@ -21,6 +21,8 @@
  * で、字幕1枚ぶんが PCS・WDS・PDS・ODS・END の並び (display set) になる。
  */
 
+import { joinBytes } from './ts/bytes';
+
 /** 節の種類 */
 const SEGMENT_PDS = 0x14;
 const SEGMENT_ODS = 0x15;
@@ -369,17 +371,6 @@ function odsSegments(pts: number, width: number, height: number, data: Uint8Arra
     return segments;
 }
 
-function concat(parts: Uint8Array[]): Uint8Array {
-    const total = parts.reduce((sum, part) => sum + part.length, 0);
-    const out = new Uint8Array(total);
-    let at = 0;
-    for (const part of parts) {
-        out.set(part, at);
-        at += part.length;
-    }
-    return out;
-}
-
 /**
  * 字幕を1枚ずつ足していって .sup にする。
  *
@@ -457,7 +448,7 @@ export class SupWriter {
     }
 
     bytes(): Uint8Array {
-        return concat(this.parts);
+        return joinBytes(this.parts);
     }
 }
 
@@ -661,7 +652,7 @@ export function readSup(bytes: Uint8Array): Drawn[] {
                 ...pending,
                 width,
                 height,
-                rle: concat(building.parts),
+                rle: joinBytes(building.parts),
                 // **写しを持つ。** 色の表はこの後の字幕で書き換わる
                 palette: palette.slice(),
             };

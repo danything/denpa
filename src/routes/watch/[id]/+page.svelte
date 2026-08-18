@@ -10,6 +10,7 @@
     import { playerControls } from '$lib/components/player/controls.svelte';
     import DataBroadcast, { pressD } from '$lib/components/player/DataBroadcast.svelte';
     import FactsAside from '$lib/components/player/FactsAside.svelte';
+    import { eachFrame } from '$lib/components/player/frames';
     import Icon from '$lib/components/player/Icon.svelte';
     import InfoBlock from '$lib/components/player/InfoBlock.svelte';
     import {
@@ -781,23 +782,21 @@
     }
 
     /**
-     * **字幕の貼り直しを、映した1枚ごとに追わせる。** ライブと同じ作り
+     * **字幕の貼り直しと CM の跨ぎを、映した1枚ごとに追わせる**
+     * ([frames.ts](../../../lib/components/player/frames.ts))。ライブと同じ作り
      * (`live-player` の `follow`)。
      *
      * `timeupdate` だけで貼り直していた頃は、**字幕が 0.1 秒ほど遅れて見えて**
-     * いました。あれはブラウザが 250ms ごとにしか出さないので、出るのが
-     * 最大 250ms・平均 125ms 遅れます。`requestVideoFrameCallback` は映した
-     * 1枚ごとに来るので、貼る時刻が見えている絵と揃う。持っていない
-     * ブラウザは画面の書き換えごとに代える (60Hz なら 16ms)。
+     * いました (あちらは 250ms ごとにしか来ない)。
      *
      * `paint` は出すものが変わっていなければその場で戻るので、空回りは安い
      */
     function follow(target: HTMLVideoElement): void {
         if (following === target) return;
         following = target;
-        const again = (_now?: number, meta?: { mediaTime?: number }) => {
+        eachFrame(target, (meta) => {
             // 別の映像に移った (画面を閉じた) ら、こちらは畳む
-            if (following !== target) return;
+            if (following !== target) return false;
             /*
              * **映したコマの時刻で外す。** `currentTime` では早すぎます —
              * 位置を代入した時点で `currentTime` は**跳んだ先を返す**のに
@@ -815,18 +814,8 @@
             // **CM の跨ぎもここで見ます。** `timeupdate` (250ms) 任せだった頃は、
             // 気付くまでの 7コマぶん (30コマ/秒) CM が見えていた
             hopCm();
-            step();
-        };
-        const step = () => {
-            const request = (
-                target as HTMLVideoElement & {
-                    requestVideoFrameCallback?(cb: () => void): number;
-                }
-            ).requestVideoFrameCallback;
-            if (typeof request === 'function') request.call(target, again);
-            else requestAnimationFrame(again);
-        };
-        step();
+            return true;
+        });
     }
 
     /**

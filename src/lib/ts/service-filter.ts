@@ -20,7 +20,17 @@
  * 落とすもの: 他局の PMT と ES、そして詰め物 (PID 0x1FFF)。
  */
 
-import { PACKET, PacketStream, SectionAssembler, SYNC, TABLE_PAT, withCrc } from './psi';
+import {
+    PACKET,
+    PacketStream,
+    pmtProgramInfo,
+    pmtStreams,
+    SectionAssembler,
+    SYNC,
+    TABLE_PAT,
+    TABLE_PMT,
+    withCrc,
+} from './psi';
 
 const PID_PAT = 0x0000;
 const PID_NULL = 0x1fff;
@@ -39,7 +49,6 @@ const KEEP = new Set([
     0x0014, // TDT / TOT
 ]);
 
-const TABLE_PMT = 0x02;
 const DESC_CA = 0x09;
 
 /** 1つの局に絞った PAT を組み立てる */
@@ -177,17 +186,10 @@ export class ServiceFilter {
             const pcrPid = ((section[8] & 0x1f) << 8) | section[9];
             if (pcrPid !== 0x1fff) pids.add(pcrPid);
 
-            const programInfoLength = ((section[10] & 0x0f) << 8) | section[11];
-            collectCa(section.subarray(12, 12 + programInfoLength), pids);
-
-            let at = 12 + programInfoLength;
-            const end = section.length - 4;
-            while (at + 5 <= end) {
-                const elementaryPid = ((section[at + 1] & 0x1f) << 8) | section[at + 2];
-                const infoLength = ((section[at + 3] & 0x0f) << 8) | section[at + 4];
+            collectCa(pmtProgramInfo(section), pids);
+            for (const [, elementaryPid, info] of pmtStreams(section)) {
                 pids.add(elementaryPid);
-                collectCa(section.subarray(at + 5, at + 5 + infoLength), pids);
-                at += 5 + infoLength;
+                collectCa(info, pids);
             }
 
             this.own.clear();

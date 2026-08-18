@@ -50,13 +50,12 @@ import {
     u32,
 } from './dsmcc';
 import { parseMjdTime } from './eit';
-import { descriptors, PacketStream, parsePat, SectionAssembler } from './psi';
+import { descriptors, PacketStream, parsePat, pmtStreams, SectionAssembler } from './psi';
 
 const PID_PAT = 0x0000;
 /** TDT / TOT。放送の現在時刻。BML の `getCurrentDateTime` がこれを見る */
 const PID_TIME = 0x0014;
 
-const TABLE_PMT = 0x02;
 const TABLE_TDT = 0x70;
 const TABLE_TOT = 0x73;
 
@@ -154,19 +153,8 @@ export function parseBxmlInfo(data: Uint8Array): AdditionalAribBXMLInfo {
  * データ放送は「何番の部品か」でしか物を指せないので、番号の無いものは指しようがない。
  */
 function parsePmt(section: Uint8Array): ComponentPMT[] {
-    if (section[0] !== TABLE_PMT) return [];
-    const programInfoLength = ((section[10] & 0x0f) << 8) | section[11];
-    let at = 12 + programInfoLength;
-    const end = section.length - 4;
-
     const components: ComponentPMT[] = [];
-    while (at + 5 <= end) {
-        const streamType = section[at];
-        const pid = ((section[at + 1] & 0x1f) << 8) | section[at + 2];
-        const infoLength = ((section[at + 3] & 0x0f) << 8) | section[at + 4];
-        const info = section.subarray(at + 5, at + 5 + infoLength);
-        at += 5 + infoLength;
-
+    for (const [streamType, pid, info] of pmtStreams(section)) {
         let componentId: number | undefined;
         let dataComponentId: number | undefined;
         let bxmlInfo: AdditionalAribBXMLInfo | undefined;

@@ -5,6 +5,7 @@
  * 読む側 (psi.ts / logo.ts) と対になる書く側で、ここだけが仕様の写し。
  */
 
+import { joinBytes } from './bytes';
 import { PACKET, SYNC, withCrc } from './psi';
 
 // 組み立てる側はここから取る人が多いので、そのまま出しておく
@@ -279,14 +280,7 @@ export function packetize(pid: number, section: Uint8Array, counter = 0): Uint8A
 
 /** 部品を1本のバイト列に繋ぐ。組んだパケットを流し込むときの糊 */
 export function stream(...parts: Uint8Array[]): Uint8Array {
-    const total = parts.reduce((sum, part) => sum + part.length, 0);
-    const out = new Uint8Array(total);
-    let at = 0;
-    for (const part of parts) {
-        out.set(part, at);
-        at += part.length;
-    }
-    return out;
+    return joinBytes(parts);
 }
 
 /** 放送の実時刻 (TDT) を1パケットに。BML の `getCurrentDateTime` が見る */

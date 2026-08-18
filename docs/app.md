@@ -63,11 +63,13 @@ EPGStation の置き換えとして作ったもので、エンコード設定は
 | `src/lib/arib.ts` | ARIB の符号を言葉に直す (ジャンル・映像・音声)。選べる音声の組み立ても |
 | `src/lib/server/logo.ts` | 局ロゴの収集と保存 (番組表に出すPNG) |
 | `src/lib/server/logo-data.ts` | logoframe が覚えたロゴ (`.lgd`) の置き場・読み取り・破棄 |
-| `src/lib/server/logo-area.ts` | CM検出用のロゴの**在り処**を録画の絵から割り出す (`-logo-area` に渡す4数字) |
+| `src/lib/ts/logo-area.ts` | ロゴの**在り処**を絵から割り出す当てはめ (純粋関数。隅だけを見る) |
+| `src/lib/server/logo-area.ts` | 上に渡すコマを録れたものから抜き、出た枠を `services.logo_area` に入れる |
 | `src/lib/components/ProgramFacts.svelte` | 番組の中身そのもの (枠は持たない)。モーダルと観る画面の両方から使う |
 | `src/lib/components/LogoArea.svelte` | CM検出用のロゴを画面で確かめ、位置を教え、捨てる |
 | `src/lib/components/Toasts.svelte` | 押した結果を画面の右下に浮かせて出す (本文を押し下げない) |
-| `src/lib/ts/psi.ts` | TS の PSI (NIT / SDT) を読む。エージェント側と共通 |
+| `src/lib/ts/psi.ts` | TS の PSI (PAT / PMT / NIT / SDT) を読む。エージェント側と共通 |
+| `src/lib/ts/bytes.ts` | バイト列の細かい道具 (繋ぐ)。中身の意味は持たない |
 | `src/lib/ts/aribtext.ts` | ARIB STD-B24 の8単位符号を読む (番組名・局名) |
 | `src/lib/ts/aribtext-gaiji.ts` | ARIB 外字の対応表 (`[新]` `[字]` はここ) |
 | `src/lib/ts/eit.ts` | EIT[schedule] と EIT[p/f]。集まり具合の判定も |

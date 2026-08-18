@@ -7,6 +7,7 @@
  */
 
 import type { AudioTrack } from '$lib/arib';
+import { eachFrame } from '$lib/components/player/frames';
 import { clearOverlay, drawOverlay } from '$lib/components/player/paint';
 import { forget, read, write } from '$lib/keep';
 import {
@@ -437,9 +438,8 @@ export function livePlayer() {
      * 最大 560ms だった。字幕は 1〜2秒で入れ替わるので、これが「次の表示が
      * 気持ち遅い」として出る。
      *
-     * `requestVideoFrameCallback` は**映した1枚ごと**に来るので、貼り直す時刻が
-     * 見えている絵と揃う。持っていないブラウザは画面の書き換えごとに代える
-     * (60Hz なら 16ms)。
+     * 映した1枚ごとに追わせれば ([frames.ts](components/player/frames.ts))、
+     * 貼り直す時刻が見えている絵と揃う。
      *
      * **止めて見ている間は来ない。** 片付け (`sweep`) は `pace` に置いたままに
      * してあるので、待たせているぶんが溜まりっぱなしにはならない。
@@ -448,9 +448,9 @@ export function livePlayer() {
     function follow(video: HTMLVideoElement): void {
         if (following === video) return;
         following = video;
-        const again = (_at?: number, frame?: { mediaTime: number }) => {
+        eachFrame(video, (frame) => {
             // 別の映像に移ったら、こちらは畳む
-            if (following !== video) return;
+            if (following !== video) return false;
             /*
              * **映した1枚の時刻と、再生位置の差。** ここが「絵だけ遅れる」の
              * 正体 (`slip` の項)。`requestVideoFrameCallback` を持っている
@@ -462,20 +462,8 @@ export function livePlayer() {
                 if (slip > SLIP_MOST) unslip(video);
             }
             paint(video.currentTime);
-            step();
-        };
-        const step = () => {
-            const request = (
-                video as HTMLVideoElement & {
-                    requestVideoFrameCallback?(
-                        cb: (at: number, frame: { mediaTime: number }) => void,
-                    ): number;
-                }
-            ).requestVideoFrameCallback;
-            if (typeof request === 'function') request.call(video, again);
-            else requestAnimationFrame(() => again());
-        };
-        step();
+            return true;
+        });
     }
 
     /**

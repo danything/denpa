@@ -20,7 +20,7 @@
 
 import { decodeAribText } from './aribtext';
 import { u16, u32 } from './dsmcc';
-import { descriptors, PacketStream, SectionAssembler } from './psi';
+import { descriptors, PacketStream, pmtStreams, SectionAssembler } from './psi';
 
 /** AIT のセクション */
 const TABLE_AIT = 0x74;
@@ -88,16 +88,8 @@ export interface Ait {
  * 名乗るので、型だけでは見分けが付きません
  */
 export function aitPidsFromPmt(section: Uint8Array): number[] {
-    if (section[0] !== 0x02 || section.length < 16) return [];
-    const programInfoLength = ((section[10] & 0x0f) << 8) | section[11];
-    let at = 12 + programInfoLength;
-    const end = section.length - 4;
     const pids: number[] = [];
-    while (at + 5 <= end) {
-        const pid = ((section[at + 1] & 0x1f) << 8) | section[at + 2];
-        const infoLength = ((section[at + 3] & 0x0f) << 8) | section[at + 4];
-        const info = section.subarray(at + 5, at + 5 + infoLength);
-        at += 5 + infoLength;
+    for (const [, pid, info] of pmtStreams(section)) {
         for (const [tag] of descriptors(info)) {
             if (tag === DESC_APPLICATION_SIGNALLING) {
                 pids.push(pid);

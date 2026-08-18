@@ -19,6 +19,7 @@ const PID_NIT = 0x0010;
 const PID_SDT = 0x0011;
 
 export const TABLE_PAT = 0x00;
+export const TABLE_PMT = 0x02;
 const TABLE_NIT_ACTUAL = 0x40;
 const TABLE_SDT_ACTUAL = 0x42;
 
@@ -234,6 +235,39 @@ export function* descriptors(data: Uint8Array): Generator<[number, Uint8Array]> 
         if (body.length < length) return;
         yield [tag, body];
         at += 2 + length;
+    }
+}
+
+/**
+ * PMT の**番組ぜんたいに掛かる記述子** (program_info)。CA (ECM の PID) はここにも入る
+ */
+export function pmtProgramInfo(section: Uint8Array): Uint8Array {
+    if (section[0] !== TABLE_PMT || section.length < 16) return new Uint8Array(0);
+    const length = ((section[10] & 0x0f) << 8) | section[11];
+    return section.subarray(12, 12 + length);
+}
+
+/**
+ * PMT の ES の並びを `[stream_type, PID, 記述子]` で返す。
+ *
+ * **`stream_type` では物を見分けられません。** データ放送も AIT もロゴも同じ
+ * DSM-CC セクション (0x0D) を名乗るので、見分けるのは記述子のほう
+ * (component_tag や application_signalling) です。だからここは**素通しで並べる
+ * だけ**にして、選り分けは呼ぶ側に置いてあります。
+ *
+ * 同じ歩き方を4箇所 (データ放送・AIT・ロゴ・局の抜き出し) で書いていた頃は、
+ * 番兵 (`section.length - 4` = CRC の手前) の書き方まで少しずつ違っていました
+ */
+export function* pmtStreams(section: Uint8Array): Generator<[number, number, Uint8Array]> {
+    if (section[0] !== TABLE_PMT || section.length < 16) return;
+    const programInfoLength = ((section[10] & 0x0f) << 8) | section[11];
+    let at = 12 + programInfoLength;
+    const end = section.length - 4;
+    while (at + 5 <= end) {
+        const pid = ((section[at + 1] & 0x1f) << 8) | section[at + 2];
+        const infoLength = ((section[at + 3] & 0x0f) << 8) | section[at + 4];
+        yield [section[at], pid, section.subarray(at + 5, at + 5 + infoLength)];
+        at += 5 + infoLength;
     }
 }
 

@@ -13,7 +13,7 @@
   <tr>
     <td align="center"><a href="docs/screens.md#予約と録画"><img src="docs/images/dashboard.webp" alt="予約と録画" width="380"></a><br><sub><b>予約と録画</b> — サムネ付き。押せばその場で観る</sub></td>
     <td align="center"><a href="docs/screens.md#ライブ"><img src="docs/images/live.webp" alt="ライブ" width="380"></a><br><sub><b>ライブ</b> — 字幕もデータ放送も。止めれば追っかけ</sub></td>
-    <td align="center"><a href="docs/screens.md#録画を観る"><img src="docs/images/watch.webp" alt="録画を観る" width="380"></a><br><sub><b>観る</b> — 放送どおりの字幕、CMはチャプターで飛ばす</sub></td>
+    <td align="center"><a href="docs/screens.md#録画を観る"><img src="docs/images/watch.webp" alt="録画を観る" width="380"></a><br><sub><b>観る</b> — 放送どおりの字幕、CMは自動で飛ばす</sub></td>
   </tr>
 </table>
 
@@ -57,7 +57,7 @@ AV1 / H.264 の mkv に焼き、字幕は放送のまま絵で入れます。
 番組の中身は右に並んで出ます。
 
 - **どこを押しても再生と一時停止**、左右の端を素早く2回で10秒戻す/送る
-- **CM 飛ばし。** CM はチャプターで入っているので、送りのボタンで飛ばせます
+- **CM は自動で飛ばします** (既定で入)。**CM のコマは1枚も出しません。** 送りのボタンで手で飛ばすこともできます
 - **字幕・倍速 (1〜2倍)・切り抜き** (いまの場面を字幕ごとクリップボードへ)
 - **続きから始まります。** 別の端末で開いても続きます。観終わったその場で消せます
 
@@ -162,6 +162,9 @@ docker compose) で動かす構成なら `oci://ghcr.io/danything/charts/denpa-a
 - **ロゴの在り処の割り出しが、薄いロゴの局でどこまで当たるか。** 実測で詰めたのは
   テレ東1局ぶんで、閾値もそこから決めた値です
   ([docs/encode.md](docs/encode.md#ロゴの在り処はこちらで割り出す))
+- **CM検出の数え始めが、どの録画でも先頭 GOP の一番早い絵になるか。** チャプターを
+  詰める量はここに拠っています。実測で突き合わせたのは1本 (8箇所) だけです
+  ([docs/encode.md](docs/encode.md#チャプターを詰める量は-ss-と同じではない))
 
 ## もっと詳しく
 

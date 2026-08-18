@@ -1,6 +1,7 @@
 import { cpSync, readdirSync, readFileSync, rmSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { deflateSync } from 'node:zlib';
+import { joinBytes } from '../ts/bytes';
 import { pngChunk } from '../ts/logo-palette';
 import { config } from './config';
 import { queryAll } from './db';
@@ -172,13 +173,7 @@ function encodeGray(gray: Uint8Array, width: number, height: number): Uint8Array
         pngChunk('IDAT', new Uint8Array(deflateSync(raw))),
         pngChunk('IEND', new Uint8Array(0)),
     ];
-    const out = new Uint8Array(parts.reduce((sum, part) => sum + part.length, 0));
-    let at = 0;
-    for (const part of parts) {
-        out.set(part, at);
-        at += part.length;
-    }
-    return out;
+    return joinBytes(parts);
 }
 
 /** その局のロゴを覚えているか。**中身が1つでもあれば覚えている** */

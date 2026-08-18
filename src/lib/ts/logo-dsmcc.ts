@@ -28,11 +28,9 @@
 
 import { ModuleBuilder, parseDdb, parseDii, TABLE_DII, u16 } from './dsmcc';
 import { withPalette } from './logo-palette';
-import { descriptors, parsePat, SectionAssembler } from './psi';
+import { descriptors, parsePat, pmtStreams, SectionAssembler, TABLE_PMT } from './psi';
 
 const PID_PAT = 0x0000;
-
-const TABLE_PMT = 0x02;
 
 /** エンジニアリングサービス。衛星のロゴはこのサービスで運ばれる (ARIB TR-B15) */
 const ESS_SERVICE_ID = 929;
@@ -50,23 +48,14 @@ const LOGO_MODULE_NAMES = new Set(['LOGO-05', 'CS_LOGO-05']);
  */
 function parseLogoEsPids(section: Uint8Array): { serviceId: number; pids: number[] } | null {
     if (section[0] !== TABLE_PMT) return null;
-    const serviceId = u16(section, 3);
-    const programInfoLength = ((section[10] & 0x0f) << 8) | section[11];
-    let at = 12 + programInfoLength;
-    const end = section.length - 4;
-
     const pids: number[] = [];
-    while (at + 5 <= end) {
-        const pid = ((section[at + 1] & 0x1f) << 8) | section[at + 2];
-        const infoLength = ((section[at + 3] & 0x0f) << 8) | section[at + 4];
-        const info = section.subarray(at + 5, at + 5 + infoLength);
-        at += 5 + infoLength;
+    for (const [, pid, info] of pmtStreams(section)) {
         for (const [tag, descriptor] of descriptors(info)) {
             if (tag !== DESC_STREAM_IDENTIFIER || descriptor.length < 1) continue;
             if (LOGO_COMPONENT_TAGS.has(descriptor[0])) pids.push(pid);
         }
     }
-    return { serviceId, pids };
+    return { serviceId: u16(section, 3), pids };
 }
 
 export interface ModuleLogo {
