@@ -63,7 +63,7 @@ EPGStation の置き換えとして作ったもので、エンコード設定は
 | `src/lib/arib.ts` | ARIB の符号を言葉に直す (ジャンル・映像・音声)。選べる音声の組み立ても |
 | `src/lib/server/logo.ts` | 局ロゴの収集と保存 (番組表に出すPNG) |
 | `src/lib/server/logo-data.ts` | logoframe が覚えたロゴ (`.lgd`) の置き場・読み取り・破棄 |
-| `src/lib/server/logo-learn.ts` | CM検出用のロゴを**録画より先に**覚える (局をまとめる決まりもここ) |
+| `src/lib/server/logo-area.ts` | CM検出用のロゴの**在り処**を録画の絵から割り出す (`-logo-area` に渡す4数字) |
 | `src/lib/components/ProgramFacts.svelte` | 番組の中身そのもの (枠は持たない)。モーダルと観る画面の両方から使う |
 | `src/lib/components/LogoArea.svelte` | CM検出用のロゴを画面で確かめ、位置を教え、捨てる |
 | `src/lib/components/Toasts.svelte` | 押した結果を画面の右下に浮かせて出す (本文を押し下げない) |

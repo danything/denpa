@@ -12,7 +12,6 @@ import { pruneHistory, reconcile } from './files';
 import { probe } from './hwenc';
 import { attend } from './live';
 import { reconcile as logoReconcile, ride, sweep } from './logo';
-import { sweep as learnSweep } from './logo-learn';
 import { activeRecordingIds, recoverOrphanedRecordings } from './recorder';
 import { relayoutLibrary } from './relayout';
 import { tick } from './scheduler';
@@ -163,15 +162,6 @@ export function start(): void {
      */
     void guard('logo', logoReconcile);
     every(config.logoSweepInterval, 'logo', sweep);
-
-    /*
-     * CM検出のロゴを**録画より先に**覚えておく (logo-learn.ts)。
-     *
-     * これまではエンコードのときに覚えていたので、局ごとに1本目だけ精度が
-     * 落ちていた。空いているチューナーがあるときだけ、1局につき数分掴む。
-     * 録画にも番組表にも譲る (優先度はロゴ集めと同じでいちばん下)
-     */
-    every(config.logoLearnInterval, 'logo-learn', learnSweep);
 }
 
 /**

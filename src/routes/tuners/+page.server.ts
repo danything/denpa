@@ -3,8 +3,7 @@ import { database, queryAll, queryOne } from '$lib/server/db';
 import { CURRENT_SERVICES } from '$lib/server/epg';
 import { collectNow, collectState } from '$lib/server/epg-collect';
 import { stats as logoStats, sweepNow, sweepState } from '$lib/server/logo';
-import { forgetLogoData } from '$lib/server/logo-data';
-import { learned, stats as learnStats, siblings, stations } from '$lib/server/logo-learn';
+import { forgetLogoData, learned, stats as learnStats, siblings, stations } from '$lib/server/logo-data';
 import { refresh, start, stop } from '$lib/server/scan';
 import { cardStatus } from '$lib/server/scramble';
 import { type AgentTuner, getTuners, putTuners, type TunerConfig, tunersDetected } from '$lib/server/tuner';
@@ -161,7 +160,7 @@ export async function load() {
          */
         logoSweep: sweepState(),
         /*
-         * CM検出のロゴ。**番組表に出す局ロゴとは別物** (logo-learn.ts)。
+         * CM検出のロゴ。**番組表に出す局ロゴとは別物** (logo-data.ts)。
          *
          * 覚えられなかった局はここで位置を教える。**録画の詳細ではなく局の話**
          * なので、局を並べているこの画面に置く
@@ -180,7 +179,7 @@ export async function load() {
  * 見つからず**、全部の局が「位置を教えるにはこの局の録画が1本要ります」に
  * なっていた (実機で、録画が3本ある TOKYO MX1 でもそう出ていた)。
  *
- * **いま選局できる局だけ**にする。数え上げ (`logo-learn.stats`) と揃えないと、
+ * **いま選局できる局だけ**にする。数え上げ (`logo-data.stats`) と揃えないと、
  * 「6 / 46 局」と出ている下に 125 局が並ぶ。
  */
 function cmLogoState(): CmLogo[] {
@@ -223,7 +222,7 @@ export const actions = {
         if (!/^\d+,\d+,\d+,\d+$/.test(area)) {
             return fail(400, { message: 'ロゴの範囲を囲ってください' });
         }
-        // 同じ絵を映しているサブチャンネルの枠にも同じことをする (`logo-learn.stations`)
+        // 同じ絵を映しているサブチャンネルの枠にも同じことをする (`logo-data.stations`)
         for (const id of [serviceId, ...siblings(serviceId)]) {
             database().prepare('UPDATE services SET logo_area = ? WHERE id = ?').run(area, id);
             forgetLogoData(id);
@@ -241,16 +240,18 @@ export const actions = {
      * ロゴではないもの (字幕の下地、常時出ている枠) を覚えることがある。
      * 実機の NHK総合 は文字の判読できない染みを覚えていた。
      *
-     * 捨てれば、空いているチューナーで回っている見回りが次に覚え直す
-     * (`logo-learn.sweep`)。それでも駄目な局だけ、下で位置を教える
+     * 捨てれば、**次にその局を録ってエンコードしたときに覚え直します**
+     * (`cm-jls`)。在り処もそのとき絵から割り出すので (`logo-area`)、
+     * 自動探索が外していた局はここで直ります。それでも駄目な局だけ、
+     * 下で位置を教える
      */
     logoForget: async ({ request }) => {
         const form = await request.formData();
         const serviceId = Number(form.get('serviceId'));
         if (!Number.isFinite(serviceId)) return fail(400, { message: '局IDが不正です' });
-        // 同じ絵を映しているサブチャンネルの枠にも配ってある (`logo-learn.share`)
+        // 同じ絵を映しているサブチャンネルの枠にも配ってある (`logo-data.share`)
         for (const id of [serviceId, ...siblings(serviceId)]) forgetLogoData(id);
-        return { success: true, message: '覚えたロゴを捨てました。空いているチューナーで覚え直します' };
+        return { success: true, message: '覚えたロゴを捨てました。次にこの局を録ったときに覚え直します' };
     },
 
     logoAreaClear: async ({ request }) => {

@@ -3,7 +3,7 @@ import { type CmOptions, invertRanges, MAX_CM_RATIO, type Range } from './cm';
 import { config } from './config';
 import { removeByPrefix } from './fsx';
 import { detectArea, hasArea, remember as rememberArea } from './logo-area';
-import { logoRepo } from './logo-data';
+import { logoRepo, share } from './logo-data';
 import { settings } from './settings';
 import { run as runProcess } from './stream';
 
@@ -193,12 +193,15 @@ export async function detectWithJls(
          * 出したものは覚えておき (`services.logo_area`)、次からは測り直さない
          */
         let logoAreaText = area;
+        /** この回で初めて在り処を出したか。サブチャンネルへ配るのはそのときだけ */
+        let firstLearn = false;
         if (logoAreaText === '' && serviceId !== undefined && !hasArea(serviceId)) {
             step('局ロゴの在り処を探しています');
             const found = await detectArea(input, signal);
             if (found !== null) {
                 rememberArea(serviceId, found);
                 logoAreaText = found;
+                firstLearn = true;
             }
         }
 
@@ -229,6 +232,12 @@ export async function detectWithJls(
         if (frames.code !== 0) {
             return { cm: [], note: failure('logoframe', frames) };
         }
+        /*
+         * **覚えたものを、同じ絵を映している局にも配る** (`logo-data.share`)。
+         * サブチャンネルの枠で録れた番組が「ロゴを覚えていない」ことに
+         * ならないように。初めて出したときだけでよい
+         */
+        if (firstLearn && serviceId !== undefined) share(serviceId);
 
         // 2. 無音とシーンチェンジを拾う
         step('無音とシーンの切れ目を探しています');
