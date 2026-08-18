@@ -54,7 +54,18 @@
     onpointermove={controls.wake}
     onpointerdown={controls.wake}
     onpointerleave={controls.away}
-    onfocusin={() => (controls.keyboard = true)}
+    onfocusin={(event) => {
+        /*
+         * **キーボードで来たときだけ残す。**
+         *
+         * `focusin` は**マウスで押したときにも飛ぶ**ので、そのまま真にすると
+         * ボタンを1回押しただけで焦点がそこに残り、**操作列が消えなくなる**
+         * (焦点が枠の外へ出るまで居座る)。`:focus-visible` はキーボードで
+         * 辿ってきたときにだけ立つので、それで見分ける
+         */
+        const target = event.target;
+        controls.keyboard = target instanceof Element && target.matches(':focus-visible');
+    }}
     onfocusout={() => (controls.keyboard = false)}
     data-testid={testid}
 >
