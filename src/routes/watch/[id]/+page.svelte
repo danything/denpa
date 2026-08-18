@@ -56,6 +56,7 @@
         prevChapterAt,
         resumePoint,
         SKIP,
+        skipCmAtStart,
         skipTarget,
         type Tap,
         tap,
@@ -274,8 +275,8 @@
      * 送りのボタンを押すことになる。
      *
      * **端末ごとに覚える** (速さと同じ理由。`SPEED_KEY` の項)。
-     * **既定は切っておく** — 判定が外れたときに本編を飛ばすので、
-     * 黙って始めるものではない
+     * **観はじめに入れるかどうかは `skipCmAtStart`** — 既定は入で、ロゴでの
+     * 判定に失敗した1本だけは覚えていても切って始める (理由と試験はあちら)
      */
     const SKIP_CM_KEY = 'watch-skip-cm';
     let skipCm = $state(false);
@@ -305,7 +306,7 @@
         coarse = window.matchMedia('(pointer: coarse)').matches;
         // 前に選んだ速さで始める。覚えるのは端末ごと
         setSpeed(storedSpeed(), false);
-        skipCm = stored(SKIP_CM_KEY) === '1';
+        skipCm = skipCmAtStart(rec.cm_note, stored(SKIP_CM_KEY));
         void loadChapters();
         loadDetail();
         // 字幕は既定で出す (ライブと同じ)。持っていない録画では何も起きない
@@ -594,10 +595,11 @@
     }
 
     /**
-     * 字幕の絵を取ってくる。**押されるまで取りに行かない。**
+     * 字幕の絵を取ってくる。**既定で出すので、開いた時点で取りに行く**
+     * (`onMount`)。一度読めていれば読み直さない。
      *
-     * 実機の30分もので 6.0MB (697枚)。動画そのものが 300MB なので誤差だが、
-     * 出さないと決めている人にまで運ばせる理由は無い
+     * 実機の30分もので 6.0MB (697枚)。動画そのものが 300MB なので誤差。
+     * 端末に保存したものがあればそちらから読む (オフラインでも字幕が出る)
      */
     async function loadCaptions(): Promise<void> {
         if (drawn.length > 0) return;

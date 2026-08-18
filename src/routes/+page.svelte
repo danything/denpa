@@ -53,6 +53,21 @@
     }
 
     /**
+     * 置き場の使用量。**主 (AV1) を先に出し、在るものだけ括弧に添える。**
+     *
+     * `ts_size` が持っているのは主のぶんだけなので、両方焼いた録画では画面の
+     * 数字と実際に使っている量が食い違っていた (H.264 のほうが大きいことも
+     * ある)。「消していいのか、どれだけ空くのか」を1行で読めるようにする
+     */
+    function sizeLabel(rec: (typeof data.recordings)[number]): string {
+        const extra = [
+            rec.alt_size === null ? '' : `H.264 ${size(rec.alt_size)}`,
+            rec.raw_size === null ? '' : `生TS ${size(rec.raw_size)}`,
+        ].filter((s) => s !== '');
+        return extra.length === 0 ? size(rec.ts_size) : `${size(rec.ts_size)} (${extra.join('、')})`;
+    }
+
+    /**
      * 焼いたものと生TSが**両方とも残っている**か。
      *
      * 「生TSも残す」で録ると、焼き上がったあとも元が消えずに残る。そのとき
@@ -806,14 +821,10 @@
                                             // 番組表の尺ではなく実際に録れた長さ。
                                             // 途中で止めたときやCMを切ったときは合わない
                                             `${dateTime(rec.start_at)} (${recordedDuration(rec)})`,
-                                            /*
-                                             * 生TSを残しているときは両方出す。片方しか
-                                             * 出していなかった頃は、消していいのか・
-                                             * どれだけ空くのかが画面から分からなかった
-                                             */
-                                            rec.raw_size === null
-                                                ? size(rec.ts_size)
-                                                : `${size(rec.ts_size)} (生TS ${size(rec.raw_size)})`,
+                                            // 在るものは全部出す (`sizeLabel`)。片方しか
+                                            // 出していなかった頃は、消していいのか・
+                                            // どれだけ空くのかが画面から分からなかった
+                                            sizeLabel(rec),
                                             rec.deleted_at !== null ? `${date(rec.deleted_at)} に削除` : '',
                                         ],
                                         { serviceId: rec.service_id, has: rec.has_logo === 1 },

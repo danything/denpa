@@ -11,6 +11,8 @@
  * - **チャプター送り**は「いま観ているものの頭」を挟む (曲送りと同じ癖)
  */
 
+import { logoUnusable } from '../format';
+
 /** 1回で動かす秒数。動画アプリの通例に合わせる */
 export const SKIP = 10;
 
@@ -247,3 +249,20 @@ export function resumePoint(at: number, length: number): number | null {
 export const RESUME_EDGE = 30;
 /** 頭のここまでは「まだ観ていない」とみなす (秒) */
 const RESUME_HEAD = 15;
+
+/**
+ * 観はじめるときに CM 飛ばしを入れておくか。
+ *
+ * **既定は入れる。** 切らずに焼いた録画 (既定はチャプターを入れるだけ) では、
+ * 観るたびに送りのボタンを押すことになる。押さずに済むほうを既定にする。
+ * 覚えているのは端末ごとで、人が切ったときだけ `'0'` が入っている。
+ *
+ * **ロゴでの判定に失敗した1本だけは、覚えていても切って始める。**
+ * あれはロゴを使えず**無音だけで当てている**ので外れやすく、外れると
+ * CM ではなく本編のほうを飛ばす。飛んでから気付くのでは遅いので、精度を
+ * 当てにできない1本では黙って飛ばさない。**押せばその場で入る**
+ */
+export function skipCmAtStart(cmNote: string | null, remembered: string | null): boolean {
+    if (logoUnusable(cmNote)) return false;
+    return remembered !== '0';
+}

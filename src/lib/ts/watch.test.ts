@@ -8,6 +8,7 @@ import {
     prevChapterAt,
     resumePoint,
     SKIP,
+    skipCmAtStart,
     skipTarget,
     tap,
     zoneOf,
@@ -283,5 +284,39 @@ describe('続きから観る', () => {
 
     test('尺が分からなければ末尾の判断はしない', () => {
         expect(resumePoint(600, 0)).toBe(600);
+    });
+});
+
+/**
+ * 観はじめるときに CM 飛ばしを入れるか (`skipCmAtStart`)。
+ *
+ * **既定は入れる。** 切らずに焼いた録画で毎回ボタンを押さずに済むように。
+ * **ロゴでの判定に失敗した1本だけは切って始める** — 無音だけで当てていて
+ * 外れやすく、外れると本編のほうを飛ばすため。
+ */
+describe('観はじめの CM 飛ばし', () => {
+    /** ロゴで当てられた録画。無音検出だけの覚え書きは「失敗」ではない */
+    const ok = '無音 8 箇所';
+    /** ロゴが使えず無音検出に落ちた録画 (format.JLS_UNUSABLE がこの形で入る) */
+    const fell = '無音 8 箇所 (jls は使えず: ロゴに合致しませんでした)';
+
+    test('覚えていなければ入れて始める', () => {
+        expect(skipCmAtStart(ok, null)).toBe(true);
+        expect(skipCmAtStart(null, null)).toBe(true);
+    });
+
+    test('前に切った端末では切ったままにする', () => {
+        expect(skipCmAtStart(ok, '0')).toBe(false);
+    });
+
+    test('前に入れた端末では入れる', () => {
+        expect(skipCmAtStart(ok, '1')).toBe(true);
+    });
+
+    /** ここが今回の肝。外れやすい1本で黙って本編を飛ばさない */
+    test('ロゴでの判定に失敗した録画は、覚えていても切って始める', () => {
+        expect(skipCmAtStart(fell, '1')).toBe(false);
+        expect(skipCmAtStart(fell, null)).toBe(false);
+        expect(skipCmAtStart(fell, '0')).toBe(false);
     });
 });

@@ -33,6 +33,13 @@ interface RecordingRow extends Recording {
      */
     raw_size: number | null;
     /**
+     * もう一方のコーデック (H.264) の大きさ。**両方焼いたときだけ**入る。
+     *
+     * `ts_size` は主 (AV1) のぶんしか持っていないので、両方焼くと画面に出る
+     * 数字と実際に置き場が使っている量が食い違っていた
+     */
+    alt_size: number | null;
+    /**
      * どこから来た1本か。**予約の行から引く** (録画には写さない)。
      *
      * 写していないので、ルールの条件を変えても「何で録れたか」は変わらない。
@@ -88,6 +95,22 @@ function rawSize(row: Recording): number | null {
     if (row.ts_path === null || row.library_path === null) return null;
     try {
         return statSync(row.ts_path).size;
+    } catch {
+        return null;
+    }
+}
+
+/**
+ * もう一方のコーデック (H.264) の大きさ。両方焼いたときだけ measure する。
+ *
+ * `ts_size` は主 (AV1) のぶんだけなので、これが無いと**置き場が実際に
+ * どれだけ使われているか**が画面から分からない。`rawSize` と同じく実ファイルを
+ * 見るのは、外から消されていることがあるため (files.reconcile)
+ */
+function altSize(row: Recording): number | null {
+    if (row.alt_path === null) return null;
+    try {
+        return statSync(row.alt_path).size;
     } catch {
         return null;
     }
@@ -207,7 +230,10 @@ export function load({ url }) {
              LIMIT 300`,
         )
         .all(...(q === '' ? [] : [`%${q}%`])) as RecordingRow[];
-    for (const row of recordings) row.raw_size = rawSize(row);
+    for (const row of recordings) {
+        row.raw_size = rawSize(row);
+        row.alt_size = altSize(row);
+    }
 
     /*
      * 録り逃し。**録画の一覧に混ぜて出す** (画面側で放送日順に差し込む)。

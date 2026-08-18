@@ -32,7 +32,7 @@ describe('録画エンコードの引数', () => {
 
     // 上流の既定 preset は版で変わる (encoder.videoArgs の実測)。書いてあることを守る。
     // **10 に戻さない** — M10 以上はシーンの変わり目でブロックノイズが出る
-    // (docs/encode.md「preset は 9 (M10 は絵が壊れる)」)
+    // (docs/encode.md「preset は 9・crf 35 (値は書いておく)」)
     test('AV1 の preset と crf は書いてある', () => {
         const args = buildArgs('/in.m2ts', '/out.mkv', 1, null);
         expect(argValue(args, '-preset')).toBe('9');

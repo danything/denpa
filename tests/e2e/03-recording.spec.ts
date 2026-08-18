@@ -239,6 +239,13 @@ test.describe('コーデックを両方焼く', () => {
             expect(existsSync(`${video.replace(/\.mkv$/, '')}-poster.jpg`)).toBe(true);
         }
 
+        /*
+         * **両方のぶんが行に出る。** 主 (AV1) だけ出していた頃は、画面の数字と
+         * 置き場が実際に使っている量が食い違っていた (H.264 のほうが大きいことも
+         * ある)。「H.264 …」が括弧の中に添う
+         */
+        await expect(row).toContainText(/\(H\.264 [\d.]+ ?[KMGT]?B/);
+
         // ダウンロードの口が AV1 と H.264 の2つに分かれる (「その他…」の中)
         await row.getByTestId('detail-button').click();
         const detail = page.getByTestId('program-detail');
