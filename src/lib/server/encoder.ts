@@ -222,15 +222,25 @@ function videoArgs(
         };
     }
     /*
-     * **preset と crf は書いておく** — SVT-AV1 の既定は版で変わる (4.2.0 で preset
-     * 10→8、実測 +32% 遅く +27% 大きい)。焼く速さと大きさは denpa が決める。
+     * **preset と crf は書いておく** — SVT-AV1 の既定は版で変わる。焼く速さと
+     * 大きさは denpa が決める。
+     *
+     * **preset は 9。10 にはしない。** SVT-AV1 は 4.x で M10 以上を切り分けていて、
+     * 焼くたびにこう言ってくる —
+     * 「Non-RTC M10+ are meant for automation tooling usage. Visual artifacts may occur」。
+     * 実際に出るのは**シーンの変わり目のブロックノイズ**で、カット直後のコマだけ
+     * 大きく崩れる (実素材でカット直後の最低 29.74dB → 9 なら 37.77dB)。
+     * 9 は 10 より**小さくなって**時間が 18% 増えるだけなので、10 に留まる理由はない。
+     * 8 まで落としてもカットの崩れはこれ以上直らず (37.69dB)、+18% 大きく +47% 遅い。
+     * 実測は docs/encode.md「preset は 9 (M10 は絵が壊れる)」
+     *
      * **8bit で出す** (10bit は 2% 小さいだけで 15% 遅く、Main10 を解ける相手が要る)。
-     * 実測は docs/encode.md「preset と crf は書いておく」「10bit では出しません」
+     * 実測は docs/encode.md「10bit では出しません」
      */
     return {
         filter: [...steps, 'format=yuv420p'].join(','),
         device: [],
-        encoder: ['libsvtav1', '-preset', '10', '-crf', '35'],
+        encoder: ['libsvtav1', '-preset', '9', '-crf', '35'],
     };
 }
 
