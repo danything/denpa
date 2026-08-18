@@ -318,6 +318,26 @@
     let blanked = false;
     /** 跳んだ先 (秒)。ここまで来たら蓋を外す */
     let hopTo = 0;
+    /** 跳んだ先に着いたと数えたコマ数。`SETTLED` まで数えてから蓋を外す */
+    let settled = 0;
+    /**
+     * 蓋を外すまでに待つコマ数。
+     *
+     * **1コマでは早すぎます。** `requestVideoFrameCallback` は「合成器へ渡した」
+     * ところで呼ばれるもので、渡したコマが画面に出るのはその先です
+     * (`expectedDisplayTime` が未来を指しているのはそのため)。さらに Windows の
+     * Chrome / Edge は**映像を DOM とは別の面 (DirectComposition の overlay) に
+     * 出す**ので、蓋を外す DOM の更新のほうが**映像の面より先に画面へ出ます**。
+     *
+     * 実機 (Windows Chrome・1.25倍) では、位置も章も本編に入っているのに
+     * **画面だけ CM のまま**という絵が撮れていました。数コマ余分に待てば消えます。
+     * そのぶん本編の頭が止め絵になりますが、4コマ (30コマ/秒で 0.13秒) なので
+     * 跳んだ間合いに紛れます。
+     *
+     * `mediaTime` を持たないブラウザ (古い Firefox) では `currentTime` で数えます。
+     * あちらは位置を代入した時点で跳んだ先を返すので、なおさら1コマでは足りない
+     */
+    const SETTLED = 4;
     /** 蓋の外し忘れ止め。跳んだ先が来ないまま止まっても、いつかは外す */
     let hopGiveUp: ReturnType<typeof setTimeout> | null = null;
     /** 蓋をしておく上限 (ms)。読み込みが詰まっても止め絵で居座らせない */
@@ -668,6 +688,7 @@
     function open(): void {
         hopping = false;
         waiting = false;
+        settled = 0;
         if (hopGiveUp !== null) {
             clearTimeout(hopGiveUp);
             hopGiveUp = null;
@@ -786,8 +807,9 @@
              * 時刻なので、これが跳んだ先を越えるまで待つ
              */
             if (waiting) {
-                const shown = meta?.mediaTime ?? target.currentTime;
-                if (!target.seeking && shown >= hopTo) open();
+                const there = !target.seeking && (meta?.mediaTime ?? target.currentTime) >= hopTo;
+                if (!there) settled = 0;
+                else if (++settled >= SETTLED) open();
             }
             paint();
             // **CM の跨ぎもここで見ます。** `timeupdate` (250ms) 任せだった頃は、
