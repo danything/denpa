@@ -6,6 +6,7 @@ import type { ChannelType } from '../types';
 import { config } from './config';
 import { queryAll } from './db';
 import { CURRENT_SERVICES } from './epg';
+import { detectArea, hasArea, remember as rememberArea } from './logo-area';
 import { logoRepo } from './logo-data';
 import { chunks, run } from './stream';
 import { type AgentTuner, getTuners, openChannelStream } from './tuner';
@@ -194,6 +195,20 @@ async function remember(target: Target, sample: string, signal?: AbortSignal): P
     const work = mkdtempSync(join(tmpdir(), 'denpa-lgd-'));
 
     try {
+        /*
+         * **在り処はこちらで割り出してから渡す** (`logo-area.ts`)。
+         *
+         * logoframe の自動検出は画面全体を見るので、テレ東のような半透明の
+         * 細いロゴでは本物より強い縁を別の場所で掴んで降りていました
+         * (実測で家具の縁 `1004,216` → `too few active pixels`)。隅だけ見れば
+         * 当てられるので、位置だけ先に出す。**空のときだけ**書くので、
+         * 画面から手で教わったものはそのまま生きます
+         */
+        if (!hasArea(target.id)) {
+            const area = await detectArea(sample, signal);
+            if (area !== null) rememberArea(target.id, area);
+        }
+
         // 一式が入っていないイメージもある (起こせなければ code 127)。CM検出はエンコードのときに覚え直す
         await run(
             [
