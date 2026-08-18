@@ -84,7 +84,18 @@ export async function run(
     try {
         const [stdout, stderr] = await Promise.all([
             options.stdout === true
-                ? new Response(proc.stdout as ReadableStream<Uint8Array>).bytes()
+                ? /*
+                   * **`.bytes()` は使わない。** Bun 1.3.14 は 1MB を境に返すものが
+                   * 変わる — それ未満は Uint8Array、それ以上は **ArrayBuffer**
+                   * (`.length` が `undefined` になる)。型は Uint8Array のままなので
+                   * 型検査では気付けず、`String(out.length)` が "undefined" になって
+                   * `Content-Length: undefined` を送り、**本文が丸ごと落ちていた**
+                   * (6.4MB の字幕を持つ録画で字幕が出ない)。
+                   * `arrayBuffer()` は版によらず ArrayBuffer なので、自分で包む
+                   */
+                  new Response(proc.stdout as ReadableStream<Uint8Array>)
+                      .arrayBuffer()
+                      .then((buffer) => new Uint8Array(buffer))
                 : Promise.resolve(new Uint8Array()),
             options.stderr === true ? text(proc.stderr as ReadableStream<Uint8Array>) : Promise.resolve(''),
         ]);

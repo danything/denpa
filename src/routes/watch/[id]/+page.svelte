@@ -611,11 +611,24 @@
                 return;
             }
             const res = await fetch(`/api/recordings/${rec.id}/captions.sup`);
-            if (!res.ok) return;
+            // **字幕を持たない番組は 404。** ボタンを出さないだけで、異常ではない
+            if (res.status === 404) return;
+            if (!res.ok) {
+                console.warn(`[captions] 取れませんでした (${res.status})`);
+                return;
+            }
             drawn = readSup(new Uint8Array(await res.arrayBuffer()));
+            /*
+             * **200 なのに読めないのは異常。** 黙って捨てると「持っているのに
+             * ボタンが出ない」になり、どこが悪いのか画面からも記録からも
+             * 辿れなかった (`Content-Length: undefined` で本文が落ちていたとき、
+             * これが無いせいで原因に辿り着くのに時間がかかった)
+             */
+            if (drawn.length === 0) console.warn('[captions] 中身を読めませんでした (先頭が PGS ではない)');
             paint();
-        } catch {
+        } catch (error) {
             // 出せないだけ。観るのに支障は無い
+            console.warn('[captions] 取れませんでした', error);
         }
     }
 
