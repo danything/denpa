@@ -88,14 +88,17 @@ const RETRY_MOST = 10_000;
 const SLIP_MOST = 0.1;
 /** 跳び直す間隔の下限 (ms)。**復号が追いつかない状態は跳んでも直らない** */
 const UNSLIP_EVERY = 3_000;
-/**
- * コマ落ちが**続けてこれだけ**出たら跳び直す。
+/*
+ * **コマ落ちでは跳び直さない。**
  *
- * 1〜2コマは開いた直後などに普通に出るので、そのたびに跳ぶと**音が 0.02 秒
- * ずつ飛ぶのが癖になる**。5コマ = 60コマ/秒で 0.08 秒ぶんで、絵の乱れとして
- * 見える側の下限に合わせてある
+ * 実機の Windows Edge (152) を CDP で動かして測ると、コマ落ちは**平常時から
+ * 12秒あたり 116〜128 コマ**出ていました (60コマ/秒の 2割ほど)。ここで跳ぶと
+ * 3秒ごと (`UNSLIP_EVERY` の上限) に跳び続けることになり、**跳べば復号器は
+ * 読み込み直しでまたコマを落とす** — 落ちるから跳び、跳ぶから落ちる、の輪に
+ * なります。実際に入れて測ったら、跳び直しが 90秒で 31回まで伸びました。
+ *
+ * 途切れ (`stalled`) は 90秒で 5回ほどなので、こちらだけを合図にします
  */
-const DROP_BURST = 5;
 /** 跳び直すときに進める幅 (秒)。**1コマぶん** — 音が飛んだと分かる長さではない */
 const FRAME = 0.02;
 
@@ -350,20 +353,18 @@ export function livePlayer() {
     let slipMost = $state(0);
     /** 次に跳び直してよい時刻 */
     let unslipAfter = 0;
-    /**
-     * 前に見たコマ落ちの数。**増えたら跳び直す** (`settle`)。
-     *
+    /*
      * **絵の遅れは JS からは見えないことがある。** `mediaTime` で分かるのは
      * 「合成器へ渡したコマ」で、Windows の Chrome / Edge はそれを DOM とは
      * 別の面に出すため、**面のほうが遅れていても数字には出ません**。実機では
-     * 「絵と音がずれるのに『絵の遅れ直し』は一度も出ない」という形で出ていて、
-     * 読み直すと直る (器ごと作り直すため)。
+     * 「絵と音がずれるのに『絵の遅れ直し』は一度も出ない、読み直すと直る」
+     * という形で出ていました。
      *
-     * 見えないものは測れないので、**起きる条件のほうで引く** — 途切れと
-     * コマ落ちです。どちらも跳び直しの元手は同じ (`unslip` の 1コマぶん) で、
-     * どのみち絵が乱れた直後なので、余計に見えることはない
+     * 見えないものは測れないので、**起きる条件のほうで引きます** — 途切れ
+     * (`stalled`) です。跳び直しの元手は `unslip` の1コマぶんで、どのみち
+     * 絵が止まった直後なので余計には見えない。コマ落ちを合図にしない理由は
+     * `DROP_BURST` を置いていたところ (上) に
      */
-    let seenDropped = 0;
     /** 繋ぎ直しの目覚まし。**待っている間だけ入っている** */
     let retry: ReturnType<typeof setTimeout> | null = null;
     /**
@@ -747,12 +748,10 @@ export function livePlayer() {
         // 捨てられたコマも同じ間隔で読む。**選局からの通し** (器を作り直すと 0 に戻る)
         dropped = element?.getVideoPlaybackQuality?.().droppedVideoFrames ?? dropped;
         /*
-         * **途切れたか、コマが落ちたら跳び直す** (`seenDropped` の説明)。
-         * 測れた遅れ (`slip`) を待たない — あれは見えないことがある
+         * **途切れたら跳び直す** (`seenDropped` の説明)。測れた遅れ (`slip`) を
+         * 待たない — あれは見えないことがある
          */
-        const lost = dropped - seenDropped >= DROP_BURST;
-        seenDropped = dropped;
-        if ((stalled || lost) && element !== null) unslip(element);
+        if (stalled && element !== null) unslip(element);
         const next = nextTarget(
             { target, floor },
             stalled,
@@ -963,7 +962,6 @@ export function livePlayer() {
         position = 0;
         slip = 0;
         slipMost = 0;
-        seenDropped = 0;
         pending.length = 0;
         // 作り直した器は開いている。読み切りの印は次の `ended` が立て直す
         ending = false;
