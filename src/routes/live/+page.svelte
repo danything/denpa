@@ -679,7 +679,7 @@
                 巻き取られる (`flex-1`)
             -->
             {#if dataPress !== null}
-                <Remote press={dataPress} close={() => player.setData(false)} />
+                <Remote press={dataPress} />
             {/if}
 
             <!-- 番組表と同じ並び・同じ見た目。探す場所がずれないようにする -->

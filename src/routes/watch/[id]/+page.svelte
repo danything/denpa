@@ -1588,7 +1588,7 @@
                 データ放送を出している間だけ、番組の中身の上に出す
             -->
             {#if dataPress !== null}
-                <Remote press={dataPress} close={() => void setData(false)} />
+                <Remote press={dataPress} />
             {/if}
         {/snippet}
 

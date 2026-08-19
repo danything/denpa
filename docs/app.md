@@ -36,7 +36,7 @@ EPGStation の置き換えとして作ったもので、エンコード設定は
 | `src/lib/ts/carousel.ts` | 配ったものを覚えておく (遅れて繋いだ人に配り直すため) |
 | `src/lib/components/player/DataBroadcast.svelte` | データ放送を映像の上に重ねる (d ボタン。押されるまで読み込まない) |
 | `src/lib/ts/data-timeline.ts` / `src/lib/ts/data-capture.ts` / `src/lib/server/recorded-bml.ts` | 録画のデータ放送。焼くときに生TSから変化ログを取り出して隣に置き (`.bml.jsonl`)、再生位置に合わせて流し直す |
-| `src/lib/components/player/Remote.svelte` | 指で押すリモコン (色・十字・決定・戻る・d・消す・数字)。**映像の上ではなく右の列** |
+| `src/lib/components/player/Remote.svelte` | 指で押すリモコン (色・十字・決定・戻る・d・数字)。**映像の上ではなく右の列** |
 | `src/lib/ts/ait.ts` | Hybridcast の在り処 (AIT)。**読むだけで動かさない** |
 | `src/lib/server/bml-network.ts` | データ放送の双方向の中継 (`/api/bml/proxy`・`/post`・`/confirm`)。**既定は切・公開の相手だけ** |
 | `src/lib/vendor/web-bml/` | 借りもの。BML を描くところ ([README](../src/lib/vendor/web-bml/README.md)) |

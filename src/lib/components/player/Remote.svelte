@@ -9,19 +9,18 @@
      * 絵の上に重ねない — 番組の中身と同じで、**観ながら押すものは右の列**に
      * 置く (`live/+page.svelte`)。放送の作った画面は枠を下まで塗り潰すので、
      * 上に重ねると押すものが放送の絵に埋もれる。
+     *
+     * **「消す」は置きません。** 文書が d を掴んでいる間は d では消せないから、と
+     * 逃げ道を1つ置いていたが、**消す口は既に右の縦列にある** (d のボタン。押せば
+     * その場で畳む)。同じことをする口を2つ置かない
      */
 
     interface Props {
         /** 押されたキーを BML へ渡す。`AribKeyCode` の番号 */
         press: (code: number) => void;
-        /**
-         * データ放送を消す。**テレビの d はまず放送の文書に渡る** (待機ページはそれで
-         * メニューを開く) ので、文書が d を掴んでいる間は d では消せない。ここに逃げ道を置く
-         */
-        close: () => void;
     }
 
-    const { press, close }: Props = $props();
+    const { press }: Props = $props();
 
     /**
      * `AribKeyCode` (`vendor/web-bml/client/content.ts`) と同じ値。
@@ -111,9 +110,6 @@
             <!-- d は放送に渡す (DataButtonPressed)。待機ページからメニューを開くのはこれ -->
             <button type="button" class="btn btn-sm" onclick={() => press(DATA)} data-testid="live-remote-data">
                 d
-            </button>
-            <button type="button" class="btn btn-sm btn-ghost" onclick={close} data-testid="live-remote-close">
-                消す
             </button>
         </div>
 
