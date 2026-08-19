@@ -283,6 +283,29 @@ export function stream(...parts: Uint8Array[]): Uint8Array {
     return joinBytes(parts);
 }
 
+/**
+ * PCR を1つ運ぶだけのパケット。**適応フィールドに基準部だけ**入れる。
+ * 拡張部 (27MHz の端数) は読む側が見ていないので 0 でよい
+ */
+export function pcrPacket(pid: number, seconds: number, counter = 0): Uint8Array {
+    const base = Math.round(seconds * 90_000) % 2 ** 33;
+    const packet = new Uint8Array(PACKET).fill(0xff);
+    packet[0] = SYNC;
+    packet[1] = pid >> 8;
+    packet[2] = pid & 0xff;
+    // 適応フィールドのみ (中身なし)
+    packet[3] = 0x20 | (counter & 0x0f);
+    packet[4] = PACKET - 5;
+    packet[5] = 0x10; // PCR_flag
+    packet[6] = Math.floor(base / 2 ** 25) & 0xff;
+    packet[7] = Math.floor(base / 2 ** 17) & 0xff;
+    packet[8] = Math.floor(base / 2 ** 9) & 0xff;
+    packet[9] = Math.floor(base / 2) & 0xff;
+    packet[10] = ((base & 1) << 7) | 0x7e;
+    packet[11] = 0x00;
+    return packet;
+}
+
 /** 放送の実時刻 (TDT) を1パケットに。BML の `getCurrentDateTime` が見る */
 export function tdtPacket(unixMs: number): Uint8Array {
     return packetize(0x0014, Uint8Array.from([0x70, 0x70, 0x05, ...mjdTime(unixMs)]));

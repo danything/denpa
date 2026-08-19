@@ -22,6 +22,7 @@
 import { type Audio, type AudioTrack, audioTracks, pickTrack } from '$lib/arib';
 import { CHANNEL, type HybridcastLink, type LiveCodec, type Notice } from '$lib/live';
 import { AitReader, APPLICATION_TYPE_HTML5, CONTROL } from '$lib/ts/ait';
+import { BroadcastClock, parseStart } from '$lib/ts/clock';
 import { Fmp4Splitter } from '$lib/ts/fmp4';
 import { MkvSplitter } from '$lib/ts/mkv';
 import { ServiceFilter } from '$lib/ts/service-filter';
@@ -445,8 +446,28 @@ const captionless = new Map<number, number>();
 /** 忘れるまで (ms)。番組の変わり目より短く採る */
 const FORGET_CAPTIONLESS = 15 * 60_000;
 
+/**
+ * 放送の実時刻を配り直す間隔 (ms)。
+ *
+ * **ずれる速さではありません。** 配り続けるのは、選局の直後はまだ TDT が
+ * 来ていないことと、端末とサーバの時計のずれを測り直せることのため
+ */
+const CLOCK_EVERY = 5_000;
+
 class Session {
     private readonly viewers = new Set<Viewer>();
+    /**
+     * 放送の実時刻を読む ([ts/clock.ts](../ts/clock.ts))。
+     *
+     * **データ放送と違って、いつでも読みます。** 誰も見ていなくても1局ぶんの
+     * TS は流れているし、読むのは PCR と TDT の2つだけで安い。押されてから
+     * 読み始める作りにすると、**押した人だけ数秒待たされる**
+     */
+    private readonly clock = new BroadcastClock();
+    /** ffmpeg が入口で 0 に寄せたぶん (秒)。`start:` から拾う */
+    private startPts = Number.NaN;
+    /** 最後に時計を配った時刻。**数秒に1回でいい** (ずれる速さではない) */
+    private toldClockAt = 0;
     private readonly splitter = new Fmp4Splitter();
     /** 字幕の器を割る。時刻はコマに付いてくる ([ts/mkv.ts](../ts/mkv.ts)) */
     private readonly frames = new MkvSplitter();
@@ -548,6 +569,40 @@ class Session {
         }
         // **出したままの人は、局を変えても出したまま** (`refreshData`)
         if (viewer.wantsData) this.refreshData(viewer);
+        const clock = this.clockNotice();
+        if (clock !== null) this.tellOne(viewer, clock);
+    }
+
+    /**
+     * 放送の実時刻と、焼いたものの物差しの対応。**両方そろってから。**
+     *
+     * TDT は数秒に1回しか来ないので、選局してすぐは `null` です。画面は
+     * 届いてから出す作りにしてあります (来ない局でも困らない)
+     */
+    private clockNotice(): Notice | null {
+        const anchor = this.clock.anchor;
+        if (anchor === null || !Number.isFinite(this.startPts)) return null;
+        return {
+            type: 'clock',
+            at: anchor.pcr - this.startPts,
+            unixMs: anchor.unixMs,
+            now: Date.now(),
+        };
+    }
+
+    /**
+     * 時計を配り直す。**塊を配るついでに、数秒に1回だけ。**
+     *
+     * 配り続ける理由は2つ — 選局の直後はまだ TDT が来ておらず配れないことと、
+     * **端末とサーバの時計のずれを測り直せる**ことです (`now`)
+     */
+    private tellClock(): void {
+        const now = Date.now();
+        if (now - this.toldClockAt < CLOCK_EVERY) return;
+        const notice = this.clockNotice();
+        if (notice === null) return;
+        this.toldClockAt = now;
+        this.tell(notice);
     }
 
     /** データ放送を出す・やめる。**頼んだ人のぶんだけ。** */
@@ -790,6 +845,7 @@ class Session {
                 // **絞ったあとを、もう一方へ分ける。** ffmpeg に渡すのと同じもの。
                 // 誰も出していなければ解かない (`wantData`)
                 this.data?.feed(out);
+                this.clock.feed(out);
                 this.findHybridcast(out);
                 // **書けたことを待つ** (上の説明)。待たないと、転んだときに拾い手が居ない
                 await writer.write(out);
@@ -813,6 +869,7 @@ class Session {
                     for (const viewer of this.viewers) this.hand(viewer, CHANNEL.videoInit, segment.data);
                 } else {
                     for (const viewer of this.viewers) this.hand(viewer, CHANNEL.videoMedia, segment.data);
+                    this.tellClock();
                 }
             }
         }
@@ -947,6 +1004,10 @@ class Session {
             if (this.list.feed(line)) {
                 this.tell({ type: 'captions', tracks: this.list.tracks, track: this.track });
                 continue;
+            }
+            // 入口の見出しに出ている「0 に寄せたぶん」。時計を配るのに要る
+            if (!Number.isFinite(this.startPts) && line.includes('start:')) {
+                this.startPts = parseStart(line);
             }
             // 字幕が無い放送。**映像ごと落ちる**ので、字幕なしで焼き直す (`run`)
             if (NO_SUBTITLE.test(line)) this.noSubtitle = true;

@@ -489,11 +489,24 @@
                         >
                             {#snippet status()}
                                 <!--
-                                    **放送からどれだけ遅れているか。** 詰めていく作業を
-                                    するのに、見えないと当てずっぽうになる
+                                    **放送からどれだけ遅れているか** (`live-player` の `fromAir`)。
+                                    放送そのものが運んでいる時刻 (TDT/TOT) との差なので、
+                                    選局から焼き上がり・回線までが全部入っている。
+                                    **読めない局では出ない**ので、下の「貯まり」だけになる
+                                -->
+                                {#if player.fromAir !== null}
+                                    <span data-testid="live-behind">放送から {player.fromAir.toFixed(1)}秒</span>
+                                {/if}
+                                <!--
+                                    **こちらは手元の貯まりの差** (`buffered.end - currentTime`)。
+                                    「あと何秒ぶん持っているか」で、上流は入っていない。
+                                    詰めていく作業をするのに、見えないと当てずっぽうになる
                                 -->
                                 {#if player.delay !== null}
-                                    <span data-testid="live-delay">遅延 {player.delay.toFixed(1)}秒</span>
+                                    <span data-testid="live-delay"
+                                        >{player.fromAir === null ? '遅延' : '・貯まり'}
+                                        {player.delay.toFixed(1)}秒</span
+                                    >
                                 {/if}
                                 <!--
                                     **測り直す口。覚えているものがあるときだけ出す。**

@@ -348,6 +348,22 @@ export function livePlayer() {
     /** 跳び直した回数。**画面に出す** — 直し続けているなら、まだ足りていない */
     let slips = $state(0);
     /**
+     * 放送の実時刻と、焼いたものの物差しの対応 (`clock` の知らせ)。
+     * **読めない局では最後まで null** — 画面は届いてから出す
+     */
+    let broadcast = $state<{ at: number; unixMs: number } | null>(null);
+    /** サーバの時計 − 端末の時計 (ms)。**端末の時計を当てにしないため** */
+    let skew = 0;
+    /**
+     * **放送からどれだけ遅れて観ているか (秒)。**
+     *
+     * 隣に出ている「遅延」とは別物です。あちらは `buffered.end - currentTime`、
+     * つまり**手元にあと何秒ぶん持っているか**で、選局から ffmpeg の焼き上がり、
+     * 回線までの上流はどれも入っていません。こちらは放送そのものが運んでいる
+     * 時刻 (TDT/TOT) との差なので、**端から端まで**が入ります
+     */
+    let fromAir = $state<number | null>(null);
+    /**
      * 絵の遅れの、これまでの最大 (秒)。**器を作り直すと 0 に戻る。**
      *
      * いまの値 (`slip`) だけでは役に立ちません — 見て「ずれている」と思った
@@ -644,6 +660,16 @@ export function livePlayer() {
         // 放送の今に張り付いているか。少しの揺れでは離れたことにしない
         const atLive = behind <= target + 1.5;
         if (atLive !== live) live = atLive;
+
+        // 放送との本当の差。0.1秒刻みにするのは `delay` と同じ理由
+        const truly =
+            broadcast === null
+                ? null
+                : Math.round(
+                      (Date.now() + skew - (broadcast.unixMs + (video.currentTime - broadcast.at) * 1000)) /
+                          100,
+                  ) / 10;
+        if (truly !== fromAir) fromAir = truly;
 
         const tenth = (value: number) => Math.round(value * 10) / 10;
         if (tenth(buffer.buffered.start(0)) !== oldest) oldest = tenth(buffer.buffered.start(0));
@@ -995,6 +1021,9 @@ export function livePlayer() {
         slip = 0;
         slipMost = 0;
         enoughAt = 0;
+        // 局が変われば物差しごと変わる。次の `clock` を待つ
+        broadcast = null;
+        fromAir = null;
         pending.length = 0;
         // 作り直した器は開いている。読み切りの印は次の `ended` が立て直す
         ending = false;
@@ -1338,6 +1367,17 @@ export function livePlayer() {
                      */
                     captionTracks = notice.tracks;
                     captionTrack = notice.track;
+                } else if (notice.type === 'clock') {
+                    /*
+                     * **放送の実時刻と、焼いたものの物差しの対応** (`behind`)。
+                     *
+                     * `now` はサーバの時計。**端末の時計は当てにしません** —
+                     * 合っていない端末は珍しくなく、ずれていればそのぶんそのまま
+                     * 遅延の数字に出ます。届いた時刻との差を覚えておいて、
+                     * 以降はサーバの時計の上で数える (LAN の片道は 1ms 未満)
+                     */
+                    broadcast = { at: notice.at, unixMs: notice.unixMs };
+                    skew = notice.now - Date.now();
                 } else if (notice.type === 'hybridcast') {
                     hybridcast = notice.apps;
                 } else if (notice.type === 'timeline') {
@@ -1580,6 +1620,9 @@ export function livePlayer() {
             return slip;
         },
         /** 絵の遅れを直すために跳び直した回数 */
+        get fromAir() {
+            return fromAir;
+        },
         get slipMost() {
             return slipMost;
         },
