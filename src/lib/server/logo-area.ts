@@ -35,17 +35,50 @@ const EVERY_LEAST = 2;
 const TIMEOUT = 120_000;
 
 /**
- * その局の枠を、既に持っているか。
+ * その局の枠を、これから割り出してよいか。
  *
  * **持っているなら触りません。** 画面から手で教わったものが入っていることが
- * あり、こちらの推測で上書きすると教え直しても戻らなくなります
+ * あり、こちらの推測で上書きすると教え直しても戻らなくなります。
+ *
+ * **一度外した局では、二度と割り出しません。** 外れた枠を捨てるだけにすると、
+ * 次のエンコードでまた同じ絵から同じ枠を出して同じところで転びます
+ * (実機の TOKYO MX1。窓枠の縁を掴んでいた)。そのときは logoframe の自動検出に
+ * 任せるほうが当たる — こちらが割り出す前は当たっていたのだから
  */
-export function hasArea(serviceId: number): boolean {
-    const area = queryAll<{ logo_area: string | null }>(
-        'SELECT logo_area FROM services WHERE id = ?',
+export function mayDetect(serviceId: number): boolean {
+    const { area, auto } = row(serviceId);
+    return area === '' && auto !== AUTO_MISSED;
+}
+
+/** こちらが割り出した枠か。**人が教えたものは、こちらの都合で捨てない** */
+export function guessed(serviceId: number): boolean {
+    return row(serviceId).auto === AUTO_GUESSED;
+}
+
+/**
+ * 割り出した枠を捨てて、**もう割り出さない**印を付ける。
+ * 人が教えた枠には触らない
+ */
+export function forgetArea(serviceId: number): void {
+    if (!guessed(serviceId)) return;
+    database()
+        .prepare('UPDATE services SET logo_area = NULL, logo_area_auto = ? WHERE id = ?')
+        .run(AUTO_MISSED, serviceId);
+}
+
+/** `logo_area_auto` の値。schema.ts に説明がある */
+const AUTO_GUESSED = 1;
+const AUTO_MISSED = 2;
+
+function row(serviceId: number): { area: string; auto: number } {
+    const found = queryAll<{ logo_area: string | null; logo_area_auto: number | null }>(
+        'SELECT logo_area, logo_area_auto FROM services WHERE id = ?',
         serviceId,
-    )[0]?.logo_area;
-    return typeof area === 'string' && area !== '';
+    )[0];
+    return {
+        area: typeof found?.logo_area === 'string' ? found.logo_area : '',
+        auto: found?.logo_area_auto ?? 0,
+    };
 }
 
 /**
@@ -105,5 +138,7 @@ export async function detectArea(input: string, signal?: AbortSignal): Promise<s
  * よく、こちらは空のときしか書かないので、教え直したほうが勝ちます
  */
 export function remember(serviceId: number, area: string): void {
-    database().prepare('UPDATE services SET logo_area = ? WHERE id = ?').run(area, serviceId);
+    database()
+        .prepare('UPDATE services SET logo_area = ?, logo_area_auto = ? WHERE id = ?')
+        .run(area, AUTO_GUESSED, serviceId);
 }

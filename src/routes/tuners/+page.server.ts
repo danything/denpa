@@ -224,7 +224,9 @@ export const actions = {
         }
         // 同じ絵を映しているサブチャンネルの枠にも同じことをする (`logo-data.stations`)
         for (const id of [serviceId, ...siblings(serviceId)]) {
-            database().prepare('UPDATE services SET logo_area = ? WHERE id = ?').run(area, id);
+            database()
+                .prepare('UPDATE services SET logo_area = ?, logo_area_auto = 0 WHERE id = ?')
+                .run(area, id);
             forgetLogoData(id);
         }
         return {
@@ -259,7 +261,9 @@ export const actions = {
         const serviceId = Number(form.get('serviceId'));
         if (!Number.isFinite(serviceId)) return fail(400, { message: '局IDが不正です' });
         for (const id of [serviceId, ...siblings(serviceId)]) {
-            database().prepare('UPDATE services SET logo_area = NULL WHERE id = ?').run(id);
+            database()
+                .prepare('UPDATE services SET logo_area = NULL, logo_area_auto = 0 WHERE id = ?')
+                .run(id);
             // 教えた枠で覚えたものが残っていると、自動に戻しても効かない
             forgetLogoData(id);
         }

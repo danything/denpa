@@ -48,6 +48,15 @@ export const ADDED_COLUMNS: { table: string; column: string; definition: string 
      * 空なら logoframe が自分で探す。探せなかった局だけ画面から入れてもらう
      */
     { table: 'services', column: 'logo_area', definition: 'TEXT' },
+    /**
+     * `logo_area` を誰が入れたか。**0 = 人 (または無し) / 1 = こちらが割り出した /
+     * 2 = 割り出したが外れた。**
+     *
+     * 2 を持たせているのは、**外した枠を出し直さない**ためです。外れた枠を
+     * 捨てるだけにすると、次のエンコードでまた同じ絵から同じ枠を割り出して
+     * 同じところで転びます。人が教えた枠 (0) は、こちらの都合で捨てない
+     */
+    { table: 'services', column: 'logo_area_auto', definition: 'INTEGER NOT NULL DEFAULT 0' },
     // CM検出が何をしたか。一覧には出さず、録画の詳細で見せる
     { table: 'recordings', column: 'cm_note', definition: 'TEXT' },
     /*

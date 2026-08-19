@@ -2,7 +2,7 @@ import { mkdirSync, readFileSync } from 'node:fs';
 import { type CmOptions, invertRanges, MAX_CM_RATIO, type Range } from './cm';
 import { config } from './config';
 import { removeByPrefix } from './fsx';
-import { detectArea, hasArea, remember as rememberArea } from './logo-area';
+import { detectArea, forgetArea, mayDetect, remember as rememberArea } from './logo-area';
 import { logoRepo, share } from './logo-data';
 import { settings } from './settings';
 import { run as runProcess } from './stream';
@@ -195,7 +195,7 @@ export async function detectWithJls(
         let logoAreaText = area;
         /** この回で初めて在り処を出したか。サブチャンネルへ配るのはそのときだけ */
         let firstLearn = false;
-        if (logoAreaText === '' && serviceId !== undefined && !hasArea(serviceId)) {
+        if (logoAreaText === '' && serviceId !== undefined && mayDetect(serviceId)) {
             step('局ロゴの在り処を探しています');
             const found = await detectArea(input, signal);
             if (found !== null) {
@@ -205,7 +205,7 @@ export async function detectWithJls(
             }
         }
 
-        const logoArgs =
+        const logoArgs = (withArea: boolean) =>
             channel === ''
                 ? ['-logo', repo]
                 : [
@@ -221,14 +221,42 @@ export async function detectWithJls(
                       '-logo-match',
                       String(config.jlsLogoMatch),
                       // 自動で見つからなかった局だけ、画面から教わった範囲を渡す
-                      ...(/^\d+,\d+,\d+,\d+$/.test(logoAreaText) ? ['-logo-area', logoAreaText] : []),
+                      ...(withArea && /^\d+,\d+,\d+,\d+$/.test(logoAreaText)
+                          ? ['-logo-area', logoAreaText]
+                          : []),
                   ];
+        const findFrames = (withArea: boolean) =>
+            run(
+                [bin('logoframe'), input, '-oa', work.frames, '-o', work.erase, ...logoArgs(withArea)],
+                signal,
+                deadline,
+            );
         step('局ロゴが写っているコマを探しています');
-        const frames = await run(
-            [bin('logoframe'), input, '-oa', work.frames, '-o', work.erase, ...logoArgs],
-            signal,
-            deadline,
-        );
+        let frames = await findFrames(true);
+        /*
+         * **枠を渡して転んだら、渡さずにもう一度。**
+         *
+         * こちらが割り出した枠は外れることがあります (実機の TOKYO MX1。
+         * 半透明の細いロゴを外して、背景の窓枠の縁を掴んでいた)。渡した枠が
+         * 外れていると logoframe は `too few active pixels` で降りますが、
+         * **その局は枠を渡す前まで自動検出で当たっていました** — こちらの
+         * 当てずっぽうが、当たっていたものを壊していたことになります。
+         *
+         * 割り出した枠は**当たらなければ無かったことにする**。当たった枠
+         * (人が教えたもの) は捨てず、渡さずに1回試すだけにします
+         */
+        const hadArea = /^\d+,\d+,\d+,\d+$/.test(logoAreaText) && channel !== '';
+        if (frames.code !== 0 && hadArea) {
+            console.warn(`[cm] ロゴの枠 ${logoAreaText} では見つかりませんでした。枠なしで試します`);
+            step('局ロゴが写っているコマを探しています (枠なし)');
+            frames = await findFrames(false);
+            if (frames.code === 0 && serviceId !== undefined) {
+                // 外れた枠だった。捨てて、もう割り出さない印を付ける
+                forgetArea(serviceId);
+                logoAreaText = '';
+                firstLearn = false;
+            }
+        }
         if (frames.code !== 0) {
             return { cm: [], note: failure('logoframe', frames) };
         }
