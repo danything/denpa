@@ -42,6 +42,33 @@ describe('放送の実時刻と PCR を組にする', () => {
     });
 
     /**
+     * TDT は秒までしか持っていないので、1つの組では最大1秒ぶん過去に寄る。
+     * **`実時刻 − PCR` がいちばん大きい組**が、秒の変わり目に来たもの
+     */
+    test('秒未満の切り捨てぶん、いちばん大きい組を採る', () => {
+        const clock = new BroadcastClock();
+        const at = Math.floor(Date.UTC(2026, 7, 19, 3, 0, 0) / 1000) * 1000;
+        // 0.7秒ぶん切り捨てられた組 (実時刻 − PCR が小さい)
+        feed(clock, 1000.7, at);
+        expect(clock.anchor).toEqual({ pcr: 1000.7, unixMs: at });
+        // 変わり目ちょうどの組。こちらが勝つ
+        clock.feed(stream(pcrPacket(PID_PCR, 1005.0), tdtPacket(at + 5000)));
+        expect(clock.anchor).toEqual({ pcr: 1005, unixMs: at + 5000 });
+        // また切り捨てられた組。**採り直さない**
+        clock.feed(stream(pcrPacket(PID_PCR, 1010.4), tdtPacket(at + 10_000)));
+        expect(clock.anchor).toEqual({ pcr: 1005, unixMs: at + 5000 });
+    });
+
+    /** 放送が時計を合わせ直したら、古い値を抱え込まない */
+    test('1秒より大きく下に飛んだら採り直す', () => {
+        const clock = new BroadcastClock();
+        const at = Math.floor(Date.UTC(2026, 7, 19, 3, 0, 0) / 1000) * 1000;
+        feed(clock, 1000, at);
+        clock.feed(stream(pcrPacket(PID_PCR, 1005), tdtPacket(at + 3000)));
+        expect(clock.anchor).toEqual({ pcr: 1005, unixMs: at + 3000 });
+    });
+
+    /**
      * **一周したら組み直す。** 足し込む作りにすると、選局直後の飛びまで
      * 拾って時刻が何時間もずれる
      */

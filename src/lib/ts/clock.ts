@@ -22,7 +22,18 @@
  *
  * **PCR は 26.5 時間で一周します** (33ビット)。またいだら結びつけ直すだけに
  * してあります — 巻き戻ったように見えたぶんを足し込む作りにすると、
- * 選局直後の飛びまで拾って**時刻が何時間もずれる**ほうが怖い
+ * 選局直後の飛びまで拾って**時刻が何時間もずれる**ほうが怖い。
+ *
+ * ## 秒未満は、いちばん大きいものを採る
+ *
+ * **TDT は秒までしか持っていません** (MJD + BCD)。持っているのは切り捨てた値
+ * なので、1つの組から出る時刻は**最大1秒ぶん過去に寄ります** — そのぶん
+ * 「放送からの遅れ」は大きく出ます。
+ *
+ * 秒の変わり目ちょうどに来た TDT だけが正しい値を持つので、
+ * **`実時刻 − PCR` がいちばん大きい組を採り続けます**。TDT は数秒に1回来るので、
+ * 十数秒で 0.1 秒くらいまで寄ります。1つ目で決め打ちにしていた頃は、局ごとに
+ * 1秒ちかく違う数字が出ていました (実測で 0.2秒 と 1.8秒)
  */
 
 import { parseMjdTime } from './eit';
@@ -38,6 +49,8 @@ const TABLE_TOT = 0x73;
 const CLOCK = 90_000;
 /** 33ビットで一周する長さ (秒)。26.5 時間ほど */
 const WRAP = 2 ** 33 / CLOCK;
+/** TDT が持っている刻み (秒)。**これより大きく飛んだら採り直す** */
+const SECOND = 1;
 
 /** 放送の実時刻と、そのときの PCR */
 export interface Anchor {
@@ -83,6 +96,8 @@ export class BroadcastClock {
     private pcrPid: number | null = null;
     private pcr = Number.NaN;
     private found: Anchor | null = null;
+    /** 採っている組の `実時刻 − PCR` (秒)。**大きいほうが真に近い** */
+    private best = Number.NEGATIVE_INFINITY;
 
     /** いちばん新しい、実時刻と PCR の組。まだ揃っていなければ null */
     get anchor(): Anchor | null {
@@ -103,6 +118,7 @@ export class BroadcastClock {
                     // 一周した (または選局で飛んだ)。結びつけ直す
                     if (Number.isFinite(this.pcr) && (at < this.pcr - 1 || at > this.pcr + WRAP / 2)) {
                         this.found = null;
+                        this.best = Number.NEGATIVE_INFINITY;
                     }
                     this.pcr = at;
                 }
@@ -132,7 +148,16 @@ export class BroadcastClock {
         if (section[0] !== TABLE_TDT && section[0] !== TABLE_TOT) return;
         if (!Number.isFinite(this.pcr)) return;
         const unixMs = parseMjdTime(section, 3);
-        if (unixMs !== null) this.found = { pcr: this.pcr, unixMs };
+        if (unixMs === null) return;
+        const offset = unixMs / 1000 - this.pcr;
+        /*
+         * **大きいほうを採る** (上の説明)。ただし1秒より大きく**下に**飛んだら
+         * 採り直す — 放送が時計を合わせ直したときに、古い値を抱え込まないため
+         */
+        if (this.found === null || offset > this.best || offset < this.best - SECOND) {
+            this.best = offset;
+            this.found = { pcr: this.pcr, unixMs };
+        }
     }
 }
 
