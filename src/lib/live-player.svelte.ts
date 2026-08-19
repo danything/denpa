@@ -102,6 +102,13 @@ const UNSLIP_EVERY = 3_000;
  */
 /** 跳び直すときに進める幅 (秒)。**1コマぶん** — 音が飛んだと分かる長さではない */
 const FRAME = 0.02;
+/**
+ * 絵が出せるようになるのを待ってよい上限 (ms)。
+ *
+ * **貯まっただけでは始めない** (`canStart`)。それでも `readyState` が上がって
+ * こないことはある (絵の無い放送・復号に失敗) ので、待ちきりにはしない
+ */
+const START_WAIT = 1_500;
 
 /**
  * データ放送の知らせを、器ができるまでに取っておく数 (`heldData`)。
@@ -354,6 +361,8 @@ export function livePlayer() {
     let slipMost = $state(0);
     /** 次に跳び直してよい時刻 */
     let unslipAfter = 0;
+    /** 貯まりが足りた最初の時刻。**絵を待ちきりにしないため** (`canStart`) */
+    let enoughAt = 0;
     /*
      * **絵の遅れは JS からは見えないことがある。** `mediaTime` で分かるのは
      * 「合成器へ渡したコマ」で、Windows の Chrome / Edge はそれを DOM とは
@@ -669,7 +678,7 @@ export function livePlayer() {
          * 貯まりを待たない (もう来ない)
          */
         if (chase !== null) {
-            if (!running && (end - video.currentTime >= 0.8 || chaseEnded)) {
+            if (!running && (end - video.currentTime >= 0.8 || chaseEnded) && canStart(video)) {
                 running = true;
                 state = 'playing';
                 void play(video);
@@ -702,13 +711,35 @@ export function livePlayer() {
             quiet = Date.now() + GRACE;
         }
         if (next.rate !== null) video.playbackRate = next.rate;
-        if (next.play && !running) {
+        if (next.play && !running && canStart(video)) {
             running = true;
             state = 'playing';
             void play(video);
             // 1枚映ってから前の絵を剥がす。ここで剥がすと一瞬黒くなる
             onFrame(video, thaw);
         }
+    }
+
+    /**
+     * **始めてよいか。貯まっただけでは始めない。**
+     *
+     * 貯まりの長さ (`pacing`) だけで `play()` を呼んでいた頃は、**音だけが先に
+     * 出て**いました。器を作り直した直後は復号器が立ち上がっておらず、1枚目が
+     * 出るまでに間があります。その間に重ねてあるのは**前の局の静止画**
+     * (`freeze`) なので、**絵が止まったまま新しい局の音が鳴る** — 実機で
+     * 「チャンネルを変えると映像が遅れる」と見えていたのはこれです。
+     *
+     * `readyState` が `HAVE_CURRENT_DATA` に上がるのは、**いまの位置の絵を
+     * 出せるようになったとき**。そこまで待てば、音と絵が一緒に始まります。
+     *
+     * **待ちきりにはしません。** 絵の無い放送や復号に失敗したときに、音まで
+     * 出なくなるほうが困る (`START_WAIT`)
+     */
+    function canStart(video: HTMLVideoElement): boolean {
+        if (video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) return true;
+        const now = Date.now();
+        if (enoughAt === 0) enoughAt = now;
+        return now - enoughAt >= START_WAIT;
     }
 
     /**
@@ -963,6 +994,7 @@ export function livePlayer() {
         position = 0;
         slip = 0;
         slipMost = 0;
+        enoughAt = 0;
         pending.length = 0;
         // 作り直した器は開いている。読み切りの印は次の `ended` が立て直す
         ending = false;
