@@ -32,7 +32,13 @@ import { queryOne } from './db';
  * (web-bml の `content.ts` が `getProgramInfoAsync` を待つ) ので、無いと
  * 「データ取得中…」のまま何も出ない。TS からは取り出していない (EIT は解かない) ので、
  * ライブと同じく DB から組み立てる (`live.ts` の `programInfo`)。局の番号は
- * `services`、番組は録画の行が持っている
+ * `services`、番組は録画の行が持っている。
+ *
+ * **中継の番号 (`transportStreamId`) は null のままにします。** ライブでは放送から
+ * 拾って渡していますが (あちらは TVerリンクが訊いてくる)、**放送のアプリは録画の
+ * 再生中に双方向をやりません** — テレ朝の TVerリンクは `IsRecorded()` で分かれて
+ * 「録画再生中は、このサービスをご利用いただけません」を出す。訊かれないものを
+ * 録画の行に足しても、確かめようが無い
  */
 function programInfoOf(recording: Recording): ResponseMessage | null {
     const service = queryOne<{ service_id: number; network_id: number }>(

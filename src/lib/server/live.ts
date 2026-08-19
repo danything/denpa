@@ -515,6 +515,13 @@ class Session {
     private toldApps = '';
     /** 最後に伝えた番組。**同じものを伝え直さない** (`programInfo`) */
     private toldEvent: number | null | undefined;
+    /** 最後に伝えた中継の番号。**遅れて分かるので、分かった時点で伝え直す** */
+    private toldTsid: number | null | undefined;
+    /**
+     * PAT に書いてある中継の番号 (`ServiceFilter`)。**読めるまでは null。**
+     * データ放送に渡すためだけに覚える (`programInfo`)
+     */
+    private tsid: number | null = null;
     private stopped = false;
 
     constructor(
@@ -640,6 +647,7 @@ class Session {
         const program = this.programInfo();
         if (program?.type === 'programInfo') {
             this.toldEvent = program.eventId;
+            this.toldTsid = program.transportStreamId;
             this.tellData(viewer, program);
         }
         for (const message of this.data.replay()) this.tellData(viewer, message);
@@ -841,6 +849,7 @@ class Session {
             for await (const chunk of chunks(stream)) {
                 if (this.stopped) break;
                 const out = filter === null ? chunk : filter.filter(chunk);
+                if (filter !== null) this.tsid = filter.transportStreamId;
                 if (out.length === 0) continue;
                 // **絞ったあとを、もう一方へ分ける。** ffmpeg に渡すのと同じもの。
                 // 誰も出していなければ解かない (`wantData`)
@@ -922,8 +931,12 @@ class Session {
          */
         if (message.type === 'moduleListUpdated') {
             const program = this.programInfo();
-            if (program?.type === 'programInfo' && this.toldEvent !== program.eventId) {
+            if (
+                program?.type === 'programInfo' &&
+                (this.toldEvent !== program.eventId || this.toldTsid !== program.transportStreamId)
+            ) {
                 this.toldEvent = program.eventId;
+                this.toldTsid = program.transportStreamId;
                 for (const viewer of wanting) this.tellData(viewer, program);
             }
         }
@@ -945,9 +958,16 @@ class Session {
      * いたが、denpa は同じものを**もっと確かな形で持っている** (番組表は
      * 溜め込んであり、放送を待たなくていい)。
      *
-     * `transportStreamId` だけ持っていない。**中継の番号は番組表に要らない**ので
-     * 集めていない。BML 側は `null` を「いまのもの」として扱う
-     * (`resource.ts` の `parseServiceReference`)
+     * **`transportStreamId` だけは放送から拾います** (`ServiceFilter` が絞るときに
+     * 読んだ PAT の値)。番組表には要らないので集めていませんが、**データ放送が
+     * 受信機に訊いてきます** — テレ朝の TVerリンクは `browser.getProgramID(4)` で
+     * これを取り、TVer のサーバへ機器の識別子と並べて送る。`null` のままだと
+     * 文字の "null" が飛んで、あちらが `e` を返し、画面には
+     * 「情報を取得することができませんでした。[エラーコード:DT-RE]」とだけ出ます
+     * (実機で再現。`DT` は dtoken_common、`RE` は返り `e` の意味)。
+     *
+     * **PAT を読むまでは null のまま伝わります**。読めた時点で伝え直すので
+     * (`handData` の `toldTsid`)、押すのが早すぎても待っていれば揃います
      */
     private programInfo(): ResponseMessage | null {
         const at = Date.now();
@@ -967,7 +987,7 @@ class Session {
             type: 'programInfo',
             originalNetworkId: service.network_id,
             networkId: service.network_id,
-            transportStreamId: null,
+            transportStreamId: this.tsid,
             serviceId: service.service_id,
             eventId: program?.event_id ?? null,
             eventName: program?.name ?? null,

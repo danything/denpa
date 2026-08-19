@@ -19,13 +19,19 @@ function payload(pid: number, counter = 0): Uint8Array {
     return out;
 }
 
+/** 実機の TSID。PAT の頭に書いてある */
+const TSID = 0x7fe1;
+
 const pat = () =>
     packetize(
         0x0000,
-        patSection([
-            [MX1, PMT1],
-            [MX2, PMT2],
-        ]),
+        patSection(
+            [
+                [MX1, PMT1],
+                [MX2, PMT2],
+            ],
+            TSID,
+        ),
     );
 
 /** MX1 は映像 0x100・音声 0x110、MX2 は 0x200・0x210 */
@@ -129,6 +135,19 @@ describe('局の選り分け', () => {
         }
         // 0 は NIT の枠。局は MX1 だけ
         expect(programs).toEqual([0, MX1]);
+    });
+
+    /**
+     * **絞るのに要るわけではない。** データ放送が受信機に訊いてくるので覚える —
+     * テレ朝の TVerリンクはこれを TVer のサーバへ送り、無いと `DT-RE` で止まる
+     * ([server/live.ts](../server/live.ts) の `programInfo`)
+     */
+    test('中継の番号 (TSID) を PAT から覚える', () => {
+        const filter = new ServiceFilter(MX1);
+        // 読む前は分からない。**分からないことを 0 と言わない**
+        expect(filter.transportStreamId).toBeNull();
+        filter.filter(pat());
+        expect(filter.transportStreamId).toBe(TSID);
     });
 
     test('PMT そのものは通す。読む側が ES の意味を知るのに要る', () => {

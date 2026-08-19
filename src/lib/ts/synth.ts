@@ -312,8 +312,8 @@ export function tdtPacket(unixMs: number): Uint8Array {
 }
 
 /** PAT。サービスID → PMT の PID */
-export function patSection(programs: [number, number][]): Uint8Array {
-    const body = [0x00, 0x00, 0x00, ...be(1), 0xc1, 0x00, 0x00];
+export function patSection(programs: [number, number][], transportStreamId = 1): Uint8Array {
+    const body = [0x00, 0x00, 0x00, ...be(transportStreamId), 0xc1, 0x00, 0x00];
     for (const [serviceId, pmtPid] of programs) {
         body.push(...be(serviceId), 0xe0 | (pmtPid >> 8), pmtPid & 0xff);
     }

@@ -103,12 +103,27 @@ export class ServiceFilter {
     /** 書き直した PAT。同じものを出し続けるので作り置きする */
     private rewritten: Uint8Array | null = null;
     private counter = 0;
+    /** PAT に書いてある中継の番号。読むまでは null */
+    private tsid: number | null = null;
 
     constructor(private readonly serviceId: number) {}
 
     /** その局の PMT を読めたか。読めるまで映像は1バイトも出ない */
     get ready(): boolean {
         return this.own.size > 0;
+    }
+
+    /**
+     * **中継の番号 (transport_stream_id)。** PAT を読むまでは null。
+     *
+     * 絞るのに要るわけではありません。**データ放送が受信機に訊いてくる**ので
+     * 覚えておきます — テレ朝の TVerリンクは `browser.getProgramID(4)` で
+     * これを取り、TVer のサーバへそのまま送る。`null` のまま渡すと文字の
+     * "null" が飛んで、あちらが断り、画面には `DT-RE` とだけ出ます
+     * ([server/live.ts](../server/live.ts) の `programInfo`)
+     */
+    get transportStreamId(): number | null {
+        return this.tsid;
     }
 
     /**
@@ -161,6 +176,7 @@ export class ServiceFilter {
         for (const section of this.pat.feed(ts)) {
             if (section[0] !== TABLE_PAT) continue;
             const transportStreamId = (section[3] << 8) | section[4];
+            this.tsid = transportStreamId;
             const version = (section[5] >> 1) & 0x1f;
             for (let at = 8; at + 4 <= section.length - 4; at += 4) {
                 const programNumber = (section[at] << 8) | section[at + 1];
