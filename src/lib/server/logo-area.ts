@@ -50,17 +50,14 @@ export function mayDetect(serviceId: number): boolean {
     return area === '' && auto !== AUTO_MISSED;
 }
 
-/** こちらが割り出した枠か。**人が教えたものは、こちらの都合で捨てない** */
-export function guessed(serviceId: number): boolean {
-    return row(serviceId).auto === AUTO_GUESSED;
-}
-
 /**
- * 割り出した枠を捨てて、**もう割り出さない**印を付ける。
- * 人が教えた枠には触らない
+ * 当たらなかった枠を捨てて、**もう割り出さない**印を付ける。
+ *
+ * **誰が入れた枠かは問いません。** 枠を渡すと転び、渡さないと通るのなら、
+ * その枠は誰が入れたものでも間違っています。人が教えたものだったときは
+ * 画面が「自動」に戻るので、**囲い直せます** (捨てたことはログにも出す)
  */
 export function forgetArea(serviceId: number): void {
-    if (!guessed(serviceId)) return;
     database()
         .prepare('UPDATE services SET logo_area = NULL, logo_area_auto = ? WHERE id = ?')
         .run(AUTO_MISSED, serviceId);

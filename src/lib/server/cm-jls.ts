@@ -252,6 +252,7 @@ export async function detectWithJls(
             frames = await findFrames(false);
             if (frames.code === 0 && serviceId !== undefined) {
                 // 外れた枠だった。捨てて、もう割り出さない印を付ける
+                console.warn(`[cm] 枠 ${logoAreaText} は当たっていないので捨てました (自動に戻します)`);
                 forgetArea(serviceId);
                 logoAreaText = '';
                 firstLearn = false;
