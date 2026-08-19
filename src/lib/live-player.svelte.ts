@@ -1512,6 +1512,16 @@ export function livePlayer() {
                  * 桁違いに違うのに、どちらから見ているかは分からない。
                  * 実際に止まったかどうかで決める (`nextTarget`)
                  */
+                /*
+                 * **絵が用意できた時点で、前の局の静止画を剥がす。**
+                 *
+                 * 剥がすのを `play()` のあとに置いていた頃は、**貼ったまま次の局の
+                 * 音が鳴って**いました (`canStart` の説明)。`loadeddata` は
+                 * 「いまの位置の絵を出せる」ところで来るので、止めたままでも
+                 * ブラウザはその1枚を描きます。**描かれたのを見てから剥がす**
+                 * (`onFrame`) ので、黒が挟まることもない
+                 */
+                video.addEventListener('loadeddata', () => onFrame(video, thaw), { once: true });
                 video.addEventListener('waiting', () => {
                     if (paused || Date.now() < quiet) return;
                     stalled = true;
