@@ -759,7 +759,13 @@ export function livePlayer() {
      * 出せるようになったとき**。そこまで待てば、音と絵が一緒に始まります。
      *
      * **待ちきりにはしません。** 絵の無い放送や復号に失敗したときに、音まで
-     * 出なくなるほうが困る (`START_WAIT`)
+     * 出なくなるほうが困る (`START_WAIT`)。
+     *
+     * **1枚目が 150ms ほど止まって見えるのは、直さないと決めた姿です**
+     * (実機で 135〜174ms)。止まっている間は貯まりが `target` に届くのを
+     * 待っているだけで、待ちそのものは避けられません — 選べるのは「その間に
+     * 何を見せるか」だけで、前の局の絵を貼ったままにすると**絵と音が食い違う**
+     * ([stream.md](../../docs/stream.md#新しい局の1枚目が少し止まるのは直さない))
      */
     function canStart(video: HTMLVideoElement): boolean {
         if (video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) return true;
