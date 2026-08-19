@@ -28,9 +28,7 @@
 
 import { ModuleBuilder, parseDdb, parseDii, TABLE_DII, u16 } from './dsmcc';
 import { withPalette } from './logo-palette';
-import { descriptors, parsePat, pmtStreams, SectionAssembler, TABLE_PMT } from './psi';
-
-const PID_PAT = 0x0000;
+import { descriptors, PID_PAT, parsePat, pmtStreams, SectionAssembler, TABLE_PMT } from './psi';
 
 /** エンジニアリングサービス。衛星のロゴはこのサービスで運ばれる (ARIB TR-B15) */
 const ESS_SERVICE_ID = 929;

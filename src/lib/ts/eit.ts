@@ -108,6 +108,25 @@ const bcd = (byte: number) => (byte >> 4) * 10 + (byte & 0x0f);
  *
  * 全ビットが1なら「未定」。開始時刻が未定の番組は番組表に置けないので null で返す。
  */
+/** TDT / TOT が流れている PID。**放送の現在時刻** */
+export const PID_TIME = 0x0014;
+const TABLE_TDT = 0x70;
+const TABLE_TOT = 0x73;
+
+/**
+ * TDT / TOT のセクションから**放送の実時刻**を読む。別のテーブルなら null。
+ *
+ * 頭3バイトのあとに MJD + BCD が5バイト。**TOT も同じ並び**で、後ろに
+ * 時差の記述子が付くだけなので同じに読める。
+ *
+ * データ放送 (`bml.ts` の `getCurrentDateTime`) と、放送との遅れを出すところ
+ * ([clock.ts](clock.ts)) の両方が見ます
+ */
+export function parseTimeTable(section: Uint8Array): number | null {
+    if (section[0] !== TABLE_TDT && section[0] !== TABLE_TOT) return null;
+    return parseMjdTime(section, 3);
+}
+
 export function parseMjdTime(data: Uint8Array, at: number): number | null {
     let allOnes = true;
     for (let i = 0; i < 5; i++) {

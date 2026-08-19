@@ -49,15 +49,8 @@ import {
     u16,
     u32,
 } from './dsmcc';
-import { parseMjdTime } from './eit';
-import { descriptors, PacketStream, parsePat, pmtStreams, SectionAssembler } from './psi';
-
-const PID_PAT = 0x0000;
-/** TDT / TOT。放送の現在時刻。BML の `getCurrentDateTime` がこれを見る */
-const PID_TIME = 0x0014;
-
-const TABLE_TDT = 0x70;
-const TABLE_TOT = 0x73;
+import { PID_TIME, parseTimeTable } from './eit';
+import { descriptors, PacketStream, PID_PAT, parsePat, pmtStreams, SectionAssembler } from './psi';
 
 const DESC_STREAM_IDENTIFIER = 0x52;
 /** データ符号化方式記述子 (STD-B10 第2部 6.2.20) */
@@ -319,10 +312,9 @@ export class BmlDecoder {
         }
     }
 
-    /** TDT / TOT。頭3バイトのあとに MJD + BCD が5バイト */
+    /** TDT / TOT。読み方は [eit.ts](eit.ts) にまとめてある */
     private onTime(section: Uint8Array): void {
-        if (section[0] !== TABLE_TDT && section[0] !== TABLE_TOT) return;
-        const at = parseMjdTime(section, 3);
+        const at = parseTimeTable(section);
         if (at !== null) this.send({ type: 'currentTime', timeUnixMillis: at });
     }
 

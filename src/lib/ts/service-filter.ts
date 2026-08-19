@@ -23,6 +23,7 @@
 import {
     PACKET,
     PacketStream,
+    PID_PAT,
     pmtProgramInfo,
     pmtStreams,
     SectionAssembler,
@@ -32,7 +33,6 @@ import {
     withCrc,
 } from './psi';
 
-const PID_PAT = 0x0000;
 const PID_NULL = 0x1fff;
 
 /**

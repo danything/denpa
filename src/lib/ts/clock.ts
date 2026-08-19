@@ -36,14 +36,8 @@
  * 1秒ちかく違う数字が出ていました (実測で 0.2秒 と 1.8秒)
  */
 
-import { parseMjdTime } from './eit';
-import { PacketStream, parsePat, SectionAssembler, TABLE_PMT } from './psi';
-
-const PID_PAT = 0x0000;
-/** TDT / TOT。放送の現在時刻 */
-const PID_TIME = 0x0014;
-const TABLE_TDT = 0x70;
-const TABLE_TOT = 0x73;
+import { PID_TIME, parseTimeTable } from './eit';
+import { PacketStream, PID_PAT, parsePat, SectionAssembler, TABLE_PMT } from './psi';
 
 /** PCR の刻み。映像の PTS と同じ */
 const CLOCK = 90_000;
@@ -145,9 +139,8 @@ export class BroadcastClock {
     }
 
     private onTime(section: Uint8Array): void {
-        if (section[0] !== TABLE_TDT && section[0] !== TABLE_TOT) return;
         if (!Number.isFinite(this.pcr)) return;
-        const unixMs = parseMjdTime(section, 3);
+        const unixMs = parseTimeTable(section);
         if (unixMs === null) return;
         const offset = unixMs / 1000 - this.pcr;
         /*

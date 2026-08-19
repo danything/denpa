@@ -1,8 +1,8 @@
 import { describe, expect, test } from 'bun:test';
 import { BroadcastClock, broadcastTime, parseStart, readPcr } from './clock';
+import { PID_PAT } from './psi';
 import { packetize, patSection, pcrPacket, programMap, stream, tdtPacket } from './synth';
 
-const PID_PAT = 0x0000;
 const PID_PMT = 0x1000;
 const PID_PCR = 0x0100;
 

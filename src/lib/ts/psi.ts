@@ -15,6 +15,8 @@ import { decodeAribText } from './aribtext';
 export const PACKET = 188;
 export const SYNC = 0x47;
 
+/** PAT。どの PID に PMT が居るかを持つ。**入口はいつもここ** */
+export const PID_PAT = 0x0000;
 const PID_NIT = 0x0010;
 const PID_SDT = 0x0011;
 
