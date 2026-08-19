@@ -156,9 +156,6 @@
 
     /** 操作列の出し入れ。ライブ・観る画面と同じ */
     const controls = playerControls();
-    $effect(() => {
-        controls.held = player.paused;
-    });
     /** 止めている間も掛けたまま (ライブ・観る画面と同じ。あちらに理由) */
     const awake = screenAwake();
     $effect(() => {

@@ -1,5 +1,5 @@
 import type { APIRequestContext, Page } from '@playwright/test';
-import { expect, goto, recordOne, test } from './helpers';
+import { expect, goto, recordOne, test, wakeControls } from './helpers';
 
 /**
  * 録画をブラウザで観る画面 (`/watch/<id>`)。
@@ -62,6 +62,7 @@ test.describe('録画を観る', () => {
         const { id } = await recordOne(page, request);
 
         await goto(page, `/watch/${id}`);
+        await wakeControls(page, 'watch-stage');
         await page.getByTestId('watch-delete').click();
         await expect(page.getByTestId('watch-delete-confirm')).toBeVisible();
 
@@ -70,6 +71,8 @@ test.describe('録画を観る', () => {
         await page.getByTestId('detail-badges').click();
         await expect(page.getByTestId('watch-delete-confirm')).toHaveCount(0);
 
+        // 右の列は絵から離れた間に引っ込んでいる。起こしてから押す
+        await wakeControls(page, 'watch-stage');
         await page.getByTestId('watch-delete').click();
         await page.getByTestId('watch-delete-confirm').click();
 
@@ -126,6 +129,7 @@ test.describe('録画を観る', () => {
         // **既定で出す。** ライブと同じ (テレビの字幕ボタンとは違い、観る画面は出す側)
         const button = page.getByTestId('watch-captions');
         await expect(button).toHaveAttribute('aria-pressed', 'true');
+        await wakeControls(page, 'watch-stage');
         await button.click();
         await expect(button).toHaveAttribute('aria-pressed', 'false');
     });
@@ -142,6 +146,7 @@ test.describe('録画を観る', () => {
         const shot = page.getByTestId('watch-shot');
         await expect(shot).toBeVisible();
         // 押しても画面は壊れない (絵が無いので写るものは無い)
+        await wakeControls(page, 'watch-stage');
         await shot.click();
         await expect(page.getByTestId('watch-video')).toBeVisible();
     });

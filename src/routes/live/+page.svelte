@@ -176,9 +176,6 @@
 
     /** 操作列の出し入れ ([controls.svelte.ts](../../lib/components/player/controls.svelte.ts))。観る画面と同じ */
     const controls = playerControls();
-    $effect(() => {
-        controls.held = player.paused;
-    });
 
     /**
      * 観ている間は画面を落とさせない ([awake.svelte.ts](../../lib/components/player/awake.svelte.ts))。

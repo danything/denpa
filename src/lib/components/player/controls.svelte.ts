@@ -1,9 +1,13 @@
 /**
  * 操作列を出しておくか消すかの決め方。**3画面 (ライブ・追っかけ・観る画面) で同じもの。**
  *
- * 絵の上に居座るものなので、触っていない間は引っ込める。**止めている間と、
- * キーボードで触っている間は残す** — 止めて眺めているときに操作が消えると、
- * 出すためだけにもう一度押すことになる。
+ * 絵の上に居座るものなので、触っていない間は引っ込める。**止めていても引っ込めます** —
+ * 一時停止するのは、たいてい**絵の中の文字をじっくり見る**ためで、そこに帯が
+ * 残っていては止めた意味が無い。以前は止めている間だけ残していた
+ * (「出すためにもう一度押すことになる」という理屈だった) が、**押せば出るものを
+ * 残しておくより、押さないと消せないほうが邪魔**だった。
+ *
+ * 残すのは**キーボードで触っている間だけ**。あちらは絵を押して出し直す手が無い。
  *
  * ここを2箇所に持っていた頃は、ライブは「動かせば出る」まで作り込んであるのに、
  * 観る画面は**押したときにしか出なかった**。実機では隠れている帯の上を押すと
@@ -35,8 +39,6 @@ export interface PlayerControls {
     away: (event: PointerEvent) => void;
     /** キーボードで触っている間は残す */
     keyboard: boolean;
-    /** 止めている間は残す。呼ぶ側が入れる */
-    held: boolean;
     /** その場で出し直す (ボタンを押した直後など) */
     stir: () => void;
     /** その場で消す (指で1回押して引っ込めるとき) */
@@ -56,17 +58,16 @@ export function playerControls(): PlayerControls {
     /** 押される直前に出ていたか。`toggle` が読む */
     let wasShown = false;
     let keyboard = $state(false);
-    let held = $state(false);
     /** 前に居た場所。**動いていない `pointermove` を捨てる**のに使う (`wake`) */
     let lastX = Number.NaN;
     let lastY = Number.NaN;
 
     /*
-     * **見るのは「触ったか」と「止めているか」だけ。** 再生できているかどうかを
+     * **見るのは「触ったか」だけ** (キーボードを除く)。再生や一時停止の状態を
      * 混ぜていた頃は、繋いでいる間ずっと出たままになり、消える経路を
      * 確かめようが無かった
      */
-    const shown = $derived(held || keyboard || now - touched < LINGER);
+    const shown = $derived(keyboard || now - touched < LINGER);
 
     $effect(() => {
         if (!shown) return;
@@ -83,12 +84,6 @@ export function playerControls(): PlayerControls {
         },
         set keyboard(value: boolean) {
             keyboard = value;
-        },
-        get held(): boolean {
-            return held;
-        },
-        set held(value: boolean) {
-            held = value;
         },
         /**
          * **指とマウスで別の出し方をする。**
@@ -139,7 +134,7 @@ export function playerControls(): PlayerControls {
         /*
          * **押す前に出ていたかで決める。** いまの状態で決めていた頃は、
          * 押した瞬間に `wake` が出したものを見て「出ている→消す」と読み、
-         * **指では二度と出せなかった** (止めている間だけ `held` で残っていた)
+         * **指では二度と出せなかった**
          */
         toggle(): void {
             if (!byTouch) return;

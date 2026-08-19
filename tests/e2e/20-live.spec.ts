@@ -1,7 +1,7 @@
 import { existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import type { Locator } from '@playwright/test';
 import { SERVICES } from '../fake/services';
-import { airing, cellOf, expect, goto, syncEpg, test, upcoming } from './helpers';
+import { airing, cellOf, expect, goto, syncEpg, test, upcoming, wakeControls } from './helpers';
 
 /**
  * 偽 ffmpeg が残した引数を1回ぶんずつに切って、最後の1回を返す。
@@ -422,6 +422,7 @@ test.describe('ライブ視聴', () => {
         // **指のリモコンも出さない。** 押しても行き先が無い
         await expect(page.getByTestId('live-remote')).toBeHidden();
 
+        await wakeControls(page, 'live-frame');
         await page.getByTestId('live-data-button').click();
         // 700KB を取りに行って、器を立てるまで
         await expect(overlay).toHaveAttribute('data-state', 'ready', { timeout: 15_000 });
@@ -512,6 +513,7 @@ test.describe('ライブ視聴', () => {
         expect(layers.data, 'データ放送が操作列を覆っている').toBeLessThan(layers.controls);
 
         // もう一度押したら畳む。**掴んだままにしない**
+        await wakeControls(page, 'live-frame');
         await page.getByTestId('live-data-button').click();
         await expect(overlay).toHaveAttribute('data-state', 'off');
         await expect(page.getByTestId('live-remote')).toBeHidden();
@@ -525,6 +527,7 @@ test.describe('ライブ視聴', () => {
          * ので、同じ要素を渡し直すと2度目で転ぶ。毎回まっさらな入れ物を
          * 作っているのはそのため
          */
+        await wakeControls(page, 'live-frame');
         await page.getByTestId('live-data-button').click();
         await expect(overlay).toHaveAttribute('data-state', 'ready', { timeout: 15_000 });
     });
@@ -610,6 +613,7 @@ test.describe('ライブ視聴', () => {
         await goto(page, '/live');
         await page.getByTestId('live-channel').first().click();
         await expect(page.getByTestId('live-title')).toBeVisible();
+        await wakeControls(page, 'live-frame');
         await page.getByTestId('live-data-button').click();
         await expect(page.getByTestId('live-data')).toHaveAttribute('data-state', 'ready', {
             timeout: 15_000,
@@ -629,6 +633,7 @@ test.describe('ライブ視聴', () => {
         await goto(page, '/live');
         await page.getByTestId('live-channel').first().click();
         await expect(page.getByTestId('live-title')).toBeVisible();
+        await wakeControls(page, 'live-frame');
         await page.getByTestId('live-data-button').click();
         await expect(page.getByTestId('live-data')).toHaveAttribute('data-state', 'ready', {
             timeout: 15_000,
@@ -657,6 +662,7 @@ test.describe('ライブ視聴', () => {
         await channels.nth(0).click();
         await expect(page.getByTestId('live-title')).toBeVisible();
         const overlay = page.getByTestId('live-data');
+        await wakeControls(page, 'live-frame');
         await page.getByTestId('live-data-button').click();
         await expect(overlay).toHaveAttribute('data-state', 'ready', { timeout: 15_000 });
         const before = await overlay.getAttribute('data-for');
@@ -800,8 +806,8 @@ test.describe('ライブ視聴', () => {
 
     /*
      * **しばらく触らなければ消える。** 絵の上に居座るものなので、見ている間は
-     * 引っ込んでいるほうがいい。止めている間は残す — 止めて眺めているときに
-     * 消えると、再開する場所が分からなくなる
+     * 引っ込んでいるほうがいい。**止めていても消えます** — 一時停止するのは
+     * 絵の中の文字をじっくり見るためで、そこに帯が残っていては止めた意味が無い
      */
     test('操作列は触らないでいると消え、動かすと戻る', async ({ page }) => {
         await goto(page, '/live');
@@ -814,10 +820,12 @@ test.describe('ライブ視聴', () => {
         await page.mouse.move(420, 320);
         await expect(controls).toHaveAttribute('data-shown', 'true');
 
-        // 止めている間は残す
+        // 止めていても消える。押した直後は出ている (押したものが見えないと困る)
         await page.getByTestId('live-play').click();
-        await page.waitForTimeout(3500);
         await expect(controls).toHaveAttribute('data-shown', 'true');
+        await expect(controls, '止めていても放っておけば消える').toHaveAttribute('data-shown', 'false', {
+            timeout: 6000,
+        });
     });
 
     /*
@@ -1007,6 +1015,7 @@ test.describe('ライブ視聴', () => {
         // 既定は H.264。どの端末でも出るほうから始める
         expect(await ffmpegArgs(stack.liveArgsFile, expect)).toContain('libx264');
 
+        await wakeControls(page, 'live-frame');
         await page.getByTestId('live-codec').click();
         await page.locator('[data-testid="live-codec-option"][data-codec="av1"]').click();
 
@@ -1036,6 +1045,7 @@ test.describe('ライブ視聴', () => {
         await channels.first().click();
         await expect(page.getByTestId('live-title')).toBeVisible();
 
+        await wakeControls(page, 'live-frame');
         await page.getByTestId('live-codec').click();
         await page.locator('[data-testid="live-codec-option"][data-codec="av1"]').click();
         await expect(page.getByTestId('live-codec')).toContainText('AV1');
@@ -1186,6 +1196,7 @@ test.describe('ライブ視聴', () => {
         await expect(page.getByTestId('live-title')).toBeVisible();
         await expect(page.getByTestId('live-relearn')).toBeVisible();
 
+        await wakeControls(page, 'live-frame');
         await page.getByTestId('live-relearn').click();
         await expect(page.getByTestId('live-relearn')).toBeHidden();
         expect(await stored(), '覚えたものが残っている').toBeNull();

@@ -259,9 +259,6 @@
 
     /** 操作列の出し入れ ([controls.svelte.ts](../../../lib/components/player/controls.svelte.ts))。ライブと同じ */
     const controls = playerControls();
-    $effect(() => {
-        controls.held = !playing;
-    });
 
     /**
      * 観ている間は画面を落とさせない ([awake.svelte.ts](../../../lib/components/player/awake.svelte.ts))。

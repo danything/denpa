@@ -288,3 +288,23 @@ export async function cancelAllReservations(page: Page): Promise<void> {
     }
     await expect(page.getByTestId('reservation-row')).toHaveCount(0);
 }
+
+/**
+ * 操作列を出し直す。**触らないでいると 2.5 秒で引っ込む**ので
+ * ([controls.svelte.ts](../../src/lib/components/player/controls.svelte.ts))、
+ * 引っ込んでいる間の帯は押せません (`pointer-events-none`)。
+ *
+ * 開いた直後は出ているため、続けて押すだけのテストは通ってしまいます。
+ * **待ちを挟んだ先で押すものは、ここで起こしてから押すこと。**
+ *
+ * 同じ場所への `pointermove` は捨てられるので (止まっているカーソルの下で
+ * 中身が動いただけでもブラウザは投げてくる)、**2回、違う場所へ動かします**
+ */
+export async function wakeControls(page: Page, stage: string): Promise<void> {
+    const box = await page.getByTestId(stage).boundingBox();
+    if (box === null) return;
+    const x = box.x + box.width / 2;
+    const y = box.y + box.height / 2;
+    await page.mouse.move(x, y);
+    await page.mouse.move(x, y - 4);
+}
