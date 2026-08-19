@@ -1516,12 +1516,16 @@ export function livePlayer() {
                  * **絵が用意できた時点で、前の局の静止画を剥がす。**
                  *
                  * 剥がすのを `play()` のあとに置いていた頃は、**貼ったまま次の局の
-                 * 音が鳴って**いました (`canStart` の説明)。`loadeddata` は
-                 * 「いまの位置の絵を出せる」ところで来るので、止めたままでも
-                 * ブラウザはその1枚を描きます。**描かれたのを見てから剥がす**
-                 * (`onFrame`) ので、黒が挟まることもない
+                 * 音が鳴って**いました (`canStart` の説明)。止めたままでも
+                 * ブラウザは1枚目を描くので、**描かれたのを見てから剥がせば**
+                 * (`onFrame`) 黒も挟まりません。
+                 *
+                 * **待ち構えるのは `loadedmetadata` から。** `loadeddata` から
+                 * にしていた頃は、**1枚目はその前に描かれてしまっていて**、
+                 * 次に描かれる = 再生が始まってからになり、実機で音より
+                 * 54〜80ms 遅れて剥がれていた
                  */
-                video.addEventListener('loadeddata', () => onFrame(video, thaw), { once: true });
+                video.addEventListener('loadedmetadata', () => onFrame(video, thaw), { once: true });
                 video.addEventListener('waiting', () => {
                     if (paused || Date.now() < quiet) return;
                     stalled = true;
