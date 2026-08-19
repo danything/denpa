@@ -220,6 +220,21 @@
     /** 読めなかったとき。**黙って黒いままにしない** */
     let broken = $state(false);
     /**
+     * 読み込み待ちで止まっているか。**輪を出す。**
+     *
+     * 出さないと、絵が止まったのが**詰まりなのか壊れたのか分かりません**。
+     * 追っかけ再生や、まだ焼けていないところへ跳んだときに数秒待つことがある
+     */
+    let buffering = $state(false);
+    let bufferTimer: ReturnType<typeof setTimeout> | null = null;
+    /**
+     * 輪を出すまでの間 (ms)。**短い詰まりでは出さない。**
+     *
+     * コマ落ち程度の詰まりは毎回起きるので、その都度出すと**輪が点滅する**
+     * だけになる。待たされていると人が思いはじめるあたりに置く
+     */
+    const BUFFER_NOTICE = 400;
+    /**
      * 繋ぎが切れて拾い直している最中か。**サーバの入れ替え (デプロイ) 用。**
      *
      * 器ごと作り直すので、観ている最中に配信が切れる。何もしないと**そこで
@@ -250,11 +265,15 @@
 
     /**
      * 観ている間は画面を落とさせない ([awake.svelte.ts](../../../lib/components/player/awake.svelte.ts))。
-     * 動画は触らずに見るものなので、**再生中こそいちばん落とされる**
+     * 動画は触らずに見るものなので、**再生中こそいちばん落とされる**。
+     *
+     * **止めている間も掛けたままにします。** 再生中だけにしていた頃は、
+     * 一時停止して絵を見ている・番組の中身を読んでいる間に暗くなって消えました
+     * — この画面は観るためだけに開くものなので、開いている間は起こしておく
      */
     const awake = screenAwake();
     $effect(() => {
-        awake.on = playing;
+        awake.on = true;
     });
     let lastTap: Tap | null = null;
 
@@ -409,6 +428,7 @@
             deleting.fire();
             if (skipNotice !== null) clearTimeout(skipNotice);
             if (hopGiveUp !== null) clearTimeout(hopGiveUp);
+            if (bufferTimer !== null) clearTimeout(bufferTimer);
             if (retryTimer !== null) clearTimeout(retryTimer);
         };
     });
@@ -776,6 +796,25 @@
         }
     }
 
+    /** 詰まった。**少し待ってから**輪を出す */
+    function stall(): void {
+        // CM を跨いでいる間は蓋がある。そちらに任せる
+        if (hopping || bufferTimer !== null || buffering) return;
+        bufferTimer = setTimeout(() => {
+            bufferTimer = null;
+            buffering = true;
+        }, BUFFER_NOTICE);
+    }
+
+    /** 動き出した。輪を引っ込める */
+    function flowing(): void {
+        if (bufferTimer !== null) {
+            clearTimeout(bufferTimer);
+            bufferTimer = null;
+        }
+        if (buffering) buffering = false;
+    }
+
     function clearCaptions(): void {
         showing = null;
         clearOverlay(overlay);
@@ -1122,7 +1161,14 @@
                     }}
                     onpause={() => {
                         playing = false;
+                        // 止めたのは詰まりではない。輪は引っ込める
+                        flowing();
                     }}
+                    onwaiting={stall}
+                    onstalled={stall}
+                    onseeking={stall}
+                    onplaying={flowing}
+                    oncanplay={flowing}
                     ontimeupdate={() => {
                         at = video?.currentTime ?? 0;
                         hopCm();
@@ -1195,6 +1241,23 @@
                     <StageNote testid="watch-resumed" wrap="inset-x-0 top-14 justify-center">
                         続きから再生しています
                     </StageNote>
+                {/if}
+
+                {#if buffering && !resuming}
+                    <!--
+                        **読み込み待ち。** 絵が止まったのが詰まりなのか壊れたのか
+                        分からないと、待てばいいのかどうかが決められない。
+                        繋ぎ直しの最中はあちらが出るので、重ねない
+                    -->
+                    <div
+                        class="pointer-events-none absolute inset-0 z-10 flex items-center justify-center"
+                        data-testid="watch-buffering"
+                    >
+                        <span class="rounded-box flex items-center gap-2 bg-black/60 px-3 py-2 text-white">
+                            <span class="loading loading-spinner loading-sm"></span>
+                            読み込み中
+                        </span>
+                    </div>
                 {/if}
 
                 {#if resuming}

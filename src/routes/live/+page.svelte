@@ -182,11 +182,15 @@
 
     /**
      * 観ている間は画面を落とさせない ([awake.svelte.ts](../../lib/components/player/awake.svelte.ts))。
-     * 動画は触らずに見るものなので、**再生中こそいちばん落とされる**
+     * 動画は触らずに見るものなので、**再生中こそいちばん落とされる**。
+     *
+     * **止めている間も掛けたままにします** (観る画面と同じ)。止めるのは
+     * 追っかけの始まりで、そのまま画面を見ていることが多い。何も選んでいない
+     * ときと、出せずに終わったときだけ外す
      */
     const awake = screenAwake();
     $effect(() => {
-        awake.on = !player.paused && player.state === 'playing';
+        awake.on = player.state !== 'idle' && player.state !== 'error';
     });
     const controlsShown = $derived(controls.shown);
     const toggle = controls.toggle;

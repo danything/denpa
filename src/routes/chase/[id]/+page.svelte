@@ -159,9 +159,10 @@
     $effect(() => {
         controls.held = player.paused;
     });
+    /** 止めている間も掛けたまま (ライブ・観る画面と同じ。あちらに理由) */
     const awake = screenAwake();
     $effect(() => {
-        awake.on = !player.paused && player.state === 'playing';
+        awake.on = player.state !== 'idle' && player.state !== 'error';
     });
     const controlsShown = $derived(controls.shown);
     const toggle = controls.toggle;
