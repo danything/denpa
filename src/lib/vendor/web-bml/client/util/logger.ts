@@ -1,6 +1,5 @@
 // @ts-nocheck
 // 借りもの。中身は書き換えない ([README](../README.md))。denpa 側の型検査は効いたまま
-
 const logLevel = {
     error: 3,
     warn: 2,

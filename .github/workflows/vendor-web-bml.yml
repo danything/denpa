@@ -7,8 +7,10 @@ name: Follow web-bml
 # **中身は古いまま「新しい版だ」と名乗るファイル**ができるだけで嘘になる。
 #
 # ここは中身ごと写し直して PR にする。写し方は README の「更新のしかた」
-# そのままで、判断が要るところ (上流が新しい依存を増やした・型を変えた) は
-# **CI が落ちることで人に回る**。
+# そのまま。**上流がファイルを増やしたり減らしたりしたぶんは、顔ぶれのほうが
+# 付いてくる** (入口から import を辿って決めるため) ので、PR の説明に
+# 「増えた」「要らなくなった」として並ぶ。型が変わったぶんは `bun run check` が
+# 落ちることで人に回る。
 on:
   schedule:
     # 毎週月曜 12:00 JST (03:00 UTC)。放送も録画も薄い時間
@@ -85,7 +87,8 @@ jobs:
 
             ${{ steps.vendor.outputs.was }} → ${{ steps.vendor.outputs.now }} (${{ steps.vendor.outputs.day }})
 
-            写し方は README の「更新のしかた」のまま — `.ts` の頭に `@ts-nocheck` と
-            断り書きを足し、`js_interpreter.ts` は denpa の1行を残してある。
+            写し方は README の「更新のしかた」のまま — 顔ぶれは denpa が呼ぶ
+            入口から `import` を辿って決め、`.ts` の頭に `@ts-nocheck` と
+            断り書きを足すだけ。
           labels: 借りもの
           delete-branch: true

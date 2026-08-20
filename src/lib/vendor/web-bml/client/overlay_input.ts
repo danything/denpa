@@ -1,6 +1,5 @@
 // @ts-nocheck
 // 借りもの。中身は書き換えない ([README](../README.md))。denpa 側の型検査は効いたまま
-
 import { InputApplication, InputApplicationLaunchOptions, InputCancelReason } from "./bml_browser";
 
 // Y=110未満には表示してはいけない (TR-B14 第二分冊 1.6)
