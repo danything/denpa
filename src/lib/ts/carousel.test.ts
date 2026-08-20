@@ -16,6 +16,15 @@ function moduleOf(componentId: number, moduleId: number, version = 0): Message {
 const pmt = { type: 'pmt', components: [{ pid: 2064, componentId: 96, streamType: 13 }] } as Message;
 const programInfo = { type: 'programInfo', eventId: 1 } as unknown as Message;
 
+function listOf(componentId: number, ids: number[], dataEventId = 1): Message {
+    return {
+        type: 'moduleListUpdated',
+        componentId,
+        dataEventId,
+        modules: ids.map((id) => ({ id, version: 0, size: 1 })),
+    } as unknown as Message;
+}
+
 describe('データ放送の覚え書き', () => {
     test('何も来ていなければ渡すものは無い', () => {
         expect(new Carousel().replay()).toEqual([]);
@@ -44,6 +53,37 @@ describe('データ放送の覚え書き', () => {
         held.take(moduleOf(96, 4096, 2));
         expect(held.held).toBe(1);
         expect(held.replay()).toEqual([moduleOf(96, 4096, 2)]);
+    });
+
+    /*
+     * **DII が無いと、待っている文書が動かない。** 放送のアプリは
+     * `beitem[type="ModuleUpdated"]` を subscribe した時点で借りものに問い合わせ、
+     * DII をまだ受け取っていなければ黙って待つ。ライブは回り続けるので次が来るが、
+     * **録画の巻き戻しでは来ない** — テレ朝の入口が番組連動 (`/50`) の DII を
+     * 待ったまま止まり、データ放送が何も出なかった
+     */
+    test('DII も覚えて、モジュールより先に渡す', () => {
+        const held = new Carousel();
+        held.take(moduleOf(80, 0));
+        held.take(listOf(80, [0, 1]));
+        held.take(pmt);
+        expect(held.replay().map((message) => message.type)).toEqual([
+            'pmt',
+            'moduleListUpdated',
+            'moduleDownloaded',
+        ]);
+    });
+
+    /*
+     * **同じ DII でも間引かない。** アプリは「変わったこと」を DII の繰り返しで
+     * 知る (版とデータイベント番号を突き合わせる)
+     */
+    test('DII はコンポーネントごとに最後の1つ。通すのは毎回', () => {
+        const held = new Carousel();
+        expect(held.take(listOf(80, [0]))).toBe(true);
+        expect(held.take(listOf(80, [0]))).toBe(true);
+        expect(held.take(listOf(96, [1]))).toBe(true);
+        expect(held.replay()).toEqual([listOf(80, [0]), listOf(96, [1])]);
     });
 
     test('コンポーネントが違えば別のものとして持つ', () => {

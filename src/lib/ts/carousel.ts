@@ -12,12 +12,25 @@
  * 揃ったモジュールを渡しても始まらない。字幕で最後の1枚を配り直しているのと
  * 同じ理由 (`server/live.ts` の `showing`)。
  *
- * 覚えるのは3つだけ:
+ * 覚えるのは4つだけ:
  *
  * - `pmt` … 最後の1つ。差し替わったら上書き
  * - `programInfo` … 同じく最後の1つ
+ * - `moduleListUpdated` … コンポーネントごとに最後の1つ (DII)
  * - `moduleDownloaded` … コンポーネントとモジュールの組ごとに最後の1つ。
  *   **版が上がると中身が変わる**ので、来るたびに置き換える
+ *
+ * ## DII (`moduleListUpdated`) を覚える理由
+ *
+ * **「そのコンポーネントに、そのモジュールが在るか」はここにしか書いていない。**
+ * 放送のアプリは `beitem[type="ModuleUpdated"]` を subscribe した時点で
+ * 借りものに問い合わせ、**DII をまだ受け取っていなければ黙って待ちます**
+ * (`interface/DOM.ts` の `subscribeModuleUpdated`)。
+ *
+ * ライブは回り続けるので数秒待てば次の DII が来ますが、**録画の巻き戻しでは
+ * 来ません** — 変化ログを積み直す作りなので、覚えていないものは二度と流れない。
+ * テレビ朝日の入口の文書がまさにこれで、番組連動データ (`/50`) の DII を
+ * 待ったまま止まり、**データ放送が何も出ませんでした** (実機の録画で再現)。
  *
  * `pcr` と `currentTime` は覚えない。**次がすぐ来る**もので、古いものを配ると
  * かえって時計が狂う。
@@ -56,6 +69,8 @@ function moduleKey(message: { componentId: number; moduleId: number }): string {
 export class Carousel {
     private pmt: ResponseMessage | null = null;
     private programInfo: ResponseMessage | null = null;
+    /** DII。**コンポーネントごとに最後の1つ** (上の説明) */
+    private readonly lists = new Map<number, ResponseMessage>();
     private readonly modules = new Map<string, ResponseMessage>();
 
     /**
@@ -77,6 +92,15 @@ export class Carousel {
             this.programInfo = message;
             return !same;
         }
+        /*
+         * **DII は覚えるが、通すのは毎回。** 放送のアプリは「変わったこと」を
+         * DII の繰り返しで知る (版とデータイベント番号を突き合わせる) ので、
+         * 同じものでも間引かない
+         */
+        if (message.type === 'moduleListUpdated') {
+            this.lists.set(message.componentId, message);
+            return true;
+        }
         if (message.type !== 'moduleDownloaded') return true;
         const key = moduleKey(message);
         /*
@@ -97,13 +121,16 @@ export class Carousel {
     /**
      * 繋いできた人に渡すぶん。
      *
-     * **出す順は pmt → programInfo → モジュール** — 何番のコンポーネントを出すかが
-     * 決まってからでないと、モジュールを渡しても置き場所が無い
+     * **出す順は pmt → programInfo → DII → モジュール** — 何番のコンポーネントを
+     * 出すかが決まってからでないと、モジュールを渡しても置き場所が無い。DII は
+     * モジュールより先に置く (「在る」と言う前に中身だけ来ても、受け側は
+     * 在ることを知らないまま)
      */
     replay(): ResponseMessage[] {
         const out: ResponseMessage[] = [];
         if (this.pmt !== null) out.push(this.pmt);
         if (this.programInfo !== null) out.push(this.programInfo);
+        for (const held of this.lists.values()) out.push(held);
         for (const held of this.modules.values()) out.push(held);
         return out;
     }
