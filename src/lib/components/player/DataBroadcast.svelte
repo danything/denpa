@@ -141,11 +141,26 @@
      *
      * **一度では届かない。** 文書が組み上がった時点ではまだ `beitem` が
      * `subscribe` になっておらず (それを立てるのはアプリの `onload`)、
-     * `DataButtonPressed` は誰にも拾われずに消える。聞く文書が出てくるまで
-     * 見に行き、**最初に聞いた文書へ1回だけ**届ける — テレビで d を1回押したのと同じ
+     * `DataButtonPressed` は誰にも拾われずに消える。聞く文書が出てくるまで見に行く
      */
     const KNOCK_TRIES = 12;
     const KNOCK_WAIT = 400;
+
+    /**
+     * **聞いている文書に届けても、捨てられることがある。**
+     *
+     * TOKYO MX の入口は `beitem` を最初から `subscribe` にしておきながら、
+     * **2秒のあいだ受けた d を捨てます** — 番組終了の知らせを待つ間だけ
+     * `gEMGet` が偽で、押しても `return` する作りです。こちらの1押しは
+     * 0.4秒 で届くので、**ちょうどその捨てられる窓に入って**いました
+     * (実機で、入口の文書のまま何も出ない形になった)。
+     *
+     * **返事が無ければもう一度押します。** テレビの前の人がやることと同じで、
+     * 反応 (次の文書が出てくること) があればそこで止めます。
+     * `TAP_MOST` までしか押さないのは、**開いたメニューを閉じてしまう局がある**ため
+     */
+    const TAP_MOST = 3;
+    const TAP_WAIT = 2500;
 
     /** 描く場所。BML の画面 (960x540 など) がこの中に入る */
     let host = $state<HTMLDivElement | null>(null);
@@ -201,12 +216,13 @@
     /** 残りの見に行く回数 */
     let knocks = 0;
     /**
-     * **押された d をまだ届けていないか。** 出す操作 (画面の d) は文書にとっての d の
-     * 1押しでもある。器を作った時点では受け取る文書がまだ無いので、聞く文書が
-     * 出てくるまで持っておく (`knock`)。届けたら下ろす — 2回届けると、開いた
-     * メニューを閉じたり頭に戻したりする局がある
+     * **押された d をまだ届け終えていないか。** 出す操作 (画面の d) は文書にとっての
+     * d の1押しでもある。器を作った時点では受け取る文書がまだ無いので、聞く文書が
+     * 出てくるまで持っておく (`knock`)。**返事があったら下ろす** (`TAP_MOST` の項)
      */
     let dueD = false;
+    /** 何回押したか。**返事が無いときだけ増える** (`TAP_MOST`) */
+    let taps = 0;
     /** 次に叩く約束 */
     let knocking: ReturnType<typeof setTimeout> | null = null;
     /** 枠の大きさを見張る。全画面にすると変わる */
@@ -423,23 +439,31 @@
     }
 
     /**
-     * **押された d を、最初に聞いた文書へ届ける** (`dueD`)。
+     * **押された d を、聞いている文書へ届ける** (`dueD`)。
      *
      * 局の待機ページ (日テレの beat・テレ朝の stream・フジの入口) は自分で出てきて
      * (invisible=false)、d を押されて初めてメニューを開く。NHK は入口が隠れたまま
-     * d を待つ。どちらも「聞いている文書に1回」で足りるので、見えているかは問わない。
-     * 文書ができるたびに見に行き直す (`load`) — 入口はたいてい別の文書へ渡すだけ
+     * d を待つ。どちらも見えているかは問わないので、聞いているかだけで決める。
+     * 文書ができるたびに見に行き直す (`load`) — 入口はたいてい別の文書へ渡すだけ。
+     *
+     * **届けたあとは、返事が来るまで押し直す** (`TAP_MOST` の項)。返事は
+     * 「次の文書が出てくること」で、`load` が来たらそこで下ろす
      */
     function knock(): void {
         knocking = null;
         if (browser === null || !dueD || knocks <= 0) return;
         knocks--;
-        if (listensD()) {
-            dueD = false;
-            tap(DATA_BUTTON);
+        if (!listensD()) {
+            knocking = setTimeout(knock, KNOCK_WAIT);
             return;
         }
-        knocking = setTimeout(knock, KNOCK_WAIT);
+        tap(DATA_BUTTON);
+        // 押しただけ数える。**返事があれば `load` が下ろす**ので、ここでは待つだけ
+        if (++taps >= TAP_MOST) {
+            dueD = false;
+            return;
+        }
+        knocking = setTimeout(knock, TAP_WAIT);
     }
 
     /**
@@ -505,6 +529,7 @@
         remember();
         // 出す操作は文書にとっての d の1押し。聞く文書が出てきたら届ける (`knock`)
         dueD = true;
+        taps = 0;
 
         const made = new BMLBrowser({
             containerElement: mount,
@@ -523,6 +548,15 @@
         made.addEventListener('load', (event) => {
             plane = event.detail.resolution;
             fit();
+            /*
+             * **押したあとに文書が変わったら、それが返事。** そこで下ろす —
+             * これ以上押すと、開いたメニューを閉じることになる
+             */
+            if (taps > 0) {
+                dueD = false;
+                stopKnocking();
+                return;
+            }
             // 文書ができるたびに見に行き直す (`knock`)。届け終えていれば何もしない
             stopKnocking();
             knocks = KNOCK_TRIES;
@@ -564,6 +598,7 @@
         stopKnocking();
         stopWaiting();
         dueD = false;
+        taps = 0;
         plane = null;
         watcher?.disconnect();
         watcher = null;
