@@ -16,6 +16,7 @@
 
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { open } from 'node:fs/promises';
+import type { ResponseMessage } from 'web-bml/protocol';
 import { DataBroadcastCapture } from '$lib/ts/data-capture';
 import {
     type KeptRange,
@@ -23,7 +24,6 @@ import {
     type TimedMessage,
     toPlaybackTimeline,
 } from '$lib/ts/data-timeline';
-import type { ResponseMessage } from '$lib/vendor/web-bml/server/ws_api';
 import type { Recording } from '../types';
 import { queryOne } from './db';
 

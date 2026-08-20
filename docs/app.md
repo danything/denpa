@@ -39,7 +39,6 @@ EPGStation の置き換えとして作ったもので、エンコード設定は
 | `src/lib/components/player/Remote.svelte` | 指で押すリモコン (色・十字・決定・戻る・d・数字)。**映像の上ではなく右の列** |
 | `src/lib/ts/ait.ts` | Hybridcast の在り処 (AIT)。**読むだけで動かさない** |
 | `src/lib/server/bml-network.ts` | データ放送の双方向の中継 (`/api/bml/proxy`・`/post`・`/confirm`)。**既定は切・公開の相手だけ** |
-| `src/lib/vendor/web-bml/` | 借りもの。BML を描くところ ([README](../src/lib/vendor/web-bml/README.md)) |
 | `src/lib/pgs.ts` | PGS (Blu-ray の字幕) の**組み立てと読み出し**。ffmpeg に符号器が無いので自前。読むほうはブラウザで使う (`readSup`) |
 | `src/lib/download.ts` | 録画のダウンロード開始 (押されてから期限付きのURLを作る) |
 | `src/lib/ts/watch.ts` | 録画を観るときの押したことの読み方 (2回押し・チャプター送り・続きの位置。DOM を触らない) |

@@ -1,5 +1,6 @@
 <script lang="ts">
     import { onMount } from 'svelte';
+    import type { ResponseMessage } from 'web-bml/protocol';
     import { submitting } from '$lib/actions';
     import { arming } from '$lib/arming.svelte';
     import ProgramFacts from '$lib/components/ProgramFacts.svelte';
@@ -63,7 +64,6 @@
         tap,
         zoneOf,
     } from '$lib/ts/watch';
-    import type { ResponseMessage } from '$lib/vendor/web-bml/server/ws_api';
 
     let { data, form } = $props();
     const rec = $derived(data.recording);

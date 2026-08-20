@@ -9,12 +9,12 @@
  *
  * **運び方は衛星のロゴと同じ DSM-CC** で、denpa はそれを既に持っている
  * ([dsmcc.ts](dsmcc.ts) / [logo-dsmcc.ts](logo-dsmcc.ts))。借りていた
- * [web-bml](../vendor/web-bml/README.md) の `decode_ts.ts` は998行あるが、
+ * [web-bml](https://github.com/otya128/web-bml) の `decode_ts.ts` は998行あるが、
  * **denpa が通るのは3割だけ**で、残りは EIT/SDT/NIT や字幕の PES —
  * どれも自前のものがある ([eit.ts](eit.ts) / [psi.ts](psi.ts) / ffmpeg)。
  * その3割のために `@chinachu/aribts` (2.3MB) を抱えていた。
  *
- * **出す形は借りたまま。** [ws_api.ts](../vendor/web-bml/server/ws_api.ts) の
+ * **出す形は借りたまま。** 借りもの (`web-bml/protocol`) の
  * `ResponseMessage` をそのまま作るので、描画側 (web-bml のブラウザ) から見ると
  * 出どころが変わったことは分からない。**型が食い違いを見張ってくれる**のが、
  * ここを自前にできる理由でもある。
@@ -30,14 +30,14 @@ import {
     entityHeaderToString,
     parseMediaType,
     parseMediaTypeFromString,
-} from '$lib/vendor/web-bml/server/entity_parser';
+} from 'web-bml/entity-parser';
 import type {
     AdditionalAribBXMLInfo,
     ComponentPMT,
     ESEvent,
     ModuleFile,
     ResponseMessage,
-} from '$lib/vendor/web-bml/server/ws_api';
+} from 'web-bml/protocol';
 import type { DiiModule } from './dsmcc';
 import {
     dataEventIdOf,

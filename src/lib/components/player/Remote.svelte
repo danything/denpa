@@ -23,7 +23,7 @@
     const { press }: Props = $props();
 
     /**
-     * `AribKeyCode` (`vendor/web-bml/client/content.ts`) と同じ値。
+     * `AribKeyCode` (借りものの `content.ts`) と同じ値。
      *
      * **番号で書くのは、`content.ts` を読み込まずに済ませるため** — 値として
      * import すると、このリモコンが載っているだけで借りもの全体 (700KB) が

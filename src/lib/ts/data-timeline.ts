@@ -23,7 +23,7 @@
  * DOM も時計も触らないので、ここだけ単体で確かめられる。
  */
 
-import type { ResponseMessage } from '$lib/vendor/web-bml/server/ws_api';
+import type { ResponseMessage } from 'web-bml/protocol';
 import { Carousel } from './carousel';
 
 export interface TimedMessage {

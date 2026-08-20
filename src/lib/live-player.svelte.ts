@@ -6,6 +6,7 @@
  * 同じ1本に字幕もデータ放送も相乗りする作りなので、種別で振り分ける。
  */
 
+import type { ResponseMessage } from 'web-bml/protocol';
 import type { AudioTrack } from '$lib/arib';
 import { eachFrame } from '$lib/components/player/frames';
 import { clearOverlay, drawOverlay } from '$lib/components/player/paint';
@@ -23,7 +24,6 @@ import {
 } from '$lib/live';
 import { CLOCK, type Cue, currentCue, insertCue, trimCues } from '$lib/ts/captions';
 import { CEILING, FLOOR, nextTarget, pacing } from '$lib/ts/pacing';
-import type { ResponseMessage } from '$lib/vendor/web-bml/server/ws_api';
 
 export type LiveState = 'idle' | 'connecting' | 'playing' | 'error';
 
@@ -1177,7 +1177,7 @@ export function livePlayer() {
      * データ放送の知らせを受け取る先を預かる。**描く側が居るときだけ渡す。**
      *
      * 渡す形は借りものの取り決めそのまま (`ResponseMessage`) なので、
-     * ここは素通しでいい ([vendor/web-bml](./vendor/web-bml/README.md))。
+     * ここは素通しでいい (`web-bml/protocol`)。
      *
      * **預かった時点で、待たせてあるぶんを先に流す** (`heldData`)
      */
