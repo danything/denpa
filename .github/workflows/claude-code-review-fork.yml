@@ -23,13 +23,13 @@ jobs:
       #    PR の内容をここに checkout してはいけない。
       #    https://github.com/anthropics/claude-code-action/blob/main/docs/security.md
       - name: Checkout base branch
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           fetch-depth: 1
 
       # 2) PR の中身は隔離したサブディレクトリに置き、--add-dir で読み取り専用に渡す。
       - name: Checkout PR head into isolated directory
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           repository: ${{ github.event.pull_request.head.repo.full_name }}
           ref: ${{ github.event.pull_request.head.sha }}
