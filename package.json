@@ -9,15 +9,13 @@
         "@sveltejs/vite-plugin-svelte": "^7.0.0",
         "@tailwindcss/vite": "^4.1.16",
         "@types/bun": "^1.3.5",
-        "crc-32": "^1.2.2",
-        "css": "https://github.com/otya128/reworkcss-css/releases/download/v3.0.1/css-3.0.1.tgz",
         "daisyui": "^5.5.5",
-        "fast-xml-parser": "^5.10.1",
         "svelte": "^5.43.10",
         "svelte-check": "^4.3.7",
         "tailwindcss": "^4.1.16",
         "typescript": "^5.9.3",
-        "vite": "^8.0.0"
+        "vite": "^8.0.0",
+        "web-bml": "1.0.1"
     },
     "private": true,
     "scripts": {

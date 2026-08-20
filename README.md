@@ -202,7 +202,7 @@ docker compose) で動かす構成なら `oci://ghcr.io/danything/charts/denpa-a
 | **CM 検出** — join_logo_scp・chapter_exe・logoframe・dtvindex | GPL-3.0 (join_logo_scp は正式なライセンス文書無し。「転載・改変は連絡不要」の表示に拠る) |
 | **rounded-mplus-1m-arib** (字幕とデータ放送のフォント) | M+ FONT LICENSE (無制限) |
 | **libaribb25** (エージェント。スクランブル解除) | Apache-2.0 |
-| **web-bml / es2** ([src/lib/vendor/web-bml](src/lib/vendor/web-bml)。データ放送を描く) | MIT |
+| **web-bml / es2** (npm の `web-bml`。データ放送を描く) | MIT |
 | **Svelte / SvelteKit / Tailwind / daisyUI** と束に入る npm 一式 | MIT (crc-32 は Apache-2.0、ieee754 は BSD-3) |
 | [patches/](patches) — ffmpeg に当てている直し (上流に投げる前提) | 当てる先と同じ |
 

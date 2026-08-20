@@ -37,7 +37,7 @@
  * 映像が出ないより先に、こういう形で出る
  */
 
-import type { ResponseMessage } from '$lib/vendor/web-bml/server/ws_api';
+import type { ResponseMessage } from 'web-bml/protocol';
 
 /**
  * 覚えておくモジュールの上限。**溜め込みすぎない歯止め。**

@@ -73,8 +73,6 @@ Dockerfile の行・`package.json`) を優先し、上流の表示に拠るも�
 
 | 名前 | 場所 | 何に | 出どころ | ライセンス |
 | --- | --- | --- | --- | --- |
-| web-bml (無改変。先頭 2 行だけ足してある) | [src/lib/vendor/web-bml](../src/lib/vendor/web-bml) | データ放送 (BML) を描く | <https://github.com/otya128/web-bml> | MIT ([LICENSE](../src/lib/vendor/web-bml/LICENSE)) |
-| es2 (ECMAScript 2nd Edition の処理系) | 同 `es2/index.ts` | BML のスクリプトを動かす | <https://github.com/otya128/es2> | MIT (ファイル冒頭の SPDX) |
 | ARIB ロゴの CLUT (129 色) | [src/lib/ts/logo-palette.ts](../src/lib/ts/logo-palette.ts) | 局ロゴの PNG 化 | node-aribts / @chinachu/aribts の `logo_clut.js` と同じ並び | MIT (上流) |
 | ARIB 外字表 | [src/lib/ts/aribtext-gaiji.ts](../src/lib/ts/aribtext-gaiji.ts) | 番組名の「[新]」「[字]」など | epgdump_py (Yasumasa Murakami, 2011) → ariblib に引き継がれた表 | MIT (ariblib。上流) |
 | 選局表の値と選局手順 | [agent/Denpa.Agent/ChannelTable.cs](../agent/Denpa.Agent/ChannelTable.cs) / `Tuning.cs` | チャンネル名 → 周波数、DVB の手順 | recisdb-rs の `dvbv5_channels_isdbs.conf` / `dvbv5.rs` を参照 (コードは写していない) | GPL-3.0 (上流) |
@@ -91,6 +89,7 @@ Dockerfile の行・`package.json`) を優先し、上流の表示に拠るも�
 | --- | --- | --- | --- |
 | Svelte / SvelteKit / adapter-node | 画面・ルーティング・サーバの束 | <https://github.com/sveltejs> | MIT |
 | Tailwind CSS / daisyUI | 出力 CSS | <https://tailwindcss.com> / <https://daisyui.com> | MIT |
+| web-bml (+ 同梱の es2) | **データ放送 (BML) を描く。** 2026-08 に上流がライブラリ化して npm に出したので、写しをやめて普通の依存にした | <https://github.com/otya128/web-bml> / <https://github.com/otya128/es2> | MIT / MIT |
 | crc-32 | web-bml の PNG / DRCS | <https://github.com/SheetJS/js-crc32> | **Apache-2.0** |
 | css (reworkcss、otya128 の fork) + source-map ほか | web-bml が BML の CSS を解く | <https://github.com/reworkcss/css> | MIT (依存は BSD-3 / MIT) |
 | fast-xml-parser / fast-xml-builder | web-bml の BML → XHTML | <https://github.com/NaturalIntelligence/fast-xml-parser> | MIT |
@@ -98,8 +97,9 @@ Dockerfile の行・`package.json`) を優先し、上流の表示に拠るも�
 
 ## 使っていないもの (書いておく価値のあるもの)
 
-- **JS-Interpreter (Google, Apache-2.0)** — web-bml の上流はこれで BML のスクリプトを
-  動かしますが、denpa は es2 に差し替えていて写していません
+- **JS-Interpreter (Google, Apache-2.0)** — web-bml の上流はかつてこれで BML の
+  スクリプトを動かしていました。いまは向こうも es2 に置き換えていて、2026-08 に
+  ファイルごと消えています
 - **@chinachu/aribts / aribb24.js / mpegts.js / hls.js / shaka-player** — 検討したうえで
   自前実装にしたもの ([stream.md](stream.md))
 - **OIDC のライブラリ** — 入れていません ([auth.md](auth.md))

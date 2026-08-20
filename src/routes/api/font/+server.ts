@@ -5,7 +5,7 @@
  * **丸ゴシック**を名指しし、**ARIB の外字**を使う。イメージに入れてある
  * `rounded-mplus-1m-arib` は3つとも満たす — 借りている側が抱えている Kosugi は
  * 外字を持っていないので、こちらのほうが適している
- * ([vendor/web-bml](../../../lib/vendor/web-bml/README.md))。
+ * ([docs/stream.md](../../../../docs/stream.md#56-データ放送の統合))。
  *
  * **ttf と woff2 の2つを置いてある** (Dockerfile)。字幕は ffmpeg が fontconfig
  * 越しに ttf を読み、こちらはブラウザへ woff2 を渡す。同じ字なので、

@@ -16,7 +16,7 @@
      *
      * denpa が作った `ResponseMessage` をそのまま食べさせるだけで、
      * **映像は denpa のまま**。BML 側には「映像はこの入れ物に居る」とだけ伝える
-     * ([vendor/web-bml](../../vendor/web-bml/README.md))。
+     * ([docs/stream.md](../../../../docs/stream.md#56-データ放送の統合))。
      *
      * ## 押されるまで何も読み込まない
      *
@@ -27,19 +27,43 @@
      *
      * ## 借りものが持っていないぶんは、ここでやる
      *
-     * `BMLBrowser` は**画面の器を持たない**。上流の単体ページ
-     * (`client/index.ts`、denpa は借りていない) がやっていたことを、この
-     * ファイルが肩代わりしている — `knock` (d を渡す)・`place` (映像を戻す)・
-     * `fit` (枠に合わせる)・`indicator` (データ取得中)・`remember` (郵便番号)。
+     * **`BMLBrowser` は画面の器を持たない。** 上流の単体ページ
+     * (`client/index.ts`。koa と react と hls.js を引き連れていて、denpa の画面とは
+     * 形が違うので使っていない) がやっていたことを、このファイルが肩代わりする。
+     * **どれも抜けると「押しても何も出ない」形で壊れる** — 実機で全部踏んだ。
      *
-     * **どれも抜けると「押しても何も出ない」形で壊れる。** 何がどう壊れるかは
-     * 借りもの側の README に1箇所だけ書いてある
-     * ([vendor/web-bml](../../vendor/web-bml/README.md#借りていないぶんこちらでやること))
+     * 1. **d を BML に渡す** (`knock`)。出す操作は文書にとっての d の1押しで、
+     *    `DataButtonPressed` を受けてアプリがメニューを出す。**器を作っただけでは
+     *    何も出ない** (NHK は `invisible` のまま d を待ち、日テレ・テレ朝・フジは
+     *    待機ページを自分で出してから d を待つ)。しかも文書ができた瞬間に叩いても
+     *    届かない — `beitem` を `subscribe` にするのはアプリの `onload` なので、
+     *    それより前に投げたぶんは誰にも拾われずに消える。**聞いている文書が出て
+     *    くるまで見に行き、最初の1つに1回だけ届ける** (2回届けると、開いたメニューを
+     *    閉じたり頭に戻したりする局がある)
+     * 2. **隠れている間、映像を元の場所へ戻す** (`place`)。借りものは文書を組むたびに、
+     *    渡された `mediaElement` を BML の `<object>` の**中へ移す**
+     *    (`content.ts` の `videoElementNew.appendChild`)。データ放送が「小窓に映せ」と
+     *    言っているならそれで正しいが、**隠れている間もそのまま**なので、放っておくと
+     *    映像が小窓の形に潰れたまま戻らない
+     * 3. **960x540 を枠に合わせて伸ばす** (`fit`)。向こうは原寸のまま置いて
+     *    100%/150%/200% のボタンを付けている。denpa の枠は端末しだいなので
+     *    `transform: scale()` で合わせる (`load` が寸法を教えてくれる)
+     * 4. **映像の入れ物の大きさを、じかに書く。** 2番で移される先は**閉じた影の中**
+     *    なので、**表の CSS (Tailwind) が届かない**。しかも借りものが敷く既定の
+     *    スタイルは `div` に `width:0; height:0` を与えるので、class で書いていると
+     *    **移された瞬間に映像が消える** (`MediaStack.svelte`、`watch/[id]/+page.svelte`)
+     * 5. **「データ取得中」を出す** (`indicator`)。テレビは電波をずっと拾い続けて
+     *    いるので押せばすぐ出るが、denpa は**押されてから解きはじめる**ので数秒待つ
+     *    (実測で8秒)。入口の文書はほぼ白紙のまま自分で `invisible` を外してくるので、
+     *    素直に映すと**その数秒が真っ白**になる
+     * 6. **郵便番号を渡す** (`remember`)。放送はこれで天気・地域のニュース・防災情報の
+     *    場所を決める。**借りものには外から入れる口が無い**ので、NVRAM の置き場へ
+     *    denpa が直に書く
      */
     import { onDestroy } from 'svelte';
+    import type { BMLBrowser, Indicator, IP } from 'web-bml';
+    import type { ResponseMessage } from 'web-bml/protocol';
     import { forget, write } from '$lib/keep';
-    import type { BMLBrowser, Indicator, IP } from '$lib/vendor/web-bml/client/bml_browser';
-    import type { ResponseMessage } from '$lib/vendor/web-bml/server/ws_api';
     import StageNote from './StageNote.svelte';
 
     interface Props {
@@ -424,7 +448,7 @@
      * 放送のアプリは `nvram://receiverinfo/zipcode` を数字7桁で読み、
      * 天気・地域のニュース・防災情報をどこのものにするかを決める。
      * 借りものはそれを `localStorage` の**この名前**で探す
-     * (`vendor/web-bml/client/nvram.ts` の `readNVRAM`)。
+     * (借りものの `nvram.ts` の `readNVRAM`)。
      *
      * **書ける口が無いので、じかに置く。** 借りものが持っているのは
      * 「放送のアプリから読み書きさせる」道だけで、受信機の設定として
@@ -446,7 +470,7 @@
         const mine = ++generation;
         loading = true;
         // 押されてから取りに行く (上の説明)
-        const { BMLBrowser } = await import('$lib/vendor/web-bml/client/bml_browser');
+        const { BMLBrowser } = await import('web-bml');
         // 待っている間に離されていたら、作らない
         if (mine !== generation || host === null || media === null) return;
 
@@ -571,7 +595,7 @@
      */
     async function key(event: KeyboardEvent, down: boolean): Promise<void> {
         if (browser === null || event.altKey || event.ctrlKey || event.metaKey) return;
-        const { keyCodeToAribKey } = await import('$lib/vendor/web-bml/client/content');
+        const { keyCodeToAribKey } = await import('web-bml');
         const code = keyCodeToAribKey(event.key);
         if (code === -1) return;
         event.preventDefault();
