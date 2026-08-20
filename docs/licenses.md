@@ -84,14 +84,13 @@ Dockerfile の行・`package.json`) を優先し、上流の表示に拠るも�
 ## ブラウザへ配る束・サーバの束に入る主なもの
 
 `package.json` に runtime の `dependencies` は無く、adapter-node が全部を `build/` に
-畳み込みます (イメージにもそれだけを載せる)。**MIT がほとんどで、例外は 2 つ**
-(`crc-32` が Apache-2.0、`ieee754` が BSD-3-Clause)。
+畳み込みます (イメージにもそれだけを載せる)。**MIT がほとんどで、例外は 1 つ**
+(`crc-32` が Apache-2.0)。
 
 | 名前 | 何に | 出どころ | ライセンス |
 | --- | --- | --- | --- |
 | Svelte / SvelteKit / adapter-node | 画面・ルーティング・サーバの束 | <https://github.com/sveltejs> | MIT |
 | Tailwind CSS / daisyUI | 出力 CSS | <https://tailwindcss.com> / <https://daisyui.com> | MIT |
-| buffer (feross) + base64-js / ieee754 | web-bml が要る Node の `Buffer` | <https://github.com/feross/buffer> | MIT / MIT / **BSD-3-Clause** |
 | crc-32 | web-bml の PNG / DRCS | <https://github.com/SheetJS/js-crc32> | **Apache-2.0** |
 | css (reworkcss、otya128 の fork) + source-map ほか | web-bml が BML の CSS を解く | <https://github.com/reworkcss/css> | MIT (依存は BSD-3 / MIT) |
 | fast-xml-parser / fast-xml-builder | web-bml の BML → XHTML | <https://github.com/NaturalIntelligence/fast-xml-parser> | MIT |

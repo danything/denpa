@@ -132,12 +132,13 @@ react と hls.js を引き連れていて、denpa の画面とは形が違いま
 借りものを書き換えずに済ませるため、denpa 側で面倒を見ています。
 
 - **`js_interpreter.ts`** は写さず、denpa の1行に差し替えています (そのファイルの頭)
-- **`Buffer` を global に据えます。** 借りものは Node の `Buffer` 前提で書かれて
-  いて、多くのファイルは `buffer` を import しますが、音声と**通信系コンテンツの
-  取得**は素の `Buffer` を当てにしています。無いと `Buffer is not defined` で
-  止まる — 実機で「通信機能について」を選ぶと `http://bml.nhk.jp/…` へ飛び、
-  取ってきた BML を包むところ (`resource.fetchRemoteResource`) で落ちました。
-  データ放送を開くときにだけ据えます ([DataBroadcast.svelte](../../components/player/DataBroadcast.svelte) の `provideBuffer`)
+
+**`Buffer` を据える細工は要らなくなりました。** 借りものは Node の `Buffer` 前提で
+書かれていて、音声と**通信系コンテンツの取得**は素の `Buffer` を当てにしていたため、
+データ放送を開くたびに polyfill を積んでいました (無いと実機で「通信機能について」が
+`Buffer is not defined` で固まった)。**上流が 2026-08 に全部 TypedArray へ
+置き換えた**ので、写している 45ファイルに `Buffer` は1つも残っていません。
+`package.json` の `buffer` も落としました
 
 ## 更新のしかた
 
