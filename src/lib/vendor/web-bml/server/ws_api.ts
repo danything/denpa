@@ -1,28 +1,5 @@
 // @ts-nocheck
 // 借りもの。中身は書き換えない ([README](../README.md))。denpa 側の型検査は効いたまま
-// /api/ws?param=JSON
-
-// Mirakurun系のAPIを使ってtsを取得
-// /api/channels/{type}/{channel}/services/{id}/stream
-export type MirakLiveParam = {
-    type: "mirakLive",
-    channelType: "GR" | "BS" | "CS" | "SKY",
-    channel: string,
-    serviceId?: number,
-};
-
-// EPGStationのAPIを使ってtsを取得
-export type EPGStationRecordedParam = {
-    type: "epgStationRecorded"
-    videoFileId: number,
-};
-
-export type BaseParam =  { demultiplexServiceId?: number, seek?: number };
-
-export type Param = (MirakLiveParam | EPGStationRecordedParam) & BaseParam;
-
-export type RequestMessage = {};
-
 export type ComponentPMT = {
     pid: number,
     componentId: number,
@@ -65,9 +42,9 @@ export type PMTMessage = {
     components: ComponentPMT[],
 };
 
-import { MediaType as EMediaType } from "./entity_parser";
+import type { MediaType } from "./entity_parser";
 
-export type MediaType = EMediaType;
+export type { MediaType };
 export type ModuleFile = {
     contentLocation: string | null,
     contentType: MediaType,

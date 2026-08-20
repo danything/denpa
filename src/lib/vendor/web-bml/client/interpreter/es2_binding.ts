@@ -22,7 +22,6 @@ import {
 } from "../../es2";
 import * as BT from "../binary_table";
 import { Content } from "../content";
-import { getLog } from "../util/trace";
 import { Profile, Resources } from "../resource";
 import { BrowserAPI } from "../browser";
 import * as bmlDate from "../date";
@@ -30,10 +29,7 @@ import * as bmlNumber from "../number";
 import * as bmlString from "../string";
 import { EPG } from "../bml_browser";
 import { getTextDecoder } from "../text";
-
-// const domTrace = getTrace("js-interpreter.dom");
-// const eventTrace = getTrace("js-interpreter.event");
-const browserLog = getLog("js-interpreter.browser");
+import { type Logger } from "../util/logger";
 
 const LAUNCH_DOCUMENT_CALLED = { type: "launchDocumentCalled" } as const;
 
@@ -54,7 +50,7 @@ function wrapArray(ctx: Context, array: any[] | PrimitiveValue): Value {
 
 function wrapDate(ctx: Context, date: Date | PrimitiveValue): Value {
     if (date instanceof Date) {
-        return newDate(ctx, date)
+        return newDate(ctx, date);
     } else {
         return date;
     }
@@ -319,10 +315,9 @@ export function defineBuiltinBinding(context: Context, resources: Resources) {
     context.realm.intrinsics.Number.properties.delete("NEGATIVE_INFINITY");
     context.realm.intrinsics.Number.properties.delete("POSITIVE_INFINITY");
     context.realm.globalObject.properties.delete("Math");
-    context.realm.globalObject.internalProperties.prototype = null;
 }
 
-export function defineBrowserBinding(context: Context, resources: Resources, browserAPI: BrowserAPI, content: Content, epg: EPG) {
+export function defineBrowserBinding(context: Context, resources: Resources, browserAPI: BrowserAPI, content: Content, epg: EPG, logger: Logger) {
     const browser = newObject(context.realm.intrinsics.ObjectPrototype);
     browser.internalProperties.class = "hostobject";
     context.realm.globalObject.properties.set("browser", {
@@ -346,7 +341,7 @@ export function defineBrowserBinding(context: Context, resources: Resources, bro
     ureg.internalProperties.get = function* browser$Ureg$get(_ctx, _self, propertyName, _caller) {
         return browserAPI.getUreg(Number(propertyName));
     };
-    ureg.internalProperties.put = function* browser$Ureg$get(ctx, _self, propertyName, value, caller) {
+    ureg.internalProperties.put = function* browser$Ureg$put(ctx, _self, propertyName, value, caller) {
         browserAPI.setUreg(Number(propertyName), yield* toString(ctx, value, caller));
     };
     const greg = newObject(context.realm.intrinsics.ObjectPrototype);
@@ -363,7 +358,7 @@ export function defineBrowserBinding(context: Context, resources: Resources, bro
     greg.internalProperties.get = function* browser$Greg$get(_ctx, _self, propertyName, _caller) {
         return browserAPI.getGreg(Number(propertyName));
     };
-    greg.internalProperties.put = function* browser$Greg$get(ctx, _self, propertyName, value, caller) {
+    greg.internalProperties.put = function* browser$Greg$put(ctx, _self, propertyName, value, caller) {
         browserAPI.setGreg(Number(propertyName), yield* toString(ctx, value, caller));
     };
     const desc = {
@@ -380,7 +375,7 @@ export function defineBrowserBinding(context: Context, resources: Resources, bro
         value: greg,
     });
     function* launchDocument(documentName: string, transitionStyle: string | undefined) {
-        browserLog("launchDocument", documentName, transitionStyle);
+        logger.log(`${logger.prefix}launchDocument`, documentName, transitionStyle);
         if (documentName.startsWith("#")) {
             // Cプロファイル TR-B14 第三分冊
             // 8.2.3.4 #fragment運用における受信機動作およびコンテンツガイドライン
@@ -395,21 +390,21 @@ export function defineBrowserBinding(context: Context, resources: Resources, bro
     }
 
     function* reloadActiveDocument() {
-        browserLog("reloadActiveDocument");
+        logger.log(`${logger.prefix}reloadActiveDocument`);
         const r = content.launchDocument(browserAPI.browser.getActiveDocument()!);
         yield LAUNCH_DOCUMENT_CALLED;
         return r;
     }
 
     function* quitDocument() {
-        browserLog("quitDocument");
+        logger.log(`${logger.prefix}quitDocument`);
         content.quitDocument();
         yield LAUNCH_DOCUMENT_CALLED;
         return NaN;
     }
 
     function* X_DPA_launchDocWithLink(documentName: string, transitionStyle: string | undefined) {
-        console.log("%X_DPA_launchDocWithLink", "font-size: 4em", documentName);
+        logger.log(`${logger.prefix}%X_DPA_launchDocWithLink`, "font-size: 4em", documentName);
         if (resources.profile !== Profile.TrProfileC) {
             yield LAUNCH_DOCUMENT_CALLED;
             return NaN;
@@ -433,7 +428,7 @@ export function defineBrowserBinding(context: Context, resources: Resources, bro
     }
 
     function* epgTune(service_ref: string) {
-        browserLog("%cepgTune", "font-size: 4em", service_ref);
+        logger.log(`${logger.prefix}%cepgTune`, "font-size: 4em", service_ref);
         const { originalNetworkId, transportStreamId, serviceId } = resources.parseServiceReference(service_ref);
         if (originalNetworkId == null || transportStreamId == null || serviceId == null) {
             yield LAUNCH_DOCUMENT_CALLED;
@@ -456,6 +451,145 @@ export function defineBrowserBinding(context: Context, resources: Resources, bro
             return browserAPI.browser.epgGetEventDuration(yield* toString(ctx, args[0], caller));
         }, 1, "epgGetEventDuration"),
     });
+    browser.properties.set("epgTuneToComponent", {
+        ...desc,
+        value: newNativeFunction(context.realm.intrinsics.FunctionPrototype, function* browser$epgTuneToComponent(ctx, _self, args, caller) {
+            return browserAPI.browser.epgTuneToComponent(yield* toString(ctx, args[0], caller));
+        }, 1, "epgTuneToComponent"),
+    });
+    browser.properties.set("epgIsReserved", {
+        ...desc,
+        value: newNativeFunction(context.realm.intrinsics.FunctionPrototype, function* browser$epgIsReserved(ctx, _self, args, caller) {
+            return browserAPI.browser.epgIsReserved(yield* toString(ctx, args[0], caller));
+        }, 1, "epgIsReserved"),
+    });
+    browser.properties.set("epgReserve", {
+        ...desc,
+        value: newNativeFunction(context.realm.intrinsics.FunctionPrototype, function* browser$epgReserve(ctx, _self, args, caller) {
+            const startTime = getDateObjectValue(args[1]);
+            return browserAPI.browser.epgReserve(yield* toString(ctx, args[0], caller), startTime == null ? startTime : new Date(startTime));
+        }, 2, "epgReserve"),
+    });
+    browser.properties.set("epgCancelReservation", {
+        ...desc,
+        value: newNativeFunction(context.realm.intrinsics.FunctionPrototype, function* browser$epgCancelReservation(ctx, _self, args, caller) {
+            return browserAPI.browser.epgCancelReservation(yield* toString(ctx, args[0], caller));
+        }, 1, "epgCancelReservation"),
+    });
+    browser.properties.set("epgRecIsReserved", {
+        ...desc,
+        value: newNativeFunction(context.realm.intrinsics.FunctionPrototype, function* browser$epgRecIsReserved(ctx, _self, args, caller) {
+            const startTime = getDateObjectValue(args[1]);
+            return browserAPI.browser.epgRecIsReserved(yield* toString(ctx, args[0], caller), startTime == null ? startTime : new Date(startTime));
+        }, 2, "epgRecIsReserved"),
+    });
+    browser.properties.set("epgRecReserve", {
+        ...desc,
+        value: newNativeFunction(context.realm.intrinsics.FunctionPrototype, function* browser$epgRecReserve(ctx, _self, args, caller) {
+            const startTime = getDateObjectValue(args[1]);
+            return browserAPI.browser.epgRecReserve(yield* toString(ctx, args[0], caller), startTime == null ? startTime : new Date(startTime));
+        }, 2, "epgRecReserve"),
+    });
+    browser.properties.set("epgRecCancelReservation", {
+        ...desc,
+        value: newNativeFunction(context.realm.intrinsics.FunctionPrototype, function* browser$epgRecCancelReservation(ctx, _self, args, caller) {
+            return browserAPI.browser.epgRecCancelReservation(yield* toString(ctx, args[0], caller));
+        }, 1, "epgRecCancelReservation"),
+    });
+    browser.properties.set("setCCDisplayStatus", {
+        ...desc,
+        value: newNativeFunction(context.realm.intrinsics.FunctionPrototype, function* browser$setCCDisplayStatus(ctx, _self, args, caller) {
+            return browserAPI.browser.setCCDisplayStatus(yield* toNumber(ctx, args[0], caller), toBoolean(args[1]));
+        }, 2, "setCCDisplayStatus"),
+    });
+    browser.properties.set("getCCDisplayStatus", {
+        ...desc,
+        value: newNativeFunction(context.realm.intrinsics.FunctionPrototype, function* browser$getCCDisplayStatus(ctx, _self, args, caller) {
+            return browserAPI.browser.getCCDisplayStatus(yield* toNumber(ctx, args[0], caller));
+        }, 1, "getCCDisplayStatus"),
+    });
+    browser.properties.set("getCCLanguageStatus", {
+        ...desc,
+        value: newNativeFunction(context.realm.intrinsics.FunctionPrototype, function* browser$getCCLanguageStatus(ctx, _self, args, caller) {
+            return browserAPI.browser.getCCLanguageStatus(yield* toNumber(ctx, args[0], caller));
+        }, 1, "getCCLanguageStatus"),
+    });
+    browser.properties.set("writeBookmarkArray", {
+        ...desc,
+        value: newNativeFunction(context.realm.intrinsics.FunctionPrototype, function* browser$writeBookmarkArray(ctx, _self, args, caller) {
+            const filename = yield* toString(ctx, args[0], caller);
+            const title = yield* toString(ctx, args[1], caller);
+            const dstURI = yield* toString(ctx, args[2], caller);
+            const expire_str = yield* toString(ctx, args[3], caller);
+            const bmType = yield* toString(ctx, args[4], caller);
+            const linkMedia = yield* toString(ctx, args[5], caller);
+            const usageFlag = yield* toString(ctx, args[6], caller);
+            const extendedStructure = args[7] == null ? undefined : yield* toString(ctx, args[7], caller);
+            let a: any[] | undefined;
+            if (extendedStructure != null) {
+                const fields = BT.parseBinaryStructure(extendedStructure);
+                if (fields == null) {
+                    return NaN;
+                }
+                if (!isObject(args[8])) {
+                    return NaN;
+                }
+                a = [];
+                for (let i = 0; i < fields.length; i++) {
+                    const field = fields[i];
+                    switch (field.type) {
+                        case BT.BinaryTableType.Boolean:
+                            a[i] = toBoolean(yield* getProperty(ctx, args[8], String(i), caller));
+                            break;
+                        case BT.BinaryTableType.UnsignedInteger:
+                        case BT.BinaryTableType.Integer:
+                            a[i] = yield* toNumber(ctx, yield* getProperty(ctx, args[8], String(i), caller), caller);
+                            break;
+                        case BT.BinaryTableType.String:
+                            a[i] = yield* toString(ctx, yield* getProperty(ctx, args[8], String(i), caller), caller);
+                            break;
+                    }
+                }
+            }
+            return browserAPI.browser.writeBookmarkArray(filename, title, dstURI, expire_str, bmType, linkMedia, usageFlag, extendedStructure, a);
+        }, 9, "writeBookmarkArray"),
+    });
+    browser.properties.set("readBookmarkArray", {
+        ...desc,
+        value: newNativeFunction(context.realm.intrinsics.FunctionPrototype, function* browser$readBookmarkArray(ctx, _self, args, caller) {
+            return wrapArray(ctx, browserAPI.browser.readBookmarkArray(yield* toString(ctx, args[0], caller), args[1] == null ? undefined : yield* toString(ctx, args[1], caller), args[2] == null ? undefined : yield* toString(ctx, args[2], caller)));
+        }, 3, "readBookmarkArray"),
+    });
+    browser.properties.set("deleteBookmark", {
+        ...desc,
+        value: newNativeFunction(context.realm.intrinsics.FunctionPrototype, function* browser$deleteBookmark(ctx, _self, args, caller) {
+            return browserAPI.browser.deleteBookmark(yield* toString(ctx, args[0], caller));
+        }, 1, "deleteBookmark"),
+    });
+    browser.properties.set("lockBookmark", {
+        ...desc,
+        value: newNativeFunction(context.realm.intrinsics.FunctionPrototype, function* browser$lockBookmark(ctx, _self, args, caller) {
+            return browserAPI.browser.lockBookmark(yield* toString(ctx, args[0], caller));
+        }, 1, "lockBookmark"),
+    });
+    browser.properties.set("unlockBookmark", {
+        ...desc,
+        value: newNativeFunction(context.realm.intrinsics.FunctionPrototype, function* browser$unlockBookmark(ctx, _self, args, caller) {
+            return browserAPI.browser.unlockBookmark(yield* toString(ctx, args[0], caller));
+        }, 1, "unlockBookmark"),
+    });
+    browser.properties.set("getBookmarkInfo", {
+        ...desc,
+        value: newNativeFunction(context.realm.intrinsics.FunctionPrototype, function* browser$getBookmarkInfo(ctx, _self, args, caller) {
+            return wrapArray(ctx, browserAPI.browser.getBookmarkInfo());
+        }, 0, "getBookmarkInfo"),
+    });
+    browser.properties.set("getBookmarkInfo2", {
+        ...desc,
+        value: newNativeFunction(context.realm.intrinsics.FunctionPrototype, function* browser$getBookmarkInfo(ctx, _self, args, caller) {
+            return wrapArray(ctx, browserAPI.browser.getBookmarkInfo2(yield* toString(ctx, args[0], caller)));
+        }, 1, "getBookmarkInfo2"),
+    });
     browser.properties.set("setCurrentDateMode", {
         ...desc,
         value: newNativeFunction(context.realm.intrinsics.FunctionPrototype, function* browser$setCurrentDateMode(ctx, _self, args, caller) {
@@ -467,6 +601,12 @@ export function defineBrowserBinding(context: Context, resources: Resources, bro
         value: newNativeFunction(context.realm.intrinsics.FunctionPrototype, function* browser$getProgramRelativeTime(ctx, _self, args, caller) {
             return browserAPI.browser.getProgramRelativeTime();
         }, 0, "getProgramRelativeTime"),
+    });
+    browser.properties.set("isBeingBroadcast", {
+        ...desc,
+        value: newNativeFunction(context.realm.intrinsics.FunctionPrototype, function* browser$isBeingBroadcast(ctx, _self, args, caller) {
+            return browserAPI.browser.isBeingBroadcast(yield* toString(ctx, args[0], caller));
+        }, 1, "isBeingBroadcast"),
     });
     browser.properties.set("subDate", {
         ...desc,
@@ -503,6 +643,12 @@ export function defineBrowserBinding(context: Context, resources: Resources, bro
         value: newNativeFunction(context.realm.intrinsics.FunctionPrototype, function* browser$unlockModuleOnMemory(ctx, _self, args, caller) {
             return browserAPI.browser.unlockModuleOnMemory(yield* toString(ctx, args[0], caller));
         }, 1, "unlockModuleOnMemory"),
+    });
+    browser.properties.set("setCachePriority", {
+        ...desc,
+        value: newNativeFunction(context.realm.intrinsics.FunctionPrototype, function* browser$setCachePriority(ctx, _self, args, caller) {
+            return browserAPI.browser.setCachePriority(yield* toString(ctx, args[0], caller), yield* toNumber(ctx, args[1], caller));
+        }, 2, "setCachePriority"),
     });
     browser.properties.set("unlockModuleOnMemoryEx", {
         ...desc,
@@ -578,6 +724,30 @@ export function defineBrowserBinding(context: Context, resources: Resources, bro
         value: newNativeFunction(context.realm.intrinsics.FunctionPrototype, function* browser$reloadActiveDocument(ctx, _self, args, caller) {
             return yield* reloadActiveDocument();
         }, 0, "reloadActiveDocument"),
+    });
+    browser.properties.set("launchExApp", {
+        ...desc,
+        value: newNativeFunction(context.realm.intrinsics.FunctionPrototype, function* browser$launchExApp(ctx, _self, args, caller) {
+            const uriname = yield* toString(ctx, args[0], caller);
+            const MIME_type = yield* toString(ctx, args[1], caller);
+            const Ex_info: string[] = [];
+            for (let a of args.slice(2)) {
+                Ex_info.push(yield* toString(ctx, a, caller));
+            }
+            return browserAPI.browser.launchExApp(uriname, MIME_type, ...Ex_info);
+        }, 2, "launchExApp"),
+    });
+    browser.properties.set("getFreeContentsMemory", {
+        ...desc,
+        value: newNativeFunction(context.realm.intrinsics.FunctionPrototype, function* browser$getFreeContentsMemory(ctx, _self, args, caller) {
+            return browserAPI.browser.getFreeContentsMemory(args[0] == null ? undefined : yield* toNumber(ctx, args[0], caller));
+        }, 1, "getFreeContentsMemory"),
+    });
+    browser.properties.set("isSupportedMedia", {
+        ...desc,
+        value: newNativeFunction(context.realm.intrinsics.FunctionPrototype, function* browser$isSupportedMedia(ctx, _self, args, caller) {
+            return browserAPI.browser.isSupportedMedia(yield* toString(ctx, args[0], caller));
+        }, 1, "isSupportedMedia"),
     });
     browser.properties.set("readPersistentArray", {
         ...desc,
@@ -661,6 +831,42 @@ export function defineBrowserBinding(context: Context, resources: Resources, bro
             return wrapArray(ctx, r);
         }, 2, "readPersistentArrayWithAccessCheck"),
     });
+    browser.properties.set("connect", {
+        ...desc,
+        value: newNativeFunction(context.realm.intrinsics.FunctionPrototype, function* browser$connect(ctx, _self, args, caller) {
+            const tel = yield* toString(ctx, args[0], caller);
+            if (args.length < 5) {
+                const bProvider = toBoolean(args[1]);
+                const speed = yield* toNumber(ctx, args[2], caller);
+                const timeout = yield* toNumber(ctx, args[3], caller);
+                return browserAPI.browser.connect(tel, bProvider, speed, timeout);
+            } else {
+                const hostNo = yield* toString(ctx, args[1], caller);
+                const bProvider = toBoolean(args[2]);
+                const speed = yield* toNumber(ctx, args[3], caller);
+                const timeout = yield* toNumber(ctx, args[4], caller);
+                return browserAPI.browser.connect(tel, hostNo, bProvider, speed, timeout);
+            }
+        }, 5, "connect"),
+    });
+    browser.properties.set("disconnect", {
+        ...desc,
+        value: newNativeFunction(context.realm.intrinsics.FunctionPrototype, function* browser$disconnect(ctx, _self, args, caller) {
+            return browserAPI.browser.disconnect();
+        }, 0, "disconnect"),
+    });
+    browser.properties.set("sendTextData", {
+        ...desc,
+        value: newNativeFunction(context.realm.intrinsics.FunctionPrototype, function* browser$sendTextData(ctx, _self, args, caller) {
+            return browserAPI.browser.sendTextData(yield* toString(ctx, args[0], caller), yield* toNumber(ctx, args[1], caller));
+        }, 2, "sendTextData"),
+    });
+    browser.properties.set("receiveTextData", {
+        ...desc,
+        value: newNativeFunction(context.realm.intrinsics.FunctionPrototype, function* browser$receiveTextData(ctx, _self, args, caller) {
+            return browserAPI.browser.receiveTextData(yield* toNumber(ctx, args[0], caller));
+        }, 1, "receiveTextData"),
+    });
     browser.properties.set("random", {
         ...desc,
         value: newNativeFunction(context.realm.intrinsics.FunctionPrototype, function* browser$random(ctx, _self, args, caller) {
@@ -730,6 +936,57 @@ export function defineBrowserBinding(context: Context, resources: Resources, bro
             return browserAPI.browser.getIRDID(yield* toNumber(ctx, args[0], caller));
         }, 1, "getIRDID"),
     });
+    browser.properties.set("setISPParams", {
+        ...desc,
+        value: newNativeFunction(context.realm.intrinsics.FunctionPrototype, function* browser$setISPParams(ctx, _self, args, caller) {
+            const ispname = yield* toString(ctx, args[0], caller);
+            const tel = yield* toString(ctx, args[1], caller);
+            const bProvider = toBoolean(args[2]);
+            const uid = yield* toString(ctx, args[3], caller);
+            const passwd = yield* toString(ctx, args[4], caller);
+            const nameServer1 = yield* toString(ctx, args[5], caller);
+            const nameServer2 = yield* toString(ctx, args[6], caller);
+            const softCompression = toBoolean(args[7]);
+            const headerCompression = toBoolean(args[8]);
+            const idleTime = yield* toNumber(ctx, args[9], caller);
+            const status = yield* toNumber(ctx, args[10], caller);
+            const lineType = args[11] == null ? undefined : yield* toNumber(ctx, args[11], caller);
+            return browserAPI.browser.setISPParams(ispname, tel, bProvider, uid, passwd, nameServer1, nameServer2, softCompression, headerCompression, idleTime, status, lineType);
+        }, 12, "setISPParams"),
+    });
+    browser.properties.set("getISPParams", {
+        ...desc,
+        value: newNativeFunction(context.realm.intrinsics.FunctionPrototype, function* browser$getISPParams(ctx, _self, args, caller) {
+            return wrapArray(ctx, browserAPI.browser.getISPParams());
+        }, 0, "getISPParams"),
+    });
+    browser.properties.set("connectPPP", {
+        ...desc,
+        value: newNativeFunction(context.realm.intrinsics.FunctionPrototype, function* browser$connectPPP(ctx, _self, args, caller) {
+            const tel = yield* toString(ctx, args[0], caller);
+            const bProvider = toBoolean(args[1]);
+            const uid = yield* toString(ctx, args[2], caller);
+            const passwd = yield* toString(ctx, args[3], caller);
+            const nameServer1 = yield* toString(ctx, args[4], caller);
+            const nameServer2 = yield* toString(ctx, args[5], caller);
+            const softCompression = toBoolean(args[6]);
+            const headerCompression = toBoolean(args[7]);
+            const idleTime = yield* toNumber(ctx, args[8], caller);
+            return browserAPI.browser.connectPPP(tel, bProvider, uid, passwd, nameServer1, nameServer2, softCompression, headerCompression, idleTime);
+        }, 9, "connectPPP"),
+    });
+    browser.properties.set("connectPPPWithISPParams", {
+        ...desc,
+        value: newNativeFunction(context.realm.intrinsics.FunctionPrototype, function* browser$connectPPPWithISPParams(ctx, _self, args, caller) {
+            return browserAPI.browser.connectPPPWithISPParams(args[0] == null ? undefined : yield* toNumber(ctx, args[0], caller));
+        }, 1, "connectPPPWithISPParams"),
+    });
+    browser.properties.set("disconnectPPP", {
+        ...desc,
+        value: newNativeFunction(context.realm.intrinsics.FunctionPrototype, function* browser$disconnectPPP(ctx, _self, args, caller) {
+            return browserAPI.browser.disconnectPPP();
+        }, 0, "disconnectPPP"),
+    });
     browser.properties.set("isIPConnected", {
         ...desc,
         value: newNativeFunction(context.realm.intrinsics.FunctionPrototype, function* browser$isIPConnected(ctx, _self, args, caller) {
@@ -741,6 +998,70 @@ export function defineBrowserBinding(context: Context, resources: Resources, bro
         value: newNativeFunction(context.realm.intrinsics.FunctionPrototype, function* browser$getConnectionType(ctx, _self, args, caller) {
             return browserAPI.browser.getConnectionType();
         }, 0, "getConnectionType"),
+    });
+    browser.properties.set("sendTextMail", {
+        ...desc,
+        value: newNativeFunction(context.realm.intrinsics.FunctionPrototype, function* browser$sendTextMail(ctx, _self, args, caller) {
+            const subject = yield* toString(ctx, args[0], caller);
+            const body = yield* toString(ctx, args[1], caller);
+            const toAddress = yield* toString(ctx, args[2], caller);
+            const ccAddress: any[] = [];
+            for (let a of args.slice(3)) {
+                ccAddress.push(yield* toString(ctx, a, caller));
+            }
+            return wrapArray(ctx, browserAPI.browser.sendTextMail(subject, body, toAddress, ...ccAddress));
+        }, 3, "sendTextMail"),
+    });
+    browser.properties.set("sendMIMEMail", {
+        ...desc,
+        value: newNativeFunction(context.realm.intrinsics.FunctionPrototype, function* browser$sendMIMEMail(ctx, _self, args, caller) {
+            const subject = yield* toString(ctx, args[0], caller);
+            const src_module = yield* toString(ctx, args[1], caller);
+            const toAddress = yield* toString(ctx, args[2], caller);
+            const ccAddress: string[] = [];
+            for (let a of args.slice(3)) {
+                ccAddress.push(yield* toString(ctx, a, caller));
+            }
+            return wrapArray(ctx, browserAPI.browser.sendMIMEMail(subject, src_module, toAddress, ...ccAddress));
+        }, 3, "sendMIMEMail"),
+    });
+    browser.properties.set("setCacheResourceOverIP", {
+        ...desc,
+        value: newNativeFunction(context.realm.intrinsics.FunctionPrototype, function* browser$setCacheResourceOverIP(ctx, _self, args, caller) {
+            if (!isObject(args[0])) {
+                return NaN;
+            }
+            const length = yield* toNumber(ctx, yield* getProperty(ctx, args[0], "length", caller), caller);
+            const resources: string[] = [];
+            for (let i = 0; i < length; i++) {
+                resources.push(yield* toString(ctx, yield* getProperty(ctx, args[0], String(i), caller), caller));
+            }
+            return wrapArray(ctx, browserAPI.browser.setCacheResourceOverIP(resources));
+        }, 1, "setCacheResourceOverIP"),
+    });
+    browser.properties.set("getPrefixNumber", {
+        ...desc,
+        value: newNativeFunction(context.realm.intrinsics.FunctionPrototype, function* browser$getPrefixNumber(ctx, _self, args, caller) {
+            return wrapArray(ctx, browserAPI.browser.getPrefixNumber());
+        }, 0, "getPrefixNumber"),
+    });
+    browser.properties.set("vote", {
+        ...desc,
+        value: newNativeFunction(context.realm.intrinsics.FunctionPrototype, function* browser$vote(ctx, _self, args, caller) {
+            return browserAPI.browser.vote(yield* toString(ctx, args[0], caller), yield* toNumber(ctx, args[1], caller));
+        }, 2, "vote"),
+    });
+    browser.properties.set("isRootCertificateExisting", {
+        ...desc,
+        value: newNativeFunction(context.realm.intrinsics.FunctionPrototype, function* browser$isRootCertificateExisting(ctx, _self, args, caller) {
+            return browserAPI.browser.isRootCertificateExisting(yield* toNumber(ctx, args[0], caller), yield* toNumber(ctx, args[1], caller), args[2] == null ? undefined : yield* toNumber(ctx, args[2], caller));
+        }, 3, "isRootCertificateExisting"),
+    });
+    browser.properties.set("getRootCertificateInfo", {
+        ...desc,
+        value: newNativeFunction(context.realm.intrinsics.FunctionPrototype, function* browser$getRootCertificateInfo(ctx, _self, args, caller) {
+            return wrapArray(ctx, browserAPI.browser.getRootCertificateInfo());
+        }, 0, "getRootCertificateInfo"),
     });
     browser.properties.set("setInterval", {
         ...desc,
@@ -807,13 +1128,13 @@ export function defineBrowserBinding(context: Context, resources: Resources, bro
     });
     browser.properties.set("X_DPA_launchDocWithLink", {
         ...desc,
-        value: newNativeFunction(context.realm.intrinsics.FunctionPrototype, function* browser$X_DPA_writeCproBM(ctx, _self, args, caller) {
+        value: newNativeFunction(context.realm.intrinsics.FunctionPrototype, function* browser$X_DPA_launchDocWithLink(ctx, _self, args, caller) {
             return yield* X_DPA_launchDocWithLink(yield* toString(ctx, args[0], caller), args[1] === undefined ? args[1] : yield* toString(ctx, args[1], caller));
         }, 1, "X_DPA_launchDocWithLink"),
     });
     browser.properties.set("epgTune", {
         ...desc,
-        value: newNativeFunction(context.realm.intrinsics.FunctionPrototype, function* browser$X_DPA_writeCproBM(ctx, _self, args, caller) {
+        value: newNativeFunction(context.realm.intrinsics.FunctionPrototype, function* browser$epgTune(ctx, _self, args, caller) {
             return yield* epgTune(yield* toString(ctx, args[0], caller));
         }, 1, "epgTune"),
     });
@@ -862,7 +1183,7 @@ export function defineBrowserBinding(context: Context, resources: Resources, bro
     });
 }
 
-export function defineBinaryTableBinding(context: Context, resources: Resources) {
+export function defineBinaryTableBinding(context: Context, resources: Resources, logger: Logger) {
     const desc = {
         readOnly: true,
         dontEnum: true,
@@ -875,14 +1196,14 @@ export function defineBinaryTableBinding(context: Context, resources: Resources)
         try {
             res = yield resources.fetchResourceAsync(table_ref);
         } catch (error) {
-            console.error("Failed to fetch BinaryTable resource", table_ref, error);
+            logger.error(`${logger.prefix}Failed to fetch BinaryTable resource`, table_ref, error);
             return null;
         }
         if (!res) {
-            browserLog("BinaryTable", table_ref, "not found");
+            logger.log(`${logger.prefix}BinaryTable`, table_ref, "not found");
             return null;
         }
-        browserLog("new BinaryTable", table_ref);
+        logger.log(`${logger.prefix}new BinaryTable`, table_ref);
         let buffer: Uint8Array = res.data;
         const host = newObject($BinaryTable$prototype);
         host.internalProperties.class = "BinaryTable";
@@ -891,8 +1212,7 @@ export function defineBinaryTableBinding(context: Context, resources: Resources)
         try {
             bt = new BT.BinaryTable(buffer, structure, getTextDecoder(resources.profile));
         } catch (error) {
-            // 壊れたデータや構造指定は BML 側へ例外を漏らさず null で通知する
-            console.error("Failed to create BinaryTable", table_ref, error);
+            logger.error("Failed to create BinaryTable", table_ref, error);
             return null;
         }
         host.internalProperties.hostObjectValue = bt;

@@ -3,14 +3,16 @@
 import { ResponseMessage } from "../server/ws_api";
 import { BroadcasterDatabase } from "./broadcaster_database";
 import { BrowserAPI } from "./browser";
-import { Content } from "./content";
+import { Content, keyCodeToAribKey, AribKeyCode } from "./content";
 import { EventDispatcher, EventQueue } from "./event_queue";
 import { BML } from "./interface/DOM";
 import { ES2Interpreter } from "./interpreter/es2_interpreter";
 import { Interpreter } from "./interpreter/interpreter";
-import { JSInterpreter } from "./interpreter/js_interpreter";
 import { NVRAM } from "./nvram";
 import { Resources } from "./resource";
+import { Logger, type LogLevel as LoggerLogLevel } from "./util/logger";
+import { OverlayInputApplication } from "./overlay_input";
+import { playRomSound } from "./romsound";
 
 export interface AudioNodeProvider {
     getAudioDestinationNode(): AudioNode;
@@ -153,6 +155,30 @@ export const bmlBrowserFontNames = Object.freeze({
     squareGothic: "角ゴシック",
 });
 
+export type LogLevel = LoggerLogLevel;
+
+export type LogChannelOptions = {
+    /**
+     * ログレベル
+     */
+    level?: LogLevel;
+};
+
+export type LogOptions = {
+    /**
+     * ログ出力のプレフィックス
+     */
+    prefix?: string;
+    /**
+     * ログレベル
+     */
+    level?: LogLevel;
+    /**
+     * チャンネルごとの設定
+     */
+    channels?: { [channel: string]: LogChannelOptions };
+};
+
 export type BMLBrowserOptions = {
     // 親要素
     containerElement: HTMLElement;
@@ -187,6 +213,7 @@ export type BMLBrowserOptions = {
      * 未指定の時は<dialog>とshowModalが使われる
      */
     showErrorMessage?: (title: string, message: string, code?: string) => void;
+    log?: LogOptions;
 };
 
 export class BMLBrowser {
@@ -224,14 +251,26 @@ export class BMLBrowser {
             audioNodeProvider = this.defaultAudioNodeProvider;
         }
         this.epg = options.epg ?? {};
-        this.interpreter = Boolean(localStorage.getItem((options.storagePrefix ?? "") + "use_js_interpreter")) ? new JSInterpreter() : new ES2Interpreter();
-        this.eventQueue = new EventQueue(this.interpreter);
-        this.resources = new Resources(this.indicator, options.ip ?? {});
-        this.broadcasterDatabase = new BroadcasterDatabase(this.resources, (options.storagePrefix ?? "") + (options.broadcasterDatabasePrefix ?? ""));
+        function setupLogger(channel: string): Logger {
+            return new Logger(`${options.log?.prefix ?? ""}[${channel}] `, options.log?.channels?.[channel]?.level ?? options.log?.level);
+        }
+        const interpreterLogger = setupLogger("interpreter");
+        const eventQueueLogger = setupLogger("event-queue");
+        const resourcesLogger = setupLogger("resources");
+        const broadcasterDatabaseLogger = setupLogger("broadcaster-database");
+        const nvramLogger = setupLogger("nvram");
+        const domLogger = setupLogger("dom");
+        const eventLogger = setupLogger("event-dispatcher");
+        const contentLogger = setupLogger("content");
+        const browserLogger = setupLogger("browser");
+        this.interpreter = new ES2Interpreter(interpreterLogger, browserLogger);
+        this.eventQueue = new EventQueue(this.interpreter, eventQueueLogger);
+        this.resources = new Resources(this.indicator, options.ip ?? {}, resourcesLogger);
+        this.broadcasterDatabase = new BroadcasterDatabase(this.resources, broadcasterDatabaseLogger, (options.storagePrefix ?? "") + (options.broadcasterDatabasePrefix ?? ""));
         this.broadcasterDatabase.openDatabase();
-        this.nvram = new NVRAM(this.resources, this.broadcasterDatabase, (options.storagePrefix ?? "") + (options.nvramPrefix ?? "nvram_"));
-        this.bmlDocument = new BML.BMLDocument(this.documentElement, this.interpreter, this.eventQueue, this.resources, this.eventTarget, audioNodeProvider, options.inputApplication, options.setMainAudioStreamCallback);
-        this.eventDispatcher = new EventDispatcher(this.eventQueue, this.bmlDocument, this.resources);
+        this.nvram = new NVRAM(this.resources, this.broadcasterDatabase, nvramLogger, (options.storagePrefix ?? "") + (options.nvramPrefix ?? "nvram_"));
+        this.bmlDocument = new BML.BMLDocument(this.documentElement, this.interpreter, this.eventQueue, this.resources, this.eventTarget, audioNodeProvider, options.inputApplication, options.setMainAudioStreamCallback, domLogger);
+        this.eventDispatcher = new EventDispatcher(this.eventQueue, this.bmlDocument, this.resources, eventLogger);
         this.eventQueue.dispatchBlur = this.eventDispatcher.dispatchBlur.bind(this.eventDispatcher);
         this.eventQueue.dispatchClick = this.eventDispatcher.dispatchClick.bind(this.eventDispatcher);
         this.eventQueue.dispatchFocus = this.eventDispatcher.dispatchFocus.bind(this.eventDispatcher);
@@ -248,9 +287,10 @@ export class BMLBrowser {
             this.indicator,
             options.videoPlaneModeEnabled ?? false,
             options.inputApplication,
-            options.showErrorMessage
+            options.showErrorMessage,
+            contentLogger,
         );
-        this.browserAPI = new BrowserAPI(this.resources, this.eventQueue, this.eventDispatcher, this.content, this.nvram, this.interpreter, audioNodeProvider, options.ip ?? {}, this.indicator, options.ureg, options.greg, options.X_DPA_startResidentApp);
+        this.browserAPI = new BrowserAPI(this.resources, this.eventQueue, this.eventDispatcher, this.content, this.nvram, this.interpreter, audioNodeProvider, options.ip ?? {}, this.indicator, options.ureg, options.greg, options.X_DPA_startResidentApp, browserLogger);
         this.interpreter.setupEnvironment(this.browserAPI, this.resources, this.content, this.epg);
         if (options.fonts?.roundGothic) {
             this.fonts.push(new FontFace(bmlBrowserFontNames.roundGothic, options.fonts?.roundGothic.source, options.fonts?.roundGothic.descriptors));
@@ -315,3 +355,7 @@ export class BMLBrowser {
         this.eventDispatcher.dispatchMainAudioStreamChangedEvent(prevComponentId, prevChannelId, componentId, channelId);
     }
 }
+
+export { keyCodeToAribKey, type AribKeyCode };
+export { OverlayInputApplication };
+export { playRomSound };

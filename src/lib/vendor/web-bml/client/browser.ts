@@ -2,7 +2,6 @@
 // 借りもの。中身は書き換えない ([README](../README.md))。denpa 側の型検査は効いたまま
 import { NVRAM } from "./nvram";
 import * as resource from "./resource";
-import { Buffer } from "buffer";
 import * as drcs from "./drcs";
 import { Interpreter } from "./interpreter/interpreter";
 import { EventDispatcher, EventQueue } from "./event_queue";
@@ -11,7 +10,8 @@ import { ResponseMessage } from "../server/ws_api";
 import { playRomSound } from "./romsound";
 import { AudioNodeProvider, Indicator, IP, Reg } from "./bml_browser";
 import { decodeEUCJP, encodeEUCJP, stripStringEUCJP } from "./euc_jp";
-import { decodeShiftJIS, encodeShiftJIS } from "./shift_jis";
+import { decodeShiftJIS, encodeShiftJIS, stripStringShiftJIS } from "./shift_jis";
+import { type Logger } from "./util/logger";
 // browser疑似オブジェクト
 
 export type LockedModuleInfo = [moduleName: string, func: number, status: number];
@@ -27,7 +27,7 @@ export interface Browser {
     // epgTuneToDocument(documentName: string): number;
     epgIsReserved(event_ref: string, startTime?: Date): number;
     epgReserve(event_ref: string, startTime?: Date): number;
-    epgCancelReservation(event_ref: string): string;
+    epgCancelReservation(event_ref: string): number;
     epgRecIsReserved(event_ref: string, startTime?: Date): number;
     epgRecReserve(event_ref: string, startTime?: Date): number;
     epgRecCancelReservation(event_ref: string): number;
@@ -57,13 +57,13 @@ export interface Browser {
     // 双方向機能－遅延発呼
     // 非運用
     // 双方向機能－BASIC手順 非対応であればエラーを返すこと
-    connect(tel: string, speed: number, timeout: number): number;
+    connect(tel: string, bProvider: boolean, speed: number, timeout: number): number;
     connect(tel: string, hostNo: string, bProvider: boolean, speed: number, timeout: number): number;
     disconnect(): number;
     // sendBinaryData(uri: string, timeout: number): number;
     // receiveBinaryData(uri: string, timeout: number): number;
     sendTextData(text: string, timeout: number): number;
-    receiveTextData(text: string, timeout: number): number;
+    receiveTextData(timeout: number): string | null;
     // 双方向機能－TCP/IP
     // 非対応であればエラーを返すこと
     setISPParams(ispname: string, tel: string, bProvider: boolean, uid: string, passwd: string, nameServer1: string, nameServer2: string, softCompression: boolean, headerCompression: boolean, idleTime: number, status: number, lineType?: number): number;
@@ -91,7 +91,7 @@ export interface Browser {
     setCacheResourceOverIP(resources: string[]): number;
     // 双方向機能－回線接続状態を取得する機能 
     // 非対応であれば[1]-[4]に空文字列を返すこと
-    getPrefixNumber(): [number, string, string, string, string];
+    getPrefixNumber(): [string, string, string, string, string];
     // 双方向機能－大量呼受付サービスを利用する通信機能
     // 非対応であればエラーを返す
     vote(tel: string, timeout: number): number;
@@ -183,8 +183,8 @@ export interface Browser {
     deleteBookmark(filename: string): number;
     lockBookmark(filename: string): number;
     unlockBookmark(filename: string): number;
-    getBookmarkInfo(): [number, number, string];
-    getBookmarkInfo2(region_name: string): [number, number, string];
+    getBookmarkInfo(): [number, number, string] | null;
+    getBookmarkInfo2(region_name: string): [number, number, string] | null;
     // オプション
     // startResidentBookmarkList(): number;
     // 印刷
@@ -198,7 +198,7 @@ export interface Browser {
 
     // Cプロファイル
     X_DPA_startResidentApp(appName: string, showAV: number, returnURI: string, ...Ex_info: string[]): number;
-    X_DPA_getComBrowserUA(): string[][];(): string[][];
+    X_DPA_getComBrowserUA(): string[][];
     X_DPA_launchDocWithLink(documentName: string): number;
     X_DPA_getIRDID(type: number): string | null;
     X_DPA_writeCproBM(title: string, dstURI: string, outline: string, CproBMtype: number, expire?: Date): number;
@@ -217,13 +217,13 @@ const apiGroup: Map<string, number> = new Map([
     ["Class.BinaryTable", 1],
     ["Class.CSVTable", 0],
     ["Class.XMLDoc", 0],
-    ["EPG.Basic", 1], // FIXME: 未実装あり
-    ["EPG.Basic2", 0], // FIXME: 未実装
-    ["EPG.Ext", 0], // epgTuneToDocument
-    ["EPG.Group", 0],
-    ["EPG.Series", 0],
+    ["EPG.Basic", 1], //  FIXME: 未実装あり
+    ["EPG.Basic2", 1], // FIXME: 未実装
+    ["EPG.Ext", 0], // epgTuneToDocument 運用しない
+    ["EPG.Group", 0], // grp.., epgXTune 運用しない
+    ["EPG.Series", 0], // series... オプション
     ["CC.Stream", 0],
-    ["CC.Control", 0], // FIXME: 未実装
+    ["CC.Control", 1], // FIXME: 未実装
     ["Persistent.Ext", 0],
     ["Persistent.Basic", 1],
     ["Persistent.MediaSupport", 1], // FIXME: setAccessInfoOfPersistentArray
@@ -241,30 +241,30 @@ const apiGroup: Map<string, number> = new Map([
     ["Storage.Module.Ext", 0],
     ["Storage.Resource.Ext", 0],
     ["Storage.Resource", 0],
-    ["Com.BASIC.Basic", 0], // FIXME: 対応は不可能だけどエラーを返すように実装すべき
+    ["Com.BASIC.Basic", 0],
     ["Com.BASIC.Ext", 0],
     ["Com.BASIC.Delay", 0],
     ["Com.BASIC.Delayed", 0],
-    ["Com.BASIC.Vote", 0], // FIXME: 対応は不可能だけどエラーを返すように実装すべき
+    ["Com.BASIC.Vote", 0],
     ["Com.BASIC.CAS", 0],
     ["Com.BASIC.Enc", 0],
-    ["Com.IP.Params", 0], // FIXME: 対応は不可能だけどエラーを返すように実装すべき
-    ["Com.IP.Connect", 0], // FIXME: 対応は不可能だけどエラーを返すように実装すべき
-    ["Com.IP.Connect.Ext", 0], // FIXME: 対応は不可能だけどエラーを返すように実装すべき
+    ["Com.IP.Params", 0],
+    ["Com.IP.Connect", 0],
+    ["Com.IP.Connect.Ext", 0],
     ["Com.IP.GetType", 1],
     ["Com.IP", 1],
     ["Com.IP.Http.Ext", 0],
     ["Com.IP.Http", 0],
     ["Com.IP.Ftp.Ext", 0],
     ["Com.IP.Ftp", 0],
-    ["Com.IP.Sendmail", 0], // FIXME?
+    ["Com.IP.Sendmail", 0],
     ["Com.IP.Transmit", 1],
     ["Com.IP.Delayed", 0],
-    ["Com.IP.SetCache", 0], // FIXME?
+    ["Com.IP.SetCache", 0],
     ["Com.IP.confirmIP", 1],
     ["Com.Common.Delayed", 0],
-    ["Com.Line.Prefix", 0], // FIXME: 対応は不可能だけどエラーを返すように実装すべき
-    ["Com.Certificate", 0], // FIXME
+    ["Com.Line.Prefix", 1],
+    ["Com.Certificate", 1],
     ["Ctrl.Basic", 1],
     ["Ctrl.NPT", 1],
     ["Ctrl.Time", 1],
@@ -275,10 +275,10 @@ const apiGroup: Map<string, number> = new Map([
     ["Ctrl.Version", 1],
     ["Ctrl.Screen", 1],
     ["Ctrl.Com", 0], // オプション扱い
-    ["Ctrl.Quit", 0], // FIXME
+    ["Ctrl.Quit", 1],
     ["Ctrl.ExtApp", 0], // オプション扱い
-    ["Ctrl.Cache.Ext", 0], // FIXME
-    ["Ctrl.Media", 0], // FIXME
+    ["Ctrl.Cache.Ext", 1],
+    ["Ctrl.Media", 1],
     ["Ctrl.Basic2", 1],
     ["Ctrl.Cache2", 1],
     ["Ctrl.MobileDisplay", 0],
@@ -295,8 +295,8 @@ const apiGroup: Map<string, number> = new Map([
     ["Misc.Peripheral", 0],
     ["Misc.Peripheral.pass", 0],
     ["Misc.Peripheral.Array", 0],
-    ["Bookmark.Basic", 0], // FIXME
-    ["Bookmark.Extended", 0], // FIXME
+    ["Bookmark.Basic", 1], // FIXME
+    ["Bookmark.Extended", 1], // FIXME
     ["Bookmark.Resident", 0],
     ["Misc.Basic", 1],
     ["Misc.Ureg", 1],
@@ -308,7 +308,7 @@ const apiGroup: Map<string, number> = new Map([
     ["AITControlledApp.Start", 0],
 
     // TR-B14 第二分冊 
-    ["Bookmark.Basic2", 0], // getBookmarkInfo2
+    ["Bookmark.Basic2", 1], // getBookmarkInfo2
     ["Ctrl.Status", 1], // getBrowserStatus
     ["Storage.Source", 0], // getContentSource
 ]);
@@ -360,7 +360,7 @@ const extraBrowserFunction = new Map<string, number>([
 const unsupported = new Map<string, number>([
     ["Misc.Unlink", 1], // 非リンク状態未実装
     ["Com.BASIC.Basic", 1],
-    ["Com.BASIC.Vote", 0],
+    ["Com.BASIC.Vote", 1],
 ]);
 
 const caSystem = new Map<string, number>([
@@ -546,6 +546,7 @@ export class BrowserAPI {
     private readonly ureg: Reg;
     private readonly greg: Reg;
     private readonly X_DPA_startResidentApp?: (appName: string, showAV: number, returnURI: string, Ex_info: string[]) => number;
+    private readonly logger: Logger;
 
     constructor(
         resources: resource.Resources,
@@ -560,6 +561,7 @@ export class BrowserAPI {
         ureg: Reg | undefined,
         greg: Reg | undefined,
         X_DPA_startResidentApp: ((appName: string, showAV: number, returnURI: string, Ex_info: string[]) => number) | undefined,
+        logger: Logger,
     ) {
         this.resources = resources;
         this.eventQueue = eventQueue;
@@ -579,22 +581,23 @@ export class BrowserAPI {
             setReg: (index, value) => this.browser.Greg[index] = value,
         };
         this.X_DPA_startResidentApp = X_DPA_startResidentApp;
+        this.logger = logger;
     }
 
     asyncBrowser: AsyncBrowser = {
         loadDRCS: async (DRCS_ref: string): Promise<number> => {
-            console.log("loadDRCS", DRCS_ref);
+            this.logger.log(`${this.logger.prefix}loadDRCS`, DRCS_ref);
             const res = this.resources.fetchLockedResource(DRCS_ref) ?? await this.resources.fetchResourceAsync(DRCS_ref);
             if (res?.data == null) {
                 return NaN;
             }
-            this.content.loadDRCS(drcs.loadDRCS(Buffer.from(res.data)));
+            this.content.loadDRCS(drcs.loadDRCS(res.data));
             for (const [id, fontFamily] of [
                 [1, "丸ゴシック"],
                 [2, "角ゴシック"],
                 [3, "太丸ゴシック"],
             ]) {
-                const glyph = drcs.loadDRCS(Buffer.from(res.data), id as number);
+                const glyph = drcs.loadDRCS(res.data, id as number);
                 const { ttf, unicodeCharacters } = drcs.toTTF(glyph);
                 if (unicodeCharacters.length === 0) {
                     continue;
@@ -606,7 +609,7 @@ export class BrowserAPI {
             return 1;
         },
         transmitTextDataOverIP: async (uri: string, text: string, charset: string): Promise<[number, string, string]> => {
-            console.info("transmitTextDataOverIP");
+            this.logger.log(`${this.logger.prefix}transmitTextDataOverIP`);
             if (this.ip.transmitTextDataOverIP == null) {
                 return [NaN, "", ""];
             }
@@ -639,7 +642,7 @@ export class BrowserAPI {
             }
         },
         confirmIPNetwork: async (destination: string, confirmType: number, timeout?: number): Promise<[boolean, string | null, number | null] | null> => {
-            console.info("confirmIPNetwork");
+            this.logger.log(`${this.logger.prefix}confirmIPNetwork`);
             if (this.ip.confirmIPNetwork == null) {
                 return null;
             }
@@ -651,9 +654,9 @@ export class BrowserAPI {
         },
         sleep: async (interval: number): Promise<number | null> => {
             return new Promise<number | null>((resolve) => {
-                console.log("SLEEP ", interval);
+                this.logger.log(`${this.logger.prefix}SLEEP `, interval);
                 setTimeout(() => {
-                    console.log("END SLEEP ", interval);
+                    this.logger.log(`${this.logger.prefix}END SLEEP `, interval);
                     resolve(1);
                 }, interval);
             });
@@ -690,7 +693,7 @@ export class BrowserAPI {
 
     public setGreg(index: number, value: string) {
         if (index >= 0 && index < this.browser.Greg.length) {
-            this.greg.setReg(index, stripStringEUCJP(value, 256));
+            this.greg.setReg(index, this.resources.profile === resource.Profile.TrProfileC ? stripStringShiftJIS(value, 256) : stripStringEUCJP(value, 256));
         }
     }
 
@@ -704,7 +707,7 @@ export class BrowserAPI {
 
     public setUreg(index: number, value: string) {
         if (index >= 0 && index < this.browser.Ureg.length) {
-            this.ureg.setReg(index, stripStringEUCJP(value, 256));
+            this.ureg.setReg(index, this.resources.profile === resource.Profile.TrProfileC ? stripStringShiftJIS(value, 256) : stripStringEUCJP(value, 256));
         }
     }
 
@@ -713,26 +716,111 @@ export class BrowserAPI {
         Greg: [...new Array(64)].map(_ => ""),
         epgGetEventStartTime: (event_ref: string): Date | null => {
             if (event_ref == this.resources.eventURI) {
-                console.log("epgGetEventStartTime", event_ref);
+                this.logger.log(`${this.logger.prefix}epgGetEventStartTime`, event_ref);
                 const time = this.resources.startTimeUnixMillis;
                 if (time == null) {
                     return null;
                 }
                 return new Date(time);
             }
-            console.error("epgGetEventStartTime: not implemented", event_ref, this.resources.eventId);
+            this.logger.error(`${this.logger.prefix}epgGetEventStartTime: not implemented`, event_ref, this.resources.eventId);
             return null;
         },
         epgGetEventDuration: (event_ref: string): number => {
             if (event_ref == this.resources.eventURI) {
-                console.log("epgGetEventDuration", event_ref);
+                this.logger.log(`${this.logger.prefix}epgGetEventDuration`, event_ref);
                 return this.resources.durationSeconds ?? NaN;
             }
-            console.error("epgGetEventDuration", event_ref);
+            this.logger.error(`${this.logger.prefix}epgGetEventDuration`, event_ref);
             return NaN;
         },
+        epgTune: (service_ref: string): number => {
+            this.logger.log(`${this.logger.prefix}epgTune stub`, { service_ref });
+            return NaN;
+        },
+        epgTuneToComponent: (component_ref: string): number => {
+            this.logger.log(`${this.logger.prefix}epgTuneToComponent stub`, { component_ref });
+            return NaN;
+        },
+        epgIsReserved: (event_ref: string): number => {
+            this.logger.log(`${this.logger.prefix}epgIsReserved stub`, { event_ref });
+            return NaN;
+        },
+        epgReserve: (event_ref: string, startTime?: Date): number => {
+            this.logger.log(`${this.logger.prefix}epgReserve stub`, { event_ref, startTime });
+            return NaN;
+        },
+        epgCancelReservation: (event_ref: string): number => {
+            this.logger.log(`${this.logger.prefix}epgCancelReservation stub`, { event_ref });
+            return NaN;
+        },
+        epgRecIsReserved: (event_ref: string, startTime?: Date): number => {
+            this.logger.log(`${this.logger.prefix}epgRecIsReserved stub`, { event_ref, startTime });
+            return NaN;
+        },
+        epgRecReserve: (event_ref: string, startTime?: Date): number => {
+            this.logger.log(`${this.logger.prefix}epgRecReserve stub`, { event_ref, startTime });
+            return NaN;
+        },
+        epgRecCancelReservation: (event_ref: string): number => {
+            this.logger.log(`${this.logger.prefix}epgRecCancelReservation stub`, { event_ref });
+            return NaN;
+        },
+        setCCDisplayStatus: (language: number, status: boolean): number => {
+            this.logger.log(`${this.logger.prefix}setCCDisplayStatus stub`, { language, status });
+            return language === 1 ? 1 : NaN;
+        },
+        getCCDisplayStatus: (language: number): number => {
+            this.logger.log(`${this.logger.prefix}getCCDisplayStatus stub`, { language });
+            if (language === 1) {
+                return 1;
+            }
+            if (language >= 1 && language <= 8) {
+                return 0;
+            }
+            return NaN;
+        },
+        getCCLanguageStatus: (language: number): number => {
+            this.logger.log(`${this.logger.prefix}getCCLanguageStatus stub`, { language });
+            if (language === 1) {
+                return 1;
+            }
+            if (language >= 1 && language <= 8) {
+                return 0;
+            }
+            return NaN;
+            
+        },
+        writeBookmarkArray: (filename: string, title: string, dstURI: string, expire_str: string, bmType: string, linkMedia: string, usageFlag: string, extendedStructure?: string, extendedData?: any[]): number => {
+            this.logger.log(`${this.logger.prefix}writeBookmarkArray stub`, { filename, title, dstURI, expire_str, bmType, linkMedia, usageFlag, extendedStructure, extendedData });
+            return NaN;
+        },
+        readBookmarkArray: (filename: string, bmType?: string, extendedStructure?: string): any[] | null => {
+            this.logger.log(`${this.logger.prefix}readBookmarkArray stub`, { filename, bmType, extendedStructure });
+            return null;
+        },
+        deleteBookmark: (filename: string): number => {
+            this.logger.log(`${this.logger.prefix}deleteBookmark stub`, { filename });
+            return NaN;
+        },
+        lockBookmark: (filename: string): number => {
+            this.logger.log(`${this.logger.prefix}lockBookmark stub`, { filename });
+            return NaN;
+        },
+        unlockBookmark: (filename: string): number => {
+            this.logger.log(`${this.logger.prefix}unlockBookmark stub`, { filename });
+            return NaN;
+        },
+        getBookmarkInfo: (): [number, number, string] | null => {
+            this.logger.log(`${this.logger.prefix}getBookmarkInfo stub`);
+            return null;
+        },
+        getBookmarkInfo2: (region_name: string): [number, number, string] | null => {
+            this.logger.log(`${this.logger.prefix}getBookmarkInfo2 stub`, { region_name });
+            return null;
+        },
         setCurrentDateMode: (time_mode: number): number => {
-            console.log("setCurrentDateMode", time_mode);
+            this.logger.log(`${this.logger.prefix}setCurrentDateMode`, time_mode);
             if (time_mode == 0) {
                 this.content.currentDateMode = 0;
             } else if (time_mode == 1) {
@@ -743,7 +831,7 @@ export class BrowserAPI {
             return 1; // 成功
         },
         getProgramRelativeTime: (): number => {
-            console.log("getProgramRelativeTime");
+            this.logger.log(`${this.logger.prefix}getProgramRelativeTime`);
             const ct = this.resources.currentTimeUnixMillis;
             const st = this.resources.startTimeUnixMillis;
             if (ct == null || st == null) {
@@ -751,6 +839,10 @@ export class BrowserAPI {
             } else {
                 return Math.floor((ct - st) / 1000); // 秒
             }
+        },
+        isBeingBroadcast: (event_ref: string): boolean => {
+            this.logger.log(`${this.logger.prefix}isBeingBroadcast stub`, { event_ref });
+            return false;
         },
         subDate(target: Date, base: Date, unit: number) {
             if (target == null || base == null) {
@@ -804,15 +896,19 @@ export class BrowserAPI {
             return number.toLocaleString("en-US");
         },
         unlockModuleOnMemory: (module: string | null | undefined): number => {
-            console.log("unlockModuleOnMemory", module);
+            this.logger.log(`${this.logger.prefix}unlockModuleOnMemory`, module);
             const { componentId, moduleId } = this.resources.parseURLEx(module);
             if (componentId == null || moduleId == null) {
                 return NaN;
             }
             return this.resources.unlockModule(componentId, moduleId, "lockModuleOnMemory") ? 1 : NaN;
         },
+        setCachePriority: (module: string, priority: number): number => {
+            this.logger.log(`${this.logger.prefix}setCachePriority: stub`, { module, priority });
+            return 1;
+        },
         unlockModuleOnMemoryEx: (module: string | null | undefined): number => {
-            console.log("unlockModuleOnMemoryEx", module);
+            this.logger.log(`${this.logger.prefix}unlockModuleOnMemoryEx`, module);
             const { componentId, moduleId } = this.resources.parseURLEx(module);
             if (componentId == null || moduleId == null) {
                 return NaN;
@@ -820,12 +916,12 @@ export class BrowserAPI {
             return this.resources.unlockModule(componentId, moduleId, "lockModuleOnMemoryEx") ? 1 : NaN;
         },
         unlockAllModulesOnMemory: (): number => {
-            console.log("unlockAllModulesOnMemory");
+            this.logger.log(`${this.logger.prefix}unlockAllModulesOnMemory`);
             this.resources.unlockModules();
             return 1; // NaN => fail
         },
         lockModuleOnMemory: (module: string | null | undefined): number => {
-            console.log("lockModuleOnMemory", module);
+            this.logger.log(`${this.logger.prefix}lockModuleOnMemory`, module);
             const { componentId, moduleId } = this.resources.parseURLEx(module);
             if (componentId == null || moduleId == null || module == null) {
                 return NaN;
@@ -835,18 +931,18 @@ export class BrowserAPI {
                 return NaN;
             }
             if (!this.resources.getPMTComponent(componentId)) {
-                console.error("lockModuleOnMemory: component does not exist in PMT", module);
+                this.logger.error(`${this.logger.prefix}lockModuleOnMemory: component does not exist in PMT`, module);
                 return -1;
             }
             if (this.resources.componentExistsInDownloadInfo(componentId)) {
                 if (!this.resources.moduleExistsInDownloadInfo(componentId, moduleId)) {
-                    console.error("lockModuleOnMemory: component does not exist in DII", module);
+                    this.logger.error(`${this.logger.prefix}lockModuleOnMemory: component does not exist in DII`, module);
                     return -1;
                 }
             }
             const cachedModule = this.resources.lockCachedModule(componentId, moduleId, "lockModuleOnMemory");
             if (!cachedModule) {
-                console.warn("lockModuleOnMemory: module not cached", module);
+                this.logger.log(`${this.logger.prefix}lockModuleOnMemory: module not cached`, module);
                 this.resources.fetchResourceAsync(module, "lockModuleOnMemory").then(() => {
                     const cachedModule = this.resources.lockCachedModule(componentId, moduleId, "lockModuleOnMemory");
                     if (cachedModule == null) {
@@ -862,7 +958,7 @@ export class BrowserAPI {
             return 1;
         },
         lockModuleOnMemoryEx: (module: string | null | undefined): number => {
-            console.log("lockModuleOnMemoryEx", module);
+            this.logger.log(`${this.logger.prefix}lockModuleOnMemoryEx`, module);
             const { componentId, moduleId } = this.resources.parseURLEx(module);
             if (componentId == null || moduleId == null || module == null) {
                 return NaN;
@@ -878,12 +974,12 @@ export class BrowserAPI {
                 return NaN;
             }
             if (!this.resources.getPMTComponent(componentId)) {
-                console.error("lockModuleOnMemoryEx: component does not exist in PMT", module);
+                this.logger.error(`${this.logger.prefix}lockModuleOnMemoryEx: component does not exist in PMT`, module);
                 return -3;
             }
             if (this.resources.componentExistsInDownloadInfo(componentId)) {
                 if (!this.resources.moduleExistsInDownloadInfo(componentId, moduleId)) {
-                    console.error("lockModuleOnMemoryEx: component does not exist in DII", module);
+                    this.logger.error(`${this.logger.prefix}lockModuleOnMemoryEx: component does not exist in DII`, module);
                     this.eventDispatcher.dispatchModuleLockedEvent(module, true, -2);
                     return 1;
                 }
@@ -891,7 +987,7 @@ export class BrowserAPI {
             const cachedModule = this.resources.lockCachedModule(componentId, moduleId, "lockModuleOnMemoryEx");
             if (!cachedModule) {
                 const dataEventId = this.resources.getDownloadComponentInfo(componentId)?.dataEventId;
-                console.warn("lockModuleOnMemoryEx: module not cached", module);
+                this.logger.log(`${this.logger.prefix}lockModuleOnMemoryEx: module not cached`, module);
                 this.resources.fetchResourceAsync(module, "lockModuleOnMemoryEx").then(() => {
                     if (dataEventId != null) {
                         const eid = this.resources.getDownloadComponentInfo(componentId)?.dataEventId;
@@ -910,16 +1006,16 @@ export class BrowserAPI {
             this.eventDispatcher.dispatchModuleLockedEvent(module, true, 0);
             return 1;
         },
-        lockScreen() {
-            console.log("lockScreen");
+        lockScreen: (): number => {
+            this.logger.log(`${this.logger.prefix}lockScreen`);
             return 1;
         },
-        unlockScreen() {
-            console.log("unlockScreen");
+        unlockScreen: (): number => {
+            this.logger.log(`${this.logger.prefix}unlockScreen`);
             return 1;
         },
         getBrowserSupport: (sProvider: string, functionname: string, ...additionalinfoList: string[]): number => {
-            console.log("getBrowserSupport", sProvider, functionname, ...additionalinfoList);
+            this.logger.log(`${this.logger.prefix}getBrowserSupport`, sProvider, functionname, ...additionalinfoList);
             const additionalinfo: string | undefined = additionalinfoList[0] ?? undefined;
             const additionalinfo2: string | undefined = additionalinfoList[1] ?? undefined;
             const additionalinfo3: string | undefined = additionalinfoList[2] ?? undefined;
@@ -957,12 +1053,12 @@ export class BrowserAPI {
                 }
                 const f = arib.get(functionname);
                 if (f == null) {
-                    console.error("unknown getBrowserSupport functionname", sProvider, functionname, ...additionalinfoList);
+                    this.logger.error(`${this.logger.prefix}unknown getBrowserSupport functionname`, sProvider, functionname, ...additionalinfoList);
                     return 0;
                 }
                 const a1 = f.get(additionalinfo);
                 if (a1 == null) {
-                    console.error("unknown getBrowserSupport additionalinfo", sProvider, functionname, ...additionalinfoList);
+                    this.logger.error(`${this.logger.prefix}unknown getBrowserSupport additionalinfo`, sProvider, functionname, ...additionalinfoList);
                     return 0;
                 }
                 if (typeof a1 === "number") {
@@ -970,7 +1066,7 @@ export class BrowserAPI {
                 }
                 const a2 = a1.get(additionalinfo2);
                 if (a2 == null) {
-                    console.error("unknown getBrowserSupport additionalinfo2", sProvider, functionname, ...additionalinfoList);
+                    this.logger.error(`${this.logger.prefix}unknown getBrowserSupport additionalinfo2`, sProvider, functionname, ...additionalinfoList);
                     return 0;
                 }
                 if (typeof a2 === "number") {
@@ -978,19 +1074,19 @@ export class BrowserAPI {
                 }
                 const a3 = a2.get(additionalinfo3);
                 if (a3 == null) {
-                    console.error("unknown getBrowserSupport additionalinfo2", sProvider, functionname, ...additionalinfoList);
+                    this.logger.error(`${this.logger.prefix}unknown getBrowserSupport additionalinfo2`, sProvider, functionname, ...additionalinfoList);
                     return 0;
                 }
                 return a3;
             } else if (sProvider === "BPA") {
                 const f = bpa.get(functionname);
                 if (f == null) {
-                    console.error("unknown getBrowserSupport functionname", sProvider, functionname, ...additionalinfoList);
+                    this.logger.error(`${this.logger.prefix}unknown getBrowserSupport functionname`, sProvider, functionname, ...additionalinfoList);
                     return 0;
                 }
                 const a1 = f.get(additionalinfo);
                 if (a1 == null) {
-                    console.error("unknown getBrowserSupport additionalinfo", sProvider, functionname, ...additionalinfoList);
+                    this.logger.error(`${this.logger.prefix}unknown getBrowserSupport additionalinfo`, sProvider, functionname, ...additionalinfoList);
                     return 0;
                 }
                 return a1;
@@ -1025,12 +1121,12 @@ export class BrowserAPI {
                 }
                 const f = dpaCpro.get(functionname);
                 if (f == null) {
-                    console.error("unknown getBrowserSupport functionname", sProvider, functionname, ...additionalinfoList);
+                    this.logger.error(`${this.logger.prefix}unknown getBrowserSupport functionname`, sProvider, functionname, ...additionalinfoList);
                     return 0;
                 }
                 const a1 = f.get(additionalinfo);
                 if (a1 == null) {
-                    console.error("unknown getBrowserSupport additionalinfo", sProvider, functionname, ...additionalinfoList);
+                    this.logger.error(`${this.logger.prefix}unknown getBrowserSupport additionalinfo`, sProvider, functionname, ...additionalinfoList);
                     return 0;
                 }
                 if (typeof a1 === "number") {
@@ -1038,7 +1134,7 @@ export class BrowserAPI {
                 }
                 const a2 = a1.get(additionalinfo2);
                 if (a2 == null) {
-                    console.error("unknown getBrowserSupport additionalinfo2", sProvider, functionname, ...additionalinfoList);
+                    this.logger.error(`${this.logger.prefix}unknown getBrowserSupport additionalinfo2`, sProvider, functionname, ...additionalinfoList);
                     return 0;
                 }
                 if (typeof a2 === "number") {
@@ -1046,16 +1142,16 @@ export class BrowserAPI {
                 }
                 const a3 = a2.get(additionalinfo3);
                 if (a3 == null) {
-                    console.error("unknown getBrowserSupport additionalinfo2", sProvider, functionname, ...additionalinfoList);
+                    this.logger.error(`${this.logger.prefix}unknown getBrowserSupport additionalinfo2`, sProvider, functionname, ...additionalinfoList);
                     return 0;
                 }
                 return a3;
             }
-            console.error("unknown getBrowserSupport", sProvider, functionname, ...additionalinfoList);
+            this.logger.error(`${this.logger.prefix}unknown getBrowserSupport`, sProvider, functionname, ...additionalinfoList);
             return 0;
         },
         getBrowserStatus: (sProvider: string, statusname: string, additionalinfo: string): number => {
-            console.log("getBrowserStatus", sProvider, statusname, additionalinfo);
+            this.logger.log(`${this.logger.prefix}getBrowserStatus`, sProvider, statusname, additionalinfo);
             if (sProvider === "TerrP" || sProvider === "DPA" /* Cプロファイル */) {
                 if (statusname === "IRDState") {
                     if (additionalinfo === "Link") {
@@ -1069,44 +1165,89 @@ export class BrowserAPI {
                     }
                 }
             }
-            console.error("unknown getBrowserStatus", sProvider, statusname, additionalinfo);
+            this.logger.error(`${this.logger.prefix}unknown getBrowserStatus`, sProvider, statusname, additionalinfo);
             return NaN;
         },
         launchDocument: (documentName: string, transitionStyle?: string): number => {
-            console.log("%claunchDocument", "font-size: 4em", documentName, transitionStyle);
+            this.logger.log(`${this.logger.prefix}%claunchDocument`, "font-size: 4em", documentName, transitionStyle);
             this.content.launchDocument(documentName);
             this.interpreter.destroyStack();
             throw new Error("unreachable!!");
         },
         quitDocument: (): number => {
-            console.log("%cquitDocument", "font-size: 4em");
+            this.logger.log(`${this.logger.prefix}%cquitDocument`, "font-size: 4em");
             this.content.quitDocument();
             this.interpreter.destroyStack();
             throw new Error("unreachable!!");
         },
         reloadActiveDocument: (): number => {
-            console.log("reloadActiveDocument");
+            this.logger.log(`${this.logger.prefix}reloadActiveDocument`);
             return this.browser.launchDocument(this.browser.getActiveDocument()!);
         },
+        launchExApp: (uriname: string, MIME_type: string, ...Ex_info: string[]): number => {
+            this.logger.log(`${this.logger.prefix}launchExApp`, { uriname, MIME_type, Ex_info });
+            return NaN;
+        },
+        getFreeContentsMemory: (number_of_resource?: number): number => {
+            return 10 * 1024 * 1024;
+        },
+        isSupportedMedia: (mediaName: string): number => {
+            switch (mediaName) {
+                // BSデジタル放送
+                case "1":
+                    return 1;
+                // 広帯域CSデジタル放送（右旋）
+                case "2":
+                    return 1;
+                // 広帯域CSデジタル放送（左旋）
+                case "3":
+                    return 0;
+                // 地上波デジタルテレビ放送
+                case "4":
+                    return 1;
+                // 地上波デジタル音声放送
+                case "5":
+                    return 0;
+                // 高度 BS デジタル放送
+                case "6":
+                    return 0;
+                // 高度広帯域CSデジタル放送
+                case "7":
+                    return 0;
+            }
+            return 0;
+        },
         readPersistentArray: (filename: string, structure: string): any[] | null => {
-            console.log("readPersistentArray", filename, structure);
+            this.logger.log(`${this.logger.prefix}readPersistentArray`, filename, structure);
             return this.nvram.readPersistentArray(filename, structure);
         },
         writePersistentArray: (filename: string, structure: string, data: any[], period?: Date): number => {
-            console.log("writePersistentArray", filename, structure, data, period);
+            this.logger.log(`${this.logger.prefix}writePersistentArray`, filename, structure, data, period);
             return this.nvram.writePersistentArray(filename, structure, data, period);
         },
         checkAccessInfoOfPersistentArray: (filename: string): number => {
-            console.log("checkAccessInfoOfPersistentArray", filename);
+            this.logger.log(`${this.logger.prefix}checkAccessInfoOfPersistentArray`, filename);
             return this.nvram.checkAccessInfoOfPersistentArray(filename);
         },
         writePersistentArrayWithAccessCheck: (filename: string, structure: string, data: any[], period?: Date): number => {
-            console.log("writePersistentArrayWithAccessCheck", filename, structure, data, period);
+            this.logger.log(`${this.logger.prefix}writePersistentArrayWithAccessCheck`, filename, structure, data, period);
             return this.nvram.writePersistentArrayWithAccessCheck(filename, structure, data, period);
         },
         readPersistentArrayWithAccessCheck: (filename: string, structure: string): any[] | null => {
-            console.log("readPersistentArrayWithAccessCheck", filename, structure);
+            this.logger.log(`${this.logger.prefix}readPersistentArrayWithAccessCheck`, filename, structure);
             return this.nvram.readPersistentArrayWithAccessCheck(filename, structure);
+        },
+        connect: (tel: string, ...args: [hostNo: string, bProvider: boolean, speed: number, timeout: number] | [bProvider: boolean, speed: number, timeout: number]): number => {
+            return NaN;
+        },
+        disconnect: (): number => {
+            return NaN;
+        },
+        sendTextData: (text: string, timeout: number): number => {
+            return NaN;  
+        },
+        receiveTextData: (timeout: number): string | null => {
+            return null;
         },
         random(num: number): number {
             return Math.floor(Math.random() * num) + 1;
@@ -1123,14 +1264,14 @@ export class BrowserAPI {
             }
             return activeDocument;
         },
-        getResidentAppVersion(appName: string): any[] | null {
+        getResidentAppVersion: (appName: string): any[] | null => {
             // Cプロファイルでもこの関数は運用される
             // ただしappNameにComBrowserは指定しない (TR-B14 第三分冊 7.10.6)
-            console.log("getResidentAppVersion", appName);
+            this.logger.log(`${this.logger.prefix}getResidentAppVersion`, appName);
             return null;
         },
         getLockedModuleInfo: (): LockedModuleInfo[] | null => {
-            console.log("getLockedModuleInfo");
+            this.logger.log(`${this.logger.prefix}getLockedModuleInfo`);
             const l: LockedModuleInfo[] = [];
             for (const { module, isEx, requesting } of this.resources.getLockedModules()) {
                 l.push([module, isEx ? 2 : 1, requesting ? 2 : 1]);
@@ -1143,10 +1284,10 @@ export class BrowserAPI {
                 return NaN;
             }
             if (this.resources.getPMTComponent(componentId)) {
-                console.log("detectComponent", componentId, true);
+                this.logger.log(`${this.logger.prefix}detectComponent`, componentId, true);
                 return 1;
             } else {
-                console.log("detectComponent", componentId, false);
+                this.logger.log(`${this.logger.prefix}detectComponent`, componentId, false);
                 return 0;
             }
         },
@@ -1174,11 +1315,11 @@ export class BrowserAPI {
             } else if (type == 9) {
                 return toHex(this.resources.networkId, 4);
             }
-            console.error("getProgramID", type);
+            this.logger.error(`${this.logger.prefix}getProgramID`, type);
             return null;
         },
         playRomSound: (soundID: string): number => {
-            console.log("playRomSound", soundID);
+            this.logger.log(`${this.logger.prefix}playRomSound`, soundID);
             const groups = /^romsound:\/\/(?<soundID>\d+)$/.exec(soundID)?.groups;
             if (groups == null) {
                 return NaN;
@@ -1194,8 +1335,8 @@ export class BrowserAPI {
         getTuningLinkageType(): number {
             return -1;
         },
-        getIRDID(type: number): string | null {
-            console.log("getIRDID", type);
+        getIRDID: (type: number): string | null => {
+            this.logger.log(`${this.logger.prefix}getIRDID`, type);
             if (type === 5) {
                 // 20桁のB-CAS番号のうち後ろ5桁のチェックサムを除去したもの
                 // const cardID = "000012345678901";
@@ -1204,13 +1345,52 @@ export class BrowserAPI {
             }
             return null;
         },
+        setISPParams: (ispname: string, tel: string, bProvider: boolean, uid: string, passwd: string, nameServer1: string, nameServer2: string, softCompression: boolean, headerCompression: boolean, idleTime: number, status: number, lineType?: number): number => {
+            return NaN;
+        },
+        getISPParams: (): any[] | null => {
+            return null;
+        },
+        connectPPP: (tel: string, bProvider: boolean, uid: string, passwd: string, nameServer1: string, nameServer2: string, softCompression: boolean, headerCompression: boolean, idleTime: number): number => {
+            return NaN;
+        },
+        connectPPPWithISPParams: (idleTime?: number): number => {
+            return NaN;
+        },
+        disconnectPPP: (): number => {
+            return NaN;
+        },
         isIPConnected: (): number => {
-            console.log("isIPConnected");
+            this.logger.log(`${this.logger.prefix}isIPConnected`);
             return this.ip.isIPConnected?.() ?? 0;
         },
         getConnectionType: (): number => {
-            console.log("getConnectionType");
+            this.logger.log(`${this.logger.prefix}getConnectionType`);
             return this.ip.getConnectionType?.() ?? 403; // Ethernet DHCP
+        },
+        sendTextMail(subject: string, body: string, toAddress: string, ...ccAddress: string[]): [number, number] {
+            return [NaN, NaN];
+        },
+        sendMIMEMail(subject: string, src_module: string, toAddress: string, ...ccAddress: string[]): [number, number] {
+            return [NaN, NaN];
+        },
+        setCacheResourceOverIP: (resources: string[]): number => {
+            return 1;
+        },
+        getPrefixNumber: () => {
+            return ["", "", "", "", ""];
+        },
+        vote: (tel: string, timeout: number): number => {
+            this.logger.log(`${this.logger.prefix}vote`, { tel, timeout });
+            return NaN;
+        },
+        isRootCertificateExisting: (root_certificate_type: number, root_certificate_id: number, root_certificate_version?: number): number => {
+            this.logger.log(`${this.logger.prefix}isRootCertificateExisting stub`, { root_certificate_type, root_certificate_id, root_certificate_version });
+            return 1;
+        },
+        getRootCertificateInfo: (): any[] | null => {
+            this.logger.log(`${this.logger.prefix}getRootCertificateInfo stub`);
+            return [];
         },
         setInterval: (evalCode: string, msec: number, iteration: number): number => {
             const handle = this.eventQueue.setInterval(() => {
@@ -1223,24 +1403,24 @@ export class BrowserAPI {
                 });
                 this.eventQueue.processEventQueue();
             }, msec);
-            console.log("setInterval", evalCode, msec, iteration, handle);
+            this.logger.log(`${this.logger.prefix}setInterval`, evalCode, msec, iteration, handle);
             return handle;
         },
         clearTimer: (timerID: number): number => {
-            console.log("clearTimer", timerID);
+            this.logger.log(`${this.logger.prefix}clearTimer`, timerID);
             return this.eventQueue.clearInterval(timerID) ? 1 : NaN;
         },
         pauseTimer: (timerID: number): number => {
-            console.log("pauseTimer", timerID);
+            this.logger.log(`${this.logger.prefix}pauseTimer`, timerID);
             return this.eventQueue.pauseTimer(timerID) ? 1 : NaN;
         },
         resumeTimer: (timerID: number): number => {
-            console.log("resumeTimer", timerID);
+            this.logger.log(`${this.logger.prefix}resumeTimer`, timerID);
             return this.eventQueue.resumeTimer(timerID) ? 1 : NaN;
         },
         getNPT: (): number => {
             const npt = Math.floor((this.content.getNPT90kHz() ?? NaN) / 90);
-            console.log("getNPT", npt);
+            this.logger.log(`${this.logger.prefix}getNPT`, npt);
             return npt;
         },
         // Cプロファイル
@@ -1287,16 +1467,16 @@ export class BrowserAPI {
                 case 3:
                     return null;
             }
-            console.error("X_DPA_getIRDID: unknown type", type);
+            this.logger.error(`${this.logger.prefix}X_DPA_getIRDID: unknown type`, type);
             return null;
         },
         X_DPA_writeCproBM: (title: string, dstURI: string, outline: string, CproBMtype: number, expire?: Date): number => {
             // テレビリンクの登録
-            console.error("X_DPA_writeCproBM", title, dstURI, outline, CproBMtype, expire);
+            this.logger.error(`${this.logger.prefix}X_DPA_writeCproBM`, title, dstURI, outline, CproBMtype, expire);
             return NaN;
         },
         X_DPA_launchDocWithLink: (documentName: string): number => {
-            console.log("%X_DPA_launchDocWithLink", "font-size: 4em", documentName);
+            this.logger.log(`${this.logger.prefix}%X_DPA_launchDocWithLink`, "font-size: 4em", documentName);
             if (this.resources.profile !== resource.Profile.TrProfileC) {
                 return NaN;
             }
@@ -1315,7 +1495,7 @@ export class BrowserAPI {
             this.interpreter.destroyStack();
             throw new Error("unreachable!!");
         },
-    } as Browser;
+    };
 
     serviceId?: number;
     public onMessage(msg: ResponseMessage) {
@@ -1323,7 +1503,7 @@ export class BrowserAPI {
             if (msg.serviceId != null && msg.serviceId !== this.serviceId) {
                 // TR-B14 第二分冊 5.12.6.1
                 if (this.serviceId != null) {
-                    console.log("serviceId changed", msg.serviceId, this.serviceId)
+                    this.logger.log(`${this.logger.prefix}serviceId changed`, msg.serviceId, this.serviceId)
                     for (let i = 1; i < 64; i++) { // FIXME
                         this.setUreg(i, "");
                     }
