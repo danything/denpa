@@ -952,6 +952,25 @@
         }
     }
 
+    /**
+     * **押す口は自分で繋ぐ** (`onclick={press}` と書かない)。
+     *
+     * データ放送を出すと、借りものは**映像の箱を閉じた影 (`attachShadow`) の中へ
+     * 移します** (`DataBroadcast` の `place`)。Svelte は `onclick` を根に1つだけ
+     * 置いて配る作りで、配り先を `composedPath()` の先頭から辿る — **閉じた影の
+     * 中は composedPath に出てこない**ので、辿り着くのは影の入れ物までです。
+     * 書いたとおりに見えて、**d を出した瞬間だけ絵を押しても止まらなく**なる
+     * (実機で踏んだ。押した先を数えると `watch-video` が light DOM から消えている)。
+     *
+     * 要素に直に付けた口は、要素ごと移されても付いたまま動きます
+     */
+    $effect(() => {
+        const target = video;
+        if (target === null) return;
+        target.addEventListener('click', press);
+        return () => target.removeEventListener('click', press);
+    });
+
     /** キーでも動かせるようにする。全画面のときはこれがいちばん早い */
     function keys(event: KeyboardEvent): void {
         if ((event.target as HTMLElement).closest('input, button, a')) return;
@@ -1141,13 +1160,21 @@
                     **class ではなく style で書く** — 理由は `MediaStack.svelte` (影の中へ移されると
                     Tailwind が届かず 0 幅になる。実機では d を押すと真っ黒になった)
                 -->
-                <div bind:this={mediaBox} style="position:absolute; inset:0; width:100%; height:100%;">
+                <!--
+                    `pointer-events:auto` は**データ放送を出している間のため**。
+                    重ねる先 (`live-data`) は押すのを邪魔しないように
+                    `pointer-events-none` にしてあり、BML はこの箱をその影の中へ
+                    移す。継いだままだと**絵を押しても止められなくなる**
+                -->
+                <div
+                    bind:this={mediaBox}
+                    style="position:absolute; inset:0; width:100%; height:100%; pointer-events:auto;"
+                >
                 <video
                     bind:this={video}
                     {src}
                     style="width:100%; height:100%; background:#000;"
                     playsinline
-                    onclick={press}
                     onplay={() => {
                         playing = true;
                         if (video !== null) follow(video);
