@@ -1042,10 +1042,10 @@ browser.destroy();
 
 | | |
 | --- | --- |
-| ファイル | **46個・1,237 KB** の TypeScript (置いたあとは 44個 — `js_interpreter.ts` を自前に差し替え、README を足したため。数え直すのは [vendor-web-bml.ts](../.github/vendor-web-bml.ts)) |
+| ファイル | 上流から写した **45個・1,246 KB** (置き場にあるのは 47個 — `js_interpreter.ts` を自前に差し替え、README を足したため。数え直すのは [vendor-web-bml.ts](../.github/vendor-web-bml.ts)) |
 | 大きいもの | `es2/index.ts` 200KB / `jis_to_unicode_map` 122KB / `es2_dom_binding` 122KB / `unicode_to_jis_map` 121KB / `interface/DOM` 90KB / `romsound_data` 84KB / `content` 68KB / `browser` 56KB |
 | 外から引くもの | **4つだけ** — `buffer` / `crc-32` / `css` (otya128 のフォーク) / `fast-xml-parser` |
-| ほかに要るもの | `JS-Interpreter/interpreter.js` (117KB) と `acorn.js` (68KB)。`public/default.css` (9KB) と `default_c.css` (5KB) |
+| ほかに要るもの | `JS-Interpreter/interpreter.js` (117KB) と `acorn.js` (68KB)。既定のスタイルは `client/default_css.ts` (9KB) と `default_c_css.ts` (5KB) — **上流が 2026-08 に `public/*.css` から TS へ移した** |
 
 **koa・react・hls.js・mpegts.js は引かない。** あれらは向こうの package.json に
 並んでいるだけで、`BMLBrowser` の木には入っていない (サーバと単体ページのもの)。
@@ -1120,12 +1120,14 @@ KosugiMaru を 4.4MB ぶん抱えている。積むかどうかは持ち込み�
 **局を変えたら作り直す。** 借りている側は一度に一つの放送しか持てない
 (カルーセルも覚えるものも局ごと) し、**前の局の文書が映像を掴んだまま**になる。
 
-Vite で組むために2つだけ面倒を見ている。**借りものは書き換えていない。**
+Vite で組むために面倒を見ているのは1つだけ。**借りものは書き換えていない。**
 
-- `import css from "../public/default.css"` を**文字列として**読ませる
-  (`vite.config.ts` の `denpa:bml-css`。向こうは webpack の `asset/source`)
 - `js_interpreter.ts` は写さず、denpa の1行に差し替える (向こうの README が
   「未使用」と言っている道で、素の ESM に `require` は無い)
+
+既定のスタイルを**文字列として**読ませる細工 (`vite.config.ts` の
+`denpa:bml-css`) は要らなくなった。**上流が `public/*.css` をやめて
+`client/default_css.ts` にした**ので、素の TypeScript として読める
 
 ### 5.7 双方向（通信系コンテンツ）プロキシ
 

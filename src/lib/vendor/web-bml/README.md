@@ -5,7 +5,7 @@
 するためで、denpa 側の都合は [ts/bml.ts](../../ts/bml.ts) と
 [DataBroadcast.svelte](../../components/player/DataBroadcast.svelte) に寄せてあります。
 
-置き方は**上流と同じ木の形**にしてあります (`client/` `es2/` `public/` `server/`)。
+置き方は**上流と同じ木の形**にしてあります (`client/` `es2/` `server/`)。
 向こうのファイルどうしが相対で指し合っているので、崩すと全部書き換えることになります。
 
 | | |
@@ -13,7 +13,7 @@
 | 出どころ | <https://github.com/otya128/web-bml> |
 | 版 | `3c075c9d4c71142b5ba7bf0f71aeb4dfed775f11` (2026-08-16) |
 | 許諾 | MIT ([LICENSE](LICENSE)) |
-| 持ってきたもの | `BMLBrowser` から辿れるもの **41ファイル・1.2MB** |
+| 持ってきたもの | `BMLBrowser` から辿れるもの **45ファイル・1.2MB** |
 | 写していないもの | `client/interpreter/js_interpreter.ts` (下の説明)、単体ページ・サーバ・自前再生 |
 
 ## 手を入れているのは2つだけ
@@ -129,14 +129,8 @@ react と hls.js を引き連れていて、denpa の画面とは形が違いま
 
 ## Vite で組むための細工
 
-借りものを書き換えずに済ませるため、denpa 側で2つ面倒を見ています。
+借りものを書き換えずに済ませるため、denpa 側で面倒を見ています。
 
-- **`import css from "../public/default.css"`** は**文字列として**読ませます。
-  向こうは webpack の `asset/source`、こちらは
-  [vite.config.ts](../../../../vite.config.ts) の `denpa:bml-css`。
-  **偽の名前は `.js` で終わらせます** — `.txt` にすると Rolldown が
-  *テキスト*と見なして、こちらが返した JS をもう一度文字列に包み、
-  **既定のスタイルが丸ごと効かなくなります** (そこに書いてあります)
 - **`js_interpreter.ts`** は写さず、denpa の1行に差し替えています (そのファイルの頭)
 - **`Buffer` を global に据えます。** 借りものは Node の `Buffer` 前提で書かれて
   いて、多くのファイルは `buffer` を import しますが、音声と**通信系コンテンツの
