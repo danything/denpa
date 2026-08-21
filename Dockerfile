@@ -3,7 +3,7 @@
 # ---------------------------------------------------------------------------
 # 依存の解決だけを分ける。ソースを変えてもここは再実行されない
 # ---------------------------------------------------------------------------
-FROM docker.io/oven/bun:1-debian AS deps
+FROM docker.io/oven/bun:1.4-slim AS deps
 WORKDIR /app
 COPY package.json bun.lock* ./
 RUN bun install
@@ -11,7 +11,7 @@ RUN bun install
 # ---------------------------------------------------------------------------
 # 開発用。compose からソースを bind mount して使う
 # ---------------------------------------------------------------------------
-FROM docker.io/oven/bun:1-debian AS dev
+FROM docker.io/oven/bun:1.4-slim AS dev
 WORKDIR /app
 ENV NODE_ENV=development
 COPY --from=deps /app/node_modules ./node_modules
@@ -186,7 +186,7 @@ RUN apt-get update && \
     apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # bun 本体。SvelteKit(adapter-node) の出力を bun で動かす
-COPY --from=docker.io/oven/bun:1-debian /usr/local/bin/bun /usr/local/bin/bun
+COPY --from=docker.io/oven/bun:1.4-slim /usr/local/bin/bun /usr/local/bin/bun
 
 COPY --from=ffmpeg /usr/local/bin/ffmpeg /usr/local/bin/ffprobe /usr/local/bin/
 COPY --from=ffmpeg /usr/local/lib/libaribcaption.* /usr/local/lib/
