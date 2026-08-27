@@ -9,6 +9,7 @@
     import { applyEncodeProgress, encodeLive } from '$lib/encode-live.svelte';
     import {
         badgeClass,
+        clipNote,
         cmNoteWorthShowing,
         date,
         dateTime,
@@ -539,6 +540,16 @@
                                         <div class="text-error mt-0.5 text-sm">{res.conflict_reason}</div>
                                     {/if}
                                     <!--
+                                        **譲ることになっているなら、録る前に言う。** 丸ごと
+                                        落とす代わりに入るところまで録るので (`server/conflict.ts`)、
+                                        黙っていると「録れたつもり」で頭が無い録画ができる
+                                    -->
+                                    {#if clipNote(res) !== null}
+                                        <div class="text-warning mt-0.5 text-sm" data-testid="reservation-clipped">
+                                            {clipNote(res)}
+                                        </div>
+                                    {/if}
+                                    <!--
                                         手動なら何も出さない。既定と違うときだけ言う。
                                         **録画の側では手動とも書く** — 録れたものは後から
                                         見返すので、「ルールではない」ことにも意味がある
@@ -829,6 +840,18 @@
                                         ],
                                         { serviceId: rec.service_id, has: rec.has_logo === 1 },
                                     )}
+                                    <!--
+                                        **欠けているなら、そう言う。** チューナーの取り合いで
+                                        頭か尻を譲った録画は、番組の一部が入っていない
+                                        (`server/conflict.ts` の「入るところまで録る」)。
+                                        尺だけ見ても「短い番組」と見分けが付かないので、
+                                        行に書く
+                                    -->
+                                    {#if clipNote(rec, true) !== null}
+                                        <div class="text-warning mt-0.5 text-sm" data-testid="recording-clipped">
+                                            {clipNote(rec, true)}
+                                        </div>
+                                    {/if}
                                     <!--
                                         **途中まで観たものは残りを出す。** 観た位置
                                         (`resume_ms`) は続きから始めるために持っていて、末尾まで

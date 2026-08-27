@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { clock, duration, durationMs, eta, percent, recordedDuration } from './format';
+import { clipNote, clock, duration, durationMs, eta, percent, recordedDuration } from './format';
 
 const MIN = 60_000;
 
@@ -103,5 +103,39 @@ describe('残り時間の見込み', () => {
         expect(eta(null)).toBe('');
         expect(eta(0)).toBe('');
         expect(eta(Number.NaN)).toBe('');
+    });
+});
+
+describe('欠けの表示', () => {
+    const base = { start_at: 0, end_at: 30 * MIN };
+
+    test('丸ごと録れるなら何も言わない', () => {
+        expect(clipNote({ ...base, record_from: null, record_to: null })).toBeNull();
+    });
+
+    /*
+     * **マージンだけ削られたぶんは言わない。** 隣り合う番組はマージンぶんが
+     * 必ず重なるので、そこまで数えるとほとんどの録画に札が付く
+     */
+    test('マージンが削られただけなら言わない', () => {
+        expect(clipNote({ ...base, record_from: 0, record_to: 30 * MIN })).toBeNull();
+    });
+
+    test('頭を譲ったら、どれだけ欠けるかを言う', () => {
+        expect(clipNote({ ...base, record_from: 15 * MIN, record_to: null })).toBe(
+            '頭 15分 が欠けます (チューナーの取り合い)',
+        );
+    });
+
+    test('録れたあとは言い方が変わる', () => {
+        expect(clipNote({ ...base, record_from: 15 * MIN, record_to: null }, true)).toBe(
+            '頭 15分 が欠けています (チューナーの取り合い)',
+        );
+    });
+
+    test('両方譲ったら両方言う', () => {
+        expect(clipNote({ ...base, record_from: 5 * MIN, record_to: 25 * MIN })).toBe(
+            '頭 5分 と 尻 5分 が欠けます (チューナーの取り合い)',
+        );
     });
 });

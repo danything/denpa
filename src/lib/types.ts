@@ -128,6 +128,14 @@ export interface Reservation {
     /** 録り始めた時刻。null なら**まだ始めていない**。二重に始めないための鍵でもある */
     started_at: number | null;
     conflict_reason: string | null;
+    /**
+     * **チューナーを掴んでよい区間** (前後マージン込み。null = 番組どおり丸ごと)。
+     *
+     * 取り合いが番組の一部でしか起きていないとき、そこだけ譲って残りを録る
+     * (`server/conflict.ts` の「入るところまで録る」)。番組の時刻は動かさない
+     */
+    record_from: number | null;
+    record_to: number | null;
     created_at: number;
     updated_at: number;
 }
@@ -154,6 +162,16 @@ export interface Recording {
     extended: string | null;
     start_at: number;
     end_at: number;
+    /**
+     * **実際に掴めた区間** (前後マージン込み。null = 番組どおり丸ごと)。予約から写す。
+     *
+     * チューナーの取り合いで頭か尻を譲ったときだけ入る
+     * (`server/conflict.ts` の「入るところまで録る」)。一覧で「頭が欠けている」と
+     * 言うのに要る — **番組の時刻 (`start_at`) は動かさない**ので、そちらとの差が
+     * 欠けた幅になる
+     */
+    record_from: number | null;
+    record_to: number | null;
     audio_type: number | null;
     ts_path: string | null;
     ts_size: number;

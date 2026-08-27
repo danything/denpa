@@ -45,6 +45,34 @@ export function duration(startAt: number, endAt: number): string {
 }
 
 /**
+ * **チューナーの取り合いで、番組のどこが欠けるか。** 欠けないなら null。
+ *
+ * 重なりが番組の一部でしか起きていないときは、そこだけ譲って残りを録ります
+ * ([server/conflict.ts](server/conflict.ts) の「入るところまで録る」)。
+ * 番組の時刻は動かさないので、**譲った区間との差がそのまま欠けた幅**です。
+ *
+ * **マージンだけ削られたぶんは何も言いません。** 隣り合う番組はマージンぶんが
+ * 必ず重なるので、そこまで数えると**ほとんどの録画に札が付いて意味を失います**
+ */
+export function clipNote(
+    item: {
+        start_at: number;
+        end_at: number;
+        record_from: number | null;
+        record_to: number | null;
+    },
+    done = false,
+): string | null {
+    const head = item.record_from !== null ? item.record_from - item.start_at : 0;
+    const tail = item.record_to !== null ? item.end_at - item.record_to : 0;
+    const parts: string[] = [];
+    if (head > 0) parts.push(`頭 ${durationMs(head)}`);
+    if (tail > 0) parts.push(`尻 ${durationMs(tail)}`);
+    if (parts.length === 0) return null;
+    return `${parts.join(' と ')} が${done ? '欠けています' : '欠けます'} (チューナーの取り合い)`;
+}
+
+/**
  * 再生位置の表示。**`12:34` / `1:02:03`。**
  *
  * `durationMs` は「27分」のように読み物の書き方をするもので、動かしている間の

@@ -1,6 +1,6 @@
 import type { Reservation } from '../types';
 import { config } from './config';
-import { assign } from './conflict';
+import { assign, whole } from './conflict';
 import { database, now, queryOne } from './db';
 import { emit } from './events';
 import { activeRecordingIds, startRecording, stopRecording } from './recorder';
@@ -63,8 +63,21 @@ export async function resolveConflicts(): Promise<{ accepted: number; rejected: 
         `UPDATE reservations SET state = 'conflict', conflict_reason = ?, updated_at = ?
          WHERE id = ? AND state = 'scheduled'`,
     );
+    /*
+     * **譲ったぶんを覚える。** 丸ごと入ったものは NULL に戻す —
+     * 前の回で削られていても、相手が消えれば丸ごと録れるようになる
+     */
+    const setWindow = database().prepare(
+        `UPDATE reservations SET record_from = ?, record_to = ?, updated_at = ?
+         WHERE id = ? AND (record_from IS NOT ? OR record_to IS NOT ?)`,
+    );
     const tx = database().transaction(() => {
-        for (const a of accepted) toScheduled.run(at, a.id);
+        for (const a of accepted) {
+            toScheduled.run(at, a.reservation.id);
+            const from = whole(a) ? null : a.from;
+            const to = whole(a) ? null : a.to;
+            setWindow.run(from, to, at, a.reservation.id, from, to);
+        }
         for (const r of rejected) toConflict.run(r.reason, at, r.reservation.id);
     });
     tx();
@@ -83,9 +96,14 @@ export async function tick(): Promise<void> {
     // 止めるほうを先にやる。次の番組が始まるときに前の録画がまだチューナーを
     // 掴んでいると、本数が足りない環境で後続が丸ごと録れない
     for (const id of activeRecordingIds()) {
-        const rec = queryOne<{ end_at: number }>('SELECT end_at FROM recordings WHERE id = ?', id);
+        const rec = queryOne<{ end_at: number; record_to: number | null }>(
+            'SELECT end_at, record_to FROM recordings WHERE id = ?',
+            id,
+        );
         if (rec === undefined) continue;
-        if (at >= rec.end_at + config.endMargin) stopRecording(id);
+        // 尻を譲っているならそこで離す (`record_to`)。次の録画がそこから掴む
+        const until = rec.record_to ?? rec.end_at + config.endMargin;
+        if (at >= until) stopRecording(id);
     }
 
     // 始まらないまま終わってしまった予約を片付ける。
@@ -111,10 +129,16 @@ export async function tick(): Promise<void> {
      * `SHUTDOWN_WAIT` (6時間) を過ぎれば `runtime.ts` が降ろす。そこで
      * 切れた録画は追記で開いてあるので、次の Pod が続きから録る
      */
+    /*
+     * **譲ったぶんがあれば、そちらを見る** (`record_from`)。チューナーの取り合いで
+     * 頭を譲った予約は、番組の始まりに起こしても掴めない — 相手がまだ掴んでいる
+     */
     const due = database()
         .prepare(
             `SELECT * FROM reservations
-             WHERE state = 'scheduled' AND started_at IS NULL AND start_at - ? <= ? AND end_at > ?`,
+             WHERE state = 'scheduled' AND started_at IS NULL
+               AND COALESCE(record_from, start_at - ?) <= ?
+               AND COALESCE(record_to, end_at) > ?`,
         )
         .all(config.startMargin, at, at) as Reservation[];
     // 5秒ごとに言わない。**始めるものがあるときだけ**

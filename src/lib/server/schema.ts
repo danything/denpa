@@ -64,6 +64,19 @@ export const ADDED_COLUMNS: { table: string; column: string; definition: string 
     // CM検出が何をしたか。一覧には出さず、録画の詳細で見せる
     { table: 'recordings', column: 'cm_note', definition: 'TEXT' },
     /*
+     * **チューナーを掴んでよい区間** (前後マージン込み。NULL = 番組どおり丸ごと)。
+     *
+     * 取り合いは番組まるごとで起きるとは限りません。重なっているのが頭の15分
+     * だけなら、そこを譲れば残りは録れます (`conflict.ts` の「入るところまで録る」)。
+     * 譲ったぶんは番組の時刻 (`start_at` / `end_at`) には触らず、ここに置きます —
+     * **番組は番組のまま**で、削られたのは録れた範囲のほうだからです
+     */
+    { table: 'reservations', column: 'record_from', definition: 'INTEGER' },
+    { table: 'reservations', column: 'record_to', definition: 'INTEGER' },
+    // 予約から写す。**一覧で「頭が欠けている」と言うのに要る**
+    { table: 'recordings', column: 'record_from', definition: 'INTEGER' },
+    { table: 'recordings', column: 'record_to', definition: 'INTEGER' },
+    /*
      * どこまで観たか (ms)。**続きから観るためだけの目印。**
      *
      * 端末に持たせず DB に置くのは、居間のタブレットで観たものを机の PC で

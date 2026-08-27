@@ -88,9 +88,9 @@ function createRecording(reservation: Reservation): Recording {
             // finished_at を入れないので、この行は「録画中」として読まれる
             `INSERT INTO recordings
                 (reservation_id, program_id, service_id, service_name, name, series, subtitle,
-                 description, extended, start_at, end_at, audio_type, genre_detail, audios,
-                 created_at, updated_at)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                 description, extended, start_at, end_at, record_from, record_to, audio_type,
+                 genre_detail, audios, created_at, updated_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         )
         .run(
             reservation.id,
@@ -104,6 +104,13 @@ function createRecording(reservation: Reservation): Recording {
             extended,
             reservation.start_at,
             reservation.end_at,
+            /*
+             * **譲った区間を写す。** チューナーの取り合いで頭か尻を譲ったときだけ
+             * 入っている (`conflict.ts` の「入るところまで録る」)。一覧で
+             * 「頭が欠けている」と言うのに要る
+             */
+            reservation.record_from,
+            reservation.record_to,
             program?.audio_type ?? null,
             // 番組表の行は24時間で消える。録り直しのときにも要るので写しておく
             program?.genre_detail ?? null,

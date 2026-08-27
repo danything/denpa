@@ -14,9 +14,33 @@ export interface Assignable {
     channel: string;
 }
 
+/**
+ * 採用したもの。**掴んでよい区間つき** (前後マージン込み)。
+ *
+ * 丸ごと入らないときは**入るところまで**にする (`assign` の「入るところまで録る」)。
+ * `from`/`to` が番組の時刻を食っていれば、その録画は頭か尻が欠ける
+ */
+export interface Accepted<T extends Assignable> {
+    reservation: T;
+    /** チューナーを掴んでよい始まり (マージン込み) */
+    from: number;
+    /** 掴んでよい終わり (マージン込み) */
+    to: number;
+}
+
 export interface AssignResult<T extends Assignable> {
-    accepted: T[];
+    accepted: Accepted<T>[];
     rejected: { reservation: T; reason: string }[];
+}
+
+/**
+ * 番組そのものが丸ごと入っているか。**マージンが削られただけなら「丸ごと」。**
+ *
+ * 隣り合う番組はマージンぶんだけ必ず重なるので、そこを削っただけで
+ * 「途中から」と言い出すと、**ほとんどの録画に札が付いて意味を失う**
+ */
+export function whole<T extends Assignable>(a: Accepted<T>): boolean {
+    return a.from <= a.reservation.start_at && a.to >= a.reservation.end_at;
 }
 
 /**
@@ -38,10 +62,23 @@ export interface Margins {
     end: number;
 }
 
-function overlaps(a: Assignable, b: Assignable, margins: Margins): boolean {
-    const x = window(a, margins);
-    const y = window(b, margins);
-    return x.from < y.to && y.from < x.to;
+/**
+ * その瞬間に掴んでいるチャンネル。**番組そのものと、マージンだけのぶんを分ける。**
+ *
+ * マージンは「番組が延びたときのための保険」なので、他所の**番組**とぶつかったら
+ * そちらを通す (`assign` の「番組はマージンに勝つ」)
+ */
+function holding<T extends Assignable>(rivals: Accepted<T>[], at: number) {
+    const all = new Set<string>();
+    const body = new Set<string>();
+    for (const rival of rivals) {
+        if (rival.from > at || at >= rival.to) continue;
+        all.add(rival.reservation.channel);
+        if (rival.reservation.start_at <= at && at < rival.reservation.end_at) {
+            body.add(rival.reservation.channel);
+        }
+    }
+    return { all, body };
 }
 
 /**
@@ -50,6 +87,29 @@ function overlaps(a: Assignable, b: Assignable, margins: Margins): boolean {
  * 同じ物理チャンネルの同時録画はエージェントが1本のチューナーで捌けるので、
  * 数えるのは「同時刻に開いている“異なるチャンネル”の数」。
  * capacity にその種別が無い場合は本数不明として無制限に扱う。
+ *
+ * ## 入るところまで録る
+ *
+ * **丸ごと入らないからといって、丸ごと捨てない。** 空いている一番長い区間を
+ * 見つけて、そこだけ掴みます。
+ *
+ * 取り合いは**番組まるごと**で起きるとは限りません。実機で出たのはこの形:
+ *
+ *     23:45 ────片田舎(テレ朝)──── 00:15
+ *     00:00 ────落第賢者(MX)────────────── 00:30
+ *     00:00 ────LV999(テレ東)───────────── 00:30
+ *
+ * 3チャンネル要るのは **00:00〜00:15 の15分だけ**で、そこを越えれば
+ * 2本で足ります。丸ごとで判断していた頃は LV999 が**まるまる録れません**でした。
+ *
+ * **切られるのは優先度の低いほうです。** 採るのが優先度の高い順なので、
+ * 席が埋まったところへ来るのは必ず低いほう — 上の例では落第賢者 (優先度1) が
+ * 00:15 から始まり、LV999 (優先度2) は丸ごと録れます。優先度が同じなら
+ * 開始が早いほう・古いほうが丸ごと残ります。
+ *
+ * **短くても録ります。** 5分でも残っていれば、何も無いよりまし
+ * (「録る価値のある長さ」を決めようとしましたが、番組しだいで意味が変わるので
+ * 置いていません)。
  */
 export function assign<T extends Assignable>(
     candidates: T[],
@@ -60,41 +120,85 @@ export function assign<T extends Assignable>(
         (a, b) => b.priority - a.priority || a.start_at - b.start_at || a.id - b.id,
     );
 
-    const accepted: T[] = [];
+    const accepted: Accepted<T>[] = [];
     const rejected: { reservation: T; reason: string }[] = [];
 
     for (const candidate of ordered) {
+        const mine = window(candidate, margins);
         const limit = capacity.get(candidate.type);
         if (limit === undefined) {
-            accepted.push(candidate);
+            accepted.push({ reservation: candidate, from: mine.from, to: mine.to });
             continue;
         }
 
-        const rivals = accepted.filter((a) => a.type === candidate.type && overlaps(a, candidate, margins));
-        const mine = window(candidate, margins);
-        // 同時本数の最大値は必ずどれかの区間の開始時点で現れるので、そこだけ調べれば足りる
-        const instants = [mine.from, ...rivals.map((r) => window(r, margins).from)].filter(
-            (t) => t >= mine.from && t < mine.to,
+        const rivals = accepted.filter(
+            (a) => a.reservation.type === candidate.type && a.from < mine.to && mine.from < a.to,
         );
-
-        let worst = 0;
-        for (const t of instants) {
-            const channels = new Set([candidate.channel]);
-            for (const rival of rivals) {
-                const other = window(rival, margins);
-                if (other.from <= t && t < other.to) channels.add(rival.channel);
+        /*
+         * **変わり目でだけ数える。** 同時本数が変わるのは、誰かが掴みはじめるか
+         * 離すかした瞬間だけ。その間は数が動かないので、区切りの間を1つの塊として
+         * 見れば足りる
+         */
+        const edges = new Set<number>([mine.from, mine.to]);
+        for (const rival of rivals) {
+            for (const edge of [rival.from, rival.to, rival.reservation.start_at, rival.reservation.end_at]) {
+                if (edge > mine.from && edge < mine.to) edges.add(edge);
             }
-            worst = Math.max(worst, channels.size);
+        }
+        for (const edge of [candidate.start_at, candidate.end_at]) {
+            if (edge > mine.from && edge < mine.to) edges.add(edge);
+        }
+        const points = [...edges].sort((a, b) => a - b);
+
+        // 入れる塊を繋いでいって、いちばん長いものを採る
+        let best: { from: number; to: number } | null = null;
+        let run: { from: number; to: number } | null = null;
+        let worst = 0;
+        /** マージンをどかしてもらった区間。あとで相手を縮める */
+        const pushed: number[] = [];
+        for (let i = 0; i + 1 < points.length; i++) {
+            const from = points[i];
+            const to = points[i + 1];
+            const here = holding(rivals, from);
+            const all = new Set([candidate.channel, ...here.all]);
+            const body = new Set([candidate.channel, ...here.body]);
+            worst = Math.max(worst, all.size);
+            /*
+             * **番組はマージンに勝つ。** この区間が候補の番組にかかっているなら、
+             * マージンだけで居座っている相手にはどいてもらう — あちらのマージンは
+             * 「延びたときのための保険」で、こちらは番組そのものだから。
+             * 候補のマージンぶんの区間では、相手のマージンを追い出さない
+             */
+            const inBody = from < candidate.end_at && candidate.start_at < to;
+            const fits = (inBody ? body : all).size <= limit;
+            if (fits) {
+                if (inBody && all.size > limit) pushed.push(from);
+                run = run === null ? { from, to } : { from: run.from, to };
+                if (best === null || run.to - run.from > best.to - best.from) best = { ...run };
+            } else {
+                run = null;
+            }
         }
 
-        if (worst > limit) {
+        if (best === null) {
             rejected.push({
                 reservation: candidate,
                 reason: `${candidate.type} のチューナー ${limit} 本に対し同時 ${worst} チャンネル必要`,
             });
-        } else {
-            accepted.push(candidate);
+            continue;
         }
+        const room = best;
+        for (const at of pushed) {
+            if (at < room.from || at >= room.to) continue;
+            for (const rival of rivals) {
+                if (rival.from > at || at >= rival.to) continue;
+                // 番組そのものが居るなら、どかせない (向こうのほうが優先度が高い)
+                if (rival.reservation.start_at <= at && at < rival.reservation.end_at) continue;
+                if (rival.reservation.end_at <= at) rival.to = Math.min(rival.to, at);
+                else rival.from = Math.max(rival.from, room.to);
+            }
+        }
+        accepted.push({ reservation: candidate, from: room.from, to: room.to });
     }
 
     return { accepted, rejected };
