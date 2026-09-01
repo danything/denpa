@@ -9,6 +9,10 @@
 # **名前と名前空間を変えると開けなくなります。** 既定の scope (strict) は
 # `denpa/denpa-oidc` を鍵の一部にしているためです。移すときは封をし直します。
 #
+# 値を変えるときは、直接編集せずこのリポジトリの GitHub Secrets (OIDC_ISSUER /
+# OIDC_CLIENT_ID / OIDC_CLIENT_SECRET / OIDC_GROUP) を更新して、
+# .github/workflows/reseal-secrets.yml を workflow_dispatch で実行する。
+#
 # 中身は4つ。値の意味は docs/auth.md:
 #
 # | 鍵 | |
