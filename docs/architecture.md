@@ -189,8 +189,8 @@ PreSync フックに置いています (`denpa-prepull`、中身は `/bin/true`)
 [k3s/application.yaml](../k3s/application.yaml) を見て、同じ chart にそこの
 `helm.valuesObject` (インライン) を重ねて当てています — **chart の使い方の実例**として
 読めます。bootstrap の ApplicationSet は `k3s/` を「素のマニフェストの置き場」として
-読むので、そこには Application (chart を指す) と、chart に持てないもの — SealedSecret
-(名前空間と名前が鍵に絡む) と、この置き場の設定 (`argocd.yaml`) — だけを素のまま
+読むので、そこには Application (chart を指す) と、chart に持たないもの — ExternalSecret
+(Infisical から Secret を作る、この家の事情) と、この置き場の設定 (`argocd.yaml`) — だけを素のまま
 置いています。Namespace は要りません (ApplicationSet の `CreateNamespace` が作る)。
 値を別ファイルにしないのも同じ理由 (kind が無いので ApplicationSet が読めない)。
 

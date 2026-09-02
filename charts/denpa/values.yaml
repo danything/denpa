@@ -45,7 +45,7 @@ denpa:
   pwaNames: ""
   # OIDC でのログイン (docs/auth.md)。**Secret の名前だけ渡す** — 中身
   # (issuer / client-id / client-secret / group) は chart の外で作る
-  # (このリポジトリ自身は SealedSecret `k3s/oidc-sealed.yaml`)。空なら OIDC 無し
+  # (このリポジトリ自身は ExternalSecret `k3s/oidc-secret.yaml`)。空なら OIDC 無し
   oidcSecretName: ""
   # 追加の環境変数 (src/lib/server/config.ts の一覧)。そのまま container.env に入る
   extraEnv: []

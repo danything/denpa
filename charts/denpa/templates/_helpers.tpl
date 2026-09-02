@@ -1,5 +1,5 @@
 {{/*
-名前は release 名を使わず固定にしてある。SealedSecret (`denpa-oidc`) や
+名前は release 名を使わず固定にしてある。ExternalSecret (`denpa-oidc`) や
 CI が書く image mark など、外から名前で参照されるものがあるため。
 複数の denpa を1つの名前空間に入れることは無い (チューナーは1台の物理機材)
 */}}

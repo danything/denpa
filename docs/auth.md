@@ -207,43 +207,27 @@ chart の `traefik.enabled`) は2つの名前を同じ Rule で denpa に届け�
 | `client-secret` | `auth/auth-secrets` の `oidc-client-secret` を写したもの |
 | `group` | `OAUTH2_PROXY_ALLOWED_GROUPS` と同じ |
 
-#### 封をして git に置いてあります
+#### 値は Infisical、Secret は ESO が作ります
 
-**`k3s/oidc-sealed.yaml` は SealedSecret です。** クラスタの中の鍵でしか開けないので、
-公開リポジトリに置いても中身は読めません。`kube-system` の
-`sealed-secrets-controller` がこれを見て Secret `denpa-oidc` を作ります。
+**`k3s/oidc-secret.yaml` は ExternalSecret です。** 値そのものは Infisical
+(https://il.doany.io、このクラスタでセルフホスト) のフォルダ `/denpa/denpa-oidc` にあり、
+External Secrets Operator がそれを読んで Secret `denpa-oidc` を作ります。Infisical 側の
+シークレット名がそのまま Secret のキー (`issuer` / `client-id` / ...) になります。
 
 そうする理由は、**手で作った Secret がどこにも書かれていない状態を無くす**ためです。
 クラスタを立て直したら、他は全部 ArgoCD が git から戻すのに、これだけ手順を
-思い出して打ち直すことになります。
+思い出して打ち直すことになります。git には「どこから取るか」だけがあって値は入っていません
+(以前は SealedSecret で暗号化して置いていましたが、kubeseal は廃止しました)。
 
-**名前と名前空間を変えると開けなくなります** (既定の scope が `denpa/denpa-oidc` を
-鍵の一部にしているため)。移すときは封をし直します。
-
-作り直すときは `~/bootstrap/kubeseal.sh` に通します。
-
-```sh
-umask 077
-cat > /tmp/oidc.yaml <<'YAML'
-apiVersion: v1
-kind: Secret
-metadata: { name: denpa-oidc, namespace: denpa }
-type: Opaque
-stringData:
-  issuer: "..."
-  client-id: "..."
-  client-secret: "..."
-  group: "..."
-YAML
-~/bootstrap/kubeseal.sh /tmp/oidc.yaml k3s/oidc-sealed.yaml && rm /tmp/oidc.yaml
-```
-
-**平文の Secret が先にあると、controller は上書きしません。** 自分が作ったもので
-なければ触らない作りです。引き取らせるには印を付けます (この構成では実施済み)。
+値を変えるときは Infisical の UI で `/denpa/denpa-oidc` を書き換えるだけです。ESO は
+`refreshInterval` (1h) ごとに取り直します。すぐ反映したいときは印を付けます。
 
 ```sh
-kubectl -n denpa annotate secret denpa-oidc sealedsecrets.bitnami.com/managed=true
+kubectl -n denpa annotate externalsecret denpa-oidc force-sync=$(date +%s) --overwrite
 ```
+
+denpa は Secret を環境変数で読むので、値を変えたら Pod を入れ替えます
+(`kubectl -n denpa rollout restart deployment/denpa`)。
 
 > **グループが載ってくるかは、入ってみるまで分かりません。** oauth2-proxy が
 > `ALLOWED_GROUPS` で絞れている以上、載っている見込みは高いのですが、あちらは
