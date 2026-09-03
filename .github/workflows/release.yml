@@ -38,6 +38,10 @@ permissions:
   # write は charts ジョブが Chart.yaml の版を main に書き戻すため
   contents: write
   packages: write
+  # 書き戻しは main へ直接 push せず、PR を出して自分でマージする (charts の最後の段)
+  pull-requests: write
+  # その PR に必須チェック (`check`) の status を自分で付けるため
+  statuses: write
 
 env:
   REGISTRY: ghcr.io
@@ -122,7 +126,8 @@ jobs:
   #
   # **Chart.yaml の版も main に書き戻す** (最後の段)。焼くときは `--version` で
   # 上書きするので動きには関係ないが、リポジトリの Chart.yaml が古い版のままだと
-  # 「どれが出ているのか」が読めない。build-and-deploy がイメージの印を書き戻すのと同じ手
+  # 「どれが出ているのか」が読めない。build-and-deploy がイメージの印を書き戻すのと
+  # 同じ手 (PR を出して自分でマージする。理由もそちらに書いてある)
   charts:
     runs-on: ubuntu-latest
     steps:
@@ -165,32 +170,29 @@ jobs:
             helm push "$tgz" "oci://${{ env.REGISTRY }}/${{ github.repository_owner }}/charts"
           done
 
-      # main の先頭に版を書いて push する。タグを付けたコミットではなく **いまの main** に
-      # 書く (その間に進んでいても、版はリリースしたものが最新なので同じ)。
-      # 手で回した (workflow_dispatch) ときも同じ — 貼り直しなら版も同じ
-      - name: Write the version back to Chart.yaml
+      # main の先頭に版を書く。タグを付けたコミットではなく **いまの main** から枝を
+      # 切る (その間に進んでいても、版はリリースしたものが最新なので同じ)。
+      # 手で回した (workflow_dispatch) ときも同じ — 貼り直しなら版も同じ。
+      #
+      # **main へは直接 push しない** (必須チェックで守ってあり、bot のトークンも
+      # 素通しにならない)。PR を出し、`check` の status を自分で付けて、自分でマージする。
+      # 中身は Chart.yaml の版だけで、確かめるものは無い。手順と理由は
+      # .github/bump-pr.sh (build-and-deploy と共通)
+      - name: Open and self-merge a PR that writes the version back to Chart.yaml
         if: steps.ver.outputs.skip != 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -eu
           v="${{ steps.ver.outputs.version }}"
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          for i in 1 2 3 4 5; do
-            git fetch origin main
-            git checkout -B main origin/main
-            for chart in charts/denpa charts/denpa-agent; do
-              sed -i -E "s#^version: .*#version: ${v}#; s#^appVersion: .*#appVersion: \"${v}\"#" "$chart/Chart.yaml"
-            done
-            git add charts/*/Chart.yaml
-            if git diff --cached --quiet; then
-              echo "Chart.yaml はもう ${v}"
-              exit 0
-            fi
-            git commit -m "chore: chart の版を ${v} に合わせる [skip ci]"
-            if git push origin main; then
-              exit 0
-            fi
-            echo "push rejected, retrying from the new origin/main (${i})"
+
+          . .github/bump-pr.sh
+          bump_begin bump-chart-version
+          for chart in charts/denpa charts/denpa-agent; do
+            sed -i -E "s#^version: .*#version: ${v}#; s#^appVersion: .*#appVersion: \"${v}\"#" "$chart/Chart.yaml"
           done
-          echo "failed to push Chart.yaml after retries"
-          exit 1
+          bump_finish bump-chart-version \
+            "chore: chart の版を ${v} に合わせる [skip ci]" \
+            "リリース ${v} の版を Chart.yaml に書き戻すだけ。下の check が付いたら自分でマージする" \
+            "Chart.yaml の版だけ。chart はこの run が出した" \
+            charts/*/Chart.yaml

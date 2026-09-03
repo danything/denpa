@@ -20,7 +20,7 @@ on:
   workflow_dispatch: {}
 
 # この workflow が書き換えるのは k3s/application.yaml だけで、そのパスは上の
-# トリガーに入っていないので、下の書き換え→push が自分をもう一度動かすことは無い
+# トリガーに入っていないので、下の書き換え→PR→マージが自分をもう一度動かすことは無い
 concurrency:
   group: build-and-deploy-${{ github.ref }}
   cancel-in-progress: false
@@ -28,6 +28,10 @@ concurrency:
 permissions:
   contents: write
   packages: write
+  # 印の書き換えは main へ直接 push せず、PR を出して自分でマージする (最後の段)
+  pull-requests: write
+  # その PR に必須チェック (`check`) の status を自分で付けるため
+  statuses: write
 
 env:
   REGISTRY: ghcr.io
@@ -96,12 +100,14 @@ jobs:
       # 変わっていない」ように見えて古い Pod が残る。Pod の注釈を書き換えれば
       # 入れ替わり、`imagePullPolicy: Always` で新しい develop を引く。
       #
-      # 書き換えとpushを1つにまとめてある。
-      # actions/checkout はブランチ先端ではなく「トリガーしたコミット」を取るので、
-      # 2つのrunが重なると後発は先発のタグ更新を知らないまま同じ行を書き換えてしまう。
-      # rebase では同じ行の衝突を解けないため、毎回 origin/main に戻してから
-      # 書き換え直す(sedはTAGから一意に決まるので何度やっても同じ結果になる)。
-      - name: Rewrite image marks and push
+      # **main へは直接 push しない** (必須チェックで守ってあり、bot のトークンも
+      # 素通しにならない)。印を書き換えた PR を出して、`check` の status を自分で付けて、
+      # 自分でマージする。手順と理由は .github/bump-pr.sh (release と共通)
+      - name: Open and self-merge a PR that rewrites the image marks
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          AGENT_TAG: ${{ steps.tag.outputs.agent }}
+          DENPA_TAG: ${{ steps.tag.outputs.denpa }}
         run: |
           set -eu
           # 印を書く先は k3s/application.yaml の helm.valuesObject の中 (imageMarks.agent /
@@ -109,27 +115,12 @@ jobs:
           # values はインラインなのでインデントは深い — 行頭の空白は幾つでも許す
           FILES="k3s/application.yaml"
 
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-
-          for i in 1 2 3 4 5; do
-            git fetch origin main
-            git reset --hard origin/main
-
-            sed -i -E "s#^( +agent:) sha-.*#\1 ${{ steps.tag.outputs.agent }}#" ${FILES}
-            sed -i -E "s#^( +denpa:) sha-.*#\1 ${{ steps.tag.outputs.denpa }}#" ${FILES}
-
-            git add ${FILES}
-            if git diff --cached --quiet; then
-              echo "no manifest changes to commit"
-              exit 0
-            fi
-            git commit -m "chore: bump image marks [skip ci]"
-
-            if git push; then
-              exit 0
-            fi
-            echo "push rejected, retrying from the new origin/main (${i})"
-          done
-          echo "failed to push manifest updates after retries"
-          exit 1
+          . .github/bump-pr.sh
+          bump_begin bump-image-marks
+          sed -i -E "s#^( +agent:) sha-.*#\1 ${AGENT_TAG}#" ${FILES}
+          sed -i -E "s#^( +denpa:) sha-.*#\1 ${DENPA_TAG}#" ${FILES}
+          bump_finish bump-image-marks \
+            "chore: bump image marks [skip ci]" \
+            "agent: ${AGENT_TAG} / denpa: ${DENPA_TAG}。k3s の印を書き換えるだけ。下の check が付いたら自分でマージする" \
+            "k3s の印だけ。イメージはこの run が焼いた" \
+            ${FILES}
