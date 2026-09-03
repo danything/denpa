@@ -135,6 +135,30 @@ test.describe('録画を観る', () => {
     });
 
     /**
+     * **Ctrl+C は字幕の切り替えではなく、コピーのまま。** 観ながら番組名や
+     * URL を写せなかった (キーの `c` が修飾キーを見ずに横取りして
+     * `preventDefault` していた)。素の `c` だけが字幕を切り替えること
+     */
+    test('修飾キー付きのショートカットは横取りしない', async ({ page, request }) => {
+        test.setTimeout(180_000);
+        const id = await watchable(page, request);
+        await goto(page, `/watch/${id}`);
+
+        const button = page.getByTestId('watch-captions');
+        await expect(button).toHaveAttribute('aria-pressed', 'true');
+
+        // コピー (Ctrl / Cmd) は素通し。字幕は出たまま。**1回ずつ見る** (2回で元に戻ると見逃す)
+        await page.keyboard.press('Control+c');
+        await expect(button).toHaveAttribute('aria-pressed', 'true');
+        await page.keyboard.press('Meta+c');
+        await expect(button).toHaveAttribute('aria-pressed', 'true');
+
+        // 素の c は今までどおり字幕を切り替える
+        await page.keyboard.press('c');
+        await expect(button).toHaveAttribute('aria-pressed', 'false');
+    });
+
+    /**
      * **切り抜きは字幕ごと。** 貼れるかどうか (クリップボード) は繋ぎ次第なので、
      * ここで見るのは「押せて、断られても落とすほうに倒れる」ところまで
      */
