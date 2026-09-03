@@ -7,11 +7,10 @@ on:
       - 'k3s/**'
       - 'docs/**'
       - '**.md'
+  # PR はパスで絞らない。main は `check` を必須にして守っているので、絞ると
+  # docs だけの PR に check が付かず、いつまでもマージできない
+  # (paths-ignore で飛ばした workflow の check は「保留」のまま残る仕様)
   pull_request:
-    paths-ignore:
-      - 'k3s/**'
-      - 'docs/**'
-      - '**.md'
   workflow_dispatch: {}
 
 concurrency:
