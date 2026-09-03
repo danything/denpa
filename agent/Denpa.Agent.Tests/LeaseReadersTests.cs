@@ -1,5 +1,5 @@
 using Denpa.Agent;
-using Xunit;
+using System.Threading.Tasks;
 
 namespace Denpa.Agent.Tests;
 
@@ -16,47 +16,47 @@ public class LeaseReadersTests
 {
     private static Lease Make() => new(0, "GR", "T27");
 
-    [Fact]
-    public void 誰も来ていなければ読み手なし()
+    [Test]
+    public async Task 誰も来ていなければ読み手なし()
     {
-        Assert.Equal("読み手なし", Make().Readers());
+        await Assert.That(Make().Readers()).IsEqualTo("読み手なし");
     }
 
-    [Fact]
-    public void 抜けたあとでも名乗る()
+    [Test]
+    public async Task 抜けたあとでも名乗る()
     {
         var lease = Make();
         lease.Saw("live GR/T27");
         // 読み手はもう居ない (Sinks は空のまま) が、居たことは残っている
-        Assert.Equal("live GR/T27", lease.Readers());
+        await Assert.That(lease.Readers()).IsEqualTo("live GR/T27");
     }
 
-    [Fact]
-    public void 読んだら忘れる()
+    [Test]
+    public async Task 読んだら忘れる()
     {
         var lease = Make();
         lease.Saw("epg T27");
-        Assert.Equal("epg T27", lease.Readers());
+        await Assert.That(lease.Readers()).IsEqualTo("epg T27");
         // 次の報告まで誰も来なければ、そこは本当に読み手なし
-        Assert.Equal("読み手なし", lease.Readers());
+        await Assert.That(lease.Readers()).IsEqualTo("読み手なし");
     }
 
-    [Fact]
-    public void 相乗りは並べる()
+    [Test]
+    public async Task 相乗りは並べる()
     {
         var lease = Make();
         lease.Saw("logo GR/T27");
         lease.Saw("epg T27");
         // 並びは決まった順にする。回すたびに入れ替わると差分が読めない
-        Assert.Equal("epg T27・logo GR/T27", lease.Readers());
+        await Assert.That(lease.Readers()).IsEqualTo("epg T27・logo GR/T27");
     }
 
-    [Fact]
-    public void 同じ読み手は一度だけ()
+    [Test]
+    public async Task 同じ読み手は一度だけ()
     {
         var lease = Make();
         lease.Saw("live GR/T27");
         lease.Saw("live GR/T27");
-        Assert.Equal("live GR/T27", lease.Readers());
+        await Assert.That(lease.Readers()).IsEqualTo("live GR/T27");
     }
 }

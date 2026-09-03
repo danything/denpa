@@ -2,7 +2,7 @@ using System.Diagnostics;
 using System.Runtime.InteropServices;
 using Denpa.Agent;
 using Microsoft.Win32.SafeHandles;
-using Xunit;
+using System.Threading.Tasks;
 
 namespace Denpa.Agent.Tests;
 
@@ -26,13 +26,14 @@ public partial class DeviceStreamTests
     private static (DeviceStream Stream, SafeFileHandle Write) Silent()
     {
         Span<int> fds = stackalloc int[2];
-        Assert.Equal(0, Pipe(fds));
+        // Assert は await が要るので、stackalloc を跨げないここでは素直に投げる
+        if (Pipe(fds) != 0) throw new InvalidOperationException("pipe() に失敗");
         return (new DeviceStream(new SafeFileHandle(fds[0], ownsHandle: true)),
             new SafeFileHandle(fds[1], ownsHandle: true));
     }
 
-    [Fact]
-    public void 降りると言えば_何も来なくても戻る()
+    [Test]
+    public async Task 降りると言えば_何も来なくても戻る()
     {
         var (stream, write) = Silent();
         using (stream)
@@ -44,8 +45,8 @@ public partial class DeviceStreamTests
             var read = stream.Read(buffer, 0, buffer.Length, () => true);
             clock.Stop();
 
-            Assert.Equal(0, read);
-            Assert.True(clock.ElapsedMilliseconds < 1000, $"{clock.ElapsedMilliseconds}ms 掛かった");
+            await Assert.That(read).IsEqualTo(0);
+            await Assert.That(clock.ElapsedMilliseconds < 1000).IsTrue().Because($"{clock.ElapsedMilliseconds}ms 掛かった");
         }
     }
 
@@ -55,7 +56,7 @@ public partial class DeviceStreamTests
      * 何も来ないからといって勝手に終わると、電波が一瞬途切れただけで録画が
      * 落ちることになる。実際に来ていないだけなら待ち続けるのが正しい
      */
-    [Fact]
+    [Test]
     public async Task 降りると言わなければ_来るまで待つ()
     {
         var (stream, write) = Silent();
@@ -65,13 +66,13 @@ public partial class DeviceStreamTests
             var buffer = new byte[188];
             var reading = Task.Run(() => stream.Read(buffer, 0, buffer.Length, () => false));
 
-            var waited = await Task.WhenAny(reading, Task.Delay(TimeSpan.FromMilliseconds(600), TestContext.Current.CancellationToken));
-            Assert.NotSame(reading, waited);
+            var waited = await Task.WhenAny(reading, Task.Delay(TimeSpan.FromMilliseconds(600), TestContext.Current!.Execution.CancellationToken));
+            await Assert.That(waited).IsNotSameReferenceAs(reading);
 
             // 書けば返ってくる
             var payload = new byte[] { 0x47, 0x01, 0x02 };
-            Assert.Equal(payload.Length, Write(write, payload));
-            Assert.Equal(payload.Length, await reading.WaitAsync(TimeSpan.FromSeconds(2), TestContext.Current.CancellationToken));
+            await Assert.That(Write(write, payload)).IsEqualTo(payload.Length);
+            await Assert.That(await reading.WaitAsync(TimeSpan.FromSeconds(2), TestContext.Current!.Execution.CancellationToken)).IsEqualTo(payload.Length);
         }
     }
 

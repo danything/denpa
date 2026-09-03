@@ -1,5 +1,5 @@
 using Denpa.Agent;
-using Xunit;
+using System.Threading.Tasks;
 
 namespace Denpa.Agent.Tests;
 
@@ -14,136 +14,136 @@ namespace Denpa.Agent.Tests;
 
 public class ChannelTableTests
 {
-    [Fact]
-    public void 地上波は_Hz_で数える()
+    [Test]
+    public async Task 地上波は_Hz_で数える()
     {
         // UHF 13ch = 473.142857 MHz。1/7 MHz のずれは放送のとおりで、丸めない
-        Assert.Equal(473_142_857u, ChannelTable.Parse("T13")!.Frequency);
-        Assert.Equal(557_142_857u, ChannelTable.Parse("T27")!.Frequency);
-        Assert.Equal(767_142_857u, ChannelTable.Parse("T62")!.Frequency);
+        await Assert.That(ChannelTable.Parse("T13")!.Frequency).IsEqualTo(473_142_857u);
+        await Assert.That(ChannelTable.Parse("T27")!.Frequency).IsEqualTo(557_142_857u);
+        await Assert.That(ChannelTable.Parse("T62")!.Frequency).IsEqualTo(767_142_857u);
     }
 
-    [Fact]
-    public void 衛星は_kHz_で数える()
+    [Test]
+    public async Task 衛星は_kHz_で数える()
     {
         /*
          * DVB API の決まりで、**地上波は Hz、衛星は kHz**。取り違えても
          * ioctl は通るので、ここを間違えると「同期しない」としか見えない
          */
         var bs = ChannelTable.Parse("BS01_0")!;
-        Assert.Equal(ChannelTable.SysIsdbs, bs.Delivery);
-        Assert.Equal(1_049_480u, bs.Frequency);
+        await Assert.That(bs.Delivery).IsEqualTo(ChannelTable.SysIsdbs);
+        await Assert.That(bs.Frequency).IsEqualTo(1_049_480u);
 
         // 中継は 38.36 MHz 刻み。BS03 は BS01 の1つ隣
-        Assert.Equal(1_087_840u, ChannelTable.Parse("BS03_0")!.Frequency);
-        Assert.Equal(1_471_440u, ChannelTable.Parse("BS23_0")!.Frequency);
+        await Assert.That(ChannelTable.Parse("BS03_0")!.Frequency).IsEqualTo(1_087_840u);
+        await Assert.That(ChannelTable.Parse("BS23_0")!.Frequency).IsEqualTo(1_471_440u);
 
         // CS は 40 MHz 刻みで、BS とは別の並び
-        Assert.Equal(1_613_000u, ChannelTable.Parse("CS02")!.Frequency);
-        Assert.Equal(2_053_000u, ChannelTable.Parse("CS24")!.Frequency);
+        await Assert.That(ChannelTable.Parse("CS02")!.Frequency).IsEqualTo(1_613_000u);
+        await Assert.That(ChannelTable.Parse("CS24")!.Frequency).IsEqualTo(2_053_000u);
     }
 
-    [Fact]
-    public void 同じ周波数に相乗りしている本数を覚えておく()
+    [Test]
+    public async Task 同じ周波数に相乗りしている本数を覚えておく()
     {
         // BS01_0 と BS01_1 は**同じ周波数**。開いたままなら選局し直さずに済む
-        Assert.Equal(ChannelTable.Parse("BS01_0")!.Frequency, ChannelTable.Parse("BS01_3")!.Frequency);
-        Assert.Equal(0, ChannelTable.Parse("BS01_0")!.RelativeTs);
-        Assert.Equal(3, ChannelTable.Parse("BS01_3")!.RelativeTs);
+        await Assert.That(ChannelTable.Parse("BS01_3")!.Frequency).IsEqualTo(ChannelTable.Parse("BS01_0")!.Frequency);
+        await Assert.That(ChannelTable.Parse("BS01_0")!.RelativeTs).IsEqualTo(0);
+        await Assert.That(ChannelTable.Parse("BS01_3")!.RelativeTs).IsEqualTo(3);
     }
 
-    [Fact]
-    public void px4_の番号は別の数え方()
+    [Test]
+    public async Task px4_の番号は別の数え方()
     {
         // chardev は周波数ではなく表の番号で言う。地上波は物理チャンネル+50
-        Assert.Equal(68, ChannelTable.Parse("T18")!.FreqNo);
+        await Assert.That(ChannelTable.Parse("T18")!.FreqNo).IsEqualTo(68);
         // 衛星はスロットが相対TS番号そのもの
-        Assert.Equal((0, 2), (ChannelTable.Parse("BS01_2")!.FreqNo, ChannelTable.Parse("BS01_2")!.Slot));
-        Assert.Equal(11, ChannelTable.Parse("BS23_0")!.FreqNo);
-        Assert.Equal(12, ChannelTable.Parse("CS02")!.FreqNo);
-        Assert.Equal(23, ChannelTable.Parse("CS24")!.FreqNo);
+        await Assert.That((ChannelTable.Parse("BS01_2")!.FreqNo, ChannelTable.Parse("BS01_2")!.Slot)).IsEqualTo((0, 2));
+        await Assert.That(ChannelTable.Parse("BS23_0")!.FreqNo).IsEqualTo(11);
+        await Assert.That(ChannelTable.Parse("CS02")!.FreqNo).IsEqualTo(12);
+        await Assert.That(ChannelTable.Parse("CS24")!.FreqNo).IsEqualTo(23);
     }
 
-    [Fact]
-    public void ゼロ詰めは同じものとして読む()
+    [Test]
+    public async Task ゼロ詰めは同じものとして読む()
     {
-        Assert.Equal(ChannelTable.Parse("BS1_0")!.Frequency, ChannelTable.Parse("BS01_0")!.Frequency);
+        await Assert.That(ChannelTable.Parse("BS01_0")!.Frequency).IsEqualTo(ChannelTable.Parse("BS1_0")!.Frequency);
     }
 
-    [Theory]
-    [InlineData("T12")]      // UHF は 13 から
-    [InlineData("T63")]      // 62 まで
-    [InlineData("BS02_0")]   // BS は奇数だけ
-    [InlineData("BS25_0")]
-    [InlineData("BS19_8")]   // 相乗りは 8 本まで
-    [InlineData("CS01")]     // CS は偶数だけ
-    [InlineData("CS26")]
-    [InlineData("")]
-    [InlineData("T")]
-    [InlineData("SKY1")]
-    public void 受け取らない名前(string name)
+    [Test]
+    [Arguments("T12")]      // UHF は 13 から
+    [Arguments("T63")]      // 62 まで
+    [Arguments("BS02_0")]   // BS は奇数だけ
+    [Arguments("BS25_0")]
+    [Arguments("BS19_8")]   // 相乗りは 8 本まで
+    [Arguments("CS01")]     // CS は偶数だけ
+    [Arguments("CS26")]
+    [Arguments("")]
+    [Arguments("T")]
+    [Arguments("SKY1")]
+    public async Task 受け取らない名前(string name)
     {
-        Assert.Null(ChannelTable.Parse(name));
+        await Assert.That(ChannelTable.Parse(name)).IsNull();
     }
 
-    [Theory]
-    [InlineData("BS07_0")]
-    [InlineData("BS17_0")]
-    public void ISDB_S3_の中継は受け取らない(string name)
+    [Test]
+    [Arguments("BS07_0")]
+    [Arguments("BS17_0")]
+    public async Task ISDB_S3_の中継は受け取らない(string name)
     {
         // BS-7 と BS-17 は 4K/8K。この復調器では受からないので、総当たりの
         // スキャンでも試させない (実機に投げれば「同期しない」で5秒溶ける)
-        Assert.Null(ChannelTable.Parse(name));
+        await Assert.That(ChannelTable.Parse(name)).IsNull();
     }
 }
 
 public class StreamIdTests
 {
-    [Fact]
-    public void 地上波は選り分けない()
+    [Test]
+    public async Task 地上波は選り分けない()
     {
         var gr = ChannelTable.Parse("T27")!;
-        Assert.Equal(ChannelTable.NoStreamId, ChannelTable.StreamId("T27", gr, _ => 1234));
+        await Assert.That(ChannelTable.StreamId("T27", gr, _ => 1234)).IsEqualTo(ChannelTable.NoStreamId);
     }
 
-    [Fact]
-    public void CS_も選り分けない()
+    [Test]
+    public async Task CS_も選り分けない()
     {
         // 1つの中継に1本しか乗っていない
         var cs = ChannelTable.Parse("CS02")!;
-        Assert.Equal(ChannelTable.NoStreamId, ChannelTable.StreamId("CS02", cs, null));
+        await Assert.That(ChannelTable.StreamId("CS02", cs, null)).IsEqualTo(ChannelTable.NoStreamId);
     }
 
-    [Fact]
-    public void スキャン結果が焼き込んだ表に勝つ()
+    [Test]
+    public async Task スキャン結果が焼き込んだ表に勝つ()
     {
         // BS は再編がある。1度でもスキャンしていれば、そちらが必ず新しい
         var bs = ChannelTable.Parse("BS15_0")!;
-        Assert.Equal(16625u, ChannelTable.StreamId("BS15_0", bs, null));
-        Assert.Equal(9999u, ChannelTable.StreamId("BS15_0", bs, _ => 9999));
+        await Assert.That(ChannelTable.StreamId("BS15_0", bs, null)).IsEqualTo(16625u);
+        await Assert.That(ChannelTable.StreamId("BS15_0", bs, _ => 9999)).IsEqualTo(9999u);
     }
 
-    [Fact]
-    public void 表にも無ければ選り分けない()
+    [Test]
+    public async Task 表にも無ければ選り分けない()
     {
         // 焼き込んだ表に無い相乗り。TSID を指定せずに掴んで、あとは復調器任せ
         var bs = ChannelTable.Parse("BS15_7")!;
-        Assert.Equal(ChannelTable.NoStreamId, ChannelTable.StreamId("BS15_7", bs, _ => null));
+        await Assert.That(ChannelTable.StreamId("BS15_7", bs, _ => null)).IsEqualTo(ChannelTable.NoStreamId);
     }
 }
 
 public class DvbDeviceTests
 {
-    [Fact]
-    public void frontend_から_demux_と_dvr_を組み立てる()
+    [Test]
+    public async Task frontend_から_demux_と_dvr_を組み立てる()
     {
         var (adapter, number) = DvbTuner.Split("/dev/dvb/adapter1/frontend0");
 
-        Assert.Equal("/dev/dvb/adapter1", adapter);
-        Assert.Equal("0", number);
+        await Assert.That(adapter).IsEqualTo("/dev/dvb/adapter1");
+        await Assert.That(number).IsEqualTo("0");
     }
 
-    [Fact]
+    [Test]
     public void DVB_でないデバイスは受け取らない()
     {
         Assert.Throws<ArgumentException>(() => DvbTuner.Split("/dev/px4video0"));
