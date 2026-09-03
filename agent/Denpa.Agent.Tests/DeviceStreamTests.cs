@@ -66,13 +66,13 @@ public partial class DeviceStreamTests
             var buffer = new byte[188];
             var reading = Task.Run(() => stream.Read(buffer, 0, buffer.Length, () => false));
 
-            var waited = await Task.WhenAny(reading, Task.Delay(TimeSpan.FromMilliseconds(600), CancellationToken.None));
+            var waited = await Task.WhenAny(reading, Task.Delay(TimeSpan.FromMilliseconds(600), TestContext.Current!.Execution.CancellationToken));
             await Assert.That(waited).IsNotSameReferenceAs(reading);
 
             // 書けば返ってくる
             var payload = new byte[] { 0x47, 0x01, 0x02 };
             await Assert.That(Write(write, payload)).IsEqualTo(payload.Length);
-            await Assert.That(await reading.WaitAsync(TimeSpan.FromSeconds(2), CancellationToken.None)).IsEqualTo(payload.Length);
+            await Assert.That(await reading.WaitAsync(TimeSpan.FromSeconds(2), TestContext.Current!.Execution.CancellationToken)).IsEqualTo(payload.Length);
         }
     }
 
