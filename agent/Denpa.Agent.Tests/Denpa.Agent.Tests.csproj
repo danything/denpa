@@ -1,8 +1,8 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
     <PropertyGroup>
-        <!-- xunit.v3 のテストは自分で実行できるアプリ。前は Microsoft.NET.Test.Sdk が
-             暗黙にやっていたが、外したので明示する (無いとビルドが断る) -->
+        <!-- TUnit のテストは自分で実行できるアプリ (Microsoft.Testing.Platform)。
+             Microsoft.NET.Test.Sdk は持たない (TUnit の検出を壊す) -->
         <OutputType>Exe</OutputType>
         <TargetFramework>net10.0</TargetFramework>
         <Nullable>enable</Nullable>
@@ -29,8 +29,9 @@
     <ItemGroup>
         <!-- MTP (global.json の test.runner) で回すので、旧 VSTest 系
              (Microsoft.NET.Test.Sdk / xunit.runner.visualstudio) は持たない。
-             xunit.v3 だけで MTP のテストアプリとして完結する -->
-        <PackageReference Include="xunit.v3" Version="4.0.0" />
+             TUnit だけで MTP のテストアプリとして完結する。TUnit はソース
+             ジェネレータで動くので、本体と同じく Native AOT でも通る -->
+        <PackageReference Include="TUnit" Version="1.65.68" />
     </ItemGroup>
 
 </Project>
