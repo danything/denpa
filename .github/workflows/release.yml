@@ -176,7 +176,8 @@ jobs:
       #
       # **main へは直接 push しない** (必須チェックで守ってあり、bot のトークンも
       # 素通しにならない)。PR を出し、`check` の status を自分で付けて、自分でマージする。
-      # 中身は Chart.yaml の版だけで、確かめるものは無い (build-and-deploy と同じ手)
+      # 中身は Chart.yaml の版だけで、確かめるものは無い。手順と理由は
+      # .github/bump-pr.sh (build-and-deploy と共通)
       - name: Open and self-merge a PR that writes the version back to Chart.yaml
         if: steps.ver.outputs.skip != 'true'
         env:
@@ -184,34 +185,14 @@ jobs:
         run: |
           set -eu
           v="${{ steps.ver.outputs.version }}"
-          branch="bump-chart-version"
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
 
-          git fetch origin main
-          git checkout -B "$branch" origin/main
+          . .github/bump-pr.sh
+          bump_begin bump-chart-version
           for chart in charts/denpa charts/denpa-agent; do
             sed -i -E "s#^version: .*#version: ${v}#; s#^appVersion: .*#appVersion: \"${v}\"#" "$chart/Chart.yaml"
           done
-          git add charts/*/Chart.yaml
-          if git diff --cached --quiet; then
-            echo "Chart.yaml はもう ${v}"
-            exit 0
-          fi
-          # squash でこのまま main のコミットになる。[skip ci] は前の直接 push と同じ
-          title="chore: chart の版を ${v} に合わせる [skip ci]"
-          body="リリース ${v} の版を Chart.yaml に書き戻すだけ。下の check が付いたら自分でマージする"
-          git commit -m "$title"
-          git push --force origin "$branch"
-
-          gh pr create --base main --head "$branch" --title "$title" --body "$body" \
-            || gh pr edit "$branch" --title "$title" --body "$body"
-
-          gh api "repos/${GITHUB_REPOSITORY}/statuses/$(git rev-parse HEAD)" \
-            -f state=success \
-            -f context=check \
-            -f description="Chart.yaml の版だけ。chart はこの run が出した" \
-            -f target_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
-
-          gh pr merge "$branch" --squash --subject "$title" --body "$body" \
-            || gh pr merge "$branch" --auto --squash --subject "$title" --body "$body"
+          bump_finish bump-chart-version \
+            "chore: chart の版を ${v} に合わせる [skip ci]" \
+            "リリース ${v} の版を Chart.yaml に書き戻すだけ。下の check が付いたら自分でマージする" \
+            "Chart.yaml の版だけ。chart はこの run が出した" \
+            charts/*/Chart.yaml

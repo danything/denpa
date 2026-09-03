@@ -100,22 +100,9 @@ jobs:
       # 変わっていない」ように見えて古い Pod が残る。Pod の注釈を書き換えれば
       # 入れ替わり、`imagePullPolicy: Always` で新しい develop を引く。
       #
-      # **main へは直接 push しない。** main は必須チェック (`check`) で守ってあり、
-      # 手元から push できないのと同じで、bot のトークンも素通しにはならない
-      # (GITHUB_TOKEN は保護の bypass に入れられない仕様)。
-      #
-      # そこで、**印を書き換えた PR を出して、自分でマージする。** PR は GITHUB_TOKEN で
-      # 開くので、GitHub はそこから workflow を1つも動かさない (これも仕様) —
-      # 放っておくと必須チェックが永遠に付かず、PR が塞がったままになる。
-      # この PR が書き換えるのは k3s/ の印だけで、指す先のイメージはこの run が上で
-      # 焼いたものなので、**確かめるものは残っていない**。`check` の status はここから
-      # 付ける (保護は context を GitHub Actions app に固定してあるので、この token で
-      # 付けないと数えられない)。
-      #
-      # 枝は毎回 **いまの origin/main** から切る。actions/checkout が取るのは
-      # 「トリガーしたコミット」で、2つの run が重なると後発は先発の bump を知らない
-      # まま同じ行を書き換え、GitHub には衝突に見えて誰もマージできない
-      # (sed は TAG から一意に決まるので、何度やっても同じ結果になる)
+      # **main へは直接 push しない** (必須チェックで守ってあり、bot のトークンも
+      # 素通しにならない)。印を書き換えた PR を出して、`check` の status を自分で付けて、
+      # 自分でマージする。手順と理由は .github/bump-pr.sh (release と共通)
       - name: Open and self-merge a PR that rewrites the image marks
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -127,38 +114,13 @@ jobs:
           # imageMarks.denpa)。以前は k3s/deployment.yaml の Pod の注釈に直接書いていた。
           # values はインラインなのでインデントは深い — 行頭の空白は幾つでも許す
           FILES="k3s/application.yaml"
-          branch="bump-image-marks"
 
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-
-          git fetch origin main
-          git checkout -B "$branch" origin/main
-
+          . .github/bump-pr.sh
+          bump_begin bump-image-marks
           sed -i -E "s#^( +agent:) sha-.*#\1 ${AGENT_TAG}#" ${FILES}
           sed -i -E "s#^( +denpa:) sha-.*#\1 ${DENPA_TAG}#" ${FILES}
-
-          git add ${FILES}
-          if git diff --cached --quiet; then
-            echo "no manifest changes to commit"
-            exit 0
-          fi
-          # squash でこのまま main のコミットになる。[skip ci] は前の直接 push と同じ
-          title="chore: bump image marks [skip ci]"
-          body="agent: ${AGENT_TAG} / denpa: ${DENPA_TAG}。k3s の印を書き換えるだけ。下の check が付いたら自分でマージする"
-          git commit -m "$title"
-          git push --force origin "$branch"
-
-          gh pr create --base main --head "$branch" --title "$title" --body "$body" \
-            || gh pr edit "$branch" --title "$title" --body "$body"
-
-          gh api "repos/${GITHUB_REPOSITORY}/statuses/$(git rev-parse HEAD)" \
-            -f state=success \
-            -f context=check \
-            -f description="k3s の印だけ。イメージはこの run が焼いた" \
-            -f target_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
-
-          # status が PR に載るまで少し掛かることがある。載っていなければ auto-merge に
-          # 倒す (保護が満たされた時点で GitHub がマージする)
-          gh pr merge "$branch" --squash --subject "$title" --body "$body" \
-            || gh pr merge "$branch" --auto --squash --subject "$title" --body "$body"
+          bump_finish bump-image-marks \
+            "chore: bump image marks [skip ci]" \
+            "agent: ${AGENT_TAG} / denpa: ${DENPA_TAG}。k3s の印を書き換えるだけ。下の check が付いたら自分でマージする" \
+            "k3s の印だけ。イメージはこの run が焼いた" \
+            ${FILES}

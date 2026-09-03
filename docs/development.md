@@ -81,7 +81,7 @@ CI では**台を増やして**います。4つに割って別のランナーに
 `Dockerfile` が denpa 本体、`agent/Dockerfile` がチューナー側です。
 CI が両方を焼いて `k3s/` の印を書き戻します。**main は直接 push できない**
 (必須チェック `check` で守ってある) ので、書き戻しは bot が PR を出して自分で
-マージします (`.github/workflows/build-and-deploy.yml` の最後の段に理由ごと書いてある)。
+マージします (手順と理由は `.github/bump-pr.sh`。release の Chart.yaml の書き戻しも同じ)。
 
 `latest` が動くのはリリースを作ったときだけ (焼き直さず貼り替える) — タグの決め方と
 理由は [architecture.md](architecture.md#イメージのタグ)、出し方は `.github/image-tags.sh`。
