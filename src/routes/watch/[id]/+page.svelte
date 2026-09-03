@@ -990,8 +990,16 @@
         return () => target.removeEventListener('click', press);
     });
 
-    /** キーでも動かせるようにする。全画面のときはこれがいちばん早い */
+    /**
+     * キーでも動かせるようにする。全画面のときはこれがいちばん早い。
+     *
+     * **修飾キー付きは取らない。** Ctrl+C (コピー) を `c` (字幕) として横取りして
+     * `preventDefault` していたので、観ながら番組名や URL を写せなかった。
+     * Ctrl+F (検索) → 全画面、Ctrl+S (保存) → 切り抜き、Cmd+K も同じ。
+     * Shift だけは通す (`<` `>` は Shift 込みで打つ)。IME 変換中のキーも渡さない
+     */
     function keys(event: KeyboardEvent): void {
+        if (event.altKey || event.ctrlKey || event.metaKey || event.isComposing) return;
         if ((event.target as HTMLElement).closest('input, button, a')) return;
         const map: Record<string, () => void> = {
             ' ': togglePlay,
