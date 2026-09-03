@@ -2,8 +2,8 @@ apiVersion: v2
 name: denpa-agent
 description: チューナーを掴む tuner-agent だけ。denpa 本体を別の所 (別ノード・docker compose) で動かすときに
 type: application
-version: 1.7.0
-appVersion: "1.7.0"
+version: 1.7.1
+appVersion: "1.7.1"
 home: https://github.com/danything/denpa
 sources:
   - https://github.com/danything/denpa
