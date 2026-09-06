@@ -2,6 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { count, eq, sql } from 'drizzle-orm';
 
 /**
  * 局だけの取り込み。
@@ -47,26 +48,32 @@ const server = Bun.serve({
 });
 config.agentUrl = `http://127.0.0.1:${server.port}`;
 
-const { database } = await import('./db');
-const { airing, savePrograms, SERVICE_ORDER, SERVICE_TYPE_ORDER, syncServicesOnly } = await import('./epg');
+const { orm } = await import('./db');
+const { programs, reservations, services } = await import('./schema');
+const { airing, savePrograms, SERVICE_ORDER, SERVICE_TYPE_ORDER, settle, syncServicesOnly } = await import(
+    './epg'
+);
 
 describe('syncServicesOnly', () => {
     test('番組表を待たずに局だけ取り込む', async () => {
         expect(await syncServicesOnly()).toBe(1);
 
-        const rows = database().query('SELECT id, name, type FROM services').all();
+        const rows = orm()
+            .select({ id: services.id, name: services.name, type: services.type })
+            .from(services)
+            .all();
         // 全角英数は取り込むときに直す。他の画面と字面がずれると別の局に見える
         // 内部IDは networkId * 100000 + serviceId。録画が参照しているので変えられない
         expect(rows).toEqual([{ id: 3239123608, name: 'TOKYO MX', type: 'GR' }]);
 
         // 選局していないこと。局の一覧はスキャンの結果を読むだけで手に入る
         expect(asked).toEqual(['/denpa/channels']);
-        expect(database().query('SELECT COUNT(*) AS n FROM programs').get()).toEqual({ n: 0 });
+        expect(orm().select({ n: count() }).from(programs).get()).toEqual({ n: 0 });
     });
 
     test('何度呼んでも増えない', async () => {
         await syncServicesOnly();
-        expect(database().query('SELECT COUNT(*) AS n FROM services').get()).toEqual({ n: 1 });
+        expect(orm().select({ n: count() }).from(services).get()).toEqual({ n: 1 });
     });
 });
 
@@ -77,31 +84,45 @@ describe('syncServicesOnly', () => {
  * もう選局できない局の番組が数万件残り、検索にも引っかかり続けていた。
  */
 describe('消えた局の片付け', () => {
-    const db = () => database();
-
     function seed(serviceId: number): void {
-        db().exec('DELETE FROM programs; DELETE FROM reservations');
-        db()
-            .prepare(
-                `INSERT INTO programs (id, service_id, network_id, event_id, start_at, end_at, name,
-                                   description, is_free, updated_at)
-             VALUES (1, ?, 32391, 1, ?, ?, '消える局の番組', '', 1, ?)`,
-            )
-            .run(serviceId, Date.now(), Date.now() + 1800_000, Date.now());
-        db()
-            .prepare(
-                `INSERT INTO reservations (id, program_id, service_id, name, description, start_at, end_at,
-                                       state, created_at, updated_at)
-             VALUES (1, 1, ?, '消える局の予約', '', ?, ?, 'scheduled', ?, ?)`,
-            )
-            .run(serviceId, Date.now(), Date.now() + 1800_000, Date.now(), Date.now());
+        orm().delete(programs).run();
+        orm().delete(reservations).run();
+        const at = Date.now();
+        orm()
+            .insert(programs)
+            .values({
+                id: 1,
+                service_id: serviceId,
+                network_id: 32391,
+                event_id: 1,
+                start_at: at,
+                end_at: at + 1800_000,
+                name: '消える局の番組',
+                updated_at: at,
+            })
+            .run();
+        orm()
+            .insert(reservations)
+            .values({
+                id: 1,
+                program_id: 1,
+                service_id: serviceId,
+                name: '消える局の予約',
+                start_at: at,
+                end_at: at + 1800_000,
+                created_at: at,
+                updated_at: at,
+            })
+            .run();
     }
 
     /** その局を「しばらく見かけていない」ことにする。時計を進める代わり */
     function unseenFor(serviceId: number, ms: number): void {
-        db()
-            .prepare('UPDATE services SET updated_at = ? WHERE id = ?')
-            .run(Date.now() - ms, serviceId);
+        orm()
+            .update(services)
+            .set({ updated_at: Date.now() - ms })
+            .where(eq(services.id, serviceId))
+            .run();
     }
 
     test('番組表は消し、まだ始めていない予約は取り消す。局の行は残す', async () => {
@@ -114,15 +135,21 @@ describe('消えた局の片付け', () => {
         unseenFor(3239123608, config.serviceForgetAfter + 1);
         await syncServicesOnly();
 
-        expect(db().query('SELECT COUNT(*) AS n FROM programs').get()).toEqual({ n: 0 });
-        expect(db().query('SELECT state FROM reservations WHERE id = 1').get()).toEqual({
+        expect(orm().select({ n: count() }).from(programs).get()).toEqual({ n: 0 });
+        expect(
+            orm()
+                .select({ state: reservations.state })
+                .from(reservations)
+                .where(eq(reservations.id, 1))
+                .get(),
+        ).toEqual({
             state: 'canceled',
         });
         /*
          * 局の行そのものは残す。消すと、その局で録った録画や過去の予約が
          * 辿れなくなる。画面に出さない仕組みは別にある (CURRENT_SERVICES)
          */
-        expect(db().query('SELECT COUNT(*) AS n FROM services').get()).toEqual({ n: 2 });
+        expect(orm().select({ n: count() }).from(services).get()).toEqual({ n: 2 });
     });
 
     test('1局も返ってこなかった回では何もしない', async () => {
@@ -137,8 +164,14 @@ describe('消えた局の片付け', () => {
         offered = [];
         await syncServicesOnly();
 
-        expect(db().query('SELECT COUNT(*) AS n FROM programs').get()).toEqual({ n: 1 });
-        expect(db().query('SELECT state FROM reservations WHERE id = 1').get()).toEqual({
+        expect(orm().select({ n: count() }).from(programs).get()).toEqual({ n: 1 });
+        expect(
+            orm()
+                .select({ state: reservations.state })
+                .from(reservations)
+                .where(eq(reservations.id, 1))
+                .get(),
+        ).toEqual({
             state: 'scheduled',
         });
     });
@@ -158,8 +191,14 @@ describe('消えた局の片付け', () => {
         offered = [channel(23609, '別の局')];
         await syncServicesOnly();
 
-        expect(db().query('SELECT COUNT(*) AS n FROM programs').get()).toEqual({ n: 1 });
-        expect(db().query('SELECT state FROM reservations WHERE id = 1').get()).toEqual({
+        expect(orm().select({ n: count() }).from(programs).get()).toEqual({ n: 1 });
+        expect(
+            orm()
+                .select({ state: reservations.state })
+                .from(reservations)
+                .where(eq(reservations.id, 1))
+                .get(),
+        ).toEqual({
             state: 'scheduled',
         });
     });
@@ -173,8 +212,6 @@ describe('消えた局の片付け', () => {
  * 片方しか読めなかった回に、もう片方を消させない。
  */
 describe('savePrograms', () => {
-    const db = () => database();
-
     function event(overrides: Record<string, unknown> = {}) {
         return {
             serviceId: 23608,
@@ -198,49 +235,117 @@ describe('savePrograms', () => {
     test('題名の無い回で、入っている題名を消さない', async () => {
         offered = [channel(23608, 'ＴＯＫＹＯ　ＭＸ')];
         await syncServicesOnly();
-        db().exec('DELETE FROM programs');
+        orm().delete(programs).run();
 
         savePrograms([event()]);
         // 詳細だけ読めた回。題名も説明も空で来る
         savePrograms([event({ name: '', description: '', extended: { 番組内容: 'あらすじ' } })]);
 
-        expect(db().query('SELECT name, description, extended FROM programs').all()).toEqual([
-            {
-                name: 'テスト番組',
-                description: 'これは説明です',
-                extended: JSON.stringify({ 番組内容: 'あらすじ' }),
-            },
+        expect(
+            orm()
+                .select({
+                    name: programs.name,
+                    description: programs.description,
+                    extended: programs.extended,
+                })
+                .from(programs)
+                .all(),
+        ).toEqual([
+            { name: 'テスト番組', description: 'これは説明です', extended: { 番組内容: 'あらすじ' } },
         ]);
+    });
+
+    /*
+     * **予約の追従。** 番組表が書き換わったぶんを、まだ始めていない予約に写す。
+     * 時刻だけでなく名前も (「[新]」が付く、サブタイトルが入る)。録り始めた予約は動かさない
+     */
+    test('番組表が動いたら、まだ始めていない予約だけ追従する', async () => {
+        offered = [channel(23608, 'ＴＯＫＹＯ　ＭＸ')];
+        await syncServicesOnly();
+        orm().delete(programs).run();
+        orm().delete(reservations).run();
+
+        const base = Date.now() + 3 * 3600_000;
+        savePrograms([
+            event({ eventId: 1, startAt: base, duration: 1800_000 }),
+            event({ eventId: 2, name: '録画中の番組', startAt: base + 3600_000, duration: 1800_000 }),
+        ]);
+        const [waiting, started] = orm()
+            .select({ id: programs.id })
+            .from(programs)
+            .orderBy(programs.event_id)
+            .all();
+        if (waiting === undefined || started === undefined) throw new Error('番組が入っていない');
+        // 予約は古い時刻と名前のまま
+        // 手で入れた予約 (ルールに紐付かないものは、当て直しで引っ込められないように manual)
+        const stale = {
+            service_id: 3239123608,
+            name: '古い名前',
+            manual: true,
+            created_at: base,
+            updated_at: base,
+        };
+        orm()
+            .insert(reservations)
+            .values([
+                { id: 1, program_id: waiting.id, start_at: base - 60_000, end_at: base + 1800_000, ...stale },
+                // 録り始めている
+                {
+                    id: 2,
+                    program_id: started.id,
+                    start_at: base + 3600_000 - 60_000,
+                    end_at: base + 5400_000,
+                    started_at: base,
+                    ...stale,
+                },
+            ])
+            .run();
+
+        expect(settle().retimed).toBe(1);
+        expect(
+            orm()
+                .select({ id: reservations.id, name: reservations.name, start_at: reservations.start_at })
+                .from(reservations)
+                .orderBy(reservations.id)
+                .all(),
+        ).toEqual([
+            { id: 1, name: 'テスト番組', start_at: base },
+            { id: 2, name: '古い名前', start_at: base + 3600_000 - 60_000 },
+        ]);
+        // 二度目は何も動かない
+        expect(settle().retimed).toBe(0);
     });
 
     test('題名だけ読めた回で、入っている番組内容を消さない', async () => {
         offered = [channel(23608, 'ＴＯＫＹＯ　ＭＸ')];
         await syncServicesOnly();
-        db().exec('DELETE FROM programs');
+        orm().delete(programs).run();
 
         savePrograms([event({ name: '', description: '', extended: { 番組内容: 'あらすじ' } })]);
         savePrograms([event()]);
 
-        expect(db().query('SELECT name, extended FROM programs').all()).toEqual([
-            { name: 'テスト番組', extended: JSON.stringify({ 番組内容: 'あらすじ' }) },
-        ]);
+        expect(
+            orm().select({ name: programs.name, extended: programs.extended }).from(programs).all(),
+        ).toEqual([{ name: 'テスト番組', extended: { 番組内容: 'あらすじ' } }]);
     });
 
     test('題名の書き換えはこれまでどおり通る', async () => {
         offered = [channel(23608, 'ＴＯＫＹＯ　ＭＸ')];
         await syncServicesOnly();
-        db().exec('DELETE FROM programs');
+        orm().delete(programs).run();
 
         savePrograms([event()]);
         savePrograms([event({ name: '[新]テスト番組' })]);
 
-        expect(db().query('SELECT name FROM programs').all()).toEqual([{ name: '[新]テスト番組' }]);
+        expect(orm().select({ name: programs.name }).from(programs).all()).toEqual([
+            { name: '[新]テスト番組' },
+        ]);
     });
 
     test('延長で重なった番組は消える (あとから来たほうが勝つ)', async () => {
         offered = [channel(23608, 'ＴＯＫＹＯ　ＭＸ')];
         await syncServicesOnly();
-        db().exec('DELETE FROM programs');
+        orm().delete(programs).run();
 
         const base = Date.now();
         // 野球 10:15〜11:05 と、その後の2本
@@ -253,13 +358,15 @@ describe('savePrograms', () => {
         // 野球が 11:54 まで延長 (EIT[p/f])。潰された2本は局の送り直しまで書き換わらない
         savePrograms([event({ eventId: 1, name: '野球', startAt: base, duration: 99 * 60_000 })]);
 
-        expect(db().query('SELECT name FROM programs ORDER BY start_at').all()).toEqual([{ name: '野球' }]);
+        expect(orm().select({ name: programs.name }).from(programs).orderBy(programs.start_at).all()).toEqual(
+            [{ name: '野球' }],
+        );
     });
 
     test('隣り合っているだけ (境界が同じ) の番組は消えない', async () => {
         offered = [channel(23608, 'ＴＯＫＹＯ　ＭＸ')];
         await syncServicesOnly();
-        db().exec('DELETE FROM programs');
+        orm().delete(programs).run();
 
         const base = Date.now();
         savePrograms([
@@ -269,10 +376,9 @@ describe('savePrograms', () => {
         // 同じものをもう一度読んでも (カルーセルは回り続ける) 隣は消えない
         savePrograms([event({ eventId: 1, name: '前の番組', startAt: base, duration: 30 * 60_000 })]);
 
-        expect(db().query('SELECT name FROM programs ORDER BY start_at').all()).toEqual([
-            { name: '前の番組' },
-            { name: '次の番組' },
-        ]);
+        expect(orm().select({ name: programs.name }).from(programs).orderBy(programs.start_at).all()).toEqual(
+            [{ name: '前の番組' }, { name: '次の番組' }],
+        );
     });
 });
 
@@ -325,27 +431,37 @@ describe('SERVICE_ORDER', () => {
     function put(
         id: number,
         serviceId: number,
-        type: string,
+        type: 'GR' | 'BS' | 'CS',
         channel: string,
         key: number | null,
         name: string,
     ) {
-        database()
-            .query(
-                `INSERT INTO services (id, service_id, network_id, name, type, service_type,
-                                       channel, remote_control_key, has_logo, updated_at)
-                 VALUES (?, ?, 4, ?, ?, 1, ?, ?, 0, 1)`,
-            )
-            .run(id, serviceId, name, type, channel, key);
+        orm()
+            .insert(services)
+            .values({
+                id,
+                service_id: serviceId,
+                network_id: 4,
+                name,
+                type,
+                service_type: 1,
+                channel,
+                remote_control_key: key,
+                updated_at: 1,
+            })
+            .run();
     }
 
-    const ordered = (sql: string) =>
-        (database().query(`SELECT name FROM services ORDER BY ${sql}`).all() as { name: string }[]).map(
-            (row) => row.name,
-        );
+    const ordered = (order: string) =>
+        orm()
+            .select({ name: services.name })
+            .from(services)
+            .orderBy(sql.raw(order))
+            .all()
+            .map((row) => row.name);
 
     test('BS は物理チャンネルではなく3桁番号の順に並ぶ', () => {
-        database().query('DELETE FROM services').run();
+        orm().delete(services).run();
         // 実機の並び。BS-TBS (161) は BS朝日 (151) より前の中継に乗っている
         put(400161, 161, 'BS', 'BS01_1', null, 'BS-TBS');
         put(400151, 151, 'BS', 'BS01_3', null, 'BS朝日1');
@@ -357,7 +473,7 @@ describe('SERVICE_ORDER', () => {
     });
 
     test('地上波はリモコン番号順。同じ番号ならサービスID順', () => {
-        database().query('DELETE FROM services').run();
+        orm().delete(services).run();
         put(3273601025, 1025, 'GR', 'T27', 1, 'NHK総合2');
         put(3273601024, 1024, 'GR', 'T27', 1, 'NHK総合1');
         put(3239123608, 23608, 'GR', 'T16', 9, 'TOKYO MX1');
@@ -366,7 +482,7 @@ describe('SERVICE_ORDER', () => {
     });
 
     test('地上波 → BS → CS の順。テレビの切り替えもこの順', () => {
-        database().query('DELETE FROM services').run();
+        orm().delete(services).run();
         put(400151, 151, 'BS', 'BS01_3', null, 'BS朝日1');
         put(600292, 292, 'CS', 'CS04', null, '時代劇専門ch');
         put(3239123608, 23608, 'GR', 'T16', 9, 'TOKYO MX1');

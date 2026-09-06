@@ -2,6 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
+import { eq } from 'drizzle-orm';
 
 /**
  * 旧レイアウト (Season フォルダ + episodedetails + `-thumb.jpg`) をいまの形
@@ -11,7 +12,8 @@ const { config } = await import('./config');
 config.dbPath = join(mkdtempSync(join(tmpdir(), 'denpa-relayout-')), 'denpa.db');
 config.libraryDir = mkdtempSync(join(tmpdir(), 'denpa-relayout-lib-'));
 
-const { database } = await import('./db');
+const { orm } = await import('./db');
+const { recordings } = await import('./schema');
 const { relayoutLibrary } = await import('./relayout');
 
 const START = new Date(2026, 7, 12, 0, 0).getTime();
@@ -23,42 +25,43 @@ function put(rel: string, content = 'x'): string {
     return path;
 }
 
-function insert(over: Record<string, unknown>): void {
-    const row = {
-        id: 1,
-        service_name: 'テレ東',
-        name: '番組',
-        series: '番組',
-        subtitle: '',
-        description: '概要',
-        start_at: START,
-        library_path: null,
-        alt_path: null,
-        ...over,
-    };
-    database()
-        .prepare(
-            `INSERT INTO recordings
-             (id, service_id, service_name, name, series, subtitle, description, start_at, end_at, finished_at, library_path, alt_path, created_at, updated_at)
-             VALUES (?, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0)`,
-        )
-        .run(
-            row.id,
-            row.service_name,
-            row.name,
-            row.series,
-            row.subtitle,
-            row.description,
-            row.start_at,
-            row.start_at,
-            row.start_at,
-            row.library_path,
-            row.alt_path,
-        );
+const DEFAULTS = {
+    id: 1,
+    service_name: 'テレ東',
+    name: '番組',
+    series: '番組',
+    subtitle: '',
+    description: '概要',
+    start_at: START,
+    library_path: null as string | null,
+    alt_path: null as string | null,
+};
+
+function insert(over: Partial<typeof DEFAULTS>): void {
+    const row = { ...DEFAULTS, ...over };
+    orm()
+        .insert(recordings)
+        .values({
+            id: row.id,
+            service_id: 1,
+            service_name: row.service_name,
+            name: row.name,
+            series: row.series,
+            subtitle: row.subtitle,
+            description: row.description,
+            start_at: row.start_at,
+            end_at: row.start_at,
+            finished_at: row.start_at,
+            library_path: row.library_path,
+            alt_path: row.alt_path,
+            created_at: 0,
+            updated_at: 0,
+        })
+        .run();
 }
 
 function reset(): void {
-    database().exec('DELETE FROM recordings');
+    orm().delete(recordings).run();
     // 実体もまっさらに戻す (テストは同じ libraryDir を使い回すので、前のテストの
     // 残りが「新しい置き場が既に埋まっている」= 衝突として効いてしまう)
     rmSync(config.libraryDir, { recursive: true, force: true });
@@ -66,9 +69,11 @@ function reset(): void {
 }
 
 function libPath(id: number): { lib: string | null; alt: string | null } {
-    return database()
-        .query('SELECT library_path AS lib, alt_path AS alt FROM recordings WHERE id = ?')
-        .get(id) as { lib: string | null; alt: string | null };
+    return orm()
+        .select({ lib: recordings.library_path, alt: recordings.alt_path })
+        .from(recordings)
+        .where(eq(recordings.id, id))
+        .get()!;
 }
 
 const OLD_DIR = '番組/Season 2026';

@@ -19,7 +19,8 @@ import type { Recording } from '../types';
 // DB は一時ファイルへ (番組の名乗りを組むのに services を引く。files.test.ts と同じ手)
 const { config } = await import('./config');
 config.dbPath = join(mkdtempSync(join(tmpdir(), 'denpa-bml-db-')), 'denpa.db');
-const { database } = await import('./db');
+const { orm } = await import('./db');
+const { services } = await import('./schema');
 const { loadRecordedBml, saveRecordedBml, withProgramInfo } = await import('./recorded-bml');
 
 /*
@@ -46,19 +47,25 @@ const dir = mkdtempSync(join(tmpdir(), 'denpa-bml-'));
 afterAll(() => {
     rmSync(dir, { recursive: true, force: true });
     // DB は同じプロセスの他のテストと共有になりうる (最初に開いた1本を使い回す)。入れた局は片付ける
-    database().exec('DELETE FROM services');
+    orm().delete(services).run();
 });
 
 const T = Date.UTC(2026, 7, 12, 0, 0, 30);
 
 /** 録画の行の要るところだけ。局は services に 1 つ入れておく (network 4, service 1024) */
 function recording(startAt: number): Recording {
-    database().exec('DELETE FROM services');
-    database()
-        .prepare(
-            `INSERT INTO services (id, service_id, network_id, name, type, channel, updated_at)
-             VALUES (7, 1024, 4, 'テスト局', 'GR', 'T27', 0)`,
-        )
+    orm().delete(services).run();
+    orm()
+        .insert(services)
+        .values({
+            id: 7,
+            service_id: 1024,
+            network_id: 4,
+            name: 'テスト局',
+            type: 'GR',
+            channel: 'T27',
+            updated_at: 0,
+        })
         .run();
     return {
         id: 1,

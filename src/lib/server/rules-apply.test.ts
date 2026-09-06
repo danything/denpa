@@ -2,6 +2,7 @@ import { afterAll, describe, expect, test } from 'bun:test';
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { eq } from 'drizzle-orm';
 
 /**
  * ルールを番組表に当て直して、予約をそろえるところ。
@@ -13,20 +14,26 @@ import { join } from 'node:path';
 const { config } = await import('./config');
 config.dbPath = join(mkdtempSync(join(tmpdir(), 'denpa-rules-')), 'denpa.db');
 
-const { database, now } = await import('./db');
+const { now, orm } = await import('./db');
 const { applyRules } = await import('./rules');
+const { programs, reservations: reservationTable, rules: ruleTable, services } = await import('./schema');
 
 const SERVICE = 3239123608;
 const HOUR = 60 * 60 * 1000;
 
-const CLEAR = 'DELETE FROM reservations; DELETE FROM programs; DELETE FROM rules; DELETE FROM services';
+function clear(): void {
+    orm().delete(reservationTable).run();
+    orm().delete(programs).run();
+    orm().delete(ruleTable).run();
+    orm().delete(services).run();
+}
 
 /*
  * **置いたものは持って帰る。** bun test はファイルをまたいでモジュールを使い回すので、
  * DBの接続も1つ (`db.database`)。先に開いたファイルの置き場が全員のものになるため、
  * 行を残すと隣のファイルの「まだ空のはず」が崩れる (実機ならぬCIで epg.test.ts が落ちた)
  */
-afterAll(() => database().exec(CLEAR));
+afterAll(clear);
 
 /**
  * 番組を置く基準の時刻。**`reset()` のたびに1回だけ読む。**
@@ -39,47 +46,76 @@ let base = now();
 
 function reset(): void {
     base = now();
-    const db = database();
-    db.exec(CLEAR);
-    db.prepare(
-        `INSERT INTO services (id, service_id, network_id, name, type, service_type, channel, has_logo, updated_at)
-         VALUES (?, 23608, 32391, 'TOKYO MX1', 'GR', 1, 'T16', 0, ?)`,
-    ).run(SERVICE, now());
+    clear();
+    sub(SERVICE, 'TOKYO MX1');
+}
+
+/** 局を1つ置く (置き直し)。MX の枝番も同じ物理チャンネルに乗る */
+function sub(id: number, name: string, channel = 'T16'): void {
+    orm().delete(services).where(eq(services.id, id)).run();
+    orm()
+        .insert(services)
+        .values({
+            id,
+            service_id: id % 100000,
+            network_id: 32391,
+            name,
+            type: 'GR',
+            service_type: 1,
+            channel,
+            updated_at: now(),
+        })
+        .run();
+}
+
+/** 局を指定して番組を1つ置く (置き直し)。既定は3時間後から (猶予の外) */
+function on(serviceId: number, id: number, name: string, startsIn = 3 * HOUR): void {
+    const start = base + startsIn;
+    orm().delete(programs).where(eq(programs.id, id)).run();
+    orm()
+        .insert(programs)
+        .values({
+            id,
+            service_id: serviceId,
+            network_id: 32391,
+            event_id: id,
+            start_at: start,
+            end_at: start + HOUR,
+            name,
+            updated_at: now(),
+        })
+        .run();
 }
 
 /** 番組を1つ置く。既定は3時間後から (猶予の外) */
 function program(id: number, name: string, startsIn = 3 * HOUR): void {
-    const start = base + startsIn;
-    database()
-        .prepare(
-            `INSERT OR REPLACE INTO programs
-                (id, service_id, network_id, event_id, start_at, end_at, name, description, is_free, updated_at)
-             VALUES (?, ?, 32391, ?, ?, ?, ?, '', 1, ?)`,
-        )
-        .run(id, SERVICE, id, start, start + HOUR, name, now());
+    on(SERVICE, id, name, startsIn);
 }
 
-function rule(id: number, keyword: string, enabled = 1, priority = 1): void {
-    database()
-        .prepare(
-            `INSERT OR REPLACE INTO rules
-                (id, name, keyword, ignore_keyword, search_fields, service_ids, service_types,
-                 genres, enabled, priority, created_at)
-             VALUES (?, ?, ?, '', 'name', NULL, NULL, NULL, ?, ?, ?)`,
-        )
-        .run(id, keyword, keyword, enabled, priority, now());
+function rule(id: number, keyword: string, enabled = true, priority = 1): void {
+    orm().delete(ruleTable).where(eq(ruleTable.id, id)).run();
+    orm()
+        .insert(ruleTable)
+        .values({ id, name: keyword, keyword, search_fields: 'name', enabled, priority, created_at: now() })
+        .run();
 }
 
 const priorityOf = (programId: number): number | undefined =>
-    database()
-        .query<{ priority: number }, [number]>('SELECT priority FROM reservations WHERE program_id = ?')
-        .get(programId)?.priority;
+    orm()
+        .select({ priority: reservationTable.priority })
+        .from(reservationTable)
+        .where(eq(reservationTable.program_id, programId))
+        .get()?.priority;
 
 const reservations = () =>
-    database()
-        .query<{ program_id: number; rule_id: number | null; state: string }, []>(
-            'SELECT program_id, rule_id, state FROM reservations ORDER BY program_id',
-        )
+    orm()
+        .select({
+            program_id: reservationTable.program_id,
+            rule_id: reservationTable.rule_id,
+            state: reservationTable.state,
+        })
+        .from(reservationTable)
+        .orderBy(reservationTable.program_id)
         .all();
 
 describe('ルールを当て直す', () => {
@@ -109,7 +145,7 @@ describe('ルールを当て直す', () => {
         applyRules();
         expect(priorityOf(10)).toBe(1);
 
-        rule(1, '無職転生', 1, 2);
+        rule(1, '無職転生', true, 2);
         expect(applyRules()).toEqual({ created: 0, dropped: 0, moved: 0, repriced: 1 });
         expect(priorityOf(10)).toBe(2);
 
@@ -140,7 +176,11 @@ describe('ルールを当て直す', () => {
         rule(1, '無職転生');
         program(10, '無職転生Ⅲ #6');
         applyRules();
-        database().prepare("UPDATE reservations SET state = 'canceled' WHERE program_id = 10").run();
+        orm()
+            .update(reservationTable)
+            .set({ state: 'canceled' })
+            .where(eq(reservationTable.program_id, 10))
+            .run();
 
         expect(applyRules()).toMatchObject({ created: 0, dropped: 0 });
         expect(reservations()).toEqual([{ program_id: 10, rule_id: 1, state: 'canceled' }]);
@@ -149,13 +189,20 @@ describe('ルールを当て直す', () => {
     test('手動の予約は触らない', () => {
         reset();
         program(10, '手で入れた番組');
-        database()
-            .prepare(
-                `INSERT INTO reservations (program_id, rule_id, service_id, name, description,
-                    start_at, end_at, manual, state, created_at, updated_at)
-                 VALUES (10, NULL, ?, '手で入れた番組', '', ?, ?, 1, 'scheduled', ?, ?)`,
-            )
-            .run(SERVICE, now() + 3 * HOUR, now() + 4 * HOUR, now(), now());
+        orm()
+            .insert(reservationTable)
+            .values({
+                program_id: 10,
+                rule_id: null,
+                service_id: SERVICE,
+                name: '手で入れた番組',
+                start_at: now() + 3 * HOUR,
+                end_at: now() + 4 * HOUR,
+                manual: true,
+                created_at: now(),
+                updated_at: now(),
+            })
+            .run();
 
         expect(applyRules()).toMatchObject({ dropped: 0 });
         expect(reservations()).toHaveLength(1);
@@ -166,7 +213,11 @@ describe('ルールを当て直す', () => {
         rule(1, '無職転生');
         program(10, '無職転生Ⅲ #6');
         applyRules();
-        database().prepare('UPDATE reservations SET started_at = ? WHERE program_id = 10').run(now());
+        orm()
+            .update(reservationTable)
+            .set({ started_at: now() })
+            .where(eq(reservationTable.program_id, 10))
+            .run();
         program(10, '差し替え');
 
         expect(applyRules()).toMatchObject({ dropped: 0 });
@@ -183,7 +234,7 @@ describe('ルールを当て直す', () => {
         rule(1, '無職転生');
         program(10, '無職転生Ⅲ #6');
         applyRules();
-        database().prepare('DELETE FROM programs WHERE id = 10').run();
+        orm().delete(programs).where(eq(programs.id, 10)).run();
 
         expect(applyRules()).toMatchObject({ dropped: 0 });
         expect(reservations()).toHaveLength(1);
@@ -222,7 +273,7 @@ describe('ルールを当て直す', () => {
         rule(1, '無職転生');
         program(10, '無職転生Ⅲ #6', 10 * 60 * 1000);
         applyRules();
-        rule(1, '無職転生', 0);
+        rule(1, '無職転生', false);
 
         expect(applyRules()).toMatchObject({ dropped: 1 });
         expect(reservations()).toEqual([]);
@@ -237,7 +288,7 @@ describe('ルールを当て直す', () => {
         expect(reservations()).toEqual([{ program_id: 10, rule_id: 1, state: 'scheduled' }]);
 
         // 1 を消した。2 がまだ当たるので、予約は生き続ける
-        database().prepare('DELETE FROM rules WHERE id = 1').run();
+        orm().delete(ruleTable).where(eq(ruleTable.id, 1)).run();
 
         expect(applyRules()).toMatchObject({ dropped: 0, moved: 1 });
         expect(reservations()).toEqual([{ program_id: 10, rule_id: 2, state: 'scheduled' }]);
@@ -248,7 +299,7 @@ describe('ルールを当て直す', () => {
         rule(1, '無職転生');
         program(10, '無職転生Ⅲ #6');
         applyRules();
-        database().prepare('DELETE FROM rules WHERE id = 1').run();
+        orm().delete(ruleTable).where(eq(ruleTable.id, 1)).run();
 
         expect(applyRules()).toMatchObject({ dropped: 1 });
         expect(reservations()).toEqual([]);
@@ -286,28 +337,6 @@ describe('ルールを当て直す', () => {
  */
 describe('同じ放送は1本だけ', () => {
     const MX2 = 3239123610;
-
-    function sub(id: number, name: string, channel = 'T16'): void {
-        database()
-            .prepare(
-                `INSERT OR REPLACE INTO services
-                    (id, service_id, network_id, name, type, service_type, channel, has_logo, updated_at)
-                 VALUES (?, ?, 32391, ?, 'GR', 1, ?, 0, ?)`,
-            )
-            .run(id, id % 100000, name, channel, now());
-    }
-
-    /** 局を指定して番組を1つ置く */
-    function on(serviceId: number, id: number, name: string, startsIn = 3 * HOUR): void {
-        const start = base + startsIn;
-        database()
-            .prepare(
-                `INSERT OR REPLACE INTO programs
-                    (id, service_id, network_id, event_id, start_at, end_at, name, description, is_free, updated_at)
-                 VALUES (?, ?, 32391, ?, ?, ?, ?, '', 1, ?)`,
-            )
-            .run(id, serviceId, id, start, start + HOUR, name, now());
-    }
 
     test('枝番の小さいほうだけ録る', () => {
         reset();
