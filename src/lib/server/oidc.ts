@@ -11,6 +11,7 @@
  * **ここは「誰か」を確かめるだけ**で、通すかどうかは `auth.ts` が決めます。
  */
 
+import { array, either, type Infer, number, object, optional, read, record, string } from '../shape';
 import { config } from './config';
 
 /** 有効かどうか。3つ揃っていなければ、入る道は TRUSTED_NETWORKS だけ (auth.ts) */
@@ -18,13 +19,15 @@ export function enabled(): boolean {
     return config.oidcIssuer !== '' && config.oidcClientId !== '' && config.oidcClientSecret !== '';
 }
 
-export interface Discovery {
-    issuer: string;
-    authorization_endpoint: string;
-    token_endpoint: string;
-    jwks_uri: string;
-    end_session_endpoint?: string;
-}
+/** 相手の口の一覧 (`/.well-known/openid-configuration`)。形はここで確かめる (`shape.ts`) */
+const DISCOVERY = object({
+    issuer: string,
+    authorization_endpoint: string,
+    token_endpoint: string,
+    jwks_uri: string,
+    end_session_endpoint: optional(string),
+});
+export type Discovery = Infer<typeof DISCOVERY>;
 
 /**
  * 相手の口の一覧。**一度読んだら覚えておきます。**
@@ -39,11 +42,7 @@ async function discover(fetcher: typeof fetch = fetch): Promise<Discovery> {
     const url = `${config.oidcIssuer}/.well-known/openid-configuration`;
     const res = await fetcher(url);
     if (!res.ok) throw new Error(`OIDC の設定を読めません (${res.status}) ${url}`);
-    const doc = (await res.json()) as Partial<Discovery>;
-    for (const key of ['issuer', 'authorization_endpoint', 'token_endpoint', 'jwks_uri'] as const) {
-        if (typeof doc[key] !== 'string') throw new Error(`OIDC の設定に ${key} がありません`);
-    }
-    discovered = doc as Discovery;
+    discovered = read(DISCOVERY, await res.json(), 'OIDC の設定');
     return discovered;
 }
 
@@ -202,20 +201,28 @@ async function publicKey(kid: string): Promise<CryptoKey> {
     return found;
 }
 
-export interface Claims {
-    sub: string;
-    name?: string;
-    preferred_username?: string;
-    email?: string;
-    groups?: string[];
+/**
+ * ID トークンの中身。**形はここで確かめる** (`shape.ts`)。相手が入れてくる
+ * 知らないクレームは捨てる (通すかどうかに使うのは下の分だけ)
+ */
+const CLAIMS = object({
+    sub: string,
+    name: optional(string),
+    preferred_username: optional(string),
+    email: optional(string),
+    groups: optional(array(string)),
     /** グループが多すぎて載せられなかったときに Entra が入れてくる印 */
-    _claim_names?: Record<string, string>;
-    iss: string;
-    aud: string | string[];
-    exp: number;
-    nbf?: number;
-    nonce?: string;
-}
+    _claim_names: optional(record(string)),
+    iss: string,
+    aud: either(string, array(string)),
+    exp: number,
+    nbf: optional(number),
+    nonce: optional(string),
+});
+export type Claims = Infer<typeof CLAIMS>;
+
+/** ヘッダのうち見るもの。署名方式と鍵の名前 */
+const HEADER = object({ alg: optional(string), kid: optional(string) });
 
 /** 時計のずれの許容 (秒)。RFC 7519 が「小さめに」と言っている程度 */
 const SKEW = 60;
@@ -240,10 +247,11 @@ export async function verify(token: string, nonce: string, at = Date.now()): Pro
         throw new Error('ID トークンの形が違います');
     }
 
-    const header = JSON.parse(new TextDecoder().decode(decodeBase64Url(rawHeader))) as {
-        alg?: string;
-        kid?: string;
-    };
+    const header = read(
+        HEADER,
+        JSON.parse(new TextDecoder().decode(decodeBase64Url(rawHeader))),
+        'ID トークンのヘッダ',
+    );
     // alg は相手が決めるものだが、こちらが受けるのは RS256 だけ。
     // none を受けると署名を見ない道ができてしまう
     if (header.alg !== 'RS256') throw new Error(`受けられない署名方式です (${header.alg})`);
@@ -257,7 +265,12 @@ export async function verify(token: string, nonce: string, at = Date.now()): Pro
     );
     if (!ok) throw new Error('ID トークンの署名が合いません');
 
-    const claims = JSON.parse(new TextDecoder().decode(decodeBase64Url(rawPayload))) as Claims;
+    // 署名を見てから開く。形の違いを言うのは、本物だと分かったものにだけ
+    const claims = read(
+        CLAIMS,
+        JSON.parse(new TextDecoder().decode(decodeBase64Url(rawPayload))),
+        'ID トークン',
+    );
     const doc = await discover();
     if (claims.iss !== doc.issuer) throw new Error('ID トークンの発行元が違います');
 
@@ -265,16 +278,13 @@ export async function verify(token: string, nonce: string, at = Date.now()): Pro
     if (!audience.includes(config.oidcClientId)) throw new Error('ID トークンの宛先が違います');
 
     const seconds = Math.floor(at / 1000);
-    if (typeof claims.exp !== 'number' || claims.exp + SKEW < seconds) {
-        throw new Error('ID トークンの期限が切れています');
-    }
-    if (typeof claims.nbf === 'number' && claims.nbf - SKEW > seconds) {
+    if (claims.exp + SKEW < seconds) throw new Error('ID トークンの期限が切れています');
+    if (claims.nbf !== undefined && claims.nbf - SKEW > seconds) {
         throw new Error('ID トークンがまだ有効ではありません');
     }
     // 出したときの合言葉と一致すること。これが「自分が始めたログイン」の証拠になる
     if (claims.nonce !== nonce) throw new Error('ID トークンの合言葉が合いません');
-    if (typeof claims.sub !== 'string' || claims.sub === '')
-        throw new Error('ID トークンに sub がありません');
+    if (claims.sub === '') throw new Error('ID トークンに sub がありません');
     return claims;
 }
 

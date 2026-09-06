@@ -114,6 +114,12 @@ JSON で持つ列 (ジャンル・音声の構成・ルールの対象チャン�
   空でないことを確かめている (`atLeastOne` のような) 場合だけ
 - **試験** は `!` でよい。落ちれば試験が落ちる
 
+外から来る JSON (チューナーエージェントの答え、OIDC の相手、取り込み元の DB) は
+`res.json() as X` と書かず、`src/lib/shape.ts` の読み手で形を確かめてから型にする
+(`read(array(AGENT_CHANNEL), await res.json(), 'エージェントの /denpa/channels')`)。型は形から
+導く (`Infer<typeof AGENT_CHANNEL>`) ので、形と型を別々に書かない。自分のサーバから自分の画面へ
+渡すもの (同じリポジトリの中) はキャストのままでよい。
+
 **マイグレーションを持つ前の DB** (1.7.x まで。`CREATE TABLE IF NOT EXISTS` を起動のたびに
 流して整えていた) には、最初のマイグレーション (baseline) を `IF NOT EXISTS` にしてあるので
 そのまま当たる。1.7.x を一度も起動していない古い DB は列が足りないことがあり、起動時に

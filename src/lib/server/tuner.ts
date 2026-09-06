@@ -8,39 +8,63 @@
  * `ts/service-filter.ts`、番組の切れ目を見るのは `ts/eit.ts`。
  */
 
+import {
+    array,
+    boolean,
+    type Infer,
+    literal,
+    nullable,
+    number,
+    object,
+    optional,
+    read,
+    type Shape,
+    string,
+} from '../shape';
 import type { ChannelType } from '../types';
 import { config } from './config';
 
-/** エージェントが知っているチャンネル。スキャンの結果そのもの */
-export interface AgentChannel {
-    type: ChannelType;
-    channel: string;
-    networkId: number;
-    transportStreamId: number;
-    remoteControlKeyId: number | null;
-    services: { serviceId: number; serviceType: number; name: string }[];
-}
+/*
+ * **エージェントが返すものの形は、ここで確かめてから型にする** (`shape.ts`)。
+ * 相手は別のリポジトリ (agent/) で、版がずれれば形もずれる。キャストで型を
+ * 付けていた頃は、ずれても「どこかで undefined」としてしか出なかった
+ */
+const CHANNEL_TYPE: Shape<ChannelType> = literal('GR', 'BS', 'CS', 'SKY');
 
-export interface AgentTuner {
-    index: number;
-    name: string;
-    types: ChannelType[];
-    disabled: boolean;
+/** エージェントが知っているチャンネル。スキャンの結果そのもの */
+const AGENT_CHANNEL = object({
+    type: CHANNEL_TYPE,
+    channel: string,
+    networkId: number,
+    transportStreamId: number,
+    remoteControlKeyId: nullable(number),
+    services: array(object({ serviceId: number, serviceType: number, name: string })),
+});
+export type AgentChannel = Infer<typeof AGENT_CHANNEL>;
+
+const AGENT_TUNER = object({
+    index: number,
+    name: string,
+    types: array(CHANNEL_TYPE),
+    disabled: boolean,
     /** 選局に使うデバイス。ここからエージェントがコマンドを組み立てる */
-    device: string | null;
+    device: nullable(string),
     /** 衛星の給電。要る構成だけ */
-    lnb: string | null;
+    lnb: nullable(string),
     /**
      * 選局コマンドの上書き。**設定ファイルに直に書いたときだけ入る。**
      * 画面からは渡せない (渡せると、あちらで好きなコマンドが走ってしまう)
      */
-    command: string | null;
+    command: nullable(string),
     /** いま掴んでいるチャンネル。空いていれば null */
-    channel: { type: ChannelType; channel: string } | null;
-    users: { use: string; priority: number }[];
-    pid: number | null;
-    error: string | null;
-}
+    channel: nullable(object({ type: CHANNEL_TYPE, channel: string })),
+    users: array(object({ use: string, priority: number })),
+    pid: nullable(number),
+    error: nullable(string),
+});
+export type AgentTuner = Infer<typeof AGENT_TUNER>;
+
+const TUNERS = object({ tuners: array(AGENT_TUNER), detected: optional(boolean) });
 
 /** 画面から書き換えられる部分だけ */
 export interface TunerConfig {
@@ -66,7 +90,7 @@ export function programKey(networkId: number, serviceId: number, eventId: number
     return serviceKey(networkId, serviceId) * 100000 + eventId;
 }
 
-async function get<T>(path: string, timeout = 10_000): Promise<T> {
+async function get<T>(path: string, shape: Shape<T>, timeout = 10_000): Promise<T> {
     const res = await fetch(`${config.agentUrl}${path}`, {
         headers: { Accept: 'application/json' },
         signal: AbortSignal.timeout(timeout),
@@ -74,11 +98,11 @@ async function get<T>(path: string, timeout = 10_000): Promise<T> {
     if (!res.ok) {
         throw new Error(`エージェント ${path} -> ${res.status} ${await res.text()}`);
     }
-    return (await res.json()) as T;
+    return read(shape, await res.json(), `エージェントの ${path}`);
 }
 
 export function getChannels(): Promise<AgentChannel[]> {
-    return get<AgentChannel[]>('/denpa/channels');
+    return get('/denpa/channels', array(AGENT_CHANNEL));
 }
 
 /**
@@ -99,16 +123,16 @@ export async function putChannels(found: AgentChannel[], scanned: ChannelType[])
         signal: AbortSignal.timeout(30_000),
     });
     if (!res.ok) throw new Error(`チャンネルを保存できません (${res.status}) ${await res.text()}`);
-    return (await res.json()) as AgentChannel[];
+    return read(array(AGENT_CHANNEL), await res.json(), 'エージェントの PUT /denpa/channels');
 }
 
 export async function getTuners(): Promise<AgentTuner[]> {
-    return (await get<{ tuners: AgentTuner[] }>('/denpa/tuners')).tuners;
+    return (await get('/denpa/tuners', TUNERS)).tuners;
 }
 
 /** 定義を書いていないので自分で見つけた状態か。画面に出す */
 export async function tunersDetected(): Promise<boolean> {
-    return (await get<{ detected?: boolean }>('/denpa/tuners')).detected === true;
+    return (await get('/denpa/tuners', TUNERS)).detected === true;
 }
 
 /**
@@ -128,8 +152,9 @@ export async function putTuners(tuners: TunerConfig[]): Promise<void> {
         signal: AbortSignal.timeout(30_000),
     });
     if (!res.ok) {
-        const body = (await res.json().catch(() => ({}))) as { error?: string };
-        throw new Error(body.error ?? `チューナーを保存できません (${res.status})`);
+        const body = await res.json().catch(() => ({}));
+        const error = typeof body === 'object' && body !== null && 'error' in body ? body.error : undefined;
+        throw new Error(typeof error === 'string' ? error : `チューナーを保存できません (${res.status})`);
     }
 }
 
