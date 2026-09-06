@@ -1,15 +1,29 @@
 import { afterEach, describe, expect, spyOn, test } from 'bun:test';
 import { config } from './config';
-import { checkForUpdate, newer, parseVersion, updateAvailable } from './update';
+import { checkForUpdate, updateAvailable } from './update';
 
-const original = { version: config.version, releasesUrl: config.releasesUrl };
+const original = { commit: config.commit, githubApi: config.githubApi };
 afterEach(() => {
     Object.assign(config, original);
 });
 
-/** GitHub の代わり。1 回ぶんの答えを決めて渡す */
-function github(body: unknown, status = 200) {
-    return async () => (status === 200 ? Response.json(body) : new Response('', { status }));
+type Status = 'ahead' | 'behind' | 'identical' | 'diverged';
+
+/**
+ * GitHub の代わり。最新のリリースと、動いているコミットから見た前後を決めて渡す。
+ * `release` が null なら「1 つも無い」(404)
+ */
+function github(release: Record<string, unknown> | null, status: Status = 'ahead') {
+    const asked: string[] = [];
+    const fetcher = async (url: string) => {
+        asked.push(url);
+        if (url.endsWith('/releases/latest')) {
+            return release === null ? new Response('', { status: 404 }) : Response.json(release);
+        }
+        if (url.includes('/compare/')) return Response.json({ status });
+        return new Response('', { status: 500 });
+    };
+    return Object.assign(fetcher, { asked });
 }
 
 const release = (tag: string, extra: Record<string, unknown> = {}) => ({
@@ -18,62 +32,52 @@ const release = (tag: string, extra: Record<string, unknown> = {}) => ({
     ...extra,
 });
 
-describe('版の札', () => {
-    test('v 付きでも無しでも読む。試し版と dev は読めない', () => {
-        expect(parseVersion('v1.7.1')).toEqual([1, 7, 1]);
-        expect(parseVersion('1.10.0')).toEqual([1, 10, 0]);
-        expect(parseVersion('v2.0.0-rc1')).toBeNull();
-        expect(parseVersion('dev')).toBeNull();
-    });
-
-    test('数で比べる (文字の並びではない)', () => {
-        expect(newer([1, 10, 0], [1, 9, 9])).toBe(true);
-        expect(newer([1, 7, 1], [1, 7, 1])).toBe(false);
-        expect(newer([1, 7, 0], [1, 7, 1])).toBe(false);
-    });
-});
-
 describe('新しい版の知らせ', () => {
-    test('向こうが新しければ出る。同じ・古ければ出ない', async () => {
-        config.version = 'v1.7.1';
-        expect(await checkForUpdate(github(release('v1.8.0')))).toEqual({
+    test('最新のリリースが動いているコミットより先なら出る。含んでいれば出ない', async () => {
+        config.commit = 'abc1234';
+        const gh = github(release('v1.8.0'), 'ahead');
+        expect(await checkForUpdate(gh)).toEqual({
             version: 'v1.8.0',
             url: 'https://github.com/danything/denpa/releases/tag/v1.8.0',
         });
         expect(updateAvailable()?.version).toBe('v1.8.0');
-        expect(await checkForUpdate(github(release('v1.7.1')))).toBeNull();
-        expect(await checkForUpdate(github(release('v1.7.0')))).toBeNull();
+        // 訊き方: 自分のコミット...リリースの札
+        expect(gh.asked[1]).toContain('/compare/abc1234...v1.8.0');
+
+        // main のほうが先 (リリースの後の main を動かしている) / 同じコミット
+        expect(await checkForUpdate(github(release('v1.8.0'), 'behind'))).toBeNull();
+        expect(await checkForUpdate(github(release('v1.8.0'), 'identical'))).toBeNull();
+        // 枝分かれ (別の枝から出したリリース) は数えない
+        expect(await checkForUpdate(github(release('v1.8.0'), 'diverged'))).toBeNull();
     });
 
     // リリースを消すと「最新」は 1 つ前になる。そこで知らせが引っ込む
     test('リリースが消えれば引っ込む。1 つも無ければ (404) も同じ', async () => {
-        config.version = 'v1.7.1';
-        await checkForUpdate(github(release('v1.8.0')));
+        config.commit = 'abc1234';
+        await checkForUpdate(github(release('v1.8.0'), 'ahead'));
         expect(updateAvailable()).not.toBeNull();
-        expect(await checkForUpdate(github(release('v1.7.1')))).toBeNull();
+        expect(await checkForUpdate(github(release('v1.7.1'), 'behind'))).toBeNull();
 
-        await checkForUpdate(github(release('v1.8.0')));
-        expect(await checkForUpdate(github(null, 404))).toBeNull();
+        await checkForUpdate(github(release('v1.8.0'), 'ahead'));
+        expect(await checkForUpdate(github(null))).toBeNull();
     });
 
     test('dev では見に行かない。試し版・下書きは数えない', async () => {
-        config.version = 'dev';
-        let asked = 0;
-        const counting = async () => {
-            asked++;
-            return Response.json(release('v9.9.9'));
-        };
-        expect(await checkForUpdate(counting)).toBeNull();
-        expect(asked).toBe(0);
+        config.commit = 'dev';
+        const gh = github(release('v9.9.9'));
+        expect(await checkForUpdate(gh)).toBeNull();
+        expect(gh.asked).toHaveLength(0);
 
-        config.version = 'v1.7.1';
+        config.commit = 'abc1234';
+        const draft = github(release('v2.0.0', { draft: true }));
+        expect(await checkForUpdate(draft)).toBeNull();
         expect(await checkForUpdate(github(release('v2.0.0', { prerelease: true })))).toBeNull();
-        expect(await checkForUpdate(github(release('v2.0.0', { draft: true })))).toBeNull();
-        expect(await checkForUpdate(github(release('v2.0.0-rc1')))).toBeNull();
+        // 下書きなら compare まで訊かない
+        expect(draft.asked).toHaveLength(1);
     });
 
     test('繋がらないことは 1 回だけ言い、いちど繋がれば (404 でも) また言う', async () => {
-        config.version = 'v1.7.1';
+        config.commit = 'abc1234';
         const warn = spyOn(console, 'warn').mockImplementation(() => {});
         try {
             const failing = async () => {
@@ -82,7 +86,7 @@ describe('新しい版の知らせ', () => {
             await checkForUpdate(failing);
             await checkForUpdate(failing);
             expect(warn).toHaveBeenCalledTimes(1);
-            await checkForUpdate(github(null, 404));
+            await checkForUpdate(github(null));
             await checkForUpdate(failing);
             expect(warn).toHaveBeenCalledTimes(2);
         } finally {
@@ -91,13 +95,14 @@ describe('新しい版の知らせ', () => {
     });
 
     test('繋がらない・形が違うときは、前に分かっていたことを持つ', async () => {
-        config.version = 'v1.7.1';
+        config.commit = 'abc1234';
         await checkForUpdate(github(release('v1.8.0')));
         const failing = async () => {
             throw new Error('繋がらない');
         };
         expect((await checkForUpdate(failing))?.version).toBe('v1.8.0');
         expect((await checkForUpdate(github({ tag: 'v1.9.0' })))?.version).toBe('v1.8.0');
-        expect((await checkForUpdate(github(null, 500)))?.version).toBe('v1.8.0');
+        const odd = async () => Response.json({ status: 'sideways' });
+        expect((await checkForUpdate(odd))?.version).toBe('v1.8.0');
     });
 });

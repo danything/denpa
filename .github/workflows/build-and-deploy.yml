@@ -54,10 +54,6 @@ jobs:
           . .github/image-tags.sh
           echo "agent=$AGENT_TAG" >> "$GITHUB_OUTPUT"
           echo "denpa=$DENPA_TAG" >> "$GITHUB_OUTPUT"
-          # 動いている版として焼き込む。このコミットから辿れる直近のリリースの札
-          # (fetch-depth: 0 なので札が見える)。新しい版の知らせはこれと GitHub の
-          # 最新のリリースを見比べる (src/lib/server/update.ts)
-          echo "version=$(git describe --tags --abbrev=0 --match 'v[0-9]*' 2>/dev/null || echo dev)" >> "$GITHUB_OUTPUT"
 
       - name: Log in to GHCR
         uses: docker/login-action@v4
@@ -95,8 +91,10 @@ jobs:
           pull: true
           cache-from: type=gha,scope=denpa
           cache-to: type=gha,mode=max,scope=denpa
+          # 動いているコミットとして焼き込む。新しい版の知らせは、GitHub の最新の
+          # リリースがこれより先かを見て出す (src/lib/server/update.ts)
           build-args: |
-            DENPA_VERSION=${{ steps.tag.outputs.version }}
+            DENPA_COMMIT=${{ github.sha }}
           tags: |
             ${{ env.REGISTRY }}/${{ github.repository_owner }}/denpa:${{ steps.tag.outputs.denpa }}
             ${{ env.REGISTRY }}/${{ github.repository_owner }}/denpa:develop
