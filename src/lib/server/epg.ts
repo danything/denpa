@@ -1,7 +1,7 @@
-import { and, count, eq, gt, inArray, isNull, lt, ne, sql } from 'drizzle-orm';
+import { and, count, eq, gt, inArray, isNull, lt, ne, or, sql } from 'drizzle-orm';
 import type { EitEvent } from '../ts/eit';
 import { config } from './config';
-import { affected, database, now, orm } from './db';
+import { affected, now, orm } from './db';
 import { emit } from './events';
 import { applyRules } from './rules';
 import { resolveConflicts } from './scheduler';
@@ -370,23 +370,32 @@ export function savePrograms(events: EitEvent[]): number {
  * そのまま録画の名前になっていた。
  */
 function syncReservationTimes(): number {
-    const changed = database()
-        .prepare(
-            `
-        UPDATE reservations
-        SET start_at = p.start_at, end_at = p.end_at, name = p.name,
-            description = p.description, updated_at = ?
-        FROM programs p
-        WHERE p.id = reservations.program_id
-          AND reservations.state IN ('scheduled', 'conflict')
-          -- 録り始めた予約は動かさない。延長への追従は録画の行のほうでやる
-          AND reservations.started_at IS NULL
-          AND (reservations.start_at != p.start_at OR reservations.end_at != p.end_at
-               OR reservations.name != p.name OR reservations.description != p.description)
-    `,
-        )
-        .run(now());
-    return changed.changes;
+    return affected(
+        orm()
+            .update(reservations)
+            .set({
+                start_at: programs.start_at,
+                end_at: programs.end_at,
+                name: programs.name,
+                description: programs.description,
+                updated_at: now(),
+            })
+            .from(programs)
+            .where(
+                and(
+                    eq(programs.id, reservations.program_id),
+                    inArray(reservations.state, ['scheduled', 'conflict']),
+                    // 録り始めた予約は動かさない。延長への追従は録画の行のほうでやる
+                    isNull(reservations.started_at),
+                    or(
+                        ne(reservations.start_at, programs.start_at),
+                        ne(reservations.end_at, programs.end_at),
+                        ne(reservations.name, programs.name),
+                        ne(reservations.description, programs.description),
+                    ),
+                ),
+            ),
+    );
 }
 
 /** 終わった番組を消す。番組表は未来しか見ないので、直近の分だけ残せば足りる */

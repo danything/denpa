@@ -2,6 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, utimesSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
+import { eq, sql } from 'drizzle-orm';
 
 /**
  * 古い履歴の片付け。
@@ -16,68 +17,107 @@ const { config } = await import('./config');
 config.dbPath = join(mkdtempSync(join(tmpdir(), 'denpa-files-')), 'denpa.db');
 config.historyRetention = 14 * 24 * 60 * 60 * 1000;
 
-const { database } = await import('./db');
+const { orm } = await import('./db');
+const { encodeJobs, recordings, reservations } = await import('./schema');
 const { pruneHistory, reconcile } = await import('./files');
 
 const DAY = 24 * 60 * 60 * 1000;
 const now = Date.now();
 
 function seed(): void {
-    const db = database();
-    db.exec('DELETE FROM reservations; DELETE FROM recordings; DELETE FROM encode_jobs');
+    orm().delete(reservations).run();
+    orm().delete(recordings).run();
+    orm().delete(encodeJobs).run();
 
     /*
      * 「終わった予約」は取り消し・録り逃しか、録り始めたもの (started_at が入る)。
      * 予約の行に 'done' や 'failed' は入らない — 顛末は録画の行が持っている
      */
-    const reservation = db.prepare(
-        `INSERT INTO reservations (id, program_id, service_id, name, start_at, end_at, state, started_at, created_at, updated_at)
-         VALUES (?, ?, 1, ?, ?, ?, ?, ?, ?, ?)`,
-    );
-    reservation.run(1, 1, '古い完了', now - 30 * DAY, now - 30 * DAY, 'scheduled', now - 30 * DAY, now, now);
-    reservation.run(2, 2, '古い取り消し', now - 30 * DAY, now - 30 * DAY, 'canceled', null, now, now);
-    reservation.run(3, 3, 'これから', now + DAY, now + DAY, 'scheduled', null, now, now);
-    reservation.run(4, 4, '最近の完了', now - DAY, now - DAY, 'scheduled', now - DAY, now, now);
+    const reservation = (
+        id: number,
+        name: string,
+        at: number,
+        state: 'scheduled' | 'canceled',
+        started_at: number | null,
+    ) => ({
+        id,
+        program_id: id,
+        service_id: 1,
+        name,
+        start_at: at,
+        end_at: at,
+        state,
+        started_at,
+        created_at: now,
+        updated_at: now,
+    });
+    orm()
+        .insert(reservations)
+        .values([
+            reservation(1, '古い完了', now - 30 * DAY, 'scheduled', now - 30 * DAY),
+            reservation(2, '古い取り消し', now - 30 * DAY, 'canceled', null),
+            reservation(3, 'これから', now + DAY, 'scheduled', null),
+            reservation(4, '最近の完了', now - DAY, 'scheduled', now - DAY),
+        ])
+        .run();
 
     // state は生成列なので入れられない。録り終えた時刻と保存先で「視聴可能」になる
-    const recording = db.prepare(
-        `INSERT INTO recordings (id, service_id, name, start_at, end_at, finished_at, library_path, deleted_at, created_at, updated_at)
-         VALUES (?, 1, ?, ?, ?, ?, '/library/x.mkv', ?, ?, ?)`,
-    );
-    recording.run(
-        1,
-        '古い削除済み',
-        now - 30 * DAY,
-        now - 30 * DAY,
-        now - 30 * DAY,
-        now - 30 * DAY,
-        now,
-        now,
-    );
-    recording.run(2, '最近の削除済み', now - DAY, now - DAY, now - DAY, now - DAY, now, now);
-    recording.run(3, '残っている録画', now - 30 * DAY, now - 30 * DAY, now - 30 * DAY, null, now, now);
+    const recording = (id: number, name: string, at: number, deleted_at: number | null) => ({
+        id,
+        service_id: 1,
+        name,
+        start_at: at,
+        end_at: at,
+        finished_at: at,
+        library_path: '/library/x.mkv',
+        deleted_at,
+        created_at: now,
+        updated_at: now,
+    });
+    orm()
+        .insert(recordings)
+        .values([
+            recording(1, '古い削除済み', now - 30 * DAY, now - 30 * DAY),
+            recording(2, '最近の削除済み', now - DAY, now - DAY),
+            recording(3, '残っている録画', now - 30 * DAY, null),
+        ])
+        .run();
 
-    const job = db.prepare(
-        `INSERT INTO encode_jobs (id, recording_id, state, created_at, finished_at) VALUES (?, ?, ?, ?, ?)`,
-    );
-    // 消える録画にぶら下がっているもの
-    job.run(1, 1, 'done', now, now);
-    // 残る録画の、古い失敗と新しい成功。古いほうだけ消えて、最新は残る
-    job.run(2, 3, 'failed', now - 30 * DAY, now - 30 * DAY);
-    job.run(3, 3, 'done', now - 30 * DAY, now - 30 * DAY);
+    const job = (id: number, recording_id: number, state: 'done' | 'failed', at: number) => ({
+        id,
+        recording_id,
+        state,
+        created_at: at,
+        finished_at: at,
+    });
+    orm()
+        .insert(encodeJobs)
+        .values([
+            // 消える録画にぶら下がっているもの
+            job(1, 1, 'done', now),
+            // 残る録画の、古い失敗と新しい成功。古いほうだけ消えて、最新は残る
+            job(2, 3, 'failed', now - 30 * DAY),
+            job(3, 3, 'done', now - 30 * DAY),
+        ])
+        .run();
 }
 
-const ids = (table: string) =>
-    (database().query(`SELECT id FROM ${table} ORDER BY id`).all() as { id: number }[]).map((row) => row.id);
+const ids = (table: typeof reservations | typeof recordings | typeof encodeJobs) =>
+    orm()
+        .select({ id: sql<number>`id` })
+        .from(table)
+        .orderBy(sql`id`)
+        .all()
+        .map((row) => row.id);
 
 describe('古い履歴の片付け', () => {
     test('2週間より古い「終わったもの」だけ消える', () => {
         seed();
         expect(pruneHistory()).toEqual({ reservations: 2, recordings: 1, jobs: 1 });
         // 残るのは「これから」と最近のもの
-        expect(ids('reservations')).toEqual([3, 4]);
+        expect(ids(reservations)).toEqual([3, 4]);
         // ファイルが残っている録画は、古くても消さない
-        expect(ids('recordings')).toEqual([2, 3]);
+        expect(ids(recordings)).toEqual([2, 3]);
     });
 
     test('録画の行と一緒にエンコードの記録も消える', () => {
@@ -85,7 +125,7 @@ describe('古い履歴の片付け', () => {
         pruneHistory();
         // 1 は録画ごと消えた。2 は古い失敗なので消える。
         // 3 はその録画の最新なので、古くても残す (一覧の状態表示がこれを見ている)
-        expect(ids('encode_jobs')).toEqual([3]);
+        expect(ids(encodeJobs)).toEqual([3]);
     });
 
     test('何度やっても同じ', () => {
@@ -129,7 +169,7 @@ describe('実体との照合', () => {
         config.libraryDir = join(root, 'library');
         mkdirSync(config.recordedDir, { recursive: true });
         mkdirSync(config.libraryDir, { recursive: true });
-        database().exec('DELETE FROM recordings');
+        orm().delete(recordings).run();
     }
 
     /*
@@ -270,12 +310,21 @@ describe('実体との照合', () => {
     function twoCodec(): { av1: string; h264: string } {
         const av1 = put(config.libraryDir, '二本立て/二本立て - 1.mkv');
         const h264 = put(config.libraryDir, '二本立て/二本立て - 1 [H264].mkv');
-        database()
-            .prepare(
-                `INSERT INTO recordings (id, service_id, name, start_at, end_at, finished_at, library_path, alt_path, created_at, updated_at)
-                 VALUES (9, 1, '二本立て', 0, 0, 0, ?, ?, 0, 0)`,
-            )
-            .run(av1, h264);
+        orm()
+            .insert(recordings)
+            .values({
+                id: 9,
+                service_id: 1,
+                name: '二本立て',
+                start_at: 0,
+                end_at: 0,
+                finished_at: 0,
+                library_path: av1,
+                alt_path: h264,
+                created_at: 0,
+                updated_at: 0,
+            })
+            .run();
         return { av1, h264 };
     }
 
@@ -301,9 +350,11 @@ describe('実体との照合', () => {
         const result = reconcile();
         // 削除済みには倒さない
         expect(result.removed).toBe(0);
-        const row = database()
-            .query('SELECT library_path AS lib, alt_path AS alt FROM recordings WHERE id = 9')
-            .get() as { lib: string; alt: string | null };
+        const row = orm()
+            .select({ lib: recordings.library_path, alt: recordings.alt_path })
+            .from(recordings)
+            .where(eq(recordings.id, 9))
+            .get()!;
         expect(row.lib).toBe(h264);
         expect(row.alt).toBeNull();
     });
@@ -316,9 +367,11 @@ describe('実体との照合', () => {
 
         const result = reconcile();
         expect(result.removed).toBe(0);
-        const row = database()
-            .query('SELECT library_path AS lib, alt_path AS alt FROM recordings WHERE id = 9')
-            .get() as { lib: string; alt: string | null };
+        const row = orm()
+            .select({ lib: recordings.library_path, alt: recordings.alt_path })
+            .from(recordings)
+            .where(eq(recordings.id, 9))
+            .get()!;
         expect(row.lib).toBe(av1);
         expect(row.alt).toBeNull();
     });

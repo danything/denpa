@@ -2,6 +2,7 @@ import { expect, test } from 'bun:test';
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { eq } from 'drizzle-orm';
 
 /**
  * エンコードキューの毒ジョブ対策。
@@ -21,35 +22,43 @@ const { config } = await import('./config');
 config.dbPath = join(mkdtempSync(join(tmpdir(), 'denpa-encpump-')), 'denpa.db');
 config.encodeMaxAttempts = 5;
 
-const { database } = await import('./db');
+const { orm } = await import('./db');
+const { encodeJobs, recordings } = await import('./schema');
 const { pump } = await import('./encoder');
 
 const now = Date.now();
 
 function reset(): void {
-    const db = database();
-    db.exec('DELETE FROM recordings; DELETE FROM encode_jobs');
-    db.prepare(
-        `INSERT INTO recordings (id, service_id, name, start_at, end_at, created_at, updated_at)
-         VALUES (1, 1, '毒番組', ?, ?, ?, ?)`,
-    ).run(now, now, now, now);
+    orm().delete(recordings).run();
+    orm().delete(encodeJobs).run();
+    orm()
+        .insert(recordings)
+        .values({
+            id: 1,
+            service_id: 1,
+            name: '毒番組',
+            start_at: now,
+            end_at: now,
+            created_at: now,
+            updated_at: now,
+        })
+        .run();
 }
 
 function seedJob(attempts: number): number {
-    return Number(
-        database()
-            .prepare(
-                `INSERT INTO encode_jobs (recording_id, state, attempts, created_at) VALUES (1, 'queued', ?, ?)`,
-            )
-            .run(attempts, now).lastInsertRowid,
-    );
+    return orm()
+        .insert(encodeJobs)
+        .values({ recording_id: 1, state: 'queued', attempts, created_at: now })
+        .returning({ id: encodeJobs.id })
+        .get()!.id;
 }
 
 function job(jobId: number): { state: string; attempts: number } {
-    return database().prepare('SELECT state, attempts FROM encode_jobs WHERE id = ?').get(jobId) as {
-        state: string;
-        attempts: number;
-    };
+    return orm()
+        .select({ state: encodeJobs.state, attempts: encodeJobs.attempts })
+        .from(encodeJobs)
+        .where(eq(encodeJobs.id, jobId))
+        .get()!;
 }
 
 test('上限を超えたジョブは掴まずに failed へ倒す', () => {
