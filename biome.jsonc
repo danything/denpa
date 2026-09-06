@@ -8,7 +8,7 @@
             "!test-results",
             "!playwright-report",
             "!static",
-            "!k3s",
+            "!deploy",
             "!windows",
             "!docs",
             "!.github",

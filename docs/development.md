@@ -132,7 +132,7 @@ JSON で持つ列 (ジャンル・音声の構成・ルールの対象チャン�
 ## イメージ
 
 `Dockerfile` が denpa 本体、`agent/Dockerfile` がチューナー側です。
-CI が両方を焼いて `k3s/` の印を書き戻します。**main は直接 push できない**
+CI が両方を焼いて `deploy/` の印を書き戻します。**main は直接 push できない**
 (必須チェック `check` で守ってある) ので、書き戻しは bot が PR を出して自分で
 マージします (手順と理由は `.github/bump-pr.sh`。release の Chart.yaml の書き戻しも同じ)。
 release はイメージを組み直さず、main で組んだものに版を 1 層足して (`.github/release.Dockerfile`
