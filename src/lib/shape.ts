@@ -54,9 +54,13 @@ export function literal<const L extends string | number | boolean>(...options: L
             : refuse(path, `決まった値 (${options.map((o) => JSON.stringify(o)).join(' / ')})`, value);
 }
 
-/** 無くてもよい。`object` の中では、無ければ鍵ごと付けない */
+/**
+ * 無くてもよい。`object` の中では、無ければ鍵ごと付けない。
+ * **null も「無い」と読む** — 無いクレームを null で送る IdP がある。ログインが
+ * そこで止まるのは、こちらの型の都合を相手に押し付けている
+ */
 export function optional<T>(shape: Shape<T>): Shape<T | undefined> {
-    return (value, path) => (value === undefined ? undefined : shape(value, path));
+    return (value, path) => (value === undefined || value === null ? undefined : shape(value, path));
 }
 
 /** null でもよい。**無いのも null と読む** — null の鍵を省いて書く実装がある (手で書いた設定ファイルも) */
@@ -141,7 +145,11 @@ export function read<T>(shape: Shape<T>, value: unknown, what: string): T {
     }
 }
 
-/** 同じ警告を繰り返さない (チューナーの状態は何秒かおきに読む) */
+/**
+ * 警告を出した口 (`what`)。同じ口では繰り返さない — チューナーの状態は何秒か
+ * おきに読むし、言葉には値が入るので (掴んでいるチャンネルなど)、言葉ごとに
+ * 覚えると増え続ける。最初の 1 回で直すべき場所は分かる
+ */
 const warned = new Set<string>();
 
 /**
@@ -157,10 +165,9 @@ export function tolerate<T>(shape: Shape<T>, value: unknown, what: string, warn 
         return shape(value, '');
     } catch (error) {
         if (!(error instanceof ShapeError)) throw error;
-        const message = `[shape] ${what}の形が違います (相手の版がずれている?)。そのまま使います: ${error.message}`;
-        if (!warned.has(message)) {
-            warned.add(message);
-            warn(message);
+        if (!warned.has(what)) {
+            warned.add(what);
+            warn(`[shape] ${what}の形が違います (相手の版がずれている?)。そのまま使います: ${error.message}`);
         }
         return value as T;
     }

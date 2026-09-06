@@ -62,6 +62,11 @@ describe('外から来た JSON の形', () => {
         expect(() => read(TUNER, [], 'x')).toThrow(/全体 はオブジェクトのはずが 配列/);
     });
 
+    test('optional は null も「無い」と読む (無いクレームを null で送る IdP がある)', () => {
+        const tuner = read(TUNER, { index: 0, name: 'PT3', types: [], error: null }, 'チューナー');
+        expect('error' in tuner).toBe(false);
+    });
+
     test('nullable は無いのも null と読む', () => {
         const tuner = read(TUNER, { index: 0, name: 'PT3', types: [] }, 'チューナー');
         expect(tuner.channel).toBeNull();
@@ -104,6 +109,9 @@ describe('外から来た JSON の形', () => {
             /^\[shape\] エージェントの \/denpa\/tunersの形が違います \(相手の版がずれている\?\)。そのまま使います: /,
         );
         expect(warnings[0]).toContain('types[0] は決まった値');
+        // 同じ口なら、違いの中身 (値) が変わっても繰り返さない
+        tolerate(TUNER, { index: 0, name: 'PT3', types: ['CATV'] }, 'エージェントの /denpa/tuners', warn);
+        expect(warnings).toHaveLength(1);
         // 合っていれば黙って読む
         expect(tolerate(TUNER, { index: 1, name: 'x', types: [] }, 'y', warn).channel).toBeNull();
         expect(warnings).toHaveLength(1);
