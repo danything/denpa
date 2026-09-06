@@ -77,7 +77,9 @@ export async function checkForUpdate(fetcher: Fetcher = fetch): Promise<Availabl
 
         let ahead = false;
         if (!(release.draft ?? false) && !(release.prerelease ?? false)) {
-            const compared = await get(`/compare/${config.commit}...${encodeURIComponent(release.tag_name)}`);
+            const compared = await get(
+                `/compare/${encodeURIComponent(config.commit)}...${encodeURIComponent(release.tag_name)}`,
+            );
             if (!compared.ok) throw new Error(`compare が ${compared.status} を返しました`);
             ahead = read(COMPARISON, await compared.json(), 'GitHub の compare').status === 'ahead';
         }
