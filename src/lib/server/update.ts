@@ -72,7 +72,9 @@ export async function checkForUpdate(fetcher: Fetcher = fetch): Promise<Availabl
             signal: AbortSignal.timeout(10_000),
         });
         if (res.status === 404) {
+            // 繋がった (リリースが 1 つも無いだけ)。次に繋がらなくなったら、また言う
             available = null;
+            warned = false;
             return available;
         }
         if (!res.ok) throw new Error(`${res.status} を返しました`);
