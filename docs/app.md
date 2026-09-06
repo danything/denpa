@@ -173,8 +173,8 @@ SQLite が拒むので、事実と状態が食い違いようがありません�
 | `RECORDED_DIR` | `/app/recorded` | 生TSの作業領域 |
 | `LIBRARY_DIR` | `/library` | エンコード済みの置き場。ここから配る |
 | `FFMPEG` / `FFPROBE` | `/usr/local/bin/...` | 開発時は偽物に差し替える |
-| `DENPA_COMMIT` | `dev` | 動いているコミット。**CI がイメージに焼き込む**。`dev` なら新しい版の知らせを出さない |
-| `DENPA_GITHUB_API` | `https://api.github.com/repos/danything/denpa` | 新しい版を見に行く先 (`releases/latest` と `compare`)。試験では偽物を指す |
+| `DENPA_VERSION` | `dev` | 動いている版。**リリースのイメージにだけ入る** (リリース時に main のイメージへ 1 層足す。`.github/release.Dockerfile`)。`dev` (develop・手元) なら新しい版の知らせを出さない |
+| `DENPA_GITHUB_API` | `https://api.github.com/repos/danything/denpa` | 新しい版を見に行く先 (`releases/latest`)。試験では偽物を指す |
 | `UPDATE_CHECK_INTERVAL` | 1時間 | 新しい版を見に行く間隔 (ms) |
 | `ENCODE_CONCURRENCY` | `1` | 録画エンコードの同時実行数 |
 | `HW_DEVICES` | `/dev/dri/renderD*` | GPU の口を探す形。当たった口を全部試し、QSV / VA-API が初期化できたもので焼く ([encode.md](encode.md)「GPU で焼く」) |
@@ -235,7 +235,7 @@ SQLite が拒むので、事実と状態が食い違いようがありません�
 | `/api/recordings/<id>/share` | 期限付きの再生リンクを作る (share.ts)。テレビへの飛ばしもこれを使う。**リンクの尻は `/file/<番組名>.mkv`** (生TS の名指しなら `.m2ts`) — テレビの VLC は URL の最後の区切りを見出しにするので (入れ物の title は見出しに効かない)、名前をここに乗せる。サーバはその段を読み捨てる (`file/[name]/+server.ts`) |
 | 画面の高さの採り方 | **単位で言い当てない。** `app.css` が `html, body` に高さを与え、土台も番組詳細の窓もそこから `%` で降りる (`min-h-full` / `md:h-full`)。`100vh` も `100dvh` も**実機の PWA (Android Chrome) で画面より 56px 大きく出た** — 56px は Chrome for Android のアドレスバーの高さそのもの。`%` なら JS も測り直しも要らず、**描く前から正しい**。`%` が届かないのは番組表の表だけ (畳まれる幅では途中の入れ物に高さが決まらない)。そこは `svh` — 3つの単位のうち**見えている範囲を超えない側**だから |
 | `?measure` (どの画面でも) | **その端末の高さを読む札** (`components/Measure.svelte`)。窓・枠・中身の高さと、`dvh`/`svh`/`lvh`/`vh` の実測、はみ出している要素を出す。縦のはみ出しは**端末でしか起きない**ことがあり (引っ込むアドレスバー、切り欠き)、自動運転のブラウザでは作れない。**PWA にはアドレスバーが無い**ので、設定画面にも入り切りがある (そちらは覚える。端末ごとで、サーバには置かない) |
-| ヘッダー (どの画面でも) | **新しい版が出ていれば札を出す** (`v1.8.0 が出ています`。押せば GitHub のリリース)。サーバが 1 時間に 1 度、GitHub の最新のリリースが動いているコミット (`DENPA_COMMIT`) より先かを compare API で見る (`server/update.ts`。版の札は焼き込まない — リリースはイメージを組み直さず名前を貼るだけなので、中身は自分が何版か知りようがない)。先にあっても、その間のコミットが denpa の中身 (`src` や `Dockerfile`) に触っていなければ出さない — リリースの札は印の書き戻し (`k3s/` だけ) のコミットに付くので。**リリースを消せば引っ込む** — 最新は消したあとの版になるので。閉じる口は置いていない (上げるか、消えるまで出ている) |
+| ヘッダー (どの画面でも) | **新しい版が出ていれば札を出す** (`v1.8.0 が出ています`。押せば GitHub のリリース)。サーバが 1 時間に 1 度、動いている版 (`DENPA_VERSION`。リリースのイメージにだけ入っている) と GitHub の最新のリリースを数で比べる (`server/update.ts`)。develop のイメージは版を持たないので出さない — main を追いかけている限りリリースより常に先。**リリースを消せば引っ込む** — 最新は消したあとの版になるので。閉じる口は置いていない (上げるか、消えるまで出ている) |
 | `/manifest.webmanifest` | PWA のマニフェスト。**来た名前で表示名が変わる**ので静的ファイルではない。認証を掛けていない口の1つ (ブラウザが資格情報を付けずに取りに来るため。他は `/login*`・`/logout`・`/api/health`。`auth.ts` の `OPEN_PATHS`) |
 
 ## チューナーエージェント (`agent/`)

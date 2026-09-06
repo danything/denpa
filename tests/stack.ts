@@ -194,9 +194,9 @@ async function boot(index: number): Promise<{ stack: Stack; shutdown: () => Prom
             FAKE_FFMPEG_ENCODE_ARGS_FILE: stack.encodeArgsFile,
             /*
              * 新しい版の知らせ。GitHub の代わりに偽通知先が「最新のリリース」を返す
-             * (既定は無し) と、動いているコミットから見た前後 (compare)
+             * (既定は無し)。動いている版は古めにして、置いたリリースが必ず新しく見えるように
              */
-            DENPA_COMMIT: 'e2e0000',
+            DENPA_VERSION: 'v1.0.0',
             DENPA_GITHUB_API: stack.webhookUrl,
             UPDATE_CHECK_INTERVAL: '1000',
             // 定期処理は止め、テストからボタン/APIで明示的に走らせる(タイミング依存を避ける)

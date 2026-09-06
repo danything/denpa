@@ -135,6 +135,9 @@ JSON で持つ列 (ジャンル・音声の構成・ルールの対象チャン�
 CI が両方を焼いて `k3s/` の印を書き戻します。**main は直接 push できない**
 (必須チェック `check` で守ってある) ので、書き戻しは bot が PR を出して自分で
 マージします (手順と理由は `.github/bump-pr.sh`。release の Chart.yaml の書き戻しも同じ)。
+release はイメージを組み直さず、main で組んだものに版を 1 層足して (`.github/release.Dockerfile`
+の `ENV DENPA_VERSION`) `x.y.z` / `latest` の名前を付けます。動いている denpa はその版と GitHub の
+最新のリリースを数で比べ、新しい版があればヘッダーで知らせます (`src/lib/server/update.ts`)。
 
 `latest` が動くのはリリースを作ったときだけ (焼き直さず貼り替える) — タグの決め方と
 理由は [architecture.md](architecture.md#イメージのタグ)、出し方は `.github/image-tags.sh`。

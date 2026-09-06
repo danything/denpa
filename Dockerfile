@@ -216,10 +216,9 @@ COPY --from=build /app/drizzle ./drizzle
 COPY --from=build /app/server.js ./server.js
 
 EXPOSE 3000
-# 動いているコミット。CI が入れる。手元で組むと dev。新しい版の知らせは、GitHub の
-# 最新のリリースがこのコミットより先かを見て出す (src/lib/server/update.ts)。
-# **いちばん最後に置く** — コミットが変わるだけで上の層を組み直さないため
-ARG DENPA_COMMIT=dev
-ENV DENPA_COMMIT=${DENPA_COMMIT}
+# 動いている版。ここでは `dev` のまま — リリースのときに、このイメージを土台に
+# 版を 1 層足す (.github/release.Dockerfile)。新しい版の知らせはそれと GitHub の
+# 最新のリリースを数で比べて出す (src/lib/server/update.ts)。dev では出さない
+ENV DENPA_VERSION=dev
 
 CMD ["bun", "./server.js"]
