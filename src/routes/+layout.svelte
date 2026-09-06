@@ -189,8 +189,24 @@
     data-hydrated={hydrated ? 'true' : undefined}
 >
     <div class="navbar bg-base-100 sticky top-0 z-40 shadow-sm">
-        <div class="flex-1">
+        <div class="flex flex-1 items-center gap-2">
             <a class="btn btn-ghost text-xl" href="/">denpa</a>
+            <!--
+                **新しい版が出ている** (server/update.ts が GitHub のリリースを見比べる)。
+                押せばリリースのページ。閉じる口は無い — 上げるか、リリースが消えれば引っ込む
+            -->
+            {#if data.update !== null}
+                <a
+                    class="badge badge-info badge-sm"
+                    href={data.update.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    title="GitHub のリリースを開く"
+                    data-testid="update-available"
+                >
+                    {data.update.version} が出ています
+                </a>
+            {/if}
         </div>
         <!--
             **横に並べる指定を忘れない。** `<details>` は行を占める箱なので、

@@ -223,4 +223,44 @@ test.describe('ダッシュボードと画面遷移', () => {
         await expect(page.getByTestId('rule-row')).toHaveCount(0);
         await cancelAllReservations(page);
     });
+
+    /*
+     * **新しい版が出ていたら、ヘッダーで知らせる。** サーバが GitHub の最新の
+     * リリースを見比べる (`server/update.ts`。ここでは偽通知先が GitHub の代わり)。
+     * 出ること・押せばリリースのページなこと・**リリースが消えれば引っ込むこと**を見る。
+     * 動いている版は v1.0.0 (tests/stack.ts)、見比べは 1 秒おき
+     */
+    test('新しい版が出ていればヘッダーに出て、リリースが消えれば引っ込む', async ({ page, stack }) => {
+        const release = (body: unknown) =>
+            fetch(`${stack.webhookUrl}/__control/release`, {
+                method: 'POST',
+                headers: { 'content-type': 'application/json' },
+                body: JSON.stringify(body),
+            });
+        const badge = page.getByTestId('update-available');
+        try {
+            await release({
+                tag_name: 'v9.9.9',
+                html_url: 'https://github.com/danything/denpa/releases/tag/v9.9.9',
+            });
+            await expect(async () => {
+                await goto(page, '/');
+                await expect(badge).toContainText('v9.9.9');
+            }).toPass({ timeout: 15_000 });
+            await expect(badge).toHaveAttribute('href', /releases\/tag\/v9\.9\.9$/);
+
+            // 最新が古い版になった (新しいほうのリリースを消した) → 引っ込む
+            await release({
+                tag_name: 'v0.9.0',
+                html_url: 'https://github.com/danything/denpa/releases/tag/v0.9.0',
+            });
+            await expect(async () => {
+                await goto(page, '/');
+                await expect(badge).toHaveCount(0);
+            }).toPass({ timeout: 15_000 });
+        } finally {
+            // 置きっぱなしにしない。他の試験はヘッダーの幅を測る
+            await release(null);
+        }
+    });
 });

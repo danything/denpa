@@ -169,6 +169,17 @@ export const config = {
     bmlDns: str('BML_DNS', '1.1.1.1,8.8.8.8'),
 
     /**
+     * 動いている版。**イメージを組むときに入る** (Dockerfile の `DENPA_VERSION`。
+     * そのコミットから辿れる直近のリリースの札 = `git describe --tags --abbrev=0`)。
+     * 手元や試験では `dev` で、そのときは新しい版の知らせを出さない (update.ts)
+     */
+    version: str('DENPA_VERSION', 'dev'),
+    /** 新しい版を見に行く先。GitHub の「最新のリリース」。試験では偽物を指す */
+    releasesUrl: str('DENPA_RELEASES_URL', 'https://api.github.com/repos/danything/denpa/releases/latest'),
+    /** 新しい版を見に行く間隔 (ms)。認証なしの GitHub API は 1 時間に 60 回まで */
+    updateCheckInterval: num('UPDATE_CHECK_INTERVAL', 60 * MIN),
+
+    /**
      * 30コマとみなす生存率の上限 (encoder.measureSmoothMotion。5窓の中央値)。
      * アニメ 17〜28% (30枚違う絵の作品で 48%) と実写 60〜79% の間の 50%。
      * **これ以上は上げないこと** — 実写側の余裕が 3〜10 ポイントしか無い

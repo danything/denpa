@@ -18,6 +18,7 @@ import { tick } from './scheduler';
 import { prune as pruneSessions } from './session';
 import { beginDraining } from './shutdown';
 import { redeem } from './tickets';
+import { checkForUpdate } from './update';
 import { notify } from './webhook';
 import { serve } from './ws';
 
@@ -94,6 +95,13 @@ export function start(): void {
         );
     }
     installShutdownHooks();
+
+    /*
+     * **新しい版が出ていないか、GitHub を見に行く** (update.ts)。起動時に 1 回と
+     * 1 時間おき。`DENPA_AUTOSTART=0` でも回す — チューナーには行かない
+     */
+    void guard('update', checkForUpdate);
+    every(config.updateCheckInterval, 'update', checkForUpdate);
 
     if (!config.autostart) {
         console.log('[boot] DENPA_AUTOSTART=0 のためバックグラウンド処理は起動しません');
