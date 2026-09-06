@@ -6,7 +6,7 @@ name: denpa
 namespace: denpa
 
 # Directory holding the manifests, relative to the repo root.
-sourcePath: k3s
+sourcePath: deploy
 recurse: false
 
 # autoSync: false leaves the app on manual sync in the UI.

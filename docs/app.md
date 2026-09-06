@@ -162,7 +162,7 @@ SQLite が拒むので、事実と状態が食い違いようがありません�
 
 本番で差し替えているのは、**既定値では決められないものだけ**です
 (前段の渡し方・OIDC・素通しにするネットワーク・PWA の名前・エンコードの本数)。置き場所は
-`k3s/application.yaml` の `helm.valuesObject` (chart の既定値 `charts/denpa/values.yaml`
+`deploy/application.yaml` の `helm.valuesObject` (chart の既定値 `charts/denpa/values.yaml`
 に重なる)。置き場所やエージェントの居場所は既定値がそのままあの構成なので書いていません — 同じ値を
 書き写すと、片方だけ直したときにどちらが効いているのか分からなくなります。
 

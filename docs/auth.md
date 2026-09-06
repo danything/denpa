@@ -198,7 +198,7 @@ chart の `traefik.enabled`) は2つの名前を同じ Rule で denpa に届け�
 グループも同じなので、入れる人の集合は forward-auth のときと変わりません。
 
 値は **`denpa` 名前空間の Secret `denpa-oidc`** に入っていて、chart はその名前
-(`denpa.oidcSecretName`、この家の値は `k3s/application.yaml` の `helm.valuesObject`) を `secretKeyRef` で引くだけです。
+(`denpa.oidcSecretName`、この家の値は `deploy/application.yaml` の `helm.valuesObject`) を `secretKeyRef` で引くだけです。
 
 | 鍵 | 何 |
 | --- | --- |
@@ -209,7 +209,7 @@ chart の `traefik.enabled`) は2つの名前を同じ Rule で denpa に届け�
 
 #### 値は Infisical、Secret は ESO が作ります
 
-**`k3s/oidc-secret.yaml` は ExternalSecret です。** 値そのものは Infisical
+**`deploy/oidc-secret.yaml` は ExternalSecret です。** 値そのものは Infisical
 (https://il.doany.io、このクラスタでセルフホスト) のフォルダ `/denpa/denpa-oidc` にあり、
 External Secrets Operator がそれを読んで Secret `denpa-oidc` を作ります。Infisical 側の
 シークレット名がそのまま Secret のキー (`issuer` / `client-id` / ...) になります。

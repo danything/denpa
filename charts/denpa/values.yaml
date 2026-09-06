@@ -2,7 +2,7 @@
 #
 # **ここは「誰の環境でも動く」値にしてある。** 自分の環境の値 (ドメイン・
 # 通すネットワーク・OIDC・PVC の大きさ) は別の values ファイルで上書きする
-# (このリポジトリ自身の本番は `k3s/application.yaml` の `helm.valuesObject`)。
+# (このリポジトリ自身の本番は `deploy/application.yaml` の `helm.valuesObject`)。
 #
 # 認証を何も設定しないと denpa は**全部断る** (docs/auth.md)。最低限
 # `denpa.trustedNetworks` に自分の LAN を入れること。
@@ -45,7 +45,7 @@ denpa:
   pwaNames: ""
   # OIDC でのログイン (docs/auth.md)。**Secret の名前だけ渡す** — 中身
   # (issuer / client-id / client-secret / group) は chart の外で作る
-  # (このリポジトリ自身は ExternalSecret `k3s/oidc-secret.yaml`)。空なら OIDC 無し
+  # (このリポジトリ自身は ExternalSecret `deploy/oidc-secret.yaml`)。空なら OIDC 無し
   oidcSecretName: ""
   # 追加の環境変数 (src/lib/server/config.ts の一覧)。そのまま container.env に入る
   extraEnv: []

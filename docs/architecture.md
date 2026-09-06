@@ -128,7 +128,7 @@ PreSync フックに置いています (`denpa-prepull`、中身は `/bin/true`)
 
 | タグ | いつ動くか | 誰が指しているか |
 | --- | --- | --- |
-| `develop` | **main へ入るたび** | `k3s/application.yaml` の `helm.valuesObject` (この構成。入れ替えの合図は `imageMarks`) |
+| `develop` | **main へ入るたび** | `deploy/application.yaml` の `helm.valuesObject` (この構成。入れ替えの合図は `imageMarks`) |
 | `latest` | **GitHub でリリースを作ったときだけ** | `compose.prod.yml` (入れて使う人) |
 | `0.1` | その系列でリリースを作るたび (0.1.1 を出せばそちらへ) | 版を決めて使う人 |
 | `0.1.0` | **動かない** | 固定して使う人・戻したいとき |
@@ -186,9 +186,9 @@ PreSync フックに置いています (`denpa-prepull`、中身は `/bin/true`)
 
 **入れ方は Helm chart** ([charts/denpa](../charts/denpa)。エージェントだけ置くなら
 [charts/denpa-agent](../charts/denpa-agent))。この家の本番は ArgoCD が
-[k3s/application.yaml](../k3s/application.yaml) を見て、同じ chart にそこの
+[deploy/application.yaml](../deploy/application.yaml) を見て、同じ chart にそこの
 `helm.valuesObject` (インライン) を重ねて当てています — **chart の使い方の実例**として
-読めます。bootstrap の ApplicationSet は `k3s/` を「素のマニフェストの置き場」として
+読めます。bootstrap の ApplicationSet は `deploy/` を「素のマニフェストの置き場」として
 読むので、そこには Application (chart を指す) と、chart に持たないもの — ExternalSecret
 (Infisical から Secret を作る、この家の事情) と、この置き場の設定 (`argocd.yaml`) — だけを素のまま
 置いています。Namespace は要りません (ApplicationSet の `CreateNamespace` が作る)。
@@ -201,8 +201,8 @@ PreSync フックに置いています (`denpa-prepull`、中身は `/bin/true`)
 - **Traefik** — `mydnschallenge` certResolver (Cloudflare DNS-01)。forward-auth を
   外したので、名前空間をまたぐ参照はもうありません
 - **ArgoCD** — push時に webhook が自動登録される運用。Application 自体は
-  [k3s/application.yaml](../k3s/application.yaml) に置いてあり、bootstrap の
-  ApplicationSet が `k3s/argocd.yaml` を見て拾います
+  [deploy/application.yaml](../deploy/application.yaml) に置いてあり、bootstrap の
+  ApplicationSet が `deploy/argocd.yaml` を見て拾います
 - **DNS** — `dp.doany.io` が Traefik の外部IPを指すこと。
   LAN 用の `dp.l.doany.io` は `*.l.doany.io` の書き換えで内側のIPへ
 - **チューナードライバ** — エージェントは `privileged: true` かつ `/dev/bus`・`/dev/dvb` を

@@ -4,7 +4,7 @@ on:
   push:
     branches: [main]
     paths-ignore:
-      - 'k3s/**'
+      - 'deploy/**'
       - 'docs/**'
       - '**.md'
   # PR はパスで絞らない。main は `check` を必須にして守っているので、絞ると
