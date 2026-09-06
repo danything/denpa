@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, spyOn, test } from 'bun:test';
 import { config } from './config';
-import { checkForUpdate, updateAvailable } from './update';
+import { checkForUpdate, DENPA_PATHS, updateAvailable } from './update';
 
 const original = { commit: config.commit, githubApi: config.githubApi };
 afterEach(() => {
@@ -13,14 +13,19 @@ type Status = 'ahead' | 'behind' | 'identical' | 'diverged';
  * GitHub の代わり。最新のリリースと、動いているコミットから見た前後を決めて渡す。
  * `release` が null なら「1 つも無い」(404)
  */
-function github(release: Record<string, unknown> | null, status: Status = 'ahead') {
+function github(
+    release: Record<string, unknown> | null,
+    status: Status = 'ahead',
+    files: { filename: string }[] | undefined = [{ filename: 'src/lib/server/update.ts' }],
+) {
     const asked: string[] = [];
     const fetcher = async (url: string) => {
         asked.push(url);
         if (url.endsWith('/releases/latest')) {
             return release === null ? new Response('', { status: 404 }) : Response.json(release);
         }
-        if (url.includes('/compare/')) return Response.json({ status });
+        if (url.includes('/compare/'))
+            return Response.json(files === undefined ? { status } : { status, files });
         return new Response('', { status: 500 });
     };
     return Object.assign(fetcher, { asked });
@@ -49,6 +54,46 @@ describe('新しい版の知らせ', () => {
         expect(await checkForUpdate(github(release('v1.8.0'), 'identical'))).toBeNull();
         // 枝分かれ (別の枝から出したリリース) は数えない
         expect(await checkForUpdate(github(release('v1.8.0'), 'diverged'))).toBeNull();
+    });
+
+    /*
+     * リリースの札は「印の書き戻し」(k3s/ だけ) のコミットに付き、イメージはその 1 つ前で
+     * 組まれる。先にあっても denpa の中身に触っていなければ、動いているのはそのリリース
+     */
+    test('先にあっても、denpa の中身に触っていなければ出ない', async () => {
+        config.commit = 'abc1234';
+        expect(
+            await checkForUpdate(github(release('v1.8.0'), 'ahead', [{ filename: 'k3s/application.yaml' }])),
+        ).toBeNull();
+        expect(
+            await checkForUpdate(
+                github(release('v1.8.0'), 'ahead', [
+                    { filename: 'charts/denpa/Chart.yaml' },
+                    { filename: 'docs/app.md' },
+                ]),
+            ),
+        ).toBeNull();
+        // 中身に触っていれば出る (Dockerfile そのもの、src の下)
+        expect(
+            (await checkForUpdate(github(release('v1.8.0'), 'ahead', [{ filename: 'Dockerfile' }])))?.version,
+        ).toBe('v1.8.0');
+        expect(
+            (
+                await checkForUpdate(
+                    github(release('v1.8.0'), 'ahead', [{ filename: 'k3s/x' }, { filename: 'src/a.ts' }]),
+                )
+            )?.version,
+        ).toBe('v1.8.0');
+        // files が無い答えと、切れている答え (300 個) は触ったことにする
+        expect((await checkForUpdate(github(release('v1.8.0'), 'ahead', undefined)))?.version).toBe('v1.8.0');
+        const many = Array.from({ length: 300 }, (_, i) => ({ filename: `k3s/${i}` }));
+        expect((await checkForUpdate(github(release('v1.8.0'), 'ahead', many)))?.version).toBe('v1.8.0');
+    });
+
+    test('denpa の中身のパスは .github/image-tags.sh と同じ', async () => {
+        const script = await Bun.file('.github/image-tags.sh').text();
+        const listed = /^denpa_paths="([^"]+)"/m.exec(script)?.[1]?.split(/\s+/);
+        expect(listed).toEqual(DENPA_PATHS);
     });
 
     // リリースを消すと「最新」は 1 つ前になる。そこで知らせが引っ込む
