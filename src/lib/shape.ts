@@ -123,7 +123,8 @@ export function object<F extends Fields>(fields: F): Shape<ObjectOf<F>> {
         const out: Record<string, unknown> = {};
         for (const [key, shape] of Object.entries(fields)) {
             const parsed = shape(source[key], path === '' ? key : `${path}.${key}`);
-            if (parsed !== undefined || key in source) out[key] = parsed;
+            // 無い (undefined / null を optional が「無い」と読んだ) 鍵は付けない
+            if (parsed !== undefined) out[key] = parsed;
         }
         return out as ObjectOf<F>;
     };
