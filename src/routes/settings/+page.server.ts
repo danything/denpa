@@ -1,13 +1,15 @@
 import { basename } from 'node:path';
 import { fail } from '@sveltejs/kit';
+import { eq, sql } from 'drizzle-orm';
 import { HW_CODECS, HW_KINDS, type HwAllow, hwAllowed } from '$lib/hw';
 import { isCmMode } from '$lib/server/cm';
-import { database, now, queryAll, queryOne } from '$lib/server/db';
+import { now, orm } from '$lib/server/db';
 import { describeDevice, type HwEncode, hwEncode, probe } from '$lib/server/hwenc';
 import { available as migrateAvailable, source, start, status } from '$lib/server/migrate';
+import { webhooks } from '$lib/server/schema';
 import { normalizePostalCode, saveSettings, settings } from '$lib/server/settings';
 import { serializeTargets, targets, type VlcTarget } from '$lib/server/vlc';
-import { send, type Webhook } from '$lib/server/webhook';
+import { send } from '$lib/server/webhook';
 import type { VideoCodec } from '$lib/types';
 import { normalizeVlcHost } from '$lib/vlc-host';
 import { EVENTS } from '$lib/webhook-events';
@@ -38,7 +40,7 @@ export function load() {
         broadcast: { postalCode: current.postalCode, bmlNetwork: current.bmlNetwork },
         /** テレビの VLC の居場所。画面は名前+ホストの行として編集する */
         vlc: { targets: targets() },
-        webhooks: queryAll<Webhook>('SELECT * FROM webhooks ORDER BY id'),
+        webhooks: orm().select().from(webhooks).orderBy(webhooks.id).all(),
         events: EVENTS,
         migrate: {
             available: migrateAvailable(),
@@ -178,11 +180,11 @@ export const actions = {
         // 何も選ばなければ全部の通知を受け取る
         const events = form.getAll('events').map(String).filter(Boolean);
 
-        database()
-            // name は廃止したが、既存DBの列が NOT NULL のままなので空文字を入れる。
-            // CREATE TABLE IF NOT EXISTS では列定義が変わらないため
-            .prepare('INSERT INTO webhooks (name, url, events, enabled, created_at) VALUES (?, ?, ?, 1, ?)')
-            .run('', url, JSON.stringify(events), now());
+        // name は廃止したが、列は残してある (既定 '' なので入れなくてよい)
+        orm()
+            .insert(webhooks)
+            .values({ url, events: JSON.stringify(events), enabled: 1, created_at: now() })
+            .run();
         return { success: true, webhookAdded: true };
     },
 
@@ -190,7 +192,11 @@ export const actions = {
         const form = await request.formData();
         const id = Number(form.get('id'));
         if (!Number.isFinite(id)) return fail(400, { message: 'IDが不正です' });
-        database().prepare('UPDATE webhooks SET enabled = 1 - enabled WHERE id = ?').run(id);
+        orm()
+            .update(webhooks)
+            .set({ enabled: sql`1 - ${webhooks.enabled}` })
+            .where(eq(webhooks.id, id))
+            .run();
         return { success: true };
     },
 
@@ -198,14 +204,14 @@ export const actions = {
         const form = await request.formData();
         const id = Number(form.get('id'));
         if (!Number.isFinite(id)) return fail(400, { message: 'IDが不正です' });
-        database().prepare('DELETE FROM webhooks WHERE id = ?').run(id);
+        orm().delete(webhooks).where(eq(webhooks.id, id)).run();
         return { success: true };
     },
 
     testWebhook: async ({ request }) => {
         const form = await request.formData();
         const id = Number(form.get('id'));
-        const webhook = queryOne<Webhook>('SELECT * FROM webhooks WHERE id = ?', id);
+        const webhook = orm().select().from(webhooks).where(eq(webhooks.id, id)).get();
         if (webhook === undefined) return fail(400, { message: '通知先が見つかりません' });
 
         const status = await send(webhook, {

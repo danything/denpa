@@ -1,12 +1,14 @@
 import { existsSync, mkdirSync, readFileSync, renameSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { and, eq, sql } from 'drizzle-orm';
 import { LogoCollector } from '../ts/logo';
 import { withPalette } from '../ts/logo-palette';
 import type { ChannelType } from '../types';
 import { config } from './config';
-import { database, queryAll } from './db';
+import { orm } from './db';
 import { CURRENT_SERVICES } from './epg';
 import { emit } from './events';
+import { services } from './schema';
 import { chunks } from './stream';
 import { type AgentTuner, getTuners, openChannelStream } from './tuner';
 
@@ -217,12 +219,12 @@ function store(networkId: number, serviceIds: number[], data: Uint8Array): numbe
 
     let saved = 0;
     for (const serviceId of serviceIds) {
-        const service = queryAll<{ id: number }>(
-            'SELECT id FROM services WHERE network_id = ? AND service_id = ?',
-            networkId,
-            serviceId,
-        );
-        for (const { id } of service) {
+        const matched = orm()
+            .select({ id: services.id })
+            .from(services)
+            .where(and(eq(services.network_id, networkId), eq(services.service_id, serviceId)))
+            .all();
+        for (const { id } of matched) {
             // 書きかけを読ませない。番組表は同時に見に来る
             const working = `${logoPath(id)}.writing`;
             writeFileSync(working, data);
@@ -234,7 +236,7 @@ function store(networkId: number, serviceIds: number[], data: Uint8Array): numbe
              * 頃は、**その局だけが「いまの局」になって番組表から他が消えていた**
              * (次の取り込みまで)。ロゴを拾ったことは取り込みとは何の関係もない
              */
-            database().prepare('UPDATE services SET has_logo = 1 WHERE id = ?').run(id);
+            orm().update(services).set({ has_logo: 1 }).where(eq(services.id, id)).run();
             saved++;
         }
     }
@@ -309,19 +311,17 @@ export interface Feed {
  * 拾い直すと局によっては何時間もかかるので、置いてあるものを直す。
  */
 export function reconcile(): number {
-    const rows = queryAll<{ id: number; has_logo: number }>('SELECT id, has_logo FROM services');
-    const fix = database().prepare('UPDATE services SET has_logo = ? WHERE id = ?');
+    const rows = orm().select({ id: services.id, has_logo: services.has_logo }).from(services).all();
     let changed = 0;
-    const tx = database().transaction(() => {
+    orm().transaction((tx) => {
         for (const row of rows) {
             const actual = existsSync(logoPath(row.id)) ? 1 : 0;
             if (actual === 1) repaint(row.id);
             if (actual === row.has_logo) continue;
-            fix.run(actual, row.id);
+            tx.update(services).set({ has_logo: actual }).where(eq(services.id, row.id)).run();
             changed++;
         }
     });
-    tx();
     if (changed > 0) emit('services');
     return changed;
 }
@@ -379,11 +379,17 @@ function needsLogo(serviceId: number): boolean {
 
 /** いま選局できる局。取り残しは見に行かない */
 function currentServices(): { id: number; type: string; channel: string; network_id: number }[] {
-    return queryAll(
-        `SELECT id, type, channel, network_id FROM services
-         WHERE ${CURRENT_SERVICES}
-         ORDER BY type, channel`,
-    );
+    return orm()
+        .select({
+            id: services.id,
+            type: services.type,
+            channel: services.channel,
+            network_id: services.network_id,
+        })
+        .from(services)
+        .where(sql.raw(CURRENT_SERVICES))
+        .orderBy(services.type, services.channel)
+        .all();
 }
 
 export function missing(): Target[] {

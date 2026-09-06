@@ -1,10 +1,12 @@
 import { type Dirent, existsSync, readdirSync, rmdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
+import { and, eq, inArray, isNotNull, isNull, lt, max, notInArray, or, sql } from 'drizzle-orm';
 import type { Recording } from '../types';
 import { config } from './config';
-import { database, now, queryAll } from './db';
+import { affected, now, orm } from './db';
 import { pruneEmptyDirs, removeIfExists } from './fsx';
 import { removeSidecars, SIDECAR_SUFFIXES } from './metadata';
+import { encodeJobs, recordings, reservations } from './schema';
 
 const SIDECAR_ORPHAN = new RegExp(
     `^(.+?)(?:${SIDECAR_SUFFIXES.map((suffix) => suffix.replace(/[.-]/g, '\\$&')).join('|')})$`,
@@ -30,12 +32,18 @@ export function deleteRecordingFiles(recording: Recording, reason: string): void
     removeIfExists(recording.ts_path);
     // 失敗した録画を消したときに理由を上書きすると、なぜ失敗したのかが分からなくなる。
     // 元の理由があるならそちらを残す
-    database()
-        .prepare(
-            `UPDATE recordings SET deleted_at = ?, library_path = NULL, alt_path = NULL, ts_path = NULL,
-             error = COALESCE(NULLIF(error, ''), ?), updated_at = ? WHERE id = ?`,
-        )
-        .run(now(), reason, now(), recording.id);
+    orm()
+        .update(recordings)
+        .set({
+            deleted_at: now(),
+            library_path: null,
+            alt_path: null,
+            ts_path: null,
+            error: sql`COALESCE(NULLIF(${recordings.error}, ''), ${reason})`,
+            updated_at: now(),
+        })
+        .where(eq(recordings.id, recording.id))
+        .run();
 }
 
 /**
@@ -56,17 +64,21 @@ export function reconcile(): {
     strays: number;
     pruned: number;
 } {
-    const recordings = queryAll<Recording>(
-        `SELECT * FROM recordings WHERE library_path IS NOT NULL AND deleted_at IS NULL`,
-    );
+    const placed = orm()
+        .select()
+        .from(recordings)
+        .where(and(isNotNull(recordings.library_path), isNull(recordings.deleted_at)))
+        .all();
 
     let removed = 0;
-    for (const recording of recordings) {
+    for (const recording of placed) {
         // もう一方 (H.264) だけが外から消えたら、その控えだけ外す。主は無事なので録画は残る
         if (recording.alt_path !== null && !existsSync(recording.alt_path)) {
-            database()
-                .prepare('UPDATE recordings SET alt_path = NULL, updated_at = ? WHERE id = ?')
-                .run(now(), recording.id);
+            orm()
+                .update(recordings)
+                .set({ alt_path: null, updated_at: now() })
+                .where(eq(recordings.id, recording.id))
+                .run();
             removeSidecars(recording.alt_path);
             console.log(`[files] もう一方が消えていたので控えを外しました: ${recording.name}`);
         }
@@ -77,11 +89,11 @@ export function reconcile(): {
          * 消してしまわないため。もう一方も無ければ、いつもどおり削除済みに倒す
          */
         if (recording.alt_path !== null && existsSync(recording.alt_path)) {
-            database()
-                .prepare(
-                    'UPDATE recordings SET library_path = ?, alt_path = NULL, updated_at = ? WHERE id = ?',
-                )
-                .run(recording.alt_path, now(), recording.id);
+            orm()
+                .update(recordings)
+                .set({ library_path: recording.alt_path, alt_path: null, updated_at: now() })
+                .where(eq(recordings.id, recording.id))
+                .run();
             console.log(`[files] 主が消えたので繰り上げました: ${recording.name}`);
             continue;
         }
@@ -91,7 +103,7 @@ export function reconcile(): {
     }
 
     const left = sweepLeftovers();
-    return { checked: recordings.length, removed, ...left };
+    return { checked: placed.length, removed, ...left };
 }
 
 /** 動画そのもの。これに付き添うものが「付き添い」 */
@@ -137,11 +149,16 @@ function settling(path: string, at: number): boolean {
  */
 function sweepLeftovers(): { swept: number; strays: number; pruned: number } {
     const known = new Set(
-        queryAll<{ path: string | null }>(
-            `SELECT ts_path AS path FROM recordings WHERE ts_path IS NOT NULL
-             UNION SELECT library_path FROM recordings WHERE library_path IS NOT NULL
-             UNION SELECT alt_path FROM recordings WHERE alt_path IS NOT NULL`,
-        ).map((row) => row.path as string),
+        orm()
+            .select({
+                ts_path: recordings.ts_path,
+                library_path: recordings.library_path,
+                alt_path: recordings.alt_path,
+            })
+            .from(recordings)
+            .all()
+            .flatMap((row) => [row.ts_path, row.library_path, row.alt_path])
+            .filter((path): path is string => path !== null),
     );
 
     const at = now();
@@ -248,20 +265,32 @@ export function pruneHistory(): { reservations: number; recordings: number; jobs
      * 「終わった予約」は**取り消し・録り逃しか、もう録り始めたもの**。
      * 録り始めたあとの顛末は録画の行が持っているので、予約側では見ない
      */
-    const reservations = database()
-        .prepare(
-            `DELETE FROM reservations
-             WHERE (state IN ('canceled', 'missed') OR started_at IS NOT NULL) AND end_at < ?`,
-        )
-        .run(cutoff).changes;
+    const droppedReservations = affected(
+        orm()
+            .delete(reservations)
+            .where(
+                and(
+                    or(
+                        inArray(reservations.state, ['canceled', 'missed']),
+                        isNotNull(reservations.started_at),
+                    ),
+                    lt(reservations.end_at, cutoff),
+                ),
+            ),
+    );
 
     // 実体はもう無い (deleted_at が立つときに消してある)
-    const recordings = database()
-        .prepare('DELETE FROM recordings WHERE deleted_at IS NOT NULL AND deleted_at < ?')
-        .run(cutoff).changes;
+    const droppedRecordings = affected(
+        orm()
+            .delete(recordings)
+            .where(and(isNotNull(recordings.deleted_at), lt(recordings.deleted_at, cutoff))),
+    );
 
     // 録画の行を消したら、ぶら下がっていたエンコードの記録も要らない
-    database().prepare('DELETE FROM encode_jobs WHERE recording_id NOT IN (SELECT id FROM recordings)').run();
+    orm()
+        .delete(encodeJobs)
+        .where(notInArray(encodeJobs.recording_id, orm().select({ id: recordings.id }).from(recordings)))
+        .run();
 
     /*
      * 終わったエンコードの記録も期限を切る。
@@ -270,19 +299,28 @@ export function pruneHistory(): { reservations: number; recordings: number; jobs
      * (実機で失敗22件)。**いちばん新しい1件だけは残す。** 一覧はそれを見て
      * 「いま失敗しているか」を決めているため、消してしまうと状態が読めなくなる。
      */
-    const jobs = database()
-        .prepare(
-            `DELETE FROM encode_jobs
-             WHERE state IN ('done', 'failed', 'canceled')
-               AND COALESCE(finished_at, created_at) < ?
-               AND id NOT IN (SELECT MAX(id) FROM encode_jobs GROUP BY recording_id)`,
-        )
-        .run(cutoff).changes;
+    const jobs = affected(
+        orm()
+            .delete(encodeJobs)
+            .where(
+                and(
+                    inArray(encodeJobs.state, ['done', 'failed', 'canceled']),
+                    lt(sql`COALESCE(${encodeJobs.finished_at}, ${encodeJobs.created_at})`, cutoff),
+                    notInArray(
+                        encodeJobs.id,
+                        orm()
+                            .select({ id: max(encodeJobs.id) })
+                            .from(encodeJobs)
+                            .groupBy(encodeJobs.recording_id),
+                    ),
+                ),
+            ),
+    );
 
-    if (reservations > 0 || recordings > 0 || jobs > 0) {
+    if (droppedReservations > 0 || droppedRecordings > 0 || jobs > 0) {
         console.log(
-            `[files] 古い履歴を片付けました: 予約 ${reservations} 件 / 録画 ${recordings} 件 / エンコード ${jobs} 件`,
+            `[files] 古い履歴を片付けました: 予約 ${droppedReservations} 件 / 録画 ${droppedRecordings} 件 / エンコード ${jobs} 件`,
         );
     }
-    return { reservations, recordings, jobs };
+    return { reservations: droppedReservations, recordings: droppedRecordings, jobs };
 }

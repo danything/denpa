@@ -1,8 +1,14 @@
 import { fail } from '@sveltejs/kit';
-import { queryAll, queryOne } from '$lib/server/db';
+import { and, eq, gt, lte, ne, sql } from 'drizzle-orm';
+import { orm, queryAll } from '$lib/server/db';
 import { airing, CURRENT_SERVICES, SERVICE_ORDER } from '$lib/server/epg';
 import { cancel, reserve } from '$lib/server/reservations';
-import { RESERVATION_STATE } from '$lib/server/schema';
+import {
+    programs as programTable,
+    RESERVATION_STATE,
+    reservations,
+    services as serviceTable,
+} from '$lib/server/schema';
 import type { ChannelType, Program, Service } from '$lib/types';
 
 const HOUR = 60 * 60 * 1000;
@@ -49,11 +55,12 @@ export async function load({ url }) {
 
     // テレビと同じ並びにする (SERVICE_ORDER)。
     // 取り残しの局は出さない (CURRENT_SERVICES)。出すと番組表に空の列が並ぶ
-    const services = queryAll<Service>(
-        `SELECT * FROM services WHERE type = ? AND ${CURRENT_SERVICES}
-         ORDER BY ${SERVICE_ORDER}`,
-        type,
-    );
+    const services: Service[] = orm()
+        .select()
+        .from(serviceTable)
+        .where(and(eq(serviceTable.type, type), sql.raw(CURRENT_SERVICES)))
+        .orderBy(sql.raw(SERVICE_ORDER))
+        .all();
     const programs = queryAll<GridProgram>(
         /*
          * 予約の状態は録画の行から引く (RESERVATION_STATE)。r.state をそのまま
@@ -93,12 +100,12 @@ export async function load({ url }) {
      */
     const at = Date.now();
     const watchable = airing(
-        queryAll<{ id: number }>(`SELECT id FROM services WHERE ${CURRENT_SERVICES}`),
-        queryAll<{ service_id: number; name: string }>(
-            `SELECT service_id, name FROM programs WHERE start_at <= ? AND end_at > ?`,
-            at,
-            at,
-        ),
+        orm().select({ id: serviceTable.id }).from(serviceTable).where(sql.raw(CURRENT_SERVICES)).all(),
+        orm()
+            .select({ service_id: programTable.service_id, name: programTable.name })
+            .from(programTable)
+            .where(and(lte(programTable.start_at, at), gt(programTable.end_at, at)))
+            .all(),
     ).map((service) => service.id);
 
     return {
@@ -118,10 +125,11 @@ export const actions = {
         const form = await request.formData();
         const programId = Number(form.get('programId'));
         if (!Number.isFinite(programId)) return fail(400, { message: '番組IDが不正です' });
-        const reservation = queryOne<{ id: number }>(
-            `SELECT id FROM reservations WHERE program_id = ? AND state != 'canceled'`,
-            programId,
-        );
+        const reservation = orm()
+            .select({ id: reservations.id })
+            .from(reservations)
+            .where(and(eq(reservations.program_id, programId), ne(reservations.state, 'canceled')))
+            .get();
         if (reservation === undefined) return fail(404, { message: '予約が見つかりません' });
         await cancel(reservation.id);
         return { success: true };

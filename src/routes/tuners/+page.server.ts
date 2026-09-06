@@ -1,10 +1,12 @@
 import { fail } from '@sveltejs/kit';
-import { database, queryAll, queryOne } from '$lib/server/db';
+import { and, count, eq, sql } from 'drizzle-orm';
+import { orm } from '$lib/server/db';
 import { CURRENT_SERVICES } from '$lib/server/epg';
 import { collectNow, collectState } from '$lib/server/epg-collect';
 import { stats as logoStats, sweepNow, sweepState } from '$lib/server/logo';
 import { forgetLogoData, learned, stats as learnStats, siblings, stations } from '$lib/server/logo-data';
 import { refresh, start, stop } from '$lib/server/scan';
+import { programs, recordings, services } from '$lib/server/schema';
 import { cardStatus } from '$lib/server/scramble';
 import { type AgentTuner, getTuners, putTuners, type TunerConfig, tunersDetected } from '$lib/server/tuner';
 import type { ChannelType } from '$lib/types';
@@ -40,10 +42,11 @@ interface TunerUser {
 function describe(use: string): string {
     const recording = use.match(/^rec (\d+)$/);
     if (recording !== null) {
-        const row = queryOne<{ name: string }>(
-            'SELECT name FROM recordings WHERE id = ?',
-            Number(recording[1]),
-        );
+        const row = orm()
+            .select({ name: recordings.name })
+            .from(recordings)
+            .where(eq(recordings.id, Number(recording[1])))
+            .get();
         return row === undefined ? '録画' : `録画: ${row.name}`;
     }
 
@@ -90,22 +93,22 @@ interface Coverage {
  * 前の回の行は残る (録画や過去の予約が辿れなくなるので消せない)。
  */
 function coverage(): Coverage[] {
-    const rows = queryAll<{
-        id: number;
-        name: string;
-        type: ChannelType;
-        channel: string;
-        programs: number;
-        until: number;
-    }>(`
-        SELECT s.id, s.name, s.type, s.channel,
-               COUNT(p.id) AS programs, COALESCE(MAX(p.end_at), 0) AS until
-          FROM services s
-          LEFT JOIN programs p ON p.service_id = s.id
-         WHERE s.updated_at >= (SELECT MAX(updated_at) FROM services)
-         GROUP BY s.id
-         ORDER BY s.service_id
-    `);
+    const rows = orm()
+        .select({
+            id: services.id,
+            name: services.name,
+            type: services.type,
+            channel: services.channel,
+            programs: count(programs.id),
+            until: sql`COALESCE(MAX(${programs.end_at}), 0)`.mapWith(Number),
+        })
+        .from(services)
+        .leftJoin(programs, eq(programs.service_id, services.id))
+        // 取り残しの局は出さない (CURRENT_SERVICES と同じ。番組表と JOIN するので列を名指しする)
+        .where(sql`${services.updated_at} >= (SELECT MAX(${services.updated_at}) FROM ${services})`)
+        .groupBy(services.id)
+        .orderBy(services.service_id)
+        .all();
 
     const order: Record<string, number> = { GR: 0, BS: 1, CS: 2 };
     const channels = new Map<string, Coverage>();
@@ -183,23 +186,23 @@ export async function load() {
  * 「6 / 46 局」と出ている下に 125 局が並ぶ。
  */
 function cmLogoState(): CmLogo[] {
-    const services = queryAll<{
-        id: number;
-        network_id: number;
-        name: string;
-        logo_area: string | null;
-        recording_id: number | null;
-    }>(`
-        SELECT s.id, s.network_id, s.name, s.logo_area,
-               (SELECT r.id FROM recordings r
-                 WHERE r.service_id = s.id AND r.deleted_at IS NULL
-                 ORDER BY r.id DESC LIMIT 1) AS recording_id
-          FROM services s
-         WHERE s.service_type = 1 AND ${CURRENT_SERVICES}
-         ORDER BY s.remote_control_key IS NULL, s.remote_control_key, s.id
-    `);
+    const rows = orm()
+        .select({
+            id: services.id,
+            network_id: services.network_id,
+            name: services.name,
+            logo_area: services.logo_area,
+            /** その局の、いちばん新しい現存の録画 (枠を囲うのに絵を出す) */
+            recording_id: sql<number | null>`(SELECT r.id FROM recordings r
+                 WHERE r.service_id = ${services.id} AND r.deleted_at IS NULL
+                 ORDER BY r.id DESC LIMIT 1)`,
+        })
+        .from(services)
+        .where(and(eq(services.service_type, 1), sql.raw(CURRENT_SERVICES)))
+        .orderBy(sql`${services.remote_control_key} IS NULL`, services.remote_control_key, services.id)
+        .all();
     // 同じ絵を映しているサブチャンネルの枠は束ねる (実機で「TOKYO MX1」が2つ並んでいた)
-    return stations(services).map((service) => ({ ...service, learned: learned(service.id) }));
+    return stations(rows).map((service) => ({ ...service, learned: learned(service.id) }));
 }
 
 export const actions = {
@@ -224,9 +227,11 @@ export const actions = {
         }
         // 同じ絵を映しているサブチャンネルの枠にも同じことをする (`logo-data.stations`)
         for (const id of [serviceId, ...siblings(serviceId)]) {
-            database()
-                .prepare('UPDATE services SET logo_area = ?, logo_area_auto = 0 WHERE id = ?')
-                .run(area, id);
+            orm()
+                .update(services)
+                .set({ logo_area: area, logo_area_auto: 0 })
+                .where(eq(services.id, id))
+                .run();
             forgetLogoData(id);
         }
         return {
@@ -261,9 +266,11 @@ export const actions = {
         const serviceId = Number(form.get('serviceId'));
         if (!Number.isFinite(serviceId)) return fail(400, { message: '局IDが不正です' });
         for (const id of [serviceId, ...siblings(serviceId)]) {
-            database()
-                .prepare('UPDATE services SET logo_area = NULL, logo_area_auto = 0 WHERE id = ?')
-                .run(id);
+            orm()
+                .update(services)
+                .set({ logo_area: null, logo_area_auto: 0 })
+                .where(eq(services.id, id))
+                .run();
             // 教えた枠で覚えたものが残っていると、自動に戻しても効かない
             forgetLogoData(id);
         }

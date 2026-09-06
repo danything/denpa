@@ -13,13 +13,14 @@
 import { copyFileSync, existsSync, mkdirSync, renameSync, statSync, unlinkSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { SQL } from 'bun';
+import { and, eq, isNull } from 'drizzle-orm';
 import { parseSearchFields, SEARCH_FIELDS } from '$lib/search';
-import type { Recording } from '$lib/types';
-import { database, now, queryOne } from './db';
+import { now, orm } from './db';
 import { emit } from './events';
 import { libraryPath, recordedPath } from './library';
 import { writeThumbnail } from './metadata';
 import { reserve } from './reservations';
+import { programs, recordings, rules, services } from './schema';
 import { parseTitle, toHalfWidth } from './title';
 
 const env = (key: string, fallback: string) => process.env[key] ?? fallback;
@@ -186,10 +187,11 @@ async function fetchRows(): Promise<Row[]> {
 /** 1件を取り込む。取り込めたかどうかを返す */
 async function importOne(row: Row, options: MigrateOptions): Promise<'imported' | 'skipped' | 'missing'> {
     // 取り込み済みは EPGStation 側のIDで判別する
-    const already = queryOne<{ id: number }>(
-        `SELECT id FROM recordings WHERE program_id = ? AND reservation_id IS NULL`,
-        -row.id,
-    );
+    const already = orm()
+        .select({ id: recordings.id })
+        .from(recordings)
+        .where(and(eq(recordings.program_id, -row.id), isNull(recordings.reservation_id)))
+        .get();
     if (already !== undefined) return 'skipped';
 
     if (row.filePath === null) {
@@ -207,40 +209,40 @@ async function importOne(row: Row, options: MigrateOptions): Promise<'imported' 
     if (!options.apply) return 'imported';
 
     const parsed = parseTitle(name);
-    const service = queryOne<{ id: number; name: string }>(
-        'SELECT id, name FROM services WHERE network_id = ? AND service_id = ?',
-        row.networkId,
-        row.serviceId,
-    );
+    // 局が分からない行 (networkId / serviceId が NULL) は照合しない。局名だけ写す
+    const service =
+        row.networkId === null || row.serviceId === null
+            ? undefined
+            : orm()
+                  .select({ id: services.id, name: services.name })
+                  .from(services)
+                  .where(and(eq(services.network_id, row.networkId), eq(services.service_id, row.serviceId)))
+                  .get();
 
     const at = now();
     // program_id は EPGStation のIDの符号を反転して入れる。
     // denpa の番組IDと衝突せず、二重取り込みの判定にも使える
-    const info = database()
-        .prepare(
-            // 録り終えた時刻を入れておく。あとでファイルの置き場所が入れば「視聴可能」になる
-            `INSERT INTO recordings
-                (reservation_id, program_id, service_id, service_name, name, series, subtitle,
-                 description, start_at, end_at, finished_at, created_at, updated_at)
-             VALUES (NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        )
-        .run(
-            -row.id,
-            service?.id ?? 0,
-            service?.name ?? toHalfWidth(row.channelName ?? ''),
+    const { id } = orm()
+        .insert(recordings)
+        // 録り終えた時刻を入れておく。あとでファイルの置き場所が入れば「視聴可能」になる
+        .values({
+            reservation_id: null,
+            program_id: -row.id,
+            service_id: service?.id ?? 0,
+            service_name: service?.name ?? toHalfWidth(row.channelName ?? ''),
             name,
-            parsed.series,
-            parsed.subtitle,
-            toHalfWidth(row.description ?? ''),
-            Number(row.startAt),
-            Number(row.endAt),
-            at,
-            at,
-            at,
-        );
-
-    const id = Number(info.lastInsertRowid);
-    const recording = queryOne<Recording>('SELECT * FROM recordings WHERE id = ?', id)!;
+            series: parsed.series,
+            subtitle: parsed.subtitle,
+            description: toHalfWidth(row.description ?? ''),
+            start_at: Number(row.startAt),
+            end_at: Number(row.endAt),
+            finished_at: at,
+            created_at: at,
+            updated_at: at,
+        })
+        .returning({ id: recordings.id })
+        .get()!;
+    const recording = orm().select().from(recordings).where(eq(recordings.id, id)).get()!;
 
     /*
      * 生TSは保存先ではなく作業領域へ置く。
@@ -267,10 +269,12 @@ async function importOne(row: Row, options: MigrateOptions): Promise<'imported' 
         copyFileSync(from, to);
     }
 
-    const column = raw ? 'ts_path' : 'library_path';
-    database()
-        .prepare(`UPDATE recordings SET ${column} = ?, ts_size = ?, updated_at = ? WHERE id = ?`)
-        .run(to, statSync(to).size, now(), id);
+    const placed = raw ? { ts_path: to } : { library_path: to };
+    orm()
+        .update(recordings)
+        .set({ ...placed, ts_size: statSync(to).size, updated_at: now() })
+        .where(eq(recordings.id, id))
+        .run();
 
     // サムネイルは保存先に置いたものにだけ付ける。作業領域は画面に出ない
     if (!raw) {
@@ -308,11 +312,16 @@ interface ReserveRow {
 
 /** EPGStation のチャンネルIDは networkId * 100000 + serviceId */
 function serviceIdFor(channelId: number): number | undefined {
-    const service = queryOne<{ id: number }>(
-        'SELECT id FROM services WHERE network_id = ? AND service_id = ?',
-        Math.floor(channelId / 100000),
-        channelId % 100000,
-    );
+    const service = orm()
+        .select({ id: services.id })
+        .from(services)
+        .where(
+            and(
+                eq(services.network_id, Math.floor(channelId / 100000)),
+                eq(services.service_id, channelId % 100000),
+            ),
+        )
+        .get();
     return service?.id;
 }
 
@@ -364,7 +373,7 @@ async function importRules(connection: SQL, options: MigrateOptions): Promise<vo
 
     for (const row of rows) {
         const source = `epgstation:${row.id}`;
-        if (queryOne<{ id: number }>('SELECT id FROM rules WHERE source = ?', source) !== undefined) {
+        if (orm().select({ id: rules.id }).from(rules).where(eq(rules.source, source)).get() !== undefined) {
             status_.rules.skipped++;
             continue;
         }
@@ -404,26 +413,26 @@ async function importRules(connection: SQL, options: MigrateOptions): Promise<vo
             continue;
         }
 
-        database()
-            .prepare(
-                // 焼き方は引き継がない。エンコードもCMも全体設定で、焼くときに読む
-                `INSERT INTO rules (name, keyword, ignore_keyword, search_fields, service_ids, service_types,
-                                    genres, enabled, priority, source, created_at)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)`,
-            )
-            .run(
+        // 焼き方は引き継がない。エンコードもCMも全体設定で、焼くときに読む
+        orm()
+            .insert(rules)
+            .values({
                 name,
                 keyword,
-                toHalfWidth(row.ignoreKeyword ?? '').trim(),
+                ignore_keyword: toHalfWidth(row.ignoreKeyword ?? '').trim(),
                 // 当てる範囲も向こうから引き継ぐ。既定に寄せると黙って当たらなくなる
-                parseSearchFields(SEARCH_FIELDS.filter((field) => row[field] === 1).join(',')).join(','),
-                channels.length === 0 ? null : JSON.stringify(channels),
-                types.length === 0 ? null : JSON.stringify(types),
-                genreIds.length === 0 ? null : JSON.stringify(genreIds),
-                row.enable ? 1 : 0,
+                search_fields: parseSearchFields(
+                    SEARCH_FIELDS.filter((field) => row[field] === 1).join(','),
+                ).join(','),
+                service_ids: channels.length === 0 ? null : JSON.stringify(channels),
+                service_types: types.length === 0 ? null : JSON.stringify(types),
+                genres: genreIds.length === 0 ? null : JSON.stringify(genreIds),
+                enabled: row.enable ? 1 : 0,
+                priority: 1,
                 source,
-                now(),
-            );
+                created_at: now(),
+            })
+            .run();
         status_.rules.imported++;
     }
 }
@@ -446,7 +455,14 @@ async function importReservations(connection: SQL, options: MigrateOptions): Pro
             status_.reservations.skipped++;
             continue;
         }
-        const program = queryOne<{ id: number }>('SELECT id FROM programs WHERE id = ?', row.programId);
+        const program =
+            row.programId === null
+                ? undefined
+                : orm()
+                      .select({ id: programs.id })
+                      .from(programs)
+                      .where(eq(programs.id, row.programId))
+                      .get();
         if (program === undefined) {
             // 番組表を取り込む前だと出る。EPG を取り直してからもう一度実行すれば入る
             record(`番組表に無いので取り込めません: ${toHalfWidth(row.name ?? String(row.programId))}`);

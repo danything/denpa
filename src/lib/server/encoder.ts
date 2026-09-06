@@ -12,6 +12,7 @@ import {
     writeFileSync,
 } from 'node:fs';
 import { basename, dirname } from 'node:path';
+import { and, eq, getTableColumns, inArray, ne, or, sql } from 'drizzle-orm';
 import { type Audio, audioTitles, DUAL_MONO } from '$lib/arib';
 import { HW_KIND_LABEL, type HwCodec } from '../hw';
 import { encodeSource } from '../source';
@@ -30,13 +31,14 @@ import {
     widenKeep,
 } from './cm';
 import { config } from './config';
-import { database, now, queryOne } from './db';
+import { affected, now, orm } from './db';
 import { type EncodeProgress, emit } from './events';
 import { removeByPrefix, removeIfExists } from './fsx';
 import { type HwWay, hwArgs, hwChain } from './hwenc';
 import { encodedPath, libraryFamily, libraryPath } from './library';
 import { removeSidecars, sidecarPaths, writeThumbnail } from './metadata';
 import { saveRecordedBml } from './recorded-bml';
+import { encodeJobs, recordings, services } from './schema';
 import { descramble, isScrambled } from './scramble';
 import { settings } from './settings';
 import { chunks, run } from './stream';
@@ -557,20 +559,24 @@ export function concatList(parts: string[]): string {
 
 /** その録画で今生きているジョブ (待ち・実行中) の id。無ければ undefined */
 export function activeEncodeJob(recordingId: number): number | undefined {
-    return queryOne<{ id: number }>(
-        `SELECT id FROM encode_jobs WHERE recording_id = ? AND state IN ('queued', 'running')`,
-        recordingId,
-    )?.id;
+    return orm()
+        .select({ id: encodeJobs.id })
+        .from(encodeJobs)
+        .where(
+            and(eq(encodeJobs.recording_id, recordingId), inArray(encodeJobs.state, ['queued', 'running'])),
+        )
+        .get()?.id;
 }
 
 export function enqueue(recordingId: number): number {
     const existing = activeEncodeJob(recordingId);
     if (existing !== undefined) return existing;
 
-    const info = database()
-        .prepare(`INSERT INTO encode_jobs (recording_id, state, created_at) VALUES (?, 'queued', ?)`)
-        .run(recordingId, now());
-    return Number(info.lastInsertRowid);
+    return orm()
+        .insert(encodeJobs)
+        .values({ recording_id: recordingId, state: 'queued', created_at: now() })
+        .returning({ id: encodeJobs.id })
+        .get()!.id;
 }
 
 export function cancel(jobId: number): void {
@@ -579,20 +585,23 @@ export function cancel(jobId: number): void {
     aborts.get(jobId)?.abort();
     procs.get(jobId)?.kill();
 
-    const stopped = database()
-        .prepare(
-            `UPDATE encode_jobs SET state = 'canceled', finished_at = ? WHERE id = ? AND state = 'queued'`,
-        )
-        .run(now(), jobId);
+    const stopped = orm()
+        .update(encodeJobs)
+        .set({ state: 'canceled', finished_at: now() })
+        .where(and(eq(encodeJobs.id, jobId), eq(encodeJobs.state, 'queued')))
+        .returning({ id: encodeJobs.id })
+        .get();
     // まだ始まっていなければここで終わり。走っている分は runJob が後始末して知らせる
-    if (stopped.changes > 0) emit('recordings');
+    if (stopped !== undefined) emit('recordings');
 }
 
 /** 段階を進めて画面にも伝える。押しても反応が無いように見えるのを防ぐ */
 function setPhase(jobId: number, phase: EncodePhase, log: string): void {
-    database()
-        .prepare('UPDATE encode_jobs SET phase = ?, log = ?, percent = 0, eta_ms = NULL WHERE id = ?')
-        .run(phase, log, jobId);
+    orm()
+        .update(encodeJobs)
+        .set({ phase, log, percent: 0, eta_ms: null })
+        .where(eq(encodeJobs.id, jobId))
+        .run();
     emit('recordings');
 }
 
@@ -603,7 +612,7 @@ function setPhase(jobId: number, phase: EncodePhase, log: string): void {
  * (「CM検出中」) だけでは、進んでいるのか止まっているのかが分からなかった。
  */
 function setStep(jobId: number, log: string): void {
-    database().prepare('UPDATE encode_jobs SET log = ? WHERE id = ?').run(log, jobId);
+    orm().update(encodeJobs).set({ log }).where(eq(encodeJobs.id, jobId)).run();
     emit('recordings');
 }
 
@@ -614,13 +623,16 @@ function setStep(jobId: number, log: string): void {
  * 画面のほうも追いつかない。
  */
 function progressReporter(jobId: number): (percent: number) => void {
-    const update = database().prepare('UPDATE encode_jobs SET percent = ? WHERE id = ?');
     let lastWrite = 0;
     return (percent) => {
         const at = Date.now();
         if (at - lastWrite < PROGRESS_INTERVAL) return;
         lastWrite = at;
-        update.run(Math.min(1, Math.max(0, percent)), jobId);
+        orm()
+            .update(encodeJobs)
+            .set({ percent: Math.min(1, Math.max(0, percent)) })
+            .where(eq(encodeJobs.id, jobId))
+            .run();
         emit('recordings');
     };
 }
@@ -779,9 +791,8 @@ async function runFfmpeg(
     let lastWrite = 0;
     let stderrTail = '';
 
-    const updateProgress = database().prepare(
-        'UPDATE encode_jobs SET percent = ?, eta_ms = ?, log = ? WHERE id = ?',
-    );
+    const updateProgress = (percent: number, etaMs: number | null, log: string) =>
+        orm().update(encodeJobs).set({ percent, eta_ms: etaMs, log }).where(eq(encodeJobs.id, job.id)).run();
 
     const readStderr = (async () => {
         const decoder = new TextDecoder();
@@ -824,7 +835,7 @@ async function runFfmpeg(
                 const wroteAt = Date.now();
                 if (wroteAt - lastWrite >= PROGRESS_INTERVAL) {
                     lastWrite = wroteAt;
-                    updateProgress.run(percent, etaMs, log, job.id);
+                    updateProgress(percent, etaMs, log);
                     /*
                      * 進み具合は**中身ごと**流す (`encode` イベント)。`recordings` で
                      * 流していた頃は、数秒おきに一覧がページ全体を読み直していて、
@@ -844,7 +855,7 @@ async function runFfmpeg(
 
     const [code] = await Promise.all([proc.exited, readStdout, readStderr]);
     procs.delete(job.id);
-    updateProgress.run(code === 0 ? 1 : percent, null, log, job.id);
+    updateProgress(code === 0 ? 1 : percent, null, log);
     return { code, stderrTail: failureReason(stderrTail), outTimeUs };
 }
 
@@ -897,10 +908,11 @@ async function prepareCm(
          * ロゴの位置を手で入れてもらっていれば渡す。自動で見つからない局
          * (薄い・動くロゴ) はこれが無いとロゴ無しの判定に落ちる
          */
-        const service = queryOne<{ logo_area: string | null }>(
-            'SELECT logo_area FROM services WHERE id = ?',
-            recording.service_id,
-        );
+        const service = orm()
+            .select({ logo_area: services.logo_area })
+            .from(services)
+            .where(eq(services.id, recording.service_id))
+            .get();
         detection = await detectCm(input, {
             signal,
             channel: recording.service_name,
@@ -919,12 +931,16 @@ async function prepareCm(
      * 持っていた頃は、後から「位置を教える口を出す条件」を広げても、既に録ってある
      * 分には効かなかった
      */
-    database()
-        .prepare('UPDATE recordings SET cm_ranges = ?, cm_note = ?, updated_at = ? WHERE id = ?')
-        .run(JSON.stringify(detection.cm), detection.note, now(), recording.id);
-    database()
-        .prepare('UPDATE encode_jobs SET log = ? WHERE id = ?')
-        .run(`CM ${detection.cm.length} 箇所 (${detection.note})`, jobId);
+    orm()
+        .update(recordings)
+        .set({ cm_ranges: JSON.stringify(detection.cm), cm_note: detection.note, updated_at: now() })
+        .where(eq(recordings.id, recording.id))
+        .run();
+    orm()
+        .update(encodeJobs)
+        .set({ log: `CM ${detection.cm.length} 箇所 (${detection.note})` })
+        .where(eq(encodeJobs.id, jobId))
+        .run();
     if (detection.cm.length === 0) return none;
 
     if (settings().cmCut === 'cut') {
@@ -1034,9 +1050,11 @@ function clearScratch(input: string): void {
 
 /** ジョブを失敗にする (行を書くだけ。知らせも画面の更新もしない) */
 function markFailed(jobId: number, reason: string): void {
-    database()
-        .prepare(`UPDATE encode_jobs SET state = 'failed', error = ?, finished_at = ? WHERE id = ?`)
-        .run(reason, now(), jobId);
+    orm()
+        .update(encodeJobs)
+        .set({ state: 'failed', error: reason, finished_at: now() })
+        .where(eq(encodeJobs.id, jobId))
+        .run();
 }
 
 /**
@@ -1071,9 +1089,11 @@ function fail(jobId: number, recording: Recording, reason: string): void {
  */
 function finishCanceled(jobId: number, working: string | null): void {
     removeIfExists(working);
-    database()
-        .prepare(`UPDATE encode_jobs SET state = 'canceled', finished_at = ? WHERE id = ?`)
-        .run(now(), jobId);
+    orm()
+        .update(encodeJobs)
+        .set({ state: 'canceled', finished_at: now() })
+        .where(eq(encodeJobs.id, jobId))
+        .run();
     // 録画の行は触らない。ジョブが消えれば「録画済み」に戻って見える
     emit('recordings');
 }
@@ -1083,8 +1103,8 @@ async function runJob(jobId: number): Promise<void> {
     aborts.set(jobId, controller);
     const signal = controller.signal;
 
-    const job = queryOne<EncodeJob>('SELECT * FROM encode_jobs WHERE id = ?', jobId)!;
-    const recording = queryOne<Recording>('SELECT * FROM recordings WHERE id = ?', job.recording_id);
+    const job = orm().select().from(encodeJobs).where(eq(encodeJobs.id, jobId)).get()!;
+    const recording = orm().select().from(recordings).where(eq(recordings.id, job.recording_id)).get();
     const input = recording === undefined ? null : encodeSource(recording);
 
     if (recording === undefined || input === null) {
@@ -1256,9 +1276,11 @@ async function runJob(jobId: number): Promise<void> {
     }
 
     if (pgs !== null) {
-        database()
-            .prepare('UPDATE encode_jobs SET log = ? WHERE id = ?')
-            .run(`字幕 ${pgs.captions} 枚を PGS にしました`, jobId);
+        orm()
+            .update(encodeJobs)
+            .set({ log: `字幕 ${pgs.captions} 枚を PGS にしました` })
+            .where(eq(encodeJobs.id, jobId))
+            .run();
     }
 
     if (canceled.has(jobId)) {
@@ -1295,12 +1317,16 @@ async function runJob(jobId: number): Promise<void> {
     if (recording.alt_path !== null) stalePaths.add(recording.alt_path);
     for (const candidate of libraryFamily(recording)) {
         if (stalePaths.has(candidate) || !existsSync(candidate)) continue;
-        const claimed = queryOne<{ id: number }>(
-            'SELECT id FROM recordings WHERE (library_path = ? OR alt_path = ?) AND id != ?',
-            candidate,
-            candidate,
-            recording.id,
-        );
+        const claimed = orm()
+            .select({ id: recordings.id })
+            .from(recordings)
+            .where(
+                and(
+                    or(eq(recordings.library_path, candidate), eq(recordings.alt_path, candidate)),
+                    ne(recordings.id, recording.id),
+                ),
+            )
+            .get();
         if (claimed === undefined) stalePaths.add(candidate);
     }
     if (stalePaths.size > 0) {
@@ -1308,11 +1334,11 @@ async function runJob(jobId: number): Promise<void> {
             removeIfExists(stalePath);
             removeSidecars(stalePath);
         }
-        database()
-            .prepare(
-                'UPDATE recordings SET library_path = NULL, alt_path = NULL, updated_at = ? WHERE id = ?',
-            )
-            .run(now(), recording.id);
+        orm()
+            .update(recordings)
+            .set({ library_path: null, alt_path: null, updated_at: now() })
+            .where(eq(recordings.id, recording.id))
+            .run();
         emit('recordings');
     }
 
@@ -1384,9 +1410,11 @@ async function runJob(jobId: number): Promise<void> {
                 // 数えるのは頭を捨てる再試行だけ (毒ジョブの見立て `encodeMaxAttempts` の物差し)。
                 // GPU から降りるのは、その素材ではその道が使えないというだけで、毒ではない
                 if (attempt.seek !== null) {
-                    database()
-                        .prepare('UPDATE encode_jobs SET attempts = attempts + 1 WHERE id = ?')
-                        .run(jobId);
+                    orm()
+                        .update(encodeJobs)
+                        .set({ attempts: sql`${encodeJobs.attempts} + 1` })
+                        .where(eq(encodeJobs.id, jobId))
+                        .run();
                 }
                 const before = attempts[i - 1].hardware;
                 if (attempt.hardware !== before) {
@@ -1485,9 +1513,11 @@ async function runJob(jobId: number): Promise<void> {
     const made = (await probeVideo(output)).duration;
     const length = Number.isFinite(made) ? made * 1000 : lastOutTimeUs / 1000;
     if (Number.isFinite(length) && length > 0) {
-        database()
-            .prepare('UPDATE recordings SET duration_ms = ? WHERE id = ?')
-            .run(Math.round(length), recording.id);
+        orm()
+            .update(recordings)
+            .set({ duration_ms: Math.round(length) })
+            .where(eq(recordings.id, recording.id))
+            .run();
     }
 
     // サムネイルを動画の隣に書く。動画を置いた直後に作る。
@@ -1507,9 +1537,11 @@ async function runJob(jobId: number): Promise<void> {
         if (existsSync(primaryPoster)) copyFileSync(primaryPoster, sidecarPaths(alt).thumbnail);
     }
 
-    database()
-        .prepare(`UPDATE encode_jobs SET state = 'done', percent = 1, finished_at = ? WHERE id = ?`)
-        .run(now(), jobId);
+    orm()
+        .update(encodeJobs)
+        .set({ state: 'done', percent: 1, finished_at: now() })
+        .where(eq(encodeJobs.id, jobId))
+        .run();
     emit('recordings');
     notify({
         event: 'encode.finished',
@@ -1527,28 +1559,29 @@ async function runJob(jobId: number): Promise<void> {
     // 主は AV1 (`output`)、もう一方は `alt` (両方焼いたときだけ)。
     // コマ数 (実測か既定の60) も一緒に書く — 番組詳細の札はここからしか出せない
     const fps = encodeOptions.smoothMotion === true ? 60 : 30;
+    const finished = { library_path: output, alt_path: alt, ts_size: size, fps, updated_at: now() };
     if (settings().keepOriginal) {
-        database()
-            .prepare(
-                `UPDATE recordings SET library_path = ?, alt_path = ?, ts_size = ?, fps = ?, updated_at = ? WHERE id = ?`,
-            )
-            .run(output, alt, size, fps, now(), recording.id);
+        orm().update(recordings).set(finished).where(eq(recordings.id, recording.id)).run();
     } else {
         removeIfExists(recording.ts_path);
-        database()
-            .prepare(
-                `UPDATE recordings SET library_path = ?, alt_path = ?, ts_path = NULL, ts_size = ?, fps = ?, updated_at = ? WHERE id = ?`,
-            )
-            .run(output, alt, size, fps, now(), recording.id);
+        orm()
+            .update(recordings)
+            .set({ ...finished, ts_path: null })
+            .where(eq(recordings.id, recording.id))
+            .run();
     }
 }
 
 /** 同時実行数の空きぶんだけキューを消化する。録画完了時と定期tickの両方から呼ばれる */
 export function pump(): void {
     while (runningJobs.size < config.encodeConcurrency) {
-        const next = queryOne<{ id: number; attempts: number }>(
-            `SELECT id, attempts FROM encode_jobs WHERE state = 'queued' ORDER BY id LIMIT 1`,
-        );
+        const next = orm()
+            .select({ id: encodeJobs.id, attempts: encodeJobs.attempts })
+            .from(encodeJobs)
+            .where(eq(encodeJobs.state, 'queued'))
+            .orderBy(encodeJobs.id)
+            .limit(1)
+            .get();
         if (next === undefined) return;
 
         // **試し過ぎたジョブは諦める。** プロセスごと落とす毒ジョブは running→queued
@@ -1556,10 +1589,12 @@ export function pump(): void {
         // して後ろを進める。failed の確定は runJob を呼ぶ前なので、直後にまた落ちても
         // 同じジョブを掴み直すことはない
         if (next.attempts >= config.encodeMaxAttempts) {
-            const recording = queryOne<Recording>(
-                'SELECT r.* FROM recordings r JOIN encode_jobs j ON j.recording_id = r.id WHERE j.id = ?',
-                next.id,
-            );
+            const recording = orm()
+                .select(getTableColumns(recordings))
+                .from(recordings)
+                .innerJoin(encodeJobs, eq(encodeJobs.recording_id, recordings.id))
+                .where(eq(encodeJobs.id, next.id))
+                .get();
             const reason = `エンコードを ${next.attempts} 回試して完了しませんでした`;
             if (recording === undefined) {
                 markFailed(next.id, reason);
@@ -1574,13 +1609,13 @@ export function pump(): void {
         }
 
         // 実際に走り出す前に状態を進めておく。次のループが同じジョブを拾わないため
-        const claimed = database()
-            .prepare(
-                `UPDATE encode_jobs SET state = 'running', started_at = ?, attempts = attempts + 1
-                 WHERE id = ? AND state = 'queued'`,
-            )
-            .run(now(), next.id);
-        if (claimed.changes === 0) return;
+        const claimed = orm()
+            .update(encodeJobs)
+            .set({ state: 'running', started_at: now(), attempts: sql`${encodeJobs.attempts} + 1` })
+            .where(and(eq(encodeJobs.id, next.id), eq(encodeJobs.state, 'queued')))
+            .returning({ id: encodeJobs.id })
+            .get();
+        if (claimed === undefined) return;
 
         const jobId = next.id;
         runningJobs.add(jobId);
@@ -1605,10 +1640,10 @@ export function pump(): void {
  * ffmpeg は親と一緒に死んでいるので、出力を捨てて頭からやり直す。
  */
 export function requeueOrphanedJobs(): number {
-    return database()
-        .prepare(
-            `UPDATE encode_jobs SET state = 'queued', phase = 'encode', percent = 0, eta_ms = NULL,
-                    started_at = NULL WHERE state = 'running'`,
-        )
-        .run().changes;
+    return affected(
+        orm()
+            .update(encodeJobs)
+            .set({ state: 'queued', phase: 'encode', percent: 0, eta_ms: null, started_at: null })
+            .where(eq(encodeJobs.state, 'running')),
+    );
 }

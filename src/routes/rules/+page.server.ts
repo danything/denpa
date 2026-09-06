@@ -1,16 +1,18 @@
 import { fail, redirect } from '@sveltejs/kit';
+import { and, desc, eq, getTableColumns, gt, inArray, isNotNull, isNull, sql } from 'drizzle-orm';
 import { genreName } from '$lib/arib';
 import { SERVICE_TYPE_LABEL } from '$lib/format';
 import { parseSearchFields } from '$lib/search';
 import { config } from '$lib/server/config';
 import { contending, type Occupant, rivalsOf } from '$lib/server/conflict';
-import { database, now, queryAll, queryOne } from '$lib/server/db';
+import { now, orm } from '$lib/server/db';
 import { CURRENT_SERVICES } from '$lib/server/epg';
 import { cancel } from '$lib/server/reservations';
 import { applyRules, compile, haystack, matchesCompiled } from '$lib/server/rules';
 import { resolveConflicts, tunerCapacity } from '$lib/server/scheduler';
+import { programs, reservations, rules as ruleTable, services as serviceTable } from '$lib/server/schema';
 import { settings } from '$lib/server/settings';
-import type { Program, Rule, Service } from '$lib/types';
+import type { Rule } from '$lib/types';
 
 interface Row extends Rule {
     reservations: number;
@@ -23,7 +25,7 @@ interface Row extends Rule {
  * 書かない)。`state IN ('scheduled','conflict')` だけで数えていた頃は、
  * 録り終えた予約まで「押さえている」に入っていた
  */
-const PENDING = "(state IN ('scheduled', 'conflict') AND started_at IS NULL)";
+const PENDING = and(inArray(reservations.state, ['scheduled', 'conflict']), isNull(reservations.started_at));
 
 /**
  * 条件の読み取り口。**画面から来る道が2つある** — 「この条件で何が録れるか」は
@@ -161,17 +163,33 @@ export async function load({ url }) {
     // 掴む区間は前後マージンぶん延びる。スケジューラと同じ物差しで数える
     const margins = { start: config.startMargin, end: config.endMargin };
     // ?edit=<id> のときは、そのルールをフォームに読み込んで書き換えられるようにする
-    const editing = queryOne<Rule>('SELECT * FROM rules WHERE id = ?', Number(url.searchParams.get('edit')));
+    const editing = orm()
+        .select()
+        .from(ruleTable)
+        .where(eq(ruleTable.id, Number(url.searchParams.get('edit'))))
+        .get();
 
     /** まだ録っていない予約。重なりの判定と、条件から外れた予約を出すのに使う */
-    const pending = queryAll<Pending>(
-        `SELECT r.id, r.rule_id, r.program_id, r.name, r.service_id, r.start_at, r.end_at, r.state,
-                r.conflict_reason, s.name AS service_name, s.type AS type, s.channel AS channel
-         FROM reservations r
-         JOIN services s ON s.id = r.service_id
-         WHERE r.state IN ('scheduled', 'conflict') AND r.started_at IS NULL
-         ORDER BY r.start_at`,
-    );
+    const pending: Pending[] = orm()
+        .select({
+            id: reservations.id,
+            rule_id: reservations.rule_id,
+            program_id: reservations.program_id,
+            name: reservations.name,
+            service_id: reservations.service_id,
+            start_at: reservations.start_at,
+            end_at: reservations.end_at,
+            state: reservations.state,
+            conflict_reason: reservations.conflict_reason,
+            service_name: serviceTable.name,
+            type: serviceTable.type,
+            channel: serviceTable.channel,
+        })
+        .from(reservations)
+        .innerJoin(serviceTable, eq(serviceTable.id, reservations.service_id))
+        .where(PENDING)
+        .orderBy(reservations.start_at)
+        .all();
     const reserved = new Map(pending.map((row) => [row.program_id, row]));
 
     /*
@@ -184,15 +202,18 @@ export async function load({ url }) {
     const conditions = conditionsFrom(url.searchParams) ?? editing ?? null;
     let preview: { total: number; programs: PreviewRow[]; conflicts: number } | null = null;
     if (conditions !== null && url.searchParams.size > 0) {
-        const all = queryAll<
-            Program & { service_type: string; service_name: string; service_channel: string }
-        >(
-            `SELECT p.*, s.type AS service_type, s.name AS service_name, s.channel AS service_channel
-             FROM programs p
-             JOIN services s ON s.id = p.service_id
-             WHERE p.start_at > ? ORDER BY p.start_at`,
-            now(),
-        );
+        const all = orm()
+            .select({
+                ...getTableColumns(programs),
+                service_type: serviceTable.type,
+                service_name: serviceTable.name,
+                service_channel: serviceTable.channel,
+            })
+            .from(programs)
+            .innerJoin(serviceTable, eq(serviceTable.id, programs.service_id))
+            .where(gt(programs.start_at, now()))
+            .orderBy(programs.start_at)
+            .all();
         // 条件のほどきは1回だけ。番組ごとにやり直すと、番組の数だけ JSON を読むことになる
         const compiled = compile(conditions);
         const hits = all.filter((program) =>
@@ -321,19 +342,22 @@ export async function load({ url }) {
      * この列を見るのは「このルールがいま何を押さえているか」を知りたいときなので、
      * 履歴は数えない
      */
-    const rules = database()
-        .prepare(
-            `SELECT r.*, (
-                 SELECT COUNT(*) FROM reservations
-                 WHERE rule_id = r.id AND ${PENDING}
-             ) AS reservations
-             FROM rules r ORDER BY r.id DESC`,
-        )
-        .all() as Row[];
+    const rules: Row[] = orm()
+        .select({
+            ...getTableColumns(ruleTable),
+            reservations: sql<number>`(SELECT COUNT(*) FROM ${reservations}
+                 WHERE ${reservations.rule_id} = ${ruleTable.id} AND ${PENDING})`.mapWith(Number),
+        })
+        .from(ruleTable)
+        .orderBy(desc(ruleTable.id))
+        .all();
     // 取り残しの局は選ばせない (CURRENT_SERVICES)。もう録れない局が並ぶだけ
-    const services = database()
-        .prepare(`SELECT * FROM services WHERE ${CURRENT_SERVICES} ORDER BY type, channel`)
-        .all() as Service[];
+    const services = orm()
+        .select()
+        .from(serviceTable)
+        .where(sql.raw(CURRENT_SERVICES))
+        .orderBy(serviceTable.type, serviceTable.channel)
+        .all();
     // フォームの初期値は preview と同じものを使う。別々に組み立てると、
     // 画面に出ている結果と保存されるものがズレる
     return { rules, services, editing: editing ?? null, seed: conditions, preview, defaults };
@@ -363,7 +387,7 @@ function rulePriority(fields: Fields): number {
 function ruleName(conditions: Conditions): string {
     if (conditions.keyword !== '') return conditions.keyword;
 
-    const services = queryAll<Service>('SELECT * FROM services');
+    const services = orm().select().from(serviceTable).all();
     const parts: string[] = [];
     if (conditions.genres !== null) {
         parts.push(...(JSON.parse(conditions.genres) as string[]).map(genreName));
@@ -409,18 +433,21 @@ async function reapply(rule?: number): Promise<number> {
 /** 条件が空だと全番組にマッチしてディスクを埋めるので作らせない */
 const EMPTY_RULE = 'キーワード・チャンネル・ジャンルのどれかは指定してください';
 
-/** create と update で並びが同じ8つ。SQL の `?` の順とここが対 */
-function ruleParams(conditions: ReturnType<typeof conditionsOf>, form: FormData) {
-    return [
-        ruleName(conditions),
-        conditions.keyword,
-        conditions.ignoreKeyword,
-        conditions.searchFields,
-        conditions.serviceIds,
-        conditions.serviceTypes,
-        conditions.genres,
-        rulePriority(form),
-    ] as const;
+/**
+ * create と update で同じ8つ。**焼き方は書かない** — エンコードもCMも全体設定で、
+ * 焼くときに読む
+ */
+function ruleValues(conditions: ReturnType<typeof conditionsOf>, form: FormData) {
+    return {
+        name: ruleName(conditions),
+        keyword: conditions.keyword,
+        ignore_keyword: conditions.ignoreKeyword,
+        search_fields: conditions.searchFields,
+        service_ids: conditions.serviceIds,
+        service_types: conditions.serviceTypes,
+        genres: conditions.genres,
+        priority: rulePriority(form),
+    };
 }
 
 export const actions = {
@@ -429,17 +456,14 @@ export const actions = {
         const conditions = conditionsOf(form);
         if (conditions.empty) return fail(400, { message: EMPTY_RULE });
 
-        const created = database()
-            .prepare(
-                // 焼き方は書かない。エンコードもCMも全体設定で、焼くときに読む
-                `INSERT INTO rules (name, keyword, ignore_keyword, search_fields, service_ids, service_types,
-                                genres, enabled, priority, created_at)
-             VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?, ?)`,
-            )
-            .run(...ruleParams(conditions, form), now());
+        const created = orm()
+            .insert(ruleTable)
+            .values({ ...ruleValues(conditions, form), enabled: 1, created_at: now() })
+            .returning({ id: ruleTable.id })
+            .get()!;
 
         // 足したルールは他の予約を外せないので、そのルールだけ当てれば足りる
-        await reapply(Number(created.lastInsertRowid));
+        await reapply(created.id);
         return { success: true };
     },
 
@@ -451,13 +475,7 @@ export const actions = {
         const conditions = conditionsOf(form);
         if (conditions.empty) return fail(400, { message: EMPTY_RULE });
 
-        database()
-            .prepare(
-                // 焼き方は触らない。エンコードもCMも全体設定で、焼くときに読む
-                `UPDATE rules SET name = ?, keyword = ?, ignore_keyword = ?, search_fields = ?, service_ids = ?,
-                 service_types = ?, genres = ?, priority = ? WHERE id = ?`,
-            )
-            .run(...ruleParams(conditions, form), id);
+        orm().update(ruleTable).set(ruleValues(conditions, form)).where(eq(ruleTable.id, id)).run();
 
         /*
          * 条件が変わったので、これから録るぶんは組み直す。
@@ -491,7 +509,11 @@ export const actions = {
         const form = await request.formData();
         const id = Number(form.get('id'));
         if (!Number.isFinite(id)) return fail(400, { message: 'ルールIDが不正です' });
-        database().prepare('UPDATE rules SET enabled = 1 - enabled WHERE id = ?').run(id);
+        orm()
+            .update(ruleTable)
+            .set({ enabled: sql`1 - ${ruleTable.enabled}` })
+            .where(eq(ruleTable.id, id))
+            .run();
         await reapply();
         return { success: true };
     },
@@ -511,17 +533,23 @@ export const actions = {
          * 見てから決める** — 消したのが「アニメ」でも、「無職転生」が残っていれば
          * その予約は生き続けるべき (`rules.applyRules` が付け替える)
          */
-        database()
-            .prepare(
-                `DELETE FROM reservations
-                  WHERE rule_id = ? AND started_at IS NULL AND state = 'canceled'`,
+        orm()
+            .delete(reservations)
+            .where(
+                and(
+                    eq(reservations.rule_id, id),
+                    isNull(reservations.started_at),
+                    eq(reservations.state, 'canceled'),
+                ),
             )
-            .run(id);
+            .run();
         // 録画中・録画済みのぶんは履歴として残すので、ルールとの紐付けだけ外す
-        database()
-            .prepare('UPDATE reservations SET rule_id = NULL WHERE rule_id = ? AND started_at IS NOT NULL')
-            .run(id);
-        database().prepare('DELETE FROM rules WHERE id = ?').run(id);
+        orm()
+            .update(reservations)
+            .set({ rule_id: null })
+            .where(and(eq(reservations.rule_id, id), isNotNull(reservations.started_at)))
+            .run();
+        orm().delete(ruleTable).where(eq(ruleTable.id, id)).run();
 
         // 引き取り手の無い予約はここで消える (猶予は効かない = 人が押した結果なので)
         const dropped = await reapply();
