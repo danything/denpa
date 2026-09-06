@@ -94,7 +94,7 @@
         audios: data.rec.audios,
         video_type: null,
         video_resolution: null,
-        is_free: 1,
+        is_free: true,
     });
 
     onMount(() => {

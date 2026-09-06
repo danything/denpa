@@ -103,7 +103,7 @@ export function load({ url, cookies }) {
             channel: service.channel,
             // 地上波はリモコン番号、BS/CS はサービスID がそのまま3桁番号
             number: service.remote_control_key ?? (service.type === 'GR' ? null : service.service_id),
-            hasLogo: service.has_logo === 1,
+            hasLogo: service.has_logo,
             now:
                 program === undefined
                     ? null

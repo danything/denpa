@@ -1,6 +1,6 @@
 import { sql } from 'drizzle-orm';
-import { index, integer, real, sqliteTable, text } from 'drizzle-orm/sqlite-core';
-import type { ChannelType } from '../types';
+import { type AnySQLiteColumn, index, integer, real, sqliteTable, text } from 'drizzle-orm/sqlite-core';
+import type { ChannelType, ReservationState } from '../types';
 
 /**
  * **テーブルの定義はここにしか無い** (drizzle)。
@@ -16,9 +16,15 @@ import type { ChannelType } from '../types';
  * 足されていなかった)。
  *
  * 真偽を 0/1 で持つ列 (`enabled` / `manual` / `encode` / `has_logo` / `is_free`)
- * は number のまま。`{ mode: 'boolean' }` にすると読み書きの値が変わり、いまの
- * 呼び出し側 (`= 1` で比べている) を全部触ることになる。型を付け終えてからの話
+ * は `{ mode: 'boolean' }` で読み書きする。DB の中は今までどおり 0/1 で、既定値も
+ * `sql\`1\`` のまま書く — `default(true)` にすると drizzle-kit が `DEFAULT true` を
+ * 出して、中身の変わらないマイグレーション (テーブルの作り直し) が出てしまう。
+ * snapshot (drizzle/meta/0000) の既定値もこの書き方 ("1") に手で揃えてある —
+ * 数の 1 と `sql\`1\`` は同じ DDL になるのに、snapshot の上では別物と見なされるので
  */
+
+/** 真偽の列。DB の中は 0/1 */
+const flag = (name: string) => integer(name, { mode: 'boolean' });
 
 /**
  * 録画の状態。**列としては持たず、事実から毎回決める** (recordings.state の生成列)
@@ -38,14 +44,19 @@ export const RECORDING_STATE = `
  * DBに入っているのは `scheduled | conflict | canceled | missed` だけ。
  * 予約 `r` と、その予約で録れた最新の録画 `rec` を LEFT JOIN した上で使う
  * (一覧と番組表の両方が要るので、式はここにしか置かない)。
+ * どちらも `alias()` したものを渡してよい — 列は名指しなので別名がそのまま効く
  */
-export const RESERVATION_STATE = `
-        CASE
-            WHEN r.started_at IS NULL THEN r.state
-            WHEN rec.state = 'recording' THEN 'recording'
-            WHEN rec.state = 'failed' THEN 'failed'
+export function reservationState(
+    r: { started_at: AnySQLiteColumn; state: AnySQLiteColumn },
+    rec: { state: AnySQLiteColumn },
+) {
+    return sql<ReservationState>`CASE
+            WHEN ${r.started_at} IS NULL THEN ${r.state}
+            WHEN ${rec.state} = 'recording' THEN 'recording'
+            WHEN ${rec.state} = 'failed' THEN 'failed'
             ELSE 'done'
         END`;
+}
 
 /** 画面から変えられる設定。環境変数を初期値として、ここにあれば上書きする */
 export const settings = sqliteTable('settings', {
@@ -72,7 +83,7 @@ export const webhooks = sqliteTable('webhooks', {
     url: text('url').notNull(),
     /** JSON 配列。空配列は「全部」 */
     events: text('events').notNull(),
-    enabled: integer('enabled').notNull().default(1),
+    enabled: flag('enabled').notNull().default(sql`1`),
     /** 直近の送信結果。設定画面で出す */
     last_status: text('last_status'),
     last_sent_at: integer('last_sent_at'),
@@ -94,16 +105,29 @@ export const services = sqliteTable('services', {
     /** 物理チャンネル。同一チャンネルの同時録画はチューナーを共有できる */
     channel: text('channel').notNull(),
     remote_control_key: integer('remote_control_key'),
-    has_logo: integer('has_logo').notNull().default(0),
+    has_logo: flag('has_logo').notNull().default(sql`0`),
     updated_at: integer('updated_at').notNull(),
     /** 局ロゴの位置 ("x,y,w,h")。CM検出 (jls) で自動検出できなかった局だけ手で入れる */
     logo_area: text('logo_area'),
-    /**
-     * `logo_area` を誰が入れたか。**0 = 人 (または無し) / 1 = こちらが割り出した /
-     * 2 = 割り出したが外れた** (外した枠は出し直さない。logo-area.ts)
-     */
-    logo_area_auto: integer('logo_area_auto').notNull().default(0),
+    /** `logo_area` を誰が入れたか (LOGO_AREA_AUTO) */
+    logo_area_auto: integer('logo_area_auto').$type<LogoAreaAuto>().notNull().default(0),
 });
+
+/**
+ * `services.logo_area` を誰が入れたか。
+ *
+ * **外した枠は出し直さない**ために `missed` がある。外れた枠を捨てるだけにすると、
+ * 次のエンコードでまた同じ絵から同じ枠を割り出して同じところで転ぶ (logo-area.ts)
+ */
+export const LOGO_AREA_AUTO = {
+    /** 人が入れた (または無し) */
+    human: 0,
+    /** こちらが割り出した */
+    guessed: 1,
+    /** 割り出したが外れた */
+    missed: 2,
+} as const;
+export type LogoAreaAuto = (typeof LOGO_AREA_AUTO)[keyof typeof LOGO_AREA_AUTO];
 
 export const programs = sqliteTable(
     'programs',
@@ -123,7 +147,7 @@ export const programs = sqliteTable(
         genres: text('genres'),
         /** JSON: [{lv1, lv2}]。表示用 */
         genre_detail: text('genre_detail'),
-        is_free: integer('is_free').notNull().default(1),
+        is_free: flag('is_free').notNull().default(sql`1`),
         /** ARIB の componentType。2 がデュアルモノ */
         audio_type: integer('audio_type'),
         /** JSON: [{componentType, langs, text?, main?}]。表示用 */
@@ -157,7 +181,7 @@ export const rules = sqliteTable('rules', {
     service_types: text('service_types'),
     /** JSON 配列 (lv1)。NULL は全ジャンル */
     genres: text('genres'),
-    enabled: integer('enabled').notNull().default(1),
+    enabled: flag('enabled').notNull().default(sql`1`),
     /**
      * チューナーが足りないとき、どの予約を残すか。大きいほうが残る (conflict.ts)。
      * **エージェントに渡す「掴む強さ」とは別物** (docs/agent.md)。
@@ -190,12 +214,12 @@ export const reservations = sqliteTable(
         start_at: integer('start_at').notNull(),
         end_at: integer('end_at').notNull(),
         priority: integer('priority').notNull().default(2),
-        manual: integer('manual').notNull().default(0),
+        manual: flag('manual').notNull().default(sql`0`),
         /**
          * 「焼くか否か」だけは予約した時点で固定する (recorder が読む)。焼き方の細目
          * (生TSを残すか・CMの扱い・コーデック) は持たず、焼くときに settings を見る
          */
-        encode: integer('encode').notNull().default(1),
+        encode: flag('encode').notNull().default(sql`1`),
         /** missed = 始まらないまま放送が終わったもの (アプリが止まっていた等) */
         state: text('state', { enum: RESERVATION_STATES }).notNull().default('scheduled'),
         /** 録り始めた時刻。NULL なら**まだ始めていない**。二重に録り始めないための鍵でもある (scheduler.tick) */

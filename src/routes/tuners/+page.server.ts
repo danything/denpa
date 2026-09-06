@@ -6,7 +6,7 @@ import { collectNow, collectState } from '$lib/server/epg-collect';
 import { stats as logoStats, sweepNow, sweepState } from '$lib/server/logo';
 import { forgetLogoData, learned, stats as learnStats, siblings, stations } from '$lib/server/logo-data';
 import { refresh, start, stop } from '$lib/server/scan';
-import { programs, recordings, services } from '$lib/server/schema';
+import { LOGO_AREA_AUTO, programs, recordings, services } from '$lib/server/schema';
 import { cardStatus } from '$lib/server/scramble';
 import { type AgentTuner, getTuners, putTuners, type TunerConfig, tunersDetected } from '$lib/server/tuner';
 import type { ChannelType } from '$lib/types';
@@ -229,7 +229,7 @@ export const actions = {
         for (const id of [serviceId, ...siblings(serviceId)]) {
             orm()
                 .update(services)
-                .set({ logo_area: area, logo_area_auto: 0 })
+                .set({ logo_area: area, logo_area_auto: LOGO_AREA_AUTO.human })
                 .where(eq(services.id, id))
                 .run();
             forgetLogoData(id);
@@ -268,7 +268,7 @@ export const actions = {
         for (const id of [serviceId, ...siblings(serviceId)]) {
             orm()
                 .update(services)
-                .set({ logo_area: null, logo_area_auto: 0 })
+                .set({ logo_area: null, logo_area_auto: LOGO_AREA_AUTO.human })
                 .where(eq(services.id, id))
                 .run();
             // 教えた枠で覚えたものが残っていると、自動に戻しても効かない

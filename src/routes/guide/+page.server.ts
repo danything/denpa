@@ -1,15 +1,17 @@
 import { fail } from '@sveltejs/kit';
-import { and, eq, gt, lte, ne, sql } from 'drizzle-orm';
-import { orm, queryAll } from '$lib/server/db';
+import { and, eq, getTableColumns, gt, lt, lte, ne, sql } from 'drizzle-orm';
+import { alias } from 'drizzle-orm/sqlite-core';
+import { orm } from '$lib/server/db';
 import { airing, CURRENT_SERVICES, SERVICE_ORDER } from '$lib/server/epg';
 import { cancel, reserve } from '$lib/server/reservations';
 import {
     programs as programTable,
-    RESERVATION_STATE,
+    recordings,
+    reservationState,
     reservations,
     services as serviceTable,
 } from '$lib/server/schema';
-import type { ChannelType, Program, Service } from '$lib/types';
+import type { ChannelType, Program, ReservationState, Service } from '$lib/types';
 
 const HOUR = 60 * 60 * 1000;
 /**
@@ -29,7 +31,7 @@ function broadcastDayStart(at: number): number {
 }
 
 interface GridProgram extends Program {
-    reservation_state: string | null;
+    reservation_state: ReservationState | null;
     /**
      * その番組で録れたもの。番組表から詳細を開いたときに、そのまま再生できるようにする。
      * 録画一覧まで戻って同じ番組を探し直させないため
@@ -61,31 +63,36 @@ export async function load({ url }) {
         .where(and(eq(serviceTable.type, type), sql.raw(CURRENT_SERVICES)))
         .orderBy(sql.raw(SERVICE_ORDER))
         .all();
-    const programs = queryAll<GridProgram>(
-        /*
-         * 予約の状態は録画の行から引く (RESERVATION_STATE)。r.state をそのまま
-         * 出していた頃は、録り終えた番組が「予約済み」のまま並び、
-         * 取消ボタンまで出ていた (予約側は録り始めた時刻しか持たないため)
-         */
-        `SELECT p.*,
-                CASE WHEN r.id IS NULL THEN NULL ELSE ${RESERVATION_STATE} END AS reservation_state,
-                rec.id AS recording_id,
-                rec.library_path, rec.ts_path
-         FROM programs p
-         JOIN services s ON s.id = p.service_id
-         LEFT JOIN reservations r ON r.program_id = p.id AND r.state != 'canceled'
-         -- 録り直すと同じ番組に複数ぶら下がる。いちばん新しい現存分だけ見る
-         LEFT JOIN recordings rec ON rec.id = (
-             SELECT id FROM recordings
-             WHERE program_id = p.id AND deleted_at IS NULL
-             ORDER BY id DESC LIMIT 1
-         )
-         WHERE s.type = ? AND p.start_at < ? AND p.end_at > ?
-         ORDER BY p.start_at`,
-        type,
-        end,
-        start,
-    );
+    const p = alias(programTable, 'p');
+    const r = alias(reservations, 'r');
+    const rec = alias(recordings, 'rec');
+    const programs: GridProgram[] = orm()
+        .select({
+            ...getTableColumns(p),
+            /*
+             * 予約の状態は録画の行から引く (reservationState)。r.state をそのまま
+             * 出していた頃は、録り終えた番組が「予約済み」のまま並び、
+             * 取消ボタンまで出ていた (予約側は録り始めた時刻しか持たないため)
+             */
+            reservation_state: sql<ReservationState | null>`CASE WHEN ${r.id} IS NULL THEN NULL ELSE ${reservationState(r, rec)} END`,
+            recording_id: rec.id,
+            library_path: rec.library_path,
+            ts_path: rec.ts_path,
+        })
+        .from(p)
+        .innerJoin(serviceTable, eq(serviceTable.id, p.service_id))
+        .leftJoin(r, and(eq(r.program_id, p.id), ne(r.state, 'canceled')))
+        // 録り直すと同じ番組に複数ぶら下がる。いちばん新しい現存分だけ見る
+        .leftJoin(
+            rec,
+            eq(
+                rec.id,
+                sql`(SELECT id FROM recordings WHERE program_id = ${p.id} AND deleted_at IS NULL ORDER BY id DESC LIMIT 1)`,
+            ),
+        )
+        .where(and(eq(serviceTable.type, type), lt(p.start_at, end), gt(p.end_at, start)))
+        .orderBy(p.start_at)
+        .all();
 
     /*
      * **いまライブで選べる局** (`services.id`)。詳細の「視聴」を出すかどうかに使う。

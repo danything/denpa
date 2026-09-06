@@ -27,7 +27,7 @@ export interface ProgramDetail {
     audios: string | null;
     video_type: string | null;
     video_resolution: string | null;
-    is_free: number;
+    is_free: boolean;
 }
 
 /**

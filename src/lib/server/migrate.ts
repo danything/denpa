@@ -427,7 +427,7 @@ async function importRules(connection: SQL, options: MigrateOptions): Promise<vo
                 service_ids: channels.length === 0 ? null : JSON.stringify(channels),
                 service_types: types.length === 0 ? null : JSON.stringify(types),
                 genres: genreIds.length === 0 ? null : JSON.stringify(genreIds),
-                enabled: row.enable ? 1 : 0,
+                enabled: Boolean(row.enable),
                 priority: 1,
                 source,
                 created_at: now(),

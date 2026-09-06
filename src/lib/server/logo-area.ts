@@ -3,7 +3,7 @@ import { areaText, type Frame, findLogoArea } from '../ts/logo-area';
 import { probeVideo } from './cm';
 import { config } from './config';
 import { orm } from './db';
-import { services } from './schema';
+import { LOGO_AREA_AUTO, type LogoAreaAuto, services } from './schema';
 import { run } from './stream';
 
 /**
@@ -49,7 +49,7 @@ const TIMEOUT = 120_000;
  */
 export function mayDetect(serviceId: number): boolean {
     const { area, auto } = row(serviceId);
-    return area === '' && auto !== AUTO_MISSED;
+    return area === '' && auto !== LOGO_AREA_AUTO.missed;
 }
 
 /**
@@ -62,22 +62,18 @@ export function mayDetect(serviceId: number): boolean {
 export function forgetArea(serviceId: number): void {
     orm()
         .update(services)
-        .set({ logo_area: null, logo_area_auto: AUTO_MISSED })
+        .set({ logo_area: null, logo_area_auto: LOGO_AREA_AUTO.missed })
         .where(eq(services.id, serviceId))
         .run();
 }
 
-/** `logo_area_auto` の値。schema.ts に説明がある */
-const AUTO_GUESSED = 1;
-const AUTO_MISSED = 2;
-
-function row(serviceId: number): { area: string; auto: number } {
+function row(serviceId: number): { area: string; auto: LogoAreaAuto } {
     const found = orm()
         .select({ logo_area: services.logo_area, logo_area_auto: services.logo_area_auto })
         .from(services)
         .where(eq(services.id, serviceId))
         .get();
-    return { area: found?.logo_area ?? '', auto: found?.logo_area_auto ?? 0 };
+    return { area: found?.logo_area ?? '', auto: found?.logo_area_auto ?? LOGO_AREA_AUTO.human };
 }
 
 /**
@@ -139,7 +135,7 @@ export async function detectArea(input: string, signal?: AbortSignal): Promise<s
 export function remember(serviceId: number, area: string): void {
     orm()
         .update(services)
-        .set({ logo_area: area, logo_area_auto: AUTO_GUESSED })
+        .set({ logo_area: area, logo_area_auto: LOGO_AREA_AUTO.guessed })
         .where(eq(services.id, serviceId))
         .run();
 }
