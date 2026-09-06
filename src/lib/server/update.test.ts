@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, test } from 'bun:test';
+import { afterEach, describe, expect, spyOn, test } from 'bun:test';
 import { config } from './config';
 import { checkForUpdate, newer, parseVersion, updateAvailable } from './update';
 
@@ -70,6 +70,24 @@ describe('新しい版の知らせ', () => {
         expect(await checkForUpdate(github(release('v2.0.0', { prerelease: true })))).toBeNull();
         expect(await checkForUpdate(github(release('v2.0.0', { draft: true })))).toBeNull();
         expect(await checkForUpdate(github(release('v2.0.0-rc1')))).toBeNull();
+    });
+
+    test('繋がらないことは 1 回だけ言い、いちど繋がれば (404 でも) また言う', async () => {
+        config.version = 'v1.7.1';
+        const warn = spyOn(console, 'warn').mockImplementation(() => {});
+        try {
+            const failing = async () => {
+                throw new Error('繋がらない');
+            };
+            await checkForUpdate(failing);
+            await checkForUpdate(failing);
+            expect(warn).toHaveBeenCalledTimes(1);
+            await checkForUpdate(github(null, 404));
+            await checkForUpdate(failing);
+            expect(warn).toHaveBeenCalledTimes(2);
+        } finally {
+            warn.mockRestore();
+        }
     });
 
     test('繋がらない・形が違うときは、前に分かっていたことを持つ', async () => {
