@@ -169,11 +169,12 @@ export const config = {
     bmlDns: str('BML_DNS', '1.1.1.1,8.8.8.8'),
 
     /**
-     * 動いているコミット。**イメージを組むときに入る** (Dockerfile の `DENPA_COMMIT`)。
-     * 手元や試験では `dev` で、そのときは新しい版の知らせを出さない (update.ts)
+     * 動いている版 (`v1.8.1` の形)。**リリースのイメージにだけ入る** — リリースのとき、
+     * main で組んだイメージに 1 層足す (.github/release.Dockerfile)。main (develop) の
+     * イメージと手元・試験は `dev` で、そのときは新しい版の知らせを出さない (update.ts)
      */
-    commit: str('DENPA_COMMIT', 'dev'),
-    /** 新しい版を見に行く先。GitHub の API (`releases/latest` と `compare`)。試験では偽物を指す */
+    version: str('DENPA_VERSION', 'dev'),
+    /** 新しい版を見に行く先。GitHub の API (`releases/latest`)。試験では偽物を指す */
     githubApi: str('DENPA_GITHUB_API', 'https://api.github.com/repos/danything/denpa').replace(/\/+$/, ''),
     /** 新しい版を見に行く間隔 (ms)。認証なしの GitHub API は 1 時間に 60 回まで */
     updateCheckInterval: num('UPDATE_CHECK_INTERVAL', 60 * MIN),

@@ -91,10 +91,6 @@ jobs:
           pull: true
           cache-from: type=gha,scope=denpa
           cache-to: type=gha,mode=max,scope=denpa
-          # 動いているコミットとして焼き込む。新しい版の知らせは、GitHub の最新の
-          # リリースがこれより先かを見て出す (src/lib/server/update.ts)
-          build-args: |
-            DENPA_COMMIT=${{ github.sha }}
           tags: |
             ${{ env.REGISTRY }}/${{ github.repository_owner }}/denpa:${{ steps.tag.outputs.denpa }}
             ${{ env.REGISTRY }}/${{ github.repository_owner }}/denpa:develop

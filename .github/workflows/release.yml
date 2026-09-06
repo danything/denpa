@@ -95,8 +95,16 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      # `imagetools create` はイメージを引かずに、レジストリの中で名前を足すだけ。
-      # 元のイメージが無ければここで落ちる (黙って古い latest が残るより、そのほうがいい)
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      # エージェントは `imagetools create` — イメージを引かずに、レジストリの中で名前を
+      # 足すだけ。元のイメージが無ければここで落ちる (黙って古い latest が残るより、
+      # そのほうがいい)。
+      #
+      # denpa は**版を 1 層足して**から名前を付ける (.github/release.Dockerfile)。
+      # main で組んだイメージを土台にするので中身は同じで、増えるのは ENV の 1 枚。
+      # 動いている denpa はこれで自分の版を知り、新しい版の知らせを出す
       - name: Point the names at this release
         run: |
           set -eu
@@ -106,17 +114,23 @@ jobs:
             echo "貼る名前がありません (x.y.z ではなく、試し版でもない)" >&2
             exit 1
           fi
-          for image in "denpa-agent:${{ steps.tag.outputs.agent }}" "denpa:${{ steps.tag.outputs.denpa }}"; do
-            name="${image%%:*}"
-            args=""
-            for alias in $names; do
-              args="$args --tag ${base}/${name}:${alias}"
-            done
-            # 単語に割りたいので引用しない (中身は上で作った名前だけ)
-            # shellcheck disable=SC2086
-            docker buildx imagetools create $args "${base}/${image}"
-            echo "${name}: ${image#*:} → $names"
+          agent_args=""
+          denpa_args=""
+          for alias in $names; do
+            agent_args="$agent_args --tag ${base}/denpa-agent:${alias}"
+            denpa_args="$denpa_args --tag ${base}/denpa:${alias}"
           done
+          # 単語に割りたいので引用しない (中身は上で作った名前だけ)
+          # shellcheck disable=SC2086
+          docker buildx imagetools create $agent_args "${base}/denpa-agent:${{ steps.tag.outputs.agent }}"
+          echo "denpa-agent: ${{ steps.tag.outputs.agent }} → $names"
+          # shellcheck disable=SC2086
+          docker buildx build --push \
+            --file .github/release.Dockerfile \
+            --build-arg BASE="${base}/denpa:${{ steps.tag.outputs.denpa }}" \
+            --build-arg DENPA_VERSION="${{ github.event.release.tag_name || github.event.inputs.ref }}" \
+            $denpa_args .
+          echo "denpa: ${{ steps.tag.outputs.denpa }} + DENPA_VERSION → $names"
 
   # **Helm chart もリリースのたびに出す** (README が案内している `oci://ghcr.io/danything/charts/…`)。
   # chart の版 (Chart.yaml の version) とアプリの版 (appVersion) をリリースの
