@@ -12,12 +12,14 @@
  * (`ts/eit.ts` の ScheduleProgress)。揃えばすぐ離すので、次のチャンネルへ回せる。
  */
 
+import { max } from 'drizzle-orm';
 import { EpgReader } from '../ts/eit';
 import { config } from './config';
-import { queryAll } from './db';
+import { orm } from './db';
 import { savePrograms, settle, syncServices } from './epg';
 import { emit } from './events';
 import { resolveConflicts } from './scheduler';
+import { programs } from './schema';
 import { chunks } from './stream';
 import {
     type AgentChannel,
@@ -52,9 +54,12 @@ const collected = new Map<string, number>();
  */
 function lastCollected(channels: AgentChannel[]): Map<string, number> {
     const perService = new Map(
-        queryAll<{ service_id: number; at: number }>(
-            'SELECT service_id, MAX(updated_at) AS at FROM programs GROUP BY service_id',
-        ).map((row) => [row.service_id, row.at]),
+        orm()
+            .select({ service_id: programs.service_id, at: max(programs.updated_at).mapWith(Number) })
+            .from(programs)
+            .groupBy(programs.service_id)
+            .all()
+            .map((row) => [row.service_id, row.at]),
     );
 
     const map = new Map<string, number>();
@@ -124,9 +129,11 @@ function update(patch: Partial<CollectState>): void {
  * 記憶だけで持っていると、Pod が入れ替わるたびに全チャンネルを回し直すことになる。
  */
 function coverage(): Map<number, number> {
-    const rows = queryAll<{ service_id: number; until: number }>(
-        'SELECT service_id, MAX(end_at) AS until FROM programs GROUP BY service_id',
-    );
+    const rows = orm()
+        .select({ service_id: programs.service_id, until: max(programs.end_at).mapWith(Number) })
+        .from(programs)
+        .groupBy(programs.service_id)
+        .all();
     return new Map(rows.map((row) => [row.service_id, row.until]));
 }
 

@@ -1,7 +1,9 @@
-import type { Program, Recording, Reservation } from '../types';
-import { database, now, queryOne } from './db';
+import { and, eq, sql } from 'drizzle-orm';
+import type { Reservation } from '../types';
+import { now, orm } from './db';
 import { stopRecording } from './recorder';
 import { resolveConflicts } from './scheduler';
+import { programs, recordings, reservations } from './schema';
 import { settings } from './settings';
 
 /** 手動予約。ルール由来の予約が既にあれば手動扱いに昇格させて優先度を上げる */
@@ -12,7 +14,7 @@ export async function reserve(
         encode?: boolean;
     } = {},
 ): Promise<Reservation> {
-    const program = queryOne<Program>('SELECT * FROM programs WHERE id = ?', programId);
+    const program = orm().select().from(programs).where(eq(programs.id, programId)).get();
     if (program === undefined) throw new Error(`番組 ${programId} が見つかりません`);
 
     const at = now();
@@ -24,34 +26,37 @@ export async function reserve(
     // 焼き方の細目 (生TSを残すか・CMの扱い・コーデック) は焼くときに settings を見る
     const encode = (options.encode ?? settings().encode) ? 1 : 0;
 
-    database()
-        .prepare(
-            `INSERT INTO reservations
-            (program_id, rule_id, service_id, name, description, start_at, end_at,
-             priority, manual, encode, state, created_at, updated_at)
-         VALUES (?, NULL, ?, ?, ?, ?, ?, ?, 1, ?, 'scheduled', ?, ?)
-         ON CONFLICT(program_id) DO UPDATE SET
-            manual = 1,
-            priority = excluded.priority,
-            encode = excluded.encode,
-            state = CASE WHEN reservations.state = 'canceled' THEN 'scheduled' ELSE reservations.state END,
-            updated_at = excluded.updated_at`,
-        )
-        .run(
-            program.id,
-            program.service_id,
-            program.name,
-            program.description,
-            program.start_at,
-            program.end_at,
+    orm()
+        .insert(reservations)
+        .values({
+            program_id: program.id,
+            rule_id: null,
+            service_id: program.service_id,
+            name: program.name,
+            description: program.description,
+            start_at: program.start_at,
+            end_at: program.end_at,
             priority,
+            manual: 1,
             encode,
-            at,
-            at,
-        );
+            state: 'scheduled',
+            created_at: at,
+            updated_at: at,
+        })
+        .onConflictDoUpdate({
+            target: reservations.program_id,
+            set: {
+                manual: 1,
+                priority: sql`excluded.priority`,
+                encode: sql`excluded.encode`,
+                state: sql`CASE WHEN ${reservations.state} = 'canceled' THEN 'scheduled' ELSE ${reservations.state} END`,
+                updated_at: sql`excluded.updated_at`,
+            },
+        })
+        .run();
 
     await resolveConflicts();
-    return queryOne<Reservation>('SELECT * FROM reservations WHERE program_id = ?', programId)!;
+    return orm().select().from(reservations).where(eq(reservations.program_id, programId)).get()!;
 }
 
 /**
@@ -61,15 +66,21 @@ export async function reserve(
  * (`INSERT OR IGNORE` が同じ番組を弾く)。気が変わったときに戻す道がここ。
  */
 export async function restore(reservationId: number): Promise<void> {
-    const reservation = queryOne<Reservation>('SELECT * FROM reservations WHERE id = ?', reservationId);
+    const reservation = byId(reservationId);
     if (reservation === undefined) throw new Error('予約が見つかりません');
     if (reservation.state !== 'canceled') throw new Error('取り消した予約ではありません');
     if (reservation.end_at <= now()) throw new Error('この番組は放送が終わっています');
 
-    database()
-        .prepare(`UPDATE reservations SET state = 'scheduled', updated_at = ? WHERE id = ?`)
-        .run(now(), reservationId);
+    orm()
+        .update(reservations)
+        .set({ state: 'scheduled', updated_at: now() })
+        .where(eq(reservations.id, reservationId))
+        .run();
     await resolveConflicts();
+}
+
+function byId(reservationId: number): Reservation | undefined {
+    return orm().select().from(reservations).where(eq(reservations.id, reservationId)).get();
 }
 
 /**
@@ -77,18 +88,21 @@ export async function restore(reservationId: number): Promise<void> {
  * (途中まででも見たいことがあるのでファイルは捨てない)。
  */
 export async function cancel(reservationId: number): Promise<void> {
-    const reservation = queryOne<Reservation>('SELECT * FROM reservations WHERE id = ?', reservationId);
+    const reservation = byId(reservationId);
     if (reservation === undefined) return;
 
     // 録っている最中なら止める。掴んでいるかどうかを知っているのは録画の行のほう
-    const recording = queryOne<Pick<Recording, 'id'>>(
-        `SELECT id FROM recordings WHERE reservation_id = ? AND state = 'recording'`,
-        reservationId,
-    );
+    const recording = orm()
+        .select({ id: recordings.id })
+        .from(recordings)
+        .where(and(eq(recordings.reservation_id, reservationId), eq(recordings.state, 'recording')))
+        .get();
     if (recording !== undefined) stopRecording(recording.id);
 
-    database()
-        .prepare(`UPDATE reservations SET state = 'canceled', updated_at = ? WHERE id = ?`)
-        .run(now(), reservationId);
+    orm()
+        .update(reservations)
+        .set({ state: 'canceled', updated_at: now() })
+        .where(eq(reservations.id, reservationId))
+        .run();
     await resolveConflicts();
 }

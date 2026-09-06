@@ -12,6 +12,8 @@
             "!windows",
             "!docs",
             "!.github",
+            // drizzle-kit が出すマイグレーション (SQL と snapshot の JSON)。手では触らない
+            "!drizzle",
             "!renovate.json",
             "!agent/Denpa.Agent",
             "!agent/Denpa.Agent.Tests",

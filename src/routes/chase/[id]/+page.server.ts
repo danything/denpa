@@ -1,5 +1,7 @@
 import { error, redirect } from '@sveltejs/kit';
-import { queryOne } from '$lib/server/db';
+import { eq } from 'drizzle-orm';
+import { orm } from '$lib/server/db';
+import { recordings } from '$lib/server/schema';
 import type { PageServerLoad } from './$types';
 
 /**
@@ -13,27 +15,7 @@ export const load: PageServerLoad = ({ params }) => {
     const id = Number(params.id);
     if (!Number.isInteger(id)) error(404, '録画が見つかりません');
 
-    const rec = queryOne<{
-        id: number;
-        program_id: number | null;
-        name: string;
-        service_name: string;
-        start_at: number;
-        end_at: number;
-        finished_at: number | null;
-        library_path: string | null;
-        ts_path: string | null;
-        resume_ms: number | null;
-        deleted_at: number | null;
-        description: string;
-        genre_detail: string | null;
-        audios: string | null;
-    }>(
-        `SELECT id, program_id, name, service_name, start_at, end_at, finished_at,
-                library_path, ts_path, resume_ms, deleted_at, description, genre_detail, audios
-         FROM recordings WHERE id = ?`,
-        id,
-    );
+    const rec = orm().select().from(recordings).where(eq(recordings.id, id)).get();
     if (rec === undefined || rec.deleted_at !== null) error(404, '録画が見つかりません');
     // 焼き上がっているなら普通の視聴画面へ。あちらはシークも字幕も揃っている
     if (rec.library_path !== null) redirect(302, `/watch/${rec.id}`);

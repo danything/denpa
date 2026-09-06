@@ -16,6 +16,7 @@
 
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { open } from 'node:fs/promises';
+import { eq } from 'drizzle-orm';
 import type { ResponseMessage } from 'web-bml/protocol';
 import { DataBroadcastCapture } from '$lib/ts/data-capture';
 import {
@@ -25,7 +26,8 @@ import {
     toPlaybackTimeline,
 } from '$lib/ts/data-timeline';
 import type { Recording } from '../types';
-import { queryOne } from './db';
+import { orm } from './db';
+import { programs, services } from './schema';
 
 /**
  * **番組の名乗り (`programInfo`)。描く側はこれが来るまで入口の BML を開かない**
@@ -41,15 +43,20 @@ import { queryOne } from './db';
  * 録画の行に足しても、確かめようが無い
  */
 function programInfoOf(recording: Recording): ResponseMessage | null {
-    const service = queryOne<{ service_id: number; network_id: number }>(
-        'SELECT service_id, network_id FROM services WHERE id = ?',
-        recording.service_id,
-    );
+    const service = orm()
+        .select({ service_id: services.service_id, network_id: services.network_id })
+        .from(services)
+        .where(eq(services.id, recording.service_id))
+        .get();
     if (service === undefined) return null;
-    const program = queryOne<{ event_id: number }>(
-        'SELECT event_id FROM programs WHERE id = ?',
-        recording.program_id,
-    );
+    const program =
+        recording.program_id === null
+            ? undefined
+            : orm()
+                  .select({ event_id: programs.event_id })
+                  .from(programs)
+                  .where(eq(programs.id, recording.program_id))
+                  .get();
     return {
         type: 'programInfo',
         originalNetworkId: service.network_id,

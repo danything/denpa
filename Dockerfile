@@ -209,6 +209,9 @@ COPY --from=jls /opt/jls /opt/jls
 # 借りものが使う4つを devDependencies に置いてあるのはそのため
 COPY --from=build /app/build ./build
 COPY --from=build /app/package.json ./package.json
+# DB のマイグレーション (drizzle-kit が出した SQL)。起動時に `drizzle/` を cwd から
+# 読んで当てる (src/lib/server/db.ts)。束ねられないので生のまま置く
+COPY --from=build /app/drizzle ./drizzle
 # ライブ視聴の WebSocket を受ける入口。中身の理由はファイルの頭に書いてある
 COPY --from=build /app/server.js ./server.js
 

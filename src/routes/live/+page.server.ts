@@ -1,9 +1,11 @@
 import { fail } from '@sveltejs/kit';
+import { and, desc, eq, gt, lte, sql } from 'drizzle-orm';
 import { LAST_COOKIE, type LiveCodec } from '$lib/live';
-import { queryAll, queryOne } from '$lib/server/db';
+import { orm } from '$lib/server/db';
 import { airing, CURRENT_SERVICES, SERVICE_ORDER, SERVICE_TYPE_ORDER } from '$lib/server/epg';
 import { warm } from '$lib/server/live';
 import { reserve } from '$lib/server/reservations';
+import { programs, services as stations } from '$lib/server/schema';
 import { settings } from '$lib/server/settings';
 import type { Service } from '$lib/types';
 import type { Actions } from './$types';
@@ -66,29 +68,30 @@ function remembered(
 export function load({ url, cookies }) {
     const at = Date.now();
     // テレビと同じ並び (SERVICE_TYPE_ORDER / SERVICE_ORDER)。番組表とも揃えてある
-    const services = queryAll<Service>(
-        `SELECT * FROM services WHERE ${CURRENT_SERVICES}
-         ORDER BY ${SERVICE_TYPE_ORDER}, ${SERVICE_ORDER}`,
-    );
+    const services: Service[] = orm()
+        .select()
+        .from(stations)
+        .where(sql.raw(CURRENT_SERVICES))
+        .orderBy(sql.raw(SERVICE_TYPE_ORDER), sql.raw(SERVICE_ORDER))
+        .all();
 
     /*
      * いま流れているものだけ引く。番組表を丸ごと持ってくると、局の数 × 8日ぶんに
      * なって画面が出るまで待たされる (実機で 25,000 件を超える)
      */
-    const now = queryAll<{
-        id: number;
-        service_id: number;
-        name: string;
-        start_at: number;
-        end_at: number;
-        description: string | null;
-    }>(
-        // 番組の id と概要も採る。**右で詳細を出すのに要る** (`programDetail`)
-        `SELECT id, service_id, name, start_at, end_at, description FROM programs
-         WHERE start_at <= ? AND end_at > ?`,
-        at,
-        at,
-    );
+    const now = orm()
+        .select({
+            id: programs.id,
+            service_id: programs.service_id,
+            name: programs.name,
+            start_at: programs.start_at,
+            end_at: programs.end_at,
+            // 概要も採る。**右で詳細を出すのに要る** (`programDetail`)
+            description: programs.description,
+        })
+        .from(programs)
+        .where(and(lte(programs.start_at, at), gt(programs.end_at, at)))
+        .all();
     const byService = new Map(now.map((program) => [program.service_id, program]));
 
     const channels: LiveChannel[] = airing(services, now).map((service) => {
@@ -184,13 +187,15 @@ export const actions = {
         if (!Number.isInteger(serviceId)) return fail(400, { message: 'チャンネルが分かりません' });
 
         const at = Date.now();
-        const program = queryOne<{ id: number; name: string }>(
-            `SELECT id, name FROM programs WHERE service_id = ? AND start_at <= ? AND end_at > ?
-             ORDER BY start_at DESC LIMIT 1`,
-            serviceId,
-            at,
-            at,
-        );
+        const program = orm()
+            .select({ id: programs.id, name: programs.name })
+            .from(programs)
+            .where(
+                and(eq(programs.service_id, serviceId), lte(programs.start_at, at), gt(programs.end_at, at)),
+            )
+            .orderBy(desc(programs.start_at))
+            .limit(1)
+            .get();
         if (program === undefined) {
             return fail(404, { message: 'いま流れている番組が番組表に見つかりません' });
         }

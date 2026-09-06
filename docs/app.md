@@ -90,7 +90,7 @@ EPGStation の置き換えとして作ったもので、エンコード設定は
 | `src/lib/server/runtime.ts` | 常駐処理の起動 (hooks.server.ts から呼ばれる) |
 | `src/lib/server/config.ts` | 環境変数 |
 | `src/lib/server/settings.ts` | 画面から変えられる設定 (環境変数を初期値にDBで上書き) |
-| `src/lib/server/db.ts` / `schema.ts` | SQLite と スキーマ |
+| `src/lib/server/db.ts` / `schema.ts` | SQLite。テーブルの定義は `schema.ts` (drizzle) にしか無く、型もマイグレーション (`drizzle/`) もそこから出す ([development.md](development.md#db-の列を足す)) |
 
 ## 状態遷移
 

@@ -1,8 +1,10 @@
+import { and, eq, getTableColumns, gt, inArray, isNull } from 'drizzle-orm';
 import { type Genre, genreMatches } from '$lib/arib';
 import { parseSearchFields, type SearchField } from '../search';
 import type { Program, Rule } from '../types';
 import { config } from './config';
-import { database, now, queryAll } from './db';
+import { now, orm } from './db';
+import { programs as programTable, reservations, rules as ruleTable, services } from './schema';
 import { settings } from './settings';
 import { toHalfWidth } from './title';
 
@@ -183,17 +185,6 @@ export interface RuleSync {
 }
 
 /**
- * ルールを取り込みたい予約。まだ立てていないものと、いま立っているものを突き合わせる。
- */
-interface Held {
-    id: number;
-    program_id: number;
-    rule_id: number | null;
-    priority: number;
-    start_at: number;
-}
-
-/**
  * ルールを番組表に当て直して、予約をそろえる。
  *
  * **足すだけでなく、外れたものは消す。** 足すだけだった頃は、番組表が書き換わって
@@ -228,7 +219,7 @@ interface Held {
  */
 export function applyRules(options: { rule?: number } = {}): RuleSync {
     const result: RuleSync = { created: 0, dropped: 0, moved: 0, repriced: 0 };
-    const rules = database().prepare('SELECT * FROM rules WHERE enabled = 1').all() as Rule[];
+    const rules = orm().select().from(ruleTable).where(eq(ruleTable.enabled, 1)).all();
     const adding = options.rule !== undefined;
     if (rules.length === 0 && adding) return result;
 
@@ -236,12 +227,13 @@ export function applyRules(options: { rule?: number } = {}): RuleSync {
     // 録画のしかたは全体で1つ。ルールごとに持たせるとどこで決まったか分からなくなる
     const recording = settings();
     // 種別(GR/BS/CS)でも絞り込めるよう、番組にチャンネル種別と物理チャンネルを添えて取る
-    const programs = queryAll<Program & { service_type: string; channel: string }>(
-        `SELECT p.*, s.type AS service_type, s.channel AS channel FROM programs p
-         JOIN services s ON s.id = p.service_id
-         WHERE p.start_at > ? ORDER BY p.start_at`,
-        at,
-    );
+    const programs = orm()
+        .select({ ...getTableColumns(programTable), service_type: services.type, channel: services.channel })
+        .from(programTable)
+        .innerJoin(services, eq(services.id, programTable.service_id))
+        .where(gt(programTable.start_at, at))
+        .orderBy(programTable.start_at)
+        .all();
 
     const compiled = rules.map(compile);
     const searching = adding ? compiled.filter((c) => c.rule.id === options.rule) : compiled;
@@ -279,46 +271,56 @@ export function applyRules(options: { rule?: number } = {}): RuleSync {
         }
     }
 
-    const insert = database().prepare(`
-        INSERT OR IGNORE INTO reservations
-            (program_id, rule_id, service_id, name, description, start_at, end_at,
-             priority, manual, encode, state, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?, 'scheduled', ?, ?)
-    `);
-    const drop = database().prepare('DELETE FROM reservations WHERE id = ?');
-    const move = database().prepare(
-        'UPDATE reservations SET rule_id = ?, priority = ?, updated_at = ? WHERE id = ?',
-    );
-
     /** いまルールが立てている予約。手動と、録り始めたものは入らない */
     const held = adding
         ? []
-        : queryAll<Held>(
-              `SELECT id, program_id, rule_id, priority, start_at FROM reservations
-                WHERE manual = 0 AND started_at IS NULL AND state IN ('scheduled', 'conflict')`,
-          );
+        : orm()
+              .select({
+                  id: reservations.id,
+                  program_id: reservations.program_id,
+                  rule_id: reservations.rule_id,
+                  priority: reservations.priority,
+                  start_at: reservations.start_at,
+              })
+              .from(reservations)
+              .where(
+                  and(
+                      eq(reservations.manual, 0),
+                      isNull(reservations.started_at),
+                      inArray(reservations.state, ['scheduled', 'conflict']),
+                  ),
+              )
+              .all();
     /** 番組表にまだ載っている番組。読めていないだけのものと区別する */
     const listed = new Map(programs.map((program) => [program.id, program]));
     /** まだ生きているルール。消された/止められたぶんは猶予を置かずに引っ込める */
     const enabled = new Set(rules.map((rule) => rule.id));
     const grace = at + config.ruleRetractGrace;
 
-    const tx = database().transaction(() => {
+    orm().transaction((tx) => {
         for (const { rule, program } of wanted.values()) {
-            const res = insert.run(
-                program.id,
-                rule.id,
-                program.service_id,
-                program.name,
-                program.description,
-                program.start_at,
-                program.end_at,
-                rule.priority,
-                recording.encode ? 1 : 0,
-                at,
-                at,
-            );
-            if (res.changes > 0) result.created++;
+            // 同じ番組の予約が既にあれば何もしない (INSERT OR IGNORE)。作れたときだけ行が返る
+            const made = tx
+                .insert(reservations)
+                .values({
+                    program_id: program.id,
+                    rule_id: rule.id,
+                    service_id: program.service_id,
+                    name: program.name,
+                    description: program.description,
+                    start_at: program.start_at,
+                    end_at: program.end_at,
+                    priority: rule.priority,
+                    manual: 0,
+                    encode: recording.encode ? 1 : 0,
+                    state: 'scheduled',
+                    created_at: at,
+                    updated_at: at,
+                })
+                .onConflictDoNothing()
+                .returning({ id: reservations.id })
+                .get();
+            if (made !== undefined) result.created++;
         }
 
         for (const reservation of held) {
@@ -326,7 +328,10 @@ export function applyRules(options: { rule?: number } = {}): RuleSync {
             if (owner !== undefined) {
                 // 別のルールが引き取った。付け替えるだけで、録るものは変わらない
                 if (owner.rule.id !== reservation.rule_id) {
-                    move.run(owner.rule.id, owner.rule.priority, at, reservation.id);
+                    tx.update(reservations)
+                        .set({ rule_id: owner.rule.id, priority: owner.rule.priority, updated_at: at })
+                        .where(eq(reservations.id, reservation.id))
+                        .run();
                     result.moved++;
                 } else if (owner.rule.priority !== reservation.priority) {
                     /*
@@ -341,7 +346,10 @@ export function applyRules(options: { rule?: number } = {}): RuleSync {
                      *
                      * 優先度はルールが持つものなので、こちらを本物として扱う
                      */
-                    move.run(owner.rule.id, owner.rule.priority, at, reservation.id);
+                    tx.update(reservations)
+                        .set({ rule_id: owner.rule.id, priority: owner.rule.priority, updated_at: at })
+                        .where(eq(reservations.id, reservation.id))
+                        .run();
                     result.repriced++;
                 }
                 continue;
@@ -352,10 +360,9 @@ export function applyRules(options: { rule?: number } = {}): RuleSync {
             // ルールが生きているのに外れた = 番組表が動いた。直前なら録っておく
             const byChurn = reservation.rule_id !== null && enabled.has(reservation.rule_id);
             if (byChurn && reservation.start_at < grace) continue;
-            drop.run(reservation.id);
+            tx.delete(reservations).where(eq(reservations.id, reservation.id)).run();
             result.dropped++;
         }
     });
-    tx();
     return result;
 }

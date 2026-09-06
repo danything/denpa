@@ -1,6 +1,8 @@
 import { error } from '@sveltejs/kit';
-import { database, now } from '$lib/server/db';
+import { eq } from 'drizzle-orm';
+import { now, orm } from '$lib/server/db';
 import { recordingOr404 } from '$lib/server/recording';
+import { recordings } from '$lib/server/schema';
 import { RESUME_EDGE, resumePoint } from '$lib/ts/watch';
 
 /**
@@ -35,9 +37,11 @@ export async function POST({ params, request }) {
     const seconds = typeof length === 'number' && Number.isFinite(length) ? length : 0;
     const keep = resumePoint(at, seconds);
 
-    database()
-        .prepare('UPDATE recordings SET resume_ms = ?, updated_at = ? WHERE id = ?')
-        .run(keep === null ? null : Math.round(keep * 1000), now(), recording.id);
+    orm()
+        .update(recordings)
+        .set({ resume_ms: keep === null ? null : Math.round(keep * 1000), updated_at: now() })
+        .where(eq(recordings.id, recording.id))
+        .run();
 
     return Response.json({ resume: keep, edge: RESUME_EDGE });
 }
