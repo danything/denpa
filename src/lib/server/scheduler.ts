@@ -1,9 +1,11 @@
+import { and, eq, getTableColumns, gt, inArray, isNull, lte, or, sql } from 'drizzle-orm';
 import type { Reservation } from '../types';
 import { config } from './config';
 import { assign, whole } from './conflict';
-import { database, now, queryOne } from './db';
+import { affected, now, orm } from './db';
 import { emit } from './events';
 import { activeRecordingIds, startRecording, stopRecording } from './recorder';
+import { recordings, reservations, services } from './schema';
 import { isDraining } from './shutdown';
 import { type AgentTuner, getTuners } from './tuner';
 
@@ -36,16 +38,20 @@ export async function tunerCapacity(): Promise<Map<string, number>> {
 
 export async function resolveConflicts(): Promise<{ accepted: number; rejected: number }> {
     const capacity = await tunerCapacity();
-    const candidates = database()
-        .prepare(
-            `SELECT r.*, s.type AS type, s.channel AS channel
-             FROM reservations r
-             JOIN services s ON s.id = r.service_id
-             -- 録り始めたものは数え直さない。掴む本数はもう決まっている
-             WHERE r.state IN ('scheduled', 'conflict') AND r.started_at IS NULL AND r.end_at > ?
-             ORDER BY r.start_at`,
+    const candidates: Candidate[] = orm()
+        .select({ ...getTableColumns(reservations), type: services.type, channel: services.channel })
+        .from(reservations)
+        .innerJoin(services, eq(services.id, reservations.service_id))
+        .where(
+            and(
+                inArray(reservations.state, ['scheduled', 'conflict']),
+                // 録り始めたものは数え直さない。掴む本数はもう決まっている
+                isNull(reservations.started_at),
+                gt(reservations.end_at, now()),
+            ),
         )
-        .all(now()) as Candidate[];
+        .orderBy(reservations.start_at)
+        .all();
 
     // 前後のマージンぶんチューナーを掴む時間は延びる。予約表と実行時のズレを無くすため
     // 同じ物差しで数える
@@ -55,32 +61,38 @@ export async function resolveConflicts(): Promise<{ accepted: number; rejected: 
     });
 
     const at = now();
-    const toScheduled = database().prepare(
-        `UPDATE reservations SET state = 'scheduled', conflict_reason = NULL, updated_at = ?
-         WHERE id = ? AND state = 'conflict'`,
-    );
-    const toConflict = database().prepare(
-        `UPDATE reservations SET state = 'conflict', conflict_reason = ?, updated_at = ?
-         WHERE id = ? AND state = 'scheduled'`,
-    );
-    /*
-     * **譲ったぶんを覚える。** 丸ごと入ったものは NULL に戻す —
-     * 前の回で削られていても、相手が消えれば丸ごと録れるようになる
-     */
-    const setWindow = database().prepare(
-        `UPDATE reservations SET record_from = ?, record_to = ?, updated_at = ?
-         WHERE id = ? AND (record_from IS NOT ? OR record_to IS NOT ?)`,
-    );
-    const tx = database().transaction(() => {
+    orm().transaction((tx) => {
         for (const a of accepted) {
-            toScheduled.run(at, a.reservation.id);
+            tx.update(reservations)
+                .set({ state: 'scheduled', conflict_reason: null, updated_at: at })
+                .where(and(eq(reservations.id, a.reservation.id), eq(reservations.state, 'conflict')))
+                .run();
+            /*
+             * **譲ったぶんを覚える。** 丸ごと入ったものは NULL に戻す —
+             * 前の回で削られていても、相手が消えれば丸ごと録れるようになる
+             */
             const from = whole(a) ? null : a.from;
             const to = whole(a) ? null : a.to;
-            setWindow.run(from, to, at, a.reservation.id, from, to);
+            tx.update(reservations)
+                .set({ record_from: from, record_to: to, updated_at: at })
+                .where(
+                    and(
+                        eq(reservations.id, a.reservation.id),
+                        or(
+                            sql`${reservations.record_from} IS NOT ${from}`,
+                            sql`${reservations.record_to} IS NOT ${to}`,
+                        ),
+                    ),
+                )
+                .run();
         }
-        for (const r of rejected) toConflict.run(r.reason, at, r.reservation.id);
+        for (const r of rejected) {
+            tx.update(reservations)
+                .set({ state: 'conflict', conflict_reason: r.reason, updated_at: at })
+                .where(and(eq(reservations.id, r.reservation.id), eq(reservations.state, 'scheduled')))
+                .run();
+        }
     });
-    tx();
     emit('reservations');
 
     return { accepted: accepted.length, rejected: rejected.length };
@@ -96,10 +108,11 @@ export async function tick(): Promise<void> {
     // 止めるほうを先にやる。次の番組が始まるときに前の録画がまだチューナーを
     // 掴んでいると、本数が足りない環境で後続が丸ごと録れない
     for (const id of activeRecordingIds()) {
-        const rec = queryOne<{ end_at: number; record_to: number | null }>(
-            'SELECT end_at, record_to FROM recordings WHERE id = ?',
-            id,
-        );
+        const rec = orm()
+            .select({ end_at: recordings.end_at, record_to: recordings.record_to })
+            .from(recordings)
+            .where(eq(recordings.id, id))
+            .get();
         if (rec === undefined) continue;
         // 尻を譲っているならそこで離す (`record_to`)。次の録画がそこから掴む
         const until = rec.record_to ?? rec.end_at + config.endMargin;
@@ -108,13 +121,19 @@ export async function tick(): Promise<void> {
 
     // 始まらないまま終わってしまった予約を片付ける。
     // アプリが止まっていた間に放送が終わったものがここに残り続けていた
-    const expired = database()
-        .prepare(
-            `UPDATE reservations SET state = 'missed', updated_at = ?
-             WHERE state IN ('scheduled', 'conflict') AND started_at IS NULL AND end_at <= ?`,
-        )
-        .run(at, at);
-    if (expired.changes > 0) emit('reservations');
+    const expired = affected(
+        orm()
+            .update(reservations)
+            .set({ state: 'missed', updated_at: at })
+            .where(
+                and(
+                    inArray(reservations.state, ['scheduled', 'conflict']),
+                    isNull(reservations.started_at),
+                    lte(reservations.end_at, at),
+                ),
+            ),
+    );
+    if (expired > 0) emit('reservations');
 
     /*
      * **止められている最中でも始める。**
@@ -133,14 +152,21 @@ export async function tick(): Promise<void> {
      * **譲ったぶんがあれば、そちらを見る** (`record_from`)。チューナーの取り合いで
      * 頭を譲った予約は、番組の始まりに起こしても掴めない — 相手がまだ掴んでいる
      */
-    const due = database()
-        .prepare(
-            `SELECT * FROM reservations
-             WHERE state = 'scheduled' AND started_at IS NULL
-               AND COALESCE(record_from, start_at - ?) <= ?
-               AND COALESCE(record_to, end_at) > ?`,
+    const due = orm()
+        .select()
+        .from(reservations)
+        .where(
+            and(
+                eq(reservations.state, 'scheduled'),
+                isNull(reservations.started_at),
+                lte(
+                    sql`COALESCE(${reservations.record_from}, ${reservations.start_at} - ${config.startMargin})`,
+                    at,
+                ),
+                gt(sql`COALESCE(${reservations.record_to}, ${reservations.end_at})`, at),
+            ),
         )
-        .all(config.startMargin, at, at) as Reservation[];
+        .all();
     // 5秒ごとに言わない。**始めるものがあるときだけ**
     if (due.length > 0 && isDraining()) {
         console.log(`[録画] 止まる途中ですが ${due.length} 件始めます (頭を落とさないため)`);
@@ -152,13 +178,19 @@ export async function tick(): Promise<void> {
          * 状態の文字列を 'recording' に進めていた頃と同じ鍵の掛け方だが、
          * こちらは録画の行と食い違いようがない (録り始めたかどうかは事実ひとつ)
          */
-        const claimed = database()
-            .prepare(
-                `UPDATE reservations SET started_at = ?, updated_at = ?
-                 WHERE id = ? AND started_at IS NULL AND state = 'scheduled'`,
+        const claimed = orm()
+            .update(reservations)
+            .set({ started_at: at, updated_at: at })
+            .where(
+                and(
+                    eq(reservations.id, reservation.id),
+                    isNull(reservations.started_at),
+                    eq(reservations.state, 'scheduled'),
+                ),
             )
-            .run(at, at, reservation.id);
-        if (claimed.changes === 0) continue;
+            .returning({ id: reservations.id })
+            .get();
+        if (claimed === undefined) continue;
         await startRecording(reservation);
     }
 }

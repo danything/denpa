@@ -1,5 +1,7 @@
 import { error, json } from '@sveltejs/kit';
-import { queryOne } from '$lib/server/db';
+import { eq } from 'drizzle-orm';
+import { orm } from '$lib/server/db';
+import { programs, services } from '$lib/server/schema';
 import type { ProgramDetail } from '$lib/types';
 
 /**
@@ -15,14 +17,24 @@ export function GET({ params }) {
     const id = Number(params.id);
     if (!Number.isFinite(id)) error(400, '番組IDが不正です');
 
-    const program = queryOne<ProgramDetail>(
-        `SELECT p.name, p.description, p.extended, p.genre_detail, p.audios,
-                p.video_type, p.video_resolution, p.is_free, p.start_at, p.end_at,
-                s.name AS service_name
-         FROM programs p JOIN services s ON s.id = p.service_id
-         WHERE p.id = ?`,
-        id,
-    );
+    const program: ProgramDetail | undefined = orm()
+        .select({
+            name: programs.name,
+            description: programs.description,
+            extended: programs.extended,
+            genre_detail: programs.genre_detail,
+            audios: programs.audios,
+            video_type: programs.video_type,
+            video_resolution: programs.video_resolution,
+            is_free: programs.is_free,
+            start_at: programs.start_at,
+            end_at: programs.end_at,
+            service_name: services.name,
+        })
+        .from(programs)
+        .innerJoin(services, eq(services.id, programs.service_id))
+        .where(eq(programs.id, id))
+        .get();
     if (program === undefined) error(404, '番組が見つかりません');
 
     return json(program);

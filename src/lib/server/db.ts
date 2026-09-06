@@ -96,6 +96,23 @@ export function orm() {
     return typed;
 }
 
+/**
+ * 変えた行数が要るときの `.run()`。
+ *
+ * bun の `.run()` は行数を返しているのに、drizzle の型の上では void になる。
+ * 1行なら `.returning()` で足りるが、まとめて消す/直すところで全行を返させるのは
+ * 無駄なので、組み立てた SQL を生の接続で流して行数を取る。
+ *
+ * 接続は `orm()` と同じ1本なので、drizzle のトランザクションの中から呼んでも
+ * その中で流れる (epg.ts の syncServices → clearBelongings がそれ)
+ */
+export function affected(query: { toSQL(): { sql: string; params: unknown[] } }): number {
+    const { sql, params } = query.toSQL();
+    return database()
+        .query(sql)
+        .run(...(params as SQLQueryBindings[])).changes;
+}
+
 export function now(): number {
     return Date.now();
 }

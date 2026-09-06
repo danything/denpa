@@ -19,6 +19,7 @@
  * 最後に流した init を持っておいて、繋いできた人に真っ先に渡す。
  */
 
+import { and, eq, gt, lte } from 'drizzle-orm';
 import { type Audio, type AudioTrack, audioTracks, pickTrack } from '$lib/arib';
 import { CHANNEL, type HybridcastLink, type LiveCodec, type Notice } from '$lib/live';
 import { AitReader, APPLICATION_TYPE_HTML5, CONTROL } from '$lib/ts/ait';
@@ -38,8 +39,9 @@ import {
 import { chasePlan, fileSize, followFile } from './chase';
 import { config } from './config';
 import { DataBroadcast, type ResponseMessage } from './databroadcast';
-import { queryOne } from './db';
+import { orm } from './db';
 import { deinterlace } from './encoder';
+import { programs, recordings, services } from './schema';
 import { chunks, lines } from './stream';
 import { openWhenFree } from './tuner';
 import type { Connection } from './ws';
@@ -394,12 +396,11 @@ const RESTING = /休止|停波|放送終了/;
 function resting(serviceId: number): number | null {
     if (!Number.isFinite(serviceId)) return null;
     const at = Date.now();
-    const program = queryOne<{ name: string; end_at: number }>(
-        `SELECT name, end_at FROM programs WHERE service_id = ? AND start_at <= ? AND end_at > ?`,
-        serviceId,
-        at,
-        at,
-    );
+    const program = orm()
+        .select({ name: programs.name, end_at: programs.end_at })
+        .from(programs)
+        .where(airingAt(serviceId, at))
+        .get();
     if (program === undefined || !RESTING.test(program.name)) return null;
     return program.end_at;
 }
@@ -971,18 +972,22 @@ class Session {
      */
     private programInfo(): ResponseMessage | null {
         const at = Date.now();
-        const service = queryOne<{ service_id: number; network_id: number }>(
-            `SELECT service_id, network_id FROM services WHERE id = ?`,
-            this.serviceId,
-        );
+        const service = orm()
+            .select({ service_id: services.service_id, network_id: services.network_id })
+            .from(services)
+            .where(eq(services.id, this.serviceId))
+            .get();
         if (service === undefined) return null;
-        const program = queryOne<{ event_id: number; name: string; start_at: number; end_at: number }>(
-            `SELECT event_id, name, start_at, end_at FROM programs
-             WHERE service_id = ? AND start_at <= ? AND end_at > ?`,
-            this.serviceId,
-            at,
-            at,
-        );
+        const program = orm()
+            .select({
+                event_id: programs.event_id,
+                name: programs.name,
+                start_at: programs.start_at,
+                end_at: programs.end_at,
+            })
+            .from(programs)
+            .where(airingAt(this.serviceId, at))
+            .get();
         return {
             type: 'programInfo',
             originalNetworkId: service.network_id,
@@ -1335,24 +1340,7 @@ function openChase(message: Record<string, unknown>, viewer: Viewer, connection:
     const caption = Number.isInteger(message.caption) ? Math.max(0, Number(message.caption)) : 0;
     if (!Number.isInteger(recordingId)) return refuse('録画が見つかりません');
 
-    const rec = queryOne<{
-        id: number;
-        service_id: number;
-        ts_path: string | null;
-        finished_at: number | null;
-        duration_ms: number | null;
-        start_at: number;
-        end_at: number;
-        created_at: number;
-        audio_type: number | null;
-        audios: string | null;
-        deleted_at: number | null;
-    }>(
-        `SELECT id, service_id, ts_path, finished_at, duration_ms, start_at, end_at,
-                created_at, audio_type, audios, deleted_at
-         FROM recordings WHERE id = ?`,
-        recordingId,
-    );
+    const rec = orm().select().from(recordings).where(eq(recordings.id, recordingId)).get();
     if (rec === undefined || rec.deleted_at !== null || rec.ts_path === null) {
         return refuse('録画が見つかりません');
     }
@@ -1369,9 +1357,7 @@ function openChase(message: Record<string, unknown>, viewer: Viewer, connection:
     const tracks = audioTracks(parseAudios(rec));
     const audio = pickTrack(tracks, wanted);
     // ffmpeg に名指しさせる放送の番号。録画TSは絞ってあるが、探させない理屈はライブと同じ
-    const program =
-        queryOne<{ service_id: number }>(`SELECT service_id FROM services WHERE id = ?`, rec.service_id)
-            ?.service_id ?? 0;
+    const program = aribServiceId(rec.service_id);
 
     tell({
         type: 'tuned',
@@ -1403,10 +1389,11 @@ function openChase(message: Record<string, unknown>, viewer: Viewer, connection:
         () =>
             followFile(path, plan.offset, plan.paceBytesPerSec, () => {
                 // 録り終えたら (行が消えたときも)、尻に着いた時点で読み終わり
-                const row = queryOne<{ finished_at: number | null }>(
-                    `SELECT finished_at FROM recordings WHERE id = ?`,
-                    rec.id,
-                );
+                const row = orm()
+                    .select({ finished_at: recordings.finished_at })
+                    .from(recordings)
+                    .where(eq(recordings.id, rec.id))
+                    .get();
                 return row === undefined || row.finished_at !== null;
             }),
     );
@@ -1452,22 +1439,29 @@ function nowPlaying(serviceId: number, wanted: string | undefined): NowPlaying {
 
     if (!Number.isFinite(serviceId)) return decide(0, []);
     const at = Date.now();
-    const service = queryOne<{ service_id: number }>(
-        `SELECT service_id FROM services WHERE id = ?`,
-        serviceId,
-    );
-    const program = queryOne<{
-        audio_type: number | null;
-        audios: string | null;
-    }>(
-        `SELECT audio_type, audios FROM programs
-         WHERE service_id = ? AND start_at <= ? AND end_at > ?`,
-        serviceId,
-        at,
-        at,
-    );
+    const program = orm()
+        .select({ audio_type: programs.audio_type, audios: programs.audios })
+        .from(programs)
+        .where(airingAt(serviceId, at))
+        .get();
 
-    return decide(service?.service_id ?? 0, parseAudios(program));
+    return decide(aribServiceId(serviceId), parseAudios(program));
+}
+
+/** その局でいま流れている番組 (`programs` の絞り込み) */
+function airingAt(serviceId: number, at: number) {
+    return and(eq(programs.service_id, serviceId), lte(programs.start_at, at), gt(programs.end_at, at));
+}
+
+/** ffmpeg に名指しさせる放送の番号 (ARIB のサービスID)。局が無ければ 0 = 探させない */
+function aribServiceId(serviceId: number): number {
+    return (
+        orm()
+            .select({ service_id: services.service_id })
+            .from(services)
+            .where(eq(services.id, serviceId))
+            .get()?.service_id ?? 0
+    );
 }
 
 /**

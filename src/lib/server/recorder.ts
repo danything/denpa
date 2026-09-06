@@ -1,17 +1,19 @@
 import { once } from 'node:events';
 import { createWriteStream, mkdirSync, statSync } from 'node:fs';
 import { dirname } from 'node:path';
+import { eq, sql } from 'drizzle-orm';
 import { EpgReader } from '../ts/eit';
 import { ServiceFilter } from '../ts/service-filter';
-import type { Program, Recording, Reservation, Service } from '../types';
+import type { Recording, Reservation } from '../types';
 import { config } from './config';
-import { database, now, queryOne } from './db';
+import { now, orm } from './db';
 import { enqueue } from './encoder';
 import { savePrograms } from './epg';
 import { emit } from './events';
 import { moveFile } from './fsx';
 import { libraryPath, recordedPath } from './library';
 import { writeThumbnail } from './metadata';
+import { programs, recordings, reservations, services } from './schema';
 import { chunks } from './stream';
 import { parseTitle } from './title';
 import { openChannelStream } from './tuner';
@@ -44,13 +46,12 @@ function fail(recordingId: number, error: string): void {
      * 理由を書けば状態は決まる (recordings.state は生成列)。
      * 掴むのも終わりなので、録り終えた時刻も同時に埋める
      */
-    database()
-        .prepare(
-            `UPDATE recordings SET error = ?, finished_at = COALESCE(finished_at, ?), updated_at = ?
-             WHERE id = ?`,
-        )
-        .run(error, now(), now(), recordingId);
-    const rec = queryOne<Recording>('SELECT * FROM recordings WHERE id = ?', recordingId);
+    orm()
+        .update(recordings)
+        .set({ error, finished_at: sql`COALESCE(${recordings.finished_at}, ${now()})`, updated_at: now() })
+        .where(eq(recordings.id, recordingId))
+        .run();
+    const rec = recordingById(recordingId);
     if (rec !== undefined) {
         notify({
             event: 'recording.failed',
@@ -62,9 +63,13 @@ function fail(recordingId: number, error: string): void {
     // 予約側には何も書かない。失敗したことは録画の行が持っている
 }
 
+function recordingById(id: number): Recording | undefined {
+    return orm().select().from(recordings).where(eq(recordings.id, id)).get();
+}
+
 function createRecording(reservation: Reservation): Recording {
-    const service = queryOne<Service>('SELECT * FROM services WHERE id = ?', reservation.service_id);
-    const program = queryOne<Program>('SELECT * FROM programs WHERE id = ?', reservation.program_id);
+    const service = orm().select().from(services).where(eq(services.id, reservation.service_id)).get();
+    const program = orm().select().from(programs).where(eq(programs.id, reservation.program_id)).get();
 
     /*
      * 名前と概要は**録り始める瞬間の番組表**から取る。
@@ -83,44 +88,38 @@ function createRecording(reservation: Reservation): Recording {
     const parsed = parseTitle(name);
     const at = now();
 
-    const info = database()
-        .prepare(
-            // finished_at を入れないので、この行は「録画中」として読まれる
-            `INSERT INTO recordings
-                (reservation_id, program_id, service_id, service_name, name, series, subtitle,
-                 description, extended, start_at, end_at, record_from, record_to, audio_type,
-                 genre_detail, audios, created_at, updated_at)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        )
-        .run(
-            reservation.id,
-            reservation.program_id,
-            reservation.service_id,
-            service?.name ?? '',
+    const { id } = orm()
+        .insert(recordings)
+        // finished_at を入れないので、この行は「録画中」として読まれる
+        .values({
+            reservation_id: reservation.id,
+            program_id: reservation.program_id,
+            service_id: reservation.service_id,
+            service_name: service?.name ?? '',
             name,
-            parsed.series,
-            parsed.subtitle,
+            series: parsed.series,
+            subtitle: parsed.subtitle,
             description,
             extended,
-            reservation.start_at,
-            reservation.end_at,
+            start_at: reservation.start_at,
+            end_at: reservation.end_at,
             /*
              * **譲った区間を写す。** チューナーの取り合いで頭か尻を譲ったときだけ
              * 入っている (`conflict.ts` の「入るところまで録る」)。一覧で
              * 「頭が欠けている」と言うのに要る
              */
-            reservation.record_from,
-            reservation.record_to,
-            program?.audio_type ?? null,
+            record_from: reservation.record_from,
+            record_to: reservation.record_to,
+            audio_type: program?.audio_type ?? null,
             // 番組表の行は24時間で消える。録り直しのときにも要るので写しておく
-            program?.genre_detail ?? null,
+            genre_detail: program?.genre_detail ?? null,
             // 焼いたものの音声トラックに番組表と同じ名前を入れるのに要る (`audioTitles`)
-            program?.audios ?? null,
-            at,
-            at,
-        );
-
-    const id = Number(info.lastInsertRowid);
+            audios: program?.audios ?? null,
+            created_at: at,
+            updated_at: at,
+        })
+        .returning({ id: recordings.id })
+        .get()!;
     // ファイル名は録画IDを含めるため、行を作ってからでないと決まらない
     const path = recordedPath({
         id,
@@ -128,9 +127,9 @@ function createRecording(reservation: Reservation): Recording {
         subtitle: parsed.subtitle,
         start_at: reservation.start_at,
     });
-    database().prepare('UPDATE recordings SET ts_path = ? WHERE id = ?').run(path, id);
+    orm().update(recordings).set({ ts_path: path }).where(eq(recordings.id, id)).run();
 
-    return queryOne<Recording>('SELECT * FROM recordings WHERE id = ?', id)!;
+    return recordingById(id)!;
 }
 
 /**
@@ -195,17 +194,25 @@ async function openWithRetry(
  * 実際にはまだ流れていたときに取り返しがつかない。
  */
 function extendIfLonger(recording: Recording, endAt: number): void {
-    const current = queryOne<{ end_at: number }>('SELECT end_at FROM recordings WHERE id = ?', recording.id);
+    const current = orm()
+        .select({ end_at: recordings.end_at })
+        .from(recordings)
+        .where(eq(recordings.id, recording.id))
+        .get();
     if (current === undefined || endAt <= current.end_at) return;
 
     const at = now();
-    database()
-        .prepare('UPDATE recordings SET end_at = ?, updated_at = ? WHERE id = ?')
-        .run(endAt, at, recording.id);
+    orm()
+        .update(recordings)
+        .set({ end_at: endAt, updated_at: at })
+        .where(eq(recordings.id, recording.id))
+        .run();
     if (recording.reservation_id !== null) {
-        database()
-            .prepare('UPDATE reservations SET end_at = ?, updated_at = ? WHERE id = ?')
-            .run(endAt, at, recording.reservation_id);
+        orm()
+            .update(reservations)
+            .set({ end_at: endAt, updated_at: at })
+            .where(eq(reservations.id, recording.reservation_id))
+            .run();
     }
     const minutes = Math.round((endAt - current.end_at) / 60000);
     console.log(`[rec] 放送が延びました: ${recording.name} (+${minutes}分)`);
@@ -216,9 +223,11 @@ function extendIfLonger(recording: Recording, endAt: number): void {
 /** 実際に録れた長さを足す。再開したぶんも合算するので加算にする */
 function addDuration(recordingId: number, ms: number): void {
     if (ms <= 0) return;
-    database()
-        .prepare('UPDATE recordings SET duration_ms = COALESCE(duration_ms, 0) + ? WHERE id = ?')
-        .run(ms, recordingId);
+    orm()
+        .update(recordings)
+        .set({ duration_ms: sql`COALESCE(${recordings.duration_ms}, 0) + ${ms}` })
+        .where(eq(recordings.id, recordingId))
+        .run();
 }
 
 /**
@@ -234,7 +243,7 @@ async function pump(recording: Recording, controller: AbortController): Promise<
     const path = recording.ts_path!;
     mkdirSync(dirname(path), { recursive: true });
 
-    const service = queryOne<Service>('SELECT * FROM services WHERE id = ?', recording.service_id);
+    const service = orm().select().from(services).where(eq(services.id, recording.service_id)).get();
     if (service === undefined) {
         fail(recording.id, '局の情報がありません。チャンネルスキャンをやり直してください');
         active.delete(recording.id);
@@ -395,18 +404,21 @@ async function pump(recording: Recording, controller: AbortController): Promise<
 export function finish(recordingId: number, size: number): void {
     const at = now();
     // 録り終えた時刻が入った時点で「録画済み」になる (recordings.state は生成列)
-    database()
-        .prepare(`UPDATE recordings SET finished_at = ?, ts_size = ?, updated_at = ? WHERE id = ?`)
-        .run(at, size, at, recordingId);
+    orm()
+        .update(recordings)
+        .set({ finished_at: at, ts_size: size, updated_at: at })
+        .where(eq(recordings.id, recordingId))
+        .run();
 
-    const recording = queryOne<Recording>('SELECT * FROM recordings WHERE id = ?', recordingId)!;
+    const recording = recordingById(recordingId)!;
     const reservation =
         recording.reservation_id == null
             ? undefined
-            : queryOne<{ encode: number }>(
-                  'SELECT encode FROM reservations WHERE id = ?',
-                  recording.reservation_id,
-              );
+            : orm()
+                  .select({ encode: reservations.encode })
+                  .from(reservations)
+                  .where(eq(reservations.id, recording.reservation_id))
+                  .get();
 
     emit('recordings');
     notify({
@@ -424,12 +436,12 @@ export function finish(recordingId: number, size: number): void {
     const dest = libraryPath(recording, '.m2ts');
     moveFile(recording.ts_path!, dest);
     void writeThumbnail(dest, (recording.end_at - recording.start_at) / 1000);
-    database()
-        .prepare(
-            // 保存先に置いた時点で「視聴可能」になる
-            `UPDATE recordings SET library_path = ?, ts_path = NULL, updated_at = ? WHERE id = ?`,
-        )
-        .run(dest, now(), recording.id);
+    // 保存先に置いた時点で「視聴可能」になる
+    orm()
+        .update(recordings)
+        .set({ library_path: dest, ts_path: null, updated_at: now() })
+        .where(eq(recordings.id, recording.id))
+        .run();
 }
 
 /**
@@ -441,9 +453,7 @@ export function finish(recordingId: number, size: number): void {
  * 放送が終わってしまったものは、もう取り返せないので失敗に倒す。
  */
 export function recoverOrphanedRecordings(): { resumed: number; failed: number } {
-    const orphans = database()
-        .prepare(`SELECT * FROM recordings WHERE state = 'recording'`)
-        .all() as Recording[];
+    const orphans = orm().select().from(recordings).where(eq(recordings.state, 'recording')).all();
 
     let resumed = 0;
     let failed = 0;

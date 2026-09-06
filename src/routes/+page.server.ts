@@ -1,12 +1,13 @@
 import { statSync } from 'node:fs';
 import { fail } from '@sveltejs/kit';
-import { database, queryAll } from '$lib/server/db';
+import { and, eq, isNull } from 'drizzle-orm';
+import { database, orm, queryAll } from '$lib/server/db';
 import { cancel as cancelEncode, enqueue, pump } from '$lib/server/encoder';
 import { emit } from '$lib/server/events';
 import { deleteRecordingFiles, reconcile } from '$lib/server/files';
 import { recordingFromForm } from '$lib/server/recording';
 import { cancel, restore } from '$lib/server/reservations';
-import { RESERVATION_STATE } from '$lib/server/schema';
+import { RESERVATION_STATE, reservations as reservationTable } from '$lib/server/schema';
 import { settings } from '$lib/server/settings';
 import { targets } from '$lib/server/vlc';
 import { encodeSource } from '$lib/source';
@@ -331,10 +332,18 @@ export const actions = {
         const id = Number(form.get('id'));
         if (!Number.isFinite(id)) return fail(400, { message: 'IDが不正です' });
         // 状態も見て消す。録り逃し以外 (これからの予約など) を同じ口で消させない
-        const gone = database()
-            .prepare(`DELETE FROM reservations WHERE id = ? AND state = 'missed' AND started_at IS NULL`)
-            .run(id);
-        if (gone.changes === 0) return fail(400, { message: '録り逃した予約ではありません' });
+        const gone = orm()
+            .delete(reservationTable)
+            .where(
+                and(
+                    eq(reservationTable.id, id),
+                    eq(reservationTable.state, 'missed'),
+                    isNull(reservationTable.started_at),
+                ),
+            )
+            .returning({ id: reservationTable.id })
+            .get();
+        if (gone === undefined) return fail(400, { message: '録り逃した予約ではありません' });
         // 他の端末の画面にも反映する
         emit('reservations');
         return { success: true };
