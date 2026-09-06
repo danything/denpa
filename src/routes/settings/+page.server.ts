@@ -1,6 +1,6 @@
 import { basename } from 'node:path';
 import { fail } from '@sveltejs/kit';
-import { eq, sql } from 'drizzle-orm';
+import { eq, not } from 'drizzle-orm';
 import { HW_CODECS, HW_KINDS, type HwAllow, hwAllowed } from '$lib/hw';
 import { isCmMode } from '$lib/server/cm';
 import { now, orm } from '$lib/server/db';
@@ -183,7 +183,7 @@ export const actions = {
         // name は廃止したが、列は残してある (既定 '' なので入れなくてよい)
         orm()
             .insert(webhooks)
-            .values({ url, events: JSON.stringify(events), enabled: 1, created_at: now() })
+            .values({ url, events: JSON.stringify(events), enabled: true, created_at: now() })
             .run();
         return { success: true, webhookAdded: true };
     },
@@ -194,7 +194,7 @@ export const actions = {
         if (!Number.isFinite(id)) return fail(400, { message: 'IDが不正です' });
         orm()
             .update(webhooks)
-            .set({ enabled: sql`1 - ${webhooks.enabled}` })
+            .set({ enabled: not(webhooks.enabled) })
             .where(eq(webhooks.id, id))
             .run();
         return { success: true };

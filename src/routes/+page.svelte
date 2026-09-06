@@ -534,7 +534,7 @@
                                             res.service_name,
                                             `${dateTime(res.start_at)}〜${time(res.end_at)} (${duration(res.start_at, res.end_at)})`,
                                         ],
-                                        { serviceId: res.service_id, has: res.has_logo === 1 },
+                                        { serviceId: res.service_id, has: res.has_logo === true },
                                     )}
                                     {#if res.conflict_reason}
                                         <div class="text-error mt-0.5 text-sm">{res.conflict_reason}</div>
@@ -683,10 +683,10 @@
                                             res.service_name,
                                             `${dateTime(res.start_at)}〜${time(res.end_at)} (${duration(res.start_at, res.end_at)})`,
                                         ],
-                                        { serviceId: res.service_id, has: res.has_logo === 1 },
+                                        { serviceId: res.service_id, has: res.has_logo === true },
                                     )}
                                     <!-- 録画側の流儀に合わせて手動とも書く (見返すものなので) -->
-                                    {@render source(res.rule_id, res.rule_name, res.manual === 1)}
+                                    {@render source(res.rule_id, res.rule_name, res.manual)}
                                 </div>
                                 <!--
                                     確かめ終わったら畳める (録画の削除と同じ2回押し)。
@@ -838,7 +838,7 @@
                                             sizeLabel(rec),
                                             rec.deleted_at !== null ? `${date(rec.deleted_at)} に削除` : '',
                                         ],
-                                        { serviceId: rec.service_id, has: rec.has_logo === 1 },
+                                        { serviceId: rec.service_id, has: rec.has_logo === true },
                                     )}
                                     <!--
                                         **欠けているなら、そう言う。** チューナーの取り合いで
@@ -890,7 +890,7 @@
                                         予約が無いので、何も出さない
                                     -->
                                     {#if rec.from_manual !== null}
-                                        {@render source(rec.rule_id, rec.rule_name, rec.from_manual === 1)}
+                                        {@render source(rec.rule_id, rec.rule_name, rec.from_manual)}
                                     {/if}
                                     <!--
                                         失敗や削除の理由は行に出さない。生のエラーは数行あって、

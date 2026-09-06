@@ -63,7 +63,7 @@ async function post(webhook: Webhook, payload: Payload): Promise<void> {
 
 /** 投げっぱなしにする。呼び出し側は待たない */
 export function notify(payload: Payload): void {
-    const enabled = orm().select().from(webhooks).where(eq(webhooks.enabled, 1)).all();
+    const enabled = orm().select().from(webhooks).where(eq(webhooks.enabled, true)).all();
     for (const webhook of enabled) {
         if (!subscribed(webhook, payload.event)) continue;
         void post(webhook, payload);

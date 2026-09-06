@@ -208,7 +208,7 @@
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false,
-          "default": 1
+          "default": "1"
         },
         "audio_type": {
           "name": "audio_type",
@@ -615,7 +615,7 @@
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false,
-          "default": 0
+          "default": "0"
         },
         "encode": {
           "name": "encode",
@@ -623,7 +623,7 @@
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false,
-          "default": 1
+          "default": "1"
         },
         "state": {
           "name": "state",
@@ -766,7 +766,7 @@
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false,
-          "default": 1
+          "default": "1"
         },
         "priority": {
           "name": "priority",
@@ -863,7 +863,7 @@
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false,
-          "default": 0
+          "default": "0"
         },
         "updated_at": {
           "name": "updated_at",
@@ -1048,7 +1048,7 @@
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false,
-          "default": 1
+          "default": "1"
         },
         "last_status": {
           "name": "last_status",

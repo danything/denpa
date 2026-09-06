@@ -1,9 +1,11 @@
 import { existsSync } from 'node:fs';
 import { error, fail, redirect } from '@sveltejs/kit';
-import { queryOne } from '$lib/server/db';
+import { eq, getTableColumns, sql } from 'drizzle-orm';
+import { orm } from '$lib/server/db';
 import { deleteRecordingFiles } from '$lib/server/files';
 import { sidecarPaths } from '$lib/server/metadata';
 import { recordingFromForm } from '$lib/server/recording';
+import { recordings } from '$lib/server/schema';
 import { settings } from '$lib/server/settings';
 import type { Recording } from '$lib/types';
 
@@ -37,22 +39,21 @@ export function load({ params }) {
     const id = Number(params.id);
     if (!Number.isFinite(id)) error(404, '録画が見つかりません');
 
-    const recording = queryOne<WatchRow>(
-        `SELECT r.*,
-             (
+    const recording: WatchRow | undefined = orm()
+        .select({
+            ...getTableColumns(recordings),
+            encode_error: sql<string | null>`(
                  SELECT CASE WHEN j2.state = 'failed' THEN j2.error END FROM encode_jobs j2
-                 WHERE j2.recording_id = r.id
-                 ORDER BY j2.id DESC LIMIT 1
-             ) AS encode_error,
-             (
+                 WHERE j2.recording_id = ${recordings.id}
+                 ORDER BY j2.id DESC LIMIT 1)`,
+            job_id: sql<number | null>`(
                  SELECT id FROM encode_jobs
-                 WHERE recording_id = r.id AND state IN ('queued','running')
-                 ORDER BY id DESC LIMIT 1
-             ) AS job_id
-         FROM recordings r
-         WHERE r.id = ?`,
-        id,
-    );
+                 WHERE recording_id = ${recordings.id} AND state IN ('queued','running')
+                 ORDER BY id DESC LIMIT 1)`,
+        })
+        .from(recordings)
+        .where(eq(recordings.id, id))
+        .get();
     if (recording === undefined) error(404, '録画が見つかりません');
     if (recording.deleted_at !== null) error(410, 'この録画は削除されています');
 

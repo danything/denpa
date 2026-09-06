@@ -47,7 +47,7 @@ export function programDetail() {
                 audios: null,
                 video_type: null,
                 video_resolution: null,
-                is_free: 1,
+                is_free: true,
             };
             if (programId === null) return;
 

@@ -24,7 +24,7 @@ export async function reserve(
     const priority = options.priority ?? 2;
     // 録画のしかたは全体で1つ。「焼くか否か」だけ予約時に固定する (指定が無ければ設定の値)。
     // 焼き方の細目 (生TSを残すか・CMの扱い・コーデック) は焼くときに settings を見る
-    const encode = (options.encode ?? settings().encode) ? 1 : 0;
+    const encode = options.encode ?? settings().encode;
 
     orm()
         .insert(reservations)
@@ -37,7 +37,7 @@ export async function reserve(
             start_at: program.start_at,
             end_at: program.end_at,
             priority,
-            manual: 1,
+            manual: true,
             encode,
             state: 'scheduled',
             created_at: at,
@@ -46,7 +46,7 @@ export async function reserve(
         .onConflictDoUpdate({
             target: reservations.program_id,
             set: {
-                manual: 1,
+                manual: true,
                 priority: sql`excluded.priority`,
                 encode: sql`excluded.encode`,
                 state: sql`CASE WHEN ${reservations.state} = 'canceled' THEN 'scheduled' ELSE ${reservations.state} END`,

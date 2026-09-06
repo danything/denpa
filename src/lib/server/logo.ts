@@ -236,7 +236,7 @@ function store(networkId: number, serviceIds: number[], data: Uint8Array): numbe
              * 頃は、**その局だけが「いまの局」になって番組表から他が消えていた**
              * (次の取り込みまで)。ロゴを拾ったことは取り込みとは何の関係もない
              */
-            orm().update(services).set({ has_logo: 1 }).where(eq(services.id, id)).run();
+            orm().update(services).set({ has_logo: true }).where(eq(services.id, id)).run();
             saved++;
         }
     }
@@ -315,8 +315,8 @@ export function reconcile(): number {
     let changed = 0;
     orm().transaction((tx) => {
         for (const row of rows) {
-            const actual = existsSync(logoPath(row.id)) ? 1 : 0;
-            if (actual === 1) repaint(row.id);
+            const actual = existsSync(logoPath(row.id));
+            if (actual) repaint(row.id);
             if (actual === row.has_logo) continue;
             tx.update(services).set({ has_logo: actual }).where(eq(services.id, row.id)).run();
             changed++;

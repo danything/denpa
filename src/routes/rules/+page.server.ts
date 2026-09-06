@@ -1,5 +1,5 @@
 import { fail, redirect } from '@sveltejs/kit';
-import { and, desc, eq, getTableColumns, gt, inArray, isNotNull, isNull, sql } from 'drizzle-orm';
+import { and, desc, eq, getTableColumns, gt, inArray, isNotNull, isNull, not, sql } from 'drizzle-orm';
 import { genreName } from '$lib/arib';
 import { SERVICE_TYPE_LABEL } from '$lib/format';
 import { parseSearchFields } from '$lib/search';
@@ -96,7 +96,7 @@ function conditionsFrom(params: URLSearchParams): Rule | null {
         service_types: conditions.serviceTypes,
         genres: conditions.genres,
         // 無料放送の扱いは**全体設定**。ルールごとには持たない (誰も読まない列)
-        enabled: 1,
+        enabled: true,
         /*
          * **打ち込んだ値をそのまま持ち回る。**
          *
@@ -458,7 +458,7 @@ export const actions = {
 
         const created = orm()
             .insert(ruleTable)
-            .values({ ...ruleValues(conditions, form), enabled: 1, created_at: now() })
+            .values({ ...ruleValues(conditions, form), enabled: true, created_at: now() })
             .returning({ id: ruleTable.id })
             .get()!;
 
@@ -511,7 +511,7 @@ export const actions = {
         if (!Number.isFinite(id)) return fail(400, { message: 'ルールIDが不正です' });
         orm()
             .update(ruleTable)
-            .set({ enabled: sql`1 - ${ruleTable.enabled}` })
+            .set({ enabled: not(ruleTable.enabled) })
             .where(eq(ruleTable.id, id))
             .run();
         await reapply();

@@ -1,17 +1,25 @@
 import { statSync } from 'node:fs';
 import { fail } from '@sveltejs/kit';
-import { and, eq, isNull } from 'drizzle-orm';
-import { database, orm, queryAll } from '$lib/server/db';
+import { and, asc, desc, eq, getTableColumns, inArray, isNull, like, ne, not, or, sql } from 'drizzle-orm';
+import { alias } from 'drizzle-orm/sqlite-core';
+import { orm } from '$lib/server/db';
 import { cancel as cancelEncode, enqueue, pump } from '$lib/server/encoder';
 import { emit } from '$lib/server/events';
 import { deleteRecordingFiles, reconcile } from '$lib/server/files';
 import { recordingFromForm } from '$lib/server/recording';
 import { cancel, restore } from '$lib/server/reservations';
-import { RESERVATION_STATE, reservations as reservationTable } from '$lib/server/schema';
+import {
+    encodeJobs,
+    recordings as recordingTable,
+    reservationState,
+    reservations as reservationTable,
+    rules as ruleTable,
+    services,
+} from '$lib/server/schema';
 import { settings } from '$lib/server/settings';
 import { targets } from '$lib/server/vlc';
 import { encodeSource } from '$lib/source';
-import type { EncodeJob, Recording, Reservation } from '$lib/types';
+import type { EncodeJob, Recording, Reservation, ReservationState } from '$lib/types';
 
 interface RecordingRow extends Recording {
     /** 直近のエンコード失敗の理由。詳細で見せる */
@@ -49,10 +57,10 @@ interface RecordingRow extends Recording {
      */
     rule_id: number | null;
     rule_name: string | null;
-    /** 手動予約なら 1。取り込んだ録画のように予約が無いものは null */
-    from_manual: number | null;
+    /** 手動予約か。取り込んだ録画のように予約が無いものは null */
+    from_manual: boolean | null;
     /** 局ロゴを拾えているか。局名の隣に出す */
-    has_logo: number | null;
+    has_logo: boolean | null;
 }
 
 /**
@@ -67,21 +75,23 @@ export interface MissedRow {
     description: string;
     service_id: number;
     service_name: string;
-    has_logo: number | null;
+    has_logo: boolean | null;
     start_at: number;
     end_at: number;
-    manual: number;
+    manual: boolean;
     rule_id: number | null;
     rule_name: string | null;
     /** チューナー不足で落とされたものは理由を持っている。詳細で見せる */
     conflict_reason: string | null;
 }
 
-interface ReservationRow extends Reservation {
+interface ReservationRow extends Omit<Reservation, 'state'> {
+    /** 画面に出す状態。録り始めてからは録画の行から引く (reservationState) */
+    state: ReservationState;
     service_name: string;
     rule_name: string | null;
     /** 局ロゴを拾えているか。局名の隣に出す */
-    has_logo: number | null;
+    has_logo: boolean | null;
     /** 録画中の録画のID。追っかけ再生 (`/chase/<id>`) への入口 (issue #16) */
     recording_id: number | null;
 }
@@ -155,24 +165,39 @@ export function load({ url }) {
      *
      * **取り消したものは出さない** — あちらは人が押した結果で、驚くことが無い
      */
+    const r = alias(reservationTable, 'r');
+    const rec = alias(recordingTable, 'rec');
     const pending = showFinished
-        ? `NOT (r.state = 'missed' AND r.started_at IS NULL)`
-        : `((r.state IN ('scheduled','conflict') AND r.started_at IS NULL) OR rec.state = 'recording')`;
-    const reservations = queryAll<ReservationRow>(
-        // 最後の state が r.* の state を隠す。出したいのは録画から引いたほう
-        `SELECT r.*, s.name AS service_name, s.has_logo AS has_logo, rules.name AS rule_name,
-                ${RESERVATION_STATE} AS state,
-                CASE WHEN rec.state = 'recording' THEN rec.id END AS recording_id
-         FROM reservations r
-         JOIN services s ON s.id = r.service_id
-         LEFT JOIN rules ON rules.id = r.rule_id
-         LEFT JOIN recordings rec ON rec.id = (
-             SELECT id FROM recordings WHERE reservation_id = r.id ORDER BY id DESC LIMIT 1
-         )
-         WHERE ${pending}
-         ORDER BY (rec.state = 'recording') DESC, r.start_at ASC
-         LIMIT 300`,
-    );
+        ? not(and(eq(r.state, 'missed'), isNull(r.started_at))!)
+        : or(
+              and(inArray(r.state, ['scheduled', 'conflict']), isNull(r.started_at)),
+              eq(rec.state, 'recording'),
+          );
+    const reservations: ReservationRow[] = orm()
+        .select({
+            ...getTableColumns(r),
+            service_name: services.name,
+            has_logo: services.has_logo,
+            rule_name: ruleTable.name,
+            // 予約の行の state ではなく、録画から引いたほうを出す
+            state: reservationState(r, rec),
+            recording_id: sql<number | null>`CASE WHEN ${rec.state} = 'recording' THEN ${rec.id} END`,
+        })
+        .from(r)
+        .innerJoin(services, eq(services.id, r.service_id))
+        .leftJoin(ruleTable, eq(ruleTable.id, r.rule_id))
+        // その予約で録れた最新の録画
+        .leftJoin(
+            rec,
+            eq(
+                rec.id,
+                sql`(SELECT id FROM recordings WHERE reservation_id = ${r.id} ORDER BY id DESC LIMIT 1)`,
+            ),
+        )
+        .where(pending)
+        .orderBy(desc(sql`${rec.state} = 'recording'`), asc(r.start_at))
+        .limit(300)
+        .all();
 
     /*
      * エンコードは録画一覧の行そのものに出す。
@@ -181,60 +206,77 @@ export function load({ url }) {
      * ずれてページごとスクロールバーが生えていた。同じ番組が2箇所に並んでもいた。
      * 「録れたものが今どうなっているか」の一形態なので、行の状態として出すのが素直。
      */
-    // 番組名・シリーズ・副題・局名のどれかにかかればよい。同じ言葉を4か所へ (`?1`)
-    const search =
-        q === ''
-            ? ''
-            : 'AND (r.name LIKE ?1 OR r.series LIKE ?1 OR r.subtitle LIKE ?1 OR r.service_name LIKE ?1)';
-    const recordings = database()
-        .prepare(
-            `SELECT r.*, (
-                 /*
-                  * 失敗の理由は詳細で見せる。一覧には「失敗」とだけ出す。
-                  *
-                  * **いちばん新しいジョブが失敗していたときだけ**出す。
-                  * 「失敗したジョブのうち最新」を拾っていた頃は、録り直して成功しても
-                  * 前の失敗が消えずに残っていた
-                  */
+    // 番組名・シリーズ・副題・局名のどれかにかかればよい。同じ言葉を4か所へ
+    const pattern = q === '' ? null : `%${q}%`;
+    const res = alias(reservationTable, 'res');
+    const j = alias(encodeJobs, 'j');
+    const recordings: RecordingRow[] = orm()
+        .select({
+            ...getTableColumns(recordingTable),
+            /*
+             * 失敗の理由は詳細で見せる。一覧には「失敗」とだけ出す。
+             *
+             * **いちばん新しいジョブが失敗していたときだけ**出す。
+             * 「失敗したジョブのうち最新」を拾っていた頃は、録り直して成功しても
+             * 前の失敗が消えずに残っていた
+             */
+            encode_error: sql<string | null>`(
                  SELECT CASE WHEN j2.state = 'failed' THEN j2.error END FROM encode_jobs j2
-                 WHERE j2.recording_id = r.id
-                 ORDER BY j2.id DESC LIMIT 1
-             ) AS encode_error,
-             j.id AS job_id, j.state AS job_state, j.phase AS job_phase,
-             j.percent AS job_percent, j.eta_ms AS job_eta_ms, j.log AS job_log,
-             s.logo_area AS logo_area, s.has_logo AS has_logo,
-             -- 何で録れた1本か。予約とルールから引く (録画には持たせない)
-             res.rule_id AS rule_id, res.manual AS from_manual, rules.name AS rule_name
-             FROM recordings r
-             LEFT JOIN services s ON s.id = r.service_id
-             LEFT JOIN reservations res ON res.id = r.reservation_id
-             LEFT JOIN rules ON rules.id = res.rule_id
-             -- 動いているエンコードは録画1本につき高々1つ (encoder.enqueue が重複を弾く)
-             LEFT JOIN encode_jobs j ON j.id = (
-                 SELECT id FROM encode_jobs
-                 WHERE recording_id = r.id AND state IN ('queued','running')
-                 ORDER BY id DESC LIMIT 1
-             )
-             -- 録画中のものは予約一覧に出ている。ここにも出すと同じ番組が2箇所に並ぶ
-             WHERE r.state != 'recording'
-             /*
-              * 「削除済みも表示」は消したものを**足す**。消したものだけに切り替えていた頃は、
-              * 消したかどうかを確かめるのに一覧を行き来することになっていた
-              */
-             ${showDeleted ? '' : 'AND r.deleted_at IS NULL'}
-             ${search}
-             /*
-              * 並びは放送日順に固定する。エンコードが始まったものを上へ動かしていた頃は、
-              * 眺めている間に行が飛んで、どれを見ていたのか分からなくなっていた
-              */
-             ORDER BY r.start_at DESC
-             LIMIT 300`,
+                 WHERE j2.recording_id = ${recordingTable.id}
+                 ORDER BY j2.id DESC LIMIT 1)`,
+            job_id: j.id,
+            job_state: j.state,
+            job_phase: j.phase,
+            job_percent: j.percent,
+            job_eta_ms: j.eta_ms,
+            job_log: j.log,
+            logo_area: services.logo_area,
+            has_logo: services.has_logo,
+            // 何で録れた1本か。予約とルールから引く (録画には持たせない)
+            rule_id: res.rule_id,
+            from_manual: res.manual,
+            rule_name: ruleTable.name,
+        })
+        .from(recordingTable)
+        .leftJoin(services, eq(services.id, recordingTable.service_id))
+        .leftJoin(res, eq(res.id, recordingTable.reservation_id))
+        .leftJoin(ruleTable, eq(ruleTable.id, res.rule_id))
+        // 動いているエンコードは録画1本につき高々1つ (encoder.enqueue が重複を弾く)
+        .leftJoin(
+            j,
+            eq(
+                j.id,
+                sql`(SELECT id FROM encode_jobs WHERE recording_id = ${recordingTable.id}
+                     AND state IN ('queued','running') ORDER BY id DESC LIMIT 1)`,
+            ),
         )
-        .all(...(q === '' ? [] : [`%${q}%`])) as RecordingRow[];
-    for (const row of recordings) {
-        row.raw_size = rawSize(row);
-        row.alt_size = altSize(row);
-    }
+        .where(
+            and(
+                // 録画中のものは予約一覧に出ている。ここにも出すと同じ番組が2箇所に並ぶ
+                ne(recordingTable.state, 'recording'),
+                /*
+                 * 「削除済みも表示」は消したものを**足す**。消したものだけに切り替えていた頃は、
+                 * 消したかどうかを確かめるのに一覧を行き来することになっていた
+                 */
+                showDeleted ? undefined : isNull(recordingTable.deleted_at),
+                pattern === null
+                    ? undefined
+                    : or(
+                          like(recordingTable.name, pattern),
+                          like(recordingTable.series, pattern),
+                          like(recordingTable.subtitle, pattern),
+                          like(recordingTable.service_name, pattern),
+                      ),
+            ),
+        )
+        /*
+         * 並びは放送日順に固定する。エンコードが始まったものを上へ動かしていた頃は、
+         * 眺めている間に行が飛んで、どれを見ていたのか分からなくなっていた
+         */
+        .orderBy(desc(recordingTable.start_at))
+        .limit(300)
+        .all()
+        .map((row) => ({ ...row, raw_size: rawSize(row), alt_size: altSize(row) }));
 
     /*
      * 録り逃し。**録画の一覧に混ぜて出す** (画面側で放送日順に差し込む)。
@@ -245,20 +287,35 @@ export function load({ url }) {
      * (`server/files.ts`。既定で14日)。絞り込みは録画側と同じ言葉を効かせる
      * (予約はシリーズ・副題を持たないので、番組名と局名だけ)
      */
-    const missed = database()
-        .prepare(
-            `SELECT r.id, r.program_id, r.name, r.description, r.service_id, r.start_at, r.end_at,
-                    r.manual, r.rule_id, r.conflict_reason, rules.name AS rule_name,
-                    s.name AS service_name, s.has_logo AS has_logo
-             FROM reservations r
-             JOIN services s ON s.id = r.service_id
-             LEFT JOIN rules ON rules.id = r.rule_id
-             WHERE r.state = 'missed' AND r.started_at IS NULL
-             ${q === '' ? '' : 'AND (r.name LIKE ?1 OR s.name LIKE ?1)'}
-             ORDER BY r.start_at DESC
-             LIMIT 100`,
+    const missed: MissedRow[] = orm()
+        .select({
+            id: r.id,
+            program_id: r.program_id,
+            name: r.name,
+            description: r.description,
+            service_id: r.service_id,
+            start_at: r.start_at,
+            end_at: r.end_at,
+            manual: r.manual,
+            rule_id: r.rule_id,
+            conflict_reason: r.conflict_reason,
+            rule_name: ruleTable.name,
+            service_name: services.name,
+            has_logo: services.has_logo,
+        })
+        .from(r)
+        .innerJoin(services, eq(services.id, r.service_id))
+        .leftJoin(ruleTable, eq(ruleTable.id, r.rule_id))
+        .where(
+            and(
+                eq(r.state, 'missed'),
+                isNull(r.started_at),
+                pattern === null ? undefined : or(like(r.name, pattern), like(services.name, pattern)),
+            ),
         )
-        .all(...(q === '' ? [] : [`%${q}%`])) as MissedRow[];
+        .orderBy(desc(r.start_at))
+        .limit(100)
+        .all();
 
     return {
         reservations,

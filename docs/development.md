@@ -88,8 +88,10 @@ CI では**台を増やして**います。4つに割って別のランナーに
 3. 起動時に当たる (`db.ts` の `bootstrap`)。手で流すものは無い
 
 読み書きは `orm()` (`db.ts`) から。`orm().select().from(recordings).where(eq(recordings.id, id)).get()`
-のように書き、列の名前と型はそこで決まる。生の SQL でしか書けないもの
-(`RESERVATION_STATE` の CASE を挟む一覧など) は `queryOne` / `queryAll` に残してよい。
+のように書き、列の名前と型はそこで決まる。組み立てで書けないもの (相関サブクエリ・CASE)
+は `sql` テンプレート (`sql<型>`) で列を名指しして挟む (`schema.ts` の `reservationState` がその例)。
+生の SQL の文字列に型を付けて返す口は置いていない — それはキャストで、型が嘘をつく
+元に戻るだけなので。
 
 **マイグレーションを持つ前の DB** (1.7.x まで。`CREATE TABLE IF NOT EXISTS` を起動のたびに
 流して整えていた) には、最初のマイグレーション (baseline) を `IF NOT EXISTS` にしてあるので

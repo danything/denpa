@@ -219,7 +219,7 @@ export interface RuleSync {
  */
 export function applyRules(options: { rule?: number } = {}): RuleSync {
     const result: RuleSync = { created: 0, dropped: 0, moved: 0, repriced: 0 };
-    const rules = orm().select().from(ruleTable).where(eq(ruleTable.enabled, 1)).all();
+    const rules = orm().select().from(ruleTable).where(eq(ruleTable.enabled, true)).all();
     const adding = options.rule !== undefined;
     if (rules.length === 0 && adding) return result;
 
@@ -285,7 +285,7 @@ export function applyRules(options: { rule?: number } = {}): RuleSync {
               .from(reservations)
               .where(
                   and(
-                      eq(reservations.manual, 0),
+                      eq(reservations.manual, false),
                       isNull(reservations.started_at),
                       inArray(reservations.state, ['scheduled', 'conflict']),
                   ),
@@ -311,8 +311,8 @@ export function applyRules(options: { rule?: number } = {}): RuleSync {
                     start_at: program.start_at,
                     end_at: program.end_at,
                     priority: rule.priority,
-                    manual: 0,
-                    encode: recording.encode ? 1 : 0,
+                    manual: false,
+                    encode: recording.encode,
                     state: 'scheduled',
                     created_at: at,
                     updated_at: at,

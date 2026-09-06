@@ -107,7 +107,7 @@ export function syncServices(channels: AgentChannel[]): number {
                         channel: channel.channel,
                         remote_control_key: channel.remoteControlKeyId,
                         // ロゴは放送波から拾ったときに立てる (logo.ts)
-                        has_logo: 0,
+                        has_logo: false,
                         updated_at: at,
                     })
                     .onConflictDoUpdate({
@@ -333,7 +333,7 @@ export function savePrograms(events: EitEvent[]): number {
                     extended: extended === null ? null : JSON.stringify(extended),
                     genres: event.genres.length === 0 ? null : JSON.stringify(event.genres.map((g) => g.lv1)),
                     genre_detail: event.genres.length === 0 ? null : JSON.stringify(event.genres),
-                    is_free: event.isFree ? 1 : 0,
+                    is_free: event.isFree,
                     audio_type: event.audios[0]?.componentType ?? null,
                     audios:
                         event.audios.length === 0

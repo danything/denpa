@@ -402,7 +402,7 @@ test.describe('ライブ視聴', () => {
                         if (message.type === 'programInfo') seen.__info.push(message);
                     });
                 }
-                send(payload: string | ArrayBufferLike | Blob | ArrayBufferView) {
+                override send(payload: string | ArrayBufferLike | Blob | ArrayBufferView) {
                     if (typeof payload === 'string' && payload.includes('"data"')) {
                         seen.__data.push(JSON.parse(payload));
                     }

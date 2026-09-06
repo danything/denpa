@@ -87,8 +87,8 @@ let typed: ReturnType<typeof wrap> | null = null;
  *
  * `database()` と接続は1つ (WAL や busy_timeout の設定もそのまま効く)。
  * bun:sqlite なので同期のまま — `.get()` / `.all()` / `.run()` を付けて呼ぶ。
- * 生の SQL でしか書けないもの (`RESERVATION_STATE` の CASE など) は
- * `queryOne` / `queryAll` に残してよい
+ * 組み立てで書けないもの (相関サブクエリ・CASE) は `sql<型>\`…\`` で列を名指しして
+ * 挟む。生の SQL の文字列に型を付けて返す口は置かない (キャストになるので)
  */
 export function orm() {
     if (typed !== null) return typed;
@@ -115,26 +115,4 @@ export function affected(query: { toSQL(): { sql: string; params: unknown[] } })
 
 export function now(): number {
     return Date.now();
-}
-
-/**
- * 1行だけ取る。
- *
- * bun:sqlite の `.get()` は該当行が無いとき `undefined` ではなく `null` を返すので、
- * `=== undefined` で書くと素通りして「null のプロパティを読む」で落ちる。
- * ここで undefined に正規化しておき、呼び出し側は普通の省略可能値として扱えるようにする。
- * `db.query` を使うのは、同じSQLの prepared statement をbun側で使い回させるため。
- */
-export function queryOne<T>(sql: string, ...params: SQLQueryBindings[]): T | undefined {
-    return (
-        (database()
-            .query(sql)
-            .get(...params) as T | null) ?? undefined
-    );
-}
-
-export function queryAll<T>(sql: string, ...params: SQLQueryBindings[]): T[] {
-    return database()
-        .query(sql)
-        .all(...params) as T[];
 }
