@@ -29,7 +29,7 @@ export interface Payload {
 
 function subscribed(webhook: Webhook, event: WebhookEvent): boolean {
     try {
-        const events = JSON.parse(webhook.events) as string[];
+        const events = webhook.events;
         // 空なら全部受け取る
         return events.length === 0 || events.includes(event);
     } catch {

@@ -743,7 +743,7 @@
                             data-library-path={rec.library_path}
                             data-alt-path={rec.alt_path}
                             data-duration-ms={rec.duration_ms}
-                            data-cm-ranges={rec.cm_ranges}
+                            data-cm-ranges={rec.cm_ranges === null ? null : JSON.stringify(rec.cm_ranges)}
                             class="group hover:bg-base-200/60 relative cursor-pointer p-3"
                             role="button"
                             tabindex="0"

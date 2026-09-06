@@ -8,27 +8,17 @@ import { programs as programTable, reservations, rules as ruleTable, services } 
 import { settings } from './settings';
 import { toHalfWidth } from './title';
 
-function parseList(json: string | null): number[] | null {
-    if (json === null || json === '') return null;
-    try {
-        const v = JSON.parse(json);
-        return Array.isArray(v) && v.length > 0 ? v.map(Number) : null;
-    } catch {
-        return null;
-    }
+/** 空の並びは「指定なし」。NULL と同じに扱う */
+function nonEmpty<T>(list: T[] | null): T[] | null {
+    return list === null || list.length === 0 ? null : list;
 }
 
-/** 詳細は見出し付きの JSON。見出しごと繋いで、素のテキストとして探せるようにする */
-function extendedText(json: string | null): string {
-    if (json === null || json === '') return '';
-    try {
-        const value = JSON.parse(json) as Record<string, string>;
-        return Object.entries(value)
-            .map(([heading, body]) => `${heading} ${body}`)
-            .join(' ');
-    } catch {
-        return '';
-    }
+/** 詳細は見出し付き。見出しごと繋いで、素のテキストとして探せるようにする */
+function extendedText(extended: Record<string, string> | null): string {
+    if (extended === null) return '';
+    return Object.entries(extended)
+        .map(([heading, body]) => `${heading} ${body}`)
+        .join(' ');
 }
 
 /** 検索対象のテキスト */
@@ -47,25 +37,7 @@ export function haystack(
  * 取り込みが古くて入っていないものは大分類だけの genres で代用する
  */
 function parseGenreDetail(program: Program): Genre[] {
-    const detail = parseStrings(program.genre_detail);
-    if (detail !== null) {
-        try {
-            return JSON.parse(program.genre_detail!) as Genre[];
-        } catch {
-            // 壊れていれば下の大分類で見る
-        }
-    }
-    return (parseList(program.genres) ?? []).map((lv1) => ({ lv1, lv2: -1 }));
-}
-
-function parseStrings(json: string | null): string[] | null {
-    if (json === null || json === '') return null;
-    try {
-        const v = JSON.parse(json);
-        return Array.isArray(v) && v.length > 0 ? v.map(String) : null;
-    } catch {
-        return null;
-    }
+    return nonEmpty(program.genre_detail) ?? (program.genres ?? []).map((lv1) => ({ lv1, lv2: -1 }));
 }
 
 /**
@@ -89,9 +61,9 @@ export interface CompiledRule {
 export function compile(rule: Rule): CompiledRule {
     return {
         rule,
-        services: parseList(rule.service_ids),
-        types: parseStrings(rule.service_types),
-        genres: parseStrings(rule.genres),
+        services: nonEmpty(rule.service_ids),
+        types: nonEmpty(rule.service_types),
+        genres: nonEmpty(rule.genres),
         fields: parseSearchFields(rule.search_fields),
         // キーワードは空白区切りの AND。「アニメ 再放送」で両方含むものだけ拾える
         keywords: toHalfWidth(rule.keyword).toLowerCase().split(/\s+/).filter(Boolean),

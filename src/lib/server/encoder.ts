@@ -325,18 +325,11 @@ interface EncodeOptions {
 }
 
 /**
- * 録画に写してある音声の構成を読む。**壊れていても止まらない。**
- *
- * 写しているのは番組表から取ったものをそのままなので、形が違うことはありうる。
- * 読めなければ何も無いことにする — どの道 `audioTitles` が既定の名前を返す
+ * 録画に写してある音声の構成。写しが無い (古い録画) なら何も無いことにする —
+ * どの道 `audioTitles` が既定の名前を返す。壊れた行を空にするのは列の読み手 (`schema.ts`)
  */
 function storedAudios(recording: Recording): Audio[] {
-    try {
-        const parsed: unknown = JSON.parse(recording.audios ?? 'null');
-        return Array.isArray(parsed) ? (parsed as Audio[]) : [];
-    } catch {
-        return [];
-    }
+    return recording.audios ?? [];
 }
 
 /** これ以下は捨てない。1コマにも満たないずれのために seek を掛けても得るものが無い */
@@ -933,7 +926,7 @@ async function prepareCm(
      */
     orm()
         .update(recordings)
-        .set({ cm_ranges: JSON.stringify(detection.cm), cm_note: detection.note, updated_at: now() })
+        .set({ cm_ranges: detection.cm, cm_note: detection.note, updated_at: now() })
         .where(eq(recordings.id, recording.id))
         .run();
     orm()

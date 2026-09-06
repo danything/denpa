@@ -1,7 +1,6 @@
 <script lang="ts">
-    import { type Audio, audioLabel, type Genre, genreLabel, videoLabel } from '$lib/arib';
+    import { audioLabel, genreLabel, videoLabel } from '$lib/arib';
     import { dateTime, duration, linkify, time } from '$lib/format';
-    import { jsonArray } from '$lib/json';
     import type { ProgramDetail } from '$lib/types';
 
     /**
@@ -37,14 +36,7 @@
     } = $props();
 
     /** 詳細情報。EIT から拾った「出演者」などの見出し付きテキスト */
-    function extended(json: string | null): [string, string][] {
-        if (json === null || json === '') return [];
-        try {
-            return Object.entries(JSON.parse(json) as Record<string, string>);
-        } catch {
-            return [];
-        }
-    }
+    const extended = $derived(Object.entries(program.extended ?? {}));
 
     /**
      * ジャンルの札。**同じものは1つにまとめる。**
@@ -61,12 +53,10 @@
      */
     const genres = $derived([
         ...new Set(
-            jsonArray<Genre>(program.genre_detail)
-                .map(genreLabel)
-                .filter((label) => label !== ''),
+            (program.genre_detail ?? []).map(genreLabel).filter((label) => label !== ''),
         ),
     ]);
-    const audios = $derived(jsonArray<Audio>(program.audios).map(audioLabel));
+    const audios = $derived((program.audios ?? []).map(audioLabel));
     const video = $derived(videoLabel(program.video_resolution, program.video_type));
 </script>
 
@@ -114,7 +104,7 @@
     <p class="mt-3 text-sm whitespace-pre-wrap">{@render body(program.description)}</p>
 {/if}
 
-{#each extended(program.extended) as [heading, text] (heading)}
+{#each extended as [heading, text] (heading)}
     <div class="mt-3">
         <div class="text-sm font-medium">{heading}</div>
         <div class="text-base-content/70 text-sm whitespace-pre-wrap">{@render body(text)}</div>

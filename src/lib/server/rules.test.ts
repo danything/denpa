@@ -53,7 +53,7 @@ function program(fields: Partial<Program>): Program {
 const target = program({
     name: '青のオーケストラ',
     description: '第20話「超える」',
-    extended: JSON.stringify({ 出演者: '山田太郎 鈴木花子', 音楽: 'だれか' }),
+    extended: { 出演者: '山田太郎 鈴木花子', 音楽: 'だれか' },
 });
 
 describe('キーワードを当てる範囲', () => {
@@ -77,12 +77,6 @@ describe('キーワードを当てる範囲', () => {
 
     test('詳細は見出しも探せる', () => {
         expect(matches(rule({ keyword: '出演者', search_fields: 'extended' }), target)).toBe(true);
-    });
-
-    test('壊れた詳細は空として扱う', () => {
-        const broken = program({ name: 'あ', extended: '{壊れている' });
-        expect(matches(rule({ keyword: 'あ', search_fields: 'name,extended' }), broken)).toBe(true);
-        expect(matches(rule({ keyword: 'い', search_fields: 'extended' }), broken)).toBe(false);
     });
 
     test('範囲が空なら番組名だけに戻す', () => {

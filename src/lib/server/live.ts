@@ -1525,19 +1525,15 @@ function aribServiceId(serviceId: number): number {
 }
 
 /**
- * 番組表が持っている音声の構成を読む。**壊れていても止まらない。**
+ * 番組表が持っている音声の構成。
  *
- * `audios` は放送から拾ったものを JSON で持っているだけなので、形が違うことは
- * ありうる。読めなければ `audio_type` に落とし、それも無ければ何も無いことにする —
- * どの道 `audioTracks` が「そのまま出す」1つを返す
+ * `audios` は放送から拾ったものをそのまま持っているだけなので、無い・壊れている
+ * (壊れた行は列の読み手が空にする。`schema.ts`) ことはありうる。そのときは
+ * `audio_type` に落とし、それも無ければ何も無いことにする — どの道 `audioTracks` が
+ * 「そのまま出す」1つを返す
  */
-function parseAudios(row: { audio_type: number | null; audios: string | null } | undefined): Audio[] {
+function parseAudios(row: { audio_type: number | null; audios: Audio[] | null } | undefined): Audio[] {
     if (row === undefined) return [];
-    try {
-        const parsed: unknown = JSON.parse(row.audios ?? 'null');
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed as Audio[];
-    } catch {
-        // 読めなかった。下の `audio_type` で見る
-    }
+    if (row.audios !== null && row.audios.length > 0) return row.audios;
     return row.audio_type === null ? [] : [{ componentType: row.audio_type }];
 }

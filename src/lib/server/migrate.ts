@@ -424,9 +424,9 @@ async function importRules(connection: SQL, options: MigrateOptions): Promise<vo
                 search_fields: parseSearchFields(
                     SEARCH_FIELDS.filter((field) => row[field] === 1).join(','),
                 ).join(','),
-                service_ids: channels.length === 0 ? null : JSON.stringify(channels),
-                service_types: types.length === 0 ? null : JSON.stringify(types),
-                genres: genreIds.length === 0 ? null : JSON.stringify(genreIds),
+                service_ids: channels.length === 0 ? null : channels,
+                service_types: types.length === 0 ? null : types,
+                genres: genreIds.length === 0 ? null : genreIds,
                 enabled: Boolean(row.enable),
                 priority: 1,
                 source,

@@ -5,15 +5,14 @@
     import Toasts, { errorNotice, type Notice } from '$lib/components/Toasts.svelte';
     import { programDetail } from '$lib/detail.svelte';
     import { badgeClass, CM_LABEL, dateTime, SERVICE_TYPE_LABEL, stateLabel } from '$lib/format';
-    import { jsonArray } from '$lib/json';
     import { parseSearchFields, SEARCH_FIELD_LABEL, SEARCH_FIELDS, searchFieldLabel } from '$lib/search';
 
     let { data, form } = $props();
 
     /** フォームの初期値として選んでおくチャンネルと種別 */
-    const seedTypes = $derived(jsonArray(data.seed?.service_types).map(String));
-    const seedServices = $derived(jsonArray(data.seed?.service_ids).map(Number));
-    const seedGenres = $derived(jsonArray(data.seed?.genres).map(String));
+    const seedTypes = $derived(data.seed?.service_types ?? []);
+    const seedServices = $derived(data.seed?.service_ids ?? []);
+    const seedGenres = $derived(data.seed?.genres ?? []);
     const seedFields = $derived(parseSearchFields(data.seed?.search_fields));
 
 
@@ -26,19 +25,17 @@
      */
     const detail = programDetail();
 
-    function channels(rule: { service_types: string | null; service_ids: string | null }): string {
+    function channels(rule: { service_types: string[] | null; service_ids: number[] | null }): string {
         const parts = [
-            ...jsonArray<string>(rule.service_types).map((t) => SERVICE_TYPE_LABEL[t] ?? t),
-            ...jsonArray<number>(rule.service_ids).map(
-                (id) => data.services.find((s) => s.id === id)?.name ?? String(id),
-            ),
+            ...(rule.service_types ?? []).map((t) => SERVICE_TYPE_LABEL[t] ?? t),
+            ...(rule.service_ids ?? []).map((id) => data.services.find((s) => s.id === id)?.name ?? String(id)),
         ];
         return parts.length === 0 ? '全局' : parts.join(', ');
     }
 
     /** 絞り込んでいるジャンル。条件のうち一番見落としやすいので、名前と並べず条件の行に出す */
-    function genres(rule: { genres: string | null }): string {
-        const parts = jsonArray<string | number>(rule.genres).map(genreName);
+    function genres(rule: { genres: string[] | null }): string {
+        const parts = (rule.genres ?? []).map(genreName);
         return parts.length === 0 ? '全ジャンル' : parts.join(', ');
     }
 
