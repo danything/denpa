@@ -170,7 +170,7 @@
             service_name: channel.name,
             start_at: channel.now.startAt,
             end_at: channel.now.endAt,
-            description: channel.now.description ?? undefined,
+            description: channel.now.description ?? '',
         });
     }
 

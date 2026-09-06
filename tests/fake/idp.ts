@@ -8,8 +8,8 @@
  * **人は出てこない。** `authorize` に来たらその場でコードを発行して戻す。
  * 「誰が入るか」は `FAKE_IDP_GROUPS` で決める — 通す人と断る人の両方を試すため。
  */
-const PORT = Number(process.env.FAKE_IDP_PORT ?? 9876);
-const ISSUER = process.env.FAKE_IDP_ISSUER ?? `http://127.0.0.1:${PORT}`;
+const PORT = Number(process.env['FAKE_IDP_PORT'] ?? 9876);
+const ISSUER = process.env['FAKE_IDP_ISSUER'] ?? `http://127.0.0.1:${PORT}`;
 const KID = 'fake-key';
 
 const pair = await crypto.subtle.generateKey(
@@ -32,7 +32,7 @@ const b64 = (bytes: Uint8Array) =>
 const encode = (value: unknown) => b64(new TextEncoder().encode(JSON.stringify(value)));
 
 /** どのグループに居ることにするか。テストから差し替える */
-let groups = (process.env.FAKE_IDP_GROUPS ?? 'admins').split(',').filter(Boolean);
+let groups = (process.env['FAKE_IDP_GROUPS'] ?? 'admins').split(',').filter(Boolean);
 /** `groups` そのものを載せない。アプリ登録の設定漏れを再現する */
 let omitGroups = false;
 

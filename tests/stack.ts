@@ -77,7 +77,7 @@ function start(command: string[], env: Record<string, string>): Started {
     });
     let log = '';
     const keep = (chunk: Buffer) => {
-        if (process.env.DENPA_E2E_LOG === '1') process.stdout.write(chunk);
+        if (process.env['DENPA_E2E_LOG'] === '1') process.stdout.write(chunk);
         log += chunk.toString();
         // 落ちたときの手掛かりが欲しいだけなので、後ろだけ持つ
         if (log.length > 20_000) log = log.slice(-20_000);
@@ -380,7 +380,7 @@ export const test = base.extend<{ anonymous: Anonymous }, { stack: Stack }>({
         const context = await playwright.request.newContext({
             baseURL: stack.appUrl,
             extraHTTPHeaders: { Origin: stack.appUrl },
-            httpCredentials: httpCredentials ?? undefined,
+            ...(httpCredentials === undefined ? {} : { httpCredentials }),
         });
         await use(context);
         await context.dispose();

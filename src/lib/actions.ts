@@ -11,7 +11,8 @@ import { begin, finish } from './busy.svelte';
  * 二度押し・三度押しできてしまう。
  */
 export function submitting(node: HTMLFormElement, submit?: SubmitFunction) {
-    return enhance(node, (input) => {
+    // 型引数は `SubmitFunction` の既定に揃える。省くと `| undefined` 側に推論され、after に渡せない
+    return enhance<Record<string, unknown>, Record<string, unknown>>(node, (input) => {
         const buttons = [...node.querySelectorAll('button')];
         begin();
         node.setAttribute('aria-busy', 'true');

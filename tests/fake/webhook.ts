@@ -4,7 +4,7 @@
  * denpa が Webhook を投げる相手。テストで「何が届いたか」を確かめるためだけのもので、
  * Discord や Slack の Incoming Webhook の代わりに立てる。
  */
-const PORT = Number(process.env.FAKE_WEBHOOK_PORT ?? 8096);
+const PORT = Number(process.env['FAKE_WEBHOOK_PORT'] ?? 8096);
 
 const calls: Record<string, unknown>[] = [];
 

@@ -340,15 +340,16 @@ export function audioTracks(audios: Audio[]): AudioTrack[] {
         const head = many && !named ? `音声${stream + 1} ` : '';
         const langs = (audio.langs ?? []).map((lang) => LANGUAGE[lang] ?? lang);
         const of = (index: number) => (langs[index] === undefined ? '' : ` (${langs[index]})`);
-        const main = audio.main;
+        // 放送が言っていなければ付けない (undefined を書き込まない)
+        const main = audio.main === undefined ? {} : { main: audio.main };
 
         if (audio.componentType === DUAL_MONO) {
             // 左右に分かれているので、名前ではなくどちら側かで呼ぶ
             const index = many ? `音声${stream + 1} ` : '';
             tracks.push(
-                { id: `${stream}:main`, stream, side: 'main', label: `${index}主音声${of(0)}`, main },
-                { id: `${stream}:sub`, stream, side: 'sub', label: `${index}副音声${of(1)}`, main },
-                { id: `${stream}:both`, stream, side: 'both', label: `${index}主+副`, main },
+                { id: `${stream}:main`, stream, side: 'main', label: `${index}主音声${of(0)}`, ...main },
+                { id: `${stream}:sub`, stream, side: 'sub', label: `${index}副音声${of(1)}`, ...main },
+                { id: `${stream}:both`, stream, side: 'both', label: `${index}主+副`, ...main },
             );
         } else {
             tracks.push({
@@ -356,7 +357,7 @@ export function audioTracks(audios: Audio[]): AudioTrack[] {
                 stream,
                 side: 'both',
                 label: `${head}${audioLabel(audio)}`,
-                main,
+                ...main,
             });
         }
     });

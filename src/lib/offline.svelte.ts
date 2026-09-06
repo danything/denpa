@@ -314,7 +314,7 @@ export async function saveOffline(rec: SaveTarget): Promise<void> {
             // downloadTotal は実測の合計 + 2% (転送の揺れぶん。超えたら打ち切られる)
             const running = await reg.backgroundFetch.fetch(fetchId(rec.id, source, attempt), urls, {
                 title: `denpa: ${rec.name}`,
-                downloadTotal: total === null ? undefined : Math.round(total * 1.02),
+                ...(total === null ? {} : { downloadTotal: Math.round(total * 1.02) }),
             });
             watchProgress(running);
             return;

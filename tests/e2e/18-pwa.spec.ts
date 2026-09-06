@@ -44,13 +44,13 @@ test.describe('PWA', () => {
             const res = await request.get(path);
             expect(res.status(), path).toBe(200);
             expect(res.headers()['cache-control'], path).toBe('no-cache');
-            expect(res.headers().etag, path).toBeTruthy();
+            expect(res.headers()['etag'], path).toBeTruthy();
         }
 
         // 指紋が付いているものは、変わっていなければ中身を流さない
         const first = await request.get('/');
         const again = await request.get('/', {
-            headers: { 'if-none-match': first.headers().etag },
+            headers: { 'if-none-match': first.headers()['etag'] },
         });
         expect(again.status()).toBe(304);
 

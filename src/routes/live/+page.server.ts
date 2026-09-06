@@ -51,14 +51,14 @@ function remembered(
     try {
         const saved = JSON.parse(raw) as Record<string, unknown>;
         const found = channels.find(
-            (channel) => channel.type === saved.channelType && channel.channel === saved.channel,
+            (channel) => channel.type === saved['channelType'] && channel.channel === saved['channel'],
         );
         if (found === undefined) return null;
         return {
             channel: found,
-            audio: typeof saved.audio === 'string' ? saved.audio : undefined,
+            ...(typeof saved['audio'] === 'string' ? { audio: saved['audio'] } : {}),
             // 覚えていない形を渡さない。知らない値なら既定 (H.264) に落ちる
-            codec: saved.codec === 'av1' ? 'av1' : undefined,
+            ...(saved['codec'] === 'av1' ? { codec: 'av1' as const } : {}),
         };
     } catch {
         return null;
@@ -145,13 +145,13 @@ export function load({ url, cookies }) {
                   channel: target.channel,
                   serviceId: target.id,
                   // 音声の控えは、同じ局に戻ったときだけ活かす
-                  audio: saved?.audio,
+                  ...(saved?.audio === undefined ? {} : { audio: saved.audio }),
                   /*
                    * **焼き方は局が変わっても引き継ぐ。** 音声と違って番組の中身で
                    * 決まるものではなく、その端末で出るかどうかの話なので、
                    * 局を選び直すたびに H.264 へ戻されては困る
                    */
-                  codec: kept?.codec,
+                  ...(kept?.codec === undefined ? {} : { codec: kept.codec }),
               };
 
     /*

@@ -49,7 +49,7 @@ function client(oidc: OidcStack, { xff = OUTSIDE, host = 'denpa.test' } = {}) {
             'x-forwarded-for': xff,
             ...((init.headers as Record<string, string>) ?? {}),
         };
-        if (jar.size > 0) headers.cookie = [...jar].map(([k, v]) => `${k}=${v}`).join('; ');
+        if (jar.size > 0) headers['cookie'] = [...jar].map(([k, v]) => `${k}=${v}`).join('; ');
         const res = await fetch(`${oidc.appUrl}${path}`, { ...init, headers, redirect: 'manual' });
         for (const raw of res.headers.getSetCookie?.() ?? []) {
             const [pair] = raw.split(';');

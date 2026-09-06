@@ -10,6 +10,8 @@
         "sourceMap": true,
         "strict": true,
         "noImplicitOverride": true,
+        "exactOptionalPropertyTypes": true,
+        "noPropertyAccessFromIndexSignature": true,
         "moduleResolution": "bundler",
         "types": ["bun"]
     }
