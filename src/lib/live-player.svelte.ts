@@ -1259,7 +1259,7 @@ export function livePlayer() {
                 type: 'chase',
                 recordingId: chase.recordingId,
                 at: chase.base,
-                audio: audio === '' ? undefined : audio,
+                ...(audio === '' ? {} : { audio }),
                 codec,
                 caption: captionTrack,
             };

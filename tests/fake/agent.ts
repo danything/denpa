@@ -13,15 +13,15 @@ import { resolve } from 'node:path';
 import { broadcast, channels, DEFAULT_KNOBS, type Knobs, on } from './broadcast';
 import type { FakeService } from './services';
 
-const PORT = Number(process.env.FAKE_AGENT_PORT ?? 25252);
+const PORT = Number(process.env['FAKE_AGENT_PORT'] ?? 25252);
 /** denpa の置き場。本物では同じものをエージェント側にも見せてある */
 const ROOTS: Record<string, string> = {
-    recorded: resolve(process.env.RECORDED_DIR ?? '/recorded'),
-    library: resolve(process.env.LIBRARY_DIR ?? '/library'),
+    recorded: resolve(process.env['RECORDED_DIR'] ?? '/recorded'),
+    library: resolve(process.env['LIBRARY_DIR'] ?? '/library'),
 };
 
 /** テストから切り替えるつまみ。本物では `tune.ts` がファイル越しに読む */
-const knobs: Knobs = { ...DEFAULT_KNOBS, scrambled: process.env.FAKE_SCRAMBLED === '1' };
+const knobs: Knobs = { ...DEFAULT_KNOBS, scrambled: process.env['FAKE_SCRAMBLED'] === '1' };
 /** チューナーが塞がっている状態。取り合いの見え方を確かめる */
 let busyTuners = false;
 

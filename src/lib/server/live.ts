@@ -1198,6 +1198,78 @@ export function warm(
     timer.unref?.();
 }
 
+/** 画面からの指示 (`$lib/live` の `Command`) を、省かれたところを既定で埋めて読んだもの */
+type Asked =
+    | { type: 'data'; on: boolean }
+    | {
+          type: 'tune';
+          channelType: string;
+          channel: string;
+          serviceId: number;
+          /** 省かれていれば主音声 (`nowPlaying` が決める) */
+          audio: string | undefined;
+          codec: LiveCodec;
+          caption: number;
+      }
+    | ChaseAsked;
+
+type ChaseAsked = {
+    type: 'chase';
+    /** 整数でないものもここまでは来る。断るのは `openChase` (見ている人に理由を返すため) */
+    recordingId: number;
+    at: number;
+    audio: string | undefined;
+    codec: LiveCodec;
+    caption: number;
+};
+
+/**
+ * 画面から来た JSON を読む。**画面から来る値をそのまま信じない** — 知らない形の
+ * 焼き方は H.264 に、数でないものは 0 に落とす。読めないもの (知らない type、
+ * 局の名指しが無い tune) は null で、黙って捨てる。
+ *
+ * 読むのをここ1箇所にしてある。選局と追っかけで別々に読んでいた頃は、字幕の
+ * 取り決めのように**両方に足すもの**が片方だけになりやすかった
+ */
+function parseCommand(message: Record<string, unknown>): Asked | null {
+    const audio = typeof message['audio'] === 'string' ? message['audio'] : undefined;
+    const codec: LiveCodec = message['codec'] === 'av1' ? 'av1' : 'h264';
+    // **字幕も映像と同じ ffmpeg**。選び直すと焼き直しになる (`encodeArgs`)
+    const caption = Number.isInteger(message['caption']) ? Math.max(0, Number(message['caption'])) : 0;
+    switch (message['type']) {
+        case 'data':
+            return { type: 'data', on: message['on'] === true };
+        case 'chase': {
+            const at = Number(message['at']);
+            return {
+                type: 'chase',
+                recordingId: Number(message['recordingId']),
+                at: Number.isFinite(at) ? Math.max(0, at) : 0,
+                audio,
+                codec,
+                caption,
+            };
+        }
+        case 'tune': {
+            const channelType = message['channelType'];
+            const channel = message['channel'];
+            if (typeof channelType !== 'string' || channelType === '') return null;
+            if (typeof channel !== 'string' || channel === '') return null;
+            return {
+                type: 'tune',
+                channelType,
+                channel,
+                serviceId: Number(message['serviceId']),
+                audio,
+                codec,
+                caption,
+            };
+        }
+        default:
+            return null;
+    }
+}
+
 /**
  * 1本ぶんの受け持ち。**繋いでいる間だけチューナーを掴む。**
  *
@@ -1217,34 +1289,27 @@ export function attend(connection: Connection): void {
     };
 
     connection.onmessage = (message) => {
+        const asked = parseCommand(message);
+        if (asked === null) return;
         /*
          * **データ放送は頼まれてから解く** (`Session.wantData`)。選局の指示とは
          * 別に受ける — 押すたびに焼き直していたら絵が途切れる
          */
-        if (message.type === 'data') {
-            current?.wantData(viewer, message.on === true);
+        if (asked.type === 'data') {
+            current?.wantData(viewer, asked.on);
             return;
         }
         /*
          * **追っかけ再生** (issue #16)。シークも同じ指示の送り直しで、
          * そのたびに焼き直す (ライブの選局し直しと同じ流儀)
          */
-        if (message.type === 'chase') {
+        if (asked.type === 'chase') {
             leave();
             viewer.ready = false;
-            current = openChase(message, viewer, connection);
+            current = openChase(asked, viewer, connection);
             return;
         }
-        if (message.type !== 'tune') return;
-        const channelType = typeof message.channelType === 'string' ? message.channelType : '';
-        const channel = typeof message.channel === 'string' ? message.channel : '';
-        const serviceId = Number(message.serviceId);
-        const audio = typeof message.audio === 'string' ? message.audio : undefined;
-        // 知らない形を頼まれたら H.264。**画面から来る値をそのまま信じない**
-        const codec: LiveCodec = message.codec === 'av1' ? 'av1' : 'h264';
-        // **字幕も映像と同じ ffmpeg**。選び直すと焼き直しになる (`encodeArgs`)
-        const caption = Number.isInteger(message.caption) ? Math.max(0, Number(message.caption)) : 0;
-        if (channelType === '' || channel === '') return;
+        const { channelType, channel, serviceId, audio, codec, caption } = asked;
 
         const now = nowPlaying(serviceId, audio);
 
@@ -1324,7 +1389,7 @@ export function attend(connection: Connection): void {
  * シークはバイト比例で当たりを付ける (`chasePlan`)。生TSに時間の索引は無いが、
  * 放送TSはレートがほぼ一定なので大きくは外れない。
  */
-function openChase(message: Record<string, unknown>, viewer: Viewer, connection: Connection): Session | null {
+function openChase(asked: ChaseAsked, viewer: Viewer, connection: Connection): Session | null {
     const tell = (notice: Notice) =>
         connection.send(CHANNEL.control, 0n, new TextEncoder().encode(JSON.stringify(notice)));
     const refuse = (text: string): null => {
@@ -1332,12 +1397,7 @@ function openChase(message: Record<string, unknown>, viewer: Viewer, connection:
         return null;
     };
 
-    const recordingId = Number(message.recordingId);
-    const at = Number.isFinite(Number(message.at)) ? Math.max(0, Number(message.at)) : 0;
-    const wanted = typeof message.audio === 'string' ? message.audio : undefined;
-    // 知らない形を頼まれたら H.264。**画面から来る値をそのまま信じない**
-    const codec: LiveCodec = message.codec === 'av1' ? 'av1' : 'h264';
-    const caption = Number.isInteger(message.caption) ? Math.max(0, Number(message.caption)) : 0;
+    const { recordingId, at, audio: wanted, codec, caption } = asked;
     if (!Number.isInteger(recordingId)) return refuse('録画が見つかりません');
 
     const rec = orm().select().from(recordings).where(eq(recordings.id, recordingId)).get();

@@ -321,7 +321,7 @@ interface EncodeOptions {
      * `hwenc.hwChain` が決めていて、runJob がその順に渡す。落ちたら次、
      * 最後はソフトウェア (undefined)
      */
-    hardware?: HwWay;
+    hardware?: HwWay | undefined;
 }
 
 /**
@@ -672,7 +672,7 @@ export function inputProgress(inputBytes: number) {
          * 出すと、そこで止まって見える (失敗して頭からやり直す時は特に、
          * 100% → 0% と動いて二度おかしく見えた)
          */
-        const percent = block.progress === 'end' ? 1 : Math.min(Math.max(prev, fraction), 0.99);
+        const percent = block['progress'] === 'end' ? 1 : Math.min(Math.max(prev, fraction), 0.99);
 
         let etaMs: number | null = null;
         if (readable) {
@@ -688,12 +688,12 @@ export function inputProgress(inputBytes: number) {
         }
 
         const mb = (bytes: number) => (bytes / 1024 / 1024).toFixed(0);
-        const sizeMb = (parseInt(block.total_size, 10) / 1024 / 1024).toFixed(1);
-        const rateMbps = (parseFloat(block.bitrate) / 1000).toFixed(2);
+        const sizeMb = (parseInt(block['total_size'], 10) / 1024 / 1024).toFixed(1);
+        const rateMbps = (parseFloat(block['bitrate']) / 1000).toFixed(2);
         return {
             percent,
             etaMs,
-            log: `input: ${readable ? `${mb(pos)}/${mb(inputBytes)}MB` : '測れず'}, speed: ${block.speed}, size: ${sizeMb}MB, rate: ${rateMbps}Mbps, drop: ${block.drop_frames}`,
+            log: `input: ${readable ? `${mb(pos)}/${mb(inputBytes)}MB` : '測れず'}, speed: ${block['speed']}, size: ${sizeMb}MB, rate: ${rateMbps}Mbps, drop: ${block['drop_frames']}`,
         };
     };
 }
@@ -813,9 +813,9 @@ async function runFfmpeg(
                 const eq = line.indexOf('=');
                 if (eq === -1) continue;
                 block[line.slice(0, eq)] = line.slice(eq + 1).trim();
-                if (block.progress === undefined) continue;
+                if (block['progress'] === undefined) continue;
 
-                const at = Number(block.out_time_us);
+                const at = Number(block['out_time_us']);
                 if (Number.isFinite(at) && at > 0) outTimeUs = at;
 
                 if (inputFd === null) inputFd = findInputFd(proc.pid, inputPath);

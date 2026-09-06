@@ -197,9 +197,8 @@ describe('通していい人か', () => {
 
 describe('画面に出す名前', () => {
     test('name が無ければ別の名乗りを使う', () => {
-        expect(displayName({ ...base, name: undefined, preferred_username: 'ruk@example' })).toBe(
-            'ruk@example',
-        );
-        expect(displayName({ ...base, name: undefined })).toBe('');
+        const { name: _name, ...nameless } = base;
+        expect(displayName({ ...nameless, preferred_username: 'ruk@example' })).toBe('ruk@example');
+        expect(displayName(nameless)).toBe('');
     });
 });

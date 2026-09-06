@@ -285,7 +285,7 @@ export function allowed(claims: Claims): { ok: true } | { ok: false; reason: str
          * `groups` の代わりに `_claim_names` を入れて「Graph を叩いて取れ」と言う。
          * 黙って弾くと「なぜか自分だけ入れない」になるので、理由を出す
          */
-        const overflow = claims._claim_names?.groups !== undefined;
+        const overflow = claims._claim_names?.['groups'] !== undefined;
         return {
             ok: false,
             reason: overflow

@@ -33,6 +33,11 @@
             "style": {
                 "noNonNullAssertion": "off"
             },
+            "complexity": {
+                // tsconfig の noPropertyAccessFromIndexSignature と逆向き。
+                // `process.env['X']` のように、型が index signature のものは [] で読む
+                "useLiteralKeys": "off"
+            },
             "a11y": {
                 // 字幕は放送が絵で送ってくる。canvas に重ねるので <track> に渡せるものが無い
                 "useMediaCaption": "off",

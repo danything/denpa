@@ -27,7 +27,7 @@
         cmNote?: string | null;
         /** 焼いたもののコマ数。録画から開いたときだけ入る (ProgramFacts へ素通し) */
         fps?: number | null;
-        actions?: Snippet;
+        actions?: Snippet | undefined;
     } = $props();
 </script>
 

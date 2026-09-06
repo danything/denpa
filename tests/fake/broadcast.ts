@@ -71,7 +71,7 @@ export interface Knobs {
 export const DEFAULT_KNOBS: Knobs = { scrambled: false, extendedMs: 0, noPresentFollowing: false };
 
 /** 1枠の本数。E2E では短くして「数秒後に始まる番組」を作る */
-const SLOTS = Number(process.env.FAKE_SLOTS ?? 60);
+const SLOTS = Number(process.env['FAKE_SLOTS'] ?? 60);
 
 export function programsFor(service: FakeService): SynthEvent[] {
     const slotMs = service.slotMs;

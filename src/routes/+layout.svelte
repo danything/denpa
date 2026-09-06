@@ -40,13 +40,13 @@
     function apply() {
         const dark =
             mode === 'dark' || (mode === 'system' && matchMedia('(prefers-color-scheme: dark)').matches);
-        document.documentElement.dataset.theme = dark ? 'dark' : 'light';
-        document.documentElement.dataset.themeMode = mode;
+        document.documentElement.dataset['theme'] = dark ? 'dark' : 'light';
+        document.documentElement.dataset['themeMode'] = mode;
     }
 
     onMount(() => {
         hydrated = true;
-        mode = (document.documentElement.dataset.themeMode as 'system' | 'light' | 'dark') ?? 'system';
+        mode = (document.documentElement.dataset['themeMode'] as 'system' | 'light' | 'dark') ?? 'system';
 
         // 端末側の設定が変わったら、system のときだけ追従する
         const media = matchMedia('(prefers-color-scheme: dark)');

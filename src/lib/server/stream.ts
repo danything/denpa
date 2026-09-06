@@ -66,7 +66,12 @@ export interface RunResult {
  */
 export async function run(
     argv: string[],
-    options: { signal?: AbortSignal; timeoutMs?: number; stdout?: boolean; stderr?: boolean } = {},
+    options: {
+        signal?: AbortSignal | undefined;
+        timeoutMs?: number;
+        stdout?: boolean;
+        stderr?: boolean;
+    } = {},
 ): Promise<RunResult> {
     let proc: Bun.Subprocess<'ignore', 'pipe' | 'ignore', 'pipe' | 'ignore'>;
     try {

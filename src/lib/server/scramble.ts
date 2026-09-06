@@ -136,7 +136,7 @@ export async function descramble(
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ input: from, output: to }),
-            signal,
+            signal: signal ?? null,
         });
         const body = (await res.json()) as { ok?: boolean; error?: string };
         if (!res.ok || body.ok !== true) {

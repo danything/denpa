@@ -159,7 +159,13 @@ function parsePmt(section: Uint8Array): ComponentPMT[] {
             }
         }
         if (componentId === undefined) continue;
-        components.push({ componentId, pid, streamType, dataComponentId, bxmlInfo });
+        components.push({
+            componentId,
+            pid,
+            streamType,
+            ...(dataComponentId === undefined ? {} : { dataComponentId }),
+            ...(bxmlInfo === undefined ? {} : { bxmlInfo }),
+        });
     }
     return components;
 }
@@ -367,7 +373,7 @@ export class BmlDecoder {
                 size: module.moduleSize,
             })),
             dataEventId,
-            returnToEntryFlag: dii.returnToEntry ?? undefined,
+            ...(dii.returnToEntry === null ? {} : { returnToEntryFlag: dii.returnToEntry }),
         });
     }
 

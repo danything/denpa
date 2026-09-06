@@ -29,7 +29,7 @@ if (services.length === 0) {
     process.exit(1);
 }
 
-const CONTROL = process.env.FAKE_CONTROL;
+const CONTROL = process.env['FAKE_CONTROL'];
 
 function knobs(): Knobs {
     if (CONTROL === undefined) return DEFAULT_KNOBS;
