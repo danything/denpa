@@ -3,7 +3,8 @@
  *
  * 動いているのはコミット (`config.commit`。イメージを組むときに入る)。GitHub の
  * 「最新のリリース」の札を取り、compare API でそのコミットとの前後を訊く
- * (`/compare/<コミット>...<札>`)。**リリースのほうが先 (`ahead`) なら知らせる。**
+ * (`/compare/<コミット>...<札>`)。**リリースのほうが先 (`ahead`) で、その先のコミットが
+ * denpa の中身 (`DENPA_PATHS`) に触っていれば知らせる。**
  *
  * 版の札を焼き込んで数で比べる手は取らない — リリースはイメージを組み直さず
  * main のものに名前を貼るだけなので (release.yml)、v1.8.0 のイメージの中身は
@@ -16,7 +17,7 @@
  * (認証なしの GitHub API は 60 回/時)
  */
 
-import { boolean, type Infer, literal, object, optional, read, string } from '../shape';
+import { array, boolean, type Infer, literal, object, optional, read, string } from '../shape';
 import { config } from './config';
 
 const RELEASE = object({
@@ -27,8 +28,46 @@ const RELEASE = object({
 });
 type Release = Infer<typeof RELEASE>;
 
-/** compare API の答えのうち見るもの。`base...head` で head が base より先なら `ahead` */
-const COMPARISON = object({ status: literal('ahead', 'behind', 'identical', 'diverged') });
+/**
+ * compare API の答えのうち見るもの。`base...head` で head が base より先なら `ahead`。
+ * `files` は先にあるコミットで変わったファイル (300 個まで。それ以上は切れる)
+ */
+const COMPARISON = object({
+    status: literal('ahead', 'behind', 'identical', 'diverged'),
+    files: optional(array(object({ filename: string }))),
+});
+
+/**
+ * **denpa のイメージの中身になるパス。** `.github/image-tags.sh` の `denpa_paths` と
+ * 同じもの (試験で突き合わせている)。
+ *
+ * リリースの札は「印の書き戻し」のコミット (`k3s/` だけを触る) に付き、イメージは
+ * その 1 つ前で組まれる。コミットの前後だけで見ると、そのリリースそのものを
+ * 動かしていても「1 つ先」になって札が出る。**先にあるコミットがここに触って
+ * いなければ、動いているものは中身としてそのリリース** — 知らせない
+ */
+export const DENPA_PATHS = [
+    'Dockerfile',
+    'src',
+    'static',
+    'package.json',
+    'bun.lock',
+    'svelte.config.ts',
+    'vite.config.ts',
+    'server.js',
+    'patches',
+];
+
+/** compare API が 1 度に返すファイルの上限。ここまで来たら切れているとみなし、触ったことにする */
+const FILES_LIMIT = 300;
+
+/** 変わったファイルに denpa の中身が混じっているか。切れていれば混じっていることにする */
+export function touchesDenpa(files: { filename: string }[]): boolean {
+    if (files.length >= FILES_LIMIT) return true;
+    return files.some(({ filename }) =>
+        DENPA_PATHS.some((path) => filename === path || filename.startsWith(`${path}/`)),
+    );
+}
 
 export interface Available {
     /** `v1.8.0` の形。そのまま画面に出す */
@@ -81,7 +120,9 @@ export async function checkForUpdate(fetcher: Fetcher = fetch): Promise<Availabl
                 `/compare/${encodeURIComponent(config.commit)}...${encodeURIComponent(release.tag_name)}`,
             );
             if (!compared.ok) throw new Error(`compare が ${compared.status} を返しました`);
-            ahead = read(COMPARISON, await compared.json(), 'GitHub の compare').status === 'ahead';
+            const comparison = read(COMPARISON, await compared.json(), 'GitHub の compare');
+            // files が無い答え (古い API・偽物) は、先なら触ったことにする
+            ahead = comparison.status === 'ahead' && touchesDenpa(comparison.files ?? [{ filename: 'src' }]);
         }
         available = ahead ? { version: release.tag_name, url: release.html_url } : null;
         warned = false;

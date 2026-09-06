@@ -27,10 +27,11 @@ Bun.serve({
         if (url.pathname === '/releases/latest') {
             return release === null ? new Response('not found', { status: 404 }) : json(release);
         }
-        // 動いているコミットから見た前後。置いたリリースの `status` をそのまま返す (既定は先)
+        // 動いているコミットから見た前後。置いたリリースの `status` をそのまま返す (既定は先)。
+        // 変わったファイルは denpa の中身 (触っていないと知らせが出ない)
         if (url.pathname.startsWith('/compare/')) {
             const status = (release as { status?: string } | null)?.status ?? 'ahead';
-            return json({ status });
+            return json({ status, files: [{ filename: 'src/app.html' }] });
         }
         if (url.pathname === '/__control/release' && request.method === 'POST') {
             release = await request.json();
