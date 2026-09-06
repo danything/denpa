@@ -191,7 +191,7 @@
             box = null;
             return;
         }
-        const [x, y, w, h] = current.split(',').map(Number);
+        const [x = NaN, y = NaN, w = NaN, h = NaN] = current.split(',').map(Number);
         if (![x, y, w, h].every(Number.isFinite)) return;
         box = { x: x * s.x, y: y * s.y, w: w * s.x, h: h * s.y };
     });

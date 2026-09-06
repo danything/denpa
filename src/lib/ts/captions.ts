@@ -60,7 +60,7 @@ export function trimCues(cues: Cue[], at: number): Cue[] {
     // 過ぎたものの中でいちばん新しい1つより前は、もう使わない
     let keepFrom = 0;
     for (let i = 0; i < cues.length; i++) {
-        if (cues[i].at > at) break;
+        if (cues[i]!.at > at) break;
         keepFrom = i;
     }
     const kept = cues.slice(keepFrom);
@@ -73,7 +73,7 @@ export function trimCues(cues: Cue[], at: number): Cue[] {
  * 同じ時刻のものが来たら**後から来たほうを採る** (出し直しなので新しいほうが正しい)。
  */
 export function insertCue(cues: Cue[], cue: Cue): Cue[] {
-    if (cues.length === 0 || cues[cues.length - 1].at < cue.at) return [...cues, cue];
+    if (cues.length === 0 || cues[cues.length - 1]!.at < cue.at) return [...cues, cue];
     const out = cues.filter((held) => held.at !== cue.at);
     const at = out.findIndex((held) => held.at > cue.at);
     if (at < 0) return [...out, cue];

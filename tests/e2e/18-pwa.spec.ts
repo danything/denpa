@@ -50,7 +50,7 @@ test.describe('PWA', () => {
         // 指紋が付いているものは、変わっていなければ中身を流さない
         const first = await request.get('/');
         const again = await request.get('/', {
-            headers: { 'if-none-match': first.headers()['etag'] },
+            headers: { 'if-none-match': first.headers()['etag'] ?? '' },
         });
         expect(again.status()).toBe(304);
 

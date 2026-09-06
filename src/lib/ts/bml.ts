@@ -77,24 +77,24 @@ const COMPRESSION_ZLIB = 0;
 export function parseBxmlInfo(data: Uint8Array): AdditionalAribBXMLInfo {
     let at = 0;
     // 00 のみ運用 (データカルーセル伝送方式およびイベントメッセージ伝送方式)
-    const transmissionFormat = (data[at] >> 6) & 0b11;
+    const transmissionFormat = (data[at]! >> 6) & 0b11;
     // component_tag=0x40 のとき必ず1。startup.xml が最初に起動される
-    const entryPointFlag = ((data[at] >> 5) & 1) === 1;
+    const entryPointFlag = ((data[at]! >> 5) & 1) === 1;
     const info: AdditionalAribBXMLInfo = { transmissionFormat, entryPointFlag };
 
     if (entryPointFlag) {
-        const autoStartFlag = ((data[at] >> 4) & 1) === 1;
+        const autoStartFlag = ((data[at]! >> 4) & 1) === 1;
         /*
          * 画面の大きさ。運用されるのは 0011 (960x540)、0100 (640x480 16:9)、
          * 0101 (640x480 4:3) の3つ
          */
-        const documentResolution = data[at] & 0x0f;
+        const documentResolution = data[at]! & 0x0f;
         at++;
-        const useXML = ((data[at] >> 7) & 1) === 1;
-        const defaultVersionFlag = ((data[at] >> 6) & 1) === 1;
+        const useXML = ((data[at]! >> 7) & 1) === 1;
+        const defaultVersionFlag = ((data[at]! >> 6) & 1) === 1;
         // BS/CS では 0 のとき単独視聴不可。地上波は常に1
-        const independentFlag = ((data[at] >> 5) & 1) === 1;
-        const styleForTVFlag = ((data[at] >> 4) & 1) === 1;
+        const independentFlag = ((data[at]! >> 5) & 1) === 1;
+        const styleForTVFlag = ((data[at]! >> 4) & 1) === 1;
         at++;
         // 既定は BS の 1.0。地上波は3、CS は2が入ってくる
         info.entryPointInfo = {
@@ -124,12 +124,12 @@ export function parseBxmlInfo(data: Uint8Array): AdditionalAribBXMLInfo {
 
     if (transmissionFormat === 0) {
         // additional_arib_carousel_info (STD-B24 第三分冊 第三編 C.1)
-        const dataEventId = (data[at] >> 4) & 0x0f;
-        const eventSectionFlag = ((data[at] >> 3) & 1) === 1;
+        const dataEventId = (data[at]! >> 4) & 0x0f;
+        const eventSectionFlag = ((data[at]! >> 3) & 1) === 1;
         at++;
-        const ondemandRetrievalFlag = ((data[at] >> 7) & 1) === 1;
-        const fileStorableFlag = ((data[at] >> 6) & 1) === 1;
-        const startPriority = (data[at] >> 5) & 1;
+        const ondemandRetrievalFlag = ((data[at]! >> 7) & 1) === 1;
+        const fileStorableFlag = ((data[at]! >> 6) & 1) === 1;
+        const startPriority = (data[at]! >> 5) & 1;
         info.additionalAribCarouselInfo = {
             dataEventId,
             eventSectionFlag,
@@ -173,17 +173,17 @@ function parsePmt(section: Uint8Array): ComponentPMT[] {
 /** ストリーム記述子 (table_id 0x3D)。NPT と イベントメッセージが載っている */
 function parseEsEvents(section: Uint8Array): ESEvent[] {
     const events: ESEvent[] = [];
-    const length = ((section[1] & 0x0f) << 8) | section[2];
+    const length = ((section[1]! & 0x0f) << 8) | section[2]!;
     const body = section.subarray(8, Math.min(3 + length - 4, section.length));
     for (const [tag, descriptor] of descriptors(body)) {
         if (tag === 0x17 && descriptor.length >= 18) {
             // NPT 参照記述子。放送の時計と番組内の時刻を結び付ける
             events.push({
                 type: 'nptReference',
-                postDiscontinuityIndicator: (descriptor[0] & 0x80) !== 0,
-                dsmContentId: descriptor[0] & 0x7f,
-                STCReference: u32(descriptor, 2) + (descriptor[1] & 1) * 0x100000000,
-                NPTReference: u32(descriptor, 10) + (descriptor[9] & 1) * 0x100000000,
+                postDiscontinuityIndicator: (descriptor[0]! & 0x80) !== 0,
+                dsmContentId: descriptor[0]! & 0x7f,
+                STCReference: u32(descriptor, 2) + (descriptor[1]! & 1) * 0x100000000,
+                NPTReference: u32(descriptor, 10) + (descriptor[9]! & 1) * 0x100000000,
                 scaleNumerator: u16(descriptor, 14),
                 scaleDenominator: u16(descriptor, 16),
             });
@@ -191,7 +191,7 @@ function parseEsEvents(section: Uint8Array): ESEvent[] {
             // 汎用イベントメッセージ記述子。運用されるのは time_mode 0 と 2 だけ
             const groupId = (u16(descriptor, 0) >> 4) & 0x0fff;
             const timeMode = descriptor[2];
-            const eventMessageType = descriptor[8];
+            const eventMessageType = descriptor[8]!;
             const eventMessageId = u16(descriptor, 9);
             const privateDataByte = [...descriptor.subarray(11)];
             if (timeMode === 0) {
@@ -208,7 +208,7 @@ function parseEsEvents(section: Uint8Array): ESEvent[] {
                     type: 'nptEvent',
                     timeMode: 2,
                     eventMessageGroupId: groupId,
-                    eventMessageNPT: u32(descriptor, 4) + (descriptor[3] & 1) * 0x100000000,
+                    eventMessageNPT: u32(descriptor, 4) + (descriptor[3]! & 1) * 0x100000000,
                     eventMessageType,
                     eventMessageId,
                     privateDataByte,

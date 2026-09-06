@@ -220,7 +220,7 @@ function sweepLeftovers(): { swept: number; strays: number; pruned: number } {
 function orphan(path: string, videos: Set<string>): boolean {
     // 索引や作業ファイル。動画の名前をまるごと頭に持つ (`….m2ts.dtvi`)
     const trailing = /^(.+\.(?:m2ts|ts|mkv|mp4))\.[^/]+$/i.exec(path);
-    if (trailing !== null) return !videos.has(trailing[1]);
+    if (trailing?.[1] !== undefined) return !videos.has(trailing[1]);
     // NFO・ポスター・データ放送。動画の拡張子を取り替えた形 (metadata.ts の
     // SIDECAR_SUFFIXES。もう作らないものも前に置いたのが残っているので拾う。tvshow.nfo も同じ道で片付く)
     const base = SIDECAR_ORPHAN.exec(path);

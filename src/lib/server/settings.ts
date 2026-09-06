@@ -171,7 +171,7 @@ export function settings(): Settings {
     const picked = parseCodecs(codec);
     const codecs = flag('encode', true) ? picked : [];
     // 主は先頭 (parseCodecs が AV1 を先頭に寄せている — 小さいので既定の再生に向く)
-    const primary: VideoCodec = codecs.length === 0 ? 'none' : codecs[0];
+    const primary: VideoCodec = codecs[0] ?? 'none';
     return {
         codec: primary,
         codecs,

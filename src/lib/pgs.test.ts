@@ -39,7 +39,7 @@ function segments(sup: Uint8Array): { type: number; pts: number; payload: Uint8A
         expect(sup[at + 1]).toBe(0x47);
         const length = view.getUint16(at + 11);
         out.push({
-            type: sup[at + 10],
+            type: sup[at + 10]!,
             pts: view.getUint32(at + 2),
             payload: sup.subarray(at + 13, at + 13 + length),
         });
@@ -82,7 +82,7 @@ describe('色の表', () => {
         // 同じ緑でも書く値が違う
         expect([...bt709]).not.toEqual([...bt601]);
         // 明るさは BT.709 のほうが緑を重く見る (0.7152 対 0.587)
-        expect(bt709[0]).toBeGreaterThan(bt601[0]);
+        expect(bt709[0]).toBeGreaterThan(bt601[0]!);
     });
 
     test('255色を超えたら近い色に寄せる', () => {
@@ -149,7 +149,7 @@ describe('.sup の組み立て', () => {
     test('時刻は 90kHz 刻み', () => {
         const parts = segments(writeSup([{ start: 1.5, end: 3, bitmap: sample }]));
         // 先頭の空を挟んだ次から本体
-        expect(parts[2].pts).toBe(135_000);
+        expect(parts[2]!.pts).toBe(135_000);
         expect(parts.at(-1)?.pts).toBe(270_000);
     });
 
@@ -159,13 +159,13 @@ describe('.sup の組み立て', () => {
          * 字幕全体が前へずれる (実機で1秒ずれた)
          */
         const parts = segments(writeSup([{ start: 1, end: 3, bitmap: sample }]));
-        expect(parts[0].pts).toBe(0);
-        expect(parts[0].type).toBe(0x16);
-        expect(parts[0].payload[10]).toBe(0); // 中身は無い
-        expect(parts[1].type).toBe(0x80);
+        expect(parts[0]!.pts).toBe(0);
+        expect(parts[0]!.type).toBe(0x16);
+        expect(parts[0]!.payload[10]).toBe(0); // 中身は無い
+        expect(parts[1]!.type).toBe(0x80);
 
         // 0秒から始まるなら要らない
-        expect(segments(writeSup([{ start: 0, end: 3, bitmap: sample }]))[0].payload[10]).toBe(1);
+        expect(segments(writeSup([{ start: 0, end: 3, bitmap: sample }]))[0]!.payload[10]).toBe(1);
     });
 
     test('窓は字幕のあるところだけ', () => {
@@ -180,18 +180,18 @@ describe('.sup の組み立て', () => {
 
     test('画面の大きさは絵の大きさから取る', () => {
         const parts = segments(writeSup([{ start: 0, end: 1, bitmap: sample }]));
-        const view = new DataView(parts[0].payload.buffer, parts[0].payload.byteOffset);
+        const view = new DataView(parts[0]!.payload.buffer, parts[0]!.payload.byteOffset);
         expect(view.getUint16(0)).toBe(1440);
         expect(view.getUint16(2)).toBe(1080);
         // 中身は1つで、位置は切り抜いたところ
-        expect(parts[0].payload[10]).toBe(1);
+        expect(parts[0]!.payload[10]).toBe(1);
         expect(view.getUint16(15)).toBe(100);
         expect(view.getUint16(17)).toBe(900);
     });
 
     test('消すほうは中身を持たない', () => {
         const parts = segments(writeSup([{ start: 0, end: 1, bitmap: sample }]));
-        const clear = parts[5];
+        const clear = parts[5]!;
         expect(clear.type).toBe(0x16);
         expect(clear.payload[10]).toBe(0);
         expect(clear.payload).toHaveLength(11);
@@ -200,7 +200,7 @@ describe('.sup の組み立て', () => {
     test('絵の長さには大きさのぶんも数える', () => {
         const parts = segments(writeSup([{ start: 0, end: 1, bitmap: sample }]));
         const ods = parts.find((p) => p.type === 0x15)!;
-        const declared = (ods.payload[4] << 16) | (ods.payload[5] << 8) | ods.payload[6];
+        const declared = (ods.payload[4]! << 16) | (ods.payload[5]! << 8) | ods.payload[6]!;
         // 宣言された長さ = 幅高さ(4バイト) + 走り書き
         expect(declared).toBe(ods.payload.length - 7);
     });
@@ -265,11 +265,11 @@ describe('.sup を読み戻す', () => {
         ]);
         const drawn = readSup(sup);
         expect(drawn).toHaveLength(2);
-        expect(drawn[0].start).toBeCloseTo(1.5, 3);
-        expect(drawn[0].end).toBeCloseTo(3.5, 3);
+        expect(drawn[0]!.start).toBeCloseTo(1.5, 3);
+        expect(drawn[0]!.end).toBeCloseTo(3.5, 3);
         expect(drawn[0]).toMatchObject({ x: 100, y: 900, width: 40, height: 20 });
-        expect(drawn[0].videoWidth).toBe(1920);
-        expect(drawn[0].videoHeight).toBe(1080);
+        expect(drawn[0]!.videoWidth).toBe(1920);
+        expect(drawn[0]!.videoHeight).toBe(1080);
         expect(drawn[1]).toMatchObject({ x: 300, y: 800, width: 10, height: 10 });
     });
 
@@ -282,8 +282,8 @@ describe('.sup を読み戻す', () => {
                 bitmap: bitmap(1920, 1080, { x: 10, y: 10, w: 4, h: 4, color: [255, 255, 0, 255] }),
             },
         ]);
-        const [first] = readSup(sup);
-        const [r, g, b, a] = pixels(first).subarray(0, 4);
+        const first = readSup(sup)[0]!;
+        const [r = 0, g = 0, b = 0, a = 0] = pixels(first).subarray(0, 4);
         expect(a).toBe(255);
         expect(Math.abs(r - 255)).toBeLessThanOrEqual(3);
         expect(Math.abs(g - 255)).toBeLessThanOrEqual(3);
@@ -299,7 +299,7 @@ describe('.sup を読み戻す', () => {
                 bitmap: bitmap(200, 100, { x: 10, y: 10, w: 4, h: 2, color: [255, 0, 0, 255] }),
             },
         ]);
-        const [first] = readSup(sup);
+        const first = readSup(sup)[0]!;
         // 切り抜かれているので、中は全部塗られている
         expect(first.width).toBe(4);
         expect(first.height).toBe(2);

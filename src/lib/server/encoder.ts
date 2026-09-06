@@ -88,7 +88,7 @@ export function pickSmooth(ratios: number[], threshold = config.fpsSurvive): boo
     const valid = ratios.filter((r) => Number.isFinite(r) && r > 0);
     if (valid.length === 0) return true;
     const sorted = [...valid].sort((a, b) => a - b);
-    const median = sorted[Math.floor(sorted.length / 2)];
+    const median = sorted[Math.floor(sorted.length / 2)] ?? 0;
     return median > threshold;
 }
 
@@ -681,8 +681,8 @@ export function inputProgress(inputBytes: number) {
         }
 
         const mb = (bytes: number) => (bytes / 1024 / 1024).toFixed(0);
-        const sizeMb = (parseInt(block['total_size'], 10) / 1024 / 1024).toFixed(1);
-        const rateMbps = (parseFloat(block['bitrate']) / 1000).toFixed(2);
+        const sizeMb = (parseInt(block['total_size'] ?? '', 10) / 1024 / 1024).toFixed(1);
+        const rateMbps = (parseFloat(block['bitrate'] ?? '') / 1000).toFixed(2);
         return {
             percent,
             etaMs,
@@ -1409,7 +1409,7 @@ async function runJob(jobId: number): Promise<void> {
                         .where(eq(encodeJobs.id, jobId))
                         .run();
                 }
-                const before = attempts[i - 1].hardware;
+                const before = attempts[i - 1]!.hardware;
                 if (attempt.hardware !== before) {
                     setStep(
                         jobId,
@@ -1458,6 +1458,8 @@ async function runJob(jobId: number): Promise<void> {
 
     // 主は AV1 (小さいので既定の再生に向く)。無ければ焼いたほう
     const primary = placed.find((p) => p.codec === 'av1') ?? placed[0];
+    // 上のループは焼けなければ return しているので、ここに来れば1本はある
+    if (primary === undefined) throw new Error('焼いたものが1本も無いのに置きに来ました');
     const alt = placed.find((p) => p.path !== primary.path)?.path ?? null;
     const output = primary.path;
 

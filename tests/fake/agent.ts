@@ -42,7 +42,7 @@ function unscramble(root: string, input: string, output: string): { ok: boolean;
     if (!existsSync(from)) return { ok: false, error: `${from} が見えません` };
 
     const buffer = readFileSync(from);
-    for (let i = 0; i + 188 <= buffer.length; i += 188) buffer[i + 3] &= 0x3f;
+    for (let i = 0; i + 188 <= buffer.length; i += 188) buffer[i + 3]! &= 0x3f;
     writeFileSync(to, buffer);
     return { ok: true, error: '' };
 }

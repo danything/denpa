@@ -55,10 +55,10 @@ export class Fmp4Splitter {
             if (this.buffer.length - at < size) break;
 
             const type = String.fromCharCode(
-                this.buffer[at + 4],
-                this.buffer[at + 5],
-                this.buffer[at + 6],
-                this.buffer[at + 7],
+                this.buffer[at + 4]!,
+                this.buffer[at + 5]!,
+                this.buffer[at + 6]!,
+                this.buffer[at + 7]!,
             );
             const box = this.buffer.slice(at, at + size);
             at += size;

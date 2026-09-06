@@ -108,8 +108,8 @@ describe('拾い集める', () => {
         );
         const found = collector.collected();
         expect(found).toHaveLength(1);
-        expect(found[0].serviceIds.sort()).toEqual([1024, 1025]);
-        expect(found[0].logo.data).toEqual(PNG);
+        expect(found[0]!.serviceIds.sort()).toEqual([1024, 1025]);
+        expect(found[0]!.logo.data).toEqual(PNG);
     });
 
     test('対応だけあってロゴが来ていなければ配らない', () => {
@@ -124,7 +124,7 @@ describe('拾い集める', () => {
         collector.feed(packetize(0x0029, cdtSection(3, 0x02, small)));
         collector.feed(packetize(0x0029, cdtSection(3, 0x05, PNG)));
         collector.feed(packetize(0x0011, sdtWithLogo([[1024, 3]])));
-        expect(collector.collected()[0].logo.logoType).toBe(0x05);
+        expect(collector.collected()[0]!.logo.logoType).toBe(0x05);
     });
 
     test('小さいロゴが後から来ても戻さない', () => {
@@ -132,7 +132,7 @@ describe('拾い集める', () => {
         collector.feed(packetize(0x0029, cdtSection(3, 0x05, PNG)));
         collector.feed(packetize(0x0029, cdtSection(3, 0x02, Uint8Array.from([1, 2, 3]))));
         collector.feed(packetize(0x0011, sdtWithLogo([[1024, 3]])));
-        expect(collector.collected()[0].logo.logoType).toBe(0x05);
+        expect(collector.collected()[0]!.logo.logoType).toBe(0x05);
     });
 
     test('188の切れ目と無関係に届いても読める', () => {

@@ -56,15 +56,15 @@ export function parseCdt(section: Uint8Array): LogoData | null {
     if (section[0] !== TABLE_CDT) return null;
     if (section[10] !== DATA_TYPE_LOGO) return null;
 
-    const descriptorsLength = ((section[11] & 0x0f) << 8) | section[12];
+    const descriptorsLength = ((section[11]! & 0x0f) << 8) | section[12]!;
     let at = 13 + descriptorsLength;
     const end = section.length - 4;
     if (at + 7 > end) return null;
 
-    const logoType = section[at];
-    const logoId = ((section[at + 1] & 0x01) << 8) | section[at + 2];
-    const logoVersion = ((section[at + 3] & 0x0f) << 8) | section[at + 4];
-    const size = (section[at + 5] << 8) | section[at + 6];
+    const logoType = section[at]!;
+    const logoId = ((section[at + 1]! & 0x01) << 8) | section[at + 2]!;
+    const logoVersion = ((section[at + 3]! & 0x0f) << 8) | section[at + 4]!;
+    const size = (section[at + 5]! << 8) | section[at + 6]!;
     at += 7;
     if (at + size > end) return null;
 
@@ -86,7 +86,7 @@ export function parseLogoLinks(section: Uint8Array): Map<number, number> {
             if (tag !== DESC_LOGO_TRANSMISSION || descriptor.length < 3) continue;
             const type = descriptor[0];
             if (type === 0x01 || type === 0x02) {
-                links.set(serviceId, ((descriptor[1] & 0x01) << 8) | descriptor[2]);
+                links.set(serviceId, ((descriptor[1]! & 0x01) << 8) | descriptor[2]!);
             }
         }
     }

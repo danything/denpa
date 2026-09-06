@@ -55,7 +55,7 @@ export function parseTitle(rawName: string): ParsedTitle {
 
     const bracket = series.match(BRACKET_SUBTITLE);
     if (bracket !== null) {
-        subtitle = bracket[1].trim();
+        subtitle = (bracket[1] ?? '').trim();
         series = series.slice(0, bracket.index).trim();
     }
 

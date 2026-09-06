@@ -99,16 +99,16 @@ describe('moduleFiles', () => {
             'multipart/mixed',
         );
         expect(files.map((file) => file.contentLocation)).toEqual(['/startup.bml', '/logo.png']);
-        expect(Buffer.from(files[0].dataBase64, 'base64').toString()).toBe('<bml/>');
-        expect(files[1].contentType.type).toBe('image');
+        expect(Buffer.from(files[0]!.dataBase64, 'base64').toString()).toBe('<bml/>');
+        expect(files[1]!.contentType.type).toBe('image');
     });
 
     /** 中身が1つのモジュールは包まれていない。置き場所は BML 側が知っている */
     test('multipart でなければ丸ごと1ファイル', () => {
         const files = moduleFiles(new TextEncoder().encode('PNG'), 'image/png');
         expect(files).toHaveLength(1);
-        expect(files[0].contentLocation).toBeNull();
-        expect(files[0].contentType.subtype).toBe('png');
+        expect(files[0]!.contentLocation).toBeNull();
+        expect(files[0]!.contentType.subtype).toBe('png');
     });
 });
 
@@ -169,7 +169,7 @@ describe('BmlDecoder', () => {
         if (done?.type !== 'moduleDownloaded') throw new Error('moduleDownloaded が出ていない');
         expect(done.componentId).toBe(COMPONENT_TAG);
         expect(done.files.map((file) => file.contentLocation)).toEqual(['/startup.bml', '/40/logo.png']);
-        expect(Buffer.from(done.files[0].dataBase64, 'base64').toString()).toContain('データ放送');
+        expect(Buffer.from(done.files[0]!.dataBase64, 'base64').toString()).toContain('データ放送');
     });
 
     /** 大きいモジュールは何ブロックにも割れる。順番は保証されない */
@@ -191,7 +191,7 @@ describe('BmlDecoder', () => {
         );
         const done = out.find((message) => message.type === 'moduleDownloaded');
         if (done?.type !== 'moduleDownloaded') throw new Error('moduleDownloaded が出ていない');
-        expect(Buffer.from(done.files[0].dataBase64, 'base64').toString()).toContain('あああ');
+        expect(Buffer.from(done.files[0]!.dataBase64, 'base64').toString()).toContain('あああ');
     });
 
     /*

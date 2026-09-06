@@ -163,7 +163,7 @@ test.describe('予約の細かい指定', () => {
         await goto(page, '/guide?type=GR');
         const done = await past(page);
 
-        await cellOf(page, done[0].programId).getByTestId('program-button').click();
+        await cellOf(page, done[0]!.programId).getByTestId('program-button').click();
         const detail = page.getByTestId('program-detail');
         await expect(detail).toBeVisible();
         await expect(detail.getByTestId('detail-ended')).toHaveText('放送終了');
@@ -173,7 +173,7 @@ test.describe('予約の細かい指定', () => {
 
         await goto(page, '/');
         await expect(
-            page.locator(`[data-testid="reservation-row"][data-program-id="${done[0].programId}"]`),
+            page.locator(`[data-testid="reservation-row"][data-program-id="${done[0]!.programId}"]`),
         ).toHaveCount(0);
     });
 });
@@ -258,7 +258,7 @@ test.describe('番組表のマスを押す', () => {
         const box = (await cell.boundingBox()) ?? { x: 0, y: 0, width: 0, height: 0 };
 
         await page.evaluate(
-            ([x, y]) => {
+            ({ x, y }) => {
                 const at = (cx: number, cy: number) => ({
                     pointerId: 1,
                     pointerType: 'touch',
@@ -275,7 +275,7 @@ test.describe('番組表のマスを押す', () => {
                 target.dispatchEvent(new PointerEvent('pointerup', at(x + 6, y)));
                 (target as HTMLElement).closest('button')?.click();
             },
-            [box.x + box.width / 2, box.y + box.height / 2],
+            { x: box.x + box.width / 2, y: box.y + box.height / 2 },
         );
 
         await expect(page.getByTestId('program-detail')).toBeVisible();

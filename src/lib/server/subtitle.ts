@@ -180,7 +180,7 @@ export async function buildPgs(
         const out = new Uint8Array(size);
         let at = 0;
         while (at < size) {
-            const part = queue[0];
+            const part = queue[0]!;
             const need = size - at;
             if (part.length <= need) {
                 out.set(part, at);

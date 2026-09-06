@@ -405,7 +405,7 @@
                         できないものをできる顔で出さないために、d ボタンと同じ
                         形にはせず「外へ出ていく」印にしてあります
                     -->
-                        {#if player.hybridcast.length > 0}
+                        {#if player.hybridcast[0] !== undefined}
                             {@const app = player.hybridcast[0]}
                             <ControlButton
                                 path={OPEN_OUT}

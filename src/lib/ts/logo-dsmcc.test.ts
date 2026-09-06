@@ -59,10 +59,10 @@ describe('parseLogoModule', () => {
             ]),
         );
         expect(logos).toHaveLength(1);
-        expect(logos[0].logoId).toBe(0x0011);
-        expect(logos[0].logoType).toBe(0x05);
+        expect(logos[0]!.logoId).toBe(0x0011);
+        expect(logos[0]!.logoType).toBe(0x05);
         // **どの局のロゴかはモジュール自身が持っている。** 地上波と違って SDT を待たない
-        expect(logos[0].services).toEqual([
+        expect(logos[0]!.services).toEqual([
             { networkId: 4, serviceId: 211 },
             { networkId: 4, serviceId: 212 },
         ]);
@@ -71,7 +71,7 @@ describe('parseLogoModule', () => {
          * (`withPalette`)、形が違うものは触らない決まりなので、この偽 PNG は
          * 素通りする。入れ直しそのものは logo-palette 側で見ている
          */
-        expect(logos[0].data).toEqual(PNG);
+        expect(logos[0]!.data).toEqual(PNG);
     });
 
     test('途中で切れていても、読めたぶんだけ返す', () => {
@@ -89,7 +89,7 @@ describe('DsmccLogoCollector', () => {
 
         const logos = collector.collected();
         expect(logos).toHaveLength(1);
-        expect(logos[0].services).toEqual([{ networkId: 4, serviceId: 211 }]);
+        expect(logos[0]!.services).toEqual([{ networkId: 4, serviceId: 211 }]);
     });
 
     test('名前の違うモジュールは拾わない', () => {

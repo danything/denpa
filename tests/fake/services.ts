@@ -102,8 +102,8 @@ export const SERVICES: FakeService[] = [
     },
 ];
 
-export const MX = SERVICES[0];
-export const FUJI = SERVICES[1];
-export const DATA = SERVICES[2];
-export const BS11 = SERVICES[3];
-export const BS_NO_LOGO = SERVICES[4];
+export const MX = SERVICES[0]!;
+export const FUJI = SERVICES[1]!;
+export const DATA = SERVICES[2]!;
+export const BS11 = SERVICES[3]!;
+export const BS_NO_LOGO = SERVICES[4]!;

@@ -247,7 +247,7 @@ const ENGINEERING = { service: 929, pmt: 0x1f0, es: 0x1f1 };
 function carouselPackets(services: FakeService[]): Uint8Array {
     const module = logoModule(0x05, [
         {
-            logoId: services[0].serviceId % 512,
+            logoId: services[0]!.serviceId % 512,
             services: services.map((s) => [s.networkId, s.serviceId] as [number, number]),
             data: LOGO_PNG,
         },
@@ -366,7 +366,7 @@ export function tables(services: FakeService[]): Uint8Array {
         }
     }
 
-    const first = services[0];
+    const first = services[0]!;
     parts.push(
         ...packetize(
             0x0011,

@@ -61,7 +61,8 @@ function sweepNfo(videoPath: string): boolean {
  */
 function sweepOldStrays(rec: Recording, oldDir: string, moved: ReadonlySet<string>): void {
     if (!existsSync(oldDir)) return;
-    const base = basename(libraryFamily(rec)[0], '.mkv');
+    // 先頭は素の `.mkv` (`libraryFamily` の並び)
+    const base = basename(libraryFamily(rec)[0]!, '.mkv');
     const variants = [
         `${base}.mkv`,
         `${base} [${rec.id}].mkv`,

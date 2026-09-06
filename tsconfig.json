@@ -12,6 +12,7 @@
         "noImplicitOverride": true,
         "exactOptionalPropertyTypes": true,
         "noPropertyAccessFromIndexSignature": true,
+        "noUncheckedIndexedAccess": true,
         "moduleResolution": "bundler",
         "types": ["bun"]
     }

@@ -59,9 +59,9 @@ describe('AIT の中身', () => {
         const ait = parseAit(
             aitSection([{ organisationId: 1, applicationId: 2, base: 'https://example.jp/app' }]),
         );
-        expect(ait?.applications[0].url).toBe('https://example.jp/app');
+        expect(ait?.applications[0]?.url).toBe('https://example.jp/app');
         // 名前は放送が入れていないことがある。空でも捨てない
-        expect(ait?.applications[0].name).toBe('');
+        expect(ait?.applications[0]?.name).toBe('');
     });
 
     test('起動のしかたはそのまま持つ', () => {
@@ -70,7 +70,7 @@ describe('AIT の中身', () => {
                 { organisationId: 1, applicationId: 2, controlCode: CONTROL.present, base: 'https://a/' },
             ]),
         );
-        expect(ait?.applications[0].controlCode).toBe(CONTROL.present);
+        expect(ait?.applications[0]?.controlCode).toBe(CONTROL.present);
     });
 
     /*
@@ -108,8 +108,8 @@ describe('TS から見つける', () => {
         const reader = new AitReader(1024);
         const found = reader.feed(stream({ base: 'https://example.jp/', path: 'x.html', name: 'テスト' }));
         expect(found).toHaveLength(1);
-        expect(found[0].applications[0].url).toBe('https://example.jp/x.html');
-        expect(found[0].applications[0].name).toBe('テスト');
+        expect(found[0]!.applications[0]!.url).toBe('https://example.jp/x.html');
+        expect(found[0]!.applications[0]!.name).toBe('テスト');
     });
 
     test('AIT が先に来ても、PMT を読むまでは拾わない', () => {

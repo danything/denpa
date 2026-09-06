@@ -42,8 +42,8 @@ describe('assign', () => {
         );
         expect(accepted.map((a) => a.reservation.id).sort()).toEqual([1, 2]);
         expect(rejected).toHaveLength(1);
-        expect(rejected[0].reservation.id).toBe(3);
-        expect(rejected[0].reason).toContain('GR のチューナー 2 本');
+        expect(rejected[0]!.reservation.id).toBe(3);
+        expect(rejected[0]!.reason).toContain('GR のチューナー 2 本');
     });
 
     test('優先度が高いものを残す', () => {
@@ -56,7 +56,7 @@ describe('assign', () => {
             GR2,
         );
         expect(accepted.map((a) => a.reservation.id)).toContain(3);
-        expect(rejected[0].reservation.priority).toBe(1);
+        expect(rejected[0]!.reservation.priority).toBe(1);
     });
 
     test('時間が重ならなければ本数を消費しない', () => {

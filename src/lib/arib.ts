@@ -403,7 +403,8 @@ export function audioTitles(audios: Audio[], dualMono: boolean): string[] {
  * 主音声とは限らないので、言っているならそちらに従う。何も言っていなければ先頭
  */
 export function pickTrack(tracks: AudioTrack[], wanted: string | undefined): AudioTrack {
-    return tracks.find((track) => track.id === wanted) ?? tracks.find((track) => track.main) ?? tracks[0];
+    // `audioTracks` は1本も無くても「音声」を1つ返すので、先頭は必ずある
+    return tracks.find((track) => track.id === wanted) ?? tracks.find((track) => track.main) ?? tracks[0]!;
 }
 
 const VIDEO_TYPE: Record<string, string> = {

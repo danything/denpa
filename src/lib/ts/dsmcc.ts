@@ -34,11 +34,11 @@ const MODULE_DESC_COMPRESSION = 0xc2;
 const DEFAULT_BLOCK_SIZE = 4066;
 
 export function u16(data: Uint8Array, at: number): number {
-    return (data[at] << 8) | data[at + 1];
+    return (data[at]! << 8) | data[at + 1]!;
 }
 
 export function u32(data: Uint8Array, at: number): number {
-    return ((data[at] << 24) | (data[at + 1] << 16) | (data[at + 2] << 8) | data[at + 3]) >>> 0;
+    return ((data[at]! << 24) | (data[at + 1]! << 16) | (data[at + 2]! << 8) | data[at + 3]!) >>> 0;
 }
 
 /**
@@ -86,7 +86,7 @@ export interface Ddb {
 
 /** DSM-CC セクションの中身 (メッセージ本体) を切り出す */
 function messageOf(section: Uint8Array): Uint8Array | null {
-    const length = ((section[1] & 0x0f) << 8) | section[2];
+    const length = ((section[1]! & 0x0f) << 8) | section[2]!;
     const end = 3 + length - 4;
     if (end <= 8 || end > section.length) return null;
     return section.subarray(8, end);
@@ -104,7 +104,7 @@ export function parseDii(section: Uint8Array): Dii | null {
     if (message === null || message.length < 20) return null;
 
     const transactionId = u32(message, 4);
-    const adaptationLength = message[9];
+    const adaptationLength = message[9]!;
     let at = 12 + adaptationLength;
     if (at + 20 > message.length) return null;
 
@@ -123,8 +123,8 @@ export function parseDii(section: Uint8Array): Dii | null {
         if (at + 8 > message.length) return null;
         const moduleId = u16(message, at);
         const moduleSize = u32(message, at + 2);
-        const moduleVersion = message[at + 6];
-        const infoLength = message[at + 7];
+        const moduleVersion = message[at + 6]!;
+        const infoLength = message[at + 7]!;
         const info = message.subarray(at + 8, at + 8 + infoLength);
         at += 8 + infoLength;
 
@@ -136,7 +136,7 @@ export function parseDii(section: Uint8Array): Dii | null {
             else if (tag === MODULE_DESC_TYPE) contentType = new TextDecoder('ascii').decode(descriptor);
             else if (tag === MODULE_DESC_COMPRESSION && descriptor.length >= 5) {
                 // 先頭1バイトは符号付き。運用されるのは 0 (zlib) だけ
-                compression = { type: (descriptor[0] << 24) >> 24, originalSize: u32(descriptor, 1) };
+                compression = { type: (descriptor[0]! << 24) >> 24, originalSize: u32(descriptor, 1) };
             }
         }
         modules.push({ moduleId, moduleSize, moduleVersion, name, contentType, compression });
@@ -151,7 +151,7 @@ export function parseDii(section: Uint8Array): Dii | null {
         const length = u16(message, at);
         for (const [tag, descriptor] of descriptors(message.subarray(at + 2, at + 2 + length))) {
             // arib_bxml_privatedata_descriptor (STD-B24 第二分冊 (1/2) 第二編 9.3.4)
-            if (tag === 0xf0 && descriptor.length >= 1) returnToEntry = (descriptor[0] & 0x80) !== 0;
+            if (tag === 0xf0 && descriptor.length >= 1) returnToEntry = (descriptor[0]! & 0x80) !== 0;
         }
     }
     return { downloadId, transactionId, blockSize, modules, returnToEntry };
@@ -164,13 +164,13 @@ export function parseDdb(section: Uint8Array): Ddb | null {
     if (message === null || message.length < 12) return null;
 
     const downloadId = u32(message, 4);
-    const adaptationLength = message[9];
+    const adaptationLength = message[9]!;
     const messageLength = u16(message, 10);
     let at = 12 + adaptationLength;
     if (at + 6 > message.length) return null;
 
     const moduleId = u16(message, at);
-    const moduleVersion = message[at + 2];
+    const moduleVersion = message[at + 2]!;
     const blockNumber = u16(message, at + 4);
     at += 6;
     const size = messageLength - adaptationLength - 6;

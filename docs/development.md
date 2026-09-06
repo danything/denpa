@@ -98,6 +98,22 @@ JSON で持つ列 (ジャンル・音声の構成・ルールの対象チャン�
 オブジェクトとして触るだけで `JSON.parse` は書かない。読み手は列ごとに書き、壊れた行は
 「持っていない」(空の並び・NULL) にする — 1行が読めないせいで一覧ごと出なくなるのは困るので。
 
+## 型の締め方
+
+`tsconfig.json` は `strict` に加えて `exactOptionalPropertyTypes` (省けるのと undefined を
+入れてよいのは別)、`noPropertyAccessFromIndexSignature` (index signature のものは `[]` で読む)、
+`noUncheckedIndexedAccess` (添字で読んだものは undefined かもしれない) を入れてある。
+
+`noUncheckedIndexedAccess` の書き分け:
+
+- **バイト列の読み** (`data[i]`、`src/lib/ts/` の TS/PSI/EIT/PGS の読み手) は、長さを確かめた
+  上で `data[i]!`。1 バイトごとに undefined を見ると読み手が二倍の長さになるだけで、長さの
+  確認が既にある。確認が無いところに `!` を足さない
+- **配列の先頭・regex の group・`split()` の結果** は undefined を見る (`?? ''`、
+  `const [a = NaN] = ...`、`if (x === undefined) return`)。`[0]!` にしてよいのは、その直前で
+  空でないことを確かめている (`atLeastOne` のような) 場合だけ
+- **試験** は `!` でよい。落ちれば試験が落ちる
+
 **マイグレーションを持つ前の DB** (1.7.x まで。`CREATE TABLE IF NOT EXISTS` を起動のたびに
 流して整えていた) には、最初のマイグレーション (baseline) を `IF NOT EXISTS` にしてあるので
 そのまま当たる。1.7.x を一度も起動していない古い DB は列が足りないことがあり、起動時に

@@ -546,8 +546,10 @@
         const list: { label: string }[] = [];
         let enabled = 0;
         for (let i = 0; i < tracks.length; i++) {
-            list.push({ label: audioLabel(tracks[i], i) });
-            if (tracks[i].enabled) enabled = i;
+            const track = tracks[i];
+            if (track === undefined) continue;
+            list.push({ label: audioLabel(track, i) });
+            if (track.enabled) enabled = i;
         }
         audios = list;
         audioIndex = enabled;
@@ -557,7 +559,10 @@
     function selectAudio(index: number): void {
         const tracks = audioTrackList();
         if (tracks === null) return;
-        for (let i = 0; i < tracks.length; i++) tracks[i].enabled = i === index;
+        for (let i = 0; i < tracks.length; i++) {
+            const track = tracks[i];
+            if (track !== undefined) track.enabled = i === index;
+        }
         audioIndex = index;
     }
 

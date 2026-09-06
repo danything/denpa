@@ -103,13 +103,13 @@ export function isPublicAddress(address: string): boolean {
     const hexMapped = /^::ffff:([\da-f]{1,4}):([\da-f]{1,4})$/i.exec(address);
     const target =
         mapped !== null
-            ? mapped[1]
+            ? mapped[1]!
             : hexMapped !== null
               ? [
-                    Number.parseInt(hexMapped[1], 16) >> 8,
-                    Number.parseInt(hexMapped[1], 16) & 255,
-                    Number.parseInt(hexMapped[2], 16) >> 8,
-                    Number.parseInt(hexMapped[2], 16) & 255,
+                    Number.parseInt(hexMapped[1]!, 16) >> 8,
+                    Number.parseInt(hexMapped[1]!, 16) & 255,
+                    Number.parseInt(hexMapped[2]!, 16) >> 8,
+                    Number.parseInt(hexMapped[2]!, 16) & 255,
                 ].join('.')
               : address;
 
@@ -125,6 +125,7 @@ export function isPublicAddress(address: string): boolean {
     const parts = target.split('.').map(Number);
     if (parts.length !== 4 || parts.some((n) => !Number.isInteger(n) || n < 0 || n > 255)) return false;
     const [a, b] = parts;
+    if (a === undefined || b === undefined) return false;
     if (a === 0 || a === 10 || a === 127) return false;
     if (a === 169 && b === 254) return false; // リンクローカル (雲のメタデータもここ)
     if (a === 172 && b >= 16 && b <= 31) return false;
@@ -168,7 +169,7 @@ async function resolvable(host: string): Promise<string> {
     for (const address of found) {
         if (!isPublicAddress(address)) throw new Refused(`内側の住所です (${host} → ${address})`);
     }
-    return found[0];
+    return found[0]!;
 }
 
 /**
@@ -350,7 +351,7 @@ export async function confirmReachable(
     // `example.jp` でも `https://example.jp/x` でも受ける
     const host = destination.includes('://')
         ? new URL(destination).hostname
-        : destination.replace(/^\/+/, '').split('/')[0];
+        : (destination.replace(/^\/+/, '').split('/')[0] ?? '');
     if (host === '') throw new Refused('宛先がありません');
 
     const started = Date.now();

@@ -43,7 +43,7 @@ const head = bmlHead();
 
 function bmlBody(message: ResponseMessage): string | null {
     if (message.type !== 'moduleDownloaded') return null;
-    return Buffer.from(message.files[0].dataBase64, 'base64').toString();
+    return Buffer.from(message.files[0]!.dataBase64, 'base64').toString();
 }
 
 const T1 = Date.UTC(2026, 7, 9, 12, 0, 0);
@@ -56,8 +56,8 @@ describe('captureDataBroadcast', () => {
         ]);
         const done = timeline.filter((item) => item.message.type === 'moduleDownloaded');
         expect(done).toHaveLength(1);
-        expect(done[0].at).toBe(T1);
-        expect(bmlBody(done[0].message)).toContain('<bml>1</bml>');
+        expect(done[0]!.at).toBe(T1);
+        expect(bmlBody(done[0]!.message)).toContain('<bml>1</bml>');
     });
 
     test('時計を見る前に配られたものは at = null', () => {
@@ -175,12 +175,12 @@ describe('feedFor', () => {
     ];
 
     test('頭から進む = そこまでの変化を順に流す', () => {
-        expect(feedFor(tl, -1, 5_000)).toEqual({ reset: false, messages: [tl[0].message] });
-        expect(feedFor(tl, -1, 20_000)).toEqual({ reset: false, messages: [tl[0].message, tl[1].message] });
+        expect(feedFor(tl, -1, 5_000)).toEqual({ reset: false, messages: [tl[0]!.message] });
+        expect(feedFor(tl, -1, 20_000)).toEqual({ reset: false, messages: [tl[0]!.message, tl[1]!.message] });
     });
 
     test('進んだぶんだけ足す (器はそのまま)', () => {
-        expect(feedFor(tl, 20_000, 70_000)).toEqual({ reset: false, messages: [tl[2].message] });
+        expect(feedFor(tl, 20_000, 70_000)).toEqual({ reset: false, messages: [tl[2]!.message] });
     });
 
     test('戻ったら作り直して積み直す', () => {

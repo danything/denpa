@@ -105,7 +105,8 @@ function latest(dir: string): string | null {
         const files = readdirSync(dir)
             .filter((name) => name.endsWith('.lgd'))
             .sort();
-        return files.length === 0 ? null : join(dir, files[files.length - 1]);
+        const newest = files.at(-1);
+        return newest === undefined ? null : join(dir, newest);
     } catch {
         // まだ1本も録っていない局。置き場ごと無い
         return null;
@@ -137,14 +138,15 @@ export function readLearnedLogo(serviceId: number): LearnedLogo | null {
     const depths = new Int16Array(width * height);
     let depth = 0;
     for (let i = 0; i < width * height; i++) {
-        depths[i] = view.getInt16(HEADER + i * PIXEL, true);
-        depth = Math.max(depth, depths[i]);
+        const value = view.getInt16(HEADER + i * PIXEL, true);
+        depths[i] = value;
+        depth = Math.max(depth, value);
     }
     // いちばん濃いところを白にする。満点で割ると、薄いものが真っ黒で形が見えない
     const top = Math.max(1, Math.min(FULL_DEPTH, depth));
     const gray = new Uint8Array(width * height);
-    for (let i = 0; i < depths.length; i++) {
-        gray[i] = Math.round((Math.max(0, Math.min(top, depths[i])) / top) * 255);
+    for (const [i, value] of depths.entries()) {
+        gray[i] = Math.round((Math.max(0, Math.min(top, value)) / top) * 255);
     }
 
     let learnedAt = 0;

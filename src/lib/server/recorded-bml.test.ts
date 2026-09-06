@@ -84,11 +84,11 @@ describe('saveRecordedBml / loadRecordedBml', () => {
         const done = loaded.find((item) => item.message.type === 'moduleDownloaded');
         if (done?.message.type !== 'moduleDownloaded') throw new Error('moduleDownloaded が無い');
         expect(done.at).toBe(10_000);
-        expect(Buffer.from(done.message.files[0].dataBase64, 'base64').toString()).toContain(
+        expect(Buffer.from(done.message.files[0]!.dataBase64, 'base64').toString()).toContain(
             '録画のデータ放送',
         );
         // **番組の名乗りが頭に入っている。** 描く側はこれが来るまで入口を開かない
-        const info = loaded[0].message;
+        const info = loaded[0]!.message;
         if (info.type !== 'programInfo') throw new Error('programInfo が頭に無い');
         expect(info.serviceId).toBe(1024);
         expect(info.eventName).toBe('録画のテスト');
@@ -101,7 +101,7 @@ describe('saveRecordedBml / loadRecordedBml', () => {
     test('名乗りを書いていなかった頃のサイドカーには、読むときに足す', () => {
         const old = [{ at: 0, message: { type: 'pmt' as const, components: [] } }];
         const fixed = withProgramInfo(old, recording(T));
-        expect(fixed[0].message.type).toBe('programInfo');
+        expect(fixed[0]!.message.type).toBe('programInfo');
         expect(fixed).toHaveLength(2);
         // 空 (データ放送を持たない録画) には足さない — 「出せない」のままにする
         expect(withProgramInfo([], recording(T))).toEqual([]);

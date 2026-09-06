@@ -52,7 +52,7 @@ function client(oidc: OidcStack, { xff = OUTSIDE, host = 'denpa.test' } = {}) {
         if (jar.size > 0) headers['cookie'] = [...jar].map(([k, v]) => `${k}=${v}`).join('; ');
         const res = await fetch(`${oidc.appUrl}${path}`, { ...init, headers, redirect: 'manual' });
         for (const raw of res.headers.getSetCookie?.() ?? []) {
-            const [pair] = raw.split(';');
+            const [pair = ''] = raw.split(';');
             const at = pair.indexOf('=');
             const name = pair.slice(0, at).trim();
             const value = pair.slice(at + 1).trim();

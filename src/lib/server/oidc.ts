@@ -230,8 +230,15 @@ const SKEW = 60;
  */
 export async function verify(token: string, nonce: string, at = Date.now()): Promise<Claims> {
     const parts = token.split('.');
-    if (parts.length !== 3) throw new Error('ID トークンの形が違います');
     const [rawHeader, rawPayload, rawSignature] = parts;
+    if (
+        parts.length !== 3 ||
+        rawHeader === undefined ||
+        rawPayload === undefined ||
+        rawSignature === undefined
+    ) {
+        throw new Error('ID トークンの形が違います');
+    }
 
     const header = JSON.parse(new TextDecoder().decode(decodeBase64Url(rawHeader))) as {
         alg?: string;

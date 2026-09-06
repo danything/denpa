@@ -41,7 +41,7 @@ function section(events: SynthEvent[], options: Record<string, number> = {}) {
 describe('時刻', () => {
     test('MJD + BCD は日本時間として読む', () => {
         const data = section([event()]);
-        expect(parseEit(data)?.events[0].startAt).toBe(NOON);
+        expect(parseEit(data)?.events[0]?.startAt).toBe(NOON);
     });
 
     test('全ビット1は「未定」。番組表に置けないので null', () => {
@@ -60,16 +60,16 @@ describe('EIT の解析', () => {
     test('番組名と概要を ARIB の文字符号から起こす', () => {
         const parsed = parseEit(section([event()]));
         expect(parsed?.events).toHaveLength(1);
-        expect(parsed?.events[0].name).toBe('テスト番組');
-        expect(parsed?.events[0].description).toBe('これは説明です');
-        expect(parsed?.events[0].duration).toBe(30 * 60 * 1000);
+        expect(parsed?.events[0]?.name).toBe('テスト番組');
+        expect(parsed?.events[0]?.description).toBe('これは説明です');
+        expect(parsed?.events[0]?.duration).toBe(30 * 60 * 1000);
     });
 
     test('局とネットワークは番組にも写す。番組表の JOIN がこれで決まる', () => {
         const parsed = parseEit(section([event()]));
-        expect(parsed?.events[0].serviceId).toBe(SERVICE);
-        expect(parsed?.events[0].originalNetworkId).toBe(NETWORK);
-        expect(parsed?.events[0].transportStreamId).toBe(TSID);
+        expect(parsed?.events[0]?.serviceId).toBe(SERVICE);
+        expect(parsed?.events[0]?.originalNetworkId).toBe(NETWORK);
+        expect(parsed?.events[0]?.transportStreamId).toBe(TSID);
     });
 
     /**
@@ -108,16 +108,16 @@ describe('EIT の解析', () => {
             section([event({ rawDescriptors: [0x4e, one.length, ...one, 0x4e, two.length, ...two] })]),
         );
 
-        expect(parsed?.events[0].extended['番組概要']).toContain('音楽:菅野祐悟');
-        expect(parsed?.events[0].extended['番組概要']).toContain('音楽制作:ONE MUSIC');
-        expect(parsed?.events[0].extended['番組概要']).toContain('音響制作:ビットグルーブプロモーション');
+        expect(parsed?.events[0]?.extended['番組概要']).toContain('音楽:菅野祐悟');
+        expect(parsed?.events[0]?.extended['番組概要']).toContain('音楽制作:ONE MUSIC');
+        expect(parsed?.events[0]?.extended['番組概要']).toContain('音響制作:ビットグルーブプロモーション');
     });
 
     test('詳細情報は見出しごとに繋ぎ直す', () => {
         const parsed = parseEit(
             section([event({ extended: { 出演者: 'ゲスト太郎', 番組内容: 'あらすじ' } })]),
         );
-        expect(parsed?.events[0].extended).toEqual({ 出演者: 'ゲスト太郎', 番組内容: 'あらすじ' });
+        expect(parsed?.events[0]?.extended).toEqual({ 出演者: 'ゲスト太郎', 番組内容: 'あらすじ' });
     });
 
     test('ジャンル・音声・映像', () => {
@@ -164,8 +164,8 @@ describe('EIT の解析', () => {
     });
 
     test('有料放送は free_CA_mode で分かる', () => {
-        expect(parseEit(section([event()]))?.events[0].isFree).toBe(true);
-        expect(parseEit(section([event({ isFree: false })]))?.events[0].isFree).toBe(false);
+        expect(parseEit(section([event()]))?.events[0]?.isFree).toBe(true);
+        expect(parseEit(section([event({ isFree: false })]))?.events[0]?.isFree).toBe(false);
     });
 
     test('他局の番組表 (0x4F / 0x60〜) は読まない', () => {
@@ -379,7 +379,7 @@ describe('EpgReader', () => {
         reader.feed(packets(section([event()])));
         reader.feed(packets(section([event({ name: '差し替え後' })])));
         expect(reader.all()).toHaveLength(1);
-        expect(reader.all()[0].name).toBe('差し替え後');
+        expect(reader.all()[0]!.name).toBe('差し替え後');
     });
 
     /*
@@ -404,7 +404,7 @@ describe('EpgReader', () => {
             ),
         );
 
-        const [program] = reader.all();
+        const program = reader.all()[0]!;
         expect(program.name).toBe('テスト番組');
         expect(program.description).toBe('これは説明です');
         expect(program.extended).toEqual({ 番組内容: 'あらすじ' });
@@ -421,7 +421,7 @@ describe('EpgReader', () => {
         );
         reader.feed(packets(section([event()])));
 
-        const [program] = reader.all();
+        const program = reader.all()[0]!;
         expect(program.name).toBe('テスト番組');
         expect(program.extended).toEqual({ 番組内容: 'あらすじ' });
     });

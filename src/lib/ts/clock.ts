@@ -63,14 +63,18 @@ export interface Anchor {
 export function readPcr(packet: Uint8Array): number {
     if (packet.length < 12 || packet[0] !== 0x47) return Number.NaN;
     // 適応フィールドを持つか (2 = 適応のみ, 3 = 適応 + 中身)
-    const control = (packet[3] >> 4) & 0x03;
+    const control = (packet[3]! >> 4) & 0x03;
     if (control !== 2 && control !== 3) return Number.NaN;
-    const length = packet[4];
+    const length = packet[4]!;
     if (length < 7) return Number.NaN;
     // PCR_flag
-    if ((packet[5] & 0x10) === 0) return Number.NaN;
+    if ((packet[5]! & 0x10) === 0) return Number.NaN;
     const base =
-        packet[6] * 2 ** 25 + packet[7] * 2 ** 17 + packet[8] * 2 ** 9 + packet[9] * 2 + (packet[10] >> 7);
+        packet[6]! * 2 ** 25 +
+        packet[7]! * 2 ** 17 +
+        packet[8]! * 2 ** 9 +
+        packet[9]! * 2 +
+        (packet[10]! >> 7);
     return base / CLOCK;
 }
 
@@ -105,7 +109,7 @@ export class BroadcastClock {
 
     feed(chunk: Uint8Array): void {
         for (const packet of this.packets.feed(chunk)) {
-            const pid = ((packet[1] & 0x1f) << 8) | packet[2];
+            const pid = ((packet[1]! & 0x1f) << 8) | packet[2]!;
             if (this.pcrPid === null || pid === this.pcrPid) {
                 const at = readPcr(packet);
                 if (Number.isFinite(at)) {
@@ -133,7 +137,7 @@ export class BroadcastClock {
 
     private onPmt(section: Uint8Array): void {
         if (section[0] !== TABLE_PMT || section.length < 12) return;
-        const pid = ((section[8] & 0x1f) << 8) | section[9];
+        const pid = ((section[8]! & 0x1f) << 8) | section[9]!;
         // 0x1fff は「PCR を運ぶ ES は無い」の意味
         this.pcrPid = pid === 0x1fff ? null : pid;
     }

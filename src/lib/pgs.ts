@@ -143,7 +143,8 @@ export function quantize(pixels: Uint8Array, bt709 = true): Palette {
     const count = new Map<number, number>();
     for (let i = 0; i < pixels.length; i += 4) {
         if (pixels[i + 3] === 0) continue;
-        const key = ((pixels[i] << 24) | (pixels[i + 1] << 16) | (pixels[i + 2] << 8) | pixels[i + 3]) >>> 0;
+        const key =
+            ((pixels[i]! << 24) | (pixels[i + 1]! << 16) | (pixels[i + 2]! << 8) | pixels[i + 3]!) >>> 0;
         count.set(key, (count.get(key) ?? 0) + 1);
     }
 
@@ -177,7 +178,7 @@ export function quantize(pixels: Uint8Array, bt709 = true): Palette {
         let best = TRANSPARENT;
         let distance = Number.POSITIVE_INFINITY;
         for (let i = 0; i < chosen.length; i++) {
-            const other = chosen[i];
+            const other = chosen[i]!;
             const dr = r - ((other >>> 24) & 0xff);
             const dg = g - ((other >>> 16) & 0xff);
             const db = b - ((other >>> 8) & 0xff);
@@ -197,7 +198,8 @@ export function quantize(pixels: Uint8Array, bt709 = true): Palette {
             indices[p] = TRANSPARENT;
             continue;
         }
-        const key = ((pixels[i] << 24) | (pixels[i + 1] << 16) | (pixels[i + 2] << 8) | pixels[i + 3]) >>> 0;
+        const key =
+            ((pixels[i]! << 24) | (pixels[i + 1]! << 16) | (pixels[i + 2]! << 8) | pixels[i + 3]!) >>> 0;
         const found = index.get(key);
         if (found !== undefined) {
             indices[p] = found;
@@ -225,7 +227,7 @@ export function rle(indices: Uint8Array, width: number, height: number): Uint8Ar
     for (let y = 0; y < height; y++) {
         let x = 0;
         while (x < width) {
-            const color = indices[y * width + x];
+            const color = indices[y * width + x]!;
             let run = 1;
             while (x + run < width && indices[y * width + x + run] === color) run++;
             x += run;
@@ -317,10 +319,10 @@ function pds(entries: Uint8Array): Uint8Array {
     out[1] = 0; // 版
     for (let i = 0; i < 256; i++) {
         out[2 + i * 5] = i;
-        out[2 + i * 5 + 1] = entries[i * 4];
-        out[2 + i * 5 + 2] = entries[i * 4 + 1];
-        out[2 + i * 5 + 3] = entries[i * 4 + 2];
-        out[2 + i * 5 + 4] = entries[i * 4 + 3];
+        out[2 + i * 5 + 1] = entries[i * 4]!;
+        out[2 + i * 5 + 2] = entries[i * 4 + 1]!;
+        out[2 + i * 5 + 3] = entries[i * 4 + 2]!;
+        out[2 + i * 5 + 4] = entries[i * 4 + 3]!;
     }
     return out;
 }
@@ -548,7 +550,7 @@ export function unrle(data: Uint8Array, width: number, height: number): Uint8Arr
     while (at < data.length && y < height) {
         const first = data[at++];
         if (first !== 0) {
-            if (x < width) out[y * width + x] = first;
+            if (x < width) out[y * width + x] = first!;
             x++;
             continue;
         }
@@ -562,9 +564,9 @@ export function unrle(data: Uint8Array, width: number, height: number): Uint8Arr
         const long = (second & 0x40) !== 0;
         const colored = (second & 0x80) !== 0;
         let run = second & 0x3f;
-        if (long) run = (run << 8) | data[at++];
+        if (long) run = (run << 8) | data[at++]!;
         const color = colored ? data[at++] : TRANSPARENT;
-        for (let i = 0; i < run && x < width; i++, x++) out[y * width + x] = color;
+        for (let i = 0; i < run && x < width; i++, x++) out[y * width + x] = color!;
     }
     return out;
 }
@@ -576,7 +578,7 @@ function* segments(bytes: Uint8Array): Generator<{ type: number; pts: number; bo
     while (at + 13 <= bytes.length) {
         if (bytes[at] !== 0x50 || bytes[at + 1] !== 0x47) return;
         const pts = view.getUint32(at + 2) / CLOCK;
-        const type = bytes[at + 10];
+        const type = bytes[at + 10]!;
         const length = view.getUint16(at + 11);
         if (at + 13 + length > bytes.length) return;
         yield { type, pts, body: bytes.subarray(at + 13, at + 13 + length) };
@@ -624,17 +626,17 @@ export function readSup(bytes: Uint8Array): Drawn[] {
         if (type === SEGMENT_PDS) {
             // 番号ごとに YCrCbA が5バイト。書いていない番号は透明のまま
             for (let at = 2; at + 5 <= body.length; at += 5) {
-                const slot = body[at];
-                palette[slot * 4] = body[at + 1];
-                palette[slot * 4 + 1] = body[at + 2];
-                palette[slot * 4 + 2] = body[at + 3];
-                palette[slot * 4 + 3] = body[at + 4];
+                const slot = body[at]!;
+                palette[slot * 4] = body[at + 1]!;
+                palette[slot * 4 + 1] = body[at + 2]!;
+                palette[slot * 4 + 2] = body[at + 3]!;
+                palette[slot * 4 + 3] = body[at + 4]!;
             }
             continue;
         }
 
         if (type === SEGMENT_ODS) {
-            const flags = body[3];
+            const flags = body[3]!;
             if ((flags & 0x80) !== 0) {
                 // 最初の節。ここにだけ大きさが付く
                 building = {
@@ -689,18 +691,18 @@ function paint(indices: Uint8Array, palette: Uint8Array, videoHeight: number): U
     const data = new Uint8Array(indices.length * 4);
     const cache = new Map<number, [number, number, number]>();
     for (let i = 0; i < indices.length; i++) {
-        const slot = indices[i];
+        const slot = indices[i]!;
         const alpha = palette[slot * 4 + 3];
         if (alpha === 0) continue;
         let rgb = cache.get(slot);
         if (rgb === undefined) {
-            rgb = fromYCrCb(palette[slot * 4], palette[slot * 4 + 1], palette[slot * 4 + 2], bt709);
+            rgb = fromYCrCb(palette[slot * 4]!, palette[slot * 4 + 1]!, palette[slot * 4 + 2]!, bt709);
             cache.set(slot, rgb);
         }
         data[i * 4] = rgb[0];
         data[i * 4 + 1] = rgb[1];
         data[i * 4 + 2] = rgb[2];
-        data[i * 4 + 3] = alpha;
+        data[i * 4 + 3] = alpha!;
     }
     return data;
 }
