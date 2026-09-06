@@ -34,5 +34,13 @@ export default defineConfig({
         // 「端末に合わせる」がダークになる前提でテストする
         colorScheme: 'dark',
         trace: 'retain-on-failure',
+        /*
+         * **GPU プロセスを起こさない。** CI でも手元 (WSL) でも GPU は無く
+         * (`drmGetDevices2() has not found any devices`)、それでも起こしに行った
+         * GPU プロセスが `browser.newContext` の途中で SEGV (`SEGV_MAPERR 0000000001b0`、
+         * 毎回同じ番地) して、テストが「ブラウザが閉じられた」で落ちていた。
+         * CI の直近 6 回のうち 4 回で、揺れの大半がこれ
+         */
+        launchOptions: { args: ['--disable-gpu'] },
     },
 });

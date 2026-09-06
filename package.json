@@ -3,7 +3,7 @@
     "license": "AGPL-3.0-or-later",
     "devDependencies": {
         "@biomejs/biome": "^2.5.6",
-        "@playwright/test": "^1.56.1",
+        "@playwright/test": "^1.63.0",
         "@sveltejs/adapter-node": "^5.4.0",
         "@sveltejs/kit": "^2.49.2",
         "@sveltejs/vite-plugin-svelte": "^7.0.0",
