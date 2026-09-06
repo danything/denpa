@@ -1,11 +1,14 @@
 import { cpSync, readdirSync, readFileSync, rmSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { deflateSync } from 'node:zlib';
+import { and, eq, ne, sql } from 'drizzle-orm';
+import { alias } from 'drizzle-orm/sqlite-core';
 import { joinBytes } from '../ts/bytes';
 import { pngChunk } from '../ts/logo-palette';
 import { config } from './config';
-import { queryAll } from './db';
+import { orm } from './db';
 import { CURRENT_SERVICES } from './epg';
+import { services } from './schema';
 
 /**
  * logoframe が覚えたロゴ (`.lgd`) の置き場と、その中身。
@@ -218,13 +221,15 @@ export function stations<T extends { id: number; network_id: number; name: strin
 
 /** 同じ絵を映している他の局。覚えたロゴを分け合うのに使う */
 export function siblings(serviceId: number): number[] {
-    return queryAll<{ id: number }>(
-        `SELECT other.id FROM services me
-           JOIN services other ON other.network_id = me.network_id AND other.name = me.name
-          WHERE me.id = ? AND other.id != ?`,
-        serviceId,
-        serviceId,
-    ).map((row) => row.id);
+    const me = alias(services, 'me');
+    const other = alias(services, 'other');
+    return orm()
+        .select({ id: other.id })
+        .from(me)
+        .innerJoin(other, and(eq(other.network_id, me.network_id), eq(other.name, me.name)))
+        .where(and(eq(me.id, serviceId), ne(other.id, serviceId)))
+        .all()
+        .map((row) => row.id);
 }
 
 /**
@@ -253,10 +258,12 @@ export function share(serviceId: number): void {
  * 下に並ぶ一覧 (こちらも束ねてある) と数が合わなかった
  */
 export function stats(): { have: number; total: number } {
-    const services = stations(
-        queryAll<{ id: number; network_id: number; name: string }>(
-            `SELECT id, network_id, name FROM services WHERE ${CURRENT_SERVICES} AND service_type = 1`,
-        ),
+    const current = stations(
+        orm()
+            .select({ id: services.id, network_id: services.network_id, name: services.name })
+            .from(services)
+            .where(and(sql.raw(CURRENT_SERVICES), eq(services.service_type, 1)))
+            .all(),
     );
-    return { have: services.filter((service) => learned(service.id)).length, total: services.length };
+    return { have: current.filter((service) => learned(service.id)).length, total: current.length };
 }

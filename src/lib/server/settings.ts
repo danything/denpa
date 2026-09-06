@@ -1,8 +1,10 @@
+import { eq, sql } from 'drizzle-orm';
 import { HW_CODECS, type HwAllow, type HwCodec, type HwKind } from '../hw';
 import type { CmMode, VideoCodec } from '../types';
 import { isCmMode } from './cm';
 import { config } from './config';
-import { database, now, queryOne } from './db';
+import { now, orm } from './db';
+import { settings as settingsTable } from './schema';
 
 /**
  * 画面から変えられる設定。
@@ -114,7 +116,11 @@ function logoLevel(value: string | undefined): number {
 }
 
 function stored(key: string): string | undefined {
-    return queryOne<{ value: string }>('SELECT value FROM settings WHERE key = ?', key)?.value;
+    return orm()
+        .select({ value: settingsTable.value })
+        .from(settingsTable)
+        .where(eq(settingsTable.key, key))
+        .get()?.value;
 }
 
 /**
@@ -185,22 +191,21 @@ export function settings(): Settings {
 }
 
 export function saveSettings(patch: Partial<Settings>): Settings {
-    const upsert = database().prepare(
-        `INSERT INTO settings (key, value, updated_at) VALUES (?, ?, ?)
-         ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`,
-    );
     const at = now();
-    const tx = database().transaction(() => {
+    orm().transaction((tx) => {
         for (const [key, value] of Object.entries(patch)) {
             if (value === undefined) continue;
             // 口ごとの GPU の設定だけ入れ子なので JSON。ほかは文字列で足りる
-            upsert.run(
-                key,
-                typeof value === 'object' && !Array.isArray(value) ? JSON.stringify(value) : String(value),
-                at,
-            );
+            const text =
+                typeof value === 'object' && !Array.isArray(value) ? JSON.stringify(value) : String(value);
+            tx.insert(settingsTable)
+                .values({ key, value: text, updated_at: at })
+                .onConflictDoUpdate({
+                    target: settingsTable.key,
+                    set: { value: sql`excluded.value`, updated_at: sql`excluded.updated_at` },
+                })
+                .run();
         }
     });
-    tx();
     return settings();
 }

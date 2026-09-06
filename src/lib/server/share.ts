@@ -1,6 +1,8 @@
 import { randomBytes, timingSafeEqual } from 'node:crypto';
+import { and, eq, gt, lte, sql } from 'drizzle-orm';
 import { fileRecordingId } from './auth';
-import { database, queryOne } from './db';
+import { orm } from './db';
+import { shareLinks } from './schema';
 
 /**
  * 期限付きの再生リンク。
@@ -30,27 +32,35 @@ export function mintShareToken(
     at: number = Date.now(),
 ): { token: string; expiresAt: number } {
     const expiresAt = at + SHARE_TTL;
-    const db = database();
+    const db = orm();
     // 腐った控えはこの機会に片付ける (発行のたびで十分。行数は録画の数が上限)
-    db.prepare('DELETE FROM share_links WHERE expires_at <= ?').run(at);
-    const living = queryOne<{ token: string }>(
-        'SELECT token FROM share_links WHERE recording_id = ? AND expires_at > ?',
-        recordingId,
-        at,
-    );
+    db.delete(shareLinks).where(lte(shareLinks.expires_at, at)).run();
+    const living = livingToken(recordingId, at);
     if (living !== undefined) {
-        db.prepare('UPDATE share_links SET expires_at = ? WHERE recording_id = ?').run(
-            expiresAt,
-            recordingId,
-        );
+        db.update(shareLinks)
+            .set({ expires_at: expiresAt })
+            .where(eq(shareLinks.recording_id, recordingId))
+            .run();
         return { token: living.token, expiresAt };
     }
     const token = randomBytes(16).toString('hex');
-    db.prepare(
-        `INSERT INTO share_links (recording_id, token, expires_at) VALUES (?, ?, ?)
-         ON CONFLICT(recording_id) DO UPDATE SET token = excluded.token, expires_at = excluded.expires_at`,
-    ).run(recordingId, token, expiresAt);
+    db.insert(shareLinks)
+        .values({ recording_id: recordingId, token, expires_at: expiresAt })
+        .onConflictDoUpdate({
+            target: shareLinks.recording_id,
+            set: { token: sql`excluded.token`, expires_at: sql`excluded.expires_at` },
+        })
+        .run();
     return { token, expiresAt };
+}
+
+/** 期限の切れていない控え */
+function livingToken(recordingId: number, at: number): { token: string } | undefined {
+    return orm()
+        .select({ token: shareLinks.token })
+        .from(shareLinks)
+        .where(and(eq(shareLinks.recording_id, recordingId), gt(shareLinks.expires_at, at)))
+        .get();
 }
 
 export function verifyShareToken(
@@ -59,11 +69,7 @@ export function verifyShareToken(
     at: number = Date.now(),
 ): boolean {
     if (token === null || token === '') return false;
-    const living = queryOne<{ token: string }>(
-        'SELECT token FROM share_links WHERE recording_id = ? AND expires_at > ?',
-        recordingId,
-        at,
-    );
+    const living = livingToken(recordingId, at);
     if (living === undefined) return false;
     const given = Buffer.from(token, 'utf8');
     const wanted = Buffer.from(living.token, 'utf8');

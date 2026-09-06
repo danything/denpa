@@ -1,7 +1,9 @@
+import { eq } from 'drizzle-orm';
 import { areaText, type Frame, findLogoArea } from '../ts/logo-area';
 import { probeVideo } from './cm';
 import { config } from './config';
-import { database, queryAll } from './db';
+import { orm } from './db';
+import { services } from './schema';
 import { run } from './stream';
 
 /**
@@ -58,9 +60,11 @@ export function mayDetect(serviceId: number): boolean {
  * 画面が「自動」に戻るので、**囲い直せます** (捨てたことはログにも出す)
  */
 export function forgetArea(serviceId: number): void {
-    database()
-        .prepare('UPDATE services SET logo_area = NULL, logo_area_auto = ? WHERE id = ?')
-        .run(AUTO_MISSED, serviceId);
+    orm()
+        .update(services)
+        .set({ logo_area: null, logo_area_auto: AUTO_MISSED })
+        .where(eq(services.id, serviceId))
+        .run();
 }
 
 /** `logo_area_auto` の値。schema.ts に説明がある */
@@ -68,14 +72,12 @@ const AUTO_GUESSED = 1;
 const AUTO_MISSED = 2;
 
 function row(serviceId: number): { area: string; auto: number } {
-    const found = queryAll<{ logo_area: string | null; logo_area_auto: number | null }>(
-        'SELECT logo_area, logo_area_auto FROM services WHERE id = ?',
-        serviceId,
-    )[0];
-    return {
-        area: typeof found?.logo_area === 'string' ? found.logo_area : '',
-        auto: found?.logo_area_auto ?? 0,
-    };
+    const found = orm()
+        .select({ logo_area: services.logo_area, logo_area_auto: services.logo_area_auto })
+        .from(services)
+        .where(eq(services.id, serviceId))
+        .get();
+    return { area: found?.logo_area ?? '', auto: found?.logo_area_auto ?? 0 };
 }
 
 /**
@@ -135,7 +137,9 @@ export async function detectArea(input: string, signal?: AbortSignal): Promise<s
  * よく、こちらは空のときしか書かないので、教え直したほうが勝ちます
  */
 export function remember(serviceId: number, area: string): void {
-    database()
-        .prepare('UPDATE services SET logo_area = ?, logo_area_auto = ? WHERE id = ?')
-        .run(area, AUTO_GUESSED, serviceId);
+    orm()
+        .update(services)
+        .set({ logo_area: area, logo_area_auto: AUTO_GUESSED })
+        .where(eq(services.id, serviceId))
+        .run();
 }

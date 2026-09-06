@@ -1,7 +1,9 @@
 import { json } from '@sveltejs/kit';
-import { queryOne } from '$lib/server/db';
+import { count } from 'drizzle-orm';
+import { orm } from '$lib/server/db';
 import { sync } from '$lib/server/epg';
 import { collectOnce } from '$lib/server/epg-collect';
+import { programs } from '$lib/server/schema';
 
 /**
  * 番組表を今すぐ集め直す。定期実行 (EPG_COLLECT_INTERVAL) を待たずに反映したいとき用。
@@ -18,6 +20,6 @@ export async function POST() {
     const result = await sync();
     return json({
         ...result,
-        programs: queryOne<{ n: number }>('SELECT COUNT(*) AS n FROM programs')?.n ?? 0,
+        programs: orm().select({ n: count() }).from(programs).get()?.n ?? 0,
     });
 }

@@ -1,5 +1,7 @@
+import { eq } from 'drizzle-orm';
 import type { WebhookEvent } from '../webhook-events';
-import { database, now, queryAll } from './db';
+import { now, orm } from './db';
+import { webhooks } from './schema';
 
 /**
  * 録画の節目を外部に知らせる。
@@ -9,16 +11,7 @@ import { database, now, queryAll } from './db';
  * 録画やエンコードが止まるほうが困るため。
  */
 
-export interface Webhook {
-    id: number;
-    name: string;
-    url: string;
-    events: string;
-    enabled: number;
-    last_status: string | null;
-    last_sent_at: number | null;
-    created_at: number;
-}
+export type Webhook = typeof webhooks.$inferSelect;
 
 export interface Payload {
     event: WebhookEvent;
@@ -60,16 +53,18 @@ async function post(webhook: Webhook, payload: Payload): Promise<void> {
         status = String(error instanceof Error ? error.message : error);
     }
 
-    database()
-        .prepare('UPDATE webhooks SET last_status = ?, last_sent_at = ? WHERE id = ?')
-        .run(status, at, webhook.id);
+    orm()
+        .update(webhooks)
+        .set({ last_status: status, last_sent_at: at })
+        .where(eq(webhooks.id, webhook.id))
+        .run();
     if (status !== 'ok') console.error(`[webhook] ${webhook.url} への送信に失敗: ${status}`);
 }
 
 /** 投げっぱなしにする。呼び出し側は待たない */
 export function notify(payload: Payload): void {
-    const webhooks = queryAll<Webhook>('SELECT * FROM webhooks WHERE enabled = 1');
-    for (const webhook of webhooks) {
+    const enabled = orm().select().from(webhooks).where(eq(webhooks.enabled, 1)).all();
+    for (const webhook of enabled) {
         if (!subscribed(webhook, payload.event)) continue;
         void post(webhook, payload);
     }
@@ -79,9 +74,10 @@ export function notify(payload: Payload): void {
 export async function send(webhook: Webhook, payload: Payload): Promise<string> {
     await post(webhook, payload);
     return (
-        queryAll<{ last_status: string | null }>(
-            'SELECT last_status FROM webhooks WHERE id = ?',
-            webhook.id,
-        )[0]?.last_status ?? 'unknown'
+        orm()
+            .select({ last_status: webhooks.last_status })
+            .from(webhooks)
+            .where(eq(webhooks.id, webhook.id))
+            .get()?.last_status ?? 'unknown'
     );
 }

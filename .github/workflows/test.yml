@@ -62,6 +62,14 @@ jobs:
       - name: Type check
         run: bun run check
 
+      # schema.ts を変えたのに `bun run db:generate` を回していないと、型と DB が
+      # 食い違ったまま出ていく。ここで出し直して、何も増えないことを見る
+      - name: Migrations are up to date with schema.ts
+        run: |
+          bun run db:generate
+          git add -N drizzle
+          git diff --exit-code --stat -- drizzle
+
       # denpa 本体だけ。エージェントは .NET なので下の agent ジョブで見る
       # (`agent/conformance.test.ts` は焼いた実行ファイルが要るので、ここには入れない)
       - name: Unit tests

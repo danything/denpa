@@ -76,6 +76,26 @@ CI では**台を増やして**います。4つに割って別のランナーに
 偽番組の尺 (BSは5秒) と録画の前後マージンに当たります。詰めると
 「録り始めより先に番組が終わる」ようになって、かえって不安定になります。
 
+## DB の列を足す
+
+テーブルの定義は **`src/lib/server/schema.ts` にしか無い** (drizzle)。行の型
+(`Recording` など) もマイグレーションもそこから出る。.NET の EF Core と同じ手で、
+書くのはオブジェクトだけ。
+
+1. `schema.ts` の列を変える (足す・消す・型を変える)
+2. `bun run db:generate` — 前回の snapshot との差分が `drizzle/` に SQL で出る。
+   **一緒にコミットする** (CI が出し直して、増えていれば落とす)
+3. 起動時に当たる (`db.ts` の `bootstrap`)。手で流すものは無い
+
+読み書きは `orm()` (`db.ts`) から。`orm().select().from(recordings).where(eq(recordings.id, id)).get()`
+のように書き、列の名前と型はそこで決まる。生の SQL でしか書けないもの
+(`RESERVATION_STATE` の CASE を挟む一覧など) は `queryOne` / `queryAll` に残してよい。
+
+**マイグレーションを持つ前の DB** (1.7.x まで。`CREATE TABLE IF NOT EXISTS` を起動のたびに
+流して整えていた) には、最初のマイグレーション (baseline) を `IF NOT EXISTS` にしてあるので
+そのまま当たる。1.7.x を一度も起動していない古い DB は列が足りないことがあり、起動時に
+どの列かを言って止まる — その場合は 1.7.x を一度起動してから上げる。
+
 ## イメージ
 
 `Dockerfile` が denpa 本体、`agent/Dockerfile` がチューナー側です。

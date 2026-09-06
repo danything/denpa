@@ -1,3 +1,15 @@
+import type {
+    ENCODE_PHASES,
+    ENCODE_STATES,
+    encodeJobs,
+    programs,
+    RECORDING_STATES,
+    recordings,
+    reservations,
+    rules,
+    services,
+} from './server/schema';
+
 export type ChannelType = 'GR' | 'BS' | 'CS' | 'SKY';
 
 /**
@@ -38,107 +50,30 @@ export type CmMode = 'off' | 'chapter' | 'cut';
  */
 export type VideoCodec = 'av1' | 'h264' | 'none';
 
-export interface Service {
-    id: number;
-    service_id: number;
-    network_id: number;
-    name: string;
-    type: ChannelType;
-    /** ARIB のサービス種別。1 がデジタルTV */
-    service_type: number;
-    channel: string;
-    remote_control_key: number | null;
-    has_logo: number;
-    /** 局ロゴの位置 ("x,y,w,h")。CM検出 (jls) で自動検出できなかった局だけ手で入れる */
-    logo_area: string | null;
-    updated_at: number;
-}
-
-export interface Program {
-    id: number;
-    service_id: number;
-    network_id: number;
-    event_id: number;
-    start_at: number;
-    end_at: number;
-    name: string;
-    description: string;
-    extended: string | null;
-    genres: string | null;
-    genre_detail: string | null;
-    is_free: number;
-    audio_type: number | null;
-    audios: string | null;
-    video_type: string | null;
-    video_resolution: string | null;
-    updated_at: number;
-}
-
-export interface Rule {
-    id: number;
-    name: string;
-    keyword: string;
-    ignore_keyword: string;
-    /** キーワードを当てる範囲。SearchField のカンマ区切り */
-    search_fields: string;
-    service_ids: string | null;
-    service_types: string | null;
-    genres: string | null;
-    enabled: number;
-    /**
-     * チューナーが足りないとき、どの予約を残すか。大きいほうが残る。
-     * **エージェントに渡す「掴む強さ」とは別物**
-     */
-    priority: number;
-    /** 引き継ぎ元での識別子 (例: epgstation:12)。自分で作ったものは NULL */
-    source: string | null;
-    created_at: number;
-}
+/*
+ * **行の型はテーブルの定義から導く** (`server/tables.ts`)。
+ *
+ * ここに interface として書き写していた頃は、列を足したときに片方だけ直しても
+ * TS は何も言わなかった (`queryOne<Recording>` はキャストなので)。テーブルの定義は
+ * 実際の DB と突き合わせるテストがあるので (`tables.test.ts`)、そこから導いた型は
+ * DB と食い違わない。列ごとの説明もあちらにある
+ */
+export type Service = typeof services.$inferSelect;
+export type Program = typeof programs.$inferSelect;
+export type Rule = typeof rules.$inferSelect;
 
 /**
- * 予約の状態。
+ * 画面に出す予約の状態。
  *
- * DBの列に入っているのは `scheduled | conflict | canceled | missed` だけ。
- * 録り始めてからの `recording | done | failed` は**録画の行から引いた結果**で、
- * 一覧を組み立てるときに足す (routes/+page.server.ts)。
+ * DBの列に入っているのは `scheduled | conflict | canceled | missed` だけ
+ * (`Reservation['state']`)。録り始めてからの `recording | done | failed` は
+ * **録画の行から引いた結果**で、一覧を組み立てるときに足す
+ * (routes/+page.server.ts の RESERVATION_STATE)。
  * 予約側にも書き写していた頃は、録画が失敗しても予約は録画中のまま残っていた
  */
-export type ReservationState =
-    | 'scheduled'
-    | 'conflict'
-    | 'canceled'
-    | 'missed'
-    | 'recording'
-    | 'done'
-    | 'failed';
+export type ReservationState = Reservation['state'] | 'recording' | 'done' | 'failed';
 
-export interface Reservation {
-    id: number;
-    program_id: number;
-    rule_id: number | null;
-    service_id: number;
-    name: string;
-    description: string;
-    start_at: number;
-    end_at: number;
-    priority: number;
-    manual: number;
-    encode: number;
-    state: ReservationState;
-    /** 録り始めた時刻。null なら**まだ始めていない**。二重に始めないための鍵でもある */
-    started_at: number | null;
-    conflict_reason: string | null;
-    /**
-     * **チューナーを掴んでよい区間** (前後マージン込み。null = 番組どおり丸ごと)。
-     *
-     * 取り合いが番組の一部でしか起きていないとき、そこだけ譲って残りを録る
-     * (`server/conflict.ts` の「入るところまで録る」)。番組の時刻は動かさない
-     */
-    record_from: number | null;
-    record_to: number | null;
-    created_at: number;
-    updated_at: number;
-}
+export type Reservation = typeof reservations.$inferSelect;
 
 /**
  * 録画の状態。**列ではなく生成列**で、他の列から毎回決まる (schema.RECORDING_STATE)。
@@ -146,97 +81,16 @@ export interface Reservation {
  * `encoding` はここに無い。動いているエンコードは encode_jobs にしか無く、
  * 一覧はそれを見て「エンコード中」を出す (format.encodeLabel)
  */
-export type RecordingState = 'recording' | 'recorded' | 'available' | 'failed' | 'deleted';
+export type RecordingState = (typeof RECORDING_STATES)[number];
 
-export interface Recording {
-    id: number;
-    reservation_id: number | null;
-    program_id: number | null;
-    service_id: number;
-    service_name: string;
-    name: string;
-    series: string;
-    subtitle: string;
-    description: string;
-    /** 詳細(拡張形式)。JSON {見出し:本文}。番組詳細の画面に概要と続けて出す */
-    extended: string | null;
-    start_at: number;
-    end_at: number;
-    /**
-     * **実際に掴めた区間** (前後マージン込み。null = 番組どおり丸ごと)。予約から写す。
-     *
-     * チューナーの取り合いで頭か尻を譲ったときだけ入る
-     * (`server/conflict.ts` の「入るところまで録る」)。一覧で「頭が欠けている」と
-     * 言うのに要る — **番組の時刻 (`start_at`) は動かさない**ので、そちらとの差が
-     * 欠けた幅になる
-     */
-    record_from: number | null;
-    record_to: number | null;
-    audio_type: number | null;
-    ts_path: string | null;
-    ts_size: number;
-    /**
-     * 焼いたもの (再生・ダウンロードで主に使う)。両方のコーデックを焼いたときは
-     * **AV1 のほう** (小さいので既定の再生に向く)
-     */
-    library_path: string | null;
-    /**
-     * もう一方のコーデックで焼いたもの。両方を選んだときだけ入る (AV1 が主なら H.264)。
-     * 古いテレビのように AV1 を解けない相手はこちらを開く
-     */
-    alt_path: string | null;
-    /** 録り終えた時刻。null なら**まだ掴んでいる最中** */
-    finished_at: number | null;
-    state: RecordingState;
-    /** 録画そのものが失敗した理由 (消したときは削除の理由)。エンコードの失敗は入らない */
-    error: string | null;
-    cm_ranges: string | null;
-    /** 番組表から写したジャンル (JSON: [{lv1, lv2}])。番組詳細のジャンル札に使う */
-    genre_detail: string | null;
-    /**
-     * 番組表から写した音声の構成 (JSON: `audio_component_descriptor` の配列)。
-     * 焼いたものの音声トラックに**番組表と同じ名前**を入れるのに使う (`arib.audioTitles`)
-     */
-    audios: string | null;
-    /**
-     * CM検出が何をしたか。詳細で見せる。
-     *
-     * **ロゴを使えたかどうかもここから読む** (`format.logoUnusable`)。別の列で
-     * 持っていた頃は、後から条件を広げても既に録ってある分には効かなかった
-     */
-    cm_note: string | null;
-    /** 実際に録れた長さ。取れていなければ null (古い行) */
-    duration_ms: number | null;
-    /** 焼いたもののコマ数 (30/60)。未エンコード・fps記録前の古い行は null */
-    fps: number | null;
-    /** どこまで観たか (ms)。まだ観ていない・観終えたものは null */
-    resume_ms: number | null;
-    deleted_at: number | null;
-    acknowledged_at: number | null;
-    created_at: number;
-    updated_at: number;
-}
+export type Recording = typeof recordings.$inferSelect;
 
-export type EncodeState = 'queued' | 'running' | 'done' | 'failed' | 'canceled';
+export type EncodeState = (typeof ENCODE_STATES)[number];
 
 /**
  * エンコードの段階。`encode` 以外は ffmpeg が回る前の下ごしらえで、
  * 進み具合が出せない代わりにこれを状態として出す。
  */
-export type EncodePhase = 'descramble' | 'cm' | 'cut' | 'encode';
+export type EncodePhase = (typeof ENCODE_PHASES)[number];
 
-export interface EncodeJob {
-    id: number;
-    recording_id: number;
-    state: EncodeState;
-    phase: EncodePhase;
-    percent: number;
-    /** 残り時間の見込み(ms)。分からない間は null */
-    eta_ms: number | null;
-    log: string;
-    attempts: number;
-    error: string | null;
-    created_at: number;
-    started_at: number | null;
-    finished_at: number | null;
-}
+export type EncodeJob = typeof encodeJobs.$inferSelect;

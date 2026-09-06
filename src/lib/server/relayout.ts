@@ -17,11 +17,13 @@
 
 import { copyFileSync, existsSync } from 'node:fs';
 import { basename, dirname, join } from 'node:path';
+import { and, eq, isNotNull, isNull, ne, or } from 'drizzle-orm';
 import type { Recording } from '../types';
-import { database, now, queryAll, queryOne } from './db';
+import { now, orm } from './db';
 import { moveFile, pruneEmptyDirs, removeIfExists } from './fsx';
 import { encodedPath, libraryFamily } from './library';
 import { removeSidecars, sidecarBase, sidecarPaths } from './metadata';
+import { recordings } from './schema';
 
 /** 置き場の名前 (`… [H264].mkv`) からコーデックを見分ける。主は AV1、`[H264]` は H.264 */
 function codecOf(path: string): 'av1' | 'h264' {
@@ -69,12 +71,16 @@ function sweepOldStrays(rec: Recording, oldDir: string, moved: ReadonlySet<strin
     for (const name of variants) {
         const stray = join(oldDir, name);
         if (moved.has(stray) || !existsSync(stray)) continue;
-        const claimed = queryOne<{ id: number }>(
-            'SELECT id FROM recordings WHERE (library_path = ? OR alt_path = ?) AND id != ?',
-            stray,
-            stray,
-            rec.id,
-        );
+        const claimed = orm()
+            .select({ id: recordings.id })
+            .from(recordings)
+            .where(
+                and(
+                    or(eq(recordings.library_path, stray), eq(recordings.alt_path, stray)),
+                    ne(recordings.id, rec.id),
+                ),
+            )
+            .get();
         if (claimed !== undefined) continue;
         removeIfExists(stray);
         removeSidecars(stray);
@@ -125,20 +131,24 @@ function relayoutOne(rec: Recording): 'moved' | 'sidecar' | 'none' {
     removeIfExists(join(dirname(oldPrimaryDir), 'tvshow.nfo'));
     pruneEmptyDirs(primary);
 
-    database()
-        .prepare('UPDATE recordings SET library_path = ?, alt_path = ?, updated_at = ? WHERE id = ?')
-        .run(newPrimary, newAlt, now(), rec.id);
+    orm()
+        .update(recordings)
+        .set({ library_path: newPrimary, alt_path: newAlt, updated_at: now() })
+        .where(eq(recordings.id, rec.id))
+        .run();
     return 'moved';
 }
 
 /** 起動時に1回。旧レイアウトをいまの形へ移し、書かなくなった .nfo を片付ける */
 export function relayoutLibrary(): void {
-    const recordings = queryAll<Recording>(
-        'SELECT * FROM recordings WHERE library_path IS NOT NULL AND deleted_at IS NULL',
-    );
+    const rows = orm()
+        .select()
+        .from(recordings)
+        .where(and(isNotNull(recordings.library_path), isNull(recordings.deleted_at)))
+        .all();
     let moved = 0;
     let sidecar = 0;
-    for (const rec of recordings) {
+    for (const rec of rows) {
         try {
             const result = relayoutOne(rec);
             if (result === 'moved') moved += 1;
