@@ -17,9 +17,9 @@ import {
     number,
     object,
     optional,
-    read,
     type Shape,
     string,
+    tolerate,
 } from '../shape';
 import type { ChannelType } from '../types';
 import { config } from './config';
@@ -27,7 +27,10 @@ import { config } from './config';
 /*
  * **エージェントが返すものの形は、ここで確かめてから型にする** (`shape.ts`)。
  * 相手は別のリポジトリ (agent/) で、版がずれれば形もずれる。キャストで型を
- * 付けていた頃は、ずれても「どこかで undefined」としてしか出なかった
+ * 付けていた頃は、ずれても「どこかで undefined」としてしか出なかった。
+ *
+ * **違っていても止めない** (`tolerate`)。版がずれただけで録画が止まるのでは
+ * 困るので、警告を出して来たものをそのまま使う。直すのは人
  */
 const CHANNEL_TYPE: Shape<ChannelType> = literal('GR', 'BS', 'CS', 'SKY');
 
@@ -98,7 +101,7 @@ async function get<T>(path: string, shape: Shape<T>, timeout = 10_000): Promise<
     if (!res.ok) {
         throw new Error(`エージェント ${path} -> ${res.status} ${await res.text()}`);
     }
-    return read(shape, await res.json(), `エージェントの ${path}`);
+    return tolerate(shape, await res.json(), `エージェントの ${path}`);
 }
 
 export function getChannels(): Promise<AgentChannel[]> {
@@ -123,7 +126,7 @@ export async function putChannels(found: AgentChannel[], scanned: ChannelType[])
         signal: AbortSignal.timeout(30_000),
     });
     if (!res.ok) throw new Error(`チャンネルを保存できません (${res.status}) ${await res.text()}`);
-    return read(array(AGENT_CHANNEL), await res.json(), 'エージェントの PUT /denpa/channels');
+    return tolerate(array(AGENT_CHANNEL), await res.json(), 'エージェントの PUT /denpa/channels');
 }
 
 export async function getTuners(): Promise<AgentTuner[]> {

@@ -13,6 +13,7 @@ import {
     record,
     ShapeError,
     string,
+    tolerate,
 } from './shape';
 
 const TUNER = object({
@@ -87,6 +88,25 @@ describe('外から来た JSON の形', () => {
         expect(read(record(boolean), { a: true, b: false }, 'x')).toEqual({ a: true, b: false });
         expect(() => read(record(boolean), { a: 1 }, 'x')).toThrow(/a は真偽のはずが number 1/);
         expect(() => read(record(boolean), [], 'x')).toThrow(/オブジェクトのはずが 配列/);
+    });
+
+    test('tolerate は形が違っても止めず、1回だけ警告して通す', () => {
+        const warnings: string[] = [];
+        const warn = (message: string) => warnings.push(message);
+        const odd: unknown = { index: 0, name: 'PT3', types: ['SAT'], channel: null };
+        // 型は付くが中身はそのまま (版がずれた相手を止めない)
+        const first: unknown = tolerate(TUNER, odd, 'エージェントの /denpa/tuners', warn);
+        const second: unknown = tolerate(TUNER, odd, 'エージェントの /denpa/tuners', warn);
+        expect(first).toBe(odd);
+        expect(second).toBe(odd);
+        expect(warnings).toHaveLength(1);
+        expect(warnings[0]).toMatch(
+            /^\[shape\] エージェントの \/denpa\/tunersの形が違います \(相手の版がずれている\?\)。そのまま使います: /,
+        );
+        expect(warnings[0]).toContain('types[0] は決まった値');
+        // 合っていれば黙って読む
+        expect(tolerate(TUNER, { index: 1, name: 'x', types: [] }, 'y', warn).channel).toBeNull();
+        expect(warnings).toHaveLength(1);
     });
 
     test('ShapeError 以外はそのまま通す', () => {

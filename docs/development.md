@@ -116,8 +116,12 @@ JSON で持つ列 (ジャンル・音声の構成・ルールの対象チャン�
 
 外から来る JSON (チューナーエージェントの答え、OIDC の相手、取り込み元の DB) は
 `res.json() as X` と書かず、`src/lib/shape.ts` の読み手で形を確かめてから型にする
-(`read(array(AGENT_CHANNEL), await res.json(), 'エージェントの /denpa/channels')`)。型は形から
-導く (`Infer<typeof AGENT_CHANNEL>`) ので、形と型を別々に書かない。自分のサーバから自分の画面へ
+(`tolerate(array(AGENT_CHANNEL), await res.json(), 'エージェントの /denpa/channels')`)。型は形から
+導く (`Infer<typeof AGENT_CHANNEL>`) ので、形と型を別々に書かない。
+
+読み方は 2 つ。**`tolerate`** は形が違っても止めず、警告を 1 回出して来たものをそのまま使う
+(エージェントの答え — 版がずれただけで録画が止まるのでは困る)。**`read`** は止める
+(ID トークン — 違う形のまま進むと危ない)。迷ったら `tolerate`。自分のサーバから自分の画面へ
 渡すもの (同じリポジトリの中) はキャストのままでよい。
 
 **マイグレーションを持つ前の DB** (1.7.x まで。`CREATE TABLE IF NOT EXISTS` を起動のたびに

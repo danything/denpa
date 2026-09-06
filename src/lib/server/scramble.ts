@@ -1,6 +1,6 @@
 import { closeSync, openSync, readSync } from 'node:fs';
 import { relative } from 'node:path';
-import { array, boolean, type Infer, object, optional, read, string } from '../shape';
+import { array, boolean, type Infer, object, optional, string, tolerate } from '../shape';
 import { config } from './config';
 
 /**
@@ -97,7 +97,7 @@ export async function cardStatus(): Promise<CardStatus> {
         if (!res.ok) {
             return { ok: false, message: `解除の受け口が ${res.status} を返しました`, readers: [] };
         }
-        return read(CARD_STATUS, await res.json(), 'エージェントの /denpa/card');
+        return tolerate(CARD_STATUS, await res.json(), 'エージェントの /denpa/card');
     } catch (error) {
         return { ok: false, message: `解除の受け口に繋がりません: ${error}`, readers: [] };
     }
@@ -139,7 +139,7 @@ export async function descramble(
             body: JSON.stringify({ input: from, output: to }),
             signal: signal ?? null,
         });
-        const body = read(DECODED, await res.json(), 'エージェントの /denpa/decode');
+        const body = tolerate(DECODED, await res.json(), 'エージェントの /denpa/decode');
         if (!res.ok || body.ok !== true) {
             return { ok: false, error: body.error ?? `解除の受け口が ${res.status} を返しました` };
         }

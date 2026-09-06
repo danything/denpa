@@ -125,12 +125,43 @@ export function object<F extends Fields>(fields: F): Shape<ObjectOf<F>> {
     };
 }
 
-/** 読む。失敗の言葉に、何を読んでいたかを添える (`エージェントの /denpa/tuners の形が違います: …`) */
+/**
+ * 読む。**形が違えば止める。** 失敗の言葉に、何を読んでいたかを添える
+ * (`ID トークンの形が違います: exp は数のはずが 無し`)。
+ *
+ * 止めてよいのは、違う形のまま進むと危ないところ (ID トークン) だけ。相手が
+ * 別の版で動いているだけなら止めずに通す (`tolerate`)
+ */
 export function read<T>(shape: Shape<T>, value: unknown, what: string): T {
     try {
         return shape(value, '');
     } catch (error) {
         if (error instanceof ShapeError) throw new ShapeError(`${what}の形が違います: ${error.message}`);
         throw error;
+    }
+}
+
+/** 同じ警告を繰り返さない (チューナーの状態は何秒かおきに読む) */
+const warned = new Set<string>();
+
+/**
+ * 読む。**形が違っても止めない。** 警告を1回だけ出して、来たものをそのまま型にする
+ * (前の `as X` と同じ振る舞い)。
+ *
+ * 相手 (チューナーエージェント) は別のリポジトリで、版がずれると鍵が増えたり
+ * 名前が変わったりする。そのたびに録画が止まるのでは困る — 動いているものは
+ * 動かしたまま、**どこが違うかを言う**。直すのは人
+ */
+export function tolerate<T>(shape: Shape<T>, value: unknown, what: string, warn = console.warn): T {
+    try {
+        return shape(value, '');
+    } catch (error) {
+        if (!(error instanceof ShapeError)) throw error;
+        const message = `[shape] ${what}の形が違います (相手の版がずれている?)。そのまま使います: ${error.message}`;
+        if (!warned.has(message)) {
+            warned.add(message);
+            warn(message);
+        }
+        return value as T;
     }
 }
