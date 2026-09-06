@@ -416,11 +416,9 @@
                                 </div>
                                 <div class="text-sm">
                                     <span class="text-base-content/60">送る通知:</span>
-                                    {JSON.parse(webhook.events).length === 0
+                                    {webhook.events.length === 0
                                         ? 'すべて'
-                                        : JSON.parse(webhook.events)
-                                              .map((e: string) => EVENT_LABEL[e] ?? e)
-                                              .join(', ')}
+                                        : webhook.events.map((e) => EVENT_LABEL[e] ?? e).join(', ')}
                                 </div>
                                 <div class="text-sm">
                                     <span class="text-base-content/60">直近の結果:</span>

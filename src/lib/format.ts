@@ -255,15 +255,10 @@ const GENRE_TINT: Record<number, string> = {
 /** ジャンルの付いていない番組。色を持たせず、これまでどおりの地の色にする */
 const NO_GENRE = 'bg-base-200 hover:bg-base-300 border-base-300';
 
-/** `programs.genres` (大分類の番号を並べた JSON) から色を決める。先頭を代表とする */
-export function genreTint(genres: string | null): string {
-    if (genres === null || genres === '') return NO_GENRE;
-    try {
-        const list = JSON.parse(genres) as number[];
-        return GENRE_TINT[list[0]] ?? NO_GENRE;
-    } catch {
-        return NO_GENRE;
-    }
+/** `programs.genres` (大分類の番号の並び) から色を決める。先頭を代表とする */
+export function genreTint(genres: number[] | null): string {
+    if (genres === null || genres.length === 0) return NO_GENRE;
+    return GENRE_TINT[genres[0]] ?? NO_GENRE;
 }
 
 export const CM_LABEL: Record<string, string> = {

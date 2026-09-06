@@ -36,14 +36,14 @@ interface Fields {
     getAll(key: string): unknown[];
 }
 
-/** 保存する形に直した条件。JSON 配列にするところまでがここの仕事 */
+/** 保存する形に直した条件。並びは**空なら NULL** (指定なし) にするところまでがここの仕事 */
 interface Conditions {
     keyword: string;
     ignoreKeyword: string;
     searchFields: string;
-    serviceIds: string | null;
-    serviceTypes: string | null;
-    genres: string | null;
+    serviceIds: number[] | null;
+    serviceTypes: string[] | null;
+    genres: string[] | null;
     /** 何も入っていない。全番組に当たってディスクを埋めるので、保存はさせない */
     empty: boolean;
 }
@@ -58,7 +58,7 @@ interface Conditions {
 function conditionsOf(fields: Fields): Conditions {
     const text = (key: string) => String(fields.get(key) ?? '').trim();
     const list = (key: string) => fields.getAll(key).map(String).filter(Boolean);
-    const json = (values: unknown[]) => (values.length === 0 ? null : JSON.stringify(values));
+    const some = <T>(values: T[]) => (values.length === 0 ? null : values);
 
     const keyword = text('keyword');
     const ids = list('serviceIds').map(Number).filter(Number.isFinite);
@@ -69,9 +69,9 @@ function conditionsOf(fields: Fields): Conditions {
         ignoreKeyword: text('ignoreKeyword'),
         // 番組表から来たときは指定が無い。既定 (番組名だけ) に戻る
         searchFields: parseSearchFields(list('searchFields').join(',')).join(','),
-        serviceIds: json(ids),
-        serviceTypes: json(types),
-        genres: json(genres),
+        serviceIds: some(ids),
+        serviceTypes: some(types),
+        genres: some(genres),
         empty: keyword === '' && ids.length === 0 && types.length === 0 && genres.length === 0,
     };
 }
@@ -389,21 +389,13 @@ function ruleName(conditions: Conditions): string {
 
     const services = orm().select().from(serviceTable).all();
     const parts: string[] = [];
-    if (conditions.genres !== null) {
-        parts.push(...(JSON.parse(conditions.genres) as string[]).map(genreName));
-    }
+    if (conditions.genres !== null) parts.push(...conditions.genres.map(genreName));
     if (conditions.serviceTypes !== null) {
-        parts.push(
-            ...(JSON.parse(conditions.serviceTypes) as string[]).map(
-                (type) => SERVICE_TYPE_LABEL[type] ?? type,
-            ),
-        );
+        parts.push(...conditions.serviceTypes.map((type) => SERVICE_TYPE_LABEL[type] ?? type));
     }
     if (conditions.serviceIds !== null) {
         parts.push(
-            ...(JSON.parse(conditions.serviceIds) as number[]).map(
-                (id) => services.find((s) => s.id === id)?.name ?? String(id),
-            ),
+            ...conditions.serviceIds.map((id) => services.find((s) => s.id === id)?.name ?? String(id)),
         );
     }
     return parts.length === 0

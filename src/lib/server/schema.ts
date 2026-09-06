@@ -1,6 +1,16 @@
 import { sql } from 'drizzle-orm';
-import { type AnySQLiteColumn, index, integer, real, sqliteTable, text } from 'drizzle-orm/sqlite-core';
+import {
+    type AnySQLiteColumn,
+    customType,
+    index,
+    integer,
+    real,
+    sqliteTable,
+    text,
+} from 'drizzle-orm/sqlite-core';
+import type { Audio, Genre } from '../arib';
 import type { ChannelType, ReservationState } from '../types';
+import type { Range } from './cm';
 
 /**
  * **テーブルの定義はここにしか無い** (drizzle)。
@@ -25,6 +35,44 @@ import type { ChannelType, ReservationState } from '../types';
 
 /** 真偽の列。DB の中は 0/1 */
 const flag = (name: string) => integer(name, { mode: 'boolean' });
+
+/**
+ * JSON を文字列で持つ列。読むときに解き、書くときに畳む。**読み手は列ごとに書く。**
+ *
+ * drizzle の `{ mode: 'json' }` は使わない。あれは読めない行で例外を投げるが、
+ * ここに入っているのは放送から拾ったものや、取り込みの時期によって形が違うもの
+ * (古い行は `''`、EPGStation から来たジャンルは数の並び) で、1行が読めないせいで
+ * 一覧ごと出なくなるのは困る。読めない行はその列を「持っていない」ことにして、
+ * 残りは見えるようにする。NULL の行は drizzle が読み手を呼ばない (NULL のまま)
+ */
+function json<T>(name: string, read: (value: unknown) => T) {
+    return customType<{ data: T; driverData: string }>({
+        dataType: () => 'text',
+        toDriver: (value) => JSON.stringify(value),
+        fromDriver: (raw) => {
+            let value: unknown = null;
+            try {
+                value = JSON.parse(raw);
+            } catch {
+                // 壊れた行。read が「持っていない」の形に落とす
+            }
+            return read(value);
+        },
+    })(name);
+}
+
+/** 並び。並びでなければ空 */
+const strings = (value: unknown): string[] => (Array.isArray(value) ? value.map(String) : []);
+const numbers = (value: unknown): number[] => (Array.isArray(value) ? value.map(Number) : []);
+const objects =
+    <T extends object>() =>
+    (value: unknown): T[] =>
+        Array.isArray(value) ? (value as T[]) : [];
+/** {見出し: 本文}。それ以外の形なら無し */
+const record = (value: unknown): Record<string, string> | null =>
+    typeof value === 'object' && value !== null && !Array.isArray(value)
+        ? (value as Record<string, string>)
+        : null;
 
 /**
  * 録画の状態。**列としては持たず、事実から毎回決める** (recordings.state の生成列)
@@ -82,7 +130,7 @@ export const webhooks = sqliteTable('webhooks', {
     name: text('name').notNull().default(''),
     url: text('url').notNull(),
     /** JSON 配列。空配列は「全部」 */
-    events: text('events').notNull(),
+    events: json('events', strings).notNull(),
     enabled: flag('enabled').notNull().default(sql`1`),
     /** 直近の送信結果。設定画面で出す */
     last_status: text('last_status'),
@@ -142,16 +190,16 @@ export const programs = sqliteTable(
         name: text('name').notNull().default(''),
         description: text('description').notNull().default(''),
         /** JSON {見出し:本文} */
-        extended: text('extended'),
+        extended: json('extended', record),
         /** JSON: lv1 の配列。ルールの判定に使う */
-        genres: text('genres'),
+        genres: json('genres', numbers),
         /** JSON: [{lv1, lv2}]。表示用 */
-        genre_detail: text('genre_detail'),
+        genre_detail: json('genre_detail', objects<Genre>()),
         is_free: flag('is_free').notNull().default(sql`1`),
         /** ARIB の componentType。2 がデュアルモノ */
         audio_type: integer('audio_type'),
         /** JSON: [{componentType, langs, text?, main?}]。表示用 */
-        audios: text('audios'),
+        audios: json('audios', objects<Audio>()),
         /** mpeg2 / h.264 など */
         video_type: text('video_type'),
         /** 1080i / 480i など */
@@ -176,11 +224,11 @@ export const rules = sqliteTable('rules', {
      */
     search_fields: text('search_fields').notNull().default('name'),
     /** JSON 配列。NULL は全チャンネル対象 */
-    service_ids: text('service_ids'),
+    service_ids: json('service_ids', numbers),
     /** JSON 配列 (GR/BS/CS)。個別チャンネルとのORで効く */
-    service_types: text('service_types'),
+    service_types: json('service_types', strings),
     /** JSON 配列 (lv1)。NULL は全ジャンル */
-    genres: text('genres'),
+    genres: json('genres', strings),
     enabled: flag('enabled').notNull().default(sql`1`),
     /**
      * チューナーが足りないとき、どの予約を残すか。大きいほうが残る (conflict.ts)。
@@ -259,7 +307,7 @@ export const recordings = sqliteTable(
         subtitle: text('subtitle').notNull().default(''),
         description: text('description').notNull().default(''),
         /** 詳細(拡張形式)。JSON {見出し:本文}。番組詳細の画面に概要と続けて出す */
-        extended: text('extended'),
+        extended: json('extended', record),
         start_at: integer('start_at').notNull(),
         end_at: integer('end_at').notNull(),
         audio_type: integer('audio_type'),
@@ -283,14 +331,14 @@ export const recordings = sqliteTable(
          */
         error: text('error'),
         /** 検出したCM区間の JSON。UIでの確認用 */
-        cm_ranges: text('cm_ranges'),
+        cm_ranges: json('cm_ranges', objects<Range>()),
         /** 番組表から写したジャンル (JSON: [{lv1, lv2}])。番組詳細のジャンル札に使う */
-        genre_detail: text('genre_detail'),
+        genre_detail: json('genre_detail', objects<Genre>()),
         /**
          * 番組表から写した音声の構成 (JSON: `audio_component_descriptor` の配列)。
          * 焼いたものの音声トラックに**番組表と同じ名前**を入れるのに使う (`arib.audioTitles`)
          */
-        audios: text('audios'),
+        audios: json('audios', objects<Audio>()),
         /** 実際に録れた長さ。番組表の尺 (end_at - start_at) は予定でしかない。取れていなければ NULL (古い行) */
         duration_ms: integer('duration_ms'),
         /** 焼いたもののコマ数 (30/60)。実測 (fpsDetect) か既定の60。未エンコード・fps記録前の古い行は NULL */

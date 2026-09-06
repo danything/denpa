@@ -330,27 +330,25 @@ export function savePrograms(events: EitEvent[]): number {
                     end_at: endAt,
                     name: toHalfWidth(event.name),
                     description: toHalfWidth(event.description),
-                    extended: extended === null ? null : JSON.stringify(extended),
-                    genres: event.genres.length === 0 ? null : JSON.stringify(event.genres.map((g) => g.lv1)),
-                    genre_detail: event.genres.length === 0 ? null : JSON.stringify(event.genres),
+                    extended,
+                    genres: event.genres.length === 0 ? null : event.genres.map((g) => g.lv1),
+                    genre_detail: event.genres.length === 0 ? null : event.genres,
                     is_free: event.isFree,
                     audio_type: event.audios[0]?.componentType ?? null,
                     audios:
                         event.audios.length === 0
                             ? null
-                            : JSON.stringify(
-                                  /*
-                                   * **放送が付けた名前も残す。** 解説放送や二重音声は、
-                                   * 種別も言語も同じ音声が2本並ぶので、符号だけでは
-                                   * 「ステレオ (日本語)」が2つになって見分けが付かない
-                                   */
-                                  event.audios.map((a) => ({
-                                      componentType: a.componentType,
-                                      langs: a.langs,
-                                      ...(a.text === undefined ? {} : { text: a.text }),
-                                      ...(a.main === undefined ? {} : { main: a.main }),
-                                  })),
-                              ),
+                            : /*
+                               * **放送が付けた名前も残す。** 解説放送や二重音声は、
+                               * 種別も言語も同じ音声が2本並ぶので、符号だけでは
+                               * 「ステレオ (日本語)」が2つになって見分けが付かない
+                               */
+                              event.audios.map((a) => ({
+                                  componentType: a.componentType,
+                                  langs: a.langs,
+                                  ...(a.text === undefined ? {} : { text: a.text }),
+                                  ...(a.main === undefined ? {} : { main: a.main }),
+                              })),
                     video_type: event.video?.type ?? null,
                     video_resolution: event.video?.resolution ?? null,
                     updated_at: at,

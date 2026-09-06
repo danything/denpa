@@ -151,8 +151,25 @@ test.describe('ライブ視聴', () => {
         await expect(channels.first()).toBeVisible();
         const tuned = await page.getByTestId('live-title').textContent();
 
+        /*
+         * **引き直す前から、行が持っている分は出る。** 番組表から引き直す口を
+         * 止めておいて開く。行の分に `description: undefined` が混じると
+         * `programDetail` の既定 ('') がそれで潰され、引き直せるまであらすじが
+         * 空になる (#43 で型の上では塞いだ)。確かめてから通し、札 (ジャンル・音声) は
+         * 引き直しで出る
+         */
+        let release = () => {};
+        const held = new Promise<void>((resolve) => {
+            release = resolve;
+        });
+        await page.route('/api/programs/*', async (route) => {
+            await held;
+            await route.continue();
+        });
         await page.getByTestId('live-channel-detail').first().click();
         await expect(page.getByTestId('live-detail')).toBeVisible();
+        await expect(page.getByTestId('live-detail')).toContainText('のテスト番組');
+        release();
         await expect(page.getByTestId('detail-badges')).toBeVisible();
         // 読んでいる間は一覧を退ける (同じ列を使う)
         await expect(page.getByTestId('live-channels')).toHaveCount(0);

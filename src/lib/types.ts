@@ -22,9 +22,9 @@ export interface ProgramDetail {
     start_at: number;
     end_at: number;
     description: string;
-    extended: string | null;
-    genre_detail: string | null;
-    audios: string | null;
+    extended: Program['extended'];
+    genre_detail: Program['genre_detail'];
+    audios: Program['audios'];
     video_type: string | null;
     video_resolution: string | null;
     is_free: boolean;

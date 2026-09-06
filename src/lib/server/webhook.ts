@@ -27,14 +27,9 @@ export interface Payload {
     error?: string;
 }
 
+/** 空なら全部受け取る。壊れた行は列の読み手が空にする (`schema.ts`) ので、ここでは構えない */
 function subscribed(webhook: Webhook, event: WebhookEvent): boolean {
-    try {
-        const events = JSON.parse(webhook.events) as string[];
-        // 空なら全部受け取る
-        return events.length === 0 || events.includes(event);
-    } catch {
-        return false;
-    }
+    return webhook.events.length === 0 || webhook.events.includes(event);
 }
 
 async function post(webhook: Webhook, payload: Payload): Promise<void> {

@@ -181,10 +181,7 @@ export const actions = {
         const events = form.getAll('events').map(String).filter(Boolean);
 
         // name は廃止したが、列は残してある (既定 '' なので入れなくてよい)
-        orm()
-            .insert(webhooks)
-            .values({ url, events: JSON.stringify(events), enabled: true, created_at: now() })
-            .run();
+        orm().insert(webhooks).values({ url, events, enabled: true, created_at: now() }).run();
         return { success: true, webhookAdded: true };
     },
 
