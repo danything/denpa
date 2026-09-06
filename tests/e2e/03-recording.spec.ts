@@ -182,7 +182,7 @@ test.describe('CMの実カット', () => {
 
         await goto(page, '/guide?type=BS');
         const cells = await upcoming(page);
-        const target = cells[0];
+        const target = cells[0]!;
         const res = await request.post('/guide?/reserve', {
             form: { programId: target.programId, options: '1', encode: 'on' },
         });

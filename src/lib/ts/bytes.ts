@@ -13,7 +13,7 @@
  * ([eit.ts](eit.ts)) では、繋ぐ必要のないほうが多数です
  */
 export function joinBytes(parts: Uint8Array[]): Uint8Array {
-    if (parts.length === 1) return parts[0];
+    if (parts.length === 1) return parts[0]!;
     let total = 0;
     for (const part of parts) total += part.length;
     const out = new Uint8Array(total);

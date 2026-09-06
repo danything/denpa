@@ -110,7 +110,7 @@ function transportUrl(body: Uint8Array): string | null {
     if (body.length < 3) return null;
     if (u16(body, 0) !== PROTOCOL_HTTP) return null;
     // [0..1] protocol_id, [2] transport_protocol_label, [3] URL_base_length
-    const baseLength = body[3];
+    const baseLength = body[3]!;
     if (body.length < 4 + baseLength) return null;
     return new TextDecoder().decode(body.subarray(4, 4 + baseLength));
 }
@@ -124,7 +124,7 @@ function transportUrl(body: Uint8Array): string | null {
 function applicationName(body: Uint8Array): string {
     // [0..2] ISO_639_language_code, [3] application_name_length
     if (body.length < 4) return '';
-    const length = body[3];
+    const length = body[3]!;
     if (body.length < 4 + length) return '';
     return decodeAribText(body.subarray(4, 4 + length)).trim();
 }
@@ -136,11 +136,11 @@ function applicationName(body: Uint8Array): string {
 export function parseAit(section: Uint8Array): Ait | null {
     if (section[0] !== TABLE_AIT || section.length < 16) return null;
     const applicationType = u16(section, 3) & 0x7fff;
-    const commonLength = ((section[8] & 0x0f) << 8) | section[9];
+    const commonLength = ((section[8]! & 0x0f) << 8) | section[9]!;
     let at = 10 + commonLength;
     const end = section.length - 4;
     if (at + 2 > end) return null;
-    const loopLength = ((section[at] & 0x0f) << 8) | section[at + 1];
+    const loopLength = ((section[at]! & 0x0f) << 8) | section[at + 1]!;
     at += 2;
     const stop = Math.min(at + loopLength, end);
 
@@ -148,8 +148,8 @@ export function parseAit(section: Uint8Array): Ait | null {
     while (at + 9 <= stop) {
         const organisationId = u32(section, at);
         const applicationId = u16(section, at + 4);
-        const controlCode = section[at + 6];
-        const infoLength = ((section[at + 7] & 0x0f) << 8) | section[at + 8];
+        const controlCode = section[at + 6]!;
+        const infoLength = ((section[at + 7]! & 0x0f) << 8) | section[at + 8]!;
         const info = section.subarray(at + 9, at + 9 + infoLength);
         at += 9 + infoLength;
 
@@ -231,7 +231,7 @@ function pmtPidOf(section: Uint8Array, serviceId: number): number | null {
     const end = section.length - 4;
     for (let at = 8; at + 4 <= end; at += 4) {
         if (u16(section, at) !== serviceId) continue;
-        return ((section[at + 2] & 0x1f) << 8) | section[at + 3];
+        return ((section[at + 2]! & 0x1f) << 8) | section[at + 3]!;
     }
     return null;
 }

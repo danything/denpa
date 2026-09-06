@@ -34,15 +34,15 @@ function patPrograms(data: Buffer): number[] {
     const found: number[] = [];
     for (let at = 0; at + 188 <= data.length; at += 188) {
         if (data[at] !== 0x47) continue;
-        const pid = ((data[at + 1] & 0x1f) << 8) | data[at + 2];
+        const pid = ((data[at + 1]! & 0x1f) << 8) | data[at + 2]!;
         // 区切りの頭が入っているものだけ (payload_unit_start_indicator)
-        if (pid !== 0 || (data[at + 1] & 0x40) === 0) continue;
-        const start = at + 4 + 1 + data[at + 4];
+        if (pid !== 0 || (data[at + 1]! & 0x40) === 0) continue;
+        const start = at + 4 + 1 + data[at + 4]!;
         if (data[start] !== 0x00) continue;
-        const length = ((data[start + 1] & 0x0f) << 8) | data[start + 2];
+        const length = ((data[start + 1]! & 0x0f) << 8) | data[start + 2]!;
         const end = start + 3 + length - 4;
         for (let i = start + 8; i + 4 <= end && i + 4 <= at + 188; i += 4) {
-            const program = (data[i] << 8) | data[i + 1];
+            const program = (data[i]! << 8) | data[i + 1]!;
             // 0 は NIT で局ではない
             if (program !== 0) found.push(program);
         }
@@ -579,7 +579,7 @@ test.describe('ライブ視聴', () => {
         await expect(channels.first()).toBeVisible();
 
         // 局は名前ではなくIDで指す。名前は SDT 由来で、表示のしかたに引きずられる
-        const mx = page.locator(`[data-testid=live-channel][data-service="${SERVICES[0].id}"]`);
+        const mx = page.locator(`[data-testid=live-channel][data-service="${SERVICES[0]!.id}"]`);
         await mx.click();
         await expect(page.getByTestId('live-title')).toBeVisible();
 
@@ -599,7 +599,7 @@ test.describe('ライブ視聴', () => {
         ]);
 
         // 載せていない局に移ると消える。**前の局のぶんを出したままにしない**
-        const other = page.locator(`[data-testid=live-channel][data-service="${SERVICES[1].id}"]`);
+        const other = page.locator(`[data-testid=live-channel][data-service="${SERVICES[1]!.id}"]`);
         await other.click();
         await expect(page.getByTestId('live-title')).toBeVisible();
         await expect(button).toBeHidden();

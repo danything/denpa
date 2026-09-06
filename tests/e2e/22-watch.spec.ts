@@ -118,7 +118,7 @@ test.describe('録画を観る', () => {
         const sup = await res.body();
         // PGS の節は 'PG' で始まる
         expect(sup.length).toBeGreaterThan(0);
-        expect(String.fromCharCode(sup[0], sup[1])).toBe('PG');
+        expect(String.fromCharCode(sup[0]!, sup[1]!)).toBe('PG');
 
         await goto(page, `/watch/${id}`);
         // 重ねる先は映像と同じ枠に敷いてある。**押す邪魔をしない**

@@ -56,7 +56,7 @@ export function scrambledRatio(path: string): number {
                 // 同期が取れていないファイルは判定しない。誤って解除に回すより素通しがまし
                 if (buffer[i] !== SYNC) return 0;
                 total++;
-                if ((buffer[i + 3] & 0xc0) !== 0) scrambled++;
+                if ((buffer[i + 3]! & 0xc0) !== 0) scrambled++;
             }
         }
         return total === 0 ? 0 : scrambled / total;

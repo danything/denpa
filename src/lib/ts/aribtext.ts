@@ -147,7 +147,7 @@ export function decodeAribText(data: Uint8Array): string {
     };
 
     while (at < data.length) {
-        const byte = data[at];
+        const byte = data[at]!;
 
         // --- 制御符号 (C0) ------------------------------------------------
         if (byte <= 0x20 || byte === 0x7f || byte === 0xa0 || byte === 0xff) {
@@ -194,7 +194,7 @@ export function decodeAribText(data: Uint8Array): string {
             at++;
             if (byte === 0x9b) {
                 // CSI。引数のあと 0x40 以上の終端バイトが来るまで読み飛ばす
-                while (at < data.length && data[at] < 0x40) at++;
+                while (at < data.length && data[at]! < 0x40) at++;
                 at++;
                 continue;
             }
@@ -214,7 +214,7 @@ export function decodeAribText(data: Uint8Array): string {
         // --- 図形文字 ---------------------------------------------------
         const area = single !== null ? single : byte >= 0xa1 ? gr : gl;
         single = null;
-        const set = g[area];
+        const set = g[area]!;
         const first = byte & 0x7f;
 
         if (set.bytes === 2) {
@@ -291,7 +291,7 @@ function afterEscape(
                 designate(next - 0x28, { bytes: 2, kind: 'blank' });
                 return at + 4;
             }
-            designate(next - 0x28, CHARSETS.get(data[at + 2]));
+            designate(next - 0x28, CHARSETS.get(data[at + 2]!));
             return at + 3;
         }
         designate(0, CHARSETS.get(next));
@@ -306,7 +306,7 @@ function afterEscape(
             designate(target, { bytes: 1, kind: 'blank' });
             return at + 3;
         }
-        designate(target, CHARSETS.get(data[at + 1]));
+        designate(target, CHARSETS.get(data[at + 1]!));
         return at + 2;
     }
 

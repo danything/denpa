@@ -29,8 +29,8 @@ describe('fMP4 を割る', () => {
         const splitter = new Fmp4Splitter();
         const out = splitter.feed(join(box('ftyp'), box('moov'), box('moof'), box('mdat')));
         expect(out.map((s) => s.kind)).toEqual(['init', 'media']);
-        expect(out[0].data).toEqual(join(box('ftyp'), box('moov')));
-        expect(out[1].data).toEqual(join(box('moof'), box('mdat')));
+        expect(out[0]!.data).toEqual(join(box('ftyp'), box('moov')));
+        expect(out[1]!.data).toEqual(join(box('moof'), box('mdat')));
     });
 
     test('moof + mdat の組が1枚ずつ出る', () => {
@@ -38,8 +38,8 @@ describe('fMP4 を割る', () => {
         splitter.feed(join(box('ftyp'), box('moov')));
         const out = splitter.feed(join(box('moof', 1), box('mdat', 1), box('moof', 2), box('mdat', 2)));
         expect(out.map((s) => s.kind)).toEqual(['init', 'media', 'media']);
-        expect(out[1].data).toEqual(join(box('moof', 1), box('mdat', 1)));
-        expect(out[2].data).toEqual(join(box('moof', 2), box('mdat', 2)));
+        expect(out[1]!.data).toEqual(join(box('moof', 1), box('mdat', 1)));
+        expect(out[2]!.data).toEqual(join(box('moof', 2), box('mdat', 2)));
     });
 
     /*
@@ -52,8 +52,8 @@ describe('fMP4 を割る', () => {
         const out = [];
         for (const byte of whole) out.push(...splitter.feed(Uint8Array.of(byte)));
         expect(out.map((s) => s.kind)).toEqual(['init', 'media']);
-        expect(out[0].data).toEqual(join(box('ftyp'), box('moov')));
-        expect(out[1].data).toEqual(join(box('moof', 1), box('mdat', 1)));
+        expect(out[0]!.data).toEqual(join(box('ftyp'), box('moov')));
+        expect(out[1]!.data).toEqual(join(box('moof', 1), box('mdat', 1)));
     });
 
     /*
@@ -64,7 +64,7 @@ describe('fMP4 を割る', () => {
         const splitter = new Fmp4Splitter();
         const out = splitter.feed(join(box('ftyp'), box('moov'), box('moof'), box('sidx'), box('mdat')));
         expect(out.map((s) => s.kind)).toEqual(['init', 'media']);
-        expect(out[1].data).toEqual(join(box('moof'), box('sidx'), box('mdat')));
+        expect(out[1]!.data).toEqual(join(box('moof'), box('sidx'), box('mdat')));
     });
 
     /*

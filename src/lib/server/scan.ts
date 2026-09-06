@@ -303,9 +303,9 @@ class Scanner {
         const order: Record<string, number> = { GR: 0, BS: 1, CS: 2 };
         return [...this.found.entries()]
             .sort(([a], [b]) => {
-                const [typeA, channelA] = a.split(':');
-                const [typeB, channelB] = b.split(':');
-                return order[typeA] - order[typeB] || channelA.localeCompare(channelB);
+                const [typeA = '', channelA = ''] = a.split(':');
+                const [typeB = '', channelB = ''] = b.split(':');
+                return (order[typeA] ?? 9) - (order[typeB] ?? 9) || channelA.localeCompare(channelB);
             })
             .map(([, entry]) => entry);
     }

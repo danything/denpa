@@ -51,7 +51,7 @@ const CRC32_TABLE = (() => {
 export function crc32(data: Uint8Array): number {
     let crc = 0xffffffff;
     for (const byte of data) {
-        crc = (((crc << 8) >>> 0) ^ CRC32_TABLE[((crc >>> 24) ^ byte) & 0xff]) >>> 0;
+        crc = (((crc << 8) >>> 0) ^ CRC32_TABLE[((crc >>> 24) ^ byte) & 0xff]!) >>> 0;
     }
     return crc >>> 0;
 }
@@ -120,20 +120,20 @@ export class SectionAssembler {
     /** パケットを1つ食わせる。組み上がったセクションを返す */
     feed(packet: Uint8Array): Uint8Array[] {
         if (packet[0] !== SYNC) return [];
-        const pid = ((packet[1] & 0x1f) << 8) | packet[2];
+        const pid = ((packet[1]! & 0x1f) << 8) | packet[2]!;
         if (pid !== this.pid) return [];
         // トランスポートエラーが立っているものは信用しない
-        if (packet[1] & 0x80) return [];
+        if (packet[1]! & 0x80) return [];
 
-        const adaptation = (packet[3] >> 4) & 0x03;
+        const adaptation = (packet[3]! >> 4) & 0x03;
         if (adaptation === 0 || adaptation === 2) return [];
         let offset = 4;
-        if (adaptation === 3) offset += 1 + packet[4];
+        if (adaptation === 3) offset += 1 + packet[4]!;
         if (offset >= PACKET) return [];
 
         const payload = packet.subarray(offset);
-        if (packet[1] & 0x40) {
-            const pointer = payload[0];
+        if (packet[1]! & 0x40) {
+            const pointer = payload[0]!;
             if (1 + pointer > payload.length) return [];
             // pointer_field の手前は前のセクションの続き
             this.append(payload.subarray(1, 1 + pointer));
@@ -163,12 +163,12 @@ export class SectionAssembler {
                 this.buffer = new Uint8Array(0);
                 return sections;
             }
-            const length = 3 + (((this.buffer[1] & 0x0f) << 8) | this.buffer[2]);
+            const length = 3 + (((this.buffer[1]! & 0x0f) << 8) | this.buffer[2]!);
             if (this.buffer.length < length) return sections;
             const section = this.buffer.slice(0, length);
             this.buffer = this.buffer.slice(length);
             // 壊れたセクションを読むと嘘の局が並ぶので、CRC を通ったものだけ使う
-            const syntax = (section[1] & 0x80) !== 0;
+            const syntax = (section[1]! & 0x80) !== 0;
             if (this.crc === 'syntax' && !syntax) sections.push(section);
             else if (crc32(section) === 0) sections.push(section);
         }
@@ -231,8 +231,8 @@ export class PacketStream {
 export function* descriptors(data: Uint8Array): Generator<[number, Uint8Array]> {
     let at = 0;
     while (at + 2 <= data.length) {
-        const tag = data[at];
-        const length = data[at + 1];
+        const tag = data[at]!;
+        const length = data[at + 1]!;
         const body = data.subarray(at + 2, at + 2 + length);
         if (body.length < length) return;
         yield [tag, body];
@@ -245,7 +245,7 @@ export function* descriptors(data: Uint8Array): Generator<[number, Uint8Array]> 
  */
 export function pmtProgramInfo(section: Uint8Array): Uint8Array {
     if (section[0] !== TABLE_PMT || section.length < 16) return new Uint8Array(0);
-    const length = ((section[10] & 0x0f) << 8) | section[11];
+    const length = ((section[10]! & 0x0f) << 8) | section[11]!;
     return section.subarray(12, 12 + length);
 }
 
@@ -262,13 +262,13 @@ export function pmtProgramInfo(section: Uint8Array): Uint8Array {
  */
 export function* pmtStreams(section: Uint8Array): Generator<[number, number, Uint8Array]> {
     if (section[0] !== TABLE_PMT || section.length < 16) return;
-    const programInfoLength = ((section[10] & 0x0f) << 8) | section[11];
+    const programInfoLength = ((section[10]! & 0x0f) << 8) | section[11]!;
     let at = 12 + programInfoLength;
     const end = section.length - 4;
     while (at + 5 <= end) {
-        const pid = ((section[at + 1] & 0x1f) << 8) | section[at + 2];
-        const infoLength = ((section[at + 3] & 0x0f) << 8) | section[at + 4];
-        yield [section[at], pid, section.subarray(at + 5, at + 5 + infoLength)];
+        const pid = ((section[at + 1]! & 0x1f) << 8) | section[at + 2]!;
+        const infoLength = ((section[at + 3]! & 0x0f) << 8) | section[at + 4]!;
+        yield [section[at]!, pid, section.subarray(at + 5, at + 5 + infoLength)];
         at += 5 + infoLength;
     }
 }
@@ -279,9 +279,9 @@ export function parsePat(section: Uint8Array): Map<number, number> {
     if (section[0] !== TABLE_PAT) return programs;
     const end = section.length - 4;
     for (let at = 8; at + 4 <= end; at += 4) {
-        const serviceId = (section[at] << 8) | section[at + 1];
+        const serviceId = (section[at]! << 8) | section[at + 1]!;
         if (serviceId === 0) continue;
-        programs.set(serviceId, ((section[at + 2] & 0x1f) << 8) | section[at + 3]);
+        programs.set(serviceId, ((section[at + 2]! & 0x1f) << 8) | section[at + 3]!);
     }
     return programs;
 }
@@ -296,8 +296,8 @@ export function* sdtServices(section: Uint8Array): Generator<[number, Uint8Array
     let at = 11;
     const end = section.length - 4;
     while (at + 5 <= end) {
-        const serviceId = (section[at] << 8) | section[at + 1];
-        const loop = ((section[at + 3] & 0x0f) << 8) | section[at + 4];
+        const serviceId = (section[at]! << 8) | section[at + 1]!;
+        const loop = ((section[at + 3]! & 0x0f) << 8) | section[at + 4]!;
         yield [serviceId, section.subarray(at + 5, at + 5 + loop)];
         at += 5 + loop;
     }
@@ -321,7 +321,7 @@ export function parseSdt(section: Uint8Array): TransportInfo | null {
                 const nameLength = descriptor[nameAt] ?? 0;
                 services.push({
                     serviceId,
-                    serviceType: descriptor[0],
+                    serviceType: descriptor[0]!,
                     name: decodeAribText(descriptor.subarray(nameAt + 1, nameAt + 1 + nameLength)),
                 });
                 break;
@@ -330,8 +330,8 @@ export function parseSdt(section: Uint8Array): TransportInfo | null {
     }
 
     return {
-        transportStreamId: (section[3] << 8) | section[4],
-        originalNetworkId: (section[8] << 8) | section[9],
+        transportStreamId: (section[3]! << 8) | section[4]!,
+        originalNetworkId: (section[8]! << 8) | section[9]!,
         services,
     };
 }
@@ -340,7 +340,7 @@ export function parseSdt(section: Uint8Array): TransportInfo | null {
 export function parseNit(section: Uint8Array): NetworkInfo | null {
     if (section[0] !== TABLE_NIT_ACTUAL) return null;
 
-    const networkLength = ((section[8] & 0x0f) << 8) | section[9];
+    const networkLength = ((section[8]! & 0x0f) << 8) | section[9]!;
     let at = 10 + networkLength;
     if (at + 2 > section.length) return null;
     at += 2; // transport_stream_loop_length
@@ -349,21 +349,21 @@ export function parseNit(section: Uint8Array): NetworkInfo | null {
     const transportStreams: TransportInfo[] = [];
     const end = section.length - 4;
     while (at + 6 <= end) {
-        const transportStreamId = (section[at] << 8) | section[at + 1];
-        const originalNetworkId = (section[at + 2] << 8) | section[at + 3];
-        const loop = ((section[at + 4] & 0x0f) << 8) | section[at + 5];
+        const transportStreamId = (section[at]! << 8) | section[at + 1]!;
+        const originalNetworkId = (section[at + 2]! << 8) | section[at + 3]!;
+        const loop = ((section[at + 4]! & 0x0f) << 8) | section[at + 5]!;
         const body = section.subarray(at + 6, at + 6 + loop);
         at += 6 + loop;
 
         const services: Service[] = [];
         for (const [tag, descriptor] of descriptors(body)) {
             if (tag === DESC_TS_INFORMATION && descriptor.length > 0 && remoteControlKeyId === null) {
-                remoteControlKeyId = descriptor[0];
+                remoteControlKeyId = descriptor[0]!;
             } else if (tag === DESC_SERVICE_LIST) {
                 for (let i = 0; i + 3 <= descriptor.length; i += 3) {
                     services.push({
-                        serviceId: (descriptor[i] << 8) | descriptor[i + 1],
-                        serviceType: descriptor[i + 2],
+                        serviceId: (descriptor[i]! << 8) | descriptor[i + 1]!,
+                        serviceType: descriptor[i + 2]!,
                         name: '',
                     });
                 }
@@ -372,7 +372,7 @@ export function parseNit(section: Uint8Array): NetworkInfo | null {
         transportStreams.push({ transportStreamId, originalNetworkId, services });
     }
 
-    return { networkId: (section[3] << 8) | section[4], remoteControlKeyId, transportStreams };
+    return { networkId: (section[3]! << 8) | section[4]!, remoteControlKeyId, transportStreams };
 }
 
 export interface FoundService extends Service {

@@ -352,9 +352,9 @@ describe('ffprobe の読み取り', () => {
 describe('join_logo_scp の出力', () => {
     test('avs の Trim をフレームから秒に直す', () => {
         const ranges = parseTrimRanges('Trim(0,2996)++Trim(4497,8993)', 30000 / 1001);
-        expect(ranges[0].start).toBeCloseTo(0, 3);
-        expect(ranges[0].end).toBeCloseTo(99.99, 1);
-        expect(ranges[1].start).toBeCloseTo(150.05, 1);
+        expect(ranges[0]!.start).toBeCloseTo(0, 3);
+        expect(ranges[0]!.end).toBeCloseTo(99.99, 1);
+        expect(ranges[1]!.start).toBeCloseTo(150.05, 1);
     });
 
     test('Trim が無ければ空', () => {

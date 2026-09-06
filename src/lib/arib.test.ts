@@ -157,7 +157,7 @@ describe('audioTracks', () => {
         ]);
         expect(tracks).toHaveLength(4);
         expect(tracks.slice(1).every((track) => track.stream === 1)).toBe(true);
-        expect(tracks[1].label).toBe('音声2 主音声 (日本語)');
+        expect(tracks[1]!.label).toBe('音声2 主音声 (日本語)');
     });
 
     /*

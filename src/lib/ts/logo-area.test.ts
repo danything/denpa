@@ -40,7 +40,7 @@ function make(count: number, logo: Rect | null, alpha: number, logoValue = 255, 
             for (let y = logo.y; y < logo.y + logo.height; y++) {
                 for (let x = logo.x; x < logo.x + logo.width; x++) {
                     const at = y * W + x;
-                    data[at] = Math.round(data[at] * (1 - alpha) + logoValue * alpha);
+                    data[at] = Math.round(data[at]! * (1 - alpha) + logoValue * alpha);
                 }
             }
         }

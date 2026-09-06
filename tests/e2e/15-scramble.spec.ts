@@ -10,7 +10,7 @@ function scrambledFiles(dir: string): string[] {
             const buffer = readFileSync(join(dir, name));
             for (let i = 0; i + 188 <= buffer.length; i += 188) {
                 if (buffer[i] !== 0x47) return false;
-                if ((buffer[i + 3] & 0xc0) !== 0) return true;
+                if ((buffer[i + 3]! & 0xc0) !== 0) return true;
             }
             return false;
         });

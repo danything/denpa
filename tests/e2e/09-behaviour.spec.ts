@@ -144,7 +144,7 @@ test.describe('操作したときの反応', () => {
                 length: (node.textContent ?? '').length,
             })),
         );
-        const target = cells.sort((a, b) => b.length - a.length)[0];
+        const target = cells.sort((a, b) => b.length - a.length)[0]!;
         await cellOf(page, target.id).getByTestId('program-button').click();
 
         const detail = page.getByTestId('program-detail');

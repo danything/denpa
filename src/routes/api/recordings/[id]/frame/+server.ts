@@ -43,7 +43,7 @@ async function sourceSize(input: string): Promise<{ width: number; height: numbe
         ],
         { timeoutMs: TIMEOUT, stdout: true },
     );
-    const [width, height] = new TextDecoder().decode(probed.stdout).trim().split(',').map(Number);
+    const [width = NaN, height = NaN] = new TextDecoder().decode(probed.stdout).trim().split(',').map(Number);
     if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0) return null;
     return { width, height };
 }

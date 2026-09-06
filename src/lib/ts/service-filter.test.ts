@@ -61,7 +61,7 @@ const pmt2 = () =>
 function pids(data: Uint8Array): number[] {
     const out: number[] = [];
     for (let at = 0; at + PACKET <= data.length; at += PACKET) {
-        out.push(((data[at + 1] & 0x1f) << 8) | data[at + 2]);
+        out.push(((data[at + 1]! & 0x1f) << 8) | data[at + 2]!);
     }
     return out;
 }
@@ -129,9 +129,9 @@ describe('局の選り分け', () => {
         const section = out.subarray(5, 5 + 20);
         expect(section[0]).toBe(0x00);
         const programs: number[] = [];
-        const length = ((section[1] & 0x0f) << 8) | section[2];
+        const length = ((section[1]! & 0x0f) << 8) | section[2]!;
         for (let at = 8; at + 4 <= 3 + length - 4; at += 4) {
-            programs.push((section[at] << 8) | section[at + 1]);
+            programs.push((section[at]! << 8) | section[at + 1]!);
         }
         // 0 は NIT の枠。局は MX1 だけ
         expect(programs).toEqual([0, MX1]);

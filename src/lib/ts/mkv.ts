@@ -64,7 +64,7 @@ interface Header {
  */
 function vint(buffer: Uint8Array, at: number, keepMarker: boolean): { value: number; next: number } | null {
     if (at >= buffer.length) return null;
-    const first = buffer[at];
+    const first = buffer[at]!;
     if (first === 0) return null;
     let length = 1;
     while (length <= 8 && (first & (0x80 >> (length - 1))) === 0) length++;
@@ -75,7 +75,7 @@ function vint(buffer: Uint8Array, at: number, keepMarker: boolean): { value: num
     // 印を落とした桁が全部 1 なら「大きさは不明」。頭だけ書いて流す器で出てくる
     let allOnes = (first & mask) === mask;
     for (let i = 1; i < length; i++) {
-        value = value * 256 + buffer[at + i];
+        value = value * 256 + buffer[at + i]!;
         if (buffer[at + i] !== 0xff) allOnes = false;
     }
     if (!keepMarker && allOnes) return { value: UNKNOWN, next: at + length };
@@ -153,7 +153,7 @@ export class MkvSplitter {
         if (track === null || track.next + 3 > body.length) return null;
         const view = new DataView(body.buffer, body.byteOffset);
         const offset = view.getInt16(track.next);
-        const flags = body[track.next + 2];
+        const flags = body[track.next + 2]!;
         if ((flags & 0x06) !== 0) return null;
         return {
             at: ((this.base + offset) * this.scale) / 1_000_000,

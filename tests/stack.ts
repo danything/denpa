@@ -70,8 +70,9 @@ interface Started {
     output: () => string;
 }
 
-function start(command: string[], env: Record<string, string>): Started {
-    const proc = spawn(command[0], command.slice(1), {
+function start(command: [string, ...string[]], env: Record<string, string>): Started {
+    const [bin, ...args] = command;
+    const proc = spawn(bin, args, {
         env: { ...process.env, ...env },
         stdio: ['ignore', 'pipe', 'pipe'],
     });

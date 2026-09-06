@@ -111,7 +111,7 @@ function median(values: number[]): number {
     if (values.length === 0) return 0;
     values.sort((a, b) => a - b);
     const half = values.length >> 1;
-    return values.length % 2 === 0 ? (values[half - 1] + values[half]) / 2 : values[half];
+    return values.length % 2 === 0 ? (values[half - 1]! + values[half]!) / 2 : values[half]!;
 }
 
 /** 隅の範囲。`width`/`height` はコマの大きさ */
@@ -133,7 +133,7 @@ function medianImage(frames: Frame[], region: Rect, width: number): Float32Array
     for (let y = 0; y < region.height; y++) {
         for (let x = 0; x < region.width; x++) {
             const at = (region.y + y) * width + region.x + x;
-            for (let n = 0; n < frames.length; n++) scratch[n] = frames[n].data[at];
+            for (let n = 0; n < frames.length; n++) scratch[n] = frames[n]!.data[at]!;
             out[y * region.width + x] = median(scratch);
         }
     }
@@ -145,7 +145,7 @@ function edges(image: Float32Array, w: number, h: number): Float32Array {
     const out = new Float32Array(w * h);
     for (let y = 1; y < h - 1; y++) {
         for (let x = 1; x < w - 1; x++) {
-            const at = (xx: number, yy: number) => image[yy * w + xx];
+            const at = (xx: number, yy: number) => image[yy * w + xx]!;
             const gx =
                 -at(x - 1, y - 1) -
                 2 * at(x - 1, y) -
@@ -269,8 +269,9 @@ function padded(rect: Rect, width: number, height: number): Rect {
  * (実素材で、90秒ぶんだけ渡したときに実際に外しました)。
  */
 export function findLogoArea(frames: Frame[]): Rect | null {
-    if (frames.length < MIN_FRAMES) return null;
-    const { width, height } = frames[0];
+    const first = frames[0];
+    if (frames.length < MIN_FRAMES || first === undefined) return null;
+    const { width, height } = first;
     if (width <= 0 || height <= 0) return null;
     if (frames.some((frame) => frame.width !== width || frame.height !== height)) return null;
 
@@ -279,13 +280,13 @@ export function findLogoArea(frames: Frame[]): Rect | null {
         const strength = edges(medianImage(frames, region, width), region.width, region.height);
 
         const sorted = Array.from(strength).sort((a, b) => a - b);
-        const middle = sorted[Math.floor(sorted.length * 0.5)];
-        const limit = sorted[Math.floor(sorted.length * (1 - EDGE_TOP))];
+        const middle = sorted[Math.floor(sorted.length * 0.5)]!;
+        const limit = sorted[Math.floor(sorted.length * (1 - EDGE_TOP))]!;
         // ロゴを出していない隅では、上位 1% も中央値とたいして変わらない
         if (limit < EDGE_FLOOR || limit < middle * EDGE_RATIO) continue;
 
         const mask = new Uint8Array(strength.length);
-        for (let at = 0; at < strength.length; at++) mask[at] = strength[at] >= limit ? 1 : 0;
+        for (let at = 0; at < strength.length; at++) mask[at] = strength[at]! >= limit ? 1 : 0;
 
         const found = largestBlob(
             dilate(mask, region.width, region.height, DILATE),

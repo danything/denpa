@@ -70,7 +70,7 @@ describe('trimCues', () => {
         // まだどれも過ぎていないので、落ちるのは上限のぶんだけ
         const kept = trimCues(cues, 0);
         expect(kept).toHaveLength(KEEP_CUES);
-        expect(kept[kept.length - 1].at).toBe(1000 + KEEP_CUES + 49);
+        expect(kept[kept.length - 1]!.at).toBe(1000 + KEEP_CUES + 49);
     });
 });
 

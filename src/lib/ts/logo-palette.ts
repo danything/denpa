@@ -68,7 +68,7 @@ const CRC_TABLE = (() => {
 
 function crc32(bytes: Uint8Array): number {
     let c = 0xffffffff;
-    for (const byte of bytes) c = CRC_TABLE[(c ^ byte) & 0xff] ^ (c >>> 8);
+    for (const byte of bytes) c = CRC_TABLE[(c ^ byte) & 0xff]! ^ (c >>> 8);
     return (c ^ 0xffffffff) >>> 0;
 }
 
@@ -114,10 +114,10 @@ export function withPalette(png: Uint8Array): Uint8Array {
     const rgb = new Uint8Array(COLORS * 3);
     const alpha = new Uint8Array(COLORS);
     for (let i = 0; i < COLORS; i++) {
-        rgb[i * 3] = CLUT[i * 4];
-        rgb[i * 3 + 1] = CLUT[i * 4 + 1];
-        rgb[i * 3 + 2] = CLUT[i * 4 + 2];
-        alpha[i] = CLUT[i * 4 + 3];
+        rgb[i * 3] = CLUT[i * 4]!;
+        rgb[i * 3 + 1] = CLUT[i * 4 + 1]!;
+        rgb[i * 3 + 2] = CLUT[i * 4 + 2]!;
+        alpha[i] = CLUT[i * 4 + 3]!;
     }
 
     const plte = pngChunk('PLTE', rgb);

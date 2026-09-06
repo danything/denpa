@@ -725,6 +725,8 @@
                         {@const link = watchLink(rec)}
                         {@const canPlay = link !== null}
                         {@const shown = rowState(rec)}
+                        <!-- 端末に入っているか (オフライン視聴)。行の印と、下のバーで見る -->
+                        {@const held = offline.entries[rec.id]}
                         <!--
                             押すと再生。中身を読みたいときは行の中の「詳細」から。
 
@@ -803,8 +805,7 @@
                                         決まるので、ここで書き分けることは何も無い
                                     -->
                                     {@render title(shown.label, shown.badge, rec.name, 'recording-state')}
-                                    {#if offline.entries[rec.id] !== undefined}
-                                        {@const held = offline.entries[rec.id]}
+                                    {#if held !== undefined}
                                         <!-- 端末に入っている印。保存中はエンコードと同じく割合を添える -->
                                         <span
                                             class="badge badge-sm mt-1 {held.state === 'ready'
@@ -1051,7 +1052,7 @@
                                 <!-- 端末への保存もエンコードと同じ見せ方。測れない間は動くだけのバー -->
                                 <progress
                                     class="progress progress-success absolute inset-x-0 bottom-0 h-1 w-full rounded-none"
-                                    value={offline.entries[rec.id].progress ?? undefined}
+                                    value={offline.entries[rec.id]?.progress ?? undefined}
                                     max="1"
                                     data-testid="offline-bar"
                                 ></progress>
@@ -1134,7 +1135,7 @@
                     ので出さない。保存済みなら「端末から消す」に変わる —
                     こちらはサーバの録画に触らない (行の削除ボタンとは別)
                 -->
-                {#if offline.entries[rec.id] === undefined || offline.entries[rec.id].state === 'failed'}
+                {#if offline.entries[rec.id] === undefined || offline.entries[rec.id]?.state === 'failed'}
                     <button
                         type="button"
                         class="btn btn-outline"
@@ -1144,7 +1145,8 @@
                         {offline.entries[rec.id]?.state === 'failed' ? '保存をやり直す' : '端末に保存'}
                     </button>
                 {/if}
-                {#if offline.entries[rec.id] !== undefined}
+                {@const held = offline.entries[rec.id]}
+                {#if held !== undefined}
                     <button
                         type="button"
                         class="btn btn-outline"
@@ -1154,9 +1156,9 @@
                         }}
                         data-testid="offline-remove-button"
                     >
-                        {offline.entries[rec.id].state === 'downloading'
+                        {held.state === 'downloading'
                             ? '保存を取り消す'
-                            : offline.entries[rec.id].state === 'failed'
+                            : held.state === 'failed'
                               ? '失敗した保存データを消す'
                               : '端末から消す'}
                     </button>

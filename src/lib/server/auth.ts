@@ -130,7 +130,7 @@ function entries(): string[] {
 export function inNetwork(address: string, entry: string): boolean {
     // ::ffff:10.0.0.1 のような書き方で届くことがある
     const target = address.replace(/^::ffff:/i, '');
-    const [network, bits] = entry.split('/');
+    const [network = '', bits] = entry.split('/');
     const left = toIpv4(target);
     const right = toIpv4(network.replace(/^::ffff:/i, ''));
     if (left === null || right === null) return target === network;

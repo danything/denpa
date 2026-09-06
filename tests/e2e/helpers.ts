@@ -80,7 +80,14 @@ export async function past(page: Page): Promise<Cell[]> {
  * 偽の放送は隙間なく並べてある (`tests/fake/broadcast.ts`) ので、始まったものの
  * うちいちばん新しいものがそれにあたる。終わりの時刻はマスに出ていない
  */
-export async function airing(page: Page): Promise<Cell[]> {
+/** 1つは要る。型でも「先頭がある」と言う (`const [target] = await upcoming(page)` がそのまま使える) */
+function atLeastOne(cells: Cell[], what: string): [Cell, ...Cell[]] {
+    const [head, ...rest] = cells;
+    if (head === undefined) throw new Error(`${what}が1つも無い`);
+    return [head, ...rest];
+}
+
+export async function airing(page: Page): Promise<[Cell, ...Cell[]]> {
     const at = Date.now();
     const latest = new Map<string, Cell>();
     for (const cell of await allCells(page)) {
@@ -88,12 +95,10 @@ export async function airing(page: Page): Promise<Cell[]> {
         const held = latest.get(cell.serviceId);
         if (held === undefined || cell.startAt > held.startAt) latest.set(cell.serviceId, cell);
     }
-    const found = [...latest.values()];
-    expect(found.length).toBeGreaterThan(0);
-    return found;
+    return atLeastOne([...latest.values()], 'いま流れている番組');
 }
 
-export async function upcoming(page: Page): Promise<Cell[]> {
+export async function upcoming(page: Page): Promise<[Cell, ...Cell[]]> {
     let soon = await cellsOn(page);
     if (soon.length === 0) {
         // 放送日の終わり際(深夜3時台など)は、この日にこれから始まる番組が
@@ -102,8 +107,7 @@ export async function upcoming(page: Page): Promise<Cell[]> {
         await page.locator('[data-hydrated="true"]').waitFor();
         soon = await cellsOn(page);
     }
-    expect(soon.length).toBeGreaterThan(0);
-    return soon;
+    return atLeastOne(soon, 'これから始まる番組');
 }
 
 /** 番組表のマスをIDで掴む。番組が終わると並びがずれるので位置では追わない */
@@ -120,7 +124,7 @@ export function cellOf(page: Page, programId: string) {
 export async function reserveSoon(page: Page, request: APIRequestContext, type: string, skip = 0) {
     await goto(page, `/guide?type=${type}`);
     const cells = await upcoming(page);
-    const target = cells[Math.min(skip, cells.length - 1)];
+    const target = cells[Math.min(skip, cells.length - 1)]!;
     const res = await request.post('/guide?/reserve', { form: { programId: target.programId } });
     await ok(res, '予約');
     return target.programId;

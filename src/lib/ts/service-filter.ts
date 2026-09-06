@@ -137,13 +137,13 @@ export class ServiceFilter {
         let length = 0;
 
         for (const ts of this.packets.feed(chunk)) {
-            const pid = ((ts[1] & 0x1f) << 8) | ts[2];
+            const pid = ((ts[1]! & 0x1f) << 8) | ts[2]!;
             if (pid === PID_NULL) continue;
 
             if (pid === PID_PAT) {
                 this.readPat(ts);
                 // 元の PAT は捨てて、書き直したものを同じ回数だけ出す
-                if (this.rewritten !== null && (ts[1] & 0x40) !== 0) {
+                if (this.rewritten !== null && (ts[1]! & 0x40) !== 0) {
                     out.push(packet(PID_PAT, this.rewritten, this.counter++));
                     length += PACKET;
                 }
@@ -175,13 +175,13 @@ export class ServiceFilter {
     private readPat(ts: Uint8Array): void {
         for (const section of this.pat.feed(ts)) {
             if (section[0] !== TABLE_PAT) continue;
-            const transportStreamId = (section[3] << 8) | section[4];
+            const transportStreamId = (section[3]! << 8) | section[4]!;
             this.tsid = transportStreamId;
-            const version = (section[5] >> 1) & 0x1f;
+            const version = (section[5]! >> 1) & 0x1f;
             for (let at = 8; at + 4 <= section.length - 4; at += 4) {
-                const programNumber = (section[at] << 8) | section[at + 1];
+                const programNumber = (section[at]! << 8) | section[at + 1]!;
                 if (programNumber !== this.serviceId) continue;
-                const pmtPid = ((section[at + 2] & 0x1f) << 8) | section[at + 3];
+                const pmtPid = ((section[at + 2]! & 0x1f) << 8) | section[at + 3]!;
                 if (pmtPid === this.pmtPid) return;
                 // 選局し直した・PAT が入れ替わった。PMT も読み直す
                 this.pmtPid = pmtPid;
@@ -199,7 +199,7 @@ export class ServiceFilter {
             const pids = new Set<number>();
 
             // PCR。映像と同じ PID のことが多いが、別に振られていることもある
-            const pcrPid = ((section[8] & 0x1f) << 8) | section[9];
+            const pcrPid = ((section[8]! & 0x1f) << 8) | section[9]!;
             if (pcrPid !== 0x1fff) pids.add(pcrPid);
 
             collectCa(pmtProgramInfo(section), pids);
@@ -219,9 +219,9 @@ function collectCa(body: Uint8Array, into: Set<number>): void {
     let at = 0;
     while (at + 2 <= body.length) {
         const tag = body[at];
-        const length = body[at + 1];
+        const length = body[at + 1]!;
         if (tag === DESC_CA && length >= 4) {
-            into.add(((body[at + 4] & 0x1f) << 8) | body[at + 5]);
+            into.add(((body[at + 4]! & 0x1f) << 8) | body[at + 5]!);
         }
         at += 2 + length;
     }

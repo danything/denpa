@@ -41,13 +41,13 @@ describe('セクションの解釈', () => {
         const parsed = parseNit(nitSection(0x7fe0, 6, [[0x0408, 0x0004, [[1024, 0x01]]]]));
         expect(parsed?.networkId).toBe(0x7fe0);
         expect(parsed?.remoteControlKeyId).toBe(6);
-        expect(parsed?.transportStreams[0].transportStreamId).toBe(0x0408);
-        expect(parsed?.transportStreams[0].services[0].serviceId).toBe(1024);
+        expect(parsed?.transportStreams[0]?.transportStreamId).toBe(0x0408);
+        expect(parsed?.transportStreams[0]?.services[0]?.serviceId).toBe(1024);
     });
 
     test('CRCが合わないセクションは捨てる', () => {
         const section = sdtSection(0x0408, 0x0004, [[1024, 0x01]]);
-        section[section.length - 1] ^= 0xff;
+        section[section.length - 1]! ^= 0xff;
         const reader = new ServiceReader();
         reader.feed(packetize(0x0011, section));
         expect(reader.transport).toBeNull();

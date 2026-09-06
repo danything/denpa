@@ -3,7 +3,7 @@ import { type AudioSide, audioTracks } from '$lib/arib';
 import { codecsFor, encodeArgs, whyNotTuned } from './live';
 
 /** 1本目の音声をそのまま。番組表が何も言っていないときの既定 */
-const stereo = audioTracks([])[0];
+const stereo = audioTracks([])[0]!;
 /** デュアルモノの中から選ぶ。0=主音声 1=副音声 2=主+副 */
 const dual = (side: AudioSide) => {
     const tracks = audioTracks([{ componentType: 2, langs: ['jpn', 'eng'] }]);
@@ -135,7 +135,7 @@ describe('ライブの焼き方', () => {
             { componentType: 3, langs: ['jpn'] },
             { componentType: 3, langs: ['eng'] },
         ]);
-        const args = encodeArgs(1032, tracks[1]);
+        const args = encodeArgs(1032, tracks[1]!);
         expect(args).toContain('0:p:1032:a:1');
         expect(args).not.toContain('0:p:1032:a:0');
     });
@@ -290,7 +290,7 @@ describe('音声も組で決まる', () => {
 
     /** デュアルモノの配り直しは音声の形より手前。どちらを選んでも効く */
     test('左右の配り直しは形によらず効く', () => {
-        const sub = audioTracks([{ componentType: 2, langs: ['jpn', 'eng'] }])[1];
+        const sub = audioTracks([{ componentType: 2, langs: ['jpn', 'eng'] }])[1]!;
         for (const codec of ['h264', 'av1'] as const) {
             const out = encodeArgs(1024, sub, codec);
             expect(out[out.indexOf('-af') + 1]).toContain('c0=c1');

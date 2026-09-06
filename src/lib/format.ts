@@ -257,8 +257,8 @@ const NO_GENRE = 'bg-base-200 hover:bg-base-300 border-base-300';
 
 /** `programs.genres` (大分類の番号の並び) から色を決める。先頭を代表とする */
 export function genreTint(genres: number[] | null): string {
-    if (genres === null || genres.length === 0) return NO_GENRE;
-    return GENRE_TINT[genres[0]] ?? NO_GENRE;
+    const first = genres?.[0];
+    return first === undefined ? NO_GENRE : (GENRE_TINT[first] ?? NO_GENRE);
 }
 
 export const CM_LABEL: Record<string, string> = {

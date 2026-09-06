@@ -50,7 +50,7 @@ function parseLogoEsPids(section: Uint8Array): { serviceId: number; pids: number
     for (const [, pid, info] of pmtStreams(section)) {
         for (const [tag, descriptor] of descriptors(info)) {
             if (tag !== DESC_STREAM_IDENTIFIER || descriptor.length < 1) continue;
-            if (LOGO_COMPONENT_TAGS.has(descriptor[0])) pids.push(pid);
+            if (LOGO_COMPONENT_TAGS.has(descriptor[0]!)) pids.push(pid);
         }
     }
     return { serviceId: u16(section, 3), pids };
@@ -77,15 +77,15 @@ export interface ModuleLogo {
  */
 export function parseLogoModule(data: Uint8Array): ModuleLogo[] {
     if (data.length < 3) return [];
-    const logoType = data[0];
+    const logoType = data[0]!;
     const count = u16(data, 1);
     let at = 3;
 
     const logos: ModuleLogo[] = [];
     for (let i = 0; i < count; i++) {
         if (at + 3 > data.length) break;
-        const logoId = ((data[at] & 0x01) << 8) | data[at + 1];
-        const serviceCount = data[at + 2];
+        const logoId = ((data[at]! & 0x01) << 8) | data[at + 1]!;
+        const serviceCount = data[at + 2]!;
         at += 3;
 
         const services: { networkId: number; serviceId: number }[] = [];

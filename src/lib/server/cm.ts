@@ -160,7 +160,7 @@ export function detectCmRanges(
     const points = boundaries(silences, duration);
     const segments: Range[] = [];
     for (let i = 0; i < points.length - 1; i++) {
-        segments.push({ start: points[i], end: points[i + 1] });
+        segments.push({ start: points[i]!, end: points[i + 1]! });
     }
 
     // 連続するCM尺セグメントを1つのCMブロックにまとめる
@@ -324,7 +324,7 @@ export function fields(out: string): Map<string, string> {
 
 /** `30000/1001` の形のフレームレートを数に直す。読めなければ NaN */
 export function parseFrameRate(value: string | undefined): number {
-    const [num, den] = (value ?? '').trim().split('/').map(Number);
+    const [num = NaN, den] = (value ?? '').trim().split('/').map(Number);
     const fps = den ? num / den : num;
     return Number.isFinite(fps) && fps > 0 ? fps : NaN;
 }

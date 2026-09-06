@@ -160,8 +160,8 @@ describe('1チャンネルの読み取り', () => {
         );
         expect(error).toBeNull();
         expect(services?.map((s) => s.serviceId)).toEqual([1024, 1025]);
-        expect(services?.[0].name).toBe('TOKYO MX1');
-        expect(services?.[0].remoteControlKeyId).toBe(6);
+        expect(services?.[0]?.name).toBe('TOKYO MX1');
+        expect(services?.[0]?.remoteControlKeyId).toBe(6);
     });
 
     test('何も出てこなければ受信できていない', async () => {

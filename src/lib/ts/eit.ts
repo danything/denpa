@@ -134,12 +134,12 @@ export function parseMjdTime(data: Uint8Array, at: number): number | null {
     }
     if (allOnes) return null;
 
-    const mjd = (data[at] << 8) | data[at + 1];
+    const mjd = (data[at]! << 8) | data[at + 1]!;
     const seconds =
         (mjd - MJD_EPOCH) * 86400 +
-        bcd(data[at + 2]) * 3600 +
-        bcd(data[at + 3]) * 60 +
-        bcd(data[at + 4]) -
+        bcd(data[at + 2]!) * 3600 +
+        bcd(data[at + 3]!) * 60 +
+        bcd(data[at + 4]!) -
         JST_OFFSET;
     return seconds * 1000;
 }
@@ -147,7 +147,7 @@ export function parseMjdTime(data: Uint8Array, at: number): number | null {
 /** BCD 3バイトの尺 (時分秒) を ms に。全ビット1なら「終了未定」 */
 export function parseBcdDuration(data: Uint8Array, at: number): number | null {
     if (data[at] === 0xff && data[at + 1] === 0xff && data[at + 2] === 0xff) return null;
-    return (bcd(data[at]) * 3600 + bcd(data[at + 1]) * 60 + bcd(data[at + 2])) * 1000;
+    return (bcd(data[at]!) * 3600 + bcd(data[at + 1]!) * 60 + bcd(data[at + 2]!)) * 1000;
 }
 
 /**
@@ -175,7 +175,7 @@ const VIDEO_CODEC: Record<number, string> = { 1: 'mpeg2', 5: 'h.264', 9: 'h.265'
 const SAMPLING_RATE: Record<number, number> = { 1: 16000, 2: 22050, 3: 24000, 5: 32000, 6: 44100, 7: 48000 };
 
 const lang = (data: Uint8Array, at: number) =>
-    String.fromCharCode(data[at], data[at + 1], data[at + 2]).toLowerCase();
+    String.fromCharCode(data[at]!, data[at + 1]!, data[at + 2]!).toLowerCase();
 
 /**
  * 記述子を読んで番組の中身を埋める。
@@ -204,21 +204,21 @@ function readDescriptors(event: EitEvent, body: Uint8Array): void {
     for (const [tag, data] of descriptors(body)) {
         switch (tag) {
             case DESC_SHORT_EVENT: {
-                const nameLength = data[3];
+                const nameLength = data[3]!;
                 const textAt = 4 + nameLength;
                 event.name = decodeAribText(data.subarray(4, textAt));
-                const textLength = data[textAt];
+                const textLength = data[textAt]!;
                 event.description = decodeAribText(data.subarray(textAt + 1, textAt + 1 + textLength));
                 break;
             }
             case DESC_EXTENDED_EVENT: {
                 let at = 5;
-                const itemsEnd = 5 + data[4];
+                const itemsEnd = 5 + data[4]!;
                 while (at < itemsEnd && at < data.length) {
-                    const headingLength = data[at];
+                    const headingLength = data[at]!;
                     const heading = decodeAribText(data.subarray(at + 1, at + 1 + headingLength));
                     at += 1 + headingLength;
-                    const textLength = data[at];
+                    const textLength = data[at]!;
                     const text = data.subarray(at + 1, at + 1 + textLength);
                     at += 1 + textLength;
 
@@ -234,13 +234,13 @@ function readDescriptors(event: EitEvent, body: Uint8Array): void {
             }
             case DESC_CONTENT: {
                 for (let at = 0; at + 2 <= data.length; at += 2) {
-                    event.genres.push({ lv1: data[at] >> 4, lv2: data[at] & 0x0f });
+                    event.genres.push({ lv1: data[at]! >> 4, lv2: data[at]! & 0x0f });
                 }
                 break;
             }
             case DESC_COMPONENT: {
-                const streamContent = data[0] & 0x0f;
-                const componentType = data[1];
+                const streamContent = data[0]! & 0x0f;
+                const componentType = data[1]!;
                 event.video = {
                     type: VIDEO_CODEC[streamContent] ?? null,
                     resolution:
@@ -264,15 +264,17 @@ function readDescriptors(event: EitEvent, body: Uint8Array): void {
              *     [残り]   text_char … **放送が付けた名前**
              */
             case DESC_AUDIO_COMPONENT: {
-                const flags = data[5];
+                const flags = data[5]!;
                 const multiLingual = (flags & 0x80) !== 0;
                 const langs = [lang(data, 6)];
                 if (multiLingual) langs.push(lang(data, 9));
                 const text = decodeAribText(data.subarray(6 + (multiLingual ? 6 : 3))).trim();
+                const samplingRate = SAMPLING_RATE[(flags >> 1) & 0x07];
                 event.audios.push({
-                    componentType: data[1],
+                    componentType: data[1]!,
                     langs,
-                    samplingRate: SAMPLING_RATE[(flags >> 1) & 0x07],
+                    // 表に無い符号 (予約) なら付けない
+                    ...(samplingRate === undefined ? {} : { samplingRate }),
                     ...(text === '' ? {} : { text }),
                     main: (flags & 0x40) !== 0,
                 });
@@ -298,36 +300,36 @@ function readDescriptors(event: EitEvent, body: Uint8Array): void {
  */
 export function parseEit(section: Uint8Array): EitSection | null {
     if (section.length < 18) return null;
-    const tableId = section[0];
+    const tableId = section[0]!;
     if (!isEitActual(tableId)) return null;
 
     const result: EitSection = {
         tableId,
-        serviceId: (section[3] << 8) | section[4],
-        version: (section[5] >> 1) & 0x1f,
-        sectionNumber: section[6],
-        lastSectionNumber: section[7],
-        transportStreamId: (section[8] << 8) | section[9],
-        originalNetworkId: (section[10] << 8) | section[11],
-        segmentLastSectionNumber: section[12],
-        lastTableId: section[13],
+        serviceId: (section[3]! << 8) | section[4]!,
+        version: (section[5]! >> 1) & 0x1f,
+        sectionNumber: section[6]!,
+        lastSectionNumber: section[7]!,
+        transportStreamId: (section[8]! << 8) | section[9]!,
+        originalNetworkId: (section[10]! << 8) | section[11]!,
+        segmentLastSectionNumber: section[12]!,
+        lastTableId: section[13]!,
         events: [],
     };
 
     let at = 14;
     const end = section.length - 4;
     while (at + 12 <= end) {
-        const descriptorsLength = ((section[at + 10] & 0x0f) << 8) | section[at + 11];
+        const descriptorsLength = ((section[at + 10]! & 0x0f) << 8) | section[at + 11]!;
         const body = section.subarray(at + 12, at + 12 + descriptorsLength);
         const event: EitEvent = {
             serviceId: result.serviceId,
             transportStreamId: result.transportStreamId,
             originalNetworkId: result.originalNetworkId,
-            eventId: (section[at] << 8) | section[at + 1],
+            eventId: (section[at]! << 8) | section[at + 1]!,
             startAt: parseMjdTime(section, at + 2),
             duration: parseBcdDuration(section, at + 7),
-            runningStatus: (section[at + 10] >> 5) & 0x07,
-            isFree: (section[at + 10] & 0x10) === 0,
+            runningStatus: (section[at + 10]! >> 5) & 0x07,
+            isFree: (section[at + 10]! & 0x10) === 0,
             name: '',
             description: '',
             extended: {},

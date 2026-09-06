@@ -157,8 +157,8 @@ export function assign<T extends Assignable>(
         /** マージンをどかしてもらった区間。あとで相手を縮める */
         const pushed: number[] = [];
         for (let i = 0; i + 1 < points.length; i++) {
-            const from = points[i];
-            const to = points[i + 1];
+            const from = points[i]!;
+            const to = points[i + 1]!;
             const here = holding(rivals, from);
             const all = new Set([candidate.channel, ...here.all]);
             const body = new Set([candidate.channel, ...here.body]);
@@ -247,7 +247,7 @@ export function rivalsOf(occupants: Iterable<Occupant>, margins: Margins): Rival
             let high = list.length;
             while (low < high) {
                 const mid = (low + high) >> 1;
-                if (list[mid].start_at < at - slack) low = mid + 1;
+                if (list[mid]!.start_at < at - slack) low = mid + 1;
                 else high = mid;
             }
             return low;
@@ -290,7 +290,7 @@ export function contending(
     // 総当たりにしない。ゆるい条件のルールは数千件に当たるので、
     // 1件ずつ全件と突き合わせると番組表の二乗ぶん回ることになる
     for (let at = rivals.from(mine.from); at < rivals.list.length; at++) {
-        const other = rivals.list[at];
+        const other = rivals.list[at]!;
         const theirs = window(other, margins);
         // 並びは開始順。これより後ろは全部この番組より後に始まる
         if (theirs.from >= mine.to) break;
