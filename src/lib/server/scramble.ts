@@ -1,5 +1,6 @@
 import { closeSync, openSync, readSync } from 'node:fs';
 import { relative } from 'node:path';
+import { array, boolean, type Infer, object, optional, string, tolerate } from '../shape';
 import { config } from './config';
 
 /**
@@ -69,12 +70,17 @@ export function isScrambled(path: string): boolean {
     return scrambledRatio(path) > THRESHOLD;
 }
 
-export interface CardStatus {
-    ok: boolean;
+/** エージェントの `/denpa/card` の答え。形はここで確かめる (`shape.ts`) */
+const CARD_STATUS = object({
+    ok: boolean,
     /** 画面にそのまま出す一言 */
-    message: string;
-    readers: string[];
-}
+    message: string,
+    readers: array(string),
+});
+export type CardStatus = Infer<typeof CARD_STATUS>;
+
+/** `/denpa/decode` の答え。断られたときは `error` に理由 */
+const DECODED = object({ ok: optional(boolean), error: optional(string) });
 
 /**
  * カードリーダーの状態。設定画面に出す。
@@ -91,12 +97,7 @@ export async function cardStatus(): Promise<CardStatus> {
         if (!res.ok) {
             return { ok: false, message: `解除の受け口が ${res.status} を返しました`, readers: [] };
         }
-        const body = (await res.json()) as Partial<CardStatus>;
-        return {
-            ok: body.ok === true,
-            message: body.message ?? '',
-            readers: body.readers ?? [],
-        };
+        return tolerate(CARD_STATUS, await res.json(), 'エージェントの /denpa/card');
     } catch (error) {
         return { ok: false, message: `解除の受け口に繋がりません: ${error}`, readers: [] };
     }
@@ -138,7 +139,7 @@ export async function descramble(
             body: JSON.stringify({ input: from, output: to }),
             signal: signal ?? null,
         });
-        const body = (await res.json()) as { ok?: boolean; error?: string };
+        const body = tolerate(DECODED, await res.json(), 'エージェントの /denpa/decode');
         if (!res.ok || body.ok !== true) {
             return { ok: false, error: body.error ?? `解除の受け口が ${res.status} を返しました` };
         }

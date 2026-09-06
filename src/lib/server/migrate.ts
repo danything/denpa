@@ -15,6 +15,7 @@ import { dirname, join } from 'node:path';
 import { SQL } from 'bun';
 import { and, eq, isNull } from 'drizzle-orm';
 import { parseSearchFields, SEARCH_FIELDS } from '$lib/search';
+import { array, number, read } from '$lib/shape';
 import { now, orm } from './db';
 import { emit } from './events';
 import { libraryPath, recordedPath } from './library';
@@ -390,7 +391,7 @@ async function importRules(connection: SQL, options: MigrateOptions): Promise<vo
         let channels: number[] = [];
         if (row.channelIds !== null) {
             try {
-                channels = (JSON.parse(row.channelIds) as number[])
+                channels = read(array(number), JSON.parse(row.channelIds), 'EPGStation の channelIds')
                     .map(serviceIdFor)
                     .filter((id): id is number => id !== undefined);
             } catch {
