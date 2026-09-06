@@ -216,4 +216,11 @@ COPY --from=build /app/drizzle ./drizzle
 COPY --from=build /app/server.js ./server.js
 
 EXPOSE 3000
+# 動いている版。CI が `git describe --tags --abbrev=0` (そのコミットから辿れる直近の
+# リリースの札) を入れる。手元で組むと dev。新しい版の知らせはこれと GitHub の
+# 最新のリリースを見比べて出す (src/lib/server/update.ts)。**いちばん最後に置く** —
+# 版が変わるだけで上の層を組み直さないため
+ARG DENPA_VERSION=dev
+ENV DENPA_VERSION=${DENPA_VERSION}
+
 CMD ["bun", "./server.js"]
