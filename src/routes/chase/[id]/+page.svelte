@@ -6,7 +6,6 @@
     import CodecMenu from '$lib/components/player/CodecMenu.svelte';
     import ControlBar from '$lib/components/player/ControlBar.svelte';
     import ControlButton from '$lib/components/player/ControlButton.svelte';
-    import { centerTap } from '$lib/components/player/center-tap';
     import { playerControls } from '$lib/components/player/controls.svelte';
     import EdgeButton from '$lib/components/player/EdgeButton.svelte';
     import FactsAside from '$lib/components/player/FactsAside.svelte';
@@ -25,6 +24,7 @@
         SOUND_OFF,
         SOUND_ON,
     } from '$lib/components/player/icons';
+    import { playerKeys } from '$lib/components/player/keys';
     import MediaStack from '$lib/components/player/MediaStack.svelte';
     import PlayerStage from '$lib/components/player/PlayerStage.svelte';
     import PlayerVeil from '$lib/components/player/PlayerVeil.svelte';
@@ -34,9 +34,12 @@
     import Toasts, { type Notice } from '$lib/components/Toasts.svelte';
     import { programDetail } from '$lib/detail.svelte';
     import { clock as clockLabel, time } from '$lib/format';
+    import { write as remind, read as stored } from '$lib/keep';
     import { livePlayer } from '$lib/live-player.svelte';
     import { liveUpdates } from '$lib/live-updates.svelte';
     import { keepResume } from '$lib/resume';
+    import { SPEEDS } from '$lib/ts/pacing';
+    import { type Tap, tap, zoneOf } from '$lib/ts/watch';
 
     /**
      * 追っかけ再生 ([issue #16](https://github.com/danything/denpa/issues/16))。
@@ -53,6 +56,8 @@
     let video = $state<HTMLVideoElement | null>(null);
     let still = $state<HTMLCanvasElement | null>(null);
     let overlay = $state<HTMLCanvasElement | null>(null);
+    /** 全画面にする枠 (`PlayerStage` が bind する)。キーの `f` から使う */
+    let stageEl = $state<HTMLElement | null>(null);
 
     /** 右端を伸ばすための時計。1秒刻みで十分 (バーの目盛りより細かい) */
     let clock = $state(Date.now());
@@ -98,6 +103,7 @@
     });
 
     onMount(() => {
+        want = storedSpeed();
         if (still !== null && overlay !== null) player.attach(still, overlay);
         // 前に途中まで観ていたら、そこから
         if (video !== null) void player.openChase(video, data.rec.id, data.rec.resumeSec);
@@ -141,7 +147,47 @@
 
     /** シーク。**録れているところより先へは行かせない** (まだ無い) */
     function seekTo(value: number): void {
-        player.chaseSeek(Math.min(value, Math.max(0, recorded - 5)));
+        player.chaseSeek(Math.max(0, Math.min(value, Math.max(0, recorded - 5))));
+    }
+
+    /** いまの場所から送る・戻す。キーと端2回タップが使う */
+    function seekBy(seconds: number): void {
+        seekTo(pos + seconds);
+    }
+
+    /**
+     * 選んでいる速さ。**端末ごとに覚え、器を作り直しても当て直す。**
+     *
+     * 鍵は観る画面と同じ (`watch-speed`) — 焼く前と後で同じ録画を観るのに、
+     * 速さだけ選び直させる理由が無い。持っておくのは、追っかけのシークが
+     * 読み直し (`openChase`) になることがあり、そこで**押した覚えの無いまま
+     * 等速へ戻る**ため (`live-player` の `clear`)
+     */
+    const SPEED_KEY = 'watch-speed';
+    let want = $state(1);
+
+    /** 前に選んだ速さ。読めない・知らない値なら等速 */
+    function storedSpeed(): number {
+        const saved = Number(stored(SPEED_KEY));
+        return SPEEDS.includes(saved as (typeof SPEEDS)[number]) ? saved : 1;
+    }
+
+    function setSpeed(value: number): void {
+        want = value;
+        player.setSpeed(value);
+        remind(SPEED_KEY, String(value));
+    }
+
+    /** 器を作り直したあとに当て直す。押されたときは `setSpeed` が先に入れている */
+    $effect(() => {
+        if (player.state === 'playing' && player.speed !== want) player.setSpeed(want);
+    });
+
+    /** 順送り。行き過ぎたら戻れるように、戻る側も持つ (観る画面と同じ) */
+    function stepSpeed(direction: number): void {
+        const at = SPEEDS.indexOf(want as (typeof SPEEDS)[number]);
+        const next = SPEEDS[Math.min(SPEEDS.length - 1, Math.max(0, (at === -1 ? 0 : at) + direction))];
+        if (next !== undefined) setSpeed(next);
     }
 
     /**
@@ -164,8 +210,54 @@
     const controlsShown = $derived(controls.shown);
     const toggle = controls.toggle;
 
-    /** 真ん中あたりを素早く2回で再生/一時停止 (`center-tap.ts`)。1回目は操作列の出し入れ */
-    const stageTap = centerTap(() => player.toggle(), toggle);
+    /**
+     * 押したことの読み方は**観る画面と同じ** (`ts/watch.ts` の `tap`)。
+     *
+     * - マウス … 1回で再生/一時停止、左右の端を素早く2回で 10秒
+     * - 指 … 1回で操作列の出し入れ、真ん中を素早く2回で再生/一時停止、端2回で 10秒
+     *
+     * 前は真ん中の2回だけを見ていたので (`center-tap.ts`)、**マウスで絵を押しても
+     * 止まらず、端2回の送りも無かった**。観ているものは焼き上がった録画と同じなのに、
+     * 焼く前だけ押し方が違っていた
+     */
+    let lastTap = $state<Tap | null>(null);
+    const coarse = typeof window === 'undefined' ? false : window.matchMedia('(pointer: coarse)').matches;
+    function press(event: MouseEvent): void {
+        const box = (event.currentTarget as HTMLElement).getBoundingClientRect();
+        const { action, next } = tap(
+            lastTap,
+            event.timeStamp,
+            zoneOf(event.clientX - box.left, box.width),
+            coarse,
+        );
+        lastTap = next;
+        if (action.kind === 'play') player.toggle();
+        else if (action.kind === 'controls') toggle();
+        else {
+            // 2回目。マウスは1回目で再生を切り替えているので、それも戻す
+            if (action.undo) player.toggle();
+            seekBy(action.by);
+        }
+    }
+
+    /** 全画面の出入り。操作列のボタンと同じことをキーからもできるように */
+    function toggleFull(): void {
+        if (document.fullscreenElement !== null) void document.exitFullscreen().catch(() => {});
+        else if (stageEl !== null) void stageEl.requestFullscreen().catch(() => {});
+    }
+
+    /** キーでも動かせるようにする。割り当ては観る画面と共通 (`player/keys.ts`) */
+    const keys = playerKeys({
+        togglePlay: () => player.toggle(),
+        seekBy,
+        toggleCaptions: () => player.toggleCaptions(),
+        snapshot,
+        toggleFull,
+        stepSpeed,
+        // **消音は player 側の印で切り替える。** 絵の要素を直に触ると、繋ぎ直しの
+        // たびに `silenced` で上書きされて戻り、ボタンの見た目ともずれる
+        toggleMute: () => (player.silenced ? player.unmute() : player.mute()),
+    });
 
     /** いまの1コマを字幕ごと切り抜く (ライブ・観る画面と同じ) */
     const shooter = snapshotter(controls);
@@ -183,16 +275,18 @@
     <title>{data.rec.name} (追っかけ) - denpa</title>
 </svelte:head>
 
+<svelte:window onkeydown={keys} />
+
 <!-- **ライブ・観る画面と同じ形。** 映像が左、番組の中身が右。決めごとは watch/[id] のコメント -->
 <div class="flex flex-col gap-4 md:h-full md:min-h-0 md:flex-row">
     <section class="flex min-w-0 flex-1 flex-col md:min-h-0">
     <!-- 舞台の配線と映像の束はライブと共通 (PlayerStage / MediaStack) -->
-    <PlayerStage {controls} testid="chase">
+    <PlayerStage {controls} testid="chase" bind:element={stageEl}>
         {#snippet children(stage)}
         <MediaStack
             holding={player.holding}
             captionsOn={player.captions && player.hasCaptions}
-            onclick={stageTap}
+            onclick={press}
             prefix="chase"
             bind:video
             bind:still
@@ -311,8 +405,8 @@
                 <SpeedMenu
                     testid="chase-speed"
                     label="再生の速さ"
-                    speed={player.speed}
-                    onselect={(speed) => player.setSpeed(speed)}
+                    speed={want}
+                    onselect={setSpeed}
                 />
 
                 <ControlButton

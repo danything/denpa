@@ -43,6 +43,29 @@ test.describe('追っかけ再生の入口', () => {
         // まだ焼けていないので、観る画面への案内は出ていない
         await expect(page.getByTestId('chase-encoded')).toHaveCount(0);
 
+        /*
+         * **押し方は観る画面と同じ** (`player/keys.ts` と `ts/watch.ts` の `tap`)。
+         * 焼く前だけ空白も画面内クリックも効かず、同じ録画なのに押し方が変わっていた。
+         * 絵は出ない (偽 ffmpeg なので) が、止めた・動かしたはボタンの名前に出る
+         */
+        const play = page.getByTestId('chase-play');
+        await expect(play).toHaveAttribute('aria-label', '一時停止');
+        await page.keyboard.press('Space');
+        await expect(play).toHaveAttribute('aria-label', '再生');
+        // k でも同じ (観る画面と同じ割り当て)
+        await page.keyboard.press('k');
+        await expect(play).toHaveAttribute('aria-label', '一時停止');
+
+        /*
+         * 画面内クリックでも切り替わる。**押す口が繋がっているかだけを見る** —
+         * 偽 ffmpeg では絵が出ないので状態の幕 (`chase-status`) が絵を覆ったままで、
+         * 本物のマウスの当たり判定はここでは通らない。押された位置の読み分け
+         * (端2回で 10秒 など) は `ts/watch.ts` の試験が見ている
+         */
+        await page.getByTestId('chase-video').evaluate((el) => (el as HTMLElement).click());
+        await expect(play).toHaveAttribute('aria-label', '再生');
+        await page.keyboard.press('k');
+
         // 焼き直させる (失敗を解いてから)。焼き上がると、追っかけの画面に案内が出る
         rmSync(stack.failFile);
         const res = await request.post('/?/reencode', { form: { id: String(id) } });
