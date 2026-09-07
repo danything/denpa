@@ -7,10 +7,11 @@ import {
     buildConcatArgs,
     buildSegmentArgs,
     concatList,
+    encodeProgress,
+    expectedFrames,
     failureReason,
     findInputFd,
     headSkip,
-    inputProgress,
     parseOutFrames,
     pickSmooth,
     readInputPos,
@@ -327,62 +328,113 @@ describe('コマ数の決め方', () => {
     });
 });
 
-describe('inputProgress', () => {
+describe('expectedFrames', () => {
+    // 1080i の放送 = 毎秒 29.97 コマ。60コマで出すならインタレ解除が倍にする
+    const hd = { duration: 100, fps: 30000 / 1001 };
+
+    test('60コマで出すなら入力のコマ数の2倍', () => {
+        expect(expectedFrames(hd, 0, true)).toBeCloseTo(5994, 0);
+    });
+
+    test('30コマで出すなら入力のコマ数そのまま', () => {
+        expect(expectedFrames(hd, 0, false)).toBeCloseTo(2997, 0);
+    });
+
+    /*
+     * **出力の毎秒コマ数を決め打ちにしない。** 720p で送っている局は入力が
+     * 59.94 で、60コマ決め打ちだと分母が半分になり 50% で頭打ちになる
+     */
+    test('入力が 59.94 の素材でも当たる (出力を決め打ちにしない)', () => {
+        expect(expectedFrames({ duration: 100, fps: 60000 / 1001 }, 0, true)).toBeCloseTo(11988, 0);
+    });
+
+    test('頭から捨てるぶんは焼かないので引く', () => {
+        expect(expectedFrames(hd, 10, false)).toBeCloseTo(2697, 0);
+    });
+
+    test('測れていなければ NaN (呼ぶ側が読み位置に落ちる)', () => {
+        expect(expectedFrames(undefined, 0, true)).toBeNaN();
+        expect(expectedFrames({ duration: NaN, fps: 30 }, 0, true)).toBeNaN();
+        expect(expectedFrames({ duration: 100, fps: NaN }, 0, true)).toBeNaN();
+        // 捨てるぶんが尺より長い (測り違え)。0コマや負のコマ数は出さない
+        expect(expectedFrames(hd, 200, true)).toBeNaN();
+    });
+});
+
+describe('encodeProgress', () => {
     /*
      * out_time_us はわざとほぼ最後を指す値にしてある。実機の TOKYO MX 録画で、
      * 入力を 65% しか読んでいないのに時刻だけ 99.1% に飛んで「あと1秒」のまま
-     * 数分止まって見えた。割合は読み位置だけを信じ、時刻には釣られないこと
+     * 数分止まって見えた。割合は焼けたコマ数だけを信じ、時刻には釣られないこと
      */
-    const block = {
+    const at = (frame: number) => ({
         progress: 'continue',
+        frame: String(frame),
         out_time_us: '1810000000',
         total_size: '1048576',
         bitrate: '2000.0',
         speed: '8.0x',
         drop_frames: '0',
-    };
+    });
+    const block = at(0);
 
-    test('読み位置から割合を出す。ffmpeg の言う時刻には釣られない', () => {
-        const p = inputProgress(1000)(0, 500, block, 0);
+    test('焼けたコマ数から割合を出す。ffmpeg の言う時刻には釣られない', () => {
+        expect(encodeProgress(1000, 1000)(0, 0, at(500), 0).percent).toBeCloseTo(0.5, 3);
+    });
+
+    /*
+     * **実機で踏んだ形** (2026-09、7.4GB の映画)。デマクサだけ先に走って入力を
+     * 読み切り、焼くほうは半分。読み位置で出していた頃は 99% に貼り付いて
+     * 「あと50分」の間ずっと止まって見えた
+     */
+    test('入力を読み切っていても、焼けた量で答える', () => {
+        const p = encodeProgress(1000, 1000)(0, 1000, at(500), 0);
         expect(p.percent).toBeCloseTo(0.5, 3);
     });
 
-    test('読み位置が取れない間は直前の値を保つ', () => {
-        expect(inputProgress(1000)(0, NaN, block, 0.42).percent).toBe(0.42);
+    test('コマ数が数えられなければ読み位置に落ちる', () => {
+        expect(encodeProgress(NaN, 1000)(0, 500, at(0), 0).percent).toBeCloseTo(0.5, 3);
     });
 
-    test('入力の大きさが測れていなくても動じない', () => {
-        expect(inputProgress(NaN)(0, 500, block, 0.1).percent).toBe(0.1);
+    test('どちらも取れない間は直前の値を保つ', () => {
+        expect(encodeProgress(NaN, NaN)(0, NaN, block, 0.42).percent).toBe(0.42);
     });
 
     test('割合は巻き戻らない', () => {
-        const report = inputProgress(1000);
-        report(0, 800, block, 0);
-        expect(report(1000, 700, block, 0.8).percent).toBe(0.8);
+        const report = encodeProgress(1000, 1000);
+        report(0, 0, at(800), 0);
+        expect(report(1000, 0, at(700), 0.8).percent).toBe(0.8);
     });
 
     test('progress=end で必ず100%にする', () => {
-        expect(inputProgress(NaN)(0, NaN, { progress: 'end' }, 0.9).percent).toBe(1);
+        expect(encodeProgress(NaN, NaN)(0, NaN, { progress: 'end' }, 0.9).percent).toBe(1);
     });
 
-    test('入力を読み切っても、終わるまでは99%で止める', () => {
-        // 読み切ったあとも溜めたコマの吐き出しが残っている。100.0% で止まって
-        // 見えるより、99% のまま「まだ終わっていない」と言うほうが正直
-        expect(inputProgress(1000)(0, 1000, block, 0).percent).toBe(0.99);
+    test('焼き切っても、終わるまでは99%で止める', () => {
+        // 最後のコマを焼いたあとも吐き出しと mux の締めが残っている。100.0% で
+        // 止まって見えるより、99% のまま「まだ終わっていない」と言うほうが正直
+        expect(encodeProgress(1000, 1000)(0, 0, at(1000), 0).percent).toBe(0.99);
     });
 
-    test('残り時間は直近の読み速度から出す。速さが読めないうちは null', () => {
-        const report = inputProgress(10_000);
-        expect(report(0, 1000, block, 0).etaMs).toBeNull(); // 窓がまだ短い
-        // 5秒で1000バイト読めた → 残り8000バイトは40秒
-        expect(report(5000, 2000, block, 0.1).etaMs).toBe(40_000);
+    test('残り時間は直近の焼き足しから出す。速さが読めないうちは null', () => {
+        const report = encodeProgress(10_000, NaN);
+        expect(report(0, NaN, at(1000), 0).etaMs).toBeNull(); // 窓がまだ短い
+        // 5秒で1000コマ焼けた → 残り8000コマは40秒
+        expect(report(5000, NaN, at(2000), 0.1).etaMs).toBe(40_000);
     });
 
-    test('読みが止まったら残り時間を出さない (「あと1秒」で張り付かせない)', () => {
-        const report = inputProgress(10_000);
-        report(0, 2000, block, 0);
-        report(31_000, 2000, block, 0.2); // 窓から最初の1点が落ちる
-        expect(report(36_000, 2000, block, 0.2).etaMs).toBeNull();
+    test('焼くほうが止まったら残り時間を出さない (「あと1秒」で張り付かせない)', () => {
+        const report = encodeProgress(10_000, NaN);
+        report(0, NaN, at(2000), 0);
+        report(31_000, NaN, at(2000), 0.2); // 窓から最初の1点が落ちる
+        expect(report(36_000, NaN, at(2000), 0.2).etaMs).toBeNull();
+    });
+
+    /** 詰まった時の見立てに、読み位置とコマ数の両方を残す */
+    test('控えの読み位置もログに残る', () => {
+        const log = encodeProgress(1000, 10 * 1024 * 1024)(0, 5 * 1024 * 1024, at(500), 0).log;
+        expect(log).toContain('frame: 500/1000');
+        expect(log).toContain('input: 5/10MB');
     });
 });
 
