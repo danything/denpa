@@ -1,0 +1,31 @@
+{{- if .Values.httpRoute.enabled }}
+# Gateway API の HTTPRoute。**認証は denpa 自身がやる** (docs/auth.md) ので、前段は名前を届けるだけ。
+# 証明書は Gateway 側のリスナーが持つので、ここでは指定しない (Ingress の tls に相当するものが無い)。
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: denpa
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "denpa.labels" . | nindent 4 }}
+  {{- with .Values.httpRoute.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  parentRefs:
+    {{- toYaml .Values.httpRoute.parentRefs | nindent 4 }}
+  {{- $hosts := .Values.httpRoute.hostnames | default .Values.ingress.hosts }}
+  {{- with $hosts }}
+  hostnames:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /
+      backendRefs:
+        - name: denpa
+          port: {{ .Values.service.port }}
+{{- end }}

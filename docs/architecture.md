@@ -56,7 +56,7 @@ TSは追記で開いていて、次の起動で `recoverOrphanedRecordings` が�
    いちばん最後で、こちらはその手前 (`hooks.server.ts` はアプリの読み込みで走る)
    なので、**最初の引き取りでは外すものがまだ無い**。そのまま置くと両方が
    登録された状態になり、プロセスは生きたまま**ポートだけ閉じます** — 実機で
-   `/proc/net/tcp` に listen が1つも無く、Traefik が「no available server」を
+   `/proc/net/tcp` に listen が1つも無く、前段が「no available server」を
    返しているのに、番組表は集まり続けている状態を確認しました。
    `setImmediate` でもう一度引き取り直します。
 
@@ -198,12 +198,13 @@ PreSync フックに置いています (`denpa-prepull`、中身は `/bin/true`)
 共通アドオンは別の(プライベートな) bootstrap リポジトリ側です。適用前に以下が要ります。
 
 - **StorageClass `local-path-retain`** — `reclaimPolicy: Retain` の local-path
-- **Traefik** — `mydnschallenge` certResolver (Cloudflare DNS-01)。forward-auth を
-  外したので、名前空間をまたぐ参照はもうありません
+- **Gateway API の Gateway** — chart の `httpRoute.parentRefs` が指す先。証明書は
+  Gateway 側のリスナーが持ちます (このクラスタでは cert-manager が Cloudflare DNS-01 で発行)。
+  forward-auth を外したので、名前空間をまたぐ参照はもうありません
 - **ArgoCD** — push時に webhook が自動登録される運用。Application 自体は
   [deploy/application.yaml](../deploy/application.yaml) に置いてあり、bootstrap の
   ApplicationSet が `deploy/argocd.yaml` を見て拾います
-- **DNS** — `dp.doany.io` が Traefik の外部IPを指すこと。
+- **DNS** — `dp.doany.io` が Gateway の外部IPを指すこと。
   LAN 用の `dp.l.doany.io` は `*.l.doany.io` の書き換えで内側のIPへ
 - **チューナードライバ** — エージェントは `privileged: true` かつ `/dev/bus`・`/dev/dvb` を
   hostPath でマウントするので、ノード側にドライバが読み込まれていること

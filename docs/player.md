@@ -71,7 +71,7 @@
 名前を LAN 内のアドレスに向ければ**、公開しないまま本物の証明書が使えます
 (DNS-01 なので外から繋がる必要がありません)。
 
-IngressRoute (chart の `ingress.hosts`) に
+HTTPRoute (chart の `httpRoute.hostnames`) に
 その名前を足してあり、**https://dp.l.doany.io** です。名前は家の中でだけ引け、
 denpa はそのネットワークから来た人には何も聞きません (`TRUSTED_NETWORKS`、[auth.md](auth.md))。
 プレイヤー (テレビの VLC) が録画を取りに来るのも同じ口です。

@@ -54,7 +54,7 @@ spec:
           encodeConcurrency: 2
           # LAN から来たときだけ何も聞かずに通す (docs/auth.md)
           trustedNetworks: 10.10.0.0/16
-          # Traefik の後ろに居るので、接続元は x-forwarded-for から読む
+          # Gateway (Envoy) の後ろに居るので、接続元は x-forwarded-for から読む
           addressHeader: x-forwarded-for
           # 同じ denpa を2つの名前で出しているので、ホーム画面の名前を分ける
           pwaNames: dp.doany.io=denpa,dp.l.doany.io=denpa 宅内
@@ -64,16 +64,21 @@ spec:
         persistence:
           storageClassName: local-path-retain
 
-        ingress:
-          hosts:
+        # Cilium Gateway (danything/gitops の bootstrap/gateway/) に付ける。
+        # dp.doany.io は `*.doany.io` の、dp.l.doany.io は `*.l.doany.io` の
+        # リスナーに載るので、parentRef を 2 つに分ける (段数ごとに証明書が違うため)
+        httpRoute:
+          enabled: true
+          parentRefs:
+            - name: doany
+              namespace: kube-system
+              sectionName: https
+            - name: doany
+              namespace: kube-system
+              sectionName: https-lan
+          hostnames:
             - dp.doany.io
             - dp.l.doany.io
-        traefik:
-          enabled: true
-          entryPoints:
-            - websecure
-          certResolver: mydnschallenge
-          nativeLB: true
   syncPolicy:
     automated:
       prune: true
