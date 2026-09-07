@@ -23,7 +23,13 @@ const { recordings } = await import('./schema');
 const { failStrayRecordings } = await import('./recorder');
 
 const MINUTE = 60_000;
-/** 終了時刻を過ぎてから畳むまでの猶予 (recorder.ts の STRAY_GRACE) */
+/**
+ * 終了時刻を過ぎてから畳むまでの猶予 (`recorder.ts` の `STRAY_GRACE`)。
+ *
+ * **写しだが、ずれれば下の2本が落ちる。** 猶予を縮めれば「猶予の内は触らない」が、
+ * 伸ばせば「過ぎていれば失敗にする」が落ちる。黙って通ることは無いので、
+ * 試すためだけに `STRAY_GRACE` を外へ出さない
+ */
 const GRACE = MINUTE;
 /** 基準の時刻。番組はこれより前に終わっている */
 const NOW = Date.UTC(2026, 8, 7, 3, 0, 0);
