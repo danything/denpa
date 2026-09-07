@@ -353,6 +353,17 @@ export function headSkip(videoStart: number | undefined): number {
 }
 
 /**
+ * `-ss` に渡す長さ。**焼くほうと進み具合の分母で同じ値を使う。**
+ *
+ * 2つの理由が足し算になる (内訳は buildArgs のコメント)。ここが食い違うと、
+ * 捨てた量と分母から引いた量がずれて、進み具合が最後まで届かない (または
+ * 先に振り切れる)。片方だけ変えられないよう、足し算そのものをここ1箇所に置く
+ */
+export function inputSkip(seek: number | null, videoStart: number | undefined): number {
+    return (seek ?? 0) + headSkip(videoStart);
+}
+
+/**
  * ffmpeg の引数。EPGStation 時代の enc.js をそのまま移植したもので、
  * 各フラグの理由はコメントに残してある(ARIB字幕の焼き込み、インタレ解除、デュアルモノ分離)。
  *
@@ -394,7 +405,7 @@ export function buildArgs(
      *
      * 字幕 (`.sup`) は捨てたぶんを引いた時刻で作ってある (subtitle.rebase)。
      */
-    const skip = (seek ?? 0) + headSkip(options.videoStart);
+    const skip = inputSkip(seek, options.videoStart);
     if (skip > 0) args.push('-ss', String(skip));
     args.push(...TS_PROBE);
     args.push('-i', input);
@@ -822,7 +833,7 @@ async function runFfmpeg(
     }
     const total = expectedFrames(
         options.probed,
-        (seek ?? 0) + headSkip(options.videoStart),
+        inputSkip(seek, options.videoStart),
         options.smoothMotion === true,
     );
     const progress = encodeProgress(total, inputBytes);

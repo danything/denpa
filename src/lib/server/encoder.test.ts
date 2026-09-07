@@ -12,6 +12,7 @@ import {
     failureReason,
     findInputFd,
     headSkip,
+    inputSkip,
     parseOutFrames,
     pickSmooth,
     readInputPos,
@@ -325,6 +326,25 @@ describe('コマ数の決め方', () => {
         const args = buildArgs('/in.m2ts', '/out.mkv', 1, null);
         expect(argValue(args, '-c:s:0')).toBeUndefined();
         expect(args.filter((a) => a.startsWith('-disposition:s'))).toHaveLength(0);
+    });
+});
+
+describe('inputSkip', () => {
+    /*
+     * **焼くほう (`-ss`) と進み具合の分母で同じ値を使う。** 片方だけ変わると、
+     * 捨てた量と分母から引いた量がずれて、進み具合が最後まで届かなくなる
+     */
+    test('頭出しと頭捨ての足し算', () => {
+        expect(inputSkip(0.5, 1.5)).toBe(2);
+    });
+
+    test('どちらも無ければ 0', () => {
+        expect(inputSkip(null, undefined)).toBe(0);
+    });
+
+    test('1コマにも満たない頭捨ては数えない (headSkip と同じ判断)', () => {
+        expect(inputSkip(null, 0.01)).toBe(0);
+        expect(inputSkip(0.5, 0.01)).toBe(0.5);
     });
 });
 
