@@ -104,7 +104,15 @@ prepull:
 persistence:
   # 既定の StorageClass。空ならクラスタの既定
   storageClassName: ""
-  # PVC は ArgoCD に消させない (Prune=false,Delete=false)。ここが消えると録画が消える
+  # **PVC を ArgoCD に消させない** (Prune=false,Delete=false)。ここが消えると録画が消える
+  # ので既定は true。true の間は、chart から PVC が消えても・Application ごと消しても
+  # ArgoCD は PVC に触らない。
+  #
+  # **false にすると「git で消したものは実際に消える」。** マニフェストから PVC が
+  # 外れた時点でボリュームごと消えるので、後ろ盾になるバックアップを用意してから
+  # にすること (このリポジトリ自身は日次の restic があるので false — deploy/application.yaml)
+  protectFromPruning: true
+  # denpa の DB
   data:
     size: 5Gi
     existingClaim: ""

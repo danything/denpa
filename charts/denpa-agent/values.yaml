@@ -34,6 +34,11 @@ affinity: {}
 
 persistence:
   storageClassName: ""
+  # **PVC を ArgoCD に消させない** (Prune=false,Delete=false)。既定は true で、
+  # true の間は chart から PVC が消えても・Application ごと消しても ArgoCD は触らない。
+  # **false にすると「git で消したものは実際に消える」** — マニフェストから外れた
+  # 時点でボリュームごと消えるので、バックアップを用意してからにすること
+  protectFromPruning: true
   # エージェントの設定 (tuners.json / channels.json)
   config:
     size: 128Mi
