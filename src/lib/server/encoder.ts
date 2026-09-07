@@ -322,6 +322,12 @@ interface EncodeOptions {
      * 最後はソフトウェア (undefined)
      */
     hardware?: HwWay | undefined;
+    /**
+     * 焼く前に測った入力の尺と毎秒コマ数 (`probeVideo`)。
+     * **進み具合の分母**をここから出す (`expectedFrames`)。
+     * 測れなければ入力の読み位置に落ちるだけで、焼き上がりには影響しない
+     */
+    probed?: { duration: number; fps: number };
 }
 
 /**
@@ -344,6 +350,17 @@ const MIN_SKIP = 0.05;
 export function headSkip(videoStart: number | undefined): number {
     const start = videoStart ?? 0;
     return Number.isFinite(start) && start > MIN_SKIP ? start : 0;
+}
+
+/**
+ * `-ss` に渡す長さ。**焼くほうと進み具合の分母で同じ値を使う。**
+ *
+ * 2つの理由が足し算になる (内訳は buildArgs のコメント)。ここが食い違うと、
+ * 捨てた量と分母から引いた量がずれて、進み具合が最後まで届かない (または
+ * 先に振り切れる)。片方だけ変えられないよう、足し算そのものをここ1箇所に置く
+ */
+export function inputSkip(seek: number | null, videoStart: number | undefined): number {
+    return (seek ?? 0) + headSkip(videoStart);
 }
 
 /**
@@ -388,7 +405,7 @@ export function buildArgs(
      *
      * 字幕 (`.sup`) は捨てたぶんを引いた時刻で作ってある (subtitle.rebase)。
      */
-    const skip = (seek ?? 0) + headSkip(options.videoStart);
+    const skip = inputSkip(seek, options.videoStart);
     if (skip > 0) args.push('-ss', String(skip));
     args.push(...TS_PROBE);
     args.push('-i', input);
@@ -637,56 +654,97 @@ interface Progress {
     log: string;
 }
 
-/** 残り時間を測る窓。直近の読み速度だけ見る (速度は素材や場面で途中から変わる) */
+/** 残り時間を測る窓。直近の進み方だけ見る (速度は素材や場面で途中から変わる) */
 const ETA_WINDOW_MS = 30_000;
 /** これより短い窓からは速度を出さない。起動直後の数点だけで暴れた値を出さないため */
 const ETA_MIN_SPAN_MS = 4_000;
 
 /**
- * 進み具合は**入力TSの読み位置**だけから出す (読んだバイト数 / ファイルの大きさ)。
- * ffmpeg の `-progress` の時刻 (`out_time_us`) は AV1 の先読み中は N/A、壊れた
- * ストリームで止まり、疎な字幕が先に mux されると先に飛ぶ — 3通りとも実機で踏んだ。
- * 残り時間も**同じ出どころ** (直近の読み速度) から出す。経緯と実例は
- * docs/encode.md「進み具合は入力の読み位置から出す」
+ * 焼き上がりのコマ数。進み具合の分母。測れなければ NaN。
+ *
+ * **入力のコマ数から出す** (尺 × 入力の毎秒コマ数)。出力の毎秒コマ数を
+ * 決め打ちにはしない — インタレ解除 (`deinterlace`) は入力1コマから
+ * 60コマ指定なら2コマ・30コマ指定なら1コマ作るので、入力が 29.97 でも
+ * 59.94 (720p の局) でも、この掛け算なら同じ式で当たる。
+ *
+ * 頭を捨てるぶん (`-ss`) はもう焼かないので引く
  */
-export function inputProgress(inputBytes: number) {
-    const samples: { at: number; pos: number }[] = [];
+export function expectedFrames(
+    probed: { duration: number; fps: number } | undefined,
+    skipSec: number,
+    smooth: boolean,
+): number {
+    if (probed === undefined) return NaN;
+    const seconds = probed.duration - (Number.isFinite(skipSec) ? skipSec : 0);
+    if (!(Number.isFinite(seconds) && seconds > 0)) return NaN;
+    if (!(Number.isFinite(probed.fps) && probed.fps > 0)) return NaN;
+    return seconds * probed.fps * (smooth ? 2 : 1);
+}
+
+/**
+ * 進み具合は**焼けたコマ数**から出す (`-progress` の `frame=` ÷ `expectedFrames`)。
+ * 残り時間も同じ出どころ (直近30秒で何コマ焼けたか)。
+ *
+ * **エンコーダが今どこに居るかを直に数えている**のがこの物差しの取り柄で、
+ * 前に使っていた2つはどちらも「エンコーダの居場所ではないもの」を見ていた:
+ *
+ * - `out_time_us` は**出力の mux が最後に書いたパケットの時刻**。疎な字幕が
+ *   先に mux されると先に飛び、壊れたストリームが混ざるとそこで止まる
+ * - 入力TSの**読み位置** (`/proc/<pid>/fdinfo`) は**デマクサの居場所**。
+ *   読むほうだけ先に走ることがあり、実機では焼き上がり半分で読み切って
+ *   (RSS 4.9GB ぶん抱えたまま) 99% に貼り付き、残り時間も出なくなった
+ *
+ * 読み位置は**分母 (尺) が測れなかったときの控え**として残してある。経緯と
+ * 実例は docs/encode.md「進み具合は焼けたコマ数から出す」
+ */
+export function encodeProgress(totalFrames: number, inputBytes: number) {
+    const samples: { at: number; done: number }[] = [];
     // NaN 汚染を防ぐガードが要る (JSON上 typeof NaN === 'number' で素通りするため)
     const measurable = (value: number) => Number.isFinite(value) && value > 0;
 
     return (at: number, pos: number, block: Record<string, string>, prev: number): Progress => {
-        // 読み位置が取れない間 (/proc が無い・一瞬の読み損ね) は前の値を保ち、当てずっぽうを出さない
+        const frames = Number(block['frame']);
+        const counted = measurable(totalFrames) && Number.isFinite(frames) && frames >= 0;
+        // 読み位置が取れない間 (/proc が無い・一瞬の読み損ね) もある
         const readable = measurable(inputBytes) && Number.isFinite(pos) && pos >= 0;
-        const fraction = readable ? Math.min(1, pos / inputBytes) : prev;
+        // どちらも取れなければ前の値を保ち、当てずっぽうを出さない
+        const done = counted
+            ? Math.min(1, frames / totalFrames)
+            : readable
+              ? Math.min(1, pos / inputBytes)
+              : NaN;
         /*
          * 前の値より下げない (読み損ねからの復帰で巻き戻って見えないように)。
-         * **100% は ffmpeg が終わるまで出さない** — 入力を読み切っても、溜めた
-         * コマの吐き出しと mux の締めが残っている。読み切った時点で 100.0% と
-         * 出すと、そこで止まって見える (失敗して頭からやり直す時は特に、
-         * 100% → 0% と動いて二度おかしく見えた)
+         * **100% は ffmpeg が終わるまで出さない** — 最後のコマを焼いても、
+         * 溜めたぶんの吐き出しと mux の締めが残っている。焼き切った時点で
+         * 100.0% と出すと、そこで止まって見える (失敗して頭からやり直す時は
+         * 特に、100% → 0% と動いて二度おかしく見えた)
          */
+        const fraction = Number.isFinite(done) ? done : prev;
         const percent = block['progress'] === 'end' ? 1 : Math.min(Math.max(prev, fraction), 0.99);
 
         let etaMs: number | null = null;
-        if (readable) {
-            samples.push({ at, pos });
+        if (Number.isFinite(done)) {
+            samples.push({ at, done });
             while (samples.length > 0 && at - samples[0]!.at > ETA_WINDOW_MS) samples.shift();
             const oldest = samples[0]!;
             const spanMs = at - oldest.at;
-            const gained = pos - oldest.pos;
-            // 速さが読めないうち (窓がまだ短い・読みが進んでいない) は null のまま
+            const gained = done - oldest.done;
+            // 速さが読めないうち (窓がまだ短い・進んでいない) は null のまま
             if (spanMs >= ETA_MIN_SPAN_MS && gained > 0) {
-                etaMs = Math.round(((inputBytes - pos) / gained) * spanMs);
+                etaMs = Math.round(((1 - done) / gained) * spanMs);
             }
         }
 
         const mb = (bytes: number) => (bytes / 1024 / 1024).toFixed(0);
         const sizeMb = (parseInt(block['total_size'] ?? '', 10) / 1024 / 1024).toFixed(1);
         const rateMbps = (parseFloat(block['bitrate'] ?? '') / 1000).toFixed(2);
+        // 読み位置も残す。**割合には使っていないが、詰まった時の見立てに要る**
+        // (デマクサだけ先に走っているのか、本当に遅いのかがこの2つ並びで分かる)
         return {
             percent,
             etaMs,
-            log: `input: ${readable ? `${mb(pos)}/${mb(inputBytes)}MB` : '測れず'}, speed: ${block['speed']}, size: ${sizeMb}MB, rate: ${rateMbps}Mbps, drop: ${block['drop_frames']}`,
+            log: `frame: ${counted ? `${frames}/${Math.round(totalFrames)}` : '数えられず'}, input: ${readable ? `${mb(pos)}/${mb(inputBytes)}MB` : '測れず'}, speed: ${block['speed']}, size: ${sizeMb}MB, rate: ${rateMbps}Mbps, drop: ${block['drop_frames']}`,
         };
     };
 }
@@ -760,8 +818,9 @@ async function runFfmpeg(
     procs.set(job.id, proc);
 
     /*
-     * 進み具合は入力の読み位置から出す (inputProgress)。`-progress` のブロックは
-     * 刻み (約0.5秒ごとに来る) と speed などの読み物としてだけ使う。
+     * 進み具合は焼けたコマ数から出す (encodeProgress)。分母は焼く前に測った尺、
+     * 分子は `-progress` の `frame=`。入力の読み位置は分母が測れなかったときの
+     * 控えと、詰まった時の見立て用に読み続ける。
      * /proc の fd は実体のパスで見えるので、シンボリックリンクはここで解いておく
      */
     let inputPath = input;
@@ -770,9 +829,14 @@ async function runFfmpeg(
         inputPath = realpathSync(input);
         inputBytes = statSync(inputPath).size;
     } catch {
-        // 測れなければ割合が動かないだけ。焼くほうはそのまま進める
+        // 測れなければ控えが1つ減るだけ。焼くほうはそのまま進める
     }
-    const progress = inputProgress(inputBytes);
+    const total = expectedFrames(
+        options.probed,
+        inputSkip(seek, options.videoStart),
+        options.smoothMotion === true,
+    );
+    const progress = encodeProgress(total, inputBytes);
     let inputFd: number | null = null;
     let inputPos = NaN;
 
@@ -1224,8 +1288,11 @@ async function runJob(jobId: number): Promise<void> {
     setPhase(jobId, 'encode', '');
 
     // 画面の大きさ・画素の縦横比・頭の音声だけの区間を焼く前に測っておく。
-    // 進み具合はここの値を使わない (入力の読み位置から出す。inputProgress 参照)
+    // 尺と毎秒コマ数は進み具合の分母にもなる (encodeProgress。下で probed に渡す)
     const measured = await probeVideo(source);
+    // 進み具合の分母。**切ったあとの `source` を測っている**ので、CM を切った
+    // ぶんはもう引けている (元のTSの尺で割ると、切ったぶんだけ早く終わって見える)
+    encodeOptions.probed = { duration: measured.duration, fps: measured.fps };
     // 字幕を絵で焼くときの画面の大きさ。渡さないと 1440x1080 とみなされ、
     // 1920x1080 の録画では字幕だけ横に伸びる
     if (Number.isFinite(measured.width) && Number.isFinite(measured.height)) {
@@ -1503,7 +1570,7 @@ async function runJob(jobId: number): Promise<void> {
      * **出来上がったものを測る。** ffmpeg が言ってきた `out_time` を書いていた頃は、
      * 壊れた副音声が1本混ざっている録画で **8.576 秒**と入っていた
      * (中身は 30分ぶん正しく入っていた)。理由は `out_time` が当てにならないのと同じ
-     * (`inputProgress` のコメント参照)。測れなかったときだけ、これまでどおり ffmpeg の値に落ちる
+     * (`encodeProgress` のコメント参照)。測れなかったときだけ、これまでどおり ffmpeg の値に落ちる
      */
     const made = (await probeVideo(output)).duration;
     const length = Number.isFinite(made) ? made * 1000 : lastOutTimeUs / 1000;
