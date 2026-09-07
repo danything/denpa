@@ -151,12 +151,11 @@ TRUSTED_NETWORKS=0.0.0.0/0
 ```
 
 **見るのは住所だけです。どの名前で来たかは問いません** — LAN から外向きの
-`dp.doany.io` を開いても、そのまま通ります。前段 (Traefik の IngressRoute、
-chart の `traefik.enabled`) は2つの名前を同じ Rule で denpa に届けるだけで、
-名前ごとに何かを分けてはいません。LAN 用の名前 `dp.l.doany.io` が家の中でだけ
+`dp.doany.io` を開いても、そのまま通ります。前段 (chart の `httpRoute`) は2つの名前を
+同じ HTTPRoute で denpa に届けるだけで、名前ごとに何かを分けてはいません。LAN 用の名前 `dp.l.doany.io` が家の中でだけ
 引けるのは DNS の側の話です ([player.md](player.md))。
 
-> **前段 (Traefik など) が居るなら `ADDRESS_HEADER=x-forwarded-for` を一緒に渡すこと。**
+> **前段 (Gateway やリバースプロキシ) が居るなら `ADDRESS_HEADER=x-forwarded-for` を一緒に渡すこと。**
 > 渡さないと接続元が前段の住所になり、住所の側が誰にも当たりません (=全員が認証を
 > 求められます)。逆に、denpa へ直に届く経路があるとヘッダを詐称できます — Pod が
 > Service 経由でしか触れないことが前提です。前段が居ない (ブラウザが直に denpa へ
@@ -237,10 +236,11 @@ denpa は Secret を環境変数で読むので、値を変えたら Pod を入�
 
 ### 前段の forward-auth は外しました
 
-IngressRoute から `forward-auth` と `forward-auth-errors` (oauth2-proxy) を
-落としてあります (いまは chart の `charts/denpa/templates/ingress.yaml`)。denpa が自分でログインさせるので、前段に置く理由がなくなりました。
+前段のルートから `forward-auth` と `forward-auth-errors` (oauth2-proxy) を
+落としてあります (いまは chart の `charts/denpa/templates/httproute.yaml`)。
+denpa が自分でログインさせるので、前段に置く理由がなくなりました。
 
-**順番が大事です。** 「denpa 側を設定 → **実機で入れることを確かめる** → ingress から
+**順番が大事です。** 「denpa 側を設定 → **実機で入れることを確かめる** → 前段から
 外す」。先に外すと、OIDC の設定を間違えていたときに*誰も入れない*ではなく
 **誰でも入れる**状態になります。
 

@@ -102,7 +102,10 @@ docker compose up -d
 helm install denpa oci://ghcr.io/danything/charts/denpa \
   --namespace denpa --create-namespace \
   --set denpa.trustedNetworks=192.168.0.0/16 \
-  --set ingress.enabled=true --set 'ingress.hosts[0]=denpa.example.home'
+  --set httpRoute.enabled=true \
+  --set 'httpRoute.parentRefs[0].name=my-gateway' \
+  --set 'httpRoute.parentRefs[0].namespace=gateway-system' \
+  --set 'httpRoute.hostnames[0]=denpa.example.home'
 ```
 
 チューナーの刺さった機械にはエージェントだけ置き、本体は別の所 (別ノードや

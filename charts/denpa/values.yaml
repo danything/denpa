@@ -130,7 +130,22 @@ service:
   publishNotReadyAddresses: true
 
 # 入口。**denpa 自身が認証する**ので、前段は名前を届けるだけでよい。
-# 標準の Ingress か、Traefik の IngressRoute のどちらか (両方は要らない)
+# Gateway API の HTTPRoute・標準の Ingress・Traefik の IngressRoute のどれか 1 つ
+# (複数を同時に有効にしても壊れはしないが、要らない)。
+# **新しく組むなら httpRoute。** Ingress API は凍結済みで、ingress-nginx も 2026-03 に retire した。
+# このリポジトリ自身の本番は httpRoute (Cilium Gateway)。
+httpRoute:
+  enabled: false
+  # **付け先の Gateway。省略できない** (HTTPRoute は自分では待ち受けを持たない)。
+  # sectionName はリスナー名。ホスト名の段数ごとにリスナーが分かれている構成では、
+  # 名前ごとに parentRef を分ける (例: *.example.com と *.lan.example.com)
+  parentRefs: []
+  #  - name: my-gateway
+  #    namespace: gateway-system
+  #    sectionName: https
+  # 空なら下の ingress.hosts をそのまま使う (両方書く必要はない)
+  hostnames: []
+  annotations: {}
 ingress:
   enabled: false
   hosts: []
