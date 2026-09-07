@@ -211,6 +211,7 @@ const CLAIMS = object({
     preferred_username: optional(string),
     email: optional(string),
     groups: optional(array(string)),
+    roles: optional(array(string)),
     /** グループが多すぎて載せられなかったときに Entra が入れてくる印 */
     _claim_names: optional(record(string)),
     iss: string,
@@ -289,14 +290,23 @@ export async function verify(token: string, nonce: string, at = Date.now()): Pro
 }
 
 /**
- * 通していい人か。**居るグループで決めます** (誰がログインしたかでは決めない)。
+ * 通していい人か。**居るグループか、割り当てられたロールで決めます**
+ * (誰がログインしたかでは決めない)。
  *
  * `OIDC_GROUP` が空なら、入れた人は全員通します。
  */
 export function allowed(claims: Claims): { ok: true } | { ok: false; reason: string } {
     if (config.oidcGroup === '') return { ok: true };
 
-    if (claims.groups === undefined) {
+    /*
+     * **`groups` と `roles` のどちらでもいい。** Entra のグループクレーム
+     * (グループのオブジェクトID) からアプリロールへ移している最中だからです。
+     * グループを載せると ID トークンが大きくなり、oauth2-proxy の Cookie セッションが
+     * 壊れます。両方受けておけば、切り替えの途中で誰も入れなくなることがありません
+     */
+    const held = [...(claims.groups ?? []), ...(claims.roles ?? [])];
+
+    if (held.length === 0) {
         /*
          * **グループが多い人はここに来ます。** Entra はクレームが大きくなりすぎると
          * `groups` の代わりに `_claim_names` を入れて「Graph を叩いて取れ」と言う。
@@ -307,11 +317,11 @@ export function allowed(claims: Claims): { ok: true } | { ok: false; reason: str
             ok: false,
             reason: overflow
                 ? 'グループが多すぎて ID トークンに載っていません (Entra の _claim_names)'
-                : 'ID トークンに groups がありません (アプリ登録の groupMembershipClaims を有効にしてください)',
+                : 'ID トークンに groups も roles もありません (アプリ登録の groupMembershipClaims を有効にするか、アプリロールを割り当ててください)',
         };
     }
-    if (!claims.groups.includes(config.oidcGroup)) {
-        return { ok: false, reason: `${config.oidcGroup} のグループに入っていません` };
+    if (!held.includes(config.oidcGroup)) {
+        return { ok: false, reason: `${config.oidcGroup} のグループにもロールにも入っていません` };
     }
     return { ok: true };
 }

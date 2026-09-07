@@ -35,6 +35,11 @@ const encode = (value: unknown) => b64(new TextEncoder().encode(JSON.stringify(v
 let groups = (process.env['FAKE_IDP_GROUPS'] ?? 'admins').split(',').filter(Boolean);
 /** `groups` そのものを載せない。アプリ登録の設定漏れを再現する */
 let omitGroups = false;
+/**
+ * アプリロール。**既定では載せません** — グループから移す途中なので、
+ * 「roles だけ来る」形もテストから作れるようにしてあります
+ */
+let roles = (process.env['FAKE_IDP_ROLES'] ?? '').split(',').filter(Boolean);
 
 /** 発行したコード → そのときの nonce。token で載せ直す */
 const codes = new Map<string, string>();
@@ -50,10 +55,15 @@ Bun.serve({
 
         // テストから振る舞いを変える口。本物には無い
         if (url.pathname === '/__control/groups' && request.method === 'POST') {
-            const body = (await request.json()) as { groups?: string[]; omit?: boolean };
+            const body = (await request.json()) as {
+                groups?: string[];
+                roles?: string[];
+                omit?: boolean;
+            };
             groups = body.groups ?? groups;
+            roles = body.roles ?? roles;
             omitGroups = body.omit === true;
-            return json({ ok: true, groups, omitGroups });
+            return json({ ok: true, groups, roles, omitGroups });
         }
 
         if (url.pathname === '/.well-known/openid-configuration') {
@@ -88,6 +98,7 @@ Bun.serve({
                 sub: 'fake-user',
                 name: 'テスト太郎',
                 ...(omitGroups ? {} : { groups }),
+                ...(roles.length > 0 ? { roles } : {}),
                 nonce,
                 exp: Math.floor(Date.now() / 1000) + 600,
             });
