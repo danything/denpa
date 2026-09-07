@@ -1,5 +1,6 @@
 {{- /*
-置き場。**ArgoCD に消させない** (Prune=false,Delete=false)。ここが消えると録画が消える。
+置き場。既定では **ArgoCD に消させない** (Prune=false,Delete=false)。ここが消えると録画が消える。
+外すかどうかは persistence.protectFromPruning (values.yaml に理由つきで書いてある)。
 existingClaim を渡したものは作らない
 */ -}}
 {{- $root := . -}}
@@ -21,7 +22,9 @@ metadata:
   labels:
     {{- include "denpa.labels" $root | nindent 4 }}
   annotations:
+    {{- if $root.Values.persistence.protectFromPruning }}
     argocd.argoproj.io/sync-options: Prune=false,Delete=false
+    {{- end }}
     helm.sh/resource-policy: keep
 spec:
   accessModes:

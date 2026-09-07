@@ -63,6 +63,10 @@ spec:
 
         persistence:
           storageClassName: local-path-retain
+          # **「git で消したものは消える」を優先する** という判断
+          # (danything/gitops の docs/decisions.md「PVC を守る仕掛けをやめた」)。
+          # 後ろ盾は日次の restic (R2) で、復元リハーサルは通っている
+          protectFromPruning: false
 
         # Cilium Gateway (danything/gitops の bootstrap/gateway/) に付ける。
         # dp.doany.io は `*.doany.io` の、dp.l.doany.io は `*.l.doany.io` の
