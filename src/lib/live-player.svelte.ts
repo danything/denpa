@@ -48,6 +48,13 @@ const KEEP = 300;
 const BUDGET = 120 * 1024 * 1024;
 /** 戻れる幅の下限 (秒)。ここまで縮めても足りないなら、そもそも抱えられない */
 const KEEP_LEAST = 20;
+/**
+ * 刈るときに再生位置の後ろへ残す幅 (秒)。
+ *
+ * ちょうどで切ると、出している最中のところを取り上げることになる。数秒あれば
+ * 押し戻し (`pacing` の詰め) にも足りる
+ */
+const BEHIND = 2;
 /** 貯める量を決め直す間隔 (ms)。塊は毎秒20個来るので、そのたびには回さない */
 const SETTLE_EVERY = 5_000;
 /**
@@ -184,6 +191,13 @@ export function livePlayer() {
     let delay = $state<number | null>(null);
     /** 止めているか。**押して止めた間も受け取り続ける** */
     let paused = $state(false);
+    /**
+     * 止めている間に**抱えきれなくなって、受け取ったぶんを捨てた**か。
+     *
+     * 捨てたあとは、止めた所の少し先までしか残っていない。そのまま再生を
+     * 押しても数秒で行き止まりになるので、押されたら取り直す (`toggle`)
+     */
+    let starved = false;
     /** 放送の今に張り付いているか。離れていれば「ライブへ」を出す */
     let live = $state(true);
     /**
@@ -695,7 +709,20 @@ export function livePlayer() {
          * いくが、そこへ跳ばせると「止めた所から見る」ができなくなる。
          * 追いかけ直すのは「ライブへ」を押されたとき (`goLive`)
          */
-        if (paused) return;
+        if (paused) {
+            /*
+             * **抱えきれる幅を超えたら、受け取ったぶんを捨てる。** 溜め続ければ
+             * 器が溢れて (`QuotaExceededError`)、そこから絵が出なくなる。
+             * 刈って場所を空けることはしない — 空けた先は**止めた所**なので、
+             * 「止めた所から見られる」を捨てることになる。
+             * 代わりに印を立てて、再開のときに取り直す (`toggle`)
+             */
+            if (end - video.currentTime > keepFor()) {
+                pending.length = 0;
+                starved = true;
+            }
+            return;
+        }
 
         /*
          * **追っかけは放送の今を追いかけない。** 右端は「録れているところ」で、
@@ -796,7 +823,19 @@ export function livePlayer() {
      */
     function trim(end: number): void {
         if (buffer === null || buffer.updating || buffer.buffered.length === 0) return;
-        const cut = end - keepFor();
+        /*
+         * **いま出している所より後ろは刈らない。**
+         *
+         * 止めている間も受け取りは続く。時刻だけで切っていた頃は、止めたまま
+         * 置いておくと**再生位置ごと消えて、押しても二度と動かなかった** —
+         * 追っかけはサーバが録れているぶんを一気に送り込むので (`server/chase.ts`)、
+         * 数十秒 止めただけで刈り取りが再生位置を追い越す。
+         *
+         * 抱えきれる幅を超えたときは、刈るのではなく**受け取るほうを捨てる**
+         * (`pace` の `starved`)。止めた所は残るので、再開のときに取り直せる
+         */
+        const at = element === null ? 0 : element.currentTime;
+        const cut = Math.min(end - keepFor(), at - BEHIND);
         if (buffer.buffered.start(0) >= cut) return;
         try {
             buffer.remove(0, cut);
@@ -885,6 +924,21 @@ export function livePlayer() {
         if (element === null) return;
         if (paused) {
             paused = false;
+            /*
+             * **長く止めていたぶんは取り直す。** 抱えきれずに受け取りを捨てて
+             * いるので (`pace` の `starved`)、そのまま押しても、止めた所から
+             * 数秒で行き止まりになる。追っかけはその場所から読み直し、
+             * ライブは放送の今へ追いつく (もう戻れる場所が無い)
+             */
+            if (starved) {
+                starved = false;
+                if (chase !== null) {
+                    void openChase(element, chase.recordingId, chase.base + element.currentTime, true);
+                    return;
+                }
+                goLive();
+                return;
+            }
             void element.play().catch(() => {
                 /* 押されて呼ばれるので断られない */
             });
@@ -1017,6 +1071,8 @@ export function livePlayer() {
         running = false;
         delay = null;
         paused = false;
+        // 取り直すのだから、捨てたことは持ち越さない
+        starved = false;
         live = true;
         // 局や音声を選び直したら、追っかけていた場所はもう無い
         chasing = false;
