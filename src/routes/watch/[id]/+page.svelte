@@ -33,6 +33,7 @@
         SOUND_ON,
         TRASH,
     } from '$lib/components/player/icons';
+    import { playerKeys } from '$lib/components/player/keys';
     import PlayerStage from '$lib/components/player/PlayerStage.svelte';
     import { clearOverlay, drawOverlay, fitRect } from '$lib/components/player/paint';
     import Remote from '$lib/components/player/Remote.svelte';
@@ -57,7 +58,6 @@
         nextChapterAt,
         prevChapterAt,
         resumePoint,
-        SKIP,
         skipCmAtStart,
         skipTarget,
         type Tap,
@@ -997,35 +997,20 @@
 
     /**
      * キーでも動かせるようにする。全画面のときはこれがいちばん早い。
-     *
-     * **修飾キー付きは取らない。** Ctrl+C (コピー) を `c` (字幕) として横取りして
-     * `preventDefault` していたので、観ながら番組名や URL を写せなかった。
-     * Ctrl+F (検索) → 全画面、Ctrl+S (保存) → 切り抜き、Cmd+K も同じ。
-     * Shift だけは通す (`<` `>` は Shift 込みで打つ)。IME 変換中のキーも渡さない
+     * **割り当ては追っかけと共通** (`player/keys.ts`。修飾キーの扱いもあちら)
      */
-    function keys(event: KeyboardEvent): void {
-        if (event.altKey || event.ctrlKey || event.metaKey || event.isComposing) return;
-        if ((event.target as HTMLElement).closest('input, button, a')) return;
-        const map: Record<string, () => void> = {
-            ' ': togglePlay,
-            k: togglePlay,
-            ArrowLeft: () => seekBy(-SKIP),
-            ArrowRight: () => seekBy(SKIP),
-            c: toggleCaptions,
-            s: () => void snapshot(),
-            f: toggleFull,
-            // 早送りは順送り。**戻る側も付ける** (行き過ぎたら戻れないと不便)
-            '>': () => stepSpeed(1),
-            '<': () => stepSpeed(-1),
-            m: () => {
-                if (video !== null) video.muted = !video.muted;
-            },
-        };
-        const run = map[event.key];
-        if (run === undefined) return;
-        event.preventDefault();
-        run();
-    }
+    const keys = playerKeys({
+        togglePlay,
+        seekBy,
+        toggleCaptions,
+        snapshot: () => void snapshot(),
+        toggleFull,
+        // 早送りは順送り。**戻る側も付ける** (行き過ぎたら戻れないと不便)
+        stepSpeed,
+        toggleMute: () => {
+            if (video !== null) video.muted = !video.muted;
+        },
+    });
 
     const current = $derived(chapterAt(chapters, at));
     /** CM の入っている録画でだけ、飛ばす口を出す (押しても何も起きない操作を並べない) */
