@@ -1,4 +1,7 @@
 {{- if .Values.httpRoute.enabled }}
+{{- if not .Values.httpRoute.parentRefs }}
+{{- fail "httpRoute.enabled のときは httpRoute.parentRefs が要ります (HTTPRoute は自分では待ち受けを持たないため)" }}
+{{- end }}
 # Gateway API の HTTPRoute。**認証は denpa 自身がやる** (docs/auth.md) ので、前段は名前を届けるだけ。
 # 証明書は Gateway 側のリスナーが持つので、ここでは指定しない (Ingress の tls に相当するものが無い)。
 apiVersion: gateway.networking.k8s.io/v1
@@ -13,8 +16,24 @@ metadata:
     {{- toYaml . | nindent 4 }}
   {{- end }}
 spec:
+  # group / kind / weight は API サーバが既定値を入れる。**明示的に書いておく** —
+  # 省くと「書いたもの」と「クラスタにあるもの」が食い違い、ArgoCD が
+  # ServerSideApply のとき永久に OutOfSync のままになる
   parentRefs:
-    {{- toYaml .Values.httpRoute.parentRefs | nindent 4 }}
+    {{- range .Values.httpRoute.parentRefs }}
+    - group: {{ .group | default "gateway.networking.k8s.io" }}
+      kind: {{ .kind | default "Gateway" }}
+      name: {{ .name }}
+      {{- with .namespace }}
+      namespace: {{ . }}
+      {{- end }}
+      {{- with .sectionName }}
+      sectionName: {{ . }}
+      {{- end }}
+      {{- with .port }}
+      port: {{ . }}
+      {{- end }}
+    {{- end }}
   {{- $hosts := .Values.httpRoute.hostnames | default .Values.ingress.hosts }}
   {{- with $hosts }}
   hostnames:
@@ -26,6 +45,9 @@ spec:
             type: PathPrefix
             value: /
       backendRefs:
-        - name: denpa
+        - group: ""
+          kind: Service
+          name: denpa
           port: {{ .Values.service.port }}
+          weight: 1
 {{- end }}
