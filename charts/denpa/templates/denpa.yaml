@@ -27,11 +27,24 @@ spec:
     metadata:
       labels:
         app: denpa
-      {{- with .Values.imageMarks.denpa }}
       annotations:
+        # k8up が Pod の中でこれを走らせて、標準出力に出たものを保存する。
+        # serialize() は SQLite の pager を通して読むので、書き込みが続いていても
+        # 1 つのコミット済みの状態が出る。ファイルをそのままコピーすると
+        # denpa.db と denpa.db-wal が別々の瞬間のものになりうる (WAL は 5 MB ある) ──
+        # ホスト側のバックアップが先に scale down しているのはそのためで、
+        # ノードが Talos になるとシェルが無いのでその形は取れない。
+        #
+        # bun:sqlite は既に入っているランタイムの機能なので、イメージには何も足さない。
+        # スクリプトに空白を入れないこと: k8up は注釈をシェル風に分割するので、
+        # 引用符が効くのは -e の前後 2 か所だけで済ませる。
+        k8up.io/backupcommand: >-
+          bun -e 'process.stdout.write(new(require("bun:sqlite").Database)("/app/data/denpa.db",{readonly:true}).serialize())'
+        k8up.io/file-extension: .db
+        {{- with .Values.imageMarks.denpa }}
         # 入れ替えの合図 (values.yaml の imageMarks)
         denpa.doany.io/denpa-image: {{ . | quote }}
-      {{- end }}
+        {{- end }}
     spec:
       # 録画中に入れ替えが来たら、終わるまで居座ってから止まる (SHUTDOWN_WAIT)
       terminationGracePeriodSeconds: {{ .Values.denpa.terminationGracePeriodSeconds }}
