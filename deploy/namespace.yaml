@@ -1,0 +1,12 @@
+# **PSA は privileged。** Talos は Pod Security Admission の既定が `baseline` で、
+# denpa と tuner-agent の privileged と hostPath(`/dev/dvb`・`/dev/bus`・`/dev/dri`)が
+# baseline に通らない。namespace 自体は ArgoCD の CreateNamespace が先に作るが、
+# ラベルはこのマニフェストが付ける。k3s では PSA を有効にしていないので効かない。
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: denpa
+  labels:
+    pod-security.kubernetes.io/enforce: privileged
+    pod-security.kubernetes.io/audit: privileged
+    pod-security.kubernetes.io/warn: privileged
