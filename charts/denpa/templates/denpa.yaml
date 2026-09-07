@@ -3,6 +3,16 @@ kind: Deployment
 metadata:
   name: denpa
   namespace: {{ .Release.Namespace }}
+  annotations:
+    # **Secret が変わったら Pod を入れ替える。** これが無いと、Infisical で
+    # OIDC_GROUP などを直しても**動いている Pod は古い値を掴んだまま**になる。
+    # 実際に起きた: Entra の admins グループを消してアプリロールへ移した際、
+    # OIDC_GROUP が消えたグループの ID のまま残り、誰もログインできない状態に
+    # 気づかれず置かれていた (2026-09-07)。
+    #
+    # 入れ替えは strategy: Recreate と grace period 21900s に従うので、
+    # 録画中は古い Pod が録画を終えるまで居座り、そのあと切り替わる。
+    secrets.infisical.com/auto-reload: "true"
   labels:
     {{- include "denpa.labels" . | nindent 4 }}
 spec:
