@@ -254,9 +254,9 @@
         snapshot,
         toggleFull,
         stepSpeed,
-        toggleMute: () => {
-            if (video !== null) video.muted = !video.muted;
-        },
+        // **消音は player 側の印で切り替える。** 絵の要素を直に触ると、繋ぎ直しの
+        // たびに `silenced` で上書きされて戻り、ボタンの見た目ともずれる
+        toggleMute: () => (player.silenced ? player.unmute() : player.mute()),
     });
 
     /** いまの1コマを字幕ごと切り抜く (ライブ・観る画面と同じ) */

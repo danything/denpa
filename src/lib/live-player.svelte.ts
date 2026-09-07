@@ -624,6 +624,17 @@ export function livePlayer() {
     }
 
     function drain(): void {
+        /*
+         * **抱えきれなくなったら、届いたぶんは捨てる** (`pace` が立てる `starved`)。
+         *
+         * 塊は毎秒20個 届き、着いたその場でここが呼ばれる。`pace` の側で待ちを
+         * 空にするだけでは、待ちはたいてい空なので**何も捨てられず**、器のほうが
+         * 際限なく太って `QuotaExceededError` に着く。止めている間の入口はここ
+         */
+        if (starved) {
+            pending.length = 0;
+            return;
+        }
         if (buffer === null || buffer.updating || pending.length === 0) {
             // 追っかけを読み切っていて、流し残しも無ければ、ここで器を締める
             finishStream();
@@ -711,16 +722,19 @@ export function livePlayer() {
          */
         if (paused) {
             /*
-             * **抱えきれる幅を超えたら、受け取ったぶんを捨てる。** 溜め続ければ
-             * 器が溢れて (`QuotaExceededError`)、そこから絵が出なくなる。
-             * 刈って場所を空けることはしない — 空けた先は**止めた所**なので、
-             * 「止めた所から見られる」を捨てることになる。
-             * 代わりに印を立てて、再開のときに取り直す (`toggle`)
+             * **追っかけは、抱えきれる幅を超えたらそこから先を受け取らない。**
+             * 溜め続ければ器が溢れて (`QuotaExceededError`)、そこから絵が出なく
+             * なる。刈って場所を空けることはしない — 空けた先は**止めた所**で、
+             * 「止めた所から見られる」を捨てることになるため。
+             *
+             * 印を立てるだけで、捨てるのは受け口 (`drain`)。**着いたその場で器へ
+             * 入る**ので、ここで待ちを空にするだけでは追いつかない。再開のときに
+             * 止めた所から読み直す (`toggle`)。
+             *
+             * ライブはここを通らない — 放送は待ってくれないので、溢れる前に
+             * 古いほうから刈る (`trim`)
              */
-            if (end - video.currentTime > keepFor()) {
-                pending.length = 0;
-                starved = true;
-            }
+            if (chase !== null && end - video.currentTime > keepFor()) starved = true;
             return;
         }
 
@@ -824,21 +838,26 @@ export function livePlayer() {
     function trim(end: number): void {
         if (buffer === null || buffer.updating || buffer.buffered.length === 0) return;
         /*
-         * **いま出している所より後ろは刈らない。**
+         * **止めている間も受け取りは続く。** 時刻だけで切っていた頃は、止めたまま
+         * 置いておくと**再生位置ごと消えて、押しても二度と動かなかった**。
          *
-         * 止めている間も受け取りは続く。時刻だけで切っていた頃は、止めたまま
-         * 置いておくと**再生位置ごと消えて、押しても二度と動かなかった** —
-         * 追っかけはサーバが録れているぶんを一気に送り込むので (`server/chase.ts`)、
-         * 数十秒 止めただけで刈り取りが再生位置を追い越す。
+         * **追っかけは、いま出している所より後ろを刈らない。** 相手は録れている
+         * ファイルなので待たせられる — 抱えきれる幅を超えたら、刈るのではなく
+         * **受け取るほうを止めて** (`pace` の `starved`)、再開のときに止めた所から
+         * 読み直す。サーバが録れているぶんを一気に送り込むぶん (`server/chase.ts`)、
+         * 刈り取りが追い越すのも数十秒と早い。
          *
-         * 抱えきれる幅を超えたときは、刈るのではなく**受け取るほうを捨てる**
-         * (`pace` の `starved`)。止めた所は残るので、再開のときに取り直せる
+         * **ライブは刈る。** 放送は待ってくれないので、抱えきれないなら古いほうから
+         * 捨てるしかない。止めた所は諦めて、**居場所を残っている先頭へ移す** —
+         * 置き去りにすると、そこには何も無いまま動かなくなる
          */
         const at = element === null ? 0 : element.currentTime;
-        const cut = Math.min(end - keepFor(), at - BEHIND);
+        const want = end - keepFor();
+        const cut = chase === null ? want : Math.min(want, at - BEHIND);
         if (buffer.buffered.start(0) >= cut) return;
         try {
             buffer.remove(0, cut);
+            if (element !== null && at < cut) element.currentTime = cut + BEHIND;
         } catch {
             // 追加中だった。次の機会に
         }
@@ -925,20 +944,17 @@ export function livePlayer() {
         if (paused) {
             paused = false;
             /*
-             * **長く止めていたぶんは取り直す。** 抱えきれずに受け取りを捨てて
+             * **長く止めていたぶんは取り直す。** 抱えきれずに受け取りを止めて
              * いるので (`pace` の `starved`)、そのまま押しても、止めた所から
-             * 数秒で行き止まりになる。追っかけはその場所から読み直し、
-             * ライブは放送の今へ追いつく (もう戻れる場所が無い)
+             * 数秒で行き止まりになる。止めた所から読み直す (追っかけだけ。
+             * ライブは刈るほうで凌いでいるので、ここには来ない)
              */
-            if (starved) {
+            if (starved && chase !== null) {
                 starved = false;
-                if (chase !== null) {
-                    void openChase(element, chase.recordingId, chase.base + element.currentTime, true);
-                    return;
-                }
-                goLive();
+                void openChase(element, chase.recordingId, chase.base + element.currentTime, true);
                 return;
             }
+            starved = false;
             void element.play().catch(() => {
                 /* 押されて呼ばれるので断られない */
             });
