@@ -163,7 +163,7 @@ describe('ID トークンを確かめる', () => {
 });
 
 /*
- * **通すかどうかはグループで決める。** 誰がログインしたかでは決めない —
+ * **通すかどうかはグループかロールで決める。** 誰がログインしたかでは決めない —
  * 人が増えたときに denpa 側を触らなくて済む
  */
 describe('通していい人か', () => {
@@ -177,11 +177,36 @@ describe('通していい人か', () => {
         expect(verdict.ok === false && verdict.reason).toContain('admins');
     });
 
-    test('groups が無いときは、設定のどこを直すか出す', () => {
-        // アプリ登録で groupMembershipClaims を有効にしていないとこうなる
+    /*
+     * グループクレームからアプリロールへ移している最中なので、`roles` だけでも通す。
+     * 片方ずつしか来なくても、切り替えの途中で誰も入れなくならないように
+     */
+    test('roles に入っていれば通す', () => {
+        expect(allowed({ ...base, roles: ['others', 'admins'] })).toEqual({ ok: true });
+    });
+
+    test('roles に入っていなければ断る', () => {
+        const verdict = allowed({ ...base, roles: ['others'] });
+        expect(verdict.ok).toBe(false);
+        expect(verdict.ok === false && verdict.reason).toContain('admins');
+    });
+
+    test('groups に無くても roles にあれば通す', () => {
+        expect(allowed({ ...base, groups: ['others'], roles: ['admins'] })).toEqual({ ok: true });
+    });
+
+    test('どちらにも無ければ断る', () => {
+        const verdict = allowed({ ...base, groups: ['others'], roles: ['guests'] });
+        expect(verdict.ok).toBe(false);
+        expect(verdict.ok === false && verdict.reason).toContain('admins');
+    });
+
+    test('groups も roles も無いときは、設定のどこを直すか出す', () => {
+        // アプリ登録で groupMembershipClaims を有効にせず、ロールも割り当てていないとこうなる
         const verdict = allowed(base);
         expect(verdict.ok).toBe(false);
         expect(verdict.ok === false && verdict.reason).toContain('groupMembershipClaims');
+        expect(verdict.ok === false && verdict.reason).toContain('ロール');
     });
 
     /*
@@ -192,6 +217,13 @@ describe('通していい人か', () => {
         const verdict = allowed({ ...base, _claim_names: { groups: 'src1' } });
         expect(verdict.ok).toBe(false);
         expect(verdict.ok === false && verdict.reason).toContain('多すぎて');
+    });
+
+    // groups が載らなくても roles で通るなら、_claim_names は関係ない
+    test('多すぎて載らなくても、roles にあれば通す', () => {
+        expect(allowed({ ...base, roles: ['admins'], _claim_names: { groups: 'src1' } })).toEqual({
+            ok: true,
+        });
     });
 });
 
