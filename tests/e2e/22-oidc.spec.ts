@@ -167,11 +167,11 @@ test.describe('OIDC でのログイン', () => {
 });
 
 /**
- * **通すかどうかはグループで決める。** 誰がログインしたかでは決めない。
+ * **通すかどうかはグループかロールで決める。** 誰がログインしたかでは決めない。
  * 断るときは理由を出す — 黙って弾くと「なぜか自分だけ入れない」になる。
  */
-test.describe('グループで絞る', () => {
-    const setGroups = (oidc: OidcStack, body: { groups?: string[]; omit?: boolean }) =>
+test.describe('グループかロールで絞る', () => {
+    const setGroups = (oidc: OidcStack, body: { groups?: string[]; roles?: string[]; omit?: boolean }) =>
         fetch(`${oidc.idpUrl}/__control/groups`, {
             method: 'POST',
             headers: { 'content-type': 'application/json' },
@@ -180,22 +180,36 @@ test.describe('グループで絞る', () => {
 
     // 一式はワーカーで共有しているので、変えた振る舞いは戻す
     test.afterEach(async ({ oidc }) => {
-        await setGroups(oidc, { groups: [oidc.group], omit: false });
+        await setGroups(oidc, { groups: [oidc.group], roles: [], omit: false });
     });
 
     test('入っていなければ断り、理由を出す', async ({ oidc }) => {
         await setGroups(oidc, { groups: ['others'] });
         const { res, jar } = await login(client(oidc));
         expect(res.status).toBe(403);
-        expect(await res.text()).toContain('のグループに入っていません');
+        expect(await res.text()).toContain('のグループにもロールにも入っていません');
         expect(jar.has('denpa_session')).toBe(false);
     });
 
     /*
-     * アプリ登録で `groupMembershipClaims` を有効にしていないとこうなる。
-     * 「入っていない」と同じ扱いにすると、設定漏れなのか本当に居ないのか分からない
+     * グループクレームからアプリロールへ移している最中なので、`roles` だけでも通す。
+     * これが通らないと、Entra 側を切り替えた瞬間に誰も入れなくなる
      */
-    test('groups がそもそも載っていなければ、そう分かる理由を出す', async ({ oidc }) => {
+    test('groups が載っていなくても、roles にあれば通す', async ({ oidc }) => {
+        await setGroups(oidc, { roles: [oidc.group], omit: true });
+        const get = client(oidc);
+        const { res, jar } = await login(get);
+        expect(res.status).toBe(303);
+        expect(jar.has('denpa_session')).toBe(true);
+        expect((await get('/')).res.status).toBe(200);
+    });
+
+    /*
+     * アプリ登録で `groupMembershipClaims` を有効にせず、ロールも割り当てていないと
+     * こうなる。「入っていない」と同じ扱いにすると、設定漏れなのか本当に居ないのか
+     * 分からない
+     */
+    test('groups も roles も載っていなければ、そう分かる理由を出す', async ({ oidc }) => {
         await setGroups(oidc, { omit: true });
         const { res } = await login(client(oidc));
         expect(res.status).toBe(403);
