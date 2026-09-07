@@ -4,7 +4,13 @@ import { config } from './config';
 import { assign, whole } from './conflict';
 import { affected, now, orm } from './db';
 import { emit } from './events';
-import { activeRecordingIds, startRecording, stopRecording } from './recorder';
+import {
+    activeRecordingIds,
+    failStrayRecordings,
+    recordingUntil,
+    startRecording,
+    stopRecording,
+} from './recorder';
 import { recordings, reservations, services } from './schema';
 import { isDraining } from './shutdown';
 import { type AgentTuner, getTuners } from './tuner';
@@ -115,8 +121,18 @@ export async function tick(): Promise<void> {
             .get();
         if (rec === undefined) continue;
         // 尻を譲っているならそこで離す (`record_to`)。次の録画がそこから掴む
-        const until = rec.record_to ?? rec.end_at + config.endMargin;
-        if (at >= until) stopRecording(id);
+        if (at >= recordingUntil(rec)) stopRecording(id);
+    }
+
+    /*
+     * **持ち主の居ない「録画中」を畳む** (`failStrayRecordings`)。畳む間もなく殺されると
+     * (k3s ごと落ちた等) DB の行だけが録画中で残り、予約の一覧に居座って録画の一覧には
+     * 出てこない。起動時の拾い直しでは、そのとき放送中だったものを録り直しに行った先で
+     * また殺されると畳めないので、見回りでも同じ片付けをする
+     */
+    if (failStrayRecordings(at) > 0) {
+        emit('recordings');
+        emit('reservations');
     }
 
     // 始まらないまま終わってしまった予約を片付ける。

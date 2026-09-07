@@ -445,6 +445,17 @@ export function finish(recordingId: number, size: number): void {
 }
 
 /**
+ * その録画が終わっているべき時刻。**尻を譲っていればそこまで** (`record_to`)。
+ *
+ * 止めるとき (`scheduler.tick`)・起動時に拾い直すとき・持ち主の居ない行を畳むとき
+ * (`failStrayRecordings`) で同じ物差しを使う。書き写していると、片方だけ直したときに
+ * 「止めた時刻」と「終わっているはずの時刻」がずれる
+ */
+export function recordingUntil(rec: { end_at: number; record_to: number | null }): number {
+    return rec.record_to ?? rec.end_at + config.endMargin;
+}
+
+/**
  * プロセスが落ちた時点で録画中だった行を拾い直す。
  *
  * AbortController はメモリ上にしか無いので、再起動すると録画は止まったままになる。
@@ -459,7 +470,7 @@ export function recoverOrphanedRecordings(): { resumed: number; failed: number }
     let failed = 0;
     const at = now();
     for (const orphan of orphans) {
-        if (orphan.ts_path === null || orphan.end_at + config.endMargin <= at) {
+        if (orphan.ts_path === null || recordingUntil(orphan) <= at) {
             fail(orphan.id, 'アプリの再起動により録画が中断されました');
             failed++;
             continue;
@@ -476,4 +487,44 @@ export function recoverOrphanedRecordings(): { resumed: number; failed: number }
     }
     if (resumed > 0) emit('recordings');
     return { resumed, failed };
+}
+
+/**
+ * 終了時刻を過ぎてから畳むまでの猶予。**正常に終わる録画に手を出さないため。**
+ *
+ * 止めてから `finish` までは同じ処理の中で続けて終わるので実際には重ならないが、
+ * 急いで畳んで得るものが何も無い
+ */
+const STRAY_GRACE = 60_000;
+
+/**
+ * **持ち主の居ない「録画中」を畳む。**
+ *
+ * 掴んでいる録画はプロセスの中にしか無い (`active`)。**畳む間もなく殺された**とき —
+ * k3s ごと落とした、Pod を強制終了した — は、DB の行だけが録画中で残る。
+ * 起動時にも同じ片付けをするが (`recoverOrphanedRecordings`)、そのとき**まだ放送中なら
+ * 録り直しに行く**ので、再開した先でまた殺されると次の起動まで誰も畳まない。
+ *
+ * 畳まれない行は**予約の一覧に居座り、録画の一覧には出てこない** — どちらの振り分けも
+ * `recordings.state = 'recording'` で決まっている (`routes/+page.server.ts`)。放送は
+ * とうに終わっているのに「録画中」と出たままで、取り消す以外に消す手が無い。
+ *
+ * **掴んでいるものには触らない。** 終了時刻を過ぎたものだけを、起動時と同じ理由で
+ * 失敗にする。生TSは消さないので、録れていた分は詳細から焼き直せる。
+ *
+ * `at` と `owned` を渡せるようにしてあるのは試すため (`recorder-stray.test.ts`)
+ */
+export function failStrayRecordings(at = now(), owned: ReadonlySet<number> = new Set(active.keys())): number {
+    const stray = orm()
+        .select({ id: recordings.id, end_at: recordings.end_at, record_to: recordings.record_to })
+        .from(recordings)
+        .where(eq(recordings.state, 'recording'))
+        .all()
+        .filter((rec) => !owned.has(rec.id) && at >= recordingUntil(rec) + STRAY_GRACE);
+
+    for (const rec of stray) {
+        console.warn(`[recorder] 録画 ${rec.id}: 掴んでいる者が居ないまま終了時刻を過ぎました。失敗にします`);
+        fail(rec.id, '録画が中断されたまま終了時刻を過ぎました');
+    }
+    return stray.length;
 }
