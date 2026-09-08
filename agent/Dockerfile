@@ -8,7 +8,7 @@
 # (本物を起こして HTTP で当てる)。入れ替えはイメージのタグを変えるだけ。
 # ---------------------------------------------------------------------------
 # 既定のイメージがそのまま trixie (`-trixie` という札は無い)
-FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
+FROM mcr.microsoft.com/dotnet/sdk:11.0 AS build
 WORKDIR /build
 # AOT のリンクに clang と zlib が要る
 RUN apt-get update && \
