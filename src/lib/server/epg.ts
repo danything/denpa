@@ -1,4 +1,4 @@
-import { and, count, eq, gt, inArray, isNull, lt, ne, or, sql } from 'drizzle-orm';
+import { and, count, eq, gt, inArray, isNull, lt, lte, ne, or, sql } from 'drizzle-orm';
 import type { EitEvent } from '../ts/eit';
 import { config } from './config';
 import { affected, now, orm } from './db';
@@ -73,6 +73,32 @@ export function airing<S extends { id: number }, P extends { service_id: number;
     const named = new Set(programs.filter((program) => program.name !== '').map((p) => p.service_id));
     const shown = services.filter((service) => named.has(service.id));
     return shown.length === 0 ? services : shown;
+}
+
+/**
+ * **いまライブで選べる局。** 番組の詳細に「視聴」を出すかどうかに使う
+ * (番組表・ルールのプレビュー)。
+ *
+ * **ライブ画面と同じ決め方にする** (`airing`)。一覧のマスは**名前の無い枠でも
+ * 出る**が、ライブの一覧には出ないので、そこに「視聴」を出すと**押した先で
+ * 別の局が映る** — 実機の NHKEテレ2/3 で踏んだ (相乗り中のサブチャンネルは、
+ * 分割放送をしていない間は名前の無い枠が並ぶ)。
+ *
+ * 局は種別で絞らない。ライブ画面が地上波・BS・CS をまとめて見ているので、
+ * 絞ると `airing` の「1局も残らなければ全部出す」の効き方がずれる。
+ *
+ * **出す画面ごとに書かない。** 番組表とルールで別々に書いていると、片方だけ
+ * 直したときに同じ番組の詳細でも「視聴」が出たり出なかったりする
+ */
+export function watchableServices(at: number): number[] {
+    return airing(
+        orm().select({ id: services.id }).from(services).where(sql.raw(CURRENT_SERVICES)).all(),
+        orm()
+            .select({ service_id: programs.service_id, name: programs.name })
+            .from(programs)
+            .where(and(lte(programs.start_at, at), gt(programs.end_at, at)))
+            .all(),
+    ).map((service) => service.id);
 }
 
 export function syncServices(channels: AgentChannel[]): number {

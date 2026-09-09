@@ -6,6 +6,7 @@
     import { programDetail } from '$lib/detail.svelte';
     import { badgeClass, CM_LABEL, dateTime, SERVICE_TYPE_LABEL, stateLabel } from '$lib/format';
     import { parseSearchFields, SEARCH_FIELD_LABEL, SEARCH_FIELDS, searchFieldLabel } from '$lib/search';
+    import type { PreviewRow } from './+page.server';
 
     let { data, form } = $props();
 
@@ -24,6 +25,39 @@
      * 詳細にしか無く、確かめるには番組表を別に開いて探し直すことになっていた
      */
     const detail = programDetail();
+    /**
+     * 詳細を開いている行そのもの。**`detail.current` とは別に持つ。**
+     *
+     * 詳細が持っているのは番組の中身 (名前・説明・ジャンル) だけで、番組ID も
+     * 局も予約の状態も入っていない — 押すもの (視聴・予約) を出すのに要るのは
+     * そちらなので、開いた行を掴んでおく
+     */
+    let opened = $state<PreviewRow | null>(null);
+
+    function show(program: PreviewRow): void {
+        opened = program;
+        void detail.open(program.id, program);
+    }
+
+    function close(): void {
+        opened = null;
+        detail.close();
+    }
+
+    /**
+     * いま放送中かどうかの判定に使う時計。**分で刻む。**
+     *
+     * 番組表と同じ (`guide/+page.svelte`)。開きっぱなしのまま番組が終わっても
+     * 「視聴」が出たままになるのを防ぐ
+     */
+    let clock = $state(Date.now());
+    $effect(() => {
+        const timer = setInterval(() => (clock = Date.now()), 60_000);
+        return () => clearInterval(timer);
+    });
+
+    /** ライブ画面が持っている局。**決めているのはサーバ** (`epg.watchableServices`) */
+    const watchable = $derived(new Set(data.watchable));
 
     function channels(rule: { service_types: string[] | null; service_ids: number[] | null }): string {
         const parts = [
@@ -420,9 +454,8 @@
                                             data-testid="preview-open"
                                             role="button"
                                             tabindex="0"
-                                            onclick={() => detail.open(program.id, program)}
-                                            onkeydown={(event) =>
-                                                event.key === 'Enter' && detail.open(program.id, program)}
+                                            onclick={() => show(program)}
+                                            onkeydown={(event) => event.key === 'Enter' && show(program)}
                                         >
                                             <div class="flex flex-wrap items-center gap-x-2 gap-y-1">
                                                 {#if program.reservation_state}
@@ -565,13 +598,80 @@
 </div>
 
 <!--
-    プレビューの行から開いた番組詳細。**押すものは「閉じる」だけ。**
-    予約・取消はここに出さない — 予約するかどうかはルールの条件が決めるところで、
-    1件ずつ手で足せると「ルールが作ったのか自分で足したのか」が後から分からなくなる
-    (取り消しだけは行に置いてある)。
+    プレビューの行から開いた番組詳細。
+
+    **押すものは「視聴」「予約する」「閉じる」。** ここに出しているのは
+    *その番組そのもの* にできることで、ルールの条件には触れない。条件を詰めて
+    いる途中で「これは録っておきたい」に行き当たったとき、番組表を開いて同じ
+    番組を探し直すことになっていた。
+
+    **取り消しはここに出さない** — 行のほうに置いてある (`rule-pending-cancel`)。
+    予約済みの行は状態の札が出るので、押すものが増えたり減ったりしない。
+
+    **押し方は番組表の詳細と同じ** (`guide/+page.svelte`)。同じモーダルが画面に
+    よって違う出方をすると、番組表で覚えた押し方が通じない。
 
     **二段組の外に置く。** 中に入れると、巻き取る箱の中で開くことになる
 -->
 {#if detail.current}
-    <ProgramDetail program={detail.current} onclose={() => detail.close()} />
+    <ProgramDetail program={detail.current} onclose={close}>
+        {#snippet actions()}
+            <!--
+                失敗の理由は詳細の中に出す。押したのはこのモーダルの中のボタンで、
+                モーダルは右下に浮かせる知らせ (Toasts) より上に出るので、
+                下に隠れるものを出しても読めない (番組表の詳細と同じ扱い)
+            -->
+            {#if form?.message}
+                <div class="alert alert-error mt-4" data-testid="rule-detail-error">{form.message}</div>
+            {/if}
+            <div class="modal-action flex-wrap items-center justify-end">
+                {#if opened?.reservation_state}
+                    <span class="badge badge-info mr-auto" data-testid="rule-detail-state">
+                        {stateLabel(opened.reservation_state)}
+                    </span>
+                {/if}
+
+                {#if opened !== null && opened.start_at <= clock && opened.end_at > clock && watchable.has(opened.service_id)}
+                    <!--
+                        **いま流れている番組は、その場で観られるようにする。**
+                        押した先は別の画面で、そこで選局からやり直すことになるので
+                        リンクにする (モーダルの中で始めるものではない)
+                    -->
+                    <a
+                        class="btn btn-outline"
+                        href="/live?service={opened.service_id}"
+                        data-testid="rule-detail-watch"
+                    >
+                        視聴
+                    </a>
+                {/if}
+
+                {#if opened !== null && opened.reservation_state === null && opened.end_at > clock}
+                    <!--
+                        録画のしかたはここでは選ばせない。設定画面の1箇所で決める
+                        (同じ選択肢を予約・ルール・設定に並べると、どれで決まったのか
+                        分からなくなる)
+                    -->
+                    <form
+                        method="POST"
+                        action="?/reserve"
+                        use:submitting={() =>
+                            async ({ result, update }) => {
+                                await update();
+                                // 失敗したときは開いたままにして、中に理由を出す
+                                if (result.type === 'success') close();
+                            }}
+                    >
+                        <input type="hidden" name="programId" value={opened.id} />
+                        <button type="submit" class="btn btn-primary" data-testid="rule-detail-reserve">
+                            予約する
+                        </button>
+                    </form>
+                {/if}
+
+                <!-- 位置を動かさないため、いつでもここが最後 -->
+                <button type="button" class="btn" onclick={close} data-testid="detail-close">閉じる</button>
+            </div>
+        {/snippet}
+    </ProgramDetail>
 {/if}

@@ -120,10 +120,42 @@ test.describe('キーワードを当てる範囲', () => {
         await expect(detail).toBeVisible();
         await expect(detail).toContainText('ゲスト太郎');
 
-        // 予約する口は出さない。足すかどうかを決めるのはルールの条件のほう
-        await expect(detail.getByTestId('detail-reserve')).toHaveCount(0);
+        // 取り消しは行のほうに置いてある。押すものが増えたり減ったりしないように
+        await expect(detail.getByTestId('rule-pending-cancel')).toHaveCount(0);
         await page.getByTestId('detail-close').click();
         await expect(detail).toHaveCount(0);
+    });
+
+    /*
+     * **条件を詰めている途中で「これは録っておきたい」に行き当たる。** 詳細から
+     * 予約できなかった頃は、番組表を開いて同じ番組を探し直すことになっていた。
+     * ルールに任せるかどうかとは別の話なので、その番組そのものに口を出す
+     */
+    test('番組詳細から、その1本だけ予約できる', async ({ page, request }) => {
+        await syncEpg(request);
+        await clearRules(page);
+        await goto(page, '/rules');
+        await page.getByTestId('rule-keyword').fill('テストアニメ');
+        await page.getByTestId('rule-preview').click();
+
+        const row = page.getByTestId('preview-row').first();
+        await expect(row).toBeVisible();
+        const programId = await row.getAttribute('data-program-id');
+        await row.getByTestId('preview-open').click();
+
+        const detail = page.getByTestId('program-detail');
+        await expect(detail).toBeVisible();
+        await detail.getByTestId('rule-detail-reserve').click();
+
+        // 押すと閉じ、その行に予約の状態が出る
+        await expect(detail).toHaveCount(0);
+        const same = page.locator(`[data-testid="preview-row"][data-program-id="${programId}"]`);
+        await expect(same.getByTestId('preview-state')).toBeVisible();
+
+        // もう予約は立っているので、開き直しても予約する口は出ない (状態の札が出る)
+        await same.getByTestId('preview-open').click();
+        await expect(detail.getByTestId('rule-detail-reserve')).toHaveCount(0);
+        await expect(detail.getByTestId('rule-detail-state')).toBeVisible();
     });
 });
 
