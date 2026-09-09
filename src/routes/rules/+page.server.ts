@@ -6,8 +6,8 @@ import { parseSearchFields } from '$lib/search';
 import { config } from '$lib/server/config';
 import { contending, type Occupant, rivalsOf } from '$lib/server/conflict';
 import { now, orm } from '$lib/server/db';
-import { CURRENT_SERVICES } from '$lib/server/epg';
-import { cancel } from '$lib/server/reservations';
+import { CURRENT_SERVICES, watchableServices } from '$lib/server/epg';
+import { cancel, reserve } from '$lib/server/reservations';
 import { applyRules, compile, haystack, matchesCompiled } from '$lib/server/rules';
 import { resolveConflicts, tunerCapacity } from '$lib/server/scheduler';
 import { programs, reservations, rules as ruleTable, services as serviceTable } from '$lib/server/schema';
@@ -121,6 +121,8 @@ function conditionsFrom(params: URLSearchParams): Rule | null {
 export interface PreviewRow {
     id: number;
     name: string;
+    /** 詳細から「視聴」でライブへ飛ぶときの局。番組表の詳細と同じ */
+    service_id: number;
     service_name: string;
     start_at: number;
     end_at: number;
@@ -259,6 +261,7 @@ export async function load({ url }) {
             return {
                 id: p.id,
                 name: p.name,
+                service_id: p.service_id,
                 service_name: p.service_name,
                 start_at: p.start_at,
                 end_at: p.end_at,
@@ -302,6 +305,7 @@ export async function load({ url }) {
                 rows.push({
                     id: held.program_id,
                     name: held.name,
+                    service_id: held.service_id,
                     service_name: held.service_name,
                     start_at: held.start_at,
                     end_at: held.end_at,
@@ -360,7 +364,16 @@ export async function load({ url }) {
         .all();
     // フォームの初期値は preview と同じものを使う。別々に組み立てると、
     // 画面に出ている結果と保存されるものがズレる
-    return { rules, services, editing: editing ?? null, seed: conditions, preview, defaults };
+    return {
+        rules,
+        services,
+        editing: editing ?? null,
+        seed: conditions,
+        preview,
+        defaults,
+        // 詳細の「視聴」を出すかどうか。決め方は番組表と揃えてある (watchableServices)
+        watchable: watchableServices(now()),
+    };
 }
 
 /**
@@ -494,6 +507,28 @@ export const actions = {
         const id = Number(form.get('reservationId'));
         if (!Number.isFinite(id)) return fail(400, { message: '予約IDが不正です' });
         await cancel(id);
+        return { success: true };
+    },
+
+    /**
+     * プレビューの1件を、その場で予約する。
+     *
+     * **ルールに任せる番組と、いま1本だけ録りたい番組は別物。** 条件を詰めている
+     * 途中で「これは録っておきたい」に行き当たったとき、番組表を開いて同じ番組を
+     * 探し直すことになっていた。押した結果は行の状態に出る (`preview_state`)。
+     *
+     * 録画のしかた (エンコードするか・生TSを残すか) はここでは選ばせない。
+     * 設定画面の1箇所で決める — 番組表の予約と同じ (docs/app.md)
+     */
+    reserve: async ({ request }) => {
+        const form = await request.formData();
+        const programId = Number(form.get('programId'));
+        if (!Number.isFinite(programId)) return fail(400, { message: '番組IDが不正です' });
+        try {
+            await reserve(programId);
+        } catch (error) {
+            return fail(400, { message: String(error) });
+        }
         return { success: true };
     },
 

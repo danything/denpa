@@ -1,8 +1,8 @@
 import { fail } from '@sveltejs/kit';
-import { and, eq, getTableColumns, gt, lt, lte, ne, sql } from 'drizzle-orm';
+import { and, eq, getTableColumns, gt, lt, ne, sql } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/sqlite-core';
 import { orm } from '$lib/server/db';
-import { airing, CURRENT_SERVICES, SERVICE_ORDER } from '$lib/server/epg';
+import { airing, CURRENT_SERVICES, SERVICE_ORDER, watchableServices } from '$lib/server/epg';
 import { cancel, reserve } from '$lib/server/reservations';
 import {
     programs as programTable,
@@ -94,26 +94,8 @@ export async function load({ url }) {
         .orderBy(p.start_at)
         .all();
 
-    /*
-     * **いまライブで選べる局** (`services.id`)。詳細の「視聴」を出すかどうかに使う。
-     *
-     * **ライブ画面と同じ決め方にする** (`epg.airing`)。番組表のマスは**名前の無い
-     * 枠でも出る**が、ライブの一覧には出ないので、そこに「視聴」を出すと**押した先で
-     * 別の局が映る** — 実機の NHKEテレ2/3 で踏んだ (相乗り中のサブチャンネルは、
-     * 分割放送をしていない間は名前の無い枠が並ぶ)。
-     *
-     * 局は種別で絞らない。ライブ画面が地上波・BS・CS をまとめて見ているので、
-     * 絞ると `airing` の「1局も残らなければ全部出す」の効き方がずれる
-     */
-    const at = Date.now();
-    const watchable = airing(
-        orm().select({ id: serviceTable.id }).from(serviceTable).where(sql.raw(CURRENT_SERVICES)).all(),
-        orm()
-            .select({ service_id: programTable.service_id, name: programTable.name })
-            .from(programTable)
-            .where(and(lte(programTable.start_at, at), gt(programTable.end_at, at)))
-            .all(),
-    ).map((service) => service.id);
+    // 詳細の「視聴」を出すかどうか。決め方はライブ画面と揃えてある (watchableServices)
+    const watchable = watchableServices(Date.now());
 
     return {
         type,
