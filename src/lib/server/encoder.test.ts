@@ -41,6 +41,17 @@ describe('録画エンコードの引数', () => {
         expect(argValue(args, '-crf')).toBe('35');
     });
 
+    /*
+     * **H.264 の crf は AV1 と同じ画質になる値。** 24 だった頃は、実写の忙しい
+     * ところで AV1 より 0.94dB 低く、そのぶん小さいだけだった (「H.264 のほうが
+     * 小さい」の正体)。実測の表は docs/encode.md「H.264 は crf 23」
+     */
+    test('H.264 の crf は AV1 と同じ画質の 23', () => {
+        const args = buildArgs('/in.m2ts', '/out.mkv', 1, null, 'h264');
+        expect(argValue(args, '-preset')).toBe('medium');
+        expect(argValue(args, '-crf')).toBe('23');
+    });
+
     test('なめらかにすると1フィールドごとに1コマ出す', () => {
         const args = buildArgs('/in.m2ts', '/out.mkv', 1, null, 'av1', { smoothMotion: true });
         expect(argValue(args, '-vf')).toBe('bwdif,format=yuv420p');
