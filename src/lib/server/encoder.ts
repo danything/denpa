@@ -589,7 +589,56 @@ export function enqueue(recordingId: number): number {
         .get()!.id;
 }
 
-export function cancel(jobId: number): void {
+/**
+ * 中止を頼んだジョブが畳み終わるのを待っている人たち。
+ * 畳み終わり (`pump` の finally) で呼ばれる
+ */
+const stopping = new Map<number, (() => void)[]>();
+
+/**
+ * 中止を待つ上限。**押した人を待たせすぎない。**
+ *
+ * ffmpeg は SIGTERM から 1秒ほどで終わる (実測 923ms / 1078ms)。この待ちは
+ * その1秒を待って**畳んだ結果を返す**ためのもので、間に合わなければ諦めて
+ * 返す — あとは畳み終わりの知らせ (SSE) が追いつく
+ */
+const CANCEL_WAIT_MS = 5_000;
+
+/** 畳み終わるまで待つ。上限を超えたら諦める (待つのをやめるだけで、中止は続く) */
+function settled(jobId: number): Promise<void> {
+    if (!runningJobs.has(jobId)) return Promise.resolve();
+    return new Promise((resolve) => {
+        const done = () => {
+            clearTimeout(timer);
+            const waiting = (stopping.get(jobId) ?? []).filter((fn) => fn !== done);
+            if (waiting.length === 0) stopping.delete(jobId);
+            else stopping.set(jobId, waiting);
+            resolve();
+        };
+        const timer = setTimeout(done, CANCEL_WAIT_MS);
+        stopping.set(jobId, [...(stopping.get(jobId) ?? []), done]);
+    });
+}
+
+/** 畳み終わったことを、待っている人たちに伝える */
+function wakeStopping(jobId: number): void {
+    for (const done of stopping.get(jobId) ?? []) done();
+    stopping.delete(jobId);
+}
+
+/**
+ * エンコードを中止する。**畳み終わってから返す。**
+ *
+ * 頼むだけで返していた頃は、**押しても画面が何も変わらなかった** — 押した直後の
+ * 読み直しは ffmpeg がまだ死ぬ前に届くので、同じ「エンコード中 60.9%」が
+ * そのまま出る。行が変わるのは畳み終わりの知らせ (SSE) が来たときで、その繋ぎが
+ * 切れている端末では**リロードするまで永久に変わらなかった**。
+ *
+ * ffmpeg は SIGTERM から1秒ほどで終わるので、待ってから返せば押した人の画面は
+ * その場で「録画済み」に変わる。**上限つき** (`CANCEL_WAIT_MS`) で、間に合わ
+ * なければ諦めて返す — 待たせ続けるよりは、知らせに任せるほうがまし
+ */
+export async function cancel(jobId: number): Promise<void> {
     canceled.add(jobId);
     // どの段階に居ても止まるようにする。ffmpeg が回っていない段階もある
     aborts.get(jobId)?.abort();
@@ -601,8 +650,19 @@ export function cancel(jobId: number): void {
         .where(and(eq(encodeJobs.id, jobId), eq(encodeJobs.state, 'queued')))
         .returning({ id: encodeJobs.id })
         .get();
-    // まだ始まっていなければここで終わり。走っている分は runJob が後始末して知らせる
-    if (stopped !== undefined) emit('recordings');
+    // まだ始まっていなければここで終わり
+    if (stopped !== undefined) {
+        emit('recordings');
+        return;
+    }
+
+    /*
+     * 走っている分。**段階の名前を先に書き換えてから待つ** — 上限に間に合わな
+     * かったときでも、押した直後の読み直しが「中止しています」を拾える
+     * (割合を出している段階では出ないが、CM検出のように数分かかる段階で効く)
+     */
+    if (runningJobs.has(jobId)) setStep(jobId, '中止しています');
+    await settled(jobId);
 }
 
 /** 段階を進めて画面にも伝える。押しても反応が無いように見えるのを防ぐ */
@@ -1690,6 +1750,8 @@ export function pump(): void {
                 procs.delete(jobId);
                 aborts.delete(jobId);
                 canceled.delete(jobId);
+                // 中止を押して待っている人に、畳み終わったことを伝える
+                wakeStopping(jobId);
                 emit('recordings');
                 // 空いた枠に次のジョブを入れる
                 pump();

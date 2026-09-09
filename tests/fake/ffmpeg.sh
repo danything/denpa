@@ -134,7 +134,17 @@ if [ -f "${FAKE_FFMPEG_FAIL_FILE:-/nonexistent}" ]; then
     exit 1
 fi
 
+# E2E から「このエンコードを長引かせる」と指示するための目印。走っている最中に
+# 押すもの (エンコード中止) を試すのに要る。**刻みは細かいまま** — 1回の sleep を
+# 長くすると、trap に入るのがそのぶん遅れる (sh は走っている子を待ってから trap を回す)
 steps=4
+if [ -f "${FAKE_FFMPEG_SLOW_FILE:-/nonexistent}" ]; then
+    steps=100
+    # **止められてもすぐには消えない。本物もそう** — SIGTERM を受けてから溜めた
+    # コマを吐き出して mux を締めるので、実測で1秒ほどかかる (923ms / 1078ms)。
+    # 中止が「畳み終わってから返る」ことを試すには、この間が要る
+    trap 'sleep 2; exit 143' TERM
+fi
 for i in $(seq 1 "$steps"); do
     out_time_us=$((i * 10000000 / steps))
     printf 'frame=%d\nfps=120\nbitrate=2000.0kbits/s\ntotal_size=%d\nout_time_us=%d\nspeed=8.0x\ndrop_frames=0\nprogress=continue\n' \

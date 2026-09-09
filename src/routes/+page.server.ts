@@ -366,7 +366,9 @@ export const actions = {
         const form = await request.formData();
         const id = Number(form.get('id'));
         if (!Number.isFinite(id)) return fail(400, { message: 'ジョブIDが不正です' });
-        cancelEncode(id);
+        // 畳み終わってから返る。ここで待たないと、この直後の読み直しが
+        // まだ「エンコード中」を拾って、押しても何も変わらないように見える
+        await cancelEncode(id);
         return { success: true };
     },
 
