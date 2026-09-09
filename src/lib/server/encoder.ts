@@ -218,9 +218,9 @@ function videoArgs(
         return {
             filter: [...steps, 'format=yuv420p'].join(','),
             device: [],
-            // crf 24 は AV1 の既定 (crf35) と同じ画質の段に揃えた下限、medium は slow に
-            // しても時間が増えるだけ。実測の表は docs/encode.md「H.264 は crf 24」
-            encoder: ['libx264', '-preset', 'medium', '-crf', '24'],
+            // crf 23 は AV1 の既定 (crf35) と同じ画質に揃えた値、medium は slow に
+            // しても時間が増えるだけ。実測の表は docs/encode.md「H.264 は crf 23」
+            encoder: ['libx264', '-preset', 'medium', '-crf', '23'],
         };
     }
     /*
