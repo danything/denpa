@@ -24,7 +24,7 @@ config.encodeMaxAttempts = 5;
 
 const { orm } = await import('./db');
 const { encodeJobs, recordings } = await import('./schema');
-const { pump } = await import('./encoder');
+const { cancel, pump } = await import('./encoder');
 
 const now = Date.now();
 
@@ -77,4 +77,30 @@ test('上限未満のジョブは普通に掴む (attempts が増える)', () =>
     pump();
     // 掴みで attempts+1。上限の分岐で早々に切り捨てていないことの裏返し
     expect(job(jobId).attempts).toBe(config.encodeMaxAttempts);
+});
+
+/*
+ * **中止は畳み終わってから返す。**
+ *
+ * 頼むだけで返していた頃は、押した直後の読み直しが ffmpeg の死ぬ前に届くので、
+ * 同じ「エンコード中 60.9%」がそのまま出た。行が変わるのは畳み終わりの知らせ
+ * (SSE) が来たときで、その繋ぎが切れている端末ではリロードするまで変わらない
+ */
+test('待機中のジョブの中止は、その場で canceled になる', async () => {
+    reset();
+    const jobId = seedJob(0);
+    await cancel(jobId);
+    expect(job(jobId).state).toBe('canceled');
+});
+
+test('走り出したジョブの中止は、畳み終わってから返る', async () => {
+    reset();
+    const jobId = seedJob(0);
+    pump(); // 掴んで走り出す (この録画には生TSが無いので、すぐ畳まれる)
+    const at = Date.now();
+    await cancel(jobId);
+    // 返ってきた時点で走り終わっている = 押した直後の読み直しが真実を拾える
+    expect(job(jobId).state).not.toBe('running');
+    // 上限 (CANCEL_WAIT_MS) で諦めたのではなく、畳み終わりを受け取って返っている
+    expect(Date.now() - at).toBeLessThan(1_000);
 });

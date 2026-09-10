@@ -4,6 +4,7 @@
     "2": ["22-oidc", "20-live", "10-webhook", "24-bml-network", "14-serve", "02-reservation", "25-chase"],
     "3": ["03-recording", "22-watch", "18-pwa", "12-encode-failure", "05-rules"],
     "4": [
+        "27-encode-cancel",
         "19-reservation-rules",
         "21-onair-fallback",
         "15-scramble",

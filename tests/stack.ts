@@ -41,6 +41,11 @@ interface Stack {
     epgstationDir: string;
     /** これを置くと偽 ffmpeg がエンコードに失敗する */
     failFile: string;
+    /**
+     * これを置くと偽 ffmpeg のエンコードが長引く (20秒ほど)。
+     * **走っている最中に押す**ものを試すのに使う (エンコード中止)
+     */
+    slowFile: string;
     /** ライブ視聴で偽 ffmpeg に渡された引数。焼き方の指定を確かめるのに使う */
     liveArgsFile: string;
     /**
@@ -131,6 +136,7 @@ async function boot(index: number): Promise<{ stack: Stack; shutdown: () => Prom
         libraryDir: `${root}/library`,
         epgstationDir: `${root}/epgstation-recorded`,
         failFile: `${root}/fail-encode`,
+        slowFile: `${root}/slow-encode`,
         liveArgsFile: `${root}/live-ffmpeg-args`,
         liveFailFile: `${root}/fail-live`,
         liveTsFile: `${root}/live-ffmpeg-ts`,
@@ -186,6 +192,7 @@ async function boot(index: number): Promise<{ stack: Stack; shutdown: () => Prom
             EPGSTATION_DB_HOST: '127.0.0.1',
             EPGSTATION_DB_PORT: '1',
             FAKE_FFMPEG_FAIL_FILE: stack.failFile,
+            FAKE_FFMPEG_SLOW_FILE: stack.slowFile,
             FAKE_FFMPEG_ARGS_FILE: stack.liveArgsFile,
             FAKE_FFMPEG_LIVE_FAIL_FILE: stack.liveFailFile,
             FAKE_FFMPEG_TS_FILE: stack.liveTsFile,
