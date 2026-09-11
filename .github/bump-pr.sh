@@ -70,18 +70,29 @@ bump_finish() {
     2>/dev/null || true)
   [ -n "$contexts" ] || contexts=check
   sha=$(git rev-parse HEAD)
-  printf '%s\n' "$contexts" | while IFS= read -r context; do
+  # 1つ付け損ねても残りは付けて、マージまで進む。ただし**落ちたことは隠さない** —
+  # 付いていない context があれば PR は塞がったままなので、最後に非0で返して
+  # run を赤くし、人が見に来られるようにする (レビュー指摘)。
+  # パイプに流すとループがサブシェルになって `failed` が外に出ないので、
+  # リダイレクトで回す
+  failed=0
+  tmp=$(mktemp)
+  printf '%s\n' "$contexts" > "$tmp"
+  while IFS= read -r context; do
     [ -n "$context" ] || continue
     gh api "repos/${GITHUB_REPOSITORY}/statuses/${sha}" \
       -f state=success \
       -f context="$context" \
       -f description="$description" \
       -f target_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" \
-      > /dev/null
-  done
+      > /dev/null || { echo "status を付けられませんでした: ${context}" >&2; failed=1; }
+  done < "$tmp"
+  rm -f "$tmp"
 
   # status が PR に載るまで少し掛かることがある。載っていなければ auto-merge に倒す
   # (保護が満たされた時点で GitHub がマージする。repo の Allow auto-merge は有効)
   gh pr merge "$branch" --squash --subject "$title" --body "$body" \
     || gh pr merge "$branch" --auto --squash --subject "$title" --body "$body"
+  # 付け損ねがあったなら、ここまで来ても PR は塞がっている。run を赤くして知らせる
+  [ "$failed" = 0 ]
 }
