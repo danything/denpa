@@ -35,6 +35,12 @@
       "allowedVersions": "<6"
     },
     {
+      "description": "dotnet/sdk の浮動の major 札 (`11.0`) は正式版より前からあり、11月の GA まではプレビューを指す (2026-09 時点で中身は 11.0.100-preview.1)。しかも CI はこの Dockerfile を焼かないので、緑のまま通ってしまう。正式版が出たら上限を上げて、TargetFramework も一緒に上げる",
+      "matchDatasources": ["docker"],
+      "matchPackageNames": ["mcr.microsoft.com/dotnet/sdk"],
+      "allowedVersions": "<11"
+    },
+    {
       "description": "CM検出の一式は毎週書き換わっている。まとめて1本の PR にして、上げるときは実機で確かめる",
       "matchDepNames": [
         "https://github.com/tobitti0/dtvindex",
