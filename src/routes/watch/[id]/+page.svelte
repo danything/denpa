@@ -41,7 +41,7 @@
     import StageNote from '$lib/components/player/StageNote.svelte';
     import { snapshotter } from '$lib/components/player/shot.svelte';
     import Toasts, { errorNotice, type Notice } from '$lib/components/Toasts.svelte';
-    import { type DetailSeed, programDetail } from '$lib/detail.svelte';
+    import { programDetail } from '$lib/detail.svelte';
     import { startDownload } from '$lib/download';
     import { clock, cmNoteWorthShowing, recordedDuration, size } from '$lib/format';
     import { write as remind, read as stored } from '$lib/keep';
@@ -1034,7 +1034,8 @@
         start_at: rec.start_at,
         end_at: rec.end_at,
         description: rec.description,
-        extended: null,
+        // 番組表から写してある分 (recorder が録り始めに写す)。番組表が消えたあとはこれだけ
+        extended: rec.extended,
         genre_detail: rec.genre_detail,
         audios: rec.audios,
         video_type: null,
@@ -1049,14 +1050,9 @@
      * 引けなければ行のぶんだけが出たままになる (古い録画は消えている)
      */
     function loadDetail(): void {
-        const seed: DetailSeed = {
-            name: rec.name,
-            service_name: rec.service_name,
-            start_at: rec.start_at,
-            end_at: rec.end_at,
-            description: rec.description,
-        };
-        void detail.open(rec.program_id, seed);
+        // 種は左に出している中身そのもの。**別に組み直さない** — 組み直していた頃は
+        // ジャンル・音声を落としていて、番組表から消えた録画で札が出なかった
+        void detail.open(rec.program_id, facts);
     }
 
     /** 切り抜きの結果。**貼れたかどうかは言う** (黙って何も起きないと分からない) */

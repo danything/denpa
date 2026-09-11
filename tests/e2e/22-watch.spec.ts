@@ -53,6 +53,27 @@ test.describe('録画を観る', () => {
         await expect(page.getByTestId('watch-download')).toBeVisible();
     });
 
+    /*
+     * **番組表から消えても、ジャンルと音声の札は出る。** 録画の行は録り始めに
+     * 番組表から写している (recorder)。番組表の行は24時間で消えるので、そのあとは
+     * この写しだけが頼り — なのに詳細の種を組み直すところで null に潰していて、
+     * **1日過ぎた録画だけ札が消えていた** (実機、2026-09-11)。
+     *
+     * 番組表から引き直す口を 404 にして「消えたあと」を作る
+     */
+    test('番組表から消えた録画でも、行が持っているジャンルと音声の札が出る', async ({ page, request }) => {
+        test.setTimeout(180_000);
+        const id = await watchable(page, request);
+        await page.route('/api/programs/*', (route) => route.fulfill({ status: 404, body: '' }));
+        await goto(page, `/watch/${id}`);
+
+        const badges = page.getByTestId('detail-badges');
+        await expect(badges).toBeVisible();
+        // 偽の番組表は全部「アニメ／特撮 > 国内アニメ」(05-rules と同じ前提)
+        await expect(badges.getByTestId('detail-genre').first()).toHaveText('アニメ／特撮 > 国内アニメ');
+        await expect(badges.getByTestId('detail-audio').first()).toBeVisible();
+    });
+
     /**
      * **観終わったその場で消せる。** 末尾はたいてい CM なので、流したまま消せる
      * のが狙い。押し間違い防止に2回押させるのは一覧と同じ
