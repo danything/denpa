@@ -8,9 +8,14 @@
 # そこで、**書き換えた PR を出して、自分でマージする。** PR は GITHUB_TOKEN で開くので、
 # GitHub はそこから workflow を1つも動かさない (これも仕様) — 放っておくと必須チェックが
 # 永遠に付かず、PR が塞がったままになる。書き換えるのは印/版だけで、指す先のイメージや
-# chart は呼び出した run が出したものなので、**確かめるものは残っていない**。`check` の
+# chart は呼び出した run が出したものなので、**確かめるものは残っていない**。必須チェックの
 # status はここから付ける (保護は context を GitHub Actions app に固定してあるので、
 # この token で付けないと数えられない)。
+#
+# **付ける context は ruleset から引く。** `check` 1つを決め打ちにしていた頃、ruleset に
+# `agent` / `e2e (1)`〜`(4)` / `claude-review` が足された途端に bump の PR が
+# 「Expected」のまま塞がった (#99、2026-09-11)。ruleset で足したものにここが自動で
+# 追いつくようにする。引けなければ `check` だけ (以前の形) に落ちる。
 #
 # **2つのワークフローが同じ手を要る** (build-and-deploy の k3s の印と、release の
 # Chart.yaml の版)。書き写すと片方だけ直したときに食い違うので、ここ1つに置く
@@ -57,14 +62,37 @@ bump_finish() {
   gh pr create --base main --head "$branch" --title "$title" --body "$body" \
     || gh pr edit "$branch" --title "$title" --body "$body"
 
-  gh api "repos/${GITHUB_REPOSITORY}/statuses/$(git rev-parse HEAD)" \
-    -f state=success \
-    -f context=check \
-    -f description="$description" \
-    -f target_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+  # main に効いている規則から、必須チェックの context を全部拾う。
+  # **引けなかったら `check` だけに落ちる** — `set -e` の下では `$(...)` の中の
+  # 失敗でここごと止まるので、`|| true` で受けてから空を見る (レビュー指摘)
+  contexts=$(gh api "repos/${GITHUB_REPOSITORY}/rules/branches/main" \
+    -q '.[] | select(.type == "required_status_checks") | .parameters.required_status_checks[].context' \
+    2>/dev/null || true)
+  [ -n "$contexts" ] || contexts=check
+  sha=$(git rev-parse HEAD)
+  # 1つ付け損ねても残りは付けて、マージまで進む。ただし**落ちたことは隠さない** —
+  # 付いていない context があれば PR は塞がったままなので、最後に非0で返して
+  # run を赤くし、人が見に来られるようにする (レビュー指摘)。
+  # パイプに流すとループがサブシェルになって `failed` が外に出ないので、
+  # リダイレクトで回す
+  failed=0
+  tmp=$(mktemp)
+  printf '%s\n' "$contexts" > "$tmp"
+  while IFS= read -r context; do
+    [ -n "$context" ] || continue
+    gh api "repos/${GITHUB_REPOSITORY}/statuses/${sha}" \
+      -f state=success \
+      -f context="$context" \
+      -f description="$description" \
+      -f target_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" \
+      > /dev/null || { echo "status を付けられませんでした: ${context}" >&2; failed=1; }
+  done < "$tmp"
+  rm -f "$tmp"
 
   # status が PR に載るまで少し掛かることがある。載っていなければ auto-merge に倒す
   # (保護が満たされた時点で GitHub がマージする。repo の Allow auto-merge は有効)
   gh pr merge "$branch" --squash --subject "$title" --body "$body" \
     || gh pr merge "$branch" --auto --squash --subject "$title" --body "$body"
+  # 付け損ねがあったなら、ここまで来ても PR は塞がっている。run を赤くして知らせる
+  [ "$failed" = 0 ]
 }
