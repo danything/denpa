@@ -1,4 +1,4 @@
-import type { ProgramDetail } from './types';
+import type { Program, ProgramDetail } from './types';
 
 /** 行が自分で持っている分。EPG から引けなくても、これだけは必ず出せる */
 export interface DetailSeed {
@@ -8,6 +8,14 @@ export interface DetailSeed {
     end_at: number;
     /** 一覧によっては持っていない (ルールのプレビューなど)。引けたら埋まる */
     description?: string;
+    /**
+     * 録画の行は**番組表から写したもの**も持っている (`recordings` の
+     * genre_detail / audios / extended)。番組表の行は24時間で消えるので、
+     * そのあとに出せるのはこの写しだけ。持っている行は渡す
+     */
+    genre_detail?: Program['genre_detail'];
+    audios?: Program['audios'];
+    extended?: Program['extended'];
 }
 
 /**
@@ -39,15 +47,21 @@ export function programDetail() {
          */
         async open(programId: number | null, seed: DetailSeed): Promise<void> {
             const token = ++opened;
+            /*
+             * **既定を先に置いて、行の分で上書きする。** 逆順に書いていた頃は、
+             * 行が持っているジャンル・音声・詳細を既定の null で潰していた。
+             * 番組表から引けるうちは引き直しで戻るので気付かず、**番組表から
+             * 消えた録画 (24時間過ぎ) だけジャンルの札が出なかった** (実機)
+             */
             current = {
                 description: '',
-                ...seed,
                 extended: null,
                 genre_detail: null,
                 audios: null,
                 video_type: null,
                 video_resolution: null,
                 is_free: true,
+                ...seed,
             };
             if (programId === null) return;
 
