@@ -62,10 +62,12 @@ bump_finish() {
   gh pr create --base main --head "$branch" --title "$title" --body "$body" \
     || gh pr edit "$branch" --title "$title" --body "$body"
 
-  # main に効いている規則から、必須チェックの context を全部拾う
+  # main に効いている規則から、必須チェックの context を全部拾う。
+  # **引けなかったら `check` だけに落ちる** — `set -e` の下では `$(...)` の中の
+  # 失敗でここごと止まるので、`|| true` で受けてから空を見る (レビュー指摘)
   contexts=$(gh api "repos/${GITHUB_REPOSITORY}/rules/branches/main" \
     -q '.[] | select(.type == "required_status_checks") | .parameters.required_status_checks[].context' \
-    2>/dev/null)
+    2>/dev/null || true)
   [ -n "$contexts" ] || contexts=check
   sha=$(git rev-parse HEAD)
   printf '%s\n' "$contexts" | while IFS= read -r context; do
