@@ -59,10 +59,13 @@ export const DATA =
 /**
  * 絵の上に置くボタンの見た目。**読めるように黒く敷く。**
  *
- * `btn-ghost` にしていた頃は daisyUI が主題の文字色を当てるので、暗い絵と
- * 下の黒いぼかしに**アイコンが沈んで見えなく**なっていた
+ * 主題の文字色に任せていた頃 (daisyUI の `btn-ghost`) は、暗い絵と
+ * 下の黒いぼかしに**アイコンが沈んで見えなく**なっていた。
+ *
+ * **クラスの中身は `ControlButton.svelte` の `<style>` (`:global`)。** 3画面とも
+ * ControlButton を読み込むので、そこに置けば必ず届く
  */
-export const OVERLAY = 'border-0 bg-black/45 text-white shadow-none hover:bg-black/70';
+export const OVERLAY = 'ov';
 
 /**
  * 絵の上に置くボタンの大きさ。**3画面で同じ。**
@@ -70,11 +73,13 @@ export const OVERLAY = 'border-0 bg-black/45 text-white shadow-none hover:bg-bla
  * `btn-sm` (32px) にしていた頃は、**タブレットでもPCでも小さすぎた** —
  * 絵の上に薄く敷くものなので、輪郭で狙うのではなく面で狙うことになる。
  *
- * 引き出し (速さ・音声・焼き方) の口も同じ大きさで揃える。あちらは
- * `<div class="dropdown">` の中の生のボタンなので `ControlButton` が使えず、
- * ここの字を直に当てる
+ * 引き出し (速さ・音声・焼き方) の口も同じ大きさで揃える (`OverlayMenu` の
+ * 口は ControlButton)。ボタンでない `<a>` (閉じる) にはここの字を直に当てる
  */
-export const OVERLAY_BTN = 'btn btn-lg';
+export const OVERLAY_BTN = 'ov-btn';
+
+/** 丸いボタン (アイコンだけのとき)。`OVERLAY_BTN` と一緒に使う */
+export const OVERLAY_ROUND = 'ov-round';
 
 /**
  * 聞き返しの2回目の見た目 (削除)。**大きさは変えない。**
@@ -84,10 +89,10 @@ export const OVERLAY_BTN = 'btn btn-lg';
  * 変えるのは色と絵だけ — 鋏や送りと違い、**赤いレ点は「これでいいか」以外に
  * 読みようが無い**
  */
-export const OVERLAY_DANGER = 'btn-error border-0 text-white shadow-none';
+export const OVERLAY_DANGER = 'ov-danger';
 
 /** 押されている間の見た目 (字幕を出しているとき・ライブに居るとき) */
-export const OVERLAY_ON = 'btn-primary border-0 text-white shadow-none';
+export const OVERLAY_ON = 'ov-on';
 
 /**
  * 触らなくなってから操作列が消えるまで。**指のほうを長く待つ。**

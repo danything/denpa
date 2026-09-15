@@ -83,22 +83,22 @@
 
     const shown = $derived(notices.filter((notice) => !dismissed.includes(notice.key)));
 
-    // 組み立てた名前は Tailwind が拾えない。使う名前をそのまま並べておく
+    /** 見た目は app.scss の notice(error / info / success) */
     const STYLE: Record<Notice['kind'], string> = {
-        error: 'alert-error',
-        info: 'alert-info',
-        success: 'alert-success',
+        error: 'error',
+        info: 'info',
+        success: 'success',
     };
 </script>
 
 {#if shown.length > 0}
-    <!-- daisyUI の toast は既定で右下。z-50 はモーダルの下・本文の上 -->
-    <div class="toast toast-end toast-bottom z-50 max-w-[min(28rem,calc(100vw-2rem))]">
+    <!-- 右下に浮かせる。z-index はモーダル(60)の下・本文の上 -->
+    <div class="toasts">
         {#each shown as notice (notice.key)}
-            <div class="alert {STYLE[notice.kind]} shadow-lg" data-testid={notice.key}>
-                <span class="whitespace-pre-wrap">{notice.text}</span>
+            <div class="notice {STYLE[notice.kind]} toast" data-testid={notice.key}>
+                <span class="text">{notice.text}</span>
                 <button type="button"
-                    class="btn btn-ghost btn-xs btn-circle"
+                    class="ghost xs close"
                     onclick={() => dismiss(notice.key)}
                     aria-label="閉じる"
                     data-testid="{notice.key}-close"
@@ -109,3 +109,31 @@
         {/each}
     </div>
 {/if}
+
+<style>
+    .toasts {
+        position: fixed;
+        right: 1rem;
+        bottom: 1rem;
+        z-index: 50;
+        display: flex;
+        flex-direction: column;
+        align-items: flex-end;
+        gap: 0.5rem;
+        max-width: min(28rem, calc(100vw - 2rem));
+    }
+    .toast {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        border: 1px solid var(--dp-base-300);
+        box-shadow: 0 10px 25px rgb(0 0 0 / 0.35);
+    }
+    .text {
+        white-space: pre-wrap;
+    }
+    .close {
+        flex: none;
+        border-radius: 999px;
+    }
+</style>

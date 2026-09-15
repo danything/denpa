@@ -648,14 +648,14 @@
     こちらは場所だけ用意する。出していないときは触れないようにしておく
     (押すのを邪魔しない)。
 
-    **操作列より下に敷く** (`z-5` / `ControlBar` は `z-10`)。上に載せていた頃は、
+    **操作列より下に敷く** (`z-index: 5` / `ControlBar` は 10)。上に載せていた頃は、
     データ放送を出した瞬間に操作列が隠れた — そこに d ボタンも居るので、
     **出したら消せなくなる**
 -->
 <div
     bind:this={host}
-    class="pointer-events-none absolute inset-0 z-[5] overflow-hidden"
-    class:hidden={!on}
+    class="data"
+    hidden={!on}
     data-testid="live-data"
     data-state={browser !== null ? 'ready' : loading ? 'loading' : 'off'}
     data-showing={visible}
@@ -668,6 +668,16 @@
         ので、テレビより待つ (実測で8秒)。何も言わずに待たせると壊れて見える
     -->
     {#if on && (loading || receiving)}
-        <StageNote testid="live-data-receiving" wrap="top-3 right-3">データ取得中…</StageNote>
+        <StageNote testid="live-data-receiving" place="corner">データ取得中…</StageNote>
     {/if}
 </div>
+
+<style>
+    .data {
+        pointer-events: none;
+        position: absolute;
+        inset: 0;
+        z-index: 5;
+        overflow: hidden;
+    }
+</style>

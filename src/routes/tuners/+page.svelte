@@ -67,222 +67,203 @@
 
 <Toasts {notices} source={form} />
 
-<div class="grid items-start gap-6 xl:grid-cols-2">
-    <div class="flex min-w-0 flex-col gap-6">
-        <section class="card bg-base-100 shadow" data-testid="channel-card">
-            <div class="card-body">
+<div class="columns">
+    <div class="column">
+        <section class="panel card" data-testid="channel-card">
+            <!--
+                **説明を3つ重ねない。**
+
+                見出しの下に長い前置き、ボタンの下に押し方の説明、数の下に
+                数え方の説明、と3つ並んでいた。どれも同じことを言い換えていて、
+                肝心の数が下に押し出されていた。**数を先に出して、注は1つだけ。**
+            -->
+            <div class="cluster spread">
+                <h2>取れているチャンネル</h2>
                 <!--
-                    **説明を3つ重ねない。**
-
-                    見出しの下に長い前置き、ボタンの下に押し方の説明、数の下に
-                    数え方の説明、と3つ並んでいた。どれも同じことを言い換えていて、
-                    肝心の数が下に押し出されていた。**数を先に出して、注は1つだけ。**
+                    入れたばかりのとき用。普段の周回は録画にもスキャンにもロゴにも
+                    譲るので、何か動いていると番組表がなかなか埋まらない。
+                    押されている間は録画以外を蹴って、全チューナーで回る
                 -->
-                <div class="flex flex-wrap items-center justify-between gap-2">
-                    <h2 class="card-title">取れているチャンネル</h2>
-                    <!--
-                        入れたばかりのとき用。普段の周回は録画にもスキャンにもロゴにも
-                        譲るので、何か動いていると番組表がなかなか埋まらない。
-                        押されている間は録画以外を蹴って、全チューナーで回る
-                    -->
-                    <form method="POST" action="?/collectNow" use:submitting>
-                        <button type="submit"
-                            class="btn btn-sm"
-                            disabled={data.collect.boosted}
-                            data-testid="epg-collect-now"
-                        >
-                            {data.collect.boosted ? '集めています…' : '番組表をいますぐ集める'}
-                        </button>
-                    </form>
-                </div>
-                {#if data.collect.running}
-                    <!-- 1チャンネルに数分かかる。黙っていると止まって見える -->
-                    <div class="text-base-content/70 text-sm" data-testid="epg-collect">
-                        {data.collect.boosted ? '最優先で集めています' : '番組表を集めています'}
-                        ({data.collect.active.join(', ') || '準備中'}) ・ 残り {data.collect.pending} チャンネル
-                    </div>
-                {/if}
-                {#if coverage.length === 0}
-                    <p class="text-base-content/60 text-sm" data-testid="channel-empty">
-                        まだ1つもありません。チャンネルスキャンを実行してください。
-                    </p>
-                {:else}
-                    <!-- 番組表がもう入っている局の数。下の表の右端を全部見なくても分かるように -->
-                    {@const withEpg = services.filter((service) => service.programs > 0).length}
-                    <!--
-                        **入れ子になった3つの数を、その順に並べる。**
-
-                        「50 / 59 ・ 124 局」とだけ出していた頃は、59 と 124 が
-                        同じものの数に見えて「残り65はどこへ行った」となっていた。
-                        この3つは入れ子で、数がそろわないのが当たり前:
-
-                          周波数 (T19, BS15_0) ┬ 局 (TOKYO MX1) ─ 番組表
-                                              └ 局 (TOKYO MX2) ─ 番組表
-
-                        局と番組表を分けて出すのも、混ざりやすいから。
-                        局はスキャンで、番組表はそのあと denpa が集めるもので、
-                        埋まる時期がずれる (局はあるのに番組表が空、が普通にある)
-                    -->
-                    <div class="text-sm" data-testid="channel-coverage">
-                        <span class="text-base-content/70">周波数</span>
-                        <strong>{coverage.length} 本</strong>
-                        <span class="text-base-content/40">→</span>
-                        <span class="text-base-content/70">そこに乗っている局</span>
-                        <strong>{services.length}</strong>
-                        <span class="text-base-content/40">→</span>
-                        <span class="text-base-content/70">番組表の届いた局</span>
-                        <strong>{withEpg}</strong>
-                    </div>
-                    <!--
-                        **注はここ1つだけ。** 数のすぐ下に、数がそろわない理由と、
-                        上のボタンが何をするものかをまとめて置く
-                    -->
-                    <div class="text-base-content/60 text-xs">
-                        1本の周波数に局が何局も相乗りしているので、本数と局数はそろいません。番組表は局ごとに、スキャンのあとを追って埋まります。
-                        埋まるのを待てないときは<strong>「番組表をいますぐ集める」</strong
-                        >で、空いているチューナーを全部使って集められます (録画中のチューナーは使いません)。
-                    </div>
-                    <!-- カードの中で巻かない。長くても全部並べる (巻くのはページごと) -->
-                    <div class="overflow-x-auto">
-                        <table class="table table-sm">
-                            <thead>
-                                <tr>
-                                    <th>種別</th>
-                                    <th>ch</th>
-                                    <th class="w-full">局</th>
-                                    <th class="whitespace-nowrap">番組表</th>
-                                </tr>
-                            </thead>
-                            <tbody data-testid="channel-list">
-                                {#each coverage as channel (`${channel.type}:${channel.channel}`)}
-                                    {@const programs = channel.services.reduce(
-                                        (sum, service) => sum + service.programs,
-                                        0,
-                                    )}
-                                    {@const last = Math.max(
-                                        0,
-                                        ...channel.services.map((service) => service.until),
-                                    )}
-                                    <tr data-testid="channel-row" data-channel={channel.channel}>
-                                        <td class="whitespace-nowrap text-sm">
-                                            {SERVICE_TYPE_LABEL[channel.type] ?? channel.type}
-                                        </td>
-                                        <td class="font-mono text-sm whitespace-nowrap">
-                                            {channel.channel}
-                                        </td>
-                                        <td class="text-sm">
-                                            <div data-testid="channel-services">
-                                                {channel.services.map((service) => service.name).join(', ')}
-                                            </div>
-                                        </td>
-                                        <td class="text-sm whitespace-nowrap" data-testid="channel-epg">
-                                            {#if programs > 0}
-                                                <div>{programs} 件</div>
-                                                <div class="text-base-content/60 text-xs">
-                                                    {until(last)}
-                                                </div>
-                                            {:else}
-                                                <span class="text-base-content/60">—</span>
-                                            {/if}
-                                        </td>
-                                    </tr>
-                                {/each}
-                            </tbody>
-                        </table>
-                    </div>
-                {/if}
+                <form method="POST" action="?/collectNow" use:submitting>
+                    <button
+                        type="submit"
+                        class="small secondary"
+                        disabled={data.collect.boosted}
+                        data-testid="epg-collect-now"
+                    >
+                        {data.collect.boosted ? '集めています…' : '番組表をいますぐ集める'}
+                    </button>
+                </form>
             </div>
+            {#if data.collect.running}
+                <!-- 1チャンネルに数分かかる。黙っていると止まって見える -->
+                <div class="small soft" data-testid="epg-collect">
+                    {data.collect.boosted ? '最優先で集めています' : '番組表を集めています'}
+                    ({data.collect.active.join(', ') || '準備中'}) ・ 残り {data.collect.pending} チャンネル
+                </div>
+            {/if}
+            {#if coverage.length === 0}
+                <p class="small muted" data-testid="channel-empty">
+                    まだ1つもありません。チャンネルスキャンを実行してください。
+                </p>
+            {:else}
+                <!-- 番組表がもう入っている局の数。下の表の右端を全部見なくても分かるように -->
+                {@const withEpg = services.filter((service) => service.programs > 0).length}
+                <!--
+                    **入れ子になった3つの数を、その順に並べる。**
+
+                    「50 / 59 ・ 124 局」とだけ出していた頃は、59 と 124 が
+                    同じものの数に見えて「残り65はどこへ行った」となっていた。
+                    この3つは入れ子で、数がそろわないのが当たり前:
+
+                      周波数 (T19, BS15_0) ┬ 局 (TOKYO MX1) ─ 番組表
+                                          └ 局 (TOKYO MX2) ─ 番組表
+
+                    局と番組表を分けて出すのも、混ざりやすいから。
+                    局はスキャンで、番組表はそのあと denpa が集めるもので、
+                    埋まる時期がずれる (局はあるのに番組表が空、が普通にある)
+                -->
+                <div class="small" data-testid="channel-coverage">
+                    <span class="soft">周波数</span>
+                    <strong>{coverage.length} 本</strong>
+                    <span class="faint">→</span>
+                    <span class="soft">そこに乗っている局</span>
+                    <strong>{services.length}</strong>
+                    <span class="faint">→</span>
+                    <span class="soft">番組表の届いた局</span>
+                    <strong>{withEpg}</strong>
+                </div>
+                <!--
+                    **注はここ1つだけ。** 数のすぐ下に、数がそろわない理由と、
+                    上のボタンが何をするものかをまとめて置く
+                -->
+                <div class="tiny muted">
+                    1本の周波数に局が何局も相乗りしているので、本数と局数はそろいません。番組表は局ごとに、スキャンのあとを追って埋まります。
+                    埋まるのを待てないときは<strong>「番組表をいますぐ集める」</strong
+                    >で、空いているチューナーを全部使って集められます (録画中のチューナーは使いません)。
+                </div>
+                <!-- カードの中で巻かない。長くても全部並べる (巻くのはページごと) -->
+                <div class="table-wrap">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>種別</th>
+                                <th>ch</th>
+                                <th class="wide">局</th>
+                                <th class="nowrap">番組表</th>
+                            </tr>
+                        </thead>
+                        <tbody data-testid="channel-list">
+                            {#each coverage as channel (`${channel.type}:${channel.channel}`)}
+                                {@const programs = channel.services.reduce(
+                                    (sum, service) => sum + service.programs,
+                                    0,
+                                )}
+                                {@const last = Math.max(
+                                    0,
+                                    ...channel.services.map((service) => service.until),
+                                )}
+                                <tr data-testid="channel-row" data-channel={channel.channel}>
+                                    <td class="nowrap small">
+                                        {SERVICE_TYPE_LABEL[channel.type] ?? channel.type}
+                                    </td>
+                                    <td class="mono small nowrap">
+                                        {channel.channel}
+                                    </td>
+                                    <td class="small">
+                                        <div data-testid="channel-services">
+                                            {channel.services.map((service) => service.name).join(', ')}
+                                        </div>
+                                    </td>
+                                    <td class="small nowrap" data-testid="channel-epg">
+                                        {#if programs > 0}
+                                            <div>{programs} 件</div>
+                                            <div class="tiny muted">
+                                                {until(last)}
+                                            </div>
+                                        {:else}
+                                            <span class="muted">—</span>
+                                        {/if}
+                                    </td>
+                                </tr>
+                            {/each}
+                        </tbody>
+                    </table>
+                </div>
+            {/if}
         </section>
 
-        <section class="card bg-base-100 shadow" data-testid="scan-card">
-            <div class="card-body">
-                <h2 class="card-title">チャンネルスキャン</h2>
-                <p class="text-base-content/70 text-sm">
-                    受信できるチャンネルを実際に選局して探します。<strong
-                        >空いているチューナーを全部使います</strong
-                    >が、<strong>録画中でも実行できます</strong> (録画のほうが強いので、そのチューナーは使いません)。見つかったものは保存され、終わると番組表も集め直します。
-                </p>
+        <section class="panel card" data-testid="scan-card">
+            <h2>チャンネルスキャン</h2>
+            <p class="small soft">
+                受信できるチャンネルを実際に選局して探します。<strong
+                    >空いているチューナーを全部使います</strong
+                >が、<strong>録画中でも実行できます</strong> (録画のほうが強いので、そのチューナーは使いません)。見つかったものは保存され、終わると番組表も集め直します。
+            </p>
 
-                <form method="POST" action="?/scan" use:submitting class="mt-2 space-y-3">
-                    <div>
-                        <span class="text-sm font-medium">種別</span>
-                        <div class="mt-1 flex flex-wrap gap-4" data-testid="scan-types">
-                            {#each TYPES as type (type)}
-                                <label class="flex cursor-pointer items-center gap-2">
-                                    <input
-                                        type="checkbox"
-                                        name="types"
-                                        value={type}
-                                        checked={type === 'GR'}
-                                        class="checkbox checkbox-sm"
-                                    />
-                                    <span class="text-sm">{SERVICE_TYPE_LABEL[type]}</span>
-                                </label>
-                            {/each}
-                        </div>
+            <form method="POST" action="?/scan" use:submitting class="stack">
+                <div>
+                    <span class="label">種別</span>
+                    <div class="types" data-testid="scan-types">
+                        {#each TYPES as type (type)}
+                            <label class="check">
+                                <input type="checkbox" name="types" value={type} checked={type === 'GR'} />
+                                <span class="small">{SERVICE_TYPE_LABEL[type]}</span>
+                            </label>
+                        {/each}
                     </div>
-                    <!--
-                        探す範囲は決め打ち。放送で使う物理チャンネルは決まっていて、
-                        狭めても総当たりの時間が少し減るだけ。
-                        狭めた結果 見つからない局が出るほうが困る
-                    -->
-                    <div class="flex flex-wrap items-center gap-2">
-                        <button type="submit"
-                            class="btn btn-primary"
-                            disabled={scan.state === 'running'}
-                            data-testid="scan-start"
+                </div>
+                <!--
+                    探す範囲は決め打ち。放送で使う物理チャンネルは決まっていて、
+                    狭めても総当たりの時間が少し減るだけ。
+                    狭めた結果 見つからない局が出るほうが困る
+                -->
+                <div class="cluster">
+                    <button type="submit" disabled={scan.state === 'running'} data-testid="scan-start">
+                        {scan.state === 'running' ? '実行中…' : '開始する'}
+                    </button>
+                    {#if scan.state === 'running'}
+                        <!--
+                            十数分かかるので、途中で降りられるようにしてある。
+                            中断しても設定は書き換えない (途中までの結果で上書きすると、
+                            まだ回っていない局の定義が消える)
+                        -->
+                        <button
+                            type="submit"
+                            class="outline danger"
+                            formaction="?/scanStop"
+                            data-testid="scan-stop"
                         >
-                            {scan.state === 'running' ? '実行中…' : '開始する'}
+                            中断する
                         </button>
-                        {#if scan.state === 'running'}
-                            <!--
-                                十数分かかるので、途中で降りられるようにしてある。
-                                中断しても設定は書き換えない (途中までの結果で上書きすると、
-                                まだ回っていない局の定義が消える)
-                            -->
-                            <button type="submit"
-                                class="btn btn-error btn-outline"
-                                formaction="?/scanStop"
-                                data-testid="scan-stop"
-                            >
-                                中断する
-                            </button>
+                    {/if}
+                </div>
+            </form>
+
+            {#if scan.state !== 'idle'}
+                <div class="progress-block" data-testid="scan-progress" data-state={scan.state}>
+                    <div class="cluster small">
+                        <span class="tag" data-testid="scan-state">{STATE_LABEL[scan.state]}</span>
+                        {#if scan.phase}
+                            <span class="tag outline">{scan.phase}</span>
                         {/if}
+                        <span data-testid="scan-found">見つかったチャンネル {scan.channels}</span>
                     </div>
-                </form>
 
-                {#if scan.state !== 'idle'}
-                    <div class="mt-4" data-testid="scan-progress" data-state={scan.state}>
-                        <div class="flex flex-wrap items-center gap-2 text-sm">
-                            <span class="badge" data-testid="scan-state">{STATE_LABEL[scan.state]}</span>
-                            {#if scan.phase}
-                                <span class="badge badge-ghost">{scan.phase}</span>
-                            {/if}
-                            <span data-testid="scan-found">見つかったチャンネル {scan.channels}</span>
-                        </div>
-
-                        <!-- 総当たりなので何分かかるか分かりにくい。どこまで進んだかを出す -->
-                        <progress
-                            class="progress progress-primary mt-2 w-full"
-                            value={progress}
-                            max="1"
-                            data-testid="scan-bar"
-                        ></progress>
-                        <div class="text-base-content/60 mt-1 text-xs" data-testid="scan-count">
-                            {scan.scanned} / {scan.total} チャンネル
-                        </div>
-
-                        {#if scan.error}
-                            <div class="alert alert-error mt-2" data-testid="scan-failed">{scan.error}</div>
-                        {/if}
-                        {#if scan.log.length > 0}
-                            <pre
-                                class="bg-base-200 mt-2 max-h-64 overflow-auto rounded p-2 font-mono text-xs whitespace-pre-wrap"
-                                data-testid="scan-log">{scan.log.join('\n')}</pre>
-                        {/if}
+                    <!-- 総当たりなので何分かかるか分かりにくい。どこまで進んだかを出す -->
+                    <progress value={progress} max="1" data-testid="scan-bar"></progress>
+                    <div class="tiny muted" data-testid="scan-count">
+                        {scan.scanned} / {scan.total} チャンネル
                     </div>
-                {/if}
-            </div>
+
+                    {#if scan.error}
+                        <div class="notice error" data-testid="scan-failed">{scan.error}</div>
+                    {/if}
+                    {#if scan.log.length > 0}
+                        <pre class="log" data-testid="scan-log">{scan.log.join('\n')}</pre>
+                    {/if}
+                </div>
+            {/if}
         </section>
 
         <!--
@@ -293,374 +274,497 @@
             チューナーの設定。**選局コマンドは出さない** — 理由は
             `src/lib/server/tuner.ts` の `putTuners`。出すのはデバイスと種別だけ
         -->
-        <section class="card bg-base-100 shadow" data-testid="tuner-config-card">
-            <div class="card-body">
-                <h2 class="card-title">チューナーの設定</h2>
-                {#await data.detected then detected}
-                    {#if detected}
-                        <p class="text-base-content/60 text-sm" data-testid="tuner-detected">
-                            いまは<strong>挿さっている機材を自動で見つけて</strong>使っています。
-                            保存するとこの内容で固定されます。
-                        </p>
-                    {/if}
-                {/await}
+        <section class="panel card" data-testid="tuner-config-card">
+            <h2>チューナーの設定</h2>
+            {#await data.detected then detected}
+                {#if detected}
+                    <p class="small muted" data-testid="tuner-detected">
+                        いまは<strong>挿さっている機材を自動で見つけて</strong>使っています。
+                        保存するとこの内容で固定されます。
+                    </p>
+                {/if}
+            {/await}
 
-                {#if shownTuners.value !== undefined}
-                    {@const rows = [...shownTuners.value.list, null]}
-                    <form method="POST" action="?/tuners" use:submitting data-testid="tuner-config-form">
-                        <div class="overflow-x-auto">
-                            <table class="table table-sm">
-                                <thead>
-                                    <tr>
-                                        <th>名前</th>
-                                        <th>デバイス</th>
-                                        <th>受けられる種別</th>
-                                        <th>LNB</th>
-                                        <th>無効</th>
+            {#if shownTuners.value !== undefined}
+                {@const rows = [...shownTuners.value.list, null]}
+                <form method="POST" action="?/tuners" use:submitting data-testid="tuner-config-form">
+                    <div class="table-wrap">
+                        <table class="config">
+                            <thead>
+                                <tr>
+                                    <th>名前</th>
+                                    <th>デバイス</th>
+                                    <th>受けられる種別</th>
+                                    <th>LNB</th>
+                                    <th>無効</th>
+                                </tr>
+                            </thead>
+                            <tbody data-testid="tuner-config-list">
+                                {#each rows as tuner, index (index)}
+                                    <tr data-testid="tuner-config-row">
+                                        <td>
+                                            <input
+                                                class="w-name"
+                                                name={`name.${index}`}
+                                                value={tuner?.name ?? ''}
+                                                placeholder={tuner === null ? '名前を入れて足す' : ''}
+                                            />
+                                        </td>
+                                        <td>
+                                            <input
+                                                class="w-device mono tiny"
+                                                name={`device.${index}`}
+                                                value={tuner?.device ?? ''}
+                                                placeholder="/dev/dvb/adapter0/frontend0"
+                                            />
+                                        </td>
+                                        <td class="nowrap">
+                                            {#each TYPES as type (type)}
+                                                <label class="check type-check">
+                                                    <input
+                                                        type="checkbox"
+                                                        name={`type.${index}.${type}`}
+                                                        checked={tuner?.types.includes(type) ?? false}
+                                                    />
+                                                    <span class="tiny">{SERVICE_TYPE_LABEL[type]}</span>
+                                                </label>
+                                            {/each}
+                                        </td>
+                                        <td>
+                                            <input
+                                                class="w-lnb"
+                                                name={`lnb.${index}`}
+                                                value={tuner?.lnb ?? ''}
+                                                placeholder="15v"
+                                            />
+                                        </td>
+                                        <td>
+                                            <input
+                                                type="checkbox"
+                                                name={`disabled.${index}`}
+                                                checked={tuner?.disabled ?? false}
+                                            />
+                                        </td>
                                     </tr>
-                                </thead>
-                                <tbody data-testid="tuner-config-list">
-                                    {#each rows as tuner, index (index)}
-                                        <tr data-testid="tuner-config-row">
-                                            <td>
-                                                <input
-                                                    class="input input-sm input-bordered w-32"
-                                                    name={`name.${index}`}
-                                                    value={tuner?.name ?? ''}
-                                                    placeholder={tuner === null ? '名前を入れて足す' : ''}
-                                                />
-                                            </td>
-                                            <td>
-                                                <input
-                                                    class="input input-sm input-bordered w-72 font-mono text-xs"
-                                                    name={`device.${index}`}
-                                                    value={tuner?.device ?? ''}
-                                                    placeholder="/dev/dvb/adapter0/frontend0"
-                                                />
-                                            </td>
-                                            <td class="whitespace-nowrap">
-                                                {#each TYPES as type (type)}
-                                                    <label class="mr-2 inline-flex items-center gap-1">
-                                                        <input
-                                                            type="checkbox"
-                                                            class="checkbox checkbox-xs"
-                                                            name={`type.${index}.${type}`}
-                                                            checked={tuner?.types.includes(type) ?? false}
-                                                        />
-                                                        <span class="text-xs">{SERVICE_TYPE_LABEL[type]}</span>
-                                                    </label>
-                                                {/each}
-                                            </td>
-                                            <td>
-                                                <input
-                                                    class="input input-sm input-bordered w-20"
-                                                    name={`lnb.${index}`}
-                                                    value={tuner?.lnb ?? ''}
-                                                    placeholder="15v"
-                                                />
-                                            </td>
-                                            <td>
-                                                <input
-                                                    type="checkbox"
-                                                    class="checkbox checkbox-sm"
-                                                    name={`disabled.${index}`}
-                                                    checked={tuner?.disabled ?? false}
-                                                />
+                                    {#if tuner?.command}
+                                        <tr>
+                                            <td colspan="5" class="tiny muted">
+                                                設定ファイルに直に書いた選局コマンドが効いています
+                                                (画面からは変えられません):
+                                                <code class="mono">{tuner.command}</code>
                                             </td>
                                         </tr>
-                                        {#if tuner?.command}
-                                            <tr>
-                                                <td colspan="5" class="text-base-content/60 text-xs">
-                                                    設定ファイルに直に書いた選局コマンドが効いています
-                                                    (画面からは変えられません):
-                                                    <code class="font-mono">{tuner.command}</code>
-                                                </td>
-                                            </tr>
-                                        {/if}
-                                    {/each}
-                                </tbody>
-                            </table>
-                        </div>
-                        <p class="text-base-content/60 mt-2 text-xs">名前を空にすると、その行は消えます。</p>
-                        <div class="card-actions mt-2">
-                            <button type="submit" class="btn btn-primary btn-sm" data-testid="tuner-config-save">
-                                保存する
-                            </button>
-                            <button type="submit"
-                                class="btn btn-ghost btn-sm"
-                                formaction="?/tunersAuto"
-                                data-testid="tuner-config-auto"
-                            >
-                                自動検出に戻す
-                            </button>
-                        </div>
-                    </form>
-                {/if}
-            </div>
+                                    {/if}
+                                {/each}
+                            </tbody>
+                        </table>
+                    </div>
+                    <p class="tiny muted note">名前を空にすると、その行は消えます。</p>
+                    <div class="cluster actions">
+                        <button type="submit" class="small" data-testid="tuner-config-save">
+                            保存する
+                        </button>
+                        <button
+                            type="submit"
+                            class="small ghost"
+                            formaction="?/tunersAuto"
+                            data-testid="tuner-config-auto"
+                        >
+                            自動検出に戻す
+                        </button>
+                    </div>
+                </form>
+            {/if}
         </section>
-
     </div>
 
-    <div class="flex min-w-0 flex-col gap-6">
+    <div class="column">
         <!--
             **いちばん上に置く。** 録るのも番組表を集めるのもここの取り合いで、
             スキャン中に見たいのも「いま何本使っているか」。カードリーダーの
             具合も同じ機材の話なので、下に並べてある
         -->
-        <section class="card bg-base-100 shadow" data-testid="tuner-card">
-            <div class="card-body">
-                <h2 class="card-title">チューナーの空き</h2>
-                {#if shownTuners.value === undefined}
-                    <p class="text-base-content/60 text-sm">確認中…</p>
+        <section class="panel card" data-testid="tuner-card">
+            <h2>チューナーの空き</h2>
+            {#if shownTuners.value === undefined}
+                <p class="small muted">確認中…</p>
+            {:else}
+                {@const tuners = shownTuners.value.list}
+                {@const failure = shownTuners.value.error}
+                {#if failure !== null}
+                    <!--
+                        繋がらなかったときに空の一覧だけ出すと「1本も無い」と
+                        見分けが付かない。理由をそのまま出す
+                    -->
+                    <div class="notice error small" data-testid="tuner-unreachable">
+                        チューナーエージェントに繋がりません: {failure}
+                    </div>
+                {:else if tuners.length === 0}
+                    <p class="small muted" data-testid="tuner-empty">
+                        チューナーがありません。「チューナーの設定」から足してください。
+                    </p>
                 {:else}
-                    {@const tuners = shownTuners.value.list}
-                    {@const failure = shownTuners.value.error}
-                    {#if failure !== null}
-                        <!--
-                            繋がらなかったときに空の一覧だけ出すと「1本も無い」と
-                            見分けが付かない。理由をそのまま出す
-                        -->
-                        <div class="alert alert-error text-sm" data-testid="tuner-unreachable">
-                            チューナーエージェントに繋がりません: {failure}
-                        </div>
-                    {:else if tuners.length === 0}
-                        <p class="text-base-content/60 text-sm" data-testid="tuner-empty">
-                            チューナーがありません。「チューナーの設定」から足してください。
-                        </p>
-                    {:else}
-                        <div class="overflow-x-auto">
-                            <table class="table table-sm">
-                                <thead>
-                                    <tr>
-                                        <th>名前</th>
-                                        <th>種別</th>
-                                        <th>状態</th>
-                                        <th class="w-full">使っているもの</th>
-                                    </tr>
-                                </thead>
-                                <tbody data-testid="tuner-list">
-                                    {#each tuners as tuner (tuner.index)}
-                                        <tr data-testid="tuner-row" data-tuner-index={tuner.index}>
-                                            <td class="whitespace-nowrap">{tuner.name}</td>
-                                            <td class="whitespace-nowrap text-sm">
-                                                {tuner.types.map((t) => SERVICE_TYPE_LABEL[t] ?? t).join('/')}
-                                            </td>
-                                            <td class="whitespace-nowrap">
-                                                <!-- 何を掴んでいるかも出す。空き/使用中だけでは追えない -->
-                                                {#if tuner.disabled}
-                                                    <span class="badge badge-sm badge-ghost">無効</span>
-                                                {:else if tuner.channel !== null}
-                                                    <span class="badge badge-sm badge-warning">
-                                                        {tuner.channel.channel}
+                    <div class="table-wrap">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>名前</th>
+                                    <th>種別</th>
+                                    <th>状態</th>
+                                    <th class="wide">使っているもの</th>
+                                </tr>
+                            </thead>
+                            <tbody data-testid="tuner-list">
+                                {#each tuners as tuner (tuner.index)}
+                                    <tr data-testid="tuner-row" data-tuner-index={tuner.index}>
+                                        <td class="nowrap">{tuner.name}</td>
+                                        <td class="nowrap small">
+                                            {tuner.types.map((t) => SERVICE_TYPE_LABEL[t] ?? t).join('/')}
+                                        </td>
+                                        <td class="nowrap">
+                                            <!-- 何を掴んでいるかも出す。空き/使用中だけでは追えない -->
+                                            {#if tuner.disabled}
+                                                <span class="tag">無効</span>
+                                            {:else if tuner.channel !== null}
+                                                <span class="tag warning">
+                                                    {tuner.channel.channel}
+                                                </span>
+                                            {:else}
+                                                <span class="tag success">空き</span>
+                                            {/if}
+                                            {#if tuner.error !== null && tuner.channel === null}
+                                                <div class="text-error tiny" data-testid="tuner-error">
+                                                    {tuner.error}
+                                                </div>
+                                            {/if}
+                                        </td>
+                                        <td class="small">
+                                            <!--
+                                                **「優先度」とは呼ばない。**
+
+                                                ルール画面の「優先度」は*どの予約を残すか*で、
+                                                こちらは*いま掴んでいる1本を誰に譲るか*。
+                                                別の物差しなのに同じ名前で数字を並べていたので、
+                                                ルールの 2 が番組表の 3 に負けるように見えていた。
+                                                録画は必ず 10 で掴むので、そうはならない
+                                            -->
+                                            <!-- 目印は番号で。同じ用途が2つ乗ることはあり、字を目印にすると落ちる -->
+                                            {#each tuner.users as user, i (i)}
+                                                <div class="truncate" data-testid="tuner-user">
+                                                    {user.label}
+                                                    <span class="muted">
+                                                        (掴む強さ {user.priority})
                                                     </span>
-                                                {:else}
-                                                    <span class="badge badge-sm badge-success">空き</span>
-                                                {/if}
-                                                {#if tuner.error !== null && tuner.channel === null}
-                                                    <div class="text-error text-xs" data-testid="tuner-error">
-                                                        {tuner.error}
-                                                    </div>
-                                                {/if}
-                                            </td>
-                                            <td class="text-sm">
-                                                <!--
-                                                    **「優先度」とは呼ばない。**
-
-                                                    ルール画面の「優先度」は*どの予約を残すか*で、
-                                                    こちらは*いま掴んでいる1本を誰に譲るか*。
-                                                    別の物差しなのに同じ名前で数字を並べていたので、
-                                                    ルールの 2 が番組表の 3 に負けるように見えていた。
-                                                    録画は必ず 10 で掴むので、そうはならない
-                                                -->
-                                                <!-- 目印は番号で。同じ用途が2つ乗ることはあり、字を目印にすると落ちる -->
-                                                {#each tuner.users as user, i (i)}
-                                                    <div class="truncate" data-testid="tuner-user">
-                                                        {user.label}
-                                                        <span class="text-base-content/60">
-                                                            (掴む強さ {user.priority})
-                                                        </span>
-                                                    </div>
-                                                {:else}
-                                                    <span class="text-base-content/60">—</span>
-                                                {/each}
-                                            </td>
-                                        </tr>
-                                    {/each}
-                                </tbody>
-                            </table>
-                        </div>
-                    {/if}
+                                                </div>
+                                            {:else}
+                                                <span class="muted">—</span>
+                                            {/each}
+                                        </td>
+                                    </tr>
+                                {/each}
+                            </tbody>
+                        </table>
+                    </div>
                 {/if}
+            {/if}
 
-                <!--
-                    カードリーダー。**同じ機材の話**なのでここに置く。
-                    掛かったまま録れてしまうのを避けるには、録る前に気づけること
-                -->
-                <div class="border-base-300 mt-2 flex flex-wrap items-center gap-2 border-t pt-3">
-                    <span class="text-sm font-medium">カードリーダー</span>
-                    {#if shownCard.value === undefined}
-                        <span class="badge badge-ghost" data-testid="status-card-reader">確認中</span>
-                    {:else}
-                        {@const card = shownCard.value}
-                        <span
-                            class="badge {card.ok ? 'badge-success' : 'badge-error'}"
-                            data-testid="status-card-reader"
-                        >
-                            {card.ok ? 'OK' : 'NG'}
+            <!--
+                カードリーダー。**同じ機材の話**なのでここに置く。
+                掛かったまま録れてしまうのを避けるには、録る前に気づけること
+            -->
+            <div class="cluster reader">
+                <span class="label">カードリーダー</span>
+                {#if shownCard.value === undefined}
+                    <span class="tag" data-testid="status-card-reader">確認中</span>
+                {:else}
+                    {@const card = shownCard.value}
+                    <span class="tag {card.ok ? 'success' : 'error'}" data-testid="status-card-reader">
+                        {card.ok ? 'OK' : 'NG'}
+                    </span>
+                    <span class="tiny muted full">{card.message}</span>
+                    <!-- 同じ型のリーダーを2つ挿すと名前が並ぶ。目印は番号で -->
+                    {#each card.readers as reader, i (i)}
+                        <span class="tiny muted full mono break">
+                            {reader}
                         </span>
-                        <span class="text-base-content/60 w-full text-xs">{card.message}</span>
-                        <!-- 同じ型のリーダーを2つ挿すと名前が並ぶ。目印は番号で -->
-                        {#each card.readers as reader, i (i)}
-                            <span class="text-base-content/60 w-full font-mono text-xs break-all">
-                                {reader}
-                            </span>
-                        {/each}
-                    {/if}
-                </div>
+                    {/each}
+                {/if}
             </div>
         </section>
 
-        <section class="card bg-base-100 shadow" data-testid="logo-card">
-            <div class="card-body">
-                <h2 class="card-title">ロゴ</h2>
-                <dl class="space-y-3">
+        <section class="panel card" data-testid="logo-card">
+            <h2>ロゴ</h2>
+            <dl class="logos">
+                <!--
+                    局ロゴ。放送波から拾うしかない。
+                    番組表に出ないとき、取れていないのか出し方が悪いのかを
+                    ここで見分けられるようにする
+                -->
+                <div class="cluster">
+                    <dt class="term">局ロゴ</dt>
+                    <!-- 取れないぶんを除いて揃っていれば「揃った」でよい -->
+                    <dd
+                        class="tag {data.logos.have + data.logos.unavailable >= data.logos.total ? 'success' : ''}"
+                        data-testid="status-logos"
+                    >
+                        {data.logos.have} / {data.logos.total} 局
+                    </dd>
                     <!--
-                        局ロゴ。放送波から拾うしかない。
-                        番組表に出ないとき、取れていないのか出し方が悪いのかを
-                        ここで見分けられるようにする
+                        取りに行くものが無ければ口も出さない。押しても
+                        「もう全部持っています」と断るだけになる。
+                        **走っている最中でも押せる** — 押されたほうが譲る作りなので、
+                        使えなくすると「BSを取っている間ずっと押せない」に逆戻りする
                     -->
-                    <div class="flex flex-wrap items-center gap-2">
-                        <dt class="w-28 text-sm font-medium">局ロゴ</dt>
-                        <!-- 取れないぶんを除いて揃っていれば「揃った」でよい -->
-                        <dd
-                            class="badge {data.logos.have + data.logos.unavailable >= data.logos.total
-                                ? 'badge-success'
-                                : 'badge-ghost'}"
-                            data-testid="status-logos"
-                        >
-                            {data.logos.have} / {data.logos.total} 局
+                    {#if data.logos.pending > 0}
+                        <dd>
+                            <form method="POST" action="?/logoSweep" use:submitting>
+                                <button type="submit" class="xs secondary" data-testid="logo-sweep">
+                                    {data.logoSweep.running ? '取得中…' : 'いますぐ取りに行く'}
+                                </button>
+                            </form>
                         </dd>
-                        <!--
-                            取りに行くものが無ければ口も出さない。押しても
-                            「もう全部持っています」と断るだけになる。
-                            **走っている最中でも押せる** — 押されたほうが譲る作りなので、
-                            使えなくすると「BSを取っている間ずっと押せない」に逆戻りする
-                        -->
-                        {#if data.logos.pending > 0}
-                            <dd>
-                                <form method="POST" action="?/logoSweep" use:submitting>
-                                    <button type="submit" class="btn btn-xs" data-testid="logo-sweep">
-                                        {data.logoSweep.running ? '取得中…' : 'いますぐ取りに行く'}
-                                    </button>
-                                </form>
-                            </dd>
-                        {/if}
-                        <dd class="text-base-content/60 w-full text-xs">
-                            ロゴが放送波に流れてくるのは数十秒〜数分に一度、
-                            <strong>衛星は十数分に一度</strong>です。普段は
-                            <strong>番組表を集めるための選局に相乗りして</strong>拾うので、 denpa
-                            がロゴのためにチューナーを増やすことはありません。一度取れたものも1週間経ったら取り直します。
-                            「いますぐ取りに行く」を押したときは衛星も回ります。<strong
-                                >BS も CS も同じ1つの中継から降ってくる</strong
-                            >ので、そこだけ最大20分かかります (他の中継は数秒で切り上げます)。
-                            {#if data.logos.unavailable > 0}
-                                <!--
-                                    取れないものを「まだ取れていない」と出し続けると、
-                                    こちらの不具合と見分けが付かない。
+                    {/if}
+                    <dd class="tiny muted full">
+                        ロゴが放送波に流れてくるのは数十秒〜数分に一度、
+                        <strong>衛星は十数分に一度</strong>です。普段は
+                        <strong>番組表を集めるための選局に相乗りして</strong>拾うので、 denpa
+                        がロゴのためにチューナーを増やすことはありません。一度取れたものも1週間経ったら取り直します。
+                        「いますぐ取りに行く」を押したときは衛星も回ります。<strong
+                            >BS も CS も同じ1つの中継から降ってくる</strong
+                        >ので、そこだけ最大20分かかります (他の中継は数秒で切り上げます)。
+                        {#if data.logos.unavailable > 0}
+                            <!--
+                                取れないものを「まだ取れていない」と出し続けると、
+                                こちらの不具合と見分けが付かない。
 
-                                    **中継にロゴが無いことでは数えない。** CS の中継には
-                                    ロゴが流れていないが、CS のロゴは BS の中継から
-                                    降ってくる。中継で数えていた頃は、取れる CS の54局を
-                                    まとめて「取れません」と出していた
-                                -->
-                                <br />
-                                <strong>{data.logos.unavailable} 局</strong
-                                >はロゴが放送に載っていないので取れません (1週間後にまた確かめます)。
+                                **中継にロゴが無いことでは数えない。** CS の中継には
+                                ロゴが流れていないが、CS のロゴは BS の中継から
+                                降ってくる。中継で数えていた頃は、取れる CS の54局を
+                                まとめて「取れません」と出していた
+                            -->
+                            <br />
+                            <strong>{data.logos.unavailable} 局</strong
+                            >はロゴが放送に載っていないので取れません (1週間後にまた確かめます)。
+                        {/if}
+                    </dd>
+                    <!--
+                        1チャンネルに数分かかる。出さないと押しても何も起きていないように
+                        見えるので、どこまで進んだかをそのまま流す
+                    -->
+                    {#if data.logoSweep.startedAt !== null}
+                        <dd class="full sweep" data-testid="logo-sweep-progress">
+                            <progress value={data.logoSweep.done} max={Math.max(1, data.logoSweep.total)}></progress>
+                            <div class="tiny soft">
+                                <span data-testid="logo-sweep-count">
+                                    {data.logoSweep.done} / {data.logoSweep.total} チャンネル
+                                </span>
+                                ・ 拾えた <strong>{data.logoSweep.found} 局</strong>
+                                {#if data.logoSweep.channels.length > 0}
+                                    ・ 受信中 {data.logoSweep.channels.join(', ')}
+                                {/if}
+                            </div>
+                            {#if data.logoSweep.message !== ''}
+                                <div class="tiny muted" data-testid="logo-sweep-done">
+                                    {data.logoSweep.message}
+                                </div>
                             {/if}
                         </dd>
-                        <!--
-                            1チャンネルに数分かかる。出さないと押しても何も起きていないように
-                            見えるので、どこまで進んだかをそのまま流す
-                        -->
-                        {#if data.logoSweep.startedAt !== null}
-                            <dd class="w-full space-y-1" data-testid="logo-sweep-progress">
-                                <progress
-                                    class="progress progress-primary w-full"
-                                    value={data.logoSweep.done}
-                                    max={Math.max(1, data.logoSweep.total)}
-                                ></progress>
-                                <div class="text-base-content/70 text-xs">
-                                    <span data-testid="logo-sweep-count">
-                                        {data.logoSweep.done} / {data.logoSweep.total} チャンネル
-                                    </span>
-                                    ・ 拾えた <strong>{data.logoSweep.found} 局</strong>
-                                    {#if data.logoSweep.channels.length > 0}
-                                        ・ 受信中 {data.logoSweep.channels.join(', ')}
-                                    {/if}
-                                </div>
-                                {#if data.logoSweep.message !== ''}
-                                    <div class="text-base-content/60 text-xs" data-testid="logo-sweep-done">
-                                        {data.logoSweep.message}
-                                    </div>
-                                {/if}
-                            </dd>
-                        {/if}
-                    </div>
-                    <!--
-                        CM検出のロゴ。**番組表に出す局ロゴとは別物** (logo-data.ts)。
-                        こちらは「画面のどこにロゴが出ているか」を logoframe に覚えさせたもの。
+                    {/if}
+                </div>
+                <!--
+                    CM検出のロゴ。**番組表に出す局ロゴとは別物** (logo-data.ts)。
+                    こちらは「画面のどこにロゴが出ているか」を logoframe に覚えさせたもの。
 
-                        置き場所を録画の詳細からここへ移した。**録画ごとの話ではなく
-                        局ごとの話**で、教えたら以降その局の全部に効く
-                    -->
-                    <div class="flex flex-wrap items-center gap-2">
-                        <dt class="w-28 text-sm font-medium">CM検出のロゴ</dt>
-                        <dd class="badge badge-ghost" data-testid="cm-logo-count">
-                            {data.cmLogoStats.have} / {data.cmLogoStats.total} 局
-                        </dd>
-                        <dd class="text-base-content/60 w-full text-xs">
-                            録画より先に、チューナーが空いたときに放送を数分ぶん見て自動で覚えます。覚えられなかった局は、
-                            下の一覧から位置を教えてください (薄いロゴや動くロゴは自動では見つかりません)。
-                        </dd>
-                        {#if cmLogos.length > 0}
-                            <dd class="w-full space-y-2" data-testid="cm-logo-missing">
-                                {#each cmLogos as service (service.id)}
-                                    <details class="rounded border-base-300 border p-2">
-                                        <summary class="cursor-pointer text-sm">
-                                            {service.name}
-                                            <!--
-                                                覚えたかどうかは畳んだまま分かるようにする。
-                                                開かないと分からない頃は、100局ぶん開いて回る
-                                                しかなかった
-                                            -->
-                                            <span
-                                                class="badge badge-xs {service.learned
-                                                    ? 'badge-success'
-                                                    : 'badge-ghost'}"
-                                                data-testid="cm-logo-state"
-                                            >
-                                                {service.learned ? '覚えました' : 'まだ'}
+                    置き場所を録画の詳細からここへ移した。**録画ごとの話ではなく
+                    局ごとの話**で、教えたら以降その局の全部に効く
+                -->
+                <div class="cluster">
+                    <dt class="term">CM検出のロゴ</dt>
+                    <dd class="tag" data-testid="cm-logo-count">
+                        {data.cmLogoStats.have} / {data.cmLogoStats.total} 局
+                    </dd>
+                    <dd class="tiny muted full">
+                        録画より先に、チューナーが空いたときに放送を数分ぶん見て自動で覚えます。覚えられなかった局は、
+                        下の一覧から位置を教えてください (薄いロゴや動くロゴは自動では見つかりません)。
+                    </dd>
+                    {#if cmLogos.length > 0}
+                        <dd class="full cm-logos" data-testid="cm-logo-missing">
+                            {#each cmLogos as service (service.id)}
+                                <details class="cm-logo">
+                                    <summary class="small">
+                                        {service.name}
+                                        <!--
+                                            覚えたかどうかは畳んだまま分かるようにする。
+                                            開かないと分からない頃は、100局ぶん開いて回る
+                                            しかなかった
+                                        -->
+                                        <span class="tag {service.learned ? 'success' : ''}" data-testid="cm-logo-state">
+                                            {service.learned ? '覚えました' : 'まだ'}
+                                        </span>
+                                        {#if service.logo_area !== null}
+                                            <span class="tiny muted">
+                                                — 教えた範囲 {service.logo_area}
                                             </span>
-                                            {#if service.logo_area !== null}
-                                                <span class="text-base-content/60 text-xs">
-                                                    — 教えた範囲 {service.logo_area}
-                                                </span>
-                                            {/if}
-                                        </summary>
-                                        <LogoArea
-                                            recordingId={service.recording_id}
-                                            serviceId={service.id}
-                                            serviceName={service.name}
-                                            area={service.logo_area}
-                                        />
-                                    </details>
-                                {/each}
-                            </dd>
-                        {/if}
-                    </div>
-                </dl>
-            </div>
+                                        {/if}
+                                    </summary>
+                                    <LogoArea
+                                        recordingId={service.recording_id}
+                                        serviceId={service.id}
+                                        serviceName={service.name}
+                                        area={service.logo_area}
+                                    />
+                                </details>
+                            {/each}
+                        </dd>
+                    {/if}
+                </div>
+            </dl>
         </section>
-
     </div>
 </div>
+
+<style>
+    .columns {
+        display: grid;
+        align-items: start;
+        gap: 1.5rem;
+    }
+    @media (min-width: 1280px) {
+        .columns {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+    }
+    .column {
+        display: flex;
+        min-width: 0;
+        flex-direction: column;
+        gap: 1.5rem;
+    }
+    .card {
+        display: flex;
+        flex-direction: column;
+        gap: 0.75rem;
+        padding: 1.5rem;
+        box-shadow: 0 1px 3px rgb(0 0 0 / 0.2);
+    }
+    .card h2 {
+        font-size: 1.15rem;
+    }
+    .soft {
+        opacity: 0.7;
+    }
+    .faint {
+        opacity: 0.4;
+    }
+    .label {
+        font-size: 0.875rem;
+        font-weight: 500;
+    }
+    .mono {
+        font-family: var(--pico-font-family-monospace);
+    }
+    .table-wrap {
+        overflow-x: auto;
+    }
+    .table-wrap table {
+        margin: 0;
+    }
+    .table-wrap th,
+    .table-wrap td {
+        padding: 0.35rem 0.5rem;
+    }
+    .wide {
+        width: 100%;
+    }
+    .truncate {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+    .types {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 1rem;
+        margin-top: 0.25rem;
+    }
+    .progress-block {
+        display: flex;
+        flex-direction: column;
+        gap: 0.5rem;
+        margin-top: 1rem;
+    }
+    .log {
+        max-height: 16rem;
+        overflow: auto;
+        margin: 0;
+        padding: 0.5rem;
+        border-radius: 0.25rem;
+        background: var(--dp-base-200);
+        font-family: var(--pico-font-family-monospace);
+        font-size: 0.75rem;
+        white-space: pre-wrap;
+    }
+    .config input:not([type='checkbox']) {
+        height: auto;
+        padding: 0.25rem 0.5rem;
+        font-size: 0.85rem;
+    }
+    .w-name {
+        width: 8rem;
+    }
+    .w-device {
+        width: 18rem;
+    }
+    .w-lnb {
+        width: 5rem;
+    }
+    .type-check {
+        margin-right: 0.5rem;
+    }
+    .note,
+    .actions {
+        margin-top: 0.5rem;
+    }
+    .reader {
+        margin-top: 0.5rem;
+        padding-top: 0.75rem;
+        border-top: 1px solid var(--dp-base-300);
+    }
+    .full {
+        width: 100%;
+    }
+    .break {
+        word-break: break-all;
+    }
+    .logos {
+        display: flex;
+        flex-direction: column;
+        gap: 0.75rem;
+        margin: 0;
+    }
+    .logos dd {
+        margin: 0;
+    }
+    .term {
+        width: 7rem;
+        font-size: 0.875rem;
+        font-weight: 500;
+    }
+    .sweep,
+    .cm-logos {
+        display: flex;
+        flex-direction: column;
+        gap: 0.25rem;
+    }
+    .cm-logos {
+        gap: 0.5rem;
+    }
+    .cm-logo {
+        padding: 0.5rem;
+        border: 1px solid var(--dp-base-300);
+        border-radius: 0.25rem;
+    }
+    .cm-logo summary {
+        cursor: pointer;
+    }
+</style>

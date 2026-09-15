@@ -275,13 +275,13 @@
     }
 </script>
 
-<div class="mt-2" data-testid="logo-area">
+<div class="area" data-testid="logo-area">
     <!--
         **見出しを置かない。** すぐ上の「CM」の中身の続きとして読むもので、
         見出しを付けていた頃は、上の覚え書き (「jls は使えず: …」) と
         ここの説明が別々の話に見えて、同じことを2回読まされていた
     -->
-    <p class="text-base-content/70 text-sm">
+    <p class="small lead">
         {#if learned !== null}
             {serviceName} のロゴは覚えています。下の絵がロゴになっていれば位置は合っているので、 まずはそのまま様子を見てください。
         {:else if recordingId === null}
@@ -299,25 +299,25 @@
     -->
     {#if learned !== null}
         <div
-            class="bg-base-200 mt-2 flex flex-wrap items-center gap-3 rounded p-2"
+            class="cluster learned"
             data-testid="logo-learned"
         >
             <img
                 src={learned.url}
                 alt="いま覚えているロゴ"
-                class="bg-neutral max-h-32 rounded"
+                class="learned-image"
                 style="image-rendering: pixelated"
                 data-testid="logo-learned-image"
             />
-            <div class="text-xs">
-                <div class="font-medium">いま覚えているロゴ</div>
+            <div class="tiny">
+                <div class="bold">いま覚えているロゴ</div>
                 <!--
                     **いつ覚えたかを一緒に出す。** ここに出るのは*いまの*ロゴで、
                     上の「CM判定に失敗」は*そのとき*の記録。実機ではこの2つが
                     18時間離れていて、どちらの話をしているのか読み取れなかった
                 -->
                 {#if learned.learnedAt > 0}
-                    <div class="text-base-content/60 mt-0.5" data-testid="logo-learned-at">
+                    <div class="sub" data-testid="logo-learned-at">
                         {dateTime(learned.learnedAt)} に覚えました
                     </div>
                 {/if}
@@ -329,16 +329,16 @@
                     ちゃんと写っていても 241/1000)。数字を並べていた頃は「241 は低いのか」
                     を考えさせるだけで、答えは結局その隣の絵にしか無かった
                 -->
-                <div class="text-base-content/60 mt-0.5">
+                <div class="sub">
                     この絵はロゴの濃さを明るさで表した白黒です (いちばん濃いところが白)。
                 </div>
                 <!--
                     **絵になっていないものは捨てられるようにする。捨てるだけでいい** —
                     理由は `routes/tuners/+page.server.ts` の `logoForget`
                 -->
-                <form method="POST" action="?/logoForget" use:submitting class="mt-1">
+                <form method="POST" action="?/logoForget" use:submitting class="forget">
                     <input type="hidden" name="serviceId" value={serviceId} />
-                    <button type="submit" class="btn btn-xs btn-ghost" data-testid="logo-forget">
+                    <button type="submit" class="xs ghost" data-testid="logo-forget">
                         この絵は違う (捨てて覚え直す)
                     </button>
                 </form>
@@ -356,17 +356,17 @@
             囲うにはコマが要る。**それでも上の「いま覚えているロゴ」は出る** —
             事前学習は録画を待たずに回るので、録画が無くても覚えていることはある
         -->
-        <p class="text-base-content/60 mt-2 text-xs" data-testid="logo-area-no-recording">
+        <p class="tiny muted spaced" data-testid="logo-area-no-recording">
             位置を教えるにはこの局の録画が1本要ります (コマを出すため)。
         </p>
     {:else}
         <details
-            class="mt-2"
+            class="spaced"
             {open}
             ontoggle={(event) => (opened = event.currentTarget.open)}
             data-testid="logo-area-details"
         >
-            <summary class="cursor-pointer text-sm font-medium" data-testid="logo-area-toggle">
+            <summary class="small bold" data-testid="logo-area-toggle">
                 ロゴを四角で囲って教える
             </summary>
             <!--
@@ -374,34 +374,33 @@
             146×24 では「有効な画素が少なすぎる」と弾かれ、周りを空けた 200×70 で
             初めて覚えられた。まわりの背景も見て判断しているらしい
         -->
-            <p class="text-base-content/60 mt-1 text-xs">
+            <p class="tiny muted hint">
                 <strong>ロゴのまわりを少し広めに</strong>囲ってください。文字にぴったり合わせると、
                 まわりの背景が足りずに覚えられないことがあります。
             </p>
 
-            <div class="mt-2 flex flex-wrap items-end gap-2">
-                <label class="flex flex-col gap-1">
-                    <span class="text-xs font-medium">見る位置 (秒)</span>
+            <div class="cluster options">
+                <label class="field">
+                    <span>見る位置 (秒)</span>
                     <input
                         type="number"
                         min="0"
                         step="30"
                         bind:value={at}
-                        class="input input-bordered input-sm w-28"
+                        class="at"
                         data-testid="logo-at"
                     />
                 </label>
                 <!-- ロゴはほぼ右上。全体を出すとその一角が小さすぎて掴めない -->
-                <label class="flex items-center gap-1 text-xs">
+                <label class="check tiny">
                     <input
                         type="checkbox"
-                        class="checkbox checkbox-xs"
                         bind:checked={zoomed}
                         data-testid="logo-zoom"
                     />
                     右上を拡大
                 </label>
-                <span class="text-base-content/60 text-xs">ロゴが出ていない場面なら「見る位置」を変えてください</span>
+                <span class="tiny muted">ロゴが出ていない場面なら「見る位置」を変えてください</span>
             </div>
 
             <!--
@@ -415,12 +414,12 @@
         縦長の帯が出ていて、しかも中の絵を寄せていなかったので左上が見えていた
     -->
             <div
-                class="bg-base-200 mt-2 max-w-full overflow-hidden"
+                class="viewport"
                 style={zoomed ? 'aspect-ratio: 16 / 9' : ''}
                 data-testid="logo-viewport"
             >
                 <div
-                    class="relative touch-none select-none"
+                    class="canvas"
                     style={zoomed ? `width:${SCALE * 100}%; margin-left:-${SHIFT}%` : 'width:100%'}
                     onpointerdown={down}
                     onpointermove={move}
@@ -431,7 +430,7 @@
                         <img
                             src={frame.url}
                             alt="ロゴの位置を選ぶためのコマ"
-                            class="block w-full"
+                            class="frame"
                             bind:clientWidth={shownWidth}
                             bind:clientHeight={shownHeight}
                             data-testid="logo-frame"
@@ -439,7 +438,7 @@
                     {:else}
                         <!-- 取り出している間も掴む場所を残しておく。出た瞬間に大きさが変わらないように -->
                         <div
-                            class="flex h-48 items-center justify-center text-sm"
+                            class="loading small"
                             data-testid="logo-frame-loading"
                         >
                             {failed ? '' : 'コマを取り出しています…'}
@@ -447,7 +446,7 @@
                     {/if}
                     {#if box !== null}
                         <div
-                            class="border-primary bg-primary/20 pointer-events-none absolute border-2"
+                            class="box"
                             style="left:{box.x}px; top:{box.y}px; width:{box.w}px; height:{box.h}px;"
                             data-testid="logo-box"
                         ></div>
@@ -456,13 +455,13 @@
             </div>
             {#if zoomed}
                 <!-- 切り取って出しているので、見えていない側があることは言っておく -->
-                <p class="text-base-content/60 mt-1 text-xs">
+                <p class="tiny muted hint">
                     右上だけを{SCALE}倍で出しています。ロゴが他の隅にある局は「右上を拡大」を外してください。
                 </p>
             {/if}
 
             {#if failed}
-                <div class="text-error mt-1 text-sm" data-testid="logo-frame-error">
+                <div class="text-error small hint" data-testid="logo-frame-error">
                     そのコマを取り出せませんでした。見る位置を変えてみてください。
                 </div>
             {/if}
@@ -471,23 +470,23 @@
                 method="POST"
                 action="?/logoArea"
                 use:submitting
-                class="mt-2 flex flex-wrap items-center gap-2"
+                class="cluster spaced"
             >
                 <input type="hidden" name="serviceId" value={serviceId} />
                 <input type="hidden" name="area" {value} />
                 <button type="submit"
-                    class="btn btn-sm btn-primary"
+                    class="small"
                     disabled={value === '' || unchanged}
                     data-testid="logo-save"
                 >
                     この位置で覚える
                 </button>
-                <span class="text-base-content/60 font-mono text-xs" data-testid="logo-value">
+                <span class="tiny muted mono" data-testid="logo-value">
                     {value === '' ? '囲ってください' : unchanged ? `いまの設定: ${value}` : value}
                 </span>
                 {#if area}
                     <button
-                        class="btn btn-sm btn-ghost"
+                        class="small ghost"
                         formaction="?/logoAreaClear"
                         data-testid="logo-clear"
                         type="submit"
@@ -499,3 +498,78 @@
         </details>
     {/if}
 </div>
+
+<style>
+    .area,
+    .spaced {
+        margin-top: 0.5rem;
+    }
+    .lead {
+        opacity: 0.7;
+    }
+    .learned {
+        --gap: 0.75rem;
+        margin-top: 0.5rem;
+        border-radius: 0.25rem;
+        padding: 0.5rem;
+        background: var(--dp-base-200);
+    }
+    .learned-image {
+        max-height: 8rem;
+        border-radius: 0.25rem;
+        background: #2a323c;
+    }
+    .sub {
+        margin-top: 0.125rem;
+        opacity: 0.6;
+    }
+    .forget {
+        margin-top: 0.25rem;
+    }
+    summary {
+        cursor: pointer;
+    }
+    .hint {
+        margin-top: 0.25rem;
+    }
+    .options {
+        margin-top: 0.5rem;
+        align-items: flex-end;
+    }
+    .at {
+        width: 7rem;
+        height: auto;
+        padding-block: 0.3rem;
+        font-size: 0.85rem;
+    }
+    .viewport {
+        margin-top: 0.5rem;
+        max-width: 100%;
+        overflow: hidden;
+        background: var(--dp-base-200);
+    }
+    .canvas {
+        position: relative;
+        touch-action: none;
+        user-select: none;
+    }
+    .frame {
+        display: block;
+        width: 100%;
+    }
+    .loading {
+        display: flex;
+        height: 12rem;
+        align-items: center;
+        justify-content: center;
+    }
+    .box {
+        position: absolute;
+        pointer-events: none;
+        border: 2px solid var(--pico-primary);
+        background: color-mix(in srgb, var(--pico-primary) 20%, transparent);
+    }
+    .mono {
+        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    }
+</style>

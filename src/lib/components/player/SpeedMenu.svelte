@@ -23,15 +23,15 @@
 <OverlayMenu
     {testid}
     attrName="speed"
-    position="dropdown-top dropdown-end"
-    menuClass="w-24 gap-1 text-lg"
-    optionClass="tabular-nums justify-center py-2"
+    align="end"
+    width="6rem"
+    size="large"
     items={SPEEDS.map((value) => ({ key: value, label: `${value}×`, active: value === speed }))}
     {onselect}
 >
     {#snippet trigger()}
         <ControlButton {label} {testid} on={speed !== 1}>
-            <span class="tabular-nums">{speed}×</span>
+            <span style="font-variant-numeric: tabular-nums">{speed}×</span>
         </ControlButton>
     {/snippet}
 </OverlayMenu>

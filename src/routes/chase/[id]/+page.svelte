@@ -278,8 +278,8 @@
 <svelte:window onkeydown={keys} />
 
 <!-- **ライブ・観る画面と同じ形。** 映像が左、番組の中身が右。決めごとは watch/[id] のコメント -->
-<div class="flex flex-col gap-4 md:h-full md:min-h-0 md:flex-row">
-    <section class="flex min-w-0 flex-1 flex-col md:min-h-0">
+<div class="layout">
+    <section class="main">
     <!-- 舞台の配線と映像の束はライブと共通 (PlayerStage / MediaStack) -->
     <PlayerStage {controls} testid="chase" bind:element={stageEl}>
         {#snippet children(stage)}
@@ -295,7 +295,7 @@
 
         <!-- 右上の列。**観る画面と同じ並び** (閉じる・切り抜き) -->
         <ControlBar side shown={controlsShown} testid="chase-side">
-            <a class="{OVERLAY_BTN} btn-circle {OVERLAY}" href="/" aria-label="一覧へ戻る" data-testid="chase-close">
+            <a class="{OVERLAY_BTN} {OVERLAY} close" href="/" aria-label="一覧へ戻る" data-testid="chase-close">
                 <Icon path={CLOSE} />
             </a>
             <ControlButton
@@ -310,7 +310,7 @@
             <!-- 帯は番組の全長。**録れていないところ (右側) へは跳べない** (`seekTo`) -->
             <input
                 type="range"
-                class="range range-xs range-primary w-full"
+                class="seek"
                 min="0"
                 max={total}
                 step="1"
@@ -321,7 +321,7 @@
             />
 
             <!-- **並びはライブと同じ。** 再生・音・字幕、焼き方・音声・端 (最新)、読みもの、速さ、全画面 -->
-            <div class="mt-1 flex flex-wrap items-center gap-1 text-white">
+            <div class="cluster buttons">
                 <ControlButton
                     path={player.paused ? PLAY : PAUSE}
                     label={player.paused ? '再生' : '一時停止'}
@@ -391,10 +391,7 @@
                         <span data-testid="chase-clock">{clockLabel(pos)} / {clockLabel(recorded)}</span>
                         {#if line !== null && !line.finished}
                             <!-- 赤はライブの赤丸と同じ出し方。黒帯の上の text-error は沈む -->
-                            ・ <span class="inline-flex items-baseline gap-1"
-                                ><span class="bg-error inline-block size-1.5 self-center rounded-full"
-                                ></span>録画中</span
-                            >
+                            ・ <span class="rec"><span class="dot"></span>録画中</span>
                         {:else if line !== null}
                             ・ 録画済み
                         {/if}
@@ -422,11 +419,11 @@
             <!--
                 焼き上がった。続きは観る画面で (位置は続き再生が覚えている)。
                 StageNote は押せない札 (pointer-events-none) なので、ここだけ押せる形で置く。
-                見た目の決まりは同じ (rounded-box bg-black/60)
+                見た目の決まりは同じ (角丸で黒の半透明)
             -->
-            <div class="absolute inset-x-0 top-0 z-10 flex justify-center p-2" data-testid="chase-encoded">
+            <div class="encoded" data-testid="chase-encoded">
                 <a
-                    class="rounded-box bg-black/60 px-3 py-1 text-xs text-white underline decoration-white/50 underline-offset-2 hover:bg-black/80"
+                    class="to-watch"
                     href="/watch/{data.rec.id}"
                     data-testid="chase-to-watch"
                 >
@@ -449,7 +446,7 @@
             >
                 {#snippet actions()}
                     <button type="button"
-                        class="btn btn-sm"
+                        class="small"
                         onclick={() => video !== null && void player.openChase(video, data.rec.id, pos)}
                         data-testid="chase-retry"
                     >
@@ -469,3 +466,88 @@
 </div>
 
 <Toasts {notices} />
+
+<style>
+    /* 映像が左、番組の中身が右。畳まれる幅では縦に積んでページごとスクロール */
+    .layout {
+        display: flex;
+        flex-direction: column;
+        gap: 1rem;
+    }
+    .main {
+        display: flex;
+        min-width: 0;
+        flex: 1 1 0%;
+        flex-direction: column;
+    }
+    @media (min-width: 768px) {
+        .layout {
+            height: 100%;
+            min-height: 0;
+            flex-direction: row;
+        }
+        .main {
+            min-height: 0;
+        }
+    }
+    /* 閉じるは丸いボタン(ControlButton のアイコンだけの形と同じ) */
+    .close {
+        display: inline-grid;
+        place-items: center;
+        width: 3rem;
+        height: 3rem;
+        padding: 0;
+        border: 0;
+        border-radius: 999px;
+        background: rgb(0 0 0 / 0.45);
+        color: #fff;
+        box-shadow: none;
+    }
+    .close:hover {
+        background: rgb(0 0 0 / 0.7);
+    }
+    .seek {
+        width: 100%;
+        margin: 0;
+    }
+    .buttons {
+        --gap: 0.25rem;
+        margin-top: 0.25rem;
+        color: #fff;
+    }
+    .rec {
+        display: inline-flex;
+        align-items: baseline;
+        gap: 0.25rem;
+    }
+    .dot {
+        display: inline-block;
+        align-self: center;
+        width: 0.375rem;
+        height: 0.375rem;
+        border-radius: 999px;
+        background: var(--dp-error);
+    }
+    .encoded {
+        position: absolute;
+        inset-inline: 0;
+        top: 0;
+        z-index: 10;
+        display: flex;
+        justify-content: center;
+        padding: 0.5rem;
+    }
+    .to-watch {
+        border-radius: 1rem;
+        background: rgb(0 0 0 / 0.6);
+        padding: 0.25rem 0.75rem;
+        font-size: 0.75rem;
+        color: #fff;
+        text-decoration: underline;
+        text-decoration-color: rgb(255 255 255 / 0.5);
+        text-underline-offset: 2px;
+    }
+    .to-watch:hover {
+        background: rgb(0 0 0 / 0.8);
+    }
+</style>

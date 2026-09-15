@@ -77,7 +77,7 @@ test.describe('操作したときの反応', () => {
         await goto(page, '/guide?type=GR');
 
         const grid = page.getByTestId('guide-grid');
-        const hours = grid.locator('div[style^="grid-column: 1;"] > span.sticky');
+        const hours = grid.locator('div[style^="grid-column: 1;"] > span.hour-label');
         const frame = (await grid.boundingBox())!;
 
         for (const top of [0, 400, 900]) {
@@ -170,7 +170,7 @@ test.describe('操作したときの反応', () => {
         expect(await grid.evaluate((el) => el.scrollLeft)).toBeGreaterThan(0);
 
         await page.getByTestId('type-BS').click();
-        await expect(page.getByTestId('type-BS')).toHaveClass(/btn-active/);
+        await expect(page.getByTestId('type-BS')).toHaveAttribute('aria-current', 'page');
         await expect.poll(() => grid.evaluate((el) => el.scrollLeft)).toBe(0);
     });
 

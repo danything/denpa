@@ -9,7 +9,7 @@
      *   貼っている意味が無くなる (実機で撮ると、前の絵が白くかすんだだけの
      *   画面になっていた)。回っているものだけを小箱に入れて、どんな絵の上でも
      *   見えるようにする
-     * - **幕そのものは押させない** (`pointer-events-none`)。箱いっぱいに広がるので、
+     * - **幕そのものは押させない** (`pointer-events: none`)。箱いっぱいに広がるので、
      *   そのままだと下の操作列を覆って押せなくなる。押しもの (`actions`) だけ戻す
      */
     interface Props {
@@ -30,29 +30,68 @@
     let { holding, busy, note = '', error = '', actions, idle = '', testid }: Props = $props();
 </script>
 
-<div
-    class="pointer-events-none absolute inset-0 flex items-center justify-center text-white
-           {holding ? '' : 'bg-black/60'}"
-    data-testid={testid}
-    data-veiled={!holding}
->
+<div class="veil" class:dim={!holding} data-testid={testid} data-veiled={!holding}>
     {#if error !== ''}
-        <div class="pointer-events-auto p-4 text-center">
-            <div class="font-medium">{error}</div>
-            {#if actions}<div class="mt-3">{@render actions()}</div>{/if}
+        <div class="error">
+            <div class="message">{error}</div>
+            {#if actions}<div class="actions">{@render actions()}</div>{/if}
         </div>
     {:else if busy}
-        <!--
-            敷くのは外側。daisyUI の `loading` は自分の background-color で
-            回る絵を塗っているので、そこへ bg-* を足すと回るものの色を上書きする
-        -->
-        <span
-            class="flex flex-col items-center gap-2 {holding ? 'rounded-box bg-black/45 p-3' : ''}"
-        >
-            <span class="loading loading-spinner loading-lg"></span>
-            {#if note !== ''}<span class="text-sm" data-testid="{testid}-note">{note}</span>{/if}
+        <!-- 前の絵を貼っている間は、回っているものだけを小箱に入れる -->
+        <span class="busy" class:boxed={holding}>
+            <span class="spinner" aria-busy="true"></span>
+            {#if note !== ''}<span class="note" data-testid="{testid}-note">{note}</span>{/if}
         </span>
     {:else if idle !== ''}
-        <span class="text-white/60">{idle}</span>
+        <span class="idle">{idle}</span>
     {/if}
 </div>
+
+<style>
+    .veil {
+        pointer-events: none;
+        position: absolute;
+        inset: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: #fff;
+    }
+    .dim {
+        background: rgb(0 0 0 / 0.6);
+    }
+    .error {
+        pointer-events: auto;
+        padding: 1rem;
+        text-align: center;
+    }
+    .message {
+        font-weight: 500;
+    }
+    .actions {
+        margin-top: 0.75rem;
+    }
+    .busy {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 0.5rem;
+    }
+    .boxed {
+        padding: 0.75rem;
+        border-radius: 1rem;
+        background: rgb(0 0 0 / 0.45);
+    }
+    /* Pico の aria-busy は文字の前に回るものを出す。大きく、白く */
+    .spinner {
+        font-size: 2.5rem;
+        line-height: 1;
+        --pico-color: #fff;
+    }
+    .note {
+        font-size: 0.875rem;
+    }
+    .idle {
+        color: rgb(255 255 255 / 0.6);
+    }
+</style>

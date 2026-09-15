@@ -12,7 +12,7 @@
      *   渡すと親子が循環する** (`DataBroadcast`)
      *
      * **class ではなく style で書く** — データ放送を出している間、この入れ物は
-     * BML の閉じた影の中へ移され、表の CSS (Tailwind) が届かない。しかも BML の
+     * BML の閉じた影の中へ移され、表の CSS が届かない。しかも BML の
      * 既定は div に width:0 を与えるので、class だと映像が消える。
      */
     interface Props {

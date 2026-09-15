@@ -25,6 +25,7 @@
         NEXT,
         OVERLAY,
         OVERLAY_BTN,
+        OVERLAY_ROUND,
         PAUSE,
         PLAY,
         PREV,
@@ -1086,14 +1087,14 @@
 
 <!--
     **ライブ (`/live`) と同じ形。** 映像が左、読むものが右。**中の作りまで同じ**
-    にしてある — 絵は `aspect-video max-h-full` の枠に入れ、右の列は固定幅で
+    にしてある — 絵は 16:9 で高さいっぱいまでの枠に入れ、右の列は固定幅で
     残りの高さをぜんぶ使う。
 
     **右を映像の高さに合わせない。** 揃えていた頃は、詳細を `absolute` で浮かせて
     grid の行の高さを映像だけで決めさせていた。**揃いはするが、それだけのために
     ライブと違う作りを1つ抱える**ことになるうえ、縦長の画面では絵が低くなるので、
     下に画面半分が空いているのに説明だけ狭い窓から覗くことになっていた
-    (下限 `min-h-[24rem]` はその継ぎ当て)。**画面の残りをぜんぶ使う**ほうが、
+    (下限 24rem はその継ぎ当て)。**画面の残りをぜんぶ使う**ほうが、
     読むものとしては素直。
 
     **タブレットからは2段組** (`md` = 768px)。縦のiPadでちょうど入る幅で、
@@ -1101,28 +1102,27 @@
     **映像が上、詳細が下**。指で開いたときはそもそも全画面に入っているので、
     ここが見えるのは全画面を抜けたあと。
 
-    **周りの余白は足さない。** 外の `<main>` が既に `p-4 md:p-6` を持っている
+    **周りの余白は足さない。** 外の `<main>` が既に余白を持っている
     ([+layout.svelte](../../+layout.svelte))。ここでも足していた頃は、他の画面より
     一回り内側から始まっていたうえ、**その足したぶんだけ縦がはみ出して**
     ページごとスクロールバーが出ていた。
 
-    **横幅の頭打ちも置かない。** `max-w-[1800px]` で中央に寄せていた頃は、
+    **横幅の頭打ちも置かない。** 1800px で頭打ちにして中央に寄せていた頃は、
     それより広い画面で**左右だけ余白が増えて**いた (実測 1880px でライブ 24px に
     対して 40px)
 -->
-<div class="flex flex-col gap-4 md:h-full md:min-h-0 md:flex-row" data-testid="watch">
+<div class="watch" data-testid="watch">
     <!-- **映像を先に書く。** 縦積みになったときに上へ来るのはこちら -->
-    <section class="flex min-w-0 flex-1 flex-col md:min-h-0">
+    <section class="player">
         {#if !ready}
             <!--
                 **焼けていないものは観られない。** 生TSは MPEG-2 で、ブラウザに
                 復号器が無い (docs/stream.md §5.5)。黙って黒い枠を出すより、
                 そう言って落とす口を出すほうがいい
             -->
-            <div class="card bg-base-100 shadow" data-testid="watch-not-ready">
-                <div class="card-body">
-                    <h2 class="card-title text-base">まだ観られません</h2>
-                    <p class="text-base-content/70 text-sm">
+            <div class="panel stack not-ready" data-testid="watch-not-ready">
+                <h2>まだ観られません</h2>
+                <p class="small muted">
                         {#if rec.job_id !== null}
                             いまエンコードしています。終わるとここで観られます。
                         {:else if rec.encode_error}
@@ -1130,8 +1130,7 @@
                         {:else}
                             エンコードがまだです。終わるとここで観られます。
                         {/if}
-                    </p>
-                </div>
+                </p>
             </div>
         {:else}
             <!--
@@ -1144,13 +1143,13 @@
                 ない。押す先は中の `<video>` とボタンのほう
             -->
             <!--
-                **枠の形はライブと同じ** (`aspect-video max-h-full`)。画面の高さから
+                **枠の形はライブと同じ** (16:9 で高さいっぱいまで)。画面の高さから
                 引き算した決め打ち (`100dvh-9rem`) を持たせていた頃は、その値が
                 ヘッダーや帯の厚みと合っているかを目で確かめるしかなかった。
                 絵が 16:9 でないときは中で letterbox されるだけ (`<video>` は
                 既定で `object-fit: contain`)。
 
-                **低くしすぎない** (`min-h-56` = 224px)。上下と右に帯を重ねている
+                **低くしすぎない** (224px)。上下と右に帯を重ねている
                 ので、絵がそれより低いと**帯どうしが重なって**押せなくなる
             -->
             <!-- 舞台の配線は3画面で共通 (PlayerStage)。全画面はこちら側の癖 (開いた時点で入る) が要るので自前のまま -->
@@ -1158,7 +1157,7 @@
                 {#snippet children(_stage)}
                 <!--
                     **押すのは絵そのもの。** ボタンを避けて敷くのではなく、
-                    ボタンを上に重ねる (`z-10`)。`onclick` は `press` が読む
+                    ボタンを上に重ねる (z-index 10)。`onclick` は `press` が読む
                 -->
                 <!-- svelte-ignore a11y_media_has_caption -->
                 <!--
@@ -1176,7 +1175,7 @@
                 <!--
                     `pointer-events:auto` は**データ放送を出している間のため**。
                     重ねる先 (`live-data`) は押すのを邪魔しないように
-                    `pointer-events-none` にしてあり、BML はこの箱をその影の中へ
+                    押すのを通すようにしてあり、BML はこの箱をその影の中へ
                     移す。継いだままだと**絵を押しても止められなくなる**
                 -->
                 <div
@@ -1248,12 +1247,12 @@
 
                 <!--
                     **放送の字幕。** 映像と同じ枠に、映像の画素そのままの大きさで
-                    敷いて、CSS で伸ばす (`object-contain`)。**押す邪魔をしない**
-                    (`pointer-events-none`) — 下の絵を押して止められなくなる
+                    敷いて、CSS で伸ばす (`object-fit: contain`)。**押す邪魔をしない**
+                    (`pointer-events: none`) — 下の絵を押して止められなくなる
                 -->
                 <canvas
                     bind:this={overlay}
-                    class="pointer-events-none absolute"
+                    class="layer"
                     data-testid="watch-captions-canvas"
                     data-on={captions && hasCaptions}
                     aria-hidden="true"
@@ -1261,12 +1260,12 @@
 
                 <!--
                     **CM を跨ぐ間の蓋。** 字幕より後ろに置く = 字幕の上に載る
-                    (CM の字幕まで隠すため)。帯や報せ (`z-10`) の下には残す
+                    (CM の字幕まで隠すため)。帯や報せ (z-index 10) の下には残す
                 -->
                 <canvas
                     bind:this={cover}
-                    class="pointer-events-none absolute"
-                    class:hidden={!hopping}
+                    class="layer"
+                    hidden={!hopping}
                     data-testid="watch-cm-cover"
                     aria-hidden="true"
                 ></canvas>
@@ -1274,9 +1273,9 @@
                 {#if continued}
                     <!--
                         **続きから出したことを言う。** 黙って途中から始まると、
-                        壊れているのか飛んだのか分からない。top-14 は操作列よけ
+                        壊れているのか飛んだのか分からない。lower は操作列よけ
                     -->
-                    <StageNote testid="watch-resumed" wrap="inset-x-0 top-14 justify-center">
+                    <StageNote testid="watch-resumed" place="lower">
                         続きから再生しています
                     </StageNote>
                 {/if}
@@ -1287,14 +1286,8 @@
                         分からないと、待てばいいのかどうかが決められない。
                         繋ぎ直しの最中はあちらが出るので、重ねない
                     -->
-                    <div
-                        class="pointer-events-none absolute inset-0 z-10 flex items-center justify-center"
-                        data-testid="watch-buffering"
-                    >
-                        <span class="rounded-box flex items-center gap-2 bg-black/60 px-3 py-2 text-white">
-                            <span class="loading loading-spinner loading-sm"></span>
-                            読み込み中
-                        </span>
+                    <div class="wait" data-testid="watch-buffering">
+                        <span class="wait-box" aria-busy="true">読み込み中</span>
                     </div>
                 {/if}
 
@@ -1304,20 +1297,14 @@
                         切れると数十秒帰ってこないので、黙って止まっていると
                         壊れたように見える
                     -->
-                    <div
-                        class="pointer-events-none absolute inset-0 z-10 flex items-center justify-center"
-                        data-testid="watch-resuming"
-                    >
-                        <span class="rounded-box flex items-center gap-2 bg-black/60 px-3 py-2 text-white">
-                            <span class="loading loading-spinner loading-sm"></span>
-                            繋ぎ直しています
-                        </span>
+                    <div class="wait" data-testid="watch-resuming">
+                        <span class="wait-box" aria-busy="true">繋ぎ直しています</span>
                     </div>
                 {/if}
 
                 {#if skipped}
                     <!-- **黙って跳ばない。** 何が起きたか言わないと壊れて見える -->
-                    <StageNote testid="watch-skipped" wrap="inset-x-0 top-14 justify-center">
+                    <StageNote testid="watch-skipped" place="lower">
                         CMを飛ばしました
                     </StageNote>
                 {/if}
@@ -1327,11 +1314,8 @@
                         **黙って黒いままにしない。** ブラウザによっては Matroska も
                         AV1 も読めない (Safari)。そのときは落として観てもらう
                     -->
-                    <div
-                        class="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-black/80 p-4 text-center text-white"
-                        data-testid="watch-error"
-                    >
-                        <p class="text-sm">
+                    <div class="broken" data-testid="watch-error">
+                        <p class="small">
                             このブラウザでは再生できませんでした。<br
                             />ダウンロードして、お手元のプレイヤーで観てください。
                         </p>
@@ -1339,7 +1323,7 @@
                             押されてから期限付きの署名URLを作る ($lib/download) -->
                         <button
                             type="button"
-                            class="btn btn-sm"
+                            class="secondary small"
                             onclick={() => void startDownload(rec.id, 'encoded')}>ダウンロード</button
                         >
                     </div>
@@ -1358,7 +1342,7 @@
                 -->
                 <ControlBar side shown={controls.shown} testid="watch-side">
                     <a
-                        class="{OVERLAY_BTN} btn-circle {OVERLAY}"
+                        class="{OVERLAY_BTN} {OVERLAY_ROUND} {OVERLAY}"
                         href="/"
                         aria-label="一覧へ戻る"
                         data-testid="watch-close"
@@ -1426,10 +1410,9 @@
                         **帯にはチャプターの切れ目を出す。** どこで CM が挟まって
                         いるかが見えると、送りのボタンを何回押すかが分かる
                     -->
-                    <div class="relative">
+                    <div class="seek">
                         <input
                             type="range"
-                            class="range range-xs range-primary w-full"
                             min="0"
                             max={length || 0}
                             step="0.1"
@@ -1439,17 +1422,17 @@
                             data-testid="watch-seek"
                         />
                         {#if chapters.length > 1 && length > 0}
-                            <div class="pointer-events-none absolute inset-x-0 top-0 h-1">
+                            <div class="marks">
                                 <!--
                                     **つまみの往復ぶんを引く。** つまみは幅の
                                     ぶんだけ内側を動く (端で枠から出ないため) ので、
                                     切れ目を素の百分率で置くと**つまみとずれます** —
                                     実機では、まだ来ていない CM の印が再生位置の
-                                    左に出ていた。`range-xs` のつまみは 1rem
+                                    左に出ていた。つまみは 1rem (下の `.seek input`)
                                 -->
                                 {#each chapters.slice(1) as chapter (chapter.start)}
                                     <span
-                                        class="absolute top-0 h-1 w-px bg-white/70"
+                                        class="mark"
                                         style="left: calc(0.5rem + {chapter.start / length} * (100% - 1rem))"
                                     ></span>
                                 {/each}
@@ -1457,10 +1440,7 @@
                         {/if}
                     </div>
 
-                    <div
-                        class="mt-1 flex flex-wrap items-center gap-1 text-white"
-                        data-testid="watch-buttons"
-                    >
+                    <div class="buttons" data-testid="watch-buttons">
                         <!--
                             **並びはライブと同じ。** 再生・音・字幕が左から順で、
                             全画面がいちばん右。画面を移っても同じ場所にあると、
@@ -1561,10 +1541,7 @@
                             {#snippet badge()}
                                 {#if localSrc !== null}
                                     <!-- サーバではなく端末のコピーで観ている印。帯の題名の並びに出す -->
-                                    <span
-                                        class="badge badge-success badge-xs shrink-0 self-center"
-                                        data-testid="watch-local"
-                                    >
+                                    <span class="tag success local" data-testid="watch-local">
                                         端末
                                     </span>
                                 {/if}
@@ -1612,9 +1589,9 @@
         観る画面で「あらすじを読みながら流す」ができないのは本末転倒だった。
         中身は一覧のモーダルと同じ部品 (`ProgramFacts`) で、枠だけこちらが持つ。
 
-        **中身が長ければ、ここだけが巻き取られる** (`overflow-y-auto`)。
+        **中身が長ければ、ここだけが巻き取られる** (`overflow-y: auto`)。
         番組の説明は数百字あるので、ページごと動くと映像が画面から出ていく。
-        **押すものは下に貼り付けて、いつでも見えるようにする** (`shrink-0`)。
+        **押すものは下に貼り付けて、いつでも見えるようにする** (縮めない)。
 
         **高さは画面の残りぜんぶ。幅も枠の作りもライブの右の列と同じ**
         ([live/+page.svelte](../../live/+page.svelte))。映像の高さに揃えていた頃は、
@@ -1644,7 +1621,7 @@
             fps={rec.fps}
         />
 
-        <div class="text-base-content/60 mt-3 text-sm" data-testid="watch-meta">
+        <div class="small muted meta" data-testid="watch-meta">
             {recordedDuration(rec)} ・ {size(rec.ts_size)}
         </div>
 
@@ -1656,7 +1633,7 @@
             <!-- 押されてから期限付きの署名URLを作って落とす ($lib/download) -->
             <button
                 type="button"
-                class="btn btn-sm btn-outline"
+                class="outline small"
                 onclick={() => void startDownload(rec.id, 'encoded')}
                 data-testid="watch-download"
             >
@@ -1667,3 +1644,114 @@
 </div>
 
 <Toasts {notices} source={form} />
+
+<style>
+    .watch {
+        display: flex;
+        flex-direction: column;
+        gap: 1rem;
+    }
+    .player {
+        display: flex;
+        min-width: 0;
+        flex: 1;
+        flex-direction: column;
+    }
+    @media (min-width: 768px) {
+        .watch {
+            height: 100%;
+            min-height: 0;
+            flex-direction: row;
+        }
+        .player {
+            min-height: 0;
+        }
+    }
+    .not-ready h2 {
+        font-size: 1rem;
+    }
+    /* 字幕・CM の蓋。位置と大きさは描くとき (paint) に style で決まる */
+    .layer {
+        pointer-events: none;
+        position: absolute;
+    }
+    .wait {
+        pointer-events: none;
+        position: absolute;
+        inset: 0;
+        z-index: 10;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+    .wait-box {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.5rem 0.75rem;
+        border-radius: 1rem;
+        background: rgb(0 0 0 / 0.6);
+        color: #fff;
+        --pico-color: #fff;
+    }
+    .broken {
+        position: absolute;
+        inset: 0;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 0.75rem;
+        padding: 1rem;
+        background: rgb(0 0 0 / 0.8);
+        text-align: center;
+        color: #fff;
+    }
+    .seek {
+        position: relative;
+    }
+    /* 細い帯。つまみは 1rem (切れ目の位置の計算がこれを前提にしている) */
+    .seek input {
+        --pico-range-thumb-height: 1rem;
+        --pico-range-thumb-width: 1rem;
+        --pico-range-height: 0.25rem;
+        --pico-range-thumb-color: var(--pico-primary-background);
+        --pico-range-thumb-active-color: var(--pico-primary-background);
+        width: 100%;
+        height: 1rem;
+        margin: 0;
+        accent-color: var(--pico-primary-background);
+    }
+    .marks {
+        pointer-events: none;
+        position: absolute;
+        left: 0;
+        right: 0;
+        top: 0;
+        height: 0.25rem;
+    }
+    .mark {
+        position: absolute;
+        top: 0;
+        height: 0.25rem;
+        width: 1px;
+        background: rgb(255 255 255 / 0.7);
+    }
+    .buttons {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 0.25rem;
+        margin-top: 0.25rem;
+        color: #fff;
+    }
+    .local {
+        flex-shrink: 0;
+        align-self: center;
+        font-size: 0.625rem;
+        padding: 0 0.35rem;
+    }
+    .meta {
+        margin-top: 0.75rem;
+    }
+</style>

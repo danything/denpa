@@ -5,7 +5,7 @@
      * - **黒いぼかしの上に置く。** 明るい絵の上でも読めるように
      * - **しばらく触らなければ消える** (`shown`)。絵の上に居座るものなので、
      *   見ている間は引っ込んでいるほうがいい
-     * - 消えている間は押せなくする (`pointer-events-none`)。見えないものが
+     * - 消えている間は押せなくする (`pointer-events: none`)。見えないものが
      *   押されると、絵を押したつもりが操作に取られる
      *
      * 下端 (既定) と右端 (`side`) の2つ。**下は観ながら使うもの、右は観る流れの
@@ -22,13 +22,13 @@
      * 下の帯の中身は「シークバーの行」と「押すものの行」の二段。**読みもの
      * (時刻・局名・番組名・遅れ) は独立した行を作らず、押すものの行の空きに
      * 入れる** — 行を足すとそのぶん帯が高くなって絵に掛かる。文字2行 (36px) は
-     * `btn-lg` (48px) より低いので、二段にしても帯は厚くならない。
+     * 押すもの (48px) より低いので、二段にしても帯は厚くならない。
      *
      * 守ることが2つ。**どの画面でも同じ**:
      *
-     * - **幅ゼロから伸ばす** (`min-w-0 grow basis-0`)。押すものと同じに中身の幅で
+     * - **幅ゼロから伸ばす** (`min-width: 0; flex: 1 1 0`)。押すものと同じに中身の幅で
      *   並べていた頃は、**名前が長いだけで帯が二段に折れて**いた (実機のタブレット) —
-     *   折り返すかどうかは中身の幅で決まるので、縮む指定 (`truncate`) より先に
+     *   折り返すかどうかは中身の幅で決まるので、縮む指定 (`text-overflow: ellipsis`) より先に
      *   行が分かれてしまう
      * - **並びは時刻・局名・番組名。縮むのは番組名だけ**。時刻と局名は幅が
      *   知れているので先に確保し、余りを名前にやって、入らないぶんだけ省く。
@@ -38,8 +38,8 @@
      *
      * **帯が折れるかどうかは、絵に残る幅で決まる。** 縦の iPad (820px) で右の列に
      * 320px を先に取ると**絵が 436px しか残らず**、48px の押しもの9個が並びきらずに
-     * 帯が二段になる。二段組にした直後は `md:w-64` (256px) にして 476px 残し、
-     * 広い画面で `lg:w-80` (320px) に戻す。**どの画面でも同じ** — 読むものは
+     * 帯が二段になる。二段組にした直後は 256px にして 476px 残し、
+     * 広い画面 (1024px から) で 320px に戻す。**どの画面でも同じ** — 読むものは
      * 細くても読めるが、絵は狭いと見られない
      */
     let {
@@ -61,19 +61,37 @@
      * ので、横へ流せば下端が、斜めへ流せば左端と下端が直線で切れる。
      * 角から丸く散らす手もあるが、要らないものを丁寧に薄くしているだけだった
      */
-    const place = $derived(
-        side
-            ? 'top-0 right-0 flex flex-col items-center gap-1 p-3'
-            : 'inset-x-0 bottom-0 bg-gradient-to-t from-black/80 to-transparent px-3 pt-8 pb-3',
-    );
 </script>
 
-<div
-    class="absolute z-10 text-white transition-opacity duration-200 {place} {shown
-        ? 'opacity-100'
-        : 'pointer-events-none opacity-0'}"
-    data-testid={testid}
-    data-shown={shown}
->
+<div class="bar" class:side class:bottom={!side} class:away={!shown} data-testid={testid} data-shown={shown}>
     {@render children()}
 </div>
+
+<style>
+    .bar {
+        position: absolute;
+        z-index: 10;
+        color: #fff;
+        transition: opacity 200ms;
+    }
+    .bar.away {
+        pointer-events: none;
+        opacity: 0;
+    }
+    .side {
+        top: 0;
+        right: 0;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 0.25rem;
+        padding: 0.75rem;
+    }
+    .bottom {
+        left: 0;
+        right: 0;
+        bottom: 0;
+        padding: 2rem 0.75rem 0.75rem;
+        background: linear-gradient(to top, rgb(0 0 0 / 0.8), transparent);
+    }
+</style>

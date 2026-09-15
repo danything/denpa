@@ -4,7 +4,7 @@
     /**
      * 「今」へ張り付くボタン — ライブの「ライブ」と追っかけの「最新」。
      * 張り付いている間は赤 (`OVERLAY_DANGER`)、離れていれば黒地に赤丸。
-     * 文字は焼き方のボタンと同じ大きさで、幅は詰める (btn-lg のままだと
+     * 文字は焼き方のボタンと同じ大きさで、幅は詰める (大きい余白のままだと
      * 帯の中でこれだけ太って見えた)
      */
     let {
@@ -23,10 +23,31 @@
 
 <button
     type="button"
-    class="{OVERLAY_BTN} gap-1 px-3 {active ? OVERLAY_DANGER : OVERLAY}"
+    class="{OVERLAY_BTN} edge {active ? OVERLAY_DANGER : OVERLAY}"
     {onclick}
     data-testid={testid}
 >
-    <span class="inline-block size-2 rounded-full {active ? 'bg-white' : 'bg-error'}"></span>
-    <span class="text-xs font-semibold">{label}</span>
+    <span class="dot" class:active></span>
+    <span class="label">{label}</span>
 </button>
+
+<style>
+    .edge {
+        gap: 0.25rem;
+        padding: 0 0.75rem;
+    }
+    .dot {
+        display: inline-block;
+        width: 0.5rem;
+        height: 0.5rem;
+        border-radius: 999px;
+        background: var(--dp-error);
+    }
+    .dot.active {
+        background: #fff;
+    }
+    .label {
+        font-size: 0.75rem;
+        font-weight: 600;
+    }
+</style>

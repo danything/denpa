@@ -3,7 +3,7 @@
     import { dragScroll, submitting } from '$lib/actions';
     import ProgramDetail from '$lib/components/ProgramDetail.svelte';
     import { startDownload } from '$lib/download';
-    import { date, genreTint, SERVICE_TYPE_LABEL, stateLabel, time } from '$lib/format';
+    import { date, SERVICE_TYPE_LABEL, stateLabel, time } from '$lib/format';
 
     let { data, form } = $props();
 
@@ -183,7 +183,7 @@
 
     ここは天井を決めているだけなので、少し小さく出る側に倒すのが正しい
 -->
-<div class="md:flex md:h-full md:flex-col">
+<div class="page">
     <!--
     **どこを見るかは1行にまとめる。** 種別・日送り・探すを3段に分けていた頃は、
     絵の出ていない上半分に 130px 使っていた。番組表は縦に長いほど読めるもの
@@ -192,11 +192,12 @@
     「番組 30343 / 局 125」も出していたが、番組表が入っているかどうかは
     **表そのものを見れば分かる** (集まり具合の内訳はチューナー画面にある)
 -->
-    <div class="mb-3 flex flex-wrap items-center gap-2">
-        <div class="join" data-testid="type-tabs">
+    <div class="cluster toolbar">
+        <div role="group" class="types" data-testid="type-tabs">
             {#each ['GR', 'BS', 'CS'] as type (type)}
                 <a
-                    class="btn join-item btn-sm {data.type === type ? 'btn-active' : ''}"
+                    class="button small {data.type === type ? '' : 'secondary outline'}"
+                    aria-current={data.type === type ? 'page' : undefined}
                     href="/guide?type={type}&start={data.start}"
                     data-testid="type-{type}"
                 >
@@ -206,14 +207,14 @@
         </div>
 
         <!-- 日送りは種別のすぐ隣。どちらも「表のどこを見るか」の操作なので離さない -->
-        <div class="flex items-center gap-2">
-            <a class="btn btn-sm" href={prevHref} data-testid="prev-day">← 前日</a>
-            <span class="text-sm" data-testid="window-label">
+        <div class="cluster">
+            <a class="button small secondary outline" href={prevHref} data-testid="prev-day">← 前日</a>
+            <span class="small" data-testid="window-label">
                 <!-- 日本の番組表の慣習で、1日は4時から翌4時まで -->
-                {date(data.start)} <span class="text-base-content/60">(4:00〜翌4:00)</span>
+                {date(data.start)} <span class="muted">(4:00〜翌4:00)</span>
             </span>
-            <a class="btn btn-sm" href={nextHref} data-testid="next-day">翌日 →</a>
-            <a class="btn btn-sm" href={href({})}>今日</a>
+            <a class="button small secondary outline" href={nextHref} data-testid="next-day">翌日 →</a>
+            <a class="button small secondary outline" href={href({})}>今日</a>
         </div>
 
         <!--
@@ -223,21 +224,21 @@
         編集はルール画面に寄せてあり (条件を2箇所で書けるようにすると判定が
         ずれる)、探す範囲もあちらで切り替える。既定は番組名だけ
     -->
-        <form method="GET" action="/rules" class="ms-auto flex items-center gap-2" data-testid="guide-filter">
+        <form method="GET" action="/rules" class="cluster search" data-testid="guide-filter">
             <input
                 type="search"
                 name="keyword"
                 placeholder="全チャンネルの番組名から"
-                class="input input-bordered input-sm w-56"
+                class="keyword"
                 data-testid="filter-keyword"
             />
-            <button class="btn btn-sm btn-primary" type="submit">検索</button>
+            <button class="small" type="submit">検索</button>
         </form>
     </div>
 
     {#if data.services.length === 0}
-        <div class="rounded-box bg-base-100 p-6 text-center shadow" data-testid="empty-grid">
-            <p class="text-base-content/60">
+        <div class="panel empty" data-testid="empty-grid">
+            <p class="muted">
                 {SERVICE_TYPE_LABEL[
                     data.type
                 ]}のチャンネルがありません。チューナー画面でチャンネルスキャンを実行してください。
@@ -245,8 +246,7 @@
         </div>
     {:else}
         <div
-            class="rounded-box bg-base-100 max-h-[75svh] cursor-grab overflow-auto shadow
-               active:cursor-grabbing md:max-h-none md:min-h-0 md:flex-1"
+            class="grid-box"
             use:dragScroll
             bind:this={grid}
             data-testid="guide-grid"
@@ -264,7 +264,7 @@
             広いときは min-width で伸ばし、余りは 1fr が分け合う
         -->
             <div
-                class="grid"
+                class="rows"
                 style="grid-template-columns: {TIME_COLUMN} repeat({data.services
                     .length}, minmax(11rem, 1fr)); grid-template-rows: auto repeat({slots}, 0.75rem); width: calc({TIME_COLUMN} + {data
                     .services.length} * 11rem); min-width: 100%;"
@@ -272,13 +272,13 @@
             >
                 <!-- 左上の角。時刻列とチャンネル行の交点で、どちらにも追従させる -->
                 <div
-                    class="bg-base-100 border-base-300 sticky top-0 left-0 z-30 border-r"
+                    class="corner"
                     style="grid-column: 1; grid-row: 1;"
                     bind:clientHeight={headHeight}
                 ></div>
                 {#each data.services as service, i (service.id)}
                     <div
-                        class="bg-base-100 border-base-300 sticky top-0 z-20 flex items-center gap-1.5 truncate border-b px-2 py-2 text-sm font-medium"
+                        class="service"
                         style="grid-column: {i + 2}; grid-row: 1;"
                         title={service.name}
                         data-testid="guide-service"
@@ -299,13 +299,13 @@
                             <img
                                 src="/api/services/{service.id}/logo"
                                 alt=""
-                                class="h-5 w-8 shrink-0 object-contain"
+                                class="logo"
                                 loading="lazy"
                             />
                         {:else}
-                            <span class="h-5 w-8 shrink-0"></span>
+                            <span class="logo"></span>
                         {/if}
-                        <span class="truncate">{service.name}</span>
+                        <span class="name">{service.name}</span>
                     </div>
                 {/each}
 
@@ -324,10 +324,10 @@
             -->
                 {#each hourMarks as mark (mark.at)}
                     <div
-                        class="bg-base-100 border-base-300 sticky left-0 z-10 border-t border-r px-1 text-xs"
+                        class="hour"
                         style="grid-column: 1; grid-row: {mark.row} / span {mark.span};"
                     >
-                        <span class="sticky block" style="top: {headHeight}px;">
+                        <span class="hour-label" style="top: {headHeight}px;">
                             {new Date(mark.at).getHours()}
                         </span>
                     </div>
@@ -335,7 +335,7 @@
 
                 {#if nowRow !== null}
                     <div
-                        class="border-error pointer-events-none relative z-10 border-t-2"
+                        class="now"
                         style="grid-column: 1 / -1; grid-row: {nowRow};"
                         bind:this={nowMark}
                         data-testid="now-line"
@@ -359,7 +359,7 @@
                         `block` にして高さの半分だけ上げれば、字が変わっても線の上に乗る
                     -->
                         <span
-                            class="bg-error text-error-content sticky left-0 z-20 block -translate-y-1/2 rounded text-center text-[10px] leading-4"
+                            class="now-label"
                             style="width: {TIME_COLUMN};"
                         >
                             {time(clock)}
@@ -370,7 +370,7 @@
                 {#each data.programs as program (program.id)}
                     {@const pos = place(program)}
                     <div
-                        class="overflow-hidden p-0.5"
+                        class="cell"
                         style="grid-column: {columnOf.get(
                             program.service_id,
                         )}; grid-row: {pos.row} / span {pos.span};"
@@ -389,26 +389,26 @@
                         「予約済み」であることのほうが大事なので、そちらを優先する
                     -->
                         <button type="button"
-                            class="flex h-full w-full flex-col overflow-hidden rounded border-l-2 px-1 py-0.5 text-left {program.reservation_state
-                                ? 'bg-primary/20 border-primary'
-                                : genreTint(program.genres)}"
+                            class="program"
+                            class:reserved={program.reservation_state}
+                            data-genre={program.genres?.[0]}
                             onclick={() => (selected = program)}
                             data-testid="program-button"
                         >
-                            <span class="block text-xs leading-tight font-medium">
+                            <span class="title">
                                 {time(program.start_at)}
                                 {#if program.name}
                                     {program.name}
                                 {:else}
-                                    <span class="text-base-content/40">(番組情報なし)</span>
+                                    <span class="faint">(番組情報なし)</span>
                                 {/if}
                             </span>
                             {#if program.reservation_state}
-                                <span class="text-primary block text-xs">
+                                <span class="state">
                                     {stateLabel(program.reservation_state)}
                                 </span>
                             {:else}
-                                <span class="text-base-content/60 block text-xs leading-tight">
+                                <span class="desc">
                                     {program.description}
                                 </span>
                             {/if}
@@ -437,16 +437,16 @@
                 上に出る。下に隠れるものを出しても読めないので、押したボタンの隣に置く
             -->
             {#if form?.message}
-                <div class="alert alert-error mt-4" data-testid="guide-error">{form.message}</div>
+                <div class="notice error guide-error" data-testid="guide-error">{form.message}</div>
             {/if}
             <!--
                 閉じるは**いちばん右で動かさない**。押すものが番組によって増えたり
                 減ったりする (予約する / 取り消す / 再生 / ダウンロード) ので、
                 そのたびに位置が変わると、閉じたつもりで別のものを押すことになる
             -->
-            <div class="modal-action flex-wrap items-center justify-end">
+            <div class="cluster guide-actions">
                 {#if program.reservation_state}
-                    <span class="badge badge-info mr-auto" data-testid="detail-state">
+                    <span class="tag info lead" data-testid="detail-state">
                         {stateLabel(program.reservation_state)}
                     </span>
                 {:else if program.end_at <= clock}
@@ -454,7 +454,7 @@
                         もう終わった番組。予約する口を出しても、押した先で
                         「放送が終わっています」と断られるだけ (reservations.reserve)
                     -->
-                    <span class="badge badge-ghost mr-auto" data-testid="detail-ended">放送終了</span>
+                    <span class="tag lead" data-testid="detail-ended">放送終了</span>
                 {/if}
 
                 {#if program.recording_id !== null && (program.library_path ?? program.ts_path) !== null}
@@ -469,7 +469,7 @@
                     -->
                     {#if program.library_path !== null}
                         <a
-                            class="btn btn-primary"
+                            class="button"
                             href="/watch/{program.recording_id}"
                             data-testid="detail-play"
                         >
@@ -479,7 +479,7 @@
                     <!-- 押されてから期限付きの署名URLを作って落とす ($lib/download) -->
                     <button
                         type="button"
-                        class="btn btn-ghost"
+                        class="ghost"
                         onclick={() => void startDownload(program.recording_id ?? -1)}
                         data-testid="detail-download"
                     >
@@ -503,7 +503,7 @@
                         やり直すことになるので、モーダルの中で始めるものではない
                     -->
                     <a
-                        class="btn btn-outline"
+                        class="button outline"
                         href="/live?service={program.service_id}"
                         data-testid="detail-watch"
                     >
@@ -523,7 +523,7 @@
                             }}
                     >
                         <input type="hidden" name="programId" value={program.id} />
-                        <button type="submit" class="btn btn-error btn-outline" data-testid="detail-cancel">
+                        <button type="submit" class="danger outline" data-testid="detail-cancel">
                             予約を取り消す
                         </button>
                     </form>
@@ -544,15 +544,223 @@
                             }}
                     >
                         <input type="hidden" name="programId" value={program.id} />
-                        <button type="submit" class="btn btn-primary" data-testid="detail-reserve">予約する</button>
+                        <button type="submit" data-testid="detail-reserve">予約する</button>
                     </form>
                 {/if}
 
                 <!-- 位置を動かさないため、いつでもここが最後 -->
-                <button type="button" class="btn" onclick={() => (selected = null)} data-testid="detail-close">
+                <button type="button" class="secondary" onclick={() => (selected = null)} data-testid="detail-close">
                     閉じる
                 </button>
             </div>
         {/snippet}
     </ProgramDetail>
 {/if}
+
+<style>
+    .toolbar {
+        margin-bottom: 0.75rem;
+    }
+    .types {
+        width: auto;
+    }
+    .search {
+        margin-left: auto;
+    }
+    .keyword {
+        width: 14rem;
+        height: auto;
+        padding-block: 0.3rem;
+        font-size: 0.85rem;
+    }
+    .empty {
+        padding: 1.5rem;
+        text-align: center;
+    }
+    /* 畳まれる幅ではページごとスクロールさせ、表の高さは見えている範囲まで(上のコメント) */
+    .grid-box {
+        max-height: 75svh;
+        overflow: auto;
+        cursor: grab;
+        border-radius: 1rem;
+        background: var(--dp-surface);
+        border: 1px solid var(--dp-base-300);
+    }
+    .grid-box:active {
+        cursor: grabbing;
+    }
+    @media (min-width: 768px) {
+        .page {
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+        }
+        .grid-box {
+            max-height: none;
+            min-height: 0;
+            flex: 1 1 0%;
+        }
+    }
+    .rows {
+        display: grid;
+    }
+    .corner,
+    .service,
+    .hour {
+        background: var(--dp-surface);
+        border-color: var(--dp-base-300);
+        border-style: solid;
+        border-width: 0;
+    }
+    .corner {
+        position: sticky;
+        top: 0;
+        left: 0;
+        z-index: 30;
+        border-right-width: 1px;
+    }
+    .service {
+        position: sticky;
+        top: 0;
+        z-index: 20;
+        display: flex;
+        align-items: center;
+        gap: 0.375rem;
+        overflow: hidden;
+        white-space: nowrap;
+        border-bottom-width: 1px;
+        padding: 0.5rem;
+        font-size: 0.875rem;
+        /* 行の高さ(= 時刻の数字が止まる位置 headHeight)を Tailwind の頃の 37px に揃える */
+        line-height: 1.25rem;
+        font-weight: 500;
+    }
+    .logo {
+        display: block;
+        height: 1.25rem;
+        width: 2rem;
+        flex-shrink: 0;
+        object-fit: contain;
+    }
+    .name {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+    .hour {
+        position: sticky;
+        left: 0;
+        z-index: 10;
+        border-top-width: 1px;
+        border-right-width: 1px;
+        padding-inline: 0.25rem;
+        font-size: 0.75rem;
+        /* 数字の行の高さは 1rem に揃える。高いと、前の時間の数字が枠の下に残って次の時間の数字と並んで見える */
+        line-height: 1rem;
+    }
+    .hour-label {
+        position: sticky;
+        display: block;
+    }
+    .now {
+        position: relative;
+        z-index: 10;
+        pointer-events: none;
+        border-top: 2px solid var(--dp-error);
+    }
+    .now-label {
+        position: sticky;
+        left: 0;
+        z-index: 20;
+        display: block;
+        transform: translateY(-50%);
+        border-radius: 0.25rem;
+        background: var(--dp-error);
+        color: #fff;
+        text-align: center;
+        font-size: 10px;
+        line-height: 1rem;
+    }
+    .cell {
+        overflow: hidden;
+        padding: 0.125rem;
+    }
+    /*
+     * 色はジャンル(大分類)ごと。下地は薄く敷いて左に濃い線を引く。濃く塗ると文字が読めなくなる。
+     * 予約したものは色より「予約済み」であることのほうが大事なので、主の色を優先する
+     */
+    .program {
+        --tint: var(--dp-base-300);
+        display: flex;
+        flex-direction: column;
+        align-items: stretch;
+        height: 100%;
+        width: 100%;
+        overflow: hidden;
+        margin: 0;
+        padding: 0.125rem 0.25rem;
+        border: 0;
+        border-left: 2px solid var(--tint);
+        border-radius: 0.25rem;
+        background: var(--dp-base-200);
+        color: inherit;
+        text-align: left;
+        font-weight: normal;
+        line-height: normal;
+    }
+    .program:hover {
+        background: var(--dp-base-300);
+    }
+    .program[data-genre] {
+        background: color-mix(in srgb, var(--tint) 15%, transparent);
+    }
+    .program[data-genre]:hover {
+        background: color-mix(in srgb, var(--tint) 25%, transparent);
+    }
+    .program[data-genre="0"] { --tint: #0ea5e9; }
+    .program[data-genre="1"] { --tint: #22c55e; }
+    .program[data-genre="2"] { --tint: #14b8a6; }
+    .program[data-genre="3"] { --tint: #f43f5e; }
+    .program[data-genre="4"] { --tint: #d946ef; }
+    .program[data-genre="5"] { --tint: #f97316; }
+    .program[data-genre="6"] { --tint: #6366f1; }
+    .program[data-genre="7"] { --tint: #8b5cf6; }
+    .program[data-genre="8"] { --tint: #f59e0b; }
+    .program[data-genre="9"] { --tint: #ec4899; }
+    .program[data-genre="10"] { --tint: #84cc16; }
+    .program[data-genre="11"] { --tint: #06b6d4; }
+    .program.reserved,
+    .program.reserved:hover {
+        --tint: var(--pico-primary);
+        background: color-mix(in srgb, var(--pico-primary) 20%, transparent);
+    }
+    .title {
+        display: block;
+        font-size: 0.75rem;
+        line-height: 1.25;
+        font-weight: 500;
+    }
+    .faint {
+        opacity: 0.4;
+    }
+    .state {
+        display: block;
+        font-size: 0.75rem;
+        color: var(--pico-primary);
+    }
+    .desc {
+        display: block;
+        font-size: 0.75rem;
+        line-height: 1.25;
+        opacity: 0.6;
+    }
+    .guide-error {
+        margin-top: 1rem;
+    }
+    .guide-actions {
+        justify-content: flex-end;
+    }
+    .lead {
+        margin-right: auto;
+    }
+</style>

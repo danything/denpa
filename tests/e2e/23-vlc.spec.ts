@@ -71,8 +71,12 @@ test.describe('テレビの VLC で再生', () => {
          * 高さは一行ぶんのまま
          */
         await page.setViewportSize({ width: 360, height: 740 });
-        const box = (await detail.locator('.modal-box').boundingBox())!;
-        for (const b of await detail.locator('.modal-action .btn').filter({ visible: true }).all()) {
+        const box = (await detail.locator('.detail-box').boundingBox())!;
+        for (const b of await detail
+            .locator('.detail-actions')
+            .locator('button, a')
+            .filter({ visible: true })
+            .all()) {
             const r = (await b.boundingBox())!;
             expect(r.x).toBeGreaterThanOrEqual(box.x);
             expect(r.x + r.width).toBeLessThanOrEqual(box.x + box.width + 0.5);

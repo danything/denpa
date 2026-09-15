@@ -125,7 +125,7 @@ test.describe('予約の細かい指定', () => {
         // まず番組表側での見え方を控える
         await cellOf(page, target.programId).getByTestId('program-button').click();
         const title = ((await page.getByTestId('program-detail').locator('h3').textContent()) ?? '').trim();
-        const badges = (await page.getByTestId('detail-badges').locator('.badge').allTextContents()).map(
+        const badges = (await page.getByTestId('detail-badges').locator('.tag').allTextContents()).map(
             (text) => text.trim(),
         );
         expect(badges.length).toBeGreaterThan(0);
@@ -143,7 +143,7 @@ test.describe('予約の細かい指定', () => {
         await expect(detail).toBeVisible();
         await expect(detail.locator('h3')).toHaveText(title);
         await expect(async () => {
-            const shown = (await detail.getByTestId('detail-badges').locator('.badge').allTextContents()).map(
+            const shown = (await detail.getByTestId('detail-badges').locator('.tag').allTextContents()).map(
                 (text) => text.trim(),
             );
             expect(shown).toEqual(badges);

@@ -110,15 +110,15 @@
 <!-- 聞き返しは他所を触ったら取り下げる (`stand`) -->
 <svelte:window onclick={deleting.stand} />
 
-<div class="mx-auto max-w-3xl">
-    <h1 class="mb-1 text-xl font-bold">端末に保存した録画</h1>
-    <p class="text-base-content/60 mb-4 text-sm">
+<div class="page">
+    <h1>端末に保存した録画</h1>
+    <p class="lead small muted">
         電波の無いところでも観られます。ここで削除すると、
         <strong>次にオンラインへ戻ったときサーバの録画も消えます</strong>。
     </p>
 
     {#if playing !== null && src !== null}
-        <div class="mb-4">
+        <div class="player">
             <!-- svelte-ignore a11y_media_has_caption -->
             <video
                 bind:this={video}
@@ -127,38 +127,37 @@
                 controls
                 autoplay
                 playsinline
-                class="w-full rounded-lg bg-black"
                 ontimeupdate={onTime}
                 data-testid="offline-player"
             ></video>
-            <div class="mt-1 flex items-center justify-between">
-                <span class="truncate text-sm font-medium">{playing.name}</span>
-                <button type="button" class="btn btn-ghost btn-xs" onclick={stop}>閉じる</button>
+            <div class="player-bar">
+                <span class="name small">{playing.name}</span>
+                <button type="button" class="ghost xs" onclick={stop}>閉じる</button>
             </div>
         </div>
     {/if}
 
     {#if loading}
-        <p class="text-base-content/60">読み込んでいます…</p>
+        <p class="muted">読み込んでいます…</p>
     {:else if list.length === 0}
-        <div class="bg-base-100 rounded-lg p-6 text-center">
-            <p class="mb-1">まだ何も保存していません。</p>
-            <p class="text-base-content/60 text-sm">
+        <div class="empty">
+            <p>まだ何も保存していません。</p>
+            <p class="small muted">
                 録画一覧の「端末に保存」を押すと、オフラインでも観られるようになります。
             </p>
         </div>
     {:else}
-        <ul class="bg-base-100 divide-base-200 divide-y rounded-lg" data-testid="offline-list">
+        <ul class="list" data-testid="offline-list">
             {#each list as item (item.id)}
-                <li class="flex items-center gap-3 p-3" data-testid="offline-row">
+                <li class="row" data-testid="offline-row">
                     {#if posterUrl(item) !== null}
-                        <img src={posterUrl(item)} alt="" class="h-12 w-20 rounded object-cover" />
+                        <img src={posterUrl(item)} alt="" class="thumb" />
                     {:else}
-                        <div class="bg-base-300 h-12 w-20 rounded"></div>
+                        <div class="thumb blank"></div>
                     {/if}
-                    <div class="min-w-0 flex-1">
-                        <div class="truncate text-sm font-medium">{item.name}</div>
-                        <div class="text-base-content/60 text-xs">
+                    <div class="info">
+                        <div class="name small">{item.name}</div>
+                        <div class="tiny muted">
                             {item.serviceName} ・ {dateTime(item.startAt)}
                             {#if item.durationMs !== null}
                                 ・ {durationMs(item.durationMs)}
@@ -173,15 +172,15 @@
                     </div>
                     {#if item.state === 'downloading'}
                         {@const progress = offline.entries[item.id]?.progress ?? null}
-                        <span class="badge badge-ghost badge-sm shrink-0">
+                        <span class="tag keep">
                             保存中{progress === null ? '…' : ` ${percent(progress)}`}
                         </span>
                     {:else if item.state === 'failed'}
-                        <span class="badge badge-error badge-sm shrink-0">保存に失敗</span>
+                        <span class="tag error keep">保存に失敗</span>
                     {:else}
                         <button
                             type="button"
-                            class="btn btn-primary btn-sm shrink-0"
+                            class="small keep"
                             onclick={() => play(item)}
                             data-testid="offline-play"
                         >
@@ -192,7 +191,7 @@
                         <!-- 失敗した控えの片付け。**サーバの録画には触らない** (中身が無いだけ) -->
                         <button
                             type="button"
-                            class="btn btn-ghost btn-sm shrink-0"
+                            class="ghost small keep"
                             onclick={async () => {
                                 await removeLocal(item.id);
                                 await load();
@@ -204,9 +203,7 @@
                     {:else}
                         <button
                             type="button"
-                            class="btn btn-sm shrink-0 {deleting.armed === item.id
-                                ? 'btn-error'
-                                : 'btn-ghost'}"
+                            class="small keep {deleting.armed === item.id ? 'danger' : 'ghost'}"
                             onclick={() => remove(item)}
                             data-testid="offline-delete"
                         >
@@ -219,8 +216,89 @@
     {/if}
 
     {#if Object.keys(offline.pendingDelete).length > 0}
-        <p class="text-base-content/60 mt-3 text-xs">
+        <p class="pending tiny muted">
             サーバからの削除が {Object.keys(offline.pendingDelete).length} 件、次にオンラインへ戻ったときに行われます。
         </p>
     {/if}
 </div>
+
+<style>
+    .page {
+        max-width: 48rem;
+        margin: 0 auto;
+    }
+    h1 {
+        margin-bottom: 0.25rem;
+        font-size: 1.25rem;
+    }
+    .lead {
+        margin-bottom: 1rem;
+    }
+    .player {
+        margin-bottom: 1rem;
+    }
+    .player video {
+        display: block;
+        width: 100%;
+        border-radius: 0.5rem;
+        background: #000;
+    }
+    .player-bar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-top: 0.25rem;
+    }
+    .name {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        font-weight: 500;
+    }
+    .empty {
+        padding: 1.5rem;
+        border-radius: 0.5rem;
+        background: var(--dp-surface);
+        text-align: center;
+    }
+    .empty p:first-child {
+        margin-bottom: 0.25rem;
+    }
+    .list {
+        margin: 0;
+        padding: 0;
+        list-style: none;
+        border-radius: 0.5rem;
+        background: var(--dp-surface);
+    }
+    .row {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        margin: 0;
+        padding: 0.75rem;
+        list-style: none;
+    }
+    .row + .row {
+        border-top: 1px solid var(--dp-base-200);
+    }
+    .thumb {
+        width: 5rem;
+        height: 3rem;
+        border-radius: 0.25rem;
+        object-fit: cover;
+    }
+    .thumb.blank {
+        background: var(--dp-base-300);
+    }
+    .info {
+        min-width: 0;
+        flex: 1 1 0%;
+    }
+    .keep {
+        flex-shrink: 0;
+    }
+    .pending {
+        margin-top: 0.75rem;
+    }
+</style>

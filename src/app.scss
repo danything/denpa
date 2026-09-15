@@ -29,33 +29,99 @@
 
 :root {
 	--pico-font-family-sans-serif: "Hiragino Sans", "Yu Gothic UI", "Noto Sans JP", system-ui, sans-serif;
-	--pico-font-size: 15px;
+	/* 16px(Tailwind の頃と同じ)。番組表の 1 マスなど rem で組んだ寸法がそのまま保たれる */
+	--pico-font-size: 16px;
 	--pico-line-height: 1.6;
 	--pico-spacing: 1rem;
 	--pico-typography-spacing-vertical: 0.75rem;
 	--pico-form-element-spacing-vertical: 0.45rem;
-	--pico-form-element-spacing-horizontal: 0.7rem;
-	--pico-border-radius: 0.5rem;
-	--dp-success: #2e9a5c;
-	--dp-warning: #d19a00;
-	--dp-error: #d9443f;
-	--dp-info: #3a86c2;
-	--dp-accent: #e0911c;
-	--dp-accent-text: #2a1c05;
+	--pico-form-element-spacing-horizontal: 0.75rem;
+	--pico-border-radius: 0.65rem;
+	/* 鮮やかに: 主は紫、差し色はピンク。状態の色も彩度を上げる */
+	--dp-success: #22c55e;
+	--dp-warning: #f59e0b;
+	--dp-error: #f43f5e;
+	--dp-info: #38bdf8;
+	--dp-accent: #ec4899;
+	--dp-accent-text: #fff;
+	--dp-gradient: linear-gradient(135deg, #8b5cf6 0%, #d946ef 55%, #ec4899 100%);
 }
 /* Pico は色を [data-theme] と :root:not([data-theme=dark]) に書くので、同じ強さで上書きする */
 :root:not([data-theme="dark"]),
 [data-theme="light"] {
-	--pico-background-color: #f6f7f9;
+	--pico-background-color: #f4f5fb;
+	--pico-color: #1e2233;
+	--pico-muted-color: #646b82;
+	--pico-primary: #7c3aed;
+	--pico-primary-background: #7c3aed;
+	--pico-primary-border: #7c3aed;
+	--pico-primary-hover: #6d28d9;
+	--pico-primary-hover-background: #6d28d9;
+	--pico-primary-hover-border: #6d28d9;
+	--pico-primary-underline: rgb(124 58 237 / 0.4);
+	--pico-primary-focus: rgb(124 58 237 / 0.3);
+	--pico-primary-inverse: #fff;
 	--dp-surface: #fff;
-	--dp-base-200: #eceef2;
-	--dp-base-300: #d9dde4;
+	--dp-base-200: #eceef8;
+	--dp-base-300: #d9ddec;
 }
 [data-theme="dark"] {
-	--pico-background-color: #1d232a;
-	--dp-surface: #232a33;
-	--dp-base-200: #2b333d;
-	--dp-base-300: #3a4450;
+	--pico-background-color: #0b0d14;
+	--pico-color: #e7e9f3;
+	--pico-muted-color: #9aa1b8;
+	--pico-primary: #a78bfa;
+	--pico-primary-background: #8b5cf6;
+	--pico-primary-border: #8b5cf6;
+	--pico-primary-hover: #c4b5fd;
+	--pico-primary-hover-background: #7c3aed;
+	--pico-primary-hover-border: #7c3aed;
+	--pico-primary-underline: rgb(167 139 250 / 0.5);
+	--pico-primary-focus: rgb(139 92 246 / 0.4);
+	--pico-primary-inverse: #fff;
+	--pico-form-element-background-color: #141824;
+	--pico-form-element-border-color: #2a3245;
+	--pico-form-element-active-background-color: #161b29;
+	--dp-surface: #141824;
+	--dp-base-200: #1b2130;
+	--dp-base-300: #2a3245;
+}
+/* Pico は送信ボタンを横幅いっぱいにする。ボタンは中身の幅にし、広げたいところだけ .full を付ける */
+button[type="submit"] {
+	width: auto;
+}
+button[type="submit"].full {
+	width: 100%;
+}
+/*
+ * 押せる入れ物 (行やカードを丸ごと押すもの。`<div role="button">`)。Pico は [role=button] をボタンの見た目にするので、
+ * 入れ物には当てない(色も枠も余白も親のまま。見た目は各画面の <style>)
+ */
+div[role="button"],
+li[role="button"],
+article[role="button"] {
+	--pico-background-color: transparent;
+	--pico-border-color: transparent;
+	--pico-color: inherit;
+	--pico-box-shadow: none;
+	display: block;
+	width: auto;
+	margin: 0;
+	border: 0;
+	border-radius: 0;
+	background: transparent;
+	color: inherit;
+	font-weight: inherit;
+	font-size: inherit;
+	line-height: inherit;
+	text-align: inherit;
+	box-shadow: none;
+}
+/* 主のボタンは紫からピンクへのグラデーション(色の変数は Pico のまま、絵だけ重ねる) */
+button:not(.secondary, .contrast, .outline, .ghost, .danger, .accent, [class*="ov-"], [data-tabs-trigger]),
+[type="submit"]:not(.secondary, .contrast, .outline, .ghost, .danger, .accent, [class*="ov-"]),
+a.button:not(.secondary, .contrast, .outline, .ghost, .danger, .accent) {
+	background-image: var(--dp-gradient);
+	border-color: transparent;
 }
 html {
 	font-size: var(--pico-font-size);
@@ -288,6 +354,20 @@ a.button.secondary.outline {
 a.button.contrast.outline {
 	--pico-color: var(--pico-contrast);
 }
+/* リンクのボタンの :hover。枠だけのものは地を塗らない(塗ると枠の色の文字が地に沈む) */
+a.button.secondary:hover {
+	--pico-background-color: var(--pico-secondary-hover-background);
+	--pico-border-color: var(--pico-secondary-hover-border);
+}
+a.button.outline:hover {
+	--pico-background-color: transparent;
+	--pico-color: var(--pico-primary-hover);
+	--pico-border-color: var(--pico-primary-hover);
+}
+a.button.secondary.outline:hover {
+	--pico-color: var(--pico-secondary-hover);
+	--pico-border-color: var(--pico-secondary-hover);
+}
 /* Pico の .secondary / .contrast / .outline に足す */
 button.small,
 [role="button"].small,
@@ -316,13 +396,12 @@ a.button.ghost {
 	--pico-color: inherit;
 	--pico-box-shadow: none;
 }
-button.ghost:hover,
-[role="button"].ghost:hover,
-a.button.ghost:hover,
-a.button.ghost[aria-current],
-button.ghost[aria-current],
-[role="button"].ghost[aria-current] {
+:is(button, [role="button"], a.button).ghost:is(:hover, :active, :focus, [aria-current]:not([aria-current="false"])) {
+	/* Pico は押せるものの :hover/:focus で文字を白、枠を主の色にする。薄い地の上だと読めないので戻す */
 	--pico-background-color: var(--dp-base-200);
+	--pico-border-color: transparent;
+	--pico-color: inherit;
+	--pico-box-shadow: none;
 }
 button.danger,
 [role="button"].danger,
@@ -331,11 +410,36 @@ a.button.danger {
 	--pico-border-color: var(--dp-error);
 	--pico-color: #fff;
 }
+/* 枠だけの危ない操作(削除など)。赤い文字と枠 */
+button.outline.danger,
+[role="button"].outline.danger,
+a.button.outline.danger {
+	--pico-background-color: transparent;
+	--pico-border-color: var(--dp-error);
+	--pico-color: var(--dp-error);
+}
 button.ghost.danger,
 [role="button"].ghost.danger,
 a.button.ghost.danger {
 	--pico-background-color: transparent;
 	--pico-border-color: transparent;
+	--pico-color: var(--dp-error);
+}
+
+
+/* 色付きのボタンは、押しているときも同じ色の少し濃いものにする(Pico の既定だと主の色に変わって文字が読みにくい) */
+:is(button, [role="button"], a.button).accent:is(:hover, :active, :focus) {
+	--pico-background-color: color-mix(in srgb, var(--dp-accent) 85%, #000);
+	--pico-border-color: color-mix(in srgb, var(--dp-accent) 85%, #000);
+	--pico-color: var(--dp-accent-text);
+}
+:is(button, [role="button"], a.button).danger:not(.ghost, .outline):is(:hover, :active, :focus) {
+	--pico-background-color: color-mix(in srgb, var(--dp-error) 85%, #000);
+	--pico-border-color: color-mix(in srgb, var(--dp-error) 85%, #000);
+	--pico-color: #fff;
+}
+:is(button, [role="button"], a.button).ghost.danger:is(:hover, :active, :focus) {
+	--pico-background-color: color-mix(in srgb, var(--dp-error) 12%, transparent);
 	--pico-color: var(--dp-error);
 }
 
@@ -380,6 +484,19 @@ a.button.ghost.danger {
 .tag.outline {
 	background: transparent;
 	border-color: currentColor;
+}
+/* 枠だけの色付き札は、文字も枠と同じ色にする(塗りの札は白文字のため) */
+.tag.outline.error {
+	color: var(--dp-error);
+}
+.tag.outline.success {
+	color: var(--dp-success);
+}
+.tag.outline.warning {
+	color: var(--dp-warning);
+}
+.tag.outline.info {
+	color: var(--dp-info);
 }
 
 /* ---- 知らせ ---- */

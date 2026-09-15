@@ -133,7 +133,7 @@
      *
      * - **ルール** … 左に書く欄、右に一覧。書きながら効き目を見るものなので、
      *   ページごと動くと書いている欄が画面から出ていく
-     * - **番組表** … 表が画面の残りをぜんぶ使う。`max-h-[75vh]` で切っていた頃は、
+     * - **番組表** … 表が画面の残りをぜんぶ使う。`max-height: 75vh` で切っていた頃は、
      *   **画面の下に余白があるのに表のほうが先に終わって**いた
      *
      * 他の画面まで同じにすると、スクロールするのが window ではなくなり、
@@ -143,7 +143,7 @@
      * **二段組にする幅は全画面で `md` (768px)。** 画面ごとに違えていた頃は、
      * **同じ幅なのに画面によって形が変わって**いた (縦のiPad 820px で、
      * ライブは1段・観る画面は2段。絵の大きさが 772px と 436px)。ここと、
-     * 各画面の `md:` がその1本の線で、**片方だけ動かさない**
+     * 各画面の 768px の `@media` がその1本の線で、**片方だけ動かさない**
      */
     const FILLED = ['/', '/live', '/rules', '/guide'];
     const fill = $derived(FILLED.includes(page.url.pathname) || page.url.pathname.startsWith('/watch/'));
@@ -172,32 +172,31 @@
 </svelte:head>
 
 <!--
-    **土台の高さは `html` から `%` で降ろす** (`app.css` で `html, body` に
+    **土台の高さは `html` から `%` で降ろす** (`app.scss` で `html, body` に
     高さを与えてある)。単位で言い当てない — `100vh` も `100dvh` も**実機では
     画面の高さと一致しないことがあった** (PWA で 763.765px 対 708px。差の
     56px は Chrome for Android のアドレスバーの高さそのもの)。
 
     `%` なら JS も要らず、**描く前から正しい**。**二段組の線 (768px) は横に
-    倒した携帯も越える** (915x412 など) ので、`md:` のほうも同じ採り方
+    倒した携帯も越える** (915x412 など) ので、768px 以上の `.fill` のほうも同じ採り方
 -->
 <div
-    class="flex min-h-full flex-col bg-base-200 {fill
-        ? 'md:h-full md:min-h-0 md:overflow-hidden'
-        : ''}"
+    class="shell"
+    class:fill
     data-root
     data-fill={fill ? 'true' : undefined}
     data-hydrated={hydrated ? 'true' : undefined}
 >
-    <div class="navbar bg-base-100 sticky top-0 z-40 shadow-sm">
-        <div class="flex flex-1 items-center gap-2">
-            <a class="btn btn-ghost text-xl" href="/">denpa</a>
+    <div class="navbar">
+        <div class="brand">
+            <a class="button ghost logo" href="/">denpa</a>
             <!--
                 **新しい版が出ている** (server/update.ts が GitHub のリリースを見比べる)。
                 押せばリリースのページ。閉じる口は無い — 上げるか、リリースが消えれば引っ込む
             -->
             {#if data.update !== null}
                 <a
-                    class="badge badge-info badge-sm"
+                    class="tag info"
                     href={data.update.url}
                     target="_blank"
                     rel="noopener noreferrer"
@@ -214,9 +213,9 @@
             ヘッダーが2段ぶんの厚さになる。狭い画面ではテーマとハンバーガーが
             横に並ぶ形にしたい
         -->
-        <nav class="flex flex-none items-center gap-1">
+        <nav class="actions">
             <button type="button"
-                class="btn btn-ghost btn-sm"
+                class="ghost small"
                 onclick={cycleTheme}
                 aria-label="テーマを切り替える"
                 title={LABEL[mode]}
@@ -230,12 +229,13 @@
                 同じリンクを2つ出すことになるが、data-testid は横並びのほうにだけ
                 付けて、テストがどちらを指すのか迷わないようにする
             -->
-            <ul class="menu menu-horizontal hidden px-1 sm:flex">
+            <ul class="links">
                 {#each links as link (link.href)}
                     <li>
                         <a
                             href={link.href}
-                            class={page.url.pathname === link.href ? 'active' : ''}
+                            class="button ghost small"
+                            aria-current={page.url.pathname === link.href ? 'page' : undefined}
                             data-testid="nav-{link.href === '/' ? 'home' : link.href.slice(1)}"
                         >
                             {link.label}
@@ -244,11 +244,16 @@
                 {/each}
             </ul>
 
-            <details class="dropdown dropdown-end sm:hidden" bind:this={menu} data-testid="nav-menu">
-                <summary class="btn btn-ghost btn-sm" aria-label="メニュー">
+            <!--
+                `<details>` のまま。開閉に JS が要らないので、読み込み途中でも押せる
+                (Bits UI のメニューはハイドレーションが済むまで開かない)
+            -->
+            <details class="burger" bind:this={menu} data-testid="nav-menu">
+                <summary aria-label="メニュー">
                     <svg
                         viewBox="0 0 24 24"
-                        class="size-5"
+                        width="20"
+                        height="20"
                         fill="none"
                         stroke="currentColor"
                         stroke-width="2"
@@ -258,10 +263,13 @@
                         <path d="M4 6h16M4 12h16M4 18h16" />
                     </svg>
                 </summary>
-                <ul class="menu dropdown-content rounded-box bg-base-100 z-50 mt-2 w-48 shadow">
+                <ul class="burger-list">
                     {#each links as link (link.href)}
                         <li>
-                            <a href={link.href} class={page.url.pathname === link.href ? 'active' : ''}>
+                            <a
+                                href={link.href}
+                                aria-current={page.url.pathname === link.href ? 'page' : undefined}
+                            >
                                 {link.label}
                             </a>
                         </li>
@@ -279,7 +287,7 @@
             {#if data.user}
                 <!-- 控えを消すので GET では出させない (先読みで勝手に切れる) -->
                 <form method="POST" action="/logout">
-                    <button type="submit" class="btn btn-ghost btn-sm" data-testid="logout">
+                    <button type="submit" class="ghost small" data-testid="logout">
                         ログアウト
                     </button>
                 </form>
@@ -291,17 +299,17 @@
             無反応に見えると二度押しされる。ヘッダーの下端に重ねて、隙間ができないようにする
         -->
         <div
-            class="absolute inset-x-0 -bottom-1 h-1 leading-none"
+            class="loading-bar"
             data-testid="loading-bar"
             data-loading={navigating.to || busy.active ? 'true' : undefined}
         >
             {#if navigating.to || busy.active}
-                <progress class="progress progress-primary block h-1 w-full rounded-none"></progress>
+                <progress></progress>
             {/if}
         </div>
     </div>
 
-    <main class="p-4 md:p-6 {fill ? 'md:min-h-0 md:flex-1' : ''}">
+    <main>
         {@render children()}
     </main>
 </div>
@@ -309,3 +317,154 @@
 {#if measure.on}
     <Measure />
 {/if}
+
+<style>
+    /* 土台。高さは html から % で降ろす(上のコメント) */
+    .shell {
+        display: flex;
+        flex-direction: column;
+        min-height: 100%;
+        background: var(--dp-base-200);
+    }
+    .navbar {
+        position: sticky;
+        top: 0;
+        z-index: 40;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        min-height: 3.5rem;
+        padding: 0.5rem;
+        background: var(--dp-surface);
+        box-shadow: 0 1px 2px rgb(0 0 0 / 0.2);
+    }
+    .brand {
+        display: flex;
+        flex: 1 1 0%;
+        align-items: center;
+        gap: 0.5rem;
+    }
+    .logo {
+        font-size: 1.25rem;
+        font-weight: 700;
+    }
+    .actions {
+        display: flex;
+        flex: none;
+        align-items: center;
+        gap: 0.25rem;
+    }
+    .actions form {
+        margin: 0;
+    }
+    ul.links,
+    ul.burger-list {
+        margin: 0;
+        padding: 0;
+        list-style: none;
+    }
+    ul.links li,
+    ul.burger-list li {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+    }
+    ul.links {
+        display: none;
+        gap: 0.125rem;
+        padding: 0 0.25rem;
+    }
+    ul.links a[aria-current='page'] {
+        --pico-background-color: var(--dp-base-300);
+    }
+    .burger {
+        position: relative;
+        margin: 0;
+    }
+    .burger summary {
+        display: inline-flex;
+        align-items: center;
+        padding: 0.3rem 0.65rem;
+        border-radius: var(--pico-border-radius);
+        list-style: none;
+        cursor: pointer;
+        color: inherit;
+    }
+    .burger summary:hover,
+    .burger[open] summary {
+        background: var(--dp-base-200);
+    }
+    .burger summary::-webkit-details-marker {
+        display: none;
+    }
+    .burger summary::after {
+        display: none;
+    }
+    .burger-list {
+        position: absolute;
+        right: 0;
+        z-index: 50;
+        margin-top: 0.5rem;
+        width: 12rem;
+        padding: 0.25rem;
+        border-radius: 0.75rem;
+        background: var(--dp-surface);
+        border: 1px solid var(--dp-base-300);
+        box-shadow: 0 10px 30px rgb(0 0 0 / 0.35);
+    }
+    .burger-list a {
+        display: block;
+        padding: 0.45rem 0.75rem;
+        border-radius: 0.5rem;
+        color: inherit;
+        text-decoration: none;
+    }
+    .burger-list a:hover {
+        background: var(--dp-base-200);
+    }
+    ul.burger-list a[aria-current='page'] {
+        background: var(--dp-base-300);
+    }
+    .loading-bar {
+        position: absolute;
+        left: 0;
+        right: 0;
+        bottom: -0.25rem;
+        height: 0.25rem;
+        line-height: 0;
+    }
+    .loading-bar progress {
+        display: block;
+        width: 100%;
+        height: 0.25rem;
+        margin: 0;
+        border-radius: 0;
+    }
+    main {
+        padding: 1rem;
+    }
+    @media (min-width: 768px) {
+        main {
+            padding: 1.5rem;
+        }
+    }
+    @media (min-width: 640px) {
+        ul.links {
+            display: flex;
+        }
+        .burger {
+            display: none;
+        }
+    }
+    @media (min-width: 768px) {
+        .shell.fill {
+            height: 100%;
+            min-height: 0;
+            overflow: hidden;
+        }
+        .shell.fill main {
+            min-height: 0;
+            flex: 1 1 0%;
+        }
+    }
+</style>

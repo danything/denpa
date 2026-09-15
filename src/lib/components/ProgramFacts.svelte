@@ -66,48 +66,48 @@
     そのまま流し込めるものとして扱わない
 -->
 {#snippet body(text: string)}{#each linkify(text) as part, i (i)}{#if part.href}<a
-                class="link link-primary break-all"
+                class="link"
                 href={part.href}
                 target="_blank"
                 rel="noopener noreferrer"
                 data-testid="detail-link">{part.text}</a
             >{:else}{part.text}{/if}{/each}{/snippet}
 
-<h3 class="text-lg font-bold break-words">{program.name}</h3>
-<p class="text-base-content/60 mt-1 text-sm">
+<h3 class="title">{program.name}</h3>
+<p class="meta small muted">
     {program.service_name} ・ {dateTime(program.start_at)} 〜 {time(program.end_at)}
     ({duration(program.start_at, program.end_at)})
 </p>
 
 <!-- EPG が持っている符号は、そのままでは読めないので言葉に直して出す -->
-<div class="mt-2 flex flex-wrap gap-1" data-testid="detail-badges">
+<div class="badges" data-testid="detail-badges">
     <!-- 目印は番号で。字を目印にすると、同じ札が2つ来たときに落ちる -->
     {#each genres as label, i (i)}
-        <span class="badge badge-sm badge-ghost" data-testid="detail-genre">{label}</span>
+        <span class="tag" data-testid="detail-genre">{label}</span>
     {/each}
     {#if video}
-        <span class="badge badge-sm badge-ghost" data-testid="detail-video">{video}</span>
+        <span class="tag" data-testid="detail-video">{video}</span>
     {/if}
     {#if fps !== null}
         <!-- 実測 (fpsDetect) がどちらに転んだか。ログにしか出ていなかった -->
-        <span class="badge badge-sm badge-ghost" data-testid="detail-fps">{fps}コマ/秒</span>
+        <span class="tag" data-testid="detail-fps">{fps}コマ/秒</span>
     {/if}
     {#each audios as label, i (i)}
-        <span class="badge badge-sm badge-ghost" data-testid="detail-audio">{label}</span>
+        <span class="tag" data-testid="detail-audio">{label}</span>
     {/each}
     {#if !program.is_free}
-        <span class="badge badge-sm badge-warning" data-testid="detail-paid">有料</span>
+        <span class="tag warning" data-testid="detail-paid">有料</span>
     {/if}
 </div>
 
 {#if program.description}
-    <p class="mt-3 text-sm whitespace-pre-wrap">{@render body(program.description)}</p>
+    <p class="block small pre">{@render body(program.description)}</p>
 {/if}
 
 {#each extended as [heading, text] (heading)}
-    <div class="mt-3">
-        <div class="text-sm font-medium">{heading}</div>
-        <div class="text-base-content/70 text-sm whitespace-pre-wrap">{@render body(text)}</div>
+    <div class="block">
+        <div class="small head">{heading}</div>
+        <div class="small pre soft">{@render body(text)}</div>
     </div>
 {/each}
 
@@ -125,17 +125,62 @@
         (`format.logoUnusable`)。口そのものはチューナー画面にある — ロゴは
         録画ごとではなく**局ごと**の話で、一度教えれば以降の全部に効く
     -->
-    <div class="mt-3" data-testid="detail-cm">
-        <div class="text-sm font-medium">CM</div>
-        <div class="text-base-content/60 text-xs" data-testid="detail-cm-note">{cmNote}</div>
+    <div class="block" data-testid="detail-cm">
+        <div class="small head">CM</div>
+        <div class="tiny muted" data-testid="detail-cm-note">{cmNote}</div>
     </div>
 {/if}
 
 {#each notes as note (note.title)}
     <!-- 失敗や削除の理由。一覧には状態だけを出して、中身はここで見せる -->
-    <div class="mt-3" data-testid="detail-error">
-        <div class="text-error text-sm font-medium">{note.title}</div>
+    <div class="block" data-testid="detail-error">
+        <div class="text-error small head">{note.title}</div>
         <pre
-            class="bg-base-200 mt-1 max-h-48 overflow-auto rounded p-2 font-mono text-xs whitespace-pre-wrap">{note.text}</pre>
+            class="note">{note.text}</pre>
     </div>
 {/each}
+
+<style>
+    .title {
+        margin: 0;
+        font-size: 1.125rem;
+        font-weight: 700;
+        overflow-wrap: break-word;
+    }
+    .meta {
+        margin-top: 0.25rem;
+    }
+    .badges {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.25rem;
+        margin-top: 0.5rem;
+    }
+    .block {
+        margin-top: 0.75rem;
+    }
+    .head {
+        font-weight: 500;
+    }
+    .pre {
+        white-space: pre-wrap;
+    }
+    .soft {
+        opacity: 0.7;
+    }
+    .link {
+        color: var(--pico-primary);
+        word-break: break-all;
+    }
+    .note {
+        margin: 0.25rem 0 0;
+        max-height: 12rem;
+        overflow: auto;
+        padding: 0.5rem;
+        border-radius: 0.25rem;
+        background: var(--dp-base-200);
+        font-family: ui-monospace, monospace;
+        font-size: 0.75rem;
+        white-space: pre-wrap;
+    }
+</style>

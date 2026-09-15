@@ -38,7 +38,8 @@
      * 土台の実際の姿。
      *
      * **塞いであるはずのものが塞がっていないことがある。** 二段組の画面では
-     * 土台に `md:h-[100dvh] md:overflow-hidden` が当たっていて、当たっていれば
+     * 土台 (`.shell.fill`、+layout.svelte) に 768px 以上で `height: 100%; overflow: hidden`
+     * が当たっていて、当たっていれば
      * ページごと動きようがない。**はみ出しが出ているのに当たっている**なら、
      * はみ出させているのは土台の外に居るもの (`position: fixed` は塞ぎを
      * すり抜ける)
@@ -102,11 +103,12 @@
                  */
                 if (rule instanceof CSSStyleRule) {
                     seen++;
-                    if (rule.selectorText.includes('h-\\[100dvh\\]')) found = true;
+                    // 二段組の土台の決まり。Svelte が `.shell.fill.svelte-xxxx` のように印を足すので部分で見る
+                    if (rule.selectorText.includes('.shell.fill')) found = true;
                 }
                 /*
-                 * **入れ子はぜんぶ潜る。** `@media` だけ見ていても届かない —
-                 * Tailwind は中身を `@layer` に入れるので、そこで止まる
+                 * **入れ子はぜんぶ潜る。** 決まりは `@media (min-width: 768px)` の中にあり、
+                 * CSS の組み方によっては `@layer` や入れ子の規則にも入るので、そこで止めない
                  */
                 const inner = (rule as CSSRule & { cssRules?: CSSRuleList }).cssRules;
                 if (inner !== undefined) stack.push(...Array.from(inner));
@@ -262,24 +264,48 @@
     **押せないようにしておく。** 出しているのは読むための数で、下にあるものを
     触れなくしたら本末転倒
 -->
-<div
-    class="pointer-events-none fixed right-1 bottom-1 z-[100] max-w-[95vw] rounded
-           bg-black/85 px-2 py-1 font-mono text-[10px] leading-tight text-white"
-    data-testid="measure"
->
+<div class="measure" data-testid="measure">
     <div>
         窓 {width}x{inner} / 枠 {client} / 中身 {scroll} =
-        <b class={over > 1 ? 'text-red-400' : 'text-green-400'}>はみ出し {over}</b>
+        <b class={over > 1 ? 'bad' : 'good'}>はみ出し {over}</b>
     </div>
     <div>{base} / {wide ? '二段組 (md)' : '一段 (md 未満)'}</div>
-    <div class="max-w-[70ch] break-all">class: {rootClass}</div>
+    <div class="wrap">class: {rootClass}</div>
     {#if units !== null}
         <div>
             dvh {units.dvh} / svh {units.svh} / lvh {units.lvh} / vh {units.vh} / 流れの中 {plain} — {mode}
         </div>
     {/if}
-    <div class="max-w-[70ch] break-all">{rules}</div>
+    <div class="wrap">{rules}</div>
     {#each culprits as culprit (culprit.what + culprit.bottom)}
         <div>↳ {culprit.what} → {culprit.bottom}</div>
     {/each}
 </div>
+
+<style>
+    .measure {
+        pointer-events: none;
+        position: fixed;
+        right: 0.25rem;
+        bottom: 0.25rem;
+        z-index: 100;
+        max-width: 95vw;
+        padding: 0.25rem 0.5rem;
+        border-radius: 0.25rem;
+        background: rgb(0 0 0 / 0.85);
+        color: #fff;
+        font-family: ui-monospace, monospace;
+        font-size: 10px;
+        line-height: 1.25;
+    }
+    .wrap {
+        max-width: 70ch;
+        word-break: break-all;
+    }
+    .bad {
+        color: #f87171;
+    }
+    .good {
+        color: #4ade80;
+    }
+</style>

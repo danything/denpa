@@ -9,8 +9,8 @@
      * 状態 (位置・遅延など)。別々に書いていた頃は、追っかけだけ時間帯が無く、
      * 局と番組の並びも他と違っていた — 画面を移ると読む場所を探し直すことになる。
      *
-     * 幅は帯の余りぜんぶ (`grow basis-0`)。入りきらないぶんは**番組名だけが**
-     * 後ろから切れる (時間帯と局は `shrink-0`。どちらも短くて、切れると読めない)。
+     * 幅は帯の余りぜんぶ (`flex: 1 1 0`)。入りきらないぶんは**番組名だけが**
+     * 後ろから切れる (時間帯と局は縮めない。どちらも短くて、切れると読めない)。
      */
     let {
         range = null,
@@ -34,20 +34,52 @@
     } = $props();
 </script>
 
-<div class="min-w-0 grow basis-0 px-2 leading-tight text-white/80">
-    <div class="flex items-baseline gap-1.5 overflow-hidden text-sm whitespace-nowrap">
+<div class="info">
+    <div class="top">
         {#if badge}{@render badge()}{/if}
-        <span class="shrink-0">
+        <span class="keep">
             {#if range !== null}{time(range.start)} 〜 {time(range.end)} ・ {/if}{service}
         </span>
         {#if title !== null && title !== ''}
-            <span class="min-w-0 truncate">
+            <span class="cut">
                 ・ <span data-testid={titleTestid}>{title}</span>
             </span>
         {/if}
     </div>
 
-    <div class="truncate text-xs tabular-nums text-white/60">
+    <div class="status cut">
         {#if status}{@render status()}{/if}
     </div>
 </div>
+
+<style>
+    .info {
+        min-width: 0;
+        flex: 1 1 0;
+        padding: 0 0.5rem;
+        line-height: 1.25;
+        color: rgb(255 255 255 / 0.8);
+    }
+    .top {
+        display: flex;
+        align-items: baseline;
+        gap: 0.375rem;
+        overflow: hidden;
+        font-size: 0.875rem;
+        white-space: nowrap;
+    }
+    .keep {
+        flex-shrink: 0;
+    }
+    .cut {
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+    .status {
+        font-size: 0.75rem;
+        font-variant-numeric: tabular-nums;
+        color: rgb(255 255 255 / 0.6);
+    }
+</style>

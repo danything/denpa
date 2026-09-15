@@ -46,14 +46,14 @@
      * 色ボタン。**並びは実機のリモコンと同じ 青・赤・緑・黄。**
      *
      * 色は放送が名指しするもので、番組が「青を押して」と言うときの青。
-     * `btn-info` のような主題の色に寄せると、**放送の言う色と画面の色が
+     * 主題の色 (info など) に寄せると、**放送の言う色と画面の色が
      * 食い違う**ので、じかに塗る
      */
     const COLORS = [
-        { code: BLUE, name: '青', paint: 'bg-blue-600 text-white' },
-        { code: RED, name: '赤', paint: 'bg-red-600 text-white' },
-        { code: GREEN, name: '緑', paint: 'bg-green-600 text-white' },
-        { code: YELLOW, name: '黄', paint: 'bg-yellow-400 text-black' },
+        { code: BLUE, name: '青', paint: '#2563eb', ink: '#fff' },
+        { code: RED, name: '赤', paint: '#dc2626', ink: '#fff' },
+        { code: GREEN, name: '緑', paint: '#16a34a', ink: '#fff' },
+        { code: YELLOW, name: '黄', paint: '#facc15', ink: '#000' },
     ];
 
     /**
@@ -67,71 +67,136 @@
 </script>
 
 <!--
-    **指で押せる大きさにする。** daisyUI の `btn-sm` は指には小さいので、
+    **指で押せる大きさにする。** 小さいボタンは指には小さいので、
     十字と決定は正方形で大きめに取る
 -->
-<div class="card bg-base-100 mb-2 shrink-0 shadow" data-testid="live-remote">
-    <div class="card-body gap-3 p-3">
-        <div class="flex gap-1">
-            {#each COLORS as color (color.code)}
+<div class="remote" data-testid="live-remote">
+    <div class="colors">
+        {#each COLORS as color (color.code)}
+            <button
+                type="button"
+                class="color"
+                style="--paint: {color.paint}; --ink: {color.ink}"
+                onclick={() => press(color.code)}
+                data-testid="live-remote-{color.code}"
+            >
+                {color.name}
+            </button>
+        {/each}
+    </div>
+
+    <!-- 十字と決定。**真ん中が決定**で、実機と同じ形 -->
+    <div class="pad">
+        <div></div>
+        <button type="button" class="secondary key" onclick={() => press(UP)}
+            aria-label="上" data-testid="live-remote-up">↑</button>
+        <div></div>
+        <button type="button" class="secondary key" onclick={() => press(LEFT)}
+            aria-label="左" data-testid="live-remote-left">←</button>
+        <button type="button" class="key enter" onclick={() => press(ENTER)}
+            data-testid="live-remote-enter">決定</button>
+        <button type="button" class="secondary key" onclick={() => press(RIGHT)}
+            aria-label="右" data-testid="live-remote-right">→</button>
+        <div></div>
+        <button type="button" class="secondary key" onclick={() => press(DOWN)}
+            aria-label="下" data-testid="live-remote-down">↓</button>
+        <div></div>
+    </div>
+
+    <div class="row">
+        <button type="button" class="secondary small grow" onclick={() => press(BACK)} data-testid="live-remote-back">
+            戻る
+        </button>
+        <!-- d は放送に渡す (DataButtonPressed)。待機ページからメニューを開くのはこれ -->
+        <button type="button" class="secondary small" onclick={() => press(DATA)} data-testid="live-remote-data">
+            d
+        </button>
+    </div>
+
+    <!-- **畳んでおく。** 使う放送のほうが少ないので、いつも場所を取らせない -->
+    <details class="digits small">
+        <summary data-testid="live-remote-digits">数字</summary>
+        <div class="digit-grid">
+            {#each DIGITS as name (name)}
                 <button
                     type="button"
-                    class="btn h-8 min-h-0 flex-1 border-0 text-sm {color.paint}"
-                    onclick={() => press(color.code)}
-                    data-testid="live-remote-{color.code}"
+                    class="secondary small"
+                    onclick={() => press(digit(name))}
+                    data-testid="live-remote-digit-{name}"
                 >
-                    {color.name}
+                    {name}
                 </button>
             {/each}
         </div>
+    </details>
 
-        <!-- 十字と決定。**真ん中が決定**で、実機と同じ形 -->
-        <div class="mx-auto grid grid-cols-3 gap-1">
-            <div></div>
-            <button type="button" class="btn size-12 p-0 text-lg" onclick={() => press(UP)}
-                aria-label="上" data-testid="live-remote-up">↑</button>
-            <div></div>
-            <button type="button" class="btn size-12 p-0 text-lg" onclick={() => press(LEFT)}
-                aria-label="左" data-testid="live-remote-left">←</button>
-            <button type="button" class="btn btn-primary size-12 p-0 text-xs" onclick={() => press(ENTER)}
-                data-testid="live-remote-enter">決定</button>
-            <button type="button" class="btn size-12 p-0 text-lg" onclick={() => press(RIGHT)}
-                aria-label="右" data-testid="live-remote-right">→</button>
-            <div></div>
-            <button type="button" class="btn size-12 p-0 text-lg" onclick={() => press(DOWN)}
-                aria-label="下" data-testid="live-remote-down">↓</button>
-            <div></div>
-        </div>
-
-        <div class="flex gap-2">
-            <button type="button" class="btn btn-sm flex-1" onclick={() => press(BACK)} data-testid="live-remote-back">
-                戻る
-            </button>
-            <!-- d は放送に渡す (DataButtonPressed)。待機ページからメニューを開くのはこれ -->
-            <button type="button" class="btn btn-sm" onclick={() => press(DATA)} data-testid="live-remote-data">
-                d
-            </button>
-        </div>
-
-        <!-- **畳んでおく。** 使う放送のほうが少ないので、いつも場所を取らせない -->
-        <details class="text-sm">
-            <summary class="cursor-pointer select-none" data-testid="live-remote-digits">数字</summary>
-            <div class="mt-2 grid grid-cols-3 gap-1">
-                {#each DIGITS as name (name)}
-                    <button
-                        type="button"
-                        class="btn btn-sm"
-                        onclick={() => press(digit(name))}
-                        data-testid="live-remote-digit-{name}"
-                    >
-                        {name}
-                    </button>
-                {/each}
-            </div>
-        </details>
-
-        <p class="text-base-content/60 text-xs">
-            キーボードでも押せます — 矢印キー・Enter・Backspace と、色は B / R / G / Y
-        </p>
-    </div>
+    <p class="tiny muted">
+        キーボードでも押せます — 矢印キー・Enter・Backspace と、色は B / R / G / Y
+    </p>
 </div>
+
+<style>
+    .remote {
+        display: flex;
+        flex-direction: column;
+        gap: 0.75rem;
+        flex-shrink: 0;
+        margin-bottom: 0.5rem;
+        padding: 0.75rem;
+        border-radius: 1rem;
+        background: var(--dp-surface);
+        box-shadow: 0 1px 3px rgb(0 0 0 / 0.25);
+    }
+    .colors {
+        display: flex;
+        gap: 0.25rem;
+    }
+    /* 放送の言う色をじかに塗る (主題の色に寄せない) */
+    .color {
+        --pico-background-color: var(--paint);
+        --pico-border-color: var(--paint);
+        --pico-color: var(--ink);
+        flex: 1;
+        height: 2rem;
+        padding: 0;
+        font-size: 0.875rem;
+    }
+    .color:is(:hover, :focus, :active) {
+        --pico-background-color: var(--paint);
+        --pico-border-color: var(--paint);
+        --pico-color: var(--ink);
+        filter: brightness(1.1);
+    }
+    .pad {
+        display: grid;
+        grid-template-columns: repeat(3, 3rem);
+        gap: 0.25rem;
+        margin: 0 auto;
+    }
+    .key {
+        width: 3rem;
+        height: 3rem;
+        padding: 0;
+        font-size: 1.125rem;
+    }
+    .enter {
+        font-size: 0.75rem;
+    }
+    .row {
+        display: flex;
+        gap: 0.5rem;
+    }
+    .grow {
+        flex: 1;
+    }
+    .digits summary {
+        cursor: pointer;
+        user-select: none;
+    }
+    .digit-grid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 0.25rem;
+        margin-top: 0.5rem;
+    }
+</style>

@@ -23,13 +23,13 @@
 <OverlayMenu
     {testid}
     attrName="codec"
-    menuClass="w-36 text-base"
+    width="9rem"
     items={LIVE_CODECS.map((c) => ({ key: c.id, label: c.label, active: c.id === codec }))}
     {onselect}
 >
     {#snippet trigger()}
         <ControlButton label="画質 (コーデック) を選ぶ" {testid}>
-            <span class="text-xs font-semibold">
+            <span style="font-size: 0.75rem; font-weight: 600">
                 {LIVE_CODECS.find((c) => c.id === codec)?.label ?? 'H.264'}
             </span>
         </ControlButton>

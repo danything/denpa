@@ -184,26 +184,26 @@ export function rowState(rec: {
     return { label: stateLabel(rec.state), badge: badgeClass(rec.state) };
 }
 
-/** daisyUI の badge 色。状態が一目で分かるようにする */
+/** 状態の札(app.scss の `.tag`)の色。状態が一目で分かるようにする。空は色なし */
 export function badgeClass(state: string): string {
     switch (state) {
         case 'recording':
         case 'running':
-            return 'badge-error';
+            return 'error';
         case 'encoding':
         case 'queued':
-            return 'badge-warning';
+            return 'warning';
         case 'available':
         case 'done':
-            return 'badge-success';
+            return 'success';
         case 'conflict':
         case 'failed':
-            return 'badge-error badge-outline';
+            return 'error outline';
         case 'canceled':
         case 'deleted':
-            return 'badge-ghost';
+            return '';
         default:
-            return 'badge-info';
+            return 'info';
     }
 }
 
@@ -226,39 +226,6 @@ export const STATE_LABEL: Record<string, string> = {
 
 export function stateLabel(state: string): string {
     return STATE_LABEL[state] ?? state;
-}
-
-/**
- * 番組表のマスの色。ジャンル(大分類)ごとに変える。
- *
- * 白黒のマスが敷き詰まっていると、どこに何があるのか目で追えない。
- * 「この帯は全部ドラマ」「ここから映画」が色で分かるようにする。
- *
- * Tailwind はソースに書かれた文字列しか拾わないので、組み立てずに丸ごと書く。
- * 下地は薄く敷いて左に濃い線を引く。濃く塗ると文字が読めなくなる
- */
-const GENRE_TINT: Record<number, string> = {
-    0: 'bg-sky-500/15 hover:bg-sky-500/25 border-sky-500',
-    1: 'bg-green-500/15 hover:bg-green-500/25 border-green-500',
-    2: 'bg-teal-500/15 hover:bg-teal-500/25 border-teal-500',
-    3: 'bg-rose-500/15 hover:bg-rose-500/25 border-rose-500',
-    4: 'bg-fuchsia-500/15 hover:bg-fuchsia-500/25 border-fuchsia-500',
-    5: 'bg-orange-500/15 hover:bg-orange-500/25 border-orange-500',
-    6: 'bg-indigo-500/15 hover:bg-indigo-500/25 border-indigo-500',
-    7: 'bg-violet-500/15 hover:bg-violet-500/25 border-violet-500',
-    8: 'bg-amber-500/15 hover:bg-amber-500/25 border-amber-500',
-    9: 'bg-pink-500/15 hover:bg-pink-500/25 border-pink-500',
-    10: 'bg-lime-500/15 hover:bg-lime-500/25 border-lime-500',
-    11: 'bg-cyan-500/15 hover:bg-cyan-500/25 border-cyan-500',
-};
-
-/** ジャンルの付いていない番組。色を持たせず、これまでどおりの地の色にする */
-const NO_GENRE = 'bg-base-200 hover:bg-base-300 border-base-300';
-
-/** `programs.genres` (大分類の番号の並び) から色を決める。先頭を代表とする */
-export function genreTint(genres: number[] | null): string {
-    const first = genres?.[0];
-    return first === undefined ? NO_GENRE : (GENRE_TINT[first] ?? NO_GENRE);
 }
 
 export const CM_LABEL: Record<string, string> = {

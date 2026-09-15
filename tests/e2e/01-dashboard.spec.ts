@@ -43,7 +43,7 @@ test.describe('ダッシュボードと画面遷移', () => {
         ] as const) {
             await page.getByTestId(name).click();
             await expect(page).toHaveTitle(`${label} - denpa`);
-            await expect(page.getByTestId(name)).toHaveClass(/active/);
+            await expect(page.getByTestId(name)).toHaveAttribute('aria-current', 'page');
         }
     });
 

@@ -236,8 +236,8 @@
     **同じ幅で絵の大きさが変わって**いた (縦のiPad 820px で、ライブ 772px に
     対して観る画面 436px)
 -->
-<div class="flex flex-col gap-4 md:h-full md:min-h-0 md:flex-row" data-testid="live">
-    <div class="flex min-w-0 flex-1 flex-col md:min-h-0">
+<div class="live" data-testid="live">
+    <div class="live-main">
         <!-- 映像は高さのほうを上限にする。横幅いっぱいにすると縦がはみ出す -->
         <!--
             **舞台の配線は3画面で共通** ([PlayerStage.svelte](../../lib/components/player/PlayerStage.svelte))。
@@ -338,7 +338,7 @@
                     <!-- 操作の色は3画面同一 (`range-primary`)。ライブ中の赤は「ライブ」ボタンが言う -->
                     <input
                         type="range"
-                        class="range range-xs range-primary w-full"
+                        class="seek"
                         min={player.oldest}
                         max={player.newest}
                         step="0.1"
@@ -349,7 +349,7 @@
                     />
 
                     <!-- **並びは観る画面と同じ。** 再生・音・字幕が左から順で、全画面が右端 -->
-                    <div class="mt-1 flex flex-wrap items-center gap-1 text-white">
+                    <div class="control-row">
                         <ControlButton
                             path={player.paused ? PLAY : PAUSE}
                             label={player.paused ? '再生' : '一時停止'}
@@ -435,7 +435,7 @@
                             >
                                 {#snippet trigger()}
                                     <ControlButton label="字幕を選ぶ" testid="live-caption-track">
-                                        <span class="max-w-28 truncate">
+                                        <span class="track-label">
                                             {player.captionTracks.find((t) => t.index === player.captionTrack)
                                                 ?.label ?? '字幕'}
                                         </span>
@@ -523,7 +523,7 @@
                                 -->
                                 {#if player.remembered > FLOOR}
                                     <button type="button"
-                                        class="underline decoration-dotted underline-offset-2 hover:text-white"
+                                        class="relearn"
                                         onclick={() => player.relearn()}
                                         data-testid="live-relearn">測り直す</button
                                     >
@@ -598,7 +598,7 @@
                 -->
                 <!-- 映像の上に置くものなので、色も他の重ねボタンと同じ (OVERLAY) -->
                 <button type="button"
-                    class="btn btn-sm absolute top-3 left-3 gap-2 {OVERLAY}"
+                    class="small unmute {OVERLAY}"
                     onclick={() => player.unmute()}
                     data-testid="live-unmute"
                 >
@@ -634,7 +634,7 @@
                 >
                     {#snippet actions()}
                         <button type="button"
-                            class="btn btn-sm"
+                            class="small secondary"
                             onclick={() => current && select(current)}
                             data-testid="live-retry">やり直す</button
                         >
@@ -663,14 +663,14 @@
         <FactsAside testid="live-detail">
             <ProgramFacts program={detail.current} />
             {#snippet footer()}
-                <button type="button" class="btn btn-sm" onclick={() => detail.close()} data-testid="live-detail-close">
+                <button type="button" class="small secondary" onclick={() => detail.close()} data-testid="live-detail-close">
                     チャンネル一覧へ戻る
                 </button>
             {/snippet}
         </FactsAside>
     {:else}
         <!-- 幅と高さの決めごとは FactsAside と同じ (一覧は枠が違うので列だけ揃える) -->
-        <aside class="flex flex-col md:w-64 md:min-h-0 md:shrink-0 lg:w-80">
+        <aside class="live-side">
             <!--
                 **データ放送を出している間だけ、リモコンを一覧の上に出す。**
 
@@ -683,10 +683,12 @@
             {/if}
 
             <!-- 番組表と同じ並び・同じ見た目。探す場所がずれないようにする -->
-            <div class="join mb-2" data-testid="live-type-tabs">
+            <div role="group" class="type-tabs" data-testid="live-type-tabs">
                 {#each types as type (type)}
+                    <!-- いま出している種別は aria-pressed で言う (色だけにしない) -->
                     <button type="button"
-                        class="btn join-item btn-sm {shown === type ? 'btn-active' : ''}"
+                        class="small {shown === type ? '' : 'secondary outline'}"
+                        aria-pressed={shown === type}
                         onclick={() => (picked = type)}
                         data-testid="live-type-{type}"
                     >
@@ -699,22 +701,15 @@
             だけに見えて押せると気付けなかった。枠を持たせ、指を乗せると浮かせ、
             いま映しているものは色で塗る
         -->
-            <ul
-                bind:this={list}
-                class="flex-1 space-y-1 overflow-y-auto md:min-h-0"
-                data-testid="live-channels"
-            >
+            <ul bind:this={list} class="channels" data-testid="live-channels">
                 {#each listed as channel (channel.id)}
                     <!-- いま映しているものかどうかは、この行の中で5回使う -->
                     {@const tuned = current?.id === channel.id}
-                    <li class="flex items-stretch gap-1">
+                    <li class="channel-item">
                         <button type="button"
                             bind:this={rows[channel.id]}
-                            class="flex min-w-0 flex-1 cursor-pointer items-center gap-3 rounded-lg border p-2
-                               text-left transition-colors
-                               {tuned
-                                ? 'border-primary bg-primary/15 ring-primary/40 ring-1'
-                                : 'border-base-300 hover:border-base-content/30 hover:bg-base-200'}"
+                            class="channel"
+                            class:tuned
                             onclick={() => select(channel)}
                             aria-current={tuned ? 'true' : undefined}
                             data-testid="live-channel"
@@ -727,42 +722,29 @@
                             BS/CS は3桁番号 (BS朝日1=151)。局名だけだと、テレビで
                             覚えている番号から探せない
                         -->
-                            <span
-                                class="text-base-content/50 w-7 shrink-0 text-right font-mono text-xs
-                                   tabular-nums"
-                                data-testid="live-number"
-                            >
+                            <span class="channel-number" data-testid="live-number">
                                 {channel.number ?? ''}
                             </span>
                             {#if channel.hasLogo}
-                                <img
-                                    src="/api/services/{channel.id}/logo"
-                                    alt=""
-                                    class="size-8 shrink-0 rounded object-contain"
-                                />
+                                <img src="/api/services/{channel.id}/logo" alt="" class="channel-logo" />
                             {:else}
-                                <span
-                                    class="bg-base-300 flex size-8 shrink-0 items-center justify-center rounded text-xs"
-                                >
+                                <span class="channel-logo channel-type">
                                     {channel.type}
                                 </span>
                             {/if}
-                            <span class="min-w-0 flex-1">
-                                <span
-                                    class="block truncate text-sm font-medium
-                                       {tuned ? 'text-primary' : ''}"
-                                >
+                            <span class="channel-text">
+                                <span class="channel-name">
                                     {channel.name}
                                 </span>
                                 {#if channel.now}
-                                    <span class="text-base-content/60 block truncate text-xs">
+                                    <span class="channel-now">
                                         {channel.now.name}
                                     </span>
                                 {/if}
                             </span>
                             <!-- いま映しているもの。色だけだと、色の見え方が違う人に伝わらない -->
                             {#if tuned}
-                                <span class="badge badge-primary badge-sm shrink-0">視聴中</span>
+                                <span class="tag primary channel-badge">視聴中</span>
                             {/if}
                         </button>
 
@@ -774,7 +756,7 @@
                     -->
                         {#if channel.now}
                             <button type="button"
-                                class="btn btn-sm btn-ghost h-auto shrink-0 self-stretch"
+                                class="ghost small channel-detail"
                                 onclick={() => openDetail(channel)}
                                 aria-label="{channel.now.name} の詳細"
                                 data-testid="live-channel-detail"
@@ -790,3 +772,199 @@
 </div>
 
 <Toasts {notices} />
+
+<style>
+    /*
+     * 映像を左、局を右。畳まれる幅では縦に積む。
+     * 広い画面 (md = 768px) ではページごとスクロールさせず、動くのは右の一覧だけ。
+     * min-height: 0 が要る — 付けないと flex の子は中身の高さで突っ張って、外側の overflow が効かない
+     */
+    .live {
+        display: flex;
+        flex-direction: column;
+        gap: 1rem;
+    }
+    .live-main {
+        display: flex;
+        min-width: 0;
+        flex: 1;
+        flex-direction: column;
+    }
+    .live-side {
+        display: flex;
+        flex-direction: column;
+    }
+    @media (min-width: 768px) {
+        .live {
+            height: 100%;
+            min-height: 0;
+            flex-direction: row;
+        }
+        .live-main {
+            min-height: 0;
+        }
+        .live-side {
+            width: 16rem;
+            min-height: 0;
+            flex-shrink: 0;
+        }
+    }
+    @media (min-width: 1024px) {
+        .live-side {
+            width: 20rem;
+        }
+    }
+    /* 操作の色は3画面同一。摘みは主の色 */
+    .seek {
+        width: 100%;
+        margin: 0;
+        accent-color: var(--pico-primary-background);
+    }
+    .control-row {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 0.25rem;
+        margin-top: 0.25rem;
+        color: #fff;
+    }
+    .track-label {
+        display: inline-block;
+        max-width: 7rem;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        vertical-align: bottom;
+    }
+    /* 測り直す口。読みものの行に置くので、ボタンの形にはしない */
+    .relearn {
+        margin: 0;
+        padding: 0;
+        border: 0;
+        background: none;
+        color: inherit;
+        font: inherit;
+        text-decoration: underline dotted;
+        text-underline-offset: 2px;
+        cursor: pointer;
+    }
+    .relearn:hover {
+        color: #fff;
+    }
+    .unmute {
+        position: absolute;
+        top: 0.75rem;
+        left: 0.75rem;
+        gap: 0.5rem;
+    }
+    .type-tabs {
+        width: auto;
+        margin-bottom: 0.5rem;
+    }
+    .channels {
+        flex: 1;
+        margin: 0;
+        padding: 0;
+        overflow-y: auto;
+        list-style: none;
+    }
+    @media (min-width: 768px) {
+        .channels {
+            min-height: 0;
+        }
+    }
+    .channel-item {
+        display: flex;
+        align-items: stretch;
+        gap: 0.25rem;
+        margin: 0;
+        list-style: none;
+    }
+    .channel-item + .channel-item {
+        margin-top: 0.25rem;
+    }
+    /* 押せると分かる形にする。枠を持たせ、指を乗せると浮かせ、いま映しているものは色で塗る */
+    .channel {
+        display: flex;
+        min-width: 0;
+        flex: 1;
+        align-items: center;
+        gap: 0.75rem;
+        margin: 0;
+        padding: 0.5rem;
+        border: 1px solid var(--dp-base-300);
+        border-radius: 0.5rem;
+        background: transparent;
+        color: inherit;
+        text-align: left;
+        font-size: inherit;
+        font-weight: normal;
+        cursor: pointer;
+        transition:
+            background-color 0.15s,
+            border-color 0.15s;
+    }
+    .channel:hover {
+        border-color: color-mix(in srgb, var(--pico-color) 30%, transparent);
+        background: var(--dp-base-200);
+    }
+    .channel.tuned {
+        border-color: var(--pico-primary-background);
+        background: color-mix(in srgb, var(--pico-primary-background) 15%, transparent);
+        box-shadow: 0 0 0 1px color-mix(in srgb, var(--pico-primary-background) 40%, transparent);
+    }
+    .channel-number {
+        width: 1.75rem;
+        flex-shrink: 0;
+        text-align: right;
+        font-family: var(--pico-font-family-monospace, monospace);
+        font-size: 0.75rem;
+        font-variant-numeric: tabular-nums;
+        opacity: 0.5;
+    }
+    .channel-logo {
+        width: 2rem;
+        height: 2rem;
+        flex-shrink: 0;
+        border-radius: 0.25rem;
+        object-fit: contain;
+    }
+    .channel-type {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: var(--dp-base-300);
+        font-size: 0.75rem;
+    }
+    .channel-text {
+        min-width: 0;
+        flex: 1;
+    }
+    .channel-name,
+    .channel-now {
+        display: block;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+    .channel-name {
+        font-size: 0.875rem;
+        font-weight: 500;
+    }
+    .tuned .channel-name {
+        color: var(--pico-primary);
+    }
+    .channel-now {
+        font-size: 0.75rem;
+        opacity: 0.6;
+    }
+    .channel-badge {
+        flex-shrink: 0;
+    }
+    .channel-detail {
+        height: auto;
+        flex-shrink: 0;
+        align-self: stretch;
+        margin: 0;
+    }
+</style>

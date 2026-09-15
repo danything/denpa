@@ -202,7 +202,7 @@ test.describe('ライブ視聴', () => {
      */
     test('チャンネル一覧を地上波/BS/CSで切り替えられる', async ({ page }) => {
         await goto(page, '/live');
-        await expect(page.getByTestId('live-type-GR')).toHaveClass(/btn-active/);
+        await expect(page.getByTestId('live-type-GR')).toHaveAttribute('aria-pressed', 'true');
         // 地上波を見ているので、一覧に出るのは地上波だけ
         const shown = page.getByTestId('live-channel');
         await expect(shown.first()).toBeVisible();
@@ -211,7 +211,7 @@ test.describe('ライブ視聴', () => {
         }
 
         await page.getByTestId('live-type-BS').click();
-        await expect(page.getByTestId('live-type-BS')).toHaveClass(/btn-active/);
+        await expect(page.getByTestId('live-type-BS')).toHaveAttribute('aria-pressed', 'true');
         await expect(shown.first()).toHaveAttribute('data-channel', /^BS\//);
         // 切り替えただけでは選局しない。見ているものはそのまま
         await expect(page.getByTestId('live-title')).toBeVisible();

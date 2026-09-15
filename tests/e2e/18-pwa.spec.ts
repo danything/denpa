@@ -110,10 +110,11 @@ test.describe('PWA', () => {
      */
     test('土台の高さに画面単位を使わない', async () => {
         const layout = await readFile('src/routes/+layout.svelte', 'utf8');
-        const root = /<div\s+class="(flex min-h-[^"]*)"/.exec(layout)?.[1];
-        expect(root, '土台の class が見つからない').toBeTruthy();
-        expect(root).toContain('min-h-full');
-        expect(root).not.toMatch(/\b\d+(dvh|svh|lvh|vh)\b|h-screen/);
+        // 土台は `<div class="shell">`。高さの決まりはそのファイルの <style> の `.shell` にある
+        expect(/<div\s+class="shell\b/.test(layout), '土台の class が見つからない').toBe(true);
+        const rules = [...layout.matchAll(/\.shell[^{]*\{([^}]*)\}/g)].map((m) => m[1]).join('\n');
+        expect(rules).toContain('min-height: 100%');
+        expect(rules).not.toMatch(/\d+(dvh|svh|lvh|vh)\b/);
     });
 
     /*

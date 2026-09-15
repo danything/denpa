@@ -1,4 +1,5 @@
 <script lang="ts">
+    import { DropdownMenu } from 'bits-ui';
     import { goto } from '$app/navigation';
     import { submitting } from '$lib/actions';
     import { arming } from '$lib/arming.svelte';
@@ -420,9 +421,9 @@
     押すものは指で押せる大きさ (既定の btn) にしてある
 -->
 {#snippet title(state: string, badge: string, name: string, testid: string)}
-    <div class="flex flex-wrap items-center gap-2">
-        <span class="badge whitespace-nowrap {badge}" data-testid={testid}>{state}</span>
-        <span class="font-medium break-words">{name}</span>
+    <div class="cluster">
+        <span class="tag {badge}" data-testid={testid}>{state}</span>
+        <span class="row-name">{name}</span>
     </div>
 {/snippet}
 
@@ -432,13 +433,13 @@
     何も出さない** — ライブ画面と違って一覧は行が細く、代わりの箱を置くと局名より目立つ
 -->
 {#snippet meta(parts: string[], logo: { serviceId: number; has: boolean } | null = null)}
-    <div class="text-base-content/60 mt-1 flex flex-wrap items-center gap-x-1.5 text-sm break-words">
+    <div class="row-meta">
         {#if logo?.has}
             <img
                 src="/api/services/{logo.serviceId}/logo"
                 alt=""
                 loading="lazy"
-                class="inline-block h-4 w-auto shrink-0 rounded-xs object-contain"
+                class="service-logo"
                 data-testid="service-logo"
             />
         {/if}
@@ -456,13 +457,13 @@
     ルール名をそのまま入口にする。行にボタンを足すと窮屈になる
 -->
 {#snippet source(ruleId: number | null, ruleName: string | null, manual: boolean)}
-    <div class="text-base-content/60 mt-0.5 text-xs" data-testid="rule-name">
+    <div class="row-sub muted tiny" data-testid="rule-name">
         {#if manual}
             手動予約
         {:else}
             ルール:
             {#if ruleId !== null}
-                <a class="link" href="/rules?edit={ruleId}">{ruleName}</a>
+                <a href="/rules?edit={ruleId}">{ruleName}</a>
             {:else}
                 (削除済み)
             {/if}
@@ -482,22 +483,22 @@
     ([+layout.svelte](./+layout.svelte) の `FILLED`)。画面ごとに違えていた頃は、
     同じ幅なのに画面によって1段だったり2段だったりした
 -->
-<div class="md:flex md:h-full md:flex-col">
+<div class="board">
     <Toasts {notices} source={form} />
 
-    <div class="grid gap-6 md:min-h-0 md:flex-1 md:grid-cols-5">
+    <div class="board-grid">
         <!--
         min-w-0 が無いと、中の表の幅にグリッドの列が引きずられてページごとはみ出す。
         1列に畳まれたときは録画を先に出す(見るのはたいてい録れたほうなので)
     -->
-        <section class="order-2 min-w-0 md:order-none md:col-span-2 md:flex md:min-h-0 md:flex-col">
-            <div class="mb-2 flex min-h-8 flex-wrap items-center justify-between gap-2">
-                <h2 class="text-lg font-bold">予約</h2>
+        <section class="board-col reservations">
+            <div class="board-head">
+                <h2>予約</h2>
                 <!--
                     「競合を再計算」は置いていない。番組表を取り直したときとルールを
                     いじったときに必ず走るので、押す機会が無かった
                 -->
-                <a class="btn btn-sm" href={data.showFinished ? '/' : '/?all=1'}>
+                <a class="button secondary outline small" href={data.showFinished ? '/' : '/?all=1'}>
                     {data.showFinished ? '進行中のみ' : '完了分も表示'}
                 </a>
             </div>
@@ -506,23 +507,23 @@
             残りいっぱいまで伸ばして、中だけスクロールさせる。2つ並べたときに、
             片方が長いともう片方が下に置いていかれるため
         -->
-            <div class="overflow-auto rounded-box bg-base-100 shadow md:min-h-0 md:flex-1">
-                <div class="divide-base-300 divide-y" data-testid="reservation-list">
+            <div class="board-box">
+                <div class="rows" data-testid="reservation-list">
                     {#each data.reservations as res (res.id)}
                         <!-- 行を押すと番組表と同じ詳細が出る -->
                         <div
                             data-testid="reservation-row"
                             data-reservation-id={res.id}
                             data-program-id={res.program_id}
-                            class="hover:bg-base-200/60 relative cursor-pointer p-3"
+                            class="row"
                             role="button"
                             tabindex="0"
                             onclick={(event) => rowClick(event, null, () => openDetail(res.program_id, res))}
                             onkeydown={(event) =>
                                 rowClick(event, null, () => openDetail(res.program_id, res))}
                         >
-                            <div class="flex flex-wrap items-start gap-x-3 gap-y-2">
-                                <div class="min-w-0 flex-1 basis-56" data-testid="row-body">
+                            <div class="row-inner">
+                                <div class="row-body" data-testid="row-body">
                                     {@render title(
                                         stateLabel(res.state),
                                         badgeClass(res.state),
@@ -537,7 +538,7 @@
                                         { serviceId: res.service_id, has: res.has_logo === true },
                                     )}
                                     {#if res.conflict_reason}
-                                        <div class="text-error mt-0.5 text-sm">{res.conflict_reason}</div>
+                                        <div class="row-sub text-error small">{res.conflict_reason}</div>
                                     {/if}
                                     <!--
                                         **譲ることになっているなら、録る前に言う。** 丸ごと
@@ -545,7 +546,7 @@
                                         黙っていると「録れたつもり」で頭が無い録画ができる
                                     -->
                                     {#if clipNote(res) !== null}
-                                        <div class="text-warning mt-0.5 text-sm" data-testid="reservation-clipped">
+                                        <div class="row-sub text-warning small" data-testid="reservation-clipped">
                                             {clipNote(res)}
                                         </div>
                                     {/if}
@@ -568,11 +569,11 @@
                                     -->
                                 </div>
 
-                                <div class="flex shrink-0 flex-wrap items-center gap-2">
+                                <div class="row-actions">
                                     {#if res.recording_id !== null}
                                         <!-- 追っかけ再生 (issue #16)。録っている最中でも頭から観られる -->
                                         <a
-                                            class="btn btn-primary"
+                                            class="button"
                                             href="/chase/{res.recording_id}"
                                             data-testid="chase-button"
                                         >
@@ -583,7 +584,7 @@
                                         <form method="POST" action="?/cancel" use:submitting>
                                             <input type="hidden" name="id" value={res.id} />
                                             <button type="submit"
-                                                class="btn btn-error btn-outline"
+                                                class="outline danger"
                                                 data-testid="cancel-button"
                                             >
                                                 取消
@@ -596,58 +597,59 @@
                                         -->
                                         <form method="POST" action="?/restore" use:submitting>
                                             <input type="hidden" name="id" value={res.id} />
-                                            <button type="submit" class="btn" data-testid="restore-button">戻す</button>
+                                            <button type="submit" class="secondary" data-testid="restore-button">戻す</button>
                                         </form>
                                     {/if}
                                 </div>
                             </div>
                         </div>
                     {:else}
-                        <div class="text-base-content/60 p-3">予約はありません</div>
+                        <div class="row-empty muted">予約はありません</div>
                     {/each}
                 </div>
             </div>
         </section>
 
-        <section class="order-1 min-w-0 md:order-none md:col-span-3 md:flex md:min-h-0 md:flex-col">
+        <section class="board-col recordings">
             <!-- 見出しの高さと下の余白は予約側と揃える。並べたときにずれて見えるため -->
-            <div class="mb-2 flex min-h-8 flex-wrap items-center justify-between gap-2">
-                <h2 class="text-lg font-bold">録画</h2>
-                <div class="flex flex-wrap items-center gap-2">
+            <div class="board-head">
+                <h2>録画</h2>
+                <div class="cluster">
                     <!--
                         **絞り込み。** 溜まると300件フラットは指のリモコンで辿れない。
                         番組名・シリーズ・副題・局にかかる (`+page.server.ts`)。GET なので
                         URL に残り、共有・戻るがそのまま効く。削除済み表示は引き継ぐ
                     -->
-                    <form method="GET" action="/" class="join" data-sveltekit-keepfocus>
+                    <form method="GET" action="/" class="search" data-sveltekit-keepfocus>
                         {#if data.showDeleted}
                             <input type="hidden" name="deleted" value="1" />
                         {/if}
-                        <input
-                            type="search"
-                            name="q"
-                            value={data.q}
-                            placeholder="番組名・シリーズ・副題・局で絞り込み"
-                            aria-label="録画を絞り込む"
-                            class="input input-sm input-bordered join-item w-40 sm:w-56"
-                            data-testid="recording-search"
-                        />
-                        <button type="submit" class="btn btn-sm join-item">絞り込む</button>
+                        <div role="group">
+                            <input
+                                type="search"
+                                name="q"
+                                value={data.q}
+                                placeholder="番組名・シリーズ・副題・局で絞り込み"
+                                aria-label="録画を絞り込む"
+                                data-testid="recording-search"
+                            />
+                            <button type="submit" class="secondary small">絞り込む</button>
+                        </div>
                     </form>
                     {#if data.q !== ''}
                         <a
-                            class="btn btn-sm btn-ghost"
+                            class="button ghost small"
                             href={data.showDeleted ? '/?deleted=1' : '/'}
                             data-testid="recording-search-clear"
                         >
                             解除
                         </a>
                     {/if}
-                    <a class="btn btn-sm" href={data.showDeleted ? '/' : '/?deleted=1'}>
+                    <a class="button secondary outline small" href={data.showDeleted ? '/' : '/?deleted=1'}>
                         {data.showDeleted ? '削除済みを隠す' : '削除済みも表示'}
                     </a>
                     <form method="POST" action="?/reconcile" use:submitting>
-                        <button type="submit" class="btn btn-sm" data-testid="reconcile-button">ファイルと照合</button>
+                        <button type="submit" class="secondary outline small" data-testid="reconcile-button">ファイルと照合</button>
                     </form>
                 </div>
             </div>
@@ -656,8 +658,8 @@
             残りいっぱいまで伸ばして、中だけスクロールさせる。2つ並べたときに、
             片方が長いともう片方が下に置いていかれるため
         -->
-            <div class="overflow-auto rounded-box bg-base-100 shadow md:min-h-0 md:flex-1">
-                <div class="divide-base-300 divide-y" data-testid="recording-list">
+            <div class="board-box">
+                <div class="rows" data-testid="recording-list">
                     {#each rightRows as row (row.key)}
                     {#if row.kind === 'missed'}
                         {@const res = row.res}
@@ -669,14 +671,14 @@
                         <div
                             data-testid="missed-row"
                             data-program-id={res.program_id}
-                            class="hover:bg-base-200/60 relative cursor-pointer p-3"
+                            class="row"
                             role="button"
                             tabindex="0"
                             onclick={(event) => rowClick(event, null, () => openMissed(res))}
                             onkeydown={(event) => rowClick(event, null, () => openMissed(res))}
                         >
-                            <div class="flex flex-wrap items-start gap-x-3 gap-y-2">
-                                <div class="min-w-0 flex-1 basis-56" data-testid="row-body">
+                            <div class="row-inner">
+                                <div class="row-body" data-testid="row-body">
                                     {@render title(stateLabel('missed'), badgeClass('missed'), res.name, 'missed-state')}
                                     {@render meta(
                                         [
@@ -694,17 +696,17 @@
                                     構えの鍵は負の値にして、録画のIDと混ざらないようにする
                                     (deleting は録画と共用で、IDの空間が別のため)
                                 -->
-                                <div class="flex shrink-0 flex-wrap items-center gap-2">
+                                <div class="row-actions">
                                     <form method="POST" action="?/deleteMissed" use:submitting>
                                         <input type="hidden" name="id" value={res.id} />
                                         {#if deleting.armed === -res.id}
-                                            <button type="submit" class="btn btn-error" data-testid="delete-confirm">
+                                            <button type="submit" class="danger" data-testid="delete-confirm">
                                                 確定
                                             </button>
                                         {:else}
                                             <button
                                                 type="button"
-                                                class="btn btn-error btn-outline"
+                                                class="outline danger"
                                                 onclick={() => deleting.arm(-res.id)}
                                                 data-testid="delete-button"
                                             >
@@ -746,13 +748,13 @@
                             data-alt-path={rec.alt_path}
                             data-duration-ms={rec.duration_ms}
                             data-cm-ranges={rec.cm_ranges === null ? null : JSON.stringify(rec.cm_ranges)}
-                            class="group hover:bg-base-200/60 relative cursor-pointer p-3"
+                            class="row playable"
                             role="button"
                             tabindex="0"
                             onclick={(event) => rowClick(event, link, () => openRecording(rec))}
                             onkeydown={(event) => rowClick(event, link, () => openRecording(rec))}
                         >
-                            <div class="flex flex-wrap items-start gap-x-3 gap-y-2">
+                            <div class="row-inner">
                                 <!--
                                     再生の印。**押すもの (button) にはしない。**
                                     行そのものが再生なので、同じ働きの的を二重に置くと
@@ -767,29 +769,23 @@
                                         (ポスターより前に焼いたもの等) ので、読めなければ絵を
                                         隠して枠だけ残す (`onerror`)。枠と再生印はいつでも出す
                                     -->
-                                    <div
-                                        class="bg-base-300 relative mt-0.5 aspect-video w-16 shrink-0 overflow-hidden rounded sm:w-24"
-                                        data-testid="play-hint"
-                                    >
+                                    <div class="poster" data-testid="play-hint">
                                         {#if rec.library_path !== null}
                                             <img
                                                 src="/api/recordings/{rec.id}/poster"
                                                 alt=""
                                                 loading="lazy"
-                                                class="h-full w-full object-cover"
+                                                class="poster-img"
                                                 onerror={(event) => {
                                                     (event.currentTarget as HTMLImageElement).style.display =
                                                         'none';
                                                 }}
                                             />
                                         {/if}
-                                        <span
-                                            class="text-primary-content absolute inset-0 flex items-center justify-center bg-black/0 transition-colors group-hover:bg-black/40"
-                                            aria-hidden="true"
-                                        >
+                                        <span class="poster-play" aria-hidden="true">
                                             <svg
                                                 viewBox="0 0 24 24"
-                                                class="size-6 opacity-0 drop-shadow transition-opacity group-hover:opacity-100"
+                                                class="poster-icon"
                                                 fill="currentColor"
                                                 aria-hidden="true"
                                             >
@@ -798,7 +794,7 @@
                                         </span>
                                     </div>
                                 {/if}
-                                <div class="min-w-0 flex-1 basis-56" data-testid="row-body">
+                                <div class="row-body" data-testid="row-body">
                                     <!--
                                         録画の状態とエンコードの状態を1つにまとめて出す
                                         (rowState)。消したもの (deleted) も録画の状態から
@@ -808,11 +804,11 @@
                                     {#if held !== undefined}
                                         <!-- 端末に入っている印。保存中はエンコードと同じく割合を添える -->
                                         <span
-                                            class="badge badge-sm mt-1 {held.state === 'ready'
-                                                ? 'badge-success'
+                                            class="tag offline-tag {held.state === 'ready'
+                                                ? 'success'
                                                 : held.state === 'failed'
-                                                  ? 'badge-error'
-                                                  : 'badge-ghost'}"
+                                                  ? 'error'
+                                                  : ''}"
                                             data-testid="offline-badge"
                                         >
                                             {held.state === 'ready'
@@ -849,7 +845,7 @@
                                         行に書く
                                     -->
                                     {#if clipNote(rec, true) !== null}
-                                        <div class="text-warning mt-0.5 text-sm" data-testid="recording-clipped">
+                                        <div class="row-sub text-warning small" data-testid="recording-clipped">
                                             {clipNote(rec, true)}
                                         </div>
                                     {/if}
@@ -866,21 +862,11 @@
                                         {@const total = rec.duration_ms ?? rec.end_at - rec.start_at}
                                         {@const frac =
                                             total > 0 ? Math.min(1, rec.resume_ms / total) : 0}
-                                        <div
-                                            class="mt-1.5 flex items-center gap-2"
-                                            data-testid="recording-progress"
-                                        >
-                                            <div
-                                                class="bg-base-300 h-1 min-w-0 flex-1 overflow-hidden rounded-full"
-                                            >
-                                                <div
-                                                    class="bg-primary h-full"
-                                                    style="width: {frac * 100}%"
-                                                ></div>
+                                        <div class="resume" data-testid="recording-progress">
+                                            <div class="resume-track">
+                                                <div class="resume-fill" style="width: {frac * 100}%"></div>
                                             </div>
-                                            <span
-                                                class="text-base-content/60 shrink-0 text-xs tabular-nums"
-                                            >
+                                            <span class="resume-left muted tiny num">
                                                 残り{durationMs(Math.max(0, total - rec.resume_ms))}
                                             </span>
                                         </div>
@@ -911,9 +897,9 @@
                                             のに結果が使い物にならなかったとき (番組の 100% がCM判定など)
                                             も、覚えているほうが怪しいので同じ口を出す
                                         -->
-                                        <div class="text-warning mt-0.5 text-sm" data-testid="logo-missing">
+                                        <div class="row-sub text-warning small" data-testid="logo-missing">
                                             ロゴでのCM判定に失敗 (無音のみで判定)
-                                            <span class="text-base-content/60"
+                                            <span class="muted"
                                                 >— チューナー画面でロゴの位置を教えられます</span
                                             >
                                         </div>
@@ -929,18 +915,12 @@
                                         <!-- SSE の生放送 (encode-live) があればそちら。読み直しを待たずに動く -->
                                         {@const live = encodeLive.entries[rec.id]}
                                         {@const liveEta = live !== undefined ? live.etaMs : rec.job_eta_ms}
-                                        <div
-                                            class="text-base-content/60 mt-0.5 text-xs"
-                                            data-testid="encode-progress"
-                                        >
+                                        <div class="row-sub muted tiny" data-testid="encode-progress">
                                             {percent(live?.percent ?? rec.job_percent ?? 0)}
                                             {#if eta(liveEta)}・{eta(liveEta)}{/if}
                                         </div>
                                     {:else if rec.job_state === 'running' && rec.job_log}
-                                        <div
-                                            class="text-base-content/60 mt-0.5 text-xs"
-                                            data-testid="encode-step"
-                                        >
+                                        <div class="row-sub muted tiny" data-testid="encode-step">
                                             {rec.job_log}
                                         </div>
                                     {/if}
@@ -951,7 +931,7 @@
                                     無いので、行の文字と見分けが付かず、どこからどこまでが
                                     押せるのか分からなかった
                                 -->
-                                <div class="flex shrink-0 flex-wrap items-center gap-2">
+                                <div class="row-actions">
                                     <!--
                                         中身を読む入口は、**行を押しても詳細にならない行だけ**に置く。
                                         観られる行は押すと再生に行くので、説明やCMの位置を見たい
@@ -963,7 +943,7 @@
                                     {#if canPlay}
                                         <button
                                             type="button"
-                                            class="btn btn-outline"
+                                            class="secondary outline"
                                             onclick={() => openRecording(rec)}
                                             data-testid="detail-button"
                                         >
@@ -985,7 +965,7 @@
                                             <form method="POST" action="?/cancelEncode" use:submitting>
                                                 <input type="hidden" name="id" value={rec.job_id} />
                                                 <button type="submit"
-                                                    class="btn btn-error btn-outline"
+                                                    class="outline danger"
                                                     data-testid="encode-cancel"
                                                 >
                                                     エンコード中止
@@ -1010,7 +990,7 @@
                                                 {#if deleting.armed === rec.id}
                                                     <!-- 幅が変わるとボタンが動いて押し間違える。2文字で揃える -->
                                                     <button type="submit"
-                                                        class="btn btn-error"
+                                                        class="danger"
                                                         data-testid="delete-confirm"
                                                     >
                                                         確定
@@ -1018,7 +998,7 @@
                                                 {:else}
                                                     <button
                                                         type="button"
-                                                        class="btn btn-error btn-outline"
+                                                        class="outline danger"
                                                         onclick={() => deleting.arm(rec.id)}
                                                         data-testid="delete-button"
                                                     >
@@ -1041,7 +1021,7 @@
                             {#if rec.job_id !== null}
                                 {@const barPercent = encodeLive.entries[rec.id]?.percent ?? rec.job_percent ?? 0}
                                 <progress
-                                    class="progress progress-primary absolute inset-x-0 bottom-0 h-1 w-full rounded-none"
+                                    class="row-bar"
                                     value={rec.job_state === 'running' && barPercent > 0
                                         ? barPercent
                                         : undefined}
@@ -1051,7 +1031,7 @@
                             {:else if offline.entries[rec.id]?.state === 'downloading'}
                                 <!-- 端末への保存もエンコードと同じ見せ方。測れない間は動くだけのバー -->
                                 <progress
-                                    class="progress progress-success absolute inset-x-0 bottom-0 h-1 w-full rounded-none"
+                                    class="row-bar success"
                                     value={offline.entries[rec.id]?.progress ?? undefined}
                                     max="1"
                                     data-testid="offline-bar"
@@ -1060,7 +1040,7 @@
                         </div>
                     {/if}
                     {:else}
-                        <div class="text-base-content/60 p-3">
+                        <div class="row-empty muted">
                             {data.q === '' ? '録画はありません' : `「${data.q}」に一致する録画はありません`}
                         </div>
                     {/each}
@@ -1070,10 +1050,7 @@
                         誘う一行を出す (`+page.server.ts` の LIMIT 300)
                     -->
                     {#if data.recordings.length >= 300}
-                        <div
-                            class="text-base-content/60 border-base-300 border-t p-3 text-sm"
-                            data-testid="recording-truncated"
-                        >
+                        <div class="row-empty truncated muted small" data-testid="recording-truncated">
                             新しい順に300件まで表示しています。古いものは絞り込みで探してください。
                         </div>
                     {/if}
@@ -1121,7 +1098,7 @@
             {#each data.vlcTargets as tv (tv.host)}
                 <button
                     type="button"
-                    class="btn btn-outline"
+                    class="secondary outline"
                     onclick={() => playOnTv(tv, rec)}
                     data-testid="vlc-play-button"
                 >
@@ -1138,7 +1115,7 @@
                 {#if offline.entries[rec.id] === undefined || offline.entries[rec.id]?.state === 'failed'}
                     <button
                         type="button"
-                        class="btn btn-outline"
+                        class="secondary outline"
                         onclick={() => saveToDevice(rec)}
                         data-testid="offline-save-button"
                     >
@@ -1149,7 +1126,7 @@
                 {#if held !== undefined}
                     <button
                         type="button"
-                        class="btn btn-outline"
+                        class="secondary outline"
                         onclick={async () => {
                             await removeLocal(rec.id);
                             detail.close();
@@ -1169,114 +1146,354 @@
                 下端に居るので、下に開くと枠から出る)。中身は上から
                 「持ち出す」「渡す」「直す」の順。
 
-                **開閉は focus 任せ** (daisyUI の dropdown)。トリガーを button に
-                すると Safari がクリックで focus を入れず開かないので、
-                role="button" の div にしてある。
+                **開閉は Bits UI の DropdownMenu。** 位置は Bits UI が枠に収まるように
+                ずらす (daisyUI の頃は、スマホ幅でフッターが折り返すと左へ伸びた分が
+                modal-box からはみ出して切れていた)。
 
-                **`static` で、メニューの基準をボタンから枠 (modal-action) に移す。**
-                ボタン基準だとメニュー (w-64) はボタンの右端から左へ伸びる。
-                スマホ幅でフッターが折り返してボタンが真ん中あたりに来ると、
-                左へ伸びた分が modal-box からはみ出して切れていた
+                **閉じている間も中身は DOM に置く (`forceMount`)。** どの口が出るかを
+                開かずに確かめられるように (e2e が数を見ている)。閉じている間は
+                `hidden` で消す — 見えないまま居座ってクリックを食うことが無いように
+                (daisyUI の頃に実機で発覚した「見えないダウンロード」の二の舞を避ける)
             -->
-            <div class="dropdown dropdown-top dropdown-end static">
-                <div tabindex="0" role="button" class="btn btn-outline" data-testid="detail-more">その他…</div>
-                <!--
-                    **dropdown-content 自身に display 系のクラスを載せない。**
-                    daisyUI は閉じている間を display:none にするが、Tailwind の
-                    `flex` はそれより強く効いて (utilities 直下 > daisyui のサブレイヤー)
-                    **常時 display:flex** になる。opacity は 0 のままなので、
-                    「その他…」の真上に見えないメニューが居座って、押すと見えない
-                    「ダウンロード」が発火していた (実機で発覚)。縦積みは内側の div で
-                -->
-                <div
-                    class="dropdown-content bg-base-100 rounded-box border-base-300 z-10 mb-1 w-64 max-w-full border p-2 shadow-lg"
-                >
-                    <div class="flex flex-col">
-                    <!--
-                        まだエンコードしていないものや、引き継いだ未エンコードの録画は
-                        生TSしか無い。配信は library_path ?? ts_path を返すので、
-                        どちらかがあれば落とせる。形式が複数あるときはラベルに添えて
-                        並べる (「AV1」だけの札では、押すと何が起きるのか読めなかった)。
-                        **押したら閉じる** — 落とし始めたあとも詳細が残っていると、
-                        押せたのかどうかが分からない
-                    -->
-                    <button
-                        type="button"
-                        class="btn btn-ghost justify-start"
-                        onclick={() => download(rec.id, bothFiles(rec) || hasAlt(rec) ? 'encoded' : undefined)}
-                        data-testid="download-link"
-                    >
-                        {hasAlt(rec)
-                            ? 'ダウンロード (AV1)'
-                            : bothFiles(rec)
-                              ? 'ダウンロード (エンコード済み)'
-                              : 'ダウンロード'}
-                    </button>
-                    {#if hasAlt(rec)}
-                        <!-- 両方のコーデックを焼いた録画でだけ。AV1 を解けない相手はこちら -->
-                        <button
-                            type="button"
-                            class="btn btn-ghost justify-start"
-                            onclick={() => download(rec.id, 'alt')}
-                            data-testid="download-alt-link"
-                        >
-                            ダウンロード (H.264)
-                        </button>
-                    {/if}
-                    {#if bothFiles(rec)}
-                        <!-- 元も落とせるように。両方残っているときだけ (`bothFiles`) -->
-                        <button
-                            type="button"
-                            class="btn btn-ghost justify-start"
-                            onclick={() => download(rec.id, 'ts')}
-                            data-testid="download-ts-link"
-                        >
-                            ダウンロード (生TS)
-                        </button>
-                    {/if}
-                    <!--
-                        **出先のプレイヤー向けの再生リンク** (share.ts)。24時間で
-                        切れるので、他人の機器の履歴に残っても腐るだけ。
-                        コピーしたら畳む (blur) — 開いたままだと押せたのか分からない
-                    -->
-                    <button
-                        type="button"
-                        class="btn btn-ghost justify-start"
-                        onclick={(event) => {
-                            (event.currentTarget as HTMLElement).blur();
-                            void copyShareLink(rec.id);
-                        }}
-                        data-testid="share-link-button"
-                    >
-                        再生リンクをコピー
-                    </button>
-                    {#if rec.job_id === null && encodeSource(rec) !== null}
-                        <!--
-                            録り直しの元になるのは生TS。エンコード済みを元にしても
-                            画質は戻らないので、生TSがあるときだけ出す。
+            <DropdownMenu.Root>
+                <DropdownMenu.Trigger class="secondary outline" data-testid="detail-more">その他…</DropdownMenu.Trigger>
+                <DropdownMenu.Content forceMount side="top" align="end" sideOffset={4} collisionPadding={8}>
+                    {#snippet child({ wrapperProps, props, open })}
+                        <div {...wrapperProps}>
+                            <div {...props} class="more-menu" hidden={!open} data-testid="detail-more-menu">
+                                <!--
+                                    まだエンコードしていないものや、引き継いだ未エンコードの録画は
+                                    生TSしか無い。配信は library_path ?? ts_path を返すので、
+                                    どちらかがあれば落とせる。形式が複数あるときはラベルに添えて
+                                    並べる (「AV1」だけの札では、押すと何が起きるのか読めなかった)。
+                                    **押したら閉じる** — 落とし始めたあとも詳細が残っていると、
+                                    押せたのかどうかが分からない
+                                -->
+                                <DropdownMenu.Item
+                                    onSelect={() =>
+                                        download(rec.id, bothFiles(rec) || hasAlt(rec) ? 'encoded' : undefined)}
+                                    data-testid="download-link"
+                                >
+                                    {hasAlt(rec)
+                                        ? 'ダウンロード (AV1)'
+                                        : bothFiles(rec)
+                                          ? 'ダウンロード (エンコード済み)'
+                                          : 'ダウンロード'}
+                                </DropdownMenu.Item>
+                                {#if hasAlt(rec)}
+                                    <!-- 両方のコーデックを焼いた録画でだけ。AV1 を解けない相手はこちら -->
+                                    <DropdownMenu.Item
+                                        onSelect={() => download(rec.id, 'alt')}
+                                        data-testid="download-alt-link"
+                                    >
+                                        ダウンロード (H.264)
+                                    </DropdownMenu.Item>
+                                {/if}
+                                {#if bothFiles(rec)}
+                                    <!-- 元も落とせるように。両方残っているときだけ (`bothFiles`) -->
+                                    <DropdownMenu.Item
+                                        onSelect={() => download(rec.id, 'ts')}
+                                        data-testid="download-ts-link"
+                                    >
+                                        ダウンロード (生TS)
+                                    </DropdownMenu.Item>
+                                {/if}
+                                <!--
+                                    **出先のプレイヤー向けの再生リンク** (share.ts)。24時間で
+                                    切れるので、他人の機器の履歴に残っても腐るだけ。
+                                    押したらメニューは閉じる — 開いたままだと押せたのか分からない
+                                -->
+                                <DropdownMenu.Item
+                                    onSelect={() => void copyShareLink(rec.id)}
+                                    data-testid="share-link-button"
+                                >
+                                    再生リンクをコピー
+                                </DropdownMenu.Item>
+                                {#if rec.job_id === null && encodeSource(rec) !== null}
+                                    <!--
+                                        録り直しの元になるのは生TS。エンコード済みを元にしても
+                                        画質は戻らないので、生TSがあるときだけ出す。
 
-                            **閉じるのは投げ終わってから。** 先に閉じると、断られた
-                            ときの知らせ (Toasts) が出る前に画面が変わってしまう
-                        -->
-                        <form
-                            method="POST"
-                            action="?/reencode"
-                            class="contents"
-                            use:submitting={() => async (options) => {
-                                await options.update();
-                                detail.close();
-                            }}
-                        >
-                            <input type="hidden" name="id" value={rec.id} />
-                            <button type="submit" class="btn btn-ghost justify-start" data-testid="reencode-button">
-                                再エンコード
-                            </button>
-                        </form>
-                    {/if}
-                    </div>
-                </div>
-            </div>
+                                        **閉じるのは投げ終わってから。** 先に閉じると、断られた
+                                        ときの知らせ (Toasts) が出る前に画面が変わってしまう
+                                    -->
+                                    <form
+                                        method="POST"
+                                        action="?/reencode"
+                                        class="menu-form"
+                                        use:submitting={() => async (options) => {
+                                            await options.update();
+                                            detail.close();
+                                        }}
+                                    >
+                                        <input type="hidden" name="id" value={rec.id} />
+                                        <DropdownMenu.Item closeOnSelect={false}>
+                                            {#snippet child({ props: itemProps })}
+                                                <button
+                                                    {...itemProps}
+                                                    type="submit"
+                                                    class="menu-button"
+                                                    data-testid="reencode-button"
+                                                >
+                                                    再エンコード
+                                                </button>
+                                            {/snippet}
+                                        </DropdownMenu.Item>
+                                    </form>
+                                {/if}
+                            </div>
+                        </div>
+                    {/snippet}
+                </DropdownMenu.Content>
+            </DropdownMenu.Root>
         {/if}
     {/if}
-    <button type="button" class="btn" onclick={() => detail.close()} data-testid="detail-close">閉じる</button>
+    <button type="button" class="secondary" onclick={() => detail.close()} data-testid="detail-close">閉じる</button>
 {/snippet}
+
+<style>
+    /*
+     * 広い画面 (md = 768px 以上) では2つの一覧を横に並べ、画面の残りを丁度使い切る。
+     * 畳まれる幅では素直にページごとスクロールさせる
+     */
+    .board-grid {
+        display: grid;
+        gap: 1.5rem;
+    }
+    .board-col {
+        /* min-width: 0 が無いと、中の幅にグリッドの列が引きずられてページごとはみ出す */
+        min-width: 0;
+    }
+    /* 1列に畳まれたときは録画を先に出す(見るのはたいてい録れたほうなので) */
+    .reservations {
+        order: 2;
+    }
+    .recordings {
+        order: 1;
+    }
+    @media (min-width: 768px) {
+        .board {
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+        }
+        .board-grid {
+            flex: 1;
+            min-height: 0;
+            grid-template-columns: repeat(5, minmax(0, 1fr));
+        }
+        .board-col {
+            display: flex;
+            flex-direction: column;
+            min-height: 0;
+            order: 0;
+        }
+        .reservations {
+            grid-column: span 2;
+        }
+        .recordings {
+            grid-column: span 3;
+        }
+        .board-box {
+            flex: 1;
+            min-height: 0;
+        }
+    }
+    .board-head {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        justify-content: space-between;
+        gap: 0.5rem;
+        min-height: 2rem;
+        margin-bottom: 0.5rem;
+    }
+    .board-head h2 {
+        font-size: 1.125rem;
+        margin: 0;
+    }
+    .search [role='group'] {
+        width: auto;
+        margin: 0;
+    }
+    .search input {
+        width: 10rem;
+        height: auto;
+        padding-block: 0.3rem;
+        font-size: 0.85rem;
+    }
+    @media (min-width: 640px) {
+        .search input {
+            width: 14rem;
+        }
+    }
+    .search button {
+        padding-block: 0.3rem;
+    }
+    /* 残りいっぱいまで伸ばして、中だけスクロールさせる */
+    .board-box {
+        overflow: auto;
+        border-radius: 1rem;
+        background: var(--dp-surface);
+        border: 1px solid var(--dp-base-300);
+    }
+    .rows > :global(* + *) {
+        border-top: 1px solid var(--dp-base-300);
+    }
+    .row {
+        position: relative;
+        cursor: pointer;
+        padding: 0.75rem;
+    }
+    .row:hover {
+        background: color-mix(in srgb, var(--dp-base-200) 60%, transparent);
+    }
+    .row-inner {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: flex-start;
+        gap: 0.5rem 0.75rem;
+    }
+    .row-body {
+        min-width: 0;
+        flex: 1 1 14rem;
+    }
+    .row-actions {
+        display: flex;
+        flex-shrink: 0;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 0.5rem;
+    }
+    .row-name {
+        font-weight: 500;
+        overflow-wrap: anywhere;
+    }
+    .row-meta {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 0 0.375rem;
+        margin-top: 0.25rem;
+        font-size: 0.875rem;
+        opacity: 0.65;
+        overflow-wrap: anywhere;
+    }
+    .row-sub {
+        margin-top: 0.125rem;
+    }
+    .service-logo {
+        display: inline-block;
+        height: 1rem;
+        width: auto;
+        flex-shrink: 0;
+        border-radius: 0.125rem;
+        object-fit: contain;
+    }
+    .row-empty {
+        padding: 0.75rem;
+    }
+    .truncated {
+        border-top: 1px solid var(--dp-base-300);
+    }
+    /* ポスターと再生の印。行に指を乗せると印が浮かぶ */
+    .poster {
+        position: relative;
+        margin-top: 0.125rem;
+        aspect-ratio: 16 / 9;
+        width: 4rem;
+        flex-shrink: 0;
+        overflow: hidden;
+        border-radius: 0.25rem;
+        background: var(--dp-base-300);
+    }
+    @media (min-width: 640px) {
+        .poster {
+            width: 6rem;
+        }
+    }
+    .poster-img {
+        height: 100%;
+        width: 100%;
+        object-fit: cover;
+    }
+    .poster-play {
+        position: absolute;
+        inset: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: #fff;
+        background: rgb(0 0 0 / 0);
+        transition: background-color 0.15s;
+    }
+    .poster-icon {
+        width: 1.5rem;
+        height: 1.5rem;
+        opacity: 0;
+        filter: drop-shadow(0 1px 2px rgb(0 0 0 / 0.5));
+        transition: opacity 0.15s;
+    }
+    .playable:hover .poster-play {
+        background: rgb(0 0 0 / 0.4);
+    }
+    .playable:hover .poster-icon {
+        opacity: 1;
+    }
+    .offline-tag {
+        margin-top: 0.25rem;
+    }
+        .resume {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        margin-top: 0.375rem;
+    }
+    .resume-track {
+        height: 0.25rem;
+        min-width: 0;
+        flex: 1;
+        overflow: hidden;
+        border-radius: 999px;
+        background: var(--dp-base-300);
+    }
+    .resume-fill {
+        height: 100%;
+        background: var(--pico-primary-background);
+    }
+    .resume-left {
+        flex-shrink: 0;
+    }
+    /* 進み具合は行の下端いっぱいに敷く */
+    .row-bar {
+        position: absolute;
+        inset-inline: 0;
+        bottom: 0;
+        width: 100%;
+        height: 0.25rem;
+        margin: 0;
+        border-radius: 0;
+    }
+    .row-bar.success {
+        --pico-progress-color: var(--dp-success);
+    }
+    /* 「その他…」の中身。項目は左寄せで縦に積む */
+    .more-menu {
+        display: flex;
+        flex-direction: column;
+        width: 16rem;
+        max-width: calc(100vw - 2rem);
+    }
+    .menu-form {
+        display: contents;
+    }
+    .menu-button {
+        width: 100%;
+        margin: 0;
+        border: 0;
+        background: transparent;
+        color: inherit;
+        text-align: left;
+        font-size: inherit;
+    }
+</style>

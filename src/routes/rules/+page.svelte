@@ -82,6 +82,7 @@
 
     /** 押した結果 */
     const notices = $derived<Notice[]>(errorNotice(form, 'rule-error'));
+
 </script>
 
 <!--
@@ -90,33 +91,33 @@
     スクロールで戻る**ことになっていた。広い画面では横がまるまる余っていて、
     キーワード1つの入力欄が 600px あるのに一覧は画面の外、という形だった。
 
-    **横に並べはじめる幅は全画面で `md` (768px)**
+    **横に並べはじめる幅は全画面で 768px**
     ([+layout.svelte](../+layout.svelte) の `FILLED`)。並べたらページごとは
     動かさず、**左右がそれぞれ自分で巻き取る** — 書いている欄と一覧の
     どちらも画面から出ていかない
 -->
-<div class="md:flex md:h-full md:flex-col">
+<div class="page">
     <Toasts {notices} source={form} />
 
-    <div class="grid gap-4 md:min-h-0 md:flex-1 md:grid-cols-[minmax(20rem,26rem)_1fr]">
+    <div class="layout">
         <!--
             **書く欄。** 中身を浮かせて枠に高さを持たせないことで、右の一覧と
             同じ高さに収まる (観る画面と同じ作り。`watch/[id]/+page.svelte`)
         -->
-        <section class="flex flex-col md:relative md:min-h-0">
-            <div class="card bg-base-100 flex min-h-0 flex-1 shadow md:absolute md:inset-0">
+        <section class="form-col">
+            <div class="panel form-card">
                 <!--
                     **押すものは巻き取られる中身の外に貼り付ける。** 条件が長い
                     ときに「追加」まで探して降りることになるので、`<form>` 自身を
                     縦の入れ物にして、上だけを巻き取る
                 -->
-                <form method="POST" use:submitting class="flex min-h-0 flex-1 flex-col">
-                    <div class="min-h-0 flex-1 space-y-4 overflow-y-auto p-4" data-testid="rule-form">
-                        <div class="space-y-1">
-                            <h2 class="card-title text-base">
+                <form method="POST" use:submitting class="rule-form">
+                    <div class="form-scroll" data-testid="rule-form">
+                        <div class="heading">
+                            <h2>
                                 {data.editing ? 'ルールを編集' : 'ルールを追加'}
                             </h2>
-                            <p class="text-base-content/70 text-sm">
+                            <p class="small lead">
                                 条件に合う番組を、これから放送されるものから自動で予約します。ルール名はキーワードから付きます。
                             </p>
                         </div>
@@ -134,63 +135,56 @@
                         <input type="hidden" name="form" value="rules" />
 
                         <!-- 横に並べない。左の列は 26rem までなので、並べると入力欄が潰れる -->
-                        <div class="grid gap-4">
-                            <label class="flex flex-col gap-1">
-                                <span class="text-sm font-medium">キーワード</span>
+                        <div class="fields">
+                            <label class="field">
+                                <span class="label">キーワード</span>
                                 <input
                                     name="keyword"
-                                    class="input input-bordered w-full"
                                     placeholder="例: 名探偵"
                                     value={data.seed?.keyword ?? ''}
                                     data-testid="rule-keyword"
                                 />
-                                <span class="text-base-content/60 text-xs">
+                                <span class="hint">
                                     空白で区切ると<strong>すべて含む</strong>ものに当たります
                                 </span>
                                 <!--
                         当てる範囲。既定は番組名だけ。概要まで広げると番宣で名前が出ただけの
                         番組を拾い、詳細まで広げると出演者でも拾える
                     -->
-                                <div
-                                    class="mt-1 flex flex-wrap gap-x-4 gap-y-1"
-                                    data-testid="rule-search-fields"
-                                >
+                                <div class="wrap-row" data-testid="rule-search-fields">
                                     {#each SEARCH_FIELDS as field (field)}
-                                        <label class="flex cursor-pointer items-center gap-2">
+                                        <label class="check">
                                             <input
                                                 type="checkbox"
                                                 name="searchFields"
                                                 value={field}
                                                 checked={seedFields.includes(field)}
-                                                class="checkbox checkbox-xs"
                                             />
-                                            <span class="text-xs">{SEARCH_FIELD_LABEL[field]}</span>
+                                            <span class="tiny">{SEARCH_FIELD_LABEL[field]}</span>
                                         </label>
                                     {/each}
                                 </div>
                             </label>
-                            <label class="flex flex-col gap-1">
-                                <span class="text-sm font-medium">除外キーワード</span>
+                            <label class="field">
+                                <span class="label">除外キーワード</span>
                                 <input
                                     name="ignoreKeyword"
-                                    class="input input-bordered w-full"
                                     placeholder="例: 再放送 総集編"
                                     value={data.seed?.ignore_keyword ?? ''}
                                     data-testid="rule-ignore"
                                 />
-                                <span class="text-base-content/60 text-xs">
+                                <span class="hint">
                                     空白区切りは<strong>どれか1つでも含む</strong>ものを除外
                                 </span>
                             </label>
-                            <label class="flex flex-col gap-1">
-                                <span class="text-sm font-medium">優先度</span>
+                            <label class="field">
+                                <span class="label">優先度</span>
                                 <input
                                     type="number"
                                     name="priority"
                                     value={data.seed?.priority ?? 1}
                                     min="0"
                                     max="9"
-                                    class="input input-bordered w-full"
                                     data-testid="rule-priority"
                                 />
                                 <!--
@@ -198,7 +192,7 @@
                         (番組表 3 / スキャン 5 …) とは別の物差しで、そちらとは比べない。
                         録画は必ずいちばん強い値で掴むので、番組表集めに負けることはない
                     -->
-                                <span class="text-base-content/60 text-xs">
+                                <span class="hint">
                                     <strong>予約どうし</strong>を比べる数です。チューナーが足りないとき<strong
                                         >大きいほうを残します</strong
                                     >
@@ -207,37 +201,31 @@
                             </label>
                         </div>
 
-                        <div class="grid items-start gap-4">
-                            <details class="border-base-300 rounded-box border">
-                                <summary
-                                    class="cursor-pointer px-4 py-3 text-sm font-medium"
-                                    data-testid="channel-summary"
-                                >
+                        <div class="fields">
+                            <details class="box">
+                                <summary class="small bold" data-testid="channel-summary">
                                     チャンネル
-                                    <span class="text-base-content/60">
+                                    <span class="muted">
                                         ({seedTypes.length + seedServices.length === 0
                                             ? '全局'
                                             : `${seedTypes.length + seedServices.length} 件選択中`})
                                     </span>
                                 </summary>
-                                <div class="space-y-3 px-4 pb-4">
+                                <div class="box-body stack">
                                     <div>
-                                        <div class="text-base-content/60 mb-1 text-xs font-bold">
-                                            まとめて選ぶ
-                                        </div>
-                                        <div class="flex flex-wrap gap-x-4 gap-y-1" data-testid="rule-types">
+                                        <div class="group-title bold">まとめて選ぶ</div>
+                                        <div class="wrap-row" data-testid="rule-types">
                                             {#each grouped as group (group.type)}
-                                                <label class="flex cursor-pointer items-center gap-2">
+                                                <label class="check">
                                                     <input
                                                         type="checkbox"
                                                         name="serviceTypes"
                                                         value={group.type}
                                                         checked={seedTypes.includes(group.type)}
-                                                        class="checkbox checkbox-sm"
                                                     />
-                                                    <span class="text-sm">
+                                                    <span class="small">
                                                         {SERVICE_TYPE_LABEL[group.type] ?? group.type}
-                                                        <span class="text-base-content/60">
+                                                        <span class="muted">
                                                             ({group.services.length})
                                                         </span>
                                                     </span>
@@ -246,23 +234,16 @@
                                         </div>
                                     </div>
                                     <div>
-                                        <div class="text-base-content/60 mb-1 text-xs font-bold">
-                                            個別に選ぶ
-                                        </div>
-                                        <div
-                                            class="max-h-48 space-y-2 overflow-y-auto"
-                                            data-testid="rule-services"
-                                        >
+                                        <div class="group-title bold">個別に選ぶ</div>
+                                        <div class="scroll-list services" data-testid="rule-services">
                                             {#each grouped as group (group.type)}
                                                 <div>
-                                                    <div class="text-base-content/60 mb-1 text-xs">
+                                                    <div class="group-title">
                                                         {SERVICE_TYPE_LABEL[group.type] ?? group.type}
                                                     </div>
-                                                    <div class="grid gap-x-4 gap-y-1 sm:grid-cols-2">
+                                                    <div class="grid-2">
                                                         {#each group.services as service (service.id)}
-                                                            <label
-                                                                class="flex cursor-pointer items-center gap-2"
-                                                            >
+                                                            <label class="check">
                                                                 <input
                                                                     type="checkbox"
                                                                     name="serviceIds"
@@ -270,17 +251,14 @@
                                                                     checked={seedServices.includes(
                                                                         service.id,
                                                                     )}
-                                                                    class="checkbox checkbox-sm"
                                                                 />
-                                                                <span class="truncate text-sm"
-                                                                    >{service.name}</span
-                                                                >
+                                                                <span class="truncate small">{service.name}</span>
                                                             </label>
                                                         {/each}
                                                     </div>
                                                 </div>
                                             {:else}
-                                                <p class="text-base-content/60 text-sm">
+                                                <p class="small muted">
                                                     チャンネルがまだありません。チューナー画面でチャンネルスキャンを実行してください。
                                                 </p>
                                             {/each}
@@ -289,53 +267,42 @@
                                 </div>
                             </details>
 
-                            <details class="border-base-300 rounded-box border">
-                                <summary
-                                    class="cursor-pointer px-4 py-3 text-sm font-medium"
-                                    data-testid="genre-summary"
-                                >
+                            <details class="box">
+                                <summary class="small bold" data-testid="genre-summary">
                                     ジャンル
-                                    <span class="text-base-content/60">
+                                    <span class="muted">
                                         ({seedGenres.length === 0
                                             ? '全ジャンル'
                                             : `${seedGenres.length} 件選択中`})
                                     </span>
                                 </summary>
-                                <div class="px-4 pb-4">
+                                <div class="box-body">
                                     <!-- 大分類だけ選べば中分類は問わない。細かく絞りたいときだけ
                              中分類にチェックを入れる -->
-                                    <div class="max-h-64 space-y-2 overflow-y-auto" data-testid="rule-genres">
+                                    <div class="scroll-list genres" data-testid="rule-genres">
                                         {#each GENRE_TREE as group (group.value)}
                                             <div>
-                                                <label class="flex cursor-pointer items-center gap-2">
+                                                <label class="check">
                                                     <input
                                                         type="checkbox"
                                                         name="genres"
                                                         value={group.value}
                                                         checked={seedGenres.includes(group.value)}
-                                                        class="checkbox checkbox-sm"
                                                     />
-                                                    <span class="text-sm font-medium">{group.label}</span>
-                                                    <span class="text-base-content/60 text-xs">(すべて)</span>
+                                                    <span class="small bold">{group.label}</span>
+                                                    <span class="tiny muted">(すべて)</span>
                                                 </label>
                                                 {#if group.children.length > 0}
-                                                    <div
-                                                        class="mt-1 ml-6 grid gap-x-4 gap-y-1 sm:grid-cols-2"
-                                                    >
+                                                    <div class="grid-2 children">
                                                         {#each group.children as child (child.value)}
-                                                            <label
-                                                                class="flex cursor-pointer items-center gap-2"
-                                                            >
+                                                            <label class="check">
                                                                 <input
                                                                     type="checkbox"
                                                                     name="genres"
                                                                     value={child.value}
                                                                     checked={seedGenres.includes(child.value)}
-                                                                    class="checkbox checkbox-xs"
                                                                 />
-                                                                <span class="truncate text-xs"
-                                                                    >{child.label}</span
-                                                                >
+                                                                <span class="truncate tiny">{child.label}</span>
                                                             </label>
                                                         {/each}
                                                     </div>
@@ -347,8 +314,8 @@
                             </details>
                         </div>
 
-                        <p class="text-base-content/60 text-sm">
-                            エンコードのしかたと無料放送の扱いは<a class="link" href="/settings">設定</a
+                        <p class="small muted">
+                            エンコードのしかたと無料放送の扱いは<a href="/settings">設定</a
                             >で決めます ({data.defaults.codec.toUpperCase()}
                             / CM: {CM_LABEL[data.defaults.cmCut]}{data.defaults.freeOnly
                                 ? ' / 無料放送のみ'
@@ -357,9 +324,10 @@
                     </div>
 
                     <!-- 巻き取られる中身の外。条件がどれだけ長くても見えている -->
-                    <div class="border-base-300 flex shrink-0 flex-wrap gap-2 border-t p-4">
-                        <button type="submit"
-                            class="btn btn-sm"
+                    <div class="form-actions cluster">
+                        <button
+                            type="submit"
+                            class="small secondary"
                             formmethod="GET"
                             formaction="/rules"
                             data-testid="rule-preview"
@@ -367,20 +335,12 @@
                             何が録れるか見る
                         </button>
                         {#if data.editing}
-                            <button type="submit"
-                                class="btn btn-sm btn-primary"
-                                formaction="?/update"
-                                data-testid="rule-update"
-                            >
+                            <button type="submit" class="small" formaction="?/update" data-testid="rule-update">
                                 更新
                             </button>
-                            <a class="btn btn-sm" href="/rules" data-testid="rule-cancel-edit">編集をやめる</a>
+                            <a class="button small secondary" href="/rules" data-testid="rule-cancel-edit">編集をやめる</a>
                         {:else}
-                            <button type="submit"
-                                class="btn btn-sm btn-primary"
-                                formaction="?/create"
-                                data-testid="rule-submit"
-                            >
+                            <button type="submit" class="small" formaction="?/create" data-testid="rule-submit">
                                 追加
                             </button>
                         {/if}
@@ -400,83 +360,73 @@
             残していることがあるので勝手には消さない) ので、要らないものだけ
             ここで外す
         -->
-        <section class="flex min-w-0 flex-col gap-4 md:min-h-0 md:overflow-y-auto">
+        <section class="result-col">
             {#if data.preview}
                 <!--
         **予約とプレビューは同じ一覧**。別々に並べていた頃は、同じ番組が2箇所に出るうえ、
         「押さえている予約」と「これから当たる番組」を頭の中で突き合わせることになっていた
     -->
-                <div class="card bg-base-100 shrink-0 shadow" data-testid="preview">
-                    <div class="card-body">
-                        <h2 class="card-title text-base">
-                            この条件で録れる番組は {data.preview.total} 件
-                            {#if data.preview.total > data.preview.programs.length}
-                                <span class="text-base-content/60 text-sm font-normal">
-                                    (先頭 {data.preview.programs.length} 件)
-                                </span>
-                            {/if}
-                            {#if data.preview.conflicts > 0}
-                                <span
-                                    class="badge badge-sm badge-error badge-outline"
-                                    data-testid="preview-conflicts"
-                                >
-                                    競合 {data.preview.conflicts} 件
-                                </span>
-                            {/if}
-                        </h2>
-                        {#if data.preview.total === 0}
-                            <p class="text-base-content/60 text-sm">
-                                いまの番組表では1件も当たりません。条件を緩めてください。
-                            </p>
-                        {:else}
-                            <p class="text-base-content/60 text-xs">
-                                予約済みのものはここで取り消せます
-                                (取り消した番組をルールがもう一度予約することはありません)。
-                                条件を変えても既に入っている予約は残るので、条件から外れたものも
-                                <span class="badge badge-xs badge-ghost">条件外</span> として並べます。
-                            </p>
-                            <ul class="divide-base-300 mt-1 divide-y" data-testid="preview-list">
-                                {#each data.preview.programs as program (program.id)}
-                                    <li
-                                        class="flex flex-wrap items-center gap-x-3 gap-y-1 py-1.5 text-sm"
-                                        data-testid="preview-row"
-                                        data-program-id={program.id}
-                                    >
-                                        <!--
+                <div class="panel preview" data-testid="preview">
+                    <h2 class="preview-title">
+                        この条件で録れる番組は {data.preview.total} 件
+                        {#if data.preview.total > data.preview.programs.length}
+                            <span class="small muted normal">
+                                (先頭 {data.preview.programs.length} 件)
+                            </span>
+                        {/if}
+                        {#if data.preview.conflicts > 0}
+                            <span class="tag error outline" data-testid="preview-conflicts">
+                                競合 {data.preview.conflicts} 件
+                            </span>
+                        {/if}
+                    </h2>
+                    {#if data.preview.total === 0}
+                        <p class="small muted">
+                            いまの番組表では1件も当たりません。条件を緩めてください。
+                        </p>
+                    {:else}
+                        <p class="tiny muted">
+                            予約済みのものはここで取り消せます
+                            (取り消した番組をルールがもう一度予約することはありません)。
+                            条件を変えても既に入っている予約は残るので、条件から外れたものも
+                            <span class="tag">条件外</span> として並べます。
+                        </p>
+                        <ul class="preview-list" data-testid="preview-list">
+                            {#each data.preview.programs as program (program.id)}
+                                <li class="preview-row small" data-testid="preview-row" data-program-id={program.id}>
+                                    <!--
                                 押すと番組詳細が出る。予約一覧・番組表と同じもの。
 
                                 **押せるのは中身のところだけ。** 行ごと押せるようにすると
                                 取消ボタンまで詳細を開く的の中に入り、押し間違えたときに
                                 何が起きたのか分からなくなる
                             -->
-                                        <div
-                                            class="hover:bg-base-200/60 min-w-0 flex-1 basis-64 cursor-pointer rounded"
-                                            data-testid="preview-open"
-                                            role="button"
-                                            tabindex="0"
-                                            onclick={() => show(program)}
-                                            onkeydown={(event) => event.key === 'Enter' && show(program)}
-                                        >
-                                            <div class="flex flex-wrap items-center gap-x-2 gap-y-1">
-                                                {#if program.reservation_state}
-                                                    <span
-                                                        class="badge badge-sm {badgeClass(
-                                                            program.reservation_state,
-                                                        )}"
-                                                        data-testid="preview-state"
-                                                    >
-                                                        {stateLabel(program.reservation_state)}
-                                                    </span>
-                                                {/if}
-                                                {#if !program.matched}
-                                                    <span class="badge badge-xs badge-ghost">条件外</span>
-                                                {/if}
-                                                <span class="truncate">{program.name}</span>
-                                            </div>
-                                            <div class="text-base-content/60 text-xs">
-                                                {program.service_name} ・ {dateTime(program.start_at)}
-                                            </div>
-                                            <!--
+                                    <div
+                                        class="preview-open"
+                                        data-testid="preview-open"
+                                        role="button"
+                                        tabindex="0"
+                                        onclick={() => show(program)}
+                                        onkeydown={(event) => event.key === 'Enter' && show(program)}
+                                    >
+                                        <div class="cluster tight">
+                                            {#if program.reservation_state}
+                                                <span
+                                                    class="tag {badgeClass(program.reservation_state)}"
+                                                    data-testid="preview-state"
+                                                >
+                                                    {stateLabel(program.reservation_state)}
+                                                </span>
+                                            {/if}
+                                            {#if !program.matched}
+                                                <span class="tag">条件外</span>
+                                            {/if}
+                                            <span class="truncate">{program.name}</span>
+                                        </div>
+                                        <div class="tiny muted">
+                                            {program.service_name} ・ {dateTime(program.start_at)}
+                                        </div>
+                                        <!--
                                     チューナーの取り合いは**録ろうとした時点で初めて分かる**
                                     ので、ここで先に見せる。出すのは本数が足りなくなるものだけ
                                     (`contending`)。ただ時間が重なっているだけのものを
@@ -487,53 +437,39 @@
                                     3本ぶつかっていても1本しか見えず、どれを諦めれば
                                     いいのかが読めなかった
                                 -->
-                                            {#if program.conflict_reason}
-                                                <div
-                                                    class="text-error text-xs"
-                                                    data-testid="preview-conflict"
-                                                >
-                                                    {program.conflict_reason}
-                                                </div>
-                                            {/if}
-                                            {#if program.conflicts.length > 0}
-                                                <!--
+                                        {#if program.conflict_reason}
+                                            <div class="text-error tiny" data-testid="preview-conflict">
+                                                {program.conflict_reason}
+                                            </div>
+                                        {/if}
+                                        {#if program.conflicts.length > 0}
+                                            <!--
                                         件数は本当の数、名前は先頭だけ。ゆるい条件だと
                                         1つの番組に何十本もぶつかることがあり、全部並べると
                                         1行が画面何個ぶんにもなる (件数さえ合っていれば
                                         「多すぎる」ことは伝わる)
                                     -->
-                                                <div
-                                                    class="text-error text-xs"
-                                                    data-testid="preview-conflict"
-                                                >
-                                                    チューナーの競合 {program.conflicts.length} 件: {program.conflicts
-                                                        .slice(0, 3)
-                                                        .join('、')}{program.conflicts.length > 3
-                                                        ? ` ほか ${program.conflicts.length - 3} 件`
-                                                        : ''}
-                                                </div>
-                                            {/if}
-                                        </div>
-                                        {#if program.reservation_id !== null}
-                                            <form method="POST" action="?/cancelReservation" use:submitting>
-                                                <input
-                                                    type="hidden"
-                                                    name="reservationId"
-                                                    value={program.reservation_id}
-                                                />
-                                                <button type="submit"
-                                                    class="btn btn-xs btn-error btn-outline"
-                                                    data-testid="rule-pending-cancel"
-                                                >
-                                                    取消
-                                                </button>
-                                            </form>
+                                            <div class="text-error tiny" data-testid="preview-conflict">
+                                                チューナーの競合 {program.conflicts.length} 件: {program.conflicts
+                                                    .slice(0, 3)
+                                                    .join('、')}{program.conflicts.length > 3
+                                                    ? ` ほか ${program.conflicts.length - 3} 件`
+                                                    : ''}
+                                            </div>
                                         {/if}
-                                    </li>
-                                {/each}
-                            </ul>
-                        {/if}
-                    </div>
+                                    </div>
+                                    {#if program.reservation_id !== null}
+                                        <form method="POST" action="?/cancelReservation" use:submitting>
+                                            <input type="hidden" name="reservationId" value={program.reservation_id} />
+                                            <button type="submit" class="xs outline danger" data-testid="rule-pending-cancel">
+                                                取消
+                                            </button>
+                                        </form>
+                                    {/if}
+                                </li>
+                            {/each}
+                        </ul>
+                    {/if}
                 </div>
             {/if}
 
@@ -550,19 +486,19 @@
                 タブレットの幅で「チャンネル」「ジャンル」が1文字ずつ折れて読めなかった。
                 1件を 名前と札 → 条件 → 押すもの の順に縦に積めば、幅がいくらでも横には出ない
             -->
-            <div class="rounded-box bg-base-100 divide-base-300 shrink-0 divide-y shadow" data-testid="rule-list">
+            <div class="panel rule-list" data-testid="rule-list">
                 {#each data.rules as rule (rule.id)}
-                    <div class="space-y-2 p-3" data-testid="rule-row" data-rule-id={rule.id}>
-                        <div class="flex flex-wrap items-center gap-2">
-                            <span class="font-medium">{rule.name}</span>
-                            <span class="badge badge-sm {rule.enabled ? 'badge-success' : 'badge-ghost'}">
+                    <div class="rule-row" data-testid="rule-row" data-rule-id={rule.id}>
+                        <div class="cluster">
+                            <span class="bold">{rule.name}</span>
+                            <span class="tag {rule.enabled ? 'success' : ''}">
                                 {rule.enabled ? '有効' : '無効'}
                             </span>
                             <!-- 優先度と予約数は札で。列にしていた頃は見出しが無いと何の数か分からなかった -->
-                            <span class="badge badge-sm badge-ghost">優先度 {rule.priority}</span>
-                            <span class="badge badge-sm badge-ghost">予約 {rule.reservations} 件</span>
+                            <span class="tag">優先度 {rule.priority}</span>
+                            <span class="tag">予約 {rule.reservations} 件</span>
                         </div>
-                        <div class="text-base-content/70 flex flex-wrap gap-x-4 gap-y-1 text-sm">
+                        <div class="conditions small">
                             <!-- どこを見て当たったのか分からないと、絞り込みの直しようがない -->
                             {#if rule.keyword}
                                 <span data-testid="rule-search-scope">{searchFieldLabel(rule.search_fields)}から</span>
@@ -573,24 +509,24 @@
                             <span data-testid="rule-channels">チャンネル: {channels(rule)}</span>
                             <span data-testid="rule-genres-label">ジャンル: {genres(rule)}</span>
                         </div>
-                        <div class="flex flex-wrap gap-2">
-                            <a class="btn btn-sm" href="/rules?edit={rule.id}" data-testid="rule-edit">編集</a>
+                        <div class="cluster">
+                            <a class="button small secondary" href="/rules?edit={rule.id}" data-testid="rule-edit">編集</a>
                             <form method="POST" action="?/toggle" use:submitting>
                                 <input type="hidden" name="id" value={rule.id} />
-                                <button type="submit" class="btn btn-sm" data-testid="rule-toggle">
+                                <button type="submit" class="small secondary" data-testid="rule-toggle">
                                     {rule.enabled ? '無効化' : '有効化'}
                                 </button>
                             </form>
                             <form method="POST" action="?/delete" use:submitting>
                                 <input type="hidden" name="id" value={rule.id} />
-                                <button type="submit" class="btn btn-sm btn-error btn-outline" data-testid="rule-delete">
+                                <button type="submit" class="small outline danger" data-testid="rule-delete">
                                     削除
                                 </button>
                             </form>
                         </div>
                     </div>
                 {:else}
-                    <div class="text-base-content/60 p-3 text-sm">ルールはまだありません</div>
+                    <div class="rule-row small muted">ルールはまだありません</div>
                 {/each}
             </div>
         </section>
@@ -622,56 +558,272 @@
                 下に隠れるものを出しても読めない (番組表の詳細と同じ扱い)
             -->
             {#if form?.message}
-                <div class="alert alert-error mt-4" data-testid="rule-detail-error">{form.message}</div>
+                <div class="notice error detail-error" data-testid="rule-detail-error">{form.message}</div>
             {/if}
-            <div class="modal-action flex-wrap items-center justify-end">
-                {#if opened?.reservation_state}
-                    <span class="badge badge-info mr-auto" data-testid="rule-detail-state">
-                        {stateLabel(opened.reservation_state)}
-                    </span>
-                {/if}
+            {#if opened?.reservation_state}
+                <span class="tag info detail-state" data-testid="rule-detail-state">
+                    {stateLabel(opened.reservation_state)}
+                </span>
+            {/if}
 
-                {#if opened !== null && opened.start_at <= clock && opened.end_at > clock && watchable.has(opened.service_id)}
-                    <!--
-                        **いま流れている番組は、その場で観られるようにする。**
-                        押した先は別の画面で、そこで選局からやり直すことになるので
-                        リンクにする (モーダルの中で始めるものではない)
-                    -->
-                    <a
-                        class="btn btn-outline"
-                        href="/live?service={opened.service_id}"
-                        data-testid="rule-detail-watch"
-                    >
-                        視聴
-                    </a>
-                {/if}
+            {#if opened !== null && opened.start_at <= clock && opened.end_at > clock && watchable.has(opened.service_id)}
+                <!--
+                    **いま流れている番組は、その場で観られるようにする。**
+                    押した先は別の画面で、そこで選局からやり直すことになるので
+                    リンクにする (モーダルの中で始めるものではない)
+                -->
+                <a class="button outline" href="/live?service={opened.service_id}" data-testid="rule-detail-watch">
+                    視聴
+                </a>
+            {/if}
 
-                {#if opened !== null && opened.reservation_state === null && opened.end_at > clock}
-                    <!--
-                        録画のしかたはここでは選ばせない。設定画面の1箇所で決める
-                        (同じ選択肢を予約・ルール・設定に並べると、どれで決まったのか
-                        分からなくなる)
-                    -->
-                    <form
-                        method="POST"
-                        action="?/reserve"
-                        use:submitting={() =>
-                            async ({ result, update }) => {
-                                await update();
-                                // 失敗したときは開いたままにして、中に理由を出す
-                                if (result.type === 'success') close();
-                            }}
-                    >
-                        <input type="hidden" name="programId" value={opened.id} />
-                        <button type="submit" class="btn btn-primary" data-testid="rule-detail-reserve">
-                            予約する
-                        </button>
-                    </form>
-                {/if}
+            {#if opened !== null && opened.reservation_state === null && opened.end_at > clock}
+                <!--
+                    録画のしかたはここでは選ばせない。設定画面の1箇所で決める
+                    (同じ選択肢を予約・ルール・設定に並べると、どれで決まったのか
+                    分からなくなる)
+                -->
+                <form
+                    method="POST"
+                    action="?/reserve"
+                    use:submitting={() =>
+                        async ({ result, update }) => {
+                            await update();
+                            // 失敗したときは開いたままにして、中に理由を出す
+                            if (result.type === 'success') close();
+                        }}
+                >
+                    <input type="hidden" name="programId" value={opened.id} />
+                    <button type="submit" data-testid="rule-detail-reserve">予約する</button>
+                </form>
+            {/if}
 
-                <!-- 位置を動かさないため、いつでもここが最後 -->
-                <button type="button" class="btn" onclick={close} data-testid="detail-close">閉じる</button>
-            </div>
+            <!-- 位置を動かさないため、いつでもここが最後 -->
+            <button type="button" class="secondary" onclick={close} data-testid="detail-close">閉じる</button>
         {/snippet}
     </ProgramDetail>
 {/if}
+
+<style>
+    @media (min-width: 768px) {
+        .page {
+            display: flex;
+            height: 100%;
+            flex-direction: column;
+        }
+    }
+    .layout {
+        display: grid;
+        gap: 1rem;
+    }
+    @media (min-width: 768px) {
+        .layout {
+            min-height: 0;
+            flex: 1 1 0%;
+            grid-template-columns: minmax(20rem, 26rem) 1fr;
+        }
+    }
+    .form-col {
+        display: flex;
+        flex-direction: column;
+    }
+    @media (min-width: 768px) {
+        .form-col {
+            position: relative;
+            min-height: 0;
+        }
+    }
+    .form-card {
+        display: flex;
+        min-height: 0;
+        flex: 1 1 0%;
+        padding: 0;
+        box-shadow: 0 1px 3px rgb(0 0 0 / 0.2);
+    }
+    @media (min-width: 768px) {
+        .form-card {
+            position: absolute;
+            inset: 0;
+        }
+    }
+    .rule-form {
+        display: flex;
+        min-height: 0;
+        flex: 1 1 0%;
+        flex-direction: column;
+    }
+    .form-scroll {
+        display: flex;
+        min-height: 0;
+        flex: 1 1 0%;
+        flex-direction: column;
+        gap: 1rem;
+        overflow-y: auto;
+        padding: 1rem;
+    }
+    .heading {
+        display: flex;
+        flex-direction: column;
+        gap: 0.25rem;
+    }
+    .heading h2,
+    .preview-title {
+        font-size: 1rem;
+    }
+    .lead {
+        opacity: 0.7;
+    }
+    .label {
+        font-size: 0.875rem;
+        font-weight: 500;
+    }
+    .hint {
+        font-size: 0.75rem;
+        opacity: 0.6;
+    }
+    .fields {
+        display: grid;
+        align-items: start;
+        gap: 1rem;
+    }
+    .wrap-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.25rem 1rem;
+        margin-top: 0.25rem;
+    }
+    .box {
+        border: 1px solid var(--dp-base-300);
+        border-radius: 1rem;
+    }
+    .box summary {
+        cursor: pointer;
+        padding: 0.75rem 1rem;
+    }
+    .box-body {
+        padding: 0 1rem 1rem;
+    }
+    .group-title {
+        margin-bottom: 0.25rem;
+        font-size: 0.75rem;
+        opacity: 0.6;
+    }
+    .scroll-list {
+        display: flex;
+        flex-direction: column;
+        gap: 0.5rem;
+        overflow-y: auto;
+    }
+    .services {
+        max-height: 12rem;
+    }
+    .genres {
+        max-height: 16rem;
+    }
+    .grid-2 {
+        display: grid;
+        gap: 0.25rem 1rem;
+    }
+    @media (min-width: 640px) {
+        .grid-2 {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+    }
+    .children {
+        margin: 0.25rem 0 0 1.5rem;
+    }
+    .truncate {
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+    .form-actions {
+        flex-shrink: 0;
+        padding: 1rem;
+        border-top: 1px solid var(--dp-base-300);
+    }
+    .result-col {
+        display: flex;
+        min-width: 0;
+        flex-direction: column;
+        gap: 1rem;
+    }
+    @media (min-width: 768px) {
+        .result-col {
+            min-height: 0;
+            overflow-y: auto;
+        }
+    }
+    .preview {
+        display: flex;
+        flex-shrink: 0;
+        flex-direction: column;
+        gap: 0.5rem;
+        padding: 1.5rem;
+        box-shadow: 0 1px 3px rgb(0 0 0 / 0.2);
+    }
+    .preview-title {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 0.5rem;
+    }
+    .normal {
+        font-weight: normal;
+    }
+    .preview-list {
+        margin: 0.25rem 0 0;
+        padding: 0;
+        list-style: none;
+    }
+    .preview-row {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 0.25rem 0.75rem;
+        padding-block: 0.375rem;
+        list-style: none;
+    }
+    .preview-row + .preview-row {
+        border-top: 1px solid var(--dp-base-300);
+    }
+    .preview-open {
+        min-width: 0;
+        flex: 1 1 16rem;
+        cursor: pointer;
+        border-radius: 0.25rem;
+    }
+    .preview-open:hover {
+        background: color-mix(in srgb, var(--dp-base-200) 60%, transparent);
+    }
+    .tight {
+        --gap: 0.25rem 0.5rem;
+    }
+    .rule-list {
+        flex-shrink: 0;
+        padding: 0;
+        box-shadow: 0 1px 3px rgb(0 0 0 / 0.2);
+    }
+    .rule-row {
+        display: flex;
+        flex-direction: column;
+        gap: 0.5rem;
+        padding: 0.75rem;
+    }
+    .rule-row + .rule-row {
+        border-top: 1px solid var(--dp-base-300);
+    }
+    .conditions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.25rem 1rem;
+        opacity: 0.7;
+    }
+    .detail-error {
+        flex-basis: 100%;
+    }
+    .detail-state {
+        margin-right: auto;
+    }
+</style>

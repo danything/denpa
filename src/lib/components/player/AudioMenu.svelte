@@ -24,9 +24,25 @@
 <OverlayMenu {testid} attrName="audio" {items} {onselect}>
     {#snippet trigger()}
         <ControlButton path={AUDIO} label="音声を選ぶ" {testid}>
-            <span class="hidden max-w-28 truncate sm:inline">
+            <span class="name">
                 {items.find((item) => item.active)?.label ?? '音声'}
             </span>
         </ControlButton>
     {/snippet}
 </OverlayMenu>
+
+<style>
+    /* 名前は広い画面でだけ (狭いと帯が折れる)。長ければ後ろを省く */
+    .name {
+        display: none;
+        max-width: 7rem;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+    @media (min-width: 640px) {
+        .name {
+            display: inline;
+        }
+    }
+</style>
