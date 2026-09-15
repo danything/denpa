@@ -761,7 +761,6 @@
          */
         .preview {
             min-height: 0;
-            flex: 0 1 auto;
             max-height: 50%;
             overflow-y: auto;
         }

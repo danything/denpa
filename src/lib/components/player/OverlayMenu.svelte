@@ -89,11 +89,22 @@
      *   開け閉めする。指の click の `detail` は端末で揃わず、実機のタブレットでは**押した瞬間に
      *   閉じて**いた (pointerup で開いた直後の click で閉じる)。pointer とキーの手は外し、click
      *   だけを受ける — 1 回押せば 1 回だけ届く。キーボードは中の `<button>` が Enter / Space を
-     *   click にしてくれるので、そのまま動く
+     *   click にしてくれるので、そのまま動く。矢印の上下で開くのだけは自分で持つ (Bits の
+     *   keydown は Enter / Space も開け閉めするので、そのまま残すと click と二重になる)
      */
     function triggerProps(props: Record<string, unknown>): Record<string, unknown> {
         const { type: _type, ...rest } = props;
-        return { ...rest, onpointerdown: undefined, onpointerup: undefined, onkeydown: undefined, onclick: toggle };
+        return {
+            ...rest,
+            onpointerdown: undefined,
+            onpointerup: undefined,
+            onkeydown: (event: KeyboardEvent) => {
+                if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return;
+                event.preventDefault();
+                open = true;
+            },
+            onclick: toggle,
+        };
     }
 </script>
 
