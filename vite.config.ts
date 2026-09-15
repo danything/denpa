@@ -1,6 +1,5 @@
 import { dirname, resolve } from 'node:path';
 import { sveltekit } from '@sveltejs/kit/vite';
-import tailwindcss from '@tailwindcss/vite';
 import { defineConfig, type Plugin } from 'vite';
 
 /**
@@ -31,7 +30,9 @@ function cssWithoutSourceMaps(): Plugin {
 }
 
 export default defineConfig({
-    plugins: [cssWithoutSourceMaps(), tailwindcss(), sveltekit()],
+    plugins: [cssWithoutSourceMaps(), sveltekit()],
+    // Pico の SCSS が使う Sass の `if()` が非推奨の警告を毎回出す(Pico 側の都合で、こちらでは直せない)
+    css: { preprocessorOptions: { scss: { silenceDeprecations: ['if-function'] } } },
     server: {
         // compose 上の Jellyfin はサービス名(`http://app:5173`)で開発サーバを叩く。
         // vite の Host チェックに引っかかるので開発時だけ外す(本番は adapter-node で

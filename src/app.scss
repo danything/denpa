@@ -1,0 +1,485 @@
+/*
+ * 見た目は Pico CSS(v2)。使う部品だけを SCSS で読み込んで小さくする。
+ * Pico は素の HTML を整える作りなので、入力欄・ボタン・余白を詰め、足りない部品(タグ・小さいボタン・並べ方)を下に足す。
+ * 画面ごとの並べ方は各コンポーネントの <style> に書く。
+ * 開いたり閉じたりする部品(メニュー・ダイアログ・タブ・トグル)は Bits UI(見た目は持たないので、ここと各画面で付ける)。
+ *
+ * テーマは暗いのが既定で、明るいのも選べる。app.html と +layout.svelte が <html data-theme> を付け、Pico はそれに従う。
+ * 色はテーマごとに下の 2 つのブロックで決め、画面側は変数だけを使う
+ */
+@use "@picocss/pico/scss/pico" with (
+	$theme-color: "azure",
+	$enable-semantic-container: false,
+	$enable-responsive-typography: false,
+	$enable-responsive-spacings: false,
+	$modules: (
+		"layout/section": false,
+		"layout/landmarks": false,
+		"content/code": false,
+		"content/figure": false,
+		"forms/input-color": false,
+		"forms/input-search": false,
+		"components/card": false,
+		"components/nav": false,
+		"components/tooltip": false,
+		"components/dropdown": false,
+		"components/modal": false
+	)
+);
+
+:root {
+	--pico-font-family-sans-serif: "Hiragino Sans", "Yu Gothic UI", "Noto Sans JP", system-ui, sans-serif;
+	--pico-font-size: 15px;
+	--pico-line-height: 1.6;
+	--pico-spacing: 1rem;
+	--pico-typography-spacing-vertical: 0.75rem;
+	--pico-form-element-spacing-vertical: 0.45rem;
+	--pico-form-element-spacing-horizontal: 0.7rem;
+	--pico-border-radius: 0.5rem;
+	--dp-success: #2e9a5c;
+	--dp-warning: #d19a00;
+	--dp-error: #d9443f;
+	--dp-info: #3a86c2;
+	--dp-accent: #e0911c;
+	--dp-accent-text: #2a1c05;
+}
+/* Pico は色を [data-theme] と :root:not([data-theme=dark]) に書くので、同じ強さで上書きする */
+:root:not([data-theme="dark"]),
+[data-theme="light"] {
+	--pico-background-color: #f6f7f9;
+	--dp-surface: #fff;
+	--dp-base-200: #eceef2;
+	--dp-base-300: #d9dde4;
+}
+[data-theme="dark"] {
+	--pico-background-color: #1d232a;
+	--dp-surface: #232a33;
+	--dp-base-200: #2b333d;
+	--dp-base-300: #3a4450;
+}
+html {
+	font-size: var(--pico-font-size);
+}
+/*
+ * **画面の高さは、単位ではなく `html` から採る。**
+ *
+ * `100vh` も `100dvh` も「画面の高さ」を*言い当てようとする*単位で、
+ * 携帯では当たらないことがある (実機の PWA で、土台が画面より 56px
+ * 高くなった。56px は Chrome for Android のアドレスバーの高さそのもの)。
+ *
+ * `html` に高さを与えておけば、その先は `100%` で降りていける。`html` の
+ * 高さは**そのページが縦に動かずに出せる高さ** (`clientHeight`) そのもので、
+ * 言い当てる余地が無い。JS も要らないので、**描く前から正しい**
+ */
+html,
+body {
+	height: 100%;
+}
+body {
+	margin: 0;
+	word-break: auto-phrase;
+	line-break: strict;
+}
+/* Pico は入力欄・表・段落の下に大きな余白を付ける。並べ方は各画面の gap で決めるので外す */
+input:not([type="checkbox"], [type="radio"]),
+select,
+textarea,
+button,
+[type="button"],
+[type="submit"],
+[type="reset"],
+[type="file"],
+[role="button"],
+fieldset,
+table,
+p,
+ul,
+ol,
+dl,
+h1,
+h2,
+h3,
+h4,
+progress,
+details,
+[role="group"],
+label {
+	margin-bottom: 0;
+}
+h1,
+h2,
+h3,
+h4 {
+	--pico-font-weight: 700;
+}
+h1 {
+	font-size: 1.5rem;
+}
+h2 {
+	font-size: 1.15rem;
+}
+h3 {
+	font-size: 1rem;
+}
+table {
+	font-size: 0.9rem;
+}
+th,
+td {
+	padding: 0.45rem 0.6rem;
+}
+
+/* 入力欄とくっつけたボタンは折り返さない */
+[role="group"] > button,
+[role="group"] > a.button {
+	white-space: nowrap;
+	flex: 0 0 auto;
+}
+
+/* ---- 並べる ---- */
+.page-container {
+	width: 100%;
+	max-width: var(--site-width);
+	margin-inline: auto;
+}
+.prose {
+	max-width: var(--page-width);
+}
+/* 縦に積む / 横に並べて折り返す / 欄を自動で段組み */
+.stack {
+	display: flex;
+	flex-direction: column;
+	gap: var(--gap, 0.75rem);
+}
+.cluster {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: var(--gap, 0.5rem);
+}
+.auto-grid {
+	display: grid;
+	gap: var(--gap, 0.75rem);
+	grid-template-columns: repeat(auto-fill, minmax(min(var(--min, 14rem), 100%), 1fr));
+}
+.spread {
+	justify-content: space-between;
+}
+.grow {
+	flex: 1 1 0;
+	min-width: 0;
+}
+.full {
+	width: 100%;
+}
+
+/* ---- 面 ---- */
+/* 枠で囲んだ白い面 */
+.panel {
+	background: var(--dp-surface);
+	border: 1px solid var(--dp-base-300);
+	border-radius: 1rem;
+	padding: 1rem;
+}
+.panel.soft {
+	background: var(--dp-base-200);
+	border-color: transparent;
+}
+
+/* ---- 文字 ---- */
+.muted {
+	opacity: 0.65;
+}
+.small {
+	font-size: 0.85rem;
+}
+.tiny {
+	font-size: 0.75rem;
+}
+.bold {
+	font-weight: 700;
+}
+.num {
+	font-variant-numeric: tabular-nums;
+}
+.right {
+	text-align: right;
+}
+.nowrap {
+	white-space: nowrap;
+}
+.text-error {
+	color: var(--dp-error);
+}
+.text-success {
+	color: var(--dp-success);
+}
+.text-warning {
+	color: var(--dp-warning);
+}
+/* 欄の上の小さい見出し。<label class="field"><span>見出し</span><input></label> */
+.field {
+	display: flex;
+	flex-direction: column;
+	gap: 0.25rem;
+	min-width: 0;
+}
+.field > span:first-child {
+	font-size: 0.75rem;
+	font-weight: 500;
+	opacity: 0.7;
+}
+/* チェックボックス + 文 */
+.check {
+	display: inline-flex;
+	align-items: center;
+	gap: 0.5rem;
+	cursor: pointer;
+}
+.check input {
+	margin: 0;
+}
+
+/* ---- ボタン ---- */
+/* リンクのままボタンの見た目にする(role="button" にするとリンクでなくなる)。<a class="button"> */
+a.button {
+	--pico-background-color: var(--pico-primary-background);
+	--pico-border-color: var(--pico-primary-border);
+	--pico-color: var(--pico-primary-inverse);
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	gap: 0.4rem;
+	padding: var(--pico-form-element-spacing-vertical) var(--pico-form-element-spacing-horizontal);
+	border: var(--pico-border-width) solid var(--pico-border-color);
+	border-radius: var(--pico-border-radius);
+	background-color: var(--pico-background-color);
+	color: var(--pico-color);
+	font-weight: var(--pico-font-weight);
+	line-height: var(--pico-line-height);
+	text-align: center;
+	text-decoration: none;
+	cursor: pointer;
+	transition:
+		background-color var(--pico-transition),
+		border-color var(--pico-transition);
+}
+a.button:hover {
+	--pico-background-color: var(--pico-primary-hover-background);
+	--pico-border-color: var(--pico-primary-hover-border);
+}
+a.button.secondary {
+	--pico-background-color: var(--pico-secondary-background);
+	--pico-border-color: var(--pico-secondary-border);
+	--pico-color: var(--pico-secondary-inverse);
+}
+a.button.contrast {
+	--pico-background-color: var(--pico-contrast-background);
+	--pico-border-color: var(--pico-contrast-border);
+	--pico-color: var(--pico-contrast-inverse);
+}
+a.button.outline {
+	--pico-background-color: transparent;
+	--pico-color: var(--pico-primary);
+}
+a.button.secondary.outline {
+	--pico-color: var(--pico-secondary);
+}
+a.button.contrast.outline {
+	--pico-color: var(--pico-contrast);
+}
+/* Pico の .secondary / .contrast / .outline に足す */
+button.small,
+[role="button"].small,
+a.button.small {
+	padding: 0.3rem 0.65rem;
+	font-size: 0.85rem;
+}
+button.xs,
+[role="button"].xs,
+a.button.xs {
+	padding: 0.15rem 0.45rem;
+	font-size: 0.75rem;
+}
+button.accent,
+[role="button"].accent,
+a.button.accent {
+	--pico-background-color: var(--dp-accent);
+	--pico-border-color: var(--dp-accent);
+	--pico-color: var(--dp-accent-text);
+}
+button.ghost,
+[role="button"].ghost,
+a.button.ghost {
+	--pico-background-color: transparent;
+	--pico-border-color: transparent;
+	--pico-color: inherit;
+	--pico-box-shadow: none;
+}
+button.ghost:hover,
+[role="button"].ghost:hover,
+a.button.ghost:hover,
+a.button.ghost[aria-current],
+button.ghost[aria-current],
+[role="button"].ghost[aria-current] {
+	--pico-background-color: var(--dp-base-200);
+}
+button.danger,
+[role="button"].danger,
+a.button.danger {
+	--pico-background-color: var(--dp-error);
+	--pico-border-color: var(--dp-error);
+	--pico-color: #fff;
+}
+button.ghost.danger,
+[role="button"].ghost.danger,
+a.button.ghost.danger {
+	--pico-background-color: transparent;
+	--pico-border-color: transparent;
+	--pico-color: var(--dp-error);
+}
+
+/* ---- タグ ---- */
+.tag {
+	display: inline-flex;
+	align-items: center;
+	gap: 0.25rem;
+	padding: 0.05rem 0.5rem;
+	border-radius: 999px;
+	font-size: 0.75rem;
+	line-height: 1.6;
+	white-space: nowrap;
+	background: var(--dp-base-200);
+	color: inherit;
+	border: 1px solid transparent;
+}
+.tag.success {
+	background: var(--dp-success);
+	color: #fff;
+}
+.tag.error {
+	background: var(--dp-error);
+	color: #fff;
+}
+.tag.warning {
+	background: #f3c35a;
+	color: #2a1c05;
+}
+.tag.info {
+	background: var(--dp-info);
+	color: #fff;
+}
+.tag.accent {
+	background: var(--dp-accent);
+	color: var(--dp-accent-text);
+}
+.tag.primary {
+	background: var(--pico-primary-background);
+	color: #fff;
+}
+.tag.outline {
+	background: transparent;
+	border-color: currentColor;
+}
+
+/* ---- 知らせ ---- */
+.notice {
+	border-radius: 0.75rem;
+	padding: 0.75rem 1rem;
+	background: var(--dp-base-200);
+}
+.notice.warning {
+	background: color-mix(in srgb, var(--dp-warning) 20%, var(--dp-surface));
+}
+.notice.error {
+	background: color-mix(in srgb, var(--dp-error) 20%, var(--dp-surface));
+}
+.notice.success {
+	background: color-mix(in srgb, var(--dp-success) 20%, var(--dp-surface));
+}
+.notice.info {
+	background: color-mix(in srgb, var(--dp-info) 20%, var(--dp-surface));
+}
+
+/* ---- 画面の幅 ---- */
+@media (max-width: 767.98px) {
+	.hide-sm {
+		display: none !important;
+	}
+}
+@media (min-width: 768px) {
+	.only-sm {
+		display: none !important;
+	}
+}
+
+/* ---- 読み込み中(Pico の aria-busy に任せる。文字の横に回るものが出る) ---- */
+
+/* ---- Bits UI の部品の見た目(開閉は Bits UI、見た目はここ) ---- */
+[data-menu-content],
+[data-dropdown-menu-content],
+[data-popover-content],
+[data-select-content] {
+	z-index: 50;
+	min-width: 10rem;
+	padding: 0.25rem;
+	border-radius: 0.5rem;
+	background: var(--dp-surface);
+	border: 1px solid var(--dp-base-300);
+	box-shadow: 0 10px 30px rgb(0 0 0 / 0.35);
+}
+[data-menu-item],
+[data-dropdown-menu-item],
+[data-select-item] {
+	display: flex;
+	align-items: center;
+	gap: 0.5rem;
+	padding: 0.4rem 0.6rem;
+	border-radius: 0.375rem;
+	cursor: pointer;
+	outline: none;
+}
+[data-menu-item][data-highlighted],
+[data-dropdown-menu-item][data-highlighted],
+[data-select-item][data-highlighted] {
+	background: var(--dp-base-200);
+}
+[data-dialog-overlay] {
+	position: fixed;
+	inset: 0;
+	z-index: 60;
+	background: rgb(0 0 0 / 0.55);
+}
+[data-dialog-content] {
+	position: fixed;
+	z-index: 61;
+	left: 50%;
+	top: 50%;
+	transform: translate(-50%, -50%);
+	width: min(32rem, calc(100vw - 2rem));
+	max-height: calc(100% - 2rem);
+	overflow: auto;
+	padding: 1.25rem;
+	border-radius: 1rem;
+	background: var(--dp-surface);
+	border: 1px solid var(--dp-base-300);
+}
+[data-tabs-list] {
+	display: inline-flex;
+	gap: 0.25rem;
+	padding: 0.25rem;
+	border-radius: 0.6rem;
+	background: var(--dp-base-200);
+}
+[data-tabs-trigger] {
+	padding: 0.3rem 0.8rem;
+	border-radius: 0.45rem;
+	border: 0;
+	background: transparent;
+	color: inherit;
+	cursor: pointer;
+}
+[data-tabs-trigger][data-state="active"] {
+	background: var(--dp-surface);
+	box-shadow: 0 1px 2px rgb(0 0 0 / 0.25);
+}

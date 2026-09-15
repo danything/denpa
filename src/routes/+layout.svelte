@@ -1,5 +1,5 @@
 <script lang="ts">
-    import '../app.css';
+    import '../app.scss';
     import { onMount } from 'svelte';
     import { invalidateAll } from '$app/navigation';
     import { navigating, page } from '$app/state';
