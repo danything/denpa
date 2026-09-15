@@ -1413,6 +1413,8 @@
                     <div class="seek">
                         <input
                             type="range"
+                            class="fill"
+                            style="--fill: {length > 0 ? (at / length) * 100 : 0}%"
                             min="0"
                             max={length || 0}
                             step="0.1"

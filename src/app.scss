@@ -600,3 +600,18 @@ a.button.ghost.danger {
 	background: var(--dp-surface);
 	box-shadow: 0 1px 2px rgb(0 0 0 / 0.25);
 }
+
+/*
+ * 再生位置の帯。Pico の range は溝を1色で塗るだけで、どこまで進んだかが見えない。
+ * 進んだぶん (--fill、画面側で 0〜100% を渡す) をグラデーションで塗る。Firefox は ::-moz-range-progress が持つ
+ */
+input[type="range"].fill::-webkit-slider-runnable-track {
+	background:
+		var(--dp-gradient) 0 0 / var(--fill, 0%) 100% no-repeat,
+		var(--pico-range-border-color);
+}
+input[type="range"].fill::-moz-range-progress {
+	height: var(--pico-range-height);
+	border-radius: var(--pico-border-radius);
+	background: var(--dp-gradient);
+}

@@ -310,7 +310,8 @@
             <!-- 帯は番組の全長。**録れていないところ (右側) へは跳べない** (`seekTo`) -->
             <input
                 type="range"
-                class="seek"
+                class="seek fill"
+                style="--fill: {total > 0 ? (pos / total) * 100 : 0}%"
                 min="0"
                 max={total}
                 step="1"

@@ -338,7 +338,12 @@
                     <!-- 操作の色は3画面同一 (`range-primary`)。ライブ中の赤は「ライブ」ボタンが言う -->
                     <input
                         type="range"
-                        class="seek"
+                        class="seek fill"
+                        style="--fill: {player.newest > player.oldest
+                            ? (((player.live ? player.newest : player.position) - player.oldest) /
+                                  (player.newest - player.oldest)) *
+                              100
+                            : 100}%"
                         min={player.oldest}
                         max={player.newest}
                         step="0.1"
