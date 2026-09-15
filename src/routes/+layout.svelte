@@ -374,6 +374,11 @@
         gap: 0.125rem;
         padding: 0 0.25rem;
     }
+    /* ヘッダーの押すものは高さ 40px。小さい字のままでも指で外さない */
+    .actions :global(button),
+    .actions :global(a.button) {
+        min-height: 2.5rem;
+    }
     ul.links a[aria-current='page'] {
         --pico-background-color: var(--dp-base-300);
     }
@@ -384,6 +389,7 @@
     .burger summary {
         display: inline-flex;
         align-items: center;
+        min-height: 2.5rem;
         padding: 0.3rem 0.65rem;
         border-radius: var(--pico-border-radius);
         list-style: none;
