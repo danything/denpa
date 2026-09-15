@@ -5,7 +5,8 @@
     import { navigating, page } from '$app/state';
     import { busy } from '$lib/busy.svelte';
     import Measure from '$lib/components/Measure.svelte';
-    import { forget, write } from '$lib/keep';
+    import Icon from '$lib/components/player/Icon.svelte';
+    import { write } from '$lib/keep';
     import { measure } from '$lib/measure.svelte';
     import { startOffline } from '$lib/offline.svelte';
 
@@ -32,10 +33,15 @@
     // 値が書き戻されて消える。E2Eはこの印が付くのを待ってから操作する
     let hydrated = $state(false);
 
-    /** system は端末の設定に従う。既定はこれ */
-    let mode = $state<'system' | 'light' | 'dark'>('system');
+    /** 既定はダーク (映像を観るものはダークが基本)。system は端末の設定に従う */
+    let mode = $state<'system' | 'light' | 'dark'>('dark');
     const LABEL = { system: '端末に合わせる', light: 'ライト', dark: 'ダーク' };
-    const ICON = { system: '🖥️', light: '☀️', dark: '🌙' };
+    /** 月・太陽・半分塗った丸 (Pico の見本と同じ月)。絵文字は端末ごとに絵が違い、太さも揃わなかった */
+    const ICON = {
+        dark: 'M12 3a9 9 0 1 0 9 9c0-.46-.04-.92-.1-1.36a5.389 5.389 0 0 1-4.4 2.26 5.403 5.403 0 0 1-3.14-9.8c-.44-.06-.9-.1-1.36-.1z',
+        light: 'M12 7a5 5 0 1 0 0 10 5 5 0 0 0 0-10zM2 13h2a1 1 0 0 0 0-2H2a1 1 0 0 0 0 2zm18 0h2a1 1 0 0 0 0-2h-2a1 1 0 0 0 0 2zM11 2v2a1 1 0 0 0 2 0V2a1 1 0 0 0-2 0zm0 18v2a1 1 0 0 0 2 0v-2a1 1 0 0 0-2 0zM5.99 4.58a1 1 0 0 0-1.41 1.41l1.06 1.06a1 1 0 0 0 1.41-1.41L5.99 4.58zm12.37 12.37a1 1 0 0 0-1.41 1.41l1.06 1.06a1 1 0 0 0 1.41-1.41l-1.06-1.06zm1.06-10.96a1 1 0 0 0-1.41-1.41l-1.06 1.06a1 1 0 0 0 1.41 1.41l1.06-1.06zM7.05 18.36a1 1 0 0 0-1.41-1.41l-1.06 1.06a1 1 0 0 0 1.41 1.41l1.06-1.06z',
+        system: 'M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm0 18V4a8 8 0 0 1 0 16z',
+    };
 
     function apply() {
         const dark =
@@ -58,10 +64,9 @@
     });
 
     function cycleTheme() {
-        mode = mode === 'system' ? 'light' : mode === 'light' ? 'dark' : 'system';
-        // system のときは保存しない。そうしないと端末側を変えても追従しなくなる
-        if (mode === 'system') forget('theme');
-        else write('theme', mode);
+        mode = mode === 'dark' ? 'light' : mode === 'light' ? 'system' : 'dark';
+        // 既定がダークなので「端末に合わせる」も選んだ印として残す (残さないと次に開いたときダークに戻る)
+        write('theme', mode);
         apply();
     }
 
@@ -222,7 +227,7 @@
                 data-testid="theme-toggle"
                 data-mode={mode}
             >
-                {ICON[mode]}
+                <Icon path={ICON[mode]} size="size-5" />
             </button>
             <!--
                 広い画面はそのまま並べる。狭い画面では下のハンバーガーに畳む。

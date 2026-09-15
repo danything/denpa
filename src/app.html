@@ -12,10 +12,10 @@
         <title>denpa</title>
         <script>
             // ハイドレーションを待つと一瞬ちがう色で表示されてしまうので、ここで当てる。
-            // 保存が無ければ端末の設定に従う
+            // 保存が無ければダーク (映像を観るものはダークが基本。端末に合わせるのは選んだときだけ)
             (() => {
                 const saved = localStorage.getItem('theme');
-                const mode = saved === 'light' || saved === 'dark' ? saved : 'system';
+                const mode = saved === 'light' || saved === 'system' ? saved : 'dark';
                 const dark =
                     mode === 'dark' ||
                     (mode === 'system' && matchMedia('(prefers-color-scheme: dark)').matches);

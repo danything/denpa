@@ -113,32 +113,34 @@ test.describe('ダッシュボードと画面遷移', () => {
         await expect(detail).toHaveCount(0);
     });
 
-    test('テーマは端末に合わせる/ライト/ダークを切り替えられ、再読み込みしても残る', async ({ page }) => {
+    test('テーマはダーク/ライト/端末に合わせるを切り替えられ、再読み込みしても残る', async ({ page }) => {
         await goto(page, '/');
         const html = page.locator('html');
         const toggle = page.getByTestId('theme-toggle');
 
-        // 既定は端末の設定に従う。テストはダークの端末として動かしている
-        await expect(toggle).toHaveAttribute('data-mode', 'system');
+        // 既定はダーク (映像を観るものはダークが基本)。端末の設定には従わない
+        await expect(toggle).toHaveAttribute('data-mode', 'dark');
         await expect(html).toHaveAttribute('data-theme', 'dark');
 
         await toggle.click();
         await expect(html).toHaveAttribute('data-theme', 'light');
-
-        await toggle.click();
-        await expect(html).toHaveAttribute('data-theme', 'dark');
-        await expect(toggle).toHaveAttribute('data-mode', 'dark');
+        await expect(toggle).toHaveAttribute('data-mode', 'light');
 
         // 明示した設定は再読み込みしても残る(ちらつかないようハイドレーション前に当てている)
         await goto(page, '/guide');
-        await expect(html).toHaveAttribute('data-theme', 'dark');
-        await expect(page.getByTestId('theme-toggle')).toHaveAttribute('data-mode', 'dark');
+        await expect(html).toHaveAttribute('data-theme', 'light');
+        await expect(page.getByTestId('theme-toggle')).toHaveAttribute('data-mode', 'light');
 
-        // 一周して端末に合わせるへ戻る
+        // 端末に合わせる。テストはダークの端末として動かしている。これも選んだ印として残る
         await page.getByTestId('theme-toggle').click();
         await expect(page.getByTestId('theme-toggle')).toHaveAttribute('data-mode', 'system');
+        await expect(html).toHaveAttribute('data-theme', 'dark');
         await goto(page, '/');
         await expect(page.getByTestId('theme-toggle')).toHaveAttribute('data-mode', 'system');
+
+        // 一周してダークへ戻る
+        await page.getByTestId('theme-toggle').click();
+        await expect(page.getByTestId('theme-toggle')).toHaveAttribute('data-mode', 'dark');
     });
 
     test('アクション中はボタンを押せなくし、ローディングを出す', async ({ page }) => {
