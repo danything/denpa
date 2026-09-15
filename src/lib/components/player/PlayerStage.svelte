@@ -1,6 +1,6 @@
 <script lang="ts">
-    import type { Snippet } from 'svelte';
-    import type { PlayerControls } from './controls.svelte';
+    import { type Snippet, setContext } from 'svelte';
+    import { PLAYER_CONTROLS, type PlayerControls } from './controls.svelte';
 
     /**
      * 絵の舞台。**3つの視聴画面 (ライブ・追っかけ・録画) で同じ配線を1本に。**
@@ -26,6 +26,9 @@
         element = $bindable(null),
         children,
     }: Props = $props();
+
+    // 中のメニュー (`OverlayMenu`) が「開いている間は操作列を残せ」と言う先。取り手で渡す (props は差し替わりうる)
+    setContext(PLAYER_CONTROLS, () => controls);
 
     let fullscreened = $state(false);
     function full(): void {

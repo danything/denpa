@@ -371,3 +371,43 @@ test.describe('録画を観る', () => {
         expect(res.status()).toBe(404);
     });
 });
+
+/**
+ * **指で。** マウスと指では操作列の出し方が違い (`controls.svelte.ts`)、メニューの
+ * 開け方も Bits UI が pointer の種類で分けていたので、指の経路を別に見る
+ */
+test.describe('指で観る', () => {
+    test.use({ hasTouch: true, isMobile: true, viewport: { width: 1024, height: 768 } });
+
+    /*
+     * **押した口が開いたまま残り、操作列も引っ込まない。** 実機のタブレットで、
+     * 速さを押した瞬間にメニューが閉じていた。開いている間は操作列の 2.5 秒の
+     * 時計 (`LINGER`) も止める — 器は操作列の中に居るので、操作列が消えれば
+     * 選んでいる最中でもメニューごと消える
+     */
+    test('速さの口を押すと開いたまま残り、選ぶまで操作列も消えない', async ({ page, request }) => {
+        test.setTimeout(180_000);
+        const id = await watchable(page, request);
+        await goto(page, `/watch/${id}`);
+
+        // 指は絵を1回押して操作列を出す (マウスのように動かしただけでは出ない)
+        const stage = (await page.getByTestId('watch-stage').boundingBox())!;
+        await page.touchscreen.tap(stage.x + stage.width / 2, stage.y + stage.height / 2);
+        const bar = page.getByTestId('watch-controls');
+        await expect(bar).toHaveAttribute('data-shown', 'true');
+
+        await page.getByTestId('watch-speed').tap();
+        const menu = page.getByTestId('watch-speed-menu');
+        await expect(menu).toBeVisible();
+        // 触らずに時計のぶんより長く待っても、開いている間は残る
+        await page.waitForTimeout(3500);
+        await expect(menu).toBeVisible();
+        await expect(bar).toHaveAttribute('data-shown', 'true');
+
+        // 選べば閉じて、そこから時計が動き出す
+        await page.getByTestId('watch-speed-option').filter({ hasText: '1.5×' }).tap();
+        await expect(menu).toBeHidden();
+        await expect(page.getByTestId('watch-speed')).toContainText('1.5×');
+        await expect(bar).toHaveAttribute('data-shown', 'false', { timeout: 5000 });
+    });
+});

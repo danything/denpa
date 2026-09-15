@@ -30,8 +30,24 @@
     {onselect}
 >
     {#snippet trigger()}
-        <ControlButton {label} {testid} on={speed !== 1}>
-            <span style="font-variant-numeric: tabular-nums">{speed}×</span>
-        </ControlButton>
+        <span class="speed">
+            <ControlButton {label} {testid} on={speed !== 1}>
+                <span style="font-variant-numeric: tabular-nums">{speed}×</span>
+            </ControlButton>
+        </span>
     {/snippet}
 </OverlayMenu>
+
+<style>
+    /*
+     * **数字だけなので、丸いボタンと同じ幅から。** 文字を添えるボタンの余白 (1.25rem) では
+     * 「1×」でも 60px、「1.25×」で 80px と、隣の丸 (48px) に比べて横に間延びしていた
+     */
+    .speed {
+        display: contents;
+    }
+    .speed :global(.ov-btn) {
+        min-width: 3rem;
+        padding-inline: 0.75rem;
+    }
+</style>

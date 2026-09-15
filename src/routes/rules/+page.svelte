@@ -752,6 +752,22 @@
     @media (min-width: 768px) {
         .result-col {
             min-height: 0;
+        }
+        /*
+         * **巻き取るのは札の中。** 列ごと巻き取っていた頃は、上へ抜けていく札が列の縁で
+         * 真っ直ぐに切られ、**動かすと角丸が消えて**見えた (タブレット)。札はその場に居て
+         * 中身だけ動けば、角はいつも丸い。プレビューが長いときは、そちらも自分で巻き取り、
+         * 一覧の場所は半分は残す
+         */
+        .preview {
+            min-height: 0;
+            flex: 0 1 auto;
+            max-height: 50%;
+            overflow-y: auto;
+        }
+        .rule-list {
+            min-height: 0;
+            flex: 1 1 0%;
             overflow-y: auto;
         }
     }

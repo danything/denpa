@@ -30,6 +30,9 @@ const LINGER = 2500;
 /** 消す時刻を跨ぐためだけの目覚まし。出ている間しか回さない */
 const TICK = 250;
 
+/** 舞台 (`PlayerStage`) が context に置き、その中のメニュー (`OverlayMenu`) が読む鍵 */
+export const PLAYER_CONTROLS = Symbol('player-controls');
+
 export interface PlayerControls {
     /** いま出ているか */
     readonly shown: boolean;
@@ -39,6 +42,8 @@ export interface PlayerControls {
     away: (event: PointerEvent) => void;
     /** キーボードで触っている間は残す */
     keyboard: boolean;
+    /** メニューが開いている間は残す。**選んでいる最中に消えては選べない** */
+    hold: boolean;
     /** その場で出し直す (ボタンを押した直後など) */
     stir: () => void;
     /** その場で消す (指で1回押して引っ込めるとき) */
@@ -58,16 +63,17 @@ export function playerControls(): PlayerControls {
     /** 押される直前に出ていたか。`toggle` が読む */
     let wasShown = false;
     let keyboard = $state(false);
+    let hold = $state(false);
     /** 前に居た場所。**動いていない `pointermove` を捨てる**のに使う (`wake`) */
     let lastX = Number.NaN;
     let lastY = Number.NaN;
 
     /*
-     * **見るのは「触ったか」だけ** (キーボードを除く)。再生や一時停止の状態を
-     * 混ぜていた頃は、繋いでいる間ずっと出たままになり、消える経路を
+     * **見るのは「触ったか」だけ** (キーボードと、開いているメニューを除く)。再生や
+     * 一時停止の状態を混ぜていた頃は、繋いでいる間ずっと出たままになり、消える経路を
      * 確かめようが無かった
      */
-    const shown = $derived(keyboard || now - touched < LINGER);
+    const shown = $derived(keyboard || hold || now - touched < LINGER);
 
     $effect(() => {
         if (!shown) return;
@@ -84,6 +90,12 @@ export function playerControls(): PlayerControls {
         },
         set keyboard(value: boolean) {
             keyboard = value;
+        },
+        get hold(): boolean {
+            return hold;
+        },
+        set hold(value: boolean) {
+            hold = value;
         },
         /**
          * **指とマウスで別の出し方をする。**

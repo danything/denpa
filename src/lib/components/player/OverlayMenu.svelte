@@ -1,6 +1,7 @@
 <script lang="ts" generics="T extends string | number">
     import { DropdownMenu } from 'bits-ui';
-    import type { Snippet } from 'svelte';
+    import { getContext, type Snippet } from 'svelte';
+    import { PLAYER_CONTROLS, type PlayerControls } from './controls.svelte';
 
     /**
      * 絵の上に出すドロップダウンの共通部分。**メニュー(選択肢の並び)だけ**を持つ。
@@ -58,21 +59,49 @@
 
     let open = $state(false);
 
-    /** 引き金の props から `type` を抜く(下の包みの span の説明) */
-    function withoutType(props: Record<string, unknown>): Record<string, unknown> {
+    /**
+     * **開いている間は操作列を残す。**
+     *
+     * 操作列は触らなくなって 2.5 秒で引っ込む (`controls.svelte.ts`) が、この器は
+     * 操作列の中に居るので、選んでいる最中に**メニューごと消えて**いた。舞台
+     * (`PlayerStage`) が context に置いた `controls` に伝える。舞台の外では何もしない
+     */
+    const controls = getContext<(() => PlayerControls) | undefined>(PLAYER_CONTROLS);
+    $effect(() => {
+        if (controls === undefined) return;
+        controls().hold = open;
+        return () => {
+            controls().hold = false;
+        };
+    });
+
+    function toggle(): void {
+        open = !open;
+    }
+
+    /**
+     * 引き金の包みの span に付ける props。Bits UI がくれるものから 2 つ変える。
+     *
+     * - `type` を抜く。Bits は引き金に `type="button"` を付けるが、包みの span に付くと Pico が
+     *   ボタンの余白と枠を当て、帯が 1 段ぶん高くなる (実測 45px → 60.5px)
+     * - **開け閉めは click の 1 回だけで決める。** Bits の引き金は、マウスは pointerdown、指は
+     *   pointerup で開け、続く click は `detail` が 0 のときだけ (キーボード由来と見て) もう一度
+     *   開け閉めする。指の click の `detail` は端末で揃わず、実機のタブレットでは**押した瞬間に
+     *   閉じて**いた (pointerup で開いた直後の click で閉じる)。pointer とキーの手は外し、click
+     *   だけを受ける — 1 回押せば 1 回だけ届く。キーボードは中の `<button>` が Enter / Space を
+     *   click にしてくれるので、そのまま動く
+     */
+    function triggerProps(props: Record<string, unknown>): Record<string, unknown> {
         const { type: _type, ...rest } = props;
-        return rest;
+        return { ...rest, onpointerdown: undefined, onpointerup: undefined, onkeydown: undefined, onclick: toggle };
     }
 </script>
 
 <DropdownMenu.Root bind:open>
     <DropdownMenu.Trigger>
         {#snippet child({ props })}
-            <!--
-                Bits UI は引き金に `type="button"` を付ける。包みの span に付くと Pico がボタンの余白と枠を当て、
-                帯が 1 段ぶん高くなる(実測 45px → 60.5px)。包みには要らないので外す
-            -->
-            <span {...withoutType(props)} class="trigger">{@render trigger()}</span>
+            <!-- 押す手は click だけ、`type` は抜く (`triggerProps`) -->
+            <span {...triggerProps(props)} class="trigger">{@render trigger()}</span>
         {/snippet}
     </DropdownMenu.Trigger>
     <DropdownMenu.Content
