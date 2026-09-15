@@ -395,6 +395,13 @@
         display: inline-flex;
         align-items: center;
         min-height: 2.5rem;
+        /*
+         * **開いても余白を足さない。** Pico は `details[open] > summary` に下の余白
+         * (1rem) を付ける — 文章の中の折りたたみでは中身と離すために要るが、ヘッダーの
+         * ハンバーガーでは**開いた瞬間にヘッダーが 64px から 72px に伸び**、
+         * 隣のテーマ切り替えまで下にずれていた (実機の携帯)
+         */
+        margin-bottom: 0;
         padding: 0.3rem 0.65rem;
         border-radius: var(--pico-border-radius);
         list-style: none;

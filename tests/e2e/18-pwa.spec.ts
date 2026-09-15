@@ -259,7 +259,17 @@ test.describe('PWA', () => {
         expect(Math.abs(theme.y - burger.y)).toBeLessThan(theme.height);
         expect(theme.x).toBeLessThan(burger.x);
 
+        /*
+         * **開いてもヘッダーの厚みは変わらない。** Pico が `details[open] > summary` に
+         * 付ける下の余白で、開いた瞬間にヘッダーが 64px から 72px に伸びていた
+         */
+        const barBefore = (await page.locator('.navbar').boundingBox())!;
         await menu.locator('summary').click();
+        const barAfter = (await page.locator('.navbar').boundingBox())!;
+        expect(barAfter.height, 'メニューを開くとヘッダーの厚みが変わる').toBe(barBefore.height);
+        const themeAfter = (await page.getByTestId('theme-toggle').boundingBox())!;
+        expect(themeAfter.y, 'メニューを開くと隣の口がずれる').toBe(theme.y);
+
         await menu.getByRole('link', { name: '番組表' }).click();
         await page.waitForURL(/guide/);
     });
