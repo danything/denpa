@@ -23,7 +23,6 @@
 <OverlayMenu
     {testid}
     attrName="codec"
-    width="9rem"
     items={LIVE_CODECS.map((c) => ({ key: c.id, label: c.label, active: c.id === codec }))}
     {onselect}
 >

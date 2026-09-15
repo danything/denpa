@@ -24,7 +24,6 @@
     {testid}
     attrName="speed"
     align="end"
-    width="6rem"
     size="large"
     items={SPEEDS.map((value) => ({ key: value, label: `${value}×`, active: value === speed }))}
     {onselect}

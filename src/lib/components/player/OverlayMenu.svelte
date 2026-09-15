@@ -37,7 +37,6 @@
         onselect,
         testid,
         align = 'start',
-        width = '13rem',
         size = 'normal',
         attrName,
     }: {
@@ -49,8 +48,6 @@
         testid: string;
         /** 器を口のどちら端に揃えるか。右端に置く口 (速さ) は `end` */
         align?: 'start' | 'end';
-        /** 器の幅 */
-        width?: string;
         /** 選択肢の文字の大きさ。速さは数字を大きく真ん中に (`large`) */
         size?: 'normal' | 'large';
         /** 付けるなら `data-{attrName}={key}` を各選択肢に足す */
@@ -120,7 +117,6 @@
         {align}
         sideOffset={4}
         class="overlay-menu {size}"
-        style="width: {width}"
         data-testid="{testid}-menu"
     >
         {#each items as item (item.key)}
@@ -144,10 +140,18 @@
     .trigger {
         display: inline-flex;
     }
+    /*
+     * **幅は中身で決める。口より狭くはしない。** 器ごとに決め打ち (音声 13rem・焼き方 9rem・
+     * 速さ 6rem) にしていた頃は、2 択の焼き方にも名前の短い音声にも余白ばかりの箱が出て、
+     * タブレットで目立った。`--bits-floating-anchor-width` は Bits UI が置く口の幅
+     */
     :global(.overlay-menu) {
         display: flex;
         flex-direction: column;
         gap: 0.125rem;
+        width: max-content;
+        min-width: var(--bits-floating-anchor-width);
+        max-width: min(20rem, 90vw);
         padding: 0.5rem;
         color: var(--pico-color);
     }
