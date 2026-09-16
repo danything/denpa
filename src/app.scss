@@ -404,6 +404,27 @@ a.button.secondary.outline:hover {
 	--pico-color: var(--pico-secondary-hover);
 	--pico-border-color: var(--pico-secondary-hover);
 }
+/*
+ * **いま居るところを表すリンク** (`<a class="button" aria-current="page">`、番組表の種別など)。
+ *
+ * Pico は「素のリンクの aria-current」を**文字を主の明るい色にする**ことで表す。
+ * `role="button"` が付いていないので、ボタンの見た目にしたリンクにもその規則が当たり、
+ * 塗ってある地 (紫) の上に薄い紫の字が乗って読めなくなっていた。
+ * 塗ってあるものは白抜きのまま、枠だけのものは元の色のままにする
+ */
+a.button[aria-current]:not([aria-current="false"]) {
+	--pico-color: var(--pico-primary-inverse);
+	--pico-text-decoration: none;
+}
+a.button.secondary[aria-current]:not([aria-current="false"]) {
+	--pico-color: var(--pico-secondary-inverse);
+}
+a.button.outline[aria-current]:not([aria-current="false"]) {
+	--pico-color: var(--pico-primary);
+}
+a.button.secondary.outline[aria-current]:not([aria-current="false"]) {
+	--pico-color: var(--pico-secondary);
+}
 /* Pico の .secondary / .contrast / .outline に足す */
 button.small,
 [role="button"].small,
