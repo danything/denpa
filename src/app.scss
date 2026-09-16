@@ -533,6 +533,11 @@ a.button.ghost.danger {
 .tag.outline {
 	border-color: currentColor;
 }
+/* 色の付かない枠だけの札(工程や但し書き)は地も塗らない。ふつうの札と見分けが付かなくなる */
+.tag.outline:not(.success, .error, .warning, .info, .accent, .primary, .solid) {
+	background: transparent;
+	border-color: var(--dp-base-300);
+}
 /* **いま動いているものだけ塗る。** 一覧の中でここにだけ目が行くようにする */
 .tag.solid {
 	background: var(--pico-primary-background);
