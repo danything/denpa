@@ -302,10 +302,14 @@
         max-width: 70ch;
         word-break: break-all;
     }
+    /*
+     * 黒の上に出すので、テーマに関わらず明るい側に寄せる
+     * (明るいテーマ用の濃い文字色だと、この黒地では読めない)
+     */
     .bad {
-        color: #f87171;
+        color: color-mix(in srgb, var(--dp-rec) 55%, #fff);
     }
     .good {
-        color: #4ade80;
+        color: color-mix(in srgb, var(--dp-ok) 55%, #fff);
     }
 </style>

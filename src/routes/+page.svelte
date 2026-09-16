@@ -1475,7 +1475,7 @@
         border-radius: 0;
     }
     .row-bar.success {
-        --pico-progress-color: var(--dp-success);
+        --pico-progress-color: var(--dp-ok);
     }
     /* 「その他…」の中身。項目は左寄せで縦に積む */
     .more-menu {

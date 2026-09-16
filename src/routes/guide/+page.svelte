@@ -717,18 +717,24 @@
     .program[data-genre]:hover {
         background: color-mix(in srgb, var(--tint) 25%, transparent);
     }
-    .program[data-genre="0"] { --tint: #0ea5e9; }
-    .program[data-genre="1"] { --tint: #22c55e; }
-    .program[data-genre="2"] { --tint: #14b8a6; }
-    .program[data-genre="3"] { --tint: #f43f5e; }
-    .program[data-genre="4"] { --tint: #d946ef; }
-    .program[data-genre="5"] { --tint: #f97316; }
-    .program[data-genre="6"] { --tint: #6366f1; }
-    .program[data-genre="7"] { --tint: #8b5cf6; }
-    .program[data-genre="8"] { --tint: #f59e0b; }
-    .program[data-genre="9"] { --tint: #ec4899; }
-    .program[data-genre="10"] { --tint: #84cc16; }
-    .program[data-genre="11"] { --tint: #06b6d4; }
+    /*
+     * ジャンルの色は **色みだけを変えて、濃さと鮮やかさは全部同じ** にする
+     * (hsl の S と L を固定)。拾ってきた色を12個並べていた頃は、黄色のマスだけが
+     * 前に出て紺色のマスが沈み、番組表を眺めると明るいマスに目が吸われていた。
+     * 濃さが揃っていれば、色は「種類が違う」ことだけを伝える
+     */
+    .program[data-genre="0"] { --tint: hsl(210 62% 55%); }  /* ニュース/報道 */
+    .program[data-genre="1"] { --tint: hsl(145 62% 55%); }  /* スポーツ */
+    .program[data-genre="2"] { --tint: hsl(190 62% 55%); }  /* 情報/ワイドショー */
+    .program[data-genre="3"] { --tint: hsl(350 62% 55%); }  /* ドラマ */
+    .program[data-genre="4"] { --tint: hsl(280 62% 55%); }  /* 音楽 */
+    .program[data-genre="5"] { --tint: hsl(25 62% 55%); }   /* バラエティ */
+    .program[data-genre="6"] { --tint: hsl(250 62% 55%); }  /* 映画 */
+    .program[data-genre="7"] { --tint: hsl(310 62% 55%); }  /* アニメ/特撮 */
+    .program[data-genre="8"] { --tint: hsl(45 62% 55%); }   /* ドキュメンタリー/教養 */
+    .program[data-genre="9"] { --tint: hsl(325 62% 55%); }  /* 劇場/公演 */
+    .program[data-genre="10"] { --tint: hsl(95 62% 55%); }  /* 趣味/教育 */
+    .program[data-genre="11"] { --tint: hsl(170 62% 55%); } /* 福祉 */
     .program.reserved,
     .program.reserved:hover {
         --tint: var(--pico-primary);

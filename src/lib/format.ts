@@ -184,12 +184,19 @@ export function rowState(rec: {
     return { label: stateLabel(rec.state), badge: badgeClass(rec.state) };
 }
 
-/** 状態の札(app.scss の `.tag`)の色。状態が一目で分かるようにする。空は色なし */
+/**
+ * 状態の札(app.scss の `.tag`)の色。空は色なし(地の色の札)。
+ *
+ * **塗る(`solid`)のはいま動いているものだけ。** 一覧は 1 画面に何十行も並ぶので、
+ * 予約済み(青)・視聴可能(緑)・録画中(赤)を全部塗っていた頃は色の列が 3 本立ち、
+ * どれが急ぐ話なのか分からなくなっていた。**待っているだけの状態は色を付けない**、
+ * 済んだものは淡い緑、手を止めてほしいもの(競合・失敗)だけ枠を足して目立たせる
+ */
 export function badgeClass(state: string): string {
     switch (state) {
         case 'recording':
         case 'running':
-            return 'error';
+            return 'solid error';
         case 'encoding':
         case 'queued':
             return 'warning';
@@ -199,11 +206,9 @@ export function badgeClass(state: string): string {
         case 'conflict':
         case 'failed':
             return 'error outline';
-        case 'canceled':
-        case 'deleted':
-            return '';
+        // 予約済み・待ち・取消・削除は「見て欲しいこと」が無いので色を付けない
         default:
-            return 'info';
+            return '';
     }
 }
 

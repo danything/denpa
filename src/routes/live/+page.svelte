@@ -749,7 +749,7 @@
                             </span>
                             <!-- いま映しているもの。色だけだと、色の見え方が違う人に伝わらない -->
                             {#if tuned}
-                                <span class="tag primary channel-badge">視聴中</span>
+                                <span class="tag solid channel-badge">視聴中</span>
                             {/if}
                         </button>
 

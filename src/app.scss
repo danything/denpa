@@ -37,14 +37,23 @@
 	--pico-form-element-spacing-vertical: 0.45rem;
 	--pico-form-element-spacing-horizontal: 0.75rem;
 	--pico-border-radius: 0.65rem;
-	/* 鮮やかに: 主は紫、差し色はピンク。状態の色も彩度を上げる */
-	--dp-success: #22c55e;
-	--dp-warning: #f59e0b;
-	--dp-error: #f43f5e;
-	--dp-info: #38bdf8;
-	--dp-accent: #ec4899;
-	--dp-accent-text: #fff;
-	--dp-gradient: linear-gradient(135deg, #8b5cf6 0%, #d946ef 55%, #ec4899 100%);
+	/*
+	 * 色は**紫ひとつ**を主に、状態の色は 4 つだけ。
+	 *
+	 * **塗るのは「いま動いているもの」と「押すと戻せないもの」だけ。**
+	 * 以前は予約済み(青)・視聴可能(緑)・取消(赤枠)が行ごとに並んでいて、
+	 * 一覧を開くと色の列が3本立ち、どこを見ればよいのか分からなくなっていた。
+	 * ふつうの状態は地の色に混ぜた淡い札にして、目は録画中の赤だけに行くようにする
+	 */
+	--dp-rec: #e11d48;
+	--dp-ok: #16a34a;
+	--dp-warn: #d97706;
+	--dp-info: #2563eb;
+	--dp-error: var(--dp-rec);
+}
+/* 状態の色を淡い地にするときの混ぜ具合。札と知らせで同じ濃さを使う */
+@function tint($color, $amount: 14%) {
+	@return color-mix(in srgb, #{$color} #{$amount}, var(--dp-surface));
 }
 /* Pico は色を [data-theme] と :root:not([data-theme=dark]) に書くので、同じ強さで上書きする */
 :root:not([data-theme="dark"]),
@@ -64,6 +73,22 @@
 	--dp-surface: #fff;
 	--dp-base-200: #eceef8;
 	--dp-base-300: #d9ddec;
+	/*
+	 * **押せるが主ではないもの**(日送り・選んでいない種別)。Pico の既定の灰色は
+	 * 地に沈んで「押せない」ように見えたので、本文と同じ濃さにして枠で区別する
+	 */
+	--pico-secondary: #3f4660;
+	--pico-secondary-background: #e7eaf6;
+	--pico-secondary-border: #c7cde3;
+	--pico-secondary-inverse: #1e2233;
+	--pico-secondary-hover: #2b3145;
+	--pico-secondary-hover-background: #dbe0f1;
+	--pico-secondary-hover-border: #b5bdd8;
+	/* 淡い札の文字。地が白寄りなので塗り色より一段濃くする */
+	--dp-rec-text: #be123c;
+	--dp-ok-text: #15803d;
+	--dp-warn-text: #b45309;
+	--dp-info-text: #1d4ed8;
 }
 [data-theme="dark"] {
 	--pico-background-color: #0b0d14;
@@ -84,6 +109,19 @@
 	--dp-surface: #141824;
 	--dp-base-200: #1b2130;
 	--dp-base-300: #2a3245;
+	/* 暗いほうも同じ考え。文字は本文並みの明るさ、区別は枠で付ける */
+	--pico-secondary: #c9cee2;
+	--pico-secondary-background: #232a3b;
+	--pico-secondary-border: #39425a;
+	--pico-secondary-inverse: #e7e9f3;
+	--pico-secondary-hover: #e7e9f3;
+	--pico-secondary-hover-background: #2b3346;
+	--pico-secondary-hover-border: #47516c;
+	/* 暗いほうは逆に、塗り色より明るくしないと読めない */
+	--dp-rec-text: #fda4af;
+	--dp-ok-text: #86efac;
+	--dp-warn-text: #fcd34d;
+	--dp-info-text: #93c5fd;
 }
 /* Pico は送信ボタンを横幅いっぱいにする。ボタンは中身の幅にし、広げたいところだけ .full を付ける */
 button[type="submit"] {
@@ -115,13 +153,6 @@ article[role="button"] {
 	line-height: inherit;
 	text-align: inherit;
 	box-shadow: none;
-}
-/* 主のボタンは紫からピンクへのグラデーション(色の変数は Pico のまま、絵だけ重ねる) */
-button:not(.secondary, .contrast, .outline, .ghost, .danger, .accent, [class*="ov-"], [data-tabs-trigger]),
-[type="submit"]:not(.secondary, .contrast, .outline, .ghost, .danger, .accent, [class*="ov-"]),
-a.button:not(.secondary, .contrast, .outline, .ghost, .danger, .accent) {
-	background-image: var(--dp-gradient);
-	border-color: transparent;
 }
 html {
 	font-size: var(--pico-font-size);
@@ -274,14 +305,19 @@ td {
 .nowrap {
 	white-space: nowrap;
 }
+/*
+ * 本文の中の色つき文字。**塗り用の色ではなく「文字用」を使う。**
+ * 塗り用は白抜きの札を前提に選んでいるので、地の上に文字として置くと
+ * 明るいテーマでは薄く、暗いテーマでは沈む
+ */
 .text-error {
-	color: var(--dp-error);
+	color: var(--dp-rec-text);
 }
 .text-success {
-	color: var(--dp-success);
+	color: var(--dp-ok-text);
 }
 .text-warning {
-	color: var(--dp-warning);
+	color: var(--dp-warn-text);
 }
 /* 欄の上の小さい見出し。<label class="field"><span>見出し</span><input></label> */
 .field {
@@ -384,9 +420,9 @@ a.button.xs {
 button.accent,
 [role="button"].accent,
 a.button.accent {
-	--pico-background-color: var(--dp-accent);
-	--pico-border-color: var(--dp-accent);
-	--pico-color: var(--dp-accent-text);
+	--pico-background-color: var(--pico-primary-background);
+	--pico-border-color: var(--pico-primary-background);
+	--pico-color: #fff;
 }
 button.ghost,
 [role="button"].ghost,
@@ -410,13 +446,23 @@ a.button.danger {
 	--pico-border-color: var(--dp-error);
 	--pico-color: #fff;
 }
-/* 枠だけの危ない操作(削除など)。赤い文字と枠 */
+/*
+ * 枠だけの危ない操作(取消・削除の 1 回目)。**待っている間は赤くしない。**
+ *
+ * 一覧では行ごとに取消や削除が並ぶので、赤い枠の列が立って画面全体が
+ * 警告のように見えていた。**赤は押そうとしたときと、確定のボタンだけ**にする
+ */
 button.outline.danger,
 [role="button"].outline.danger,
 a.button.outline.danger {
 	--pico-background-color: transparent;
-	--pico-border-color: var(--dp-error);
-	--pico-color: var(--dp-error);
+	--pico-border-color: var(--pico-secondary-border);
+	--pico-color: var(--pico-secondary);
+}
+:is(button, [role="button"], a.button).outline.danger:is(:hover, :active, :focus) {
+	--pico-background-color: #{tint(var(--dp-rec))};
+	--pico-border-color: var(--dp-rec);
+	--pico-color: var(--dp-rec-text);
 }
 button.ghost.danger,
 [role="button"].ghost.danger,
@@ -429,9 +475,9 @@ a.button.ghost.danger {
 
 /* 色付きのボタンは、押しているときも同じ色の少し濃いものにする(Pico の既定だと主の色に変わって文字が読みにくい) */
 :is(button, [role="button"], a.button).accent:is(:hover, :active, :focus) {
-	--pico-background-color: color-mix(in srgb, var(--dp-accent) 85%, #000);
-	--pico-border-color: color-mix(in srgb, var(--dp-accent) 85%, #000);
-	--pico-color: var(--dp-accent-text);
+	--pico-background-color: color-mix(in srgb, var(--pico-primary-background) 85%, #000);
+	--pico-border-color: color-mix(in srgb, var(--pico-primary-background) 85%, #000);
+	--pico-color: #fff;
 }
 :is(button, [role="button"], a.button).danger:not(.ghost, .outline):is(:hover, :active, :focus) {
 	--pico-background-color: color-mix(in srgb, var(--dp-error) 85%, #000);
@@ -444,6 +490,11 @@ a.button.ghost.danger {
 }
 
 /* ---- タグ ---- */
+/*
+ * 状態の札。**既定は淡い地に濃い文字。** 塗るのは `.solid` を付けたものだけで、
+ * それは「いま動いているもの」(録画中・視聴中)に限る。
+ * 一覧では 1 行に札が 2〜3 個並ぶので、全部塗ると色の縞になって読めなかった
+ */
 .tag {
 	display: inline-flex;
 	align-items: center;
@@ -458,64 +509,71 @@ a.button.ghost.danger {
 	border: 1px solid transparent;
 }
 .tag.success {
-	background: var(--dp-success);
-	color: #fff;
+	background: tint(var(--dp-ok));
+	color: var(--dp-ok-text);
 }
 .tag.error {
-	background: var(--dp-error);
-	color: #fff;
+	background: tint(var(--dp-rec));
+	color: var(--dp-rec-text);
 }
 .tag.warning {
-	background: #f3c35a;
-	color: #2a1c05;
+	background: tint(var(--dp-warn));
+	color: var(--dp-warn-text);
 }
 .tag.info {
-	background: var(--dp-info);
-	color: #fff;
+	background: tint(var(--dp-info));
+	color: var(--dp-info-text);
 }
-.tag.accent {
-	background: var(--dp-accent);
-	color: var(--dp-accent-text);
-}
+.tag.accent,
 .tag.primary {
-	background: var(--pico-primary-background);
-	color: #fff;
+	background: tint(var(--pico-primary-background));
+	color: var(--pico-primary);
 }
+/* 枠を足すだけ。色は上の淡い札と同じ(手を止めてほしいもの = 競合・失敗に使う) */
 .tag.outline {
-	background: transparent;
 	border-color: currentColor;
 }
-/* 枠だけの色付き札は、文字も枠と同じ色にする(塗りの札は白文字のため) */
-.tag.outline.error {
-	color: var(--dp-error);
+/* **いま動いているものだけ塗る。** 一覧の中でここにだけ目が行くようにする */
+.tag.solid {
+	background: var(--pico-primary-background);
+	color: #fff;
+	border-color: transparent;
 }
-.tag.outline.success {
-	color: var(--dp-success);
+.tag.solid.error {
+	background: var(--dp-rec);
+	color: #fff;
 }
-.tag.outline.warning {
-	color: var(--dp-warning);
-}
-.tag.outline.info {
-	color: var(--dp-info);
+.tag.solid.success {
+	background: var(--dp-ok);
+	color: #fff;
 }
 
 /* ---- 知らせ ---- */
+/*
+ * 一言の知らせ。**地を塗るのではなく、左の線で種類を示す。**
+ * 色で塗りつぶすと、暗いほうでは濁った帯になって字が読みにくかった
+ */
 .notice {
 	border-radius: 0.75rem;
 	padding: 0.75rem 1rem;
 	background: var(--dp-base-200);
+	border-left: 3px solid transparent;
 }
 .notice.warning {
-	background: color-mix(in srgb, var(--dp-warning) 20%, var(--dp-surface));
+	background: tint(var(--dp-warn), 10%);
+	border-left-color: var(--dp-warn);
 }
 .notice.error {
-	background: color-mix(in srgb, var(--dp-error) 20%, var(--dp-surface));
+	background: tint(var(--dp-rec), 10%);
+	border-left-color: var(--dp-rec);
 }
 .notice.success {
-	background: color-mix(in srgb, var(--dp-success) 20%, var(--dp-surface));
+	background: tint(var(--dp-ok), 10%);
+	border-left-color: var(--dp-ok);
 }
 .notice.info {
-	background: color-mix(in srgb, var(--dp-info) 20%, var(--dp-surface));
+	background: tint(var(--dp-info), 10%);
+	border-left-color: var(--dp-info);
 }
 
 /* ---- 画面の幅 ---- */
@@ -603,15 +661,15 @@ a.button.ghost.danger {
 
 /*
  * 再生位置の帯。Pico の range は溝を1色で塗るだけで、どこまで進んだかが見えない。
- * 進んだぶん (--fill、画面側で 0〜100% を渡す) をグラデーションで塗る。Firefox は ::-moz-range-progress が持つ
+ * 進んだぶん (--fill、画面側で 0〜100% を渡す) を主の色で塗る。Firefox は ::-moz-range-progress が持つ
  */
 input[type="range"].fill::-webkit-slider-runnable-track {
 	background:
-		var(--dp-gradient) 0 0 / var(--fill, 0%) 100% no-repeat,
+		linear-gradient(var(--pico-primary-background), var(--pico-primary-background)) 0 0 / var(--fill, 0%) 100% no-repeat,
 		var(--pico-range-border-color);
 }
 input[type="range"].fill::-moz-range-progress {
 	height: var(--pico-range-height);
 	border-radius: var(--pico-border-radius);
-	background: var(--dp-gradient);
+	background: var(--pico-primary-background);
 }

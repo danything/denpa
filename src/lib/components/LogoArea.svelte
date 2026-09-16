@@ -517,7 +517,8 @@
     .learned-image {
         max-height: 8rem;
         border-radius: 0.25rem;
-        background: #2a323c;
+        /* 白抜きのロゴが多いので、下地は暗いほうに寄せた枠色を使う */
+        background: var(--dp-base-300);
     }
     .sub {
         margin-top: 0.125rem;
