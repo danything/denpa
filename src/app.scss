@@ -414,7 +414,6 @@ a.button.secondary.outline:hover {
  */
 a.button[aria-current]:not([aria-current="false"]) {
 	--pico-color: var(--pico-primary-inverse);
-	--pico-text-decoration: none;
 }
 a.button.secondary[aria-current]:not([aria-current="false"]) {
 	--pico-color: var(--pico-secondary-inverse);

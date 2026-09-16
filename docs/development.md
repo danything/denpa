@@ -15,6 +15,23 @@ docker compose run --rm unit bun run check  # 型 (svelte-check)
 依存を足したら `docker compose run --rm unit bun install` を一度回してください
 (`node_modules` は名前付きボリュームなので、イメージの焼き直しは要りません)。
 
+## README の絵
+
+`docs/images/` の絵は **動いている denpa から撮ります**(偽エージェントではなく、
+番組表も録画も入っているもの)。撮る条件 — 1600×900・暗いテーマ・ja-JP・Asia/Tokyo、
+動く絵も同じ広さで動かして貼るときに 1120×630 へ縮める — は
+`scripts/capture-docs.ts` の頭に書いてあります。
+
+```sh
+ssh -N -L 3399:<denpa の ClusterIP>:3000 <ホスト>   # 見えるところに繋ぐ
+bun scripts/capture-docs.ts                          # 全部 (名前を挙げるとそのぶんだけ)
+python3 scripts/docs-webp.py                         # 動く絵を組み立てて docs/images へ
+```
+
+**閲覧だけです。** 予約も削除も保存もしません。自分の値が入る欄 (通知先・VLC・郵便番号) と
+映像はぼかします。見た目を変えたら撮り直してください — 古い絵が残っていると、
+README を見て入れた人が最初に「話が違う」と気づくところになります。
+
 ## テストの方針
 
 **E2E が主で、単体テストは純粋関数の境界条件だけ。** 偽エージェント・偽の通知先・
