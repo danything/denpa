@@ -52,7 +52,7 @@ ENV DEV="curl ca-certificates build-essential cmake pkg-config nasm patch zlib1g
 # 上限 (131,072 個) で、patches/ffmpeg-sched-overflow.patch で直して使う
 # (経緯と数字は patches/README.md)。上げるときはパッチが当たるかを CI が見る (--fuzz=0)
 # renovate: datasource=github-tags depName=FFmpeg/FFmpeg extractVersion=^n(?<version>.*)$
-ENV FFMPEG_VERSION=9.0.1
+ENV FFMPEG_VERSION=9.0.2
 # SVT-AV1 は**上流の最新をソースから組む** (Debian trixie のパッケージは 2 系で古い。
 # 3 系以降は速度も画質も別物)。静的に繋ぐので実行イメージに共有ライブラリは要らない
 # renovate: datasource=gitlab-tags depName=AOMediaCodec/SVT-AV1 registryUrl=https://gitlab.com
