@@ -48,9 +48,10 @@ ENV CURL="curl -fsSL --retry 5 --retry-delay 5 --retry-all-errors --connect-time
 # vaapi も有効にしてあるのは、QSV が初期化できない機種の逃げ道 (h264_vaapi) のため
 ENV DEV="curl ca-certificates build-essential cmake pkg-config nasm patch zlib1g-dev libfreetype6-dev libopus-dev libx264-dev libdav1d-dev libfontconfig-dev woff2 libva-dev libvpl-dev"
 
-# 9.0 / 9.0.1 は 60コマで焼くと 20〜25分で音声が黙って終わる。原因は CLI の溢れ FIFO の
-# 上限 (131,072 個) で、patches/ffmpeg-sched-overflow.patch で直して使う
-# (経緯と数字は patches/README.md)。上げるときはパッチが当たるかを CI が見る (--fuzz=0)
+# 9.0 / 9.0.1 は 60コマで焼くと 20〜25分で音声が黙って終わった (CLI の溢れ FIFO の上限)。
+# 9.0.2 でその FIFO ごと無くなり、当てていた patches/ffmpeg-sched-overflow.patch は
+# 取り下げた (経緯と数字は patches/README.md)。上げるときはパッチが当たるかを
+# ビルド (--fuzz=0) が見る — 当たらなくなったら、上流に入ったのかまず疑う
 # renovate: datasource=github-tags depName=FFmpeg/FFmpeg extractVersion=^n(?<version>.*)$
 ENV FFMPEG_VERSION=9.0.2
 # SVT-AV1 は**上流の最新をソースから組む** (Debian trixie のパッケージは 2 系で古い。
