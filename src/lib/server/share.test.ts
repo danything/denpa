@@ -6,7 +6,7 @@ import { join } from 'node:path';
 const { config } = await import('./config');
 config.dbPath = join(mkdtempSync(join(tmpdir(), 'denpa-share-')), 'denpa.db');
 
-const { mintShareToken, verifyShareToken, shareTokenAllows, SHARE_TTL } = await import('./share');
+const { mintShareToken, verifyShareToken, shareTokenAllows, shareUrls, SHARE_TTL } = await import('./share');
 
 describe('期限付きの再生リンク', () => {
     test('作ったものは期限まで通る', () => {
@@ -70,5 +70,42 @@ describe('期限付きの再生リンク', () => {
         expect(shareTokenAllows('/api/recordings/46', params)).toBe(false);
         expect(shareTokenAllows('/settings', params)).toBe(false);
         expect(shareTokenAllows('/api/recordings/46/file', new URLSearchParams())).toBe(false);
+    });
+});
+
+/**
+ * リンクの形。ファイルそのものと、続きの位置から指す XSPF の 2 本。
+ * 尻の段はテレビの VLC の見出しになる (`share/+server.ts`)
+ */
+describe('再生リンクの形', () => {
+    const rec = { id: 12, name: '[新]番組 第1話' };
+
+    test('尻に番組名、資格と名指しはクエリに', () => {
+        const links = shareUrls(rec, 'https://denpa.example', 'abc', 'alt');
+        expect(links.file).toBe(
+            `https://denpa.example/api/recordings/12/file/${encodeURIComponent('番組 第1話.mkv')}?token=abc&source=alt`,
+        );
+        expect(links.playlist).toBe(
+            `https://denpa.example/api/recordings/12/playlist/${encodeURIComponent('番組 第1話.xspf')}?token=abc&source=alt`,
+        );
+    });
+
+    test('生TSの名指しは拡張子が m2ts (.ts は TypeScript と紛れる)', () => {
+        expect(shareUrls(rec, 'https://x', 'abc', 'ts').file).toContain(
+            `${encodeURIComponent('.m2ts')}?token=abc&source=ts`,
+        );
+        // プレイリストのほうは中身が XSPF なので変わらない
+        expect(shareUrls(rec, 'https://x', 'abc', 'ts').playlist).toContain('.xspf?token=abc&source=ts');
+    });
+
+    test('名前の区切り文字はパスの段を増やさない', () => {
+        const { file } = shareUrls({ id: 3, name: 'A/B\\C' }, 'https://x', 'abc', null);
+        expect(file).toBe(`https://x/api/recordings/3/file/${encodeURIComponent('A／B／C.mkv')}?token=abc`);
+    });
+
+    test('名前が空なら id、資格が無ければクエリも無い (信頼したネットワークから直に開く形)', () => {
+        expect(shareUrls({ id: 7, name: '' }, 'https://x', null, null).file).toBe(
+            'https://x/api/recordings/7/file/7.mkv',
+        );
     });
 });
