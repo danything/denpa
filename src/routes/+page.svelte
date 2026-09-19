@@ -105,10 +105,10 @@
     async function mintShareLink(
         id: number,
         source?: 'ts' | 'alt',
-    ): Promise<{ url: string; expiresAt: number }> {
+    ): Promise<{ url: string; playlist: string; expiresAt: number }> {
         const query = source === undefined ? '' : `?source=${source}`;
         const res = await fetch(`/api/recordings/${id}/share${query}`, { method: 'POST' });
-        return (await res.json()) as { url: string; expiresAt: number };
+        return (await res.json()) as { url: string; playlist: string; expiresAt: number };
     }
 
     /**
@@ -129,7 +129,12 @@
      *
      * **窓は押した瞬間に開けておく。** リンク先はトークンを取ってから入れる —
      * await の後の window.open はポップアップ扱いで塞がれることがある。
-     * 応答 (OK だけの白いタブ) は中身が読めない (別オリジン) ので、数秒で畳む
+     * 応答 (OK だけの白いタブ) は中身が読めない (別オリジン) ので、数秒で畳む。
+     *
+     * **途中まで観たものは続きから。** VLC の `/play` に位置を渡す口は無いので、
+     * ファイルではなく、それを続きの位置から指す XSPF (`playlist`) を渡す
+     * (`server/playlist.ts`)。まだ観ていないものは今までどおりファイルを渡す —
+     * プレイリストを読めない版の VLC でも、少なくとも頭からは観られるように
      */
     async function playOnTv(
         tv: (typeof data.vlcTargets)[number],
@@ -158,9 +163,11 @@
                 : tv.codec === 'ts' && rec.ts_path !== null
                   ? ('ts' as const)
                   : undefined;
+        const resumeMs = rec.resume_ms ?? 0;
         let shareUrl: string;
         try {
-            ({ url: shareUrl } = await mintShareLink(rec.id, source));
+            const links = await mintShareLink(rec.id, source);
+            shareUrl = resumeMs > 0 ? links.playlist : links.url;
         } catch {
             win?.close();
             noteVlc('error', '再生リンクを作れませんでした');
@@ -174,7 +181,7 @@
         }
         win.location.href = play;
         setTimeout(() => win.close(), 1500);
-        noteVlc('info', 'テレビへ飛ばしました');
+        noteVlc('info', resumeMs > 0 ? `テレビへ飛ばしました (${durationMs(resumeMs)} から)` : 'テレビへ飛ばしました');
         detail.close();
     }
 

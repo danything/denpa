@@ -81,6 +81,7 @@ EPGStation の置き換えとして作ったもので、エンコード設定は
 | `src/lib/server/migrate.ts` | EPGStation からの引き継ぎ ([migrate.md](migrate.md)) |
 | `src/lib/server/share.ts` | 期限付きの再生リンク (プレイヤーへ渡す) |
 | `src/lib/server/vlc.ts` | 設定に書いたテレビの VLC の一覧 (飛ばすのは端末側) |
+| `src/lib/server/playlist.ts` | 続きの位置から始めさせる XSPF (テレビの VLC に、ファイルの代わりに渡す) |
 | `src/lib/server/auth.ts` | どの口をどう守るか ([auth.md](auth.md)) |
 | `src/lib/server/oidc.ts` | OIDC (discovery・PKCE・ID トークンの検証)。ライブラリは使っていない |
 | `src/lib/server/session.ts` | ログインの控え (DBに持つ。Cookie に入るのは32バイトだけ) |

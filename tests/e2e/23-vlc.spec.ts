@@ -6,7 +6,8 @@ import { expect, goto, recordOne, test } from './helpers';
  * **実際には飛ばしません。** 飛ばすのは端末のブラウザのトップレベル遷移で、
  * 相手 (テレビの VLC) がいないと開いたタブが繋がらないだけ — ここで確かめるのは
  * **口の出方と覚え方**のほう: 設定の行編集 (名前+IP+ポート+コーデック) が
- * 読み書きできるか、並べたテレビが詳細のボタンになるか。ホスト表記の整え方や
+ * 読み書きできるか、並べたテレビが詳細のボタンになるか、途中まで観たものは
+ * 続きの位置から指す XSPF を渡すか。ホスト表記の整え方や
  * 書式の往復は `vlc-host.test.ts` / `vlc.test.ts` が持っている。
  */
 test.describe('テレビの VLC で再生', () => {
@@ -101,6 +102,54 @@ test.describe('テレビの VLC で再生', () => {
         await expect
             .poll(() => page.evaluate(() => (window as unknown as { __opened: string[] }).__opened))
             .toEqual(['http://192.168.1.99:8080/']);
+
+        /*
+         * **途中まで観たものは続きから。** ペア済みなら `/play?path=` に渡すのは
+         * ファイルではなく、それを続きの位置から指す XSPF。VLC の `/play` に
+         * 位置を渡す口が無いので (`server/playlist.ts`)。中身はテレビが取りに来る
+         * 瞬間に作る — ここでは同じ資格 (`?token=`) で取って、位置と資格の写しを見る
+         */
+        const resumed = await request.post(`/api/recordings/${id}/resume`, {
+            data: { at: 95, length: 0 },
+        });
+        expect(resumed.ok()).toBe(true);
+        await goto(page, '/');
+        await row.getByTestId('detail-button').click();
+        await page.evaluate(() => {
+            const opened: string[] = [];
+            (window as unknown as { __opened: string[] }).__opened = opened;
+            /*
+             * 先に開く白い窓の代わり。`null` を返すとポップアップを塞がれた扱いで
+             * **このタブごと**テレビへ遷移してしまう (戻れない)。行き先は窓の
+             * `location.href` に入るので、そこだけ受け取る
+             */
+            window.open = (() =>
+                ({
+                    close() {},
+                    location: {
+                        set href(value: string) {
+                            opened.push(value);
+                        },
+                    },
+                }) as unknown as Window) as typeof window.open;
+            localStorage.setItem('vlc-paired:192.168.1.99:8080', '1');
+        });
+        await detail.getByTestId('vlc-play-button').nth(0).click();
+        await expect(page.getByText('テレビへ飛ばしました (2分 から)')).toBeVisible();
+        const opened = await page.evaluate(() => (window as unknown as { __opened: string[] }).__opened);
+        expect(opened).toHaveLength(1);
+        const path = new URL(opened[0] ?? '').searchParams.get('path') ?? '';
+        expect(path).toMatch(new RegExp(`/api/recordings/${id}/playlist/.+\\.xspf\\?token=`));
+        const xspf = await request.get(path);
+        expect(xspf.headers()['content-type']).toContain('application/xspf+xml');
+        const xml = await xspf.text();
+        expect(xml).toContain('<vlc:option>start-time=95</vlc:option>');
+        // 中のファイルの URL も同じトークンで開ける (XML なので & は &amp;)
+        const token = new URL(path).searchParams.get('token');
+        expect(xml).toContain(`/api/recordings/${id}/file/`);
+        expect(xml).toContain(`?token=${token}</location>`);
+        const file = (/<location>([^<]+)<\/location>/.exec(xml)?.[1] ?? '').replaceAll('&amp;', '&');
+        expect((await request.head(file)).ok()).toBe(true);
 
         // 後片付け。全部外して保存すると行ごと消える (他のテストにボタンを残さない)
         await goto(page, '/settings');
