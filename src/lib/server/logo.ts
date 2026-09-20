@@ -196,7 +196,7 @@ function markAbsent(): void {
     const known = notes();
     const absent = { ...known.absent };
     for (const service of currentServices()) {
-        if (service.type !== 'GR' && needsLogo(service.id)) absent[service.id] = Date.now();
+        if (service.type !== 'GR' && needsLogo(service)) absent[service.id] = Date.now();
     }
     save({ ...known, absent });
 }
@@ -396,9 +396,14 @@ function storedLogoType(serviceId: number): number | null {
  * 拾った時点で閉じてしまい、実機の地上波26局が小さいロゴのまま並んでいた
  * (大きさが局ごとに違って見える)。64×36 が来るまでは足りていないとみなす。
  *
- * 開けるだけ開けて来なかった局 (`gaveUp`) は、次の取り直しの時期まで今のもので足りる
+ * 開けるだけ開けて来なかった局 (`gaveUp`) は、次の取り直しの時期まで今のもので足りる。
+ *
+ * **大きさを見るのは地上波だけ。** 衛星のカルーセル (`LOGO-05`) には 0x05 しか載って
+ * いないので小さいものは入りようがなく、来なかったときに控える道 (`gaveUp`) も
+ * 地上波にしか無い — 衛星まで見ると、万一のときに毎回20分待つことになる
  */
-function needsLogo(serviceId: number): boolean {
+function needsLogo(service: { id: number; type: string }): boolean {
+    const serviceId = service.id;
     let age: number;
     try {
         age = Date.now() - statSync(logoPath(serviceId)).mtimeMs;
@@ -407,7 +412,8 @@ function needsLogo(serviceId: number): boolean {
     }
     const at = notes().gaveUp[serviceId];
     if (at !== undefined && Date.now() - at < LOGO_MAX_AGE) return false;
-    return age > LOGO_MAX_AGE || storedLogoType(serviceId) !== PREFERRED_LOGO_TYPE;
+    if (age > LOGO_MAX_AGE) return true;
+    return service.type === 'GR' && storedLogoType(serviceId) !== PREFERRED_LOGO_TYPE;
 }
 
 /**
@@ -419,8 +425,7 @@ function markGaveUp(channel: string): void {
     const gaveUp = { ...known.gaveUp };
     let changed = false;
     for (const service of currentServices()) {
-        if (service.channel !== channel || !existsSync(logoPath(service.id)) || !needsLogo(service.id))
-            continue;
+        if (service.channel !== channel || !existsSync(logoPath(service.id)) || !needsLogo(service)) continue;
         gaveUp[service.id] = Date.now();
         changed = true;
     }
@@ -453,7 +458,7 @@ export function missing(): Target[] {
 
     // 地上波は中継ごとに乗っている局が違う。その中継の局が足りないときだけ開く
     for (const service of services) {
-        if (service.type === 'GR' && needsLogo(service.id)) add(service);
+        if (service.type === 'GR' && needsLogo(service)) add(service);
     }
 
     /*
@@ -482,7 +487,7 @@ export function missing(): Target[] {
 
 /** その物理チャンネルに相乗りしている局のうち、ロゴを取り直したい数 */
 function missingOn(channel: string): number {
-    return currentServices().filter((s) => s.channel === channel && needsLogo(s.id)).length;
+    return currentServices().filter((s) => s.channel === channel && needsLogo(s)).length;
 }
 
 /**
@@ -497,7 +502,7 @@ function missingOn(channel: string): number {
  * ぶんを毎回取りこぼしていた (実機で CS が 0/54 のままだった)。
  */
 function missingSatellites(): number {
-    return currentServices().filter((s) => s.type !== 'GR' && needsLogo(s.id) && !absentFromCarousel(s.id))
+    return currentServices().filter((s) => s.type !== 'GR' && needsLogo(s) && !absentFromCarousel(s.id))
         .length;
 }
 
