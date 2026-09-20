@@ -32,7 +32,11 @@ CMD ["bun", "run", "test"]
 # ffmpeg (自前ビルド。ARIB字幕 libaribcaption + AV1 libsvtav1/dav1d + H.264 x264 +
 # Opus + Intel GPU (VA-API/QSV)。上流に投げる直しを patches/ から当てる)
 # ---------------------------------------------------------------------------
-FROM docker.io/library/debian:trixie-slim AS ffmpeg
+# **debian は digest で固定する** (ffmpeg / jls / runtime の3つとも同じもの)。
+# 札 (`trixie-slim`) だけだと月に何度か中身が入れ替わり、CI は `pull: true` なので
+# その日の push が — CSS を1行直しただけでも — ffmpeg の組み直し (10分強) に巻き込まれる。
+# 固定しておけば組み直すのは Renovate が digest を上げる PR のときだけになる
+FROM docker.io/library/debian:trixie-slim@sha256:a99cfc517144bc59b1978475ec53b46ecabec7e43635402ee5b77cc54cd1b20a AS ffmpeg
 SHELL ["/bin/bash", "-c"]
 
 # ダウンロードは CI で切られることがあるので必ずリトライさせる。
@@ -112,7 +116,7 @@ RUN apt-get update && \
 # — JL の文字コードが版で違い (4.0 は Shift-JIS、5.x は BOM付きUTF-8)、取り違えると
 # 「何も切らない」。仕組みと出どころの経緯は docs/encode.md「検出方法は2つ」
 # ---------------------------------------------------------------------------
-FROM docker.io/library/debian:trixie-slim AS jls
+FROM docker.io/library/debian:trixie-slim@sha256:a99cfc517144bc59b1978475ec53b46ecabec7e43635402ee5b77cc54cd1b20a AS jls
 ENV DEBIAN_FRONTEND=noninteractive
 ENV CURL="curl -fsSL --retry 5 --retry-delay 5 --retry-all-errors --connect-timeout 20"
 RUN apt-get update && \
@@ -164,7 +168,7 @@ RUN bun run build
 # ---------------------------------------------------------------------------
 # 本番イメージ
 # ---------------------------------------------------------------------------
-FROM docker.io/library/debian:trixie-slim AS runtime
+FROM docker.io/library/debian:trixie-slim@sha256:a99cfc517144bc59b1978475ec53b46ecabec7e43635402ee5b77cc54cd1b20a AS runtime
 WORKDIR /app
 ENV NODE_ENV=production \
     TZ=Asia/Tokyo \
