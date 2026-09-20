@@ -42,6 +42,21 @@ export const LOGO_PNG = Uint8Array.from(
     (c) => c.charCodeAt(0),
 );
 
+/**
+ * 大きいほうのロゴ (logo_type 0x05 = 64x36)。こちらは作り物の市松模様。
+ *
+ * **寸法は本物どおりにする。** denpa は置いてある PNG の寸法からロゴの種類を見分ける
+ * (`logoTypeOfPng`)。48x24 を 0x05 と名乗って流していた頃は、「まだ小さいものしか
+ * 持っていない」と見られて地上波の見回りがいつまでも閉じなかった。
+ * 色の表が入っていないのは上と同じ
+ */
+export const LOGO_PNG_LARGE = Uint8Array.from(
+    atob(
+        'iVBORw0KGgoAAAANSUhEUgAAAEAAAAAkCAMAAAAO0sygAAAANElEQVR42mNgpBAwDBMDOIAAJsABBcTyh4sB5GiEsUcNGD4GjOaFUQNG88KoAcOoeqcEAAAsSR5xqyZZeQAAAABJRU5ErkJggg==',
+    ),
+    (c) => c.charCodeAt(0),
+);
+
 /** 番組表を丸1日ぶん埋めるための追加分。局ごとの尺に応じて増やす */
 const DAY = 30 * 60 * 60 * 1000;
 
@@ -249,7 +264,7 @@ function carouselPackets(services: FakeService[]): Uint8Array {
         {
             logoId: services[0]!.serviceId % 512,
             services: services.map((s) => [s.networkId, s.serviceId] as [number, number]),
-            data: LOGO_PNG,
+            data: LOGO_PNG_LARGE,
         },
     ]);
     return Uint8Array.from([
@@ -271,23 +286,29 @@ function logoPackets(service: FakeService): Uint8Array {
     const be = (value: number) => [(value >> 8) & 0xff, value & 0xff];
     const logoId = service.serviceId % 512;
 
-    const cdt = withCrc([
-        0xc8,
-        0x00,
-        0x00,
-        ...be(service.networkId),
-        0xc1,
-        0x00,
-        0x00,
-        ...be(service.networkId),
-        0x01,
-        ...be(0xf000),
-        0x05,
-        ...be(logoId),
-        ...be(1),
-        ...be(LOGO_PNG.length),
-        ...LOGO_PNG,
-    ]);
+    /*
+     * **小さいもの (0x00) を先に、大きいもの (0x05) をあとに流す。** 本物の局も6種類を
+     * 順に流していて、どれが先に来るかは運。最初に来た1つで閉じていた頃は、実機の
+     * 地上波26局が小さいロゴのまま並んでいた
+     */
+    const cdt = (logoType: number, data: Uint8Array) =>
+        withCrc([
+            0xc8,
+            0x00,
+            0x00,
+            ...be(service.networkId),
+            0xc1,
+            0x00,
+            0x00,
+            ...be(service.networkId),
+            0x01,
+            ...be(0xf000),
+            logoType,
+            ...be(logoId),
+            ...be(1),
+            ...be(data.length),
+            ...data,
+        ]);
     const sdt = withCrc([
         0x42,
         0x00,
@@ -308,7 +329,10 @@ function logoPackets(service: FakeService): Uint8Array {
         ...be(1),
         ...be(service.networkId),
     ]);
-    return Uint8Array.from([...packetize(0x0029, cdt), ...packetize(0x0011, sdt, 5)]);
+    const small = packetize(0x0029, cdt(0x00, LOGO_PNG));
+    // 同じ PID の続きなので、連続性カウンタは前のぶんの続きから
+    const large = packetize(0x0029, cdt(0x05, LOGO_PNG_LARGE), small.length / 188);
+    return Uint8Array.from([...small, ...packetize(0x0011, sdt, 5), ...large]);
 }
 
 /**

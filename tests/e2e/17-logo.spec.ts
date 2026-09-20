@@ -59,6 +59,12 @@ test.describe('局ロゴ', () => {
                 const bytes = await logo.body();
                 expect(bytes.includes(Buffer.from('PLTE'))).toBeTruthy();
                 expect(bytes.includes(Buffer.from('tRNS'))).toBeTruthy();
+                /*
+                 * **残るのは大きいほう (64x36)。** 偽の放送は小さいもの (48x24) を先に流す。
+                 * 最初に来た1つで閉じていた頃は、実機の地上波26局が小さいロゴのままで、
+                 * 番組表に並ぶと局ごとに大きさが違って見えた
+                 */
+                expect([bytes.readUInt32BE(16), bytes.readUInt32BE(20)]).toEqual([64, 36]);
             }).toPass({ timeout: 60_000 });
         }
 
