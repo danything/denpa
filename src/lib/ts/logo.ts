@@ -32,7 +32,45 @@ const DESC_LOGO_TRANSMISSION = 0xcf;
  * 使うロゴの大きさ。0x05 が一番大きい(64×36)。
  * 小さいものは並べたときに粗いので、大きいものが来たら差し替える。
  */
-const PREFERRED_LOGO_TYPE = 0x05;
+export const PREFERRED_LOGO_TYPE = 0x05;
+
+/**
+ * ロゴの大きさは**規格で6種類に決まっている** (ARIB STD-B21。logo_type → 幅×高さ)。
+ * 局は6種類とも流していて、どれが先に来るかは運。0x00〜0x04 は SD 用・HD の小で、
+ * SD 用は画素が正方でない前提の絵なので、そのまま並べると縦横比まで局ごとに違って見える
+ */
+const LOGO_SIZES: readonly (readonly [number, number])[] = [
+    [48, 24],
+    [36, 24],
+    [48, 27],
+    [72, 36],
+    [54, 36],
+    [64, 36],
+];
+
+/**
+ * 置いてある PNG がどの logo_type か。寸法から引く (6種類とも寸法が違う)。
+ * PNG でない・規格に無い寸法なら null
+ */
+export function logoTypeOfPng(png: Uint8Array): number | null {
+    // 署名 8 + IHDR の長さと名前 8 のあとに、幅と高さが 4 バイトずつ
+    if (png.length < 24 || png[0] !== 0x89 || png[1] !== 0x50) return null;
+    const view = new DataView(png.buffer, png.byteOffset, png.byteLength);
+    const width = view.getUint32(16);
+    const height = view.getUint32(20);
+    const type = LOGO_SIZES.findIndex(([w, h]) => w === width && h === height);
+    return type === -1 ? null : type;
+}
+
+/**
+ * いま持っているものを、来たもので置き換えてよいか。**小さいものへは戻さない。**
+ * 同じ種類は置き換える (絵が新しくなっているかもしれない)。
+ * 持っているものの種類が分からなければ (null) 置き換える
+ */
+export function replacesLogo(knownType: number | null, nextType: number): boolean {
+    if (knownType === null || knownType === nextType) return true;
+    return knownType !== PREFERRED_LOGO_TYPE && nextType > knownType;
+}
 
 export interface LogoData {
     logoId: number;
@@ -158,8 +196,9 @@ export class LogoCollector {
         // 大きいものを優先する。同じ大きさなら新しい版に入れ替える
         if (
             known === undefined ||
-            (known.logoType !== PREFERRED_LOGO_TYPE && logo.logoType > known.logoType) ||
-            (known.logoType === logo.logoType && logo.logoVersion !== known.logoVersion)
+            (known.logoType === logo.logoType
+                ? logo.logoVersion !== known.logoVersion
+                : replacesLogo(known.logoType, logo.logoType))
         ) {
             this.logos.set(logo.logoId, logo);
         }

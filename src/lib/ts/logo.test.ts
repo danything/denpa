@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { LogoCollector, parseCdt, parseLogoLinks } from './logo';
+import { LogoCollector, logoTypeOfPng, parseCdt, parseLogoLinks, replacesLogo } from './logo';
 import { packetize, withCrc } from './synth';
 
 /** 1x1 の PNG。中身は問わないので、ロゴとして扱えるかだけ見る */
@@ -143,5 +143,44 @@ describe('拾い集める', () => {
         ]);
         for (let at = 0; at < data.length; at += 77) collector.feed(data.subarray(at, at + 77));
         expect(collector.collected()).toHaveLength(1);
+    });
+});
+
+/** 署名と IHDR の頭だけの PNG。寸法を読むのに要るのはここまで */
+function pngOf(width: number, height: number): Uint8Array {
+    const out = new Uint8Array(24);
+    out.set([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 13, 0x49, 0x48, 0x44, 0x52]);
+    const view = new DataView(out.buffer);
+    view.setUint32(16, width);
+    view.setUint32(20, height);
+    return out;
+}
+
+describe('ロゴの大きさ', () => {
+    test('寸法から logo_type を引く', () => {
+        expect(logoTypeOfPng(pngOf(48, 24))).toBe(0x00);
+        expect(logoTypeOfPng(pngOf(72, 36))).toBe(0x03);
+        expect(logoTypeOfPng(pngOf(64, 36))).toBe(0x05);
+    });
+
+    test('規格に無い寸法・PNG でないものは null', () => {
+        expect(logoTypeOfPng(pngOf(100, 100))).toBeNull();
+        expect(logoTypeOfPng(PNG)).toBeNull();
+        expect(logoTypeOfPng(new Uint8Array(24))).toBeNull();
+    });
+
+    test('64×36 を持っていたら小さいものへは戻さない', () => {
+        expect(replacesLogo(0x05, 0x00)).toBe(false);
+        expect(replacesLogo(0x05, 0x03)).toBe(false);
+        // 同じ種類は絵が変わったかもしれないので置き換える
+        expect(replacesLogo(0x05, 0x05)).toBe(true);
+    });
+
+    test('小さいものは大きいもので置き換える', () => {
+        expect(replacesLogo(0x00, 0x05)).toBe(true);
+        expect(replacesLogo(0x00, 0x03)).toBe(true);
+        expect(replacesLogo(0x03, 0x00)).toBe(false);
+        // 何を持っているか分からなければ置き換える
+        expect(replacesLogo(null, 0x00)).toBe(true);
     });
 });

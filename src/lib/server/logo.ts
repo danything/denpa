@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, readFileSync, renameSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { and, eq, sql } from 'drizzle-orm';
-import { LogoCollector } from '../ts/logo';
+import { LogoCollector, logoTypeOfPng, PREFERRED_LOGO_TYPE, replacesLogo } from '../ts/logo';
 import { withPalette } from '../ts/logo-palette';
 import type { ChannelType } from '../types';
 import { config } from './config';
@@ -120,6 +120,11 @@ interface RelayNotes {
     noCarousel: Record<string, number>;
     /** カルーセルを読み切っても来なかった局 (局ID → そう分かった時刻) */
     absent: Record<string, number>;
+    /**
+     * 地上波で、開けるだけ開けても**大きいロゴ (64×36) が来なかった**局 (局ID → 時刻)。
+     * 控えておかないと、小さいロゴしか流さない局のために見回りのたびに6分開き直す
+     */
+    gaveUp: Record<string, number>;
 }
 
 /**
@@ -135,9 +140,13 @@ function notes(): RelayNotes {
     if (relays !== null) return relays;
     try {
         const parsed = JSON.parse(readFileSync(relayPath(), 'utf8')) as Partial<RelayNotes>;
-        relays = { noCarousel: parsed.noCarousel ?? {}, absent: parsed.absent ?? {} };
+        relays = {
+            noCarousel: parsed.noCarousel ?? {},
+            absent: parsed.absent ?? {},
+            gaveUp: parsed.gaveUp ?? {},
+        };
     } catch {
-        relays = { noCarousel: {}, absent: {} };
+        relays = { noCarousel: {}, absent: {}, gaveUp: {} };
     }
     return relays;
 }
@@ -214,7 +223,7 @@ export function readLogo(serviceId: number): Uint8Array | null {
  * 放送波の service_id は ARIB のもので、denpa が持っている services.id とは
  * 別物。network_id と合わせて引き直す。
  */
-function store(networkId: number, serviceIds: number[], data: Uint8Array): number {
+function store(networkId: number, serviceIds: number[], logoType: number, data: Uint8Array): number {
     mkdirSync(logoDir(), { recursive: true });
 
     let saved = 0;
@@ -225,6 +234,12 @@ function store(networkId: number, serviceIds: number[], data: Uint8Array): numbe
             .where(and(eq(services.network_id, networkId), eq(services.service_id, serviceId)))
             .all();
         for (const { id } of matched) {
+            /*
+             * **小さいものへは戻さない。** 局は6種類の大きさを順に流していて、
+             * 開くたびにどれが先に来るかは違う。来たものをそのまま上書きしていた頃は、
+             * 取り直し (LOGO_MAX_AGE) のたびに 64×36 が 48×24 に化けることがあった
+             */
+            if (!replacesLogo(storedLogoType(id), logoType)) continue;
             // 書きかけを読ませない。番組表は同時に見に来る
             const working = `${logoPath(id)}.writing`;
             writeFileSync(working, data);
@@ -276,7 +291,7 @@ export function watch(networkId: number): Feed {
                 const key = `${network}:${logo.logoId}:${logo.logoType}:${logo.logoVersion}`;
                 if (written.has(key)) continue;
                 written.add(key);
-                saved += store(network, serviceIds, logo.data);
+                saved += store(network, serviceIds, logo.logoType, logo.data);
             }
             if (saved > 0) emit('services');
         } catch (error) {
@@ -368,13 +383,48 @@ export interface Target {
  */
 const LOGO_MAX_AGE = 7 * 24 * 60 * 60_000;
 
-/** その局のロゴを取りに行く必要があるか。無い、または古い */
+/** 置いてあるロゴの logo_type。無い・読めない・規格に無い寸法なら null */
+function storedLogoType(serviceId: number): number | null {
+    const stored = readLogo(serviceId);
+    return stored === null ? null : logoTypeOfPng(stored);
+}
+
+/**
+ * その局のロゴを取りに行く必要があるか。無い、古い、**または小さい。**
+ *
+ * 「1つでも持っていれば足りている」で見ていた頃は、最初に来た種類 (48×24 など) を
+ * 拾った時点で閉じてしまい、実機の地上波26局が小さいロゴのまま並んでいた
+ * (大きさが局ごとに違って見える)。64×36 が来るまでは足りていないとみなす。
+ *
+ * 開けるだけ開けて来なかった局 (`gaveUp`) は、次の取り直しの時期まで今のもので足りる
+ */
 function needsLogo(serviceId: number): boolean {
+    let age: number;
     try {
-        return Date.now() - statSync(logoPath(serviceId)).mtimeMs > LOGO_MAX_AGE;
+        age = Date.now() - statSync(logoPath(serviceId)).mtimeMs;
     } catch {
         return true;
     }
+    const at = notes().gaveUp[serviceId];
+    if (at !== undefined && Date.now() - at < LOGO_MAX_AGE) return false;
+    return age > LOGO_MAX_AGE || storedLogoType(serviceId) !== PREFERRED_LOGO_TYPE;
+}
+
+/**
+ * 地上波を上限いっぱいまで開けて、なお足りない局を控える。
+ * **ロゴを1つも持っていない局は控えない** — そちらは今までどおり毎回取りに行く
+ */
+function markGaveUp(channel: string): void {
+    const known = notes();
+    const gaveUp = { ...known.gaveUp };
+    let changed = false;
+    for (const service of currentServices()) {
+        if (service.channel !== channel || !existsSync(logoPath(service.id)) || !needsLogo(service.id))
+            continue;
+        gaveUp[service.id] = Date.now();
+        changed = true;
+    }
+    if (changed) save({ ...known, gaveUp });
 }
 
 /** いま選局できる局。取り残しは見に行かない */
@@ -477,7 +527,12 @@ async function collect(target: Target, timeout: number, signal?: AbortSignal): P
     /** 当たり外れを書き留めたか。毎回書きに行かないための印 */
     let marked = false;
     const controller = new AbortController();
-    const stop = setTimeout(() => controller.abort(), timeout);
+    /** 上限まで開けきったか。横から止められた・蹴られたのとは区別する */
+    let ranOut = false;
+    const stop = setTimeout(() => {
+        ranOut = true;
+        controller.abort();
+    }, timeout);
     collecting.add(target.channel);
     // 外から止められるようにする。衛星に10分かけている最中でも譲れるように
     const give = () => controller.abort();
@@ -548,6 +603,8 @@ async function collect(target: Target, timeout: number, signal?: AbortSignal): P
         signal?.removeEventListener('abort', give);
         controller.abort();
     }
+    // 相乗り (RIDE_TIMEOUT) は短いので、来なかったことの証拠にしない
+    if (target.type === 'GR' && ranOut && timeout >= SWEEP_TIMEOUT) markGaveUp(target.channel);
     // 衛星は開いた中継以外の局も一緒に拾える。数えるほうも合わせる
     return before - (target.type !== 'GR' ? missingSatellites() : missingOn(target.channel));
 }
