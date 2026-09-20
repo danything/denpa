@@ -99,6 +99,20 @@ describe('トラックの名前', () => {
         expect(title(args, '-metadata:s:a:1')).toBe('title=副音声');
     });
 
+    /** 頭に中身の無い音声 (次の番組の副音声) は拾わない。分からなければ全部拾う */
+    test('拾う音声を名指しされたらそれだけを map する', () => {
+        const all = buildArgs('/in.m2ts', '/out.mkv', 1, null);
+        expect(all).toContain('0:a');
+
+        const picked = buildArgs('/in.m2ts', '/out.mkv', 1, null, 'av1', { audioStreams: [0, 2] });
+        expect(picked).not.toContain('0:a');
+        expect(picked).toContain('0:a:0');
+        expect(picked).toContain('0:a:2');
+        expect(picked).not.toContain('0:a:1');
+
+        expect(buildArgs('/in.m2ts', '/out.mkv', 1, null, 'av1', { audioStreams: [] })).toContain('0:a');
+    });
+
     /** 字幕は放送が名乗っている言語まで入れる。無ければ「字幕」 */
     test('字幕にも名前を入れる', () => {
         const withLabel = buildArgs('/in.m2ts', '/out.mkv', 1, null, 'av1', {

@@ -10,6 +10,7 @@ import {
     invertRanges,
     isCmLength,
     leadIn,
+    liveAudioIndexes,
     longestRange,
     parseFrameRate,
     parseRatio,
@@ -436,3 +437,25 @@ describe('ロゴの写っているコマ', () => {
  * 書き換えた写しを渡していた頃は、規則が JL フォルダの外へ出て隣のファイルを
  * 見失っていた (実測で `warning: not found setup-file JL_common.txt`)
  */
+
+/**
+ * 録画の尻に次の番組の副音声が入ると、探りの間に中身の来ない音声が1本増える。
+ * 実機の ffprobe の出力 (programs と streams の両方に同じものが並ぶ) をそのまま使う
+ */
+describe('中身のある音声だけを拾う', () => {
+    test('channels が 0 の音声は外す', () => {
+        const json =
+            '{"programs":[{"streams":[{"channels":2},{"channels":0}]},{"streams":[]}],"streams":[{"channels":2},{"channels":0}]}';
+        expect(liveAudioIndexes(json)).toEqual([0]);
+    });
+
+    test('多重音声はどちらも拾う', () => {
+        expect(liveAudioIndexes('{"streams":[{"channels":2},{"channels":2}]}')).toEqual([0, 1]);
+    });
+
+    test('音声が無い・channels が出てこないときは空', () => {
+        expect(liveAudioIndexes('{"streams":[]}')).toEqual([]);
+        expect(liveAudioIndexes('{}')).toEqual([]);
+        expect(liveAudioIndexes('{"streams":[{}]}')).toEqual([]);
+    });
+});
