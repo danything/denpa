@@ -3,6 +3,7 @@ import type { CmMode } from '../types';
 import { config } from './config';
 import { settings } from './settings';
 import { lines as readLines, run, text } from './stream';
+import { TS_PROBE } from './ts-probe';
 
 /**
  * CM検出。
@@ -415,6 +416,52 @@ export async function probeVideo(input: string): Promise<{
          */
         sar,
     };
+}
+
+/**
+ * ffprobe の JSON から、**中身のある音声**が音声の何本目かを拾う (`0:a:<n>` の n)。
+ *
+ * 中身があるかは `channels` で見る。探り (`TS_PROBE`) の間に1パケットも来なかった
+ * 音声は復号できておらず、0 のまま出てくる
+ */
+export function liveAudioIndexes(json: string): number[] {
+    const parsed = JSON.parse(json) as { streams?: { channels?: number }[] };
+    const out: number[] = [];
+    (parsed.streams ?? []).forEach((stream, index) => {
+        if ((stream.channels ?? 0) > 0) out.push(index);
+    });
+    return out;
+}
+
+/**
+ * 焼くときに拾う音声 (音声の何本目か)。**頭に中身の無い音声は拾わない。**
+ *
+ * 録画の尻には次の番組の頭が少し入る。次の番組が副音声つきだと、その音声の PID が
+ * 最後の十数秒だけ現れ、`-map 0:a` はそれも1本の音声として拾っていた。出来上がりに
+ * **末尾13秒にしか中身の無い音声トラック**が入り、テレビの VLC (Android) はその録画で
+ * 字幕 (PGS) を出さなくなった (実機。同じ日の、音声が1本の録画では出る)。
+ *
+ * **探りの長さは焼くほうと揃える** (`TS_PROBE`)。何本目かで名指しするので、
+ * 見えている音声の並びが食い違うと別の音声を指してしまう。
+ *
+ * 分からなければ空を返す — 呼ぶ側は今までどおり全部拾う
+ */
+export async function probeLiveAudio(input: string): Promise<number[]> {
+    try {
+        return liveAudioIndexes(
+            await probe(input, [
+                ...TS_PROBE,
+                '-select_streams',
+                'a',
+                '-show_entries',
+                'stream=channels',
+                '-of',
+                'json',
+            ]),
+        );
+    } catch {
+        return [];
+    }
 }
 
 /**

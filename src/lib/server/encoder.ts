@@ -25,6 +25,7 @@ import {
     invertRanges,
     longestRange,
     probeLeadIn,
+    probeLiveAudio,
     probeVideo,
     type Range,
     shiftRanges,
@@ -309,6 +310,11 @@ interface EncodeOptions {
      * 出なかった — 二カ国語や解説放送でどちらがどちらか分からない
      */
     audioTitles?: string[];
+    /**
+     * 拾う音声 (音声の何本目か。`cm.probeLiveAudio`)。**頭に中身の無い音声を外すため。**
+     * 無い・空なら全部拾う。デュアルモノでは使わない (1本を左右に割るだけ)
+     */
+    audioStreams?: number[];
     /** 字幕トラックの名前。放送が名乗っている言語まで入る (`buildPgs`) */
     captionTitle?: string;
     /**
@@ -453,8 +459,11 @@ export function buildArgs(
             'language=und',
         );
     } else {
-        // 音声ストリームを全て拾う(多言語放送等で複数トラックある場合に備える)
-        args.push('-map', '0:a');
+        // 音声ストリームを全て拾う(多言語放送等で複数トラックある場合に備える)。
+        // ただし頭に中身の無いもの (次の番組の副音声) は外す — `audioStreams`
+        const streams = options.audioStreams ?? [];
+        if (streams.length === 0) args.push('-map', '0:a');
+        for (const index of streams) args.push('-map', `0:a:${index}`);
     }
     args.push('-c:a', 'libopus', '-b:a', '256k'); // 元放送(AAC 256kbps)と同じビットレート
 
@@ -1358,6 +1367,7 @@ async function runJob(jobId: number): Promise<void> {
     if (Number.isFinite(measured.width) && Number.isFinite(measured.height)) {
         encodeOptions.canvasSize = `${measured.width}x${measured.height}`;
     }
+    encodeOptions.audioStreams = await probeLiveAudio(source);
     // 映像が出るまでの音声だけの区間。頭から捨てて 0 秒から始める
     const head = await probeLeadIn(source, measured.formatStart, measured.packetStart);
     encodeOptions.videoStart = head.lead;
