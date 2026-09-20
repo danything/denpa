@@ -1376,11 +1376,12 @@
         font-weight: 500;
         overflow-wrap: anywhere;
     }
+    /*
+        flex にしない。録画済みの行は書くことが多く (サイズ・コーデック)、flex-wrap だと
+        文字のかたまりごと次の行へ送られて、ロゴだけが1行に取り残される。
+        ロゴを文の中の1文字として流せば、折り返すのは文の途中になる
+    */
     .row-meta {
-        display: flex;
-        flex-wrap: wrap;
-        align-items: center;
-        gap: 0 0.375rem;
         margin-top: 0.25rem;
         font-size: 0.875rem;
         opacity: 0.65;
@@ -1393,7 +1394,8 @@
         display: inline-block;
         height: 1rem;
         width: auto;
-        flex-shrink: 0;
+        margin-right: 0.375rem;
+        vertical-align: -0.1875rem;
         border-radius: 0.125rem;
         object-fit: contain;
     }
