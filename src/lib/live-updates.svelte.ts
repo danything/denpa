@@ -1,4 +1,4 @@
-import { invalidateAll } from '$app/navigation';
+import { reload } from './reload.svelte';
 
 /**
  * サーバからの通知を受けて画面を読み直す。
@@ -50,7 +50,7 @@ export function liveUpdates(
 
         const refresh = () => {
             if (timer !== null) clearTimeout(timer);
-            timer = setTimeout(() => void invalidateAll(), 200);
+            timer = setTimeout(reload, 200);
         };
 
         const connect = () => {

@@ -1,19 +1,27 @@
 <script lang="ts">
     import '../app.scss';
     import { onMount } from 'svelte';
-    import { invalidateAll } from '$app/navigation';
-    import { navigating, page } from '$app/state';
+    import { page } from '$app/state';
     import { busy } from '$lib/busy.svelte';
     import Measure from '$lib/components/Measure.svelte';
     import Icon from '$lib/components/player/Icon.svelte';
     import { write } from '$lib/keep';
     import { measure } from '$lib/measure.svelte';
     import { startOffline } from '$lib/offline.svelte';
+    import { followNavigation, moving, reload } from '$lib/reload.svelte';
 
     let { children, data } = $props();
 
     // オフライン視聴の控えを読み、オンラインに戻ったら outbox を流す (docs/offline.md)
     onMount(() => startOffline());
+
+    /*
+     * 画面遷移の終わりを自前で見る。**`navigating` は畳まれた遷移で真のまま残る**
+     * ので、あれに任せるとローディングバーが出たきりになる (理由と直し方は
+     * [reload.svelte.ts](../lib/reload.svelte.ts))。土台は画面遷移で作り直されない
+     * ので、ここで1度追い始めれば全部の遷移を見ていられる
+     */
+    followNavigation();
 
     /**
      * **その端末の高さを読む札。**
@@ -97,7 +105,7 @@
     onMount(() => {
         const refresh = () => {
             if (document.visibilityState !== 'visible') return;
-            void invalidateAll();
+            reload();
         };
         const restored = (event: PageTransitionEvent) => {
             if (event.persisted) refresh();
@@ -306,9 +314,9 @@
         <div
             class="loading-bar"
             data-testid="loading-bar"
-            data-loading={navigating.to || busy.active ? 'true' : undefined}
+            data-loading={moving.active || busy.active ? 'true' : undefined}
         >
-            {#if navigating.to || busy.active}
+            {#if moving.active || busy.active}
                 <progress></progress>
             {/if}
         </div>

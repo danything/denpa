@@ -171,6 +171,63 @@ test.describe('ダッシュボードと画面遷移', () => {
         await expect(page.getByTestId('reconcile-result')).toHaveCount(0);
     });
 
+    /**
+     * **読み直しは、走っている遷移を畳んでしまう。**
+     *
+     * SvelteKit は遷移にも `invalidateAll` にも同じ札を使っていて、後から来た
+     * 読み直しが札を書き換えると、読み終えた遷移はそこで黙って降りる。降りる側は
+     * `navigating` を下ろさず、下ろすのは*最後まで行った*遷移だけなので、
+     * **ローディングバーが出たきりになる** (実機。「削除したら消えない
+     * ことがある」— 観る画面の削除は一覧へ戻る遷移を伴う)。押した先へも行かない。
+     *
+     * 知らせは録画が動いていれば勝手に飛んでくるので、重なるかどうかは運。
+     * ここでは行き先の読み込みを遅らせて窓を作り、その間に知らせを飛ばす
+     * (`reconcile` は `emit('recordings')` する)
+     */
+    test('遷移中に知らせが来ても、押した先へ行き、ローディングは消える', async ({ page, request }) => {
+        await syncEpg(request);
+        await goto(page, '/');
+
+        await page.route('**/guide/__data.json*', async (route) => {
+            await new Promise((resolve) => setTimeout(resolve, 3000));
+            await route.continue();
+        });
+
+        await page.getByTestId('nav-guide').click();
+        await expect(page.getByTestId('loading-bar')).toHaveAttribute('data-loading', 'true');
+        await request.post('/?/reconcile', { form: {} });
+
+        // 畳まれていなければ番組表に着く
+        await expect(page).toHaveURL(/\/guide/);
+        await expect(page.getByTestId('loading-bar')).not.toHaveAttribute('data-loading', 'true');
+    });
+
+    /**
+     * **畳まれた遷移でもバーは下りる。**
+     *
+     * 読み直しを遷移に重ねないようにしても (上のテスト)、フォーム送信は
+     * SvelteKit が成功のたびに自分で `invalidateAll` を呼ぶので、こちらの手は
+     * 届かない。バーは `navigating` ではなく**その遷移の `complete`** を見て
+     * いるので、畳まれて転んだときも下りる
+     */
+    test('遷移がフォーム送信に畳まれても、ローディングは消える', async ({ page, request }) => {
+        await syncEpg(request);
+        await goto(page, '/');
+
+        await page.route('**/guide/__data.json*', async (route) => {
+            await new Promise((resolve) => setTimeout(resolve, 4000));
+            await route.continue();
+        });
+
+        await page.getByTestId('nav-guide').click();
+        await expect(page.getByTestId('loading-bar')).toHaveAttribute('data-loading', 'true');
+
+        await page.getByTestId('reconcile-button').click();
+        await expect(page.getByTestId('reconcile-result')).toBeVisible();
+
+        await expect(page.getByTestId('loading-bar')).not.toHaveAttribute('data-loading', 'true');
+    });
+
     test('サーバ側の変化が通知で届く', async ({ page }) => {
         await goto(page, '/');
 
