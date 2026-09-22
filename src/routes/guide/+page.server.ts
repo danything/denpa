@@ -43,17 +43,18 @@ interface GridProgram extends Program {
 }
 
 /**
- * 番組表は2つの見せ方をする。
- * キーワードなし: 時間×チャンネルのグリッド。並びを眺めて選ぶとき用
- * キーワードあり: 全チャンネル横断のリスト。探しているものが決まっているとき用
+ * 表の中身。**器より後から流す** (SvelteKit の streaming)。
+ *
+ * 種別のタブ・日送り・検索窓は URL だけで描けるのに、いちばん重い表を待って
+ * いたせいで**画面ごと出てこなかった**。器を先に出して、表のところだけ
+ * 読み込み中にしておけば、放送波を選び直すのも検索を打ち始めるのも待たずにできる。
+ *
+ * **一度譲ってから引く。** SQLite の読みは同期なので、譲らずに引くと `load` が
+ * 返る前に引き終わり、器だけ先に出す意味が無くなる (後から流れるのは、`load` が
+ * 返った時点でまだ片が付いていない promise だけ)。
  */
-export async function load({ url }) {
-    const type = (TYPES.find((t) => t === url.searchParams.get('type')) ?? 'GR') as ChannelType;
-
-    // 既定は今日の放送日。めくるときだけ start が付く
-    const requested = Number(url.searchParams.get('start'));
-    const start = broadcastDayStart(Number.isFinite(requested) && requested > 0 ? requested : Date.now());
-    const end = start + WINDOW_HOURS * HOUR;
+async function gridOf(type: ChannelType, start: number, end: number) {
+    await new Promise((resolve) => setTimeout(resolve, 0));
 
     // テレビと同じ並びにする (SERVICE_ORDER)。
     // 取り残しの局は出さない (CURRENT_SERVICES)。出すと番組表に空の列が並ぶ
@@ -94,17 +95,35 @@ export async function load({ url }) {
         .orderBy(p.start_at)
         .all();
 
-    // 詳細の「視聴」を出すかどうか。決め方はライブ画面と揃えてある (watchableServices)
-    const watchable = watchableServices(Date.now());
+    return {
+        programs,
+        // 放送していない局は出さない (終わったチャンネル・相乗り中のサブチャンネル)
+        services: airing(services, programs),
+    };
+}
+
+/**
+ * 番組表は2つの見せ方をする。
+ * キーワードなし: 時間×チャンネルのグリッド。並びを眺めて選ぶとき用
+ * キーワードあり: 全チャンネル横断のリスト。探しているものが決まっているとき用
+ */
+export function load({ url }) {
+    const type = (TYPES.find((t) => t === url.searchParams.get('type')) ?? 'GR') as ChannelType;
+
+    // 既定は今日の放送日。めくるときだけ start が付く
+    const requested = Number(url.searchParams.get('start'));
+    const start = broadcastDayStart(Number.isFinite(requested) && requested > 0 ? requested : Date.now());
+    const end = start + WINDOW_HOURS * HOUR;
 
     return {
+        // ここまでが器。URL と設定だけで決まるので、表を待たずに描ける
         type,
         start,
         hours: WINDOW_HOURS,
-        programs,
-        watchable,
-        // 放送していない局は出さない (終わったチャンネル・相乗り中のサブチャンネル)
-        services: airing(services, programs),
+        // 詳細の「視聴」を出すかどうか。決め方はライブ画面と揃えてある (watchableServices)
+        watchable: watchableServices(Date.now()),
+        /** 表の中身。**promise のまま渡して、後から流す** */
+        grid: gridOf(type, start, end),
     };
 }
 

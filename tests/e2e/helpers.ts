@@ -13,6 +13,15 @@ export { expect, test };
 export async function goto(page: Page, url: string): Promise<void> {
     await page.goto(url);
     await page.locator('[data-hydrated="true"]').waitFor();
+    /*
+     * **番組表は器だけ先に出る。** 表は後から流れてくるので
+     * (`guide/+page.server.ts` の `gridOf`)、ハイドレーションだけ待って触りに
+     * いくと、まだ骨組みしか無いことがある。局が1つも無ければ表の代わりに
+     * 「チャンネルがありません」が出るので、どちらかが出るまで待つ
+     */
+    if (new URL(url, 'http://localhost').pathname === '/guide') {
+        await page.locator('[data-testid="guide-grid"], [data-testid="empty-grid"]').first().waitFor();
+    }
 }
 
 /**

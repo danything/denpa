@@ -77,7 +77,12 @@ test.describe('操作したときの反応', () => {
         await goto(page, '/guide?type=GR');
 
         const grid = page.getByTestId('guide-grid');
-        const hours = grid.locator('div[style^="grid-column: 1;"] > span.hour-label');
+        /*
+         * **`style` の字面では拾わない。** 表は後から流れてきて画面側で組むので
+         * (`guide/+page.server.ts`)、`grid-column` と `grid-row` はブラウザが
+         * `grid-area` にまとめ直す。SSR の頃の字面を当てにすると1つも拾えない
+         */
+        const hours = grid.locator('div.hour > span.hour-label');
         const frame = (await grid.boundingBox())!;
 
         for (const top of [0, 400, 900]) {

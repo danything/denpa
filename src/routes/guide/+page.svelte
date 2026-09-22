@@ -1,4 +1,5 @@
 <script lang="ts">
+    import { untrack } from 'svelte';
     import { preloadData } from '$app/navigation';
     import { dragScroll, submitting } from '$lib/actions';
     import ProgramDetail from '$lib/components/ProgramDetail.svelte';
@@ -9,10 +10,54 @@
 
     // 検索条件はURLに持たせる。そのままルールにできるようにするため
 
-    /** クリックした番組。詳細を出してから予約するかどうか決める */
-    let selected = $state<(typeof data.programs)[number] | null>(null);
+    type Sheet = Awaited<typeof data.grid>;
 
-    const serviceName = (id: number) => data.services.find((s) => s.id === id)?.name ?? '';
+    /**
+     * 表の中身。**器より後から届く** (`+page.server.ts` の `gridOf`)。
+     * 届くまでは骨組みだけ出しておき、種別のタブ・日送り・検索窓は先に使えるようにする。
+     *
+     * **知らせで読み直したときに骨組みへ戻さない。** 番組表は録画やエンコードの
+     * 知らせが来るたびに読み直すので、そのたび表が消えては現れるとちらつく。
+     * 同じ日・同じ放送波なら前のものを出したままにして、届いたら差し替える
+     * (`live-updates.svelte.ts` の `held` と同じ考え方)。
+     * **別の日・別の放送波へ移ったときだけ**捨てる — 選び直したのに前の表が
+     * 残っていると、タブと中身が食い違って見える
+     */
+    let sheet = $state<Sheet | null>(null);
+    let shownKey = '';
+    $effect(() => {
+        const key = `${data.type}:${data.start}`;
+        const coming = data.grid;
+        if (key !== shownKey) {
+            /*
+             * 骨組みを挟むと表ごと作り直しになる。縦位置は戻せるように覚えておく。
+             *
+             * **`untrack` で読む。** 素で読むと表が消えた拍子にこの効果がもう一度
+             * 回り、そのとき `grid` は null なので**覚えたばかりの位置を消して**
+             * しまう (実測: 選び直すたびに先頭へ戻った)
+             */
+            keptTop = untrack(() => grid?.scrollTop) ?? null;
+            sheet = null;
+        }
+        // 追い越しがあると古いほうで上書きしてしまう
+        let stale = false;
+        void coming.then((next) => {
+            if (stale) return;
+            sheet = next;
+            shownKey = key;
+        });
+        return () => {
+            stale = true;
+        };
+    });
+
+    const services = $derived(sheet?.services ?? []);
+    const programs = $derived(sheet?.programs ?? []);
+
+    /** クリックした番組。詳細を出してから予約するかどうか決める */
+    let selected = $state<Sheet['programs'][number] | null>(null);
+
+    const serviceName = (id: number) => services.find((s) => s.id === id)?.name ?? '';
 
     /**
      * いまライブで選べる局。詳細の「視聴」を出すかどうかに使う。
@@ -68,8 +113,23 @@
      * その分だけ下に行き過ぎる。実際に見えている位置の差から出す。
      */
     let scrolled = false;
+    /**
+     * 骨組みを挟んでいる間の縦位置。
+     *
+     * 放送波や日を選び直すと表を作り直すので、`scrollTop` は 0 に戻ってしまう。
+     * **縦は時刻**で、どの放送波でも同じ意味なので、見ていたところへ戻す
+     * (横は局の並びが別物なので、別の効果で先頭に戻している)
+     */
+    let keptTop: number | null = null;
     $effect(() => {
-        if (scrolled || grid === null || nowMark === null) return;
+        if (grid === null) return;
+        const back = keptTop;
+        if (back !== null) {
+            keptTop = null;
+            grid.scrollTop = back;
+            return;
+        }
+        if (scrolled || nowMark === null) return;
         scrolled = true;
 
         const target = grid;
@@ -100,7 +160,7 @@
         return { row: from + 2, span: Math.max(1, to - from) };
     }
 
-    const columnOf = $derived(new Map(data.services.map((s, i) => [s.id, i + 2])));
+    const columnOf = $derived(new Map(services.map((s, i) => [s.id, i + 2])));
 
     const hourMarks = $derived(
         Array.from({ length: data.hours }, (_, i) => ({
@@ -118,6 +178,28 @@
 
     const prevHref = $derived(href({ start: String(data.start - data.hours * HOUR) }));
     const nextHref = $derived(href({ start: String(data.start + data.hours * HOUR) }));
+
+    /**
+     * 読み込み中に出す骨組みの形。**中身の数とは関係なく決め打ち。**
+     *
+     * 何局あるかは表と一緒に届くので、この時点では分からない。8列ぶん出して
+     * おけば、狭い画面でも広い画面でも「ここに表が来る」ことは伝わる。
+     *
+     * 高さは**番組の尺のつもり**でばらけさせる。全部同じ高さだと表ではなく
+     * ただの縞に見えた。乱数ではなく決め打ちなのは、描き直すたびに形が変わると
+     * それ自体が動いて見えるため
+     */
+    const SKELETON_COLUMNS = 8;
+    const SKELETON_CELLS = [
+        [3, 1.5, 4.5, 2, 3, 2.5, 4, 1.5, 3, 2],
+        [1.5, 5, 2, 3.5, 2, 3, 1.5, 4, 2.5, 2],
+        [4, 2, 2.5, 4, 1.5, 3, 2, 3.5, 2.5, 2],
+        [2, 3, 6, 1.5, 2.5, 2, 4, 1.5, 3, 1.5],
+        [5, 1.5, 2, 3, 2.5, 4, 1.5, 3, 2, 2.5],
+        [1.5, 4, 3, 2, 3.5, 2.5, 2, 4, 2.5, 2],
+        [3.5, 2.5, 1.5, 5, 2, 3, 2, 2.5, 3, 2],
+        [2, 6, 2.5, 1.5, 3, 2, 3.5, 2, 2.5, 2],
+    ];
 
     /*
      * 放送波を切り替えたら横位置を先頭へ戻す。
@@ -236,7 +318,31 @@
         </form>
     </div>
 
-    {#if data.services.length === 0}
+    {#if sheet === null}
+        <!--
+            **表のところだけ読み込み中にする。** 画面ごと出てこないと、放送波を
+            選び直すのも検索を打ち始めるのも待たされる。骨組みは本物と同じ形
+            (左に時刻の列、上にチャンネルの行) にしておく — 何が出てくるのかが
+            分かるし、届いたときに位置が飛ばない
+        -->
+        <div
+            class="panel skeleton"
+            data-testid="guide-skeleton"
+            role="status"
+            aria-label="番組表を読み込んでいます"
+        >
+            <div class="skeleton-rows" aria-hidden="true">
+                {#each { length: SKELETON_COLUMNS } as _, column (column)}
+                    <div class="skeleton-column">
+                        <div class="skeleton-head"></div>
+                        {#each SKELETON_CELLS[column] as height, cell (cell)}
+                            <div class="skeleton-cell" style="height: {height}rem"></div>
+                        {/each}
+                    </div>
+                {/each}
+            </div>
+        </div>
+    {:else if services.length === 0}
         <div class="panel empty" data-testid="empty-grid">
             <p class="muted">
                 {SERVICE_TYPE_LABEL[
@@ -265,9 +371,7 @@
         -->
             <div
                 class="rows"
-                style="grid-template-columns: {TIME_COLUMN} repeat({data.services
-                    .length}, minmax(11rem, 1fr)); grid-template-rows: auto repeat({slots}, 0.75rem); width: calc({TIME_COLUMN} + {data
-                    .services.length} * 11rem); min-width: 100%;"
+                style="grid-template-columns: {TIME_COLUMN} repeat({services.length}, minmax(11rem, 1fr)); grid-template-rows: auto repeat({slots}, 0.75rem); width: calc({TIME_COLUMN} + {services.length} * 11rem); min-width: 100%;"
                 data-testid="guide-rows"
             >
                 <!-- 左上の角。時刻列とチャンネル行の交点で、どちらにも追従させる -->
@@ -276,7 +380,7 @@
                     style="grid-column: 1; grid-row: 1;"
                     bind:clientHeight={headHeight}
                 ></div>
-                {#each data.services as service, i (service.id)}
+                {#each services as service, i (service.id)}
                     <div
                         class="service"
                         style="grid-column: {i + 2}; grid-row: 1;"
@@ -367,7 +471,7 @@
                     </div>
                 {/if}
 
-                {#each data.programs as program (program.id)}
+                {#each programs as program (program.id)}
                     {@const pos = place(program)}
                     <div
                         class="cell"
@@ -576,6 +680,71 @@
     .empty {
         padding: 1.5rem;
         text-align: center;
+    }
+
+    /*
+     * 読み込み中の骨組み。**表と同じ場所・同じ高さに置く** ので、
+     * 中身が届いたときに下のものが飛び跳ねない。
+     *
+     * 光が流れるのは骨組みそのものではなく**上に重ねた一枚**。桝ごとに動かすと
+     * 数十個ぶんのアニメーションが同時に走り、届いた瞬間の描き直しと重なって
+     * もたついた。重ねた一枚なら動くのは1つで済む
+     */
+    .skeleton {
+        position: relative;
+        overflow: hidden;
+        padding: 0.75rem;
+        /* 表と同じ高さを取っておく。届いた拍子に枠が伸びると画面が跳ねる */
+        height: 75svh;
+    }
+    .skeleton-rows {
+        display: flex;
+        height: 100%;
+        gap: 0.5rem;
+    }
+    .skeleton-column {
+        display: flex;
+        flex: 1 1 0;
+        flex-direction: column;
+        gap: 0.5rem;
+        /* 狭い画面では右の列がはみ出すが、外側で切る (本物の表も横に流れる) */
+        min-width: 6rem;
+    }
+    .skeleton-head,
+    .skeleton-cell {
+        /* 縮ませない。合計が枠より高いぶんは下で切る (本物の表も下へ続く) */
+        flex-shrink: 0;
+        border-radius: 0.375rem;
+        background: var(--dp-base-200);
+    }
+    /* チャンネル名の行。本物と同じで、ここだけ濃い */
+    .skeleton-head {
+        height: 1.75rem;
+        background: var(--dp-base-300);
+    }
+    .skeleton::after {
+        content: '';
+        position: absolute;
+        inset: 0;
+        background: linear-gradient(
+            90deg,
+            transparent 0%,
+            rgb(255 255 255 / 0.06) 50%,
+            transparent 100%
+        );
+        transform: translateX(-100%);
+        animation: skeleton-sweep 1.4s ease-in-out infinite;
+    }
+    @keyframes skeleton-sweep {
+        to {
+            transform: translateX(100%);
+        }
+    }
+    /* 動くものが苦手な人には動かさない (Pico と同じ約束) */
+    @media (prefers-reduced-motion: reduce) {
+        .skeleton::after {
+            animation: none;
+        }
     }
     /* 畳まれる幅ではページごとスクロールさせ、表の高さは見えている範囲まで(上のコメント) */
     .grid-box {
