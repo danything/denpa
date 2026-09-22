@@ -1,35 +1,52 @@
 import type { SubmitFunction } from '@sveltejs/kit';
 import { tick } from 'svelte';
 import { enhance } from '$app/forms';
-import { begin, finish } from './busy.svelte';
 
 /**
- * `use:enhance` の代わり。送信中はそのフォームのボタンを押せなくし、
- * 画面上部のローディングバーを出す。
+ * `use:enhance` の代わり。**送信中は押したボタンの上に回るものを出し**、
+ * そのフォームのボタンを押せなくする。
  *
  * 素の enhance だと、EPG取得のように数秒かかるアクションでも見た目が変わらず、
  * 二度押し・三度押しできてしまう。
+ *
+ * ## 押した場所に返す
+ *
+ * 以前は**画面上端のバー**を出していた。どの操作でも同じ場所に同じものが出るので、
+ * 押した指から遠く、*何が*動いているのかが読み取れなかった。押したボタンの上で
+ * 回っていれば、返事が返ってきた先がそのまま分かる。
+ *
+ * バーは画面遷移だけに使う (`reload.svelte.ts`) — あちらは押したリンクごと
+ * 次の画面に変わってしまうので、押した場所に出しようがない。
+ *
+ * 回るものの見た目と、**幅を動かさない**ための細工は `app.scss` の「読み込み中」。
  */
 export function submitting(node: HTMLFormElement, submit?: SubmitFunction) {
     // 型引数は `SubmitFunction` の既定に揃える。省くと `| undefined` 側に推論され、after に渡せない
     return enhance<Record<string, unknown>, Record<string, unknown>>(node, (input) => {
         const buttons = [...node.querySelectorAll('button')];
-        begin();
-        node.setAttribute('aria-busy', 'true');
+        /*
+         * 出すのは**押したボタン**。Enter で送ったときは押されたものが無いので、
+         * そのフォームの最初の送信ボタンに出す (見ている人が待つのはそこ)。
+         * `<input type="submit">` は回るものを載せられないので、同じ扱いで逃がす
+         */
+        const pressed =
+            input.submitter instanceof HTMLButtonElement
+                ? input.submitter
+                : (buttons.find((button) => button.type === 'submit') ?? null);
+        pressed?.setAttribute('aria-busy', 'true');
         for (const button of buttons) button.disabled = true;
 
         const after = submit?.(input);
 
         return async (options) => {
             try {
-                // 先にバーを消すと、消えてから一拍おいて画面が変わる。
-                // 新しい内容が描き終わるまで出したままにする
+                // 先に止めると、止まってから一拍おいて画面が変わる。
+                // 新しい内容が描き終わるまで回したままにする
                 if (typeof after === 'function') await after(options);
                 else await options.update();
                 await tick();
             } finally {
-                finish();
-                node.removeAttribute('aria-busy');
+                pressed?.removeAttribute('aria-busy');
                 for (const button of buttons) button.disabled = false;
             }
         };

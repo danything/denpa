@@ -2,7 +2,6 @@
     import '../app.scss';
     import { onMount } from 'svelte';
     import { page } from '$app/state';
-    import { busy } from '$lib/busy.svelte';
     import Measure from '$lib/components/Measure.svelte';
     import Icon from '$lib/components/player/Icon.svelte';
     import { write } from '$lib/keep';
@@ -308,15 +307,20 @@
         </nav>
 
         <!--
-            画面遷移とフォーム送信の待ち時間を出す。番組表やEPG取得は数秒かかることがあり、
-            無反応に見えると二度押しされる。ヘッダーの下端に重ねて、隙間ができないようにする
+            **画面遷移の待ち時間だけ**を出す。番組表は組むのに数秒かかることがあり、
+            無反応に見えると二度押しされる。ヘッダーの下端に重ねて、隙間ができないようにする。
+
+            **フォームの送信はここに出さない。** 押したボタンの上で回す
+            (`actions.ts`) — どの操作でも同じ場所に同じものが出るバーでは、
+            押した指から遠いうえ、何が動いているのかが読み取れなかった。
+            遷移は押したリンクごと次の画面に変わるので、こちらはバーで出すしかない
         -->
         <div
             class="loading-bar"
             data-testid="loading-bar"
-            data-loading={moving.active || busy.active ? 'true' : undefined}
+            data-loading={moving.active ? 'true' : undefined}
         >
-            {#if moving.active || busy.active}
+            {#if moving.active}
                 <progress></progress>
             {/if}
         </div>

@@ -143,7 +143,14 @@ test.describe('ダッシュボードと画面遷移', () => {
         await expect(page.getByTestId('theme-toggle')).toHaveAttribute('data-mode', 'dark');
     });
 
-    test('アクション中はボタンを押せなくし、ローディングを出す', async ({ page }) => {
+    /**
+     * **待ち時間は押したボタンの上に出す。** 画面上端のバーは画面遷移専用
+     * (`actions.ts` の `submitting`)。
+     *
+     * **幅が変わらない**ことも一緒に見る。Pico の `aria-busy` は回るものを文字の
+     * 前に足すのでボタンが横に伸び、行に並んだボタンが隣ごとずれる (`app.scss`)
+     */
+    test('アクション中は押したボタンで回し、ボタンを押せなくする', async ({ page }) => {
         await goto(page, '/');
 
         // 照合は録画の数だけファイルを見に行くので実機では数秒かかる。
@@ -154,14 +161,18 @@ test.describe('ダッシュボードと画面遷移', () => {
         });
 
         const button = page.getByTestId('reconcile-button');
+        const before = await button.boundingBox();
         await button.click();
 
         await expect(button).toBeDisabled();
-        await expect(page.getByTestId('loading-bar')).toHaveAttribute('data-loading', 'true');
+        await expect(button).toHaveAttribute('aria-busy', 'true');
+        // 送信中でも上のバーは出さない (画面遷移ではないので)
+        await expect(page.getByTestId('loading-bar')).not.toHaveAttribute('data-loading', 'true');
+        expect((await button.boundingBox())?.width).toBeCloseTo(before?.width ?? 0, 1);
 
         await expect(page.getByTestId('reconcile-result')).toBeVisible();
         await expect(button).toBeEnabled();
-        await expect(page.getByTestId('loading-bar')).not.toHaveAttribute('data-loading', 'true');
+        await expect(button).not.toHaveAttribute('aria-busy', 'true');
 
         /*
          * 知らせは右下に浮いていて、自分で閉じられる。

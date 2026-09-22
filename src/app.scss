@@ -613,7 +613,47 @@ a.button.ghost.danger {
 	}
 }
 
-/* ---- 読み込み中(Pico の aria-busy に任せる。文字の横に回るものが出る) ---- */
+/* ---- 読み込み中 (送信中のボタン。`actions.ts` の `submitting` が付ける) ---- */
+
+/*
+ * **幅を動かさない。** Pico の `aria-busy` は回るものを `::before` で*文字の前に
+ * 足す*ので、押した瞬間にボタンが横に伸びる。行に並んだボタンはそれで**隣ごと
+ * ずれて**、次に押す場所が変わってしまう (削除の聞き返しが2文字で揃えてあるのと
+ * 同じ話。`arming.svelte.ts`)。
+ *
+ * 中身は**消さずに隠す**。場所を取ったままなので、ボタンの大きさは送信の前後で
+ * 1px も変わらない。回るものはその上に重ねる
+ */
+button[aria-busy='true'] {
+	position: relative;
+	/* 文字を透かす。場所は取ったままなので幅は変わらない。アイコンは
+	   `currentColor` で塗っているので、これだけで一緒に消える (`Icon.svelte`) */
+	color: transparent;
+	/* 押せているように見せる。Pico は `[disabled]` を半分に透かすが、動いている
+	   ことを見せたいので戻す (`:where()` で書かれているので、これで上書きできる) */
+	opacity: 1;
+}
+button[aria-busy='true']::before {
+	/* Pico が文字の前に足すぶん。重ねるほうを使うので出さない */
+	display: none;
+}
+button[aria-busy='true'] > * {
+	/* `currentColor` で塗っていないもの (絵・別に色を持つ印) の保険 */
+	visibility: hidden;
+}
+button[aria-busy='true']::after {
+	content: '';
+	position: absolute;
+	inset: 0;
+	margin: auto;
+	/* 1em では小さすぎて、何が起きているのか一目で分からなかった */
+	width: 1.25em;
+	height: 1.25em;
+	background-image: var(--pico-icon-loading);
+	background-size: 1.25em auto;
+	background-repeat: no-repeat;
+	background-position: center;
+}
 
 /* ---- Bits UI の部品の見た目(開閉は Bits UI、見た目はここ) ---- */
 [data-menu-content],
