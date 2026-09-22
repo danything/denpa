@@ -52,10 +52,25 @@ interface GridProgram extends Program {
  * **一度譲ってから引く。** SQLite の読みは同期なので、譲らずに引くと `load` が
  * 返る前に引き終わり、器だけ先に出す意味が無くなる (後から流れるのは、`load` が
  * 返った時点でまだ片が付いていない promise だけ)。
+ *
+ * **転んでも投げ返さない。** 流して返すぶんの拒否は `load` の外で起きるので
+ * SvelteKit のエラー画面にはならず、受け損ねると骨組みのまま永久に止まる。
+ * そのうえ**拾い手のいない拒否**になって画面と関係のないところで落ちる —
+ * 画面側で受けようにも、拒否は器を組むより先に届くことがあり、先読みしたぶん
+ * (前日・翌日) に至っては誰も読まない。**理由を中身として返す**ほうが確実で、
+ * 本当の理由もサーバのログに残せる (画面へ渡るのは短い一行だけ)
  */
 async function gridOf(type: ChannelType, start: number, end: number) {
     await new Promise((resolve) => setTimeout(resolve, 0));
+    try {
+        return readGrid(type, start, end);
+    } catch (error) {
+        console.error('[guide] 番組表を組めませんでした', error);
+        return { programs: [], services: [], failed: String(error) };
+    }
+}
 
+function readGrid(type: ChannelType, start: number, end: number) {
     // テレビと同じ並びにする (SERVICE_ORDER)。
     // 取り残しの局は出さない (CURRENT_SERVICES)。出すと番組表に空の列が並ぶ
     const services: Service[] = orm()
@@ -99,6 +114,8 @@ async function gridOf(type: ChannelType, start: number, end: number) {
         programs,
         // 放送していない局は出さない (終わったチャンネル・相乗り中のサブチャンネル)
         services: airing(services, programs),
+        /** 組めなかった理由。組めていれば null */
+        failed: null as string | null,
     };
 }
 

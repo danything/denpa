@@ -5,6 +5,7 @@
     import ProgramDetail from '$lib/components/ProgramDetail.svelte';
     import { startDownload } from '$lib/download';
     import { date, SERVICE_TYPE_LABEL, stateLabel, time } from '$lib/format';
+    import { reload } from '$lib/reload.svelte';
 
     let { data, form } = $props();
 
@@ -43,6 +44,14 @@
         let stale = false;
         void coming.then((next) => {
             if (stale) return;
+            /*
+             * **一度きりの失敗で、見えている表を消さない。** 知らせのたびに
+             * 読み直すので、そのうち1回が転んだだけで番組表が消えるのは割に
+             * 合わない (`held` と同じ考え方)。まだ何も出していないときと、
+             * 別の日・別の放送波へ移ったあと (`sheet` は null に戻してある) は、
+             * 出すものが無いので理由を出す
+             */
+            if (next.failed !== null && sheet !== null && sheet.failed === null) return;
             sheet = next;
             shownKey = key;
         });
@@ -318,7 +327,16 @@
         </form>
     </div>
 
-    {#if sheet === null}
+    {#if sheet !== null && sheet.failed !== null}
+        <!--
+            組めなかった。**骨組みのまま放っておかない** — 読み込み中と区別が
+            付かず、いつまでも待たせることになる。本当の理由はサーバのログに出る
+        -->
+        <div class="panel empty" data-testid="guide-failed">
+            <p class="muted">番組表を読み込めませんでした ({sheet.failed})</p>
+            <button type="button" class="small secondary outline" onclick={reload}>読み直す</button>
+        </div>
+    {:else if sheet === null}
         <!--
             **表のところだけ読み込み中にする。** 画面ごと出てこないと、放送波を
             選び直すのも検索を打ち始めるのも待たされる。骨組みは本物と同じ形
