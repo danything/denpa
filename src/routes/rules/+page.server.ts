@@ -118,6 +118,18 @@ function conditionsFrom(params: URLSearchParams): Rule | null {
  * 出るうえ、「押さえている予約」と「これから当たる番組」を頭の中で突き合わせる
  * ことになっていた。1本の時系列にして、その番組がいまどうなっているかを行に書く。
  */
+/**
+ * 条件の下見ひとまとめ。**後から流れてくる** (`previewOf`)。
+ *
+ * `failed` は組めなかった理由。組めていれば null
+ */
+export interface Preview {
+    total: number;
+    programs: PreviewRow[];
+    conflicts: number;
+    failed: string | null;
+}
+
 export interface PreviewRow {
     id: number;
     name: string;
@@ -202,8 +214,35 @@ export async function load({ url }) {
      * 使うと**いま画面に入っている条件ではない結果**が出てしまう。
      */
     const conditions = conditionsFrom(url.searchParams) ?? editing ?? null;
-    let preview: { total: number; programs: PreviewRow[]; conflicts: number } | null = null;
-    if (conditions !== null && url.searchParams.size > 0) {
+    const wanted = conditions !== null && url.searchParams.size > 0;
+
+    /**
+     * 条件に当たる番組の下見。**いちばん重い。**
+     *
+     * これから先の番組を**全部**引いて JS で絞るので、実データでは番組表の
+     * 24時間ぶんより重い。しかも**番組表の検索窓が飛ばす先はここ**
+     * (`<form action="/rules">`) なので、待たされるのはたいていこの道。
+     *
+     * ここだけ後から流して、条件の枠とルールの一覧は先に出す
+     * (番組表と同じ。`guide/+page.server.ts` の `gridOf`)。
+     * **転んでも投げ返さない** — 理由も同じ (拾い手のいない拒否になる)
+     */
+    async function previewOf(): Promise<Preview> {
+        // 器を先に出してから引く。同期のクエリなので、ここで一度譲らないと意味が無い
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        try {
+            return { ...readPreview(conditions as Rule), failed: null };
+        } catch (error) {
+            console.error('[rules] 下見を組めませんでした', error);
+            return { total: 0, programs: [], conflicts: 0, failed: String(error) };
+        }
+    }
+
+    function readPreview(conditions: Rule): {
+        total: number;
+        programs: PreviewRow[];
+        conflicts: number;
+    } {
         const all = orm()
             .select({
                 ...getTableColumns(programs),
@@ -331,7 +370,7 @@ export async function load({ url }) {
         }
         rows.sort((a, b) => a.start_at - b.start_at);
 
-        preview = {
+        return {
             total: rows.length,
             // 数えるのは**行の数**。1行に3本重なっていても、困っている番組は1つ
             conflicts: rows.filter((row) => row.conflicts.length > 0 || row.conflict_reason !== null).length,
@@ -369,7 +408,8 @@ export async function load({ url }) {
         services,
         editing: editing ?? null,
         seed: conditions,
-        preview,
+        /** 下見。**条件が付いているときだけ、後から流れてくる** */
+        preview: wanted ? previewOf() : null,
         defaults,
         // 詳細の「視聴」を出すかどうか。決め方は番組表と揃えてある (watchableServices)
         watchable: watchableServices(now()),

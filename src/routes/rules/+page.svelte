@@ -1,4 +1,5 @@
 <script lang="ts">
+    import { page } from '$app/state';
     import { submitting } from '$lib/actions';
     import { GENRE_TREE, genreName } from '$lib/arib';
     import ProgramDetail from '$lib/components/ProgramDetail.svelte';
@@ -6,9 +7,46 @@
     import { programDetail } from '$lib/detail.svelte';
     import { badgeClass, CM_LABEL, dateTime, SERVICE_TYPE_LABEL, stateLabel } from '$lib/format';
     import { parseSearchFields, SEARCH_FIELD_LABEL, SEARCH_FIELDS, searchFieldLabel } from '$lib/search';
-    import type { PreviewRow } from './+page.server';
+    import type { Preview, PreviewRow } from './+page.server';
 
     let { data, form } = $props();
+
+    /**
+     * 下見。**器より後から届く** (`+page.server.ts` の `previewOf`)。
+     *
+     * これから先の番組を全部見るので、実データではこの画面でいちばん待つところ。
+     * 条件の枠とルールの一覧は先に出して、ここだけ読み込み中にしておけば、
+     * **打ち直しも取り消しも待たずにできる**。番組表と同じ作り
+     * (`guide/+page.svelte` の `sheet`)
+     */
+    let preview = $state<Preview | null>(null);
+    let shownKey = '';
+    $effect(() => {
+        const key = page.url.search;
+        const coming = data.preview;
+        if (coming === null) {
+            preview = null;
+            shownKey = key;
+            return;
+        }
+        // 条件が変わったら前の下見は捨てる (別の条件の結果を出したままにしない)
+        if (key !== shownKey) preview = null;
+        let stale = false;
+        void coming.then((next) => {
+            if (stale) return;
+            preview = next;
+            shownKey = key;
+        });
+        return () => {
+            stale = true;
+        };
+    });
+
+    /**
+     * 下見を待っている間の枠の形。数は決め打ち (何件当たるかは届くまで分からない)。
+     * 高さをばらけさせるのは、揃っていると表ではなくただの縞に見えるため
+     */
+    const PREVIEW_SKELETON = [2.5, 3, 2.5, 3.5, 2.5, 3, 2.5, 3.5];
 
     /** フォームの初期値として選んでおくチャンネルと種別 */
     const seedTypes = $derived(data.seed?.service_types ?? []);
@@ -361,26 +399,44 @@
             ここで外す
         -->
         <section class="result-col">
-            {#if data.preview}
+            {#if data.preview !== null && preview === null}
+                <!--
+                    下見が届くまで。**枠だけ先に置く** — 条件を打ち直すたびに
+                    右の列ごと消えると、どこを見ていたか分からなくなる
+                -->
+                <div class="panel preview" data-testid="preview-skeleton" role="status" aria-label="下見を数えています">
+                    <div class="skeleton-title" aria-hidden="true"></div>
+                    <ul class="preview-list" aria-hidden="true">
+                        {#each PREVIEW_SKELETON as height, row (row)}
+                            <li class="skeleton-row" style="height: {height}rem"></li>
+                        {/each}
+                    </ul>
+                </div>
+            {:else if preview !== null && preview.failed !== null}
+                <!-- 数えられなかった。黙って空にしない (本当の理由はサーバのログ) -->
+                <div class="panel preview" data-testid="preview-failed">
+                    <p class="muted">下見を数えられませんでした ({preview.failed})</p>
+                </div>
+            {:else if data.preview !== null && preview !== null}
                 <!--
         **予約とプレビューは同じ一覧**。別々に並べていた頃は、同じ番組が2箇所に出るうえ、
         「押さえている予約」と「これから当たる番組」を頭の中で突き合わせることになっていた
     -->
                 <div class="panel preview" data-testid="preview">
                     <h2 class="preview-title">
-                        この条件で録れる番組は {data.preview.total} 件
-                        {#if data.preview.total > data.preview.programs.length}
+                        この条件で録れる番組は {preview.total} 件
+                        {#if preview.total > preview.programs.length}
                             <span class="small muted normal">
-                                (先頭 {data.preview.programs.length} 件)
+                                (先頭 {preview.programs.length} 件)
                             </span>
                         {/if}
-                        {#if data.preview.conflicts > 0}
+                        {#if preview.conflicts > 0}
                             <span class="tag error outline" data-testid="preview-conflicts">
-                                競合 {data.preview.conflicts} 件
+                                競合 {preview.conflicts} 件
                             </span>
                         {/if}
                     </h2>
-                    {#if data.preview.total === 0}
+                    {#if preview.total === 0}
                         <p class="small muted">
                             いまの番組表では1件も当たりません。条件を緩めてください。
                         </p>
@@ -392,7 +448,7 @@
                             <span class="tag">条件外</span> として並べます。
                         </p>
                         <ul class="preview-list" data-testid="preview-list">
-                            {#each data.preview.programs as program (program.id)}
+                            {#each preview.programs as program (program.id)}
                                 <li class="preview-row small" data-testid="preview-row" data-program-id={program.id}>
                                     <!--
                                 押すと番組詳細が出る。予約一覧・番組表と同じもの。
@@ -667,6 +723,21 @@
         gap: 0.25rem;
     }
     .heading h2,
+    /* 下見を待っている間の枠 (`preview-skeleton`)。本物と同じ場所・同じ大きさ */
+    .skeleton-title {
+        height: 1.5rem;
+        width: 60%;
+        margin-bottom: 0.75rem;
+        border-radius: 0.375rem;
+        background: var(--dp-base-300);
+    }
+    .skeleton-row {
+        margin-bottom: 0.5rem;
+        border-radius: 0.375rem;
+        background: var(--dp-base-200);
+        list-style: none;
+    }
+
     .preview-title {
         font-size: 1rem;
     }
