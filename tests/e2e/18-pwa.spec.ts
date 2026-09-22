@@ -44,7 +44,21 @@ test.describe('PWA', () => {
             const res = await request.get(path);
             expect(res.status(), path).toBe(200);
             expect(res.headers()['cache-control'], path).toBe('no-cache');
-            expect(res.headers()['etag'], path).toBeTruthy();
+        }
+
+        /*
+         * **指紋が付くのは、最後まで組んでから返す画面だけ。**
+         *
+         * 番組表は器を先に返して表を後から流すので (`guide/+page.server.ts` の
+         * `gridOf`)、返し始める時点で中身が決まっておらず、指紋の出しようがない。
+         * 落ちるのは「変わっていなければ 304」だけで、**溜め込ませない約束
+         * (`no-cache`) は上で見たとおり効いている** — 実機で出た「開き直すと前に
+         * 閉じたときの一覧」はそちらの話なので、ここは守れている。
+         * 番組表の中身は番組が動くたびに変わるので、もともと 304 になる機会も
+         * ほとんど無かった
+         */
+        for (const path of ['/', '/settings']) {
+            expect((await request.get(path)).headers()['etag'], path).toBeTruthy();
         }
 
         // 指紋が付いているものは、変わっていなければ中身を流さない
