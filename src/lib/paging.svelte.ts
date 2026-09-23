@@ -72,15 +72,23 @@ export class Paged<T> {
 export function sentinel(node: HTMLElement, onSeen: () => void) {
     let observer: IntersectionObserver | null = null;
     let seen = onSeen;
+    let frame = 0;
+    /**
+     * 外されたか。**外されたあとに積んであった `watch` が走ると、外れた要素を
+     * 見張る observer がもう1つできて、誰にも切られない** — 最後の1回を足した
+     * 直後に一覧が出尽くして印ごと消えるとそうなる
+     */
+    let gone = false;
 
     const watch = (): void => {
+        if (gone) return;
         observer?.disconnect();
         observer = new IntersectionObserver(
             (entries) => {
                 if (!entries.some((entry) => entry.isIntersecting)) return;
                 seen();
                 // 足したあとにまだ見えているなら、もう一度鳴らす
-                requestAnimationFrame(watch);
+                frame = requestAnimationFrame(watch);
             },
             { rootMargin: '200px 0px' },
         );
@@ -93,7 +101,10 @@ export function sentinel(node: HTMLElement, onSeen: () => void) {
             seen = next;
         },
         destroy() {
+            gone = true;
+            cancelAnimationFrame(frame);
             observer?.disconnect();
+            observer = null;
         },
     };
 }
