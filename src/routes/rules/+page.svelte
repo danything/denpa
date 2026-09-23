@@ -599,11 +599,6 @@
                             bind:value={filter}
                             data-testid="rule-filter"
                         />
-                        {#if filtered.length !== data.rules.length}
-                            <span class="tiny muted nowrap" data-testid="rule-filter-count">
-                                {data.rules.length} 件中 {filtered.length} 件
-                            </span>
-                        {/if}
                     </div>
                 {/if}
                 {#each paged.rows as rule (rule.id)}
@@ -653,6 +648,12 @@
                 {#if paged.more}
                     <div class="rule-row small muted more" use:sentinel={() => paged.reveal()} data-testid="rule-more">
                         あと {paged.rest} 件…
+                    </div>
+                {/if}
+                <!-- 絞った結果の件数は末尾に。入力欄の隣に出すと、打つたびに欄の幅が変わる -->
+                {#if filter !== ''}
+                    <div class="rule-row small muted more" data-testid="rule-filter-count">
+                        {data.rules.length} 件中 {filtered.length} 件
                     </div>
                 {/if}
             </div>

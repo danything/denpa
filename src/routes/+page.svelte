@@ -618,11 +618,6 @@
                         bind:value={reservationQuery}
                         data-testid="reservation-filter"
                     />
-                    {#if reservationQuery !== ''}
-                        <span class="small muted" data-testid="reservation-count">
-                            {data.reservations.length} 件中 {reservationRows.length} 件
-                        </span>
-                    {/if}
                     <a class="button secondary outline small" href={data.showFinished ? '/' : '/?all=1'}>
                         {data.showFinished ? '進行中のみ' : '完了分も表示'}
                     </a>
@@ -744,6 +739,15 @@
                             残り {reservationPage.rest} 件
                         </div>
                     {/if}
+                    <!--
+                        絞った結果の件数は**一覧の末尾に**。見出しの行に出していた頃は、
+                        打つたびに右の押すものが動いてガクガクした
+                    -->
+                    {#if reservationQuery !== ''}
+                        <div class="row-empty muted small" data-testid="reservation-count">
+                            {data.reservations.length} 件中 {reservationRows.length} 件
+                        </div>
+                    {/if}
                 </div>
             </div>
         </section>
@@ -755,24 +759,25 @@
                 <div class="cluster">
                     <!--
                         **絞り込み。** 溜まると300件フラットは指のリモコンで辿れない。
-                        番組名・シリーズ・副題・局にかかる (`+page.server.ts`)。GET なので
-                        URL に残り、共有・戻るがそのまま効く。削除済み表示は引き継ぐ
+                        打った端から手元の 300 件に当たり (上の `recordingQuery`)、**Enter で
+                        送ればサーバに聞く** — 番組名・シリーズ・副題・局にかかり
+                        (`+page.server.ts`)、300 件より古いものにも届く。GET なので URL に
+                        残り、共有・戻るがそのまま効く。削除済み表示は引き継ぐ。
+                        押すものは置かない (予約側の欄と同じ形にする)
                     -->
                     <form method="GET" action="/" class="search" data-sveltekit-keepfocus>
                         {#if data.showDeleted}
                             <input type="hidden" name="deleted" value="1" />
                         {/if}
-                        <div role="group">
-                            <input
-                                type="search"
-                                name="q"
-                                bind:value={recordingQuery}
-                                placeholder="番組名・シリーズ・副題・局で絞り込み"
-                                aria-label="録画を絞り込む"
-                                data-testid="recording-search"
-                            />
-                            <button type="submit" class="secondary small">絞り込む</button>
-                        </div>
+                        <input
+                            type="search"
+                            name="q"
+                            class="filter"
+                            bind:value={recordingQuery}
+                            placeholder="番組名・シリーズ・副題・局で絞り込み"
+                            aria-label="録画を絞り込む"
+                            data-testid="recording-search"
+                        />
                     </form>
                     {#if data.q !== ''}
                         <a
@@ -782,12 +787,6 @@
                         >
                             解除
                         </a>
-                    {/if}
-                    <!-- 手元で絞っているぶん。送る前でも何件残るかが分かる -->
-                    {#if recordingQuery !== data.q}
-                        <span class="small muted" data-testid="recording-count">
-                            {rightRows.length} 件中 {recordingRows.length} 件
-                        </span>
                     {/if}
                     <a class="button secondary outline small" href={data.showDeleted ? '/' : '/?deleted=1'}>
                         {data.showDeleted ? '削除済みを隠す' : '削除済みも表示'}
@@ -1218,6 +1217,12 @@
                             残り {recordingPage.rest} 件
                         </div>
                     {/if}
+                    <!-- 手元で絞っているぶん (予約側と同じく末尾に)。送る前でも何件残るかが分かる -->
+                    {#if recordingQuery !== data.q}
+                        <div class="row-empty muted small" data-testid="recording-count">
+                            {rightRows.length} 件中 {recordingRows.length} 件
+                        </div>
+                    {/if}
                     <!--
                         **300件で頭打ちなのを黙らない。** 溜まると古いものが黙って
                         消え、「消えた」ように見える。上限に当たっていたら、絞り込みへ
@@ -1486,28 +1491,21 @@
         font-size: 1.125rem;
         margin: 0;
     }
-    .search [role='group'] {
-        width: auto;
+    /* 絞り込みの欄。予約側と録画側で同じ形 (録画側だけ送れる form の中に居る) */
+    .search {
         margin: 0;
     }
-    .search input,
     .filter {
         width: 10rem;
         height: auto;
+        margin: 0;
         padding-block: 0.3rem;
         font-size: 0.85rem;
     }
     @media (min-width: 640px) {
-        .search input,
         .filter {
             width: 14rem;
         }
-    }
-    .filter {
-        margin: 0;
-    }
-    .search button {
-        padding-block: 0.3rem;
     }
     /* 残りいっぱいまで伸ばして、中だけスクロールさせる */
     .board-box {
