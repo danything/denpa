@@ -763,7 +763,8 @@
                         送ればサーバに聞く** — 番組名・シリーズ・副題・局にかかり
                         (`+page.server.ts`)、300 件より古いものにも届く。GET なので URL に
                         残り、共有・戻るがそのまま効く。削除済み表示は引き継ぐ。
-                        押すものは置かない (予約側の欄と同じ形にする)
+                        押すものは置かない (予約側の欄と同じ形にする) — 解くのも欄を空にして
+                        Enter (`type="search"` の × でも消える)
                     -->
                     <form method="GET" action="/" class="search" data-sveltekit-keepfocus>
                         {#if data.showDeleted}
@@ -779,15 +780,6 @@
                             data-testid="recording-search"
                         />
                     </form>
-                    {#if data.q !== ''}
-                        <a
-                            class="button ghost small"
-                            href={data.showDeleted ? '/?deleted=1' : '/'}
-                            data-testid="recording-search-clear"
-                        >
-                            解除
-                        </a>
-                    {/if}
                     <a class="button secondary outline small" href={data.showDeleted ? '/' : '/?deleted=1'}>
                         {data.showDeleted ? '削除済みを隠す' : '削除済みも表示'}
                     </a>
