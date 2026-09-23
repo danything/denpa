@@ -28,6 +28,8 @@
     import { forget, forgetPrefix, read, write } from '$lib/keep';
     import { liveUpdates } from '$lib/live-updates.svelte';
     import { clearFailed, offline, removeLocal, saveOffline } from '$lib/offline.svelte';
+    import { matches } from '$lib/paging';
+    import { Paged, sentinel } from '$lib/paging.svelte';
     import { encodeSource, type FileSource } from '$lib/source';
 
     let { data, form } = $props();
@@ -455,6 +457,63 @@
             ),
         ].sort((a, b) => b.at - a.at),
     );
+
+    /*
+     * **一覧は少しずつ出す** (`$lib/paging.svelte`)。
+     *
+     * 予約も録画も 300 件まで来る。全部を一度に描くと、この画面を開いた直後に
+     * 一瞬止まって見えた (行ごとにボタンとポスターがあるので、描くのが重い)。
+     * 最初は1画面と少しだけ描き、下端に近づいたら足す。
+     *
+     * **絞り込みは手元で。** 出していない行は Ctrl+F で探せないので、代わりに
+     * 打った端から当たる欄を置く。当てる先は番組名・局・状態・ルール名。
+     * 録画のほうは既にサーバ側の絞り込み (`?q=`。300 件より古いものにも届く) が
+     * あるので、**同じ欄で両方やる** — 打った端から手元の 300 件を絞り、送れば
+     * サーバに聞きに行く
+     */
+    let reservationQuery = $state('');
+    const reservationRows = $derived(
+        data.reservations.filter((res) =>
+            matches(
+                reservationQuery,
+                [res.name, res.service_name, stateLabel(res.state), res.rule_name ?? '', dateTime(res.start_at)].join(' '),
+            ),
+        ),
+    );
+    const reservationPage = new Paged(() => reservationRows, 60);
+    $effect(() => {
+        reservationQuery;
+        reservationPage.reset();
+    });
+
+    /** 録画の絞り込み。URL の `q` から始めて、打った端から効かせる (URL が変われば下の効果で追う) */
+    // svelte-ignore state_referenced_locally
+    let recordingQuery = $state(data.q);
+    $effect(() => {
+        recordingQuery = data.q;
+    });
+    function rightText(row: RightRow): string {
+        if (row.kind === 'missed') {
+            const res = row.res;
+            return [res.name, res.service_name, stateLabel('missed'), res.rule_name ?? '', dateTime(res.start_at)].join(' ');
+        }
+        const rec = row.rec;
+        return [
+            rec.name,
+            rec.series ?? '',
+            rec.subtitle ?? '',
+            rec.service_name,
+            rowState(rec).label,
+            rec.rule_name ?? '',
+            dateTime(rec.start_at),
+        ].join(' ');
+    }
+    const recordingRows = $derived(rightRows.filter((row) => matches(recordingQuery, rightText(row))));
+    const recordingPage = new Paged(() => recordingRows, 60);
+    $effect(() => {
+        recordingQuery;
+        recordingPage.reset();
+    });
 </script>
 
 <!-- 聞き返しは他所を触ったら取り下げる (`stand`) -->
@@ -549,9 +608,25 @@
                     「競合を再計算」は置いていない。番組表を取り直したときとルールを
                     いじったときに必ず走るので、押す機会が無かった
                 -->
-                <a class="button secondary outline small" href={data.showFinished ? '/' : '/?all=1'}>
-                    {data.showFinished ? '進行中のみ' : '完了分も表示'}
-                </a>
+                <div class="cluster">
+                    <!-- 打った端から手元の一覧を絞る (上の `reservationQuery`) -->
+                    <input
+                        type="search"
+                        class="filter"
+                        placeholder="番組名・局・状態で絞り込み"
+                        aria-label="予約を絞り込む"
+                        bind:value={reservationQuery}
+                        data-testid="reservation-filter"
+                    />
+                    {#if reservationQuery !== ''}
+                        <span class="small muted" data-testid="reservation-count">
+                            {data.reservations.length} 件中 {reservationRows.length} 件
+                        </span>
+                    {/if}
+                    <a class="button secondary outline small" href={data.showFinished ? '/' : '/?all=1'}>
+                        {data.showFinished ? '進行中のみ' : '完了分も表示'}
+                    </a>
+                </div>
             </div>
 
             <!--
@@ -560,7 +635,7 @@
         -->
             <div class="board-box">
                 <div class="rows" data-testid="reservation-list">
-                    {#each data.reservations as res (res.id)}
+                    {#each reservationPage.rows as res (res.id)}
                         <!-- 行を押すと番組表と同じ詳細が出る -->
                         <div
                             data-testid="reservation-row"
@@ -655,8 +730,20 @@
                             </div>
                         </div>
                     {:else}
-                        <div class="row-empty muted">予約はありません</div>
+                        <div class="row-empty muted">
+                            {reservationQuery === '' ? '予約はありません' : `「${reservationQuery}」に一致する予約はありません`}
+                        </div>
                     {/each}
+                    <!-- 下端に近づいたら続きを足す (`sentinel`)。残りが無くなれば消える -->
+                    {#if reservationPage.more}
+                        <div
+                            class="row-empty muted small"
+                            use:sentinel={() => reservationPage.reveal()}
+                            data-testid="reservation-more"
+                        >
+                            残り {reservationPage.rest} 件
+                        </div>
+                    {/if}
                 </div>
             </div>
         </section>
@@ -679,7 +766,7 @@
                             <input
                                 type="search"
                                 name="q"
-                                value={data.q}
+                                bind:value={recordingQuery}
                                 placeholder="番組名・シリーズ・副題・局で絞り込み"
                                 aria-label="録画を絞り込む"
                                 data-testid="recording-search"
@@ -696,6 +783,12 @@
                             解除
                         </a>
                     {/if}
+                    <!-- 手元で絞っているぶん。送る前でも何件残るかが分かる -->
+                    {#if recordingQuery !== data.q}
+                        <span class="small muted" data-testid="recording-count">
+                            {rightRows.length} 件中 {recordingRows.length} 件
+                        </span>
+                    {/if}
                     <a class="button secondary outline small" href={data.showDeleted ? '/' : '/?deleted=1'}>
                         {data.showDeleted ? '削除済みを隠す' : '削除済みも表示'}
                     </a>
@@ -711,7 +804,7 @@
         -->
             <div class="board-box">
                 <div class="rows" data-testid="recording-list">
-                    {#each rightRows as row (row.key)}
+                    {#each recordingPage.rows as row (row.key)}
                     {#if row.kind === 'missed'}
                         {@const res = row.res}
                         <!--
@@ -1110,9 +1203,21 @@
                     {/if}
                     {:else}
                         <div class="row-empty muted">
-                            {data.q === '' ? '録画はありません' : `「${data.q}」に一致する録画はありません`}
+                            {recordingQuery === ''
+                                ? '録画はありません'
+                                : `「${recordingQuery}」に一致する録画はありません`}
                         </div>
                     {/each}
+                    <!-- 下端に近づいたら続きを足す (`sentinel`)。残りが無くなれば消える -->
+                    {#if recordingPage.more}
+                        <div
+                            class="row-empty muted small"
+                            use:sentinel={() => recordingPage.reveal()}
+                            data-testid="recording-more"
+                        >
+                            残り {recordingPage.rest} 件
+                        </div>
+                    {/if}
                     <!--
                         **300件で頭打ちなのを黙らない。** 溜まると古いものが黙って
                         消え、「消えた」ように見える。上限に当たっていたら、絞り込みへ
@@ -1385,16 +1490,21 @@
         width: auto;
         margin: 0;
     }
-    .search input {
+    .search input,
+    .filter {
         width: 10rem;
         height: auto;
         padding-block: 0.3rem;
         font-size: 0.85rem;
     }
     @media (min-width: 640px) {
-        .search input {
+        .search input,
+        .filter {
             width: 14rem;
         }
+    }
+    .filter {
+        margin: 0;
     }
     .search button {
         padding-block: 0.3rem;

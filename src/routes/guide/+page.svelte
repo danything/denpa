@@ -52,8 +52,12 @@
              * 出すものが無いので理由を出す
              */
             if (next.failed !== null && sheet !== null && sheet.failed === null) return;
+            // 骨組みから表に変わる回か、見えている表の差し替えか
+            const fresh = shownKey !== key;
             sheet = next;
             shownKey = key;
+            if (fresh) drawGradually(next.programs.length);
+            else drawAll();
         });
         return () => {
             stale = true;
@@ -62,6 +66,57 @@
 
     const services = $derived(sheet?.services ?? []);
     const programs = $derived(sheet?.programs ?? []);
+
+    /**
+     * 一度に描くマスの数。
+     *
+     * **表が届いた瞬間に画面が止まって見えるのは、マスを一度に全部描くから。**
+     * BS/CS は局が多く、24時間ぶんで数千個の `<button>` になる。骨組みを出して
+     * 待たせないようにしても、届いたあとの描画で同じだけ止まっていた。
+     * 先頭 (開始時刻順なので朝の 4:00 側) から数百個ずつ、描画の合間
+     * (`requestAnimationFrame`) に足していけば、1コマあたりの仕事は数十ms に収まり、
+     * 描いている最中でもスクロールもタブの切り替えもできる。
+     *
+     * 300 は「e2e の偽の放送 (数十番組) なら最初の1回で全部出る」数。
+     * 実データの地上波 (20局×24時間 ≒ 500〜700) でも2〜3コマで済む
+     */
+    const CELL_CHUNK = 300;
+    /** いま描いているマスの数。`Infinity` なら全部 */
+    let shownCells = $state(Number.POSITIVE_INFINITY);
+    let drawFrame = 0;
+
+    /**
+     * **骨組みから表に変わるときだけ**少しずつ描く。
+     *
+     * 位置は `grid-row` / `grid-column` で決めているので、途中まででも
+     * マスの場所は崩れない。いま (`nowMark`) の線はマスと独立に描くので、
+     * 「いま」へのスクロールは最初のコマで済む
+     */
+    function drawGradually(total: number): void {
+        cancelAnimationFrame(drawFrame);
+        shownCells = Math.min(CELL_CHUNK, total);
+        const step = (): void => {
+            if (shownCells >= total) return;
+            shownCells = Math.min(total, shownCells + CELL_CHUNK);
+            drawFrame = requestAnimationFrame(step);
+        };
+        if (shownCells < total) drawFrame = requestAnimationFrame(step);
+    }
+
+    /**
+     * **見えている表の差し替えは一度に。** 知らせのたびに読み直すので、
+     * そのたび少しずつ描き直すとマスが消えて現れてちらつく
+     */
+    function drawAll(): void {
+        cancelAnimationFrame(drawFrame);
+        shownCells = Number.POSITIVE_INFINITY;
+    }
+
+    $effect(() => () => cancelAnimationFrame(drawFrame));
+
+    /** まだ描き終えていない。`aria-busy` で外から分かるようにする */
+    const drawing = $derived(shownCells < programs.length);
+    const visibleCells = $derived(drawing ? programs.slice(0, shownCells) : programs);
 
     /** クリックした番組。詳細を出してから予約するかどうか決める */
     let selected = $state<Sheet['programs'][number] | null>(null);
@@ -374,6 +429,7 @@
             use:dragScroll
             bind:this={grid}
             data-testid="guide-grid"
+            aria-busy={drawing ? 'true' : undefined}
         >
             <!--
             **横幅を数えて入れておく。**
@@ -489,7 +545,8 @@
                     </div>
                 {/if}
 
-                {#each programs as program (program.id)}
+                <!-- 少しずつ足していく (`drawGradually`)。全部出るまで `aria-busy` が付いている -->
+                {#each visibleCells as program (program.id)}
                     {@const pos = place(program)}
                     <div
                         class="cell"

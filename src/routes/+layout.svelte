@@ -1,7 +1,7 @@
 <script lang="ts">
     import '../app.scss';
     import { onMount } from 'svelte';
-    import { page } from '$app/state';
+    import { navigating, page } from '$app/state';
     import Measure from '$lib/components/Measure.svelte';
     import Icon from '$lib/components/player/Icon.svelte';
     import { write } from '$lib/keep';
@@ -21,6 +21,42 @@
      * ので、ここで1度追い始めれば全部の遷移を見ていられる
      */
     followNavigation();
+
+    /**
+     * **遷移が長引いているときだけ、上端に細いバーを出す。**
+     *
+     * リンクを押してから次の画面のデータが届くまで、画面は何も変わらない。
+     * 番組表やルールのように読むものが多い画面では、それが「止まった」に見えて
+     * いた (押した指の先に返事が無い)。
+     *
+     * 150ms 待ってから出す — 速い遷移でまで出すと、押すたびに光ってちらつく。
+     * 消すのは `navigating.complete` の解決/拒否で。`navigating` の下りを待つと、
+     * 畳まれた遷移 (読み直しに追い越されたもの) で**永久に出たまま**になる
+     * ([reload.svelte.ts](../lib/reload.svelte.ts) と同じ落とし穴)
+     */
+    let slow = $state(false);
+    $effect(() => {
+        const done = navigating.complete;
+        if (done === null) {
+            slow = false;
+            return;
+        }
+        const timer = setTimeout(() => {
+            slow = true;
+        }, 150);
+        let stale = false;
+        const settle = (): void => {
+            clearTimeout(timer);
+            // 次の遷移がもう始まっているなら、消すのはあちらに任せる
+            if (stale) return;
+            slow = false;
+        };
+        void done.then(settle, settle);
+        return () => {
+            stale = true;
+            clearTimeout(timer);
+        };
+    });
 
     /**
      * **その端末の高さを読む札。**
@@ -199,6 +235,18 @@
     data-fill={fill ? 'true' : undefined}
     data-hydrated={hydrated ? 'true' : undefined}
 >
+    <!--
+        遷移の進み具合 (上の `slow`)。長さの分からない読み込みなので、
+        光が左から右へ走るだけの不確定のバー。ヘッダーの上端に貼る
+    -->
+    {#if slow}
+        <div
+            class="nav-progress"
+            role="progressbar"
+            aria-label="次の画面を読み込んでいます"
+            data-testid="nav-progress"
+        ></div>
+    {/if}
     <div class="navbar">
         <div class="brand">
             <a class="button ghost logo" href="/">denpa</a>
@@ -324,6 +372,41 @@
         flex-direction: column;
         min-height: 100%;
         background: var(--dp-base-200);
+    }
+    /*
+     * 遷移中のバー。**ヘッダーより上に重ねる** (z-index)。色は主の色で、
+     * 光の帯を左から右へ流す。動かせない設定の端末では帯を止めて色だけ出す
+     */
+    .nav-progress {
+        position: fixed;
+        inset: 0 0 auto 0;
+        z-index: 60;
+        height: 3px;
+        background:
+            linear-gradient(
+                    90deg,
+                    transparent 0%,
+                    var(--pico-primary-background) 40%,
+                    var(--pico-primary-background) 60%,
+                    transparent 100%
+                )
+                0 0 / 40% 100% no-repeat,
+            color-mix(in srgb, var(--pico-primary-background) 30%, transparent);
+        animation: nav-progress 1.1s ease-in-out infinite;
+    }
+    @keyframes nav-progress {
+        from {
+            background-position: -40% 0;
+        }
+        to {
+            background-position: 140% 0;
+        }
+    }
+    @media (prefers-reduced-motion: reduce) {
+        .nav-progress {
+            animation: none;
+            background: var(--pico-primary-background);
+        }
     }
     .navbar {
         position: sticky;

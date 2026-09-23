@@ -19,8 +19,20 @@ export async function goto(page: Page, url: string): Promise<void> {
      * いくと、まだ骨組みしか無いことがある。局が1つも無ければ表の代わりに
      * 「チャンネルがありません」が出るので、どちらかが出るまで待つ
      */
-    if (new URL(url, 'http://localhost').pathname === '/guide') {
+    const pathname = new URL(url, 'http://localhost').pathname;
+    if (pathname === '/guide') {
         await page.locator('[data-testid="guide-grid"], [data-testid="empty-grid"]').first().waitFor();
+        // マスは数百個ずつ描く (`guide/+page.svelte` の `drawGradually`)。数える前に描き終わるのを待つ
+        await expect(page.locator('[data-testid="guide-grid"][aria-busy="true"]')).toHaveCount(0);
+    }
+    /*
+     * **ホームの一覧は少しずつしか描かない** (`$lib/paging.svelte`)。テストは行を
+     * 番号で名指ししたり件数を数えたりするので、開いた時点で全部出させておく —
+     * 61 件目から先は、巻き取って初めて描かれる
+     */
+    if (pathname === '/') {
+        await revealAll(page, 'reservation-list');
+        await revealAll(page, 'recording-list');
     }
 }
 
@@ -269,6 +281,38 @@ export async function clearRules(page: Page): Promise<void> {
         await expect(rows).toHaveCount(count - 1);
     }
     await expect(rows).toHaveCount(0);
+}
+
+/**
+ * 少しずつ出す一覧を**全部出させる** (`$lib/paging.svelte`)。
+ *
+ * ホームの予約・録画とルールの一覧は、最初は 1 画面と少しだけ描き、末尾の印
+ * (`<一覧>-more`。`use:sentinel`) が画面に入るたびに続きを足す。件数を数える・
+ * 行を番号で名指しするテストは、その前にこれを呼ぶ (ホームは `goto` が呼ぶ)。
+ *
+ * **印を巻き取って見せる**のはブラウザの `scrollIntoView` で。一覧は自分の箱の中で
+ * 巻き取る (`overflow: auto`) ので、箱ごと動かさないと見えない。足されたかどうかは
+ * **行の数**で見る (印の文言で見ていた頃は、読む前に足されると比べる相手が同じになって
+ * 5 秒ずつ空回りし、テストごと時間切れになった)。
+ *
+ * @param listTestId 一覧の `data-testid` (`reservation-list` など)。印はその `-list` を `-more` に替えたもの
+ */
+export async function revealAll(page: Page, listTestId: string): Promise<void> {
+    const list = page.getByTestId(listTestId);
+    const more = page.getByTestId(listTestId.replace(/-list$/, '-more'));
+    const rows = list.locator('[data-testid$="-row"]');
+    for (let i = 0; i < 100; i++) {
+        if ((await more.count()) === 0) return;
+        const before = await rows.count();
+        await more.first().evaluate((node) => node.scrollIntoView({ block: 'center' }));
+        await expect
+            .poll(async () => (await more.count()) === 0 || (await rows.count()) > before, {
+                timeout: 10_000,
+                message: `${listTestId} の続きが出ません (${before} 行のまま)`,
+            })
+            .toBe(true);
+    }
+    await expect(more).toHaveCount(0);
 }
 
 /** 通知先を全部消す (10-webhook の後片付け)。消えるのを待ってから次を押す */

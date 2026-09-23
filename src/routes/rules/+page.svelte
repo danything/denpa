@@ -6,6 +6,7 @@
     import Toasts, { errorNotice, type Notice } from '$lib/components/Toasts.svelte';
     import { programDetail } from '$lib/detail.svelte';
     import { badgeClass, CM_LABEL, dateTime, SERVICE_TYPE_LABEL, stateLabel } from '$lib/format';
+    import { matches, Paged, sentinel } from '$lib/paging.svelte';
     import { parseSearchFields, SEARCH_FIELD_LABEL, SEARCH_FIELDS, searchFieldLabel } from '$lib/search';
     import type { Preview, PreviewRow } from './+page.server';
 
@@ -117,6 +118,46 @@
             .map((type) => ({ type, services: data.services.filter((s) => s.type === type) }))
             .filter((g) => g.services.length > 0),
     );
+
+    /**
+     * 一覧の絞り込み。**Ctrl+F の代わり。**
+     *
+     * 一覧は少しずつしか描かない (下の `paged`) ので、画面に無い行はブラウザの
+     * 検索では見つからない。名前だけでなく、条件に出しているもの (キーワード・
+     * 除外・チャンネル・ジャンル・有効かどうか) も当てる — 「NHK のルールは
+     * どれだったか」で探せるように。読み方はルールのキーワードと同じ
+     * (空白で区切った語をすべて含む)
+     */
+    let filter = $state('');
+    const filtered = $derived(
+        data.rules.filter((rule) =>
+            matches(
+                filter,
+                [
+                    rule.name,
+                    rule.keyword,
+                    rule.ignore_keyword,
+                    channels(rule),
+                    genres(rule),
+                    rule.enabled ? '有効' : '無効',
+                ].join(' '),
+            ),
+        ),
+    );
+
+    /**
+     * 少しずつ出す (`paging.svelte.ts`)。
+     *
+     * ルールが数百に溜まると、この画面を開いた直後に一瞬止まって見える —
+     * 全部の行を描き終わるまで何も動かない。最初は 1 画面ぶん少し多めだけ描き、
+     * 下端に近づいたら続きを足す。**絞り込みが変わったら先頭に戻す**
+     * (絞ったあとの一覧が前と同じ長さとは限らない)
+     */
+    const paged = new Paged(() => filtered, 40);
+    $effect(() => {
+        void filter;
+        paged.reset();
+    });
 
     /** 押した結果 */
     const notices = $derived<Notice[]>(errorNotice(form, 'rule-error'));
@@ -543,7 +584,29 @@
                 1件を 名前と札 → 条件 → 押すもの の順に縦に積めば、幅がいくらでも横には出ない
             -->
             <div class="panel rule-list" data-testid="rule-list">
-                {#each data.rules as rule (rule.id)}
+                <!--
+                    絞り込みの欄は一覧の頭に貼り付ける。巻き取るのは一覧のほうなので、
+                    下のほうまで来てから絞り直したくなっても、上へ戻らずに済む。
+                    ルールが1件も無いときは出さない (絞るものが無い)
+                -->
+                {#if data.rules.length > 0}
+                    <div class="filter-bar">
+                        <input
+                            type="search"
+                            class="small"
+                            placeholder="一覧を絞り込む (名前・キーワード・チャンネル・ジャンル)"
+                            aria-label="ルールの一覧を絞り込む"
+                            bind:value={filter}
+                            data-testid="rule-filter"
+                        />
+                        {#if filtered.length !== data.rules.length}
+                            <span class="tiny muted nowrap" data-testid="rule-filter-count">
+                                {data.rules.length} 件中 {filtered.length} 件
+                            </span>
+                        {/if}
+                    </div>
+                {/if}
+                {#each paged.rows as rule (rule.id)}
                     <div class="rule-row" data-testid="rule-row" data-rule-id={rule.id}>
                         <div class="cluster">
                             <span class="bold">{rule.name}</span>
@@ -582,8 +645,16 @@
                         </div>
                     </div>
                 {:else}
-                    <div class="rule-row small muted">ルールはまだありません</div>
+                    <div class="rule-row small muted">
+                        {data.rules.length === 0 ? 'ルールはまだありません' : '当たるルールはありません'}
+                    </div>
                 {/each}
+                <!-- 下端に近づいたら続きを足す。まだ出していない件数を添えて、終わりではないと分かるように -->
+                {#if paged.more}
+                    <div class="rule-row small muted more" use:sentinel={() => paged.reveal()} data-testid="rule-more">
+                        あと {paged.rest} 件…
+                    </div>
+                {/if}
             </div>
         </section>
     </div>
@@ -722,8 +793,9 @@
         flex-direction: column;
         gap: 0.25rem;
     }
-    .heading h2,
-    /* 下見を待っている間の枠 (`preview-skeleton`)。本物と同じ場所・同じ大きさ */
+    /* 下見を待っている間の枠 (`preview-skeleton`)。本物と同じ場所・同じ大きさ。
+       **見出し (`.heading h2`) をここに繋がない** — 繋いでいた頃は「ルールを追加」が
+       灰色の箱になっていた */
     .skeleton-title {
         height: 1.5rem;
         width: 60%;
@@ -899,6 +971,27 @@
     }
     .rule-row + .rule-row {
         border-top: 1px solid var(--dp-base-300);
+    }
+    .filter-bar {
+        position: sticky;
+        top: 0;
+        z-index: 1;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.5rem 0.75rem;
+        border-bottom: 1px solid var(--dp-base-300);
+        /* 下を流れる行が透けないように。札と同じ地の色 */
+        background: var(--pico-card-background-color);
+        border-radius: var(--pico-border-radius) var(--pico-border-radius) 0 0;
+    }
+    .filter-bar input {
+        flex: 1 1 auto;
+        min-width: 0;
+        margin: 0;
+    }
+    .more {
+        text-align: center;
     }
     .conditions {
         display: flex;
