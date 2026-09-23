@@ -115,32 +115,6 @@ public static partial class DeviceProbe
         return [.. property.Slice(BufferDataAt, length).ToArray().Select(value => (int)value)];
     }
 
-    /// <summary>
-    /// chardev のデバイス名から種別を当てる (`px4_drv`)。
-    ///
-    /// <para>
-    /// **こちらは ioctl で聞けない。** DVB と違って方式を答える口が無く、
-    /// 名前と番号の決まりがそのまま種別になっている。合わなければ
-    /// 画面から書いて上書きしてもらう。
-    /// </para>
-    /// </summary>
-    public static string[] TypesForChardev(string name)
-    {
-        // PX-W3U4 / W3PE4 など: 0,1 が衛星で 2,3 が地上波
-        if (name.StartsWith("px4video", StringComparison.Ordinal))
-        {
-            return name[^1] is '0' or '1' ? ["BS", "CS"] : ["GR"];
-        }
-        // PX-MLT5PE / ISDB2056 など: 1本でどちらも受けられる
-        if (name.StartsWith("pxmlt", StringComparison.Ordinal)
-            || name.StartsWith("isdb2056video", StringComparison.Ordinal)
-            || name.StartsWith("isdb6014video", StringComparison.Ordinal))
-        {
-            return ["GR", "BS", "CS"];
-        }
-        return [];
-    }
-
     private static string[] Ask(string device)
     {
         var fd = Open(device, OReadOnly | ONonBlock);
@@ -217,14 +191,11 @@ public static partial class DeviceProbe
             }
         }
 
-        foreach (var device in Files("/dev", "px4video*").Concat(Files("/dev", "pxmlt*"))
-            .Concat(Files("/dev", "isdb*video*")).Order(StringComparer.Ordinal))
-        {
-            var name = Path.GetFileName(device);
-            var types = TypesForChardev(name);
-            if (types.Length == 0) continue;
-            found.Add(new TunerSpec(name, types, false, device));
-        }
+        /*
+         * PX-Q3U4 は USB を sysfs で数える。ドライバは同梱の px4-userland で、
+         * デバイスノードは出ない (Q3u4.cs)。1台につき8本
+         */
+        found.AddRange(Px4Userland.Detect());
 
         return found;
     }

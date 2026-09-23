@@ -226,7 +226,12 @@ public sealed class TunerPool(
                 var held = Acquire(index, spec);
                 lock (held.Gate)
                 {
-                    if (held.Channel != channel)
+                    /*
+                     * **合っていても、生きていなければ選局し直す。** DVB は合ったまま
+                     * だが、px4-userland は読み手が居なくなると px4-ts が切られる
+                     * (Q3u4.cs)。合っている印だけ残っていて中身が無い、を掴まない
+                     */
+                    if (held.Channel != channel || !held.Device.Tuned)
                     {
                         var tuning = ChannelTable.Parse(channel)
                             ?? throw new IOException($"{channel} は選局表にありません");
@@ -297,15 +302,31 @@ public sealed class TunerPool(
             }
 
             var path = spec.Device ?? throw new IOException($"{spec.Name} にデバイスが書かれていません");
-            ITuneDevice device = path.Contains("/dvb/", StringComparison.Ordinal)
-                ? new DvbTuner(path, spec.Lnb)
-                : new Px4Tuner(path, spec.Lnb);
+            var device = OpenDevice(path, spec.Lnb);
 
             var held = new Held(device, Reopen(spec));
             _held[index] = held;
             Log.Write($"[{spec.Name}] {path} を掴みました");
             return held;
         }
+    }
+
+    /// <summary>
+    /// 設定の <c>device</c> から口を選ぶ。
+    ///
+    /// <list type="bullet">
+    /// <item><c>/dev/dvb/adapterN/frontendM</c> … Linux DVB (Tuning.cs)</item>
+    /// <item><c>q3u4:&lt;base serial&gt;:&lt;受信機&gt;</c> … PX-Q3U4 を px4-userland で (Q3u4.cs)</item>
+    /// </list>
+    ///
+    /// <para>それ以外は投げる。<c>px4_drv</c> の chardev はもう受け取らない</para>
+    /// </summary>
+    public static ITuneDevice OpenDevice(string path, string? lnb)
+    {
+        if (Px4Userland.Parse(path) is { } q3u4) return new Q3u4Tuner(q3u4.Serial, q3u4.Receiver, lnb);
+        if (path.Contains("/dvb/", StringComparison.Ordinal)) return new DvbTuner(path, lnb);
+        throw new IOException(
+            $"{path} は知らないデバイスです (/dev/dvb/adapterN/frontendM か {Px4Userland.Scheme}<シリアル14桁>:<受信機0-7>)");
     }
 
     /// <summary>

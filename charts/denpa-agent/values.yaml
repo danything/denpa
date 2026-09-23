@@ -18,7 +18,8 @@ image:
 imageMark: ""
 
 timezone: Asia/Tokyo
-# チューナーとカードリーダーに触るために特権が要る
+# チューナーとカードリーダーに触るために特権が要る。PX-Q3U4 はホストにドライバを
+# 入れず、/dev/bus (USB) が見えればイメージ同梱の px4-userland が掴む (docs/agent.md)
 privileged: true
 hostDevices:
   - name: dev-bus

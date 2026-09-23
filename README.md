@@ -76,7 +76,9 @@ AV1 が再生できないテレビには、テレビごとに H.264 や生TSを�
 
 ## 用意するもの
 
-- **チューナー** — Linux DVB (PT2/PT3、PX-S1UD など)。ドライバはホスト側に入れておく
+- **チューナー** — Linux DVB (PT2/PT3、PX-S1UD など。ドライバはホスト側に入れておく) か、
+  **PLEX PX-Q3U4** (ドライバはエージェントのイメージに同梱。ホストには何も入れない。
+  [docs/agent.md](docs/agent.md#px-q3u4-は-px4-userland-でカーネルドライバは入れてもらわない))
 - **B-CASカード** と PC/SC 対応のリーダー
 - **Docker** (Compose) か **Kubernetes** (Helm)
 - あれば **Intel の GPU** — `/dev/dri` が見えれば起動時に見つけて GPU で焼きます
@@ -163,8 +165,8 @@ docker compose) で動かす構成なら `oci://ghcr.io/danything/charts/denpa-a
 **手元の機材では当てられていないところです。** 動いた/動かなかったを
 [Issue](https://github.com/danything/denpa/issues) で教えてもらえると、ここを埋められます。
 
-- **`px4_drv` を chardev (`/dev/px4video*`) で使うチューナーでの選局** (コードは
-  ありますが、値は資料から取ったものです)
+- **PX-Q3U4 での選局と内蔵カードリーダー** (同梱の px4-userland に任せる作りですが、
+  手元に筐体が無く、実機に当てていません)
 - **ロゴの在り処の割り出しが、薄いロゴの局でどこまで当たるか。** 実測で詰めたのは
   テレ東1局ぶんで、閾値もそこから決めた値です。**TOKYO MX1 では外しました**
   (背景の窓枠を掴んだ)。外したときは自動検出に戻す作りにしてありますが、

@@ -15,13 +15,18 @@ namespace Denpa.Agent;
 ///
 /// <para>
 /// 口は2つある。どちらも「開く → 選局 → 流し始める → 読む → 選局し直す」で、
-/// 違うのはそれをどの ioctl で言うかだけ。
+/// 違うのは誰がデバイスを持っているか。
 /// </para>
 ///
 /// <list type="bullet">
-/// <item><see cref="DvbTuner"/> … 標準の Linux DVB v5。PT2/PT3、PX-S1UD、PX-BCUD</item>
-/// <item><see cref="Px4Tuner"/> … <c>px4_drv</c> の chardev。PX4/PX5/PX-MLT 系</item>
+/// <item><see cref="DvbTuner"/> … 標準の Linux DVB v5。PT2/PT3、PX-S1UD、PX-BCUD。カーネルが持つ</item>
+/// <item><see cref="Q3u4Tuner"/> … PLEX PX-Q3U4。px4-userland の <c>px4d</c> が持ち、選局ごとに <c>px4-ts</c> を起こす (Q3u4.cs)</item>
 /// </list>
+///
+/// <para>
+/// <c>px4_drv</c> の chardev (<c>/dev/px4video*</c>) は**外した**。ホストに DKMS で
+/// カーネルモジュールを入れてもらう前提そのものをやめたので (Q3u4.cs)。
+/// </para>
 /// </summary>
 public interface ITuneDevice : IDisposable
 {
@@ -31,8 +36,19 @@ public interface ITuneDevice : IDisposable
     /// </summary>
     void Tune(ChannelTable.Tuning tuning, uint streamId);
 
-    /// <summary>TS の読み口。選局し直しても同じものが続く</summary>
+    /// <summary>TS の読み口。<see cref="Tune"/> のあとで取る (選局し直したら取り直す)</summary>
     Stream Output { get; }
+
+    /// <summary>
+    /// 前の選局がまだ生きているか。
+    ///
+    /// <para>
+    /// DVB は一度合わせたら合ったまま。px4-userland は読み手が居なくなると
+    /// px4-ts が切られるので、**同じチャンネルでも選局し直しが要る**ことがある。
+    /// TunerPool は「同じチャンネルならそのまま」の前にここを見る。
+    /// </para>
+    /// </summary>
+    bool Tuned { get; }
 }
 
 /// <summary>libc の口。ioctl を直に叩くところだけ</summary>
@@ -56,6 +72,31 @@ internal static unsafe partial class Sys
 
     [LibraryImport("libc", EntryPoint = "poll", SetLastError = true)]
     public static partial int Poll(byte* fds, nuint count, int timeout);
+
+    [LibraryImport("libc", EntryPoint = "fcntl", SetLastError = true)]
+    public static partial int Fcntl(int fd, int command, int argument);
+
+    /// <summary><c>F_SETPIPE_SZ</c>。pipe の深さを変える (Linux)</summary>
+    public const int SetPipeSize = 1031;
+
+    private const short EventIn = 1;
+    private const short EventHup = 0x10;
+
+    /// <summary>
+    /// 読めるようになるまで待つ。<c>Readable</c> は中身が来た、<c>Ended</c> は
+    /// 相手が閉じた (pipe なら子が終わった)。両方いっぺんに立つこともある
+    /// </summary>
+    public static (bool Readable, bool Ended) PollIn(int fd, int timeoutMs)
+    {
+        // struct pollfd { int fd; short events; short revents; }
+        var descriptor = stackalloc byte[8];
+        *(int*)descriptor = fd;
+        *(short*)(descriptor + 4) = EventIn;
+        *(short*)(descriptor + 6) = 0;
+        if (Poll(descriptor, 1, timeoutMs) <= 0) return (false, false);
+        var revents = *(short*)(descriptor + 6);
+        return ((revents & EventIn) != 0, (revents & EventHup) != 0);
+    }
 
     /// <summary>開けなければ errno を添えて投げる。デバイスが無い・使用中の区別が要る</summary>
     public static SafeFileHandle Must(string path, int flags)
@@ -83,7 +124,13 @@ internal static unsafe partial class Sys
 /// 止まり方をする。<c>poll</c> で待って**時々起きる**ようにしてある。
 /// </para>
 /// </summary>
-internal sealed unsafe class DeviceStream(SafeFileHandle handle) : Stream
+/// <param name="handle">読む fd。DVB の dvr でも、子プロセスの標準出力の pipe でも同じ</param>
+/// <param name="ended">
+/// **尽きたときの理由。** 子プロセスの pipe なら EOF は子が終わったということで、
+/// 黙って 0 を返すと読み手には「選局が終了しました」としか伝わらない。
+/// 理由があるなら (終了コード・stderr の末尾) それを投げる。null なら普通の終わり
+/// </param>
+internal sealed unsafe class DeviceStream(SafeFileHandle handle, Func<string?>? ended = null) : Stream
 {
     /// <summary>読み口そのもの。**環の大きさはここに言う** (<c>DvbTuner.StartFilter</c>)</summary>
     public SafeFileHandle Handle => handle;
@@ -237,8 +284,12 @@ internal sealed unsafe class DeviceStream(SafeFileHandle handle) : Stream
                     _handedAt = Stopwatch.GetTimestamp();
                     return (int)read;
                 }
-                // 本当に何も無くなった
-                if (read == 0) return 0;
+                // 本当に何も無くなった。理由が分かるなら添えて投げる (pipe の向こうが終わった)
+                if (read == 0)
+                {
+                    if (ended?.Invoke() is { } reason) throw new IOException(reason);
+                    return 0;
+                }
 
                 var failure = Marshal.GetLastPInvokeError();
                 if (failure is EAgain or EIntr) continue;
@@ -403,6 +454,9 @@ public sealed class DvbTuner : ITuneDevice
 
     public Stream Output => _dvr;
 
+    /// <summary>カーネルが持っているので、一度合わせたら合ったまま</summary>
+    public bool Tuned => _streaming;
+
     public void Tune(ChannelTable.Tuning tuning, uint streamId)
     {
         // 選局し直す間は止める。前のチャンネルの残りが混ざったまま流れると、
@@ -564,78 +618,5 @@ public sealed class DvbTuner : ITuneDevice
         _dvr.Dispose();
         _demux.Dispose();
         _frontend.Dispose();
-    }
-}
-
-/// <summary>
-/// <c>px4_drv</c> の chardev で掴む。PX4/PX5/PX-MLT 系。
-///
-/// <para>
-/// DVB より単純で、**fd が1つ**。frontend も demux も dvr も分かれていない。
-/// 衛星のスロット (<c>BS01_0</c> と <c>BS01_1</c> の違い) も選局と同時に渡せる。
-/// </para>
-///
-/// <para>
-/// **実機で試せていない。** ここにある機材は PT3 (DVB) だけで、chardev の
-/// デバイスは1つも無い。値は <c>px4_drv</c> と <c>recisdb</c> の
-/// <c>character_device.rs</c> から取ってある
-/// </para>
-/// </summary>
-public sealed class Px4Tuner : ITuneDevice
-{
-    private const uint PtxSetChannel = 0x40088d01;   // _IOW(0x8d, 0x01, struct ptx_freq)
-    private const uint PtxStartStreaming = 0x8d02;   // _IO(0x8d, 0x02)
-    private const uint PtxStopStreaming = 0x8d03;    // _IO(0x8d, 0x03)
-    private const uint PtxEnableLnb = 0x40048d05;    // _IOW(0x8d, 0x05, int)
-    private const uint PtxDisableLnb = 0x8d06;       // _IO(0x8d, 0x06)
-
-    private readonly SafeFileHandle _device;
-    private readonly DeviceStream _stream;
-    private readonly int? _voltage;
-    private bool _streaming;
-
-    public Px4Tuner(string device, string? lnb)
-    {
-        _device = Sys.Must(device, Sys.ReadOnly);
-        _stream = new DeviceStream(Sys.Must(device, Sys.ReadOnly | Sys.NonBlocking));
-        // 1 = 11V, 2 = 15V (DVB の SEC_VOLTAGE とは別の数え方)
-        _voltage = lnb switch { "15v" => 2, "11v" => 1, _ => null };
-    }
-
-    public Stream Output => _stream;
-
-    public void Tune(ChannelTable.Tuning tuning, uint streamId)
-    {
-        if (_streaming) Sys.Call(_device, PtxStopStreaming, 0, "受信の停止");
-
-        // struct ptx_freq { int freq_no; int slot; }
-        var frequency = new byte[8];
-        BitConverter.TryWriteBytes(frequency.AsSpan(0), tuning.FreqNo);
-        BitConverter.TryWriteBytes(frequency.AsSpan(4), tuning.Slot);
-
-        var handle = GCHandle.Alloc(frequency, GCHandleType.Pinned);
-        try
-        {
-            Sys.Call(_device, PtxSetChannel, handle.AddrOfPinnedObject(), "選局");
-        }
-        finally
-        {
-            handle.Free();
-        }
-
-        if (tuning.Satellite && _voltage is not null)
-        {
-            Sys.Call(_device, PtxEnableLnb, _voltage.Value, "LNB への給電");
-        }
-
-        Sys.Call(_device, PtxStartStreaming, 0, "受信の開始");
-        _streaming = true;
-    }
-
-    public void Dispose()
-    {
-        if (_voltage is not null) Sys.Ioctl((int)_device.DangerousGetHandle(), PtxDisableLnb, 0);
-        _stream.Dispose();
-        _device.Dispose();
     }
 }

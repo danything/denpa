@@ -240,12 +240,14 @@ public class DeviceProbeTests
     }
 
     [Test]
-    public async Task chardev_は名前の決まりで分ける()
+    public async Task Q3U4_は受信機の並びで種別が決まる()
     {
-        // px4_drv は方式を聞ける口を持たない。番号の決まりがそのまま種別
-        await Assert.That(DeviceProbe.TypesForChardev("px4video0")).IsEquivalentTo(["BS", "CS"], CollectionOrdering.Matching);
-        await Assert.That(DeviceProbe.TypesForChardev("px4video2")).IsEquivalentTo(["GR"], CollectionOrdering.Matching);
-        await Assert.That(DeviceProbe.TypesForChardev("pxmlt5video0")).IsEquivalentTo(["GR", "BS", "CS"], CollectionOrdering.Matching);
-        await Assert.That(DeviceProbe.TypesForChardev("sda")).IsEmpty();
+        // 筐体の中の IT9305E 2つに、衛星2本・地上波2本ずつ (px4-userland SPEC 4.2)
+        await Assert.That(Px4Userland.TypesFor(0)).IsEquivalentTo(["BS", "CS"], CollectionOrdering.Matching);
+        await Assert.That(Px4Userland.TypesFor(1)).IsEquivalentTo(["BS", "CS"], CollectionOrdering.Matching);
+        await Assert.That(Px4Userland.TypesFor(2)).IsEquivalentTo(["GR"], CollectionOrdering.Matching);
+        await Assert.That(Px4Userland.TypesFor(3)).IsEquivalentTo(["GR"], CollectionOrdering.Matching);
+        await Assert.That(Px4Userland.TypesFor(4)).IsEquivalentTo(["BS", "CS"], CollectionOrdering.Matching);
+        await Assert.That(Px4Userland.TypesFor(7)).IsEquivalentTo(["GR"], CollectionOrdering.Matching);
     }
 }

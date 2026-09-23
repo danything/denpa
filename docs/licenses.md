@@ -67,6 +67,8 @@ Dockerfile の行・`package.json`) を優先し、上流の表示に拠るも�
 | libaribb25 0.2.10 (deb) | B25 のスクランブル解除 | <https://github.com/tsukumijima/libaribb25> (arib_std_b25 → stz2012/libarib25 の系譜) | **Apache-2.0** (NOTICE の写しが要る) |
 | pcscd / libpcsclite | B-CAS カードの読み取り | <https://pcsclite.apdu.fr> | BSD-3-Clause |
 | pcsc-tools | カードの確認 | <https://pcsc-tools.apdu.fr> | GPL-2.0+ |
+| px4-userland 0.1.3 (`/opt/px4-userland`) | PLEX PX-Q3U4 のユーザー空間ドライバ。`px4d` / `px4-ts` / `px4ctl` と pcscd 用 IFD ハンドラ | <https://github.com/Khronos31/px4-userland> (nns779 → tsukumijima の px4_drv から派生) | **GPL-2.0-only** (実行ファイルに静的リンクの libusb 1.0.30 は LGPL-2.1+。配布物の `THIRD_PARTY_NOTICES.md` を同梱のまま置いてある) |
+| IT930x ファームウェア (`/opt/px4-userland/firmware/it930x-firmware.bin`、2,169 バイト) | PX-Q3U4 に挿すたびに流し込む | tsukumijima/px4_drv の `etc/` にある抽出済みのもの。元は PLEX の Windows ドライバ `PXW3U4.sys` (著作権表示は Digital Warrior Corp.) | **ライセンス無し** (再配布の許諾は誰も持っていない。権利者が動いていない実態に乗る判断。[agent.md](agent.md#px-q3u4-は-px4-userland-でカーネルドライバは入れてもらわない)) |
 | util-linux (`setsid`) / procps / curl / zlib / ca-certificates / tzdata | 道具 | Debian | GPL-2.0 (一部 LGPL/BSD) / GPL-2.0+ / curl / zlib / MPL-2.0 / PD |
 
 ## リポジトリに写してあるもの・借りた表

@@ -10,8 +10,9 @@ using Microsoft.AspNetCore.Http.Features;
  * denpa から触れないものが3つある。
  *
  * - B-CASカード … pcscd 経由でしか読めず、その pcscd はこのコンテナにしか居ない
- * - チューナーデバイス … `/dev/dvb/*` が見えているのはこちらだけ
- * - 選局そのもの … デバイスを掴んで ioctl で選局する (Tuning.cs)
+ * - チューナーデバイス … `/dev/dvb/*` と `/dev/bus/usb` が見えているのはこちらだけ
+ * - 選局そのもの … デバイスを掴んで ioctl で選局する (Tuning.cs)。PX-Q3U4 は
+ *   同梱の px4-userland に USB を叩かせる (Q3u4.cs)
  *
  * **中身は読まない。** NIT も SDT も EIT も解かず、TS をそのまま流す。
  * 読むのは denpa (`src/lib/ts`) で、局を選り分けるのも番組表を組み立てるのも、
@@ -256,6 +257,8 @@ app.MapPut("/denpa/tuners", async (HttpContext http) =>
     var (resolved, auto) = config.ResolveTuners();
     pool.Detected = auto;
     pool.Replace(resolved);
+    // 新しく書かれた Q3U4 があれば px4d を起こしてカードリーダーも繋ぐ。数秒かかるので返事は待たせない
+    _ = Task.Run(() => Px4Daemon.Prepare(resolved));
     await Respond.Write(http, new JsonObject { ["tuners"] = pool.Status(), ["detected"] = pool.Detected });
 });
 
@@ -353,6 +356,12 @@ app.MapPost("/denpa/card/ecm", async (HttpContext http) =>
 app.MapFallback((HttpContext http) =>
     Respond.Write(http, new JsonObject { ["ok"] = false, ["error"] = "not found" }, 404));
 
+/*
+ * **PX-Q3U4 は pcscd より先に起こす。** 内蔵カードリーダーは px4d の向こうに
+ * 居て、pcscd は起動時に reader.conf を読んで繋ぎに行く。px4d が居ないと
+ * リーダーが登録されない (Q3u4.cs)。筐体が無ければ何もしない
+ */
+Px4Daemon.Prepare(pool.Tuners);
 await Card.EnsurePcscd();
 
 /*
@@ -366,7 +375,12 @@ await Card.EnsurePcscd();
  * (その上限が上の `ShutdownTimeout`)。読み手が居なくなってから離せば、
  * 録画は最後まで届く。
  */
-app.Lifetime.ApplicationStopped.Register(pool.CloseAll);
+app.Lifetime.ApplicationStopped.Register(() =>
+{
+    pool.CloseAll();
+    // 読み手を全部離してから px4d を止める。SIGTERM で LNB を 0V に戻して終わる
+    Px4Daemon.StopAll();
+});
 
 Log.Write($"listening on :{port} (tuners: {config.TunersFile} / channels: {config.ChannelsFile})");
 Log.Write($"チューナー {pool.Tuners.Count} 本 / チャンネル {config.LoadChannels().Count} 件");

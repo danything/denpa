@@ -256,7 +256,8 @@ SQLite が拒むので、事実と状態が食い違いようがありません�
 | --- | --- |
 | `agent/Denpa.Agent/Program.cs` | HTTP の口 (Kestrel)。選局・チャンネルの控え・カード・解除 |
 | `agent/Denpa.Agent/TunerPool.cs` | 優先度つきの取り合いと、掴んでいるデバイスの面倒 |
-| `agent/Denpa.Agent/Tuning.cs` | 選局そのもの (DVB / chardev)。掴んだまま変えられる |
+| `agent/Denpa.Agent/Tuning.cs` | 選局そのもの (DVB)。掴んだまま変えられる |
+| `agent/Denpa.Agent/Q3u4.cs` | PX-Q3U4 を同梱の px4-userland で掴む。`px4d` を起こし、選局ごとに `px4-ts` を読む |
 | `agent/Denpa.Agent/ChannelTable.cs` | チャンネル名 → 周波数と TSID |
 | `agent/Denpa.Agent/AribB25.cs` / `CardShare.cs` | B25 の解除と、鍵を他の拠点へ配る口 |
 | `agent/Denpa.Agent/DeviceProbe.cs` | **チューナーの自動検出** (ioctl で受けられる方式を聞く) |

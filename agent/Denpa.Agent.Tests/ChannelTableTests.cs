@@ -53,15 +53,14 @@ public class ChannelTableTests
     }
 
     [Test]
-    public async Task px4_の番号は別の数え方()
+    public async Task 衛星のスロットは相対番号そのもの()
     {
-        // chardev は周波数ではなく表の番号で言う。地上波は物理チャンネル+50
-        await Assert.That(ChannelTable.Parse("T18")!.FreqNo).IsEqualTo(68);
-        // 衛星はスロットが相対TS番号そのもの
-        await Assert.That((ChannelTable.Parse("BS01_2")!.FreqNo, ChannelTable.Parse("BS01_2")!.Slot)).IsEqualTo((0, 2));
-        await Assert.That(ChannelTable.Parse("BS23_0")!.FreqNo).IsEqualTo(11);
-        await Assert.That(ChannelTable.Parse("CS02")!.FreqNo).IsEqualTo(12);
-        await Assert.That(ChannelTable.Parse("CS24")!.FreqNo).IsEqualTo(23);
+        // TSID が分からないときに px4-userland へ --slot で渡す (Q3u4.cs)。CS は1本しか乗っていない
+        await Assert.That(ChannelTable.Parse("BS01_2")!.Slot).IsEqualTo(2);
+        await Assert.That(ChannelTable.Parse("BS23_0")!.Slot).IsEqualTo(0);
+        await Assert.That(ChannelTable.Parse("BS15")!.Slot).IsEqualTo(0);
+        await Assert.That(ChannelTable.Parse("CS02")!.Slot).IsEqualTo(0);
+        await Assert.That(ChannelTable.Parse("T18")!.Slot).IsEqualTo(0);
     }
 
     [Test]

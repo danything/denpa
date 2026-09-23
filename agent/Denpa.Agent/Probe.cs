@@ -13,6 +13,7 @@ namespace Denpa.Agent;
 /// denpa-agent --tune /dev/dvb/adapter1/frontend0 T27
 /// denpa-agent --tune /dev/dvb/adapter0/frontend0 BS15_0 --lnb 15v
 /// denpa-agent --tune /dev/dvb/adapter1/frontend0 T27,T21   # 掴んだまま切り替える
+/// denpa-agent --tune q3u4:00001205000960:2 T27              # PX-Q3U4 (px4-userland)。受信機 2 は地上波
 /// </code>
 ///
 /// <para>
@@ -102,9 +103,7 @@ public static class Probe
             Console.WriteLine($"カード {(ids.Length == 0 ? "(番号を読めません)" : string.Join(" / ", ids))}");
         }
 
-        using ITuneDevice tuner = device.Contains("/dvb/", StringComparison.Ordinal)
-            ? new DvbTuner(device, lnb)
-            : new Px4Tuner(device, lnb);
+        using var tuner = TunerPool.OpenDevice(device, lnb);
 
         Console.WriteLine($"{device} を開きました{(lnb is null ? "" : $" (LNB {lnb})")}");
 

@@ -207,5 +207,7 @@ PreSync フックに置いています (`denpa-prepull`、中身は `/bin/true`)
 - **DNS** — `dp.doany.io` が Gateway の外部IPを指すこと。
   LAN 用の `dp.l.doany.io` は `*.l.doany.io` の書き換えで内側のIPへ
 - **チューナードライバ** — エージェントは `privileged: true` かつ `/dev/bus`・`/dev/dvb` を
-  hostPath でマウントするので、ノード側にドライバが読み込まれていること
+  hostPath でマウントするので、DVB の機材はノード側にドライバが読み込まれていること。
+  PX-Q3U4 はノードに何も要らない (イメージ同梱の px4-userland が `/dev/bus/usb` を掴む。
+  [agent.md](agent.md#px-q3u4-は-px4-userland-でカーネルドライバは入れてもらわない))
 - **GHCR** — `ghcr.io/danything/denpa-agent` と `.../denpa` を pull できること

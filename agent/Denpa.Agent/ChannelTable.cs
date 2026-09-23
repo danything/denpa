@@ -42,10 +42,11 @@ public static class ChannelTable
     /// <param name="Delivery">DVB の方式 (<see cref="SysIsdbt"/> / <see cref="SysIsdbs"/>)</param>
     /// <param name="Frequency">**地上波は Hz、衛星は kHz**</param>
     /// <param name="RelativeTs">衛星で同じ周波数に相乗りしている何本目か。無ければ -1</param>
-    /// <param name="FreqNo">px4_drv の <c>ptx_freq.freq_no</c></param>
-    /// <param name="Slot">px4_drv の <c>ptx_freq.slot</c></param>
-    public sealed record Tuning(
-        string Type, int Delivery, uint Frequency, int RelativeTs, int FreqNo, int Slot)
+    /// <param name="Slot">
+    /// 衛星のスロット。TSID が分からないときに px4-userland へ <c>--slot</c> で渡す
+    /// (Q3u4.cs)。BS は相対番号そのもの、CS は1本しか乗っていないので 0
+    /// </param>
+    public sealed record Tuning(string Type, int Delivery, uint Frequency, int RelativeTs, int Slot)
     {
         public bool Satellite => Delivery == SysIsdbs;
     }
@@ -66,8 +67,7 @@ public static class ChannelTable
         {
             if (!Number(name[1..], out var channel) || channel is < 13 or > 62) return null;
             // UHF 13-62ch。1/7 MHz のずれは放送のとおりで、丸めない
-            return new Tuning(
-                "GR", SysIsdbt, (uint)(473142857 + (channel - 13) * 6000000), -1, channel + 50, 0);
+            return new Tuning("GR", SysIsdbt, (uint)(473142857 + (channel - 13) * 6000000), -1, 0);
         }
 
         if (name.StartsWith("BS", StringComparison.Ordinal))
@@ -85,7 +85,7 @@ public static class ChannelTable
             if (channel is 7 or 17) return null;  // ISDB-S3 (4K/8K)。この復調では受からない
 
             var index = channel / 2;  // BS01 -> 0 … BS23 -> 11
-            return new Tuning("BS", SysIsdbs, (uint)(1049480 + 38360 * index), relative, index, relative);
+            return new Tuning("BS", SysIsdbs, (uint)(1049480 + 38360 * index), relative, Math.Max(0, relative));
         }
 
         if (name.StartsWith("CS", StringComparison.Ordinal))
@@ -94,7 +94,7 @@ public static class ChannelTable
             if (channel is < 2 or > 24 || channel % 2 != 0) return null;
 
             var index = channel / 2 + 11;  // CS02 -> 12 … CS24 -> 23
-            return new Tuning("CS", SysIsdbs, (uint)(1613000 + 40000 * (index - 12)), -1, index, 0);
+            return new Tuning("CS", SysIsdbs, (uint)(1613000 + 40000 * (index - 12)), -1, 0);
         }
 
         return null;
