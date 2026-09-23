@@ -39,4 +39,18 @@ describe('run の標準出力', () => {
         const { code } = await run(['denpa-such-command-does-not-exist'], { stdout: true });
         expect(code).toBe(127);
     });
+
+    /**
+     * **押された後の合図でも起こさない。** `abort` の聞き耳は押された瞬間にしか
+     * 鳴らないので、押された後に起こした道具は最後まで走っていた (中止を押した
+     * あとの無音検出・字幕づくり)。殺されたときと同じ 143 で、すぐ返る
+     */
+    test('もう押されている中止の合図なら、起こさずに 143 で返る', async () => {
+        const controller = new AbortController();
+        controller.abort();
+        const started = Date.now();
+        const { code } = await run(['sleep', '5'], { signal: controller.signal });
+        expect(code).toBe(143);
+        expect(Date.now() - started).toBeLessThan(1_000);
+    });
 });

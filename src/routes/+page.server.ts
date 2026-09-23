@@ -3,7 +3,7 @@ import { fail } from '@sveltejs/kit';
 import { and, asc, desc, eq, getTableColumns, inArray, isNull, like, ne, not, or, sql } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/sqlite-core';
 import { orm } from '$lib/server/db';
-import { cancel as cancelEncode, enqueue, pump } from '$lib/server/encoder';
+import { cancel as cancelEncode, enqueue, isCanceling, pump } from '$lib/server/encoder';
 import { emit } from '$lib/server/events';
 import { deleteRecordingFiles, reconcile } from '$lib/server/files';
 import { recordingFromForm } from '$lib/server/recording';
@@ -31,6 +31,11 @@ interface RecordingRow extends Recording {
     job_percent: number | null;
     job_eta_ms: number | null;
     job_log: string | null;
+    /**
+     * 中止を頼んであって、まだ畳み終わっていない。中止のボタンを回したまま
+     * にするための印 (`encoder.isCanceling`)。DB には無く、動いている間だけ
+     */
+    job_canceling: boolean;
     /** その局に入れてあるロゴの位置。詳細で指定し直せるように渡す */
     logo_area: string | null;
     /**
@@ -276,7 +281,12 @@ export function load({ url }) {
         .orderBy(desc(recordingTable.start_at))
         .limit(300)
         .all()
-        .map((row) => ({ ...row, raw_size: rawSize(row), alt_size: altSize(row) }));
+        .map((row) => ({
+            ...row,
+            raw_size: rawSize(row),
+            alt_size: altSize(row),
+            job_canceling: row.job_id !== null && isCanceling(row.job_id),
+        }));
 
     /*
      * 録り逃し。**録画の一覧に混ぜて出す** (画面側で放送日順に差し込む)。

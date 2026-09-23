@@ -40,6 +40,7 @@
     let {
         notices,
         source,
+        ondismiss,
     }: {
         notices: Notice[];
         /**
@@ -50,6 +51,15 @@
          * 新しい `form` を渡してくるので、それが変わったら閉じたことは忘れる
          */
         source?: unknown;
+        /**
+         * 閉じた (自分で消えた) ことを持ち主に返す。
+         *
+         * `form` から作る知らせは `source` が変わればそれ自身も作り直されるが、
+         * 画面が自分で持っている知らせ (テレビへ飛ばした・端末に保存した) は
+         * そのまま残る。閉じたことを忘れるたびに**それまで一緒に蘇っていた**。
+         * 持ち主がここで捨てれば、出し直すものが無い
+         */
+        ondismiss?: (key: string) => void;
     } = $props();
 
     /** 自分で消える時間。読み切れるだけ出したら引っ込める */
@@ -77,8 +87,17 @@
         };
     });
 
+    // 無くなった知らせの閉じた印は捨てる。同じ key で次に来るものは別の知らせ
+    $effect(() => {
+        const alive = new Set(notices.map((notice) => notice.key));
+        const kept = untrack(() => dismissed).filter((key) => alive.has(key));
+        if (kept.length !== untrack(() => dismissed).length) dismissed = kept;
+    });
+
     function dismiss(key: string): void {
-        if (!dismissed.includes(key)) dismissed = [...dismissed, key];
+        if (dismissed.includes(key)) return;
+        dismissed = [...dismissed, key];
+        ondismiss?.(key);
     }
 
     const shown = $derived(notices.filter((notice) => !dismissed.includes(notice.key)));

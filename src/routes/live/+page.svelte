@@ -776,7 +776,7 @@
     {/if}
 </div>
 
-<Toasts {notices} />
+<Toasts {notices} ondismiss={shooter.dismiss} />
 
 <style>
     /*

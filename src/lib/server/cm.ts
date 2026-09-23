@@ -79,6 +79,8 @@ async function detectSilences(
     onProgress?: (percent: number) => void,
     total = NaN,
 ): Promise<{ silences: Silence[]; duration: number }> {
+    // 押された後の合図は聞き耳に届かない (stream.run と同じ理由)。起こす前に見る
+    if (signal?.aborted === true) throw new Error('中止されました');
     const proc = Bun.spawn(
         [
             config.ffmpeg,

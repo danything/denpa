@@ -73,6 +73,15 @@ export async function run(
         stderr?: boolean;
     } = {},
 ): Promise<RunResult> {
+    /*
+     * **もう押されている合図は、起こす前に見る。** `abort` の聞き耳は押された
+     * *瞬間*にしか鳴らないので、押された後に起こした道具には届かず、最後まで
+     * 走り切っていた — 中止を押したあとに CM検出が無音検出へ落ち、字幕まで
+     * 絵にしてから畳んでいたのはこれ。殺されたときと同じ顔 (143 = SIGTERM) で返す
+     */
+    if (options.signal?.aborted === true) {
+        return { code: 143, stdout: new Uint8Array(), stderr: '中止されました' };
+    }
     let proc: Bun.Subprocess<'ignore', 'pipe' | 'ignore', 'pipe' | 'ignore'>;
     try {
         proc = Bun.spawn(argv, {

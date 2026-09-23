@@ -126,6 +126,8 @@ export async function buildPgs(
     const output = `${input}.sup`;
     const args = pgsArgs(input, canvasSize, fonts);
 
+    // 押された後の合図は聞き耳に届かない (stream.run と同じ理由)。起こす前に見る
+    if (signal?.aborted === true) return null;
     let proc: Bun.Subprocess<'ignore', 'pipe', 'pipe'>;
     try {
         proc = Bun.spawn([config.ffmpeg, ...args], { stdin: 'ignore', stdout: 'pipe', stderr: 'pipe' });

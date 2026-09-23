@@ -670,12 +670,25 @@ export async function cancel(jobId: number): Promise<void> {
      * かったときでも、押した直後の読み直しが「中止しています」を拾える
      * (割合を出している段階では出ないが、CM検出のように数分かかる段階で効く)
      */
-    if (runningJobs.has(jobId)) setStep(jobId, '中止しています');
+    if (runningJobs.has(jobId)) writeStep(jobId, '中止しています');
     await settled(jobId);
+}
+
+/**
+ * 中止を頼まれて、まだ畳み終わっていないか。
+ *
+ * 一覧の行に添えて、中止のボタンを**畳み終わるまで回したままにする**ための
+ * もの。押した返事 (`cancel`) は上限で切り上げることがあるので、返事だけで
+ * ボタンを戻すと「回るのが止まったのにまだエンコード中」になる
+ */
+export function isCanceling(jobId: number): boolean {
+    return canceled.has(jobId);
 }
 
 /** 段階を進めて画面にも伝える。押しても反応が無いように見えるのを防ぐ */
 function setPhase(jobId: number, phase: EncodePhase, log: string): void {
+    // 中止を頼まれた後は「中止しています」を残す (下の setStep と同じ)
+    if (canceled.has(jobId)) return;
     orm()
         .update(encodeJobs)
         .set({ phase, log, percent: 0, eta_ms: null })
@@ -689,8 +702,17 @@ function setPhase(jobId: number, phase: EncodePhase, log: string): void {
  *
  * CM検出は中で3つの道具を順に回していて、どれも数分かかる。段階の名前
  * (「CM検出中」) だけでは、進んでいるのか止まっているのかが分からなかった。
+ *
+ * **中止を頼まれた後は書き換えない。** `cancel` が書いた「中止しています」を、
+ * 畳むまでの間に通る段階 (無音検出に落ちる・字幕を絵にする) が上書きして、
+ * 押したのに「CMを探しています」に戻って見えていた
  */
 function setStep(jobId: number, log: string): void {
+    if (canceled.has(jobId)) return;
+    writeStep(jobId, log);
+}
+
+function writeStep(jobId: number, log: string): void {
     orm().update(encodeJobs).set({ log }).where(eq(encodeJobs.id, jobId)).run();
     emit('recordings');
 }
@@ -1352,6 +1374,11 @@ async function runJob(jobId: number): Promise<void> {
             encodeOptions.fpsBlock,
             signal,
         );
+    }
+    // ここから先の下調べ (ffprobe) は合図を受け取らない。測っている間に押されていたら、その前で降りる
+    if (canceled.has(jobId)) {
+        discardWork();
+        return finishCanceled(jobId, decoded);
     }
 
     setPhase(jobId, 'encode', '');

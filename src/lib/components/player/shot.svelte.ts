@@ -16,6 +16,10 @@ export function snapshotter(controls: PlayerControls) {
         get notices(): Notice[] {
             return shot === null ? [] : [shot];
         },
+        /** 閉じた (自分で消えた) ら捨てる。持ったままだと、返事が変わったときに蘇る (Toasts) */
+        dismiss(key: string): void {
+            if (shot?.key === key) shot = null;
+        },
         /**
          * いまの1コマを字幕ごと切り抜く。
          * @param caption 出している字幕の canvas。出していなければ null

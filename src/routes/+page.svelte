@@ -98,6 +98,19 @@
     }
 
     /**
+     * 閉じた (自分で消えた) 知らせは持ち主が捨てる。
+     *
+     * 持ったままにしていた頃は、**別のボタンを押すたびに「テレビへ飛ばしました」が
+     * 蘇っていた** — Toasts は返事 (`form`) が変わると閉じたことを忘れる作りで
+     * (同じ失敗を2回したときに2回出すため)、フォームではないこちらの知らせまで
+     * 一緒に出し直していた
+     */
+    function dropNote(key: string): void {
+        if (vlcNote?.key === key) vlcNote = null;
+        if (offlineNote?.key === key) offlineNote = null;
+    }
+
+    /**
      * 期限付きの再生リンクを作る (share.ts)。テレビへ飛ばすのもコピーするのも同じ1本。
      * `source` を渡すと、そのファイル (`?source=` の名指し) を指すリンクになる —
      * テレビごとのコーデック設定 (settings) の実現手段
@@ -129,7 +142,7 @@
      *
      * **窓は押した瞬間に開けておく。** リンク先はトークンを取ってから入れる —
      * await の後の window.open はポップアップ扱いで塞がれることがある。
-     * 応答 (OK だけの白いタブ) は中身が読めない (別オリジン) ので、数秒で畳む。
+     * 応答 (OK だけの白いタブ) は**テレビの返事に切り替わったら**畳む (`closeWhenLanded`)。
      *
      * **途中まで観たものは続きから。** VLC の `/play` に位置を渡す口は無いので、
      * ファイルではなく、それを続きの位置から指す XSPF (`playlist`) を渡す
@@ -180,9 +193,40 @@
             return;
         }
         win.location.href = play;
-        setTimeout(() => win.close(), 1500);
+        closeWhenLanded(win);
         noteVlc('info', resumeMs > 0 ? `テレビへ飛ばしました (${durationMs(resumeMs)} から)` : 'テレビへ飛ばしました');
         detail.close();
+    }
+
+    /** テレビの返事を待つ上限。過ぎたら畳まずに残す (繋がらなかった画面がそのまま見える) */
+    const LANDING_WAIT_MS = 15_000;
+
+    /**
+     * 飛ばした窓を、**テレビの返事に切り替わったら**畳む。
+     *
+     * 返事は別オリジンなので、中身も読み込み完了 (`load`) もこちらからは読めない。
+     * 読めるのは「まだこちらの about:blank のままか」だけ — `win.document` に触れて
+     * 例外が出れば、向こうの文書に切り替わっている (= `/play` がテレビに届いて
+     * 返事が来た)。決め打ちの秒数で畳んでいた頃は、テレビの返事が遅いと
+     * **届く前に畳んで再生が始まらず**、早ければそのぶん白いタブが残っていた。
+     *
+     * 上限を過ぎたら畳まない。繋がらないときの画面を残すほうが、何も起きなかった
+     * ように見えるよりまし
+     */
+    function closeWhenLanded(win: Window): void {
+        const started = Date.now();
+        const timer = setInterval(() => {
+            if (win.closed || Date.now() - started > LANDING_WAIT_MS) {
+                clearInterval(timer);
+                return;
+            }
+            try {
+                void win.document;
+            } catch {
+                clearInterval(timer);
+                win.close();
+            }
+        }, 100);
     }
 
     /**
@@ -491,7 +535,7 @@
     同じ幅なのに画面によって1段だったり2段だったりした
 -->
 <div class="board">
-    <Toasts {notices} source={form} />
+    <Toasts {notices} source={form} ondismiss={dropNote} />
 
     <div class="board-grid">
         <!--
@@ -969,15 +1013,33 @@
                                                 動いている間は中止だけ。この裏で ffmpeg が
                                                 元のTSを読んでいるので、消させると道連れになる
                                             -->
-                                            <form method="POST" action="?/cancelEncode" use:submitting>
-                                                <input type="hidden" name="id" value={rec.job_id} />
-                                                <button type="submit"
+                                            {#if rec.job_canceling}
+                                                <!--
+                                                    **畳み終わるまで回したままにする。** 押した返事は
+                                                    上限 (encoder.CANCEL_WAIT_MS) で切り上げることが
+                                                    あり、返事でボタンを戻すと「回るのが止まったのに
+                                                    まだエンコード中」になっていた。行が消える
+                                                    (畳み終わりの知らせ) までは、まだ中止の途中
+                                                -->
+                                                <button type="button"
                                                     class="outline danger"
+                                                    disabled
+                                                    aria-busy="true"
                                                     data-testid="encode-cancel"
                                                 >
                                                     エンコード中止
                                                 </button>
-                                            </form>
+                                            {:else}
+                                                <form method="POST" action="?/cancelEncode" use:submitting>
+                                                    <input type="hidden" name="id" value={rec.job_id} />
+                                                    <button type="submit"
+                                                        class="outline danger"
+                                                        data-testid="encode-cancel"
+                                                    >
+                                                        エンコード中止
+                                                    </button>
+                                                </form>
+                                            {/if}
                                         {:else}
                                             <!-- サーバから消したら、端末に落としてあったコピーも片付ける -->
                                             <form

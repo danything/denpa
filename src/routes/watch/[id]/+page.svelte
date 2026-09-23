@@ -1645,7 +1645,7 @@
     </FactsAside>
 </div>
 
-<Toasts {notices} source={form} />
+<Toasts {notices} source={form} ondismiss={shooter.dismiss} />
 
 <style>
     .watch {

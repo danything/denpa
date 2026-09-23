@@ -466,7 +466,7 @@
     </FactsAside>
 </div>
 
-<Toasts {notices} />
+<Toasts {notices} ondismiss={shooter.dismiss} />
 
 <style>
     /* 映像が左、番組の中身が右。畳まれる幅では縦に積んでページごとスクロール */
