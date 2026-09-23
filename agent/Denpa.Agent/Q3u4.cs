@@ -505,7 +505,21 @@ public sealed class Q3u4Tuner : ITuneDevice
 
     public Stream Output => _stream ?? throw new InvalidOperationException($"{_name} はまだ選局していません");
 
-    public bool Tuned => _stream is not null && _child is { Process.HasExited: false };
+    /// <summary>
+    /// 前の px4-ts がまだ生きているか。**錠の下で読む** — <c>Dispose</c> は別の
+    /// 錠 (<c>TunerPool._deviceGate</c>) から来るので、畳んでいる最中の
+    /// <c>Process</c> に触らないように
+    /// </summary>
+    public bool Tuned
+    {
+        get
+        {
+            lock (_gate)
+            {
+                return _stream is not null && _child is { Process.HasExited: false };
+            }
+        }
+    }
 
     /// <summary>
     /// px4-ts に渡す引数。**選局表の値をそのまま。**

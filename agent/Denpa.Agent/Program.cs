@@ -356,13 +356,16 @@ app.MapPost("/denpa/card/ecm", async (HttpContext http) =>
 app.MapFallback((HttpContext http) =>
     Respond.Write(http, new JsonObject { ["ok"] = false, ["error"] = "not found" }, 404));
 
-/*
- * **PX-Q3U4 は pcscd より先に起こす。** 内蔵カードリーダーは px4d の向こうに
- * 居て、pcscd は起動時に reader.conf を読んで繋ぎに行く。px4d が居ないと
- * リーダーが登録されない (Q3u4.cs)。筐体が無ければ何もしない
- */
-Px4Daemon.Prepare(pool.Tuners);
 await Card.EnsurePcscd();
+
+/*
+ * **PX-Q3U4 の px4d は背景で起こす。** ready までファームウェアの流し込みで
+ * 数秒、駄目な筐体なら 30 秒待つので、ここで待つと HTTP の口 (= PT3 など他の
+ * チューナーの提供) まで遅れる。内蔵カードリーダーは px4d が ready になった
+ * ときに reader.conf を書いて `pcscd --hotplug` で読み直させるので、pcscd が
+ * 先に居ても困らない (Q3u4.cs)。筐体が無ければ何もしない
+ */
+_ = Task.Run(() => Px4Daemon.Prepare(pool.Tuners));
 
 /*
  * **畳むのは、流し終えてから。**
