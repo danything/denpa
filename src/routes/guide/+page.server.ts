@@ -1,5 +1,5 @@
 import { fail } from '@sveltejs/kit';
-import { and, eq, getTableColumns, gt, lt, ne, sql } from 'drizzle-orm';
+import { and, eq, gt, lt, ne, sql } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/sqlite-core';
 import { orm } from '$lib/server/db';
 import { airing, CURRENT_SERVICES, SERVICE_ORDER, watchableServices } from '$lib/server/epg';
@@ -30,7 +30,17 @@ function broadcastDayStart(at: number): number {
     return d.getTime();
 }
 
-interface GridProgram extends Program {
+/**
+ * 表に出す 1 マスぶん。**番組の全列は持たない。**
+ *
+ * 出演者やあらすじ (`extended`)、音声 (`audios`)、ジャンルの中分類
+ * (`genre_detail`) は詳細を開いたときにしか使わないのに、BS の 24 時間ぶん
+ * (2,171 件) で応答 1.43 MB のうち 41% を占めていた。しかも前日・翌日の先読み
+ * (`preloadData`) が同じ形をもう 2 本取るので、開くたびに約 10 MB。
+ * 詳細は開いた 1 件だけ `/api/programs/<id>` で取る (予約・録画の一覧と同じ道)
+ */
+interface GridProgram
+    extends Pick<Program, 'id' | 'service_id' | 'start_at' | 'end_at' | 'name' | 'description' | 'genres'> {
     reservation_state: ReservationState | null;
     /**
      * その番組で録れたもの。番組表から詳細を開いたときに、そのまま再生できるようにする。
@@ -84,7 +94,15 @@ function readGrid(type: ChannelType, start: number, end: number) {
     const rec = alias(recordings, 'rec');
     const programs: GridProgram[] = orm()
         .select({
-            ...getTableColumns(p),
+            id: p.id,
+            service_id: p.service_id,
+            start_at: p.start_at,
+            end_at: p.end_at,
+            name: p.name,
+            // マスに 1 行だけ出す。詳細でしか使わない列は上の GridProgram のとおり持たない
+            description: p.description,
+            // マスの色はジャンル (大分類) で決める
+            genres: p.genres,
             /*
              * 予約の状態は録画の行から引く (reservationState)。r.state をそのまま
              * 出していた頃は、録り終えた番組が「予約済み」のまま並び、

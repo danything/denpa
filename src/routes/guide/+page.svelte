@@ -6,6 +6,7 @@
     import { startDownload } from '$lib/download';
     import { date, SERVICE_TYPE_LABEL, stateLabel, time } from '$lib/format';
     import { reload } from '$lib/reload.svelte';
+    import type { ProgramDetail as Facts } from '$lib/types';
 
     let { data, form } = $props();
 
@@ -122,6 +123,53 @@
 
     /** クリックした番組。詳細を出してから予約するかどうか決める */
     let selected = $state<Sheet['programs'][number] | null>(null);
+
+    /**
+     * 開いた番組の中身 (出演者・あらすじ・音声…)。**表は持っていない**
+     * (`+page.server.ts` の `GridProgram`) ので、開くときに 1 件だけ取る。
+     */
+    let facts = $state<Facts | null>(null);
+    /** 続けて別のマスを押したとき、遅れて届いた前の結果で上書きしない */
+    let opening = 0;
+
+    /**
+     * **届いてから出す。** 表が持っている分 (題名・時刻・概要) で先に出して
+     * あとから差し替える手もあるが、詳細を開いた瞬間に札 (ジャンル・音声) が
+     * 無く、一拍おいて生える見え方になる。取りに行くのは同じホストの 1 件で
+     * 数十 ms なので、揃ってから出す。取れなければ (番組表から消えた) 表の分だけ
+     */
+    async function open(program: Sheet['programs'][number]): Promise<void> {
+        const token = ++opening;
+        const seed: Facts = {
+            name: program.name,
+            service_name: serviceName(program.service_id),
+            start_at: program.start_at,
+            end_at: program.end_at,
+            description: program.description,
+            extended: null,
+            genre_detail: null,
+            audios: null,
+            video_type: null,
+            video_resolution: null,
+            is_free: true,
+        };
+        let detail = seed;
+        try {
+            const res = await fetch(`/api/programs/${program.id}`);
+            if (res.ok) detail = { ...seed, ...((await res.json()) as Facts) };
+        } catch {
+            // 取れなくても開く。中身は表が持っている分だけ
+        }
+        if (token !== opening) return;
+        facts = detail;
+        selected = program;
+    }
+
+    function close(): void {
+        opening++;
+        selected = null;
+        facts = null;
+    }
 
     const serviceName = (id: number) => services.find((s) => s.id === id)?.name ?? '';
 
@@ -289,12 +337,21 @@
      *
      * **開くのが終わってから**取りに行く。すぐ投げていた頃は、いま見たい番組表と
      * 前後2日ぶんを同時に取ることになり、初めの表示そのものが遅くなっていた。
-     * requestIdleCallback は Safari に無いので、無ければ少し置いてから
+     * 「終わってから」は**マスを描き終わってから** (`drawing` が下りてから) —
+     * 表が届いた時点で投げていた頃は、マスを描いている最中に BS で 1 本 1 MB 超の
+     * 応答が 2 本届いて、その解読が描画と取り合っていた。
+     * requestIdleCallback は Safari に無いので、無ければ少し置いてから。
+     * 同じ日・同じ放送波の読み直しでは取り直さない (`prefetchedFor`)
      */
+    let prefetchedFor = '';
     $effect(() => {
         const soon = prevHref;
         const later = nextHref;
+        if (sheet === null || drawing) return;
+        const key = `${data.type}:${data.start}`;
+        if (prefetchedFor === key) return;
         const fetchBoth = () => {
+            prefetchedFor = key;
             void preloadData(soon);
             void preloadData(later);
         };
@@ -573,7 +630,7 @@
                             class="program"
                             class:reserved={program.reservation_state}
                             data-genre={program.genres?.[0]}
-                            onclick={() => (selected = program)}
+                            onclick={() => void open(program)}
                             data-testid="program-button"
                         >
                             <span class="title">
@@ -602,12 +659,9 @@
 </div>
 
 <!-- 番組の中身。**二段組の外に置く** (中に入れると巻き取る箱の中で開くことになる) -->
-{#if selected}
+{#if selected && facts}
     {@const program = selected}
-    <ProgramDetail
-        program={{ ...program, service_name: serviceName(program.service_id) }}
-        onclose={() => (selected = null)}
-    >
+    <ProgramDetail program={facts} onclose={close}>
         {#snippet actions()}
             <!--
                 失敗の理由は詳細の中に出す。番組表にインラインで足すと、その分だけ
@@ -700,7 +754,7 @@
                         use:submitting={() =>
                             async ({ result, update }) => {
                                 await update();
-                                if (result.type === 'success') selected = null;
+                                if (result.type === 'success') close();
                             }}
                     >
                         <input type="hidden" name="programId" value={program.id} />
@@ -721,7 +775,7 @@
                             async ({ result, update }) => {
                                 await update();
                                 // 失敗したときは開いたままにして、中に理由を出す
-                                if (result.type === 'success') selected = null;
+                                if (result.type === 'success') close();
                             }}
                     >
                         <input type="hidden" name="programId" value={program.id} />
@@ -730,7 +784,7 @@
                 {/if}
 
                 <!-- 位置を動かさないため、いつでもここが最後 -->
-                <button type="button" class="secondary" onclick={() => (selected = null)} data-testid="detail-close">
+                <button type="button" class="secondary" onclick={close} data-testid="detail-close">
                     閉じる
                 </button>
             </div>
