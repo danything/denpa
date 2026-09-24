@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import type { Program, Rule } from '../types';
-import { matches } from './rules';
+import { compile, likePatterns, matches } from './rules';
 
 /**
  * ルールの判定。DBには触らない (matches は純粋関数にしてある)。
@@ -96,5 +96,32 @@ describe('キーワードを当てる範囲', () => {
         const r = rule({ keyword: '青の 超える', search_fields: 'name,description' });
         expect(matches(r, target)).toBe(true);
         expect(matches(rule({ ...r, keyword: '青の 届かない' }), target)).toBe(false);
+    });
+});
+
+describe('下見の SQL 前絞り (likePatterns)', () => {
+    const compiledOf = (keyword: string, search_fields = 'name') => compile(rule({ keyword, search_fields }));
+
+    test('空白区切りの語ごとに %語% を作る (半角・小文字に揃えたあと)', () => {
+        expect(likePatterns(compiledOf('名探偵 ＮＨＫ'))).toEqual(['%名探偵%', '%nhk%']);
+    });
+
+    test('% _ \\ は字そのものとして当てる', () => {
+        expect(likePatterns(compiledOf('100%'))).toEqual(['%100\\%%']);
+        expect(likePatterns(compiledOf('a_b'))).toEqual(['%a\\_b%']);
+    });
+
+    test('大文字小文字を持つ非 ASCII の語は使わない (LIKE が揃えられない)', () => {
+        expect(likePatterns(compiledOf('名探偵 Привет'))).toEqual(['%名探偵%']);
+        expect(likePatterns(compiledOf('Привет'))).toBeNull();
+    });
+
+    test('詳細説明まで検索するときは SQL では当てない', () => {
+        expect(likePatterns(compiledOf('名探偵', 'name,description,extended'))).toBeNull();
+        expect(likePatterns(compiledOf('名探偵', 'name,description'))).toEqual(['%名探偵%']);
+    });
+
+    test('語が無ければ null', () => {
+        expect(likePatterns(compiledOf(''))).toBeNull();
     });
 });

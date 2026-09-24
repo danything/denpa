@@ -1,5 +1,5 @@
 import { fail, redirect } from '@sveltejs/kit';
-import { and, desc, eq, getTableColumns, gt, inArray, isNotNull, isNull, not, sql } from 'drizzle-orm';
+import { and, desc, eq, getTableColumns, gt, inArray, isNotNull, isNull, not, or, sql } from 'drizzle-orm';
 import { genreName } from '$lib/arib';
 import { SERVICE_TYPE_LABEL } from '$lib/format';
 import { parseSearchFields } from '$lib/search';
@@ -8,11 +8,11 @@ import { contending, type Occupant, rivalsOf } from '$lib/server/conflict';
 import { now, orm } from '$lib/server/db';
 import { CURRENT_SERVICES, watchableServices } from '$lib/server/epg';
 import { cancel, reserve } from '$lib/server/reservations';
-import { applyRules, compile, haystack, matchesCompiled } from '$lib/server/rules';
+import { applyRules, compile, haystack, likePatterns, matchesCompiled } from '$lib/server/rules';
 import { resolveConflicts, tunerCapacity } from '$lib/server/scheduler';
 import { programs, reservations, rules as ruleTable, services as serviceTable } from '$lib/server/schema';
 import { settings } from '$lib/server/settings';
-import type { Rule } from '$lib/types';
+import type { Program, Rule } from '$lib/types';
 
 interface Row extends Rule {
     reservations: number;
@@ -243,21 +243,49 @@ export async function load({ url }) {
         programs: PreviewRow[];
         conflicts: number;
     } {
+        // 条件のほどきは1回だけ。番組ごとにやり直すと、番組の数だけ JSON を読むことになる
+        const compiled = compile(conditions);
+        /*
+         * **SQL で候補を減らしてから JS で当てる。** これから放送される全番組
+         * (実データ相当で 33,000 件) を全列で読むだけで 330〜400ms かかり、条件が
+         * 1語でもそれは同じだった。番組名 (と概要) に `LIKE` を掛ければ当たった
+         * 行だけ読めて 33ms。当てるのは今までどおり `matchesCompiled` で、
+         * SQL は「必ず含むはずの語」を落とすだけ (`likePatterns`)
+         */
+        const patterns = likePatterns(compiled);
+        const columns = compiled.fields.includes('description')
+            ? [programs.name, programs.description]
+            : [programs.name];
+        const narrowed = (patterns ?? []).map((pattern) =>
+            or(...columns.map((column) => sql`${column} LIKE ${pattern} ESCAPE '\\'`)),
+        );
+        /*
+         * **読む列も絞る。** 判定に要らない JSON 列 (音声 106KB、映像) は読まない。
+         * 詳細説明は検索範囲に入っているときだけ。JSON 列の読み出しが 33,000 行ぶんで
+         * 43ms あった
+         */
+        const {
+            audios: _audios,
+            video_type: _video,
+            video_resolution: _resolution,
+            extended,
+            ...light
+        } = getTableColumns(programs);
         const all = orm()
             .select({
-                ...getTableColumns(programs),
+                ...light,
+                extended: compiled.fields.includes('extended') ? extended : sql<Program['extended']>`NULL`,
                 service_type: serviceTable.type,
                 service_name: serviceTable.name,
                 service_channel: serviceTable.channel,
             })
             .from(programs)
             .innerJoin(serviceTable, eq(serviceTable.id, programs.service_id))
-            .where(gt(programs.start_at, now()))
+            .where(and(gt(programs.start_at, now()), ...narrowed))
             .orderBy(programs.start_at)
             .all();
-        // 条件のほどきは1回だけ。番組ごとにやり直すと、番組の数だけ JSON を読むことになる
-        const compiled = compile(conditions);
         const hits = all.filter((program) =>
+            // 判定が読むのは局・ジャンル・無料かどうか・検索範囲の文字だけ (`Matchable`。読まない列は上で外した)
             matchesCompiled(compiled, program, program.service_type, defaults.freeOnly, (fields) =>
                 haystack(program, fields),
             ),
@@ -307,23 +335,9 @@ export async function load({ url }) {
                 reservation_id: held?.id ?? null,
                 reservation_state: held?.state ?? null,
                 matched: true,
-                /*
-                 * 重なりは**録ろうとした時点で初めて分かる**ので先に見せる。
-                 * スケジューラが既にチューナー不足と判断していれば、その理由も
-                 * 添える (何本足りないのかはあちらしか知らない)
-                 */
-                conflicts: contending(
-                    {
-                        programId: p.id,
-                        type: p.service_type,
-                        channel: p.service_channel,
-                        start_at: p.start_at,
-                        end_at: p.end_at,
-                    },
-                    rivals,
-                    capacity,
-                    margins,
-                ),
+                // 重なりは出す 100 件にだけ当てる (下)。スケジューラが既にチューナー
+                // 不足と判断していれば、その理由も添える (何本足りないのかはあちらしか知らない)
+                conflicts: [],
                 conflict_reason:
                     held?.state === 'conflict' ? (held.conflict_reason ?? 'チューナーが足りません') : null,
             };
@@ -351,18 +365,7 @@ export async function load({ url }) {
                     reservation_id: held.id,
                     reservation_state: held.state,
                     matched: false,
-                    conflicts: contending(
-                        {
-                            programId: held.program_id,
-                            type: held.type,
-                            channel: held.channel,
-                            start_at: held.start_at,
-                            end_at: held.end_at,
-                        },
-                        rivals,
-                        capacity,
-                        margins,
-                    ),
+                    conflicts: [],
                     conflict_reason:
                         held.state === 'conflict' ? (held.conflict_reason ?? 'チューナーが足りません') : null,
                 });
@@ -370,11 +373,41 @@ export async function load({ url }) {
         }
         rows.sort((a, b) => a.start_at - b.start_at);
 
+        /*
+         * **重なりは、出す 100 件にだけ当てる。**
+         *
+         * 重なりは**録ろうとした時点で初めて分かる**ので先に見せるのだが、当たった
+         * 全部に当てていた頃は、ゆるい条件 (詳細まで・27,000 件) で `contending` に
+         * 7.5 秒かかり、その間サーバごと止まっていた (SQLite も判定も同期)。
+         * 画面に出るのは先頭 100 件だけなので、そこにだけ当てる。**比べる相手
+         * (`rivals`) は全部のまま** — 出さない番組とも取り合うので、そこは減らせない
+         * (こちらは 27,000 件でも 15ms)。
+         *
+         * 「競合 N 件」もその 100 件の中の数になる。画面ではそう書く
+         */
+        const shown = rows.slice(0, 100);
+        for (const row of shown) {
+            const where = occupants.get(row.id);
+            if (where === undefined) continue;
+            row.conflicts = contending(
+                {
+                    programId: row.id,
+                    type: where.type,
+                    channel: where.channel,
+                    start_at: row.start_at,
+                    end_at: row.end_at,
+                },
+                rivals,
+                capacity,
+                margins,
+            );
+        }
+
         return {
             total: rows.length,
             // 数えるのは**行の数**。1行に3本重なっていても、困っている番組は1つ
-            conflicts: rows.filter((row) => row.conflicts.length > 0 || row.conflict_reason !== null).length,
-            programs: rows.slice(0, 100),
+            conflicts: shown.filter((row) => row.conflicts.length > 0 || row.conflict_reason !== null).length,
+            programs: shown,
         };
     }
     /*

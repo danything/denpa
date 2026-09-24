@@ -471,9 +471,10 @@
                                 (先頭 {preview.programs.length} 件)
                             </span>
                         {/if}
+                        <!-- 重なりを見るのは出している分だけ (`readPreview`)。全部は見ていないと分かる書き方にする -->
                         {#if preview.conflicts > 0}
                             <span class="tag error outline" data-testid="preview-conflicts">
-                                競合 {preview.conflicts} 件
+                                {preview.total > preview.programs.length ? '表示分に' : ''}競合 {preview.conflicts} 件
                             </span>
                         {/if}
                     </h2>

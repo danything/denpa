@@ -36,7 +36,13 @@ export function haystack(
  * 番組のジャンル。中分類まで持っている genre_detail を使い、
  * 取り込みが古くて入っていないものは大分類だけの genres で代用する
  */
-function parseGenreDetail(program: Program): Genre[] {
+/**
+ * 判定が番組から読む列。**全列は要らない** — 下見 (`rules/+page.server.ts`) は
+ * 読む列を絞って引くので、ここを `Program` にしていると渡せない
+ */
+export type Matchable = Pick<Program, 'service_id' | 'is_free' | 'genres' | 'genre_detail'>;
+
+function parseGenreDetail(program: Matchable): Genre[] {
     return nonEmpty(program.genre_detail) ?? (program.genres ?? []).map((lv1) => ({ lv1, lv2: -1 }));
 }
 
@@ -73,6 +79,37 @@ export function compile(rule: Rule): CompiledRule {
 }
 
 /**
+ * SQL の `LIKE` で候補を減らすための語。**減らすだけで、当てるのは `matchesCompiled`。**
+ *
+ * 下見 (`rules/+page.server.ts`) はこれから放送される番組を全部引いて JS で絞っていた。
+ * 実データ相当 (33,000 件) で全列を読むだけで 330〜400ms、条件が1語でも同じだけ
+ * かかる。番組名に `LIKE '%語%'` を掛ければ 33ms で当たった行だけ読める。
+ *
+ * **必ず含むはずの語だけ使う。** キーワードは空白区切りの AND なので、1語でも
+ * 含まない番組は当たらない — SQL で落としても結果は変わらない。ただし
+ *
+ * - `extended` (詳細説明) は JSON のまま入っていて全角も直していないので、
+ *   検索範囲がそこまで及ぶときは SQL では当てない (null を返す)
+ * - 大文字小文字の違いを `LIKE` が吸収するのは ASCII だけ。JS 側は
+ *   `toLowerCase` で全部揃えるので、大文字小文字を持つ非 ASCII の字
+ *   (キリル文字など) を含む語は使わない
+ * - `%` `_` `\` は `ESCAPE '\'` で字そのものとして当てる
+ *
+ * 番組名と概要は取り込み時に半角へ直してある (`epg.ts`) ので、`compile` が
+ * 半角に直した語をそのまま当てられる。
+ *
+ * @returns `LIKE` に渡す形 (`%語%`)。使えなければ null
+ */
+export function likePatterns(compiled: CompiledRule): string[] | null {
+    if (compiled.fields.includes('extended')) return null;
+    const safe = compiled.keywords.filter((word) =>
+        [...word].every((ch) => /[a-z0-9]/.test(ch) || ch.toLowerCase() === ch.toUpperCase()),
+    );
+    if (safe.length === 0) return null;
+    return safe.map((word) => `%${word.replace(/[\\%_]/g, (ch) => `\\${ch}`)}%`);
+}
+
+/**
  * ほどいたルールに番組が当てはまるか。
  *
  * 検索用テキストは**関数で受け取る**。文字を作るのが一番高くつくので、
@@ -81,7 +118,7 @@ export function compile(rule: Rule): CompiledRule {
  */
 export function matchesCompiled(
     compiled: CompiledRule,
-    program: Program,
+    program: Matchable,
     serviceType: string | undefined,
     freeOnly: boolean,
     textOf: (fields: SearchField[]) => string,
