@@ -42,6 +42,10 @@ function migrations(db: Database): number {
     return (db.query('SELECT COUNT(*) AS n FROM __drizzle_migrations').get() as { n: number }).n;
 }
 
+/** drizzle/ にあるマイグレーションの数。起動後はこれだけ当たっているはず (数を決め打ちしない) */
+const KNOWN = (JSON.parse(readFileSync(`${MIGRATIONS}/meta/_journal.json`, 'utf8')) as { entries: unknown[] })
+    .entries.length;
+
 /** マイグレーションで作った DB */
 function migrated(): Database {
     const db = new Database(':memory:');
@@ -98,11 +102,11 @@ describe('起動', () => {
     test('マイグレーションを持つ前の DB にもそのまま当たり、二度目は何もしない', () => {
         const db = preexisting();
         expect(() => bootstrap(db)).not.toThrow();
-        expect(migrations(db)).toBe(1);
+        expect(migrations(db)).toBe(KNOWN);
         expect(tables(db)).toEqual(tables(migrated()));
 
         bootstrap(db);
-        expect(migrations(db)).toBe(1);
+        expect(migrations(db)).toBe(KNOWN);
     });
 
     test('列が足りない古い DB は、どの列かを言って止まる', () => {

@@ -394,4 +394,149 @@ describe('同じ放送は1本だけ', () => {
 
         expect(applyRules()).toMatchObject({ created: 2 });
     });
+
+    /*
+     * 延長は枝番ごとに別々のタイミングで届く (EIT p/f は局ごと)。終了時刻まで
+     * 鍵に入れていた頃は、片方だけ動いた回が「別の放送」に見えて両方立った
+     */
+    test('終了時刻だけ違う枝番の組は1本だけ', () => {
+        reset();
+        sub(SERVICE + 1, 'TOKYO MX1');
+        rule(1, '幼女戦記');
+        on(SERVICE, 10, '幼女戦記Ⅱ #5「貧乏籤」');
+        on(SERVICE + 1, 11, '幼女戦記Ⅱ #5「貧乏籤」');
+        // 23609 側にだけ延長が先に届いた
+        orm()
+            .update(programs)
+            .set({ end_at: base + 4 * HOUR + 30 * 60 * 1000 })
+            .where(eq(programs.id, 11))
+            .run();
+
+        expect(applyRules()).toMatchObject({ created: 1 });
+        expect(reservations()).toEqual([{ program_id: 10, rule_id: 1, state: 'scheduled' }]);
+    });
+});
+
+/**
+ * **取り消しは放送単位で効く。**
+ *
+ * 取り消しの記録は番組の id (局 + event_id) に付いているので、`INSERT OR IGNORE`
+ * だけでは id が変わる道をすり抜ける。実機で「取り消したはずの回が録れた」として
+ * 出たのは枝番違い (取り消していないほうの枝番に立つ) と event_id の変更
+ * (局が送り直して番組の行が別 id になる)。どちらも物理チャンネル・題名・開始時刻は
+ * 変わらないので、そこで当てる (`canceledBroadcasts`)。
+ */
+describe('取り消した放送には立てない', () => {
+    const MIN = 60 * 1000;
+
+    /** 人が押した取り消し (reservations.cancel と同じ形) */
+    function cancel(programId: number): void {
+        orm()
+            .update(reservationTable)
+            .set({ state: 'canceled', canceled_by: 'user' })
+            .where(eq(reservationTable.program_id, programId))
+            .run();
+    }
+
+    test('取り消したあと枝番違いに同じ回が載っても立てない', () => {
+        reset();
+        sub(SERVICE + 1, 'TOKYO MX1');
+        rule(1, '幼女戦記');
+        // 取り消したときは 23609 側にしか載っていなかった
+        on(SERVICE + 1, 11, '幼女戦記Ⅱ #5「貧乏籤」');
+        applyRules();
+        cancel(11);
+
+        // あとから 23608 側にも載った。本線はこちらに移るが、同じ放送なので立てない
+        on(SERVICE, 10, '幼女戦記Ⅱ #5「貧乏籤」');
+        expect(applyRules()).toMatchObject({ created: 0 });
+        expect(reservations()).toEqual([{ program_id: 11, rule_id: 1, state: 'canceled' }]);
+    });
+
+    test('取り消したあと event_id が変わっても立てない', () => {
+        reset();
+        rule(1, '幼女戦記');
+        on(SERVICE, 10, '幼女戦記Ⅱ #5「貧乏籤」');
+        applyRules();
+        cancel(10);
+
+        // 局が同じ番組を別の event_id で送り直した。番組表の取り込みは重なる行を消して入れ直す
+        orm().delete(programs).where(eq(programs.id, 10)).run();
+        on(SERVICE, 12, '幼女戦記Ⅱ #5「貧乏籤」');
+        expect(applyRules()).toMatchObject({ created: 0 });
+        expect(reservations()).toEqual([{ program_id: 10, rule_id: 1, state: 'canceled' }]);
+    });
+
+    test('少し繰り下がっただけなら同じ放送', () => {
+        reset();
+        rule(1, '幼女戦記');
+        on(SERVICE, 10, '幼女戦記Ⅱ #5「貧乏籤」');
+        applyRules();
+        cancel(10);
+
+        orm().delete(programs).where(eq(programs.id, 10)).run();
+        on(SERVICE, 12, '幼女戦記Ⅱ #5「貧乏籤」', 3 * HOUR + 5 * MIN);
+        expect(applyRules()).toMatchObject({ created: 0 });
+    });
+
+    test('10 分以上ずれた別の回 (再放送) は立つ', () => {
+        reset();
+        rule(1, '幼女戦記');
+        on(SERVICE, 10, '幼女戦記Ⅱ #5「貧乏籤」');
+        applyRules();
+        cancel(10);
+
+        on(SERVICE, 13, '幼女戦記Ⅱ #5「貧乏籤」', 3 * HOUR + 30 * MIN);
+        expect(applyRules()).toMatchObject({ created: 1 });
+        expect(reservations()).toEqual([
+            { program_id: 10, rule_id: 1, state: 'canceled' },
+            { program_id: 13, rule_id: 1, state: 'scheduled' },
+        ]);
+    });
+
+    test('手動で立てて取り消した回にも、ルールは立てない', () => {
+        reset();
+        rule(1, '幼女戦記');
+        on(SERVICE, 10, '幼女戦記Ⅱ #5「貧乏籤」');
+        orm()
+            .insert(reservationTable)
+            .values({
+                program_id: 10,
+                rule_id: null,
+                service_id: SERVICE,
+                name: '幼女戦記Ⅱ #5「貧乏籤」',
+                start_at: base + 3 * HOUR,
+                end_at: base + 4 * HOUR,
+                manual: true,
+                state: 'canceled',
+                created_at: now(),
+                updated_at: now(),
+            })
+            .run();
+
+        orm().delete(programs).where(eq(programs.id, 10)).run();
+        on(SERVICE, 12, '幼女戦記Ⅱ #5「貧乏籤」');
+        expect(applyRules()).toMatchObject({ created: 0 });
+    });
+
+    test('局ごと消えた取り消しは数えない (戻ったなら録る)', () => {
+        reset();
+        sub(3273801040, 'テレビ愛知', 'T23');
+        rule(1, '幼女戦記');
+        on(3273801040, 20, '幼女戦記Ⅱ #5「貧乏籤」');
+        applyRules();
+        // 局が選局できなくなった。システムが予約を取り消し (epg.clearBelongings)、局の行ごと消す
+        orm()
+            .update(reservationTable)
+            .set({ state: 'canceled', canceled_by: 'system' })
+            .where(eq(reservationTable.program_id, 20))
+            .run();
+        orm().delete(programs).where(eq(programs.id, 20)).run();
+        orm().delete(services).where(eq(services.id, 3273801040)).run();
+
+        // 局が戻ってきた
+        sub(3273801040, 'テレビ愛知', 'T23');
+        on(3273801040, 21, '幼女戦記Ⅱ #5「貧乏籤」');
+        expect(applyRules()).toMatchObject({ created: 1 });
+    });
 });

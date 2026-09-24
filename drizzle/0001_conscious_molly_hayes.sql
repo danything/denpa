@@ -1,0 +1,1 @@
+ALTER TABLE `reservations` ADD `canceled_by` text;

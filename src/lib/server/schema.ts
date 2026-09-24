@@ -272,6 +272,14 @@ export const reservations = sqliteTable(
         state: text('state', { enum: RESERVATION_STATES }).notNull().default('scheduled'),
         /** 録り始めた時刻。NULL なら**まだ始めていない**。二重に録り始めないための鍵でもある (scheduler.tick) */
         started_at: integer('started_at'),
+        /**
+         * **誰が取り消したか。** 人が押した取り消し (`user`) はその放送に二度と
+         * ルールを立てない印になる (`rules.ts` の `canceledBroadcasts`)。局が選局
+         * できなくなってシステムが片付けたもの (`system`。`epg.clearBelongings`) は
+         * 局が戻れば録り直してよいので、印にしない。NULL は列を足す前の行で、
+         * 人が押したものとして扱う (余分に録るより、取り消したものを録るほうが困る)
+         */
+        canceled_by: text('canceled_by', { enum: ['user', 'system'] }),
         conflict_reason: text('conflict_reason'),
         created_at: integer('created_at').notNull(),
         updated_at: integer('updated_at').notNull(),

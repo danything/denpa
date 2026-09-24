@@ -187,7 +187,8 @@ function clearBelongings(at: number, serviceId: number): { programs: number; res
     const canceled = affected(
         orm()
             .update(reservations)
-            .set({ state: 'canceled', updated_at: at })
+            // システムの取り消し。人が押したものと違い、局が戻ればルールが立て直してよい
+            .set({ state: 'canceled', canceled_by: 'system', updated_at: at })
             .where(
                 and(
                     eq(reservations.service_id, serviceId),

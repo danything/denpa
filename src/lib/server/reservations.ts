@@ -50,6 +50,8 @@ export async function reserve(
                 priority: sql`excluded.priority`,
                 encode: sql`excluded.encode`,
                 state: sql`CASE WHEN ${reservations.state} = 'canceled' THEN 'scheduled' ELSE ${reservations.state} END`,
+                // 取り消しを解いたので、印も消す
+                canceled_by: null,
                 updated_at: sql`excluded.updated_at`,
             },
         })
@@ -73,7 +75,7 @@ export async function restore(reservationId: number): Promise<void> {
 
     orm()
         .update(reservations)
-        .set({ state: 'scheduled', updated_at: now() })
+        .set({ state: 'scheduled', canceled_by: null, updated_at: now() })
         .where(eq(reservations.id, reservationId))
         .run();
     await resolveConflicts();
@@ -99,9 +101,10 @@ export async function cancel(reservationId: number): Promise<void> {
         .get();
     if (recording !== undefined) stopRecording(recording.id);
 
+    // 人が押した印。**この放送にはルールが二度と立てない** (rules.ts の canceledBroadcasts)
     orm()
         .update(reservations)
-        .set({ state: 'canceled', updated_at: now() })
+        .set({ state: 'canceled', canceled_by: 'user', updated_at: now() })
         .where(eq(reservations.id, reservationId))
         .run();
     await resolveConflicts();

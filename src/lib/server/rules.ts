@@ -1,4 +1,4 @@
-import { and, eq, getTableColumns, gt, inArray, isNull } from 'drizzle-orm';
+import { and, eq, getTableColumns, gt, inArray, isNull, ne, or } from 'drizzle-orm';
 import { type Genre, genreMatches } from '$lib/arib';
 import { parseSearchFields, type SearchField } from '../search';
 import type { Program, Rule } from '../types';
@@ -145,6 +145,77 @@ function textCache(program: Program): (fields: SearchField[]) => string {
     };
 }
 
+/** 取り消し済みの放送に、番組が当たるかどうか */
+interface Declined {
+    has(program: Pick<Program, 'name' | 'start_at'> & { channel: string }): boolean;
+}
+
+/**
+ * 取り消しから 10 分以内なら同じ放送。延長や繰り下げで開始が少し動いても
+ * 追いかけられ、同じ日の再放送 (1時間後など) は別の回として扱える
+ */
+const DECLINE_WINDOW = 10 * 60 * 1000;
+
+/**
+ * **人が取り消した放送。** 番組の id ではなく、**物理チャンネル + 題名 + 開始時刻**で持つ。
+ *
+ * 取り消しの記録は `reservations.program_id` (局 + event_id) に付いていて、ルールは
+ * `INSERT OR IGNORE` がそれに当たることで「二度と立てない」を成り立たせていた。
+ * ところが id が同じでなくなる道が2つあり、どちらも実機で**取り消したはずの回が
+ * 録れた**として出た。
+ *
+ * - **枝番違い。** 同じ放送が 23608 と 23609 の両方に載るとき、束ねが一時的に
+ *   外れる (片方だけ延長が先に届く、題名がまだ違う) と、取り消していないほうの
+ *   枝番に予約が無いので立つ。放送直前なら猶予 (`ruleRetractGrace`) の中で
+ *   引っ込まず、そのまま録れる
+ * - **event_id の変更。** 局が同じ番組を別の event_id で送り直すと、番組表の
+ *   取り込みは重なる行を消して新しい id で入れる。取り消し行は古い id を指したまま
+ *   残り、新しい id には予約が無いので立つ
+ *
+ * どちらも「同じ物理チャンネルで、同じ題名が、同じ頃に始まる」ことは変わらないので、
+ * そこで当てる。
+ *
+ * **システムの取り消しは含めない。** 選局できなくなった局の予約はシステムが
+ * 取り消す (`epg.clearBelongings`、`canceled_by = 'system'`) が、それは「局が戻ったなら
+ * 録る」でよい。列を足す前の行 (NULL) は人が押したものとして扱う。
+ * 手動予約を人が取り消したぶんは含める — 今までも id が同じ限りルールを止めていたので、
+ * その振る舞いを id が変わっても続けるだけ。
+ */
+function canceledBroadcasts(at: number): Declined {
+    const rows = orm()
+        .select({
+            channel: services.channel,
+            name: reservations.name,
+            start_at: reservations.start_at,
+        })
+        .from(reservations)
+        .innerJoin(services, eq(services.id, reservations.service_id))
+        .where(
+            and(
+                eq(reservations.state, 'canceled'),
+                gt(reservations.end_at, at),
+                or(isNull(reservations.canceled_by), ne(reservations.canceled_by, 'system')),
+            ),
+        )
+        .all();
+    /** 物理チャンネル + 題名 → 取り消した回の開始時刻 */
+    const starts = new Map<string, number[]>();
+    for (const row of rows) {
+        if (row.name === '') continue;
+        const key = `${row.channel} ${row.name}`;
+        const list = starts.get(key);
+        if (list === undefined) starts.set(key, [row.start_at]);
+        else list.push(row.start_at);
+    }
+    return {
+        has(program) {
+            const list = starts.get(`${program.channel} ${program.name}`);
+            if (list === undefined) return false;
+            return list.some((start) => Math.abs(start - program.start_at) <= DECLINE_WINDOW);
+        },
+    };
+}
+
 export interface RuleSync {
     /** 新しく立てた予約 */
     created: number;
@@ -167,8 +238,9 @@ export interface RuleSync {
  * - 当てているルールが変わった (別のルールが引き取った) → **付け替える**
  *
  * **消すのであって「取り消し」にはしない。** 取り消しは*人が押したこと*の記録で、
- * ルールは二度と作り直さない (`INSERT OR IGNORE`)。番組表が動いただけのものを
- * 取り消しにすると、条件に戻ってきても永久に予約が立たなくなる。
+ * ルールは二度と作り直さない (`INSERT OR IGNORE` と、放送単位で当てる
+ * `canceledBroadcasts`)。番組表が動いただけのものを取り消しにすると、条件に
+ * 戻ってきても永久に予約が立たなくなる。
  *
  * ### 引っ込めないもの
  *
@@ -210,6 +282,8 @@ export function applyRules(options: { rule?: number } = {}): RuleSync {
     const compiled = rules.map(compile);
     const searching = adding ? compiled.filter((c) => c.rule.id === options.rule) : compiled;
 
+    const declined = canceledBroadcasts(at);
+
     /** 番組 → 受け持つルール。同じ番組に何本当たっても予約は1つで、**先勝ち** */
     const wanted = new Map<number, { rule: Rule; program: Program }>();
     /**
@@ -222,6 +296,10 @@ export function applyRules(options: { rule?: number } = {}): RuleSync {
      * 同じ名前のファイルへ同時に書いて中身が壊れた。
      *
      * 中身が違うとき (MX1 と MX2 で別番組) は題名が違うので、両方残る。
+     *
+     * **終了時刻は鍵に入れない。** 延長は枝番ごとに別々のタイミングで届く
+     * (EIT p/f は局ごと) ので、片方だけ `end_at` が動いた回は「別の放送」に
+     * 見えて両方が立っていた。開始と題名が同じなら同じ放送。
      */
     const simulcast = new Map<string, { serviceId: number; programId: number }>();
     for (const program of programs) {
@@ -229,7 +307,13 @@ export function applyRules(options: { rule?: number } = {}): RuleSync {
         for (const candidate of searching) {
             if (!matchesCompiled(candidate, program, program.service_type, recording.freeOnly, textOf))
                 continue;
-            const key = `${program.channel} ${program.start_at} ${program.end_at} ${program.name}`;
+            /*
+             * **人が取り消した放送には立てない。** 取り消しの記録は番組の id
+             * (局 + event_id) に付いているので、`INSERT OR IGNORE` だけに頼ると
+             * 枝番違いや event_id の変更ですり抜ける (下の `canceledBroadcasts`)
+             */
+            if (declined.has(program)) break;
+            const key = `${program.channel} ${program.start_at} ${program.name}`;
             const twin = simulcast.get(key);
             if (twin !== undefined) {
                 // 枝番の小さいほうが本線 (MX1 なら 23608)。並び順に左右されないよう、
