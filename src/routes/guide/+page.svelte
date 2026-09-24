@@ -78,9 +78,11 @@
      * 描いている最中でもスクロールもタブの切り替えもできる。
      *
      * 300 は「e2e の偽の放送 (数十番組) なら最初の1回で全部出る」数。
-     * 実データの地上波 (20局×24時間 ≒ 500〜700) でも2〜3コマで済む
+     * 実データの地上波 (20局×24時間 ≒ 500〜700) でも2〜3コマで済む。
+     * 画面の外のマスは中身を組まない (下の `.cell` の `content-visibility`) ので、
+     * 1コマの仕事は「マスを置く」だけになり、数を増やしても止まらない
      */
-    const CELL_CHUNK = 300;
+    const CELL_CHUNK = 600;
     /** いま描いているマスの数。`Infinity` なら全部 */
     let shownCells = $state(Number.POSITIVE_INFINITY);
     let drawFrame = 0;
@@ -925,9 +927,24 @@
         font-size: 10px;
         line-height: 1rem;
     }
+    /*
+     * **画面の外のマスは中身を組まない** (`content-visibility: auto`)。
+     *
+     * 288 行 (5 分刻み) × 局数の grid に BS で 2,000 個超の `<button>` を置く。
+     * マスを足すたびに表全体の Layout がやり直しになり、実データ相当 (BS 60 局・
+     * 2,171 マス) で 1 回 450ms × 7 回 = 描き終わりまで 12 秒かかっていた。
+     * 見えている範囲のマスだけ中身を組めば Layout は 11 秒 → 2 秒、描き終わりは
+     * 12 秒 → 3.4 秒 (CPU を 4 倍遅くしても 23 秒 → 10 秒)。
+     *
+     * 大きさは grid の track で決まる (列は `minmax(11rem, 1fr)`、行は 0.75rem) ので、
+     * 中身を組まなくてもマスの場所は変わらない。`contain-intrinsic-size` は
+     * 中身が無いときの仮の大きさで、track に伸ばされるぶんには効かない
+     */
     .cell {
         overflow: hidden;
         padding: 0.125rem;
+        content-visibility: auto;
+        contain-intrinsic-size: auto 11rem auto 0.75rem;
     }
     /*
      * 色はジャンル(大分類)ごと。下地は薄く敷いて左に濃い線を引く。濃く塗ると文字が読めなくなる。
