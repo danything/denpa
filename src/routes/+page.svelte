@@ -182,7 +182,7 @@
         let shareUrl: string;
         try {
             const links = await mintShareLink(rec.id, source);
-            shareUrl = resumeMs > 0 ? links.playlist : links.url;
+            shareUrl = freshForVlc(resumeMs > 0 ? links.playlist : links.url);
         } catch {
             win?.close();
             noteVlc('error', '再生リンクを作れませんでした');
@@ -198,6 +198,24 @@
         closeWhenLanded(win);
         noteVlc('info', resumeMs > 0 ? `テレビへ飛ばしました (${durationMs(resumeMs)} から)` : 'テレビへ飛ばしました');
         detail.close();
+    }
+
+    /**
+     * **毎回別の URL にして渡す。** VLC は URL ごとに自分で再生位置を覚えていて、
+     * 同じ URL を開くとそこから始める。再生リンクは 24 時間同じ URL なので
+     * (`share.ts`。履歴の URL を生かすため)、さっきテレビで観終えた録画をもう一度
+     * 飛ばすと**末尾から始まって一瞬で終わり、VLC のトップに戻る**。
+     * いま流れている媒体と同じ URL は `/play` が黙って無視する作りでもある
+     * (vlc-android の `RemoteAccessRoutingPlayback`)。
+     *
+     * 押した時刻を添えれば VLC には新しい媒体に見える。資格はトークンだけを
+     * 見るので余計なクエリは無害 (`hooks.server.ts`)。続きの位置は denpa が
+     * XSPF で渡すので (`server/playlist.ts`)、VLC 側の覚えは要らない
+     */
+    function freshForVlc(url: string): string {
+        const fresh = new URL(url);
+        fresh.searchParams.set('play', String(Date.now()));
+        return fresh.toString();
     }
 
     /** テレビの返事を待つ上限。過ぎたら畳まずに残す (繋がらなかった画面がそのまま見える) */

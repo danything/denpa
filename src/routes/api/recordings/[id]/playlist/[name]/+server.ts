@@ -19,9 +19,16 @@ import { parseFileSource } from '$lib/source';
 export function GET({ params, url }) {
     const recording = recordingOr404(params.id);
     const source = parseFileSource(url.searchParams.get('source'));
+    /*
+     * 中のファイルの URL も**取りに来るたびに別物**にする。VLC は 1 曲ごとの URL で
+     * 再生位置を覚えるので、同じなら `start-time` より自分の覚えが勝って末尾から
+     * 始まりかねない (`+page.svelte` の `freshForVlc` と同じ理由)
+     */
+    const location = new URL(shareUrls(recording, url.origin, url.searchParams.get('token'), source).file);
+    location.searchParams.set('play', String(Date.now()));
     const body = xspf({
         title: displayTitle(recording.name) || String(recording.id),
-        location: shareUrls(recording, url.origin, url.searchParams.get('token'), source).file,
+        location: location.toString(),
         startSeconds: (recording.resume_ms ?? 0) / 1000,
     });
     return new Response(body, {

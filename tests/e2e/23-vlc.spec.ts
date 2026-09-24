@@ -147,7 +147,8 @@ test.describe('テレビの VLC で再生', () => {
         // 中のファイルの URL も同じトークンで開ける (XML なので & は &amp;)
         const token = new URL(path).searchParams.get('token');
         expect(xml).toContain(`/api/recordings/${id}/file/`);
-        expect(xml).toContain(`?token=${token}</location>`);
+        // 取りに来るたびに `play=` が変わるので、トークンの後ろは決め打ちしない
+        expect(xml).toMatch(new RegExp(`\\?token=${token}&amp;play=\\d+</location>`));
         const file = (/<location>([^<]+)<\/location>/.exec(xml)?.[1] ?? '').replaceAll('&amp;', '&');
         expect((await request.head(file)).ok()).toBe(true);
 
