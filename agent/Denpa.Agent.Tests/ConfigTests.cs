@@ -199,16 +199,4 @@ public class DeviceProbeTests
     {
         await Assert.That(DeviceProbe.ParseDelivery(new byte[76])).IsEmpty();
     }
-
-    [Test]
-    public async Task Q3U4_は受信機の並びで種別が決まる()
-    {
-        // 筐体の中の IT9305E 2つに、衛星2本・地上波2本ずつ (px4-userland SPEC 4.2)
-        await Assert.That(Px4Userland.TypesFor(0)).IsEquivalentTo(["BS", "CS"], CollectionOrdering.Matching);
-        await Assert.That(Px4Userland.TypesFor(1)).IsEquivalentTo(["BS", "CS"], CollectionOrdering.Matching);
-        await Assert.That(Px4Userland.TypesFor(2)).IsEquivalentTo(["GR"], CollectionOrdering.Matching);
-        await Assert.That(Px4Userland.TypesFor(3)).IsEquivalentTo(["GR"], CollectionOrdering.Matching);
-        await Assert.That(Px4Userland.TypesFor(4)).IsEquivalentTo(["BS", "CS"], CollectionOrdering.Matching);
-        await Assert.That(Px4Userland.TypesFor(7)).IsEquivalentTo(["GR"], CollectionOrdering.Matching);
-    }
 }

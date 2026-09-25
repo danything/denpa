@@ -229,7 +229,7 @@ public sealed class TunerPool(
                     /*
                      * **合っていても、生きていなければ選局し直す。** DVB は合ったまま
                      * だが、px4-userland は読み手が居なくなると px4-ts が切られる
-                     * (Q3u4.cs)。合っている印だけ残っていて中身が無い、を掴まない
+                     * (Px4.cs)。合っている印だけ残っていて中身が無い、を掴まない
                      */
                     if (held.Channel != channel || !held.Device.Tuned)
                     {
@@ -316,17 +316,17 @@ public sealed class TunerPool(
     ///
     /// <list type="bullet">
     /// <item><c>/dev/dvb/adapterN/frontendM</c> … Linux DVB (Tuning.cs)</item>
-    /// <item><c>q3u4:&lt;base serial&gt;:&lt;受信機&gt;</c> … PX-Q3U4 を px4-userland で (Q3u4.cs)</item>
+    /// <item><c>px4:&lt;筐体の番号&gt;:&lt;受信機&gt;</c> … px4-userland の機材 (Px4.cs)</item>
     /// </list>
     ///
     /// <para>それ以外は投げる。<c>px4_drv</c> の chardev はもう受け取らない</para>
     /// </summary>
     public static ITuneDevice OpenDevice(string path, string? lnb)
     {
-        if (Px4Userland.Parse(path) is { } q3u4) return new Q3u4Tuner(q3u4.Serial, q3u4.Receiver, lnb);
+        if (Px4Userland.Parse(path) is { } px4) return new Px4Tuner(px4.Id, px4.Receiver, lnb);
         if (path.Contains("/dvb/", StringComparison.Ordinal)) return new DvbTuner(path, lnb);
         throw new IOException(
-            $"{path} は知らないデバイスです (/dev/dvb/adapterN/frontendM か {Px4Userland.Scheme}<シリアル14桁>:<受信機0-7>)");
+            $"{path} は知らないデバイスです (/dev/dvb/adapterN/frontendM か {Px4Userland.Scheme}<筐体の番号>:<受信機>)");
     }
 
     /// <summary>

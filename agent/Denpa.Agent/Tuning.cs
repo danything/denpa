@@ -20,12 +20,12 @@ namespace Denpa.Agent;
 ///
 /// <list type="bullet">
 /// <item><see cref="DvbTuner"/> … 標準の Linux DVB v5。PT2/PT3、PX-S1UD、PX-BCUD。カーネルが持つ</item>
-/// <item><see cref="Q3u4Tuner"/> … PLEX PX-Q3U4。px4-userland の <c>px4d</c> が持ち、選局ごとに <c>px4-ts</c> を起こす (Q3u4.cs)</item>
+/// <item><see cref="Px4Tuner"/> … px4-userland の機材 (PX-Q3U4 など)。<c>px4d</c> が持ち、選局ごとに <c>px4-ts</c> を起こす (Px4.cs)</item>
 /// </list>
 ///
 /// <para>
 /// <c>px4_drv</c> の chardev (<c>/dev/px4video*</c>) は**外した**。ホストに DKMS で
-/// カーネルモジュールを入れてもらう前提そのものをやめたので (Q3u4.cs)。
+/// カーネルモジュールを入れてもらう前提そのものをやめたので (Px4.cs)。
 /// </para>
 /// </summary>
 public interface ITuneDevice : IDisposable

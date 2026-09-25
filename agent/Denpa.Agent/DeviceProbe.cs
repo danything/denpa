@@ -192,8 +192,8 @@ public static partial class DeviceProbe
         }
 
         /*
-         * PX-Q3U4 は USB を sysfs で数える。ドライバは同梱の px4-userland で、
-         * デバイスノードは出ない (Q3u4.cs)。1台につき8本
+         * px4-userland の機材は USB を sysfs で数え、受信機は筐体に聞く。
+         * デバイスノードは出ない (Px4.cs)。px4d が ready になるまでは出てこない
          */
         found.AddRange(Px4Userland.Detect());
 

@@ -11,8 +11,8 @@ using Microsoft.AspNetCore.Http.Features;
  *
  * - B-CASカード … pcscd 経由でしか読めず、その pcscd はこのコンテナにしか居ない
  * - チューナーデバイス … `/dev/dvb/*` と `/dev/bus/usb` が見えているのはこちらだけ
- * - 選局そのもの … デバイスを掴んで ioctl で選局する (Tuning.cs)。PX-Q3U4 は
- *   同梱の px4-userland に USB を叩かせる (Q3u4.cs)
+ * - 選局そのもの … デバイスを掴んで ioctl で選局する (Tuning.cs)。px4-userland の
+ *   機材 (PX-Q3U4 など) は同梱の px4-userland に USB を叩かせる (Px4.cs)
  *
  * **中身は読まない。** NIT も SDT も EIT も解かず、TS をそのまま流す。
  * 読むのは denpa (`src/lib/ts`) で、局を選り分けるのも番組表を組み立てるのも、
@@ -44,6 +44,26 @@ var tune = new TuneOptions(
     Environment.GetEnvironmentVariable("FAKE_TUNE") is { Length: > 0 } fake ? fake : null);
 
 var pool = new TunerPool(tuners, () => events.Emit("tuners"), tune) { Detected = detected };
+
+/*
+ * **px4-userland の筐体の px4d を起こす。** 設定にある筐体と、定義が無ければ刺さっている筐体。
+ *
+ * 受信機が何本あって何を受けられるかは、px4d が ready になってから筐体に聞く
+ * (Px4.cs)。なので自動で組んだ顔ぶれは、起こし終えたところで組み直す —
+ * 起動直後の顔ぶれには px4-userland の機材がまだ入っていない。
+ */
+void PreparePx4()
+{
+    var ids = Px4Userland.IdsIn(pool.Tuners);
+    if (pool.Detected) ids = ids.Union(Px4Userland.Enclosures().Select(enclosure => enclosure.Id));
+    Px4Daemon.Prepare(ids.ToList());
+
+    if (!pool.Detected) return;
+    var (resolved, auto) = config.ResolveTuners();
+    static string Shape(IEnumerable<TunerSpec> specs) =>
+        string.Join('\n', specs.Select(spec => spec.ToJson().ToJsonString()));
+    if (auto && Shape(resolved) != Shape(pool.Tuners)) pool.Replace(resolved);
+}
 
 var builder = WebApplication.CreateSlimBuilder(args);
 builder.WebHost.ConfigureKestrel(options =>
@@ -257,8 +277,8 @@ app.MapPut("/denpa/tuners", async (HttpContext http) =>
     var (resolved, auto) = config.ResolveTuners();
     pool.Detected = auto;
     pool.Replace(resolved);
-    // 新しく書かれた Q3U4 があれば px4d を起こしてカードリーダーも繋ぐ。数秒かかるので返事は待たせない
-    _ = Task.Run(() => Px4Daemon.Prepare(resolved));
+    // 新しく書かれた筐体があれば px4d を起こしてカードリーダーも繋ぐ。数秒かかるので返事は待たせない
+    _ = Task.Run(PreparePx4);
     await Respond.Write(http, new JsonObject { ["tuners"] = pool.Status(), ["detected"] = pool.Detected });
 });
 
@@ -359,13 +379,13 @@ app.MapFallback((HttpContext http) =>
 await Card.EnsurePcscd();
 
 /*
- * **PX-Q3U4 の px4d は背景で起こす。** ready までファームウェアの流し込みで
+ * **px4-userland の px4d は背景で起こす。** ready までファームウェアの流し込みで
  * 数秒、駄目な筐体なら 30 秒待つので、ここで待つと HTTP の口 (= PT3 など他の
  * チューナーの提供) まで遅れる。内蔵カードリーダーは px4d が ready になった
  * ときに reader.conf を書いて `pcscd --hotplug` で読み直させるので、pcscd が
- * 先に居ても困らない (Q3u4.cs)。筐体が無ければ何もしない
+ * 先に居ても困らない (Px4.cs)。筐体が無ければ何もしない
  */
-_ = Task.Run(() => Px4Daemon.Prepare(pool.Tuners));
+_ = Task.Run(PreparePx4);
 
 /*
  * **畳むのは、流し終えてから。**

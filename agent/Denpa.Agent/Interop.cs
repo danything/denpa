@@ -39,7 +39,7 @@ public static partial class Interop
     /// <para>
     /// <c>Process.Kill()</c> は SIGKILL しか送れない。px4-userland の <c>px4d</c> と
     /// <c>px4-ts</c> は SIGTERM で lease を返し LNB を 0V に戻してから終わるので、
-    /// まずこちらで頼み、聞かなければ呼んだ側が SIGKILL にする (Q3u4.cs)
+    /// まずこちらで頼み、聞かなければ呼んだ側が SIGKILL にする (Px4.cs)
     /// </para>
     /// </summary>
     public static void Terminate(int pid) => kill(pid, Sigterm);

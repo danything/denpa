@@ -13,7 +13,7 @@ namespace Denpa.Agent;
 /// denpa-agent --tune /dev/dvb/adapter1/frontend0 T27
 /// denpa-agent --tune /dev/dvb/adapter0/frontend0 BS15_0 --lnb 15v
 /// denpa-agent --tune /dev/dvb/adapter1/frontend0 T27,T21   # 掴んだまま切り替える
-/// denpa-agent --tune q3u4:00001205000960:2 T27              # PX-Q3U4 (px4-userland)。受信機 2 は地上波
+/// denpa-agent --tune px4:00001205000960:2 T27               # px4-userland の機材。Q3U4 なら受信機 2 は地上波
 /// </code>
 ///
 /// <para>

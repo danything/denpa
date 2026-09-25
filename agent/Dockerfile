@@ -23,7 +23,7 @@ FROM docker.io/library/debian:trixie-slim
 # **`recisdb` は入れません。** 選局は自分でやり (ioctl)、B25 も自分で解きます。
 #
 # libaribb25       … B25 の復号。`recisdb` が中で使っていたものと同じ実装
-# pcscd/pcsc-tools … B-CASカードを読む。denpa 側からは触れない。PX-Q3U4 の内蔵
+# pcscd/pcsc-tools … B-CASカードを読む。denpa 側からは触れない。px4-userland の機材の内蔵
 #                    リーダーもここに IFD ハンドラで登録する (下の px4-userland)
 # renovate: datasource=github-releases depName=tsukumijima/libaribb25 extractVersion=^v(?<version>.*)$
 ARG ARIBB25_VERSION=0.2.10
@@ -36,7 +36,7 @@ RUN apt-get update && \
     apt-get clean && rm -rf /var/lib/apt/lists/* /tmp/*
 
 # ---------------------------------------------------------------------------
-# PLEX PX-Q3U4 は px4-userland で掴む (Q3u4.cs)。**カーネルドライバを入れてもらわない。**
+# PLEX PX-Q3U4 などは px4-userland で掴む (Px4.cs)。**カーネルドライバを入れてもらわない。**
 #
 # px4d / px4-ts / px4ctl は musl の完全静的 ELF。IFD ハンドラ (ifd/*.so) だけが
 # glibc に依るので、glibc 版のアーカイブを取る (trixie は glibc 2.41 ≥ 2.31)。

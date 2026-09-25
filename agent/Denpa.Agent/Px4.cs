@@ -4,7 +4,8 @@ using System.Runtime.InteropServices;
 namespace Denpa.Agent;
 
 /// <summary>
-/// PLEX PX-Q3U4 を <a href="https://github.com/Khronos31/px4-userland">px4-userland</a> で掴む。
+/// <a href="https://github.com/Khronos31/px4-userland">px4-userland</a> に任せる機材
+/// (PLEX PX-Q3U4 / PX-MLT5PE / e-Better DTV02A-5TS-P …)。
 ///
 /// <para>
 /// **カーネルドライバを入れてもらわない。** px4_drv (DKMS) をホストに入れて
@@ -16,38 +17,52 @@ namespace Denpa.Agent;
 /// </para>
 ///
 /// <para>
-/// **口は3つ。** <c>px4d</c> が筐体 (USB 2機能・受信機8本・カード) を所有する
+/// **口は3つ。** <c>px4d</c> が筐体 (USB 機能・受信機・カード) を所有する
 /// デーモンで、筐体1台につき1つ起こす。<c>px4-ts</c> は受信機を1本借りて
 /// 選局し、TS を標準出力に流す。<c>px4ctl</c> は状態を聞く。3つとも同じ
-/// ランタイムディレクトリと 14 桁の base serial で Unix ドメインソケットを
-/// 見つける。
+/// ランタイムディレクトリと筐体の番号で Unix ドメインソケットを見つける。
 /// </para>
 ///
 /// <para>
-/// **1回1チャンネル**なのは px4-ts の作り。掴んだまま選局し直す口は無いので、
-/// チャンネルを変えるときは px4-ts を起こし直す。ただし受信機を持っているのは
-/// px4d のほうで、そちらは開きっぱなしなので、<c>recisdb</c> の頃のように
-/// デバイスが宙に浮くことはない (docs/agent.md)。
+/// **機種ごとの違いは、できるだけ px4-userland に聞く。** 受信機が何本あって
+/// それぞれ何を受けられるかは、px4d を起こしてから <c>px4ctl list</c> で聞く
+/// (<see cref="Px4Receiver"/>)。こちらで持つのは <see cref="Models"/> の
+/// **USB での見分け方だけ** — px4-userland には「刺さっている筐体を挙げる」口が
+/// 無く、px4d を誰のために起こすかはこちらで決めるしかないため。対応機種が
+/// 増えたら、ここに1行足せば済む。
 /// </para>
 ///
 /// <para>
-/// 設定の <c>device</c> には <c>q3u4:&lt;base serial&gt;:&lt;受信機番号&gt;</c> と書く。
-/// 受信機は 0,1,4,5 が衛星、2,3,6,7 が地上波 (筐体の中の IT9305E 2つに
-/// 4本ずつ)。刺さっていれば <see cref="Detect"/> が sysfs から見つけて
-/// 8本ぶん組み立てるので、普通は書かなくてよい。
+/// 設定の <c>device</c> には <c>px4:&lt;筐体の番号&gt;:&lt;受信機番号&gt;</c> と書く。
+/// 刺さっていれば <see cref="Detect"/> が見つけて組み立てるので、普通は書かなくてよい。
 /// </para>
 /// </summary>
 public static class Px4Userland
 {
     /// <summary>設定の <c>device</c> の頭。これで始まっていれば px4-userland で掴む</summary>
-    public const string Scheme = "q3u4:";
+    public const string Scheme = "px4:";
 
-    public const int Receivers = 8;
+    /// <summary>
+    /// px4-userland が対応している機種の USB での見分け方 (px4-userland SPEC 4.1)。
+    ///
+    /// <para>
+    /// <c>UsbFunctions</c> は筐体1台が出す USB デバイスの数。2つ以上出す機種は
+    /// シリアルの**末尾1桁**が機能の番号で、残りが筐体の番号になる
+    /// (Q3U4 の <c>000012050009601</c> / <c>…602</c> → <c>00001205000960</c>)。
+    /// 1つの機種はシリアル全体が筐体の番号。
+    /// </para>
+    /// </summary>
+    public sealed record Model(string Vendor, string Product, string Name, int UsbFunctions);
 
-    /// <summary>PX-Q3U4 の USB ID。px4-userland が対応するのはこの1機種だけ</summary>
-    public const string VendorId = "0511";
+    public static readonly Model[] Models =
+    [
+        new("0511", "084a", "PX-Q3U4", 2),
+        new("0511", "024e", "PX-MLT5PE", 1),
+        new("0511", "924e", "DTV02A-5TS-P", 1),
+    ];
 
-    public const string ProductId = "084a";
+    /// <summary>刺さっている筐体1台。<c>Id</c> は px4d に <c>--device</c> で渡す番号</summary>
+    public sealed record Enclosure(string Id, string Model);
 
     /// <summary>配布アーカイブを展開した場所 (Dockerfile)</summary>
     public static string Dir =>
@@ -73,77 +88,69 @@ public static class Px4Userland
     public static string ReaderConfDir =>
         Environment.GetEnvironmentVariable("PCSC_READER_CONF_DIR") ?? "/etc/reader.conf.d";
 
-    public static string Device(string serial, int receiver) => $"{Scheme}{serial}:{receiver}";
+    public static string Device(string id, int receiver) => $"{Scheme}{id}:{receiver}";
 
     public static bool Is(string? device) => device?.StartsWith(Scheme, StringComparison.Ordinal) == true;
 
-    /// <summary><c>q3u4:00001205000960:2</c> を割る。形が違えば null</summary>
-    public static (string Serial, int Receiver)? Parse(string device)
+    /// <summary>
+    /// <c>px4:00001205000960:2</c> を割る。形が違えば null。
+    ///
+    /// <para>
+    /// 番号の桁数や受信機の上限は見ない。**それを知っているのは px4-userland** で、
+    /// 合わなければ px4d / px4-ts が理由を付けて断る。
+    /// </para>
+    /// </summary>
+    public static (string Id, int Receiver)? Parse(string device)
     {
         if (!Is(device)) return null;
         var parts = device[Scheme.Length..].Split(':');
-        if (parts.Length != 2 || BaseSerial(parts[0]) is not { } serial || serial != parts[0]) return null;
-        if (!int.TryParse(parts[1], out var receiver) || receiver is < 0 or >= Receivers) return null;
-        return (serial, receiver);
+        if (parts.Length != 2 || !Digits(parts[0])) return null;
+        if (!int.TryParse(parts[1], out var receiver) || receiver < 0) return null;
+        return (parts[0], receiver);
     }
 
-    /// <summary>
-    /// 受信機番号から種別。**筐体の中の並びで決まっている** (px4-userland SPEC 4.2)。
-    /// IT9305E 1つにつき ISDB-S が2本、ISDB-T が2本
-    /// </summary>
-    public static bool Satellite(int receiver) => receiver % 4 < 2;
+    private static bool Digits(string value) => value.Length > 0 && value.All(char.IsAsciiDigit);
 
-    public static string[] TypesFor(int receiver) => Satellite(receiver) ? ["BS", "CS"] : ["GR"];
+    /// <summary>画面に出す名前。筐体は番号の末尾4桁で見分ける</summary>
+    public static string Name(string model, string id, int receiver) => $"{model}-{id[^4..]} #{receiver}";
 
     /// <summary>
-    /// USB のシリアルから 14 桁の base serial を取り出す。
-    ///
-    /// <para>
-    /// 1台の Q3U4 は USB デバイスを2つ出していて、シリアルは
-    /// <c>000012050009601</c> / <c>000012050009602</c> のように**末尾1桁だけ違う**。
-    /// 共通の 14 桁で筐体をまとめる (px4-userland SPEC 4.1)。
-    /// </para>
-    /// </summary>
-    public static string? BaseSerial(string serial)
-    {
-        var trimmed = serial.Trim();
-        if (trimmed.Length < 14) return null;
-        var head = trimmed[..14];
-        return head.All(char.IsAsciiDigit) ? head : null;
-    }
-
-    /// <summary>画面に出す名前。筐体はシリアルの末尾4桁で見分ける</summary>
-    public static string Name(string serial, int receiver) => $"Q3U4-{serial[^4..]} #{receiver}";
-
-    /// <summary>
-    /// 刺さっている Q3U4 の base serial。**両方の USB 機能が見えているものだけ。**
+    /// 刺さっている筐体。**USB 機能が全部見えているものだけ。**
     ///
     /// <para>
     /// sysfs を読む。libusb を呼ばなくても <c>/sys/bus/usb/devices/*/{idVendor,idProduct,serial}</c>
-    /// で足りる (コンテナからも読める)。片方しか見えていない筐体は px4d が
+    /// で足りる (コンテナからも読める)。機能が欠けている筐体は px4d が
     /// ready にならないので、ここで落として理由を残す。
     /// </para>
     /// </summary>
-    public static List<string> Serials(string sysfs = "/sys/bus/usb/devices")
+    public static List<Enclosure> Enclosures(string sysfs = "/sys/bus/usb/devices")
     {
-        var seen = new Dictionary<string, int>(StringComparer.Ordinal);
+        var seen = new Dictionary<string, (Model Model, int Count)>(StringComparer.Ordinal);
         if (!Directory.Exists(sysfs)) return [];
         foreach (var entry in Directory.EnumerateDirectories(sysfs))
         {
-            if (Attribute(entry, "idVendor") != VendorId || Attribute(entry, "idProduct") != ProductId) continue;
-            if (Attribute(entry, "serial") is not { } serial || BaseSerial(serial) is not { } bases) continue;
-            seen[bases] = seen.GetValueOrDefault(bases) + 1;
-        }
-
-        var found = new List<string>();
-        foreach (var (serial, count) in seen.OrderBy(pair => pair.Key, StringComparer.Ordinal))
-        {
-            if (count == 2)
+            var vendor = Attribute(entry, "idVendor");
+            var product = Attribute(entry, "idProduct");
+            if (Models.FirstOrDefault(m => m.Vendor == vendor && m.Product == product) is not { } model) continue;
+            if (Attribute(entry, "serial") is not { } serial) continue;
+            var id = model.UsbFunctions > 1 ? serial[..^1] : serial;
+            if (!Digits(id))
             {
-                found.Add(serial);
+                Log.Write($"{model.Name} のシリアル {serial} が読めません (数字だけのはず)");
                 continue;
             }
-            Log.Write($"PX-Q3U4 {serial} は USB が {count} 機能しか見えていません (2つ揃わないと使えません)");
+            seen[id] = (model, seen.GetValueOrDefault(id).Count + 1);
+        }
+
+        var found = new List<Enclosure>();
+        foreach (var (id, (model, count)) in seen.OrderBy(pair => pair.Key, StringComparer.Ordinal))
+        {
+            if (count == model.UsbFunctions)
+            {
+                found.Add(new Enclosure(id, model.Name));
+                continue;
+            }
+            Log.Write($"{model.Name} {id} は USB が {count} 機能しか見えていません ({model.UsbFunctions} つ揃わないと使えません)");
         }
         return found;
     }
@@ -161,26 +168,102 @@ public static class Px4Userland
         }
     }
 
-    /// <summary>刺さっている筐体を、設定に書いたのと同じ形で。1台につき8本</summary>
-    public static List<TunerSpec> Detect(string sysfs = "/sys/bus/usb/devices")
+    /// <summary>
+    /// 刺さっている筐体の受信機を、設定に書いたのと同じ形で。
+    ///
+    /// <para>
+    /// **px4d が ready になって受信機を聞けた筐体だけ。** 起動直後はまだ空で、
+    /// 聞けたところでエージェントが組み直す (Program.cs の <c>PreparePx4</c>)。
+    /// </para>
+    /// </summary>
+    public static List<TunerSpec> Detect(string sysfs = "/sys/bus/usb/devices") =>
+        Specs(Enclosures(sysfs), id => Px4Daemon.For(id).Receivers);
+
+    /// <summary>筐体と受信機の一覧から、設定の形に組み立てる</summary>
+    public static List<TunerSpec> Specs(
+        IEnumerable<Enclosure> enclosures, Func<string, IReadOnlyList<Px4Receiver>?> receivers)
     {
         var found = new List<TunerSpec>();
-        foreach (var serial in Serials(sysfs))
+        foreach (var enclosure in enclosures)
         {
-            for (var receiver = 0; receiver < Receivers; receiver++)
+            foreach (var receiver in receivers(enclosure.Id) ?? [])
             {
-                found.Add(new TunerSpec(Name(serial, receiver), TypesFor(receiver), false, Device(serial, receiver)));
+                if (receiver.Types.Length == 0) continue;
+                found.Add(new TunerSpec(
+                    Name(enclosure.Model, enclosure.Id, receiver.Index),
+                    receiver.Types,
+                    false,
+                    Device(enclosure.Id, receiver.Index)));
             }
         }
         return found;
     }
 
     /// <summary>設定に出てくる筐体。px4d を起こす相手</summary>
-    public static IEnumerable<string> SerialsIn(IEnumerable<TunerSpec> specs) => specs
+    public static IEnumerable<string> IdsIn(IEnumerable<TunerSpec> specs) => specs
         .Where(spec => !spec.Disabled && spec.Device is not null)
-        .Select(spec => Parse(spec.Device!)?.Serial)
+        .Select(spec => Parse(spec.Device!)?.Id)
         .OfType<string>()
         .Distinct(StringComparer.Ordinal);
+}
+
+/// <summary>
+/// 受信機1本。**<c>px4ctl list</c> で筐体に聞いたもの。**
+///
+/// <para>
+/// Q3U4 は受信機ごとに地上波か衛星かが決まっていて、MLT5 系はどれも両方受けられる
+/// (選局のたびに切り替える)。その違いはここに入ってくるだけで、こちらは機種を見ない。
+/// </para>
+/// </summary>
+public sealed record Px4Receiver(int Index, bool Terrestrial, bool Satellite)
+{
+    public string[] Types => [.. Terrestrial ? ["GR"] : Array.Empty<string>(), .. Satellite ? ["BS", "CS"] : Array.Empty<string>()];
+
+    public bool Accepts(ChannelTable.Tuning tuning) => tuning.Satellite ? Satellite : Terrestrial;
+
+    /// <summary>
+    /// <c>px4ctl list</c> の出力を読む。
+    ///
+    /// <para>
+    /// <c>receiver=0 device=1 local=0 system=ISDB-S</c> の行が受信機の数だけ並ぶ。
+    /// <c>system</c> は <c>ISDB-T</c> / <c>ISDB-S</c> / <c>ISDB-T/S</c> (どちらも)。
+    /// **知らない値は飛ばして続ける** — px4-userland が新しくなって方式が増えても、
+    /// 分かる受信機は使えるように。飛ばしたことは <paramref name="warn"/> で残す。
+    /// </para>
+    /// </summary>
+    public static List<Px4Receiver> ParseList(string output, Action<string> warn)
+    {
+        var found = new List<Px4Receiver>();
+        foreach (var line in output.Split('\n'))
+        {
+            var fields = line.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries)
+                .Select(field => field.Split('=', 2))
+                .Where(pair => pair.Length == 2)
+                .ToDictionary(pair => pair[0], pair => pair[1], StringComparer.Ordinal);
+            if (!fields.TryGetValue("receiver", out var index) || !fields.TryGetValue("system", out var system)) continue;
+            if (!int.TryParse(index, out var number))
+            {
+                warn($"px4ctl list の受信機番号が読めません: {line.Trim()}");
+                continue;
+            }
+            switch (system)
+            {
+                case "ISDB-T":
+                    found.Add(new Px4Receiver(number, true, false));
+                    break;
+                case "ISDB-S":
+                    found.Add(new Px4Receiver(number, false, true));
+                    break;
+                case "ISDB-T/S":
+                    found.Add(new Px4Receiver(number, true, true));
+                    break;
+                default:
+                    warn($"受信機 {number} の方式 {system} を知りません (px4-userland が新しい?)。この受信機は使いません");
+                    break;
+            }
+        }
+        return found;
+    }
 }
 
 /// <summary>
@@ -188,8 +271,13 @@ public static class Px4Userland
 ///
 /// <para>
 /// 起こすのは最初に要ったとき (起動時の <see cref="Prepare"/> か、初めての選局)。
-/// ファームウェアを2つの IT9305E に流し込んでから ready になるので、
-/// 数秒かかる。落ちていたら次に要ったときに起こし直す。
+/// ファームウェアを流し込んでから ready になるので、数秒かかる。
+/// 落ちていたら次に要ったときに起こし直す。
+/// </para>
+///
+/// <para>
+/// **ready になったら受信機を聞く** (<c>px4ctl list</c>、<see cref="Receivers"/>)。
+/// 何本あって何を受けられるかは筐体の答えを使う。
 /// </para>
 ///
 /// <para>
@@ -206,21 +294,21 @@ public sealed class Px4Daemon
     /// <summary>ready を待つ上限。ファームウェアの流し込みは数秒で済む</summary>
     private static readonly TimeSpan ReadyTimeout = TimeSpan.FromSeconds(30);
 
-    private readonly string _serial;
+    private readonly string _id;
     private readonly Lock _gate = new();
     private Process? _process;
     private string _stderr = "";
 
-    private Px4Daemon(string serial) => _serial = serial;
+    private Px4Daemon(string id) => _id = id;
 
-    public static Px4Daemon For(string serial)
+    public static Px4Daemon For(string id)
     {
         lock (Registry)
         {
-            if (!All.TryGetValue(serial, out var daemon))
+            if (!All.TryGetValue(id, out var daemon))
             {
-                daemon = new Px4Daemon(serial);
-                All[serial] = daemon;
+                daemon = new Px4Daemon(id);
+                All[id] = daemon;
             }
             return daemon;
         }
@@ -229,7 +317,13 @@ public sealed class Px4Daemon
     public bool Running => _process is { HasExited: false };
 
     /// <summary>
-    /// 設定にある筐体ぶん、px4d を起こしてリーダーを繋ぐ。**起動時と、設定を書き換えたとき。**
+    /// 筐体に聞いた受信機。**ready になるまで null。** 聞けなかったときも null のままで、
+    /// そのときは選局を px4-ts に任せる (合わなければあちらが断る)
+    /// </summary>
+    public IReadOnlyList<Px4Receiver>? Receivers { get; private set; }
+
+    /// <summary>
+    /// 挙げた筐体ぶん、px4d を起こしてリーダーを繋ぐ。**起動時と、設定を書き換えたとき。**
     ///
     /// <para>
     /// **起こせなくても止まらない。** 筐体が抜けている・ファームウェアが無い、は
@@ -237,17 +331,17 @@ public sealed class Px4Daemon
     /// 理由は記録に残し、選局のときにもう一度試す。
     /// </para>
     /// </summary>
-    public static void Prepare(IEnumerable<TunerSpec> specs)
+    public static void Prepare(IEnumerable<string> ids)
     {
-        foreach (var serial in Px4Userland.SerialsIn(specs))
+        foreach (var id in ids)
         {
             try
             {
-                For(serial).Ensure();
+                For(id).Ensure();
             }
             catch (Exception error)
             {
-                Log.Write($"[px4d {serial}] {error.Message}");
+                Log.Write($"[px4d {id}] {error.Message}");
             }
         }
     }
@@ -284,13 +378,13 @@ public sealed class Px4Daemon
             };
             foreach (var arg in new[]
             {
-                "--device", _serial,
+                "--device", _id,
                 "--firmware", Px4Userland.Firmware,
                 "--runtime-dir", Px4Userland.RuntimeDir,
                 /*
                  * 15V を出してよいかの門は2段。ここは「頼まれたら出す」で開けておき、
                  * 本当に頼むかどうかは設定の `lnb` で決める (px4-ts に `--lnb-voltage 15`
-                 * を渡すのは `15v` と書いてある本だけ。Q3u4Tuner.Arguments)
+                 * を渡すのは `15v` と書いてある本だけ。Px4Tuner.Arguments)
                  */
                 "--allow-lnb-power",
             })
@@ -308,7 +402,7 @@ public sealed class Px4Daemon
                 while (await reader.ReadLineAsync() is { } line)
                 {
                     _stderr = line;
-                    Log.Write($"[px4d {_serial}] {line}");
+                    Log.Write($"[px4d {_id}] {line}");
                 }
             });
             _ = Task.Run(() => process.StandardOutput.ReadToEndAsync());
@@ -322,7 +416,8 @@ public sealed class Px4Daemon
                 }
                 if (Status(TimeSpan.FromSeconds(5)).Code == 0)
                 {
-                    Log.Write($"[px4d {_serial}] ready");
+                    Log.Write($"[px4d {_id}] ready");
+                    Receivers = ListReceivers();
                     RegisterReader();
                     return;
                 }
@@ -335,10 +430,27 @@ public sealed class Px4Daemon
     }
 
     /// <summary><c>px4ctl status</c>。exit 0 なら ready</summary>
-    public (int Code, string Output) Status(TimeSpan timeout) => Shell.Run(
+    public (int Code, string Output) Status(TimeSpan timeout) => Control("status", timeout);
+
+    private (int Code, string Output) Control(string command, TimeSpan timeout) => Shell.Run(
         Path.Combine(Px4Userland.Dir, "px4ctl"),
-        ["--device", _serial, "--runtime-dir", Px4Userland.RuntimeDir, "status"],
+        ["--device", _id, "--runtime-dir", Px4Userland.RuntimeDir, command],
         timeout).GetAwaiter().GetResult();
+
+    /// <summary><c>px4ctl list</c> で受信機を聞く。聞けなければ null (理由は記録に)</summary>
+    private List<Px4Receiver>? ListReceivers()
+    {
+        var (code, output) = Control("list", TimeSpan.FromSeconds(5));
+        if (code != 0)
+        {
+            Log.Write($"[px4d {_id}] 受信機を聞けません (px4ctl list exit {code}: {output})");
+            return null;
+        }
+        var receivers = Px4Receiver.ParseList(output, message => Log.Write($"[px4d {_id}] {message}"));
+        Log.Write($"[px4d {_id}] 受信機 {receivers.Count} 本: "
+            + string.Join(", ", receivers.Select(r => $"#{r.Index} {string.Join("/", r.Types)}")));
+        return receivers;
+    }
 
     /// <summary>
     /// 内蔵カードリーダーを pcscd に見せる。
@@ -355,19 +467,19 @@ public sealed class Px4Daemon
         var ifd = Path.Combine(Px4Userland.Dir, "ifd", "px4-userland-ifd.so");
         if (!File.Exists(ifd))
         {
-            Log.Write($"[px4d {_serial}] IFD ハンドラが無いので内蔵カードリーダーは使えません: {ifd}");
+            Log.Write($"[px4d {_id}] IFD ハンドラが無いので内蔵カードリーダーは使えません: {ifd}");
             return;
         }
 
         try
         {
             Directory.CreateDirectory(Px4Userland.ReaderConfDir);
-            var conf = Path.Combine(Px4Userland.ReaderConfDir, $"px4-userland-{_serial}.conf");
-            File.WriteAllText(conf, ReaderConf(_serial, Px4Userland.RuntimeDir, ifd));
+            var conf = Path.Combine(Px4Userland.ReaderConfDir, $"px4-userland-{_id}.conf");
+            File.WriteAllText(conf, ReaderConf(_id, Px4Userland.RuntimeDir, ifd));
         }
         catch (Exception error)
         {
-            Log.Write($"[px4d {_serial}] reader.conf を書けません: {error.Message}");
+            Log.Write($"[px4d {_id}] reader.conf を書けません: {error.Message}");
             return;
         }
 
@@ -375,16 +487,16 @@ public sealed class Px4Daemon
         if (pcscd.Code != 0) return;
         var reload = Shell.Run("pcscd", ["--hotplug"], TimeSpan.FromSeconds(10)).GetAwaiter().GetResult();
         Log.Write(reload.Code == 0
-            ? $"[px4d {_serial}] pcscd に内蔵カードリーダーを読み直させました"
-            : $"[px4d {_serial}] pcscd に読み直しを頼めません: {reload.Output}");
+            ? $"[px4d {_id}] pcscd に内蔵カードリーダーを読み直させました"
+            : $"[px4d {_id}] pcscd に読み直しを頼めません: {reload.Output}");
     }
 
     /// <summary>pcscd の reader.conf。1筐体1枚</summary>
-    public static string ReaderConf(string serial, string runtimeDir, string ifd) =>
+    public static string ReaderConf(string id, string runtimeDir, string ifd) =>
         $"""
-        # denpa-agent が書いたもの。PX-Q3U4 {serial} の内蔵カードリーダー (px4-userland)
-        FRIENDLYNAME "PLEX PX-Q3U4 {serial[^4..]} Internal Card Reader"
-        DEVICENAME   px4-userland:runtime={runtimeDir}:device={serial}:access=user
+        # denpa-agent が書いたもの。筐体 {id} の内蔵カードリーダー (px4-userland)
+        FRIENDLYNAME "px4-userland {id[^4..]} Internal Card Reader"
+        DEVICENAME   px4-userland:runtime={runtimeDir}:device={id}:access=user
         LIBPATH      {ifd}
         CHANNELID    0
 
@@ -419,7 +531,7 @@ public sealed class Px4Daemon
 }
 
 /// <summary>
-/// Q3U4 の受信機1本。<c>px4-ts</c> を起こして標準出力を読む。
+/// px4-userland の受信機1本。<c>px4-ts</c> を起こして標準出力を読む。
 ///
 /// <para>
 /// **選局のたびに px4-ts を起こし直す。** 1回1チャンネルの作りで、掴んだまま
@@ -441,7 +553,7 @@ public sealed class Px4Daemon
 /// TunerPool が見る)。
 /// </para>
 /// </summary>
-public sealed class Q3u4Tuner : ITuneDevice
+public sealed class Px4Tuner : ITuneDevice
 {
     /// <summary>同期を待つ上限。DVB 側 (<c>DvbTuner.LockTimeout</c>) と同じ。総当たりの一周がこれで決まる</summary>
     private static readonly TimeSpan TuneTimeout = TimeSpan.FromSeconds(5);
@@ -472,7 +584,7 @@ public sealed class Q3u4Tuner : ITuneDevice
     /// </summary>
     private static readonly TimeSpan ReaderDrain = TimeSpan.FromMilliseconds(300);
 
-    private readonly string _serial;
+    private readonly string _id;
     private readonly int _receiver;
     private readonly string? _lnb;
     private readonly string _name;
@@ -495,12 +607,12 @@ public sealed class Q3u4Tuner : ITuneDevice
         public volatile bool Dropped;
     }
 
-    public Q3u4Tuner(string serial, int receiver, string? lnb)
+    public Px4Tuner(string id, int receiver, string? lnb)
     {
-        _serial = serial;
+        _id = id;
         _receiver = receiver;
         _lnb = lnb;
-        _name = Px4Userland.Name(serial, receiver);
+        _name = $"px4-{id[^4..]} #{receiver}";
     }
 
     public Stream Output => _stream ?? throw new InvalidOperationException($"{_name} はまだ選局していません");
@@ -533,11 +645,11 @@ public sealed class Q3u4Tuner : ITuneDevice
     /// </para>
     /// </summary>
     public static List<string> Arguments(
-        string serial, int receiver, ChannelTable.Tuning tuning, uint streamId, string? lnb)
+        string id, int receiver, ChannelTable.Tuning tuning, uint streamId, string? lnb)
     {
         var args = new List<string>
         {
-            "--device", serial,
+            "--device", id,
             "--receiver", receiver.ToString(),
             "--system", tuning.Satellite ? "isdb-s" : "isdb-t",
             "--frequency-khz", (tuning.Satellite ? tuning.Frequency : tuning.Frequency / 1000).ToString(),
@@ -561,16 +673,12 @@ public sealed class Q3u4Tuner : ITuneDevice
 
     public void Tune(ChannelTable.Tuning tuning, uint streamId)
     {
-        if (tuning.Satellite != Px4Userland.Satellite(_receiver))
-        {
-            throw new IOException(
-                $"受信機 {_receiver} は {(Px4Userland.Satellite(_receiver) ? "衛星" : "地上波")} 用です ({tuning.Type} は受けられません)");
-        }
-
         lock (_gate)
         {
+            var daemon = Px4Daemon.For(_id);
+            daemon.Ensure();
+            Check(daemon.Receivers, _receiver, tuning);
             Drop();
-            Px4Daemon.For(_serial).Ensure();
 
             var start = new ProcessStartInfo(Path.Combine(Px4Userland.Dir, "px4-ts"))
             {
@@ -578,7 +686,7 @@ public sealed class Q3u4Tuner : ITuneDevice
                 RedirectStandardError = true,
                 UseShellExecute = false,
             };
-            foreach (var arg in Arguments(_serial, _receiver, tuning, streamId, _lnb)) start.ArgumentList.Add(arg);
+            foreach (var arg in Arguments(_id, _receiver, tuning, streamId, _lnb)) start.ArgumentList.Add(arg);
             start.ArgumentList.Add("--runtime-dir");
             start.ArgumentList.Add(Px4Userland.RuntimeDir);
 
@@ -640,6 +748,23 @@ public sealed class Q3u4Tuner : ITuneDevice
                 // 読み手が居なくなって px4d に切られたのも、USB が抜けたのもここに来る
                 Log.Write($"[{_name}] {Reason(process.ExitCode, child.Stderr)}");
             }, TaskScheduler.Default);
+        }
+    }
+
+    /// <summary>
+    /// 筐体に聞いた受信機と、頼まれた選局が合っているか。**合わなければ px4-ts を起こす前に断る。**
+    /// 受信機を聞けていなければ (<paramref name="receivers"/> が null) 見ずに通す
+    /// </summary>
+    public static void Check(IReadOnlyList<Px4Receiver>? receivers, int index, ChannelTable.Tuning tuning)
+    {
+        if (receivers is null) return;
+        var receiver = receivers.FirstOrDefault(r => r.Index == index)
+            ?? throw new IOException(
+                $"受信機 {index} はありません (この筐体にあるのは {string.Join(", ", receivers.Select(r => r.Index))})");
+        if (!receiver.Accepts(tuning))
+        {
+            throw new IOException(
+                $"受信機 {index} は {string.Join("/", receiver.Types)} 用です ({tuning.Type} は受けられません)");
         }
     }
 

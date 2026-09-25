@@ -20,7 +20,7 @@ services:
         restart: unless-stopped
         # denpa と同じ (下の説明)。TS を流しているのはこちらなので、先に消えると録画ごと切れる
         stop_grace_period: 6h5m
-        # チューナーとカードリーダーに触るため。PX-Q3U4 はホストにドライバを入れず、
+        # チューナーとカードリーダーに触るため。PX-Q3U4 などはホストにドライバを入れず、
         # /dev/bus (USB) が見えればイメージ同梱の px4-userland が掴む (docs/agent.md)
         privileged: true
         devices:
