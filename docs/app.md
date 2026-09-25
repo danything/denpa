@@ -264,7 +264,7 @@ SQLite が拒むので、事実と状態が食い違いようがありません�
 | `agent/Denpa.Agent/AribB25.cs` / `CardShare.cs` | B25 の解除と、鍵を他の拠点へ配る口 |
 | `agent/Denpa.Agent/DeviceProbe.cs` | **チューナーの自動検出** (ioctl で受けられる方式を聞く) |
 | `agent/Denpa.Agent/Config.cs` | `tuners.json` と `channels.json` の読み書き |
-| `agent/Denpa.Agent/Interop.cs` | 外の選局コマンド (`command`) をプロセスグループごと終わらせる |
+| `agent/Denpa.Agent/Interop.cs` | 偽の選局 (`FAKE_TUNE`) をプロセスグループごと終わらせる |
 
 **チューナーは書かなくてよい。** 定義が無ければ `/dev/dvb/*` を開いて
 `DTV_ENUM_DELSYS` で方式を聞き、地上波か衛星かまで判別する。書いてあれば

@@ -40,7 +40,8 @@ var (tuners, detected) = config.ResolveTuners();
  */
 var tune = new TuneOptions(
     Environment.GetEnvironmentVariable("CARD_URL"),
-    name => config.StreamIds()(name));
+    name => config.StreamIds()(name),
+    Environment.GetEnvironmentVariable("FAKE_TUNE") is { Length: > 0 } fake ? fake : null);
 
 var pool = new TunerPool(tuners, () => events.Emit("tuners"), tune) { Detected = detected };
 
@@ -249,8 +250,7 @@ app.MapPut("/denpa/tuners", async (HttpContext http) =>
             await Respond.Write(http, new JsonObject { ["error"] = "name の無いチューナーがあります" }, 400);
             return;
         }
-        // 画面から渡ってきたコマンドは捨てる。ファイルに直に書いたものだけ効く
-        next.Add(spec with { Command = null });
+        next.Add(spec);
     }
 
     config.SaveTuners(next);

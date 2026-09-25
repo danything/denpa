@@ -38,17 +38,17 @@ const ROOT = resolve(import.meta.dir, '..');
  * 「空きが無い」も「弱い相手を蹴る」も作れない。総当たりが少し遅くなるだけで
  * 済むほうを取る。
  *
- * `command` は**ファイルに直に書いたときだけ効く**逃げ道。ここではそれを
- * 使って、選局コマンドを偽物に差し替えている。
+ * 選局は `FAKE_TUNE` で偽物に差し替える (エージェントが `<種別> <チャンネル>` を足して起こす)。
+ * 設定ファイルにも画面にもコマンドを書く口は無く、環境変数からだけ入る。
  */
-const TUNE = `bun ${ROOT}/tests/fake/tune.ts {{channel_type}} {{channel}}`;
+const TUNE = `bun ${ROOT}/tests/fake/tune.ts`;
 const TUNERS = JSON.stringify(
     {
         tuners: [
-            { name: 'gr0', types: ['GR'], command: TUNE },
-            { name: 'bs0', types: ['BS', 'CS'], command: TUNE },
-            { name: 'bs1', types: ['BS', 'CS'], command: TUNE },
-            { name: 'off0', types: ['GR'], disabled: true, command: 'false' },
+            { name: 'gr0', types: ['GR'] },
+            { name: 'bs0', types: ['BS', 'CS'] },
+            { name: 'bs1', types: ['BS', 'CS'] },
+            { name: 'off0', types: ['GR'], disabled: true },
         ],
     },
     null,
@@ -82,7 +82,6 @@ interface TunerStatus {
     disabled: boolean;
     device: string | null;
     lnb: string | null;
-    command: string | null;
     channel: { type: string; channel: string } | null;
     users: { use: string; priority: number }[];
 }
@@ -162,6 +161,7 @@ beforeAll(async () => {
             TUNERS_FILE: paths().tuners,
             CHANNELS_FILE: paths().channels,
             RECORDED_DIR: paths().recorded,
+            FAKE_TUNE: TUNE,
             // 復号は別プロセス。本物と同じく終了コードだけを見る
             // 番組を作る本数。総当たりの1チャンネルあたりを軽くする
             FAKE_SLOTS: '4',
@@ -468,8 +468,8 @@ test('知らない口は 404', async () => {
 });
 
 /*
- * **いちばん最後に置く。** 定義を書き換えると元の顔ぶれには戻せない
- * (選局コマンドは画面から渡せないので、偽の選局に差し替え直せない)。
+ * **後ろのほうに置く。** 定義を書き換えると、前のテストが当てにしている
+ * 顔ぶれ (gr0 / bs0 / bs1) が消える。
  */
 describe('機材の定義', () => {
     /**
@@ -499,7 +499,7 @@ describe('機材の定義', () => {
         expect(status[0].lnb).toBe('15v');
         expect(status[0].disabled).toBe(true);
         // 画面から渡ってきたコマンドは捨てる
-        expect(status[0].command).toBeNull();
+        expect(status[0]).not.toHaveProperty('command');
         expect(readFileSync(paths().tuners, 'utf8')).not.toContain('rm -rf');
     });
 
@@ -536,6 +536,7 @@ describe('止まれと言われたとき', () => {
                 TUNERS_FILE: join(room, 'tuners.json'),
                 CHANNELS_FILE: join(room, 'channels.json'),
                 RECORDED_DIR: join(room, 'recorded'),
+                FAKE_TUNE: TUNE,
                 FAKE_SLOTS: '4',
                 // 本番は6時間。テストなので短くするが、待つ道は同じ
                 SHUTDOWN_WAIT: '30000',

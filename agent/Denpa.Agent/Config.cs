@@ -9,13 +9,7 @@ namespace Denpa.Agent;
 /// **選局コマンドそのものは持たない。** 画面から書き換えられるようにした以上、
 /// 自由な文字列を受けると「denpa に入れた人がチューナー側で好きなコマンドを
 /// 走らせられる」ことになる (しかもあちらは privileged)。持つのは
-/// **デバイスと種別**だけにして、コマンドはこちらで組み立てる。
-/// </para>
-///
-/// <para>
-/// <c>Command</c> は逃げ道で、**ファイルに直に書いたときだけ**効く。画面からは
-/// 触らせず、入っていれば読めるように出すだけ。**既定では誰も使わない** —
-/// 選局は自分で掴んでやるようになった (Tuning.cs)。
+/// **デバイスと種別**だけ。選局は自分で掴む (Tuning.cs)。
 /// </para>
 /// </summary>
 public sealed record TunerSpec(
@@ -23,20 +17,8 @@ public sealed record TunerSpec(
     string[] Types,
     bool Disabled,
     string? Device = null,
-    string? Lnb = null,
-    string? Command = null)
+    string? Lnb = null)
 {
-    /// <summary>
-    /// 選局を外のコマンドに任せるか。**書いてあるときだけ。**
-    ///
-    /// <para>
-    /// 既定は自分で掴む (ioctl で選局して B25 も自分で解く。Tuning.cs)。
-    /// ここに書いてあるときだけ、そのコマンドを起こして標準出力を読む。
-    /// 変わった機材や、試すときの逃げ道。
-    /// </para>
-    /// </summary>
-    public string? Resolve() => string.IsNullOrEmpty(Command) ? null : Command;
-
     public JsonObject ToJson()
     {
         var types = new JsonArray();
@@ -50,7 +32,6 @@ public sealed record TunerSpec(
             ["device"] = Device,
         };
         if (!string.IsNullOrEmpty(Lnb)) node["lnb"] = Lnb;
-        if (!string.IsNullOrEmpty(Command)) node["command"] = Command;
         return node;
     }
 
@@ -74,8 +55,7 @@ public sealed record TunerSpec(
             [.. types],
             item["disabled"]?.GetValue<bool>() ?? false,
             item["device"]?.GetValue<string>(),
-            item["lnb"]?.GetValue<string>(),
-            item["command"]?.GetValue<string>());
+            item["lnb"]?.GetValue<string>());
     }
 }
 

@@ -84,7 +84,6 @@ interface FakeTuner {
     disabled: boolean;
     device: string | null;
     lnb: string | null;
-    command: string | null;
 }
 
 let TUNERS: FakeTuner[] = [0, 1, 2, 3].map((index) => ({
@@ -94,7 +93,6 @@ let TUNERS: FakeTuner[] = [0, 1, 2, 3].map((index) => ({
     disabled: false,
     device: `/dev/dvb/adapter${index}/frontend0`,
     lnb: null,
-    command: null,
 }));
 
 interface Lease {
@@ -313,7 +311,6 @@ const options: Bun.ServeOptions = {
                     disabled: tuner.disabled === true,
                     device: tuner.device ?? null,
                     lnb: tuner.lnb ?? null,
-                    command: null,
                 }));
                 leases.clear();
                 emit('tuners');

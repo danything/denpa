@@ -346,15 +346,6 @@
                                             />
                                         </td>
                                     </tr>
-                                    {#if tuner?.command}
-                                        <tr>
-                                            <td colspan="5" class="tiny muted">
-                                                設定ファイルに直に書いた選局コマンドが効いています
-                                                (画面からは変えられません):
-                                                <code class="mono">{tuner.command}</code>
-                                            </td>
-                                        </tr>
-                                    {/if}
                                 {/each}
                             </tbody>
                         </table>

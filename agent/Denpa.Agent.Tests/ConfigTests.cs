@@ -22,24 +22,6 @@ public class TunerSpecTests
     }
 
     [Test]
-    public async Task 既定では外のコマンドを起こさない()
-    {
-        // 選局は自分でやる (ioctl)。`recisdb` はもう要らない
-        var spec = new TunerSpec("adapter0", ["GR"], false, "/dev/dvb/adapter0/frontend0");
-
-        await Assert.That(spec.Resolve()).IsNull();
-    }
-
-    [Test]
-    public async Task 直に書いたコマンドが勝つ()
-    {
-        // 逃げ道。**画面からは触らせない** (ファイルに直に書いたときだけ効く)
-        var spec = new TunerSpec("x", ["GR"], false, "/dev/null", null, "myTuner --ch {{channel}}");
-
-        await Assert.That(spec.Resolve()).IsEqualTo("myTuner --ch {{channel}}");
-    }
-
-    [Test]
     public async Task 書いて読み直すと同じものになる()
     {
         var config = Fresh();
@@ -154,27 +136,6 @@ public class ChannelStoreTests
     public async Task まだ1度も預かっていなければ空()
     {
         await Assert.That(Fresh().LoadChannels()).IsEmpty();
-    }
-}
-
-public class RenderTests
-{
-    [Test]
-    public async Task 選局コマンドのテンプレートを埋める()
-    {
-        await Assert.That(TunerPool.Render("recisdb tune --device /dev/dvb/adapter0/frontend0 -c {{{channel}}} -", "T27", "GR")).IsEqualTo("recisdb tune --device /dev/dvb/adapter0/frontend0 -c T27 -");
-    }
-
-    [Test]
-    public async Task 種別と長さも埋める()
-    {
-        await Assert.That(TunerPool.Render("x {{channel_type}} {{{duration}}}", "T27", "GR")).IsEqualTo("x GR -");
-    }
-
-    [Test]
-    public async Task 知らない差し込みは空にする()
-    {
-        await Assert.That(TunerPool.Render("a {{{extra_args}}} b", "T27", "GR")).IsEqualTo("a  b");
     }
 }
 

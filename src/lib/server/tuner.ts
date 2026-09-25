@@ -54,11 +54,6 @@ const AGENT_TUNER = object({
     device: nullable(string),
     /** 衛星の給電。要る構成だけ */
     lnb: nullable(string),
-    /**
-     * 選局コマンドの上書き。**設定ファイルに直に書いたときだけ入る。**
-     * 画面からは渡せない (渡せると、あちらで好きなコマンドが走ってしまう)
-     */
-    command: nullable(string),
     /** いま掴んでいるチャンネル。空いていれば null */
     channel: nullable(object({ type: CHANNEL_TYPE, channel: string })),
     users: array(object({ use: string, priority: number })),

@@ -9,7 +9,13 @@ namespace Denpa.Agent;
 /// </summary>
 /// <param name="CardUrl">鍵を配ってくれる相手。手元にカードが無い拠点だけ (CardShare.cs)</param>
 /// <param name="StreamIds">チャンネル名から TSID を引く。衛星の選局に要る</param>
-public sealed record TuneOptions(string? CardUrl, Func<string, int?> StreamIds)
+/// <param name="FakeTune">
+/// **適合テスト専用。** 選局を自分で掴む代わりに、このコマンドに
+/// <c>&lt;種別&gt; &lt;チャンネル&gt;</c> を足して起こし、標準出力を読む
+/// (<c>tests/fake/tune.ts</c>)。環境変数 <c>FAKE_TUNE</c> からだけ入る —
+/// 設定ファイルにも画面にも、コマンドを書く口は無い。
+/// </param>
+public sealed record TuneOptions(string? CardUrl, Func<string, int?> StreamIds, string? FakeTune = null)
 {
     public static TuneOptions None => new(null, _ => null);
 }
@@ -30,8 +36,7 @@ public sealed record TuneOptions(string? CardUrl, Func<string, int?> StreamIds)
 ///
 /// <para>
 /// 選局は**自分で掴む**。ioctl で選局して B25 も自分で解き、掴んだまま
-/// チャンネルだけ変える (Tuning.cs / AribB25.cs)。外のコマンドを起こすのは
-/// 設定に <c>command</c> が書いてあるときだけで、**<c>recisdb</c> は要らない**。
+/// チャンネルだけ変える (Tuning.cs / AribB25.cs)。**<c>recisdb</c> は要らない**。
 /// </para>
 /// </summary>
 public sealed class TunerPool(
@@ -215,13 +220,8 @@ public sealed class TunerPool(
 
         try
         {
-            /*
-             * **既定は自分で掴む。** 外のコマンドを起こすのは、設定に
-             * `command` が書いてあるときだけ (変わった機材と、試すときの逃げ道。
-             * 偽の選局コマンドで走る適合テストもこの道を通る)。
-             */
-            var command = spec.Resolve();
-            if (command is null)
+            // 自分で掴む。偽の選局を起こすのは適合テストだけ (TuneOptions.FakeTune)
+            if (_tune.FakeTune is not { } fake)
             {
                 var held = Acquire(index, spec);
                 lock (held.Gate)
@@ -247,7 +247,7 @@ public sealed class TunerPool(
             }
             else
             {
-                lease.Start(Render(command, channel, type), () => OnExit(index, lease));
+                lease.Start(fake, () => OnExit(index, lease));
             }
         }
         catch (Exception error)
@@ -544,8 +544,6 @@ public sealed class TunerPool(
                     // 画面がそのまま編集できるように、定義もいっしょに返す
                     ["device"] = spec.Device,
                     ["lnb"] = spec.Lnb,
-                    // 直に書いた逃げ道。**画面からは触らせない** (読めるだけ)
-                    ["command"] = spec.Command,
                     ["channel"] = lease is null
                         ? null
                         : new JsonObject { ["type"] = lease.Type, ["channel"] = lease.Channel },
@@ -589,21 +587,6 @@ public sealed class TunerPool(
             foreach (var lease in _leases.Values.ToList()) Release(lease, "停止します");
             foreach (var index in _held.Keys.ToList()) Drop(index);
         }
-    }
-
-    /// <summary>チューナーコマンドの <c>{{channel}}</c> を埋める</summary>
-    public static string Render(string command, string channel, string type)
-    {
-        return System.Text.RegularExpressions.Regex.Replace(
-            command,
-            @"\{\{\{?\s*([a-z_]+)\s*\}?\}\}",
-            match => match.Groups[1].Value switch
-            {
-                "channel" => channel,
-                "channel_type" => type,
-                "duration" => "-",
-                _ => "",
-            });
     }
 }
 
@@ -720,16 +703,6 @@ internal sealed class Lease(int tuner, string type, string channel)
 
     public int Priority => Sinks.Count == 0 ? int.MinValue : Sinks.Max(sink => sink.Priority);
 
-    /// <summary>
-    /// 選局を始める。
-    ///
-    /// <para>
-    /// **`setsid` を噛ませる。** `sh -c` に渡すのがパイプラインだと、sh を殺しても
-    /// 選局コマンドが生き残ってチューナーを掴んだままになり、次のチャンネルが
-    /// 「デバイスが使用中」で失敗し続ける。新しいプロセスグループに入れておいて、
-    /// 止めるときはグループごと落とす。
-    /// </para>
-    /// </summary>
     private bool _native;
     private volatile bool _stopped;
     private Task? _pump;
@@ -862,6 +835,14 @@ internal sealed class Lease(int tuner, string type, string channel)
                 + $"(読むのが追いつきません: {Readers()}、いちばん空いたのは {worstGap / 1000.0:0.0}秒)");
     }
 
+    /// <summary>
+    /// 偽の選局を起こす。**適合テストだけ** (TuneOptions.FakeTune)。
+    ///
+    /// <para>
+    /// **`setsid` を噛ませる。** `sh -c` 越しなので、sh を殺しても中身が生き残る。
+    /// 新しいプロセスグループに入れておいて、止めるときはグループごと落とす。
+    /// </para>
+    /// </summary>
     public void Start(string command, Action onExit)
     {
         var start = new ProcessStartInfo("setsid")
@@ -872,7 +853,10 @@ internal sealed class Lease(int tuner, string type, string channel)
         };
         start.ArgumentList.Add("sh");
         start.ArgumentList.Add("-c");
-        start.ArgumentList.Add(command);
+        start.ArgumentList.Add($"{command} \"$1\" \"$2\"");
+        start.ArgumentList.Add("sh");
+        start.ArgumentList.Add(Type);
+        start.ArgumentList.Add(Channel);
 
         var child = Process.Start(start)!;
         _child = child;
@@ -900,7 +884,7 @@ internal sealed class Lease(int tuner, string type, string channel)
             }
         });
 
-        _ = Task.Run(async () =>
+        var stderr = Task.Run(async () =>
         {
             // 選局が失敗した理由を拾うため、末尾だけ持つ
             _stderr += await child.StandardError.ReadToEndAsync();
@@ -910,6 +894,8 @@ internal sealed class Lease(int tuner, string type, string channel)
         _ = Task.Run(async () =>
         {
             await child.WaitForExitAsync();
+            // 終わっても stderr を読み切っているとは限らない。理由を取りこぼさないよう待つ
+            await stderr;
             Error = _stderr.Trim().Split('\n').LastOrDefault()?.Trim() is { Length: > 0 } tail ? tail : null;
             onExit();
         });
