@@ -28,6 +28,11 @@ jobs:
           fetch-depth: 1
 
       # 2) PR の中身は隔離したサブディレクトリに置き、--add-dir で読み取り専用に渡す。
+      #    checkout v7 は pull_request_target で fork のコードを取るのを既定で断るので、
+      #    allow-unsafe-pr-checkout で明示的に許す。**取るだけで実行はしない**から許せる:
+      #    ワークスペース直下は base のまま、PR のコードを走らせる step は無く、
+      #    Claude に渡す道具もコメントと gh pr diff/view だけ (下の allowedTools)。
+      #    PR のコードを build / test / install する step をここに足してはいけない。
       - name: Checkout PR head into isolated directory
         uses: actions/checkout@v7
         with:
@@ -36,6 +41,7 @@ jobs:
           path: pr-head
           persist-credentials: false
           fetch-depth: 1
+          allow-unsafe-pr-checkout: true
 
       - name: Claude Code Review
         uses: anthropics/claude-code-action@v1
