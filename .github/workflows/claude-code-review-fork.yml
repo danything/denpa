@@ -14,10 +14,10 @@ jobs:
       github.event.label.name == 'claude-review' &&
       github.event.pull_request.head.repo.full_name != github.repository
     runs-on: ubuntu-latest
+    # OIDC (id-token) は渡さない。下の github_token でワークフローの GITHUB_TOKEN を使う
     permissions:
       contents: read
       pull-requests: write
-      id-token: write
     steps:
       # 1) ワークスペース直下は必ず base ブランチ (信頼できるコード)。
       #    PR の内容をここに checkout してはいけない。
@@ -47,6 +47,10 @@ jobs:
         uses: anthropics/claude-code-action@v1
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          # 既定の「OIDC を Claude の GitHub App のトークンに交換する」道は、fork の
+          # pull_request_target では 401 (Invalid OIDC token) で断られる。コメントを
+          # 書くのはワークフローの GITHUB_TOKEN (pull-requests: write) で足りる
+          github_token: ${{ secrets.GITHUB_TOKEN }}
           track_progress: true
           prompt: |
             REPO: ${{ github.repository }}
