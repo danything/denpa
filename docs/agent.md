@@ -429,7 +429,7 @@ ioctl は通り、**ただ同期しない**ので気付きにくいところで�
 | 機材 | 口 |
 | --- | --- |
 | PT2 / PT3 (Earthsoft) | **DVB** (mainline の `earth_pt1` / `earth_pt3`)。実機はこれ |
-| PX-S1UD (ISDB-T / USB) | **DVB** (mainline の Siano `smsusb` + `smsdvb`。firmware `isdbt_rio.inp` が要る) |
+| PX-S1UD (ISDB-T / USB) | **DVB** (mainline の Siano `smsusb` + `smsdvb`。firmware `isdbt_rio.inp` が要る)。smsusb を blacklist してあれば **siano-userland** (同梱。`Siano.cs`。[下記](#px-s1ud-はカーネルが掴んでいなければ-siano-userland-で)) |
 | PX-BCUD (ISDB-S / USB) | **DVB** (Linux 4.7 以降 mainline) |
 | PX-Q3U4 (USB) / PX-MLT5PE / DTV02A-5TS-P | **px4-userland** (同梱。`Px4.cs`)。px4-userland が対応している機種 |
 | PX-W3U4 / PX-Q3PE4 / PX-MLT8PE など | **未対応**。px4-userland がまだ対応していないため (対応したら下の表に1行足す) |
@@ -478,6 +478,55 @@ px4-userland が対応機種を増やしたら、この表 (`Px4Userland.Models`
   `SLOW_CONSUMER` として切る。それは失敗ではなく受信機を離しただけで、次に同じ
   チャンネルを頼まれたら起こし直します (`ITuneDevice.Tuned` を `TunerPool` が見る。
   DVB は合ったままなので常に true)
+
+### PX-S1UD はカーネルが掴んでいなければ siano-userland で
+
+PX-S1UD は mainline の `smsusb` + `smsdvb` で Linux DVB になるので、**今までどおり
+DVB で使えます** (ホストに `isdbt_rio.inp` が要る)。それとは別に、
+[siano-userland](https://github.com/Khronos31/siano-userland) の `siano-ts` を
+**エージェントのイメージに同梱**しています (`agent/Dockerfile`)。こちらは libusb だけで
+USB を叩き、ファームウェアも配布アーカイブに入っているので、ホストに何も入れずに動きます。
+
+**カーネルが掴んでいる機材には触りません。** `siano-ts` は
+`libusb_set_auto_detach_kernel_driver` を立てていて、smsusb が掴んでいても黙って
+奪います。作者自身が「動いている smsusb から切り替えるのは安全と判定していない」と
+書いていて (unbind の境目でカーネルの異常を観測)、DVB で動いている人の S1UD を
+エージェントが奪うのは論外なので、**どのドライバにも繋がっていない機材だけ**を渡します。
+
+| 機材の様子 | 使う口 |
+| --- | --- |
+| smsusb が掴んでいる (`/dev/dvb` に出ている) | **DVB** (`DvbTuner`)。siano-ts は起こさない |
+| どのドライバにも繋がっていない (smsusb を blacklist した・モジュールが無い) | **siano-userland** (`SianoTuner`) |
+
+siano-userland で使うなら、ホストで `smsusb` / `smsdvb` / `smsmdtv` を blacklist して
+再起動します (挿したまま unbind するのは上の理由で勧めません)。
+
+```sh
+printf 'blacklist smsusb\nblacklist smsdvb\nblacklist smsmdtv\n' | sudo tee /etc/modprobe.d/denpa-siano.conf
+sudo reboot
+```
+
+- **設定の `device` は `siano:<USB のポート>`** (`siano:1-2`)。S1UD にはシリアルが
+  無いので、挿したポートで見分けます。刺さっていれば `/sys/bus/usb/devices` から
+  見つけて組み立てるので (`SianoUserland.Detect`)、普通は書きません。
+  挿すポートを変えたら組み直します
+- **USB のノードは自分で開いて `--fd` で渡します。** `siano-ts --device N` は
+  libusb が並べた順の N 番目で、その並びにはカーネルが掴んでいる S1UD も入るため、
+  2台刺さっていると番号がずれて DVB 側を奪いかねません。sysfs で見分けた1台の
+  `/dev/bus/usb/BBB/DDD` を `/bin/sh` に fd 3 で開かせ、そのまま `siano-ts --fd 3` に
+  exec させます (.NET には fd を子に渡す口が無い)。値は全部引数で渡し、シェルの文には
+  埋め込みません
+- **選局の直前にもう一度 sysfs を見ます** (`SianoUserland.Claimable`)。起動のあとで
+  smsusb が掴んだ・抜けた・挿し替えた、は siano-ts を起こす前に理由を付けて断ります
+- **siano-ts も1回1チャンネル。** 起こし直すたびに USB を掴み直しますが、ファームウェアは
+  同じモードで動いていれば入れ直さないので、2回目からは流し込みを待ちません。
+  子の標準出力を読むところは px4-ts と同じ (`ChildTs.cs`)。同期の上限は 15 秒
+  (siano-ts 自身が 10 秒待つ。初回はファームウェアの流し込みも入る)
+- **誰も読まなくても siano-ts は死にません。** pipe が埋まると siano-ts の中の溜めが
+  溢れて捨てるだけで、選局は生きています (DVB の環が溢れたときと同じ)
+- **地上波だけ。** 衛星を頼まれたら siano-ts を起こす前に断ります
+- **実機に当てていません。** siano-userland 側で実機確認済みなのは PX-S1UD (`3275:0080`) だけで、
+  `187f:0600` / `187f:0302` はあちらでも未検証です
 - **15V は2段の門。** `px4d` には `--allow-lnb-power` を渡しておき、本当に頼むのは
   設定に `lnb: 15v` と書いてある本だけ (`px4-ts --lnb-voltage 15`)。`11v` は
   px4-userland に無い (0V か 15V) ので頼みません

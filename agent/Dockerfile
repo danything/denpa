@@ -66,6 +66,27 @@ RUN set -eu && cd /tmp && \
     echo "${IT930X_FIRMWARE_SHA256}  /opt/px4-userland/firmware/it930x-firmware.bin" | sha256sum -c - && \
     rm -rf /tmp/*
 
+# ---------------------------------------------------------------------------
+# PLEX PX-S1UD などの Siano RIO 系は、**カーネルが掴んでいなければ** siano-userland で掴む
+# (Siano.cs)。smsusb が掴んでいれば今までどおり /dev/dvb で使う。こちらからは奪わない。
+#
+# siano-ts は libusb を静的にリンクした libc 非依存の ELF。配布アーカイブの
+# SHA256SUMS で確かめてから展開する。**ファームウェア (isdbt_rio.inp) はアーカイブに
+# 入っている** (Siano の許諾で無改変なら再配布できる。LICENCE.siano も一緒に置く)。
+# README が示す SHA-256 とも突き合わせる。
+# ---------------------------------------------------------------------------
+# renovate: datasource=github-releases depName=Khronos31/siano-userland extractVersion=^v(?<version>.*)$
+ARG SIANO_USERLAND_VERSION=0.1.5
+ARG ISDBT_RIO_SHA256=054520642d5d09cb7ab7d08dbd6fd9ba9365de56adf2e7d7d06927f9845ff818
+RUN set -eu && cd /tmp && \
+    base="https://github.com/Khronos31/siano-userland/releases/download/v${SIANO_USERLAND_VERSION}" && \
+    archive="siano-ts-${SIANO_USERLAND_VERSION}-linux-x86_64.tar.gz" && \
+    curl -fsSLO "${base}/${archive}" && curl -fsSLO "${base}/SHA256SUMS" && \
+    sha256sum -c --ignore-missing SHA256SUMS && \
+    mkdir -p /opt/siano-userland && tar -xzf "${archive}" -C /opt/siano-userland && \
+    echo "${ISDBT_RIO_SHA256}  /opt/siano-userland/firmware/isdbt_rio.inp" | sha256sum -c - && \
+    rm -rf /tmp/*
+
 # 設定は PVC (/app-config) に置く。**どちらも denpa の画面が書く。**
 #
 # **どちらも無くて構わない。** tuners.json が無ければ刺さっている機材を

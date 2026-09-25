@@ -21,6 +21,7 @@ namespace Denpa.Agent;
 /// <list type="bullet">
 /// <item><see cref="DvbTuner"/> … 標準の Linux DVB v5。PT2/PT3、PX-S1UD、PX-BCUD。カーネルが持つ</item>
 /// <item><see cref="Px4Tuner"/> … px4-userland の機材 (PX-Q3U4 など)。<c>px4d</c> が持ち、選局ごとに <c>px4-ts</c> を起こす (Px4.cs)</item>
+/// <item><see cref="SianoTuner"/> … siano-userland の機材 (PX-S1UD などをカーネルに掴ませていないとき)。選局ごとに <c>siano-ts</c> を起こす (Siano.cs)</item>
 /// </list>
 ///
 /// <para>

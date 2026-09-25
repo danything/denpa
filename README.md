@@ -79,7 +79,9 @@ AV1 が再生できないテレビには、テレビごとに H.264 や生TSを�
 - **チューナー** — Linux DVB (PT2/PT3、PX-S1UD など。ドライバはホスト側に入れておく) か、
   **px4-userland の対応機種** (PLEX PX-Q3U4 / PX-MLT5PE / e-Better DTV02A-5TS-P。
   ドライバはエージェントのイメージに同梱。ホストには何も入れない。
-  [docs/agent.md](docs/agent.md#px-q3u4-などは-px4-userland-でカーネルドライバは入れてもらわない))
+  [docs/agent.md](docs/agent.md#px-q3u4-などは-px4-userland-でカーネルドライバは入れてもらわない))。
+  PX-S1UD は smsusb を blacklist してあれば、同梱の siano-userland でホストに何も入れずに使えます
+  ([docs/agent.md](docs/agent.md#px-s1ud-はカーネルが掴んでいなければ-siano-userland-で))
 - **B-CASカード** と PC/SC 対応のリーダー
 - **Docker** (Compose) か **Kubernetes** (Helm)
 - あれば **Intel の GPU** — `/dev/dri` が見えれば起動時に見つけて GPU で焼きます
@@ -168,6 +170,8 @@ docker compose) で動かす構成なら `oci://ghcr.io/danything/charts/denpa-a
 
 - **PX-Q3U4 / PX-MLT5PE / DTV02A-5TS-P での選局と内蔵カードリーダー** (同梱の px4-userland に任せる作りですが、
   手元に筐体が無く、実機に当てていません)
+- **PX-S1UD を siano-userland で掴んだときの選局** (smsusb を blacklist した場合。同梱の siano-ts に
+  任せる作りですが、実機に当てていません。DVB で使う道はこれまでどおり)
 - **ロゴの在り処の割り出しが、薄いロゴの局でどこまで当たるか。** 実測で詰めたのは
   テレ東1局ぶんで、閾値もそこから決めた値です。**TOKYO MX1 では外しました**
   (背景の窓枠を掴んだ)。外したときは自動検出に戻す作りにしてありますが、
