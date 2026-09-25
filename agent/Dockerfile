@@ -25,11 +25,10 @@ FROM docker.io/library/debian:trixie-slim
 # libaribb25       … B25 の復号。`recisdb` が中で使っていたものと同じ実装
 # pcscd/pcsc-tools … B-CASカードを読む。denpa 側からは触れない。PX-Q3U4 の内蔵
 #                    リーダーもここに IFD ハンドラで登録する (下の px4-userland)
-# util-linux       … setsid。設定に選局コマンドを書いたときだけ使う逃げ道
 # renovate: datasource=github-releases depName=tsukumijima/libaribb25 extractVersion=^v(?<version>.*)$
 ARG ARIBB25_VERSION=0.2.10
 RUN apt-get update && \
-    apt-get -y --no-install-recommends install curl ca-certificates procps util-linux \
+    apt-get -y --no-install-recommends install curl ca-certificates procps \
         pcscd pcsc-tools tzdata && \
     cd /tmp && \
     curl -fsSLO https://github.com/tsukumijima/libaribb25/releases/download/v${ARIBB25_VERSION}/libaribb25_${ARIBB25_VERSION}_amd64.deb && \
