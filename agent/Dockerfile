@@ -50,7 +50,7 @@ RUN apt-get update && \
 # tsukumijima 版が黙認されている実態に乗る判断 (docs/agent.md)。
 # ---------------------------------------------------------------------------
 # renovate: datasource=github-releases depName=Khronos31/px4-userland extractVersion=^v(?<version>.*)$
-ARG PX4_USERLAND_VERSION=0.1.4
+ARG PX4_USERLAND_VERSION=0.1.6
 # renovate: datasource=git-refs depName=https://github.com/tsukumijima/px4_drv branch=develop
 ARG PX4_DRV_COMMIT=c995c10138368283a720cec4fcbca157ccc0dbd3
 # px4-userland SPEC 4.5 が受理する唯一のイメージ (2,169 バイト)
