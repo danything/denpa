@@ -46,23 +46,36 @@ var tune = new TuneOptions(
 var pool = new TunerPool(tuners, () => events.Emit("tuners"), tune) { Detected = detected };
 
 /*
- * **px4-userland の筐体の px4d を起こす。** 設定にある筐体と、定義が無ければ刺さっている筐体。
- *
- * 受信機が何本あって何を受けられるかは、px4d が ready になってから筐体に聞く
- * (Px4.cs)。なので自動で組んだ顔ぶれは、起こし終えたところで組み直す —
- * 起動直後の顔ぶれには px4-userland の機材がまだ入っていない。
+ * **px4-userland の筐体の px4d を起こす。** 顔ぶれ (設定か、自動で見つけたもの) にある筐体ぶん。
+ * 筐体も受信機も px4d --list で分かっているので、ここで顔ぶれは変わらない (Px4.cs)
  */
-void PreparePx4()
-{
-    var ids = Px4Userland.IdsIn(pool.Tuners);
-    if (pool.Detected) ids = ids.Union(Px4Userland.Enclosures().Select(enclosure => enclosure.Id));
-    Px4Daemon.Prepare(ids.ToList());
+void PreparePx4() => Px4Daemon.Prepare(Px4Userland.IdsIn(pool.Tuners).ToList());
 
-    if (!pool.Detected) return;
-    var (resolved, auto) = config.ResolveTuners();
-    static string Shape(IEnumerable<TunerSpec> specs) =>
-        string.Join('\n', specs.Select(spec => spec.ToJson().ToJsonString()));
-    if (auto && Shape(resolved) != Shape(pool.Tuners)) pool.Replace(resolved);
+/*
+ * **内蔵カードリーダーが増えたら pcscd を入れ直す。** 起動したあとに筐体が増えたときだけ。
+ *
+ * pcscd は reader.conf を起動したときにしか読まない (Px4.cs の WriteReaderConfs)。
+ * 入れ直すと開いていたカードが全部使えなくなるので、録画が終わるまで待ち、
+ * 入れ直したら復号器とカードの共有を開き直させる (libaribb25 は繋ぎ直さない)。
+ * 待っている間にもう一度頼まれても、入れ直すのは1回でよい (そのとき書いてある分を読む)
+ */
+var reloadingReaders = 0;
+async Task ReloadCardReaders()
+{
+    if (Interlocked.Exchange(ref reloadingReaders, 1) == 1) return;
+    try
+    {
+        if (pool.Recording) Log.Write("内蔵カードリーダーが増えました。録画が終わったら pcscd を入れ直します");
+        while (pool.Recording) await Task.Delay(TimeSpan.FromSeconds(30));
+        await Card.RestartPcscd();
+        pool.ReopenCards();
+        AribB25.Server.Forget();
+        Log.Write("内蔵カードリーダーを読ませるため pcscd を入れ直しました");
+    }
+    finally
+    {
+        Volatile.Write(ref reloadingReaders, 0);
+    }
 }
 
 var builder = WebApplication.CreateSlimBuilder(args);
@@ -277,8 +290,9 @@ app.MapPut("/denpa/tuners", async (HttpContext http) =>
     var (resolved, auto) = config.ResolveTuners();
     pool.Detected = auto;
     pool.Replace(resolved);
-    // 新しく書かれた筐体があれば px4d を起こしてカードリーダーも繋ぐ。数秒かかるので返事は待たせない
+    // 新しく書かれた筐体があれば px4d を起こす。数秒かかるので返事は待たせない
     _ = Task.Run(PreparePx4);
+    if (Px4Userland.WriteReaderConfs(Px4Userland.IdsIn(resolved))) _ = Task.Run(ReloadCardReaders);
     await Respond.Write(http, new JsonObject { ["tuners"] = pool.Status(), ["detected"] = pool.Detected });
 });
 
@@ -376,14 +390,18 @@ app.MapPost("/denpa/card/ecm", async (HttpContext http) =>
 app.MapFallback((HttpContext http) =>
     Respond.Write(http, new JsonObject { ["ok"] = false, ["error"] = "not found" }, 404));
 
+/*
+ * **内蔵カードリーダーの reader.conf を書いてから pcscd を起こす。** pcscd は
+ * reader.conf を起動したときにしか読まない。書くのに px4d は要らない (IFD は
+ * px4d が居なくても登録され、ready になったら自分で繋ぐ。Px4.cs)
+ */
+Px4Userland.WriteReaderConfs(Px4Userland.IdsIn(pool.Tuners));
 await Card.EnsurePcscd();
 
 /*
  * **px4-userland の px4d は背景で起こす。** ready までファームウェアの流し込みで
  * 数秒、駄目な筐体なら 30 秒待つので、ここで待つと HTTP の口 (= PT3 など他の
- * チューナーの提供) まで遅れる。内蔵カードリーダーは px4d が ready になった
- * ときに reader.conf を書いて `pcscd --hotplug` で読み直させるので、pcscd が
- * 先に居ても困らない (Px4.cs)。筐体が無ければ何もしない
+ * チューナーの提供) まで遅れる。筐体が無ければ何もしない
  */
 _ = Task.Run(PreparePx4);
 

@@ -4,7 +4,7 @@ namespace Denpa.Agent;
 
 /// <summary>
 /// <a href="https://github.com/Khronos31/px4-userland">px4-userland</a> に任せる機材
-/// (PLEX PX-Q3U4 / PX-MLT5PE / e-Better DTV02A-5TS-P …)。
+/// (PLEX PX-Q3U4 / PX-W3U4 / PX-MLT 系、e-Better / Digibest 系 …)。
 ///
 /// <para>
 /// **カーネルドライバを入れてもらわない。** px4_drv (DKMS) をホストに入れて
@@ -23,12 +23,10 @@ namespace Denpa.Agent;
 /// </para>
 ///
 /// <para>
-/// **機種ごとの違いは、できるだけ px4-userland に聞く。** 受信機が何本あって
-/// それぞれ何を受けられるかは、px4d を起こしてから <c>px4ctl list</c> で聞く
-/// (<see cref="Px4Receiver"/>)。こちらで持つのは <see cref="Models"/> の
-/// **USB での見分け方だけ** — px4-userland には「刺さっている筐体を挙げる」口が
-/// 無く、px4d を誰のために起こすかはこちらで決めるしかないため。対応機種が
-/// 増えたら、ここに1行足せば済む。
+/// **機種のことは何も持たない。** 刺さっている筐体と、それぞれの受信機が何を
+/// 受けられるかは <c>px4d --list</c> に聞く (<see cref="Enclosures"/>)。USB ID や
+/// 筐体の番号の決まりは px4-userland の中にあり、対応機種が増えても
+/// px4-userland を上げるだけで追従する。
 /// </para>
 ///
 /// <para>
@@ -41,27 +39,8 @@ public static class Px4Userland
     /// <summary>設定の <c>device</c> の頭。これで始まっていれば px4-userland で掴む</summary>
     public const string Scheme = "px4:";
 
-    /// <summary>
-    /// px4-userland が対応している機種の USB での見分け方 (px4-userland SPEC 4.1)。
-    ///
-    /// <para>
-    /// <c>UsbFunctions</c> は筐体1台が出す USB デバイスの数。2つ以上出す機種は
-    /// シリアルの**末尾1桁**が機能の番号で、残りが筐体の番号になる
-    /// (Q3U4 の <c>000012050009601</c> / <c>…602</c> → <c>00001205000960</c>)。
-    /// 1つの機種はシリアル全体が筐体の番号。
-    /// </para>
-    /// </summary>
-    public sealed record Model(string Vendor, string Product, string Name, int UsbFunctions);
-
-    public static readonly Model[] Models =
-    [
-        new("0511", "084a", "PX-Q3U4", 2),
-        new("0511", "024e", "PX-MLT5PE", 1),
-        new("0511", "924e", "DTV02A-5TS-P", 1),
-    ];
-
     /// <summary>刺さっている筐体1台。<c>Id</c> は px4d に <c>--device</c> で渡す番号</summary>
-    public sealed record Enclosure(string Id, string Model);
+    public sealed record Enclosure(string Id, string Model, IReadOnlyList<Px4Receiver> Receivers);
 
     /// <summary>配布アーカイブを展開した場所 (Dockerfile)</summary>
     public static string Dir =>
@@ -114,78 +93,107 @@ public static class Px4Userland
     public static string Name(string model, string id, int receiver) => $"{model}-{id[^4..]} #{receiver}";
 
     /// <summary>
-    /// 刺さっている筐体。**USB 機能が全部見えているものだけ。**
+    /// 刺さっている筐体。**<c>px4d --list</c> に聞く。**
     ///
     /// <para>
-    /// sysfs を読む。libusb を呼ばなくても <c>/sys/bus/usb/devices/*/{idVendor,idProduct,serial}</c>
-    /// で足りる (コンテナからも読める)。機能が欠けている筐体は px4d が
-    /// ready にならないので、ここで落として理由を残す。
+    /// 読むだけで筐体を掴まないので、px4d が動いていても聞ける。px4-userland が
+    /// 入っていない環境 (手元の開発など) では空。
     /// </para>
     /// </summary>
-    public static List<Enclosure> Enclosures(string sysfs = "/sys/bus/usb/devices")
+    public static List<Enclosure> Enclosures()
     {
-        var seen = new Dictionary<string, (Model Model, int Count)>(StringComparer.Ordinal);
-        if (!Directory.Exists(sysfs)) return [];
-        foreach (var entry in Directory.EnumerateDirectories(sysfs))
+        var px4d = Path.Combine(Dir, "px4d");
+        if (!File.Exists(px4d)) return [];
+        var (code, output) = Shell.Run(px4d, ["--list"], TimeSpan.FromSeconds(15)).GetAwaiter().GetResult();
+        if (code != 0)
         {
-            var vendor = Attribute(entry, "idVendor");
-            var product = Attribute(entry, "idProduct");
-            if (Models.FirstOrDefault(m => m.Vendor == vendor && m.Product == product) is not { } model) continue;
-            if (Attribute(entry, "serial") is not { } serial) continue;
-            var id = model.UsbFunctions > 1 ? serial[..^1] : serial;
-            if (!Digits(id))
-            {
-                Log.Write($"{model.Name} のシリアル {serial} が読めません (数字だけのはず)");
-                continue;
-            }
-            seen[id] = (model, seen.GetValueOrDefault(id).Count + 1);
+            Log.Write($"px4-userland の筐体を挙げられません (px4d --list exit {code}: {output})");
+            return [];
         }
-
-        var found = new List<Enclosure>();
-        foreach (var (id, (model, count)) in seen.OrderBy(pair => pair.Key, StringComparer.Ordinal))
-        {
-            if (count == model.UsbFunctions)
-            {
-                found.Add(new Enclosure(id, model.Name));
-                continue;
-            }
-            Log.Write($"{model.Name} {id} は USB が {count} 機能しか見えていません ({model.UsbFunctions} つ揃わないと使えません)");
-        }
-        return found;
-    }
-
-    private static string? Attribute(string directory, string name)
-    {
-        try
-        {
-            var path = Path.Combine(directory, name);
-            return File.Exists(path) ? File.ReadAllText(path).Trim() : null;
-        }
-        catch
-        {
-            return null;
-        }
+        return ParseList(output, Log.Write);
     }
 
     /// <summary>
-    /// 刺さっている筐体の受信機を、設定に書いたのと同じ形で。
+    /// <c>px4d --list</c> の出力を読む (px4-userland SPEC 4.6)。**使えるのは <c>status=ready</c> の筐体だけ。**
     ///
     /// <para>
-    /// **px4d が ready になって受信機を聞けた筐体だけ。** 起動直後はまだ空で、
-    /// 聞けたところでエージェントが組み直す (Program.cs の <c>PreparePx4</c>)。
+    /// <c>serial=… model=… usb=… status=… receivers=N</c> の行のあとに、
+    /// <c>px4ctl list</c> と同じ形の受信機の行が N 行続く。まとめられなかった
+    /// USB デバイスは <c>rejected …</c> の行で来る。使えない筐体と rejected は
+    /// 理由を <paramref name="warn"/> で残す — 権限が無いとき (<c>open_failed</c>) に
+    /// 黙って「チューナーが無い」にならないように。
     /// </para>
     /// </summary>
-    public static List<TunerSpec> Detect(string sysfs = "/sys/bus/usb/devices") =>
-        Specs(Enclosures(sysfs), id => Px4Daemon.For(id).Receivers);
+    public static List<Enclosure> ParseList(string output, Action<string> warn)
+    {
+        var found = new List<Enclosure>();
+        Dictionary<string, string>? current = null;
+        var receivers = new System.Text.StringBuilder();
 
-    /// <summary>筐体と受信機の一覧から、設定の形に組み立てる</summary>
-    public static List<TunerSpec> Specs(
-        IEnumerable<Enclosure> enclosures, Func<string, IReadOnlyList<Px4Receiver>?> receivers)
+        void Flush()
+        {
+            if (current is null) return;
+            var id = current.GetValueOrDefault("serial") ?? "";
+            var model = current.GetValueOrDefault("model") ?? "px4";
+            var status = current.GetValueOrDefault("status") ?? "";
+            if (status != "ready")
+            {
+                warn($"{model} {id} は使えません (px4d --list: status={status})");
+            }
+            else if (!Digits(id))
+            {
+                warn($"{model} の番号 {id} が読めません (数字だけのはず)");
+            }
+            else
+            {
+                found.Add(new Enclosure(id, model, Px4Receiver.ParseList(receivers.ToString(), warn)));
+            }
+            current = null;
+            receivers.Clear();
+        }
+
+        foreach (var raw in output.Split('\n'))
+        {
+            var line = raw.Trim();
+            if (line.StartsWith("serial=", StringComparison.Ordinal))
+            {
+                Flush();
+                current = Fields(line);
+            }
+            else if (line.StartsWith("receiver=", StringComparison.Ordinal))
+            {
+                if (current is not null) receivers.AppendLine(line);
+            }
+            else if (line.StartsWith("rejected ", StringComparison.Ordinal))
+            {
+                Flush();
+                var fields = Fields(line["rejected ".Length..]);
+                var status = fields.GetValueOrDefault("status") ?? "";
+                warn($"{fields.GetValueOrDefault("model")} ({fields.GetValueOrDefault("usb")}) を使えません: {status}"
+                    + (status == "open_failed" ? " (/dev/bus/usb を開く権限が無いかもしれません)" : ""));
+            }
+        }
+        Flush();
+        return found;
+    }
+
+    private static Dictionary<string, string> Fields(string line) => line
+        .Split(' ', StringSplitOptions.RemoveEmptyEntries)
+        .Select(field => field.Split('=', 2))
+        .Where(pair => pair.Length == 2)
+        .GroupBy(pair => pair[0], StringComparer.Ordinal)
+        .ToDictionary(group => group.Key, group => group.First()[1], StringComparer.Ordinal);
+
+    /// <summary>刺さっている筐体の受信機を、設定に書いたのと同じ形で</summary>
+    public static List<TunerSpec> Detect() => Specs(Enclosures());
+
+    /// <summary>筐体の一覧から、設定の形に組み立てる</summary>
+    public static List<TunerSpec> Specs(IEnumerable<Enclosure> enclosures)
     {
         var found = new List<TunerSpec>();
         foreach (var enclosure in enclosures)
         {
-            foreach (var receiver in receivers(enclosure.Id) ?? [])
+            foreach (var receiver in enclosure.Receivers)
             {
                 if (receiver.Types.Length == 0) continue;
                 found.Add(new TunerSpec(
@@ -204,10 +212,75 @@ public static class Px4Userland
         .Select(spec => Parse(spec.Device!)?.Id)
         .OfType<string>()
         .Distinct(StringComparer.Ordinal);
+
+    /// <summary>
+    /// 内蔵カードリーダーを pcscd に見せる reader.conf を、筐体ぶん揃える。
+    /// **pcscd を起こす前に呼ぶ。** 新しく増えたか中身が変わったら true。
+    ///
+    /// <para>
+    /// Debian の pcscd (libudev 版) は reader.conf を**起動したときにしか読まない**
+    /// (<c>pcscd --hotplug</c> は何もしない)。なので先に書いてから起こす。
+    /// 書くのに要るのは筐体の番号だけで、px4d を待たなくてよい — IFD は px4d が
+    /// 居なくても登録され、居ない間は「カードなし」と答えて、px4d が来たら
+    /// 自分で繋ぐ (px4-userland 0.1.6)。px4d を起こし直したときも同じで、
+    /// pcscd を入れ直さなくてよい。
+    /// </para>
+    ///
+    /// <para>
+    /// もう無い筐体の reader.conf は消す。残すと、居ない筐体のリーダーが
+    /// 「カードなし」で並び続ける。
+    /// </para>
+    /// </summary>
+    public static bool WriteReaderConfs(IEnumerable<string> ids, string? dir = null, string? ifd = null)
+    {
+        dir ??= ReaderConfDir;
+        ifd ??= Path.Combine(Dir, "ifd", "px4-userland-ifd.so");
+        var wanted = ids.ToHashSet(StringComparer.Ordinal);
+        if (wanted.Count > 0 && !File.Exists(ifd))
+        {
+            Log.Write($"IFD ハンドラが無いので内蔵カードリーダーは使えません: {ifd}");
+            return false;
+        }
+
+        var changed = false;
+        try
+        {
+            Directory.CreateDirectory(dir);
+            foreach (var path in Directory.EnumerateFiles(dir, "px4-userland-*.conf"))
+            {
+                var id = Path.GetFileNameWithoutExtension(path)["px4-userland-".Length..];
+                if (!wanted.Contains(id)) File.Delete(path);
+            }
+            foreach (var id in wanted)
+            {
+                var path = Path.Combine(dir, $"px4-userland-{id}.conf");
+                var conf = ReaderConf(id, RuntimeDir, ifd);
+                if (File.Exists(path) && File.ReadAllText(path) == conf) continue;
+                File.WriteAllText(path, conf);
+                changed = true;
+            }
+        }
+        catch (Exception error)
+        {
+            Log.Write($"reader.conf を書けません: {error.Message}");
+        }
+        return changed;
+    }
+
+    /// <summary>pcscd の reader.conf。1筐体1枚 (配布アーカイブの雛形と同じ形。px4d と pcscd は同じ root)</summary>
+    public static string ReaderConf(string id, string runtimeDir, string ifd) =>
+        $"""
+        # denpa-agent が書いたもの。筐体 {id} の内蔵カードリーダー (px4-userland)
+        FRIENDLYNAME "px4-userland {id[^4..]} Internal Card Reader"
+        DEVICENAME   px4-userland:runtime={runtimeDir}:device={id}:access=user
+        LIBPATH      {ifd}
+        CHANNELID    0
+
+        """;
 }
 
 /// <summary>
-/// 受信機1本。**<c>px4ctl list</c> で筐体に聞いたもの。**
+/// 受信機1本。**<c>px4d --list</c> / <c>px4ctl list</c> で px4-userland に聞いたもの。**
 ///
 /// <para>
 /// Q3U4 は受信機ごとに地上波か衛星かが決まっていて、MLT5 系はどれも両方受けられる
@@ -221,7 +294,7 @@ public sealed record Px4Receiver(int Index, bool Terrestrial, bool Satellite)
     public bool Accepts(ChannelTable.Tuning tuning) => tuning.Satellite ? Satellite : Terrestrial;
 
     /// <summary>
-    /// <c>px4ctl list</c> の出力を読む。
+    /// <c>px4ctl list</c> の出力 (<c>px4d --list</c> の受信機の行も同じ形) を読む。
     ///
     /// <para>
     /// <c>receiver=0 device=1 local=0 system=ISDB-S</c> の行が受信機の数だけ並ぶ。
@@ -280,9 +353,9 @@ public sealed record Px4Receiver(int Index, bool Terrestrial, bool Satellite)
 /// </para>
 ///
 /// <para>
-/// **カードリーダーもここが繋ぐ。** ready になったら pcscd 向けの reader.conf を
-/// 書き、pcscd が既に動いていれば読み直させる。IFD ハンドラは登録された
-/// 時点で px4d に繋ぎに来るので、**px4d が先**でないとリーダーが登録されない。
+/// 内蔵カードリーダーの reader.conf はここでは書かない。pcscd を起こす前に
+/// まとめて書く (<see cref="Px4Userland.WriteReaderConfs"/>)。IFD は px4d が
+/// 居なくても登録され、ready になったら自分で繋ぐ。
 /// </para>
 /// </summary>
 public sealed class Px4Daemon
@@ -417,7 +490,6 @@ public sealed class Px4Daemon
                 {
                     Log.Write($"[px4d {_id}] ready");
                     Receivers = ListReceivers();
-                    RegisterReader();
                     return;
                 }
                 Thread.Sleep(500);
@@ -450,56 +522,6 @@ public sealed class Px4Daemon
             + string.Join(", ", receivers.Select(r => $"#{r.Index} {string.Join("/", r.Types)}")));
         return receivers;
     }
-
-    /// <summary>
-    /// 内蔵カードリーダーを pcscd に見せる。
-    ///
-    /// <para>
-    /// 配布アーカイブの雛形 (<c>reader.conf.d/px4-userland.conf</c>) と同じ形。
-    /// px4d と pcscd は同じユーザー (root) で動くので private mode (<c>access=user</c>)。
-    /// pcscd が既に動いていれば <c>--hotplug</c> で読み直させる (起動前なら
-    /// 起動時に読む。Card.EnsurePcscd はこの後に呼ぶ)。
-    /// </para>
-    /// </summary>
-    private void RegisterReader()
-    {
-        var ifd = Path.Combine(Px4Userland.Dir, "ifd", "px4-userland-ifd.so");
-        if (!File.Exists(ifd))
-        {
-            Log.Write($"[px4d {_id}] IFD ハンドラが無いので内蔵カードリーダーは使えません: {ifd}");
-            return;
-        }
-
-        try
-        {
-            Directory.CreateDirectory(Px4Userland.ReaderConfDir);
-            var conf = Path.Combine(Px4Userland.ReaderConfDir, $"px4-userland-{_id}.conf");
-            File.WriteAllText(conf, ReaderConf(_id, Px4Userland.RuntimeDir, ifd));
-        }
-        catch (Exception error)
-        {
-            Log.Write($"[px4d {_id}] reader.conf を書けません: {error.Message}");
-            return;
-        }
-
-        var pcscd = Shell.Run("pgrep", ["-x", "pcscd"], TimeSpan.FromSeconds(10)).GetAwaiter().GetResult();
-        if (pcscd.Code != 0) return;
-        var reload = Shell.Run("pcscd", ["--hotplug"], TimeSpan.FromSeconds(10)).GetAwaiter().GetResult();
-        Log.Write(reload.Code == 0
-            ? $"[px4d {_id}] pcscd に内蔵カードリーダーを読み直させました"
-            : $"[px4d {_id}] pcscd に読み直しを頼めません: {reload.Output}");
-    }
-
-    /// <summary>pcscd の reader.conf。1筐体1枚</summary>
-    public static string ReaderConf(string id, string runtimeDir, string ifd) =>
-        $"""
-        # denpa-agent が書いたもの。筐体 {id} の内蔵カードリーダー (px4-userland)
-        FRIENDLYNAME "px4-userland {id[^4..]} Internal Card Reader"
-        DEVICENAME   px4-userland:runtime={runtimeDir}:device={id}:access=user
-        LIBPATH      {ifd}
-        CHANNELID    0
-
-        """;
 
     /// <summary>
     /// 止める。**SIGTERM で。** px4d は合図を受けると LNB を 0V に戻し、

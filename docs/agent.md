@@ -431,37 +431,25 @@ ioctl は通り、**ただ同期しない**ので気付きにくいところで�
 | PT2 / PT3 (Earthsoft) | **DVB** (mainline の `earth_pt1` / `earth_pt3`)。実機はこれ |
 | PX-S1UD (ISDB-T / USB) | **DVB** (mainline の Siano `smsusb` + `smsdvb`。firmware `isdbt_rio.inp` が要る)。smsusb を blacklist してあれば **siano-userland** (同梱。`Siano.cs`。[下記](#px-s1ud-はカーネルが掴んでいなければ-siano-userland-で)) |
 | PX-BCUD (ISDB-S / USB) | **DVB** (Linux 4.7 以降 mainline) |
-| PX-Q3U4 (USB) / PX-MLT5PE / DTV02A-5TS-P | **px4-userland** (同梱。`Px4.cs`)。px4-userland が対応している機種 |
-| PX-W3U4 / PX-Q3PE4 / PX-MLT8PE など | **未対応**。px4-userland がまだ対応していないため (対応したら下の表に1行足す) |
+| PX-Q3U4 / PX-W3U4 / PX-MLT 系、e-Better / Digibest 系など (USB・PCIe) | **px4-userland** (同梱。`Px4.cs`)。px4-userland が対応している機種ならそのまま使う ([一覧](https://github.com/Khronos31/px4-userland#対応機種動作環境)) |
 
 **口は3つ。** `px4d` が筐体 (USB 機能・受信機・内蔵カードリーダー) を所有する
 デーモンで、筐体1台につき1つ起こします。`px4-ts` は受信機を1本借りて選局し、
 TS を標準出力に流します。`px4ctl` は状態を聞きます。
 
-**機種ごとの違いは、できるだけ px4-userland に聞きます。** 受信機が何本あって
-それぞれ何を受けられるかは、`px4d` が ready になってから `px4ctl list` で聞きます
-(`Px4Receiver`)。Q3U4 なら8本で受信機ごとに地上波か衛星か決まっていて、MLT5 系なら
-5本でどれも両方受けられる — その違いは答えに入ってくるだけで、こちらは機種を
-見ません。**こちらで持つのは USB での見分け方だけ** (`Px4Userland.Models`) です。
-px4-userland には「刺さっている筐体を挙げる」口が無く、`px4d` を誰のために起こすかは
-こちらで決めるしかないため。
-
-| 機種 | USB ID | USB 機能 | 筐体の番号 |
-| --- | --- | --- | --- |
-| PX-Q3U4 | `0511:084a` | 2 | シリアル (15桁) の末尾1桁 (機能の番号) を除いた14桁 |
-| PX-MLT5PE | `0511:024e` | 1 | シリアル (15桁) 全体 |
-| DTV02A-5TS-P | `0511:924e` | 1 | シリアル (15桁) 全体 |
-
-px4-userland が対応機種を増やしたら、この表 (`Px4Userland.Models`) に1行足せば済みます。
+**機種のことは何も持ちません。** 刺さっている筐体と、それぞれの受信機が何を
+受けられるかは `px4d --list` に聞きます (px4-userland 0.1.6 から。`Px4Userland.Enclosures`)。
+USB ID も筐体の番号の決まりも px4-userland の中にあり、Q3U4 なら8本で受信機ごとに
+地上波か衛星か決まっている、MLT5 系なら5本でどれも両方受けられる — その違いは
+答えに入ってくるだけです。**対応機種が増えても px4-userland を上げるだけ**で追従します。
+`--list` は筐体を掴まずに読むだけなので、px4d を起こす前に顔ぶれが決まります。
 
 - **設定の `device` は `px4:<筐体の番号>:<受信機>`。** 刺さっていれば
-  `/sys/bus/usb/devices` から見つけて組み立てるので (`Px4Userland.Detect`)、
-  普通は書きません。USB 機能が全部見えていない筐体は数に入れません。番号の桁数や
-  受信機の上限はこちらでは見ず、合わなければ `px4d` / `px4-ts` が理由を付けて断ります
-- **自動で組む顔ぶれは、`px4d` が ready になってから入ります。** 受信機を聞けるのが
-  そこからなので、起動直後の顔ぶれには px4-userland の機材がまだ居ません。
-  起こし終えたところで組み直します (`Program.cs` の `PreparePx4`)
-- **`px4ctl list` の知らない方式は飛ばして続けます。** px4-userland が新しくなって
+  `px4d --list` から組み立てるので (`Px4Userland.Detect`)、普通は書きません。
+  `status=ready` 以外の筐体と `rejected` の行は、理由を記録に残して使いません
+  (`open_failed` なら `/dev/bus/usb` を開く権限を疑う)。番号の桁数や受信機の上限は
+  こちらでは見ず、合わなければ `px4d` / `px4-ts` が理由を付けて断ります
+- **知らない方式は飛ばして続けます。** px4-userland が新しくなって
   方式が増えても、分かる受信機は使えるように。飛ばしたことは記録に残します
 - **受信機と違う方式は、px4-ts を起こす前に断ります** (`Px4Tuner.Check`)。
   受信機を聞けていなければ見ずに通し、px4-ts に任せます
@@ -478,6 +466,24 @@ px4-userland が対応機種を増やしたら、この表 (`Px4Userland.Models`
   `SLOW_CONSUMER` として切る。それは失敗ではなく受信機を離しただけで、次に同じ
   チャンネルを頼まれたら起こし直します (`ITuneDevice.Tuned` を `TunerPool` が見る。
   DVB は合ったままなので常に true)
+- **15V は2段の門。** `px4d` には `--allow-lnb-power` を渡しておき、本当に頼むのは
+  設定に `lnb: 15v` と書いてある本だけ (`px4-ts --lnb-voltage 15`)。`11v` は
+  px4-userland に無い (0V か 15V) ので頼みません
+- **内蔵カードリーダーも `px4d` が持っています。** 同梱の IFD ハンドラで、pcscd からは
+  普通の PC/SC リーダーに見えます。**reader.conf は pcscd を起こす前に書きます**
+  (`/etc/reader.conf.d/px4-userland-<筐体の番号>.conf`。`Px4Userland.WriteReaderConfs`)。
+  Debian の pcscd (libudev 版) は reader.conf を起動したときにしか読まず、
+  `pcscd --hotplug` は何もしないためです (#195)。書くのに px4d は要りません —
+  IFD は px4d が居なくても登録され、居ない間は「カードなし」と答え、px4d が来たら
+  (起こし直したときも) 自分で繋ぎます (px4-userland 0.1.6)。もう居ない筐体の
+  reader.conf は消します
+- **起動したあとに筐体が増えたときだけ pcscd を入れ直します** (画面から定義を
+  書き換えたとき)。入れ直すと開いていたカードが全部使えなくなるので、**録画中は
+  終わるまで待ち**、入れ直したら復号器とカードの共有を次の選局で開き直させます
+  (libaribb25 はカードに繋ぎ直さない。`TunerPool.ReopenCards`)
+- 起動時に顔ぶれにある筐体ぶん `px4d` を起こします (`Px4Daemon.Prepare`)。
+  ファームウェアを流し込んでから ready になるので数秒かかります。起こせなくても
+  他のチューナー (PT3 など) は動き、選局のときにもう一度試します
 
 ### PX-S1UD はカーネルが掴んでいなければ siano-userland で
 
@@ -527,17 +533,6 @@ sudo reboot
 - **地上波だけ。** 衛星を頼まれたら siano-ts を起こす前に断ります
 - **実機に当てていません。** siano-userland 側で実機確認済みなのは PX-S1UD (`3275:0080`) だけで、
   `187f:0600` / `187f:0302` はあちらでも未検証です
-- **15V は2段の門。** `px4d` には `--allow-lnb-power` を渡しておき、本当に頼むのは
-  設定に `lnb: 15v` と書いてある本だけ (`px4-ts --lnb-voltage 15`)。`11v` は
-  px4-userland に無い (0V か 15V) ので頼みません
-- **内蔵カードリーダーも `px4d` が持っています。** ready になったら pcscd 向けの
-  reader.conf (`/etc/reader.conf.d/px4-userland-<筐体の番号>.conf`) を書き、同梱の
-  IFD ハンドラで普通の PC/SC リーダーとして見せます。IFD は登録された時点で
-  `px4d` に繋ぎに来るので、**`px4d` が先、pcscd が後** (`Program.cs`)。あとから
-  筐体が増えたときは `pcscd --hotplug` で読み直させます
-- 起動時に設定にある筐体 (定義が無ければ刺さっている筐体) ぶん `px4d` を起こします
-  (`Px4Daemon.Prepare`)。ファームウェアを流し込んでから ready になるので数秒かかります。
-  起こせなくても他のチューナー (PT3 など) は動き、選局のときにもう一度試します
 
 **ファームウェアは同梱しています。** IT930x は本体にファームウェアを持っておらず、
 挿すたびにホストから RAM へ流し込むもの (px4_drv の読み込み手順を見ると、版数を
@@ -551,9 +546,9 @@ Digital Warrior Corp.) から切り出したもので、**再配布の許諾は�
 px4-userland 本体は方針として同梱しない (SPEC 4.5) ので、そこだけこちらが背負います。
 
 **実機には当てていません。** ここにある機材は PT3 で、px4-userland の機材はありません。
-確かめてあるのは機材に触らない部分 (sysfs の読み方・`px4ctl list` の読み方・device 文字列・
-px4-ts の引数。`Px4Tests.cs`。`px4ctl list` の形は px4-userland 自身のテストの期待値に
-合わせてある) と、配布物の CLI が期待どおりの引数を受けること。実機で当てるのは
+確かめてあるのは機材に触らない部分 (`px4d --list` / `px4ctl list` の読み方・device 文字列・
+px4-ts の引数・reader.conf。`Px4Tests.cs`。出力の形は px4-userland の SPEC 4.6 と
+自身のテストの期待値に合わせてある) と、配布物の CLI が期待どおりの引数を受けること。実機で当てるのは
 `denpa-agent --tune px4:<筐体の番号>:2 T27` (`Probe.cs`)。
 
 **`q3u4:` の書き方は `px4:` に変わりました。** 定義に `q3u4:<14桁>:<受信機>` と書いて

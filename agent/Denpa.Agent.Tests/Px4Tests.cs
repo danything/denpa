@@ -7,26 +7,11 @@ namespace Denpa.Agent.Tests;
  * px4-userland の機材 (PX-Q3U4 / PX-MLT5PE / DTV02A-5TS-P …) を掴むところ。
  *
  * 本物の筐体は無い。ここで確かめるのは**機材に触らない部分**だけ —
- * sysfs の読み方、px4ctl list の読み方、device 文字列の形、px4-ts に渡す引数。
+ * px4d --list / px4ctl list の読み方、device 文字列の形、px4-ts に渡す引数、reader.conf。
  * 実機で当てるのは `denpa-agent --tune px4:<筐体の番号>:2 T27` (Probe.cs)。
  */
 public class Px4Tests
 {
-    /// <summary>偽の sysfs。<c>/sys/bus/usb/devices/&lt;name&gt;/{idVendor,idProduct,serial}</c> の形</summary>
-    private static string FakeSysfs(params (string Name, string Vendor, string Product, string? Serial)[] devices)
-    {
-        var root = Path.Combine(Path.GetTempPath(), $"denpa-sysfs-{Guid.NewGuid():N}");
-        foreach (var (name, vendor, product, serial) in devices)
-        {
-            var dir = Path.Combine(root, name);
-            Directory.CreateDirectory(dir);
-            File.WriteAllText(Path.Combine(dir, "idVendor"), vendor + "\n");
-            File.WriteAllText(Path.Combine(dir, "idProduct"), product + "\n");
-            if (serial is not null) File.WriteAllText(Path.Combine(dir, "serial"), serial + "\n");
-        }
-        return root;
-    }
-
     /// <summary>px4-userland 0.1.4 の <c>px4ctl list</c> を Q3U4 に当てたときの形</summary>
     private const string Q3u4List = """
         serial=00001205000960 ready=yes usb-present-mask=0x03
@@ -52,58 +37,58 @@ public class Px4Tests
 
     private static List<Px4Receiver> Receivers(string list) => Px4Receiver.ParseList(list, _ => { });
 
+    /// <summary>px4-userland 0.1.6 の <c>px4d --list</c> の形 (SPEC 4.6)</summary>
+    private const string List = """
+        serial=000000000012345 model=PX-MLT5PE usb=0511:024e status=ready receivers=5
+        receiver=0 device=1 local=0 system=ISDB-T/S
+        receiver=1 device=1 local=1 system=ISDB-T/S
+        receiver=2 device=1 local=2 system=ISDB-T/S
+        receiver=3 device=1 local=3 system=ISDB-T/S
+        receiver=4 device=1 local=4 system=ISDB-T/S
+        serial=00001205000123 model=PX-Q3U4 usb=0511:084a status=incomplete receivers=8
+        receiver=0 device=1 local=0 system=ISDB-S
+        receiver=1 device=1 local=1 system=ISDB-S
+        receiver=2 device=1 local=2 system=ISDB-T
+        receiver=3 device=1 local=3 system=ISDB-T
+        receiver=4 device=2 local=0 system=ISDB-S
+        receiver=5 device=2 local=1 system=ISDB-S
+        receiver=6 device=2 local=2 system=ISDB-T
+        receiver=7 device=2 local=3 system=ISDB-T
+        serial=00001205000960 model=PX-Q3U4 usb=0511:084a status=ready receivers=8
+        receiver=0 device=1 local=0 system=ISDB-S
+        receiver=1 device=1 local=1 system=ISDB-S
+        receiver=2 device=1 local=2 system=ISDB-T
+        receiver=3 device=1 local=3 system=ISDB-T
+        receiver=4 device=2 local=0 system=ISDB-S
+        receiver=5 device=2 local=1 system=ISDB-S
+        receiver=6 device=2 local=2 system=ISDB-T
+        receiver=7 device=2 local=3 system=ISDB-T
+        rejected serial= model=PX-W3U4 usb=0511:083f status=open_failed
+        """;
+
     [Test]
-    public async Task USB_機能が全部見えている筐体だけ数える()
+    public async Task px4d_list_の_ready_な筐体だけ使う()
     {
-        var sysfs = FakeSysfs(
-            // Q3U4 は2機能。シリアルの末尾1桁が機能の番号
-            ("1-3.1", "0511", "084a", "000012050009601"),
-            ("1-3.2", "0511", "084a", "000012050009602"),
-            // 片方しか見えていない Q3U4 は使えない
-            ("2-1", "0511", "084a", "000012050001231"),
-            // MLT5 系は1機能。シリアル全体が筐体の番号
-            ("3-1", "0511", "024e", "000000000012345"),
-            ("3-2", "0511", "924e", "000000000067890"),
-            // px4-userland が対応していない機材
-            ("1-4", "0511", "0000", "000012050009999"),
-            ("1-5", "1234", "5678", "000012050009999"),
-            // シリアルが無い
-            ("usb1", "1d6b", "0002", null));
-        try
-        {
-            await Assert.That(Px4Userland.Enclosures(sysfs)).IsEquivalentTo(
-                [
-                    new Px4Userland.Enclosure("000000000012345", "PX-MLT5PE"),
-                    new Px4Userland.Enclosure("000000000067890", "DTV02A-5TS-P"),
-                    new Px4Userland.Enclosure("00001205000960", "PX-Q3U4"),
-                ],
-                CollectionOrdering.Matching);
-        }
-        finally
-        {
-            Directory.Delete(sysfs, recursive: true);
-        }
+        var warned = new List<string>();
+        var found = Px4Userland.ParseList(List, warned.Add);
+
+        await Assert.That(found.Select(e => (e.Id, e.Model))).IsEquivalentTo(
+            [("000000000012345", "PX-MLT5PE"), ("00001205000960", "PX-Q3U4")], CollectionOrdering.Matching);
+        await Assert.That(found[0].Receivers.Count).IsEqualTo(5);
+        await Assert.That(found[1].Receivers.Count).IsEqualTo(8);
+        await Assert.That(found[1].Receivers[2].Types).IsEquivalentTo(["GR"], CollectionOrdering.Matching);
+
+        // 使えない筐体と rejected は理由を残す。権限が無いときは黙って「無い」にしない
+        await Assert.That(warned.Count).IsEqualTo(2);
+        await Assert.That(warned[0]).Contains("status=incomplete");
+        await Assert.That(warned[1]).Contains("open_failed");
+        await Assert.That(warned[1]).Contains("権限");
     }
 
     [Test]
-    public async Task 数字でないシリアルは使わない()
+    public async Task 何も刺さっていなければ空()
     {
-        var sysfs = FakeSysfs(("3-1", "0511", "024e", "ABC000000012345"));
-        try
-        {
-            await Assert.That(Px4Userland.Enclosures(sysfs)).IsEmpty();
-        }
-        finally
-        {
-            Directory.Delete(sysfs, recursive: true);
-        }
-    }
-
-    [Test]
-    public async Task sysfs_が無ければ空()
-    {
-        await Assert.That(Px4Userland.Enclosures("/nonexistent/sysfs")).IsEmpty();
-        await Assert.That(Px4Userland.Detect("/nonexistent/sysfs")).IsEmpty();
+        await Assert.That(Px4Userland.ParseList("", _ => { })).IsEmpty();
     }
 
     [Test]
@@ -143,26 +128,14 @@ public class Px4Tests
     [Test]
     public async Task 筐体と受信機から設定の形に組み立てる()
     {
-        var found = Px4Userland.Specs(
-            [
-                new Px4Userland.Enclosure("00001205000960", "PX-Q3U4"),
-                new Px4Userland.Enclosure("000000000012345", "PX-MLT5PE"),
-                // まだ受信機を聞けていない筐体は出さない
-                new Px4Userland.Enclosure("000000000067890", "DTV02A-5TS-P"),
-            ],
-            id => id switch
-            {
-                "00001205000960" => Receivers(Q3u4List),
-                "000000000012345" => Receivers(Mlt5List),
-                _ => null,
-            });
+        var found = Px4Userland.Specs(Px4Userland.ParseList(List, _ => { }));
         await Assert.That(found.Count).IsEqualTo(13);
-        await Assert.That(found[0].Device).IsEqualTo("px4:00001205000960:0");
-        await Assert.That(found[0].Name).IsEqualTo("PX-Q3U4-0960 #0");
-        await Assert.That(found[2].Types).IsEquivalentTo(["GR"], CollectionOrdering.Matching);
-        await Assert.That(found[8].Device).IsEqualTo("px4:000000000012345:0");
-        await Assert.That(found[8].Name).IsEqualTo("PX-MLT5PE-2345 #0");
-        await Assert.That(found[12].Types).IsEquivalentTo(["GR", "BS", "CS"], CollectionOrdering.Matching);
+        await Assert.That(found[0].Device).IsEqualTo("px4:000000000012345:0");
+        await Assert.That(found[0].Name).IsEqualTo("PX-MLT5PE-2345 #0");
+        await Assert.That(found[0].Types).IsEquivalentTo(["GR", "BS", "CS"], CollectionOrdering.Matching);
+        await Assert.That(found[5].Device).IsEqualTo("px4:00001205000960:0");
+        await Assert.That(found[5].Name).IsEqualTo("PX-Q3U4-0960 #0");
+        await Assert.That(found[7].Types).IsEquivalentTo(["GR"], CollectionOrdering.Matching);
         await Assert.That(found.All(spec => !spec.Disabled)).IsTrue();
     }
 
@@ -272,10 +245,43 @@ public class Px4Tests
     [Test]
     public async Task reader_conf_は_pcscd_の形()
     {
-        var conf = Px4Daemon.ReaderConf("00001205000960", "/run/px4-userland", "/opt/px4-userland/ifd/px4-userland-ifd.so");
+        var conf = Px4Userland.ReaderConf("00001205000960", "/run/px4-userland", "/opt/px4-userland/ifd/px4-userland-ifd.so");
         await Assert.That(conf).Contains("FRIENDLYNAME \"px4-userland 0960 Internal Card Reader\"");
         await Assert.That(conf).Contains("DEVICENAME   px4-userland:runtime=/run/px4-userland:device=00001205000960:access=user");
         await Assert.That(conf).Contains("LIBPATH      /opt/px4-userland/ifd/px4-userland-ifd.so");
         await Assert.That(conf).Contains("CHANNELID    0");
+    }
+
+    [Test]
+    public async Task reader_conf_を筐体ぶん揃えて_いない筐体のは消す()
+    {
+        var dir = Path.Combine(Path.GetTempPath(), $"denpa-readerconf-{Guid.NewGuid():N}");
+        var ifd = Path.Combine(dir, "ifd.so");
+        Directory.CreateDirectory(dir);
+        File.WriteAllText(ifd, "");
+        try
+        {
+            // もう居ない筐体の reader.conf は消す
+            File.WriteAllText(Path.Combine(dir, "px4-userland-00001205009999.conf"), "old");
+            // denpa が書いたものでないファイルには触らない
+            File.WriteAllText(Path.Combine(dir, "other.conf"), "keep");
+
+            await Assert.That(Px4Userland.WriteReaderConfs(["00001205000960", "000000000012345"], dir, ifd)).IsTrue();
+            var names = Directory.GetFiles(dir, "*.conf").Select(Path.GetFileName).Order().ToArray();
+            await Assert.That(names).IsEquivalentTo(
+                ["other.conf", "px4-userland-000000000012345.conf", "px4-userland-00001205000960.conf"],
+                CollectionOrdering.Matching);
+
+            // 同じ顔ぶれなら書き直さない (pcscd を入れ直さなくてよい)
+            await Assert.That(Px4Userland.WriteReaderConfs(["00001205000960", "000000000012345"], dir, ifd)).IsFalse();
+            // 減っただけなら入れ直さない (居ない筐体のリーダーは「カードなし」で並ぶだけ)
+            await Assert.That(Px4Userland.WriteReaderConfs(["00001205000960"], dir, ifd)).IsFalse();
+            // 増えたら入れ直す
+            await Assert.That(Px4Userland.WriteReaderConfs(["00001205000960", "000000000067890"], dir, ifd)).IsTrue();
+        }
+        finally
+        {
+            Directory.Delete(dir, recursive: true);
+        }
     }
 }

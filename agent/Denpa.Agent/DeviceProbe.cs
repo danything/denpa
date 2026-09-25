@@ -192,8 +192,8 @@ public static partial class DeviceProbe
         }
 
         /*
-         * px4-userland の機材は USB を sysfs で数え、受信機は筐体に聞く。
-         * デバイスノードは出ない (Px4.cs)。px4d が ready になるまでは出てこない
+         * px4-userland の機材は、筐体も受信機も px4d --list に聞く。
+         * デバイスノードは出ない (Px4.cs)
          */
         found.AddRange(Px4Userland.Detect());
 

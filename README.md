@@ -77,7 +77,7 @@ AV1 が再生できないテレビには、テレビごとに H.264 や生TSを�
 ## 用意するもの
 
 - **チューナー** — Linux DVB (PT2/PT3、PX-S1UD など。ドライバはホスト側に入れておく) か、
-  **px4-userland の対応機種** (PLEX PX-Q3U4 / PX-MLT5PE / e-Better DTV02A-5TS-P。
+  **px4-userland の対応機種** (PLEX PX-Q3U4 / PX-W3U4 / PX-MLT 系、e-Better / Digibest 系など。
   ドライバはエージェントのイメージに同梱。ホストには何も入れない。
   [docs/agent.md](docs/agent.md#px-q3u4-などは-px4-userland-でカーネルドライバは入れてもらわない))。
   PX-S1UD は smsusb を blacklist してあれば、同梱の siano-userland でホストに何も入れずに使えます
@@ -168,7 +168,7 @@ docker compose) で動かす構成なら `oci://ghcr.io/danything/charts/denpa-a
 **手元の機材では当てられていないところです。** 動いた/動かなかったを
 [Issue](https://github.com/danything/denpa/issues) で教えてもらえると、ここを埋められます。
 
-- **PX-Q3U4 / PX-MLT5PE / DTV02A-5TS-P での選局と内蔵カードリーダー** (同梱の px4-userland に任せる作りですが、
+- **px4-userland の機材 (PX-Q3U4 など) での選局と内蔵カードリーダー** (同梱の px4-userland に任せる作りですが、
   手元に筐体が無く、実機に当てていません)
 - **PX-S1UD を siano-userland で掴んだときの選局** (smsusb を blacklist した場合。同梱の siano-ts に
   任せる作りですが、実機に当てていません。DVB で使う道はこれまでどおり)

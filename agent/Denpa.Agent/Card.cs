@@ -79,6 +79,32 @@ public static class Card
         }
     }
 
+    /// <summary>
+    /// pcscd を入れ直す。**reader.conf を読ませるため** (Debian の pcscd は
+    /// 起動したときにしか読まない。Px4.cs の WriteReaderConfs)。
+    ///
+    /// <para>
+    /// 入れ直すと、開いていたカードは全部使えなくなる。libaribb25 は繋ぎ直さない
+    /// ので、呼んだ側でカードを開き直させる (Program.cs)。録画中は呼ばない。
+    /// </para>
+    /// </summary>
+    public static async Task RestartPcscd()
+    {
+        await Shell.Run("pkill", ["-x", "pcscd"], TimeSpan.FromSeconds(10));
+        for (var i = 0; i < 50; i++)
+        {
+            if ((await Shell.Run("pgrep", ["-x", "pcscd"], TimeSpan.FromSeconds(10))).Code != 0) break;
+            await Task.Delay(100);
+        }
+        if ((await Shell.Run("pgrep", ["-x", "pcscd"], TimeSpan.FromSeconds(10))).Code == 0)
+        {
+            Log.Write("pcscd が止まらないので SIGKILL します");
+            await Shell.Run("pkill", ["-KILL", "-x", "pcscd"], TimeSpan.FromSeconds(10));
+            await Task.Delay(500);
+        }
+        await EnsurePcscd();
+    }
+
     public static async Task<JsonObject> Status()
     {
         var pcscd = (await Shell.Run("pgrep", ["-x", "pcscd"], TimeSpan.FromSeconds(10))).Code == 0;

@@ -91,7 +91,11 @@ public sealed class TunerPool(
         {
             B25?.Dispose();
             B25 = next;
+            CardStale = false;
         }
+
+        /// <summary>pcscd を入れ直したので、次に掴むとき復号器ごとカードを開き直す</summary>
+        public bool CardStale { get; set; }
 
         /// <summary>
         /// **この1本を選局し直す間の錠。本ごとに別**なので、他の本は待たない。
@@ -147,6 +151,19 @@ public sealed class TunerPool(
             }
         }
         onChange();
+    }
+
+    /// <summary>
+    /// **pcscd を入れ直したあとに呼ぶ。** 掴んでいる本の復号器を、次の選局で
+    /// カードごと開き直させる。libaribb25 はカードに繋ぎ直さないので、前の口の
+    /// ままだと以降の ECM が全部失敗する。いま流れている選局はそのまま
+    /// </summary>
+    public void ReopenCards()
+    {
+        lock (_deviceGate)
+        {
+            foreach (var held in _held.Values) held.CardStale = true;
+        }
     }
 
     public sealed class TunerBusyException(string message) : Exception(message);
@@ -296,6 +313,11 @@ public sealed class TunerPool(
                 if (open.B25 is { Broken: true })
                 {
                     Log.Write($"[{spec.Name}] 復号器が壊れた疑いがあるので作り直します");
+                    open.ReplaceB25(Reopen(spec));
+                }
+                else if (open.CardStale)
+                {
+                    // pcscd を入れ直した。前のカードの口はもう使えない (ReopenCards)
                     open.ReplaceB25(Reopen(spec));
                 }
                 return open;
