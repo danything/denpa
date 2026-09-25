@@ -6,11 +6,12 @@ using Microsoft.Win32.SafeHandles;
 namespace Denpa.Agent;
 
 /// <summary>
-/// 選局した TS を**子プロセスの標準出力**で受け取る口。px4-ts (Px4.cs) と
-/// siano-ts (Siano.cs) が同じ作りなので、ここで1つにする。
+/// 選局した TS を**子プロセスの標準出力**で受け取る口 (px4-ts。Px4.cs)。
+/// siano-ts は起こしたまま選局し直すので別の作り (Siano.cs) だが、pipe の扱い
+/// (<see cref="StdoutHandle"/> / <see cref="WidenPipe"/>) はここのものを使う。
 ///
 /// <para>
-/// **どちらも1回1チャンネル。** 選局のたびに子を起こし直す。
+/// **1回1チャンネル。** 選局のたびに子を起こし直す。
 /// 子は同期するまで標準出力に1バイトも書かない (書くのは TS だけ、診断は stderr)。
 /// なので「最初の1バイトが読めた = 同期した」「先に終わった = 失敗、理由は stderr の末尾」
 /// 「何も無いまま時間が過ぎた = 電波が来ていない」で見分ける。
@@ -86,6 +87,15 @@ internal sealed class ChildTs(string name, string program)
         throw new IOException($"子の標準出力を掴めません ({stream.GetType().Name})");
     }
 
+    /// <summary>子の標準出力の pipe を広げる (<see cref="PipeSize"/>)。通らなければ記録に残して続ける</summary>
+    internal static void WidenPipe(int fd, string name)
+    {
+        if (Sys.Fcntl(fd, Sys.SetPipeSize, PipeSize) < 0 && Sys.Fcntl(fd, Sys.SetPipeSize, FallbackPipeSize) < 0)
+        {
+            Log.Write($"[{name}] pipe を広げられませんでした ({Marshal.GetLastPInvokeErrorMessage()})");
+        }
+    }
+
     /// <summary>
     /// 子を起こして同期を待つ。前の子が居れば先に止める。
     /// 同期しなければ理由を添えて投げる (子は止めてある)
@@ -112,10 +122,7 @@ internal sealed class ChildTs(string name, string program)
 
         var handle = StdoutHandle(process);
         var fd = (int)handle.DangerousGetHandle();
-        if (Sys.Fcntl(fd, Sys.SetPipeSize, PipeSize) < 0 && Sys.Fcntl(fd, Sys.SetPipeSize, FallbackPipeSize) < 0)
-        {
-            Log.Write($"[{name}] pipe を広げられませんでした ({Marshal.GetLastPInvokeErrorMessage()})");
-        }
+        WidenPipe(fd, name);
 
         var deadline = DateTime.UtcNow + syncTimeout;
         var synced = false;
