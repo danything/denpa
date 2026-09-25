@@ -198,6 +198,22 @@ docker compose) で動かす構成なら `oci://ghcr.io/danything/charts/denpa-a
 - [docs/migrate.md](docs/migrate.md) — **EPGStation からの引き継ぎ**
 - [docs/stream.md](docs/stream.md) — **ライブ視聴** (放送中のものを観る)
 
+## 謝辞
+
+**手を入れてくれた人** (ありがとうございます):
+
+- [@Khronos31](https://github.com/Khronos31) — px4-userland / siano-userland で選局できなかったのを、PX-Q3U4 の実機で見つけて直してくれました (#188)
+
+**denpa が乗っている仕事** — とくにチューナーまわりは、次の方々の仕事の上に立っています:
+
+- [px4-userland](https://github.com/Khronos31/px4-userland) / [siano-userland](https://github.com/Khronos31/siano-userland) (@Khronos31) — PX-Q3U4 などと PX-S1UD を、ホストにドライバを入れずに使えるのはこれのおかげです。PX-MLT5PE / DTV02A-5TS-P の対応は @siketyan
+- [px4_drv](https://github.com/tsukumijima/px4_drv) (nns779 / tsukumijima) — px4-userland の元になったドライバと、IT930x のファームウェアの出どころ
+- [libaribb25](https://github.com/tsukumijima/libaribb25) (tsukumijima) — B25 の解除
+- [join_logo_scp](https://github.com/yobibi/join_logo_scp) (yobibi) と chapter_exe / logoframe (tobitti0 版) — CM 検出
+- [web-bml](https://github.com/otya128/web-bml) (otya128) — データ放送を描く
+
+ほかに借りているものと出どころは [docs/licenses.md](docs/licenses.md) にあります。
+
 ## ライセンス
 
 **AGPL-3.0-or-later** ([LICENSE](LICENSE))。denpa は**自分の家に置いて、外から使う**
