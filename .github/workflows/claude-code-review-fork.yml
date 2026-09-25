@@ -1,18 +1,29 @@
 name: Claude Code Review (fork)
 
 # fork からの PR は secrets が渡らないため通常の pull_request では動かない。
-# メンテナが 'claude-review' ラベルを貼ったときだけ pull_request_target で起動する。
+# メンテナが 'claude-review' ラベルを貼ったら pull_request_target で起動する。
 # ラベルを貼れるのは write 権限保持者だけなので、これが承認ゲートになる。
-# 再レビューしたいときはラベルを外して貼り直す。
+# **貼ってある間は、push のたびにもう一度レビューする** (貼り直さなくてよい)。
+# 承認した後の変更も読ませることになるが、PR のコードは取るだけで実行しない
+# (下の checkout の説明)。止めたいときはラベルを外す。
 on:
   pull_request_target:
-    types: [labeled]
+    types: [labeled, synchronize]
 
 jobs:
   claude-review-fork:
     if: >-
-      github.event.label.name == 'claude-review' &&
-      github.event.pull_request.head.repo.full_name != github.repository
+      github.event.pull_request.head.repo.full_name != github.repository &&
+      (
+        (github.event.action == 'labeled' && github.event.label.name == 'claude-review') ||
+        (github.event.action == 'synchronize' &&
+          contains(github.event.pull_request.labels.*.name, 'claude-review'))
+      )
+    # 同じ PR で続けて push されたら、古いほうのレビューは取り消す。job に置くのは、
+    # 関係ないラベルを貼っただけの run (上の if で飛ばされる) に取り消させないため
+    concurrency:
+      group: claude-review-fork-${{ github.event.pull_request.number }}
+      cancel-in-progress: true
     runs-on: ubuntu-latest
     # OIDC (id-token) は渡さない。下の github_token でワークフローの GITHUB_TOKEN を使う
     permissions:
