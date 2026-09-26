@@ -263,9 +263,11 @@ SQLite が拒むので、事実と状態が食い違いようがありません�
 | `agent/Denpa.Agent/Siano.cs` | siano-userland の機材 (PX-S1UD …) を掴む。機材は `siano-ts --list` に聞き、カーネルが掴んでいないものだけを `--control` で起こしたまま選局し直す |
 | `agent/Denpa.Agent/ChildTs.cs` | 子プロセス (px4-ts / siano-ts) の標準出力を読み口に載せる |
 | `agent/Denpa.Agent/ChannelTable.cs` | チャンネル名 → 周波数と TSID |
+| `agent/Denpa.Agent/Cas.cs` | B-CAS まわりの境目 (解く・鍵を貰う・カードと話す、の3段の型) |
 | `agent/Denpa.Agent/B25.cs` / `Multi2.cs` | B25 の解除 (TS から ECM を拾い、鍵を貰って MULTI2 で解く) |
 | `agent/Denpa.Agent/BCas.cs` / `CardLinks.cs` | B-CAS へのコマンドと、カードリーダーを探して繋ぎ直す |
 | `agent/Denpa.Agent/Ccid.cs` / `T1.cs` / `UsbFs.cs` | USB の CCID カードリーダーを usbfs で直に叩く (pcscd を使わない) |
+| `agent/Denpa.Agent/Pcsc.cs` | macOS の USB カードリーダー (OS の PCSC.framework 越し) |
 | `agent/Denpa.Agent/Px4Card.cs` | px4-userland の内蔵カードリーダーに px4d の control socket で APDU を投げる |
 | `agent/Denpa.Agent/CardShare.cs` | 鍵をどこから貰うか (手元のカード / 別の拠点) と、鍵を他の拠点へ配る口 |
 | `agent/Denpa.Agent/Card.cs` | カードが読めているかと、掛かったまま録れた TS の後からの解除 |
@@ -273,7 +275,7 @@ SQLite が拒むので、事実と状態が食い違いようがありません�
 | `agent/Denpa.Agent/Config.cs` | `tuners.json` と `channels.json` の読み書き |
 | `agent/Denpa.Agent/Events.cs` | 知らせ (`/denpa/events`、SSE) |
 | `agent/Denpa.Agent/Probe.cs` | 実機で選局と復号だけ試す口 (`denpa-agent --tune …`)。サーバは立てない |
-| `agent/Denpa.Agent/Interop.cs` | 偽の選局 (`FAKE_TUNE`) をプロセスグループごと終わらせる |
+| `agent/Denpa.Agent/Interop.cs` | 子プロセスへの SIGTERM (偽の選局 `FAKE_TUNE` はプロセスグループごと) |
 
 **チューナーは書かなくてよい。** 定義が無ければ刺さっているものを自分で見つけ、
 地上波か衛星かまで判別する。書いてあればそちらが勝つ (LNB・1本だけ止める、は
