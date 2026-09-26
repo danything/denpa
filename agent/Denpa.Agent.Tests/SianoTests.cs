@@ -8,27 +8,22 @@ namespace Denpa.Agent.Tests;
  * siano-userland の機材 (PX-S1UD など) を掴むところ。
  *
  * 本物の機材は無い。ここで確かめるのは**機材に触らない部分**だけ —
- * sysfs の読み方 (とくに「カーネルが掴んでいるものは渡さない」)、device 文字列の形、
+ * siano-ts --list と sysfs の読み方 (とくに「カーネルが掴んでいるものは渡さない」)、device 文字列の形、
  * siano-ts の起こし方。実機で当てるのは `denpa-agent --tune siano:<ポート> T27` (Probe.cs)。
  */
 public class SianoTests
 {
     /// <summary>
-    /// 偽の sysfs。<c>/sys/bus/usb/devices/&lt;port&gt;/{idVendor,idProduct,busnum,devnum}</c> と、
-    /// ドライバが掴んでいればインターフェース <c>&lt;port&gt;:1.0/driver</c> をドライバの場所へのリンクで
+    /// 偽の sysfs。ドライバが掴んでいる機材だけ、インターフェース <c>&lt;port&gt;:1.0/driver</c> を
+    /// ドライバの場所へのリンクにする (カーネルが掴んでいるかは sysfs で見る)
     /// </summary>
-    private static string FakeSysfs(params (string Port, string Vendor, string Product, int Bus, int Address, string? Driver)[] devices)
+    private static string FakeSysfs(params (string Port, string? Driver)[] devices)
     {
         var root = Path.Combine(Path.GetTempPath(), $"denpa-sysfs-{Guid.NewGuid():N}");
         var drivers = Path.Combine(root, "_drivers");
-        foreach (var (port, vendor, product, bus, address, driver) in devices)
+        foreach (var (port, driver) in devices)
         {
-            var dir = Path.Combine(root, port);
-            Directory.CreateDirectory(dir);
-            File.WriteAllText(Path.Combine(dir, "idVendor"), vendor + "\n");
-            File.WriteAllText(Path.Combine(dir, "idProduct"), product + "\n");
-            File.WriteAllText(Path.Combine(dir, "busnum"), bus + "\n");
-            File.WriteAllText(Path.Combine(dir, "devnum"), address + "\n");
+            Directory.CreateDirectory(Path.Combine(root, port));
             var iface = Path.Combine(root, $"{port}:1.0");
             Directory.CreateDirectory(iface);
             if (driver is null) continue;
@@ -38,44 +33,70 @@ public class SianoTests
         return root;
     }
 
+    /// <summary>siano-userland 0.1.7 の <c>siano-ts --list</c> の形</summary>
+    private const string List = """
+        model=PX-S1UD usb=3275:0080 bus=1 address=4 port=1-2 status=ready receivers=1
+        receiver=0 device=1 local=0 system=ISDB-T
+        model=PX-S1UD usb=3275:0080 bus=1 address=5 port=1-3 status=ready receivers=1
+        receiver=0 device=1 local=0 system=ISDB-T
+        model=Siano-Rio usb=187f:0600 bus=2 address=9 port=2-1.4 status=ready receivers=1
+        receiver=0 device=1 local=0 system=ISDB-T
+        model=Siano-Rio usb=187f:0600 bus=3 address=2 port=- status=ready receivers=1
+        receiver=0 device=1 local=0 system=ISDB-T
+        rejected model=Siano-Nova-B usb=187f:0201 bus=1 address=6 port=1-4 status=unsupported
+        """;
+
+    // smsusb が掴んでいるのは 1-3 だけ
+    private static List<SianoUserland.Stick> Sticks(List<string>? warned = null) =>
+        SianoUserland.ParseList(List, port => port == "1-3" ? "smsusb" : null, message => warned?.Add(message));
+
+    [Test]
+    public async Task siano_ts_list_から機材を読む()
+    {
+        var warned = new List<string>();
+        var sticks = Sticks(warned);
+        await Assert.That(sticks.Select(s => s.Port)).IsEquivalentTo(["1-2", "1-3", "2-1.4"], CollectionOrdering.Matching);
+        await Assert.That(sticks[2].Node).IsEqualTo("/dev/bus/usb/002/009");
+        await Assert.That(sticks[2].Model).IsEqualTo("Siano-Rio");
+        await Assert.That(sticks[0].Types).IsEquivalentTo(["GR"], CollectionOrdering.Matching);
+        await Assert.That(sticks[1].Driver).IsEqualTo("smsusb");
+        // ポートの分からない機材と対応外の機材は、理由を残して使わない
+        await Assert.That(warned.Count).IsEqualTo(2);
+        await Assert.That(warned[0]).Contains("port=-");
+        await Assert.That(warned[1]).Contains("unsupported");
+    }
+
     [Test]
     public async Task ドライバに繋がっていない機材だけ挙げる()
     {
-        var sysfs = FakeSysfs(
-            ("1-2", "3275", "0080", 1, 4, null),
-            // smsusb が掴んでいる S1UD は /dev/dvb で見つかる。こちらでは挙げない
-            ("1-3", "3275", "0080", 1, 5, "smsusb"),
-            ("2-1.4", "187f", "0600", 2, 9, null),
-            // 関係ない機材
-            ("1-4", "0511", "084a", 1, 6, null));
-        try
-        {
-            await Assert.That(SianoUserland.Detect(sysfs)).IsEquivalentTo(
-                [
-                    new TunerSpec("PX-S1UD 1-2", ["GR"], false, "siano:1-2"),
-                    new TunerSpec("Siano RIO 2-1.4", ["GR"], false, "siano:2-1.4"),
-                ],
-                CollectionOrdering.Matching);
-            var sticks = SianoUserland.Sticks(sysfs);
-            await Assert.That(sticks.Single(s => s.Port == "1-3").Driver).IsEqualTo("smsusb");
-            await Assert.That(sticks.Single(s => s.Port == "2-1.4").Node).IsEqualTo("/dev/bus/usb/002/009");
-        }
-        finally
-        {
-            Directory.Delete(sysfs, recursive: true);
-        }
+        await Assert.That(SianoUserland.Specs(Sticks())).IsEquivalentTo(
+            [
+                // smsusb が掴んでいる 1-3 は /dev/dvb で見つかる。こちらでは挙げない
+                new TunerSpec("PX-S1UD 1-2", ["GR"], false, "siano:1-2"),
+                new TunerSpec("Siano-Rio 2-1.4", ["GR"], false, "siano:2-1.4"),
+            ],
+            CollectionOrdering.Matching);
     }
 
     [Test]
     public async Task カーネルが掴んでいれば選局の前に断る()
     {
-        var sysfs = FakeSysfs(("1-3", "3275", "0080", 1, 5, "smsusb"), ("1-2", "3275", "0080", 1, 4, null));
+        var error = Assert.Throws<IOException>(() => SianoUserland.Claimable("1-3", Sticks()));
+        await Assert.That(error.Message).Contains("smsusb");
+        Assert.Throws<IOException>(() => SianoUserland.Claimable("1-9", Sticks()));
+        await Assert.That(SianoUserland.Claimable("1-2", Sticks()).Node).IsEqualTo("/dev/bus/usb/001/004");
+    }
+
+    [Test]
+    public async Task 掴んでいるドライバは_sysfs_のインターフェースで見る()
+    {
+        var sysfs = FakeSysfs(("1-2", null), ("1-3", "smsusb"));
         try
         {
-            var error = Assert.Throws<IOException>(() => SianoUserland.Claimable("1-3", sysfs));
-            await Assert.That(error.Message).Contains("smsusb");
-            Assert.Throws<IOException>(() => SianoUserland.Claimable("1-9", sysfs));
-            await Assert.That(SianoUserland.Claimable("1-2", sysfs).Node).IsEqualTo("/dev/bus/usb/001/004");
+            await Assert.That(SianoUserland.Driver(sysfs, "1-2")).IsNull();
+            await Assert.That(SianoUserland.Driver(sysfs, "1-3")).IsEqualTo("smsusb");
+            // sysfs が無い (Linux でない) なら、掴んでいるドライバも無い
+            await Assert.That(SianoUserland.Driver("/nonexistent/sysfs", "1-2")).IsNull();
         }
         finally
         {
@@ -84,9 +105,9 @@ public class SianoTests
     }
 
     [Test]
-    public async Task sysfs_が無ければ空()
+    public async Task 何も刺さっていなければ空()
     {
-        await Assert.That(SianoUserland.Detect("/nonexistent/sysfs")).IsEmpty();
+        await Assert.That(SianoUserland.ParseList("", _ => null, _ => { })).IsEmpty();
     }
 
     [Test]
