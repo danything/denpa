@@ -95,16 +95,13 @@ docker_ready() {
   return 1
 }
 
-# genkan が動いているか (proxy ネットワークに caddy-docker-proxy が居るか)
+# genkan が入っているか。**genkan ネットワークがあれば入っている** (genkan だけが作る名前。止まっていても
+# 残る)。止めてあるものは起こし直さない — 意図して止めた人の genkan を上げ直すたびに復活させたり、
+# 別の場所に入れた genkan の横にもう1つ clone したりしない
+genkan_installed() { docker network inspect genkan >/dev/null 2>&1; }
+# 動いているか (genkan ネットワークに Caddy が居るか)
 genkan_running() {
-  docker network inspect proxy >/dev/null 2>&1 \
-    && docker ps --filter network=proxy --format '{{.Image}}' | grep -q caddy-docker-proxy
-}
-# genkan が入ってはいるか (止まっていても)。**止めてあるものは起こし直さない** — 意図して止めた人の
-# genkan を上げ直すたびに復活させたり、別の場所に入れた genkan の横にもう1つ clone したりしない
-genkan_installed() {
-  docker network inspect proxy >/dev/null 2>&1 \
-    || docker ps -a --format '{{.Image}}' | grep -q caddy-docker-proxy
+  genkan_installed && docker ps --filter network=genkan --format '{{.Image}}' | grep -q caddy-docker-proxy
 }
 # そのポートで誰かが待ち受けているか。bash の /dev/tcp で繋いでみる (ss / lsof の違いを気にしない)
 port_used() { (exec 3<>"/dev/tcp/127.0.0.1/$1") 2>/dev/null; }
@@ -144,10 +141,10 @@ GENKAN_OVERRIDE='services:
       caddy.@outside: not remote_ip private_ranges
       caddy.respond: "@outside 403"
       caddy.reverse_proxy: "{{upstreams 3000}}"
-    networks: [default, proxy]
+    networks: [default, genkan]
 
 networks:
-  proxy:
+  genkan:
     external: true'
 
 # ~/denpa で docker compose。-f を付けないので compose.yml と compose.override.yml を Compose が自分で重ねる
@@ -171,9 +168,9 @@ start_denpa() {
   { echo "$MARK $2。手を入れず、足すものは compose.override.yml に)"; cat "$DENPA_DIR/.compose.yml.orig"; } > "$DENPA_DIR/compose.yml"
   rm -f "$DENPA_DIR/compose.yml.new"
   override="$DENPA_DIR/compose.override.yml"
-  # genkan の登録が残っているのに proxy ネットワークが無い (genkan を外した) と、up が分かりにくく落ちる
-  if [ -f "$override" ] && grep -q 'denpa.localhost' "$override" && ! docker network inspect proxy >/dev/null 2>&1; then
-    die "genkan が見当たりません。$override の genkan への登録 (labels・networks・proxy) を消すか、genkan を起こしてから流し直してください"
+  # genkan の登録が残っているのに genkan ネットワークが無い (genkan を外した) と、up が分かりにくく落ちる
+  if [ -f "$override" ] && grep -q 'denpa.localhost' "$override" && ! genkan_installed; then
+    die "genkan が見当たりません。$override の genkan への登録 (labels・networks) を消すか、genkan を入れ直してから流し直してください"
   fi
   # **登録するときだけ genkan を入れる** (雛形を作るときか、もう登録が書いてあるとき)
   genkan=no
