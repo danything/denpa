@@ -80,10 +80,6 @@ CI では**台を増やして**います。4つに割って別のランナーに
 `--shard` の機械割りだと重いスペック (録画完了を実時間で待つもの) が同じ組に固まるので、
 実測の所要時間で人が割っています。新しいスペックを足したら必ずどこかの組に入れてください
 (入れ忘れは CI の「組分けの検算」が落として教えます。`.github/workflows/test.yml`)。
-**ランナーの4コアに対して1つ空けています** — ワーカーごとに denpa と偽エージェントと
-ブラウザを1式ずつ立てるので、4つ並べるとコアが余らず、**チューナーを掴むのを待つ
-テスト**が30秒待っても掴めずに落ちます。手元の12コアを `taskset` で4つに絞って測ると、
-4ワーカーは2回とも落ち、3ワーカーは2回とも通りました (速さは変わりません)。
 リント・型・単体と、.NET のエージェントも別のジョブなので、待つのは
 **いちばん遅い1つ**だけです (4分37秒 → 2分ほど)。
 
@@ -93,9 +89,9 @@ CI では**台を増やして**います。4つに割って別のランナーに
 | いちばん長いファイル (放送の延長、58秒) を2つに割る | 59秒 → 50秒 |
 
 ワーカー数は**手元では CPU の数そのまま (下限2・上限6)、CI (`CI=1`。`docker compose run e2e` も
-そう) では 3 で固定** (`playwright.config.ts`)。半分にしていた頃は CI (4コア) で
-2つしか立たず、そこだけ速くなりませんでした。待っている時間が大半なので、
-コア数ぶん立てて構いません。
+そう) では 3 で固定**です。待っている時間が大半なのでコア数ぶん立てて構いませんが、
+**CI のランナー (4コア) では1つ空けます** — 4つ並べると**チューナーを掴むのを待つテスト**が
+30秒待っても掴めずに落ちました (実測は `playwright.config.ts` の頭)。
 
 混み具合のせいでごく稀に落ちるので **1回だけやり直します** (`retries: 1`)。
 中身ではなくブラウザ側が落ちるほうの話なので、ここで赤くしても直すものがありません。
@@ -161,11 +157,12 @@ JSON で持つ列 (ジャンル・音声の構成・ルールの対象チャン�
 
 `Dockerfile` が denpa 本体、`agent/Dockerfile` がチューナー側です。
 CI が両方を焼いて `deploy/` の印を書き戻します。**main は直接 push できない**
-(必須チェック `check` で守ってある) ので、書き戻しは bot が PR を出して自分で
-マージします (手順と理由は `.github/bump-pr.sh`。release の Chart.yaml の書き戻しも同じ)。
-release はイメージを組み直さず、main で組んだものに版を 1 層足して (`.github/release.Dockerfile`
-の `ENV DENPA_VERSION`) `x.y.z` / `latest` の名前を付けます。動いている denpa はその版と GitHub の
-最新のリリースを数で比べ、新しい版があればヘッダーで知らせます (`src/lib/server/update.ts`)。
+(ruleset の必須チェック `check` / `agent` / `e2e (1)`〜`(4)` / `claude-review` で守ってある)
+ので、書き戻しは bot が PR を出し、必須チェックの status を自分で付けてマージします
+(手順と理由は `.github/bump-pr.sh`。release の Chart.yaml の書き戻しも同じ)。
+release はイメージを組み直さず、main で組んだものに版を 1 層足します
+(`.github/release.Dockerfile`。タグの決め方と理由は [architecture.md](architecture.md#イメージのタグ)、
+出し方は `.github/image-tags.sh`)。
 
 **イメージは amd64 と arm64 の2つ**で、同じタグに束ねてあります (理由と組み方は
 [architecture.md](architecture.md#イメージのタグ))。Dockerfile は BuildKit の `TARGETARCH`
@@ -176,9 +173,6 @@ release はイメージを組み直さず、main で組んだものに版を 1 �
 (push はしない。必須チェックにはしていない)。手元で arm64 を組むなら
 `docker buildx build --platform linux/arm64 -f agent/Dockerfile .` (amd64 の機械では
 QEMU が要り、ffmpeg や AOT はかなり遅い)。
-
-`latest` が動くのはリリースを作ったときだけ (焼き直さず貼り替える) — タグの決め方と
-理由は [architecture.md](architecture.md#イメージのタグ)、出し方は `.github/image-tags.sh`。
 
 エージェントの口に当てる適合テストは `agent/conformance.test.ts` ([app.md](app.md) のテストの表)。
 

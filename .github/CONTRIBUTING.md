@@ -25,13 +25,6 @@
 
 ## 開発環境
 
-```sh
-docker compose up                           # 開発サーバ(:5173) + 偽エージェント(:25252)
-docker compose run --rm unit                # 単体テスト
-docker compose run --rm e2e                 # E2E (Playwright)
-docker compose run --rm unit bun run lint   # リント + フォーマット確認
-docker compose run --rm unit bun run check  # 型 (svelte-check)
-```
-
-チューナー実機が無くても、E2E は偽のエージェント (`tests/fake`) で動きます。
-テストの方針や DB の列の足し方は [docs/development.md](../docs/development.md) に。
+`docker compose up` で開発サーバと偽のエージェント (`tests/fake`) が立ち、チューナー実機が
+無くても E2E まで回ります。入口 (genkan)・テストの回し方・方針・DB の列の足し方は
+[docs/development.md](../docs/development.md) に。

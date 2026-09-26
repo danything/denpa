@@ -30,7 +30,7 @@ permissions:
   packages: write
   # 印の書き換えは main へ直接 push せず、PR を出して自分でマージする (最後の段)
   pull-requests: write
-  # その PR に必須チェック (`check`) の status を自分で付けるため
+  # その PR に必須チェックの status を自分で付けるため
   statuses: write
 
 env:
@@ -197,7 +197,7 @@ jobs:
   # (各ノードは自分の arch のものを引く)。
   #
   # **main へは直接 push しない** (必須チェックで守ってあり、bot のトークンも
-  # 素通しにならない)。印を書き換えた PR を出して、`check` の status を自分で付けて、
+  # 素通しにならない)。印を書き換えた PR を出して、必須チェックの status を自分で付けて、
   # 自分でマージする。手順と理由は .github/bump-pr.sh (release と共通)
   bump:
     needs: [tags, merge]
@@ -216,8 +216,7 @@ jobs:
         run: |
           set -eu
           # 印を書く先は deploy/application.yaml の helm.valuesObject の中 (imageMarks.agent /
-          # imageMarks.denpa)。以前は k3s/deployment.yaml の Pod の注釈に直接書いていた。
-          # values はインラインなのでインデントは深い — 行頭の空白は幾つでも許す
+          # imageMarks.denpa)。values はインラインなのでインデントは深い — 行頭の空白は幾つでも許す
           FILES="deploy/application.yaml"
 
           . .github/bump-pr.sh
@@ -226,6 +225,6 @@ jobs:
           sed -i -E "s#^( +denpa:) sha-.*#\1 ${DENPA_TAG}#" ${FILES}
           bump_finish bump-image-marks \
             "chore: bump image marks [skip ci]" \
-            "agent: ${AGENT_TAG} / denpa: ${DENPA_TAG}。k3s の印を書き換えるだけ。下の check が付いたら自分でマージする" \
-            "k3s の印だけ。イメージはこの run が焼いた" \
+            "agent: ${AGENT_TAG} / denpa: ${DENPA_TAG}。deploy の印を書き換えるだけ。必須チェックが付いたら自分でマージする" \
+            "deploy の印だけ。イメージはこの run が焼いた" \
             ${FILES}

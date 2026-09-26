@@ -1,5 +1,5 @@
 /**
- * 偽の選局コマンド。**`recisdb tune` の代わり。**
+ * 偽の選局コマンド。**実チューナーの代わり** (エージェントの `FAKE_TUNE` 専用)。
  *
  * エージェントの `FAKE_TUNE` にこれを渡すと、本物のエージェントを実チューナー無しで
  * 動かせる (エージェントが `<種別> <チャンネル>` を足して起こす)。エージェントから見れば「起こすと TS を標準出力に流し続ける子プロセス」
@@ -24,7 +24,7 @@ if (type === undefined || channel === undefined) {
 
 const services = on(type, channel);
 if (services.length === 0) {
-    // recisdb が電波を掴めなかったときと同じ形。スキャンはここを見て次へ行く
+    // 電波を掴めなかったときの落ち方 (非0で終わる)。スキャンはここを見て次へ行く
     process.stderr.write(`Cannot tune to ${channel}: no signal\n`);
     process.exit(1);
 }

@@ -45,7 +45,7 @@ denpa:
   pwaNames: ""
   # OIDC でのログイン (docs/auth.md)。**Secret の名前だけ渡す** — 中身
   # (issuer / client-id / client-secret / group) は chart の外で作る
-  # (このリポジトリ自身は ExternalSecret `deploy/oidc-secret.yaml`)。空なら OIDC 無し
+  # (このリポジトリ自身は InfisicalSecret `deploy/oidc-secret.yaml`)。空なら OIDC 無し
   oidcSecretName: ""
   # 追加の環境変数 (src/lib/server/config.ts の一覧)。そのまま container.env に入る
   extraEnv: []
@@ -162,7 +162,8 @@ ingress:
   annotations: {}
   tls: []
 traefik:
-  # Traefik の IngressRoute (CRD)。標準の Ingress より前段の細かい指定ができる
+  # Traefik の IngressRoute (CRD)。標準の Ingress より前段の細かい指定ができる。
+  # 名前は ingress.hosts を使う (ingress.enabled は false のままでよい)
   enabled: false
   entryPoints:
     - websecure

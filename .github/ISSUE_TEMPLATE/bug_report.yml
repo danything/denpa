@@ -30,7 +30,7 @@ body:
       id: version
       attributes:
           label: denpa のバージョン
-          placeholder: v0.7.2
+          placeholder: v1.23.0
     - type: input
       id: environment
       attributes:

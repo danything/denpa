@@ -117,9 +117,9 @@ WebCrypto で足ります。認証まわりで「中で何をしているか分�
 **誰がログインしたかでは決めません。** 人が増えても denpa 側を触らずに済みます。
 
 **見るのは `groups` と `roles` の両方で、どちらかに `OIDC_GROUP` があれば通します。**
-グループクレーム (グループのオブジェクトID) からアプリロールへ移している最中だからです
-— グループを載せると ID トークンが大きくなり、oauth2-proxy の Cookie セッションが
-壊れます。両方受けておけば、切り替えの途中で誰も入れなくなることがありません。
+この家はグループクレーム (グループのオブジェクトID) からアプリロールへ移しました —
+グループを載せると ID トークンが大きくなり、oauth2-proxy の Cookie セッションが
+壊れるためです。両方受けておけば、どちらの形の登録でも、切り替えの途中でも入れます。
 
 Entra ID でグループを載せるには、**アプリ登録の「トークン構成」で
 `groupMembershipClaims` を有効に**してください。既定で載るのは
@@ -198,59 +198,30 @@ TRUSTED_NETWORKS=0.0.0.0/0
 #### この構成で実際に使っている値
 
 **oauth2-proxy (`auth` 名前空間) と同じアプリ登録を使い回しています。** テナントも
-グループも同じなので、入れる人の集合は forward-auth のときと変わりません。
+同じなので、入れる人の集合は前段で forward-auth していたときと変わりません。
 
-値は **`denpa` 名前空間の Secret `denpa-oidc`** に入っていて、chart はその名前
-(`denpa.oidcSecretName`、この家の値は `deploy/application.yaml` の `helm.valuesObject`) を `secretKeyRef` で引くだけです。
+値は **`denpa` 名前空間の Secret `denpa-oidc`** (鍵は `issuer` / `client-id` /
+`client-secret` / `group`) に入っていて、chart はその名前 (`denpa.oidcSecretName`、
+この家の値は `deploy/application.yaml` の `helm.valuesObject`) を `secretKeyRef` で引くだけです。
 
-| 鍵 | 何 |
-| --- | --- |
-| `issuer` | `OAUTH2_PROXY_OIDC_ISSUER_URL` と同じ |
-| `client-id` | `OAUTH2_PROXY_CLIENT_ID` と同じ |
-| `client-secret` | `auth/auth-secrets` の `oidc-client-secret` を写したもの |
-| `group` | `OAUTH2_PROXY_ALLOWED_GROUPS` と同じ |
+**Secret は Infisical の operator が作ります** (`deploy/oidc-secret.yaml` の InfisicalSecret)。
+値そのものは Infisical (https://il.doany.io、このクラスタでセルフホスト) のフォルダ
+`/denpa/denpa-oidc` にあり、シークレット名がそのまま Secret の鍵になります。
+**手で作った Secret がどこにも書かれていない状態を無くす**ためです — クラスタを立て直したとき、
+他は全部 ArgoCD がリポジトリから戻すのに、これだけ手順を思い出して打ち直すことになる。
+リポジトリには「どこから取るか」だけがあって値は入っていません。
 
-#### 値は Infisical、Secret は ESO が作ります
-
-**`deploy/oidc-secret.yaml` は ExternalSecret です。** 値そのものは Infisical
-(https://il.doany.io、このクラスタでセルフホスト) のフォルダ `/denpa/denpa-oidc` にあり、
-External Secrets Operator がそれを読んで Secret `denpa-oidc` を作ります。Infisical 側の
-シークレット名がそのまま Secret のキー (`issuer` / `client-id` / ...) になります。
-
-そうする理由は、**手で作った Secret がどこにも書かれていない状態を無くす**ためです。
-クラスタを立て直したら、他は全部 ArgoCD が git から戻すのに、これだけ手順を
-思い出して打ち直すことになります。git には「どこから取るか」だけがあって値は入っていません
-(以前は SealedSecret で暗号化して置いていましたが、kubeseal は廃止しました)。
-
-値を変えるときは Infisical の UI で `/denpa/denpa-oidc` を書き換えるだけです。ESO は
-`refreshInterval` (1h) ごとに取り直します。すぐ反映したいときは印を付けます。
-
-```sh
-kubectl -n denpa annotate externalsecret denpa-oidc force-sync=$(date +%s) --overwrite
-```
-
-denpa は Secret を環境変数で読むので、値を変えたら Pod を入れ替えます
-(`kubectl -n denpa rollout restart deployment/denpa`)。
-
-> **グループが載ってくるかは、入ってみるまで分かりません。** oauth2-proxy が
-> `ALLOWED_GROUPS` で絞れている以上、載っている見込みは高いのですが、あちらは
-> 載っていなければ Graph に聞きに行く作りなので**証拠にはなりません**。
-> 載っていなければ denpa は理由を出して断るので、そこで分かります
-> (「ID トークンに groups も roles もありません」)。
+値を変えるときは Infisical の UI で書き換えるだけです。Secret はすぐ追いつき、
+Deployment に付けた `secrets.infisical.com/auto-reload` で **Pod も入れ替わります**
+(denpa は Secret を環境変数で読むので、入れ替えないと古い値を掴んだまま。
+録画中なら終わるまで居座ってから)。
 
 ### 前段の forward-auth は外しました
 
-前段のルートから `forward-auth` と `forward-auth-errors` (oauth2-proxy) を
-落としてあります (いまは chart の `charts/denpa/templates/httproute.yaml`)。
-denpa が自分でログインさせるので、前段に置く理由がなくなりました。
+前段のルートにあった `forward-auth` (oauth2-proxy) は外してあり、`dp.doany.io` のルートは
+1つです (chart の `charts/denpa/templates/httproute.yaml`)。「配信だけ forward-auth を
+通さない」ための仕分けは、いま denpa 側 (`auth.ts`) がやっています。
 
-**順番が大事です。** 「denpa 側を設定 → **実機で入れることを確かめる** → 前段から
-外す」。先に外すと、OIDC の設定を間違えていたときに*誰も入れない*ではなく
-**誰でも入れる**状態になります。
-
-外したことで、`dp.doany.io` のルートは1つに戻りました。2つに割れていたのは
-「配信だけ forward-auth を通さない」ためで、その仕分けは
-いま denpa 側 (`auth.ts`) がやっています。
-
-> **oauth2-proxy 自体は残っています。** 同じアプリ登録を他のもの (Mattermost など)
-> も使っているので、`auth` 名前空間には手を触れていません。
+**外す順番は「denpa 側を設定 → 実機で入れることを確かめる → 前段から外す」。** 逆にすると、
+OIDC の設定を間違えていたときに*誰も入れない*ではなく**誰でも入れる**状態になります。
+oauth2-proxy 自体は、同じアプリ登録を使う他のもののために `auth` 名前空間に残っています。
