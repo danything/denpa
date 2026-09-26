@@ -174,7 +174,7 @@ function Test-Health([string]$Target, [string[]]$Extra = @()) {
 }
 
 # compose.mac.yml を ~/denpa/compose.yml に置いて起こす (install.sh の start_denpa と同じ手順)
-function Start-Denpa([string]$Ref) {
+function Start-Denpa([string]$Ref, [switch]$NoOpen) {
     Say "denpa $Ref を $DenpaDir に置きます"
     $compose = Join-Path $DenpaDir 'compose.yml'
     $orig = Join-Path $DenpaDir '.compose.yml.orig'
@@ -357,7 +357,7 @@ function Install-Agent([string]$Ref) {
     throw "エージェントが答えません。ログを見てください: $Log"
 }
 
-function Invoke-Main {
+function Invoke-Main([switch]$NoOpen, [switch]$Uninstall, [switch]$NoDocker) {
     $ErrorActionPreference = 'Stop'
     $ProgressPreference = 'SilentlyContinue'
 
@@ -387,7 +387,7 @@ function Invoke-Main {
         return
     }
     # --- denpa 本体 (Docker)。エージェントと同じ版に。手元の zip を入れたときは main と latest ---
-    Start-Denpa $(if ($ref) { $ref } else { 'main' })
+    Start-Denpa $(if ($ref) { $ref } else { 'main' }) -NoOpen:$NoOpen
 }
 
-Invoke-Main
+Invoke-Main -NoOpen:$NoOpen -Uninstall:$Uninstall -NoDocker:$NoDocker
