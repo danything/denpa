@@ -80,16 +80,15 @@ public static class SianoUserland
     /// 刺さっている機材。**カーネルが掴んでいるものも挙げる** (<c>Driver</c> で分かる)。
     ///
     /// <para>
-    /// 機材は <c>siano-ts --list</c> に聞く (siano-userland 0.1.7)。USB ID の表は持たず、
-    /// バス・アドレス・ポートも siano-ts が libusb で見たものを使う。デバイスを開かないので、
+    /// 機材は <c>siano-ts --list</c> に聞く (siano-userland 0.1.7 から)。USB ID の表は持たず、
+    /// ポートと受けられる方式も siano-ts が libusb で見たものを使う。デバイスを開かないので、
     /// 別の siano-ts が掴んでいても聞ける。
     /// </para>
     ///
     /// <para>
     /// **カーネルが掴んでいるかだけは sysfs で見る** (インターフェースの <c>driver</c> のリンク)。
-    /// siano-ts は掴まれていても黙って奪う (<c>libusb_set_auto_detach_kernel_driver</c>) ので、
-    /// 奪わないのはこちらの仕事になっている。siano-ts が既定で奪わなくなれば
-    /// (Khronos31/siano-userland#9) 要らなくなる。
+    /// <c>--list</c> はそこを教えてくれず、並べると同じ機材が DVB と siano の2本になる。
+    /// 選局のときは siano-ts 自身が断るので (0.1.8。終了コード 4)、ここは並べ方のためだけ。
     /// </para>
     /// </summary>
     public static List<Stick> Sticks()
