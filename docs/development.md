@@ -12,7 +12,7 @@ curl -sf https://raw.githubusercontent.com/danything/genkan/main/init.sh | sh -s
 ```
 
 ```sh
-docker compose up                           # 開発サーバ (https://denpa.localhost) + 偽エージェント (https://denpa-agent.localhost)
+docker compose up                           # 開発サーバ (http://denpa.localhost) + 偽エージェント (http://denpa-agent.localhost)
 docker compose run --rm unit                # 単体テスト
 docker compose run --rm e2e                 # E2E (Playwright)
 docker compose run --rm unit bun run lint   # リント + フォーマット確認

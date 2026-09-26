@@ -4,8 +4,8 @@
 # リバースプロキシ)。ポートは公開しないので、他のプロジェクトとぶつからない。
 # 先に genkan を1回起こしておく (docs/development.md)。
 #
-#   docker compose up            … 開発サーバ (https://denpa.localhost) + 偽チューナーエージェント
-#                                  (https://denpa-agent.localhost)
+#   docker compose up            … 開発サーバ (http://denpa.localhost) + 偽チューナーエージェント
+#                                  (http://denpa-agent.localhost)
 #   docker compose run --rm e2e  … E2E (中で偽エージェント/偽通知先/アプリを起動する)
 #   docker compose run --rm unit … 単体テスト
 #
@@ -41,7 +41,7 @@ services:
             - denpa-recorded:/recorded
             - denpa-library:/library
         labels:
-            caddy: denpa.localhost
+            caddy: http://denpa.localhost
             caddy.reverse_proxy: '{{upstreams 5173}}'
         networks: [default, proxy]
         depends_on:
@@ -62,7 +62,7 @@ services:
             - .:/app
             - app-node-modules:/app/node_modules
         labels:
-            caddy: denpa-agent.localhost
+            caddy: http://denpa-agent.localhost
             caddy.reverse_proxy: '{{upstreams 25252}}'
         networks: [default, proxy]
 
