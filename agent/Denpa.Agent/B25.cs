@@ -350,23 +350,28 @@ public sealed class Descrambler(IKeySource source, bool background = true)
     {
         if (ecm.Parity != parity)
         {
-            if (ecm.Parity != 0 && ecm.Current is { } current && current.Flips++ == 0) current.FlipHeard = ecm.Heard;
+            if (ecm.Parity != 0 && ecm.Current is { } current)
+            {
+                current.Flips++;
+                current.FlipHeard = ecm.Heard;
+            }
             ecm.Parity = parity;
             ecm.RunStart = seq;
         }
         if (ecm.Current is not { } content) return new Mark(Need.Head) { Ecm = ecm, Seq = seq };
         /*
-         * **中身を見たあとに偶奇が2回変わったら、その中身の鍵ではない。** 中身が持つのは今と次の
-         * 鍵だけで、次の次へ切り替わる前には次の中身が来る。来ないのは ECM が見えていないとき
-         * (PMT より先に ECM の PID が移った、など)。古い中身の鍵で解くと化ける
+         * **中身を見たあとに偶奇が3回変わったら、その中身の鍵ではない。** 中身が持つのは今と次の
+         * 鍵だけで、次の次へ切り替わる前には次の中身が来る。数えが1回多くなりうるのは、切り替わって
+         * から中身を見るまでにその ES のパケットが無く、見た時点の偶奇が1つ前のままのとき
          */
-        if (content.Flips >= 2) return new Mark(Need.Undecodable);
+        if (content.Flips >= 3) return new Mark(Need.Undecodable);
         return new Mark(Need.Content)
         {
             Content = content,
             // 答えが来ないときに前の中身の鍵で解いてよいか (Decide)。**見た時点の偶奇が続いている間だけ**
             Fallback = content.Flips == 0 && parity == content.SeenParity,
-            Confirm = content.Flips == 1,
+            Confirm = content.Flips > 0,
+            Since = content.FlipHeard,
         };
     }
 
@@ -416,7 +421,7 @@ public sealed class Descrambler(IKeySource source, bool background = true)
                  * 来るはずなので、切り替わりのあとに何か受ければ前者と分かる。何も来ないまま
                  * PMT から外れたら、ECM の PID が PMT より先に移っていた — 解かない
                  */
-                if (mark.Confirm && content.Owner.Heard == content.FlipHeard)
+                if (mark.Confirm && content.Owner.Heard == mark.Since)
                 {
                     return content.Owner.Removed || content.GaveUp || final ? Step.Undecodable : Step.Wait;
                 }
@@ -1003,8 +1008,12 @@ public sealed class Descrambler(IKeySource source, bool background = true)
         public long Seq { get; init; }
         /// <summary>答えが来ないとき、前の中身の鍵で解いてよい</summary>
         public bool Fallback { get; init; }
-        /// <summary>中身を見たあとに偶奇が1回変わったあと。次の ECM を受けるまで待つ (<see cref="Decide"/>)</summary>
+        /// <summary>
+        /// 中身を見たあとに偶奇が変わったあと。<see cref="Ecm.Heard"/> が <see cref="Since"/> を
+        /// 超える (次の ECM を受ける) まで待つ (<see cref="Decide"/>)
+        /// </summary>
         public bool Confirm { get; init; }
+        public long Since { get; init; }
     }
 
     private enum State : byte
@@ -1034,9 +1043,9 @@ public sealed class Descrambler(IKeySource source, bool background = true)
         /// <summary>見た時点の偶奇 (0 はまだパケットが来ていない) と、その偶奇が続いている頭</summary>
         public int SeenParity;
         public long RunStart;
-        /// <summary>見たあとに偶奇が変わった回数。変わったら前の中身の鍵では解かず、2回で自分の鍵でもなくなる</summary>
+        /// <summary>見たあとに偶奇が変わった回数。変わったら前の中身の鍵では解かず、3回で自分の鍵でもなくなる</summary>
         public int Flips;
-        /// <summary>1回目に変わった時点の <see cref="Ecm.Heard"/>。それより後に ECM を受けたら、変わった先も中身の鍵</summary>
+        /// <summary>最後に変わった時点の <see cref="Ecm.Heard"/>。それより後に ECM を受けたら、変わった先も中身の鍵</summary>
         public long FlipHeard;
         /// <summary>待ちきれなかったか、貰えなかった。この中身の札は待たない</summary>
         public bool GaveUp;
