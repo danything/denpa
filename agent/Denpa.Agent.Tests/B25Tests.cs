@@ -198,6 +198,25 @@ public class B25Tests
         return output.WrittenSpan.ToArray();
     }
 
+    /// <summary>
+    /// 溜めの上限を超えるだけの、掛かっていない詰め物 (null パケット)。**答えを待つのを
+    /// やめさせる** (<see cref="Descrambler.HoldLimit"/>)
+    /// </summary>
+    private static readonly byte[] Overflow = BuildOverflow();
+
+    private static byte[] BuildOverflow()
+    {
+        var wire = new byte[(Descrambler.HoldLimit / 188 + 1) * 188];
+        for (var at = 0; at < wire.Length; at += 188)
+        {
+            wire[at] = 0x47;
+            wire[at + 1] = 0x1F;
+            wire[at + 2] = 0xFF;
+            wire[at + 3] = (byte)(0x10 | (at / 188 & 0x0F));
+        }
+        return wire;
+    }
+
     /// <summary>カードに聞いた ECM の世代を、聞いた順に</summary>
     private static string Generations(Cards cards) => string.Join(",", cards.Asked.Select(ecm => ecm[0]));
 
@@ -258,7 +277,8 @@ public class B25Tests
     [Test]
     public async Task どこで区切って渡しても同じに解ける()
     {
-        var ts = Channel().Ecm(EcmPid, 1).Videos(20, 1).Ecm(EcmPid, 2).Videos(20, 2, even: false);
+        // 切り替わりのあとの ECM の繰り返しで、切り替わった先も 2 の鍵と分かる (Descrambler.Decide)
+        var ts = Channel().Ecm(EcmPid, 1).Videos(20, 1).Ecm(EcmPid, 2).Videos(20, 2, even: false).Ecm(EcmPid, 2);
         var wire = ts.Wire.ToArray();
         var expected = Expected(ts);
 
@@ -348,7 +368,8 @@ public class B25Tests
         var wire = ts.Wire.ToArray();
         var ecmAt = (2 + 30) * 188;
         descrambler.Decode(wire.AsSpan(0, ecmAt), output);
-        await Assert.That(output.WrittenCount).IsEqualTo(0);
+        // 出ているのは掛かっていない PAT と PMT だけ。掛かった頭は鍵を待って溜めている
+        await Assert.That(output.WrittenCount).IsEqualTo(2 * 188);
 
         descrambler.Decode(wire.AsSpan(ecmAt), output);
         descrambler.Flush(output);
@@ -393,7 +414,8 @@ public class B25Tests
             .Pat((0x0400, PmtPid))
             .Pmt(PmtPid, 0x0400, Ca(EcmPid), (VideoPid, []), (AudioPid, Ca(other)))
             .Ecm(EcmPid, 1).Ecm(other, 7)
-            .Videos(3, 1).Payload(AudioPid, 7).Payload(AudioPid, 7, even: false).Videos(3, 1);
+            .Videos(3, 1).Payload(AudioPid, 7).Payload(AudioPid, 7, even: false).Videos(3, 1)
+            .Ecm(other, 7);
         var cards = new Cards();
         var descrambler = new Descrambler(cards, background: false);
 
@@ -412,7 +434,8 @@ public class B25Tests
             .Pmt(PmtPid, 0x0400, Ca(EcmPid), (VideoPid, []))
             .Pmt(pmt2, 0x0401, Ca(ecm2), (video2, []))
             .Ecm(EcmPid, 1).Ecm(ecm2, 9)
-            .Videos(3, 1).Payload(video2, 9).Payload(video2, 9, even: false).Videos(3, 1, even: false);
+            .Videos(3, 1).Payload(video2, 9).Payload(video2, 9, even: false).Videos(3, 1, even: false)
+            .Ecm(EcmPid, 1).Ecm(ecm2, 9);
         var descrambler = new Descrambler(new Cards(), background: false);
 
         var output = Run(descrambler, ts.Wire.ToArray());
@@ -500,13 +523,13 @@ public class B25Tests
 
         var started = DateTime.UtcNow;
         descrambler.Decode(ts.Wire.ToArray(), output);
-        // カードが黙っていても戻ってくる。頭は鍵を待って溜めている
+        // カードが黙っていても戻ってくる。掛かったものは鍵を待って溜めている (出たのは PAT・PMT・ECM だけ)
         await Assert.That(DateTime.UtcNow - started).IsLessThan(TimeSpan.FromSeconds(2));
-        await Assert.That(output.WrittenCount).IsEqualTo(0);
+        await Assert.That(output.WrittenCount).IsEqualTo(3 * 188);
 
         cards.Gate.Set();
         var more = Channel().Videos(0, 1);
-        for (var tries = 0; tries < 200 && output.WrittenCount == 0; tries++)
+        for (var tries = 0; tries < 200 && output.WrittenCount < ts.Wire.Count; tries++)
         {
             await Task.Delay(10);
             descrambler.Decode(more.Wire.ToArray(), output);
@@ -560,8 +583,8 @@ public class B25Tests
     }
 
     /// <summary>
-    /// **答えを待つ間は、今の偶奇だけ解く。** 逆の偶奇の鍵は入れ替わるので、答えより先に
-    /// 切り替わったら古い鍵で解かずに素通しする (化けたものを「解けた」にしない)
+    /// **答えを待ちきれなかったら、今の偶奇だけ前の鍵で解く。** 逆の偶奇の鍵は入れ替わるので、
+    /// 答えより先に切り替わったぶんは古い鍵で解かずに素通しする (化けたものを「解けた」にしない)
     /// </summary>
     [Test]
     public async Task 答えを待つ間に偶奇が切り替わったら古い鍵で解かない()
@@ -571,22 +594,26 @@ public class B25Tests
         var output = new ArrayBufferWriter<byte>();
         var head = Channel().Ecm(EcmPid, 1).Videos(3, 1, even: true);
         descrambler.Decode(head.Wire.ToArray(), output);
-        for (var tries = 0; tries < 500 && output.WrittenCount == 0; tries++)
+        for (var tries = 0; tries < 500 && descrambler.Decoded < 3; tries++)
         {
             await Task.Delay(10);
             descrambler.Decode(Channel().Wire.ToArray(), output);
         }
         await Assert.That(descrambler.Decoded).IsEqualTo(3);
 
-        // 次の ECM の答えが来ないうちに、奇数に切り替わった
+        // 次の ECM の答えが来ないうちに、奇数に切り替わった。答えを待って溜める
         var switched = new Ts().Ecm(EcmPid, 12).Videos(3, 12, even: false);
         output.ResetWrittenCount();
         descrambler.Decode(switched.Wire.ToArray(), output);
+        await Assert.That(output.WrittenCount).IsEqualTo(188);
 
+        // 溜めが溢れて待つのをやめても、切り替わったぶんは古い鍵で解かない
+        descrambler.Decode(Overflow, output);
         await Assert.That(descrambler.Decoded).IsEqualTo(3);
         await Assert.That(descrambler.Undecodable).IsEqualTo(3);
         // 掛かったまま、元のバイトのまま流れている
-        await Assert.That(Diff(output.WrittenSpan.ToArray(), switched.Wire.ToArray())).IsEqualTo(-1);
+        var got = output.WrittenSpan[..switched.Wire.Count].ToArray();
+        await Assert.That(Diff(got, switched.Wire.ToArray())).IsEqualTo(-1);
         cards.Gate.Set();
     }
 
@@ -644,9 +671,8 @@ public class B25Tests
     }
 
     /// <summary>
-    /// **最初の答えを待つ間に ECM が変わっても、溜めた頭は最初の鍵で解く。** 新しい中身は
-    /// 流し終えてから聞く。流し直すときに ECM を読み直して聞き直すと、新しい鍵で頭を解いて化けた。
-    /// (12 を見た時点で流れているのは奇数。奇数の鍵は 11 と 12 で共通なので、12 のあとの奇数も 11 の鍵で掛ける)
+    /// **最初の答えを待つ間に ECM が変わっても、溜めた頭は最初の鍵で解く。** 12 の答えは
+    /// 12 のあとのパケットにだけ当てる。新しい鍵で頭まで解くと化ける
     /// </summary>
     [Test]
     public async Task 最初の答えを待つ間にECMが変わっても溜めた頭は最初の鍵で解く()
@@ -655,7 +681,7 @@ public class B25Tests
         var descrambler = new Descrambler(cards);
         var output = new ArrayBufferWriter<byte>();
         var head = Channel().Videos(3, 11, even: false).Ecm(EcmPid, 11).Videos(3, 11, even: false)
-            .Ecm(EcmPid, 12).Videos(3, 11, even: false);
+            .Ecm(EcmPid, 12).Videos(3, 12, even: false);
         descrambler.Decode(head.Wire.ToArray(), output);
         cards.Gate(11).Set();
         cards.Gate(12).Set();
@@ -671,8 +697,8 @@ public class B25Tests
     }
 
     /// <summary>
-    /// **溜めている間に ECM が変わって偶奇も切り替わったら、切り替わったぶんは古い鍵で解かない。**
-    /// 12 で入れ替わった奇数の鍵は 11 には無い。流し直しで 11 の鍵を当てると化ける
+    /// **最初の答えを待つ間に ECM が変わって偶奇も切り替わったら、切り替わったぶんは古い鍵で解かない。**
+    /// 12 で入れ替わった奇数の鍵は 11 には無い。12 の答えを待ちきれずに 11 の鍵を当てると化ける
     /// </summary>
     [Test]
     public async Task 溜めている間に切り替わった偶奇は流し直しでも古い鍵で解かない()
@@ -683,11 +709,13 @@ public class B25Tests
         var head = Channel().Ecm(EcmPid, 11).Videos(3, 11, even: true).Ecm(EcmPid, 12).Videos(3, 12, even: false);
         descrambler.Decode(head.Wire.ToArray(), output);
         cards.Gate(11).Set();
-        for (var tries = 0; tries < 500 && output.WrittenCount < head.Wire.Count; tries++)
+        for (var tries = 0; tries < 500 && descrambler.Decoded < 3; tries++)
         {
             await Task.Delay(1);
             descrambler.Decode(new Ts().Pat((0x0400, PmtPid)).Wire.ToArray(), output);
         }
+        // 12 の答えは来ない。溜めが溢れるまで待ってから流す
+        descrambler.Decode(Overflow, output);
 
         await Assert.That(descrambler.Decoded).IsEqualTo(3);
         await Assert.That(descrambler.Undecodable).IsEqualTo(3);
@@ -722,13 +750,17 @@ public class B25Tests
         var decoded = descrambler.Decoded;
         descrambler.Decode(new Ts().Videos(20, 12, even: false).Wire.ToArray(), output);
         await Assert.That(descrambler.Decoded).IsEqualTo(decoded);
+        // 溢れて待つのをやめても、11 の鍵では解かない
+        descrambler.Decode(Overflow, output);
+        await Assert.That(descrambler.Decoded).IsEqualTo(decoded);
+        await Assert.That(descrambler.Undecodable).IsEqualTo(22);
         cards.Gate(12).Set();
     }
 
     /// <summary>
-    /// **溜めている間に同じ ECM が2回変わったら、今の鍵はどちらの偶奇にも使わない。**
-    /// 後から見た偶奇で門を上書きすると、1回目と2回目のあいだに切り替わった偶奇を
-    /// 古い鍵で解いて化ける。もう1本の ECM の答えが遅く、溜めが長引く形
+    /// **答えを待つ間に同じ ECM が2回変わったら、今の鍵はどちらの偶奇にも使わない。**
+    /// 1回目と2回目のあいだに切り替わった偶奇を古い鍵で解くと化ける。
+    /// もう1本の ECM の答えも遅い形
     /// </summary>
     [Test]
     public async Task 溜めている間に同じECMが2回変わったら今の鍵は使わない()
@@ -743,22 +775,26 @@ public class B25Tests
             .Ecm(EcmPid, 1).Ecm(other, 20);
         descrambler.Decode(head.Wire.ToArray(), output);
         for (var tries = 0; tries < 500 && cards.Answered < 1; tries++) await Task.Delay(1);
-        var body = new Ts().Ecm(other, 21).Videos(3, 1, even: false).Ecm(EcmPid, 2)
-            .Videos(3, 2, even: true).Ecm(EcmPid, 3).Videos(3, 2, even: true);
+        var body = new Ts().Ecm(other, 21).Videos(3, 1, even: false).Ecm(EcmPid, 12)
+            .Videos(3, 12, even: true).Ecm(EcmPid, 13).Videos(3, 12, even: true);
         descrambler.Decode(body.Wire.ToArray(), output);
-        await Assert.That(output.WrittenCount).IsEqualTo(0);
         cards.Gate(20).Set();
-        for (var tries = 0; tries < 500 && output.WrittenCount < head.Wire.Count + body.Wire.Count; tries++)
+        for (var tries = 0; tries < 500 && descrambler.Decoded < 3; tries++)
         {
             await Task.Delay(1);
             descrambler.Decode(new Ts().Pat((0x0400, PmtPid)).Wire.ToArray(), output);
         }
+        // 12 も 13 も答えが来ないまま溢れる
+        descrambler.Decode(Overflow, output);
+        cards.Gate(12).Set();
+        cards.Gate(13).Set();
         cards.Gate(21).Set();
         await Assert.That(descrambler.Decoded).IsEqualTo(3);
+        await Assert.That(descrambler.Undecodable).IsEqualTo(6);
     }
 
     /// <summary>
-    /// **溜めている間に鍵が変わっても、他の ECM の最初の答えが来るまでは流さない。**
+    /// **1本目の鍵が揃っても、2本目の ECM の最初の答えが来るまではその ES から先を流さない。**
     /// 流してしまうと、そちらの ES の頭が掛かったまま出る
     /// </summary>
     [Test]
@@ -775,10 +811,15 @@ public class B25Tests
             .Ecm(other, 20).Payload(AudioPid, 20)
             .Ecm(EcmPid, 2);
         descrambler.Decode(head.Wire.ToArray(), output);
-        for (var tries = 0; tries < 500 && cards.Answered < 1; tries++) await Task.Delay(1);
-        descrambler.Decode(new Ts().Pat((0x0400, PmtPid)).Wire.ToArray(), output);
-        // 1本目の答えは来たが、2本目の最初の答えがまだ。流さない
-        await Assert.That(output.WrittenCount).IsEqualTo(0);
+        // 1本目の答えは来たが、2本目の最初の答えがまだ。音声の手前 (PAT・PMT・ECM・映像2つ・ECM) までしか出ない
+        const int beforeAudio = 6 * 188;
+        for (var tries = 0; tries < 500 && output.WrittenCount < beforeAudio; tries++)
+        {
+            await Task.Delay(1);
+            descrambler.Decode(new Ts().Pat((0x0400, PmtPid)).Wire.ToArray(), output);
+        }
+        await Assert.That(output.WrittenCount).IsEqualTo(beforeAudio);
+        await Assert.That(descrambler.Undecodable).IsEqualTo(0);
 
         cards.Gate(20).Set();
         for (var tries = 0; tries < 500 && output.WrittenCount < head.Wire.Count; tries++)
@@ -791,8 +832,8 @@ public class B25Tests
     }
 
     /// <summary>
-    /// **止めたパケットの偶奇も覚える。** 覚えないと、次に聞くときの門が
-    /// 「門が閉じる前の偶奇」になり、今流れている偶奇を止めて、古い鍵の偶奇を通す
+    /// **前の鍵で解いてよい偶奇は、ECM が変わるのを見た時点で流れていた偶奇。** 待っている
+    /// パケットの偶奇も数える。数えないと、今流れている偶奇を止めて、古い鍵の偶奇を通す
     /// </summary>
     [Test]
     public async Task 門で止めた偶奇も次の門に使う()
@@ -809,25 +850,126 @@ public class B25Tests
         await Feed(Channel().Ecm(EcmPid, 1).Videos(2, 1, even: false));
         for (var tries = 0; tries < 500 && descrambler.Decoded < 2; tries++) await Feed(Channel());
 
-        // 11 を待つ間に偶数へ切り替わり (止まる)、12 が来る
-        await Feed(new Ts().Ecm(EcmPid, 11).Videos(2, 11, even: true).Ecm(EcmPid, 12));
-        // 11 の答えが来る。12 を聞いている間は、いま流れている偶数を 11 の鍵で解ける
+        // 11 を待つ間に偶数へ切り替わり (待つ)、12 が来る。12 のあとも偶数は 11 の鍵のまま
+        await Feed(new Ts().Ecm(EcmPid, 11).Videos(2, 11, even: true).Ecm(EcmPid, 12).Videos(1, 11, even: true));
+        // 11 の答えが来る。12 の答えより先に奇数へ切り替わる
         cards.Gate(11).Set();
-        for (var tries = 0; tries < 500 && descrambler.Decoded < 2 + 1; tries++)
-        {
-            await Feed(new Ts().Videos(1, 11, even: true));
-        }
-        await Assert.That(descrambler.Decoded).IsGreaterThanOrEqualTo(3);
+        for (var tries = 0; tries < 500 && descrambler.Decoded < 2 + 2; tries++) await Feed(new Ts().Pat((0x0400, PmtPid)));
+        await Assert.That(descrambler.Decoded).IsEqualTo(4);
+        await Feed(new Ts().Videos(2, 12, even: false));
 
-        // 12 の答えより先に奇数へ切り替わったら、古い鍵では解かない
-        var decoded = descrambler.Decoded;
-        var before = descrambler.Undecodable;
-        output.ResetWrittenCount();
-        var odd = new Ts().Videos(2, 12, even: false);
-        await Feed(odd);
-        await Assert.That(descrambler.Decoded).IsEqualTo(decoded);
-        await Assert.That(descrambler.Undecodable).IsEqualTo(before + 2);
+        // 12 の答えを待ちきれなかった。12 を見た時点で流れていた偶数は 11 の鍵で解け、奇数は解かない
+        descrambler.Decode(Overflow, output);
+        await Assert.That(descrambler.Decoded).IsEqualTo(5);
+        await Assert.That(descrambler.Undecodable).IsEqualTo(2);
         cards.Gate(12).Set();
+    }
+
+    /// <summary>**PMT より前に来た掛かったパケットも、PMT で ECM が分かったところで札を付けて解く**</summary>
+    [Test]
+    public async Task PMTより前に来たパケットも解く()
+    {
+        var ts = new Ts().Pat((0x0400, PmtPid)).Videos(3, 1)
+            .Pmt(PmtPid, 0x0400, Ca(EcmPid), (VideoPid, []))
+            .Videos(2, 1).Ecm(EcmPid, 1).Videos(2, 1);
+        var descrambler = new Descrambler(new Cards(), background: false);
+
+        var output = Run(descrambler, ts.Wire.ToArray());
+
+        await Assert.That(Diff(output, Expected(ts))).IsEqualTo(-1);
+        await Assert.That(descrambler.Decoded).IsEqualTo(7);
+    }
+
+    /// <summary>
+    /// **ECM が1本しか見えていなくても、PAT の PMT がみな来るまではそれで表に無い ES を解かない。**
+    /// 2本目の番組の PMT がまだなだけで、その ES は別の ECM の鍵で掛かっている
+    /// </summary>
+    [Test]
+    public async Task PMTが揃うまでは1本だけのECMで他の番組を解かない()
+    {
+        const int pmt2 = 0x0102, video2 = 0x0121, ecm2 = 0x0902;
+        var ts = new Ts().Pat((0x0400, PmtPid), (0x0401, pmt2))
+            .Pmt(PmtPid, 0x0400, Ca(EcmPid), (VideoPid, []))
+            .Ecm(EcmPid, 1).Videos(2, 1)
+            .Payload(video2, 9).Payload(video2, 9)
+            .Pmt(pmt2, 0x0401, Ca(ecm2), (video2, []))
+            .Ecm(ecm2, 9).Payload(video2, 9).Videos(2, 1);
+        var descrambler = new Descrambler(new Cards(), background: false);
+
+        var output = Run(descrambler, ts.Wire.ToArray());
+
+        await Assert.That(Diff(output, Expected(ts))).IsEqualTo(-1);
+        await Assert.That(descrambler.Decoded).IsEqualTo(7);
+    }
+
+    /// <summary>
+    /// **答えを待つ間に来た中身は、飛ばさずに順に聞く。** どれにも札の付いたパケットが待っている。
+    /// 最新だけ聞くと、間の中身の鍵が要るパケットが掛かったまま出る
+    /// </summary>
+    [Test]
+    public async Task 答えを待つ間に来た中身は飛ばさずに順に聞く()
+    {
+        var cards = new StepCards();
+        var descrambler = new Descrambler(cards);
+        var output = new ArrayBufferWriter<byte>();
+        var ts = Channel().Ecm(EcmPid, 11).Videos(2, 11, even: true)
+            .Ecm(EcmPid, 12).Videos(2, 12, even: false)
+            .Ecm(EcmPid, 13).Videos(2, 13, even: true).Ecm(EcmPid, 13);
+        descrambler.Decode(ts.Wire.ToArray(), output);
+        cards.Gate(11).Set();
+        cards.Gate(12).Set();
+        cards.Gate(13).Set();
+        for (var tries = 0; tries < 500 && output.WrittenCount < ts.Wire.Count; tries++)
+        {
+            await Task.Delay(1);
+            descrambler.Decode(new Ts().Pat((0x0400, PmtPid)).Wire.ToArray(), output);
+        }
+
+        await Assert.That(Diff(output.WrittenSpan[..ts.Wire.Count].ToArray(), Expected(ts))).IsEqualTo(-1);
+        await Assert.That(descrambler.Decoded).IsEqualTo(6);
+    }
+
+    /// <summary>
+    /// **新しい ECM が来ないまま偶奇が2回変わったら、古い中身の鍵で解かない。** 中身が持つのは
+    /// 今と次の鍵だけで、次の次は次の中身にしか無い
+    /// </summary>
+    [Test]
+    public async Task ECMが来ないまま偶奇が2回変わったら古い中身で解かない()
+    {
+        var ts = Channel().Ecm(EcmPid, 1).Videos(2, 1, even: true).Videos(2, 1, even: false)
+            .Ecm(EcmPid, 1).Videos(3, 3, even: true);
+        var descrambler = new Descrambler(new Cards(), background: false);
+
+        var output = Run(descrambler, ts.Wire.ToArray());
+
+        await Assert.That(descrambler.Decoded).IsEqualTo(4);
+        await Assert.That(descrambler.Undecodable).IsEqualTo(3);
+        await Assert.That(Diff(output[^(3 * 188)..], ts.Wire.ToArray()[^(3 * 188)..])).IsEqualTo(-1);
+    }
+
+    /// <summary>
+    /// **中身を見たあとに偶奇が変わったら、次の ECM を受けてから解く。** 録り始めに見た中身が
+    /// もう切り替わったあとのものだと、次の切り替わりの先はその中身に無い。ふつうは次の中身が
+    /// 先に来るが、ECM の PID が PMT より先に移ると来ない。何も来ないまま PMT から外れたら解かない
+    /// </summary>
+    [Test]
+    public async Task 偶奇が変わったあとECMが来ないままPMTから外れたら解かない()
+    {
+        const int moved = 0x0905;
+        var ts = Channel().Ecm(EcmPid, 1).Videos(2, 1, even: false)
+            // 1 の中身に無い鍵へ切り替わった (新しい ECM は、まだ PMT に載っていない PID で来ている)
+            .Videos(2, 3, even: true);
+        ts.Version = 1;
+        ts.Pmt(PmtPid, 0x0400, Ca(moved), (VideoPid, []), (AudioPid, []))
+            .Ecm(moved, 3).Videos(2, 3, even: true);
+        var descrambler = new Descrambler(new Cards(), background: false);
+
+        var output = Run(descrambler, ts.Wire.ToArray());
+
+        await Assert.That(descrambler.Decoded).IsEqualTo(4);
+        await Assert.That(descrambler.Undecodable).IsEqualTo(2);
+        var at = (3 + 2) * 188;
+        await Assert.That(Diff(output[at..(at + 2 * 188)], ts.Wire.ToArray()[at..(at + 2 * 188)])).IsEqualTo(-1);
     }
 
     [Test]
