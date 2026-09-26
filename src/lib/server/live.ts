@@ -671,11 +671,14 @@ class Session {
      * 中身は詰まったら捨ててよい。**遅れて全部届くより、飛んで今が映るほうがいい** —
      * 放送は待ってくれないので、積むと際限なく太る。init は捨てない
      * (捨てるとその人には以降ずっと絵が出ない)。
+     *
+     * **生の TS も捨ててよい。** 欠けた PES は受け側の復号器が次の I フレームで拾い直す。
+     * 1局 15Mbit/s を積み続けると、詰まった客1人でサーバの手元が数秒で数十 MB 太る
      */
     private hand(viewer: Viewer, kind: number, data: Uint8Array): void {
         if (kind === CHANNEL.videoInit) viewer.ready = true;
         else if (!viewer.ready) return;
-        viewer.connection.send(kind, 0n, data, kind === CHANNEL.videoMedia);
+        viewer.connection.send(kind, 0n, data, kind === CHANNEL.videoMedia || kind === CHANNEL.rawTs);
     }
 
     /** 焼き始める。**畳むまで戻らない** */

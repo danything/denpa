@@ -342,6 +342,8 @@ export function livePlayer() {
     let host: HTMLElement | null = null;
     /** 生の道の刻み。貯まり・貯める量の決め直しを回す */
     let rawTimer: ReturnType<typeof setInterval> | null = null;
+    /** 生で1コマ解くのに掛かっている時間 (ms、95パーセンタイル)。**画面に出す** */
+    let decodeMs = $state(0);
 
     let socket: WebSocket | null = null;
     let source: MediaSource | null = null;
@@ -1796,6 +1798,8 @@ export function livePlayer() {
             });
             // 押す口は <video> に付いている (`MediaStack`)。見えなくするだけで、そこに残す
             video.style.opacity = '0';
+            // 音を消していたなら、生でも消したまま始める
+            if (silenced) engine.mute();
         } else {
             engine.reset();
         }
@@ -1817,6 +1821,7 @@ export function livePlayer() {
         engine?.destroy();
         engine = null;
         raw = false;
+        decodeMs = 0;
         if (element !== null) element.style.opacity = '';
     }
 
@@ -1844,6 +1849,8 @@ export function livePlayer() {
             if (engine.blocked) silenced = true;
         }
         const at = engine.position;
+        const cost = Math.round(engine.decodeMs * 10) / 10;
+        if (cost !== decodeMs) decodeMs = cost;
         const rounded = running ? Math.round(engine.lead * 10) / 10 : null;
         if (rounded !== delay) delay = rounded;
         if (!live) live = true;
@@ -1871,7 +1878,7 @@ export function livePlayer() {
         },
         /** 生で1コマ解くのに掛かっている時間 (ms、95パーセンタイル)。生でなければ 0 */
         get decodeMs() {
-            return engine?.decodeMs ?? 0;
+            return decodeMs;
         },
         get message() {
             return message;
