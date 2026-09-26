@@ -26,8 +26,16 @@
         <Compile Include="../Denpa.Agent/Siano.cs" />
         <Compile Include="../Denpa.Agent/ChildTs.cs" />
         <Compile Include="../Denpa.Agent/Card.cs" />
-        <Compile Include="../Denpa.Agent/AribB25.cs" />
         <Compile Include="../Denpa.Agent/CardShare.cs" />
+        <Compile Include="../Denpa.Agent/Cas.cs" />
+        <Compile Include="../Denpa.Agent/BCas.cs" />
+        <Compile Include="../Denpa.Agent/Px4Card.cs" />
+        <Compile Include="../Denpa.Agent/CardLinks.cs" />
+        <Compile Include="../Denpa.Agent/UsbFs.cs" />
+        <Compile Include="../Denpa.Agent/T1.cs" />
+        <Compile Include="../Denpa.Agent/Ccid.cs" />
+        <Compile Include="../Denpa.Agent/Multi2.cs" />
+        <Compile Include="../Denpa.Agent/B25.cs" />
     </ItemGroup>
 
     <ItemGroup>

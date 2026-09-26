@@ -338,15 +338,13 @@ const options: Bun.ServeOptions = {
                 knobs.scrambled
                     ? {
                           ok: false,
-                          pcscd: true,
                           readers: [],
-                          message: 'pcscd は動いていますが、カードリーダーが見つかりません',
+                          message: 'カードリーダーが見つかりません',
                       }
                     : {
                           ok: true,
-                          pcscd: true,
-                          readers: ['Fake Card Reader 00 00'],
-                          message: 'カードリーダーが見えています (1 台)',
+                          readers: ['Fake Card Reader (usb 1-1)'],
+                          message: 'カードが読めています (Fake Card Reader (usb 1-1)、0000000000000000)',
                       },
             );
         }

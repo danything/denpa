@@ -1334,7 +1334,6 @@ AV1 の負荷は [§5.1](#51-エンコード)、字幕を焼く費用は [§5.2]
 | Vanilagy/mediabunny | 6,846 | WebCodecs 移行時のデマクサ |
 | Dash-Industry-Forum/dash.js | 5,539 | 同上 |
 | kixelated/moq | 1,431 | 低遅延化の候補 |
-| tsukumijima/KonomiTV | 1,007 | 参考実装 |
 | otya128/web-bml | 246 | データ放送 |
 | xqq/libaribcaption | 127 | **字幕の描画**（denpa の ffmpeg に組み込み済み） |
 | monyone/biim | 49 | LL-HLS 化する場合 |

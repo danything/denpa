@@ -1,3 +1,4 @@
+using System.Buffers;
 using System.Diagnostics;
 using System.Text.Json.Nodes;
 using System.Threading.Channels;
@@ -7,7 +8,6 @@ namespace Denpa.Agent;
 /// <summary>
 /// 選局の仕方。
 /// </summary>
-/// <param name="CardUrl">鍵を配ってくれる相手。手元にカードが無い拠点だけ (CardShare.cs)</param>
 /// <param name="StreamIds">チャンネル名から TSID を引く。衛星の選局に要る</param>
 /// <param name="FakeTune">
 /// **適合テスト専用。** 選局を自分で掴む代わりに、このコマンドに
@@ -15,9 +15,9 @@ namespace Denpa.Agent;
 /// (<c>tests/fake/tune.ts</c>)。環境変数 <c>FAKE_TUNE</c> からだけ入る —
 /// 設定ファイルにも画面にも、コマンドを書く口は無い。
 /// </param>
-public sealed record TuneOptions(string? CardUrl, Func<string, int?> StreamIds, string? FakeTune = null)
+public sealed record TuneOptions(Func<string, int?> StreamIds, string? FakeTune = null)
 {
-    public static TuneOptions None => new(null, _ => null);
+    public static TuneOptions None => new(_ => null);
 }
 
 /// <summary>
@@ -35,7 +35,7 @@ public sealed record TuneOptions(string? CardUrl, Func<string, int?> StreamIds, 
 ///
 /// <para>
 /// 選局は**自分で掴む**。B25 も自分で解き、掴んだままチャンネルだけ変える
-/// (Tuning.cs / AribB25.cs)。
+/// (Tuning.cs / B25.cs)。
 /// </para>
 /// </summary>
 public sealed class TunerPool(
@@ -76,25 +76,9 @@ public sealed class TunerPool(
     private readonly Lock _deviceGate = new();
 
     /// <summary>1本ぶんの実体。**閉じるのは定義が変わったときと、止めるときだけ**</summary>
-    private sealed class Held(ITuneDevice device, AribB25? b25) : IDisposable
+    private sealed class Held(ITuneDevice device) : IDisposable
     {
         public ITuneDevice Device { get; } = device;
-        public AribB25? B25 { get; private set; } = b25;
-
-        /// <summary>
-        /// 復号器だけ入れ替える。**この入れ物ごと作り直さない** — デバイスは
-        /// 掴んだままだし (掴み直すと <c>Device or resource busy</c>)、下の
-        /// <see cref="Gate"/> が別物になると選局が2つ同時に入りうる
-        /// </summary>
-        public void ReplaceB25(AribB25? next)
-        {
-            B25?.Dispose();
-            B25 = next;
-            CardStale = false;
-        }
-
-        /// <summary>pcscd を入れ直したので、次に掴むとき復号器ごとカードを開き直す</summary>
-        public bool CardStale { get; set; }
 
         /// <summary>
         /// **この1本を選局し直す間の錠。本ごとに別**なので、他の本は待たない。
@@ -110,11 +94,7 @@ public sealed class TunerPool(
         /// <summary>いま合わせているところ。**同じなら選局し直さない**</summary>
         public string? Channel { get; set; }
 
-        public void Dispose()
-        {
-            Device.Dispose();
-            B25?.Dispose();
-        }
+        public void Dispose() => Device.Dispose();
     }
 
     private IReadOnlyList<TunerSpec> _specs = specs;
@@ -150,19 +130,6 @@ public sealed class TunerPool(
             }
         }
         onChange();
-    }
-
-    /// <summary>
-    /// **pcscd を入れ直したあとに呼ぶ。** 掴んでいる本の復号器を、次の選局で
-    /// カードごと開き直させる。libaribb25 はカードに繋ぎ直さないので、前の口の
-    /// ままだと以降の ECM が全部失敗する。いま流れている選局はそのまま
-    /// </summary>
-    public void ReopenCards()
-    {
-        lock (_deviceGate)
-        {
-            foreach (var held in _held.Values) held.CardStale = true;
-        }
     }
 
     public sealed class TunerBusyException(string message) : Exception(message);
@@ -225,10 +192,9 @@ public sealed class TunerPool(
         /*
          * **蹴った相手が読み終わるまで待つ。**
          *
-         * 復号器はチューナー1本につき1つで、選局を跨いで持ち回している。
-         * 前の読み手がまだ回っているうちに次を始めると、**同じ復号器を2本の
-         * 流れから叩く**ことになり、libaribb25 の中が壊れてプロセスごと落ちる
-         * (実機で `double free or corruption`。AribB25.cs)。
+         * デバイスはチューナー1本につき1つで、選局を跨いで開きっぱなし。
+         * 前の読み手がまだ回っているうちに次を始めると、**同じ読み口を2本で
+         * 取り合い**、前の局のパケットが次の選局に混ざる。
          *
          * **錠は放してから待つ。** 握ったまま待つと、その間どの本も開けない。
          */
@@ -254,11 +220,9 @@ public sealed class TunerPool(
                         // 途中で落ちたら「どこにも合っていない」。次は必ず選局し直す
                         held.Channel = null;
                         held.Device.Tune(tuning, ChannelTable.StreamId(channel, tuning, _tune.StreamIds));
-                        // 前のチャンネルの PMT と鍵を忘れさせる
-                        held.B25?.Reset();
                         held.Channel = channel;
                     }
-                    lease.StartNative(held.Device, held.B25, () => OnExit(index, lease));
+                    lease.StartNative(held.Device, () => OnExit(index, lease));
                 }
             }
             else
@@ -277,7 +241,7 @@ public sealed class TunerPool(
             lock (_gate)
             {
                 if (_leases.TryGetValue(index, out var mine) && mine == lease) _leases.Remove(index);
-                lease.Sinks.Clear();
+                lock (lease.Sinks) lease.Sinks.Clear();
             }
             sink.Fail($"{spec.Name}: {error.Message}");
             onChange();
@@ -286,46 +250,20 @@ public sealed class TunerPool(
         return sink;
     }
 
-    /// <summary>
-    /// 開きっぱなしの実体を取り出す。**無ければ、そのとき1度だけ開く。**
-    ///
-    /// <para>
-    /// カードが開けなくても選局はする。**掛かったままでも録るほうがまし**で、
-    /// 電波は二度と戻ってこない (解けていないことは denpa 側が見て分かる)。
-    /// </para>
-    /// </summary>
+    /// <summary>開きっぱなしの実体を取り出す。**無ければ、そのとき1度だけ開く。**</summary>
     private Held Acquire(int index, TunerSpec spec)
     {
         lock (_deviceGate)
         {
             if (_held.TryGetValue(index, out var open))
             {
-                /*
-                 * **解けなくなった復号器は持ち回らない。** 途中で投げたものは
-                 * 中の解析が半端なところで止まっているので、`Reset` して使い
-                 * 回すと壊れたまま次の選局へ持っていくことになる (実機で
-                 * ECM の解析に失敗した直後にプロセスごと落ちた)。
-                 *
-                 * **デバイスはそのまま。** 掴み直すと `Device or resource busy`
-                 * になる。作り直すのは復号器だけ
-                 */
-                if (open.B25 is { Broken: true })
-                {
-                    Log.Write($"[{spec.Name}] 復号器が壊れた疑いがあるので作り直します");
-                    open.ReplaceB25(Reopen(spec));
-                }
-                else if (open.CardStale)
-                {
-                    // pcscd を入れ直した。前のカードの口はもう使えない (ReopenCards)
-                    open.ReplaceB25(Reopen(spec));
-                }
                 return open;
             }
 
             var path = spec.Device ?? throw new IOException($"{spec.Name} にデバイスが書かれていません");
             var device = OpenDevice(path, spec.Lnb);
 
-            var held = new Held(device, Reopen(spec));
+            var held = new Held(device);
             _held[index] = held;
             Log.Write($"[{spec.Name}] {path} を掴みました");
             return held;
@@ -352,25 +290,6 @@ public sealed class TunerPool(
             $"{path} は知らないデバイスです (/dev/dvb/adapterN/frontendM か {Px4Userland.Scheme}<筐体の番号>:<受信機> か {SianoUserland.Scheme}<USB のポート>)");
     }
 
-    /// <summary>
-    /// 復号器を用意する。**開けなくても選局はする。**
-    ///
-    /// カードが読めなくても、**掛かったままでも録るほうがまし**。電波は二度と
-    /// 戻ってこないし、解けていないことは denpa 側が見て分かる
-    /// </summary>
-    private AribB25? Reopen(TunerSpec spec)
-    {
-        try
-        {
-            return AribB25.Open(_tune.CardUrl);
-        }
-        catch (Exception error)
-        {
-            Log.Write($"[{spec.Name}] 解けません: {error.Message}");
-            return null;
-        }
-    }
-
     /// <summary>実体を手放す。**定義が変わったときと、止めるときだけ**</summary>
     private void Drop(int index)
     {
@@ -389,8 +308,11 @@ public sealed class TunerPool(
             _leases.Remove(index);
             // 選局が落ちた。読み手には失敗として伝える (黙って終わると空ファイルになる)
             var reason = lease.Error is null ? "" : $" ({lease.Error})";
-            foreach (var sink in lease.Sinks) sink.Fail($"選局が終了しました{reason}");
-            lease.Sinks.Clear();
+            lock (lease.Sinks)
+            {
+                foreach (var sink in lease.Sinks) sink.Fail($"選局が終了しました{reason}");
+                lease.Sinks.Clear();
+            }
         }
         onChange();
     }
@@ -402,12 +324,13 @@ public sealed class TunerPool(
         {
             lock (_gate)
             {
-                lease.Sinks.Remove(leaving);
+                // 解き手が別のスレッドで配っているので、入れ物は Sinks の錠の下で触る
+                lock (lease.Sinks) lease.Sinks.Remove(leaving);
                 if (lease.Sinks.Count == 0) ScheduleRelease(lease);
             }
             onChange();
         });
-        lease.Sinks.Add(sink);
+        lock (lease.Sinks) lease.Sinks.Add(sink);
         // 溢れの報告に名前を残す。**抜けたあとに報告が回っても名乗れるように**
         lease.Saw(use);
         Task.Run(onChange);
@@ -452,7 +375,7 @@ public sealed class TunerPool(
                 if (reason is null) sink.End();
                 else sink.Fail(reason);
             }
-            lease.Sinks.Clear();
+            lock (lease.Sinks) lease.Sinks.Clear();
         }
         // 読むのをやめろとだけ言う。止まりきるのを待つのは錠の外 (上の説明)
         lease.Stop();
@@ -552,9 +475,12 @@ public sealed class TunerPool(
                 var users = new JsonArray();
                 if (lease is not null)
                 {
-                    foreach (var sink in lease.Sinks)
+                    lock (lease.Sinks)
                     {
-                        users.Add((JsonNode)new JsonObject { ["use"] = sink.Use, ["priority"] = sink.Priority });
+                        foreach (var sink in lease.Sinks)
+                        {
+                            users.Add((JsonNode)new JsonObject { ["use"] = sink.Use, ["priority"] = sink.Priority });
+                        }
                     }
                 }
 
@@ -728,79 +654,169 @@ internal sealed class Lease(int tuner, string type, string channel)
 
     private volatile bool _stopped;
     private Task? _pump;
+    /// <summary>解き手が終わった (失敗も含む)。**読み手も降りる** — 残ると読み口を掴んだまま回り続ける</summary>
+    private volatile bool _drained;
+    /// <summary>読み手と解き手の間に溜まっているバイト数</summary>
+    private long _queued;
 
     /// <summary>
-    /// **掴んだままのデバイスから読んで配る。** 選局そのものはプールがやる。
+    /// 読み手と解き手の間に溜められる量。**64MB** — 地上波で 25 秒、衛星の中継器まるごとでも 10 秒ほど。
+    /// 解き手が止まるのはカードや配り役を待つときで、それぞれ上限がある (CCID は 5 秒で諦め、
+    /// 繋ぎ直しに失敗したら 10 秒は探さずに断り、配り役は 10 秒で切る) ので、その間を丸ごと呑める。
+    /// **数ではなくバイトで測る** — 読み口は溜まっているぶんだけ返すので、1回の読みは小さいこともある
+    /// </summary>
+    private const long QueueLimit = 64 * 1024 * 1024;
+
+    /// <summary>
+    /// **掴んだままのデバイスから読んで、解いて配る。** 選局そのものはプールがやる。
     ///
     /// <para>
     /// デバイスは**チューナーごとに開きっぱなし**で、ここでは閉じない。
     /// 畳むときも読むのをやめるだけ (<see cref="Stop"/>)。
     /// **流れが途切れたら失敗として畳む** — 黙って終わると空のファイルが残る。
     /// </para>
+    ///
+    /// <para>
+    /// **読み手と解き手は別のスレッドで、間に 64MB のキューを置く** (<see cref="QueueLimit"/>)。
+    /// 解き手は ECM が変わるとその場で鍵を貰うので、カードや配り役が固まると何秒も止まる。
+    /// 読み手がそこで待つとデバイスの溜め (3.5 秒ぶん) が溢れて**録画が欠ける** —
+    /// 欠けたものは後から解いても戻らない。キューが埋まったときだけ読み手も待つ。
+    /// </para>
+    ///
+    /// <para>
+    /// **復号器は選局ごとに作る。** 中身は PAT・PMT・鍵だけで、作るのは安い。
+    /// 選局を跨いで持ち回さなければ、前の局の鍵が残ることも、2本から同時に
+    /// 叩かれることも起きようがない。
+    /// </para>
     /// </summary>
-    public void StartNative(ITuneDevice tuner, AribB25? b25, Action onExit)
+    public void StartNative(ITuneDevice tuner, Action onExit)
     {
-        _pump = Task.Run(() =>
+        var queue = System.Threading.Channels.Channel.CreateUnbounded<(byte[] Rented, int Length)>(
+            new UnboundedChannelOptions { SingleReader = true, SingleWriter = true });
+        // **どちらも専用のスレッドで。** 流れている間ずっと塞ぐので、共用の池から借りると
+        // HTTP の口が、池が増えるまで待たされる
+        _pump = Task.Factory.StartNew(
+            () => Read(tuner, queue.Writer), CancellationToken.None, TaskCreationOptions.LongRunning, TaskScheduler.Default);
+        // 解き手は待たない (Await)。デバイスに触らず、配り先も畳むときに空になっている
+        _ = Task.Factory.StartNew(
+            () => Descramble(queue.Reader, onExit), CancellationToken.None, TaskCreationOptions.LongRunning, TaskScheduler.Default);
+    }
+
+    /// <summary>読み手。読んだぶんを写してキューへ入れる。終わったらキューを閉じる</summary>
+    private void Read(ITuneDevice tuner, ChannelWriter<(byte[] Rented, int Length)> queue)
+    {
+        var buffer = new byte[188 * 1024];
+        /*
+         * **降りる合図を読み口まで渡す。** 渡さないと、電波が来ていない間は
+         * `Read` が永久に戻らず、蹴られてもここに居座る (Tuning.cs)
+         */
+        var ring = tuner.Output as DeviceStream;
+        /*
+         * **その選局のぶんだけ数える。**
+         *
+         * デバイスは選局を跨いで開きっぱなしなので、**局を変えている間は
+         * 誰も読んでいない**。その間もドライバは電波を積むので、読み始めた
+         * 最初の1回が必ず溢れとして返り、しかも「空いた時間」は
+         * 選局に掛かった時間そのものになる。
+         *
+         * 実機ではロゴ集めが局を飛び回るチューナーで **4.1秒・4.3秒** と
+         * 出た。溜めは 3.5秒ぶんなので「読み手が遅い」に見えるが、
+         * **前の局の読み終わりからの時間**を測っていただけだった。
+         * ここで測り直せば、残るのは本当に追いつかなかったぶんになる
+         */
+        ring?.Begin();
+        var since = Stopwatch.StartNew();
+        var waited = false;
+        try
         {
-            var buffer = new byte[188 * 1024];
-            /*
-             * **降りる合図を読み口まで渡す。** 渡さないと、電波が来ていない間は
-             * `Read` が永久に戻らず、蹴られてもここに居座る (Tuning.cs)
-             */
-            var ring = tuner.Output as DeviceStream;
-            /*
-             * **その選局のぶんだけ数える。**
-             *
-             * デバイスは選局を跨いで開きっぱなしなので、**局を変えている間は
-             * 誰も読んでいない**。その間もドライバは電波を積むので、読み始めた
-             * 最初の1回が必ず溢れとして返り、しかも「空いた時間」は
-             * 選局に掛かった時間そのものになる。
-             *
-             * 実機ではロゴ集めが局を飛び回るチューナーで **4.1秒・4.3秒** と
-             * 出た。溜めは 3.5秒ぶんなので「読み手が遅い」に見えるが、
-             * **前の局の読み終わりからの時間**を測っていただけだった。
-             * ここで測り直せば、残るのは本当に追いつかなかったぶんになる
-             */
-            ring?.Begin();
-            var since = Stopwatch.StartNew();
-            try
+            while (!_stopped && !_drained)
             {
-                while (!_stopped)
+                var read = ring is null
+                    ? tuner.Output.Read(buffer, 0, buffer.Length)
+                    : ring.Read(buffer, 0, buffer.Length, () => _stopped || _drained);
+                if (read <= 0) break;
+
+                if (Interlocked.Add(ref _queued, read) > QueueLimit)
                 {
-                    var read = ring is null
-                        ? tuner.Output.Read(buffer, 0, buffer.Length)
-                        : ring.Read(buffer, 0, buffer.Length, () => _stopped);
-                    if (read <= 0) break;
+                    // 解き手が止まったまま埋まった。空くまで読むのを待つ (まれなので、起きて見に行く形で足りる)
+                    if (!waited) Log.Write($"[{Tuner}] {Channel}: 解くのが追いつかずキューが埋まったので、読むのを待ちます");
+                    waited = true;
+                    while (Volatile.Read(ref _queued) > QueueLimit && !_stopped && !_drained) Thread.Sleep(10);
+                }
+                // 写す先は借り物。解き手が解き終えたら返す (1回が 192KB なので、毎回確保すると大きな塊の置き場を汚す)
+                var rented = ArrayPool<byte>.Shared.Rent(read);
+                buffer.AsSpan(0, read).CopyTo(rented);
+                if (!queue.TryWrite((rented, read))) ArrayPool<byte>.Shared.Return(rented);
 
-                    var chunk = b25 is null ? buffer[..read] : b25.Decode(buffer.AsSpan(0, read)).ToArray();
-                    if (chunk.Length == 0) continue;
+                if (since.Elapsed < OverflowReport) continue;
+                since.Restart();
+                ReportOverflows(ring);
+            }
+        }
+        catch (Exception error)
+        {
+            Error = error.Message;
+        }
+        ReportOverflows(ring);
+        queue.TryComplete();
+    }
 
-                    lock (Sinks)
+    /// <summary>解き手。キューから取って解き、読み手たちに配る。キューが閉じて空になったら終わる</summary>
+    private void Descramble(ChannelReader<(byte[] Rented, int Length)> queue, Action onExit)
+    {
+        var b25 = new Descrambler(Keys.Source);
+        var decoded = new ArrayBufferWriter<byte>();
+        void Push()
+        {
+            if (decoded.WrittenCount == 0) return;
+            var chunk = decoded.WrittenSpan.ToArray();
+            decoded.ResetWrittenCount();
+            lock (Sinks)
+            {
+                foreach (var sink in Sinks.ToList()) sink.Push(chunk);
+            }
+        }
+
+        try
+        {
+            while (!_stopped && queue.WaitToReadAsync().AsTask().GetAwaiter().GetResult())
+            {
+                while (!_stopped && queue.TryRead(out var chunk))
+                {
+                    Interlocked.Add(ref _queued, -chunk.Length);
+                    try
                     {
-                        foreach (var sink in Sinks.ToList()) sink.Push(chunk);
+                        b25.Decode(chunk.Rented.AsSpan(0, chunk.Length), decoded);
                     }
-
-                    if (since.Elapsed < OverflowReport) continue;
-                    since.Restart();
-                    ReportOverflows(ring);
+                    finally
+                    {
+                        ArrayPool<byte>.Shared.Return(chunk.Rented);
+                    }
+                    Push();
                 }
             }
-            catch (Exception error)
+            if (!_stopped)
             {
-                Error = error.Message;
+                b25.Flush(decoded);
+                Push();
             }
-            ReportOverflows(ring);
-            /*
-             * **同じ復号器に2本入りかけたら残す。** 静かに直しただけでは、
-             * 直ったのか元々起きていなかったのかが分からない (AribB25.cs)
-             */
-            if (b25?.TakeContended() is > 0 and var contended)
-            {
-                Log.Write($"[{Tuner}] {Channel}: 復号器に {contended} 回、二重に入りかけました");
-            }
-            // 畳めと言われて終わったのなら、それは失敗ではない
-            if (!_stopped) onExit();
-        });
+        }
+        catch (Exception error)
+        {
+            Error ??= error.Message;
+        }
+        _drained = true;
+        /*
+         * **解けなかったぶんを残す。** 掛かったまま流したものは、録画が
+         * 成功したように見えて中身が見られない。理由も添える
+         */
+        if (b25.Undecodable > 0)
+        {
+            Log.Write($"[{Tuner}] {Channel}: {b25.Undecodable} パケットを掛かったまま流しました"
+                + (b25.LastError is { } why ? $" ({why})" : ""));
+        }
+        // 畳めと言われて終わったのなら、それは失敗ではない
+        if (!_stopped) onExit();
     }
 
     /**
@@ -956,8 +972,10 @@ internal sealed class Lease(int tuner, string type, string channel)
      * **止まりきるまで待つ。呼ぶのは錠の外で。**
      *
      * <para>
-     * 次の選局は、これが返ってから始める。待たずに始めると**同じ復号器を
-     * 2本の流れから叩く**ことになり、プロセスごと落ちる (AribB25.cs)。
+     * 次の選局は、これが返ってから始める。待たずに始めると**同じ読み口を
+     * 2本で取り合い**、前の局のパケットが次の選局に混ざる。待つのは読み手だけ —
+     * 解き手はデバイスに触らず、配り先も畳むときに空になっている (鍵を待っていれば
+     * 止まるのはその答えのあと)。
      * </para>
      *
      * <para>

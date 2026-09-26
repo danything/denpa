@@ -33,48 +33,55 @@ RUN case "${TARGETARCH}" in \
     dotnet publish Denpa.Agent/Denpa.Agent.csproj -c Release -r "${rid}" -o /out
 
 # ---------------------------------------------------------------------------
+# IT930x のファームウェア (px4-userland の機材に挿すたびに流し込む)。
+#
+# **PLEX 公式の Windows ドライバ (PX-W3U4 BDA Ver.1.0 64bit) の PXW3U4.sys から
+# 切り出す。** 配布 zip・.sys・切り出したものの3つをハッシュで確かめる。
+# px4-userland SPEC 4.5 が受理するのはこの 2,169 バイトの1つだけ。
+# 再配布の許諾は誰も持っていないので、そこはこちらが背負う判断 (docs/agent.md)。
+#
+# arch に依らない中身なので、組む機械の arch で1回だけ作る
+# ---------------------------------------------------------------------------
+FROM --platform=$BUILDPLATFORM docker.io/library/debian:trixie-slim AS firmware
+ARG PLEX_DRIVER_SHA256=bdf3b4eb84b69ccbacb4ba3df2f59c93c803ef6d3f61e7a90a531c22c301a200
+ARG PXW3U4_SYS_SHA256=8c7b526e2c92f9b42440b55b99b309c33f2011f4e11de310acf0c1da58038722
+ARG IT930X_FIRMWARE_SHA256=5213a5a38872661277a2cc1b2dfdfe88faf06f41205f460f3b51857f0568b484
+RUN set -eu && cd /tmp && \
+    apt-get update && apt-get -y --no-install-recommends install curl ca-certificates unzip && \
+    curl -fsSL -o driver.zip https://plex-net.co.jp/plex/pxw3u4/pxw3u4_BDA_ver1x64.zip && \
+    echo "${PLEX_DRIVER_SHA256}  driver.zip" | sha256sum -c - && \
+    unzip -p driver.zip pxw3u4_BDA_ver1x64/PXW3U4.sys > PXW3U4.sys && \
+    echo "${PXW3U4_SYS_SHA256}  PXW3U4.sys" | sha256sum -c - && \
+    dd if=PXW3U4.sys of=/it930x-firmware.bin bs=1 skip=$((0x287d0)) count=2169 status=none && \
+    echo "${IT930X_FIRMWARE_SHA256}  /it930x-firmware.bin" | sha256sum -c -
+
+# ---------------------------------------------------------------------------
 FROM docker.io/library/debian:trixie-slim
 ARG TARGETARCH
 
-# **`recisdb` は入れません。** 選局は自分でやり (ioctl)、B25 も自分で解きます。
-#
-# libaribb25       … B25 の復号。`recisdb` が中で使っていたものと同じ実装
-# pcscd/pcsc-tools … B-CASカードを読む。denpa 側からは触れない。px4-userland の機材の内蔵
-#                    リーダーもここに IFD ハンドラで登録する (下の px4-userland)
-# renovate: datasource=github-releases depName=tsukumijima/libaribb25 extractVersion=^v(?<version>.*)$
-ARG ARIBB25_VERSION=0.2.10
+# **`recisdb` も libaribb25 も pcscd も入れません。** 選局は自分でやり (ioctl)、
+# B25 も自分で解き (B25.cs)、カードリーダーとも自分で話します (Ccid.cs / Px4Card.cs)。
 RUN case "${TARGETARCH}" in \
       amd64|arm64) ;; \
       *) echo "対応していない arch: ${TARGETARCH}" >&2; exit 1 ;; \
     esac && \
     apt-get update && \
-    apt-get -y --no-install-recommends install curl ca-certificates procps \
-        pcscd pcsc-tools tzdata && \
-    cd /tmp && \
-    curl -fsSLO https://github.com/tsukumijima/libaribb25/releases/download/v${ARIBB25_VERSION}/libaribb25_${ARIBB25_VERSION}_${TARGETARCH}.deb && \
-    apt-get -y --no-install-recommends install ./libaribb25_${ARIBB25_VERSION}_${TARGETARCH}.deb && \
+    apt-get -y --no-install-recommends install curl ca-certificates procps tzdata && \
     apt-get clean && rm -rf /var/lib/apt/lists/* /tmp/*
 
 # ---------------------------------------------------------------------------
 # PLEX PX-Q3U4 などは px4-userland で掴む (Px4.cs)。**カーネルドライバを入れてもらわない。**
 #
-# px4d / px4-ts / px4ctl は musl の完全静的 ELF。IFD ハンドラ (ifd/*.so) だけが
-# glibc に依るので、glibc 版のアーカイブを取る (trixie は glibc 2.41 ≥ 2.31)。
+# px4d / px4-ts / px4ctl は musl の完全静的 ELF。同梱の IFD ハンドラ (ifd/*.so) は
+# pcscd 用で、ここでは使わない (内蔵カードリーダーには px4d に直に聞く。Px4Card.cs)。
 # 配布アーカイブの SHA256SUMS で中身を確かめてから展開する。
 #
 # **ファームウェア (it930x-firmware.bin) も同梱する。** 本体には入っておらず、
 # 挿すたびにホストから流し込むもので、px4-userland は受理する版を SHA-256 で
-# 1つに固定している。取ってくる先は tsukumijima/px4_drv が `etc/` に置いている
-# 抽出済みのもの (同じハッシュであることを確かめる)。元は PLEX の Windows
-# ドライバ (PXW3U4.sys) から切り出したもので、再配布の許諾は誰も持っていない —
-# tsukumijima 版が黙認されている実態に乗る判断 (docs/agent.md)。
+# 1つに固定している。切り出すのは上の firmware 段。
 # ---------------------------------------------------------------------------
 # renovate: datasource=github-releases depName=Khronos31/px4-userland extractVersion=^v(?<version>.*)$
 ARG PX4_USERLAND_VERSION=0.1.6
-# renovate: datasource=git-refs depName=https://github.com/tsukumijima/px4_drv branch=develop
-ARG PX4_DRV_COMMIT=c995c10138368283a720cec4fcbca157ccc0dbd3
-# px4-userland SPEC 4.5 が受理する唯一のイメージ (2,169 バイト)
-ARG IT930X_FIRMWARE_SHA256=5213a5a38872661277a2cc1b2dfdfe88faf06f41205f460f3b51857f0568b484
 RUN set -eu && cd /tmp && \
     case "${TARGETARCH}" in amd64) arch=x86_64 ;; arm64) arch=aarch64 ;; *) exit 1 ;; esac && \
     base="https://github.com/Khronos31/px4-userland/releases/download/v${PX4_USERLAND_VERSION}" && \
@@ -82,10 +89,8 @@ RUN set -eu && cd /tmp && \
     curl -fsSLO "${base}/${archive}" && curl -fsSLO "${base}/SHA256SUMS" && \
     sha256sum -c --ignore-missing SHA256SUMS && \
     mkdir -p /opt/px4-userland/firmware && tar -xzf "${archive}" -C /opt/px4-userland && \
-    curl -fsSL -o /opt/px4-userland/firmware/it930x-firmware.bin \
-        "https://raw.githubusercontent.com/tsukumijima/px4_drv/${PX4_DRV_COMMIT}/etc/it930x-firmware.bin" && \
-    echo "${IT930X_FIRMWARE_SHA256}  /opt/px4-userland/firmware/it930x-firmware.bin" | sha256sum -c - && \
     rm -rf /tmp/*
+COPY --from=firmware /it930x-firmware.bin /opt/px4-userland/firmware/it930x-firmware.bin
 
 # ---------------------------------------------------------------------------
 # PLEX PX-S1UD などの Siano RIO 系は、**カーネルが掴んでいなければ** siano-userland で掴む

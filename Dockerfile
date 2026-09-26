@@ -190,7 +190,7 @@ ENV NODE_ENV=production \
     FFPROBE=/usr/local/bin/ffprobe
 
 # B-CASカードは触らない。掛かったまま録れたTSの解除はチューナーエージェントに
-# 投げる(あちらにしか pcscd が居ないため)。recisdb も libpcsclite も要らない
+# 投げる(カードリーダーを叩くのはあちら)。recisdb も libpcsclite も要らない
 # libav* は join_logo_scp 一式のため。あちらは Debian の共有ライブラリに繋いである
 # (denpa 自身の ffmpeg は下で入れる自前ビルド)
 # libvpl2 + libmfx-gen1.2 (QSV のランタイム) + libva* + intel-media-va-driver (iHD) は

@@ -213,8 +213,6 @@ docker compose) で動かす構成なら `oci://ghcr.io/danything/charts/denpa-a
 **denpa が乗っている仕事** — とくにチューナーまわりは、次の方々の仕事の上に立っています:
 
 - [px4-userland](https://github.com/Khronos31/px4-userland) / [siano-userland](https://github.com/Khronos31/siano-userland) (@Khronos31) — PX-Q3U4 などと PX-S1UD を、ホストにドライバを入れずに使えるのはこれのおかげです。PX-MLT5PE / DTV02A-5TS-P の対応は @siketyan
-- [px4_drv](https://github.com/tsukumijima/px4_drv) (nns779 / tsukumijima) — px4-userland の元になったドライバと、IT930x のファームウェアの出どころ
-- [libaribb25](https://github.com/tsukumijima/libaribb25) (tsukumijima) — B25 の解除
 - [join_logo_scp](https://github.com/yobibi/join_logo_scp) (yobibi) と chapter_exe / logoframe (tobitti0 版) — CM 検出
 - [web-bml](https://github.com/otya128/web-bml) (otya128) — データ放送を描く
 
@@ -233,7 +231,6 @@ docker compose) で動かす構成なら `oci://ghcr.io/danything/charts/denpa-a
 | **ffmpeg** (x264 / SVT-AV1 / dav1d / Opus / libaribcaption / libva / libvpl を繋いだ自前ビルド) | GPL-2.0+ (x264 のため) ほか BSD / MIT |
 | **CM 検出** — join_logo_scp・chapter_exe・logoframe・dtvindex | GPL-3.0 (join_logo_scp は正式なライセンス文書無し。「転載・改変は連絡不要」の表示に拠る) |
 | **rounded-mplus-1m-arib** (字幕とデータ放送のフォント) | M+ FONT LICENSE (無制限) |
-| **libaribb25** (エージェント。スクランブル解除) | Apache-2.0 |
 | **web-bml / es2** (npm の `web-bml`。データ放送を描く) | MIT |
 | **Svelte / SvelteKit / Tailwind / daisyUI** と束に入る npm 一式 | MIT (crc-32 は Apache-2.0、ieee754 は BSD-3) |
 | [patches/](patches) — ffmpeg に当てている直し (上流に投げる前提) | 当てる先と同じ |

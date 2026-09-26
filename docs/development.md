@@ -158,7 +158,7 @@ release はイメージを組み直さず、main で組んだものに版を 1 �
 
 **イメージは amd64 と arm64 の2つ**で、同じタグに束ねてあります (理由と組み方は
 [architecture.md](architecture.md#イメージのタグ))。Dockerfile は BuildKit の `TARGETARCH`
-で arch を見て、配布物 (libaribb25 / px4-userland / siano-ts) の名前と .NET の RID を
+で arch を見て、配布物 (px4-userland / siano-ts) の名前と .NET の RID を
 読み替え、**Intel の QSV (libvpl・libmfx-gen・intel-media-va-driver) は amd64 だけに入れます**
 (Debian の arm64 には無い)。Dockerfile やそこへ入るもの (`agent/`・`patches/`・依存) を
 触った PR では、`Docker build check` が両方の arch を本物のランナーで組んで確かめます
@@ -173,7 +173,7 @@ QEMU が要り、ffmpeg や AOT はかなり遅い)。
 
 ### 外から持ってくるものは版で固定する
 
-ffmpeg・libaribcaption・CM検出の一式・ARIB のフォント・libaribb25 は、どれも
+ffmpeg・libaribcaption・CM検出の一式・ARIB のフォント・px4-userland / siano-userland は、どれも
 `ARG` / `ENV` に版 (タグかコミット) を書いてから取ってきます。**`master` を
 追っていた頃は、同じコミットから焼いても中身が違いえました** — 実際「実機に何が
 入っているか」を知るのに Pod へ入るしかない状態でした。CM検出の3つ (`logoframe`・

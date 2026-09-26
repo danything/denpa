@@ -1,3 +1,5 @@
+using System.Buffers;
+
 namespace Denpa.Agent;
 
 /// <summary>
@@ -15,6 +17,8 @@ namespace Denpa.Agent;
 /// denpa-agent --tune /dev/dvb/adapter1/frontend0 T27,T21   # 掴んだまま切り替える
 /// denpa-agent --tune px4:00001205000960:2 T27               # px4-userland の機材。Q3U4 なら受信機 2 は地上波
 /// denpa-agent --tune siano:1-2 T27                          # siano-userland の機材 (smsusb を blacklist した PX-S1UD)
+/// denpa-agent --tune /dev/dvb/adapter1/frontend0 T27 --decode [--card-url http://…]
+/// denpa-agent --card                                        # カードリーダーを並べ、カードに INT を通す (エージェントを止めて)
 /// </code>
 ///
 /// <para>
@@ -45,8 +49,9 @@ public static class Probe
             return 2;
         }
 
-        using var b25 = AribB25.Open();
-        Console.WriteLine($"カード {string.Join(" / ", b25.Ids())}");
+        Keys.Configure(Environment.GetEnvironmentVariable("CARD_URL"));
+        var b25 = new Descrambler(Keys.Source);
+        var decoded = new ArrayBufferWriter<byte>();
 
         using var input = File.OpenRead(source);
         using var output = File.Create(destination);
@@ -63,18 +68,44 @@ public static class Probe
                 packets++;
                 if (Scrambled(buffer.AsSpan(at))) scrambled++;
             }
-            var decoded = b25.Decode(buffer.AsSpan(0, (int)read));
-            output.Write(decoded);
-            written += decoded.Length;
+            decoded.ResetWrittenCount();
+            b25.Decode(buffer.AsSpan(0, (int)read), decoded);
+            output.Write(decoded.WrittenSpan);
+            written += decoded.WrittenCount;
         }
 
-        var rest = b25.Flush();
-        output.Write(rest);
-        written += rest.Length;
+        decoded.ResetWrittenCount();
+        b25.Flush(decoded);
+        output.Write(decoded.WrittenSpan);
+        written += decoded.WrittenCount;
 
         var before = packets == 0 ? 0 : 100.0 * scrambled / packets;
         Console.WriteLine($"{input.Length} -> {written} バイト  元は {before:F1}% が掛かっていました");
+        Console.WriteLine($"解いた {b25.Decoded} / 掛かったまま {b25.Undecodable} パケット{(b25.LastError is { } why ? $" ({why})" : "")}");
         return 0;
+    }
+
+    /// <summary>
+    /// カードリーダーを並べて、カードを開いてみる。**pcscd を通さなくなったので、
+    /// 実機でリーダーと話せているかはここで確かめる。**
+    /// </summary>
+    public static int Card(string[] args)
+    {
+        Console.WriteLine(Ccid.Describe(reset: true));
+        foreach (var found in Px4Card.Find()) Console.WriteLine($"内蔵 {found.Name}");
+        try
+        {
+            using var card = CardLinks.Open();
+            var init = card.Init();
+            Console.WriteLine($"{card.Name}: カード {string.Join(" / ", init.Ids.Select(id => id.ToString("D16")))}"
+                + $"  CA_system_id 0x{init.CaSystemId:X4}");
+            return 0;
+        }
+        catch (IOException error)
+        {
+            Console.Error.WriteLine(error.Message);
+            return 1;
+        }
     }
 
     public static int Run(string[] args)
@@ -91,17 +122,10 @@ public static class Probe
         var lnb = lnbAt >= 0 ? args.ElementAtOrDefault(lnbAt + 1) : null;
         var decode = args.Contains("--decode");
         // 手元にカードが無い拠点。鍵だけ貰いに行く (CardShare.cs)
-        var cardAt = Array.IndexOf(args, "--card");
-        var card = cardAt >= 0 ? args.ElementAtOrDefault(cardAt + 1) : null;
+        var cardAt = Array.IndexOf(args, "--card-url");
+        Keys.Configure(cardAt >= 0 ? args.ElementAtOrDefault(cardAt + 1) : null);
 
         var known = Config.FromEnvironment().StreamIds();
-
-        using var b25 = decode ? AribB25.Open(card) : null;
-        if (b25 is not null)
-        {
-            var ids = b25.Ids();
-            Console.WriteLine($"カード {(ids.Length == 0 ? "(番号を読めません)" : string.Join(" / ", ids))}");
-        }
 
         using var tuner = TunerPool.OpenDevice(device, lnb);
 
@@ -133,16 +157,17 @@ public static class Probe
             }
             Console.WriteLine($"    同期 {(DateTime.UtcNow - started).TotalMilliseconds:F0} ms");
 
-            Measure(tuner.Output, name, b25);
+            Measure(tuner.Output, name, decode ? new Descrambler(Keys.Source) : null);
         }
 
         return 0;
     }
 
     /// <summary>読めたバイト数と、それが TS の形をしているか。解かせたなら解けたか</summary>
-    private static void Measure(Stream stream, string name, AribB25? b25)
+    private static void Measure(Stream stream, string name, Descrambler? b25)
     {
         var buffer = new byte[188 * 1024];
+        var decoded = new ArrayBufferWriter<byte>();
         var started = DateTime.UtcNow;
         var deadline = started + Read;
         var first = TimeSpan.Zero;
@@ -169,11 +194,12 @@ public static class Probe
 
             if (b25 is null) continue;
 
-            var decoded = b25.Decode(buffer.AsSpan(0, read));
-            for (var at = 0; at + 188 <= decoded.Length; at += 188)
+            decoded.ResetWrittenCount();
+            b25.Decode(buffer.AsSpan(0, read), decoded);
+            for (var at = 0; at + 188 <= decoded.WrittenCount; at += 188)
             {
                 outPackets++;
-                if (Scrambled(decoded[at..])) scrambledOut++;
+                if (Scrambled(decoded.WrittenSpan[at..])) scrambledOut++;
             }
         }
 
@@ -191,7 +217,8 @@ public static class Probe
         }
 
         var after = outPackets == 0 ? 0 : 100.0 * scrambledOut / outPackets;
-        Console.WriteLine($"    掛かっているパケット {before:F1}% -> 解いたあと {after:F1}% ({outPackets} 個)");
+        Console.WriteLine($"    掛かっているパケット {before:F1}% -> 解いたあと {after:F1}% ({outPackets} 個)"
+            + (b25.LastError is { } why ? $"  {why}" : ""));
         if (total == 0) Console.Error.WriteLine($"    {name}: 1バイトも来ていません");
     }
 
