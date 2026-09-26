@@ -12,14 +12,12 @@ public static class Shell
     {
         try
         {
-            var start = new ProcessStartInfo(file)
+            var start = new ProcessStartInfo(file, args)
             {
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
                 UseShellExecute = false,
             };
-            foreach (var arg in args) start.ArgumentList.Add(arg);
-
             using var child = Process.Start(start)!;
             var stdout = child.StandardOutput.ReadToEndAsync();
             var stderr = child.StandardError.ReadToEndAsync();
@@ -53,8 +51,8 @@ public static class Shell
 ///
 /// <para>
 /// **使うカードは1枚。** 鍵の出どころはプロセスで1つ (<see cref="Keys"/>) で、
-/// INT に答えた最初のリーダーのカードを全部のチューナーで使い回す。ECM は鍵が
-/// 変わるときにしか来ないので、1枚で何本でも足りる。残りのリーダーは**予備** —
+/// INT に答えた最初のリーダーのカードを全部のチューナーで使い回す。カードに聞くのは
+/// ECM の中身が変わったときだけなので、1枚で何本でも足りる。残りのリーダーは**予備** —
 /// 使っているカードが答えなくなったら、繋ぎ直すときに探し直して拾う (<see cref="BCas"/>)。
 /// チューナーごとにカードを割り当てることはしない。
 /// </para>
@@ -162,6 +160,7 @@ public static class Card
             failure = Unwrap(error).Message;
         }
 
+        // 使っているリーダー。INT に答えなかったなら無い (全部を覗く)
         var used = init is null ? null : active();
         var found = find();
         var others = found.Where(candidate => candidate.Name != used).ToList();
@@ -169,18 +168,11 @@ public static class Card
         var peeked = Probe(others, left < ProbeFor ? left : ProbeFor);
 
         var readers = new List<ReaderState>();
-        if (init is not null && used is not null)
-        {
-            // 探し直したときに見えなくなっていても、使っているものは必ず出す
-            if (found.All(candidate => candidate.Name != used)) readers.Add(new ReaderState(used, init.Ids, true, null));
-        }
+        var usedRow = used is null ? null : new ReaderState(used, init!.Ids, true, null);
+        // 探し直したときに見えなくなっていても、使っているものは必ず出す
+        if (usedRow is not null && others.Count == found.Count) readers.Add(usedRow);
         var next = 0;
-        foreach (var candidate in found)
-        {
-            readers.Add(candidate.Name == used && init is not null
-                ? new ReaderState(used, init.Ids, true, null)
-                : peeked[next++]);
-        }
+        foreach (var candidate in found) readers.Add(candidate.Name == used ? usedRow! : peeked[next++]);
 
         string message;
         if (init is not null) message = "";
@@ -319,11 +311,7 @@ public static class Scramble
         return full.StartsWith(root + Path.DirectorySeparatorChar, StringComparison.Ordinal) ? full : null;
     }
 
-    /// <summary>
-    /// 掛かったまま録れてしまったものを、後から解く。
-    ///
-    /// <para>**自分で解く** (B25.cs)。</para>
-    /// </summary>
+    /// <summary>掛かったまま録れてしまったものを、後から解く (<see cref="Descrambler"/>)</summary>
     public static JsonObject Decode(string recorded, string? input, string? output)
     {
         var source = Inside(recorded, input);

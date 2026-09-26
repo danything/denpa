@@ -68,9 +68,7 @@ public sealed record TunerSpec(
 /// </list>
 ///
 /// <para>
-/// **YAML をやめた。** 人が手で書く前提だったからコメントを守る必要があり、
-/// そのために既製のものを入れられない AOT では小さな読み取りを自分で持っていた。
-/// 画面から書き換えるなら、書き戻せて壊れにくいほうがいい。
+/// **YAML ではなく JSON。** 画面から書き換えるので、コメントを守るより書き戻せて壊れにくいほうがいい。
 /// </para>
 ///
 /// <para>
@@ -113,7 +111,6 @@ public sealed class Config(string tunersFile, string channelsFile)
 
     public List<TunerSpec> LoadTuners()
     {
-        if (!File.Exists(TunersFile)) return [];
         var found = new List<TunerSpec>();
         foreach (var node in ReadArray(TunersFile, "tuners"))
         {
@@ -183,18 +180,8 @@ public sealed class Config(string tunersFile, string channelsFile)
     public JsonArray LoadChannels() => ReadArray(ChannelsFile, null);
 
     /// <summary>
-    /// チャンネル名から TSID を引く。**衛星の選局に要る。**
-    ///
-    /// <para>
-    /// 衛星は1つの周波数に何本もの TS が相乗りしていて、復調器は TSID を
-    /// 書いて選り分ける。denpa が言ってくるのは <c>BS15_0</c> のような相対番号
-    /// なので、ここで直す (<see cref="ChannelTable.StreamId"/>)。
-    /// </para>
-    ///
-    /// <para>
-    /// **スキャン結果がいちばん新しい。** BS は再編があるので、焼き込んだ表は
-    /// いつか古くなる。1度でもスキャンしていればこちらが勝つ。
-    /// </para>
+    /// チャンネル名から、スキャンで分かった TSID を引く。衛星の選局で相対番号を TSID に直すのに使い、
+    /// 焼き込んだ表より優先する (<see cref="ChannelTable.StreamId"/>)
     /// </summary>
     public Func<string, int?> StreamIds()
     {

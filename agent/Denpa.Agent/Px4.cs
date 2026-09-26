@@ -175,7 +175,7 @@ public static class Px4Userland
 
     /// <summary>
     /// <c>key=value</c> を空白で並べた1行を割る。同じ鍵が2度あれば最初のもの。
-    /// <c>siano-ts --list</c> も同じ形なので Siano.cs からも使う
+    /// 受信機の行 (<see cref="Px4Receiver.ParseList"/>) と <c>siano-ts --list</c> (Siano.cs) も同じ形
     /// </summary>
     internal static Dictionary<string, string> Fields(string line) => line
         .Split(' ', StringSplitOptions.RemoveEmptyEntries)
@@ -243,10 +243,7 @@ public sealed record Px4Receiver(int Index, bool Terrestrial, bool Satellite)
         var found = new List<Px4Receiver>();
         foreach (var line in output.Split('\n'))
         {
-            var fields = line.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries)
-                .Select(field => field.Split('=', 2))
-                .Where(pair => pair.Length == 2)
-                .ToDictionary(pair => pair[0], pair => pair[1], StringComparer.Ordinal);
+            var fields = Px4Userland.Fields(line);
             if (!fields.TryGetValue("receiver", out var index) || !fields.TryGetValue("system", out var system)) continue;
             if (!int.TryParse(index, out var number))
             {
@@ -371,14 +368,8 @@ public sealed class Px4Daemon
                     Px4Userland.RuntimeDir, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
             }
 
-            var start = new ProcessStartInfo(px4d)
-            {
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                UseShellExecute = false,
-            };
-            foreach (var arg in new[]
-            {
+            var start = new ProcessStartInfo(px4d,
+            [
                 "--device", _id,
                 "--firmware", Px4Userland.Firmware,
                 "--runtime-dir", Px4Userland.RuntimeDir,
@@ -388,10 +379,12 @@ public sealed class Px4Daemon
                  * を渡すのは `15v` と書いてある本だけ。Px4Tuner.Arguments)
                  */
                 "--allow-lnb-power",
-            })
+            ])
             {
-                start.ArgumentList.Add(arg);
-            }
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false,
+            };
 
             var process = Process.Start(start) ?? throw new IOException("px4d を起こせません");
             _process = process;
@@ -487,11 +480,7 @@ public sealed class Px4Daemon
 /// **選局のたびに px4-ts を起こし直す。** 1回1チャンネルの作りで、掴んだまま
 /// 変える口が無い。ただし受信機を持っているのは px4d のほうなので、
 /// 起こし直す間に別のものが割り込むことはない (同じエージェントの中では
-/// TunerPool が本ごとに順番を守る)。
-/// </para>
-///
-/// <para>
-/// 子を起こして標準出力を読むところは ChildTs.cs にある。
+/// TunerPool が本ごとに順番を守る)。子を起こして標準出力を読むところは ChildTs.cs。
 /// </para>
 ///
 /// <para>
@@ -586,10 +575,9 @@ public sealed class Px4Tuner : ITuneDevice
             var daemon = Px4Daemon.For(_id);
             daemon.Ensure();
             Check(daemon.Receivers, _receiver, tuning);
-            var start = new ProcessStartInfo(Path.Combine(Px4Userland.Dir, "px4-ts"));
-            foreach (var arg in Arguments(_id, _receiver, tuning, streamId, _lnb)) start.ArgumentList.Add(arg);
-            start.ArgumentList.Add("--runtime-dir");
-            start.ArgumentList.Add(Px4Userland.RuntimeDir);
+            var start = new ProcessStartInfo(
+                Path.Combine(Px4Userland.Dir, "px4-ts"),
+                [.. Arguments(_id, _receiver, tuning, streamId, _lnb), "--runtime-dir", Px4Userland.RuntimeDir]);
             _ts.Start(start, TuneTimeout + FirstTsGrace);
         }
     }

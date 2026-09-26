@@ -198,7 +198,6 @@ public class B25Tests
         return output.WrittenSpan.ToArray();
     }
 
-
     /// <summary>カードに聞いた ECM の世代を、聞いた順に</summary>
     private static string Generations(Cards cards) => string.Join(",", cards.Asked.Select(ecm => ecm[0]));
 
