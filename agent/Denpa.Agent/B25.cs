@@ -21,8 +21,8 @@ namespace Denpa.Agent;
 /// <para>
 /// **鍵は読み手の外で貰う。** カードや配り役が固まると1回の問い合わせに何秒もかかり、
 /// 読み手がそこで待つとデバイスの溜め (3.5 秒ぶん) が溢れて**録画が欠ける**。
-/// 欠けたものは後から解いても戻らない。待っている間は今の鍵で解き続け、答えが来たら
-/// 差し替える (ECM は次の鍵を切り替わりの前から配っている)。
+/// 欠けたものは後から解いても戻らない。待っている間は今の偶奇だけ今の鍵で解き続け、
+/// 答えが来たら差し替える (ECM は次の鍵を切り替わりの前から配っている)。
 /// </para>
 ///
 /// <para>
@@ -364,6 +364,18 @@ public sealed class Descrambler(IKeySource source, bool background = true)
                 else _undecodable++;
                 return;
             }
+            /*
+             * **答えを待っている間は、今の偶奇だけ解く。** 前の ECM と新しい ECM で
+             * 共通なのは今の鍵だけで、逆の偶奇の鍵は入れ替わる。答えより先に切り替わると
+             * 古い鍵で解いて、化けたものを「解けた」として流すことになる
+             */
+            var parity = control == 2 ? 2 : 3;
+            if (ecm!.Asking is not null && ecm.Safe != 0 && parity != ecm.Safe)
+            {
+                _undecodable++;
+                return;
+            }
+            ecm.Parity = parity;
             // 0b10 が偶数、0b11 が奇数 (0b01 は使われないが、奇数の鍵で解く)
             cipher.Decrypt(control == 2, packet[start..]);
         }
@@ -575,7 +587,8 @@ public sealed class Descrambler(IKeySource source, bool background = true)
         // 溜めている間に同じ ECM がもう一度来たら、1周したということ (Hold)
         if (scanning && seen) _ecmRepeated = true;
         if (Same(section, ecm.Last) || Same(section, ecm.Asking)) return;
-        if (Same(section, ecm.Failed) && Environment.TickCount64 < ecm.RetryAt) return;
+        // 後からの解除 (background でない) は時計より速く読むので、次に来たら聞き直す
+        if (Same(section, ecm.Failed) && background && Environment.TickCount64 < ecm.RetryAt) return;
         if (ecm.Asking is not null)
         {
             // 前の答えを待っている。**聞くのは1本につき1つずつ**、最新だけ覚えておく
@@ -583,6 +596,7 @@ public sealed class Descrambler(IKeySource source, bool background = true)
             return;
         }
         Ask(ecm, section.ToArray());
+        if (!background) Poll();
     }
 
     private static bool Same(ReadOnlySpan<byte> section, byte[]? known) =>
@@ -605,6 +619,7 @@ public sealed class Descrambler(IKeySource source, bool background = true)
             (known ?? source.Init(), source.Ecm(section.AsSpan(8, section.Length - 12)));
 
         ecm.Asking = section;
+        ecm.Safe = ecm.Last is null ? 0 : ecm.Parity;
         if (background)
         {
             ecm.Pending = Task.Run(Fetch);
@@ -621,29 +636,42 @@ public sealed class Descrambler(IKeySource source, bool background = true)
             }
         }
         _waiting.Add(ecm);
-        Poll();
     }
 
-    /// <summary>答えが来ていたら鍵を差し替える。**読み手の側で**やるので錠は要らない</summary>
+    /// <summary>
+    /// 答えが来ていたら鍵を差し替える。**読み手の側で**やるので錠は要らない。
+    /// 待っている間に次の中身が来ていたら、見終えてから聞き直す (回している途中で
+    /// <see cref="_waiting"/> を触らない)
+    /// </summary>
     private void Poll()
     {
-        for (var index = _waiting.Count - 1; index >= 0; index--)
+        while (true)
         {
-            var ecm = _waiting[index];
-            if (ecm.Pending is not { IsCompleted: true } done) continue;
-            _waiting.RemoveAt(index);
-            var section = ecm.Asking!;
-            ecm.Pending = null;
-            ecm.Asking = null;
-            ecm.Attempted = true;
-            _sectionSeen = true;
-            Apply(ecm, section, done);
-
-            if (ecm.Next is { } next)
+            List<(Ecm Ecm, byte[] Next)>? again = null;
+            for (var index = _waiting.Count - 1; index >= 0; index--)
             {
-                ecm.Next = null;
-                if (!Same(next, ecm.Last) && !Same(next, ecm.Failed)) Ask(ecm, next);
+                var ecm = _waiting[index];
+                if (ecm.Pending is not { IsCompleted: true } done) continue;
+                _waiting.RemoveAt(index);
+                var section = ecm.Asking!;
+                ecm.Pending = null;
+                ecm.Asking = null;
+                // PAT・PMT が変わって要らなくなった ECM の答えは捨てる
+                if (!_ecms.ContainsValue(ecm)) continue;
+                ecm.Attempted = true;
+                _sectionSeen = true;
+                Apply(ecm, section, done);
+
+                if (ecm.Next is { } next)
+                {
+                    ecm.Next = null;
+                    if (!Same(next, ecm.Last) && !Same(next, ecm.Failed)) (again ??= []).Add((ecm, next));
+                }
             }
+            if (again is null) return;
+            foreach (var (ecm, next) in again) Ask(ecm, next);
+            // 待たずに聞いたなら、もう答えは出ている
+            if (background) return;
         }
     }
 
@@ -740,6 +768,10 @@ public sealed class Descrambler(IKeySource source, bool background = true)
         public bool Attempted;
         /// <summary>カードが「契約が無い」と答えた</summary>
         public bool Unentitled;
+        /// <summary>最後に解いたパケットの偶奇 (transport_scrambling_control)</summary>
+        public int Parity;
+        /// <summary>聞いている間も解いてよい偶奇。0 なら分からない</summary>
+        public int Safe;
         public Multi2? Cipher;
     }
 

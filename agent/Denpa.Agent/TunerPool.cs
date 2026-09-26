@@ -665,7 +665,9 @@ internal sealed class Lease(int tuner, string type, string channel)
     /// </summary>
     public void StartNative(ITuneDevice tuner, Action onExit)
     {
-        _pump = Task.Run(() =>
+        // **読み手は専用のスレッドで。** 流れている間ずっと塞ぐので、共用の池から借りると
+        // 鍵の問い合わせや HTTP の口が、池が増えるまで待たされる
+        _pump = Task.Factory.StartNew(() =>
         {
             var buffer = new byte[188 * 1024];
             var b25 = new Descrambler(Keys.Source);
@@ -730,7 +732,7 @@ internal sealed class Lease(int tuner, string type, string channel)
             }
             // 畳めと言われて終わったのなら、それは失敗ではない
             if (!_stopped) onExit();
-        });
+        }, CancellationToken.None, TaskCreationOptions.LongRunning, TaskScheduler.Default);
     }
 
     /**

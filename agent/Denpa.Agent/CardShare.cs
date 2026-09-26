@@ -92,8 +92,8 @@ public sealed class LocalCard : IKeySource
 /// </para>
 ///
 /// <para>
-/// **同期で呼びます。** 復号は ECM が変わったところで鍵を待つので、遅れた分は
-/// 取りこぼしではなく遅延になります。
+/// 呼ぶのは読み手の外 (B25.cs)。相手が遅くても録画は欠けず、答えが来るまでの
+/// 間だけ掛かったまま流れます。
 /// </para>
 /// </summary>
 public sealed class RemoteCard(string url) : IKeySource

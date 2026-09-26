@@ -516,6 +516,80 @@ public class B25Tests
         await Assert.That(descrambler.Undecodable).IsEqualTo(0);
     }
 
+    /// <summary>世代が <see cref="From"/> 以上の ECM だけ、門が開くまで答えない</summary>
+    private sealed class GatedCards : IKeySource
+    {
+        public ManualResetEventSlim Gate { get; } = new();
+        public int From { get; init; }
+        public int Done;
+        private readonly Cards _inner = new();
+        public CardInit Init() => _inner.Init();
+
+        public EcmAnswer Ecm(ReadOnlySpan<byte> ecm)
+        {
+            var copy = ecm.ToArray();
+            if (copy[0] >= From) Gate.Wait(TimeSpan.FromSeconds(10));
+            Interlocked.Increment(ref Done);
+            lock (_inner) return _inner.Ecm(copy);
+        }
+    }
+
+    /// <summary>
+    /// **待っている間に次の中身が来た ECM が幾つもあっても落ちない。** 答えを拾う途中で
+    /// 聞き直すと、見ている並びが縮んで読み手ごと落ちていた
+    /// </summary>
+    [Test]
+    public async Task 待っている間に中身が変わったECMが幾つあっても落ちない()
+    {
+        var cards = new GatedCards { From = 0 };
+        var descrambler = new Descrambler(cards);
+        var ts = new Ts().Pat((1, 0x101), (2, 0x102), (3, 0x103))
+            .Pmt(0x101, 1, Ca(0x901), (0x111, []))
+            .Pmt(0x102, 2, Ca(0x902), (0x121, []))
+            .Pmt(0x103, 3, Ca(0x903), (0x131, []))
+            .Ecm(0x901, 1).Ecm(0x902, 2).Ecm(0x903, 3)
+            .Ecm(0x903, 13);
+        var output = new ArrayBufferWriter<byte>();
+        descrambler.Decode(ts.Wire.ToArray(), output);
+        cards.Gate.Set();
+        for (var tries = 0; tries < 500 && Volatile.Read(ref cards.Done) < 3; tries++) await Task.Delay(10);
+        await Task.Delay(50);
+
+        descrambler.Decode(new Ts().Videos(1, null).Wire.ToArray(), output);
+        await Assert.That(descrambler.LastError).IsNull();
+    }
+
+    /// <summary>
+    /// **答えを待つ間は、今の偶奇だけ解く。** 逆の偶奇の鍵は入れ替わるので、答えより先に
+    /// 切り替わったら古い鍵で解かずに素通しする (化けたものを「解けた」にしない)
+    /// </summary>
+    [Test]
+    public async Task 答えを待つ間に偶奇が切り替わったら古い鍵で解かない()
+    {
+        var cards = new GatedCards { From = 10 };
+        var descrambler = new Descrambler(cards);
+        var output = new ArrayBufferWriter<byte>();
+        var head = Channel().Ecm(EcmPid, 1).Videos(3, 1, even: true);
+        descrambler.Decode(head.Wire.ToArray(), output);
+        for (var tries = 0; tries < 500 && output.WrittenCount == 0; tries++)
+        {
+            await Task.Delay(10);
+            descrambler.Decode(Channel().Wire.ToArray(), output);
+        }
+        await Assert.That(descrambler.Decoded).IsEqualTo(3);
+
+        // 次の ECM の答えが来ないうちに、奇数に切り替わった
+        var switched = new Ts().Ecm(EcmPid, 12).Videos(3, 12, even: false);
+        output.ResetWrittenCount();
+        descrambler.Decode(switched.Wire.ToArray(), output);
+
+        await Assert.That(descrambler.Decoded).IsEqualTo(3);
+        await Assert.That(descrambler.Undecodable).IsEqualTo(3);
+        // 掛かったまま、元のバイトのまま流れている
+        await Assert.That(Diff(output.WrittenSpan.ToArray(), switched.Wire.ToArray())).IsEqualTo(-1);
+        cards.Gate.Set();
+    }
+
     [Test]
     public async Task 化けたECMはカードに渡さない()
     {

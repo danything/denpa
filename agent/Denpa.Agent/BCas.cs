@@ -171,7 +171,8 @@ public sealed class BCas : IKeySource, IDisposable
                 }
                 if (response.Length < EcmLength)
                 {
-                    throw new IOException($"カードが ECM に答えません (応答 {response.Length} バイト)");
+                    // **線は生きている。** 繋ぎ直しても同じ ECM には同じ答えなので、繋ぎ直さない
+                    throw new CardRefusedException($"カードが ECM に答えません (応答 {response.Length} バイト)");
                 }
                 return new EcmAnswer(
                     response[6..14], response[14..22], BinaryPrimitives.ReadUInt16BigEndian(response.AsSpan(4)));
@@ -338,3 +339,6 @@ public sealed class BCas : IKeySource, IDisposable
         }
     }
 }
+
+/// <summary>カードは答えたが、使える答えではなかった。**線の故障ではない**ので繋ぎ直さない</summary>
+public sealed class CardRefusedException(string message) : Exception(message);

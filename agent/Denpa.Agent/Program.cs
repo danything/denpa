@@ -323,7 +323,7 @@ app.MapGet("/denpa/card/init", async (HttpContext http) =>
     try
     {
         http.Response.ContentType = "application/octet-stream";
-        await http.Response.Body.WriteAsync(CardWire.Pack(await Task.Run(Keys.Local.Init)));
+        await http.Response.Body.WriteAsync(CardWire.Pack(await Task.Run(Keys.Local.Check)));
     }
     catch (Exception error)
     {

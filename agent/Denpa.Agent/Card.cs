@@ -53,6 +53,8 @@ public static class Shell
 /// </summary>
 public static class Card
 {
+    private static readonly TimeSpan CheckFor = TimeSpan.FromSeconds(8);
+
     public static JsonObject Status()
     {
         var readers = new JsonArray();
@@ -62,7 +64,13 @@ public static class Card
         var ok = false;
         try
         {
-            var init = Keys.Source is RemoteCard remote ? remote.Check() : Keys.Local.Check();
+            /*
+             * **denpa は 10 秒で諦める。** それより先に切り上げて理由を返す —
+             * 間に合わないと、画面には「受け口に繋がりません」とエージェントのせいに見える
+             */
+            var check = Task.Run(() => Keys.Source is RemoteCard remote ? remote.Check() : Keys.Local.Check());
+            if (!check.Wait(CheckFor)) throw new TimeoutException($"カードが {CheckFor.TotalSeconds:F0} 秒で答えません");
+            var init = check.Result;
             var ids = string.Join(" / ", init.Ids.Select(id => id.ToString("D16")));
             var from = Keys.Source is RemoteCard ? "鍵を配る相手" : Keys.Local.Name;
             message = $"カードが読めています ({from}{(ids.Length > 0 ? $"、{ids}" : "")})";
@@ -70,6 +78,7 @@ public static class Card
         }
         catch (Exception error)
         {
+            if (error is AggregateException { InnerException: { } inner }) error = inner;
             message = readers.Count == 0 && Keys.Source is not RemoteCard
                 ? "カードリーダーが見つかりません"
                 : error.Message;
