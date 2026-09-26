@@ -150,14 +150,14 @@ public static class Card
     {
         var started = Stopwatch.StartNew();
         CardInit? init = null;
-        string failure = "";
+        Exception? failure = null;
         try
         {
             init = check();
         }
         catch (Exception error)
         {
-            failure = Unwrap(error).Message;
+            failure = Unwrap(error);
         }
 
         var found = find();
@@ -167,7 +167,7 @@ public static class Card
          * いる間 (固まったリーダーだと待つのをやめたあとも) 繋ぎ直しが掴めず、画面を開くたびに
          * 締め出し続けて、カードが二度と読めなくなる (実機で起きた)
          */
-        if (init is null) return Failed(failure, found);
+        if (init is null) return Failed(failure!, found);
 
         var used = active();
         var others = found.Where(candidate => candidate.Name != used).ToList();
@@ -185,24 +185,17 @@ public static class Card
     }
 
     /// <summary>
-    /// 鍵の出どころが INT を通せなかった。**リーダーごとの理由は、その失敗から読む**
-    /// (BCas.Connect の「名前: 理由 / 名前: 理由」)。読み取れなければ失敗の文をそのまま出す
+    /// 鍵の出どころが INT を通せなかった。**リーダーごとの理由はその失敗が持っている**
+    /// (<see cref="CardsUnreadableException"/>)。持っていなければ失敗の文をそのまま出す
     /// </summary>
-    private static CardSurvey Failed(string failure, IReadOnlyList<CardLinkCandidate> found)
+    private static CardSurvey Failed(Exception failure, IReadOnlyList<CardLinkCandidate> found)
     {
+        var known = (failure as CardsUnreadableException)?.Readers ?? [];
         var readers = found.Select(candidate =>
         {
-            var at = failure.IndexOf(candidate.Name + ": ", StringComparison.Ordinal);
-            var why = failure;
-            if (at >= 0)
-            {
-                why = failure[(at + candidate.Name.Length + 2)..];
-                var end = why.IndexOf(" / ", StringComparison.Ordinal);
-                if (end >= 0) why = why[..end];
-                else if (why.EndsWith(')')) why = why[..^1];
-            }
+            var reader = known.FirstOrDefault(reader => reader.Name == candidate.Name);
             // 挿さっていないだけなら理由を出さない (カードなし)
-            return new ReaderState(candidate.Name, null, false, why.Contains("挿さっていません") ? null : why);
+            return new ReaderState(candidate.Name, null, false, reader is { Absent: true } ? null : reader?.Reason ?? failure.Message);
         }).ToList();
 
         var message = readers.Count == 0 ? "カードリーダーが見つかりません"
@@ -242,6 +235,8 @@ public static class Card
         lock (Running)
         {
             if (Running.TryGetValue(candidate.Name, out var running) && !running.IsCompleted) return running;
+            // 終わった覗きは溜めない (挿し直すと名前の USB の場所が変わり、キーが増えていく)
+            foreach (var done in Running.Where(entry => entry.Value.IsCompleted).Select(entry => entry.Key).ToList()) Running.Remove(done);
             return Running[candidate.Name] = Task.Factory.StartNew(
                 () => Peek(candidate), CancellationToken.None, TaskCreationOptions.LongRunning, TaskScheduler.Default);
         }
