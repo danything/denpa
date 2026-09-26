@@ -251,7 +251,7 @@ function Start-Denpa([string]$Ref) {
 }
 
 # Siano のチューナーが刺さっていれば、ドライバが WinUSB かを見る (入れ替えは人の手で。Zadig)
-function Show-Tuners {
+function Show-Tuner {
     try {
         $sticks = @(Get-PnpDevice -PresentOnly -ErrorAction SilentlyContinue |
                 Where-Object { $_.InstanceId -match '^USB\\VID_(3275&PID_0080|187F&PID_0600|187F&PID_0302)\\' })
@@ -376,7 +376,7 @@ function Invoke-Main {
 
     $ref = if ($env:DENPA_AGENT_ZIP) { '' } else { Get-Version }
     Install-Agent $ref
-    Show-Tuners
+    Show-Tuner
     if ($NoDocker) {
         Say "エージェントだけ入れました。denpa の TUNER_AGENT_URL に http://$($env:COMPUTERNAME):$Port を書いてください"
         Say '(LAN から繋ぐなら、Windows ファイアウォールでポート 25252 への受信を許してください)'

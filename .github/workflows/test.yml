@@ -252,18 +252,21 @@ jobs:
       - name: Publish (Native AOT, win-x64)
         run: dotnet publish agent/Denpa.Agent/Denpa.Agent.csproj -c Release -r win-x64 -o out
 
-      # PowerShell 5.1 (Windows の既定) で読めること。BOM が無いのは irm | iex で流すため
-      # (5.1 に -File で渡すと ANSI で読まれるので、その渡し方は案内しない)。Write-Host は画面に出す案内なので許す
+      # 書き方は PowerShell 5.1 (Windows の既定) に合わせて見る (PSUseCompatibleSyntax)。
+      # 読むのは pwsh で — install.ps1 は BOM の無い UTF-8 で、5.1 はそれを ANSI で読む
+      # (irm | iex は UTF-8 で受け取るので困らない。-File で 5.1 に渡す入れ方は案内しない)。
+      # 外す規則: Write-Host (画面に出す案内)、ShouldProcess (-WhatIf を持つモジュールではない)、BOM (上の理由)。
+      # **このジョブの PowerShell の段には日本語を書かない** (5.1 が ANSI で読んで、引用符が崩れうる)
       - name: Lint install.ps1
-        shell: powershell
+        shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
           Install-Module PSScriptAnalyzer -Force -Scope CurrentUser
-          $found = Invoke-ScriptAnalyzer -Path install.ps1 -ExcludeRule PSAvoidUsingWriteHost, PSUseBOMForUnicodeEncodedFile -Settings @{
-            Rules = @{ PSUseCompatibleSyntax = @{ Enable = $true; TargetVersions = @('5.1', '7.0') } }
-          }
+          $found = Invoke-ScriptAnalyzer -Path install.ps1 -Severity Warning, Error `
+            -ExcludeRule PSAvoidUsingWriteHost, PSUseShouldProcessForStateChangingFunctions, PSUseBOMForUnicodeEncodedFile `
+            -Settings @{ Rules = @{ PSUseCompatibleSyntax = @{ Enable = $true; TargetVersions = @('5.1', '7.0') } } }
           $found | Format-Table -AutoSize | Out-String -Width 200
-          if ($found) { throw "PSScriptAnalyzer: $($found.Count) 件" }
+          if ($found) { throw "PSScriptAnalyzer: $($found.Count) findings" }
 
       # 何も設定せずに起こす。チューナーは自動検出で空、カードはリーダーが無いので ok:false が返るはず。
       # **落ちずに答える**ことを見る。WinSCard (winscard.dll) をここで実際に引く
@@ -281,12 +284,12 @@ jobs:
           $card = Invoke-RestMethod http://127.0.0.1:25300/denpa/card
           "tuners: $($tuners | ConvertTo-Json -Compress -Depth 5)"
           "card: $($card | ConvertTo-Json -Compress -Depth 5)"
-          if ($null -eq $tuners.tuners) { throw 'tuners が返りません' }
-          if ($card.ok -ne $false -or $null -eq $card.readers) { throw 'card の答えが違います' }
+          if ($null -eq $tuners.tuners) { throw 'no tuners in /denpa/tuners' }
+          if ($card.ok -ne $false -or $null -eq $card.readers) { throw 'unexpected /denpa/card' }
           Stop-Process -Id $agent.Id
-          if (-not $agent.WaitForExit(10000)) { throw '止まりません' }
+          if (-not $agent.WaitForExit(10000)) { throw 'agent did not stop' }
           Get-Content agent.log, agent.err
-          # 最後の外のコマンド (--card はカードが無いので 1) の終了コードで落ちないように
+          # --card exits 1 (no card); do not fail on the last native exit code
           exit 0
 
       # 入れ方を通しで。エージェントはいま焼いたものを zip にして入れ、siano-userland と
@@ -310,14 +313,14 @@ jobs:
 
           & $script -NoDocker -NoOpen
           $tuners = Invoke-RestMethod http://127.0.0.1:25252/denpa/tuners
-          if ($null -eq $tuners.tuners) { throw '上げ直したあと答えません' }
+          if ($null -eq $tuners.tuners) { throw 'agent does not answer after the upgrade' }
 
           & $script -Uninstall
-          if (Get-ScheduledTask -TaskName denpa-agent -ErrorAction SilentlyContinue) { throw 'タスクが残っています' }
-          if (Test-Path $prefix) { throw "$prefix が残っています" }
-          if (Get-Process denpa-agent -ErrorAction SilentlyContinue) { throw 'エージェントが残っています' }
-          # 設定の置き場は外しても残す
-          if (-not (Test-Path "$env:USERPROFILE\denpa\config")) { throw '~/denpa/config が消えています' }
+          if (Get-ScheduledTask -TaskName denpa-agent -ErrorAction SilentlyContinue) { throw 'task left' }
+          if (Test-Path $prefix) { throw "$prefix left" }
+          if (Get-Process denpa-agent -ErrorAction SilentlyContinue) { throw 'agent still running' }
+          # keeps ~/denpa/config
+          if (-not (Test-Path "$env:USERPROFILE\denpa\config")) { throw '~/denpa/config removed' }
           Get-Content "$env:USERPROFILE\denpa\denpa-agent.log"
           exit 0
 
