@@ -812,7 +812,10 @@ irm https://raw.githubusercontent.com/danything/denpa/main/install.ps1 | iex
   答え (windows-latest で確かめた)、次の行が来るまで TS を止めます。空行は読み飛ばされるので、
   埋めておけば流れ続けます。siano-ts 側で直れば (pipe なら `PeekNamedPipe` で見る) 外せます
 - 子の標準出力は poll できないので、裏の1本に読ませて 200ms ごとに起きます (`DeviceStream`)。
-  pipe の深さは Windows 任せ (広げない)
+  pipe の深さは Windows 任せ (広げられず、4KB ほど)。読み手が少し止まったぶんは siano-ts の中の溜め
+  (16KB × 256) が吸う
+- タスクの優先度は普通にしてあります (既定の「低い」だと、Docker がエンコードで CPU を食っている間に
+  siano-ts が後回しにされる)
 - ログは cmd がファイルへ足していくだけで、回しません (Mac と同じ)
 - LAN のほかの機械からエージェントに繋ぐとき (`-NoDocker`) は、Windows ファイアウォールでポート 25252 を
   許します (初めて起きたときに確認の窓が出ることがある)。Docker Desktop のコンテナからは要りません

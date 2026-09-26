@@ -405,6 +405,8 @@ public sealed class SianoTuner : ITuneDevice
     /// (windows-latest で確かめた)。そのまま <c>ReadFile</c> が次の行まで止まり、TS を 16KB
     /// 書くごとに1行待つ。空行は読み飛ばされるので、埋めておけば止まらない。詰め物が pipe
     /// (4KB) を埋めるぶん、頼んだ行が読まれるのは 16 周ほど後 (TS が流れていれば 0.1 秒ほど)。
+    /// 空回りはしない — siano-ts の1周は TS を待つところ (来なければ 100ms) で決まり、こちらは
+    /// pipe が埋まれば書くところで待つ。
     /// **siano-ts 側で直れば (pipe なら PeekNamedPipe で見る) 要らなくなる。**
     /// </para>
     ///

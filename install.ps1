@@ -105,7 +105,7 @@ function Test-Recording {
 
 # エージェントを止める。**録画中なら終わるまで待つ** (Windows はエージェントに「止まれ」を伝える手が無く、
 # 止めればその場で落ちる。Mac のように録画を待ってから畳むことができないので、ここで待つ)。
-# 起こした .cmd・エージェント・siano-ts を、コマンドラインに置き場が入っているもので見つけて落とす
+# 起こした conhost・.cmd・エージェント・siano-ts を、コマンドラインに置き場が入っているもので見つけて落とす
 # (タスクを止めても、.cmd の下で起きたものまでは止まらない)
 function Stop-Agent {
     if (-not (Get-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue)) { return }
@@ -116,7 +116,8 @@ function Stop-Agent {
     Stop-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue
     for ($i = 0; $i -lt 30; $i++) {
         $left = @(Get-CimInstance Win32_Process | Where-Object {
-                $_.CommandLine -and $_.CommandLine.IndexOf($Prefix, [StringComparison]::OrdinalIgnoreCase) -ge 0
+                $_.Name -in 'conhost.exe', 'cmd.exe', 'denpa-agent.exe', 'siano-ts.exe' -and $_.CommandLine -and
+                $_.CommandLine.IndexOf("$Prefix\", [StringComparison]::OrdinalIgnoreCase) -ge 0
             })
         if ($left.Count -eq 0) { return }
         $left | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
@@ -319,21 +320,23 @@ function Install-Agent([string]$Ref) {
 
     # 起こす .cmd。環境変数はコンテナで既定にしている置き場を Windows の置き場に向け直すものだけ (Mac の plist と同じ)。
     # **落ちたら5秒置いて起こし直す** (タスク スケジューラの「失敗したら再起動」は、終了コードでは効かない)。
-    # ログはここで足していく。cmd はファイルを OEM の文字コードで読むので、その文字コードで書く (パスに日本語が入りうる)
+    # ログはここで足していく。**パスに日本語が入りうる**ので、1行目で cmd の文字コードを UTF-8 にしてから読ませる
+    # (そのままだとコンソールの文字コードで読み、それはユーザーの設定次第で決め打てない)
     $cmd = "$Prefix\denpa-agent.cmd"
     $vars = [ordered]@{
         AGENT_PORT = $Port; TUNERS_FILE = "$DenpaDir\config\tuners.json"; CHANNELS_FILE = "$DenpaDir\config\channels.json"
         SIANO_USERLAND_DIR = "$Prefix\siano-userland"; SIANO_FIRMWARE = "$Prefix\siano-userland\firmware\isdbt_rio.inp"
         RECORDED_DIR = "$Media\recorded"
     }
-    $lines = @('@echo off', 'rem Written by install.ps1 (denpa). Re-run the installer instead of editing this file.')
+    $lines = @('@chcp 65001 >nul', '@echo off', 'rem Written by install.ps1 (denpa). Re-run the installer instead of editing this file.')
     foreach ($key in $vars.Keys) { $lines += "set `"$key=$(([string]$vars[$key]).Replace('%', '%%'))`"" }
     $lines += ':loop', "`"$Prefix\bin\denpa-agent.exe`" >> `"$($Log.Replace('%', '%%'))`" 2>&1", 'ping -n 6 127.0.0.1 >nul', 'goto loop'
-    $oem = [Text.Encoding]::GetEncoding([Globalization.CultureInfo]::CurrentCulture.TextInfo.OEMCodePage)
-    Write-Text $cmd (($lines -join "`r`n") + "`r`n") $oem
+    Write-Text $cmd (($lines -join "`r`n") + "`r`n")
 
     # ログオンしたら起こす。**窓を出さない** (conhost --headless。コンソールのプログラムは、そのままだと窓が開く)。
-    # 自分のアカウントのタスクなので管理者は要らない。時間の上限は外す (既定は 3 日で止められる)
+    # 自分のアカウントのタスクなので管理者は要らない。時間の上限は外す (既定は 3 日で止められる)。
+    # **優先度は普通 (4) に。** 既定の 7 だと CPU も I/O も後回しにされ、Docker がエンコードで CPU を
+    # 食っている間に siano-ts が USB を読みに行けず TS を落としうる (Mac の ProcessType Interactive と同じ理由)
     $me = [Security.Principal.WindowsIdentity]::GetCurrent().Name
     $action = New-ScheduledTaskAction -Execute "$env:WINDIR\System32\conhost.exe" `
         -Argument "--headless `"$env:WINDIR\System32\cmd.exe`" /d /c `"$cmd`""
@@ -341,6 +344,7 @@ function Install-Agent([string]$Ref) {
     $principal = New-ScheduledTaskPrincipal -UserId $me -LogonType Interactive -RunLevel Limited
     $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries `
         -ExecutionTimeLimit ([TimeSpan]::Zero) -MultipleInstances IgnoreNew
+    $settings.Priority = 4
     Register-ScheduledTask -TaskName $TaskName -Action $action -Trigger $trigger -Principal $principal -Settings $settings `
         -Description 'denpa のチューナーエージェント (install.ps1 が入れた)' -Force | Out-Null
     Start-ScheduledTask -TaskName $TaskName

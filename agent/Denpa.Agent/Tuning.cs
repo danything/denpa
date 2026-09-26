@@ -171,10 +171,17 @@ internal sealed unsafe class DeviceStream(SafeFileHandle handle, Func<string?>? 
         private int _at;
         private int _left;
 
-        /// <summary>読めたバイト数。0 は尽きた、null は降りた</summary>
+        /// <summary>
+        /// 読めたバイト数。0 は尽きた、null は降りた。**錠を待つ間も降りる合図を見る** —
+        /// 先の読み手が待っている間、後から来た読み手 (降りたい側) が錠の手前で止まらないように
+        /// </summary>
         public int? Read(Span<byte> target, Func<bool> giveUp)
         {
-            lock (_gate)
+            while (!_gate.TryEnter(WakeMs))
+            {
+                if (giveUp()) return null;
+            }
+            try
             {
                 while (_left == 0)
                 {
@@ -192,6 +199,10 @@ internal sealed unsafe class DeviceStream(SafeFileHandle handle, Func<string?>? 
                 _at += count;
                 _left -= count;
                 return count;
+            }
+            finally
+            {
+                _gate.Exit();
             }
         }
     }
