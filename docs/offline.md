@@ -14,7 +14,7 @@
 
 **電波の無いときは `/offline` で観ます。** `/watch/<id>` はサーバが組む画面なので開けず、
 ナビゲーションが繋がらないとサービスワーカーが `/offline` へ落とします。
-**`/offline` はナビに並べません** — 保存・進み具合 (行のバッジに割合、下端にバー)・視聴は
+`/offline` はナビに並べません。保存・進み具合 (行のバッジに割合、下端にバー)・視聴は
 ふだんの一覧と観る画面でできます (オンラインの `/watch` は端末のコピーがあればそちらを使う)。
 **「サーバからも消す」予約 (outbox) を積むのは `/offline` の削除だけ**です。一覧の行の削除は
 その場でサーバから消し (端末のコピーも片付ける)、詳細の「端末から消す」はサーバに触りません。
@@ -36,7 +36,7 @@
 ```
 
 **Service Worker は配信のキャッシュに使いません** (`/api/` は素通し、殻だけキャッシュし、
-一覧はキャッシュしない)。足したのは Background Fetch の受け取りと**オフラインの入口** —
+一覧はキャッシュしない)。足したのは Background Fetch の受け取りとオフラインの入口だけ。
 `/offline` を install 時に控えて、ナビゲーションが繋がらないときの行き先にします
 (ブラウザのダウンロード表示を押したときも `backgroundfetchclick` で `/offline` を開く)。
 
@@ -52,7 +52,7 @@ DB 名 `denpa-offline`、ストア3つ (実体は [offline-db.ts](../src/lib/off
 - `resume` (key: 録画ID) … オフライン中に進んだ視聴位置。復帰時にまとめて
   `POST /api/recordings/<id>/resume` で送る。
 
-`state` は `'downloading' | 'ready' | 'failed'` の3つ。**失敗は消さずに残す** —
+`state` は `'downloading' | 'ready' | 'failed'` の3つ。**失敗は消さずに残す。**
 失敗した瞬間の知らせ (トースト) は一瞬で、控えごと消すと「無かったことになった」ように
 見える。残った行がそのまま「保存をやり直す」の口になる。進み具合 (%) は
 IndexedDB には置かず、画面側のメモリだけで持つ (下記)。
@@ -64,20 +64,20 @@ IndexedDB には置かず、画面側のメモリだけで持つ (下記)。
 ### ダウンロード — Background Fetch API を使う
 
 1. **HEAD で下見してから預ける** (`probeDownloads`)。Background Fetch は
-   **404 が1つでも混ざると全体が失敗になる** (`failureReason: bad-status`) — 付き添いは
-   無い録画もあるので、在るものだけに絞る。さらに **`downloadTotal` を超えた時点で
-   打ち切られる**ので、当てずっぽうではなく HEAD の実測合計 (+2%) を渡す。
+   **404 が1つでも混ざると全体が失敗になる** (`failureReason: bad-status`)。付き添いは
+   無い録画もあるので、在るものだけに絞る。さらに `downloadTotal` を超えた時点で
+   打ち切られるので、当てずっぽうではなく HEAD の実測合計 (+2%) を渡す。
    どちらも実機の Edge で踏んだ。
-2. `backgroundFetch.fetch(id, urls, {title, downloadTotal})` で**ブラウザに預ける** (タブを
+2. `backgroundFetch.fetch(id, urls, {title, downloadTotal})` でブラウザに預ける (タブを
    閉じても続く。`/api/…/file` はログインの控えでも通る — `auth.sessionMayRead`)。登録IDは
-   `rec-<録画ID>-<source>-<試みの印>` — **同じIDが生きている間は再登録できない**ので
+   `rec-<録画ID>-<source>-<試みの印>`。**同じIDが生きている間は再登録できない**ので
    やり直しのたびに印を変え、前回の残骸は登録前に中止する。遅れて届く残骸の中止の知らせが
    新しい控えを消さないよう、SW 側は印を照合する。
 3. **進み具合は2秒おきに `get()` で掴み直す** (`watchProgress`)。`progress` イベントだけだと、
    遅い回線でブラウザが止めて再開したあとの通知が届かず、割合が張り付く。
 4. SW の `backgroundfetchsuccess` で IndexedDB へ移して `state='ready'`。
    `backgroundfetchfail` / `backgroundfetchabort` は **`state='failed'` として残す**。
-   開き直したときは突き合わせもする — 「保存中」なのにブラウザ側に対応する
+   開き直したときは突き合わせもする。「保存中」なのにブラウザ側に対応する
    ダウンロードが無ければ、もう動いていないので失敗に倒す (`watchRunning`)。
 5. 対応していないブラウザ (Safari / Firefox) は**ページ主導の fetch にフォールバック**
    (タブを開いたまま。進捗は一覧のバッジに出す)。機能検出は

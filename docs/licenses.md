@@ -6,7 +6,7 @@ denpa 自身は **AGPL-3.0-or-later** ([LICENSE](../LICENSE)) です。ここに
 
 書き方の約束: 「根拠」はリポジトリの中で確かめられるもの (LICENSE ファイル・
 Dockerfile の行・`package.json`) を優先し、上流の表示に拠るものは (上流) と添えます。
-**版はここに書きません** — Renovate が Dockerfile の `ARG` / `ENV` を上げるたびに食い違うので、
+**版はここに書きません。** Renovate が Dockerfile の `ARG` / `ENV` を上げるたびに食い違うので、
 いま入っている版は Dockerfile を見てください。
 
 ## コンテナイメージ `denpa` に入るもの
