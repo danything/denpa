@@ -647,14 +647,32 @@ internal sealed class Lease(int tuner, string type, string channel)
 
     private volatile bool _stopped;
     private Task? _pump;
+    private Task? _descramble;
+    /// <summary>読み手と解き手の間に溜まっているバイト数</summary>
+    private long _queued;
 
     /// <summary>
-    /// **掴んだままのデバイスから読んで配る。** 選局そのものはプールがやる。
+    /// 読み手と解き手の間に溜められる量。**64MB** — 地上波で 25 秒、衛星の中継器まるごとでも 10 秒ほど。
+    /// 解き手が止まるのはカードや配り役を待つときで、それぞれ上限がある (CCID は 5 秒で諦め、
+    /// 繋ぎ直しに失敗したら 10 秒は探さずに断り、配り役は 10 秒で切る) ので、その間を丸ごと呑める。
+    /// **数ではなくバイトで測る** — 読み口は溜まっているぶんだけ返すので、1回の読みは小さいこともある
+    /// </summary>
+    private const long QueueLimit = 64 * 1024 * 1024;
+
+    /// <summary>
+    /// **掴んだままのデバイスから読んで、解いて配る。** 選局そのものはプールがやる。
     ///
     /// <para>
     /// デバイスは**チューナーごとに開きっぱなし**で、ここでは閉じない。
     /// 畳むときも読むのをやめるだけ (<see cref="Stop"/>)。
     /// **流れが途切れたら失敗として畳む** — 黙って終わると空のファイルが残る。
+    /// </para>
+    ///
+    /// <para>
+    /// **読み手と解き手は別のスレッドで、間に 64MB のキューを置く** (<see cref="QueueLimit"/>)。
+    /// 解き手は ECM が変わるとその場で鍵を貰うので、カードや配り役が固まると何秒も止まる。
+    /// 読み手がそこで待つとデバイスの溜め (3.5 秒ぶん) が溢れて**録画が欠ける** —
+    /// 欠けたものは後から解いても戻らない。キューが埋まったときだけ読み手も待つ。
     /// </para>
     ///
     /// <para>
@@ -665,74 +683,117 @@ internal sealed class Lease(int tuner, string type, string channel)
     /// </summary>
     public void StartNative(ITuneDevice tuner, Action onExit)
     {
-        // **読み手は専用のスレッドで。** 流れている間ずっと塞ぐので、共用の池から借りると
-        // 鍵の問い合わせや HTTP の口が、池が増えるまで待たされる
-        _pump = Task.Factory.StartNew(() =>
+        var queue = System.Threading.Channels.Channel.CreateUnbounded<byte[]>(
+            new UnboundedChannelOptions { SingleReader = true, SingleWriter = true });
+        // **どちらも専用のスレッドで。** 流れている間ずっと塞ぐので、共用の池から借りると
+        // HTTP の口が、池が増えるまで待たされる
+        _pump = Task.Factory.StartNew(
+            () => Read(tuner, queue.Writer), CancellationToken.None, TaskCreationOptions.LongRunning, TaskScheduler.Default);
+        _descramble = Task.Factory.StartNew(
+            () => Descramble(queue.Reader, onExit), CancellationToken.None, TaskCreationOptions.LongRunning, TaskScheduler.Default);
+    }
+
+    /// <summary>読み手。読んだぶんを写してキューへ入れる。終わったらキューを閉じる</summary>
+    private void Read(ITuneDevice tuner, ChannelWriter<byte[]> queue)
+    {
+        var buffer = new byte[188 * 1024];
+        /*
+         * **降りる合図を読み口まで渡す。** 渡さないと、電波が来ていない間は
+         * `Read` が永久に戻らず、蹴られてもここに居座る (Tuning.cs)
+         */
+        var ring = tuner.Output as DeviceStream;
+        /*
+         * **その選局のぶんだけ数える。**
+         *
+         * デバイスは選局を跨いで開きっぱなしなので、**局を変えている間は
+         * 誰も読んでいない**。その間もドライバは電波を積むので、読み始めた
+         * 最初の1回が必ず溢れとして返り、しかも「空いた時間」は
+         * 選局に掛かった時間そのものになる。
+         *
+         * 実機ではロゴ集めが局を飛び回るチューナーで **4.1秒・4.3秒** と
+         * 出た。溜めは 3.5秒ぶんなので「読み手が遅い」に見えるが、
+         * **前の局の読み終わりからの時間**を測っていただけだった。
+         * ここで測り直せば、残るのは本当に追いつかなかったぶんになる
+         */
+        ring?.Begin();
+        var since = Stopwatch.StartNew();
+        var waited = false;
+        try
         {
-            var buffer = new byte[188 * 1024];
-            var b25 = new Descrambler(Keys.Source);
-            var decoded = new ArrayBufferWriter<byte>();
-            /*
-             * **降りる合図を読み口まで渡す。** 渡さないと、電波が来ていない間は
-             * `Read` が永久に戻らず、蹴られてもここに居座る (Tuning.cs)
-             */
-            var ring = tuner.Output as DeviceStream;
-            /*
-             * **その選局のぶんだけ数える。**
-             *
-             * デバイスは選局を跨いで開きっぱなしなので、**局を変えている間は
-             * 誰も読んでいない**。その間もドライバは電波を積むので、読み始めた
-             * 最初の1回が必ず溢れとして返り、しかも「空いた時間」は
-             * 選局に掛かった時間そのものになる。
-             *
-             * 実機ではロゴ集めが局を飛び回るチューナーで **4.1秒・4.3秒** と
-             * 出た。溜めは 3.5秒ぶんなので「読み手が遅い」に見えるが、
-             * **前の局の読み終わりからの時間**を測っていただけだった。
-             * ここで測り直せば、残るのは本当に追いつかなかったぶんになる
-             */
-            ring?.Begin();
-            var since = Stopwatch.StartNew();
-            try
+            while (!_stopped)
             {
-                while (!_stopped)
+                var read = ring is null
+                    ? tuner.Output.Read(buffer, 0, buffer.Length)
+                    : ring.Read(buffer, 0, buffer.Length, () => _stopped);
+                if (read <= 0) break;
+
+                if (Interlocked.Add(ref _queued, read) > QueueLimit)
                 {
-                    var read = ring is null
-                        ? tuner.Output.Read(buffer, 0, buffer.Length)
-                        : ring.Read(buffer, 0, buffer.Length, () => _stopped);
-                    if (read <= 0) break;
+                    // 解き手が止まったまま埋まった。空くまで読むのを待つ (まれなので、起きて見に行く形で足りる)
+                    if (!waited) Log.Write($"[{Tuner}] {Channel}: 解くのが追いつかずキューが埋まったので、読むのを待ちます");
+                    waited = true;
+                    while (Volatile.Read(ref _queued) > QueueLimit && !_stopped) Thread.Sleep(10);
+                }
+                queue.TryWrite(buffer.AsSpan(0, read).ToArray());
 
-                    decoded.ResetWrittenCount();
-                    b25.Decode(buffer.AsSpan(0, read), decoded);
-                    if (decoded.WrittenCount == 0) continue;
-                    var chunk = decoded.WrittenSpan.ToArray();
+                if (since.Elapsed < OverflowReport) continue;
+                since.Restart();
+                ReportOverflows(ring);
+            }
+        }
+        catch (Exception error)
+        {
+            Error = error.Message;
+        }
+        ReportOverflows(ring);
+        queue.TryComplete();
+    }
 
-                    lock (Sinks)
-                    {
-                        foreach (var sink in Sinks.ToList()) sink.Push(chunk);
-                    }
+    /// <summary>解き手。キューから取って解き、読み手たちに配る。キューが閉じて空になったら終わる</summary>
+    private void Descramble(ChannelReader<byte[]> queue, Action onExit)
+    {
+        var b25 = new Descrambler(Keys.Source);
+        var decoded = new ArrayBufferWriter<byte>();
+        void Push()
+        {
+            if (decoded.WrittenCount == 0) return;
+            var chunk = decoded.WrittenSpan.ToArray();
+            decoded.ResetWrittenCount();
+            lock (Sinks)
+            {
+                foreach (var sink in Sinks.ToList()) sink.Push(chunk);
+            }
+        }
 
-                    if (since.Elapsed < OverflowReport) continue;
-                    since.Restart();
-                    ReportOverflows(ring);
+        try
+        {
+            while (!_stopped && queue.WaitToReadAsync().AsTask().GetAwaiter().GetResult())
+            {
+                while (!_stopped && queue.TryRead(out var chunk))
+                {
+                    Interlocked.Add(ref _queued, -chunk.Length);
+                    b25.Decode(chunk, decoded);
+                    Push();
                 }
             }
-            catch (Exception error)
-            {
-                Error = error.Message;
-            }
-            ReportOverflows(ring);
-            /*
-             * **解けなかったぶんを残す。** 掛かったまま流したものは、録画が
-             * 成功したように見えて中身が見られない。理由も添える
-             */
-            if (b25.Undecodable > 0)
-            {
-                Log.Write($"[{Tuner}] {Channel}: {b25.Undecodable} パケットを掛かったまま流しました"
-                    + (b25.LastError is { } why ? $" ({why})" : ""));
-            }
-            // 畳めと言われて終わったのなら、それは失敗ではない
-            if (!_stopped) onExit();
-        }, CancellationToken.None, TaskCreationOptions.LongRunning, TaskScheduler.Default);
+            b25.Flush(decoded);
+            Push();
+        }
+        catch (Exception error)
+        {
+            Error ??= error.Message;
+        }
+        /*
+         * **解けなかったぶんを残す。** 掛かったまま流したものは、録画が
+         * 成功したように見えて中身が見られない。理由も添える
+         */
+        if (b25.Undecodable > 0)
+        {
+            Log.Write($"[{Tuner}] {Channel}: {b25.Undecodable} パケットを掛かったまま流しました"
+                + (b25.LastError is { } why ? $" ({why})" : ""));
+        }
+        // 畳めと言われて終わったのなら、それは失敗ではない
+        if (!_stopped) onExit();
     }
 
     /**
@@ -889,7 +950,8 @@ internal sealed class Lease(int tuner, string type, string channel)
      *
      * <para>
      * 次の選局は、これが返ってから始める。待たずに始めると**同じ読み口を
-     * 2本で取り合い**、前の局のパケットが次の選局に混ざる。
+     * 2本で取り合い**、前の局のパケットが次の選局に混ざる。解き手も待つ —
+     * 鍵を待っていれば止まるのはその答えのあと (カードや配り役の上限まで)。
      * </para>
      *
      * <para>
@@ -899,12 +961,12 @@ internal sealed class Lease(int tuner, string type, string channel)
      */
     public void Await()
     {
-        var pump = _pump;
-        _pump = null;
-        if (pump is null) return;
-        if (!pump.Wait(StopWait))
+        Task?[] running = [_pump, _descramble];
+        _pump = _descramble = null;
+        if (running.OfType<Task>().ToArray() is not { Length: > 0 } tasks) return;
+        if (!Task.WaitAll(tasks, StopWait))
         {
-            Log.Write($"[{Tuner}] {Channel}: 読み手が {StopWait.TotalSeconds} 秒で止まりませんでした");
+            Log.Write($"[{Tuner}] {Channel}: 読み手か解き手が {StopWait.TotalSeconds} 秒で止まりませんでした");
         }
     }
 

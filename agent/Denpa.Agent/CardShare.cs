@@ -92,8 +92,8 @@ public sealed class LocalCard : IKeySource
 /// </para>
 ///
 /// <para>
-/// 呼ぶのは読み手の外 (B25.cs)。相手が遅くても録画は欠けず、答えが来るまでの
-/// 間だけ掛かったまま流れます。
+/// 呼ぶのは解き手のスレッドで、読み手とは別 (TunerPool.cs)。相手が遅くても
+/// 間のキュー (64MB) が呑むうちは録画は欠けず、答えが来てから続きを解きます。
 /// </para>
 /// </summary>
 public sealed class RemoteCard(string url) : IKeySource
