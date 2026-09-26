@@ -71,6 +71,12 @@
         const list: Notice[] = [];
         list.push(...errorNotice(form, 'tuner-error'));
         if (form?.scan) list.push({ key: 'tuner-notice', kind: 'info', text: form.scan });
+        /*
+         * 済んだこと (ロゴの位置・チューナーの保存)。**`message` に載せない** —
+         * あれは fail の言葉として赤で出す口 (`errorNotice`) なので、載せていた頃は
+         * ロゴの位置を受け取れても失敗の赤で出ていた (チューナーの保存は何も出なかった)
+         */
+        if (form?.done) list.push({ key: 'tuner-done', kind: 'success', text: form.done });
         return list;
     });
 </script>

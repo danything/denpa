@@ -192,9 +192,15 @@ function cmLogoState(): CmLogo[] {
             network_id: services.network_id,
             name: services.name,
             logo_area: services.logo_area,
-            /** その局の、いちばん新しい現存の録画 (枠を囲うのに絵を出す) */
+            /**
+             * その局の、いちばん新しい現存の録画 (枠を囲うのに絵を出す)。
+             *
+             * **外の局は `services.id` と書き切る** (`${services.id}` にしない)。表が1つの
+             * select では drizzle が列を `"id"` とだけ書くので、副問い合わせの中では
+             * **録画の id を指してしまい**、どの局も録画が0本に見えていた (囲う口が出ない)
+             */
             recording_id: sql<number | null>`(SELECT r.id FROM recordings r
-                 WHERE r.service_id = ${services.id} AND r.deleted_at IS NULL
+                 WHERE r.service_id = services.id AND r.deleted_at IS NULL
                  ORDER BY r.id DESC LIMIT 1)`,
         })
         .from(services)
@@ -243,7 +249,7 @@ export const actions = {
         setLogoArea(serviceId, area);
         return {
             success: true,
-            message: `ロゴの位置を受け取りました (${area})。次に掴んだときに、この範囲でロゴを覚え直します`,
+            done: `ロゴの位置を受け取りました (${area})。次に掴んだときに、この範囲でロゴを覚え直します`,
         };
     },
 
@@ -265,7 +271,7 @@ export const actions = {
         if (!Number.isFinite(serviceId)) return fail(400, { message: '局IDが不正です' });
         // 同じ絵を映しているサブチャンネルの枠にも配ってある (`logo-data.share`)
         for (const id of [serviceId, ...siblings(serviceId)]) forgetLogoData(id);
-        return { success: true, message: '覚えたロゴを捨てました。次にこの局を録ったときに覚え直します' };
+        return { success: true, done: '覚えたロゴを捨てました。次にこの局を録ったときに覚え直します' };
     },
 
     logoAreaClear: async ({ request }) => {
@@ -273,7 +279,7 @@ export const actions = {
         const serviceId = Number(form.get('serviceId'));
         if (!Number.isFinite(serviceId)) return fail(400, { message: '局IDが不正です' });
         setLogoArea(serviceId, null);
-        return { success: true, message: 'ロゴの位置を自動に戻しました' };
+        return { success: true, done: 'ロゴの位置を自動に戻しました' };
     },
 
     /**
@@ -346,7 +352,7 @@ export const actions = {
         } catch (error) {
             return fail(502, { message: String(error) });
         }
-        return { success: true, tuners: `チューナーを ${tuners.length} 本 保存しました` };
+        return { success: true, done: `チューナーを ${tuners.length} 本 保存しました` };
     },
 
     /** 定義を消して自動検出に戻す。刺さっている機材をエージェントが自分で見つける */
@@ -356,7 +362,7 @@ export const actions = {
         } catch (error) {
             return fail(502, { message: String(error) });
         }
-        return { success: true, tuners: '自動検出に戻しました' };
+        return { success: true, done: '自動検出に戻しました' };
     },
 
     /** 走っているスキャンを中断する。設定は書き換えないまま止まる */
