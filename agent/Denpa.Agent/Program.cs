@@ -11,8 +11,8 @@ using Microsoft.AspNetCore.Http.Features;
  *
  * - B-CASカード … pcscd 経由でしか読めず、その pcscd はこのコンテナにしか居ない
  * - チューナーデバイス … `/dev/dvb/*` と `/dev/bus/usb` が見えているのはこちらだけ
- * - 選局そのもの … デバイスを掴んで ioctl で選局する (Tuning.cs)。px4-userland の
- *   機材 (PX-Q3U4 など) は同梱の px4-userland に USB を叩かせる (Px4.cs)
+ * - 選局そのもの … デバイスを掴んで ioctl で選局する (Tuning.cs)。px4-userland /
+ *   siano-userland の機材は同梱のものに USB を叩かせる (Px4.cs / Siano.cs)
  *
  * **中身は読まない。** NIT も SDT も EIT も解かず、TS をそのまま流す。
  * 読むのは denpa (`src/lib/ts`) で、局を選り分けるのも番組表を組み立てるのも、
@@ -33,8 +33,6 @@ var events = new Events();
 var (tuners, detected) = config.ResolveTuners();
 
 /*
- * 選局は自分でやる。**`recisdb` は要らなくなった。**
- *
  * CARD_URL は「手元にカードが無い拠点」だけ。指定しなければ自分に刺さって
  * いるカードを読む (CardShare.cs)。
  */
@@ -260,10 +258,7 @@ app.MapGet("/denpa/tuners", (HttpContext http) =>
 /*
  * 機材の定義を書き換える。**画面から。**
  *
- * 受け取るのはデバイスと種別だけで、選局コマンドは組み立てる。自由な文字列を
- * 受けると「denpa に入れた人がチューナー側で好きなコマンドを走らせられる」
- * ことになる (しかもあちらは privileged)。
- *
+ * 受け取るのはデバイスと種別だけで、選局コマンドは受け取らない (TunerSpec)。
  * 空を渡すと定義そのものを消す = **自動検出に戻す**。
  */
 app.MapPut("/denpa/tuners", async (HttpContext http) =>
@@ -413,7 +408,7 @@ _ = Task.Run(PreparePx4);
  * 入れ替えるだけで 30 分番組が始まって 10 秒で失敗している (実機)。
  *
  * `ApplicationStopped` は Kestrel が開いている応答を流し終えたあとに来る
- * (その上限が上の `ShutdownTimeout`)。読み手が居なくなってから離せば、
+ * (録画を待つのはその前の `Drain`)。読み手が居なくなってから離せば、
  * 録画は最後まで届く。
  */
 app.Lifetime.ApplicationStopped.Register(() =>

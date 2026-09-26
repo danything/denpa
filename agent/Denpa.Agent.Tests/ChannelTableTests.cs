@@ -1,5 +1,4 @@
 using Denpa.Agent;
-using System.Threading.Tasks;
 
 namespace Denpa.Agent.Tests;
 

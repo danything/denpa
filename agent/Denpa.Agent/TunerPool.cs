@@ -25,7 +25,6 @@ public sealed record TuneOptions(string? CardUrl, Func<string, int?> StreamIds, 
 ///
 /// <para>
 /// 「誰にどのチューナーを渡すか」はここだけで決まる。
-/// bun 版 (<c>agent/tuners.ts</c>) の移し替えで、決まりは1つも変えていない。
 /// </para>
 ///
 /// <list type="bullet">
@@ -35,8 +34,8 @@ public sealed record TuneOptions(string? CardUrl, Func<string, int?> StreamIds, 
 /// </list>
 ///
 /// <para>
-/// 選局は**自分で掴む**。ioctl で選局して B25 も自分で解き、掴んだまま
-/// チャンネルだけ変える (Tuning.cs / AribB25.cs)。**<c>recisdb</c> は要らない**。
+/// 選局は**自分で掴む**。B25 も自分で解き、掴んだままチャンネルだけ変える
+/// (Tuning.cs / AribB25.cs)。
 /// </para>
 /// </summary>
 public sealed class TunerPool(
@@ -437,7 +436,7 @@ public sealed class TunerPool(
      * </para>
      *
      * <para>
-     * **止まるのを待つのは呼んだ側** (<see cref="Lease.Kill"/> は最長2秒待つ)。
+     * **止まるのを待つのは呼んだ側** (<see cref="Lease.Await"/> は最長2秒待つ)。
      * ここで待つと、取り合いの錠 (<see cref="_gate"/>) を握ったまま2秒止まり、
      * その間どの本も開けなくなる。
      * </para>
@@ -727,30 +726,20 @@ internal sealed class Lease(int tuner, string type, string channel)
 
     public int Priority => Sinks.Count == 0 ? int.MinValue : Sinks.Max(sink => sink.Priority);
 
-    private bool _native;
     private volatile bool _stopped;
     private Task? _pump;
 
-    /// <summary>
-    /// **掴んだまま選局する側。** 外のコマンドを起こさずに ioctl で選局し、
-    /// B25 も自分で解く (Tuning.cs / AribB25.cs)。
-    ///
-    /// <para>
-    /// 外から見た振る舞いはプロセス版と同じにしてある。**流れが途切れたら
-    /// 失敗として畳む** — 黙って終わると空のファイルが残る。
-    /// </para>
-    /// </summary>
     /// <summary>
     /// **掴んだままのデバイスから読んで配る。** 選局そのものはプールがやる。
     ///
     /// <para>
     /// デバイスは**チューナーごとに開きっぱなし**で、ここでは閉じない。
-    /// 畳むときも読むのをやめるだけ (<see cref="Kill"/>)。
+    /// 畳むときも読むのをやめるだけ (<see cref="Stop"/>)。
+    /// **流れが途切れたら失敗として畳む** — 黙って終わると空のファイルが残る。
     /// </para>
     /// </summary>
     public void StartNative(ITuneDevice tuner, AribB25? b25, Action onExit)
     {
-        _native = true;
         _pump = Task.Run(() =>
         {
             var buffer = new byte[188 * 1024];
@@ -863,8 +852,8 @@ internal sealed class Lease(int tuner, string type, string channel)
     /// 偽の選局を起こす。**適合テストだけ** (TuneOptions.FakeTune)。
     ///
     /// <para>
-    /// **`setsid` を噛ませる。** `sh -c` 越しなので、sh を殺しても中身が生き残る。
-    /// 新しいプロセスグループに入れておいて、止めるときはグループごと落とす。
+    /// **`setsid` を噛ませる。** `sh -c` 越しなので、止めるときはグループごと
+    /// 落とす (<see cref="Interop.KillGroup"/>)。
     /// </para>
     /// </summary>
     public void Start(string command, Action onExit)
@@ -978,7 +967,6 @@ internal sealed class Lease(int tuner, string type, string channel)
      */
     public void Await()
     {
-        if (!_native) return;
         var pump = _pump;
         _pump = null;
         if (pump is null) return;
@@ -990,11 +978,4 @@ internal sealed class Lease(int tuner, string type, string channel)
 
     /// <summary>止まるのを待つ上限。読み口は 200ms ごとに起きるので、十分に長い</summary>
     private static readonly TimeSpan StopWait = TimeSpan.FromSeconds(2);
-
-    /// <summary>やめさせて、止まりきるまで待つ。**畳むときはこちら**</summary>
-    public void Kill()
-    {
-        Stop();
-        Await();
-    }
 }

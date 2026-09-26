@@ -1,20 +1,19 @@
 using TUnit.Assertions.Enums;
-using System.IO;
 using System.Text.Json.Nodes;
 using Denpa.Agent;
-using System.Threading.Tasks;
 
 namespace Denpa.Agent.Tests;
 
 /*
- * 取り合いと HTTP の口は `agent/conformance.test.ts` が本物を起こして当てている
- * (bun 版と同じものを通す)。こちらで見るのは、そこからは届きにくいところ —
+ * 取り合いと HTTP の口は `agent/conformance.test.ts` が本物を起こして当てている。
+ * こちらで見るのは、そこからは届きにくいところ —
  * **設定の読み書き**と、チューナー自動検出の値の読み取り。
  */
 
 public class TunerSpecTests
 {
-    private static Config Fresh()
+    /// <summary>使い捨ての置き場に向けた設定 (ChannelStoreTests も使う)</summary>
+    internal static Config Fresh()
     {
         var work = Directory.CreateTempSubdirectory();
         return new Config(
@@ -71,12 +70,7 @@ public class TunerSpecTests
 
 public class ChannelStoreTests
 {
-    private static Config Fresh()
-    {
-        var work = Directory.CreateTempSubdirectory();
-        return new Config(
-            Path.Combine(work.FullName, "tuners.json"), Path.Combine(work.FullName, "channels.json"));
-    }
+    private static Config Fresh() => TunerSpecTests.Fresh();
 
     private static JsonArray Entries(params (string Type, string Channel)[] items)
     {

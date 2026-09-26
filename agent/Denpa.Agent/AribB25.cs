@@ -3,13 +3,12 @@ using System.Runtime.InteropServices;
 namespace Denpa.Agent;
 
 /// <summary>
-/// ARIB STD-B25 を自分で解く。**<c>recisdb</c> を起こさずに済ませるための最後の一片。**
+/// ARIB STD-B25 を自分で解く。
 ///
 /// <para>
 /// 借りるのは <a href="https://github.com/tsukumijima/libaribb25">libaribb25</a>。
-/// **いま実機で解けているものそのもの**で、<c>recisdb</c> も
-/// recisdb-rs → <c>b25-sys</c> → libaribb25 と積んでいる。差し替えても
-/// 復号の挙動が変わらないのが何よりの利点 (docs/agent.md)。
+/// <c>recisdb</c> も recisdb-rs → <c>b25-sys</c> → libaribb25 と積んでいたもので、
+/// 外のコマンドから移しても復号の挙動が変わらないのが何よりの利点 (docs/agent.md)。
 /// </para>
 ///
 /// <para>
@@ -127,7 +126,7 @@ public sealed unsafe partial class AribB25 : IDisposable
     /// <summary>取り合いが起きた回数。聞いたら 0 に戻す</summary>
     public int TakeContended() => Interlocked.Exchange(ref _contended, 0);
 
-    /// <summary>順番に通す。**取り合いが起きたら数える** (上の説明) */</summary>
+    /// <summary>順番に通す。**取り合いが起きたら数える** (上の説明)</summary>
     private Guard Enter()
     {
         if (!_gate.TryEnter())
@@ -148,9 +147,8 @@ public sealed unsafe partial class AribB25 : IDisposable
     ///
     /// <para>
     /// **開けなければ投げる。** 掛かったまま流すかどうかを決めるのは呼んだ側で、
-    /// ここで黙って素通しにはしない — いまの <c>recisdb</c> はカードが開けないと
-    /// 黙って素通しするので、「録画は成功しているのに中身が全部スクランブル」
-    /// という分かりにくい壊れ方をする (Card.cs)。
+    /// ここで黙って素通しにはしない — 黙って素通しすると「録画は成功しているのに
+    /// 中身が全部スクランブル」という分かりにくい壊れ方をする (Card.cs)。
     /// </para>
     /// </summary>
     /// <param name="cardUrl">

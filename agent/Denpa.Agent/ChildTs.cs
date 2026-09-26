@@ -8,7 +8,8 @@ namespace Denpa.Agent;
 /// <summary>
 /// 選局した TS を**子プロセスの標準出力**で受け取る口 (px4-ts。Px4.cs)。
 /// siano-ts は起こしたまま選局し直すので別の作り (Siano.cs) だが、pipe の扱い
-/// (<see cref="StdoutHandle"/> / <see cref="WidenPipe"/>) はここのものを使う。
+/// (<see cref="StdoutHandle"/> / <see cref="WidenPipe"/>) と子の印 (<see cref="TsChild"/>) は
+/// ここのものを使う。
 ///
 /// <para>
 /// **1回1チャンネル。** 選局のたびに子を起こし直す。
@@ -44,27 +45,13 @@ internal sealed class ChildTs(string name, string program)
     /// <summary>
     /// 読み手が降りきるまでの猶予。<see cref="DeviceStream"/> は 200ms ごとに
     /// 起きて印を見るので、fd を閉じるのはそれより後にする (閉じた番号を
-    /// 次の子が使い回すと、降りかけの読み手が新しい pipe を読んでしまう)
+    /// 次の子が使い回すと、降りかけの読み手が新しい pipe を読んでしまう)。
+    /// siano-ts の後始末 (SianoTuner.Drop) も同じ理由でこれを使う
     /// </summary>
-    private static readonly TimeSpan ReaderDrain = TimeSpan.FromMilliseconds(300);
+    internal static readonly TimeSpan ReaderDrain = TimeSpan.FromMilliseconds(300);
 
-    private Child? _child;
+    private TsChild? _child;
     private DeviceStream? _stream;
-
-    /// <summary>
-    /// 子1つぶん。**印は子ごとに持つ。** 止めたかどうかを1つの旗で持つと、
-    /// 前の子の後始末が次の子の旗を読む (起こし直した直後に前の子の終了が回ってくる)
-    /// </summary>
-    private sealed class Child(Process process)
-    {
-        public Process Process { get; } = process;
-
-        /// <summary>stderr の末尾。失敗の理由はここに出る</summary>
-        public volatile string Stderr = "";
-
-        /// <summary>こちらから止めたか。**自分で止めた終わりは失敗ではない**</summary>
-        public volatile bool Dropped;
-    }
 
     public Stream Output => _stream ?? throw new InvalidOperationException($"{name} はまだ選局していません");
 
@@ -108,7 +95,7 @@ internal sealed class ChildTs(string name, string program)
         start.UseShellExecute = false;
 
         var process = Process.Start(start) ?? throw new IOException($"{program} を起こせません");
-        var child = new Child(process);
+        var child = new TsChild(program, process);
         _child = child;
         _ = Task.Run(async () =>
         {
@@ -133,7 +120,7 @@ internal sealed class ChildTs(string name, string program)
             {
                 // 先に終わった。理由は stderr に出ている (同期しなかった・使用中・USB…)
                 process.WaitForExit(TimeSpan.FromSeconds(2));
-                var reason = Reason(process.ExitCode, child.Stderr);
+                var reason = child.Exited(process.ExitCode);
                 Drop();
                 throw new IOException(reason);
             }
@@ -149,33 +136,18 @@ internal sealed class ChildTs(string name, string program)
             throw new IOException("同期しませんでした (電波が来ていないか、その周波数に放送がありません)");
         }
 
-        _stream = new DeviceStream(handle, () => EndReason(child));
+        _stream = new DeviceStream(handle, child.EndReason);
         _ = process.WaitForExitAsync().ContinueWith(_ =>
         {
             if (child.Dropped) return;
             // 読み手が居なくなって切られたのも、USB が抜けたのもここに来る
-            Log.Write($"[{name}] {Reason(process.ExitCode, child.Stderr)}");
+            Log.Write($"[{name}] {child.Exited(process.ExitCode)}");
         }, TaskScheduler.Default);
     }
 
-    private string Reason(int code, string stderr) =>
-        $"{program} が終了しました (exit {code}{(stderr.Length == 0 ? "" : $": {stderr}")})";
-
     /// <summary>
-    /// 読み口が尽きたときの理由。**理由の分かる終わり方をする** (DeviceStream)。
-    /// EOF は子が終わったということなので、終了コードと stderr の末尾を添える
-    /// </summary>
-    private string? EndReason(Child child)
-    {
-        if (child.Dropped) return null;
-        if (!child.Process.WaitForExit(TimeSpan.FromSeconds(2))) return $"{program} が黙りました";
-        return Reason(child.Process.ExitCode, child.Stderr);
-    }
-
-    /// <summary>
-    /// 走っている子を止める。**SIGTERM で。** px4-ts は受信機の lease を返し、
-    /// siano-ts は USB を手放してから終わる。読み手が降りきってから fd を閉じる
-    /// (<see cref="ReaderDrain"/>)
+    /// 走っている子を止める。**SIGTERM で。** px4-ts は受信機の lease を返してから
+    /// 終わる。読み手が降りきってから fd を閉じる (<see cref="ReaderDrain"/>)
     /// </summary>
     public void Drop()
     {
@@ -204,5 +176,37 @@ internal sealed class ChildTs(string name, string program)
          */
         process.StandardOutput.Dispose();
         process.Dispose();
+    }
+}
+
+/// <summary>
+/// 子1つぶん (px4-ts / siano-ts)。**印は子ごとに持つ。** 止めたかどうかを1つの旗で
+/// 持つと、前の子の後始末が次の子の旗を読む (起こし直した直後に前の子の終了が回ってくる)
+/// </summary>
+internal class TsChild(string program, Process process)
+{
+    public Process Process { get; } = process;
+
+    /// <summary>stderr の最後の行。失敗・終わった理由はここに出る</summary>
+    public volatile string Stderr = "";
+
+    /// <summary>こちらから止めたか。**自分で止めた終わりは失敗ではない**</summary>
+    public volatile bool Dropped;
+
+    public string Exited(int code)
+    {
+        var stderr = Stderr;
+        return $"{program} が終了しました (exit {code}{(stderr.Length == 0 ? "" : $": {stderr}")})";
+    }
+
+    /// <summary>
+    /// 読み口が尽きたときの理由。**理由の分かる終わり方をする** (DeviceStream)。
+    /// EOF は子が終わったということなので、終了コードと stderr の末尾を添える
+    /// </summary>
+    public string? EndReason()
+    {
+        if (Dropped) return null;
+        if (!Process.WaitForExit(TimeSpan.FromSeconds(2))) return $"{program} が黙りました";
+        return Exited(Process.ExitCode);
     }
 }
