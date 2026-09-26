@@ -4,10 +4,10 @@
 # 別の所で動かす構成向け (denpa 側は TUNER_AGENT_URL でここを指す)。
 # 本体も同じクラスタに置くなら charts/denpa のほうが agent も一緒に出す。
 #
-# **掛かったまま録れた TS を解くには、denpa と同じ置き場が見えている必要がある**
-# (recordedClaim)。別の機械で動かすなら NFS などで同じ実体を両方に見せる。
-# 見せられないなら、denpa 側で `keepOriginal` を切ってスクランブル解除を
-# 録画中に済ませる (docs/agent.md)
+# **掛かったまま録れた TS を後から解くには、denpa と同じ置き場が見えている必要がある**
+# (persistence.recorded)。別の機械で動かすなら NFS などで同じ実体を両方に見せる。
+# 見せられなくても録画中はその場で解くので、困るのは録画中にカードが読めなかった
+# ときだけ (docs/agent.md「B-CASカードとデスクランブル」)
 
 image:
   repository: ghcr.io/danything/denpa-agent
