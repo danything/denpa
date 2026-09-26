@@ -205,6 +205,21 @@ function cmLogoState(): CmLogo[] {
     return stations(rows).map((service) => ({ ...service, learned: learned(service.id) }));
 }
 
+/**
+ * 教えたロゴの位置を置く (null で自動に戻す)。同じ絵を映しているサブチャンネルの枠にも
+ * 同じことをする (`logo-data.stations`)。覚えたロゴも捨てる — 残っていると効かない
+ */
+function setLogoArea(serviceId: number, area: string | null): void {
+    for (const id of [serviceId, ...siblings(serviceId)]) {
+        orm()
+            .update(services)
+            .set({ logo_area: area, logo_area_auto: LOGO_AREA_AUTO.human })
+            .where(eq(services.id, id))
+            .run();
+        forgetLogoData(id);
+    }
+}
+
 export const actions = {
     /**
      * 局ロゴの位置を覚える。
@@ -225,15 +240,7 @@ export const actions = {
         if (!/^\d+,\d+,\d+,\d+$/.test(area)) {
             return fail(400, { message: 'ロゴの範囲を囲ってください' });
         }
-        // 同じ絵を映しているサブチャンネルの枠にも同じことをする (`logo-data.stations`)
-        for (const id of [serviceId, ...siblings(serviceId)]) {
-            orm()
-                .update(services)
-                .set({ logo_area: area, logo_area_auto: LOGO_AREA_AUTO.human })
-                .where(eq(services.id, id))
-                .run();
-            forgetLogoData(id);
-        }
+        setLogoArea(serviceId, area);
         return {
             success: true,
             message: `ロゴの位置を受け取りました (${area})。次に掴んだときに、この範囲でロゴを覚え直します`,
@@ -265,15 +272,7 @@ export const actions = {
         const form = await request.formData();
         const serviceId = Number(form.get('serviceId'));
         if (!Number.isFinite(serviceId)) return fail(400, { message: '局IDが不正です' });
-        for (const id of [serviceId, ...siblings(serviceId)]) {
-            orm()
-                .update(services)
-                .set({ logo_area: null, logo_area_auto: LOGO_AREA_AUTO.human })
-                .where(eq(services.id, id))
-                .run();
-            // 教えた枠で覚えたものが残っていると、自動に戻しても効かない
-            forgetLogoData(id);
-        }
+        setLogoArea(serviceId, null);
         return { success: true, message: 'ロゴの位置を自動に戻しました' };
     },
 
@@ -304,12 +303,7 @@ export const actions = {
         return { success: true, scan: result.message };
     },
 
-    /**
-     * 機材の定義を書き換える。
-     *
-     * **選局コマンドは受け取らない** — 理由は `server/tuner.ts` の `putTuners`。
-     * 受け渡すのはデバイスと種別だけ
-     */
+    /** 機材の定義を書き換える。渡すのはデバイスと種別だけ (選局はエージェントが組み立てる) */
     tuners: async ({ request }) => {
         const form = await request.formData();
 

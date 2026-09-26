@@ -297,7 +297,7 @@ export async function clearRules(page: Page): Promise<void> {
  *
  * @param listTestId 一覧の `data-testid` (`reservation-list` など)。印はその `-list` を `-more` に替えたもの
  */
-export async function revealAll(page: Page, listTestId: string): Promise<void> {
+async function revealAll(page: Page, listTestId: string): Promise<void> {
     const list = page.getByTestId(listTestId);
     const more = page.getByTestId(listTestId.replace(/-list$/, '-more'));
     const rows = list.locator('[data-testid$="-row"]');

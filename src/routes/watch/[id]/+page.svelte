@@ -38,7 +38,7 @@
     import PlayerStage from '$lib/components/player/PlayerStage.svelte';
     import { clearOverlay, drawOverlay, fitRect } from '$lib/components/player/paint';
     import Remote from '$lib/components/player/Remote.svelte';
-    import SpeedMenu from '$lib/components/player/SpeedMenu.svelte';
+    import SpeedMenu, { SPEED_KEY, storedSpeed } from '$lib/components/player/SpeedMenu.svelte';
     import StageNote from '$lib/components/player/StageNote.svelte';
     import { snapshotter } from '$lib/components/player/shot.svelte';
     import Toasts, { errorNotice, type Notice } from '$lib/components/Toasts.svelte';
@@ -284,7 +284,6 @@
      * 手元の端末と居間のテレビで好みが違う。続きの位置 (`resume_ms`) を
      * サーバに置いているのとは逆の理由
      */
-    const SPEED_KEY = 'watch-speed';
     let speed = $state(1);
 
     /**
@@ -294,7 +293,7 @@
      * 残して焼いている場合 (既定はチャプターを入れるだけ) は、観るたびに
      * 送りのボタンを押すことになる。
      *
-     * **端末ごとに覚える** (速さと同じ理由。`SPEED_KEY` の項)。
+     * **端末ごとに覚える** (速さと同じ理由。`speed` の項)。
      * **観はじめに入れるかどうかは `skipCmAtStart`** — 既定は入で、ロゴでの
      * 判定に失敗した1本だけは覚えていても切って始める (理由と試験はあちら)
      */
@@ -643,12 +642,6 @@
         controls.stir();
     }
 
-    /** 前に選んだ速さを引き出す。読めない・知らない値なら等速 */
-    function storedSpeed(): number {
-        const saved = Number(stored(SPEED_KEY));
-        return SPEEDS.includes(saved as (typeof SPEEDS)[number]) ? saved : 1;
-    }
-
     /**
      * CM飛ばしの入り切り。切り替えた時点で、いま CM の中に居れば跳ぶ —
      * 「CMが始まったから押した」がいちばん多い押し方なので
@@ -660,11 +653,6 @@
         controls.stir();
     }
 
-    /**
-     * CM の中に居たら、その終わりまで跳ぶ。**判断は `ts/watch.ts` が持つ。**
-     *
-     * 続いている CM はまとめて跨ぐので、15秒ごとに何度も跳ぶことはない
-     */
     /**
      * CM を跨ぐ**手前**で跳ぶための先読み (秒)。
      *
@@ -678,6 +666,11 @@
      */
     const CM_LEAD = 0.1;
 
+    /**
+     * CM の中に居たら、その終わりまで跳ぶ。**判断は `ts/watch.ts` が持つ。**
+     *
+     * 続いている CM はまとめて跨ぐので、15秒ごとに何度も跳ぶことはない
+     */
     function hopCm(): void {
         // 跳んだ先を待っている最中。着くまでは何もしない
         if (waiting || !skipCm || video === null) return;

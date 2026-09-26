@@ -159,18 +159,6 @@ export class BroadcastClock {
 }
 
 /**
- * 焼いたものの物差し (0 起点) の時刻を、放送の実時刻に直す。
- *
- * @param anchor TDT が来た瞬間の PCR と実時刻
- * @param start ffmpeg が入口で 0 に寄せたぶん (秒)。`Input #0 ... start:` の値
- * @param at 焼いたものの時刻 (秒)
- */
-export function broadcastTime(anchor: Anchor, start: number, at: number): number | null {
-    if (!Number.isFinite(start) || !Number.isFinite(at)) return null;
-    return Math.round(anchor.unixMs + (at + start - anchor.pcr) * 1000);
-}
-
-/**
  * ffmpeg が入口で言ってくる `start:` を読む。
  *
  *     Duration: N/A, start: 72575.147089, bitrate: N/A

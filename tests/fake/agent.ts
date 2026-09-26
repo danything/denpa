@@ -298,7 +298,6 @@ const options: Bun.ServeOptions = {
             return json({ tuners: tunerStatus(), detected: false });
         }
         if (url.pathname === '/denpa/tuners' && request.method === 'PUT') {
-            // 本物と同じく、選局コマンドは受け取らない
             return request.json().then((body: { tuners?: Partial<FakeTuner>[] }) => {
                 const list = body.tuners ?? [];
                 if (list.some((t) => typeof t?.name !== 'string' || t.name === '')) {

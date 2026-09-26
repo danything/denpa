@@ -234,15 +234,7 @@ td {
 }
 
 /* ---- 並べる ---- */
-.page-container {
-	width: 100%;
-	max-width: var(--site-width);
-	margin-inline: auto;
-}
-.prose {
-	max-width: var(--page-width);
-}
-/* 縦に積む / 横に並べて折り返す / 欄を自動で段組み */
+/* 縦に積む / 横に並べて折り返す */
 .stack {
 	display: flex;
 	flex-direction: column;
@@ -253,11 +245,6 @@ td {
 	flex-wrap: wrap;
 	align-items: center;
 	gap: var(--gap, 0.5rem);
-}
-.auto-grid {
-	display: grid;
-	gap: var(--gap, 0.75rem);
-	grid-template-columns: repeat(auto-fill, minmax(min(var(--min, 14rem), 100%), 1fr));
 }
 .spread {
 	justify-content: space-between;
@@ -312,9 +299,6 @@ td {
  */
 .text-error {
 	color: var(--dp-rec-text);
-}
-.text-success {
-	color: var(--dp-ok-text);
 }
 .text-warning {
 	color: var(--dp-warn-text);
@@ -375,20 +359,12 @@ a.button.secondary {
 	--pico-border-color: var(--pico-secondary-border);
 	--pico-color: var(--pico-secondary-inverse);
 }
-a.button.contrast {
-	--pico-background-color: var(--pico-contrast-background);
-	--pico-border-color: var(--pico-contrast-border);
-	--pico-color: var(--pico-contrast-inverse);
-}
 a.button.outline {
 	--pico-background-color: transparent;
 	--pico-color: var(--pico-primary);
 }
 a.button.secondary.outline {
 	--pico-color: var(--pico-secondary);
-}
-a.button.contrast.outline {
-	--pico-color: var(--pico-contrast);
 }
 /* リンクのボタンの :hover。枠だけのものは地を塗らない(塗ると枠の色の文字が地に沈む) */
 a.button.secondary:hover {
@@ -599,18 +575,6 @@ a.button.ghost.danger {
 .notice.info {
 	background: tint(var(--dp-info), 10%);
 	border-left-color: var(--dp-info);
-}
-
-/* ---- 画面の幅 ---- */
-@media (max-width: 767.98px) {
-	.hide-sm {
-		display: none !important;
-	}
-}
-@media (min-width: 768px) {
-	.only-sm {
-		display: none !important;
-	}
 }
 
 /* ---- 読み込み中 (送信中のボタン。`actions.ts` の `submitting` が付ける) ---- */

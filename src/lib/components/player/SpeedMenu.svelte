@@ -1,5 +1,18 @@
-<script lang="ts">
+<script lang="ts" module>
+    import { read } from '$lib/keep';
     import { SPEEDS } from '$lib/ts/pacing';
+
+    /** 録画の速さを覚える鍵。観る画面と追っかけで共通 (焼く前と後で同じ録画を観る) */
+    export const SPEED_KEY = 'watch-speed';
+
+    /** 前に選んだ速さ。読めない・知らない値なら等速 */
+    export function storedSpeed(): number {
+        const saved = Number(read(SPEED_KEY));
+        return SPEEDS.includes(saved as (typeof SPEEDS)[number]) ? saved : 1;
+    }
+</script>
+
+<script lang="ts">
     import ControlButton from './ControlButton.svelte';
     import OverlayMenu from './OverlayMenu.svelte';
 

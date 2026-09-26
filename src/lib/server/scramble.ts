@@ -111,8 +111,7 @@ export async function cardStatus(): Promise<CardStatus> {
  * HTTP で往復させる意味が無い(そもそも Bun の fetch は送りながら受け取れず、
  * 大きいものを投げると詰まる)。
  *
- * **返事だけでは信じない。** 出来上がったものを読んで、掛かったままでないことを
- * 呼ぶ側が確かめる (`descrambleIfNeeded`)。
+ * **返事だけでは信じない。** 出来上がったものを読み、掛かったままなら失敗にする。
  */
 export async function descramble(
     input: string,

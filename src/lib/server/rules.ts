@@ -419,31 +419,28 @@ export function applyRules(options: { rule?: number } = {}): RuleSync {
         for (const reservation of held) {
             const owner = wanted.get(reservation.program_id);
             if (owner !== undefined) {
-                // 別のルールが引き取った。付け替えるだけで、録るものは変わらない
-                if (owner.rule.id !== reservation.rule_id) {
+                /*
+                 * 別のルールが引き取ったなら付け替えるだけで、録るものは変わらない。
+                 *
+                 * **同じルールでも、優先度は当て直す。**
+                 *
+                 * 予約は `INSERT OR IGNORE` で立てるので、**もう立っている
+                 * ぶんは作った日の優先度のまま**だった。ルールの優先度を
+                 * 上げても効くのは次に立つ予約からで、いま競合している
+                 * 予約はいくら上げても負けたまま — 実機で、優先度2に
+                 * 上げた「片田舎のおっさん」が優先度1の裏番組に負け続けて
+                 * いた (予約側は3件とも1のまま)。
+                 *
+                 * 優先度はルールが持つものなので、こちらを本物として扱う
+                 */
+                const moved = owner.rule.id !== reservation.rule_id;
+                if (moved || owner.rule.priority !== reservation.priority) {
                     tx.update(reservations)
                         .set({ rule_id: owner.rule.id, priority: owner.rule.priority, updated_at: at })
                         .where(eq(reservations.id, reservation.id))
                         .run();
-                    result.moved++;
-                } else if (owner.rule.priority !== reservation.priority) {
-                    /*
-                     * **同じルールでも、優先度は当て直す。**
-                     *
-                     * 予約は `INSERT OR IGNORE` で立てるので、**もう立っている
-                     * ぶんは作った日の優先度のまま**だった。ルールの優先度を
-                     * 上げても効くのは次に立つ予約からで、いま競合している
-                     * 予約はいくら上げても負けたまま — 実機で、優先度2に
-                     * 上げた「片田舎のおっさん」が優先度1の裏番組に負け続けて
-                     * いた (予約側は3件とも1のまま)。
-                     *
-                     * 優先度はルールが持つものなので、こちらを本物として扱う
-                     */
-                    tx.update(reservations)
-                        .set({ rule_id: owner.rule.id, priority: owner.rule.priority, updated_at: at })
-                        .where(eq(reservations.id, reservation.id))
-                        .run();
-                    result.repriced++;
+                    if (moved) result.moved++;
+                    else result.repriced++;
                 }
                 continue;
             }

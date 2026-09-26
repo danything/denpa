@@ -95,13 +95,6 @@ export const OVERLAY_DANGER = 'ov-danger';
 export const OVERLAY_ON = 'ov-on';
 
 /**
- * 触らなくなってから操作列が消えるまで。**指のほうを長く待つ。**
- *
- * 指は「出す」も「消す」も同じ1回押しなので、短いと出した先から消える
- */
-export const LINGER = { mouse: 2500, touch: 5000 };
-
-/**
  * Hybridcast。**別のタブへ出ていく**ので「四角から飛び出す矢印」
  * (Material Symbols の `open_in_new`)。
  *
