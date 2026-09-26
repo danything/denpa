@@ -1,5 +1,5 @@
 /**
- * 録画のデータ放送。**TS を解いて、変化を実時刻つきで並べる。**
+ * 録画のデータ放送。**実時刻つきで並べた変化から、その時点の画面を積み直す。**
  *
  * ライブは「常に今」なので [carousel.ts](carousel.ts) が「各モジュールの最後の1つ」
  * だけ持てば足りる。録画は**巻き戻し・番組またぎ**があるので、それでは足りない —
@@ -130,7 +130,7 @@ export function feedFor(timeline: readonly PlacedMessage[], fromMs: number, toMs
 /**
  * 実時刻 `at` の時点の画面。**そこまでの変化を積んで復元する。**
  *
- * 出す順は `Carousel` に委ねる (pmt → programInfo → モジュール)。シークで戻った
+ * 出す順は `Carousel` に委ねる (pmt → programInfo → DII → モジュール)。シークで戻った
  * ときも、頭から積み直すだけで正しい状態になる — 変化ログなので、積む順は届いた順。
  *
  * `at` の意味は渡すタイムライン次第 — `captureDataBroadcast` の出力 (`TimedMessage[]`,

@@ -6,8 +6,8 @@
     /**
      * 番組の中身そのもの。**枠は持たない。**
      *
-     * モーダル (`ProgramDetail.svelte`) と、録画を観る画面の左側
-     * (`routes/watch/[id]`) の両方から使う。**同じものを2つ書くと、片方だけ
+     * モーダル (`ProgramDetail.svelte`) と、観る画面・ライブ・追っかけの右側
+     * (`FactsAside`) の両方から使う。**同じものを2つ書くと、片方だけ
      * 直したときに見え方がずれる** — 実際、番組表・予約一覧・録画一覧で
      * 見え方を揃えるためにモーダルへ寄せたのが元の理由で、観る画面もその続き。
      */
@@ -69,8 +69,7 @@
                 class="link"
                 href={part.href}
                 target="_blank"
-                rel="noopener noreferrer"
-                data-testid="detail-link">{part.text}</a
+                rel="noopener noreferrer">{part.text}</a
             >{:else}{part.text}{/if}{/each}{/snippet}
 
 <h3 class="title">{program.name}</h3>
@@ -96,7 +95,7 @@
         <span class="tag" data-testid="detail-audio">{label}</span>
     {/each}
     {#if !program.is_free}
-        <span class="tag warning" data-testid="detail-paid">有料</span>
+        <span class="tag warning">有料</span>
     {/if}
 </div>
 

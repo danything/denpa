@@ -8,7 +8,7 @@ import { recordingOr404 } from '$lib/server/recording';
  * 録り終えてから焼き上がるまでの間 (CM検出・エンコード) も追っかけの器で
  * 観られるが、焼き上がれば普通の観る画面 (シークも字幕も揃う) に移りたい。
  * 画面は `recordings` の知らせ (SSE) を受けるたびにここを読む。
- * 中身は行そのものではなく、判断に要る2つだけ
+ * 中身は行そのものではなく、判断に要るもの (焼けたか・状態) だけ
  */
 export function GET({ params }) {
     const recording = recordingOr404(params.id);

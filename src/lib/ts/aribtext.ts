@@ -67,7 +67,7 @@ const UNKNOWN = '□';
 /**
  * ひらがな・カタカナ表の末尾。**両方で共通**。
  *
- * 0x74〜0x76 は規格で未定義なので飛ばす (`undefined` のまま置いてある)。
+ * ひらがなは 0x74〜0x76 が規格で未定義なので飛ばす (カタカナはヴヵヶ。表には置かない)。
  */
 const KANA_TAIL = new Map<number, [string, string]>([
     [0x77, ['ゝ', 'ヽ']],
@@ -252,6 +252,15 @@ function oneByte(code: number, kind: Charset['kind']): string {
     }
 }
 
+/** 呼び出し (ESC のあと)。LS2/LS3 と、GR 側の LS1R/LS2R/LS3R → [GL, GR] */
+const LOCKING = new Map<number, [number | null, number | null]>([
+    [0x6e, [2, null]],
+    [0x6f, [3, null]],
+    [0x7e, [null, 1]],
+    [0x7d, [null, 2]],
+    [0x7c, [null, 3]],
+]);
+
 /**
  * ESC のあとを読む。**指示 (どの表を G0〜G3 に載せるか) と
  * 呼び出し (どの G を GL/GR に出すか) の2種類がある。**
@@ -267,15 +276,7 @@ function afterEscape(
     const byte = data[at];
     if (byte === undefined) return at + 1;
 
-    // 呼び出し。LS2/LS3 と、GR 側の LS1R/LS2R/LS3R
-    const locking: Record<number, [number | null, number | null]> = {
-        110: [2, null],
-        111: [3, null],
-        126: [null, 1],
-        125: [null, 2],
-        124: [null, 3],
-    };
-    const shift = locking[byte];
+    const shift = LOCKING.get(byte);
     if (shift !== undefined) {
         invoke(shift[0], shift[1]);
         return at + 1;

@@ -14,7 +14,7 @@ import { readLearnedLogo } from '$lib/server/logo-data';
  */
 export function GET({ params }) {
     const logo = readLearnedLogo(Number(params.serviceId));
-    if (logo === null) throw error(404, 'まだロゴを覚えていません');
+    if (logo === null) error(404, 'まだロゴを覚えていません');
 
     return new Response(new Uint8Array(logo.png), {
         headers: {

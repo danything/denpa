@@ -38,7 +38,7 @@ export function load() {
         hw: hw.probed ? forScreen(hw) : probe().then(forScreen),
         /** データ放送に渡すもの。いまは郵便番号だけ */
         broadcast: { postalCode: current.postalCode, bmlNetwork: current.bmlNetwork },
-        /** テレビの VLC の居場所。画面は名前+ホストの行として編集する */
+        /** テレビの VLC の居場所。画面は名前・IP・ポート・コーデックの行として編集する */
         vlc: { targets: targets() },
         webhooks: orm().select().from(webhooks).orderBy(webhooks.id).all(),
         events: EVENTS,

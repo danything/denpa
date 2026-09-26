@@ -179,21 +179,16 @@
 
     /**
      * 観ている間は画面を落とさせない ([awake.svelte.ts](../../lib/components/player/awake.svelte.ts))。
-     * 動画は触らずに見るものなので、**再生中こそいちばん落とされる**。
-     *
-     * **止めている間も掛けたままにします** (観る画面と同じ)。止めるのは
-     * 追っかけの始まりで、そのまま画面を見ていることが多い。何も選んでいない
-     * ときと、出せずに終わったときだけ外す
+     * **止めている間も掛けたまま** (止めるのは追っかけの始まりで、画面を見ていることが多い)。
+     * 何も選んでいないときと、出せずに終わったときだけ外す
      */
     const awake = screenAwake();
     $effect(() => {
         awake.on = player.state !== 'idle' && player.state !== 'error';
     });
-    const controlsShown = $derived(controls.shown);
-    const toggle = controls.toggle;
 
     /** 真ん中あたりを素早く2回で再生/一時停止 (`center-tap.ts`)。1回目は操作列の出し入れ */
-    const stageTap = centerTap(() => player.toggle(), toggle);
+    const stageTap = centerTap(() => player.toggle(), controls.toggle);
 
     /**
      * **いまの1コマを字幕ごと切り抜く。観る画面 (`/watch/<id>`) と同じやり方。**
@@ -257,9 +252,8 @@
                 bind:box={mediaBox}
             />
 
-
             <!--
-                **データ放送。** 映像はここ (`frame`) に居るとだけ伝えて、
+                **データ放送。** 映像はここ (`media`) に居るとだけ伝えて、
                 描くのは借りものに任せる。押されるまで 700KB を取りに行かない。
                 **局が変わったら作り直す** — カルーセルも覚えるものも局ごと
             -->
@@ -282,7 +276,7 @@
                     d ボタンと切り抜きが画面ごとに違う場所にあると、押すたびに
                     探し直すことになる。いちばん上は録画 (観る画面では「閉じる」の位置)
                 -->
-                <ControlBar side shown={controlsShown} testid="live-side">
+                <ControlBar side shown={controls.shown} testid="live-side">
                     <!--
                         **いま観ている番組を録る。** 手動予約と同じ道 (`?/record`) に
                         乗せるだけで、数秒後にはこの番組の録画が始まる。既に録って
@@ -308,18 +302,14 @@
                 </ControlBar>
 
                 <!--
-                    自前の操作列。**放送の今に居るときは右端に張り付く。**
-                    止めても受け取りは続くので、止めた所から見られる。
-
+                    自前の操作列。止めても受け取りは続くので、止めた所から見られる。
                     絵が出る前から出しておく — 出たり消えたりすると、押そうとした
-                    ところで動くことになる
+                    ところで動くことになる。
+
+                    **しばらく触らなければ消える** (`ControlBar`。止めていても引っ込み、
+                    残すのはキーボードで触っている間だけ)。**観る画面と同じ帯**
                 -->
-                <!--
-                    **しばらく触らなければ消える** (`ControlBar`)。絵の上に居座る
-                    ものなので、見ている間は引っ込んでいるほうがいい。止めている間と、
-                    キーボードで触っている間は残す。**観る画面と同じ帯**
-                -->
-                <ControlBar shown={controlsShown} testid="live-controls">
+                <ControlBar shown={controls.shown} testid="live-controls">
                     <!--
                         **上に位置、下に押すもの。観る画面と同じ二段。**
                         ([watch/[id]/+page.svelte](../watch/%5Bid%5D/+page.svelte))
@@ -335,7 +325,7 @@
                         溜まりが増えるたびに摘みが左へ動く。見ている人には
                         「勝手に戻っている」としか映らない
                     -->
-                    <!-- 操作の色は3画面同一 (`range-primary`)。ライブ中の赤は「ライブ」ボタンが言う -->
+                    <!-- 操作の色は `input[type=range].fill` (app.scss)。ライブ中の赤は「ライブ」ボタンが言う -->
                     <input
                         type="range"
                         class="seek fill"
@@ -394,7 +384,6 @@
                         データ放送 (d) と切り抜きは**右上の縦列** (`live-side`) —
                         観る画面と同じ場所に揃えてある。
 
-                        **Hybridcast。載っている番組でだけ出す。**
                         **Hybridcast。載っている番組でだけ出す。**
 
                         データ放送と違って、**アプリは電波に乗っていません** —
@@ -500,7 +489,7 @@
                                     全部入っている。**出るまでは**下の「貯まり」だけになる
                                 -->
                                 {#if player.fromAir !== null}
-                                    <span data-testid="live-behind">放送から {player.fromAir.toFixed(1)}秒</span>
+                                    <span>放送から {player.fromAir.toFixed(1)}秒</span>
                                 {/if}
                                 <!--
                                     **こちらは手元の貯まりの差** (`buffered.end - currentTime`)。
@@ -508,7 +497,7 @@
                                     詰めていく作業をするのに、見えないと当てずっぽうになる
                                 -->
                                 {#if player.delay !== null}
-                                    <span data-testid="live-delay"
+                                    <span
                                         >{player.fromAir === null ? '遅延' : '・貯まり'}
                                         {player.delay.toFixed(1)}秒</span
                                     >
@@ -539,7 +528,7 @@
                                     `stalls` に書いてある (実測は stream.md §4)
                                 -->
                                 {#if player.stalls > 0}
-                                    ・ <span data-testid="live-stalls">途切れ {player.stalls}回</span>
+                                    ・ <span>途切れ {player.stalls}回</span>
                                 {/if}
                                 <!--
                                     **描かれずに捨てられたコマ。** 「音と字幕は
@@ -549,7 +538,7 @@
                                     `dropped`)
                                 -->
                                 {#if player.dropped > 0}
-                                    ・ <span data-testid="live-dropped">コマ落ち {player.dropped}</span>
+                                    ・ <span>コマ落ち {player.dropped}</span>
                                 {/if}
                                 <!--
                                     **絵だけの遅れ。** 音と字幕は再生位置に
@@ -558,12 +547,12 @@
                                     出るのは直した回数のほう
                                 -->
                                 {#if player.slipMost > 0}
-                                    ・ <span data-testid="live-slip"
+                                    ・ <span
                                         >絵の遅れ 最大 {Math.round(player.slipMost * 1000)}ms</span
                                     >
                                 {/if}
                                 {#if player.slips > 0}
-                                    ・ <span data-testid="live-slips">絵の遅れ直し {player.slips}回</span>
+                                    ・ <span>絵の遅れ直し {player.slips}回</span>
                                 {/if}
                             {/snippet}
                         </InfoBlock>
@@ -604,7 +593,6 @@
                 <button type="button"
                     class="small unmute {OVERLAY}"
                     onclick={() => player.unmute()}
-                    data-testid="live-unmute"
                 >
                     音を出す
                 </button>
@@ -624,7 +612,7 @@
             {#if player.state !== 'playing'}
                 <!--
                     何も出ていない間に何が起きているかを出す。黒いままだと壊れて
-                    見える。見た目の決まりは3画面共通 (`PlayerVeil`)。
+                    見える。見た目の決まりは追っかけと共通 (`PlayerVeil`)。
                     **繋ぎ直しの最中は、そう言う** — サーバの入れ替え (デプロイ) で
                     切れると数十秒帰ってこないので、回っているものだけだと壊れて見える
                 -->
@@ -687,7 +675,7 @@
             {/if}
 
             <!-- 番組表と同じ並び・同じ見た目。探す場所がずれないようにする -->
-            <div role="group" class="type-tabs" data-testid="live-type-tabs">
+            <div role="group" class="type-tabs">
                 {#each types as type (type)}
                     <!-- いま出している種別は aria-pressed で言う (色だけにしない) -->
                     <button type="button"

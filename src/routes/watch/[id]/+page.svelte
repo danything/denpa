@@ -224,7 +224,7 @@
      * 読み込み待ちで止まっているか。**輪を出す。**
      *
      * 出さないと、絵が止まったのが**詰まりなのか壊れたのか分かりません**。
-     * 追っかけ再生や、まだ焼けていないところへ跳んだときに数秒待つことがある
+     * 跳んだ直後や回線が細いときは数秒待つことがある
      */
     let buffering = $state(false);
     let bufferTimer: ReturnType<typeof setTimeout> | null = null;
@@ -262,12 +262,8 @@
     const controls = playerControls();
 
     /**
-     * 観ている間は画面を落とさせない ([awake.svelte.ts](../../../lib/components/player/awake.svelte.ts))。
-     * 動画は触らずに見るものなので、**再生中こそいちばん落とされる**。
-     *
-     * **止めている間も掛けたままにします。** 再生中だけにしていた頃は、
-     * 一時停止して絵を見ている・番組の中身を読んでいる間に暗くなって消えました
-     * — この画面は観るためだけに開くものなので、開いている間は起こしておく
+     * 画面を落とさせない ([awake.svelte.ts](../../../lib/components/player/awake.svelte.ts))。
+     * **開いている間はずっと** — 観るためだけに開く画面なので、止めて読んでいる間も
      */
     const awake = screenAwake();
     $effect(() => {
@@ -905,8 +901,8 @@
     /**
      * いまの位置に合う1枚を重ねる。**変わったときだけ描く。**
      *
-     * canvas は**映像の画素そのままの大きさ**にして、CSS で伸ばす
-     * (`object-contain`)。位置合わせはブラウザ任せで、こちらは放送が言う座標に
+     * canvas は**字幕の面の画素そのままの大きさ**にして、置き場所と大きさは
+     * `place` (fitRect) が映像の絵に合わせる。こちらは放送が言う座標に
      * そのまま置けばよい — **左右の位置がそのまま出る**のはこのため
      */
     function paint(): void {
@@ -1017,10 +1013,10 @@
     const remaining = $derived(Math.max(0, (length - at) / (speed || 1)));
 
     /**
-     * 左に出す中身。**録画の行が持っているぶんだけ**で組み立てる。
+     * 右に出す中身。**録画の行が持っているぶんだけ**で組み立てる。
      *
-     * 出演者などは番組表の側にあり、24時間で消える。引けるうちは「詳細」から
-     * 引き直す (`programDetail`)
+     * 出演者などは番組表の側にあり、24時間で消える。引けるうちは開いた時点で
+     * 引き直す (`loadDetail`)
      */
     const facts = $derived({
         name: rec.name,
@@ -1044,7 +1040,7 @@
      * 引けなければ行のぶんだけが出たままになる (古い録画は消えている)
      */
     function loadDetail(): void {
-        // 種は左に出している中身そのもの。**別に組み直さない** — 組み直していた頃は
+        // 種は右に出している中身そのもの。**別に組み直さない** — 組み直していた頃は
         // ジャンル・音声を落としていて、番組表から消えた録画で札が出なかった
         void detail.open(rec.program_id, facts);
     }
@@ -1079,30 +1075,16 @@
 <svelte:window onclick={deleting.stand} onkeydown={keys} />
 
 <!--
-    **ライブ (`/live`) と同じ形。** 映像が左、読むものが右。**中の作りまで同じ**
-    にしてある — 絵は 16:9 で高さいっぱいまでの枠に入れ、右の列は固定幅で
-    残りの高さをぜんぶ使う。
+    **ライブ (`/live`) と同じ形・同じ作り。** 映像が左 (16:9 で高さいっぱいまで)、
+    読むものが右 (固定幅で残りの高さをぜんぶ使う)。
 
-    **右を映像の高さに合わせない。** 揃えていた頃は、詳細を `absolute` で浮かせて
-    grid の行の高さを映像だけで決めさせていた。**揃いはするが、それだけのために
-    ライブと違う作りを1つ抱える**ことになるうえ、縦長の画面では絵が低くなるので、
-    下に画面半分が空いているのに説明だけ狭い窓から覗くことになっていた
-    (下限 24rem はその継ぎ当て)。**画面の残りをぜんぶ使う**ほうが、
-    読むものとしては素直。
+    **右を映像の高さに合わせない。** 揃えていた頃はライブと違う作りを抱えたうえ、
+    縦長の画面では下が空いているのに説明だけ狭い窓から覗くことになっていた。
 
-    **タブレットからは2段組** (`md` = 768px)。縦のiPadでちょうど入る幅で、
-    そこを境にすると「持ち替えたら形が変わる」ことがない。狭い画面では
-    **映像が上、詳細が下**。指で開いたときはそもそも全画面に入っているので、
-    ここが見えるのは全画面を抜けたあと。
-
-    **周りの余白は足さない。** 外の `<main>` が既に余白を持っている
-    ([+layout.svelte](../../+layout.svelte))。ここでも足していた頃は、他の画面より
-    一回り内側から始まっていたうえ、**その足したぶんだけ縦がはみ出して**
-    ページごとスクロールバーが出ていた。
-
-    **横幅の頭打ちも置かない。** 1800px で頭打ちにして中央に寄せていた頃は、
-    それより広い画面で**左右だけ余白が増えて**いた (実測 1880px でライブ 24px に
-    対して 40px)
+    **タブレット (`md` = 768px) から2段組**、狭い画面では映像が上・詳細が下。
+    **周りの余白も横幅の頭打ちも足さない** — 外の `<main>` が余白を持っていて
+    ([+layout.svelte](../../+layout.svelte))、足すと他の画面より内側から始まり、
+    縦がはみ出してスクロールバーが出ていた
 -->
 <div class="watch" data-testid="watch">
     <!-- **映像を先に書く。** 縦積みになったときに上へ来るのはこちら -->
@@ -1113,7 +1095,7 @@
                 復号器が無い (docs/stream.md §5.5)。黙って黒い枠を出すより、
                 そう言って落とす口を出すほうがいい
             -->
-            <div class="panel stack not-ready" data-testid="watch-not-ready">
+            <div class="panel stack not-ready">
                 <h2>まだ観られません</h2>
                 <p class="small muted">
                         {#if rec.job_id !== null}
@@ -1127,30 +1109,14 @@
             </div>
         {:else}
             <!--
-                映像とその上の操作をまとめた箱。**全画面にするのはここ** —
-                `<video>` だけを全画面にすると、上に重ねた操作が付いてこない
-                (iOS の `webkitEnterFullscreen` は端末の操作列になる)
+                舞台 (映像と操作をまとめた箱。全画面にするのはここ) は3画面で共通 (PlayerStage)。
+                全画面はこちら側の癖 (開いた時点で入る) が要るので自前のまま
             -->
-            <!--
-                動かしたら操作列を出すためだけの `pointermove` なので、押すものでは
-                ない。押す先は中の `<video>` とボタンのほう
-            -->
-            <!--
-                **枠の形はライブと同じ** (16:9 で高さいっぱいまで)。画面の高さから
-                引き算した決め打ち (`100dvh-9rem`) を持たせていた頃は、その値が
-                ヘッダーや帯の厚みと合っているかを目で確かめるしかなかった。
-                絵が 16:9 でないときは中で letterbox されるだけ (`<video>` は
-                既定で `object-fit: contain`)。
-
-                **低くしすぎない** (224px)。上下と右に帯を重ねている
-                ので、絵がそれより低いと**帯どうしが重なって**押せなくなる
-            -->
-            <!-- 舞台の配線は3画面で共通 (PlayerStage)。全画面はこちら側の癖 (開いた時点で入る) が要るので自前のまま -->
             <PlayerStage {controls} testid="watch-stage" bind:element={stage}>
                 {#snippet children(_stage)}
                 <!--
                     **押すのは絵そのもの。** ボタンを避けて敷くのではなく、
-                    ボタンを上に重ねる (z-index 10)。`onclick` は `press` が読む
+                    ボタンを上に重ねる (z-index 10)。押す口は自分で繋ぐ (`press` の effect)
                 -->
                 <!-- svelte-ignore a11y_media_has_caption -->
                 <!--
@@ -1159,17 +1125,11 @@
                     放送どおりには出ない (左右の位置・背景の箱・外字が落ちる)。
                     絵のまま重ねる — ライブと同じやり方 (下の canvas)
                 -->
-                <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_noninteractive_element_interactions -->
                 <!--
                     **映像の箱。BML はこれを動かす** (`DataBroadcast` の place)。ライブと同じ。
-                    **class ではなく style で書く** — 理由は `MediaStack.svelte` (影の中へ移されると
-                    Tailwind が届かず 0 幅になる。実機では d を押すと真っ黒になった)
-                -->
-                <!--
-                    `pointer-events:auto` は**データ放送を出している間のため**。
-                    重ねる先 (`live-data`) は押すのを邪魔しないように
-                    押すのを通すようにしてあり、BML はこの箱をその影の中へ
-                    移す。継いだままだと**絵を押しても止められなくなる**
+                    **class ではなく style で書く** — 影の中へ移されると class が届かず 0 幅になる
+                    (`MediaStack.svelte`)。`pointer-events:auto` は、押すのを通す `live-data` の
+                    影へ移されても**絵を押して止められる**ように
                 -->
                 <div
                     bind:this={mediaBox}
@@ -1239,8 +1199,7 @@
                 />
 
                 <!--
-                    **放送の字幕。** 映像と同じ枠に、映像の画素そのままの大きさで
-                    敷いて、CSS で伸ばす (`object-fit: contain`)。**押す邪魔をしない**
+                    **放送の字幕。** 字幕の面の画素で敷き、映像の絵に重ねる (`place`)。**押す邪魔をしない**
                     (`pointer-events: none`) — 下の絵を押して止められなくなる
                 -->
                 <canvas
@@ -1259,7 +1218,6 @@
                     bind:this={cover}
                     class="layer"
                     hidden={!hopping}
-                    data-testid="watch-cm-cover"
                     aria-hidden="true"
                 ></canvas>
 
@@ -1279,7 +1237,7 @@
                         分からないと、待てばいいのかどうかが決められない。
                         繋ぎ直しの最中はあちらが出るので、重ねない
                     -->
-                    <div class="wait" data-testid="watch-buffering">
+                    <div class="wait">
                         <span class="wait-box" aria-busy="true">読み込み中</span>
                     </div>
                 {/if}
@@ -1290,7 +1248,7 @@
                         切れると数十秒帰ってこないので、黙って止まっていると
                         壊れたように見える
                     -->
-                    <div class="wait" data-testid="watch-resuming">
+                    <div class="wait">
                         <span class="wait-box" aria-busy="true">繋ぎ直しています</span>
                     </div>
                 {/if}
@@ -1307,7 +1265,7 @@
                         **黙って黒いままにしない。** ブラウザによっては Matroska も
                         AV1 も読めない (Safari)。そのときは落として観てもらう
                     -->
-                    <div class="broken" data-testid="watch-error">
+                    <div class="broken">
                         <p class="small">
                             このブラウザでは再生できませんでした。<br
                             />ダウンロードして、お手元のプレイヤーで観てください。
@@ -1414,7 +1372,6 @@
                             value={at}
                             oninput={(e) => seekTo(Number(e.currentTarget.value))}
                             aria-label="再生位置"
-                            data-testid="watch-seek"
                         />
                         {#if chapters.length > 1 && length > 0}
                             <div class="marks">
@@ -1536,7 +1493,7 @@
                             {#snippet badge()}
                                 {#if localSrc !== null}
                                     <!-- サーバではなく端末のコピーで観ている印。帯の題名の並びに出す -->
-                                    <span class="tag success local" data-testid="watch-local">
+                                    <span class="tag success local">
                                         端末
                                     </span>
                                 {/if}
@@ -1551,7 +1508,7 @@
                                     {clock(at)} / {clock(length)} 残り {clock(remaining)}
                                 </span>
                                 {#if current !== null}
-                                    ・ <span data-testid="watch-chapter">{current.title}</span>
+                                    ・ <span>{current.title}</span>
                                 {/if}
                             {/snippet}
                         </InfoBlock>
@@ -1665,7 +1622,7 @@
     .not-ready h2 {
         font-size: 1rem;
     }
-    /* 字幕・CM の蓋。位置と大きさは描くとき (paint) に style で決まる */
+    /* 字幕・CM の蓋。位置と大きさは place が style で決める */
     .layer {
         pointer-events: none;
         position: absolute;

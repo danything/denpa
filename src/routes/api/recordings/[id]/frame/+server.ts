@@ -53,7 +53,7 @@ export async function GET({ params, url }) {
 
     // 生TSを優先する。ロゴの位置は放送そのままの絵で決めたい
     const source = recording.ts_path ?? recording.library_path;
-    if (source === null) throw error(404, 'ファイルがありません');
+    if (source === null) error(404, 'ファイルがありません');
 
     const requested = Number(url.searchParams.get('at'));
     const at = Number.isFinite(requested) && requested >= 0 ? requested : DEFAULT_AT;
@@ -93,7 +93,7 @@ export async function GET({ params, url }) {
     const image = shot.stdout;
 
     // 指定した位置が録画の終わりより後ろだと1枚も出てこない
-    if (image.byteLength === 0) throw error(404, 'その位置のコマを取り出せませんでした');
+    if (image.byteLength === 0) error(404, 'その位置のコマを取り出せませんでした');
 
     return new Response(image as BodyInit, {
         headers: {

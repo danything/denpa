@@ -199,8 +199,6 @@
     $effect(() => {
         awake.on = player.state !== 'idle' && player.state !== 'error';
     });
-    const controlsShown = $derived(controls.shown);
-    const toggle = controls.toggle;
 
     /**
      * 押したことの読み方は**観る画面と同じ** (`ts/watch.ts` の `tap`)。
@@ -212,7 +210,7 @@
      * 止まらず、端2回の送りも無かった**。観ているものは焼き上がった録画と同じなのに、
      * 焼く前だけ押し方が違っていた
      */
-    let lastTap = $state<Tap | null>(null);
+    let lastTap: Tap | null = null;
     const coarse = typeof window === 'undefined' ? false : window.matchMedia('(pointer: coarse)').matches;
     function press(event: MouseEvent): void {
         const box = (event.currentTarget as HTMLElement).getBoundingClientRect();
@@ -224,7 +222,7 @@
         );
         lastTap = next;
         if (action.kind === 'play') player.toggle();
-        else if (action.kind === 'controls') toggle();
+        else if (action.kind === 'controls') controls.toggle();
         else {
             // 2回目。マウスは1回目で再生を切り替えているので、それも戻す
             if (action.undo) player.toggle();
@@ -286,8 +284,8 @@
         />
 
         <!-- 右上の列。**観る画面と同じ並び** (閉じる・切り抜き) -->
-        <ControlBar side shown={controlsShown} testid="chase-side">
-            <a class="{OVERLAY_BTN} {OVERLAY} close" href="/" aria-label="一覧へ戻る" data-testid="chase-close">
+        <ControlBar side shown={controls.shown} testid="chase-side">
+            <a class="{OVERLAY_BTN} {OVERLAY} close" href="/" aria-label="一覧へ戻る">
                 <Icon path={CLOSE} />
             </a>
             <ControlButton
@@ -298,7 +296,7 @@
             />
         </ControlBar>
 
-        <ControlBar shown={controlsShown} testid="chase-controls">
+        <ControlBar shown={controls.shown} testid="chase-controls">
             <!-- 帯は番組の全長。**録れていないところ (右側) へは跳べない** (`seekTo`) -->
             <input
                 type="range"
@@ -310,7 +308,6 @@
                 value={pos}
                 oninput={(event) => seekTo(Number(event.currentTarget.value))}
                 aria-label="再生位置"
-                data-testid="chase-seek"
             />
 
             <!-- **並びはライブと同じ。** 再生・音・字幕、焼き方・音声・端 (最新)、読みもの、速さ、全画面 -->
@@ -381,7 +378,7 @@
                     titleTestid="chase-title"
                 >
                     {#snippet status()}
-                        <span data-testid="chase-clock">{clockLabel(pos)} / {clockLabel(recorded)}</span>
+                        <span>{clockLabel(pos)} / {clockLabel(recorded)}</span>
                         {#if line !== null && !line.finished}
                             <!-- 赤はライブの赤丸と同じ出し方。黒帯の上の text-error は沈む -->
                             ・ <span class="rec"><span class="dot"></span>録画中</span>
@@ -429,7 +426,7 @@
         {/if}
 
         {#if player.state !== 'playing'}
-            <!-- 見た目の決まりは3画面共通 (`PlayerVeil`)。前の絵を貼っている間は塗り潰さない -->
+            <!-- 見た目の決まりはライブと共通 (`PlayerVeil`)。前の絵を貼っている間は塗り潰さない -->
             <PlayerVeil
                 holding={player.holding}
                 busy={player.state !== 'error'}
@@ -441,7 +438,6 @@
                     <button type="button"
                         class="small"
                         onclick={() => video !== null && void player.openChase(video, data.rec.id, pos)}
-                        data-testid="chase-retry"
                     >
                         やり直す
                     </button>

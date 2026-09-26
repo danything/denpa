@@ -95,7 +95,7 @@
 
     onMount(() => {
         hydrated = true;
-        mode = (document.documentElement.dataset['themeMode'] as 'system' | 'light' | 'dark') ?? 'system';
+        mode = (document.documentElement.dataset['themeMode'] as 'system' | 'light' | 'dark') ?? 'dark';
 
         // 端末側の設定が変わったら、system のときだけ追従する
         const media = matchMedia('(prefers-color-scheme: dark)');
@@ -226,13 +226,7 @@
     `%` なら JS も要らず、**描く前から正しい**。**二段組の線 (768px) は横に
     倒した携帯も越える** (915x412 など) ので、768px 以上の `.fill` のほうも同じ採り方
 -->
-<div
-    class="shell"
-    class:fill
-    data-root
-    data-fill={fill ? 'true' : undefined}
-    data-hydrated={hydrated ? 'true' : undefined}
->
+<div class="shell" class:fill={fill} data-root data-hydrated={hydrated ? 'true' : undefined}>
     <!--
         遷移の進み具合 (上の `slow`)。長さの分からない読み込みなので、
         光が左から右へ走るだけの不確定のバー。ヘッダーの上端に貼る
@@ -343,7 +337,7 @@
                 誰か知らないし、切るものも持っていない
             -->
             {#if data.user}
-                <!-- 控えを消すので GET では出させない (先読みで勝手に切れる) -->
+                <!-- ボタンはフォームの POST で押す。リンク (GET) だと先読みで勝手に切れる -->
                 <form method="POST" action="/logout">
                     <button type="submit" class="ghost small" data-testid="logout">
                         ログアウト
@@ -521,11 +515,6 @@
     main {
         padding: 1rem;
     }
-    @media (min-width: 768px) {
-        main {
-            padding: 1.5rem;
-        }
-    }
     @media (min-width: 640px) {
         ul.links {
             display: flex;
@@ -535,6 +524,9 @@
         }
     }
     @media (min-width: 768px) {
+        main {
+            padding: 1.5rem;
+        }
         .shell.fill {
             height: 100%;
             min-height: 0;

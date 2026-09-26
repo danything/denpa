@@ -103,11 +103,6 @@ const JST_OFFSET = 9 * 3600;
 
 const bcd = (byte: number) => (byte >> 4) * 10 + (byte & 0x0f);
 
-/**
- * MJD + BCD の5バイトを epoch ms に直す。
- *
- * 全ビットが1なら「未定」。開始時刻が未定の番組は番組表に置けないので null で返す。
- */
 /** TDT / TOT が流れている PID。**放送の現在時刻** */
 export const PID_TIME = 0x0014;
 const TABLE_TDT = 0x70;
@@ -119,14 +114,18 @@ const TABLE_TOT = 0x73;
  * 頭3バイトのあとに MJD + BCD が5バイト。**TOT も同じ並び**で、後ろに
  * 時差の記述子が付くだけなので同じに読める。
  *
- * データ放送 (`bml.ts` の `getCurrentDateTime`) と、放送との遅れを出すところ
- * ([clock.ts](clock.ts)) の両方が見ます
+ * データ放送 (`bml.ts` の `getCurrentDateTime`) が見ます
  */
 export function parseTimeTable(section: Uint8Array): number | null {
     if (section[0] !== TABLE_TDT && section[0] !== TABLE_TOT) return null;
     return parseMjdTime(section, 3);
 }
 
+/**
+ * MJD + BCD の5バイトを epoch ms に直す。
+ *
+ * 全ビットが1なら「未定」。開始時刻が未定の番組は番組表に置けないので null で返す。
+ */
 export function parseMjdTime(data: Uint8Array, at: number): number | null {
     let allOnes = true;
     for (let i = 0; i < 5; i++) {
@@ -153,7 +152,7 @@ export function parseBcdDuration(data: Uint8Array, at: number): number | null {
 /**
  * 映像の解像度。component_type の上位ニブルで決まる。
  *
- * 480i だけ 0x01〜0x04 と例外で、そこから先は 0xA?=480p, 0xB?=1080i … と並ぶ。
+ * 480i は 0x01〜0x04 (上位ニブル 0)、そこから先は 0xA?=480p, 0xB?=1080i … と並ぶ。
  * 画面の `videoLabel` がこの文字列をそのまま読む。
  */
 const RESOLUTION: Record<number, string> = {
@@ -243,10 +242,7 @@ function readDescriptors(event: EitEvent, body: Uint8Array): void {
                 const componentType = data[1]!;
                 event.video = {
                     type: VIDEO_CODEC[streamContent] ?? null,
-                    resolution:
-                        RESOLUTION[componentType >> 4] ??
-                        (componentType <= 0x04 ? RESOLUTION[0x0] : null) ??
-                        null,
+                    resolution: RESOLUTION[componentType >> 4] ?? null,
                 };
                 break;
             }

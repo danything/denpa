@@ -1,4 +1,4 @@
-import { matches, normalize } from './paging';
+import { matches } from './paging';
 
 /**
  * 長い一覧を**少しずつ出す**。
@@ -109,4 +109,4 @@ export function sentinel(node: HTMLElement, onSeen: () => void) {
     };
 }
 
-export { matches, normalize };
+export { matches };

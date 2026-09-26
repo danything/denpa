@@ -10,8 +10,6 @@
 
     let { data, form } = $props();
 
-    // 検索条件はURLに持たせる。そのままルールにできるようにするため
-
     type Sheet = Awaited<typeof data.grid>;
 
     /**
@@ -78,8 +76,8 @@
      * (`requestAnimationFrame`) に足していけば、1コマあたりの仕事は数十ms に収まり、
      * 描いている最中でもスクロールもタブの切り替えもできる。
      *
-     * 300 は「e2e の偽の放送 (数十番組) なら最初の1回で全部出る」数。
-     * 実データの地上波 (20局×24時間 ≒ 500〜700) でも2〜3コマで済む。
+     * e2e の偽の放送 (数十番組) なら最初の1回で全部出て、
+     * 実データの地上波 (20局×24時間 ≒ 500〜700) でも1〜2コマで済む数。
      * 画面の外のマスは中身を組まない (下の `.cell` の `content-visibility`) ので、
      * 1コマの仕事は「マスを置く」だけになり、数を増やしても止まらない
      */
@@ -284,7 +282,6 @@
         })),
     );
 
-
     function href(params: Record<string, string>): string {
         const query = new URLSearchParams({ type: data.type, ...params });
         return `/guide?${query}`;
@@ -355,7 +352,6 @@
             void preloadData(soon);
             void preloadData(later);
         };
-        // requestIdleCallback は Safari に無い
         if (typeof requestIdleCallback !== 'function') {
             const timer = setTimeout(fetchBoth, 500);
             return () => clearTimeout(timer);
@@ -403,7 +399,7 @@
                 <a
                     class="button small {data.type === type ? '' : 'secondary outline'}"
                     aria-current={data.type === type ? 'page' : undefined}
-                    href="/guide?type={type}&start={data.start}"
+                    href={href({ type, start: String(data.start) })}
                     data-testid="type-{type}"
                 >
                     {SERVICE_TYPE_LABEL[type]}
@@ -414,7 +410,7 @@
         <!-- 日送りは種別のすぐ隣。どちらも「表のどこを見るか」の操作なので離さない -->
         <div class="cluster">
             <a class="button small secondary outline" href={prevHref} data-testid="prev-day">← 前日</a>
-            <span class="small" data-testid="window-label">
+            <span class="small">
                 <!-- 日本の番組表の慣習で、1日は4時から翌4時まで -->
                 {date(data.start)} <span class="muted">(4:00〜翌4:00)</span>
             </span>
@@ -446,7 +442,7 @@
             組めなかった。**骨組みのまま放っておかない** — 読み込み中と区別が
             付かず、いつまでも待たせることになる。本当の理由はサーバのログに出る
         -->
-        <div class="panel empty" data-testid="guide-failed">
+        <div class="panel empty">
             <p class="muted">番組表を読み込めませんでした ({sheet.failed})</p>
             <button type="button" class="small secondary outline" onclick={reload}>読み直す</button>
         </div>
@@ -672,7 +668,7 @@
                 上に出る。下に隠れるものを出しても読めないので、押したボタンの隣に置く
             -->
             {#if form?.message}
-                <div class="notice error guide-error" data-testid="guide-error">{form.message}</div>
+                <div class="notice error guide-error">{form.message}</div>
             {/if}
             <!--
                 閉じるは**いちばん右で動かさない**。押すものが番組によって増えたり
@@ -706,7 +702,6 @@
                         <a
                             class="button"
                             href="/watch/{program.recording_id}"
-                            data-testid="detail-play"
                         >
                             再生
                         </a>
@@ -716,7 +711,6 @@
                         type="button"
                         class="ghost"
                         onclick={() => void startDownload(program.recording_id ?? -1)}
-                        data-testid="detail-download"
                     >
                         ダウンロード
                     </button>
@@ -758,7 +752,7 @@
                             }}
                     >
                         <input type="hidden" name="programId" value={program.id} />
-                        <button type="submit" class="danger outline" data-testid="detail-cancel">
+                        <button type="submit" class="danger outline">
                             予約を取り消す
                         </button>
                     </form>

@@ -30,7 +30,6 @@ export const load: PageServerLoad = ({ params }) => {
             service_name: rec.service_name,
             start_at: rec.start_at,
             end_at: rec.end_at,
-            finished: rec.finished_at !== null,
             // 前に途中まで観ていたら、そこから (観る画面の続き再生と同じ理屈)
             resumeSec: rec.resume_ms === null ? 0 : rec.resume_ms / 1000,
             description: rec.description,
