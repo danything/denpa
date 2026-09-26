@@ -7,18 +7,34 @@
 # denpa から見える口は agent/conformance.test.ts が押さえている
 # (本物を起こして HTTP で当てる)。入れ替えはイメージのタグを変えるだけ。
 # ---------------------------------------------------------------------------
+# **arch ごとに、その arch のランナーで組む** (CI は amd64 を ubuntu-latest、arm64 を
+# ubuntu-24.04-arm で。QEMU は使わない)。Native AOT は組む機械と同じ arch の実行ファイルを
+# 出すのが素直で、AOT のクロスは clang とリンカの揃え直しが要るので、組む段も
+# `--platform=$BUILDPLATFORM` にはしない。
+#
+# `TARGETARCH` (BuildKit が入れる) から、RID と取ってくる配布物の名前を引く。
+# 名前の付け方は上流ごとにばらばら (amd64 / x86_64 / x64、arm64 / aarch64) なので、
+# 各段の頭で読み替える。それ以外の arch は配布物が無いので、黙って amd64 のものを
+# 入れずにそこで止める
 # 既定のイメージがそのまま trixie (`-trixie` という札は無い)
 FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
+ARG TARGETARCH
 WORKDIR /build
 # AOT のリンクに clang と zlib が要る
 RUN apt-get update && \
     apt-get -y --no-install-recommends install clang zlib1g-dev && \
     rm -rf /var/lib/apt/lists/*
 COPY agent/Denpa.Agent/ Denpa.Agent/
-RUN dotnet publish Denpa.Agent/Denpa.Agent.csproj -c Release -r linux-x64 -o /out
+RUN case "${TARGETARCH}" in \
+      amd64) rid=linux-x64 ;; \
+      arm64) rid=linux-arm64 ;; \
+      *) echo "対応していない arch: ${TARGETARCH}" >&2; exit 1 ;; \
+    esac && \
+    dotnet publish Denpa.Agent/Denpa.Agent.csproj -c Release -r "${rid}" -o /out
 
 # ---------------------------------------------------------------------------
 FROM docker.io/library/debian:trixie-slim
+ARG TARGETARCH
 
 # **`recisdb` は入れません。** 選局は自分でやり (ioctl)、B25 も自分で解きます。
 #
@@ -27,12 +43,16 @@ FROM docker.io/library/debian:trixie-slim
 #                    リーダーもここに IFD ハンドラで登録する (下の px4-userland)
 # renovate: datasource=github-releases depName=tsukumijima/libaribb25 extractVersion=^v(?<version>.*)$
 ARG ARIBB25_VERSION=0.2.10
-RUN apt-get update && \
+RUN case "${TARGETARCH}" in \
+      amd64|arm64) ;; \
+      *) echo "対応していない arch: ${TARGETARCH}" >&2; exit 1 ;; \
+    esac && \
+    apt-get update && \
     apt-get -y --no-install-recommends install curl ca-certificates procps \
         pcscd pcsc-tools tzdata && \
     cd /tmp && \
-    curl -fsSLO https://github.com/tsukumijima/libaribb25/releases/download/v${ARIBB25_VERSION}/libaribb25_${ARIBB25_VERSION}_amd64.deb && \
-    apt-get -y --no-install-recommends install ./libaribb25_${ARIBB25_VERSION}_amd64.deb && \
+    curl -fsSLO https://github.com/tsukumijima/libaribb25/releases/download/v${ARIBB25_VERSION}/libaribb25_${ARIBB25_VERSION}_${TARGETARCH}.deb && \
+    apt-get -y --no-install-recommends install ./libaribb25_${ARIBB25_VERSION}_${TARGETARCH}.deb && \
     apt-get clean && rm -rf /var/lib/apt/lists/* /tmp/*
 
 # ---------------------------------------------------------------------------
@@ -56,8 +76,9 @@ ARG PX4_DRV_COMMIT=c995c10138368283a720cec4fcbca157ccc0dbd3
 # px4-userland SPEC 4.5 が受理する唯一のイメージ (2,169 バイト)
 ARG IT930X_FIRMWARE_SHA256=5213a5a38872661277a2cc1b2dfdfe88faf06f41205f460f3b51857f0568b484
 RUN set -eu && cd /tmp && \
+    case "${TARGETARCH}" in amd64) arch=x86_64 ;; arm64) arch=aarch64 ;; *) exit 1 ;; esac && \
     base="https://github.com/Khronos31/px4-userland/releases/download/v${PX4_USERLAND_VERSION}" && \
-    archive="px4-userland-${PX4_USERLAND_VERSION}-linux-glibc-x86_64.tar.gz" && \
+    archive="px4-userland-${PX4_USERLAND_VERSION}-linux-glibc-${arch}.tar.gz" && \
     curl -fsSLO "${base}/${archive}" && curl -fsSLO "${base}/SHA256SUMS" && \
     sha256sum -c --ignore-missing SHA256SUMS && \
     mkdir -p /opt/px4-userland/firmware && tar -xzf "${archive}" -C /opt/px4-userland && \
@@ -79,8 +100,9 @@ RUN set -eu && cd /tmp && \
 ARG SIANO_USERLAND_VERSION=0.1.7
 ARG ISDBT_RIO_SHA256=054520642d5d09cb7ab7d08dbd6fd9ba9365de56adf2e7d7d06927f9845ff818
 RUN set -eu && cd /tmp && \
+    case "${TARGETARCH}" in amd64) arch=x86_64 ;; arm64) arch=aarch64 ;; *) exit 1 ;; esac && \
     base="https://github.com/Khronos31/siano-userland/releases/download/v${SIANO_USERLAND_VERSION}" && \
-    archive="siano-ts-${SIANO_USERLAND_VERSION}-linux-x86_64.tar.gz" && \
+    archive="siano-ts-${SIANO_USERLAND_VERSION}-linux-${arch}.tar.gz" && \
     curl -fsSLO "${base}/${archive}" && curl -fsSLO "${base}/SHA256SUMS" && \
     sha256sum -c --ignore-missing SHA256SUMS && \
     mkdir -p /opt/siano-userland && tar -xzf "${archive}" -C /opt/siano-userland && \

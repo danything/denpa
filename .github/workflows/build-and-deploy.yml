@@ -37,23 +37,62 @@ env:
   REGISTRY: ghcr.io
 
 jobs:
-  build-and-deploy:
+  # イメージごとに「そのイメージの中身を最後に変えたコミット」でタグを付ける
+  # (.github/image-tags.sh)。全部を HEAD で揃えると、denpa を直しただけの
+  # push でエージェントのタグまで変わり、録画中に選局が落ちる。
+  #
+  # **先に1回だけ出して、後の段に配る。** arch ごとに組む段は4つに分かれ、
+  # 名前を付けるのは最後の merge なので、それぞれで数えると食い違う余地が残る
+  tags:
     runs-on: ubuntu-latest
+    outputs:
+      agent: ${{ steps.tag.outputs.agent }}
+      denpa: ${{ steps.tag.outputs.denpa }}
     steps:
       - name: Checkout
         uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
-      # イメージごとに「そのイメージの中身を最後に変えたコミット」でタグを付ける
-      # (.github/image-tags.sh)。全部を HEAD で揃えると、denpa を直しただけの
-      # push でエージェントのタグまで変わり、録画中に選局が落ちる。
       - name: Compute image tags
         id: tag
         run: |
           . .github/image-tags.sh
           echo "agent=$AGENT_TAG" >> "$GITHUB_OUTPUT"
           echo "denpa=$DENPA_TAG" >> "$GITHUB_OUTPUT"
+
+  # **arch ごとに、その arch のランナーで組む** (amd64 は ubuntu-latest、arm64 は
+  # ubuntu-24.04-arm)。QEMU で arm64 を組むと ffmpeg と Native AOT が何倍も掛かり、
+  # AOT はそもそもエミュレーションの下で転ぶことがある。
+  #
+  # ここでは**名前を付けずに digest だけで push する** (push-by-digest)。同じタグへ
+  # arch ごとに push すると後に着いたほうが上書きするので、名前は下の merge で
+  # 両方を束ねた索引 (multi-arch manifest) に1回だけ付ける
+  build:
+    strategy:
+      fail-fast: true
+      matrix:
+        image:
+          # チューナーエージェント。**Native AOT で実行ファイル1個。**
+          # 選局も B25 の解除も自分でやる (recisdb は入っていない)
+          - name: denpa-agent
+            file: agent/Dockerfile
+            target: ''
+            scope: agent
+          - name: denpa
+            file: Dockerfile
+            target: runtime
+            scope: denpa
+        arch:
+          - name: amd64
+            runner: ubuntu-latest
+          - name: arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.arch.runner }}
+    name: build (${{ matrix.image.name }}, ${{ matrix.arch.name }})
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
 
       - name: Log in to GHCR
         uses: docker/login-action@v4
@@ -65,49 +104,115 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
 
-      # チューナーエージェント。**Native AOT で実行ファイル1個。**
-      # 選局も B25 の解除も自分でやる (recisdb は入っていない)
-      - name: Build and push tuner agent image
+      # キャッシュは arch ごとに分ける。混ぜると互いの層を追い出し合う
+      - name: Build and push by digest
+        id: build
         uses: docker/build-push-action@v7
         with:
           context: .
-          file: agent/Dockerfile
-          platforms: linux/amd64
-          push: true
+          file: ${{ matrix.image.file }}
+          target: ${{ matrix.image.target }}
+          platforms: linux/${{ matrix.arch.name }}
           pull: true
-          cache-from: type=gha,scope=agent
-          cache-to: type=gha,mode=max,scope=agent
-          tags: |
-            ${{ env.REGISTRY }}/${{ github.repository_owner }}/denpa-agent:${{ steps.tag.outputs.agent }}
-            ${{ env.REGISTRY }}/${{ github.repository_owner }}/denpa-agent:develop
+          cache-from: type=gha,scope=${{ matrix.image.scope }}-${{ matrix.arch.name }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.image.scope }}-${{ matrix.arch.name }}
+          outputs: type=image,name=${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ matrix.image.name }},push-by-digest=true,name-canonical=true,push=true
 
-      - name: Build and push denpa image
-        uses: docker/build-push-action@v7
+      # digest は空のファイルの名前にして merge へ渡す (中身は要らない)。
+      # artifact の名前はイメージ名でなく scope (agent / denpa) で付ける — `denpa-agent` は
+      # `denpa` で前方一致するので、merge の `digests-denpa-*` がエージェントの digest まで
+      # 拾ってしまう (レビュー指摘)
+      - name: Export digest
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          mkdir -p "${RUNNER_TEMP}/digests"
+          touch "${RUNNER_TEMP}/digests/${DIGEST#sha256:}"
+
+      - name: Upload digest
+        uses: actions/upload-artifact@v7
         with:
-          context: .
-          target: runtime
-          platforms: linux/amd64
-          push: true
-          pull: true
-          cache-from: type=gha,scope=denpa
-          cache-to: type=gha,mode=max,scope=denpa
-          tags: |
-            ${{ env.REGISTRY }}/${{ github.repository_owner }}/denpa:${{ steps.tag.outputs.denpa }}
-            ${{ env.REGISTRY }}/${{ github.repository_owner }}/denpa:develop
+          name: digests-${{ matrix.image.scope }}-${{ matrix.arch.name }}
+          path: ${{ runner.temp }}/digests/*
+          if-no-files-found: error
+          retention-days: 1
 
-      # **イメージのタグは `develop` のまま動かさず、印だけ書き換える。**
-      # 動くタグを指しているとマニフェストが変わらず、ArgoCD には「何も
-      # 変わっていない」ように見えて古い Pod が残る。Pod の注釈を書き換えれば
-      # 入れ替わり、`imagePullPolicy: Always` で新しい develop を引く。
-      #
-      # **main へは直接 push しない** (必須チェックで守ってあり、bot のトークンも
-      # 素通しにならない)。印を書き換えた PR を出して、`check` の status を自分で付けて、
-      # 自分でマージする。手順と理由は .github/bump-pr.sh (release と共通)
+  # arch ごとの digest を1つの索引に束ねて、今までと同じ名前 (`sha-…` と `develop`) を
+  # 付ける。`imagetools create` はレジストリの中で索引を書くだけで、イメージは引かない。
+  # **どちらかの arch が落ちたらここまで来ない** — 片方の arch だけの `develop` が
+  # 出ていくより、前のものが残るほうがいい
+  merge:
+    needs: [tags, build]
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - image: denpa-agent
+            tag: agent
+          - image: denpa
+            tag: denpa
+    steps:
+      - name: Download digests
+        uses: actions/download-artifact@v8
+        with:
+          path: ${{ runner.temp }}/digests
+          pattern: digests-${{ matrix.tag }}-*
+          merge-multiple: true
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v4
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Create multi-arch manifest
+        working-directory: ${{ runner.temp }}/digests
+        env:
+          IMAGE: ${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ matrix.image }}
+          TAG: ${{ matrix.tag == 'agent' && needs.tags.outputs.agent || needs.tags.outputs.denpa }}
+        run: |
+          set -eu
+          # arch が欠けたまま束ねない (artifact の取りこぼしで amd64 だけの索引になるのを防ぐ)
+          set -- *
+          [ "$#" = 2 ] || { echo "digest が2つ揃っていません: $*" >&2; exit 1; }
+          refs=""
+          for digest in "$@"; do refs="$refs ${IMAGE}@sha256:${digest}"; done
+          # 単語に割りたいので引用しない (中身は上で作った参照だけ)
+          # shellcheck disable=SC2086
+          docker buildx imagetools create \
+            --tag "${IMAGE}:${TAG}" \
+            --tag "${IMAGE}:develop" \
+            $refs
+          docker buildx imagetools inspect "${IMAGE}:${TAG}"
+
+  # **イメージのタグは `develop` のまま動かさず、印だけ書き換える。**
+  # 動くタグを指しているとマニフェストが変わらず、ArgoCD には「何も
+  # 変わっていない」ように見えて古い Pod が残る。Pod の注釈を書き換えれば
+  # 入れ替わり、`imagePullPolicy: Always` で新しい develop を引く。
+  # 印は**タグ**を指すので、タグが multi-arch の索引になっても書き方は変わらない
+  # (各ノードは自分の arch のものを引く)。
+  #
+  # **main へは直接 push しない** (必須チェックで守ってあり、bot のトークンも
+  # 素通しにならない)。印を書き換えた PR を出して、`check` の status を自分で付けて、
+  # 自分でマージする。手順と理由は .github/bump-pr.sh (release と共通)
+  bump:
+    needs: [tags, merge]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
       - name: Open and self-merge a PR that rewrites the image marks
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          AGENT_TAG: ${{ steps.tag.outputs.agent }}
-          DENPA_TAG: ${{ steps.tag.outputs.denpa }}
+          AGENT_TAG: ${{ needs.tags.outputs.agent }}
+          DENPA_TAG: ${{ needs.tags.outputs.denpa }}
         run: |
           set -eu
           # 印を書く先は deploy/application.yaml の helm.valuesObject の中 (imageMarks.agent /

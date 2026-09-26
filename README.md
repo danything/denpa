@@ -89,9 +89,11 @@ AV1 が再生できないテレビには、テレビごとに H.264 や生TSを�
   - PX-S1UD はホストで smsusb を blacklist すれば、同梱の siano-userland でやはりホストに何も要らない
     ([docs/agent.md](docs/agent.md#px-s1ud-はカーネルが掴んでいなければ-siano-userland-で))
 - **B-CASカード** と PC/SC 対応のリーダー
-- **Docker** (Compose) か **Kubernetes** (Helm)
+- **Docker** (Compose) か **Kubernetes** (Helm)。**amd64 (x86_64) と arm64 (aarch64)** の
+  どちらでも動きます (イメージは両方を束ねてあり、同じタグで自分の arch のものが降ってくる)
 - あれば **Intel の GPU** — `/dev/dri` が見えれば起動時に見つけて GPU で焼きます
-  (Helm は既定で渡す。無ければソフトウェア。[docs/encode.md](docs/encode.md)「GPU で焼く」)
+  (Helm は既定で渡す。無ければソフトウェア。[docs/encode.md](docs/encode.md)「GPU で焼く」)。
+  **Intel QSV は amd64 だけ**で、arm64 は VA-API かソフトウェアで焼きます
 
 ## 立てる
 
