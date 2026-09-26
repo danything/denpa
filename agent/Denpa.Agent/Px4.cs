@@ -324,7 +324,7 @@ public sealed class Px4Daemon
     public IReadOnlyList<Px4Receiver>? Receivers { get; private set; }
 
     /// <summary>
-    /// 挙げた筐体ぶん、px4d を起こしてリーダーを繋ぐ。**起動時と、設定を書き換えたとき。**
+    /// 挙げた筐体ぶん、px4d を起こして ready まで待つ。**起動時と、設定を書き換えたとき。**
     ///
     /// <para>
     /// **起こせなくても止まらない。** 筐体が抜けている・ファームウェアが無い、は

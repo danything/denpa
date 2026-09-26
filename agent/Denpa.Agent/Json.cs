@@ -20,7 +20,7 @@ public static class Log
 public static class Json
 {
     /*
-     * **日本語をそのまま書く。** 既定では非ASCIIを `あ` に逃がすので、
+     * **日本語をそのまま書く。** 既定では非ASCIIを `\u3042` に逃がすので、
      * `channels.json` が人の目で読めなくなる (局名は全部日本語)。
      * ここは HTML に埋めるものではないので、逃がす理由が無い
      */

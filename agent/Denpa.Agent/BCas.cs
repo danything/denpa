@@ -218,11 +218,7 @@ public sealed class BCas : IKeySource, IDisposable
         }
     }
 
-    /// <summary>
-    /// リーダーを探して、カードが答えた最初の1つを掴む。INT と IDI もここで読む。
-    /// **駄目だったリーダーの理由は全部残す** — 1つ目が空で2つ目が壊れている、を
-    /// 「カードが読めません」の1行で済ませると、どこを見ればよいか分からない
-    /// </summary>
+    /// <summary>探し直す。**しくじったら <see cref="RetryAfter"/> のあいだは探さずに同じ理由で断る**</summary>
     private void Reconnect()
     {
         if (_failed is { } failed && _clock.GetUtcNow() - failed.At < RetryAfter) throw failed.Error;
@@ -238,6 +234,11 @@ public sealed class BCas : IKeySource, IDisposable
         }
     }
 
+    /// <summary>
+    /// リーダーを探して、カードが答えた最初の1つを掴む。INT と IDI もここで読む。
+    /// **駄目だったリーダーの理由は全部残す** — 1つ目が空で2つ目が壊れている、を
+    /// 「カードが読めません」の1行で済ませると、どこを見ればよいか分からない
+    /// </summary>
     private void Connect()
     {
         var candidates = _find();

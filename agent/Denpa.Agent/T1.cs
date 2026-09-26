@@ -7,7 +7,7 @@ namespace Denpa.Agent;
 /// B-CAS は <c>3B F0 12 00 FF 91 81 B1 7C 45 1F 03 99</c>。TA2 (<c>81</c>) があるので
 /// **specific mode** — カードは ATR の直後から TA1 (<c>12</c> = Fi 372 / Di 2) の速さで話す。
 /// PPS は要らないが、読み取り機にその速さを教えないと話が通じない (<see cref="CcidLink"/>)。
-/// T=1 用の値は TD3 が T=1 を示したあとの TA4 (IFSC = 0x7C) と TB4 (BWI 4 / CWI 5)。
+/// T=1 用の値は TD2 が T=1 を示したあとの TA3 (IFSC = 0x7C) と TB3 (BWI 4 / CWI 5)。
 /// </para>
 /// </summary>
 /// <param name="FiDi">TA1。無ければ既定の 0x11</param>
@@ -39,10 +39,9 @@ public sealed record Atr(
         bool crc = false, sawIfsc = false, sawBw = false, sawEdc = false;
         var needTck = false;
 
-        var at = 1;
         var y = atr[1] >> 4;
         var historical = atr[1] & 0x0f;
-        at++;
+        var at = 2;
         // i は TA_i などの i。protocol は直前の TD_{i-1} が示したプロトコル (最初は T=0)
         var protocol = 0;
         for (var i = 1; ; i++)
