@@ -118,7 +118,10 @@ jobs:
           cache-to: type=gha,mode=max,scope=${{ matrix.image.scope }}-${{ matrix.arch.name }}
           outputs: type=image,name=${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ matrix.image.name }},push-by-digest=true,name-canonical=true,push=true
 
-      # digest は空のファイルの名前にして merge へ渡す (中身は要らない)
+      # digest は空のファイルの名前にして merge へ渡す (中身は要らない)。
+      # artifact の名前はイメージ名でなく scope (agent / denpa) で付ける — `denpa-agent` は
+      # `denpa` で前方一致するので、merge の `digests-denpa-*` がエージェントの digest まで
+      # 拾ってしまう (レビュー指摘)
       - name: Export digest
         env:
           DIGEST: ${{ steps.build.outputs.digest }}
@@ -129,7 +132,7 @@ jobs:
       - name: Upload digest
         uses: actions/upload-artifact@v7
         with:
-          name: digests-${{ matrix.image.name }}-${{ matrix.arch.name }}
+          name: digests-${{ matrix.image.scope }}-${{ matrix.arch.name }}
           path: ${{ runner.temp }}/digests/*
           if-no-files-found: error
           retention-days: 1
@@ -153,7 +156,7 @@ jobs:
         uses: actions/download-artifact@v8
         with:
           path: ${{ runner.temp }}/digests
-          pattern: digests-${{ matrix.image }}-*
+          pattern: digests-${{ matrix.tag }}-*
           merge-multiple: true
 
       - name: Log in to GHCR
