@@ -68,7 +68,7 @@ EPGStation の置き換えとして作ったもので、エンコード設定は
 | `src/lib/components/LogoArea.svelte` | CM検出用のロゴを画面で確かめ、位置を教え、捨てる |
 | `src/lib/components/Toasts.svelte` | 押した結果を画面の右下に浮かせて出す (本文を押し下げない) |
 | `src/lib/paging.svelte.ts` / `paging.ts` | **長い一覧を少しずつ出す** (`Paged` + `sentinel`。無限スクロール) と、その代わりの絞り込み (`matches`。空白区切りの語をすべて含む)。予約・録画・ルールの一覧が使う。全部は描かないので Ctrl+F では探せず、一覧ごとに絞り込みの欄を置く |
-| `src/lib/ts/psi.ts` | TS の PSI (PAT / PMT / NIT / SDT) を読む。エージェント側と共通 |
+| `src/lib/ts/psi.ts` | TS の PSI (PAT / PMT / NIT / SDT) を読む。チャンネルスキャンで局の一覧を知るのに使う (エージェントは NIT も SDT も読まない) |
 | `src/lib/ts/bytes.ts` | バイト列の細かい道具 (繋ぐ)。中身の意味は持たない |
 | `src/lib/ts/clock.ts` | PCR をサーバが受け取った時刻に結びつけ、焼いたものの物差しに直す (TDT は局ごとにずれるので使わない) |
 | `src/lib/ts/aribtext.ts` | ARIB STD-B24 の8単位符号を読む (番組名・局名) |
@@ -261,7 +261,7 @@ SQLite が拒むので、事実と状態が食い違いようがありません�
 | `agent/Denpa.Agent/Tuning.cs` | 選局そのもの (DVB)。掴んだまま変えられる |
 | `agent/Denpa.Agent/Px4.cs` | px4-userland の機材 (PX-Q3U4 / PX-MLT 系 …) を掴む。筐体と受信機は `px4d --list` に聞き、選局ごとに `px4-ts` を読む |
 | `agent/Denpa.Agent/Siano.cs` | siano-userland の機材 (PX-S1UD …) を掴む。機材は `siano-ts --list` に聞き、カーネルが掴んでいないものだけを `--control` で起こしたまま選局し直す |
-| `agent/Denpa.Agent/ChildTs.cs` | 子プロセス (px4-ts) の標準出力を読み口に載せる |
+| `agent/Denpa.Agent/ChildTs.cs` | 子プロセス (px4-ts / siano-ts) の標準出力を読み口に載せる |
 | `agent/Denpa.Agent/ChannelTable.cs` | チャンネル名 → 周波数と TSID |
 | `agent/Denpa.Agent/B25.cs` / `Multi2.cs` | B25 の解除 (TS から ECM を拾い、鍵を貰って MULTI2 で解く) |
 | `agent/Denpa.Agent/BCas.cs` / `CardLinks.cs` | B-CAS へのコマンドと、カードリーダーを探して繋ぎ直す |
@@ -281,7 +281,9 @@ SQLite が拒むので、事実と状態が食い違いようがありません�
 
 環境変数は `AGENT_PORT` (既定 `25252`)・`TUNERS_FILE` / `CHANNELS_FILE` (既定 `/app-config/` の下)・
 `RECORDED_DIR` (denpa と同じ生TSの置き場)・`CARD_URL` (手元にカードが無い拠点だけ。鍵を貰う先)・
-`SHUTDOWN_WAIT` (denpa と同じ)。`FAKE_TUNE` は適合テストだけが使う。
+`SHUTDOWN_WAIT` (denpa と同じ)。同梱のドライバの置き場 `PX4_USERLAND_DIR` / `PX4_FIRMWARE` / `PX4_RUNTIME_DIR` /
+`SIANO_USERLAND_DIR` / `SIANO_FIRMWARE` はイメージの既定のままでよい (Mac の `install.sh` だけが書き換える)。
+`FAKE_TUNE` は適合テストだけが使う。
 
 ## テスト
 

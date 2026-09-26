@@ -66,7 +66,7 @@ Dockerfile の行・`package.json`) を優先し、上流の表示に拠るも�
 | .NET 10 ランタイム (AOT でバイナリに埋まる) | エージェント本体 | <https://github.com/dotnet/runtime> | MIT |
 | px4-userland 0.1.6 (`/opt/px4-userland`) | PLEX PX-Q3U4 / PX-W3U4 / PX-MLT 系、e-Better / Digibest 系のユーザー空間ドライバ。`px4d` / `px4-ts` / `px4ctl` (同梱の pcscd 用 IFD ハンドラは使わない) | <https://github.com/Khronos31/px4-userland> | **GPL-2.0-only** (実行ファイルに静的リンクの libusb 1.0.30 は LGPL-2.1+。配布物の `THIRD_PARTY_NOTICES.md` を同梱のまま置いてある) |
 | IT930x ファームウェア (`/opt/px4-userland/firmware/it930x-firmware.bin`、2,169 バイト) | 挿すたびに流し込む (px4-userland の対応機種で共通) | PLEX 公式の Windows ドライバ (`pxw3u4_BDA_ver1x64.zip` の `PXW3U4.sys`、著作権表示は Digital Warrior Corp.) から焼くときに切り出す (agent/Dockerfile) | **ライセンス無し** (再配布の許諾は誰も持っていない。権利者が動いていない実態に乗る判断。[agent.md](agent.md#px-q3u4-などは-px4-userland-でカーネルドライバは入れてもらわない)) |
-| siano-userland 0.1.7 (`/opt/siano-userland`) | PLEX PX-S1UD など Siano RIO 系のユーザー空間ドライバ。`siano-ts` | <https://github.com/Khronos31/siano-userland> | **GPL-2.0-or-later** (実行ファイルに静的リンクの libusb 1.0.30 は LGPL-2.1+。配布物の `COPYING`・`libusb/COPYING`・`DEPENDENCY-NOTICE.txt` を同梱のまま置いてある) |
+| siano-userland 0.1.8 (`/opt/siano-userland`) | PLEX PX-S1UD など Siano RIO 系のユーザー空間ドライバ。`siano-ts` | <https://github.com/Khronos31/siano-userland> | **GPL-2.0-or-later** (実行ファイルに静的リンクの libusb 1.0.30 は LGPL-2.1+。配布物の `COPYING`・`libusb/COPYING`・`DEPENDENCY-NOTICE.txt` を同梱のまま置いてある) |
 | Siano ISDB-T ファームウェア (`/opt/siano-userland/firmware/isdbt_rio.inp`、85,840 バイト) | siano-ts が USB で流し込む | siano-userland の配布アーカイブに入っているもの (Siano Mobile Silicon) | **Siano の再配布許諾** (無改変なら再配布可。解析は禁止。許諾の文面 `LICENCE.siano` を同じ場所に置いてある) |
 | procps / curl / zlib / ca-certificates / tzdata | 道具 | Debian | GPL-2.0+ / curl / zlib / MPL-2.0 / PD |
 
