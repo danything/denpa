@@ -249,6 +249,11 @@ async function collectChannel(channel: AgentChannel): Promise<number> {
      * 揃わなかったのか電波が欠けていたのかは記録が無くて追えなかった。
      */
     if (opened) {
+        /*
+         * **1件も取れなくても「行った」と覚える。** 番組の行から数え直すだけだった頃は、
+         * EIT が来ない局の `last` が永久に 0 のままで、周回のたびに選ばれ続けていた
+         */
+        collected.set(label, Date.now());
         const secs = Math.round((Date.now() - startedAt) / 1000);
         if (reader.complete) {
             console.log(`[epg] ${label}: 揃ったので ${secs}秒で離しました`);
@@ -261,22 +266,12 @@ async function collectChannel(channel: AgentChannel): Promise<number> {
         }
     }
 
-    /*
-     * **1件も取れなくても「行った」と覚える。** 番組の行から数え直すだけだった頃は、
-     * EIT が来ない局の `last` が永久に 0 のままで、周回のたびに選ばれ続けていた
-     */
-    if (opened) collected.set(label, Date.now());
     const events = reader.all();
     if (events.length === 0) return 0;
     return savePrograms(events);
 }
 
-/**
- * 1周する。
- *
- * 並列数は**その種別のチューナーの本数**。エージェントが取り合いを裁くので
- * 多めに投げても壊れはしないが、録画のために空けておきたいので数は守る。
- */
+/** 走っている周回。重なった呼び出しはこれに相乗りする */
 let inflight: Promise<number> | null = null;
 
 /** 人が押して待っている間だけ立つ。開くたびに読むので、走っている回にも効く */
@@ -299,12 +294,10 @@ export function collectOnce(): Promise<number> {
  *
  * 入れたばかりのときのためのもの。普段の周回 (`collectOnce`) は録画にも
  * スキャンにもロゴにも譲るので、他が動いていると番組表がなかなか埋まらない。
- * 押されている間は**録画以外を全部蹴って**掴みに行く。
+ * 押されている間は**録画とライブ以外を全部蹴って**掴みに行く (`config.priority.epgNow`)。
  *
  * **既に回っている最中なら、その回を強くする。** 開くのは1チャンネルずつなので、
  * 次に開くところから効く (待たせて仕切り直すより早い)。
- *
- * 局の一覧も先に取り込む。スキャンの直後は、局が入る前にここへ来ることがある。
  */
 export function collectNow(): Promise<number> {
     boosted = true;
@@ -321,11 +314,7 @@ async function run(): Promise<number> {
     // 局の一覧はここでも取り込んでおく。スキャンの直後に呼ばれることがある
     syncServices(all);
 
-    /*
-     * **同じ TS を指す枠は1回だけ開く。** スキャンでも落としているが、控えを
-     * 書いたのが古いスキャンだと写しが残る。実機の BS はこれで 35 枠のうち
-     * 9 枠が写しのままで、**衛星の1周が 35 回**になっていた (実体は 26 TS)
-     */
+    // **同じ TS を指す枠は1回だけ開く** (`tuner.withoutTwins`。実機の BS は 35 枠で実体 26 TS)
     const channels = withoutTwins(all);
 
     const reach = coverage();

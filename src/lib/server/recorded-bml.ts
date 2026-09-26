@@ -7,7 +7,7 @@
  *
  * ここは**ファイルの出し入れだけ**。エンコードのついでに元TSをもう一度解いて
  * (`saveRecordedBml`)、再生時に読む (`loadRecordedBml`)。中身は1行1メッセージの
- * JSONL で、字幕やサムネイルと同じ**録画の隣**に置く (`metadata.sidecarPaths`)。
+ * JSONL で、サムネイルと同じ**録画の隣**に置く (`metadata.sidecarPaths`)。
  *
  * **録画のTSは1局に絞ってある** (実機の録画で PAT のプログラムは1つ) ので、
  * ライブのような `ServiceFilter` は要らない — [ts/bml.ts](../ts/bml.ts) の
