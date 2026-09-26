@@ -3,8 +3,16 @@
 **ホストに bun は入れません。全部コンテナの中で動かします。**
 実チューナーも B-CASカードも ffmpeg も要りません。
 
+**入口は [genkan](https://github.com/danything/genkan)** (ホスト名でコンテナに振り分ける
+リバースプロキシ)。ポートを公開しないので、他のプロジェクトとぶつかりません。
+先に1回だけ起こしておきます。
+
 ```sh
-docker compose up                           # 開発サーバ(:5173) + 偽エージェント(:25252)
+curl -sf https://raw.githubusercontent.com/danything/genkan/main/init.sh | sh -s
+```
+
+```sh
+docker compose up                           # 開発サーバ (http://denpa.localhost) + 偽エージェント (http://denpa-agent.localhost)
 docker compose run --rm unit                # 単体テスト
 docker compose run --rm e2e                 # E2E (Playwright)
 docker compose run --rm unit bun run lint   # リント + フォーマット確認
@@ -14,6 +22,9 @@ docker compose run --rm unit bun run check  # 型 (svelte-check)
 
 依存を足したら `docker compose run --rm unit bun install` を一度回してください
 (`node_modules` は名前付きボリュームなので、イメージの焼き直しは要りません)。
+
+**手元だけの上書きは `compose.override.yml` に** (Compose が自動で読む。コミットしない)。
+`.env` は使いません。
 
 ## README の絵
 
