@@ -28,6 +28,9 @@
         <Compile Include="../Denpa.Agent/Card.cs" />
         <Compile Include="../Denpa.Agent/AribB25.cs" />
         <Compile Include="../Denpa.Agent/CardShare.cs" />
+        <Compile Include="../Denpa.Agent/Cas.cs" />
+        <Compile Include="../Denpa.Agent/BCas.cs" />
+        <Compile Include="../Denpa.Agent/Px4Card.cs" />
     </ItemGroup>
 
     <ItemGroup>
