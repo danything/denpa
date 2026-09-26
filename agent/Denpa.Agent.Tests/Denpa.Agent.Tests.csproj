@@ -36,6 +36,7 @@
         <Compile Include="../Denpa.Agent/T1.cs" />
         <Compile Include="../Denpa.Agent/Ccid.cs" />
         <Compile Include="../Denpa.Agent/Multi2.cs" />
+        <Compile Include="../Denpa.Agent/B25.cs" />
     </ItemGroup>
 
     <ItemGroup>
