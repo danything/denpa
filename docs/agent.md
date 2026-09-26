@@ -696,8 +696,8 @@ compose.prod.yml から tuner-agent を外したもの)。
    (`~/Library/LaunchAgents/io.github.danything.denpa-agent.plist`) に載せます。
    ログインしたら起き、落ちたら起き直し、止めるときは録画が終わるまで待ちます
    (launchd に殺されないよう、待ちの上限を 6 時間より長くしてある)
-2. **denpa 本体** — エージェントと**同じ版**の compose.yml を取ってきて `docker compose up -d`。
-   `http://localhost:3000` が答えたらブラウザで開きます (`--no-open` で開かない)
+2. **denpa 本体** — エージェントと**同じ版**の compose.mac.yml を `~/denpa/compose.yml` として置いて
+   `docker compose up -d`。`http://localhost:3000` が答えたらブラウザで開きます (`--no-open` で開かない)
 
 - **要るのは Homebrew の libusb と Docker。** libusb は px4-userland と siano-userland の Mac 版が
   繋がっているもので、Homebrew があれば `brew install libusb` まで済ませます (無ければ入れ方を
@@ -707,14 +707,16 @@ compose.prod.yml から tuner-agent を外したもの)。
 
 | 置き場 | 中身 |
 | --- | --- |
-| `~/Library/Application Support/denpa-agent/` | エージェント・px4-userland・siano-userland・設定 (`tuners.json` / `channels.json`)・`compose.yml` と `.env` |
+| `~/denpa/` (`DENPA_HOME`) | **Linux と同じ置き場。** `compose.yml` (上げ直すたびに上書き)・`compose.override.yml` (手を入れるならここ。無いときだけ雛形を作り、あれば触らない)・`config/` (エージェントの `tuners.json` / `channels.json`) |
+| `~/Library/Application Support/denpa-agent/` | エージェント・px4-userland・siano-userland (プログラムだけ) |
 | `~/Movies/denpa/recorded` | 生TS。**エージェントとコンテナの両方に見せる** (掛かったまま録れたものを後から解くとき、denpa は置き場からの相対パスで頼み、エージェントが直に読み書きする) |
 | `~/Movies/denpa/library` | 出来上がった録画 (Finder から見える) |
 | Docker のボリューム `denpa_denpa-data` | DB。SQLite の錠は Mac から見せたフォルダ越しだと当てにならないので、名前付きボリュームに |
 | `~/Library/Logs/denpa-agent.log` | エージェントのログ |
 
 - もう一度流せば上げ直し (エージェントも denpa のイメージも最新のリリースへ)。
-  消すときは `… | bash -s -- --uninstall` (denpa も畳む。録画と DB は残し、消し方を言う)
+  消すときは `… | bash -s -- --uninstall`。外すのはエージェント・LaunchAgent・キャッシュと、
+  コンテナを畳むところまで。`~/denpa` (compose と設定)・録画・DB は残し、消し方を言います (Linux と同じ)
 - denpa 本体は別の Linux で動かし、Mac にはエージェントだけ置くなら `… | bash -s -- --no-docker`。
   denpa の `TUNER_AGENT_URL` に `http://<Mac の名前>.local:25252` を書きます
   ([別の所に置く](#エージェントは別イメージ別プロセス)のと同じ形)
@@ -723,7 +725,7 @@ compose.prod.yml から tuner-agent を外したもの)。
   これで通ります
 
 LaunchAgent に書く環境変数は、コンテナで既定にしている置き場を Mac の置き場に向け直すものだけです
-(`AGENT_PORT` `TUNERS_FILE` `CHANNELS_FILE` `PX4_USERLAND_DIR` `PX4_FIRMWARE` `PX4_RUNTIME_DIR`
+(`AGENT_PORT` (25252 のまま) `TUNERS_FILE` `CHANNELS_FILE` `PX4_USERLAND_DIR` `PX4_FIRMWARE` `PX4_RUNTIME_DIR`
 `SIANO_USERLAND_DIR` `SIANO_FIRMWARE` `RECORDED_DIR`)。`PX4_RUNTIME_DIR` を
 `~/Library/Caches/denpa-agent` と短い所にしているのは、px4d の制御ソケットのパスが macOS では
 104 バイトまでしか通らないからです。IT930x のファームウェアはコンテナと同じく PLEX のドライバから
@@ -740,7 +742,7 @@ LaunchAgent に書く環境変数は、コンテナで既定にしている置�
 - **Apple Silicon だけ** (Intel Mac 用の px4-userland / siano-userland が無い)。
   **Mac の実機でチューナーとカードを繋いで確かめたことはまだありません。** CI で焼いて起こし、
   エージェントの入れ方を最後まで流すところまで (`.github/workflows/test.yml` の `agent-macos`。
-  Mac のランナーには Docker が無いので、compose は Linux のジョブで書き方だけ見る)
+  Mac のランナーには Docker が無いので、compose.mac.yml は Linux のジョブ (`install-linux`) で書き方だけ見る)
 
 ## B-CASカードとデスクランブル
 

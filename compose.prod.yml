@@ -5,8 +5,6 @@
 #
 # イメージは公開してあるので、リポジトリを持ってこなくてもこのファイルだけで動きます。
 # 自分で焼くなら image: を消して build: を書いてください。
-# イメージの札は既定で latest。版で固定するなら同じ場所の .env に DENPA_TAG=1.2.3 と書く
-# (install.sh はそうしている。compose ファイルも同じ版のものを取ってくる)。
 #
 # 手元に合わせるところは2つ。
 #   1. 下の devices  … チューナーとカードリーダーのデバイス
@@ -18,7 +16,7 @@ services:
     # 選局・チャンネルスキャン・B-CASカード・スクランブル解除を持ち、
     # 素のTSを denpa へ流します (番組表を読むのは denpa の仕事)
     tuner-agent:
-        image: ghcr.io/danything/denpa-agent:${DENPA_TAG:-latest}
+        image: ghcr.io/danything/denpa-agent:latest
         restart: unless-stopped
         # denpa と同じ (下の説明)。TS を流しているのはこちらなので、先に消えると録画ごと切れる
         stop_grace_period: 6h5m
@@ -41,7 +39,7 @@ services:
             - '25252:25252'
 
     denpa:
-        image: ghcr.io/danything/denpa:${DENPA_TAG:-latest}
+        image: ghcr.io/danything/denpa:latest
         restart: unless-stopped
         # 録画中に止めようとしたら、終わるまで居座ってから止まる (SHUTDOWN_WAIT)。
         # ここを伸ばしておかないと、待っている途中で殺されて意味が無くなる。

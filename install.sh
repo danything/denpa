@@ -4,7 +4,7 @@
 #
 #   curl -fsSL https://raw.githubusercontent.com/danything/denpa/main/install.sh | bash
 #   … | bash -s -- --no-open      ブラウザを開かない
-#   … | bash -s -- --uninstall    止めて外す (録画・DB・設定は残す)
+#   … | bash -s -- --uninstall    止めて外す (~/denpa の compose と設定、録画・DB は残す)
 #   … | bash -s -- --no-docker    Mac だけ: エージェントだけ (denpa 本体は別の Linux で動かす)
 #
 # **Linux** は全部 Docker Compose (compose.prod.yml をそのまま置く)。
@@ -14,17 +14,17 @@
 #
 # **Docker は勝手に入れない。** 無い・起きていない・触る権限が無いときは、入れ方を案内して止まる
 # (Mac はエージェントだけ入れてから)。もう一度流せば、そのまま上げ直しになる (pull して up -d)。
-# compose ファイルもイメージも**最新のリリースの版**に揃える。
+# compose ファイルもイメージも**最新のリリースの版**に揃える (取ってきた compose.yml の札を書き換える)。
 #
 # 置き場:
-#   Linux  ~/denpa (DENPA_HOME で変えられる)          compose.yml・.env・config/
-#   Mac    ~/Library/Application Support/denpa-agent/  エージェント・px4-userland・siano-userland・設定・compose.yml
-#          ~/Library/LaunchAgents/<LABEL>.plist        ログインしたら起こし、落ちたら起こし直す
-#          ~/Library/Logs/denpa-agent.log              エージェントのログ
-#          ~/Movies/denpa/{recorded,library}           生TS (エージェントとコンテナの両方が見る) と出来上がった録画
+#   Linux / Mac  ~/denpa (DENPA_HOME で変えられる)    compose.yml (上げ直すたびに上書き)・compose.override.yml
+#                                                     (手を入れるならここ。無いときだけ雛形を作り、あれば触らない)・config/
+#   Mac だけ     ~/Library/Application Support/denpa-agent/  エージェント・px4-userland・siano-userland
+#                ~/Library/LaunchAgents/<LABEL>.plist        ログインしたら起こし、落ちたら起こし直す
+#                ~/Library/Logs/denpa-agent.log              エージェントのログ
+#                ~/Movies/denpa/{recorded,library}           生TS (エージェントとコンテナの両方が見る) と出来上がった録画
 #
-# 環境変数: DENPA_VERSION (v1.2.3 のように。既定は最新のリリース。CI はコミットを渡す)、
-# DENPA_HOME (Linux の置き場)、AGENT_PORT (Mac のエージェント。25252)、
+# 環境変数: DENPA_VERSION (v1.2.3 のように。既定は最新のリリース。CI はコミットを渡す)、DENPA_HOME、
 # DENPA_AGENT_TARBALL (Mac: 手元で焼いたエージェントの tar.gz を絶対パスで。CI と開発用)
 #
 # macOS の bash は 3.2 なので、4 以降の書き方 (連想配列・mapfile など) は使わない。
@@ -46,6 +46,7 @@ IT930X_FIRMWARE_SHA256=5213a5a38872661277a2cc1b2dfdfe88faf06f41205f460f3b51857f0
 
 REPO=danything/denpa
 URL=http://localhost:3000
+DENPA_DIR="${DENPA_HOME:-$HOME/denpa}"
 
 open_browser=yes uninstall=no docker_mode=yes
 for arg in "$@"; do
@@ -86,6 +87,41 @@ docker_ready() {
   return 1
 }
 
+# ~/denpa で docker compose。-f を付けないので compose.yml と compose.override.yml を Compose が自分で重ねる
+compose() { (cd "$DENPA_DIR" && docker compose "$@"); }
+
+# 取ってきた compose ($1。compose.prod.yml か compose.mac.yml) を ~/denpa/compose.yml に置いて起こす。
+# **版は札で揃える** — 取ってきたものの latest をこの版に書き換える (.env は使わない)
+start_denpa() {
+  say "denpa $2 を $DENPA_DIR に置きます"
+  mkdir -p "$DENPA_DIR/config"
+  fetch "https://raw.githubusercontent.com/$REPO/$2/$1" "$DENPA_DIR/compose.yml.new"
+  sed "s#\(image: ghcr.io/danything/[a-z-]*\):latest#\1:$(image_tag "$2")#" "$DENPA_DIR/compose.yml.new" > "$DENPA_DIR/compose.yml"
+  rm -f "$DENPA_DIR/compose.yml.new"
+  if [ ! -f "$DENPA_DIR/compose.override.yml" ]; then
+    cat > "$DENPA_DIR/compose.override.yml" <<'EOF'
+# 手元で足したい・変えたいものはここに書く。compose.yml は install.sh が上げ直すたびに
+# 上書きするが、このファイルには触らない (Compose が compose.yml に重ねて読む)。
+# 書くときは下の `services: {}` を消して、たとえば:
+#
+#   services:
+#     denpa:
+#       environment:
+#         TRUSTED_NETWORKS: 192.168.1.0/24
+services: {}
+EOF
+  fi
+  compose pull
+  # 録画中に上げ直すと、録画が終わるまで待ってから入れ替わる (stop_grace_period)
+  compose up -d
+  wait_and_open "$3"
+}
+
+# 止める (コンテナを畳むだけ。~/denpa も録画もボリュームも残す)
+stop_denpa() {
+  if [ -f "$DENPA_DIR/compose.yml" ] && docker_ready "" ""; then compose down; fi
+}
+
 # 答えるまで待って、開けるなら開く。LAN から入るときの住所も出す
 wait_and_open() {
   say "denpa の応答を待ちます"
@@ -102,19 +138,17 @@ wait_and_open() {
     fi
     sleep 2
   done
-  die "denpa が答えません。docker compose -p denpa -f \"$2\" logs を見てください"
+  die "denpa が答えません。cd $DENPA_DIR && docker compose logs を見てください"
 }
 
 # ---------------------------------------------------------------------------
 # Linux: compose.prod.yml をそのまま置いて起こす
 # ---------------------------------------------------------------------------
 linux_main() {
-  home="${DENPA_HOME:-$HOME/denpa}"
-  compose="$home/compose.yml"
   if [ "$uninstall" = yes ]; then
-    [ -f "$compose" ] && docker_ready "" "" && docker compose -p denpa -f "$compose" down
+    stop_denpa
     say "止めました。残してあるもの (要らなければ手で消してください):"
-    say "  設定 $home / 録画と DB は docker volume rm denpa_denpa-data denpa_denpa-recorded denpa_denpa-library"
+    say "  compose と設定 $DENPA_DIR / 録画と DB は docker volume rm denpa_denpa-data denpa_denpa-recorded denpa_denpa-library"
     return 0
   fi
 
@@ -122,16 +156,8 @@ linux_main() {
   docker_ready "https://get.docker.com の手順で入れてから、もう一度流してください" \
     "sudo systemctl start docker で起こしてから、もう一度流してください" || exit 1
 
-  ref=$(version)
-  say "denpa $ref を $home に置きます"
-  mkdir -p "$home/config"
-  fetch "https://raw.githubusercontent.com/$REPO/$ref/compose.prod.yml" "$compose"
-  echo "DENPA_TAG=$(image_tag "$ref")" > "$home/.env"
-  docker compose -p denpa -f "$compose" pull
-  # 録画中に上げ直すと、denpa もエージェントも録画が終わるまで待ってから入れ替わる (stop_grace_period)
-  docker compose -p denpa -f "$compose" up -d
   ip=$(hostname -I 2>/dev/null | awk '{print $1}' || true)
-  wait_and_open "${ip:-$(hostname)}" "$compose"
+  start_denpa compose.prod.yml "$(version)" "${ip:-$(hostname)}"
 }
 
 # ---------------------------------------------------------------------------
@@ -144,7 +170,8 @@ PREFIX="$HOME/Library/Application Support/denpa-agent"
 RUNTIME="$HOME/Library/Caches/denpa-agent"
 PLIST="$HOME/Library/LaunchAgents/$LABEL.plist"
 LOG="$HOME/Library/Logs/denpa-agent.log"
-PORT="${AGENT_PORT:-25252}"
+# compose.mac.yml の TUNER_AGENT_URL と揃える
+PORT=25252
 LIBUSB=/opt/homebrew/opt/libusb/lib/libusb-1.0.0.dylib
 # 生TSはエージェント (後から解く) とコンテナ (録る) の両方が読み書きするので、Mac のフォルダに置く
 MEDIA="$HOME/Movies/denpa"
@@ -169,15 +196,14 @@ check_listed() {
 }
 
 mac_main() {
-  compose="$PREFIX/compose.yml"
   if [ "$uninstall" = yes ]; then
-    # compose.yml は PREFIX の中なので、消す前に畳む。**録画中なら終わるまで待つ** (stop_grace_period)
-    if [ -f "$compose" ] && docker_ready "" ""; then docker compose -p denpa -f "$compose" down; fi
+    # **録画中なら終わるまで待つ** (コンテナは stop_grace_period、エージェントは ExitTimeOut)
+    stop_denpa
     mac_stop
     rm -f "$PLIST"
     rm -rf "$PREFIX" "$RUNTIME"
     say "外しました。残してあるもの (要らなければ手で消してください):"
-    say "  録画 $MEDIA / ログ $LOG / DB は docker volume rm denpa_denpa-data"
+    say "  compose と設定 $DENPA_DIR / 録画 $MEDIA / ログ $LOG / DB は docker volume rm denpa_denpa-data"
     return 0
   fi
 
@@ -242,7 +268,7 @@ mac_main() {
 
   # --- 入れ替える。**揃ってから止める** (取ってこられなかったら、動いているものに触らない) ---
   mac_stop
-  mkdir -p "$PREFIX/config" "$RUNTIME" "$MEDIA/recorded" "$MEDIA/library" "$(dirname "$PLIST")" "$(dirname "$LOG")"
+  mkdir -p "$PREFIX" "$DENPA_DIR/config" "$RUNTIME" "$MEDIA/recorded" "$MEDIA/library" "$(dirname "$PLIST")" "$(dirname "$LOG")"
   for part in bin px4-userland siano-userland; do
     rm -rf "${PREFIX:?}/$part"
     mv "new/$part" "$PREFIX/$part"
@@ -267,8 +293,8 @@ mac_main() {
   <key>EnvironmentVariables</key>
   <dict>
     <key>AGENT_PORT</key><string>$PORT</string>
-    <key>TUNERS_FILE</key><string>$PREFIX/config/tuners.json</string>
-    <key>CHANNELS_FILE</key><string>$PREFIX/config/channels.json</string>
+    <key>TUNERS_FILE</key><string>$DENPA_DIR/config/tuners.json</string>
+    <key>CHANNELS_FILE</key><string>$DENPA_DIR/config/channels.json</string>
     <key>PX4_USERLAND_DIR</key><string>$PREFIX/px4-userland</string>
     <key>PX4_FIRMWARE</key><string>$PREFIX/px4-userland/firmware/it930x-firmware.bin</string>
     <key>PX4_RUNTIME_DIR</key><string>$RUNTIME</string>
@@ -302,19 +328,8 @@ EOF
   docker_ready "$MAC_DOCKER" "Docker Desktop か OrbStack を起こしてから、もう一度流してください" \
     || { say "エージェントは入っています (http://$host:$PORT)"; return 0; }
 
-  # --- denpa 本体 (Docker) -------------------------------------------------
-  # compose もイメージもエージェントと同じ版に。手元の tar.gz を入れたときは main と latest
-  say "denpa を起こします (docker compose)"
-  fetch "https://raw.githubusercontent.com/$REPO/${ref:-main}/compose.mac.yml" "$compose"
-  cat > "$PREFIX/.env" <<EOF
-DENPA_TAG=$(image_tag "${ref:-main}")
-AGENT_PORT=$PORT
-DENPA_RECORDED=$MEDIA/recorded
-DENPA_LIBRARY=$MEDIA/library
-EOF
-  docker compose -p denpa -f "$compose" pull
-  docker compose -p denpa -f "$compose" up -d
-  wait_and_open "$host" "$compose"
+  # --- denpa 本体 (Docker)。エージェントと同じ版に。手元の tar.gz を入れたときは main と latest ---
+  start_denpa compose.mac.yml "${ref:-main}" "$host"
 }
 
 case "$(uname -s)" in

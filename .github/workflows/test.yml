@@ -128,7 +128,7 @@ jobs:
 
       # Mac で denpa 本体を起こす compose。Mac のランナーには Docker が無いので、書き方だけここで見る
       - name: Mac compose file is valid
-        run: DENPA_RECORDED=/tmp/recorded DENPA_LIBRARY=/tmp/library docker compose -f compose.mac.yml config -q
+        run: docker compose -f compose.mac.yml config -q
 
       - name: install.sh end to end
         env:
@@ -138,8 +138,15 @@ jobs:
           bash install.sh --no-open
           curl -fsS http://localhost:3000/api/health; echo
           curl -fsS http://localhost:25252/denpa/tuners; echo
+          # 上げ直し。手を入れた compose.override.yml には触らないこと
+          echo '# 手で足した行' >> ~/denpa/compose.override.yml
+          cp ~/denpa/compose.override.yml "$RUNNER_TEMP/override"
+          bash install.sh --no-open
+          cmp ~/denpa/compose.override.yml "$RUNNER_TEMP/override"
           bash install.sh --uninstall
           test -z "$(docker compose -p denpa ps -q)"
+          # 外しても compose と設定は残す
+          test -f ~/denpa/compose.yml
 
   # Mac (Apple Silicon) で動かすエージェント (docs/agent.md「Mac でチューナーを使う」)。
   #
@@ -203,12 +210,15 @@ jobs:
         run: |
           set -euo pipefail
           tar -czf "$RUNNER_TEMP/denpa-agent.tar.gz" -C out denpa-agent
-          DENPA_AGENT_TARBALL="$RUNNER_TEMP/denpa-agent.tar.gz" AGENT_PORT=25301 bash install.sh --no-docker
-          curl -fsS http://127.0.0.1:25301/denpa/card; echo
+          DENPA_AGENT_TARBALL="$RUNNER_TEMP/denpa-agent.tar.gz" bash install.sh --no-docker
+          curl -fsS http://127.0.0.1:25252/denpa/card; echo
           ls -l "$HOME/Library/Application Support/denpa-agent/px4-userland" "$HOME/Library/Application Support/denpa-agent/siano-userland"
           "$HOME/Library/Application Support/denpa-agent/px4-userland/px4d" --list || true
           bash install.sh --uninstall
           test ! -e "$HOME/Library/LaunchAgents/io.github.danything.denpa-agent.plist"
+          test ! -e "$HOME/Library/Application Support/denpa-agent"
+          # 設定の置き場 (~/denpa/config) は外しても残す
+          test -d "$HOME/denpa/config"
           cat "$HOME/Library/Logs/denpa-agent.log"
 
   # 予約から録画・エンコード・保存先への配置まで、偽の放送で通しで流す

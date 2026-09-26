@@ -111,8 +111,10 @@ curl -fsSL https://raw.githubusercontent.com/danything/denpa/main/install.sh | b
   ([docs/agent.md](docs/agent.md#mac-でチューナーを使う))
 - **Docker は入れません。** 無ければ入れ方を言って止まります (Linux は <https://get.docker.com>、
   Mac は Docker Desktop か OrbStack)
+- 置き場は `~/denpa` (`DENPA_HOME`)。`compose.yml` は上げ直すたびに上書きするので、
+  **手を入れたいときは同じ場所の `compose.override.yml` に**書きます (Compose が重ねて読み、install.sh は触らない)
 - もう一度流せば最新のリリースへ上げ直し。`… | bash -s -- --uninstall` で止めて外します
-  (録画・DB・設定は残す)。ブラウザを開かないなら `--no-open`
+  (`~/denpa`・録画・DB は残す)。ブラウザを開かないなら `--no-open`
 
 ### Docker Compose を手で置く
 
