@@ -50,6 +50,9 @@ public static class SianoUserland
     public static string Dir =>
         Environment.GetEnvironmentVariable("SIANO_USERLAND_DIR") ?? "/opt/siano-userland";
 
+    /// <summary>USB デバイスが並ぶ sysfs。カーネルが掴んでいるかをここで見る (<see cref="Driver"/>)</summary>
+    private const string Sysfs = "/sys/bus/usb/devices";
+
     /// <summary>ISDB-T のファームウェア。**同梱してある** (配布アーカイブに入っている。Dockerfile)</summary>
     public static string Firmware =>
         Environment.GetEnvironmentVariable("SIANO_FIRMWARE") ?? Path.Combine(Dir, "firmware", "isdbt_rio.inp");
@@ -94,7 +97,7 @@ public static class SianoUserland
     /// (Khronos31/siano-userland#9) 要らなくなる。
     /// </para>
     /// </summary>
-    public static List<Stick> Sticks(string sysfs = "/sys/bus/usb/devices")
+    public static List<Stick> Sticks()
     {
         var program = Path.Combine(Dir, "siano-ts");
         if (!File.Exists(program)) return [];
@@ -104,7 +107,7 @@ public static class SianoUserland
             Log.Write($"siano-userland の機材を挙げられません (siano-ts --list exit {code}: {output})");
             return [];
         }
-        return ParseList(output, port => Driver(sysfs, port), Log.Write);
+        return ParseList(output, port => Driver(Sysfs, port), Log.Write);
     }
 
     /// <summary>
@@ -159,7 +162,7 @@ public static class SianoUserland
             if (line.StartsWith("model=", StringComparison.Ordinal))
             {
                 Flush();
-                current = Fields(line);
+                current = Px4Userland.Fields(line);
             }
             else if (line.StartsWith("receiver=", StringComparison.Ordinal))
             {
@@ -168,20 +171,13 @@ public static class SianoUserland
             else if (line.StartsWith("rejected ", StringComparison.Ordinal))
             {
                 Flush();
-                var fields = Fields(line["rejected ".Length..]);
+                var fields = Px4Userland.Fields(line["rejected ".Length..]);
                 warn($"{fields.GetValueOrDefault("model")} ({fields.GetValueOrDefault("usb")}, port={fields.GetValueOrDefault("port")}) は使えません: {fields.GetValueOrDefault("status")}");
             }
         }
         Flush();
         return found;
     }
-
-    private static Dictionary<string, string> Fields(string line) => line
-        .Split(' ', StringSplitOptions.RemoveEmptyEntries)
-        .Select(field => field.Split('=', 2))
-        .Where(pair => pair.Length == 2)
-        .GroupBy(pair => pair[0], StringComparer.Ordinal)
-        .ToDictionary(group => group.Key, group => group.First()[1], StringComparer.Ordinal);
 
     /// <summary>どれかのインターフェースを掴んでいるドライバの名前。誰も掴んでいなければ null</summary>
     internal static string? Driver(string sysfs, string port)
@@ -206,7 +202,7 @@ public static class SianoUserland
     /// <c>/dev/dvb</c> に出ているので、DVB の側で見つかる (DeviceProbe)。
     /// </para>
     /// </summary>
-    public static List<TunerSpec> Detect(string sysfs = "/sys/bus/usb/devices") => Specs(Sticks(sysfs));
+    public static List<TunerSpec> Detect() => Specs(Sticks());
 
     /// <summary>機材の一覧から、設定の形に組み立てる (ドライバに繋がっているもの・受けられる方式が無いものは除く)</summary>
     public static List<TunerSpec> Specs(IEnumerable<Stick> sticks)
@@ -224,9 +220,9 @@ public static class SianoUserland
     /// 選局の直前に、そのポートの機材を確かめる。**どのドライバにも繋がっていなければ返す。**
     /// 抜けている・別の機材に挿し替わった・カーネルが掴んでいる、は理由を添えて投げる
     /// </summary>
-    public static Stick Claimable(string port, string sysfs = "/sys/bus/usb/devices") => Claimable(port, Sticks(sysfs));
+    public static Stick Claimable(string port) => Claimable(port, Sticks());
 
-    /// <summary><see cref="Claimable(string, string)"/> の中身。機材の一覧を渡す</summary>
+    /// <summary><see cref="Claimable(string)"/> の中身。機材の一覧を渡す</summary>
     public static Stick Claimable(string port, IEnumerable<Stick> sticks)
     {
         var stick = sticks.FirstOrDefault(s => s.Port == port)
@@ -275,9 +271,6 @@ public sealed class SianoTuner : ITuneDevice
     /// </summary>
     private static readonly TimeSpan TuneTimeout = TimeSpan.FromSeconds(15);
 
-    /// <summary>読み手が降りきるまでの猶予 (ChildTs と同じ理由。fd の番号の使い回し)</summary>
-    private static readonly TimeSpan ReaderDrain = TimeSpan.FromMilliseconds(300);
-
     private readonly string _name;
     private readonly Func<ProcessStartInfo> _start;
     private readonly TimeSpan _tuneTimeout;
@@ -285,22 +278,14 @@ public sealed class SianoTuner : ITuneDevice
     private Child? _child;
     private DeviceStream? _stream;
 
-    /// <summary>siano-ts 1つぶん。stderr の行は <see cref="Lines"/> に流す (選局の答えを待つため)</summary>
-    private sealed class Child(Process process)
+    /// <summary>siano-ts 1つぶん。stderr の行は <see cref="Lines"/> にも流す (選局の答えを待つため)</summary>
+    private sealed class Child(Process process) : TsChild("siano-ts", process)
     {
-        public Process Process { get; } = process;
-
         public System.Threading.Channels.Channel<string> Lines { get; } =
             System.Threading.Channels.Channel.CreateUnbounded<string>();
-
-        /// <summary>stderr の最後の行。終わった理由はここに出る</summary>
-        public volatile string Last = "";
-
-        /// <summary>こちらから止めたか。**自分で止めた終わりは失敗ではない**</summary>
-        public volatile bool Dropped;
     }
 
-    public SianoTuner(string port, string sysfs = "/sys/bus/usb/devices")
+    public SianoTuner(string port)
         : this($"siano {port}", () =>
         {
             var program = Path.Combine(SianoUserland.Dir, "siano-ts");
@@ -310,7 +295,7 @@ public sealed class SianoTuner : ITuneDevice
                 throw new IOException($"ファームウェアがありません: {SianoUserland.Firmware}");
             }
             // 起こす直前に確かめる (走っている間は自分が掴んでいる)
-            var stick = SianoUserland.Claimable(port, sysfs);
+            var stick = SianoUserland.Claimable(port);
             return StartInfo(stick.Node, SianoUserland.Dir, SianoUserland.Firmware);
         })
     {
@@ -402,7 +387,7 @@ public sealed class SianoTuner : ITuneDevice
             {
                 var trimmed = line.Trim();
                 if (trimmed.Length == 0) continue;
-                child.Last = trimmed;
+                child.Stderr = trimmed;
                 child.Lines.Writer.TryWrite(trimmed);
             }
             child.Lines.Writer.TryComplete();
@@ -411,12 +396,12 @@ public sealed class SianoTuner : ITuneDevice
         var handle = ChildTs.StdoutHandle(process);
         ChildTs.WidenPipe((int)handle.DangerousGetHandle(), _name);
         _child = child;
-        _stream = new DeviceStream(handle, () => EndReason(child));
+        _stream = new DeviceStream(handle, child.EndReason);
         _ = process.WaitForExitAsync().ContinueWith(_ =>
         {
             if (child.Dropped) return;
             // USB が抜けたのもここに来る。次の選局で起こし直す (Tuned が false になる)
-            Log.Write($"[{_name}] {Reason(process.ExitCode, child.Last)}");
+            Log.Write($"[{_name}] {child.Exited(process.ExitCode)}");
         }, TaskScheduler.Default);
     }
 
@@ -461,7 +446,7 @@ public sealed class SianoTuner : ITuneDevice
         {
             // 標準入力に書けない = 子が終わっている
             failure = child.Process.WaitForExit(TimeSpan.FromSeconds(2))
-                ? Reason(child.Process.ExitCode, child.Last)
+                ? child.Exited(child.Process.ExitCode)
                 : "siano-ts に選局を頼めません";
         }
         finally
@@ -518,25 +503,14 @@ public sealed class SianoTuner : ITuneDevice
         catch (System.Threading.Channels.ChannelClosedException)
         {
             child.Process.WaitForExit(TimeSpan.FromSeconds(2));
-            return (Reason(child.Process.HasExited ? child.Process.ExitCode : -1, child.Last), true);
+            return (child.Exited(child.Process.HasExited ? child.Process.ExitCode : -1), true);
         }
-    }
-
-    private static string Reason(int code, string stderr) =>
-        $"siano-ts が終了しました (exit {code}{(stderr.Length == 0 ? "" : $": {stderr}")})";
-
-    /// <summary>読み口が尽きたときの理由。EOF は子が終わったということ</summary>
-    private static string? EndReason(Child child)
-    {
-        if (child.Dropped) return null;
-        if (!child.Process.WaitForExit(TimeSpan.FromSeconds(2))) return "siano-ts が黙りました";
-        return Reason(child.Process.ExitCode, child.Last);
     }
 
     /// <summary>
     /// siano-ts を止める。<c>quit</c> を頼み、聞かなければ SIGTERM、それでも残れば SIGKILL。
     /// 書くところで止まっていると <c>quit</c> は読まれないので、待ちは短く。
-    /// 読み手が降りきってから fd を閉じる (<see cref="ReaderDrain"/>)
+    /// 読み手が降りきってから fd を閉じる (<see cref="ChildTs.ReaderDrain"/>)
     /// </summary>
     private void Drop()
     {
@@ -564,7 +538,7 @@ public sealed class SianoTuner : ITuneDevice
             Interop.Terminate(process.Id);
             if (!process.WaitForExit(TimeSpan.FromSeconds(2))) process.Kill();
         }
-        var rest = ReaderDrain - stopped.Elapsed;
+        var rest = ChildTs.ReaderDrain - stopped.Elapsed;
         if (stream is not null && rest > TimeSpan.Zero) Thread.Sleep(rest);
         stream?.Dispose();
         // 同期読みにした標準出力は Process.Dispose が閉じない (ChildTs.Drop と同じ)

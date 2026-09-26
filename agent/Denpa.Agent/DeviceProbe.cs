@@ -14,10 +14,6 @@ namespace Denpa.Agent;
 /// </para>
 ///
 /// <para>
-/// bun のままでは書けなかったところで、.NET にした利点がそのまま出ている。
-/// </para>
-///
-/// <para>
 /// 数と並びは実機 (PT3 / `earth_pt3` / Ubuntu 24.04) で測った値。
 /// </para>
 ///
@@ -44,21 +40,10 @@ public static partial class DeviceProbe
     private const int BufferLenAt = 48;
     private const int NameLength = 128;
 
-    private const int SysIsdbt = 8;
-    private const int SysIsdbs = 9;
     private const int SysIsdbc = 10;
-
-    private const int OReadOnly = 0;
-    private const int ONonBlock = 0x800;
-
-    [LibraryImport("libc", EntryPoint = "open", StringMarshalling = StringMarshalling.Utf8, SetLastError = true)]
-    private static partial int Open(string path, int flags);
 
     [LibraryImport("libc", EntryPoint = "close")]
     private static partial int Close(int fd);
-
-    [LibraryImport("libc", EntryPoint = "ioctl", SetLastError = true)]
-    private static partial int Ioctl(int fd, nuint request, nint argument);
 
     /// <summary>
     /// 受けられる方式から denpa の種別に直す。
@@ -73,8 +58,8 @@ public static partial class DeviceProbe
         var types = new List<string>();
         foreach (var system in delivery)
         {
-            if (system == SysIsdbt && !types.Contains("GR")) types.Add("GR");
-            if (system == SysIsdbs)
+            if (system == ChannelTable.SysIsdbt && !types.Contains("GR")) types.Add("GR");
+            if (system == ChannelTable.SysIsdbs)
             {
                 if (!types.Contains("BS")) types.Add("BS");
                 if (!types.Contains("CS")) types.Add("CS");
@@ -117,7 +102,7 @@ public static partial class DeviceProbe
 
     private static string[] Ask(string device)
     {
-        var fd = Open(device, OReadOnly | ONonBlock);
+        var fd = Sys.Open(device, Sys.ReadOnly | Sys.NonBlocking);
         if (fd < 0) return [];
         try
         {
@@ -133,7 +118,7 @@ public static partial class DeviceProbe
                 var headerHandle = GCHandle.Alloc(header, GCHandleType.Pinned);
                 try
                 {
-                    if (Ioctl(fd, FeGetProperty, headerHandle.AddrOfPinnedObject()) >= 0)
+                    if (Sys.Ioctl(fd, FeGetProperty, headerHandle.AddrOfPinnedObject()) >= 0)
                     {
                         var types = TypesFor(ParseDelivery(property));
                         if (types.Length > 0) return types;
@@ -154,7 +139,7 @@ public static partial class DeviceProbe
             var infoHandle = GCHandle.Alloc(info, GCHandleType.Pinned);
             try
             {
-                if (Ioctl(fd, FeGetInfo, infoHandle.AddrOfPinnedObject()) < 0) return [];
+                if (Sys.Ioctl(fd, FeGetInfo, infoHandle.AddrOfPinnedObject()) < 0) return [];
                 return TypesFromName(ParseName(info));
             }
             finally

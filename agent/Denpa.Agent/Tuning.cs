@@ -8,24 +8,23 @@ namespace Denpa.Agent;
 /// デバイスを**掴んだまま**選局する。
 ///
 /// <para>
-/// これまでは選局のたびに <c>recisdb</c> を起こしていた。1回1チャンネルの
-/// 使い捨てで、チャンネルを変えるにはプロセスごと立て直すしかない。その間
-/// デバイスが宙に浮き、掴み直す隙間ができる (docs/agent.md)。
+/// 選局のたびに外のコマンド (<c>recisdb</c>) を起こしていた頃は、チャンネルを
+/// 変えるたびにデバイスが宙に浮き、掴み直す隙間ができた (docs/agent.md)。
 /// </para>
 ///
 /// <para>
-/// 口は2つある。どちらも「開く → 選局 → 流し始める → 読む → 選局し直す」で、
+/// 口は3つある。どれも「開く → 選局 → 流し始める → 読む → 選局し直す」で、
 /// 違うのは誰がデバイスを持っているか。
 /// </para>
 ///
 /// <list type="bullet">
 /// <item><see cref="DvbTuner"/> … 標準の Linux DVB v5。PT2/PT3、PX-S1UD、PX-BCUD。カーネルが持つ</item>
 /// <item><see cref="Px4Tuner"/> … px4-userland の機材 (PX-Q3U4 など)。<c>px4d</c> が持ち、選局ごとに <c>px4-ts</c> を起こす (Px4.cs)</item>
-/// <item><see cref="SianoTuner"/> … siano-userland の機材 (PX-S1UD などをカーネルに掴ませていないとき)。選局ごとに <c>siano-ts</c> を起こす (Siano.cs)</item>
+/// <item><see cref="SianoTuner"/> … siano-userland の機材 (PX-S1UD などをカーネルに掴ませていないとき)。<c>siano-ts</c> を起こしたまま標準入力で選局し直す (Siano.cs)</item>
 /// </list>
 ///
 /// <para>
-/// <c>px4_drv</c> の chardev (<c>/dev/px4video*</c>) は**外した**。ホストに DKMS で
+/// <c>px4_drv</c> の chardev (<c>/dev/px4video*</c>) は受け取らない。ホストに DKMS で
 /// カーネルモジュールを入れてもらう前提そのものをやめたので (Px4.cs)。
 /// </para>
 /// </summary>
@@ -64,9 +63,6 @@ internal static unsafe partial class Sys
 
     [LibraryImport("libc", EntryPoint = "ioctl", SetLastError = true)]
     public static partial int Ioctl(int fd, nuint request, nint argument);
-
-    [LibraryImport("libc", EntryPoint = "ioctl", SetLastError = true)]
-    public static partial int IoctlValue(int fd, nuint request, nint value);
 
     [LibraryImport("libc", EntryPoint = "read", SetLastError = true)]
     public static partial nint ReadFd(int fd, byte* buffer, nuint count);

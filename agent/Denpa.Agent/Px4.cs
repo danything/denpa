@@ -177,7 +177,11 @@ public static class Px4Userland
         return found;
     }
 
-    private static Dictionary<string, string> Fields(string line) => line
+    /// <summary>
+    /// <c>key=value</c> を空白で並べた1行を割る。同じ鍵が2度あれば最初のもの。
+    /// <c>siano-ts --list</c> も同じ形なので Siano.cs からも使う
+    /// </summary>
+    internal static Dictionary<string, string> Fields(string line) => line
         .Split(' ', StringSplitOptions.RemoveEmptyEntries)
         .Select(field => field.Split('=', 2))
         .Where(pair => pair.Length == 2)
@@ -218,8 +222,8 @@ public static class Px4Userland
     /// **pcscd を起こす前に呼ぶ。** 新しく増えたか中身が変わったら true。
     ///
     /// <para>
-    /// Debian の pcscd (libudev 版) は reader.conf を**起動したときにしか読まない**
-    /// (<c>pcscd --hotplug</c> は何もしない)。なので先に書いてから起こす。
+    /// Debian の pcscd (libudev 版) は reader.conf を**起動したときにしか読まない**。
+    /// なので先に書いてから起こす。
     /// 書くのに要るのは筐体の番号だけで、px4d を待たなくてよい — IFD は px4d が
     /// 居なくても登録され、居ない間は「カードなし」と答えて、px4d が来たら
     /// 自分で繋ぐ (px4-userland 0.1.6)。px4d を起こし直したときも同じで、
@@ -562,7 +566,7 @@ public sealed class Px4Daemon
 /// </para>
 ///
 /// <para>
-/// 子を起こして標準出力を読むところは siano-ts と同じなので ChildTs.cs にある。
+/// 子を起こして標準出力を読むところは ChildTs.cs にある。
 /// </para>
 ///
 /// <para>

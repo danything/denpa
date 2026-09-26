@@ -6,13 +6,6 @@ namespace Denpa.Agent;
 /// 選局表。**チャンネル名を周波数に直す。**
 ///
 /// <para>
-/// いままでこれを持っていたのは <c>recisdb</c> のほうで、こちらは
-/// <c>--channel T27</c> と渡すだけだった。掴んだまま選局するには自分で
-/// ioctl を叩くことになるので、名前から周波数への対応もこちらに要る
-/// (docs/agent.md)。
-/// </para>
-///
-/// <para>
 /// 値は <a href="https://github.com/kazuki0824/recisdb-rs">recisdb-rs</a> の
 /// <c>channels.rs</c> から取った。**いま実機で選局できているものと同じ数字**に
 /// することがいちばん大事で、自分で導き直す理由が無い。

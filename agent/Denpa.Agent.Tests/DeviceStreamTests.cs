@@ -2,7 +2,6 @@ using System.Diagnostics;
 using System.Runtime.InteropServices;
 using Denpa.Agent;
 using Microsoft.Win32.SafeHandles;
-using System.Threading.Tasks;
 
 namespace Denpa.Agent.Tests;
 
