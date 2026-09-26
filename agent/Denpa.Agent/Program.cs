@@ -19,6 +19,12 @@ using Microsoft.AspNetCore.Http.Features;
  * チャンネルスキャンで見つかった局を判断するのもあちらの仕事 (docs/agent.md)。
  */
 
+/*
+ * **Windows は出力を UTF-8 に。** 既定はコンソールの文字コード (英語版なら 437) で、ログの日本語が
+ * `?` になる (install.ps1 はログをファイルへ足していく)
+ */
+if (OperatingSystem.IsWindows()) Console.OutputEncoding = Encoding.UTF8;
+
 // 実機で選局と復号だけ試す口。サーバは立てない (Probe.cs)
 if (args.ElementAtOrDefault(0) == "--tune") return Probe.Run(args);
 if (args.ElementAtOrDefault(0) == "--decode-file") return Probe.Decode(args);

@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using Denpa.Agent;
+using TUnit.Core.Enums;
 
 namespace Denpa.Agent.Tests;
 
@@ -13,6 +14,8 @@ namespace Denpa.Agent.Tests;
 public class ChildTsTests
 {
     [Test]
+    // Windows は fd を掴まず、.NET の Stream のまま読む (ChildTs.Stdout)
+    [ExcludeOn(OS.Windows)]
     public async Task Unixの標準出力でもfdを掴める()
     {
         using var process = Process.Start(new ProcessStartInfo("/bin/sleep")

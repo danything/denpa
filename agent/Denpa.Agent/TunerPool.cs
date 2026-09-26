@@ -283,6 +283,14 @@ public sealed class TunerPool(
     /// </summary>
     public static ITuneDevice OpenDevice(string path, string? lnb)
     {
+        /*
+         * **Windows は siano-userland の機材だけ。** DVB は無く、px4-userland は Windows を出していない。
+         * 書いてあっても開かない (開けば libc を呼びにいって落ちる)
+         */
+        if (OperatingSystem.IsWindows() && !SianoUserland.Is(path))
+        {
+            throw new IOException($"{path} は Windows では使えません (Windows で使えるのは {SianoUserland.Scheme}<USB のポート> だけ)");
+        }
         if (Px4Userland.Parse(path) is { } px4) return new Px4Tuner(px4.Id, px4.Receiver, lnb);
         if (SianoUserland.Parse(path) is { } port) return new SianoTuner(port);
         if (path.Contains("/dvb/", StringComparison.Ordinal)) return new DvbTuner(path, lnb);

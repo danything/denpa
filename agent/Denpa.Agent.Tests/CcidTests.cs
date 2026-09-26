@@ -1,5 +1,6 @@
 using System.Buffers.Binary;
 using Denpa.Agent;
+using TUnit.Core.Enums;
 
 namespace Denpa.Agent.Tests;
 
@@ -277,6 +278,8 @@ public class CcidTests
     }
 
     [Test]
+    // Linux の置き場の形 (sysfs の名前の「:」、/dev のパス) を見るもの。Windows では作れない
+    [ExcludeOn(OS.Windows)]
     public async Task sysfs_から_CCID_のインターフェースだけ拾う()
     {
         var root = Path.Combine(Path.GetTempPath(), $"denpa-ccid-{Guid.NewGuid():N}");

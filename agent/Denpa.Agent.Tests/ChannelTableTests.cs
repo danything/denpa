@@ -1,4 +1,5 @@
 using Denpa.Agent;
+using TUnit.Core.Enums;
 
 namespace Denpa.Agent.Tests;
 
@@ -133,6 +134,8 @@ public class StreamIdTests
 public class DvbDeviceTests
 {
     [Test]
+    // Linux の置き場の形 (sysfs の名前の「:」、/dev のパス) を見るもの。Windows では作れない
+    [ExcludeOn(OS.Windows)]
     public async Task frontend_から_demux_と_dvr_を組み立てる()
     {
         var (adapter, number) = DvbTuner.Split("/dev/dvb/adapter1/frontend0");

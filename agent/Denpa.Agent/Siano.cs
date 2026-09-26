@@ -45,6 +45,10 @@ public static class SianoUserland
     public static string Dir =>
         Environment.GetEnvironmentVariable("SIANO_USERLAND_DIR") ?? "/opt/siano-userland";
 
+    /// <summary>siano-ts の実行ファイル。Windows だけ <c>.exe</c> が付く (配布 zip の中身のまま)</summary>
+    public static string Executable(string dir) =>
+        Path.Combine(dir, OperatingSystem.IsWindows() ? "siano-ts.exe" : "siano-ts");
+
     /// <summary>USB デバイスが並ぶ sysfs。カーネルが掴んでいるかをここで見る (<see cref="Driver"/>)</summary>
     private const string Sysfs = "/sys/bus/usb/devices";
 
@@ -93,7 +97,7 @@ public static class SianoUserland
     /// </summary>
     public static List<Stick> Sticks()
     {
-        var program = Path.Combine(Dir, "siano-ts");
+        var program = Executable(Dir);
         if (!File.Exists(program)) return [];
         var (code, output) = Shell.Run(program, ["--list"], TimeSpan.FromSeconds(15)).GetAwaiter().GetResult();
         if (code != 0)
@@ -211,6 +215,9 @@ public static class SianoUserland
     /// </summary>
     public static string Hint(int code) => code switch
     {
+        // Windows は libusb が WinUSB 越しにしか開けない。ドライバが違えば開くところで落ちる
+        1 or 4 when OperatingSystem.IsWindows() =>
+            " — チューナーのドライバが WinUSB になっていないか、別のプロセスが掴んでいます (Zadig で WinUSB に。docs/agent.md)",
         3 => " — そのポートに Siano の機材が見当たりません (抜けたか、挿し替えた?)",
         4 => " — カーネルのドライバ (smsusb) か別のプロセスが掴んでいます。/dev/dvb に出ていればそちらで使えます。"
             + "siano-userland で使うなら smsusb / smsdvb / smsmdtv を blacklist して再起動してください",
@@ -256,6 +263,7 @@ public sealed class SianoTuner : ITuneDevice
     private readonly string _name;
     private readonly Func<ProcessStartInfo> _start;
     private readonly TimeSpan _tuneTimeout;
+    private readonly bool _keepFed;
     private readonly Lock _gate = new();
     private Child? _child;
     private DeviceStream? _stream;
@@ -265,12 +273,21 @@ public sealed class SianoTuner : ITuneDevice
     {
         public System.Threading.Channels.Channel<string> Lines { get; } =
             System.Threading.Channels.Channel.CreateUnbounded<string>();
+
+        /// <summary>標準入力へ書く行。**書くのは <see cref="Feed"/> の1本だけ**</summary>
+        public System.Threading.Channels.Channel<string> Commands { get; } =
+            System.Threading.Channels.Channel.CreateUnbounded<string>();
+
+        public Task Feeding { get; set; } = Task.CompletedTask;
     }
+
+    /// <summary>空行の詰め物 (<see cref="Feed"/>)。siano-ts が1周で読むのは 256 バイトまで</summary>
+    private static readonly string Blank = new('\n', 256);
 
     public SianoTuner(string port)
         : this($"siano {port}", () =>
         {
-            var program = Path.Combine(SianoUserland.Dir, "siano-ts");
+            var program = SianoUserland.Executable(SianoUserland.Dir);
             if (!File.Exists(program)) throw new IOException($"siano-userland が入っていません: {program}");
             if (!File.Exists(SianoUserland.Firmware))
             {
@@ -283,11 +300,12 @@ public sealed class SianoTuner : ITuneDevice
     }
 
     /// <summary>起こし方と待ちの上限を差し替える (テスト。偽の siano-ts を起こす)</summary>
-    internal SianoTuner(string name, Func<ProcessStartInfo> start, TimeSpan? tuneTimeout = null)
+    internal SianoTuner(string name, Func<ProcessStartInfo> start, TimeSpan? tuneTimeout = null, bool? keepFed = null)
     {
         _name = name;
         _start = start;
         _tuneTimeout = tuneTimeout ?? TuneTimeout;
+        _keepFed = keepFed ?? OperatingSystem.IsWindows();
     }
 
     public Stream Output => _stream ?? throw new InvalidOperationException($"{_name} はまだ選局していません");
@@ -314,7 +332,7 @@ public sealed class SianoTuner : ITuneDevice
     /// </summary>
     public static ProcessStartInfo StartInfo(string port, string dir, string firmware)
     {
-        var start = new ProcessStartInfo(Path.Combine(dir, "siano-ts"));
+        var start = new ProcessStartInfo(SianoUserland.Executable(dir));
         foreach (var arg in new[] { "--device", port, "--control", "--firmware", firmware })
         {
             start.ArgumentList.Add(arg);
@@ -366,16 +384,53 @@ public sealed class SianoTuner : ITuneDevice
             child.Lines.Writer.TryComplete();
         });
 
-        var handle = ChildTs.StdoutHandle(process);
-        ChildTs.WidenPipe((int)handle.DangerousGetHandle(), _name);
+        child.Feeding = Task.Factory.StartNew(
+            () => Feed(child, _keepFed), CancellationToken.None, TaskCreationOptions.LongRunning, TaskScheduler.Default);
         _child = child;
-        _stream = new DeviceStream(handle, child.EndReason);
+        _stream = ChildTs.Stdout(process, _name, child.EndReason);
         _ = process.WaitForExitAsync().ContinueWith(_ =>
         {
             if (child.Dropped) return;
             // USB が抜けたのもここに来る。次の選局で起こし直す (Tuned が false になる)
             Log.Write($"[{_name}] {Why(child, process.ExitCode)}");
         }, TaskScheduler.Default);
+    }
+
+    /// <summary>
+    /// 標準入力に書く1本。頼まれた行を書き、<paramref name="keepFed"/> なら**合間を空行で埋め続ける**。
+    ///
+    /// <para>
+    /// **Windows の siano-ts (0.1.8) は、標準入力が pipe だと TS が止まる。** 読める行があるかを
+    /// <c>WaitForSingleObject</c> で見ているが、pipe は中身が無くても「読める」と答える
+    /// (windows-latest で確かめた)。そのまま <c>ReadFile</c> が次の行まで止まり、TS を 16KB
+    /// 書くごとに1行待つ。空行は読み飛ばされるので、埋めておけば止まらない。詰め物が pipe
+    /// (4KB) を埋めるぶん、頼んだ行が読まれるのは 16 周ほど後 (TS が流れていれば 0.1 秒ほど)。
+    /// **siano-ts 側で直れば (pipe なら PeekNamedPipe で見る) 要らなくなる。**
+    /// </para>
+    ///
+    /// <para>
+    /// 書くのをこの1本に寄せたのは、詰め物が pipe が空くまで書くところで止まるから。
+    /// 選局や止める側が書くと、同じところで止まる (siano-ts が詰まっていれば二度と返らない)
+    /// </para>
+    /// </summary>
+    private static void Feed(Child child, bool keepFed)
+    {
+        var input = child.Process.StandardInput;
+        var commands = child.Commands.Reader;
+        try
+        {
+            for (; ; )
+            {
+                if (commands.TryRead(out var line)) input.Write(line + "\n");
+                else if (keepFed) input.Write(Blank);
+                else input.Write(commands.ReadAsync().AsTask().GetAwaiter().GetResult() + "\n");
+            }
+        }
+        catch (Exception error) when (error is IOException or ObjectDisposedException
+            or System.Threading.Channels.ChannelClosedException)
+        {
+            // 子が終わった (pipe が閉じた) か、止めた (Drop)
+        }
     }
 
     /// <summary>
@@ -411,16 +466,9 @@ public sealed class SianoTuner : ITuneDevice
         var uncertain = false;
         try
         {
-            child.Process.StandardInput.WriteLine(command);
-            child.Process.StandardInput.Flush();
+            // 子が終わっていれば書けないが、それは stderr が閉じることで分かる (Await)
+            child.Commands.Writer.TryWrite(command);
             (failure, uncertain) = Await(child, command, _tuneTimeout);
-        }
-        catch (IOException)
-        {
-            // 標準入力に書けない = 子が終わっている
-            failure = child.Process.WaitForExit(TimeSpan.FromSeconds(2))
-                ? Why(child, child.Process.ExitCode)
-                : "siano-ts に選局を頼めません";
         }
         finally
         {
@@ -485,8 +533,14 @@ public sealed class SianoTuner : ITuneDevice
 
     /// <summary>
     /// siano-ts を止める。<c>quit</c> を頼み、聞かなければ SIGTERM、それでも残れば SIGKILL。
-    /// 書くところで止まっていると <c>quit</c> は読まれないので、待ちは短く。
-    /// 読み手が降りきってから fd を閉じる (<see cref="ChildTs.ReaderDrain"/>)
+    /// 読み手が降りきってから fd を閉じる (<see cref="ChildTs.ReaderDrain"/>)。
+    ///
+    /// <para>
+    /// **<c>quit</c> を読ませる間は標準出力を読み捨てる** (<see cref="Retune"/> と同じ理由)。
+    /// 誰も読まないと siano-ts は書くところで止まって <c>quit</c> を読みに来ない。
+    /// Linux / macOS は SIGTERM で抜けられるが、**Windows には SIGTERM が無く**、読まれなければ
+    /// Kill (TerminateProcess) になる — USB は OS が閉じるが、siano-ts の後始末は飛ぶ
+    /// </para>
     /// </summary>
     private void Drop()
     {
@@ -497,23 +551,32 @@ public sealed class SianoTuner : ITuneDevice
         if (child is null) return;
 
         child.Dropped = true;
-        stream?.Stop();
-        var stopped = Stopwatch.StartNew();
         var process = child.Process;
+        child.Commands.Writer.TryWrite("quit");
+        var grace = Stopwatch.StartNew();
+        var buffer = new byte[64 * 1024];
+        bool Done() => process.HasExited || grace.ElapsedMilliseconds > 500;
         try
         {
-            process.StandardInput.WriteLine("quit");
-            process.StandardInput.Flush();
+            while (stream is not null && !Done() && stream.Read(buffer, 0, buffer.Length, Done) > 0)
+            {
+            }
         }
         catch (IOException)
         {
-            // もう居ない
+            // 子が終わった
         }
-        if (!process.WaitForExit(TimeSpan.FromMilliseconds(500)))
+        stream?.Stop();
+        var stopped = Stopwatch.StartNew();
+        if (!process.WaitForExit(TimeSpan.FromMilliseconds(100)))
         {
+            // Windows では何もせず、猶予のあと Kill になる (Interop.Terminate)
             Interop.Terminate(process.Id);
             if (!process.WaitForExit(TimeSpan.FromSeconds(2))) process.Kill();
         }
+        // 書く1本を降ろす。子が居なくなれば pipe が閉じて、書きかけのところからも抜ける
+        child.Commands.Writer.TryComplete();
+        child.Feeding.Wait(TimeSpan.FromSeconds(2));
         var rest = ChildTs.ReaderDrain - stopped.Elapsed;
         if (stream is not null && rest > TimeSpan.Zero) Thread.Sleep(rest);
         stream?.Dispose();

@@ -176,6 +176,35 @@ jobs:
           shasum -a 256 "$asset" > "$asset.sha256"
           gh release upload "$tag" "$asset" "$asset.sha256" --clobber
 
+  # **Windows (x64) 用のエージェントも添える** (install.ps1 が取りに来る)。Mac と同じく、
+  # Native AOT は Linux から Windows へ焼けないので Windows のランナーで焼く
+  agent-windows:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.inputs.ref || github.event.release.tag_name }}
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: '10.0.x'
+
+      # denpa-agent-1.2.3-windows-x64.zip (中身は denpa-agent.exe 1個) と .sha256 (shasum と同じ形)
+      - name: Build and attach to the release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -eu
+          tag="${{ github.event.release.tag_name || github.event.inputs.ref }}"
+          dotnet publish agent/Denpa.Agent/Denpa.Agent.csproj -c Release -r win-x64 -o out
+          asset="denpa-agent-${tag#v}-windows-x64.zip"
+          pwsh -NoProfile -Command "Compress-Archive -Path out/denpa-agent.exe -DestinationPath '$asset'"
+          sha256sum "$asset" > "$asset.sha256"
+          gh release upload "$tag" "$asset" "$asset.sha256" --clobber
+
   # **Helm chart もリリースのたびに出す** (README が案内している `oci://ghcr.io/danything/charts/…`)。
   # chart の版 (Chart.yaml の version) とアプリの版 (appVersion) をリリースの
   # 版で揃えて焼き、GHCR の OCI レジストリに push する。イメージと同じく、chart 側の

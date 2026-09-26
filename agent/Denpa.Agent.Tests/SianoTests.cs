@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using TUnit.Assertions.Enums;
+using TUnit.Core.Enums;
 using Denpa.Agent;
 
 namespace Denpa.Agent.Tests;
@@ -81,13 +82,24 @@ public class SianoTests
     public async Task siano_ts_の終了コードに手当てを添える()
     {
         // 0.1.8 の終了コード。カーネルが掴んでいる・抜けた、は siano-ts が答える
-        await Assert.That(SianoUserland.Hint(4)).Contains("smsusb");
         await Assert.That(SianoUserland.Hint(3)).Contains("見当たりません");
         await Assert.That(SianoUserland.Hint(10)).Contains("ファームウェア");
-        await Assert.That(SianoUserland.Hint(1)).IsEqualTo("");
+        // Windows は開けなければ (WinUSB でなければ) 1 か 4 で落ちる
+        if (OperatingSystem.IsWindows())
+        {
+            await Assert.That(SianoUserland.Hint(4)).Contains("WinUSB");
+            await Assert.That(SianoUserland.Hint(1)).Contains("WinUSB");
+        }
+        else
+        {
+            await Assert.That(SianoUserland.Hint(4)).Contains("smsusb");
+            await Assert.That(SianoUserland.Hint(1)).IsEqualTo("");
+        }
     }
 
     [Test]
+    // Linux の置き場の形 (sysfs の名前の「:」、/dev のパス) を見るもの。Windows では作れない
+    [ExcludeOn(OS.Windows)]
     public async Task 掴んでいるドライバは_sysfs_のインターフェースで見る()
     {
         var sysfs = FakeSysfs(("1-2", null), ("1-3", "smsusb"));
@@ -127,7 +139,7 @@ public class SianoTests
     public async Task siano_ts_はポートで指して_control_で起こす()
     {
         var start = SianoTuner.StartInfo("1-2.3", "/opt/siano-userland", "/fw/isdbt_rio.inp");
-        await Assert.That(start.FileName).IsEqualTo("/opt/siano-userland/siano-ts");
+        await Assert.That(start.FileName).IsEqualTo(SianoUserland.Executable("/opt/siano-userland"));
         await Assert.That(start.ArgumentList.ToArray()).IsEquivalentTo(
             ["--device", "1-2.3", "--control", "--firmware", "/fw/isdbt_rio.inp"],
             CollectionOrdering.Matching);
@@ -212,6 +224,22 @@ public class SianoTests
         var output = tuner.Output;
         tuner.Tune(ChannelTable.Parse("T13")!, ChannelTable.NoStreamId);
         await Assert.That(tuner.Output).IsSameReferenceAs(output);
+        await Assert.That(ReadLine(tuner.Output)).IsEqualTo("NEW473142857");
+    }
+
+    /// <summary>
+    /// **Windows の詰め物** (空行を書き続ける) を入れても、選局し直せて止められる。
+    /// Windows の pipe の振る舞いまでは見られないが、空行が選局の答えを乱さないことはここで見る
+    /// </summary>
+    [Test]
+    public async Task 空行を詰め続けても選局し直せる()
+    {
+        if (!OperatingSystem.IsLinux()) return;
+        using var tuner = new SianoTuner(
+            "siano fake", () => new ProcessStartInfo("/bin/sh") { ArgumentList = { "-c", FakeSianoTs } }, keepFed: true);
+        tuner.Tune(ChannelTable.Parse("T27")!, ChannelTable.NoStreamId);
+        await Assert.That(ReadLine(tuner.Output)).IsEqualTo("NEW557142857");
+        tuner.Tune(ChannelTable.Parse("T13")!, ChannelTable.NoStreamId);
         await Assert.That(ReadLine(tuner.Output)).IsEqualTo("NEW473142857");
     }
 

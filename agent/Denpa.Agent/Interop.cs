@@ -24,6 +24,8 @@ public static partial class Interop
     /// </summary>
     public static void KillGroup(int pid)
     {
+        // 偽の選局は setsid で起こすので、Windows ではそもそも起きない
+        if (OperatingSystem.IsWindows()) return;
         kill(-pid, Sigterm);
         _ = Task.Delay(KillGrace).ContinueWith(_ => kill(-pid, Sigkill), TaskScheduler.Default);
     }
@@ -36,6 +38,14 @@ public static partial class Interop
     /// 0V に戻してから終わるので、まずこちらで頼み、聞かなければ呼んだ側が SIGKILL にする
     /// (Px4.cs / ChildTs.cs / Siano.cs)
     /// </para>
+    ///
+    /// <para>
+    /// **Windows では何もしない。** SIGTERM に当たるものが無く (Ctrl+C の合図は同じコンソールの
+    /// プロセスグループにしか送れない)、呼んだ側が猶予のあとで <c>Kill</c> (TerminateProcess) にする
+    /// </para>
     /// </summary>
-    public static void Terminate(int pid) => kill(pid, Sigterm);
+    public static void Terminate(int pid)
+    {
+        if (!OperatingSystem.IsWindows()) kill(pid, Sigterm);
+    }
 }
