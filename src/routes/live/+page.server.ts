@@ -184,7 +184,7 @@ export const actions = {
     record: async ({ request }) => {
         const form = await request.formData();
         const serviceId = Number(form.get('service'));
-        if (!Number.isInteger(serviceId)) return fail(400, { message: 'チャンネルが分かりません' });
+        if (!Number.isInteger(serviceId)) return fail(400, { message: 'チャンネルの指定が不正です' });
 
         const at = Date.now();
         const program = orm()

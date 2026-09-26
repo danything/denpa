@@ -429,7 +429,7 @@
             <input
                 type="search"
                 name="keyword"
-                placeholder="全チャンネルの番組名から"
+                placeholder="全チャンネルの番組名で検索"
                 class="keyword"
                 data-testid="filter-keyword"
             />

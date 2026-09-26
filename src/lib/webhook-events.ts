@@ -20,6 +20,6 @@ export const EVENT_LABEL: Record<string, string> = {
     'encode.finished': 'エンコード完了',
     'encode.failed': 'エンコード失敗',
     'disk.low': 'ディスク残量わずか',
-    'agent.down': 'チューナーに繋がらない',
-    'agent.up': 'チューナーに繋がった',
+    'agent.down': 'チューナーエージェント切断',
+    'agent.up': 'チューナーエージェント復帰',
 };

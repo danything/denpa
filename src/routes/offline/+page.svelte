@@ -113,7 +113,7 @@
     <h1>端末に保存した録画</h1>
     <p class="lead small muted">
         電波の無いところでも観られます。ここで削除すると、
-        <strong>次にオンラインへ戻ったときサーバの録画も消えます</strong>。
+        <strong>次にオンラインに戻ったとき、サーバの録画も消えます</strong>。
     </p>
 
     {#if playing !== null && src !== null}
@@ -213,7 +213,7 @@
 
     {#if Object.keys(offline.pendingDelete).length > 0}
         <p class="pending tiny muted">
-            サーバからの削除が {Object.keys(offline.pendingDelete).length} 件、次にオンラインへ戻ったときに行われます。
+            {Object.keys(offline.pendingDelete).length} 件は、次にオンラインに戻ったときにサーバからも削除します。
         </p>
     {/if}
 </div>

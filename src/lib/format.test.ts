@@ -132,19 +132,19 @@ describe('欠けの表示', () => {
 
     test('頭を譲ったら、どれだけ欠けるかを言う', () => {
         expect(clipNote({ ...base, record_from: 15 * MIN, record_to: null })).toBe(
-            '頭 15分 が欠けます (チューナーの取り合い)',
+            '冒頭 15分が欠けます (チューナー不足)',
         );
     });
 
     test('録れたあとは言い方が変わる', () => {
         expect(clipNote({ ...base, record_from: 15 * MIN, record_to: null }, true)).toBe(
-            '頭 15分 が欠けています (チューナーの取り合い)',
+            '冒頭 15分が欠けています (チューナー不足)',
         );
     });
 
     test('両方譲ったら両方言う', () => {
         expect(clipNote({ ...base, record_from: 5 * MIN, record_to: 25 * MIN })).toBe(
-            '頭 5分 と 尻 5分 が欠けます (チューナーの取り合い)',
+            '冒頭 5分と末尾 5分が欠けます (チューナー不足)',
         );
     });
 });

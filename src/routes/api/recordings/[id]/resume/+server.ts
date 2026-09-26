@@ -30,7 +30,7 @@ export async function POST({ params, request }) {
     try {
         ({ at, length } = await request.json());
     } catch {
-        error(400, '本文を読めませんでした');
+        error(400, 'リクエストの本文を読めませんでした');
     }
     if (typeof at !== 'number' || !Number.isFinite(at) || at < 0) error(400, '位置が不正です');
 
