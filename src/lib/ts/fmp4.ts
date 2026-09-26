@@ -16,6 +16,8 @@
  * 大きさは箱ぜんぶ (頭の8バイトを含む) を数えた値。
  */
 
+import { joinBytes } from './bytes';
+
 /** 箱の頭。大きさと種別で8バイト */
 const HEADER = 8;
 
@@ -69,7 +71,7 @@ export class Fmp4Splitter {
                  * 溜めておいて、ここで1つにして出す
                  */
                 if (!this.started && this.pending.length > 0) {
-                    out.push({ kind: 'init', data: join(this.pending) });
+                    out.push({ kind: 'init', data: joinBytes(this.pending) });
                     this.pending = [];
                 }
                 this.started = true;
@@ -86,23 +88,11 @@ export class Fmp4Splitter {
              * 出してしまい、中身の無いものを MSE に渡すことになる
              */
             if (this.started && type === 'mdat') {
-                out.push({ kind: 'media', data: join(this.pending) });
+                out.push({ kind: 'media', data: joinBytes(this.pending) });
                 this.pending = [];
             }
         }
         this.buffer = this.buffer.slice(at);
         return out;
     }
-}
-
-function join(parts: Uint8Array[]): Uint8Array {
-    let size = 0;
-    for (const part of parts) size += part.length;
-    const out = new Uint8Array(size);
-    let at = 0;
-    for (const part of parts) {
-        out.set(part, at);
-        at += part.length;
-    }
-    return out;
 }

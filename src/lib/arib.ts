@@ -245,6 +245,11 @@ export const LANGUAGE: Record<string, string> = {
     etc: 'その他',
 };
 
+/** 音声の言語を読める名前に */
+function langNames(audio: Audio): string[] {
+    return (audio.langs ?? []).map((lang) => LANGUAGE[lang] ?? lang);
+}
+
 export interface Audio {
     componentType: number;
     langs?: string[];
@@ -276,7 +281,7 @@ export function audioLabel(audio: Audio): string {
         audio.text !== undefined && audio.text !== ''
             ? audio.text
             : (AUDIO_TYPE[audio.componentType] ?? `種別${audio.componentType}`);
-    const langs = (audio.langs ?? []).map((lang) => LANGUAGE[lang] ?? lang);
+    const langs = langNames(audio);
     return langs.length === 0 ? type : `${type} (${langs.join('/')})`;
 }
 
@@ -338,7 +343,7 @@ export function audioTracks(audios: Audio[]): AudioTrack[] {
          */
         const named = audio.text !== undefined && audio.text !== '';
         const head = many && !named ? `音声${stream + 1} ` : '';
-        const langs = (audio.langs ?? []).map((lang) => LANGUAGE[lang] ?? lang);
+        const langs = langNames(audio);
         const of = (index: number) => (langs[index] === undefined ? '' : ` (${langs[index]})`);
         // 放送が言っていなければ付けない (undefined を書き込まない)
         const main = audio.main === undefined ? {} : { main: audio.main };

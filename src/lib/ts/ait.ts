@@ -20,7 +20,7 @@
 
 import { decodeAribText } from './aribtext';
 import { u16, u32 } from './dsmcc';
-import { descriptors, PacketStream, pmtStreams, SectionAssembler } from './psi';
+import { descriptors, PacketStream, PID_PAT, parsePat, pmtStreams, SectionAssembler } from './psi';
 
 /** AIT のセクション */
 const TABLE_AIT = 0x74;
@@ -29,7 +29,6 @@ const TABLE_AIT = 0x74;
 const DESC_APPLICATION_SIGNALLING = 0x6f;
 
 /** AIT の中の記述子 */
-const DESC_APPLICATION = 0x00;
 const DESC_APPLICATION_NAME = 0x01;
 const DESC_TRANSPORT_PROTOCOL = 0x02;
 const DESC_SIMPLE_APPLICATION_LOCATION = 0x15;
@@ -160,9 +159,7 @@ export function parseAit(section: Uint8Array): Ait | null {
             if (tag === DESC_TRANSPORT_PROTOCOL) base = transportUrl(descriptor) ?? base;
             else if (tag === DESC_SIMPLE_APPLICATION_LOCATION) path = new TextDecoder().decode(descriptor);
             else if (tag === DESC_APPLICATION_NAME) name = applicationName(descriptor);
-            else if (tag === DESC_APPLICATION) {
-                // いまは読むものが無い (優先度と可視性。動かさないので使い道がない)
-            }
+            // application_descriptor (優先度と可視性) は読まない。動かさないので使い道がない
         }
         // **URL の無いものは出さない。** 在ることだけ言われても行き先が無い
         if (base === null) continue;
@@ -182,7 +179,7 @@ export function parseAit(section: Uint8Array): Ait | null {
  */
 export class AitReader {
     private readonly packets = new PacketStream();
-    private readonly pat = new SectionAssembler(0);
+    private readonly pat = new SectionAssembler(PID_PAT);
     /** PMT を組み立てるもの。**PID が決まってから作る** */
     private pmt: SectionAssembler | null = null;
     private pmtPid: number | null = null;
@@ -201,16 +198,14 @@ export class AitReader {
         const found: Ait[] = [];
         for (const packet of this.packets.feed(chunk)) {
             for (const section of this.pat.feed(packet)) {
-                if (section[0] !== 0x00) continue;
-                const pid = pmtPidOf(section, this.serviceId);
-                if (pid === null || pid === this.pmtPid) continue;
+                const pid = parsePat(section).get(this.serviceId);
+                if (pid === undefined || pid === this.pmtPid) continue;
                 // 局が変わった。PMT も AIT も拾い直す
                 this.pmtPid = pid;
                 this.pmt = new SectionAssembler(pid);
                 this.aits = new Map();
             }
             for (const section of this.pmt?.feed(packet) ?? []) {
-                if (section[0] !== 0x02) continue;
                 for (const pid of aitPidsFromPmt(section)) {
                     if (!this.aits.has(pid)) this.aits.set(pid, new SectionAssembler(pid));
                 }
@@ -224,14 +219,4 @@ export class AitReader {
         }
         return found;
     }
-}
-
-/** PAT から、そのサービスの PMT の PID */
-function pmtPidOf(section: Uint8Array, serviceId: number): number | null {
-    const end = section.length - 4;
-    for (let at = 8; at + 4 <= end; at += 4) {
-        if (u16(section, at) !== serviceId) continue;
-        return ((section[at + 2]! & 0x1f) << 8) | section[at + 3]!;
-    }
-    return null;
 }

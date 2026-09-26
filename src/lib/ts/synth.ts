@@ -93,19 +93,20 @@ export function sdtSection(
     return withCrc(body);
 }
 
+/** 2桁の10進を BCD の1バイトに */
+const bcd = (value: number) => ((Math.floor(value / 10) << 4) | (value % 10)) & 0xff;
+
 /** epoch ms → MJD + BCD の5バイト。放送の時刻は日本時間で書く */
 function mjdTime(at: number): number[] {
     const jst = Math.floor(at / 1000) + 9 * 3600;
     const mjd = Math.floor(jst / 86400) + 40587;
     const rest = ((jst % 86400) + 86400) % 86400;
-    const bcd = (value: number) => ((Math.floor(value / 10) << 4) | (value % 10)) & 0xff;
     return [...be(mjd), bcd(Math.floor(rest / 3600)), bcd(Math.floor(rest / 60) % 60), bcd(rest % 60)];
 }
 
 /** ms → BCD 3バイトの尺 */
 function bcdDuration(ms: number): number[] {
     const total = Math.floor(ms / 1000);
-    const bcd = (value: number) => ((Math.floor(value / 10) << 4) | (value % 10)) & 0xff;
     return [bcd(Math.floor(total / 3600)), bcd(Math.floor(total / 60) % 60), bcd(total % 60)];
 }
 

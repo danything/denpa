@@ -67,7 +67,7 @@ export type Rule = typeof rules.$inferSelect;
  * DBの列に入っているのは `scheduled | conflict | canceled | missed` だけ
  * (`Reservation['state']`)。録り始めてからの `recording | done | failed` は
  * **録画の行から引いた結果**で、一覧を組み立てるときに足す
- * (routes/+page.server.ts の RESERVATION_STATE)。
+ * (routes/+page.server.ts で録画の行から引く)。
  * 予約側にも書き写していた頃は、録画が失敗しても予約は録画中のまま残っていた
  */
 export type ReservationState = Reservation['state'] | 'recording' | 'done' | 'failed';
