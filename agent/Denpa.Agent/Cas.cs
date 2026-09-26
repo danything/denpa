@@ -37,6 +37,9 @@ public interface IKeySource
     EcmAnswer Ecm(ReadOnlySpan<byte> ecm);
 }
 
+/// <summary>見つかったカードリーダー。開くまでは何も掴まない</summary>
+public sealed record CardLinkCandidate(string Name, Func<ICardLink> Open);
+
 /// <summary>
 /// カードとの線。**APDU の単位**でやり取りする (T=1 の枠組みは線の側が持つ)。
 /// 1本の線を同時に2つから叩かない (呼ぶ側が順番にする)。
