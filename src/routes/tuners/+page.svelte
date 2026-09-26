@@ -798,9 +798,6 @@
         padding-top: 0.75rem;
         border-top: 1px solid var(--dp-base-300);
     }
-    .full {
-        width: 100%;
-    }
     .break {
         word-break: break-all;
     }

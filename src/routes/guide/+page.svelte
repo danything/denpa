@@ -10,8 +10,6 @@
 
     let { data, form } = $props();
 
-    // 検索条件はURLに持たせる。そのままルールにできるようにするため
-
     type Sheet = Awaited<typeof data.grid>;
 
     /**
@@ -78,8 +76,8 @@
      * (`requestAnimationFrame`) に足していけば、1コマあたりの仕事は数十ms に収まり、
      * 描いている最中でもスクロールもタブの切り替えもできる。
      *
-     * 300 は「e2e の偽の放送 (数十番組) なら最初の1回で全部出る」数。
-     * 実データの地上波 (20局×24時間 ≒ 500〜700) でも2〜3コマで済む。
+     * e2e の偽の放送 (数十番組) なら最初の1回で全部出て、
+     * 実データの地上波 (20局×24時間 ≒ 500〜700) でも1〜2コマで済む数。
      * 画面の外のマスは中身を組まない (下の `.cell` の `content-visibility`) ので、
      * 1コマの仕事は「マスを置く」だけになり、数を増やしても止まらない
      */
@@ -284,7 +282,6 @@
         })),
     );
 
-
     function href(params: Record<string, string>): string {
         const query = new URLSearchParams({ type: data.type, ...params });
         return `/guide?${query}`;
@@ -355,7 +352,6 @@
             void preloadData(soon);
             void preloadData(later);
         };
-        // requestIdleCallback は Safari に無い
         if (typeof requestIdleCallback !== 'function') {
             const timer = setTimeout(fetchBoth, 500);
             return () => clearTimeout(timer);
@@ -403,7 +399,7 @@
                 <a
                     class="button small {data.type === type ? '' : 'secondary outline'}"
                     aria-current={data.type === type ? 'page' : undefined}
-                    href="/guide?type={type}&start={data.start}"
+                    href={href({ type, start: String(data.start) })}
                     data-testid="type-{type}"
                 >
                     {SERVICE_TYPE_LABEL[type]}

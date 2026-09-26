@@ -206,13 +206,6 @@
                      どのルールを編集していたかを持ち回らないと、追加の画面に戻ってしまう -->
                             <input type="hidden" name="edit" value={data.editing.id} />
                         {/if}
-                        <!--
-                チェックを外した状態は GET だと「キー自体が無い」になって、
-                番組表から keyword だけ渡されたときと見分けが付かない。
-                この印があるときはチェックボックスの状態をそのまま信じる
-            -->
-                        <input type="hidden" name="form" value="rules" />
-
                         <!-- 横に並べない。左の列は 26rem までなので、並べると入力欄が潰れる -->
                         <div class="fields">
                             <label class="field">
@@ -808,12 +801,8 @@
         margin-bottom: 0.5rem;
         border-radius: 0.375rem;
         background: var(--dp-base-200);
-        list-style: none;
     }
 
-    .preview-title {
-        font-size: 1rem;
-    }
     .lead {
         opacity: 0.7;
     }
@@ -923,6 +912,7 @@
         box-shadow: 0 1px 3px rgb(0 0 0 / 0.2);
     }
     .preview-title {
+        font-size: 1rem;
         display: flex;
         flex-wrap: wrap;
         align-items: center;
@@ -942,7 +932,6 @@
         align-items: center;
         gap: 0.25rem 0.75rem;
         padding-block: 0.375rem;
-        list-style: none;
     }
     .preview-row + .preview-row {
         border-top: 1px solid var(--dp-base-300);

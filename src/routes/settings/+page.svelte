@@ -3,7 +3,7 @@
     import { untrack } from 'svelte';
     import { submitting } from '$lib/actions';
     import Toasts, { errorNotice, type Notice } from '$lib/components/Toasts.svelte';
-    import { dateTime } from '$lib/format';
+    import { dateTime, stateLabel } from '$lib/format';
     import { CODEC_LABEL, HW_CODECS, HW_KIND_LABEL, HW_KINDS, hwAllowed } from '$lib/hw';
     import { liveUpdates } from '$lib/live-updates.svelte';
     import { measure } from '$lib/measure.svelte';
@@ -27,14 +27,11 @@
     });
 
     /**
-     * 画面で触る値は、サーバから来たものを写して持つ。
-     *
-     * `value={data...}` を直に入れていた頃は、**別のフォームを保存しただけで
-     * 手元の入力が data の値に書き戻されて**いた (チェックが勝手に外れる)。
-     * 写しておけば、書き戻るのは data そのものが変わったときだけになる
+     * 録画設定のフォームは bind せず `checked` / `selected` で初期値だけ渡す。
+     * 別のフォームを保存して data が読み直されても、値が同じなら Svelte は DOM に
+     * 書かない — 手元で変えたまま保存していない入力はそのまま残る
      */
-    // untrack は「初期値としてだけ読む」印。下の $effect で追従させている
-    let recording = $state(untrack(() => ({ ...data.recording })));
+    const recording = $derived(data.recording);
 
     /**
      * 「今の値を編集する」フォームは、保存してもフォームを reset させない。
@@ -69,9 +66,6 @@
     let tvRows = $state(untrack(tvRowsOf));
     let tvSeen = JSON.stringify(untrack(tvRowsOf));
 
-    $effect(() => {
-        recording = { ...data.recording };
-    });
     $effect(() => {
         const rows = tvRowsOf();
         const key = JSON.stringify(rows);
@@ -535,7 +529,7 @@
                             AV1 を解けないテレビは H.264、エンコード済み自体が重い
                             テレビは生TS。無い形式を選んでいたら、おまかせに落ちる
                         -->
-                        <select name="vlcCodec" bind:value={row.codec} class="w-codec" data-testid="vlc-codec">
+                        <select name="vlcCodec" bind:value={row.codec} data-testid="vlc-codec">
                             <option value="auto">おまかせ</option>
                             <option value="h264">H.264</option>
                             <option value="ts">生TS</option>
@@ -611,11 +605,7 @@
                 <div class="progress-block" data-testid="migrate-progress" data-state={migrate.state}>
                     <div class="cluster small">
                         <span class="tag" data-testid="migrate-state">
-                            {migrate.state === 'running'
-                                ? '実行中'
-                                : migrate.state === 'done'
-                                  ? '完了'
-                                  : '失敗'}
+                            {stateLabel(migrate.state)}
                         </span>
                         <span class="tag outline">{migrate.apply ? '取り込み' : '確認だけ (変更なし)'}</span>
                         {#if migrate.move}

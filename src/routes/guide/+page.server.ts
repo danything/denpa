@@ -138,9 +138,8 @@ function readGrid(type: ChannelType, start: number, end: number) {
 }
 
 /**
- * 番組表は2つの見せ方をする。
- * キーワードなし: 時間×チャンネルのグリッド。並びを眺めて選ぶとき用
- * キーワードあり: 全チャンネル横断のリスト。探しているものが決まっているとき用
+ * 時間×チャンネルのグリッドを返す。並びを眺めて選ぶとき用
+ * (キーワードで探すのはルール画面 `/rules` に寄せてある)
  */
 export function load({ url }) {
     const type = (TYPES.find((t) => t === url.searchParams.get('type')) ?? 'GR') as ChannelType;

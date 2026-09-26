@@ -95,7 +95,7 @@ function conditionsFrom(params: URLSearchParams): Rule | null {
         service_ids: conditions.serviceIds,
         service_types: conditions.serviceTypes,
         genres: conditions.genres,
-        // 無料放送の扱いは**全体設定**。ルールごとには持たない (誰も読まない列)
+        // 無料放送の扱いは**全体設定** (ルールには持たない)
         enabled: true,
         /*
          * **打ち込んだ値をそのまま持ち回る。**
