@@ -88,7 +88,7 @@ public static class Card
     {
         /*
          * **denpa は 10 秒で諦める。** それより先に切り上げて理由を返す —
-         * 間に合わないと、画面には「受け口に繋がりません」とエージェントのせいに見える
+         * 間に合わないと、画面には「カードの状態を聞くエージェントに繋がりません」とエージェントのせいに見える
          */
         CardSurvey survey;
         try
@@ -107,10 +107,10 @@ public static class Card
     /// <summary>間に合わなかった。**リーダーの名前だけは並べる** (探すだけなら何も開かない)</summary>
     private static CardSurvey TimedOut()
     {
-        var message = $"カードが {CheckFor.TotalSeconds:F0} 秒で答えません";
+        var message = $"カードが {CheckFor.TotalSeconds:F0} 秒以内に応答しません";
         if (Keys.Source is RemoteCard remote) return new CardSurvey(false, message, [], [], remote.Url);
         return new CardSurvey(
-            false, message, [.. CardLinks.Find().Select(found => new ReaderState(found.Name, null, false, "確かめが間に合いません"))], [], null);
+            false, message, [.. CardLinks.Find().Select(found => new ReaderState(found.Name, null, false, "確認が間に合いません"))], [], null);
     }
 
     /// <summary>鍵を配る相手から貰っている。**手元のリーダーは使わない**ので並べない</summary>
@@ -199,8 +199,8 @@ public static class Card
         }).ToList();
 
         var message = readers.Count == 0 ? "カードリーダーが見つかりません"
-            : readers.Any(reader => reader.Error is not null) ? "どのリーダーでもカードを読めません"
-            : "どのリーダーにもカードが挿さっていません";
+            : readers.Any(reader => reader.Error is not null) ? "どのカードリーダーでもカードを読めません"
+            : "どのカードリーダーにもカードが挿さっていません";
         return new CardSurvey(false, message, readers, [], null);
     }
 
@@ -212,7 +212,7 @@ public static class Card
     {
         /*
          * **1つずつ専用のスレッドで。** 固まったリーダーは何秒も塞ぐので、共用の池から
-         * 借りると池が増えるまで他の覗きも待たされ、答えられるものまで「答えません」になる
+         * 借りると池が増えるまで他の覗きも待たされ、答えられるものまで「応答しません」になる
          */
         var peeking = candidates.Select(Peeking).ToArray();
         if (peeking.Length > 0 && within > TimeSpan.Zero) Task.WaitAll(peeking, within);
@@ -220,7 +220,7 @@ public static class Card
         [
             .. candidates.Select((candidate, at) => peeking[at].IsCompletedSuccessfully
                 ? peeking[at].Result
-                : new ReaderState(candidate.Name, null, false, $"{ProbeFor.TotalSeconds:F0} 秒で答えません")),
+                : new ReaderState(candidate.Name, null, false, $"{ProbeFor.TotalSeconds:F0} 秒以内に応答しません")),
         ];
     }
 
@@ -354,14 +354,14 @@ public static class Scramble
         var target = Inside(recorded, output);
         if (source is null || target is null)
         {
-            return new JsonObject { ["ok"] = false, ["error"] = "生TSの置き場の外は解除に回せません" };
+            return new JsonObject { ["ok"] = false, ["error"] = "生TSの保存先の外にあるファイルは解除できません" };
         }
         if (!File.Exists(source))
         {
             return new JsonObject
             {
                 ["ok"] = false,
-                ["error"] = $"{source} が見えません。denpa と同じ置き場をこのコンテナにも見せてください",
+                ["error"] = $"{source} が見つかりません。denpa と同じ保存先をこのコンテナにもマウントしてください",
             };
         }
 
@@ -392,7 +392,7 @@ public static class Scramble
                 return new JsonObject
                 {
                     ["ok"] = false,
-                    ["error"] = $"{b25.Undecodable} パケットが掛かったままです ({b25.LastError ?? "鍵を貰えませんでした"})",
+                    ["error"] = $"{b25.Undecodable} パケットがスクランブルのままです ({b25.LastError ?? "鍵を受け取れませんでした"})",
                 };
             }
         }

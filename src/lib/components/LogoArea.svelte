@@ -283,7 +283,7 @@
     -->
     <p class="small lead">
         {#if learned !== null}
-            {serviceName} のロゴは覚えています。下の絵がロゴになっていれば位置は合っているので、 まずはそのまま様子を見てください。
+            {serviceName} のロゴは覚えています。下の絵がロゴの形になっていれば、位置は合っています。
         {:else if recordingId === null}
             {serviceName} のロゴはまだ覚えていません。チューナーが空いたときに放送から自動で覚えます。
         {:else}
@@ -337,7 +337,7 @@
                 <form method="POST" action="?/logoForget" use:submitting class="forget">
                     <input type="hidden" name="serviceId" value={serviceId} />
                     <button type="submit" class="xs ghost">
-                        この絵は違う (捨てて覚え直す)
+                        この絵は違う (消して覚え直す)
                     </button>
                 </form>
             </div>
@@ -355,7 +355,7 @@
             事前学習は録画を待たずに回るので、録画が無くても覚えていることはある
         -->
         <p class="tiny muted spaced">
-            位置を教えるにはこの局の録画が1本要ります (コマを出すため)。
+            位置を教えるには、この局の録画が1本必要です。
         </p>
     {:else}
         <details
@@ -447,7 +447,7 @@
             {#if zoomed}
                 <!-- 切り取って出しているので、見えていない側があることは言っておく -->
                 <p class="tiny muted hint">
-                    右上だけを{SCALE}倍で出しています。ロゴが他の隅にある局は「右上を拡大」を外してください。
+                    右上だけを{SCALE}倍で表示しています。ロゴが他の隅にある局は「右上を拡大」を外してください。
                 </p>
             {/if}
 

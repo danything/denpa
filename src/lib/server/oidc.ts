@@ -169,7 +169,9 @@ async function exchange(code: string, redirectUri: string, verifier: string): Pr
     });
     const body = (await res.json().catch(() => ({}))) as { id_token?: string; error_description?: string };
     if (!res.ok || typeof body.id_token !== 'string') {
-        throw new Error(`引き換えに失敗しました (${res.status}) ${body.error_description ?? ''}`.trim());
+        throw new Error(
+            `トークンを取得できませんでした (${res.status}) ${body.error_description ?? ''}`.trim(),
+        );
     }
     return body.id_token;
 }
@@ -183,7 +185,7 @@ async function publicKey(kid: string): Promise<CryptoKey> {
 
     const doc = await discover();
     const res = await fetch(doc.jwks_uri);
-    if (!res.ok) throw new Error(`鍵を読めません (${res.status})`);
+    if (!res.ok) throw new Error(`署名の鍵を取得できません (${res.status})`);
     const { keys: jwks } = (await res.json()) as { keys?: (JsonWebKey & { kid?: string })[] };
     for (const jwk of jwks ?? []) {
         if (jwk.kid === undefined || jwk.kty !== 'RSA') continue;
@@ -255,7 +257,7 @@ export async function verify(token: string, nonce: string, at = Date.now()): Pro
     );
     // alg は相手が決めるものだが、こちらが受けるのは RS256 だけ。
     // none を受けると署名を見ない道ができてしまう
-    if (header.alg !== 'RS256') throw new Error(`受けられない署名方式です (${header.alg})`);
+    if (header.alg !== 'RS256') throw new Error(`対応していない署名方式です (${header.alg})`);
     if (typeof header.kid !== 'string') throw new Error('ID トークンに鍵の名前がありません');
 
     const ok = await crypto.subtle.verify(
@@ -284,7 +286,7 @@ export async function verify(token: string, nonce: string, at = Date.now()): Pro
         throw new Error('ID トークンがまだ有効ではありません');
     }
     // 出したときの合言葉と一致すること。これが「自分が始めたログイン」の証拠になる
-    if (claims.nonce !== nonce) throw new Error('ID トークンの合言葉が合いません');
+    if (claims.nonce !== nonce) throw new Error('ID トークンの nonce が合いません');
     if (claims.sub === '') throw new Error('ID トークンに sub がありません');
     return claims;
 }

@@ -107,7 +107,7 @@ public sealed class Px4Card : ICardLink
             if (answer.Length != 8) throw new IOException($"px4d の HELLO の答えが {answer.Length} バイトです (8 のはず)");
             if ((BinaryPrimitives.ReadUInt32LittleEndian(answer.AsSpan(4)) & CardCapability) == 0)
             {
-                throw new IOException("px4d がカードを扱いません");
+                throw new IOException("px4d がカードに対応していません");
             }
             return card;
         }
@@ -245,7 +245,7 @@ public sealed class Px4Card : ICardLink
             7 => "USB の読み書きに失敗しました (USB_IO)",
             8 => "筐体が抜けました (DISCONNECTED)",
             11 => "この筐体では使えません (UNSUPPORTED)",
-            12 => "カードが刺さっていません (NO_CARD)",
+            12 => "カードが挿さっていません (NO_CARD)",
             13 => "カードが抜かれました (CARD_REMOVED)",
             _ => $"エラー {code}",
         };

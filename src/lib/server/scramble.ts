@@ -189,11 +189,11 @@ export async function cardStatus(): Promise<CardStatus> {
             signal: AbortSignal.timeout(10_000),
         });
         if (!res.ok) {
-            return failed(`解除の受け口が ${res.status} を返しました`);
+            return failed(`エージェントからカードの状態を取得できません (${res.status})`);
         }
         return readCardStatus(await res.json());
     } catch (error) {
-        return failed(`解除の受け口に繋がりません: ${error}`);
+        return failed(`カードの状態を聞くエージェントに繋がりません: ${error}`);
     }
 }
 
@@ -221,7 +221,7 @@ export async function descramble(
     const from = relative(base, input);
     const to = relative(base, output);
     if (from.startsWith('..') || to.startsWith('..')) {
-        return { ok: false, error: `生TSの置き場 (${base}) の外は解除に回せません` };
+        return { ok: false, error: `生TSの保存先 (${base}) の外にあるファイルは解除できません` };
     }
 
     try {
@@ -234,17 +234,20 @@ export async function descramble(
         });
         const body = tolerate(DECODED, await res.json(), 'エージェントの /denpa/decode');
         if (!res.ok || body.ok !== true) {
-            return { ok: false, error: body.error ?? `解除の受け口が ${res.status} を返しました` };
+            return {
+                ok: false,
+                error: body.error ?? `エージェントへの解除の依頼が失敗しました (${res.status})`,
+            };
         }
     } catch (error) {
-        return { ok: false, error: `解除の受け口に繋がりません: ${error}` };
+        return { ok: false, error: `解除を頼むエージェントに繋がりません: ${error}` };
     }
 
     if (isScrambled(output)) {
         // 素通しされた。ほぼカードが読めていない
         const card = await cardStatus();
         const why = card.ok ? 'カードは読めているので、鍵が合わないか ECM が流れていません' : card.message;
-        return { ok: false, error: `解除しても掛かったままです。${why}` };
+        return { ok: false, error: `解除してもスクランブルが残っています。${why}` };
     }
     return { ok: true, error: '' };
 }

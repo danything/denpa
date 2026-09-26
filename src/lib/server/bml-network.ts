@@ -65,7 +65,7 @@ export function refusalMessage(failure: unknown, fallback: string): string {
 
 /** 双方向を切ってあるなら 403。3 つの口の入口で同じ */
 export function requireBmlNetwork(): void {
-    if (!settings().bmlNetwork) error(403, 'データ放送の双方向は切ってあります');
+    if (!settings().bmlNetwork) error(403, 'データ放送の双方向通信はオフになっています');
 }
 
 /**
@@ -151,7 +151,7 @@ async function resolvable(host: string): Promise<string> {
     const bare = host.startsWith('[') && host.endsWith(']') ? host.slice(1, -1) : host;
     // IP を直に書いてあるなら引かずに見る
     if (/^[\d.]+$/.test(bare) || bare.includes(':')) {
-        if (!isPublicAddress(bare)) throw new Refused(`内側の住所です (${host})`);
+        if (!isPublicAddress(bare)) throw new Refused(`内部ネットワークのアドレスです (${host})`);
         return bare;
     }
 
@@ -162,12 +162,13 @@ async function resolvable(host: string): Promise<string> {
         try {
             found = await resolver.resolve6(host);
         } catch {
-            throw new Refused(`名前を引けません (${host})`);
+            throw new Refused(`名前解決できません (${host})`);
         }
     }
-    if (found.length === 0) throw new Refused(`名前を引けません (${host})`);
+    if (found.length === 0) throw new Refused(`名前解決できません (${host})`);
     for (const address of found) {
-        if (!isPublicAddress(address)) throw new Refused(`内側の住所です (${host} → ${address})`);
+        if (!isPublicAddress(address))
+            throw new Refused(`内部ネットワークのアドレスです (${host} → ${address})`);
     }
     return found[0]!;
 }
@@ -200,7 +201,7 @@ export async function allowed(raw: string): Promise<{ url: URL; address: string 
      * `file:` や `data:` のような別の仕組みへ逃がす道は塞いだままにする
      */
     if (url.protocol !== 'https:' && url.protocol !== 'http:') {
-        throw new Refused(`http か https だけです (${url.protocol})`);
+        throw new Refused(`http か https のみ使えます (${url.protocol})`);
     }
     return { url, address: await resolvable(url.hostname) };
 }
@@ -316,7 +317,7 @@ async function follow(raw: string, first: 'GET' | 'POST', body: Uint8Array | und
         const got = await doRequest(url, address, method, method === 'POST' ? body : undefined);
 
         if (got.status >= 300 && got.status < 400 && got.location !== null) {
-            if (hop >= HOPS) throw new Refused('飛ばされる回数が多すぎます');
+            if (hop >= HOPS) throw new Refused('リダイレクトが多すぎます');
             if (got.status !== 307 && got.status !== 308) method = 'GET';
             ({ url, address } = await allowed(new URL(got.location, url).toString()));
             continue;

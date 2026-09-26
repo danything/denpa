@@ -260,7 +260,7 @@ public sealed class TunerPool(
                 return open;
             }
 
-            var path = spec.Device ?? throw new IOException($"{spec.Name} にデバイスが書かれていません");
+            var path = spec.Device ?? throw new IOException($"{spec.Name} のデバイスが指定されていません");
             var device = OpenDevice(path, spec.Lnb);
 
             var held = new Held(device);
@@ -295,7 +295,7 @@ public sealed class TunerPool(
         if (SianoUserland.Parse(path) is { } port) return new SianoTuner(port);
         if (path.Contains("/dvb/", StringComparison.Ordinal)) return new DvbTuner(path, lnb);
         throw new IOException(
-            $"{path} は知らないデバイスです (/dev/dvb/adapterN/frontendM か {Px4Userland.Scheme}<筐体の番号>:<受信機> か {SianoUserland.Scheme}<USB のポート>)");
+            $"{path} は対応していないデバイスです (/dev/dvb/adapterN/frontendM か {Px4Userland.Scheme}<筐体の番号>:<受信機> か {SianoUserland.Scheme}<USB のポート>)");
     }
 
     /// <summary>実体を手放す。**定義が変わったときと、止めるときだけ**</summary>
@@ -588,7 +588,7 @@ public sealed class Sink(string use, int priority, Action<Sink> onLeave)
          * プロセスごと落ちるので、ここを超えたらその読み手だけ切る。切られた
          * 側は「録画に失敗した」と分かるほうが、黙って全部が死ぬよりまし
          */
-        if (Interlocked.Read(ref _pending) > TunerPool.MaxLag) Fail("読み出しが追い付かないので切りました");
+        if (Interlocked.Read(ref _pending) > TunerPool.MaxLag) Fail("読み出しが追いつかないため切断しました");
     }
 
     /// <summary>読み出した分だけ遅れを減らす</summary>

@@ -386,7 +386,7 @@ public sealed class Px4Daemon
                 UseShellExecute = false,
             };
 
-            var process = Process.Start(start) ?? throw new IOException("px4d を起こせません");
+            var process = Process.Start(start) ?? throw new IOException("px4d を起動できません");
             _process = process;
             _stderr = "";
             _ = Task.Run(async () =>
@@ -418,7 +418,7 @@ public sealed class Px4Daemon
             }
 
             Stop();
-            throw new IOException($"px4d が {ReadyTimeout.TotalSeconds} 秒で ready になりません ({_stderr})");
+            throw new IOException($"px4d が {ReadyTimeout.TotalSeconds} 秒以内に ready になりません ({_stderr})");
         }
     }
 

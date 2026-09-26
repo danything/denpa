@@ -308,7 +308,7 @@ public sealed class T1Protocol
                     case SAbort:
                         throw new IOException("カードがやり取りを打ち切りました (T=1 S(ABORT))");
                     default:
-                        if (++errors > MaxRetries) throw new IOException($"カードから思わぬ S ブロックが来ました (PCB 0x{pcb:X2})");
+                        if (++errors > MaxRetries) throw new IOException($"カードから予期しない S ブロックが来ました (PCB 0x{pcb:X2})");
                         toSend = sending ? current : Block((byte)(RBlock | (_nr << 4)), []);
                         break;
                 }

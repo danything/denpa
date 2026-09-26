@@ -413,7 +413,7 @@
                     href="/watch/{data.rec.id}"
                     data-testid="chase-to-watch"
                 >
-                    焼き上がりました — 観る画面で続きを ▶
+                    エンコードが終わりました — 続きは再生画面で ▶
                 </a>
             </div>
         {:else if player.chaseEnded}

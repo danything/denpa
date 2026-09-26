@@ -28,7 +28,7 @@ export async function GET({ url, cookies }) {
     if (error !== null) {
         return failed(`${error} ${url.searchParams.get('error_description') ?? ''}`.trim());
     }
-    if (pending === null) return failed('ログインの途中の控えがありません。もう一度お試しください');
+    if (pending === null) return failed('ログインの途中経過が見つかりません。もう一度ログインしてください');
 
     const state = url.searchParams.get('state');
     if (state !== pending.state) return failed('state が合いません');

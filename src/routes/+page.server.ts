@@ -342,7 +342,7 @@ export const actions = {
          */
         if (settings().codec === 'none') {
             return fail(400, {
-                message: '映像コーデックが選ばれていません。設定で AV1 か H.264 を入れてください',
+                message: '映像コーデックが選ばれていません。設定で AV1 か H.264 を選んでください',
             });
         }
         enqueue(recording.id);

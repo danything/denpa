@@ -197,7 +197,7 @@
                                 {data.editing ? 'ルールを編集' : 'ルールを追加'}
                             </h2>
                             <p class="small lead">
-                                条件に合う番組を、これから放送されるものから自動で予約します。ルール名はキーワードから付きます。
+                                これから放送される番組のうち、条件に合うものを自動で予約します。ルール名はキーワードから付けます。
                             </p>
                         </div>
                         {#if data.editing}
@@ -217,7 +217,7 @@
                                     data-testid="rule-keyword"
                                 />
                                 <span class="hint">
-                                    空白で区切ると<strong>すべて含む</strong>ものに当たります
+                                    空白で区切ると<strong>すべて含む</strong>ものに一致します
                                 </span>
                                 <!--
                         当てる範囲。既定は番組名だけ。概要まで広げると番宣で名前が出ただけの
@@ -246,7 +246,7 @@
                                     data-testid="rule-ignore"
                                 />
                                 <span class="hint">
-                                    空白区切りは<strong>どれか1つでも含む</strong>ものを除外
+                                    空白で区切ると<strong>どれか1つでも含む</strong>ものを除外します
                                 </span>
                             </label>
                             <label class="field">
@@ -265,10 +265,10 @@
                         録画は必ずいちばん強い値で掴むので、番組表集めに負けることはない
                     -->
                                 <span class="hint">
-                                    <strong>予約どうし</strong>を比べる数です。チューナーが足りないとき<strong
-                                        >大きいほうを残します</strong
+                                    <strong>予約どうし</strong>の優先度です。チューナーが足りないときは<strong
+                                        >大きいほうを録ります</strong
                                     >
-                                    (手動予約は 2)。番組表集めやロゴ集めとは比べません — 録画は必ずそれらより強く掴みます。
+                                    (手動予約は 2)。番組表やロゴの取得とは比べません。録画はそれらより常に優先されます。
                                 </span>
                             </label>
                         </div>
@@ -467,20 +467,20 @@
                         <!-- 重なりを見るのは出している分だけ (`readPreview`)。全部は見ていないと分かる書き方にする -->
                         {#if preview.conflicts > 0}
                             <span class="tag error outline">
-                                {preview.total > preview.programs.length ? '表示分に' : ''}競合 {preview.conflicts} 件
+                                {preview.total > preview.programs.length ? '表示分のうち' : ''}競合 {preview.conflicts} 件
                             </span>
                         {/if}
                     </h2>
                     {#if preview.total === 0}
                         <p class="small muted">
-                            いまの番組表では1件も当たりません。条件を緩めてください。
+                            いまの番組表では1件も一致しません。条件を緩めてください。
                         </p>
                     {:else}
                         <p class="tiny muted">
-                            予約済みのものはここで取り消せます
-                            (取り消した番組をルールがもう一度予約することはありません)。
-                            条件を変えても既に入っている予約は残るので、条件から外れたものも
-                            <span class="tag">条件外</span> として並べます。
+                            予約済みの番組はここで取り消せます
+                            (取り消した番組をルールが予約し直すことはありません)。
+                            条件を変えても入っている予約は残るため、条件から外れたものは
+                            <span class="tag">条件外</span> として表示します。
                         </p>
                         <ul class="preview-list">
                             {#each preview.programs as program (program.id)}
@@ -634,13 +634,13 @@
                     </div>
                 {:else}
                     <div class="rule-row small muted">
-                        {data.rules.length === 0 ? 'ルールはまだありません' : '当たるルールはありません'}
+                        {data.rules.length === 0 ? 'ルールはまだありません' : '一致するルールはありません'}
                     </div>
                 {/each}
                 <!-- 下端に近づいたら続きを足す。まだ出していない件数を添えて、終わりではないと分かるように -->
                 {#if paged.more}
                     <div class="rule-row small muted more" use:sentinel={() => paged.reveal()}>
-                        あと {paged.rest} 件…
+                        残り {paged.rest} 件
                     </div>
                 {/if}
                 <!-- 絞った結果の件数は末尾に。入力欄の隣に出すと、打つたびに欄の幅が変わる -->

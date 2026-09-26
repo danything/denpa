@@ -255,7 +255,7 @@
                     title="GitHub のリリースを開く"
                     data-testid="update-available"
                 >
-                    {data.update.version} が出ています
+                    {data.update.version} が公開されています
                 </a>
             {/if}
         </div>

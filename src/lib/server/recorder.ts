@@ -173,7 +173,7 @@ async function openWithRetry(
             }
         }
     }
-    throw new Error(`チューナーを ${OPEN_RETRIES} 回試して掴めませんでした: ${last}`);
+    throw new Error(`チューナーを ${OPEN_RETRIES} 回試しましたが確保できませんでした: ${last}`);
 }
 
 /**

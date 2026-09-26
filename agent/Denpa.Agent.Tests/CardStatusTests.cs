@@ -108,7 +108,7 @@ public class CardStatusTests
             () => throw new CardsUnreadableException([new("空 (usb 1-2)", "空 (usb 1-2) にカードが挿さっていません", true)]),
             () => "", () => found, TimeSpan.FromSeconds(5));
         await Assert.That(survey.Ok).IsFalse();
-        await Assert.That(survey.Message).IsEqualTo("どのリーダーにもカードが挿さっていません");
+        await Assert.That(survey.Message).IsEqualTo("どのカードリーダーにもカードが挿さっていません");
     }
 
     [Test]
@@ -118,7 +118,7 @@ public class CardStatusTests
         var survey = Card.Local(
             () => throw new CardsUnreadableException([new("壊れた (usb 1-3)", "INT を断られました", false)]),
             () => "", () => found, TimeSpan.FromSeconds(5));
-        await Assert.That(survey.Message).IsEqualTo("どのリーダーでもカードを読めません");
+        await Assert.That(survey.Message).IsEqualTo("どのカードリーダーでもカードを読めません");
         await Assert.That(survey.Readers[0].Error).IsEqualTo("INT を断られました");
     }
 
@@ -164,7 +164,7 @@ public class CardStatusTests
         // 使っているものは探し直しに出なくても出す
         await Assert.That(survey.Readers.Select(reader => reader.Name).ToArray())
             .IsEquivalentTo(new[] { "使っている", "固まった (usb 2-1)", "予備 (usb 2-2)" });
-        await Assert.That(survey.Readers[1].Error).Contains("答えません");
+        await Assert.That(survey.Readers[1].Error).Contains("応答しません");
         await Assert.That(survey.Readers[2].Card).IsTrue();
     }
 
@@ -179,7 +179,7 @@ public class CardStatusTests
         await Assert.That(report["tuners"]![0]!.GetValue<string>()).IsEqualTo("PT3-T1");
         await Assert.That(report["readers"]!.AsArray().Count).IsEqualTo(0);
 
-        var down = Card.Remote("http://card:25252", () => throw new IOException("鍵を配る相手からカードの素を貰えません (503)"));
+        var down = Card.Remote("http://card:25252", () => throw new IOException("鍵を配る拠点からカードの情報を受け取れません (503)"));
         await Assert.That(down.Ok).IsFalse();
         await Assert.That(down.Message).Contains("503");
     }

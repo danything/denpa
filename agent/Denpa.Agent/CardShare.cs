@@ -113,7 +113,7 @@ public sealed class RemoteCard(string url) : IKeySource
         using var response = Http.Send(new HttpRequestMessage(HttpMethod.Get, $"{_url}/denpa/card/init"));
         if (!response.IsSuccessStatusCode)
         {
-            throw new IOException($"鍵を配る相手からカードの素を貰えません ({(int)response.StatusCode})");
+            throw new IOException($"鍵を配る拠点からカードの情報を受け取れません ({(int)response.StatusCode})");
         }
         return _init = CardWire.ReadInit(Body(response));
     }
@@ -128,12 +128,12 @@ public sealed class RemoteCard(string url) : IKeySource
         try
         {
             using var response = Http.Send(request);
-            if (!response.IsSuccessStatusCode) throw new IOException($"鍵を貰えません ({(int)response.StatusCode})");
+            if (!response.IsSuccessStatusCode) throw new IOException($"鍵を受け取れません ({(int)response.StatusCode})");
             return CardWire.ReadEcm(Body(response));
         }
         catch (HttpRequestException error)
         {
-            throw new IOException($"鍵を配る相手に繋がりません: {error.Message}", error);
+            throw new IOException($"鍵を配る拠点に繋がりません: {error.Message}", error);
         }
     }
 
@@ -163,7 +163,7 @@ public static class CardWire
 
     public static CardInit ReadInit(byte[] body)
     {
-        if (body.Length < 44) throw new IOException("カードの素が短すぎます");
+        if (body.Length < 44) throw new IOException("カードの情報が短すぎます");
         var ids = new long[(body.Length - 44) / 8];
         for (var at = 0; at < ids.Length; at++)
         {

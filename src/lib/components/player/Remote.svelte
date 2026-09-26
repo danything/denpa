@@ -130,7 +130,7 @@
     </details>
 
     <p class="tiny muted">
-        キーボードでも押せます — 矢印キー・Enter・Backspace と、色は B / R / G / Y
+        キーボードでも操作できます (矢印キー・Enter・Backspace、色ボタンは B / R / G / Y)
     </p>
 </div>
 

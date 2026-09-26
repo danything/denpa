@@ -32,9 +32,9 @@ function unscramble(input: string, output: string): { ok: boolean; error: string
     const from = resolve(RECORDED, input);
     const to = resolve(RECORDED, output);
     if (!from.startsWith(`${RECORDED}/`) || !to.startsWith(`${RECORDED}/`)) {
-        return { ok: false, error: '生TSの置き場の外は解除に回せません' };
+        return { ok: false, error: '生TSの保存先の外にあるファイルは解除できません' };
     }
-    if (!existsSync(from)) return { ok: false, error: `${from} が見えません` };
+    if (!existsSync(from)) return { ok: false, error: `${from} が見つかりません` };
 
     const buffer = readFileSync(from);
     for (let i = 0; i + 188 <= buffer.length; i += 188) buffer[i + 3]! &= 0x3f;

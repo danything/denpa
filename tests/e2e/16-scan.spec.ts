@@ -69,7 +69,7 @@ test.describe('チューナー画面', () => {
 
         // 終わったら押せる状態に戻る。戻らないと次に押せない
         await expect(page.getByTestId('epg-collect-now')).toBeEnabled({ timeout: 120_000 });
-        await expect(page.getByTestId('channel-coverage')).toContainText('番組表の届いた局');
+        await expect(page.getByTestId('channel-coverage')).toContainText('番組表のある局');
     });
 
     test('種別を1つも選ばなければ断る', async ({ page }) => {
@@ -123,8 +123,8 @@ test.describe('チューナー画面', () => {
          */
         const coverage = page.getByTestId('channel-coverage');
         await expect(coverage).toContainText('周波数');
-        await expect(coverage).toContainText('そこに乗っている局');
-        await expect(coverage).toContainText('番組表の届いた局');
+        await expect(coverage).toContainText('局');
+        await expect(coverage).toContainText('番組表のある局');
     });
 });
 

@@ -99,7 +99,7 @@ app.MapGet("/denpa/stream", async (HttpContext http) =>
     var channel = query["channel"].ToString();
     if (type.Length == 0 || channel.Length == 0)
     {
-        await Respond.Write(http, new JsonObject { ["error"] = "type と channel が要ります" }, 400);
+        await Respond.Write(http, new JsonObject { ["error"] = "type と channel が必要です" }, 400);
         return;
     }
     _ = int.TryParse(query["priority"].ToString(), out var priority);
@@ -246,7 +246,7 @@ app.MapPut("/denpa/tuners", async (HttpContext http) =>
     var body = await Respond.Read(http);
     if (body?["tuners"] is not JsonArray list)
     {
-        await Respond.Write(http, new JsonObject { ["error"] = "tuners が要ります" }, 400);
+        await Respond.Write(http, new JsonObject { ["error"] = "tuners が必要です" }, 400);
         return;
     }
 
@@ -284,7 +284,7 @@ app.MapPut("/denpa/channels", async (HttpContext http) =>
     if (body?["channels"] is not JsonArray found || body["scanned"] is not JsonArray scanned
         || scanned.Count == 0)
     {
-        await Respond.Write(http, new JsonObject { ["error"] = "channels と scanned が要ります" }, 400);
+        await Respond.Write(http, new JsonObject { ["error"] = "channels と scanned が必要です" }, 400);
         return;
     }
     // 1件も無いまま上書きすると、今まで録れていた局まで消える

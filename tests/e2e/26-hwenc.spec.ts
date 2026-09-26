@@ -54,13 +54,15 @@ test.describe('GPU で焼く', () => {
         await goto(page, '/settings');
         // GPU が無ければ、口の行も無い
         await page.getByTestId('hw-probe').click();
-        await expect(page.getByTestId('hw-status')).toContainText('GPU が見えません');
+        await expect(page.getByTestId('hw-status')).toContainText('GPU が見つかりません');
         await expect(page.getByTestId('hw-device')).toHaveCount(0);
 
         // 2枚挿した → 確かめ直すと、口が2つ・どちらも4つとも使えて、勝手に印が付く
         for (const gpu of GPUS) writeFileSync(`${stack.hwDir}/${gpu}`, '1');
         await page.getByTestId('hw-probe').click();
-        await expect(page.getByTestId('hw-status')).toContainText('2 口見つかり、2 口で GPU で焼けます');
+        await expect(page.getByTestId('hw-status')).toContainText(
+            'デバイスが 2 個見つかり、2 個で GPU エンコードできます',
+        );
         await expect(page.getByTestId('hw-device')).toHaveCount(2);
         for (const gpu of GPUS) {
             for (const id of IDS) {

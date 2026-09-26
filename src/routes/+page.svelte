@@ -160,7 +160,7 @@
             write(`vlc-paired:${host}`, '1');
             noteAction(
                 'info',
-                '初回はテレビとのペア設定です。開いたタブで「セキュアな接続を使用」に進んで証明書を受け入れ、テレビの画面に出る6桁コードを入れたら、もう一度同じボタンを押してください',
+                '初回はテレビとのペア設定が必要です。開いたタブで「セキュアな接続を使用」から証明書を受け入れ、テレビに出る6桁のコードを入れてから、もう一度このボタンを押してください',
             );
             return;
         }
@@ -195,7 +195,10 @@
         }
         win.location.href = play;
         closeWhenLanded(win);
-        noteAction('info', resumeMs > 0 ? `テレビへ飛ばしました (${durationMs(resumeMs)} から)` : 'テレビへ飛ばしました');
+        noteAction(
+            'info',
+            resumeMs > 0 ? `テレビで再生を始めました (${durationMs(resumeMs)} から)` : 'テレビで再生を始めました',
+        );
         detail.close();
     }
 
@@ -271,10 +274,10 @@
              * 動画そのものには触らないので、その数だけは出しておく
              */
             const { checked, removed, swept, strays, pruned } = form.reconcile;
-            const parts = [`照合 ${checked} 件`, `ファイルが無く削除済みにした ${removed} 件`];
-            if (swept > 0) parts.push(`持ち主の居ない付属ファイルを削除 ${swept} 件`);
+            const parts = [`照合 ${checked} 件`, `ファイルが無いため削除済みにした ${removed} 件`];
+            if (swept > 0) parts.push(`録画の無い付属ファイルを削除 ${swept} 件`);
             if (pruned > 0) parts.push(`空のフォルダを削除 ${pruned} 件`);
-            if (strays > 0) parts.push(`DBに無い動画 ${strays} 件 (消していません)`);
+            if (strays > 0) parts.push(`DB に無い動画 ${strays} 件 (残してあります)`);
             list.push({ key: 'reconcile-result', kind: 'info', text: parts.join(' / ') });
         }
         return list;
@@ -440,7 +443,7 @@
      */
     function openMissed(res: (typeof data.missed)[number]): void {
         const text =
-            res.conflict_reason ?? 'アプリが止まっていた等で、録り始めないまま放送が終わりました';
+            res.conflict_reason ?? 'アプリが止まっていたなどの理由で、録画を始められないまま放送が終わりました';
         openDetail(res.program_id, res, [{ title: '録り逃しました', text }]);
     }
     const rightRows = $derived(
@@ -985,7 +988,7 @@
                                             も、覚えているほうが怪しいので同じ口を出す
                                         -->
                                         <div class="row-sub text-warning small">
-                                            ロゴでのCM判定に失敗 (無音のみで判定)
+                                            ロゴでCMを判定できませんでした (無音だけで判定)
                                             <span class="muted"
                                                 >— チューナー画面でロゴの位置を教えられます</span
                                             >

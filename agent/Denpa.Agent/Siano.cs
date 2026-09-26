@@ -369,7 +369,7 @@ public sealed class SianoTuner : ITuneDevice
         start.RedirectStandardError = true;
         start.UseShellExecute = false;
 
-        var process = Process.Start(start) ?? throw new IOException("siano-ts を起こせません");
+        var process = Process.Start(start) ?? throw new IOException("siano-ts を起動できません");
         var child = new Child(process);
         _ = Task.Run(async () =>
         {
@@ -482,7 +482,7 @@ public sealed class SianoTuner : ITuneDevice
              */
             if (!drain.Wait(TimeSpan.FromSeconds(2)))
             {
-                failure ??= "siano-ts の標準出力を読み捨てるところが止まりません";
+                failure ??= "siano-ts の標準出力の読み捨てが止まりません";
                 uncertain = true;
             }
         }

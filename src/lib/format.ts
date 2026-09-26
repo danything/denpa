@@ -65,10 +65,10 @@ export function clipNote(
     const head = item.record_from !== null ? item.record_from - item.start_at : 0;
     const tail = item.record_to !== null ? item.end_at - item.record_to : 0;
     const parts: string[] = [];
-    if (head > 0) parts.push(`頭 ${durationMs(head)}`);
-    if (tail > 0) parts.push(`尻 ${durationMs(tail)}`);
+    if (head > 0) parts.push(`冒頭 ${durationMs(head)}`);
+    if (tail > 0) parts.push(`末尾 ${durationMs(tail)}`);
     if (parts.length === 0) return null;
-    return `${parts.join(' と ')} が${done ? '欠けています' : '欠けます'} (チューナーの取り合い)`;
+    return `${parts.join('と')}が${done ? '欠けています' : '欠けます'} (チューナー不足)`;
 }
 
 /**
@@ -217,7 +217,7 @@ export const STATE_LABEL: Record<string, string> = {
     recording: '録画中',
     done: '完了',
     failed: '失敗',
-    canceled: 'キャンセル',
+    canceled: '取り消し済み',
     missed: '録り逃し',
     recorded: '録画済み',
     encoding: 'エンコード中',

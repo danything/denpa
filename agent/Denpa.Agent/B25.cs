@@ -470,7 +470,7 @@ public sealed class Descrambler(IKeySource source)
             if (answer.Code is not (0x0200 or 0x0400 or 0x0800))
             {
                 ecm.Unentitled = true;
-                Report($"カードが鍵を出しません (契約が無いか、別の方式の局: 0x{answer.Code:X4})");
+                Report($"カードが鍵を返しません (未契約か、別の方式の局です: 0x{answer.Code:X4})");
                 return;
             }
             ecm.Cipher ??= new Multi2(_init.SystemKey, _init.InitCbc);

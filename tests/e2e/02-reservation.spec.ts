@@ -34,7 +34,7 @@ test.describe('手動予約', () => {
         await goto(page, '/?all=1');
         await expect(
             page.locator(`[data-testid="reservation-row"][data-program-id="${target.programId}"]`),
-        ).toContainText('キャンセル');
+        ).toContainText('取り消し済み');
     });
 
     test('ルール未設定でも複数チャンネルの予約が並行して立つ', async ({ page }) => {

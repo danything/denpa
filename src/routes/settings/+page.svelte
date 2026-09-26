@@ -112,8 +112,7 @@
         <section class="panel card">
             <h2>録画のしかた</h2>
             <p class="small lead">
-                全部の録画に効きます。番組ごとに変えたくなることは実際にはほとんど無いので、
-                ルールにも予約にも同じ選択肢を並べず、ここ1箇所で決めます。
+                すべての録画に効きます。ルールや予約ごとには変えられません。
             </p>
             <form
                 method="POST"
@@ -155,8 +154,8 @@
                     </label>
                     {#if recording.codecs.length === 0}
                         <span class="hint">
-                            どちらも入れないと<strong>エンコードしません</strong>
-                            (生TSのまま置く)。CM のチャプターも字幕トラックも付きません
+                            どちらも選ばないと<strong>エンコードせず</strong>、
+                            生TSのまま残します。CM のチャプターや字幕トラックも付きません
                         </span>
                     {:else if recording.codecs.length === 2}
                         <span class="hint">
@@ -180,7 +179,7 @@
                     recording.keepOriginal,
                     'global-keep',
                     '生TSも残す',
-                    'エンコードしたあとも元のTSを消しません。容量を食います',
+                    'エンコードしたあとも元のTSを消しません。容量を多く使います',
                     'self-center',
                 )}
                 <label class="field">
@@ -189,7 +188,7 @@
                         <option value="chapter" selected={recording.cmCut === 'chapter'}>
                             チャプターを打つだけ (安全)
                         </option>
-                        <option value="cut" selected={recording.cmCut === 'cut'}>実際に切る</option>
+                        <option value="cut" selected={recording.cmCut === 'cut'}>切り取る</option>
                         <option value="off" selected={recording.cmCut === 'off'}>何もしない</option>
                     </select>
                 </label>
@@ -215,7 +214,7 @@
                     だけなので、言葉で選ばせる
                 -->
                 <label class="field">
-                    <span class="label">ロゴをどれだけ当てにするか</span>
+                    <span class="label">ロゴの重み</span>
                     <select
                         name="logoLevel"
                         disabled={recording.cmDetector !== 'jls'}
@@ -230,7 +229,7 @@
                         <option value="1" selected={recording.logoLevel <= 1}> ロゴを使わない </option>
                     </select>
                     <span class="hint">
-                        ロゴは合っているのにCMを取り違えるなら「最優先」側に、取り込んであるロゴ自体が怪しいなら「参考程度」側にします
+                        ロゴは合っているのにCMを取り違えるなら「最優先」寄りに、覚えたロゴ自体が怪しいなら「参考程度」寄りにしてください
                     </span>
                 </label>
                 <!--
@@ -244,7 +243,7 @@
                     recording.fpsDetect,
                     'global-fps-detect',
                     'コマ数を映像から決める',
-                    '同じ絵が並ぶ素材 (アニメなど) を 30コマでエンコードし、時間とサイズを半分にします。外すと全部 60コマになります',
+                    '同じコマが続く映像 (アニメなど) は 30コマでエンコードし、時間とサイズを半分にします。外すとすべて 60コマになります',
                 )}
                 {@render checkRow(
                     'freeOnly',
@@ -267,10 +266,10 @@
         <section class="panel card">
             <h2>GPU</h2>
             <p class="small lead">
-                GPU (Intel QSV / VA-API) で焼くかを、口ごと・コーデックごとに決めます。
-                使えるものには自動で印が付き、両方に付いていれば QSV → VA-API → ソフトウェアの
-                順に試して、落ちたら次で焼き直します。グラボが2枚あれば「こちらは AV1、
-                あちらは H.264」のように分けられ、同じコーデックを焼ける口が複数あれば順に回します。
+                GPU (Intel QSV / VA-API) でエンコードするかを、デバイスごと・コーデックごとに選びます。
+                使えるものには自動で印が付きます。両方に付いていれば QSV → VA-API → ソフトウェアの
+                順に試し、失敗したら次の方法でやり直します。GPU が2枚あれば「こちらは AV1、
+                あちらは H.264」のように分けられ、同じコーデックを扱えるデバイスが複数あれば順番に使います。
             </p>
             {#await data.hw}
                 <span class="hint" data-testid="hw-status">GPU を確認中…</span>
@@ -327,9 +326,9 @@
         <section class="panel card">
             <h2>通知</h2>
             <p class="small lead">
-                録画の開始・完了・失敗などの通知を外部に送ります。Discord や Slack の Incoming Webhook の URL
+                録画の開始・完了・失敗などを外部に通知します。Discord や Slack の Incoming Webhook の URL
                 をそのまま入れられます。
-                録画の失敗は画面を開くまで気づけないので、少なくとも失敗だけでも入れておくと安心です。
+                録画の失敗は画面を開くまで気づけないので、せめて「録画失敗」は送っておくと安心です。
             </p>
 
             {#if form?.tested}
@@ -430,9 +429,9 @@
         <section class="panel card">
             <h2>データ放送</h2>
             <p class="small lead">
-                テレビの初期設定で聞かれる郵便番号です。データ放送 (d ボタン) の
-                <strong>天気・地域のニュース・防災情報</strong>は、これでどこの分を出すかが決まります。
-                入れていないと「郵便番号が正しく設定されていません」と出て、その欄が空のままになります。
+                テレビの初期設定で入れる郵便番号です。データ放送 (d ボタン) の
+                <strong>天気・地域のニュース・防災情報</strong>は、これで地域が決まります。
+                未設定だと「郵便番号が正しく設定されていません」と表示され、その欄は空のままです。
             </p>
             <form method="POST" action="?/saveBroadcast" use:submitting={keepValues} class="wrap-form">
                 <label class="field">
@@ -447,7 +446,7 @@
                     />
                 </label>
                 <!-- **空にできる。** 空は「渡さない」という選び方で、危なくない -->
-                <span class="hint full">数字7桁。ハイフンは入れても構いません。空にすると渡しません</span>
+                <span class="hint full">数字7桁 (ハイフンは有っても無くても可)。空にすると設定しません</span>
 
                 <!--
                     **双方向。既定は切。**
@@ -469,9 +468,9 @@
                     <span class="small">
                         双方向 (通信系コンテンツ) を使う
                         <span class="hint">
-                            入れると、denpa が<strong>放送局のサーバとの通信を代わりに行います</strong> (受け取りも送信もします)。
-                            番組の応募や投票もそのまま通ります。切っていると放送側は
-                            「インターネットに接続されていません」と案内します
+                            オンにすると、denpa が<strong>放送局のサーバと代わりに通信します</strong> (受信も送信も)。
+                            番組の応募や投票もそのまま送られます。オフのときは、放送側に
+                            「インターネットに接続されていません」と表示されます
                         </span>
                     </span>
                 </label>
@@ -492,12 +491,12 @@
         <section class="panel card" data-testid="vlc-card">
             <h2>テレビで再生 (VLC)</h2>
             <p class="small lead">
-                テレビの VLC の「リモートアクセス」に、<strong>いま開いている端末から</strong>録画を飛ばして
-                再生させます。VLC 側で <strong>その他 → リモートアクセス</strong> を有効にして、ここに
-                テレビを登録すると、録画詳細に「テレビで再生」が出ます (登録が無いと出ません)。初回だけ
-                VLC のペア設定が開きます — セキュアな接続 (自己署名の証明書) を受け入れて、
-                テレビの画面に出る6桁コードを入れると、以後は素通りです。
-                AV1 を再生できないテレビは、コーデックを H.264 や生TSにすると
+                テレビの VLC の「リモートアクセス」を使い、<strong>いま開いている端末から</strong>録画を
+                テレビで再生します。VLC で <strong>その他 → リモートアクセス</strong> を有効にして、ここに
+                テレビを登録すると、録画詳細に「テレビで再生」が出ます。初回だけ
+                VLC のペア設定が開きます。セキュアな接続 (自己署名の証明書) を受け入れ、
+                テレビに出る6桁のコードを入れれば、次からはそのまま再生できます。
+                AV1 を再生できないテレビは、コーデックを H.264 か生TSにすると、
                 そのテレビにだけ別のファイルを渡します。
             </p>
             <form method="POST" action="?/saveVlc" use:submitting={keepValues} class="stack">
@@ -547,8 +546,8 @@
                     <p class="small muted">まだテレビがありません</p>
                 {/each}
                 <span class="hint">
-                    名前は空でもかまいません (IPがそのままボタンの文字になります)。
-                    ポートを空にすると VLC の既定 (8080) になります
+                    名前が空ならボタンに IP を表示します。
+                    ポートが空なら VLC の既定 (8080) を使います
                 </span>
                 <div class="cluster">
                     <button
@@ -557,7 +556,7 @@
                         onclick={() => tvRows.push({ name: '', ip: '', port: '8080', codec: 'auto' })}
                         data-testid="vlc-add"
                     >
-                        テレビを足す
+                        テレビを追加
                     </button>
                     <button type="submit" data-testid="save-vlc">保存</button>
                 </div>
@@ -567,15 +566,15 @@
         <section class="panel card">
             <h2>EPGStation からの引き継ぎ</h2>
             <p class="small lead">
-                EPGStation のデータベースを読み、<strong>自動予約ルール・手で入れた予約・録画</strong>を
+                EPGStation のデータベースから、<strong>ルール・手動予約・録画</strong>を
                 取り込みます。録画は denpa
-                の並びに置き直し、番組情報とサムネイルもここで作ります。何度実行しても取り込み済みのものは飛ばします。
-                ルール由来の予約は、ルールを取り込んだあと denpa が自分で立て直します。
+                のフォルダ構成に置き直し、番組情報とサムネイルも作ります。何度実行しても、取り込み済みのものは飛ばします。
+                ルールによる予約は、取り込んだルールから denpa が作り直します。
             </p>
 
             {#if !data.migrate.available}
                 <div class="notice warning" data-testid="migrate-unavailable">
-                    引き継ぎ元 <code>{data.migrate.source}</code> が見えません。denpa の Pod に EPGStation の録画PVCをマウントしてください。
+                    引き継ぎ元 <code>{data.migrate.source}</code> が見つかりません。denpa の Pod に EPGStation の録画PVCをマウントしてください。
                 </div>
             {:else}
                 <form method="POST" action="?/migrate" use:submitting class="stack">
@@ -583,15 +582,15 @@
                         'apply',
                         false,
                         'migrate-apply',
-                        '実際に取り込む',
-                        '外したままなら何が取り込まれるかを出すだけで、ファイルもデータベースも触りません',
+                        '取り込む',
+                        '外したままだと、何が取り込まれるかを表示するだけで、ファイルにもデータベースにも触りません',
                     )}
                     {@render checkRow(
                         'move',
                         false,
                         'migrate-move',
                         'コピーではなく移動する',
-                        '既定はコピー。中身を確かめてから EPGStation 側を消せます。空き容量が足りないときだけ移動にしてください',
+                        '既定はコピーです。中身を確かめてから EPGStation 側を消せます。空き容量が足りないときだけ移動にしてください',
                     )}
                     <div>
                         <button type="submit" disabled={migrate.state === 'running'} data-testid="migrate-run">
@@ -607,7 +606,7 @@
                         <span class="tag" data-testid="migrate-state">
                             {stateLabel(migrate.state)}
                         </span>
-                        <span class="tag outline">{migrate.apply ? '取り込み' : '確認だけ (変更なし)'}</span>
+                        <span class="tag outline">{migrate.apply ? '取り込み' : '下見 (変更なし)'}</span>
                         {#if migrate.move}
                             <span class="tag outline">移動</span>
                         {/if}

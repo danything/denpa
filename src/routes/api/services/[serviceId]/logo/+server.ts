@@ -7,7 +7,7 @@ import { readLogo } from '$lib/server/logo';
  */
 export function GET({ params, setHeaders }) {
     const serviceId = Number(params.serviceId);
-    if (!Number.isFinite(serviceId)) error(400, 'チャンネルIDが不正です');
+    if (!Number.isFinite(serviceId)) error(400, '局IDが不正です');
 
     const logo = readLogo(serviceId);
     if (logo === null) error(404, 'ロゴがありません');

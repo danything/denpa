@@ -38,7 +38,7 @@ test.describe('自動予約ルール', () => {
         await goto(page, '/rules');
         await page.getByTestId('rule-submit').click();
         await expect(page.getByTestId('rule-error')).toContainText(
-            'キーワード・チャンネル・ジャンルのどれかは指定してください',
+            'キーワード・チャンネル・ジャンルのいずれかを指定してください',
         );
         await expect(page.getByTestId('rule-row')).toHaveCount(0);
     });

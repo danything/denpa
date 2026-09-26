@@ -135,7 +135,7 @@ test.describe('テレビの VLC で再生', () => {
             localStorage.setItem('vlc-paired:192.168.1.99:8080', '1');
         });
         await detail.getByTestId('vlc-play-button').nth(0).click();
-        await expect(page.getByText('テレビへ飛ばしました (2分 から)')).toBeVisible();
+        await expect(page.getByText('テレビで再生を始めました (2分 から)')).toBeVisible();
         const opened = await page.evaluate(() => (window as unknown as { __opened: string[] }).__opened);
         expect(opened).toHaveLength(1);
         const path = new URL(opened[0] ?? '').searchParams.get('path') ?? '';

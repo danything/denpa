@@ -94,7 +94,7 @@
                 肝心の数が下に押し出されていた。**数を先に出して、注は1つだけ。**
             -->
             <div class="cluster spread">
-                <h2>取れているチャンネル</h2>
+                <h2>受信できるチャンネル</h2>
                 <!--
                     入れたばかりのとき用。普段の周回は録画にもスキャンにもロゴにも
                     譲るので、何か動いていると番組表がなかなか埋まらない。
@@ -141,12 +141,12 @@
                 -->
                 <div class="small" data-testid="channel-coverage">
                     <span class="soft">周波数</span>
-                    <strong>{coverage.length} 本</strong>
+                    <strong>{coverage.length}</strong>
                     <span class="faint">→</span>
-                    <span class="soft">そこに乗っている局</span>
+                    <span class="soft">局</span>
                     <strong>{services.length}</strong>
                     <span class="faint">→</span>
-                    <span class="soft">番組表の届いた局</span>
+                    <span class="soft">番組表のある局</span>
                     <strong>{withEpg}</strong>
                 </div>
                 <!--
@@ -154,8 +154,8 @@
                     上のボタンが何をするものかをまとめて置く
                 -->
                 <div class="tiny muted">
-                    1本の周波数に局が何局も相乗りしているので、本数と局数はそろいません。番組表は局ごとに、スキャンのあとを追って埋まります。
-                    埋まるのを待てないときは<strong>「番組表をいますぐ集める」</strong
+                    1つの周波数に複数の局が乗っているので、周波数と局の数は一致しません。番組表はスキャンのあと、局ごとに埋まっていきます。
+                    待てないときは<strong>「番組表をいますぐ集める」</strong
                     >で、空いているチューナーを全部使って集められます (録画中のチューナーは使いません)。
                 </div>
                 <!-- カードの中で巻かない。長くても全部並べる (巻くのはページごと) -->
@@ -212,9 +212,9 @@
         <section class="panel card" data-testid="scan-card">
             <h2>チャンネルスキャン</h2>
             <p class="small soft">
-                受信できるチャンネルを実際に選局して探します。<strong
+                受信できるチャンネルを選局して探します。<strong
                     >空いているチューナーを全部使います</strong
-                >が、<strong>録画中でも実行できます</strong> (録画のほうが強いので、そのチューナーは使いません)。見つかったものは保存され、終わると番組表も集め直します。
+                >。<strong>録画中でも実行できます</strong> (録画中のチューナーは使いません)。見つかったチャンネルは保存し、終わると番組表も集め直します。
             </p>
 
             <form method="POST" action="?/scan" use:submitting class="stack">
@@ -291,8 +291,8 @@
             {#await data.detected then detected}
                 {#if detected}
                     <p class="small muted">
-                        いまは<strong>挿さっている機材を自動で見つけて</strong>使っています。
-                        保存するとこの内容で固定されます。
+                        いまは<strong>挿さっているチューナーを自動で見つけて</strong>使っています。
+                        保存すると、この内容に固定します。
                     </p>
                 {/if}
             {/await}
@@ -306,7 +306,7 @@
                                 <tr>
                                     <th>名前</th>
                                     <th>デバイス</th>
-                                    <th>受けられる種別</th>
+                                    <th>受信できる種別</th>
                                     <th>LNB</th>
                                     <th>無効</th>
                                 </tr>
@@ -319,7 +319,7 @@
                                                 class="w-name"
                                                 name={`name.${index}`}
                                                 value={tuner?.name ?? ''}
-                                                placeholder={tuner === null ? '名前を入れて足す' : ''}
+                                                placeholder={tuner === null ? '名前を入れて追加' : ''}
                                             />
                                         </td>
                                         <td>
@@ -403,7 +403,7 @@
                     </div>
                 {:else if tuners.length === 0}
                     <p class="small muted">
-                        チューナーがありません。「チューナーの設定」から足してください。
+                        チューナーがありません。「チューナーの設定」から追加してください。
                     </p>
                 {:else}
                     <div class="table-wrap">
@@ -491,7 +491,7 @@
                         {#if card.source === 'remote'}
                             <!-- CARD_URL。手元のリーダーは使わず、鍵だけ貰っている -->
                             <span class="small">
-                                鍵を配る相手 <span class="mono break">{card.remote ?? '?'}</span> から貰っています
+                                別の拠点 <span class="mono break">{card.remote ?? '?'}</span> から鍵を受け取っています
                                 {#if card.ids.length > 0}
                                     <span class="mono">({card.ids.join(' / ')})</span>
                                 {/if}
@@ -518,7 +518,7 @@
                             <table>
                                 <thead>
                                     <tr>
-                                        <th>リーダー</th>
+                                        <th>カードリーダー</th>
                                         <th>カード (番号)</th>
                                         <th>状態</th>
                                         <th class="wide">使っているチューナー</th>
@@ -609,13 +609,13 @@
                         </dd>
                     {/if}
                     <dd class="tiny muted full">
-                        ロゴが放送波に流れてくるのは数十秒〜数分に一度、
+                        ロゴが放送波に流れるのは数十秒〜数分に一度、
                         <strong>衛星は十数分に一度</strong>です。普段は
-                        <strong>番組表を集めるための選局に相乗りして</strong>拾うので、 denpa
-                        がロゴのためにチューナーを増やすことはありません。一度取れたものも1週間経ったら取り直します。
-                        「いますぐ取りに行く」を押したときは衛星も回ります。<strong
-                            >BS も CS も同じ1つの中継から降ってくる</strong
-                        >ので、そこだけ最大20分かかります (他の中継は数秒で切り上げます)。
+                        <strong>番組表を集める選局のついでに</strong>拾うので、
+                        ロゴのためにチューナーを使うことはありません。取れたロゴも1週間ごとに取り直します。
+                        「いますぐ取りに行く」では衛星も回ります。<strong
+                            >BS と CS のロゴは同じ1つの中継で流れる</strong
+                        >ため、そこだけ最大20分かかります (他の中継は数秒で終わります)。
                         {#if data.logos.unavailable > 0}
                             <!--
                                 取れないものを「まだ取れていない」と出し続けると、
@@ -628,7 +628,7 @@
                             -->
                             <br />
                             <strong>{data.logos.unavailable} 局</strong
-                            >はロゴが放送に載っていないので取れません (1週間後にまた確かめます)。
+                            >はロゴが放送に載っていないため取れません (1週間後にまた確かめます)。
                         {/if}
                     </dd>
                     <!--
@@ -642,7 +642,7 @@
                                 <span>
                                     {data.logoSweep.done} / {data.logoSweep.total} チャンネル
                                 </span>
-                                ・ 拾えた <strong>{data.logoSweep.found} 局</strong>
+                                ・ 取得 <strong>{data.logoSweep.found} 局</strong>
                                 {#if data.logoSweep.channels.length > 0}
                                     ・ 受信中 {data.logoSweep.channels.join(', ')}
                                 {/if}
@@ -668,7 +668,7 @@
                         {data.cmLogoStats.have} / {data.cmLogoStats.total} 局
                     </dd>
                     <dd class="tiny muted full">
-                        録画より先に、チューナーが空いたときに放送を数分ぶん見て自動で覚えます。覚えられなかった局は、
+                        チューナーが空いているときに放送を数分見て、自動で覚えます。覚えられなかった局は、
                         下の一覧から位置を教えてください (薄いロゴや動くロゴは自動では見つかりません)。
                     </dd>
                     {#if cmLogos.length > 0}

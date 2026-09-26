@@ -183,7 +183,7 @@ export function assign<T extends Assignable>(
         if (best === null) {
             rejected.push({
                 reservation: candidate,
-                reason: `${candidate.type} のチューナー ${limit} 本に対し同時 ${worst} チャンネル必要`,
+                reason: `${candidate.type} のチューナーは ${limit} 本ですが、同時に ${worst} チャンネル必要です`,
             });
             continue;
         }

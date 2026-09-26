@@ -249,7 +249,7 @@ export const actions = {
         setLogoArea(serviceId, area);
         return {
             success: true,
-            done: `ロゴの位置を受け取りました (${area})。次に掴んだときに、この範囲でロゴを覚え直します`,
+            done: `ロゴの位置を保存しました (${area})。次にこの局を受信したとき、この範囲でロゴを覚え直します`,
         };
     },
 
@@ -271,7 +271,7 @@ export const actions = {
         if (!Number.isFinite(serviceId)) return fail(400, { message: '局IDが不正です' });
         // 同じ絵を映しているサブチャンネルの枠にも配ってある (`logo-data.share`)
         for (const id of [serviceId, ...siblings(serviceId)]) forgetLogoData(id);
-        return { success: true, done: '覚えたロゴを捨てました。次にこの局を録ったときに覚え直します' };
+        return { success: true, done: '覚えたロゴを消しました。次にこの局を録画したときに覚え直します' };
     },
 
     logoAreaClear: async ({ request }) => {
@@ -333,7 +333,7 @@ export const actions = {
 
             const types = TYPES.filter((type) => form.get(`type.${index}.${type}`) !== null);
             if (types.length === 0) {
-                return fail(400, { message: `${name}: 受けられる種別を1つ以上選んでください` });
+                return fail(400, { message: `${name}: 受信できる種別を1つ以上選んでください` });
             }
             const device = String(form.get(`device.${index}`) ?? '').trim();
             if (device === '') return fail(400, { message: `${name}: デバイスのパスを入れてください` });
@@ -352,7 +352,7 @@ export const actions = {
         } catch (error) {
             return fail(502, { message: String(error) });
         }
-        return { success: true, done: `チューナーを ${tuners.length} 本 保存しました` };
+        return { success: true, done: `チューナー ${tuners.length} 本を保存しました` };
     },
 
     /** 定義を消して自動検出に戻す。刺さっている機材をエージェントが自分で見つける */

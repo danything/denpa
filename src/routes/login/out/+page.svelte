@@ -8,8 +8,8 @@
     <div class="panel card">
         <h1>ログアウトしました</h1>
         <p class="small muted">
-            この端末のログイン情報は消しました。Microsoft からは出ていないので、
-            入り直すときはパスワードを聞かれないことがあります。
+            この端末のログイン情報を消しました。Microsoft からはログアウトしていないので、
+            次はパスワードを聞かれずにログインできることがあります。
         </p>
         <div class="card-actions">
             <a class="button" href="/login">もう一度ログイン</a>
