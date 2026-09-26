@@ -105,7 +105,7 @@ export async function resolveConflicts(): Promise<{ accepted: number; rejected: 
 }
 
 /**
- * 1秒ごとに呼ばれる本体。開始時刻に達した予約を録画に移し、終了時刻を過ぎた録画を止める。
+ * `schedulerTick` (既定5秒) ごとに呼ばれる本体。開始時刻に達した予約を録画に移し、終了時刻を過ぎた録画を止める。
  * 状態遷移は全てここに集約し、recorder.ts はストリームの読み書きだけに専念させる。
  */
 export async function tick(): Promise<void> {
@@ -162,9 +162,8 @@ export async function tick(): Promise<void> {
      * 始めれば居座りはそのぶん伸びるが、**Pod はどのみち残っている**ので
      * 新しく待たせるものは無い。伸びすぎない歯止めは既にある —
      * `SHUTDOWN_WAIT` (6時間) を過ぎれば `runtime.ts` が降ろす。そこで
-     * 切れた録画は追記で開いてあるので、次の Pod が続きから録る
-     */
-    /*
+     * 切れた録画は追記で開いてあるので、次の Pod が続きから録る。
+     *
      * **譲ったぶんがあれば、そちらを見る** (`record_from`)。チューナーの取り合いで
      * 頭を譲った予約は、番組の始まりに起こしても掴めない — 相手がまだ掴んでいる
      */

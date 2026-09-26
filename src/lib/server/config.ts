@@ -33,6 +33,10 @@ function bool(key: string, fallback: boolean): boolean {
 const SEC = 1000;
 const MIN = 60 * SEC;
 
+const dbPath = str('DENPA_DB', '/app/data/denpa.db');
+/** DBの隣。運用でいちいち2つ指す意味が無い */
+const dataDir = dbPath.replace(/\/[^/]*$/, '') || '.';
+
 export const config = {
     /**
      * チューナーエージェントの居場所。
@@ -74,9 +78,9 @@ export const config = {
         logo: 1,
     },
 
-    dbPath: str('DENPA_DB', '/app/data/denpa.db'),
+    dbPath,
     /** DBと並べて置くもの。局ロゴと、jls が作るロゴデータ */
-    dataDir: '',
+    dataDir,
     /** 生TSの置き場。エンコード後は(keep_original でなければ)消える作業領域 */
     recordedDir: str('RECORDED_DIR', '/app/recorded'),
     /** エンコード済みの置き場。プレイヤーにはここのファイルを配る */
@@ -113,8 +117,8 @@ export const config = {
     jlsBin: '/opt/jls/bin',
     /** join_logo_scp の判定規則。join_logo_scp_trial に付いてくるもの */
     jlsRule: '/opt/jls/JL/JL_標準.txt',
-    /** logoframe が作るロゴデータ (.lgd) の置き場。データ置き場の下 */
-    jlsLogoDir: '',
+    /** logoframe が作るロゴデータ (.lgd) の置き場。放送波から拾った局ロゴ (PNG) の隣 */
+    jlsLogoDir: `${dataDir}/logos/jls`,
     /** ロゴを覚えるときに見るコマ数。増やすほど綺麗に出るが、その分だけ読む */
     jlsLogoSamples: 600,
     /**
@@ -192,16 +196,6 @@ export const config = {
     endMargin: num('END_MARGIN', 15 * SEC),
 
     /**
-     * 放送の延長に追従する。
-     *
-     * 録画中のTSには EIT[p/f] (いま流れている番組) が乗っている。そこの終了時刻が
-     * 後ろへ動いたら録画も延ばす。野球が延びればその分だけ録り続ける。
-     *
-     * 0 にすると番組表の時刻で開いて閉じる、前のやり方に戻る。
-     */
-    followOnair: true,
-
-    /**
      * 番組表を集めに行く間隔。**この周期で「集め直すべき局」を選び直す。**
      *
      * チューナーが空いていれば空いているだけ並列に回すので、周期を短くしても
@@ -272,8 +266,8 @@ export const config = {
      */
     agentDownGrace: num('AGENT_DOWN_GRACE', 3 * MIN),
     /**
-     * 局ロゴを取りに行く間隔。放送波に流れてくるのを待つので、急いでも取れない。
-     * ただし1回に開けるのは数チャンネルなので、間隔が長いと BS/CS が埋まらない
+     * 局ロゴの見回りの間隔。**相乗りだけで、自分ではチューナーを開かない** (`logo.sweep`)。
+     * 開いた瞬間の知らせ (`tuners`) でも乗るので、これは知らせを取りこぼしたときの保険
      */
     logoSweepInterval: 10 * MIN,
     /** 終了した番組情報をDBに残しておく期間。番組表の遡り表示にしか使わないので短くてよい */
@@ -297,8 +291,8 @@ export const config = {
     oidcClientId: str('OIDC_CLIENT_ID', ''),
     oidcClientSecret: str('OIDC_CLIENT_SECRET', ''),
     /**
-     * **このグループに居る人だけ入れる。** Entra ID の `groups` クレームに
-     * 入っているもの (既定ではグループのオブジェクトID) と照合する。
+     * **このグループに居る人だけ入れる。** Entra ID の `groups` クレーム
+     * (既定ではグループのオブジェクトID) か `roles` クレーム (アプリロール) と照合する (`oidc.allowed`)。
      *
      * 空にすると「入れた人は全員通す」。誰が入れるかを Entra 側の
      * アプリ割り当てで決めているなら、そちらで足りる
@@ -332,8 +326,3 @@ export const config = {
     /** 0 にすると EPG 取得・スケジューラ・エンコーダを起動しない (単体テスト用) */
     autostart: bool('DENPA_AUTOSTART', true),
 };
-
-/** 指定が無ければDBの隣。運用でいちいち2つ指す意味が無い */
-if (config.dataDir === '') config.dataDir = config.dbPath.replace(/\/[^/]*$/, '') || '.';
-/** 局ロゴと同じ扱い。放送波から拾った PNG の隣に、jls 用の .lgd を置く */
-if (config.jlsLogoDir === '') config.jlsLogoDir = `${config.dataDir}/logos/jls`;

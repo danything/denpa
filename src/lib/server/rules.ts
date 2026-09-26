@@ -33,15 +33,15 @@ export function haystack(
 }
 
 /**
- * 番組のジャンル。中分類まで持っている genre_detail を使い、
- * 取り込みが古くて入っていないものは大分類だけの genres で代用する
- */
-/**
  * 判定が番組から読む列。**全列は要らない** — 下見 (`rules/+page.server.ts`) は
  * 読む列を絞って引くので、ここを `Program` にしていると渡せない
  */
 export type Matchable = Pick<Program, 'service_id' | 'is_free' | 'genres' | 'genre_detail'>;
 
+/**
+ * 番組のジャンル。中分類まで持っている genre_detail を使い、
+ * 取り込みが古くて入っていないものは大分類だけの genres で代用する
+ */
 function parseGenreDetail(program: Matchable): Genre[] {
     return nonEmpty(program.genre_detail) ?? (program.genres ?? []).map((lv1) => ({ lv1, lv2: -1 }));
 }

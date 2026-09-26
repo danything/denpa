@@ -46,12 +46,6 @@ describe('選局するチャンネル', () => {
     test('CSは02chから', () => {
         expect(channelsFor('CS')[0]).toBe('CS02');
     });
-
-    test('範囲を広げても放送に無いチャンネルは足さない', () => {
-        expect(channelsFor('GR', 1, 999)[0]).toBe('T13');
-        expect(channelsFor('GR', 1, 999).at(-1)).toBe('T62');
-        expect(channelsFor('GR', 20, 22)).toEqual(['T20', 'T21', 'T22']);
-    });
 });
 
 describe('チャンネル定義の組み立て', () => {

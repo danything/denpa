@@ -111,19 +111,11 @@ async function run(argv: string[], signal: AbortSignal | undefined, deadline: nu
 }
 
 /**
- * 途中で作るファイルの共通の頭。入力の隣に置く (TSと同じ場所なら容量の心配が要らない)。
- *
- * 後始末はこの頭で拾って消す。logoframe は渡した名前のほかに
- * `_1.txt` や `_list.ini` を**自分で足して**作るので、こちらが名前を並べただけでは
- * 取りこぼす。実機の生TSの置き場に残骸が溜まっていた
+ * 途中で作るファイル。入力の隣に置く (TSと同じ場所なら容量の心配が要らない)。
+ * 頭は全部 `<入力>.jls` — 後始末はこの頭で拾って消す (`cleanup`)
  */
-function workPrefix(input: string): string {
-    return `${input}.jls`;
-}
-
-/** 途中で作るファイル。入力の隣に置く (TSと同じ場所なら容量の心配が要らない) */
 function workFiles(input: string) {
-    const base = workPrefix(input);
+    const base = `${input}.jls`;
     return {
         /** chapter_exe が出す無音・シーンチェンジの一覧 */
         scenes: `${base}.chapterexe.txt`,
@@ -170,18 +162,6 @@ export async function detectWithJls(
 
     try {
         /*
-         * 1. 局ロゴが写っているコマを拾う。
-         *
-         * 局名を渡すと logoframe が**その局のロゴデータ (.lgd) を自分で作って覚える**。
-         * 1本目は作るぶん遅く、2本目からは使い回す。局が分からないときは
-         * 持っているロゴを片端から当てる (無ければロゴ無しで進む)。
-         *
-         * **無音・シーンチェンジより先に回す。** 逆にしていた頃は、chapter_exe が
-         * 落ちた録画ではロゴを当てられたかどうかが分からないまま無音検出に落ちていて、
-         * 一覧に「ロゴを当てられませんでした」が出なかった (実機で2本)。
-         * ロゴの当たり外れは局ごとに決まる話なので、先に確かめて必ず伝える
-         */
-        /*
          * **在り処が空なら、この録画から割り出して渡す** (`logo-area.ts`)。
          *
          * logoframe の自動検出は画面全体を見るので、半透明の細いロゴでは
@@ -205,6 +185,20 @@ export async function detectWithJls(
             }
         }
 
+        /** 在り処の枠を渡せる形か (`x,y,w,h`) */
+        const areaReady = () => /^\d+,\d+,\d+,\d+$/.test(logoAreaText);
+        /*
+         * 1. 局ロゴが写っているコマを拾う。
+         *
+         * 局名を渡すと logoframe が**その局のロゴデータ (.lgd) を自分で作って覚える**。
+         * 1本目は作るぶん遅く、2本目からは使い回す。局が分からないときは
+         * 持っているロゴを片端から当てる (無ければロゴ無しで進む)。
+         *
+         * **無音・シーンチェンジより先に回す。** 逆にしていた頃は、chapter_exe が
+         * 落ちた録画ではロゴを当てられたかどうかが分からないまま無音検出に落ちていて、
+         * 一覧に「ロゴを当てられませんでした」が出なかった (実機で2本)。
+         * ロゴの当たり外れは局ごとに決まる話なので、先に確かめて必ず伝える
+         */
         const logoArgs = (withArea: boolean) =>
             channel === ''
                 ? ['-logo', repo]
@@ -221,9 +215,7 @@ export async function detectWithJls(
                       '-logo-match',
                       String(config.jlsLogoMatch),
                       // 自動で見つからなかった局だけ、画面から教わった範囲を渡す
-                      ...(withArea && /^\d+,\d+,\d+,\d+$/.test(logoAreaText)
-                          ? ['-logo-area', logoAreaText]
-                          : []),
+                      ...(withArea && areaReady() ? ['-logo-area', logoAreaText] : []),
                   ];
         const findFrames = (withArea: boolean) =>
             run(
@@ -245,7 +237,7 @@ export async function detectWithJls(
          * 割り出した枠は**当たらなければ無かったことにする**。当たった枠
          * (人が教えたもの) は捨てず、渡さずに1回試すだけにします
          */
-        const hadArea = /^\d+,\d+,\d+,\d+$/.test(logoAreaText) && channel !== '';
+        const hadArea = areaReady() && channel !== '';
         if (frames.code !== 0 && hadArea) {
             console.warn(`[cm] ロゴの枠 ${logoAreaText} では見つかりませんでした。枠なしで試します`);
             step('局ロゴが写っているコマを探しています (枠なし)');

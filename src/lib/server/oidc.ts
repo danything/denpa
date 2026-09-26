@@ -37,10 +37,10 @@ export type Discovery = Infer<typeof DISCOVERY>;
  */
 let discovered: Discovery | null = null;
 
-async function discover(fetcher: typeof fetch = fetch): Promise<Discovery> {
+async function discover(): Promise<Discovery> {
     if (discovered !== null) return discovered;
     const url = `${config.oidcIssuer}/.well-known/openid-configuration`;
-    const res = await fetcher(url);
+    const res = await fetch(url);
     if (!res.ok) throw new Error(`OIDC の設定を読めません (${res.status}) ${url}`);
     discovered = read(DISCOVERY, await res.json(), 'OIDC の設定');
     return discovered;

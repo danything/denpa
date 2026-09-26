@@ -45,10 +45,10 @@ export async function handle({ event, resolve }) {
     if (!open && !isOpenPath(pathname)) {
         if (isFilePath(pathname)) {
             /*
-             * **ファイルの口はログインの控えか、期限付きの署名リンク** (share.ts)。
+             * **ファイルの口はログインの控えか、期限付きのリンク** (share.ts)。
              * プレイヤーはリダイレクトを扱えないので、URL そのものが資格になる
              * リンクで開ける。ベーシック認証は廃止した — パスワードを使う場面が
-             * 全部署名リンクに置き換わったため
+             * 全部期限付きのリンクに置き換わったため
              */
             if (!sessionMayRead(session !== null) && !shareTokenAllows(pathname, event.url.searchParams)) {
                 return denied();

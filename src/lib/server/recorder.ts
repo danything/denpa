@@ -13,6 +13,7 @@ import { emit } from './events';
 import { moveFile } from './fsx';
 import { libraryPath, recordedPath } from './library';
 import { writeThumbnail } from './metadata';
+import { recordingSummary } from './recording';
 import { programs, recordings, reservations, services } from './schema';
 import { chunks } from './stream';
 import { parseTitle } from './title';
@@ -30,17 +31,6 @@ export function stopRecording(recordingId: number): void {
     active.get(recordingId)?.abort();
 }
 
-/** 通知用に録画の要点をまとめる */
-function summary(recording: Recording) {
-    return {
-        id: recording.id,
-        name: recording.name,
-        service: recording.service_name,
-        startAt: recording.start_at,
-        endAt: recording.end_at,
-    };
-}
-
 function fail(recordingId: number, error: string): void {
     /*
      * 理由を書けば状態は決まる (recordings.state は生成列)。
@@ -56,7 +46,7 @@ function fail(recordingId: number, error: string): void {
         notify({
             event: 'recording.failed',
             text: `録画に失敗しました: ${rec.name} (${rec.service_name})`,
-            recording: summary(rec),
+            recording: recordingSummary(rec),
             error,
         });
     }
@@ -75,8 +65,8 @@ function createRecording(reservation: Reservation): Recording {
      * 名前と概要は**録り始める瞬間の番組表**から取る。
      *
      * 番組表は放送直前まで書き換わる (「[新]」が付く、サブタイトルが入る、
-     * 誤字が直る)。予約の行はキーワードで当てた時点の値のままで、時刻が動いた
-     * ときにしか更新していないので、そのまま写すと**古い名前で保存先に並ぶ**。
+     * 誤字が直る)。予約の行が追い付くのは番組表を集め終えたとき (`epg.settle`) だけ
+     * なので、そのまま写すと**古い名前で保存先に並ぶ**ことがある。
      *
      * 逆に、録り終えたあとは動かさない。番組表の行は24時間で消えるうえ、
      * ファイル名も画面に出す番組情報 (DB) も既に固まっている (docs/data.md)
@@ -139,21 +129,23 @@ function createRecording(reservation: Reservation): Recording {
 export async function startRecording(reservation: Reservation): Promise<Recording> {
     const recording = createRecording(reservation);
     emit('recordings');
-    const controller = new AbortController();
-    active.set(recording.id, controller);
-
     notify({
         event: 'recording.started',
         text: `録画を開始しました: ${recording.name} (${recording.service_name})`,
-        recording: summary(recording),
+        recording: recordingSummary(recording),
     });
+    launch(recording);
+    return recording;
+}
 
+/** 読み出しを裏で走らせる。止める口 (`active`) はここで立てる */
+function launch(recording: Recording): void {
+    const controller = new AbortController();
+    active.set(recording.id, controller);
     void pump(recording, controller).catch((error) => {
         active.delete(recording.id);
         fail(recording.id, String(error));
     });
-
-    return recording;
 }
 
 /**
@@ -177,7 +169,7 @@ async function openWithRetry(
         } catch (error) {
             last = error;
             if (attempt < OPEN_RETRIES - 1) {
-                await new Promise((resolve) => setTimeout(resolve, OPEN_RETRY_WAIT));
+                await Bun.sleep(OPEN_RETRY_WAIT);
             }
         }
     }
@@ -322,13 +314,13 @@ async function pump(recording: Recording, controller: AbortController): Promise<
                         `[recorder] 録画 ${recording.id}: 選局を掴み直せません (${interrupted} 回目: ${error})。` +
                             `待って掛け直します`,
                     );
-                    await new Promise((resolve) => setTimeout(resolve, OPEN_RETRY_WAIT));
+                    await Bun.sleep(OPEN_RETRY_WAIT);
                     continue;
                 }
 
                 try {
                     for await (const chunk of chunks(stream)) {
-                        if (config.followOnair && epg.feed(chunk) && eventId !== null) {
+                        if (epg.feed(chunk) && eventId !== null) {
                             const present = epg.present.get(service.service_id);
                             if (
                                 present !== undefined &&
@@ -361,7 +353,7 @@ async function pump(recording: Recording, controller: AbortController): Promise<
                     `[recorder] 録画 ${recording.id}: 選局が切れました (${interrupted} 回目` +
                         `${broke === null ? '' : `: ${broke}`})。掴み直します`,
                 );
-                await new Promise((resolve) => setTimeout(resolve, OPEN_RETRY_WAIT));
+                await Bun.sleep(OPEN_RETRY_WAIT);
             }
         } finally {
             if (interrupted > 0) {
@@ -372,12 +364,11 @@ async function pump(recording: Recording, controller: AbortController): Promise<
                 sink.end((error?: Error | null) => (error ? reject(error) : resolve()));
             });
             // 途中で終わっても、読めたぶんの番組表は残す
-            if (config.followOnair) savePrograms(epg.all());
+            savePrograms(epg.all());
         }
     } catch (error) {
         // 終了時刻に達して自分で abort した場合は正常終了。それ以外だけ失敗にする
         if (!controller.signal.aborted) {
-            active.delete(recording.id);
             fail(recording.id, String(error));
             return;
         }
@@ -424,7 +415,7 @@ export function finish(recordingId: number, size: number): void {
     notify({
         event: 'recording.finished',
         text: `録画が終わりました: ${recording.name} (${recording.service_name})`,
-        recording: summary(recording),
+        recording: recordingSummary(recording),
     });
 
     if (reservation === undefined || reservation.encode) {
@@ -476,12 +467,7 @@ export function recoverOrphanedRecordings(): { resumed: number; failed: number }
             continue;
         }
 
-        const controller = new AbortController();
-        active.set(orphan.id, controller);
-        void pump(orphan, controller).catch((error) => {
-            active.delete(orphan.id);
-            fail(orphan.id, String(error));
-        });
+        launch(orphan);
         console.log(`[boot] 録画を再開: ${orphan.name} (${orphan.service_name})`);
         resumed++;
     }

@@ -17,9 +17,10 @@
 
 import { copyFileSync, existsSync } from 'node:fs';
 import { basename, dirname, join } from 'node:path';
-import { and, eq, isNotNull, isNull, ne, or } from 'drizzle-orm';
+import { and, eq, isNotNull, isNull } from 'drizzle-orm';
 import type { Recording } from '../types';
 import { now, orm } from './db';
+import { usedByOther } from './files';
 import { moveFile, pruneEmptyDirs, removeIfExists } from './fsx';
 import { encodedPath, libraryFamily } from './library';
 import { removeSidecars, sidecarBase, sidecarPaths } from './metadata';
@@ -49,10 +50,7 @@ function movePrimary(from: string, to: string): void {
 
 /** 書かなくなった `.nfo` が残っていれば片付ける (消したら true) */
 function sweepNfo(videoPath: string): boolean {
-    const { nfo } = sidecarPaths(videoPath);
-    if (!existsSync(nfo)) return false;
-    removeIfExists(nfo);
-    return true;
+    return removeIfExists(sidecarPaths(videoPath).nfo);
 }
 
 /**
@@ -61,28 +59,10 @@ function sweepNfo(videoPath: string): boolean {
  */
 function sweepOldStrays(rec: Recording, oldDir: string, moved: ReadonlySet<string>): void {
     if (!existsSync(oldDir)) return;
-    // 先頭は素の `.mkv` (`libraryFamily` の並び)
-    const base = basename(libraryFamily(rec)[0]!, '.mkv');
-    const variants = [
-        `${base}.mkv`,
-        `${base} [${rec.id}].mkv`,
-        `${base} [H264].mkv`,
-        `${base} [${rec.id}] [H264].mkv`,
-    ];
-    for (const name of variants) {
-        const stray = join(oldDir, name);
-        if (moved.has(stray) || !existsSync(stray)) continue;
-        const claimed = orm()
-            .select({ id: recordings.id })
-            .from(recordings)
-            .where(
-                and(
-                    or(eq(recordings.library_path, stray), eq(recordings.alt_path, stray)),
-                    ne(recordings.id, rec.id),
-                ),
-            )
-            .get();
-        if (claimed !== undefined) continue;
+    // 名前の候補は `libraryFamily` と同じ4通り。置き場だけ旧フォルダに読み替える
+    for (const candidate of libraryFamily(rec)) {
+        const stray = join(oldDir, basename(candidate));
+        if (moved.has(stray) || !existsSync(stray) || usedByOther(stray, rec.id)) continue;
         removeIfExists(stray);
         removeSidecars(stray);
     }

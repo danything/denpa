@@ -14,7 +14,7 @@ import { TS_PROBE } from './ts-probe';
  * 構成される、という2つだけを使う。ロゴが整っていない局でもチャプターだけは付けられる。
  *
  * 誤爆したときの被害が大きい(本編が消える)ので、既定は実カットではなく
- * チャプター付与にしてある。cm_cut = 'cut' を明示したものだけ実際に切る。
+ * チャプター付与にしてある (`config.cmCutDefault`)。設定の CMの扱いを `cut` にしたときだけ実際に切る。
  */
 
 export interface Range {
@@ -219,7 +219,7 @@ export function invertRanges(ranges: Range[], duration: number): Range[] {
  * 「本編の頭が一瞬欠ける」形で出ていた。
  *
  * 戻したぶんだけ CM の尻が残るが、**本編を削るよりそちらのほうが被害が小さい**
- * (この判断は `tooMuchCm` と同じ)。
+ * (この判断は `MAX_CM_RATIO` と同じ)。
  *
  * 戻した結果 前の区間とくっついたら1つにまとめる (切り出しが1回減る)。
  */
@@ -630,11 +630,6 @@ export function parseRatio(value: string | undefined): number {
     return Number.isFinite(ratio) && ratio > 0 ? ratio : 1;
 }
 
-/** 尺だけを軽く取る。CM区間を秒で扱うために必要 */
-async function probeDuration(input: string): Promise<number> {
-    return (await probeVideo(input)).duration;
-}
-
 export interface CmDetection {
     cm: Range[];
     duration: number;
@@ -683,7 +678,7 @@ export async function detectCm(input: string, options: CmOptions = {}): Promise<
      * 尺は先に測る。silencedetect の出力からも拾えるが、それだと終わるまで
      * 分母が分からず、進み具合を出せない
      */
-    const measured = await probeDuration(input);
+    const measured = (await probeVideo(input)).duration;
     const { silences, duration } = await detectSilences(input, signal, onProgress, measured);
     /*
      * 落ちた理由まで書く。「無音 8 箇所」とだけ出していた頃は、jls を選んで

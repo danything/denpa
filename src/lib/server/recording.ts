@@ -3,6 +3,28 @@ import { and, eq, isNull } from 'drizzle-orm';
 import type { Recording } from '../types';
 import { orm } from './db';
 import { recordings } from './schema';
+import type { Payload } from './webhook';
+
+/**
+ * 知らせ (webhook) に載せる録画の要点。録画とエンコードの節目で同じ形。
+ * webhook.ts に置かないのは、試験がそちらを差し替える (`disk.test.ts`) ため
+ */
+export function recordingSummary(recording: Recording): NonNullable<Payload['recording']> {
+    return {
+        id: recording.id,
+        name: recording.name,
+        service: recording.service_name,
+        startAt: recording.start_at,
+        endAt: recording.end_at,
+    };
+}
+
+/** フォームの `id` から録画を引く (画面のアクション用)。無ければ undefined。消した行も引く */
+export function recordingFromForm(form: FormData): Recording | undefined {
+    const id = Number(form.get('id'));
+    if (!Number.isFinite(id)) return undefined;
+    return orm().select().from(recordings).where(eq(recordings.id, id)).get();
+}
 
 /**
  * `/api/recordings/<id>` 系の前置き。id を確かめて行を引く。
@@ -13,13 +35,6 @@ import { recordings } from './schema';
  *   消したものを返さないように。削除 API だけは「もう消えている」を
  *   見分けたいので true で呼ぶ
  */
-/** フォームの `id` から録画を引く (画面のアクション用)。無ければ undefined。消した行も引く */
-export function recordingFromForm(form: FormData): Recording | undefined {
-    const id = Number(form.get('id'));
-    if (!Number.isFinite(id)) return undefined;
-    return orm().select().from(recordings).where(eq(recordings.id, id)).get();
-}
-
 export function recordingOr404(idLike: string, deleted = false): Recording {
     const id = Number(idLike);
     if (!Number.isFinite(id)) error(400, '録画IDが不正です');
