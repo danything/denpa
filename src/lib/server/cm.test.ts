@@ -4,7 +4,6 @@ import {
     chapterMetadata,
     detectCmRanges,
     droppedHead,
-    earliestFrameTime,
     fields,
     firstFrameTime,
     invertRanges,
@@ -12,6 +11,7 @@ import {
     leadIn,
     liveAudioIndexes,
     longestRange,
+    packetTimes,
     parseFrameRate,
     parseRatio,
     parseSilences,
@@ -240,41 +240,78 @@ describe('頭から捨てる長さの上限', () => {
     });
 });
 
+const FPS = 30000 / 1001;
+
+/** 復号の順に並べた映像パケットの表示時刻 (ffprobe -show_packets の形) */
+const packets = (times: number[]): string => times.map((t) => `pts_time=${t.toFixed(6)}`).join('\n');
+
 /**
  * 実機 (ブチ切れ令嬢 / 2026-08-18) の TS から取った並び。**先頭は表示の順に
- * 並んでいない** — 先行 B のほうが I より早い時刻を持つ
+ * 並んでいない** — 先行 B のほうが I より早い時刻を持つ。P から始まるので穴は無い
  */
-const HEAD_PACKETS = `pts_time=72575.629533
-pts_time=72575.562800
-pts_time=72575.596167
-pts_time=72575.729633
-pts_time=72575.662900
-pts_time=72575.696267
-`;
+const HEAD_PACKETS = packets([
+    72575.629533, 72575.5628, 72575.596167, 72575.729633, 72575.6629, 72575.696267,
+]);
+
+/**
+ * 実機 (令和のダラさん / 2026-09-24) の頭。**B から始まっていて、表示の時刻に穴がある**
+ * — 69117.164667 に出るはずの P は復号の順で前にあり、録れていない。
+ * 9本のうち 8本がこの形だった
+ */
+const HOLED_PACKETS = packets([
+    69117.097933, 69117.1313, 69117.264767, 69117.198033, 69117.2314, 69117.364867, 69117.298133, 69117.3315,
+    69117.464967, 69117.398233, 69117.4316, 69117.565067, 69117.498333, 69117.5317,
+]);
+
+/**
+ * 実機 (全国映画祭 短編シネマセレクション / 2026-09-25) の頭。**閉じた GOP** で、
+ * I (71493.751589) の前の B が2つ復号できる — 焼いたものは B から始まる
+ */
+const CLOSED_GOP_PACKETS = packets([
+    71493.217722, 71493.351189, 71493.284456, 71493.317822, 71493.451289, 71493.384556, 71493.417922,
+    71493.551389, 71493.484656, 71493.518022, 71493.651489, 71493.584756, 71493.618122, 71493.751589,
+    71493.684856, 71493.718222, 71493.851689,
+]);
 
 describe('捨てられるコマぶん (チャプターを詰める量)', () => {
-    test('いちばん早い表示時刻を探す。頭の1つではない', () => {
-        expect(earliestFrameTime(HEAD_PACKETS)).toBeCloseTo(72575.5628, 4);
-        expect(Number.isNaN(earliestFrameTime('pts_time=N/A\n'))).toBe(true);
+    test('パケットの表示時刻を並んだとおりに読む。読めない行は飛ばす', () => {
+        expect(packetTimes(HEAD_PACKETS)).toHaveLength(6);
+        expect(packetTimes('pts_time=N/A\npts_time=1.5\n')).toEqual([1.5]);
     });
 
     /*
      * 引く量を `leadIn` (0.5825) と取り違えていた頃は 0.416 秒 = 12.5 コマ
      * 引きすぎていて、跳んだ先が CM の途中に着地していた
      */
-    test('復号できる1コマ目までに捨てられるコマぶんだけ', () => {
+    test('復号できる1コマ目より前にあるコマの数だけ', () => {
         const first = 72575.729633;
-        expect(droppedHead(first, earliestFrameTime(HEAD_PACKETS))).toBeCloseTo(0.1668, 4);
+        expect(droppedHead(first, packetTimes(HEAD_PACKETS), FPS)).toBeCloseTo(5 / FPS, 4);
         // 入れ物の頭から数えたほうは、音声だけの区間まで含んでしまう
         expect(leadIn(first, 72575.147089)).toBeCloseTo(0.5825, 4);
     });
 
+    /*
+     * 時刻の差 (first - いちばん早い絵) で引いていた頃は 0.367 秒 = 11 コマで、
+     * チャプターがどれも実際の境目の1コマ手前に入っていた
+     */
+    test('表示の時刻に穴があっても、数えるのはコマの数', () => {
+        const first = 69117.464967;
+        expect(droppedHead(first, packetTimes(HOLED_PACKETS), FPS)).toBeCloseTo(10 / FPS, 4);
+    });
+
+    test('閉じた GOP では、I の前の B から数える', () => {
+        expect(droppedHead(71493.684856, packetTimes(CLOSED_GOP_PACKETS), FPS)).toBeCloseTo(13 / FPS, 4);
+    });
+
     test('読めない・逆さま・大きすぎるときは 0', () => {
-        expect(droppedHead(Number.NaN, 10)).toBe(0);
-        expect(droppedHead(10, Number.NaN)).toBe(0);
-        expect(droppedHead(10, 10.5)).toBe(0);
+        const head = packetTimes(HEAD_PACKETS);
+        expect(droppedHead(Number.NaN, head, FPS)).toBe(0);
+        expect(droppedHead(72575.729633, [], FPS)).toBe(0);
+        expect(droppedHead(72575.729633, head, Number.NaN)).toBe(0);
+        expect(droppedHead(72575.5, head, FPS)).toBe(0);
         // 1 GOP を超えるずれは読み違い
-        expect(droppedHead(12, 10)).toBe(0);
+        const many = Array.from({ length: 40 }, (_, i) => 10 + i / FPS);
+        expect(droppedHead(12, many, FPS)).toBe(0);
     });
 });
 

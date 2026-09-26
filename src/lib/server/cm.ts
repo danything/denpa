@@ -487,9 +487,10 @@ export async function probeLeadIn(
     input: string,
     formatStart: number,
     packetStart = NaN,
+    fps = NaN,
 ): Promise<{ lead: number; dropped: number }> {
     let first = NaN;
-    let earliest = NaN;
+    let packets: number[] = [];
     try {
         first = firstFrameTime(
             // 上限 (MAX_LEAD_IN) より先まで読んでも使わないので、そのぶんだけ見る
@@ -506,7 +507,7 @@ export async function probeLeadIn(
             ]),
         );
         // 復号する必要は無い。パケットの時刻だけ見る (先頭 GOP ぶんで足りる)
-        earliest = earliestFrameTime(
+        packets = packetTimes(
             await probe(input, [
                 '-select_streams',
                 'v:0',
@@ -523,7 +524,9 @@ export async function probeLeadIn(
         // ffprobe が使えない環境。パケットの時刻で代用する
     }
     const start = Number.isFinite(first) ? first : packetStart;
-    return { lead: leadIn(start, formatStart), dropped: droppedHead(start, earliest) };
+    // 検出が番号を秒に直すのと同じ値で割る (測れなければ同じ既定に落ちる。cm-jls.ts)
+    const rate = Number.isFinite(fps) && fps > 0 ? fps : config.cmJlsFallbackFps;
+    return { lead: leadIn(start, formatStart), dropped: droppedHead(start, packets, rate) };
 }
 
 /**
@@ -559,28 +562,34 @@ export function firstFrameTime(output: string): number {
 /**
  * **焼く前に捨てられるコマぶんの時間 (秒)。チャプターを詰める量はこちら。**
  *
- * ffmpeg も ffprobe も**最初の I フレームまでのコマを捨てます** — 先頭の GOP には
- * 参照先の無い先行 B が並んでいて、復号できないためです。焼いたものの 0 秒は
- * その I フレームになる。
+ * ffmpeg も ffprobe も**最初に復号できるコマより前を捨てます** — 録画は GOP の途中から
+ * 始まり、頭のコマは参照先が録れていないためです。焼いたものの 0 秒はその1コマ
+ * (ふつうは I。閉じた GOP なら I の前の B から出る。実機で1本)。
  *
- * ところが**CM 検出は捨てません。** logoframe / chapter_exe は TS の絵を
- * 頭から数え、その番号を `番号 ÷ fps` で秒に直す (`cm-jls.ts`)。数え始めが
- * **いちばん早い表示時刻**なので、焼いたものより捨てたコマぶんだけ先に進んでいる。
+ * ところが**CM 検出は捨てません。** logoframe / chapter_exe は dtvindex の索引で
+ * TS の**映像パケットを全部**表示の順に並べて頭から数え、その番号を `番号 ÷ fps` で
+ * 秒に直す (`cm-jls.ts`)。焼いたものより捨てたコマぶんだけ先に進んでいる。
+ *
+ * **引くのは「時刻の差」ではなく「コマの数 ÷ fps」。** 録画が B から始まると、
+ * その B のあとに出るはずの P は復号の順で前にあって録れておらず、**表示の時刻に
+ * 1コマぶん穴が空く**。索引は穴を詰めて数えるので、時刻の差で引くと1コマ引きすぎる。
+ * 実機 9本のうち 8本がこれで、チャプターがどれも実際の境目の**1コマ手前**に
+ * 入っていた (令和のダラさん):
+ *
+ *     いちばん早い絵  69117.098  ← 検出の 0 コマ目
+ *     (穴)            69117.165  ← 録れていない P
+ *     復号できた1コマ 69117.465  ← 焼いたものの 0 秒 (I)。時刻の差は 11 コマ、手前にあるのは 10 コマ
  *
  * **`leadIn` を引いてはいけない。** あちらは入れ物の頭 (音声だけの区間を含む)
- * から数えた量で、検出はそこを見ていない。実機で引きすぎていたのは 0.416 秒 =
- * 12.5 コマぶんで、**跳んだ先が CM の途中に着地し、本編が始まるまでの CM が
- * 見えていた**:
- *
- *     入れ物の頭      72575.147
- *     いちばん早い絵  72575.563  ← 検出の 0 コマ目 (先行 B)
- *     復号できた1コマ 72575.730  ← 焼いたものの 0 秒 (I)。ここまでの5コマが捨てられる
- *
- * 引くのはこの**5コマぶん (0.167秒)** だけ
+ * から数えた量で、検出はそこを見ていない。取り違えていた頃は 0.416 秒 = 12.5 コマ
+ * 引きすぎていて、**跳んだ先が CM の途中に着地し、本編が始まるまでの CM が
+ * 見えていた** (ブチ切れ令嬢 / 2026-08-18)
  */
-export function droppedHead(first: number, earliest: number): number {
-    if (!Number.isFinite(first) || !Number.isFinite(earliest)) return 0;
-    const gap = first - earliest;
+export function droppedHead(first: number, packets: number[], fps: number): number {
+    if (!Number.isFinite(first) || !Number.isFinite(fps) || fps <= 0) return 0;
+    // 時刻は小数6桁で来るので、半コマの幅で「first より前」を見る
+    const before = packets.filter((at) => at < first - 0.5 / fps).length;
+    const gap = before / fps;
     // 1 GOP ぶんを超えるなら読み違えている。0 のほうが壊れ方が小さい
     return gap > 0 && gap <= MAX_DROPPED ? gap : 0;
 }
@@ -589,20 +598,20 @@ export function droppedHead(first: number, earliest: number): number {
 const MAX_DROPPED = 1;
 
 /**
- * `ffprobe -show_packets` の吐き出しから、**いちばん早い表示時刻**を読む。
+ * `ffprobe -show_packets` の吐き出しから、**映像パケットの表示時刻**を並んだとおりに読む。
  *
  * 先頭は表示の順に並んでいない (B フレームは復号の順であとに来る) ので、
- * 頭の1つを取るのではなく**いちばん小さいものを探す**
+ * 使う側は順番ではなく値で比べる (`droppedHead`)。読めない行は飛ばす
  */
-export function earliestFrameTime(output: string): number {
-    let earliest = NaN;
+export function packetTimes(output: string): number[] {
+    const times: number[] = [];
     for (const line of output.split('\n')) {
         const match = /^pts_time=(-?[\d.]+)/.exec(line.trim());
         if (match === null) continue;
         const at = Number(match[1]);
-        if (Number.isFinite(at) && (!Number.isFinite(earliest) || at < earliest)) earliest = at;
+        if (Number.isFinite(at)) times.push(at);
     }
-    return earliest;
+    return times;
 }
 
 export function leadIn(streamStart: number, formatStart: number): number {
