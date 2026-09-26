@@ -51,10 +51,20 @@ public interface ITuneDevice : IDisposable
     bool Tuned { get; }
 }
 
-/// <summary>libc の口。ioctl を直に叩くところだけ</summary>
+/// <summary>
+/// libc の口。ioctl を直に叩くところだけ。
+///
+/// <para>
+/// **macOS でも同じ口で動く** (Mac で px4-ts / siano-ts の pipe を読むため)。"libc" は
+/// macOS でも <c>/usr/lib/libc.dylib</c> (libSystem の別名) で引ける。ただし**数値が
+/// OS ごとに違うもの** (<c>O_NONBLOCK</c>、errno) は決め打ちにできないので、ここと
+/// <see cref="DeviceStream"/> で OS を見て選ぶ。
+/// </para>
+/// </summary>
 internal static unsafe partial class Sys
 {
-    public const int NonBlocking = 0x800;
+    /// <summary><c>O_NONBLOCK</c>。Linux は 0x800、macOS (BSD) は 0x4</summary>
+    public static readonly int NonBlocking = OperatingSystem.IsMacOS() ? 0x4 : 0x800;
     public const int ReadOnly = 0;
     public const int ReadWrite = 2;
 
@@ -73,7 +83,7 @@ internal static unsafe partial class Sys
     [LibraryImport("libc", EntryPoint = "fcntl", SetLastError = true)]
     public static partial int Fcntl(int fd, int command, int argument);
 
-    /// <summary><c>F_SETPIPE_SZ</c>。pipe の深さを変える (Linux)</summary>
+    /// <summary><c>F_SETPIPE_SZ</c>。pipe の深さを変える (**Linux だけ**。macOS には無い)</summary>
     public const int SetPipeSize = 1031;
 
     private const short EventIn = 1;
@@ -137,8 +147,8 @@ internal sealed unsafe class DeviceStream(SafeFileHandle handle, Func<string?>? 
 
     private const short PollIn = 1;
 
-    /// <summary>まだ来ていないだけ</summary>
-    private const int EAgain = 11;
+    /// <summary>まだ来ていないだけ。Linux は 11、macOS は 35</summary>
+    private static readonly int EAgain = OperatingSystem.IsMacOS() ? 35 : 11;
 
     /// <summary>割り込まれただけ</summary>
     private const int EIntr = 4;
@@ -153,7 +163,7 @@ internal sealed unsafe class DeviceStream(SafeFileHandle handle, Func<string?>? 
     /// 「socket connection was closed unexpectedly」だけが届いていた。
     /// </para>
     /// </summary>
-    private const int EOverflow = 75;
+    private static readonly int EOverflow = OperatingSystem.IsMacOS() ? 84 : 75;
 
     private volatile bool _closed;
 
@@ -267,7 +277,7 @@ internal sealed unsafe class DeviceStream(SafeFileHandle handle, Func<string?>? 
             if (ready < 0)
             {
                 var failure = Marshal.GetLastPInvokeError();
-                if (failure is EIntr or EAgain) continue;
+                if (failure == EIntr || failure == EAgain) continue;
                 throw new IOException($"待てません ({Marshal.GetLastPInvokeErrorMessage()})");
             }
             if (ready == 0) continue;
@@ -289,7 +299,7 @@ internal sealed unsafe class DeviceStream(SafeFileHandle handle, Func<string?>? 
                 }
 
                 var failure = Marshal.GetLastPInvokeError();
-                if (failure is EAgain or EIntr) continue;
+                if (failure == EAgain || failure == EIntr) continue;
                 if (failure == EOverflow)
                 {
                     /*

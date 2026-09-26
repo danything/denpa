@@ -146,6 +146,36 @@ jobs:
             $denpa_args .
           echo "denpa: ${{ steps.tag.outputs.denpa }} ($platforms) + DENPA_VERSION → $names"
 
+  # **Mac (Apple Silicon) 用のエージェントをリリースに添える** (agent/macos/install.sh が取りに来る)。
+  # Native AOT は Linux から macOS へ焼けないので、ここだけは Mac のランナーで**焼く**
+  # (イメージのように main で焼いたものを使い回す先が無い)。中身はタグのコミットそのもの
+  agent-macos:
+    runs-on: macos-15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.inputs.ref || github.event.release.tag_name }}
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: '10.0.x'
+
+      # 名前はタグから `v` を落とした版で (denpa-agent-1.2.3-darwin-arm64.tar.gz)。
+      # 中身は実行ファイル1個。.sha256 は install.sh が確かめる
+      - name: Build and attach to the release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -eu
+          tag="${{ github.event.release.tag_name || github.event.inputs.ref }}"
+          dotnet publish agent/Denpa.Agent/Denpa.Agent.csproj -c Release -r osx-arm64 -o out
+          asset="denpa-agent-${tag#v}-darwin-arm64.tar.gz"
+          tar -czf "$asset" -C out denpa-agent
+          shasum -a 256 "$asset" > "$asset.sha256"
+          gh release upload "$tag" "$asset" "$asset.sha256" --clobber
+
   # **Helm chart もリリースのたびに出す** (README が案内している `oci://ghcr.io/danything/charts/…`)。
   # chart の版 (Chart.yaml の version) とアプリの版 (appVersion) をリリースの
   # 版で揃えて焼き、GHCR の OCI レジストリに push する。イメージと同じく、chart 側の

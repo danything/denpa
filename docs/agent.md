@@ -677,6 +677,46 @@ Unix ドメインソケットは**まだ入れていません** (`Program.cs` �
   足す (複数のエージェントを1つの denpa に束ねる) のはまだ入っていません。入れるなら
   取り合いは denpa が全体を見て決め、どのエージェントの何本目かは denpa 側の帳簿になります
 
+## Mac でチューナーを使う
+
+**Apple Silicon の Mac に、エージェントだけを置けます。** denpa 本体はいままでどおり
+Linux (Docker / Kubernetes) で動かし、`TUNER_AGENT_URL` で Mac を指します
+([別の所に置く](#エージェントは別イメージ別プロセス)のと同じ形)。
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/danything/denpa/main/agent/macos/install.sh | bash
+```
+
+- **要るのは Homebrew の libusb だけ** (px4-userland と siano-userland の Mac 版がそれに繋がっている)。
+  Homebrew があれば `brew install libusb` まで済ませ、無ければ入れ方を言って止まります
+- 入れるのは全部ユーザーの下で、sudo は要りません。
+  本体・px4-userland・siano-userland・設定 (`tuners.json` / `channels.json`) は
+  `~/Library/Application Support/denpa-agent/`、ログは `~/Library/Logs/denpa-agent.log`
+- IT930x のファームウェアはコンテナと同じく PLEX のドライバから手元で切り出します (ハッシュ3つで確かめる)
+- **LaunchAgent** (`~/Library/LaunchAgents/io.github.danything.denpa-agent.plist`) で、
+  ログインしたら起き、落ちたら起き直します。止めるときは録画が終わるまで待ちます
+  (launchd に殺されないよう、待ちの上限を 6 時間より長くしてある)
+- もう一度流せば上げ直し。消すときは `… | bash -s -- --uninstall`
+
+installer が LaunchAgent に書く環境変数は、コンテナで既定にしている置き場を Mac の置き場に
+向け直すものだけです (`AGENT_PORT` `TUNERS_FILE` `CHANNELS_FILE` `PX4_USERLAND_DIR`
+`PX4_FIRMWARE` `PX4_RUNTIME_DIR` `SIANO_USERLAND_DIR` `SIANO_FIRMWARE`)。
+`PX4_RUNTIME_DIR` を `~/Library/Caches/denpa-agent` と短い所にしているのは、px4d の制御ソケットの
+パスが macOS では 104 バイトまでしか通らないからです。
+
+**違うところ。**
+
+- **チューナーは px4-userland と siano-userland の機材だけ。** macOS には DVB が無いので、
+  PT2/PT3 のような PCI の機材や、カーネルのドライバで見せる道はありません
+- **カードリーダー**: px4-userland の内蔵リーダーはそのまま (px4d に聞く)。USB のリーダーは、
+  Linux のように usbfs を直に叩けないので、**macOS に最初から入っている PC/SC
+  (PCSC.framework) 越し**に叩きます (`Pcsc.cs`)。`denpa-agent --card` はそのリーダーを並べます
+- pipe を広げられない (`F_SETPIPE_SZ` が無い) ので、px4-ts / siano-ts から受ける溜めは Linux より浅い
+- 掛かったまま録れたものを後から解く口 (`/denpa/decode`) は、生TSの置き場を Mac にも見せないと使えません
+- **Apple Silicon だけ** (Intel Mac 用の px4-userland / siano-userland が無い)。
+  **Mac の実機でチューナーとカードを繋いで確かめたことはまだありません。** CI で焼いて起こし、
+  入れ方を最後まで流すところまで (`.github/workflows/test.yml` の `agent-macos`)
+
 ## B-CASカードとデスクランブル
 
 スクランブルは**エージェント自身が解きます** (`B25.cs`)。カードが読めないときは

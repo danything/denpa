@@ -74,9 +74,18 @@ internal sealed class ChildTs(string name, string program)
         throw new IOException($"子の標準出力を掴めません ({stream.GetType().Name})");
     }
 
-    /// <summary>子の標準出力の pipe を広げる (<see cref="PipeSize"/>)。通らなければ記録に残して続ける</summary>
+    /// <summary>
+    /// 子の標準出力の pipe を広げる (<see cref="PipeSize"/>)。通らなければ記録に残して続ける。
+    ///
+    /// <para>
+    /// **macOS では何もしない。** <c>F_SETPIPE_SZ</c> が無く、pipe の深さは OS 任せ
+    /// (書き手が詰まると 64KB まで自分で伸びる)。溜めは px4d / siano-ts の側にもあるので、
+    /// 読み手が一瞬止まる程度なら持つ。ただし Linux の 8MB より浅いことは変わらない
+    /// </para>
+    /// </summary>
     internal static void WidenPipe(int fd, string name)
     {
+        if (!OperatingSystem.IsLinux()) return;
         if (Sys.Fcntl(fd, Sys.SetPipeSize, PipeSize) < 0 && Sys.Fcntl(fd, Sys.SetPipeSize, FallbackPipeSize) < 0)
         {
             Log.Write($"[{name}] pipe を広げられませんでした ({Marshal.GetLastPInvokeErrorMessage()})");

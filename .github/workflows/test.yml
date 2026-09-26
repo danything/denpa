@@ -111,6 +111,73 @@ jobs:
       - name: Conformance
         run: bun run test:conformance
 
+  # Mac (Apple Silicon) で動かすエージェント (docs/agent.md「Mac でチューナーを使う」)。
+  #
+  # **Native AOT は Linux から macOS へ焼けない** ので、Mac のランナーで焼いて起こす。
+  # 実機は無いので、確かめるのは「焼ける・テストが通る・起きて口が答える・入れ方が最後まで通る」まで。
+  #
+  # **必須チェックにはしない** (main の ruleset に入れていない)。Mac のランナーは混むと待たされるので、
+  # ここで PR を止めない。赤くなったら Mac で壊れたということなので、見て直す
+  agent-macos:
+    runs-on: macos-15
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: '10.0.x'
+
+      # Linux でしか意味の無いテスト (/proc を数える・Linux の pipe の深さに頼る偽物) は中で飛ばしてある
+      - name: Unit tests (.NET agent)
+        run: dotnet test --project agent/Denpa.Agent.Tests/Denpa.Agent.Tests.csproj
+
+      - name: Publish (Native AOT, osx-arm64)
+        run: dotnet publish agent/Denpa.Agent/Denpa.Agent.csproj -c Release -r osx-arm64 -o out
+
+      - name: Lint install.sh
+        run: |
+          bash -n agent/macos/install.sh
+          brew install shellcheck >/dev/null
+          shellcheck agent/macos/install.sh
+
+      # 何も設定せずに起こす (FAKE_TUNE も無し)。チューナーは自動検出で空、カードは
+      # リーダーが無いので ok:false が返るはず。**落ちずに答える**ことを見る。
+      # PC/SC (PCSC.framework) と libc をここで実際に引く
+      - name: Smoke test (published binary)
+        run: |
+          set -euo pipefail
+          ./out/denpa-agent --card || true
+          AGENT_PORT=25300 ./out/denpa-agent > agent.log 2>&1 &
+          pid=$!
+          for _ in $(seq 30); do curl -fsS http://127.0.0.1:25300/denpa/tuners > tuners.json 2>/dev/null && break; sleep 1; done
+          echo "tuners: $(cat tuners.json)"
+          curl -fsS http://127.0.0.1:25300/denpa/card | tee card.json; echo
+          jq -e '.tuners | type == "array"' tuners.json
+          jq -e '.ok == false and (.readers | type == "array")' card.json
+          # SIGTERM で畳めること (録画していなければすぐ終わる)
+          kill -TERM "$pid"
+          for _ in $(seq 20); do kill -0 "$pid" 2>/dev/null || break; sleep 1; done
+          if kill -0 "$pid" 2>/dev/null; then echo "SIGTERM で終わりません" >&2; exit 1; fi
+          cat agent.log
+
+      # 入れ方を通しで。エージェントはリリースから取らずにいま焼いたものを入れ、
+      # px4-userland / siano-userland / ファームウェアは本物を取ってきてハッシュを確かめ、
+      # launchd に載せて口が答えるまで。最後に消す
+      - name: install.sh end to end
+        run: |
+          set -euo pipefail
+          tar -czf "$RUNNER_TEMP/denpa-agent.tar.gz" -C out denpa-agent
+          DENPA_AGENT_TARBALL="$RUNNER_TEMP/denpa-agent.tar.gz" AGENT_PORT=25301 bash agent/macos/install.sh
+          curl -fsS http://127.0.0.1:25301/denpa/card; echo
+          ls -l "$HOME/Library/Application Support/denpa-agent/px4-userland" "$HOME/Library/Application Support/denpa-agent/siano-userland"
+          "$HOME/Library/Application Support/denpa-agent/px4-userland/px4d" --list || true
+          bash agent/macos/install.sh --uninstall
+          test ! -e "$HOME/Library/LaunchAgents/io.github.danything.denpa-agent.plist"
+          cat "$HOME/Library/Logs/denpa-agent.log"
+
   # 予約から録画・エンコード・保存先への配置まで、偽の放送で通しで流す
   e2e:
     runs-on: ubuntu-latest
