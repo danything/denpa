@@ -200,21 +200,19 @@ Debian では amd64 にしか無いので arm64 のイメージには入れて�
 [deploy/application.yaml](../deploy/application.yaml) を見て、同じ chart にそこの
 `helm.valuesObject` (インライン) を重ねて当てています — **chart の使い方の実例**として
 読めます。bootstrap の ApplicationSet は `deploy/` を「素のマニフェストの置き場」として
-読むので、そこには Application (chart を指す) と、chart に持たないもの — ExternalSecret
-(Infisical から Secret を作る、この家の事情) と、この置き場の設定 (`argocd.yaml`) — だけを素のまま
-置いています。Namespace は要りません (ApplicationSet の `CreateNamespace` が作る)。
-値を別ファイルにしないのも同じ理由 (kind が無いので ApplicationSet が読めない)。
+読む (置き場の設定は `deploy/argocd.yaml`) ので、そこには Application (chart を指す) と、
+chart に持たないこの家の事情 — InfisicalSecret (Infisical から Secret を作る) と
+Namespace (PSA を privileged にするラベル。名前空間そのものは `CreateNamespace` が作る) —
+だけを素のまま置いています。値を別ファイルにしないのも同じ理由 (kind が無いので
+ApplicationSet が読めない)。
 
-このリポジトリには `denpa` namespace のアプリ本体しか入っていません。k3sホストの初期構築や
-共通アドオンは別の(プライベートな) bootstrap リポジトリ側です。適用前に以下が要ります。
+このリポジトリには `denpa` namespace のアプリ本体しか入っていません。クラスタの初期構築や
+共通アドオンは別の bootstrap リポジトリ側です。適用前に以下が要ります。
 
 - **StorageClass `local-path-retain`** — `reclaimPolicy: Retain` の local-path
 - **Gateway API の Gateway** — chart の `httpRoute.parentRefs` が指す先。証明書は
-  Gateway 側のリスナーが持ちます (このクラスタでは cert-manager が Cloudflare DNS-01 で発行)。
-  forward-auth を外したので、名前空間をまたぐ参照はもうありません
-- **ArgoCD** — push時に webhook が自動登録される運用。Application 自体は
-  [deploy/application.yaml](../deploy/application.yaml) に置いてあり、bootstrap の
-  ApplicationSet が `deploy/argocd.yaml` を見て拾います
+  Gateway 側のリスナーが持ちます
+- **ArgoCD** — 上の ApplicationSet が `deploy/argocd.yaml` を見て Application を拾います
 - **DNS** — `dp.doany.io` が Gateway の外部IPを指すこと。
   LAN 用の `dp.l.doany.io` は `*.l.doany.io` の書き換えで内側のIPへ
 - **チューナードライバ** — エージェントは `privileged: true` かつ `/dev/bus`・`/dev/dvb` を

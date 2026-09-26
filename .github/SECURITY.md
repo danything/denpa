@@ -18,5 +18,5 @@
 ## 前提
 
 denpa は**家庭内 LAN での利用を前提**にしています。インターネットへ
-直接公開する設計ではありません。公開する場合は OIDC・ベーシック認証・
-`TRUSTED_NETWORKS` の設定を必ず確認してください (README 参照)。
+直接公開する設計ではありません。公開する場合は OIDC と
+`TRUSTED_NETWORKS` の設定を必ず確認してください ([docs/auth.md](../docs/auth.md))。
