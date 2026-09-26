@@ -2,7 +2,7 @@
     import { submitting } from '$lib/actions';
     import LogoArea from '$lib/components/LogoArea.svelte';
     import Toasts, { errorNotice, type Notice } from '$lib/components/Toasts.svelte';
-    import { SERVICE_TYPE_LABEL, STATE_LABEL as SHARED_STATE_LABEL } from '$lib/format';
+    import { SERVICE_TYPE_LABEL, STATE_LABEL as SHARED_STATE_LABEL, splitReaderName } from '$lib/format';
     import { held, liveUpdates } from '$lib/live-updates.svelte';
     import type { CardReaderState } from '$lib/server/scramble';
 
@@ -71,6 +71,12 @@
         const list: Notice[] = [];
         list.push(...errorNotice(form, 'tuner-error'));
         if (form?.scan) list.push({ key: 'tuner-notice', kind: 'info', text: form.scan });
+        /*
+         * 済んだこと (ロゴの位置・チューナーの保存)。**`message` に載せない** —
+         * あれは fail の言葉として赤で出す口 (`errorNotice`) なので、載せていた頃は
+         * ロゴの位置を受け取れても失敗の赤で出ていた (チューナーの保存は何も出なかった)
+         */
+        if (form?.done) list.push({ key: 'tuner-done', kind: 'success', text: form.done });
         return list;
     });
 </script>
@@ -521,8 +527,21 @@
                                 <tbody>
                                     <!-- 同じ型のリーダーを2つ挿すと名前が並ぶ。目印は番号で -->
                                     {#each card.readers as reader, i (i)}
+                                        {@const label = splitReaderName(reader.name)}
                                         <tr data-testid="card-reader-row" data-state={reader.state}>
-                                            <td class="small break">{reader.name}</td>
+                                            <!--
+                                                場所 (「usb 4-11」) は2行目に小さく。**文字の途中で折らない** —
+                                                break-all にしていた頃は、狭い列で「Gempl / us US / B Sma…」と
+                                                1文字ずつ折れて読めなかった。折るのは単語の区切りで
+                                            -->
+                                            <td class="reader-name">
+                                                <span data-testid="card-reader-name">{label.name}</span>
+                                                {#if label.where !== null}
+                                                    <div class="tiny muted mono" data-testid="card-reader-where">
+                                                        {label.where}
+                                                    </div>
+                                                {/if}
+                                            </td>
                                             <td class="nowrap small mono">
                                                 {#if reader.ids.length > 0}
                                                     {reader.ids.join(' / ')}
@@ -800,6 +819,11 @@
     }
     .break {
         word-break: break-all;
+    }
+    /* 名前の列は潰させない。長すぎる1語だけはその中で折る (他の語は区切りで折る) */
+    .reader-name {
+        min-width: 12rem;
+        overflow-wrap: break-word;
     }
     .logos {
         display: flex;

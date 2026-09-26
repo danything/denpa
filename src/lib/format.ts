@@ -258,6 +258,20 @@ export function logoUnusable(cmNote: string | null): boolean {
     return cmNote?.includes(JLS_UNUSABLE) === true;
 }
 
+/**
+ * カードリーダーの名前を「名前」と「挿さっている場所」に分ける。
+ *
+ * エージェントは `Gemplus USB SmartCard Reader (usb 4-11)` のように場所を括弧で
+ * 後ろに付けて返す。**場所は2行目に小さく出す** — 1行に詰めていた頃は列が狭く、
+ * 文字の途中で1文字ずつ折り返して名前が読めなかった。括弧の無い名前 (px4 の内蔵
+ * リーダーなど) はそのまま
+ */
+export function splitReaderName(name: string): { name: string; where: string | null } {
+    const found = /^(.+?)\s*\(([^()]+)\)\s*$/.exec(name);
+    if (found === null) return { name, where: null };
+    return { name: found[1] ?? name, where: found[2] ?? null };
+}
+
 /** ロゴまで見て判定できたときの覚え書き (`cm-jls.detectWithJls`) */
 const JLS_OK = 'join_logo_scp';
 

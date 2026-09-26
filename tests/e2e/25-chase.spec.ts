@@ -65,6 +65,43 @@ test.describe('追っかけ再生の入口', () => {
         await page.getByTestId('chase-video').evaluate((el) => (el as HTMLElement).click());
         await expect(play).toHaveAttribute('aria-label', '再生');
         await page.keyboard.press('k');
+        await expect(play).toHaveAttribute('aria-label', '一時停止');
+
+        /*
+         * **閉じた影の中へ移されても押せる。** データ放送を出すと、借りものは映像の
+         * 入れ物を閉じた影 (`attachShadow`) の中へ移す (`DataBroadcast` の place)。
+         * Svelte の onclick は根で受けて composedPath を辿るので、影の中の video には
+         * 届かなかった (`MediaStack.svelte`)。偽の放送では BML が立たないので、
+         * 移すところだけ同じことをこちらでやる。真ん中を押す (端だと2回押しの送りになる)
+         */
+        await page.getByTestId('chase-video').evaluate((video) => {
+            const box = video.parentElement as HTMLElement;
+            const host = document.createElement('div');
+            box.before(host);
+            host.attachShadow({ mode: 'closed' }).append(box);
+            const rect = video.getBoundingClientRect();
+            video.dispatchEvent(
+                new MouseEvent('click', {
+                    bubbles: true,
+                    composed: true,
+                    clientX: rect.left + rect.width / 2,
+                    clientY: rect.top + rect.height / 2,
+                }),
+            );
+        });
+        await expect(play).toHaveAttribute('aria-label', '再生');
+
+        /*
+         * **番組表に無い番組でも、ジャンルと音声の札は出る** (観る画面の 22 と同じ)。
+         * 右の中身の種を組み直していた頃は、ここだけ行が持っている写しを落としていた。
+         * 番組表から引き直す口を 404 にして作る (開き直すので、上で移した入れ物も戻る)
+         */
+        await page.route('/api/programs/*', (route) => route.fulfill({ status: 404, body: '' }));
+        await goto(page, `/chase/${id}`);
+        const badges = page.getByTestId('chase-facts').getByTestId('detail-badges');
+        await expect(badges.getByTestId('detail-genre').first()).toHaveText('アニメ／特撮 > 国内アニメ');
+        await expect(badges.getByTestId('detail-audio').first()).toBeVisible();
+        await page.unroute('/api/programs/*');
 
         // 焼き直させる (失敗を解いてから)。焼き上がると、追っかけの画面に案内が出る
         rmSync(stack.failFile);

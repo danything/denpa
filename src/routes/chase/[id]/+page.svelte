@@ -94,7 +94,7 @@
         start_at: data.rec.start_at,
         end_at: data.rec.end_at,
         description: data.rec.description,
-        extended: null,
+        extended: data.rec.extended,
         genre_detail: data.rec.genre_detail,
         audios: data.rec.audios,
         video_type: null,
@@ -108,13 +108,9 @@
         // 前に途中まで観ていたら、そこから
         if (video !== null) void player.openChase(video, data.rec.id, data.rec.resumeSec);
         // 出演者などは番組表の側にある。押させずに、開いた時点で引く (観る画面と同じ)
-        void detail.open(data.rec.program_id, {
-            name: data.rec.name,
-            service_name: data.rec.service_name,
-            start_at: data.rec.start_at,
-            end_at: data.rec.end_at,
-            description: data.rec.description,
-        });
+        // 種は右に出している中身そのもの (観る画面の loadDetail と同じ)。**組み直さない** —
+        // 組み直していた頃はジャンル・音声を落としていて、番組表に無い番組で札が消えた
+        void detail.open(data.rec.program_id, facts);
         const ticker = setInterval(() => (clock = Date.now()), 1000);
         const keeper = setInterval(() => sendResume(), 15_000);
         const onLeave = () => sendResume(true);

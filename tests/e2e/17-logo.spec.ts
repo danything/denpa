@@ -1,6 +1,6 @@
 import { rmSync } from 'node:fs';
 import { BS_NO_LOGO, BS11, FUJI, MX } from '../fake/services';
-import { expect, goto, syncEpg, test } from './helpers';
+import { expect, goto, recordOne, syncEpg, test } from './helpers';
 
 /**
  * 局ロゴ。
@@ -175,5 +175,44 @@ test.describe('衛星の局ロゴ', () => {
             'ロゴが放送に載っていないので取れません',
         );
         expect((await request.get(`/api/services/${BS_NO_LOGO.id}/logo`)).status()).toBe(404);
+    });
+});
+
+/**
+ * CM検出のロゴの位置を教える口 (`LogoArea.svelte`)。**済んだことは済んだ色で出す。**
+ *
+ * 済んだ言葉を fail と同じ `message` に載せていたので、位置を受け取れても
+ * 自動に戻せても、失敗の赤 (`tuner-error`) で出ていた。囲う枠はコマの絵が
+ * 要り、偽 ffmpeg では出ないので、位置はフォームと同じものを投げて入れる
+ */
+test.describe('CM検出のロゴの位置', () => {
+    test('位置を自動に戻すと、済んだ知らせで出る', async ({ page, request }) => {
+        test.setTimeout(180_000);
+        // 囲う口は録画が1本ある局にだけ出る (コマを出すため)。BS の偽番組は5秒
+        await recordOne(page, request);
+        const res = await request.post('/tuners?/logoArea', {
+            form: { serviceId: String(BS11.id), area: '1500,20,300,120' },
+        });
+        expect(res.ok()).toBe(true);
+
+        await goto(page, '/tuners');
+        // 局名は画面では半角に揃えてある (ＢＳ１１ → BS11)
+        const card = page.locator('details.cm-logo').filter({ hasText: 'BS11' });
+        await card.locator('summary').first().click();
+        await expect(card).toContainText('教えた範囲 1500,20,300,120');
+
+        // 囲う場所は、覚えているものがあると畳んである。畳んであれば開く
+        const reset = card.getByRole('button', { name: '自動に戻す' });
+        await expect(async () => {
+            if (!(await reset.isVisible())) await card.getByText('ロゴを四角で囲って教える').click();
+            await expect(reset).toBeVisible({ timeout: 1_000 });
+        }).toPass({ timeout: 15_000 });
+        await reset.click();
+
+        const done = page.getByTestId('tuner-done');
+        await expect(done).toContainText('自動に戻しました');
+        await expect(done).toHaveClass(/\bsuccess\b/);
+        await expect(page.getByTestId('tuner-error')).toHaveCount(0);
+        await expect(card).not.toContainText('教えた範囲');
     });
 });
