@@ -14,9 +14,9 @@
 
 **電波の無いときは `/offline` で観ます。** `/watch/<id>` はサーバが組む画面なので開けず、
 ナビゲーションが繋がらないとサービスワーカーが `/offline` へ落とします。
-**`/offline` はナビに並べません** — 保存・進み具合 (行のバッジに割合、下端にバー)・視聴は
+`/offline` はナビに並べません。保存・進み具合 (行のバッジに割合、下端にバー)・視聴は
 ふだんの一覧と観る画面でできます (オンラインの `/watch` は端末のコピーがあればそちらを使う)。
-**「サーバからも消す」予約 (outbox) を積むのは `/offline` の削除だけ**です。一覧の行の削除は
+「サーバからも消す」予約 (outbox) を積むのは `/offline` の削除だけです。一覧の行の削除は
 その場でサーバから消し (端末のコピーも片付ける)、詳細の「端末から消す」はサーバに触りません。
 
 ## 全体像
@@ -35,8 +35,8 @@
               online 復帰 ──▶ outbox を処理: DELETE /api/recordings/<id> → deleteRecordingFiles
 ```
 
-**Service Worker は配信のキャッシュに使いません** (`/api/` は素通し、殻だけキャッシュし、
-一覧はキャッシュしない)。足したのは Background Fetch の受け取りと**オフラインの入口** —
+**Service Worker は配信のキャッシュに使いません** (`/api/` は素通し、キャッシュするのは殻だけ)。
+足したのは Background Fetch の受け取りとオフラインの入口だけで、
 `/offline` を install 時に控えて、ナビゲーションが繋がらないときの行き先にします
 (ブラウザのダウンロード表示を押したときも `backgroundfetchclick` で `/offline` を開く)。
 
@@ -52,10 +52,9 @@ DB 名 `denpa-offline`、ストア3つ (実体は [offline-db.ts](../src/lib/off
 - `resume` (key: 録画ID) … オフライン中に進んだ視聴位置。復帰時にまとめて
   `POST /api/recordings/<id>/resume` で送る。
 
-`state` は `'downloading' | 'ready' | 'failed'` の3つ。**失敗は消さずに残す** —
-失敗した瞬間の知らせ (トースト) は一瞬で、控えごと消すと「無かったことになった」ように
-見える。残った行がそのまま「保存をやり直す」の口になる。進み具合 (%) は
-IndexedDB には置かず、画面側のメモリだけで持つ (下記)。
+`state` は `'downloading' | 'ready' | 'failed'` の3つ。**失敗は消さずに残す。**
+知らせ (トースト) は一瞬なので、控えごと消すと無かったことに見える。残った行がそのまま
+「保存をやり直す」の口になる。進み具合 (%) は IndexedDB に置かず、画面側のメモリだけで持つ (下記)。
 
 一覧・視聴の UI はこの `videos` を参照して「DL 済みか」を分岐する。
 
@@ -64,22 +63,20 @@ IndexedDB には置かず、画面側のメモリだけで持つ (下記)。
 ### ダウンロード — Background Fetch API を使う
 
 1. **HEAD で下見してから預ける** (`probeDownloads`)。Background Fetch は
-   **404 が1つでも混ざると全体が失敗になる** (`failureReason: bad-status`) — 付き添いは
-   無い録画もあるので、在るものだけに絞る。さらに **`downloadTotal` を超えた時点で
-   打ち切られる**ので、当てずっぽうではなく HEAD の実測合計 (+2%) を渡す。
+   404 が1つでも混ざると全体が失敗になる (`failureReason: bad-status`) ので、付き添いは
+   在るものだけに絞る。`downloadTotal` を超えても打ち切られるので、HEAD の実測合計 (+2%) を渡す。
    どちらも実機の Edge で踏んだ。
-2. `backgroundFetch.fetch(id, urls, {title, downloadTotal})` で**ブラウザに預ける** (タブを
-   閉じても続く。`/api/…/file` はログインの控えでも通る — `auth.sessionMayRead`)。登録IDは
-   `rec-<録画ID>-<source>-<試みの印>` — **同じIDが生きている間は再登録できない**ので
+2. `backgroundFetch.fetch(id, urls, {title, downloadTotal})` でブラウザに預ける (タブを
+   閉じても続く。`/api/…/file` はログインの控えでも通る: `auth.sessionMayRead`)。登録IDは
+   `rec-<録画ID>-<source>-<試みの印>`。同じIDが生きている間は再登録できないので
    やり直しのたびに印を変え、前回の残骸は登録前に中止する。遅れて届く残骸の中止の知らせが
    新しい控えを消さないよう、SW 側は印を照合する。
 3. **進み具合は2秒おきに `get()` で掴み直す** (`watchProgress`)。`progress` イベントだけだと、
    遅い回線でブラウザが止めて再開したあとの通知が届かず、割合が張り付く。
 4. SW の `backgroundfetchsuccess` で IndexedDB へ移して `state='ready'`。
-   `backgroundfetchfail` / `backgroundfetchabort` は **`state='failed'` として残す**。
-   開き直したときは突き合わせもする — 「保存中」なのにブラウザ側に対応する
-   ダウンロードが無ければ、もう動いていないので失敗に倒す (`watchRunning`)。
-5. 対応していないブラウザ (Safari / Firefox) は**ページ主導の fetch にフォールバック**
+   `backgroundfetchfail` / `backgroundfetchabort` は `state='failed'` として残す。
+   開き直したときは、「保存中」なのにブラウザ側にダウンロードが無ければ失敗に倒す (`watchRunning`)。
+5. 対応していないブラウザ (Safari / Firefox) はページ主導の fetch にフォールバック
    (タブを開いたまま。進捗は一覧のバッジに出す)。機能検出は
    `'backgroundFetch' in swReg`。仕分けは SW の受け取りと共有 (`storeResponse`)。
 
@@ -88,14 +85,14 @@ IndexedDB には置かず、画面側のメモリだけで持つ (下記)。
 **既定は AV1** (`library_path`)。端末が AV1 を解けなければ H.264 (`alt_path`) に落とす。
 判定は `navigator.mediaCapabilities.decodingInfo()` (`video/mp4; codecs=av01.…` の
 `supported`)。H.264 しか解けない端末で `alt_path` が無い録画は、ダウンロード時に
-「この端末では再生できない」と断る (落とすだけ落とせても観られないため)。
+「この端末では再生できない」と断る (落とせても観られないため)。
 
 ### 観る
 
 - **オンラインの `/watch`** は、`videos` に `ready` があれば `URL.createObjectURL(blob)`、
-  無ければ従来の API URL を `src` にする。同じ画面の src を差し替えるだけなので、操作
+  無ければ従来の API URL を `src` にする。src を差し替えるだけなので操作
   (チャプター・CM飛ばし・速度・字幕・データ放送) はそのままで、付き添いも端末のものを読む。
-- **オフラインの `/offline`** は素の `<video controls>` で、**動画だけ**を流す
+- **オフラインの `/offline`** は素の `<video controls>` で、動画だけを流す
   (字幕・チャプター・データ放送は落としてあっても使わない)。位置は5秒ごとに `resume` ストアへ。
 - 使い終わったら `URL.revokeObjectURL` する。
 
@@ -104,7 +101,7 @@ IndexedDB には置かず、画面側のメモリだけで持つ (下記)。
 - `/offline` で削除 → `videos` から除去し、`outbox` に `{op:'delete'}` を積む (オンラインならその場で流す)。
 - `online` イベント (と起動時の `navigator.onLine`) で `outbox` を処理:
   `DELETE /api/recordings/<id>` → サーバは [`deleteRecordingFiles`](../src/lib/server/files.ts) を呼ぶ。
-  成功と 404 (もう無い) は済んだことにして消す。他の失敗は残して次の復帰で再試行。
+  成功と 404 (もう無い) は済みとして消し、他の失敗は残して次の復帰で再試行。
   視聴位置 (`resume` ストア) も同じ合図で送る。
 
 > [!IMPORTANT]

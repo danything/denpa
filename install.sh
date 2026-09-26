@@ -70,7 +70,7 @@ done
 
 say() { printf '\033[1m==>\033[0m %s\n' "$*"; }
 die() { printf '\033[31mエラー:\033[0m %s\n' "$*" >&2; exit 1; }
-fetch() { curl -fsSL --retry 3 -o "$2" "$1" || die "取ってこられません: $1"; }
+fetch() { curl -fsSL --retry 3 -o "$2" "$1" || die "ダウンロードできません: $1"; }
 
 # 入れる版。compose ファイルはこの版 (git の ref) から取り、イメージは x.y.z の形のときだけその版に
 # 揃える (コミットやブランチなら latest)。API を使わず、latest の転送先からタグを読む (API は回数制限がある)
@@ -90,9 +90,9 @@ docker_ready() {
   fi
   if docker info >/dev/null 2>&1; then return 0; fi
   if [ "$(uname -s)" = Linux ] && [ "$(id -u)" != 0 ] && ! id -nG | grep -qw docker; then
-    say "Docker に触る権限がありません。sudo usermod -aG docker $(id -un) のあと入り直して (ログインし直して)、もう一度流してください"
+    say "Docker に触る権限がありません。sudo usermod -aG docker $(id -un) のあとログインし直して、もう一度流してください"
   else
-    say "Docker が起きていません。$2"
+    say "Docker が動いていません。$2"
   fi
   return 1
 }
@@ -112,7 +112,7 @@ port_used() { (exec 3<>"/dev/tcp/127.0.0.1/$1") 2>/dev/null; }
 ensure_genkan() {
   genkan_running && return 0
   if genkan_installed; then
-    say "genkan は入っていますが止まっています (起こせば http://denpa.localhost で開けます)"
+    say "genkan は入っていますが止まっています (起動すれば http://denpa.localhost で開けます)"
     return 1
   fi
   if port_used 80 || port_used 443; then
@@ -158,13 +158,13 @@ start_denpa() {
   say "denpa $2 を $DENPA_DIR に置きます"
   mkdir -p "$DENPA_DIR/config"
   curl -fsSL --retry 3 -o "$DENPA_DIR/compose.yml.new" "https://raw.githubusercontent.com/$REPO/$2/$1" \
-    || die "$2 に $1 がありません (取ってこられません)。compose.mac.yml はこのあとのリリースから入るので、それより前の版では Mac に入れられません"
+    || die "$2 に $1 がありません。compose.mac.yml は v1.23.0 からなので、それより前の版は Mac に入れられません"
   # 手で置いたもの・手を入れたものは黙って上書きせず、compose.yml.bak に退けてそう言う。
   # install.sh が書いたものは1行目が印で、残りは前に書いた控え (.compose.yml.orig) と同じはず
   if [ -f "$DENPA_DIR/compose.yml" ] && ! { head -1 "$DENPA_DIR/compose.yml" | grep -q "^$MARK" \
     && tail -n +2 "$DENPA_DIR/compose.yml" | cmp -s - "$DENPA_DIR/.compose.yml.orig"; }; then
     mv "$DENPA_DIR/compose.yml" "$DENPA_DIR/compose.yml.bak"
-    say "手で置いた (手を入れた) $DENPA_DIR/compose.yml を compose.yml.bak に退けました。手直しは compose.override.yml に移してください"
+    say "手を入れた $DENPA_DIR/compose.yml を compose.yml.bak に退避しました。変更は compose.override.yml に移してください"
   fi
   sed "s#\(image: ghcr.io/danything/[a-z-]*\):latest#\1:$(image_tag "$2")#" "$DENPA_DIR/compose.yml.new" > "$DENPA_DIR/.compose.yml.orig"
   { echo "$MARK $2。手を入れず、足すものは compose.override.yml に)"; cat "$DENPA_DIR/.compose.yml.orig"; } > "$DENPA_DIR/compose.yml"
@@ -181,7 +181,7 @@ start_denpa() {
   fi
   if [ ! -f "$override" ]; then
     {
-      echo "# 手元で足したい・変えたいものはここに書く。compose.yml は install.sh が上げ直すたびに"
+      echo "# 手元で足したい・変えたいものはここに書く。compose.yml は install.sh が更新のたびに"
       echo "# 上書きするが、このファイルには触らない (Compose が compose.yml に重ねて読む)。"
       echo "# たとえば denpa の environment に TRUSTED_NETWORKS: 192.168.1.0/24 を足すなど"
       if [ "$genkan" = yes ]; then
@@ -230,7 +230,7 @@ wait_and_open() {
           sleep 2
         done
       fi
-      say "立ちました: $url (このマシンからは $URL でも。LAN のほかの機械からは http://$1:3000)"
+      say "起動しました: $url (このマシンからは $URL でも開けます。LAN のほかの機器からは http://$1:3000)"
       [ "$open_browser" = yes ] || return 0
       if [ "$(uname -s)" = Darwin ]; then
         open "$url"
@@ -241,7 +241,7 @@ wait_and_open() {
     fi
     sleep 2
   done
-  die "denpa が答えません。cd $DENPA_DIR && docker compose logs を見てください"
+  die "denpa が応答しません。cd $DENPA_DIR && docker compose logs を見てください"
 }
 
 # ---------------------------------------------------------------------------
@@ -256,7 +256,7 @@ linux_main() {
     return 0
   fi
 
-  case "$(uname -m)" in x86_64 | aarch64 | arm64) ;; *) die "amd64 と arm64 だけです (イメージがありません)" ;; esac
+  case "$(uname -m)" in x86_64 | aarch64 | arm64) ;; *) die "対応しているのは amd64 と arm64 だけです (ほかのイメージはありません)" ;; esac
   docker_ready "https://get.docker.com の手順で入れてから、もう一度流してください" \
     "sudo systemctl start docker で起こしてから、もう一度流してください" || exit 1
 
@@ -294,7 +294,7 @@ mac_stop() {
 }
 
 check() {
-  [ "$(shasum -a 256 "$1" | awk '{print $1}')" = "$2" ] || die "$1 の中身が合いません (取ってくる途中で壊れたかもしれません。もう一度流してください)"
+  [ "$(shasum -a 256 "$1" | awk '{print $1}')" = "$2" ] || die "$1 のハッシュが合いません (ダウンロード中に壊れた可能性があります。もう一度流してください)"
 }
 # SHA256SUMS から1行引いて確かめる
 check_listed() {
@@ -316,7 +316,7 @@ mac_main() {
     return 0
   fi
 
-  [ "$(uname -m)" = arm64 ] || die "Apple Silicon (arm64) の Mac だけです (px4-userland / siano-userland に Intel Mac 用がありません)"
+  [ "$(uname -m)" = arm64 ] || die "対応しているのは Apple Silicon (arm64) の Mac だけです (px4-userland / siano-userland に Intel Mac 用がありません)"
 
   # px4-userland と siano-ts は Homebrew の libusb に動的にリンクしている
   if [ ! -f "$LIBUSB" ]; then
@@ -341,7 +341,7 @@ mac_main() {
     agent="denpa-agent-${ref#v}-darwin-arm64.tar.gz"
     say "denpa-agent $ref"
     curl -fsSL --retry 3 -o "$agent" "https://github.com/$REPO/releases/download/$ref/$agent" \
-      || die "$ref には Mac 用のエージェントがありません。Mac 用はこのあとのリリースから添えるので、それより前の版では Mac に入れられません"
+      || die "$ref には Mac 用のエージェントがありません。Mac 用は v1.23.0 からなので、それより前の版は Mac に入れられません"
     fetch "https://github.com/$REPO/releases/download/$ref/$agent.sha256" "$agent.sha256"
     check "$agent" "$(awk '{print $1}' "$agent.sha256")"
   fi
@@ -418,7 +418,7 @@ EOF
   launchctl bootstrap "gui/$(id -u)" "$PLIST" \
     || die "LaunchAgent に載せられません。ログを見てください: $LOG (載せ直すなら launchctl bootstrap gui/$(id -u) \"$PLIST\")"
 
-  say "エージェントを起こしました。応答を待ちます"
+  say "エージェントを起動しました。応答を待ちます"
   answered=no
   for _ in 1 2 3 4 5 6 7 8 9 10; do
     if tuners=$(curl -fsS "http://127.0.0.1:$PORT/denpa/tuners" 2>/dev/null); then
@@ -428,7 +428,7 @@ EOF
     fi
     sleep 2
   done
-  [ "$answered" = yes ] || die "エージェントが答えません。ログを見てください: $LOG"
+  [ "$answered" = yes ] || die "エージェントが応答しません。ログを見てください: $LOG"
 
   host="$(scutil --get LocalHostName 2>/dev/null || hostname).local"
   if [ "$docker_mode" = no ]; then
@@ -445,5 +445,5 @@ EOF
 case "$(uname -s)" in
   Linux) linux_main ;;
   Darwin) mac_main ;;
-  *) die "Linux と macOS だけです" ;;
+  *) die "対応しているのは Linux と macOS だけです" ;;
 esac

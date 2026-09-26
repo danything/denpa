@@ -1,8 +1,8 @@
 # tuner-agent 単体の既定値。**denpa 本体は入っていない。**
 #
-# チューナーとカードリーダーが刺さっている機械にだけこれを置き、denpa 本体は
+# チューナーとカードリーダーを挿した機械にだけこれを置き、denpa 本体は
 # 別の所で動かす構成向け (denpa 側は TUNER_AGENT_URL でここを指す)。
-# 本体も同じクラスタに置くなら charts/denpa のほうが agent も一緒に出す。
+# 本体も同じクラスタに置くなら、charts/denpa がエージェントも一緒に出す。
 #
 # **掛かったまま録れた TS を後から解くには、denpa と同じ置き場が見えている必要がある**
 # (persistence.recorded)。別の機械で動かすなら NFS などで同じ実体を両方に見せる。
@@ -37,7 +37,7 @@ persistence:
   storageClassName: ""
   # **PVC を ArgoCD に消させない** (Prune=false,Delete=false)。既定は true で、
   # true の間は chart から PVC が消えても・Application ごと消しても ArgoCD は触らない。
-  # **false にすると「git で消したものは実際に消える」** — マニフェストから外れた
+  # **false にすると「git で消したものは実際に消える」。** マニフェストから外れた
   # 時点でボリュームごと消えるので、バックアップを用意してからにすること
   protectFromPruning: true
   # エージェントの設定 (tuners.json / channels.json)

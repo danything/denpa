@@ -1,25 +1,25 @@
 # Mac と Windows で denpa 本体を動かす (install.sh / install.ps1 が ~/denpa/compose.yml として置いて起こす)。
 #
-# compose.prod.yml から **tuner-agent を外したもの**。denpa サービスは compose.prod.yml と揃える。
+# compose.prod.yml から tuner-agent を外したもの。denpa サービスは compose.prod.yml と揃える。
 # Mac と Windows の Docker (Docker Desktop / OrbStack / colima) はコンテナに USB を渡せないので、
-# エージェントは OS の上でそのまま動かし (Mac は LaunchAgent、Windows はタスク スケジューラ)、
+# エージェントは OS の上で直接動かし (Mac は LaunchAgent、Windows はタスク スケジューラ)、
 # denpa はそれを host.docker.internal で呼ぶ。
 #
-# **このファイルには手を入れない** (上げ直すたびに上書きする)。足したいものは
-# 同じ場所の compose.override.yml に (Compose が自分で読む)。
+# **このファイルには手を入れない** (更新のたびに上書きする)。足したいものは
+# 同じ場所の compose.override.yml に書く (Compose が自分で読む)。
 #
-# **名前は mac のままにしておく** (Windows も使うが)。main の install.sh / install.ps1 はリリースのタグから
-# この名前で取るので、変えると出してある版 (v1.23.0 など) を Mac に入れられなくなる。
+# Windows でも使うが、**名前は mac のままにする**。main の install.sh / install.ps1 はリリースのタグから
+# この名前で取るので、変えると出した版 (v1.23.0 など) を Mac に入れられなくなる。
 name: denpa
 
 services:
     denpa:
         image: ghcr.io/danything/denpa:latest
         restart: unless-stopped
-        # compose.prod.yml と同じ。録画中に止めようとしたら、終わるまで居座ってから止まる
+        # compose.prod.yml と同じ。録画中に止めようとすると、録画が終わるまで居座ってから止まる
         stop_grace_period: 6h5m
         # Docker Desktop と OrbStack は host.docker.internal を最初から引けるが、colima などは
-        # 引けないことがある。host-gateway で OS 自身を指させておけば、どれでも同じに通る
+        # 引けないことがある。host-gateway で OS 自身を指しておけば、どれでも通る
         extra_hosts:
             - 'host.docker.internal:host-gateway'
         environment:
@@ -29,13 +29,13 @@ services:
             RECORDED_DIR: /app/recorded
             LIBRARY_DIR: /library
             ENCODE_CONCURRENCY: '2'
-            # **誰を通すか (docs/auth.md)。** compose.prod.yml と同じ私設網。
-            # ブラウザから localhost で入ると、コンテナに見える送り元は Docker の
+            # **誰を通すか (docs/auth.md)。** compose.prod.yml と同じプライベートネットワーク。
+            # ブラウザから localhost で入ると、コンテナに見える送信元は Docker の
             # ネットワークの出口 (172.16.0.0/12 か 192.168.0.0/16 の中) なので、これで通る。
-            # LAN のほかの機械からも同じく通る (家の外に出すなら OIDC を。README)
+            # LAN のほかの機器からも通る (家の外に出すなら OIDC を使う。README)
             TRUSTED_NETWORKS: 192.168.0.0/16,10.0.0.0/8,172.16.0.0/12
         volumes:
-            # DB は名前付きボリュームに置く (SQLite の錠が、OS から見せたフォルダ越しだと当てにならない)
+            # DB は名前付きボリュームに置く (SQLite のロックが、OS から見せたフォルダ越しだと当てにならない)
             - denpa-data:/app/data
             # 生TSの置き場は**エージェントと同じ OS のフォルダ** (エージェントの RECORDED_DIR)。
             # 掛かったまま録れたものを後から解くとき、エージェントが直に読み書きする
