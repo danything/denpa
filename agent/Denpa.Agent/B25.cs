@@ -78,6 +78,8 @@ public sealed class Descrambler(IKeySource source, bool background = true)
     private bool _sectionSeen;
     private bool _pmtRepeated;
     private bool _ecmRepeated;
+    /// <summary>溜めている間に、もう鍵を持っている ECM の中身が変わった (<see cref="Hold"/>)</summary>
+    private bool _keyChanged;
 
     private readonly Section _pat = new(null);
     private byte[]? _patLast;
@@ -194,7 +196,7 @@ public sealed class Descrambler(IKeySource source, bool background = true)
         _holding = true;
         _held = null;
         _heldLength = 0;
-        _sectionSeen = _pmtRepeated = _ecmRepeated = false;
+        _sectionSeen = _pmtRepeated = _ecmRepeated = _keyChanged = false;
         _pat.Drop();
         _patLast = null;
         _programs.Clear();
@@ -298,6 +300,17 @@ public sealed class Descrambler(IKeySource source, bool background = true)
             if ((_route[pid] ?? _only) is { } ecm) ecm.Parity = packet[3] >> 6 == 2 ? 2 : 3;
         }
 
+        /*
+         * **溜めている間に鍵が変わるなら、そこで流す。** 答えを待ってから流すと、
+         * 溜めた頭まで新しい鍵で解いて、化けたものを「解けた」として出す。
+         * 今の鍵で解けるところまで先に出し、そこから先は偶奇の門に任せる
+         */
+        if (_keyChanged)
+        {
+            _keyChanged = false;
+            Release(output);
+            return;
+        }
         if (_sectionSeen)
         {
             _sectionSeen = false;
@@ -387,12 +400,13 @@ public sealed class Descrambler(IKeySource source, bool background = true)
              * 古い鍵で解いて、化けたものを「解けた」として流すことになる
              */
             var parity = control == 2 ? 2 : 3;
-            if (ecm!.Asking is not null && ecm.Safe != 0 && parity != ecm.Safe)
+            // 止めるパケットでも偶奇は覚える。次に聞くときの門は「いま流れている偶奇」で決める
+            ecm!.Parity = parity;
+            if (ecm.Asking is not null && ecm.Safe != 0 && parity != ecm.Safe)
             {
                 _undecodable++;
                 return;
             }
-            ecm.Parity = parity;
             // 0b10 が偶数、0b11 が奇数 (0b01 は使われないが、奇数の鍵で解く)
             cipher.Decrypt(control == 2, packet[start..]);
         }
@@ -605,6 +619,7 @@ public sealed class Descrambler(IKeySource source, bool background = true)
         if (scanning && seen) _ecmRepeated = true;
         if (Same(section, ecm.Last) || Same(section, ecm.Asking)) return;
         if (Same(section, ecm.Failed) && Now() < ecm.RetryAt) return;
+        if (scanning && ecm.Last is not null) _keyChanged = true;
         if (ecm.Asking is not null)
         {
             // 前の答えを待っている。**聞くのは1本につき1つずつ**、最新だけ覚えておく
