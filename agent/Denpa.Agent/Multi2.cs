@@ -23,7 +23,7 @@ namespace Denpa.Agent;
 /// <para>
 /// 1つの実体は**1本の流れからしか触らない**。鍵を書き換えている途中に別の流れが
 /// 解くと半端な鍵で解いてしまうが、錠は掛けない (<see cref="Descrambler"/> が
-/// 1本の読み手の中で順に呼ぶ)。
+/// 1本の流れ (解き手) の中で順に呼ぶ)。
 /// </para>
 /// </summary>
 public sealed class Multi2

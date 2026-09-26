@@ -127,30 +127,6 @@ public sealed class Descrambler(IKeySource source)
         Release(output);
     }
 
-    /// <summary>
-    /// 中身を忘れる。**チャンネルを変えたとき** — 前の PMT と鍵が残っていると、次の ECM まで前の鍵で
-    /// 解こうとする。数えも溜めも捨てる。カードの定数 (<see cref="CardInit"/>) だけは持ち越す
-    /// </summary>
-    public void Reset()
-    {
-        _carryLength = _held = 0;
-        _synced = _allPmts = _pmtRepeated = false;
-        _holding = true;
-        _hold = _patLast = null;
-        _pat.Drop();
-        _programs.Clear();
-        _pmtSections.Clear();
-        _pmts.Clear();
-        _ecms.Clear();
-        Array.Clear(_route);
-        _only = null;
-        _logged = LastError = null;
-        Volatile.Write(ref _decoded, 0);
-        Volatile.Write(ref _undecodable, 0);
-        Volatile.Write(ref _unentitled, 0);
-        Volatile.Write(ref _dropped, 0);
-    }
-
     /// <summary>188 バイトずつ切り出す。読み進めたバイト数を返す (残りは 188 バイト以下)</summary>
     private int Scan(ReadOnlySpan<byte> data, IBufferWriter<byte> output)
     {

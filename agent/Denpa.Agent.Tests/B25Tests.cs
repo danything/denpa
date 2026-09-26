@@ -660,30 +660,4 @@ public class B25Tests
         await Assert.That(cards.Asked.Count).IsEqualTo(0);
     }
 
-    /// <summary>選局を変えたら前の PMT と鍵を忘れ、次のチャンネルを初めから読む</summary>
-    [Test]
-    public async Task Resetで前のチャンネルを忘れる()
-    {
-        var cards = new Cards();
-        var descrambler = new Descrambler(cards);
-        var first = Channel().Ecm(EcmPid, 1).Videos(5, 1);
-        Run(descrambler, first.Wire.ToArray());
-
-        descrambler.Reset();
-        await Assert.That(descrambler.Decoded).IsEqualTo(0);
-
-        const int pmt2 = 0x0102, video2 = 0x0121, ecm2 = 0x0902;
-        // 前と同じ ES の PID でも、前の鍵では解かない (次の局の ECM を待って溜める)
-        var second = new Ts()
-            .Pat((0x0500, pmt2))
-            .Pmt(pmt2, 0x0500, Ca(ecm2), (video2, []), (VideoPid, []))
-            .Videos(3, 5)
-            .Ecm(ecm2, 5)
-            .Payload(video2, 5).Videos(3, 5);
-        var output = Run(descrambler, second.Wire.ToArray());
-
-        await Assert.That(Diff(output, Expected(second))).IsEqualTo(-1);
-        await Assert.That(descrambler.Decoded).IsEqualTo(7);
-        await Assert.That(Generations(cards)).IsEqualTo("1,5");
-    }
 }

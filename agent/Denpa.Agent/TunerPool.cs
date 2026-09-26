@@ -241,7 +241,7 @@ public sealed class TunerPool(
             lock (_gate)
             {
                 if (_leases.TryGetValue(index, out var mine) && mine == lease) _leases.Remove(index);
-                lease.Sinks.Clear();
+                lock (lease.Sinks) lease.Sinks.Clear();
             }
             sink.Fail($"{spec.Name}: {error.Message}");
             onChange();
@@ -309,7 +309,7 @@ public sealed class TunerPool(
             // 選局が落ちた。読み手には失敗として伝える (黙って終わると空ファイルになる)
             var reason = lease.Error is null ? "" : $" ({lease.Error})";
             foreach (var sink in lease.Sinks) sink.Fail($"選局が終了しました{reason}");
-            lease.Sinks.Clear();
+            lock (lease.Sinks) lease.Sinks.Clear();
         }
         onChange();
     }
@@ -321,12 +321,13 @@ public sealed class TunerPool(
         {
             lock (_gate)
             {
-                lease.Sinks.Remove(leaving);
+                // 解き手が別のスレッドで配っているので、入れ物は Sinks の錠の下で触る
+                lock (lease.Sinks) lease.Sinks.Remove(leaving);
                 if (lease.Sinks.Count == 0) ScheduleRelease(lease);
             }
             onChange();
         });
-        lease.Sinks.Add(sink);
+        lock (lease.Sinks) lease.Sinks.Add(sink);
         // 溢れの報告に名前を残す。**抜けたあとに報告が回っても名乗れるように**
         lease.Saw(use);
         Task.Run(onChange);
@@ -371,7 +372,7 @@ public sealed class TunerPool(
                 if (reason is null) sink.End();
                 else sink.Fail(reason);
             }
-            lease.Sinks.Clear();
+            lock (lease.Sinks) lease.Sinks.Clear();
         }
         // 読むのをやめろとだけ言う。止まりきるのを待つのは錠の外 (上の説明)
         lease.Stop();
@@ -647,7 +648,8 @@ internal sealed class Lease(int tuner, string type, string channel)
 
     private volatile bool _stopped;
     private Task? _pump;
-    private Task? _descramble;
+    /// <summary>解き手が終わった (失敗も含む)。**読み手も降りる** — 残ると読み口を掴んだまま回り続ける</summary>
+    private volatile bool _drained;
     /// <summary>読み手と解き手の間に溜まっているバイト数</summary>
     private long _queued;
 
@@ -683,18 +685,19 @@ internal sealed class Lease(int tuner, string type, string channel)
     /// </summary>
     public void StartNative(ITuneDevice tuner, Action onExit)
     {
-        var queue = System.Threading.Channels.Channel.CreateUnbounded<byte[]>(
+        var queue = System.Threading.Channels.Channel.CreateUnbounded<(byte[] Rented, int Length)>(
             new UnboundedChannelOptions { SingleReader = true, SingleWriter = true });
         // **どちらも専用のスレッドで。** 流れている間ずっと塞ぐので、共用の池から借りると
         // HTTP の口が、池が増えるまで待たされる
         _pump = Task.Factory.StartNew(
             () => Read(tuner, queue.Writer), CancellationToken.None, TaskCreationOptions.LongRunning, TaskScheduler.Default);
-        _descramble = Task.Factory.StartNew(
+        // 解き手は待たない (Await)。デバイスに触らず、配り先も畳むときに空になっている
+        _ = Task.Factory.StartNew(
             () => Descramble(queue.Reader, onExit), CancellationToken.None, TaskCreationOptions.LongRunning, TaskScheduler.Default);
     }
 
     /// <summary>読み手。読んだぶんを写してキューへ入れる。終わったらキューを閉じる</summary>
-    private void Read(ITuneDevice tuner, ChannelWriter<byte[]> queue)
+    private void Read(ITuneDevice tuner, ChannelWriter<(byte[] Rented, int Length)> queue)
     {
         var buffer = new byte[188 * 1024];
         /*
@@ -720,11 +723,11 @@ internal sealed class Lease(int tuner, string type, string channel)
         var waited = false;
         try
         {
-            while (!_stopped)
+            while (!_stopped && !_drained)
             {
                 var read = ring is null
                     ? tuner.Output.Read(buffer, 0, buffer.Length)
-                    : ring.Read(buffer, 0, buffer.Length, () => _stopped);
+                    : ring.Read(buffer, 0, buffer.Length, () => _stopped || _drained);
                 if (read <= 0) break;
 
                 if (Interlocked.Add(ref _queued, read) > QueueLimit)
@@ -732,9 +735,12 @@ internal sealed class Lease(int tuner, string type, string channel)
                     // 解き手が止まったまま埋まった。空くまで読むのを待つ (まれなので、起きて見に行く形で足りる)
                     if (!waited) Log.Write($"[{Tuner}] {Channel}: 解くのが追いつかずキューが埋まったので、読むのを待ちます");
                     waited = true;
-                    while (Volatile.Read(ref _queued) > QueueLimit && !_stopped) Thread.Sleep(10);
+                    while (Volatile.Read(ref _queued) > QueueLimit && !_stopped && !_drained) Thread.Sleep(10);
                 }
-                queue.TryWrite(buffer.AsSpan(0, read).ToArray());
+                // 写す先は借り物。解き手が解き終えたら返す (1回が 192KB なので、毎回確保すると大きな塊の置き場を汚す)
+                var rented = ArrayPool<byte>.Shared.Rent(read);
+                buffer.AsSpan(0, read).CopyTo(rented);
+                if (!queue.TryWrite((rented, read))) ArrayPool<byte>.Shared.Return(rented);
 
                 if (since.Elapsed < OverflowReport) continue;
                 since.Restart();
@@ -750,7 +756,7 @@ internal sealed class Lease(int tuner, string type, string channel)
     }
 
     /// <summary>解き手。キューから取って解き、読み手たちに配る。キューが閉じて空になったら終わる</summary>
-    private void Descramble(ChannelReader<byte[]> queue, Action onExit)
+    private void Descramble(ChannelReader<(byte[] Rented, int Length)> queue, Action onExit)
     {
         var b25 = new Descrambler(Keys.Source);
         var decoded = new ArrayBufferWriter<byte>();
@@ -772,17 +778,28 @@ internal sealed class Lease(int tuner, string type, string channel)
                 while (!_stopped && queue.TryRead(out var chunk))
                 {
                     Interlocked.Add(ref _queued, -chunk.Length);
-                    b25.Decode(chunk, decoded);
+                    try
+                    {
+                        b25.Decode(chunk.Rented.AsSpan(0, chunk.Length), decoded);
+                    }
+                    finally
+                    {
+                        ArrayPool<byte>.Shared.Return(chunk.Rented);
+                    }
                     Push();
                 }
             }
-            b25.Flush(decoded);
-            Push();
+            if (!_stopped)
+            {
+                b25.Flush(decoded);
+                Push();
+            }
         }
         catch (Exception error)
         {
             Error ??= error.Message;
         }
+        _drained = true;
         /*
          * **解けなかったぶんを残す。** 掛かったまま流したものは、録画が
          * 成功したように見えて中身が見られない。理由も添える
@@ -950,8 +967,9 @@ internal sealed class Lease(int tuner, string type, string channel)
      *
      * <para>
      * 次の選局は、これが返ってから始める。待たずに始めると**同じ読み口を
-     * 2本で取り合い**、前の局のパケットが次の選局に混ざる。解き手も待つ —
-     * 鍵を待っていれば止まるのはその答えのあと (カードや配り役の上限まで)。
+     * 2本で取り合い**、前の局のパケットが次の選局に混ざる。待つのは読み手だけ —
+     * 解き手はデバイスに触らず、配り先も畳むときに空になっている (鍵を待っていれば
+     * 止まるのはその答えのあと)。
      * </para>
      *
      * <para>
@@ -961,12 +979,12 @@ internal sealed class Lease(int tuner, string type, string channel)
      */
     public void Await()
     {
-        Task?[] running = [_pump, _descramble];
-        _pump = _descramble = null;
-        if (running.OfType<Task>().ToArray() is not { Length: > 0 } tasks) return;
-        if (!Task.WaitAll(tasks, StopWait))
+        var pump = _pump;
+        _pump = null;
+        if (pump is null) return;
+        if (!pump.Wait(StopWait))
         {
-            Log.Write($"[{Tuner}] {Channel}: 読み手か解き手が {StopWait.TotalSeconds} 秒で止まりませんでした");
+            Log.Write($"[{Tuner}] {Channel}: 読み手が {StopWait.TotalSeconds} 秒で止まりませんでした");
         }
     }
 
