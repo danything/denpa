@@ -178,7 +178,7 @@ public static class Px4Userland
     /// 受信機の行 (<see cref="Px4Receiver.ParseList"/>) と <c>siano-ts --list</c> (Siano.cs) も同じ形
     /// </summary>
     internal static Dictionary<string, string> Fields(string line) => line
-        .Split(' ', StringSplitOptions.RemoveEmptyEntries)
+        .Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries)
         .Select(field => field.Split('=', 2))
         .Where(pair => pair.Length == 2)
         .GroupBy(pair => pair[0], StringComparer.Ordinal)
