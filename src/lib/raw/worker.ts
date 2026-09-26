@@ -96,7 +96,6 @@ let audioErrors = 0;
 const budget = new DecodeBudget();
 let dropped = 0;
 let shown = 0;
-let size = { width: 0, height: 0 };
 let statsAt = 0;
 
 function post(message: FromWorker, transfer: Transferable[] = []): void {
@@ -270,7 +269,6 @@ function take(): void {
     }
     lastFramePts = pts;
     current = { pts, interlaced: (flags & 1) !== 0, topFirst: (flags & 2) !== 0 };
-    size = { width, height };
     decoder._dec_pop();
 }
 
@@ -288,8 +286,8 @@ function draw(field: number): void {
 
 /** 刻むたびに: 番の近いものを解き、番が来たコマを出す */
 function tick(): void {
-    schedule();
     if (decoder === null || failed) return;
+    schedule();
     const at = now();
 
     if (at === null) {
@@ -339,15 +337,11 @@ function tick(): void {
             : Math.max(0, (at - current.pts - frameTicks) / CLOCK);
     const wall = performance.now();
     if (budget.tick(wall, (frameTicks / CLOCK) * 1000, late)) {
-        post({
-            type: 'slow',
-            reason: 'この端末では MPEG-2 を解くのが間に合わないので、焼いたものに戻しました',
-        });
-        failed = true;
+        fail('この端末では MPEG-2 を解くのが間に合わないので、焼いたものに戻しました');
     }
     if (wall - statsAt >= 1000) {
         statsAt = wall;
-        post({ type: 'stats', dropped, p95: budget.p95, shown, ...size });
+        post({ type: 'stats', dropped, p95: budget.p95, shown });
     }
 }
 
@@ -406,7 +400,6 @@ async function init(canvas: OffscreenCanvas, base: string): Promise<void> {
         fail('この denpa には MPEG-2 の復号器が入っていません');
         return;
     }
-    post({ type: 'ready' });
     schedule();
 }
 

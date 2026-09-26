@@ -1448,14 +1448,8 @@ export function attend(connection: Connection, grant: Grant = { raw: false }): v
         const { channelType, channel, serviceId, audio, codec, caption } = asked;
 
         const now = nowPlaying(serviceId, audio);
-        /*
-         * **生で送るのは、頼まれて、しかも札が許しているときだけ** (LAN から取った札。
-         * `tickets.Grant`)。断ったら理由を添えて焼いたものを送る — 画面が黙って戻ると、
-         * 設定を入れたのに効かない理由が分からない
-         */
+        // **生で送るのは、頼まれて、しかも札が許しているときだけ** (LAN から取った札。`tickets.Grant`)
         const raw = asked.raw && grant.raw;
-        const refused =
-            asked.raw && !grant.raw ? '家の外から見ているので、焼いたものを送っています' : undefined;
 
         /*
          * **同じものを焼いているなら、焼き直さない。**
@@ -1491,7 +1485,6 @@ export function attend(connection: Connection, grant: Grant = { raw: false }): v
             codecs: codecsFor(codec),
             codec,
             raw,
-            ...(refused === undefined ? {} : { refused }),
             audio: now.audio.id,
             audios: now.audios,
         };

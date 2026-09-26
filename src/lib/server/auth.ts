@@ -119,6 +119,24 @@ export function trusted(address: string): boolean {
 }
 
 /**
+ * 接続元の住所。**読めなければ空文字を返す。**
+ *
+ * adapter-node は `ADDRESS_HEADER` を渡してあるのにそのヘッダが無いリクエストが
+ * 来ると**例外を投げる**。Traefik を通らずに Pod へ直に届くもの (kubelet の
+ * ヘルスチェックなど) がそれで、そのまま呼ぶと 500 になる。
+ *
+ * **読めなかったときは素通しにしない** (空文字はどの CIDR にも当たらない)。
+ * 分からないほうを通すと、ヘッダを外すだけで認証を抜けられてしまう
+ */
+export function clientAddress(event: { getClientAddress(): string }): string {
+    try {
+        return event.getClientAddress();
+    } catch {
+        return '';
+    }
+}
+
+/**
  * 家の中 (LAN) の住所か。**私設・ループバック・リンクローカルだけ。**
  *
  * CGNAT (100.64.0.0/10) は入れない — Tailscale などの VPN で**外から**入ってくる
@@ -130,7 +148,7 @@ export function onLan(address: string): boolean {
     const target = address.replace(/^::ffff:/i, '').toLowerCase();
     if (target === '::1') return true;
     // IPv6 の ULA (fc00::/7) とリンクローカル (fe80::/10)
-    if (/^f[cd][0-9a-f]{0,2}:/.test(target) || /^fe[89ab][0-9a-f]?:/.test(target)) return true;
+    if (/^f[cd][0-9a-f]{2}:/.test(target) || /^fe[89ab][0-9a-f]:/.test(target)) return true;
     return LAN.some((network) => inNetwork(target, network));
 }
 

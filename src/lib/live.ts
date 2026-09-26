@@ -28,7 +28,7 @@ import type { AudioTrack } from './arib';
  * ([stream.md](../../docs/stream.md) §5.1)
  *
  * **生 (MPEG-2 のまま) はここに並べない。** 焼き方ではなく「焼かない」なので、
- * 端末の設定 (`raw-setting.ts`) と LAN かどうか (サーバが決める) で別に選ぶ
+ * 端末の設定 (`raw/setting.svelte.ts`) と LAN かどうか (サーバが決める) で別に選ぶ
  * (`TuneCommand.raw`。[stream.md](../../docs/stream.md) §5.5)
  */
 export type LiveCodec = 'h264' | 'av1';
@@ -100,12 +100,8 @@ export type Notice =
           codecs: string;
           /** いま焼いている形。画面の切り替えがどれを指すか */
           codec: LiveCodec;
-          /**
-           * **焼かずに生の TS を送るか** (`CHANNEL.rawTs`)。頼まれても LAN の外からなら
-           * false で答え、`refused` に理由を添える — 画面は黙って焼いたものに戻さず、そう言う
-           */
+          /** **焼かずに生の TS を送るか** (`CHANNEL.rawTs`)。頼まれても LAN の外からなら false */
           raw: boolean;
-          refused?: string;
           /** いま焼いている音声 (`AudioTrack.id`) */
           audio: string;
           /** 選べる音声。1つしか無ければ画面は切り替えを出さない */

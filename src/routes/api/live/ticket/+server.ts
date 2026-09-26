@@ -1,5 +1,5 @@
 import { json } from '@sveltejs/kit';
-import { mayStreamRaw } from '$lib/server/auth';
+import { clientAddress, mayStreamRaw } from '$lib/server/auth';
 import { issue } from '$lib/server/tickets';
 
 /**
@@ -11,15 +11,9 @@ import { issue } from '$lib/server/tickets';
  *
  * **生で送ってよいか (LAN か) もここで決めて札に持たせる** (`Grant`)。本当の接続元が
  * 読めるのはこちら側だけ (前段が居るとヘッダにしか無い)。画面にも返すのは、
- * 断られると分かっているのに復号器 (500KB) を取りに行かせないため
+ * 生で見る設定なのに焼いたものになる理由を画面が言えるようにするため
  */
-export function POST({ getClientAddress }) {
-    let address = '';
-    try {
-        address = getClientAddress();
-    } catch {
-        // 読めなければ生にしない (hooks と同じく、分からないほうを通さない)
-    }
-    const raw = mayStreamRaw(address);
+export function POST(event) {
+    const raw = mayStreamRaw(clientAddress(event));
     return json({ ticket: issue({ raw }), raw });
 }

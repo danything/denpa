@@ -156,7 +156,8 @@ describe('生で送ってよい相手', () => {
     });
 
     test('外の住所。VPN (CGNAT) で入ってきたものも外', () => {
-        for (const address of ['203.0.113.5', '100.64.1.2', '2001:db8::1', '']) {
+        // 'fe8::1' / 'fc::1' は頭の 0 を省いた書き方 (0fe8:: / 00fc::) で、リンクローカルでも ULA でもない
+        for (const address of ['203.0.113.5', '100.64.1.2', '2001:db8::1', 'fe8::1', 'fc::1', '']) {
             expect(onLan(address), address).toBe(false);
         }
     });

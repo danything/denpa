@@ -1480,6 +1480,10 @@ export function livePlayer() {
             ticket = answer.ticket;
             // LAN から取った札か。**生で頼むかどうかの最後の1つ** (`wantsRaw`)
             rawGranted = answer.raw === true;
+            // 生で見る設定なのに家の外。**黙って焼いたものにせず、そう言う**
+            if (rawSetting.on && rawProblem === null && !rawGranted) {
+                warning = '家の外から見ているので、焼いたものを送っています';
+            }
         } catch {
             // 繋ぎ直しの最中なら、サーバがまだ帰っていないだけ。待ち直す
             if (attempts > 0) reconnect();
@@ -1593,8 +1597,6 @@ export function livePlayer() {
                     audios = notice.audios;
                     audio = notice.audio;
                     codec = notice.codec;
-                    // 生を頼んだのに断られた (LAN の外)。**黙って戻さず、そう言う**
-                    if (notice.refused !== undefined) warning = notice.refused;
                     if (notice.raw) startRaw(video);
                     else start(video, notice.codecs, notice.codec);
                 }
@@ -1784,18 +1786,25 @@ export function livePlayer() {
             video.pause();
             video.removeAttribute('src');
             video.load();
-            const box = host ?? video.parentElement;
-            if (box === null) return;
-            engine = new RawEngine(box, still, target, {
-                shown: () => thaw(),
-                stalled: () => {
-                    if (paused || Date.now() < quiet) return;
-                    stalled = true;
-                    stalls += 1;
-                    lastStall = Date.now();
-                },
-                gaveUp: (reason) => fallBack(reason),
-            });
+            try {
+                const box = host ?? video.parentElement;
+                if (box === null) throw new Error('入れ物が無い');
+                engine = new RawEngine(box, still, target, {
+                    shown: () => thaw(),
+                    stalled: () => {
+                        if (paused || Date.now() < quiet) return;
+                        stalled = true;
+                        stalls += 1;
+                        lastStall = Date.now();
+                    },
+                    gaveUp: (reason) => fallBack(reason),
+                });
+            } catch (error) {
+                fallBack(
+                    `生の器を作れませんでした (${error instanceof Error ? error.message : String(error)})`,
+                );
+                return;
+            }
             // 押す口は <video> に付いている (`MediaStack`)。見えなくするだけで、そこに残す
             video.style.opacity = '0';
             // 音を消していたなら、生でも消したまま始める
@@ -1845,8 +1854,9 @@ export function livePlayer() {
         if (!running && engine.playing) {
             running = true;
             state = 'playing';
-            // 自動再生で断られた。**押すまで絵だけ進める** (壁時計。`RawEngine.blocked`)
-            if (engine.blocked) silenced = true;
+            // 自動再生で断られた。**押すまで絵だけ進める** (壁時計。`RawEngine.blocked`)。
+            // 音も消しておく — 他を押したついでに鳴りだすと、画面の「消音」と食い違う
+            if (engine.blocked) mute();
         }
         const at = engine.position;
         const cost = Math.round(engine.decodeMs * 10) / 10;

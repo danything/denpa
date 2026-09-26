@@ -28,12 +28,8 @@ export type ToWorker =
 
 /** worker → 画面 */
 export type FromWorker =
-    /** 復号器を読み終えた */
-    | { type: 'ready' }
-    /** 使えなくなった。**画面は焼いたものに戻る** */
+    /** 使えなくなった (復号器が無い・音が解けない・間に合わない。`budget.ts`)。**画面は焼いたものに戻る** */
     | { type: 'fail'; reason: string }
-    /** 解く・描くのが間に合わない。**画面は焼いたものに戻る** (`budget.ts`) */
-    | { type: 'slow'; reason: string }
     /**
      * 解けた音1コマ。面ごとの float (-1〜1)。**時刻は伸ばした PTS** (`pes.unwrap`)
      */
@@ -47,4 +43,4 @@ export type FromWorker =
     /** 選局し直してから最初の絵を描いた。**前の局の静止画を剥がす合図** */
     | { type: 'shown' }
     /** 数字 (1秒ごと)。画面に出すもの */
-    | { type: 'stats'; dropped: number; p95: number; shown: number; width: number; height: number };
+    | { type: 'stats'; dropped: number; p95: number; shown: number };

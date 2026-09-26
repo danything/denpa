@@ -42,7 +42,7 @@ emcc -O3 "$HERE/decoder.c" -I"$PREFIX/include" -L"$PREFIX/lib" -lavcodec -lavuti
     -sENVIRONMENT=worker -sFILESYSTEM=0 \
     -sMODULARIZE=1 -sEXPORT_ES6=1 -sEXPORT_NAME=createDecoder \
     -sEXPORTED_FUNCTIONS=_malloc,_free \
-    -sEXPORTED_RUNTIME_METHODS=HEAPU8,HEAP32,HEAPF64 \
+    -sEXPORTED_RUNTIME_METHODS=HEAPU8,HEAP32 \
     -o "$OUT/decoder.mjs"
 ls -l "$OUT"
 rm -rf "$WORK"

@@ -80,7 +80,6 @@ export class RawEngine {
         // 押すのは下の <video> (押し口がそこに付いている。`MediaStack`)
         this.canvas.style.cssText =
             'position:absolute; inset:0; width:100%; height:100%; object-fit:contain; background:#000; pointer-events:none;';
-        host.insertBefore(this.canvas, before);
 
         this.context = new AudioContext({ latencyHint: 'playback' });
         this.gain = this.context.createGain();
@@ -97,6 +96,8 @@ export class RawEngine {
         this.send({ type: 'init', canvas: offscreen, decoder: DECODER }, [offscreen]);
 
         this.timer = setInterval(() => this.tick(), TICK);
+        // 差し込むのは最後。途中で転んだら (呼ぶ側が焼いたものに戻す) 何も残さない
+        host.insertBefore(this.canvas, before);
     }
 
     /** どれだけ貯めるか (秒)。**決めるのは焼く道と同じ `pacing.nextTarget`** (live-player) */
@@ -220,10 +221,7 @@ export class RawEngine {
                 this.canvas.dataset['audio'] = String(this.heard);
                 break;
             case 'fail':
-            case 'slow':
                 this.giveUp(message.reason);
-                break;
-            case 'ready':
                 break;
         }
     }
@@ -281,13 +279,18 @@ export class RawEngine {
         }
     }
 
-    /** 時計を音に替える (自動再生の許しが出た)。**鳴っている位置はそのまま** */
+    /**
+     * 時計を替える。**鳴っている位置はそのまま。** 自動再生の許しが出たら音へ、音が止められたら
+     * (出口が外れた・OS に止められた) 壁時計へ — 止まった音の時計に絵まで付いて止まらないように
+     */
     private follow(): void {
-        if (!this.wall || this.context.state !== 'running') return;
-        const position = this.playout.position(performance.now() / 1000);
-        this.wall = false;
+        const wall = this.context.state !== 'running';
+        if (this.gone || wall === this.wall) return;
+        const position = this.playout.position(this.now());
+        this.wall = wall;
+        if (wall) this.stopAll();
         if (position === null) return;
-        for (const scheduled of this.playout.rebase(position, this.context.currentTime)) this.play(scheduled);
+        for (const scheduled of this.playout.rebase(position, this.now())) this.play(scheduled);
     }
 
     private play(scheduled: Scheduled<AudioChunk>): void {

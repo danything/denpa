@@ -8,7 +8,7 @@
  * 配るのは2つだけ: 読み込み口 (`decoder.mjs`) と中身 (`decoder.wasm`)。**名前は決め打ち** —
  * 置き場の中を好きに読ませる口にはしない。
  *
- * 無ければ 404。画面はそれを見て焼いたものに戻る (`raw/player.ts`)
+ * 無ければ 404。画面はそれを見て焼いたものに戻る (`raw/worker.ts`)
  */
 
 import { existsSync, statSync } from 'node:fs';
@@ -24,7 +24,8 @@ const TYPES: Record<string, string> = {
 };
 
 export const GET: RequestHandler = ({ params, request }) => {
-    const type = TYPES[params.file];
+    // `constructor` などの継いだ名前を拾わない
+    const type = Object.hasOwn(TYPES, params.file) ? TYPES[params.file] : undefined;
     if (type === undefined) error(404, '無い名前です');
     const path = join(config.mpeg2Dir, params.file);
     if (!existsSync(path)) error(404, 'MPEG-2 の復号器が入っていません');

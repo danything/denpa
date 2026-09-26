@@ -1,7 +1,7 @@
 import { fail } from '@sveltejs/kit';
 import { and, desc, eq, gt, lte, sql } from 'drizzle-orm';
 import { LAST_COOKIE, type LiveCodec } from '$lib/live';
-import { mayStreamRaw } from '$lib/server/auth';
+import { clientAddress, mayStreamRaw } from '$lib/server/auth';
 import { orm } from '$lib/server/db';
 import { airing, CURRENT_SERVICES, SERVICE_ORDER, SERVICE_TYPE_ORDER } from '$lib/server/epg';
 import { warm } from '$lib/server/live';
@@ -68,7 +68,8 @@ function remembered(
     }
 }
 
-export function load({ url, cookies, getClientAddress }) {
+export function load(event) {
+    const { url, cookies } = event;
     const at = Date.now();
     // テレビと同じ並び (SERVICE_TYPE_ORDER / SERVICE_ORDER)。番組表とも揃えてある
     const services: Service[] = orm()
@@ -166,13 +167,7 @@ export function load({ url, cookies, getClientAddress }) {
          * **前回が生なら生で温める。** ただし LAN から来ているときだけ — 札を取るときと
          * 同じ判断 (`mayStreamRaw`)。外れても困らない (来なければ 8秒で畳む)
          */
-        let lan = false;
-        try {
-            lan = mayStreamRaw(getClientAddress());
-        } catch {
-            // 住所が読めない。生にはしない
-        }
-        const raw = kept?.raw === true && lan;
+        const raw = kept?.raw === true && mayStreamRaw(clientAddress(event));
         warm(start.channelType, start.channel, start.serviceId, start.audio, start.codec, raw);
     }
 
