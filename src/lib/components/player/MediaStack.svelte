@@ -38,16 +38,29 @@
         overlay = $bindable(null),
         box = $bindable(null),
     }: Props = $props();
+
+    /**
+     * **押す口は自分で繋ぐ** (`onclick={onclick}` と書かない)。観る画面の `press` と同じ理由 —
+     * Svelte の onclick は根で受けて `composedPath()` を辿って配るが、データ放送を出すと
+     * この入れ物は**閉じた影の中へ移され**、中の video は composedPath に出てこない。
+     * 書いたままだと **d を出している間だけ絵を押しても止まらない**。要素に直に付けた口は、
+     * 要素ごと移されても付いたまま動く。呼ぶのはその時点の `onclick` (差し替えに付いていく)
+     */
+    $effect(() => {
+        const target = video;
+        if (target === null) return;
+        const press = (event: MouseEvent) => onclick(event);
+        target.addEventListener('click', press);
+        return () => target.removeEventListener('click', press);
+    });
 </script>
 
 <div bind:this={box} style="position:absolute; inset:0; width:100%; height:100%;">
     <!-- svelte-ignore a11y_media_has_caption -->
-    <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_noninteractive_element_interactions -->
     <video
         bind:this={video}
         style="width:100%; height:100%; background:#000;"
         playsinline
-        {onclick}
         data-testid="{prefix}-video"
     ></video>
     <canvas
