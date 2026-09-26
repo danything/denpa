@@ -498,7 +498,7 @@
                                 -->
                                 {#if player.delay !== null}
                                     <span
-                                        >{player.fromAir === null ? '遅延' : '・貯まり'}
+                                        >{player.fromAir === null ? '遅延' : '・バッファ'}
                                         {player.delay.toFixed(1)}秒</span
                                     >
                                 {/if}
@@ -548,11 +548,11 @@
                                 -->
                                 {#if player.slipMost > 0}
                                     ・ <span
-                                        >絵の遅れ 最大 {Math.round(player.slipMost * 1000)}ms</span
+                                        >映像の遅れ 最大 {Math.round(player.slipMost * 1000)}ms</span
                                     >
                                 {/if}
                                 {#if player.slips > 0}
-                                    ・ <span>絵の遅れ直し {player.slips}回</span>
+                                    ・ <span>映像の遅れを補正 {player.slips}回</span>
                                 {/if}
                             {/snippet}
                         </InfoBlock>

@@ -216,7 +216,7 @@ async function ensureRoom(bytes: number): Promise<void> {
     try {
         const { usage, quota } = await navigator.storage.estimate();
         if (quota !== undefined && usage !== undefined && quota - usage < bytes * 1.2) {
-            throw new Error(`端末の空きが足りません (空きは残り ${Math.round((quota - usage) / 1e6)}MB)`);
+            throw new Error(`端末の空き容量が足りません (残り ${Math.round((quota - usage) / 1e6)}MB)`);
         }
     } catch (error) {
         if (error instanceof Error && error.message.startsWith('端末の空き')) throw error;
