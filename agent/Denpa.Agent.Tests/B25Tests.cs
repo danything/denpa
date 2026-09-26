@@ -726,6 +726,38 @@ public class B25Tests
     }
 
     /// <summary>
+    /// **溜めている間に同じ ECM が2回変わったら、今の鍵はどちらの偶奇にも使わない。**
+    /// 後から見た偶奇で門を上書きすると、1回目と2回目のあいだに切り替わった偶奇を
+    /// 古い鍵で解いて化ける。もう1本の ECM の答えが遅く、溜めが長引く形
+    /// </summary>
+    [Test]
+    public async Task 溜めている間に同じECMが2回変わったら今の鍵は使わない()
+    {
+        const int other = 0x0902;
+        var cards = new StepCards();
+        var descrambler = new Descrambler(cards);
+        var output = new ArrayBufferWriter<byte>();
+        var head = new Ts()
+            .Pat((0x0400, PmtPid))
+            .Pmt(PmtPid, 0x0400, [], (VideoPid, Ca(EcmPid)), (AudioPid, Ca(other)))
+            .Ecm(EcmPid, 1).Ecm(other, 20);
+        descrambler.Decode(head.Wire.ToArray(), output);
+        for (var tries = 0; tries < 500 && cards.Answered < 1; tries++) await Task.Delay(1);
+        var body = new Ts().Ecm(other, 21).Videos(3, 1, even: false).Ecm(EcmPid, 2)
+            .Videos(3, 2, even: true).Ecm(EcmPid, 3).Videos(3, 2, even: true);
+        descrambler.Decode(body.Wire.ToArray(), output);
+        await Assert.That(output.WrittenCount).IsEqualTo(0);
+        cards.Gate(20).Set();
+        for (var tries = 0; tries < 500 && output.WrittenCount < head.Wire.Count + body.Wire.Count; tries++)
+        {
+            await Task.Delay(1);
+            descrambler.Decode(new Ts().Pat((0x0400, PmtPid)).Wire.ToArray(), output);
+        }
+        cards.Gate(21).Set();
+        await Assert.That(descrambler.Decoded).IsEqualTo(3);
+    }
+
+    /// <summary>
     /// **止めたパケットの偶奇も覚える。** 覚えないと、次に聞くときの門が
     /// 「門が閉じる前の偶奇」になり、今流れている偶奇を止めて、古い鍵の偶奇を通す
     /// </summary>

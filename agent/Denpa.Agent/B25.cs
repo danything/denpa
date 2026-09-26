@@ -692,7 +692,8 @@ public sealed class Descrambler(IKeySource source, bool background = true)
         }
         else
         {
-            ecm.Safe = ecm.Parity;
+            // もう門が掛かっていて、今の鍵のまま2回目の変化を見た (溜めている間)。どちらの偶奇にも使わない
+            ecm.Safe = ecm.Guarded ? -1 : ecm.Parity;
         }
         if (!ecm.Guarded) ecm.GuardFrom = _holding ? _heldLength : 0;
         ecm.Guarded = true;
