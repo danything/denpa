@@ -1078,7 +1078,9 @@
                                                 action="?/delete"
                                                 use:submitting={() => async (options) => {
                                                     await options.update();
-                                                    if (options.result.type === 'success' && held !== undefined) {
+                                                    // held は使わない。use: の引数は作ったときのまま閉じ込められるので、
+                                                    // あとから端末に保存した録画でも古い「無い」を見てしまう
+                                                    if (options.result.type === 'success' && offline.entries[rec.id] !== undefined) {
                                                         void removeLocal(rec.id);
                                                     }
                                                 }}
