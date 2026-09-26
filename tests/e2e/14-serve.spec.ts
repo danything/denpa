@@ -64,3 +64,32 @@ test.describe('接続元の住所', () => {
         }
     });
 });
+
+/*
+ * **生で送るのは家の中からだけ。** 決めるのはサーバで、札を取ったときの住所を見る
+ * (`auth.mayStreamRaw`。ライブを生で見る道、docs/stream.md §5.5)。`TRUSTED_NETWORKS` を全部開けていても、外の住所なら生にしない
+ */
+test.describe('生で送ってよい相手', () => {
+    test('家の外の住所には、札で生を許さない', async ({ stack }) => {
+        const open = await bootClosed(test.info().workerIndex, stack.root, {
+            TRUSTED_NETWORKS: '0.0.0.0/0',
+            ADDRESS_HEADER: 'x-forwarded-for',
+        });
+        try {
+            const ask = async (from: string) => {
+                const res = await fetch(`${open.appUrl}/api/live/ticket`, {
+                    method: 'POST',
+                    headers: { 'x-forwarded-for': from },
+                });
+                expect(res.status).toBe(200);
+                return (await res.json()) as { ticket: string; raw: boolean };
+            };
+            expect((await ask('203.0.113.5')).raw).toBe(false);
+            // VPN (CGNAT) で外から入ってきた住所も外とみなす
+            expect((await ask('100.64.1.2')).raw).toBe(false);
+            expect((await ask('192.168.1.10')).raw).toBe(true);
+        } finally {
+            await open.shutdown();
+        }
+    });
+});
