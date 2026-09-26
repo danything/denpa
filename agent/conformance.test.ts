@@ -419,13 +419,97 @@ describe('チャンネル', () => {
     });
 });
 
+/** `/denpa/card` の形 (agent/Denpa.Agent/Card.cs、読むのは src/lib/server/scramble.ts) */
+type CardReader = {
+    name: string;
+    card: boolean;
+    ids: string[];
+    active: boolean;
+    tuners: string[];
+    error?: string;
+};
+type CardStatus = {
+    ok: boolean;
+    message: string;
+    source: 'local' | 'remote';
+    remote?: string;
+    ids?: string[];
+    tuners?: string[];
+    readers: CardReader[];
+};
+
+function expectReader(reader: CardReader) {
+    expect(typeof reader.name).toBe('string');
+    expect(typeof reader.card).toBe('boolean');
+    expect(typeof reader.active).toBe('boolean');
+    for (const id of reader.ids) expect(id).toMatch(/^\d{16}$/);
+    expect(Array.isArray(reader.tuners)).toBe(true);
+    if (reader.error !== undefined) expect(typeof reader.error).toBe('string');
+}
+
 describe('カードとスクランブル解除', () => {
     test('カードリーダーの様子を返す', async () => {
-        const card = (await (await get('/denpa/card')).json()) as { ok: boolean; message: string };
+        const card = (await (await get('/denpa/card')).json()) as CardStatus;
         // 手元にリーダーは無い。**それでも答えは返る**ことが大事
         expect(typeof card.ok).toBe('boolean');
-        expect(card.message.length).toBeGreaterThan(0);
+        expect(typeof card.message).toBe('string');
+        expect(card.source).toBe('local');
+        expect(Array.isArray(card.readers)).toBe(true);
+        // 読めていないときは理由を言う。読めているなら一言は空 (名前と番号は表に出る)
+        if (!card.ok) expect(card.message.length).toBeGreaterThan(0);
+        for (const reader of card.readers) expectReader(reader);
+        // 使うカードは1枚だけ
+        expect(card.readers.filter((reader) => reader.active).length).toBeLessThanOrEqual(1);
     });
+
+    test('鍵を配る相手から貰うときは、その相手を返す', async () => {
+        /*
+         * CARD_URL を立てたもう1つを起こし、こちら (カードの無いエージェント) を
+         * 配り役にする。貰えなくても**形は同じ**で、手元のリーダーは並べない
+         */
+        const port = PORT + 2;
+        const room = mkdtempSync(join(tmpdir(), 'denpa-agent-remote-'));
+        writeFileSync(join(room, 'tuners.json'), TUNERS);
+        writeFileSync(join(room, 'channels.json'), JSON.stringify(channels(), null, 4));
+        const other = Bun.spawn(AGENT_CMD, {
+            cwd: ROOT,
+            env: {
+                ...process.env,
+                AGENT_PORT: String(port),
+                TUNERS_FILE: join(room, 'tuners.json'),
+                CHANNELS_FILE: join(room, 'channels.json'),
+                RECORDED_DIR: join(room, 'recorded'),
+                FAKE_TUNE: TUNE,
+                CARD_URL: BASE,
+            },
+            stdout: 'ignore',
+            stderr: 'ignore',
+        });
+        try {
+            let card: CardStatus | undefined;
+            for (let i = 0; i < 100 && card === undefined; i++) {
+                try {
+                    const res = await fetch(`http://127.0.0.1:${port}/denpa/card`);
+                    if (res.ok) card = (await res.json()) as CardStatus;
+                } catch {
+                    // まだ待ち受けていない
+                }
+                if (card === undefined) await sleep(100);
+            }
+            if (card === undefined) throw new Error('CARD_URL を立てたエージェントが応答しません');
+            expect(card.source).toBe('remote');
+            expect(card.remote).toBe(BASE);
+            expect(typeof card.ok).toBe('boolean');
+            expect(Array.isArray(card.ids)).toBe(true);
+            expect(Array.isArray(card.tuners)).toBe(true);
+            expect(card.readers).toEqual([]);
+            if (!card.ok) expect(card.message.length).toBeGreaterThan(0);
+        } finally {
+            other.kill('SIGKILL');
+            await other.exited;
+            rmSync(room, { recursive: true, force: true });
+        }
+    }, 30_000);
 
     test('置き場の外は解除に回さない', async () => {
         const res = await post('/denpa/decode', { input: '../../etc/passwd', output: 'x.ts' });

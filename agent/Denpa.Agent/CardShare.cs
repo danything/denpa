@@ -102,6 +102,9 @@ public sealed class RemoteCard(string url) : IKeySource
     private readonly string _url = url.TrimEnd('/');
     private CardInit? _init;
 
+    /// <summary>配り役の URL (画面に出す)</summary>
+    public string Url => _url;
+
     /// <summary>素は1回貰えば変わらない。**貰えなかったら次に要ったときにまた聞く**</summary>
     public CardInit Init() => _init ?? Check();
 

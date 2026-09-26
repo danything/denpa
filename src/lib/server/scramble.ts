@@ -1,6 +1,6 @@
 import { closeSync, openSync, readSync } from 'node:fs';
 import { relative } from 'node:path';
-import { array, boolean, type Infer, object, optional, string, tolerate } from '../shape';
+import { array, boolean, type Infer, literal, object, optional, string, tolerate } from '../shape';
 import { config } from './config';
 
 /**
@@ -68,14 +68,110 @@ export function isScrambled(path: string): boolean {
     return scrambledRatio(path) > THRESHOLD;
 }
 
+/** `/denpa/card` の1行。リーダー1つ */
+const CARD_READER = object({
+    name: string,
+    /** カードが読めたか */
+    card: boolean,
+    /** カードの番号 (10進16桁) */
+    ids: array(string),
+    /** 鍵の出どころが使っているリーダー。**使うのは1枚だけ** (他は予備) */
+    active: boolean,
+    /** このカードで解いているチューナー */
+    tuners: array(string),
+    /** 覗けなかった理由。挿さっていないだけなら無い */
+    error: optional(string),
+});
+
 /** エージェントの `/denpa/card` の答え。形はここで確かめる (`shape.ts`) */
 const CARD_STATUS = object({
     ok: boolean,
-    /** 画面にそのまま出す一言 */
+    /** 困っているときだけの一言。読めているときは空 */
     message: string,
-    readers: array(string),
+    /** 手元のカードか、鍵を配る相手 (CARD_URL) か */
+    source: literal('local', 'remote'),
+    /** 鍵を配る相手の URL (`source: 'remote'` のとき) */
+    remote: optional(string),
+    /** 配る相手のカードの番号と、それで解いているチューナー (`source: 'remote'` のとき) */
+    ids: optional(array(string)),
+    tuners: optional(array(string)),
+    readers: array(CARD_READER),
 });
-export type CardStatus = Infer<typeof CARD_STATUS>;
+
+/** 画面での呼び分け。`unknown` は前の版のエージェント (名前しか返さない) */
+export type CardReaderState = 'active' | 'standby' | 'empty' | 'error' | 'unknown';
+
+export type CardReader = {
+    name: string;
+    state: CardReaderState;
+    ids: string[];
+    tuners: string[];
+    error?: string;
+};
+
+export type CardStatus = {
+    ok: boolean;
+    message: string;
+    source: 'local' | 'remote';
+    remote?: string;
+    ids: string[];
+    tuners: string[];
+    readers: CardReader[];
+};
+
+function strings(value: unknown): string[] {
+    return Array.isArray(value) ? value.filter((v): v is string => typeof v === 'string') : [];
+}
+
+/** 来たままの形。**どの鍵も無いかもしれない**として読む */
+type Loose<T> = { [K in keyof T]?: unknown };
+
+function stateOf(row: Loose<Infer<typeof CARD_READER>>): CardReaderState {
+    if (row.active === true) return 'active';
+    if (row.card === true) return 'standby';
+    return typeof row.error === 'string' ? 'error' : 'empty';
+}
+
+/**
+ * 画面に渡す形に揃える。**形が違っても止めない** (`tolerate`) ので、ここは来たものを
+ * 疑って読む。前の版のエージェントは `readers` がリーダーの名前の並びで、
+ * 名前と番号は `message` に書いてある — 行は名前だけ出し、状態は「—」にする
+ */
+function normalize(raw: unknown): CardStatus {
+    const body: Loose<Infer<typeof CARD_STATUS>> = typeof raw === 'object' && raw !== null ? raw : {};
+    const readers = (Array.isArray(body.readers) ? (body.readers as unknown[]) : []).map(
+        (entry): CardReader => {
+            if (typeof entry === 'string') return { name: entry, state: 'unknown', ids: [], tuners: [] };
+            const row: Loose<Infer<typeof CARD_READER>> =
+                typeof entry === 'object' && entry !== null ? entry : {};
+            return {
+                name: typeof row.name === 'string' ? row.name : '',
+                state: stateOf(row),
+                ids: strings(row.ids),
+                tuners: strings(row.tuners),
+                ...(typeof row.error === 'string' ? { error: row.error } : {}),
+            };
+        },
+    );
+    return {
+        ok: body.ok === true,
+        message: typeof body.message === 'string' ? body.message : '',
+        source: body.source === 'remote' ? 'remote' : 'local',
+        ...(typeof body.remote === 'string' ? { remote: body.remote } : {}),
+        ids: strings(body.ids),
+        tuners: strings(body.tuners),
+        readers,
+    };
+}
+
+/** エージェントの答えを読む。**形が違えば1回だけ警告して、読めるだけ読む** */
+export function readCardStatus(raw: unknown): CardStatus {
+    return normalize(tolerate(CARD_STATUS, raw, 'エージェントの /denpa/card'));
+}
+
+function failed(message: string): CardStatus {
+    return { ok: false, message, source: 'local', ids: [], tuners: [], readers: [] };
+}
 
 /** `/denpa/decode` の答え。断られたときは `error` に理由 */
 const DECODED = object({ ok: optional(boolean), error: optional(string) });
@@ -93,11 +189,11 @@ export async function cardStatus(): Promise<CardStatus> {
             signal: AbortSignal.timeout(10_000),
         });
         if (!res.ok) {
-            return { ok: false, message: `解除の受け口が ${res.status} を返しました`, readers: [] };
+            return failed(`解除の受け口が ${res.status} を返しました`);
         }
-        return tolerate(CARD_STATUS, await res.json(), 'エージェントの /denpa/card');
+        return readCardStatus(await res.json());
     } catch (error) {
-        return { ok: false, message: `解除の受け口に繋がりません: ${error}`, readers: [] };
+        return failed(`解除の受け口に繋がりません: ${error}`);
     }
 }
 
@@ -147,7 +243,8 @@ export async function descramble(
     if (isScrambled(output)) {
         // 素通しされた。ほぼカードが読めていない
         const card = await cardStatus();
-        return { ok: false, error: `解除しても掛かったままです。${card.message}` };
+        const why = card.ok ? 'カードは読めているので、鍵が合わないか ECM が流れていません' : card.message;
+        return { ok: false, error: `解除しても掛かったままです。${why}` };
     }
     return { ok: true, error: '' };
 }

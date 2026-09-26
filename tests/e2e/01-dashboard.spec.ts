@@ -57,7 +57,21 @@ test.describe('ダッシュボードと画面遷移', () => {
         const card = page.getByTestId('tuner-card');
         // 相手待ちなので後から流れてくる
         await expect(card.getByTestId('status-card-reader')).toHaveText('OK');
-        await expect(card).toContainText('Fake Card Reader');
+        /*
+         * **リーダーごとに1行。** 使うのは1枚だけで、残りは予備。
+         * チューナーは使用中の行にだけ並ぶ。読めているときは一言を出さない
+         * (名前と番号を表と二重に出していた)
+         */
+        const rows = card.getByTestId('card-reader-row');
+        await expect(rows).toHaveCount(2);
+        await expect(rows.nth(0)).toContainText('Fake Card Reader (usb 1-1)');
+        await expect(rows.nth(0)).toContainText('0000000000000000');
+        await expect(rows.nth(0)).toContainText('使用中');
+        await expect(rows.nth(0)).toContainText('Fake-T1');
+        await expect(rows.nth(1)).toContainText('Spare Card Reader (usb 1-2)');
+        await expect(rows.nth(1)).toContainText('予備');
+        await expect(card.getByTestId('card-message')).toHaveCount(0);
+        await expect(card.getByText('Fake Card Reader')).toHaveCount(1);
     });
 
     /**

@@ -250,9 +250,7 @@ public sealed class BCas : IKeySource, IDisposable
             try
             {
                 link = candidate.Open();
-                link.Reset();
-                var (systemKey, initCbc, caSystemId) = Initial(link);
-                _init = new CardInit(systemKey, initCbc, caSystemId, Ids(link));
+                _init = Read(link);
                 _link = link;
                 return;
             }
@@ -264,6 +262,17 @@ public sealed class BCas : IKeySource, IDisposable
             }
         }
         throw new IOException($"どのリーダーでもカードを読めません ({string.Join(" / ", reasons)})");
+    }
+
+    /// <summary>
+    /// 開いた線でカードに電源を入れ、INT と IDI を読む。**B-CAS でなければ投げる。**
+    /// 予備のリーダーを覗くのにも使う (<see cref="Card.Status"/>)
+    /// </summary>
+    internal static CardInit Read(ICardLink link)
+    {
+        link.Reset();
+        var (systemKey, initCbc, caSystemId) = Initial(link);
+        return new CardInit(systemKey, initCbc, caSystemId, Ids(link));
     }
 
     private void Drop()

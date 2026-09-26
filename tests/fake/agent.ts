@@ -334,17 +334,38 @@ const options: Bun.ServeOptions = {
         }
 
         if (url.pathname === '/denpa/card') {
+            /*
+             * 本物と同じ形 (agent/Denpa.Agent/Card.cs)。**予備のリーダーも1つ置く** —
+             * 使うのは1枚だけで、チューナーが並ぶのは使用中の行だけ、を画面で確かめる
+             */
             return json(
                 knobs.scrambled
                     ? {
                           ok: false,
-                          readers: [],
                           message: 'カードリーダーが見つかりません',
+                          source: 'local',
+                          readers: [],
                       }
                     : {
                           ok: true,
-                          readers: ['Fake Card Reader (usb 1-1)'],
-                          message: 'カードが読めています (Fake Card Reader (usb 1-1)、0000000000000000)',
+                          message: '',
+                          source: 'local',
+                          readers: [
+                              {
+                                  name: 'Fake Card Reader (usb 1-1)',
+                                  card: true,
+                                  ids: ['0000000000000000'],
+                                  active: true,
+                                  tuners: ['Fake-T1'],
+                              },
+                              {
+                                  name: 'Spare Card Reader (usb 1-2)',
+                                  card: true,
+                                  ids: ['0000000000000001'],
+                                  active: false,
+                                  tuners: [],
+                              },
+                          ],
                       },
             );
         }

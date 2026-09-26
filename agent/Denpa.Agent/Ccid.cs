@@ -179,7 +179,7 @@ public sealed class CcidLink : ICardLink
         {
             var reply = Call(CcidMessage.PowerOn, [], select);
             _powered = true;
-            if (reply.Absent) throw new IOException($"{Name} にカードが挿さっていません");
+            if (reply.Absent) throw new CardAbsentException($"{Name} にカードが挿さっていません");
             if (!reply.Failed && reply.Data.Length > 0)
             {
                 raw = reply.Data;
