@@ -1,3 +1,4 @@
+using System.Buffers;
 using System.Diagnostics;
 using System.Text.Json.Nodes;
 
@@ -41,98 +42,40 @@ public static class Shell
 }
 
 /// <summary>
-/// カードリーダーが見えているか。
+/// カードが読めているか。
 ///
 /// <para>
-/// pcscd が動いていてもリーダーを掴めていないことがある (USBが黙る)。そうなると
-/// 復号器を用意できないまま掛かったまま流すので (TunerPool.Reopen)、録画は成功した
-/// ように見えて中身が全部スクランブルされたまま、という分かりにくい壊れ方をする。
+/// リーダーが見えていてもカードを読めていないことがある (刺さっていない・USB が黙る)。
+/// そうなると掛かったまま流すので、録画は成功したように見えて中身が全部
+/// スクランブルされたまま、という分かりにくい壊れ方をする。**実際に INT を通して**
+/// 確かめる。
 /// </para>
 /// </summary>
 public static class Card
 {
-    /// <summary>
-    /// pcscd が居なければ起こす。**起こせなくても止まらない。**
-    ///
-    /// <para>
-    /// カードが読めなくても番組表もロゴも集まるし、掛かったままでも録っておく
-    /// ほうが録らないよりまし。ここで落ちると「カードリーダーが無いから1本も
-    /// 録れない」になる。
-    /// </para>
-    /// </summary>
-    public static async Task EnsurePcscd()
+    public static JsonObject Status()
     {
-        if ((await Shell.Run("pgrep", ["-x", "pcscd"], TimeSpan.FromSeconds(10))).Code == 0) return;
+        var readers = new JsonArray();
+        foreach (var found in CardLinks.Find()) readers.Add((JsonNode?)JsonValue.Create(found.Name));
+
+        string message;
+        var ok = false;
         try
         {
-            Process.Start(new ProcessStartInfo("pcscd", "--foreground --disable-polkit")
-            {
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                UseShellExecute = false,
-            });
-            Log.Write("pcscd を起動しました");
+            var init = Keys.Source.Init();
+            var ids = string.Join(" / ", init.Ids.Select(id => id.ToString("D16")));
+            var from = Keys.Source is RemoteCard ? "鍵を配る相手" : Keys.Local.Name;
+            message = $"カードが読めています ({from}{(ids.Length > 0 ? $"、{ids}" : "")})";
+            ok = true;
         }
         catch (Exception error)
         {
-            Log.Write($"pcscd を起こせません (カードが要る録画は解除に失敗します): {error.Message}");
-        }
-    }
-
-    /// <summary>
-    /// pcscd を入れ直す。**reader.conf を読ませるため** (Debian の pcscd は
-    /// 起動したときにしか読まない。Px4.cs の WriteReaderConfs)。
-    ///
-    /// <para>
-    /// 入れ直すと、開いていたカードは全部使えなくなる。libaribb25 は繋ぎ直さない
-    /// ので、呼んだ側でカードを開き直させる (Program.cs)。録画中は呼ばない。
-    /// </para>
-    /// </summary>
-    public static async Task RestartPcscd()
-    {
-        await Shell.Run("pkill", ["-x", "pcscd"], TimeSpan.FromSeconds(10));
-        for (var i = 0; i < 50; i++)
-        {
-            if ((await Shell.Run("pgrep", ["-x", "pcscd"], TimeSpan.FromSeconds(10))).Code != 0) break;
-            await Task.Delay(100);
-        }
-        if ((await Shell.Run("pgrep", ["-x", "pcscd"], TimeSpan.FromSeconds(10))).Code == 0)
-        {
-            Log.Write("pcscd が止まらないので SIGKILL します");
-            await Shell.Run("pkill", ["-KILL", "-x", "pcscd"], TimeSpan.FromSeconds(10));
-            await Task.Delay(500);
-        }
-        await EnsurePcscd();
-    }
-
-    public static async Task<JsonObject> Status()
-    {
-        var pcscd = (await Shell.Run("pgrep", ["-x", "pcscd"], TimeSpan.FromSeconds(10))).Code == 0;
-        var scan = await Shell.Run("pcsc_scan", ["-r"], TimeSpan.FromSeconds(15));
-
-        // 「0: Reader name」の形で並ぶ
-        var readers = new JsonArray();
-        foreach (var line in scan.Output.Split('\n'))
-        {
-            var trimmed = line.Trim();
-            var colon = trimmed.IndexOf(':');
-            if (colon <= 0 || !trimmed[..colon].All(char.IsDigit)) continue;
-            readers.Add((JsonNode?)JsonValue.Create(trimmed[(colon + 1)..].Trim()));
+            message = readers.Count == 0 && Keys.Source is not RemoteCard
+                ? "カードリーダーが見つかりません"
+                : error.Message;
         }
 
-        var message = !pcscd
-            ? "pcscd が動いていません"
-            : readers.Count > 0
-                ? $"カードリーダーが見えています ({readers.Count} 台)"
-                : "pcscd は動いていますが、カードリーダーが見つかりません";
-
-        return new JsonObject
-        {
-            ["ok"] = pcscd && readers.Count > 0,
-            ["pcscd"] = pcscd,
-            ["readers"] = readers,
-            ["message"] = message,
-        };
+        return new JsonObject { ["ok"] = ok, ["readers"] = readers, ["message"] = message };
     }
 }
 
@@ -158,9 +101,9 @@ public static class Scramble
     /// <summary>
     /// 掛かったまま録れてしまったものを、後から解く。
     ///
-    /// <para>**自分で解く** (AribB25.cs)。</para>
+    /// <para>**自分で解く** (B25.cs)。</para>
     /// </summary>
-    public static JsonObject Decode(string recorded, string? input, string? output, string? cardUrl)
+    public static JsonObject Decode(string recorded, string? input, string? output)
     {
         var source = Inside(recorded, input);
         var target = Inside(recorded, output);
@@ -179,13 +122,34 @@ public static class Scramble
 
         try
         {
-            using var b25 = AribB25.Open(cardUrl);
+            var b25 = new Descrambler(Keys.Source);
             using var reading = File.OpenRead(source);
             using var writing = File.Create(target);
             var buffer = new byte[188 * 1024];
+            var decoded = new ArrayBufferWriter<byte>();
             int read;
-            while ((read = reading.Read(buffer)) > 0) writing.Write(b25.Decode(buffer.AsSpan(0, read)));
-            writing.Write(b25.Flush());
+            while ((read = reading.Read(buffer)) > 0)
+            {
+                decoded.ResetWrittenCount();
+                b25.Decode(buffer.AsSpan(0, read), decoded);
+                writing.Write(decoded.WrittenSpan);
+            }
+            decoded.ResetWrittenCount();
+            b25.Flush(decoded);
+            writing.Write(decoded.WrittenSpan);
+
+            /*
+             * **解けなかったのに成功とは言わない。** カードが無い・ECM が流れていない
+             * ときも、掛かったまま全部書き出せてしまう。1% を超えて残ったら断る
+             */
+            if (b25.Undecodable * 100 > b25.Decoded)
+            {
+                return new JsonObject
+                {
+                    ["ok"] = false,
+                    ["error"] = $"{b25.Undecodable} パケットが掛かったままです ({b25.LastError ?? "鍵を貰えませんでした"})",
+                };
+            }
         }
         catch (Exception error)
         {

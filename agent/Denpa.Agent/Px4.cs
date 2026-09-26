@@ -11,8 +11,8 @@ namespace Denpa.Agent;
 /// chardev を出す道は捨てた。px4-userland は libusb だけで USB を叩く
 /// ユーザー空間のドライバで、静的リンクの実行ファイル3つとファームウェアを
 /// イメージに同梱すれば、<c>/dev/bus/usb</c> が見えるだけで動く。
-/// カードリーダーも同じデーモンが持っていて、pcscd には IFD ハンドラを
-/// 1枚登録するだけで普通の PC/SC リーダーに見える。
+/// カードリーダーも同じデーモンが持っていて、control socket 越しに APDU を
+/// 投げれば読める (Px4Card.cs)。
 /// </para>
 ///
 /// <para>
@@ -58,13 +58,9 @@ public static class Px4Userland
     public static string Firmware =>
         Environment.GetEnvironmentVariable("PX4_FIRMWARE") ?? Path.Combine(Dir, "firmware", "it930x-firmware.bin");
 
-    /// <summary>px4d と px4-ts と IFD ハンドラが socket を置く場所</summary>
+    /// <summary>px4d と px4-ts が socket を置く場所</summary>
     public static string RuntimeDir =>
         Environment.GetEnvironmentVariable("PX4_RUNTIME_DIR") ?? "/run/px4-userland";
-
-    /// <summary>pcscd が起動時に読む reader.conf の置き場 (Debian の pcscd は <c>serialconfdir</c> がここ)</summary>
-    public static string ReaderConfDir =>
-        Environment.GetEnvironmentVariable("PCSC_READER_CONF_DIR") ?? "/etc/reader.conf.d";
 
     public static string Device(string id, int receiver) => $"{Scheme}{id}:{receiver}";
 
@@ -216,71 +212,6 @@ public static class Px4Userland
         .Select(spec => Parse(spec.Device!)?.Id)
         .OfType<string>()
         .Distinct(StringComparer.Ordinal);
-
-    /// <summary>
-    /// 内蔵カードリーダーを pcscd に見せる reader.conf を、筐体ぶん揃える。
-    /// **pcscd を起こす前に呼ぶ。** 新しく増えたか中身が変わったら true。
-    ///
-    /// <para>
-    /// Debian の pcscd (libudev 版) は reader.conf を**起動したときにしか読まない**。
-    /// なので先に書いてから起こす。
-    /// 書くのに要るのは筐体の番号だけで、px4d を待たなくてよい — IFD は px4d が
-    /// 居なくても登録され、居ない間は「カードなし」と答えて、px4d が来たら
-    /// 自分で繋ぐ (px4-userland 0.1.6)。px4d を起こし直したときも同じで、
-    /// pcscd を入れ直さなくてよい。
-    /// </para>
-    ///
-    /// <para>
-    /// もう無い筐体の reader.conf は消す。残すと、居ない筐体のリーダーが
-    /// 「カードなし」で並び続ける。
-    /// </para>
-    /// </summary>
-    public static bool WriteReaderConfs(IEnumerable<string> ids, string? dir = null, string? ifd = null)
-    {
-        dir ??= ReaderConfDir;
-        ifd ??= Path.Combine(Dir, "ifd", "px4-userland-ifd.so");
-        var wanted = ids.ToHashSet(StringComparer.Ordinal);
-        if (wanted.Count > 0 && !File.Exists(ifd))
-        {
-            Log.Write($"IFD ハンドラが無いので内蔵カードリーダーは使えません: {ifd}");
-            return false;
-        }
-
-        var changed = false;
-        try
-        {
-            Directory.CreateDirectory(dir);
-            foreach (var path in Directory.EnumerateFiles(dir, "px4-userland-*.conf"))
-            {
-                var id = Path.GetFileNameWithoutExtension(path)["px4-userland-".Length..];
-                if (!wanted.Contains(id)) File.Delete(path);
-            }
-            foreach (var id in wanted)
-            {
-                var path = Path.Combine(dir, $"px4-userland-{id}.conf");
-                var conf = ReaderConf(id, RuntimeDir, ifd);
-                if (File.Exists(path) && File.ReadAllText(path) == conf) continue;
-                File.WriteAllText(path, conf);
-                changed = true;
-            }
-        }
-        catch (Exception error)
-        {
-            Log.Write($"reader.conf を書けません: {error.Message}");
-        }
-        return changed;
-    }
-
-    /// <summary>pcscd の reader.conf。1筐体1枚 (配布アーカイブの雛形と同じ形。px4d と pcscd は同じ root)</summary>
-    public static string ReaderConf(string id, string runtimeDir, string ifd) =>
-        $"""
-        # denpa-agent が書いたもの。筐体 {id} の内蔵カードリーダー (px4-userland)
-        FRIENDLYNAME "px4-userland {id[^4..]} Internal Card Reader"
-        DEVICENAME   px4-userland:runtime={runtimeDir}:device={id}:access=user
-        LIBPATH      {ifd}
-        CHANNELID    0
-
-        """;
 }
 
 /// <summary>
@@ -354,12 +285,6 @@ public sealed record Px4Receiver(int Index, bool Terrestrial, bool Satellite)
 /// <para>
 /// **ready になったら受信機を聞く** (<c>px4ctl list</c>、<see cref="Receivers"/>)。
 /// 何本あって何を受けられるかは筐体の答えを使う。
-/// </para>
-///
-/// <para>
-/// 内蔵カードリーダーの reader.conf はここでは書かない。pcscd を起こす前に
-/// まとめて書く (<see cref="Px4Userland.WriteReaderConfs"/>)。IFD は px4d が
-/// 居なくても登録され、ready になったら自分で繋ぐ。
 /// </para>
 /// </summary>
 public sealed class Px4Daemon

@@ -38,7 +38,7 @@ export const config = {
      * チューナーエージェントの居場所。
      *
      * 選局もスクランブル解除もチャンネルスキャンも、全部ここが窓口。
-     * B-CASカードは pcscd 経由でしか読めず、その pcscd は向こう側にしか無い。
+     * B-CASカードのリーダーを叩くのも向こう側。
      * 別PCのチューナーを足すときは、そのPCのエージェントを指す
      */
     agentUrl: str('TUNER_AGENT_URL', 'http://tuner-agent:25252').replace(/\/+$/, ''),

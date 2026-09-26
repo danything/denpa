@@ -77,7 +77,7 @@ public sealed class Px4Card : ICardLink
                 .OrderBy(found => found.Id, StringComparer.Ordinal)
                 .Select(found =>
                 {
-                    // pcscd に見せていたときの名前 (Px4Userland.ReaderConf) と揃える
+                    // pcscd に見せていた頃と同じ名前 (画面で見分けがつくように)
                     var name = $"px4-userland {found.Id[^4..]} Internal Card Reader";
                     return new CardLinkCandidate(name, () => Open(name, found.Socket));
                 }),

@@ -9,7 +9,7 @@ using Microsoft.AspNetCore.Http.Features;
  *
  * denpa から触れないものが3つある。
  *
- * - B-CASカード … pcscd 経由でしか読めず、その pcscd はこのコンテナにしか居ない
+ * - B-CASカード … USB のリーダーも px4d の内蔵リーダーも、こちらが直に叩く (CardLinks.cs)
  * - チューナーデバイス … `/dev/dvb/*` と `/dev/bus/usb` が見えているのはこちらだけ
  * - 選局そのもの … デバイスを掴んで ioctl で選局する (Tuning.cs)。px4-userland /
  *   siano-userland の機材は同梱のものに USB を叩かせる (Px4.cs / Siano.cs)
@@ -22,6 +22,7 @@ using Microsoft.AspNetCore.Http.Features;
 // 実機で選局と復号だけ試す口。サーバは立てない (Probe.cs)
 if (args.ElementAtOrDefault(0) == "--tune") return Probe.Run(args);
 if (args.ElementAtOrDefault(0) == "--decode-file") return Probe.Decode(args);
+if (args.ElementAtOrDefault(0) == "--card") return Probe.Card(args);
 
 var port = int.TryParse(Environment.GetEnvironmentVariable("AGENT_PORT"), out var configured)
     ? configured
@@ -36,8 +37,8 @@ var (tuners, detected) = config.ResolveTuners();
  * CARD_URL は「手元にカードが無い拠点」だけ。指定しなければ自分に刺さって
  * いるカードを読む (CardShare.cs)。
  */
+Keys.Configure(Environment.GetEnvironmentVariable("CARD_URL"));
 var tune = new TuneOptions(
-    Environment.GetEnvironmentVariable("CARD_URL"),
     name => config.StreamIds()(name),
     Environment.GetEnvironmentVariable("FAKE_TUNE") is { Length: > 0 } fake ? fake : null);
 
@@ -48,33 +49,6 @@ var pool = new TunerPool(tuners, () => events.Emit("tuners"), tune) { Detected =
  * 筐体も受信機も px4d --list で分かっているので、ここで顔ぶれは変わらない (Px4.cs)
  */
 void PreparePx4() => Px4Daemon.Prepare(Px4Userland.IdsIn(pool.Tuners).ToList());
-
-/*
- * **内蔵カードリーダーが増えたら pcscd を入れ直す。** 起動したあとに筐体が増えたときだけ。
- *
- * pcscd は reader.conf を起動したときにしか読まない (Px4.cs の WriteReaderConfs)。
- * 入れ直すと開いていたカードが全部使えなくなるので、録画が終わるまで待ち、
- * 入れ直したら復号器とカードの共有を開き直させる (libaribb25 は繋ぎ直さない)。
- * 待っている間にもう一度頼まれても、入れ直すのは1回でよい (そのとき書いてある分を読む)
- */
-var reloadingReaders = 0;
-async Task ReloadCardReaders()
-{
-    if (Interlocked.Exchange(ref reloadingReaders, 1) == 1) return;
-    try
-    {
-        if (pool.Recording) Log.Write("内蔵カードリーダーが増えました。録画が終わったら pcscd を入れ直します");
-        while (pool.Recording) await Task.Delay(TimeSpan.FromSeconds(30));
-        await Card.RestartPcscd();
-        pool.ReopenCards();
-        AribB25.Server.Forget();
-        Log.Write("内蔵カードリーダーを読ませるため pcscd を入れ直しました");
-    }
-    finally
-    {
-        Volatile.Write(ref reloadingReaders, 0);
-    }
-}
 
 var builder = WebApplication.CreateSlimBuilder(args);
 builder.WebHost.ConfigureKestrel(options =>
@@ -287,7 +261,6 @@ app.MapPut("/denpa/tuners", async (HttpContext http) =>
     pool.Replace(resolved);
     // 新しく書かれた筐体があれば px4d を起こす。数秒かかるので返事は待たせない
     _ = Task.Run(PreparePx4);
-    if (Px4Userland.WriteReaderConfs(Px4Userland.IdsIn(resolved))) _ = Task.Run(ReloadCardReaders);
     await Respond.Write(http, new JsonObject { ["tuners"] = pool.Status(), ["detected"] = pool.Detected });
 });
 
@@ -327,14 +300,12 @@ app.MapPut("/denpa/channels", async (HttpContext http) =>
 });
 
 // --- カードとスクランブル解除 ---------------------------------------------
-app.MapGet("/denpa/card", async (HttpContext http) => await Respond.Write(http, await Card.Status()));
+app.MapGet("/denpa/card", async (HttpContext http) => await Respond.Write(http, await Task.Run(Card.Status)));
 
 app.MapPost("/denpa/decode", async (HttpContext http) =>
 {
     var body = await Respond.Read(http);
-    var result = Scramble.Decode(
-        recorded, body?["input"]?.GetValue<string>(), body?["output"]?.GetValue<string>(),
-        Environment.GetEnvironmentVariable("CARD_URL"));
+    var result = Scramble.Decode(recorded, body?["input"]?.GetValue<string>(), body?["output"]?.GetValue<string>());
     await Respond.Write(http, result, result["ok"]!.GetValue<bool>() ? 200 : 500);
 });
 
@@ -352,7 +323,7 @@ app.MapGet("/denpa/card/init", async (HttpContext http) =>
     try
     {
         http.Response.ContentType = "application/octet-stream";
-        await http.Response.Body.WriteAsync(AribB25.Pack(AribB25.Server.Init()));
+        await http.Response.Body.WriteAsync(CardWire.Pack(await Task.Run(Keys.Local.Init)));
     }
     catch (Exception error)
     {
@@ -372,9 +343,10 @@ app.MapPost("/denpa/card/ecm", async (HttpContext http) =>
 
     try
     {
-        var (key, code) = AribB25.Server.Ecm(body.ToArray());
+        var ecm = body.ToArray();
+        var answer = await Task.Run(() => Keys.Local.Ecm(ecm));
         http.Response.ContentType = "application/octet-stream";
-        await http.Response.Body.WriteAsync(AribB25.Pack(key, code));
+        await http.Response.Body.WriteAsync(CardWire.Pack(answer));
     }
     catch (Exception error)
     {
@@ -384,14 +356,6 @@ app.MapPost("/denpa/card/ecm", async (HttpContext http) =>
 
 app.MapFallback((HttpContext http) =>
     Respond.Write(http, new JsonObject { ["ok"] = false, ["error"] = "not found" }, 404));
-
-/*
- * **内蔵カードリーダーの reader.conf を書いてから pcscd を起こす。** pcscd は
- * reader.conf を起動したときにしか読まない。書くのに px4d は要らない (IFD は
- * px4d が居なくても登録され、ready になったら自分で繋ぐ。Px4.cs)
- */
-Px4Userland.WriteReaderConfs(Px4Userland.IdsIn(pool.Tuners));
-await Card.EnsurePcscd();
 
 /*
  * **px4-userland の px4d は背景で起こす。** ready までファームウェアの流し込みで

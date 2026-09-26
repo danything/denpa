@@ -7,7 +7,7 @@ namespace Denpa.Agent.Tests;
  * px4-userland の機材 (PX-Q3U4 / PX-MLT5PE / DTV02A-5TS-P …) を掴むところ。
  *
  * 本物の筐体は無い。ここで確かめるのは**機材に触らない部分**だけ —
- * px4d --list / px4ctl list の読み方、device 文字列の形、px4-ts に渡す引数、reader.conf。
+ * px4d --list / px4ctl list の読み方、device 文字列の形、px4-ts に渡す引数。
  * 実機で当てるのは `denpa-agent --tune px4:<筐体の番号>:2 T27` (Probe.cs)。
  */
 public class Px4Tests
@@ -240,48 +240,5 @@ public class Px4Tests
     {
         Px4Tuner.Check(null, 7, ChannelTable.Parse("BS15_0")!);
         await Task.CompletedTask;
-    }
-
-    [Test]
-    public async Task reader_conf_は_pcscd_の形()
-    {
-        var conf = Px4Userland.ReaderConf("00001205000960", "/run/px4-userland", "/opt/px4-userland/ifd/px4-userland-ifd.so");
-        await Assert.That(conf).Contains("FRIENDLYNAME \"px4-userland 0960 Internal Card Reader\"");
-        await Assert.That(conf).Contains("DEVICENAME   px4-userland:runtime=/run/px4-userland:device=00001205000960:access=user");
-        await Assert.That(conf).Contains("LIBPATH      /opt/px4-userland/ifd/px4-userland-ifd.so");
-        await Assert.That(conf).Contains("CHANNELID    0");
-    }
-
-    [Test]
-    public async Task reader_conf_を筐体ぶん揃えて_いない筐体のは消す()
-    {
-        var dir = Path.Combine(Path.GetTempPath(), $"denpa-readerconf-{Guid.NewGuid():N}");
-        var ifd = Path.Combine(dir, "ifd.so");
-        Directory.CreateDirectory(dir);
-        File.WriteAllText(ifd, "");
-        try
-        {
-            // もう居ない筐体の reader.conf は消す
-            File.WriteAllText(Path.Combine(dir, "px4-userland-00001205009999.conf"), "old");
-            // denpa が書いたものでないファイルには触らない
-            File.WriteAllText(Path.Combine(dir, "other.conf"), "keep");
-
-            await Assert.That(Px4Userland.WriteReaderConfs(["00001205000960", "000000000012345"], dir, ifd)).IsTrue();
-            var names = Directory.GetFiles(dir, "*.conf").Select(Path.GetFileName).Order().ToArray();
-            await Assert.That(names).IsEquivalentTo(
-                ["other.conf", "px4-userland-000000000012345.conf", "px4-userland-00001205000960.conf"],
-                CollectionOrdering.Matching);
-
-            // 同じ顔ぶれなら書き直さない (pcscd を入れ直さなくてよい)
-            await Assert.That(Px4Userland.WriteReaderConfs(["00001205000960", "000000000012345"], dir, ifd)).IsFalse();
-            // 減っただけなら入れ直さない (居ない筐体のリーダーは「カードなし」で並ぶだけ)
-            await Assert.That(Px4Userland.WriteReaderConfs(["00001205000960"], dir, ifd)).IsFalse();
-            // 増えたら入れ直す
-            await Assert.That(Px4Userland.WriteReaderConfs(["00001205000960", "000000000067890"], dir, ifd)).IsTrue();
-        }
-        finally
-        {
-            Directory.Delete(dir, recursive: true);
-        }
     }
 }
