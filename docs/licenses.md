@@ -77,6 +77,7 @@ Dockerfile の行・`package.json`) を優先し、上流の表示に拠るも�
 違いは **libusb を同梱せず Homebrew のもの (LGPL-2.1+) に動的に繋ぐ**ことだけで、
 配布物の `DEPENDENCY-NOTICE.txt` / `THIRD_PARTY_NOTICES.md` もそのまま置きます。
 USB のカードリーダーは macOS の PCSC.framework (OS の一部) を呼びます。
+denpa 本体は上と同じコンテナイメージ `denpa` を、Mac の Docker で動かします。
 
 ## リポジトリに写してあるもの・借りた表
 

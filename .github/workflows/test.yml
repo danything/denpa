@@ -111,6 +111,11 @@ jobs:
       - name: Conformance
         run: bun run test:conformance
 
+      # Mac で denpa 本体を起こす compose (agent/macos/install.sh が置く)。Mac のランナーには
+      # Docker が無いので、書き方が通るかだけここで見る
+      - name: Mac compose file is valid
+        run: DENPA_RECORDED=/tmp/recorded DENPA_LIBRARY=/tmp/library docker compose -f agent/macos/compose.yml config -q
+
   # Mac (Apple Silicon) で動かすエージェント (docs/agent.md「Mac でチューナーを使う」)。
   #
   # **Native AOT は Linux から macOS へ焼けない** ので、Mac のランナーで焼いて起こす。
@@ -130,9 +135,10 @@ jobs:
         with:
           dotnet-version: '10.0.x'
 
-      # Linux でしか意味の無いテスト (/proc を数える・Linux の pipe の深さに頼る偽物) は中で飛ばしてある
+      # Linux でしか意味の無いテスト (/proc を数える・Linux の pipe の深さに頼る偽物) は中で飛ばしてある。
+      # 1本ずつ結果を出して上限を切る。Mac でだけ止まるものがあったとき、どれなのかが残るように
       - name: Unit tests (.NET agent)
-        run: dotnet test --project agent/Denpa.Agent.Tests/Denpa.Agent.Tests.csproj
+        run: dotnet test --project agent/Denpa.Agent.Tests/Denpa.Agent.Tests.csproj --output detailed --timeout 5m
 
       - name: Publish (Native AOT, osx-arm64)
         run: dotnet publish agent/Denpa.Agent/Denpa.Agent.csproj -c Release -r osx-arm64 -o out
@@ -165,12 +171,13 @@ jobs:
 
       # 入れ方を通しで。エージェントはリリースから取らずにいま焼いたものを入れ、
       # px4-userland / siano-userland / ファームウェアは本物を取ってきてハッシュを確かめ、
-      # launchd に載せて口が答えるまで。最後に消す
+      # launchd に載せて口が答えるまで。最後に消す。
+      # denpa 本体 (docker compose) は Mac のランナーに Docker が無いので --no-docker で外す
       - name: install.sh end to end
         run: |
           set -euo pipefail
           tar -czf "$RUNNER_TEMP/denpa-agent.tar.gz" -C out denpa-agent
-          DENPA_AGENT_TARBALL="$RUNNER_TEMP/denpa-agent.tar.gz" AGENT_PORT=25301 bash agent/macos/install.sh
+          DENPA_AGENT_TARBALL="$RUNNER_TEMP/denpa-agent.tar.gz" AGENT_PORT=25301 bash agent/macos/install.sh --no-docker
           curl -fsS http://127.0.0.1:25301/denpa/card; echo
           ls -l "$HOME/Library/Application Support/denpa-agent/px4-userland" "$HOME/Library/Application Support/denpa-agent/siano-userland"
           "$HOME/Library/Application Support/denpa-agent/px4-userland/px4d" --list || true

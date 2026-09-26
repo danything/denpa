@@ -91,8 +91,8 @@ AV1 が再生できないテレビには、テレビごとに H.264 や生TSを�
 - **B-CASカード** と PC/SC 対応のリーダー
 - **Docker** (Compose) か **Kubernetes** (Helm)。**amd64 (x86_64) と arm64 (aarch64)** の
   どちらでも動きます (イメージは両方を束ねてあり、同じタグで自分の arch のものが降ってくる)
-  (チューナーを **Apple Silicon の Mac** に挿すなら、Mac にはエージェントだけを
-  curl 1行で入れられます。[docs/agent.md](docs/agent.md#mac-でチューナーを使う))
+  (**Apple Silicon の Mac** なら curl 1行で、エージェントと denpa が立ち上がってブラウザが開きます。
+  [docs/agent.md](docs/agent.md#mac-でチューナーを使う))
 - あれば **Intel の GPU** — `/dev/dri` が見えれば起動時に見つけて GPU で焼きます
   (Helm は既定で渡す。無ければソフトウェア。[docs/encode.md](docs/encode.md)「GPU で焼く」)。
   **Intel QSV は amd64 だけ**で、arm64 は VA-API かソフトウェアで焼きます

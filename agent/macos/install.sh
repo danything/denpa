@@ -1,18 +1,23 @@
 #!/usr/bin/env bash
 # ---------------------------------------------------------------------------
-# denpa のチューナーエージェントを Mac (Apple Silicon) に入れる。
+# Mac (Apple Silicon) で denpa を立てる。**1行で、ブラウザが開くところまで。**
 #
 #   curl -fsSL https://raw.githubusercontent.com/danything/denpa/main/agent/macos/install.sh | bash
-#   curl -fsSL https://raw.githubusercontent.com/danything/denpa/main/agent/macos/install.sh | bash -s -- --uninstall
+#   … | bash -s -- --no-docker    エージェントだけ (denpa 本体は別の Linux で動かす)
+#   … | bash -s -- --no-open      ブラウザを開かない
+#   … | bash -s -- --uninstall    消す (録画・DB は残す)
 #
-# **denpa 本体は Linux (Docker) のまま。** Mac で動くのはエージェントだけで、
-# denpa からは TUNER_AGENT_URL で HTTP 越しに繋ぐ (別の拠点に置くのと同じ形。docs/agent.md)。
+# **エージェントは Mac の上でそのまま、denpa 本体は Docker で。** Mac の Docker は
+# コンテナに USB を渡せないので、チューナーとカードに触るエージェントだけは
+# コンテナに入れられない。denpa は host.docker.internal でエージェントを呼ぶ (compose.yml)。
+# Docker が無ければエージェントだけ入れて、入れ方を案内して終わる (勝手には入れない)。
 #
 # 入れるのは全部ユーザーの下 (sudo は要らない)。もう一度流せば、そのまま上げ直しになる。
 #
-#   ~/Library/Application Support/denpa-agent/  本体・px4-userland・siano-userland・設定
+#   ~/Library/Application Support/denpa-agent/  エージェント・px4-userland・siano-userland・設定・compose.yml
 #   ~/Library/LaunchAgents/<LABEL>.plist        ログインしたら起こし、落ちたら起こし直す
-#   ~/Library/Logs/denpa-agent.log              ログ
+#   ~/Library/Logs/denpa-agent.log              エージェントのログ
+#   ~/Movies/denpa/{recorded,library}           生TS (エージェントとコンテナの両方が見る) と出来上がった録画
 #
 # 環境変数で変えられるもの: AGENT_PORT (25252)、DENPA_AGENT_VERSION (v1.2.3 のように。既定は最新のリリース)、
 # DENPA_AGENT_TARBALL (手元の tar.gz を絶対パスで。CI と開発用)
@@ -45,6 +50,20 @@ LOG="$HOME/Library/Logs/denpa-agent.log"
 PORT="${AGENT_PORT:-25252}"
 LIBUSB=/opt/homebrew/opt/libusb/lib/libusb-1.0.0.dylib
 DOMAIN="gui/$(id -u)"
+# 生TSはエージェント (後から解く) とコンテナ (録る) の両方が読み書きするので、Mac のフォルダに置く
+MEDIA="$HOME/Movies/denpa"
+COMPOSE="$PREFIX/compose.yml"
+URL=http://localhost:3000
+
+docker_mode=yes open_browser=yes uninstall=no
+for arg in "$@"; do
+  case "$arg" in
+    --no-docker) docker_mode=no ;;
+    --no-open) open_browser=no ;;
+    --uninstall) uninstall=yes ;;
+    *) echo "知らない引数: $arg (--no-docker / --no-open / --uninstall)" >&2; exit 2 ;;
+  esac
+done
 
 say() { printf '\033[1m==>\033[0m %s\n' "$*"; }
 die() { printf '\033[31mエラー:\033[0m %s\n' "$*" >&2; exit 1; }
@@ -57,11 +76,30 @@ stop() {
   fi
 }
 
-if [ "${1:-}" = "--uninstall" ]; then
+# Docker が使えるか。無い・起きていないときは理由を案内して、呼んだ側で止める
+docker_ready() {
+  if ! command -v docker >/dev/null 2>&1 || ! docker compose version >/dev/null 2>&1; then
+    say "Docker (compose) が見当たりません。Docker Desktop (https://www.docker.com/products/docker-desktop/) か"
+    say "OrbStack (https://orbstack.dev) を入れてから、もう一度流してください"
+    return 1
+  fi
+  if ! docker info >/dev/null 2>&1; then
+    say "Docker が起きていません。Docker Desktop か OrbStack を起こしてから、もう一度流してください"
+    return 1
+  fi
+}
+
+if [ "$uninstall" = yes ]; then
+  # compose.yml は PREFIX の中なので、消す前に畳む。**録画中なら終わるまで待つ** (stop_grace_period)
+  if [ -f "$COMPOSE" ] && docker_ready; then
+    say "denpa を止めます (録画中なら終わるまで待ちます)"
+    docker compose -p denpa -f "$COMPOSE" down
+  fi
   stop
   rm -f "$PLIST"
   rm -rf "$PREFIX" "$RUNTIME"
-  say "消しました (ログ $LOG は残してあります)"
+  say "消しました。残してあるもの (要らなければ手で消してください):"
+  say "  録画 $MEDIA / ログ $LOG / DB は docker volume rm denpa_denpa-data"
   exit 0
 fi
 
@@ -97,6 +135,7 @@ check_listed() {
 # --- エージェント本体 (GitHub のリリース) ---------------------------------
 # DENPA_AGENT_TARBALL に手元で組んだものを渡すと、リリースから取らずにそれを入れる (CI と開発用)
 agent="${DENPA_AGENT_TARBALL:-}"
+tag=""
 if [ -z "$agent" ]; then
   tag="${DENPA_AGENT_VERSION:-}"
   if [ -z "$tag" ]; then
@@ -143,7 +182,7 @@ check new/siano-userland/firmware/isdbt_rio.inp "$ISDBT_RIO_SHA256"
 
 # --- 入れ替える。**揃ってから止める** (取ってこられなかったら、動いているものに触らない) ---
 stop
-mkdir -p "$PREFIX/config" "$RUNTIME" "$(dirname "$PLIST")" "$(dirname "$LOG")"
+mkdir -p "$PREFIX/config" "$RUNTIME" "$MEDIA/recorded" "$MEDIA/library" "$(dirname "$PLIST")" "$(dirname "$LOG")"
 for part in bin px4-userland siano-userland; do
   rm -rf "${PREFIX:?}/$part"
   mv "new/$part" "$PREFIX/$part"
@@ -175,6 +214,7 @@ cat > "$PLIST" <<EOF
     <key>PX4_RUNTIME_DIR</key><string>$RUNTIME</string>
     <key>SIANO_USERLAND_DIR</key><string>$PREFIX/siano-userland</string>
     <key>SIANO_FIRMWARE</key><string>$PREFIX/siano-userland/firmware/isdbt_rio.inp</string>
+    <key>RECORDED_DIR</key><string>$MEDIA/recorded</string>
   </dict>
 </dict>
 </plist>
@@ -182,14 +222,45 @@ EOF
 plutil -lint "$PLIST" >/dev/null
 launchctl bootstrap "$DOMAIN" "$PLIST"
 
-say "起こしました。応答を待ちます"
+say "エージェントを起こしました。応答を待ちます"
+answered=no
 for _ in 1 2 3 4 5 6 7 8 9 10; do
   if tuners=$(curl -fsS "http://127.0.0.1:$PORT/denpa/tuners" 2>/dev/null); then
     echo "$tuners"
-    host=$(scutil --get LocalHostName 2>/dev/null || hostname)
-    say "入りました。denpa の TUNER_AGENT_URL に http://$host.local:$PORT を書いてください"
+    answered=yes
+    break
+  fi
+  sleep 2
+done
+[ "$answered" = yes ] || die "エージェントが答えません。ログを見てください: $LOG"
+
+host=$(scutil --get LocalHostName 2>/dev/null || hostname)
+if [ "$docker_mode" = no ]; then
+  say "エージェントだけ入れました。denpa の TUNER_AGENT_URL に http://$host.local:$PORT を書いてください"
+  exit 0
+fi
+docker_ready || { say "エージェントは入っています (http://$host.local:$PORT)"; exit 0; }
+
+# --- denpa 本体 (Docker) ---------------------------------------------------
+# compose.yml もイメージも**エージェントと同じ版**に揃える。手元の tar.gz を入れたときは main と latest
+say "denpa を起こします (docker compose)"
+fetch "https://raw.githubusercontent.com/$REPO/${tag:-main}/agent/macos/compose.yml" "$COMPOSE"
+cat > "$PREFIX/.env" <<EOF
+DENPA_TAG=${tag#v}
+AGENT_PORT=$PORT
+DENPA_RECORDED=$MEDIA/recorded
+DENPA_LIBRARY=$MEDIA/library
+EOF
+docker compose -p denpa -f "$COMPOSE" pull
+docker compose -p denpa -f "$COMPOSE" up -d
+
+say "denpa の応答を待ちます"
+for _ in $(seq 90); do
+  if curl -fsS -o /dev/null "$URL/api/health" 2>/dev/null; then
+    say "立ちました: $URL (LAN のほかの機械からは http://$host.local:3000)"
+    [ "$open_browser" = no ] || open "$URL"
     exit 0
   fi
   sleep 2
 done
-die "応答がありません。ログを見てください: $LOG"
+die "denpa が答えません。docker compose -p denpa -f \"$COMPOSE\" logs denpa を見てください"
