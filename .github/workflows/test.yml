@@ -111,6 +111,121 @@ jobs:
       - name: Conformance
         run: bun run test:conformance
 
+  # 入れ方 (install.sh) を Linux で通しで。compose.prod.yml を置いて、本物のイメージを引いて起こし、
+  # denpa が答えるまで。最後に外す。**必須チェックにはしない** (イメージを引くので重く、
+  # レジストリの機嫌でも揺れる)。compose ファイルはこのコミットのものを取らせる (DENPA_VERSION)
+  install-linux:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Lint install.sh
+        run: |
+          bash -n install.sh
+          shellcheck install.sh
+
+      # Mac で denpa 本体を起こす compose。Mac のランナーには Docker が無いので、書き方だけここで見る
+      - name: Mac compose file is valid
+        run: docker compose -f compose.mac.yml config -q
+
+      - name: install.sh end to end
+        env:
+          DENPA_VERSION: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          set -euo pipefail
+          bash install.sh --no-open
+          curl -fsS http://localhost:3000/api/health; echo
+          curl -fsS http://localhost:25252/denpa/tuners; echo
+          # ランナーの 80 / 443 は空いているので genkan が入り、http://denpa.localhost で開ける
+          # (genkan のコンテナから来る要求が TRUSTED_NETWORKS の既定で通ることも含めて)
+          curl -fsS --resolve denpa.localhost:80:127.0.0.1 http://denpa.localhost/api/health; echo
+          # 上げ直し。手を入れた compose.override.yml には触らないこと
+          echo '# 手で足した行' >> ~/denpa/compose.override.yml
+          cp ~/denpa/compose.override.yml "$RUNNER_TEMP/override"
+          bash install.sh --no-open
+          cmp ~/denpa/compose.override.yml "$RUNNER_TEMP/override"
+          # 自分で書いた compose.yml は退けずに上書きする
+          test ! -e ~/denpa/compose.yml.bak
+          bash install.sh --uninstall
+          test -z "$(docker compose -p denpa ps -q)"
+          # 外しても compose と設定は残す
+          test -f ~/denpa/compose.yml
+
+  # Mac (Apple Silicon) で動かすエージェント (docs/agent.md「Mac でチューナーを使う」)。
+  #
+  # **Native AOT は Linux から macOS へ焼けない** ので、Mac のランナーで焼いて起こす。
+  # 実機は無いので、確かめるのは「焼ける・テストが通る・起きて口が答える・入れ方が最後まで通る」まで。
+  #
+  # **必須チェックにはしない** (main の ruleset に入れていない)。Mac のランナーは混むと待たされるので、
+  # ここで PR を止めない。赤くなったら Mac で壊れたということなので、見て直す
+  agent-macos:
+    runs-on: macos-15
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: '10.0.x'
+
+      # Linux でしか意味の無いテスト (/proc を数える・Linux の pipe の深さに頼る偽物) は中で飛ばしてある。
+      # 1本ずつ結果を出して上限を切る。Mac でだけ止まるものがあったとき、どれなのかが残るように
+      - name: Unit tests (.NET agent)
+        timeout-minutes: 8
+        run: dotnet test --project agent/Denpa.Agent.Tests/Denpa.Agent.Tests.csproj --output detailed --timeout 5m
+
+      - name: Publish (Native AOT, osx-arm64)
+        run: dotnet publish agent/Denpa.Agent/Denpa.Agent.csproj -c Release -r osx-arm64 -o out
+
+      - name: Lint install.sh
+        run: |
+          bash -n install.sh
+          brew install shellcheck >/dev/null
+          shellcheck install.sh
+
+      # 何も設定せずに起こす (FAKE_TUNE も無し)。チューナーは自動検出で空、カードは
+      # リーダーが無いので ok:false が返るはず。**落ちずに答える**ことを見る。
+      # PC/SC (PCSC.framework) と libc をここで実際に引く
+      - name: Smoke test (published binary)
+        run: |
+          set -euo pipefail
+          ./out/denpa-agent --card || true
+          AGENT_PORT=25300 ./out/denpa-agent > agent.log 2>&1 &
+          pid=$!
+          for _ in $(seq 30); do curl -fsS http://127.0.0.1:25300/denpa/tuners > tuners.json 2>/dev/null && break; sleep 1; done
+          echo "tuners: $(cat tuners.json)"
+          curl -fsS http://127.0.0.1:25300/denpa/card | tee card.json; echo
+          jq -e '.tuners | type == "array"' tuners.json
+          jq -e '.ok == false and (.readers | type == "array")' card.json
+          # SIGTERM で畳めること (録画していなければすぐ終わる)
+          kill -TERM "$pid"
+          for _ in $(seq 20); do kill -0 "$pid" 2>/dev/null || break; sleep 1; done
+          if kill -0 "$pid" 2>/dev/null; then echo "SIGTERM で終わりません" >&2; exit 1; fi
+          cat agent.log
+
+      # 入れ方を通しで。エージェントはリリースから取らずにいま焼いたものを入れ、
+      # px4-userland / siano-userland / ファームウェアは本物を取ってきてハッシュを確かめ、
+      # launchd に載せて口が答えるまで。最後に消す。
+      # denpa 本体 (docker compose) は Mac のランナーに Docker が無いので --no-docker で外す
+      - name: install.sh end to end
+        run: |
+          set -euo pipefail
+          tar -czf "$RUNNER_TEMP/denpa-agent.tar.gz" -C out denpa-agent
+          DENPA_AGENT_TARBALL="$RUNNER_TEMP/denpa-agent.tar.gz" bash install.sh --no-docker
+          curl -fsS http://127.0.0.1:25252/denpa/card; echo
+          ls -l "$HOME/Library/Application Support/denpa-agent/px4-userland" "$HOME/Library/Application Support/denpa-agent/siano-userland"
+          "$HOME/Library/Application Support/denpa-agent/px4-userland/px4d" --list || true
+          bash install.sh --uninstall
+          test ! -e "$HOME/Library/LaunchAgents/io.github.danything.denpa-agent.plist"
+          test ! -e "$HOME/Library/Application Support/denpa-agent"
+          # 設定の置き場 (~/denpa/config) は外しても残す
+          test -d "$HOME/denpa/config"
+          cat "$HOME/Library/Logs/denpa-agent.log"
+
   # 予約から録画・エンコード・保存先への配置まで、偽の放送で通しで流す
   e2e:
     runs-on: ubuntu-latest

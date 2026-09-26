@@ -15,6 +15,16 @@
       ]
     },
     {
+      "description": "入れ方 (install.sh。Mac で px4-userland / siano-userland を取ってくる) の `# renovate:` 付きの変数。Dockerfile と同じ px4-userland / siano-userland を指していて、同じ依存なので1本の PR で揃って上がる",
+      "customType": "regex",
+      "managerFilePatterns": [
+        "/^install\\.sh$/"
+      ],
+      "matchStrings": [
+        "# renovate: datasource=(?<datasource>[a-z-]+?) depName=(?<depName>\\S+?)(?: extractVersion=(?<extractVersion>\\S+?))?\\s+[A-Z0-9_]+=(?<currentValue>\\S+)"
+      ]
+    },
+    {
       "description": "タグの無いものは枝の先頭のコミットで固定する。枝が動いたら Renovate が新しいコミットで PR を出す",
       "customType": "regex",
       "managerFilePatterns": [

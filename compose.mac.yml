@@ -1,0 +1,46 @@
+# Mac で denpa 本体を動かす (install.sh が Mac のときに ~/denpa/compose.yml として置いて起こす)。
+#
+# compose.prod.yml から **tuner-agent を外したもの**。denpa サービスは compose.prod.yml と揃える。
+# Mac の Docker (Docker Desktop / OrbStack / colima) はコンテナに USB を渡せないので、
+# エージェントは Mac の上でそのまま動かし (LaunchAgent)、denpa はそれを host.docker.internal で呼ぶ。
+#
+# **このファイルには手を入れない** (install.sh が上げ直すたびに上書きする)。足したいものは
+# 同じ場所の compose.override.yml に (Compose が自分で読む)。
+name: denpa
+
+services:
+    denpa:
+        image: ghcr.io/danything/denpa:latest
+        restart: unless-stopped
+        # compose.prod.yml と同じ。録画中に止めようとしたら、終わるまで居座ってから止まる
+        stop_grace_period: 6h5m
+        # Docker Desktop と OrbStack は host.docker.internal を最初から引けるが、colima などは
+        # 引けないことがある。host-gateway で Mac 自身を指させておけば、どれでも同じに通る
+        extra_hosts:
+            - 'host.docker.internal:host-gateway'
+        environment:
+            TZ: Asia/Tokyo
+            TUNER_AGENT_URL: http://host.docker.internal:25252
+            DENPA_DB: /app/data/denpa.db
+            RECORDED_DIR: /app/recorded
+            LIBRARY_DIR: /library
+            ENCODE_CONCURRENCY: '2'
+            # **誰を通すか (docs/auth.md)。** compose.prod.yml と同じ私設網。
+            # Mac のブラウザから localhost で入ると、コンテナに見える送り元は Docker の
+            # ネットワークの出口 (172.16.0.0/12 か 192.168.0.0/16 の中) なので、これで通る。
+            # LAN のほかの機械からも同じく通る (家の外に出すなら OIDC を。README)
+            TRUSTED_NETWORKS: 192.168.0.0/16,10.0.0.0/8,172.16.0.0/12
+        volumes:
+            # DB は名前付きボリュームに置く (SQLite の錠が、Mac から見せたフォルダ越しだと当てにならない)
+            - denpa-data:/app/data
+            # 生TSの置き場は**エージェントと同じ Mac のフォルダ** (エージェントの RECORDED_DIR)。
+            # 掛かったまま録れたものを後から解くとき、エージェントが直に読み書きする
+            # (置き場からの相対パスで頼まれる)。HOME はシェルのものなので .env は要らない
+            - ${HOME}/Movies/denpa/recorded:/app/recorded
+            # 出来上がった録画は Mac の Finder からも見える所に
+            - ${HOME}/Movies/denpa/library:/library
+        ports:
+            - '3000:3000'
+
+volumes:
+    denpa-data:

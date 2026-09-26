@@ -12,8 +12,14 @@ public static class CardLinks
     /// 内蔵リーダーは px4d の向こうにあり、1回ごとにソケットを1往復する。
     /// 両方にカードが刺さっているなら、直に叩けるほうを使う。
     /// </para>
+    ///
+    /// <para>
+    /// USB のリーダーは、Linux なら usbfs を直に (Ccid.cs)、macOS なら OS の PC/SC 越しに
+    /// (Pcsc.cs)。**macOS には usbfs が無い**
+    /// </para>
     /// </summary>
-    public static IReadOnlyList<CardLinkCandidate> Find() => [.. Ccid.Find(), .. Px4Card.Find()];
+    public static IReadOnlyList<CardLinkCandidate> Find() =>
+        [.. OperatingSystem.IsMacOS() ? PcscLink.Find() : Ccid.Find(), .. Px4Card.Find()];
 
     /// <summary>
     /// カードが刺さっていて INT に答えた最初のリーダーで B-CAS を開く。どれも駄目なら投げる。

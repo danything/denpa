@@ -91,16 +91,37 @@ AV1 が再生できないテレビには、テレビごとに H.264 や生TSを�
 - **B-CASカード** と PC/SC 対応のリーダー
 - **Docker** (Compose) か **Kubernetes** (Helm)。**amd64 (x86_64) と arm64 (aarch64)** の
   どちらでも動きます (イメージは両方を束ねてあり、同じタグで自分の arch のものが降ってくる)
+  (**Apple Silicon の Mac** でも、[下の1行](#立てる)でエージェントと denpa が立ち上がります。
+  [docs/agent.md](docs/agent.md#mac-でチューナーを使う))
 - あれば **Intel の GPU** — `/dev/dri` が見えれば起動時に見つけて GPU で焼きます
   (Helm は既定で渡す。無ければソフトウェア。[docs/encode.md](docs/encode.md)「GPU で焼く」)。
   **Intel QSV は amd64 だけ**で、arm64 は VA-API かソフトウェアで焼きます
 
 ## 立てる
 
-**Docker Compose** か **Helm** のどちらか。イメージは公開してあるので、
+**Linux でも Mac でも、この1行で立ち上がってブラウザが開きます。** イメージは公開してあるので、
 リポジトリを持ってくる必要はありません。
 
-### Docker Compose
+```sh
+curl -fsSL https://raw.githubusercontent.com/danything/denpa/main/install.sh | bash
+```
+
+- **Linux** (amd64 / arm64) — 全部 Docker Compose。`~/denpa` に compose.prod.yml を置いて起こします
+- **Mac** (Apple Silicon) — チューナーに触るエージェントは Mac の上でそのまま、denpa 本体は Docker で
+  ([docs/agent.md](docs/agent.md#mac-でチューナーを使う))。**このあとのリリースから**入れられます
+- **Docker は入れません。** 無ければ入れ方を言って止まります (Linux は <https://get.docker.com>、
+  Mac は Docker Desktop か OrbStack)
+- **入口は [genkan](https://github.com/danything/genkan)** (ホスト名で振り分けるリバースプロキシ)。
+  動いていればそれを使い、無ければ **80 と 443 が空いているときだけ** `~/genkan` に入れて、
+  **<http://denpa.localhost>** で開きます。埋まっていれば入れず <http://localhost:3000> で。
+  `denpa.localhost` で開けるのはそのマシンだけなので、LAN のほかの機械 (テレビ・スマホ) からは
+  これまでどおり `http://<IP>:3000`
+- 置き場は `~/denpa` (`DENPA_HOME`)。`compose.yml` は上げ直すたびに上書きするので、
+  **手を入れたいときは同じ場所の `compose.override.yml` に**書きます (Compose が重ねて読み、install.sh は触らない)
+- もう一度流せば最新のリリースへ上げ直し。`… | bash -s -- --uninstall` で止めて外します
+  (`~/denpa`・録画・DB は残す)。ブラウザを開かないなら `--no-open`
+
+### Docker Compose を手で置く
 
 ```sh
 mkdir denpa && cd denpa
@@ -128,7 +149,7 @@ docker compose) で動かす構成なら `oci://ghcr.io/danything/charts/denpa-a
 
 ### 立てたあと
 
-1. **開く** — <http://localhost:3000>。compose.yml の `TRUSTED_NETWORKS` には**家の中
+1. **開く** — <http://denpa.localhost> (genkan を入れたとき) か <http://localhost:3000>。compose.yml の `TRUSTED_NETWORKS` には**家の中
    (プライベートネットワーク) だけ通す**初期値が書いてあります (Helm は `denpa.trustedNetworks`。
    変えるときは下の「[誰を通すか](#誰を通すか)」を読むこと)
 2. **チューナーを確かめる** — 「チューナー」に、見つかったものが並んでいます。
