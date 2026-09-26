@@ -1,6 +1,6 @@
 import { existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import type { Locator } from '@playwright/test';
-import { SERVICES } from '../fake/services';
+import { BS_NO_LOGO, SERVICES } from '../fake/services';
 import { airing, cellOf, expect, goto, syncEpg, test, upcoming, wakeControls } from './helpers';
 
 /**
@@ -1238,5 +1238,38 @@ test.describe('ライブ視聴', () => {
                 }),
         );
         expect(status).toBe('断られた');
+    });
+
+    /*
+     * **同じ知らせでも、押し直せばもう一度出る。** 閉じたことは key で覚えているので、
+     * 返事が変わったことを渡さないと (`source`)、同じ文面の2回目は閉じたままになりうる
+     * (Toasts)。いまは `applyAction` が一度 form を null にしてから入れ直すので、
+     * その隙に閉じた印が捨てられて出ている — **それに頼らない**よう他の画面と揃えて
+     * `source` を渡し、ここで見張る。
+     *
+     * 毎回同じ断りを返させるため、録る局だけ番組表の無い局 (BSテレ東) に差し替えて
+     * 押す — 本当に録り始めるとチューナーを30分塞ぐ
+     */
+    test('同じ知らせを閉じても、押し直せばまた出る', async ({ page }) => {
+        await goto(page, '/live');
+        await page.getByTestId('live-channel').first().click();
+        await expect(page.getByTestId('live-title')).toBeVisible();
+        const record = page.getByTestId('live-record');
+        const notice = page.getByTestId('record-error');
+        const press = async () => {
+            await page
+                .locator('form[action="?/record"] input[name="service"]')
+                .evaluate((input, id) => ((input as HTMLInputElement).value = id), String(BS_NO_LOGO.id));
+            await wakeControls(page, 'live-frame');
+            await record.click();
+        };
+
+        await press();
+        await expect(notice).toContainText('番組表に見つかりません');
+        await page.getByTestId('record-error-close').click();
+        await expect(notice).toHaveCount(0);
+
+        await press();
+        await expect(notice).toContainText('番組表に見つかりません');
     });
 });

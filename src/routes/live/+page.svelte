@@ -763,7 +763,8 @@
     {/if}
 </div>
 
-<Toasts {notices} ondismiss={shooter.dismiss} />
+<!-- 返事が変わったことは `source` で渡す (他の画面と同じ。閉じた知らせの扱いは Toasts) -->
+<Toasts {notices} source={form} ondismiss={shooter.dismiss} />
 
 <style>
     /*
