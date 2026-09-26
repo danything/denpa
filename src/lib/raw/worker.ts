@@ -309,7 +309,13 @@ function tick(): void {
     const head = pending[0];
     if (head !== undefined && head.dts < at - BEHIND_MOST) skipTo(at);
 
-    while (pending.length > 0 && decoder._dec_count() < DECODED_MOST && pending[0]!.dts <= at + AHEAD) {
+    /*
+     * **1回に解くのは1枚まで** (遅れているときだけ3枚まで)。1枚 10〜20ms かかるので、
+     * まとめて解くとその間コマを出せず、番を過ぎて捨てるコマが増える
+     */
+    for (let i = 0; i < 3 && pending.length > 0 && decoder._dec_count() < DECODED_MOST; i++) {
+        const next = pending[0]!;
+        if (next.dts > at + AHEAD || (i > 0 && next.dts > at)) break;
         decode(pending.shift() as Pending);
     }
 
@@ -353,9 +359,13 @@ function schedule(): void {
         scheduled = false;
         tick();
     };
-    // 描く番は画面の書き換えに合わせる。worker の rAF が無ければ細かく刻む
-    if (typeof scope.requestAnimationFrame === 'function') scope.requestAnimationFrame(next);
-    else setTimeout(next, 8);
+    /*
+     * **rAF ではなく細かい時計で刻む。** worker の rAF は描いたものが画面に出る速さに
+     * 引っ張られ、実機の録画 (1080i) をヘッドレスで流すと毎秒 6 回しか来なかった — 1回に
+     * 何枚も解くことになり、コマを出す番を逃し続ける。4ms ごとに1枚ずつ解いて、番が来た
+     * コマを出す (描いたものはその回の終わりに画面へ渡る)
+     */
+    setTimeout(next, 4);
 }
 
 function reset(): void {
