@@ -12,18 +12,16 @@ namespace Denpa.Agent;
 /// siano-userland はそれと別の道で、ホストに firmware やモジュールが無くても
 /// <c>/dev/bus/usb</c> が見えれば動く。ただし <c>siano-ts</c> は
 /// <c>libusb_set_auto_detach_kernel_driver</c> を立てていて、**smsusb が掴んでいても
-/// 黙って奪う。** 作者自身が「動いている smsusb から切り替えるのは安全と判定していない」
-/// (unbind の境目でカーネルの異常を観測) と書いているので、こちらは
-/// **どのドライバにも繋がっていない機材だけ**を siano-ts に渡す。
+/// 黙って奪っていた。** 作者自身が「動いている smsusb から切り替えるのは安全と判定していない」
+/// (unbind の境目でカーネルの異常を観測) と書いていて、0.1.8 からは siano-ts 自身が
+/// **カーネルのドライバが掴んでいるデバイスを断る** (終了コード 4)。こちらも自動検出では
+/// どのドライバにも繋がっていない機材だけを並べる (掴まれている S1UD は /dev/dvb の側で見つかる)。
 /// 使いたい人は smsusb / smsdvb / smsmdtv を blacklist して再起動する (docs/agent.md)。
 /// </para>
 ///
 /// <para>
-/// **USB のノードは自分で開いて <c>--fd</c> で渡す。** <c>siano-ts --device N</c> は
-/// libusb が並べた順の N 番目で、その並びにはカーネルが掴んでいる S1UD も入る。
-/// 2台刺さっていると番号がずれて、DVB で使っている方を奪いかねない。
-/// <c>siano-ts --list</c> で見分けた1台の <c>/dev/bus/usb/BBB/DDD</c> をシェルに fd 3 で開かせ、
-/// そのまま siano-ts に exec させる (.NET から fd を子に渡す口が無いため)。
+/// **機材はポートで指す** (<c>siano-ts --device 1-2.3</c>、0.1.8 から)。番号 (<c>--device N</c>) は
+/// libusb が並べた順で、カーネルが掴んでいる S1UD も入って番号がずれるので使わない。
 /// </para>
 ///
 /// <para>
@@ -41,10 +39,7 @@ public static class SianoUserland
     /// 刺さっている1台。<c>Types</c> は受けられる方式 (siano-ts --list の受信機の行)、
     /// <c>Driver</c> はどれかのインターフェースを掴んでいるドライバ (無ければ null)
     /// </summary>
-    public sealed record Stick(string Port, string Model, int Bus, int Address, string[] Types, string? Driver)
-    {
-        public string Node => $"/dev/bus/usb/{Bus:D3}/{Address:D3}";
-    }
+    public sealed record Stick(string Port, string Model, string[] Types, string? Driver);
 
     /// <summary>配布アーカイブを展開した場所 (Dockerfile)</summary>
     public static string Dir =>
@@ -139,18 +134,13 @@ public static class SianoUserland
             {
                 warn($"{model} の USB のポートが分からないので使いません (port={port})");
             }
-            else if (!int.TryParse(current.GetValueOrDefault("bus"), out var bus)
-                || !int.TryParse(current.GetValueOrDefault("address"), out var address))
-            {
-                warn($"{model} {port} の USB の番号が読めません");
-            }
             else
             {
                 var types = Px4Receiver.ParseList(receivers.ToString(), warn)
                     .SelectMany(receiver => receiver.Types)
                     .Distinct(StringComparer.Ordinal)
                     .ToArray();
-                found.Add(new Stick(port, model, bus, address, types, driver(port)));
+                found.Add(new Stick(port, model, types, driver(port)));
             }
             current = null;
             receivers.Clear();
@@ -217,24 +207,17 @@ public static class SianoUserland
     }
 
     /// <summary>
-    /// 選局の直前に、そのポートの機材を確かめる。**どのドライバにも繋がっていなければ返す。**
-    /// 抜けている・別の機材に挿し替わった・カーネルが掴んでいる、は理由を添えて投げる
+    /// siano-ts の終了コードに、どうすればいいかを添える (0.1.8 で体系化された)。
+    /// 分からないコードは何も足さない
     /// </summary>
-    public static Stick Claimable(string port) => Claimable(port, Sticks());
-
-    /// <summary><see cref="Claimable(string)"/> の中身。機材の一覧を渡す</summary>
-    public static Stick Claimable(string port, IEnumerable<Stick> sticks)
+    public static string Hint(int code) => code switch
     {
-        var stick = sticks.FirstOrDefault(s => s.Port == port)
-            ?? throw new IOException($"USB のポート {port} に Siano の機材が見当たりません (抜けたか、挿し替えた?)");
-        if (stick.Driver is not null)
-        {
-            throw new IOException(
-                $"{stick.Model} {port} はカーネルのドライバ ({stick.Driver}) が掴んでいるので、siano-userland では開きません。"
-                + " /dev/dvb に出ていればそちらで使えます。siano-userland で使うなら smsusb を blacklist して再起動してください");
-        }
-        return stick;
-    }
+        3 => " — そのポートに Siano の機材が見当たりません (抜けたか、挿し替えた?)",
+        4 => " — カーネルのドライバ (smsusb) か別のプロセスが掴んでいます。/dev/dvb に出ていればそちらで使えます。"
+            + "siano-userland で使うなら smsusb / smsdvb / smsmdtv を blacklist して再起動してください",
+        10 => " — ファームウェアが無いか壊れています",
+        _ => "",
+    };
 }
 
 /// <summary>
@@ -294,9 +277,8 @@ public sealed class SianoTuner : ITuneDevice
             {
                 throw new IOException($"ファームウェアがありません: {SianoUserland.Firmware}");
             }
-            // 起こす直前に確かめる (走っている間は自分が掴んでいる)
-            var stick = SianoUserland.Claimable(port);
-            return StartInfo(stick.Node, SianoUserland.Dir, SianoUserland.Firmware);
+            // 抜けた・カーネルが掴んでいる、は siano-ts が終了コードで答える (Hint)
+            return StartInfo(port, SianoUserland.Dir, SianoUserland.Firmware);
         })
     {
     }
@@ -324,25 +306,17 @@ public sealed class SianoTuner : ITuneDevice
     }
 
     /// <summary>
-    /// 起こすもの。**シェルに USB のノードを fd 3 で開かせ、siano-ts に exec させる。**
+    /// 起こすもの。**機材は USB のポートで指す** (<c>--device 1-2.3</c>)。
     ///
     /// <para>
-    /// 値は全部 <c>$1</c> 以降の引数で渡し、シェルの文には埋め込まない。
     /// 選局は起こしたあとに標準入力で頼むので、ここでは周波数を渡さない。
     /// PID は絞らない (全部。B25 と記録は TS 全体を要る)。
     /// </para>
     /// </summary>
-    public static ProcessStartInfo StartInfo(string node, string dir, string firmware)
+    public static ProcessStartInfo StartInfo(string port, string dir, string firmware)
     {
-        var start = new ProcessStartInfo("/bin/sh");
-        foreach (var arg in new[]
-        {
-            "-c", "node=$1; shift; exec \"$0\" --fd 3 \"$@\" 3<>\"$node\"",
-            Path.Combine(dir, "siano-ts"),
-            node,
-            "--control",
-            "--firmware", firmware,
-        })
+        var start = new ProcessStartInfo(Path.Combine(dir, "siano-ts"));
+        foreach (var arg in new[] { "--device", port, "--control", "--firmware", firmware })
         {
             start.ArgumentList.Add(arg);
         }
@@ -401,7 +375,7 @@ public sealed class SianoTuner : ITuneDevice
         {
             if (child.Dropped) return;
             // USB が抜けたのもここに来る。次の選局で起こし直す (Tuned が false になる)
-            Log.Write($"[{_name}] {child.Exited(process.ExitCode)}");
+            Log.Write($"[{_name}] {Why(child, process.ExitCode)}");
         }, TaskScheduler.Default);
     }
 
@@ -446,7 +420,7 @@ public sealed class SianoTuner : ITuneDevice
         {
             // 標準入力に書けない = 子が終わっている
             failure = child.Process.WaitForExit(TimeSpan.FromSeconds(2))
-                ? child.Exited(child.Process.ExitCode)
+                ? Why(child, child.Process.ExitCode)
                 : "siano-ts に選局を頼めません";
         }
         finally
@@ -466,6 +440,9 @@ public sealed class SianoTuner : ITuneDevice
         if (uncertain) Drop();
         if (failure is not null) throw new IOException(failure);
     }
+
+    /// <summary>終わった理由に、終了コードから分かる手当てを添える (<see cref="SianoUserland.Hint"/>)</summary>
+    private static string Why(TsChild child, int code) => child.Exited(code) + SianoUserland.Hint(code);
 
     /// <summary>
     /// 答えを待つ。<c>tuned &lt;頼んだ Hz&gt;</c> なら成功 (null)、駄目なら理由。
@@ -503,7 +480,7 @@ public sealed class SianoTuner : ITuneDevice
         catch (System.Threading.Channels.ChannelClosedException)
         {
             child.Process.WaitForExit(TimeSpan.FromSeconds(2));
-            return (child.Exited(child.Process.HasExited ? child.Process.ExitCode : -1), true);
+            return (Why(child, child.Process.HasExited ? child.Process.ExitCode : -1), true);
         }
     }
 

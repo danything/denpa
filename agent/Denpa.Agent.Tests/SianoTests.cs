@@ -56,7 +56,6 @@ public class SianoTests
         var warned = new List<string>();
         var sticks = Sticks(warned);
         await Assert.That(sticks.Select(s => s.Port)).IsEquivalentTo(["1-2", "1-3", "2-1.4"], CollectionOrdering.Matching);
-        await Assert.That(sticks[2].Node).IsEqualTo("/dev/bus/usb/002/009");
         await Assert.That(sticks[2].Model).IsEqualTo("Siano-Rio");
         await Assert.That(sticks[0].Types).IsEquivalentTo(["GR"], CollectionOrdering.Matching);
         await Assert.That(sticks[1].Driver).IsEqualTo("smsusb");
@@ -79,12 +78,13 @@ public class SianoTests
     }
 
     [Test]
-    public async Task カーネルが掴んでいれば選局の前に断る()
+    public async Task siano_ts_の終了コードに手当てを添える()
     {
-        var error = Assert.Throws<IOException>(() => SianoUserland.Claimable("1-3", Sticks()));
-        await Assert.That(error.Message).Contains("smsusb");
-        Assert.Throws<IOException>(() => SianoUserland.Claimable("1-9", Sticks()));
-        await Assert.That(SianoUserland.Claimable("1-2", Sticks()).Node).IsEqualTo("/dev/bus/usb/001/004");
+        // 0.1.8 の終了コード。カーネルが掴んでいる・抜けた、は siano-ts が答える
+        await Assert.That(SianoUserland.Hint(4)).Contains("smsusb");
+        await Assert.That(SianoUserland.Hint(3)).Contains("見当たりません");
+        await Assert.That(SianoUserland.Hint(10)).Contains("ファームウェア");
+        await Assert.That(SianoUserland.Hint(1)).IsEqualTo("");
     }
 
     [Test]
@@ -124,18 +124,12 @@ public class SianoTests
     }
 
     [Test]
-    public async Task siano_ts_はノードを_fd_3_で渡して_control_で起こす()
+    public async Task siano_ts_はポートで指して_control_で起こす()
     {
-        var start = SianoTuner.StartInfo("/dev/bus/usb/001/004", "/opt/siano-userland", "/fw/isdbt_rio.inp");
-        await Assert.That(start.FileName).IsEqualTo("/bin/sh");
+        var start = SianoTuner.StartInfo("1-2.3", "/opt/siano-userland", "/fw/isdbt_rio.inp");
+        await Assert.That(start.FileName).IsEqualTo("/opt/siano-userland/siano-ts");
         await Assert.That(start.ArgumentList.ToArray()).IsEquivalentTo(
-            [
-                "-c", "node=$1; shift; exec \"$0\" --fd 3 \"$@\" 3<>\"$node\"",
-                "/opt/siano-userland/siano-ts",
-                "/dev/bus/usb/001/004",
-                "--control",
-                "--firmware", "/fw/isdbt_rio.inp",
-            ],
+            ["--device", "1-2.3", "--control", "--firmware", "/fw/isdbt_rio.inp"],
             CollectionOrdering.Matching);
     }
 
