@@ -217,6 +217,22 @@ public class CcidTests
         await Assert.That(Assert.Throws<IOException>(() => link.Reset()).Message).Contains("挿さっていません");
     }
 
+    /// <summary>**ATR を読めずに失敗しても、電源を入れたなら閉じるときに切る**</summary>
+    [Test]
+    public async Task ATR_が壊れていても閉じるときに電源を切る()
+    {
+        var reader = new FakeReader(command => command.Type == CcidMessage.PowerOn
+            ? [Reply(CcidMessage.DataBlock, command.Seq, 0, 0, [0x3B, 0xFF])]
+            : [Slot(command)]);
+        var link = new CcidLink("PC Twin", reader, Twin);
+        Assert.Throws<IOException>(() => link.Reset());
+
+        var before = reader.Commands.Count;
+        link.Dispose();
+        await Assert.That(reader.Commands.Count).IsEqualTo(before + 1);
+        await Assert.That(reader.Commands[^1].Type).IsEqualTo(CcidMessage.PowerOff);
+    }
+
     [Test]
     public async Task 電圧を下げて試す()
     {

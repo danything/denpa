@@ -758,6 +758,39 @@ public class B25Tests
     }
 
     /// <summary>
+    /// **溜めている間に鍵が変わっても、他の ECM の最初の答えが来るまでは流さない。**
+    /// 流してしまうと、そちらの ES の頭が掛かったまま出る
+    /// </summary>
+    [Test]
+    public async Task 溜めている間に鍵が変わっても他のECMの最初の答えを待つ()
+    {
+        const int other = 0x0902;
+        var cards = new StepCards();
+        var descrambler = new Descrambler(cards);
+        var output = new ArrayBufferWriter<byte>();
+        var head = new Ts()
+            .Pat((0x0400, PmtPid))
+            .Pmt(PmtPid, 0x0400, [], (VideoPid, Ca(EcmPid)), (AudioPid, Ca(other)))
+            .Ecm(EcmPid, 1).Videos(2, 1)
+            .Ecm(other, 20).Payload(AudioPid, 20)
+            .Ecm(EcmPid, 2);
+        descrambler.Decode(head.Wire.ToArray(), output);
+        for (var tries = 0; tries < 500 && cards.Answered < 1; tries++) await Task.Delay(1);
+        descrambler.Decode(new Ts().Pat((0x0400, PmtPid)).Wire.ToArray(), output);
+        // 1本目の答えは来たが、2本目の最初の答えがまだ。流さない
+        await Assert.That(output.WrittenCount).IsEqualTo(0);
+
+        cards.Gate(20).Set();
+        for (var tries = 0; tries < 500 && output.WrittenCount < head.Wire.Count; tries++)
+        {
+            await Task.Delay(1);
+            descrambler.Decode(new Ts().Pat((0x0400, PmtPid)).Wire.ToArray(), output);
+        }
+        await Assert.That(descrambler.Decoded).IsEqualTo(3);
+        await Assert.That(descrambler.Undecodable).IsEqualTo(0);
+    }
+
+    /// <summary>
     /// **止めたパケットの偶奇も覚える。** 覚えないと、次に聞くときの門が
     /// 「門が閉じる前の偶奇」になり、今流れている偶奇を止めて、古い鍵の偶奇を通す
     /// </summary>

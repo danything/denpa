@@ -156,6 +156,18 @@ public class T1Tests
         await Assert.That(script.Wtx).IsEquivalentTo([(byte)0, (byte)5]);
     }
 
+    /// <summary>**待ちの延長を求め続けるカードで永久に返らない**、を塞いである</summary>
+    [Test]
+    public async Task WTX_を求め続けるカードは打ち切る()
+    {
+        var steps = new List<(byte[], byte[]?)> { (I(0, false, "01"), S(0x03, "05")) };
+        for (var i = 0; i < 16; i++) steps.Add((S(0x23, "05"), S(0x03, "05")));
+        var script = new Script([.. steps]);
+        var t1 = new T1Protocol(WithIfsc(0x7C), script.Exchange);
+        await Assert.That(Assert.Throws<IOException>(() => t1.Transmit([0x01])).Message).Contains("求め続けます");
+        await Assert.That(script.Done).IsTrue();
+    }
+
     [Test]
     public async Task カードからの_IFS_要求で送る長さが変わる()
     {
