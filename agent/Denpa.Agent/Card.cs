@@ -55,6 +55,22 @@ public static class Card
 {
     private static readonly TimeSpan CheckFor = TimeSpan.FromSeconds(8);
 
+    private static readonly Lock Gate = new();
+    private static Task<CardInit>? _checking;
+
+    /// <summary>
+    /// 走っている確かめに相乗りする。**同時に1本だけ** — 切り上げたあとも確かめは
+    /// 走り続けるので、画面を開き直すたびに足すと錠の前に溜まっていく
+    /// </summary>
+    private static Task<CardInit> Checking()
+    {
+        lock (Gate)
+        {
+            if (_checking is { IsCompleted: false } running) return running;
+            return _checking = Task.Run(() => Keys.Source is RemoteCard remote ? remote.Check() : Keys.Local.Check());
+        }
+    }
+
     public static JsonObject Status()
     {
         var readers = new JsonArray();
@@ -68,7 +84,7 @@ public static class Card
              * **denpa は 10 秒で諦める。** それより先に切り上げて理由を返す —
              * 間に合わないと、画面には「受け口に繋がりません」とエージェントのせいに見える
              */
-            var check = Task.Run(() => Keys.Source is RemoteCard remote ? remote.Check() : Keys.Local.Check());
+            var check = Checking();
             if (!check.Wait(CheckFor)) throw new TimeoutException($"カードが {CheckFor.TotalSeconds:F0} 秒で答えません");
             var init = check.Result;
             var ids = string.Join(" / ", init.Ids.Select(id => id.ToString("D16")));

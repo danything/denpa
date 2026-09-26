@@ -57,6 +57,16 @@ public sealed class Descrambler(IKeySource source, bool background = true)
     /// <summary>鍵を貰えなかった ECM を、同じ中身のまま聞き直すまでの間</summary>
     private const long RetryMs = 2000;
 
+    /// <summary>
+    /// 後からの解除 (background でない) で聞き直すまでのパケット数。**時計ではなく読んだ量で数える** —
+    /// ファイルは実時間より速く読むので、時計で待つと数分ぶんが掛かったまま残り、
+    /// 待たないと同じ ECM (0.1 秒おきに来る) のたびに固まった相手を待つ。地上波の 2 秒ほど
+    /// </summary>
+    private const long RetryPackets = 25_000;
+
+    /// <summary>読んだパケットの数 (聞き直しの間隔を数える)</summary>
+    private long _packets;
+
     private readonly byte[] _carry = new byte[PacketSize * 2];
     private readonly byte[] _joint = new byte[PacketSize * 4];
     private int _carryLength;
@@ -248,6 +258,7 @@ public sealed class Descrambler(IKeySource source, bool background = true)
 
     private void Take(ReadOnlySpan<byte> packet, IBufferWriter<byte> output)
     {
+        _packets++;
         if (_waiting.Count > 0) Poll();
         if (_holding)
         {
@@ -280,6 +291,12 @@ public sealed class Descrambler(IKeySource source, bool background = true)
         _heldLength += PacketSize;
 
         if ((packet[1] & 0x80) == 0 && packet[3] >> 6 == 0) Parse(packet, scanning: true);
+        else if ((packet[1] & 0x80) == 0)
+        {
+            // 溜めている間も偶奇は覚える。答えを待つ間に解いてよい偶奇の手がかりになる (Ask)
+            var pid = ((packet[1] & 0x1F) << 8) | packet[2];
+            if ((_route[pid] ?? _only) is { } ecm) ecm.Parity = packet[3] >> 6 == 2 ? 2 : 3;
+        }
 
         if (_sectionSeen)
         {
@@ -587,17 +604,21 @@ public sealed class Descrambler(IKeySource source, bool background = true)
         // 溜めている間に同じ ECM がもう一度来たら、1周したということ (Hold)
         if (scanning && seen) _ecmRepeated = true;
         if (Same(section, ecm.Last) || Same(section, ecm.Asking)) return;
-        // 後からの解除 (background でない) は時計より速く読むので、次に来たら聞き直す
-        if (Same(section, ecm.Failed) && background && Environment.TickCount64 < ecm.RetryAt) return;
+        if (Same(section, ecm.Failed) && Now() < ecm.RetryAt) return;
         if (ecm.Asking is not null)
         {
             // 前の答えを待っている。**聞くのは1本につき1つずつ**、最新だけ覚えておく
             ecm.Next = section.ToArray();
+            // 次の中身が来たなら、今の偶奇の鍵もこのあと入れ替わる。**どちらの偶奇も解かない**
+            ecm.Safe = -1;
             return;
         }
         Ask(ecm, section.ToArray());
         if (!background) Poll();
     }
+
+    /// <summary>聞き直しの間隔を測る物差し。流れなら時計、後からの解除なら読んだ量</summary>
+    private long Now() => background ? Environment.TickCount64 : _packets;
 
     private static bool Same(ReadOnlySpan<byte> section, byte[]? known) =>
         known is not null && section.SequenceEqual(known);
@@ -716,7 +737,7 @@ public sealed class Descrambler(IKeySource source, bool background = true)
             ecm.Unentitled = false;
             ecm.Last = null;
             ecm.Failed = section;
-            ecm.RetryAt = Environment.TickCount64 + RetryMs;
+            ecm.RetryAt = Now() + (background ? RetryMs : RetryPackets);
             Report(error.Message);
         }
     }
