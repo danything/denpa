@@ -150,19 +150,26 @@ public static class Card
     {
         var started = Stopwatch.StartNew();
         CardInit? init = null;
-        string failure = "";
+        Exception? failure = null;
         try
         {
             init = check();
         }
         catch (Exception error)
         {
-            failure = Unwrap(error).Message;
+            failure = Unwrap(error);
         }
 
-        // 使っているリーダー。INT に答えなかったなら無い (全部を覗く)
-        var used = init is null ? null : active();
         var found = find();
+        /*
+         * **INT が通らなかったら覗かない。** 鍵の出どころ自身が全部のリーダーを試して、
+         * リーダーごとの理由を持っている (BCas.Connect)。ここで覗くと、覗きが独占して掴んで
+         * いる間 (固まったリーダーだと待つのをやめたあとも) 繋ぎ直しが掴めず、画面を開くたびに
+         * 締め出し続けて、カードが二度と読めなくなる (実機で起きた)
+         */
+        if (init is null) return Failed(failure!, found);
+
+        var used = active();
         var others = found.Where(candidate => candidate.Name != used).ToList();
         var left = within - started.Elapsed;
         var peeked = Probe(others, left < ProbeFor ? left : ProbeFor);
@@ -174,13 +181,27 @@ public static class Card
         var next = 0;
         foreach (var candidate in found) readers.Add(candidate.Name == used ? usedRow! : peeked[next++]);
 
-        string message;
-        if (init is not null) message = "";
-        else if (readers.Count == 0) message = "カードリーダーが見つかりません";
-        else if (readers.Any(reader => reader.Card)) message = $"カードは見えていますが、鍵を貰えていません ({failure})";
-        else if (readers.Any(reader => reader.Error is not null)) message = "どのリーダーでもカードを読めません";
-        else message = "どのリーダーにもカードが挿さっていません";
-        return new CardSurvey(init is not null, message, readers, init?.Ids ?? [], null);
+        return new CardSurvey(true, "", readers, init.Ids, null);
+    }
+
+    /// <summary>
+    /// 鍵の出どころが INT を通せなかった。**リーダーごとの理由はその失敗が持っている**
+    /// (<see cref="CardsUnreadableException"/>)。持っていなければ失敗の文をそのまま出す
+    /// </summary>
+    private static CardSurvey Failed(Exception failure, IReadOnlyList<CardLinkCandidate> found)
+    {
+        var known = (failure as CardsUnreadableException)?.Readers ?? [];
+        var readers = found.Select(candidate =>
+        {
+            var reader = known.FirstOrDefault(reader => reader.Name == candidate.Name);
+            // 挿さっていないだけなら理由を出さない (カードなし)
+            return new ReaderState(candidate.Name, null, false, reader is { Absent: true } ? null : reader?.Reason ?? failure.Message);
+        }).ToList();
+
+        var message = readers.Count == 0 ? "カードリーダーが見つかりません"
+            : readers.Any(reader => reader.Error is not null) ? "どのリーダーでもカードを読めません"
+            : "どのリーダーにもカードが挿さっていません";
+        return new CardSurvey(false, message, readers, [], null);
     }
 
     /// <summary>
@@ -193,10 +214,7 @@ public static class Card
          * **1つずつ専用のスレッドで。** 固まったリーダーは何秒も塞ぐので、共用の池から
          * 借りると池が増えるまで他の覗きも待たされ、答えられるものまで「答えません」になる
          */
-        var peeking = candidates
-            .Select(candidate => Task.Factory.StartNew(
-                () => Peek(candidate), CancellationToken.None, TaskCreationOptions.LongRunning, TaskScheduler.Default))
-            .ToArray();
+        var peeking = candidates.Select(Peeking).ToArray();
         if (peeking.Length > 0 && within > TimeSpan.Zero) Task.WaitAll(peeking, within);
         return
         [
@@ -204,6 +222,24 @@ public static class Card
                 ? peeking[at].Result
                 : new ReaderState(candidate.Name, null, false, $"{ProbeFor.TotalSeconds:F0} 秒で答えません")),
         ];
+    }
+
+    private static readonly Dictionary<string, Task<ReaderState>> Running = [];
+
+    /// <summary>
+    /// そのリーダーの覗き。**前の覗きが終わっていなければ、それに相乗りする** — 固まった
+    /// リーダーは待つのをやめたあとも掴んだままなので、重ねて開くと自分で締め出す
+    /// </summary>
+    private static Task<ReaderState> Peeking(CardLinkCandidate candidate)
+    {
+        lock (Running)
+        {
+            if (Running.TryGetValue(candidate.Name, out var running) && !running.IsCompleted) return running;
+            // 終わった覗きは溜めない (挿し直すと名前の USB の場所が変わり、キーが増えていく)
+            foreach (var done in Running.Where(entry => entry.Value.IsCompleted).Select(entry => entry.Key).ToList()) Running.Remove(done);
+            return Running[candidate.Name] = Task.Factory.StartNew(
+                () => Peek(candidate), CancellationToken.None, TaskCreationOptions.LongRunning, TaskScheduler.Default);
+        }
     }
 
     /// <summary>開いて、電源を入れて INT と IDI を読み、閉じる</summary>

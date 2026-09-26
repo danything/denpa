@@ -43,6 +43,19 @@ public interface IKeySource
 /// </summary>
 public sealed class CardAbsentException(string message) : IOException(message);
 
+/// <summary>
+/// どのリーダーでもカードを読めなかった。**リーダーごとの理由を持つ** — 画面の表は
+/// これをそのまま行にする (文を切り分けて読み直さない)
+/// </summary>
+public sealed class CardsUnreadableException(IReadOnlyList<CardsUnreadableException.Reader> readers)
+    : IOException($"どのリーダーでもカードを読めません ({string.Join(" / ", readers.Select(reader => $"{reader.Name}: {reader.Reason}"))})")
+{
+    /// <param name="Absent">挿さっていないだけ</param>
+    public sealed record Reader(string Name, string Reason, bool Absent);
+
+    public IReadOnlyList<Reader> Readers { get; } = readers;
+}
+
 /// <summary>見つかったカードリーダー。開くまでは何も掴まない</summary>
 public sealed record CardLinkCandidate(string Name, Func<ICardLink> Open);
 

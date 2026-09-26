@@ -244,7 +244,7 @@ public sealed class BCas : IKeySource, IDisposable
         var candidates = _find();
         if (candidates.Count == 0) throw new IOException("カードリーダーが見つかりません");
 
-        var reasons = new List<string>();
+        var reasons = new List<CardsUnreadableException.Reader>();
         foreach (var candidate in candidates)
         {
             ICardLink? link = null;
@@ -259,10 +259,10 @@ public sealed class BCas : IKeySource, IDisposable
             {
                 // 開けない・カードが無い・B-CAS ではない。どれも次のリーダーを試す
                 link?.Dispose();
-                reasons.Add($"{candidate.Name}: {error.Message}");
+                reasons.Add(new(candidate.Name, error.Message, error is CardAbsentException));
             }
         }
-        throw new IOException($"どのリーダーでもカードを読めません ({string.Join(" / ", reasons)})");
+        throw new CardsUnreadableException(reasons);
     }
 
     /// <summary>
