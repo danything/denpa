@@ -458,11 +458,11 @@ const CLOCK_EVERY = 5_000;
 class Session {
     private readonly viewers = new Set<Viewer>();
     /**
-     * 放送の実時刻を読む ([ts/clock.ts](../ts/clock.ts))。
+     * 放送の時計 (PCR) を、受け取った時刻と組にする ([ts/clock.ts](../ts/clock.ts))。
      *
      * **データ放送と違って、いつでも読みます。** 誰も見ていなくても1局ぶんの
-     * TS は流れているし、読むのは PCR と TDT の2つだけで安い。押されてから
-     * 読み始める作りにすると、**押した人だけ数秒待たされる**
+     * TS は流れているし、読むのは PCR だけで安い。**受け取った時刻で組にする**
+     * ので、ここより手前で溜めると、そのぶん遅れて見える
      */
     private readonly clock = new BroadcastClock();
     /** ffmpeg が入口で 0 に寄せたぶん (秒)。`start:` から拾う */
@@ -582,10 +582,10 @@ class Session {
     }
 
     /**
-     * 放送の実時刻と、焼いたものの物差しの対応。**両方そろってから。**
+     * 受け取った時刻と、焼いたものの物差しの対応。**両方そろってから。**
      *
-     * TDT は数秒に1回しか来ないので、選局してすぐは `null` です。画面は
-     * 届いてから出す作りにしてあります (来ない局でも困らない)
+     * `start:` は ffmpeg が入口を読み終えるまで出ないので、選局してすぐは
+     * `null` です。画面は届いてから出す作りにしてあります
      */
     private clockNotice(): Notice | null {
         const anchor = this.clock.anchor;

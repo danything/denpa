@@ -70,7 +70,7 @@ EPGStation の置き換えとして作ったもので、エンコード設定は
 | `src/lib/paging.svelte.ts` / `paging.ts` | **長い一覧を少しずつ出す** (`Paged` + `sentinel`。無限スクロール) と、その代わりの絞り込み (`matches`。空白区切りの語をすべて含む)。予約・録画・ルールの一覧が使う。全部は描かないので Ctrl+F では探せず、一覧ごとに絞り込みの欄を置く |
 | `src/lib/ts/psi.ts` | TS の PSI (PAT / PMT / NIT / SDT) を読む。エージェント側と共通 |
 | `src/lib/ts/bytes.ts` | バイト列の細かい道具 (繋ぐ)。中身の意味は持たない |
-| `src/lib/ts/clock.ts` | 放送の実時刻 (TDT/TOT) を PCR に結びつけ、焼いたものの物差しに直す |
+| `src/lib/ts/clock.ts` | PCR をサーバが受け取った時刻に結びつけ、焼いたものの物差しに直す (TDT は局ごとにずれるので使わない) |
 | `src/lib/ts/aribtext.ts` | ARIB STD-B24 の8単位符号を読む (番組名・局名) |
 | `src/lib/ts/aribtext-gaiji.ts` | ARIB 外字の対応表 (`[新]` `[字]` はここ) |
 | `src/lib/ts/eit.ts` | EIT[schedule] と EIT[p/f]。集まり具合の判定も |
