@@ -1,6 +1,11 @@
 # 開発環境。ホストに bun を入れずに済むよう、全部コンテナの中で完結させる。
 #
-#   docker compose up            … 開発サーバ + 偽チューナーエージェント
+# **入口は genkan** (https://github.com/danything/genkan。ホスト名でコンテナに振り分ける
+# リバースプロキシ)。ポートは公開しないので、他のプロジェクトとぶつからない。
+# 先に genkan を1回起こしておく (docs/development.md)。
+#
+#   docker compose up            … 開発サーバ (https://denpa.localhost) + 偽チューナーエージェント
+#                                  (https://denpa-agent.localhost)
 #   docker compose run --rm e2e  … E2E (中で偽エージェント/偽通知先/アプリを起動する)
 #   docker compose run --rm unit … 単体テスト
 #
@@ -27,15 +32,18 @@ services:
             EPG_COLLECT_INTERVAL: '60000'
             SCHEDULER_TICK: '2000'
             ENCODE_CONCURRENCY: '2'
+            # 開発では誰でも通す。来るのは genkan (proxy ネットワークの中) からだけ
+            TRUSTED_NETWORKS: 10.0.0.0/8,172.16.0.0/12,192.168.0.0/16
         volumes:
             - .:/app
             - app-node-modules:/app/node_modules
             - denpa-data:/data
             - denpa-recorded:/recorded
             - denpa-library:/library
-        ports:
-            # ホスト側で5173が埋まっていることがあるので上書きできるようにしておく
-            - '${DENPA_PORT:-5173}:5173'
+        labels:
+            caddy: denpa.localhost
+            caddy.reverse_proxy: '{{upstreams 5173}}'
+        networks: [default, proxy]
         depends_on:
             - tuner-agent
 
@@ -53,9 +61,10 @@ services:
         volumes:
             - .:/app
             - app-node-modules:/app/node_modules
-        ports:
-            - '25252:25252'
-
+        labels:
+            caddy: denpa-agent.localhost
+            caddy.reverse_proxy: '{{upstreams 25252}}'
+        networks: [default, proxy]
 
     e2e:
         build:
@@ -82,6 +91,11 @@ services:
         volumes:
             - .:/app
             - app-node-modules:/app/node_modules
+
+networks:
+    # genkan が作るネットワーク。ここに入ったコンテナへ、ラベルのホスト名で振り分けてくれる
+    proxy:
+        external: true
 
 volumes:
     app-node-modules:
