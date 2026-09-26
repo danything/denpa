@@ -46,7 +46,7 @@
      */
     function download(id: number, source?: FileSource): void {
         void startDownload(id, source).then((ok) => {
-            if (!ok) noteVlc('error', 'ダウンロードのリンクを作れませんでした');
+            if (!ok) noteAction('error', 'ダウンロードのリンクを作れませんでした');
         });
         detail.close();
     }
@@ -88,15 +88,15 @@
     /** 端末への保存の結果。フォームではないので自前で持つ */
     let offlineNote = $state<Notice | null>(null);
 
-    /** テレビ再生・リンクコピーの結果。こちらもフォームではないので自前で持つ */
-    let vlcNote = $state<Notice | null>(null);
+    /** テレビ再生・リンクコピー・ダウンロードの結果。こちらもフォームではないので自前で持つ */
+    let actionNote = $state<Notice | null>(null);
     // 旧版が端末に覚えていた出先のIP (詳細のIP入力ごとやめた)。残りは掃除する
     forget('vlc-other-host');
     // 旧版の「飛ばしたことがある」印。ペア設定を経ずに立つことがあり、当てにならない
     forgetPrefix('vlc-fired:');
 
-    function noteVlc(kind: 'info' | 'error', text: string): void {
-        vlcNote = { key: `vlc-${Date.now()}`, kind, text };
+    function noteAction(kind: 'info' | 'error', text: string): void {
+        actionNote = { key: `vlc-${Date.now()}`, kind, text };
     }
 
     /**
@@ -108,22 +108,21 @@
      * 一緒に出し直していた
      */
     function dropNote(key: string): void {
-        if (vlcNote?.key === key) vlcNote = null;
+        if (actionNote?.key === key) actionNote = null;
         if (offlineNote?.key === key) offlineNote = null;
     }
+
+    type ShareLink = { url: string; playlist: string; expiresAt: number };
 
     /**
      * 期限付きの再生リンクを作る (share.ts)。テレビへ飛ばすのもコピーするのも同じ1本。
      * `source` を渡すと、そのファイル (`?source=` の名指し) を指すリンクになる —
      * テレビごとのコーデック設定 (settings) の実現手段
      */
-    async function mintShareLink(
-        id: number,
-        source?: 'ts' | 'alt',
-    ): Promise<{ url: string; playlist: string; expiresAt: number }> {
+    async function mintShareLink(id: number, source?: 'ts' | 'alt'): Promise<ShareLink> {
         const query = source === undefined ? '' : `?source=${source}`;
         const res = await fetch(`/api/recordings/${id}/share${query}`, { method: 'POST' });
-        return (await res.json()) as { url: string; playlist: string; expiresAt: number };
+        return (await res.json()) as ShareLink;
     }
 
     /**
@@ -159,7 +158,7 @@
         if (read(`vlc-paired:${host}`) !== '1') {
             window.open(`http://${host}/`, '_blank');
             write(`vlc-paired:${host}`, '1');
-            noteVlc(
+            noteAction(
                 'info',
                 '初回はテレビとのペア設定です。開いたタブで「セキュアな接続を使用」に進んで証明書を受け入れ、テレビの画面に出る6桁コードを入れたら、もう一度同じボタンを押してください',
             );
@@ -185,7 +184,7 @@
             shareUrl = resumeMs > 0 ? links.playlist : links.url;
         } catch {
             win?.close();
-            noteVlc('error', '再生リンクを作れませんでした');
+            noteAction('error', '再生リンクを作れませんでした');
             return;
         }
         const play = `http://${host}/play?id=0&path=${encodeURIComponent(shareUrl)}`;
@@ -196,7 +195,7 @@
         }
         win.location.href = play;
         closeWhenLanded(win);
-        noteVlc('info', resumeMs > 0 ? `テレビへ飛ばしました (${durationMs(resumeMs)} から)` : 'テレビへ飛ばしました');
+        noteAction('info', resumeMs > 0 ? `テレビへ飛ばしました (${durationMs(resumeMs)} から)` : 'テレビへ飛ばしました');
         detail.close();
     }
 
@@ -241,10 +240,10 @@
             await navigator.clipboard.writeText(url);
             // 有効な長さはサーバの決めごと (share.ts の SHARE_TTL)。文字で固定しない
             const hours = Math.round((expiresAt - Date.now()) / 3_600_000);
-            noteVlc('info', `再生リンクをコピーしました (${hours}時間有効)`);
+            noteAction('info', `再生リンクをコピーしました (${hours}時間有効)`);
         } catch {
             // 貼れない繋ぎ (http) ではクリップボードが使えない (切り抜きと同じ制約)
-            noteVlc('error', 'コピーできませんでした。https で開いているか確かめてください');
+            noteAction('error', 'コピーできませんでした。https で開いているか確かめてください');
         }
     }
 
@@ -263,7 +262,7 @@
     const notices = $derived.by(() => {
         const list: Notice[] = [];
         if (offlineNote !== null) list.push(offlineNote);
-        if (vlcNote !== null) list.push(vlcNote);
+        if (actionNote !== null) list.push(actionNote);
         list.push(...errorNotice(form, 'dashboard-error'));
         if (form?.reconcile) {
             /*
@@ -313,14 +312,13 @@
      * うまくいったときは持たない (`cmNoteWorthShowing`)
      */
     let detailCmNote = $state<string | null>(null);
-    /**
-     * 詳細を開いている録画。**予約から開いたときは null。**
-     *
-     * ダウンロードと録り直しはここから出す。一覧の行に並べていた頃は、
-     * 1行あたり4つも5つもボタンが並んで、狭い画面では横に流れていた。
-     * どちらもその1本に対する操作なので、中身を見ている場所にある
-     */
+    /** 詳細を開いている録画。**予約から開いたときは null** (操作は recordingActions) */
     let detailRec = $state<(typeof data.recordings)[number] | null>(null);
+
+    /** 予約・録り逃しの行に出す放送の枠 */
+    function airing(row: { start_at: number; end_at: number }): string {
+        return `${dateTime(row.start_at)}〜${time(row.end_at)} (${duration(row.start_at, row.end_at)})`;
+    }
 
     /**
      * 行を押したら番組詳細を出す。中身の出し方は `detail` が持っている。
@@ -364,9 +362,7 @@
 
     /**
      * その録画を観る画面。**観られないものには無い。**
-     *
-     * **観られるのは焼いたものだけ。** 生TSは MPEG-2 で、ブラウザに復号器が
-     * 無い (docs/stream.md §5.5)。焼き上がるまでは詳細から落として観てもらう。
+     * 焼いたものは `/watch`、焼く前は生TSを `/chase` で観る (下)。
      *
      * 消したものと、**録画そのものが失敗したもの**も外す。後者は途中まで書けた
      * ファイルが残っていることはあるが、頭からスクランブルが掛かっていたり
@@ -394,7 +390,7 @@
      * 録画の状態まで 'failed' にしていた頃は、中身のあるTSを持っているのに
      * ダウンロードまで消えていた
      */
-    function playable(rec: (typeof data.recordings)[number]): boolean {
+    function hasFile(rec: (typeof data.recordings)[number]): boolean {
         if (rec.deleted_at !== null) return false;
         if ((rec.library_path ?? rec.ts_path) === null) return false;
         return rec.state !== 'failed';
@@ -542,18 +538,27 @@
     局ロゴは放送波から拾ったもの (`/api/services/<id>/logo`)。**まだ拾えていない局は
     何も出さない** — ライブ画面と違って一覧は行が細く、代わりの箱を置くと局名より目立つ
 -->
-{#snippet meta(parts: string[], logo: { serviceId: number; has: boolean } | null = null)}
+{#snippet meta(parts: string[], row: { service_id: number; has_logo: boolean | null })}
     <div class="row-meta">
-        {#if logo?.has}
-            <img
-                src="/api/services/{logo.serviceId}/logo"
-                alt=""
-                loading="lazy"
-                class="service-logo"
-            />
+        {#if row.has_logo}
+            <img src="/api/services/{row.service_id}/logo" alt="" loading="lazy" class="service-logo" />
         {/if}
         <span>{parts.filter(Boolean).join(' ・ ')}</span>
     </div>
+{/snippet}
+
+<!--
+    削除の2回押し (`deleting`)。
+    幅が変わるとボタンが動いて押し間違えるので、どちらも2文字で揃える
+-->
+{#snippet armedDelete(key: number)}
+    {#if deleting.armed === key}
+        <button type="submit" class="danger" data-testid="delete-confirm">確定</button>
+    {:else}
+        <button type="button" class="outline danger" onclick={() => deleting.arm(key)} data-testid="delete-button">
+            削除
+        </button>
+    {/if}
 {/snippet}
 
 <!--
@@ -596,10 +601,6 @@
     <Toasts {notices} source={form} ondismiss={dropNote} />
 
     <div class="board-grid">
-        <!--
-        min-w-0 が無いと、中の表の幅にグリッドの列が引きずられてページごとはみ出す。
-        1列に畳まれたときは録画を先に出す(見るのはたいてい録れたほうなので)
-    -->
         <section class="board-col reservations">
             <div class="board-head">
                 <h2>予約</h2>
@@ -608,7 +609,6 @@
                     いじったときに必ず走るので、押す機会が無かった
                 -->
                 <div class="cluster">
-                    <!-- 打った端から手元の一覧を絞る (上の `reservationQuery`) -->
                     <input
                         type="search"
                         class="filter"
@@ -622,14 +622,11 @@
                 </div>
             </div>
 
-            <!--
-            残りいっぱいまで伸ばして、中だけスクロールさせる。2つ並べたときに、
-            片方が長いともう片方が下に置いていかれるため
-        -->
             <div class="board-box">
                 <div class="rows" data-testid="reservation-list">
                     {#each reservationPage.rows as res (res.id)}
-                        <!-- 行を押すと番組表と同じ詳細が出る -->
+                        {@const press = (event: MouseEvent | KeyboardEvent) =>
+                            rowClick(event, null, () => openDetail(res.program_id, res))}
                         <div
                             data-testid="reservation-row"
                             data-reservation-id={res.id}
@@ -637,9 +634,8 @@
                             class="row"
                             role="button"
                             tabindex="0"
-                            onclick={(event) => rowClick(event, null, () => openDetail(res.program_id, res))}
-                            onkeydown={(event) =>
-                                rowClick(event, null, () => openDetail(res.program_id, res))}
+                            onclick={press}
+                            onkeydown={press}
                         >
                             <div class="row-inner">
                                 <div class="row-body" data-testid="row-body">
@@ -649,13 +645,7 @@
                                         res.name,
                                         'reservation-state',
                                     )}
-                                    {@render meta(
-                                        [
-                                            res.service_name,
-                                            `${dateTime(res.start_at)}〜${time(res.end_at)} (${duration(res.start_at, res.end_at)})`,
-                                        ],
-                                        { serviceId: res.service_id, has: res.has_logo === true },
-                                    )}
+                                    {@render meta([res.service_name, airing(res)], res)}
                                     {#if res.conflict_reason}
                                         <div class="row-sub text-error small">{res.conflict_reason}</div>
                                     {/if}
@@ -754,13 +744,9 @@
                 <h2>録画</h2>
                 <div class="cluster">
                     <!--
-                        **絞り込み。** 溜まると300件フラットは指のリモコンで辿れない。
-                        打った端から手元の 300 件に当たり (上の `recordingQuery`)、**Enter で
-                        送ればサーバに聞く** — 番組名・シリーズ・副題・局にかかり
-                        (`+page.server.ts`)、300 件より古いものにも届く。GET なので URL に
-                        残り、共有・戻るがそのまま効く。削除済み表示は引き継ぐ。
-                        押すものは置かない (予約側の欄と同じ形にする) — 解くのも欄を空にして
-                        Enter (`type="search"` の × でも消える)
+                        打てば手元で絞り、**Enter で `?q=` をサーバに聞く** (上の `recordingQuery`)。
+                        GET なので URL に残り、共有・戻るがそのまま効く。削除済み表示は引き継ぐ。
+                        押すものは置かない (予約側と同じ形) — 解くのも欄を空にして Enter
                     -->
                     <form method="GET" action="/" class="search" data-sveltekit-keepfocus>
                         {#if data.showDeleted}
@@ -784,15 +770,12 @@
                 </div>
             </div>
 
-            <!--
-            残りいっぱいまで伸ばして、中だけスクロールさせる。2つ並べたときに、
-            片方が長いともう片方が下に置いていかれるため
-        -->
             <div class="board-box">
                 <div class="rows" data-testid="recording-list">
                     {#each recordingPage.rows as row (row.key)}
                     {#if row.kind === 'missed'}
                         {@const res = row.res}
+                        {@const press = (event: MouseEvent | KeyboardEvent) => rowClick(event, null, () => openMissed(res))}
                         <!--
                             録り逃し。観るものが無いので、押すと詳細だけ出す (予約の行と
                             同じ扱い)。ボタンも置かない — 放送は終わっているので、
@@ -803,19 +786,13 @@
                             class="row"
                             role="button"
                             tabindex="0"
-                            onclick={(event) => rowClick(event, null, () => openMissed(res))}
-                            onkeydown={(event) => rowClick(event, null, () => openMissed(res))}
+                            onclick={press}
+                            onkeydown={press}
                         >
                             <div class="row-inner">
                                 <div class="row-body" data-testid="row-body">
                                     {@render title(stateLabel('missed'), badgeClass('missed'), res.name, 'missed-state')}
-                                    {@render meta(
-                                        [
-                                            res.service_name,
-                                            `${dateTime(res.start_at)}〜${time(res.end_at)} (${duration(res.start_at, res.end_at)})`,
-                                        ],
-                                        { serviceId: res.service_id, has: res.has_logo === true },
-                                    )}
+                                    {@render meta([res.service_name, airing(res)], res)}
                                     <!-- 録画側の流儀に合わせて手動とも書く (見返すものなので) -->
                                     {@render source(res.rule_id, res.rule_name, res.manual)}
                                 </div>
@@ -828,32 +805,16 @@
                                 <div class="row-actions">
                                     <form method="POST" action="?/deleteMissed" use:submitting>
                                         <input type="hidden" name="id" value={res.id} />
-                                        {#if deleting.armed === -res.id}
-                                            <button type="submit" class="danger" data-testid="delete-confirm">
-                                                確定
-                                            </button>
-                                        {:else}
-                                            <button
-                                                type="button"
-                                                class="outline danger"
-                                                onclick={() => deleting.arm(-res.id)}
-                                                data-testid="delete-button"
-                                            >
-                                                削除
-                                            </button>
-                                        {/if}
+                                        {@render armedDelete(-res.id)}
                                     </form>
                                 </div>
                             </div>
                         </div>
                     {:else}
                         {@const rec = row.rec}
-                        <!--
-                            録り直しの元になるのは生TS。エンコード済みを元にしても画質は
-                            戻らないので、生TSがあるときだけ出す。
-                            録画中は元がまだ書かれている最中なので触らせない
-                        -->
                         {@const link = watchLink(rec)}
+                        {@const press = (event: MouseEvent | KeyboardEvent) =>
+                            rowClick(event, link, () => openRecording(rec))}
                         {@const canPlay = link !== null}
                         {@const shown = rowState(rec)}
                         <!-- 端末に入っているか (オフライン視聴)。行の印と、下のバーで見る -->
@@ -880,8 +841,8 @@
                             class="row playable"
                             role="button"
                             tabindex="0"
-                            onclick={(event) => rowClick(event, link, () => openRecording(rec))}
-                            onkeydown={(event) => rowClick(event, link, () => openRecording(rec))}
+                            onclick={press}
+                            onkeydown={press}
                         >
                             <div class="row-inner">
                                 <!--
@@ -963,7 +924,7 @@
                                             sizeLabel(rec),
                                             rec.deleted_at !== null ? `${date(rec.deleted_at)} に削除` : '',
                                         ],
-                                        { serviceId: rec.service_id, has: rec.has_logo === true },
+                                        rec,
                                     )}
                                     <!--
                                         **欠けているなら、そう言う。** チューナーの取り合いで
@@ -1008,12 +969,9 @@
                                         {@render source(rec.rule_id, rec.rule_name, rec.from_manual)}
                                     {/if}
                                     <!--
-                                        失敗や削除の理由は行に出さない。生のエラーは数行あって、
-                                        1行がその高さを占めると他の録画が画面から押し出される。
-                                        状態はバッジで分かるので、中身は「詳細」に回す (openRecording)
+                                        失敗・削除の理由や CM の検出元は長いので行に出さず、
+                                        詳細 (openRecording) に回す。状態はバッジで分かる
                                     -->
-                                    <!-- CM をどこで検出したかは行に出さない。長くて場所を食う割に
-                                         普段は見ないので、行を押したときの詳細に回す -->
                                     {#if logoUnusable(rec.cm_note) && rec.deleted_at === null}
                                         <!--
                                             ロゴでの判定が使えなかったので、無音だけでCMを判定している。
@@ -1079,12 +1037,7 @@
                                         </button>
                                     {/if}
                                     {#if rec.deleted_at === null}
-                                        <!--
-                                            **ダウンロードと録り直しは詳細の中に置いてある。**
-                                            行に並べていた頃は1行に4つも5つもボタンが載って、
-                                            狭い画面では横に流れていた。行そのものが再生なので、
-                                            ここに残すのは「詳細」と、取り返しのつかない削除だけ
-                                        -->
+                                        <!-- ダウンロードと録り直しは詳細の中 (recordingActions) -->
                                         {#if rec.job_id !== null}
                                             <!--
                                                 動いている間は中止だけ。この裏で ffmpeg が
@@ -1124,33 +1077,13 @@
                                                 action="?/delete"
                                                 use:submitting={() => async (options) => {
                                                     await options.update();
-                                                    if (
-                                                        options.result.type === 'success' &&
-                                                        offline.entries[rec.id] !== undefined
-                                                    ) {
+                                                    if (options.result.type === 'success' && held !== undefined) {
                                                         void removeLocal(rec.id);
                                                     }
                                                 }}
                                             >
                                                 <input type="hidden" name="id" value={rec.id} />
-                                                {#if deleting.armed === rec.id}
-                                                    <!-- 幅が変わるとボタンが動いて押し間違える。2文字で揃える -->
-                                                    <button type="submit"
-                                                        class="danger"
-                                                        data-testid="delete-confirm"
-                                                    >
-                                                        確定
-                                                    </button>
-                                                {:else}
-                                                    <button
-                                                        type="button"
-                                                        class="outline danger"
-                                                        onclick={() => deleting.arm(rec.id)}
-                                                        data-testid="delete-button"
-                                                    >
-                                                        削除
-                                                    </button>
-                                                {/if}
+                                                {@render armedDelete(rec.id)}
                                             </form>
                                         {/if}
                                     {/if}
@@ -1173,11 +1106,11 @@
                                         : undefined}
                                     max="1"
                                 ></progress>
-                            {:else if offline.entries[rec.id]?.state === 'downloading'}
+                            {:else if held?.state === 'downloading'}
                                 <!-- 端末への保存もエンコードと同じ見せ方。測れない間は動くだけのバー -->
                                 <progress
                                     class="row-bar success"
-                                    value={offline.entries[rec.id]?.progress ?? undefined}
+                                    value={held.progress ?? undefined}
                                     max="1"
                                 ></progress>
                             {/if}
@@ -1242,7 +1175,7 @@
 {#snippet recordingActions()}
     {#if detailRec !== null}
         {@const rec = detailRec}
-        {#if rec.deleted_at === null && playable(rec)}
+        {#if hasFile(rec)}
             <!--
                 **並べるのはよく押すものだけ** — テレビへ飛ばすのと、端末に保存。
                 条件が揃うと10個のボタンが同じ見た目で並び、狭い画面では文字の
@@ -1273,16 +1206,12 @@
                     ので出さない。保存済みなら「端末から消す」に変わる —
                     こちらはサーバの録画に触らない (行の削除ボタンとは別)
                 -->
-                {#if offline.entries[rec.id] === undefined || offline.entries[rec.id]?.state === 'failed'}
-                    <button
-                        type="button"
-                        class="secondary outline"
-                        onclick={() => saveToDevice(rec)}
-                    >
-                        {offline.entries[rec.id]?.state === 'failed' ? '保存をやり直す' : '端末に保存'}
+                {@const held = offline.entries[rec.id]}
+                {#if held === undefined || held.state === 'failed'}
+                    <button type="button" class="secondary outline" onclick={() => saveToDevice(rec)}>
+                        {held?.state === 'failed' ? '保存をやり直す' : '端末に保存'}
                     </button>
                 {/if}
-                {@const held = offline.entries[rec.id]}
                 {#if held !== undefined}
                     <button
                         type="button"
@@ -1358,8 +1287,8 @@
                                     </DropdownMenu.Item>
                                 {/if}
                                 <!--
-                                    **出先のプレイヤー向けの再生リンク** (share.ts)。24時間で
-                                    切れるので、他人の機器の履歴に残っても腐るだけ。
+                                    **出先のプレイヤー向けの再生リンク** (share.ts)。期限付き
+                                    (SHARE_TTL) なので、他人の機器の履歴に残っても腐るだけ。
                                     押したらメニューは閉じる — 開いたままだと押せたのか分からない
                                 -->
                                 <DropdownMenu.Item
@@ -1487,7 +1416,8 @@
             width: 14rem;
         }
     }
-    /* 残りいっぱいまで伸ばして、中だけスクロールさせる */
+    /* 残りいっぱいまで伸ばして、中だけスクロールさせる。2つ並べたときに、
+       片方が長いともう片方が下に置いていかれるため */
     .board-box {
         overflow: auto;
         border-radius: 1rem;
@@ -1602,7 +1532,7 @@
     .offline-tag {
         margin-top: 0.25rem;
     }
-        .resume {
+    .resume {
         display: flex;
         align-items: center;
         gap: 0.5rem;

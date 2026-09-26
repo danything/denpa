@@ -102,31 +102,13 @@ interface ReservationRow extends Omit<Reservation, 'state'> {
 }
 
 /**
- * 生TSの大きさ。エンコード済みと両方あるときだけ測る。
- *
- * 片方しか無ければ `ts_size` がそのファイルの大きさなので、二重に出す意味がない。
- * 実ファイルを見るのは、外から消されていることがあるため (files.reconcile)。
+ * ファイルの大きさ (`raw_size` / `alt_size`。出すときの決まりは RecordingRow)。
+ * 実ファイルを見るのは、外から消されていることがあるため (files.reconcile)
  */
-function rawSize(row: Recording): number | null {
-    if (row.ts_path === null || row.library_path === null) return null;
+function fileSize(path: string | null): number | null {
+    if (path === null) return null;
     try {
-        return statSync(row.ts_path).size;
-    } catch {
-        return null;
-    }
-}
-
-/**
- * もう一方のコーデック (H.264) の大きさ。両方焼いたときだけ measure する。
- *
- * `ts_size` は主 (AV1) のぶんだけなので、これが無いと**置き場が実際に
- * どれだけ使われているか**が画面から分からない。`rawSize` と同じく実ファイルを
- * 見るのは、外から消されていることがあるため (files.reconcile)
- */
-function altSize(row: Recording): number | null {
-    if (row.alt_path === null) return null;
-    try {
-        return statSync(row.alt_path).size;
+        return statSync(path).size;
     } catch {
         return null;
     }
@@ -168,7 +150,8 @@ export function load({ url }) {
      * 予約側に出していた頃は、放送が終わった行が予約の列に居座って、
      * 「これから何が録れるか」の中に過去が混ざっていた。
      *
-     * **取り消したものは出さない** — あちらは人が押した結果で、驚くことが無い
+     * **取り消したものは既定では出さない** — 人が押した結果で、驚くことが無い
+     * (「完了分も表示」では出す。戻す口のため)
      */
     const r = alias(reservationTable, 'r');
     const rec = alias(recordingTable, 'rec');
@@ -184,7 +167,6 @@ export function load({ url }) {
             service_name: services.name,
             has_logo: services.has_logo,
             rule_name: ruleTable.name,
-            // 予約の行の state ではなく、録画から引いたほうを出す
             state: reservationState(r, rec),
             recording_id: sql<number | null>`CASE WHEN ${rec.state} = 'recording' THEN ${rec.id} END`,
         })
@@ -211,7 +193,6 @@ export function load({ url }) {
      * ずれてページごとスクロールバーが生えていた。同じ番組が2箇所に並んでもいた。
      * 「録れたものが今どうなっているか」の一形態なので、行の状態として出すのが素直。
      */
-    // 番組名・シリーズ・副題・局名のどれかにかかればよい。同じ言葉を4か所へ
     const pattern = q === '' ? null : `%${q}%`;
     const res = alias(reservationTable, 'res');
     const j = alias(encodeJobs, 'j');
@@ -283,8 +264,8 @@ export function load({ url }) {
         .all()
         .map((row) => ({
             ...row,
-            raw_size: rawSize(row),
-            alt_size: altSize(row),
+            raw_size: row.library_path === null ? null : fileSize(row.ts_path),
+            alt_size: fileSize(row.alt_path),
             job_canceling: row.job_id !== null && isCanceling(row.job_id),
         }));
 
@@ -339,19 +320,16 @@ export function load({ url }) {
     };
 }
 
-// フォームの id から録画を引く。どのアクションも最初にこれを通る
-const target = recordingFromForm;
-
 export const actions = {
     delete: async ({ request }) => {
-        const recording = target(await request.formData());
+        const recording = recordingFromForm(await request.formData());
         if (recording === undefined) return fail(400, { message: '録画が見つかりません' });
         deleteRecordingFiles(recording, '手動削除');
         return { success: true };
     },
 
     reencode: async ({ request }) => {
-        const recording = target(await request.formData());
+        const recording = recordingFromForm(await request.formData());
         if (recording === undefined) return fail(400, { message: '録画が見つかりません' });
         // 元になるのは生TS。エンコード済みを元に録り直しても画質は戻らない
         if (encodeSource(recording) === null) {
@@ -413,7 +391,6 @@ export const actions = {
             .returning({ id: reservationTable.id })
             .get();
         if (gone === undefined) return fail(400, { message: '録り逃した予約ではありません' });
-        // 他の端末の画面にも反映する
         emit('reservations');
         return { success: true };
     },
