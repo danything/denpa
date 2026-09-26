@@ -197,7 +197,14 @@ public static class Card
     /// </summary>
     internal static ReaderState[] Probe(IReadOnlyList<CardLinkCandidate> candidates, TimeSpan within)
     {
-        var peeking = candidates.Select(candidate => Task.Run(() => Peek(candidate))).ToArray();
+        /*
+         * **1つずつ専用のスレッドで。** 固まったリーダーは何秒も塞ぐので、共用の池から
+         * 借りると池が増えるまで他の覗きも待たされ、答えられるものまで「答えません」になる
+         */
+        var peeking = candidates
+            .Select(candidate => Task.Factory.StartNew(
+                () => Peek(candidate), CancellationToken.None, TaskCreationOptions.LongRunning, TaskScheduler.Default))
+            .ToArray();
         if (peeking.Length > 0 && within > TimeSpan.Zero) Task.WaitAll(peeking, within);
         return
         [

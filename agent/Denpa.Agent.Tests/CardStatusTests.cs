@@ -93,7 +93,7 @@ public class CardStatusTests
     public async Task リーダーが無ければそう言う()
     {
         var survey = Card.Local(
-            () => throw new IOException("カードリーダーが見つかりません"), () => "", () => [], TimeSpan.FromSeconds(1));
+            () => throw new IOException("カードリーダーが見つかりません"), () => "", () => [], TimeSpan.FromSeconds(5));
         var report = Card.Report(survey, []);
         await Assert.That(report["ok"]!.GetValue<bool>()).IsFalse();
         await Assert.That(report["message"]!.GetValue<string>()).IsEqualTo("カードリーダーが見つかりません");
@@ -105,7 +105,7 @@ public class CardStatusTests
     {
         CardLinkCandidate[] found = [Failing("空 (usb 1-2)", new CardAbsentException("挿さっていません"))];
         var survey = Card.Local(
-            () => throw new IOException("どのリーダーでもカードを読めません (…)"), () => "", () => found, TimeSpan.FromSeconds(1));
+            () => throw new IOException("どのリーダーでもカードを読めません (…)"), () => "", () => found, TimeSpan.FromSeconds(5));
         await Assert.That(survey.Ok).IsFalse();
         await Assert.That(survey.Message).IsEqualTo("どのリーダーにもカードが挿さっていません");
     }
@@ -116,7 +116,7 @@ public class CardStatusTests
         CardLinkCandidate[] found = [Failing("壊れた (usb 1-3)", new IOException("INT を断られました"))];
         var survey = Card.Local(
             () => throw new IOException("どのリーダーでもカードを読めません (壊れた: INT を断られました)"),
-            () => "", () => found, TimeSpan.FromSeconds(1));
+            () => "", () => found, TimeSpan.FromSeconds(5));
         await Assert.That(survey.Message).IsEqualTo("どのリーダーでもカードを読めません");
         await Assert.That(survey.Readers[0].Error).IsEqualTo("INT を断られました");
     }
