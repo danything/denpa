@@ -128,6 +128,9 @@ public sealed class CcidLink : ICardLink
     private T1Protocol? _t1;
     private int _bwtMs = 1500;
 
+    /// <summary>電源を入れた (PowerOn を送った)。閉じるときに切る</summary>
+    private bool _powered;
+
     public string Name { get; }
     public CcidInterface Interface { get; }
 
@@ -159,9 +162,6 @@ public sealed class CcidLink : ICardLink
     /// 聞くので、最初のブロックから黙る。
     /// </para>
     /// </summary>
-    /// <summary>電源を入れた (PowerOn を送った)。閉じるときに切る</summary>
-    private bool _powered;
-
     public byte[] Reset()
     {
         if (!Interface.Tpdu && !Interface.Apdu)

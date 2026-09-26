@@ -86,8 +86,7 @@ public static class ChannelTable
             if (!Number(name[2..], out var channel)) return null;
             if (channel is < 2 or > 24 || channel % 2 != 0) return null;
 
-            var index = channel / 2 + 11;  // CS02 -> 12 … CS24 -> 23
-            return new Tuning("CS", SysIsdbs, (uint)(1613000 + 40000 * (index - 12)), -1, 0);
+            return new Tuning("CS", SysIsdbs, (uint)(1613000 + 40000 * (channel / 2 - 1)), -1, 0);
         }
 
         return null;

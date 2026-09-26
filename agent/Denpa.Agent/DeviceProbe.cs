@@ -100,52 +100,34 @@ public static partial class DeviceProbe
         return [.. property.Slice(BufferDataAt, length).ToArray().Select(value => (int)value)];
     }
 
-    private static string[] Ask(string device)
+    private static unsafe string[] Ask(string device)
     {
         var fd = Sys.Open(device, Sys.ReadOnly | Sys.NonBlocking);
         if (fd < 0) return [];
         try
         {
+            // struct dtv_properties { u32 num; struct dtv_property *props; } に、DTV_ENUM_DELSYS を1つ
             var property = new byte[PropertySize];
             BitConverter.TryWriteBytes(property, DtvEnumDelsys);
-
-            var handle = GCHandle.Alloc(property, GCHandleType.Pinned);
             var header = new byte[16];
-            try
+            BitConverter.TryWriteBytes(header, 1u);
+            fixed (byte* props = property)
+            fixed (byte* headerAt = header)
             {
-                BitConverter.TryWriteBytes(header.AsSpan(0), 1u);
-                BitConverter.TryWriteBytes(header.AsSpan(8), handle.AddrOfPinnedObject().ToInt64());
-                var headerHandle = GCHandle.Alloc(header, GCHandleType.Pinned);
-                try
+                BitConverter.TryWriteBytes(header.AsSpan(8), (long)props);
+                if (Sys.Ioctl(fd, FeGetProperty, (nint)headerAt) >= 0 && TypesFor(ParseDelivery(property)) is { Length: > 0 } types)
                 {
-                    if (Sys.Ioctl(fd, FeGetProperty, headerHandle.AddrOfPinnedObject()) >= 0)
-                    {
-                        var types = TypesFor(ParseDelivery(property));
-                        if (types.Length > 0) return types;
-                    }
+                    return types;
                 }
-                finally
-                {
-                    headerHandle.Free();
-                }
-            }
-            finally
-            {
-                handle.Free();
             }
 
             // 方式を答えないドライバもある。名前で当てにいく
             var info = new byte[FrontendInfoSize];
-            var infoHandle = GCHandle.Alloc(info, GCHandleType.Pinned);
-            try
+            fixed (byte* infoAt = info)
             {
-                if (Sys.Ioctl(fd, FeGetInfo, infoHandle.AddrOfPinnedObject()) < 0) return [];
-                return TypesFromName(ParseName(info));
+                if (Sys.Ioctl(fd, FeGetInfo, (nint)infoAt) < 0) return [];
             }
-            finally
-            {
-                infoHandle.Free();
-            }
+            return TypesFromName(ParseName(info));
         }
         finally
         {

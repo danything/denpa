@@ -156,7 +156,6 @@ public sealed unsafe partial class UsbFsPipe : IBulkPipe
     internal static readonly uint ClaimInterface = Ioc(2, 15, sizeof(uint));
     internal static readonly uint ReleaseInterface = Ioc(2, 16, sizeof(uint));
 
-    private const int ReadWrite = 2;
     private const int CloseOnExec = 0x80000;
 
     private const int Eperm = 1;
@@ -166,22 +165,11 @@ public sealed unsafe partial class UsbFsPipe : IBulkPipe
     private const int Enodev = 19;
     private const int Etimedout = 110;
 
-    [LibraryImport("libc", EntryPoint = "open", StringMarshalling = StringMarshalling.Utf8, SetLastError = true)]
-    private static partial int Open(string path, int flags);
-
-    [LibraryImport("libc", EntryPoint = "ioctl", SetLastError = true)]
-    private static partial int Ioctl(int fd, nuint request, void* argument);
-
-    [LibraryImport("libc", EntryPoint = "read", SetLastError = true)]
-    private static partial nint ReadFd(int fd, byte* buffer, nuint count);
-
+    // open / ioctl / read は Sys (Tuning.cs) のものを使う
     [LibraryImport("libc", EntryPoint = "close")]
     private static partial int Close(int fd);
 
     private readonly string _path;
-    private readonly byte _in;
-    private readonly byte _out;
-    private readonly uint _interface;
     private int _fd;
 
     public CcidInterface Interface { get; }
@@ -191,9 +179,6 @@ public sealed unsafe partial class UsbFsPipe : IBulkPipe
         _path = path;
         _fd = fd;
         Interface = info;
-        _in = info.BulkIn;
-        _out = info.BulkOut;
-        _interface = (uint)info.Number;
     }
 
     /// <summary>
@@ -206,7 +191,7 @@ public sealed unsafe partial class UsbFsPipe : IBulkPipe
     /// </summary>
     public static UsbFsPipe Open(string path, int vendor, int product, int configValue, int interfaceNumber)
     {
-        var fd = Open(path, ReadWrite | CloseOnExec);
+        var fd = Sys.Open(path, Sys.ReadWrite | CloseOnExec);
         if (fd < 0)
         {
             var errno = Marshal.GetLastPInvokeError();
@@ -226,7 +211,7 @@ public sealed unsafe partial class UsbFsPipe : IBulkPipe
             fixed (byte* start = blob)
             {
                 nint got;
-                while (total < blob.Length && (got = ReadFd(fd, start + total, (nuint)(blob.Length - total))) > 0)
+                while (total < blob.Length && (got = Sys.ReadFd(fd, start + total, (nuint)(blob.Length - total))) > 0)
                 {
                     total += (int)got;
                 }
@@ -241,7 +226,7 @@ public sealed unsafe partial class UsbFsPipe : IBulkPipe
                 ?? throw new IOException($"{path} に CCID のインターフェース {interfaceNumber} が見当たりません");
 
             var number = (uint)interfaceNumber;
-            if (Ioctl(fd, ClaimInterface, &number) < 0)
+            if (Sys.Ioctl(fd, ClaimInterface, (nint)(&number)) < 0)
             {
                 var errno = Marshal.GetLastPInvokeError();
                 throw new IOException(errno == Ebusy
@@ -261,8 +246,8 @@ public sealed unsafe partial class UsbFsPipe : IBulkPipe
     {
         fixed (byte* start = data)
         {
-            var transfer = new BulkTransfer { Endpoint = _out, Length = (uint)data.Length, TimeoutMs = 5000, Data = start };
-            var sent = Ioctl(Fd, Bulk, &transfer);
+            var transfer = new BulkTransfer { Endpoint = Interface.BulkOut, Length = (uint)data.Length, TimeoutMs = 5000, Data = start };
+            var sent = Sys.Ioctl(Fd, Bulk, (nint)(&transfer));
             if (sent < 0) throw Failure("リーダーに送れません");
             if (sent != data.Length) throw new IOException($"リーダーに送りきれません ({sent}/{data.Length} バイト)");
         }
@@ -272,8 +257,8 @@ public sealed unsafe partial class UsbFsPipe : IBulkPipe
     {
         fixed (byte* start = buffer)
         {
-            var transfer = new BulkTransfer { Endpoint = _in, Length = (uint)buffer.Length, TimeoutMs = (uint)timeoutMs, Data = start };
-            var got = Ioctl(Fd, Bulk, &transfer);
+            var transfer = new BulkTransfer { Endpoint = Interface.BulkIn, Length = (uint)buffer.Length, TimeoutMs = (uint)timeoutMs, Data = start };
+            var got = Sys.Ioctl(Fd, Bulk, (nint)(&transfer));
             if (got < 0) throw Failure("リーダーから読めません");
             return got;
         }
@@ -295,8 +280,8 @@ public sealed unsafe partial class UsbFsPipe : IBulkPipe
     public void Dispose()
     {
         if (_fd < 0) return;
-        var number = _interface;
-        Ioctl(_fd, ReleaseInterface, &number);
+        var number = (uint)Interface.Number;
+        Sys.Ioctl(_fd, ReleaseInterface, (nint)(&number));
         Close(_fd);
         _fd = -1;
     }

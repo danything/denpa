@@ -48,7 +48,7 @@ public class T1Tests
         await Assert.That(atr.GuardN).IsEqualTo((byte)0xFF);
         await Assert.That(atr.Specific).IsTrue();
         await Assert.That(atr.T1).IsTrue();
-        // TD3 が T=1 を示したあとの TA4 / TB4
+        // TD2 が T=1 を示したあとの TA3 / TB3
         await Assert.That(atr.Ifsc).IsEqualTo(0x7C);
         await Assert.That(atr.Bwi).IsEqualTo(4);
         await Assert.That(atr.Cwi).IsEqualTo(5);
