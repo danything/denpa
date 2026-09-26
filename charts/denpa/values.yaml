@@ -32,25 +32,25 @@ denpa:
   # 同時に焼く本数。ffmpeg は 1 本で ~4GB 使う
   encodeConcurrency: 2
   timezone: Asia/Tokyo
-  # 何も聞かずに通すネットワーク (CIDR のカンマ区切り)。docs/auth.md。
-  # 空だと (OIDC も無ければ) 全部 403 で断る。全部開けるなら 0.0.0.0/0 —
-  # ただしそれはインターネットに向けて開くのと同じ意味
+  # ログインなしで通すネットワーク (CIDR のカンマ区切り)。docs/auth.md。
+  # 空だと (OIDC も無ければ) 全部 403 で断る。0.0.0.0/0 で全部開くが、
+  # それはインターネットに向けて開くのと同じ
   trustedNetworks: ""
-  # 前段 (Traefik など) が居るときだけ (居なければ空のままでよい — 本当の接続元は
-  # server.js が伝える)。前段が居るのに無いと接続元が前段の住所になり
-  # trustedNetworks が誰にも当たらない。**前段を通さず直に届く経路があると
-  # 偽装できる**ので、前段経由でしか届かないことを確かめてから
+  # 前段 (Traefik など) が居るときだけ設定する。居なければ空のままでよい (本当の接続元は
+  # server.js が伝える)。前段が居るのに空だと接続元が前段のアドレスになり、
+  # trustedNetworks が誰にも当たらない。**前段を通らず直に届く経路があると
+  # 偽装できる**ので、前段経由でしか届かないことを確かめてから設定する
   addressHeader: ""
   # ホーム画面に置いたときの名前。`ホスト=名前` のカンマ区切り (docs/player.md)
   pwaNames: ""
-  # OIDC でのログイン (docs/auth.md)。**Secret の名前だけ渡す** — 中身
+  # OIDC でのログイン (docs/auth.md)。**Secret の名前だけを渡し**、中身
   # (issuer / client-id / client-secret / group) は chart の外で作る
   # (このリポジトリ自身は InfisicalSecret `deploy/oidc-secret.yaml`)。空なら OIDC 無し
   oidcSecretName: ""
   # 追加の環境変数 (src/lib/server/config.ts の一覧)。そのまま container.env に入る
   extraEnv: []
   # 録画中に入れ替えが来たら、終わるまで居座ってから止まる (SHUTDOWN_WAIT)。
-  # 短いと待っている途中で SIGKILL されて意味が無くなる。録画していなければ即座に止まる
+  # 短いと待っている途中で SIGKILL される。録画していなければすぐに止まる
   terminationGracePeriodSeconds: 21900
   # ノードごとフリーズさせないための頭打ち。ffmpeg (エンコード + ライブ視聴) が
   # 積み上がると 46GB + swap を食い潰してノードごと固まった (2026-08 の事故)。
@@ -65,9 +65,9 @@ denpa:
     initialDelaySeconds: 20
     periodSeconds: 30
   # **Intel の GPU で焼く** (docs/encode.md「GPU で焼く」)。イメージには QSV / VA-API の
-  # ドライバが入っていて、コンテナから /dev/dri が見えれば起動時に自分で見つけて使う
-  # (無ければソフトウェアで焼くだけ)。**既定で /dev/dri を hostPath で渡す** — GPU を
-  # 挿したときに何もしなくても効くように。そのぶん Pod は privileged になる
+  # ドライバが入っていて、コンテナから /dev/dri が見えれば起動時に見つけて使う
+  # (無ければソフトウェアで焼く)。GPU を挿せば何もしなくても効くように、既定で
+  # /dev/dri を hostPath で渡す。そのぶん Pod は privileged になる
   # (そうしないとデバイスの cgroup が /dev/dri を開かせない)。デバイスプラグイン
   # (intel-device-plugins-for-kubernetes) を使うなら false にして、resources.limits に
   # `gpu.intel.com/i915: 1` を足す (こちらが行儀がよい)

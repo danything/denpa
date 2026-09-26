@@ -1,23 +1,23 @@
-# 実運用向け。このリポジトリの中では開発用の compose.yml と並ぶので別名だが、
-# **入れて使う人は `compose.yml` として置く** (`-f` を書かずに済む)。Linux では
-# install.sh (README「立てる」) が ~/denpa に置いて起こす。手で置くなら
+# 実運用向け。リポジトリの中では開発用の compose.yml と並ぶので別名にしているが、
+# 使う人は `compose.yml` として置く (`-f` を書かずに済む)。Linux では
+# install.sh (README「立てる」) が ~/denpa に置いて起動する。手で置くなら
 #
 #   curl -Lo compose.yml .../compose.prod.yml && docker compose up -d
 #
-# イメージは公開してあるので、このファイルだけで動きます。自分で焼くなら image: を消して
-# build: を書いてください。**手を入れるなら同じ場所の compose.override.yml に**
-# (install.sh は上げ直すたびにこのファイルを上書きする)。
+# イメージは公開してあるので、このファイルだけで動く。自分でビルドするなら image: を消して
+# build: を書く。**変えたいことは同じ場所の compose.override.yml に書く**
+# (install.sh は更新のたびにこのファイルを上書きする)。
 #
-# 手元に合わせるところは2つ。チューナーそのものは自分で見つけるので、画面 (/tuners) で
-# 確かめるだけで普通は何も書かない。
+# 手元に合わせるのは次の2つ。チューナーは自動で見つけるので、普段は画面 (/tuners) で
+# 確かめるだけでよい。
 #   1. 下の devices          … チューナーとカードリーダーのデバイス
 #   2. 下の TRUSTED_NETWORKS … 誰を通すか
 name: denpa
 
 services:
-    # チューナーエージェント。**機材に触るのはここだけ**です。
-    # 選局・チャンネルスキャン・B-CASカード・スクランブル解除を持ち、
-    # 素のTSを denpa へ流します (番組表を読むのは denpa の仕事)
+    # チューナーエージェント。**機材に触るのはここだけ。**
+    # 選局・チャンネルスキャン・B-CASカード・スクランブル解除を受け持ち、
+    # 素のTSを denpa へ流す (番組表を読むのは denpa の仕事)
     tuner-agent:
         image: ghcr.io/danything/denpa-agent:latest
         restart: unless-stopped
@@ -44,9 +44,9 @@ services:
     denpa:
         image: ghcr.io/danything/denpa:latest
         restart: unless-stopped
-        # 録画中に止めようとしたら、終わるまで居座ってから止まる (SHUTDOWN_WAIT)。
-        # ここを伸ばしておかないと、待っている途中で殺されて意味が無くなる。
-        # 録画していないときは即座に止まる
+        # 録画中に止めようとすると、録画が終わるまで居座ってから止まる (SHUTDOWN_WAIT)。
+        # ここを伸ばしておかないと、待っている途中で kill される。
+        # 録画していなければすぐに止まる
         stop_grace_period: 6h5m
         depends_on:
             - tuner-agent
@@ -58,10 +58,10 @@ services:
             RECORDED_DIR: /app/recorded
             LIBRARY_DIR: /library
             ENCODE_CONCURRENCY: '2'
-            # **誰を通すか (docs/auth.md)。設定するまで全部のアクセスを断ります。**
-            # このネットワークから来た人は何も聞かずに通す。自分の LAN に合わせて書き換えを。
-            # 全部開けるなら 0.0.0.0/0 — ただし**インターネットに向けて開くのと
-            # 同じ意味**なので、家の外に出す構成では OIDC を (README の注意も読むこと)
+            # **誰を通すか (docs/auth.md)。設定するまで全部のアクセスを断る。**
+            # このネットワークからのアクセスはログインなしで通す。自分の LAN に合わせて書き換える。
+            # 0.0.0.0/0 で全部開くが、インターネットに向けて開くのと同じなので、
+            # 家の外に出す構成では OIDC を使う (README の注意も読むこと)
             TRUSTED_NETWORKS: 192.168.0.0/16,10.0.0.0/8,172.16.0.0/12
         volumes:
             - denpa-data:/app/data
@@ -70,7 +70,7 @@ services:
         ports:
             - '3000:3000'
         # Intel の GPU で焼くなら /dev/dri を渡す (docs/encode.md「GPU で焼く」)。
-        # 見えれば起動時に自分で見つけて使い、無ければソフトウェアで焼く
+        # 見えれば起動時に見つけて使い、無ければソフトウェアで焼く
         # devices:
         #     - /dev/dri:/dev/dri
 

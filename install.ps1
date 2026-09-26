@@ -71,12 +71,12 @@ function Say([string]$Message) { Write-Host "==> $Message" -ForegroundColor Cyan
 # 取ってくる。PowerShell 5.1 の Invoke-WebRequest は遅い (進み具合の表示) ので、Windows 10 から入っている curl.exe で
 function Get-Url([string]$From, [string]$To) {
     & curl.exe -fsSL --retry 3 -o $To $From
-    if ($LASTEXITCODE -ne 0) { throw "取ってこられません: $From" }
+    if ($LASTEXITCODE -ne 0) { throw "ダウンロードできません: $From" }
 }
 
 function Assert-Hash([string]$Path, [string]$Expected) {
     if ((Get-FileHash -Algorithm SHA256 -LiteralPath $Path).Hash -ne $Expected.ToUpperInvariant()) {
-        throw "$Path の中身が合いません (取ってくる途中で壊れたかもしれません。もう一度流してください)"
+        throw "$Path のハッシュが合いません (ダウンロード中に壊れた可能性があります。もう一度流してください)"
     }
 }
 
@@ -184,7 +184,7 @@ function Start-Denpa([string]$Ref, [switch]$NoOpen) {
     try {
         Get-Url "https://raw.githubusercontent.com/$Repo/$Ref/compose.mac.yml" $fetched
     } catch {
-        throw "$Ref に compose.mac.yml がありません。Windows 用はこのあとのリリースから入るので、それより前の版では Windows に入れられません"
+        throw "$Ref に compose.mac.yml がありません。Windows 用はこのあとのリリースからなので、それより前の版は Windows に入れられません"
     }
     $text = [IO.File]::ReadAllText($fetched)
     Remove-Item -LiteralPath $fetched
@@ -204,7 +204,7 @@ function Start-Denpa([string]$Ref, [switch]$NoOpen) {
             $old.Substring($old.IndexOf("`n") + 1) -eq [IO.File]::ReadAllText($orig)
         if (-not $mine) {
             Move-Item -Force -LiteralPath $compose -Destination "$compose.bak"
-            Say "手で置いた (手を入れた) $compose を compose.yml.bak に退けました。手直しは compose.override.yml に移してください"
+            Say "手を入れた $compose を compose.yml.bak に退避しました。変更は compose.override.yml に移してください"
         }
     }
     Write-Text $orig $text
@@ -242,13 +242,13 @@ function Start-Denpa([string]$Ref, [switch]$NoOpen) {
                     Start-Sleep -Seconds 2
                 }
             }
-            Say "立ちました: $open (このマシンからは $Url でも。LAN のほかの機械からは http://$($env:COMPUTERNAME):3000)"
+            Say "起動しました: $open (このマシンからは $Url でも開けます。LAN のほかの機器からは http://$($env:COMPUTERNAME):3000)"
             if (-not $NoOpen) { Start-Process $open }
             return
         }
         Start-Sleep -Seconds 2
     }
-    throw "denpa が答えません。cd $DenpaDir; docker compose logs を見てください"
+    throw "denpa が応答しません。cd $DenpaDir; docker compose logs を見てください"
 }
 
 # Siano のチューナーが刺さっていれば、ドライバが WinUSB かを見る (入れ替えは人の手で。Zadig)
@@ -284,7 +284,7 @@ function Install-Agent([string]$Ref) {
             try {
                 Get-Url "https://github.com/$Repo/releases/download/$Ref/$name" $agent
             } catch {
-                throw "$Ref には Windows 用のエージェントがありません。Windows 用はこのあとのリリースから添えるので、それより前の版では Windows に入れられません"
+                throw "$Ref には Windows 用のエージェントがありません。Windows 用はこのあとのリリースからなので、それより前の版は Windows に入れられません"
             }
             Get-Url "https://github.com/$Repo/releases/download/$Ref/$name.sha256" "$agent.sha256"
             Assert-Hash $agent ((Get-Content -LiteralPath "$agent.sha256" -Raw) -split '\s+')[0]
@@ -349,7 +349,7 @@ function Install-Agent([string]$Ref) {
         -Description 'denpa のチューナーエージェント (install.ps1 が入れた)' -Force | Out-Null
     Start-ScheduledTask -TaskName $TaskName
 
-    Say 'エージェントを起こしました。応答を待ちます'
+    Say 'エージェントを起動しました。応答を待ちます'
     for ($i = 0; $i -lt 15; $i++) {
         $tuners = & curl.exe -fs "http://127.0.0.1:$Port/denpa/tuners"
         if ($LASTEXITCODE -eq 0) {
@@ -358,7 +358,7 @@ function Install-Agent([string]$Ref) {
         }
         Start-Sleep -Seconds 2
     }
-    throw "エージェントが答えません。ログを見てください: $Log"
+    throw "エージェントが応答しません。ログを見てください: $Log"
 }
 
 function Invoke-Main([switch]$NoOpen, [switch]$Uninstall, [switch]$NoDocker) {
@@ -376,7 +376,7 @@ function Invoke-Main([switch]$NoOpen, [switch]$Uninstall, [switch]$NoDocker) {
         return
     }
 
-    if ($env:PROCESSOR_ARCHITECTURE -ne 'AMD64') { throw 'x64 の Windows だけです (siano-userland に ARM 用がありません)' }
+    if ($env:PROCESSOR_ARCHITECTURE -ne 'AMD64') { throw '対応しているのは x64 の Windows だけです (siano-userland に ARM 用がありません)' }
 
     $ref = if ($env:DENPA_AGENT_ZIP) { '' } else { Get-Version }
     Install-Agent $ref
