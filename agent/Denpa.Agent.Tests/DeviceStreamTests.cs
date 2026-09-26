@@ -63,7 +63,14 @@ public partial class DeviceStreamTests
         using (write)
         {
             var buffer = new byte[188];
-            var reading = Task.Run(() => stream.Read(buffer, 0, buffer.Length, () => false));
+            /*
+             * **専用のスレッドで読む。** 共用の池から借りると、他のテストが池を塞いでいる間は
+             * 読み始めることすらできず、書いてから 2 秒待っても返らない (CI で1度落ちた。
+             * 手元では2コアに絞っても出ない揺れ)。Px4CardTests の偽の px4d と同じ理由
+             */
+            var reading = Task.Factory.StartNew(
+                () => stream.Read(buffer, 0, buffer.Length, () => false),
+                CancellationToken.None, TaskCreationOptions.LongRunning, TaskScheduler.Default);
 
             var waited = await Task.WhenAny(reading, Task.Delay(TimeSpan.FromMilliseconds(600), TestContext.Current!.Execution.CancellationToken));
             await Assert.That(waited).IsNotSameReferenceAs(reading);
