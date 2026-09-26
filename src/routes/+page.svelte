@@ -721,6 +721,7 @@
                         <div
                             class="row-empty muted small"
                             use:sentinel={() => reservationPage.reveal()}
+                            data-testid="reservation-more"
                         >
                             残り {reservationPage.rest} 件
                         </div>
@@ -1128,6 +1129,7 @@
                         <div
                             class="row-empty muted small"
                             use:sentinel={() => recordingPage.reveal()}
+                            data-testid="recording-more"
                         >
                             残り {recordingPage.rest} 件
                         </div>
