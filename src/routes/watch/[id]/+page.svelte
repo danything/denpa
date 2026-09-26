@@ -224,7 +224,7 @@
      * 読み込み待ちで止まっているか。**輪を出す。**
      *
      * 出さないと、絵が止まったのが**詰まりなのか壊れたのか分かりません**。
-     * 追っかけ再生や、まだ焼けていないところへ跳んだときに数秒待つことがある
+     * 跳んだ直後や回線が細いときは数秒待つことがある
      */
     let buffering = $state(false);
     let bufferTimer: ReturnType<typeof setTimeout> | null = null;
@@ -905,8 +905,8 @@
     /**
      * いまの位置に合う1枚を重ねる。**変わったときだけ描く。**
      *
-     * canvas は**映像の画素そのままの大きさ**にして、CSS で伸ばす
-     * (`object-contain`)。位置合わせはブラウザ任せで、こちらは放送が言う座標に
+     * canvas は**字幕の面の画素そのままの大きさ**にして、置き場所と大きさは
+     * `place` (fitRect) が映像の絵に合わせる。こちらは放送が言う座標に
      * そのまま置けばよい — **左右の位置がそのまま出る**のはこのため
      */
     function paint(): void {
@@ -1017,10 +1017,10 @@
     const remaining = $derived(Math.max(0, (length - at) / (speed || 1)));
 
     /**
-     * 左に出す中身。**録画の行が持っているぶんだけ**で組み立てる。
+     * 右に出す中身。**録画の行が持っているぶんだけ**で組み立てる。
      *
-     * 出演者などは番組表の側にあり、24時間で消える。引けるうちは「詳細」から
-     * 引き直す (`programDetail`)
+     * 出演者などは番組表の側にあり、24時間で消える。引けるうちは開いた時点で
+     * 引き直す (`loadDetail`)
      */
     const facts = $derived({
         name: rec.name,
@@ -1044,7 +1044,7 @@
      * 引けなければ行のぶんだけが出たままになる (古い録画は消えている)
      */
     function loadDetail(): void {
-        // 種は左に出している中身そのもの。**別に組み直さない** — 組み直していた頃は
+        // 種は右に出している中身そのもの。**別に組み直さない** — 組み直していた頃は
         // ジャンル・音声を落としていて、番組表から消えた録画で札が出なかった
         void detail.open(rec.program_id, facts);
     }
@@ -1150,7 +1150,7 @@
                 {#snippet children(_stage)}
                 <!--
                     **押すのは絵そのもの。** ボタンを避けて敷くのではなく、
-                    ボタンを上に重ねる (z-index 10)。`onclick` は `press` が読む
+                    ボタンを上に重ねる (z-index 10)。押す口は自分で繋ぐ (`press` の effect)
                 -->
                 <!-- svelte-ignore a11y_media_has_caption -->
                 <!--
@@ -1159,7 +1159,6 @@
                     放送どおりには出ない (左右の位置・背景の箱・外字が落ちる)。
                     絵のまま重ねる — ライブと同じやり方 (下の canvas)
                 -->
-                <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_noninteractive_element_interactions -->
                 <!--
                     **映像の箱。BML はこれを動かす** (`DataBroadcast` の place)。ライブと同じ。
                     **class ではなく style で書く** — 理由は `MediaStack.svelte` (影の中へ移されると
@@ -1239,8 +1238,7 @@
                 />
 
                 <!--
-                    **放送の字幕。** 映像と同じ枠に、映像の画素そのままの大きさで
-                    敷いて、CSS で伸ばす (`object-fit: contain`)。**押す邪魔をしない**
+                    **放送の字幕。** 字幕の面の画素で敷き、映像の絵に重ねる (`place`)。**押す邪魔をしない**
                     (`pointer-events: none`) — 下の絵を押して止められなくなる
                 -->
                 <canvas
@@ -1663,7 +1661,7 @@
     .not-ready h2 {
         font-size: 1rem;
     }
-    /* 字幕・CM の蓋。位置と大きさは描くとき (paint) に style で決まる */
+    /* 字幕・CM の蓋。位置と大きさは place が style で決める */
     .layer {
         pointer-events: none;
         position: absolute;

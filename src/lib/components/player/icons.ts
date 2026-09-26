@@ -91,7 +91,7 @@ export const OVERLAY_ROUND = 'ov-round';
  */
 export const OVERLAY_DANGER = 'ov-danger';
 
-/** 押されている間の見た目 (字幕を出しているとき・ライブに居るとき) */
+/** 押されている間の見た目 (字幕を出しているときなど。ライブに居るときは EdgeButton の OVERLAY_DANGER) */
 export const OVERLAY_ON = 'ov-on';
 
 /**

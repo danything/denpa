@@ -181,12 +181,12 @@ export function livePlayer() {
     let state = $state<LiveState>('idle');
     let message = $state('');
     let tuned = $state<Tuned | null>(null);
-    /** 音を止められているか。**自動再生を断られたときだけ立つ** */
+    /** 音を消しているか (押して消した・自動再生を断られた) */
     let silenced = $state(false);
     /**
-     * 放送からどれだけ遅れているか (秒)。**受け取った最後の絵と、いま映して
-     * いる絵の差。** ここが遅延の大半で、焼き方より効く。出しているのは、
-     * 詰まりが増えていないかを見ながら詰めていくため
+     * 手元に貯めている長さ (秒)。**受け取った最後の絵と、いま映している絵の差**
+     * (`buffered.end - currentTime`。放送との差は `fromAir`)。ここが遅延の大半で、
+     * 焼き方より効く。出しているのは、詰まりが増えていないかを見ながら詰めていくため
      */
     let delay = $state<number | null>(null);
     /** 止めているか。**押して止めた間も受け取り続ける** */
@@ -909,7 +909,7 @@ export function livePlayer() {
             try {
                 await video.play();
             } catch {
-                // それでも駄目。備え付けの再生ボタンを押してもらう
+                // それでも駄目。画面の再生ボタンを押してもらう
             }
         }
     }
@@ -1025,10 +1025,10 @@ export function livePlayer() {
     }
 
     /**
-     * 追っかけの速さを選ぶ。**追っかけている間だけ効く。**
+     * 追っかけの速さを選ぶ。**遅れて見ているとき (と追っかけ再生) だけ効く。**
      *
-     * ライブに張り付いているときに速められては困る (放送より先は無い) ので、
-     * ここで選べるのは遅れて見ているときだけ。追いついたら 1 に戻す (`pace`)
+     * ライブに張り付いているときに速められては困る (放送より先は無い)。
+     * 追いついたら 1 に戻す (`pace`)
      */
     function setSpeed(next: number): void {
         // 追っかけ再生 (`chase`) では常に選べる — 放送の今より先が無いのはライブだけ
@@ -1627,11 +1627,6 @@ export function livePlayer() {
                     pace(video);
                 });
                 /*
-                 * **詰まったことを覚えておく。** 宅内と宅外で必要な貯めの量は
-                 * 桁違いに違うのに、どちらから見ているかは分からない。
-                 * 実際に止まったかどうかで決める (`nextTarget`)
-                 */
-                /*
                  * **絵が用意できた時点で、前の局の静止画を剥がす。**
                  *
                  * 剥がすのを `play()` のあとに置いていた頃は、**貼ったまま次の局の
@@ -1645,6 +1640,11 @@ export function livePlayer() {
                  * 54〜80ms 遅れて剥がれていた
                  */
                 video.addEventListener('loadedmetadata', () => onFrame(video, thaw), { once: true });
+                /*
+                 * **詰まったことを覚えておく。** 宅内と宅外で必要な貯めの量は
+                 * 桁違いに違うのに、どちらから見ているかは分からない。
+                 * 実際に止まったかどうかで決める (`nextTarget`)
+                 */
                 video.addEventListener('waiting', () => {
                     if (paused || Date.now() < quiet) return;
                     stalled = true;
@@ -1671,7 +1671,7 @@ export function livePlayer() {
         get silenced() {
             return silenced;
         },
-        /** 放送からどれだけ遅れているか (秒)。再生していないときは null */
+        /** 手元に貯めている長さ (秒)。再生していないときは null */
         get delay() {
             return delay;
         },
@@ -1694,17 +1694,14 @@ export function livePlayer() {
         get remembered() {
             return floor;
         },
-        /** 絵だけの遅れ (秒)。音と字幕は再生位置に乗っているので、ここが開くと口が合わない */
-        get slip() {
-            return slip;
-        },
-        /** 絵の遅れを直すために跳び直した回数 */
+        /** 放送からの遅れ (秒)。隣のテレビとの差 */
         get fromAir() {
             return fromAir;
         },
         get slipMost() {
             return slipMost;
         },
+        /** 絵の遅れを直すために跳び直した回数 */
         get slips() {
             return slips;
         },
@@ -1715,10 +1712,6 @@ export function livePlayer() {
         /** 放送の今に張り付いているか */
         get live() {
             return live;
-        },
-        /** いまどれだけ貯めているか (秒)。詰まると伸びる */
-        get buffering() {
-            return target;
         },
         /** どこまで戻れるか (いちばん古い時刻) */
         get oldest() {
@@ -1807,10 +1800,6 @@ export function livePlayer() {
         /* ---- 追っかけ再生 ([issue #16](https://github.com/danything/denpa/issues/16)) ---- */
         openChase,
         chaseSeek,
-        /** 追っかけ再生か。録画中の録画を観ている */
-        get chaseMode() {
-            return chase !== null;
-        },
         /** 追っかけの再生位置 (秒)。焼き直しをまたいで通しで数える */
         get chasePosition() {
             return chase === null ? 0 : chase.base + position;

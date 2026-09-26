@@ -189,11 +189,9 @@
     $effect(() => {
         awake.on = player.state !== 'idle' && player.state !== 'error';
     });
-    const controlsShown = $derived(controls.shown);
-    const toggle = controls.toggle;
 
     /** 真ん中あたりを素早く2回で再生/一時停止 (`center-tap.ts`)。1回目は操作列の出し入れ */
-    const stageTap = centerTap(() => player.toggle(), toggle);
+    const stageTap = centerTap(() => player.toggle(), controls.toggle);
 
     /**
      * **いまの1コマを字幕ごと切り抜く。観る画面 (`/watch/<id>`) と同じやり方。**
@@ -257,9 +255,8 @@
                 bind:box={mediaBox}
             />
 
-
             <!--
-                **データ放送。** 映像はここ (`frame`) に居るとだけ伝えて、
+                **データ放送。** 映像はここ (`media`) に居るとだけ伝えて、
                 描くのは借りものに任せる。押されるまで 700KB を取りに行かない。
                 **局が変わったら作り直す** — カルーセルも覚えるものも局ごと
             -->
@@ -282,7 +279,7 @@
                     d ボタンと切り抜きが画面ごとに違う場所にあると、押すたびに
                     探し直すことになる。いちばん上は録画 (観る画面では「閉じる」の位置)
                 -->
-                <ControlBar side shown={controlsShown} testid="live-side">
+                <ControlBar side shown={controls.shown} testid="live-side">
                     <!--
                         **いま観ている番組を録る。** 手動予約と同じ道 (`?/record`) に
                         乗せるだけで、数秒後にはこの番組の録画が始まる。既に録って
@@ -308,18 +305,14 @@
                 </ControlBar>
 
                 <!--
-                    自前の操作列。**放送の今に居るときは右端に張り付く。**
-                    止めても受け取りは続くので、止めた所から見られる。
-
+                    自前の操作列。止めても受け取りは続くので、止めた所から見られる。
                     絵が出る前から出しておく — 出たり消えたりすると、押そうとした
-                    ところで動くことになる
+                    ところで動くことになる。
+
+                    **しばらく触らなければ消える** (`ControlBar`。止めていても引っ込み、
+                    残すのはキーボードで触っている間だけ)。**観る画面と同じ帯**
                 -->
-                <!--
-                    **しばらく触らなければ消える** (`ControlBar`)。絵の上に居座る
-                    ものなので、見ている間は引っ込んでいるほうがいい。止めている間と、
-                    キーボードで触っている間は残す。**観る画面と同じ帯**
-                -->
-                <ControlBar shown={controlsShown} testid="live-controls">
+                <ControlBar shown={controls.shown} testid="live-controls">
                     <!--
                         **上に位置、下に押すもの。観る画面と同じ二段。**
                         ([watch/[id]/+page.svelte](../watch/%5Bid%5D/+page.svelte))
@@ -335,7 +328,7 @@
                         溜まりが増えるたびに摘みが左へ動く。見ている人には
                         「勝手に戻っている」としか映らない
                     -->
-                    <!-- 操作の色は3画面同一 (`range-primary`)。ライブ中の赤は「ライブ」ボタンが言う -->
+                    <!-- 操作の色は `input[type=range].fill` (app.scss)。ライブ中の赤は「ライブ」ボタンが言う -->
                     <input
                         type="range"
                         class="seek fill"
@@ -394,7 +387,6 @@
                         データ放送 (d) と切り抜きは**右上の縦列** (`live-side`) —
                         観る画面と同じ場所に揃えてある。
 
-                        **Hybridcast。載っている番組でだけ出す。**
                         **Hybridcast。載っている番組でだけ出す。**
 
                         データ放送と違って、**アプリは電波に乗っていません** —
@@ -623,7 +615,7 @@
             {#if player.state !== 'playing'}
                 <!--
                     何も出ていない間に何が起きているかを出す。黒いままだと壊れて
-                    見える。見た目の決まりは3画面共通 (`PlayerVeil`)。
+                    見える。見た目の決まりは追っかけと共通 (`PlayerVeil`)。
                     **繋ぎ直しの最中は、そう言う** — サーバの入れ替え (デプロイ) で
                     切れると数十秒帰ってこないので、回っているものだけだと壊れて見える
                 -->

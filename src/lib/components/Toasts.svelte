@@ -101,20 +101,14 @@
     }
 
     const shown = $derived(notices.filter((notice) => !dismissed.includes(notice.key)));
-
-    /** 見た目は app.scss の notice(error / info / success) */
-    const STYLE: Record<Notice['kind'], string> = {
-        error: 'error',
-        info: 'info',
-        success: 'success',
-    };
 </script>
 
 {#if shown.length > 0}
     <!-- 右下に浮かせる。z-index はモーダル(60)の下・本文の上 -->
     <div class="toasts">
         {#each shown as notice (notice.key)}
-            <div class="notice {STYLE[notice.kind]} toast" data-testid={notice.key}>
+            <!-- 見た目は app.scss の notice (error / info / success。kind と同じ名前) -->
+            <div class="notice {notice.kind} toast" data-testid={notice.key}>
                 <span class="text">{notice.text}</span>
                 <button type="button"
                     class="ghost xs close"
