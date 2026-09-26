@@ -4,6 +4,7 @@
     import Toasts, { errorNotice, type Notice } from '$lib/components/Toasts.svelte';
     import { SERVICE_TYPE_LABEL, STATE_LABEL as SHARED_STATE_LABEL } from '$lib/format';
     import { held, liveUpdates } from '$lib/live-updates.svelte';
+    import type { CardReaderState } from '$lib/server/scramble';
 
     let { data, form } = $props();
 
@@ -49,6 +50,15 @@
      */
     const shownTuners = held(() => data.tuners);
     const shownCard = held(() => data.card);
+
+    /** カードリーダーの行の呼び名。`unknown` は前の版のエージェント (名前しか返さない) */
+    const READER_STATE: Record<CardReaderState, { label: string; tone: string }> = {
+        active: { label: '使用中', tone: 'success' },
+        standby: { label: '予備', tone: '' },
+        empty: { label: 'カードなし', tone: '' },
+        error: { label: 'エラー', tone: 'error' },
+        unknown: { label: '—', tone: '' },
+    };
 
     /** 番組表がどこまで埋まっているか。「8/9 まで」の形で出す */
     function until(at: number): string {
@@ -458,24 +468,93 @@
 
             <!--
                 カードリーダー。**同じ機材の話**なのでここに置く。
-                掛かったまま録れてしまうのを避けるには、録る前に気づけること
+                掛かったまま録れてしまうのを避けるには、録る前に気づけること。
+
+                **使うカードは1枚** (エージェントの Card.cs)。どのチューナーもその1枚の鍵で
+                解くので、「使っているチューナー」は使用中の行にだけ並ぶ。他のリーダーは予備で、
+                使用中のカードが答えなくなったら繋ぎ直すときに拾われる
             -->
-            <div class="cluster reader">
-                <span class="label">カードリーダー</span>
-                {#if shownCard.value === undefined}
-                    <span class="tag" data-testid="status-card-reader">確認中</span>
-                {:else}
-                    {@const card = shownCard.value}
-                    <span class="tag {card.ok ? 'success' : 'error'}" data-testid="status-card-reader">
-                        {card.ok ? 'OK' : 'NG'}
-                    </span>
-                    <span class="tiny muted full">{card.message}</span>
-                    <!-- 同じ型のリーダーを2つ挿すと名前が並ぶ。目印は番号で -->
-                    {#each card.readers as reader, i (i)}
-                        <span class="tiny muted full mono break">
-                            {reader}
+            <div class="reader">
+                <div class="cluster">
+                    <span class="label">カードリーダー</span>
+                    {#if shownCard.value === undefined}
+                        <span class="tag" data-testid="status-card-reader">確認中</span>
+                    {:else}
+                        {@const card = shownCard.value}
+                        <span class="tag {card.ok ? 'success' : 'error'}" data-testid="status-card-reader">
+                            {card.ok ? 'OK' : 'NG'}
                         </span>
-                    {/each}
+                        {#if card.source === 'remote'}
+                            <!-- CARD_URL。手元のリーダーは使わず、鍵だけ貰っている -->
+                            <span class="small" data-testid="card-remote">
+                                鍵を配る相手 <span class="mono break">{card.remote ?? '?'}</span> から貰っています
+                                {#if card.ids.length > 0}
+                                    <span class="mono">({card.ids.join(' / ')})</span>
+                                {/if}
+                                {#if card.tuners.length > 0}
+                                    — {card.tuners.join('、')}
+                                {/if}
+                            </span>
+                        {/if}
+                    {/if}
+                </div>
+                {#if shownCard.value !== undefined}
+                    {@const card = shownCard.value}
+                    <!-- 困っているときだけ。名前と番号は表に出る -->
+                    {#if card.message !== ''}
+                        <div
+                            class={card.ok ? 'tiny muted' : 'notice error small'}
+                            data-testid="card-message"
+                        >
+                            {card.message}
+                        </div>
+                    {/if}
+                    {#if card.readers.length > 0}
+                        <div class="table-wrap">
+                            <table>
+                                <thead>
+                                    <tr>
+                                        <th>リーダー</th>
+                                        <th>カード (番号)</th>
+                                        <th>状態</th>
+                                        <th class="wide">使っているチューナー</th>
+                                    </tr>
+                                </thead>
+                                <tbody data-testid="card-reader-list">
+                                    <!-- 同じ型のリーダーを2つ挿すと名前が並ぶ。目印は番号で -->
+                                    {#each card.readers as reader, i (i)}
+                                        <tr data-testid="card-reader-row" data-state={reader.state}>
+                                            <td class="small break">{reader.name}</td>
+                                            <td class="nowrap small mono">
+                                                {#if reader.ids.length > 0}
+                                                    {reader.ids.join(' / ')}
+                                                {:else}
+                                                    <span class="muted">—</span>
+                                                {/if}
+                                            </td>
+                                            <td class="nowrap">
+                                                <span class="tag {READER_STATE[reader.state].tone}">
+                                                    {READER_STATE[reader.state].label}
+                                                </span>
+                                                {#if reader.error !== undefined}
+                                                    <div class="text-error tiny" data-testid="card-reader-error">
+                                                        {reader.error}
+                                                    </div>
+                                                {/if}
+                                            </td>
+                                            <td class="small">
+                                                {#if reader.tuners.length > 0}
+                                                    {reader.tuners.join('、')}
+                                                {:else}
+                                                    <span class="muted">—</span>
+                                                {/if}
+                                            </td>
+                                        </tr>
+                                    {/each}
+                                </tbody>
+                            </table>
+                        </div>
+                    {/if}
                 {/if}
             </div>
         </section>
@@ -714,6 +793,9 @@
         margin-top: 0.5rem;
     }
     .reader {
+        display: flex;
+        flex-direction: column;
+        gap: 0.5rem;
         margin-top: 0.5rem;
         padding-top: 0.75rem;
         border-top: 1px solid var(--dp-base-300);

@@ -37,6 +37,12 @@ public interface IKeySource
     EcmAnswer Ecm(ReadOnlySpan<byte> ecm);
 }
 
+/// <summary>
+/// リーダーにカードが挿さっていない。**壊れているのではない**ので、画面では
+/// 「エラー」ではなく「カードなし」と出す (<see cref="Card.Status"/>)
+/// </summary>
+public sealed class CardAbsentException(string message) : IOException(message);
+
 /// <summary>見つかったカードリーダー。開くまでは何も掴まない</summary>
 public sealed record CardLinkCandidate(string Name, Func<ICardLink> Open);
 

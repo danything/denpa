@@ -300,7 +300,7 @@ app.MapPut("/denpa/channels", async (HttpContext http) =>
 });
 
 // --- カードとスクランブル解除 ---------------------------------------------
-app.MapGet("/denpa/card", async (HttpContext http) => await Respond.Write(http, await Task.Run(Card.Status)));
+app.MapGet("/denpa/card", async (HttpContext http) => await Respond.Write(http, await Task.Run(() => Card.Status(pool.Descrambling))));
 
 app.MapPost("/denpa/decode", async (HttpContext http) =>
 {

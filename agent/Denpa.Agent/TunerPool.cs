@@ -528,6 +528,19 @@ public sealed class TunerPool(
         }
     }
 
+    /// <summary>
+    /// いまカードの鍵で解いているチューナーの名前 (画面の「カードリーダー」の表)。
+    /// **カードは1枚を全部で使い回す** (<see cref="Keys"/>) ので、ここに並ぶのは
+    /// どれも使用中のカードを使っている
+    /// </summary>
+    public IReadOnlyList<string> Descrambling()
+    {
+        lock (_gate)
+        {
+            return [.. _leases.Where(pair => pair.Value.Descrambling).OrderBy(pair => pair.Key).Select(pair => Tuners[pair.Key].Name)];
+        }
+    }
+
     /// <summary>全部畳む。止めるときに使う</summary>
     public void CloseAll()
     {
@@ -656,6 +669,9 @@ internal sealed class Lease(int tuner, string type, string channel)
     private Task? _pump;
     /// <summary>解き手が終わった (失敗も含む)。**読み手も降りる** — 残ると読み口を掴んだまま回り続ける</summary>
     private volatile bool _drained;
+    /// <summary>解き手が回っている (<see cref="TunerPool.Descrambling"/>)</summary>
+    public bool Descrambling { get => _descrambling; private set => _descrambling = value; }
+    private volatile bool _descrambling;
     /// <summary>読み手と解き手の間に溜まっているバイト数</summary>
     private long _queued;
 
@@ -765,6 +781,7 @@ internal sealed class Lease(int tuner, string type, string channel)
     private void Descramble(ChannelReader<(byte[] Rented, int Length)> queue, Action onExit)
     {
         var b25 = new Descrambler(Keys.Source);
+        Descrambling = true;
         var decoded = new ArrayBufferWriter<byte>();
         void Push()
         {
@@ -806,6 +823,7 @@ internal sealed class Lease(int tuner, string type, string channel)
             Error ??= error.Message;
         }
         _drained = true;
+        Descrambling = false;
         /*
          * **解けなかったぶんを残す。** 掛かったまま流したものは、録画が
          * 成功したように見えて中身が見られない。理由も添える
