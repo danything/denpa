@@ -125,6 +125,16 @@ public class Px4Tests
         await Assert.That(warned[0]).Contains("ISDB-S3");
     }
 
+    /// <summary>同じ鍵が2度ある行は最初の値を採る (筐体の行と同じ <see cref="Px4Userland.Fields"/>)。投げない</summary>
+    [Test]
+    public async Task 同じ鍵が2度あれば最初の値()
+    {
+        var receivers = Px4Receiver.ParseList("receiver=3 device=1 system=ISDB-T system=ISDB-S", _ => { });
+        await Assert.That(receivers.Count).IsEqualTo(1);
+        await Assert.That(receivers[0].Index).IsEqualTo(3);
+        await Assert.That(receivers[0].Types).IsEquivalentTo(["GR"], CollectionOrdering.Matching);
+    }
+
     [Test]
     public async Task 筐体と受信機から設定の形に組み立てる()
     {
