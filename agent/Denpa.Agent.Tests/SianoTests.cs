@@ -135,7 +135,8 @@ public class SianoTests
     /// <summary>
     /// 偽の siano-ts --control。起きたらまず前の選局の残りに見立てて **pipe より多く** 書き、
     /// それから標準入力を読む (本物も「書く → 標準入力を見る」の1本の輪)。
-    /// <c>tune 1</c> は同期しない。それ以外は少し待ってから (本物の同期待ち)
+    /// <c>tune 1</c> は同期しない。<c>tune 2</c> は前の選局の答え (別の周波数の <c>tuned</c>) を
+    /// 先に吐く。<c>tune 3</c> は答えない。それ以外は少し待ってから (本物の同期待ち)
     /// <c>tuned</c> を返し、<c>NEW&lt;Hz&gt;</c> を書き続ける (本物の TS も流れ続ける。
     /// <c>tuned</c> の直後の少しは読み捨てに食われるので、1行だけだと届かない)
     /// </summary>
@@ -145,6 +146,9 @@ public class SianoTests
           case "$line" in
             "tune 1") echo "ISDB-T tune response received but no demod lock" >&2
                       echo "control: tune failed: Connection timed out" >&2 ;;
+            "tune 2") echo "tuned 473142857" >&2; sleep 0.1; echo "tuned 2" >&2
+                      i=0; while [ $i -lt 2000 ]; do echo "NEW2"; i=$((i+1)); done ;;
+            "tune 3") sleep 30 ;;
             tune\ *) sleep 0.3; echo "tuned ${line#tune }" >&2
                      i=0; while [ $i -lt 2000 ]; do echo "NEW${line#tune }"; i=$((i+1)); done ;;
             quit) exit 0 ;;
@@ -224,6 +228,40 @@ public class SianoTests
         tuner.Tune(ChannelTable.Parse("T27")!, ChannelTable.NoStreamId);
         await Assert.That(ReadLine(tuner.Output)).IsEqualTo("NEW557142857");
         for (var i = 0; i < 50 && tuner.Tuned; i++) await Task.Delay(100);
+        await Assert.That(tuner.Tuned).IsFalse();
+
+        tuner.Tune(ChannelTable.Parse("T13")!, ChannelTable.NoStreamId);
+        await Assert.That(starts).IsEqualTo(2);
+        await Assert.That(ReadLine(tuner.Output)).IsEqualTo("NEW473142857");
+    }
+
+    [Test]
+    public async Task 別の周波数の_tuned_は答えにしない()
+    {
+        if (!OperatingSystem.IsLinux()) return;
+        using var tuner = Fake();
+        tuner.Tune(ChannelTable.Parse("T27")! with { Frequency = 2 }, ChannelTable.NoStreamId);
+        await Assert.That(ReadLine(tuner.Output)).IsEqualTo("NEW2");
+    }
+
+    [Test]
+    public async Task 答えが来なければ子を捨てて_次は起こし直す()
+    {
+        if (!OperatingSystem.IsLinux()) return;
+        var starts = 0;
+        using var tuner = new SianoTuner(
+            "siano fake",
+            () =>
+            {
+                starts++;
+                return new ProcessStartInfo("/bin/sh") { ArgumentList = { "-c", FakeSianoTs } };
+            },
+            TimeSpan.FromSeconds(1));
+
+        var error = Assert.Throws<IOException>(
+            () => tuner.Tune(ChannelTable.Parse("T27")! with { Frequency = 3 }, ChannelTable.NoStreamId));
+        await Assert.That(error.Message).Contains("同期しませんでした");
+        // 遅れて来る答えが次の選局に紛れないよう、子はもう居ない
         await Assert.That(tuner.Tuned).IsFalse();
 
         tuner.Tune(ChannelTable.Parse("T13")!, ChannelTable.NoStreamId);

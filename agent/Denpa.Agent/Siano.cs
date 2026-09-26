@@ -220,6 +220,7 @@ public sealed class SianoTuner : ITuneDevice
 
     private readonly string _name;
     private readonly Func<ProcessStartInfo> _start;
+    private readonly TimeSpan _tuneTimeout;
     private readonly Lock _gate = new();
     private Child? _child;
     private DeviceStream? _stream;
@@ -255,11 +256,12 @@ public sealed class SianoTuner : ITuneDevice
     {
     }
 
-    /// <summary>起こし方を差し替える (テスト。偽の siano-ts を起こす)</summary>
-    internal SianoTuner(string name, Func<ProcessStartInfo> start)
+    /// <summary>起こし方と待ちの上限を差し替える (テスト。偽の siano-ts を起こす)</summary>
+    internal SianoTuner(string name, Func<ProcessStartInfo> start, TimeSpan? tuneTimeout = null)
     {
         _name = name;
         _start = start;
+        _tuneTimeout = tuneTimeout ?? TuneTimeout;
     }
 
     public Stream Output => _stream ?? throw new InvalidOperationException($"{_name} はまだ選局していません");
@@ -387,11 +389,13 @@ public sealed class SianoTuner : ITuneDevice
         });
 
         string? failure = null;
+        // 答えを信じられなくなった。子を捨てて、次の選局で起こし直す
+        var uncertain = false;
         try
         {
             child.Process.StandardInput.WriteLine(command);
             child.Process.StandardInput.Flush();
-            failure = Await(child);
+            (failure, uncertain) = Await(child, command, _tuneTimeout);
         }
         catch (IOException)
         {
@@ -403,38 +407,58 @@ public sealed class SianoTuner : ITuneDevice
         finally
         {
             Volatile.Write(ref answered, 1);
-            drain.Wait(TimeSpan.FromSeconds(2));
+            /*
+             * **読み捨てが降りきるまで返さない。** 降りないまま返すと、次の読み手と
+             * 同じ fd を取り合う。Read は 200ms ごとに起きて印を見るので普通は
+             * すぐ降りるが、降りなければ子ごと捨てる (Drop が読み口を止めて閉じる)
+             */
+            if (!drain.Wait(TimeSpan.FromSeconds(2)))
+            {
+                failure ??= "siano-ts の標準出力を読み捨てるところが止まりません";
+                uncertain = true;
+            }
         }
+        if (uncertain) Drop();
         if (failure is not null) throw new IOException(failure);
     }
 
-    /// <summary><c>tuned</c> なら null、駄目なら理由</summary>
-    private string? Await(Child child)
+    /// <summary>
+    /// 答えを待つ。<c>tuned &lt;頼んだ Hz&gt;</c> なら成功 (null)、駄目なら理由。
+    ///
+    /// <para>
+    /// **待ちきれなかったら、その子の答えはもう信じない** (<c>Uncertain</c>)。siano-ts は
+    /// まだ前の選局を続けていて、その答え (<c>tuned</c> / <c>tune failed</c>) が次の選局の
+    /// 答えに紛れ込むため。<c>tuned</c> は頼んだ周波数と突き合わせるが、<c>tune failed</c> には
+    /// 周波数が付かないので、子ごと捨てて起こし直すしかない。答えでない行 (警告など) は飛ばす
+    /// </para>
+    /// </summary>
+    private static (string? Failure, bool Uncertain) Await(Child child, string command, TimeSpan limit)
     {
-        using var timeout = new CancellationTokenSource(TuneTimeout);
+        var expected = $"tuned {command["tune ".Length..]}";
+        using var timeout = new CancellationTokenSource(limit);
         var before = "";
         try
         {
             for (; ; )
             {
                 var line = child.Lines.Reader.ReadAsync(timeout.Token).AsTask().GetAwaiter().GetResult();
-                if (line.StartsWith("tuned ", StringComparison.Ordinal)) return null;
+                if (line == expected) return (null, false);
                 if (line.StartsWith("control: tune failed", StringComparison.Ordinal) || line == "control: invalid")
                 {
                     // 直前の行のほうが分かりやすい (no demod lock など)
-                    return before.Length == 0 ? line : $"{before} ({line})";
+                    return (before.Length == 0 ? line : $"{before} ({line})", false);
                 }
                 before = line;
             }
         }
         catch (OperationCanceledException)
         {
-            return "同期しませんでした (電波が来ていないか、その周波数に放送がありません)";
+            return ("同期しませんでした (電波が来ていないか、その周波数に放送がありません)", true);
         }
         catch (System.Threading.Channels.ChannelClosedException)
         {
             child.Process.WaitForExit(TimeSpan.FromSeconds(2));
-            return Reason(child.Process.HasExited ? child.Process.ExitCode : -1, child.Last);
+            return (Reason(child.Process.HasExited ? child.Process.ExitCode : -1, child.Last), true);
         }
     }
 
