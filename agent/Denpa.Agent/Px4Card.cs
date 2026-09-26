@@ -8,9 +8,8 @@ namespace Denpa.Agent;
 /// px4d の内蔵カードリーダー。**px4d の制御ソケットに直に APDU を投げる。**
 ///
 /// <para>
-/// px4-userland のカードは px4d が持っていて (T=1 の枠組みも向こう)、pcscd には
-/// IFD ハンドラ越しに見せていた。そのハンドラがしているのと同じやり取り
-/// (SPEC 6 節の portable IPC) をこちらでするので、pcscd も IFD も要らない。
+/// px4-userland のカードは px4d が持っていて (T=1 の枠組みも向こう)、同梱の IFD ハンドラと
+/// 同じやり取り (SPEC 6 節の portable IPC) をこちらでする。pcscd も IFD ハンドラも使わない。
 /// </para>
 ///
 /// <para>
