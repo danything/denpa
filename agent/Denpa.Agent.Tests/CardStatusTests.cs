@@ -105,7 +105,8 @@ public class CardStatusTests
     {
         CardLinkCandidate[] found = [Failing("空 (usb 1-2)", new CardAbsentException("挿さっていません"))];
         var survey = Card.Local(
-            () => throw new IOException("どのリーダーでもカードを読めません (…)"), () => "", () => found, TimeSpan.FromSeconds(5));
+            () => throw new IOException("どのリーダーでもカードを読めません (空 (usb 1-2): 空 (usb 1-2) にカードが挿さっていません)"),
+            () => "", () => found, TimeSpan.FromSeconds(5));
         await Assert.That(survey.Ok).IsFalse();
         await Assert.That(survey.Message).IsEqualTo("どのリーダーにもカードが挿さっていません");
     }
@@ -115,10 +116,30 @@ public class CardStatusTests
     {
         CardLinkCandidate[] found = [Failing("壊れた (usb 1-3)", new IOException("INT を断られました"))];
         var survey = Card.Local(
-            () => throw new IOException("どのリーダーでもカードを読めません (壊れた: INT を断られました)"),
+            () => throw new IOException("どのリーダーでもカードを読めません (壊れた (usb 1-3): INT を断られました)"),
             () => "", () => found, TimeSpan.FromSeconds(5));
         await Assert.That(survey.Message).IsEqualTo("どのリーダーでもカードを読めません");
         await Assert.That(survey.Readers[0].Error).IsEqualTo("INT を断られました");
+    }
+
+    /// <summary>
+    /// **INT が通らないときはリーダーを開かない。** 覗きが掴んでいる間は繋ぎ直しが掴めず、
+    /// 画面を開くたびに締め出してカードが二度と読めなくなった (実機)
+    /// </summary>
+    [Test]
+    public async Task INTが通らないときはリーダーを開かない()
+    {
+        var opened = 0;
+        CardLinkCandidate[] found = [new("Gemplus (usb 4-11)", () =>
+        {
+            Interlocked.Increment(ref opened);
+            throw new IOException("開いてはいけない");
+        })];
+        var survey = Card.Local(
+            () => throw new IOException("どのリーダーでもカードを読めません (Gemplus (usb 4-11): リーダーが応答しません)"),
+            () => "", () => found, TimeSpan.FromSeconds(5));
+        await Assert.That(opened).IsEqualTo(0);
+        await Assert.That(survey.Readers[0].Error).IsEqualTo("リーダーが応答しません");
     }
 
     [Test]
