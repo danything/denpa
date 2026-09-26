@@ -86,6 +86,16 @@ public class Px4Tests
     }
 
     [Test]
+    public async Task 受信機の行は_CRLF_でも読む()
+    {
+        // Windows では筐体の一覧から受信機の行を集め直すときに CRLF が付く。行末の \r を値に残さない
+        var found = Receivers(Q3u4List.ReplaceLineEndings("\r\n"));
+
+        await Assert.That(found.Count).IsEqualTo(8);
+        await Assert.That(found[2].Types).IsEquivalentTo(["GR"], CollectionOrdering.Matching);
+    }
+
+    [Test]
     public async Task 何も刺さっていなければ空()
     {
         await Assert.That(Px4Userland.ParseList("", _ => { })).IsEmpty();
