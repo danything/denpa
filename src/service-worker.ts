@@ -12,7 +12,7 @@
  * 預けたダウンロードが終わったら IndexedDB へ移す。配信のキャッシュはしない。
  */
 
-import { parseFetchId, storeResponse, videos } from '$lib/offline-db';
+import { type OfflineVideo, parseFetchId, storeResponse, videos } from '$lib/offline-db';
 import { build, files, version } from '$service-worker';
 
 const CACHE = `denpa-${version}`;
@@ -91,18 +91,34 @@ async function tellClients(message: unknown): Promise<void> {
 }
 
 /**
+ * 知らせの宛先の控え。**画面側の控えが無い (先に消された) か、別の試み
+ * (やり直したあとに届いた前回の残骸) なら null** — やり直しの控えを
+ * 前回の残骸の知らせが上書きしないように、印を照合する
+ */
+async function heldFor(event: BackgroundFetchEvent): Promise<OfflineVideo | null> {
+    const parsed = parseFetchId(event.registration.id);
+    if (parsed === null) return null;
+    const held = await videos.get(parsed.id);
+    if (held === undefined || (held.attempt ?? '') !== parsed.attempt) return null;
+    return held;
+}
+
+/** 失敗として残す (やり直す口になる) */
+async function markFailed(held: OfflineVideo): Promise<void> {
+    held.state = 'failed';
+    await videos.put(held);
+    await tellClients({ type: 'offline-failed', id: held.id });
+}
+
+/**
  * ブラウザが運び終えた。**結果を IndexedDB へ移して初めて「保存済み」になる。**
  * 動画以外の付き添いは無い録画もある (404)。取れたぶんだけ持つ
  */
 worker.addEventListener('backgroundfetchsuccess', (event) => {
-    const parsed = parseFetchId(event.registration.id);
-    if (parsed === null) return;
     event.waitUntil(
         (async () => {
-            const held = await videos.get(parsed.id);
-            if (held === undefined) return; // 画面側の控えが無い (先に消された)
-            // 別の試み (やり直したあとに届いた前回の残骸) は仕舞わない
-            if ((held.attempt ?? '') !== parsed.attempt) return;
+            const held = await heldFor(event);
+            if (held === null) return;
 
             for (const record of await event.registration.matchAll()) {
                 // 1つ読めなくても他は仕舞う。動画さえあれば観られる (下の確認)
@@ -115,18 +131,13 @@ worker.addEventListener('backgroundfetchsuccess', (event) => {
                 }
             }
 
-            if (held.video === undefined) {
-                // 肝心の動画が無いなら保存とは言えない。失敗として残す (やり直す口になる)
-                held.state = 'failed';
-                await videos.put(held);
-                await tellClients({ type: 'offline-failed', id: parsed.id });
-                return;
-            }
+            // 肝心の動画が無いなら保存とは言えない
+            if (held.video === undefined) return markFailed(held);
             held.state = 'ready';
             held.downloadedAt = Date.now();
             await videos.put(held);
             await event.updateUI?.({ title: `保存しました: ${held.name}` });
-            await tellClients({ type: 'offline-saved', id: parsed.id });
+            await tellClients({ type: 'offline-saved', id: held.id });
         })(),
     );
 });
@@ -138,18 +149,7 @@ worker.addEventListener('backgroundfetchsuccess', (event) => {
  * 見えていた。残った行が、そのままやり直す口になる
  */
 function drop(event: BackgroundFetchEvent): void {
-    const parsed = parseFetchId(event.registration.id);
-    if (parsed === null) return;
-    event.waitUntil(
-        (async () => {
-            // やり直しの控えを、**前回の残骸を中止した知らせ**が消さないように印を照合する
-            const held = await videos.get(parsed.id);
-            if (held === undefined || (held.attempt ?? '') !== parsed.attempt) return;
-            held.state = 'failed';
-            await videos.put(held);
-            await tellClients({ type: 'offline-failed', id: parsed.id });
-        })(),
-    );
+    event.waitUntil(heldFor(event).then((held) => (held === null ? undefined : markFailed(held))));
 }
 worker.addEventListener('backgroundfetchfail', drop);
 worker.addEventListener('backgroundfetchabort', drop);

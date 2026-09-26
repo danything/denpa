@@ -3,8 +3,7 @@
     import { arming } from '$lib/arming.svelte';
     import { dateTime, durationMs, percent, size } from '$lib/format';
     import { offline, rememberResume, removeEverywhere, removeLocal, startOffline } from '$lib/offline.svelte';
-    import type { OfflineVideo } from '$lib/offline-db';
-    import { resumeQueue, videos } from '$lib/offline-db';
+    import { type OfflineVideo, resumeQueue, videos } from '$lib/offline-db';
 
     /**
      * 端末に保存した録画。**電波が無くてもここだけは開く** — サービスワーカーが
