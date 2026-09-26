@@ -80,24 +80,33 @@ export class RawEngine {
         // 押すのは下の <video> (押し口がそこに付いている。`MediaStack`)
         this.canvas.style.cssText =
             'position:absolute; inset:0; width:100%; height:100%; object-fit:contain; background:#000; pointer-events:none;';
+        host.insertBefore(this.canvas, before);
 
-        this.context = new AudioContext({ latencyHint: 'playback' });
-        this.gain = this.context.createGain();
-        this.gain.connect(this.context.destination);
-        this.wall = this.context.state !== 'running';
-        // 押される前でも鳴らせることがある (前に押したことのあるサイト)。駄目なら押すまで壁時計
-        void this.context.resume().catch(() => undefined);
-        this.context.onstatechange = () => this.follow();
+        // 途中で転んだら (呼ぶ側が焼いたものに戻す) 作ったものを残さない
+        let context: AudioContext | null = null;
+        let worker: Worker | null = null;
+        try {
+            this.context = context = new AudioContext({ latencyHint: 'playback' });
+            this.gain = context.createGain();
+            this.gain.connect(context.destination);
+            this.wall = context.state !== 'running';
+            // 押される前でも鳴らせることがある (前に押したことのあるサイト)。駄目なら押すまで壁時計
+            void context.resume().catch(() => undefined);
+            context.onstatechange = () => this.follow();
 
-        this.worker = new Worker(new URL('./worker.ts', import.meta.url), { type: 'module' });
-        this.worker.onmessage = (event: MessageEvent<FromWorker>) => this.receive(event.data);
-        this.worker.onerror = () => this.giveUp('MPEG-2 の復号器が止まりました');
-        const offscreen = this.canvas.transferControlToOffscreen();
-        this.send({ type: 'init', canvas: offscreen, decoder: DECODER }, [offscreen]);
+            this.worker = worker = new Worker(new URL('./worker.ts', import.meta.url), { type: 'module' });
+            worker.onmessage = (event: MessageEvent<FromWorker>) => this.receive(event.data);
+            worker.onerror = () => this.giveUp('MPEG-2 の復号器が止まりました');
+            const offscreen = this.canvas.transferControlToOffscreen();
+            this.send({ type: 'init', canvas: offscreen, decoder: DECODER }, [offscreen]);
+        } catch (error) {
+            worker?.terminate();
+            void context?.close().catch(() => undefined);
+            this.canvas.remove();
+            throw error;
+        }
 
         this.timer = setInterval(() => this.tick(), TICK);
-        // 差し込むのは最後。途中で転んだら (呼ぶ側が焼いたものに戻す) 何も残さない
-        host.insertBefore(this.canvas, before);
     }
 
     /** どれだけ貯めるか (秒)。**決めるのは焼く道と同じ `pacing.nextTarget`** (live-player) */
