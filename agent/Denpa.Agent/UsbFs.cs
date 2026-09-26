@@ -127,6 +127,9 @@ public interface IBulkPipe : IDisposable
 
     /// <summary>1回のバルク転送で読めただけ返す。0 バイトのこともある (ZLP)</summary>
     int Read(Span<byte> buffer, int timeoutMs);
+
+    /// <summary>USB のポートをリセットして掴み直す。できない口 (テストの偽物) は何もしない</summary>
+    void ResetPort() { }
 }
 
 /// <summary>
@@ -155,6 +158,7 @@ public sealed unsafe partial class UsbFsPipe : IBulkPipe
     internal static readonly uint Bulk = Ioc(3, 2, sizeof(BulkTransfer));
     internal static readonly uint ClaimInterface = Ioc(2, 15, sizeof(uint));
     internal static readonly uint ReleaseInterface = Ioc(2, 16, sizeof(uint));
+    internal static readonly uint Reset = Ioc(0, 20, 0);
 
     private const int CloseOnExec = 0x80000;
 
@@ -262,6 +266,19 @@ public sealed unsafe partial class UsbFsPipe : IBulkPipe
             if (got < 0) throw Failure("リーダーから読めません");
             return got;
         }
+    }
+
+    /// <summary>
+    /// **USB のポートをリセットする** (<c>USBDEVFS_RESET</c>)。リーダーが途中のやり取りを
+    /// 抱えたまま固まったとき (前のエージェントがやり取りの最中に止められた、など)、
+    /// USB からは繋がって見えるのに何を送っても応えなくなる。人が unbind / bind していたのを
+    /// ここでやる。リセットで掴みが外れるので掴み直す
+    /// </summary>
+    public void ResetPort()
+    {
+        if (Sys.Ioctl(Fd, Reset, 0) < 0) throw Failure("リーダーをリセットできません");
+        var number = (uint)Interface.Number;
+        if (Sys.Ioctl(Fd, ClaimInterface, (nint)(&number)) < 0) throw Failure("リセットしたリーダーを掴み直せません");
     }
 
     private int Fd => _fd >= 0 ? _fd : throw new ObjectDisposedException(_path);

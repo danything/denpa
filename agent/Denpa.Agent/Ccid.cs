@@ -128,6 +128,9 @@ public sealed class CcidLink : ICardLink
     private T1Protocol? _t1;
     private int _bwtMs = 1500;
 
+    /// <summary>この線でもうポートをリセットした (固まったリーダーの立て直しは1回だけ)</summary>
+    private bool _portReset;
+
     /// <summary>電源を入れた (PowerOn を送った)。閉じるときに切る</summary>
     private bool _powered;
 
@@ -170,7 +173,18 @@ public sealed class CcidLink : ICardLink
         }
         _t1 = null;
         Atr = null;
-        Call(CcidMessage.PowerOff, []);
+        try
+        {
+            Call(CcidMessage.PowerOff, []);
+        }
+        catch (IOException) when (!_portReset)
+        {
+            // 最初の命令から黙るなら、リーダーが固まっている。ポートをリセットして1回だけやり直す
+            _portReset = true;
+            Log.Write($"{Name} が応えないので、USB のポートをリセットします");
+            _pipe.ResetPort();
+            Call(CcidMessage.PowerOff, []);
+        }
         _powered = false;
 
         byte[]? raw = null;
