@@ -1,6 +1,7 @@
 import { fail } from '@sveltejs/kit';
 import { and, desc, eq, gt, lte, sql } from 'drizzle-orm';
 import { LAST_COOKIE, type LiveCodec } from '$lib/live';
+import { clientAddress, mayStreamRaw } from '$lib/server/auth';
 import { orm } from '$lib/server/db';
 import { airing, CURRENT_SERVICES, SERVICE_ORDER, SERVICE_TYPE_ORDER } from '$lib/server/epg';
 import { warm } from '$lib/server/live';
@@ -46,7 +47,7 @@ export interface LiveChannel {
 function remembered(
     raw: string | undefined,
     channels: LiveChannel[],
-): { channel: LiveChannel; audio?: string; codec?: LiveCodec } | null {
+): { channel: LiveChannel; audio?: string; codec?: LiveCodec; raw?: boolean } | null {
     if (raw === undefined) return null;
     try {
         const saved = JSON.parse(raw) as Record<string, unknown>;
@@ -59,13 +60,16 @@ function remembered(
             ...(typeof saved['audio'] === 'string' ? { audio: saved['audio'] } : {}),
             // 覚えていない形を渡さない。知らない値なら既定 (H.264) に落ちる
             ...(saved['codec'] === 'av1' ? { codec: 'av1' as const } : {}),
+            // 前回は生で見ていた (`TuneCommand.raw`)。**先回りに使うだけ** — 決めるのは画面の設定
+            ...(saved['raw'] === true ? { raw: true } : {}),
         };
     } catch {
         return null;
     }
 }
 
-export function load({ url, cookies }) {
+export function load(event) {
+    const { url, cookies } = event;
     const at = Date.now();
     // テレビと同じ並び (SERVICE_TYPE_ORDER / SERVICE_ORDER)。番組表とも揃えてある
     const services: Service[] = orm()
@@ -159,7 +163,12 @@ export function load({ url, cookies }) {
      * WebSocket が繋がるまでの 160ms を、ffmpeg の立ち上がりと重ねる
      */
     if (start !== null) {
-        warm(start.channelType, start.channel, start.serviceId, start.audio, start.codec);
+        /*
+         * **前回が生なら生で温める。** ただし LAN から来ているときだけ — 札を取るときと
+         * 同じ判断 (`mayStreamRaw`)。外れても困らない (来なければ 8秒で畳む)
+         */
+        const raw = kept?.raw === true && mayStreamRaw(clientAddress(event));
+        warm(start.channelType, start.channel, start.serviceId, start.audio, start.codec, raw);
     }
 
     /*

@@ -87,6 +87,12 @@ export const config = {
     libraryDir: str('LIBRARY_DIR', '/library'),
 
     ffmpeg: str('FFMPEG', '/usr/local/bin/ffmpeg'),
+    /**
+     * ブラウザで MPEG-2 を解く WebAssembly の置き場 (ライブを生で送る道。docs/stream.md §5.5)。
+     * Dockerfile の `mpeg2wasm` 段が置く。**アプリの外にあるのは、開発の compose がソースを
+     * /app に被せるため** (中に置くと隠れる)。無ければ生の道は使えず、画面は焼いたものに戻る
+     */
+    mpeg2Dir: str('MPEG2_DIR', '/opt/denpa/mpeg2'),
     encodeConcurrency: num('ENCODE_CONCURRENCY', 1),
     /** 先頭が壊れていて初期化に失敗したときに頭を捨てて再試行する秒数 (enc.js 由来) */
     encodeRetrySeek: 0.2,

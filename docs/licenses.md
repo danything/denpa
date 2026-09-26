@@ -108,6 +108,18 @@ denpa 本体は上と同じコンテナイメージ `denpa` を、Mac の Docker
 | fast-xml-parser / fast-xml-builder | web-bml の BML → XHTML | <https://github.com/NaturalIntelligence/fast-xml-parser> | MIT |
 | cookie / devalue / set-cookie-parser / sirv / mrmime / totalist / esm-env / clsx | SvelteKit と adapter-node のランタイム | 各上流 | MIT |
 
+### ライブを生で見るときにブラウザへ配る復号器
+
+[Dockerfile](../Dockerfile) の `mpeg2wasm` 段で組み、イメージの `/opt/denpa/mpeg2` に置いて
+`/api/live/mpeg2/` から配る WebAssembly ([stream.md](stream.md#55-放送そのままmpeg-2を-lan-で送る))。
+**`--enable-gpl` を付けずに組んでいる**ので、中の FFmpeg は LGPL のまま (denpa 自身は AGPL で、
+どちらでも問題は無い)。ソースは Dockerfile が取ってくる FFmpeg の tarball と `wasm/mpeg2/decoder.c`。
+
+| 名前 | 何に | 出どころ | ライセンス |
+| --- | --- | --- | --- |
+| FFmpeg (libavcodec の mpeg2video 復号器と parser、libavutil だけ) | 放送の MPEG-2 をブラウザで解く | <https://ffmpeg.org> | LGPL-2.1+ |
+| emscripten の読み込み口 (`decoder.mjs` に埋まる実行時の糊) | WASM を worker に読み込む | <https://github.com/emscripten-core/emscripten> | MIT / University of Illinois/NCSA |
+
 ## 使っていないもの (書いておく価値のあるもの)
 
 - **JS-Interpreter (Google, Apache-2.0)** — web-bml の上流はかつてこれで BML の

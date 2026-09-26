@@ -16,26 +16,44 @@
 /** 札の寿命。取ってすぐ繋ぐだけなので短くてよい */
 const LIFETIME = 30_000;
 
-const issued = new Map<string, number>();
+/**
+ * 札で許すこと。**住所を見られるのは札を取るときだけ**なので、そこで決めて札に持たせる。
+ *
+ * WebSocket の口 (`server.js` の `Bun.serve`) からも接続元は見えるが、前段 (Traefik) が
+ * 居る構成ではそれは前段の住所で、本当の接続元はヘッダにしか無い。そのヘッダを
+ * 読み分けているのは SvelteKit の側 (`ADDRESS_HEADER`) なので、判断もそちらに寄せる
+ */
+export interface Grant {
+    /**
+     * **焼かずに生の TS を送ってよいか** (docs/stream.md §5.5)。LAN から来たときだけ
+     * (`auth.onLan`)。1局 15〜17 Mbit/s を宅外へ流さないため
+     */
+    raw: boolean;
+}
+
+const issued = new Map<string, { until: number; grant: Grant }>();
 
 /** 期限切れを片付ける。**配るときと使うときに掃く** (別に走らせるほどの量ではない) */
 function sweep(at: number): void {
-    for (const [token, until] of issued) {
-        if (until <= at) issued.delete(token);
+    for (const [token, held] of issued) {
+        if (held.until <= at) issued.delete(token);
     }
 }
 
 /** 1枚配る */
-export function issue(at: number = Date.now()): string {
+export function issue(grant: Grant = { raw: false }, at: number = Date.now()): string {
     sweep(at);
     const token = crypto.randomUUID();
-    issued.set(token, at + LIFETIME);
+    issued.set(token, { until: at + LIFETIME, grant });
     return token;
 }
 
-/** 使う。**使えるのは1回だけ** */
-export function redeem(token: string | null, at: number = Date.now()): boolean {
-    if (token === null) return false;
+/** 使う。**使えるのは1回だけ**。使えなければ null */
+export function redeem(token: string | null, at: number = Date.now()): Grant | null {
+    if (token === null) return null;
     sweep(at);
-    return issued.delete(token);
+    const held = issued.get(token);
+    if (held === undefined) return null;
+    issued.delete(token);
+    return held.grant;
 }

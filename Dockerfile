@@ -9,12 +9,42 @@ COPY package.json bun.lock* ./
 RUN bun install
 
 # ---------------------------------------------------------------------------
+# 放送の MPEG-2 をブラウザで解く WebAssembly (docs/stream.md §5.5「生で送る」)
+#
+# **ブラウザには MPEG-2 の復号器が無い**ので、FFmpeg の mpeg2video だけを組んで
+# 持ち込む。出てくるのは decoder.mjs と decoder.wasm の2つ (合わせて 500KB ほど) で、
+# どの arch で組んでも中身は同じ (wasm なので)。**置き場はアプリの外** (/opt/denpa/mpeg2) —
+# 開発と E2E の compose はソースを /app に被せるので、/app の中に置くと隠れる。
+# 配るのは `/api/live/mpeg2/<名前>` (MPEG2_DIR を読む)。
+#
+# FFmpeg は下の `ffmpeg` 段と同じ版に揃える (Renovate が同じ PR で2か所とも上げる)。
+# 組むのは復号器1つだけなので、1〜2分で終わる
+# ---------------------------------------------------------------------------
+FROM docker.io/emscripten/emsdk:6.0.10 AS mpeg2wasm
+# renovate: datasource=github-tags depName=FFmpeg/FFmpeg extractVersion=^n(?<version>.*)$
+ARG FFMPEG_VERSION=9.0.2
+COPY wasm/mpeg2/ /src/mpeg2/
+RUN mkdir /tmp/ffmpeg && \
+    curl -fsSL --retry 5 --retry-delay 5 --retry-all-errors --connect-timeout 20 \
+      https://ffmpeg.org/releases/ffmpeg-${FFMPEG_VERSION}.tar.bz2 | tar -xj --strip-components=1 -C /tmp/ffmpeg && \
+    bash /src/mpeg2/build.sh /tmp/ffmpeg /opt/denpa/mpeg2 && \
+    rm -rf /tmp/ffmpeg
+
+# 組んだ2つだけを取り出す口。**CI の E2E はイメージを使わずランナーで回す**ので、
+# `docker buildx build --target mpeg2wasm-out --output type=local,dest=…` でここだけ手元へ出す
+# (上の段をそのまま出すと emsdk ごと 3GB 出てくる)
+FROM scratch AS mpeg2wasm-out
+COPY --from=mpeg2wasm /opt/denpa/mpeg2 /
+
+# ---------------------------------------------------------------------------
 # 開発用。compose からソースを bind mount して使う
 # ---------------------------------------------------------------------------
 FROM docker.io/oven/bun:1.4-slim AS dev
 WORKDIR /app
 ENV NODE_ENV=development
 COPY --from=deps /app/node_modules ./node_modules
+# **ライブを生で送る道の復号器** (上の段)。/app の外に置くので bind mount に隠れない
+COPY --from=mpeg2wasm /opt/denpa/mpeg2 /opt/denpa/mpeg2
 COPY . .
 EXPOSE 5173
 CMD ["bun", "run", "dev", "--host", "0.0.0.0", "--port", "5173"]
@@ -222,6 +252,9 @@ RUN ldconfig && fc-cache -f
 # CM検出の一式。**これが既定** (設定画面の「CMの探し方」で「無音だけ」に戻せる)。
 # 3つのコマンドは denpa (src/lib/server/cm-jls.ts) から直接起動する
 COPY --from=jls /opt/jls /opt/jls
+
+# ライブを生で送るときにブラウザへ配る MPEG-2 の復号器 (`mpeg2wasm` 段)
+COPY --from=mpeg2wasm /opt/denpa/mpeg2 /opt/denpa/mpeg2
 
 # **node_modules は載せない。**
 #

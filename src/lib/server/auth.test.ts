@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
-import { configured, inNetwork, isFilePath, isOpenPath, trusted } from './auth';
+import { configured, inNetwork, isFilePath, isOpenPath, mayStreamRaw, onLan, trusted } from './auth';
 import { config } from './config';
 
 /**
@@ -127,6 +127,49 @@ describe('ネットワークの中なら素通しにする', () => {
         // CIDR でなく住所そのままでも書ける
         expect(trusted('192.168.1.5')).toBe(true);
         expect(trusted('192.168.1.6')).toBe(false);
+    });
+});
+
+/*
+ * **生の TS (1局 15〜17 Mbit/s) は家の中にだけ送る** (docs/stream.md §5.5)。
+ * 信頼したネットワークでも、全部開けてある (`0.0.0.0/0`) なら外の住所は外
+ */
+describe('生で送ってよい相手', () => {
+    const original = config.trustedNetworks;
+    afterEach(() => {
+        config.trustedNetworks = original;
+    });
+
+    test('家の中の住所', () => {
+        for (const address of [
+            '192.168.1.10',
+            '10.0.0.5',
+            '172.20.1.1',
+            '127.0.0.1',
+            '::1',
+            '::ffff:192.168.0.2',
+            'fd12:3456::1',
+            'fe80::1',
+        ]) {
+            expect(onLan(address), address).toBe(true);
+        }
+    });
+
+    test('外の住所。VPN (CGNAT) で入ってきたものも外', () => {
+        // 'fe8::1' / 'fc::1' は頭の 0 を省いた書き方 (0fe8:: / 00fc::) で、リンクローカルでも ULA でもない
+        for (const address of ['203.0.113.5', '100.64.1.2', '2001:db8::1', 'fe8::1', 'fc::1', '']) {
+            expect(onLan(address), address).toBe(false);
+        }
+    });
+
+    test('信頼したネットワークで、しかも家の中のときだけ', () => {
+        config.trustedNetworks = '0.0.0.0/0';
+        expect(mayStreamRaw('192.168.1.10')).toBe(true);
+        expect(mayStreamRaw('203.0.113.5')).toBe(false);
+        config.trustedNetworks = '10.10.0.0/16';
+        // 家の中の住所でも、信頼していないネットワーク (OIDC で入ってきた人) には送らない
+        expect(mayStreamRaw('192.168.1.10')).toBe(false);
+        expect(mayStreamRaw('10.10.2.3')).toBe(true);
     });
 });
 

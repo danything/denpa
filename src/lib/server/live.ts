@@ -33,6 +33,7 @@ import {
     captionOutput,
     frame,
     NO_SUBTITLE,
+    rawCaptionArgs,
     TrackList,
     worthLogging,
 } from './captions';
@@ -43,6 +44,7 @@ import { orm } from './db';
 import { deinterlace } from './encoder';
 import { programs, recordings, services } from './schema';
 import { chunks, lines } from './stream';
+import type { Grant } from './tickets';
 import { openWhenFree } from './tuner';
 import type { Connection } from './ws';
 
@@ -526,6 +528,11 @@ class Session {
         /** その局の中で何本目の字幕を出すか */
         readonly track: number,
         /**
+         * **焼かずに生の TS を配るか** (stream.md §5.5。`runRaw`)。音声も焼き方も画面が
+         * 決めるので、相乗りの目印からも外れる (`key`)
+         */
+        readonly raw: boolean,
+        /**
          * 入力の差し替え口。無ければチューナーから (ライブ)。
          * 追っかけ再生はこれで録画中のファイルを渡す (`openChase`)。
          * 呼ぶたびに読み直しの口を返すこと — 字幕なしでの焼き直しに使う
@@ -533,7 +540,11 @@ class Session {
         private readonly source?: () => ReadableStream<Uint8Array>,
     ) {
         this.list = new TrackList(program);
+        this.id = key(channelType, channel, serviceId, audio, raw ? 'raw' : codec, track);
     }
+
+    /** 一覧 (`sessions`) での目印。**作ったときに決めて、畳むときも同じものを消す** */
+    readonly id: string;
 
     get empty(): boolean {
         return this.viewers.size === 0;
@@ -552,6 +563,8 @@ class Session {
 
     add(viewer: Viewer): void {
         this.viewers.add(viewer);
+        // 生の TS に init は無い。**どこから受け取っても頭から読める** (PAT/PMT は繰り返し来る)
+        if (this.raw) viewer.ready = true;
         if (this.init !== null) this.hand(viewer, CHANNEL.videoInit, this.init);
         // 選べる字幕と、いま出ている1枚。**どちらも待たせない**
         if (this.list.tracks.length > 0) {
@@ -576,10 +589,15 @@ class Session {
      */
     private clockNotice(): Notice | null {
         const anchor = this.clock.anchor;
-        if (anchor === null || !Number.isFinite(this.startPts)) return null;
+        /*
+         * **生の道では寄せない。** 受け側の物差しは放送の PTS そのもの (自分で PES から読む)
+         * なので、PCR をそのまま渡せば比べられる。ffmpeg の `start:` を待つ必要も無い
+         */
+        const shift = this.raw ? 0 : this.startPts;
+        if (anchor === null || !Number.isFinite(shift)) return null;
         return {
             type: 'clock',
-            at: anchor.pcr - this.startPts,
+            at: anchor.pcr - shift,
             unixMs: anchor.unixMs,
             now: Date.now(),
         };
@@ -653,16 +671,20 @@ class Session {
      * 中身は詰まったら捨ててよい。**遅れて全部届くより、飛んで今が映るほうがいい** —
      * 放送は待ってくれないので、積むと際限なく太る。init は捨てない
      * (捨てるとその人には以降ずっと絵が出ない)。
+     *
+     * **生の TS も捨ててよい。** 欠けた PES は受け側の復号器が次の I フレームで拾い直す。
+     * 1局 15Mbit/s を積み続けると、詰まった客1人でサーバの手元が数秒で数十 MB 太る
      */
     private hand(viewer: Viewer, kind: number, data: Uint8Array): void {
         if (kind === CHANNEL.videoInit) viewer.ready = true;
         else if (!viewer.ready) return;
-        viewer.connection.send(kind, 0n, data, kind === CHANNEL.videoMedia);
+        viewer.connection.send(kind, 0n, data, kind === CHANNEL.videoMedia || kind === CHANNEL.rawTs);
     }
 
     /** 焼き始める。**畳むまで戻らない** */
     async run(): Promise<void> {
         const label = `${this.channelType}:${this.channel}`;
+        if (this.raw) return this.runRaw(label);
         try {
             /*
              * **空きが無ければ待って掛け直す** (チャンネルを変える一瞬は2本要る。
@@ -1071,9 +1093,123 @@ class Session {
         this.aborter.abort();
         this.proc?.kill();
         this.data?.close();
-        sessions.delete(
-            key(this.channelType, this.channel, this.serviceId, this.audio, this.codec, this.track),
-        );
+        // 選び直しで同じ目印の新しいものが載っていたら、そちらは消さない
+        if (sessions.get(this.id) === this) sessions.delete(this.id);
+    }
+
+    /**
+     * **焼かずに、1局に絞った TS をそのまま配る** (stream.md §5.5「生で送る」)。
+     *
+     *     エージェント → 1局に絞る → WebSocket (`CHANNEL.rawTs`) → ブラウザが自分で解く
+     *
+     * 映像の ffmpeg は起こさない — 立ち上がりの 0.5秒も、焼いているぶんの遅れも、サーバの
+     * CPU (350〜470%) も消える。**起こすのは字幕を描く ffmpeg だけ** (`rawCaptionArgs`)。
+     * 字幕は放送に絵が乗っていないので、どこかで描く必要がある (§2「字幕はサーバで絵にする」)。
+     *
+     * **字幕の ffmpeg が転んでも映像は止めない。** 焼く道と違って、映像はそもそも
+     * ffmpeg を通っていない。字幕を持たない放送で降りたら、覚えておいて (`captionless`)
+     * 次からは起こさない
+     */
+    private async runRaw(label: string): Promise<void> {
+        let captioner: RawCaptions | null = null;
+        try {
+            const tuned = await openWhenFree(
+                this.channelType,
+                this.channel,
+                this.aborter.signal,
+                `live ${this.channelType}/${this.channel}`,
+                config.priority.live,
+                () => this.stopped,
+            );
+            const forgotten = captionless.get(this.serviceId);
+            if (forgotten === undefined || Date.now() - forgotten >= FORGET_CAPTIONLESS) {
+                captioner = this.captions();
+            }
+            const filter = this.program > 0 ? new ServiceFilter(this.program) : null;
+            for await (const chunk of chunks(tuned)) {
+                if (this.stopped) break;
+                const out = filter === null ? chunk : filter.filter(chunk);
+                if (filter !== null) this.tsid = filter.transportStreamId;
+                if (out.length === 0) continue;
+                this.data?.feed(out);
+                this.clock.feed(out);
+                this.findHybridcast(out);
+                // **詰まったら捨てる** (`hand` の説明)。遅れて全部届くより、飛んで今が映るほうがいい
+                for (const viewer of this.viewers) this.hand(viewer, CHANNEL.rawTs, out);
+                this.tellClock();
+                captioner?.feed(out);
+            }
+            this.died(label, '放送が途切れました', '映像を出せませんでした');
+        } catch (error) {
+            this.died(label, String(error), whyNotTuned(String(error), resting(this.serviceId)));
+        } finally {
+            captioner?.stop();
+            this.stop();
+        }
+    }
+
+    /** 生の道の字幕を描く ffmpeg を起こす (`rawCaptionArgs`)。**字幕の口と見出しを汲み続ける** */
+    private captions(): RawCaptions {
+        const proc = Bun.spawn([config.ffmpeg, ...rawCaptionArgs(this.program, this.track)], {
+            stdio: ['pipe', 'pipe', 'pipe', 'pipe'] as never,
+        });
+        const captioner = new RawCaptions(proc);
+        // 標準出力には何も出さないはずだが、**汲まずに放っておくと詰まったときに止まる**
+        void (async () => {
+            for await (const _ of chunks(proc.stdout as ReadableStream<Uint8Array>)) {
+                // 読み捨てる
+            }
+        })().catch(() => undefined);
+        void this.watch(proc)
+            .then(() => {
+                if (this.noSubtitle) captionless.set(this.serviceId, Date.now());
+            })
+            .catch(() => undefined);
+        void this.subtitles(proc).catch(() => undefined);
+        return captioner;
+    }
+}
+
+/**
+ * 生の道で字幕を描かせている ffmpeg への流し込み。**映像を待たせない。**
+ *
+ * 焼く道では書き込みが捌けるまで待つ (`Session.pump`) — そうしないと転んだときに
+ * サーバごと落ちるため。ここでも待つが、**待っている間に来た塊は字幕の側には渡さない**。
+ * 映像はブラウザへ直に流れているので、字幕のために読むのを止めると映像まで止まる。
+ * 取りこぼした塊で字幕が1枚欠けることはありうるが、映像が止まるよりずっといい
+ */
+class RawCaptions {
+    private busy = false;
+    private dead = false;
+
+    constructor(private readonly proc: ReturnType<typeof Bun.spawn>) {}
+
+    feed(data: Uint8Array): void {
+        if (this.busy || this.dead) return;
+        this.busy = true;
+        const writer = this.proc.stdin as import('bun').FileSink;
+        // **返りは必ず受ける** (捨てた Promise が転ぶと bun ごと落ちる。`Session.pump`)
+        Promise.resolve()
+            .then(() => writer.write(data))
+            .then(() => writer.flush())
+            .then(
+                () => {
+                    this.busy = false;
+                },
+                () => {
+                    this.dead = true;
+                },
+            );
+    }
+
+    stop(): void {
+        this.dead = true;
+        try {
+            (this.proc.stdin as import('bun').FileSink).end();
+        } catch {
+            // もう閉じている
+        }
+        this.proc.kill();
     }
 }
 
@@ -1096,9 +1232,10 @@ const key = (
     channel: string,
     serviceId: number,
     audio: AudioTrack,
-    codec: LiveCodec,
+    form: LiveCodec | 'raw',
     track: number,
-) => `${type}:${channel}:${serviceId}:${audio.id}:${codec}:${track}`;
+    // **生は音声で分けない** — 全部の音声を送って画面が選ぶ (`TuneCommand.raw`)
+) => `${type}:${channel}:${serviceId}:${form === 'raw' ? '*' : audio.id}:${form}:${track}`;
 const sessions = new Map<string, Session>();
 
 /** 焼きはじめて一覧に載せる。畳むのは見ている人が居なくなったとき。ここでは待たない */
@@ -1109,9 +1246,10 @@ function begin(
     now: NowPlaying,
     codec: LiveCodec,
     track: number,
+    raw: boolean,
 ): Session {
-    const session = new Session(channelType, channel, serviceId, now.program, now.audio, codec, track);
-    sessions.set(key(channelType, channel, serviceId, now.audio, codec, track), session);
+    const session = new Session(channelType, channel, serviceId, now.program, now.audio, codec, track, raw);
+    sessions.set(session.id, session);
     void session.run();
     return session;
 }
@@ -1124,11 +1262,12 @@ function watch(
     now: NowPlaying,
     codec: LiveCodec,
     track: number,
+    raw: boolean,
     viewer: Viewer,
 ): Session {
     const session =
-        sessions.get(key(channelType, channel, serviceId, now.audio, codec, track)) ??
-        begin(channelType, channel, serviceId, now, codec, track);
+        sessions.get(key(channelType, channel, serviceId, now.audio, raw ? 'raw' : codec, track)) ??
+        begin(channelType, channel, serviceId, now, codec, track, raw);
     session.add(viewer);
     return session;
 }
@@ -1168,14 +1307,19 @@ export function warm(
     serviceId: number,
     audio?: string,
     codec: LiveCodec = 'h264',
+    /**
+     * 生で温めるか。**LAN から来ていて、前回も生で見ていたときだけ** (呼ぶ側が決める)。
+     * 生は ffmpeg を待たないぶん削れるのはチューナーの掴みだけだが、それでも 160ms は重なる
+     */
+    raw = false,
 ): void {
     if (channelType === '' || channel === '' || !Number.isFinite(serviceId)) return;
 
     const now = nowPlaying(serviceId, audio);
     // 字幕は1本目で温める。**選び直す人は稀**で、そのときは焼き直しになる。
     // 既に焼いていれば何もしない。開き直すたびに増やさない
-    if (sessions.has(key(channelType, channel, serviceId, now.audio, codec, 0))) return;
-    const session = begin(channelType, channel, serviceId, now, codec, 0);
+    if (sessions.has(key(channelType, channel, serviceId, now.audio, raw ? 'raw' : codec, 0))) return;
+    const session = begin(channelType, channel, serviceId, now, codec, 0, raw);
 
     /*
      * **誰も来なければ自分で畳む。** 見ている人が居なくなったら畳む仕掛け
@@ -1199,6 +1343,8 @@ type Asked =
           audio: string | undefined;
           codec: LiveCodec;
           caption: number;
+          /** 生で欲しいと言われたか。**許すかは札で決まる** (`attend`) */
+          raw: boolean;
       }
     | ChaseAsked;
 
@@ -1252,6 +1398,7 @@ function parseCommand(message: Record<string, unknown>): Asked | null {
                 audio,
                 codec,
                 caption,
+                raw: message['raw'] === true,
             };
         }
         default:
@@ -1265,7 +1412,7 @@ function parseCommand(message: Record<string, unknown>): Asked | null {
  * 接続そのものが在席の印になる (`stream.md` §4「入っているもの」の畳み方)。
  * HTTP のストリームだと切断の検出が遅れるが、WebSocket なら閉じた時点で分かる。
  */
-export function attend(connection: Connection): void {
+export function attend(connection: Connection, grant: Grant = { raw: false }): void {
     const viewer: Viewer = { connection, ready: false, wantsData: false };
     let current: Session | null = null;
 
@@ -1301,6 +1448,8 @@ export function attend(connection: Connection): void {
         const { channelType, channel, serviceId, audio, codec, caption } = asked;
 
         const now = nowPlaying(serviceId, audio);
+        // **生で送るのは、頼まれて、しかも札が許しているときだけ** (LAN から取った札。`tickets.Grant`)
+        const raw = asked.raw && grant.raw;
 
         /*
          * **同じものを焼いているなら、焼き直さない。**
@@ -1314,8 +1463,8 @@ export function attend(connection: Connection): void {
             current.channelType === channelType &&
             current.channel === channel &&
             current.serviceId === serviceId &&
-            current.audio.id === now.audio.id &&
-            current.codec === codec &&
+            current.raw === raw &&
+            (raw || (current.audio.id === now.audio.id && current.codec === codec)) &&
             current.track === caption;
 
         /*
@@ -1335,6 +1484,7 @@ export function attend(connection: Connection): void {
             channel,
             codecs: codecsFor(codec),
             codec,
+            raw,
             audio: now.audio.id,
             audios: now.audios,
         };
@@ -1358,7 +1508,7 @@ export function attend(connection: Connection): void {
         }
 
         leave();
-        current = watch(channelType, channel, serviceId, now, codec, caption, viewer);
+        current = watch(channelType, channel, serviceId, now, codec, caption, raw, viewer);
     };
 
     connection.onclose = () => {
@@ -1413,6 +1563,8 @@ function openChase(asked: ChaseAsked, viewer: Viewer, connection: Connection): S
         channel: String(rec.id),
         codecs: codecsFor(codec),
         codec,
+        // 追っかけは生にしない。録画の TS を倍速で送り込む作りで、受け側の貯め方が別物
+        raw: false,
         audio: audio.id,
         audios: tracks,
     });
@@ -1434,6 +1586,7 @@ function openChase(asked: ChaseAsked, viewer: Viewer, connection: Connection): S
         audio,
         codec,
         caption,
+        false,
         () =>
             followFile(path, plan.offset, plan.paceBytesPerSec, () => {
                 // 録り終えたら (行が消えたときも)、尻に着いた時点で読み終わり

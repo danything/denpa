@@ -89,8 +89,10 @@ Bun.serve({
              * **断るのは握手の前。** ここなら普通の HTTP として理由を返せる。
              * 握手したあとに切ると、ブラウザには「繋がらない」としか映らない
              */
-            if (!live().accept(url)) return new Response('ticket required', { status: 403 });
-            const data = { url, connection: null };
+            // 札が許すこと (生で送ってよいか) を接続に持たせる (`ws.ts` の `SocketData.grant`)
+            const grant = live().accept(url);
+            if (grant === null) return new Response('ticket required', { status: 403 });
+            const data = { url, connection: null, grant };
             if (server.upgrade(request, { data })) return undefined;
             return new Response('upgrade failed', { status: 400 });
         }

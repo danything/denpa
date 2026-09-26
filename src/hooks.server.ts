@@ -1,29 +1,19 @@
 import { redirect } from '@sveltejs/kit';
-import { denied, isFilePath, isOpenPath, needsLogin, sessionMayRead, trusted } from '$lib/server/auth';
+import {
+    clientAddress,
+    denied,
+    isFilePath,
+    isOpenPath,
+    needsLogin,
+    sessionMayRead,
+    trusted,
+} from '$lib/server/auth';
 import { start } from '$lib/server/runtime';
 import { COOKIE, find } from '$lib/server/session';
 import { shareTokenAllows } from '$lib/server/share';
 
 // SvelteKit のサーバ起動時に一度だけ走る。EPG取得・スケジューラ・エンコーダを立ち上げる
 start();
-
-/**
- * 接続元の住所。**読めなければ空文字を返す。**
- *
- * adapter-node は `ADDRESS_HEADER` を渡してあるのにそのヘッダが無いリクエストが
- * 来ると**例外を投げる**。Traefik を通らずに Pod へ直に届くもの (kubelet の
- * ヘルスチェックなど) がそれで、そのまま呼ぶと 500 になる。
- *
- * **読めなかったときは素通しにしない** (空文字はどの CIDR にも当たらない)。
- * 分からないほうを通すと、ヘッダを外すだけで認証を抜けられてしまう
- */
-function clientAddress(event: Parameters<typeof handle>[0]['event']): string {
-    try {
-        return event.getClientAddress();
-    } catch {
-        return '';
-    }
-}
 
 export async function handle({ event, resolve }) {
     const { pathname, search } = event.url;

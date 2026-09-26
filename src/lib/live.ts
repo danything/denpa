@@ -27,9 +27,9 @@ import type { AudioTrack } from './arib';
  * いる (ビットレートを決めていない) ので、実測も揃わなかった
  * ([stream.md](../../docs/stream.md) §5.1)
  *
- * **生 (MPEG-2 のまま) は入っていない。** ブラウザに MPEG-2 の復号器が無い —
- * 実測で `MediaSource.isTypeSupported('video/mp4; codecs="mp2v.61,mp4a.40.2"')` も
- * `VideoDecoder.isConfigSupported({codec:'mp2v'})` も false ([stream.md](../../docs/stream.md) §5.5)
+ * **生 (MPEG-2 のまま) はここに並べない。** 焼き方ではなく「焼かない」なので、
+ * 端末の設定 (`raw/setting.svelte.ts`) と LAN かどうか (サーバが決める) で別に選ぶ
+ * (`TuneCommand.raw`。[stream.md](../../docs/stream.md) §5.5)
  */
 export type LiveCodec = 'h264' | 'av1';
 
@@ -58,6 +58,11 @@ export const CHANNEL = {
     videoInit: 0x00,
     /** 映像の中身 (moof + mdat) */
     videoMedia: 0x01,
+    /**
+     * **生の TS** (1局に絞っただけ。焼かない道。[stream.md](../../docs/stream.md) §5.5)。
+     * 映像・音声・PAT/PMT が入っていて、受け側が自分で解く (`raw/`)。init は無い
+     */
+    rawTs: 0x02,
     /** 音声の init セグメント。**いまは使わない** (映像と同じ器に入れている) */
     audioInit: 0x10,
     /** 音声の中身。同上 */
@@ -95,6 +100,8 @@ export type Notice =
           codecs: string;
           /** いま焼いている形。画面の切り替えがどれを指すか */
           codec: LiveCodec;
+          /** **焼かずに生の TS を送るか** (`CHANNEL.rawTs`)。頼まれても LAN の外からなら false */
+          raw: boolean;
           /** いま焼いている音声 (`AudioTrack.id`) */
           audio: string;
           /** 選べる音声。1つしか無ければ画面は切り替えを出さない */
@@ -268,6 +275,14 @@ export type TuneCommand = {
      * `encodeArgs`)。そうしないと時刻が揃わない
      */
     caption?: number;
+    /**
+     * **焼かずに生の TS で欲しい** ([stream.md](../../docs/stream.md) §5.5)。
+     *
+     * 決めるのは2か所: 端末の設定 (既定は切) とブラウザが解けるか (`raw/support.ts`) で
+     * 画面が頼み、**LAN から来たかはサーバが見る** (札を取ったときの住所。`server/tickets.ts`)。
+     * 生で送ると音声は画面が選ぶので、`audio` は選び直しても焼き直しにならない
+     */
+    raw?: boolean;
 };
 
 /** WebSocket の宛先 */
@@ -283,6 +298,8 @@ export interface Tuned {
     audio?: string;
     /** どの形で焼くか。省くと `h264` */
     codec?: LiveCodec;
+    /** 生で頼むか (`TuneCommand.raw`)。**覚えておくのは、次に開くときに先回りするため** (`server/live.ts` の `warm`) */
+    raw?: boolean;
 }
 
 /**

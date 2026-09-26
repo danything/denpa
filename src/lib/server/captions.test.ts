@@ -1,6 +1,15 @@
 import { describe, expect, test } from 'bun:test';
 import { CHANNEL } from '$lib/live';
-import { CANVAS, captionInput, captionOutput, frame, NO_SUBTITLE, TrackList, worthLogging } from './captions';
+import {
+    CANVAS,
+    captionInput,
+    captionOutput,
+    frame,
+    NO_SUBTITLE,
+    rawCaptionArgs,
+    TrackList,
+    worthLogging,
+} from './captions';
 
 /**
  * PNG 1枚ぶん。**かたまりの形まで真似る** — 切れ目を `IEND` で見つけるので、
@@ -98,6 +107,27 @@ describe('字幕の取り出し方', () => {
  * そこに字幕を頼むと ffmpeg は組み立ての時点で降りる — **映像も出ない**。
  * そうと分かったら字幕なしで焼き直すので、その言い分を見分けられること
  */
+/*
+ * **生の道の字幕は、放送の時刻のまま出させる** (docs/stream.md §5.5)。受け側の時計は
+ * 放送の PTS そのもの (自分で PES から読む) なので、ffmpeg に 0 へ寄せさせると合わない
+ */
+describe('生の道の字幕', () => {
+    test('放送の時刻を持ち込む (-copyts)。映像は焼かない', () => {
+        const args = rawCaptionArgs(1024, 0);
+        expect(args).toContain('-copyts');
+        expect(args.indexOf('-copyts')).toBeLessThan(args.indexOf('-i'));
+        expect(args).not.toContain('libx264');
+        expect(args).not.toContain('-vf');
+        // 出口は焼く道と同じ (Matroska を 3 本目の口へ)
+        expect(args.slice(-2)).toEqual(['matroska', 'pipe:3']);
+        expect(args.join(' ')).toContain('[0:p:1024:s:0]null[s]');
+    });
+
+    test('何本目の字幕かを選べる', () => {
+        expect(rawCaptionArgs(1024, 1).join(' ')).toContain('[0:p:1024:s:1]');
+    });
+});
+
 describe('字幕が無いと分かる', () => {
     /** 実機で出させたものそのまま */
     test('ffmpeg の言い分から見分ける', () => {
