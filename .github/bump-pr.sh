@@ -1,7 +1,7 @@
 #!/bin/sh
 # main へ「印/版を書き戻す」PR を出して、自分でマージする。
 #
-# **main へは直接 push しない。** main は必須チェック (`check`) で守ってあり、手元から
+# **main へは直接 push しない。** main は必須チェック (ruleset) で守ってあり、手元から
 # push できないのと同じで、bot のトークンも素通しにはならない (GITHUB_TOKEN は保護の
 # bypass に入れられない仕様)。
 #
@@ -17,7 +17,7 @@
 # 「Expected」のまま塞がった (#99、2026-09-11)。ruleset で足したものにここが自動で
 # 追いつくようにする。引けなければ `check` だけ (以前の形) に落ちる。
 #
-# **2つのワークフローが同じ手を要る** (build-and-deploy の k3s の印と、release の
+# **2つのワークフローが同じ手を要る** (build-and-deploy の deploy の印と、release の
 # Chart.yaml の版)。書き写すと片方だけ直したときに食い違うので、ここ1つに置く
 # (image-tags.sh と同じ)。
 #
