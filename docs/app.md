@@ -46,6 +46,9 @@ EPGStation の置き換えとして作ったもので、エンコード設定は
 | `src/lib/server/library.ts` | 保存先でのファイル配置 |
 | `src/lib/server/metadata.ts` | サムネイル (`-poster.jpg`) と、その置き場の決めごと |
 | `src/lib/server/files.ts` | 録画の削除と、実体とDBの突き合わせ |
+| `src/lib/server/relayout.ts` | 保存先を今の命名へ整える (起動時に1回。昔の `Season` フォルダや `.nfo` を片付ける) |
+| `src/lib/server/disk.ts` | 保存先の残量の見張り (閾値をまたいだときに1回だけ知らせる) |
+| `src/lib/server/fsx.ts` | ファイル操作の道具 (PVC をまたぐ移動・空フォルダを畳む) |
 | `src/lib/server/serve.ts` | ファイルの配信 (Range 対応) |
 | `src/lib/server/scramble.ts` | スクランブルの検出と、チューナー側への解除依頼 |
 | `src/lib/server/live.ts` | ライブ視聴。焼き方・相乗り・見ている人の勘定 ([stream.md](stream.md))。**追っかけ再生の入口 (`openChase`) もここ** |
@@ -90,6 +93,10 @@ EPGStation の置き換えとして作ったもので、エンコード設定は
 | `src/lib/server/events.ts` | 画面へ変化を知らせる (SSE。ポーリングの代わり) |
 | `src/lib/server/webhook.ts` | 録画の節目 (開始・完了・失敗)、エンコードの完了・失敗、そして録画の外側の変事 (ディスク残量わずか・チューナーに繋がらない/繋がった) を外部へ通知する |
 | `src/lib/server/runtime.ts` | 常駐処理の起動 (hooks.server.ts から呼ばれる) |
+| `src/lib/server/shutdown.ts` | 止められている最中かの印 (居座り中に始めた録画を記録に残すため) |
+| `src/lib/server/recording.ts` | 録画の行を引く・通知に載せる要点 (画面と API の共通の前置き) |
+| `src/lib/server/stream.ts` | ReadableStream をチャンク・行・文字列で読む道具と、子プロセスを起こして結果を待つ `run` |
+| `src/lib/server/ts-probe.ts` | 生TSを開くときの探りの長さ (焼き・CM の切り出し・字幕で共通) |
 | `src/lib/server/config.ts` | 環境変数 |
 | `src/lib/server/settings.ts` | 画面から変えられる設定 (初期値は `config.ts`。DBに値があればそちらが勝つ) |
 | `src/lib/server/db.ts` / `schema.ts` | SQLite。テーブルの定義は `schema.ts` (drizzle) にしか無く、型もマイグレーション (`drizzle/`) もそこから出す ([development.md](development.md#db-の列を足す)) |
