@@ -147,7 +147,7 @@ public static class Scramble
 
         try
         {
-            var b25 = new Descrambler(Keys.Source, background: false);
+            var b25 = new Descrambler(Keys.Source);
             using var reading = File.OpenRead(source);
             using var writing = File.Create(target);
             var buffer = new byte[188 * 1024];

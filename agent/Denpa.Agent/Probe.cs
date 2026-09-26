@@ -50,7 +50,7 @@ public static class Probe
         }
 
         Keys.Configure(Environment.GetEnvironmentVariable("CARD_URL"));
-        var b25 = new Descrambler(Keys.Source, background: false);
+        var b25 = new Descrambler(Keys.Source);
         var decoded = new ArrayBufferWriter<byte>();
 
         using var input = File.OpenRead(source);
