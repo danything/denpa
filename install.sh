@@ -16,6 +16,11 @@
 # (Mac はエージェントだけ入れてから)。もう一度流せば、そのまま上げ直しになる (pull して up -d)。
 # compose ファイルもイメージも**最新のリリースの版**に揃える (取ってきた compose.yml の札を書き換える)。
 #
+# **入口は genkan** (https://github.com/danything/genkan。ホスト名でコンテナに振り分けるリバースプロキシ)。
+# 動いていればそれを使い、無ければ 80 と 443 が空いているときだけ ~/genkan に入れて、
+# http://denpa.localhost で開けるようにする (登録は compose.override.yml に書く)。
+# ポート 3000 は残す — denpa.localhost はそのマシンからしか引けないので、LAN のほかの機械は IP:3000。
+#
 # 置き場:
 #   Linux / Mac  ~/denpa (DENPA_HOME で変えられる)    compose.yml (上げ直すたびに上書き)・compose.override.yml
 #                                                     (手を入れるならここ。無いときだけ雛形を作り、あれば触らない)・config/
@@ -46,6 +51,7 @@ IT930X_FIRMWARE_SHA256=5213a5a38872661277a2cc1b2dfdfe88faf06f41205f460f3b51857f0
 
 REPO=danything/denpa
 URL=http://localhost:3000
+GENKAN_URL=http://denpa.localhost
 DENPA_DIR="${DENPA_HOME:-$HOME/denpa}"
 # install.sh が書いた compose.yml の1行目
 MARK="# install.sh が置いた (版"
@@ -89,6 +95,41 @@ docker_ready() {
   return 1
 }
 
+# genkan が動いているか (proxy ネットワークに caddy-docker-proxy が居るか)
+genkan_running() {
+  docker network inspect proxy >/dev/null 2>&1 \
+    && docker ps --filter network=proxy --format '{{.Image}}' | grep -q caddy-docker-proxy
+}
+# そのポートで誰かが待ち受けているか。bash の /dev/tcp で繋いでみる (ss / lsof の違いを気にしない)
+port_used() { (exec 3<>"/dev/tcp/127.0.0.1/$1") 2>/dev/null; }
+
+# genkan を使えるようにする。使えれば 0。**80 か 443 が埋まっていれば入れない** (誰かのものを奪わない)
+ensure_genkan() {
+  genkan_running && return 0
+  if port_used 80 || port_used 443; then
+    say "80 か 443 が使われているので genkan は入れません (http://localhost:3000 で開きます)"
+    return 1
+  fi
+  command -v git >/dev/null 2>&1 || { say "git が無いので genkan は入れません (http://localhost:3000 で開きます)"; return 1; }
+  say "genkan を $HOME/genkan に入れます (http://denpa.localhost で開けるように)"
+  (cd "$HOME" && curl -fsSL https://raw.githubusercontent.com/danything/genkan/main/init.sh | sh -s) \
+    || { say "genkan を入れられませんでした (http://localhost:3000 で開きます)"; return 1; }
+  genkan_running
+}
+
+# genkan に denpa を登録する断片。**http:// を付けるので HTTPS にせず、証明書の信頼も要らない**
+# (*.localhost はブラウザが安全な文脈として扱う)
+GENKAN_OVERRIDE='services:
+  denpa:
+    labels:
+      caddy: http://denpa.localhost
+      caddy.reverse_proxy: "{{upstreams 3000}}"
+    networks: [default, proxy]
+
+networks:
+  proxy:
+    external: true'
+
 # ~/denpa で docker compose。-f を付けないので compose.yml と compose.override.yml を Compose が自分で重ねる
 compose() { (cd "$DENPA_DIR" && docker compose "$@"); }
 
@@ -109,23 +150,30 @@ start_denpa() {
   sed "s#\(image: ghcr.io/danything/[a-z-]*\):latest#\1:$(image_tag "$2")#" "$DENPA_DIR/compose.yml.new" > "$DENPA_DIR/.compose.yml.orig"
   { echo "$MARK $2。手を入れず、足すものは compose.override.yml に)"; cat "$DENPA_DIR/.compose.yml.orig"; } > "$DENPA_DIR/compose.yml"
   rm -f "$DENPA_DIR/compose.yml.new"
+  genkan=no
+  ensure_genkan && genkan=yes
   if [ ! -f "$DENPA_DIR/compose.override.yml" ]; then
-    cat > "$DENPA_DIR/compose.override.yml" <<'EOF'
-# 手元で足したい・変えたいものはここに書く。compose.yml は install.sh が上げ直すたびに
-# 上書きするが、このファイルには触らない (Compose が compose.yml に重ねて読む)。
-# 書くときは下の `services: {}` を消して、たとえば:
-#
-#   services:
-#     denpa:
-#       environment:
-#         TRUSTED_NETWORKS: 192.168.1.0/24
-services: {}
-EOF
+    {
+      echo "# 手元で足したい・変えたいものはここに書く。compose.yml は install.sh が上げ直すたびに"
+      echo "# 上書きするが、このファイルには触らない (Compose が compose.yml に重ねて読む)。"
+      echo "# たとえば denpa の environment に TRUSTED_NETWORKS: 192.168.1.0/24 を足すなど"
+      if [ "$genkan" = yes ]; then
+        echo "#"
+        echo "# genkan (http://denpa.localhost) への登録は install.sh が書いた"
+        echo "$GENKAN_OVERRIDE"
+      else
+        echo "services: {}"
+      fi
+    } > "$DENPA_DIR/compose.override.yml"
+  elif [ "$genkan" = yes ] && ! grep -q 'denpa.localhost' "$DENPA_DIR/compose.override.yml"; then
+    genkan=no
+    say "compose.override.yml には触りません。http://denpa.localhost で開くなら、次を足して流し直してください:"
+    printf '%s\n' "$GENKAN_OVERRIDE"
   fi
   compose pull
   # 録画中に上げ直すと、録画が終わるまで待ってから入れ替わる (stop_grace_period)
   compose up -d
-  wait_and_open "$3"
+  wait_and_open "$3" "$genkan"
 }
 
 # 止める (コンテナを畳むだけ。~/denpa も録画もボリュームも残す)
@@ -138,12 +186,23 @@ wait_and_open() {
   say "denpa の応答を待ちます"
   for _ in $(seq 90); do
     if curl -fsS -o /dev/null "$URL/api/health" 2>/dev/null; then
-      say "立ちました: $URL (LAN のほかの機械からは http://$1:3000)"
+      url=$URL
+      # genkan 越しにも答えれば、そちらを開く (Caddy がラベルを読むまで少し掛かる)
+      if [ "$2" = yes ]; then
+        for _ in $(seq 15); do
+          if curl -fsS -o /dev/null --resolve denpa.localhost:80:127.0.0.1 "$GENKAN_URL/api/health" 2>/dev/null; then
+            url=$GENKAN_URL
+            break
+          fi
+          sleep 2
+        done
+      fi
+      say "立ちました: $url (このマシンからは $URL でも。LAN のほかの機械からは http://$1:3000)"
       [ "$open_browser" = yes ] || return 0
       if [ "$(uname -s)" = Darwin ]; then
-        open "$URL"
+        open "$url"
       elif command -v xdg-open >/dev/null 2>&1 && [ -n "${DISPLAY:-}${WAYLAND_DISPLAY:-}" ]; then
-        xdg-open "$URL" >/dev/null 2>&1 || true
+        xdg-open "$url" >/dev/null 2>&1 || true
       fi
       return 0
     fi

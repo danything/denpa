@@ -138,6 +138,9 @@ jobs:
           bash install.sh --no-open
           curl -fsS http://localhost:3000/api/health; echo
           curl -fsS http://localhost:25252/denpa/tuners; echo
+          # ランナーの 80 / 443 は空いているので genkan が入り、http://denpa.localhost で開ける
+          # (genkan のコンテナから来る要求が TRUSTED_NETWORKS の既定で通ることも含めて)
+          curl -fsS --resolve denpa.localhost:80:127.0.0.1 http://denpa.localhost/api/health; echo
           # 上げ直し。手を入れた compose.override.yml には触らないこと
           echo '# 手で足した行' >> ~/denpa/compose.override.yml
           cp ~/denpa/compose.override.yml "$RUNNER_TEMP/override"

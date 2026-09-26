@@ -111,6 +111,11 @@ curl -fsSL https://raw.githubusercontent.com/danything/denpa/main/install.sh | b
   ([docs/agent.md](docs/agent.md#mac-でチューナーを使う))。**このあとのリリースから**入れられます
 - **Docker は入れません。** 無ければ入れ方を言って止まります (Linux は <https://get.docker.com>、
   Mac は Docker Desktop か OrbStack)
+- **入口は [genkan](https://github.com/danything/genkan)** (ホスト名で振り分けるリバースプロキシ)。
+  動いていればそれを使い、無ければ **80 と 443 が空いているときだけ** `~/genkan` に入れて、
+  **<http://denpa.localhost>** で開きます。埋まっていれば入れず <http://localhost:3000> で。
+  `denpa.localhost` で開けるのはそのマシンだけなので、LAN のほかの機械 (テレビ・スマホ) からは
+  これまでどおり `http://<IP>:3000`
 - 置き場は `~/denpa` (`DENPA_HOME`)。`compose.yml` は上げ直すたびに上書きするので、
   **手を入れたいときは同じ場所の `compose.override.yml` に**書きます (Compose が重ねて読み、install.sh は触らない)
 - もう一度流せば最新のリリースへ上げ直し。`… | bash -s -- --uninstall` で止めて外します
@@ -144,7 +149,7 @@ docker compose) で動かす構成なら `oci://ghcr.io/danything/charts/denpa-a
 
 ### 立てたあと
 
-1. **開く** — <http://localhost:3000>。compose.yml の `TRUSTED_NETWORKS` には**家の中
+1. **開く** — <http://denpa.localhost> (genkan を入れたとき) か <http://localhost:3000>。compose.yml の `TRUSTED_NETWORKS` には**家の中
    (プライベートネットワーク) だけ通す**初期値が書いてあります (Helm は `denpa.trustedNetworks`。
    変えるときは下の「[誰を通すか](#誰を通すか)」を読むこと)
 2. **チューナーを確かめる** — 「チューナー」に、見つかったものが並んでいます。

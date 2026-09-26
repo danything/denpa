@@ -698,7 +698,8 @@ compose.prod.yml から tuner-agent を外したもの)。
    ログインしたら起き、落ちたら起き直し、止めるときは録画が終わるまで待ちます
    (launchd に殺されないよう、待ちの上限を 6 時間より長くしてある)
 2. **denpa 本体** — エージェントと**同じ版**の compose.mac.yml を `~/denpa/compose.yml` として置いて
-   `docker compose up -d`。`http://localhost:3000` が答えたらブラウザで開きます (`--no-open` で開かない)
+   `docker compose up -d`。答えたらブラウザで開きます (`--no-open` で開かない)。genkan が動いているか
+   80・443 が空いていれば、Linux と同じく `http://denpa.localhost` で開けるようにします (README「立てる」)
 
 - **要るのは Homebrew の libusb と Docker。** libusb は px4-userland と siano-userland の Mac 版が
   繋がっているもので、Homebrew があれば `brew install libusb` まで済ませます (無ければ入れ方を
