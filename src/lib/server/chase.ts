@@ -102,12 +102,12 @@ export function followFile(
                         controller.enqueue(buffer.slice(0, bytesRead));
                         // 倍速より先へは行かない (上の説明)。遅れているぶんは眠らず進む
                         const ahead = sent / paceBytesPerSec - (Date.now() - started) / 1000;
-                        if (ahead > 0) await sleep(ahead * 1000);
+                        if (ahead > 0) await Bun.sleep(ahead * 1000);
                         continue;
                     }
                     // 尻に着いた。録画が終わっていれば読み切った、まだなら待って読み足す
                     if (done()) break;
-                    await sleep(WAIT_MORE);
+                    await Bun.sleep(WAIT_MORE);
                 }
                 controller.close();
             } catch (error) {
@@ -129,8 +129,4 @@ export function fileSize(path: string): number | null {
     } catch {
         return null;
     }
-}
-
-function sleep(ms: number): Promise<void> {
-    return new Promise((resolve) => setTimeout(resolve, ms));
 }

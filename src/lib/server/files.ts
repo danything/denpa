@@ -1,6 +1,6 @@
 import { type Dirent, existsSync, readdirSync, rmdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
-import { and, eq, inArray, isNotNull, isNull, lt, max, notInArray, or, sql } from 'drizzle-orm';
+import { and, eq, inArray, isNotNull, isNull, lt, max, ne, notInArray, or, sql } from 'drizzle-orm';
 import type { Recording } from '../types';
 import { config } from './config';
 import { affected, now, orm } from './db';
@@ -25,7 +25,7 @@ export function deleteRecordingFiles(recording: Recording, reason: string): void
     for (const path of [recording.library_path, recording.alt_path]) {
         if (path === null) continue;
         removeIfExists(path);
-        // .nfo を取り残すと、.nfo を読むプレイヤーに中身の無い録画が並び続ける
+        // 付き添い (ポスター・データ放送) も一緒に。取り残すと片付かないゴミになる
         removeSidecars(path);
         pruneEmptyDirs(path);
     }
@@ -44,6 +44,25 @@ export function deleteRecordingFiles(recording: Recording, reason: string): void
         })
         .where(eq(recordings.id, recording.id))
         .run();
+}
+
+/**
+ * その置き場所を**他の録画**が現に使っているか (`library_path` / `alt_path`)。
+ * はぐれファイルを片付けるとき、万一の同名衝突で他の録画を巻き添えにしないために見る
+ */
+export function usedByOther(path: string, recordingId: number): boolean {
+    return (
+        orm()
+            .select({ id: recordings.id })
+            .from(recordings)
+            .where(
+                and(
+                    or(eq(recordings.library_path, path), eq(recordings.alt_path, path)),
+                    ne(recordings.id, recordingId),
+                ),
+            )
+            .get() !== undefined
+    );
 }
 
 /**

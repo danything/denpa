@@ -1,9 +1,10 @@
 import { config } from './config';
+import { chunks } from './stream';
 
 /**
  * エージェントが起きたことを教えてくれる口 (`GET /denpa/events`, SSE)。
  *
- * これが使えると、チューナーの様子もスキャンの進み具合も「覗きに行く」必要がない。
+ * これが使えると、チューナーの様子も局の入れ替わりも「覗きに行く」必要がない。
  * 定期実行は**知らせが途切れたときの保険**として残してある
  * (つなぎ直しは下でやっているが、黙って止まる可能性は消せない)。
  *
@@ -11,9 +12,10 @@ import { config } from './config';
  *
  * | イベント | denpa の使い道 |
  * | --- | --- |
- * | `tuners` | チューナー画面を更新する |
- * | `scan` | スキャンの進み具合を画面へ流す |
+ * | `tuners` | チューナー画面を更新し、開いた選局にロゴ集めが相乗りする |
  * | `channels` | スキャンで局が入れ替わった。取り込み直す |
+ *
+ * スキャンの進み具合は流れてこない — 走らせているのは denpa 自身 (`scan.ts`)。
  */
 
 export interface AgentEvent {
@@ -48,9 +50,8 @@ export function parseBlock(block: string): AgentEvent | null {
 export async function* blocks(stream: ReadableStream<Uint8Array>): AsyncGenerator<string> {
     const decoder = new TextDecoder();
     let buffer = '';
-    // @ts-expect-error bun/node のストリームは非同期反復できる
-    for await (const chunk of stream) {
-        buffer += decoder.decode(chunk as Uint8Array, { stream: true });
+    for await (const chunk of chunks(stream)) {
+        buffer += decoder.decode(chunk, { stream: true });
         let at = buffer.indexOf('\n\n');
         while (at !== -1) {
             yield buffer.slice(0, at);
@@ -118,7 +119,7 @@ export function listen(
                 onReachable?.(false);
             }
             if (stopped) return;
-            await new Promise((resolve) => setTimeout(resolve, retry));
+            await Bun.sleep(retry);
             retry = Math.min(retry * 2, RETRY_MAX);
         }
     };

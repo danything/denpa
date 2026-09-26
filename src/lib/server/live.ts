@@ -98,16 +98,8 @@ import type { Connection } from './ws';
  * ## 字幕も同じ ffmpeg で焼く。**出口を2つ持つ**
  *
  * 映像は `pipe:1` に fMP4、字幕は `pipe:3` に Matroska
- * ([captions.ts](captions.ts) の `captionOutput`)。
- *
- * **時刻を揃えるにはこうするしかなかった。** 別々に起こした2本の ffmpeg は
- * 入口の寄せ幅が違うので、出てきた時刻を突き合わせても意味を持たない。
- * 1本にすれば寄せは1回で、両方の出口に同じだけ効く — 実機で突き合わせると
- * 1ms 以内で一致した (`captions.ts` に実測)。**費用はほぼ無い**
- * (同じ20秒で 10.6秒 対 10.7秒)。
- *
- * 引き換えに、音声や焼き方を選び直すと**字幕も焼き直し**になる。
- * 字幕は次が来るまで出しっぱなしのものなので、その間は最後の1枚を配り直す。
+ * ([captions.ts](captions.ts) の `captionOutput`)。**時刻を揃えるにはこうするしか
+ * なかった** — 理由と実測、引き換え (選び直すと字幕も焼き直し) は captions.ts の冒頭。
  *
  * **`-loglevel` は下げない。** 選べる字幕は入口の見出しから拾っていて
  * (`TrackList`)、あれは info で出る。騒がしいぶんは読む側で落とす (`watch`)。
@@ -188,11 +180,7 @@ export function encodeArgs(
               : null;
     return [
         '-hide_banner',
-        /*
-         * **数字の進み具合だけ止める。** `-loglevel` は下げられない —
-         * 選べる字幕は入口の見出しから拾っていて (`TrackList`)、あれは info。
-         * 要らない行は読む側で落とす (`watch`)
-         */
+        // 数字の進み具合だけ止める。`-loglevel` は下げられない (上の説明)
         '-nostats',
         '-fflags',
         'nobuffer',
@@ -204,10 +192,9 @@ export function encodeArgs(
         '-i',
         'pipe:0',
         /*
-         * インタレ解除。放送は 1080i なので、解かずに渡すと動きが櫛状になる。
-         * **ライブは常に60コマ。** 録画は本編映像から実測して30に落とすことがあるが
-         * (`encoder.measureSmoothMotion`)、ライブは映像が来る前に決めないといけない。
-         * 60 に倒しておけば動きは絶対に落ちない (アニメで無駄が出るだけ)
+         * インタレ解除 (上の説明)。**ライブは常に60コマ。** 録画は本編映像から実測して
+         * 30に落とすことがあるが (`encoder.measureSmoothMotion`)、ライブは映像が来る前に
+         * 決めないといけない。60 に倒しておけば動きは絶対に落ちない (アニメで無駄が出るだけ)
          */
         '-vf',
         deinterlace(true),
@@ -447,13 +434,13 @@ const captionless = new Map<number, number>();
 /** 忘れるまで (ms)。番組の変わり目より短く採る */
 const FORGET_CAPTIONLESS = 15 * 60_000;
 
-/**
- * 放送の実時刻を配り直す間隔 (ms)。
- *
- * **ずれる速さではありません。** 配り続けるのは、選局の直後はまだ TDT が
- * 来ていないことと、端末とサーバの時計のずれを測り直せることのため
- */
+/** 放送の実時刻を配り直す間隔 (ms)。配り続ける理由は `Session.tellClock` */
 const CLOCK_EVERY = 5_000;
+
+/** 知らせ・データ放送は JSON にして運ぶ */
+function json(value: unknown): Uint8Array {
+    return new TextEncoder().encode(JSON.stringify(value));
+}
 
 class Session {
     private readonly viewers = new Set<Viewer>();
@@ -467,7 +454,7 @@ class Session {
     private readonly clock = new BroadcastClock();
     /** ffmpeg が入口で 0 に寄せたぶん (秒)。`start:` から拾う */
     private startPts = Number.NaN;
-    /** 最後に時計を配った時刻。**数秒に1回でいい** (ずれる速さではない) */
+    /** 最後に時計を配った時刻 (`tellClock`) */
     private toldClockAt = 0;
     private readonly splitter = new Fmp4Splitter();
     /** 字幕の器を割る。時刻はコマに付いてくる ([ts/mkv.ts](../ts/mkv.ts)) */
@@ -599,7 +586,7 @@ class Session {
     }
 
     /**
-     * 時計を配り直す。**塊を配るついでに、数秒に1回だけ。**
+     * 時計を配り直す。**塊を配るついでに、数秒に1回だけ** (ずれる速さではない)。
      *
      * 配り続ける理由は2つ — 選局の直後はまだ TDT が来ておらず配れないことと、
      * **端末とサーバの時計のずれを測り直せる**ことです (`now`)
@@ -678,13 +665,9 @@ class Session {
         const label = `${this.channelType}:${this.channel}`;
         try {
             /*
-             * **空きが無ければ待って掛け直す** (`openWhenFree`)。チャンネルを
-             * 変える一瞬だけ、前のチャンネルと合わせてチューナーが2本要る —
-             * 前のを離してから頼んでいるが、離れたことがエージェントに届くのは
-             * 非同期なので重なる瞬間が残る。地上波は2本しかないので、録画か
-             * 番組表集めが1本使っていると、そこで断られていた。
-             *
-             * 追っかけ (`source`) はチューナーを掴まない — 電波は録画が受けている
+             * **空きが無ければ待って掛け直す** (チャンネルを変える一瞬は2本要る。
+             * `tuner.openWhenFree`)。追っかけ (`source`) はチューナーを掴まない —
+             * 電波は録画が受けている
              */
             const tuned =
                 this.source !== undefined
@@ -831,8 +814,8 @@ class Session {
      * **プロセスを終わらせる** — ライブ1本の後始末で、録画まで道連れになる。
      *
      * `try`/`catch` では止まらない。投げられるのではなく、捨てた Promise が
-     * あとから転ぶため。実機で落ちた (`captions.ts` の `pump` で EPIPE、
-     * 終了コード 1)。同じ形を作って数えると:
+     * あとから転ぶため。実機で落ちた (字幕だけ別の ffmpeg で焼いていた頃の
+     * 流し込みで EPIPE、終了コード 1)。同じ形を作って数えると:
      *
      *     write を待たない   15回中 8回 落ちる
      *     write を待つ       15回中 0回
@@ -942,12 +925,12 @@ class Session {
             }
         }
         // **組み立てるのは1回だけ。** 人数ぶん JSON にすると、人が増えたぶんだけ無駄に働く
-        const data = new TextEncoder().encode(JSON.stringify(message));
+        const data = json(message);
         for (const viewer of wanting) viewer.connection.send(CHANNEL.data, 0n, data);
     }
 
     private tellData(viewer: Viewer, message: ResponseMessage): void {
-        viewer.connection.send(CHANNEL.data, 0n, new TextEncoder().encode(JSON.stringify(message)));
+        viewer.connection.send(CHANNEL.data, 0n, json(message));
     }
 
     /**
@@ -1079,7 +1062,7 @@ class Session {
     }
 
     private tellOne(viewer: Viewer, notice: Notice): void {
-        viewer.connection.send(CHANNEL.control, 0n, new TextEncoder().encode(JSON.stringify(notice)));
+        viewer.connection.send(CHANNEL.control, 0n, json(notice));
     }
 
     stop(): void {
@@ -1118,6 +1101,21 @@ const key = (
 ) => `${type}:${channel}:${serviceId}:${audio.id}:${codec}:${track}`;
 const sessions = new Map<string, Session>();
 
+/** 焼きはじめて一覧に載せる。畳むのは見ている人が居なくなったとき。ここでは待たない */
+function begin(
+    channelType: string,
+    channel: string,
+    serviceId: number,
+    now: NowPlaying,
+    codec: LiveCodec,
+    track: number,
+): Session {
+    const session = new Session(channelType, channel, serviceId, now.program, now.audio, codec, track);
+    sessions.set(key(channelType, channel, serviceId, now.audio, codec, track), session);
+    void session.run();
+    return session;
+}
+
 /** 見に行く。既に同じものを焼いていれば相乗りする */
 function watch(
     channelType: string,
@@ -1128,14 +1126,9 @@ function watch(
     track: number,
     viewer: Viewer,
 ): Session {
-    const id = key(channelType, channel, serviceId, now.audio, codec, track);
-    let session = sessions.get(id);
-    if (session === undefined) {
-        session = new Session(channelType, channel, serviceId, now.program, now.audio, codec, track);
-        sessions.set(id, session);
-        // 畳むのは見ている人が居なくなったとき。ここでは待たない
-        void session.run();
-    }
+    const session =
+        sessions.get(key(channelType, channel, serviceId, now.audio, codec, track)) ??
+        begin(channelType, channel, serviceId, now, codec, track);
     session.add(viewer);
     return session;
 }
@@ -1179,14 +1172,10 @@ export function warm(
     if (channelType === '' || channel === '' || !Number.isFinite(serviceId)) return;
 
     const now = nowPlaying(serviceId, audio);
-    // 字幕は1本目で温める。**選び直す人は稀**で、そのときは焼き直しになる
-    const id = key(channelType, channel, serviceId, now.audio, codec, 0);
+    // 字幕は1本目で温める。**選び直す人は稀**で、そのときは焼き直しになる。
     // 既に焼いていれば何もしない。開き直すたびに増やさない
-    if (sessions.has(id)) return;
-
-    const session = new Session(channelType, channel, serviceId, now.program, now.audio, codec, 0);
-    sessions.set(id, session);
-    void session.run();
+    if (sessions.has(key(channelType, channel, serviceId, now.audio, codec, 0))) return;
+    const session = begin(channelType, channel, serviceId, now, codec, 0);
 
     /*
      * **誰も来なければ自分で畳む。** 見ている人が居なくなったら畳む仕掛け
@@ -1349,7 +1338,7 @@ export function attend(connection: Connection): void {
             audio: now.audio.id,
             audios: now.audios,
         };
-        connection.send(CHANNEL.control, 0n, new TextEncoder().encode(JSON.stringify(notice)));
+        connection.send(CHANNEL.control, 0n, json(notice));
 
         /*
          * **焼き直さなくても、頼まれたら必ず答える。**
@@ -1384,14 +1373,13 @@ export function attend(connection: Connection): void {
  * チューナーは掴まない。録画が書き足している生TSを追い読みして (`chase.ts`)、
  * ライブと同じ `Session` に流し込む。**相乗りはしない** — 観る位置が人ごとに
  * 違うので、同じものを観る2人はほぼ起きない。セッションの一覧 (`sessions`) にも
- * 載せない (見ている人が switch れば `leave` が畳む)。
+ * 載せない (見ている人が選び直すか抜ければ `leave` が畳む)。
  *
  * シークはバイト比例で当たりを付ける (`chasePlan`)。生TSに時間の索引は無いが、
  * 放送TSはレートがほぼ一定なので大きくは外れない。
  */
 function openChase(asked: ChaseAsked, viewer: Viewer, connection: Connection): Session | null {
-    const tell = (notice: Notice) =>
-        connection.send(CHANNEL.control, 0n, new TextEncoder().encode(JSON.stringify(notice)));
+    const tell = (notice: Notice) => connection.send(CHANNEL.control, 0n, json(notice));
     const refuse = (text: string): null => {
         tell({ type: 'error', message: text });
         return null;

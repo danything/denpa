@@ -42,6 +42,12 @@ function every(ms: number, name: string, fn: () => Promise<unknown> | unknown): 
     timers.push(timer);
 }
 
+/** いま1回走らせて、あとは `every` と同じ */
+function nowAndEvery(ms: number, name: string, fn: () => Promise<unknown> | unknown): void {
+    void guard(name, fn);
+    every(ms, name, fn);
+}
+
 export function start(): void {
     if (started) return;
     started = true;
@@ -100,8 +106,7 @@ export function start(): void {
      * **新しい版が出ていないか、GitHub を見に行く** (update.ts)。起動時に 1 回と
      * 1 時間おき。`DENPA_AUTOSTART=0` でも回す — チューナーには行かない
      */
-    void guard('update', checkForUpdate);
-    every(config.updateCheckInterval, 'update', checkForUpdate);
+    nowAndEvery(config.updateCheckInterval, 'update', checkForUpdate);
 
     if (!config.autostart) {
         console.log('[boot] DENPA_AUTOSTART=0 のためバックグラウンド処理は起動しません');
@@ -120,8 +125,7 @@ export function start(): void {
      * チューナーが空いているだけ並列に回し、薄い局から先に行く (epg-collect.ts)。
      * 起動直後に1回走らせるので、初回は数分で番組表が出る
      */
-    void guard('epg-collect', collectOnce);
-    every(config.epgCollectInterval, 'epg-collect', collectOnce);
+    nowAndEvery(config.epgCollectInterval, 'epg-collect', collectOnce);
 
     listenToAgent();
 
@@ -137,29 +141,25 @@ export function start(): void {
      * 最初の1件しかイベントが来ず当てにできなかったので定期実行にしてある。
      * すぐ反映したいときは画面の「実体と照合」を押す。
      */
-    void guard('reconcile', reconcile);
-    every(config.reconcileInterval, 'reconcile', reconcile);
+    nowAndEvery(config.reconcileInterval, 'reconcile', reconcile);
 
     /*
      * ディスク残量を見張る。埋まると始まる録画が片っ端から失敗するので、
      * 下回ったところで知らせる (disk.ts)。照合と同じ周期でよい
      */
-    void guard('disk', checkDisk);
-    every(config.reconcileInterval, 'disk', checkDisk);
+    nowAndEvery(config.reconcileInterval, 'disk', checkDisk);
 
     /*
      * 古い履歴を畳む。終わった予約と、消した録画の行が対象。
      * 実体はもう無いので、消えて困るものはない。照合と同じ周期でよい
      */
-    void guard('prune', pruneHistory);
-    every(config.reconcileInterval, 'prune', pruneHistory);
+    nowAndEvery(config.reconcileInterval, 'prune', pruneHistory);
 
     /*
      * 切れたログインの控えを片付ける。**入れなくなる人は居ません** — 切れたものは
      * 読む側 (`session.find`) が既に無視しているので、消しているのは行だけ
      */
-    void guard('sessions', pruneSessions);
-    every(config.reconcileInterval, 'sessions', pruneSessions);
+    nowAndEvery(config.reconcileInterval, 'sessions', pruneSessions);
 
     /*
      * 局ロゴ。放送波から拾うしかないので、持っていない局のぶんを少しずつ取りに行く。
@@ -175,7 +175,7 @@ export function start(): void {
 /**
  * エージェントからの知らせを受け取る。
  *
- * チューナーの様子もスキャンの進み具合も、これまでは決まった間隔で覗きに行っていた。
+ * チューナーの様子も局の入れ替わりも、これまでは決まった間隔で覗きに行っていた。
  * 覗きに行く方式だと「変わってから気付くまで」が必ず空くうえ、
  * 何も変わっていない時間帯も同じだけ叩くことになる。
  *
@@ -375,7 +375,7 @@ async function drain(signal: string): Promise<void> {
     const until = Date.now() + config.shutdownWait;
     let reported = Date.now();
     while (activeRecordingIds().length > 0 && Date.now() < until) {
-        await new Promise((resolve) => setTimeout(resolve, DRAIN_CHECK));
+        await Bun.sleep(DRAIN_CHECK);
         // **黙って待たない。** 何を待っているのかが分からないと、外からは固まって見える
         if (Date.now() - reported >= DRAIN_REPORT) {
             reported = Date.now();

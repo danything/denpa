@@ -193,9 +193,9 @@ export async function allowed(raw: string): Promise<{ url: URL; address: string 
      * そうなった。
      *
      * 覗かれる道を開けることは承知の上。ただし**これは放送のアプリの
-     * 通信**で、denpa の資格情報も利用者の秘密も乗らない (`credentials:
-     * 'omit'`)。実機のテレビが出す通信と同じもので、それ以上に危なくは
-     * ならない。
+     * 通信**で、denpa の資格情報も利用者の秘密も乗らない (cookie も認証も
+     * 渡さない。`doRequest`)。実機のテレビが出す通信と同じもので、それ以上に
+     * 危なくはならない。
      *
      * `file:` や `data:` のような別の仕組みへ逃がす道は塞いだままにする
      */
@@ -282,18 +282,8 @@ function doRequest(
  * 自動の redirect に任せると、飛ばされた先が内側でも黙って繋ぎます。
  * 手で追いかけて、行き先ごとに `allowed` を通します
  */
-export async function fetchForBml(raw: string): Promise<Fetched> {
-    let { url, address } = await allowed(raw);
-    for (let hop = 0; ; hop++) {
-        const got = await doRequest(url, address, 'GET', undefined);
-
-        if (got.status >= 300 && got.status < 400 && got.location !== null) {
-            if (hop >= HOPS) throw new Refused('飛ばされる回数が多すぎます');
-            ({ url, address } = await allowed(new URL(got.location, url).toString()));
-            continue;
-        }
-        return { status: got.status, contentType: got.contentType, body: got.body };
-    }
+export function fetchForBml(raw: string): Promise<Fetched> {
+    return follow(raw, 'GET', undefined);
 }
 
 /**
@@ -314,9 +304,14 @@ export async function fetchForBml(raw: string): Promise<Fetched> {
  * 飛ばされたときの手の変わりかたは web と同じ規則にします —
  * 301/302/303 は GET へ、307/308 は POST のまま。**行き先は毎回確かめ直す**
  */
-export async function postForBml(raw: string, body: Uint8Array): Promise<Fetched> {
+export function postForBml(raw: string, body: Uint8Array): Promise<Fetched> {
+    return follow(raw, 'POST', body);
+}
+
+/** 飛ばされるのを1つずつ確かめながら追いかける (`fetchForBml` / `postForBml` の本体) */
+async function follow(raw: string, first: 'GET' | 'POST', body: Uint8Array | undefined): Promise<Fetched> {
     let { url, address } = await allowed(raw);
-    let method: 'GET' | 'POST' = 'POST';
+    let method = first;
     for (let hop = 0; ; hop++) {
         const got = await doRequest(url, address, method, method === 'POST' ? body : undefined);
 

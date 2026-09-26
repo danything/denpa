@@ -61,17 +61,12 @@ const SATELLITE_TIMEOUT = 20 * 60_000;
 const SATELLITE_QUIET = 15_000;
 /**
  * 相乗りのときの上限。向こうの都合でいつ閉じてもおかしくないので短くする。
- * こちらはチューナーを増やさない (同じチャンネルなら**エージェントが相乗りさせる**)
- *
- * **実際に集めているのはほぼこちら。** 実機では、BS の38局ぶんが番組表集めに
- * 相乗りした一度で全部揃った (denpa が自分でチューナーを開いた記録は残っていない)。
- * 番組表集めは全チャンネルを定期的に開くので、こちらはそこに乗っているだけで只で埋まる。
+ * こちらはチューナーを増やさない (同じチャンネルなら**エージェントが相乗りさせる**)。
+ * **実際に集めているのはほぼこちら** (`sweep`)
  */
 const RIDE_TIMEOUT = 3 * 60_000;
 /**
- * ロゴを取りに行くときの優先度。**いちばん下。**
- *
- * 「録画 > スキャン > 番組表 > ロゴ」と並べてある (`config.priority`)。
+ * ロゴを取りに行くときの優先度。**いちばん下** (並びは `config.priority`)。
  * ロゴが出なくても番組表は読めるが、番組情報が来なければ何も予約できない
  */
 const SWEEP_PRIORITY = config.priority.logo;
@@ -115,6 +110,13 @@ function relayPath(): string {
     return join(logoDir(), 'satellite-relays.json');
 }
 
+/** 書きかけを読ませない。番組表は同時に見に来るので、別名に書いてから置き換える */
+function writeWhole(path: string, data: string | Uint8Array): void {
+    const working = `${path}.writing`;
+    writeFileSync(working, data);
+    renameSync(working, path);
+}
+
 interface RelayNotes {
     /** ロゴを積んでいなかった中継と、そう分かった時刻 */
     noCarousel: Record<string, number>;
@@ -155,9 +157,7 @@ function save(next: RelayNotes): void {
     relays = next;
     try {
         mkdirSync(logoDir(), { recursive: true });
-        const working = `${relayPath()}.writing`;
-        writeFileSync(working, JSON.stringify(next));
-        renameSync(working, relayPath());
+        writeWhole(relayPath(), JSON.stringify(next));
     } catch {
         // 控えられなくても集めることはできる。次の機会に
     }
@@ -240,10 +240,7 @@ function store(networkId: number, serviceIds: number[], logoType: number, data: 
              * 取り直し (LOGO_MAX_AGE) のたびに 64×36 が 48×24 に化けることがあった
              */
             if (!replacesLogo(storedLogoType(id), logoType)) continue;
-            // 書きかけを読ませない。番組表は同時に見に来る
-            const working = `${logoPath(id)}.writing`;
-            writeFileSync(working, data);
-            renameSync(working, logoPath(id));
+            writeWhole(logoPath(id), data);
             /*
              * **`updated_at` は触らない。** あれは「最後に取り込んだ
              * 時刻」で、番組表は *いちばん新しいものと同じ時刻の局だけ* を出す
@@ -348,22 +345,13 @@ function repaint(serviceId: number): void {
         const stored = readFileSync(path);
         const fixed = withPalette(stored);
         if (fixed.length === stored.length) return;
-        const working = `${path}.writing`;
-        writeFileSync(working, fixed);
-        renameSync(working, path);
+        writeWhole(path, fixed);
         console.log(`[logo] ${serviceId} の色の表を入れ直しました`);
     } catch {
         // 直せなくても番組表は出る。次の機会に
     }
 }
 
-/**
- * ロゴをまだ持っていない局。
- *
- * いま選局できる局だけを対象にする。取り残しの局まで見に行くと、
- * もう選局できないチャンネルを1局ずつ60秒かけて開いては諦めることになり、
- * 本当に要る局まで順番が回ってこない。
- */
 /** ロゴを取りに行く単位。1つの物理チャンネルと、そこに乗っている局 */
 export interface Target {
     type: string;
@@ -447,6 +435,13 @@ function currentServices(): { id: number; type: string; channel: string; network
         .all();
 }
 
+/**
+ * ロゴを取りに行く物理チャンネル。
+ *
+ * いま選局できる局だけを対象にする。取り残しの局まで見に行くと、
+ * もう選局できないチャンネルを1局ずつ開いては諦めることになり、
+ * 本当に要る局まで順番が回ってこない。
+ */
 export function missing(): Target[] {
     const services = currentServices();
     const targets = new Map<string, Target>();
@@ -557,11 +552,7 @@ async function collect(target: Target, timeout: number, signal?: AbortSignal): P
         let progressed = Date.now();
         for await (const chunk of chunks(stream)) {
             feed(chunk);
-            /*
-             * **衛星は「開いた中継の局」では見ない。** 同じカルーセルに BS と CS の
-             * 全局ぶんが入っているので、開いた中継のぶんで打ち切ると後ろに続く
-             * CS を毎回取りこぼす (実機で CS が 0/54 のままだった原因)
-             */
+            // 衛星は「開いた中継の局」では見ない (`missingSatellites`)
             const now = satellite ? missingSatellites() : missingOn(target.channel);
             if (now < left) {
                 left = now;
@@ -585,14 +576,9 @@ async function collect(target: Target, timeout: number, signal?: AbortSignal): P
                 break;
             }
             /*
-             * **衛星のロゴは1つの中継にしかない。** 実機の BS はネットワーク4に
-             * 26の中継があるが、ロゴを運ぶエンジニアリングサービス (929) が
-             * 居るのは `BS15_0` (NHK BS と同じ中継) だけだった。CS の12中継には
-             * どこにも居ない (CS のロゴもこの BS の中継から流れてくる)。
-             * 外れの中継は PAT を見た時点で分かるので、待たずに次へ行く。
-             *
-             * 当たり外れは書き留めておく。そうしないと、二度と来ないものを
-             * 見回りのたびに開き直すことになる
+             * **衛星のロゴは1つの中継にしかない** (`RELAY_RETRY`)。外れの中継は PAT を
+             * 見た時点で分かるので、待たずに次へ行く。当たり外れは書き留めておく —
+             * そうしないと、二度と来ないものを見回りのたびに開き直すことになる
              */
             if (satellite && !marked && feed.hasSatelliteLogo !== null) {
                 marked = true;
@@ -646,7 +632,7 @@ function openChannels(tuners: AgentTuner[]): Set<string> {
     return open;
 }
 
-/** 同時に2つ走らせない。相乗りの合図 (tuner.status-changed) は連続して飛んでくる */
+/** 同時に2つ走らせない。相乗りの合図 (エージェントの `tuners`) は連続して飛んでくる */
 let riding = false;
 
 /**
@@ -832,7 +818,7 @@ export async function sweepNow(): Promise<{ started: boolean; message: string }>
     const ordered = [...targets].sort((a, b) => Number(b.type === 'GR') - Number(a.type === 'GR'));
     const parallel = Math.min(SWEEP_TUNERS, Math.max(...free.values()));
     // 終わるのは数分後。押した人を待たせず、進み具合は画面へ流す
-    void run(ordered, parallel, 0);
+    void run(ordered, parallel);
     return {
         started: true,
         message:
@@ -851,7 +837,7 @@ async function settled(): Promise<boolean> {
 }
 
 /** 実際に回すところ。走っている印を立て、終わったら結果を残す */
-async function run(targets: Target[], parallel: number, found: number): Promise<void> {
+async function run(targets: Target[], parallel: number): Promise<void> {
     const controller = new AbortController();
     inflight = controller;
     state = {
@@ -859,7 +845,7 @@ async function run(targets: Target[], parallel: number, found: number): Promise<
         channels: [],
         done: 0,
         total: targets.length,
-        found,
+        found: 0,
         message: '',
         startedAt: Date.now(),
         finishedAt: null,

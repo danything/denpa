@@ -32,7 +32,8 @@ function subscribed(webhook: Webhook, event: WebhookEvent): boolean {
     return webhook.events.length === 0 || webhook.events.includes(event);
 }
 
-async function post(webhook: Webhook, payload: Payload): Promise<void> {
+/** 送って、結果を行に残す。戻り値も同じ結果 (`ok` か失敗の理由) */
+async function post(webhook: Webhook, payload: Payload): Promise<string> {
     const at = now();
     let status = 'ok';
     try {
@@ -54,6 +55,7 @@ async function post(webhook: Webhook, payload: Payload): Promise<void> {
         .where(eq(webhooks.id, webhook.id))
         .run();
     if (status !== 'ok') console.error(`[webhook] ${webhook.url} への送信に失敗: ${status}`);
+    return status;
 }
 
 /** 投げっぱなしにする。呼び出し側は待たない */
@@ -66,13 +68,6 @@ export function notify(payload: Payload): void {
 }
 
 /** 設定画面の「テスト送信」。こちらは結果を見たいので待つ */
-export async function send(webhook: Webhook, payload: Payload): Promise<string> {
-    await post(webhook, payload);
-    return (
-        orm()
-            .select({ last_status: webhooks.last_status })
-            .from(webhooks)
-            .where(eq(webhooks.id, webhook.id))
-            .get()?.last_status ?? 'unknown'
-    );
+export function send(webhook: Webhook, payload: Payload): Promise<string> {
+    return post(webhook, payload);
 }

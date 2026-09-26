@@ -311,19 +311,12 @@ interface ReserveRow {
     name: string | null;
 }
 
-/** EPGStation のチャンネルIDは networkId * 100000 + serviceId */
+/**
+ * EPGStation のチャンネルIDは networkId * 100000 + serviceId — denpa の局の内部ID
+ * (`tuner.serviceKey`) と作り方が同じなので、そのまま引ける。知らない局なら undefined
+ */
 function serviceIdFor(channelId: number): number | undefined {
-    const service = orm()
-        .select({ id: services.id })
-        .from(services)
-        .where(
-            and(
-                eq(services.network_id, Math.floor(channelId / 100000)),
-                eq(services.service_id, channelId % 100000),
-            ),
-        )
-        .get();
-    return service?.id;
+    return orm().select({ id: services.id }).from(services).where(eq(services.id, channelId)).get()?.id;
 }
 
 /**
@@ -456,14 +449,11 @@ async function importReservations(connection: SQL, options: MigrateOptions): Pro
             status_.reservations.skipped++;
             continue;
         }
-        const program =
-            row.programId === null
-                ? undefined
-                : orm()
-                      .select({ id: programs.id })
-                      .from(programs)
-                      .where(eq(programs.id, row.programId))
-                      .get();
+        const program = orm()
+            .select({ id: programs.id })
+            .from(programs)
+            .where(eq(programs.id, row.programId))
+            .get();
         if (program === undefined) {
             // 番組表を取り込む前だと出る。EPG を取り直してからもう一度実行すれば入る
             record(`番組表に無いので取り込めません: ${toHalfWidth(row.name ?? String(row.programId))}`);
@@ -479,8 +469,7 @@ async function importReservations(connection: SQL, options: MigrateOptions): Pro
 
 /**
  * 取り込みを走らせる。進捗は {@link status} に入る。
- *
- * 呼び出し側を待たせないので、CLI から使うときは返り値を await すること。
+ * 画面からは待たずに呼ぶ (`start`)。返り値は終わったときの進み具合
  */
 export async function run(options: MigrateOptions): Promise<MigrateStatus> {
     status_ = freshStatus({

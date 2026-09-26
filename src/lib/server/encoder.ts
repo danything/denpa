@@ -12,8 +12,8 @@ import {
     writeFileSync,
 } from 'node:fs';
 import { basename, dirname } from 'node:path';
-import { and, eq, getTableColumns, inArray, ne, or, sql } from 'drizzle-orm';
-import { type Audio, audioTitles, DUAL_MONO } from '$lib/arib';
+import { and, eq, getTableColumns, inArray, sql } from 'drizzle-orm';
+import { audioTitles, DUAL_MONO } from '$lib/arib';
 import { HW_KIND_LABEL, type HwCodec } from '../hw';
 import { encodeSource } from '../source';
 import type { EncodeJob, EncodePhase, Recording } from '../types';
@@ -34,11 +34,13 @@ import {
 import { config } from './config';
 import { affected, now, orm } from './db';
 import { type EncodeProgress, emit } from './events';
+import { usedByOther } from './files';
 import { removeByPrefix, removeIfExists } from './fsx';
 import { type HwWay, hwArgs, hwChain } from './hwenc';
 import { encodedPath, libraryFamily, libraryPath } from './library';
 import { removeSidecars, sidecarPaths, writeThumbnail } from './metadata';
 import { saveRecordedBml } from './recorded-bml';
+import { recordingSummary } from './recording';
 import { encodeJobs, recordings, services } from './schema';
 import { descramble, isScrambled } from './scramble';
 import { settings } from './settings';
@@ -336,14 +338,6 @@ interface EncodeOptions {
     probed?: { duration: number; fps: number };
 }
 
-/**
- * 録画に写してある音声の構成。写しが無い (古い録画) なら何も無いことにする —
- * どの道 `audioTitles` が既定の名前を返す。壊れた行を空にするのは列の読み手 (`schema.ts`)
- */
-function storedAudios(recording: Recording): Audio[] {
-    return recording.audios ?? [];
-}
-
 /** これ以下は捨てない。1コマにも満たないずれのために seek を掛けても得るものが無い */
 const MIN_SKIP = 0.05;
 
@@ -370,8 +364,8 @@ export function inputSkip(seek: number | null, videoStart: number | undefined): 
 }
 
 /**
- * ffmpeg の引数。EPGStation 時代の enc.js をそのまま移植したもので、
- * 各フラグの理由はコメントに残してある(ARIB字幕の焼き込み、インタレ解除、デュアルモノ分離)。
+ * ffmpeg の引数。元は EPGStation 時代の enc.js で、各フラグの理由はコメントに
+ * 残してある (インタレ解除、デュアルモノ分離)。字幕は焼き込まず、別に作った PGS を入れる。
  *
  * CM を切る場合でもここは変わらない。**切るのはエンコードの前にTSの段階**で、
  * ここに来る入力は既に切り終えたものになっている (buildSegmentArgs)。
@@ -1034,7 +1028,7 @@ async function prepareCm(
     input: string,
     signal: AbortSignal,
 ): Promise<EncodeOptions & CmPrep> {
-    const none = {
+    const none: CmPrep & { keep: null } = {
         keep: null,
         chaptersFile: null,
         contentStart: null,
@@ -1098,13 +1092,10 @@ async function prepareCm(
          * チャプターにするほうは戻さない — あちらは切らないので、位置は
          * 判定どおりのほうが正しい
          */
+        // 切ってしまうので出来上がりは既にCMが無い。サムネは頭からの固定でよい
         return {
+            ...none,
             keep: widenKeep(invertRanges(detection.cm, detection.duration), config.cmCutMargin),
-            chaptersFile: null,
-            // 切ってしまうので出来上がりは既にCMが無い。サムネは頭からの固定でよい
-            contentStart: null,
-            fpsBlock: null,
-            chapterSource: null,
         };
     }
 
@@ -1218,13 +1209,7 @@ function fail(jobId: number, recording: Recording, reason: string): void {
     notify({
         event: 'encode.failed',
         text: `エンコードに失敗しました: ${recording.name} (${recording.service_name})`,
-        recording: {
-            id: recording.id,
-            name: recording.name,
-            service: recording.service_name,
-            startAt: recording.start_at,
-            endAt: recording.end_at,
-        },
+        recording: recordingSummary(recording),
         error: reason,
     });
 }
@@ -1324,8 +1309,9 @@ async function runJob(jobId: number): Promise<void> {
          * 番組表の行は24時間で消えるので、写しておいたものから引く
          * (`recordings.audios`。ジャンルと同じ扱い)。古い録画には写しが無いので、
          * そのときは `audioTitles` の既定 (「音声」/「主音声」「副音声」) に落ちる
+         * (壊れた行を空にするのは列の読み手。`schema.ts`)
          */
-        audioTitles: audioTitles(storedAudios(recording), recording.audio_type === DUAL_MONO),
+        audioTitles: audioTitles(recording.audios ?? [], recording.audio_type === DUAL_MONO),
         mediaTitle: displayTitle(recording.name),
     };
     if (canceled.has(jobId)) return finishCanceled(jobId, decoded);
@@ -1430,9 +1416,6 @@ async function runJob(jobId: number): Promise<void> {
         encodeOptions.pgsFile = pgs.path;
         // 名前も放送が名乗っているものにする (「字幕 (日本語)」)
         encodeOptions.captionTitle = pgs.label;
-    }
-
-    if (pgs !== null) {
         orm()
             .update(encodeJobs)
             .set({ log: `字幕 ${pgs.captions} 枚を PGS にしました` })
@@ -1474,17 +1457,7 @@ async function runJob(jobId: number): Promise<void> {
     if (recording.alt_path !== null) stalePaths.add(recording.alt_path);
     for (const candidate of libraryFamily(recording)) {
         if (stalePaths.has(candidate) || !existsSync(candidate)) continue;
-        const claimed = orm()
-            .select({ id: recordings.id })
-            .from(recordings)
-            .where(
-                and(
-                    or(eq(recordings.library_path, candidate), eq(recordings.alt_path, candidate)),
-                    ne(recordings.id, recording.id),
-                ),
-            )
-            .get();
-        if (claimed === undefined) stalePaths.add(candidate);
+        if (!usedByOther(candidate, recording.id)) stalePaths.add(candidate);
     }
     if (stalePaths.size > 0) {
         for (const stalePath of stalePaths) {
@@ -1705,13 +1678,7 @@ async function runJob(jobId: number): Promise<void> {
     notify({
         event: 'encode.finished',
         text: `エンコードが終わりました: ${recording.name} (${recording.service_name})`,
-        recording: {
-            id: recording.id,
-            name: recording.name,
-            service: recording.service_name,
-            startAt: recording.start_at,
-            endAt: recording.end_at,
-        },
+        recording: recordingSummary(recording),
     });
 
     // 保存先が入った時点で「視聴可能」になる (recordings.state は生成列)。

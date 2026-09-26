@@ -58,12 +58,15 @@ const CHANNEL_RANGES: Record<ScannableType, { min: number; max: number }> = {
 /** BS は1つの物理チャンネルに最大4本の TS が相乗りしている */
 const BS_SLOTS = 4;
 
-/** 選局する物理チャンネルの一覧。エージェントが受け付ける書き方で返す */
-export function channelsFor(type: ScannableType, minimum?: number, maximum?: number): string[] {
-    const bounds = CHANNEL_RANGES[type];
-    const low = minimum === undefined ? bounds.min : Math.max(minimum, bounds.min);
-    const high = maximum === undefined ? bounds.max : Math.min(maximum, bounds.max);
-    const range = Array.from({ length: Math.max(0, high - low + 1) }, (_, i) => low + i);
+/**
+ * 選局する物理チャンネルの一覧。エージェントが受け付ける書き方で返す。
+ *
+ * **範囲は決め打ち。** 放送で使う物理チャンネルは決まっていて、狭めても
+ * 総当たりの時間が少し減るだけ。狭めた結果 見つからない局が出るほうが困る
+ */
+export function channelsFor(type: ScannableType): string[] {
+    const { min, max } = CHANNEL_RANGES[type];
+    const range = Array.from({ length: max - min + 1 }, (_, i) => min + i);
 
     if (type === 'GR') return range.map((ch) => `T${ch}`);
     if (type === 'BS') {
@@ -450,8 +453,6 @@ export function start(options: ScanOptions): { started: boolean; message: string
     if (types.length === 0) return { started: false, message: 'チャンネル種別の指定が不正です' };
     if (current.state === 'running') return { started: false, message: '既に実行中です' };
 
-    // 範囲は決め打ち。放送で使う物理チャンネルは決まっていて、狭めても
-    // 総当たりの時間が少し減るだけ。狭めた結果 見つからない局が出るほうが困る
     const targets: [ScannableType, string[]][] = types.map((type) => [type, channelsFor(type)]);
 
     current = {
