@@ -10,7 +10,7 @@
 **公開の Issue には書かないでください。** 攻撃に使える情報が、直る前に
 広まってしまいます。
 
-- GitHub の [プライベート脆弱性報告](../../security/advisories/new) を
+- GitHub の [プライベート脆弱性報告](https://github.com/danything/denpa/security/advisories/new) を
   使ってください (Security タブ → Report a vulnerability)。
 - 内容に応じて優先的に対応します。個人プロジェクトなので即応は
   約束できませんが、放置はしません。
