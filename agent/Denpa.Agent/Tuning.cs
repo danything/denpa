@@ -130,6 +130,12 @@ internal static unsafe partial class Sys
 /// TS が来なくなったチューナーを掴んだまま、畳もうとしても畳めない、という
 /// 止まり方をする。<c>poll</c> で待って**時々起きる**ようにしてある。
 /// </para>
+///
+/// <para>
+/// **Windows には poll が無い** (子の標準出力の pipe しか読まない。Siano.cs)。そちらは
+/// .NET の <see cref="Stream"/> を裏の1本に読ませ、こちらは同じく 200ms ごとに起きて印を見る
+/// (<see cref="Background"/>)。
+/// </para>
 /// </summary>
 /// <param name="handle">読む fd。DVB の dvr でも、子プロセスの標準出力の pipe でも同じ</param>
 /// <param name="ended">
@@ -144,6 +150,62 @@ internal sealed unsafe class DeviceStream(SafeFileHandle handle, Func<string?>? 
 
     /// <summary>この間隔で起きて、畳めと言われていないか見る</summary>
     private const int WakeMs = 200;
+
+    /// <summary>Windows の読み口 (<see cref="Background"/>)。あれば fd は使わない</summary>
+    private readonly Background? _background;
+
+    /// <summary>Windows で子の標準出力を読む口。fd は無いので、空の (無効な) ハンドルを持たせておく</summary>
+    public DeviceStream(Stream pipe, Func<string?>? ended = null)
+        : this(new SafeFileHandle(), ended) => _background = new Background(pipe);
+
+    /// <summary>
+    /// **読むのは裏の1本、待つのはこちら。** 読みかけの間に読み手が降りても、読めたぶんは
+    /// 捨てずに次の <see cref="Read(byte[], int, int, Func{bool}?)"/> に渡す
+    /// (poll で待ってから読む Unix と同じく、降りた読み手が中身を持ち去らない)
+    /// </summary>
+    private sealed class Background(Stream pipe)
+    {
+        private readonly byte[] _buffer = new byte[188 * 1024];
+        private readonly Lock _gate = new();
+        private Task<int>? _reading;
+        private int _at;
+        private int _left;
+
+        /// <summary>
+        /// 読めたバイト数。0 は尽きた、null は降りた。**錠を待つ間も降りる合図を見る** —
+        /// 先の読み手が待っている間、後から来た読み手 (降りたい側) が錠の手前で止まらないように
+        /// </summary>
+        public int? Read(Span<byte> target, Func<bool> giveUp)
+        {
+            while (!_gate.TryEnter(WakeMs))
+            {
+                if (giveUp()) return null;
+            }
+            try
+            {
+                while (_left == 0)
+                {
+                    if (giveUp()) return null;
+                    _reading ??= Task.Run(() => pipe.Read(_buffer, 0, _buffer.Length));
+                    if (!((IAsyncResult)_reading).AsyncWaitHandle.WaitOne(WakeMs)) continue;
+                    // 読めなかったなら、ここで元の例外がそのまま出る
+                    _left = _reading.GetAwaiter().GetResult();
+                    _reading = null;
+                    _at = 0;
+                    if (_left == 0) return 0;
+                }
+                var count = Math.Min(target.Length, _left);
+                _buffer.AsSpan(_at, count).CopyTo(target);
+                _at += count;
+                _left -= count;
+                return count;
+            }
+            finally
+            {
+                _gate.Exit();
+            }
+        }
+    }
 
     private const short PollIn = 1;
 
@@ -263,6 +325,15 @@ internal sealed unsafe class DeviceStream(SafeFileHandle handle, Func<string?>? 
      */
     public int Read(byte[] buffer, int offset, int count, Func<bool>? giveUp)
     {
+        if (_background is not null)
+        {
+            var read = _background.Read(buffer.AsSpan(offset, count), () => _closed || giveUp?.Invoke() == true);
+            if (read is null) return 0;
+            if (read > 0) return read.Value;
+            if (ended?.Invoke() is { } reason) throw new IOException(reason);
+            return 0;
+        }
+
         var fd = (int)handle.DangerousGetHandle();
         // struct pollfd { int fd; short events; short revents; }
         var descriptor = stackalloc byte[8];

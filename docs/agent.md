@@ -680,7 +680,7 @@ Unix ドメインソケットは**まだ入れていません** (`Program.cs` �
 ## Mac でチューナーを使う
 
 **Apple Silicon の Mac なら、Linux と同じ1行で denpa ごと立ち上がってブラウザが開きます**
-(入口の `install.sh` は1つで、OS を見て振り分ける)。**Mac 用はこのあとのリリースから**添えるので、
+(入口の `install.sh` は1つで、OS を見て振り分ける)。**Mac 用は v1.23.0 から**添えているので、
 それより前の版では Mac に入れられません (install.sh がそう言って止まる)。
 
 ```sh
@@ -746,6 +746,82 @@ LaunchAgent に書く環境変数は、コンテナで既定にしている置�
   **Mac の実機でチューナーとカードを繋いで確かめたことはまだありません。** CI で焼いて起こし、
   エージェントの入れ方を最後まで流すところまで (`.github/workflows/test.yml` の `agent-macos`。
   Mac のランナーには Docker が無いので、compose.mac.yml は Linux のジョブ (`install-linux`) で書き方だけ見る)
+- compose.mac.yml は Windows (install.ps1) と共用です
+
+## Windows でチューナーを使う
+
+**x64 の Windows なら、PowerShell の1行で denpa ごと立ち上がってブラウザが開きます**
+(`install.ps1`。作りは Mac と同じ)。**Windows 用はこのあとのリリースから**添えるので、
+それより前の版では入れられません (install.ps1 がそう言って止まる)。
+
+```powershell
+irm https://raw.githubusercontent.com/danything/denpa/main/install.ps1 | iex
+```
+
+引数を渡すときは `& ([scriptblock]::Create((irm https://raw.githubusercontent.com/danything/denpa/main/install.ps1))) -Uninstall`
+の形で (`-NoOpen` ブラウザを開かない / `-Uninstall` 止めて外す / `-NoDocker` エージェントだけ)。
+
+**エージェントは Windows の上でそのまま、denpa 本体は Docker Desktop で動かします** (Docker Desktop も
+コンテナに USB を渡せない)。denpa のコンテナからは `host.docker.internal` でエージェントを呼びます
+(`compose.mac.yml`。Mac と同じファイルで、録画の置き場だけ install.ps1 が Windows のフォルダに書き換える)。
+
+1. **エージェント** — 最新のリリースから取ってきて、**タスク スケジューラ**に「ログオンしたら起こす」
+   タスク (`denpa-agent`) を載せます。自分のアカウントのタスクなので管理者は要りません。窓は出さず
+   (`conhost --headless`)、落ちたら 5 秒置いて起こし直します (起こすのは `denpa-agent.cmd` の輪。
+   タスク スケジューラの「失敗したら再起動」は終了コードでは効かないため)
+2. **denpa 本体** — エージェントと同じ版の compose.mac.yml を `~/denpa/compose.yml` として置いて
+   `docker compose up -d`。**genkan は入れません** — もう動いていれば、Linux・Mac と同じく
+   `http://denpa.localhost` で開けるようにします。無ければ `http://localhost:3000` で開きます
+
+- **Docker は勝手に入れません。** 無い・起きていない・Windows コンテナになっているときは、エージェントだけ
+  入れて、Docker Desktop を入れる (起こす・Linux コンテナにする) ように言って終わります
+- ドライバは入れません (下)。刺さっている Siano のチューナーのドライバが WinUSB でなければ、そう言います
+
+| 置き場 | 中身 |
+| --- | --- |
+| `~/denpa/` (`DENPA_HOME`) | Linux・Mac と同じ。`compose.yml`・`compose.override.yml`・`config/` と、エージェントのログ `denpa-agent.log` |
+| `%LOCALAPPDATA%\denpa-agent\` | エージェント・siano-userland・起こす `denpa-agent.cmd` (環境変数はここに書く。Mac の plist と同じもの) |
+| `~/Videos/denpa/recorded` | 生TS。**エージェントとコンテナの両方に見せる** (Mac と同じ理由) |
+| `~/Videos/denpa/library` | 出来上がった録画 (エクスプローラーから見える) |
+| Docker のボリューム `denpa_denpa-data` | DB |
+
+**使えるもの。**
+
+- **チューナーは siano-userland の機材だけ** (PX-S1UD など。地上波)。siano-userland は Windows 版
+  (`siano-ts.exe` と libusb) を出していて、**ドライバを WinUSB にすれば**動きます。WinUSB にするのは
+  [Zadig](https://zadig.akeo.ie) で (Options → List All Devices → チューナーを選んで WinUSB → Replace Driver)。
+  installer が勝手にドライバを入れ替えることはしません (ほかのソフトで使っていた人の機材を黙って奪わない)。
+  WinUSB でないまま選局すると、siano-ts が開けずに落ち、そう添えて返します
+- **カードリーダー**: USB のリーダーを **Windows の PC/SC (winscard.dll) 越し**に叩きます (`Pcsc.cs`。
+  Mac と同じ作りで、違うのはハンドルの幅と関数の名前だけ)。ドライバは Windows の標準のもので足ります。
+  `denpa-agent --card` がリーダーを並べ、動いている間はリーダーを独り占めします
+
+**使えないもの。**
+
+- **PX-Q3U4 / PX-W3U4 / PX-MLT などの px4-userland の機材** — px4-userland は Windows を出していません
+  (方針として)。**PT2/PT3 などの DVB の機材** — Windows に DVB はありません
+- **止めるときに録画を待てません。** Windows にはエージェントに「止まれ」を伝える手 (SIGTERM) が無く、
+  止めればその場で落ちます。**上げ直し・外すときは、install.ps1 が録画の終わりを待ってから止めます**が、
+  ログオフ・再起動・シャットダウンでは待たずに切れます (録画中に Windows を落とさないこと)。
+  siano-ts も同じく、止めるときに `quit` を読めなければ Kill になります (USB は OS が閉じる)
+
+**Linux・Mac と違うところ。**
+
+- **siano-ts の標準入力に空行を詰め続けます** (`SianoTuner.Feed`)。siano-ts 0.1.8 の Windows 版は、
+  標準入力に行が来ているかを `WaitForSingleObject` で見ていて、pipe だと中身が無くても「来ている」と
+  答え (windows-latest で確かめた)、次の行が来るまで TS を止めます。空行は読み飛ばされるので、
+  埋めておけば流れ続けます。siano-ts 側で直れば (pipe なら `PeekNamedPipe` で見る) 外せます
+- 子の標準出力は poll できないので、裏の1本に読ませて 200ms ごとに起きます (`DeviceStream`)。
+  pipe の深さは Windows 任せ (広げられず、4KB ほど)。読み手が少し止まったぶんは siano-ts の中の溜め
+  (16KB × 256) が吸う
+- タスクの優先度は普通にしてあります (既定の「低い」だと、Docker がエンコードで CPU を食っている間に
+  siano-ts が後回しにされる)
+- ログは cmd がファイルへ足していくだけで、回しません (Mac と同じ)
+- LAN のほかの機械からエージェントに繋ぐとき (`-NoDocker`) は、Windows ファイアウォールでポート 25252 を
+  許します (初めて起きたときに確認の窓が出ることがある)。Docker Desktop のコンテナからは要りません
+- **Windows の実機でチューナーとカードを繋いで確かめたことはまだありません。** CI (`agent-windows`) で
+  焼いて起こし、口が答えること・入れ方 (`-NoDocker`) を最後まで流すところまで。ランナーの Docker は
+  Windows コンテナなので、compose.mac.yml を Windows で起こすところは通していません
 
 ## B-CASカードとデスクランブル
 

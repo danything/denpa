@@ -93,6 +93,18 @@ internal sealed class ChildTs(string name, string program)
     }
 
     /// <summary>
+    /// 子の標準出力を読み口にする (siano-ts)。Unix は fd を poll で待ち (pipe を広げてから)、
+    /// **Windows は .NET の Stream のまま** (<see cref="DeviceStream(Stream, Func{string?}?)"/>)
+    /// </summary>
+    internal static DeviceStream Stdout(Process process, string name, Func<string?> ended)
+    {
+        if (OperatingSystem.IsWindows()) return new DeviceStream(process.StandardOutput.BaseStream, ended);
+        var handle = StdoutHandle(process);
+        WidenPipe((int)handle.DangerousGetHandle(), name);
+        return new DeviceStream(handle, ended);
+    }
+
+    /// <summary>
     /// 子を起こして同期を待つ。前の子が居れば先に止める。
     /// 同期しなければ理由を添えて投げる (子は止めてある)
     /// </summary>

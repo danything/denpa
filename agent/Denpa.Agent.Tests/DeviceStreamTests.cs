@@ -1,7 +1,9 @@
 using System.Diagnostics;
+using System.IO.Pipes;
 using System.Runtime.InteropServices;
 using Denpa.Agent;
 using Microsoft.Win32.SafeHandles;
+using TUnit.Core.Enums;
 
 namespace Denpa.Agent.Tests;
 
@@ -16,6 +18,8 @@ namespace Denpa.Agent.Tests;
  * 本物のチューナーは要らない。何も来ないパイプで「来ないときにどうするか」は
  * そのまま試せる。
  */
+// libc の pipe で作る読み口 (poll で待つ道)。Windows の道は下の DeviceStreamPipeTests
+[ExcludeOn(OS.Windows)]
 public partial class DeviceStreamTests
 {
     [LibraryImport("libc", EntryPoint = "pipe", SetLastError = true)]
@@ -92,4 +96,48 @@ public partial class DeviceStreamTests
 
     [LibraryImport("libc", EntryPoint = "write", SetLastError = true)]
     private static unsafe partial nint WriteFd(int fd, byte* buffer, nuint count);
+}
+/*
+ * Windows の読み口 (.NET の Stream を裏の1本に読ませる道)。どの OS でも同じに動くので、
+ * Linux の CI でもここで見る。何も来ない pipe は .NET の匿名 pipe で作る
+ */
+public class DeviceStreamPipeTests
+{
+    /// <summary>読み口と書き口。読み口の側が Windows で子の標準出力にあたる</summary>
+    private static (DeviceStream Stream, Stream Write) Silent(Func<string?>? ended = null)
+    {
+        var read = new AnonymousPipeServerStream(PipeDirection.In);
+        var write = new AnonymousPipeClientStream(PipeDirection.Out, read.ClientSafePipeHandle);
+        return (new DeviceStream(read, ended), write);
+    }
+
+    [Test]
+    public async Task 降りると言えば_何も来なくても戻り_あとから来たものは次の読み手に渡る()
+    {
+        var (stream, write) = Silent();
+        using var _ = write;
+        var buffer = new byte[188];
+
+        var clock = Stopwatch.StartNew();
+        await Assert.That(stream.Read(buffer, 0, buffer.Length, () => clock.ElapsedMilliseconds > 300)).IsEqualTo(0);
+        await Assert.That(clock.ElapsedMilliseconds < 1000).IsTrue().Because($"{clock.ElapsedMilliseconds}ms 掛かった");
+
+        // 降りた読み手の読みかけに届いたものも、次の読み手が受け取る (捨てない)
+        write.Write([0x47, 0x01, 0x02]);
+        write.Flush();
+        await Assert.That(stream.Read(buffer, 0, 2, () => false)).IsEqualTo(2);
+        await Assert.That(stream.Read(buffer, 2, 10, () => false)).IsEqualTo(1);
+        await Assert.That(buffer[..3]).IsEquivalentTo([(byte)0x47, (byte)0x01, (byte)0x02]);
+    }
+
+    [Test]
+    public async Task 尽きたら理由を添えて投げる()
+    {
+        var (stream, write) = Silent(() => "siano-ts が終了しました");
+        using var _ = stream;
+        // 書き手 (子) が居なくなった
+        write.Dispose();
+        var error = Assert.Throws<IOException>(() => stream.Read(new byte[188], 0, 188, () => false));
+        await Assert.That(error.Message).Contains("終了しました");
+    }
 }

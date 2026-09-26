@@ -91,7 +91,7 @@ AV1 が再生できないテレビには、テレビごとに H.264 や生TSを�
 - **B-CASカード** と PC/SC 対応のリーダー
 - **Docker** (Compose) か **Kubernetes** (Helm)。**amd64 (x86_64) と arm64 (aarch64)** の
   どちらでも動きます (イメージは両方を束ねてあり、同じタグで自分の arch のものが降ってくる)
-  (**Apple Silicon の Mac** でも、[下の1行](#立てる)でエージェントと denpa が立ち上がります。
+  (**Apple Silicon の Mac** と **x64 の Windows** でも、[下の1行](#立てる)でエージェントと denpa が立ち上がります。
   [docs/agent.md](docs/agent.md#mac-でチューナーを使う))
 - あれば **Intel の GPU** — `/dev/dri` が見えれば起動時に見つけて GPU で焼きます
   (Helm は既定で渡す。無ければソフトウェア。[docs/encode.md](docs/encode.md)「GPU で焼く」)。
@@ -108,9 +108,12 @@ curl -fsSL https://raw.githubusercontent.com/danything/denpa/main/install.sh | b
 
 - **Linux** (amd64 / arm64) — 全部 Docker Compose。`~/denpa` に compose.prod.yml を置いて起こします
 - **Mac** (Apple Silicon) — チューナーに触るエージェントは Mac の上でそのまま、denpa 本体は Docker で
-  ([docs/agent.md](docs/agent.md#mac-でチューナーを使う))。**このあとのリリースから**入れられます
+  ([docs/agent.md](docs/agent.md#mac-でチューナーを使う))。**v1.23.0 から**入れられます
+- **Windows** (x64) は PowerShell で `irm https://raw.githubusercontent.com/danything/denpa/main/install.ps1 | iex`。
+  作りは Mac と同じで、チューナーは PX-S1UD など siano-userland の機材だけ (ドライバを WinUSB に)
+  ([docs/agent.md](docs/agent.md#windows-でチューナーを使う))。**このあとのリリースから**入れられます
 - **Docker は入れません。** 無ければ入れ方を言って止まります (Linux は <https://get.docker.com>、
-  Mac は Docker Desktop か OrbStack)
+  Mac は Docker Desktop か OrbStack、Windows は Docker Desktop)
 - **入口は [genkan](https://github.com/danything/genkan)** (ホスト名で振り分けるリバースプロキシ)。
   動いていればそれを使い、無ければ **80 と 443 が空いているときだけ** `~/genkan` に入れて、
   **<http://denpa.localhost>** で開きます。埋まっていれば入れず <http://localhost:3000> で。

@@ -226,6 +226,104 @@ jobs:
           test -d "$HOME/denpa/config"
           cat "$HOME/Library/Logs/denpa-agent.log"
 
+  # Windows (x64) で動かすエージェント (docs/agent.md「Windows でチューナーを使う」)。
+  #
+  # agent-macos と同じく、Native AOT は Linux から Windows へ焼けないので Windows のランナーで焼いて起こす。
+  # 実機は無いので、確かめるのは「焼ける・テストが通る・起きて口が答える・入れ方が最後まで通る」まで。
+  # ランナーの Docker は Windows コンテナなので、denpa 本体 (Linux のイメージ) は -NoDocker で外す。
+  # **必須チェックにはしない** (agent-macos と同じ理由)
+  agent-windows:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: '10.0.x'
+
+      # Linux でしか意味の無いテスト (sysfs・/dev のパス・libc の pipe・/bin/sh の偽物) は中で飛ばしてある
+      - name: Unit tests (.NET agent)
+        timeout-minutes: 8
+        run: dotnet test --project agent/Denpa.Agent.Tests/Denpa.Agent.Tests.csproj --output detailed --timeout 5m
+
+      - name: Publish (Native AOT, win-x64)
+        run: dotnet publish agent/Denpa.Agent/Denpa.Agent.csproj -c Release -r win-x64 -o out
+
+      # 書き方は PowerShell 5.1 (Windows の既定) に合わせて見る (PSUseCompatibleSyntax)。
+      # 読むのは pwsh で — install.ps1 は BOM の無い UTF-8 で、5.1 はそれを ANSI で読む
+      # (irm | iex は UTF-8 で受け取るので困らない。-File で 5.1 に渡す入れ方は案内しない)。
+      # 外す規則: Write-Host (画面に出す案内)、ShouldProcess (-WhatIf を持つモジュールではない)、BOM (上の理由)。
+      # **このジョブの PowerShell の段には日本語を書かない** (5.1 が ANSI で読んで、引用符が崩れうる)
+      - name: Lint install.ps1
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          Install-Module PSScriptAnalyzer -Force -Scope CurrentUser
+          $found = Invoke-ScriptAnalyzer -Path install.ps1 -Severity Warning, Error `
+            -ExcludeRule PSAvoidUsingWriteHost, PSUseShouldProcessForStateChangingFunctions, PSUseBOMForUnicodeEncodedFile `
+            -Settings @{ Rules = @{ PSUseCompatibleSyntax = @{ Enable = $true; TargetVersions = @('5.1', '7.0') } } }
+          $found | Format-Table -AutoSize | Out-String -Width 200
+          if ($found) { throw "PSScriptAnalyzer: $($found.Count) findings" }
+
+      # 何も設定せずに起こす。チューナーは自動検出で空、カードはリーダーが無いので ok:false が返るはず。
+      # **落ちずに答える**ことを見る。WinSCard (winscard.dll) をここで実際に引く
+      - name: Smoke test (published binary)
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          & .\out\denpa-agent.exe --card
+          $env:AGENT_PORT = '25300'
+          $agent = Start-Process .\out\denpa-agent.exe -PassThru -RedirectStandardOutput agent.log -RedirectStandardError agent.err
+          $tuners = $null
+          for ($i = 0; $i -lt 30 -and -not $tuners; $i++) {
+            try { $tuners = Invoke-RestMethod http://127.0.0.1:25300/denpa/tuners } catch { Start-Sleep 1 }
+          }
+          $card = Invoke-RestMethod http://127.0.0.1:25300/denpa/card
+          "tuners: $($tuners | ConvertTo-Json -Compress -Depth 5)"
+          "card: $($card | ConvertTo-Json -Compress -Depth 5)"
+          if ($null -eq $tuners.tuners) { throw 'no tuners in /denpa/tuners' }
+          if ($card.ok -ne $false -or $null -eq $card.readers) { throw 'unexpected /denpa/card' }
+          Stop-Process -Id $agent.Id
+          if (-not $agent.WaitForExit(10000)) { throw 'agent did not stop' }
+          Get-Content agent.log, agent.err
+          # --card exits 1 (no card); do not fail on the last native exit code
+          exit 0
+
+      # 入れ方を通しで。エージェントはいま焼いたものを zip にして入れ、siano-userland と
+      # ファームウェアは本物を取ってきてハッシュを確かめ、タスク スケジューラに載せて口が答えるまで。
+      # 1回目は irm | iex と同じ形 (取ってきた中身を scriptblock にして) で流す。2回目は上げ直し
+      # (動いているエージェントを止めて入れ替える)。最後に外す
+      - name: install.ps1 end to end
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          Compress-Archive -Path out\denpa-agent.exe -DestinationPath "$env:RUNNER_TEMP\denpa-agent.zip"
+          $env:DENPA_AGENT_ZIP = "$env:RUNNER_TEMP\denpa-agent.zip"
+          $script = [scriptblock]::Create((Get-Content install.ps1 -Raw -Encoding UTF8))
+          & $script -NoDocker -NoOpen
+          $prefix = "$env:LOCALAPPDATA\denpa-agent"
+          Get-ScheduledTask -TaskName denpa-agent | Format-List TaskName, State
+          Invoke-RestMethod http://127.0.0.1:25252/denpa/card | ConvertTo-Json -Compress
+          & "$prefix\siano-userland\siano-ts.exe" --list
+          "siano-ts --list: exit $LASTEXITCODE"
+          Get-Content "$prefix\denpa-agent.cmd"
+
+          & $script -NoDocker -NoOpen
+          $tuners = Invoke-RestMethod http://127.0.0.1:25252/denpa/tuners
+          if ($null -eq $tuners.tuners) { throw 'agent does not answer after the upgrade' }
+
+          & $script -Uninstall
+          if (Get-ScheduledTask -TaskName denpa-agent -ErrorAction SilentlyContinue) { throw 'task left' }
+          if (Test-Path $prefix) { throw "$prefix left" }
+          if (Get-Process denpa-agent -ErrorAction SilentlyContinue) { throw 'agent still running' }
+          # keeps ~/denpa/config
+          if (-not (Test-Path "$env:USERPROFILE\denpa\config")) { throw '~/denpa/config removed' }
+          Get-Content "$env:USERPROFILE\denpa\denpa-agent.log"
+          exit 0
+
   # 予約から録画・エンコード・保存先への配置まで、偽の放送で通しで流す
   e2e:
     runs-on: ubuntu-latest

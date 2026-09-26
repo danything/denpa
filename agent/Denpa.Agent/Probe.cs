@@ -91,7 +91,7 @@ public static class Probe
     /// </summary>
     public static int Card(string[] args)
     {
-        Console.WriteLine(OperatingSystem.IsMacOS() ? PcscLink.Describe() : Ccid.Describe(reset: true));
+        Console.WriteLine(OperatingSystem.IsLinux() ? Ccid.Describe(reset: true) : PcscLink.Describe());
         foreach (var found in Px4Card.Find()) Console.WriteLine($"内蔵 {found.Name}");
         try
         {

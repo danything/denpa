@@ -7,6 +7,8 @@
 #   … | bash -s -- --uninstall    止めて外す (~/denpa の compose と設定、録画・DB は残す)
 #   … | bash -s -- --no-docker    Mac だけ: エージェントだけ (denpa 本体は別の Linux で動かす)
 #
+# Windows は install.ps1 (同じ作りを PowerShell で。docs/agent.md「Windows でチューナーを使う」)
+#
 # **Linux** は全部 Docker Compose (compose.prod.yml をそのまま置く)。
 # **Mac (Apple Silicon)** は、エージェントを Mac の上でそのまま動かし (LaunchAgent)、
 # denpa 本体だけ Docker で (compose.mac.yml)。Mac の Docker はコンテナに USB を渡せないので、
