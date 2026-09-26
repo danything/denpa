@@ -137,21 +137,24 @@ public class SianoTests
     /// それから標準入力を読む (本物も「書く → 標準入力を見る」の1本の輪)。
     /// <c>tune 1</c> は同期しない。<c>tune 2</c> は前の選局の答え (別の周波数の <c>tuned</c>) を
     /// 先に吐く。<c>tune 3</c> は答えない。それ以外は少し待ってから (本物の同期待ち)
-    /// <c>tuned</c> を返し、<c>NEW&lt;Hz&gt;</c> を書き続ける (本物の TS も流れ続ける。
-    /// <c>tuned</c> の直後の少しは読み捨てに食われるので、1行だけだと届かない)
+    /// <c>tuned</c> を返し、次のコマンドが来るまで <c>NEW&lt;Hz&gt;</c> を書き続ける
+    /// (本物の TS も流れ続ける。<c>tuned</c> のあと読み捨てが止まるまでの分は食われるので、
+    /// 書く量に限りがあると、込み合ったときに全部食われて届かない)
     /// </summary>
     private const string FakeSianoTs = """
         dd if=/dev/zero bs=1048576 count=20 2>/dev/null
+        writer=
+        stop() { if [ -n "$writer" ]; then kill "$writer" 2>/dev/null; wait "$writer" 2>/dev/null; writer=; fi; }
+        emit() { (while :; do echo "NEW$1"; done) & writer=$!; }
         while IFS= read -r line; do
           case "$line" in
-            "tune 1") echo "ISDB-T tune response received but no demod lock" >&2
+            "tune 1") stop
+                      echo "ISDB-T tune response received but no demod lock" >&2
                       echo "control: tune failed: Connection timed out" >&2 ;;
-            "tune 2") echo "tuned 473142857" >&2; sleep 0.1; echo "tuned 2" >&2
-                      i=0; while [ $i -lt 2000 ]; do echo "NEW2"; i=$((i+1)); done ;;
-            "tune 3") sleep 30 ;;
-            tune\ *) sleep 0.3; echo "tuned ${line#tune }" >&2
-                     i=0; while [ $i -lt 2000 ]; do echo "NEW${line#tune }"; i=$((i+1)); done ;;
-            quit) exit 0 ;;
+            "tune 2") stop; echo "tuned 473142857" >&2; sleep 0.1; echo "tuned 2" >&2; emit 2 ;;
+            "tune 3") stop; sleep 30 ;;
+            tune\ *) stop; sleep 0.3; echo "tuned ${line#tune }" >&2; emit "${line#tune }" ;;
+            quit) stop; exit 0 ;;
           esac
         done
         """;
@@ -222,7 +225,7 @@ public class SianoTests
         {
             starts++;
             // 1回目の子は1回選局したら終わる (USB が抜けた、に見立てる)
-            var script = starts == 1 ? FakeSianoTs.Replace("i=$((i+1)); done ;;", "i=$((i+1)); done; exit 7 ;;") : FakeSianoTs;
+            var script = starts == 1 ? FakeSianoTs.Replace("emit \"${line#tune }\" ;;", "emit \"${line#tune }\"; sleep 0.5; stop; exit 7 ;;") : FakeSianoTs;
             return new ProcessStartInfo("/bin/sh") { ArgumentList = { "-c", script } };
         });
         tuner.Tune(ChannelTable.Parse("T27")!, ChannelTable.NoStreamId);
