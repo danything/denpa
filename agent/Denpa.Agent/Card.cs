@@ -45,8 +45,8 @@ public static class Shell
 ///
 /// <para>
 /// pcscd が動いていてもリーダーを掴めていないことがある (USBが黙る)。そうなると
-/// recisdb は黙って復号せずに素通しし、録画は成功したように見えて中身が全部
-/// スクランブルされたまま、という分かりにくい壊れ方をする。
+/// 復号器を用意できないまま掛かったまま流すので (TunerPool.Reopen)、録画は成功した
+/// ように見えて中身が全部スクランブルされたまま、という分かりにくい壊れ方をする。
 /// </para>
 /// </summary>
 public static class Card
@@ -158,10 +158,7 @@ public static class Scramble
     /// <summary>
     /// 掛かったまま録れてしまったものを、後から解く。
     ///
-    /// <para>
-    /// **自分で解く。** 前は <c>recisdb decode</c> を起こしていたが、解く口を
-    /// 持つようになったので外に出す理由が無くなった (AribB25.cs)。
-    /// </para>
+    /// <para>**自分で解く** (AribB25.cs)。</para>
     /// </summary>
     public static JsonObject Decode(string recorded, string? input, string? output, string? cardUrl)
     {

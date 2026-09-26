@@ -1,56 +1,58 @@
 /**
- * **放送の実時刻を、映像の物差しに結びつける。**
+ * **放送の時計 (PCR) を、受け取った時刻と映像の物差しに結びつける。**
  *
  * ライブで出している「遅延」は、これまで**手元の貯まりの差**
  * (`buffered.end - currentTime`) でした。あれは「あと何秒ぶん持っているか」で
  * あって、放送との差ではありません — チューナーの選局から ffmpeg の焼き上がり、
  * 回線まで、**上流でかかった時間はどれも入っていない**。
  *
- * 放送そのものは時刻を運んでいます (TDT / TOT)。それを PCR に結びつけておけば、
- * 「いま映しているコマは放送の何時何分のものか」が言えます。
+ * 放送は PCR という時計を運んでいて、映像の PTS も同じ時計で打たれています。
+ * PCR を「サーバが受け取った時刻」と組にしておけば、「いま映しているコマは、
+ * 隣に置いたテレビなら何時何分に映るものか」が言えます。
  *
- * ## 結びつけ方
- *
- * TDT は数秒に1回しか来ないので、**来た瞬間の PCR と組にして覚えます**。
- * PCR は 90kHz で連続して流れているので、以降はそこからの差で引けます。
- *
- *     放送の実時刻(unixMs) ─── TDT が来た瞬間 ─── PCR (90kHz)
+ *     受け取った時刻(unixMs, サーバの時計) ─── そのとき着いた PCR (90kHz)
  *
  * ffmpeg は入口の時刻を 0 に寄せて出すので (`-copyts` を付けていない。理由は
  * `server/live.ts`)、焼いたものの物差しに直すには**寄せたぶんを引く**だけです。
  * 引く量は ffmpeg 自身が入口で言ってくる (`Input #0 ... start: 72575.147089`)。
+ * 出口でも同じだけしか寄っていないことは実測で確かめてある (docs/stream.md)。
  *
  * **PCR は 26.5 時間で一周します** (33ビット)。またいだら結びつけ直すだけに
  * してあります — 巻き戻ったように見えたぶんを足し込む作りにすると、
  * 選局直後の飛びまで拾って**時刻が何時間もずれる**ほうが怖い。
  *
- * ## 秒未満は、いちばん大きいものを採る
+ * ## 放送の時刻 (TDT/TOT) は使わない
  *
- * **TDT は秒までしか持っていません** (MJD + BCD)。持っているのは切り捨てた値
- * なので、1つの組から出る時刻は**最大1秒ぶん過去に寄ります** — そのぶん
- * 「放送からの遅れ」は大きく出ます。
+ * 以前は TDT と組にしていましたが、**TDT は局ごとに固定でずれています**。
+ * 受け取った時刻 (NTP で合わせたサーバの時計) と突き合わせると、地上波9局で
+ * -0.72〜+0.90秒 (テレ東 -0.41、tvk +0.90、フジ -0.72)。秒未満の端数も局ごとに
+ * 同じところで入ってくるので、何本待っても寄りません。その差がそのまま
+ * 「放送から」に出て、Eテレでは手元の貯まりより小さい値になっていました。
  *
- * 秒の変わり目ちょうどに来た TDT だけが正しい値を持つので、
- * **`実時刻 − PCR` がいちばん大きい組を採り続けます**。TDT は数秒に1回来るので、
- * 十数秒で 0.1 秒くらいまで寄ります。1つ目で決め打ちにしていた頃は、局ごとに
- * 1秒ちかく違う数字が出ていました (実測で 0.2秒 と 1.8秒)
+ * 比べる相手 (`now`) もサーバの時計なので、**時計の絶対値はどこにも要りません**。
+ *
+ * ## いちばん早く着いた組を採る
+ *
+ * 受け取るのは塊ごとで、ffmpeg が詰まれば読むのも遅れます。遅れた組を採ると
+ * そのぶん「放送から」が小さく出るので、**`受け取った時刻 − PCR` がいちばん
+ * 小さい組**を採ります。ただし PCR とサーバの時計は別の水晶なので少しずつずれる —
+ * 永久には持たず、**30秒ごとに選び直します** (直前の区切りのぶんも残して比べる)
  */
 
-import { PID_TIME, parseTimeTable } from './eit';
 import { PacketStream, PID_PAT, parsePat, SectionAssembler, TABLE_PMT } from './psi';
 
 /** PCR の刻み。映像の PTS と同じ */
 const CLOCK = 90_000;
 /** 33ビットで一周する長さ (秒)。26.5 時間ほど */
 const WRAP = 2 ** 33 / CLOCK;
-/** TDT が持っている刻み (秒)。**これより大きく飛んだら採り直す** */
-const SECOND = 1;
+/** 組を選び直す区切り (ms)。水晶どうしのずれは 30秒で 1ms にも届かない */
+const WINDOW = 30_000;
 
-/** 放送の実時刻と、そのときの PCR */
+/** 受け取った時刻と、そのとき着いた PCR */
 export interface Anchor {
-    /** そのときの PCR (秒) */
+    /** そのとき着いた PCR (秒) */
     pcr: number;
-    /** 放送の実時刻 (unix ms) */
+    /** サーバが受け取った時刻 (unix ms) */
     unixMs: number;
 }
 
@@ -78,28 +80,36 @@ export function readPcr(packet: Uint8Array): number {
     return base / CLOCK;
 }
 
+/** `受け取った時刻 − PCR` (秒)。**小さいほど遅れずに着いた組** */
+function lag(anchor: Anchor): number {
+    return anchor.unixMs / 1000 - anchor.pcr;
+}
+
 /**
- * 1局に絞った TS から、放送の実時刻と PCR の組を拾い続ける。
+ * 1局に絞った TS から、PCR と受け取った時刻の組を拾い続ける。
  *
- * **絞ったあとを食わせる** (`ServiceFilter` の出口)。あちらは PAT・PMT・
- * PID 0x14 とその局の ES を残すので、要るものは全部通っている
+ * **絞ったあとを食わせる** (`ServiceFilter` の出口)。あちらは PAT・PMT と
+ * その局の ES を残すので、PCR を運ぶ ES も通っている
  */
 export class BroadcastClock {
     private readonly packets = new PacketStream();
     private readonly pat = new SectionAssembler(PID_PAT);
-    /** TDT は CRC を持たない。`syntax` で受ける (`bml.ts` と同じ理由) */
-    private readonly time = new SectionAssembler(PID_TIME, 'syntax');
     private pmt: SectionAssembler | null = null;
     private pmtPid: number | null = null;
     private pcrPid: number | null = null;
     private pcr = Number.NaN;
-    private found: Anchor | null = null;
-    /** 採っている組の `実時刻 − PCR` (秒)。**大きいほうが真に近い** */
-    private best = Number.NEGATIVE_INFINITY;
+    /** いまの区切りで採っている組 */
+    private current: Anchor | null = null;
+    /** 1つ前の区切りで採った組。**区切りの直後に遅れた組しか無くても困らないように** */
+    private previous: Anchor | null = null;
+    private windowFrom = Number.NaN;
 
-    /** いちばん新しい、実時刻と PCR の組。まだ揃っていなければ null */
+    /** いちばん遅れずに着いた組。まだ PCR を読めていなければ null */
     get anchor(): Anchor | null {
-        return this.found;
+        const current = this.current;
+        const previous = this.previous;
+        if (current === null || previous === null) return current ?? previous;
+        return lag(previous) < lag(current) ? previous : current;
     }
 
     /** 直近の PCR (秒)。まだ読めていなければ NaN */
@@ -107,24 +117,38 @@ export class BroadcastClock {
         return this.pcr;
     }
 
-    feed(chunk: Uint8Array): void {
+    /**
+     * @param receivedAt その塊を受け取った時刻 (unix ms, サーバの時計)。
+     *   塊の中の PCR はどれもこの時刻で組にする — 早く着いた PCR ほど遅れて
+     *   見えるだけで、塊の最後の PCR がいちばん小さく出て選ばれる
+     */
+    feed(chunk: Uint8Array, receivedAt = Date.now()): void {
         for (const packet of this.packets.feed(chunk)) {
             const pid = ((packet[1]! & 0x1f) << 8) | packet[2]!;
             if (this.pcrPid === null || pid === this.pcrPid) {
                 const at = readPcr(packet);
-                if (Number.isFinite(at)) {
-                    // 一周した (または選局で飛んだ)。結びつけ直す
-                    if (Number.isFinite(this.pcr) && (at < this.pcr - 1 || at > this.pcr + WRAP / 2)) {
-                        this.found = null;
-                        this.best = Number.NEGATIVE_INFINITY;
-                    }
-                    this.pcr = at;
-                }
+                if (Number.isFinite(at)) this.onPcr(at, receivedAt);
             }
             for (const section of this.pat.feed(packet)) this.onPat(section);
             for (const section of this.pmt?.feed(packet) ?? []) this.onPmt(section);
-            for (const section of this.time.feed(packet)) this.onTime(section);
         }
+    }
+
+    private onPcr(at: number, receivedAt: number): void {
+        // 一周した (または選局で飛んだ)。結びつけ直す
+        if (Number.isFinite(this.pcr) && (at < this.pcr - 1 || at > this.pcr + WRAP / 2)) {
+            this.current = null;
+            this.previous = null;
+            this.windowFrom = Number.NaN;
+        }
+        this.pcr = at;
+        if (!(receivedAt - this.windowFrom < WINDOW)) {
+            this.previous = this.current;
+            this.current = null;
+            this.windowFrom = receivedAt;
+        }
+        const anchor = { pcr: at, unixMs: receivedAt };
+        if (this.current === null || lag(anchor) < lag(this.current)) this.current = anchor;
     }
 
     private onPat(section: Uint8Array): void {
@@ -141,33 +165,6 @@ export class BroadcastClock {
         // 0x1fff は「PCR を運ぶ ES は無い」の意味
         this.pcrPid = pid === 0x1fff ? null : pid;
     }
-
-    private onTime(section: Uint8Array): void {
-        if (!Number.isFinite(this.pcr)) return;
-        const unixMs = parseTimeTable(section);
-        if (unixMs === null) return;
-        const offset = unixMs / 1000 - this.pcr;
-        /*
-         * **大きいほうを採る** (上の説明)。ただし1秒より大きく**下に**飛んだら
-         * 採り直す — 放送が時計を合わせ直したときに、古い値を抱え込まないため
-         */
-        if (this.found === null || offset > this.best || offset < this.best - SECOND) {
-            this.best = offset;
-            this.found = { pcr: this.pcr, unixMs };
-        }
-    }
-}
-
-/**
- * 焼いたものの物差し (0 起点) の時刻を、放送の実時刻に直す。
- *
- * @param anchor TDT が来た瞬間の PCR と実時刻
- * @param start ffmpeg が入口で 0 に寄せたぶん (秒)。`Input #0 ... start:` の値
- * @param at 焼いたものの時刻 (秒)
- */
-export function broadcastTime(anchor: Anchor, start: number, at: number): number | null {
-    if (!Number.isFinite(start) || !Number.isFinite(at)) return null;
-    return Math.round(anchor.unixMs + (at + start - anchor.pcr) * 1000);
 }
 
 /**
@@ -176,7 +173,8 @@ export function broadcastTime(anchor: Anchor, start: number, at: number): number
  *     Duration: N/A, start: 72575.147089, bitrate: N/A
  *
  * **これが 0 に寄せたぶん**。`-copyts` を付けていないので、出てくる時刻は
- * 入口の時刻からこれを引いたものになる
+ * 入口の時刻からこれを引いたものになる。映像が音声より遅れて始まっても
+ * 映像だけ 0 に詰められることはない (頭は同じ絵で埋まる。docs/stream.md)
  */
 export function parseStart(line: string): number {
     const match = /\bstart:\s*(-?\d+(?:\.\d+)?)/.exec(line);

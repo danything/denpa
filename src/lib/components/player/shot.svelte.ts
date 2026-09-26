@@ -2,12 +2,7 @@ import type { Notice } from '$lib/components/Toasts.svelte';
 import type { PlayerControls } from './controls.svelte';
 import { clipFrame } from './snapshot';
 
-/**
- * 切り抜きの3点セット (撮る・結果を持つ・トーストに出す)。**3画面で同じ形。**
- *
- * クリップボードに絵を置けるのは安全な繋ぎ (https) と押した勢いが要るので、
- * 断られたら**落とすほうに倒す** — 撮ったものを取り落とさない (`clipFrame`)。
- */
+/** 切り抜きの3点セット (撮る・結果を持つ・トーストに出す)。**3画面で同じ形。** 撮り方は `clipFrame` */
 export function snapshotter(controls: PlayerControls) {
     let shot = $state<Notice | null>(null);
 

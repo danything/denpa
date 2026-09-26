@@ -1,9 +1,7 @@
 import type {
     ENCODE_PHASES,
-    ENCODE_STATES,
     encodeJobs,
     programs,
-    RECORDING_STATES,
     recordings,
     reservations,
     rules,
@@ -45,8 +43,9 @@ export type CmMode = 'off' | 'chapter' | 'cut';
  * h264 : エンコードが速く、非力なマシンや古いクライアント向け
  * none : **エンコードしない。** 生TSのまま保存先へ置く
  *
+ * 両方焼くときもこの型は主のほうだけ (一覧は `Settings.codecs`)。
  * 別に「エンコードする」のチェックを持っていた頃は、外したときにコーデックの
- * 選択だけが残って、どちらが効いているのか画面から読めなかった。選ぶものは1つでいい
+ * 選択だけが残って、どちらが効いているのか画面から読めなかった。それで `none` もここに入れる
  */
 export type VideoCodec = 'av1' | 'h264' | 'none';
 
@@ -75,17 +74,7 @@ export type ReservationState = Reservation['state'] | 'recording' | 'done' | 'fa
 
 export type Reservation = typeof reservations.$inferSelect;
 
-/**
- * 録画の状態。**列ではなく生成列**で、他の列から毎回決まる (schema.RECORDING_STATE)。
- *
- * `encoding` はここに無い。動いているエンコードは encode_jobs にしか無く、
- * 一覧はそれを見て「エンコード中」を出す (format.encodeLabel)
- */
-export type RecordingState = (typeof RECORDING_STATES)[number];
-
 export type Recording = typeof recordings.$inferSelect;
-
-export type EncodeState = (typeof ENCODE_STATES)[number];
 
 /**
  * エンコードの段階。`encode` 以外は ffmpeg が回る前の下ごしらえで、

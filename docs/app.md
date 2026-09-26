@@ -70,7 +70,7 @@ EPGStation の置き換えとして作ったもので、エンコード設定は
 | `src/lib/paging.svelte.ts` / `paging.ts` | **長い一覧を少しずつ出す** (`Paged` + `sentinel`。無限スクロール) と、その代わりの絞り込み (`matches`。空白区切りの語をすべて含む)。予約・録画・ルールの一覧が使う。全部は描かないので Ctrl+F では探せず、一覧ごとに絞り込みの欄を置く |
 | `src/lib/ts/psi.ts` | TS の PSI (PAT / PMT / NIT / SDT) を読む。エージェント側と共通 |
 | `src/lib/ts/bytes.ts` | バイト列の細かい道具 (繋ぐ)。中身の意味は持たない |
-| `src/lib/ts/clock.ts` | 放送の実時刻 (TDT/TOT) を PCR に結びつけ、焼いたものの物差しに直す |
+| `src/lib/ts/clock.ts` | PCR をサーバが受け取った時刻に結びつけ、焼いたものの物差しに直す (TDT は局ごとにずれるので使わない) |
 | `src/lib/ts/aribtext.ts` | ARIB STD-B24 の8単位符号を読む (番組名・局名) |
 | `src/lib/ts/aribtext-gaiji.ts` | ARIB 外字の対応表 (`[新]` `[字]` はここ) |
 | `src/lib/ts/eit.ts` | EIT[schedule] と EIT[p/f]。集まり具合の判定も |
@@ -256,19 +256,28 @@ SQLite が拒むので、事実と状態が食い違いようがありません�
 
 | ファイル | 役割 |
 | --- | --- |
-| `agent/Denpa.Agent/Program.cs` | HTTP の口 (Kestrel)。選局・チャンネルの控え・カード・解除 |
+| `agent/Denpa.Agent/Program.cs` | HTTP の口 (Kestrel)。選局・チャンネルの控え・カード・解除・知らせ |
 | `agent/Denpa.Agent/TunerPool.cs` | 優先度つきの取り合いと、掴んでいるデバイスの面倒 |
 | `agent/Denpa.Agent/Tuning.cs` | 選局そのもの (DVB)。掴んだまま変えられる |
 | `agent/Denpa.Agent/Px4.cs` | px4-userland の機材 (PX-Q3U4 / PX-MLT 系 …) を掴む。筐体と受信機は `px4d --list` に聞き、内蔵カードリーダーの reader.conf を pcscd より先に書き、選局ごとに `px4-ts` を読む |
+| `agent/Denpa.Agent/Siano.cs` | siano-userland の機材 (PX-S1UD …) を掴む。機材は `siano-ts --list` に聞き、カーネルが掴んでいないものだけを `--control` で起こしたまま選局し直す |
+| `agent/Denpa.Agent/ChildTs.cs` | 子プロセス (px4-ts) の標準出力を読み口に載せる |
 | `agent/Denpa.Agent/ChannelTable.cs` | チャンネル名 → 周波数と TSID |
 | `agent/Denpa.Agent/AribB25.cs` / `CardShare.cs` | B25 の解除と、鍵を他の拠点へ配る口 |
-| `agent/Denpa.Agent/DeviceProbe.cs` | **チューナーの自動検出** (ioctl で受けられる方式を聞く) |
+| `agent/Denpa.Agent/Card.cs` | pcscd の起動・入れ直しとカードリーダーの状態 |
+| `agent/Denpa.Agent/DeviceProbe.cs` | **チューナーの自動検出** (DVB は ioctl で受けられる方式を聞き、px4 / siano は `--list` に聞く) |
 | `agent/Denpa.Agent/Config.cs` | `tuners.json` と `channels.json` の読み書き |
+| `agent/Denpa.Agent/Events.cs` | 知らせ (`/denpa/events`、SSE) |
+| `agent/Denpa.Agent/Probe.cs` | 実機で選局と復号だけ試す口 (`denpa-agent --tune …`)。サーバは立てない |
 | `agent/Denpa.Agent/Interop.cs` | 偽の選局 (`FAKE_TUNE`) をプロセスグループごと終わらせる |
 
-**チューナーは書かなくてよい。** 定義が無ければ `/dev/dvb/*` を開いて
-`DTV_ENUM_DELSYS` で方式を聞き、地上波か衛星かまで判別する。書いてあれば
-そちらが勝つ (LNB・1本だけ止める、は人にしか決められない)。
+**チューナーは書かなくてよい。** 定義が無ければ刺さっているものを自分で見つけ、
+地上波か衛星かまで判別する。書いてあればそちらが勝つ (LNB・1本だけ止める、は
+人にしか決められない)。聞き方は [agent.md](agent.md#選局コマンドは画面から渡させない)。
+
+環境変数は `AGENT_PORT` (既定 `25252`)・`TUNERS_FILE` / `CHANNELS_FILE` (既定 `/app-config/` の下)・
+`RECORDED_DIR` (denpa と同じ生TSの置き場)・`CARD_URL` (手元にカードが無い拠点だけ。鍵を貰う先)・
+`SHUTDOWN_WAIT` (denpa と同じ)。`FAKE_TUNE` は適合テストだけが使う。
 
 ## テスト
 
@@ -276,9 +285,9 @@ SQLite が拒むので、事実と状態が食い違いようがありません�
 | --- | --- |
 | `tests/e2e/` | Playwright。番号順に、予約 → 録画 → ルール → 引き継ぎ → 放送の延長。**ファイル単位で並ぶ**ので、長いものは割ってある |
 | `tests/stack.ts` | ワーカーごとに denpa と偽エージェントを1式立てる (これでファイル単位に並べられる) |
-| `tests/fake/` | 偽エージェント・偽の選局コマンド・偽の通知先・偽ffmpeg。**電波は `broadcast.ts` が組み立てる** (EIT も SDT も NIT も。同じものを偽エージェントと偽選局コマンドの両方が流す) |
+| `tests/fake/` | 偽エージェント・偽の選局 (`tune.ts`。本物のエージェントの `FAKE_TUNE` に渡す)・偽の通知先・偽ffmpeg。**電波は `broadcast.ts` が組み立てる** (EIT も SDT も NIT も。同じものを偽エージェントと偽の選局の両方が流す) |
 | `src/**/*.test.ts` | 純粋関数の境界条件 (bun test) |
-| `agent/Denpa.Agent.Tests/` | エージェント側 (手で書く設定の読み取り、選局表、チューナー自動検出) |
-| `agent/conformance.test.ts` | **本物のエージェントを起こして HTTP の口に当てる。** チューナーの代わりは偽の選局コマンド (`AGENT_CMD` で差し替えられる) |
+| `agent/Denpa.Agent.Tests/` | エージェント側 (設定の読み書き、選局表、読み口、px4-userland / siano-userland の答えの読み方と引数) |
+| `agent/conformance.test.ts` | **本物のエージェントを起こして HTTP の口に当てる** (`bun run test:conformance`)。チューナーの代わりは偽の選局 (`FAKE_TUNE`)、起こすエージェントは `AGENT_CMD` で差し替えられる |
 
 回し方と方針は [development.md](development.md) に置いてある。

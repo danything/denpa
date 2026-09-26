@@ -189,4 +189,4 @@ ffmpeg・libaribcaption・CM検出の一式・ARIB のフォント・libaribb25 
 bunx --package renovate renovate-config-validator   # 設定そのもの
 ```
 
-読む順は [architecture.md](architecture.md) の「もっと詳しく」に。
+文書の一覧は [README](../README.md#もっと詳しく) と [architecture.md](architecture.md) の冒頭の表に。

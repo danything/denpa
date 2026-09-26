@@ -362,8 +362,8 @@ export function livePlayer() {
     /** 跳び直した回数。**画面に出す** — 直し続けているなら、まだ足りていない */
     let slips = $state(0);
     /**
-     * 放送の実時刻と、焼いたものの物差しの対応 (`clock` の知らせ)。
-     * **読めない局では最後まで null** — 画面は届いてから出す
+     * サーバが受け取った時刻と、焼いたものの物差しの対応 (`clock` の知らせ)。
+     * **届くまでは null** — 画面は届いてから出す
      */
     let broadcast = $state<{ at: number; unixMs: number } | null>(null);
     /** サーバの時計 − 端末の時計 (ms)。**端末の時計を当てにしないため** */
@@ -373,8 +373,9 @@ export function livePlayer() {
      *
      * 隣に出ている「遅延」とは別物です。あちらは `buffered.end - currentTime`、
      * つまり**手元にあと何秒ぶん持っているか**で、選局から ffmpeg の焼き上がり、
-     * 回線までの上流はどれも入っていません。こちらは放送そのものが運んでいる
-     * 時刻 (TDT/TOT) との差なので、**端から端まで**が入ります
+     * 回線までの上流はどれも入っていません。こちらは**隣に置いたテレビとの差**
+     * (PCR をサーバが受け取った時刻と組にしたもの) なので、**端から端まで**が入ります。
+     * テレビも PTS まで待って映すので、貯まりより小さく出ることはある (docs/stream.md)
      */
     let fromAir = $state<number | null>(null);
     /**
@@ -403,7 +404,7 @@ export function livePlayer() {
      * 見えないものは測れないので、**起きる条件のほうで引きます** — 途切れ
      * (`stalled`) です。跳び直しの元手は `unslip` の1コマぶんで、どのみち
      * 絵が止まった直後なので余計には見えない。コマ落ちを合図にしない理由は
-     * `DROP_BURST` を置いていたところ (上) に
+     * `UNSLIP_EVERY` の下に
      */
     /** 繋ぎ直しの目覚まし。**待っている間だけ入っている** */
     let retry: ReturnType<typeof setTimeout> | null = null;
@@ -870,7 +871,7 @@ export function livePlayer() {
         // 捨てられたコマも同じ間隔で読む。**選局からの通し** (器を作り直すと 0 に戻る)
         dropped = element?.getVideoPlaybackQuality?.().droppedVideoFrames ?? dropped;
         /*
-         * **途切れたら跳び直す** (`seenDropped` の説明)。測れた遅れ (`slip`) を
+         * **途切れたら跳び直す** (`unslipAfter` の下の説明)。測れた遅れ (`slip`) を
          * 待たない — あれは見えないことがある
          */
         if (stalled && element !== null) unslip(element);
@@ -1447,7 +1448,7 @@ export function livePlayer() {
                     captionTrack = notice.track;
                 } else if (notice.type === 'clock') {
                     /*
-                     * **放送の実時刻と、焼いたものの物差しの対応** (`behind`)。
+                     * **サーバが受け取った時刻と、焼いたものの物差しの対応** (`behind`)。
                      *
                      * `now` はサーバの時計。**端末の時計は当てにしません** —
                      * 合っていない端末は珍しくなく、ずれていればそのぶんそのまま

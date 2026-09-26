@@ -14,8 +14,8 @@
  * 要らないもの (`src` の下) だけで、こちらは先に `dotnet publish` が要ります。
  * 混ぜていた頃は、焼く前の CI がここで ENOENT を出して落ちていました。
  *
- * チューナーの代わりは `tests/fake/tune.ts`。エージェントから見れば
- * 「起こすと TS を流し続ける子プロセス」でしかないので、recisdb と区別がつかない。
+ * チューナーの代わりは `tests/fake/tune.ts` (`FAKE_TUNE`)。エージェントから見れば
+ * 「起こすと TS を流し続ける子プロセス」で、取り合いと配り方はそのまま通る。
  */
 import { afterAll, afterEach, beforeAll, describe, expect, test } from 'bun:test';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
@@ -162,7 +162,6 @@ beforeAll(async () => {
             CHANNELS_FILE: paths().channels,
             RECORDED_DIR: paths().recorded,
             FAKE_TUNE: TUNE,
-            // 復号は別プロセス。本物と同じく終了コードだけを見る
             // 番組を作る本数。総当たりの1チャンネルあたりを軽くする
             FAKE_SLOTS: '4',
         },
@@ -408,7 +407,7 @@ describe('チャンネル', () => {
         expect(found.filter((c) => c.type === 'GR').map((c) => c.channel)).toEqual(['T25']);
         // 地上波だけ差し替えたので、衛星はそのまま残っている
         expect(found.filter((c) => c.type === 'BS').map((c) => c.channel)).toEqual(['BS03_0', 'BS11_0']);
-        // 書き換えたら知らせる。denpa はこれを合図に取り込み直す
+        // 控えのファイルにも書いてある
         expect(readFileSync(paths().channels, 'utf8')).toContain('あたらしい局');
     });
 
@@ -474,7 +473,7 @@ test('知らない口は 404', async () => {
 describe('機材の定義', () => {
     /**
      * **画面から書き換えられる。** 受け取るのはデバイスと種別だけで、
-     * 選局コマンドはエージェントが組み立てる — 自由な文字列を受けると
+     * 選局コマンドは持たない — 自由な文字列を受けると
      * 「denpa に入れた人がチューナー側で好きなコマンドを走らせられる」
      * ことになる (しかもあちらは privileged)
      */

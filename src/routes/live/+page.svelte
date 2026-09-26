@@ -496,9 +496,8 @@
                             {#snippet status()}
                                 <!--
                                     **放送からどれだけ遅れているか** (`live-player` の `fromAir`)。
-                                    放送そのものが運んでいる時刻 (TDT/TOT) との差なので、
-                                    選局から焼き上がり・回線までが全部入っている。
-                                    **読めない局では出ない**ので、下の「貯まり」だけになる
+                                    隣に置いたテレビとの差なので、焼き上がり・回線・貯まりが
+                                    全部入っている。**出るまでは**下の「貯まり」だけになる
                                 -->
                                 {#if player.fromAir !== null}
                                     <span data-testid="live-behind">放送から {player.fromAir.toFixed(1)}秒</span>

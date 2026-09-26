@@ -18,7 +18,7 @@ Dockerfile の行・`package.json`) を優先し、上流の表示に拠るも�
 
 | 名前 | 何に | 出どころ | ライセンス |
 | --- | --- | --- | --- |
-| FFmpeg 9.0.1 | エンコード・字幕・サムネイル・ライブ | <https://ffmpeg.org> | LGPL-2.1+ (`--enable-gpl` で GPL-2.0+) |
+| FFmpeg 9.0.2 | エンコード・字幕・サムネイル・ライブ | <https://ffmpeg.org> | LGPL-2.1+ (`--enable-gpl` で GPL-2.0+) |
 | x264 | H.264 のエンコード | <https://www.videolan.org/developers/x264.html> | GPL-2.0+ |
 | SVT-AV1 4.2.0 (ソースから静的リンク) | AV1 のエンコード | <https://gitlab.com/AOMediaCodec/SVT-AV1> | BSD-3-Clause-Clear + AOM 特許ライセンス |
 | dav1d | AV1 のデコード | <https://code.videolan.org/videolan/dav1d> | BSD-2-Clause |
@@ -29,7 +29,7 @@ Dockerfile の行・`package.json`) を優先し、上流の表示に拠るも�
 | libvpl / libmfx-gen | Intel QSV (GPU で焼く) | <https://github.com/intel/libvpl> / <https://github.com/intel/vpl-gpu-rt> | MIT |
 | intel-media-va-driver (iHD) | Intel の VA-API ドライバ | <https://github.com/intel/media-driver> | MIT (一部 BSD) |
 | zlib | ffmpeg の依存 | <https://zlib.net> | zlib |
-| [patches/](../patches) | ffmpeg に当てている直し 2 本 (libaribcaption の「消せ」、fftools の溢れ FIFO。denpa が書いたもの。上流に投げる前提) | — | 当てる先と同じ (LGPL/GPL) |
+| [patches/](../patches) | ffmpeg に当てている直し (libaribcaption の「消せ」。denpa が書いたもの。上流に投げる前提) | — | 当てる先と同じ (LGPL/GPL) |
 
 ### CM 検出
 
@@ -59,7 +59,7 @@ Dockerfile の行・`package.json`) を優先し、上流の表示に拠るも�
 ## コンテナイメージ `denpa-agent` に入るもの
 
 [agent/Dockerfile](../agent/Dockerfile)。.NET の Native AOT で 1 本のバイナリにしてあり、
-**NuGet の依存は 0** (YAML も JSON も自前)。
+**NuGet の依存は 0** (JSON はランタイムの `System.Text.Json`)。
 
 | 名前 | 何に | 出どころ | ライセンス |
 | --- | --- | --- | --- |
@@ -69,7 +69,7 @@ Dockerfile の行・`package.json`) を優先し、上流の表示に拠るも�
 | pcsc-tools | カードの確認 | <https://pcsc-tools.apdu.fr> | GPL-2.0+ |
 | px4-userland 0.1.6 (`/opt/px4-userland`) | PLEX PX-Q3U4 / PX-W3U4 / PX-MLT 系、e-Better / Digibest 系のユーザー空間ドライバ。`px4d` / `px4-ts` / `px4ctl` と pcscd 用 IFD ハンドラ | <https://github.com/Khronos31/px4-userland> (nns779 → tsukumijima の px4_drv から派生) | **GPL-2.0-only** (実行ファイルに静的リンクの libusb 1.0.30 は LGPL-2.1+。配布物の `THIRD_PARTY_NOTICES.md` を同梱のまま置いてある) |
 | IT930x ファームウェア (`/opt/px4-userland/firmware/it930x-firmware.bin`、2,169 バイト) | 挿すたびに流し込む (px4-userland の対応機種で共通) | tsukumijima/px4_drv の `etc/` にある抽出済みのもの。元は PLEX の Windows ドライバ `PXW3U4.sys` (著作権表示は Digital Warrior Corp.) | **ライセンス無し** (再配布の許諾は誰も持っていない。権利者が動いていない実態に乗る判断。[agent.md](agent.md#px-q3u4-などは-px4-userland-でカーネルドライバは入れてもらわない)) |
-| siano-userland 0.1.5 (`/opt/siano-userland`) | PLEX PX-S1UD など Siano RIO 系のユーザー空間ドライバ。`siano-ts` | <https://github.com/Khronos31/siano-userland> | **GPL-2.0-or-later** (実行ファイルに静的リンクの libusb 1.0.30 は LGPL-2.1+。配布物の `COPYING`・`libusb/COPYING`・`DEPENDENCY-NOTICE.txt` を同梱のまま置いてある) |
+| siano-userland 0.1.7 (`/opt/siano-userland`) | PLEX PX-S1UD など Siano RIO 系のユーザー空間ドライバ。`siano-ts` | <https://github.com/Khronos31/siano-userland> | **GPL-2.0-or-later** (実行ファイルに静的リンクの libusb 1.0.30 は LGPL-2.1+。配布物の `COPYING`・`libusb/COPYING`・`DEPENDENCY-NOTICE.txt` を同梱のまま置いてある) |
 | Siano ISDB-T ファームウェア (`/opt/siano-userland/firmware/isdbt_rio.inp`、85,840 バイト) | siano-ts が USB で流し込む | siano-userland の配布アーカイブに入っているもの (Siano Mobile Silicon) | **Siano の再配布許諾** (無改変なら再配布可。解析は禁止。許諾の文面 `LICENCE.siano` を同じ場所に置いてある) |
 | procps / curl / zlib / ca-certificates / tzdata | 道具 | Debian | GPL-2.0+ / curl / zlib / MPL-2.0 / PD |
 
