@@ -82,6 +82,8 @@ public sealed class Descrambler(IKeySource source, bool background = true)
     private bool _keyChanged;
     /// <summary>溜めたぶんを流し直している最中。節は読み終えているので読まず、答えも拾わない</summary>
     private bool _replaying;
+    /// <summary>流し直している位置 (溜めの頭からのバイト数)</summary>
+    private int _replayAt;
 
     private readonly Section _pat = new(null);
     private byte[]? _patLast;
@@ -366,7 +368,11 @@ public sealed class Descrambler(IKeySource source, bool background = true)
         _replaying = true;
         try
         {
-            for (var at = 0; at < length; at += PacketSize) Take(held.AsSpan(at, PacketSize), output);
+            for (var at = 0; at < length; at += PacketSize)
+            {
+                _replayAt = at;
+                Take(held.AsSpan(at, PacketSize), output);
+            }
         }
         finally
         {
@@ -421,7 +427,7 @@ public sealed class Descrambler(IKeySource source, bool background = true)
             var parity = control == 2 ? 2 : 3;
             // 止めるパケットでも偶奇は覚える。次に聞くときの門は「いま流れている偶奇」で決める
             ecm!.Parity = parity;
-            if (ecm.Asking is not null && ecm.Safe != 0 && parity != ecm.Safe)
+            if (ecm.Guarded && (!_replaying || _replayAt >= ecm.GuardFrom) && parity != ecm.Safe)
             {
                 _undecodable++;
                 return;
@@ -638,6 +644,7 @@ public sealed class Descrambler(IKeySource source, bool background = true)
         if (scanning && seen) _ecmRepeated = true;
         if (Same(section, ecm.Last) || Same(section, ecm.Asking)) return;
         if (Same(section, ecm.Failed) && Now() < ecm.RetryAt) return;
+        if (ecm.Last is not null || ecm.Asking is not null) Guard(ecm);
         if (scanning && (ecm.Last is not null || ecm.Asking is not null))
         {
             // 溜めている間の2つ目の中身。**流すまで聞かない** (Hold)
@@ -649,12 +656,46 @@ public sealed class Descrambler(IKeySource source, bool background = true)
         {
             // 前の答えを待っている。**聞くのは1本につき1つずつ**、最新だけ覚えておく
             ecm.Next = section.ToArray();
-            // 次の中身が来たなら、今の偶奇の鍵もこのあと入れ替わる。**どちらの偶奇も解かない**
-            ecm.Safe = -1;
             return;
         }
         Ask(ecm, section.ToArray());
         if (!background) Poll();
+    }
+
+    /// <summary>
+    /// **ECM が変わったのを見た時点で、古い鍵で解いてよい偶奇を決める。**
+    ///
+    /// <para>
+    /// ECM は今の鍵と次の鍵を配る。中身が変わったとき、前の中身と共通なのは**いま流れて
+    /// いる偶奇**の鍵だけで、逆の偶奇はこのあと入れ替わる。だから答えを待つ間は、見た時点の
+    /// 偶奇だけ解く。聞き始めた時点で決めると、そのあいだに切り替わった偶奇を古い鍵で解いて、
+    /// 化けたものを「解けた」として流す。
+    /// </para>
+    ///
+    /// <para>
+    /// 答えを待つ間にもう1回変わったら、今持っている鍵はどちらの偶奇にも使えない (-1)。
+    /// そのとき聞き待ちになる中身 (<see cref="Ecm.Next"/>) には、それを見た時点の偶奇を
+    /// 取っておき、前の答えが来て鍵を差し替えたらそれに切り替える (<see cref="Apply"/>)。
+    /// </para>
+    ///
+    /// <para>
+    /// 溜めている間は**溜めのどこで見たか**も覚え、流し直すときはそこから先だけ門を効かせる。
+    /// </para>
+    /// </summary>
+    private void Guard(Ecm ecm)
+    {
+        if (ecm.Asking is not null)
+        {
+            // 聞き待ちの中身がある。いまの鍵 (Last) はもう使えず、次に聞く中身の門を覚える
+            ecm.NextSafe = ecm.Next is null ? ecm.Parity : -1;
+            ecm.Safe = ecm.Last is null ? ecm.Safe : -1;
+        }
+        else
+        {
+            ecm.Safe = ecm.Parity;
+        }
+        if (!ecm.Guarded) ecm.GuardFrom = _holding ? _heldLength : 0;
+        ecm.Guarded = true;
     }
 
     /// <summary>聞き直しの間隔を測る物差し。流れなら時計、後からの解除なら読んだ量</summary>
@@ -680,7 +721,6 @@ public sealed class Descrambler(IKeySource source, bool background = true)
             (known ?? source.Init(), source.Ecm(section.AsSpan(8, section.Length - 12)));
 
         ecm.Asking = section;
-        ecm.Safe = ecm.Last is null ? 0 : ecm.Parity;
         if (background)
         {
             ecm.Pending = Task.Run(Fetch);
@@ -739,6 +779,10 @@ public sealed class Descrambler(IKeySource source, bool background = true)
 
     private void Apply(Ecm ecm, byte[] section, Task<(CardInit Init, EcmAnswer Answer)> done)
     {
+        // 鍵が入れ替わる。門は聞き待ちの中身のもの (見た時点の偶奇) に移すか、外す (Guard)
+        if (ecm.Next is null) ecm.Guarded = false;
+        else ecm.Safe = ecm.NextSafe;
+
         try
         {
             var (init, answer) = done.GetAwaiter().GetResult();
@@ -832,8 +876,14 @@ public sealed class Descrambler(IKeySource source, bool background = true)
         public bool Unentitled;
         /// <summary>最後に解いたパケットの偶奇 (transport_scrambling_control)</summary>
         public int Parity;
-        /// <summary>聞いている間も解いてよい偶奇。0 なら分からない</summary>
+        /// <summary>ECM が変わるのを見て、答えを待っている (<see cref="Guard"/>)</summary>
+        public bool Guarded;
+        /// <summary>待つ間も今の鍵で解いてよい偶奇。-1 ならどちらも解かない</summary>
         public int Safe;
+        /// <summary>聞き待ちの中身 (<see cref="Next"/>) を見た時点の偶奇</summary>
+        public int NextSafe;
+        /// <summary>溜めのどこから門を効かせるか (溜めの頭からのバイト数)</summary>
+        public int GuardFrom;
         public Multi2? Cipher;
     }
 

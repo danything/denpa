@@ -646,7 +646,7 @@ public class B25Tests
     /// <summary>
     /// **最初の答えを待つ間に ECM が変わっても、溜めた頭は最初の鍵で解く。** 新しい中身は
     /// 流し終えてから聞く。流し直すときに ECM を読み直して聞き直すと、新しい鍵で頭を解いて化けた。
-    /// (偶数の鍵は 11 と 12 で共通、という本物の並びに合わせて、12 のあとの偶数も 11 の鍵で掛ける)
+    /// (12 を見た時点で流れているのは奇数。奇数の鍵は 11 と 12 で共通なので、12 のあとの奇数も 11 の鍵で掛ける)
     /// </summary>
     [Test]
     public async Task 最初の答えを待つ間にECMが変わっても溜めた頭は最初の鍵で解く()
@@ -655,7 +655,7 @@ public class B25Tests
         var descrambler = new Descrambler(cards);
         var output = new ArrayBufferWriter<byte>();
         var head = Channel().Videos(3, 11, even: false).Ecm(EcmPid, 11).Videos(3, 11, even: false)
-            .Ecm(EcmPid, 12).Videos(3, 11, even: true);
+            .Ecm(EcmPid, 12).Videos(3, 11, even: false);
         descrambler.Decode(head.Wire.ToArray(), output);
         cards.Gate(11).Set();
         cards.Gate(12).Set();
@@ -668,6 +668,61 @@ public class B25Tests
         var got = output.WrittenSpan[..head.Wire.Count].ToArray();
         await Assert.That(Diff(got, Expected(head))).IsEqualTo(-1);
         await Assert.That(descrambler.Decoded).IsEqualTo(9);
+    }
+
+    /// <summary>
+    /// **溜めている間に ECM が変わって偶奇も切り替わったら、切り替わったぶんは古い鍵で解かない。**
+    /// 12 で入れ替わった奇数の鍵は 11 には無い。流し直しで 11 の鍵を当てると化ける
+    /// </summary>
+    [Test]
+    public async Task 溜めている間に切り替わった偶奇は流し直しでも古い鍵で解かない()
+    {
+        var cards = new StepCards();
+        var descrambler = new Descrambler(cards);
+        var output = new ArrayBufferWriter<byte>();
+        var head = Channel().Ecm(EcmPid, 11).Videos(3, 11, even: true).Ecm(EcmPid, 12).Videos(3, 12, even: false);
+        descrambler.Decode(head.Wire.ToArray(), output);
+        cards.Gate(11).Set();
+        for (var tries = 0; tries < 500 && output.WrittenCount < head.Wire.Count; tries++)
+        {
+            await Task.Delay(1);
+            descrambler.Decode(new Ts().Pat((0x0400, PmtPid)).Wire.ToArray(), output);
+        }
+
+        await Assert.That(descrambler.Decoded).IsEqualTo(3);
+        await Assert.That(descrambler.Undecodable).IsEqualTo(3);
+        // 切り替わったあとの3つは、元のバイトのまま (掛かったまま) 出ている
+        var tail = output.WrittenSpan[(head.Wire.Count - 3 * 188)..head.Wire.Count].ToArray();
+        await Assert.That(Diff(tail, head.Wire.ToArray()[^(3 * 188)..])).IsEqualTo(-1);
+        cards.Gate(12).Set();
+    }
+
+    /// <summary>
+    /// **流れの中でも同じ。** 11 を待つ間に 12 が来て、11 の答えより先に奇数へ切り替わったら、
+    /// 11 の答えが来たあとも 12 の答えまで奇数は解かない (聞き始めた時点の偶奇で門を決めない)
+    /// </summary>
+    [Test]
+    public async Task 答えを待つ間にECMがまた変わって切り替わった偶奇は次の答えまで解かない()
+    {
+        var cards = new StepCards();
+        var descrambler = new Descrambler(cards);
+        var output = new ArrayBufferWriter<byte>();
+        descrambler.Decode(Channel().Ecm(EcmPid, 1).Videos(2, 1, even: true).Wire.ToArray(), output);
+        for (var tries = 0; tries < 500 && descrambler.Decoded < 2; tries++)
+        {
+            await Task.Delay(1);
+            descrambler.Decode(Channel().Wire.ToArray(), output);
+        }
+
+        descrambler.Decode(new Ts().Ecm(EcmPid, 11).Ecm(EcmPid, 12).Videos(2, 12, even: false).Wire.ToArray(), output);
+        cards.Gate(11).Set();
+        for (var tries = 0; tries < 500 && cards.Answered < 2; tries++) await Task.Delay(1);
+        await Task.Delay(20);
+
+        var decoded = descrambler.Decoded;
+        descrambler.Decode(new Ts().Videos(20, 12, even: false).Wire.ToArray(), output);
+        await Assert.That(descrambler.Decoded).IsEqualTo(decoded);
+        cards.Gate(12).Set();
     }
 
     /// <summary>
