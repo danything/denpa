@@ -15,10 +15,10 @@
       ]
     },
     {
-      "description": "Mac の入れ方 (agent/macos/install.sh) の `# renovate:` 付きの変数。Dockerfile と同じ px4-userland / siano-userland を指していて、同じ依存なので1本の PR で揃って上がる",
+      "description": "入れ方 (install.sh。Mac で px4-userland / siano-userland を取ってくる) の `# renovate:` 付きの変数。Dockerfile と同じ px4-userland / siano-userland を指していて、同じ依存なので1本の PR で揃って上がる",
       "customType": "regex",
       "managerFilePatterns": [
-        "/(^|/)agent/macos/install\\.sh$/"
+        "/^install\\.sh$/"
       ],
       "matchStrings": [
         "# renovate: datasource=(?<datasource>[a-z-]+?) depName=(?<depName>\\S+?)(?: extractVersion=(?<extractVersion>\\S+?))?\\s+[A-Z0-9_]+=(?<currentValue>\\S+)"

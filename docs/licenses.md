@@ -70,7 +70,7 @@ Dockerfile の行・`package.json`) を優先し、上流の表示に拠るも�
 | Siano ISDB-T ファームウェア (`/opt/siano-userland/firmware/isdbt_rio.inp`、85,840 バイト) | siano-ts が USB で流し込む | siano-userland の配布アーカイブに入っているもの (Siano Mobile Silicon) | **Siano の再配布許諾** (無改変なら再配布可。解析は禁止。許諾の文面 `LICENCE.siano` を同じ場所に置いてある) |
 | procps / curl / zlib / ca-certificates / tzdata | 道具 | Debian | GPL-2.0+ / curl / zlib / MPL-2.0 / PD |
 
-### Mac に入れるもの (`agent/macos/install.sh`)
+### Mac に入れるもの (`install.sh`)
 
 リリースに添えた `denpa-agent-<版>-darwin-arm64.tar.gz` (上と同じ .NET の Native AOT のバイナリ1個) と、
 上と同じ px4-userland / siano-userland の **Mac 版** (`darwin-arm64`)・同じファームウェア。

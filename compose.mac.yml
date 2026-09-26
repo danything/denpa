@@ -1,4 +1,4 @@
-# Mac で denpa 本体を動かす (agent/macos/install.sh が置いて起こす)。
+# Mac で denpa 本体を動かす (install.sh が Mac のときに置いて起こす)。denpa サービスは compose.prod.yml と揃える。
 #
 # compose.prod.yml から **tuner-agent を外したもの**。Mac の Docker (Docker Desktop /
 # OrbStack / colima) はコンテナに USB を渡せないので、エージェントは Mac の上で

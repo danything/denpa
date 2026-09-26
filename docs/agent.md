@@ -679,16 +679,17 @@ Unix ドメインソケットは**まだ入れていません** (`Program.cs` �
 
 ## Mac でチューナーを使う
 
-**Apple Silicon の Mac なら、1行で denpa ごと立ち上がってブラウザが開きます。**
+**Apple Silicon の Mac なら、Linux と同じ1行で denpa ごと立ち上がってブラウザが開きます**
+(入口の `install.sh` は1つで、OS を見て振り分ける)。
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/danything/denpa/main/agent/macos/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/danything/denpa/main/install.sh | bash
 ```
 
 **エージェントは Mac の上でそのまま、denpa 本体は Docker で動かします。** Mac の Docker
 (Docker Desktop / OrbStack / colima) はコンテナに USB を渡せないので、チューナーとカードに
 触るエージェントだけはコンテナに入れられません。denpa のコンテナからは
-`host.docker.internal` でエージェントを呼びます (`agent/macos/compose.yml`。
+`host.docker.internal` でエージェントを呼びます (`compose.mac.yml`。
 compose.prod.yml から tuner-agent を外したもの)。
 
 1. **エージェント** — 最新のリリースから取ってきて、LaunchAgent

@@ -111,10 +111,35 @@ jobs:
       - name: Conformance
         run: bun run test:conformance
 
-      # Mac で denpa 本体を起こす compose (agent/macos/install.sh が置く)。Mac のランナーには
-      # Docker が無いので、書き方が通るかだけここで見る
+  # 入れ方 (install.sh) を Linux で通しで。compose.prod.yml を置いて、本物のイメージを引いて起こし、
+  # denpa が答えるまで。最後に外す。**必須チェックにはしない** (イメージを引くので重く、
+  # レジストリの機嫌でも揺れる)。compose ファイルはこのコミットのものを取らせる (DENPA_VERSION)
+  install-linux:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Lint install.sh
+        run: |
+          bash -n install.sh
+          shellcheck install.sh
+
+      # Mac で denpa 本体を起こす compose。Mac のランナーには Docker が無いので、書き方だけここで見る
       - name: Mac compose file is valid
-        run: DENPA_RECORDED=/tmp/recorded DENPA_LIBRARY=/tmp/library docker compose -f agent/macos/compose.yml config -q
+        run: DENPA_RECORDED=/tmp/recorded DENPA_LIBRARY=/tmp/library docker compose -f compose.mac.yml config -q
+
+      - name: install.sh end to end
+        env:
+          DENPA_VERSION: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          set -euo pipefail
+          bash install.sh --no-open
+          curl -fsS http://localhost:3000/api/health; echo
+          curl -fsS http://localhost:25252/denpa/tuners; echo
+          bash install.sh --uninstall
+          test -z "$(docker compose -p denpa ps -q)"
 
   # Mac (Apple Silicon) で動かすエージェント (docs/agent.md「Mac でチューナーを使う」)。
   #
@@ -138,6 +163,7 @@ jobs:
       # Linux でしか意味の無いテスト (/proc を数える・Linux の pipe の深さに頼る偽物) は中で飛ばしてある。
       # 1本ずつ結果を出して上限を切る。Mac でだけ止まるものがあったとき、どれなのかが残るように
       - name: Unit tests (.NET agent)
+        timeout-minutes: 8
         run: dotnet test --project agent/Denpa.Agent.Tests/Denpa.Agent.Tests.csproj --output detailed --timeout 5m
 
       - name: Publish (Native AOT, osx-arm64)
@@ -145,9 +171,9 @@ jobs:
 
       - name: Lint install.sh
         run: |
-          bash -n agent/macos/install.sh
+          bash -n install.sh
           brew install shellcheck >/dev/null
-          shellcheck agent/macos/install.sh
+          shellcheck install.sh
 
       # 何も設定せずに起こす (FAKE_TUNE も無し)。チューナーは自動検出で空、カードは
       # リーダーが無いので ok:false が返るはず。**落ちずに答える**ことを見る。
@@ -177,11 +203,11 @@ jobs:
         run: |
           set -euo pipefail
           tar -czf "$RUNNER_TEMP/denpa-agent.tar.gz" -C out denpa-agent
-          DENPA_AGENT_TARBALL="$RUNNER_TEMP/denpa-agent.tar.gz" AGENT_PORT=25301 bash agent/macos/install.sh --no-docker
+          DENPA_AGENT_TARBALL="$RUNNER_TEMP/denpa-agent.tar.gz" AGENT_PORT=25301 bash install.sh --no-docker
           curl -fsS http://127.0.0.1:25301/denpa/card; echo
           ls -l "$HOME/Library/Application Support/denpa-agent/px4-userland" "$HOME/Library/Application Support/denpa-agent/siano-userland"
           "$HOME/Library/Application Support/denpa-agent/px4-userland/px4d" --list || true
-          bash agent/macos/install.sh --uninstall
+          bash install.sh --uninstall
           test ! -e "$HOME/Library/LaunchAgents/io.github.danything.denpa-agent.plist"
           cat "$HOME/Library/Logs/denpa-agent.log"
 

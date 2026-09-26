@@ -91,7 +91,7 @@ AV1 が再生できないテレビには、テレビごとに H.264 や生TSを�
 - **B-CASカード** と PC/SC 対応のリーダー
 - **Docker** (Compose) か **Kubernetes** (Helm)。**amd64 (x86_64) と arm64 (aarch64)** の
   どちらでも動きます (イメージは両方を束ねてあり、同じタグで自分の arch のものが降ってくる)
-  (**Apple Silicon の Mac** なら curl 1行で、エージェントと denpa が立ち上がってブラウザが開きます。
+  (**Apple Silicon の Mac** でも、[下の1行](#立てる)でエージェントと denpa が立ち上がります。
   [docs/agent.md](docs/agent.md#mac-でチューナーを使う))
 - あれば **Intel の GPU** — `/dev/dri` が見えれば起動時に見つけて GPU で焼きます
   (Helm は既定で渡す。無ければソフトウェア。[docs/encode.md](docs/encode.md)「GPU で焼く」)。
@@ -99,10 +99,22 @@ AV1 が再生できないテレビには、テレビごとに H.264 や生TSを�
 
 ## 立てる
 
-**Docker Compose** か **Helm** のどちらか。イメージは公開してあるので、
+**Linux でも Mac でも、この1行で立ち上がってブラウザが開きます。** イメージは公開してあるので、
 リポジトリを持ってくる必要はありません。
 
-### Docker Compose
+```sh
+curl -fsSL https://raw.githubusercontent.com/danything/denpa/main/install.sh | bash
+```
+
+- **Linux** (amd64 / arm64) — 全部 Docker Compose。`~/denpa` に compose.prod.yml を置いて起こします
+- **Mac** (Apple Silicon) — チューナーに触るエージェントは Mac の上でそのまま、denpa 本体は Docker で
+  ([docs/agent.md](docs/agent.md#mac-でチューナーを使う))
+- **Docker は入れません。** 無ければ入れ方を言って止まります (Linux は <https://get.docker.com>、
+  Mac は Docker Desktop か OrbStack)
+- もう一度流せば最新のリリースへ上げ直し。`… | bash -s -- --uninstall` で止めて外します
+  (録画・DB・設定は残す)。ブラウザを開かないなら `--no-open`
+
+### Docker Compose を手で置く
 
 ```sh
 mkdir denpa && cd denpa

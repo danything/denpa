@@ -21,7 +21,6 @@ public class Px4CardTests
     {
         private readonly Socket _listener;
         private readonly Task _serving;
-        private readonly CancellationTokenSource _stop = new();
 
         public DirectoryInfo Runtime { get; } = Directory.CreateTempSubdirectory("px4");
         public List<Frame> Received { get; } = [];
@@ -39,21 +38,7 @@ public class Px4CardTests
             // 塞ぐことがあり、池から借りると CI の 2 コアで答えが 5 秒に間に合わなかった
             _serving = Task.Factory.StartNew(() =>
             {
-                /*
-                 * **待ち受けは止められる形で。** 誰も繋ぎに来ないテスト (Find だけ見る) では
-                 * accept で待ったまま片付けに入る。Linux は待ち受けを閉じれば accept が起きるが、
-                 * macOS は起きず、閉じる側 (Dispose) まで止まったままになる (Mac の CI で詰まった)
-                 */
-                Socket client;
-                try
-                {
-                    client = _listener.AcceptAsync(_stop.Token).AsTask().GetAwaiter().GetResult();
-                }
-                catch (OperationCanceledException)
-                {
-                    return;
-                }
-                using var _ = client;
+                using var client = _listener.Accept();
                 while (true)
                 {
                     var header = new byte[20];
@@ -101,7 +86,22 @@ public class Px4CardTests
 
         public void Dispose()
         {
-            _stop.Cancel();
+            /*
+             * **誰も繋ぎに来なかったなら、自分で1本繋いで accept を起こしてから閉じる。**
+             * Find だけ見るテストでは accept で待ったまま片付けに入る。Linux は待ち受けを
+             * 閉じれば accept が起きるが、macOS は起きず、閉じる側 (Dispose) まで止まった
+             * (Mac の CI で詰まった)。繋いですぐ切れば、待っていた側は 0 バイトを読んで降りる。
+             * AcceptAsync で止める形にすると、答えるのが共用の池頼みに戻って CI で間に合わなかった
+             */
+            try
+            {
+                using var poke = new Socket(AddressFamily.Unix, SocketType.Stream, ProtocolType.Unspecified);
+                poke.Connect(new UnixDomainSocketEndPoint(SocketPath));
+            }
+            catch (SocketException)
+            {
+                // もう待ち受けていない
+            }
             _listener.Dispose();
             Runtime.Delete(true);
         }

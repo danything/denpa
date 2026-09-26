@@ -146,7 +146,7 @@ jobs:
             $denpa_args .
           echo "denpa: ${{ steps.tag.outputs.denpa }} ($platforms) + DENPA_VERSION → $names"
 
-  # **Mac (Apple Silicon) 用のエージェントをリリースに添える** (agent/macos/install.sh が取りに来る)。
+  # **Mac (Apple Silicon) 用のエージェントをリリースに添える** (install.sh が取りに来る)。
   # Native AOT は Linux から macOS へ焼けないので、ここだけは Mac のランナーで**焼く**
   # (イメージのように main で焼いたものを使い回す先が無い)。中身はタグのコミットそのもの
   agent-macos:
