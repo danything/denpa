@@ -162,7 +162,6 @@ async function boot(index: number): Promise<{ stack: Stack; shutdown: () => Prom
             // スクランブル解除はパスだけ受け取って直接ファイルを触る。
             // 本物でも denpa とエージェントの両方に同じ置き場を見せている
             RECORDED_DIR: stack.recordedDir,
-            LIBRARY_DIR: stack.libraryDir,
         });
         started.push(agent);
 

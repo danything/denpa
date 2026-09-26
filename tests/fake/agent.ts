@@ -14,11 +14,8 @@ import { broadcast, channels, DEFAULT_KNOBS, type Knobs, on } from './broadcast'
 import type { FakeService } from './services';
 
 const PORT = Number(process.env['FAKE_AGENT_PORT'] ?? 25252);
-/** denpa の置き場。本物では同じものをエージェント側にも見せてある */
-const ROOTS: Record<string, string> = {
-    recorded: resolve(process.env['RECORDED_DIR'] ?? '/recorded'),
-    library: resolve(process.env['LIBRARY_DIR'] ?? '/library'),
-};
+/** denpa の生TSの置き場。本物では同じものをエージェント側にも見せてある */
+const RECORDED = resolve(process.env['RECORDED_DIR'] ?? '/recorded');
 
 /** テストから切り替えるつまみ。本物では `tune.ts` がファイル越しに読む */
 const knobs: Knobs = { ...DEFAULT_KNOBS, scrambled: process.env['FAKE_SCRAMBLED'] === '1' };
@@ -31,13 +28,11 @@ let busyTuners = false;
  *
  * 本物と同じく、渡されるのは生TSの置き場からの相対パス。
  */
-function unscramble(root: string, input: string, output: string): { ok: boolean; error: string } {
-    const base = ROOTS[root];
-    if (base === undefined) return { ok: false, error: `知らない置き場です: ${root}` };
-    const from = resolve(base, input);
-    const to = resolve(base, output);
-    if (!from.startsWith(`${base}/`) || !to.startsWith(`${base}/`)) {
-        return { ok: false, error: `${root} の置き場の外は解除に回せません` };
+function unscramble(input: string, output: string): { ok: boolean; error: string } {
+    const from = resolve(RECORDED, input);
+    const to = resolve(RECORDED, output);
+    if (!from.startsWith(`${RECORDED}/`) || !to.startsWith(`${RECORDED}/`)) {
+        return { ok: false, error: '生TSの置き場の外は解除に回せません' };
     }
     if (!existsSync(from)) return { ok: false, error: `${from} が見えません` };
 
@@ -372,9 +367,7 @@ const options: Bun.ServeOptions = {
         if (url.pathname === '/denpa/decode' && request.method === 'POST') {
             return request
                 .json()
-                .then((body: { root?: string; input: string; output: string }) =>
-                    json(unscramble(body.root ?? 'recorded', body.input, body.output)),
-                );
+                .then((body: { input: string; output: string }) => json(unscramble(body.input, body.output)));
         }
         return new Response('not found', { status: 404 });
     },
