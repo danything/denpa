@@ -35,6 +35,7 @@ export const load: PageServerLoad = ({ params }) => {
             description: rec.description,
             genre_detail: rec.genre_detail,
             audios: rec.audios,
+            extended: rec.extended,
         },
     };
 };
