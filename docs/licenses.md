@@ -6,6 +6,8 @@ denpa 自身は **AGPL-3.0-or-later** ([LICENSE](../LICENSE)) です。ここに
 
 書き方の約束: 「根拠」はリポジトリの中で確かめられるもの (LICENSE ファイル・
 Dockerfile の行・`package.json`) を優先し、上流の表示に拠るものは (上流) と添えます。
+**版はここに書きません** — Renovate が Dockerfile の `ARG` / `ENV` を上げるたびに食い違うので、
+いま入っている版は Dockerfile を見てください。
 
 ## コンテナイメージ `denpa` に入るもの
 
@@ -18,12 +20,12 @@ Dockerfile の行・`package.json`) を優先し、上流の表示に拠るも�
 
 | 名前 | 何に | 出どころ | ライセンス |
 | --- | --- | --- | --- |
-| FFmpeg 9.0.2 | エンコード・字幕・サムネイル・ライブ | <https://ffmpeg.org> | LGPL-2.1+ (`--enable-gpl` で GPL-2.0+) |
+| FFmpeg | エンコード・字幕・サムネイル・ライブ | <https://ffmpeg.org> | LGPL-2.1+ (`--enable-gpl` で GPL-2.0+) |
 | x264 | H.264 のエンコード | <https://www.videolan.org/developers/x264.html> | GPL-2.0+ |
-| SVT-AV1 4.2.0 (ソースから静的リンク) | AV1 のエンコード | <https://gitlab.com/AOMediaCodec/SVT-AV1> | BSD-3-Clause-Clear + AOM 特許ライセンス |
+| SVT-AV1 (ソースから静的リンク) | AV1 のエンコード | <https://gitlab.com/AOMediaCodec/SVT-AV1> | BSD-3-Clause-Clear + AOM 特許ライセンス |
 | dav1d | AV1 のデコード | <https://code.videolan.org/videolan/dav1d> | BSD-2-Clause |
 | Opus (libopus) | 音声 | <https://opus-codec.org> | BSD-3-Clause |
-| libaribcaption 1.1.2 (ソースから) | ARIB 字幕を絵にする | <https://github.com/xqq/libaribcaption> | MIT |
+| libaribcaption (ソースから) | ARIB 字幕を絵にする | <https://github.com/xqq/libaribcaption> | MIT |
 | FreeType / fontconfig | 字幕の描画とフォント解決 | <https://freetype.org> / <https://fontconfig.org> | FTL (or GPL-2.0) / MIT 系 |
 | libva / libva-drm | VA-API (GPU で焼く) | <https://github.com/intel/libva> | MIT |
 | libvpl / libmfx-gen | Intel QSV (GPU で焼く) | <https://github.com/intel/libvpl> / <https://github.com/intel/vpl-gpu-rt> | MIT |
@@ -37,7 +39,7 @@ Dockerfile の行・`package.json`) を優先し、上流の表示に拠るも�
 
 | 名前 | 何に | 出どころ | ライセンス |
 | --- | --- | --- | --- |
-| join_logo_scp 5.1.1 | 本編と CM の判定 (`JL_*.txt` の規則も同梱) | <https://github.com/yobibi/join_logo_scp> (nekopanda 版のフォーク) | **正式なライセンス文書は無し**。README に「転載・改変は連絡不要 (各自の責任で)」とだけ。その表示に拠っています |
+| join_logo_scp | 本編と CM の判定 (`JL_*.txt` の規則も同梱) | <https://github.com/yobibi/join_logo_scp> (nekopanda 版のフォーク) | **正式なライセンス文書は無し**。README に「転載・改変は連絡不要 (各自の責任で)」とだけ。その表示に拠っています |
 | chapter_exe | 無音とシーンチェンジ | <https://github.com/tobitti0/chapter_exe> (原作 ru、Linux 移植 sogaani) | GPL-3.0 |
 | logoframe | 局ロゴの検出と学習 (`.lgd`) | <https://github.com/tobitti0/logoframe> (原作 Yobi、移植 sogaani) | GPL-3.0 |
 | dtvindex | 上の 2 本が TS を読むための静的ライブラリ | <https://github.com/tobitti0/dtvindex> | GPL-3.0 |
@@ -64,9 +66,9 @@ Dockerfile の行・`package.json`) を優先し、上流の表示に拠るも�
 | 名前 | 何に | 出どころ | ライセンス |
 | --- | --- | --- | --- |
 | .NET 10 ランタイム (AOT でバイナリに埋まる) | エージェント本体 | <https://github.com/dotnet/runtime> | MIT |
-| px4-userland 0.1.6 (`/opt/px4-userland`) | PLEX PX-Q3U4 / PX-W3U4 / PX-MLT 系、e-Better / Digibest 系のユーザー空間ドライバ。`px4d` / `px4-ts` / `px4ctl` (同梱の pcscd 用 IFD ハンドラは使わない) | <https://github.com/Khronos31/px4-userland> | **GPL-2.0-only** (実行ファイルに静的リンクの libusb 1.0.30 は LGPL-2.1+。配布物の `THIRD_PARTY_NOTICES.md` を同梱のまま置いてある) |
+| px4-userland (`/opt/px4-userland`) | PLEX PX-Q3U4 / PX-W3U4 / PX-MLT 系、e-Better / Digibest 系のユーザー空間ドライバ。`px4d` / `px4-ts` / `px4ctl` (同梱の pcscd 用 IFD ハンドラは使わない) | <https://github.com/Khronos31/px4-userland> | **GPL-2.0-only** (実行ファイルに静的リンクの libusb 1.0.30 は LGPL-2.1+。配布物の `THIRD_PARTY_NOTICES.md` を同梱のまま置いてある) |
 | IT930x ファームウェア (`/opt/px4-userland/firmware/it930x-firmware.bin`、2,169 バイト) | 挿すたびに流し込む (px4-userland の対応機種で共通) | PLEX 公式の Windows ドライバ (`pxw3u4_BDA_ver1x64.zip` の `PXW3U4.sys`、著作権表示は Digital Warrior Corp.) から焼くときに切り出す (agent/Dockerfile) | **ライセンス無し** (再配布の許諾は誰も持っていない。権利者が動いていない実態に乗る判断。[agent.md](agent.md#px-q3u4-などは-px4-userland-でカーネルドライバは入れてもらわない)) |
-| siano-userland 0.1.8 (`/opt/siano-userland`) | PLEX PX-S1UD など Siano RIO 系のユーザー空間ドライバ。`siano-ts` | <https://github.com/Khronos31/siano-userland> | **GPL-2.0-or-later** (実行ファイルに静的リンクの libusb 1.0.30 は LGPL-2.1+。配布物の `COPYING`・`libusb/COPYING`・`DEPENDENCY-NOTICE.txt` を同梱のまま置いてある) |
+| siano-userland (`/opt/siano-userland`) | PLEX PX-S1UD など Siano RIO 系のユーザー空間ドライバ。`siano-ts` | <https://github.com/Khronos31/siano-userland> | **GPL-2.0-or-later** (実行ファイルに静的リンクの libusb 1.0.30 は LGPL-2.1+。配布物の `COPYING`・`libusb/COPYING`・`DEPENDENCY-NOTICE.txt` を同梱のまま置いてある) |
 | Siano ISDB-T ファームウェア (`/opt/siano-userland/firmware/isdbt_rio.inp`、85,840 バイト) | siano-ts が USB で流し込む | siano-userland の配布アーカイブに入っているもの (Siano Mobile Silicon) | **Siano の再配布許諾** (無改変なら再配布可。解析は禁止。許諾の文面 `LICENCE.siano` を同じ場所に置いてある) |
 | procps / curl / zlib / ca-certificates / tzdata | 道具 | Debian | GPL-2.0+ / curl / zlib / MPL-2.0 / PD |
 
@@ -92,13 +94,14 @@ denpa 本体は上と同じコンテナイメージ `denpa` を、Mac の Docker
 ## ブラウザへ配る束・サーバの束に入る主なもの
 
 `package.json` に runtime の `dependencies` は無く、adapter-node が全部を `build/` に
-畳み込みます (イメージにもそれだけを載せる)。**MIT がほとんどで、例外は 1 つ**
-(`crc-32` が Apache-2.0)。
+畳み込みます (イメージにもそれだけを載せる)。**MIT がほとんどで、例外は Apache-2.0 の
+2 つ** (`drizzle-orm` と `crc-32`)。
 
 | 名前 | 何に | 出どころ | ライセンス |
 | --- | --- | --- | --- |
 | Svelte / SvelteKit / adapter-node | 画面・ルーティング・サーバの束 | <https://github.com/sveltejs> | MIT |
-| Tailwind CSS / daisyUI | 出力 CSS | <https://tailwindcss.com> / <https://daisyui.com> | MIT |
+| Pico CSS / Bits UI | 見た目の土台と、メニューなどの部品 | <https://picocss.com> / <https://bits-ui.com> | MIT |
+| drizzle-orm | SQLite の読み書き (サーバの束) | <https://github.com/drizzle-team/drizzle-orm> | **Apache-2.0** |
 | web-bml (+ 同梱の es2) | **データ放送 (BML) を描く。** 2026-08 に上流がライブラリ化して npm に出したので、写しをやめて普通の依存にした | <https://github.com/otya128/web-bml> / <https://github.com/otya128/es2> | MIT / MIT |
 | crc-32 | web-bml の PNG / DRCS | <https://github.com/SheetJS/js-crc32> | **Apache-2.0** |
 | css (reworkcss、otya128 の fork) + source-map ほか | web-bml が BML の CSS を解く | <https://github.com/reworkcss/css> | MIT (依存は BSD-3 / MIT) |
