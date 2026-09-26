@@ -100,17 +100,31 @@ genkan_running() {
   docker network inspect proxy >/dev/null 2>&1 \
     && docker ps --filter network=proxy --format '{{.Image}}' | grep -q caddy-docker-proxy
 }
+# genkan が入ってはいるか (止まっていても)。**止めてあるものは起こし直さない** — 意図して止めた人の
+# genkan を上げ直すたびに復活させたり、別の場所に入れた genkan の横にもう1つ clone したりしない
+genkan_installed() {
+  docker network inspect proxy >/dev/null 2>&1 \
+    || docker ps -a --format '{{.Image}}' | grep -q caddy-docker-proxy
+}
 # そのポートで誰かが待ち受けているか。bash の /dev/tcp で繋いでみる (ss / lsof の違いを気にしない)
 port_used() { (exec 3<>"/dev/tcp/127.0.0.1/$1") 2>/dev/null; }
 
 # genkan を使えるようにする。使えれば 0。**80 か 443 が埋まっていれば入れない** (誰かのものを奪わない)
 ensure_genkan() {
   genkan_running && return 0
+  if genkan_installed; then
+    say "genkan は入っていますが止まっています (起こせば http://denpa.localhost で開けます)"
+    return 1
+  fi
   if port_used 80 || port_used 443; then
     say "80 か 443 が使われているので genkan は入れません (http://localhost:3000 で開きます)"
     return 1
   fi
-  command -v git >/dev/null 2>&1 || { say "git が無いので genkan は入れません (http://localhost:3000 で開きます)"; return 1; }
+  # Mac の /usr/bin/git は開発者ツールが無いと入れるダイアログを出すだけの代役なので、そちらも見る
+  if ! command -v git >/dev/null 2>&1 || { [ "$(uname -s)" = Darwin ] && ! xcode-select -p >/dev/null 2>&1; }; then
+    say "git が無いので genkan は入れません (http://localhost:3000 で開きます)"
+    return 1
+  fi
   say "genkan を $HOME/genkan に入れます (http://denpa.localhost で開けるように)"
   (cd "$HOME" && curl -fsSL https://raw.githubusercontent.com/danything/genkan/main/init.sh | sh -s) \
     || { say "genkan を入れられませんでした (http://localhost:3000 で開きます)"; return 1; }
@@ -118,11 +132,17 @@ ensure_genkan() {
 }
 
 # genkan に denpa を登録する断片。**http:// を付けるので HTTPS にせず、証明書の信頼も要らない**
-# (*.localhost はブラウザが安全な文脈として扱う)
+# (*.localhost はブラウザが安全な文脈として扱う)。
+#
+# **私設網の外から来たものは genkan で断る。** denpa から見た送り主は genkan のコンテナ (私設網) に
+# なるので、TRUSTED_NETWORKS では外と内を見分けられない。ほかのアプリのために 80 番を外へ開けて
+# いると、Host を偽るだけでインターネットから素通りになる
 GENKAN_OVERRIDE='services:
   denpa:
     labels:
       caddy: http://denpa.localhost
+      caddy.@outside: not remote_ip private_ranges
+      caddy.respond: "@outside 403"
       caddy.reverse_proxy: "{{upstreams 3000}}"
     networks: [default, proxy]
 
@@ -150,9 +170,17 @@ start_denpa() {
   sed "s#\(image: ghcr.io/danything/[a-z-]*\):latest#\1:$(image_tag "$2")#" "$DENPA_DIR/compose.yml.new" > "$DENPA_DIR/.compose.yml.orig"
   { echo "$MARK $2。手を入れず、足すものは compose.override.yml に)"; cat "$DENPA_DIR/.compose.yml.orig"; } > "$DENPA_DIR/compose.yml"
   rm -f "$DENPA_DIR/compose.yml.new"
+  override="$DENPA_DIR/compose.override.yml"
+  # genkan の登録が残っているのに proxy ネットワークが無い (genkan を外した) と、up が分かりにくく落ちる
+  if [ -f "$override" ] && grep -q 'denpa.localhost' "$override" && ! docker network inspect proxy >/dev/null 2>&1; then
+    die "genkan が見当たりません。$override の genkan への登録 (labels・networks・proxy) を消すか、genkan を起こしてから流し直してください"
+  fi
+  # **登録するときだけ genkan を入れる** (雛形を作るときか、もう登録が書いてあるとき)
   genkan=no
-  ensure_genkan && genkan=yes
-  if [ ! -f "$DENPA_DIR/compose.override.yml" ]; then
+  if [ ! -f "$override" ] || grep -q 'denpa.localhost' "$override"; then
+    ensure_genkan && genkan=yes
+  fi
+  if [ ! -f "$override" ]; then
     {
       echo "# 手元で足したい・変えたいものはここに書く。compose.yml は install.sh が上げ直すたびに"
       echo "# 上書きするが、このファイルには触らない (Compose が compose.yml に重ねて読む)。"
@@ -164,16 +192,22 @@ start_denpa() {
       else
         echo "services: {}"
       fi
-    } > "$DENPA_DIR/compose.override.yml"
-  elif [ "$genkan" = yes ] && ! grep -q 'denpa.localhost' "$DENPA_DIR/compose.override.yml"; then
-    genkan=no
-    say "compose.override.yml には触りません。http://denpa.localhost で開くなら、次を足して流し直してください:"
+    } > "$override"
+  elif ! grep -q 'denpa.localhost' "$override" && genkan_running; then
+    say "compose.override.yml には触りません。genkan の http://denpa.localhost で開くなら、次を足して流し直してください:"
     printf '%s\n' "$GENKAN_OVERRIDE"
   fi
   compose pull
   # 録画中に上げ直すと、録画が終わるまで待ってから入れ替わる (stop_grace_period)
   compose up -d
   wait_and_open "$3" "$genkan"
+}
+
+# genkan は外さない (ほかのプロジェクトも乗る)。残っていることと、畳み方を言う
+genkan_left() {
+  [ -d "$HOME/genkan" ] || return 0
+  say "  genkan $HOME/genkan (80・443 と Arcane。要らなければ cd ~/genkan && docker compose down)。"
+  say "  genkan を外したら compose.override.yml の genkan への登録も消してください"
 }
 
 # 止める (コンテナを畳むだけ。~/denpa も録画もボリュームも残す)
@@ -219,6 +253,7 @@ linux_main() {
     stop_denpa
     say "止めました。残してあるもの (要らなければ手で消してください):"
     say "  compose と設定 $DENPA_DIR / 録画と DB は docker volume rm denpa_denpa-data denpa_denpa-recorded denpa_denpa-library"
+    genkan_left
     return 0
   fi
 
@@ -278,6 +313,7 @@ mac_main() {
     rm -rf "$PREFIX" "$RUNTIME"
     say "外しました。残してあるもの (要らなければ手で消してください):"
     say "  compose と設定 $DENPA_DIR / 録画 $MEDIA / ログ $LOG / DB は docker volume rm denpa_denpa-data"
+    genkan_left
     return 0
   fi
 
