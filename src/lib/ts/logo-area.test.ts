@@ -49,6 +49,18 @@ function make(count: number, logo: Rect | null, alpha: number, logoValue = 255, 
     return frames;
 }
 
+/** 作った絵に、動かない白い四角をもう1つ重ねる (窓枠やテロップのつもり) */
+function overlay(frames: Frame[], rect: Rect, alpha: number): void {
+    for (const frame of frames) {
+        for (let y = rect.y; y < rect.y + rect.height; y++) {
+            for (let x = rect.x; x < rect.x + rect.width; x++) {
+                const at = y * W + x;
+                frame.data[at] = Math.round(frame.data[at]! * (1 - alpha) + 255 * alpha);
+            }
+        }
+    }
+}
+
 interface Rect {
     x: number;
     y: number;
@@ -123,6 +135,28 @@ describe('ロゴの在り処', () => {
             for (let y = 0; y < 48; y++) for (let x = 213; x < W; x++) frame.data[y * W + x] = 0;
         }
         expect(findLogoArea(frames)).toBeNull();
+    });
+
+    /**
+     * **ロゴと張り合う「動かない縁」が同じ隅にあれば、言い切らない。**
+     * 実機の MX1 では背景の窓枠を掴みました。どちらがロゴかは中央値からは
+     * 決められないので、外れた枠を覚えるより logoframe に任せる
+     */
+    test('同じくらい強い動かない縁が並ぶ隅では null', () => {
+        const truth = { x: 262, y: 12, width: 40, height: 16 };
+        const frames = make(40, truth, 0.6);
+        overlay(frames, { x: 216, y: 14, width: 30, height: 14 }, 0.6);
+        expect(findLogoArea(frames)).toBeNull();
+    });
+
+    /** 弱い縁が並ぶだけなら、ロゴが強い縁を独り占めするので見つかる */
+    test('弱い動かない縁が並んでいても見つける', () => {
+        const truth = { x: 262, y: 12, width: 40, height: 16 };
+        const frames = make(40, truth, 0.6);
+        overlay(frames, { x: 216, y: 14, width: 30, height: 14 }, 0.2);
+        const found = findLogoArea(frames);
+        expect(found).not.toBeNull();
+        expect(covers(found as Rect, truth)).toBe(true);
     });
 
     /** コマが少なすぎると振れ幅が当てにならない */
