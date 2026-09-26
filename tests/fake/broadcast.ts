@@ -26,6 +26,15 @@ import {
     sdtSection,
     withCrc,
 } from '../../src/lib/ts/synth';
+import {
+    AUDIO_TICKS,
+    CLOCK,
+    FRAME_TICKS,
+    mpeg2Frame,
+    packetizePes,
+    pes,
+    silentAac,
+} from '../../src/lib/ts/synth-av';
 import { type FakeService, SERVICES } from './services';
 
 /**
@@ -451,6 +460,66 @@ function nowOnAir(services: FakeService[], knobs: Knobs): Uint8Array {
 const TICK = 100;
 
 /**
+ * 映像と音声。**本当に解ける MPEG-2 と AAC を流す** (`src/lib/ts/synth-av.ts`)。
+ *
+ * 焼く道の E2E では ffmpeg も偽物なので中身は何でもよかったが、ライブを生で送る道は
+ * **ブラウザが自分で解いて絵を出す** (docs/stream.md §5.5)。そこを試すには解けるものが要る。
+ * 絵は 30 枚を使い回す (1秒で一巡りする縞)。
+ *
+ * **PTS は PCR より 0.4 秒先にする。** 本物の放送もそう作ってある (受信機は PTS まで
+ * 待って映す。stream.md §4「貯まりより小さく出ることはある」)
+ */
+const FRAMES = Array.from({ length: 30 }, (_, n) => mpeg2Frame(n));
+const SILENCE = silentAac();
+const PTS_AHEAD = 0.4 * CLOCK;
+
+interface AvState {
+    startedAt: number;
+    /** 最初の PTS。局ごとにずらす (実機もばらばら) */
+    base: number;
+    frames: number;
+    audio: number;
+    videoCounter: number;
+    audioCounter: number;
+}
+
+function avPackets(index: number, state: AvState): Uint8Array {
+    const pids = pidsOf(index);
+    const elapsed = ((performance.now() - state.startedAt) / 1000) * CLOCK;
+    const parts: Uint8Array[] = [];
+    while (state.frames * FRAME_TICKS <= elapsed) {
+        const at = state.frames * FRAME_TICKS;
+        const out = packetizePes(
+            pids.video,
+            pes(0xe0, state.base + at + PTS_AHEAD, FRAMES[state.frames % FRAMES.length]!),
+            state.videoCounter,
+            state.base + at,
+        );
+        state.videoCounter = out.counter;
+        parts.push(out.packets);
+        state.frames++;
+    }
+    while (state.audio * AUDIO_TICKS <= elapsed) {
+        const at = state.audio * AUDIO_TICKS;
+        const out = packetizePes(
+            pids.audio,
+            pes(0xc0, state.base + at + PTS_AHEAD, SILENCE),
+            state.audioCounter,
+        );
+        state.audioCounter = out.counter;
+        parts.push(out.packets);
+        state.audio++;
+    }
+    const joined = new Uint8Array(parts.reduce((sum, part) => sum + part.length, 0));
+    let offset = 0;
+    for (const part of parts) {
+        joined.set(part, offset);
+        offset += part.length;
+    }
+    return joined;
+}
+
+/**
  * 選局した状態を作る。**物理チャンネル丸ごと**しか無い。
  *
  * 局を選り分けるのも番組表を読むのも denpa の仕事なので、1本の TS に
@@ -474,6 +543,14 @@ export function broadcast(
     send(nowOnAir(services, knobs()));
 
     let ticks = 0;
+    const av: AvState[] = services.map((_, index) => ({
+        startedAt: performance.now(),
+        base: 900_000 * (index + 1),
+        frames: 0,
+        audio: 0,
+        videoCounter: 0,
+        audioCounter: 0,
+    }));
     const timer = setInterval(() => {
         ticks++;
         const now = knobs();
@@ -484,9 +561,12 @@ export function broadcast(
             send(tables(services));
             send(nowOnAir(services, now));
         }
-        // 映像と音声の代わり。局ごとに別のPIDで流す (選り分けを試すため)
+        /*
+         * 映像と音声。局ごとに別のPIDで流す (選り分けを試すため)。**スクランブルが掛かって
+         * いる状態は、解けない中身のまま流す** — 掛かっていれば本物も解けない
+         */
         for (let index = 0; index < services.length; index++) {
-            send(payload(pidsOf(index).video, 10, now.scrambled));
+            send(now.scrambled ? payload(pidsOf(index).video, 10, true) : avPackets(index, av[index]!));
         }
     }, TICK);
 

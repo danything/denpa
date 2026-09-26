@@ -184,6 +184,7 @@ SQLite が拒むので、事実と状態が食い違いません。文字列で�
 | `RECORDED_DIR` | `/app/recorded` | 生TSの作業領域 |
 | `LIBRARY_DIR` | `/library` | エンコード済みの置き場。ここから配る |
 | `FFMPEG` / `FFPROBE` | `/usr/local/bin/...` | 開発時は偽物に差し替える |
+| `MPEG2_DIR` | `/opt/denpa/mpeg2` | ライブを生で見るときにブラウザへ配る MPEG-2 の復号器 (WASM) の置き場。イメージの `mpeg2wasm` 段が置く。無ければ生の道は使えず焼いたものに戻る ([stream.md](stream.md#55-放送そのままmpeg-2を-lan-で送る)) |
 | `DENPA_VERSION` | `dev` | 動いている版。リリースのイメージにだけ入る (リリース時に main のイメージへ 1 層足す。`.github/release.Dockerfile`)。`dev` (develop・手元) なら新しい版の知らせを出さない |
 | `DENPA_GITHUB_API` | `https://api.github.com/repos/danything/denpa` | 新しい版を見に行く先 (`releases/latest`)。試験では偽物を指す |
 | `UPDATE_CHECK_INTERVAL` | 1時間 | 新しい版を見に行く間隔 (ms) |

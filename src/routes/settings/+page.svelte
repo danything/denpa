@@ -7,11 +7,24 @@
     import { CODEC_LABEL, HW_CODECS, HW_KIND_LABEL, HW_KINDS, hwAllowed } from '$lib/hw';
     import { liveUpdates } from '$lib/live-updates.svelte';
     import { measure } from '$lib/measure.svelte';
+    import { rawSetting } from '$lib/raw/setting.svelte';
+    import { rawUnsupported } from '$lib/raw/support';
     import { EVENT_LABEL } from '$lib/webhook-events';
 
     let { data, form } = $props();
 
     liveUpdates(['migrate']);
+
+    /**
+     * この端末で生の TS を解けるか (`raw/support.ts`)。**入れる前に分かるように出す** —
+     * 入れても解けなければ焼いたものになるので、スイッチだけ見ても効くか分からない
+     */
+    let rawProblem = $state<string | null | undefined>(undefined);
+    $effect(() => {
+        void rawUnsupported().then((problem) => {
+            rawProblem = problem;
+        });
+    });
 
 
     const migrate = $derived(data.migrate.status);
@@ -657,6 +670,39 @@
             `?measure` を付ければ同じものが出るが、ホーム画面から開いた
             アプリでは URL を打つところがない。
         -->
+        <!--
+            **ライブを生で見る** (docs/stream.md §5.5)。端末ごとの設定で既定は切。
+            サーバに置かないのは、決め手が端末の側 (解ける CPU があるか・電池か) にあるため
+        -->
+        <section class="panel card" data-testid="raw-card">
+            <h2>ライブを生で見る</h2>
+            <p class="small lead">
+                サーバで焼かずに、放送そのまま (MPEG-2) をこの端末で解きます。<strong>この端末だけ</strong>の設定です。
+            </p>
+
+            <label class="check">
+                <input
+                    type="checkbox"
+                    role="switch"
+                    aria-checked={rawSetting.on}
+                    checked={rawSetting.on}
+                    onchange={(event) => rawSetting.set(event.currentTarget.checked)}
+                    data-testid="raw-toggle"
+                />
+                <span>家の中 (LAN) では生で見る</span>
+            </label>
+
+            <p class="hint">
+                焼くのに掛かっていた 0.5〜1 秒が縮み、サーバはほとんど働かなくなります。そのかわり
+                <strong>1局 15〜17 Mbit/s</strong> がずっと流れ、この端末が MPEG-2 を解きます (電池を使います)。
+                止めて再開すると放送の今からになり、5分戻ったり追っかけの速さを選んだりはできません。
+                家の外からや、解くのが間に合わないときは、いつもの焼いたものに自動で戻ります。
+            </p>
+            {#if rawProblem}
+                <p class="hint" data-testid="raw-unsupported">この端末では使えません: {rawProblem}</p>
+            {/if}
+        </section>
+
         <section class="panel card">
             <h2>画面の高さを見る</h2>
             <p class="small lead">

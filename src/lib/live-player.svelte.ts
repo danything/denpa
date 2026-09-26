@@ -22,6 +22,9 @@ import {
     SOCKET_PATH,
     type Tuned,
 } from '$lib/live';
+import { RawEngine } from '$lib/raw/engine';
+import { rawSetting } from '$lib/raw/setting.svelte';
+import { rawUnsupported } from '$lib/raw/support';
 import { CLOCK, type Cue, currentCue, insertCue, trimCues } from '$lib/ts/captions';
 import { CEILING, FLOOR, nextTarget, pacing } from '$lib/ts/pacing';
 
@@ -310,6 +313,36 @@ export function livePlayer() {
     /** 読み切ったら、流し残しが尽きたところで器を締める (`finishStream`) */
     let ending = false;
 
+    /*
+     * ---- 生で送る道 ([stream.md](../../docs/stream.md) §5.5) ----
+     *
+     * **MSE の代わりに `raw/engine.ts` を使う。** それ以外 (繋ぎ・知らせ・字幕・データ放送・
+     * 貯め方の決め方) は焼く道と同じものを通す。違うのは器と時計だけ:
+     *
+     * | | 焼く道 | 生の道 |
+     * | --- | --- | --- |
+     * | 絵 | `<video>` + MSE | canvas (worker の WebGL2) |
+     * | 時計 | `video.currentTime` (0 起点) | 鳴っている音の PTS (放送の時刻そのまま) |
+     * | 貯まり | `buffered.end - currentTime` | 届いた音の端 − 鳴っている位置 |
+     * | 止めて再開 | 止めた所から (5分戻れる) | **放送の今から** (遡るほど持っていない) |
+     */
+    /** いま生で見ているか。**サーバが `tuned` でそう答えたときだけ** */
+    let raw = $state(false);
+    let engine: RawEngine | null = null;
+    /** 札を取ったときにサーバが「生でよい」(LAN) と言ったか */
+    let rawGranted = false;
+    /**
+     * 生を諦めたか (解くのが間に合わない・音が解けない・復号器が無い)。**この画面を開いている
+     * 間は頼み直さない** — 戻しては諦めるを繰り返すと、そのたびに絵が止まる
+     */
+    let rawGaveUp = false;
+    /** この端末で解けない理由 (`raw/support.ts`)。調べるまでは undefined */
+    let rawProblem: string | null | undefined;
+    /** 映像の入れ物。生の canvas はここに差し込む (`attach`) */
+    let host: HTMLElement | null = null;
+    /** 生の道の刻み。貯まり・貯める量の決め直しを回す */
+    let rawTimer: ReturnType<typeof setInterval> | null = null;
+
     let socket: WebSocket | null = null;
     let source: MediaSource | null = null;
     let buffer: SourceBuffer | null = null;
@@ -470,6 +503,8 @@ export function livePlayer() {
      * それは正しい。実際に止まっている
      */
     function freeze(): void {
+        // 生の道では canvas が次の絵まで前の絵を持っている。写す必要が無い
+        if (raw) return;
         if (element === null || still === null) return;
         // まだ1枚も出ていない (初めて開いたとき)。写すものが無い
         if (element.readyState < 2 || element.videoWidth === 0) return;
@@ -869,12 +904,15 @@ export function livePlayer() {
         const now = Date.now();
         if (!stalled && now - lastSettled < SETTLE_EVERY) return;
         // 捨てられたコマも同じ間隔で読む。**選局からの通し** (器を作り直すと 0 に戻る)
-        dropped = element?.getVideoPlaybackQuality?.().droppedVideoFrames ?? dropped;
+        dropped =
+            engine !== null
+                ? engine.dropped
+                : (element?.getVideoPlaybackQuality?.().droppedVideoFrames ?? dropped);
         /*
          * **途切れたら跳び直す** (`unslipAfter` の下の説明)。測れた遅れ (`slip`) を
-         * 待たない — あれは見えないことがある
+         * 待たない — あれは見えないことがある。生の道には要らない (絵は音の時計を追うだけ)
          */
-        if (stalled && element !== null) unslip(element);
+        if (stalled && element !== null && !raw) unslip(element);
         const next = nextTarget(
             { target, floor },
             stalled,
@@ -890,6 +928,7 @@ export function livePlayer() {
             rememberFloor(floor);
         }
         if (next.target !== target) target = next.target;
+        if (engine !== null) engine.target = target;
     }
 
     /**
@@ -917,7 +956,8 @@ export function livePlayer() {
     /** 音を出す。**押されて呼ばれる** — ここまで来ればブラウザは断らない */
     function unmute(): void {
         silenced = false;
-        if (element === null) return;
+        engine?.unmute();
+        if (element === null || raw) return;
         element.muted = false;
         void element.play().catch(() => {
             /* 押したのに断られることはない */
@@ -927,6 +967,7 @@ export function livePlayer() {
     /** 音を止める。備え付けの操作を出さないので、こちらで用意する */
     function mute(): void {
         silenced = true;
+        engine?.mute();
         if (element !== null) element.muted = true;
     }
 
@@ -942,6 +983,19 @@ export function livePlayer() {
      */
     function toggle(): void {
         if (element === null) return;
+        /*
+         * **生の道は、止めたら再開は放送の今から。** 1局 15Mbit/s を遡れるほど持って
+         * おけない (5分で 600MB) ので、止めている間に届いたものは捨てる
+         */
+        if (raw && engine !== null) {
+            paused = !paused;
+            if (paused) engine.pause();
+            else {
+                quiet = Date.now() + GRACE;
+                engine.resume();
+            }
+            return;
+        }
         if (paused) {
             paused = false;
             /*
@@ -991,6 +1045,11 @@ export function livePlayer() {
 
     /** 放送の今へ追いつく。**追っかけをやめて、見ていたぶんを飛ばす** */
     function goLive(): void {
+        // 生の道はいつも放送の今。止めていたら再開するだけ
+        if (raw) {
+            if (paused) toggle();
+            return;
+        }
         if (element === null || buffer === null || buffer.buffered.length === 0) return;
         const end = buffer.buffered.end(buffer.buffered.length - 1);
         element.currentTime = Math.max(buffer.buffered.start(0), end - target);
@@ -1020,7 +1079,7 @@ export function livePlayer() {
         // 一覧は同じ局のものなので残す (`forget`)
         forget(true);
         captionTrack = index;
-        const command: Command = { type: 'tune', ...tuned, caption: index };
+        const command: Command = { type: 'tune', ...tuned, caption: index, raw: wantsRaw() };
         if (socket !== null && socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify(command));
     }
 
@@ -1151,6 +1210,7 @@ export function livePlayer() {
         if (retry !== null) clearTimeout(retry);
         retry = null;
         reset();
+        stopRaw();
         thaw();
     }
 
@@ -1203,6 +1263,17 @@ export function livePlayer() {
      */
     function setAudio(id: string): void {
         if (element === null || id === audio) return;
+        /*
+         * **生の道では焼き直さない。** TS には全部の音声が入っているので、どれを解いて
+         * どちら側を鳴らすかを変えるだけ (`RawEngine.selectAudio`)
+         */
+        if (raw && engine !== null && tuned !== null) {
+            audio = id;
+            tuned = { ...tuned, audio: id };
+            remember(tuned);
+            pickAudio();
+            return;
+        }
         // 追っかけも同じ理屈で焼き直し。**居た場所から**開き直す
         if (chase !== null) {
             audio = id;
@@ -1282,9 +1353,14 @@ export function livePlayer() {
      * @param frozen 切り替えの間、前の絵を貼っておく先 (`freeze`)
      * @param subtitles 字幕を重ねる先 (`paint`)
      */
-    function attach(frozen: HTMLCanvasElement, subtitles: HTMLCanvasElement): void {
+    function attach(
+        frozen: HTMLCanvasElement,
+        subtitles: HTMLCanvasElement,
+        box: HTMLElement | null = null,
+    ): void {
         still = frozen;
         overlay = subtitles;
+        host = box;
     }
 
     /**
@@ -1299,7 +1375,8 @@ export function livePlayer() {
         tuned = target;
         audio = target.audio ?? '';
         codec = target.codec ?? 'h264';
-        remember(target);
+        // 生で頼むかも覚えておく — 次に開いたときにサーバが先回りする (`server/live.ts` の `warm`)
+        remember({ ...target, raw: rawSetting.on && !rawGaveUp && rawProblem === null });
         await begin(video, keepList);
     }
 
@@ -1337,14 +1414,30 @@ export function livePlayer() {
                 caption: captionTrack,
             };
         }
-        if (tuned !== null) return { type: 'tune', ...tuned };
+        if (tuned !== null) return { type: 'tune', ...tuned, raw: wantsRaw() };
         return null;
+    }
+
+    /**
+     * 生で頼むか。**端末の設定が入っていて、解けて、LAN から来ていて、まだ諦めていない**とき。
+     * LAN かどうかはサーバが札で言ってくる (`rawGranted`)。頼んでも最後に決めるのはサーバ
+     */
+    function wantsRaw(): boolean {
+        return rawSetting.on && rawProblem === null && rawGranted && !rawGaveUp;
     }
 
     /** 繋いで頼む。選局 (`tune`) と追っかけ (`openChase`) の共通の後半 */
     async function begin(video: HTMLVideoElement, keepList: boolean): Promise<void> {
         element = video;
         left = false;
+        /*
+         * **生で見る設定なら、解けるかを先に確かめる** (1回だけ。`raw/support.ts`)。
+         * 解けない端末では最初から焼いたものを頼み、理由を断り書きに出す
+         */
+        if (rawSetting.on && rawProblem === undefined) {
+            rawProblem = await rawUnsupported();
+            if (rawProblem !== null) warning = `生では見られません: ${rawProblem}`;
+        }
         // 数え直す。焼き直しでも器から作り直しになるので、前の数は続きではない
         stalls = 0;
         // 字幕は映した1枚ごとに貼り直す (`follow`)。2度目からは何もしない
@@ -1381,7 +1474,10 @@ export function livePlayer() {
         try {
             const res = await fetch('/api/live/ticket', { method: 'POST' });
             if (!res.ok) throw new Error(String(res.status));
-            ticket = ((await res.json()) as { ticket: string }).ticket;
+            const answer = (await res.json()) as { ticket: string; raw?: boolean };
+            ticket = answer.ticket;
+            // LAN から取った札か。**生で頼むかどうかの最後の1つ** (`wantsRaw`)
+            rawGranted = answer.raw === true;
         } catch {
             // 繋ぎ直しの最中なら、サーバがまだ帰っていないだけ。待ち直す
             if (attempts > 0) reconnect();
@@ -1435,6 +1531,15 @@ export function livePlayer() {
             const kind = new DataView(data).getUint8(0);
             const body = new Uint8Array(data, 9);
 
+            /*
+             * **生の TS。** 写さずにそのまま worker へ移す (`RawEngine.feed`)。頭の9バイトは
+             * 多重化の頭なので、そこから先を読ませる
+             */
+            if (kind === CHANNEL.rawTs) {
+                engine?.feed(data, 9);
+                return;
+            }
+
             if (kind === CHANNEL.control) {
                 const notice = JSON.parse(new TextDecoder().decode(body)) as Notice;
                 if (notice.type === 'error') {
@@ -1455,7 +1560,9 @@ export function livePlayer() {
                      * 遅延の数字に出ます。届いた時刻との差を覚えておいて、
                      * 以降はサーバの時計の上で数える (LAN の片道は 1ms 未満)
                      */
-                    broadcast = { at: notice.at, unixMs: notice.unixMs };
+                    // 生の道の物差しは放送の PTS そのもの。**一周をまたいでいたら伸ばして合わせる**
+                    const at = raw && engine !== null ? engine.unwrap(notice.at * CLOCK) / CLOCK : notice.at;
+                    broadcast = { at, unixMs: notice.unixMs };
                     skew = notice.now - Date.now();
                 } else if (notice.type === 'hybridcast') {
                     hybridcast = notice.apps;
@@ -1484,7 +1591,10 @@ export function livePlayer() {
                     audios = notice.audios;
                     audio = notice.audio;
                     codec = notice.codec;
-                    start(video, notice.codecs, notice.codec);
+                    // 生を頼んだのに断られた (LAN の外)。**黙って戻さず、そう言う**
+                    if (notice.refused !== undefined) warning = notice.refused;
+                    if (notice.raw) startRaw(video);
+                    else start(video, notice.codecs, notice.codec);
                 }
                 return;
             }
@@ -1546,7 +1656,9 @@ export function livePlayer() {
                  * 字幕のほうが先に届く**ので、そのぶんだけ早く出ていた —
                  * 時刻で置けば、その量を測ったり当てたりしなくてよくなる
                  */
-                const at = Number(new DataView(data).getBigUint64(1)) / CLOCK;
+                const stamp = Number(new DataView(data).getBigUint64(1));
+                // 生の道は放送の PTS のまま来る (`server/captions.ts` の `rawCaptionArgs`)。一周をまたいだら伸ばす
+                const at = (raw && engine !== null ? engine.unwrap(stamp) : stamp) / CLOCK;
 
                 if (kind === CHANNEL.subtitleClear) {
                     cues = insertCue(cues, { at, bitmap: null });
@@ -1581,6 +1693,8 @@ export function livePlayer() {
      * なるので、確実に出るほうへ落として、そう言う
      */
     function start(video: HTMLVideoElement, codecs: string, baked: LiveCodec): void {
+        // 生から焼いたものへ戻るとき (諦めた・LAN の外)。canvas を畳んで <video> を出す
+        stopRaw();
         if (!('MediaSource' in globalThis) || !MediaSource.isTypeSupported(codecs)) {
             if (baked !== 'h264') {
                 warning = 'この端末では AV1 を再生できないので、H.264 に戻しました';
@@ -1657,9 +1771,107 @@ export function livePlayer() {
         );
     }
 
+    /**
+     * 生の器を用意する (`tuned` で raw: true と答えられた)。**2度目からは作り直さず開き直すだけ** —
+     * worker と復号器の読み込み (500KB) を選局のたびにやり直さない
+     */
+    function startRaw(video: HTMLVideoElement): void {
+        clear();
+        if (engine === null) {
+            // 焼いたものを流していた器は止める。音が二重に鳴らないように
+            video.pause();
+            video.removeAttribute('src');
+            video.load();
+            const box = host ?? video.parentElement;
+            if (box === null) return;
+            engine = new RawEngine(box, still, target, {
+                shown: () => thaw(),
+                stalled: () => {
+                    if (paused || Date.now() < quiet) return;
+                    stalled = true;
+                    stalls += 1;
+                    lastStall = Date.now();
+                },
+                gaveUp: (reason) => fallBack(reason),
+            });
+            // 押す口は <video> に付いている (`MediaStack`)。見えなくするだけで、そこに残す
+            video.style.opacity = '0';
+        } else {
+            engine.reset();
+        }
+        raw = true;
+        pickAudio();
+        if (rawTimer === null) rawTimer = setInterval(rawPace, 20);
+    }
+
+    /** 選んでいる音声を生の器に伝える。**焼き直さない** (`setAudio`) */
+    function pickAudio(): void {
+        const track = audios.find((candidate) => candidate.id === audio) ?? audios[0];
+        if (engine !== null && track !== undefined) engine.selectAudio(track.stream, track.side);
+    }
+
+    /** 生の器を畳む。**焼いたものに戻るときと、画面を離れるとき** */
+    function stopRaw(): void {
+        if (rawTimer !== null) clearInterval(rawTimer);
+        rawTimer = null;
+        engine?.destroy();
+        engine = null;
+        raw = false;
+        if (element !== null) element.style.opacity = '';
+    }
+
+    /**
+     * 生を諦めて焼いたものに戻す。**理由は断り書きに残す** (`warning`) — 黙って戻すと、
+     * 設定を入れたのに効いていない理由が分からない
+     */
+    function fallBack(reason: string): void {
+        rawGaveUp = true;
+        warning = reason;
+        stopRaw();
+        if (element !== null && tuned !== null) void tune(element, tuned, true);
+    }
+
+    /**
+     * 生の道の `pace`。**時計が音なので、`updateend` の代わりに刻みで回す。**
+     * 貯まり・放送からの遅れ・字幕の貼り直し・貯める量の決め直しを、焼く道と同じ形で出す
+     */
+    function rawPace(): void {
+        if (engine === null) return;
+        if (!running && engine.playing) {
+            running = true;
+            state = 'playing';
+            // 自動再生で断られた。**押すまで絵だけ進める** (壁時計。`RawEngine.blocked`)
+            if (engine.blocked) silenced = true;
+        }
+        const at = engine.position;
+        const rounded = running ? Math.round(engine.lead * 10) / 10 : null;
+        if (rounded !== delay) delay = rounded;
+        if (!live) live = true;
+        if (at !== null) {
+            const truly =
+                broadcast === null
+                    ? null
+                    : Math.round(
+                          (Date.now() + skew - (broadcast.unixMs + (at - broadcast.at) * 1000)) / 100,
+                      ) / 10;
+            if (truly !== fromAir) fromAir = truly;
+            paint(at);
+            sweep(at);
+        }
+        settle();
+    }
+
     return {
         get state() {
             return state;
+        },
+        /** 生で見ているか (焼いていない)。**操作列の出し分けに使う** — 生では遡れない */
+        get raw() {
+            return raw;
+        },
+        /** 生で1コマ解くのに掛かっている時間 (ms、95パーセンタイル)。生でなければ 0 */
+        get decodeMs() {
+            return engine?.decodeMs ?? 0;
         },
         get message() {
             return message;

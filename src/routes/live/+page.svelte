@@ -71,7 +71,8 @@
      */
     onMount(() => {
         // 重ねるものの置き場を先に渡す。選局はこのあと (bind は mount 時点で入っている)
-        if (still !== null && overlay !== null) player.attach(still, overlay);
+        // 入れ物も渡す — 生で見るときは、映像の代わりの canvas をここに差し込む (`raw/engine.ts`)
+        if (still !== null && overlay !== null) player.attach(still, overlay, mediaBox);
         if (data.start !== null && video !== null) void player.tune(video, data.start);
         return () => player.stop();
     });
@@ -293,12 +294,18 @@
                         testid="live-data-button"
                         onclick={() => pressD(player.showData, dataButton, (on) => player.setData(on))}
                     />
-                    <ControlButton
-                        path={CAMERA}
-                        label="この場面を切り抜く"
-                        testid="live-shot"
-                        onclick={() => void snapshot()}
-                    />
+                    <!--
+                        **生で見ている間は切り抜きを出さない。** 絵は worker の canvas に居て、
+                        こちらから写し取る口をまだ持っていない (stream.md §5.5)
+                    -->
+                    {#if !player.raw}
+                        <ControlButton
+                            path={CAMERA}
+                            label="この場面を切り抜く"
+                            testid="live-shot"
+                            onclick={() => void snapshot()}
+                        />
+                    {/if}
                 </ControlBar>
 
                 <!--
@@ -325,7 +332,11 @@
                         溜まりが増えるたびに摘みが左へ動く。見ている人には
                         「勝手に戻っている」としか映らない
                     -->
-                    <!-- 操作の色は `input[type=range].fill` (app.scss)。ライブ中の赤は「ライブ」ボタンが言う -->
+                    <!--
+                        操作の色は `input[type=range].fill` (app.scss)。ライブ中の赤は「ライブ」ボタンが言う。
+                        **生で見ている間は出さない** — 遡れるほど持っていない (止めて再開は放送の今から)
+                    -->
+                    {#if !player.raw}
                     <input
                         type="range"
                         class="seek fill"
@@ -342,6 +353,7 @@
                         aria-label="再生位置"
                         data-testid="live-seek"
                     />
+                    {/if}
 
                     <!-- **並びは観る画面と同じ。** 再生・音・字幕が左から順で、全画面が右端 -->
                     <div class="control-row">
@@ -443,11 +455,19 @@
                             **出ないブラウザもある** — 受け取れなければ H.264 に
                             戻して、戻した理由を出す (`live-player.svelte.ts` の `start`)
                         -->
-                        <CodecMenu
-                            testid="live-codec"
-                            codec={player.codec}
-                            onselect={(key) => player.setCodec(key)}
-                        />
+                        <!--
+                            **生で見ている間は焼き方を選ばせない** — 焼いていない。代わりに
+                            生であることを言う (焼いたものに戻るときは断り書きが理由を言う)
+                        -->
+                        {#if player.raw}
+                            <span class="raw-badge" data-testid="live-raw-badge" title="焼かずに放送そのまま (MPEG-2) を送っています">生</span>
+                        {:else}
+                            <CodecMenu
+                                testid="live-codec"
+                                codec={player.codec}
+                                onselect={(key) => player.setCodec(key)}
+                            />
+                        {/if}
 
                         {#if player.audios.length > 1}
                             <AudioMenu
@@ -553,6 +573,14 @@
                                 {/if}
                                 {#if player.slips > 0}
                                     ・ <span>映像の遅れを補正 {player.slips}回</span>
+                                {/if}
+                                <!--
+                                    **生で1コマ解くのに掛かっている時間。** 1コマ (33ms) の 8 割を
+                                    5 秒超え続けたら焼いたものに戻る (`raw/budget.ts`)。
+                                    戻る前に余裕がどれだけあるかを読むため
+                                -->
+                                {#if player.raw && player.decodeMs > 0}
+                                    ・ <span>解く {player.decodeMs.toFixed(1)}ms</span>
                                 {/if}
                             {/snippet}
                         </InfoBlock>
@@ -820,6 +848,17 @@
         gap: 0.25rem;
         margin-top: 0.25rem;
         color: #fff;
+    }
+    /* 生で見ていることの印。焼き方のボタンと同じ場所・同じ大きさ */
+    .raw-badge {
+        display: inline-flex;
+        align-items: center;
+        height: 2rem;
+        padding: 0 0.6rem;
+        border: 1px solid rgb(255 255 255 / 0.5);
+        border-radius: 0.25rem;
+        font-size: 0.75rem;
+        font-weight: 600;
     }
     .track-label {
         display: inline-block;

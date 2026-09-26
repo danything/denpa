@@ -138,6 +138,17 @@ EMSCRIPTEN_KEEPALIVE int *dec_peek(void) {
 
 EMSCRIPTEN_KEEPALIVE double dec_peek_pts(void) { return info_pts; }
 
+/**
+ * i 枚目 (0 がいちばん古い) の時刻。**見せる番が過ぎた絵を、覗かずに飛ばすため** —
+ * 次の絵がもう番を迎えているなら、手前の絵は絵にする (テクスチャに上げる) だけ無駄
+ */
+EMSCRIPTEN_KEEPALIVE double dec_pts_at(int i) {
+    if (i < 0 || i >= count) return -1;
+    const AVFrame *f = queue[(head + i) % QUEUE];
+    int64_t pts = f->pts != AV_NOPTS_VALUE ? f->pts : f->best_effort_timestamp;
+    return pts == AV_NOPTS_VALUE ? -1 : (double)pts;
+}
+
 /** いちばん古い1枚を捨てる。**見せ終わったか、見せずに飛ばすとき** */
 EMSCRIPTEN_KEEPALIVE void dec_pop(void) {
     if (count == 0) return;

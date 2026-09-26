@@ -395,7 +395,32 @@ jobs:
 
       # アプリを1度だけ組んでから、ワーカーの数だけ立てる。
       # 偽エージェント・偽通知先もワーカーごとに1式ずつ (tests/stack.ts)
+      # **ライブを生で見る道の復号器** (docs/stream.md §5.5)。ブラウザで MPEG-2 を解く WASM は
+      # Dockerfile の `mpeg2wasm` 段で組む (emscripten)。E2E はイメージを使わずランナーで
+      # 回すので、その段だけ組んで取り出し、`MPEG2_DIR` で denpa に渡す。
+      # 使うのは 28-live-raw だけなので、それを持つ組でだけ組む。中身は FFmpeg の版と
+      # wasm/mpeg2 が変わらない限り同じなので、2回目からはキャッシュで数秒
+      - name: Does this shard need the MPEG-2 decoder?
+        id: mpeg2
+        run: echo "needed=$(jq -r --arg s '${{ matrix.shard }}' '.[$s] | index("28-live-raw") != null' tests/e2e/shards.json)" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Docker Buildx
+        if: steps.mpeg2.outputs.needed == 'true'
+        uses: docker/setup-buildx-action@v4
+
+      - name: Build the MPEG-2 decoder (WASM)
+        if: steps.mpeg2.outputs.needed == 'true'
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          target: mpeg2wasm-out
+          outputs: type=local,dest=${{ runner.temp }}/mpeg2
+          cache-from: type=gha,scope=mpeg2wasm
+          cache-to: type=gha,mode=min,scope=mpeg2wasm
+
       - name: E2E tests
+        env:
+          MPEG2_DIR: ${{ runner.temp }}/mpeg2
         run: bunx playwright test $(jq -r '."${{ matrix.shard }}"[] | "tests/e2e/\(.).spec.ts"' tests/e2e/shards.json | tr '\n' ' ')
 
       - name: Upload Playwright report
