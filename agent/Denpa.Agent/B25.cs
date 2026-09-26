@@ -78,8 +78,10 @@ public sealed class Descrambler(IKeySource source, bool background = true)
     private bool _sectionSeen;
     private bool _pmtRepeated;
     private bool _ecmRepeated;
-    /// <summary>溜めている間に、もう鍵を持っている ECM の中身が変わった (<see cref="Hold"/>)</summary>
+    /// <summary>溜めている間に ECM の中身が変わった。新しい中身は流してから聞く (<see cref="Hold"/>)</summary>
     private bool _keyChanged;
+    /// <summary>溜めたぶんを流し直している最中。節は読み終えているので読まず、答えも拾わない</summary>
+    private bool _replaying;
 
     private readonly Section _pat = new(null);
     private byte[]? _patLast;
@@ -261,7 +263,7 @@ public sealed class Descrambler(IKeySource source, bool background = true)
     private void Take(ReadOnlySpan<byte> packet, IBufferWriter<byte> output)
     {
         _packets++;
-        if (_waiting.Count > 0) Poll();
+        if (_waiting.Count > 0 && !_replaying) Poll();
         if (_holding)
         {
             Hold(packet, output);
@@ -301,11 +303,11 @@ public sealed class Descrambler(IKeySource source, bool background = true)
         }
 
         /*
-         * **溜めている間に鍵が変わるなら、そこで流す。** 答えを待ってから流すと、
-         * 溜めた頭まで新しい鍵で解いて、化けたものを「解けた」として出す。
-         * 今の鍵で解けるところまで先に出し、そこから先は偶奇の門に任せる
+         * **溜めている間に鍵が変わるなら、今の鍵の答えが来たところで流す。** 新しい鍵を
+         * 先に貰ってから流すと、溜めた頭まで新しい鍵で解いて、化けたものを「解けた」として
+         * 出す。新しい中身は取っておき (OnEcm)、流し終えてから聞く (Release)
          */
-        if (_keyChanged)
+        if (_keyChanged && !_ecms.Values.Any(ecm => ecm.Next is not null && ecm.Asking is not null))
         {
             _keyChanged = false;
             Release(output);
@@ -361,7 +363,24 @@ public sealed class Descrambler(IKeySource source, bool background = true)
         var length = _heldLength;
         _held = null;
         _heldLength = 0;
-        for (var at = 0; at < length; at += PacketSize) Take(held.AsSpan(at, PacketSize), output);
+        _replaying = true;
+        try
+        {
+            for (var at = 0; at < length; at += PacketSize) Take(held.AsSpan(at, PacketSize), output);
+        }
+        finally
+        {
+            _replaying = false;
+        }
+
+        // 溜めている間に取っておいた新しい中身を、ここで聞く
+        foreach (var ecm in _ecms.Values)
+        {
+            if (ecm.Asking is not null || ecm.Next is not { } next) continue;
+            ecm.Next = null;
+            if (!Same(next, ecm.Last)) Ask(ecm, next);
+        }
+        if (!background) Poll();
     }
 
     /// <summary>1 パケットをその場で解く。掛かっていないものは中の節を読む</summary>
@@ -373,7 +392,7 @@ public sealed class Descrambler(IKeySource source, bool background = true)
         var control = packet[3] >> 6;
         if (control == 0)
         {
-            Parse(packet, scanning: false);
+            if (!_replaying) Parse(packet, scanning: false);
             return;
         }
 
@@ -619,7 +638,13 @@ public sealed class Descrambler(IKeySource source, bool background = true)
         if (scanning && seen) _ecmRepeated = true;
         if (Same(section, ecm.Last) || Same(section, ecm.Asking)) return;
         if (Same(section, ecm.Failed) && Now() < ecm.RetryAt) return;
-        if (scanning && ecm.Last is not null) _keyChanged = true;
+        if (scanning && (ecm.Last is not null || ecm.Asking is not null))
+        {
+            // 溜めている間の2つ目の中身。**流すまで聞かない** (Hold)
+            ecm.Next = section.ToArray();
+            _keyChanged = true;
+            return;
+        }
         if (ecm.Asking is not null)
         {
             // 前の答えを待っている。**聞くのは1本につき1つずつ**、最新だけ覚えておく
@@ -698,7 +723,8 @@ public sealed class Descrambler(IKeySource source, bool background = true)
                 _sectionSeen = true;
                 Apply(ecm, section, done);
 
-                if (ecm.Next is { } next)
+                // 溜めている間は聞き直さない。流してから聞く (Release)
+                if (!_holding && ecm.Next is { } next)
                 {
                     ecm.Next = null;
                     if (!Same(next, ecm.Last) && !Same(next, ecm.Failed)) (again ??= []).Add((ecm, next));

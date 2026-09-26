@@ -644,6 +644,33 @@ public class B25Tests
     }
 
     /// <summary>
+    /// **最初の答えを待つ間に ECM が変わっても、溜めた頭は最初の鍵で解く。** 新しい中身は
+    /// 流し終えてから聞く。流し直すときに ECM を読み直して聞き直すと、新しい鍵で頭を解いて化けた。
+    /// (偶数の鍵は 11 と 12 で共通、という本物の並びに合わせて、12 のあとの偶数も 11 の鍵で掛ける)
+    /// </summary>
+    [Test]
+    public async Task 最初の答えを待つ間にECMが変わっても溜めた頭は最初の鍵で解く()
+    {
+        var cards = new StepCards();
+        var descrambler = new Descrambler(cards);
+        var output = new ArrayBufferWriter<byte>();
+        var head = Channel().Videos(3, 11, even: false).Ecm(EcmPid, 11).Videos(3, 11, even: false)
+            .Ecm(EcmPid, 12).Videos(3, 11, even: true);
+        descrambler.Decode(head.Wire.ToArray(), output);
+        cards.Gate(11).Set();
+        cards.Gate(12).Set();
+        for (var tries = 0; tries < 500 && output.WrittenCount < head.Wire.Count; tries++)
+        {
+            await Task.Delay(1);
+            descrambler.Decode(new Ts().Pat((0x0400, PmtPid)).Wire.ToArray(), output);
+        }
+
+        var got = output.WrittenSpan[..head.Wire.Count].ToArray();
+        await Assert.That(Diff(got, Expected(head))).IsEqualTo(-1);
+        await Assert.That(descrambler.Decoded).IsEqualTo(9);
+    }
+
+    /// <summary>
     /// **止めたパケットの偶奇も覚える。** 覚えないと、次に聞くときの門が
     /// 「門が閉じる前の偶奇」になり、今流れている偶奇を止めて、古い鍵の偶奇を通す
     /// </summary>
