@@ -189,11 +189,11 @@ export async function cardStatus(): Promise<CardStatus> {
             signal: AbortSignal.timeout(10_000),
         });
         if (!res.ok) {
-            return failed(`エージェントへの解除の依頼が失敗しました (${res.status})`);
+            return failed(`エージェントからカードの状態を取得できません (${res.status})`);
         }
         return readCardStatus(await res.json());
     } catch (error) {
-        return failed(`解除を頼むエージェントに繋がりません: ${error}`);
+        return failed(`カードの状態を聞くエージェントに繋がりません: ${error}`);
     }
 }
 

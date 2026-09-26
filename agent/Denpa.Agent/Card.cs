@@ -88,7 +88,7 @@ public static class Card
     {
         /*
          * **denpa は 10 秒で諦める。** それより先に切り上げて理由を返す —
-         * 間に合わないと、画面には「受け口に繋がりません」とエージェントのせいに見える
+         * 間に合わないと、画面には「カードの状態を聞くエージェントに繋がりません」とエージェントのせいに見える
          */
         CardSurvey survey;
         try
@@ -212,7 +212,7 @@ public static class Card
     {
         /*
          * **1つずつ専用のスレッドで。** 固まったリーダーは何秒も塞ぐので、共用の池から
-         * 借りると池が増えるまで他の覗きも待たされ、答えられるものまで「答えません」になる
+         * 借りると池が増えるまで他の覗きも待たされ、答えられるものまで「応答しません」になる
          */
         var peeking = candidates.Select(Peeking).ToArray();
         if (peeking.Length > 0 && within > TimeSpan.Zero) Task.WaitAll(peeking, within);
