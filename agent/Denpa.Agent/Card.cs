@@ -65,12 +65,24 @@ public static class Card
         if ((await Shell.Run("pgrep", ["-x", "pcscd"], TimeSpan.FromSeconds(10))).Code == 0) return;
         try
         {
-            Process.Start(new ProcessStartInfo("pcscd", "--foreground --disable-polkit")
+            var start = new ProcessStartInfo("pcscd")
             {
+                ArgumentList = { "--foreground", "--disable-polkit" },
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
                 UseShellExecute = false,
-            });
+            };
+            /*
+             * reader.conf の置き場を変えたときだけ pcscd にも言う。pcscd が読むのは焼いたときの
+             * 場所 (serialconfdir) で、Homebrew の pcsc-lite でも /etc/reader.conf.d のまま
+             * (root でないと書けない)。イメージでは指定しないので、今までどおりの起こし方になる
+             */
+            if (Environment.GetEnvironmentVariable("PCSC_READER_CONF_DIR") is { Length: > 0 } confDir)
+            {
+                start.ArgumentList.Add("--config");
+                start.ArgumentList.Add(confDir);
+            }
+            Process.Start(start);
             Log.Write("pcscd を起動しました");
         }
         catch (Exception error)

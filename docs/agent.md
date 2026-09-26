@@ -637,6 +637,38 @@ Unix ドメインソケットは**まだ入れていません** (`Program.cs` �
   足す (複数のエージェントを1つの denpa に束ねる) のはまだ入っていません。入れるなら
   取り合いは denpa が全体を見て決め、どのエージェントの何本目かは denpa 側の帳簿になります
 
+## macOS で動かす (試し。実機では未確認)
+
+**denpa は Docker Desktop のまま、エージェントだけを Mac に直接入れます。** Docker Desktop の
+コンテナからは USB が見えないためです。Apple Silicon だけで、Homebrew で入れます。
+
+```sh
+brew tap danything/denpa https://github.com/danything/denpa
+brew install denpa-agent
+brew services start denpa-agent
+```
+
+denpa 側は `TUNER_AGENT_URL` を Mac に向けます (Docker Desktop なら
+`http://host.docker.internal:25252`)。
+
+- **中身はイメージと同じ顔ぶれ**です (エージェント・libaribb25・px4-userland・siano-userland と
+  ファームウェア)。リリースのたびに `agent/macos/build.sh` が束ね、formula が指す先も
+  書き換わります (`release.yml`)。px4-userland と siano-userland は配布元の macOS 版を使い、
+  libaribb25 だけは配布物が無いので Homebrew の pcsc-lite に繋いで組みます
+- 設定と控えは `$(brew --prefix)/var/denpa-agent/`、記録は `$(brew --prefix)/var/log/denpa-agent.log`。
+  環境変数を変えたいとき (`AGENT_PORT`・`CARD_URL`・`RECORDED_DIR` など) は
+  `$(brew --prefix)/etc/denpa-agent.env` に `名前=値` で書きます
+- **pcscd は Homebrew の pcsc-lite のもの**を起こします。Mac の標準の PC/SC とは別物で、
+  px4-userland の筐体の内蔵カードリーダーは reader.conf で登録されますが、**外付けの USB
+  リーダーは読めません** (CCID のドライバが入らない)。外付けのカードを使うなら、カードの
+  ある別のエージェントを `CARD_URL` で指します
+- PX-S1UD は Linux と同じくポートで siano-ts に渡します (macOS には Siano を掴むドライバが
+  無いので、刺さっていればそのまま使える)。PT3 などの Linux DVB の機材は使えません
+- チューナー画面の「カードリーダー」行は `pcsc_scan` (Homebrew に無い) を使うので、
+  リーダーが無いと出ます
+- CI (`macos-agent.yml`) で確かめているのは、組めて formula で入り、起きて libaribb25 と
+  libusb を引けるところまでです。**チューナーとカードを繋いでは試していません**
+
 ## B-CASカードとデスクランブル
 
 スクランブルは**エージェント自身が解きます** (`AribB25.cs`)。カードが開けないときは

@@ -1,0 +1,93 @@
+name: macOS agent
+
+# **Homebrew で配るエージェントを、壊れたままリリースしない。** macOS の束
+# (agent/macos/build.sh) を本物の Apple Silicon のランナーで組み、formula で入れて
+# formula の test (起こして口に当てる) を通す。PR の間と、リリースのとき
+# (release.yml が呼ぶ) の両方でこれ1つを使う — 組み方を2か所に書くと片方だけ古くなる。
+#
+# 実機 (チューナー・カード) は無いので、確かめられるのは「組める・入る・起きる・
+# libaribb25 と libusb を引ける」まで。
+#
+# **必須チェックにはしない** (docker-build-check.yml と同じ理由。パスで飛ばすと保留が残る)。
+# ジョブの名前も必須の context と重ならないようにしてある
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'agent/**'
+      - 'HomebrewFormula/**'
+      - '.github/workflows/macos-agent.yml'
+  workflow_call:
+    inputs:
+      tag:
+        description: 'リリースのタグ (v1.2.3)。版はここから v を落として付ける'
+        required: true
+        type: string
+    outputs:
+      sha256:
+        value: ${{ jobs.build.outputs.sha256 }}
+  workflow_dispatch: {}
+
+concurrency:
+  group: macos-agent-${{ github.ref }}-${{ inputs.tag }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: macos (build + brew test)
+    # 配布元 (px4-userland) の darwin 版と同じランナー
+    runs-on: macos-14
+    outputs:
+      sha256: ${{ steps.build.outputs.sha256 }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.tag }}
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Install build dependencies
+        run: brew install pcsc-lite libusb pkgconf
+
+      - name: Build the tarball
+        id: build
+        env:
+          TAG: ${{ inputs.tag }}
+        run: |
+          set -eu
+          version="${TAG#v}"
+          version="${version:-0.0.0}"
+          agent/macos/build.sh "$version" dist
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "sha256=$(shasum -a 256 "dist/denpa-agent-$version-darwin-arm64.tar.gz" | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
+
+      # 手元の束を指すように書き換えた formula を仮の tap に置いて、利用者と同じ道で入れる
+      - name: Install with the formula and run its test
+        env:
+          VERSION: ${{ steps.build.outputs.version }}
+          SHA256: ${{ steps.build.outputs.sha256 }}
+        run: |
+          set -eu
+          brew tap-new --no-git denpa/local
+          sed -e "s#^  url .*#  url \"file://$PWD/dist/denpa-agent-$VERSION-darwin-arm64.tar.gz\"#" \
+              -e "s#^  version .*#  version \"$VERSION\"#" \
+              -e "s#^  sha256 .*#  sha256 \"$SHA256\"#" \
+              HomebrewFormula/denpa-agent.rb > "$(brew --repository denpa/local)/Formula/denpa-agent.rb"
+          # tap の外のファイルに当てると Homebrew 自身の規則 (sorbet など) で見られるので、置いてから
+          brew style denpa/local/denpa-agent
+          brew install --formula denpa/local/denpa-agent
+          brew test --verbose denpa/local/denpa-agent
+
+      - name: Upload the tarball
+        uses: actions/upload-artifact@v7
+        with:
+          name: macos-agent
+          path: dist/*.tar.gz
+          if-no-files-found: error

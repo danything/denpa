@@ -137,8 +137,8 @@ internal sealed unsafe class DeviceStream(SafeFileHandle handle, Func<string?>? 
 
     private const short PollIn = 1;
 
-    /// <summary>まだ来ていないだけ</summary>
-    private const int EAgain = 11;
+    /// <summary>まだ来ていないだけ。番号は OS で違う (macOS は 35)</summary>
+    private static readonly int EAgain = OperatingSystem.IsMacOS() ? 35 : 11;
 
     /// <summary>割り込まれただけ</summary>
     private const int EIntr = 4;
@@ -267,7 +267,7 @@ internal sealed unsafe class DeviceStream(SafeFileHandle handle, Func<string?>? 
             if (ready < 0)
             {
                 var failure = Marshal.GetLastPInvokeError();
-                if (failure is EIntr or EAgain) continue;
+                if (failure == EIntr || failure == EAgain) continue;
                 throw new IOException($"待てません ({Marshal.GetLastPInvokeErrorMessage()})");
             }
             if (ready == 0) continue;
@@ -289,7 +289,7 @@ internal sealed unsafe class DeviceStream(SafeFileHandle handle, Func<string?>? 
                 }
 
                 var failure = Marshal.GetLastPInvokeError();
-                if (failure is EAgain or EIntr) continue;
+                if (failure == EIntr || failure == EAgain) continue;
                 if (failure == EOverflow)
                 {
                     /*

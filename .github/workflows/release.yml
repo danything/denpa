@@ -224,3 +224,53 @@ jobs:
             "リリース ${v} の版を Chart.yaml に書き戻すだけ。下の check が付いたら自分でマージする" \
             "Chart.yaml の版だけ。chart はこの run が出した" \
             charts/*/Chart.yaml
+
+  # **macOS 向けのエージェントも出す** (Homebrew。HomebrewFormula/denpa-agent.rb)。
+  # 組んで formula で入れて確かめるところは PR と同じもの (macos-agent.yml) を呼ぶ
+  macos-agent:
+    uses: ./.github/workflows/macos-agent.yml
+    with:
+      tag: ${{ github.event.release.tag_name || github.event.inputs.ref }}
+
+  # 束をリリースに載せ、formula の url / sha256 / version を書き戻す。書き戻しは charts と
+  # 同じ手 (.github/bump-pr.sh)。**試し版では書き戻さない** — tap から入れている人の
+  # ところへ降ってしまう (latest を貼らないのと同じ理由)
+  macos-agent-release:
+    needs: macos-agent
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Download the tarball
+        uses: actions/download-artifact@v8
+        with:
+          name: macos-agent
+          path: dist
+
+      - name: Upload it to the release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.event.release.tag_name || github.event.inputs.ref }}
+        run: gh release upload "$TAG" dist/*.tar.gz --clobber
+
+      - name: Open and self-merge a PR that points the formula at this release
+        if: github.event.release.prerelease != true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.event.release.tag_name || github.event.inputs.ref }}
+          SHA256: ${{ needs.macos-agent.outputs.sha256 }}
+        run: |
+          set -eu
+          v="${TAG#v}"
+          url="https://github.com/${GITHUB_REPOSITORY}/releases/download/${TAG}/denpa-agent-${v}-darwin-arm64.tar.gz"
+
+          . .github/bump-pr.sh
+          bump_begin bump-formula
+          sed -i -E "s#^  url .*#  url \"${url}\"#; s#^  version .*#  version \"${v}\"#; s#^  sha256 .*#  sha256 \"${SHA256}\"#" \
+            HomebrewFormula/denpa-agent.rb
+          bump_finish bump-formula \
+            "chore: Homebrew の formula を ${v} に合わせる [skip ci]" \
+            "リリース ${v} の macOS 向けの束を formula に書き戻すだけ。下の check が付いたら自分でマージする" \
+            "formula の url と sha256 だけ。束はこの run が組んで確かめた" \
+            HomebrewFormula/denpa-agent.rb

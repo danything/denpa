@@ -66,6 +66,13 @@ public static class Px4Userland
     public static string ReaderConfDir =>
         Environment.GetEnvironmentVariable("PCSC_READER_CONF_DIR") ?? "/etc/reader.conf.d";
 
+    /// <summary>
+    /// pcscd に登録する IFD ハンドラ。macOS の配布物では <c>ifd/px4-userland-ifd.bundle</c>
+    /// (ディレクトリ) なので、Homebrew の formula がこちらを指し直す
+    /// </summary>
+    public static string Ifd =>
+        Environment.GetEnvironmentVariable("PX4_IFD") ?? Path.Combine(Dir, "ifd", "px4-userland-ifd.so");
+
     public static string Device(string id, int receiver) => $"{Scheme}{id}:{receiver}";
 
     public static bool Is(string? device) => device?.StartsWith(Scheme, StringComparison.Ordinal) == true;
@@ -238,9 +245,10 @@ public static class Px4Userland
     public static bool WriteReaderConfs(IEnumerable<string> ids, string? dir = null, string? ifd = null)
     {
         dir ??= ReaderConfDir;
-        ifd ??= Path.Combine(Dir, "ifd", "px4-userland-ifd.so");
+        ifd ??= Ifd;
         var wanted = ids.ToHashSet(StringComparer.Ordinal);
-        if (wanted.Count > 0 && !File.Exists(ifd))
+        // bundle はディレクトリなので File.Exists では見えない
+        if (wanted.Count > 0 && !Path.Exists(ifd))
         {
             Log.Write($"IFD ハンドラが無いので内蔵カードリーダーは使えません: {ifd}");
             return false;

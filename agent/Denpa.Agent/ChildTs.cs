@@ -77,6 +77,11 @@ internal sealed class ChildTs(string name, string program)
     /// <summary>子の標準出力の pipe を広げる (<see cref="PipeSize"/>)。通らなければ記録に残して続ける</summary>
     internal static void WidenPipe(int fd, string name)
     {
+        /*
+         * F_SETPIPE_SZ は Linux だけ。macOS では番号ごと無く、しかも fcntl は可変長引数なので
+         * Apple の arm64 では P/Invoke の渡し方 (レジスタ) と食い違う。呼ばない
+         */
+        if (!OperatingSystem.IsLinux()) return;
         if (Sys.Fcntl(fd, Sys.SetPipeSize, PipeSize) < 0 && Sys.Fcntl(fd, Sys.SetPipeSize, FallbackPipeSize) < 0)
         {
             Log.Write($"[{name}] pipe を広げられませんでした ({Marshal.GetLastPInvokeErrorMessage()})");
