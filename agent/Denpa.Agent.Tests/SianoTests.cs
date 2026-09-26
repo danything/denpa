@@ -220,22 +220,36 @@ public class SianoTests
     public async Task 子が死んでいれば起こし直す()
     {
         if (!OperatingSystem.IsLinux()) return;
+        // 1回目の子は、1行読まれたところで (印のファイルができたら) 終わる。USB が抜けた、に見立てる。
+        // 時間で終わらせると、遅い機械では読む前に終わってしまう
+        var die = Path.Combine(Path.GetTempPath(), $"denpa-siano-die-{Guid.NewGuid():N}");
         var starts = 0;
         using var tuner = new SianoTuner("siano fake", () =>
         {
             starts++;
-            // 1回目の子は1回選局したら終わる (USB が抜けた、に見立てる)
-            var script = starts == 1 ? FakeSianoTs.Replace("emit \"${line#tune }\" ;;", "emit \"${line#tune }\"; sleep 0.5; stop; exit 7 ;;") : FakeSianoTs;
-            return new ProcessStartInfo("/bin/sh") { ArgumentList = { "-c", script } };
+            var script = starts == 1
+                ? FakeSianoTs.Replace(
+                    "emit \"${line#tune }\" ;;",
+                    "emit \"${line#tune }\"; while [ ! -e \"$DIE\" ]; do sleep 0.05; done; stop; exit 7 ;;")
+                : FakeSianoTs;
+            return new ProcessStartInfo("/bin/sh") { ArgumentList = { "-c", script }, Environment = { ["DIE"] = die } };
         });
-        tuner.Tune(ChannelTable.Parse("T27")!, ChannelTable.NoStreamId);
-        await Assert.That(ReadLine(tuner.Output)).IsEqualTo("NEW557142857");
-        for (var i = 0; i < 50 && tuner.Tuned; i++) await Task.Delay(100);
-        await Assert.That(tuner.Tuned).IsFalse();
+        try
+        {
+            tuner.Tune(ChannelTable.Parse("T27")!, ChannelTable.NoStreamId);
+            await Assert.That(ReadLine(tuner.Output)).IsEqualTo("NEW557142857");
+            File.WriteAllText(die, "");
+            for (var i = 0; i < 50 && tuner.Tuned; i++) await Task.Delay(100);
+            await Assert.That(tuner.Tuned).IsFalse();
 
-        tuner.Tune(ChannelTable.Parse("T13")!, ChannelTable.NoStreamId);
-        await Assert.That(starts).IsEqualTo(2);
-        await Assert.That(ReadLine(tuner.Output)).IsEqualTo("NEW473142857");
+            tuner.Tune(ChannelTable.Parse("T13")!, ChannelTable.NoStreamId);
+            await Assert.That(starts).IsEqualTo(2);
+            await Assert.That(ReadLine(tuner.Output)).IsEqualTo("NEW473142857");
+        }
+        finally
+        {
+            File.Delete(die);
+        }
     }
 
     [Test]
