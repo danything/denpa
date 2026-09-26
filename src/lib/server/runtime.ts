@@ -211,12 +211,12 @@ function listenToAgent(): void {
         (up) => {
             if (up) {
                 console.log('[agent] チューナーに繋がりました');
-                notify({ event: 'agent.up', text: 'チューナー(エージェント)に繋がりました' });
+                notify({ event: 'agent.up', text: 'チューナーエージェントに繋がりました' });
             } else {
                 console.error('[agent] チューナーに繋がりません');
                 notify({
                     event: 'agent.down',
-                    text: 'チューナー(エージェント)に繋がりません。録画できない状態です',
+                    text: 'チューナーエージェントに繋がりません。いまは録画できません',
                 });
             }
         },

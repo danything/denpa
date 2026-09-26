@@ -77,7 +77,7 @@ test.describe('局ロゴ', () => {
          */
         await expect(async () => {
             await goto(page, '/tuners');
-            await expect(page.getByTestId('logo-sweep-done')).toContainText('拾いました');
+            await expect(page.getByTestId('logo-sweep-done')).toContainText('ロゴを取得しました');
         }).toPass({ timeout: 60_000 });
 
         // 何局ぶん持っているかもここに出す。番組表にロゴが出ないとき、

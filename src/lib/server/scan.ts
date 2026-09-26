@@ -451,7 +451,7 @@ async function runScan(targets: [ScannableType, string[]][]): Promise<void> {
 export function start(options: ScanOptions): { started: boolean; message: string } {
     const types = options.types.filter((type): type is ScannableType => type in CHANNEL_RANGES);
     if (types.length === 0) return { started: false, message: 'チャンネル種別の指定が不正です' };
-    if (current.state === 'running') return { started: false, message: '既に実行中です' };
+    if (current.state === 'running') return { started: false, message: 'すでに実行中です' };
 
     const targets: [ScannableType, string[]][] = types.map((type) => [type, channelsFor(type)]);
 

@@ -530,7 +530,7 @@ export function start(options: MigrateOptions): { started: boolean; message: str
     if (!available()) {
         return {
             started: false,
-            message: `引き継ぎ元 ${source.recordedDir} が見えません。EPGStation のPVCをマウントしてください`,
+            message: `引き継ぎ元 ${source.recordedDir} が見つかりません。EPGStation のPVCをマウントしてください`,
         };
     }
     void run(options);

@@ -113,7 +113,7 @@ describe('ID トークンを確かめる', () => {
      * 同じ相手のトークンを貼られたときに通してしまう
      */
     test('合言葉が違えば通さない', async () => {
-        await expect(verify(await idToken(base), 'べつの', NOW)).rejects.toThrow('合言葉');
+        await expect(verify(await idToken(base), 'べつの', NOW)).rejects.toThrow('nonce');
     });
 
     test('宛先が自分でなければ通さない', async () => {

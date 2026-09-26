@@ -216,15 +216,15 @@ export function describeDevice(device: HwDevice): string {
     );
     return parts.length > 0
         ? parts.join('、')
-        : 'GPU で焼けません (ドライバが合っていないか、権限がありません)';
+        : 'GPU でエンコードできません (ドライバが合っていないか、権限がありません)';
 }
 
 function describe(devices: HwDevice[]): string {
     if (devices.length === 0) {
-        return `GPU が見えません (${config.hwDevices} に当たる口がありません)。ソフトウェアで焼きます`;
+        return `GPU が見つかりません (${config.hwDevices} に該当するデバイスがありません)。ソフトウェアでエンコードします`;
     }
     const usable = devices.filter((d) => d.qsv.length > 0 || d.vaapi.length > 0).length;
     if (usable === 0)
-        return `${devices.length} 口見つかりましたが、どれも GPU で焼けません。ソフトウェアで焼きます`;
-    return `${devices.length} 口見つかり、${usable} 口で GPU で焼けます`;
+        return `デバイスが ${devices.length} 個見つかりましたが、どれも GPU でエンコードできません。ソフトウェアでエンコードします`;
+    return `デバイスが ${devices.length} 個見つかり、${usable} 個で GPU エンコードできます`;
 }

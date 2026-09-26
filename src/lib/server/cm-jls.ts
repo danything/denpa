@@ -176,7 +176,7 @@ export async function detectWithJls(
         /** この回で初めて在り処を出したか。サブチャンネルへ配るのはそのときだけ */
         let firstLearn = false;
         if (logoAreaText === '' && serviceId !== undefined && mayDetect(serviceId)) {
-            step('局ロゴの在り処を探しています');
+            step('局ロゴの位置を探しています');
             const found = await detectArea(input, signal);
             if (found !== null) {
                 rememberArea(serviceId, found);
@@ -386,10 +386,10 @@ function byLogoAlone(
     if (tooMuchCm(cm, duration)) {
         return {
             cm: [],
-            note: `${cause}ので、ロゴの在り処だけで分け直しましたが、${cmRatio(cm, duration)}% がCMになりました`,
+            note: `${cause}ので、ロゴの位置だけで分け直しましたが、${cmRatio(cm, duration)}% がCMになりました`,
         };
     }
-    return { cm, note: `${cause}ので、ロゴの在り処だけで分けました` };
+    return { cm, note: `${cause}ので、ロゴの位置だけで分けました` };
 }
 
 /**

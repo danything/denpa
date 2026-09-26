@@ -86,8 +86,8 @@ export function warnIfClosed(): void {
 /** 入る道が無い相手への返事。理由が分からない 403 にしない */
 export function denied(): Response {
     const text = configured()
-        ? 'この口はログインか期限付きのリンクでしか開けません'
-        : '入る道が設定されていません。OIDC か TRUSTED_NETWORKS を設定してください (docs/auth.md)';
+        ? 'このページは、ログインするか期限付きのリンクからでないと開けません'
+        : 'ログイン方法が設定されていません。OIDC か TRUSTED_NETWORKS を設定してください (docs/auth.md)';
     return new Response(text, { status: 403, headers: { 'content-type': 'text/plain; charset=utf-8' } });
 }
 

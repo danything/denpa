@@ -1348,7 +1348,7 @@ async function runJob(jobId: number): Promise<void> {
      * 設定で切ってあれば測らず、全部 60コマで出す
      */
     if (settings().fpsDetect) {
-        setStep(jobId, 'コマ数を確かめています');
+        setStep(jobId, 'フレームレートを確かめています');
         // CM を切れたなら source は短くなっている。残した区間の合計が実際の尺。
         // 切り出しに失敗したときは元のままなので、録画の予定尺で見る
         const keepTotal =
@@ -1405,7 +1405,7 @@ async function runJob(jobId: number): Promise<void> {
      * していた頃は1枚4色までで、実測230色の字幕から縁のなめらかさと色分けが落ちていた。
      * 作れなければ黙って諦める (字幕トラックが1本減るだけ)
      */
-    setPhase(jobId, 'encode', '字幕を絵にしています');
+    setPhase(jobId, 'encode', '字幕を画像にしています');
     /*
      * 字幕の 0 秒を**焼き上がりの 0 秒に合わせる。** 焼くほうは入れ物の始まりから
      * 数え直したうえで、映像が出るまで (`headSkip`) を捨てる。同じところを引く
@@ -1550,7 +1550,7 @@ async function runJob(jobId: number): Promise<void> {
                 if (attempt.hardware !== before) {
                     setStep(
                         jobId,
-                        `${wayName(before)} で焼けなかったので、${wayName(attempt.hardware)}で焼き直します (${codec})`,
+                        `${wayName(before)} でエンコードできなかったため、${wayName(attempt.hardware)} でやり直します (${codec})`,
                     );
                 }
             }
@@ -1721,7 +1721,7 @@ export function pump(): void {
                 .innerJoin(encodeJobs, eq(encodeJobs.recording_id, recordings.id))
                 .where(eq(encodeJobs.id, next.id))
                 .get();
-            const reason = `エンコードを ${next.attempts} 回試して完了しませんでした`;
+            const reason = `エンコードを ${next.attempts} 回試しましたが、完了しませんでした`;
             if (recording === undefined) {
                 markFailed(next.id, reason);
                 emit('recordings');

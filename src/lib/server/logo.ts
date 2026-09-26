@@ -707,7 +707,7 @@ async function drain(queue: Target[], parallel: number, signal: AbortSignal): Pr
                 full.add(target.type);
                 update({
                     done: state.done + 1,
-                    message: `${target.type} の空きチューナーが無くなったので、そのぶんはやめました`,
+                    message: `${target.type} の空きチューナーが無くなったため、残りは取りやめました`,
                 });
                 continue;
             }
@@ -800,7 +800,7 @@ export async function sweepNow(): Promise<{ started: boolean; message: string }>
     reconcile();
     const targets = missing();
     if (targets.length === 0) {
-        return { started: false, message: 'ロゴはもう全部持っています (取り直しも要りません)' };
+        return { started: false, message: 'ロゴはすべて取得済みです' };
     }
     /*
      * 空きは**種別ごとに数える。** 衛星用の空きは地上波の役に立たない。
@@ -822,7 +822,7 @@ export async function sweepNow(): Promise<{ started: boolean; message: string }>
     return {
         started: true,
         message:
-            `${targets.length} チャンネルぶんを、チューナー ${parallel} 本で取りに行きます。` +
+            `${targets.length} チャンネルをチューナー ${parallel} 本で取りに行きます。` +
             'ロゴが流れてくるまで数分かかります',
     };
 }
@@ -863,7 +863,7 @@ async function run(targets: Target[], parallel: number): Promise<void> {
             message:
                 state.message !== ''
                     ? state.message
-                    : `${state.found} 局ぶん拾いました (まだ持っていないチャンネルは残り ${left})`,
+                    : `${state.found} 局のロゴを取得しました (未取得のチャンネルは残り ${left})`,
         });
         if (state.found > 0) console.log(`[logo] ${state.message}`);
         emit('services');
