@@ -15,7 +15,14 @@ namespace Denpa.Agent;
 /// <para>
 /// **解けないものは落とさずに素通しする。** 録れないよりまし、で、解けなかったことは
 /// <see cref="Undecodable"/> と <see cref="LastError"/> で分かる。鍵の相手が失敗しても
-/// 投げない — 次に ECM が変わったとき (数秒後) にもう一度聞く。
+/// 投げない — 少し置いて同じ ECM をもう一度聞く。
+/// </para>
+///
+/// <para>
+/// **鍵は読み手の外で貰う。** カードや配り役が固まると1回の問い合わせに何秒もかかり、
+/// 読み手がそこで待つとデバイスの溜め (3.5 秒ぶん) が溢れて**録画が欠ける**。
+/// 欠けたものは後から解いても戻らない。待っている間は今の鍵で解き続け、答えが来たら
+/// 差し替える (ECM は次の鍵を切り替わりの前から配っている)。
 /// </para>
 ///
 /// <para>
@@ -24,7 +31,10 @@ namespace Denpa.Agent;
 /// プロセスごと落ちた)。数え (<see cref="Decoded"/> など) だけは他のスレッドから覗いてよい。
 /// </para>
 /// </summary>
-public sealed class Descrambler(IKeySource source)
+/// <param name="background">
+/// false なら鍵をその場で貰う (単体テストと、急がない後からの解除用)
+/// </param>
+public sealed class Descrambler(IKeySource source, bool background = true)
 {
     private const int PacketSize = 188;
     private const byte SyncByte = 0x47;
@@ -43,6 +53,9 @@ public sealed class Descrambler(IKeySource source)
 
     /// <summary>B-CAS の CA_system_id。カードから聞けるまではこれで CA 記述子を選ぶ</summary>
     private const int BcasSystemId = 0x0005;
+
+    /// <summary>鍵を貰えなかった ECM を、同じ中身のまま聞き直すまでの間</summary>
+    private const long RetryMs = 2000;
 
     private readonly byte[] _carry = new byte[PacketSize * 2];
     private readonly byte[] _joint = new byte[PacketSize * 4];
@@ -70,6 +83,8 @@ public sealed class Descrambler(IKeySource source)
     private readonly Ecm?[] _route = new Ecm?[8192];
     /// <summary>ECM が1本だけなら、PMT に載っていない PID が掛かっていてもそれで解く</summary>
     private Ecm? _only;
+    /// <summary>答えを待っている ECM</summary>
+    private readonly List<Ecm> _waiting = [];
 
     private CardInit? _init;
     private int _caSystemId = BcasSystemId;
@@ -77,13 +92,20 @@ public sealed class Descrambler(IKeySource source)
 
     private long _decoded;
     private long _undecodable;
+    private long _unentitled;
     private long _dropped;
 
     /// <summary>解いたパケットの数</summary>
     public long Decoded => Volatile.Read(ref _decoded);
 
-    /// <summary>掛かっていたのに鍵が無くて**そのまま流した**パケットの数</summary>
+    /// <summary>掛かっていたのに鍵が無くて**そのまま流した**パケットの数 (契約の無いものは数えない)</summary>
     public long Undecodable => Volatile.Read(ref _undecodable);
+
+    /// <summary>
+    /// **契約が無くて**そのまま流したパケットの数。解けなかったのではなく、解く資格が無い。
+    /// 1つの TS には契約していない局も乗っている (CS・BS の有料局)
+    /// </summary>
+    public long Unentitled => Volatile.Read(ref _unentitled);
 
     /// <summary>188 バイトの並びに乗らず捨てたバイト数 (途中から読み始めた頭や、壊れたところ)</summary>
     public long Dropped => Volatile.Read(ref _dropped);
@@ -171,10 +193,12 @@ public sealed class Descrambler(IKeySource source)
         _ecms.Clear();
         Array.Clear(_route);
         _only = null;
+        _waiting.Clear();
         _logged = null;
         LastError = null;
         Volatile.Write(ref _decoded, 0);
         Volatile.Write(ref _undecodable, 0);
+        Volatile.Write(ref _unentitled, 0);
         Volatile.Write(ref _dropped, 0);
     }
 
@@ -224,6 +248,7 @@ public sealed class Descrambler(IKeySource source)
 
     private void Take(ReadOnlySpan<byte> packet, IBufferWriter<byte> output)
     {
+        if (_waiting.Count > 0) Poll();
         if (_holding)
         {
             Hold(packet, output);
@@ -240,7 +265,8 @@ public sealed class Descrambler(IKeySource source)
     ///
     /// <para>
     /// **揃う**とは、PAT の番組の PMT がみな来て、PMT が指す ECM をみなカードに聞き終えたこと。
-    /// どれかが2周目に入ったら、来ないものは待たない (1周で来ないものは来ない)。
+    /// どれかが2周目に入ったら、来ないものは待たない (1周で来ないものは来ない)。ただし
+    /// **聞いている最中の答えは待つ** (上限は <see cref="HoldLimit"/>)。
     /// 聞いた結果が失敗でも揃ったことにする — 待っても鍵は来ない。
     /// </para>
     /// </summary>
@@ -281,12 +307,10 @@ public sealed class Descrambler(IKeySource source)
                 if (!_pmts.ContainsKey(number)) return false;
             }
         }
-        if (!_ecmRepeated)
+        foreach (var ecm in _ecms.Values)
         {
-            foreach (var ecm in _ecms.Values)
-            {
-                if (!ecm.Attempted) return false;
-            }
+            if (ecm.Asking is not null) return false;
+            if (!_ecmRepeated && !ecm.Attempted) return false;
         }
         return true;
     }
@@ -332,10 +356,12 @@ public sealed class Descrambler(IKeySource source)
         if (start < PacketSize)
         {
             var pid = ((packet[1] & 0x1F) << 8) | packet[2];
-            var cipher = (_route[pid] ?? _only)?.Cipher;
+            var ecm = _route[pid] ?? _only;
+            var cipher = ecm?.Cipher;
             if (cipher is not { HasKeys: true })
             {
-                _undecodable++;
+                if (ecm is { Unentitled: true }) _unentitled++;
+                else _undecodable++;
                 return;
             }
             // 0b10 が偶数、0b11 が奇数 (0b01 は使われないが、奇数の鍵で解く)
@@ -545,36 +571,110 @@ public sealed class Descrambler(IKeySource source)
     private void OnEcm(Ecm ecm, ReadOnlySpan<byte> section, bool scanning)
     {
         if (section[0] != 0x82) return;
-        // 溜めている間は1本につき1回だけ聞く。2つ目が来たら1周したということ (Hold)
-        if (scanning && ecm.Attempted)
+        var seen = Same(section, ecm.Last) || Same(section, ecm.Asking) || Same(section, ecm.Failed);
+        // 溜めている間に同じ ECM がもう一度来たら、1周したということ (Hold)
+        if (scanning && seen) _ecmRepeated = true;
+        if (Same(section, ecm.Last) || Same(section, ecm.Asking)) return;
+        if (Same(section, ecm.Failed) && Environment.TickCount64 < ecm.RetryAt) return;
+        if (ecm.Asking is not null)
         {
-            _ecmRepeated = true;
+            // 前の答えを待っている。**聞くのは1本につき1つずつ**、最新だけ覚えておく
+            ecm.Next = section.ToArray();
             return;
         }
-        if (ecm.Last is not null && section.SequenceEqual(ecm.Last)) return;
-        ecm.Last = section.ToArray();
-        ecm.Attempted = true;
+        Ask(ecm, section.ToArray());
+    }
 
+    private static bool Same(ReadOnlySpan<byte> section, byte[]? known) =>
+        known is not null && section.SequenceEqual(known);
+
+    /// <summary>
+    /// カードに聞き始める。**待たない** (<see cref="background"/>)。答えは次の
+    /// パケットのときに拾う (<see cref="Poll"/>)。
+    ///
+    /// <para>
+    /// **渡すのは節の頭 8 バイトと末尾の CRC 4 バイトを除いた中身。** libaribb25 が
+    /// カードへ渡していたのと同じ切り方で、拠点を跨いで鍵を貰う線 (CardShare.cs) も
+    /// この切り方で運んでいる。変えると古いエージェントと話が通じなくなる。
+    /// </para>
+    /// </summary>
+    private void Ask(Ecm ecm, byte[] section)
+    {
+        var known = _init;
+        (CardInit, EcmAnswer) Fetch() =>
+            (known ?? source.Init(), source.Ecm(section.AsSpan(8, section.Length - 12)));
+
+        ecm.Asking = section;
+        if (background)
+        {
+            ecm.Pending = Task.Run(Fetch);
+        }
+        else
+        {
+            try
+            {
+                ecm.Pending = Task.FromResult(Fetch());
+            }
+            catch (Exception error)
+            {
+                ecm.Pending = Task.FromException<(CardInit, EcmAnswer)>(error);
+            }
+        }
+        _waiting.Add(ecm);
+        Poll();
+    }
+
+    /// <summary>答えが来ていたら鍵を差し替える。**読み手の側で**やるので錠は要らない</summary>
+    private void Poll()
+    {
+        for (var index = _waiting.Count - 1; index >= 0; index--)
+        {
+            var ecm = _waiting[index];
+            if (ecm.Pending is not { IsCompleted: true } done) continue;
+            _waiting.RemoveAt(index);
+            var section = ecm.Asking!;
+            ecm.Pending = null;
+            ecm.Asking = null;
+            ecm.Attempted = true;
+            _sectionSeen = true;
+            Apply(ecm, section, done);
+
+            if (ecm.Next is { } next)
+            {
+                ecm.Next = null;
+                if (!Same(next, ecm.Last) && !Same(next, ecm.Failed)) Ask(ecm, next);
+            }
+        }
+    }
+
+    private void Apply(Ecm ecm, byte[] section, Task<(CardInit Init, EcmAnswer Answer)> done)
+    {
         try
         {
+            var (init, answer) = done.GetAwaiter().GetResult();
             if (_init is null)
             {
-                _init = source.Init();
+                _init = init;
                 // A-CAS など B-CAS 以外のカードなら、CA 記述子を選び直す
-                if (_init.CaSystemId != _caSystemId)
+                if (init.CaSystemId != _caSystemId)
                 {
-                    _caSystemId = _init.CaSystemId;
+                    _caSystemId = init.CaSystemId;
                     Rebuild();
                 }
             }
             ecm.Cipher ??= new Multi2(_init.SystemKey, _init.InitCbc);
+            ecm.Last = section;
+            ecm.Failed = null;
 
-            var answer = source.Ecm(section[8..^4]);
             // 0x0200・0x0400・0x0800 が「見てよい」。それ以外は契約が無い
             if (answer.Code is not (0x0200 or 0x0400 or 0x0800))
             {
-                throw new IOException($"カードが鍵を出しません (契約が無いか、別の方式の局: 0x{answer.Code:X4})");
+                ecm.Cipher.Clear();
+                ecm.Unentitled = true;
+                Report($"カードが鍵を出しません (契約が無いか、別の方式の局: 0x{answer.Code:X4})");
+                return;
             }
+            ecm.Unentitled = false;
             ecm.Cipher.SetKeys(answer.Odd, answer.Even);
 
             if (_logged is not null) Log.Write("鍵を貰えるようになりました");
@@ -582,12 +682,22 @@ public sealed class Descrambler(IKeySource source)
         }
         catch (Exception error)
         {
-            // **古い鍵で解き続けない。** 掛かったまま流れれば、数えで分かる
+            // **古い鍵で解き続けない** (切り替わったあとは化けたものを「解けた」として流すことになる)。
+            // 掛かったまま流れれば数えで分かり、少し置いて同じ ECM を聞き直す
             ecm.Cipher?.Clear();
-            LastError = error.Message;
-            if (_logged != error.Message) Log.Write($"鍵を貰えません: {error.Message}");
-            _logged = error.Message;
+            ecm.Unentitled = false;
+            ecm.Last = null;
+            ecm.Failed = section;
+            ecm.RetryAt = Environment.TickCount64 + RetryMs;
+            Report(error.Message);
         }
+    }
+
+    private void Report(string message)
+    {
+        LastError = message;
+        if (_logged != message) Log.Write($"鍵を貰えません: {message}");
+        _logged = message;
     }
 
     /// <summary>MPEG-2 の CRC32。節の末尾の CRC まで含めて回すと 0 になる</summary>
@@ -617,8 +727,19 @@ public sealed class Descrambler(IKeySource source)
         public Ecm() => Section = new Section(this);
 
         public Section Section { get; }
+        /// <summary>最後に答えを貰えた中身</summary>
         public byte[]? Last;
+        /// <summary>いま聞いている中身と、その答え</summary>
+        public byte[]? Asking;
+        public Task<(CardInit Init, EcmAnswer Answer)>? Pending;
+        /// <summary>聞いている間に来た次の中身</summary>
+        public byte[]? Next;
+        /// <summary>貰えなかった中身と、次に聞き直してよい時刻</summary>
+        public byte[]? Failed;
+        public long RetryAt;
         public bool Attempted;
+        /// <summary>カードが「契約が無い」と答えた</summary>
+        public bool Unentitled;
         public Multi2? Cipher;
     }
 

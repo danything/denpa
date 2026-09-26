@@ -251,18 +251,25 @@ public class BCasTests
     {
         var broken = new FakeLink("broken", _ => throw new IOException("USB が外れました"));
         var finds = 0;
+        var clock = new FakeClock();
         using var card = BCas.Open(() =>
         {
             finds++;
             return finds == 2 ? [] : [Candidate(finds == 1 ? broken : new FakeLink("back"))];
-        });
+        }, clock);
 
         var error = Assert.Throws<IOException>(() => card.Ecm(SampleEcm));
         await Assert.That(error.Message).Contains("カードとやり取りできません");
         await Assert.That(error.Message).Contains("カードリーダーが見つかりません");
         await Assert.That(card.Name).IsEqualTo("");
 
-        // 挿し直した。次の ECM は読める
+        // しばらくは探し直さずに同じ理由で断る (全部の流れが順番にリーダーを開き直さない)
+        var soon = Assert.Throws<IOException>(() => card.Ecm(SampleEcm));
+        await Assert.That(soon.Message).Contains("カードリーダーが見つかりません");
+        await Assert.That(finds).IsEqualTo(2);
+
+        // 挿し直した。間を置いた次の ECM は読める
+        clock.Now += BCas.RetryAfter;
         await Assert.That(card.Ecm(SampleEcm).Code).IsEqualTo(0x0200);
         await Assert.That(card.Name).IsEqualTo("back");
     }

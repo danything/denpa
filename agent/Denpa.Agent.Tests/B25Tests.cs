@@ -217,7 +217,7 @@ public class B25Tests
     {
         var ts = Channel().Ecm(EcmPid, 1).Videos(50, 1);
         var cards = new Cards();
-        var descrambler = new Descrambler(cards);
+        var descrambler = new Descrambler(cards, background: false);
 
         var output = Run(descrambler, ts.Wire.ToArray());
 
@@ -235,7 +235,7 @@ public class B25Tests
     public async Task カードに渡すのは節の頭とCRCを除いた中身()
     {
         var cards = new Cards();
-        Run(new Descrambler(cards), Channel().Ecm(EcmPid, 3).Videos(3, 3).Wire.ToArray());
+        Run(new Descrambler(cards, background: false), Channel().Ecm(EcmPid, 3).Videos(3, 3).Wire.ToArray());
 
         await Assert.That(cards.Asked.Count).IsEqualTo(1);
         await Assert.That(Convert.ToHexString(cards.Asked[0])).IsEqualTo(Convert.ToHexString(EcmBody(3)));
@@ -247,7 +247,7 @@ public class B25Tests
         var ts = Channel();
         for (var i = 0; i < 10; i++) ts.Ecm(EcmPid, 1).Videos(5, 1);
         var cards = new Cards();
-        var descrambler = new Descrambler(cards);
+        var descrambler = new Descrambler(cards, background: false);
 
         var output = Run(descrambler, ts.Wire.ToArray());
 
@@ -264,13 +264,13 @@ public class B25Tests
 
         foreach (var chunk in new[] { 1, 7, 187, 188, 189, 376, 1000 })
         {
-            var output = Run(new Descrambler(new Cards()), wire, chunk);
+            var output = Run(new Descrambler(new Cards(), background: false), wire, chunk);
             await Assert.That(Diff(output, expected)).IsEqualTo(-1);
         }
 
         // でたらめな長さで切っても
         var random = new Random(3);
-        var descrambler = new Descrambler(new Cards());
+        var descrambler = new Descrambler(new Cards(), background: false);
         var writer = new ArrayBufferWriter<byte>();
         for (var at = 0; at < wire.Length;)
         {
@@ -291,7 +291,7 @@ public class B25Tests
         byte[] garbage = [0x00, 0x47, 0x12, 0x47, 0x47, 0x99, .. Enumerable.Repeat((byte)0x33, 300)];
         byte[] wire = [.. garbage.AsSpan(0, 50), .. head.Wire, .. garbage, .. tail.Wire];
 
-        var descrambler = new Descrambler(new Cards());
+        var descrambler = new Descrambler(new Cards(), background: false);
         var output = Run(descrambler, wire, chunk: 100);
 
         byte[] expected = [.. Expected(head), .. Expected(tail)];
@@ -309,7 +309,7 @@ public class B25Tests
             .Payload(VideoPid, 1, adaptation: 182)
             // アダプテーションだけ。解くものは無く、印を下ろすだけ
             .Payload(VideoPid, 1, adaptation: 183);
-        var descrambler = new Descrambler(new Cards());
+        var descrambler = new Descrambler(new Cards(), background: false);
 
         var output = Run(descrambler, ts.Wire.ToArray());
 
@@ -325,7 +325,7 @@ public class B25Tests
             .Ecm(EcmPid, 2).Videos(5, 2, even: false).Videos(5, 2, even: true)
             .Ecm(EcmPid, 3).Videos(5, 3, even: true);
         var cards = new Cards();
-        var descrambler = new Descrambler(cards);
+        var descrambler = new Descrambler(cards, background: false);
 
         var output = Run(descrambler, ts.Wire.ToArray());
 
@@ -342,7 +342,7 @@ public class B25Tests
     {
         var before = Channel().Videos(30, 1);
         var ts = before.Ecm(EcmPid, 1).Videos(5, 1);
-        var descrambler = new Descrambler(new Cards());
+        var descrambler = new Descrambler(new Cards(), background: false);
         var output = new ArrayBufferWriter<byte>();
 
         var wire = ts.Wire.ToArray();
@@ -362,7 +362,7 @@ public class B25Tests
         // PAT の無い TS。いくら待っても揃わない
         var ts = new Ts().Videos(Descrambler.HoldLimit / 188 + 10, 1);
         var wire = ts.Wire.ToArray();
-        var descrambler = new Descrambler(new Cards());
+        var descrambler = new Descrambler(new Cards(), background: false);
 
         var output = Run(descrambler, wire, flush: false);
 
@@ -376,7 +376,7 @@ public class B25Tests
     public async Task 掛かっていない番組は溜めずに流す()
     {
         var ts = new Ts().Pat((0x0400, PmtPid)).Pmt(PmtPid, 0x0400, [], (VideoPid, [])).Videos(10, null);
-        var descrambler = new Descrambler(new Cards());
+        var descrambler = new Descrambler(new Cards(), background: false);
 
         var output = Run(descrambler, ts.Wire.ToArray(), flush: false);
 
@@ -395,7 +395,7 @@ public class B25Tests
             .Ecm(EcmPid, 1).Ecm(other, 7)
             .Videos(3, 1).Payload(AudioPid, 7).Payload(AudioPid, 7, even: false).Videos(3, 1);
         var cards = new Cards();
-        var descrambler = new Descrambler(cards);
+        var descrambler = new Descrambler(cards, background: false);
 
         var output = Run(descrambler, ts.Wire.ToArray());
 
@@ -413,7 +413,7 @@ public class B25Tests
             .Pmt(pmt2, 0x0401, Ca(ecm2), (video2, []))
             .Ecm(EcmPid, 1).Ecm(ecm2, 9)
             .Videos(3, 1).Payload(video2, 9).Payload(video2, 9, even: false).Videos(3, 1, even: false);
-        var descrambler = new Descrambler(new Cards());
+        var descrambler = new Descrambler(new Cards(), background: false);
 
         var output = Run(descrambler, ts.Wire.ToArray());
 
@@ -431,7 +431,7 @@ public class B25Tests
             .Ecm(EcmPid, 4) // もう誰も指していない。聞かない
             .Ecm(moved, 2).Videos(5, 2);
         var cards = new Cards();
-        var descrambler = new Descrambler(cards);
+        var descrambler = new Descrambler(cards, background: false);
 
         var output = Run(descrambler, ts.Wire.ToArray());
 
@@ -448,7 +448,7 @@ public class B25Tests
         var failed = Channel().Ecm(EcmPid, 1).Videos(5, 1);
         var recovered = new Ts().Ecm(EcmPid, 2).Videos(5, 2);
         var cards = new Cards { Fail = ecm => ecm[0] == 1 ? new IOException("カードが抜けています") : null };
-        var descrambler = new Descrambler(cards);
+        var descrambler = new Descrambler(cards, background: false);
 
         var output = Run(descrambler, [.. failed.Wire, .. recovered.Wire]);
 
@@ -464,13 +464,56 @@ public class B25Tests
     public async Task 契約が無ければ解かずに理由を残す()
     {
         var ts = Channel().Ecm(EcmPid, 1).Videos(5, 1);
-        var descrambler = new Descrambler(new Cards { Code = 0x8901 });
+        var descrambler = new Descrambler(new Cards { Code = 0x8901 }, background: false);
 
         var output = Run(descrambler, ts.Wire.ToArray());
 
         await Assert.That(Diff(output, ts.Wire.ToArray())).IsEqualTo(-1);
-        await Assert.That(descrambler.Undecodable).IsEqualTo(5);
+        // 解けなかったのではなく、解く資格が無い。**解除の失敗には数えない**
+        await Assert.That(descrambler.Unentitled).IsEqualTo(5);
+        await Assert.That(descrambler.Undecodable).IsEqualTo(0);
         await Assert.That(descrambler.LastError!).Contains("0x8901");
+    }
+
+    /// <summary>カードが答えるまで止まる相手。**読み手がそこで待たないこと**を確かめる</summary>
+    private sealed class SlowCards : IKeySource
+    {
+        public ManualResetEventSlim Gate { get; } = new();
+        private readonly Cards _inner = new();
+        public CardInit Init() => _inner.Init();
+
+        public EcmAnswer Ecm(ReadOnlySpan<byte> ecm)
+        {
+            var copy = ecm.ToArray();
+            Gate.Wait(TimeSpan.FromSeconds(10));
+            return _inner.Ecm(copy);
+        }
+    }
+
+    [Test]
+    public async Task 鍵を待つ間も読み手は止まらず_答えが来たら頭から解く()
+    {
+        var ts = Channel().Ecm(EcmPid, 1).Videos(20, 1);
+        var cards = new SlowCards();
+        var descrambler = new Descrambler(cards);
+        var output = new ArrayBufferWriter<byte>();
+
+        var started = DateTime.UtcNow;
+        descrambler.Decode(ts.Wire.ToArray(), output);
+        // カードが黙っていても戻ってくる。頭は鍵を待って溜めている
+        await Assert.That(DateTime.UtcNow - started).IsLessThan(TimeSpan.FromSeconds(2));
+        await Assert.That(output.WrittenCount).IsEqualTo(0);
+
+        cards.Gate.Set();
+        var more = Channel().Videos(0, 1);
+        for (var tries = 0; tries < 200 && output.WrittenCount == 0; tries++)
+        {
+            await Task.Delay(10);
+            descrambler.Decode(more.Wire.ToArray(), output);
+        }
+        var head = output.WrittenSpan[..ts.Wire.Count].ToArray();
+        await Assert.That(Diff(head, Expected(ts))).IsEqualTo(-1);
+        await Assert.That(descrambler.Undecodable).IsEqualTo(0);
     }
 
     [Test]
@@ -482,7 +525,7 @@ public class B25Tests
         ts.Videos(3, 1);
         var cards = new Cards();
 
-        Run(new Descrambler(cards), ts.Wire.ToArray());
+        Run(new Descrambler(cards, background: false), ts.Wire.ToArray());
 
         await Assert.That(cards.Asked.Count).IsEqualTo(0);
     }
@@ -492,7 +535,7 @@ public class B25Tests
     public async Task Resetで前のチャンネルを忘れる()
     {
         var cards = new Cards();
-        var descrambler = new Descrambler(cards);
+        var descrambler = new Descrambler(cards, background: false);
         var first = Channel().Ecm(EcmPid, 1).Videos(5, 1);
         Run(descrambler, first.Wire.ToArray());
 

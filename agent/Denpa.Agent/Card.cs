@@ -62,7 +62,7 @@ public static class Card
         var ok = false;
         try
         {
-            var init = Keys.Source.Init();
+            var init = Keys.Source is RemoteCard remote ? remote.Check() : Keys.Local.Check();
             var ids = string.Join(" / ", init.Ids.Select(id => id.ToString("D16")));
             var from = Keys.Source is RemoteCard ? "鍵を配る相手" : Keys.Local.Name;
             message = $"カードが読めています ({from}{(ids.Length > 0 ? $"、{ids}" : "")})";
@@ -122,7 +122,7 @@ public static class Scramble
 
         try
         {
-            var b25 = new Descrambler(Keys.Source);
+            var b25 = new Descrambler(Keys.Source, background: false);
             using var reading = File.OpenRead(source);
             using var writing = File.Create(target);
             var buffer = new byte[188 * 1024];

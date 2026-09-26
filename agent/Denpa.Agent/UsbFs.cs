@@ -245,7 +245,7 @@ public sealed unsafe partial class UsbFsPipe : IBulkPipe
             {
                 var errno = Marshal.GetLastPInvokeError();
                 throw new IOException(errno == Ebusy
-                    ? "別のプロセス (pcscd など) がリーダーを掴んでいます。pcscd を止めてください"
+                    ? "別のプロセスがリーダーを掴んでいます (動いているエージェント自身か、ホストの pcscd など)"
                     : $"リーダーのインターフェースを掴めません ({Marshal.GetPInvokeErrorMessage(errno)})");
             }
             return new UsbFsPipe(path, fd, info);

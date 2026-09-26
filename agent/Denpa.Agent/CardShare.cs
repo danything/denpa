@@ -39,18 +39,41 @@ public sealed class LocalCard : IKeySource
 {
     private readonly Lock _gate = new();
     private BCas? _card;
+    private (DateTime At, IOException Error)? _failed;
 
     /// <summary>いま使っているリーダー。開いていなければ空</summary>
     public string Name => _card?.Name ?? "";
 
+    /// <summary>
+    /// 開いたカード。**開けなかったら、しばらくは探さずに同じ理由で断る**
+    /// (<see cref="BCas.RetryAfter"/>。何本もの流れが順番に全部のリーダーを開き直さない)
+    /// </summary>
     private BCas Card()
     {
-        lock (_gate) return _card ??= CardLinks.Open();
+        lock (_gate)
+        {
+            if (_card is not null) return _card;
+            if (_failed is { } failed && DateTime.UtcNow - failed.At < BCas.RetryAfter) throw failed.Error;
+            try
+            {
+                _card = CardLinks.Open();
+                _failed = null;
+                return _card;
+            }
+            catch (IOException error)
+            {
+                _failed = (DateTime.UtcNow, error);
+                throw;
+            }
+        }
     }
 
     public CardInit Init() => Card().Init();
 
     public EcmAnswer Ecm(ReadOnlySpan<byte> ecm) => Card().Ecm(ecm);
+
+    /// <summary>いまカードと話せるか。INT を1回通す (<see cref="BCas.Check"/>)</summary>
+    public CardInit Check() => Card().Check();
 }
 
 /// <summary>
@@ -80,9 +103,11 @@ public sealed class RemoteCard(string url) : IKeySource
     private CardInit? _init;
 
     /// <summary>素は1回貰えば変わらない。**貰えなかったら次に要ったときにまた聞く**</summary>
-    public CardInit Init()
+    public CardInit Init() => _init ?? Check();
+
+    /// <summary>いま配り役と話せるか。**覚えている素を使わずに聞き直す** (画面の「カードリーダー」行)</summary>
+    public CardInit Check()
     {
-        if (_init is { } known) return known;
         using var response = Http.Send(new HttpRequestMessage(HttpMethod.Get, $"{_url}/denpa/card/init"));
         if (!response.IsSuccessStatusCode)
         {

@@ -47,6 +47,17 @@ public sealed class BCas : IKeySource, IDisposable
     /// <summary>鍵が変わる周期より短くする。長く持つと古い鍵を配る</summary>
     private static readonly TimeSpan CacheFor = TimeSpan.FromSeconds(3);
 
+    /// <summary>
+    /// 繋ぎ直しに失敗したら、**この間は探さずに同じ理由で断る。**
+    ///
+    /// <para>
+    /// 探すのはリーダーを全部開いて電源を入れ直すことで、固まったリーダーだと
+    /// 数十秒かかる。ECM は何本もの流れから数秒ごとに来るので、そのたびに探すと
+    /// 錠の前に全部の流れが並ぶ。カードを挿し直したなら 10 秒後には読める
+    /// </para>
+    /// </summary>
+    public static readonly TimeSpan RetryAfter = TimeSpan.FromSeconds(10);
+
     private readonly Func<IReadOnlyList<CardLinkCandidate>> _find;
     private readonly TimeProvider _clock;
     private readonly Lock _gate = new();
@@ -64,6 +75,7 @@ public sealed class BCas : IKeySource, IDisposable
     private ICardLink? _link;
     private CardInit? _init;
     private bool _disposed;
+    private (DateTimeOffset At, IOException Error)? _failed;
 
     private BCas(Func<IReadOnlyList<CardLinkCandidate>> find, TimeProvider clock)
     {
@@ -92,6 +104,19 @@ public sealed class BCas : IKeySource, IDisposable
         get
         {
             lock (_gate) return _link?.Name ?? "";
+        }
+    }
+
+    /// <summary>
+    /// **いまカードと話せるか**、INT を1回通して確かめる (画面の「カードリーダー」行)。
+    /// 切れていれば繋ぎ直し、駄目なら投げる
+    /// </summary>
+    public CardInit Check()
+    {
+        lock (_gate)
+        {
+            Run(Initial);
+            return _init!;
         }
     }
 
@@ -169,7 +194,7 @@ public sealed class BCas : IKeySource, IDisposable
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
         // 前に切れたまま (繋ぎ直しにも失敗した) なら、まずここで探し直す
-        if (_link is null) Connect();
+        if (_link is null) Reconnect();
 
         try
         {
@@ -181,7 +206,7 @@ public sealed class BCas : IKeySource, IDisposable
             Drop();
             try
             {
-                Connect();
+                Reconnect();
                 return command(_link!);
             }
             catch (IOException again)
@@ -197,6 +222,21 @@ public sealed class BCas : IKeySource, IDisposable
     /// **駄目だったリーダーの理由は全部残す** — 1つ目が空で2つ目が壊れている、を
     /// 「カードが読めません」の1行で済ませると、どこを見ればよいか分からない
     /// </summary>
+    private void Reconnect()
+    {
+        if (_failed is { } failed && _clock.GetUtcNow() - failed.At < RetryAfter) throw failed.Error;
+        try
+        {
+            Connect();
+            _failed = null;
+        }
+        catch (IOException error)
+        {
+            _failed = (_clock.GetUtcNow(), error);
+            throw;
+        }
+    }
+
     private void Connect()
     {
         var candidates = _find();

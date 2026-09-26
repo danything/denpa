@@ -18,7 +18,7 @@ namespace Denpa.Agent;
 /// denpa-agent --tune px4:00001205000960:2 T27               # px4-userland の機材。Q3U4 なら受信機 2 は地上波
 /// denpa-agent --tune siano:1-2 T27                          # siano-userland の機材 (smsusb を blacklist した PX-S1UD)
 /// denpa-agent --tune /dev/dvb/adapter1/frontend0 T27 --decode [--card-url http://…]
-/// denpa-agent --card                                        # カードリーダーを並べ、カードに INT を通す
+/// denpa-agent --card                                        # カードリーダーを並べ、カードに INT を通す (エージェントを止めて)
 /// </code>
 ///
 /// <para>
@@ -50,7 +50,7 @@ public static class Probe
         }
 
         Keys.Configure(Environment.GetEnvironmentVariable("CARD_URL"));
-        var b25 = new Descrambler(Keys.Source);
+        var b25 = new Descrambler(Keys.Source, background: false);
         var decoded = new ArrayBufferWriter<byte>();
 
         using var input = File.OpenRead(source);
