@@ -156,6 +156,16 @@ release はイメージを組み直さず、main で組んだものに版を 1 �
 の `ENV DENPA_VERSION`) `x.y.z` / `latest` の名前を付けます。動いている denpa はその版と GitHub の
 最新のリリースを数で比べ、新しい版があればヘッダーで知らせます (`src/lib/server/update.ts`)。
 
+**イメージは amd64 と arm64 の2つ**で、同じタグに束ねてあります (理由と組み方は
+[architecture.md](architecture.md#イメージのタグ))。Dockerfile は BuildKit の `TARGETARCH`
+で arch を見て、配布物 (libaribb25 / px4-userland / siano-ts) の名前と .NET の RID を
+読み替え、**Intel の QSV (libvpl・libmfx-gen・intel-media-va-driver) は amd64 だけに入れます**
+(Debian の arm64 には無い)。Dockerfile やそこへ入るもの (`agent/`・`patches/`・依存) を
+触った PR では、`Docker build check` が両方の arch を本物のランナーで組んで確かめます
+(push はしない。必須チェックにはしていない)。手元で arm64 を組むなら
+`docker buildx build --platform linux/arm64 -f agent/Dockerfile .` (amd64 の機械では
+QEMU が要り、ffmpeg や AOT はかなり遅い)。
+
 `latest` が動くのはリリースを作ったときだけ (焼き直さず貼り替える) — タグの決め方と
 理由は [architecture.md](architecture.md#イメージのタグ)、出し方は `.github/image-tags.sh`。
 

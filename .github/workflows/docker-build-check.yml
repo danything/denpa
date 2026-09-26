@@ -1,0 +1,79 @@
+name: Docker build check
+
+# **Dockerfile を壊したまま main へ入れない。** イメージを組むのは main の
+# build-and-deploy だけだったので、Dockerfile の誤りや arm64 だけで転ぶ依存
+# (Intel の QSV は amd64 にしか無い、配布物の名前が arch で違う) は、入れてから
+# デプロイが止まって初めて分かった。PR の間に両方の arch を本物のランナーで組む
+# (push はしない)。
+#
+# **パスで絞る。** denpa のイメージは ffmpeg を組むので重い。ソースだけの PR は
+# test.yml が見ていて、イメージの形が変わるのは下のパスを触ったときだけ。
+#
+# **必須チェックにはしない** (ruleset に足さない)。パスで飛ばした workflow の check は
+# 「保留」のまま残る仕様なので、必須にすると docs だけの PR が塞がる。ジョブの名前
+# (`image (…)`) も必須の context (`check` / `agent` / `e2e (n)` / `claude-review`) と
+# 重ならないようにしてある — bump の PR は GITHUB_TOKEN で開くので workflow が動かず、
+# 必須の context は .github/bump-pr.sh が ruleset から引いて自分で付けている。
+# ここがそれと同じ名前を名乗ると、どちらの結果か読めなくなる
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'Dockerfile'
+      - 'agent/**'
+      - 'patches/**'
+      - 'package.json'
+      - 'bun.lock'
+      - '.dockerignore'
+      - '.github/workflows/docker-build-check.yml'
+  workflow_dispatch: {}
+
+concurrency:
+  group: docker-build-check-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  image:
+    strategy:
+      # 片方の arch が落ちても、もう片方の結果は見たい
+      fail-fast: false
+      matrix:
+        image:
+          - name: denpa-agent
+            file: agent/Dockerfile
+            target: ''
+            scope: agent
+          - name: denpa
+            file: Dockerfile
+            target: runtime
+            scope: denpa
+        arch:
+          - name: amd64
+            runner: ubuntu-latest
+          - name: arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.arch.runner }}
+    name: image (${{ matrix.image.name }}, ${{ matrix.arch.name }})
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      # キャッシュは build-and-deploy と同じ scope を読む (main で積んだ層がそのまま効く。
+      # PR から書いたものはその PR の中にしか見えないので、main のものは汚さない)
+      - name: Build
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: ${{ matrix.image.file }}
+          target: ${{ matrix.image.target }}
+          platforms: linux/${{ matrix.arch.name }}
+          push: false
+          pull: true
+          cache-from: type=gha,scope=${{ matrix.image.scope }}-${{ matrix.arch.name }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.image.scope }}-${{ matrix.arch.name }}

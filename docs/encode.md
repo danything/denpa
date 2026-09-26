@@ -407,6 +407,13 @@ AV1 はそのぶん小さくなります — ソフトウェアで H.264 crf 23 
 測らずに写すと当てずっぽうが二重になります。インタレ解除と引き伸ばしは CPU のフィルタで済ませ、焼くところだけ
 GPU に渡します。
 
+**QSV は amd64 のイメージだけです。** libvpl / libmfx-gen / intel-media-va-driver は
+Debian では amd64 にしか無い (Intel の GPU が載る arm の機械も無い) ので、arm64 の
+イメージは ffmpeg を libvpl 無しで組み、VA-API (libva) だけを入れています。上の試し焼きで
+QSV が落ちるだけなので、denpa の側は arch を見ていません。arm64 で VA-API を使うには、
+その GPU の VA-API ドライバがイメージに要ります (いまは何も入れていないので、実際には
+ソフトウェアで焼きます。実機では確かめていません)。
+
 渡し方は、Helm なら既定で `/dev/dri` を hostPath で渡してあります (`denpa.gpu.hostPath`。
 そのぶん Pod は privileged。デバイスプラグインを使うなら false にして `resources.limits`
 で)。Compose は `devices: - /dev/dri:/dev/dri` (compose.prod.yml のコメント。ホストに

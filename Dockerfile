@@ -38,6 +38,10 @@ CMD ["bun", "run", "test"]
 # 固定しておけば組み直すのは Renovate が digest を上げる PR のときだけになる
 FROM docker.io/library/debian:trixie-slim@sha256:a99cfc517144bc59b1978475ec53b46ecabec7e43635402ee5b77cc54cd1b20a AS ffmpeg
 SHELL ["/bin/bash", "-c"]
+# **arch ごとに、その arch のランナーで組む** (CI は amd64 と arm64 を別の機械で。QEMU で
+# ffmpeg を組むと何倍も掛かる)。digest は複数 arch の索引を指しているので、上の FROM は
+# 組む arch のものを引く。違うのは Intel の QSV だけ (下の説明)
+ARG TARGETARCH
 
 # ダウンロードは CI で切られることがあるので必ずリトライさせる。
 # 一度これで ffmpeg の取得に失敗してデプロイが止まった
@@ -50,7 +54,12 @@ ENV CURL="curl -fsSL --retry 5 --retry-delay 5 --retry-all-errors --connect-time
 # 見つけて使い、無ければソフトウェア (libsvtav1 / libx264) で焼く。
 # **libva は QSV の下に必ず居る** (Linux では libvpl → libmfx-gen → libva → /dev/dri)。
 # vaapi も有効にしてあるのは、QSV が初期化できない機種の逃げ道 (h264_vaapi) のため
-ENV DEV="curl ca-certificates build-essential cmake pkg-config nasm patch zlib1g-dev libfreetype6-dev libopus-dev libx264-dev libdav1d-dev libfontconfig-dev woff2 libva-dev libvpl-dev"
+#
+# **QSV (libvpl) は amd64 だけ。** Debian の libvpl / libmfx-gen / intel-media-va-driver は
+# amd64 にしか無い (Intel の GPU が載る arm の機械は無い)。arm64 では libvpl を外して組み、
+# VA-API だけ残す — 起動時の試し焼き (server/hwenc.ts) で QSV が落ちて、VA-API か
+# ソフトウェアで焼くだけなので、denpa の側は何も変えない
+ENV DEV="curl ca-certificates build-essential cmake pkg-config nasm patch zlib1g-dev libfreetype6-dev libopus-dev libx264-dev libdav1d-dev libfontconfig-dev woff2 libva-dev"
 
 # 9.0 / 9.0.1 は 60コマで焼くと 20〜25分で音声が黙って終わった (CLI の溢れ FIFO の上限)。
 # 9.0.2 でその FIFO ごと無くなり、当てていた patches/ffmpeg-sched-overflow.patch は
@@ -77,8 +86,13 @@ ARG ARIB_FONT_SHA=a9c834099818c59ba9c3721a2b1a860f6c0af61a
 # **黙ってずれて当たるより、ビルドを止めてほしい**ため
 COPY patches/ /patches/
 
-RUN apt-get update && \
-    apt-get -y --no-install-recommends install $DEV && \
+RUN case "${TARGETARCH}" in \
+      amd64) qsv_dev=libvpl-dev qsv_flag=--enable-libvpl ;; \
+      arm64) qsv_dev="" qsv_flag="" ;; \
+      *) echo "対応していない arch: ${TARGETARCH}" >&2; exit 1 ;; \
+    esac && \
+    apt-get update && \
+    apt-get -y --no-install-recommends install $DEV $qsv_dev && \
     mkdir -p /usr/share/fonts/truetype/rounded-mplus-arib && \
     $CURL https://raw.githubusercontent.com/5ym/arib-font/${ARIB_FONT_SHA}/rounded-mplus-1m-arib.ttf \
       -o /usr/share/fonts/truetype/rounded-mplus-arib/rounded-mplus-1m-arib.ttf && \
@@ -102,7 +116,7 @@ RUN apt-get update && \
       --enable-libx264 \
       --enable-libdav1d \
       --enable-vaapi \
-      --enable-libvpl \
+      $qsv_flag \
     && \
     make -j$(nproc) && make install && \
     rm -rf /var/lib/apt/lists/* /tmp/*
@@ -181,12 +195,19 @@ ENV NODE_ENV=production \
 # (denpa 自身の ffmpeg は下で入れる自前ビルド)
 # libvpl2 + libmfx-gen1.2 (QSV のランタイム) + libva* + intel-media-va-driver (iHD) は
 # Intel の GPU (QSV / VA-API) 向け (上の ffmpeg 段の説明)。GPU の無い機械でも害は無い
-# (起動時の試し焼きが落ちて、ソフトウェアで焼くだけ)
-RUN apt-get update && \
+# (起動時の試し焼きが落ちて、ソフトウェアで焼くだけ)。**Intel の3つは amd64 だけ**
+# (ffmpeg 段の説明。arm64 の Debian には無い)。libva は arm64 にも入れる
+ARG TARGETARCH
+RUN case "${TARGETARCH}" in \
+      amd64) intel="libvpl2 intel-media-va-driver libmfx-gen1.2" ;; \
+      arm64) intel="" ;; \
+      *) echo "対応していない arch: ${TARGETARCH}" >&2; exit 1 ;; \
+    esac && \
+    apt-get update && \
     apt-get -y --no-install-recommends install \
       libopus0 libx264-164 libdav1d7 libfontconfig1 libfreetype6 \
       libavformat61 libavcodec61 libavutil59 libswscale8 libswresample5 \
-      libva2 libva-drm2 libvpl2 intel-media-va-driver libmfx-gen1.2 \
+      libva2 libva-drm2 $intel \
       fontconfig ca-certificates tzdata && \
     apt-get clean && rm -rf /var/lib/apt/lists/*
 

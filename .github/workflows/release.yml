@@ -105,6 +105,14 @@ jobs:
       # denpa は**版を 1 層足して**から名前を付ける (.github/release.Dockerfile)。
       # main で組んだイメージを土台にするので中身は同じで、増えるのは ENV の 1 枚。
       # 動いている denpa はこれで自分の版を知り、新しい版の知らせを出す
+      #
+      # **どちらも multi-arch のまま名前を付ける** (main は amd64 と arm64 を束ねた索引を
+      # 出している)。エージェントの `imagetools create` は索引ごと写すので何もしなくていい。
+      # denpa は土台の索引にある arch を全部並べて `--platform` に渡す。release.Dockerfile
+      # には RUN が無いので、このランナー (amd64) で arm64 も組める — FROM で arch ごとの
+      # 土台を引いて ENV を足すだけで、何も実行しない (QEMU は要らない)。arch を土台から
+      # 読むのは、arm64 を出す前の `sha-…` を手で貼り直すとき (workflow_dispatch) に
+      # 無い arch を求めて落ちないため
       - name: Point the names at this release
         run: |
           set -eu
@@ -124,13 +132,19 @@ jobs:
           # shellcheck disable=SC2086
           docker buildx imagetools create $agent_args "${base}/denpa-agent:${{ steps.tag.outputs.agent }}"
           echo "denpa-agent: ${{ steps.tag.outputs.agent }} → $names"
+          denpa_base="${base}/denpa:${{ steps.tag.outputs.denpa }}"
+          platforms=$(docker buildx imagetools inspect --raw "$denpa_base" \
+            | jq -r '[.manifests[]? | .platform | select(.os == "linux") | "linux/\(.architecture)"] | unique | join(",")')
+          # 索引でなく1枚のイメージなら manifests が無い — 以前の amd64 だけのもの
+          platforms="${platforms:-linux/amd64}"
           # shellcheck disable=SC2086
           docker buildx build --push \
+            --platform "$platforms" \
             --file .github/release.Dockerfile \
-            --build-arg BASE="${base}/denpa:${{ steps.tag.outputs.denpa }}" \
+            --build-arg BASE="$denpa_base" \
             --build-arg DENPA_VERSION="${{ github.event.release.tag_name || github.event.inputs.ref }}" \
             $denpa_args .
-          echo "denpa: ${{ steps.tag.outputs.denpa }} + DENPA_VERSION → $names"
+          echo "denpa: ${{ steps.tag.outputs.denpa }} ($platforms) + DENPA_VERSION → $names"
 
   # **Helm chart もリリースのたびに出す** (README が案内している `oci://ghcr.io/danything/charts/…`)。
   # chart の版 (Chart.yaml の version) とアプリの版 (appVersion) をリリースの

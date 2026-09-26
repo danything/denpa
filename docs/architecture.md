@@ -134,6 +134,15 @@ PreSync フックに置いています (`denpa-prepull`、中身は `/bin/true`)
 | `0.1.0` | **動かない** | 固定して使う人・戻したいとき |
 | `sha-<12桁>` | 動かない。中身ごとに1つ | 中身のコミットから辿るとき |
 
+**どのタグも amd64 と arm64 を束ねた索引 (multi-arch manifest) を指します。** CI は
+arch ごとにその arch のランナー (amd64 は `ubuntu-latest`、arm64 は `ubuntu-24.04-arm`) で
+組んで digest だけで push し、最後に両方を束ねた索引へ名前を付けます
+(`.github/workflows/build-and-deploy.yml`)。QEMU で arm64 を組むと ffmpeg と Native AOT が
+何倍も掛かるので使いません。**片方の arch が落ちたら名前は付けない** — 片方だけの
+`develop` が出ていくより、前のものが残るほうがいい。違いは Intel の QSV だけで、
+Debian では amd64 にしか無いので arm64 のイメージには入れていません
+([encode.md](encode.md#gpu-で焼く-intel-qsv--va-api))。
+
 **版の名前を貼っていなかった頃は、入れた人が版を固定できませんでした。** リリースで
 動くのが `latest` だけだと「いま動いているもの」を指す名前しか無く、戻し先が
 `sha-…` (中身を最後に変えたコミット) しか残らない。git のタグ (`v0.1.0`) から
@@ -151,6 +160,8 @@ PreSync フックに置いています (`denpa-prepull`、中身は `/bin/true`)
 `sha-` のタグはリリースのときの目印にも使っています。リリースを作ると、
 **焼き直さずに** そのコミットの `sha-` へ版と `latest` を貼り足します
 (`.github/workflows/release.yml`)。試したものとリリースしたものが別にならないように。
+貼り足すときも両方の arch のまま — エージェントは索引ごと写し、denpa は版の ENV を
+足す層を土台の索引にある arch の数だけ作ります (RUN が無いので1台のランナーで済む)。
 
 **試し版 (prerelease) には `latest` を貼りません。** `compose.prod.yml` が指して
 いるのがそれなので、貼ると入れて使っている人のところへ降ってしまいます。
