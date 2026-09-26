@@ -1396,7 +1396,7 @@ async function runJob(jobId: number): Promise<void> {
     }
     encodeOptions.audioStreams = await probeLiveAudio(source);
     // 映像が出るまでの音声だけの区間。頭から捨てて 0 秒から始める
-    const head = await probeLeadIn(source, measured.formatStart, measured.packetStart);
+    const head = await probeLeadIn(source, measured.formatStart, measured.packetStart, measured.fps);
     encodeOptions.videoStart = head.lead;
     // チャプターを詰める量は別 (理由は cm.ts の droppedHead)
     encodeOptions.chapterDrop = head.dropped;
