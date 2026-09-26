@@ -299,7 +299,8 @@ public class BCasTests
     public async Task 同時に呼ばれてもカードには順番に触る()
     {
         var link = new FakeLink("reader");
-        using var card = BCas.Open(() => [Candidate(link)]);
+        // 時計は止めておく。混んだ CI で 64 本が 3 秒を跨ぐと、覚えた答えが切れて数が合わなくなる
+        using var card = BCas.Open(() => [Candidate(link)], new FakeClock());
 
         var ecms = Enumerable.Range(0, 32).Select(n => new byte[] { 0x80, (byte)n, 0x01, 0x02 }).ToArray();
         await Task.WhenAll(Enumerable.Range(0, 64).Select(n => Task.Run(() => card.Ecm(ecms[n % ecms.Length]))));

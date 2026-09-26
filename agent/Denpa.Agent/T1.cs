@@ -138,6 +138,13 @@ public sealed class T1Protocol
     /// <summary>1つのブロックを諦めるまでに再送を頼む回数</summary>
     private const int MaxRetries = 3;
 
+    /// <summary>
+    /// 1つの APDU のあいだに受ける S(WTX) / S(IFS) の上限。**これが無いと、求め続ける
+    /// カードで永久に返らない** — カードは1枚を全チューナーで共有しているので、1本が
+    /// ここで止まると全部の解除が道連れになる。B-CAS の ECM は普通 1〜2 回で済む
+    /// </summary>
+    private const int MaxSupervisory = 16;
+
     private readonly Func<byte[], byte, byte[]?> _exchange;
     private byte _ns;
     private byte _nr;
@@ -230,6 +237,7 @@ public sealed class T1Protocol
         var toSend = current;
         var response = new List<byte>();
         var errors = 0;
+        var supervisory = 0;
         byte wtx = 0;
 
         for (; ; )
@@ -288,6 +296,8 @@ public sealed class T1Protocol
             {
                 switch (pcb & 0x3f)
                 {
+                    case SWtx or SIfs when ++supervisory > MaxSupervisory:
+                        throw new IOException($"カードが待ちの延長や長さの変更を求め続けます (T=1、{MaxSupervisory} 回)");
                     case SWtx when block.Inf is [var multiplier]:
                         toSend = Block(SBlock | SResponse | SWtx, [multiplier]);
                         wtx = multiplier;

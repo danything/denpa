@@ -159,6 +159,9 @@ public sealed class CcidLink : ICardLink
     /// 聞くので、最初のブロックから黙る。
     /// </para>
     /// </summary>
+    /// <summary>電源を入れた (PowerOn を送った)。閉じるときに切る</summary>
+    private bool _powered;
+
     public byte[] Reset()
     {
         if (!Interface.Tpdu && !Interface.Apdu)
@@ -168,12 +171,14 @@ public sealed class CcidLink : ICardLink
         _t1 = null;
         Atr = null;
         Call(CcidMessage.PowerOff, []);
+        _powered = false;
 
         byte[]? raw = null;
         string? why = null;
         foreach (var select in PowerSelects())
         {
             var reply = Call(CcidMessage.PowerOn, [], select);
+            _powered = true;
             if (reply.Absent) throw new IOException($"{Name} にカードが挿さっていません");
             if (!reply.Failed && reply.Data.Length > 0)
             {
@@ -391,7 +396,8 @@ public sealed class CcidLink : ICardLink
     {
         try
         {
-            if (Atr is not null) Call(CcidMessage.PowerOff, [], timeoutMs: 1000);
+            // ATR を読めずに失敗したときも、電源を入れたなら切っておく
+            if (_powered) Call(CcidMessage.PowerOff, [], timeoutMs: 1000);
         }
         catch (IOException)
         {

@@ -305,11 +305,11 @@ public sealed class Descrambler(IKeySource source, bool background = true)
         }
 
         /*
-         * **溜めている間に鍵が変わるなら、今の鍵の答えが来たところで流す。** 新しい鍵を
+         * **溜めている間に鍵が変わるなら、聞いている答えが全部来たところで流す。** 新しい鍵を
          * 先に貰ってから流すと、溜めた頭まで新しい鍵で解いて、化けたものを「解けた」として
          * 出す。新しい中身は取っておき (OnEcm)、流し終えてから聞く (Release)
          */
-        if (_keyChanged && !_ecms.Values.Any(ecm => ecm.Next is not null && ecm.Asking is not null))
+        if (_keyChanged && !_ecms.Values.Any(ecm => ecm.Asking is not null))
         {
             _keyChanged = false;
             Release(output);
@@ -724,7 +724,10 @@ public sealed class Descrambler(IKeySource source, bool background = true)
         ecm.Asking = section;
         if (background)
         {
-            ecm.Pending = Task.Run(Fetch);
+            // **専用のスレッドで。** カードや配り役が固まると何秒も塞ぐので、共用の池から借りると
+            // チューナー × ECM の本数ぶん池が埋まり、HTTP の口まで待たされる
+            ecm.Pending = Task.Factory.StartNew(
+                Fetch, CancellationToken.None, TaskCreationOptions.LongRunning, TaskScheduler.Default);
         }
         else
         {

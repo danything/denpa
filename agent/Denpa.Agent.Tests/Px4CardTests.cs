@@ -34,7 +34,9 @@ public class Px4CardTests
             _listener = new Socket(AddressFamily.Unix, SocketType.Stream, ProtocolType.Unspecified);
             _listener.Bind(new UnixDomainSocketEndPoint(SocketPath));
             _listener.Listen();
-            _serving = Task.Run(() =>
+            // **専用のスレッドで。** 共用の池は他のテスト (鍵を待って止まる偽のカード) が
+            // 塞ぐことがあり、池から借りると CI の 2 コアで答えが 5 秒に間に合わなかった
+            _serving = Task.Factory.StartNew(() =>
             {
                 using var client = _listener.Accept();
                 while (true)
@@ -52,7 +54,7 @@ public class Px4CardTests
                     if (answer(frame) is not { } reply) return;
                     client.Send(Encode(frame.Type, reply.Flags, frame.RequestId, reply.Payload));
                 }
-            });
+            }, CancellationToken.None, TaskCreationOptions.LongRunning, TaskScheduler.Default);
         }
 
         private static bool Read(Socket socket, Span<byte> into)

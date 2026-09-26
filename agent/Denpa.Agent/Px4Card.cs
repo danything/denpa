@@ -188,7 +188,8 @@ public sealed class Px4Card : ICardLink
 
         try
         {
-            _socket.Send(frame);
+            // Send は求めた長さより少なく送って返ることがある。送り切るまで回す
+            for (var sent = 0; sent < frame.Length;) sent += _socket.Send(frame.AsSpan(sent));
 
             var header = new byte[HeaderSize];
             Receive(header);
