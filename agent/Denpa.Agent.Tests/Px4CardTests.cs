@@ -215,7 +215,7 @@ public class Px4CardTests
         using var link = Px4Card.Find(px4d.Runtime.FullName)[0].Open();
 
         var error = Assert.Throws<IOException>(() => link.Reset());
-        await Assert.That(error.Message).Contains("カードが刺さっていません");
+        await Assert.That(error.Message).Contains("カードが挿さっていません");
         await Assert.That(error.Message).Contains("slot empty");
     }
 
@@ -226,7 +226,7 @@ public class Px4CardTests
         var candidate = Px4Card.Find(px4d.Runtime.FullName)[0];
 
         var error = Assert.Throws<IOException>(() => candidate.Open());
-        await Assert.That(error.Message).Contains("カードを扱いません");
+        await Assert.That(error.Message).Contains("カードに対応していません");
     }
 
     [Test]

@@ -87,7 +87,7 @@ public static class CcidMessage
     {
         IccMute => "カードが応答しません",
         ParityError => "パリティ誤り",
-        Overrun => "受け取りが溢れました",
+        Overrun => "受信バッファが溢れました",
         0xFB => "リーダーの故障",
         0xF8 => "ATR の TS が不正です",
         0xF7 => "ATR の TCK が不正です",
@@ -95,7 +95,7 @@ public static class CcidMessage
         0xF5 => "対応していない電圧のカードです",
         0xF4 => "手続きバイトが食い違いました",
         0xF3 => "プロトコルが無効にされています",
-        0xF2 => "リーダーが自動の処理の最中です",
+        0xF2 => "リーダーが自動処理の最中です",
         0xEF => "打ち切られました",
         0xE0 => "スロットが使用中です",
         0x00 => "リーダーが対応していない命令です",
@@ -169,7 +169,7 @@ public sealed class CcidLink : ICardLink
     {
         if (!Interface.Tpdu && !Interface.Apdu)
         {
-            throw new IOException($"{Name} は{Interface.Level}のリーダーで、対応していません");
+            throw new IOException($"{Name} は{Interface.Level}のリーダーのため、対応していません");
         }
         _t1 = null;
         Atr = null;
@@ -390,7 +390,7 @@ public sealed class CcidLink : ICardLink
         var length = CcidMessage.Length(buffer);
         if (length > Math.Max(Interface.MaxMessage, 271) + packet)
         {
-            throw new IOException($"{Name} の応答の長さがおかしい ({length} バイト)");
+            throw new IOException($"{Name} の応答の長さがおかしいです ({length} バイト)");
         }
         if (total < length)
         {

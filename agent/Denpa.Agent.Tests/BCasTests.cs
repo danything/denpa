@@ -207,7 +207,7 @@ public class BCasTests
     [Test]
     public async Task INTに答えないリーダーは飛ばす()
     {
-        var empty = new FakeLink("empty") { Int = () => throw new IOException("カードが刺さっていません") };
+        var empty = new FakeLink("empty") { Int = () => throw new IOException("カードが挿さっていません") };
         var acas = new FakeLink("other") { Int = () => IntResponse(0xa101) };
         var good = new FakeLink("good");
         using var card = BCas.Open(() => [Candidate(empty), Candidate(acas), Candidate(good)]);
@@ -221,9 +221,9 @@ public class BCasTests
     [Test]
     public async Task どれも駄目なら理由を並べて投げる()
     {
-        var empty = new FakeLink("empty") { Int = () => throw new IOException("カードが刺さっていません") };
+        var empty = new FakeLink("empty") { Int = () => throw new IOException("カードが挿さっていません") };
         var error = Assert.Throws<IOException>(() => BCas.Open(() => [Candidate(empty)]));
-        await Assert.That(error.Message).Contains("empty: カードが刺さっていません");
+        await Assert.That(error.Message).Contains("empty: カードが挿さっていません");
 
         var none = Assert.Throws<IOException>(() => BCas.Open(() => []));
         await Assert.That(none.Message).Contains("カードリーダーが見つかりません");

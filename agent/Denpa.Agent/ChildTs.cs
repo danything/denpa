@@ -115,7 +115,7 @@ internal sealed class ChildTs(string name, string program)
         start.RedirectStandardError = true;
         start.UseShellExecute = false;
 
-        var process = Process.Start(start) ?? throw new IOException($"{program} を起こせません");
+        var process = Process.Start(start) ?? throw new IOException($"{program} を起動できません");
         var child = new TsChild(program, process);
         _child = child;
         _ = Task.Run(async () =>
@@ -227,7 +227,7 @@ internal class TsChild(string program, Process process)
     public string? EndReason()
     {
         if (Dropped) return null;
-        if (!Process.WaitForExit(TimeSpan.FromSeconds(2))) return $"{program} が黙りました";
+        if (!Process.WaitForExit(TimeSpan.FromSeconds(2))) return $"{program} が応答しなくなりました";
         return Exited(Process.ExitCode);
     }
 }

@@ -514,7 +514,7 @@ describe('カードとスクランブル解除', () => {
     test('置き場の外は解除に回さない', async () => {
         const res = await post('/denpa/decode', { input: '../../etc/passwd', output: 'x.ts' });
         expect(res.status).toBe(500);
-        expect(((await res.json()) as { error: string }).error).toContain('置き場の外');
+        expect(((await res.json()) as { error: string }).error).toContain('保存先の外');
     });
 
     /*

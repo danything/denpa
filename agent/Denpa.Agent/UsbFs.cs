@@ -234,8 +234,8 @@ public sealed unsafe partial class UsbFsPipe : IBulkPipe
             {
                 var errno = Marshal.GetLastPInvokeError();
                 throw new IOException(errno == Ebusy
-                    ? "別のプロセスがリーダーを掴んでいます (動いているエージェント自身か、ホストの pcscd など)"
-                    : $"リーダーのインターフェースを掴めません ({Marshal.GetPInvokeErrorMessage(errno)})");
+                    ? "別のプロセスがカードリーダーを使用中です (動いているエージェント自身か、ホストの pcscd など)"
+                    : $"カードリーダーのインターフェースを確保できません ({Marshal.GetPInvokeErrorMessage(errno)})");
             }
             return new UsbFsPipe(path, fd, info);
         }
@@ -278,7 +278,7 @@ public sealed unsafe partial class UsbFsPipe : IBulkPipe
     {
         if (Sys.Ioctl(Fd, Reset, 0) < 0) throw Failure("リーダーをリセットできません");
         var number = (uint)Interface.Number;
-        if (Sys.Ioctl(Fd, ClaimInterface, (nint)(&number)) < 0) throw Failure("リセットしたリーダーを掴み直せません");
+        if (Sys.Ioctl(Fd, ClaimInterface, (nint)(&number)) < 0) throw Failure("リセットしたリーダーを確保し直せません");
     }
 
     private int Fd => _fd >= 0 ? _fd : throw new ObjectDisposedException(_path);

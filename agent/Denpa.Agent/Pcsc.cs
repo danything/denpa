@@ -205,7 +205,7 @@ public sealed partial class PcscLink : ICardLink
     public byte[] Reset()
     {
         // 繋ぐだけで電源が入る。**呼ばれるのは開いた直後の1回だけ** — BCas は失敗したら閉じて開き直す
-        Check(Connect(_context, Name, out _card), Name, "リーダーを掴めません");
+        Check(Connect(_context, Name, out _card), Name, "カードリーダーに接続できません");
 
         var atr = new byte[36];
         var atrLength = (uint)atr.Length;
@@ -238,11 +238,11 @@ public sealed partial class PcscLink : ICardLink
     /// <summary>よく出るものだけ言葉にする (pcsc-lite の pcsclite.h と同じ番号。Windows の winerror.h も同じ)</summary>
     private static string Explain(int result) => unchecked((uint)result) switch
     {
-        0x8010000B => ": 他のアプリが掴んでいます",
-        0x8010000C or 0x80100069 => ": カードが刺さっていません",
+        0x8010000B => ": 他のアプリが使用中です",
+        0x8010000C or 0x80100069 => ": カードが挿さっていません",
         0x8010001D => ": PC/SC が動いていません",
         0x8010002E => ": リーダーが見つかりません",
-        0x80100066 => ": カードが答えません",
+        0x80100066 => ": カードが応答しません",
         _ => "",
     };
 
@@ -251,7 +251,7 @@ public sealed partial class PcscLink : ICardLink
     {
         var readers = Readers();
         return readers.Count == 0
-            ? "PC/SC のカードリーダーが見つかりません (USB のリーダーが刺さっていないか、OS が認識していません)"
+            ? "PC/SC のカードリーダーが見つかりません (USB のカードリーダーが挿さっていないか、OS が認識していません)"
             : string.Join('\n', readers.Select(name => $"PC/SC {name}"));
     }
 }

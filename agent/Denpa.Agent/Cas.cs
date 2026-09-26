@@ -48,7 +48,7 @@ public sealed class CardAbsentException(string message) : IOException(message);
 /// これをそのまま行にする (文を切り分けて読み直さない)
 /// </summary>
 public sealed class CardsUnreadableException(IReadOnlyList<CardsUnreadableException.Reader> readers)
-    : IOException($"どのリーダーでもカードを読めません ({string.Join(" / ", readers.Select(reader => $"{reader.Name}: {reader.Reason}"))})")
+    : IOException($"どのカードリーダーでもカードを読めません ({string.Join(" / ", readers.Select(reader => $"{reader.Name}: {reader.Reason}"))})")
 {
     /// <param name="Absent">挿さっていないだけ</param>
     public sealed record Reader(string Name, string Reason, bool Absent);

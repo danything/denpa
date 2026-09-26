@@ -172,7 +172,7 @@ public sealed class BCas : IKeySource, IDisposable
                 if (response.Length < EcmLength)
                 {
                     // **線は生きている。** 繋ぎ直しても同じ ECM には同じ答えなので、繋ぎ直さない
-                    throw new CardRefusedException($"カードが ECM に答えません (応答 {response.Length} バイト)");
+                    throw new CardRefusedException($"カードが ECM に応答しません (応答 {response.Length} バイト)");
                 }
                 return new EcmAnswer(
                     response[6..14], response[14..22], BinaryPrimitives.ReadUInt16BigEndian(response.AsSpan(4)));
@@ -303,7 +303,7 @@ public sealed class BCas : IKeySource, IDisposable
         var response = link.Transmit([0x90, 0x30, 0x00, 0x00, 0x00]);
         if (response.Length < InitLength) throw new IOException($"INT の応答が短すぎます ({response.Length} バイト)");
         var code = BinaryPrimitives.ReadUInt16BigEndian(response.AsSpan(4));
-        if (code != InitOk) throw new IOException($"INT を断られました (返り値 0x{code:x4}。B-CAS カードですか)");
+        if (code != InitOk) throw new IOException($"INT を拒否されました (返り値 0x{code:x4})。B-CAS カードか確かめてください");
         return (response[16..48], response[48..56], BinaryPrimitives.ReadUInt16BigEndian(response.AsSpan(6)));
     }
 
