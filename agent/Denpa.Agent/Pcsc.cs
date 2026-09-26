@@ -34,7 +34,6 @@ public sealed partial class PcscLink : ICardLink
     private const uint ShareExclusive = 1;
     private const uint ProtocolT1 = 2;
     private const uint LeaveCard = 0;
-    private const uint ResetCard = 1;
 
     /// <summary><c>SCARD_IO_REQUEST</c> (dwProtocol, cbPciLength)。<c>g_rgSCardT1Pci</c> と同じ中身</summary>
     private static readonly uint[] T1Pci = [ProtocolT1, 8];
@@ -50,9 +49,6 @@ public sealed partial class PcscLink : ICardLink
 
     [LibraryImport(Framework, StringMarshalling = StringMarshalling.Utf8)]
     private static partial int SCardConnect(int context, string reader, uint share, uint protocols, out int card, out uint active);
-
-    [LibraryImport(Framework)]
-    private static partial int SCardReconnect(int card, uint share, uint protocols, uint initialization, out uint active);
 
     [LibraryImport(Framework)]
     private static partial int SCardStatus(
@@ -110,9 +106,8 @@ public sealed partial class PcscLink : ICardLink
 
     public byte[] Reset()
     {
-        // 初めは繋ぐだけで電源が入る。2回目からは起こし直す (BCas が繋ぎ直すとき)
-        if (_card == 0) Check(SCardConnect(_context, Name, ShareExclusive, ProtocolT1, out _card, out _), Name, "リーダーを掴めません");
-        else Check(SCardReconnect(_card, ShareExclusive, ProtocolT1, ResetCard, out _), Name, "カードを起こし直せません");
+        // 繋ぐだけで電源が入る。**呼ばれるのは開いた直後の1回だけ** — BCas は失敗したら閉じて開き直す
+        Check(SCardConnect(_context, Name, ShareExclusive, ProtocolT1, out _card, out _), Name, "リーダーを掴めません");
 
         var atr = new byte[36];
         uint atrLength = (uint)atr.Length, namesLength = 0;

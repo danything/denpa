@@ -108,7 +108,7 @@ curl -fsSL https://raw.githubusercontent.com/danything/denpa/main/install.sh | b
 
 - **Linux** (amd64 / arm64) — 全部 Docker Compose。`~/denpa` に compose.prod.yml を置いて起こします
 - **Mac** (Apple Silicon) — チューナーに触るエージェントは Mac の上でそのまま、denpa 本体は Docker で
-  ([docs/agent.md](docs/agent.md#mac-でチューナーを使う))
+  ([docs/agent.md](docs/agent.md#mac-でチューナーを使う))。**このあとのリリースから**入れられます
 - **Docker は入れません。** 無ければ入れ方を言って止まります (Linux は <https://get.docker.com>、
   Mac は Docker Desktop か OrbStack)
 - 置き場は `~/denpa` (`DENPA_HOME`)。`compose.yml` は上げ直すたびに上書きするので、

@@ -47,6 +47,8 @@ IT930X_FIRMWARE_SHA256=5213a5a38872661277a2cc1b2dfdfe88faf06f41205f460f3b51857f0
 REPO=danything/denpa
 URL=http://localhost:3000
 DENPA_DIR="${DENPA_HOME:-$HOME/denpa}"
+# install.sh が書いた compose.yml の1行目
+MARK="# install.sh が置いた (版"
 
 open_browser=yes uninstall=no docker_mode=yes
 for arg in "$@"; do
@@ -80,7 +82,7 @@ docker_ready() {
   fi
   if docker info >/dev/null 2>&1; then return 0; fi
   if [ "$(uname -s)" = Linux ] && [ "$(id -u)" != 0 ] && ! id -nG | grep -qw docker; then
-    say "Docker に触る権限がありません。sudo usermod -aG docker $USER のあと入り直して (ログインし直して)、もう一度流してください"
+    say "Docker に触る権限がありません。sudo usermod -aG docker $(id -un) のあと入り直して (ログインし直して)、もう一度流してください"
   else
     say "Docker が起きていません。$2"
   fi
@@ -95,8 +97,17 @@ compose() { (cd "$DENPA_DIR" && docker compose "$@"); }
 start_denpa() {
   say "denpa $2 を $DENPA_DIR に置きます"
   mkdir -p "$DENPA_DIR/config"
-  fetch "https://raw.githubusercontent.com/$REPO/$2/$1" "$DENPA_DIR/compose.yml.new"
-  sed "s#\(image: ghcr.io/danything/[a-z-]*\):latest#\1:$(image_tag "$2")#" "$DENPA_DIR/compose.yml.new" > "$DENPA_DIR/compose.yml"
+  curl -fsSL --retry 3 -o "$DENPA_DIR/compose.yml.new" "https://raw.githubusercontent.com/$REPO/$2/$1" \
+    || die "$2 に $1 がありません (取ってこられません)。compose.mac.yml はこのあとのリリースから入るので、それより前の版では Mac に入れられません"
+  # 手で置いたもの・手を入れたものは黙って上書きせず、compose.yml.bak に退けてそう言う。
+  # install.sh が書いたものは1行目が印で、残りは前に書いた控え (.compose.yml.orig) と同じはず
+  if [ -f "$DENPA_DIR/compose.yml" ] && ! { head -1 "$DENPA_DIR/compose.yml" | grep -q "^$MARK" \
+    && tail -n +2 "$DENPA_DIR/compose.yml" | cmp -s - "$DENPA_DIR/.compose.yml.orig"; }; then
+    mv "$DENPA_DIR/compose.yml" "$DENPA_DIR/compose.yml.bak"
+    say "手で置いた (手を入れた) $DENPA_DIR/compose.yml を compose.yml.bak に退けました。手直しは compose.override.yml に移してください"
+  fi
+  sed "s#\(image: ghcr.io/danything/[a-z-]*\):latest#\1:$(image_tag "$2")#" "$DENPA_DIR/compose.yml.new" > "$DENPA_DIR/.compose.yml.orig"
+  { echo "$MARK $2。手を入れず、足すものは compose.override.yml に)"; cat "$DENPA_DIR/.compose.yml.orig"; } > "$DENPA_DIR/compose.yml"
   rm -f "$DENPA_DIR/compose.yml.new"
   if [ ! -f "$DENPA_DIR/compose.override.yml" ]; then
     cat > "$DENPA_DIR/compose.override.yml" <<'EOF'
@@ -157,7 +168,8 @@ linux_main() {
     "sudo systemctl start docker で起こしてから、もう一度流してください" || exit 1
 
   ip=$(hostname -I 2>/dev/null | awk '{print $1}' || true)
-  start_denpa compose.prod.yml "$(version)" "${ip:-$(hostname)}"
+  ref=$(version)
+  start_denpa compose.prod.yml "$ref" "${ip:-$(hostname)}"
 }
 
 # ---------------------------------------------------------------------------
@@ -178,15 +190,18 @@ MEDIA="$HOME/Movies/denpa"
 MAC_DOCKER="Docker Desktop (https://www.docker.com/products/docker-desktop/) か OrbStack (https://orbstack.dev) を入れてから、もう一度流してください"
 
 # 止める。**録画中なら終わるまで待つ** (エージェントが SIGTERM で録画を待ってから畳む。plist の ExitTimeOut)
+#
+# **消えるまで待つ。** bootout は止まるのに時間の掛かるサービスだと待たずに返る (EINPROGRESS)。
+# そのまま入れ替えると、動いているバイナリを差し替えたうえ bootstrap が衝突して、エージェントが居なくなる
 mac_stop() {
-  if launchctl print "gui/$(id -u)/$LABEL" >/dev/null 2>&1; then
-    say "動いているエージェントを止めます (録画中なら終わるまで待ちます)"
-    launchctl bootout "gui/$(id -u)/$LABEL" 2>/dev/null || true
-  fi
+  launchctl print "gui/$(id -u)/$LABEL" >/dev/null 2>&1 || return 0
+  say "動いているエージェントを止めます (録画中なら、終わるまでここで待ちます)"
+  launchctl bootout "gui/$(id -u)/$LABEL" 2>/dev/null || true
+  while launchctl print "gui/$(id -u)/$LABEL" >/dev/null 2>&1; do sleep 5; done
 }
 
 check() {
-  [ "$(shasum -a 256 "$1" | awk '{print $1}')" = "$2" ] || die "$1 のハッシュが合いません (壊れているか、差し替えられています)"
+  [ "$(shasum -a 256 "$1" | awk '{print $1}')" = "$2" ] || die "$1 の中身が合いません (取ってくる途中で壊れたかもしれません。もう一度流してください)"
 }
 # SHA256SUMS から1行引いて確かめる
 check_listed() {
@@ -232,7 +247,7 @@ mac_main() {
     agent="denpa-agent-${ref#v}-darwin-arm64.tar.gz"
     say "denpa-agent $ref"
     curl -fsSL --retry 3 -o "$agent" "https://github.com/$REPO/releases/download/$ref/$agent" \
-      || die "$ref には Mac 用のエージェントがありません (Mac 用を出し始める前の版かもしれません)"
+      || die "$ref には Mac 用のエージェントがありません。Mac 用はこのあとのリリースから添えるので、それより前の版では Mac に入れられません"
     fetch "https://github.com/$REPO/releases/download/$ref/$agent.sha256" "$agent.sha256"
     check "$agent" "$(awk '{print $1}' "$agent.sha256")"
   fi
@@ -306,7 +321,8 @@ mac_main() {
 </plist>
 EOF
   plutil -lint "$PLIST" >/dev/null
-  launchctl bootstrap "gui/$(id -u)" "$PLIST"
+  launchctl bootstrap "gui/$(id -u)" "$PLIST" \
+    || die "LaunchAgent に載せられません。ログを見てください: $LOG (載せ直すなら launchctl bootstrap gui/$(id -u) \"$PLIST\")"
 
   say "エージェントを起こしました。応答を待ちます"
   answered=no

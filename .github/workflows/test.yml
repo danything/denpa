@@ -143,6 +143,8 @@ jobs:
           cp ~/denpa/compose.override.yml "$RUNNER_TEMP/override"
           bash install.sh --no-open
           cmp ~/denpa/compose.override.yml "$RUNNER_TEMP/override"
+          # 自分で書いた compose.yml は退けずに上書きする
+          test ! -e ~/denpa/compose.yml.bak
           bash install.sh --uninstall
           test -z "$(docker compose -p denpa ps -q)"
           # 外しても compose と設定は残す

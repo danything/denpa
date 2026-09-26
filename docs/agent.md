@@ -680,7 +680,8 @@ Unix ドメインソケットは**まだ入れていません** (`Program.cs` �
 ## Mac でチューナーを使う
 
 **Apple Silicon の Mac なら、Linux と同じ1行で denpa ごと立ち上がってブラウザが開きます**
-(入口の `install.sh` は1つで、OS を見て振り分ける)。
+(入口の `install.sh` は1つで、OS を見て振り分ける)。**Mac 用はこのあとのリリースから**添えるので、
+それより前の版では Mac に入れられません (install.sh がそう言って止まる)。
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/danything/denpa/main/install.sh | bash
@@ -737,7 +738,8 @@ LaunchAgent に書く環境変数は、コンテナで既定にしている置�
   PT2/PT3 のような PCI の機材や、カーネルのドライバで見せる道はありません
 - **カードリーダー**: px4-userland の内蔵リーダーはそのまま (px4d に聞く)。USB のリーダーは、
   Linux のように usbfs を直に叩けないので、**macOS に最初から入っている PC/SC
-  (PCSC.framework) 越し**に叩きます (`Pcsc.cs`)。`denpa-agent --card` はそのリーダーを並べます
+  (PCSC.framework) 越し**に叩きます (`Pcsc.cs`)。`denpa-agent --card` はそのリーダーを並べます。
+  **動いている間はリーダーを独り占めする**ので (排他で掴む)、その間は他のアプリがカードを使えません
 - pipe を広げられない (`F_SETPIPE_SZ` が無い) ので、px4-ts / siano-ts から受ける溜めは Linux より浅い
 - **Apple Silicon だけ** (Intel Mac 用の px4-userland / siano-userland が無い)。
   **Mac の実機でチューナーとカードを繋いで確かめたことはまだありません。** CI で焼いて起こし、
