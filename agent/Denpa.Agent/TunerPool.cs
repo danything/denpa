@@ -308,8 +308,11 @@ public sealed class TunerPool(
             _leases.Remove(index);
             // 選局が落ちた。読み手には失敗として伝える (黙って終わると空ファイルになる)
             var reason = lease.Error is null ? "" : $" ({lease.Error})";
-            foreach (var sink in lease.Sinks) sink.Fail($"選局が終了しました{reason}");
-            lock (lease.Sinks) lease.Sinks.Clear();
+            lock (lease.Sinks)
+            {
+                foreach (var sink in lease.Sinks) sink.Fail($"選局が終了しました{reason}");
+                lease.Sinks.Clear();
+            }
         }
         onChange();
     }
@@ -472,9 +475,12 @@ public sealed class TunerPool(
                 var users = new JsonArray();
                 if (lease is not null)
                 {
-                    foreach (var sink in lease.Sinks)
+                    lock (lease.Sinks)
                     {
-                        users.Add((JsonNode)new JsonObject { ["use"] = sink.Use, ["priority"] = sink.Priority });
+                        foreach (var sink in lease.Sinks)
+                        {
+                            users.Add((JsonNode)new JsonObject { ["use"] = sink.Use, ["priority"] = sink.Priority });
+                        }
                     }
                 }
 
