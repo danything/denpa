@@ -32,7 +32,7 @@ services:
             EPG_COLLECT_INTERVAL: '60000'
             SCHEDULER_TICK: '2000'
             ENCODE_CONCURRENCY: '2'
-            # 開発では誰でも通す。来るのは genkan (proxy ネットワークの中) からだけ
+            # 開発では誰でも通す。来るのは genkan (genkan ネットワークの中) からだけ
             TRUSTED_NETWORKS: 10.0.0.0/8,172.16.0.0/12,192.168.0.0/16
         volumes:
             - .:/app
@@ -43,7 +43,7 @@ services:
         labels:
             caddy: http://denpa.localhost
             caddy.reverse_proxy: '{{upstreams 5173}}'
-        networks: [default, proxy]
+        networks: [default, genkan]
         depends_on:
             - tuner-agent
 
@@ -64,7 +64,7 @@ services:
         labels:
             caddy: http://denpa-agent.localhost
             caddy.reverse_proxy: '{{upstreams 25252}}'
-        networks: [default, proxy]
+        networks: [default, genkan]
 
     e2e:
         build:
@@ -94,7 +94,7 @@ services:
 
 networks:
     # genkan が作るネットワーク。ここに入ったコンテナへ、ラベルのホスト名で振り分けてくれる
-    proxy:
+    genkan:
         external: true
 
 volumes:
