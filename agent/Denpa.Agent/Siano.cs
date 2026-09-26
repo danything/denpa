@@ -22,7 +22,7 @@ namespace Denpa.Agent;
 /// **USB のノードは自分で開いて <c>--fd</c> で渡す。** <c>siano-ts --device N</c> は
 /// libusb が並べた順の N 番目で、その並びにはカーネルが掴んでいる S1UD も入る。
 /// 2台刺さっていると番号がずれて、DVB で使っている方を奪いかねない。
-/// sysfs で見分けた1台の <c>/dev/bus/usb/BBB/DDD</c> をシェルに fd 3 で開かせ、
+/// <c>siano-ts --list</c> で見分けた1台の <c>/dev/bus/usb/BBB/DDD</c> をシェルに fd 3 で開かせ、
 /// そのまま siano-ts に exec させる (.NET から fd を子に渡す口が無いため)。
 /// </para>
 ///
@@ -37,21 +37,11 @@ public static class SianoUserland
     /// <summary>設定の <c>device</c> の頭。これで始まっていれば siano-userland で掴む</summary>
     public const string Scheme = "siano:";
 
-    public sealed record Model(string Vendor, string Product, string Name);
-
     /// <summary>
-    /// siano-ts が ISDB-T の RIO として扱う機種 (siano-userland の README)。
-    /// 実機で確かめてあるのは PX-S1UD だけで、残り2つはあちらでも未検証
+    /// 刺さっている1台。<c>Types</c> は受けられる方式 (siano-ts --list の受信機の行)、
+    /// <c>Driver</c> はどれかのインターフェースを掴んでいるドライバ (無ければ null)
     /// </summary>
-    public static readonly Model[] Models =
-    [
-        new("3275", "0080", "PX-S1UD"),
-        new("187f", "0600", "Siano RIO"),
-        new("187f", "0302", "Siano RIO"),
-    ];
-
-    /// <summary>刺さっている1台。<c>Driver</c> はどれかのインターフェースを掴んでいるドライバ (無ければ null)</summary>
-    public sealed record Stick(string Port, string Model, int Bus, int Address, string? Driver)
+    public sealed record Stick(string Port, string Model, int Bus, int Address, string[] Types, string? Driver)
     {
         public string Node => $"/dev/bus/usb/{Bus:D3}/{Address:D3}";
     }
@@ -92,35 +82,112 @@ public static class SianoUserland
     /// 刺さっている機材。**カーネルが掴んでいるものも挙げる** (<c>Driver</c> で分かる)。
     ///
     /// <para>
-    /// sysfs を読む。<c>idVendor</c> / <c>idProduct</c> / <c>busnum</c> / <c>devnum</c> と、
-    /// インターフェース (<c>&lt;port&gt;:1.0</c> …) の <c>driver</c> のリンク先。
+    /// 機材は <c>siano-ts --list</c> に聞く (siano-userland 0.1.7)。USB ID の表は持たず、
+    /// バス・アドレス・ポートも siano-ts が libusb で見たものを使う。デバイスを開かないので、
+    /// 別の siano-ts が掴んでいても聞ける。
+    /// </para>
+    ///
+    /// <para>
+    /// **カーネルが掴んでいるかだけは sysfs で見る** (インターフェースの <c>driver</c> のリンク)。
+    /// siano-ts は掴まれていても黙って奪う (<c>libusb_set_auto_detach_kernel_driver</c>) ので、
+    /// 奪わないのはこちらの仕事になっている。siano-ts が既定で奪わなくなれば
+    /// (Khronos31/siano-userland#9) 要らなくなる。
     /// </para>
     /// </summary>
     public static List<Stick> Sticks(string sysfs = "/sys/bus/usb/devices")
     {
-        var found = new List<Stick>();
-        if (!Directory.Exists(sysfs)) return found;
-        foreach (var entry in Directory.EnumerateFileSystemEntries(sysfs).Order(StringComparer.Ordinal))
+        var program = Path.Combine(Dir, "siano-ts");
+        if (!File.Exists(program)) return [];
+        var (code, output) = Shell.Run(program, ["--list"], TimeSpan.FromSeconds(15)).GetAwaiter().GetResult();
+        if (code != 0)
         {
-            var port = Path.GetFileName(entry);
-            if (!IsPort(port)) continue;
-            var vendor = Attribute(entry, "idVendor");
-            var product = Attribute(entry, "idProduct");
-            if (Models.FirstOrDefault(m => m.Vendor == vendor && m.Product == product) is not { } model) continue;
-            if (!int.TryParse(Attribute(entry, "busnum"), out var bus)
-                || !int.TryParse(Attribute(entry, "devnum"), out var address))
-            {
-                Log.Write($"{model.Name} {port} の USB の番号が読めません");
-                continue;
-            }
-            found.Add(new Stick(port, model.Name, bus, address, Driver(sysfs, port)));
+            Log.Write($"siano-userland の機材を挙げられません (siano-ts --list exit {code}: {output})");
+            return [];
         }
+        return ParseList(output, port => Driver(sysfs, port), Log.Write);
+    }
+
+    /// <summary>
+    /// <c>siano-ts --list</c> の出力を読む。**使えるのは <c>status=ready</c> の機材だけ。**
+    ///
+    /// <para>
+    /// <c>model=… usb=… bus=… address=… port=… status=ready receivers=N</c> の行のあとに、
+    /// <c>px4ctl list</c> と同じ形の受信機の行が N 行続く (px4d --list に揃えてある)。
+    /// 対応外の機材は <c>rejected …</c> の行で来るので、理由を <paramref name="warn"/> で残す。
+    /// ポートが分からない (<c>port=-</c>) 機材は見分けられないので使わない。
+    /// </para>
+    /// </summary>
+    public static List<Stick> ParseList(string output, Func<string, string?> driver, Action<string> warn)
+    {
+        var found = new List<Stick>();
+        Dictionary<string, string>? current = null;
+        var receivers = new System.Text.StringBuilder();
+
+        void Flush()
+        {
+            if (current is null) return;
+            var model = current.GetValueOrDefault("model") ?? "Siano";
+            var port = current.GetValueOrDefault("port") ?? "-";
+            if (current.GetValueOrDefault("status") != "ready")
+            {
+                warn($"{model} {port} は使えません (siano-ts --list: status={current.GetValueOrDefault("status")})");
+            }
+            else if (!IsPort(port))
+            {
+                warn($"{model} の USB のポートが分からないので使いません (port={port})");
+            }
+            else if (!int.TryParse(current.GetValueOrDefault("bus"), out var bus)
+                || !int.TryParse(current.GetValueOrDefault("address"), out var address))
+            {
+                warn($"{model} {port} の USB の番号が読めません");
+            }
+            else
+            {
+                var types = Px4Receiver.ParseList(receivers.ToString(), warn)
+                    .SelectMany(receiver => receiver.Types)
+                    .Distinct(StringComparer.Ordinal)
+                    .ToArray();
+                found.Add(new Stick(port, model, bus, address, types, driver(port)));
+            }
+            current = null;
+            receivers.Clear();
+        }
+
+        foreach (var raw in output.Split('\n'))
+        {
+            var line = raw.Trim();
+            if (line.StartsWith("model=", StringComparison.Ordinal))
+            {
+                Flush();
+                current = Fields(line);
+            }
+            else if (line.StartsWith("receiver=", StringComparison.Ordinal))
+            {
+                if (current is not null) receivers.AppendLine(line);
+            }
+            else if (line.StartsWith("rejected ", StringComparison.Ordinal))
+            {
+                Flush();
+                var fields = Fields(line["rejected ".Length..]);
+                warn($"{fields.GetValueOrDefault("model")} ({fields.GetValueOrDefault("usb")}, port={fields.GetValueOrDefault("port")}) は使えません: {fields.GetValueOrDefault("status")}");
+            }
+        }
+        Flush();
         return found;
     }
 
+    private static Dictionary<string, string> Fields(string line) => line
+        .Split(' ', StringSplitOptions.RemoveEmptyEntries)
+        .Select(field => field.Split('=', 2))
+        .Where(pair => pair.Length == 2)
+        .GroupBy(pair => pair[0], StringComparer.Ordinal)
+        .ToDictionary(group => group.Key, group => group.First()[1], StringComparer.Ordinal);
+
     /// <summary>どれかのインターフェースを掴んでいるドライバの名前。誰も掴んでいなければ null</summary>
-    private static string? Driver(string sysfs, string port)
+    internal static string? Driver(string sysfs, string port)
     {
+        // sysfs が無い (Linux でない) ならカーネルのドライバも無い
+        if (!Directory.Exists(sysfs)) return null;
         foreach (var entry in Directory.EnumerateFileSystemEntries(sysfs, $"{port}:*").Order(StringComparer.Ordinal))
         {
             var driver = Path.Combine(entry, "driver");
@@ -131,19 +198,6 @@ public static class SianoUserland
         return null;
     }
 
-    private static string? Attribute(string directory, string name)
-    {
-        try
-        {
-            var path = Path.Combine(directory, name);
-            return File.Exists(path) ? File.ReadAllText(path).Trim() : null;
-        }
-        catch
-        {
-            return null;
-        }
-    }
-
     /// <summary>
     /// siano-ts に渡せる機材を、設定に書いたのと同じ形で。
     ///
@@ -152,13 +206,16 @@ public static class SianoUserland
     /// <c>/dev/dvb</c> に出ているので、DVB の側で見つかる (DeviceProbe)。
     /// </para>
     /// </summary>
-    public static List<TunerSpec> Detect(string sysfs = "/sys/bus/usb/devices")
+    public static List<TunerSpec> Detect(string sysfs = "/sys/bus/usb/devices") => Specs(Sticks(sysfs));
+
+    /// <summary>機材の一覧から、設定の形に組み立てる (ドライバに繋がっているもの・受けられる方式が無いものは除く)</summary>
+    public static List<TunerSpec> Specs(IEnumerable<Stick> sticks)
     {
         var found = new List<TunerSpec>();
-        foreach (var stick in Sticks(sysfs))
+        foreach (var stick in sticks)
         {
-            if (stick.Driver is not null) continue;
-            found.Add(new TunerSpec(Name(stick.Model, stick.Port), ["GR"], false, Device(stick.Port)));
+            if (stick.Driver is not null || stick.Types.Length == 0) continue;
+            found.Add(new TunerSpec(Name(stick.Model, stick.Port), stick.Types, false, Device(stick.Port)));
         }
         return found;
     }
@@ -167,9 +224,12 @@ public static class SianoUserland
     /// 選局の直前に、そのポートの機材を確かめる。**どのドライバにも繋がっていなければ返す。**
     /// 抜けている・別の機材に挿し替わった・カーネルが掴んでいる、は理由を添えて投げる
     /// </summary>
-    public static Stick Claimable(string port, string sysfs = "/sys/bus/usb/devices")
+    public static Stick Claimable(string port, string sysfs = "/sys/bus/usb/devices") => Claimable(port, Sticks(sysfs));
+
+    /// <summary><see cref="Claimable(string, string)"/> の中身。機材の一覧を渡す</summary>
+    public static Stick Claimable(string port, IEnumerable<Stick> sticks)
     {
-        var stick = Sticks(sysfs).FirstOrDefault(s => s.Port == port)
+        var stick = sticks.FirstOrDefault(s => s.Port == port)
             ?? throw new IOException($"USB のポート {port} に Siano の機材が見当たりません (抜けたか、挿し替えた?)");
         if (stick.Driver is not null)
         {

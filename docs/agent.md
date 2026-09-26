@@ -513,16 +513,22 @@ sudo reboot
 ```
 
 - **設定の `device` は `siano:<USB のポート>`** (`siano:1-2`)。S1UD にはシリアルが
-  無いので、挿したポートで見分けます。刺さっていれば `/sys/bus/usb/devices` から
-  見つけて組み立てるので (`SianoUserland.Detect`)、普通は書きません。
-  挿すポートを変えたら組み直します
+  無いので、挿したポートで見分けます。刺さっていれば組み立てるので
+  (`SianoUserland.Detect`)、普通は書きません。挿すポートを変えたら組み直します
+- **機材は `siano-ts --list` に聞きます** (siano-userland 0.1.7。px4d --list と同じ
+  `key=value` の形)。USB ID の表は持たず、バス・アドレス・ポートと受けられる方式も
+  siano-ts が見たものを使います。ポートの分からない機材 (`port=-`) と対応外の機材
+  (`rejected`) は、理由を記録に残して使いません。**カーネルが掴んでいるかだけは
+  sysfs (インターフェースの `driver`) で見ます** — siano-ts は掴まれていても黙って奪うので、
+  奪わないのはこちらの仕事になっています (siano-ts が既定で奪わなくなれば要らなくなる。
+  Khronos31/siano-userland#9)
 - **USB のノードは自分で開いて `--fd` で渡します。** `siano-ts --device N` は
   libusb が並べた順の N 番目で、その並びにはカーネルが掴んでいる S1UD も入るため、
-  2台刺さっていると番号がずれて DVB 側を奪いかねません。sysfs で見分けた1台の
+  2台刺さっていると番号がずれて DVB 側を奪いかねません。`--list` で見分けた1台の
   `/dev/bus/usb/BBB/DDD` を `/bin/sh` に fd 3 で開かせ、そのまま `siano-ts --fd 3` に
   exec させます (.NET には fd を子に渡す口が無い)。値は全部引数で渡し、シェルの文には
   埋め込みません
-- **選局の直前にもう一度 sysfs を見ます** (`SianoUserland.Claimable`)。起動のあとで
+- **siano-ts を起こす直前にもう一度確かめます** (`SianoUserland.Claimable`)。起動のあとで
   smsusb が掴んだ・抜けた・挿し替えた、は siano-ts を起こす前に理由を付けて断ります
 - **siano-ts は起こしたまま選局し直します** (`--control`)。起こすのは最初の選局の
   ときだけで、以降は標準入力に `tune <Hz>` を1行書き、stderr の `tuned <Hz>` を待ちます
