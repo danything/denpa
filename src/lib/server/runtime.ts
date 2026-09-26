@@ -89,7 +89,7 @@ export function start(): void {
     serve(SOCKET_PATH, {
         // **握手より前に見る。** ここで断れば普通の HTTP で理由を返せる
         accept: (url) => redeem(url.searchParams.get('ticket')),
-        open: (connection) => attend(connection),
+        open: (connection, _url, grant) => attend(connection, grant),
     });
 
     const recovered = recoverOrphanedRecordings();

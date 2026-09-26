@@ -118,6 +118,34 @@ export function trusted(address: string): boolean {
     return entries().some((network) => inNetwork(address, network));
 }
 
+/**
+ * 家の中 (LAN) の住所か。**私設・ループバック・リンクローカルだけ。**
+ *
+ * CGNAT (100.64.0.0/10) は入れない — Tailscale などの VPN で**外から**入ってくる
+ * 住所で、細い回線の向こうに居ることが多い。
+ */
+const LAN = ['10.0.0.0/8', '172.16.0.0/12', '192.168.0.0/16', '127.0.0.0/8', '169.254.0.0/16'];
+
+export function onLan(address: string): boolean {
+    const target = address.replace(/^::ffff:/i, '').toLowerCase();
+    if (target === '::1') return true;
+    // IPv6 の ULA (fc00::/7) とリンクローカル (fe80::/10)
+    if (/^f[cd][0-9a-f]{0,2}:/.test(target) || /^fe[89ab][0-9a-f]?:/.test(target)) return true;
+    return LAN.some((network) => inNetwork(target, network));
+}
+
+/**
+ * **焼かずに生の TS を送ってよい相手か** (docs/stream.md §5.5)。信頼したネットワークから
+ * 来ていて、**しかも家の中の住所**のときだけ。
+ *
+ * 1局 15〜17 Mbit/s が中身によらずずっと流れるので、宅外へは出さない。
+ * `TRUSTED_NETWORKS` だけで決めないのは、全部開ける書き方 (`0.0.0.0/0`) がありうるため —
+ * それは「誰でも通す」であって「家の中に居る」ではない。住所が読めないとき (空) は生にしない
+ */
+export function mayStreamRaw(address: string): boolean {
+    return trusted(address) && onLan(address);
+}
+
 function entries(): string[] {
     return config.trustedNetworks
         .split(',')

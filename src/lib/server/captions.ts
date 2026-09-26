@@ -171,6 +171,41 @@ export function captionOutput(from: string, track: number): string[] {
 }
 
 /**
+ * **生で送る道の字幕** (docs/stream.md §5.5)。映像は焼かないので、ffmpeg には字幕だけを描かせる。
+ *
+ * 焼く道で「同じ ffmpeg に両方焼かせる」のは、ffmpeg が入口で時刻を 0 に寄せ、その
+ * 寄せ幅がプロセスごとに違うからだった (上の説明)。生の道では**寄せない** (`-copyts`) —
+ * 受け側が合わせる相手は放送の PTS そのもの (ブラウザが自分で PES から読む) なので、
+ * 字幕も放送の PTS のまま出せば突き合わせられる。mp4 の多重化器が時刻を 0 に詰め直す
+ * 問題は、字幕の出口 (Matroska) には無い。実機の録画で、出てきた字幕の時刻が元の TS の
+ * 字幕 PES の PTS と 1ms 単位で一致した (71759.734333 → 71759.734)。
+ *
+ * **`-copyts` を外すと合わない。** 映像を出さない ffmpeg は寄せ幅を入口の `start:` とは
+ * 違う値にし (同じ録画で 0.3〜0.7秒ずれた)、それを外から知る方法が無い。
+ *
+ * 映像を解かない (字幕の ES だけを読む) ので、焼く ffmpeg と違って CPU はほとんど使わない
+ *
+ * @param program ffmpeg に名指しさせる局の番号 (0以下なら最初の局)
+ * @param track その局の中で何本目の字幕か
+ */
+export function rawCaptionArgs(program: number, track: number): string[] {
+    const from = Number.isFinite(program) && program > 0 ? `0:p:${program}` : '0';
+    return [
+        '-hide_banner',
+        '-nostats',
+        '-fflags',
+        'nobuffer',
+        '-probesize',
+        '100000',
+        '-copyts',
+        ...captionInput(),
+        '-i',
+        'pipe:0',
+        ...captionOutput(from, track),
+    ];
+}
+
+/**
  * 字幕がその放送に無いときに ffmpeg が言うこと。
  *
  * 字幕を持たない局はある (ショッピングやサブチャンネル)。そこに
