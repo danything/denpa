@@ -300,14 +300,12 @@
     {#if learned !== null}
         <div
             class="cluster learned"
-            data-testid="logo-learned"
         >
             <img
                 src={learned.url}
                 alt="いま覚えているロゴ"
                 class="learned-image"
                 style="image-rendering: pixelated"
-                data-testid="logo-learned-image"
             />
             <div class="tiny">
                 <div class="bold">いま覚えているロゴ</div>
@@ -317,7 +315,7 @@
                     18時間離れていて、どちらの話をしているのか読み取れなかった
                 -->
                 {#if learned.learnedAt > 0}
-                    <div class="sub" data-testid="logo-learned-at">
+                    <div class="sub">
                         {dateTime(learned.learnedAt)} に覚えました
                     </div>
                 {/if}
@@ -338,7 +336,7 @@
                 -->
                 <form method="POST" action="?/logoForget" use:submitting class="forget">
                     <input type="hidden" name="serviceId" value={serviceId} />
-                    <button type="submit" class="xs ghost" data-testid="logo-forget">
+                    <button type="submit" class="xs ghost">
                         この絵は違う (捨てて覚え直す)
                     </button>
                 </form>
@@ -356,7 +354,7 @@
             囲うにはコマが要る。**それでも上の「いま覚えているロゴ」は出る** —
             事前学習は録画を待たずに回るので、録画が無くても覚えていることはある
         -->
-        <p class="tiny muted spaced" data-testid="logo-area-no-recording">
+        <p class="tiny muted spaced">
             位置を教えるにはこの局の録画が1本要ります (コマを出すため)。
         </p>
     {:else}
@@ -364,9 +362,8 @@
             class="spaced"
             {open}
             ontoggle={(event) => (opened = event.currentTarget.open)}
-            data-testid="logo-area-details"
         >
-            <summary class="small bold" data-testid="logo-area-toggle">
+            <summary class="small bold">
                 ロゴを四角で囲って教える
             </summary>
             <!--
@@ -388,7 +385,6 @@
                         step="30"
                         bind:value={at}
                         class="at"
-                        data-testid="logo-at"
                     />
                 </label>
                 <!-- ロゴはほぼ右上。全体を出すとその一角が小さすぎて掴めない -->
@@ -396,7 +392,6 @@
                     <input
                         type="checkbox"
                         bind:checked={zoomed}
-                        data-testid="logo-zoom"
                     />
                     右上を拡大
                 </label>
@@ -416,7 +411,6 @@
             <div
                 class="viewport"
                 style={zoomed ? 'aspect-ratio: 16 / 9' : ''}
-                data-testid="logo-viewport"
             >
                 <div
                     class="canvas"
@@ -433,13 +427,11 @@
                             class="frame"
                             bind:clientWidth={shownWidth}
                             bind:clientHeight={shownHeight}
-                            data-testid="logo-frame"
                         />
                     {:else}
                         <!-- 取り出している間も掴む場所を残しておく。出た瞬間に大きさが変わらないように -->
                         <div
                             class="loading small"
-                            data-testid="logo-frame-loading"
                         >
                             {failed ? '' : 'コマを取り出しています…'}
                         </div>
@@ -448,7 +440,6 @@
                         <div
                             class="box"
                             style="left:{box.x}px; top:{box.y}px; width:{box.w}px; height:{box.h}px;"
-                            data-testid="logo-box"
                         ></div>
                     {/if}
                 </div>
@@ -461,7 +452,7 @@
             {/if}
 
             {#if failed}
-                <div class="text-error small hint" data-testid="logo-frame-error">
+                <div class="text-error small hint">
                     そのコマを取り出せませんでした。見る位置を変えてみてください。
                 </div>
             {/if}
@@ -477,18 +468,16 @@
                 <button type="submit"
                     class="small"
                     disabled={value === '' || unchanged}
-                    data-testid="logo-save"
                 >
                     この位置で覚える
                 </button>
-                <span class="tiny muted mono" data-testid="logo-value">
+                <span class="tiny muted mono">
                     {value === '' ? '囲ってください' : unchanged ? `いまの設定: ${value}` : value}
                 </span>
                 {#if area}
                     <button
                         class="small ghost"
                         formaction="?/logoAreaClear"
-                        data-testid="logo-clear"
                         type="submit"
                     >
                         自動に戻す

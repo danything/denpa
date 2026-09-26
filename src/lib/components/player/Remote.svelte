@@ -89,33 +89,32 @@
     <div class="pad">
         <div></div>
         <button type="button" class="secondary key" onclick={() => press(UP)}
-            aria-label="上" data-testid="live-remote-up">↑</button>
+            aria-label="上">↑</button>
         <div></div>
         <button type="button" class="secondary key" onclick={() => press(LEFT)}
-            aria-label="左" data-testid="live-remote-left">←</button>
-        <button type="button" class="key enter" onclick={() => press(ENTER)}
-            data-testid="live-remote-enter">決定</button>
+            aria-label="左">←</button>
+        <button type="button" class="key enter" onclick={() => press(ENTER)}>決定</button>
         <button type="button" class="secondary key" onclick={() => press(RIGHT)}
-            aria-label="右" data-testid="live-remote-right">→</button>
+            aria-label="右">→</button>
         <div></div>
         <button type="button" class="secondary key" onclick={() => press(DOWN)}
-            aria-label="下" data-testid="live-remote-down">↓</button>
+            aria-label="下">↓</button>
         <div></div>
     </div>
 
     <div class="row">
-        <button type="button" class="secondary small grow" onclick={() => press(BACK)} data-testid="live-remote-back">
+        <button type="button" class="secondary small grow" onclick={() => press(BACK)}>
             戻る
         </button>
         <!-- d は放送に渡す (DataButtonPressed)。待機ページからメニューを開くのはこれ -->
-        <button type="button" class="secondary small" onclick={() => press(DATA)} data-testid="live-remote-data">
+        <button type="button" class="secondary small" onclick={() => press(DATA)}>
             d
         </button>
     </div>
 
     <!-- **畳んでおく。** 使う放送のほうが少ないので、いつも場所を取らせない -->
     <details class="digits small">
-        <summary data-testid="live-remote-digits">数字</summary>
+        <summary>数字</summary>
         <div class="digit-grid">
             {#each DIGITS as name (name)}
                 <button

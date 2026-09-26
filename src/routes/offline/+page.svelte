@@ -128,7 +128,6 @@
                 autoplay
                 playsinline
                 ontimeupdate={onTime}
-                data-testid="offline-player"
             ></video>
             <div class="player-bar">
                 <span class="name small">{playing.name}</span>
@@ -147,9 +146,9 @@
             </p>
         </div>
     {:else}
-        <ul class="list" data-testid="offline-list">
+        <ul class="list">
             {#each list as item (item.id)}
-                <li class="row" data-testid="offline-row">
+                <li class="row">
                     {#if posterUrl(item) !== null}
                         <img src={posterUrl(item)} alt="" class="thumb" />
                     {:else}
@@ -182,7 +181,6 @@
                             type="button"
                             class="small keep"
                             onclick={() => play(item)}
-                            data-testid="offline-play"
                         >
                             観る
                         </button>
@@ -196,7 +194,6 @@
                                 await removeLocal(item.id);
                                 await load();
                             }}
-                            data-testid="offline-delete-failed"
                         >
                             失敗した保存データを消す
                         </button>

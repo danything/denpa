@@ -287,7 +287,7 @@
 
         <!-- 右上の列。**観る画面と同じ並び** (閉じる・切り抜き) -->
         <ControlBar side shown={controlsShown} testid="chase-side">
-            <a class="{OVERLAY_BTN} {OVERLAY} close" href="/" aria-label="一覧へ戻る" data-testid="chase-close">
+            <a class="{OVERLAY_BTN} {OVERLAY} close" href="/" aria-label="一覧へ戻る">
                 <Icon path={CLOSE} />
             </a>
             <ControlButton
@@ -310,7 +310,6 @@
                 value={pos}
                 oninput={(event) => seekTo(Number(event.currentTarget.value))}
                 aria-label="再生位置"
-                data-testid="chase-seek"
             />
 
             <!-- **並びはライブと同じ。** 再生・音・字幕、焼き方・音声・端 (最新)、読みもの、速さ、全画面 -->
@@ -381,7 +380,7 @@
                     titleTestid="chase-title"
                 >
                     {#snippet status()}
-                        <span data-testid="chase-clock">{clockLabel(pos)} / {clockLabel(recorded)}</span>
+                        <span>{clockLabel(pos)} / {clockLabel(recorded)}</span>
                         {#if line !== null && !line.finished}
                             <!-- 赤はライブの赤丸と同じ出し方。黒帯の上の text-error は沈む -->
                             ・ <span class="rec"><span class="dot"></span>録画中</span>
@@ -441,7 +440,6 @@
                     <button type="button"
                         class="small"
                         onclick={() => video !== null && void player.openChase(video, data.rec.id, pos)}
-                        data-testid="chase-retry"
                     >
                         やり直す
                     </button>

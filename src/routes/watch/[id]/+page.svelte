@@ -1113,7 +1113,7 @@
                 復号器が無い (docs/stream.md §5.5)。黙って黒い枠を出すより、
                 そう言って落とす口を出すほうがいい
             -->
-            <div class="panel stack not-ready" data-testid="watch-not-ready">
+            <div class="panel stack not-ready">
                 <h2>まだ観られません</h2>
                 <p class="small muted">
                         {#if rec.job_id !== null}
@@ -1259,7 +1259,6 @@
                     bind:this={cover}
                     class="layer"
                     hidden={!hopping}
-                    data-testid="watch-cm-cover"
                     aria-hidden="true"
                 ></canvas>
 
@@ -1279,7 +1278,7 @@
                         分からないと、待てばいいのかどうかが決められない。
                         繋ぎ直しの最中はあちらが出るので、重ねない
                     -->
-                    <div class="wait" data-testid="watch-buffering">
+                    <div class="wait">
                         <span class="wait-box" aria-busy="true">読み込み中</span>
                     </div>
                 {/if}
@@ -1290,7 +1289,7 @@
                         切れると数十秒帰ってこないので、黙って止まっていると
                         壊れたように見える
                     -->
-                    <div class="wait" data-testid="watch-resuming">
+                    <div class="wait">
                         <span class="wait-box" aria-busy="true">繋ぎ直しています</span>
                     </div>
                 {/if}
@@ -1307,7 +1306,7 @@
                         **黙って黒いままにしない。** ブラウザによっては Matroska も
                         AV1 も読めない (Safari)。そのときは落として観てもらう
                     -->
-                    <div class="broken" data-testid="watch-error">
+                    <div class="broken">
                         <p class="small">
                             このブラウザでは再生できませんでした。<br
                             />ダウンロードして、お手元のプレイヤーで観てください。
@@ -1414,7 +1413,6 @@
                             value={at}
                             oninput={(e) => seekTo(Number(e.currentTarget.value))}
                             aria-label="再生位置"
-                            data-testid="watch-seek"
                         />
                         {#if chapters.length > 1 && length > 0}
                             <div class="marks">
@@ -1536,7 +1534,7 @@
                             {#snippet badge()}
                                 {#if localSrc !== null}
                                     <!-- サーバではなく端末のコピーで観ている印。帯の題名の並びに出す -->
-                                    <span class="tag success local" data-testid="watch-local">
+                                    <span class="tag success local">
                                         端末
                                     </span>
                                 {/if}
@@ -1551,7 +1549,7 @@
                                     {clock(at)} / {clock(length)} 残り {clock(remaining)}
                                 </span>
                                 {#if current !== null}
-                                    ・ <span data-testid="watch-chapter">{current.title}</span>
+                                    ・ <span>{current.title}</span>
                                 {/if}
                             {/snippet}
                         </InfoBlock>

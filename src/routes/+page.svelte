@@ -550,7 +550,6 @@
                 alt=""
                 loading="lazy"
                 class="service-logo"
-                data-testid="service-logo"
             />
         {/if}
         <span>{parts.filter(Boolean).join(' ・ ')}</span>
@@ -616,7 +615,6 @@
                         placeholder="番組名・局・状態で絞り込み"
                         aria-label="予約を絞り込む"
                         bind:value={reservationQuery}
-                        data-testid="reservation-filter"
                     />
                     <a class="button secondary outline small" href={data.showFinished ? '/' : '/?all=1'}>
                         {data.showFinished ? '進行中のみ' : '完了分も表示'}
@@ -667,7 +665,7 @@
                                         黙っていると「録れたつもり」で頭が無い録画ができる
                                     -->
                                     {#if clipNote(res) !== null}
-                                        <div class="row-sub text-warning small" data-testid="reservation-clipped">
+                                        <div class="row-sub text-warning small">
                                             {clipNote(res)}
                                         </div>
                                     {/if}
@@ -696,7 +694,6 @@
                                         <a
                                             class="button"
                                             href="/chase/{res.recording_id}"
-                                            data-testid="chase-button"
                                         >
                                             追っかけ
                                         </a>
@@ -734,7 +731,6 @@
                         <div
                             class="row-empty muted small"
                             use:sentinel={() => reservationPage.reveal()}
-                            data-testid="reservation-more"
                         >
                             残り {reservationPage.rest} 件
                         </div>
@@ -744,7 +740,7 @@
                         打つたびに右の押すものが動いてガクガクした
                     -->
                     {#if reservationQuery !== ''}
-                        <div class="row-empty muted small" data-testid="reservation-count">
+                        <div class="row-empty muted small">
                             {data.reservations.length} 件中 {reservationRows.length} 件
                         </div>
                     {/if}
@@ -777,7 +773,6 @@
                             bind:value={recordingQuery}
                             placeholder="番組名・シリーズ・副題・局で絞り込み"
                             aria-label="録画を絞り込む"
-                            data-testid="recording-search"
                         />
                     </form>
                     <a class="button secondary outline small" href={data.showDeleted ? '/' : '/?deleted=1'}>
@@ -804,7 +799,6 @@
                             この行からできることが無い (再放送は番組表から予約し直す)
                         -->
                         <div
-                            data-testid="missed-row"
                             data-program-id={res.program_id}
                             class="row"
                             role="button"
@@ -944,7 +938,6 @@
                                                 : held.state === 'failed'
                                                   ? 'error'
                                                   : ''}"
-                                            data-testid="offline-badge"
                                         >
                                             {held.state === 'ready'
                                                 ? '端末に保存済み'
@@ -980,7 +973,7 @@
                                         行に書く
                                     -->
                                     {#if clipNote(rec, true) !== null}
-                                        <div class="row-sub text-warning small" data-testid="recording-clipped">
+                                        <div class="row-sub text-warning small">
                                             {clipNote(rec, true)}
                                         </div>
                                     {/if}
@@ -997,7 +990,7 @@
                                         {@const total = rec.duration_ms ?? rec.end_at - rec.start_at}
                                         {@const frac =
                                             total > 0 ? Math.min(1, rec.resume_ms / total) : 0}
-                                        <div class="resume" data-testid="recording-progress">
+                                        <div class="resume">
                                             <div class="resume-track">
                                                 <div class="resume-fill" style="width: {frac * 100}%"></div>
                                             </div>
@@ -1032,7 +1025,7 @@
                                             のに結果が使い物にならなかったとき (番組の 100% がCM判定など)
                                             も、覚えているほうが怪しいので同じ口を出す
                                         -->
-                                        <div class="row-sub text-warning small" data-testid="logo-missing">
+                                        <div class="row-sub text-warning small">
                                             ロゴでのCM判定に失敗 (無音のみで判定)
                                             <span class="muted"
                                                 >— チューナー画面でロゴの位置を教えられます</span
@@ -1055,7 +1048,7 @@
                                             {#if eta(liveEta)}・{eta(liveEta)}{/if}
                                         </div>
                                     {:else if rec.job_state === 'running' && rec.job_log}
-                                        <div class="row-sub muted tiny" data-testid="encode-step">
+                                        <div class="row-sub muted tiny">
                                             {rec.job_log}
                                         </div>
                                     {/if}
@@ -1179,7 +1172,6 @@
                                         ? barPercent
                                         : undefined}
                                     max="1"
-                                    data-testid="encode-bar"
                                 ></progress>
                             {:else if offline.entries[rec.id]?.state === 'downloading'}
                                 <!-- 端末への保存もエンコードと同じ見せ方。測れない間は動くだけのバー -->
@@ -1187,7 +1179,6 @@
                                     class="row-bar success"
                                     value={offline.entries[rec.id]?.progress ?? undefined}
                                     max="1"
-                                    data-testid="offline-bar"
                                 ></progress>
                             {/if}
                         </div>
@@ -1204,14 +1195,13 @@
                         <div
                             class="row-empty muted small"
                             use:sentinel={() => recordingPage.reveal()}
-                            data-testid="recording-more"
                         >
                             残り {recordingPage.rest} 件
                         </div>
                     {/if}
                     <!-- 手元で絞っているぶん (予約側と同じく末尾に)。送る前でも何件残るかが分かる -->
                     {#if recordingQuery !== data.q}
-                        <div class="row-empty muted small" data-testid="recording-count">
+                        <div class="row-empty muted small">
                             {rightRows.length} 件中 {recordingRows.length} 件
                         </div>
                     {/if}
@@ -1221,7 +1211,7 @@
                         誘う一行を出す (`+page.server.ts` の LIMIT 300)
                     -->
                     {#if data.recordings.length >= 300}
-                        <div class="row-empty truncated muted small" data-testid="recording-truncated">
+                        <div class="row-empty truncated muted small">
                             新しい順に300件まで表示しています。古いものは絞り込みで探してください。
                         </div>
                     {/if}
@@ -1288,7 +1278,6 @@
                         type="button"
                         class="secondary outline"
                         onclick={() => saveToDevice(rec)}
-                        data-testid="offline-save-button"
                     >
                         {offline.entries[rec.id]?.state === 'failed' ? '保存をやり直す' : '端末に保存'}
                     </button>
@@ -1302,7 +1291,6 @@
                             await removeLocal(rec.id);
                             detail.close();
                         }}
-                        data-testid="offline-remove-button"
                     >
                         {held.state === 'downloading'
                             ? '保存を取り消す'

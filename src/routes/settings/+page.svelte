@@ -126,7 +126,6 @@
                 action="?/saveRecording"
                 use:submitting={keepValues}
                 class="two-col"
-                data-testid="recording-form"
             >
                 <!--
                     **コーデックは複数選べる。** 両方入れると1本の録画を両方で
@@ -138,7 +137,7 @@
                     テレビ用に H.264 を選ぶとブラウザ用の小さい AV1 を諦めることに
                     なっていた
                 -->
-                <fieldset class="field" data-testid="global-codec">
+                <fieldset class="field">
                     <span class="label">映像コーデック</span>
                     <label class="check">
                         <input
@@ -202,7 +201,7 @@
                 </label>
                 <label class="field">
                     <span class="label">CMの探し方</span>
-                    <select name="cmDetector" data-testid="global-detector">
+                    <select name="cmDetector">
                         <option value="jls" selected={recording.cmDetector === 'jls'}>
                             ロゴまで見る (確実・遅い)
                         </option>
@@ -225,7 +224,6 @@
                     <span class="label">ロゴをどれだけ当てにするか</span>
                     <select
                         name="logoLevel"
-                        data-testid="global-logo-level"
                         disabled={recording.cmDetector !== 'jls'}
                     >
                         <option value="8" selected={recording.logoLevel >= 8}> ロゴを最優先する </option>
@@ -272,7 +270,7 @@
             口ごとに持つ。「録画のしかた」に混ぜると読みにくかった。使えないものの印は
             触れない — 押しても焼けないものにチェックを入れさせても嘘になるだけ
         -->
-        <section class="panel card" data-testid="hw-card">
+        <section class="panel card">
             <h2>GPU</h2>
             <p class="small lead">
                 GPU (Intel QSV / VA-API) で焼くかを、口ごと・コーデックごとに決めます。
@@ -283,7 +281,7 @@
             {#await data.hw}
                 <span class="hint" data-testid="hw-status">GPU を確認中…</span>
             {:then hw}
-                <form method="POST" action="?/saveHw" use:submitting={keepValues} data-testid="hw-form">
+                <form method="POST" action="?/saveHw" use:submitting={keepValues}>
                     <span class="hint" data-testid="hw-status">{hw.message}</span>
                     {#if hw.devices.length > 0}
                         <!-- 口ごとに1枚。表にすると半分の幅で横に巻くので、縦に積む -->
@@ -435,7 +433,7 @@
             受け取るのは端末の中 (NVRAM = localStorage) だが、置き場をここに
             してあるのは**端末ごとに訊き直さずに済ませる**ため
         -->
-        <section class="panel card" data-testid="broadcast-card">
+        <section class="panel card">
             <h2>データ放送</h2>
             <p class="small lead">
                 テレビの初期設定で聞かれる郵便番号です。データ放送 (d ボタン) の
@@ -572,7 +570,7 @@
             </form>
         </section>
 
-        <section class="panel card" data-testid="migrate-card">
+        <section class="panel card">
             <h2>EPGStation からの引き継ぎ</h2>
             <p class="small lead">
                 EPGStation のデータベースを読み、<strong>自動予約ルール・手で入れた予約・録画</strong>を
@@ -623,14 +621,14 @@
                         {#if migrate.move}
                             <span class="tag outline">移動</span>
                         {/if}
-                        <span data-testid="migrate-counts">
+                        <span>
                             新規 {migrate.imported} 件 / 取り込み済み {migrate.skipped} 件 / ファイル無し {migrate.missing}
                             件
                         </span>
-                        <span data-testid="migrate-rule-counts">
+                        <span>
                             ルール {migrate.rules.imported} 件 / 対象外 {migrate.rules.skipped} 件
                         </span>
-                        <span data-testid="migrate-reservation-counts">
+                        <span>
                             予約 {migrate.reservations.imported} 件 / 対象外 {migrate.reservations.skipped} 件
                         </span>
                     </div>
@@ -670,7 +668,7 @@
             `?measure` を付ければ同じものが出るが、ホーム画面から開いた
             アプリでは URL を打つところがない。
         -->
-        <section class="panel card" data-testid="measure-card">
+        <section class="panel card">
             <h2>画面の高さを見る</h2>
             <p class="small lead">
                 右下に、その端末での高さを出します。<strong>この端末だけ</strong>の設定で、

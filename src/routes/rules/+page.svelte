@@ -445,7 +445,7 @@
                     下見が届くまで。**枠だけ先に置く** — 条件を打ち直すたびに
                     右の列ごと消えると、どこを見ていたか分からなくなる
                 -->
-                <div class="panel preview" data-testid="preview-skeleton" role="status" aria-label="下見を数えています">
+                <div class="panel preview" role="status" aria-label="下見を数えています">
                     <div class="skeleton-title" aria-hidden="true"></div>
                     <ul class="preview-list" aria-hidden="true">
                         {#each PREVIEW_SKELETON as height, row (row)}
@@ -455,7 +455,7 @@
                 </div>
             {:else if preview !== null && preview.failed !== null}
                 <!-- 数えられなかった。黙って空にしない (本当の理由はサーバのログ) -->
-                <div class="panel preview" data-testid="preview-failed">
+                <div class="panel preview">
                     <p class="muted">下見を数えられませんでした ({preview.failed})</p>
                 </div>
             {:else if data.preview !== null && preview !== null}
@@ -473,7 +473,7 @@
                         {/if}
                         <!-- 重なりを見るのは出している分だけ (`readPreview`)。全部は見ていないと分かる書き方にする -->
                         {#if preview.conflicts > 0}
-                            <span class="tag error outline" data-testid="preview-conflicts">
+                            <span class="tag error outline">
                                 {preview.total > preview.programs.length ? '表示分に' : ''}競合 {preview.conflicts} 件
                             </span>
                         {/if}
@@ -489,7 +489,7 @@
                             条件を変えても既に入っている予約は残るので、条件から外れたものも
                             <span class="tag">条件外</span> として並べます。
                         </p>
-                        <ul class="preview-list" data-testid="preview-list">
+                        <ul class="preview-list">
                             {#each preview.programs as program (program.id)}
                                 <li class="preview-row small" data-testid="preview-row" data-program-id={program.id}>
                                     <!--
@@ -536,7 +536,7 @@
                                     いいのかが読めなかった
                                 -->
                                         {#if program.conflict_reason}
-                                            <div class="text-error tiny" data-testid="preview-conflict">
+                                            <div class="text-error tiny">
                                                 {program.conflict_reason}
                                             </div>
                                         {/if}
@@ -547,7 +547,7 @@
                                         1行が画面何個ぶんにもなる (件数さえ合っていれば
                                         「多すぎる」ことは伝わる)
                                     -->
-                                            <div class="text-error tiny" data-testid="preview-conflict">
+                                            <div class="text-error tiny">
                                                 チューナーの競合 {program.conflicts.length} 件: {program.conflicts
                                                     .slice(0, 3)
                                                     .join('、')}{program.conflicts.length > 3
@@ -598,7 +598,6 @@
                             placeholder="一覧を絞り込む (名前・キーワード・チャンネル・ジャンル)"
                             aria-label="ルールの一覧を絞り込む"
                             bind:value={filter}
-                            data-testid="rule-filter"
                         />
                     </div>
                 {/if}
@@ -616,13 +615,13 @@
                         <div class="conditions small">
                             <!-- どこを見て当たったのか分からないと、絞り込みの直しようがない -->
                             {#if rule.keyword}
-                                <span data-testid="rule-search-scope">{searchFieldLabel(rule.search_fields)}から</span>
+                                <span>{searchFieldLabel(rule.search_fields)}から</span>
                             {/if}
                             {#if rule.ignore_keyword}
                                 <span class="text-error">除外: {rule.ignore_keyword}</span>
                             {/if}
-                            <span data-testid="rule-channels">チャンネル: {channels(rule)}</span>
-                            <span data-testid="rule-genres-label">ジャンル: {genres(rule)}</span>
+                            <span>チャンネル: {channels(rule)}</span>
+                            <span>ジャンル: {genres(rule)}</span>
                         </div>
                         <div class="cluster">
                             <a class="button small secondary" href="/rules?edit={rule.id}" data-testid="rule-edit">編集</a>
@@ -647,13 +646,13 @@
                 {/each}
                 <!-- 下端に近づいたら続きを足す。まだ出していない件数を添えて、終わりではないと分かるように -->
                 {#if paged.more}
-                    <div class="rule-row small muted more" use:sentinel={() => paged.reveal()} data-testid="rule-more">
+                    <div class="rule-row small muted more" use:sentinel={() => paged.reveal()}>
                         あと {paged.rest} 件…
                     </div>
                 {/if}
                 <!-- 絞った結果の件数は末尾に。入力欄の隣に出すと、打つたびに欄の幅が変わる -->
                 {#if filter !== ''}
-                    <div class="rule-row small muted more" data-testid="rule-filter-count">
+                    <div class="rule-row small muted more">
                         {data.rules.length} 件中 {filtered.length} 件
                     </div>
                 {/if}
@@ -687,7 +686,7 @@
                 下に隠れるものを出しても読めない (番組表の詳細と同じ扱い)
             -->
             {#if form?.message}
-                <div class="notice error detail-error" data-testid="rule-detail-error">{form.message}</div>
+                <div class="notice error detail-error">{form.message}</div>
             {/if}
             {#if opened?.reservation_state}
                 <span class="tag info detail-state" data-testid="rule-detail-state">
@@ -701,7 +700,7 @@
                     押した先は別の画面で、そこで選局からやり直すことになるので
                     リンクにする (モーダルの中で始めるものではない)
                 -->
-                <a class="button outline" href="/live?service={opened.service_id}" data-testid="rule-detail-watch">
+                <a class="button outline" href="/live?service={opened.service_id}">
                     視聴
                 </a>
             {/if}
@@ -795,7 +794,7 @@
         flex-direction: column;
         gap: 0.25rem;
     }
-    /* 下見を待っている間の枠 (`preview-skeleton`)。本物と同じ場所・同じ大きさ。
+    /* 下見を待っている間の枠。本物と同じ場所・同じ大きさ。
        **見出し (`.heading h2`) をここに繋がない** — 繋いでいた頃は「ルールを追加」が
        灰色の箱になっていた */
     .skeleton-title {

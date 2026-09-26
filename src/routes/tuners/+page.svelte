@@ -79,7 +79,7 @@
 
 <div class="columns">
     <div class="column">
-        <section class="panel card" data-testid="channel-card">
+        <section class="panel card">
             <!--
                 **説明を3つ重ねない。**
 
@@ -113,7 +113,7 @@
                 </div>
             {/if}
             {#if coverage.length === 0}
-                <p class="small muted" data-testid="channel-empty">
+                <p class="small muted">
                     まだ1つもありません。チャンネルスキャンを実行してください。
                 </p>
             {:else}
@@ -181,11 +181,11 @@
                                         {channel.channel}
                                     </td>
                                     <td class="small">
-                                        <div data-testid="channel-services">
+                                        <div>
                                             {channel.services.map((service) => service.name).join(', ')}
                                         </div>
                                     </td>
-                                    <td class="small nowrap" data-testid="channel-epg">
+                                    <td class="small nowrap">
                                         {#if programs > 0}
                                             <div>{programs} 件</div>
                                             <div class="tiny muted">
@@ -242,7 +242,6 @@
                             type="submit"
                             class="outline danger"
                             formaction="?/scanStop"
-                            data-testid="scan-stop"
                         >
                             中断する
                         </button>
@@ -251,7 +250,7 @@
             </form>
 
             {#if scan.state !== 'idle'}
-                <div class="progress-block" data-testid="scan-progress" data-state={scan.state}>
+                <div class="progress-block" data-state={scan.state}>
                     <div class="cluster small">
                         <span class="tag" data-testid="scan-state">{STATE_LABEL[scan.state]}</span>
                         {#if scan.phase}
@@ -261,13 +260,13 @@
                     </div>
 
                     <!-- 総当たりなので何分かかるか分かりにくい。どこまで進んだかを出す -->
-                    <progress value={progress} max="1" data-testid="scan-bar"></progress>
+                    <progress value={progress} max="1"></progress>
                     <div class="tiny muted" data-testid="scan-count">
                         {scan.scanned} / {scan.total} チャンネル
                     </div>
 
                     {#if scan.error}
-                        <div class="notice error" data-testid="scan-failed">{scan.error}</div>
+                        <div class="notice error">{scan.error}</div>
                     {/if}
                     {#if scan.log.length > 0}
                         <pre class="log" data-testid="scan-log">{scan.log.join('\n')}</pre>
@@ -285,7 +284,7 @@
             <h2>チューナーの設定</h2>
             {#await data.detected then detected}
                 {#if detected}
-                    <p class="small muted" data-testid="tuner-detected">
+                    <p class="small muted">
                         いまは<strong>挿さっている機材を自動で見つけて</strong>使っています。
                         保存するとこの内容で固定されます。
                     </p>
@@ -294,7 +293,7 @@
 
             {#if shownTuners.value !== undefined}
                 {@const rows = [...shownTuners.value.list, null]}
-                <form method="POST" action="?/tuners" use:submitting data-testid="tuner-config-form">
+                <form method="POST" action="?/tuners" use:submitting>
                     <div class="table-wrap">
                         <table class="config">
                             <thead>
@@ -306,7 +305,7 @@
                                     <th>無効</th>
                                 </tr>
                             </thead>
-                            <tbody data-testid="tuner-config-list">
+                            <tbody>
                                 {#each rows as tuner, index (index)}
                                     <tr data-testid="tuner-config-row">
                                         <td>
@@ -366,7 +365,6 @@
                             type="submit"
                             class="small ghost"
                             formaction="?/tunersAuto"
-                            data-testid="tuner-config-auto"
                         >
                             自動検出に戻す
                         </button>
@@ -394,11 +392,11 @@
                         繋がらなかったときに空の一覧だけ出すと「1本も無い」と
                         見分けが付かない。理由をそのまま出す
                     -->
-                    <div class="notice error small" data-testid="tuner-unreachable">
+                    <div class="notice error small">
                         チューナーエージェントに繋がりません: {failure}
                     </div>
                 {:else if tuners.length === 0}
-                    <p class="small muted" data-testid="tuner-empty">
+                    <p class="small muted">
                         チューナーがありません。「チューナーの設定」から足してください。
                     </p>
                 {:else}
@@ -486,7 +484,7 @@
                         </span>
                         {#if card.source === 'remote'}
                             <!-- CARD_URL。手元のリーダーは使わず、鍵だけ貰っている -->
-                            <span class="small" data-testid="card-remote">
+                            <span class="small">
                                 鍵を配る相手 <span class="mono break">{card.remote ?? '?'}</span> から貰っています
                                 {#if card.ids.length > 0}
                                     <span class="mono">({card.ids.join(' / ')})</span>
@@ -520,7 +518,7 @@
                                         <th class="wide">使っているチューナー</th>
                                     </tr>
                                 </thead>
-                                <tbody data-testid="card-reader-list">
+                                <tbody>
                                     <!-- 同じ型のリーダーを2つ挿すと名前が並ぶ。目印は番号で -->
                                     {#each card.readers as reader, i (i)}
                                         <tr data-testid="card-reader-row" data-state={reader.state}>
@@ -537,7 +535,7 @@
                                                     {READER_STATE[reader.state].label}
                                                 </span>
                                                 {#if reader.error !== undefined}
-                                                    <div class="text-error tiny" data-testid="card-reader-error">
+                                                    <div class="text-error tiny">
                                                         {reader.error}
                                                     </div>
                                                 {/if}
@@ -622,7 +620,7 @@
                         <dd class="full sweep" data-testid="logo-sweep-progress">
                             <progress value={data.logoSweep.done} max={Math.max(1, data.logoSweep.total)}></progress>
                             <div class="tiny soft">
-                                <span data-testid="logo-sweep-count">
+                                <span>
                                     {data.logoSweep.done} / {data.logoSweep.total} チャンネル
                                 </span>
                                 ・ 拾えた <strong>{data.logoSweep.found} 局</strong>
@@ -647,7 +645,7 @@
                 -->
                 <div class="cluster">
                     <dt class="term">CM検出のロゴ</dt>
-                    <dd class="tag" data-testid="cm-logo-count">
+                    <dd class="tag">
                         {data.cmLogoStats.have} / {data.cmLogoStats.total} 局
                     </dd>
                     <dd class="tiny muted full">
@@ -655,7 +653,7 @@
                         下の一覧から位置を教えてください (薄いロゴや動くロゴは自動では見つかりません)。
                     </dd>
                     {#if cmLogos.length > 0}
-                        <dd class="full cm-logos" data-testid="cm-logo-missing">
+                        <dd class="full cm-logos">
                             {#each cmLogos as service (service.id)}
                                 <details class="cm-logo">
                                     <summary class="small">
@@ -665,7 +663,7 @@
                                             開かないと分からない頃は、100局ぶん開いて回る
                                             しかなかった
                                         -->
-                                        <span class="tag {service.learned ? 'success' : ''}" data-testid="cm-logo-state">
+                                        <span class="tag {service.learned ? 'success' : ''}">
                                             {service.learned ? '覚えました' : 'まだ'}
                                         </span>
                                         {#if service.logo_area !== null}

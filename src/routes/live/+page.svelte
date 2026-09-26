@@ -500,7 +500,7 @@
                                     全部入っている。**出るまでは**下の「貯まり」だけになる
                                 -->
                                 {#if player.fromAir !== null}
-                                    <span data-testid="live-behind">放送から {player.fromAir.toFixed(1)}秒</span>
+                                    <span>放送から {player.fromAir.toFixed(1)}秒</span>
                                 {/if}
                                 <!--
                                     **こちらは手元の貯まりの差** (`buffered.end - currentTime`)。
@@ -508,7 +508,7 @@
                                     詰めていく作業をするのに、見えないと当てずっぽうになる
                                 -->
                                 {#if player.delay !== null}
-                                    <span data-testid="live-delay"
+                                    <span
                                         >{player.fromAir === null ? '遅延' : '・貯まり'}
                                         {player.delay.toFixed(1)}秒</span
                                     >
@@ -539,7 +539,7 @@
                                     `stalls` に書いてある (実測は stream.md §4)
                                 -->
                                 {#if player.stalls > 0}
-                                    ・ <span data-testid="live-stalls">途切れ {player.stalls}回</span>
+                                    ・ <span>途切れ {player.stalls}回</span>
                                 {/if}
                                 <!--
                                     **描かれずに捨てられたコマ。** 「音と字幕は
@@ -549,7 +549,7 @@
                                     `dropped`)
                                 -->
                                 {#if player.dropped > 0}
-                                    ・ <span data-testid="live-dropped">コマ落ち {player.dropped}</span>
+                                    ・ <span>コマ落ち {player.dropped}</span>
                                 {/if}
                                 <!--
                                     **絵だけの遅れ。** 音と字幕は再生位置に
@@ -558,12 +558,12 @@
                                     出るのは直した回数のほう
                                 -->
                                 {#if player.slipMost > 0}
-                                    ・ <span data-testid="live-slip"
+                                    ・ <span
                                         >絵の遅れ 最大 {Math.round(player.slipMost * 1000)}ms</span
                                     >
                                 {/if}
                                 {#if player.slips > 0}
-                                    ・ <span data-testid="live-slips">絵の遅れ直し {player.slips}回</span>
+                                    ・ <span>絵の遅れ直し {player.slips}回</span>
                                 {/if}
                             {/snippet}
                         </InfoBlock>
@@ -604,7 +604,6 @@
                 <button type="button"
                     class="small unmute {OVERLAY}"
                     onclick={() => player.unmute()}
-                    data-testid="live-unmute"
                 >
                     音を出す
                 </button>
@@ -687,7 +686,7 @@
             {/if}
 
             <!-- 番組表と同じ並び・同じ見た目。探す場所がずれないようにする -->
-            <div role="group" class="type-tabs" data-testid="live-type-tabs">
+            <div role="group" class="type-tabs">
                 {#each types as type (type)}
                     <!-- いま出している種別は aria-pressed で言う (色だけにしない) -->
                     <button type="button"

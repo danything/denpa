@@ -69,8 +69,7 @@
                 class="link"
                 href={part.href}
                 target="_blank"
-                rel="noopener noreferrer"
-                data-testid="detail-link">{part.text}</a
+                rel="noopener noreferrer">{part.text}</a
             >{:else}{part.text}{/if}{/each}{/snippet}
 
 <h3 class="title">{program.name}</h3>
@@ -96,7 +95,7 @@
         <span class="tag" data-testid="detail-audio">{label}</span>
     {/each}
     {#if !program.is_free}
-        <span class="tag warning" data-testid="detail-paid">有料</span>
+        <span class="tag warning">有料</span>
     {/if}
 </div>
 
