@@ -1,5 +1,14 @@
 import { describe, expect, test } from 'bun:test';
-import { clipNote, clock, duration, durationMs, eta, percent, recordedDuration } from './format';
+import {
+    clipNote,
+    clock,
+    duration,
+    durationMs,
+    eta,
+    percent,
+    recordedDuration,
+    splitReaderName,
+} from './format';
 
 const MIN = 60_000;
 
@@ -137,5 +146,19 @@ describe('欠けの表示', () => {
         expect(clipNote({ ...base, record_from: 5 * MIN, record_to: 25 * MIN })).toBe(
             '頭 5分 と 尻 5分 が欠けます (チューナーの取り合い)',
         );
+    });
+});
+
+describe('カードリーダーの名前', () => {
+    test('後ろの括弧は挿さっている場所として分ける', () => {
+        expect(splitReaderName('Gemplus USB SmartCard Reader (usb 4-11)')).toEqual({
+            name: 'Gemplus USB SmartCard Reader',
+            where: 'usb 4-11',
+        });
+    });
+
+    test('括弧の無い名前はそのまま', () => {
+        const name = 'px4-userland 0960 Internal Card Reader';
+        expect(splitReaderName(name)).toEqual({ name, where: null });
     });
 });

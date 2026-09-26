@@ -64,11 +64,24 @@ test.describe('ダッシュボードと画面遷移', () => {
          */
         const rows = card.getByTestId('card-reader-row');
         await expect(rows).toHaveCount(2);
-        await expect(rows.nth(0)).toContainText('Fake Card Reader (usb 1-1)');
+        /*
+         * 挿さっている場所 (括弧の中) は名前と分けて2行目に出す。1行に詰めていた頃は
+         * 狭い列で文字の途中から1文字ずつ折れて読めなかった
+         */
+        await expect(rows.nth(0).getByTestId('card-reader-name')).toHaveText('Fake Card Reader');
+        await expect(rows.nth(0).getByTestId('card-reader-where')).toHaveText('usb 1-1');
+        // 名前は1行に収まる (行の箱が1つ)。潰されて折れていないこと
+        expect(
+            await rows
+                .nth(0)
+                .getByTestId('card-reader-name')
+                .evaluate((el) => el.getClientRects().length),
+        ).toBe(1);
         await expect(rows.nth(0)).toContainText('0000000000000000');
         await expect(rows.nth(0)).toContainText('使用中');
         await expect(rows.nth(0)).toContainText('Fake-T1');
-        await expect(rows.nth(1)).toContainText('Spare Card Reader (usb 1-2)');
+        await expect(rows.nth(1).getByTestId('card-reader-name')).toHaveText('Spare Card Reader');
+        await expect(rows.nth(1).getByTestId('card-reader-where')).toHaveText('usb 1-2');
         await expect(rows.nth(1)).toContainText('予備');
         await expect(card.getByTestId('card-message')).toHaveCount(0);
         await expect(card.getByText('Fake Card Reader')).toHaveCount(1);
