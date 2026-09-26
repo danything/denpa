@@ -35,6 +35,7 @@
         <Compile Include="../Denpa.Agent/UsbFs.cs" />
         <Compile Include="../Denpa.Agent/T1.cs" />
         <Compile Include="../Denpa.Agent/Ccid.cs" />
+        <Compile Include="../Denpa.Agent/Multi2.cs" />
     </ItemGroup>
 
     <ItemGroup>
