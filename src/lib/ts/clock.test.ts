@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { BroadcastClock, broadcastTime, parseStart, readPcr } from './clock';
+import { BroadcastClock, parseStart, readPcr } from './clock';
 import { PID_PAT } from './psi';
 import { packetize, patSection, pcrPacket, programMap, stream, tdtPacket } from './synth';
 
@@ -79,21 +79,6 @@ describe('放送の実時刻と PCR を組にする', () => {
         expect(clock.anchor).not.toBeNull();
         clock.feed(pcrPacket(PID_PCR, 10));
         expect(clock.anchor).toBeNull();
-    });
-});
-
-describe('焼いたものの時刻を放送の実時刻に直す', () => {
-    const anchor = { pcr: 72575.5, unixMs: 1_787_000_000_000 };
-
-    /** ffmpeg は入口の時刻を 0 に寄せるので、寄せたぶんを足し戻す */
-    test('寄せたぶんを足し戻して引き算する', () => {
-        // 焼いたものの 0 秒 = 入口の 72575.147 秒。組の 0.353 秒前にあたる
-        expect(broadcastTime(anchor, 72575.147, 0)).toBe(anchor.unixMs - 353);
-        expect(broadcastTime(anchor, 72575.147, 10)).toBe(anchor.unixMs + 9647);
-    });
-
-    test('寄せたぶんが分からなければ言わない', () => {
-        expect(broadcastTime(anchor, Number.NaN, 0)).toBeNull();
     });
 });
 

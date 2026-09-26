@@ -28,8 +28,7 @@ export function date(ms: number): string {
 }
 
 export function dateTime(ms: number): string {
-    const d = new Date(ms);
-    return `${d.getMonth() + 1}/${d.getDate()}(${WEEKDAYS[d.getDay()]}) ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+    return `${date(ms)} ${time(ms)}`;
 }
 
 export function durationMs(ms: number): string {

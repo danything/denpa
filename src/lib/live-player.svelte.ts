@@ -403,7 +403,7 @@ export function livePlayer() {
      * 見えないものは測れないので、**起きる条件のほうで引きます** — 途切れ
      * (`stalled`) です。跳び直しの元手は `unslip` の1コマぶんで、どのみち
      * 絵が止まった直後なので余計には見えない。コマ落ちを合図にしない理由は
-     * `DROP_BURST` を置いていたところ (上) に
+     * `UNSLIP_EVERY` の下に
      */
     /** 繋ぎ直しの目覚まし。**待っている間だけ入っている** */
     let retry: ReturnType<typeof setTimeout> | null = null;
@@ -870,7 +870,7 @@ export function livePlayer() {
         // 捨てられたコマも同じ間隔で読む。**選局からの通し** (器を作り直すと 0 に戻る)
         dropped = element?.getVideoPlaybackQuality?.().droppedVideoFrames ?? dropped;
         /*
-         * **途切れたら跳び直す** (`seenDropped` の説明)。測れた遅れ (`slip`) を
+         * **途切れたら跳び直す** (`unslipAfter` の下の説明)。測れた遅れ (`slip`) を
          * 待たない — あれは見えないことがある
          */
         if (stalled && element !== null) unslip(element);

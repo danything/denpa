@@ -28,13 +28,13 @@
     import MediaStack from '$lib/components/player/MediaStack.svelte';
     import PlayerStage from '$lib/components/player/PlayerStage.svelte';
     import PlayerVeil from '$lib/components/player/PlayerVeil.svelte';
-    import SpeedMenu from '$lib/components/player/SpeedMenu.svelte';
+    import SpeedMenu, { SPEED_KEY, storedSpeed } from '$lib/components/player/SpeedMenu.svelte';
     import StageNote from '$lib/components/player/StageNote.svelte';
     import { snapshotter } from '$lib/components/player/shot.svelte';
     import Toasts, { type Notice } from '$lib/components/Toasts.svelte';
     import { programDetail } from '$lib/detail.svelte';
     import { clock as clockLabel, time } from '$lib/format';
-    import { write as remind, read as stored } from '$lib/keep';
+    import { write as remind } from '$lib/keep';
     import { livePlayer } from '$lib/live-player.svelte';
     import { liveUpdates } from '$lib/live-updates.svelte';
     import { keepResume } from '$lib/resume';
@@ -158,19 +158,11 @@
     /**
      * 選んでいる速さ。**端末ごとに覚え、器を作り直しても当て直す。**
      *
-     * 鍵は観る画面と同じ (`watch-speed`) — 焼く前と後で同じ録画を観るのに、
-     * 速さだけ選び直させる理由が無い。持っておくのは、追っかけのシークが
+     * 鍵は観る画面と同じ (`SpeedMenu` の `SPEED_KEY`)。持っておくのは、追っかけのシークが
      * 読み直し (`openChase`) になることがあり、そこで**押した覚えの無いまま
      * 等速へ戻る**ため (`live-player` の `clear`)
      */
-    const SPEED_KEY = 'watch-speed';
     let want = $state(1);
-
-    /** 前に選んだ速さ。読めない・知らない値なら等速 */
-    function storedSpeed(): number {
-        const saved = Number(stored(SPEED_KEY));
-        return SPEEDS.includes(saved as (typeof SPEEDS)[number]) ? saved : 1;
-    }
 
     function setSpeed(value: number): void {
         want = value;

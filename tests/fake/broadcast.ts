@@ -35,7 +35,7 @@ import { type FakeService, SERVICES } from './services';
  * 色が決め打ちなので送らない決まりで、受け取った側が入れて初めて絵になる。
  * ここを普通の PNG にしてしまうと、その入れ直しが抜けていても気づけない
  */
-export const LOGO_PNG = Uint8Array.from(
+const LOGO_PNG = Uint8Array.from(
     atob(
         'iVBORw0KGgoAAAANSUhEUgAAADAAAAAYCAMAAACLI47uAAAAo0lEQVR42r2SSwrDMAxE49UcSbOwwPc/VUcJLYXa8WRTIYwNevqMfLSHdvwfCGQgMlsm0YktkEAXAIAERuyBTCi3zqK4ByoxO1oOXQPcz1Ael58vT6XgbzM3AAfK6AJSBzX7lJgAofC4BPYAFTj71/bCArSHtrYp0HV2TWFXKGCl07IlkmkCn6HdCl+yekCVGOfiXKCxguuTu8D784Un6709Bl72jh+i3qzvNQAAAABJRU5ErkJggg==',
     ),
@@ -50,7 +50,7 @@ export const LOGO_PNG = Uint8Array.from(
  * 持っていない」と見られて地上波の見回りがいつまでも閉じなかった。
  * 色の表が入っていないのは上と同じ
  */
-export const LOGO_PNG_LARGE = Uint8Array.from(
+const LOGO_PNG_LARGE = Uint8Array.from(
     atob(
         'iVBORw0KGgoAAAANSUhEUgAAAEAAAAAkCAMAAAAO0sygAAAANElEQVR42mNgpBAwDBMDOIAAJsABBcTyh4sB5GiEsUcNGD4GjOaFUQNG88KoAcOoeqcEAAAsSR5xqyZZeQAAAABJRU5ErkJggg==',
     ),
@@ -88,7 +88,7 @@ export const DEFAULT_KNOBS: Knobs = { scrambled: false, extendedMs: 0, noPresent
 /** 1枠の本数。E2E では短くして「数秒後に始まる番組」を作る */
 const SLOTS = Number(process.env['FAKE_SLOTS'] ?? 60);
 
-export function programsFor(service: FakeService): SynthEvent[] {
+function programsFor(service: FakeService): SynthEvent[] {
     const slotMs = service.slotMs;
     /*
      * 番組表(4時〜翌4時)が埋まるだけの本数を出す。短い尺の局は本数で稼ぐと多すぎるので上限を切る。
@@ -237,7 +237,7 @@ export function payload(pid: number, count: number, scrambled: boolean): Uint8Ar
 }
 
 /** 局ごとの PID。実機と同じで、局ごとに別の値が振られている */
-export const pidsOf = (index: number) => ({
+const pidsOf = (index: number) => ({
     pmt: 0x1000 + index * 0x10,
     video: 0x1001 + index * 0x10,
     audio: 0x1002 + index * 0x10,
@@ -425,7 +425,7 @@ export function schedule(services: FakeService[]): Uint8Array {
 }
 
 /** EIT[p/f]。いま流れている番組。延長はここに乗る */
-export function nowOnAir(services: FakeService[], knobs: Knobs): Uint8Array {
+function nowOnAir(services: FakeService[], knobs: Knobs): Uint8Array {
     if (knobs.noPresentFollowing) return new Uint8Array(0);
     const parts: number[] = [];
     for (const service of services) {
