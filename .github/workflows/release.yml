@@ -150,7 +150,7 @@ jobs:
   # Native AOT は Linux から macOS へ焼けないので、ここだけは Mac のランナーで**焼く**
   # (イメージのように main で焼いたものを使い回す先が無い)。中身はタグのコミットそのもの
   agent-macos:
-    runs-on: macos-15
+    runs-on: macos-26
     steps:
       - name: Checkout
         uses: actions/checkout@v7
