@@ -28,7 +28,7 @@ import type { AudioTrack } from './arib';
  * ([stream.md](../../docs/stream.md) §5.1)
  *
  * **生 (MPEG-2 のまま) はここに並べない。** 焼き方ではなく「焼かない」なので、
- * 端末の設定 (`raw/setting.svelte.ts`) で別に選ぶ
+ * 画質の切り替えの末尾に別に並べる (`CodecMenu` の `onraw`)
  * (`TuneCommand.raw`。[stream.md](../../docs/stream.md) §5.5)
  */
 export type LiveCodec = 'h264' | 'av1';

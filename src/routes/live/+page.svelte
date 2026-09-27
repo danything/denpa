@@ -455,19 +455,14 @@
                             **出ないブラウザもある** — 受け取れなければ H.264 に
                             戻して、戻した理由を出す (`live-player.svelte.ts` の `start`)
                         -->
-                        <!--
-                            **生で見ている間は焼き方を選ばせない** — 焼いていない。代わりに
-                            生であることを言う (焼いたものに戻るときは断り書きが理由を言う)
-                        -->
-                        {#if player.raw}
-                            <span class="raw-badge" data-testid="live-raw-badge" title="焼かずに放送そのまま (MPEG-2) を送っています">生</span>
-                        {:else}
-                            <CodecMenu
-                                testid="live-codec"
-                                codec={player.codec}
-                                onselect={(key) => player.setCodec(key)}
-                            />
-                        {/if}
+                        <!-- 末尾の MPEG-2 は焼かずに放送そのままを解く道 (焼いたものに戻るときは断り書きが理由を言う) -->
+                        <CodecMenu
+                            testid="live-codec"
+                            codec={player.codec}
+                            raw={player.raw}
+                            onselect={(key) => player.setCodec(key)}
+                            onraw={() => player.setRaw()}
+                        />
 
                         {#if player.audios.length > 1}
                             <AudioMenu
@@ -848,17 +843,6 @@
         gap: 0.25rem;
         margin-top: 0.25rem;
         color: #fff;
-    }
-    /* 生で見ていることの印。焼き方のボタンと同じ場所・同じ大きさ */
-    .raw-badge {
-        display: inline-flex;
-        align-items: center;
-        height: 2rem;
-        padding: 0 0.6rem;
-        border: 1px solid rgb(255 255 255 / 0.5);
-        border-radius: 0.25rem;
-        font-size: 0.75rem;
-        font-weight: 600;
     }
     .track-label {
         display: inline-block;

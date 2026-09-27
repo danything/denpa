@@ -59,7 +59,7 @@ function remembered(
             ...(typeof saved['audio'] === 'string' ? { audio: saved['audio'] } : {}),
             // 覚えていない形を渡さない。知らない値なら既定 (H.264) に落ちる
             ...(saved['codec'] === 'av1' ? { codec: 'av1' as const } : {}),
-            // 前回は生で見ていた (`TuneCommand.raw`)。**先回りに使うだけ** — 決めるのは画面の設定
+            // 前回は生で見ていた (`TuneCommand.raw`)。画面はそのまま生で頼み、サーバは先回りする
             ...(saved['raw'] === true ? { raw: true } : {}),
         };
     } catch {
@@ -155,6 +155,8 @@ export function load(event) {
                    * 局を選び直すたびに H.264 へ戻されては困る
                    */
                   ...(kept?.codec === undefined ? {} : { codec: kept.codec }),
+                  // 生 (MPEG-2) で見るかも同じく引き継ぐ
+                  ...(kept?.raw === true ? { raw: true } : {}),
               };
 
     /*
@@ -163,7 +165,7 @@ export function load(event) {
      */
     if (start !== null) {
         // **前回が生なら生で温める。** 外れても困らない (来なければ 8秒で畳む)
-        const raw = kept?.raw === true;
+        const raw = start.raw === true;
         warm(start.channelType, start.channel, start.serviceId, start.audio, start.codec, raw);
     }
 

@@ -15,11 +15,11 @@ import { expect, goto, syncEpg, test, wakeControls } from './helpers';
  * 時間とともに変わることを見る。GPU の無いヘッドレス (SwiftShader) でも同じに動く。
  */
 
-/** 設定画面のスイッチと同じ置き場 (`raw/setting.svelte.ts`) */
-const RAW_KEY = 'denpa_live_raw';
-
-async function rawOn(page: Page): Promise<void> {
-    await page.addInitScript((key) => localStorage.setItem(key, '1'), RAW_KEY);
+/** 画質の切り替えで MPEG-2 を選ぶ。操作列は触らないと引っ込む (`ControlBar`) ので動かして出す */
+async function chooseRaw(page: Page): Promise<void> {
+    await wakeControls(page, 'live-frame');
+    await page.getByTestId('live-codec').click();
+    await page.locator('[data-testid="live-codec-option"][data-codec="mpeg2"]').click();
 }
 
 /** 偽 ffmpeg に渡された引数を、1回ぶんずつに切る (`tests/fake/ffmpeg.sh`) */
@@ -36,17 +36,17 @@ test.describe('ライブを生で見る', () => {
         await syncEpg(request);
     });
 
-    test('設定を入れると、焼かずに放送そのままを解いて描き、音も解く', async ({ page, stack }) => {
-        await rawOn(page);
+    test('MPEG-2 を選ぶと、焼かずに放送そのままを解いて描き、音も解く', async ({ page, stack }) => {
         const before = ffmpegRuns(stack.liveArgsFile).length;
         await goto(page, '/live');
         await page.getByTestId('live-channel').first().click();
+        await expect(page.getByTestId('live-title')).toBeVisible();
+        await chooseRaw(page);
 
         const canvas = page.getByTestId('live-raw');
         await expect(canvas).toBeVisible({ timeout: 30_000 });
-        // 焼き方の切り替えの代わりに「生」と出る
-        await expect(page.getByTestId('live-raw-badge')).toBeVisible();
-        await expect(page.getByTestId('live-codec')).toHaveCount(0);
+        // 切り替えに選んだものが出る
+        await expect(page.getByTestId('live-codec')).toContainText('MPEG-2');
 
         // **コマが進む。** 1秒に 60 枚 (フィールドごと) 描くので、数秒で数十は進む
         const shown = async () => Number((await canvas.getAttribute('data-shown')) ?? 0);
@@ -83,8 +83,7 @@ test.describe('ライブを生で見る', () => {
          * **焼く ffmpeg は起こさない。** 起きるのは字幕だけを描く1本で、放送の時刻のまま
          * 出させる (`-copyts`。`server/captions.ts` の `rawCaptionArgs`)。
          *
-         * 開いた瞬間の先回り (`server/live.ts` の `warm`) は焼く形で起きうる — 初めて開いた
-         * 端末はまだ「前回は生」を覚えていない。見るのは**生で頼んだあと**に焼き始めていないこと
+         * MPEG-2 を選ぶまでは焼いている。見るのは**生で頼んだあと**に焼き始めていないこと
          */
         const runs = ffmpegRuns(stack.liveArgsFile).slice(before);
         const captions = runs.findIndex((run) => run.includes('-copyts'));
@@ -96,10 +95,11 @@ test.describe('ライブを生で見る', () => {
     });
 
     test('局を変えても生のまま、新しい局の絵が出る', async ({ page }) => {
-        await rawOn(page);
         await goto(page, '/live');
         const channels = page.getByTestId('live-channel');
         await channels.first().click();
+        await expect(page.getByTestId('live-title')).toBeVisible();
+        await chooseRaw(page);
         const canvas = page.getByTestId('live-raw');
         const shown = async () => Number((await canvas.getAttribute('data-shown')) ?? 0);
         await expect.poll(shown, { timeout: 30_000 }).toBeGreaterThan(10);
@@ -109,10 +109,10 @@ test.describe('ライブを生で見る', () => {
         // 器は作り直さない (同じ canvas のまま、数え続ける)
         const after = await shown();
         await expect.poll(shown, { timeout: 30_000 }).toBeGreaterThan(after + 10);
-        await expect(page.getByTestId('live-raw-badge')).toBeVisible();
+        await expect(page.getByTestId('live-codec')).toContainText('MPEG-2');
     });
 
-    test('設定を入れていなければ、いつもどおり焼いたものを見る', async ({ page }) => {
+    test('選んでいなければ、いつもどおり焼いたものを見る', async ({ page }) => {
         await goto(page, '/live');
         await page.getByTestId('live-channel').first().click();
         await expect(page.getByTestId('live-title')).toBeVisible();
@@ -121,7 +121,6 @@ test.describe('ライブを生で見る', () => {
     });
 
     test('解けない端末では焼いたものに戻り、理由を出す', async ({ page }) => {
-        await rawOn(page);
         // AAC を解く口が無い端末 (http で開いたときもこうなる)
         await page.addInitScript(() => {
             // biome-ignore lint/suspicious/noExplicitAny: 端末に無いことにする
@@ -129,21 +128,33 @@ test.describe('ライブを生で見る', () => {
         });
         await goto(page, '/live');
         await page.getByTestId('live-channel').first().click();
-        await expect(page.getByTestId('live-warning')).toContainText('生では見られません');
-        await expect(page.getByTestId('live-codec').first()).toBeVisible();
+        await expect(page.getByTestId('live-title')).toBeVisible();
+        await chooseRaw(page);
+        await expect(page.getByTestId('live-warning')).toContainText('MPEG-2 を再生できません');
+        await expect(page.getByTestId('live-codec')).toContainText('H.264');
         await expect(page.getByTestId('live-raw')).toHaveCount(0);
     });
 
-    test('設定画面で入り切りでき、この端末に覚える', async ({ page }) => {
-        await goto(page, '/settings');
-        const toggle = page.getByTestId('raw-toggle');
-        await expect(toggle).not.toBeChecked();
-        await toggle.check();
-        await page.reload();
-        await page.locator('[data-hydrated="true"]').waitFor();
-        await expect(page.getByTestId('raw-toggle')).toBeChecked();
-        expect(await page.evaluate((key) => localStorage.getItem(key), RAW_KEY)).toBe('1');
-        await page.getByTestId('raw-toggle').uncheck();
-        expect(await page.evaluate((key) => localStorage.getItem(key), RAW_KEY)).toBeNull();
+    test('選んだものは焼き方と同じくこの端末に覚える', async ({ page }) => {
+        await goto(page, '/live');
+        await page.getByTestId('live-channel').first().click();
+        await expect(page.getByTestId('live-title')).toBeVisible();
+        await chooseRaw(page);
+        await expect(page.getByTestId('live-raw')).toBeVisible({ timeout: 30_000 });
+
+        // 開き直しても MPEG-2 のまま
+        await goto(page, '/live');
+        await expect(page.getByTestId('live-raw')).toBeVisible({ timeout: 30_000 });
+        await expect(page.getByTestId('live-codec')).toContainText('MPEG-2');
+
+        // H.264 に戻すと焼いたものになり、それも覚える
+        await wakeControls(page, 'live-frame');
+        await page.getByTestId('live-codec').click();
+        await page.locator('[data-testid="live-codec-option"][data-codec="h264"]').click();
+        await expect(page.getByTestId('live-raw')).toHaveCount(0, { timeout: 30_000 });
+        await goto(page, '/live');
+        await expect(page.getByTestId('live-title')).toBeVisible();
+        await expect(page.getByTestId('live-codec')).toContainText('H.264');
+        await expect(page.getByTestId('live-raw')).toHaveCount(0);
     });
 });

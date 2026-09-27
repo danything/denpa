@@ -23,7 +23,6 @@ import {
     type Tuned,
 } from '$lib/live';
 import { RawEngine } from '$lib/raw/engine';
-import { rawSetting } from '$lib/raw/setting.svelte';
 import { rawUnsupported } from '$lib/raw/support';
 import { CLOCK, type Cue, currentCue, insertCue, trimCues } from '$lib/ts/captions';
 import { CEILING, FLOOR, nextTarget, pacing } from '$lib/ts/pacing';
@@ -329,6 +328,8 @@ export function livePlayer() {
     /** いま生で見ているか。**サーバが `tuned` でそう答えたときだけ** */
     let raw = $state(false);
     let engine: RawEngine | null = null;
+    /** 生 (MPEG-2) を選んでいるか。**頼むかどうかの元** — 実際に生になったかは `raw` */
+    let rawChosen = false;
     /**
      * 生を諦めたか (解くのが間に合わない・音が解けない・復号器が無い)。**この画面を開いている
      * 間は頼み直さない** — 戻しては諦めるを繰り返すと、そのたびに絵が止まる
@@ -1299,7 +1300,26 @@ export function livePlayer() {
     function setCodec(next: LiveCodec): void {
         // 選び直したなら、前の断り書きは用済み
         warning = '';
+        // 生から焼いたものへ。同じ焼き方でも頼み直す (`swapCodec` は同じなら何もしない)
+        if (rawChosen) {
+            rawChosen = false;
+            if (element !== null && tuned !== null) {
+                void tune(element, { ...tuned, codec: next, raw: false }, true);
+                return;
+            }
+        }
         swapCodec(next);
+    }
+
+    /**
+     * 生 (MPEG-2) で見る (画質の切り替えの末尾)。焼き方と同じく**この端末に覚える** (`LAST_COOKIE`)。
+     * 前に諦めていても、選び直したなら試し直す
+     */
+    function setRaw(): void {
+        if (rawChosen && raw) return;
+        warning = '';
+        rawGaveUp = false;
+        if (element !== null && tuned !== null) void tune(element, { ...tuned, raw: true }, true);
     }
 
     /**
@@ -1375,8 +1395,9 @@ export function livePlayer() {
         tuned = target;
         audio = target.audio ?? '';
         codec = target.codec ?? 'h264';
-        // 生で頼むかも覚えておく — 次に開いたときにサーバが先回りする (`server/live.ts` の `warm`)
-        remember({ ...target, raw: rawSetting.on && !rawGaveUp && rawProblem === null });
+        // 生で見るかは局を変えても引き継ぐ (焼き方と同じ)。覚えておくと次に開いたときサーバが先回りする (`warm`)
+        rawChosen = target.raw ?? rawChosen;
+        remember({ ...target, raw: rawChosen });
         await begin(video, keepList);
     }
 
@@ -1419,10 +1440,10 @@ export function livePlayer() {
     }
 
     /**
-     * 生で頼むか。**端末の設定が入っていて、解けて、まだ諦めていない**とき
+     * 生で頼むか。**MPEG-2 を選んでいて、解けて、まだ諦めていない**とき
      */
     function wantsRaw(): boolean {
-        return rawSetting.on && rawProblem === null && !rawGaveUp;
+        return rawChosen && rawProblem === null && !rawGaveUp;
     }
 
     /** 繋いで頼む。選局 (`tune`) と追っかけ (`openChase`) の共通の後半 */
@@ -1430,12 +1451,17 @@ export function livePlayer() {
         element = video;
         left = false;
         /*
-         * **生で見る設定なら、解けるかを先に確かめる** (1回だけ。`raw/support.ts`)。
+         * **生を選んでいるなら、解けるかを先に確かめる** (1回だけ。`raw/support.ts`)。
          * 解けない端末では最初から焼いたものを頼み、理由を断り書きに出す
          */
-        if (rawSetting.on && rawProblem === undefined) {
+        if (rawChosen && rawProblem === undefined) {
             rawProblem = await rawUnsupported();
-            if (rawProblem !== null) warning = `生では見られません: ${rawProblem}`;
+        }
+        // 解けない端末では覚えておかない (開くたびに断り書きが出る)
+        if (rawChosen && typeof rawProblem === 'string') {
+            rawChosen = false;
+            if (tuned !== null) remember({ ...tuned, raw: false });
+            warning = `この端末では MPEG-2 を再生できません: ${rawProblem}`;
         }
         // 数え直す。焼き直しでも器から作り直しになるので、前の数は続きではない
         stalls = 0;
@@ -1961,6 +1987,7 @@ export function livePlayer() {
             return warning;
         },
         setCodec,
+        setRaw,
         /** 前の絵を貼っているか。**切り替えの間の黒を埋めている** */
         get holding() {
             return holding;

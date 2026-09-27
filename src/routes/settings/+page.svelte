@@ -7,24 +7,11 @@
     import { CODEC_LABEL, HW_CODECS, HW_KIND_LABEL, HW_KINDS, hwAllowed } from '$lib/hw';
     import { liveUpdates } from '$lib/live-updates.svelte';
     import { measure } from '$lib/measure.svelte';
-    import { rawSetting } from '$lib/raw/setting.svelte';
-    import { rawUnsupported } from '$lib/raw/support';
     import { EVENT_LABEL } from '$lib/webhook-events';
 
     let { data, form } = $props();
 
     liveUpdates(['migrate']);
-
-    /**
-     * この端末で生の TS を解けるか (`raw/support.ts`)。**入れる前に分かるように出す** —
-     * 入れても解けなければ焼いたものになるので、スイッチだけ見ても効くか分からない
-     */
-    let rawProblem = $state<string | null | undefined>(undefined);
-    $effect(() => {
-        void rawUnsupported().then((problem) => {
-            rawProblem = problem;
-        });
-    });
 
     const migrate = $derived(data.migrate.status);
     const done = $derived(migrate.imported + migrate.skipped + migrate.missing);
@@ -655,40 +642,6 @@
                         </details>
                     {/if}
                 </div>
-            {/if}
-        </section>
-
-        <!--
-            **ライブを生で見る** (docs/stream.md §5.5)。端末ごとの設定で既定は切。
-            サーバに置かないのは、決め手が端末の側 (解ける CPU があるか・電池か) にあるため
-        -->
-        <section class="panel card" data-testid="raw-card">
-            <h2>ライブを生で見る</h2>
-            <p class="small lead">
-                サーバで焼かずに、放送そのまま (MPEG-2) をこの端末で解きます。<strong>この端末だけ</strong>の設定です。
-            </p>
-
-            <label class="check">
-                <input
-                    type="checkbox"
-                    role="switch"
-                    aria-checked={rawSetting.on}
-                    checked={rawSetting.on}
-                    onchange={(event) => rawSetting.set(event.currentTarget.checked)}
-                    data-testid="raw-toggle"
-                />
-                <span>ライブをエンコードせずに見る</span>
-            </label>
-
-            <p class="hint">
-                遅れが 0.5〜1 秒縮み、サーバの負荷もほぼなくなります。そのかわり
-                <strong>1局 15〜17 Mbit/s</strong> の帯域を使い、この端末が MPEG-2 をデコードします (電池を使います)。
-                家の外で見るなら、回線がそれだけ出るか確かめてください。
-                一時停止から再開すると放送の今からになり、5分戻す・追っかけの速度は使えません。
-                デコードが間に合わないときは、自動でエンコードした映像に戻ります。
-            </p>
-            {#if rawProblem}
-                <p class="hint" data-testid="raw-unsupported">この端末では使えません: {rawProblem}</p>
             {/if}
         </section>
 
