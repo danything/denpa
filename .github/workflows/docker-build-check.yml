@@ -64,8 +64,10 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
 
-      # キャッシュは build-and-deploy と同じ scope を読む (main で積んだ層がそのまま効く。
-      # PR から書いたものはその PR の中にしか見えないので、main のものは汚さない)
+      # キャッシュは build-and-deploy と同じ scope を**読むだけ** (main で積んだ層がそのまま効く)。
+      # **書かない。** PR から書いたものはその PR の中にしか見えず、マージした後は誰も読まない。
+      # それでも Actions のキャッシュの上限 (10GB) には数えられるので、PR ごとに mode=max で
+      # 積むと main の層が追い出されていた (PR の分だけで 3GB を超えていた)
       - name: Build
         uses: docker/build-push-action@v7
         with:
@@ -76,4 +78,3 @@ jobs:
           push: false
           pull: true
           cache-from: type=gha,scope=${{ matrix.image.scope }}-${{ matrix.arch.name }}
-          cache-to: type=gha,mode=max,scope=${{ matrix.image.scope }}-${{ matrix.arch.name }}
