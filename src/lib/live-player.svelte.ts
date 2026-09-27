@@ -329,8 +329,6 @@ export function livePlayer() {
     /** いま生で見ているか。**サーバが `tuned` でそう答えたときだけ** */
     let raw = $state(false);
     let engine: RawEngine | null = null;
-    /** 札を取ったときにサーバが「生でよい」(LAN) と言ったか */
-    let rawGranted = false;
     /**
      * 生を諦めたか (解くのが間に合わない・音が解けない・復号器が無い)。**この画面を開いている
      * 間は頼み直さない** — 戻しては諦めるを繰り返すと、そのたびに絵が止まる
@@ -1421,11 +1419,10 @@ export function livePlayer() {
     }
 
     /**
-     * 生で頼むか。**端末の設定が入っていて、解けて、LAN から来ていて、まだ諦めていない**とき。
-     * LAN かどうかはサーバが札で言ってくる (`rawGranted`)。頼んでも最後に決めるのはサーバ
+     * 生で頼むか。**端末の設定が入っていて、解けて、まだ諦めていない**とき
      */
     function wantsRaw(): boolean {
-        return rawSetting.on && rawProblem === null && rawGranted && !rawGaveUp;
+        return rawSetting.on && rawProblem === null && !rawGaveUp;
     }
 
     /** 繋いで頼む。選局 (`tune`) と追っかけ (`openChase`) の共通の後半 */
@@ -1476,14 +1473,7 @@ export function livePlayer() {
         try {
             const res = await fetch('/api/live/ticket', { method: 'POST' });
             if (!res.ok) throw new Error(String(res.status));
-            const answer = (await res.json()) as { ticket: string; raw?: boolean };
-            ticket = answer.ticket;
-            // LAN から取った札か。**生で頼むかどうかの最後の1つ** (`wantsRaw`)
-            rawGranted = answer.raw === true;
-            // 生で見る設定なのに家の外。**黙って焼いたものにせず、そう言う**
-            if (rawSetting.on && rawProblem === null && !rawGranted) {
-                warning = '家の外から見ているので、焼いたものを送っています';
-            }
+            ticket = ((await res.json()) as { ticket: string }).ticket;
         } catch {
             // 繋ぎ直しの最中なら、サーバがまだ帰っていないだけ。待ち直す
             if (attempts > 0) reconnect();

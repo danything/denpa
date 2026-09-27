@@ -27,7 +27,6 @@
  */
 
 import type { ServerWebSocket, WebSocketHandler } from 'bun';
-import type { Grant } from './tickets';
 
 /** 入口が見る名前。`server.js` と揃えること */
 const LIVE = '__denpaLive';
@@ -45,8 +44,6 @@ const BACKLOG_LIMIT = 4 * 1024 * 1024;
 export interface SocketData {
     url: URL;
     connection: Connection | null;
-    /** 握手の前に札から読んだ許し (`Route.accept`)。開いたあとの受け持ちへ渡す */
-    grant: Grant;
 }
 
 /** 開いている1本。**送るのは binary、受けるのは小さな指示だけ** */
@@ -110,10 +107,9 @@ interface Route {
      *
      * ここで断れば普通の HTTP として返せるので、理由を伝えられる。
      * 握手したあとに切ると、ブラウザには「繋がらない」としか映らない。
-     * **通すなら、その接続で許すこと** (`Grant`) を返す。断るなら null
      */
-    accept(url: URL): Grant | null;
-    open(connection: Connection, url: URL, grant: Grant): void;
+    accept(url: URL): boolean;
+    open(connection: Connection, url: URL): void;
 }
 
 const routes = new Map<string, Route>();
@@ -133,8 +129,8 @@ export function serve(pathname: string, route: Route): void {
 export interface LiveEntry {
     /** そもそも受け持つ道か。**断り方を変えるために `accept` と分けてある** */
     handles(url: URL): boolean;
-    /** 握手してよいか。ここで札を使い切る。**通すなら許すことを返す** (`SocketData.grant` へ) */
-    accept(url: URL): Grant | null;
+    /** 握手してよいか。ここで札を使い切る */
+    accept(url: URL): boolean;
     websocket: WebSocketHandler<SocketData>;
 }
 
@@ -143,7 +139,7 @@ const entry: LiveEntry = {
         return routes.has(url.pathname);
     },
     accept(url) {
-        return routes.get(url.pathname)?.accept(url) ?? null;
+        return routes.get(url.pathname)?.accept(url) === true;
     },
     websocket: {
         open(ws) {
@@ -154,7 +150,7 @@ const entry: LiveEntry = {
             }
             const connection = new Connection(ws);
             ws.data.connection = connection;
-            route.open(connection, ws.data.url, ws.data.grant);
+            route.open(connection, ws.data.url);
         },
         message(ws, message) {
             ws.data.connection?.receive(message);

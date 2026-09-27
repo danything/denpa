@@ -1,7 +1,6 @@
 import { fail } from '@sveltejs/kit';
 import { and, desc, eq, gt, lte, sql } from 'drizzle-orm';
 import { LAST_COOKIE, type LiveCodec } from '$lib/live';
-import { clientAddress, mayStreamRaw } from '$lib/server/auth';
 import { orm } from '$lib/server/db';
 import { airing, CURRENT_SERVICES, SERVICE_ORDER, SERVICE_TYPE_ORDER } from '$lib/server/epg';
 import { warm } from '$lib/server/live';
@@ -163,11 +162,8 @@ export function load(event) {
      * WebSocket が繋がるまでの 160ms を、ffmpeg の立ち上がりと重ねる
      */
     if (start !== null) {
-        /*
-         * **前回が生なら生で温める。** ただし LAN から来ているときだけ — 札を取るときと
-         * 同じ判断 (`mayStreamRaw`)。外れても困らない (来なければ 8秒で畳む)
-         */
-        const raw = kept?.raw === true && mayStreamRaw(clientAddress(event));
+        // **前回が生なら生で温める。** 外れても困らない (来なければ 8秒で畳む)
+        const raw = kept?.raw === true;
         warm(start.channelType, start.channel, start.serviceId, start.audio, start.codec, raw);
     }
 

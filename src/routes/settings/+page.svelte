@@ -677,14 +677,15 @@
                     onchange={(event) => rawSetting.set(event.currentTarget.checked)}
                     data-testid="raw-toggle"
                 />
-                <span>家の中 (LAN) では生で見る</span>
+                <span>ライブをエンコードせずに見る</span>
             </label>
 
             <p class="hint">
-                焼くのに掛かっていた 0.5〜1 秒が縮み、サーバはほとんど働かなくなります。そのかわり
-                <strong>1局 15〜17 Mbit/s</strong> がずっと流れ、この端末が MPEG-2 を解きます (電池を使います)。
-                止めて再開すると放送の今からになり、5分戻ったり追っかけの速さを選んだりはできません。
-                家の外からや、解くのが間に合わないときは、いつもの焼いたものに自動で戻ります。
+                遅れが 0.5〜1 秒縮み、サーバの負荷もほぼなくなります。そのかわり
+                <strong>1局 15〜17 Mbit/s</strong> の帯域を使い、この端末が MPEG-2 をデコードします (電池を使います)。
+                家の外で見るなら、回線がそれだけ出るか確かめてください。
+                一時停止から再開すると放送の今からになり、5分戻す・追っかけの速度は使えません。
+                デコードが間に合わないときは、自動でエンコードした映像に戻ります。
             </p>
             {#if rawProblem}
                 <p class="hint" data-testid="raw-unsupported">この端末では使えません: {rawProblem}</p>

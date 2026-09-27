@@ -111,7 +111,7 @@ denpa 本体は上と同じコンテナイメージ `denpa` を、Mac の Docker
 ### ライブを生で見るときにブラウザへ配る復号器
 
 [Dockerfile](../Dockerfile) の `mpeg2wasm` 段で組み、イメージの `/opt/denpa/mpeg2` に置いて
-`/api/live/mpeg2/` から配る WebAssembly ([stream.md](stream.md#55-放送そのままmpeg-2を-lan-で送る))。
+`/api/live/mpeg2/` から配る WebAssembly ([stream.md](stream.md#55-放送そのままmpeg-2を送る))。
 **`--enable-gpl` を付けずに組んでいる**ので、中の FFmpeg は LGPL のまま (denpa 自身は AGPL で、
 どちらでも問題は無い)。ソースは Dockerfile が取ってくる FFmpeg の tarball と `wasm/mpeg2/decoder.c`。
 
