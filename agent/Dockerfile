@@ -82,7 +82,7 @@ RUN case "${TARGETARCH}" in \
 # 1つに固定している。切り出すのは上の firmware 段。
 # ---------------------------------------------------------------------------
 # renovate: datasource=github-releases depName=Khronos31/px4-userland extractVersion=^v(?<version>.*)$
-ARG PX4_USERLAND_VERSION=0.1.6
+ARG PX4_USERLAND_VERSION=0.1.7
 RUN set -eu && cd /tmp && \
     case "${TARGETARCH}" in amd64) arch=x86_64 ;; arm64) arch=aarch64 ;; *) exit 1 ;; esac && \
     base="https://github.com/Khronos31/px4-userland/releases/download/v${PX4_USERLAND_VERSION}" && \
