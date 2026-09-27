@@ -6,7 +6,7 @@
  * でしか出てこない** — LAN でも http で開いていると使えない
  * ([player.md](../../../docs/player.md)「LAN でも https で開く」)。
  *
- * 1つでも欠けていれば、画面は最初から焼いたものを頼む (設定を入れていても)。
+ * 1つでも欠けていれば、MPEG-2 を選んでも画面は焼いたものを頼む。
  */
 
 let answer: Promise<string | null> | null = null;
