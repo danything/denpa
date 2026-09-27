@@ -28,7 +28,7 @@ import type { AudioTrack } from './arib';
  * ([stream.md](../../docs/stream.md) §5.1)
  *
  * **生 (MPEG-2 のまま) はここに並べない。** 焼き方ではなく「焼かない」なので、
- * 端末の設定 (`raw/setting.svelte.ts`) と LAN かどうか (サーバが決める) で別に選ぶ
+ * 端末の設定 (`raw/setting.svelte.ts`) で別に選ぶ
  * (`TuneCommand.raw`。[stream.md](../../docs/stream.md) §5.5)
  */
 export type LiveCodec = 'h264' | 'av1';
@@ -100,7 +100,7 @@ export type Notice =
           codecs: string;
           /** いま焼いている形。画面の切り替えがどれを指すか */
           codec: LiveCodec;
-          /** **焼かずに生の TS を送るか** (`CHANNEL.rawTs`)。頼まれても LAN の外からなら false */
+          /** **焼かずに生の TS を送るか** (`CHANNEL.rawTs`) */
           raw: boolean;
           /** いま焼いている音声 (`AudioTrack.id`) */
           audio: string;
@@ -278,8 +278,7 @@ export type TuneCommand = {
     /**
      * **焼かずに生の TS で欲しい** ([stream.md](../../docs/stream.md) §5.5)。
      *
-     * 決めるのは2か所: 端末の設定 (既定は切) とブラウザが解けるか (`raw/support.ts`) で
-     * 画面が頼み、**LAN から来たかはサーバが見る** (札を取ったときの住所。`server/tickets.ts`)。
+     * 端末の設定 (既定は切) とブラウザが解けるか (`raw/support.ts`) で画面が決める。
      * 生で送ると音声は画面が選ぶので、`audio` は選び直しても焼き直しにならない
      */
     raw?: boolean;

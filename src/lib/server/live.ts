@@ -1307,7 +1307,7 @@ export function warm(
     audio?: string,
     codec: LiveCodec = 'h264',
     /**
-     * 生で温めるか。**LAN から来ていて、前回も生で見ていたときだけ** (呼ぶ側が決める)。
+     * 生で温めるか。**前回も生で見ていたときだけ** (呼ぶ側が決める)。
      * 生は ffmpeg を待たないぶん削れるのはチューナーの掴みだけだが、それでも 160ms は重なる
      */
     raw = false,
@@ -1342,7 +1342,7 @@ type Asked =
           audio: string | undefined;
           codec: LiveCodec;
           caption: number;
-          /** 生で欲しいと言われたか。**許すかは札で決まる** (`attend`) */
+          /** 生で欲しいと言われたか */
           raw: boolean;
       }
     | ChaseAsked;
