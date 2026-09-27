@@ -794,10 +794,6 @@ irm https://raw.githubusercontent.com/danything/denpa/main/install.ps1 | iex
 
 **Linux・Mac と違うところ。**
 
-- **siano-ts の標準入力に空行を詰め続けます** (`SianoTuner.Feed`)。siano-ts 0.1.8 の Windows 版は、
-  標準入力に行が来ているかを `WaitForSingleObject` で見ており、pipe だと中身が無くても「来ている」と
-  答え (windows-latest で確かめた)、次の行が来るまで TS を止めます。空行は読み飛ばされるので、
-  埋めておけば流れます。siano-ts 側で直れば (pipe なら `PeekNamedPipe` で見る) 外せます
 - 子の標準出力は poll できないので、裏の1本に読ませて 200ms ごとに起きます (`DeviceStream`)。
   pipe は広げられず 4KB ほどで、読み手が少し止まったぶんは siano-ts の中の溜め
   (16KB × 256) が吸う

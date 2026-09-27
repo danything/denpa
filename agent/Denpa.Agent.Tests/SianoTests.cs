@@ -227,25 +227,6 @@ public class SianoTests
         await Assert.That(ReadLine(tuner.Output)).IsEqualTo("NEW473142857");
     }
 
-    /// <summary>
-    /// **Windows の詰め物** (空行を書き続ける) を入れても、選局し直せて止められる。
-    /// Windows の pipe の振る舞いまでは見られないが、空行が選局の答えを乱さないことはここで見る。
-    /// **ほかと並べない** — 偽物は TS と関係なく空行を読み続けるので CPU を1つ食い、
-    /// 並んだテストの待ち (1 秒で切るもの) を押し出す (CI で1度落ちた)
-    /// </summary>
-    [Test]
-    [NotInParallel]
-    public async Task 空行を詰め続けても選局し直せる()
-    {
-        if (!OperatingSystem.IsLinux()) return;
-        using var tuner = new SianoTuner(
-            "siano fake", () => new ProcessStartInfo("/bin/sh") { ArgumentList = { "-c", FakeSianoTs } }, keepFed: true);
-        tuner.Tune(ChannelTable.Parse("T27")!, ChannelTable.NoStreamId);
-        await Assert.That(ReadLine(tuner.Output)).IsEqualTo("NEW557142857");
-        tuner.Tune(ChannelTable.Parse("T13")!, ChannelTable.NoStreamId);
-        await Assert.That(ReadLine(tuner.Output)).IsEqualTo("NEW473142857");
-    }
-
     [Test]
     public async Task 同期しなければ理由を添えて投げ_子は生かしておく()
     {

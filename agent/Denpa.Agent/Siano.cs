@@ -263,7 +263,6 @@ public sealed class SianoTuner : ITuneDevice
     private readonly string _name;
     private readonly Func<ProcessStartInfo> _start;
     private readonly TimeSpan _tuneTimeout;
-    private readonly bool _keepFed;
     private readonly Lock _gate = new();
     private Child? _child;
     private DeviceStream? _stream;
@@ -281,9 +280,6 @@ public sealed class SianoTuner : ITuneDevice
         public Task Feeding { get; set; } = Task.CompletedTask;
     }
 
-    /// <summary>空行の詰め物 (<see cref="Feed"/>)。siano-ts が1周で読むのは 256 バイトまで</summary>
-    private static readonly string Blank = new('\n', 256);
-
     public SianoTuner(string port)
         : this($"siano {port}", () =>
         {
@@ -300,12 +296,11 @@ public sealed class SianoTuner : ITuneDevice
     }
 
     /// <summary>起こし方と待ちの上限を差し替える (テスト。偽の siano-ts を起こす)</summary>
-    internal SianoTuner(string name, Func<ProcessStartInfo> start, TimeSpan? tuneTimeout = null, bool? keepFed = null)
+    internal SianoTuner(string name, Func<ProcessStartInfo> start, TimeSpan? tuneTimeout = null)
     {
         _name = name;
         _start = start;
         _tuneTimeout = tuneTimeout ?? TuneTimeout;
-        _keepFed = keepFed ?? OperatingSystem.IsWindows();
     }
 
     public Stream Output => _stream ?? throw new InvalidOperationException($"{_name} はまだ選局していません");
@@ -385,7 +380,7 @@ public sealed class SianoTuner : ITuneDevice
         });
 
         child.Feeding = Task.Factory.StartNew(
-            () => Feed(child, _keepFed), CancellationToken.None, TaskCreationOptions.LongRunning, TaskScheduler.Default);
+            () => Feed(child), CancellationToken.None, TaskCreationOptions.LongRunning, TaskScheduler.Default);
         _child = child;
         _stream = ChildTs.Stdout(process, _name, child.EndReason);
         _ = process.WaitForExitAsync().ContinueWith(_ =>
@@ -397,36 +392,20 @@ public sealed class SianoTuner : ITuneDevice
     }
 
     /// <summary>
-    /// 標準入力に書く1本。頼まれた行を書き、<paramref name="keepFed"/> なら**合間を空行で埋め続ける**。
+    /// 標準入力に書く1本。頼まれた行を順に書く。
     ///
     /// <para>
-    /// **Windows の siano-ts (0.1.8) は、標準入力が pipe だと TS が止まる。** 読める行があるかを
-    /// <c>WaitForSingleObject</c> で見ているが、pipe は中身が無くても「読める」と答える
-    /// (windows-latest で確かめた)。そのまま <c>ReadFile</c> が次の行まで止まり、TS を 16KB
-    /// 書くごとに1行待つ。空行は読み飛ばされるので、埋めておけば止まらない。詰め物が pipe
-    /// (4KB) を埋めるぶん、頼んだ行が読まれるのは 16 周ほど後 (TS が流れていれば 0.1 秒ほど)。
-    /// 空回りはしない — siano-ts の1周は TS を待つところ (来なければ 100ms) で決まり、こちらは
-    /// pipe が埋まれば書くところで待つ。
-    /// **siano-ts 側で直れば (pipe なら PeekNamedPipe で見る) 要らなくなる。**
-    /// </para>
-    ///
-    /// <para>
-    /// 書くのをこの1本に寄せたのは、詰め物が pipe が空くまで書くところで止まるから。
-    /// 選局や止める側が書くと、同じところで止まる (siano-ts が詰まっていれば二度と返らない)
+    /// Windows の siano-ts 0.1.8 は標準入力が pipe だと TS が止まり、合間を空行で埋め続けていた。
+    /// 0.1.9 で直った (siano-userland #13。pipe は <c>PeekNamedPipe</c> で見るようになった) ので、もう埋めない
     /// </para>
     /// </summary>
-    private static void Feed(Child child, bool keepFed)
+    private static void Feed(Child child)
     {
         var input = child.Process.StandardInput;
         var commands = child.Commands.Reader;
         try
         {
-            for (; ; )
-            {
-                if (commands.TryRead(out var line)) input.Write(line + "\n");
-                else if (keepFed) input.Write(Blank);
-                else input.Write(commands.ReadAsync().AsTask().GetAwaiter().GetResult() + "\n");
-            }
+            for (; ; ) input.Write(commands.ReadAsync().AsTask().GetAwaiter().GetResult() + "\n");
         }
         catch (Exception error) when (error is IOException or ObjectDisposedException
             or System.Threading.Channels.ChannelClosedException)
