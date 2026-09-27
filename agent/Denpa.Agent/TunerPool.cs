@@ -199,6 +199,7 @@ public sealed class TunerPool(
          * **錠は放してから待つ。** 握ったまま待つと、その間どの本も開けない。
          */
         kicked?.Await();
+        if (kicked is not null) lease.KickedMs = lease.Clock.ElapsedMilliseconds;
 
         try
         {
@@ -221,6 +222,7 @@ public sealed class TunerPool(
                         held.Channel = null;
                         held.Device.Tune(tuning, ChannelTable.StreamId(channel, tuning, _tune.StreamIds));
                         held.Channel = channel;
+                        lease.TunedMs = lease.Clock.ElapsedMilliseconds;
                     }
                     lease.StartNative(held.Device, () => OnExit(index, lease));
                 }
@@ -629,6 +631,20 @@ internal sealed class Lease(int tuner, string type, string channel)
     public List<Sink> Sinks { get; } = [];
 
     /// <summary>
+    /// **選局の内訳を測る時計** (借りた時点から)。最初に送り出したときに1行残す —
+    /// 局替えの遅さがどこにあるか (前の読み手待ち・同期・最初の TS・鍵) を実機で割るため
+    /// </summary>
+    public Stopwatch Clock { get; } = Stopwatch.StartNew();
+
+    /// <summary>前の読み手が降りた時点 (蹴っていなければ -1)</summary>
+    public long KickedMs { get; set; } = -1;
+
+    /// <summary>同期した時点。選局し直さずに済んだら -1</summary>
+    public long TunedMs { get; set; } = -1;
+
+    private long _firstReadMs = -1;
+
+    /// <summary>
     /// **前の報告からあとに、読み手として居たもの。**
     ///
     /// <para>
@@ -759,6 +775,7 @@ internal sealed class Lease(int tuner, string type, string channel)
                     ? tuner.Output.Read(buffer, 0, buffer.Length)
                     : ring.Read(buffer, 0, buffer.Length, () => _stopped || _drained);
                 if (read <= 0) break;
+                if (_firstReadMs < 0) _firstReadMs = Clock.ElapsedMilliseconds;
 
                 if (Interlocked.Add(ref _queued, read) > QueueLimit)
                 {
@@ -791,9 +808,18 @@ internal sealed class Lease(int tuner, string type, string channel)
         var b25 = new Descrambler(Keys.Source);
         Descrambling = true;
         var decoded = new ArrayBufferWriter<byte>();
+        var pushed = false;
         void Push()
         {
             if (decoded.WrittenCount == 0) return;
+            if (!pushed)
+            {
+                pushed = true;
+                string At(long ms) => ms < 0 ? "-" : $"{ms}ms";
+                Log.Write($"[{Tuner}] {Channel}: 前の読み手 {At(KickedMs)} / 同期 {At(TunedMs)} / "
+                    + $"最初の TS {At(_firstReadMs)} / 送り出し {Clock.ElapsedMilliseconds}ms"
+                    + (b25.Undecodable > 0 ? $" (掛かったまま {b25.Undecodable} パケット)" : ""));
+            }
             var chunk = decoded.WrittenSpan.ToArray();
             decoded.ResetWrittenCount();
             lock (Sinks)
