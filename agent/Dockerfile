@@ -72,8 +72,9 @@ RUN case "${TARGETARCH}" in \
 # ---------------------------------------------------------------------------
 # PLEX PX-Q3U4 などは px4-userland で掴む (Px4.cs)。**カーネルドライバを入れてもらわない。**
 #
-# px4d / px4-ts / px4ctl は musl の完全静的 ELF。同梱の IFD ハンドラ (ifd/*.so) は
-# pcscd 用で、ここでは使わない (内蔵カードリーダーには px4d に直に聞く。Px4Card.cs)。
+# px4d / px4ctl は musl の完全静的 ELF。受信機もカードも px4d の制御ソケットで直に話すので
+# (Px4.cs / Px4Card.cs)、配布物の px4-ts と IFD ハンドラ (ifd/*.so、pcscd 用) は使わない。
+# 受信機を借りたまま選局し直す (STOP_STREAM → TUNE → START_STREAM) のは 0.1.6 から。
 # 配布アーカイブの SHA256SUMS で中身を確かめてから展開する。
 #
 # **ファームウェア (it930x-firmware.bin) も同梱する。** 本体には入っておらず、

@@ -582,7 +582,7 @@ public sealed class SianoTuner : ITuneDevice
         var rest = ChildTs.ReaderDrain - stopped.Elapsed;
         if (rest > TimeSpan.Zero) stream?.WaitReaders(rest);
         stream?.Dispose();
-        // 同期読みにした標準出力は Process.Dispose が閉じない (ChildTs.Drop と同じ)
+        // 同期読みにした標準出力は Process.Dispose が閉じない。閉じないと GC まで fd が残り、起こし直すたびに増える
         process.StandardOutput.Dispose();
         try
         {

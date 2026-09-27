@@ -1,4 +1,8 @@
+using System.Buffers.Binary;
 using System.Diagnostics;
+using System.Net.Sockets;
+using System.Runtime.InteropServices;
+using Microsoft.Win32.SafeHandles;
 
 namespace Denpa.Agent;
 
@@ -16,10 +20,11 @@ namespace Denpa.Agent;
 /// </para>
 ///
 /// <para>
-/// **口は3つ。** <c>px4d</c> が筐体 (USB 機能・受信機・カード) を所有する
-/// デーモンで、筐体1台につき1つ起こす。<c>px4-ts</c> は受信機を1本借りて
-/// 選局し、TS を標準出力に流す。<c>px4ctl</c> は状態を聞く。3つとも同じ
-/// ランタイムディレクトリと筐体の番号で Unix ドメインソケットを見つける。
+/// **使うのは2つ。** <c>px4d</c> が筐体 (USB 機能・受信機・カード) を所有する
+/// デーモンで、筐体1台につき1つ起こす。<c>px4ctl</c> は状態を聞く。受信機は
+/// px4d の制御ソケットで直に借りて選局し、TS も px4d から直に受ける (<see cref="Px4Tuner"/>)。
+/// 同梱の <c>px4-ts</c> (1回1チャンネルの CLI) は使わない。どれも同じランタイム
+/// ディレクトリと筐体の番号で Unix ドメインソケットを見つける。
 /// </para>
 ///
 /// <para>
@@ -58,7 +63,7 @@ public static class Px4Userland
     public static string Firmware =>
         Environment.GetEnvironmentVariable("PX4_FIRMWARE") ?? Path.Combine(Dir, "firmware", "it930x-firmware.bin");
 
-    /// <summary>px4d と px4-ts が socket を置く場所</summary>
+    /// <summary>px4d が socket を置く場所</summary>
     public static string RuntimeDir =>
         Environment.GetEnvironmentVariable("PX4_RUNTIME_DIR") ?? "/run/px4-userland";
 
@@ -71,7 +76,7 @@ public static class Px4Userland
     ///
     /// <para>
     /// 番号の桁数や受信機の上限は見ない。**それを知っているのは px4-userland** で、
-    /// 合わなければ px4d / px4-ts が理由を付けて断る。
+    /// 合わなければ px4d が理由を付けて断る。
     /// </para>
     /// </summary>
     public static (string Id, int Receiver)? Parse(string device)
@@ -316,7 +321,7 @@ public sealed class Px4Daemon
 
     /// <summary>
     /// 筐体に聞いた受信機。**ready になるまで null。** 聞けなかったときも null のままで、
-    /// そのときは選局を px4-ts に任せる (合わなければあちらが断る)
+    /// そのときは選局を px4d に任せる (合わなければあちらが断る)
     /// </summary>
     public IReadOnlyList<Px4Receiver>? Receivers { get; private set; }
 
@@ -375,8 +380,8 @@ public sealed class Px4Daemon
                 "--runtime-dir", Px4Userland.RuntimeDir,
                 /*
                  * 15V を出してよいかの門は2段。ここは「頼まれたら出す」で開けておき、
-                 * 本当に頼むかどうかは設定の `lnb` で決める (px4-ts に `--lnb-voltage 15`
-                 * を渡すのは `15v` と書いてある本だけ。Px4Tuner.Arguments)
+                 * 本当に頼むかどうかは設定の `lnb` で決める (TUNE で 15V を頼むのは
+                 * `15v` と書いてある本だけ。Px4Tuner.TuneRequest)
                  */
                 "--allow-lnb-power",
             ])
@@ -474,50 +479,99 @@ public sealed class Px4Daemon
 }
 
 /// <summary>
-/// px4-userland の受信機1本。<c>px4-ts</c> を起こして標準出力を読む。
+/// px4-userland の受信機1本。**px4d の制御ソケットで受信機を借り、借りたまま選局し直す。**
 ///
 /// <para>
-/// **選局のたびに px4-ts を起こし直す。** 1回1チャンネルの作りで、掴んだまま
-/// 変える口が無い。ただし受信機を持っているのは px4d のほうなので、
-/// 起こし直す間に別のものが割り込むことはない (同じエージェントの中では
-/// TunerPool が本ごとに順番を守る)。子を起こして標準出力を読むところは ChildTs.cs。
+/// 最初の選局で <c>ACQUIRE → TUNE → START_STREAM → ATTACH_STREAM</c>、2回目からは
+/// <c>STOP_STREAM → TUNE → START_STREAM → ATTACH_STREAM</c> (px4-userland SPEC 6.3、v0.1.6 から)。
+/// 返すのは <see cref="Dispose"/> (<c>RELEASE</c>) のときだけ。以前は選局ごとに <c>px4-ts</c> を
+/// 起こしていて、px4-ts が終わるたびに lease が返り、最後の受信機なら px4d がチューナーの
+/// 電源を落としていた。次の選局は電源を入れてチューナーを初期化し直すところからで、遅かった。
 /// </para>
 ///
 /// <para>
-/// **誰も読まなくなると px4-ts は死ぬ。** pipe が埋まると px4d が
-/// <c>SLOW_CONSUMER</c> として切る。それは失敗ではなく、受信機を離しただけ。
-/// 次に同じチャンネルを頼まれたら起こし直す (<see cref="Tuned"/> を
+/// **TS は別のソケット (<c>stream.sock</c>) に来る。** 枠 (TS_DATA) をほどいて pipe に書き、
+/// 読み口はその pipe を <see cref="DeviceStream"/> に載せる (<see cref="Px4Stream"/>)。
+/// 読み手の振る舞い (電波が来なくても畳める・蹴られた読み手は 200ms で降りる) は DVB と同じ。
+/// </para>
+///
+/// <para>
+/// **誰も読まなくなったら TS の流れを畳む。** pipe が埋まったまま空かなければ、こちらから
+/// stream.sock を閉じる (放っておくと px4d の溜めが溢れて <c>SLOW_CONSUMER</c> になる)。
+/// 受信機は借りたままなので、次に頼まれたら同じ lease で選局し直す (<see cref="Tuned"/> を
 /// TunerPool が見る)。
 /// </para>
 /// </summary>
 public sealed class Px4Tuner : ITuneDevice
 {
-    /// <summary>同期を待つ上限。DVB 側 (<c>DvbTuner.LockTimeout</c>) と同じ。総当たりの一周がこれで決まる</summary>
+    /// <summary>同期を待つ上限 (TUNE の <c>timeout_ms</c>)。DVB 側 (<c>DvbTuner.LockTimeout</c>) と同じ。総当たりの一周がこれで決まる</summary>
     private static readonly TimeSpan TuneTimeout = TimeSpan.FromSeconds(5);
 
-    /// <summary>px4-ts が同期のあと最初の TS を出すまでの猶予。同期の上限に足す</summary>
+    /// <summary>同期のあと最初の TS が来るまでの猶予</summary>
     private static readonly TimeSpan FirstTsGrace = TimeSpan.FromSeconds(3);
+
+    /// <summary>TUNE 以外の1回のやり取りの上限。px4-ts と同じ</summary>
+    private static readonly TimeSpan RequestTimeout = TimeSpan.FromSeconds(4);
+
+    /// <summary>
+    /// TUNE が BUSY で返ったときに待ち直す上限。前の TS の流れの後始末 (閉じた stream.sock を
+    /// px4d が畳む) と行き違うと、ほんの一瞬だけ BUSY になる
+    /// </summary>
+    private static readonly TimeSpan BusyRetry = TimeSpan.FromSeconds(1);
+
+    private const string SyncFailed = "同期しませんでした (電波が来ていないか、その周波数に放送がありません)";
 
     private readonly string _id;
     private readonly int _receiver;
     private readonly string? _lnb;
+    private readonly string _runtimeDir;
+    private readonly Func<IReadOnlyList<Px4Receiver>?> _prepare;
+    private readonly string _name;
     private readonly Lock _gate = new();
-    private readonly ChildTs _ts;
+
+    /// <summary>受信機を借りている制御ソケット。null なら借りていない</summary>
+    private Px4Control? _control;
+
+    private ulong _lease;
+    private byte[] _nonce = [];
+
+    /// <summary>START_STREAM が通ってから STOP_STREAM を言うまで</summary>
+    private bool _started;
+
+    private Px4Stream? _stream;
 
     public Px4Tuner(string id, int receiver, string? lnb)
+        : this(id, receiver, lnb, Px4Userland.RuntimeDir, () =>
+        {
+            var daemon = Px4Daemon.For(id);
+            daemon.Ensure();
+            return daemon.Receivers;
+        })
+    {
+    }
+
+    /// <param name="prepare">
+    /// 選局の前に呼ぶ。px4d を起こして、筐体に聞いた受信機を返す (聞けていなければ null)。
+    /// テストは px4d のふりをするので何もしない
+    /// </param>
+    internal Px4Tuner(string id, int receiver, string? lnb, string runtimeDir, Func<IReadOnlyList<Px4Receiver>?> prepare)
     {
         _id = id;
         _receiver = receiver;
         _lnb = lnb;
-        _ts = new ChildTs($"px4-{id[^4..]} #{receiver}", "px4-ts");
+        _runtimeDir = runtimeDir;
+        _prepare = prepare;
+        _name = $"px4-{id[^4..]} #{receiver}";
     }
 
-    public Stream Output => _ts.Output;
+    /// <summary>読み手が居ないまま pipe が空かなければ、この時間で TS の流れを畳む</summary>
+    internal TimeSpan StallLimit { get; init; } = Px4Stream.DefaultStallLimit;
+
+    public Stream Output => _stream?.Output ?? throw new InvalidOperationException($"{_name} はまだ選局していません");
 
     /// <summary>
-    /// 前の px4-ts がまだ生きているか。**錠の下で読む** — <c>Dispose</c> は別の
-    /// 錠 (<c>TunerPool._deviceGate</c>) から来るので、畳んでいる最中の
-    /// <c>Process</c> に触らないように
+    /// 受信機を借りていて、TS がまだ流れているか。**錠の下で読む** — <c>Dispose</c> は別の
+    /// 錠 (<c>TunerPool._deviceGate</c>) から来るので、畳んでいる最中のものに触らないように
     /// </summary>
     public bool Tuned
     {
@@ -525,66 +579,173 @@ public sealed class Px4Tuner : ITuneDevice
         {
             lock (_gate)
             {
-                return _ts.Alive;
+                return _control is not null && _stream is { Ended: false };
             }
         }
     }
 
     /// <summary>
-    /// px4-ts に渡す引数。**選局表の値をそのまま。**
+    /// TUNE の中身 (SPEC 6.4)。**選局表の値をそのまま。**
+    /// <c>u64 lease_id, u8 system, u64 frequency_khz, u16 stream_id, u16 slot, u32 bandwidth_hz, u8 lnb_voltage, u32 timeout_ms</c>
     ///
     /// <para>
     /// 周波数は kHz で言う。選局表は DVB の決まりで地上波が Hz・衛星が kHz
     /// なので、地上波だけ 1000 で割る (473142857 Hz → 473142 kHz。端数は切る)。
-    /// 衛星は TSID が分かっていれば <c>--stream-id</c>、分からなければ
-    /// 相対番号を <c>--slot</c> で (CS は1本しか乗っていないので 0)。
-    /// 15V は設定に <c>15v</c> と書いてある本だけ頼む。
+    /// 衛星は TSID が分かっていれば <c>stream_id</c>、分からなければ相対番号を
+    /// <c>slot</c> で (CS は1本しか乗っていないので 0)。使わないほうは 0xffff。
+    /// 帯域は地上波が 6MHz、衛星は 0 (px4d がこれ以外を断る)。
+    /// 15V は設定に <c>15v</c> と書いてある本だけ頼む (<c>11v</c> は px4-userland に無い)。
     /// </para>
     /// </summary>
-    public static List<string> Arguments(
-        string id, int receiver, ChannelTable.Tuning tuning, uint streamId, string? lnb)
+    public static byte[] TuneRequest(ulong lease, ChannelTable.Tuning tuning, uint streamId, string? lnb)
     {
-        var args = new List<string>
-        {
-            "--device", id,
-            "--receiver", receiver.ToString(),
-            "--system", tuning.Satellite ? "isdb-s" : "isdb-t",
-            "--frequency-khz", (tuning.Satellite ? tuning.Frequency : tuning.Frequency / 1000).ToString(),
-            "--tune-timeout-ms", ((int)TuneTimeout.TotalMilliseconds).ToString(),
-            "--output", "-",
-        };
-        if (tuning.Satellite)
-        {
-            if (streamId != ChannelTable.NoStreamId)
-            {
-                args.AddRange(["--stream-id", streamId.ToString()]);
-            }
-            else
-            {
-                args.AddRange(["--slot", tuning.Slot.ToString()]);
-            }
-            if (lnb == "15v") args.AddRange(["--lnb-voltage", "15"]);
-        }
-        return args;
+        const ushort unused = 0xffff;
+        var payload = new byte[30];
+        BinaryPrimitives.WriteUInt64LittleEndian(payload, lease);
+        payload[8] = (byte)(tuning.Satellite ? 2 : 1);
+        BinaryPrimitives.WriteUInt64LittleEndian(payload.AsSpan(9), tuning.Satellite ? tuning.Frequency : tuning.Frequency / 1000);
+        var byId = tuning.Satellite && streamId != ChannelTable.NoStreamId;
+        BinaryPrimitives.WriteUInt16LittleEndian(payload.AsSpan(17), byId ? (ushort)streamId : unused);
+        BinaryPrimitives.WriteUInt16LittleEndian(payload.AsSpan(19), tuning.Satellite && !byId ? (ushort)tuning.Slot : unused);
+        BinaryPrimitives.WriteUInt32LittleEndian(payload.AsSpan(21), tuning.Satellite ? 0u : 6_000_000u);
+        payload[25] = (byte)(tuning.Satellite && lnb == "15v" ? 15 : 0);
+        BinaryPrimitives.WriteUInt32LittleEndian(payload.AsSpan(26), (uint)TuneTimeout.TotalMilliseconds);
+        return payload;
     }
 
+    /// <summary>
+    /// 選局する。**借りていれば借りたまま、切れていれば借り直す。**
+    ///
+    /// <para>
+    /// 借りていたはずの接続が切れていた (px4d が起こし直された・lease が無い) ときは、
+    /// その場で1度だけ借り直して続ける。同期しなかった (TIMEOUT) ときは受信機を借りたまま
+    /// 投げる — 総当たりのスキャンは同期しないチャンネルのほうが多く、そのたびに返すと
+    /// 電源の入れ直しからやり直しになる。
+    /// </para>
+    /// </summary>
     public void Tune(ChannelTable.Tuning tuning, uint streamId)
     {
         lock (_gate)
         {
-            var daemon = Px4Daemon.For(_id);
-            daemon.Ensure();
-            Check(daemon.Receivers, _receiver, tuning);
-            var start = new ProcessStartInfo(
-                Path.Combine(Px4Userland.Dir, "px4-ts"),
-                [.. Arguments(_id, _receiver, tuning, streamId, _lnb), "--runtime-dir", Px4Userland.RuntimeDir]);
-            _ts.Start(start, TuneTimeout + FirstTsGrace);
+            Check(_prepare(), _receiver, tuning);
+            DropStream();
+            var reused = _control is not null;
+            try
+            {
+                Attempt(tuning, streamId);
+            }
+            catch (IOException error) when (reused && Lost(error))
+            {
+                Log.Write($"[{_name}] px4d との接続が切れていたので、受信機を借り直します ({error.Message})");
+                Attempt(tuning, streamId);
+            }
         }
     }
 
+    /// <summary>接続ごと失くした (px4d のエラーの答えではない、または lease がもう無い)</summary>
+    private static bool Lost(IOException error) => error is not Px4Error || ((Px4Error)error).Code == Px4Error.NotFound;
+
     /// <summary>
-    /// 筐体に聞いた受信機と、頼まれた選局が合っているか。**合わなければ px4-ts を起こす前に断る。**
-    /// 受信機を聞けていなければ (<paramref name="receivers"/> が null) 見ずに通す
+    /// 受信機を借りたまま次に進める失敗か。同期しなかった・頼み方が合わなかった (TUNE)、
+    /// TS の流れだけが駄目だった (<see cref="Px4StreamError"/>)。それ以外は受信機を返して閉じる
+    /// </summary>
+    private static bool Keeps(IOException error) =>
+        error is Px4StreamError || error is Px4Error { Code: Px4Error.Timeout or Px4Error.InvalidArgument };
+
+    private void Attempt(ChannelTable.Tuning tuning, uint streamId)
+    {
+        try
+        {
+            if (_control is null) Open();
+            Run(tuning, streamId);
+        }
+        catch (IOException error) when (!Keeps(error))
+        {
+            Close();
+            throw;
+        }
+    }
+
+    /// <summary>繋いで受信機を借りる (HELLO → ACQUIRE)</summary>
+    private void Open()
+    {
+        var control = Px4Control.Connect(Px4Control.Endpoint(_runtimeDir, _id, "control.sock"), 0, RequestTimeout);
+        try
+        {
+            var answer = control.Request(Px4Control.Acquire, [(byte)_receiver]);
+            if (answer.Length != 24) throw new IOException($"px4d の ACQUIRE の答えが {answer.Length} バイトです (24 のはず)");
+            var lease = BinaryPrimitives.ReadUInt64LittleEndian(answer);
+            if (lease == 0) throw new IOException("px4d の ACQUIRE の答えの lease が 0 です");
+            _lease = lease;
+            _nonce = answer[8..24];
+        }
+        catch (Px4Error error)
+        {
+            control.Dispose();
+            throw new Px4Error(error.Code, $"受信機 {_receiver} を借りられません ({error.Message})");
+        }
+        catch
+        {
+            control.Dispose();
+            throw;
+        }
+        _control = control;
+        _started = false;
+        Log.Write($"[{_name}] 受信機を借りました");
+    }
+
+    /// <summary>(流していれば止めて) 合わせて、流し始めて、TS を受け取りにいく</summary>
+    private void Run(ChannelTable.Tuning tuning, uint streamId)
+    {
+        var control = _control!;
+        var lease = new byte[8];
+        BinaryPrimitives.WriteUInt64LittleEndian(lease, _lease);
+
+        if (_started)
+        {
+            try
+            {
+                control.Request(Px4Control.StopStream, lease, RequestTimeout);
+            }
+            catch (Px4Error error) when (error.Code == Px4Error.NotReady)
+            {
+                // もう止まっている (閉じた stream.sock を px4d が先に畳んだ)
+            }
+            _started = false;
+        }
+
+        var tune = TuneRequest(_lease, tuning, streamId, _lnb);
+        var busyUntil = DateTime.UtcNow + BusyRetry;
+        byte[] answer;
+        while (true)
+        {
+            try
+            {
+                // px4d は timeout_ms で同期を諦めて答える。それより少し長く待つ (px4-ts と同じ +2 秒)
+                answer = control.Request(Px4Control.Tune, tune, TuneTimeout + TimeSpan.FromSeconds(2));
+                break;
+            }
+            catch (Px4Error error) when (error.Code == Px4Error.Busy && DateTime.UtcNow < busyUntil)
+            {
+                Thread.Sleep(50);
+            }
+            catch (Px4Error error) when (error.Code == Px4Error.Timeout)
+            {
+                throw new Px4Error(Px4Error.Timeout, SyncFailed);
+            }
+        }
+        // u8 locked, i32 cnr_mdb。px4d は同期したときしか成功で答えないが、px4-ts と同じく locked も見る
+        if (answer.Length < 1 || answer[0] == 0) throw new Px4Error(Px4Error.Timeout, SyncFailed);
+
+        control.Request(Px4Control.StartStream, lease, RequestTimeout);
+        _started = true;
+        _stream = Px4Stream.Attach(
+            Px4Control.Endpoint(_runtimeDir, _id, "stream.sock"), _lease, _nonce, _name, StallLimit, FirstTsGrace);
+    }
+
+    /// <summary>
+    /// 筐体に聞いた受信機と、頼まれた選局が合っているか。**合わなければ px4d に頼む前に断る。**
+    /// 受信機を聞けていなければ (<paramref name="receivers"/> が null) 見ずに通す (合わなければ px4d が断る)
     /// </summary>
     public static void Check(IReadOnlyList<Px4Receiver>? receivers, int index, ChannelTable.Tuning tuning)
     {
@@ -599,8 +760,319 @@ public sealed class Px4Tuner : ITuneDevice
         }
     }
 
+    /// <summary>
+    /// TS の流れを畳む。**stream.sock を閉じるのは TUNE より前に。** nonce は lease の間ずっと
+    /// 同じなので、前の stream.sock の後始末を px4d が次の START_STREAM より後に回すと、
+    /// 新しい流れのほうを取り消してしまう (px4d は閉じた接続の後始末で同じ lease と nonce の
+    /// 流れを取り消す)。先に閉じておけば、px4d は TUNE に答えるより前にそれを見る
+    /// </summary>
+    private void DropStream()
+    {
+        var stream = _stream;
+        _stream = null;
+        stream?.Stop();
+    }
+
+    /// <summary>受信機を返して閉じる。**失敗しても構わない** — 接続を閉じれば px4d の側で返される (SPEC 6.3)</summary>
+    private void Close()
+    {
+        DropStream();
+        var control = _control;
+        _control = null;
+        if (control is null) return;
+        var lease = new byte[8];
+        BinaryPrimitives.WriteUInt64LittleEndian(lease, _lease);
+        try
+        {
+            if (_started) control.Request(Px4Control.StopStream, lease, RequestTimeout);
+        }
+        catch (IOException)
+        {
+        }
+        try
+        {
+            control.Request(Px4Control.Release, lease, RequestTimeout);
+        }
+        catch (IOException)
+        {
+        }
+        _started = false;
+        control.Dispose();
+        Log.Write($"[{_name}] 受信機を返しました");
+    }
+
     public void Dispose()
     {
-        lock (_gate) _ts.Drop();
+        lock (_gate) Close();
+    }
+}
+
+/// <summary>
+/// 受信機を借りたままの間に、TS の流れが駄目だった (ATTACH を断られた・TS が来なかった)。
+/// **受信機は返さない** — 次の選局で同じ lease のまま STOP_STREAM → TUNE からやり直せる
+/// </summary>
+internal sealed class Px4StreamError(string message) : IOException(message);
+
+/// <summary>
+/// px4d から TS を受け取る1回ぶん (START_STREAM 1回につき1つ)。
+///
+/// <para>
+/// <c>stream.sock</c> に繋いで ATTACH_STREAM (lease と nonce) を送ると、あとは px4d が
+/// TS_DATA の枠を送り続け、止めると STREAM_END が来る (SPEC 6.3 / 6.4)。枠をほどいた中身を
+/// pipe に書き、読み口はその pipe の読む側 (<see cref="DeviceStream"/>)。pipe は子の標準出力と
+/// 同じく広げる (<see cref="ChildTs.WidenPipe"/>)。
+/// </para>
+///
+/// <para>
+/// **読み手が居ないと pipe が埋まる。** 書けないまま <see cref="DefaultStallLimit"/> 経ったら
+/// stream.sock を閉じて終わる。こちらが読まないままだと px4d の溜め (既定 65,536 パケット、
+/// 地上波で5秒ほど) が溢れて SLOW_CONSUMER になるが、その知らせ (STREAM_END) も読まない
+/// ソケットの奥に詰まって届かない。こちらで見切る。
+/// </para>
+/// </summary>
+internal sealed unsafe class Px4Stream
+{
+    /// <summary>pipe が空かないまま待つ上限。px4d の溜めが溢れるのと同じくらい</summary>
+    public static readonly TimeSpan DefaultStallLimit = TimeSpan.FromSeconds(5);
+
+    /// <summary>
+    /// TS がこれだけ来なければ終わる。px4-ts と同じ5秒。**pipe に書けずに待っている間は数えない**
+    /// (そちらは <see cref="DefaultStallLimit"/>)
+    /// </summary>
+    private static readonly TimeSpan SilenceLimit = TimeSpan.FromSeconds(5);
+
+    private readonly Socket _socket;
+    private readonly string _name;
+    private readonly TimeSpan _stallLimit;
+    private readonly ManualResetEventSlim _first = new();
+    private SafeFileHandle? _write;
+    private Thread? _pump;
+    private volatile bool _stopped;
+    private volatile bool _ended;
+    private volatile string? _reason;
+
+    /// <summary>pipe に1枚でも書けたか (Attach が待つのはこれ)</summary>
+    private volatile bool _delivered;
+    private ulong _sequence;
+
+    public DeviceStream Output { get; private set; } = null!;
+
+    /// <summary>流れが終わった (px4d が止めた・切れた・読み手が居なくて畳んだ・こちらで止めた)</summary>
+    public bool Ended => _ended;
+
+    private Px4Stream(Socket socket, string name, TimeSpan stallLimit)
+    {
+        _socket = socket;
+        _name = name;
+        _stallLimit = stallLimit;
+    }
+
+    /// <summary>
+    /// 繋いで ATTACH_STREAM を送り、**最初の TS が来るまで待つ。** 来なければ理由を添えて
+    /// <see cref="Px4StreamError"/> を投げる (繋いだものは閉じてある)
+    /// </summary>
+    public static Px4Stream Attach(
+        string socketPath, ulong lease, byte[] nonce, string name, TimeSpan stallLimit, TimeSpan firstTs)
+    {
+        var socket = new Socket(AddressFamily.Unix, SocketType.Stream, ProtocolType.Unspecified)
+        {
+            SendTimeout = 4000,
+            ReceiveTimeout = 4000,
+        };
+        var stream = new Px4Stream(socket, name, stallLimit);
+        try
+        {
+            socket.Connect(new UnixDomainSocketEndPoint(socketPath));
+            var payload = new byte[8 + nonce.Length];
+            BinaryPrimitives.WriteUInt64LittleEndian(payload, lease);
+            nonce.CopyTo(payload, 8);
+            // px4-ts と同じく request_id 0。最初の枠は ATTACH_STREAM でなければならない (HELLO は無い)
+            Px4Control.SendAll(socket, Px4Control.Encode(Px4Control.AttachStream, 0, 0, payload));
+            var (type, flags, _, body) = Px4Control.ReadFrame(socket, Px4Control.MaxPayload);
+            if (type != Px4Control.AttachStream || (flags & Px4Control.ResponseFlag) == 0)
+            {
+                throw new IOException($"px4d から ATTACH_STREAM の答えではないものが来ました (型 0x{type:x4})");
+            }
+            if ((flags & Px4Control.ErrorFlag) != 0) throw Px4Control.Failed(body);
+            // 待つのは pump のほう。ここからは Poll で起きるので、読むときの上限は途中で詰まったときだけ
+            socket.ReceiveTimeout = (int)SilenceLimit.TotalMilliseconds;
+            stream.StartPump();
+        }
+        catch (Exception error) when (error is IOException or SocketException)
+        {
+            socket.Dispose();
+            throw new Px4StreamError($"px4d から TS を受け取れません ({error.Message})");
+        }
+
+        if (!stream._first.Wait(firstTs))
+        {
+            stream.Stop();
+            throw new Px4StreamError($"同期したのに TS が {firstTs.TotalSeconds:F0} 秒来ません");
+        }
+        // 1枚でも渡せていれば成功。すぐ後に終わっても、読み手は TS を読んでから理由を受け取る
+        if (!stream._delivered)
+        {
+            var reason = stream._reason ?? "px4d との TS の接続が切れました";
+            stream.Stop();
+            throw new Px4StreamError(reason);
+        }
+        return stream;
+    }
+
+    private void StartPump()
+    {
+        var fds = stackalloc int[2];
+        if (Sys.Pipe(fds) < 0) throw new IOException($"pipe を作れません ({Marshal.GetLastPInvokeErrorMessage()})");
+        var read = new SafeFileHandle(fds[0], ownsHandle: true);
+        _write = new SafeFileHandle(fds[1], ownsHandle: true);
+        ChildTs.WidenPipe(fds[1], _name);
+        // 書く側は待たない。空きは poll で待ち、その間も止めろと言われていないか見る
+        Sys.Fcntl(fds[1], Sys.SetFlags, Sys.Fcntl(fds[1], Sys.GetFlags, 0) | Sys.NonBlocking);
+        Output = new DeviceStream(read, () => _reason);
+        // **専用のスレッドで。** 流れている間ずっと塞ぐ
+        _pump = new Thread(Pump) { IsBackground = true, Name = $"{_name} TS" };
+        _pump.Start();
+    }
+
+    private void Pump()
+    {
+        try
+        {
+            var heard = Stopwatch.StartNew();
+            while (!_stopped)
+            {
+                if (!_socket.Poll(TimeSpan.FromMilliseconds(200), SelectMode.SelectRead))
+                {
+                    if (heard.Elapsed < SilenceLimit) continue;
+                    End($"px4d から TS が {SilenceLimit.TotalSeconds:F0} 秒来ません");
+                    return;
+                }
+                var (type, flags, _, body) = Px4Control.ReadFrame(_socket, Px4Control.MaxTsPayload);
+                if (type == Px4Control.StreamEnd && body.Length >= 68)
+                {
+                    // final counters (u64 × 8) のあとに u32 error_code
+                    var code = BinaryPrimitives.ReadUInt32LittleEndian(body.AsSpan(64));
+                    End(code == 0 ? "px4d が TS を止めました" : $"px4d が TS を止めました ({Px4Control.Reason(code)})");
+                    return;
+                }
+                if (type != Px4Control.TsData || flags != 0 || body.Length < 20)
+                {
+                    End($"px4d から知らない枠が来ました (型 0x{type:x4})");
+                    return;
+                }
+                // u64 sequence, u64 cumulative_drop_count, u32 byte_count, bytes
+                var sequence = BinaryPrimitives.ReadUInt64LittleEndian(body);
+                var dropped = BinaryPrimitives.ReadUInt64LittleEndian(body.AsSpan(8));
+                var count = BinaryPrimitives.ReadUInt32LittleEndian(body.AsSpan(16));
+                if (count != body.Length - 20 || count % 188 != 0)
+                {
+                    End($"px4d の TS_DATA の長さが崩れています ({count} バイト)");
+                    return;
+                }
+                if (dropped != 0)
+                {
+                    End($"px4d が TS を {dropped} 回捨てました ({Px4Control.Reason(15)})");
+                    return;
+                }
+                if (sequence != _sequence)
+                {
+                    End($"px4d の TS_DATA の番号が飛びました ({_sequence} のはずが {sequence})");
+                    return;
+                }
+                _sequence++;
+                if (!Write(body.AsSpan(20))) return;
+                _delivered = true;
+                _first.Set();
+                heard.Restart();
+            }
+        }
+        catch (Exception error) when (error is IOException or SocketException or ObjectDisposedException)
+        {
+            End($"px4d との TS の接続が切れました ({error.Message})");
+        }
+        finally
+        {
+            _ended = true;
+            _socket.Dispose();
+            // 読む側はこれで EOF になり、_reason を添えて終わる (DeviceStream の ended)
+            _write?.Dispose();
+            _first.Set();
+        }
+    }
+
+    /// <summary>pipe に書き切る。**空かないまま <see cref="_stallLimit"/> 経ったら諦める** (読み手が居ない)</summary>
+    private bool Write(ReadOnlySpan<byte> bytes)
+    {
+        var fd = (int)_write!.DangerousGetHandle();
+        Stopwatch? stalled = null;
+        while (bytes.Length > 0)
+        {
+            if (_stopped) return false;
+            nint written;
+            fixed (byte* source = bytes) written = Sys.WriteFd(fd, source, (nuint)bytes.Length);
+            if (written > 0)
+            {
+                bytes = bytes[(int)written..];
+                stalled = null;
+                continue;
+            }
+            var failure = Marshal.GetLastPInvokeError();
+            if (failure == 4) continue;  // EINTR
+            if (failure != (OperatingSystem.IsMacOS() ? 35 : 11))  // EAGAIN
+            {
+                End($"TS を渡せません ({Marshal.GetLastPInvokeErrorMessage()})");
+                return false;
+            }
+            stalled ??= Stopwatch.StartNew();
+            if (stalled.Elapsed >= _stallLimit)
+            {
+                End($"読み手が居ないまま {_stallLimit.TotalSeconds:F0} 秒経ったので TS の流れを畳みました (受信機は借りたまま)");
+                return false;
+            }
+            // 止めろと言われたらすぐ降りたいので短く待つ
+            Sys.PollOut(fd, 50);
+        }
+        return true;
+    }
+
+    /// <summary>終わった理由を残す。**こちらで止めたときは残さない** (読み手には普通の終わり)</summary>
+    private void End(string reason)
+    {
+        if (_stopped) return;
+        _reason = reason;
+        Log.Write($"[{_name}] {reason}");
+    }
+
+    /// <summary>
+    /// 止める。pump を降ろして stream.sock を閉じ、読みかけの読み手が戻ってから pipe を閉じる
+    /// (<see cref="DeviceStream.WaitReaders"/>、長くても <see cref="ChildTs.ReaderDrain"/>。
+    /// 閉じた番号を次の pipe が使い回すと、降りかけの読み手が新しい流れを読んでしまう)。
+    /// **局替えのたびに通る**ので、固定では待たない
+    /// </summary>
+    public void Stop()
+    {
+        _stopped = true;
+        _reason = null;
+        var stopped = Stopwatch.StartNew();
+        Output?.Stop();
+        // pump を今すぐ起こす (Poll の 200ms を待たない)。閉じる向きを言えば Poll が起き、読めば 0 で降りる
+        try
+        {
+            _socket.Shutdown(SocketShutdown.Both);
+        }
+        catch (Exception error) when (error is SocketException or ObjectDisposedException)
+        {
+            // 繋がっていない・もう閉じた
+        }
+        if (_pump is { } pump && !pump.Join(TimeSpan.FromSeconds(1)))
+        {
+            _socket.Dispose();
+            pump.Join(TimeSpan.FromSeconds(1));
+        }
+        _socket.Dispose();
+        var rest = ChildTs.ReaderDrain - stopped.Elapsed;
+        if (rest > TimeSpan.Zero) Output?.WaitReaders(rest);
+        Output?.Dispose();
+        _ended = true;
     }
 }

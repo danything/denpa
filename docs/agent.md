@@ -104,7 +104,7 @@ CM検出用のロゴ (`.lgd`) はチューナーを掴みません。録れた�
 ## 選局は、読み手が切るまで終わらない
 
 **向こうから終わったなら、それは失敗です。** チューナーを取り上げられた・子プロセス
-(px4-ts / siano-ts) が落ちた・デバイスが黙った、のどれかで、録り終えたのではありません。
+(siano-ts) が落ちた・px4d が TS を止めた・デバイスが黙った、のどれかで、録り終えたのではありません。
 
 エージェントは取り上げた相手のストリームを接続ごと壊して畳みます (`http.Abort()`)。
 きれいに閉じると正常終了として届くためです (bun 版はこれが出来ず、取り上げられた
@@ -313,9 +313,11 @@ BS は再編があるので焼き込んだ表はいつか古くなります (実
 | PX-BCUD (ISDB-S / USB) | DVB (Linux 4.7 以降 mainline) |
 | PX-Q3U4 / PX-W3U4 / PX-MLT 系、e-Better / Digibest 系など (USB・PCIe) | px4-userland (同梱。`Px4.cs`)。px4-userland の対応機種ならそのまま使う ([一覧](https://github.com/Khronos31/px4-userland#対応機種動作環境)) |
 
-**口は3つ。** `px4d` が筐体 (USB 機能・受信機・内蔵カードリーダー) を所有する
-デーモンで、筐体1台につき1つ起こします。`px4-ts` は受信機を1本借りて選局し、
-TS を標準出力に流します。`px4ctl` は状態を聞きます。
+**使うのは2つ。** `px4d` が筐体 (USB 機能・受信機・内蔵カードリーダー) を所有する
+デーモンで、筐体1台につき1つ起こします。`px4ctl` は状態を聞きます。受信機は
+`px4d` の制御ソケット (`control.sock`) で直に借りて選局し、TS も `px4d` から直に
+受けます (`Px4Tuner`、px4-userland SPEC 6 節の portable IPC)。同梱の `px4-ts`
+(1回1チャンネルの CLI) は使いません。
 
 **機種のことは何も持ちません。** 刺さっている筐体と各受信機が受けられる方式は
 `px4d --list` に聞きます (px4-userland 0.1.6 から。`Px4Userland.Enclosures`)。
@@ -327,27 +329,38 @@ Q3U4 なら8本で受信機ごとに地上波か衛星か決まっており、ML
   `px4d --list` から組み立てるので (`Px4Userland.Detect`)、普通は書きません。
   `status=ready` 以外の筐体と `rejected` の行は、理由を記録して使いません
   (`open_failed` なら `/dev/bus/usb` を開く権限を疑う)。番号の桁数や受信機の上限は
-  見ず、合わなければ `px4d` / `px4-ts` が理由を付けて断ります。
+  見ず、合わなければ `px4d` が理由を付けて断ります。
   古い `q3u4:<14桁>:<受信機>` は「知らないデバイス」として断るので、書いてあれば
   `px4:` に書き直してください (番号と受信機はそのまま)
 - **知らない方式は飛ばして続けます。** 方式が増えても分かる受信機は使えるように。
   飛ばしたことは記録に残します
-- **受信機と違う方式は、px4-ts を起こす前に断ります** (`Px4Tuner.Check`)。
-  受信機を聞けていなければ px4-ts に任せます
-- **px4-ts は1回1チャンネル。** チャンネルを変えるたびに起こし直しますが、受信機は
-  開きっぱなしの `px4d` が持つので、デバイスは宙に浮きません。子の標準出力の pipe を
-  `DeviceStream` に載せるので (`ChildTs.cs`)、読み手の振る舞いは DVB と同じです
-  (電波が来なくても畳める・蹴られたら 200ms で降りる)。pipe は 8MB に広げます
-  (既定の 64KB は地上波で 30ms ぶん)
-- **同期の判定は「標準出力に最初の1バイトが来たか」。** px4-ts は同期するまで
-  何も書かない (書くのは TS だけ、診断は stderr)。先に終われば失敗で、
-  理由は stderr の末尾と終了コード (4 = 受信機が使用中、5 = 同期しない、7 = USB)
-- **誰も読まなくなると px4-ts は死にます。** pipe が埋まると `px4d` が
-  `SLOW_CONSUMER` として切ります。失敗ではなく受信機を離しただけで、次に同じ
-  チャンネルを頼まれたら起こし直します (`ITuneDevice.Tuned` を `TunerPool` が見る。
-  DVB は常に true)
+- **受信機と違う方式は、px4d に頼む前に断ります** (`Px4Tuner.Check`)。
+  受信機を聞けていなければ px4d に任せます
+- **受信機は借りたまま選局し直します。** 最初の選局で `ACQUIRE → TUNE →
+  START_STREAM → ATTACH_STREAM`、2回目からは `STOP_STREAM → TUNE → START_STREAM →
+  ATTACH_STREAM` (SPEC 6.3。px4-userland 0.1.6 から)。返すのはデバイスを閉じるとき
+  (`RELEASE`) だけです。以前は選局ごとに `px4-ts` を起こしていて、終わるたびに lease が
+  返り、最後の受信機なら `px4d` がチューナーの電源を落としていました。次の選局は
+  電源投入と全チューナーの初期化からで、局替えが遅かった
+- **TS は別のソケット (`stream.sock`) に TS_DATA の枠で来ます。** 枠をほどいて pipe に
+  書き、その pipe を `DeviceStream` に載せるので (`Px4Stream`)、読み手の振る舞いは
+  DVB と同じです (電波が来なくても畳める・蹴られたら 200ms で降りる)。pipe は 8MB に
+  広げます (既定の 64KB は地上波で 30ms ぶん)。選局のたびに新しい pipe なので、前の局の
+  TS は混ざりません
+- **同期の判定は TUNE の答え。** `px4d` は同期するまで答えず、5 秒 (`timeout_ms`) で
+  諦めて TIMEOUT を返します。そのあと最初の TS が 3 秒以内に来れば成功。**同期しなくても
+  受信機は借りたまま**なので、総当たりのスキャンで同期しないチャンネルが続いても電源は
+  入れ直しません。px4d のエラーは番号の名前と日本語を添えて画面に出ます
+  (`Px4Control.Reason`。BUSY = 他が使っている、USB_IO、DISCONNECTED …)
+- **誰も読まなくなったら TS の流れを畳みます。** pipe が埋まったまま 5 秒空かなければ
+  こちらから `stream.sock` を閉じます (放っておくと `px4d` の溜めが溢れて
+  `SLOW_CONSUMER` になり、その知らせも読まないソケットの奥に詰まる)。受信機は
+  借りたままで、次に同じチャンネルを頼まれたら同じ lease で選局し直します
+  (`ITuneDevice.Tuned` を `TunerPool` が見る。DVB は常に true)
+- **`px4d` との接続が切れていたら借り直します。** px4d が落ちて起こし直された・lease が
+  無くなった、は次の選局で気づき、その場で1度だけ `HELLO → ACQUIRE` からやり直します
 - **15V は2段の門。** `px4d` には `--allow-lnb-power` を渡し、実際に頼むのは
-  設定に `lnb: 15v` と書いた本だけ (`px4-ts --lnb-voltage 15`)。`11v` は
+  設定に `lnb: 15v` と書いた本だけ (TUNE の `lnb_voltage` = 15)。`11v` は
   px4-userland に無い (0V か 15V) ので頼みません
 - **内蔵カードリーダーも `px4d` が持っています。** control socket に APDU を
   投げて読みます (`Px4Card.cs`、px4-userland SPEC 6 節の portable IPC)。同梱の
@@ -369,9 +382,9 @@ Q3U4 なら8本で受信機ごとに地上波か衛星か決まっており、ML
 px4-userland 本体は方針として同梱しない (SPEC 4.5) ので、そこはこちらが背負います。
 
 **実機には当てていません** (手元の機材は PT3)。確かめたのは、機材に触らない部分
-(`px4d --list` / `px4ctl list` の読み方・device 文字列・px4-ts の引数・内蔵カードの IPC)
+(`px4d --list` / `px4ctl list` の読み方・device 文字列・TUNE の中身・受信機と内蔵カードの IPC)
 と、配布物の CLI が期待どおりの引数を受けることです。テストは `Px4Tests.cs` /
-`Px4CardTests.cs` で、出力の形は px4-userland の SPEC 4.6 と自身のテストの期待値に
+`Px4TunerTests.cs` / `Px4CardTests.cs` で (受信機とカードは px4d のふりをしたソケット相手)、出力の形は px4-userland の SPEC 4.6 と自身のテストの期待値に
 合わせてあります。実機で当てるのは
 `denpa-agent --tune px4:<筐体の番号>:2 T27` (`Probe.cs`)。
 
@@ -714,7 +727,7 @@ LaunchAgent の環境変数は、コンテナ既定の置き場を Mac の置き
   usbfs を直に叩けないので、**macOS 標準の PC/SC (PCSC.framework) 越し**に叩きます
   (`Pcsc.cs`)。`denpa-agent --card` はそのリーダーを並べます。動いている間はリーダーを
   排他で掴むので、他のアプリはカードを使えません
-- pipe を広げられない (`F_SETPIPE_SZ` が無い) ので、px4-ts / siano-ts から受ける溜めは Linux より浅い
+- pipe を広げられない (`F_SETPIPE_SZ` が無い) ので、px4d / siano-ts から受ける溜めは Linux より浅い
 - **Apple Silicon だけ** (Intel Mac 用の px4-userland / siano-userland が無い)
 - **Mac の実機でチューナーとカードを繋いで確かめたことはまだありません。** CI で焼いて起こし、
   入れ方を最後まで流すところまで (`.github/workflows/test.yml` の `agent-macos`。

@@ -1,3 +1,4 @@
+using System.Buffers.Binary;
 using TUnit.Assertions.Enums;
 using Denpa.Agent;
 
@@ -7,7 +8,7 @@ namespace Denpa.Agent.Tests;
  * px4-userland の機材 (PX-Q3U4 / PX-MLT5PE / DTV02A-5TS-P …) を掴むところ。
  *
  * 本物の筐体は無い。ここで確かめるのは**機材に触らない部分**だけ —
- * px4d --list / px4ctl list の読み方、device 文字列の形、px4-ts に渡す引数。
+ * px4d --list / px4ctl list の読み方、device 文字列の形、TUNE の中身。
  * 実機で当てるのは `denpa-agent --tune px4:<筐体の番号>:2 T27` (Probe.cs)。
  */
 public class Px4Tests
@@ -192,46 +193,53 @@ public class Px4Tests
             .IsEquivalentTo(["00001205000960", "000000000012345"], CollectionOrdering.Matching);
     }
 
+    /// <summary>TUNE の中身を読む (SPEC 6.4)</summary>
+    private static (ulong Lease, byte System, ulong Khz, ushort StreamId, ushort Slot, uint Bandwidth, byte Lnb, uint TimeoutMs) Tune(byte[] p) => (
+        BinaryPrimitives.ReadUInt64LittleEndian(p),
+        p[8],
+        BinaryPrimitives.ReadUInt64LittleEndian(p.AsSpan(9)),
+        BinaryPrimitives.ReadUInt16LittleEndian(p.AsSpan(17)),
+        BinaryPrimitives.ReadUInt16LittleEndian(p.AsSpan(19)),
+        BinaryPrimitives.ReadUInt32LittleEndian(p.AsSpan(21)),
+        p[25],
+        BinaryPrimitives.ReadUInt32LittleEndian(p.AsSpan(26)));
+
     [Test]
-    public async Task 地上波は_Hz_を_kHz_に直して渡す()
+    public async Task 地上波は_Hz_を_kHz_に直して頼む()
     {
-        var tuning = ChannelTable.Parse("T27")!;
-        var args = Px4Tuner.Arguments("00001205000960", 2, tuning, ChannelTable.NoStreamId, null);
-        // px4-userland の README の例 (T27 = 557142 kHz) と同じ数字になること
-        await Assert.That(args).IsEquivalentTo(
-            ["--device", "00001205000960", "--receiver", "2", "--system", "isdb-t", "--frequency-khz", "557142",
-                "--tune-timeout-ms", "5000", "--output", "-"],
-            CollectionOrdering.Matching);
+        var payload = Px4Tuner.TuneRequest(0x0102030405060708, ChannelTable.Parse("T27")!, ChannelTable.NoStreamId, "15v");
+        await Assert.That(payload.Length).IsEqualTo(30);
+        // px4-userland の README の例 (T27 = 557142 kHz) と同じ数字になること。
+        // 地上波は stream_id / slot を使わず、帯域 6MHz、LNB は頼まない (15v と書いてあっても)
+        await Assert.That(Tune(payload)).IsEqualTo(((ulong)0x0102030405060708, (byte)1, 557142UL, (ushort)0xffff, (ushort)0xffff, 6_000_000u, (byte)0, 5000u));
     }
 
     [Test]
     public async Task 衛星は_TSID_が分かっていれば_stream_id()
     {
         var tuning = ChannelTable.Parse("BS15_1")!;
-        var args = Px4Tuner.Arguments("00001205000960", 0, tuning, 16626, "15v");
-        await Assert.That(args).Contains("--system");
-        await Assert.That(args[args.IndexOf("--system") + 1]).IsEqualTo("isdb-s");
-        await Assert.That(args[args.IndexOf("--frequency-khz") + 1]).IsEqualTo(tuning.Frequency.ToString());
-        await Assert.That(args[args.IndexOf("--stream-id") + 1]).IsEqualTo("16626");
-        await Assert.That(args).DoesNotContain("--slot");
+        var tune = Tune(Px4Tuner.TuneRequest(7, tuning, 16626, "15v"));
+        await Assert.That(tune.System).IsEqualTo((byte)2);
+        await Assert.That(tune.Khz).IsEqualTo((ulong)tuning.Frequency);
+        await Assert.That(tune.StreamId).IsEqualTo((ushort)16626);
+        await Assert.That(tune.Slot).IsEqualTo((ushort)0xffff);
+        await Assert.That(tune.Bandwidth).IsEqualTo(0u);
         // 15V は設定に書いてある本だけ
-        await Assert.That(args[args.IndexOf("--lnb-voltage") + 1]).IsEqualTo("15");
+        await Assert.That(tune.Lnb).IsEqualTo((byte)15);
     }
 
     [Test]
     public async Task 衛星で_TSID_が分からなければ_slot()
     {
-        var tuning = ChannelTable.Parse("BS15_2")!;
-        var args = Px4Tuner.Arguments("00001205000960", 1, tuning, ChannelTable.NoStreamId, null);
-        await Assert.That(args[args.IndexOf("--slot") + 1]).IsEqualTo("2");
-        await Assert.That(args).DoesNotContain("--stream-id");
-        await Assert.That(args).DoesNotContain("--lnb-voltage");
+        var tune = Tune(Px4Tuner.TuneRequest(7, ChannelTable.Parse("BS15_2")!, ChannelTable.NoStreamId, null));
+        await Assert.That(tune.Slot).IsEqualTo((ushort)2);
+        await Assert.That(tune.StreamId).IsEqualTo((ushort)0xffff);
+        await Assert.That(tune.Lnb).IsEqualTo((byte)0);
 
-        // CS は1本しか乗っていないので slot 0
-        var cs = Px4Tuner.Arguments("00001205000960", 1, ChannelTable.Parse("CS04")!, ChannelTable.NoStreamId, "11v");
-        await Assert.That(cs[cs.IndexOf("--slot") + 1]).IsEqualTo("0");
-        // 11v は px4-userland には無い (0V か 15V)。頼まない
-        await Assert.That(cs).DoesNotContain("--lnb-voltage");
+        // CS は1本しか乗っていないので slot 0。11v は px4-userland には無い (0V か 15V)。頼まない
+        var cs = Tune(Px4Tuner.TuneRequest(7, ChannelTable.Parse("CS04")!, ChannelTable.NoStreamId, "11v"));
+        await Assert.That(cs.Slot).IsEqualTo((ushort)0);
+        await Assert.That(cs.Lnb).IsEqualTo((byte)0);
     }
 
     [Test]
@@ -256,7 +264,7 @@ public class Px4Tests
     }
 
     [Test]
-    public async Task 受信機を聞けていなければ_px4_ts_に任せる()
+    public async Task 受信機を聞けていなければ_px4d_に任せる()
     {
         Px4Tuner.Check(null, 7, ChannelTable.Parse("BS15_0")!);
         await Task.CompletedTask;

@@ -263,9 +263,10 @@ SQLite が拒むので、事実と状態が食い違いません。文字列で�
 | `agent/Denpa.Agent/Program.cs` | HTTP の口 (Kestrel)。選局・チャンネルの控え・カード・解除・知らせ |
 | `agent/Denpa.Agent/TunerPool.cs` | 優先度つきの取り合いと、掴んでいるデバイスの面倒 |
 | `agent/Denpa.Agent/Tuning.cs` | 選局そのもの (DVB)。掴んだまま変えられる |
-| `agent/Denpa.Agent/Px4.cs` | px4-userland の機材 (PX-Q3U4 / PX-MLT 系 …) を掴む。筐体と受信機は `px4d --list` に聞き、選局ごとに `px4-ts` を読む |
+| `agent/Denpa.Agent/Px4.cs` | px4-userland の機材 (PX-Q3U4 / PX-MLT 系 …) を掴む。筐体と受信機は `px4d --list` に聞き、受信機は px4d の制御ソケットで借りたまま選局し直す |
 | `agent/Denpa.Agent/Siano.cs` | siano-userland の機材 (PX-S1UD …) を掴む。機材は `siano-ts --list` に聞き、カーネルが掴んでいないものだけを `--control` で起こしたまま選局し直す |
-| `agent/Denpa.Agent/ChildTs.cs` | 子プロセス (px4-ts / siano-ts) の標準出力を読み口に載せる |
+| `agent/Denpa.Agent/Px4Control.cs` | px4d の制御ソケット (SPEC 6 節の portable IPC)。受信機 (`Px4.cs`) とカード (`Px4Card.cs`) が使う |
+| `agent/Denpa.Agent/ChildTs.cs` | 子プロセス (siano-ts) の標準出力を読み口に載せる。pipe の広げ方・閉じ方 |
 | `agent/Denpa.Agent/ChannelTable.cs` | チャンネル名 → 周波数と TSID |
 | `agent/Denpa.Agent/Cas.cs` | B-CAS まわりの境目 (解く・鍵を貰う・カードと話す、の3段の型) |
 | `agent/Denpa.Agent/B25.cs` / `Multi2.cs` | B25 の解除 (TS から ECM を拾い、鍵を貰って MULTI2 で解く) |

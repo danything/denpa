@@ -19,7 +19,7 @@ namespace Denpa.Agent;
 ///
 /// <list type="bullet">
 /// <item><see cref="DvbTuner"/> … 標準の Linux DVB v5。PT2/PT3、PX-S1UD、PX-BCUD。カーネルが持つ</item>
-/// <item><see cref="Px4Tuner"/> … px4-userland の機材 (PX-Q3U4 など)。<c>px4d</c> が持ち、選局ごとに <c>px4-ts</c> を起こす (Px4.cs)</item>
+/// <item><see cref="Px4Tuner"/> … px4-userland の機材 (PX-Q3U4 など)。<c>px4d</c> が持ち、受信機を借りたまま制御ソケットで選局し直す (Px4.cs)</item>
 /// <item><see cref="SianoTuner"/> … siano-userland の機材 (PX-S1UD などをカーネルに掴ませていないとき)。<c>siano-ts</c> を起こしたまま標準入力で選局し直す (Siano.cs)</item>
 /// </list>
 ///
@@ -44,7 +44,7 @@ public interface ITuneDevice : IDisposable
     ///
     /// <para>
     /// DVB は一度合わせたら合ったまま。px4-userland は読み手が居なくなると
-    /// px4-ts が切られるので、**同じチャンネルでも選局し直しが要る**ことがある。
+    /// TS の流れを畳む (受信機は借りたまま) ので、**同じチャンネルでも選局し直しが要る**ことがある。
     /// TunerPool は「同じチャンネルならそのまま」の前にここを見る。
     /// </para>
     /// </summary>
@@ -55,7 +55,7 @@ public interface ITuneDevice : IDisposable
 /// libc の口。ioctl を直に叩くところだけ。
 ///
 /// <para>
-/// **macOS でも同じ口で動く** (Mac で px4-ts / siano-ts の pipe を読むため)。"libc" は
+/// **macOS でも同じ口で動く** (Mac で px4d から受けた TS / siano-ts の pipe を読むため)。"libc" は
 /// macOS でも <c>/usr/lib/libc.dylib</c> (libSystem の別名) で引ける。ただし**数値が
 /// OS ごとに違うもの** (<c>O_NONBLOCK</c>、errno) は決め打ちにできないので、ここと
 /// <see cref="DeviceStream"/> で OS を見て選ぶ。
@@ -83,11 +83,39 @@ internal static unsafe partial class Sys
     [LibraryImport("libc", EntryPoint = "fcntl", SetLastError = true)]
     public static partial int Fcntl(int fd, int command, int argument);
 
+    [LibraryImport("libc", EntryPoint = "write", SetLastError = true)]
+    public static partial nint WriteFd(int fd, byte* buffer, nuint count);
+
+    /// <summary><c>pipe(int fds[2])</c>。fds[0] が読み口、fds[1] が書き口</summary>
+    [LibraryImport("libc", EntryPoint = "pipe", SetLastError = true)]
+    public static partial int Pipe(int* fds);
+
+    /// <summary><c>F_GETFL</c> / <c>F_SETFL</c>。Linux も macOS も同じ番号</summary>
+    public const int GetFlags = 3;
+    public const int SetFlags = 4;
+
     /// <summary><c>F_SETPIPE_SZ</c>。pipe の深さを変える (**Linux だけ**。macOS には無い)</summary>
     public const int SetPipeSize = 1031;
 
     private const short EventIn = 1;
+    private const short EventOut = 4;
+    private const short EventError = 8;
     private const short EventHup = 0x10;
+
+    /// <summary>
+    /// 書けるようになるまで待つ。<c>Writable</c> は空きができた、<c>Ended</c> は
+    /// 読み口が閉じた (pipe なら読む側が居なくなった。POLLERR で来る)
+    /// </summary>
+    public static (bool Writable, bool Ended) PollOut(int fd, int timeoutMs)
+    {
+        var descriptor = stackalloc byte[8];
+        *(int*)descriptor = fd;
+        *(short*)(descriptor + 4) = EventOut;
+        *(short*)(descriptor + 6) = 0;
+        if (Poll(descriptor, 1, timeoutMs) <= 0) return (false, false);
+        var revents = *(short*)(descriptor + 6);
+        return ((revents & EventOut) != 0, (revents & (EventHup | EventError)) != 0);
+    }
 
     /// <summary>
     /// 読めるようになるまで待つ。<c>Readable</c> は中身が来た、<c>Ended</c> は

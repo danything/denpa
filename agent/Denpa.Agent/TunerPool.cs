@@ -210,8 +210,8 @@ public sealed class TunerPool(
                 {
                     /*
                      * **合っていても、生きていなければ選局し直す。** DVB は合ったまま
-                     * だが、px4-userland は読み手が居なくなると px4-ts が切られる
-                     * (Px4.cs)。合っている印だけ残っていて中身が無い、を掴まない
+                     * だが、px4-userland は読み手が居なくなると TS の流れを畳む
+                     * (受信機は借りたまま。Px4.cs)。合っている印だけ残っていて中身が無い、を掴まない
                      */
                     if (held.Channel != channel || !held.Device.Tuned)
                     {
