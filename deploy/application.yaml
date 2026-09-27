@@ -48,7 +48,7 @@ spec:
         # 手で触らない
         imageMarks:
           denpa: sha-8c470d8dcb93
-          agent: sha-46fa4ee34e72
+          agent: sha-886e8390001a
 
         denpa:
           encodeConcurrency: 2
