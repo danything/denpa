@@ -74,7 +74,7 @@ internal sealed class Px4Control : IDisposable
         var control = new Px4Control(socket, timeout);
         try
         {
-            socket.Connect(new UnixDomainSocketEndPoint(socketPath));
+            ConnectWithin(socket, socketPath, timeout);
 
             // v1.0 だけを言う。**px4d は版を厳密に比べる** (SPEC 6.4) ので幅は持たせない
             var hello = new byte[12];
@@ -92,6 +92,24 @@ internal sealed class Px4Control : IDisposable
         {
             socket.Dispose();
             throw error as IOException ?? new IOException($"px4d に繋がりません ({socketPath}: {error.Message})", error);
+        }
+    }
+
+    /// <summary>
+    /// 繋ぐ。**上限つきで。** Socket.Connect は待つ上限を持たず、px4d が受け付けなくなって
+    /// 待ち行列が埋まると戻らない (選局の錠を握ったまま止まる)。間に合わなければ投げる
+    /// (ソケットは呼んだ側が閉じる)
+    /// </summary>
+    public static void ConnectWithin(Socket socket, string socketPath, TimeSpan timeout)
+    {
+        var connecting = socket.ConnectAsync(new UnixDomainSocketEndPoint(socketPath));
+        try
+        {
+            if (!connecting.Wait(timeout)) throw new IOException($"px4d が {timeout.TotalSeconds:F0} 秒以内に受け付けません ({socketPath})");
+        }
+        catch (AggregateException error) when (error.InnerException is { } inner)
+        {
+            throw inner is SocketException ? new IOException($"px4d に繋がりません ({socketPath}: {inner.Message})", inner) : inner;
         }
     }
 

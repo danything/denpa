@@ -903,7 +903,7 @@ internal sealed unsafe class Px4Stream
         var stream = new Px4Stream(socket, name, stallLimit);
         try
         {
-            socket.Connect(new UnixDomainSocketEndPoint(socketPath));
+            Px4Control.ConnectWithin(socket, socketPath, TimeSpan.FromSeconds(4));
             var payload = new byte[8 + nonce.Length];
             BinaryPrimitives.WriteUInt64LittleEndian(payload, lease);
             nonce.CopyTo(payload, 8);
