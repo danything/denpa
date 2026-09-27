@@ -106,6 +106,8 @@ test.describe('ライブを生で見る', () => {
 
         await channels.nth(1).click();
         await expect(channels.nth(1)).toHaveAttribute('data-current', 'true');
+        // 切り替えの間も前の局の絵のまま (テレビと同じ)。幕で塗り潰さない
+        await expect(page.locator('[data-testid="live-status"][data-veiled="true"]')).toHaveCount(0);
         // 器は作り直さない (同じ canvas のまま、数え続ける)
         const after = await shown();
         await expect.poll(shown, { timeout: 30_000 }).toBeGreaterThan(after + 10);

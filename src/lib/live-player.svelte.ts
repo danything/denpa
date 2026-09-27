@@ -504,16 +504,20 @@ export function livePlayer() {
      * それは正しい。実際に止まっている
      */
     function freeze(): void {
-        // 生の道では canvas が次の絵まで前の絵を持っている。写す必要が無い
-        if (raw) return;
-        if (element === null || still === null) return;
-        // まだ1枚も出ていない (初めて開いたとき)。写すものが無い
-        if (element.readyState < 2 || element.videoWidth === 0) return;
-        const ctx = still.getContext('2d');
-        if (ctx === null) return;
-        still.width = element.videoWidth;
-        still.height = element.videoHeight;
-        ctx.drawImage(element, 0, 0, still.width, still.height);
+        if (raw) {
+            // 生の道では canvas が次の絵まで前の絵を持っている。写さずに「貼っている」ことにする
+            // (でないと幕が前の絵を塗り潰す)。剥がすのは新しい局の1枚目 (`shown`)
+            if (engine === null) return;
+        } else {
+            if (element === null || still === null) return;
+            // まだ1枚も出ていない (初めて開いたとき)。写すものが無い
+            if (element.readyState < 2 || element.videoWidth === 0) return;
+            const ctx = still.getContext('2d');
+            if (ctx === null) return;
+            still.width = element.videoWidth;
+            still.height = element.videoHeight;
+            ctx.drawImage(element, 0, 0, still.width, still.height);
+        }
         holding = true;
         if (holdTimer !== null) clearTimeout(holdTimer);
         holdTimer = setTimeout(thaw, HOLD_MOST);
