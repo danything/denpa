@@ -471,9 +471,12 @@ public class Px4TunerTests
         using var tuner = Open(px4d);
         tuner.Tune(T27, ChannelTable.NoStreamId);
         var before = Fds();
-        for (var i = 0; i < 10; i++) tuner.Tune(i % 2 == 0 ? T28 : T27, ChannelTable.NoStreamId);
-        // 漏れていれば 10 本以上増える。他の片付けの揺れは数本に収まる
-        await Assert.That(Fds() - before).IsLessThan(5);
+        for (var i = 0; i < 30; i++) tuner.Tune(i % 2 == 0 ? T28 : T27, ChannelTable.NoStreamId);
+        // 偽の px4d の後始末 (閉じた stream.sock を向こうが閉じる) が追いつくのを少し待つ
+        await Task.Delay(300);
+        // 漏れていれば選局1回につき pipe と stream.sock で 30 本以上増える。並んで走る他のテストと
+        // 偽の px4d の揺れは数本 (CI でちょうど 5 本だったことがある) なので、間を大きく取る
+        await Assert.That(Fds() - before).IsLessThan(15);
         await Assert.That(px4d.Count(Px4Control.Acquire)).IsEqualTo(1);
     }
 
