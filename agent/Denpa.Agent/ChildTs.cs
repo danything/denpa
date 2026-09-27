@@ -43,9 +43,10 @@ internal sealed class ChildTs(string name, string program)
     private const int FallbackPipeSize = 1024 * 1024;
 
     /// <summary>
-    /// 読み手が降りきるまでの猶予。<see cref="DeviceStream"/> は 200ms ごとに
-    /// 起きて印を見るので、fd を閉じるのはそれより後にする (閉じた番号を
+    /// 読み手が降りきるまで待つ上限。<see cref="DeviceStream"/> は 200ms ごとに
+    /// 起きて印を見るので、fd を閉じるのは読み手が戻ってから (閉じた番号を
     /// 次の子が使い回すと、降りかけの読み手が新しい pipe を読んでしまう)。
+    /// 待つのは読みかけが居るときだけ (<see cref="DeviceStream.WaitReaders"/>)。
     /// siano-ts の後始末 (SianoTuner.Drop) も同じ理由でこれを使う
     /// </summary>
     internal static readonly TimeSpan ReaderDrain = TimeSpan.FromMilliseconds(300);
@@ -188,7 +189,7 @@ internal sealed class ChildTs(string name, string program)
             if (!process.WaitForExit(TimeSpan.FromSeconds(2))) process.Kill();
         }
         var rest = ReaderDrain - stopped.Elapsed;
-        if (stream is not null && rest > TimeSpan.Zero) Thread.Sleep(rest);
+        if (rest > TimeSpan.Zero) stream?.WaitReaders(rest);
         stream?.Dispose();
         /*
          * **標準出力は自分で閉じる。** StandardOutput に触った (同期読みにした) 子は、

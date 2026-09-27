@@ -290,18 +290,21 @@ function tick(): void {
     schedule();
     const at = now();
 
-    if (at === null) {
-        // 止まっている (貯めている)。**新しい局の1枚目だけは出して待つ** — 前の局の絵のまま
-        // 新しい局の音を待たせると、見えているものと聞こえるものが食い違う
-        if (!shownSinceReset) {
-            while (decoder._dec_count() === 0 && pending.length > 0) decode(pending.shift() as Pending);
-            if (decoder._dec_count() > 0) {
-                take();
-                draw(current?.interlaced === true ? (current.topFirst ? 0 : 1) : -1);
-            }
+    /*
+     * **新しい局の1枚目は、解けたらすぐ出して待つ** — 前の局の絵のまま新しい局の音を
+     * 聞かせると、見えているものと聞こえるものが食い違う。音の時計が動き出していても
+     * 待たない: 放送の絵は音より先に届く (VBV の遅れ) ので、番を待つと 1 枚目が
+     * 0.5〜2 秒遅れていた (本番の実測)。番が来るまではこの1枚のまま止めておく
+     */
+    if (!shownSinceReset) {
+        while (decoder._dec_count() === 0 && pending.length > 0) decode(pending.shift() as Pending);
+        if (decoder._dec_count() > 0) {
+            take();
+            draw(current?.interlaced === true ? (current.topFirst ? 0 : 1) : -1);
         }
-        return;
     }
+    // 止まっている (貯めている)
+    if (at === null) return;
 
     // 大きく遅れている (裏から戻った・止めていた)。解きながら追うより I まで飛ぶ
     const head = pending[0];

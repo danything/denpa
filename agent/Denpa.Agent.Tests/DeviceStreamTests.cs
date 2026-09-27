@@ -54,6 +54,39 @@ public partial class DeviceStreamTests
     }
 
     /*
+     * **止めたあとは、読みかけが戻るまでだけ待つ** (`WaitReaders`)。局替えのたびに
+     * 固定で 300ms 寝ていたのを、読み手が居なければ待たない形にした
+     */
+    [Test]
+    public async Task 読み手が居なければ待たず_居れば戻るまで待つ()
+    {
+        var (stream, write) = Silent();
+        using (stream)
+        using (write)
+        {
+            stream.Stop();
+            var idle = Stopwatch.StartNew();
+            stream.WaitReaders(TimeSpan.FromSeconds(2));
+            await Assert.That(idle.ElapsedMilliseconds < 50).IsTrue().Because($"{idle.ElapsedMilliseconds}ms 待った");
+        }
+
+        (stream, write) = Silent();
+        using (stream)
+        using (write)
+        {
+            var buffer = new byte[188];
+            var reading = Task.Factory.StartNew(
+                () => stream.Read(buffer, 0, buffer.Length, () => false),
+                CancellationToken.None, TaskCreationOptions.LongRunning, TaskScheduler.Default);
+            await Task.Delay(100);
+            stream.Stop();
+            stream.WaitReaders(TimeSpan.FromSeconds(2));
+            // poll は 0.2 秒ごとに起きるので、待ち終えた時点で読み手は戻っている
+            await Assert.That(reading.IsCompleted).IsTrue();
+        }
+    }
+
+    /*
      * **降りると言うまでは戻らない。**
      *
      * 何も来ないからといって勝手に終わると、電波が一瞬途切れただけで録画が

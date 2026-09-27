@@ -580,7 +580,7 @@ public sealed class SianoTuner : ITuneDevice
         child.Commands.Writer.TryComplete();
         child.Feeding.Wait(TimeSpan.FromSeconds(2));
         var rest = ChildTs.ReaderDrain - stopped.Elapsed;
-        if (stream is not null && rest > TimeSpan.Zero) Thread.Sleep(rest);
+        if (rest > TimeSpan.Zero) stream?.WaitReaders(rest);
         stream?.Dispose();
         // 同期読みにした標準出力は Process.Dispose が閉じない (ChildTs.Drop と同じ)
         process.StandardOutput.Dispose();

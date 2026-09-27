@@ -298,6 +298,20 @@ internal sealed unsafe class DeviceStream(SafeFileHandle handle, Func<string?>? 
 
     public void Stop() => _closed = true;
 
+    /// <summary>いま <see cref="Read(byte[], int, int, Func{bool}?)"/> の中に居る読み手の数</summary>
+    private int _reading;
+
+    /// <summary>
+    /// <see cref="Stop"/> のあと、**読みかけの読み手が戻るまで待つ** (長くても <paramref name="most"/>)。
+    /// 止めたあとに始まった Read は fd に触らずに戻るので、見るのは中に居る数だけでよい。
+    /// 読み手が先に降りていれば待たない (局替えのたびに固定で寝ていた 300ms がこれで消える)
+    /// </summary>
+    public void WaitReaders(TimeSpan most)
+    {
+        var since = Stopwatch.StartNew();
+        while (Volatile.Read(ref _reading) > 0 && since.Elapsed < most) Thread.Sleep(2);
+    }
+
     /// <summary>
     /// **理由の分かる終わり方をする。**
     ///
@@ -324,6 +338,19 @@ internal sealed unsafe class DeviceStream(SafeFileHandle handle, Func<string?>? 
      * </param>
      */
     public int Read(byte[] buffer, int offset, int count, Func<bool>? giveUp)
+    {
+        Interlocked.Increment(ref _reading);
+        try
+        {
+            return ReadCore(buffer, offset, count, giveUp);
+        }
+        finally
+        {
+            Interlocked.Decrement(ref _reading);
+        }
+    }
+
+    private int ReadCore(byte[] buffer, int offset, int count, Func<bool>? giveUp)
     {
         if (_background is not null)
         {
