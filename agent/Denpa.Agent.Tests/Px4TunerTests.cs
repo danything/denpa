@@ -297,9 +297,13 @@ public class Px4TunerTests
 
         public void Dispose()
         {
-            // 受け手が Accept の外に出てから待ち受けを閉じる (Serve)
+            // 受け手が Accept の外に出てから待ち受けを閉じる (Serve)。抜けないまま閉じると
+            // macOS で Dispose ごと止まりうるので、閉じずに失敗にする (待ち受けは漏れるが固まらない)
             _closed = true;
-            Task.WaitAll(_serving, TimeSpan.FromSeconds(2));
+            if (!Task.WaitAll(_serving, TimeSpan.FromSeconds(5)))
+            {
+                throw new TimeoutException("偽の px4d の受け手が 5 秒で抜けません");
+            }
             _control.Dispose();
             _stream.Dispose();
             /*
