@@ -36,6 +36,7 @@ public class Px4TunerTests
         private bool _active;
         private ulong _khz;
         private int _attachments;
+        private int _attachTries;
         private Socket? _controlClient;
 
         public DirectoryInfo Runtime { get; } = Directory.CreateTempSubdirectory("px4");
@@ -51,6 +52,9 @@ public class Px4TunerTests
 
         /// <summary>ACQUIRE に番号で断る (0 なら通す)</summary>
         public uint AcquireError { get; init; }
+
+        /// <summary>この番目 (1 から) の ATTACH_STREAM を NOT_FOUND で断る</summary>
+        public int RejectAttach { get; init; }
 
         /// <summary>最初の流れだけ、これだけ流したら STREAM_END (この番号) で止める</summary>
         public (int Frames, uint Code)? EndFirstStream { get; init; }
@@ -211,7 +215,7 @@ public class Px4TunerTests
             ulong khz;
             lock (_gate)
             {
-                var good = type == Px4Control.AttachStream && payload.Length == 24 && _armed
+                var good = ++_attachTries != RejectAttach && type == Px4Control.AttachStream && payload.Length == 24 && _armed
                     && BinaryPrimitives.ReadUInt64LittleEndian(payload) == _lease && payload.AsSpan(8).SequenceEqual(Nonce);
                 if (!good)
                 {
@@ -397,6 +401,27 @@ public class Px4TunerTests
         tuner.Tune(T27, ChannelTable.NoStreamId);
         await Assert.That(ReadMark(tuner.Output)).IsEqualTo(Mark(T27.Frequency / 1000));
         await Assert.That(px4d.Count(Px4Control.Acquire)).IsEqualTo(1);
+    }
+
+    [Test]
+    public async Task ATTACHを断られたら黙って借り直さず_次の選局で借り直す()
+    {
+        using var px4d = new FakePx4d { RejectAttach = 2 };
+        using var tuner = Open(px4d);
+        tuner.Tune(T27, ChannelTable.NoStreamId);
+
+        // 2回目の ATTACH_STREAM を断られる。接続が切れたわけではないので、その場では借り直さない (1度で投げる)
+        var error = Assert.Throws<IOException>(() => tuner.Tune(T28, ChannelTable.NoStreamId));
+        await Assert.That(error.Message).Contains("TS を受け取れません");
+        await Assert.That(px4d.Count(Px4Control.StartStream)).IsEqualTo(2);
+        await Assert.That(px4d.Count(Px4Control.Acquire)).IsEqualTo(1);
+        await Assert.That(tuner.Tuned).IsFalse();
+
+        // px4d の lease は armed のまま残る (本物は TUNE が BUSY になる) ので、返して借り直す
+        tuner.Tune(T28, ChannelTable.NoStreamId);
+        await Assert.That(ReadMark(tuner.Output)).IsEqualTo(Mark(T28.Frequency / 1000));
+        await Assert.That(px4d.Count(Px4Control.Release)).IsEqualTo(1);
+        await Assert.That(px4d.Count(Px4Control.Acquire)).IsEqualTo(2);
     }
 
     [Test]

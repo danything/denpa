@@ -642,15 +642,24 @@ public sealed class Px4Tuner : ITuneDevice
         }
     }
 
-    /// <summary>接続ごと失くした (px4d のエラーの答えではない、または lease がもう無い)</summary>
-    private static bool Lost(IOException error) => error is not Px4Error || ((Px4Error)error).Code == Px4Error.NotFound;
+    /// <summary>
+    /// 制御ソケットごと失くした (px4d のエラーの答えではない、または lease がもう無い)。
+    /// **TS の流れの失敗 (<see cref="Px4StreamError"/>) は入れない** — 制御ソケットは生きていて、
+    /// 黙って借り直すと「接続が切れていた」と嘘の記録が残る
+    /// </summary>
+    private static bool Lost(IOException error) => error switch
+    {
+        Px4StreamError => false,
+        Px4Error failed => failed.Code == Px4Error.NotFound,
+        _ => true,
+    };
 
     /// <summary>
     /// 受信機を借りたまま次に進める失敗か。同期しなかった・頼み方が合わなかった (TUNE)、
-    /// TS の流れだけが駄目だった (<see cref="Px4StreamError"/>)。それ以外は受信機を返して閉じる
+    /// ATTACH は通ったが TS が駄目だった (<see cref="Px4StreamError.KeepsLease"/>)。それ以外は受信機を返して閉じる
     /// </summary>
     private static bool Keeps(IOException error) =>
-        error is Px4StreamError || error is Px4Error { Code: Px4Error.Timeout or Px4Error.InvalidArgument };
+        error is Px4StreamError { KeepsLease: true } || error is Px4Error { Code: Px4Error.Timeout or Px4Error.InvalidArgument };
 
     private void Attempt(ChannelTable.Tuning tuning, uint streamId)
     {
@@ -811,7 +820,16 @@ public sealed class Px4Tuner : ITuneDevice
 /// 受信機を借りたままの間に、TS の流れが駄目だった (ATTACH を断られた・TS が来なかった)。
 /// **受信機は返さない** — 次の選局で同じ lease のまま STOP_STREAM → TUNE からやり直せる
 /// </summary>
-internal sealed class Px4StreamError(string message) : IOException(message);
+internal sealed class Px4StreamError(string message, bool keepsLease) : IOException(message)
+{
+    /// <summary>
+    /// 受信機を借りたまま次に進めるか。**ATTACH_STREAM が通っていれば (流れが active) 進める** —
+    /// 次の STOP_STREAM で畳める。通らなかったときは px4d の lease が「armed」のまま残り、
+    /// TUNE も START_STREAM も BUSY で返るようになる (px4d は armed の期限切れを ATTACH でしか
+    /// 見ない) ので、返して借り直すしかない
+    /// </summary>
+    public bool KeepsLease { get; } = keepsLease;
+}
 
 /// <summary>
 /// px4d から TS を受け取る1回ぶん (START_STREAM 1回につき1つ)。
@@ -850,6 +868,9 @@ internal sealed unsafe class Px4Stream
     private volatile bool _stopped;
     private volatile bool _ended;
     private volatile string? _reason;
+
+    /// <summary>ATTACH_STREAM が通ったか (px4d の側で流れが active になった)</summary>
+    private bool _attached;
 
     /// <summary>pipe に1枚でも書けたか (Attach が待つのはこれ)</summary>
     private volatile bool _delivered;
@@ -894,6 +915,7 @@ internal sealed unsafe class Px4Stream
                 throw new IOException($"px4d から ATTACH_STREAM の答えではないものが来ました (型 0x{type:x4})");
             }
             if ((flags & Px4Control.ErrorFlag) != 0) throw Px4Control.Failed(body);
+            stream._attached = true;
             // 待つのは pump のほう。ここからは Poll で起きるので、読むときの上限は途中で詰まったときだけ
             socket.ReceiveTimeout = (int)SilenceLimit.TotalMilliseconds;
             stream.StartPump();
@@ -901,20 +923,20 @@ internal sealed unsafe class Px4Stream
         catch (Exception error) when (error is IOException or SocketException)
         {
             socket.Dispose();
-            throw new Px4StreamError($"px4d から TS を受け取れません ({error.Message})");
+            throw new Px4StreamError($"px4d から TS を受け取れません ({error.Message})", stream._attached);
         }
 
         if (!stream._first.Wait(firstTs))
         {
             stream.Stop();
-            throw new Px4StreamError($"同期したのに TS が {firstTs.TotalSeconds:F0} 秒来ません");
+            throw new Px4StreamError($"同期したのに TS が {firstTs.TotalSeconds:F0} 秒来ません", keepsLease: true);
         }
         // 1枚でも渡せていれば成功。すぐ後に終わっても、読み手は TS を読んでから理由を受け取る
         if (!stream._delivered)
         {
             var reason = stream._reason ?? "px4d との TS の接続が切れました";
             stream.Stop();
-            throw new Px4StreamError(reason);
+            throw new Px4StreamError(reason, keepsLease: true);
         }
         return stream;
     }
@@ -925,9 +947,18 @@ internal sealed unsafe class Px4Stream
         if (Sys.Pipe(fds) < 0) throw new IOException($"pipe を作れません ({Marshal.GetLastPInvokeErrorMessage()})");
         var read = new SafeFileHandle(fds[0], ownsHandle: true);
         _write = new SafeFileHandle(fds[1], ownsHandle: true);
-        ChildTs.WidenPipe(fds[1], _name);
-        // 書く側は待たない。空きは poll で待ち、その間も止めろと言われていないか見る
-        Sys.Fcntl(fds[1], Sys.SetFlags, Sys.Fcntl(fds[1], Sys.GetFlags, 0) | Sys.NonBlocking);
+        try
+        {
+            ChildTs.WidenPipe(fds[1], _name);
+            // 書く側は待たない。空きは poll で待ち、その間も止めろと言われていないか見る
+            Sys.SetNonBlocking(fds[1]);
+        }
+        catch
+        {
+            read.Dispose();
+            _write.Dispose();
+            throw;
+        }
         Output = new DeviceStream(read, () => _reason);
         // **専用のスレッドで。** 流れている間ずっと塞ぐ
         _pump = new Thread(Pump) { IsBackground = true, Name = $"{_name} TS" };
@@ -1051,8 +1082,12 @@ internal sealed unsafe class Px4Stream
     /// </summary>
     public void Stop()
     {
+        /*
+         * **理由は消さない。** ここから先は End が理由を残さない (_stopped) ので、残っているのは
+         * 止める前に向こうから終わった理由だけ。読み手が pipe の残りを読み切る前に次の選局が
+         * 来ても、読み手には「px4d が TS を止めました (…)」が届く
+         */
         _stopped = true;
-        _reason = null;
         var stopped = Stopwatch.StartNew();
         Output?.Stop();
         // pump を今すぐ起こす (Poll の 200ms を待たない)。閉じる向きを言えば Poll が起き、読めば 0 で降りる

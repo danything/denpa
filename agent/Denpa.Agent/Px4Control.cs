@@ -43,6 +43,9 @@ internal sealed class Px4Control : IDisposable
     private readonly TimeSpan _timeout;
     private uint _requestId;
 
+    /// <summary>いまソケットに言ってある受ける上限 (ms)</summary>
+    private int _receiveTimeout;
+
     /// <summary>HELLO で頼んで、px4d が認めた機能 (頼んだものと向こうが持つものの積)</summary>
     public uint Capabilities { get; private set; }
 
@@ -50,6 +53,7 @@ internal sealed class Px4Control : IDisposable
     {
         _socket = socket;
         _timeout = timeout;
+        _receiveTimeout = (int)timeout.TotalMilliseconds;
     }
 
     /// <summary>筐体ごとのソケットの場所。<paramref name="name"/> は <c>control.sock</c> か <c>stream.sock</c></summary>
@@ -103,7 +107,12 @@ internal sealed class Px4Control : IDisposable
 
         try
         {
-            _socket.ReceiveTimeout = (int)(timeout ?? _timeout).TotalMilliseconds;
+            /*
+             * **変わるときだけ言う。** macOS は相手が閉じたソケットの setsockopt を EINVAL で断り、
+             * 本当の理由 (相手が閉じた) が「InvalidArgument」に化ける
+             */
+            var wait = (int)(timeout ?? _timeout).TotalMilliseconds;
+            if (_receiveTimeout != wait) _socket.ReceiveTimeout = _receiveTimeout = wait;
             SendAll(_socket, Encode(type, 0, id, payload));
 
             var (answered, flags, answeredId, body) = ReadFrame(_socket, MaxPayload);

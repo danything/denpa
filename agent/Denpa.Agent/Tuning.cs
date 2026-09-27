@@ -94,6 +94,26 @@ internal static unsafe partial class Sys
     public const int GetFlags = 3;
     public const int SetFlags = 4;
 
+    /// <summary>
+    /// <c>fcntl</c> を Apple Silicon の決まりで呼ぶ。**fcntl は可変長引数** で、Apple の arm64 では
+    /// 可変長のぶん (3つ目) をレジスタではなくスタックに置く。<see cref="Fcntl"/> のまま呼ぶと
+    /// 3つ目はレジスタに乗り、fcntl はスタックの別の値を読む (O_NONBLOCK が立たずに
+    /// pipe の write で止まった。Mac の CI)。名前つきの8つ (x0〜x7) を埋めて、9つ目をスタックに押し出す
+    /// </summary>
+    [LibraryImport("libc", EntryPoint = "fcntl", SetLastError = true)]
+    private static partial int FcntlApple(int fd, int command, nint x2, nint x3, nint x4, nint x5, nint x6, nint x7, nint argument);
+
+    /// <summary>書き口を待たない (<c>O_NONBLOCK</c>) にする。Linux と macOS のどちらでも</summary>
+    public static void SetNonBlocking(int fd)
+    {
+        var apple = OperatingSystem.IsMacOS() && RuntimeInformation.ProcessArchitecture == Architecture.Arm64;
+        var flags = apple ? FcntlApple(fd, GetFlags, 0, 0, 0, 0, 0, 0, 0) : Fcntl(fd, GetFlags, 0);
+        var set = flags < 0 ? -1 : apple
+            ? FcntlApple(fd, SetFlags, 0, 0, 0, 0, 0, 0, flags | NonBlocking)
+            : Fcntl(fd, SetFlags, flags | NonBlocking);
+        if (set < 0) throw new IOException($"待たない書き口にできません ({Marshal.GetLastPInvokeErrorMessage()})");
+    }
+
     /// <summary><c>F_SETPIPE_SZ</c>。pipe の深さを変える (**Linux だけ**。macOS には無い)</summary>
     public const int SetPipeSize = 1031;
 
