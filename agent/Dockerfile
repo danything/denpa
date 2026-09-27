@@ -103,7 +103,7 @@ COPY --from=firmware /it930x-firmware.bin /opt/px4-userland/firmware/it930x-firm
 # README が示す SHA-256 とも突き合わせる。
 # ---------------------------------------------------------------------------
 # renovate: datasource=github-releases depName=Khronos31/siano-userland extractVersion=^v(?<version>.*)$
-ARG SIANO_USERLAND_VERSION=0.1.8
+ARG SIANO_USERLAND_VERSION=0.1.9
 ARG ISDBT_RIO_SHA256=054520642d5d09cb7ab7d08dbd6fd9ba9365de56adf2e7d7d06927f9845ff818
 RUN set -eu && cd /tmp && \
     case "${TARGETARCH}" in amd64) arch=x86_64 ;; arm64) arch=aarch64 ;; *) exit 1 ;; esac && \

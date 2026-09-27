@@ -43,7 +43,7 @@ set -euo pipefail
 # renovate: datasource=github-releases depName=Khronos31/px4-userland extractVersion=^v(?<version>.*)$
 PX4_USERLAND_VERSION=0.1.6
 # renovate: datasource=github-releases depName=Khronos31/siano-userland extractVersion=^v(?<version>.*)$
-SIANO_USERLAND_VERSION=0.1.8
+SIANO_USERLAND_VERSION=0.1.9
 ISDBT_RIO_SHA256=054520642d5d09cb7ab7d08dbd6fd9ba9365de56adf2e7d7d06927f9845ff818
 
 # IT930x のファームウェアは PLEX 公式ドライバから切り出す。3つのハッシュは agent/Dockerfile と同じ

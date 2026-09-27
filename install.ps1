@@ -33,7 +33,7 @@ param([switch]$NoOpen, [switch]$Uninstall, [switch]$NoDocker)
 # siano-userland の版。**agent/Dockerfile・install.sh と揃える** (Renovate が一緒に上げる)。
 # 中身は配布元の SHA256SUMS で確かめるので、版を上げてもここのハッシュは要らない
 # renovate: datasource=github-releases depName=Khronos31/siano-userland extractVersion=^v(?<version>.*)$
-$SianoUserlandVersion = '0.1.8'
+$SianoUserlandVersion = '0.1.9'
 $IsdbtRioSha256 = '054520642d5d09cb7ab7d08dbd6fd9ba9365de56adf2e7d7d06927f9845ff818'
 
 $Repo = 'danything/denpa'
