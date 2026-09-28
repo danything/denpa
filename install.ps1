@@ -184,7 +184,7 @@ function Start-Denpa([string]$Ref, [switch]$NoOpen) {
     try {
         Get-Url "https://raw.githubusercontent.com/$Repo/$Ref/compose.mac.yml" $fetched
     } catch {
-        throw "$Ref に compose.mac.yml がありません。Windows 用はこのあとのリリースからなので、それより前の版は Windows に入れられません"
+        throw "$Ref に compose.mac.yml がありません。Windows 用は 1.23.1 からなので、それより前の版は Windows に入れられません"
     }
     $text = [IO.File]::ReadAllText($fetched)
     Remove-Item -LiteralPath $fetched
@@ -284,7 +284,7 @@ function Install-Agent([string]$Ref) {
             try {
                 Get-Url "https://github.com/$Repo/releases/download/$Ref/$name" $agent
             } catch {
-                throw "$Ref には Windows 用のエージェントがありません。Windows 用はこのあとのリリースからなので、それより前の版は Windows に入れられません"
+                throw "$Ref には Windows 用のエージェントがありません。Windows 用は 1.23.1 からなので、それより前の版は Windows に入れられません"
             }
             Get-Url "https://github.com/$Repo/releases/download/$Ref/$name.sha256" "$agent.sha256"
             Assert-Hash $agent ((Get-Content -LiteralPath "$agent.sha256" -Raw) -split '\s+')[0]

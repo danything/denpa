@@ -111,7 +111,7 @@ curl -fsSL https://raw.githubusercontent.com/danything/denpa/main/install.sh | b
   ([docs/agent.md](docs/agent.md#mac-でチューナーを使う))。v1.23.0 から入れられます
 - **Windows** (x64) は PowerShell で `irm https://raw.githubusercontent.com/danything/denpa/main/install.ps1 | iex`。
   構成は Mac と同じです。チューナーは PX-S1UD など siano-userland の機材だけで、ドライバを WinUSB にします
-  ([docs/agent.md](docs/agent.md#windows-でチューナーを使う))。このあとのリリースから入れられます
+  ([docs/agent.md](docs/agent.md#windows-でチューナーを使う))。1.23.1 から入れられます
 - **Docker は入れません。** 無ければ入れ方を示して止まります (Linux は <https://get.docker.com>、
   Mac は Docker Desktop か OrbStack、Windows は Docker Desktop)
 - **入口は [genkan](https://github.com/danything/genkan)** (ホスト名で振り分けるリバースプロキシ)。

@@ -737,7 +737,7 @@ LaunchAgent の環境変数は、コンテナ既定の置き場を Mac の置き
 ## Windows でチューナーを使う
 
 **x64 の Windows なら、PowerShell の1行で denpa ごと立ち上がってブラウザが開きます**
-(`install.ps1`。作りは Mac と同じ)。Windows 用はこのあとのリリースからで、
+(`install.ps1`。作りは Mac と同じ)。Windows 用は 1.23.1 からで、
 それより前の版は入れられません (install.ps1 がそう言って止まる)。
 
 ```powershell
