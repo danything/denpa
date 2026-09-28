@@ -8,5 +8,7 @@ playwright-report
 *.db-shm
 .git
 .github
+# denpa-aio の入口 (.github/aio.Dockerfile が写す)
+!.github/aio-entrypoint.sh
 deploy
 docs

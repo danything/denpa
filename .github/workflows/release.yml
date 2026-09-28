@@ -146,6 +146,21 @@ jobs:
             $denpa_args .
           echo "denpa: ${{ steps.tag.outputs.denpa }} ($platforms) + DENPA_VERSION → $names"
 
+          # 本体とエージェントを1つにしたもの (.github/aio.Dockerfile)。本体は、いま版を
+          # 足したほう (DENPA_VERSION 入り) から写す。これも写すだけなので数秒で終わる
+          aio_args=""
+          for alias in $names; do aio_args="$aio_args --tag ${base}/denpa-aio:${alias}"; done
+          # shellcheck disable=SC2086
+          set -- $names
+          first="$1"
+          docker buildx build --push \
+            --platform "$platforms" \
+            --file .github/aio.Dockerfile \
+            --build-arg DENPA="${base}/denpa:${first}" \
+            --build-arg AGENT="${base}/denpa-agent:${{ steps.tag.outputs.agent }}" \
+            $aio_args .
+          echo "denpa-aio: denpa:${first} + denpa-agent:${{ steps.tag.outputs.agent }} → $names"
+
   # **Mac (Apple Silicon) 用のエージェントをリリースに添える** (install.sh が取りに来る)。
   # Native AOT は Linux から macOS へ焼けないので、ここだけは Mac のランナーで**焼く**
   # (イメージのように main で焼いたものを使い回す先が無い)。中身はタグのコミットそのもの
