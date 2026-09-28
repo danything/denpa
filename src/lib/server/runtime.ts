@@ -2,6 +2,7 @@ import { mkdirSync } from 'node:fs';
 import { SOCKET_PATH } from '$lib/live';
 import { listen } from './agent-events';
 import { warnIfClosed } from './auth';
+import { seedChannels } from './channel-seed';
 import { config } from './config';
 import { checkDisk } from './disk';
 import { pump, requeueOrphanedJobs } from './encoder';
@@ -194,6 +195,8 @@ function listenToAgent(): void {
                      * 開いた瞬間に来る知らせなので、ここで乗る
                      */
                     void guard('logo', ride);
+                    // BS / CS を受けられるチューナーが挿さったなら、標準の表から局を入れる
+                    void guard('channels', seedChannels);
                     break;
                 case 'channels':
                     // スキャンで局が入れ替わった。取り込み直して番組表も集め直す
@@ -211,6 +214,8 @@ function listenToAgent(): void {
         (up) => {
             if (up) {
                 console.log('[agent] チューナーに繋がりました');
+                // BS / CS の局がまだ無ければ、標準の表から入れる (channel-seed.ts)
+                void guard('channels', seedChannels);
                 notify({ event: 'agent.up', text: 'チューナーエージェントに繋がりました' });
             } else {
                 console.error('[agent] チューナーに繋がりません');

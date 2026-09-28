@@ -20,6 +20,7 @@ EPGStation の置き換えとして作ったもので、エンコード設定は
 | `src/lib/server/epg.ts` | 局と番組表のDB書き込み、予約時刻の追従 |
 | `src/lib/server/epg-collect.ts` | 番組表集め (どのチャンネルを何本並べて開くか) |
 | `src/lib/server/scan.ts` | チャンネルスキャンの総当たり (選局はエージェント、NIT/SDT を読むのはこちら) |
+| `src/lib/server/channel-seed.ts` | 局が1つも無いとき、BS / CS の局を標準の表 (`channel-seed.json`) から入れる (全国で同じなのでスキャン不要) |
 | `src/lib/server/rules.ts` | ルール(キーワード/チャンネル/ジャンル)から予約を作る |
 | `src/lib/server/reservations.ts` | 手動予約と取り消し |
 | `src/lib/server/conflict.ts` | チューナー割り当てと競合判定 (純粋関数) |
