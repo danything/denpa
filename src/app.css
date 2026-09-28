@@ -1,0 +1,732 @@
+/*
+ * 見た目は Blades の Pico (Pico CSS v2 を引き継いだもの。素の CSS で、Sass は要らない)。
+ * Pico は素の HTML を整える作りなので、入力欄・ボタン・余白を詰め、足りない部品(タグ・小さいボタン・並べ方)を下に足す。
+ * 画面ごとの並べ方は各コンポーネントの <style> に書く。
+ * 開いたり閉じたりする部品(メニュー・ダイアログ・タブ・トグル)は Bits UI(見た目は持たないので、ここと各画面で付ける)。
+ *
+ * **Pico は `pico` の層 (@layer) に入れる。** 層に入らないこちらの規則は、詳細度に関係なく
+ * 必ず Pico に勝つ。Pico の強い selector に合わせて同じ強さで書き直す、という張り合いが要らない。
+ * 各画面の <style> も同じく層の外なので、Pico より必ず勝つ。
+ *
+ * テーマは暗いのが既定で、明るいのも選べる。app.html と +layout.svelte が <html data-theme> を付け、Pico はそれに従う。
+ * 色はテーマごとに下の 2 つのブロックで決め、画面側は変数だけを使う
+ */
+@import "@anyblades/blades/pico" layer(pico);
+
+:root {
+    --pico-font-family-sans-serif: "Hiragino Sans", "Yu Gothic UI", "Noto Sans JP", system-ui, sans-serif;
+    /* 16px(Tailwind の頃と同じ)。番組表の 1 マスなど rem で組んだ寸法がそのまま保たれる */
+    --pico-font-size: 16px;
+    --pico-line-height: 1.6;
+    --pico-spacing: 1rem;
+    --pico-typography-spacing-vertical: 0.75rem;
+    --pico-form-element-spacing-vertical: 0.45rem;
+    --pico-form-element-spacing-horizontal: 0.75rem;
+    --pico-border-radius: 0.65rem;
+    /*
+	 * 色は**紫ひとつ**を主に、状態の色は 4 つだけ。
+	 *
+	 * **塗るのは「いま動いているもの」と「押すと戻せないもの」だけ。**
+	 * 以前は予約済み(青)・視聴可能(緑)・取消(赤枠)が行ごとに並んでいて、
+	 * 一覧を開くと色の列が3本立ち、どこを見ればよいのか分からなくなっていた。
+	 * ふつうの状態は地の色に混ぜた淡い札にして、目は録画中の赤だけに行くようにする
+	 */
+    --dp-rec: #e11d48;
+    --dp-ok: #16a34a;
+    --dp-warn: #d97706;
+    --dp-info: #2563eb;
+    --dp-error: var(--dp-rec);
+}
+/* テーマごとの色。Pico も [data-theme] と :root:not([data-theme=dark]) に書くが、層の外のこちらが勝つ */
+:root:not([data-theme="dark"]),
+[data-theme="light"] {
+    --pico-background-color: #f4f5fb;
+    --pico-color: #1e2233;
+    --pico-muted-color: #646b82;
+    --pico-primary: #7c3aed;
+    --pico-primary-background: #7c3aed;
+    --pico-primary-border: #7c3aed;
+    --pico-primary-hover: #6d28d9;
+    --pico-primary-hover-background: #6d28d9;
+    --pico-primary-hover-border: #6d28d9;
+    --pico-primary-underline: rgb(124 58 237 / 0.4);
+    --pico-primary-focus: rgb(124 58 237 / 0.3);
+    --pico-primary-inverse: #fff;
+    --dp-surface: #fff;
+    --dp-base-200: #eceef8;
+    --dp-base-300: #d9ddec;
+    /*
+	 * **押せるが主ではないもの**(日送り・選んでいない種別)。Pico の既定の灰色は
+	 * 地に沈んで「押せない」ように見えたので、本文と同じ濃さにして枠で区別する
+	 */
+    --pico-secondary: #3f4660;
+    --pico-secondary-background: #e7eaf6;
+    --pico-secondary-border: #c7cde3;
+    --pico-secondary-inverse: #1e2233;
+    --pico-secondary-hover: #2b3145;
+    --pico-secondary-hover-background: #dbe0f1;
+    --pico-secondary-hover-border: #b5bdd8;
+    /* 淡い札の文字。地が白寄りなので塗り色より一段濃くする */
+    --dp-rec-text: #be123c;
+    --dp-ok-text: #15803d;
+    --dp-warn-text: #b45309;
+    --dp-info-text: #1d4ed8;
+}
+[data-theme="dark"] {
+    --pico-background-color: #0b0d14;
+    --pico-color: #e7e9f3;
+    --pico-muted-color: #9aa1b8;
+    --pico-primary: #a78bfa;
+    --pico-primary-background: #8b5cf6;
+    --pico-primary-border: #8b5cf6;
+    --pico-primary-hover: #c4b5fd;
+    --pico-primary-hover-background: #7c3aed;
+    --pico-primary-hover-border: #7c3aed;
+    --pico-primary-underline: rgb(167 139 250 / 0.5);
+    --pico-primary-focus: rgb(139 92 246 / 0.4);
+    --pico-primary-inverse: #fff;
+    --pico-form-element-background-color: #141824;
+    --pico-form-element-border-color: #2a3245;
+    --pico-form-element-active-background-color: #161b29;
+    --dp-surface: #141824;
+    --dp-base-200: #1b2130;
+    --dp-base-300: #2a3245;
+    /* 暗いほうも同じ考え。文字は本文並みの明るさ、区別は枠で付ける */
+    --pico-secondary: #c9cee2;
+    --pico-secondary-background: #232a3b;
+    --pico-secondary-border: #39425a;
+    --pico-secondary-inverse: #e7e9f3;
+    --pico-secondary-hover: #e7e9f3;
+    --pico-secondary-hover-background: #2b3346;
+    --pico-secondary-hover-border: #47516c;
+    /* 暗いほうは逆に、塗り色より明るくしないと読めない */
+    --dp-rec-text: #fda4af;
+    --dp-ok-text: #86efac;
+    --dp-warn-text: #fcd34d;
+    --dp-info-text: #93c5fd;
+}
+/* Pico は送信ボタンを横幅いっぱいにする。ボタンは中身の幅にし、広げたいところだけ .full を付ける */
+button[type="submit"] {
+    width: auto;
+}
+button[type="submit"].full {
+    width: 100%;
+}
+/*
+ * 押せる入れ物 (行やカードを丸ごと押すもの。`<div role="button">`)。Pico は [role=button] をボタンの見た目にするので、
+ * 入れ物には当てない(色も枠も余白も親のまま。見た目は各画面の <style>)
+ */
+div[role="button"],
+li[role="button"],
+article[role="button"] {
+    --pico-background-color: transparent;
+    --pico-border-color: transparent;
+    --pico-color: inherit;
+    --pico-box-shadow: none;
+    display: block;
+    width: auto;
+    margin: 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    color: inherit;
+    font-weight: inherit;
+    font-size: inherit;
+    line-height: inherit;
+    text-align: inherit;
+    box-shadow: none;
+}
+html {
+    font-size: var(--pico-font-size);
+}
+/*
+ * **画面の高さは、単位ではなく `html` から採る。**
+ *
+ * `100vh` も `100dvh` も「画面の高さ」を*言い当てようとする*単位で、
+ * 携帯では当たらないことがある (実機の PWA で、土台が画面より 56px
+ * 高くなった。56px は Chrome for Android のアドレスバーの高さそのもの)。
+ *
+ * `html` に高さを与えておけば、その先は `100%` で降りていける。`html` の
+ * 高さは**そのページが縦に動かずに出せる高さ** (`clientHeight`) そのもので、
+ * 言い当てる余地が無い。JS も要らないので、**描く前から正しい**
+ */
+html,
+body {
+    height: 100%;
+}
+body {
+    margin: 0;
+    word-break: auto-phrase;
+    line-break: strict;
+}
+/*
+ * **使わない Pico の部品を打ち消す。** Blades の Pico は部品を選べず丸ごと1枚で来る
+ * (部品ごとに読めるようにする話は anyblades/discussions#168)。Pico の Sass で外していた
+ * 部品のうち、こちらの要素に当たるものだけをここで戻す。部品ごとに読めるようになったら、
+ * 読まないことにしてこの塊ごと消す
+ */
+/* ナビ (<nav>)。間は各画面の gap で取る。Pico は li と a に負の余白と余白を足す */
+:root {
+    --pico-nav-element-spacing-vertical: 0;
+    --pico-nav-element-spacing-horizontal: 0;
+    --pico-nav-link-spacing-vertical: 0;
+    --pico-nav-link-spacing-horizontal: 0;
+}
+/* コード (<code> <pre>)。地を塗った札にしない。字は等幅にするだけ */
+pre,
+code,
+var,
+kbd,
+samp {
+    display: revert;
+    padding: 0;
+    border-radius: 0;
+    background: none;
+    color: inherit;
+    font-family: revert;
+    font-size: revert;
+    font-weight: inherit;
+    line-height: inherit;
+}
+pre {
+    overflow: revert;
+    margin-bottom: var(--pico-typography-spacing-vertical);
+}
+/* 検索欄の虫眼鏡 */
+input[type="search"] {
+    padding-inline-start: var(--pico-form-element-spacing-horizontal);
+    background-image: none;
+}
+
+/* Pico は入力欄・表・段落の下に大きな余白を付ける。並べ方は各画面の gap で決めるので外す */
+input:not([type="checkbox"], [type="radio"]),
+select,
+textarea,
+button,
+[type="button"],
+[type="submit"],
+[type="reset"],
+[type="file"],
+[role="button"],
+fieldset,
+table,
+p,
+ul,
+ol,
+dl,
+h1,
+h2,
+h3,
+h4,
+progress,
+details,
+[role="group"],
+label,
+section {
+    margin-bottom: 0;
+}
+h1,
+h2,
+h3,
+h4 {
+    --pico-font-weight: 700;
+}
+h1 {
+    font-size: 1.5rem;
+}
+h2 {
+    font-size: 1.15rem;
+}
+h3 {
+    font-size: 1rem;
+}
+table {
+    font-size: 0.9rem;
+}
+th,
+td {
+    padding: 0.45rem 0.6rem;
+}
+
+/* ---- 並べる ---- */
+/* 縦に積む / 横に並べて折り返す */
+.stack {
+    display: flex;
+    flex-direction: column;
+    gap: var(--gap, 0.75rem);
+}
+.cluster {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--gap, 0.5rem);
+}
+.spread {
+    justify-content: space-between;
+}
+.grow {
+    flex: 1 1 0;
+    min-width: 0;
+}
+.full {
+    width: 100%;
+}
+
+/* ---- 面 ---- */
+/* 枠で囲んだ白い面 */
+.panel {
+    background: var(--dp-surface);
+    border: 1px solid var(--dp-base-300);
+    border-radius: 1rem;
+    padding: 1rem;
+}
+.panel.soft {
+    background: var(--dp-base-200);
+    border-color: transparent;
+}
+
+/* ---- 文字 ---- */
+.muted {
+    opacity: 0.65;
+}
+.small {
+    font-size: 0.85rem;
+}
+.tiny {
+    font-size: 0.75rem;
+}
+.bold {
+    font-weight: 700;
+}
+.num {
+    font-variant-numeric: tabular-nums;
+}
+.right {
+    text-align: right;
+}
+.nowrap {
+    white-space: nowrap;
+}
+/*
+ * 本文の中の色つき文字。**塗り用の色ではなく「文字用」を使う。**
+ * 塗り用は白抜きの札を前提に選んでいるので、地の上に文字として置くと
+ * 明るいテーマでは薄く、暗いテーマでは沈む
+ */
+.text-error {
+    color: var(--dp-rec-text);
+}
+.text-warning {
+    color: var(--dp-warn-text);
+}
+/* 欄の上の小さい見出し。<label class="field"><span>見出し</span><input></label> */
+.field {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    min-width: 0;
+}
+.field > span:first-child {
+    font-size: 0.75rem;
+    font-weight: 500;
+    opacity: 0.7;
+}
+/* チェックボックス + 文 */
+.check {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    cursor: pointer;
+}
+.check input {
+    margin: 0;
+}
+
+/* ---- ボタン ---- */
+/* リンクのままボタンの見た目にする(role="button" にするとリンクでなくなる)。<a class="button"> */
+a.button {
+    --pico-background-color: var(--pico-primary-background);
+    --pico-border-color: var(--pico-primary-border);
+    --pico-color: var(--pico-primary-inverse);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.4rem;
+    padding: var(--pico-form-element-spacing-vertical) var(--pico-form-element-spacing-horizontal);
+    border: var(--pico-border-width) solid var(--pico-border-color);
+    border-radius: var(--pico-border-radius);
+    background-color: var(--pico-background-color);
+    color: var(--pico-color);
+    font-weight: var(--pico-font-weight);
+    line-height: var(--pico-line-height);
+    text-align: center;
+    text-decoration: none;
+    cursor: pointer;
+    transition:
+        background-color var(--pico-transition),
+        border-color var(--pico-transition);
+}
+a.button:hover {
+    --pico-background-color: var(--pico-primary-hover-background);
+    --pico-border-color: var(--pico-primary-hover-border);
+}
+a.button.secondary {
+    --pico-background-color: var(--pico-secondary-background);
+    --pico-border-color: var(--pico-secondary-border);
+    --pico-color: var(--pico-secondary-inverse);
+}
+a.button.outline {
+    --pico-background-color: transparent;
+    --pico-color: var(--pico-primary);
+}
+a.button.secondary.outline {
+    --pico-color: var(--pico-secondary);
+}
+/* リンクのボタンの :hover。枠だけのものは地を塗らない(塗ると枠の色の文字が地に沈む) */
+a.button.secondary:hover {
+    --pico-background-color: var(--pico-secondary-hover-background);
+    --pico-border-color: var(--pico-secondary-hover-border);
+}
+a.button.outline:hover {
+    --pico-background-color: transparent;
+    --pico-color: var(--pico-primary-hover);
+    --pico-border-color: var(--pico-primary-hover);
+}
+a.button.secondary.outline:hover {
+    --pico-color: var(--pico-secondary-hover);
+    --pico-border-color: var(--pico-secondary-hover);
+}
+/*
+ * **いま居るところを表すリンク** (`<a class="button" aria-current="page">`、番組表の種別など)。
+ *
+ * Pico は「素のリンクの aria-current」を**文字を主の明るい色にする**ことで表す。
+ * `role="button"` が付いていないので、ボタンの見た目にしたリンクにもその規則が当たり、
+ * 塗ってある地 (紫) の上に薄い紫の字が乗って読めなくなっていた。
+ * 塗ってあるものは白抜きのまま、枠だけのものは元の色のままにする
+ */
+a.button[aria-current]:not([aria-current="false"]) {
+    --pico-color: var(--pico-primary-inverse);
+}
+a.button.secondary[aria-current]:not([aria-current="false"]) {
+    --pico-color: var(--pico-secondary-inverse);
+}
+a.button.outline[aria-current]:not([aria-current="false"]) {
+    --pico-color: var(--pico-primary);
+}
+a.button.secondary.outline[aria-current]:not([aria-current="false"]) {
+    --pico-color: var(--pico-secondary);
+}
+/* Pico の .secondary / .contrast / .outline に足す */
+button.small,
+[role="button"].small,
+a.button.small {
+    padding: 0.3rem 0.65rem;
+    font-size: 0.85rem;
+}
+button.xs,
+[role="button"].xs,
+a.button.xs {
+    padding: 0.15rem 0.45rem;
+    font-size: 0.75rem;
+}
+button.accent,
+[role="button"].accent,
+a.button.accent {
+    --pico-background-color: var(--pico-primary-background);
+    --pico-border-color: var(--pico-primary-background);
+    --pico-color: #fff;
+}
+button.ghost,
+[role="button"].ghost,
+a.button.ghost {
+    --pico-background-color: transparent;
+    --pico-border-color: transparent;
+    --pico-color: inherit;
+    --pico-box-shadow: none;
+}
+:is(button, [role="button"], a.button).ghost:is(
+    :hover,
+    :active,
+    :focus,
+    [aria-current]:not([aria-current="false"])
+) {
+    /* Pico は押せるものの :hover/:focus で文字を白、枠を主の色にする。薄い地の上だと読めないので戻す */
+    --pico-background-color: var(--dp-base-200);
+    --pico-border-color: transparent;
+    --pico-color: inherit;
+    --pico-box-shadow: none;
+}
+button.danger,
+[role="button"].danger,
+a.button.danger {
+    --pico-background-color: var(--dp-error);
+    --pico-border-color: var(--dp-error);
+    --pico-color: #fff;
+}
+/*
+ * 枠だけの危ない操作(取消・削除の 1 回目)。**待っている間は赤くしない。**
+ *
+ * 一覧では行ごとに取消や削除が並ぶので、赤い枠の列が立って画面全体が
+ * 警告のように見えていた。**赤は押そうとしたときと、確定のボタンだけ**にする
+ */
+button.outline.danger,
+[role="button"].outline.danger,
+a.button.outline.danger {
+    --pico-background-color: transparent;
+    --pico-border-color: var(--pico-secondary-border);
+    --pico-color: var(--pico-secondary);
+}
+:is(button, [role="button"], a.button).outline.danger:is(:hover, :active, :focus) {
+    --pico-background-color: color-mix(in srgb, var(--dp-rec) 14%, var(--dp-surface));
+    --pico-border-color: var(--dp-rec);
+    --pico-color: var(--dp-rec-text);
+}
+button.ghost.danger,
+[role="button"].ghost.danger,
+a.button.ghost.danger {
+    --pico-background-color: transparent;
+    --pico-border-color: transparent;
+    --pico-color: var(--dp-error);
+}
+
+/* 色付きのボタンは、押しているときも同じ色の少し濃いものにする(Pico の既定だと主の色に変わって文字が読みにくい) */
+:is(button, [role="button"], a.button).accent:is(:hover, :active, :focus) {
+    --pico-background-color: color-mix(in srgb, var(--pico-primary-background) 85%, #000);
+    --pico-border-color: color-mix(in srgb, var(--pico-primary-background) 85%, #000);
+    --pico-color: #fff;
+}
+:is(button, [role="button"], a.button).danger:not(.ghost, .outline):is(:hover, :active, :focus) {
+    --pico-background-color: color-mix(in srgb, var(--dp-error) 85%, #000);
+    --pico-border-color: color-mix(in srgb, var(--dp-error) 85%, #000);
+    --pico-color: #fff;
+}
+:is(button, [role="button"], a.button).ghost.danger:is(:hover, :active, :focus) {
+    --pico-background-color: color-mix(in srgb, var(--dp-error) 12%, transparent);
+    --pico-color: var(--dp-error);
+}
+
+/* 入力欄とくっつけたボタンは折り返さない */
+[role="group"] > button,
+[role="group"] > a.button {
+    white-space: nowrap;
+    flex: 0 0 auto;
+}
+
+/* ---- タグ ---- */
+/*
+ * 状態の札。**既定は淡い地に濃い文字。** 塗るのは `.solid` を付けたものだけで、
+ * それは「いま動いているもの」(録画中・視聴中)に限る。
+ * 一覧では 1 行に札が 2〜3 個並ぶので、全部塗ると色の縞になって読めなかった
+ */
+.tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    padding: 0.05rem 0.5rem;
+    border-radius: 999px;
+    font-size: 0.75rem;
+    line-height: 1.6;
+    white-space: nowrap;
+    background: var(--dp-base-200);
+    color: inherit;
+    border: 1px solid transparent;
+}
+/* 淡い地は、状態の色を地の色 (--dp-surface) に 14% 混ぜる (知らせは 10%)。札と知らせで同じ考え */
+.tag.success {
+    background: color-mix(in srgb, var(--dp-ok) 14%, var(--dp-surface));
+    color: var(--dp-ok-text);
+}
+.tag.error {
+    background: color-mix(in srgb, var(--dp-rec) 14%, var(--dp-surface));
+    color: var(--dp-rec-text);
+}
+.tag.warning {
+    background: color-mix(in srgb, var(--dp-warn) 14%, var(--dp-surface));
+    color: var(--dp-warn-text);
+}
+.tag.info {
+    background: color-mix(in srgb, var(--dp-info) 14%, var(--dp-surface));
+    color: var(--dp-info-text);
+}
+.tag.accent,
+.tag.primary {
+    background: color-mix(in srgb, var(--pico-primary-background) 14%, var(--dp-surface));
+    color: var(--pico-primary);
+}
+/* 枠を足すだけ。色は上の淡い札と同じ(手を止めてほしいもの = 競合・失敗に使う) */
+.tag.outline {
+    border-color: currentColor;
+}
+/* 色の付かない枠だけの札(工程や但し書き)は地も塗らない。ふつうの札と見分けが付かなくなる */
+.tag.outline:not(.success, .error, .warning, .info, .accent, .primary, .solid) {
+    background: transparent;
+    border-color: var(--dp-base-300);
+}
+/* **いま動いているものだけ塗る。** 一覧の中でここにだけ目が行くようにする */
+.tag.solid {
+    background: var(--pico-primary-background);
+    color: #fff;
+    border-color: transparent;
+}
+.tag.solid.error {
+    background: var(--dp-rec);
+    color: #fff;
+}
+.tag.solid.success {
+    background: var(--dp-ok);
+    color: #fff;
+}
+
+/* ---- 知らせ ---- */
+/*
+ * 一言の知らせ。**地を塗るのではなく、左の線で種類を示す。**
+ * 色で塗りつぶすと、暗いほうでは濁った帯になって字が読みにくかった
+ */
+.notice {
+    border-radius: 0.75rem;
+    padding: 0.75rem 1rem;
+    background: var(--dp-base-200);
+    border-left: 3px solid transparent;
+}
+.notice.warning {
+    background: color-mix(in srgb, var(--dp-warn) 10%, var(--dp-surface));
+    border-left-color: var(--dp-warn);
+}
+.notice.error {
+    background: color-mix(in srgb, var(--dp-rec) 10%, var(--dp-surface));
+    border-left-color: var(--dp-rec);
+}
+.notice.success {
+    background: color-mix(in srgb, var(--dp-ok) 10%, var(--dp-surface));
+    border-left-color: var(--dp-ok);
+}
+.notice.info {
+    background: color-mix(in srgb, var(--dp-info) 10%, var(--dp-surface));
+    border-left-color: var(--dp-info);
+}
+
+/* ---- 読み込み中 (送信中のボタン。`actions.ts` の `submitting` が付ける) ---- */
+
+/*
+ * **幅を動かさない。** Pico の `aria-busy` は回るものを `::before` で*文字の前に
+ * 足す*ので、押した瞬間にボタンが横に伸びる。行に並んだボタンはそれで**隣ごと
+ * ずれて**、次に押す場所が変わってしまう (削除の聞き返しが2文字で揃えてあるのと
+ * 同じ話。`arming.svelte.ts`)。
+ *
+ * 中身は**消さずに隠す**。場所を取ったままなので、ボタンの大きさは送信の前後で
+ * 1px も変わらない。回るものはその上に重ねる
+ */
+button[aria-busy="true"] {
+    position: relative;
+    /* 文字を透かす。場所は取ったままなので幅は変わらない。アイコンは
+	   `currentColor` で塗っているので、これだけで一緒に消える (`Icon.svelte`) */
+    color: transparent;
+    /* 押せているように見せる。Pico は `[disabled]` を半分に透かすが、動いている
+	   ことを見せたいので戻す */
+    opacity: 1;
+}
+button[aria-busy="true"]::before {
+    /* Pico が文字の前に足すぶん。重ねるほうを使うので出さない */
+    display: none;
+}
+button[aria-busy="true"] > * {
+    /* `currentColor` で塗っていないもの (絵・別に色を持つ印) の保険 */
+    visibility: hidden;
+}
+button[aria-busy="true"]::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    margin: auto;
+    /* 1em では小さすぎて、何が起きているのか一目で分からなかった */
+    width: 1.25em;
+    height: 1.25em;
+    background-image: var(--pico-icon-loading);
+    background-size: 1.25em auto;
+    background-repeat: no-repeat;
+    background-position: center;
+}
+
+/* ---- Bits UI の部品の見た目(開閉は Bits UI、見た目はここ) ---- */
+[data-menu-content],
+[data-dropdown-menu-content],
+[data-popover-content],
+[data-select-content] {
+    z-index: 50;
+    min-width: 10rem;
+    padding: 0.25rem;
+    border-radius: 0.5rem;
+    background: var(--dp-surface);
+    border: 1px solid var(--dp-base-300);
+    box-shadow: 0 10px 30px rgb(0 0 0 / 0.35);
+}
+[data-menu-item],
+[data-dropdown-menu-item],
+[data-select-item] {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.4rem 0.6rem;
+    border-radius: 0.375rem;
+    cursor: pointer;
+    outline: none;
+}
+[data-menu-item][data-highlighted],
+[data-dropdown-menu-item][data-highlighted],
+[data-select-item][data-highlighted] {
+    background: var(--dp-base-200);
+}
+[data-dialog-overlay] {
+    position: fixed;
+    inset: 0;
+    z-index: 60;
+    background: rgb(0 0 0 / 0.55);
+}
+[data-dialog-content] {
+    position: fixed;
+    z-index: 61;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    width: min(32rem, calc(100vw - 2rem));
+    max-height: calc(100% - 2rem);
+    overflow: auto;
+    padding: 1.25rem;
+    border-radius: 1rem;
+    background: var(--dp-surface);
+    border: 1px solid var(--dp-base-300);
+}
+[data-tabs-list] {
+    display: inline-flex;
+    gap: 0.25rem;
+    padding: 0.25rem;
+    border-radius: 0.6rem;
+    background: var(--dp-base-200);
+}
+[data-tabs-trigger] {
+    padding: 0.3rem 0.8rem;
+    border-radius: 0.45rem;
+    border: 0;
+    background: transparent;
+    color: inherit;
+    cursor: pointer;
+}
+[data-tabs-trigger][data-state="active"] {
+    background: var(--dp-surface);
+    box-shadow: 0 1px 2px rgb(0 0 0 / 0.25);
+}
+
+/*
+ * 再生位置の帯。Pico の range は溝を1色で塗るだけで、どこまで進んだかが見えない。
+ * 進んだぶん (--fill、画面側で 0〜100% を渡す) を主の色で塗る。Firefox は ::-moz-range-progress が持つ
+ */
+input[type="range"].fill::-webkit-slider-runnable-track {
+    background:
+        linear-gradient(var(--pico-primary-background), var(--pico-primary-background)) 0 0 / var(--fill, 0%)
+        100% no-repeat,
+        var(--pico-range-border-color);
+}
+input[type="range"].fill::-moz-range-progress {
+    height: var(--pico-range-height);
+    border-radius: var(--pico-border-radius);
+    background: var(--pico-primary-background);
+}

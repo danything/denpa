@@ -100,7 +100,7 @@ denpa 本体は上と同じコンテナイメージ `denpa` を、Mac の Docker
 | 名前 | 何に | 出どころ | ライセンス |
 | --- | --- | --- | --- |
 | Svelte / SvelteKit / adapter-node | 画面・ルーティング・サーバの束 | <https://github.com/sveltejs> | MIT |
-| Pico CSS / Bits UI | 見た目の土台と、メニューなどの部品 | <https://picocss.com> / <https://bits-ui.com> | MIT |
+| Blades (Pico CSS を引き継いだもの) / Bits UI | 見た目の土台と、メニューなどの部品 | <https://blades.ninja> / <https://bits-ui.com> | MIT |
 | drizzle-orm | SQLite の読み書き (サーバの束) | <https://github.com/drizzle-team/drizzle-orm> | **Apache-2.0** |
 | web-bml (+ 同梱の es2) | **データ放送 (BML) を描く。** 2026-08 に上流がライブラリ化して npm に出したので、写しをやめて普通の依存にした | <https://github.com/otya128/web-bml> / <https://github.com/otya128/es2> | MIT / MIT |
 | crc-32 | web-bml の PNG / DRCS | <https://github.com/SheetJS/js-crc32> | **Apache-2.0** |

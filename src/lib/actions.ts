@@ -18,7 +18,7 @@ import { enhance } from '$app/forms';
  * バーは画面遷移だけに使う (`+layout.svelte`) — あちらは押したリンクごと
  * 次の画面に変わってしまうので、押した場所に出しようがない。
  *
- * 回るものの見た目と、**幅を動かさない**ための細工は `app.scss` の「読み込み中」。
+ * 回るものの見た目と、**幅を動かさない**ための細工は `app.css` の「読み込み中」。
  */
 export function submitting(node: HTMLFormElement, submit?: SubmitFunction) {
     // 型引数は `SubmitFunction` の既定に揃える。省くと `| undefined` 側に推論され、after に渡せない

@@ -107,7 +107,7 @@
     <!-- 右下に浮かせる。z-index はモーダル(60)の下・本文の上 -->
     <div class="toasts">
         {#each shown as notice (notice.key)}
-            <!-- 見た目は app.scss の notice (error / info / success。kind と同じ名前) -->
+            <!-- 見た目は app.css の notice (error / info / success。kind と同じ名前) -->
             <div class="notice {notice.kind} toast" data-testid={notice.key}>
                 <span class="text">{notice.text}</span>
                 <button type="button"

@@ -1,5 +1,5 @@
 <script lang="ts">
-    import '../app.scss';
+    import '../app.css';
     import { onMount } from 'svelte';
     import { navigating, page } from '$app/state';
     import Measure from '$lib/components/Measure.svelte';
@@ -218,7 +218,7 @@
 </svelte:head>
 
 <!--
-    **土台の高さは `html` から `%` で降ろす** (`app.scss` で `html, body` に
+    **土台の高さは `html` から `%` で降ろす** (`app.css` で `html, body` に
     高さを与えてある)。単位で言い当てない — `100vh` も `100dvh` も**実機では
     画面の高さと一致しないことがあった** (PWA で 763.765px 対 708px。差の
     56px は Chrome for Android のアドレスバーの高さそのもの)。
