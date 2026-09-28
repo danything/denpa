@@ -15,6 +15,7 @@
  */
 import type { ChannelType } from '../types';
 import SEED from './channel-seed.json';
+import { refresh as scanState } from './scan';
 import { type AgentChannel, getChannels, getTuners, putChannels } from './tuner';
 
 const TYPES: ChannelType[] = ['BS', 'CS'];
@@ -26,6 +27,12 @@ const TYPES: ChannelType[] = ['BS', 'CS'];
  * 番組表の集め直しはその知らせで走る (runtime.ts)。ここでは預けるだけ
  */
 export async function seedChannels(): Promise<ChannelType[]> {
+    /*
+     * **スキャンの最中は入れない。** スキャンは結果を最後にまとめて預けるので、その間は
+     * 局が空のまま。そこへチューナーの知らせ (選局のたびに来る) で割り込むと、
+     * スキャンの途中で標準の表に切り替わり、番組表集めがそちらへ走る (レビュー指摘)
+     */
+    if (scanState().state === 'running') return [];
     const [tuners, channels] = await Promise.all([getTuners(), getChannels()]);
     if (channels.length > 0) return [];
     const receivable = new Set(tuners.filter((t) => !t.disabled).flatMap((t) => t.types));
