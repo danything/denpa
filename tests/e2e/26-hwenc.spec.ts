@@ -12,15 +12,20 @@ import { expect, goto, reserveSoon, setRecording, syncEpg, test, waitWatchable }
 
 /**
  * 焼くときに偽 ffmpeg へ渡された引数、1回ぶんずつ。**書き途中の名前 (`.encoding`) へ
- * 出しているものだけ** — サムネイルなど、同じ道を通る他の呼び出しは省く
+ * 出しているものだけ** — サムネイルなど、同じ道を通る他の呼び出しは省く。
+ *
+ * **この録画のぶんだけ。** 入力は生TS (`…-<録画の番号>.m2ts`、切り出したものもこれが頭)。
+ * 同じワーカーの前のテストが残した予約が録れて焼かれると、そのぶんまで混ざっていた (CI)
  */
-function encodeRuns(file: string): string[][] {
+function encodeRuns(file: string, recordingId: string | null): string[][] {
     if (!existsSync(file)) return [];
+    const mine = new RegExp(`-${recordingId}\\.m2ts`);
     return readFileSync(file, 'utf8')
         .split('---\n')
         .filter((run) => run.trim() !== '')
         .map((run) => run.split('\n'))
-        .filter((run) => run.some((a) => a.endsWith('.encoding')));
+        .filter((run) => run.some((a) => a.endsWith('.encoding')))
+        .filter((run) => run.some((a, i) => run[i - 1] === '-i' && mine.test(a)));
 }
 
 /** 1回ぶんの引数から「どの口を、何で焼いたか」。ソフトウェアなら口は無し */
@@ -97,8 +102,9 @@ test.describe('GPU で焼く', () => {
         let programId = await reserveSoon(page, request, 'BS');
         let row = page.locator(`[data-testid="recording-row"][data-program-id="${programId}"]`);
         await waitWatchable(page, row);
+        let recordingId = await row.getAttribute('data-recording-id');
         // AV1 は 128 の QSV、H.264 は 129 の QSV (どちらも先頭の道で通る)
-        expect(encodeRuns(stack.encodeArgsFile).map(wayOf)).toEqual([
+        expect(encodeRuns(stack.encodeArgsFile, recordingId).map(wayOf)).toEqual([
             'renderD128:av1_qsv',
             'renderD129:h264_qsv',
         ]);
@@ -115,7 +121,8 @@ test.describe('GPU で焼く', () => {
         programId = await reserveSoon(page, request, 'BS', 1);
         row = page.locator(`[data-testid="recording-row"][data-program-id="${programId}"]`);
         await waitWatchable(page, row);
-        expect(encodeRuns(stack.encodeArgsFile).map(wayOf)).toEqual([
+        recordingId = await row.getAttribute('data-recording-id');
+        expect(encodeRuns(stack.encodeArgsFile, recordingId).map(wayOf)).toEqual([
             'renderD129:h264_qsv',
             'renderD129:h264_qsv',
             'renderD129:h264_vaapi',

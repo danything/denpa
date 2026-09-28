@@ -78,11 +78,20 @@ public partial class DeviceStreamTests
             var reading = Task.Factory.StartNew(
                 () => stream.Read(buffer, 0, buffer.Length, () => false),
                 CancellationToken.None, TaskCreationOptions.LongRunning, TaskScheduler.Default);
-            await Task.Delay(100);
+            /*
+             * **読み手が中に入ったのを見てから止める。** 決め打ちで 100ms 寝ていた頃は、混んだ Mac の
+             * ランナーでまだ入っていないうちに止めてしまい、待つ相手の居ない WaitReaders が
+             * すぐ戻って落ちた (CI)
+             */
+            var entering = Stopwatch.StartNew();
+            while (stream.Readers == 0 && entering.Elapsed < TimeSpan.FromSeconds(2)) await Task.Delay(5);
+            await Assert.That(stream.Readers).IsEqualTo(1);
             stream.Stop();
             stream.WaitReaders(TimeSpan.FromSeconds(2));
-            // poll は 0.2 秒ごとに起きるので、待ち終えた時点で読み手は戻っている
-            await Assert.That(reading.IsCompleted).IsTrue();
+            // poll は 0.2 秒ごとに起きるので、待ち終えた時点で読み手は戻っている。
+            // タスクが「終わった」になるのはその少し後なので、見るのは中に居る数
+            await Assert.That(stream.Readers).IsEqualTo(0);
+            await Assert.That(await reading.WaitAsync(TimeSpan.FromSeconds(1))).IsEqualTo(0);
         }
     }
 

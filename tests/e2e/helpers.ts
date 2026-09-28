@@ -82,13 +82,42 @@ async function cellsOn(page: Page): Promise<Cell[]> {
         .sort((a, b) => a.startAt - b.startAt || Number(a.serviceId) - Number(b.serviceId));
 }
 
+/**
+ * 番組表を翌日 / 前日に送り、**表が新しい日のものに入れ替わって描き終わるまで待つ。**
+ *
+ * ハイドレーションは済んでいるので、それを待っても即座に抜ける。表は後から流れてきて
+ * 少しずつ描くので (`goto` と同じ)、押した直後に数えると**前の日のマス**を拾い、
+ * 入れ替わった後には居ないマスを押していた (放送日の終わり際の 3 時台に CI で落ちた)
+ */
+async function turnDay(page: Page, which: 'next-day' | 'prev-day'): Promise<void> {
+    const before = page.url();
+    await page.getByTestId(which).click();
+    await page.waitForURL((url) => url.href !== before);
+    await page.locator('[data-hydrated="true"]').waitFor();
+    /*
+     * 送った先の日は `start` (その日の 4:00) から 24 時間。いちばん遅く始まるマスがその中に
+     * 入っていれば、入れ替わっている (前の日の表は、翌日へ送ったなら手前、前日へ送ったなら先に外れる)
+     */
+    const start = Number(new URL(page.url()).searchParams.get('start'));
+    const day = 24 * 60 * 60 * 1000;
+    await expect
+        .poll(
+            async () => {
+                const last = Math.max(...(await allCells(page)).map((c) => c.startAt));
+                return last >= start && last < start + day;
+            },
+            { timeout: 30_000 },
+        )
+        .toBe(true);
+    await expect(page.locator('[data-testid="guide-grid"][aria-busy="true"]')).toHaveCount(0);
+}
+
 /** 番組表に出ているうち、もう終わったもの。放送日の頭(4時台)では前日に送って探す */
 export async function past(page: Page): Promise<Cell[]> {
     const stale = (cells: Cell[]) => cells.filter((c) => c.startAt < Date.now() - 60 * 60 * 1000);
     let found = stale(await allCells(page));
     if (found.length === 0) {
-        await page.getByTestId('prev-day').click();
-        await page.locator('[data-hydrated="true"]').waitFor();
+        await turnDay(page, 'prev-day');
         found = stale(await allCells(page));
     }
     expect(found.length).toBeGreaterThan(0);
@@ -124,8 +153,7 @@ export async function upcoming(page: Page): Promise<[Cell, ...Cell[]]> {
     if (soon.length === 0) {
         // 放送日の終わり際(深夜3時台など)は、この日にこれから始まる番組が
         // 1つも残っていない。翌日に送って探す
-        await page.getByTestId('next-day').click();
-        await page.locator('[data-hydrated="true"]').waitFor();
+        await turnDay(page, 'next-day');
         soon = await cellsOn(page);
     }
     return atLeastOne(soon, 'これから始まる番組');

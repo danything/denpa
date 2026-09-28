@@ -349,6 +349,9 @@ internal sealed unsafe class DeviceStream(SafeFileHandle handle, Func<string?>? 
     /// <summary>いま <see cref="Read(byte[], int, int, Func{bool}?)"/> の中に居る読み手の数</summary>
     private int _reading;
 
+    /// <summary>中に居る読み手の数 (テストが「読み手が入った」「戻った」を見る)</summary>
+    internal int Readers => Volatile.Read(ref _reading);
+
     /// <summary>
     /// <see cref="Stop"/> のあと、**読みかけの読み手が戻るまで待つ** (長くても <paramref name="most"/>)。
     /// 止めたあとに始まった Read は fd に触らずに戻るので、見るのは中に居る数だけでよい。
