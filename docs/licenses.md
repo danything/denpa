@@ -76,7 +76,7 @@ Dockerfile の行・`package.json`) を優先し、上流の表示に拠るも�
 
 リリースに添えた `denpa-agent-<版>-darwin-arm64.tar.gz` (上と同じ .NET の Native AOT のバイナリ1個) と、
 上と同じ px4-userland / siano-userland の **Mac 版** (`darwin-arm64`)・同じファームウェア。
-違いは **libusb を同梱せず Homebrew のもの (LGPL-2.1+) に動的に繋ぐ**ことだけで、
+libusb 1.0.30 (LGPL-2.1+) が実行ファイルに静的リンクなのも上と同じで、
 配布物の `DEPENDENCY-NOTICE.txt` / `THIRD_PARTY_NOTICES.md` もそのまま置きます。
 USB のカードリーダーは macOS の PCSC.framework (OS の一部) を呼びます。
 denpa 本体は上と同じコンテナイメージ `denpa` を、Mac の Docker で動かします。

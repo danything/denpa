@@ -277,7 +277,6 @@ PLIST="$HOME/Library/LaunchAgents/$LABEL.plist"
 LOG="$HOME/Library/Logs/denpa-agent.log"
 # compose.mac.yml の TUNER_AGENT_URL と揃える
 PORT=25252
-LIBUSB=/opt/homebrew/opt/libusb/lib/libusb-1.0.0.dylib
 # 生TSはエージェント (後から解く) とコンテナ (録る) の両方が読み書きするので、Mac のフォルダに置く
 MEDIA="$HOME/Movies/denpa"
 MAC_DOCKER="Docker Desktop (https://www.docker.com/products/docker-desktop/) か OrbStack (https://orbstack.dev) を入れてから、もう一度流してください"
@@ -317,17 +316,6 @@ mac_main() {
   fi
 
   [ "$(uname -m)" = arm64 ] || die "対応しているのは Apple Silicon (arm64) の Mac だけです (px4-userland / siano-userland に Intel Mac 用がありません)"
-
-  # px4-userland と siano-ts は Homebrew の libusb に動的にリンクしている
-  if [ ! -f "$LIBUSB" ]; then
-    # PATH に載せていない人もいるので、Apple Silicon の既定の場所も見る
-    brew=$(command -v brew || true)
-    if [ -z "$brew" ] && [ -x /opt/homebrew/bin/brew ]; then brew=/opt/homebrew/bin/brew; fi
-    [ -n "$brew" ] || die "Homebrew の libusb が要ります。https://brew.sh から Homebrew を入れて、もう一度流してください"
-    say "libusb を入れます (brew install libusb)"
-    "$brew" install libusb
-    [ -f "$LIBUSB" ] || die "$LIBUSB が見当たりません"
-  fi
 
   work=$(mktemp -d)
   trap 'rm -rf "$work"' EXIT

@@ -688,9 +688,9 @@ compose.prod.yml から tuner-agent を外したもの)。
    `docker compose up -d`。答えたらブラウザで開きます (`--no-open` で開かない)。genkan が動いているか
    80・443 が空いていれば、Linux と同じく `http://denpa.localhost` で開けるようにします (README「立てる」)
 
-- **要るのは Homebrew の libusb と Docker。** libusb は px4-userland と siano-userland の Mac 版が
-  使うもので、Homebrew があれば `brew install libusb` まで済ませます (無ければ入れ方を
-  言って止まる)。Docker は勝手に入れません。無い・起きていないときはエージェントだけ入れ、
+- **要るのは Docker だけ。** px4-userland / siano-userland の Mac 版は libusb を中に抱えている
+  (px4-userland 0.1.7・siano-userland 0.1.9 から) ので、Homebrew は要りません。
+  Docker は勝手に入れません。無い・起きていないときはエージェントだけ入れ、
   Docker Desktop か OrbStack を入れる (起こす) よう言って終わります。入れたらもう一度流す
 - 入れるのは全部ユーザーの下で、sudo は要りません
 

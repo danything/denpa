@@ -218,6 +218,14 @@ jobs:
           DENPA_AGENT_TARBALL="$RUNNER_TEMP/denpa-agent.tar.gz" bash install.sh --no-docker
           curl -fsS http://127.0.0.1:25252/denpa/card; echo
           ls -l "$HOME/Library/Application Support/denpa-agent/px4-userland" "$HOME/Library/Application Support/denpa-agent/siano-userland"
+          # libusb は中に抱えている (Homebrew のものに繋がない)。ランナーには Homebrew の libusb が
+          # 入りうるので、動いたことでは確かめられない。繋ぎ先を直に見る
+          for bin in px4-userland/px4d siano-userland/siano-ts; do
+            otool -L "$HOME/Library/Application Support/denpa-agent/$bin"
+            if otool -L "$HOME/Library/Application Support/denpa-agent/$bin" | grep -q libusb; then
+              echo "$bin が外の libusb に繋いでいます" >&2; exit 1
+            fi
+          done
           "$HOME/Library/Application Support/denpa-agent/px4-userland/px4d" --list || true
           bash install.sh --uninstall
           test ! -e "$HOME/Library/LaunchAgents/io.github.danything.denpa-agent.plist"
