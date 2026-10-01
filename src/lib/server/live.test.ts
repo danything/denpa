@@ -424,3 +424,14 @@ describe('掴めなかった理由', () => {
         expect(whyNotTuned('ffmpeg が終了しました (1)', until)).toBe('選局できませんでした');
     });
 });
+
+describe('音声だけの焼き方 (外から使う口の ?audio=only)', () => {
+    test('映像も字幕も焼かず、AAC だけを fMP4 で出す', () => {
+        const args = encodeArgs(1024, stereo, 'audio', 0);
+        expect(args).not.toContain('-vf');
+        expect(args.some((a) => a.endsWith(':v:0'))).toBe(false);
+        expect(args).not.toContain('-filter_complex');
+        expect(args.join(' ')).toContain('-c:a aac');
+        expect(args.join(' ')).toContain('-f mp4');
+    });
+});

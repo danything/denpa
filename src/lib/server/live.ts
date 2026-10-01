@@ -165,12 +165,19 @@ import type { Connection } from './ws';
  *   字幕を持たない放送に頼むと ffmpeg は組み立ての時点で降りるので、
  *   そうと分かったらこちらで焼き直す (`Session.run`)
  */
+/**
+ * セッションの焼き方。画面が選ぶのは LiveCodec だけで、`audio` は外から使う口
+ * (`/api/services/<id>/live?audio=only`) の**音声だけ**。映像も字幕も焼かず、AAC の fMP4 を出す
+ */
+type StreamCodec = LiveCodec | 'audio';
+
 export function encodeArgs(
     program: number,
     audio: AudioTrack,
-    codec: LiveCodec = 'h264',
+    codec: StreamCodec = 'h264',
     caption: number | null = 0,
 ): string[] {
+    const video = codec !== 'audio';
     const from = Number.isFinite(program) && program > 0 ? `0:p:${program}` : '0';
     // デュアルモノは片側だけを両耳へ。そのままだと左右から別の言語が同時に鳴る
     const pan =
@@ -189,40 +196,45 @@ export function encodeArgs(
         '-probesize',
         '100000',
         // 字幕を絵で受け取るための指定。映像には効かない
-        ...(caption === null ? [] : captionInput()),
+        ...(caption === null || !video ? [] : captionInput()),
         '-i',
         'pipe:0',
-        /*
-         * インタレ解除 (上の説明)。**ライブは常に60コマ。** 録画は本編映像から実測して
-         * 30に落とすことがあるが (`encoder.measureSmoothMotion`)、ライブは映像が来る前に
-         * 決めないといけない。60 に倒しておけば動きは絶対に落ちない (アニメで無駄が出るだけ)
-         */
-        '-vf',
-        deinterlace(true),
-        '-map',
-        `${from}:v:0`,
-        /*
-         * **コマ数の上限を言っておく。**
-         *
-         * `-probesize` を大きくは取らないので、ffmpeg は入口でコマ数を読み切れず、
-         * 時間の刻み (90kHz) から**でたらめな値**を起こすことがある。x264 は黙って
-         * 受けるが、**SVT-AV1 は突っぱねる**:
-         *
-         *     Svt[error]: Instance 1: The maximum allowed frame rate is 240 fps
-         *     [libsvtav1] Error setting encoder parameters: bad parameter
-         *
-         * 実機で probesize を 20KB まで下げて AV1 を選ぶと 0/3、この上限を付けると 3/3 通った。
-         *
-         * **固定 (`-r`) ではなく上限 (`-fpsmax`) にする。** 固定すると、放送が
-         * 本当に 59.94p だったとき (720p の局) にコマを落とす。上限なら、
-         * まともな値のときは何も起きず、でたらめな値のときだけ抑える。
-         *
-         * 値はインタレ解除の出方そのまま — 29.97 のインタレのフィールドを
-         * 起こすので 59.94
-         */
-        '-fpsmax',
-        '60000/1001',
-        ...videoArgs(codec),
+        // 音声だけなら映像は焼かない (StreamCodec)
+        ...(video
+            ? [
+                  /*
+                   * インタレ解除 (上の説明)。**ライブは常に60コマ。** 録画は本編映像から実測して
+                   * 30に落とすことがあるが (`encoder.measureSmoothMotion`)、ライブは映像が来る前に
+                   * 決めないといけない。60 に倒しておけば動きは絶対に落ちない (アニメで無駄が出るだけ)
+                   */
+                  '-vf',
+                  deinterlace(true),
+                  '-map',
+                  `${from}:v:0`,
+                  /*
+                   * **コマ数の上限を言っておく。**
+                   *
+                   * `-probesize` を大きくは取らないので、ffmpeg は入口でコマ数を読み切れず、
+                   * 時間の刻み (90kHz) から**でたらめな値**を起こすことがある。x264 は黙って
+                   * 受けるが、**SVT-AV1 は突っぱねる**:
+                   *
+                   *     Svt[error]: Instance 1: The maximum allowed frame rate is 240 fps
+                   *     [libsvtav1] Error setting encoder parameters: bad parameter
+                   *
+                   * 実機で probesize を 20KB まで下げて AV1 を選ぶと 0/3、この上限を付けると 3/3 通った。
+                   *
+                   * **固定 (`-r`) ではなく上限 (`-fpsmax`) にする。** 固定すると、放送が
+                   * 本当に 59.94p だったとき (720p の局) にコマを落とす。上限なら、
+                   * まともな値のときは何も起きず、でたらめな値のときだけ抑える。
+                   *
+                   * 値はインタレ解除の出方そのまま — 29.97 のインタレのフィールドを
+                   * 起こすので 59.94
+                   */
+                  '-fpsmax',
+                  '60000/1001',
+                  ...videoArgs(codec),
+              ]
+            : []),
         // 何本目の音声か。複数入っている放送では 0 が主とは限らない
         '-map',
         `${from}:a:${audio.stream}`,
@@ -239,7 +251,7 @@ export function encodeArgs(
         '1',
         'pipe:1',
         // **2つ目の出口。** 字幕の絵を、映像と同じ物差しの時刻付きで出す
-        ...(caption === null ? [] : captionOutput(from, caption)),
+        ...(caption === null || !video ? [] : captionOutput(from, caption)),
     ];
 }
 
@@ -342,7 +354,7 @@ function videoArgs(codec: LiveCodec): string[] {
  * どちらも 2ch に落とす。デュアルモノの配り直し (`-af pan=…`) はこの手前で
  * 効いているので、ここへ来るのは既に「出したい音」1本ぶん
  */
-function audioArgs(codec: LiveCodec): string[] {
+function audioArgs(codec: StreamCodec): string[] {
     return codec === 'av1'
         ? ['-c:a', 'libopus', '-b:a', '256k', '-ac', '2']
         : ['-c:a', 'aac', '-b:a', '256k', '-ac', '2'];
@@ -415,7 +427,8 @@ export function whyNotTuned(why: string, until: number | null): string {
 }
 
 interface Viewer {
-    connection: Connection;
+    /** 送り先。WebSocket の視聴者は Connection、HTTP の視聴者 (liveStream) は映像だけを流す口 */
+    connection: Pick<Connection, 'send'>;
     /** init を渡したか。渡す前に中身を送っても MSE は捨てる */
     ready: boolean;
     /** データ放送を出しているか。**頼まれた人にだけ配る** */
@@ -523,7 +536,7 @@ class Session {
         /** どの音声を、どちら側で出すか */
         readonly audio: AudioTrack,
         /** どの形で焼くか。**見ている人が選ぶ** */
-        readonly codec: LiveCodec,
+        readonly codec: StreamCodec,
         /** その局の中で何本目の字幕を出すか */
         readonly track: number,
         /**
@@ -710,8 +723,12 @@ class Session {
              * もう一度起こす。TS は流れ続けているので、掴み直しは要らない
              */
             const forgotten = captionless.get(this.serviceId);
+            // 音声だけなら字幕は焼かない
             let wanted =
-                forgotten !== undefined && Date.now() - forgotten < FORGET_CAPTIONLESS ? null : this.track;
+                this.codec === 'audio' ||
+                (forgotten !== undefined && Date.now() - forgotten < FORGET_CAPTIONLESS)
+                    ? null
+                    : this.track;
             for (;;) {
                 // ライブは同じ TS が流れ続けている。追っかけは焼き直しのたびに読み直す
                 const stream = tuned ?? this.source?.();
@@ -1231,7 +1248,7 @@ const key = (
     channel: string,
     serviceId: number,
     audio: AudioTrack,
-    form: LiveCodec | 'raw',
+    form: StreamCodec | 'raw',
     track: number,
     // **生は音声で分けない** — 全部の音声を送って画面が選ぶ (`TuneCommand.raw`)
 ) => `${type}:${channel}:${serviceId}:${form === 'raw' ? '*' : audio.id}:${form}:${track}`;
@@ -1243,7 +1260,7 @@ function begin(
     channel: string,
     serviceId: number,
     now: NowPlaying,
-    codec: LiveCodec,
+    codec: StreamCodec,
     track: number,
     raw: boolean,
 ): Session {
@@ -1259,7 +1276,7 @@ function watch(
     channel: string,
     serviceId: number,
     now: NowPlaying,
-    codec: LiveCodec,
+    codec: StreamCodec,
     track: number,
     raw: boolean,
     viewer: Viewer,
@@ -1269,6 +1286,82 @@ function watch(
         begin(channelType, channel, serviceId, now, codec, track, raw);
     session.add(viewer);
     return session;
+}
+
+/** HTTP のライブで、読まれずに溜まってよい量 (バイト)。超えたら閉じる */
+const LIVE_STREAM_BACKLOG = 32 * 1024 * 1024;
+
+/**
+ * **HTTP で流すライブ** (`GET /api/services/<id>/live`)。画面の外のもの
+ * (Home Assistant の Cast・VLC・ffplay) 向けに、画面と同じ焼き方の fMP4 をそのまま流す。
+ *
+ * `raw` なら焼かずに、1局に絞っただけの生の TS を流す (画面の「生」と同じ道)。
+ * `audio` なら音声だけ (AAC の fMP4。画面の無いスピーカーへの Cast 向け)。
+ *
+ * 画面の視聴者と同じ取り合いに乗る — 同じ局・同じ焼き方を誰かが見ていれば相乗りし、
+ * 最後の1人が抜けたら畳む。流すのは映像の器 (init + 中身) だけで、字幕・データ放送・
+ * 知らせは捨てる。焼けなくなったら (`error` / `ended`) 応答を閉じる。
+ * 局が無ければ null
+ */
+export function liveStream(serviceId: number, codec: StreamCodec | 'raw'): ReadableStream<Uint8Array> | null {
+    const row = orm()
+        .select({ type: services.type, channel: services.channel })
+        .from(services)
+        .where(eq(services.id, serviceId))
+        .get();
+    if (row === undefined) return null;
+
+    let session: Session | null = null;
+    /** もう閉じたか。加えている最中 (watch の中) に閉じることがあるので、戻ってから見る */
+    let closed = false;
+    const viewer: Viewer = { connection: { send: () => {} }, ready: false, wantsData: false };
+    const leave = () => {
+        if (session === null) return;
+        session.remove(viewer);
+        if (session.empty) session.stop();
+        session = null;
+    };
+    return new ReadableStream<Uint8Array>(
+        {
+            start(controller) {
+                viewer.connection = {
+                    send(kind, _pts, payload) {
+                        if (closed) return;
+                        const close = () => {
+                            closed = true;
+                            leave();
+                            controller.close();
+                        };
+                        if (
+                            kind === CHANNEL.videoInit ||
+                            kind === CHANNEL.videoMedia ||
+                            kind === CHANNEL.rawTs
+                        ) {
+                            /*
+                             * **読むのが追いつかない相手は閉じる。** 溜め続けるとメモリが増え続ける。
+                             * fMP4 は途中の中身を捨てると壊れるので、捨てずに閉じる
+                             */
+                            if ((controller.desiredSize ?? 0) < -LIVE_STREAM_BACKLOG) return close();
+                            controller.enqueue(payload);
+                            return;
+                        }
+                        if (kind !== CHANNEL.control) return;
+                        const notice = JSON.parse(new TextDecoder().decode(payload)) as Notice;
+                        if (notice.type === 'error' || notice.type === 'ended') close();
+                    },
+                };
+                const raw = codec === 'raw';
+                const now = nowPlaying(serviceId, undefined);
+                session = watch(row.type, row.channel, serviceId, now, raw ? 'h264' : codec, 0, raw, viewer);
+                if (closed) leave();
+            },
+            cancel() {
+                closed = true;
+                leave();
+            },
+        },
+        new ByteLengthQueuingStrategy({ highWaterMark: 1024 * 1024 }),
+    );
 }
 
 /**
