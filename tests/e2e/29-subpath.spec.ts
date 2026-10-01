@@ -27,8 +27,16 @@ test.describe('接頭辞の下で', () => {
                 res.writeHead(404).end(`outside of ${PREFIX}: ${req.url}`);
                 return;
             }
+            /*
+             * **Origin は本体のものに直して渡す。** このスタックは ORIGIN を本体の URL に固定して
+             * あるので、別のポートに立てたこの前段からのフォーム送信は、SvelteKit に
+             * 「よそからの送信」として断られる。本物の前段 (Home Assistant の Ingress など) は
+             * Host をそのまま渡し、denpa は ORIGIN を付けないので、こうはならない
+             */
+            const headers = { ...req.headers };
+            if (headers.origin !== undefined) headers.origin = app.origin;
             const upstream = httpRequest(
-                { host: app.hostname, port: app.port, path, method: req.method, headers: req.headers },
+                { host: app.hostname, port: app.port, path, method: req.method, headers },
                 (up) => {
                     res.writeHead(up.statusCode ?? 502, up.headers);
                     up.pipe(res);
