@@ -415,7 +415,8 @@ export function whyNotTuned(why: string, until: number | null): string {
 }
 
 interface Viewer {
-    connection: Connection;
+    /** 送り先。WebSocket の視聴者は Connection、HTTP の視聴者 (liveStream) は映像だけを流す口 */
+    connection: Pick<Connection, 'send'>;
     /** init を渡したか。渡す前に中身を送っても MSE は捨てる */
     ready: boolean;
     /** データ放送を出しているか。**頼まれた人にだけ配る** */
@@ -1278,6 +1279,59 @@ function watch(
  * まで 160ms。それでも来ないなら開いたそばから離れた人なので、掴んだままに
  * しない (ライブは録画の次に強いので、放っておくと番組表集めを蹴り続ける)。
  */
+/**
+ * **HTTP で流すライブ** (`GET /api/services/<id>/live`)。画面の外のもの
+ * (Home Assistant の Cast・VLC・ffplay) 向けに、画面と同じ焼き方の fMP4 をそのまま流す。
+ *
+ * `raw` なら焼かずに、1局に絞っただけの生の TS を流す (画面の「生」と同じ道)。
+ *
+ * 画面の視聴者と同じ取り合いに乗る — 同じ局・同じ焼き方を誰かが見ていれば相乗りし、
+ * 最後の1人が抜けたら畳む。流すのは映像の器 (init + 中身) だけで、字幕・データ放送・
+ * 知らせは捨てる。焼けなくなったら (`error` / `ended`) 応答を閉じる。
+ * 局が無ければ null
+ */
+export function liveStream(serviceId: number, codec: LiveCodec | 'raw'): ReadableStream<Uint8Array> | null {
+    const row = orm()
+        .select({ type: services.type, channel: services.channel })
+        .from(services)
+        .where(eq(services.id, serviceId))
+        .get();
+    if (row === undefined) return null;
+
+    let session: Session | null = null;
+    const viewer: Viewer = { connection: { send: () => {} }, ready: false, wantsData: false };
+    const leave = () => {
+        if (session === null) return;
+        session.remove(viewer);
+        if (session.empty) session.stop();
+        session = null;
+    };
+    return new ReadableStream<Uint8Array>({
+        start(controller) {
+            viewer.connection = {
+                send(kind, _pts, payload) {
+                    if (kind === CHANNEL.videoInit || kind === CHANNEL.videoMedia || kind === CHANNEL.rawTs) {
+                        controller.enqueue(payload);
+                        return;
+                    }
+                    if (kind !== CHANNEL.control) return;
+                    const notice = JSON.parse(new TextDecoder().decode(payload)) as Notice;
+                    if (notice.type === 'error' || notice.type === 'ended') {
+                        leave();
+                        controller.close();
+                    }
+                },
+            };
+            const raw = codec === 'raw';
+            const now = nowPlaying(serviceId, undefined);
+            session = watch(row.type, row.channel, serviceId, now, raw ? 'h264' : codec, 0, raw, viewer);
+        },
+        cancel() {
+            leave();
+        },
+    });
+}
+
 const WARM_WAIT = 8_000;
 
 /**
