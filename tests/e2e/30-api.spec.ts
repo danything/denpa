@@ -28,6 +28,13 @@ test.describe('外から使う口', () => {
         expect(value?.[0]).toBe(0x47);
         controller.abort();
 
+        // 音声だけは audio/mp4
+        const audio = new AbortController();
+        const sound = await fetch(`${baseURL}/${first.live}?audio=only`, { signal: audio.signal });
+        expect(sound.status).toBe(200);
+        expect(sound.headers.get('content-type')).toBe('audio/mp4');
+        audio.abort();
+
         expect((await request.get('/api/services/1/live')).status()).toBe(404);
     });
 

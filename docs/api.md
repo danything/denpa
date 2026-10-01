@@ -30,6 +30,9 @@
 | `av1` | AV1 / Opus の fragmented MP4 | `video/mp4` | AV1 を解ける新しい端末 |
 | `raw` | 焼かずに1局に絞っただけの TS (MPEG-2) | `video/mp2t` | VLC・ffplay・録画ソフト (いちばん軽い) |
 
+`?audio=only` で音声だけ (AAC の fragmented MP4、`audio/mp4`)。画面の無いスピーカーへの Cast 向け。
+映像を焼かないので軽い。録画の `audio` と同じ書き方です。
+
 ## 録画の一覧 `GET /api/recordings`
 
 観られるもの (録り終えて、ファイルがあるもの) を新しい順に。`?limit=` と `?offset=` で区切れます。
