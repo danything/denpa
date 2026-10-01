@@ -4,7 +4,7 @@ import type { FileSource } from '$lib/source';
 import { fileRecordingId } from './auth';
 import { orm } from './db';
 import { shareLinks } from './schema';
-import { displayTitle } from './title';
+import { markedTitle } from './title';
 
 /**
  * 期限付きの再生リンク。
@@ -99,6 +99,7 @@ export function shareTokenAllows(pathname: string, searchParams: URLSearchParams
  * (vlc-android の VideoPlayerActivity / MediaWrapper.getTitle を確認)。入れ物の
  * title は履歴や通知にしか回らず、見出しには効かない。名前の区切りは
  * サーバでは読み捨てる (`file/[name]/+server.ts`) — 資格はトークンだけ。
+ * 名前は `[字][デ]` を残す (markedTitle)。テレビの見出しはこれしか出ないので。
  * `source` の名指しはクエリに焼き込む (テレビごとのコーデック設定の実現手段)。
  * プレイリストのほう (`playlist/[name]/+server.ts`) は、その中身にファイルの
  * URL を同じ資格で書く
@@ -114,7 +115,7 @@ export function shareUrls(
     if (source !== null) query.set('source', source);
     const qs = query.size === 0 ? '' : `?${query}`;
     // 名前の中の区切り文字はパスの段を増やすので寄せておく。見た目だけの部分なので厳密でなくてよい
-    const label = displayTitle(recording.name).replace(/[/\\]/g, '／') || String(recording.id);
+    const label = markedTitle(recording.name).replace(/[/\\]/g, '／') || String(recording.id);
     const base = `${origin}/api/recordings/${recording.id}`;
     // 拡張子は中身に合わせる (生TSは録画と同じ `.m2ts` — `.ts` は TypeScript と紛れる)
     return {

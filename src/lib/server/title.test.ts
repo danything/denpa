@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { displayTitle, parseTitle, sanitizeFileName, toHalfWidth } from './title';
+import { displayTitle, markedTitle, parseTitle, sanitizeFileName, toHalfWidth } from './title';
 
 describe('parseTitle', () => {
     test('装飾記号を落としてシリーズ名にする', () => {
@@ -55,6 +55,15 @@ describe('displayTitle', () => {
 
     test('全部消えたら元の名前のまま', () => {
         expect(displayTitle('[字]')).toBe('[字]');
+    });
+});
+
+describe('markedTitle', () => {
+    test('[字][デ] は残す (テレビの見出しで字幕・二か国語が分かるように)', () => {
+        expect(markedTitle('［新］番組　第１話［字］［デ］')).toBe('[新]番組 第1話[字][デ]');
+    });
+    test('ARIB の囲み文字は [字] の形に開く (テレビの VLC で豆腐にしない)', () => {
+        expect(markedTitle('ニュース\u{1F211}\u{1F213}')).toBe('ニュース[字][デ]');
     });
 });
 

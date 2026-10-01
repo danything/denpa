@@ -39,6 +39,18 @@ export function displayTitle(rawName: string): string {
     return cleaned === '' ? (rawName ?? '').trim() : cleaned;
 }
 
+/**
+ * **テレビの VLC に出す番組名。** `[字][デ][二]` のような記号を**残す** (displayTitle は落とす)。
+ * 一覧と違ってテレビの見出しはこれしか出ないので、字幕があるか・二か国語かがここで分かる。
+ *
+ * ARIB の囲み文字 (🈑🈞🈔) は `[字][デ][二]` に開く。テレビの VLC は絵文字の字形を
+ * 持っていないことがあり、豆腐になる
+ */
+export function markedTitle(rawName: string): string {
+    const opened = (rawName ?? '').replace(/[\u{1F210}-\u{1F23B}]/gu, (c) => `[${c.normalize('NFKC')}]`);
+    return toHalfWidth(opened).replace(/\s+/g, ' ').trim();
+}
+
 export interface ParsedTitle {
     series: string;
     subtitle: string;

@@ -1,7 +1,7 @@
 import { xspf } from '$lib/server/playlist';
 import { recordingOr404 } from '$lib/server/recording';
 import { shareUrls } from '$lib/server/share';
-import { displayTitle } from '$lib/server/title';
+import { markedTitle } from '$lib/server/title';
 import { parseFileSource } from '$lib/source';
 
 /**
@@ -20,7 +20,7 @@ export function GET({ params, url }) {
     const recording = recordingOr404(params.id);
     const source = parseFileSource(url.searchParams.get('source'));
     const body = xspf({
-        title: displayTitle(recording.name) || String(recording.id),
+        title: markedTitle(recording.name) || String(recording.id),
         location: shareUrls(recording, url.origin, url.searchParams.get('token'), source).file,
         startSeconds: (recording.resume_ms ?? 0) / 1000,
     });
