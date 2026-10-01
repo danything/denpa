@@ -13,7 +13,7 @@
  */
 
 import { type OfflineVideo, parseFetchId, storeResponse, videos } from '$lib/offline-db';
-import { build, files, version } from '$service-worker';
+import { base, build, files, version } from '$service-worker';
 
 const CACHE = `denpa-${version}`;
 /** 殻だけ。ロゴやサムネイルのような「増えるもの」は入れない */
@@ -23,7 +23,8 @@ const SHELL = [...build, ...files.filter((file) => !file.endsWith('robots.txt'))
  * これで受ける (下の fetch)。**殻と違って HTML なので、版が変わる**。
  * install のたびに取り直す
  */
-const OFFLINE_PAGE = '/offline';
+// 頭は `base` (Service Worker の置き場から SvelteKit が求める。前段の接頭辞込み)
+const OFFLINE_PAGE = `${base}/offline`;
 
 const worker = self as unknown as ServiceWorkerGlobalScope;
 
@@ -58,7 +59,7 @@ worker.addEventListener('fetch', (event) => {
      * API は素通しする。録画の配信は数十GB、通知は繋ぎっぱなしの SSE で、
      * どちらもキャッシュに載せると壊れる
      */
-    if (url.pathname.startsWith('/api/')) return;
+    if (url.pathname.startsWith(`${base}/api/`)) return;
 
     /*
      * 画面への移動は**サーバ優先、繋がらなければオフラインの入口**。

@@ -1,4 +1,5 @@
 <script lang="ts">
+    import { base } from '$app/paths';
     import { submitting } from '$lib/actions';
     import { dateTime } from '$lib/format';
 
@@ -110,7 +111,7 @@
         // 畳んでいる間は取り出さない。1コマ出すのに録画を頭から読ませることになる
         if (!open || recordingId === null) return;
         return fetchImage(
-            `/api/recordings/${recordingId}/frame?at=${at}`,
+            `${base}/api/recordings/${recordingId}/frame?at=${at}`,
             (url, res) => {
                 frame = {
                     url,
@@ -141,7 +142,7 @@
         // 位置を教え直すと覚えているものは捨てられる。保存後に消えるのが正しい
         void area;
         return fetchImage(
-            `/api/services/${serviceId}/logo-data`,
+            `${base}/api/services/${serviceId}/logo-data`,
             (url, res) => {
                 learned = { url, learnedAt: Number(res.headers.get('X-Logo-Learned-At')) };
                 checked = true;

@@ -1,6 +1,7 @@
 <script lang="ts">
     import { onMount } from 'svelte';
     import type { ResponseMessage } from 'web-bml/protocol';
+    import { base } from '$app/paths';
     import { submitting } from '$lib/actions';
     import { arming } from '$lib/arming.svelte';
     import ProgramFacts from '$lib/components/ProgramFacts.svelte';
@@ -95,7 +96,7 @@
         };
     });
     const src = $derived(
-        localChecked ? (localSrc ?? `/api/recordings/${rec.id}/file?source=encoded`) : undefined,
+        localChecked ? (localSrc ?? `${base}/api/recordings/${rec.id}/file?source=encoded`) : undefined,
     );
 
     let video = $state<HTMLVideoElement | null>(null);
@@ -144,7 +145,7 @@
                 // 端末に保存したものから。オフラインでも d が効く
                 dataTimeline = localCopy.databroadcast as PlacedMessage[];
             } else {
-                const response = await fetch(`/api/recordings/${rec.id}/databroadcast`).catch(() => null);
+                const response = await fetch(`${base}/api/recordings/${rec.id}/databroadcast`).catch(() => null);
                 dataTimeline = response?.ok ? await response.json() : [];
             }
         }
@@ -577,7 +578,7 @@
                 chapters = held.chapters;
                 return;
             }
-            const res = await fetch(`/api/recordings/${rec.id}/chapters`);
+            const res = await fetch(`${base}/api/recordings/${rec.id}/chapters`);
             if (!res.ok) return;
             chapters = (await res.json()).chapters ?? [];
         } catch {
@@ -785,7 +786,7 @@
                 paint();
                 return;
             }
-            const res = await fetch(`/api/recordings/${rec.id}/captions.sup`);
+            const res = await fetch(`${base}/api/recordings/${rec.id}/captions.sup`);
             // **字幕を持たない番組は 404。** ボタンを出さないだけで、異常ではない
             if (res.status === 404) return;
             if (!res.ok) {
@@ -1294,7 +1295,7 @@
                 <ControlBar side shown={controls.shown} testid="watch-side">
                     <a
                         class="{OVERLAY_BTN} {OVERLAY_ROUND} {OVERLAY}"
-                        href="/"
+                        href="{base}/"
                         aria-label="一覧へ戻る"
                         data-testid="watch-close"
                     >

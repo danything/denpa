@@ -11,6 +11,7 @@
  */
 
 import { browser } from '$app/environment';
+import { base } from '$app/paths';
 import {
     downloadRequests,
     fetchId,
@@ -282,7 +283,9 @@ export async function saveOffline(rec: SaveTarget): Promise<void> {
     }
 
     // 下見して、在るものだけに絞る (404 が混ざると全体が失敗になる)
-    const { urls, total } = await probeDownloads(downloadRequests(rec.id, source));
+    const { urls, total } = await probeDownloads(
+        downloadRequests(rec.id, source).map((url) => `${base}${url}`),
+    );
     await ensureRoom(total ?? rec.ts_size);
 
     /*
@@ -413,7 +416,7 @@ export async function rememberResume(id: number, at: number, length: number): Pr
 async function flush(): Promise<void> {
     for (const item of await outbox.all()) {
         try {
-            const res = await fetch(`/api/recordings/${item.id}`, { method: 'DELETE' });
+            const res = await fetch(`${base}/api/recordings/${item.id}`, { method: 'DELETE' });
             if (res.ok || res.status === 404) await outbox.remove(item.id);
         } catch {
             // まだ繋がっていない。次の online で
@@ -421,7 +424,7 @@ async function flush(): Promise<void> {
     }
     for (const item of await resumeQueue.all()) {
         try {
-            const res = await fetch(`/api/recordings/${item.id}/resume`, {
+            const res = await fetch(`${base}/api/recordings/${item.id}/resume`, {
                 method: 'POST',
                 headers: { 'content-type': 'application/json' },
                 body: JSON.stringify({ at: item.at, length: item.length }),

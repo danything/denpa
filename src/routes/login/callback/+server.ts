@@ -1,6 +1,7 @@
 import { redirect } from '@sveltejs/kit';
 import { config } from '$lib/server/config';
 import { complete, enabled, readPending, redirectUri } from '$lib/server/oidc';
+import { publicBase, relative } from '$lib/server/paths';
 import { COOKIE, create, PENDING_COOKIE } from '$lib/server/session';
 
 function failed(message: string): Response {
@@ -17,7 +18,7 @@ function failed(message: string): Response {
  * **`state` が合うことが「自分が始めたログイン」の証拠**になる。合言葉は
  * Cookie にしか無いので、他所のサイトから貼られたリンクでは通らない。
  */
-export async function GET({ url, cookies }) {
+export async function GET({ url, cookies, request }) {
     if (!enabled()) return new Response('OIDC が設定されていません', { status: 404 });
 
     const pending = readPending(cookies.get(PENDING_COOKIE));
@@ -38,7 +39,7 @@ export async function GET({ url, cookies }) {
 
     let who: { subject: string; name: string };
     try {
-        who = await complete(code, redirectUri(url.origin), pending);
+        who = await complete(code, redirectUri(publicBase(url, request.headers)), pending);
     } catch (cause) {
         console.warn(`[auth] ログインを断りました: ${cause}`);
         return failed(String(cause instanceof Error ? cause.message : cause));
@@ -53,5 +54,5 @@ export async function GET({ url, cookies }) {
         secure: url.protocol === 'https:',
         maxAge: Math.floor(config.oidcSessionTtl / 1000),
     });
-    redirect(303, pending.to);
+    redirect(303, relative(url, pending.to));
 }

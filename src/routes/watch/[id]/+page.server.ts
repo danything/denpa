@@ -4,6 +4,7 @@ import { eq, getTableColumns, sql } from 'drizzle-orm';
 import { orm } from '$lib/server/db';
 import { deleteRecordingFiles } from '$lib/server/files';
 import { sidecarPaths } from '$lib/server/metadata';
+import { relative } from '$lib/server/paths';
 import { recordingFromForm } from '$lib/server/recording';
 import { recordings } from '$lib/server/schema';
 import { settings } from '$lib/server/settings';
@@ -72,7 +73,7 @@ export const actions = {
      * 末尾はたいてい CM なので、**流したまま消せる**のが狙い。
      * 押し間違い防止に2回押させるのは一覧と同じ (画面側の `armed`)
      */
-    delete: async ({ request }) => {
+    delete: async ({ request, url }) => {
         const form = await request.formData();
         const recording = recordingFromForm(form);
         if (recording === undefined) return fail(400, { message: '録画が見つかりません' });
@@ -85,6 +86,6 @@ export const actions = {
          * エラー画面に変わって、消えたのかどうかも分からなくなる。
          * 消したものの画面に留まっても、そもそも見るものが無い
          */
-        redirect(303, '/');
+        redirect(303, relative(url, '/'));
     },
 };

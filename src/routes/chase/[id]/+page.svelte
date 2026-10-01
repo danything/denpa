@@ -1,5 +1,6 @@
 <script lang="ts">
     import { onMount } from 'svelte';
+    import { base } from '$app/paths';
     import ProgramFacts from '$lib/components/ProgramFacts.svelte';
     import AudioMenu from '$lib/components/player/AudioMenu.svelte';
     import { screenAwake } from '$lib/components/player/awake.svelte';
@@ -73,7 +74,7 @@
     let encoded = $state(false);
     liveUpdates([], {
         recordings: () => {
-            void fetch(`/api/recordings/${data.rec.id}`)
+            void fetch(`${base}/api/recordings/${data.rec.id}`)
                 .then((res) => (res.ok ? res.json() : null))
                 .then((body: { encoded?: boolean } | null) => {
                     if (body?.encoded === true) encoded = true;
@@ -281,7 +282,7 @@
 
         <!-- 右上の列。**観る画面と同じ並び** (閉じる・切り抜き) -->
         <ControlBar side shown={controls.shown} testid="chase-side">
-            <a class="{OVERLAY_BTN} {OVERLAY} close" href="/" aria-label="一覧へ戻る">
+            <a class="{OVERLAY_BTN} {OVERLAY} close" href="{base}/" aria-label="一覧へ戻る">
                 <Icon path={CLOSE} />
             </a>
             <ControlButton
@@ -410,7 +411,7 @@
             <div class="encoded" data-testid="chase-encoded">
                 <a
                     class="to-watch"
-                    href="/watch/{data.rec.id}"
+                    href="{base}/watch/{data.rec.id}"
                     data-testid="chase-to-watch"
                 >
                     エンコードが終わりました — 続きは再生画面で ▶

@@ -87,7 +87,12 @@ export function parseFetchId(
     return { id: Number(m[1]), source: m[2] as 'encoded' | 'alt', attempt: m[3] ?? '' };
 }
 
-/** 落とすものの一覧。動画 + 観るのに要る付き添い */
+/**
+ * 落とすものの一覧。動画 + 観るのに要る付き添い。
+ *
+ * **頭の `base` は呼ぶ側 (offline.svelte.ts) が付ける。** ここは Service Worker からも
+ * 読まれるので `$app/paths` を使えない (前段の接頭辞。server/paths.ts)
+ */
 export function downloadRequests(id: number, source: 'encoded' | 'alt'): string[] {
     return [
         `/api/recordings/${id}/file?source=${source}`,

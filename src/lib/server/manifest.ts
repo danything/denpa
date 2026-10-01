@@ -45,21 +45,23 @@ export function manifest(hostname: string): unknown {
          * どちらの名前で入れても同じ `/` になる。同じ端末に2つ置いたときに
          * 片方がもう片方の入れ直しとして扱われないよう、明示しておく
          */
-        id: `/?host=${hostname.toLowerCase()}`,
-        start_url: '/',
-        scope: '/',
+        // URL は manifest の置き場からの相対。前段の接頭辞の下でも、その中を指す (server/paths.ts)。
+        // 根で動かしていれば前と同じ `/?host=…` に解けるので、入れてある PWA は別物にならない
+        id: `./?host=${hostname.toLowerCase()}`,
+        start_url: './',
+        scope: './',
         display: 'standalone',
         background_color: '#0b0d14',
         theme_color: '#0b0d14',
         icons: [
-            { src: '/icon-192.png', sizes: '192x192', type: 'image/png' },
-            { src: '/icon-512.png', sizes: '512x512', type: 'image/png' },
-            { src: '/icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
-            { src: '/icon.svg', sizes: 'any', type: 'image/svg+xml' },
+            { src: './icon-192.png', sizes: '192x192', type: 'image/png' },
+            { src: './icon-512.png', sizes: '512x512', type: 'image/png' },
+            { src: './icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
+            { src: './icon.svg', sizes: 'any', type: 'image/svg+xml' },
         ],
         shortcuts: [
-            { name: '番組表', url: '/guide' },
-            { name: '予約と録画', url: '/' },
+            { name: '番組表', url: './guide' },
+            { name: '予約と録画', url: './' },
         ],
     };
 }

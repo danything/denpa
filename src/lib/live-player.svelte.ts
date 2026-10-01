@@ -7,6 +7,7 @@
  */
 
 import type { ResponseMessage } from 'web-bml/protocol';
+import { base } from '$app/paths';
 import type { AudioTrack } from '$lib/arib';
 import { eachFrame } from '$lib/components/player/frames';
 import { clearOverlay, drawOverlay } from '$lib/components/player/paint';
@@ -1501,7 +1502,7 @@ export function livePlayer() {
          */
         let ticket: string;
         try {
-            const res = await fetch('/api/live/ticket', { method: 'POST' });
+            const res = await fetch(`${base}/api/live/ticket`, { method: 'POST' });
             if (!res.ok) throw new Error(String(res.status));
             ticket = ((await res.json()) as { ticket: string }).ticket;
         } catch {
@@ -1512,7 +1513,7 @@ export function livePlayer() {
         }
 
         const scheme = location.protocol === 'https:' ? 'wss' : 'ws';
-        const ws = new WebSocket(`${scheme}://${location.host}${SOCKET_PATH}?ticket=${ticket}`);
+        const ws = new WebSocket(`${scheme}://${location.host}${base}${SOCKET_PATH}?ticket=${ticket}`);
         ws.binaryType = 'arraybuffer';
         socket = ws;
 

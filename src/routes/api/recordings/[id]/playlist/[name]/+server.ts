@@ -1,3 +1,4 @@
+import { publicBase } from '$lib/server/paths';
 import { xspf } from '$lib/server/playlist';
 import { recordingOr404 } from '$lib/server/recording';
 import { shareUrls } from '$lib/server/share';
@@ -16,12 +17,17 @@ import { parseFileSource } from '$lib/source';
  * 尻の `[name]` はファイルの口と同じく読み捨てる (見出しの役は `<title>` に
  * 移るので、ここは URL の見た目だけ)。資格は hooks (`isFilePath` + share.ts)
  */
-export function GET({ params, url }) {
+export function GET({ params, url, request }) {
     const recording = recordingOr404(params.id);
     const source = parseFileSource(url.searchParams.get('source'));
     const body = xspf({
         title: markedTitle(recording.name) || String(recording.id),
-        location: shareUrls(recording, url.origin, url.searchParams.get('token'), source).file,
+        location: shareUrls(
+            recording,
+            publicBase(url, request.headers),
+            url.searchParams.get('token'),
+            source,
+        ).file,
         startSeconds: (recording.resume_ms ?? 0) / 1000,
     });
     return new Response(body, {
