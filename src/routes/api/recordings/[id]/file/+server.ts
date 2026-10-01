@@ -7,15 +7,14 @@ import { contentDisposition, serveFile } from '$lib/server/serve';
 import { type FileSource, parseFileSource } from '$lib/source';
 
 /**
- * 録画ファイルをそのまま配る。
- * プレイヤーに URL を渡して直接再生させるための口。
- */
-/**
  * **音声だけ** (`?audio=only`)。音声だけで鳴らすもの (スマートスピーカーへの Cast など) 向け。
  * 元がどれ (生TS・AV1・H.264) でも同じ形で出せるよう、主音声を AAC に焼き直して ADTS で流す。
  * 音声だけなので軽い。閉じられたら ffmpeg も止める
  */
-function audioOnly(path: string): Response {
+function audioOnly(path: string, request: Request): Response {
+    const headers = { 'Content-Type': 'audio/aac', 'Cache-Control': 'no-store' };
+    // HEAD は形だけ答える。焼き直しを起こさない
+    if (request.method === 'HEAD') return new Response(null, { headers });
     const ffmpeg = Bun.spawn(
         [
             config.ffmpeg,
@@ -49,9 +48,13 @@ function audioOnly(path: string): Response {
             ffmpeg.kill();
         },
     });
-    return new Response(body, { headers: { 'Content-Type': 'audio/aac', 'Cache-Control': 'no-store' } });
+    return new Response(body, { headers });
 }
 
+/**
+ * 録画ファイルをそのまま配る。
+ * プレイヤーに URL を渡して直接再生させるための口。
+ */
 function respond(
     id: string,
     request: Request,
@@ -93,7 +96,7 @@ function respond(
                   ? recording.ts_path
                   : (recording.library_path ?? recording.ts_path);
     if (path === null) error(404, 'ファイルがありません');
-    if (audio) return audioOnly(path);
+    if (audio) return audioOnly(path, request);
 
     // ?download=1 のときだけ添付にする。プレイヤーは inline のほうが素直に開く
     return serveFile(

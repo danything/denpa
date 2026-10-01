@@ -1272,13 +1272,9 @@ function watch(
     return session;
 }
 
-/**
- * 誰も繋いでこなかったときに畳むまで (ms)。
- *
- * **画面はすぐ来る** — 実測で、ページを組みはじめてから WebSocket が繋がる
- * まで 160ms。それでも来ないなら開いたそばから離れた人なので、掴んだままに
- * しない (ライブは録画の次に強いので、放っておくと番組表集めを蹴り続ける)。
- */
+/** HTTP のライブで、読まれずに溜まってよい量 (バイト)。超えたら閉じる */
+const LIVE_STREAM_BACKLOG = 32 * 1024 * 1024;
+
 /**
  * **HTTP で流すライブ** (`GET /api/services/<id>/live`)。画面の外のもの
  * (Home Assistant の Cast・VLC・ffplay) 向けに、画面と同じ焼き方の fMP4 をそのまま流す。
@@ -1299,6 +1295,8 @@ export function liveStream(serviceId: number, codec: LiveCodec | 'raw'): Readabl
     if (row === undefined) return null;
 
     let session: Session | null = null;
+    /** もう閉じたか。加えている最中 (watch の中) に閉じることがあるので、戻ってから見る */
+    let closed = false;
     const viewer: Viewer = { connection: { send: () => {} }, ready: false, wantsData: false };
     const leave = () => {
         if (session === null) return;
@@ -1306,32 +1304,56 @@ export function liveStream(serviceId: number, codec: LiveCodec | 'raw'): Readabl
         if (session.empty) session.stop();
         session = null;
     };
-    return new ReadableStream<Uint8Array>({
-        start(controller) {
-            viewer.connection = {
-                send(kind, _pts, payload) {
-                    if (kind === CHANNEL.videoInit || kind === CHANNEL.videoMedia || kind === CHANNEL.rawTs) {
-                        controller.enqueue(payload);
-                        return;
-                    }
-                    if (kind !== CHANNEL.control) return;
-                    const notice = JSON.parse(new TextDecoder().decode(payload)) as Notice;
-                    if (notice.type === 'error' || notice.type === 'ended') {
-                        leave();
-                        controller.close();
-                    }
-                },
-            };
-            const raw = codec === 'raw';
-            const now = nowPlaying(serviceId, undefined);
-            session = watch(row.type, row.channel, serviceId, now, raw ? 'h264' : codec, 0, raw, viewer);
+    return new ReadableStream<Uint8Array>(
+        {
+            start(controller) {
+                viewer.connection = {
+                    send(kind, _pts, payload) {
+                        if (closed) return;
+                        const close = () => {
+                            closed = true;
+                            leave();
+                            controller.close();
+                        };
+                        if (
+                            kind === CHANNEL.videoInit ||
+                            kind === CHANNEL.videoMedia ||
+                            kind === CHANNEL.rawTs
+                        ) {
+                            /*
+                             * **読むのが追いつかない相手は閉じる。** 溜め続けるとメモリが増え続ける。
+                             * fMP4 は途中の中身を捨てると壊れるので、捨てずに閉じる
+                             */
+                            if ((controller.desiredSize ?? 0) < -LIVE_STREAM_BACKLOG) return close();
+                            controller.enqueue(payload);
+                            return;
+                        }
+                        if (kind !== CHANNEL.control) return;
+                        const notice = JSON.parse(new TextDecoder().decode(payload)) as Notice;
+                        if (notice.type === 'error' || notice.type === 'ended') close();
+                    },
+                };
+                const raw = codec === 'raw';
+                const now = nowPlaying(serviceId, undefined);
+                session = watch(row.type, row.channel, serviceId, now, raw ? 'h264' : codec, 0, raw, viewer);
+                if (closed) leave();
+            },
+            cancel() {
+                closed = true;
+                leave();
+            },
         },
-        cancel() {
-            leave();
-        },
-    });
+        new ByteLengthQueuingStrategy({ highWaterMark: 1024 * 1024 }),
+    );
 }
 
+/**
+ * 誰も繋いでこなかったときに畳むまで (ms)。
+ *
+ * **画面はすぐ来る** — 実測で、ページを組みはじめてから WebSocket が繋がる
+ * まで 160ms。それでも来ないなら開いたそばから離れた人なので、掴んだままに
+ * しない (ライブは録画の次に強いので、放っておくと番組表集めを蹴り続ける)。
+ */
 const WARM_WAIT = 8_000;
 
 /**
