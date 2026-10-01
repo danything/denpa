@@ -109,7 +109,7 @@ test.describe('接頭辞の下で', () => {
         await expect(row).toBeVisible();
         await row.getByTestId('rule-edit').click();
         await expect(page).toHaveURL(new RegExp(`^${origin}${PREFIX}/rules\\?edit=\\d+$`));
-        await page.getByTestId('rule-submit').click();
+        await page.getByTestId('rule-update').click();
         await expect(page).toHaveURL(`${origin}${PREFIX}/rules`);
         await row.getByTestId('rule-delete').click();
         await expect(row).toHaveCount(0);
