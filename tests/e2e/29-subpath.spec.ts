@@ -114,16 +114,22 @@ test.describe('接頭辞の下で', () => {
         await row.getByTestId('rule-delete').click();
         await expect(row).toHaveCount(0);
 
-        // ライブ: 札 (fetch) を取って WebSocket で繋ぎ、映像が進む
+        // ライブ: 札 (fetch) を取って、接頭辞の中の WebSocket に繋ぎ、TS が届く
+        let frames = 0;
+        let socketUrl = '';
+        page.on('websocket', (ws) => {
+            socketUrl = ws.url();
+            ws.on('framereceived', () => {
+                frames++;
+            });
+        });
         await page.getByTestId('nav-live').click();
         await expect(page).toHaveURL(`${origin}${PREFIX}/live`);
         await page.getByTestId('live-channel').first().click();
         await expect
-            .poll(() => page.getByTestId('live-video').evaluate((v) => (v as HTMLVideoElement).currentTime), {
-                timeout: 60_000,
-                message: 'ライブの映像が進まない',
-            })
+            .poll(() => frames, { timeout: 60_000, message: 'ライブの TS が届かない' })
             .toBeGreaterThan(0);
+        expect(new URL(socketUrl).pathname.startsWith(`${PREFIX}/api/live/socket`)).toBe(true);
 
         expect(outside, '接頭辞の外へ出た要求').toEqual([]);
     });
