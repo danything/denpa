@@ -1,6 +1,7 @@
 import { error, redirect } from '@sveltejs/kit';
 import { eq } from 'drizzle-orm';
 import { orm } from '$lib/server/db';
+import { relative } from '$lib/server/paths';
 import { recordings } from '$lib/server/schema';
 import type { PageServerLoad } from './$types';
 
@@ -11,14 +12,14 @@ import type { PageServerLoad } from './$types';
  * 生TSはブラウザで読めないので (MPEG-2)、観るのはライブと同じ器 —
  * サーバが焼き直して WebSocket で運ぶ (`server/live.ts` の `openChase`)。
  */
-export const load: PageServerLoad = ({ params }) => {
+export const load: PageServerLoad = ({ params, url }) => {
     const id = Number(params.id);
     if (!Number.isInteger(id)) error(404, '録画が見つかりません');
 
     const rec = orm().select().from(recordings).where(eq(recordings.id, id)).get();
     if (rec === undefined || rec.deleted_at !== null) error(404, '録画が見つかりません');
     // 焼き上がっているなら普通の視聴画面へ。あちらはシークも字幕も揃っている
-    if (rec.library_path !== null) redirect(302, `/watch/${rec.id}`);
+    if (rec.library_path !== null) redirect(302, relative(url, `/watch/${rec.id}`));
     if (rec.ts_path === null) error(404, 'まだ何も録れていません');
 
     return {

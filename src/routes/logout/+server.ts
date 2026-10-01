@@ -1,4 +1,5 @@
 import { redirect } from '@sveltejs/kit';
+import { relative } from '$lib/server/paths';
 import { COOKIE, destroy } from '$lib/server/session';
 
 /**
@@ -10,15 +11,15 @@ import { COOKIE, destroy } from '$lib/server/session';
  * 出たあとに `/` へ戻すと、SSO が効いている間は黙って入り直してしまい、
  * 出られたのかどうか画面から分からない。行き先は知らせの画面にする。
  */
-function out(cookies: import('@sveltejs/kit').Cookies): never {
+function out(url: URL, cookies: import('@sveltejs/kit').Cookies): never {
     destroy(cookies.get(COOKIE));
     cookies.delete(COOKIE, { path: '/' });
-    redirect(303, '/login/out');
+    redirect(303, relative(url, '/login/out'));
 }
 
-export function GET({ cookies }) {
-    out(cookies);
+export function GET({ url, cookies }) {
+    out(url, cookies);
 }
-export function POST({ cookies }) {
-    out(cookies);
+export function POST({ url, cookies }) {
+    out(url, cookies);
 }

@@ -106,8 +106,8 @@ export function safeReturn(to: string | null): string {
  * 来たリクエストから組み立てる。**認可のときと引き換えのときで同じ値**を渡す
  * 必要があるので、両方ここから取る
  */
-export function redirectUri(origin: string): string {
-    return new URL('/login/callback', origin).toString();
+export function redirectUri(base: string): string {
+    return `${base}/login/callback`;
 }
 
 /** 預けておいた途中の控えを読み直す。壊れていれば null (最初からやり直させる) */

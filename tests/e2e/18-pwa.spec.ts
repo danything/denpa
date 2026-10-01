@@ -10,7 +10,7 @@ import { expect, goto, test } from './helpers';
 test.describe('PWA', () => {
     test('マニフェストとアイコンが揃っている', async ({ page, request }) => {
         await goto(page, '/');
-        await expect(page.locator('link[rel="manifest"]')).toHaveAttribute('href', '/manifest.webmanifest');
+        await expect(page.locator('link[rel="manifest"]')).toHaveAttribute('href', './manifest.webmanifest');
 
         const res = await request.get('/manifest.webmanifest');
         expect(res.ok()).toBeTruthy();

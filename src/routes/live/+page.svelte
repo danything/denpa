@@ -1,5 +1,6 @@
 <script lang="ts">
     import { onMount } from 'svelte';
+    import { base } from '$app/paths';
     import { submitting } from '$lib/actions';
     import ProgramFacts from '$lib/components/ProgramFacts.svelte';
     import AudioMenu from '$lib/components/player/AudioMenu.svelte';
@@ -741,7 +742,7 @@
                                 {channel.number ?? ''}
                             </span>
                             {#if channel.hasLogo}
-                                <img src="/api/services/{channel.id}/logo" alt="" class="channel-logo" />
+                                <img src="{base}/api/services/{channel.id}/logo" alt="" class="channel-logo" />
                             {:else}
                                 <span class="channel-logo channel-type">
                                     {channel.type}

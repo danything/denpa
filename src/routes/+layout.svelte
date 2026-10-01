@@ -1,4 +1,5 @@
 <script lang="ts">
+    import { base } from '$app/paths';
     import '../app.css';
     import { onMount } from 'svelte';
     import { navigating, page } from '$app/state';
@@ -170,7 +171,7 @@
     ];
 
     /** ページ名はナビと同じものを使う。タブに出す */
-    const title = $derived(`${links.find((l) => l.href === page.url.pathname)?.label ?? 'denpa'} - denpa`);
+    const title = $derived(`${links.find((l) => l.href === page.route.id)?.label ?? 'denpa'} - denpa`);
 
     /**
      * 画面ぴったりの高さにして、中の一覧だけをスクロールさせる画面。
@@ -193,7 +194,8 @@
      * 各画面の 768px の `@media` がその1本の線で、**片方だけ動かさない**
      */
     const FILLED = ['/', '/live', '/rules', '/guide'];
-    const fill = $derived(FILLED.includes(page.url.pathname) || page.url.pathname.startsWith('/watch/'));
+    // 比べるのは経路 (route.id)。URL は前段の接頭辞の下だと頭が付く (server/paths.ts)
+    const fill = $derived(FILLED.includes(page.route.id ?? '') || page.route.id === '/watch/[id]');
 
     /**
      * 狭い画面ではナビを畳む。
@@ -241,7 +243,7 @@
     {/if}
     <div class="navbar">
         <div class="brand">
-            <a class="button ghost logo" href="/">denpa</a>
+            <a class="button ghost logo" href="{base}/">denpa</a>
             <!--
                 **新しい版が出ている** (server/update.ts が GitHub のリリースを見比べる)。
                 押せばリリースのページ。閉じる口は無い — 上げるか、リリースが消えれば引っ込む
@@ -285,9 +287,9 @@
                 {#each links as link (link.href)}
                     <li>
                         <a
-                            href={link.href}
+                            href="{base}{link.href}"
                             class="button ghost small"
-                            aria-current={page.url.pathname === link.href ? 'page' : undefined}
+                            aria-current={page.route.id === link.href ? 'page' : undefined}
                             data-testid="nav-{link.href === '/' ? 'home' : link.href.slice(1)}"
                         >
                             {link.label}
@@ -319,8 +321,8 @@
                     {#each links as link (link.href)}
                         <li>
                             <a
-                                href={link.href}
-                                aria-current={page.url.pathname === link.href ? 'page' : undefined}
+                                href="{base}{link.href}"
+                                aria-current={page.route.id === link.href ? 'page' : undefined}
                             >
                                 {link.label}
                             </a>
@@ -338,7 +340,7 @@
             -->
             {#if data.user}
                 <!-- ボタンはフォームの POST で押す。リンク (GET) だと先読みで勝手に切れる -->
-                <form method="POST" action="/logout">
+                <form method="POST" action="{base}/logout">
                     <button type="submit" class="ghost small" data-testid="logout">
                         ログアウト
                     </button>

@@ -1,4 +1,5 @@
 import { json } from '@sveltejs/kit';
+import { publicBase } from '$lib/server/paths';
 import { recordingOr404 } from '$lib/server/recording';
 import { mintShareToken, shareUrls } from '$lib/server/share';
 import { parseFileSource } from '$lib/source';
@@ -20,9 +21,14 @@ import { parseFileSource } from '$lib/source';
  * `playlist` はそれを**続きの位置から**指す XSPF (テレビへ飛ばすとき、続きが
  * あれば使う。`server/playlist.ts`)。URL の形は `shareUrls` に
  */
-export function POST({ params, url }) {
+export function POST({ params, url, request }) {
     const recording = recordingOr404(params.id);
     const { token, expiresAt } = mintShareToken(recording.id);
-    const links = shareUrls(recording, url.origin, token, parseFileSource(url.searchParams.get('source')));
+    const links = shareUrls(
+        recording,
+        publicBase(url, request.headers),
+        token,
+        parseFileSource(url.searchParams.get('source')),
+    );
     return json({ url: links.file, playlist: links.playlist, expiresAt });
 }

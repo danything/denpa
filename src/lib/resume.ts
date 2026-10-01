@@ -1,3 +1,4 @@
+import { base } from '$app/paths';
 import { rememberResume } from './offline.svelte';
 
 /**
@@ -12,7 +13,7 @@ import { rememberResume } from './offline.svelte';
  */
 export function keepResume(id: number, at: number, length: number, leaving = false): void {
     const body = JSON.stringify({ at, length });
-    const url = `/api/recordings/${id}/resume`;
+    const url = `${base}/api/recordings/${id}/resume`;
     if (leaving && navigator.sendBeacon !== undefined) {
         navigator.sendBeacon(url, new Blob([body], { type: 'application/json' }));
         return;

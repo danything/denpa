@@ -8,6 +8,7 @@ import {
     sessionMayRead,
     trusted,
 } from '$lib/server/auth';
+import { relative } from '$lib/server/paths';
 import { start } from '$lib/server/runtime';
 import { COOKIE, find } from '$lib/server/session';
 import { shareTokenAllows } from '$lib/server/share';
@@ -62,7 +63,7 @@ export async function handle({ event, resolve }) {
                 if (event.request.method !== 'GET' || !wantsHtml) {
                     return new Response('login required', { status: 401 });
                 }
-                redirect(302, `/login?to=${encodeURIComponent(pathname + search)}`);
+                redirect(302, relative(event.url, `/login?to=${encodeURIComponent(pathname + search)}`));
             }
         } else {
             // OIDC も TRUSTED_NETWORKS も無い。入る道が無いことを言葉で返す (auth.denied)

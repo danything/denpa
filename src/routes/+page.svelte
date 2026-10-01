@@ -1,6 +1,7 @@
 <script lang="ts">
     import { DropdownMenu } from 'bits-ui';
     import { goto } from '$app/navigation';
+    import { base } from '$app/paths';
     import { submitting } from '$lib/actions';
     import { arming } from '$lib/arming.svelte';
     import ProgramDetail from '$lib/components/ProgramDetail.svelte';
@@ -121,7 +122,7 @@
      */
     async function mintShareLink(id: number, source?: 'ts' | 'alt'): Promise<ShareLink> {
         const query = source === undefined ? '' : `?source=${source}`;
-        const res = await fetch(`/api/recordings/${id}/share${query}`, { method: 'POST' });
+        const res = await fetch(`${base}/api/recordings/${id}/share${query}`, { method: 'POST' });
         return (await res.json()) as ShareLink;
     }
 
@@ -373,7 +374,7 @@
      */
     function watchLink(rec: (typeof data.recordings)[number]): string | null {
         if (rec.deleted_at !== null || rec.state === 'failed') return null;
-        if (rec.library_path !== null) return `/watch/${rec.id}`;
+        if (rec.library_path !== null) return `${base}/watch/${rec.id}`;
         /*
          * **焼き上がる前でも観られる。** 録っている最中はもちろん、録り終えて
          * CM検出やエンコードを待っている間も、生TSはある。追っかけ再生の器
@@ -381,7 +382,7 @@
          * 以前は焼き上がるまで行が押せず、30分番組を録り終えたあと数分〜十数分
          * 「観られるのに観られない」時間があった
          */
-        if (rec.ts_path !== null) return `/chase/${rec.id}`;
+        if (rec.ts_path !== null) return `${base}/chase/${rec.id}`;
         return null;
     }
 
@@ -544,7 +545,7 @@
 {#snippet meta(parts: string[], row: { service_id: number; has_logo: boolean | null })}
     <div class="row-meta">
         {#if row.has_logo}
-            <img src="/api/services/{row.service_id}/logo" alt="" loading="lazy" class="service-logo" />
+            <img src="{base}/api/services/{row.service_id}/logo" alt="" loading="lazy" class="service-logo" />
         {/if}
         <span>{parts.filter(Boolean).join(' ・ ')}</span>
     </div>
@@ -580,7 +581,7 @@
         {:else}
             ルール:
             {#if ruleId !== null}
-                <a href="/rules?edit={ruleId}">{ruleName}</a>
+                <a href="{base}/rules?edit={ruleId}">{ruleName}</a>
             {:else}
                 (削除済み)
             {/if}
@@ -686,7 +687,7 @@
                                         <!-- 追っかけ再生 (issue #16)。録っている最中でも頭から観られる -->
                                         <a
                                             class="button"
-                                            href="/chase/{res.recording_id}"
+                                            href="{base}/chase/{res.recording_id}"
                                         >
                                             追っかけ
                                         </a>
@@ -752,7 +753,7 @@
                         GET なので URL に残り、共有・戻るがそのまま効く。削除済み表示は引き継ぐ。
                         押すものは置かない (予約側と同じ形) — 解くのも欄を空にして Enter
                     -->
-                    <form method="GET" action="/" class="search" data-sveltekit-keepfocus>
+                    <form method="GET" action="{base}/" class="search" data-sveltekit-keepfocus>
                         {#if data.showDeleted}
                             <input type="hidden" name="deleted" value="1" />
                         {/if}
@@ -866,7 +867,7 @@
                                     <div class="poster" data-testid="play-hint">
                                         {#if rec.library_path !== null}
                                             <img
-                                                src="/api/recordings/{rec.id}/poster"
+                                                src="{base}/api/recordings/{rec.id}/poster"
                                                 alt=""
                                                 loading="lazy"
                                                 class="poster-img"

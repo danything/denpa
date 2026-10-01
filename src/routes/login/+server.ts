@@ -1,5 +1,6 @@
 import { redirect } from '@sveltejs/kit';
 import { enabled, redirectUri, safeReturn, start } from '$lib/server/oidc';
+import { publicBase } from '$lib/server/paths';
 import { PENDING_COOKIE, PENDING_TTL } from '$lib/server/session';
 
 /**
@@ -9,12 +10,12 @@ import { PENDING_COOKIE, PENDING_TTL } from '$lib/server/session';
  * DBに置いてもいいが、**捨て忘れが残らない**ぶんこちらが素直 — 期限を切っておけば、
  * 途中でやめたぶんはブラウザが黙って消す。
  */
-export async function GET({ url, cookies }) {
+export async function GET({ url, cookies, request }) {
     // 設定していないのにここへ来た。入口が無いことを隠さない
     if (!enabled()) return new Response('OIDC が設定されていません', { status: 404 });
 
     const { url: authorize, pending } = await start(
-        redirectUri(url.origin),
+        redirectUri(publicBase(url, request.headers)),
         safeReturn(url.searchParams.get('to')),
     );
     cookies.set(PENDING_COOKIE, JSON.stringify(pending), {

@@ -7,6 +7,7 @@ import { config } from '$lib/server/config';
 import { contending, type Occupant, rivalsOf } from '$lib/server/conflict';
 import { now, orm } from '$lib/server/db';
 import { CURRENT_SERVICES, watchableServices } from '$lib/server/epg';
+import { relative } from '$lib/server/paths';
 import { cancel, reserve } from '$lib/server/reservations';
 import { applyRules, compile, haystack, likePatterns, matchesCompiled } from '$lib/server/rules';
 import { resolveConflicts, tunerCapacity } from '$lib/server/scheduler';
@@ -545,7 +546,7 @@ export const actions = {
         return { success: true };
     },
 
-    update: async ({ request }) => {
+    update: async ({ request, url }) => {
         const form = await request.formData();
         const id = Number(form.get('id'));
         if (!Number.isFinite(id)) return fail(400, { message: 'ルールIDが不正です' });
@@ -562,7 +563,7 @@ export const actions = {
          * 取り消ししか無かった
          */
         await reapply();
-        redirect(303, '/rules');
+        redirect(303, relative(url, '/rules'));
     },
 
     /**
