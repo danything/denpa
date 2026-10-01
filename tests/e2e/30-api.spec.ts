@@ -28,13 +28,10 @@ test.describe('外から使う口', () => {
         expect(value?.[0]).toBe(0x47);
         controller.abort();
 
-        // 音声だけは audio/mp4
-        const audio = new AbortController();
-        const sound = await fetch(`${baseURL}/${first.live}?audio=only`, { signal: audio.signal });
-        expect(sound.status).toBe(200);
-        expect(sound.headers.get('content-type')).toBe('audio/mp4');
-        audio.abort();
-
+        /*
+         * 焼くもの (h264 / av1 / ?audio=only) はここでは流さない。偽の ffmpeg は TS をそのまま返すだけで
+         * fMP4 を作らないので、何も届かない。焼き方の引数は live.test.ts が押さえている
+         */
         expect((await request.get('/api/services/1/live')).status()).toBe(404);
     });
 

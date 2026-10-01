@@ -31,7 +31,7 @@
 | `raw` | 焼かずに1局に絞っただけの TS (MPEG-2) | `video/mp2t` | VLC・ffplay・録画ソフト (いちばん軽い) |
 
 `?audio=only` で音声だけ (AAC の fragmented MP4、`audio/mp4`)。画面の無いスピーカーへの Cast 向け。
-映像を焼かないので軽い。録画の `audio` と同じ書き方です。
+映像を焼かないので軽い。録画の `audio` と同じ書き方です。`codec` と一緒に渡すと、`audio=only` が勝ちます。
 
 ## 録画の一覧 `GET /api/recordings`
 
