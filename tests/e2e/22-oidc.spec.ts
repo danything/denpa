@@ -77,7 +77,8 @@ test.describe('OIDC でのログイン', () => {
         const get = client(oidc);
         const { res } = await get('/');
         expect(res.status).toBe(302);
-        expect(res.headers.get('location')).toBe('/login?to=%2F');
+        // 転送は、いまの URL からの相対 (前段の接頭辞の下でも効くように。server/paths.ts)
+        expect(res.headers.get('location')).toBe('./login?to=%2F');
     });
 
     /*
@@ -124,7 +125,7 @@ test.describe('OIDC でのログイン', () => {
         const { res, jar } = await get(back.pathname + back.search);
 
         expect(res.status).toBe(303);
-        expect(res.headers.get('location')).toBe('/settings');
+        expect(res.headers.get('location')).toBe('../settings');
         expect(jar.has('denpa_session')).toBe(true);
         // 使い捨て。成否によらず捨てる
         expect(jar.has('denpa_login')).toBe(false);
@@ -160,7 +161,7 @@ test.describe('OIDC でのログイン', () => {
 
         const { res, jar } = await get('/logout', { method: 'POST' });
         expect(res.status).toBe(303);
-        expect(res.headers.get('location')).toBe('/login/out');
+        expect(res.headers.get('location')).toBe('./login/out');
         expect(jar.has('denpa_session')).toBe(false);
         expect((await get('/')).res.status).toBe(302);
     });

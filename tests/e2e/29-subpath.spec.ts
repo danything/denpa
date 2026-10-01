@@ -1,7 +1,7 @@
 import { createServer, request as httpRequest, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { connect } from 'node:net';
-import { expect, syncEpg, test } from './helpers';
+import { cellOf, expect, syncEpg, test, upcoming } from './helpers';
 
 /**
  * **前段の接頭辞の下でも動く** (server/paths.ts)。
@@ -85,7 +85,10 @@ test.describe('接頭辞の下で', () => {
         await expect(page.getByTestId('nav-guide')).toHaveAttribute('aria-current', 'page');
 
         // 詳細は fetch で取る (`/api/programs/<id>`)
-        await page.getByTestId('grid-program').first().click();
+        // これから始まるマスを、見える所まで送ってから押す (先頭は終わった番組で、見出しに隠れうる)
+        const [target] = await upcoming(page);
+        await cellOf(page, target.programId).scrollIntoViewIfNeeded();
+        await cellOf(page, target.programId).click();
         await expect(page.getByTestId('program-detail')).toBeVisible();
         await page.getByTestId('detail-close').click();
 
