@@ -257,71 +257,89 @@
                 </div>
             </form>
         </section>
+
         <!--
-            **GPU は別のカード。** 口 (グラボ) が増えると行が増え、道 × コーデックの印も
-            口ごとに持つ。「録画のしかた」に混ぜると読みにくかった。使えないものの印は
-            触れない — 押しても焼けないものにチェックを入れさせても嘘になるだけ
+            **テレビの VLC で再生。** VLC for Android (3.6+) のリモートアクセスへ、
+            **画面を開いている端末が** URL を投げて再生させる (server/vlc.ts は
+            一覧を持つだけ)。相手の居場所だけここで決め、
+            ペアリング (テレビに出る6桁のコード) は録画詳細の「テレビで再生」を
+            初めて押したときにその場でやる
         -->
-        <section class="panel card">
-            <h2>GPU</h2>
+        <section class="panel card" data-testid="vlc-card">
+            <h2>テレビで再生 (VLC)</h2>
             <p class="small lead">
-                GPU (Intel QSV / VA-API) でエンコードするかを、デバイスごと・コーデックごとに選びます。
-                使えるものには自動で印が付きます。両方に付いていれば QSV → VA-API → ソフトウェアの
-                順に試し、失敗したら次の方法でやり直します。GPU が2枚あれば「こちらは AV1、
-                あちらは H.264」のように分けられ、同じコーデックを扱えるデバイスが複数あれば順番に使います。
+                テレビの VLC の「リモートアクセス」を使い、<strong>いま開いている端末から</strong>録画を
+                テレビで再生します。VLC で <strong>その他 → リモートアクセス</strong> を有効にして、ここに
+                テレビを登録すると、録画詳細に「テレビで再生」が出ます。初回だけ
+                VLC のペア設定が開きます。セキュアな接続 (自己署名の証明書) を受け入れ、
+                テレビに出る6桁のコードを入れれば、次からはそのまま再生できます。
+                AV1 を再生できないテレビは、コーデックを H.264 か生TSにすると、
+                そのテレビにだけ別のファイルを渡します。
             </p>
-            {#await data.hw}
-                <span class="hint" data-testid="hw-status">GPU を確認中…</span>
-            {:then hw}
-                <form method="POST" action="?/saveHw" use:submitting={keepValues}>
-                    <span class="hint" data-testid="hw-status">{hw.message}</span>
-                    {#if hw.devices.length > 0}
-                        <!-- 口ごとに1枚。表にすると半分の幅で横に巻くので、縦に積む -->
-                        <div class="rows">
-                            {#each hw.devices as device (device.path)}
-                                <div class="row device" data-testid="hw-device" data-device={device.path}>
-                                    <div class="mono small">{device.label}</div>
-                                    <div class="hint">{device.summary}</div>
-                                    {#each HW_KINDS as kind (kind)}
-                                        <div class="kind-row">
-                                            <span class="kind small">{HW_KIND_LABEL[kind]}</span>
-                                            {#each HW_CODECS as codec (codec)}
-                                                {@const usable = device[kind].includes(codec)}
-                                                <label class="check" class:unusable={!usable}>
-                                                    <input
-                                                        type="checkbox"
-                                                        name={`hw.${device.path}.${kind}.${codec}`}
-                                                        checked={usable &&
-                                                            hwAllowed(data.recording.hwAllow, device.path, kind, codec)}
-                                                        disabled={!usable}
-                                                        data-testid={`hw-${device.port}-${kind}-${codec}`}
-                                                    />
-                                                    <span class="small">{CODEC_LABEL[codec]}</span>
-                                                </label>
-                                            {/each}
-                                        </div>
-                                    {/each}
-                                </div>
-                            {/each}
-                        </div>
-                    {/if}
-                    <div class="cluster actions">
-                        {#if hw.devices.length > 0}
-                            <button type="submit" class="small" data-testid="hw-save">保存</button>
-                        {/if}
+            <form method="POST" action="?/saveVlc" use:submitting={keepValues} class="stack">
+                {#each tvRows as row (row)}
+                    <div class="tv-row">
+                        <input
+                            name="vlcName"
+                            bind:value={row.name}
+                            class="w-name"
+                            placeholder="名前 (例 リビング)"
+                            data-testid="vlc-name"
+                        />
+                        <input
+                            name="vlcIp"
+                            bind:value={row.ip}
+                            class="mono w-ip"
+                            placeholder="IP (例 192.168.10.20)"
+                            data-testid="vlc-ip"
+                        />
+                        <input
+                            name="vlcPort"
+                            bind:value={row.port}
+                            class="mono w-port"
+                            placeholder="8080"
+                            data-testid="vlc-port"
+                        />
+                        <!--
+                            そのテレビに渡すファイル。おまかせ (今いいほう) が既定で、
+                            AV1 を解けないテレビは H.264、エンコード済み自体が重い
+                            テレビは生TS。無い形式を選んでいたら、おまかせに落ちる
+                        -->
+                        <select name="vlcCodec" bind:value={row.codec} data-testid="vlc-codec">
+                            <option value="auto">おまかせ</option>
+                            <option value="h264">H.264</option>
+                            <option value="ts">生TS</option>
+                        </select>
                         <button
-                            type="submit"
+                            type="button"
                             class="small ghost"
-                            formaction="?/probeHw"
-                            formnovalidate
-                            data-testid="hw-probe"
+                            onclick={() => tvRows.splice(tvRows.indexOf(row), 1)}
+                            data-testid="vlc-remove"
                         >
-                            確かめ直す
+                            外す
                         </button>
                     </div>
-                </form>
-            {/await}
+                {:else}
+                    <p class="small muted">まだテレビがありません</p>
+                {/each}
+                <span class="hint">
+                    名前が空ならボタンに IP を表示します。
+                    ポートが空なら VLC の既定 (8080) を使います
+                </span>
+                <div class="cluster">
+                    <button
+                        type="button"
+                        class="secondary"
+                        onclick={() => tvRows.push({ name: '', ip: '', port: '8080', codec: 'auto' })}
+                        data-testid="vlc-add"
+                    >
+                        テレビを追加
+                    </button>
+                    <button type="submit" data-testid="save-vlc">保存</button>
+                </div>
+            </form>
         </section>
+
         <section class="panel card">
             <h2>通知</h2>
             <p class="small lead">
@@ -479,87 +497,70 @@
                 </div>
             </form>
         </section>
-
         <!--
-            **テレビの VLC で再生。** VLC for Android (3.6+) のリモートアクセスへ、
-            **画面を開いている端末が** URL を投げて再生させる (server/vlc.ts は
-            一覧を持つだけ)。相手の居場所だけここで決め、
-            ペアリング (テレビに出る6桁のコード) は録画詳細の「テレビで再生」を
-            初めて押したときにその場でやる
+            **GPU は別のカード。** 口 (グラボ) が増えると行が増え、道 × コーデックの印も
+            口ごとに持つ。「録画のしかた」に混ぜると読みにくかった。使えないものの印は
+            触れない — 押しても焼けないものにチェックを入れさせても嘘になるだけ
         -->
-        <section class="panel card" data-testid="vlc-card">
-            <h2>テレビで再生 (VLC)</h2>
+        <section class="panel card">
+            <h2>GPU</h2>
             <p class="small lead">
-                テレビの VLC の「リモートアクセス」を使い、<strong>いま開いている端末から</strong>録画を
-                テレビで再生します。VLC で <strong>その他 → リモートアクセス</strong> を有効にして、ここに
-                テレビを登録すると、録画詳細に「テレビで再生」が出ます。初回だけ
-                VLC のペア設定が開きます。セキュアな接続 (自己署名の証明書) を受け入れ、
-                テレビに出る6桁のコードを入れれば、次からはそのまま再生できます。
-                AV1 を再生できないテレビは、コーデックを H.264 か生TSにすると、
-                そのテレビにだけ別のファイルを渡します。
+                GPU (Intel QSV / VA-API) でエンコードするかを、デバイスごと・コーデックごとに選びます。
+                使えるものには自動で印が付きます。両方に付いていれば QSV → VA-API → ソフトウェアの
+                順に試し、失敗したら次の方法でやり直します。GPU が2枚あれば「こちらは AV1、
+                あちらは H.264」のように分けられ、同じコーデックを扱えるデバイスが複数あれば順番に使います。
             </p>
-            <form method="POST" action="?/saveVlc" use:submitting={keepValues} class="stack">
-                {#each tvRows as row (row)}
-                    <div class="tv-row">
-                        <input
-                            name="vlcName"
-                            bind:value={row.name}
-                            class="w-name"
-                            placeholder="名前 (例 リビング)"
-                            data-testid="vlc-name"
-                        />
-                        <input
-                            name="vlcIp"
-                            bind:value={row.ip}
-                            class="mono w-ip"
-                            placeholder="IP (例 192.168.10.20)"
-                            data-testid="vlc-ip"
-                        />
-                        <input
-                            name="vlcPort"
-                            bind:value={row.port}
-                            class="mono w-port"
-                            placeholder="8080"
-                            data-testid="vlc-port"
-                        />
-                        <!--
-                            そのテレビに渡すファイル。おまかせ (今いいほう) が既定で、
-                            AV1 を解けないテレビは H.264、エンコード済み自体が重い
-                            テレビは生TS。無い形式を選んでいたら、おまかせに落ちる
-                        -->
-                        <select name="vlcCodec" bind:value={row.codec} data-testid="vlc-codec">
-                            <option value="auto">おまかせ</option>
-                            <option value="h264">H.264</option>
-                            <option value="ts">生TS</option>
-                        </select>
+            {#await data.hw}
+                <span class="hint" data-testid="hw-status">GPU を確認中…</span>
+            {:then hw}
+                <form method="POST" action="?/saveHw" use:submitting={keepValues}>
+                    <span class="hint" data-testid="hw-status">{hw.message}</span>
+                    {#if hw.devices.length > 0}
+                        <!-- 口ごとに1枚。表にすると半分の幅で横に巻くので、縦に積む -->
+                        <div class="rows">
+                            {#each hw.devices as device (device.path)}
+                                <div class="row device" data-testid="hw-device" data-device={device.path}>
+                                    <div class="mono small">{device.label}</div>
+                                    <div class="hint">{device.summary}</div>
+                                    {#each HW_KINDS as kind (kind)}
+                                        <div class="kind-row">
+                                            <span class="kind small">{HW_KIND_LABEL[kind]}</span>
+                                            {#each HW_CODECS as codec (codec)}
+                                                {@const usable = device[kind].includes(codec)}
+                                                <label class="check" class:unusable={!usable}>
+                                                    <input
+                                                        type="checkbox"
+                                                        name={`hw.${device.path}.${kind}.${codec}`}
+                                                        checked={usable &&
+                                                            hwAllowed(data.recording.hwAllow, device.path, kind, codec)}
+                                                        disabled={!usable}
+                                                        data-testid={`hw-${device.port}-${kind}-${codec}`}
+                                                    />
+                                                    <span class="small">{CODEC_LABEL[codec]}</span>
+                                                </label>
+                                            {/each}
+                                        </div>
+                                    {/each}
+                                </div>
+                            {/each}
+                        </div>
+                    {/if}
+                    <div class="cluster actions">
+                        {#if hw.devices.length > 0}
+                            <button type="submit" class="small" data-testid="hw-save">保存</button>
+                        {/if}
                         <button
-                            type="button"
+                            type="submit"
                             class="small ghost"
-                            onclick={() => tvRows.splice(tvRows.indexOf(row), 1)}
-                            data-testid="vlc-remove"
+                            formaction="?/probeHw"
+                            formnovalidate
+                            data-testid="hw-probe"
                         >
-                            外す
+                            確かめ直す
                         </button>
                     </div>
-                {:else}
-                    <p class="small muted">まだテレビがありません</p>
-                {/each}
-                <span class="hint">
-                    名前が空ならボタンに IP を表示します。
-                    ポートが空なら VLC の既定 (8080) を使います
-                </span>
-                <div class="cluster">
-                    <button
-                        type="button"
-                        class="secondary"
-                        onclick={() => tvRows.push({ name: '', ip: '', port: '8080', codec: 'auto' })}
-                        data-testid="vlc-add"
-                    >
-                        テレビを追加
-                    </button>
-                    <button type="submit" data-testid="save-vlc">保存</button>
-                </div>
-            </form>
+                </form>
+            {/await}
         </section>
 
         <section class="panel card">

@@ -83,10 +83,10 @@ describe('再生リンクの形', () => {
     test('尻に番組名、資格と名指しはクエリに', () => {
         const links = shareUrls(rec, 'https://denpa.example', 'abc', 'alt');
         expect(links.file).toBe(
-            `https://denpa.example/api/recordings/12/file/${encodeURIComponent('番組 第1話.mkv')}?token=abc&source=alt`,
+            `https://denpa.example/api/recordings/12/file/${encodeURIComponent('[新]番組 第1話.mkv')}?token=abc&source=alt`,
         );
         expect(links.playlist).toBe(
-            `https://denpa.example/api/recordings/12/playlist/${encodeURIComponent('番組 第1話.xspf')}?token=abc&source=alt`,
+            `https://denpa.example/api/recordings/12/playlist/${encodeURIComponent('[新]番組 第1話.xspf')}?token=abc&source=alt`,
         );
     });
 
