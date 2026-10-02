@@ -38,7 +38,12 @@ async function open(browser: Browser, width: number, height: number, scale: numb
         locale: 'ja-JP',
         timezoneId: 'Asia/Tokyo',
         colorScheme: 'dark',
-        extraHTTPHeaders: { 'x-forwarded-for': XFF },
+        /*
+         * x-forwarded-proto も付ける。server.js は PROTOCOL_HEADER を常に置くので、
+         * 無いと https だと思われ、http で開いたこちらの Origin と食い違って
+         * POST (ライブの札など) が CSRF で弾かれる
+         */
+        extraHTTPHeaders: { 'x-forwarded-for': XFF, 'x-forwarded-proto': 'http' },
     });
     const page = await ctx.newPage();
     await page.addInitScript((css) => {
