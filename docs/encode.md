@@ -3,11 +3,7 @@
 **録ったあとの話。** 何をどう焼くか、CM をどう見つけるか、字幕をどう入れるか。
 選ばなかった案と、実測して見送ったものも置いてあります。
 
-| 探しもの | 見る場所 |
-| --- | --- |
-| 全体像 | [architecture.md](architecture.md) |
-| 保存先とファイルの配り方 | [library.md](library.md) |
-| CM検出に使うロゴ (`.lgd`) | [logo.md](logo.md) |
+保存先と配り方は [library.md](library.md)、局ロゴは [logo.md](logo.md)。
 
 既定は AV1 + Opus + PGS の Matroska。同じ画質でファイルは小さくなりますが
 時間がかかるので、AV1 を解けない相手 (古いテレビなど) 向けに設定画面で **H.264 も選べます**。

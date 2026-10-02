@@ -108,10 +108,10 @@ curl -fsSL https://raw.githubusercontent.com/danything/denpa/main/install.sh | b
 
 - **Linux** (amd64 / arm64) — 全部 Docker Compose で動かします。`~/denpa` に compose.prod.yml を置いて起動します
 - **Mac** (Apple Silicon) — チューナーに触るエージェントは Mac の上で直接、denpa 本体は Docker で動かします
-  ([docs/agent.md](docs/agent.md#mac-でチューナーを使う))。v1.23.0 から入れられます
+  ([docs/agent.md](docs/agent.md#mac-でチューナーを使う))
 - **Windows** (x64) は PowerShell で `irm https://raw.githubusercontent.com/danything/denpa/main/install.ps1 | iex`。
   構成は Mac と同じです。チューナーは PX-S1UD など siano-userland の機材だけで、ドライバを WinUSB にします
-  ([docs/agent.md](docs/agent.md#windows-でチューナーを使う))。1.23.1 から入れられます
+  ([docs/agent.md](docs/agent.md#windows-でチューナーを使う))
 - **Docker は入れません。** 無ければ入れ方を示して止まります (Linux は <https://get.docker.com>、
   Mac は Docker Desktop か OrbStack、Windows は Docker Desktop)
 - **入口は [genkan](https://github.com/danything/genkan)** (ホスト名で振り分けるリバースプロキシ)。
@@ -137,7 +137,6 @@ docker compose up -d
 本体とチューナーエージェントを1つのコンテナにまとめたイメージもあります。
 チューナーを挿した機械でそのまま全部動かすとき (NAS や、ほかの仕組みに載せるとき) 向けです。
 中身は上の2つのイメージと同じで、分けるかまとめるかだけが違います。
-`latest` と版の名前は次のリリースから付きます (それまでは main の `develop`)。
 
 ```sh
 docker run -d --name denpa --restart unless-stopped --stop-timeout 21900 \
@@ -189,6 +188,10 @@ docker compose) で動かすなら `oci://ghcr.io/danything/charts/denpa-agent` 
 
 イメージのタグは `latest` で、リリースのたびに新しくなります。版を固定したいなら `1.20.0` の
 ように書きます ([docs/architecture.md](docs/architecture.md#イメージのタグ))。
+
+前段で `/denpa` のような接頭辞の下に置いても動きます (Home Assistant の Ingress など)。
+接頭辞は denpa に教えません。VLC や OIDC に渡す URL にだけ、前段が付ける
+`X-Forwarded-Prefix` (Home Assistant は `X-Ingress-Path`) を頭に付けます。
 
 ## 誰を通すか
 
@@ -248,6 +251,7 @@ docker compose) で動かすなら `oci://ghcr.io/danything/charts/denpa-agent` 
 - [docs/auth.md](docs/auth.md) — **誰を通すか** (OIDC でのログイン・信頼したネットワーク・期限付きのリンク)
 - [docs/migrate.md](docs/migrate.md) — **EPGStation からの引き継ぎ**
 - [docs/stream.md](docs/stream.md) — **ライブ視聴** (放送中のものを観る)
+- [docs/api.md](docs/api.md) — **外から使う口** (局・録画の一覧、ライブを HTTP で。Home Assistant やスクリプト向け)
 
 ## 謝辞
 
@@ -277,7 +281,7 @@ docker compose) で動かすなら `oci://ghcr.io/danything/charts/denpa-agent` 
 | **CM 検出** — join_logo_scp・chapter_exe・logoframe・dtvindex | GPL-3.0 (join_logo_scp は正式なライセンス文書無し。「転載・改変は連絡不要」の表示に拠る) |
 | **rounded-mplus-1m-arib** (字幕とデータ放送のフォント) | M+ FONT LICENSE (無制限) |
 | **web-bml / es2** (npm の `web-bml`。データ放送を描く) | MIT |
-| **Svelte / SvelteKit / Tailwind / daisyUI** と束に入る npm 一式 | MIT (crc-32 は Apache-2.0、ieee754 は BSD-3) |
+| **Svelte / SvelteKit / Blades / Bits UI** と束に入る npm 一式 | MIT (drizzle-orm と crc-32 は Apache-2.0) |
 | [patches/](patches) — ffmpeg に当てている直し (上流に投げる前提) | 当てる先と同じ |
 
 **全部の一覧 (出どころ・何に使っているか・根拠) は [docs/licenses.md](docs/licenses.md)。**

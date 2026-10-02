@@ -22,6 +22,7 @@ on:
       - 'Dockerfile'
       - 'agent/**'
       - 'patches/**'
+      - 'wasm/**'
       - 'package.json'
       - 'bun.lock'
       - '.dockerignore'

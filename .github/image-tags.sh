@@ -12,9 +12,10 @@
 set -eu
 
 # denpa はリポジトリ直下なので、エージェントなど別物のパスを除いて見る。
-# server.js (WebSocket の前段。イメージにそのまま入る) と patches (ffmpeg に当てる直し)
-# が漏れていて、server.js だけの修正がイメージに焼かれないまま release まで素通りしていた
-denpa_paths="Dockerfile src static package.json bun.lock vite.config.ts server.js patches"
+# **イメージに入るものは全部並べる** (build-and-deploy.yml の paths と揃える)。漏れると、
+# そこだけの修正がイメージに焼かれないまま release まで素通りする (server.js で実際に起きた)。
+# wasm はライブを生で見る復号器、drizzle はマイグレーション
+denpa_paths="Dockerfile src static package.json bun.lock vite.config.ts server.js patches wasm drizzle"
 
 AGENT_TAG="sha-$(git log -1 --format=%H -- agent | cut -c1-12)"
 DENPA_TAG="sha-$(git log -1 --format=%H -- $denpa_paths | cut -c1-12)"

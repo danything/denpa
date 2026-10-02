@@ -25,9 +25,6 @@ services:
         environment:
             TZ: Asia/Tokyo
             TUNER_AGENT_URL: http://host.docker.internal:25252
-            DENPA_DB: /app/data/denpa.db
-            RECORDED_DIR: /app/recorded
-            LIBRARY_DIR: /library
             ENCODE_CONCURRENCY: '2'
             # **誰を通すか (docs/auth.md)。** compose.prod.yml と同じプライベートネットワーク。
             # ブラウザから localhost で入ると、コンテナに見える送信元は Docker の

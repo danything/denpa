@@ -81,6 +81,17 @@ libusb 1.0.30 (LGPL-2.1+) が実行ファイルに静的リンクなのも上と
 USB のカードリーダーは macOS の PCSC.framework (OS の一部) を呼びます。
 denpa 本体は上と同じコンテナイメージ `denpa` を、Mac の Docker で動かします。
 
+### Windows に入れるもの (`install.ps1`)
+
+リリースに添えた `denpa-agent-<版>-windows-x64.zip` (`denpa-agent.exe` 1個) と、siano-userland の
+**Windows 版** (`windows-x64`)・同じファームウェア。px4-userland は入れません (Windows 版が無い)。
+カードリーダーは Windows の WinSCard (`winscard.dll`。OS の一部) を呼びます。
+
+### `denpa-aio`
+
+上の `denpa` に、`denpa-agent` の実行ファイルと `/opt/px4-userland`・`/opt/siano-userland` を
+写しただけのもの (`.github/aio.Dockerfile`)。中身もライセンスも上の2つと同じです。
+
 ## リポジトリに写してあるもの・借りた表
 
 | 名前 | 場所 | 何に | 出どころ | ライセンス |
@@ -101,11 +112,13 @@ denpa 本体は上と同じコンテナイメージ `denpa` を、Mac の Docker
 | --- | --- | --- | --- |
 | Svelte / SvelteKit / adapter-node | 画面・ルーティング・サーバの束 | <https://github.com/sveltejs> | MIT |
 | Blades (Pico CSS を引き継いだもの) / Bits UI | 見た目の土台と、メニューなどの部品 | <https://blades.ninja> / <https://bits-ui.com> | MIT |
+| Floating UI / runed / svelte-toolbelt / tabbable / style-to-object | Bits UI の依存 (浮かせる枠・フォーカス) | 各上流 | MIT |
 | drizzle-orm | SQLite の読み書き (サーバの束) | <https://github.com/drizzle-team/drizzle-orm> | **Apache-2.0** |
 | web-bml (+ 同梱の es2) | **データ放送 (BML) を描く。** 2026-08 に上流がライブラリ化して npm に出したので、写しをやめて普通の依存にした | <https://github.com/otya128/web-bml> / <https://github.com/otya128/es2> | MIT / MIT |
 | crc-32 | web-bml の PNG / DRCS | <https://github.com/SheetJS/js-crc32> | **Apache-2.0** |
-| css (reworkcss、otya128 の fork) + source-map ほか | web-bml が BML の CSS を解く | <https://github.com/reworkcss/css> | MIT (依存は BSD-3 / MIT) |
-| fast-xml-parser / fast-xml-builder | web-bml の BML → XHTML | <https://github.com/NaturalIntelligence/fast-xml-parser> | MIT |
+| css (reworkcss、otya128 の fork。依存なし) | web-bml が BML の CSS を解く | <https://github.com/otya128/reworkcss-css> | MIT |
+| fast-xml-parser (+ strnum) | web-bml の BML → XHTML | <https://github.com/NaturalIntelligence/fast-xml-parser> | MIT |
+| arib-mmt-tlv-ts / fflate | web-bml の依存 | npm の各上流 | MIT |
 | cookie / devalue / esm-env / clsx | SvelteKit のランタイム (adapter-node 6 は静的ファイルの配りも自前で、依存を持たない) | 各上流 | MIT |
 
 ### ライブを生で見るときにブラウザへ配る復号器

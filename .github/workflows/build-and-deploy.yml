@@ -11,9 +11,11 @@ on:
       - 'package.json'
       - 'bun.lock'
       - 'vite.config.ts'
-      # イメージにそのまま入るのに漏れていた2つ (.github/image-tags.sh の denpa_paths と揃える)
+      # ここから下も denpa のイメージに入る (.github/image-tags.sh の denpa_paths と揃える)
       - 'server.js'
       - 'patches/**'
+      - 'wasm/**'
+      - 'drizzle/**'
       - '.github/workflows/build-and-deploy.yml'
       - '.github/image-tags.sh'
       - '.github/aio.Dockerfile'
