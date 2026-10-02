@@ -9,7 +9,8 @@
  * 別の端末や別の人に付いて回るものではない
  */
 
-import { forget, read, write } from '$lib/keep';
+import { forget, read, write } from '#lib/keep.js';
+import type { ReadonlyURL } from '$app/state';
 
 const KEY = 'denpa_measure';
 
@@ -33,7 +34,7 @@ export const measure = {
      * `?measure` は**覚えない** — 1回だけ見たいときの手で、付けた URL を
      * 誰かに渡したときに相手の端末に居座らせない
      */
-    start(url: URL): void {
+    start(url: ReadonlyURL): void {
         on = url.searchParams.has('measure') || read(KEY) === '1';
     },
 };

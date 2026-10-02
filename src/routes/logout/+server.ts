@@ -1,6 +1,6 @@
 import { redirect } from '@sveltejs/kit';
-import { relative } from '$lib/server/paths';
-import { COOKIE, destroy } from '$lib/server/session';
+import { relative } from '#lib/server/paths.js';
+import { COOKIE, destroy } from '#lib/server/session.js';
 
 /**
  * ログアウト。**こちらの控えを消すだけ**で、Entra 側からは出さない。

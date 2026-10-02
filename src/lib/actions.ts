@@ -1,6 +1,5 @@
-import type { SubmitFunction } from '@sveltejs/kit';
 import { tick } from 'svelte';
-import { enhance } from '$app/forms';
+import { enhance, type SubmitFunction } from '$app/forms';
 
 /**
  * `use:enhance` の代わり。**送信中は押したボタンの上に回るものを出し**、

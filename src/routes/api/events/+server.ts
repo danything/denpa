@@ -1,4 +1,4 @@
-import { type DenpaEvent, subscribe } from '$lib/server/events';
+import { type DenpaEvent, subscribe } from '#lib/server/events.js';
 
 /** 何も起きなくても切られないよう、定期的に空行を送る */
 const HEARTBEAT = 25_000;

@@ -1,5 +1,5 @@
 import { error } from '@sveltejs/kit';
-import { readLogo } from '$lib/server/logo';
+import { readLogo } from '#lib/server/logo.js';
 
 /**
  * 局ロゴ。denpa が放送波から拾ったものを配る (src/lib/server/logo.ts)。

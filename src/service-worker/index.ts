@@ -1,8 +1,6 @@
-/// <reference lib="webworker" />
-
 /**
  * ホーム画面から開けるようにするための最小限のサービスワーカー
- * + オフライン視聴の受け取り係 ([docs/offline.md](../docs/offline.md))。
+ * + オフライン視聴の受け取り係 ([docs/offline.md](../../docs/offline.md))。
  *
  * 録画一覧も番組表も**サーバの今の状態**が要るので、中身はキャッシュしない。
  * 古い一覧を見せるくらいなら、繋がらないと分かるほうがまし。
@@ -12,21 +10,31 @@
  * 預けたダウンロードが終わったら IndexedDB へ移す。配信のキャッシュはしない。
  */
 
-import { type OfflineVideo, parseFetchId, storeResponse, videos } from '$lib/offline-db';
-import { base, build, files, version } from '$service-worker';
+import { type OfflineVideo, parseFetchId, storeResponse, videos } from '#lib/offline-db.js';
+import { version } from '$app/env';
+import { assets, immutable } from '$app/manifest';
+import { asset, resolve } from '$app/paths';
+import { self as worker } from '$app/service-worker';
+
+/*
+ * **頭 (前段の接頭辞込み。server/paths.ts) は SvelteKit が自分の置き場から求める。**
+ * Service Worker の中の `$app/paths` は `<接頭辞>/service-worker.js` の置き場を
+ * base にするので、`resolve` / `asset` がそのまま接頭辞の下を指す
+ */
 
 const CACHE = `denpa-${version}`;
-/** 殻だけ。ロゴやサムネイルのような「増えるもの」は入れない */
-const SHELL = [...build, ...files.filter((file) => !file.endsWith('robots.txt'))];
+/** 殻だけ。ロゴやサムネイルのような「増えるもの」は入れない。道は base からの相対で来る */
+const SHELL = [
+    // 組んだ JS/CSS はルートでも static でもないので型の付いた `resolve` に渡せない。頭だけ借りる
+    ...immutable.map((file) => `${resolve('')}${file.path}`),
+    ...assets.filter((file) => !file.path.endsWith('robots.txt')).map((file) => asset(file.path)),
+];
 /**
  * オフラインの入口。電波の無いところで開いたとき、どの画面への行き先も
  * これで受ける (下の fetch)。**殻と違って HTML なので、版が変わる**。
  * install のたびに取り直す
  */
-// 頭は `base` (Service Worker の置き場から SvelteKit が求める。前段の接頭辞込み)
-const OFFLINE_PAGE = `${base}/offline`;
-
-const worker = self as unknown as ServiceWorkerGlobalScope;
+const OFFLINE_PAGE = resolve('offline');
 
 worker.addEventListener('install', (event) => {
     event.waitUntil(
@@ -59,7 +67,7 @@ worker.addEventListener('fetch', (event) => {
      * API は素通しする。録画の配信は数十GB、通知は繋ぎっぱなしの SSE で、
      * どちらもキャッシュに載せると壊れる
      */
-    if (url.pathname.startsWith(`${base}/api/`)) return;
+    if (url.pathname.startsWith(`${resolve('')}api/`)) return;
 
     /*
      * 画面への移動は**サーバ優先、繋がらなければオフラインの入口**。

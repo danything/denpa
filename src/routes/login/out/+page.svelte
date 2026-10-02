@@ -6,7 +6,7 @@
 -->
 
 <script lang="ts">
-    import { base } from '$app/paths';
+    import { resolve } from '$app/paths';
 </script>
 <div class="wrap">
     <div class="panel card">
@@ -16,7 +16,7 @@
             次はパスワードを聞かれずにログインできることがあります。
         </p>
         <div class="card-actions">
-            <a class="button" href="{base}/login">もう一度ログイン</a>
+            <a class="button" href={resolve('login')}>もう一度ログイン</a>
         </div>
     </div>
 </div>

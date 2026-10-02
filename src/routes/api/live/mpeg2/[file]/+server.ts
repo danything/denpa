@@ -14,7 +14,7 @@
 import { existsSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { error } from '@sveltejs/kit';
-import { config } from '$lib/server/config';
+import { config } from '#lib/server/config.js';
 import type { RequestHandler } from './$types';
 
 const TYPES: Record<string, string> = {

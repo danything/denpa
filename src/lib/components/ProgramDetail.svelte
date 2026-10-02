@@ -1,7 +1,7 @@
 <script lang="ts">
     import type { Snippet } from 'svelte';
-    import ProgramFacts from '$lib/components/ProgramFacts.svelte';
-    import type { ProgramDetail } from '$lib/types';
+    import ProgramFacts from '#lib/components/ProgramFacts.svelte';
+    import type { ProgramDetail } from '#lib/types.js';
 
     /**
      * 番組の詳細を出すモーダル。

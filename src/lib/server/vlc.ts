@@ -1,4 +1,4 @@
-import { normalizeVlcHost } from '$lib/vlc-host';
+import { normalizeVlcHost } from '#lib/vlc-host.js';
 import { settings } from './settings';
 
 /**
@@ -36,7 +36,7 @@ function asCodec(raw: string | undefined): VlcCodec {
 /**
  * `名前=ホスト:ポート#コーデック` のカンマ区切りを読む。名前 (`=` から前) と
  * コーデック (`#` から後ろ) はどちらも略せる — 旧書式 (`名前=ホスト:ポート`) は
- * そのまま読める。ホストの整え方は `$lib/vlc-host` と共通
+ * そのまま読める。ホストの整え方は `#lib/vlc-host.js` と共通
  */
 export function parseTargets(text: string): VlcTarget[] {
     const out: VlcTarget[] = [];

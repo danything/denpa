@@ -10,7 +10,6 @@ on:
       - 'static/**'
       - 'package.json'
       - 'bun.lock'
-      - 'svelte.config.ts'
       - 'vite.config.ts'
       # イメージにそのまま入るのに漏れていた2つ (.github/image-tags.sh の denpa_paths と揃える)
       - 'server.js'

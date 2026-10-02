@@ -1,10 +1,10 @@
 <script lang="ts">
-    import { submitting } from '$lib/actions';
-    import LogoArea from '$lib/components/LogoArea.svelte';
-    import Toasts, { errorNotice, type Notice } from '$lib/components/Toasts.svelte';
-    import { SERVICE_TYPE_LABEL, STATE_LABEL as SHARED_STATE_LABEL, splitReaderName } from '$lib/format';
-    import { held, liveUpdates } from '$lib/live-updates.svelte';
-    import type { CardReaderState } from '$lib/server/scramble';
+    import { submitting } from '#lib/actions.js';
+    import LogoArea from '#lib/components/LogoArea.svelte';
+    import Toasts, { errorNotice, type Notice } from '#lib/components/Toasts.svelte';
+    import { SERVICE_TYPE_LABEL, STATE_LABEL as SHARED_STATE_LABEL, splitReaderName } from '#lib/format.js';
+    import { held, liveUpdates } from '#lib/live-updates.svelte.js';
+    import type { CardReaderState } from '#lib/server/scramble.js';
 
     let { data, form } = $props();
 

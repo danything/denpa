@@ -1,5 +1,5 @@
 import { and, eq, getTableColumns, gt, inArray, isNull, ne, or } from 'drizzle-orm';
-import { type Genre, genreMatches } from '$lib/arib';
+import { type Genre, genreMatches } from '#lib/arib.js';
 import { parseSearchFields, type SearchField } from '../search';
 import type { Program, Rule } from '../types';
 import { config } from './config';

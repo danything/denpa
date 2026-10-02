@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { CHANNEL } from '$lib/live';
+import { CHANNEL } from '#lib/live.js';
 import {
     CANVAS,
     captionInput,

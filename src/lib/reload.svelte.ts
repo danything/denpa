@@ -1,10 +1,13 @@
-import { invalidateAll } from '$app/navigation';
+import { refreshAll } from '$app/navigation';
 import { navigating } from '$app/state';
 
 /**
  * 画面の読み直し。**走っている遷移に重ねない。**
  *
- * ## `invalidateAll` は、走っている遷移を黙って畳む
+ * ## `invalidateAll` は、走っている遷移を黙って畳んでいた
+ *
+ * (SvelteKit 2 の話。3 では読み直しが遷移を畳まなくなり、名前も `refreshAll` に
+ * 変わった。持ち越しは害が無いので残してある — 遷移の行き先はどのみち新しく読む)
  *
  * SvelteKit は遷移にも読み直しにも同じ「いま有効な札」(`token`) を使っていて、
  * `invalidateAll()` はそれを**自分のものに書き換える**。読み込みから戻ってきた
@@ -34,7 +37,7 @@ let owed = false;
 function flush(): void {
     if (!owed) return;
     owed = false;
-    void invalidateAll();
+    void refreshAll();
 }
 
 /**
@@ -77,5 +80,5 @@ export function reload(): void {
         owed = true;
         return;
     }
-    void invalidateAll();
+    void refreshAll();
 }

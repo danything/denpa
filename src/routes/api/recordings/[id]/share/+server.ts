@@ -1,8 +1,8 @@
 import { json } from '@sveltejs/kit';
-import { publicBase } from '$lib/server/paths';
-import { recordingOr404 } from '$lib/server/recording';
-import { mintShareToken, shareUrls } from '$lib/server/share';
-import { parseFileSource } from '$lib/source';
+import { publicBase } from '#lib/server/paths.js';
+import { recordingOr404 } from '#lib/server/recording.js';
+import { mintShareToken, shareUrls } from '#lib/server/share.js';
+import { parseFileSource } from '#lib/source.js';
 
 /**
  * 期限付きの再生リンクを作る (`share.ts`)。

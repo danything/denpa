@@ -1,0 +1,11 @@
+{
+    "extends": "$app/tsconfig/service-worker",
+    "compilerOptions": {
+        "strict": true,
+        "noImplicitOverride": true,
+        "exactOptionalPropertyTypes": true,
+        "noPropertyAccessFromIndexSignature": true,
+        "noUncheckedIndexedAccess": true
+    },
+    "include": [".", "../lib/background-fetch.d.ts"]
+}

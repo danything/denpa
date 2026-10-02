@@ -1,5 +1,5 @@
 import { json } from '@sveltejs/kit';
-import { issue } from '$lib/server/tickets';
+import { issue } from '#lib/server/tickets.js';
 
 /**
  * ライブ視聴の WebSocket に繋ぐための札を1枚配る。

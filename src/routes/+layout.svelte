@@ -1,14 +1,14 @@
 <script lang="ts">
-    import { base } from '$app/paths';
+    import { resolve } from '$app/paths';
     import '../app.css';
     import { onMount } from 'svelte';
+    import Measure from '#lib/components/Measure.svelte';
+    import Icon from '#lib/components/player/Icon.svelte';
+    import { write } from '#lib/keep.js';
+    import { measure } from '#lib/measure.svelte.js';
+    import { startOffline } from '#lib/offline.svelte.js';
+    import { followNavigation, reload } from '#lib/reload.svelte.js';
     import { navigating, page } from '$app/state';
-    import Measure from '$lib/components/Measure.svelte';
-    import Icon from '$lib/components/player/Icon.svelte';
-    import { write } from '$lib/keep';
-    import { measure } from '$lib/measure.svelte';
-    import { startOffline } from '$lib/offline.svelte';
-    import { followNavigation, reload } from '$lib/reload.svelte';
 
     let { children, data } = $props();
 
@@ -168,7 +168,7 @@
         { href: '/rules', label: 'ルール' },
         { href: '/tuners', label: 'チューナー' },
         { href: '/settings', label: '設定' },
-    ];
+    ] as const;
 
     /** ページ名はナビと同じものを使う。タブに出す */
     const title = $derived(`${links.find((l) => l.href === page.route.id)?.label ?? 'denpa'} - denpa`);
@@ -243,7 +243,7 @@
     {/if}
     <div class="navbar">
         <div class="brand">
-            <a class="button ghost logo" href="{base}/">denpa</a>
+            <a class="button ghost logo" href={resolve('')}>denpa</a>
             <!--
                 **新しい版が出ている** (server/update.ts が GitHub のリリースを見比べる)。
                 押せばリリースのページ。閉じる口は無い — 上げるか、リリースが消えれば引っ込む
@@ -287,7 +287,7 @@
                 {#each links as link (link.href)}
                     <li>
                         <a
-                            href="{base}{link.href}"
+                            href={resolve(link.href)}
                             class="button ghost small"
                             aria-current={page.route.id === link.href ? 'page' : undefined}
                             data-testid="nav-{link.href === '/' ? 'home' : link.href.slice(1)}"
@@ -321,7 +321,7 @@
                     {#each links as link (link.href)}
                         <li>
                             <a
-                                href="{base}{link.href}"
+                                href={resolve(link.href)}
                                 aria-current={page.route.id === link.href ? 'page' : undefined}
                             >
                                 {link.label}
@@ -340,7 +340,7 @@
             -->
             {#if data.user}
                 <!-- ボタンはフォームの POST で押す。リンク (GET) だと先読みで勝手に切れる -->
-                <form method="POST" action="{base}/logout">
+                <form method="POST" action={resolve('logout')}>
                     <button type="submit" class="ghost small" data-testid="logout">
                         ログアウト
                     </button>

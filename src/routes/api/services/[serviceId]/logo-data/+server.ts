@@ -1,5 +1,5 @@
 import { error } from '@sveltejs/kit';
-import { readLearnedLogo } from '$lib/server/logo-data';
+import { readLearnedLogo } from '#lib/server/logo-data.js';
 
 /**
  * その局について logoframe が**覚えたロゴ**を絵にして返す。

@@ -1,19 +1,19 @@
 import { fail, redirect } from '@sveltejs/kit';
 import { and, desc, eq, getTableColumns, gt, inArray, isNotNull, isNull, not, or, sql } from 'drizzle-orm';
-import { genreName } from '$lib/arib';
-import { SERVICE_TYPE_LABEL } from '$lib/format';
-import { parseSearchFields } from '$lib/search';
-import { config } from '$lib/server/config';
-import { contending, type Occupant, rivalsOf } from '$lib/server/conflict';
-import { now, orm } from '$lib/server/db';
-import { CURRENT_SERVICES, watchableServices } from '$lib/server/epg';
-import { relative } from '$lib/server/paths';
-import { cancel, reserve } from '$lib/server/reservations';
-import { applyRules, compile, haystack, likePatterns, matchesCompiled } from '$lib/server/rules';
-import { resolveConflicts, tunerCapacity } from '$lib/server/scheduler';
-import { programs, reservations, rules as ruleTable, services as serviceTable } from '$lib/server/schema';
-import { settings } from '$lib/server/settings';
-import type { Program, Rule } from '$lib/types';
+import { genreName } from '#lib/arib.js';
+import { SERVICE_TYPE_LABEL } from '#lib/format.js';
+import { parseSearchFields } from '#lib/search.js';
+import { config } from '#lib/server/config.js';
+import { contending, type Occupant, rivalsOf } from '#lib/server/conflict.js';
+import { now, orm } from '#lib/server/db.js';
+import { CURRENT_SERVICES, watchableServices } from '#lib/server/epg.js';
+import { relative } from '#lib/server/paths.js';
+import { cancel, reserve } from '#lib/server/reservations.js';
+import { applyRules, compile, haystack, likePatterns, matchesCompiled } from '#lib/server/rules.js';
+import { resolveConflicts, tunerCapacity } from '#lib/server/scheduler.js';
+import { programs, reservations, rules as ruleTable, services as serviceTable } from '#lib/server/schema.js';
+import { settings } from '#lib/server/settings.js';
+import type { Program, Rule } from '#lib/types.js';
 
 interface Row extends Rule {
     reservations: number;

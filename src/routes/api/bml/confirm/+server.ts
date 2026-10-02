@@ -11,7 +11,7 @@
  */
 
 import { error, json } from '@sveltejs/kit';
-import { confirmReachable, refusalMessage, requireBmlNetwork } from '$lib/server/bml-network';
+import { confirmReachable, refusalMessage, requireBmlNetwork } from '#lib/server/bml-network.js';
 import type { RequestHandler } from './$types';
 
 export const GET: RequestHandler = async ({ url }) => {

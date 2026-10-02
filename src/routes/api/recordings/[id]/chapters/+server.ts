@@ -1,7 +1,7 @@
-import { config } from '$lib/server/config';
-import { recordingOr404 } from '$lib/server/recording';
-import { run } from '$lib/server/stream';
-import { parseChapters } from '$lib/ts/watch';
+import { config } from '#lib/server/config.js';
+import { recordingOr404 } from '#lib/server/recording.js';
+import { run } from '#lib/server/stream.js';
+import { parseChapters } from '#lib/ts/watch.js';
 
 /**
  * 焼いたものに入っているチャプターを返す。**CM飛ばしの行き先。**

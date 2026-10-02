@@ -1,4 +1,4 @@
-import type { Notice } from '$lib/components/Toasts.svelte';
+import type { Notice } from '#lib/components/Toasts.svelte';
 
 /**
  * いまの1コマを字幕ごと切り抜く。**3画面 (ライブ・追っかけ・観る画面) で同じ。**

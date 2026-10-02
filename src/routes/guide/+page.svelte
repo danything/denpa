@@ -1,13 +1,13 @@
 <script lang="ts">
     import { untrack } from 'svelte';
+    import { dragScroll, submitting } from '#lib/actions.js';
+    import ProgramDetail from '#lib/components/ProgramDetail.svelte';
+    import { startDownload } from '#lib/download.js';
+    import { channelNumber, date, SERVICE_TYPE_LABEL, stateLabel, time } from '#lib/format.js';
+    import { reload } from '#lib/reload.svelte.js';
+    import type { ProgramDetail as Facts } from '#lib/types.js';
     import { preloadData } from '$app/navigation';
-    import { base } from '$app/paths';
-    import { dragScroll, submitting } from '$lib/actions';
-    import ProgramDetail from '$lib/components/ProgramDetail.svelte';
-    import { startDownload } from '$lib/download';
-    import { channelNumber, date, SERVICE_TYPE_LABEL, stateLabel, time } from '$lib/format';
-    import { reload } from '$lib/reload.svelte';
-    import type { ProgramDetail as Facts } from '$lib/types';
+    import { resolve } from '$app/paths';
 
     let { data, form } = $props();
 
@@ -154,7 +154,7 @@
         };
         let detail = seed;
         try {
-            const res = await fetch(`${base}/api/programs/${program.id}`);
+            const res = await fetch(resolve(`api/programs/${program.id}`));
             if (res.ok) detail = { ...seed, ...((await res.json()) as Facts) };
         } catch {
             // 取れなくても開く。中身は表が持っている分だけ
@@ -285,7 +285,7 @@
 
     function href(params: Record<string, string>): string {
         const query = new URLSearchParams({ type: data.type, ...params });
-        return `${base}/guide?${query}`;
+        return resolve(`guide?${query}`);
     }
 
     const prevHref = $derived(href({ start: String(data.start - data.hours * HOUR) }));
@@ -426,7 +426,7 @@
         編集はルール画面に寄せてあり (条件を2箇所で書けるようにすると判定が
         ずれる)、探す範囲もあちらで切り替える。既定は番組名だけ
     -->
-        <form method="GET" action="{base}/rules" class="cluster search" data-testid="guide-filter">
+        <form method="GET" action={resolve('rules')} class="cluster search" data-testid="guide-filter">
             <input
                 type="search"
                 name="keyword"
@@ -531,7 +531,7 @@
                     -->
                         {#if service.has_logo}
                             <img
-                                src="{base}/api/services/{service.id}/logo"
+                                src={resolve(`api/services/${service.id}/logo`)}
                                 alt=""
                                 class="logo"
                                 loading="lazy"
@@ -706,12 +706,12 @@
                     {#if program.library_path !== null}
                         <a
                             class="button"
-                            href="{base}/watch/{program.recording_id}"
+                            href={resolve(`watch/${program.recording_id}`)}
                         >
                             再生
                         </a>
                     {/if}
-                    <!-- 押されてから期限付きの署名URLを作って落とす ($lib/download) -->
+                    <!-- 押されてから期限付きの署名URLを作って落とす (#lib/download) -->
                     <button
                         type="button"
                         class="ghost"
@@ -738,7 +738,7 @@
                     -->
                     <a
                         class="button outline"
-                        href="{base}/live?service={program.service_id}"
+                        href={resolve(`live?service=${program.service_id}`)}
                         data-testid="detail-watch"
                     >
                         視聴

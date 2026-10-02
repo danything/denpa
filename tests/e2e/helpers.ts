@@ -26,7 +26,7 @@ export async function goto(page: Page, url: string): Promise<void> {
         await expect(page.locator('[data-testid="guide-grid"][aria-busy="true"]')).toHaveCount(0);
     }
     /*
-     * **ホームの一覧は少しずつしか描かない** (`$lib/paging.svelte`)。テストは行を
+     * **ホームの一覧は少しずつしか描かない** (`#lib/paging.svelte`)。テストは行を
      * 番号で名指ししたり件数を数えたりするので、開いた時点で全部出させておく —
      * 61 件目から先は、巻き取って初めて描かれる
      */
@@ -312,7 +312,7 @@ export async function clearRules(page: Page): Promise<void> {
 }
 
 /**
- * 少しずつ出す一覧を**全部出させる** (`$lib/paging.svelte`)。
+ * 少しずつ出す一覧を**全部出させる** (`#lib/paging.svelte`)。
  *
  * ホームの予約・録画とルールの一覧は、最初は 1 画面と少しだけ描き、末尾の印
  * (`<一覧>-more`。`use:sentinel`) が画面に入るたびに続きを足す。件数を数える・

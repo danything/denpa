@@ -1,5 +1,5 @@
 import { mkdirSync } from 'node:fs';
-import { SOCKET_PATH } from '$lib/live';
+import { SOCKET_PATH } from '#lib/live.js';
 import { listen } from './agent-events';
 import { warnIfClosed } from './auth';
 import { seedChannels } from './channel-seed';

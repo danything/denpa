@@ -10,9 +10,9 @@
  * がそのまま重なる。
  */
 
-import { base } from '$app/paths';
-import type { AudioSide } from '$lib/arib';
-import { unwrap } from '$lib/ts/pes';
+import type { AudioSide } from '#lib/arib.js';
+import { unwrap } from '#lib/ts/pes.js';
+import { resolve } from '$app/paths';
 import type { FromWorker, ToWorker } from './messages';
 import { type Chunk, Playout, type Scheduled } from './playout';
 
@@ -99,7 +99,9 @@ export class RawEngine {
             worker.onmessage = (event: MessageEvent<FromWorker>) => this.receive(event.data);
             worker.onerror = () => this.giveUp('MPEG-2 の復号器が止まりました');
             const offscreen = this.canvas.transferControlToOffscreen();
-            this.send({ type: 'init', canvas: offscreen, decoder: `${base}${DECODER}` }, [offscreen]);
+            this.send({ type: 'init', canvas: offscreen, decoder: `${resolve('')}${DECODER.slice(1)}` }, [
+                offscreen,
+            ]);
         } catch (error) {
             worker?.terminate();
             void context?.close().catch(() => undefined);

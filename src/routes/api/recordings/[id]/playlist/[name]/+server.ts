@@ -1,9 +1,9 @@
-import { publicBase } from '$lib/server/paths';
-import { xspf } from '$lib/server/playlist';
-import { recordingOr404 } from '$lib/server/recording';
-import { shareUrls } from '$lib/server/share';
-import { markedTitle } from '$lib/server/title';
-import { parseFileSource } from '$lib/source';
+import { publicBase } from '#lib/server/paths.js';
+import { xspf } from '#lib/server/playlist.js';
+import { recordingOr404 } from '#lib/server/recording.js';
+import { shareUrls } from '#lib/server/share.js';
+import { markedTitle } from '#lib/server/title.js';
+import { parseFileSource } from '#lib/source.js';
 
 /**
  * 録画を**続きの位置から**指す XSPF。テレビの VLC へ飛ばすときに、ファイルの

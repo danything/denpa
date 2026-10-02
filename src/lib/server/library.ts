@@ -1,6 +1,6 @@
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
-import { pad } from '$lib/format';
+import { pad } from '#lib/format.js';
 import { config } from './config';
 import { sanitizeFileName } from './title';
 

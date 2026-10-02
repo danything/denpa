@@ -2,12 +2,12 @@ import { statSync } from 'node:fs';
 import { fail } from '@sveltejs/kit';
 import { and, asc, desc, eq, getTableColumns, inArray, isNull, like, ne, not, or, sql } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/sqlite-core';
-import { orm } from '$lib/server/db';
-import { cancel as cancelEncode, enqueue, isCanceling, pump } from '$lib/server/encoder';
-import { emit } from '$lib/server/events';
-import { deleteRecordingFiles, reconcile } from '$lib/server/files';
-import { recordingFromForm } from '$lib/server/recording';
-import { cancel, restore } from '$lib/server/reservations';
+import { orm } from '#lib/server/db.js';
+import { cancel as cancelEncode, enqueue, isCanceling, pump } from '#lib/server/encoder.js';
+import { emit } from '#lib/server/events.js';
+import { deleteRecordingFiles, reconcile } from '#lib/server/files.js';
+import { recordingFromForm } from '#lib/server/recording.js';
+import { cancel, restore } from '#lib/server/reservations.js';
 import {
     encodeJobs,
     recordings as recordingTable,
@@ -15,11 +15,11 @@ import {
     reservations as reservationTable,
     rules as ruleTable,
     services,
-} from '$lib/server/schema';
-import { settings } from '$lib/server/settings';
-import { targets } from '$lib/server/vlc';
-import { encodeSource } from '$lib/source';
-import type { EncodeJob, Recording, Reservation, ReservationState } from '$lib/types';
+} from '#lib/server/schema.js';
+import { settings } from '#lib/server/settings.js';
+import { targets } from '#lib/server/vlc.js';
+import { encodeSource } from '#lib/source.js';
+import type { EncodeJob, Recording, Reservation, ReservationState } from '#lib/types.js';
 
 interface RecordingRow extends Recording {
     /** 直近のエンコード失敗の理由。詳細で見せる */

@@ -13,7 +13,7 @@ import {
 } from 'node:fs';
 import { basename, dirname } from 'node:path';
 import { and, eq, getTableColumns, inArray, sql } from 'drizzle-orm';
-import { audioTitles, DUAL_MONO } from '$lib/arib';
+import { audioTitles, DUAL_MONO } from '#lib/arib.js';
 import { HW_KIND_LABEL, type HwCodec } from '../hw';
 import { encodeSource } from '../source';
 import type { EncodeJob, EncodePhase, Recording } from '../types';

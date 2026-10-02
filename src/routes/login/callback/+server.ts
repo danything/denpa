@@ -1,8 +1,8 @@
 import { redirect } from '@sveltejs/kit';
-import { config } from '$lib/server/config';
-import { complete, enabled, readPending, redirectUri } from '$lib/server/oidc';
-import { publicBase, relative } from '$lib/server/paths';
-import { COOKIE, create, PENDING_COOKIE } from '$lib/server/session';
+import { config } from '#lib/server/config.js';
+import { complete, enabled, readPending, redirectUri } from '#lib/server/oidc.js';
+import { publicBase, relative } from '#lib/server/paths.js';
+import { COOKIE, create, PENDING_COOKIE } from '#lib/server/session.js';
 
 function failed(message: string): Response {
     // ここは人が見る画面。何が起きたか読めないと、設定のどこが悪いのか追えない

@@ -1,14 +1,14 @@
 <script lang="ts">
-    import { base } from '$app/paths';
+    import { submitting } from '#lib/actions.js';
+    import { GENRE_TREE, genreName } from '#lib/arib.js';
+    import ProgramDetail from '#lib/components/ProgramDetail.svelte';
+    import Toasts, { errorNotice, type Notice } from '#lib/components/Toasts.svelte';
+    import { programDetail } from '#lib/detail.svelte.js';
+    import { badgeClass, CM_LABEL, dateTime, SERVICE_TYPE_LABEL, stateLabel } from '#lib/format.js';
+    import { matches, Paged, sentinel } from '#lib/paging.svelte.js';
+    import { parseSearchFields, SEARCH_FIELD_LABEL, SEARCH_FIELDS, searchFieldLabel } from '#lib/search.js';
+    import { resolve } from '$app/paths';
     import { page } from '$app/state';
-    import { submitting } from '$lib/actions';
-    import { GENRE_TREE, genreName } from '$lib/arib';
-    import ProgramDetail from '$lib/components/ProgramDetail.svelte';
-    import Toasts, { errorNotice, type Notice } from '$lib/components/Toasts.svelte';
-    import { programDetail } from '$lib/detail.svelte';
-    import { badgeClass, CM_LABEL, dateTime, SERVICE_TYPE_LABEL, stateLabel } from '$lib/format';
-    import { matches, Paged, sentinel } from '$lib/paging.svelte';
-    import { parseSearchFields, SEARCH_FIELD_LABEL, SEARCH_FIELDS, searchFieldLabel } from '$lib/search';
     import type { Preview, PreviewRow } from './+page.server';
 
     let { data, form } = $props();
@@ -388,7 +388,7 @@
                         </div>
 
                         <p class="small muted">
-                            エンコードのしかたと無料放送の扱いは<a href="{base}/settings">設定</a
+                            エンコードのしかたと無料放送の扱いは<a href={resolve('settings')}>設定</a
                             >で決めます ({data.defaults.codec.toUpperCase()}
                             / CM: {CM_LABEL[data.defaults.cmCut]}{data.defaults.freeOnly
                                 ? ' / 無料放送のみ'
@@ -402,7 +402,7 @@
                             type="submit"
                             class="small secondary"
                             formmethod="GET"
-                            formaction="{base}/rules"
+                            formaction={resolve('rules')}
                             data-testid="rule-preview"
                         >
                             何が録れるか見る
@@ -411,7 +411,7 @@
                             <button type="submit" class="small" formaction="?/update" data-testid="rule-update">
                                 更新
                             </button>
-                            <a class="button small secondary" href="{base}/rules" data-testid="rule-cancel-edit">編集をやめる</a>
+                            <a class="button small secondary" href={resolve('rules')} data-testid="rule-cancel-edit">編集をやめる</a>
                         {:else}
                             <button type="submit" class="small" formaction="?/create" data-testid="rule-submit">
                                 追加
@@ -618,7 +618,7 @@
                             <span>ジャンル: {genres(rule)}</span>
                         </div>
                         <div class="cluster">
-                            <a class="button small secondary" href="{base}/rules?edit={rule.id}" data-testid="rule-edit">編集</a>
+                            <a class="button small secondary" href={resolve(`rules?edit=${rule.id}`)} data-testid="rule-edit">編集</a>
                             <form method="POST" action="?/toggle" use:submitting>
                                 <input type="hidden" name="id" value={rule.id} />
                                 <button type="submit" class="small secondary" data-testid="rule-toggle">
@@ -694,7 +694,7 @@
                     押した先は別の画面で、そこで選局からやり直すことになるので
                     リンクにする (モーダルの中で始めるものではない)
                 -->
-                <a class="button outline" href="{base}/live?service={opened.service_id}">
+                <a class="button outline" href={resolve(`live?service=${opened.service_id}`)}>
                     視聴
                 </a>
             {/if}

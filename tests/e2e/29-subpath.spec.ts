@@ -8,7 +8,7 @@ import { cellOf, expect, syncEpg, test, upcoming } from './helpers';
  *
  * Home Assistant の Ingress や k8s の Ingress と同じく、`/sub/denpa` を**剥がしてから**
  * 渡す前段を立てて、その下で主な道を通す。denpa には接頭辞を教えない。
- * 画面の中の URL は `base` (SvelteKit がブラウザの居る URL から求める)、転送は相対。
+ * 画面の中の URL は `resolve` (SvelteKit がブラウザの居る URL から求める)、転送は相対。
  * どれか1つでも根から書いてあれば、その先で前段の外 (`/guide` など) へ出て 404 になる
  */
 const PREFIX = '/sub/denpa';
@@ -28,15 +28,12 @@ test.describe('接頭辞の下で', () => {
                 return;
             }
             /*
-             * **Origin は本体のものに直して渡す。** このスタックは ORIGIN を本体の URL に固定して
-             * あるので、別のポートに立てたこの前段からのフォーム送信は、SvelteKit に
-             * 「よそからの送信」として断られる。本物の前段 (Home Assistant の Ingress など) は
-             * Host をそのまま渡し、denpa は ORIGIN を付けないので、こうはならない
+             * **ヘッダはそのまま渡す** (本物の前段 = Home Assistant の Ingress などと同じ)。
+             * `Host` がこの前段のものなので、denpa から見た自分の origin とブラウザの
+             * Origin が揃い、フォーム送信も CSRF に引っかからない
              */
-            const headers = { ...req.headers };
-            if (headers.origin !== undefined) headers.origin = app.origin;
             const upstream = httpRequest(
-                { host: app.hostname, port: app.port, path, method: req.method, headers },
+                { host: app.hostname, port: app.port, path, method: req.method, headers: req.headers },
                 (up) => {
                     res.writeHead(up.statusCode ?? 502, up.headers);
                     up.pipe(res);

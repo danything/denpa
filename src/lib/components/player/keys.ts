@@ -1,4 +1,4 @@
-import { SKIP } from '$lib/ts/watch';
+import { SKIP } from '#lib/ts/watch.js';
 
 /**
  * 再生画面のキー操作。**観る画面と追っかけで同じ割り当てにする。**

@@ -1,7 +1,7 @@
 import { json } from '@sveltejs/kit';
-import { sidecarPaths } from '$lib/server/metadata';
-import { loadRecordedBml, withProgramInfo } from '$lib/server/recorded-bml';
-import { recordingOr404 } from '$lib/server/recording';
+import { sidecarPaths } from '#lib/server/metadata.js';
+import { loadRecordedBml, withProgramInfo } from '#lib/server/recorded-bml.js';
+import { recordingOr404 } from '#lib/server/recording.js';
 
 /**
  * 録画のデータ放送 (再生位置つきの変化ログ)。**d ボタンで開いたときに読む。**

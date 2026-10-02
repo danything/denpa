@@ -12,13 +12,13 @@
  * 観るほうはブラウザでそのまま再生するので (`routes/watch/[id]`)、ここに
  * 残っているのはダウンロードだけ。外部プレイヤーへ渡す口 (`denpa://`) は廃止済み。
  */
-import { base } from '$app/paths';
+import { resolve } from '$app/paths';
 import type { FileSource } from './source';
 
 export async function startDownload(id: number, source?: FileSource): Promise<boolean> {
     const query = source === undefined ? '' : `?source=${source}`;
     try {
-        const res = await fetch(`${base}/api/recordings/${id}/share${query}`, { method: 'POST' });
+        const res = await fetch(resolve(`api/recordings/${id}/share${query}`), { method: 'POST' });
         if (!res.ok) return false;
         const { url } = (await res.json()) as { url: string };
         location.href = `${url}&download=1`;

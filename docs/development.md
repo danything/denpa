@@ -62,7 +62,9 @@ python3 scripts/docs-webp.py                         # 動く絵を組み立て�
 - アプリは開発サーバではなく組んだもの (`bun run build` → `adapter-node`) をワーカーの数だけ
   動かす。開発サーバを4つ立てるより軽く、本番と同じ出力を試せる
 - API へ直接投げるときは `Origin` を付ける。SvelteKit は Origin の無いフォーム形式の POST を
-  別サイトからの送信として断る
+  別サイトからの送信として断る (3 からは Content-Type の無い POST/PUT/PATCH/DELETE も)。
+  平文で叩いていることも `x-forwarded-proto: http` で伝える — 無いと adapter-node が https と
+  決め打ち、Origin と食い違う。どちらも `tests/stack.ts` が付けている
 
 **1台ではこれ以上縮みません。** 中身の合計は約3分で大半は偽の放送を待つ時間、
 下限はいちばん長いファイル1本の時間です。

@@ -1,4 +1,4 @@
-import type { EncodeProgress } from '$lib/server/events';
+import type { EncodeProgress } from '#lib/server/events.js';
 
 /**
  * エンコード進捗の**生放送**。SSE の `encode` イベント (中身付き) を録画IDごとに持つ。

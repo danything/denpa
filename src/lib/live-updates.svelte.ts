@@ -1,4 +1,4 @@
-import { base } from '$app/paths';
+import { resolve } from '$app/paths';
 import { reload } from './reload.svelte';
 
 /**
@@ -57,7 +57,7 @@ export function liveUpdates(
         const connect = () => {
             source?.close();
             lastSeen = Date.now(); // 新しい繋ぎに60秒の猶予をやる
-            source = new EventSource(`${base}/api/events`);
+            source = new EventSource(resolve('api/events'));
             source.addEventListener('open', () => {
                 lastSeen = Date.now();
                 // 繋ぎ直しは、切れていた間のことを知らない。1回読み直して追いつく。

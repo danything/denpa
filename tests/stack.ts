@@ -13,6 +13,9 @@ import { test as base } from '@playwright/test';
  * 1つのファイルの中でテストが前のテストの結果を当てにしている書き方はそのまま通る。
  */
 
+/** 平文で叩いていることを denpa に伝えるヘッダ (下の `extraHTTPHeaders`) */
+const PLAIN_HTTP = { 'x-forwarded-proto': 'http' };
+
 /** 作業領域。global-setup で毎回まっさらにする */
 export const TEST_ROOT = '/tmp/denpa-e2e';
 
@@ -175,11 +178,10 @@ async function boot(index: number): Promise<{ stack: Stack; shutdown: () => Prom
             HOST: '127.0.0.1',
             PORT: String(appPort),
             /*
-             * adapter-node は指定が無いと自分を https だと思い込む。
-             * SvelteKit の CSRF 判定は Origin ヘッダと自分の origin を突き合わせるので、
-             * 平文で叩いている POST が全部 403 になる (画面上は「押しても何も起きない」)
+             * 平文で叩いていることは、ブラウザとリクエストの両方に `x-forwarded-proto: http` を
+             * 付けて伝える (下の `extraHTTPHeaders`・`request`)。以前ここで渡していた
+             * `ORIGIN` は adapter-node 6 で無くなった
              */
-            ORIGIN: stack.appUrl,
             DENPA_DB: `${root}/denpa.db`,
             RECORDED_DIR: stack.recordedDir,
             LIBRARY_DIR: stack.libraryDir,
@@ -288,10 +290,8 @@ export async function bootOidc(
             HOST: '127.0.0.1',
             PORT: String(appPort),
             /*
-             * **ORIGIN は渡さない。** 渡すと adapter-node は Host ヘッダを見なくなり、
-             * どの名前で来ても同じ origin として扱う。Entra へ送る戻り先
-             * (`redirect_uri`) は**来たリクエストから組み立てる**ので、本番と同じく
-             * リクエストごとのヘッダから決めさせる
+             * Entra へ送る戻り先 (`redirect_uri`) は**来たリクエストから組み立てる**ので、
+             * 本番と同じくリクエストごとのヘッダから決めさせる
              */
             /*
              * **名前は `x-forwarded-host` から読ませる。** 本番は既定の `host` だが、
@@ -380,6 +380,17 @@ export const test = base.extend<{ anonymous: Anonymous }, { stack: Stack }>({
     baseURL: async ({ stack }, use) => {
         await use(stack.appUrl);
     },
+    /*
+     * **平文で来ていると伝える。** 前段が居ないと adapter-node は https と決め打ち、
+     * 自分の origin (`https://…`) とブラウザの Origin (`http://…`) が食い違って、
+     * フォームの送信が全部 CSRF として 403 になる (画面上は「押しても何も起きない」)。
+     * 以前は `ORIGIN` で自分の origin を固定していたが、adapter-node 6 で無くなった
+     * (代わりの `paths.origin` は組むときに決まるので、ワーカーごとのポートを入れられない)
+     */
+    // biome-ignore lint/correctness/noEmptyPattern: Playwright は分割代入でないと受け付けない
+    extraHTTPHeaders: async ({}, use) => {
+        await use(PLAIN_HTTP);
+    },
 
     /*
      * API から直接投げるとき用。
@@ -393,7 +404,7 @@ export const test = base.extend<{ anonymous: Anonymous }, { stack: Stack }>({
     request: async ({ playwright, stack, httpCredentials }, use) => {
         const context = await playwright.request.newContext({
             baseURL: stack.appUrl,
-            extraHTTPHeaders: { Origin: stack.appUrl },
+            extraHTTPHeaders: { Origin: stack.appUrl, ...PLAIN_HTTP },
             ...(httpCredentials === undefined ? {} : { httpCredentials }),
         });
         await use(context);

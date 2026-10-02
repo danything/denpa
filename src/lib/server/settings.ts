@@ -29,7 +29,7 @@ export interface Settings {
      */
     codecs: HwCodec[];
     /**
-     * **GPU の口ごとに、GPU で焼いてよいコーデック** (`$lib/hw` の HwAllow)。使えるかは
+     * **GPU の口ごとに、GPU で焼いてよいコーデック** (`#lib/hw.js` の HwAllow)。使えるかは
      * 別 (`server/hwenc.ts`) で、焼くのは「使える かつ 許されている」もの。使えないものの
      * 印は画面から触れないので保存しても残る (GPU を挿し替えればそのまま効く)。JSON で1つの鍵
      */

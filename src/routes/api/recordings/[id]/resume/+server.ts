@@ -1,9 +1,9 @@
 import { error } from '@sveltejs/kit';
 import { eq } from 'drizzle-orm';
-import { now, orm } from '$lib/server/db';
-import { recordingOr404 } from '$lib/server/recording';
-import { recordings } from '$lib/server/schema';
-import { RESUME_EDGE, resumePoint } from '$lib/ts/watch';
+import { now, orm } from '#lib/server/db.js';
+import { recordingOr404 } from '#lib/server/recording.js';
+import { recordings } from '#lib/server/schema.js';
+import { RESUME_EDGE, resumePoint } from '#lib/ts/watch.js';
 
 /**
  * どこまで観たかを覚える。**続きから観るためだけの目印。**

@@ -1,4 +1,4 @@
-import { manifest } from '$lib/server/manifest';
+import { manifest } from '#lib/server/manifest.js';
 
 /**
  * PWA のマニフェスト。**静的ファイルではなく、ここで組み立てる。**

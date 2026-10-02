@@ -1,20 +1,19 @@
 <script lang="ts">
     import { onMount } from 'svelte';
     import type { ResponseMessage } from 'web-bml/protocol';
-    import { base } from '$app/paths';
-    import { submitting } from '$lib/actions';
-    import { arming } from '$lib/arming.svelte';
-    import ProgramFacts from '$lib/components/ProgramFacts.svelte';
-    import AudioMenu from '$lib/components/player/AudioMenu.svelte';
-    import { screenAwake } from '$lib/components/player/awake.svelte';
-    import ControlBar from '$lib/components/player/ControlBar.svelte';
-    import ControlButton from '$lib/components/player/ControlButton.svelte';
-    import { playerControls } from '$lib/components/player/controls.svelte';
-    import DataBroadcast, { pressD } from '$lib/components/player/DataBroadcast.svelte';
-    import FactsAside from '$lib/components/player/FactsAside.svelte';
-    import { eachFrame } from '$lib/components/player/frames';
-    import Icon from '$lib/components/player/Icon.svelte';
-    import InfoBlock from '$lib/components/player/InfoBlock.svelte';
+    import { submitting } from '#lib/actions.js';
+    import { arming } from '#lib/arming.svelte.js';
+    import ProgramFacts from '#lib/components/ProgramFacts.svelte';
+    import AudioMenu from '#lib/components/player/AudioMenu.svelte';
+    import { screenAwake } from '#lib/components/player/awake.svelte.js';
+    import ControlBar from '#lib/components/player/ControlBar.svelte';
+    import ControlButton from '#lib/components/player/ControlButton.svelte';
+    import { playerControls } from '#lib/components/player/controls.svelte.js';
+    import DataBroadcast, { pressD } from '#lib/components/player/DataBroadcast.svelte';
+    import FactsAside from '#lib/components/player/FactsAside.svelte';
+    import { eachFrame } from '#lib/components/player/frames.js';
+    import Icon from '#lib/components/player/Icon.svelte';
+    import InfoBlock from '#lib/components/player/InfoBlock.svelte';
     import {
         CAMERA,
         CAPTION,
@@ -34,25 +33,25 @@
         SOUND_OFF,
         SOUND_ON,
         TRASH,
-    } from '$lib/components/player/icons';
-    import { playerKeys } from '$lib/components/player/keys';
-    import PlayerStage from '$lib/components/player/PlayerStage.svelte';
-    import { clearOverlay, drawOverlay, fitRect } from '$lib/components/player/paint';
-    import Remote from '$lib/components/player/Remote.svelte';
-    import SpeedMenu, { SPEED_KEY, storedSpeed } from '$lib/components/player/SpeedMenu.svelte';
-    import StageNote from '$lib/components/player/StageNote.svelte';
-    import { snapshotter } from '$lib/components/player/shot.svelte';
-    import Toasts, { errorNotice, type Notice } from '$lib/components/Toasts.svelte';
-    import { programDetail } from '$lib/detail.svelte';
-    import { startDownload } from '$lib/download';
-    import { clock, cmNoteWorthShowing, recordedDuration, size } from '$lib/format';
-    import { write as remind, read as stored } from '$lib/keep';
-    import { loadOffline } from '$lib/offline.svelte';
-    import type { OfflineVideo } from '$lib/offline-db';
-    import { captionAt, type Drawn, pixels, readSup } from '$lib/pgs';
-    import { keepResume } from '$lib/resume';
-    import { feedFor, type PlacedMessage, replayAt } from '$lib/ts/data-timeline';
-    import { SPEEDS } from '$lib/ts/pacing';
+    } from '#lib/components/player/icons.js';
+    import { playerKeys } from '#lib/components/player/keys.js';
+    import PlayerStage from '#lib/components/player/PlayerStage.svelte';
+    import { clearOverlay, drawOverlay, fitRect } from '#lib/components/player/paint.js';
+    import Remote from '#lib/components/player/Remote.svelte';
+    import SpeedMenu, { SPEED_KEY, storedSpeed } from '#lib/components/player/SpeedMenu.svelte';
+    import StageNote from '#lib/components/player/StageNote.svelte';
+    import { snapshotter } from '#lib/components/player/shot.svelte.js';
+    import Toasts, { errorNotice, type Notice } from '#lib/components/Toasts.svelte';
+    import { programDetail } from '#lib/detail.svelte.js';
+    import { startDownload } from '#lib/download.js';
+    import { clock, cmNoteWorthShowing, recordedDuration, size } from '#lib/format.js';
+    import { write as remind, read as stored } from '#lib/keep.js';
+    import { loadOffline } from '#lib/offline.svelte.js';
+    import type { OfflineVideo } from '#lib/offline-db.js';
+    import { captionAt, type Drawn, pixels, readSup } from '#lib/pgs.js';
+    import { keepResume } from '#lib/resume.js';
+    import { feedFor, type PlacedMessage, replayAt } from '#lib/ts/data-timeline.js';
+    import { SPEEDS } from '#lib/ts/pacing.js';
     import {
         type Chapter,
         chapterAt,
@@ -65,7 +64,8 @@
         type Tap,
         tap,
         zoneOf,
-    } from '$lib/ts/watch';
+    } from '#lib/ts/watch.js';
+    import { resolve } from '$app/paths';
 
     let { data, form } = $props();
     const rec = $derived(data.recording);
@@ -96,7 +96,7 @@
         };
     });
     const src = $derived(
-        localChecked ? (localSrc ?? `${base}/api/recordings/${rec.id}/file?source=encoded`) : undefined,
+        localChecked ? (localSrc ?? resolve(`api/recordings/${rec.id}/file?source=encoded`)) : undefined,
     );
 
     let video = $state<HTMLVideoElement | null>(null);
@@ -145,7 +145,7 @@
                 // 端末に保存したものから。オフラインでも d が効く
                 dataTimeline = localCopy.databroadcast as PlacedMessage[];
             } else {
-                const response = await fetch(`${base}/api/recordings/${rec.id}/databroadcast`).catch(() => null);
+                const response = await fetch(resolve(`api/recordings/${rec.id}/databroadcast`)).catch(() => null);
                 dataTimeline = response?.ok ? await response.json() : [];
             }
         }
@@ -448,7 +448,7 @@
 
     /**
      * **どこまで観たかを覚える。** 覚えるかどうかの判断は `ts/watch.ts` が持つ
-     * (サーバも同じものを見る)。送り方は追っかけと共通 (`$lib/resume.ts`)
+     * (サーバも同じものを見る)。送り方は追っかけと共通 (`#lib/resume.ts`)
      */
     function remember(leaving = false): void {
         if (video === null || !ready) return;
@@ -578,7 +578,7 @@
                 chapters = held.chapters;
                 return;
             }
-            const res = await fetch(`${base}/api/recordings/${rec.id}/chapters`);
+            const res = await fetch(resolve(`api/recordings/${rec.id}/chapters`));
             if (!res.ok) return;
             chapters = (await res.json()).chapters ?? [];
         } catch {
@@ -786,7 +786,7 @@
                 paint();
                 return;
             }
-            const res = await fetch(`${base}/api/recordings/${rec.id}/captions.sup`);
+            const res = await fetch(resolve(`api/recordings/${rec.id}/captions.sup`));
             // **字幕を持たない番組は 404。** ボタンを出さないだけで、異常ではない
             if (res.status === 404) return;
             if (!res.ok) {
@@ -1272,7 +1272,7 @@
                             />ダウンロードして、お手元のプレイヤーで観てください。
                         </p>
                         <!-- src は端末のコピー (blob:) のことがあるので、落とす口は API を名指す。
-                            押されてから期限付きの署名URLを作る ($lib/download) -->
+                            押されてから期限付きの署名URLを作る (#lib/download) -->
                         <button
                             type="button"
                             class="secondary small"
@@ -1295,7 +1295,7 @@
                 <ControlBar side shown={controls.shown} testid="watch-side">
                     <a
                         class="{OVERLAY_BTN} {OVERLAY_ROUND} {OVERLAY}"
-                        href="{base}/"
+                        href={resolve('')}
                         aria-label="一覧へ戻る"
                         data-testid="watch-close"
                     >
@@ -1583,7 +1583,7 @@
                 **「一覧へ」は置かない。** 絵の右上の「×」が同じ行き先で、
                 2つ並べる意味が無かった
             -->
-            <!-- 押されてから期限付きの署名URLを作って落とす ($lib/download) -->
+            <!-- 押されてから期限付きの署名URLを作って落とす (#lib/download) -->
             <button
                 type="button"
                 class="outline small"
