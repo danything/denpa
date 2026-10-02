@@ -19,8 +19,8 @@ import { type AgentTuner, getTuners, openChannelStream } from './tuner';
  * 集め方は Mirakurun と同じで、開いているストリームに相乗りする。
  *
  * ロゴは滅多に変わらないうえ、放送波に流れてくるのは数十秒〜数分に一度なので、
- * 録画のついでに拾えたら儲けもの、くらいの扱いにしてある。持っていない局が
- * 残っていれば、空いている時間に短く開いて取りに行く。
+ * 番組表集めや録画の選局に相乗りして拾う (`ride`)。自分でチューナーを開くのは
+ * 画面から頼まれたとき (`sweepNow`) だけ。
  */
 
 /**
@@ -172,7 +172,7 @@ function skipRelay(channel: string): boolean {
 /** 「この中継にロゴは載っていない」/「載っていた」を書き留める */
 function markRelay(channel: string, hasLogo: boolean): void {
     const known = notes();
-    // 何も変わらないなら書きに行かない (1チャンクごとに呼ばれる道がある)
+    // 何も変わらないなら書きに行かない
     if (hasLogo === (known.noCarousel[channel] === undefined)) return;
     const noCarousel = { ...known.noCarousel };
     if (hasLogo) delete noCarousel[channel];
@@ -534,7 +534,7 @@ async function collect(target: Target, timeout: number, signal?: AbortSignal): P
         controller.abort();
     }, timeout);
     collecting.add(target.channel);
-    // 外から止められるようにする。衛星に10分かけている最中でも譲れるように
+    // 外から止められるようにする。衛星に20分かけている最中でも譲れるように
     const give = () => controller.abort();
     signal?.addEventListener('abort', give, { once: true });
     try {
@@ -641,7 +641,7 @@ let riding = false;
  * 1チャンネルに数分かける仕事なので、押しても何も起きていないように見えていた。
  * どこまで進んだかを出さないと、動いているのか失敗したのか区別が付かない。
  */
-export interface SweepState {
+interface SweepState {
     running: boolean;
     /** いま開いている物理チャンネル。地上波は2つ並ぶ */
     channels: string[];
@@ -668,7 +668,7 @@ const IDLE: SweepState = {
 };
 
 /**
- * 走っているのは高々1つ。定期実行と画面からの「いま取りに行く」が重なると
+ * 走っているのは高々1つ。定期実行と画面からの「いますぐ取りに行く」が重なると
  * チューナーを食い合う。相乗り (ride) だけは只なので別勘定にしてある
  */
 let state: SweepState = IDLE;
@@ -771,7 +771,7 @@ export async function ride(): Promise<number> {
  *
  * 自分でも開いていた頃は、10分ごとに1チャンネルを数分掴んでいた。相乗りで
  * 埋まるのに録画とチューナーを取り合う理由がないので、定期のぶんはやめた。
- * すぐ欲しいときは画面の「いま取りに行く」(`sweepNow`) がある。
+ * すぐ欲しいときは画面の「いますぐ取りに行く」(`sweepNow`) がある。
  */
 export async function sweep(): Promise<number> {
     // 立っているだけでファイルが無い局を先に拾い直す。そうしないと
@@ -781,7 +781,7 @@ export async function sweep(): Promise<number> {
 }
 
 /**
- * 画面の「いま取りに行く」。残っているぶんを、チューナー2つで一気に取りに行く。
+ * 画面の「いますぐ取りに行く」。残っているぶんを、チューナー2つで一気に取りに行く。
  *
  * **衛星も混ぜる。** ロゴを運ぶ中継は1つだけで、当たれば BS と CS の全局ぶんが
  * まとめて揃い、外れは PAT を見た時点 (1秒ほど) で次へ行く。当たり外れを

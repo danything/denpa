@@ -23,15 +23,13 @@ export interface Range {
 }
 
 /** 無音の区間。形は Range と同じで、名前で用途を言い分けているだけ */
-export type Silence = Range;
+type Silence = Range;
 
 /**
  * これ以上がCM判定になったら、その結果は信じない。
  *
- * **無音検出と join_logo_scp で同じ値を使う。** どちらも「検出が効いていない」
- * 兆候は同じ (番組が丸ごとCMになる) で、本編を削るよりCMが残るほうが被害が小さい、
- * という判断も同じ。数字を別々に持って「そろえてある」と書いていた頃は、
- * 片方だけ動かせる状態のまま「そろえてある」と書いてあるだけでした。
+ * **無音検出と join_logo_scp で同じ値を使う。** どちらも「番組が丸ごとCM」は
+ * 検出が効いていない兆候で、本編を削るよりCMが残るほうが被害が小さい。
  */
 export const MAX_CM_RATIO = 0.5;
 
@@ -149,15 +147,7 @@ export function isCmLength(seconds: number, tolerance: number): boolean {
  * 効いていない/音声が特殊な素材とみなして「CM無し」を返す。本編を削るより
  * CMが残るほうが被害が小さいという判断。
  */
-export function detectCmRanges(
-    silences: Silence[],
-    duration: number,
-    options: { tolerance?: number; minBlock?: number; maxRatio?: number } = {},
-): Range[] {
-    const tolerance = options.tolerance ?? config.cmTolerance;
-    const minBlock = options.minBlock ?? config.cmMinBlock;
-    const maxRatio = options.maxRatio ?? MAX_CM_RATIO;
-
+export function detectCmRanges(silences: Silence[], duration: number): Range[] {
     if (!Number.isFinite(duration) || duration <= 0) return [];
 
     const points = boundaries(silences, duration);
@@ -170,7 +160,7 @@ export function detectCmRanges(
     const blocks: Range[] = [];
     let current: Range | null = null;
     for (const segment of segments) {
-        if (isCmLength(segment.end - segment.start, tolerance)) {
+        if (isCmLength(segment.end - segment.start, config.cmTolerance)) {
             current = current === null ? { ...segment } : { start: current.start, end: segment.end };
         } else if (current !== null) {
             blocks.push(current);
@@ -180,10 +170,10 @@ export function detectCmRanges(
     if (current !== null) blocks.push(current);
 
     // 単発の15秒セグメントは本編の短いコーナーと区別が付かないので、一定長以上のブロックだけ採る
-    const cm = blocks.filter((b) => b.end - b.start >= minBlock);
+    const cm = blocks.filter((b) => b.end - b.start >= config.cmMinBlock);
 
     const total = cm.reduce((sum, b) => sum + (b.end - b.start), 0);
-    if (total > duration * maxRatio) return [];
+    if (total > duration * MAX_CM_RATIO) return [];
 
     return cm;
 }
@@ -345,7 +335,7 @@ async function probe(input: string, args: string[]): Promise<string> {
  * 拾えず、進み具合が最後まで 0% のままになっていた。先に ffprobe で押さえる。
  *
  * **頭出し (`probeLeadIn`) はここに含めない。** あちらは実際に復号してみる
- * ぶんだけ高くつくのに、4箇所ある呼び出しのうち要るのは焼く前の1回だけ
+ * ぶんだけ高くつくのに、要るのは焼く前の1回だけ
  */
 export async function probeVideo(input: string): Promise<{
     duration: number;
@@ -480,8 +470,7 @@ export async function probeLiveAudio(input: string): Promise<number[]> {
  *
  *     start_time 6115.872 / 実際に出た1コマ目 6116.439 (I)
  *
- * **`probeVideo` とは別にしてある。** 実際に復号してみるぶんだけ高くつくのに、
- * 尺だけ欲しい呼び出しのほうが多いため。`formatStart` はあちらで取ったものを渡す
+ * `probeVideo` とは別にしてある (理由はあちら)。`formatStart` はあちらで取ったものを渡す
  */
 export async function probeLeadIn(
     input: string,
@@ -641,7 +630,7 @@ export interface CmOptions {
     /** 局名。logoframe に渡すとこの名前でロゴを覚える */
     channel?: string;
     /** 局のID。覚えたロゴの置き場を局ごとに分けるのに使う */
-    serviceId?: number;
+    serviceId: number;
     /** 手で教えてもらったロゴの位置 ("x,y,w,h") */
     area?: string;
     /** 無音検出の進み具合 */
@@ -655,30 +644,27 @@ export interface CmOptions {
  * jls を選んでいても、ロゴデータ未整備などで結果が空なら無音ベースに落とす
  * (何も検出できないよりは、チャプターだけでも付いたほうが使えるため)。
  */
-export async function detectCm(input: string, options: CmOptions = {}): Promise<CmDetection> {
+export async function detectCm(input: string, options: CmOptions): Promise<CmDetection> {
     const { signal, onProgress } = options;
     /** jls が使えなかった理由。落ちた先の説明に足す */
     let fallback = '';
+    /*
+     * 尺は先に測る。silencedetect の出力からも拾えるが、それだと終わるまで分母が
+     * 分からず、進み具合を出せない。フレームレートは join_logo_scp の Trim をコマから
+     * 秒に直すのに要る
+     */
+    const { duration: measured, fps } = await probeVideo(input);
     // 検出のしかたは設定画面で決める (jls は確かだが録画1本あたり数分かかる)
-    if (settings().cmDetector === 'jls') {
-        // 尺とフレームレートは1回で取る。join_logo_scp の Trim をコマから秒に直すのに要る
-        const { duration, fps } = await probeVideo(input);
-        if (Number.isFinite(duration)) {
-            const { detectWithJls } = await import('./cm-jls');
-            const result = await detectWithJls(input, duration, { ...options, fps });
-            if (result.cm.length > 0) {
-                return { cm: result.cm, duration, note: result.note };
-            }
-            fallback = result.note;
-            console.warn(`[cm] jls で検出できなかったため無音検出に切り替えます: ${result.note}`);
+    if (settings().cmDetector === 'jls' && Number.isFinite(measured)) {
+        const { detectWithJls } = await import('./cm-jls');
+        const result = await detectWithJls(input, measured, { ...options, fps });
+        if (result.cm.length > 0) {
+            return { cm: result.cm, duration: measured, note: result.note };
         }
+        fallback = result.note;
+        console.warn(`[cm] jls で検出できなかったため無音検出に切り替えます: ${result.note}`);
     }
 
-    /*
-     * 尺は先に測る。silencedetect の出力からも拾えるが、それだと終わるまで
-     * 分母が分からず、進み具合を出せない
-     */
-    const measured = (await probeVideo(input)).duration;
     const { silences, duration } = await detectSilences(input, signal, onProgress, measured);
     /*
      * 落ちた理由まで書く。「無音 8 箇所」とだけ出していた頃は、jls を選んで
