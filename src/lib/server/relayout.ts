@@ -22,14 +22,9 @@ import type { Recording } from '../types';
 import { now, orm } from './db';
 import { usedByOther } from './files';
 import { moveFile, pruneEmptyDirs, removeIfExists } from './fsx';
-import { encodedPath, libraryFamily } from './library';
+import { encodedCodec, encodedPath, libraryFamily } from './library';
 import { removeSidecars, sidecarBase, sidecarPaths } from './metadata';
 import { recordings } from './schema';
-
-/** 置き場の名前 (`… [H264].mkv`) からコーデックを見分ける。主は AV1、`[H264]` は H.264 */
-function codecOf(path: string): 'av1' | 'h264' {
-    return / \[H264\]\.mkv$/i.test(path) ? 'h264' : 'av1';
-}
 
 /**
  * 本体1本 (主) を新しい置き場へ移し、付き添いも連れていく。
@@ -88,8 +83,8 @@ function relayoutOne(rec: Recording): 'moved' | 'sidecar' | 'none' {
     const primary = rec.library_path;
     if (primary === null) return 'none';
 
-    const newPrimary = encodedPath(rec, codecOf(primary));
-    const newAlt = rec.alt_path === null ? null : encodedPath(rec, codecOf(rec.alt_path));
+    const newPrimary = encodedPath(rec, encodedCodec(primary));
+    const newAlt = rec.alt_path === null ? null : encodedPath(rec, encodedCodec(rec.alt_path));
 
     // 既に新しい形。書かなくなった .nfo を片付け、もう一方のポスターも無ければ補う
     if (newPrimary === primary && newAlt === rec.alt_path) {
