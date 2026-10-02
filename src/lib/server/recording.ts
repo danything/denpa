@@ -29,7 +29,7 @@ export function recordingFromForm(form: FormData): Recording | undefined {
 /**
  * `/api/recordings/<id>` 系の前置き。id を確かめて行を引く。
  * 数字でなければ 400、無ければ 404 をここで投げるので、呼ぶ側は
- * 在る前提で書ける (同じ4行を8本のルートが書いていた)。
+ * 在る前提で書ける (同じ4行をルートごとに書いていた)。
  *
  * @param deleted 消した行も引くか。**既定は引かない** — 観る・落とす口が
  *   消したものを返さないように。削除 API だけは「もう消えている」を

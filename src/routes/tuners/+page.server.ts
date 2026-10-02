@@ -130,8 +130,8 @@ function coverage(): Coverage[] {
 
 export async function load() {
     return {
-        // 実際の状況はエージェントが持っている。開いた時点で取りに行く
-        scan: await refresh(),
+        // スキャンの進み具合。回しているのは denpa 自身 (scan.refresh)
+        scan: refresh(),
         /*
          * 定義を書いていないので自動で見つけた状態か。
          *
