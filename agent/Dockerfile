@@ -15,8 +15,7 @@
 # `TARGETARCH` (BuildKit が入れる) から、RID と取ってくる配布物の名前を引く。
 # 名前の付け方は上流ごとにばらばら (amd64 / x86_64 / x64、arm64 / aarch64) なので、
 # 各段の頭で読み替える。それ以外の arch は配布物が無いので、黙って amd64 のものを
-# 入れずにそこで止める
-# 既定のイメージがそのまま trixie (`-trixie` という札は無い)
+# 入れずにそこで止める。sdk:10.0 の既定がそのまま trixie (`-trixie` という札は無い)
 FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 ARG TARGETARCH
 WORKDIR /build
@@ -74,7 +73,7 @@ RUN case "${TARGETARCH}" in \
 #
 # px4d / px4ctl は musl の完全静的 ELF。受信機もカードも px4d の制御ソケットで直に話すので
 # (Px4.cs / Px4Card.cs)、配布物の px4-ts と IFD ハンドラ (ifd/*.so、pcscd 用) は使わない。
-# 受信機を借りたまま選局し直す (STOP_STREAM → TUNE → START_STREAM) のは 0.1.6 から。
+# **0.1.9 より下げない。** 筐体は `px4d --list-json` (0.1.9 から) でしか聞かない。
 # 配布アーカイブの SHA256SUMS で中身を確かめてから展開する。
 #
 # **ファームウェア (it930x-firmware.bin) も同梱する。** 本体には入っておらず、

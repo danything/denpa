@@ -140,7 +140,7 @@ public interface IBulkPipe : IDisposable
 /// <c>_IOC</c> の並びを使う)。構造体の大きさは番号に埋まるので、<c>sizeof</c> から組み立てる。
 /// </para>
 /// </summary>
-public sealed unsafe partial class UsbFsPipe : IBulkPipe
+public sealed unsafe class UsbFsPipe : IBulkPipe
 {
     /// <summary>struct usbdevfs_bulktransfer。64bit ではポインタの前に 4 バイトの詰めが入って 24 バイト</summary>
     [StructLayout(LayoutKind.Sequential)]
@@ -169,10 +169,7 @@ public sealed unsafe partial class UsbFsPipe : IBulkPipe
     private const int Enodev = 19;
     private const int Etimedout = 110;
 
-    // open / ioctl / read は Sys (Tuning.cs) のものを使う
-    [LibraryImport("libc", EntryPoint = "close")]
-    private static partial int Close(int fd);
-
+    // libc は Sys (Tuning.cs) のものを使う
     private readonly string _path;
     private int _fd;
 
@@ -241,7 +238,7 @@ public sealed unsafe partial class UsbFsPipe : IBulkPipe
         }
         catch
         {
-            Close(fd);
+            Sys.Close(fd);
             throw;
         }
     }
@@ -299,7 +296,7 @@ public sealed unsafe partial class UsbFsPipe : IBulkPipe
         if (_fd < 0) return;
         var number = (uint)Interface.Number;
         Sys.Ioctl(_fd, ReleaseInterface, (nint)(&number));
-        Close(_fd);
+        Sys.Close(_fd);
         _fd = -1;
     }
 }

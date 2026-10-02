@@ -42,7 +42,6 @@ public static class CcidMessage
     public const byte SetParameters = 0x61;
     public const byte PowerOn = 0x62;
     public const byte PowerOff = 0x63;
-    public const byte GetSlotStatus = 0x65;
     public const byte XfrBlock = 0x6F;
 
     public const byte DataBlock = 0x80;
@@ -498,10 +497,10 @@ public static class Ccid
     }
 
     /// <summary>
-    /// 診断用。見つかったリーダーを並べ、<paramref name="reset"/> なら最初の1台のカードに
+    /// 診断用 (<c>denpa-agent --card</c>)。見つかったリーダーを並べ、最初の1台のカードに
     /// 電源を入れて ATR と読み取り機の形を書く。**実機で最初に当てるのはここ。**
     /// </summary>
-    public static string Describe(bool reset = false)
+    public static string Describe()
     {
         var text = new StringBuilder();
         var found = Find();
@@ -510,7 +509,6 @@ public static class Ccid
             return $"CCID のカードリーダーが見つかりません ({Sysfs} に bInterfaceClass 0b のインターフェースがありません)";
         }
         foreach (var candidate in found) text.AppendLine(candidate.Name);
-        if (!reset) return text.ToString().TrimEnd();
 
         try
         {

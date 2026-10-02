@@ -2,11 +2,11 @@
  * エージェントの適合テスト。**本物のエージェントを起こして、HTTP の口に直接当てる。**
  *
  * denpa の E2E は偽エージェント (`tests/fake/agent.ts`) を相手にしているので、
- * `server.ts` も取り合いも総当たりも1行も通っていなかった。ここがその穴を塞ぐ。
+ * 本物の取り合いも総当たりも1行も通らない。ここがその穴を塞ぐ。
  *
- * **口に当てているので、中身が何語で書かれていても走る。** エージェントを
- * .NET に書き直したら、`AGENT_CMD` を差し替えて同じものを通す — それが
- * 「今までと同じように動く」の定義になる ([agent.md](../docs/agent.md))。
+ * **口に当てているので、中身が何語で書かれていても走る。** bun 版から .NET に
+ * 書き直したときも、`AGENT_CMD` を差し替えて同じものを通した — それが
+ * 「今までと同じように動く」の定義 ([agent.md](../docs/agent.md))。
  *
  *     bun run test:conformance
  *
@@ -23,7 +23,9 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { SYNC } from '../src/lib/ts/psi';
 import { channels } from '../tests/fake/broadcast';
-import type { ChannelEntry } from './channels';
+
+/** `/denpa/channels` の1件。ここで見るのは種別とチャンネル名だけ */
+type ChannelEntry = { type: string; channel: string };
 
 /** 既定は焼いたもの。`bun run test:conformance` なら焼くところからやる */
 const AGENT_CMD = (process.env.AGENT_CMD ?? 'agent/publish/denpa-agent').split(' ');

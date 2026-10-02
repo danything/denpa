@@ -385,7 +385,7 @@ public sealed class TunerPool(
                 if (reason is null) sink.End();
                 else sink.Fail(reason);
             }
-            lock (lease.Sinks) lease.Sinks.Clear();
+            lease.Sinks.Clear();
         }
         // 読むのをやめろとだけ言う。止まりきるのを待つのは錠の外 (上の説明)
         lease.Stop();
@@ -479,9 +479,6 @@ public sealed class TunerPool(
                 var spec = Tuners[index];
                 _leases.TryGetValue(index, out var lease);
 
-                var types = new JsonArray();
-                foreach (var type in spec.Types) types.Add((JsonNode?)JsonValue.Create(type));
-
                 var users = new JsonArray();
                 if (lease is not null)
                 {
@@ -498,7 +495,7 @@ public sealed class TunerPool(
                 {
                     ["index"] = index,
                     ["name"] = spec.Name,
-                    ["types"] = types,
+                    ["types"] = Json.Strings(spec.Types),
                     ["disabled"] = spec.Disabled,
                     // 画面がそのまま編集できるように、定義もいっしょに返す
                     ["device"] = spec.Device,
@@ -524,8 +521,8 @@ public sealed class TunerPool(
     ///
     /// <para>
     /// 見ているのは <c>use</c> の頭。denpa は録画に <c>rec &lt;録画ID&gt;</c>、
-    /// それ以外に <c>epg</c> / <c>logo</c> / <c>scan</c> を渡してくる
-    /// (`src/lib/server/*.ts`)。番組表もロゴも切れたら取り直せばいいだけだが、
+    /// それ以外に <c>epg</c> / <c>logo</c> / <c>scan</c> / <c>live</c> を渡してくる
+    /// (<c>StreamUse</c>、src/lib/server/tuner.ts)。番組表もロゴも切れたら取り直せばいいだけだが、
     /// **放送は二度と来ない**ので、録画だけは終わるまで待つ。
     /// </para>
     /// </summary>
@@ -698,7 +695,7 @@ internal sealed class Lease(int tuner, string type, string channel)
     /// <summary>解き手が終わった (失敗も含む)。**読み手も降りる** — 残ると読み口を掴んだまま回り続ける</summary>
     private volatile bool _drained;
     /// <summary>解き手が回っている (<see cref="TunerPool.Descrambling"/>)</summary>
-    public bool Descrambling { get => _descrambling; private set => _descrambling = value; }
+    public bool Descrambling => _descrambling;
     private volatile bool _descrambling;
     /// <summary>読み手と解き手の間に溜まっているバイト数</summary>
     private long _queued;
@@ -755,19 +752,7 @@ internal sealed class Lease(int tuner, string type, string channel)
          * `Read` が永久に戻らず、蹴られてもここに居座る (Tuning.cs)
          */
         var ring = tuner.Output as DeviceStream;
-        /*
-         * **その選局のぶんだけ数える。**
-         *
-         * デバイスは選局を跨いで開きっぱなしなので、**局を変えている間は
-         * 誰も読んでいない**。その間もドライバは電波を積むので、読み始めた
-         * 最初の1回が必ず溢れとして返り、しかも「空いた時間」は
-         * 選局に掛かった時間そのものになる。
-         *
-         * 実機ではロゴ集めが局を飛び回るチューナーで **4.1秒・4.3秒** と
-         * 出た。溜めは 3.5秒ぶんなので「読み手が遅い」に見えるが、
-         * **前の局の読み終わりからの時間**を測っていただけだった。
-         * ここで測り直せば、残るのは本当に追いつかなかったぶんになる
-         */
+        // **その選局のぶんだけ数える** — 局を変えている間の溢れを読み手のせいにしない (DeviceStream.Begin)
         ring?.Begin();
         var since = Stopwatch.StartNew();
         var waited = false;
@@ -810,7 +795,7 @@ internal sealed class Lease(int tuner, string type, string channel)
     private void Descramble(ChannelReader<(byte[] Rented, int Length)> queue, Action onExit)
     {
         var b25 = new Descrambler(Keys.Source);
-        Descrambling = true;
+        _descrambling = true;
         var decoded = new ArrayBufferWriter<byte>();
         var pushed = false;
         void Push()
@@ -861,7 +846,7 @@ internal sealed class Lease(int tuner, string type, string channel)
             Error ??= error.Message;
         }
         _drained = true;
-        Descrambling = false;
+        _descrambling = false;
         /*
          * **解けなかったぶんを残す。** 掛かったまま流したものは、録画が
          * 成功したように見えて中身が見られない。理由も添える
@@ -909,12 +894,7 @@ internal sealed class Lease(int tuner, string type, string channel)
             if (stale > 0) Log.Write($"[{Tuner}] {Channel}: 選局前に環が {stale} 回溢れていました");
             return;
         }
-        /*
-         * **空いた時間も出す。** 環は 8MB = 地上波で 3.5 秒ぶんなので、
-         * ここが 1 秒あたりで頭打ちなら**広げたはずの溜めが効いていない**
-         * (カーネルの既定 1.8MB のまま)。3.5 秒を超えているなら、
-         * 溜めの深さではなく読み手が止まる理由のほうが本題になる
-         */
+        // **空いた時間も出す。** 溜めが効いていないのか読み手が止まっているのかを分ける (DeviceStream.TakeOverflows)
         Log.Write(
             $"[{Tuner}] {Channel}: 環が {count} 回溢れました "
                 + $"(読むのが追いつきません: {Readers()}、いちばん空いたのは {worstGap / 1000.0:0.0}秒)");

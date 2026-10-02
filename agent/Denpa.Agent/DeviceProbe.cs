@@ -1,4 +1,3 @@
-using System.Runtime.InteropServices;
 using System.Text;
 
 namespace Denpa.Agent;
@@ -27,7 +26,7 @@ namespace Denpa.Agent;
 /// adapter1 "Toshiba TC90522 ISDB-T module" delsys=[8]
 /// </code>
 /// </summary>
-public static partial class DeviceProbe
+public static class DeviceProbe
 {
     // linux/dvb/frontend.h。実機で測った値をそのまま置く
     private const uint FeGetInfo = 0x80a86f3d;
@@ -41,9 +40,6 @@ public static partial class DeviceProbe
     private const int NameLength = 128;
 
     private const int SysIsdbc = 10;
-
-    [LibraryImport("libc", EntryPoint = "close")]
-    private static partial int Close(int fd);
 
     /// <summary>
     /// 受けられる方式から denpa の種別に直す。
@@ -131,7 +127,7 @@ public static partial class DeviceProbe
         }
         finally
         {
-            Close(fd);
+            Sys.Close(fd);
         }
     }
 
@@ -159,7 +155,7 @@ public static partial class DeviceProbe
         }
 
         /*
-         * px4-userland の機材は、筐体も受信機も px4d --list に聞く。
+         * px4-userland の機材は、筐体も受信機も px4d --list-json に聞く。
          * デバイスノードは出ない (Px4.cs)
          */
         found.AddRange(Px4Userland.Detect());

@@ -5,11 +5,10 @@
 
         **Native AOT。** 別のPCへ置くときに「まず何かを入れてください」が
         要らないことが条件なので、ここは外せない。
-        出来上がるのは 1.3MB ほどの実行ファイル1個。
+        出来上がるのは 13MB ほどの実行ファイル1個。
 
-        依存を1つも足していない。JSON は System.Text.Json.Nodes で木を直に組む —
-        AOT では反射を使う道が素直に動かないうえ、読むのは
-        こちらが形を決めたファイル2つだけだから (Json.cs)。
+        依存を1つも足していない。JSON は System.Text.Json.Nodes で木を直に組み、読む —
+        AOT では反射を使う道が素直に動かない (Json.cs)。
     -->
     <PropertyGroup>
         <TargetFramework>net10.0</TargetFramework>
@@ -17,7 +16,7 @@
         <ImplicitUsings>enable</ImplicitUsings>
         <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
         <PublishAot>true</PublishAot>
-        <!-- ioctl と kill を直に呼ぶので要る (LibraryImport が生成する側の都合) -->
+        <!-- ioctl や poll にポインタを直に渡す (Tuning.cs / UsbFs.cs)。LibraryImport が生成するコードも要る -->
         <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
         <InvariantGlobalization>true</InvariantGlobalization>
         <AssemblyName>denpa-agent</AssemblyName>

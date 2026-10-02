@@ -24,7 +24,7 @@ namespace Denpa.Agent;
 /// **Windows も同じ API で、違うのは型の幅と名前だけ。** <c>SCARDCONTEXT</c> / <c>SCARDHANDLE</c> は
 /// ポインタの幅 (64bit で 8 バイト)、文字列を取るものは <c>…W</c> (UTF-16) を呼ぶ。
 /// 手順も番号 (共有・プロトコル・エラー) も同じなので、違いは下の <c>Mac</c> / <c>Win</c> と、
-/// それを選ぶ数行だけに閉じ込めてある。Windows は Linux と同じく usbfs が無く、
+/// それを選ぶ数行だけに閉じ込めてある。Windows も macOS と同じく usbfs が無く、
 /// CCID のリーダーは OS の標準ドライバが先に掴んでいる。
 /// </para>
 ///
