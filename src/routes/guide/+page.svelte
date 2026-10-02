@@ -5,7 +5,7 @@
     import { dragScroll, submitting } from '$lib/actions';
     import ProgramDetail from '$lib/components/ProgramDetail.svelte';
     import { startDownload } from '$lib/download';
-    import { date, SERVICE_TYPE_LABEL, stateLabel, time } from '$lib/format';
+    import { date, SERVICE_TYPE_LABEL, stateLabel, time, channelNumber } from '$lib/format';
     import { reload } from '$lib/reload.svelte';
     import type { ProgramDetail as Facts } from '$lib/types';
 
@@ -539,6 +539,10 @@
                         {:else}
                             <span class="logo"></span>
                         {/if}
+                        <!-- テレビに出ている番号。札の形はライブの一覧と同じ (format.ts の channelNumber) -->
+                        {#if channelNumber(service) !== null}
+                            <span class="tag ch-number" data-testid="guide-number">{channelNumber(service)}</span>
+                        {/if}
                         <span class="name">{service.name}</span>
                     </div>
                 {/each}
@@ -941,6 +945,10 @@
         overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;
+    }
+    .ch-number {
+        flex-shrink: 0;
+        font-variant-numeric: tabular-nums;
     }
     .hour {
         position: sticky;

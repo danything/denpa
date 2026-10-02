@@ -1,5 +1,6 @@
 import { fail } from '@sveltejs/kit';
 import { and, desc, eq, gt, lte, sql } from 'drizzle-orm';
+import { channelNumber } from '$lib/format';
 import { LAST_COOKIE, type LiveCodec } from '$lib/live';
 import { orm } from '$lib/server/db';
 import { airing, CURRENT_SERVICES, SERVICE_ORDER, SERVICE_TYPE_ORDER } from '$lib/server/epg';
@@ -104,8 +105,7 @@ export function load(event) {
             name: service.name,
             type: service.type,
             channel: service.channel,
-            // 地上波はリモコン番号、BS/CS はサービスID がそのまま3桁番号
-            number: service.remote_control_key ?? (service.type === 'GR' ? null : service.service_id),
+            number: channelNumber(service),
             hasLogo: service.has_logo,
             now:
                 program === undefined

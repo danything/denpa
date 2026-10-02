@@ -319,3 +319,16 @@ export function linkify(text: string): TextPart[] {
     if (cursor < text.length) parts.push({ text: text.slice(cursor) });
     return parts;
 }
+
+/**
+ * **テレビに出ている番号。** 地上波はリモコン番号、BS/CS はサービスID がそのまま3桁番号
+ * (BS朝日1=151)。局名だけだと、テレビで覚えている番号から探せない。
+ * 地上波でリモコン番号が分からなければ null (出さない)
+ */
+export function channelNumber(service: {
+    type: string;
+    remote_control_key: number | null;
+    service_id: number;
+}): number | null {
+    return service.remote_control_key ?? (service.type === 'GR' ? null : service.service_id);
+}

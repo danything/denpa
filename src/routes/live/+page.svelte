@@ -738,8 +738,9 @@
                             BS/CS は3桁番号 (BS朝日1=151)。局名だけだと、テレビで
                             覚えている番号から探せない
                         -->
+                            <!-- 札の形は番組表の見出しと同じ。番号の無い局も幅は取る (局名の頭をそろえる) -->
                             <span class="channel-number" data-testid="live-number">
-                                {channel.number ?? ''}
+                                {#if channel.number !== null}<span class="tag">{channel.number}</span>{/if}
                             </span>
                             {#if channel.hasLogo}
                                 <img src="{base}/api/services/{channel.id}/logo" alt="" class="channel-logo" />
@@ -931,13 +932,10 @@
         box-shadow: 0 0 0 1px color-mix(in srgb, var(--pico-primary-background) 40%, transparent);
     }
     .channel-number {
-        width: 1.75rem;
+        width: 2.5rem;
         flex-shrink: 0;
         text-align: right;
-        font-family: var(--pico-font-family-monospace, monospace);
-        font-size: 0.75rem;
         font-variant-numeric: tabular-nums;
-        opacity: 0.5;
     }
     .channel-logo {
         width: 2rem;
