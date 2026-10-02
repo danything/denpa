@@ -509,6 +509,12 @@ export function livePlayer() {
             // 生の道では canvas が次の絵まで前の絵を持っている。写さずに「貼っている」ことにする
             // (でないと幕が前の絵を塗り潰す)。剥がすのは新しい局の1枚目 (`shown`)
             if (engine === null) return;
+            /*
+             * **貼る canvas は空にしておく。** 中身は焼いていたころに写した絵のまま残っていて、
+             * 生の canvas より上にある — 空にしないと、選局のたびにその古い絵 (前に焼いて
+             * 見ていた局の) が一瞬かぶさって見える
+             */
+            if (still !== null) still.width = 0;
         } else {
             if (element === null || still === null) return;
             // まだ1枚も出ていない (初めて開いたとき)。写すものが無い
