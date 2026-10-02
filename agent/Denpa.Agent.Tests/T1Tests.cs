@@ -6,7 +6,7 @@ namespace Denpa.Agent.Tests;
  * ATR の読み方と T=1 のブロックのやり取り。
  *
  * カードは台本 (送るはずのブロックと、それへの返事) で置き換える。送ったものが台本と
- * 違えばその場で落とす。本物のカードで当てるのは Ccid.Describe(reset: true)。
+ * 違えばその場で落とす。本物のカードで当てるのは Ccid.Describe() (`denpa-agent --card`)。
  */
 public class T1Tests
 {

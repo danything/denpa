@@ -1,5 +1,6 @@
 using System.Text.Encodings.Web;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 
 namespace Denpa.Agent;
 
@@ -13,8 +14,8 @@ public static class Log
 /// JSON の書き方。**組み立ては <c>JsonNode</c> だけでやる。**
 ///
 /// <para>
-/// Native AOT では、型から反射で書き出す道が使えない。読む相手も書く相手も
-/// こちらが形を決めたものしかないので、木を直に組むほうが素直。
+/// Native AOT では、型から反射で書き出す道が使えない。読むもの (設定・denpa から来るもの・
+/// <c>px4d --list-json</c>) も木のまま読む (Px4.cs の <c>JsonShape</c>)。
 /// </para>
 /// </summary>
 public static class Json
@@ -36,4 +37,7 @@ public static class Json
 
     /// <summary>口から返すもの。読むのは denpa なので詰めて出す</summary>
     public static readonly JsonSerializerOptions Compact = new() { Encoder = Relaxed };
+
+    /// <summary>文字列の並びを JSON の配列に</summary>
+    public static JsonArray Strings(IEnumerable<string> values) => [.. values.Select(value => (JsonNode)value)];
 }

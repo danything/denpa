@@ -8,7 +8,7 @@ namespace Denpa.Agent.Tests;
  * px4-userland の機材 (PX-Q3U4 / PX-MLT5PE / DTV02A-5TS-P …) を掴むところ。
  *
  * 本物の筐体は無い。ここで確かめるのは**機材に触らない部分**だけ —
- * px4d --list / px4ctl list の読み方、device 文字列の形、TUNE の中身。
+ * px4d --list-json / px4ctl list の読み方、device 文字列の形、TUNE の中身。
  * 実機で当てるのは `denpa-agent --tune px4:<筐体の番号>:2 T27` (Probe.cs)。
  */
 public class Px4Tests
@@ -38,54 +38,6 @@ public class Px4Tests
 
     private static List<Px4Receiver> Receivers(string list) => Px4Receiver.ParseList(list, _ => { });
 
-    /// <summary>px4-userland 0.1.6 の <c>px4d --list</c> の形 (SPEC 4.6)</summary>
-    private const string List = """
-        serial=000000000012345 model=PX-MLT5PE usb=0511:024e status=ready receivers=5
-        receiver=0 device=1 local=0 system=ISDB-T/S
-        receiver=1 device=1 local=1 system=ISDB-T/S
-        receiver=2 device=1 local=2 system=ISDB-T/S
-        receiver=3 device=1 local=3 system=ISDB-T/S
-        receiver=4 device=1 local=4 system=ISDB-T/S
-        serial=00001205000123 model=PX-Q3U4 usb=0511:084a status=incomplete receivers=8
-        receiver=0 device=1 local=0 system=ISDB-S
-        receiver=1 device=1 local=1 system=ISDB-S
-        receiver=2 device=1 local=2 system=ISDB-T
-        receiver=3 device=1 local=3 system=ISDB-T
-        receiver=4 device=2 local=0 system=ISDB-S
-        receiver=5 device=2 local=1 system=ISDB-S
-        receiver=6 device=2 local=2 system=ISDB-T
-        receiver=7 device=2 local=3 system=ISDB-T
-        serial=00001205000960 model=PX-Q3U4 usb=0511:084a status=ready receivers=8
-        receiver=0 device=1 local=0 system=ISDB-S
-        receiver=1 device=1 local=1 system=ISDB-S
-        receiver=2 device=1 local=2 system=ISDB-T
-        receiver=3 device=1 local=3 system=ISDB-T
-        receiver=4 device=2 local=0 system=ISDB-S
-        receiver=5 device=2 local=1 system=ISDB-S
-        receiver=6 device=2 local=2 system=ISDB-T
-        receiver=7 device=2 local=3 system=ISDB-T
-        rejected serial= model=PX-W3U4 usb=0511:083f status=open_failed
-        """;
-
-    [Test]
-    public async Task px4d_list_の_ready_な筐体だけ使う()
-    {
-        var warned = new List<string>();
-        var found = Px4Userland.ParseList(List, warned.Add);
-
-        await Assert.That(found.Select(e => (e.Id, e.Model))).IsEquivalentTo(
-            [("000000000012345", "PX-MLT5PE"), ("00001205000960", "PX-Q3U4")], CollectionOrdering.Matching);
-        await Assert.That(found[0].Receivers.Count).IsEqualTo(5);
-        await Assert.That(found[1].Receivers.Count).IsEqualTo(8);
-        await Assert.That(found[1].Receivers[2].Types).IsEquivalentTo(["GR"], CollectionOrdering.Matching);
-
-        // 使えない筐体と rejected は理由を残す。権限が無いときは黙って「無い」にしない
-        await Assert.That(warned.Count).IsEqualTo(2);
-        await Assert.That(warned[0]).Contains("status=incomplete");
-        await Assert.That(warned[1]).Contains("open_failed");
-        await Assert.That(warned[1]).Contains("権限");
-    }
-
     [Test]
     public async Task 受信機の行は_CRLF_でも読む()
     {
@@ -94,12 +46,6 @@ public class Px4Tests
 
         await Assert.That(found.Count).IsEqualTo(8);
         await Assert.That(found[2].Types).IsEquivalentTo(["GR"], CollectionOrdering.Matching);
-    }
-
-    [Test]
-    public async Task 何も刺さっていなければ空()
-    {
-        await Assert.That(Px4Userland.ParseList("", _ => { })).IsEmpty();
     }
 
     [Test]
@@ -136,7 +82,7 @@ public class Px4Tests
         await Assert.That(warned[0]).Contains("ISDB-S3");
     }
 
-    /// <summary>同じ鍵が2度ある行は最初の値を採る (筐体の行と同じ <see cref="Px4Userland.Fields"/>)。投げない</summary>
+    /// <summary>同じ鍵が2度ある行は最初の値を採る (<see cref="Px4Receiver.Fields"/>)。投げない</summary>
     [Test]
     public async Task 同じ鍵が2度あれば最初の値()
     {
@@ -149,14 +95,15 @@ public class Px4Tests
     [Test]
     public async Task 筐体と受信機から設定の形に組み立てる()
     {
-        var found = Px4Userland.Specs(Px4Userland.ParseList(List, _ => { }));
-        await Assert.That(found.Count).IsEqualTo(13);
+        var found = Px4Userland.Specs(Px4Userland.ParseJson(JsonList, _ => { }));
+        await Assert.That(found.Count).IsEqualTo(4);
         await Assert.That(found[0].Device).IsEqualTo("px4:000000000012345:0");
         await Assert.That(found[0].Name).IsEqualTo("PX-MLT5PE-2345 #0");
         await Assert.That(found[0].Types).IsEquivalentTo(["GR", "BS", "CS"], CollectionOrdering.Matching);
-        await Assert.That(found[5].Device).IsEqualTo("px4:00001205000960:0");
-        await Assert.That(found[5].Name).IsEqualTo("PX-Q3U4-0960 #0");
-        await Assert.That(found[7].Types).IsEquivalentTo(["GR"], CollectionOrdering.Matching);
+        await Assert.That(found[2].Device).IsEqualTo("px4:00001205000960:0");
+        await Assert.That(found[2].Name).IsEqualTo("PX-Q3U4-0960 #0");
+        await Assert.That(found[3].Device).IsEqualTo("px4:00001205000960:2");
+        await Assert.That(found[3].Types).IsEquivalentTo(["GR"], CollectionOrdering.Matching);
         await Assert.That(found.All(spec => !spec.Disabled)).IsTrue();
     }
 
@@ -338,47 +285,13 @@ public class Px4Tests
     }
 
     [Test]
-    public async Task px4d_list_json_が文書でなければ投げてテキストに戻らせる()
+    public async Task px4d_list_json_が文書でなければ投げる()
     {
-        // 古い px4d が知らないオプションを usage で断った、など。Enclosures はこれを見て --list で聞き直す
+        // 古い px4d が知らないオプションを usage で断った、など。Enclosures はこれを見て筐体を挙げない
         Assert.Throws<FormatException>(() => Px4Userland.ParseJson("usage: px4d --list | --device SERIAL …", _ => { }));
         Assert.Throws<FormatException>(() => Px4Userland.ParseJson("[]", _ => { }));
         Assert.Throws<System.Text.Json.JsonException>(() => Px4Userland.ParseJson("{\"enclosures\":[", _ => { }));
         await Task.CompletedTask;
-    }
-
-    [Test]
-    public async Task px4d_list_の_0_1_9_の項目も読む()
-    {
-        var warned = new List<string>();
-        var found = Px4Userland.ParseList(
-            """
-            serial=00001205000960 model=PX-Q3U4 usb=0511:084a status=ready receivers=2 serial_unique=true dev1_bus=1 dev1_address=8 dev1_port=1-3.1 dev2_bus=1 dev2_address=9 dev2_port=1-3.2
-            receiver=0 device=1 local=0 system=ISDB-S lnb_15v_supported=true
-            receiver=2 device=1 local=2 system=ISDB-T lnb_15v_supported=false
-            serial=000000000000001 model=PX-M1UR usb=0511:0854 status=ready receivers=1 serial_unique=false dev1_bus=1 dev1_address=6 dev1_port=1-2.3
-            receiver=0 device=1 local=0 system=ISDB-T/S lnb_15v_supported=false
-            serial=000000000000001 model=PX-S1UR usb=0511:0855 status=ready receivers=1 serial_unique=false dev1_bus=1 dev1_address=7 dev1_port=1-2.4
-            receiver=0 device=1 local=0 system=ISDB-T lnb_15v_supported=false
-            rejected serial= model=PX-W3U4 usb=0511:083f status=open_failed bus=3 address=2 port=3-1
-            """,
-            warned.Add);
-
-        await Assert.That(found.Select(e => e.Id)).IsEquivalentTo(["00001205000960"], CollectionOrdering.Matching);
-        await Assert.That(found[0].Receivers.Select(r => r.Lnb15v)).IsEquivalentTo(
-            new bool?[] { true, false }, CollectionOrdering.Matching);
-        await Assert.That(warned.Count).IsEqualTo(3);
-        await Assert.That(warned[0]).Contains("serial_unique=false, USB 1-2.3");
-        await Assert.That(warned[1]).Contains("USB 1-2.4");
-        await Assert.That(warned[2]).Contains("USB 3-1");
-    }
-
-    [Test]
-    public async Task 古い_px4d_の一覧では_15V_の可否は分からない()
-    {
-        // 0.1.8 までは lnb_15v_supported が無い。分からないので null (頼まれたとおり頼む)
-        var found = Px4Userland.ParseList(List, _ => { });
-        await Assert.That(found.SelectMany(e => e.Receivers).All(r => r.Lnb15v is null)).IsTrue();
     }
 
     [Test]

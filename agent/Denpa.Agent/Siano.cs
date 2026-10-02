@@ -8,14 +8,11 @@ namespace Denpa.Agent;
 ///
 /// <para>
 /// **カーネルが掴んでいる機材には触らない。** PX-S1UD は mainline の <c>smsusb</c> +
-/// <c>smsdvb</c> で普通に Linux DVB になり、今までどおりそちらで使える (DvbTuner)。
-/// siano-userland はそれと別の道で、ホストに firmware やモジュールが無くても
-/// <c>/dev/bus/usb</c> が見えれば動く。ただし <c>siano-ts</c> は
-/// <c>libusb_set_auto_detach_kernel_driver</c> を立てていて、**smsusb が掴んでいても
-/// 黙って奪っていた。** 作者自身が「動いている smsusb から切り替えるのは安全と判定していない」
-/// (unbind の境目でカーネルの異常を観測) と書いていて、0.1.8 からは siano-ts 自身が
-/// **カーネルのドライバが掴んでいるデバイスを断る** (終了コード 4)。こちらも自動検出では
-/// どのドライバにも繋がっていない機材だけを並べる (掴まれている S1UD は /dev/dvb の側で見つかる)。
+/// <c>smsdvb</c> で Linux DVB になり、そちらで使える (DvbTuner)。siano-userland は
+/// firmware やモジュールが無くても <c>/dev/bus/usb</c> が見えれば動く別の道だが、
+/// <c>siano-ts</c> は **smsusb が掴んでいても黙って奪っていた** (作者も unbind の境目で
+/// カーネルの異常を観測している)。0.1.8 からは siano-ts 自身がカーネルの掴んでいる機材を
+/// 断り (終了コード 4)、こちらも自動検出ではどのドライバにも繋がっていない機材だけを並べる。
 /// 使いたい人は smsusb / smsdvb / smsmdtv を blacklist して再起動する (docs/agent.md)。
 /// </para>
 ///
@@ -99,7 +96,7 @@ public static class SianoUserland
     {
         var program = Executable(Dir);
         if (!File.Exists(program)) return [];
-        var (code, output) = Shell.Run(program, ["--list"], TimeSpan.FromSeconds(15)).GetAwaiter().GetResult();
+        var (code, output) = Shell.Run(program, ["--list"], TimeSpan.FromSeconds(15));
         if (code != 0)
         {
             Log.Write($"siano-userland の機材を挙げられません (siano-ts --list exit {code}: {output})");
@@ -113,7 +110,7 @@ public static class SianoUserland
     ///
     /// <para>
     /// <c>model=… usb=… bus=… address=… port=… status=ready receivers=N</c> の行のあとに、
-    /// <c>px4ctl list</c> と同じ形の受信機の行が N 行続く (px4d --list に揃えてある)。
+    /// <c>px4ctl list</c> と同じ形の受信機の行が N 行続く (<see cref="Px4Receiver.ParseList"/>)。
     /// 対応外の機材は <c>rejected …</c> の行で来るので、理由を <paramref name="warn"/> で残す。
     /// ポートが分からない (<c>port=-</c>) 機材は見分けられないので使わない。
     /// </para>
@@ -155,7 +152,7 @@ public static class SianoUserland
             if (line.StartsWith("model=", StringComparison.Ordinal))
             {
                 Flush();
-                current = Px4Userland.Fields(line);
+                current = Px4Receiver.Fields(line);
             }
             else if (line.StartsWith("receiver=", StringComparison.Ordinal))
             {
@@ -164,7 +161,7 @@ public static class SianoUserland
             else if (line.StartsWith("rejected ", StringComparison.Ordinal))
             {
                 Flush();
-                var fields = Px4Userland.Fields(line["rejected ".Length..]);
+                var fields = Px4Receiver.Fields(line["rejected ".Length..]);
                 warn($"{fields.GetValueOrDefault("model")} ({fields.GetValueOrDefault("usb")}, port={fields.GetValueOrDefault("port")}) は使えません: {fields.GetValueOrDefault("status")}");
             }
         }
@@ -392,12 +389,8 @@ public sealed class SianoTuner : ITuneDevice
     }
 
     /// <summary>
-    /// 標準入力に書く1本。頼まれた行を順に書く。
-    ///
-    /// <para>
-    /// Windows の siano-ts 0.1.8 は標準入力が pipe だと TS が止まり、合間を空行で埋め続けていた。
-    /// 0.1.9 で直った (siano-userland #13。pipe は <c>PeekNamedPipe</c> で見るようになった) ので、もう埋めない
-    /// </para>
+    /// 標準入力に書く1本。頼まれた行を順に書く (0.1.8 までの Windows で要った空行の詰め物は、
+    /// 0.1.9 で直ったのでもう無い。siano-userland #13)
     /// </summary>
     private static void Feed(Child child)
     {

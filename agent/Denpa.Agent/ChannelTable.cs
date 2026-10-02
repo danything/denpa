@@ -36,8 +36,8 @@ public static class ChannelTable
     /// <param name="Frequency">**地上波は Hz、衛星は kHz**</param>
     /// <param name="RelativeTs">衛星で同じ周波数に相乗りしている何本目か。無ければ -1</param>
     /// <param name="Slot">
-    /// 衛星のスロット。TSID が分からないときに px4-userland へ <c>--slot</c> で渡す
-    /// (Px4.cs)。BS は相対番号そのもの、CS は1本しか乗っていないので 0
+    /// 衛星のスロット。TSID が分からないときに px4d の TUNE の <c>slot</c> で渡す
+    /// (<see cref="Px4Tuner.TuneRequest"/>)。BS は相対番号そのもの、CS は1本しか乗っていないので 0
     /// </param>
     public sealed record Tuning(string Type, int Delivery, uint Frequency, int RelativeTs, int Slot)
     {

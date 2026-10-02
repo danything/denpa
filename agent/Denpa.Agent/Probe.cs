@@ -51,33 +51,18 @@ public static class Probe
 
         Keys.Configure(Environment.GetEnvironmentVariable("CARD_URL"));
         var b25 = new Descrambler(Keys.Source);
-        var decoded = new ArrayBufferWriter<byte>();
-
         using var input = File.OpenRead(source);
         using var output = File.Create(destination);
-        var buffer = new byte[188 * 1024];
-        long read;
-        long written = 0;
         long scrambled = 0;
         long packets = 0;
-
-        while ((read = input.Read(buffer)) > 0)
+        var written = b25.DecodeAll(input, output, chunk =>
         {
-            for (var at = 0; at + 188 <= read; at += 188)
+            for (var at = 0; at + 188 <= chunk.Length; at += 188)
             {
                 packets++;
-                if (Scrambled(buffer.AsSpan(at))) scrambled++;
+                if (Scrambled(chunk[at..])) scrambled++;
             }
-            decoded.ResetWrittenCount();
-            b25.Decode(buffer.AsSpan(0, (int)read), decoded);
-            output.Write(decoded.WrittenSpan);
-            written += decoded.WrittenCount;
-        }
-
-        decoded.ResetWrittenCount();
-        b25.Flush(decoded);
-        output.Write(decoded.WrittenSpan);
-        written += decoded.WrittenCount;
+        });
 
         var before = packets == 0 ? 0 : 100.0 * scrambled / packets;
         Console.WriteLine($"{input.Length} -> {written} バイト  元は {before:F1}% が掛かっていました");
@@ -89,9 +74,9 @@ public static class Probe
     /// カードリーダーを並べて、カードを開いてみる。**pcscd を通さなくなったので、
     /// 実機でリーダーと話せているかはここで確かめる。**
     /// </summary>
-    public static int Card(string[] args)
+    public static int Card()
     {
-        Console.WriteLine(OperatingSystem.IsLinux() ? Ccid.Describe(reset: true) : PcscLink.Describe());
+        Console.WriteLine(OperatingSystem.IsLinux() ? Ccid.Describe() : PcscLink.Describe());
         foreach (var found in Px4Card.Find()) Console.WriteLine($"内蔵 {found.Name}");
         try
         {

@@ -1,14 +1,13 @@
-using System.Buffers;
 using System.Diagnostics;
 using System.Text.Json.Nodes;
 
 namespace Denpa.Agent;
 
-/// <summary>子プロセスを最後まで回して、出力をまとめて受け取る</summary>
+/// <summary>子プロセスを最後まで回して、出力をまとめて受け取る (px4d --list-json・px4ctl・siano-ts --list)</summary>
 public static class Shell
 {
-    public static async Task<(int Code, string Output)> Run(
-        string file, IEnumerable<string> args, TimeSpan? timeout = null)
+    /// <summary>上限を過ぎたら子ごと落とす。起こせなかった・落とした、は exit -1 と理由で返す</summary>
+    public static (int Code, string Output) Run(string file, IEnumerable<string> args, TimeSpan timeout)
     {
         try
         {
@@ -21,16 +20,8 @@ public static class Shell
             using var child = Process.Start(start)!;
             var stdout = child.StandardOutput.ReadToEndAsync();
             var stderr = child.StandardError.ReadToEndAsync();
-            using var limit = new CancellationTokenSource(timeout ?? TimeSpan.FromMinutes(30));
-            try
-            {
-                await child.WaitForExitAsync(limit.Token);
-            }
-            catch (OperationCanceledException)
-            {
-                child.Kill(entireProcessTree: true);
-            }
-            return (child.ExitCode, $"{await stdout}{await stderr}".Trim());
+            if (!child.WaitForExit(timeout)) child.Kill(entireProcessTree: true);
+            return (child.ExitCode, $"{stdout.GetAwaiter().GetResult()}{stderr.GetAwaiter().GetResult()}".Trim());
         }
         catch (Exception error)
         {
@@ -175,11 +166,11 @@ public static class Card
         var peeked = Probe(others, left < ProbeFor ? left : ProbeFor);
 
         var readers = new List<ReaderState>();
-        var usedRow = used is null ? null : new ReaderState(used, init!.Ids, true, null);
+        var usedRow = new ReaderState(used, init.Ids, true, null);
         // 探し直したときに見えなくなっていても、使っているものは必ず出す
-        if (usedRow is not null && others.Count == found.Count) readers.Add(usedRow);
+        if (others.Count == found.Count) readers.Add(usedRow);
         var next = 0;
-        foreach (var candidate in found) readers.Add(candidate.Name == used ? usedRow! : peeked[next++]);
+        foreach (var candidate in found) readers.Add(candidate.Name == used ? usedRow : peeked[next++]);
 
         return new CardSurvey(true, "", readers, init.Ids, null);
     }
@@ -275,7 +266,7 @@ public static class Card
                 ["card"] = reader.Card,
                 ["ids"] = Ids(reader.Ids ?? []),
                 ["active"] = reader.Active,
-                ["tuners"] = Names(reader.Active ? streaming : []),
+                ["tuners"] = Json.Strings(reader.Active ? streaming : []),
             };
             if (reader.Error is not null) row["error"] = reader.Error;
             readers.Add((JsonNode)row);
@@ -292,25 +283,13 @@ public static class Card
         {
             report["remote"] = survey.Remote;
             report["ids"] = Ids(survey.Ids);
-            report["tuners"] = Names(survey.Ok ? streaming : []);
+            report["tuners"] = Json.Strings(survey.Ok ? streaming : []);
         }
         return report;
     }
 
     /// <summary>番号は libaribb25 の頃と同じ 10 進 16 桁</summary>
-    private static JsonArray Ids(long[] ids)
-    {
-        var list = new JsonArray();
-        foreach (var id in ids) list.Add((JsonNode?)JsonValue.Create(id.ToString("D16")));
-        return list;
-    }
-
-    private static JsonArray Names(IReadOnlyList<string> names)
-    {
-        var list = new JsonArray();
-        foreach (var name in names) list.Add((JsonNode?)JsonValue.Create(name));
-        return list;
-    }
+    private static JsonArray Ids(long[] ids) => Json.Strings(ids.Select(id => id.ToString("D16")));
 
     private static Exception Unwrap(Exception error) =>
         error is AggregateException { InnerException: { } inner } ? inner : error;
@@ -370,18 +349,7 @@ public static class Scramble
             var b25 = new Descrambler(Keys.Source);
             using var reading = File.OpenRead(source);
             using var writing = File.Create(target);
-            var buffer = new byte[188 * 1024];
-            var decoded = new ArrayBufferWriter<byte>();
-            int read;
-            while ((read = reading.Read(buffer)) > 0)
-            {
-                decoded.ResetWrittenCount();
-                b25.Decode(buffer.AsSpan(0, read), decoded);
-                writing.Write(decoded.WrittenSpan);
-            }
-            decoded.ResetWrittenCount();
-            b25.Flush(decoded);
-            writing.Write(decoded.WrittenSpan);
+            b25.DecodeAll(reading, writing);
 
             /*
              * **解けなかったのに成功とは言わない。** カードが無い・ECM が流れていない

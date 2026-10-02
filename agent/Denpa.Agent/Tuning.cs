@@ -52,7 +52,7 @@ public interface ITuneDevice : IDisposable
 }
 
 /// <summary>
-/// libc の口。ioctl を直に叩くところだけ。
+/// libc の口 (open・ioctl・poll・pipe など。kill だけは Interop.cs)。
 ///
 /// <para>
 /// **macOS でも同じ口で動く** (Mac で px4d から受けた TS / siano-ts の pipe を読むため)。"libc" は
@@ -86,6 +86,9 @@ internal static unsafe partial class Sys
     [LibraryImport("libc", EntryPoint = "write", SetLastError = true)]
     public static partial nint WriteFd(int fd, byte* buffer, nuint count);
 
+    [LibraryImport("libc", EntryPoint = "close")]
+    public static partial int Close(int fd);
+
     /// <summary><c>pipe(int fds[2])</c>。fds[0] が読み口、fds[1] が書き口</summary>
     [LibraryImport("libc", EntryPoint = "pipe", SetLastError = true)]
     public static partial int Pipe(int* fds);
@@ -117,40 +120,18 @@ internal static unsafe partial class Sys
     /// <summary><c>F_SETPIPE_SZ</c>。pipe の深さを変える (**Linux だけ**。macOS には無い)</summary>
     public const int SetPipeSize = 1031;
 
-    private const short EventIn = 1;
-    private const short EventOut = 4;
-    private const short EventError = 8;
-    private const short EventHup = 0x10;
-
     /// <summary>
-    /// 書けるようになるまで待つ。<c>Writable</c> は空きができた、<c>Ended</c> は
-    /// 読み口が閉じた (pipe なら読む側が居なくなった。POLLERR で来る)
+    /// 書けるようになるか、<paramref name="timeoutMs"/> 経つまで待つ。どちらで起きたかは見ない
+    /// (呼んだ側が書いてみて確かめる)
     /// </summary>
-    public static (bool Writable, bool Ended) PollOut(int fd, int timeoutMs)
+    public static void PollOut(int fd, int timeoutMs)
     {
+        // struct pollfd { int fd; short events; short revents; }。POLLOUT = 4
         var descriptor = stackalloc byte[8];
         *(int*)descriptor = fd;
-        *(short*)(descriptor + 4) = EventOut;
+        *(short*)(descriptor + 4) = 4;
         *(short*)(descriptor + 6) = 0;
-        if (Poll(descriptor, 1, timeoutMs) <= 0) return (false, false);
-        var revents = *(short*)(descriptor + 6);
-        return ((revents & EventOut) != 0, (revents & (EventHup | EventError)) != 0);
-    }
-
-    /// <summary>
-    /// 読めるようになるまで待つ。<c>Readable</c> は中身が来た、<c>Ended</c> は
-    /// 相手が閉じた (pipe なら子が終わった)。両方いっぺんに立つこともある
-    /// </summary>
-    public static (bool Readable, bool Ended) PollIn(int fd, int timeoutMs)
-    {
-        // struct pollfd { int fd; short events; short revents; }
-        var descriptor = stackalloc byte[8];
-        *(int*)descriptor = fd;
-        *(short*)(descriptor + 4) = EventIn;
-        *(short*)(descriptor + 6) = 0;
-        if (Poll(descriptor, 1, timeoutMs) <= 0) return (false, false);
-        var revents = *(short*)(descriptor + 6);
-        return ((revents & EventIn) != 0, (revents & EventHup) != 0);
+        Poll(descriptor, 1, timeoutMs);
     }
 
     /// <summary>開けなければ errno を添えて投げる。デバイスが無い・使用中の区別が要る</summary>
@@ -451,11 +432,7 @@ internal sealed unsafe class DeviceStream(SafeFileHandle handle, Func<string?>? 
                 if (failure == EAgain || failure == EIntr) continue;
                 if (failure == EOverflow)
                 {
-                    /*
-                     * **まだ1バイトも受け取っていないなら、この選局のせいではない。**
-                     * 局を変えている間に埋まった環の印が、読み始めた最初の
-                     * `read` で返っているだけ (`_handed`)
-                     */
+                    // まだ1バイトも受け取っていないなら、局替えの間に埋まった印 (`_handed`)
                     if (!_handed)
                     {
                         _stale++;
@@ -463,12 +440,7 @@ internal sealed unsafe class DeviceStream(SafeFileHandle handle, Func<string?>? 
                         continue;
                     }
                     _overflows++;
-                    /*
-                     * **空いた時間も採る。** 溢れたということは、この時間ぶんの
-                     * 中身が環に積まれて一周したということ。環の深さ (3.5秒ぶん)
-                     * と突き合わせれば、溜めが効いていないのか読み手が止まって
-                     * いるのかが分かれる (`TakeOverflows`)
-                     */
+                    // 空いた時間も採る。環の深さ (3.5秒ぶん) と突き合わせる (`TakeOverflows`)
                     var gap = (int)Stopwatch.GetElapsedTime(_handedAt).TotalMilliseconds;
                     if (gap > _worstGap) _worstGap = gap;
                     // 溢れたぶんは捨てられている。ここからは新しい溜まり方になる

@@ -21,13 +21,10 @@ public sealed record TunerSpec(
 {
     public JsonObject ToJson()
     {
-        var types = new JsonArray();
-        foreach (var type in Types) types.Add((JsonNode?)JsonValue.Create(type));
-
         var node = new JsonObject
         {
             ["name"] = Name,
-            ["types"] = types,
+            ["types"] = Json.Strings(Types),
             ["disabled"] = Disabled,
             ["device"] = Device,
         };

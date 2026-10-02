@@ -116,6 +116,30 @@ public sealed class Descrambler(IKeySource source)
         _carryLength = input.Length - used;
     }
 
+    /// <summary>
+    /// 録れたものを丸ごと解いて書く (<c>/denpa/decode</c> と <c>--decode-file</c>)。書いたバイト数を返す。
+    /// <paramref name="read"/> は読んだそのままの塊を覗く (解く前の掛かり具合を数える)
+    /// </summary>
+    public long DecodeAll(Stream input, Stream output, Action<ReadOnlySpan<byte>>? read = null)
+    {
+        var buffer = new byte[188 * 1024];
+        var decoded = new ArrayBufferWriter<byte>();
+        long written = 0;
+        int count;
+        while ((count = input.Read(buffer)) > 0)
+        {
+            read?.Invoke(buffer.AsSpan(0, count));
+            decoded.ResetWrittenCount();
+            Decode(buffer.AsSpan(0, count), decoded);
+            output.Write(decoded.WrittenSpan);
+            written += decoded.WrittenCount;
+        }
+        decoded.ResetWrittenCount();
+        Flush(decoded);
+        output.Write(decoded.WrittenSpan);
+        return written + decoded.WrittenCount;
+    }
+
     /// <summary>溜めているぶんを吐き出す。**終わりに1回**。尻尾の半端なバイトは捨てる</summary>
     public void Flush(IBufferWriter<byte> output)
     {

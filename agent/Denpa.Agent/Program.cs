@@ -9,7 +9,8 @@ using Microsoft.AspNetCore.Http.Features;
  *
  * denpa から触れないものが3つある。
  *
- * - B-CASカード … USB のリーダーも px4d の内蔵リーダーも、こちらが直に叩く (CardLinks.cs)
+ * - B-CASカード … USB のリーダーも px4d の内蔵リーダーも、こちらが直に叩く (CardLinks.cs。
+ *   macOS / Windows の USB リーダーだけは OS の PC/SC 越し)
  * - チューナーデバイス … `/dev/dvb/*` と `/dev/bus/usb` が見えているのはこちらだけ
  * - 選局そのもの … デバイスを掴んで ioctl で選局する (Tuning.cs)。px4-userland /
  *   siano-userland の機材は同梱のものに USB を叩かせる (Px4.cs / Siano.cs)
@@ -28,7 +29,7 @@ if (OperatingSystem.IsWindows()) Console.OutputEncoding = Encoding.UTF8;
 // 実機で選局と復号だけ試す口。サーバは立てない (Probe.cs)
 if (args.ElementAtOrDefault(0) == "--tune") return Probe.Run(args);
 if (args.ElementAtOrDefault(0) == "--decode-file") return Probe.Decode(args);
-if (args.ElementAtOrDefault(0) == "--card") return Probe.Card(args);
+if (args.ElementAtOrDefault(0) == "--card") return Probe.Card();
 
 var port = int.TryParse(Environment.GetEnvironmentVariable("AGENT_PORT"), out var configured)
     ? configured
@@ -52,7 +53,7 @@ var pool = new TunerPool(tuners, () => events.Emit("tuners"), tune) { Detected =
 
 /*
  * **px4-userland の筐体の px4d を起こす。** 顔ぶれ (設定か、自動で見つけたもの) にある筐体ぶん。
- * 筐体も受信機も px4d --list で分かっているので、ここで顔ぶれは変わらない (Px4.cs)
+ * 筐体も受信機も px4d --list-json で分かっているので、ここで顔ぶれは変わらない (Px4.cs)
  */
 void PreparePx4() => Px4Daemon.Prepare(Px4Userland.IdsIn(pool.Tuners).ToList());
 
@@ -70,15 +71,8 @@ builder.Logging.ClearProviders();
  * **録画中に止められたら、終わるまで居座る** (denpa の `SHUTDOWN_WAIT` と同じ考え)。
  *
  * これが無かった頃は、**Pod を入れ替えるだけで録画が落ちた** — denpa 側は録画が
- * 終わるまで待つ作りなのに、TS を流しているこちらが先に消えるので、掴んでいた
- * ストリームごと切れる。実機で 30 分番組を始まって 10 秒で失っている。
- *
- * **Kestrel に任せることはできない。** 止まれの合図で畳みに入った時点で、
- * 開いている応答への書き込みが止まる (実測: バイトが1つも進まなくなる)。
- * だから**サーバが止まり始める前に**待つ。ここで待っている間は今までどおり
- * 流れ続け、離してから畳みに入る。
- *
- * 待つのは録画だけ。番組表もロゴもスキャンも、切れたら取り直せばいいだけ。
+ * 終わるまで待つのに、TS を流しているこちらが先に消える。実機で 30 分番組を
+ * 始まって 10 秒で失っている。Kestrel に任せられない理由は Drain。
  *
  * Kubernetes には `terminationGracePeriodSeconds` を一緒に伸ばしておくこと
  * (足りないと待っている途中で SIGKILL される)。
@@ -99,7 +93,7 @@ app.MapGet("/denpa/stream", async (HttpContext http) =>
     var channel = query["channel"].ToString();
     if (type.Length == 0 || channel.Length == 0)
     {
-        await Respond.Write(http, new JsonObject { ["error"] = "type と channel が必要です" }, 400);
+        await Respond.Error(http, "type と channel が必要です", 400);
         return;
     }
     _ = int.TryParse(query["priority"].ToString(), out var priority);
@@ -113,7 +107,7 @@ app.MapGet("/denpa/stream", async (HttpContext http) =>
     catch (TunerPool.TunerBusyException error)
     {
         // 掴めなかった。**409 で返す**ので、呼んだ側は待って掛け直せる
-        await Respond.Write(http, new JsonObject { ["error"] = error.Message }, 409);
+        await Respond.Error(http, error.Message, 409);
         return;
     }
     catch (Exception error)
@@ -125,7 +119,7 @@ app.MapGet("/denpa/stream", async (HttpContext http) =>
          * 分からなかった (docs/agent.md)
          */
         Log.Write($"{type} {channel} ({use}): {error.Message}");
-        await Respond.Write(http, new JsonObject { ["error"] = error.Message }, 500);
+        await Respond.Error(http, error.Message, 500);
         return;
     }
 
@@ -164,7 +158,7 @@ app.MapGet("/denpa/stream", async (HttpContext http) =>
         {
             Log.Write($"{channel} ({use}): {sink.FailedWith}");
             if (sent) http.Abort();
-            else await Respond.Write(http, new JsonObject { ["error"] = sink.FailedWith }, 500);
+            else await Respond.Error(http, sink.FailedWith, 500);
         }
     }
     catch (OperationCanceledException)
@@ -246,7 +240,7 @@ app.MapPut("/denpa/tuners", async (HttpContext http) =>
     var body = await Respond.Read(http);
     if (body?["tuners"] is not JsonArray list)
     {
-        await Respond.Write(http, new JsonObject { ["error"] = "tuners が必要です" }, 400);
+        await Respond.Error(http, "tuners が必要です", 400);
         return;
     }
 
@@ -255,7 +249,7 @@ app.MapPut("/denpa/tuners", async (HttpContext http) =>
     {
         if (TunerSpec.FromJson(node) is not { } spec)
         {
-            await Respond.Write(http, new JsonObject { ["error"] = "name の無いチューナーがあります" }, 400);
+            await Respond.Error(http, "name の無いチューナーがあります", 400);
             return;
         }
         next.Add(spec);
@@ -284,13 +278,13 @@ app.MapPut("/denpa/channels", async (HttpContext http) =>
     if (body?["channels"] is not JsonArray found || body["scanned"] is not JsonArray scanned
         || scanned.Count == 0)
     {
-        await Respond.Write(http, new JsonObject { ["error"] = "channels と scanned が必要です" }, 400);
+        await Respond.Error(http, "channels と scanned が必要です", 400);
         return;
     }
     // 1件も無いまま上書きすると、今まで録れていた局まで消える
     if (found.Count == 0)
     {
-        await Respond.Write(http, new JsonObject { ["error"] = "チャンネルが1件もありません" }, 400);
+        await Respond.Error(http, "チャンネルが1件もありません", 400);
         return;
     }
 
@@ -333,7 +327,7 @@ app.MapGet("/denpa/card/init", async (HttpContext http) =>
     }
     catch (Exception error)
     {
-        await Respond.Write(http, new JsonObject { ["error"] = error.Message }, 503);
+        await Respond.Error(http, error.Message, 503);
     }
 });
 
@@ -343,7 +337,7 @@ app.MapPost("/denpa/card/ecm", async (HttpContext http) =>
     await http.Request.Body.CopyToAsync(body);
     if (body.Length is 0 or > 4096)
     {
-        await Respond.Write(http, new JsonObject { ["error"] = "ECM が入っていません" }, 400);
+        await Respond.Error(http, "ECM が入っていません", 400);
         return;
     }
 
@@ -356,7 +350,7 @@ app.MapPost("/denpa/card/ecm", async (HttpContext http) =>
     }
     catch (Exception error)
     {
-        await Respond.Write(http, new JsonObject { ["error"] = error.Message }, 503);
+        await Respond.Error(http, error.Message, 503);
     }
 });
 
@@ -371,15 +365,9 @@ app.MapFallback((HttpContext http) =>
 _ = Task.Run(PreparePx4);
 
 /*
- * **畳むのは、流し終えてから。**
- *
- * ここを `ApplicationStopping` でやっていた頃は、止まれの合図を受けたその場で
- * 全部のチューナーを離していた。**録画中でも問答無用で切れる**ので、Pod を
- * 入れ替えるだけで 30 分番組が始まって 10 秒で失敗している (実機)。
- *
- * `ApplicationStopped` は Kestrel が開いている応答を流し終えたあとに来る
- * (録画を待つのはその前の `Drain`)。読み手が居なくなってから離せば、
- * 録画は最後まで届く。
+ * **畳むのは、流し終えてから。** `ApplicationStopping` でやっていた頃は、止まれの合図の
+ * その場で録画中のチューナーまで離していた (上の 30 分番組はこれ)。`ApplicationStopped` は
+ * Kestrel が開いている応答を流し終えたあとに来る (録画を待つのはその前の `Drain`)。
  */
 app.Lifetime.ApplicationStopped.Register(() =>
 {
@@ -402,6 +390,9 @@ internal static class Respond
         http.Response.ContentType = "application/json";
         await http.Response.WriteAsync(body?.ToJsonString(Json.Compact) ?? "null");
     }
+
+    public static Task Error(HttpContext http, string message, int status) =>
+        Write(http, new JsonObject { ["error"] = message }, status);
 
     public static async Task<JsonNode?> Read(HttpContext http)
     {
