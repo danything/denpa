@@ -233,6 +233,32 @@ test.describe('ダッシュボードと画面遷移', () => {
         await expect(page.getByTestId('reconcile-result')).toHaveCount(0);
     });
 
+    test('狭い幅では録画の見出しを1行に保ち、照合は「⋯」から押せる', async ({ page }) => {
+        await page.setViewportSize({ width: 390, height: 844 });
+        await goto(page, '/');
+
+        /*
+         * 並べていた頃は「ファイルと照合」が2行目に落ちていた。たまにしか押さない
+         * ものは「⋯」に畳み、見出し・絞り込み・「⋯」が同じ行に並ぶ
+         */
+        const more = page.getByTestId('recordings-more');
+        await expect(page.getByTestId('reconcile-button')).toBeHidden();
+        await expect(more).toBeVisible();
+        const heading = (await page.locator('.recordings h2').boundingBox())!;
+        const trigger = (await more.boundingBox())!;
+        expect(Math.abs(heading.y + heading.height / 2 - (trigger.y + trigger.height / 2))).toBeLessThan(
+            trigger.height / 2,
+        );
+
+        await more.click();
+        const menu = page.getByTestId('recordings-more-menu');
+        await expect(menu).toBeVisible();
+        await menu.getByTestId('reconcile-menu-button').click();
+        await expect(page.getByTestId('reconcile-result')).toBeVisible();
+        // 送り終えたら閉じる
+        await expect(menu).toBeHidden();
+    });
+
     /**
      * **読み直しは、走っている遷移を畳んでしまう。**
      *

@@ -509,6 +509,12 @@
     $effect(() => {
         recordingQuery = data.q;
     });
+
+    /** 「削除済みも表示」の行き先と札。広い幅では並べ、狭い幅では「⋯」の中に出す (同じものを2か所) */
+    const deletedHref = $derived(data.showDeleted ? resolve('') : `${resolve('')}?deleted=1`);
+    const deletedLabel = $derived(data.showDeleted ? '削除済みを隠す' : '削除済みも表示');
+    /** 録画の見出しの「⋯」。照合を送り終えたら閉じる */
+    let toolsOpen = $state(false);
     function rightText(row: RightRow): string {
         if (row.kind === 'missed') {
             const res = row.res;
@@ -733,9 +739,21 @@
                             </div>
                         </div>
                     {:else}
-                        <div class="row-empty muted">
-                            {reservationQuery === '' ? '予約はありません' : `「${reservationQuery}」に一致する予約はありません`}
-                        </div>
+                        {#if reservationQuery === ''}
+                            <!-- 空のときは次に何をすればよいかまで言う (下の `.empty`) -->
+                            <div class="empty" data-testid="reservation-empty">
+                                <p class="empty-title">予約はありません</p>
+                                <p class="empty-hint">番組表から予約するか、ルールを作ると自動で入ります</p>
+                                <div class="empty-actions">
+                                    <a class="button small" href={resolve('guide')}>番組表を開く</a>
+                                    <a class="button secondary outline small" href={resolve('rules')}>ルールを作る</a>
+                                </div>
+                            </div>
+                        {:else}
+                            <div class="empty">
+                                <p class="empty-title">「{reservationQuery}」に一致する予約はありません</p>
+                            </div>
+                        {/if}
                     {/each}
                     <!-- 下端に近づいたら続きを足す (`sentinel`)。残りが無くなれば消える -->
                     {#if reservationPage.more}
@@ -783,12 +801,70 @@
                             aria-label="録画を絞り込む"
                         />
                     </form>
-                    <a class="button secondary outline small" href={data.showDeleted ? resolve('') : `${resolve('')}?deleted=1`}>
-                        {data.showDeleted ? '削除済みを隠す' : '削除済みも表示'}
+                    <a class="button secondary outline small wide-only" href={deletedHref}>
+                        {deletedLabel}
                     </a>
-                    <form method="POST" action="?/reconcile" use:submitting>
+                    <form method="POST" action="?/reconcile" class="wide-only" use:submitting>
                         <button type="submit" class="secondary outline small" data-testid="reconcile-button">ファイルと照合</button>
                     </form>
+                    <!--
+                        **狭い幅では「⋯」に畳む。** 390px の端末では「ファイルと照合」が
+                        2行目に落ち、見出しの行が2段ぶんの厚さになっていた。どちらも
+                        たまにしか押さないので、絞り込みの欄を削るより奥へ下げる。
+                        広い列では今までどおり並べる (切り替えは列の幅。下の `@container`)
+
+                        中身は閉じている間も DOM に置く (`forceMount`)。照合を送っている
+                        途中でメニューが消えると、回るものを出す先が無くなるため。
+                        閉じるのは送り終わってから (詳細の「再エンコード」と同じ)
+                    -->
+                    <DropdownMenu.Root bind:open={toolsOpen}>
+                        <DropdownMenu.Trigger
+                            class="secondary outline small narrow-only tools-trigger"
+                            aria-label="その他の操作"
+                            data-testid="recordings-more"
+                        >
+                            <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden="true">
+                                <circle cx="5" cy="12" r="2" />
+                                <circle cx="12" cy="12" r="2" />
+                                <circle cx="19" cy="12" r="2" />
+                            </svg>
+                        </DropdownMenu.Trigger>
+                        <DropdownMenu.Content forceMount align="end" sideOffset={4} collisionPadding={8}>
+                            {#snippet child({ wrapperProps, props, open })}
+                                <div {...wrapperProps}>
+                                    <div {...props} class="more-menu tools-menu" hidden={!open} data-testid="recordings-more-menu">
+                                        <DropdownMenu.Item>
+                                            {#snippet child({ props: itemProps })}
+                                                <a {...itemProps} href={deletedHref} class="menu-link">{deletedLabel}</a>
+                                            {/snippet}
+                                        </DropdownMenu.Item>
+                                        <form
+                                            method="POST"
+                                            action="?/reconcile"
+                                            class="menu-form"
+                                            use:submitting={() => async (options) => {
+                                                await options.update();
+                                                toolsOpen = false;
+                                            }}
+                                        >
+                                            <DropdownMenu.Item closeOnSelect={false}>
+                                                {#snippet child({ props: itemProps })}
+                                                    <button
+                                                        {...itemProps}
+                                                        type="submit"
+                                                        class="menu-button"
+                                                        data-testid="reconcile-menu-button"
+                                                    >
+                                                        ファイルと照合
+                                                    </button>
+                                                {/snippet}
+                                            </DropdownMenu.Item>
+                                        </form>
+                                    </div>
+                                </div>
+                            {/snippet}
+                        </DropdownMenu.Content>
+                    </DropdownMenu.Root>
                 </div>
             </div>
 
@@ -1141,11 +1217,22 @@
                         </div>
                     {/if}
                     {:else}
-                        <div class="row-empty muted">
-                            {recordingQuery === ''
-                                ? '録画はありません'
-                                : `「${recordingQuery}」に一致する録画はありません`}
-                        </div>
+                        {#if recordingQuery === ''}
+                            <div class="empty" data-testid="recording-empty">
+                                <p class="empty-title">録画はありません</p>
+                                <p class="empty-hint">予約した番組は、録り終わるとここに並びます</p>
+                                <div class="empty-actions">
+                                    <a class="button secondary outline small" href={resolve('guide')}>番組表を開く</a>
+                                </div>
+                            </div>
+                        {:else}
+                            <div class="empty">
+                                <p class="empty-title">「{recordingQuery}」に一致する録画はありません</p>
+                                {#if recordingQuery !== data.q}
+                                    <p class="empty-hint">Enter で古い録画まで探します</p>
+                                {/if}
+                            </div>
+                        {/if}
                     {/each}
                     <!-- 下端に近づいたら続きを足す (`sentinel`)。残りが無くなれば消える -->
                     {#if recordingPage.more}
@@ -1535,6 +1622,79 @@
     .row-empty {
         padding: 0.75rem;
     }
+    /*
+     * **一覧が空のとき。** 「録画はありません」を行と同じ小さな字で左上に置いていた
+     * 頃は、大きな枠の隅に一言あるだけで、壊れているのか空なのか読み取れなかった。
+     * 枠の真ん中に置き、次にすること (番組表・ルール) への口を添える。
+     *
+     * 真ん中に寄せるために、枠と一覧を縦の flex にして空の札を残りいっぱいに伸ばす。
+     * 畳まれる幅では枠が中身の高さなので、上下の余白だけが効く
+     */
+    .board-box {
+        display: flex;
+        flex-direction: column;
+    }
+    .rows {
+        display: flex;
+        flex: 1 0 auto;
+        flex-direction: column;
+    }
+    .empty {
+        display: flex;
+        flex: 1 0 auto;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 0.5rem;
+        padding: 2.5rem 1rem;
+        text-align: center;
+    }
+    .empty p {
+        margin: 0;
+    }
+    .empty-title {
+        font-weight: 600;
+        overflow-wrap: anywhere;
+    }
+    .empty-hint {
+        font-size: 0.875rem;
+        opacity: 0.7;
+    }
+    .empty-actions {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: center;
+        gap: 0.5rem;
+        margin-top: 0.5rem;
+    }
+    /* 録画の見出しの「⋯」。広い列では並べたほうを出し、狭い列ではこちらだけ */
+    .cluster :global(.tools-trigger) {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        margin: 0;
+    }
+    .menu-link {
+        color: inherit;
+        text-decoration: none;
+    }
+    /*
+     * 畳むかどうかは**画面の幅ではなく録画の列の幅**で決める。二段組に入ったばかりの
+     * 幅 (縦の iPad など) でも列は 440px ほどしかなく、並べると同じように折り返す
+     */
+    .recordings {
+        container: recordings / inline-size;
+    }
+    @container recordings (min-width: 36rem) {
+        .cluster :global(.narrow-only) {
+            display: none;
+        }
+    }
+    @container recordings (max-width: 35.99rem) {
+        .cluster .wide-only {
+            display: none;
+        }
+    }
     .truncated {
         border-top: 1px solid var(--dp-base-300);
     }
@@ -1625,6 +1785,10 @@
         flex-direction: column;
         width: 16rem;
         max-width: calc(100vw - 2rem);
+    }
+    /* 録画の見出しの「⋯」の中身。項目が短いので細くする */
+    .tools-menu {
+        width: 12rem;
     }
     .menu-form {
         display: contents;
