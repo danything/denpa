@@ -281,7 +281,7 @@ function installShutdownHooks(): void {
      * が同時に走る。プロセスは生きたまま**ポートだけ閉じる**ので、録画は
      * 続いているのに画面がどこからも開けない (実機で確認: プロセスは動いて
      * 番組表も集めているのに `/proc/net/tcp` に listen が1つも無く、
-     * Traefik は「no available server」)。
+     * 当時の前段 (Traefik) は「no available server」)。
      *
      * `setImmediate` なら index.js の残りが走り終えたあとになる。
      */

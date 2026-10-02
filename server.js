@@ -46,7 +46,7 @@ process.env.PORT = String(innerPort);
 process.env.HOST = '127.0.0.1';
 /*
  * **https の目印は常に `x-forwarded-proto` から読む** (選べるオプションにしない)。
- * 無いと adapter-node が http と決め打ち、前段が https を受ける構成 (Traefik 等)
+ * 無いと adapter-node が http と決め打ち、前段 (リバースプロキシ) が https を受ける構成
  * で CSRF 判定が食い違って POST が全部 403 になる。偽装されても得るものが無い —
  * ブラウザ経由の CSRF ではこのヘッダを付けられないし、直に付けて来る相手が
  * 変えられるのは自分に返る origin の見た目だけ。
@@ -108,7 +108,7 @@ Bun.serve({
          *
          * 外しておけば内側は生で返すので、食い違いが起きない。無駄に
          * 圧縮して展開し直す往復も消える。**線の上での圧縮は前段に任せる**
-         * (公開しているところは Traefik が居る)。
+         * (公開しているところは前段のリバースプロキシが居る)。
          */
         const headers = new Headers(request.headers);
         // **消すだけでは効かない。** `fetch` は無ければ自分で付け直すので、

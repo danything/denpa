@@ -309,7 +309,7 @@ export const config = {
      * (`10.10.0.0/16`)。当たると OIDC も掛からない
      * (どう効くかは `auth.trusted`)。
      *
-     * **前段 (Traefik など) が居るなら `ADDRESS_HEADER=x-forwarded-for` を一緒に渡す。**
+     * **前段 (リバースプロキシ) が居るなら `ADDRESS_HEADER=x-forwarded-for` を一緒に渡す。**
      * 渡さないと接続元が前段の住所になり、ここが誰にも当たらない。逆に、denpa へ
      * 直に届く経路があると住所を詐称できる。前段が居なければ何も要らない
      * (server.js の中継が本当の接続元を内側へ伝える)
