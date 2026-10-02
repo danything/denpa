@@ -1602,7 +1602,8 @@ async function runJob(jobId: number): Promise<void> {
             sourceTs,
             sidecarPaths(output).dataBroadcast,
             recording,
-            encodeOptions.keep ?? null,
+            // 時刻を詰めるのは CM を実際に切れたときだけ。切れずに CM ごと焼いたなら映像の時刻のまま
+            trimmed !== null ? keep : null,
         );
         if (changes > 0) {
             console.log(`[bml] 録画のデータ放送を保存しました: ${changes} 変化 (録画 ${recording.id})`);

@@ -588,6 +588,35 @@ describe('機材の定義', () => {
         expect(readFileSync(paths().tuners, 'utf8')).not.toContain('rm -rf');
     });
 
+    /**
+     * **地上波も衛星も受ける1本 (PX-MLT など) は残しておく。** 先に並んでいても、
+     * 地上波専用が空いているならそちらを使う。兼用の1本を地上波で塞ぐと
+     * 衛星が録れなくなる (denpa の予約の割り振りは、残っている前提で数える)
+     */
+    test('空いていれば、受けられる種別の少ないチューナーから使う', async () => {
+        const put = await request('PUT', '/denpa/tuners', {
+            tuners: [
+                { name: 'mlt0', types: ['GR', 'BS', 'CS'] },
+                { name: 'gr0', types: ['GR'] },
+            ],
+        });
+        expect(put.status).toBe(200);
+
+        const gr = await open('type=GR&channel=T16&use=rec%201&priority=10');
+        await gr.reader?.read();
+        const bs = await open('type=BS&channel=BS11_0&use=rec%202&priority=10');
+        await bs.reader?.read();
+
+        const status = await tuners();
+        expect(status.map((t) => t.channel)).toEqual([
+            { type: 'BS', channel: 'BS11_0' },
+            { type: 'GR', channel: 'T16' },
+        ]);
+
+        gr.close();
+        bs.close();
+    });
+
     test('名前の無い定義は断る', async () => {
         const res = await request('PUT', '/denpa/tuners', { tuners: [{ types: ['GR'] }] });
         expect(res.status).toBe(400);

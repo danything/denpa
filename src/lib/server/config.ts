@@ -10,6 +10,7 @@
  * 追いにくくなるだけだった。**画面から変えたいものは設定画面** (settings.ts)。
  */
 
+import { dirname } from 'node:path';
 import type { CmMode, VideoCodec } from '../types';
 
 function str(key: string, fallback: string): string {
@@ -35,7 +36,7 @@ const MIN = 60 * SEC;
 
 const dbPath = str('DENPA_DB', '/app/data/denpa.db');
 /** DBの隣。運用でいちいち2つ指す意味が無い */
-const dataDir = dbPath.replace(/\/[^/]*$/, '') || '.';
+const dataDir = dirname(dbPath);
 
 export const config = {
     /**

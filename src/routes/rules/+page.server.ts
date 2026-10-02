@@ -4,7 +4,7 @@ import { genreName } from '#lib/arib.js';
 import { SERVICE_TYPE_LABEL } from '#lib/format.js';
 import { parseSearchFields } from '#lib/search.js';
 import { config } from '#lib/server/config.js';
-import { contending, type Occupant, rivalsOf } from '#lib/server/conflict.js';
+import { type Capacity, contending, type Occupant, rivalsOf } from '#lib/server/conflict.js';
 import { now, orm } from '#lib/server/db.js';
 import { CURRENT_SERVICES, watchableServices } from '#lib/server/epg.js';
 import { relative } from '#lib/server/paths.js';
@@ -174,7 +174,7 @@ export async function load({ url }) {
      * 取れなければ空 (= 何も競合として出さない)。エージェントが落ちているときに
      * 予約表を赤くしても直しようが無いので、スケジューラもそう振る舞う
      */
-    const capacity = await tunerCapacity().catch(() => new Map<string, number>());
+    const capacity = await tunerCapacity().catch((): Capacity => []);
     // 掴む区間は前後マージンぶん延びる。スケジューラと同じ物差しで数える
     const margins = { start: config.startMargin, end: config.endMargin };
     // ?edit=<id> のときは、そのルールをフォームに読み込んで書き換えられるようにする

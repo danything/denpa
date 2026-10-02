@@ -1,7 +1,7 @@
 import { and, eq, getTableColumns, gt, inArray, isNull, lte, or, sql } from 'drizzle-orm';
 import type { Reservation } from '../types';
 import { config } from './config';
-import { assign, whole } from './conflict';
+import { assign, type Capacity, capacityOf, whole } from './conflict';
 import { affected, now, orm } from './db';
 import { emit } from './events';
 import {
@@ -13,7 +13,7 @@ import {
 } from './recorder';
 import { recordings, reservations, services } from './schema';
 import { isDraining } from './shutdown';
-import { type AgentTuner, getTuners } from './tuner';
+import { getTuners } from './tuner';
 
 interface Candidate extends Reservation {
     type: string;
@@ -21,25 +21,16 @@ interface Candidate extends Reservation {
 }
 
 /**
- * チャンネル種別ごとのチューナー本数。エージェントに繋がらないときは
- * 「制限なし」を返し、予約を勝手に conflict にしない(実際に録画が始まるときに
+ * 動いているチューナーそれぞれが受けられる単位 (`Capacity`)。エージェントに繋がらないときは
+ * 空 (「制限なし」) を返し、予約を勝手に conflict にしない(実際に録画が始まるときに
  * あちらが弾くので、予約表を壊すより実行時に失敗させるほうが害が小さい)。
  */
-export async function tunerCapacity(): Promise<Map<string, number>> {
-    const capacity = new Map<string, number>();
-    let tuners: AgentTuner[];
+export async function tunerCapacity(): Promise<Capacity> {
     try {
-        tuners = await getTuners();
+        return capacityOf(await getTuners());
     } catch {
-        return capacity;
+        return [];
     }
-    for (const tuner of tuners) {
-        if (tuner.disabled) continue;
-        for (const type of tuner.types) {
-            capacity.set(type, (capacity.get(type) ?? 0) + 1);
-        }
-    }
-    return capacity;
 }
 
 export async function resolveConflicts(): Promise<{ accepted: number; rejected: number }> {
