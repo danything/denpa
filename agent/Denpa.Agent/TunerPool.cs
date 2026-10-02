@@ -508,7 +508,11 @@ public sealed class TunerPool(
                         : new JsonObject { ["type"] = lease.Type, ["channel"] = lease.Channel },
                     ["users"] = users,
                     ["pid"] = lease?.Pid,
-                    ["error"] = lease?.Error,
+                    /*
+                     * 選局の失敗が無ければ、受信機の注意書き (15V を出せないので 0V にした、など。
+                     * Px4Userland.Notice)。画面は空いている本の error を出すので、新しい欄は作らない
+                     */
+                    ["error"] = lease?.Error ?? Px4Userland.Notice(spec.Device),
                 });
             }
             return list;
