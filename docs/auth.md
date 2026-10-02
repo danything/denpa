@@ -3,21 +3,13 @@
 **口によって守り方が違います。** 画面は人が見るもので、録画のファイルは
 プレイヤー (テレビの VLC など) が取りに来るもの。同じ守り方はできません。
 
-| 探しもの | 見る場所 |
-| --- | --- |
-| 全体像 | [architecture.md](architecture.md) |
-| 環境変数の一覧 | [app.md](app.md) |
-| ホーム画面に置く | [player.md](player.md) |
-
 | 口 | 守り方 |
 | --- | --- |
-| `/api/recordings/<id>/file` (尻に `/<番組名>` が付いた形も同じ) | 期限付きのリンク (`?token=…`、`share.ts`。控えは `share_links`)。OIDC で入った画面のぶんはログインの控えも受ける |
+| `/api/recordings/<id>/file` と `/playlist` (尻に `/<番組名>` が付いた形も同じ) | 期限付きのリンク (`?token=…`、`share.ts`。控えは `share_links`)。OIDC で入った画面のぶんはログインの控えも受ける |
 | `/api/live/socket` | 使い捨ての札 (下記)。ここだけ SvelteKit に届きません |
-| それ以外 (画面と API) | OIDC (設定してあれば) |
+| それ以外 (画面と [外から使う口](api.md)) | OIDC (設定してあれば) |
 | どの口も | `TRUSTED_NETWORKS` に当たれば素通し (下記) |
-| `/login` `/login/callback` `/login/out` `/logout` | 素通し |
-| `/api/health` | 素通し |
-| `/manifest.webmanifest` | 素通し |
+| `/login*` `/logout` `/api/health` `/manifest.webmanifest` | 素通し (`auth.ts` の `OPEN_PATHS`) |
 
 **OIDC も `TRUSTED_NETWORKS` も設定していなければ、全部断ります** (403、
 理由を本文に書いて返す。[下記](#入る道が無ければ全部断る))。全部開けたいなら
@@ -89,9 +81,11 @@ URLは使い続けているかぎり切れません。全部を今すぐ切り�
 
 秘密を含むので環境変数だけから読み、設定画面には出しません。
 
-> **scheme は `x-forwarded-proto` から読みます** (`server.js` が常に設定する。
-> 選べるオプションではなくなりました)。戻ってくる口の住所も、控えの Cookie に
-> `Secure` を付けるかどうかも、リクエストの scheme で決めます。
+> **scheme は `x-forwarded-proto` から読みます** (`server.js` が常に設定する)。
+> 戻ってくる口の住所も、控えの Cookie に `Secure` を付けるかどうかも、リクエストの
+> scheme で決めます。前段が接頭辞を剥がして渡す構成 (`/denpa` の下など) では、前段が付ける
+> `X-Forwarded-Prefix` (Home Assistant は `X-Ingress-Path`) を戻ってくる口の頭に付けます
+> (`paths.ts` の `publicBase`)。登録するリダイレクト URI も接頭辞込みです。
 
 ### ライブラリを入れていません
 
@@ -152,7 +146,7 @@ TRUSTED_NETWORKS=0.0.0.0/0
 
 **見るのは住所だけで、どの名前で来たかは問いません。** LAN から外向きの
 `dp.doany.io` を開いても通ります。前段 (chart の `httpRoute`) は2つの名前を
-同じ HTTPRoute で denpa に届けるだけです。LAN 用の名前 `dp.l.doany.io` が家の中でだけ
+1つの HTTPRoute で denpa に届けるだけです。LAN 用の名前 `dp.l.doany.io` が家の中でだけ
 引けるのは DNS の側の話です ([player.md](player.md))。
 
 > **前段 (Gateway やリバースプロキシ) が居るなら `ADDRESS_HEADER=x-forwarded-for` を一緒に渡すこと。**
@@ -211,12 +205,9 @@ Deployment に付けた `secrets.infisical.com/auto-reload` で Pod も入れ替
 (denpa は Secret を環境変数で読むので、入れ替えないと古い値を掴んだまま。
 録画中なら終わるまで居座ってから)。
 
-### 前段の forward-auth は外しました
+### 前段の forward-auth は使わない
 
-前段のルートにあった `forward-auth` (oauth2-proxy) は外してあり、`dp.doany.io` のルートは
-1つです (chart の `charts/denpa/templates/httproute.yaml`)。「配信だけ forward-auth を
-通さない」仕分けは、いま denpa 側 (`auth.ts`) がやっています。
-
-**外す順番は「denpa 側を設定 → 実機で入れることを確かめる → 前段から外す」。** 逆にすると、
-OIDC の設定を間違えていたときに、誰も入れないのではなく誰でも入れる状態になります。
-oauth2-proxy 自体は、同じアプリ登録を使う他のもののために `auth` 名前空間に残っています。
+前段に `forward-auth` (oauth2-proxy) は挟みません。「配信だけ通す」仕分けは denpa 側
+(`auth.ts`) がやります。前段から外すときは「denpa 側を設定 → 実機で入れることを確かめる →
+前段から外す」の順にします。逆にすると、OIDC の設定を間違えていたときに、誰も入れないのではなく
+誰でも入れる状態になります。

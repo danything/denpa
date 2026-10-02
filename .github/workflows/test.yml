@@ -17,7 +17,7 @@ concurrency:
   group: test-denpa-${{ github.ref }}
   cancel-in-progress: true
 
-# 本番コンテナは TZ=Asia/Tokyo で動く。放送日やXMLTVのオフセットはローカル時刻で
+# 本番コンテナは TZ=Asia/Tokyo で動く。放送日や番組表の日付はローカル時刻で
 # 組み立てるので、ランナー既定のUTCのままだとテストが本番と違う値を見ることになる
 env:
   TZ: Asia/Tokyo
@@ -401,8 +401,6 @@ jobs:
                <(jq -r 'del(."//") | .[][]' tests/e2e/shards.json | sort)
           jq -e 'del(."//") | keys == ["1","2","3","4"]' tests/e2e/shards.json > /dev/null
 
-      # アプリを1度だけ組んでから、ワーカーの数だけ立てる。
-      # 偽エージェント・偽通知先もワーカーごとに1式ずつ (tests/stack.ts)
       # **ライブを生で見る道の復号器** (docs/stream.md §5.5)。ブラウザで MPEG-2 を解く WASM は
       # Dockerfile の `mpeg2wasm` 段で組む (emscripten)。E2E はイメージを使わずランナーで
       # 回すので、その段だけ組んで取り出し、`MPEG2_DIR` で denpa に渡す。
@@ -426,6 +424,8 @@ jobs:
           cache-from: type=gha,scope=mpeg2wasm
           cache-to: type=gha,mode=min,scope=mpeg2wasm
 
+      # アプリを1度だけ組んでから、ワーカーの数だけ立てる。
+      # 偽エージェント・偽通知先もワーカーごとに1式ずつ (tests/stack.ts)
       - name: E2E tests
         env:
           MPEG2_DIR: ${{ runner.temp }}/mpeg2

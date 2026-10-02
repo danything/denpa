@@ -27,7 +27,6 @@ services:
             # 開発では本物の ffmpeg (ビルドに数十分) の代わりに偽物を使う。
             # 実エンコードを試したいときだけ FFMPEG=/usr/local/bin/ffmpeg にして runtime ステージで動かす
             FFMPEG: /app/tests/fake/ffmpeg.sh
-            TUNER_AGENT_URL: http://tuner-agent:25252
             RECONCILE_INTERVAL: '60000'
             EPG_COLLECT_INTERVAL: '60000'
             SCHEDULER_TICK: '2000'
