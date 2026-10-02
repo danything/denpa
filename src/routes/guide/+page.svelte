@@ -753,7 +753,7 @@
                             }}
                     >
                         <input type="hidden" name="programId" value={program.id} />
-                        <button type="submit" class="danger outline">
+                        <button type="submit" class="danger outline" data-testid="detail-cancel">
                             予約を取り消す
                         </button>
                     </form>

@@ -318,6 +318,16 @@
     let detailCmNote = $state<string | null>(null);
     /** 詳細を開いている録画。**予約から開いたときは null** (操作は recordingActions) */
     let detailRec = $state<(typeof data.recordings)[number] | null>(null);
+    /**
+     * 詳細を開いている予約。**録画・録り逃しから開いたときは null** (操作は reservationActions)。
+     *
+     * 行そのものではなく ID で持ち、いまの一覧から引き直す。知らせで読み直すと
+     * 状態が変わる (予約済み → 録画中) ので、掴んだ行のままだと出す口がずれる
+     */
+    let detailResId = $state<number | null>(null);
+    const detailRes = $derived(
+        detailResId === null ? null : (data.reservations.find((res) => res.id === detailResId) ?? null),
+    );
 
     /** 予約・録り逃しの行に出す放送の枠 */
     function airing(row: { start_at: number; end_at: number }): string {
@@ -334,11 +344,18 @@
         notes: { title: string; text: string }[] = [],
         cmNote: string | null = null,
     ): void {
-        // 予約から開いたときは録画のボタンを出さない (openRecording が入れ直す)
+        // 開いた行の操作だけ出す。録画は openRecording、予約は openReservation が入れ直す
         detailRec = null;
+        detailResId = null;
         detailNotes = notes;
         detailCmNote = cmNoteWorthShowing(cmNote) ? cmNote : null;
         void detail.open(programId, row);
+    }
+
+    /** 予約の行から開く。取消を詳細の中にも出す (reservationActions) */
+    function openReservation(res: (typeof data.reservations)[number]): void {
+        openDetail(res.program_id, res);
+        detailResId = res.id;
     }
 
     /** 削除は2回押させる。挙動は3画面共通 ([arming.svelte.ts](../lib/arming.svelte.ts)) */
@@ -630,7 +647,7 @@
                 <div class="rows" data-testid="reservation-list">
                     {#each reservationPage.rows as res (res.id)}
                         {@const press = (event: MouseEvent | KeyboardEvent) =>
-                            rowClick(event, null, () => openDetail(res.program_id, res))}
+                            rowClick(event, null, () => openReservation(res))}
                         <div
                             data-testid="reservation-row"
                             data-reservation-id={res.id}
@@ -1169,9 +1186,37 @@
         cmNote={detailCmNote}
         onclose={() => detail.close()}
         fps={detailRec?.fps ?? null}
-        actions={detailRec === null ? undefined : recordingActions}
+        actions={detailRec !== null ? recordingActions : detailRes !== null ? reservationActions : undefined}
     />
 {/if}
+
+<!--
+    予約の詳細から取り消す。**行の「取消」と同じ口** (`?/cancel`) なので、
+    ルールが立てた予約でも作り直されない (戻すのは行の「戻す」から)。
+
+    行にしか無かった頃は、詳細を開いて中身を確かめてから要らないと分かっても、
+    一度閉じて行のボタンを探し直すことになっていた (番組表の詳細には前から在る)。
+    **取り消せたら閉じる** — 番組表の詳細で予約・取消したときと同じ。
+    取り消した行は一覧から消える (完了分を出しているときは「戻す」に変わる)
+-->
+{#snippet reservationActions()}
+    {#if detailRes !== null && active.includes(detailRes.state)}
+        <form
+            method="POST"
+            action="?/cancel"
+            use:submitting={() =>
+                async ({ result, update }) => {
+                    await update();
+                    if (result.type === 'success') detail.close();
+                }}
+        >
+            <input type="hidden" name="id" value={detailRes.id} />
+            <button type="submit" class="outline danger" data-testid="detail-cancel">予約を取り消す</button>
+        </form>
+    {/if}
+    <!-- 位置を動かさないため、いつでもここが最後 -->
+    <button type="button" class="secondary" onclick={() => detail.close()} data-testid="detail-close">閉じる</button>
+{/snippet}
 
 <!--
     その1本に対する操作。**一覧の行ではなくここに置く。**
