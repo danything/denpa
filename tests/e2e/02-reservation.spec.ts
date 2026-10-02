@@ -158,6 +158,73 @@ test.describe('予約の細かい指定', () => {
         await expect(detail).toHaveCount(0);
     });
 
+    /*
+     * 詳細を開いて中身を確かめてから要らないと分かったとき、一度閉じて行の
+     * ボタンを探し直さなくていいように。行の「取消」と同じ口を詳細にも出す
+     */
+    test('予約の詳細から取り消せる', async ({ page }) => {
+        await goto(page, '/guide?type=GR');
+        const [target] = await upcoming(page);
+        await cellOf(page, target.programId).getByTestId('program-button').click();
+        await page.getByTestId('detail-reserve').click();
+        await expect(cellOf(page, target.programId)).toContainText('予約済み');
+
+        await goto(page, '/');
+        const reservation = page.locator(
+            `[data-testid="reservation-row"][data-program-id="${target.programId}"]`,
+        );
+        await reservation.getByTestId('row-body').click();
+        const detail = page.getByTestId('program-detail');
+        await expect(detail).toBeVisible();
+
+        // 取り消せたら詳細は閉じ、行も一覧から消える (読み込み直さずに)
+        await detail.getByTestId('detail-cancel').click();
+        await expect(detail).toHaveCount(0);
+        await expect(reservation).toHaveCount(0);
+
+        // 行から取り消したときと同じ扱い (完了分にだけ出て、戻せる)
+        await goto(page, '/?all=1');
+        const canceled = page.locator(
+            `[data-testid="reservation-row"][data-program-id="${target.programId}"]`,
+        );
+        await expect(canceled).toContainText('取り消し済み');
+        await expect(canceled.getByTestId('restore-button')).toHaveCount(1);
+        // 取り消した予約の詳細には、もう取消を出さない
+        await canceled.getByTestId('row-body').click();
+        await expect(detail).toBeVisible();
+        await expect(detail.getByTestId('detail-cancel')).toHaveCount(0);
+        await page.getByTestId('detail-close').click();
+
+        // 番組表の詳細でも、取り消したあとは「予約する」に戻っている
+        await goto(page, '/guide?type=GR');
+        const cell = cellOf(page, target.programId);
+        await expect(cell).not.toContainText('予約済み');
+        await cell.getByTestId('program-button').click();
+        await expect(detail.getByTestId('detail-reserve')).toBeVisible();
+        await expect(detail.getByTestId('detail-cancel')).toHaveCount(0);
+    });
+
+    test('番組表の詳細から取り消すと、その場で予約する口に戻る', async ({ page }) => {
+        await goto(page, '/guide?type=GR');
+        const [target] = await upcoming(page);
+        const cell = cellOf(page, target.programId);
+        const detail = page.getByTestId('program-detail');
+
+        await cell.getByTestId('program-button').click();
+        await detail.getByTestId('detail-reserve').click();
+        await expect(cell).toContainText('予約済み');
+
+        await cell.getByTestId('program-button').click();
+        await expect(detail.getByTestId('detail-reserve')).toHaveCount(0);
+        await detail.getByTestId('detail-cancel').click();
+        await expect(detail).toHaveCount(0);
+        await expect(cell).not.toContainText('予約済み');
+
+        await cell.getByTestId('program-button').click();
+        await expect(detail.getByTestId('detail-reserve')).toBeVisible();
+        await expect(detail.getByTestId('detail-cancel')).toHaveCount(0);
+    });
+
     test('放送が終わった番組には予約する口を出さない', async ({ page }) => {
         // 番組表には過去の番組も並んでいる。押せてしまうと、押した先で断られるだけ
         await goto(page, '/guide?type=GR');

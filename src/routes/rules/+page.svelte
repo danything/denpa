@@ -699,7 +699,24 @@
                 </a>
             {/if}
 
-            {#if opened !== null && opened.reservation_state === null && opened.end_at > clock}
+            {#if opened !== null && opened.reservation_id !== null}
+                <!--
+                    行の「取消」と同じ口。ルールが立てた予約でも作り直されず、
+                    戻すのは予約一覧の「戻す」から (cancelReservation)
+                -->
+                <form
+                    method="POST"
+                    action="?/cancelReservation"
+                    use:submitting={() =>
+                        async ({ result, update }) => {
+                            await update();
+                            if (result.type === 'success') close();
+                        }}
+                >
+                    <input type="hidden" name="reservationId" value={opened.reservation_id} />
+                    <button type="submit" class="outline danger" data-testid="rule-detail-cancel">予約を取り消す</button>
+                </form>
+            {:else if opened !== null && opened.reservation_state === null && opened.end_at > clock}
                 <!--
                     録画のしかたはここでは選ばせない。設定画面の1箇所で決める
                     (同じ選択肢を予約・ルール・設定に並べると、どれで決まったのか
