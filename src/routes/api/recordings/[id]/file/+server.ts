@@ -35,16 +35,36 @@ function audioOnly(path: string, request: Request): Response {
             'adts',
             'pipe:1',
         ],
-        { stdout: 'pipe', stderr: 'ignore' },
+        { stdout: 'pipe', stderr: 'pipe' },
     );
+    // `-loglevel error` なので出るのは失敗の理由だけ。落ちたときにログへ回す
+    const stderr = new Response(ffmpeg.stderr).text().catch(() => '');
+    let canceled = false;
     const reader = ffmpeg.stdout.getReader();
     const body = new ReadableStream<Uint8Array>({
         async pull(controller) {
             const { done, value } = await reader.read();
-            if (done) controller.close();
-            else controller.enqueue(value);
+            if (!done) {
+                controller.enqueue(value);
+                return;
+            }
+            /*
+             * **途中で落ちたら、ログに残して応答もエラーで終える。** 200 のまま静かに閉じると、
+             * 受け手は最後まで届いたと思い、どこで何が起きたのかも残らなかった (レビュー指摘)
+             */
+            const code = await ffmpeg.exited;
+            // 受け手が閉じたあとは、もう閉じてある (二度閉じると投げる)
+            if (canceled) return;
+            if (code === 0) {
+                controller.close();
+                return;
+            }
+            const why = (await stderr).trim().split('\n').slice(-3).join(' / ');
+            console.warn(`[audio] 音声だけの取り出しが止まりました (${code}): ${path}: ${why}`);
+            controller.error(new Error(`ffmpeg exited with ${code}`));
         },
         cancel() {
+            canceled = true;
             ffmpeg.kill();
         },
     });
