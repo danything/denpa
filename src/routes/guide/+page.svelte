@@ -426,7 +426,8 @@
         編集はルール画面に寄せてあり (条件を2箇所で書けるようにすると判定が
         ずれる)、探す範囲もあちらで切り替える。既定は番組名だけ
     -->
-        <form method="GET" action={resolve('rules')} class="cluster search" data-testid="guide-filter">
+        <!-- role="search" で入力欄とボタンを1本につなぐ (Pico)。種別の切り替えと同じ見た目の決まり -->
+        <form method="GET" action={resolve('rules')} role="search" class="search" data-testid="guide-filter">
             <input
                 type="search"
                 name="keyword"
@@ -799,6 +800,9 @@
         width: auto;
     }
     .search {
+        /* Pico の role=search は横いっぱい・下に余白。ここでは右に寄せて置くだけ */
+        width: auto;
+        margin-bottom: 0;
         margin-left: auto;
     }
     .keyword {

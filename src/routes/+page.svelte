@@ -637,7 +637,7 @@
                         aria-label="予約を絞り込む"
                         bind:value={reservationQuery}
                     />
-                    <a class="button secondary outline small" href={data.showFinished ? '/' : '/?all=1'}>
+                    <a class="button secondary outline small" href={data.showFinished ? resolve('') : `${resolve('')}?all=1`}>
                         {data.showFinished ? '進行中のみ' : '完了分も表示'}
                     </a>
                 </div>
@@ -783,7 +783,7 @@
                             aria-label="録画を絞り込む"
                         />
                     </form>
-                    <a class="button secondary outline small" href={data.showDeleted ? '/' : '/?deleted=1'}>
+                    <a class="button secondary outline small" href={data.showDeleted ? resolve('') : `${resolve('')}?deleted=1`}>
                         {data.showDeleted ? '削除済みを隠す' : '削除済みも表示'}
                     </a>
                     <form method="POST" action="?/reconcile" use:submitting>
