@@ -41,6 +41,8 @@ test.describe('自動予約ルール', () => {
             'キーワード・チャンネル・ジャンルのいずれかを指定してください',
         );
         await expect(page.getByTestId('rule-row')).toHaveCount(0);
+        // 1件も無いときは、空の札の隅ではなく真ん中に、次にすることまで出す
+        await expect(page.getByTestId('rule-empty')).toContainText('「追加」すると');
     });
 
     test('キーワードルールを作ると予約が自動で立ち、削除できる', async ({ page, request }) => {
