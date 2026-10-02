@@ -38,7 +38,7 @@ function audioOnly(path: string, request: Request): Response {
         { stdout: 'pipe', stderr: 'pipe' },
     );
     // `-loglevel error` なので出るのは失敗の理由だけ。落ちたときにログへ回す
-    const stderr = new Response(ffmpeg.stderr).text();
+    const stderr = new Response(ffmpeg.stderr).text().catch(() => '');
     let canceled = false;
     const reader = ffmpeg.stdout.getReader();
     const body = new ReadableStream<Uint8Array>({
@@ -53,7 +53,9 @@ function audioOnly(path: string, request: Request): Response {
              * 受け手は最後まで届いたと思い、どこで何が起きたのかも残らなかった (レビュー指摘)
              */
             const code = await ffmpeg.exited;
-            if (code === 0 || canceled) {
+            // 受け手が閉じたあとは、もう閉じてある (二度閉じると投げる)
+            if (canceled) return;
+            if (code === 0) {
                 controller.close();
                 return;
             }
