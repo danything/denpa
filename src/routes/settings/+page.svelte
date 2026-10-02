@@ -81,16 +81,29 @@
     testid: string,
     title: string,
     hint: string,
+    more: string = '',
     wrap: string = '',
 )}
-    <!-- チェック + 見出し + 小さい説明。この画面の決まりの形 (6行が同じ骨格だった) -->
-    <label class="check-row {wrap}">
-        <input type="checkbox" {name} {checked} data-testid={testid} />
-        <span class="small">
-            {title}
-            <span class="hint">{hint}</span>
-        </span>
-    </label>
+    <!--
+        チェック + 見出し + 1行の要点。この画面の決まりの形 (6行が同じ骨格だった)。
+        続きの説明 (`more`) は畳んで、label の外に置く — label の中に details を
+        入れると、「詳しく」を押したつもりでチェックまで切り替わりかねない
+    -->
+    <div class="check-item {wrap}">
+        <label class="check-row">
+            <input type="checkbox" {name} {checked} data-testid={testid} />
+            <span class="small">
+                {title}
+                <span class="hint">{hint}</span>
+            </span>
+        </label>
+        {#if more !== ''}
+            <details class="more">
+                <summary>詳しく</summary>
+                <p>{more}</p>
+            </details>
+        {/if}
+    </div>
 {/snippet}
 
 <Toasts {notices} source={form} />
@@ -153,14 +166,20 @@
                     </label>
                     {#if recording.codecs.length === 0}
                         <span class="hint">
-                            どちらも選ばないと<strong>エンコードせず</strong>、
-                            生TSのまま残します。CM のチャプターや字幕トラックも付きません
+                            選ばないと<strong>エンコードせず</strong>、生TSのまま残します
                         </span>
+                        <details class="more">
+                            <summary>詳しく</summary>
+                            <p>CM のチャプターや字幕トラックも付きません。</p>
+                        </details>
                     {:else if recording.codecs.length === 2}
-                        <span class="hint">
-                            1本の録画を両方でエンコードします (再生・ダウンロードは既定で AV1。
-                            テレビごとの設定で H.264 を渡せます)
-                        </span>
+                        <span class="hint">1本の録画を両方でエンコードします</span>
+                        <details class="more">
+                            <summary>詳しく</summary>
+                            <p>
+                                再生・ダウンロードは既定で AV1 です。テレビごとの設定で H.264 を渡せます。
+                            </p>
+                        </details>
                     {/if}
                 </fieldset>
                 <!--
@@ -179,6 +198,7 @@
                     'global-keep',
                     '生TSも残す',
                     'エンコードしたあとも元のTSを消しません。容量を多く使います',
+                    '',
                     'self-center',
                 )}
                 <label class="field">
@@ -212,25 +232,31 @@
                     数字 (1〜8) をそのまま出しても「6 は高いのか」を考えさせる
                     だけなので、言葉で選ばせる
                 -->
-                <label class="field">
-                    <span class="label">ロゴの重み</span>
-                    <select
-                        name="logoLevel"
-                        disabled={recording.cmDetector !== 'jls'}
-                    >
-                        <option value="8" selected={recording.logoLevel >= 8}> ロゴを最優先する </option>
-                        <option value="6" selected={recording.logoLevel < 8 && recording.logoLevel >= 5}>
-                            ふつう (おすすめ)
-                        </option>
-                        <option value="3" selected={recording.logoLevel < 5 && recording.logoLevel >= 2}>
-                            ロゴは参考程度
-                        </option>
-                        <option value="1" selected={recording.logoLevel <= 1}> ロゴを使わない </option>
-                    </select>
-                    <span class="hint">
-                        ロゴは合っているのにCMを取り違えるなら「最優先」寄りに、覚えたロゴ自体が怪しいなら「参考程度」寄りにしてください
-                    </span>
-                </label>
+                <div class="field">
+                    <label class="field">
+                        <span class="label">ロゴの重み</span>
+                        <select
+                            name="logoLevel"
+                            disabled={recording.cmDetector !== 'jls'}
+                        >
+                            <option value="8" selected={recording.logoLevel >= 8}> ロゴを最優先する </option>
+                            <option value="6" selected={recording.logoLevel < 8 && recording.logoLevel >= 5}>
+                                ふつう (おすすめ)
+                            </option>
+                            <option value="3" selected={recording.logoLevel < 5 && recording.logoLevel >= 2}>
+                                ロゴは参考程度
+                            </option>
+                            <option value="1" selected={recording.logoLevel <= 1}> ロゴを使わない </option>
+                        </select>
+                        <span class="hint">CMを取り違えるときに変えます</span>
+                    </label>
+                    <details class="more">
+                        <summary>詳しく</summary>
+                        <p>
+                            ロゴは合っているのにCMを取り違えるなら「最優先」寄りに、覚えたロゴ自体が怪しいなら「参考程度」寄りにしてください。
+                        </p>
+                    </details>
+                </div>
                 <!--
                     コマ数 (30/60) は本編映像から実測して決める (encoder.measureSmoothMotion)。
                     放送は素材が何でも 1080i/60 で来るので、ジャンルにもTSのヘッダにも
@@ -242,7 +268,8 @@
                     recording.fpsDetect,
                     'global-fps-detect',
                     'コマ数を映像から決める',
-                    '同じコマが続く映像 (アニメなど) は 30コマでエンコードし、時間とサイズを半分にします。外すとすべて 60コマになります',
+                    'アニメなどは 30コマにして、時間とサイズを半分にします',
+                    '同じコマが続く映像 (アニメなど) を見分けて 30コマでエンコードします。外すとすべて 60コマになります。',
                 )}
                 {@render checkRow(
                     'freeOnly',
@@ -250,6 +277,7 @@
                     'global-free-only',
                     '自動予約は無料放送だけにする',
                     '契約していない有料放送は、録画してもスクランブルのままで観られません',
+                    '',
                     'span-2',
                 )}
                 <div class="span-2">
@@ -268,14 +296,27 @@
         <section class="panel card" data-testid="vlc-card">
             <h2>テレビで再生 (VLC)</h2>
             <p class="small lead">
-                テレビの VLC の「リモートアクセス」を使い、<strong>いま開いている端末から</strong>録画を
-                テレビで再生します。VLC で <strong>その他 → リモートアクセス</strong> を有効にして、ここに
-                テレビを登録すると、録画詳細に「テレビで再生」が出ます。初回だけ
-                VLC のペア設定が開きます。セキュアな接続 (自己署名の証明書) を受け入れ、
-                テレビに出る6桁のコードを入れれば、次からはそのまま再生できます。
-                AV1 を再生できないテレビは、コーデックを H.264 か生TSにすると、
-                そのテレビにだけ別のファイルを渡します。
+                <strong>いま開いている端末から</strong>、テレビの VLC で録画を再生します
             </p>
+            <details class="more">
+                <summary>詳しく</summary>
+                <p>
+                    テレビの VLC の「リモートアクセス」を使います。VLC で
+                    <strong>その他 → リモートアクセス</strong> を有効にして、ここにテレビを登録すると、
+                    録画詳細に「テレビで再生」が出ます。
+                </p>
+                <p>
+                    初回だけ VLC のペア設定が開きます。セキュアな接続 (自己署名の証明書) を受け入れ、
+                    テレビに出る6桁のコードを入れれば、次からはそのまま再生できます。
+                </p>
+                <p>
+                    AV1 を再生できないテレビは、コーデックを H.264 か生TSにすると、
+                    そのテレビにだけ別のファイルを渡します。
+                </p>
+                <p>
+                    名前が空ならボタンに IP を表示します。ポートが空なら VLC の既定 (8080) を使います。
+                </p>
+            </details>
             <form method="POST" action="?/saveVlc" use:submitting={keepValues} class="stack">
                 {#each tvRows as row (row)}
                     <div class="tv-row">
@@ -322,10 +363,6 @@
                 {:else}
                     <p class="small muted">まだテレビがありません</p>
                 {/each}
-                <span class="hint">
-                    名前が空ならボタンに IP を表示します。
-                    ポートが空なら VLC の既定 (8080) を使います
-                </span>
                 <div class="cluster">
                     <button
                         type="button"
@@ -342,11 +379,14 @@
 
         <section class="panel card">
             <h2>通知</h2>
-            <p class="small lead">
-                録画の開始・完了・失敗などを外部に通知します。Discord や Slack の Incoming Webhook の URL
-                をそのまま入れられます。
-                録画の失敗は画面を開くまで気づけないので、せめて「録画失敗」は送っておくと安心です。
-            </p>
+            <p class="small lead">録画の開始・完了・失敗などを外部に通知します</p>
+            <details class="more">
+                <summary>詳しく</summary>
+                <p>Discord や Slack の Incoming Webhook の URL をそのまま入れられます。</p>
+                <p>
+                    録画の失敗は画面を開くまで気づけないので、せめて「録画失敗」は送っておくと安心です。
+                </p>
+            </details>
 
             {#if form?.tested}
                 <div class="notice" data-testid="webhook-tested">テスト送信の結果: {form.tested}</div>
@@ -445,11 +485,15 @@
         -->
         <section class="panel card">
             <h2>データ放送</h2>
-            <p class="small lead">
-                テレビの初期設定で入れる郵便番号です。データ放送 (d ボタン) の
-                <strong>天気・地域のニュース・防災情報</strong>は、これで地域が決まります。
-                未設定だと「郵便番号が正しく設定されていません」と表示され、その欄は空のままです。
-            </p>
+            <p class="small lead">データ放送 (d ボタン) の地域を、郵便番号で決めます</p>
+            <details class="more">
+                <summary>詳しく</summary>
+                <p>
+                    テレビの初期設定で入れる郵便番号です。データ放送の
+                    <strong>天気・地域のニュース・防災情報</strong>は、これで地域が決まります。
+                </p>
+                <p>未設定だと「郵便番号が正しく設定されていません」と表示され、その欄は空のままです。</p>
+            </details>
             <form method="POST" action="?/saveBroadcast" use:submitting={keepValues} class="wrap-form">
                 <label class="field">
                     <span class="label">郵便番号</span>
@@ -475,22 +519,30 @@
                     放送側が案内します — **それは事実の通りなので、
                     黙って入れない**
                 -->
-                <label class="check-row full">
-                    <input
-                        type="checkbox"
-                        name="bmlNetwork"
-                        checked={data.broadcast.bmlNetwork}
-                        data-testid="bml-network"
-                    />
-                    <span class="small">
-                        双方向 (通信系コンテンツ) を使う
-                        <span class="hint">
-                            オンにすると、denpa が<strong>放送局のサーバと代わりに通信します</strong> (受信も送信も)。
-                            番組の応募や投票もそのまま送られます。オフのときは、放送側に
-                            「インターネットに接続されていません」と表示されます
+                <div class="check-item full">
+                    <label class="check-row">
+                        <input
+                            type="checkbox"
+                            name="bmlNetwork"
+                            checked={data.broadcast.bmlNetwork}
+                            data-testid="bml-network"
+                        />
+                        <span class="small">
+                            双方向 (通信系コンテンツ) を使う
+                            <span class="hint">
+                                番組の<strong>応募や投票も放送局へ送られます</strong>
+                            </span>
                         </span>
-                    </span>
-                </label>
+                    </label>
+                    <details class="more">
+                        <summary>詳しく</summary>
+                        <p>
+                            オンにすると、denpa が放送局のサーバと代わりに通信します (受信も送信も)。
+                            番組の応募や投票もそのまま送られます。
+                        </p>
+                        <p>オフのときは、放送側に「インターネットに接続されていません」と表示されます。</p>
+                    </details>
+                </div>
 
                 <div class="full">
                     <button type="submit" data-testid="save-broadcast">保存</button>
@@ -504,12 +556,20 @@
         -->
         <section class="panel card">
             <h2>GPU</h2>
-            <p class="small lead">
-                GPU (Intel QSV / VA-API) でエンコードするかを、デバイスごと・コーデックごとに選びます。
-                使えるものには自動で印が付きます。両方に付いていれば QSV → VA-API → ソフトウェアの
-                順に試し、失敗したら次の方法でやり直します。GPU が2枚あれば「こちらは AV1、
-                あちらは H.264」のように分けられ、同じコーデックを扱えるデバイスが複数あれば順番に使います。
-            </p>
+            <p class="small lead">GPU でエンコードするかを、デバイスとコーデックごとに選びます</p>
+            <details class="more">
+                <summary>詳しく</summary>
+                <p>
+                    使える GPU は Intel QSV / VA-API です。使えるものには自動で印が付きます。
+                </p>
+                <p>
+                    両方に付いていれば QSV → VA-API → ソフトウェアの順に試し、失敗したら次の方法でやり直します。
+                </p>
+                <p>
+                    GPU が2枚あれば「こちらは AV1、あちらは H.264」のように分けられ、
+                    同じコーデックを扱えるデバイスが複数あれば順番に使います。
+                </p>
+            </details>
             {#await data.hw}
                 <span class="hint" data-testid="hw-status">GPU を確認中…</span>
             {:then hw}
@@ -566,11 +626,19 @@
         <section class="panel card">
             <h2>EPGStation からの引き継ぎ</h2>
             <p class="small lead">
-                EPGStation のデータベースから、<strong>ルール・手動予約・録画</strong>を
-                取り込みます。録画は denpa
-                のフォルダ構成に置き直し、番組情報とサムネイルも作ります。何度実行しても、取り込み済みのものは飛ばします。
-                ルールによる予約は、取り込んだルールから denpa が作り直します。
+                EPGStation から<strong>ルール・手動予約・録画</strong>を取り込みます
             </p>
+            <details class="more">
+                <summary>詳しく</summary>
+                <p>
+                    EPGStation のデータベースから読みます。録画は denpa のフォルダ構成に置き直し、
+                    番組情報とサムネイルも作ります。
+                </p>
+                <p>
+                    何度実行しても、取り込み済みのものは飛ばします。ルールによる予約は、取り込んだルールから
+                    denpa が作り直します。
+                </p>
+            </details>
 
             {#if !data.migrate.available}
                 <div class="notice warning" data-testid="migrate-unavailable">
@@ -583,14 +651,16 @@
                         false,
                         'migrate-apply',
                         '取り込む',
-                        '外したままだと、何が取り込まれるかを表示するだけで、ファイルにもデータベースにも触りません',
+                        '外したままなら下見だけで、何も変えません',
+                        '何が取り込まれるかを表示するだけで、ファイルにもデータベースにも触りません。',
                     )}
                     {@render checkRow(
                         'move',
                         false,
                         'migrate-move',
                         'コピーではなく移動する',
-                        '既定はコピーです。中身を確かめてから EPGStation 側を消せます。空き容量が足りないときだけ移動にしてください',
+                        '空き容量が足りないときだけ移動にしてください',
+                        '既定はコピーです。中身を確かめてから EPGStation 側を消せます。',
                     )}
                     <div>
                         <button type="submit" disabled={migrate.state === 'running'} data-testid="migrate-run">
@@ -659,10 +729,7 @@
         -->
         <section class="panel card">
             <h2>画面の高さを見る</h2>
-            <p class="small lead">
-                右下に、その端末での高さを出します。<strong>この端末だけ</strong>の設定で、
-                サーバにも他の端末にも伝わりません。
-            </p>
+            <p class="small lead">右下に、この端末での画面の高さを出します</p>
 
             <label class="check">
                 <input
@@ -676,11 +743,17 @@
                 <span>高さの表示を出す</span>
             </label>
 
-            <p class="hint">
-                出るのは「窓 / 枠 / 中身 = はみ出し」「dvh / svh / lvh / vh の実測」と、
-                <strong>はみ出している要素</strong>。はみ出しが 0 でなければページごと動きます。
-                単位の4つが同じ数なら、食い違いが原因ではありません。
-            </p>
+            <details class="more">
+                <summary>詳しく</summary>
+                <p>
+                    <strong>この端末だけ</strong>の設定で、サーバにも他の端末にも伝わりません。
+                </p>
+                <p>
+                    出るのは「窓 / 枠 / 中身 = はみ出し」「dvh / svh / lvh / vh の実測」と、
+                    <strong>はみ出している要素</strong>。はみ出しが 0 でなければページごと動きます。
+                    単位の4つが同じ数なら、食い違いが原因ではありません。
+                </p>
+            </details>
         </section>
     </div>
 </div>
@@ -715,14 +788,18 @@
     .lead {
         opacity: 0.7;
     }
+    /* 要点の1行と「詳しく」は1つの話。カードの段の間隔 (0.75rem) で離さない */
+    .lead + .more {
+        margin-top: -0.5rem;
+    }
     .label {
         font-size: 0.875rem;
         font-weight: 500;
     }
     .hint {
         display: block;
-        font-size: 0.75rem;
-        opacity: 0.6;
+        font-size: 0.8rem;
+        opacity: 0.7;
     }
     .mono {
         font-family: var(--pico-font-family-monospace);
@@ -741,6 +818,15 @@
         .self-center {
             align-self: center;
         }
+    }
+    .check-item {
+        display: flex;
+        flex-direction: column;
+        gap: 0.25rem;
+    }
+    /* 「詳しく」はチェックの横の文に揃える (箱の幅 1.25rem + 間 0.5rem) */
+    .check-item > .more {
+        margin-inline-start: 1.75rem;
     }
     .check-row {
         display: flex;
