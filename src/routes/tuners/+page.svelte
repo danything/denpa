@@ -37,7 +37,7 @@
      * エージェントにも控えはあるが、聞きに行かない (+page.server.ts)
      */
     const coverage = $derived(data.channels);
-    /** そこに乗っている局の総数と、番組表が届いている局の数 */
+    /** 乗っている局をすべて並べたもの */
     const services = $derived(coverage.flatMap((channel) => channel.services));
 
     /*
@@ -738,22 +738,6 @@
 </div>
 
 <style>
-    .columns {
-        display: grid;
-        align-items: start;
-        gap: 1.5rem;
-    }
-    @media (min-width: 1280px) {
-        .columns {
-            grid-template-columns: repeat(2, minmax(0, 1fr));
-        }
-    }
-    .column {
-        display: flex;
-        min-width: 0;
-        flex-direction: column;
-        gap: 1.5rem;
-    }
     .card {
         display: flex;
         flex-direction: column;
@@ -806,12 +790,6 @@
         flex-wrap: wrap;
         gap: 1rem;
         margin-top: 0.25rem;
-    }
-    .progress-block {
-        display: flex;
-        flex-direction: column;
-        gap: 0.5rem;
-        margin-top: 1rem;
     }
     .log {
         max-height: 16rem;
@@ -888,8 +866,5 @@
         padding: 0.5rem;
         border: 1px solid var(--dp-base-300);
         border-radius: 0.25rem;
-    }
-    .cm-logo summary {
-        cursor: pointer;
     }
 </style>

@@ -56,7 +56,6 @@
     const seedGenres = $derived(data.seed?.genres ?? []);
     const seedFields = $derived(parseSearchFields(data.seed?.search_fields));
 
-
     /**
      * プレビューの行から開く番組詳細 (detail.svelte.ts)。予約一覧と同じ見せ方。
      *
@@ -162,7 +161,6 @@
 
     /** 押した結果 */
     const notices = $derived<Notice[]>(errorNotice(form, 'rule-error'));
-
 </script>
 
 <!--
@@ -265,11 +263,6 @@
                                         max="9"
                                         data-testid="rule-priority"
                                     />
-                                    <!--
-                            **比べる相手は予約だけ。** チューナー画面に出ている「掴む強さ」
-                            (番組表 3 / スキャン 5 …) とは別の物差しで、そちらとは比べない。
-                            録画は必ずいちばん強い値で掴むので、番組表集めに負けることはない
-                        -->
                                     <span class="hint">
                                         チューナーが足りないときは<strong>大きいほうを録ります</strong>
                                     </span>
@@ -655,7 +648,7 @@
                             分からなかった。次に何をすればよいかも添える
                         -->
                         <div class="empty" data-testid="rule-empty">
-                            <p class="empty-title">ルールはまだありません</p>
+                            <p class="bold">ルールはまだありません</p>
                             <p class="small muted">
                                 キーワードを入れて「追加」すると、合う番組を自動で予約します
                             </p>
@@ -803,6 +796,10 @@
         min-height: 0;
         flex: 1 1 0%;
         padding: 0;
+    }
+    .form-card,
+    .preview,
+    .rule-list {
         box-shadow: 0 1px 3px rgb(0 0 0 / 0.2);
     }
     @media (min-width: 768px) {
@@ -959,7 +956,6 @@
         flex-direction: column;
         gap: 0.5rem;
         padding: 1.5rem;
-        box-shadow: 0 1px 3px rgb(0 0 0 / 0.2);
     }
     .preview-title {
         font-size: 1rem;
@@ -1001,7 +997,6 @@
     .rule-list {
         flex-shrink: 0;
         padding: 0;
-        box-shadow: 0 1px 3px rgb(0 0 0 / 0.2);
     }
     .rule-row {
         display: flex;
@@ -1021,8 +1016,8 @@
         gap: 0.5rem;
         padding: 0.5rem 0.75rem;
         border-bottom: 1px solid var(--dp-base-300);
-        /* 下を流れる行が透けないように。札と同じ地の色 */
-        background: var(--pico-card-background-color);
+        /* 下を流れる行が透けないように。札 (.panel) と同じ地の色 */
+        background: var(--dp-surface);
         border-radius: var(--pico-border-radius) var(--pico-border-radius) 0 0;
     }
     .filter-bar input {
@@ -1048,9 +1043,6 @@
         .empty {
             height: 100%;
         }
-    }
-    .empty-title {
-        font-weight: 700;
     }
     .conditions {
         display: flex;

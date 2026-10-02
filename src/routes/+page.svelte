@@ -562,7 +562,7 @@
 
     そこで**どの幅でも同じ1つの形**にした。左に「状態 + 番組名 + その他ぜんぶ」、
     右に押すもの。狭いところでは押すものが下へ回り込むだけで、出るものは変わらない。
-    押すものは指で押せる大きさ (既定の btn) にしてある
+    押すものは指で押せる大きさ (既定のボタン) にしてある
 -->
 {#snippet title(state: string, badge: string, name: string, testid: string)}
     <div class="cluster">
@@ -1124,9 +1124,9 @@
                                 </div>
 
                                 <!--
-                                    押すものはすべて枠付きにする。btn-ghost は枠も背景も
-                                    無いので、行の文字と見分けが付かず、どこからどこまでが
-                                    押せるのか分からなかった
+                                    押すものはすべて枠付きにする。枠も地も無いボタン (ghost) は
+                                    行の文字と見分けが付かず、どこからどこまでが押せるのか
+                                    分からなかった
                                 -->
                                 <div class="row-actions">
                                     <!--
@@ -1551,16 +1551,11 @@
     }
     .board-head h2 {
         font-size: 1.125rem;
-        margin: 0;
     }
     /* 絞り込みの欄。予約側と録画側で同じ形 (録画側だけ送れる form の中に居る) */
-    .search {
-        margin: 0;
-    }
     .filter {
         width: 10rem;
         height: auto;
-        margin: 0;
         padding-block: 0.3rem;
         font-size: 0.85rem;
     }
@@ -1569,9 +1564,14 @@
             width: 14rem;
         }
     }
-    /* 残りいっぱいまで伸ばして、中だけスクロールさせる。2つ並べたときに、
-       片方が長いともう片方が下に置いていかれるため */
+    /*
+     * 残りいっぱいまで伸ばして、中だけスクロールさせる。2つ並べたときに、
+     * 片方が長いともう片方が下に置いていかれるため。
+     * 縦の flex なのは、空の札 (`.empty`) を枠の真ん中に置くため
+     */
     .board-box {
+        display: flex;
+        flex-direction: column;
         overflow: auto;
         border-radius: 1rem;
         background: var(--dp-surface);
@@ -1639,14 +1639,8 @@
      * **一覧が空のとき。** 「録画はありません」を行と同じ小さな字で左上に置いていた
      * 頃は、大きな枠の隅に一言あるだけで、壊れているのか空なのか読み取れなかった。
      * 枠の真ん中に置き、次にすること (番組表・ルール) への口を添える。
-     *
-     * 真ん中に寄せるために、枠と一覧を縦の flex にして空の札を残りいっぱいに伸ばす。
      * 畳まれる幅では枠が中身の高さなので、上下の余白だけが効く
      */
-    .board-box {
-        display: flex;
-        flex-direction: column;
-    }
     .rows {
         display: flex;
         flex: 1 0 auto;
@@ -1661,9 +1655,6 @@
         gap: 0.5rem;
         padding: 2.5rem 1rem;
         text-align: center;
-    }
-    .empty p {
-        margin: 0;
     }
     .empty-title {
         font-weight: 600;
@@ -1685,7 +1676,6 @@
         display: inline-flex;
         align-items: center;
         justify-content: center;
-        margin: 0;
     }
     .menu-link {
         color: inherit;
@@ -1784,9 +1774,7 @@
         position: absolute;
         inset-inline: 0;
         bottom: 0;
-        width: 100%;
         height: 0.25rem;
-        margin: 0;
         border-radius: 0;
     }
     .row-bar.success {
@@ -1808,7 +1796,6 @@
     }
     .menu-button {
         width: 100%;
-        margin: 0;
         border: 0;
         background: transparent;
         color: inherit;

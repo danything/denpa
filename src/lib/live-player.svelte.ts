@@ -143,7 +143,8 @@ const HOLD_DATA = 300;
  */
 function remember(target: Tuned): void {
     const value = encodeURIComponent(JSON.stringify(target));
-    document.cookie = `${LAST_COOKIE}=${value}; path=/live; max-age=31536000; samesite=lax`;
+    // 道は接頭辞込み。`/live` と決め打ちすると、前段の接頭辞の下では読む画面に届かない
+    document.cookie = `${LAST_COOKIE}=${value}; path=${resolve('live')}; max-age=31536000; samesite=lax`;
 }
 
 /**

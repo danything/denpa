@@ -159,7 +159,7 @@
     /*
      * `/offline` (端末に保存した録画) はここに並べない。ふだんの操作は一覧で
      * 全部できて、あの画面が要るのは**電波が無いとき**だけ — そのときは
-     * サービスワーカーが勝手にあそこへ落とす (service-worker.ts)
+     * サービスワーカーが勝手にあそこへ落とす (service-worker/index.ts)
      */
     const links = [
         { href: '/', label: '予約と録画' },
@@ -430,20 +430,10 @@
         align-items: center;
         gap: 0.25rem;
     }
-    .actions form {
-        margin: 0;
-    }
-    ul.links,
-    ul.burger-list {
-        margin: 0;
-        padding: 0;
-        list-style: none;
-    }
+    /* 並べ方の余白は Pico の `nav ul` / `nav li` が消す (app.css で間を 0 にしてある)。印だけ `ul li` に残る */
     ul.links li,
     ul.burger-list li {
         list-style: none;
-        margin: 0;
-        padding: 0;
     }
     ul.links {
         display: none;
@@ -486,7 +476,6 @@
     }
     .burger {
         position: relative;
-        margin: 0;
     }
     .burger summary {
         display: inline-flex;
@@ -501,16 +490,12 @@
         margin-bottom: 0;
         padding: 0.3rem 0.65rem;
         border-radius: var(--pico-border-radius);
-        list-style: none;
         cursor: pointer;
         color: inherit;
     }
     .burger summary:hover,
     .burger[open] summary {
         background: var(--dp-base-200);
-    }
-    .burger summary::-webkit-details-marker {
-        display: none;
     }
     .burger summary::after {
         display: none;
@@ -526,9 +511,7 @@
         position: absolute;
         right: 0;
         z-index: 50;
-        margin-top: 0.5rem;
         width: 12rem;
-        padding: 0.25rem;
         border-radius: 0.75rem;
         background: var(--dp-surface);
         border: 1px solid var(--dp-base-300);
@@ -536,8 +519,6 @@
     }
     .burger-list a {
         display: block;
-        /* Pico の `nav li a` の負の余白を消す。残ると項目が箱の外へ寄る */
-        margin: 0;
         padding: 0.45rem 0.75rem;
         border-radius: 0.5rem;
         color: inherit;

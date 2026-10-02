@@ -12,9 +12,10 @@ import { join } from 'node:path';
 const ROOT = join(import.meta.dir);
 const SERVER =
     /(^|\/)(lib\/server\/|hooks\.server\.ts$|.*\+server\.ts$|.*\+page\.server\.ts$|.*\+layout\.server\.ts$)/;
-// `href={x ? '/' : '/?deleted=1'}` のように、式の中に根から書いた文字列があるものも拾う
+// `href={x ? '/' : '/?deleted=1'}` のように、式の中に根から書いた文字列があるものも拾う。
+// cookie の `path=/…` も同じ (接頭辞の下では、その画面に cookie が届かない)
 const ABSOLUTE =
-    /(?:href|src|action|formaction)="\/|(?:href|src|action)=\{[^}]*['"`]\/(?!\/)|['"`]\/api\/|goto\(['`]\//;
+    /(?:href|src|action|formaction)="\/|(?:href|src|action)=\{[^}]*['"`]\/(?!\/)|['"`]\/api\/|goto\(['`]\/|path=\//;
 /** 頭を呼ぶ側が付けるもの (Service Worker からも読まれる。offline-db.ts の downloadRequests) */
 const PREFIXED_BY_CALLER = /^lib\/offline-db\.ts$/;
 /** 接頭辞を後から足して使う定数 (live.ts の SOCKET_PATH・raw/engine.ts の DECODER) */

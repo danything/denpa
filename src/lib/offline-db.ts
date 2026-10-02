@@ -25,7 +25,7 @@ export interface OfflineVideo {
     /**
      * 何回目の試みか (でたらめな文字列)。**やり直しと前回の残骸を見分ける印。**
      * 前回の失敗を中止してからやり直すとき、その中止の知らせが遅れて届いても、
-     * 印が違えば新しい控えを消さない (service-worker.ts の drop)
+     * 印が違えば新しい控えを消さない (`service-worker/index.ts` の drop)
      */
     attempt?: string;
     /**

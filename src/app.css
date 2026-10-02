@@ -2,7 +2,7 @@
  * 見た目は Blades の Pico (Pico CSS v2 を引き継いだもの。素の CSS で、Sass は要らない)。
  * Pico は素の HTML を整える作りなので、入力欄・ボタン・余白を詰め、足りない部品(タグ・小さいボタン・並べ方)を下に足す。
  * 画面ごとの並べ方は各コンポーネントの <style> に書く。
- * 開いたり閉じたりする部品(メニュー・ダイアログ・タブ・トグル)は Bits UI(見た目は持たないので、ここと各画面で付ける)。
+ * 開いたり閉じたりするメニューは Bits UI の DropdownMenu(見た目は持たないので、ここと各画面で付ける)。
  *
  * **Pico は `pico` の層 (@layer) に入れる。** 層に入らないこちらの規則は、詳細度に関係なく
  * 必ず Pico に勝つ。Pico の強い selector に合わせて同じ強さで書き直す、という張り合いが要らない。
@@ -25,7 +25,7 @@
     --pico-border-radius: 0.65rem;
     /*
 	 * 色は**主の色ひとつ**と、状態の色 4 つだけ。主の色は Blades (Pico) の既定の azure を
-	 * そのまま使う (上書きしない。アイコンの水色とも揃う)。紫は daisyUI の頃の名残だった。
+	 * そのまま使う (上書きしない。アイコンの水色とも揃う)。
 	 * 状態の色も Pico の色見本の段から選ぶ (録画中 red・成功 jade・注意 amber・知らせ cyan)。
 	 * 「知らせ」は azure と並ぶと見分けが付かないので、緑寄りの cyan にしてある
 	 *
@@ -99,9 +99,7 @@ button[type="submit"].full {
  * 押せる入れ物 (行やカードを丸ごと押すもの。`<div role="button">`)。Pico は [role=button] をボタンの見た目にするので、
  * 入れ物には当てない(色も枠も余白も親のまま。見た目は各画面の <style>)
  */
-div[role="button"],
-li[role="button"],
-article[role="button"] {
+div[role="button"] {
     --pico-background-color: transparent;
     --pico-border-color: transparent;
     --pico-color: inherit;
@@ -118,9 +116,6 @@ article[role="button"] {
     line-height: inherit;
     text-align: inherit;
     box-shadow: none;
-}
-html {
-    font-size: var(--pico-font-size);
 }
 /*
  * **画面の高さは、単位ではなく `html` から採る。**
@@ -208,12 +203,6 @@ label,
 section {
     margin-bottom: 0;
 }
-h1,
-h2,
-h3,
-h4 {
-    --pico-font-weight: 700;
-}
 /*
  * 文字の大きさは html の 16px を据え置いたまま、小さい側を一段上げてある。
  * 1280px の画面で本文・表・注記が 0.75〜0.9rem だと詰まって見えた。
@@ -259,6 +248,30 @@ td {
 .full {
     width: 100%;
 }
+/* 札を縦に積んだ列。広い画面 (1280px 以上) では2列にする (チューナー・設定) */
+.columns {
+    display: grid;
+    align-items: start;
+    gap: 1.5rem;
+}
+@media (min-width: 1280px) {
+    .columns {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+.column {
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+    gap: 1.5rem;
+}
+/* 走っている取り込み・スキャンの状態と記録 */
+.progress-block {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    margin-top: 1rem;
+}
 
 /* ---- 面 ---- */
 /* 枠で囲んだ白い面 */
@@ -288,9 +301,6 @@ td {
 }
 .num {
     font-variant-numeric: tabular-nums;
-}
-.right {
-    text-align: right;
 }
 .nowrap {
     white-space: nowrap;
@@ -418,68 +428,41 @@ a.button.secondary.outline:hover {
     --pico-border-color: var(--pico-secondary-hover);
 }
 /*
- * **いま居るところを表すリンク** (`<a class="button" aria-current="page">`、番組表の種別など)。
+ * **いま居るところを表すリンク** (`<a class="button" aria-current="page">`、番組表の種別)。
  *
  * Pico は「素のリンクの aria-current」を**文字を主の明るい色にする**ことで表す。
  * `role="button"` が付いていないので、ボタンの見た目にしたリンクにもその規則が当たり、
- * 塗ってある地 (紫) の上に薄い紫の字が乗って読めなくなっていた。
- * 塗ってあるものは白抜きのまま、枠だけのものは元の色のままにする
+ * 塗ってある主の色の地に、同じ系統の明るい字が乗って読めなくなる。白抜きのままにする
+ * (いま居るものは塗ったほうだけ。枠だけのものに aria-current は付けない)
  */
 a.button[aria-current]:not([aria-current="false"]) {
     --pico-color: var(--pico-primary-inverse);
 }
-a.button.secondary[aria-current]:not([aria-current="false"]) {
-    --pico-color: var(--pico-secondary-inverse);
-}
-a.button.outline[aria-current]:not([aria-current="false"]) {
-    --pico-color: var(--pico-primary);
-}
-a.button.secondary.outline[aria-current]:not([aria-current="false"]) {
-    --pico-color: var(--pico-secondary);
-}
 /* Pico の .secondary / .contrast / .outline に足す */
 button.small,
-[role="button"].small,
 a.button.small {
     padding: 0.3rem 0.65rem;
     font-size: 0.85rem;
 }
-button.xs,
-[role="button"].xs,
-a.button.xs {
+button.xs {
     padding: 0.15rem 0.45rem;
     font-size: 0.75rem;
 }
-button.accent,
-[role="button"].accent,
-a.button.accent {
-    --pico-background-color: var(--pico-primary-background);
-    --pico-border-color: var(--pico-primary-background);
-    --pico-color: #fff;
-}
 button.ghost,
-[role="button"].ghost,
 a.button.ghost {
     --pico-background-color: transparent;
     --pico-border-color: transparent;
     --pico-color: inherit;
     --pico-box-shadow: none;
 }
-:is(button, [role="button"], a.button).ghost:is(
-    :hover,
-    :active,
-    :focus,
-    [aria-current]:not([aria-current="false"])
-) {
+:is(button, a.button).ghost:is(:hover, :active, :focus, [aria-current]:not([aria-current="false"])) {
     /* Pico は押せるものの :hover/:focus で文字を白、枠を主の色にする。薄い地の上だと読めないので戻す */
     --pico-background-color: var(--dp-base-200);
     --pico-border-color: transparent;
     --pico-color: inherit;
     --pico-box-shadow: none;
 }
-button.danger,
-[role="button"].danger,
-a.button.danger {
+button.danger {
     --pico-background-color: var(--dp-error);
     --pico-border-color: var(--dp-error);
     --pico-color: #fff;
@@ -490,40 +473,22 @@ a.button.danger {
  * 一覧では行ごとに取消や削除が並ぶので、赤い枠の列が立って画面全体が
  * 警告のように見えていた。**赤は押そうとしたときと、確定のボタンだけ**にする
  */
-button.outline.danger,
-[role="button"].outline.danger,
-a.button.outline.danger {
+button.outline.danger {
     --pico-background-color: transparent;
     --pico-border-color: var(--pico-secondary-border);
     --pico-color: var(--pico-secondary);
 }
-:is(button, [role="button"], a.button).outline.danger:is(:hover, :active, :focus) {
+button.outline.danger:is(:hover, :active, :focus) {
     --pico-background-color: color-mix(in srgb, var(--dp-rec) 14%, var(--dp-surface));
     --pico-border-color: var(--dp-rec);
     --pico-color: var(--dp-rec-text);
 }
-button.ghost.danger,
-[role="button"].ghost.danger,
-a.button.ghost.danger {
-    --pico-background-color: transparent;
-    --pico-border-color: transparent;
-    --pico-color: var(--dp-error);
-}
 
-/* 色付きのボタンは、押しているときも同じ色の少し濃いものにする(Pico の既定だと主の色に変わって文字が読みにくい) */
-:is(button, [role="button"], a.button).accent:is(:hover, :active, :focus) {
-    --pico-background-color: color-mix(in srgb, var(--pico-primary-background) 85%, #000);
-    --pico-border-color: color-mix(in srgb, var(--pico-primary-background) 85%, #000);
-    --pico-color: #fff;
-}
-:is(button, [role="button"], a.button).danger:not(.ghost, .outline):is(:hover, :active, :focus) {
+/* 赤いボタンは、押しているときも同じ色の少し濃いものにする(Pico の既定だと主の色に変わって文字が読みにくい) */
+button.danger:not(.outline):is(:hover, :active, :focus) {
     --pico-background-color: color-mix(in srgb, var(--dp-error) 85%, #000);
     --pico-border-color: color-mix(in srgb, var(--dp-error) 85%, #000);
     --pico-color: #fff;
-}
-:is(button, [role="button"], a.button).ghost.danger:is(:hover, :active, :focus) {
-    --pico-background-color: color-mix(in srgb, var(--dp-error) 12%, transparent);
-    --pico-color: var(--dp-error);
 }
 
 /*
@@ -586,17 +551,12 @@ a.button.ghost.danger {
     background: color-mix(in srgb, var(--dp-info) 14%, var(--dp-surface));
     color: var(--dp-info-text);
 }
-.tag.accent,
-.tag.primary {
-    background: color-mix(in srgb, var(--pico-primary-background) 14%, var(--dp-surface));
-    color: var(--pico-primary);
-}
 /* 枠を足すだけ。色は上の淡い札と同じ(手を止めてほしいもの = 競合・失敗に使う) */
 .tag.outline {
     border-color: currentColor;
 }
 /* 色の付かない枠だけの札(工程や但し書き)は地も塗らない。ふつうの札と見分けが付かなくなる */
-.tag.outline:not(.success, .error, .warning, .info, .accent, .primary, .solid) {
+.tag.outline:not(.success, .error, .warning, .info, .solid) {
     background: transparent;
     border-color: var(--dp-base-300);
 }
@@ -685,11 +645,8 @@ button[aria-busy="true"]::after {
     background-position: center;
 }
 
-/* ---- Bits UI の部品の見た目(開閉は Bits UI、見た目はここ) ---- */
-[data-menu-content],
-[data-dropdown-menu-content],
-[data-popover-content],
-[data-select-content] {
+/* ---- Bits UI のメニューの見た目(開閉は Bits UI、見た目はここ) ---- */
+[data-dropdown-menu-content] {
     z-index: 50;
     min-width: 10rem;
     padding: 0.25rem;
@@ -698,9 +655,7 @@ button[aria-busy="true"]::after {
     border: 1px solid var(--dp-base-300);
     box-shadow: 0 10px 30px rgb(0 0 0 / 0.35);
 }
-[data-menu-item],
-[data-dropdown-menu-item],
-[data-select-item] {
+[data-dropdown-menu-item] {
     display: flex;
     align-items: center;
     gap: 0.5rem;
@@ -709,49 +664,8 @@ button[aria-busy="true"]::after {
     cursor: pointer;
     outline: none;
 }
-[data-menu-item][data-highlighted],
-[data-dropdown-menu-item][data-highlighted],
-[data-select-item][data-highlighted] {
+[data-dropdown-menu-item][data-highlighted] {
     background: var(--dp-base-200);
-}
-[data-dialog-overlay] {
-    position: fixed;
-    inset: 0;
-    z-index: 60;
-    background: rgb(0 0 0 / 0.55);
-}
-[data-dialog-content] {
-    position: fixed;
-    z-index: 61;
-    left: 50%;
-    top: 50%;
-    transform: translate(-50%, -50%);
-    width: min(32rem, calc(100vw - 2rem));
-    max-height: calc(100% - 2rem);
-    overflow: auto;
-    padding: 1.25rem;
-    border-radius: 1rem;
-    background: var(--dp-surface);
-    border: 1px solid var(--dp-base-300);
-}
-[data-tabs-list] {
-    display: inline-flex;
-    gap: 0.25rem;
-    padding: 0.25rem;
-    border-radius: 0.6rem;
-    background: var(--dp-base-200);
-}
-[data-tabs-trigger] {
-    padding: 0.3rem 0.8rem;
-    border-radius: 0.45rem;
-    border: 0;
-    background: transparent;
-    color: inherit;
-    cursor: pointer;
-}
-[data-tabs-trigger][data-state="active"] {
-    background: var(--dp-surface);
-    box-shadow: 0 1px 2px rgb(0 0 0 / 0.25);
 }
 
 /*

@@ -62,8 +62,8 @@
      * 3画面とも ControlButton を読み込むので、`:global` にしておけば
      * `<a>` (閉じる) や EdgeButton にも届く。
      *
-     * Pico はボタンの色を変数 (`--pico-background-color` など) で持つので、
-     * 変数を差し替える。`:hover` などで Pico が主題の色に戻さないよう、同じ強さ以上で書く
+     * Pico はボタンの色を変数 (`--pico-background-color` など) で持つので、変数を差し替える。
+     * Pico は層 (`@layer pico`) の中なので、`:hover` などで主の色に戻されることはない
      */
     :global(.ov-btn) {
         display: inline-flex;
@@ -105,30 +105,22 @@
         width: 2.5rem;
         padding: 0;
     }
-    :global(.ov-btn.ov),
+    /* `.ov` だけで使うものもある (ライブの「音を出す」) */
     :global(.ov) {
         --pico-background-color: rgb(0 0 0 / 0.45);
         --pico-border-color: transparent;
         --pico-color: #fff;
         --pico-box-shadow: none;
     }
-    :global(.ov-btn.ov:is(:hover, :focus-visible)),
     :global(.ov:is(:hover, :focus-visible)) {
         --pico-background-color: rgb(0 0 0 / 0.7);
-        --pico-color: #fff;
     }
-    :global(.ov-btn.ov-on),
-    :global(.ov-btn.ov-on:is(:hover, :focus-visible)) {
+    :global(.ov-btn.ov-on) {
         --pico-background-color: var(--pico-primary-background);
-        --pico-border-color: transparent;
         --pico-color: #fff;
-        --pico-box-shadow: none;
     }
-    :global(.ov-btn.ov-danger),
-    :global(.ov-btn.ov-danger:is(:hover, :focus-visible)) {
+    :global(.ov-btn.ov-danger) {
         --pico-background-color: var(--dp-error);
-        --pico-border-color: transparent;
         --pico-color: #fff;
-        --pico-box-shadow: none;
     }
 </style>

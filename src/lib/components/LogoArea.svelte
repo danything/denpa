@@ -160,7 +160,7 @@
      *
      * **覚えているものがあるなら畳んでおく。** その場合ここで直すことは滅多になく
      * (覚えた絵を見て確かめれば済む)、開いたままだとコマの取り出しから枠まで
-     * 画面の大半を占めて、詳細の他の中身が下へ押し出されていた。
+     * 画面の大半を占めて、他の局の行が下へ押し出される。
      * 覚えているものが無いときだけは、ここで教えるしか手が無いので開いておく。
      */
     let opened = $state<boolean | null>(null);
@@ -277,11 +277,7 @@
 </script>
 
 <div class="area" data-testid="logo-area">
-    <!--
-        **見出しを置かない。** すぐ上の「CM」の中身の続きとして読むもので、
-        見出しを付けていた頃は、上の覚え書き (「jls は使えず: …」) と
-        ここの説明が別々の話に見えて、同じことを2回読まされていた
-    -->
+    <!-- 見出しは置かない。開いた局の名前 (チューナー画面の `<summary>`) の続きとして読む -->
     <p class="small lead">
         {#if learned !== null}
             {serviceName} のロゴは覚えています。下の絵がロゴの形になっていれば、位置は合っています。
@@ -299,20 +295,13 @@
         それを確かめる手立てが無いと「なぜ当たらないのか」が分からなかった
     -->
     {#if learned !== null}
-        <div
-            class="cluster learned"
-        >
-            <img
-                src={learned.url}
-                alt="いま覚えているロゴ"
-                class="learned-image"
-                style="image-rendering: pixelated"
-            />
+        <div class="cluster learned">
+            <img src={learned.url} alt="いま覚えているロゴ" class="learned-image" style="image-rendering: pixelated" />
             <div class="tiny">
                 <div class="bold">いま覚えているロゴ</div>
                 <!--
                     **いつ覚えたかを一緒に出す。** ここに出るのは*いまの*ロゴで、
-                    上の「CM判定に失敗」は*そのとき*の記録。実機ではこの2つが
+                    録画の「CM判定に失敗」は*そのとき*の記録。実機ではこの2つが
                     18時間離れていて、どちらの話をしているのか読み取れなかった
                 -->
                 {#if learned.learnedAt > 0}
@@ -346,32 +335,23 @@
     {/if}
 
     <!--
-        囲う場所は**畳めるようにしておく**。コマの取り出しから枠まで縦に長く、
-        開いたままだと詳細の他の中身が画面の外へ押し出されていた。
-        覚えているものが無いときだけ開いて出す (それ以外に教える手が無いので)
+        囲う場所は**畳めるようにしておく** (縦に長い)。覚えているものが無いときだけ
+        開いて出す (それ以外に教える手が無いので。`open`)
     -->
     {#if recordingId === null}
         <!--
             囲うにはコマが要る。**それでも上の「いま覚えているロゴ」は出る** —
             事前学習は録画を待たずに回るので、録画が無くても覚えていることはある
         -->
-        <p class="tiny muted spaced">
-            位置を教えるには、この局の録画が1本必要です。
-        </p>
+        <p class="tiny muted spaced">位置を教えるには、この局の録画が1本必要です。</p>
     {:else}
-        <details
-            class="spaced"
-            {open}
-            ontoggle={(event) => (opened = event.currentTarget.open)}
-        >
-            <summary class="small bold">
-                ロゴを四角で囲って教える
-            </summary>
+        <details class="spaced" {open} ontoggle={(event) => (opened = event.currentTarget.open)}>
+            <summary class="small bold">ロゴを四角で囲って教える</summary>
             <!--
-            きっちり囲うと失敗する。実機の TOKYO MX で試すと、文字ぴったりの
-            146×24 では「有効な画素が少なすぎる」と弾かれ、周りを空けた 200×70 で
-            初めて覚えられた。まわりの背景も見て判断しているらしい
-        -->
+                きっちり囲うと失敗する。実機の TOKYO MX で試すと、文字ぴったりの
+                146×24 では「有効な画素が少なすぎる」と弾かれ、周りを空けた 200×70 で
+                初めて覚えられた。まわりの背景も見て判断しているらしい
+            -->
             <p class="tiny muted hint">
                 <strong>ロゴのまわりを少し広めに</strong>囲ってください。文字にぴったり合わせると、
                 まわりの背景が足りずに覚えられないことがあります。
@@ -380,39 +360,22 @@
             <div class="cluster options">
                 <label class="field">
                     <span>見る位置 (秒)</span>
-                    <input
-                        type="number"
-                        min="0"
-                        step="30"
-                        bind:value={at}
-                        class="at"
-                    />
+                    <input type="number" min="0" step="30" bind:value={at} class="at" />
                 </label>
                 <!-- ロゴはほぼ右上。全体を出すとその一角が小さすぎて掴めない -->
                 <label class="check tiny">
-                    <input
-                        type="checkbox"
-                        bind:checked={zoomed}
-                    />
+                    <input type="checkbox" bind:checked={zoomed} />
                     右上を拡大
                 </label>
                 <span class="tiny muted">ロゴが出ていない場面なら「見る位置」を変えてください</span>
             </div>
 
             <!--
-        画像の上で掴んで引く。canvas は使わない (画像に重ねた div で足りるうえ、
-        拡大縮小の計算が1箇所で済む)。
-
-        拡大は**外側で切り取る**だけにしてある。中の画像と枠は同じ入れ物に居るので、
-        倍率が変わっても座標の計算は1つのまま。
-
-        切り取り窓は拡大していても **16:9 のまま**にする。窓を絵なりの高さにしていた頃は
-        縦長の帯が出ていて、しかも中の絵を寄せていなかったので左上が見えていた
-    -->
-            <div
-                class="viewport"
-                style={zoomed ? 'aspect-ratio: 16 / 9' : ''}
-            >
+                画像の上で掴んで引く。canvas は使わない (画像に重ねた div で足りるうえ、
+                拡大縮小の計算が1箇所で済む)。拡大は**外側で切り取る**だけなので、
+                倍率が変わっても座標の計算は1つのまま。窓を 16:9 に保つ理由は `zoomed`
+            -->
+            <div class="viewport" style={zoomed ? 'aspect-ratio: 16 / 9' : ''}>
                 <div
                     class="canvas"
                     style={zoomed ? `width:${SCALE * 100}%; margin-left:-${SHIFT}%` : 'width:100%'}
@@ -431,9 +394,7 @@
                         />
                     {:else}
                         <!-- 取り出している間も掴む場所を残しておく。出た瞬間に大きさが変わらないように -->
-                        <div
-                            class="loading small"
-                        >
+                        <div class="loading small">
                             {failed ? '' : 'コマを取り出しています…'}
                         </div>
                     {/if}
@@ -458,29 +419,17 @@
                 </div>
             {/if}
 
-            <form
-                method="POST"
-                action="?/logoArea"
-                use:submitting
-                class="cluster spaced"
-            >
+            <form method="POST" action="?/logoArea" use:submitting class="cluster spaced">
                 <input type="hidden" name="serviceId" value={serviceId} />
                 <input type="hidden" name="area" {value} />
-                <button type="submit"
-                    class="small"
-                    disabled={value === '' || unchanged}
-                >
+                <button type="submit" class="small" disabled={value === '' || unchanged}>
                     この位置で覚える
                 </button>
                 <span class="tiny muted mono">
                     {value === '' ? '囲ってください' : unchanged ? `いまの設定: ${value}` : value}
                 </span>
                 {#if area}
-                    <button
-                        class="small ghost"
-                        formaction="?/logoAreaClear"
-                        type="submit"
-                    >
+                    <button class="small ghost" formaction="?/logoAreaClear" type="submit">
                         自動に戻す
                     </button>
                 {/if}
@@ -516,9 +465,6 @@
     }
     .forget {
         margin-top: 0.25rem;
-    }
-    summary {
-        cursor: pointer;
     }
     .hint {
         margin-top: 0.25rem;

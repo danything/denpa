@@ -415,7 +415,7 @@
         {#if encoded}
             <!--
                 焼き上がった。続きは観る画面で (位置は続き再生が覚えている)。
-                StageNote は押せない札 (pointer-events-none) なので、ここだけ押せる形で置く。
+                StageNote は押せない札 (`pointer-events: none`) なので、ここだけ押せる形で置く。
                 見た目の決まりは同じ (角丸で黒の半透明)
             -->
             <div class="encoded" data-testid="chase-encoded">

@@ -160,10 +160,8 @@
         padding: 0;
         font-size: 0.875rem;
     }
+    /* 押したときの色は Pico (層の中) に勝つ上の変数のまま。明るさだけ上げる */
     .color:is(:hover, :focus, :active) {
-        --pico-background-color: var(--paint);
-        --pico-border-color: var(--paint);
-        --pico-color: var(--ink);
         filter: brightness(1.1);
     }
     .pad {
@@ -184,9 +182,6 @@
     .row {
         display: flex;
         gap: 0.5rem;
-    }
-    .grow {
-        flex: 1;
     }
     .digits summary {
         cursor: pointer;
