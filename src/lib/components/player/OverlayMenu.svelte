@@ -1,7 +1,7 @@
 <script lang="ts" generics="T extends string | number">
     import { DropdownMenu } from 'bits-ui';
     import { getContext, type Snippet } from 'svelte';
-    import { PLAYER_CONTROLS, type PlayerControls } from './controls.svelte';
+    import { PLAYER_CONTROLS, PLAYER_STAGE, type PlayerControls } from './controls.svelte';
 
     /**
      * 絵の上に出すドロップダウンの共通部分。**メニュー(選択肢の並び)だけ**を持つ。
@@ -72,6 +72,19 @@
         };
     });
 
+    /**
+     * **器は舞台の枠の中に収める。** 枠の外へ出ると、上はページの見出しの裏に潜り、
+     * 全画面では切れる。スマホの縦で全画面をやめると枠は 224px しか無く、速さ (7つ) の
+     * 器が上へはみ出して**等速・0.75× が見出しの裏に隠れて押せなかった**。
+     * 枠を当たり判定の境にして、入りきらなければ器の中を巻き取る (`max-height`)
+     */
+    const stage = getContext<(() => HTMLElement | null) | undefined>(PLAYER_STAGE);
+    // 舞台の外 (と、枠がまだ無いうち) は空 — Bits の既定 (画面の端) に任せる
+    const boundary = $derived.by(() => {
+        const element = stage?.() ?? null;
+        return element === null ? [] : [element];
+    });
+
     function toggle(): void {
         open = !open;
     }
@@ -116,6 +129,8 @@
         side="top"
         {align}
         sideOffset={4}
+        collisionBoundary={boundary}
+        collisionPadding={4}
         class="overlay-menu {size}"
         data-testid="{testid}-menu"
     >
@@ -152,6 +167,8 @@
         width: max-content;
         min-width: var(--bits-floating-anchor-width);
         max-width: min(20rem, 90vw);
+        max-height: var(--bits-floating-available-height);
+        overflow-y: auto;
         padding: 0.5rem;
         color: var(--pico-color);
     }
@@ -170,5 +187,14 @@
         justify-content: center;
         padding: 0.5rem;
         font-variant-numeric: tabular-nums;
+    }
+    /*
+     * **狭い枠では速さを4列に並べる。** 縦に7つ積むと 300px あり、スマホの縦で
+     * 全画面をやめた枠 (224px) には入らない — 巻き取らせると2つしか見えず、
+     * 押したい速さを探して器の中を動かすことになる
+     */
+    :global(.stage[data-compact] .overlay-menu.large) {
+        display: grid;
+        grid-template-columns: repeat(4, auto);
     }
 </style>

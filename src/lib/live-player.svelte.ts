@@ -1917,6 +1917,13 @@ export function livePlayer() {
         get raw() {
             return raw;
         },
+        /**
+         * 生で見ているときの、いま出しているコマ (切り抜き)。**絵は worker の canvas に
+         * 居て、`<video>` からは写せない** (`RawEngine.grab`)。生でなければ null
+         */
+        grab(): Promise<ImageBitmap | null> {
+            return raw && engine !== null ? engine.grab() : Promise.resolve(null);
+        },
         /** 生で1コマ解くのに掛かっている時間 (ms、95パーセンタイル)。生でなければ 0 */
         get decodeMs() {
             return decodeMs;

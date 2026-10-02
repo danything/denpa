@@ -11,6 +11,7 @@
     import { playerControls } from '#lib/components/player/controls.svelte.js';
     import DataBroadcast, { pressD } from '#lib/components/player/DataBroadcast.svelte';
     import EdgeButton from '#lib/components/player/EdgeButton.svelte';
+    import Extras from '#lib/components/player/Extras.svelte';
     import FactsAside from '#lib/components/player/FactsAside.svelte';
     import Icon from '#lib/components/player/Icon.svelte';
     import InfoBlock from '#lib/components/player/InfoBlock.svelte';
@@ -30,6 +31,7 @@
         SOUND_ON,
     } from '#lib/components/player/icons.js';
     import MediaStack from '#lib/components/player/MediaStack.svelte';
+    import MoreButton from '#lib/components/player/MoreButton.svelte';
     import OverlayMenu from '#lib/components/player/OverlayMenu.svelte';
     import PlayerStage from '#lib/components/player/PlayerStage.svelte';
     import PlayerVeil from '#lib/components/player/PlayerVeil.svelte';
@@ -37,9 +39,10 @@
     import SpeedMenu from '#lib/components/player/SpeedMenu.svelte';
     import StageNote from '#lib/components/player/StageNote.svelte';
     import { snapshotter } from '#lib/components/player/shot.svelte.js';
+    import { type Frame, videoFrame } from '#lib/components/player/snapshot.js';
     import Toasts, { errorNotice, type Notice } from '#lib/components/Toasts.svelte';
     import { programDetail } from '#lib/detail.svelte.js';
-    import { SERVICE_TYPE_LABEL, time } from '#lib/format.js';
+    import { SERVICE_TYPE_LABEL } from '#lib/format.js';
     import { livePlayer } from '#lib/live-player.svelte.js';
     import { FLOOR } from '#lib/ts/pacing.js';
     import { resolve } from '$app/paths';
@@ -195,9 +198,8 @@
     /**
      * **いまの1コマを字幕ごと切り抜く。観る画面 (`/watch/<id>`) と同じやり方。**
      *
-     * 映像に、出している字幕 (`overlay`) をそのまま重ねて1枚にする。
-     * クリップボードに絵を置けるのは安全な繋ぎ (https) と押した勢いが要るので、
-     * 断られたら**落とすほうに倒す** — 撮ったものを取り落とさない
+     * 映像に、出している字幕 (`overlay`) をそのまま重ねて1枚の PNG にする。
+     * 渡し方 (指は共有シート、PC は落としてクリップボードにも) は3画面共通 (`snapshot.ts`)
      */
     const shooter = snapshotter(controls);
     const notices = $derived<Notice[]>([
@@ -210,12 +212,21 @@
     ]);
 
     function snapshot(): void {
-        // 字幕を出しているときだけ重ねる
         void shooter.take(
-            video,
+            player.raw ? rawFrame() : videoFrame(video),
+            // 字幕を出しているときだけ重ねる
             player.captions && player.hasCaptions ? overlay : null,
-            () => `${current?.now?.name ?? current?.name ?? 'ライブ'} - ${time(Date.now())}`,
+            current?.now?.name ?? current?.name ?? 'ライブ',
         );
+    }
+
+    /**
+     * **生で見ているときは worker に1枚貰う。** 絵は worker の canvas に居て、
+     * `<video>` は空のまま (`raw/engine.ts`)。以前はこの間だけ切り抜きを出していなかった
+     */
+    async function rawFrame(): Promise<Frame | null> {
+        const bitmap = await player.grab();
+        return bitmap === null ? null : { image: bitmap, width: bitmap.width, height: bitmap.height };
     }
 </script>
 
@@ -296,17 +307,15 @@
                         onclick={() => pressD(player.showData, dataButton, (on) => player.setData(on))}
                     />
                     <!--
-                        **生で見ている間は切り抜きを出さない。** 絵は worker の canvas に居て、
-                        こちらから写し取る口をまだ持っていない (stream.md §5.5)
+                        **生で見ている間も切り抜ける。** 絵は worker の canvas に居るので、
+                        そちらに1枚頼む (`rawFrame`)
                     -->
-                    {#if !player.raw}
-                        <ControlButton
-                            path={CAMERA}
-                            label="この場面を切り抜く"
-                            testid="live-shot"
-                            onclick={() => void snapshot()}
-                        />
-                    {/if}
+                    <ControlButton
+                        path={CAMERA}
+                        label="この場面を切り抜く"
+                        testid="live-shot"
+                        onclick={() => void snapshot()}
+                    />
                 </ControlBar>
 
                 <!--
@@ -394,6 +403,12 @@
                         {/if}
 
                         <!--
+                            **ここから音声までと速さは、狭い枠では「ほか」(⋯) に畳む** (`Extras`)。
+                            広い枠では包みは何もしないので、並びは今までどおり (観る画面と同じ)
+                        -->
+                        <MoreButton {stage} testid="live-more" />
+                        <Extras>
+                        <!--
                         データ放送 (d) と切り抜きは**右上の縦列** (`live-side`) —
                         観る画面と同じ場所に揃えてある。
 
@@ -476,6 +491,7 @@
                                 onselect={(key) => player.setAudio(key)}
                             />
                         {/if}
+                        </Extras>
 
                         <!--
                             放送の今に居るかどうか。離れていれば押して戻れる。
@@ -589,12 +605,14 @@
                         この選択肢も消える
                     -->
                         {#if player.chasing}
-                            <SpeedMenu
-                                testid="live-speed"
-                                label="追っかけの速さ"
-                                speed={player.speed}
-                                onselect={(speed) => player.setSpeed(speed)}
-                            />
+                            <Extras>
+                                <SpeedMenu
+                                    testid="live-speed"
+                                    label="追っかけの速さ"
+                                    speed={player.speed}
+                                    onselect={(speed) => player.setSpeed(speed)}
+                                />
+                            </Extras>
                         {/if}
 
                         <ControlButton
@@ -845,6 +863,10 @@
         gap: 0.25rem;
         margin-top: 0.25rem;
         color: #fff;
+    }
+    /* 狭い枠では全画面だけ右端へ寄せる (観る画面と同じ) */
+    :global(.stage[data-compact]) .control-row > :global(:last-child) {
+        margin-left: auto;
     }
     .track-label {
         display: inline-block;

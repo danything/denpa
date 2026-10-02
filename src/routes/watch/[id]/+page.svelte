@@ -10,6 +10,7 @@
     import ControlButton from '#lib/components/player/ControlButton.svelte';
     import { playerControls } from '#lib/components/player/controls.svelte.js';
     import DataBroadcast, { pressD } from '#lib/components/player/DataBroadcast.svelte';
+    import Extras from '#lib/components/player/Extras.svelte';
     import FactsAside from '#lib/components/player/FactsAside.svelte';
     import { eachFrame } from '#lib/components/player/frames.js';
     import Icon from '#lib/components/player/Icon.svelte';
@@ -35,12 +36,14 @@
         TRASH,
     } from '#lib/components/player/icons.js';
     import { playerKeys } from '#lib/components/player/keys.js';
+    import MoreButton from '#lib/components/player/MoreButton.svelte';
     import PlayerStage from '#lib/components/player/PlayerStage.svelte';
     import { clearOverlay, drawOverlay, fitRect } from '#lib/components/player/paint.js';
     import Remote from '#lib/components/player/Remote.svelte';
     import SpeedMenu, { SPEED_KEY, storedSpeed } from '#lib/components/player/SpeedMenu.svelte';
     import StageNote from '#lib/components/player/StageNote.svelte';
     import { snapshotter } from '#lib/components/player/shot.svelte.js';
+    import { videoFrame } from '#lib/components/player/snapshot.js';
     import Toasts, { errorNotice, type Notice } from '#lib/components/Toasts.svelte';
     import { programDetail } from '#lib/detail.svelte.js';
     import { startDownload } from '#lib/download.js';
@@ -1056,19 +1059,13 @@
     ]);
 
     /**
-     * いまの1コマを**字幕ごと**切り抜いて、クリップボードへ。
-     *
-     * 字幕は別の canvas に重ねてあるので、映像の上にそれを重ねて焼き直すだけ。
-     * **面の大きさが違う** (字幕 1440x1080 / 映像 1920x1080) ので、画面で
-     * やっているのと同じように引き伸ばす。
-     *
-     * **貼れないことがある。** クリップボードに絵を置けるのは安全な繋ぎ
-     * (https か localhost) だけで、押した勢い (user activation) も要る。
-     * 断られたら**落とすほうに倒す** — 撮ったものを取り落とさない
+     * いまの1コマを**字幕ごと**切り抜いて PNG に (`番組名_YYYYMMDD-HHMMSS.png`)。
+     * 指の端末では共有シート、PC では落としてクリップボードにも置く。
+     * 重ね方・渡し方は3画面共通 ([snapshot.ts](../../../lib/components/player/snapshot.ts))
      */
     function snapshot(): void {
         // 字幕を出しているときだけ重ねる
-        void shooter.take(video, captions && showing !== null ? overlay : null, () => `${rec.name} - ${clock(at)}`);
+        void shooter.take(videoFrame(video), captions && showing !== null ? overlay : null, rec.name);
     }
 </script>
 
@@ -1114,7 +1111,7 @@
                 全画面はこちら側の癖 (開いた時点で入る) が要るので自前のまま
             -->
             <PlayerStage {controls} testid="watch-stage" bind:element={stage}>
-                {#snippet children(_stage)}
+                {#snippet children(layout)}
                 <!--
                     **押すのは絵そのもの。** ボタンを避けて敷くのではなく、
                     ボタンを上に重ねる (z-index 10)。押す口は自分で繋ぐ (`press` の effect)
@@ -1434,6 +1431,12 @@
                         {/if}
 
                         <!--
+                            **ここから CM 飛ばしまでと速さは、狭い枠では「ほか」(⋯) に畳む** (`Extras`)。
+                            広い枠では包みは何もしないので、並びは今までどおり
+                        -->
+                        <MoreButton stage={layout} testid="watch-more" />
+                        <Extras>
+                        <!--
                             **音声トラックの切り替え。** ブラウザが器から2本以上
                             出せたときだけ (二カ国語・二重音声)。`/live` の音声選びと
                             同じ見た目。1本しか無ければ出さない
@@ -1483,6 +1486,7 @@
                                 onclick={toggleSkipCm}
                             />
                         {/if}
+                        </Extras>
 
                         <!-- **読みものは3画面共通の二段** (InfoBlock)。決まりは [ControlBar.svelte](../../../lib/components/player/ControlBar.svelte) -->
                         <InfoBlock
@@ -1515,12 +1519,14 @@
                         </InfoBlock>
 
                         <!-- 早送り。**ライブの追っかけと同じ並び・同じ見た目** -->
-                        <SpeedMenu
-                            testid="watch-speed"
-                            label="再生の速さ"
-                            {speed}
-                            onselect={(value) => setSpeed(value)}
-                        />
+                        <Extras>
+                            <SpeedMenu
+                                testid="watch-speed"
+                                label="再生の速さ"
+                                {speed}
+                                onselect={(value) => setSpeed(value)}
+                            />
+                        </Extras>
 
                         <ControlButton
                             path={full ? SHRINK : EXPAND}
@@ -1697,6 +1703,10 @@
         gap: 0.25rem;
         margin-top: 0.25rem;
         color: #fff;
+    }
+    /* 狭い枠では全画面だけ右端へ寄せる (読みものが上の行へ移って、間を埋めるものが無い) */
+    :global(.stage[data-compact]) .buttons > :global(:last-child) {
+        margin-left: auto;
     }
     .local {
         flex-shrink: 0;

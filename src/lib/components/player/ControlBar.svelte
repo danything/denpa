@@ -41,6 +41,13 @@
      * 帯が二段になる。二段組にした直後は 256px にして 476px 残し、
      * 広い画面 (1024px から) で 320px に戻す。**どの画面でも同じ** — 読むものは
      * 細くても読めるが、絵は狭いと見られない
+     *
+     * ## 狭い枠・低い枠では詰める
+     *
+     * 枠の大きさは舞台 (`PlayerStage`) が測って `data-compact` / `data-low` に出す。
+     * **低い枠では右の列を右上の一行に寝かせる** — 縦に積むと下の帯とぶつかる。
+     * **狭い枠 (スマホの縦) では帯の余白も削る** — 絵が 224px しか無いところで
+     * 上に 32px のぼかしを取ると、帯だけで絵の半分になっていた
      */
     let {
         shown = true,
@@ -93,5 +100,14 @@
         bottom: 0;
         padding: 2rem 0.75rem 0.75rem;
         background: linear-gradient(to top, rgb(0 0 0 / 0.8), transparent);
+    }
+    :global(.stage[data-low]) .side {
+        flex-direction: row;
+    }
+    :global(.stage[data-compact]) .side {
+        padding: 0.375rem;
+    }
+    :global(.stage[data-compact]) .bottom {
+        padding: 1rem 0.375rem 0.375rem;
     }
 </style>

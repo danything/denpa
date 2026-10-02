@@ -180,20 +180,41 @@ test.describe('録画を観る', () => {
     });
 
     /**
-     * **切り抜きは字幕ごと。** 貼れるかどうか (クリップボード) は繋ぎ次第なので、
-     * ここで見るのは「押せて、断られても落とすほうに倒れる」ところまで
+     * **切り抜きは字幕ごと PNG に落ちる** (`番組名_YYYYMMDD-HHMMSS.png`)。PC では
+     * クリップボードにも置くが、置けるかは繋ぎ次第なので、ここで見るのは落ちるところまで。
+     * 指の端末の共有シートはヘッドレスに無い
      */
-    test('切り抜きのボタンが出る', async ({ page, request }) => {
+    test('切り抜きは番組名と時刻の名前で PNG に落ちる', async ({ page, request }) => {
         test.setTimeout(180_000);
         const id = await watchable(page, request);
 
         await goto(page, `/watch/${id}`);
         const shot = page.getByTestId('watch-shot');
         await expect(shot).toBeVisible();
-        // 押しても画面は壊れない (絵が無いので写るものは無い)
+        const name = (await page.getByTestId('watch-name').textContent())?.trim() ?? '';
+
+        // 絵が無いうちは押しても何も起きない (落とすものが無い)。画面も壊れない
         await wakeControls(page, 'watch-stage');
         await shot.click();
         await expect(page.getByTestId('watch-video')).toBeVisible();
+
+        /*
+         * 偽 ffmpeg の焼いたものは中身が無く、絵は来ない。**絵が来たことにする** —
+         * 大きささえあれば写せる (中身の無い映像は黒く写る)
+         */
+        await page.getByTestId('watch-video').evaluate((video) => {
+            Object.defineProperty(video, 'videoWidth', { get: () => 320 });
+            Object.defineProperty(video, 'videoHeight', { get: () => 180 });
+        });
+        await wakeControls(page, 'watch-stage');
+        const download = page.waitForEvent('download');
+        await shot.click();
+        const file = await download;
+        expect(file.suggestedFilename()).toMatch(/_\d{8}-\d{6}\.png$/);
+        expect(
+            file.suggestedFilename().startsWith(`${name.replace(/[\\/:*?"<>|]/g, '_').slice(0, 60)}_`),
+        ).toBe(true);
+        await expect(page.getByText('切り抜きを保存しました', { exact: false })).toBeVisible();
     });
 
     /** 残りは「あと何分で終わるか」。**倍速のぶんは割る** */
@@ -369,6 +390,90 @@ test.describe('録画を観る', () => {
     test('無い録画は 404', async ({ request }) => {
         const res = await request.get('/watch/999999');
         expect(res.status()).toBe(404);
+    });
+});
+
+/**
+ * **スマホの縦で、全画面をやめて観る。** 枠は 358x224 しか無い。
+ *
+ * 48px の押すものを全部並べていた頃は、帯が折れて絵を覆い、右の縦列 (閉じる・
+ * 切り抜き・削除) がシークバーや再生ボタンに重なっていた (実機の報告)。狭い枠では
+ * 40px に縮め、毎回は使わないもの (速さなど) を「ほか」(⋯) に畳み、右の列を右上の
+ * 一行に寝かせる (`PlayerStage`)
+ */
+test.describe('スマホの縦で観る', () => {
+    test.use({ hasTouch: true, isMobile: true, viewport: { width: 390, height: 844 } });
+
+    test('押すものは 40px 以上で重ならず、速さは「ほか」に畳まれる', async ({ page, request }) => {
+        test.setTimeout(180_000);
+        const id = await watchable(page, request);
+        await goto(page, `/watch/${id}`);
+        // 指の端末は開いた時点で全画面に入る。やめたところを見る
+        await page.evaluate(() => document.fullscreenElement && document.exitFullscreen());
+        await expect.poll(() => page.evaluate(() => document.fullscreenElement === null)).toBe(true);
+
+        const stage = page.getByTestId('watch-stage');
+        await expect(stage).toHaveAttribute('data-compact', '');
+        // 出ていなければ押して出す (開いた直後は出ている。2.5 秒で引っ込む)
+        const bar = page.getByTestId('watch-controls');
+        if ((await bar.getAttribute('data-shown')) !== 'true') {
+            const box = (await stage.boundingBox())!;
+            await page.touchscreen.tap(box.x + box.width / 2, box.y + box.height / 2);
+        }
+        await expect(bar).toHaveAttribute('data-shown', 'true');
+
+        const shape = await page.evaluate(() => {
+            const rect = (el: Element) => el.getBoundingClientRect();
+            const shown = (el: Element) => rect(el).width > 0;
+            const side = [...document.querySelectorAll('[data-testid="watch-side"] .ov-btn')].filter(shown);
+            const bottom = [
+                ...document.querySelectorAll(
+                    '[data-testid="watch-controls"] .ov-btn, [data-testid="watch-controls"] input',
+                ),
+            ].filter(shown);
+            const sideBottom = Math.max(...side.map((el) => rect(el).bottom));
+            const barTop = Math.min(...bottom.map((el) => rect(el).top));
+            const buttons = [...side, ...bottom].filter((el) => el.classList.contains('ov-btn'));
+            const stage = rect(document.querySelector('[data-testid="watch-stage"]') as Element);
+            return {
+                右の列は帯より上: sideBottom <= barTop,
+                いちばん小さい: Math.min(...buttons.map((el) => Math.min(rect(el).width, rect(el).height))),
+                枠からはみ出す: buttons.some(
+                    (el) => rect(el).left < stage.left || rect(el).right > stage.right,
+                ),
+                横に動く: document.documentElement.scrollWidth > document.documentElement.clientWidth,
+            };
+        });
+        expect(shape.右の列は帯より上).toBe(true);
+        expect(shape.いちばん小さい).toBeGreaterThanOrEqual(40);
+        expect(shape.枠からはみ出す).toBe(false);
+        expect(shape.横に動く).toBe(false);
+        // 押すものは一段 (40px)。折れると倍になる
+        const row = await page.getByTestId('watch-play').boundingBox();
+        const full = await page.getByTestId('watch-full').boundingBox();
+        expect(Math.abs((row?.y ?? 0) - (full?.y ?? -100))).toBeLessThan(2);
+
+        // 速さは畳まれていて、「ほか」で出る
+        await expect(page.getByTestId('watch-speed')).toBeHidden();
+        await page.getByTestId('watch-more').tap();
+        await expect(page.getByTestId('watch-speed')).toBeVisible();
+        await page.getByTestId('watch-speed').tap();
+        // 器は枠の中に収まる (見出しの裏に潜らない)
+        const menu = page.getByTestId('watch-speed-menu');
+        await expect(menu).toBeVisible();
+        const inside = await page.evaluate(() => {
+            const menu = document.querySelector('[data-testid="watch-speed-menu"]')?.getBoundingClientRect();
+            const stage = document.querySelector('[data-testid="watch-stage"]')?.getBoundingClientRect();
+            return (
+                menu !== undefined &&
+                stage !== undefined &&
+                menu.top >= stage.top - 1 &&
+                menu.bottom <= stage.bottom + 1
+            );
+        });
+        expect(inside).toBe(true);
+        await page.getByTestId('watch-speed-option').filter({ hasText: '1.5×' }).tap();
+        await expect(page.getByTestId('watch-speed')).toContainText('1.5×');
     });
 });
 

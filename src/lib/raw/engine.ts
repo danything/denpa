@@ -22,6 +22,8 @@ const CLOCK = 90_000;
 const TICK = 20;
 /** 絵は出ているのに音が来ないまま、これだけたったら諦める (ms) */
 const NO_AUDIO = 5_000;
+/** 切り抜きの返事を待つ上限 (ms)。1080 の1枚を読み出して渡すのは数十 ms */
+const GRAB_WAIT = 2_000;
 /** 復号器の置き場 (`routes/api/live/mpeg2`) */
 const DECODER = '/api/live/mpeg2';
 
@@ -59,6 +61,9 @@ export class RawEngine {
     private side: AudioSide = 'both';
     /** 最後に知った PTS。字幕や時計の知らせを伸ばすのに使う (`unwrap`) */
     private near: number | null = null;
+    /** 切り抜きの返事待ち (`grab`)。id ごと */
+    private readonly grabs = new Map<number, (bitmap: ImageBitmap | null) => void>();
+    private grabbed = 0;
     /** 描かれずに捨てたコマ (worker が数える) */
     dropped = 0;
     /** 1コマを解く時間の 95 パーセンタイル (ms) */
@@ -187,9 +192,29 @@ export class RawEngine {
         return this.near === null ? pts : unwrap(pts, this.near);
     }
 
+    /**
+     * いま出しているコマを1枚 (切り抜き)。**絵は worker の canvas に居る**ので、
+     * 頼んで返してもらう。返事が来ない (worker が詰まっている) ときは諦めて null
+     */
+    grab(): Promise<ImageBitmap | null> {
+        if (this.gone) return Promise.resolve(null);
+        const id = ++this.grabbed;
+        return new Promise((resolve) => {
+            const timer = setTimeout(() => settle(null), GRAB_WAIT);
+            const settle = (bitmap: ImageBitmap | null) => {
+                clearTimeout(timer);
+                this.grabs.delete(id);
+                resolve(bitmap);
+            };
+            this.grabs.set(id, settle);
+            this.send({ type: 'grab', id });
+        });
+    }
+
     destroy(): void {
         if (this.gone) return;
         this.gone = true;
+        for (const settle of [...this.grabs.values()]) settle(null);
         clearInterval(this.timer);
         this.stopAll();
         this.worker.terminate();
@@ -235,6 +260,13 @@ export class RawEngine {
             case 'fail':
                 this.giveUp(message.reason);
                 break;
+            case 'frame': {
+                const settle = this.grabs.get(message.id);
+                // 待ちきれずに諦めたあとに届いたもの。持たずに捨てる
+                if (settle === undefined) message.bitmap?.close();
+                else settle(message.bitmap);
+                break;
+            }
         }
     }
 

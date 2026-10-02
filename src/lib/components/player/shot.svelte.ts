@@ -1,10 +1,15 @@
 import type { Notice } from '#lib/components/Toasts.svelte';
 import type { PlayerControls } from './controls.svelte';
-import { clipFrame } from './snapshot';
+import { clipFrame, type Frame } from './snapshot';
 
 /** 切り抜きの3点セット (撮る・結果を持つ・トーストに出す)。**3画面で同じ形。** 撮り方は `clipFrame` */
 export function snapshotter(controls: PlayerControls) {
     let shot = $state<Notice | null>(null);
+    /**
+     * 撮っている最中か。**続けて押しても1枚ずつ** — 共有シートが開いている間に
+     * もう一度押すと、2枚目の共有が「もう開いている」で断られて落ちてくる
+     */
+    let busy = false;
 
     return {
         /** トーストへ混ぜるぶん。撮っていなければ空 */
@@ -17,17 +22,24 @@ export function snapshotter(controls: PlayerControls) {
         },
         /**
          * いまの1コマを字幕ごと切り抜く。
+         * @param frame 写す絵。生で見ているときは worker から貰うので待つ (`raw/engine.ts` の `grab`)
          * @param caption 出している字幕の canvas。出していなければ null
+         * @param title 番組名 (ファイル名の頭)
          */
         async take(
-            video: HTMLVideoElement | null,
+            frame: Frame | null | Promise<Frame | null>,
             caption: HTMLCanvasElement | null,
-            title: () => string,
+            title: string,
         ): Promise<void> {
-            if (video === null) return;
+            if (busy) return;
+            busy = true;
             controls.stir();
-            const notice = await clipFrame(video, caption, title);
-            if (notice !== null) shot = notice;
+            try {
+                const notice = await clipFrame(await frame, caption, title);
+                if (notice !== null) shot = notice;
+            } finally {
+                busy = false;
+            }
         },
     };
 }

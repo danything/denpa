@@ -90,6 +90,21 @@
         padding: 0;
         border-radius: 999px;
     }
+    /*
+     * **狭い枠 (スマホの縦) では 40px。** 48px のままだと、毎回使うものだけに
+     * 絞っても 360px 幅の端末で一段に収まらない。指で押す的として 40px は割らない
+     * (舞台の `data-compact`。決め方は `PlayerStage`)
+     */
+    :global(.stage[data-compact] .ov-btn) {
+        height: 2.5rem;
+        min-height: 2.5rem;
+        padding: 0 0.75rem;
+        font-size: 1rem;
+    }
+    :global(.stage[data-compact] .ov-btn.ov-round) {
+        width: 2.5rem;
+        padding: 0;
+    }
     :global(.ov-btn.ov),
     :global(.ov) {
         --pico-background-color: rgb(0 0 0 / 0.45);

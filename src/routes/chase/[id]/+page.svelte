@@ -8,6 +8,7 @@
     import ControlButton from '#lib/components/player/ControlButton.svelte';
     import { playerControls } from '#lib/components/player/controls.svelte.js';
     import EdgeButton from '#lib/components/player/EdgeButton.svelte';
+    import Extras from '#lib/components/player/Extras.svelte';
     import FactsAside from '#lib/components/player/FactsAside.svelte';
     import Icon from '#lib/components/player/Icon.svelte';
     import InfoBlock from '#lib/components/player/InfoBlock.svelte';
@@ -18,6 +19,7 @@
         EXPAND,
         OVERLAY,
         OVERLAY_BTN,
+        OVERLAY_ROUND,
         PAUSE,
         PLAY,
         SHRINK,
@@ -26,14 +28,16 @@
     } from '#lib/components/player/icons.js';
     import { playerKeys } from '#lib/components/player/keys.js';
     import MediaStack from '#lib/components/player/MediaStack.svelte';
+    import MoreButton from '#lib/components/player/MoreButton.svelte';
     import PlayerStage from '#lib/components/player/PlayerStage.svelte';
     import PlayerVeil from '#lib/components/player/PlayerVeil.svelte';
     import SpeedMenu, { SPEED_KEY, storedSpeed } from '#lib/components/player/SpeedMenu.svelte';
     import StageNote from '#lib/components/player/StageNote.svelte';
     import { snapshotter } from '#lib/components/player/shot.svelte.js';
+    import { videoFrame } from '#lib/components/player/snapshot.js';
     import Toasts, { type Notice } from '#lib/components/Toasts.svelte';
     import { programDetail } from '#lib/detail.svelte.js';
-    import { clock as clockLabel, time } from '#lib/format.js';
+    import { clock as clockLabel } from '#lib/format.js';
     import { write as remind } from '#lib/keep.js';
     import { livePlayer } from '#lib/live-player.svelte.js';
     import { liveUpdates } from '#lib/live-updates.svelte.js';
@@ -246,14 +250,14 @@
         toggleMute: () => (player.silenced ? player.unmute() : player.mute()),
     });
 
-    /** いまの1コマを字幕ごと切り抜く (ライブ・観る画面と同じ) */
+    /** いまの1コマを字幕ごと切り抜いて PNG に (ライブ・観る画面と同じ。`snapshot.ts`) */
     const shooter = snapshotter(controls);
     const notices = $derived<Notice[]>(shooter.notices);
     function snapshot(): void {
         void shooter.take(
-            video,
+            videoFrame(video),
             player.captions && player.hasCaptions ? overlay : null,
-            () => `${data.rec.name} - ${time(Date.now())}`,
+            data.rec.name,
         );
     }
 </script>
@@ -282,7 +286,7 @@
 
         <!-- 右上の列。**観る画面と同じ並び** (閉じる・切り抜き) -->
         <ControlBar side shown={controls.shown} testid="chase-side">
-            <a class="{OVERLAY_BTN} {OVERLAY} close" href={resolve('')} aria-label="一覧へ戻る">
+            <a class="{OVERLAY_BTN} {OVERLAY_ROUND} {OVERLAY}" href={resolve('')} aria-label="一覧へ戻る">
                 <Icon path={CLOSE} />
             </a>
             <ControlButton
@@ -331,6 +335,9 @@
                     />
                 {/if}
 
+                <!-- 焼き方・音声と速さは、狭い枠では「ほか」(⋯) に畳む (`Extras`。観る画面と同じ) -->
+                <MoreButton {stage} testid="chase-more" />
+                <Extras>
                 <!-- 焼き方。ライブと同じ場所・同じ見た目で、選び直すと居た場所から焼き直し -->
                 <CodecMenu
                     testid="chase-codec"
@@ -348,6 +355,7 @@
                         onselect={(key) => player.setAudio(key)}
                     />
                 {/if}
+                </Extras>
 
                 <!--
                     いま録れているところへ。ライブの「ライブ」に相当し、場所も同じ。
@@ -386,12 +394,14 @@
                 </InfoBlock>
 
                 <!-- 追っかけは常に速さを選べる (録れている範囲の中を進むだけ) -->
-                <SpeedMenu
-                    testid="chase-speed"
-                    label="再生の速さ"
-                    speed={want}
-                    onselect={setSpeed}
-                />
+                <Extras>
+                    <SpeedMenu
+                        testid="chase-speed"
+                        label="再生の速さ"
+                        speed={want}
+                        onselect={setSpeed}
+                    />
+                </Extras>
 
                 <ControlButton
                     path={stage.fullscreened ? SHRINK : EXPAND}
@@ -476,22 +486,6 @@
             min-height: 0;
         }
     }
-    /* 閉じるは丸いボタン(ControlButton のアイコンだけの形と同じ) */
-    .close {
-        display: inline-grid;
-        place-items: center;
-        width: 3rem;
-        height: 3rem;
-        padding: 0;
-        border: 0;
-        border-radius: 999px;
-        background: rgb(0 0 0 / 0.45);
-        color: #fff;
-        box-shadow: none;
-    }
-    .close:hover {
-        background: rgb(0 0 0 / 0.7);
-    }
     .seek {
         width: 100%;
         margin: 0;
@@ -500,6 +494,10 @@
         --gap: 0.25rem;
         margin-top: 0.25rem;
         color: #fff;
+    }
+    /* 狭い枠では全画面だけ右端へ寄せる (観る画面と同じ) */
+    :global(.stage[data-compact]) .buttons > :global(:last-child) {
+        margin-left: auto;
     }
     .rec {
         display: inline-flex;

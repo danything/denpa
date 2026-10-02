@@ -174,6 +174,32 @@ export class YuvRenderer {
         gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
     }
 
+    /**
+     * いま上げてあるコマを描き直して、画素を読み出す (切り抜き)。
+     *
+     * **描き直してから読む。** 描いたものは残さない作り (`preserveDrawingBuffer` 無し) なので、
+     * 画面へ渡した後の面は空になっている。同じコマを描き直せば、その回のうちは読める。
+     * 読み出しは下から上の順なので、上下を返す
+     */
+    capture(field: number): ImageData | null {
+        const gl = this.gl;
+        if (this.size.width === 0) return null;
+        this.draw(field);
+        const { width, height } = this.canvas;
+        const pixels = new Uint8ClampedArray(width * height * 4);
+        gl.readPixels(0, 0, width, height, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
+        const row = width * 4;
+        const swap = new Uint8ClampedArray(row);
+        for (let top = 0, bottom = height - 1; top < bottom; top++, bottom--) {
+            const a = top * row;
+            const b = bottom * row;
+            swap.set(pixels.subarray(a, a + row));
+            pixels.copyWithin(a, b, b + row);
+            pixels.set(swap, b);
+        }
+        return new ImageData(pixels, width, height);
+    }
+
     /** 黒で塗る。**出せなくなったときに前の局の絵を残さない** */
     clear(): void {
         const gl = this.gl;
