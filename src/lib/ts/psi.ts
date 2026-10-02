@@ -30,8 +30,9 @@ const DESC_SERVICE = 0x48;
 const DESC_TS_INFORMATION = 0xcd;
 
 /**
- * 録るに値するサービス種別。Mirakurun のスキャンが通しているものと同じ。
- * データ放送やワンセグを混ぜると、映像の無いものが番組表に並ぶ
+ * スキャンで残すサービス種別。Mirakurun のスキャンが通しているものと同じで、
+ * ラジオ (0x02) とデータ (0xc0) も入る。映像の無いものを番組表に並べないのは
+ * 取り込むほう (epg.ts の DIGITAL_TV)
  */
 export const SERVICE_TYPES = new Set([0x01, 0x02, 0xa1, 0xa4, 0xa5, 0xad, 0xc0]);
 
