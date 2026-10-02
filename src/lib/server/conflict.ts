@@ -118,20 +118,10 @@ function known(capacity: Capacity, pool: string): boolean {
 }
 
 /**
- * 同時に要るチャンネル (`tunerKey` → 単位) を、チューナーに1本ずつ割り振れるか。
- * 割り振れなければ、**足りない単位の組**を返す (割り振れるなら null)。
- *
- * どの単位の組を取っても「その組のチャンネル数 ≦ その組のどれかを受けられる本数」なら
- * 割り振れる (ホールの結婚定理)。単位は高々数個なので組を総当たりしてよい。
- * 小さい組から調べるので、返る組は「どれを諦めれば空くか」に近いものになる
- * (衛星が溢れているのに地上波の番組まで名指ししない)
+ * 単位の組ごとの「溢れる数」(その組のチャンネル数 − その組のどれかを受けられる本数)。
+ * 小さい組から順に返す。単位は高々数個なので組を総当たりしてよい
  */
-function shortage(
-    capacity: Capacity,
-    channels: ReadonlyMap<string, string>,
-    /** 指したときは、この単位を含む組だけを見る (ほかの単位だけが溢れていても関係ない) */
-    involving?: string,
-): Set<string> | null {
+function* overflows(capacity: Capacity, channels: ReadonlyMap<string, string>) {
     const demand = new Map<string, number>();
     for (const pool of channels.values()) {
         if (known(capacity, pool)) demand.set(pool, (demand.get(pool) ?? 0) + 1);
@@ -142,13 +132,42 @@ function shortage(
     );
     for (const mask of subsets) {
         const group = new Set(pools.filter((_, i) => mask & (1 << i)));
-        if (involving !== undefined && !group.has(involving)) continue;
         let need = 0;
         for (const pool of group) need += demand.get(pool)!;
         const have = capacity.filter((tuner) => [...group].some((pool) => tuner.has(pool))).length;
-        if (need > have) return group;
+        yield { group, over: need - have };
+    }
+}
+
+/**
+ * 同時に要るチャンネル (`tunerKey` → 単位) を、チューナーに1本ずつ割り振れるか。
+ * 割り振れなければ、**足りない単位の組**を返す (割り振れるなら null)。
+ *
+ * どの単位の組を取っても溢れなければ割り振れる (ホールの結婚定理)。
+ * 小さい組から調べるので、返る組は「どれを諦めれば空くか」に近いものになる
+ * (衛星が溢れているのに地上波の番組まで名指ししない)
+ */
+function shortage(
+    capacity: Capacity,
+    channels: ReadonlyMap<string, string>,
+    /** 指したときは、この単位を含む組だけを見る (名指しする相手を選ぶため) */
+    involving?: string,
+): Set<string> | null {
+    for (const { group, over } of overflows(capacity, channels)) {
+        if (involving !== undefined && !group.has(involving)) continue;
+        if (over > 0) return group;
     }
     return null;
+}
+
+/**
+ * 録れずに残るチャンネルの数 (いちばん溢れる組の溢れる数)。
+ * 割り振れる最大の本数は「チャンネル数 − これ」になる (ホールの定理の欠損版)
+ */
+function deficit(capacity: Capacity, channels: ReadonlyMap<string, string>): number {
+    let worst = 0;
+    for (const { over } of overflows(capacity, channels)) worst = Math.max(worst, over);
+    return worst;
 }
 
 function bits(n: number): number {
@@ -392,6 +411,15 @@ export function contending(
             ...together.map((o) => [tunerKey(poolOf(o.type), o.channel), poolOf(o.type)] as const),
             [tunerKey(pool, row.channel), pool],
         ]);
+        /*
+         * **自分を足すと録れない数が増えるときだけ競合。** 地上波だけが溢れている
+         * 区間で、ちょうど空いている衛星の番組まで競合と言わない (`assign` もそちらを落とさない)
+         */
+        const without = new Map(channels);
+        without.delete(tunerKey(pool, row.channel));
+        // 同じチャンネルの相手が居れば、その1本に相乗りする (消すと数え違える)
+        if (together.some((o) => o.channel === row.channel && poolOf(o.type) === pool)) continue;
+        if (deficit(capacity, channels) <= deficit(capacity, without)) continue;
         const short = shortage(capacity, channels, pool);
         if (short === null) continue;
         /*

@@ -296,6 +296,13 @@ describe('チューナーの取り合い (プレビュー)', () => {
         expect(against(bs, [a, b, cs], tuners('GR', 'BS+CS'))).toEqual(['番組2 (局)']);
     });
 
+    test('ほかの単位だけが溢れているなら、空いている自分は競合にしない', () => {
+        const bs = occ({ programId: 1, type: 'BS', channel: 'BS15_0' });
+        const a = occ({ programId: 2, channel: 'T16' });
+        const b = occ({ programId: 3, channel: 'T21' });
+        expect(against(bs, [a, b], tuners('GR', 'BS+CS'))).toEqual([]);
+    });
+
     test('足りない単位の相手だけを名指しする', () => {
         const bs = occ({ programId: 1, type: 'BS', channel: 'BS15_0' });
         const cs = occ({ programId: 2, type: 'CS', channel: 'CS4' });
