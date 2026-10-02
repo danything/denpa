@@ -20,7 +20,7 @@ RUN bun install
 # FFmpeg は下の `ffmpeg` 段と同じ版に揃える (Renovate が同じ PR で2か所とも上げる)。
 # 組むのは復号器1つだけなので、1〜2分で終わる
 # ---------------------------------------------------------------------------
-FROM docker.io/emscripten/emsdk:6.0.10 AS mpeg2wasm
+FROM docker.io/emscripten/emsdk:6.0.11 AS mpeg2wasm
 # renovate: datasource=github-tags depName=FFmpeg/FFmpeg extractVersion=^n(?<version>.*)$
 ARG FFMPEG_VERSION=9.0.2
 COPY wasm/mpeg2/ /src/mpeg2/
