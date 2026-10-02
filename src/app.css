@@ -214,17 +214,22 @@ h3,
 h4 {
     --pico-font-weight: 700;
 }
+/*
+ * 文字の大きさは html の 16px を据え置いたまま、小さい側を一段上げてある。
+ * 1280px の画面で本文・表・注記が 0.75〜0.9rem だと詰まって見えた。
+ * **番組表のマスは各画面の <style> で大きさを決めている** ので、ここを変えても動かない
+ */
 h1 {
     font-size: 1.5rem;
 }
 h2 {
-    font-size: 1.15rem;
+    font-size: 1.25rem;
 }
 h3 {
-    font-size: 1rem;
+    font-size: 1.05rem;
 }
 table {
-    font-size: 0.9rem;
+    font-size: 0.95rem;
 }
 th,
 td {
@@ -273,10 +278,10 @@ td {
     opacity: 0.65;
 }
 .small {
-    font-size: 0.85rem;
+    font-size: 0.9rem;
 }
 .tiny {
-    font-size: 0.75rem;
+    font-size: 0.8rem;
 }
 .bold {
     font-weight: 700;
@@ -309,7 +314,7 @@ td {
     min-width: 0;
 }
 .field > span:first-child {
-    font-size: 0.75rem;
+    font-size: 0.8rem;
     font-weight: 500;
     opacity: 0.7;
 }
