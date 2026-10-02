@@ -69,15 +69,15 @@ export interface Margins {
  * そちらを通す (`assign` の「番組はマージンに勝つ」)
  */
 function holding<T extends Assignable>(rivals: Accepted<T>[], at: number) {
-    /** チャンネル → 単位 (`poolOf`) */
+    /** `tunerKey` → 単位 (`poolOf`) */
     const all = new Map<string, string>();
     const body = new Map<string, string>();
     for (const rival of rivals) {
         if (rival.from > at || at >= rival.to) continue;
         const pool = poolOf(rival.reservation.type);
-        all.set(rival.reservation.channel, pool);
+        all.set(tunerKey(pool, rival.reservation.channel), pool);
         if (rival.reservation.start_at <= at && at < rival.reservation.end_at) {
-            body.set(rival.reservation.channel, pool);
+            body.set(tunerKey(pool, rival.reservation.channel), pool);
         }
     }
     return { all, body };
@@ -104,13 +104,21 @@ export function capacityOf(tuners: readonly { types: readonly string[]; disabled
     return tuners.filter((t) => !t.disabled).map((t) => new Set(t.types.map(poolOf)));
 }
 
+/**
+ * 1本のチューナーで足りる単位。チャンネル名は地上波と衛星で重ならない作りだが、
+ * 単位を跨いで数えるようになったので、念のため単位も付けて取り違えないようにする
+ */
+function tunerKey(pool: string, channel: string): string {
+    return `${pool}:${channel}`;
+}
+
 /** その単位を受けられるチューナーが1本も無ければ、本数不明として数えない */
 function known(capacity: Capacity, pool: string): boolean {
     return capacity.some((tuner) => tuner.has(pool));
 }
 
 /**
- * 同時に要るチャンネル (チャンネル → 単位) を、チューナーに1本ずつ割り振れるか。
+ * 同時に要るチャンネル (`tunerKey` → 単位) を、チューナーに1本ずつ割り振れるか。
  * 割り振れなければ、**足りない単位の組**を返す (割り振れるなら null)。
  *
  * どの単位の組を取っても「その組のチャンネル数 ≦ その組のどれかを受けられる本数」なら
@@ -221,8 +229,8 @@ export function assign<T extends Assignable>(
             const from = points[i]!;
             const to = points[i + 1]!;
             const here = holding(rivals, from);
-            const all = new Map([...here.all, [candidate.channel, pool]]);
-            const body = new Map([...here.body, [candidate.channel, pool]]);
+            const all = new Map([...here.all, [tunerKey(pool, candidate.channel), pool]]);
+            const body = new Map([...here.body, [tunerKey(pool, candidate.channel), pool]]);
             worst = Math.max(worst, all.size);
             /*
              * **番組はマージンに勝つ。** この区間が候補の番組にかかっているなら、
@@ -375,8 +383,8 @@ export function contending(
             return theirs.from <= at && at < theirs.to;
         });
         const channels = new Map([
-            ...together.map((o) => [o.channel, poolOf(o.type)] as const),
-            [row.channel, pool],
+            ...together.map((o) => [tunerKey(poolOf(o.type), o.channel), poolOf(o.type)] as const),
+            [tunerKey(pool, row.channel), pool],
         ]);
         const short = shortage(capacity, channels);
         if (short === null || !short.has(pool)) continue;
