@@ -417,9 +417,20 @@ public sealed class TunerPool(
     /// </summary>
     private int? Pick(string type, string channel, int priority)
     {
+        /*
+         * **受けられる種別の少ないものから使う。** PX-MLT のように地上波も衛星も受ける
+         * 1本を地上波で塞ぐと、地上波専用が空いていても衛星が録れなくなる。
+         * サーバの予約の割り振り (conflict.ts の `Capacity`) は兼用の1本を残す前提で数えている
+         */
         var usable = Enumerable.Range(0, Tuners.Count)
             .Where(index => !Tuners[index].Disabled && Tuners[index].Types.Contains(type))
+            .OrderBy(index => Tuners[index].Types.Length)
             .ToList();
+        // 兼用の本は、選局し直しを1回省くためだけには使わない (もっと狭い本が空いているなら)
+        var narrowest = usable.Where(index => !_leases.ContainsKey(index))
+            .Select(index => Tuners[index].Types.Length)
+            .DefaultIfEmpty(int.MaxValue)
+            .Min();
 
         /*
          * **既に合っているものを先に採る。** ただし誰かが読んでいる最中のものは
@@ -428,7 +439,7 @@ public sealed class TunerPool(
          */
         foreach (var index in usable)
         {
-            if (_leases.ContainsKey(index)) continue;
+            if (_leases.ContainsKey(index) || Tuners[index].Types.Length > narrowest) continue;
             /*
              * 錠の順は `_gate` → `_deviceGate`。`CloseAll` も同じ向きなので
              * 噛み合わない。`Channel` を `held.Gate` 無しで読むのは承知の上で、

@@ -69,13 +69,15 @@ export interface Margins {
  * そちらを通す (`assign` の「番組はマージンに勝つ」)
  */
 function holding<T extends Assignable>(rivals: Accepted<T>[], at: number) {
-    const all = new Set<string>();
-    const body = new Set<string>();
+    /** チャンネル → 単位 (`poolOf`) */
+    const all = new Map<string, string>();
+    const body = new Map<string, string>();
     for (const rival of rivals) {
         if (rival.from > at || at >= rival.to) continue;
-        all.add(rival.reservation.channel);
+        const pool = poolOf(rival.reservation.type);
+        all.set(rival.reservation.channel, pool);
         if (rival.reservation.start_at <= at && at < rival.reservation.end_at) {
-            body.add(rival.reservation.channel);
+            body.set(rival.reservation.channel, pool);
         }
     }
     return { all, body };
@@ -91,11 +93,62 @@ export function poolOf(type: string): string {
 }
 
 /**
+ * 動いているチューナーそれぞれが受けられる単位 (`poolOf`)。**空なら本数不明。**
+ *
+ * 単位ごとの本数で持たないのは、PX-MLT のように**地上波も衛星も受ける1本**があるから。
+ * 本数で持つと、その1本を地上波でも衛星でも1本ずつ数えてしまう
+ */
+export type Capacity = readonly ReadonlySet<string>[];
+
+export function capacityOf(tuners: readonly { types: readonly string[]; disabled?: boolean }[]): Capacity {
+    return tuners.filter((t) => !t.disabled).map((t) => new Set(t.types.map(poolOf)));
+}
+
+/** その単位を受けられるチューナーが1本も無ければ、本数不明として数えない */
+function known(capacity: Capacity, pool: string): boolean {
+    return capacity.some((tuner) => tuner.has(pool));
+}
+
+/**
+ * 同時に要るチャンネル (チャンネル → 単位) を、チューナーに1本ずつ割り振れるか。
+ * 割り振れなければ、**足りない単位の組**を返す (割り振れるなら null)。
+ *
+ * どの単位の組を取っても「その組のチャンネル数 ≦ その組のどれかを受けられる本数」なら
+ * 割り振れる (ホールの結婚定理)。単位は高々数個なので組を総当たりしてよい。
+ * 小さい組から調べるので、返る組は「どれを諦めれば空くか」に近いものになる
+ * (衛星が溢れているのに地上波の番組まで名指ししない)
+ */
+function shortage(capacity: Capacity, channels: ReadonlyMap<string, string>): Set<string> | null {
+    const demand = new Map<string, number>();
+    for (const pool of channels.values()) {
+        if (known(capacity, pool)) demand.set(pool, (demand.get(pool) ?? 0) + 1);
+    }
+    const pools = [...demand.keys()];
+    const subsets = Array.from({ length: (1 << pools.length) - 1 }, (_, i) => i + 1).sort(
+        (a, b) => bits(a) - bits(b),
+    );
+    for (const mask of subsets) {
+        const group = new Set(pools.filter((_, i) => mask & (1 << i)));
+        let need = 0;
+        for (const pool of group) need += demand.get(pool)!;
+        const have = capacity.filter((tuner) => [...group].some((pool) => tuner.has(pool))).length;
+        if (need > have) return group;
+    }
+    return null;
+}
+
+function bits(n: number): number {
+    let count = 0;
+    for (; n > 0; n >>= 1) count += n & 1;
+    return count;
+}
+
+/**
  * 優先度が高い順・開始が早い順に採用していき、入らなかったものを競合として返す。
  *
  * 同じ物理チャンネルの同時録画はエージェントが1本のチューナーで捌けるので、
  * 数えるのは「同時刻に開いている“異なるチャンネル”の数」。
- * capacity (`poolOf` で束ねた単位) に無い場合は本数不明として無制限に扱う。
+ * 受けられるチューナーが分からない単位 (`known`) は無制限に扱う。
  *
  * ## 入るところまで録る
  *
@@ -122,7 +175,7 @@ export function poolOf(type: string): string {
  */
 export function assign<T extends Assignable>(
     candidates: T[],
-    capacity: Map<string, number>,
+    capacity: Capacity,
     margins: Margins = { start: 0, end: 0 },
 ): AssignResult<T> {
     const ordered = [...candidates].sort(
@@ -135,15 +188,13 @@ export function assign<T extends Assignable>(
     for (const candidate of ordered) {
         const mine = window(candidate, margins);
         const pool = poolOf(candidate.type);
-        const limit = capacity.get(pool);
-        if (limit === undefined) {
+        if (!known(capacity, pool)) {
             accepted.push({ reservation: candidate, from: mine.from, to: mine.to });
             continue;
         }
 
-        const rivals = accepted.filter(
-            (a) => poolOf(a.reservation.type) === pool && a.from < mine.to && mine.from < a.to,
-        );
+        // 単位が違っても相手にする。兼用のチューナーを地上波と衛星で取り合うことがある
+        const rivals = accepted.filter((a) => a.from < mine.to && mine.from < a.to);
         /*
          * **変わり目でだけ数える。** 同時本数が変わるのは、誰かが掴みはじめるか
          * 離すかした瞬間だけ。その間は数が動かないので、区切りの間を1つの塊として
@@ -170,8 +221,8 @@ export function assign<T extends Assignable>(
             const from = points[i]!;
             const to = points[i + 1]!;
             const here = holding(rivals, from);
-            const all = new Set([candidate.channel, ...here.all]);
-            const body = new Set([candidate.channel, ...here.body]);
+            const all = new Map([...here.all, [candidate.channel, pool]]);
+            const body = new Map([...here.body, [candidate.channel, pool]]);
             worst = Math.max(worst, all.size);
             /*
              * **番組はマージンに勝つ。** この区間が候補の番組にかかっているなら、
@@ -180,9 +231,9 @@ export function assign<T extends Assignable>(
              * 候補のマージンぶんの区間では、相手のマージンを追い出さない
              */
             const inBody = from < candidate.end_at && candidate.start_at < to;
-            const fits = (inBody ? body : all).size <= limit;
+            const fits = shortage(capacity, inBody ? body : all) === null;
             if (fits) {
-                if (inBody && all.size > limit) pushed.push(from);
+                if (inBody && shortage(capacity, all) !== null) pushed.push(from);
                 run = run === null ? { from, to } : { from: run.from, to };
                 if (best === null || run.to - run.from > best.to - best.from) best = { ...run };
             } else {
@@ -193,7 +244,7 @@ export function assign<T extends Assignable>(
         if (best === null) {
             rejected.push({
                 reservation: candidate,
-                reason: `${pool} のチューナーは ${limit} 本ですが、同時に ${worst} チャンネル必要です`,
+                reason: `${pool} を受けられるチューナーが足りません (同時に ${worst} チャンネル必要です)`,
             });
             continue;
         }
@@ -226,7 +277,7 @@ export interface Occupant {
     programId: number;
     name: string;
     serviceName: string;
-    /** チャンネル種別。地上波と衛星は別のチューナーなので、取り合わない */
+    /** チャンネル種別。取り合うかどうかはチューナーしだい (`Capacity`) */
     type: string;
     channel: string;
     start_at: number;
@@ -272,11 +323,12 @@ export function rivalsOf(occupants: Iterable<Occupant>, margins: Margins): Rival
  * ここだけ違う物差しで数えると、画面が「重なっています」と言っているのに
  * スケジューラは通す、という食い違いが出る。
  *
- * - **`poolOf` の単位で数える。** チューナーは GR / BS・CS で別々に刺さっている。
- *   全部まとめて数えていた頃は、**衛星の番組に地上波の番組が競合として出ていた**。
+ * - **チューナーごとに受けられる単位で数える** (`Capacity`)。全部まとめて数えていた頃は、
+ *   **衛星の番組に地上波の番組が競合として出ていた**。兼用のチューナーがあれば、
+ *   地上波と衛星でも取り合う。
  * - **同じ物理チャンネルは1本で足りる。** エージェントが1本のチューナーを配るので、
  *   テレ東1と2のような相乗りは何本並んでも1本。
- * - **本数を超えて初めて競合。** 地上波チューナーが2本あるなら、別チャンネルの
+ * - **割り振れなくなって初めて競合。** 地上波チューナーが2本あるなら、別チャンネルの
  *   2番組が重なっていても録れる。重なりをそのまま出していた頃は、録れるものまで
  *   「重なっています」と出ていた。
  * - **本数が分からないときは何も言わない** (エージェントが落ちているとき)。
@@ -288,15 +340,14 @@ export function rivalsOf(occupants: Iterable<Occupant>, margins: Margins): Rival
 export function contending(
     row: { programId: number; type: string; channel: string; start_at: number; end_at: number },
     rivals: Rivals,
-    capacity: Map<string, number>,
+    capacity: Capacity,
     margins: Margins,
 ): string[] {
     const pool = poolOf(row.type);
-    const limit = capacity.get(pool);
-    if (limit === undefined) return [];
+    if (!known(capacity, pool)) return [];
     const mine = window(row, margins);
 
-    /** 同じ単位で時間が重なっているもの。同じチャンネルのものも入れる (本数は1本で済む) */
+    /** 時間が重なっているもの。同じチャンネルのものも入れる (本数は1本で済む) */
     const overlapping: Occupant[] = [];
     // 総当たりにしない。ゆるい条件のルールは数千件に当たるので、
     // 1件ずつ全件と突き合わせると番組表の二乗ぶん回ることになる
@@ -305,13 +356,13 @@ export function contending(
         const theirs = window(other, margins);
         // 並びは開始順。これより後ろは全部この番組より後に始まる
         if (theirs.from >= mine.to) break;
-        if (other.programId === row.programId || poolOf(other.type) !== pool) continue;
+        if (other.programId === row.programId) continue;
         if (theirs.to <= mine.from) continue;
         overlapping.push(other);
     }
 
     /*
-     * 同時に何チャンネル要るか。**いちばん要る瞬間は必ずどれかの区間の開始時点に
+     * 割り振れなくなるか。**いちばん苦しい瞬間は必ずどれかの区間の開始時点に
      * 現れる**ので、そこだけ調べれば足りる (assign と同じ)。重なっている相手を
      * ただ全部足すと、互いには重なっていないもの同士まで一緒に数えてしまう
      */
@@ -323,14 +374,20 @@ export function contending(
             const theirs = window(o, margins);
             return theirs.from <= at && at < theirs.to;
         });
-        const channels = new Set([row.channel, ...together.map((o) => o.channel)]);
-        if (channels.size > worst) {
-            worst = channels.size;
-            culprits = together;
+        const channels = new Map([
+            ...together.map((o) => [o.channel, poolOf(o.type)] as const),
+            [row.channel, pool],
+        ]);
+        const short = shortage(capacity, channels);
+        if (short === null || !short.has(pool)) continue;
+        // 足りない単位の相手だけを名指しする。それ以外を諦めても空かない
+        const named = together.filter((o) => short.has(poolOf(o.type)));
+        if (named.length > worst) {
+            worst = named.length;
+            culprits = named;
         }
     }
 
-    if (worst <= limit) return [];
     // 同じチャンネルの相手は名前を出さない。1本で足りるので、諦めても何も空かない
     return culprits.filter((o) => o.channel !== row.channel).map((o) => `${o.name} (${o.serviceName})`);
 }

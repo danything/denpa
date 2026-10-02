@@ -1,5 +1,14 @@
 import { describe, expect, test } from 'bun:test';
-import { type Assignable, assign, contending, type Occupant, rivalsOf, whole } from './conflict';
+import {
+    type Assignable,
+    assign,
+    type Capacity,
+    capacityOf,
+    contending,
+    type Occupant,
+    rivalsOf,
+    whole,
+} from './conflict';
 
 function res(over: Partial<Assignable> & { id: number }): Assignable {
     return {
@@ -12,10 +21,12 @@ function res(over: Partial<Assignable> & { id: number }): Assignable {
     };
 }
 
-const GR2 = new Map([
-    ['GR', 2],
-    ['BS/CS', 2],
-]);
+/** 'GR+BS+CS' のように、1本ずつ受けられる種別を並べる */
+function tuners(...specs: string[]) {
+    return capacityOf(specs.map((spec) => ({ types: spec.split('+') })));
+}
+
+const GR2 = tuners('GR', 'GR', 'BS+CS', 'BS+CS');
 
 describe('assign', () => {
     test('チューナー本数に収まるものは全部採用する', () => {
@@ -43,7 +54,7 @@ describe('assign', () => {
         expect(accepted.map((a) => a.reservation.id).sort()).toEqual([1, 2]);
         expect(rejected).toHaveLength(1);
         expect(rejected[0]!.reservation.id).toBe(3);
-        expect(rejected[0]!.reason).toContain('GR のチューナーは 2 本');
+        expect(rejected[0]!.reason).toContain('GR を受けられるチューナーが足りません');
     });
 
     test('優先度が高いものを残す', () => {
@@ -86,7 +97,7 @@ describe('assign', () => {
     test('本数が分からない種別は制限しない', () => {
         const { rejected } = assign(
             [1, 2, 3, 4].map((id) => res({ id, type: 'CS', channel: `CS${id}` })),
-            new Map([['GR', 2]]),
+            tuners('GR', 'GR'),
         );
         expect(rejected).toHaveLength(0);
     });
@@ -94,14 +105,34 @@ describe('assign', () => {
     test('BS と CS は同じ衛星チューナーを取り合う', () => {
         const { rejected } = assign(
             [res({ id: 1, type: 'BS', channel: 'BS15_0' }), res({ id: 2, type: 'CS', channel: 'CS4' })],
-            new Map([['BS/CS', 1]]),
+            tuners('BS+CS'),
         );
         expect(rejected.map((r) => r.reservation.id)).toEqual([2]);
+    });
+
+    test('地上波も衛星も受けるチューナー (PX-MLT など) は、どちらかで1本', () => {
+        const mixed = tuners('GR', 'GR+BS+CS');
+        // 地上波2つで2本とも埋まるので、衛星は入らない
+        const full = assign(
+            [
+                res({ id: 1, channel: 'T16' }),
+                res({ id: 2, channel: 'T21' }),
+                res({ id: 3, type: 'BS', channel: 'BS15_0' }),
+            ],
+            mixed,
+        );
+        expect(full.rejected.map((r) => r.reservation.id)).toEqual([3]);
+        // 地上波1つなら、兼用の1本が衛星に回る
+        const room = assign(
+            [res({ id: 1, channel: 'T16' }), res({ id: 2, type: 'BS', channel: 'BS15_0' })],
+            mixed,
+        );
+        expect(room.rejected).toHaveLength(0);
     });
 });
 
 describe('assign (前後マージン)', () => {
-    const GR1 = new Map([['GR', 1]]);
+    const GR1 = tuners('GR');
     const MARGINS = { start: 10, end: 15 };
 
     /*
@@ -179,7 +210,7 @@ describe('assign (前後マージン)', () => {
      */
     test('重なりが番組の一部なら、優先度の低いほうが途中から録る', () => {
         const MIN = 60_000;
-        const GR2 = new Map([['GR', 2]]);
+        const GR2 = tuners('GR', 'GR');
         const { accepted, rejected } = assign(
             [
                 res({ id: 1, channel: 'MX', start_at: 0, end_at: 30 * MIN, priority: 2 }),
@@ -233,7 +264,7 @@ function occ(over: Partial<Occupant> & { programId: number }): Occupant {
 
 const NO_MARGIN = { start: 0, end: 0 };
 
-function against(row: Occupant, others: Occupant[], capacity: Map<string, number>): string[] {
+function against(row: Occupant, others: Occupant[], capacity: Capacity): string[] {
     return contending(row, rivalsOf([row, ...others], NO_MARGIN), capacity, NO_MARGIN);
 }
 
@@ -245,29 +276,44 @@ describe('チューナーの取り合い (プレビュー)', () => {
          */
         const bs = occ({ programId: 1, type: 'BS', channel: 'BS15_0' });
         const gr = occ({ programId: 2, type: 'GR', channel: 'T16' });
-        expect(against(bs, [gr], new Map([['BS/CS', 1]]))).toEqual([]);
+        expect(against(bs, [gr], tuners('BS+CS'))).toEqual([]);
+    });
+
+    test('兼用のチューナーがあれば、地上波と衛星でも取り合う', () => {
+        const bs = occ({ programId: 1, type: 'BS', channel: 'BS15_0' });
+        const a = occ({ programId: 2, channel: 'T16' });
+        const b = occ({ programId: 3, channel: 'T21' });
+        expect(against(bs, [a, b], tuners('GR', 'GR+BS+CS')).sort()).toEqual(['番組2 (局)', '番組3 (局)']);
+        expect(against(bs, [a, b], tuners('GR', 'GR', 'GR+BS+CS'))).toEqual([]);
+    });
+
+    test('足りない単位の相手だけを名指しする', () => {
+        const bs = occ({ programId: 1, type: 'BS', channel: 'BS15_0' });
+        const cs = occ({ programId: 2, type: 'CS', channel: 'CS4' });
+        const gr = occ({ programId: 3, channel: 'T16' });
+        expect(against(bs, [cs, gr], tuners('GR', 'GR', 'BS+CS'))).toEqual(['番組2 (局)']);
     });
 
     test('本数に収まっていれば、重なっていても出さない', () => {
         const mine = occ({ programId: 1, channel: 'T16' });
         const other = occ({ programId: 2, channel: 'T21' });
         // 地上波2本あるので、別チャンネル2番組は録れる
-        expect(against(mine, [other], new Map([['GR', 2]]))).toEqual([]);
+        expect(against(mine, [other], tuners('GR', 'GR'))).toEqual([]);
         // 1本しかなければ取り合う
-        expect(against(mine, [other], new Map([['GR', 1]]))).toEqual(['番組2 (局)']);
+        expect(against(mine, [other], tuners('GR'))).toEqual(['番組2 (局)']);
     });
 
     test('同じ物理チャンネルは1本で足りるので数にも名前にも入れない', () => {
         const mine = occ({ programId: 1, channel: 'T16' });
         const sameCh = occ({ programId: 2, channel: 'T16' });
-        expect(against(mine, [sameCh], new Map([['GR', 1]]))).toEqual([]);
+        expect(against(mine, [sameCh], tuners('GR'))).toEqual([]);
     });
 
     test('足りないときは相手を全部返す', () => {
         const mine = occ({ programId: 1, channel: 'T16' });
         const a = occ({ programId: 2, channel: 'T21' });
         const b = occ({ programId: 3, channel: 'T25' });
-        expect(against(mine, [a, b], new Map([['GR', 1]])).sort()).toEqual(['番組2 (局)', '番組3 (局)']);
+        expect(against(mine, [a, b], tuners('GR')).sort()).toEqual(['番組2 (局)', '番組3 (局)']);
     });
 
     test('互いに重なっていない相手を足し合わせない', () => {
@@ -275,12 +321,12 @@ describe('チューナーの取り合い (プレビュー)', () => {
         const mine = occ({ programId: 1, channel: 'T16', start_at: 0, end_at: 60 });
         const a = occ({ programId: 2, channel: 'T21', start_at: 0, end_at: 20 });
         const b = occ({ programId: 3, channel: 'T25', start_at: 40, end_at: 60 });
-        expect(against(mine, [a, b], new Map([['GR', 2]]))).toEqual([]);
+        expect(against(mine, [a, b], tuners('GR', 'GR'))).toEqual([]);
     });
 
     test('本数が分からないときは何も言わない', () => {
         const mine = occ({ programId: 1, channel: 'T16' });
         const other = occ({ programId: 2, channel: 'T21' });
-        expect(against(mine, [other], new Map())).toEqual([]);
+        expect(against(mine, [other], [])).toEqual([]);
     });
 });
