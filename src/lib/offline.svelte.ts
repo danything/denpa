@@ -313,7 +313,7 @@ export async function saveOffline(rec: SaveTarget): Promise<void> {
         if (reg.backgroundFetch !== undefined) {
             // 前回の残骸 (失敗して居座っている登録) を先に中止する
             await abortRunning(reg, rec.id);
-            // ブラウザに預ける。受け取りは SW (service-worker.ts)。
+            // ブラウザに預ける。受け取りは SW (`service-worker/index.ts`)。
             // downloadTotal は実測の合計 + 2% (転送の揺れぶん。超えたら打ち切られる)
             const running = await reg.backgroundFetch.fetch(fetchId(rec.id, source, attempt), urls, {
                 title: `denpa: ${rec.name}`,

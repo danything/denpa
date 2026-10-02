@@ -1090,8 +1090,8 @@
         {#if !ready}
             <!--
                 **焼けていないものは観られない。** 生TSは MPEG-2 で、ブラウザに
-                復号器が無い (docs/stream.md §5.5)。黙って黒い枠を出すより、
-                そう言って落とす口を出すほうがいい
+                復号器が無い (持ち込んだ WASM の復号器はライブの生の道だけ。docs/stream.md §5.5)。
+                黙って黒い枠を出すより、そう言って落とす口を出すほうがいい
             -->
             <div class="panel stack not-ready">
                 <h2>まだ観られません</h2>
@@ -1390,7 +1390,7 @@
                         {/if}
                     </div>
 
-                    <div class="buttons" data-testid="watch-buttons">
+                    <div class="cluster buttons" data-testid="watch-buttons">
                         <!--
                             **並びはライブと同じ。** 再生・音・字幕が左から順で、
                             全画面がいちばん右。画面を移っても同じ場所にあると、
@@ -1697,10 +1697,7 @@
         background: rgb(255 255 255 / 0.7);
     }
     .buttons {
-        display: flex;
-        flex-wrap: wrap;
-        align-items: center;
-        gap: 0.25rem;
+        --gap: 0.25rem;
         margin-top: 0.25rem;
         color: #fff;
     }

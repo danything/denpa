@@ -72,7 +72,6 @@
         tvSeen = key;
         tvRows = rows;
     });
-
 </script>
 
 {#snippet checkRow(
@@ -759,22 +758,6 @@
 </div>
 
 <style>
-    .columns {
-        display: grid;
-        align-items: start;
-        gap: 1.5rem;
-    }
-    @media (min-width: 1280px) {
-        .columns {
-            grid-template-columns: repeat(2, minmax(0, 1fr));
-        }
-    }
-    .column {
-        display: flex;
-        min-width: 0;
-        flex-direction: column;
-        gap: 1.5rem;
-    }
     .card {
         display: flex;
         flex-direction: column;
@@ -837,10 +820,6 @@
     .check-row input {
         margin: 0.15rem 0 0;
         flex-shrink: 0;
-    }
-    fieldset.field {
-        border: 0;
-        padding: 0;
     }
     .rows > .row + .row {
         border-top: 1px solid var(--dp-base-300);
@@ -920,27 +899,20 @@
     .tv-row select {
         width: auto;
     }
-    .tv-row input.w-name {
+    .w-name {
         width: 10rem;
     }
-    .tv-row input.w-ip {
+    .w-ip {
         width: 11rem;
     }
-    .tv-row input.w-port {
+    .w-port {
         width: 6rem;
-    }
-    .progress-block {
-        display: flex;
-        flex-direction: column;
-        gap: 0.5rem;
-        margin-top: 1rem;
     }
     .log {
         border: 1px solid var(--dp-base-300);
         border-radius: 1rem;
     }
     .log summary {
-        cursor: pointer;
         padding: 0.5rem 1rem;
     }
     .log pre {

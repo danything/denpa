@@ -7,7 +7,7 @@
 
     /**
      * 端末に保存した録画。**電波が無くてもここだけは開く** — サービスワーカーが
-     * この画面を控えておき、繋がらないときの行き先にする (service-worker.ts)。
+     * この画面を控えておき、繋がらないときの行き先にする (service-worker/index.ts)。
      *
      * プレイヤーはこの画面に内蔵する。オフラインでは /watch/<id> へは行けない
      * (あの画面はサーバが組む) ので、ここで直接観られるようにしておく。
@@ -261,9 +261,7 @@
         margin-bottom: 0.25rem;
     }
     .list {
-        margin: 0;
         padding: 0;
-        list-style: none;
         border-radius: 0.5rem;
         background: var(--dp-surface);
     }
@@ -271,6 +269,7 @@
         display: flex;
         align-items: center;
         gap: 0.75rem;
+        /* Pico は `li` に下の余白と四角の印を付ける */
         margin: 0;
         padding: 0.75rem;
         list-style: none;

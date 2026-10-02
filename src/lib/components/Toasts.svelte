@@ -110,7 +110,8 @@
             <!-- 見た目は app.css の notice (error / info / success。kind と同じ名前) -->
             <div class="notice {notice.kind} toast" data-testid={notice.key}>
                 <span class="text">{notice.text}</span>
-                <button type="button"
+                <button
+                    type="button"
                     class="ghost xs close"
                     onclick={() => dismiss(notice.key)}
                     aria-label="閉じる"

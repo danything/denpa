@@ -86,7 +86,7 @@
      *
      * **局で引く。** 物理チャンネルで引いていた頃は、**1本に複数の局が乗って
      * いると先頭の局が塗られていた** — MX2 を選んでも MX1 の行が光る。
-     * 焼いているのは選んだ局なので (`live.ts`)、絵と印が食い違う
+     * 焼いているのは選んだ局なので (`server/live.ts`)、絵と印が食い違う
      */
     const current = $derived(channels.find((c) => c.id === player.tuned?.serviceId));
 
@@ -236,8 +236,7 @@
 
     **広い画面ではページごとスクロールさせない** (`+layout.svelte` の `fill`)。
     映像を見ながら選ぶものなので、ページが動くと絵が画面から出ていく。
-    動くのは右の一覧だけ。`min-h-0` が要る — 付けないと flex の子は中身の高さで
-    突っ張って、外側の `overflow` が効かない。
+    動くのは右の一覧だけ。
 
     **二段組にする幅は観る画面 (`/watch/<id>`) と同じ `md` (768px)。** 映像を左、
     一覧を右に置く形は同じなのに、こちらだけ 1024px からにしていた頃は、
@@ -366,7 +365,7 @@
                     {/if}
 
                     <!-- **並びは観る画面と同じ。** 再生・音・字幕が左から順で、全画面が右端 -->
-                    <div class="control-row">
+                    <div class="cluster control-row">
                         <ControlButton
                             path={player.paused ? PLAY : PAUSE}
                             label={player.paused ? '再生' : '一時停止'}
@@ -496,7 +495,7 @@
                         <!--
                             放送の今に居るかどうか。離れていれば押して戻れる。
                             **文字は焼き方のボタンと同じ大きさ・幅は詰める** —
-                            btn-lg のままだと帯の中でこれだけ太って見えていた
+                            大きいボタンのままだと帯の中でこれだけ太って見えていた
                         -->
                         <EdgeButton
                             active={player.live}
@@ -684,7 +683,7 @@
         (リモコン番号順、持たない局は物理チャンネル順) にしてあるので、
         番組表で見つけた局をここでも同じ位置で探せる。
 
-        **高さは残りぜんぶ。** `max-h-[70vh]` で切っていた頃は、画面の下に
+        **高さは残りぜんぶ。** 高さを 70vh で切っていた頃は、画面の下に
         余白があるのに一覧のほうが先に終わっていた
     -->
     {#if detail.current}
@@ -710,7 +709,7 @@
 
                 番組の中身と違って**入れ替えない** — 押しながら局も変えたいし、
                 リモコンを引っ込める操作を覚えることにもなる。一覧は残りの高さで
-                巻き取られる (`flex-1`)
+                巻き取られる (`.channels` の `flex: 1`)
             -->
             {#if dataPress !== null}
                 <Remote press={dataPress} />
@@ -857,10 +856,7 @@
         accent-color: var(--pico-primary-background);
     }
     .control-row {
-        display: flex;
-        flex-wrap: wrap;
-        align-items: center;
-        gap: 0.25rem;
+        --gap: 0.25rem;
         margin-top: 0.25rem;
         color: #fff;
     }
@@ -906,7 +902,6 @@
         margin: 0;
         padding: 0;
         overflow-y: auto;
-        list-style: none;
     }
     @media (min-width: 768px) {
         .channels {

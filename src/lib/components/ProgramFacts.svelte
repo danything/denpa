@@ -80,7 +80,7 @@
 
 <!-- EPG が持っている符号は、そのままでは読めないので言葉に直して出す -->
 <div class="badges" data-testid="detail-badges">
-    <!-- 目印は番号で。字を目印にすると、同じ札が2つ来たときに落ちる -->
+    <!-- 目印は番号で (`genres` の注) -->
     {#each genres as label, i (i)}
         <span class="tag" data-testid="detail-genre">{label}</span>
     {/each}
@@ -131,11 +131,9 @@
 {/if}
 
 {#each notes as note (note.title)}
-    <!-- 失敗や削除の理由。一覧には状態だけを出して、中身はここで見せる -->
     <div class="block" data-testid="detail-error">
         <div class="text-error small head">{note.title}</div>
-        <pre
-            class="note">{note.text}</pre>
+        <pre class="note">{note.text}</pre>
     </div>
 {/each}
 
