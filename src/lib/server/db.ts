@@ -47,8 +47,8 @@ export const MIGRATIONS = 'drizzle';
  * マイグレーションを持つ前 (1.7.x まで) の DB にもそのまま当たる — あの頃は起動のたびに
  * `CREATE TABLE IF NOT EXISTS` と足りない列の追加で同じ形に整えていた
  */
-export function bootstrap(db: Database, migrationsFolder: string = MIGRATIONS): void {
-    migrate(drizzle({ client: db }), { migrationsFolder });
+export function bootstrap(db: Database): void {
+    migrate(drizzle({ client: db }), { migrationsFolder: MIGRATIONS });
     verify(db);
 }
 

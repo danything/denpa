@@ -26,7 +26,7 @@ import { enabled as oidcEnabled } from './oidc';
  * 期限付きのリンクとログインの控えで開けられる口。**ここは OIDC のリダイレクトにしない。**
  * `file` はファイルそのもの、`playlist` はそれを続きの位置から指す XSPF
  * (`playlist/[name]/+server.ts`)。どちらもプレイヤーが取りに来るので同じ扱い。
- * 尻の1段は番組名 (プレイヤーの見出し用、share/+server.ts)。読み捨てるので何が来ても
+ * 尻の1段は番組名 (プレイヤーの見出し用、share.ts の shareUrls)。読み捨てるので何が来ても
  * よいが、それより深くは通さない。**形はここ1つ** — share.ts の突き合わせも同じものを使う
  */
 const FILE_PATH = /^\/api\/recordings\/(\d+)\/(?:file|playlist)(?:\/[^/]+)?$/;

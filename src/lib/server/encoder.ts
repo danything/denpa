@@ -320,7 +320,7 @@ interface EncodeOptions {
     captionTitle?: string;
     /**
      * 入れ物 (mkv) の title に焼き込む番組名 (`title.displayTitle`)。テレビの VLC の
-     * 履歴・通知に出る名前 (再生画面の見出しは URL の尻 — share/+server.ts)
+     * 履歴・通知に出る名前 (再生画面の見出しは URL の尻 — share.ts の shareUrls)
      */
     mediaTitle?: string;
     /**

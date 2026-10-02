@@ -1,4 +1,3 @@
-import { existsSync } from 'node:fs';
 import { extname } from 'node:path';
 import { config } from './config';
 import { removeIfExists } from './fsx';
@@ -103,7 +102,7 @@ export async function writeThumbnail(
     videoPath: string,
     durationSec: number,
     content?: { start: number; end: number },
-): Promise<boolean> {
+): Promise<void> {
     const { thumbnail } = sidecarPaths(videoPath);
     let at: number;
     if (content !== undefined && Number.isFinite(content.start)) {
@@ -116,8 +115,7 @@ export async function writeThumbnail(
                 : config.thumbnailPosition;
     }
 
-    const { code } = await run([config.ffmpeg, ...buildThumbnailArgs(videoPath, thumbnail, at)]);
-    return code === 0 && existsSync(thumbnail);
+    await run([config.ffmpeg, ...buildThumbnailArgs(videoPath, thumbnail, at)]);
 }
 
 /** 動画と一緒に、隣の付き添いを全部消す。取り残すと片付かないゴミになる */

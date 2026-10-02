@@ -26,7 +26,7 @@
  * **`Host` はそのまま渡す。** 書き換わると SvelteKit の CSRF 判定が自分の
  * origin と食い違い、フォーム送信が全部弾かれる。denpa は名前を2つ持っていて
  * 自分の origin を1つに固定できない (SvelteKit の `paths.origin`。組むときに決まる)
- * ため、ここが効く (charts/denpa/templates/denpa.yaml)。
+ * ため、ここが効く (名前は charts/denpa/values.yaml の ingress.hosts)。
  */
 
 /** `src/lib/server/ws.ts` が置く名前 */

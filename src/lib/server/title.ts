@@ -21,9 +21,8 @@ const FORBIDDEN = '/\\:*?"<>|';
 /** 全角英数・記号を半角に寄せる。放送波の局名/番組名は全角混じりで検索しづらい */
 export function toHalfWidth(input: string): string {
     return input
-        .replace(/[Ａ-Ｚａ-ｚ０-９]/g, (c) => String.fromCharCode(c.charCodeAt(0) - 0xfee0))
-        .replace(/　/g, ' ')
-        .replace(/[！-／：-＠［-｀｛-～]/g, (c) => String.fromCharCode(c.charCodeAt(0) - 0xfee0));
+        .replace(/[！-～]/g, (c) => String.fromCharCode(c.charCodeAt(0) - 0xfee0))
+        .replace(/　/g, ' ');
 }
 
 /**

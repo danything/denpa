@@ -25,7 +25,6 @@ const DISCOVERY = object({
     authorization_endpoint: string,
     token_endpoint: string,
     jwks_uri: string,
-    end_session_endpoint: optional(string),
 });
 type Discovery = Infer<typeof DISCOVERY>;
 

@@ -8,7 +8,7 @@
 
 import { eq, lte } from 'drizzle-orm';
 import { config } from './config';
-import { now, orm } from './db';
+import { affected, now, orm } from './db';
 import { randomToken } from './oidc';
 import { sessions } from './schema';
 
@@ -54,7 +54,5 @@ export function destroy(id: string | undefined): void {
 
 /** 切れた控えを片付ける。消し忘れても害は無いが、溜め続ける理由も無い */
 export function prune(): number {
-    // 消した行を返させて数える (bun の `.run()` は型の上では変更数を返さない)
-    return orm().delete(sessions).where(lte(sessions.expires_at, now())).returning({ id: sessions.id }).all()
-        .length;
+    return affected(orm().delete(sessions).where(lte(sessions.expires_at, now())));
 }

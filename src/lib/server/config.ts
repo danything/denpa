@@ -287,8 +287,8 @@ export const config = {
     historyRetention: 14 * 24 * 60 * MIN,
 
     /**
-     * **OIDC でのログイン。** 3つ揃ったときだけ有効になり、揃っていなければ
-     * 全部のアクセスを断る (auth.configured)。
+     * **OIDC でのログイン。** 3つ揃ったときだけ有効になる。OIDC も
+     * TRUSTED_NETWORKS も無ければ全部のアクセスを断る (auth.configured)。
      *
      * 秘密を含むので**環境変数だけ**から読み、設定画面には出さない。
      * 使い方は docs/auth.md
