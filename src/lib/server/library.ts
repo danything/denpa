@@ -73,6 +73,11 @@ export function encodedPath(rec: LibraryNameInput, codec: 'av1' | 'h264'): strin
     return libraryPath(rec, codec === 'h264' ? ' [H264].mkv' : '.mkv');
 }
 
+/** 置き場の名前 (`… [H264].mkv`) からコーデックを見分ける (`encodedPath` の逆) */
+export function encodedCodec(path: string): 'av1' | 'h264' {
+    return / \[H264\]\.mkv$/i.test(path) ? 'h264' : 'av1';
+}
+
 /**
  * この録画が取りうる保存先の候補すべて。
  *

@@ -26,7 +26,7 @@ import { config } from './config';
 
 /*
  * **エージェントが返すものの形は、ここで確かめてから型にする** (`shape.ts`)。
- * 相手は別のリポジトリ (agent/) で、版がずれれば形もずれる。キャストで型を
+ * 相手は別のプロセス (agent/。別のイメージで動くこともある) で、版がずれれば形もずれる。キャストで型を
  * 付けていた頃は、ずれても「どこかで undefined」としてしか出なかった。
  *
  * **違っていても止めない** (`tolerate`)。版がずれただけで録画が止まるのでは
@@ -214,8 +214,8 @@ const BUSY_WAIT = 700;
  * **待っているのは前のチャンネルが離れるまで**なので、長くは掛からない。
  * 掛け直すのは空き待ちのときだけ — 選局そのものが駄目なら何度やっても同じ。
  *
- * 録画には使わない。あちらは**時刻が決まっている**ので、掴めないなら
- * その場で分かるほうがよく、黙って数秒遅らせるのは頭切れになる。
+ * 録画には使わない。録画は自前で掛け直す (`recorder.openWithRetry`。空き待ちに
+ * 限らず、終了時刻まで掴み直す)。
  */
 export function openWhenFree(
     type: string,
@@ -223,7 +223,7 @@ export function openWhenFree(
     signal: AbortSignal,
     use: StreamUse,
     priority: number,
-    giveUp: () => boolean = () => false,
+    giveUp: () => boolean,
 ): Promise<ReadableStream<Uint8Array>> {
     return retryWhileBusy(() => openChannelStream(type, channel, signal, use, priority), giveUp);
 }
@@ -260,7 +260,7 @@ export async function retryWhileBusy<T>(
  * (`BS01_3` = `BS01_0`、`BS05_2` と `BS05_3` = `BS05_0` …)。
  *
  * **中身は1つも減りません。** 実機で見つかった BS の 26 TS は、放送自身が
- * 名乗っている 26 TS と一致していました (docs/agent.md)。
+ * 名乗っている 26 TS と一致していました (docs/data.md「相対番号の穴」)。
  */
 export function twinOf(found: Iterable<AgentChannel>, entry: AgentChannel): string | null {
     // TSID が分からないものは判断できない。地上波は1周波数1TSなので、そもそも起きない

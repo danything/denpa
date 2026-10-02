@@ -101,7 +101,7 @@ const CARD_STATUS = object({
 /** 画面での呼び分け。`unknown` は前の版のエージェント (名前しか返さない) */
 export type CardReaderState = 'active' | 'standby' | 'empty' | 'error' | 'unknown';
 
-export type CardReader = {
+type CardReader = {
     name: string;
     state: CardReaderState;
     ids: string[];

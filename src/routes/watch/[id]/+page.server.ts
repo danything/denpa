@@ -1,12 +1,12 @@
 import { existsSync } from 'node:fs';
 import { error, fail, redirect } from '@sveltejs/kit';
-import { eq, getTableColumns, sql } from 'drizzle-orm';
+import { eq, getTableColumns } from 'drizzle-orm';
 import { orm } from '#lib/server/db.js';
 import { deleteRecordingFiles } from '#lib/server/files.js';
 import { sidecarPaths } from '#lib/server/metadata.js';
 import { relative } from '#lib/server/paths.js';
 import { recordingFromForm } from '#lib/server/recording.js';
-import { recordings } from '#lib/server/schema.js';
+import { activeEncodeJobId, lastEncodeError, recordings } from '#lib/server/schema.js';
 import { settings } from '#lib/server/settings.js';
 import type { Recording } from '#lib/types.js';
 
@@ -25,7 +25,7 @@ import type { Recording } from '#lib/types.js';
  * ## 観るのは焼いたものだけ
  *
  * 生TSは MPEG-2 で、**ブラウザに復号器が無い** (docs/stream.md §5.5)。
- * 焼いたもの (AV1 + Opus の Matroska) はそのまま読める。
+ * 焼いたもの (AV1 か H.264 の Matroska) はそのまま読める。
  * まだ焼けていない録画では、この画面は「まだ焼けていません」を出す。
  */
 
@@ -43,14 +43,8 @@ export function load({ params }) {
     const recording: WatchRow | undefined = orm()
         .select({
             ...getTableColumns(recordings),
-            encode_error: sql<string | null>`(
-                 SELECT CASE WHEN j2.state = 'failed' THEN j2.error END FROM encode_jobs j2
-                 WHERE j2.recording_id = ${recordings.id}
-                 ORDER BY j2.id DESC LIMIT 1)`,
-            job_id: sql<number | null>`(
-                 SELECT id FROM encode_jobs
-                 WHERE recording_id = ${recordings.id} AND state IN ('queued','running')
-                 ORDER BY id DESC LIMIT 1)`,
+            encode_error: lastEncodeError(recordings.id),
+            job_id: activeEncodeJobId(recordings.id),
         })
         .from(recordings)
         .where(eq(recordings.id, id))

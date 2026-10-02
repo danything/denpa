@@ -170,6 +170,11 @@ export function captionOutput(from: string, track: number): string[] {
     ];
 }
 
+/** ffmpeg に名指しさせる入力。局の番号が分からなければ (0以下) 入力そのもの */
+export function programSpec(program: number): string {
+    return Number.isFinite(program) && program > 0 ? `0:p:${program}` : '0';
+}
+
 /**
  * **生で送る道の字幕** (docs/stream.md §5.5)。映像は焼かないので、ffmpeg には字幕だけを描かせる。
  *
@@ -189,7 +194,7 @@ export function captionOutput(from: string, track: number): string[] {
  * @param track その局の中で何本目の字幕か
  */
 export function rawCaptionArgs(program: number, track: number): string[] {
-    const from = Number.isFinite(program) && program > 0 ? `0:p:${program}` : '0';
+    const from = programSpec(program);
     return [
         '-hide_banner',
         '-nostats',

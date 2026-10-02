@@ -287,8 +287,8 @@ export const config = {
     historyRetention: 14 * 24 * 60 * MIN,
 
     /**
-     * **OIDC でのログイン。** 3つ揃ったときだけ有効になり、揃っていなければ
-     * 全部のアクセスを断る (auth.configured)。
+     * **OIDC でのログイン。** 3つ揃ったときだけ有効になる。OIDC も
+     * TRUSTED_NETWORKS も無ければ全部のアクセスを断る (auth.configured)。
      *
      * 秘密を含むので**環境変数だけ**から読み、設定画面には出さない。
      * 使い方は docs/auth.md
@@ -309,7 +309,7 @@ export const config = {
      * (`10.10.0.0/16`)。当たると OIDC も掛からない
      * (どう効くかは `auth.trusted`)。
      *
-     * **前段 (Traefik など) が居るなら `ADDRESS_HEADER=x-forwarded-for` を一緒に渡す。**
+     * **前段 (リバースプロキシ) が居るなら `ADDRESS_HEADER=x-forwarded-for` を一緒に渡す。**
      * 渡さないと接続元が前段の住所になり、ここが誰にも当たらない。逆に、denpa へ
      * 直に届く経路があると住所を詐称できる。前段が居なければ何も要らない
      * (server.js の中継が本当の接続元を内側へ伝える)

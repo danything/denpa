@@ -25,9 +25,8 @@ const DISCOVERY = object({
     authorization_endpoint: string,
     token_endpoint: string,
     jwks_uri: string,
-    end_session_endpoint: optional(string),
 });
-export type Discovery = Infer<typeof DISCOVERY>;
+type Discovery = Infer<typeof DISCOVERY>;
 
 /**
  * 相手の口の一覧。**一度読んだら覚えておきます。**

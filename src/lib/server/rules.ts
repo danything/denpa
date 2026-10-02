@@ -136,7 +136,7 @@ export function matchesCompiled(
     }
 
     // ジャンルは "7"(大分類だけ)と "7-0"(中分類まで)の2通りで持つ。
-    // 昔のルールは数値の配列だが、String() を通せばそのまま大分類として読める
+    // 昔のルールは数値の配列だが、読み出し時に文字列へ揃えてある (schema.ts の strings)
     if (genres !== null) {
         const detail = parseGenreDetail(program);
         if (detail.length === 0) return false;
@@ -188,7 +188,7 @@ interface Declined {
 }
 
 /**
- * 取り消しから 10 分以内なら同じ放送。延長や繰り下げで開始が少し動いても
+ * 取り消した回と開始が 10 分以内なら同じ放送。延長や繰り下げで開始が少し動いても
  * 追いかけられ、同じ日の再放送 (1時間後など) は別の回として扱える
  */
 const DECLINE_WINDOW = 10 * 60 * 1000;
@@ -347,7 +347,7 @@ export function applyRules(options: { rule?: number } = {}): RuleSync {
             /*
              * **人が取り消した放送には立てない。** 取り消しの記録は番組の id
              * (局 + event_id) に付いているので、`INSERT OR IGNORE` だけに頼ると
-             * 枝番違いや event_id の変更ですり抜ける (下の `canceledBroadcasts`)
+             * 枝番違いや event_id の変更ですり抜ける (上の `canceledBroadcasts`)
              */
             if (declined.has(program)) break;
             const key = `${program.channel} ${program.start_at} ${program.name}`;

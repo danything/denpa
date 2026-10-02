@@ -431,7 +431,7 @@ function pruneOldPrograms(): number {
     return affected(orm().delete(programs).where(lt(programs.end_at, cutoff)));
 }
 
-export interface SyncResult {
+interface SyncResult {
     services: number;
     programs: number;
     retimed: number;

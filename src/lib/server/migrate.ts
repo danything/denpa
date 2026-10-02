@@ -185,7 +185,7 @@ async function fetchRows(): Promise<Row[]> {
     }
 }
 
-/** 1件を取り込む。取り込めたかどうかを返す */
+/** 1件を取り込む。結果は imported / skipped (取り込み済み) / missing (ファイルが無い) */
 async function importOne(row: Row, options: MigrateOptions): Promise<'imported' | 'skipped' | 'missing'> {
     // 取り込み済みは EPGStation 側のIDで判別する
     const already = orm()
@@ -469,9 +469,9 @@ async function importReservations(connection: SQL, options: MigrateOptions): Pro
 
 /**
  * 取り込みを走らせる。進捗は {@link status} に入る。
- * 画面からは待たずに呼ぶ (`start`)。返り値は終わったときの進み具合
+ * 画面からは待たずに呼ぶ (`start`)
  */
-export async function run(options: MigrateOptions): Promise<MigrateStatus> {
+async function run(options: MigrateOptions): Promise<void> {
     status_ = freshStatus({
         state: 'running',
         apply: options.apply,
@@ -516,7 +516,6 @@ export async function run(options: MigrateOptions): Promise<MigrateStatus> {
     }
     status_.finishedAt = Date.now();
     emit('migrate');
-    return status();
 }
 
 /**

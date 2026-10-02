@@ -1,6 +1,6 @@
-import { statSync, writeFileSync } from 'node:fs';
+import { writeFileSync } from 'node:fs';
 import { SupWriter } from '../pgs';
-import { TrackList } from './captions';
+import { SUBTITLE_FONTS, TrackList } from './captions';
 import { config } from './config';
 import { chunks, lines } from './stream';
 import { TS_PROBE } from './ts-probe';
@@ -24,7 +24,7 @@ import { TS_PROBE } from './ts-probe';
  *
  * 文字にすると左右の位置・背景の箱・外字・ルビが落ち、拾う相手 (VLC・観る画面) は
  * PGS をそのまま出せる。焼くたび 2〜9 秒と場所を払う理由が無かった
- * (docs/library.md「字幕はどこから出るか」)。
+ * (docs/encode.md「字幕は PGS 1本だけ」)。
  */
 
 /** 最後の1枚をどれだけ出しておくか。ふつうは「消す」が来るので使わない */
@@ -96,8 +96,8 @@ export function pgsArgs(input: string, canvasSize: string | undefined, fonts: st
 /**
  * 放送の時刻を、出来上がりの 0 秒から数えた時刻に直す。
  *
- * 引くのは**入れ物の始まり** (`probeVideo` の formatStart)。エンコードのほうも
- * ffmpeg が同じものを引くので、これで両者が同じ物差しに乗る。
+ * 引くのは呼ぶ側が渡す基準 (`encoder.ts` が formatStart と `headSkip` から決める)。
+ * 焼くほうも同じところを捨てるので、これで両者が同じ物差しに乗る。
  *
  * 読めなかったとき (NaN) は引かない。**そのときだけ以前と同じ**で、
  * 字幕は入るがズレる可能性がある — 何も入らないよりはましなため。
@@ -114,17 +114,16 @@ export function rebase(pts: number, startAt: number): number {
  * 失敗しても録画とエンコードは止めない。**入る字幕はこれ1本だけ**なので、
  * null になった録画には字幕トラックが付かない。
  *
- * `startAt` は入れ物の始まり (PTS)。出来上がりと噛み合わせるために引く (rebase)。
+ * `startAt` は焼き上がりの 0 秒にあたる放送時刻。出来上がりと噛み合わせるために引く (rebase)。
  */
 export async function buildPgs(
     input: string,
     canvasSize: string | undefined,
-    fonts: string,
     startAt: number,
     signal?: AbortSignal,
 ): Promise<PgsResult | null> {
     const output = `${input}.sup`;
-    const args = pgsArgs(input, canvasSize, fonts);
+    const args = pgsArgs(input, canvasSize, SUBTITLE_FONTS);
 
     // 押された後の合図は聞き耳に届かない (stream.run と同じ理由)。起こす前に見る
     if (signal?.aborted === true) return null;
@@ -259,7 +258,6 @@ export async function buildPgs(
 
     try {
         writeFileSync(output, writer.bytes());
-        statSync(output);
     } catch (error) {
         console.error(`[subtitle] .sup を書けませんでした: ${error}`);
         return null;

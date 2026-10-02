@@ -228,7 +228,7 @@ function listenToAgent(): void {
     );
 }
 
-export function stop(): void {
+function stop(): void {
     for (const timer of timers) clearInterval(timer);
     timers.length = 0;
     unlisten?.();
@@ -268,21 +268,9 @@ function installShutdownHooks(): void {
     const take = () => takeOverSignals(onSignal);
     take();
     /*
-     * **もう一度、あとから引き取り直す。**
-     *
-     * adapter-node が後始末を登録するのは `build/index.js` の**いちばん最後**で、
-     * こちらはその手前 (`hooks.server.ts` はアプリの読み込みで走る) なので、
-     * **最初の引き取りでは外すものがまだ無い**。そのまま置くと両方が登録された
-     * 状態になり、SIGTERM で
-     *
-     * - こちら … 録画が終わるまで待つ
-     * - あちら … `httpServer.close()` で listen を閉じる
-     *
-     * が同時に走る。プロセスは生きたまま**ポートだけ閉じる**ので、録画は
-     * 続いているのに画面がどこからも開けない (実機で確認: プロセスは動いて
-     * 番組表も集めているのに `/proc/net/tcp` に listen が1つも無く、
-     * Traefik は「no available server」)。
-     *
+     * **もう一度、あとから引き取り直す。** adapter-node が後始末を登録するのは
+     * `build/index.js` の**いちばん最後**で、こちら (`hooks.server.ts`) はその手前なので、
+     * 最初の引き取りでは外す相手がまだ居ない (外す理由は `takeOverSignals`)。
      * `setImmediate` なら index.js の残りが走り終えたあとになる。
      */
     setImmediate(() => {
@@ -295,9 +283,9 @@ function installShutdownHooks(): void {
  * 止まれの合図を**こちらで受け取る**。先に入っていた後始末は外す。
  *
  * 外す相手は adapter-node で、SIGTERM を受けた**その場で listen を閉じる**。
- * そのため録画が終わるまで居座っている間、Pod は生きているのに画面が開けなかった
- * (実機で34分。Kubernetes は止まりかけの Pod を Service から外すので、
- * そこへ HTTP も閉じられると、録画中はどこからも見えない)。
+ * 両方残すと、録画が終わるまで居座っている間、プロセスは生きているのにポートだけ
+ * 閉じて画面がどこからも開けなかった (実機で34分。`/proc/net/tcp` に listen が
+ * 1つも無く、当時の前段 (Traefik) は「no available server」)。
  *
  * 落とすのはこちらの `drain` の最後で `process.exit` するときだけにする。
  * 開いている応答は切れるが、これは今までと同じ (以前も待たずに exit していた)。

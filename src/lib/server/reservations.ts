@@ -7,13 +7,7 @@ import { programs, recordings, reservations } from './schema';
 import { settings } from './settings';
 
 /** 手動予約。ルール由来の予約が既にあれば手動扱いに昇格させて優先度を上げる */
-export async function reserve(
-    programId: number,
-    options: {
-        priority?: number;
-        encode?: boolean;
-    } = {},
-): Promise<Reservation> {
+export async function reserve(programId: number): Promise<Reservation> {
     const program = orm().select().from(programs).where(eq(programs.id, programId)).get();
     if (program === undefined) throw new Error(`番組 ${programId} が見つかりません`);
 
@@ -21,10 +15,10 @@ export async function reserve(
     // 終わった番組を予約しても録れない。予約表に並べても取り消す手間が増えるだけ
     if (program.end_at <= at) throw new Error('この番組は放送が終わっています');
     // 手動で入れたものはルール由来 (既定 1) より上。**予約どうしだけの物差し**
-    const priority = options.priority ?? 2;
-    // 録画のしかたは全体で1つ。「焼くか否か」だけ予約時に固定する (指定が無ければ設定の値)。
+    const priority = 2;
+    // 録画のしかたは全体で1つ。「焼くか否か」だけ予約時に固定する。
     // 焼き方の細目 (生TSを残すか・CMの扱い・コーデック) は焼くときに settings を見る
-    const encode = options.encode ?? settings().encode;
+    const encode = settings().encode;
 
     orm()
         .insert(reservations)
@@ -65,7 +59,8 @@ export async function reserve(
  * 取り消した予約を戻す。
  *
  * ルールが作った予約を手で取り消すと、以後ルールは作り直さない
- * (`INSERT OR IGNORE` が同じ番組を弾く)。気が変わったときに戻す道がここ。
+ * (`INSERT OR IGNORE` と、放送単位で当てる `rules.canceledBroadcasts` が弾く)。
+ * 気が変わったときに戻す道がここ。
  */
 export async function restore(reservationId: number): Promise<void> {
     const reservation = byId(reservationId);

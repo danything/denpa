@@ -1,13 +1,9 @@
 import { json } from '@sveltejs/kit';
 import { and, desc, isNotNull, ne, or } from 'drizzle-orm';
 import { orm } from '#lib/server/db.js';
+import { encodedCodec } from '#lib/server/library.js';
 import { recordings } from '#lib/server/schema.js';
 import { displayTitle } from '#lib/server/title.js';
-
-/** 焼いたもののコーデック。H.264 のほうは名前に印が付く (library.ts の encodedPath) */
-function codecOf(path: string): 'av1' | 'h264' {
-    return path.endsWith(' [H264].mkv') ? 'h264' : 'av1';
-}
 
 /**
  * **観られる録画の一覧** (画面の外のもの向けの口。docs/api.md)。新しい順。
@@ -50,8 +46,10 @@ export function GET({ url }) {
             const files = [
                 ...(row.library === null
                     ? []
-                    : [{ source: 'encoded', codec: codecOf(row.library), url: file('encoded') }]),
-                ...(row.alt === null ? [] : [{ source: 'alt', codec: codecOf(row.alt), url: file('alt') }]),
+                    : [{ source: 'encoded', codec: encodedCodec(row.library), url: file('encoded') }]),
+                ...(row.alt === null
+                    ? []
+                    : [{ source: 'alt', codec: encodedCodec(row.alt), url: file('alt') }]),
                 ...(row.ts === null ? [] : [{ source: 'ts', codec: 'mpeg2', url: file('ts') }]),
             ];
             return {

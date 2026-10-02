@@ -20,7 +20,7 @@ import { parseTitle } from './title';
 import { openChannelStream } from './tuner';
 import { notify } from './webhook';
 
-/** 録画中のストリームを止めるための口。プロセス内にしか無いので再起動で失われる(起動時に失敗扱いにする) */
+/** 録画中のストリームを止めるための口。プロセス内にしか無いので再起動で失われる (起動時に拾い直す: recoverOrphanedRecordings) */
 const active = new Map<number, AbortController>();
 
 export function activeRecordingIds(): number[] {
@@ -274,24 +274,12 @@ async function pump(recording: Recording, controller: AbortController): Promise<
 
         try {
             /*
-             * **選局は自分から切るまで終わらないもの。**
-             *
-             * 向こうから終わったなら、それは失敗である — 優先度で蹴られたか、
-             * デバイスが黙ったか、エージェントごと入れ替わったか。掴み直せば
-             * 続きが録れるので、終了時刻が来るまでは何度でも掛け直す。
-             *
-             * **EOF を「録り終えた」と読んではいけない。** HTTP を1枚挟むと、
-             * エージェントが失敗として畳んだストリームも、こちらには正常終了
-             * として届く (Bun は接続を壊さず、残りを打ち切るだけ)。ここを
-             * 素直に受けていた頃は、蹴られた録画が尻切れのまま「録れた」に
-             * なっていた (`agent/conformance.test.ts`)。
-             *
-             * **途中で例外が飛んだときも同じ扱いにする。** 繋ぎが切れると
-             * 読んでいる最中に投げてくる (`The socket connection was closed
-             * unexpectedly`)。ここを外へ抜けさせていた頃は、**エージェントの
-             * Pod を入れ替えただけで、始まって10秒の30分番組が丸ごと失敗した**
-             * (実機)。切れ方が EOF か例外かは向こうの都合で、こちらの
-             * 「掴み直せば続きが録れる」は変わらない
+             * **選局は自分から切るまで終わらない。** 向こうから終わったなら (EOF でも
+             * 例外でも) 蹴られたか切れたかで、終了時刻 (自分の abort) までは掴み直す。
+             * EOF を正常終了と読んでいた頃は、蹴られた録画が尻切れのまま「録れた」に
+             * なり (HTTP 越しでは失敗も正常終了に見える。`agent/conformance.test.ts`)、
+             * 例外で抜けていた頃はエージェントの Pod を入れ替えただけで番組が丸ごと
+             * 失敗した (実機)
              */
             while (!controller.signal.aborted) {
                 /** 切れた理由。EOF なら null のまま */
@@ -392,7 +380,7 @@ async function pump(recording: Recording, controller: AbortController): Promise<
 }
 
 /** 録画完了。エンコードするならキューに積み、しないならそのまま保存先に置く */
-export function finish(recordingId: number, size: number): void {
+function finish(recordingId: number, size: number): void {
     const at = now();
     // 録り終えた時刻が入った時点で「録画済み」になる (recordings.state は生成列)
     orm()

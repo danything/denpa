@@ -77,7 +77,7 @@ const record = (value: unknown): Record<string, string> | null =>
 /**
  * 録画の状態。**列としては持たず、事実から毎回決める** (recordings.state の生成列)
  */
-export const RECORDING_STATE = `
+const RECORDING_STATE = `
         CASE
             WHEN deleted_at IS NOT NULL THEN 'deleted'
             WHEN error IS NOT NULL THEN 'failed'
@@ -106,7 +106,24 @@ export function reservationState(
         END`;
 }
 
-/** 画面から変えられる設定。環境変数を初期値として、ここにあれば上書きする */
+/**
+ * 録画の直近のエンコード失敗の理由。**いちばん新しいジョブが失敗していたときだけ**。
+ * 「失敗したジョブのうち最新」を拾っていた頃は、焼き直して成功しても前の失敗が残っていた
+ */
+export function lastEncodeError(recordingId: AnySQLiteColumn) {
+    return sql<string | null>`(
+        SELECT CASE WHEN j2.state = 'failed' THEN j2.error END FROM encode_jobs j2
+        WHERE j2.recording_id = ${recordingId}
+        ORDER BY j2.id DESC LIMIT 1)`;
+}
+
+/** 録画の、動いている (待ち・実行中) エンコード。録画1本につき高々1つ (`encoder.enqueue` が重複を弾く) */
+export function activeEncodeJobId(recordingId: AnySQLiteColumn) {
+    return sql<number | null>`(SELECT id FROM encode_jobs WHERE recording_id = ${recordingId}
+        AND state IN ('queued','running') ORDER BY id DESC LIMIT 1)`;
+}
+
+/** 画面から変えられる設定 (settings.ts)。初期値は config.ts が持ち、ここに行があればそちらが勝つ */
 export const settings = sqliteTable('settings', {
     key: text('key').primaryKey(),
     value: text('value').notNull(),
@@ -225,9 +242,9 @@ export const rules = sqliteTable('rules', {
     search_fields: text('search_fields').notNull().default('name'),
     /** JSON 配列。NULL は全チャンネル対象 */
     service_ids: json('service_ids', numbers),
-    /** JSON 配列 (GR/BS/CS)。個別チャンネルとのORで効く */
+    /** JSON 配列 (GR/BS/CS/SKY)。個別チャンネルとのORで効く */
     service_types: json('service_types', strings),
-    /** JSON 配列 (lv1)。NULL は全ジャンル */
+    /** JSON 配列。`"7"` (大分類) か `"7-0"` (中分類まで)。NULL は全ジャンル */
     genres: json('genres', strings),
     enabled: flag('enabled').notNull().default(sql`1`),
     /**
@@ -244,10 +261,10 @@ export const rules = sqliteTable('rules', {
 /**
  * DB に入る予約の状態。**録り始めてからの状態は持たない** — 録画の行がそれを
  * 知っているので、画面に出す `recording | done | failed` は録画から引く
- * (`types.ts` の ReservationState、上の RESERVATION_STATE)。
+ * (`types.ts` の ReservationState、上の `reservationState()`)。
  * 予約側にも書き写していた頃は、録画が失敗しても予約は録画中のまま残っていた
  */
-export const RESERVATION_STATES = ['scheduled', 'conflict', 'canceled', 'missed'] as const;
+const RESERVATION_STATES = ['scheduled', 'conflict', 'canceled', 'missed'] as const;
 
 export const reservations = sqliteTable(
     'reservations',
@@ -299,7 +316,7 @@ export const reservations = sqliteTable(
  * `encoding` はここに無い。動いているエンコードは encode_jobs にしか無く、
  * 一覧はそれを見て「エンコード中」を出す (format.encodeLabel)
  */
-export const RECORDING_STATES = ['recording', 'recorded', 'available', 'failed', 'deleted'] as const;
+const RECORDING_STATES = ['recording', 'recorded', 'available', 'failed', 'deleted'] as const;
 
 export const recordings = sqliteTable(
     'recordings',
@@ -401,7 +418,7 @@ export const recordings = sqliteTable(
     ],
 );
 
-export const ENCODE_STATES = ['queued', 'running', 'done', 'failed', 'canceled'] as const;
+const ENCODE_STATES = ['queued', 'running', 'done', 'failed', 'canceled'] as const;
 /**
  * エンコードの段階。`encode` 以外は ffmpeg が回る前の下ごしらえで、長いものだと
  * 数十分かかる。進み具合が出せない代わりにこれを状態として出す

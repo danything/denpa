@@ -9,20 +9,9 @@
  *
  * ## なぜ入口が別に居るのか
  *
- * denpa は adapter-node で動いていて、そこは `node:http` の上にある。
- * **bun の `node:http` は WebSocket の握手ができない** — `upgrade` は上げるのに、
- * 渡される socket に書いても相手に1バイトも届かない (`write()` は true を返し、
- * コールバックも成功と言う。`_handle` が空)。実測で確かめた。
- *
- * `svelte-adapter-bun` に替える手も試したが、**今の SvelteKit では動かない**。
- * あちらは kit の生成物を正規表現で4か所書き換えて `websocket` フックを
- * 挿し込むのだが、`get_hooks` が別チャンクへ出るようになったため2か所が
- * 当たらず、`Bun.serve` に `websocket` が渡らない (実測。500 で落ちる)。
- *
- * そこで **`Bun.serve` を前に置き、WebSocket だけそこで受ける**。
- * それ以外は今までどおり adapter-node へ流すので、録画の配信も認証も
- * 止め方も1ミリも変わらない (`server.js`)。
- *
+ * bun の `node:http` (adapter-node が乗っている) は WebSocket の握手ができず、
+ * `svelte-adapter-bun` も今の kit には挿し込めない (試したことは `server.js` の冒頭)。
+ * そこで `server.js` の `Bun.serve` が WebSocket だけ受け、残りは adapter-node へ流す。
  * 入口はアプリの束の外に居るので直に import できない。`globalThis` 越しに渡す。
  */
 
@@ -31,17 +20,11 @@ import type { ServerWebSocket, WebSocketHandler } from 'bun';
 /** 入口が見る名前。`server.js` と揃えること */
 const LIVE = '__denpaLive';
 
-/**
- * 溜まってよい量。**これを超えたら映像は捨てる。**
- *
- * 放送は待ってくれないので、送りきれないぶんを積むと際限なく太る。
- * ライブは**遅れて全部届くより、飛んで今が映るほうがいい**。
- * init と制御は捨てない (捨てると以降ずっと絵が出ない)。
- */
+/** 溜まってよい量。超えたら捨ててよいもの (`droppable`) を捨てる。何を捨ててよいかは live.ts の `hand` */
 const BACKLOG_LIMIT = 4 * 1024 * 1024;
 
 /** 接続1本ぶんの持ち物。`server.upgrade()` に渡して `ws.data` になる */
-export interface SocketData {
+interface SocketData {
     url: URL;
     connection: Connection | null;
 }
@@ -51,8 +34,6 @@ export class Connection {
     /** ブラウザからの指示。JSON で解けなかったものは渡さない */
     onmessage: ((message: Record<string, unknown>) => void) | null = null;
     onclose: (() => void) | null = null;
-    /** 捨てた数。詰まっているかを見るのに使う */
-    dropped = 0;
 
     constructor(private readonly ws: ServerWebSocket<SocketData>) {}
 
@@ -61,25 +42,18 @@ export class Connection {
      *
      *     [1 byte: 種別][8 bytes: PTS (90kHz, BE)][中身...]
      *
-     * 時刻は ffmpeg が焼いた mp4 の物差し (0 起点)。実際に運ぶのは字幕だけで、
-     * 映像・データ放送・制御は 0 を渡す — 字幕を絵と同じ物差しに乗せるために要る。
+     * 時刻は受け側の物差し (焼く道は mp4 の 0 起点、生の道は放送の PTS)。運ぶのは
+     * 字幕だけで、映像・データ放送・制御は 0 を渡す — 字幕を絵と同じ物差しに乗せるため。
      *
-     * @param droppable 詰まっているときに捨ててよいか。映像の中身だけ true
+     * @param droppable 詰まっているときに捨ててよいか。映像の中身 (fMP4 / 生の TS) だけ true
      */
     send(kind: number, pts: bigint, payload: Uint8Array, droppable = false): void {
-        if (droppable && this.ws.getBufferedAmount() > BACKLOG_LIMIT) {
-            this.dropped++;
-            return;
-        }
+        if (droppable && this.ws.getBufferedAmount() > BACKLOG_LIMIT) return;
         const out = new Uint8Array(9 + payload.length);
         out[0] = kind;
         new DataView(out.buffer).setBigUint64(1, pts);
         out.set(payload, 9);
         this.ws.sendBinary(out);
-    }
-
-    close(): void {
-        this.ws.close();
     }
 
     /** bun から渡されたものを解く。**JSON 以外は黙って捨てる** */
@@ -109,7 +83,7 @@ interface Route {
      * 握手したあとに切ると、ブラウザには「繋がらない」としか映らない。
      */
     accept(url: URL): boolean;
-    open(connection: Connection, url: URL): void;
+    open(connection: Connection): void;
 }
 
 const routes = new Map<string, Route>();
@@ -126,7 +100,7 @@ export function serve(pathname: string, route: Route): void {
  * そのあとになりうる。**入口側は毎回 `globalThis` を引き直す**ので、
  * ここに置くのは1回で足りる。
  */
-export interface LiveEntry {
+interface LiveEntry {
     /** そもそも受け持つ道か。**断り方を変えるために `accept` と分けてある** */
     handles(url: URL): boolean;
     /** 握手してよいか。ここで札を使い切る */
@@ -150,7 +124,7 @@ const entry: LiveEntry = {
             }
             const connection = new Connection(ws);
             ws.data.connection = connection;
-            route.open(connection, ws.data.url);
+            route.open(connection);
         },
         message(ws, message) {
             ws.data.connection?.receive(message);

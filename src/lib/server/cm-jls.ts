@@ -106,8 +106,7 @@ async function run(argv: string[], signal: AbortSignal | undefined, deadline: nu
     if (left <= 0) return { code: 124, stderr: '時間切れ' };
 
     // 一式が入っていないイメージもある (code 127 で返る)。無音検出に落ちれば録画は続く
-    const result = await runProcess(argv, { signal, timeoutMs: left, stderr: true });
-    return { code: result.code, stderr: result.stderr };
+    return runProcess(argv, { signal, timeoutMs: left, stderr: true });
 }
 
 /**
@@ -131,13 +130,13 @@ function workFiles(input: string) {
 }
 
 /** 無音ベース (cm.ts) と同じ材料に、コマ数だけ足したもの */
-export interface JlsOptions extends Omit<CmOptions, 'onProgress'> {
+interface JlsOptions extends Omit<CmOptions, 'onProgress'> {
     /**
      * 動画のフレームレート。join_logo_scp が返す Trim はコマ番号なので、これで秒に直す。
      *
      * **呼ぶ側が測ったものをもらう。** ここでも ffprobe を叩いていた頃は、
      * 尺を測るのと合わせて同じTSを2回読んでいたうえ、読み方が2箇所に分かれていて
-     * 片方だけ直っていない状態を作った (cm.parseFrameRate の覚え書き)
+     * 片方だけ直っていない状態を作った (cm.fields の覚え書き)
      */
     fps?: number;
 }
@@ -145,13 +144,13 @@ export interface JlsOptions extends Omit<CmOptions, 'onProgress'> {
 export async function detectWithJls(
     input: string,
     duration: number,
-    options: JlsOptions = {},
+    options: JlsOptions,
 ): Promise<{ cm: Range[]; note: string }> {
     const { signal, channel = '', serviceId, area = '', onStep } = options;
     // 測れなかったときだけ既定に落とす (地上波・BS はどちらも 30000/1001)
     const fps =
-        Number.isFinite(options.fps) && (options.fps ?? 0) > 0
-            ? Number(options.fps)
+        options.fps !== undefined && Number.isFinite(options.fps) && options.fps > 0
+            ? options.fps
             : config.cmJlsFallbackFps;
     const deadline = Date.now() + config.cmDetectTimeout;
     const step = onStep ?? (() => {});
@@ -162,20 +161,14 @@ export async function detectWithJls(
 
     try {
         /*
-         * **在り処が空なら、この録画から割り出して渡す** (`logo-area.ts`)。
-         *
-         * logoframe の自動検出は画面全体を見るので、半透明の細いロゴでは
-         * 本物より強い縁を別の場所で掴んで降ります (テレ東の実素材で家具の縁)。
-         * **覚え直しの仕事だけに入れていては届きません** — 既に `.lgd` を
-         * 持っている局は覚え直しの対象にならないので、空のまま CM検出に来ます。
-         *
-         * ここには**録画1本まるごと**という良い材料があるので、その場で割り出す。
+         * **在り処が空なら、この録画から割り出して渡す** (理由は `logo-area.ts`)。
+         * 既に `.lgd` を持つ局は覚え直しの対象にならず空のままここへ来るので、ここで出す。
          * 出したものは覚えておき (`services.logo_area`)、次からは測り直さない
          */
         let logoAreaText = area;
         /** この回で初めて在り処を出したか。サブチャンネルへ配るのはそのときだけ */
         let firstLearn = false;
-        if (logoAreaText === '' && serviceId !== undefined && mayDetect(serviceId)) {
+        if (logoAreaText === '' && mayDetect(serviceId)) {
             step('局ロゴの位置を探しています');
             const found = await detectArea(input, signal);
             if (found !== null) {
@@ -234,15 +227,15 @@ export async function detectWithJls(
          * **その局は枠を渡す前まで自動検出で当たっていました** — こちらの
          * 当てずっぽうが、当たっていたものを壊していたことになります。
          *
-         * 割り出した枠は**当たらなければ無かったことにする**。当たった枠
-         * (人が教えたもの) は捨てず、渡さずに1回試すだけにします
+         * 枠なしで通ったら、**誰が入れた枠でも捨てて**、もう割り出さない印を付ける
+         * (`logo-area.forgetArea`)
          */
         const hadArea = areaReady() && channel !== '';
         if (frames.code !== 0 && hadArea) {
             console.warn(`[cm] ロゴの枠 ${logoAreaText} では見つかりませんでした。枠なしで試します`);
             step('局ロゴが写っているコマを探しています (枠なし)');
             frames = await findFrames(false);
-            if (frames.code === 0 && serviceId !== undefined) {
+            if (frames.code === 0) {
                 // 外れた枠だった。捨てて、もう割り出さない印を付ける
                 console.warn(`[cm] 枠 ${logoAreaText} は当たっていないので捨てました (自動に戻します)`);
                 forgetArea(serviceId);
@@ -258,7 +251,7 @@ export async function detectWithJls(
          * サブチャンネルの枠で録れた番組が「ロゴを覚えていない」ことに
          * ならないように。初めて出したときだけでよい
          */
-        if (firstLearn && serviceId !== undefined) share(serviceId);
+        if (firstLearn) share(serviceId);
 
         // 2. 無音とシーンチェンジを拾う
         step('無音とシーンの切れ目を探しています');
@@ -315,15 +308,9 @@ export async function detectWithJls(
         }
 
         /*
-         * ここから先の失敗は**覚えているロゴのほうが怪しい**ので、位置を教える口を出す。
-         *
-         * logoframe は「合致した」と言っているのに区切りが出せていない状態。
-         * 自動探索が拾えるのは画面の右上に**ずっと同じ縁があること**だけなので、
-         * ロゴではない縁 (常時出ている枠や字幕の下地) を覚えるとこうなる。
-         *
-         * 「ロゴを見つけられなかった」ときしか出していなかった頃は、この状態が
-         * 一番直しようがなかった: 毎回 100% がCM判定で捨てられ、無音検出に落ち、
-         * しかも画面には何も出ないので、位置を教える手立てが無かった
+         * ここから先は logoframe が「合致した」のに区切れない状態 (ロゴではない縁を
+         * 覚えているとこうなる)。区切れなければロゴの在り処だけで分け直す (`byLogoAlone`)。
+         * 位置を教える口を出すかは覚え書きから決まる (`format.logoUnusable`)
          */
         const keep = parseTrimRanges(avs, fps);
         if (keep.length === 0) {

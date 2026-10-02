@@ -106,7 +106,7 @@ export async function resolveConflicts(): Promise<{ accepted: number; rejected: 
 
 /**
  * `schedulerTick` (既定5秒) ごとに呼ばれる本体。開始時刻に達した予約を録画に移し、終了時刻を過ぎた録画を止める。
- * 状態遷移は全てここに集約し、recorder.ts はストリームの読み書きだけに専念させる。
+ * 録画の終わり方 (完了・失敗) は recorder.ts が書く。
  */
 export async function tick(): Promise<void> {
     const at = now();

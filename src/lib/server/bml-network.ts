@@ -21,7 +21,7 @@
  * | --- | --- |
  * | 既定 | **切** (設定画面で入れる)。入れるまで `isIPConnected` は 0 を返す |
  * | 手 | GET と POST (`transmitTextDataOverIP`)。**中身は放送のアプリが組んだものをそのまま通すだけ** |
- * | 相手 | **公開アドレスのみ** (http も可 — 放送がそう作られている)。私設・ループバック・リンクローカル・多重放送は断る |
+ * | 相手 | **公開アドレスのみ** (http も可 — 放送がそう作られている)。私設・ループバック・リンクローカル・マルチキャストは断る |
  * | 追いかけ | 3回まで。**行き先ごとに確かめ直す** — 1回目が公開でも、飛ばされた先が内側のことがある |
  * | 大きさ | 4MB まで |
  * | 待ち | 10秒 |
@@ -131,7 +131,7 @@ export function isPublicAddress(address: string): boolean {
     if (a === 172 && b >= 16 && b <= 31) return false;
     if (a === 192 && b === 168) return false;
     if (a === 100 && b >= 64 && b <= 127) return false; // 事業者内 (CGNAT)
-    if (a >= 224) return false; // 多重放送と予約
+    if (a >= 224) return false; // マルチキャストと予約
     return true;
 }
 
@@ -330,7 +330,7 @@ async function follow(raw: string, first: 'GET' | 'POST', body: Uint8Array | und
  * 相手まで届くかを確かめる (`browser.confirmIPNetwork`)。
  *
  * 「相手まで届くか」を訊かれたときに答える口です。**NHK は呼びに来ません**
- * (実機で確かめた。あちらは [postForBml](#) の側で判断していた) が、
+ * (実機で確かめた。あちらは `postForBml` の側で判断していた) が、
  * 訊いてくる放送はあるので用意しておきます。借りものは実装が無いと `null`
  * (非対応) を返し、`getBrowserSupport(… "Com.IP.confirmIP")` も 0 になります。
  *

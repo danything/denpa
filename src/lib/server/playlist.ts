@@ -11,7 +11,7 @@
  * 続きから始まる。
  *
  * 見出しは `<title>` に入れる。ファイルの URL のときは尻の区切りが見出しになる
- * (share/+server.ts) が、プレイリストの中の 1 曲はプレイリストの題が使われる
+ * (share.ts の shareUrls) が、プレイリストの中の 1 曲はプレイリストの題が使われる
  */
 export function xspf(track: { title: string; location: string; startSeconds: number }): string {
     const start = Math.max(0, Math.floor(track.startSeconds));

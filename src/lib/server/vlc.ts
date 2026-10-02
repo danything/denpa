@@ -21,7 +21,7 @@ import { settings } from './settings';
  * `h264` は AV1 を解けないテレビ用 (両方焼いた録画で H.264 のほうを渡す)、
  * `ts` はエンコード済みを解けないテレビ用 (生TSが残っていればそちらを渡す)
  */
-export type VlcCodec = 'auto' | 'h264' | 'ts';
+type VlcCodec = 'auto' | 'h264' | 'ts';
 
 export interface VlcTarget {
     name: string;

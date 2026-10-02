@@ -17,7 +17,6 @@ import { audioTitles, DUAL_MONO } from '#lib/arib.js';
 import { HW_KIND_LABEL, type HwCodec } from '../hw';
 import { encodeSource } from '../source';
 import type { EncodeJob, EncodePhase, Recording } from '../types';
-import { SUBTITLE_FONTS } from './captions';
 import {
     type CmDetection,
     chapterMetadata,
@@ -160,7 +159,7 @@ async function measureSmoothMotion(
               : start + FPS_WINDOW;
     const span = Math.max(0, end - start - FPS_WINDOW);
 
-    // 尺が窓より短いと3点が同じ位置に重なる。同じ30秒を測り直さない
+    // 尺が窓より短いと5点が同じ位置に重なる。同じ30秒を測り直さない
     const offsets = [...new Set(FPS_POINTS.map((point) => start + span * point))];
     const ratios: number[] = [];
     for (const at of offsets) {
@@ -285,7 +284,7 @@ interface EncodeOptions {
      */
     pgsFile?: string | null;
     /**
-     * 映像が出るまでの音声だけの区間(秒)。**頭から捨てる長さ** (`probeVideo`)。
+     * 映像が出るまでの音声だけの区間(秒)。**頭から捨てる長さ** (`probeLeadIn`)。
      *
      * 捨てると映像・音声・字幕が同じ瞬間から始まるので、時刻を読むプレイヤーでも
      * 1コマ目から数えるプレイヤーでも同じ絵になる。捨てるのは映像がまだ無い
@@ -321,7 +320,7 @@ interface EncodeOptions {
     captionTitle?: string;
     /**
      * 入れ物 (mkv) の title に焼き込む番組名 (`title.displayTitle`)。テレビの VLC の
-     * 履歴・通知に出る名前 (再生画面の見出しは URL の尻 — share/+server.ts)
+     * 履歴・通知に出る名前 (再生画面の見出しは URL の尻 — share.ts の shareUrls)
      */
     mediaTitle?: string;
     /**
@@ -1019,7 +1018,7 @@ interface CmPrep {
 }
 
 /**
- * エンコード前のCM検出。cm_cut の設定に応じて、実カット用の残す区間か
+ * エンコード前のCM検出。`settings().cmCut` に応じて、実カット用の残す区間か
  * チャプター用の ffmetadata を用意する。検出できなかった場合は素通し。
  */
 async function prepareCm(
@@ -1035,11 +1034,7 @@ async function prepareCm(
         fpsBlock: null,
         chapterSource: null,
     };
-    /*
-     * **CMの扱いは焼くときの設定に従う。** 録画の行にも写してあるが、それは
-     * 録り始めた時点の値で、設定を変えても直らない (`keepOriginal` は前から
-     * 設定を見ている。ここだけ食い違っていた)
-     */
+    // CMの扱いは焼くときの設定に従う (録画の行には持たない)
     if (settings().cmCut === 'off') return none;
 
     setPhase(jobId, 'cm', 'CMを探しています');
@@ -1264,14 +1259,6 @@ async function runJob(jobId: number): Promise<void> {
      */
     mkdirSync(dirname(libraryPath(recording, '.mkv')), { recursive: true });
 
-    /*
-     * 焼くときは別名 (`.<jobId>.<codec>.encoding`) に書いてから置き換える
-     * (下の焼くループ)。同じ番組を録り直すと入力と出力が同じ場所になることが
-     * あり、そのまま書くと元を壊す。失敗したときに元が消えないのも同じ理由。
-     * **ジョブとコーデックで別の名前にする** — 番組名だけで決めていた頃は、
-     * 同じ番組の2本が1つの作業ファイルに同時に書き込んで壊していた (実機)。
-     */
-
     // スクランブルが掛かったまま録れていたら、ここで解く (scramble.ts)
     /** 後始末で消す作業ファイル。生TSを置き換えたときは残す側になるので null のまま */
     let decoded: string | null = null;
@@ -1335,7 +1322,7 @@ async function runJob(jobId: number): Promise<void> {
     const discardWork = (): void => {
         removeIfExists(trimmed);
         removeIfExists(encodeOptions.chaptersFile);
-        removeIfExists(encodeOptions.pgsFile ?? null);
+        removeIfExists(encodeOptions.pgsFile);
     };
     if (canceled.has(jobId)) {
         discardWork();
@@ -1411,7 +1398,7 @@ async function runJob(jobId: number): Promise<void> {
      * 数え直したうえで、映像が出るまで (`headSkip`) を捨てる。同じところを引く
      */
     const startAt = measured.formatStart + headSkip(encodeOptions.videoStart);
-    const pgs = await buildPgs(source, encodeOptions.canvasSize, SUBTITLE_FONTS, startAt, signal);
+    const pgs = await buildPgs(source, encodeOptions.canvasSize, startAt, signal);
     if (pgs !== null) {
         encodeOptions.pgsFile = pgs.path;
         // 名前も放送が名乗っているものにする (「字幕 (日本語)」)
@@ -1515,6 +1502,11 @@ async function runJob(jobId: number): Promise<void> {
     };
 
     for (const codec of codecs) {
+        /*
+         * 別名に書いてから置き換える (入力と出力が同じ場所でも元を壊さない。失敗しても元が残る)。
+         * 名前はジョブとコーデックで分ける — 番組名だけだと同じ番組の2本が1つの作業ファイルに
+         * 同時に書いて壊した (実機)
+         */
         const working = `${encodedPath(recording, codec)}.${jobId}.${codec}.encoding`;
 
         /*

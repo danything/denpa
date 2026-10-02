@@ -13,8 +13,8 @@ import { services } from './schema';
 /**
  * logoframe が覚えたロゴ (`.lgd`) の置き場と、その中身。
  *
- * **これは放送波から拾う局ロゴ (PNG) とは別物。** あちらは番組表に出すための絵で、
- * こちらは「画面のどこにロゴが出ているか」を録画から学習したもの (`server/logo.ts`)。
+ * **これは放送波から拾う局ロゴ (PNG) とは別物。** あちら (`server/logo.ts`) は番組表に
+ * 出すための絵で、こちらは「画面のどこにロゴが出ているか」を録画から学習したもの。
  */
 
 /**
@@ -28,8 +28,8 @@ import { services } from './schema';
  * 既に覚えているものがあれば合致率が落ちるまで作り直さない。捨てられないと、
  * 位置を教えても覚えているほうが使われ続ける。
  */
-export function logoRepo(serviceId: number | undefined): string {
-    return serviceId === undefined ? config.jlsLogoDir : join(config.jlsLogoDir, String(serviceId));
+export function logoRepo(serviceId: number): string {
+    return join(config.jlsLogoDir, String(serviceId));
 }
 
 /**
@@ -72,12 +72,8 @@ export interface LearnedLogo {
     width: number;
     height: number;
     /**
-     * いちばん濃いところ (0〜1000)。**下の PNG を伸ばすのに使う。**
-     *
-     * 画面には出しません。**低い = 駄目、とは限らない**ためです — 半透明の細い
-     * 文字のロゴ (TOKYO MX) は、ちゃんと写っていても 241 しか出ません。
-     * 数字を出していた頃は「241 は低いのか」を考えさせるだけで、良し悪しは
-     * 結局その隣の絵にしか書いてありませんでした
+     * いちばん濃いところ (0〜1000)。画面には出さない — 半透明の細いロゴ (TOKYO MX)
+     * はちゃんと写っていても 241 で、数字は良し悪しの材料にならなかった
      */
     depth: number;
     /**

@@ -10,7 +10,8 @@
  *
  * - 地上波は 13〜62ch を総当たり、BS は 01〜23 の各 4 スロット、CS は 02〜24ch
  * - 1チャンネルにつき最大 30 秒待ち、NIT と SDT が**両方**揃ったら受信できたとみなす
- * - 録るに値するサービス種別だけ残す (`psi.SERVICE_TYPES`)
+ * - Mirakurun と同じサービス種別を残す (`psi.SERVICE_TYPES`。ラジオ・データも入り、
+ *   映像の無いものは取り込みで落とす: `epg.DIGITAL_TV`)
  *
  * **録画中でも実行できる。** 選局はエージェントの取り合いに乗るので、録画が
  * 掴んでいるチューナーは使われないだけ (空きが無ければ待ち、飛ばさない)。
@@ -47,7 +48,7 @@ const BUSY_RETRY = 10_000;
 const LOG_LIMIT = 400;
 
 /** 総当たりできる種別。`SKY` (スカパー!プレミアム) は持っていないので対象外 */
-export type ScannableType = Extract<ChannelType, 'GR' | 'BS' | 'CS'>;
+type ScannableType = Extract<ChannelType, 'GR' | 'BS' | 'CS'>;
 
 const CHANNEL_RANGES: Record<ScannableType, { min: number; max: number }> = {
     GR: { min: 13, max: 62 },
@@ -399,7 +400,7 @@ class Scanner {
     }
 }
 
-export interface ScanOptions {
+interface ScanOptions {
     types: ChannelType[];
 }
 
