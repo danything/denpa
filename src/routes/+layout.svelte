@@ -455,8 +455,34 @@
     .actions :global(a.button) {
         min-height: 2.5rem;
     }
-    ul.links a[aria-current='page'] {
-        --pico-background-color: var(--dp-base-300);
+    /*
+     * **いまの画面は主の色の字と下線で示す。** 薄い灰色の地を敷くだけだった頃は、
+     * ヘッダーの地とほとんど見分けが付かず「どの画面に居るのか」が読めなかった。
+     * 地は塗らない (指を乗せたときの灰色と混ざらないように)。下線は押す場所の
+     * 内側に引くので、ヘッダーの高さは変わらない。
+     * `.button.ghost` まで書くのは、`app.css` の ghost の `[aria-current]` (灰色の地と
+     * 継いだ字の色) より強くするため。短く書くとあちらが勝って色が付かない
+     */
+    ul.links a.button {
+        position: relative;
+        font-size: 0.9rem;
+    }
+    ul.links a.button.ghost[aria-current='page'] {
+        --pico-background-color: transparent;
+        --pico-color: var(--pico-primary);
+        font-weight: 600;
+    }
+    ul.links a.button.ghost[aria-current='page']:hover {
+        --pico-background-color: var(--dp-base-200);
+    }
+    ul.links a.button.ghost[aria-current='page']::after {
+        content: '';
+        position: absolute;
+        inset-inline: 0.65rem;
+        bottom: 0.2rem;
+        height: 2px;
+        border-radius: 1px;
+        background: currentColor;
     }
     .burger {
         position: relative;
@@ -489,7 +515,14 @@
     .burger summary::after {
         display: none;
     }
+    /*
+     * **縦に積む。** Pico は `nav ul` を横並び (flex) にするので、何も言わないと
+     * 畳んだメニューの中まで横に並び、12rem の箱から「ライブ」より先がはみ出していた
+     */
     .burger-list {
+        display: flex;
+        flex-direction: column;
+        align-items: stretch;
         position: absolute;
         right: 0;
         z-index: 50;
@@ -503,6 +536,8 @@
     }
     .burger-list a {
         display: block;
+        /* Pico の `nav li a` の負の余白を消す。残ると項目が箱の外へ寄る */
+        margin: 0;
         padding: 0.45rem 0.75rem;
         border-radius: 0.5rem;
         color: inherit;
@@ -511,8 +546,12 @@
     .burger-list a:hover {
         background: var(--dp-base-200);
     }
+    /* 畳んだメニューでも同じ色。縦に並ぶので下線ではなく左端に印を立てる */
     ul.burger-list a[aria-current='page'] {
-        background: var(--dp-base-300);
+        background: color-mix(in srgb, var(--pico-primary) 12%, transparent);
+        box-shadow: inset 3px 0 0 var(--pico-primary);
+        color: var(--pico-primary);
+        font-weight: 600;
     }
     main {
         padding: 1rem;
