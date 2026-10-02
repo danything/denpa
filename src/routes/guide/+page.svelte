@@ -631,6 +631,7 @@
                         <button type="button"
                             class="program"
                             class:reserved={program.reservation_state}
+                            data-state={program.reservation_state}
                             data-genre={program.genres?.[0]}
                             onclick={() => void open(program)}
                             data-testid="program-button"
@@ -1008,11 +1009,18 @@
         contain-intrinsic-size: auto 11rem auto 0.75rem;
     }
     /*
-     * 色はジャンル(大分類)ごと。下地は薄く敷いて左に濃い線を引く。濃く塗ると文字が読めなくなる。
-     * 予約したものは色より「予約済み」であることのほうが大事なので、主の色を優先する
+     * 色はジャンル(大分類)ごと。**色は左の太い線で見せ、下地はごく淡く敷くだけ** (WebTS と同じ形)。
+     * 下地を 15% 塗っていた頃は、明るいテーマでマスが桃色や水色の板になり、
+     * 上に乗る小さい字が地に溶けて読みにくかった。下地は地の色 (--dp-surface) に
+     * ジャンルの色を少しだけ混ぜる。暗いテーマは混ぜても沈みやすいので少し多めにする。
+     * 字は本文と同じ濃さのまま。
+     *
+     * 予約したものは色より「予約済み」であることのほうが大事なので、主の色を優先し、
+     * 線に加えて細い枠も引く。録画中はさらに録画の赤にする (一覧の札と同じ考え)
      */
     .program {
         --tint: var(--dp-base-300);
+        --wash: 10%;
         display: flex;
         flex-direction: column;
         align-items: stretch;
@@ -1022,7 +1030,7 @@
         margin: 0;
         padding: 0.125rem 0.25rem;
         border: 0;
-        border-left: 2px solid var(--tint);
+        border-inline-start: 4px solid var(--tint);
         border-radius: 0.25rem;
         background: var(--dp-base-200);
         color: inherit;
@@ -1030,14 +1038,17 @@
         font-weight: normal;
         line-height: normal;
     }
+    :global([data-theme="dark"]) .program {
+        --wash: 14%;
+    }
     .program:hover {
         background: var(--dp-base-300);
     }
     .program[data-genre] {
-        background: color-mix(in srgb, var(--tint) 15%, transparent);
+        background: color-mix(in srgb, var(--tint) var(--wash), var(--dp-surface));
     }
     .program[data-genre]:hover {
-        background: color-mix(in srgb, var(--tint) 25%, transparent);
+        background: color-mix(in srgb, var(--tint) calc(var(--wash) + 10%), var(--dp-surface));
     }
     /*
      * ジャンルの色は **色みだけを変えて、濃さと鮮やかさは全部同じ** にする
@@ -1057,10 +1068,16 @@
     .program[data-genre="9"] { --tint: hsl(325 62% 55%); }  /* 劇場/公演 */
     .program[data-genre="10"] { --tint: hsl(95 62% 55%); }  /* 趣味/教育 */
     .program[data-genre="11"] { --tint: hsl(170 62% 55%); } /* 福祉 */
-    .program.reserved,
-    .program.reserved:hover {
+    .program.reserved {
         --tint: var(--pico-primary);
-        background: color-mix(in srgb, var(--pico-primary) 20%, transparent);
+        background: color-mix(in srgb, var(--tint) calc(var(--wash) + 6%), var(--dp-surface));
+        box-shadow: inset 0 0 0 1px var(--tint);
+    }
+    .program.reserved:hover {
+        background: color-mix(in srgb, var(--tint) calc(var(--wash) + 14%), var(--dp-surface));
+    }
+    .program[data-state="recording"] {
+        --tint: var(--dp-rec);
     }
     .title {
         display: block;
@@ -1074,13 +1091,18 @@
     .state {
         display: block;
         font-size: 0.75rem;
+        font-weight: 500;
         color: var(--pico-primary);
     }
+    .program[data-state="recording"] .state {
+        color: var(--dp-rec-text);
+    }
+    /* 説明は番組名より一段だけ控える。0.6 まで落とすと淡い下地の上で字が溶けた */
     .desc {
         display: block;
         font-size: 0.75rem;
         line-height: 1.25;
-        opacity: 0.6;
+        opacity: 0.8;
     }
     .guide-error {
         margin-top: 1rem;
