@@ -301,9 +301,7 @@ export function allowed(claims: Claims): { ok: true } | { ok: false; reason: str
 
     /*
      * **`groups` と `roles` のどちらでもいい。** Entra のグループクレーム
-     * (グループのオブジェクトID) からアプリロールへ移している最中だからです。
-     * グループを載せると ID トークンが大きくなり、oauth2-proxy の Cookie セッションが
-     * 壊れます。両方受けておけば、切り替えの途中で誰も入れなくなることがありません
+     * (グループのオブジェクトID) でもアプリロールでも、置いた名前が入っていれば通す
      */
     const held = [...(claims.groups ?? []), ...(claims.roles ?? [])];
 

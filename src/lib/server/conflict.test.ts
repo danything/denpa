@@ -14,7 +14,7 @@ function res(over: Partial<Assignable> & { id: number }): Assignable {
 
 const GR2 = new Map([
     ['GR', 2],
-    ['BS', 2],
+    ['BS/CS', 2],
 ]);
 
 describe('assign', () => {
@@ -86,9 +86,17 @@ describe('assign', () => {
     test('本数が分からない種別は制限しない', () => {
         const { rejected } = assign(
             [1, 2, 3, 4].map((id) => res({ id, type: 'CS', channel: `CS${id}` })),
-            GR2,
+            new Map([['GR', 2]]),
         );
         expect(rejected).toHaveLength(0);
+    });
+
+    test('BS と CS は同じ衛星チューナーを取り合う', () => {
+        const { rejected } = assign(
+            [res({ id: 1, type: 'BS', channel: 'BS15_0' }), res({ id: 2, type: 'CS', channel: 'CS4' })],
+            new Map([['BS/CS', 1]]),
+        );
+        expect(rejected.map((r) => r.reservation.id)).toEqual([2]);
     });
 });
 
@@ -237,7 +245,7 @@ describe('チューナーの取り合い (プレビュー)', () => {
          */
         const bs = occ({ programId: 1, type: 'BS', channel: 'BS15_0' });
         const gr = occ({ programId: 2, type: 'GR', channel: 'T16' });
-        expect(against(bs, [gr], new Map([['BS', 1]]))).toEqual([]);
+        expect(against(bs, [gr], new Map([['BS/CS', 1]]))).toEqual([]);
     });
 
     test('本数に収まっていれば、重なっていても出さない', () => {

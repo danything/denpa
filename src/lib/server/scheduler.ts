@@ -1,7 +1,7 @@
 import { and, eq, getTableColumns, gt, inArray, isNull, lte, or, sql } from 'drizzle-orm';
 import type { Reservation } from '../types';
 import { config } from './config';
-import { assign, whole } from './conflict';
+import { assign, poolOf, whole } from './conflict';
 import { affected, now, orm } from './db';
 import { emit } from './events';
 import {
@@ -21,7 +21,7 @@ interface Candidate extends Reservation {
 }
 
 /**
- * チャンネル種別ごとのチューナー本数。エージェントに繋がらないときは
+ * チューナー本数を `poolOf` の単位 (GR / BS・CS) で数える。エージェントに繋がらないときは
  * 「制限なし」を返し、予約を勝手に conflict にしない(実際に録画が始まるときに
  * あちらが弾くので、予約表を壊すより実行時に失敗させるほうが害が小さい)。
  */
@@ -35,8 +35,9 @@ export async function tunerCapacity(): Promise<Map<string, number>> {
     }
     for (const tuner of tuners) {
         if (tuner.disabled) continue;
-        for (const type of tuner.types) {
-            capacity.set(type, (capacity.get(type) ?? 0) + 1);
+        // BS と CS を受けるチューナーは BS/CS に1本。種別ごとに足すと倍になる
+        for (const pool of new Set(tuner.types.map(poolOf))) {
+            capacity.set(pool, (capacity.get(pool) ?? 0) + 1);
         }
     }
     return capacity;

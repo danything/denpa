@@ -82,11 +82,20 @@ function holding<T extends Assignable>(rivals: Accepted<T>[], at: number) {
 }
 
 /**
+ * **チューナーを取り合う単位。** BS と CS は同じ衛星チューナーで受けるので1つに束ねる。
+ * 種別ごとに数えていた頃は、衛星チューナー1本が BS で1本・CS で1本と倍に数えられ、
+ * BS と CS の番組が重なっても競合にならなかった
+ */
+export function poolOf(type: string): string {
+    return type === 'BS' || type === 'CS' ? 'BS/CS' : type;
+}
+
+/**
  * 優先度が高い順・開始が早い順に採用していき、入らなかったものを競合として返す。
  *
  * 同じ物理チャンネルの同時録画はエージェントが1本のチューナーで捌けるので、
  * 数えるのは「同時刻に開いている“異なるチャンネル”の数」。
- * capacity にその種別が無い場合は本数不明として無制限に扱う。
+ * capacity (`poolOf` で束ねた単位) に無い場合は本数不明として無制限に扱う。
  *
  * ## 入るところまで録る
  *
@@ -125,14 +134,15 @@ export function assign<T extends Assignable>(
 
     for (const candidate of ordered) {
         const mine = window(candidate, margins);
-        const limit = capacity.get(candidate.type);
+        const pool = poolOf(candidate.type);
+        const limit = capacity.get(pool);
         if (limit === undefined) {
             accepted.push({ reservation: candidate, from: mine.from, to: mine.to });
             continue;
         }
 
         const rivals = accepted.filter(
-            (a) => a.reservation.type === candidate.type && a.from < mine.to && mine.from < a.to,
+            (a) => poolOf(a.reservation.type) === pool && a.from < mine.to && mine.from < a.to,
         );
         /*
          * **変わり目でだけ数える。** 同時本数が変わるのは、誰かが掴みはじめるか
@@ -183,7 +193,7 @@ export function assign<T extends Assignable>(
         if (best === null) {
             rejected.push({
                 reservation: candidate,
-                reason: `${candidate.type} のチューナーは ${limit} 本ですが、同時に ${worst} チャンネル必要です`,
+                reason: `${pool} のチューナーは ${limit} 本ですが、同時に ${worst} チャンネル必要です`,
             });
             continue;
         }
@@ -262,7 +272,7 @@ export function rivalsOf(occupants: Iterable<Occupant>, margins: Margins): Rival
  * ここだけ違う物差しで数えると、画面が「重なっています」と言っているのに
  * スケジューラは通す、という食い違いが出る。
  *
- * - **種別ごとに数える。** チューナーは GR / BS・CS で別々に刺さっている。
+ * - **`poolOf` の単位で数える。** チューナーは GR / BS・CS で別々に刺さっている。
  *   全部まとめて数えていた頃は、**衛星の番組に地上波の番組が競合として出ていた**。
  * - **同じ物理チャンネルは1本で足りる。** エージェントが1本のチューナーを配るので、
  *   テレ東1と2のような相乗りは何本並んでも1本。
@@ -281,11 +291,12 @@ export function contending(
     capacity: Map<string, number>,
     margins: Margins,
 ): string[] {
-    const limit = capacity.get(row.type);
+    const pool = poolOf(row.type);
+    const limit = capacity.get(pool);
     if (limit === undefined) return [];
     const mine = window(row, margins);
 
-    /** 同じ種別で時間が重なっているもの。同じチャンネルのものも入れる (本数は1本で済む) */
+    /** 同じ単位で時間が重なっているもの。同じチャンネルのものも入れる (本数は1本で済む) */
     const overlapping: Occupant[] = [];
     // 総当たりにしない。ゆるい条件のルールは数千件に当たるので、
     // 1件ずつ全件と突き合わせると番組表の二乗ぶん回ることになる
@@ -294,7 +305,7 @@ export function contending(
         const theirs = window(other, margins);
         // 並びは開始順。これより後ろは全部この番組より後に始まる
         if (theirs.from >= mine.to) break;
-        if (other.programId === row.programId || other.type !== row.type) continue;
+        if (other.programId === row.programId || poolOf(other.type) !== pool) continue;
         if (theirs.to <= mine.from) continue;
         overlapping.push(other);
     }
