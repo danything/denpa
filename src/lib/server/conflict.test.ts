@@ -287,6 +287,15 @@ describe('チューナーの取り合い (プレビュー)', () => {
         expect(against(bs, [a, b], tuners('GR', 'GR', 'GR+BS+CS'))).toEqual([]);
     });
 
+    test('ほかの単位も同時に溢れていても、自分の単位の取り合いは出す', () => {
+        const bs = occ({ programId: 1, type: 'BS', channel: 'BS15_0' });
+        const cs = occ({ programId: 2, type: 'CS', channel: 'CS4' });
+        const a = occ({ programId: 3, channel: 'T16' });
+        const b = occ({ programId: 4, channel: 'T21' });
+        // 地上波が先に並ぶ (地上波の組が先に足りないと分かる) ようにしてある
+        expect(against(bs, [a, b, cs], tuners('GR', 'BS+CS'))).toEqual(['番組2 (局)']);
+    });
+
     test('足りない単位の相手だけを名指しする', () => {
         const bs = occ({ programId: 1, type: 'BS', channel: 'BS15_0' });
         const cs = occ({ programId: 2, type: 'CS', channel: 'CS4' });

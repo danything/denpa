@@ -126,7 +126,12 @@ function known(capacity: Capacity, pool: string): boolean {
  * 小さい組から調べるので、返る組は「どれを諦めれば空くか」に近いものになる
  * (衛星が溢れているのに地上波の番組まで名指ししない)
  */
-function shortage(capacity: Capacity, channels: ReadonlyMap<string, string>): Set<string> | null {
+function shortage(
+    capacity: Capacity,
+    channels: ReadonlyMap<string, string>,
+    /** 指したときは、この単位を含む組だけを見る (ほかの単位だけが溢れていても関係ない) */
+    involving?: string,
+): Set<string> | null {
     const demand = new Map<string, number>();
     for (const pool of channels.values()) {
         if (known(capacity, pool)) demand.set(pool, (demand.get(pool) ?? 0) + 1);
@@ -137,6 +142,7 @@ function shortage(capacity: Capacity, channels: ReadonlyMap<string, string>): Se
     );
     for (const mask of subsets) {
         const group = new Set(pools.filter((_, i) => mask & (1 << i)));
+        if (involving !== undefined && !group.has(involving)) continue;
         let need = 0;
         for (const pool of group) need += demand.get(pool)!;
         const have = capacity.filter((tuner) => [...group].some((pool) => tuner.has(pool))).length;
@@ -386,8 +392,8 @@ export function contending(
             ...together.map((o) => [tunerKey(poolOf(o.type), o.channel), poolOf(o.type)] as const),
             [tunerKey(pool, row.channel), pool],
         ]);
-        const short = shortage(capacity, channels);
-        if (short === null || !short.has(pool)) continue;
+        const short = shortage(capacity, channels, pool);
+        if (short === null) continue;
         /*
          * 足りない単位の相手だけを名指しする。それ以外を諦めても空かない。
          * 同じチャンネルの相手も出さない。1本で足りるので、諦めても何も空かない
