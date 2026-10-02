@@ -5,7 +5,7 @@
     import { dragScroll, submitting } from '$lib/actions';
     import ProgramDetail from '$lib/components/ProgramDetail.svelte';
     import { startDownload } from '$lib/download';
-    import { date, SERVICE_TYPE_LABEL, stateLabel, time, channelNumber } from '$lib/format';
+    import { channelNumber, date, SERVICE_TYPE_LABEL, stateLabel, time } from '$lib/format';
     import { reload } from '$lib/reload.svelte';
     import type { ProgramDetail as Facts } from '$lib/types';
 
