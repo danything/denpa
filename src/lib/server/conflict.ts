@@ -388,14 +388,16 @@ export function contending(
         ]);
         const short = shortage(capacity, channels);
         if (short === null || !short.has(pool)) continue;
-        // 足りない単位の相手だけを名指しする。それ以外を諦めても空かない
-        const named = together.filter((o) => short.has(poolOf(o.type)));
+        /*
+         * 足りない単位の相手だけを名指しする。それ以外を諦めても空かない。
+         * 同じチャンネルの相手も出さない。1本で足りるので、諦めても何も空かない
+         */
+        const named = together.filter((o) => short.has(poolOf(o.type)) && o.channel !== row.channel);
         if (named.length > worst) {
             worst = named.length;
             culprits = named;
         }
     }
 
-    // 同じチャンネルの相手は名前を出さない。1本で足りるので、諦めても何も空かない
-    return culprits.filter((o) => o.channel !== row.channel).map((o) => `${o.name} (${o.serviceName})`);
+    return culprits.map((o) => `${o.name} (${o.serviceName})`);
 }
