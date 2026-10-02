@@ -504,6 +504,23 @@ a.button.ghost.danger {
     --pico-color: var(--dp-error);
 }
 
+/*
+ * **つなげたボタンの中のリンク (`<a class="button">`) も、つなぐ側の角を落とす。** Pico は
+ * `[role=group]` の中身なら何でもつなぐが、層の外のこちらの `a.button` の角が必ず勝つので、
+ * リンクだけ角の丸い札のまま離れて並んでいた (番組表の種別。ライブの `<button>` とずれていた)
+ */
+[role="group"] > a.button {
+    margin: 0;
+}
+[role="group"] > a.button:not(:first-child) {
+    border-start-start-radius: 0;
+    border-end-start-radius: 0;
+}
+[role="group"] > a.button:not(:last-child) {
+    border-start-end-radius: 0;
+    border-end-end-radius: 0;
+}
+
 /* 入力欄とくっつけたボタンは折り返さない */
 [role="group"] > button,
 [role="group"] > a.button {
