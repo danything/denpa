@@ -383,6 +383,25 @@ function reset(): void {
     audioConfig = '';
 }
 
+/**
+ * いま出しているコマを1枚返す (切り抜き。`messages.ts` の `grab`)。
+ * **最後に描いたフィールドのまま** 描き直す — 1080i で別のフィールドを描くと、
+ * 画面に見えていたものと半コマずれる
+ */
+async function grab(id: number): Promise<void> {
+    let bitmap: ImageBitmap | null = null;
+    try {
+        const image =
+            renderer !== null && current !== null && !Number.isNaN(drawn.field)
+                ? renderer.capture(drawn.field)
+                : null;
+        if (image !== null) bitmap = await createImageBitmap(image);
+    } catch {
+        // 読めなかった。写せないと返す (画面は何もしない)
+    }
+    post({ type: 'frame', id, bitmap }, bitmap === null ? [] : [bitmap]);
+}
+
 async function init(canvas: OffscreenCanvas, base: string): Promise<void> {
     try {
         renderer = new YuvRenderer(canvas);
@@ -432,6 +451,9 @@ scope.onmessage = (event: MessageEvent<ToWorker>) => {
             audioIndex = message.index;
             demuxer.selectAudio(message.index);
             adts.reset();
+            break;
+        case 'grab':
+            void grab(message.id);
             break;
     }
 };

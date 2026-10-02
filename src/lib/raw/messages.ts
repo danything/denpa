@@ -24,7 +24,13 @@ export type ToWorker =
     /** 選局し直した。**前の局のものは全部捨てる** */
     | { type: 'reset' }
     /** 何本目の音声を解くか (`AudioTrack.stream`) */
-    | { type: 'audio'; index: number };
+    | { type: 'audio'; index: number }
+    /**
+     * いま出しているコマを1枚ください (切り抜き)。**絵は worker の canvas に居て、
+     * 画面の側からは画素を読めない** (`transferControlToOffscreen` で渡したので)。
+     * `id` は返事 (`frame`) と組にするため
+     */
+    | { type: 'grab'; id: number };
 
 /** worker → 画面 */
 export type FromWorker =
@@ -43,4 +49,6 @@ export type FromWorker =
     /** 選局し直してから最初の絵を描いた。**前の局の静止画を剥がす合図** */
     | { type: 'shown' }
     /** 数字 (1秒ごと)。画面に出すもの */
-    | { type: 'stats'; dropped: number; p95: number; shown: number };
+    | { type: 'stats'; dropped: number; p95: number; shown: number }
+    /** `grab` の返事。まだ何も出していなければ null */
+    | { type: 'frame'; id: number; bitmap: ImageBitmap | null };

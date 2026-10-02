@@ -114,6 +114,45 @@ test.describe('ライブを生で見る', () => {
         await expect(page.getByTestId('live-codec')).toContainText('MPEG-2');
     });
 
+    /*
+     * **生で見ている間も切り抜ける。** 絵は worker の canvas に居て `<video>` は空なので、
+     * worker に1枚貰う (`raw/engine.ts` の `grab`)。描いたものは残さない作り
+     * (`preserveDrawingBuffer` 無し) なので、**描き直さずに読むと真っ黒**になる — 黒くないことまで見る
+     */
+    test('生で見ている間も切り抜きは絵ごと PNG に落ちる', async ({ page }) => {
+        await goto(page, '/live');
+        await page.getByTestId('live-channel').first().click();
+        await expect(page.getByTestId('live-title')).toBeVisible();
+        await chooseRaw(page);
+        const canvas = page.getByTestId('live-raw');
+        await expect
+            .poll(async () => Number((await canvas.getAttribute('data-shown')) ?? 0), { timeout: 30_000 })
+            .toBeGreaterThan(10);
+
+        await wakeControls(page, 'live-frame');
+        const download = page.waitForEvent('download');
+        await page.getByTestId('live-shot').click();
+        const file = await download;
+        expect(file.suggestedFilename()).toMatch(/^.+_\d{8}-\d{6}\.png$/);
+
+        const png = readFileSync(await file.path()).toString('base64');
+        const lit = await page.evaluate(async (data) => {
+            const blob = await (await fetch(`data:image/png;base64,${data}`)).blob();
+            const bitmap = await createImageBitmap(blob);
+            const board = new OffscreenCanvas(bitmap.width, bitmap.height);
+            const ctx = board.getContext('2d') as OffscreenCanvasRenderingContext2D;
+            ctx.drawImage(bitmap, 0, 0);
+            const pixels = ctx.getImageData(0, 0, bitmap.width, bitmap.height).data;
+            let bright = 0;
+            for (let i = 0; i < pixels.length; i += 4 * 97) {
+                if (pixels[i]! + pixels[i + 1]! + pixels[i + 2]! > 60) bright++;
+            }
+            return { width: bitmap.width, bright };
+        }, png);
+        expect(lit.width).toBeGreaterThan(0);
+        expect(lit.bright).toBeGreaterThan(0);
+    });
+
     test('選んでいなければ、いつもどおり焼いたものを見る', async ({ page }) => {
         await goto(page, '/live');
         await page.getByTestId('live-channel').first().click();

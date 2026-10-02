@@ -33,6 +33,9 @@ const TICK = 250;
 /** 舞台 (`PlayerStage`) が context に置き、その中のメニュー (`OverlayMenu`) が読む鍵 */
 export const PLAYER_CONTROLS = Symbol('player-controls');
 
+/** 舞台の枠そのもの。**メニューを枠の中に収める**のに使う (`OverlayMenu`) */
+export const PLAYER_STAGE = Symbol('player-stage');
+
 export interface PlayerControls {
     /** いま出ているか */
     readonly shown: boolean;

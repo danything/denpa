@@ -11,6 +11,12 @@
      *
      * 幅は帯の余りぜんぶ (`flex: 1 1 0`)。入りきらないぶんは**番組名だけが**
      * 後ろから切れる (時間帯と局は縮めない。どちらも短くて、切れると読めない)。
+     *
+     * **狭い枠 (スマホの縦) では、下の段だけを押すものの上の一行に出す**
+     * (`PlayerStage` の `data-compact`)。押すものの間に挟むと 360px 幅では
+     * 数十 px しか残らず、位置も番組名も「23:0…」で切れていた。番組名・局・
+     * 時間帯は、その幅では絵のすぐ下 (右の列が畳まれて下に来る) に出ているので、
+     * 帯では位置と遅れだけを読ませる
      */
     let {
         range = null,
@@ -76,6 +82,14 @@
         overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;
+    }
+    :global(.stage[data-compact]) .info {
+        order: -1;
+        flex: 1 1 100%;
+        padding: 0 0.25rem;
+    }
+    :global(.stage[data-compact]) .top {
+        display: none;
     }
     .status {
         font-size: 0.75rem;

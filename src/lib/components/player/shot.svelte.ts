@@ -1,10 +1,15 @@
 import type { Notice } from '#lib/components/Toasts.svelte';
 import type { PlayerControls } from './controls.svelte';
-import { clipFrame } from './snapshot';
+import { clipFrame, type Frame } from './snapshot';
 
 /** 切り抜きの3点セット (撮る・結果を持つ・トーストに出す)。**3画面で同じ形。** 撮り方は `clipFrame` */
 export function snapshotter(controls: PlayerControls) {
     let shot = $state<Notice | null>(null);
+    /**
+     * 撮っている最中か。**続けて押しても1枚ずつ** — 共有シートが開いている間に
+     * もう一度押すと、2枚目の共有が「もう開いている」で断られて落ちてくる
+     */
+    let busy = false;
 
     return {
         /** トーストへ混ぜるぶん。撮っていなければ空 */
@@ -17,17 +22,30 @@ export function snapshotter(controls: PlayerControls) {
         },
         /**
          * いまの1コマを字幕ごと切り抜く。
+         * @param frame 写す絵を取りに行く口。**撮れると決まってから呼ぶ** (`busy` の後) — 生で
+         *   見ているときは worker に1枚頼む (`raw/engine.ts` の `grab`) ので、先に呼ぶと
+         *   弾いた押しのぶんの絵 (1080 で 8MB) が誰にも閉じられずに残る
          * @param caption 出している字幕の canvas。出していなければ null
+         * @param title 番組名 (ファイル名の頭)
          */
         async take(
-            video: HTMLVideoElement | null,
+            frame: () => Frame | null | Promise<Frame | null>,
             caption: HTMLCanvasElement | null,
-            title: () => string,
+            title: string,
         ): Promise<void> {
-            if (video === null) return;
+            if (busy) return;
+            busy = true;
             controls.stir();
-            const notice = await clipFrame(video, caption, title);
-            if (notice !== null) shot = notice;
+            let got: Frame | null = null;
+            try {
+                got = await frame();
+                const notice = await clipFrame(got, caption, title);
+                if (notice !== null) shot = notice;
+            } finally {
+                busy = false;
+                // 生で貰った絵 (1080 で 8MB) は写し終えたら手放す。GC 任せだと押すたびに溜まる
+                if (got?.image instanceof ImageBitmap) got.image.close();
+            }
         },
     };
 }

@@ -45,6 +45,13 @@
         top: 3.5rem;
         justify-content: center;
     }
+    /* 低い枠では右の列が右上の一行に寝る (`ControlBar`)。その下から出す */
+    :global(.stage[data-low]) .top {
+        padding-top: 3.25rem;
+    }
+    :global(.stage[data-low]) .lower {
+        top: 4rem;
+    }
     .corner {
         top: 0.75rem;
         right: 0.75rem;
