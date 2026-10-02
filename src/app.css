@@ -24,86 +24,69 @@
     --pico-form-element-spacing-horizontal: 0.75rem;
     --pico-border-radius: 0.65rem;
     /*
-	 * 色は**紫ひとつ**を主に、状態の色は 4 つだけ。
+	 * 色は**主の色ひとつ**と、状態の色 4 つだけ。主の色は Blades (Pico) の既定の azure を
+	 * そのまま使う (上書きしない。アイコンの水色とも揃う)。紫は daisyUI の頃の名残だった。
+	 * 状態の色も Pico の色見本の段から選ぶ (録画中 red・成功 jade・注意 amber・知らせ cyan)。
+	 * 「知らせ」は azure と並ぶと見分けが付かないので、緑寄りの cyan にしてある
 	 *
 	 * **塗るのは「いま動いているもの」と「押すと戻せないもの」だけ。**
 	 * 以前は予約済み(青)・視聴可能(緑)・取消(赤枠)が行ごとに並んでいて、
 	 * 一覧を開くと色の列が3本立ち、どこを見ればよいのか分からなくなっていた。
 	 * ふつうの状態は地の色に混ぜた淡い札にして、目は録画中の赤だけに行くようにする
 	 */
-    --dp-rec: #e11d48;
-    --dp-ok: #16a34a;
-    --dp-warn: #d97706;
-    --dp-info: #2563eb;
+    --dp-rec: #d93526; /* red-500 */
+    --dp-ok: #00895a; /* jade-500 */
+    --dp-warn: #c79400; /* amber-350 */
+    --dp-info: #058686; /* cyan-500 */
     --dp-error: var(--dp-rec);
 }
-/* テーマごとの色。Pico も [data-theme] と :root:not([data-theme=dark]) に書くが、層の外のこちらが勝つ */
+/*
+ * テーマごとの色。**値は Pico の色見本 (pico.colors.css の 50〜950 の段) から選ぶ。**
+ * 主の色 (azure) も Pico の段から来ているので、同じ物差しで並べると色の系統がそろう。
+ * 本文・地 (ダーク)・入力欄は Blades (Pico) の既定のまま。Pico も [data-theme] と
+ * :root:not([data-theme=dark]) に書くが、層の外のこちらが勝つ
+ */
 :root:not([data-theme="dark"]),
 [data-theme="light"] {
-    --pico-background-color: #f4f5fb;
-    --pico-color: #1e2233;
-    --pico-muted-color: #646b82;
-    --pico-primary: #7c3aed;
-    --pico-primary-background: #7c3aed;
-    --pico-primary-border: #7c3aed;
-    --pico-primary-hover: #6d28d9;
-    --pico-primary-hover-background: #6d28d9;
-    --pico-primary-hover-border: #6d28d9;
-    --pico-primary-underline: rgb(124 58 237 / 0.4);
-    --pico-primary-focus: rgb(124 58 237 / 0.3);
-    --pico-primary-inverse: #fff;
+    /* 白い面 (.panel) を並べるので、地だけは白にせず slate の一番淡い段にする */
+    --pico-background-color: #eff1f4; /* slate-50 */
     --dp-surface: #fff;
-    --dp-base-200: #eceef8;
-    --dp-base-300: #d9ddec;
+    --dp-base-200: #eff1f4; /* slate-50 */
+    --dp-base-300: #cfd5e2; /* slate-150 */
     /*
 	 * **押せるが主ではないもの**(日送り・選んでいない種別)。Pico の既定の灰色は
 	 * 地に沈んで「押せない」ように見えたので、本文と同じ濃さにして枠で区別する
 	 */
-    --pico-secondary: #3f4660;
-    --pico-secondary-background: #e7eaf6;
-    --pico-secondary-border: #c7cde3;
-    --pico-secondary-inverse: #1e2233;
-    --pico-secondary-hover: #2b3145;
-    --pico-secondary-hover-background: #dbe0f1;
-    --pico-secondary-hover-border: #b5bdd8;
+    --pico-secondary: #3d475c; /* slate-700 */
+    --pico-secondary-background: #eff1f4; /* slate-50 */
+    --pico-secondary-border: #cfd5e2; /* slate-150 */
+    --pico-secondary-inverse: #2a3140; /* slate-800 */
+    --pico-secondary-hover: #2a3140; /* slate-800 */
+    --pico-secondary-hover-background: #dfe3eb; /* slate-100 */
+    --pico-secondary-hover-border: #b0b9d0; /* slate-250 */
     /* 淡い札の文字。地が白寄りなので塗り色より一段濃くする */
-    --dp-rec-text: #be123c;
-    --dp-ok-text: #15803d;
-    --dp-warn-text: #b45309;
-    --dp-info-text: #1d4ed8;
+    --dp-rec-text: #9b2318; /* red-650 */
+    --dp-ok-text: #005f3d; /* jade-650 */
+    --dp-warn-text: #694d00; /* amber-650 */
+    --dp-info-text: #025d5d; /* cyan-650 */
 }
 [data-theme="dark"] {
-    --pico-background-color: #0b0d14;
-    --pico-color: #e7e9f3;
-    --pico-muted-color: #9aa1b8;
-    --pico-primary: #a78bfa;
-    --pico-primary-background: #8b5cf6;
-    --pico-primary-border: #8b5cf6;
-    --pico-primary-hover: #c4b5fd;
-    --pico-primary-hover-background: #7c3aed;
-    --pico-primary-hover-border: #7c3aed;
-    --pico-primary-underline: rgb(167 139 250 / 0.5);
-    --pico-primary-focus: rgb(139 92 246 / 0.4);
-    --pico-primary-inverse: #fff;
-    --pico-form-element-background-color: #141824;
-    --pico-form-element-border-color: #2a3245;
-    --pico-form-element-active-background-color: #161b29;
-    --dp-surface: #141824;
-    --dp-base-200: #1b2130;
-    --dp-base-300: #2a3245;
+    --dp-surface: #181c25; /* slate-900 (Pico のカードの地と同じ) */
+    --dp-base-200: #202632; /* slate-850 */
+    --dp-base-300: #2a3140; /* slate-800 */
     /* 暗いほうも同じ考え。文字は本文並みの明るさ、区別は枠で付ける */
-    --pico-secondary: #c9cee2;
-    --pico-secondary-background: #232a3b;
-    --pico-secondary-border: #39425a;
-    --pico-secondary-inverse: #e7e9f3;
-    --pico-secondary-hover: #e7e9f3;
-    --pico-secondary-hover-background: #2b3346;
-    --pico-secondary-hover-border: #47516c;
+    --pico-secondary: #bfc7d9; /* slate-200 */
+    --pico-secondary-background: #202632; /* slate-850 */
+    --pico-secondary-border: #3d475c; /* slate-700 */
+    --pico-secondary-inverse: #dfe3eb; /* slate-100 */
+    --pico-secondary-hover: #dfe3eb; /* slate-100 */
+    --pico-secondary-hover-background: #2a3140; /* slate-800 */
+    --pico-secondary-hover-border: #525f7a; /* slate-600 */
     /* 暗いほうは逆に、塗り色より明るくしないと読めない */
-    --dp-rec-text: #fda4af;
-    --dp-ok-text: #86efac;
-    --dp-warn-text: #fcd34d;
-    --dp-info-text: #93c5fd;
+    --dp-rec-text: #f38f79; /* red-300 */
+    --dp-ok-text: #00cc88; /* jade-250 */
+    --dp-warn-text: #fecc63; /* amber-150 */
+    --dp-info-text: #0ccece; /* cyan-250 */
 }
 /* Pico は送信ボタンを横幅いっぱいにする。ボタンは中身の幅にし、広げたいところだけ .full を付ける */
 button[type="submit"] {
