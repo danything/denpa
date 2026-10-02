@@ -9,7 +9,9 @@ import { deleteRecordingFiles, reconcile } from '#lib/server/files.js';
 import { recordingFromForm } from '#lib/server/recording.js';
 import { cancel, restore } from '#lib/server/reservations.js';
 import {
+    activeEncodeJobId,
     encodeJobs,
+    lastEncodeError,
     recordings as recordingTable,
     reservationState,
     reservations as reservationTable,
@@ -199,17 +201,8 @@ export function load({ url }) {
     const recordings: RecordingRow[] = orm()
         .select({
             ...getTableColumns(recordingTable),
-            /*
-             * 失敗の理由は詳細で見せる。一覧には「失敗」とだけ出す。
-             *
-             * **いちばん新しいジョブが失敗していたときだけ**出す。
-             * 「失敗したジョブのうち最新」を拾っていた頃は、録り直して成功しても
-             * 前の失敗が消えずに残っていた
-             */
-            encode_error: sql<string | null>`(
-                 SELECT CASE WHEN j2.state = 'failed' THEN j2.error END FROM encode_jobs j2
-                 WHERE j2.recording_id = ${recordingTable.id}
-                 ORDER BY j2.id DESC LIMIT 1)`,
+            // 失敗の理由は詳細で見せる。一覧には「失敗」とだけ出す
+            encode_error: lastEncodeError(recordingTable.id),
             job_id: j.id,
             job_state: j.state,
             job_phase: j.phase,
@@ -227,15 +220,7 @@ export function load({ url }) {
         .leftJoin(services, eq(services.id, recordingTable.service_id))
         .leftJoin(res, eq(res.id, recordingTable.reservation_id))
         .leftJoin(ruleTable, eq(ruleTable.id, res.rule_id))
-        // 動いているエンコードは録画1本につき高々1つ (encoder.enqueue が重複を弾く)
-        .leftJoin(
-            j,
-            eq(
-                j.id,
-                sql`(SELECT id FROM encode_jobs WHERE recording_id = ${recordingTable.id}
-                     AND state IN ('queued','running') ORDER BY id DESC LIMIT 1)`,
-            ),
-        )
+        .leftJoin(j, eq(j.id, activeEncodeJobId(recordingTable.id)))
         .where(
             and(
                 // 録画中のものは予約一覧に出ている。ここにも出すと同じ番組が2箇所に並ぶ

@@ -106,6 +106,23 @@ export function reservationState(
         END`;
 }
 
+/**
+ * 録画の直近のエンコード失敗の理由。**いちばん新しいジョブが失敗していたときだけ**。
+ * 「失敗したジョブのうち最新」を拾っていた頃は、焼き直して成功しても前の失敗が残っていた
+ */
+export function lastEncodeError(recordingId: AnySQLiteColumn) {
+    return sql<string | null>`(
+        SELECT CASE WHEN j2.state = 'failed' THEN j2.error END FROM encode_jobs j2
+        WHERE j2.recording_id = ${recordingId}
+        ORDER BY j2.id DESC LIMIT 1)`;
+}
+
+/** 録画の、動いている (待ち・実行中) エンコード。録画1本につき高々1つ (`encoder.enqueue` が重複を弾く) */
+export function activeEncodeJobId(recordingId: AnySQLiteColumn) {
+    return sql<number | null>`(SELECT id FROM encode_jobs WHERE recording_id = ${recordingId}
+        AND state IN ('queued','running') ORDER BY id DESC LIMIT 1)`;
+}
+
 /** 画面から変えられる設定。環境変数を初期値として、ここにあれば上書きする */
 export const settings = sqliteTable('settings', {
     key: text('key').primaryKey(),
