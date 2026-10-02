@@ -73,9 +73,9 @@
  * 絵を重ねるのは「消す」と同じ結果になるので、空かどうかを見分ける必要が無い。
  */
 
-import { LANGUAGE } from '$lib/arib';
-import { type CaptionTrack, CHANNEL } from '$lib/live';
-import type { MkvFrame } from '$lib/ts/mkv';
+import { LANGUAGE } from '#lib/arib.js';
+import { type CaptionTrack, CHANNEL } from '#lib/live.js';
+import type { MkvFrame } from '#lib/ts/mkv.js';
 
 /**
  * 字幕を描く画面の大きさ。

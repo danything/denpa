@@ -1,7 +1,7 @@
 <script lang="ts">
-    import { base } from '$app/paths';
-    import { submitting } from '$lib/actions';
-    import { dateTime } from '$lib/format';
+    import { submitting } from '#lib/actions.js';
+    import { dateTime } from '#lib/format.js';
+    import { resolve } from '$app/paths';
 
     /**
      * 局ロゴの位置を教える。
@@ -111,7 +111,7 @@
         // 畳んでいる間は取り出さない。1コマ出すのに録画を頭から読ませることになる
         if (!open || recordingId === null) return;
         return fetchImage(
-            `${base}/api/recordings/${recordingId}/frame?at=${at}`,
+            resolve(`api/recordings/${recordingId}/frame?at=${at}`),
             (url, res) => {
                 frame = {
                     url,
@@ -142,7 +142,7 @@
         // 位置を教え直すと覚えているものは捨てられる。保存後に消えるのが正しい
         void area;
         return fetchImage(
-            `${base}/api/services/${serviceId}/logo-data`,
+            resolve(`api/services/${serviceId}/logo-data`),
             (url, res) => {
                 learned = { url, learnedAt: Number(res.headers.get('X-Logo-Learned-At')) };
                 checked = true;

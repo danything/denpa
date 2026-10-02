@@ -20,13 +20,13 @@
  */
 
 import { and, eq, gt, lte } from 'drizzle-orm';
-import { type Audio, type AudioTrack, audioTracks, pickTrack } from '$lib/arib';
-import { CHANNEL, type HybridcastLink, type LiveCodec, type Notice } from '$lib/live';
-import { AitReader, APPLICATION_TYPE_HTML5, CONTROL } from '$lib/ts/ait';
-import { BroadcastClock, parseStart } from '$lib/ts/clock';
-import { Fmp4Splitter } from '$lib/ts/fmp4';
-import { MkvSplitter } from '$lib/ts/mkv';
-import { ServiceFilter } from '$lib/ts/service-filter';
+import { type Audio, type AudioTrack, audioTracks, pickTrack } from '#lib/arib.js';
+import { CHANNEL, type HybridcastLink, type LiveCodec, type Notice } from '#lib/live.js';
+import { AitReader, APPLICATION_TYPE_HTML5, CONTROL } from '#lib/ts/ait.js';
+import { BroadcastClock, parseStart } from '#lib/ts/clock.js';
+import { Fmp4Splitter } from '#lib/ts/fmp4.js';
+import { MkvSplitter } from '#lib/ts/mkv.js';
+import { ServiceFilter } from '#lib/ts/service-filter.js';
 import {
     type Caption,
     captionInput,
@@ -1423,7 +1423,7 @@ export function warm(
     timer.unref?.();
 }
 
-/** 画面からの指示 (`$lib/live` の `Command`) を、省かれたところを既定で埋めて読んだもの */
+/** 画面からの指示 (`#lib/live` の `Command`) を、省かれたところを既定で埋めて読んだもの */
 type Asked =
     | { type: 'data'; on: boolean }
     | {

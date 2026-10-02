@@ -1,20 +1,19 @@
 <script lang="ts">
     import { onMount } from 'svelte';
-    import { base } from '$app/paths';
-    import { submitting } from '$lib/actions';
-    import ProgramFacts from '$lib/components/ProgramFacts.svelte';
-    import AudioMenu from '$lib/components/player/AudioMenu.svelte';
-    import { screenAwake } from '$lib/components/player/awake.svelte';
-    import CodecMenu from '$lib/components/player/CodecMenu.svelte';
-    import ControlBar from '$lib/components/player/ControlBar.svelte';
-    import ControlButton from '$lib/components/player/ControlButton.svelte';
-    import { centerTap } from '$lib/components/player/center-tap';
-    import { playerControls } from '$lib/components/player/controls.svelte';
-    import DataBroadcast, { pressD } from '$lib/components/player/DataBroadcast.svelte';
-    import EdgeButton from '$lib/components/player/EdgeButton.svelte';
-    import FactsAside from '$lib/components/player/FactsAside.svelte';
-    import Icon from '$lib/components/player/Icon.svelte';
-    import InfoBlock from '$lib/components/player/InfoBlock.svelte';
+    import { submitting } from '#lib/actions.js';
+    import ProgramFacts from '#lib/components/ProgramFacts.svelte';
+    import AudioMenu from '#lib/components/player/AudioMenu.svelte';
+    import { screenAwake } from '#lib/components/player/awake.svelte.js';
+    import CodecMenu from '#lib/components/player/CodecMenu.svelte';
+    import ControlBar from '#lib/components/player/ControlBar.svelte';
+    import ControlButton from '#lib/components/player/ControlButton.svelte';
+    import { centerTap } from '#lib/components/player/center-tap.js';
+    import { playerControls } from '#lib/components/player/controls.svelte.js';
+    import DataBroadcast, { pressD } from '#lib/components/player/DataBroadcast.svelte';
+    import EdgeButton from '#lib/components/player/EdgeButton.svelte';
+    import FactsAside from '#lib/components/player/FactsAside.svelte';
+    import Icon from '#lib/components/player/Icon.svelte';
+    import InfoBlock from '#lib/components/player/InfoBlock.svelte';
     import {
         CAMERA,
         CAPTION,
@@ -29,20 +28,21 @@
         SHRINK,
         SOUND_OFF,
         SOUND_ON,
-    } from '$lib/components/player/icons';
-    import MediaStack from '$lib/components/player/MediaStack.svelte';
-    import OverlayMenu from '$lib/components/player/OverlayMenu.svelte';
-    import PlayerStage from '$lib/components/player/PlayerStage.svelte';
-    import PlayerVeil from '$lib/components/player/PlayerVeil.svelte';
-    import Remote from '$lib/components/player/Remote.svelte';
-    import SpeedMenu from '$lib/components/player/SpeedMenu.svelte';
-    import StageNote from '$lib/components/player/StageNote.svelte';
-    import { snapshotter } from '$lib/components/player/shot.svelte';
-    import Toasts, { errorNotice, type Notice } from '$lib/components/Toasts.svelte';
-    import { programDetail } from '$lib/detail.svelte';
-    import { SERVICE_TYPE_LABEL, time } from '$lib/format';
-    import { livePlayer } from '$lib/live-player.svelte';
-    import { FLOOR } from '$lib/ts/pacing';
+    } from '#lib/components/player/icons.js';
+    import MediaStack from '#lib/components/player/MediaStack.svelte';
+    import OverlayMenu from '#lib/components/player/OverlayMenu.svelte';
+    import PlayerStage from '#lib/components/player/PlayerStage.svelte';
+    import PlayerVeil from '#lib/components/player/PlayerVeil.svelte';
+    import Remote from '#lib/components/player/Remote.svelte';
+    import SpeedMenu from '#lib/components/player/SpeedMenu.svelte';
+    import StageNote from '#lib/components/player/StageNote.svelte';
+    import { snapshotter } from '#lib/components/player/shot.svelte.js';
+    import Toasts, { errorNotice, type Notice } from '#lib/components/Toasts.svelte';
+    import { programDetail } from '#lib/detail.svelte.js';
+    import { SERVICE_TYPE_LABEL, time } from '#lib/format.js';
+    import { livePlayer } from '#lib/live-player.svelte.js';
+    import { FLOOR } from '#lib/ts/pacing.js';
+    import { resolve } from '$app/paths';
     import type { LiveChannel } from './+page.server';
 
     let { data, form } = $props();
@@ -743,7 +743,7 @@
                                 {#if channel.number !== null}<span class="tag">{channel.number}</span>{/if}
                             </span>
                             {#if channel.hasLogo}
-                                <img src="{base}/api/services/{channel.id}/logo" alt="" class="channel-logo" />
+                                <img src={resolve(`api/services/${channel.id}/logo`)} alt="" class="channel-logo" />
                             {:else}
                                 <span class="channel-logo channel-type">
                                     {channel.type}

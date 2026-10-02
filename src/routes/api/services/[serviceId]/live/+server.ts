@@ -1,5 +1,5 @@
 import { error } from '@sveltejs/kit';
-import { liveStream } from '$lib/server/live';
+import { liveStream } from '#lib/server/live.js';
 
 /**
  * **ライブを HTTP で流す** (画面の外のもの向けの口。docs/api.md)。

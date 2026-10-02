@@ -1,7 +1,7 @@
 import { redirect } from '@sveltejs/kit';
-import { enabled, redirectUri, safeReturn, start } from '$lib/server/oidc';
-import { publicBase } from '$lib/server/paths';
-import { PENDING_COOKIE, PENDING_TTL } from '$lib/server/session';
+import { enabled, redirectUri, safeReturn, start } from '#lib/server/oidc.js';
+import { publicBase } from '#lib/server/paths.js';
+import { PENDING_COOKIE, PENDING_TTL } from '#lib/server/session.js';
 
 /**
  * ログインを始める。Entra へ送るだけで、こちらでは何も決めない。
@@ -25,5 +25,7 @@ export async function GET({ url, cookies, request }) {
         secure: url.protocol === 'https:',
         maxAge: PENDING_TTL,
     });
-    redirect(302, authorize);
+    // 行き先は IdP (よその origin)。SvelteKit 3 からは外へ送ると明示しないと止められる。
+    // 宛先は利用者の入力ではなく、IdP の discovery から組み立てたもの
+    redirect(302, authorize, { external: true });
 }

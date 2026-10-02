@@ -1,7 +1,7 @@
 <script lang="ts">
-    import { audioLabel, genreLabel, videoLabel } from '$lib/arib';
-    import { dateTime, duration, linkify, time } from '$lib/format';
-    import type { ProgramDetail } from '$lib/types';
+    import { audioLabel, genreLabel, videoLabel } from '#lib/arib.js';
+    import { dateTime, duration, linkify, time } from '#lib/format.js';
+    import type { ProgramDetail } from '#lib/types.js';
 
     /**
      * 番組の中身そのもの。**枠は持たない。**

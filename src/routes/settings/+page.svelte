@@ -1,13 +1,13 @@
 <script lang="ts">
-    import type { SubmitFunction } from '@sveltejs/kit';
     import { untrack } from 'svelte';
-    import { submitting } from '$lib/actions';
-    import Toasts, { errorNotice, type Notice } from '$lib/components/Toasts.svelte';
-    import { dateTime, stateLabel } from '$lib/format';
-    import { CODEC_LABEL, HW_CODECS, HW_KIND_LABEL, HW_KINDS, hwAllowed } from '$lib/hw';
-    import { liveUpdates } from '$lib/live-updates.svelte';
-    import { measure } from '$lib/measure.svelte';
-    import { EVENT_LABEL } from '$lib/webhook-events';
+    import { submitting } from '#lib/actions.js';
+    import Toasts, { errorNotice, type Notice } from '#lib/components/Toasts.svelte';
+    import { dateTime, stateLabel } from '#lib/format.js';
+    import { CODEC_LABEL, HW_CODECS, HW_KIND_LABEL, HW_KINDS, hwAllowed } from '#lib/hw.js';
+    import { liveUpdates } from '#lib/live-updates.svelte.js';
+    import { measure } from '#lib/measure.svelte.js';
+    import { EVENT_LABEL } from '#lib/webhook-events.js';
+    import type { SubmitFunction } from '$app/forms';
 
     let { data, form } = $props();
 

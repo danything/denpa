@@ -1,9 +1,9 @@
 import { json } from '@sveltejs/kit';
 import { count } from 'drizzle-orm';
-import { orm } from '$lib/server/db';
-import { sync } from '$lib/server/epg';
-import { collectOnce } from '$lib/server/epg-collect';
-import { programs } from '$lib/server/schema';
+import { orm } from '#lib/server/db.js';
+import { sync } from '#lib/server/epg.js';
+import { collectOnce } from '#lib/server/epg-collect.js';
+import { programs } from '#lib/server/schema.js';
 
 /**
  * 番組表を今すぐ集め直す。定期実行 (EPG_COLLECT_INTERVAL) を待たずに反映したいとき用。

@@ -1,8 +1,8 @@
 import { json } from '@sveltejs/kit';
 import { and, desc, isNotNull, ne, or } from 'drizzle-orm';
-import { orm } from '$lib/server/db';
-import { recordings } from '$lib/server/schema';
-import { displayTitle } from '$lib/server/title';
+import { orm } from '#lib/server/db.js';
+import { recordings } from '#lib/server/schema.js';
+import { displayTitle } from '#lib/server/title.js';
 
 /** 焼いたもののコーデック。H.264 のほうは名前に印が付く (library.ts の encodedPath) */
 function codecOf(path: string): 'av1' | 'h264' {

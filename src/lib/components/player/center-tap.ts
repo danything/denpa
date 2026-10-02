@@ -1,4 +1,4 @@
-import { DOUBLE_TAP } from '$lib/ts/watch';
+import { DOUBLE_TAP } from '#lib/ts/watch.js';
 
 /**
  * **真ん中あたりを素早く2回で再生/一時停止** (スマホの VLC と同じ癖)。

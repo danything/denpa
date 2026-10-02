@@ -1,14 +1,14 @@
 import { existsSync } from 'node:fs';
 import { error, fail, redirect } from '@sveltejs/kit';
 import { eq, getTableColumns, sql } from 'drizzle-orm';
-import { orm } from '$lib/server/db';
-import { deleteRecordingFiles } from '$lib/server/files';
-import { sidecarPaths } from '$lib/server/metadata';
-import { relative } from '$lib/server/paths';
-import { recordingFromForm } from '$lib/server/recording';
-import { recordings } from '$lib/server/schema';
-import { settings } from '$lib/server/settings';
-import type { Recording } from '$lib/types';
+import { orm } from '#lib/server/db.js';
+import { deleteRecordingFiles } from '#lib/server/files.js';
+import { sidecarPaths } from '#lib/server/metadata.js';
+import { relative } from '#lib/server/paths.js';
+import { recordingFromForm } from '#lib/server/recording.js';
+import { recordings } from '#lib/server/schema.js';
+import { settings } from '#lib/server/settings.js';
+import type { Recording } from '#lib/types.js';
 
 /**
  * 録画を観る画面。**ブラウザでそのまま再生する。**

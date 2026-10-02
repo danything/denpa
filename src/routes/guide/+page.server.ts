@@ -1,17 +1,17 @@
 import { fail } from '@sveltejs/kit';
 import { and, eq, gt, lt, ne, sql } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/sqlite-core';
-import { orm } from '$lib/server/db';
-import { airing, CURRENT_SERVICES, SERVICE_ORDER, watchableServices } from '$lib/server/epg';
-import { cancel, reserve } from '$lib/server/reservations';
+import { orm } from '#lib/server/db.js';
+import { airing, CURRENT_SERVICES, SERVICE_ORDER, watchableServices } from '#lib/server/epg.js';
+import { cancel, reserve } from '#lib/server/reservations.js';
 import {
     programs as programTable,
     recordings,
     reservationState,
     reservations,
     services as serviceTable,
-} from '$lib/server/schema';
-import type { ChannelType, Program, ReservationState, Service } from '$lib/types';
+} from '#lib/server/schema.js';
+import type { ChannelType, Program, ReservationState, Service } from '#lib/types.js';
 
 const HOUR = 60 * 60 * 1000;
 /**

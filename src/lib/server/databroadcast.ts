@@ -21,8 +21,8 @@
  */
 
 import type { ResponseMessage } from 'web-bml/protocol';
-import { BmlDecoder } from '$lib/ts/bml';
-import { Carousel } from '$lib/ts/carousel';
+import { BmlDecoder } from '#lib/ts/bml.js';
+import { Carousel } from '#lib/ts/carousel.js';
 
 export type { ResponseMessage };
 

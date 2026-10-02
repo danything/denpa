@@ -106,7 +106,7 @@ denpa 本体は上と同じコンテナイメージ `denpa` を、Mac の Docker
 | crc-32 | web-bml の PNG / DRCS | <https://github.com/SheetJS/js-crc32> | **Apache-2.0** |
 | css (reworkcss、otya128 の fork) + source-map ほか | web-bml が BML の CSS を解く | <https://github.com/reworkcss/css> | MIT (依存は BSD-3 / MIT) |
 | fast-xml-parser / fast-xml-builder | web-bml の BML → XHTML | <https://github.com/NaturalIntelligence/fast-xml-parser> | MIT |
-| cookie / devalue / set-cookie-parser / sirv / mrmime / totalist / esm-env / clsx | SvelteKit と adapter-node のランタイム | 各上流 | MIT |
+| cookie / devalue / esm-env / clsx | SvelteKit のランタイム (adapter-node 6 は静的ファイルの配りも自前で、依存を持たない) | 各上流 | MIT |
 
 ### ライブを生で見るときにブラウザへ配る復号器
 

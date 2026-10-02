@@ -8,7 +8,7 @@
 
 - [src/lib/offline-db.ts](../src/lib/offline-db.ts) … IndexedDB (ページと SW の共有層)
 - [src/lib/offline.svelte.ts](../src/lib/offline.svelte.ts) … 画面側 (保存・進捗・削除・outbox)
-- [src/service-worker.ts](../src/service-worker.ts) … Background Fetch の受け取りとオフラインの入口
+- [src/service-worker/index.ts](../src/service-worker/index.ts) … Background Fetch の受け取りとオフラインの入口
 - [src/routes/offline/+page.svelte](../src/routes/offline/+page.svelte) … 保存済み一覧 + 内蔵プレイヤー
 - [src/routes/api/recordings/[id]/+server.ts](../src/routes/api/recordings/[id]/+server.ts) … `DELETE` (outbox の宛先)
 

@@ -90,8 +90,8 @@ export function parseFetchId(
 /**
  * 落とすものの一覧。動画 + 観るのに要る付き添い。
  *
- * **頭の `base` は呼ぶ側 (offline.svelte.ts) が付ける。** ここは Service Worker からも
- * 読まれるので `$app/paths` を使えない (前段の接頭辞。server/paths.ts)
+ * **頭 (前段の接頭辞。server/paths.ts) は呼ぶ側 (offline.svelte.ts) が付ける。** ここは
+ * Service Worker からも読まれ、道の形で付き添いを見分ける (`kindOf`) ので、根からの道のまま持つ
  */
 export function downloadRequests(id: number, source: 'encoded' | 'alt'): string[] {
     return [

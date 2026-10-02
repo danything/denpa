@@ -1,4 +1,4 @@
-import { updateAvailable } from '$lib/server/update';
+import { updateAvailable } from '#lib/server/update.js';
 
 /**
  * ログインしているかどうか。**OIDC を通って入ったときだけ入る。**

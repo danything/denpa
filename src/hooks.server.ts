@@ -7,11 +7,11 @@ import {
     needsLogin,
     sessionMayRead,
     trusted,
-} from '$lib/server/auth';
-import { relative } from '$lib/server/paths';
-import { start } from '$lib/server/runtime';
-import { COOKIE, find } from '$lib/server/session';
-import { shareTokenAllows } from '$lib/server/share';
+} from '#lib/server/auth.js';
+import { relative } from '#lib/server/paths.js';
+import { start } from '#lib/server/runtime.js';
+import { COOKIE, find } from '#lib/server/session.js';
+import { shareTokenAllows } from '#lib/server/share.js';
 
 // SvelteKit のサーバ起動時に一度だけ走る。EPG取得・スケジューラ・エンコーダを立ち上げる
 start();

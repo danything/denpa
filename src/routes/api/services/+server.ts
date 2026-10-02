@@ -1,8 +1,8 @@
 import { json } from '@sveltejs/kit';
 import { sql } from 'drizzle-orm';
-import { orm } from '$lib/server/db';
-import { CURRENT_SERVICES, SERVICE_ORDER, SERVICE_TYPE_ORDER } from '$lib/server/epg';
-import { services } from '$lib/server/schema';
+import { orm } from '#lib/server/db.js';
+import { CURRENT_SERVICES, SERVICE_ORDER, SERVICE_TYPE_ORDER } from '#lib/server/epg.js';
+import { services } from '#lib/server/schema.js';
 
 /**
  * **局の一覧** (画面の外のもの向けの口。docs/api.md)。並びはテレビと同じ

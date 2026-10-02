@@ -1,17 +1,16 @@
 <script lang="ts">
     import { onMount } from 'svelte';
-    import { base } from '$app/paths';
-    import ProgramFacts from '$lib/components/ProgramFacts.svelte';
-    import AudioMenu from '$lib/components/player/AudioMenu.svelte';
-    import { screenAwake } from '$lib/components/player/awake.svelte';
-    import CodecMenu from '$lib/components/player/CodecMenu.svelte';
-    import ControlBar from '$lib/components/player/ControlBar.svelte';
-    import ControlButton from '$lib/components/player/ControlButton.svelte';
-    import { playerControls } from '$lib/components/player/controls.svelte';
-    import EdgeButton from '$lib/components/player/EdgeButton.svelte';
-    import FactsAside from '$lib/components/player/FactsAside.svelte';
-    import Icon from '$lib/components/player/Icon.svelte';
-    import InfoBlock from '$lib/components/player/InfoBlock.svelte';
+    import ProgramFacts from '#lib/components/ProgramFacts.svelte';
+    import AudioMenu from '#lib/components/player/AudioMenu.svelte';
+    import { screenAwake } from '#lib/components/player/awake.svelte.js';
+    import CodecMenu from '#lib/components/player/CodecMenu.svelte';
+    import ControlBar from '#lib/components/player/ControlBar.svelte';
+    import ControlButton from '#lib/components/player/ControlButton.svelte';
+    import { playerControls } from '#lib/components/player/controls.svelte.js';
+    import EdgeButton from '#lib/components/player/EdgeButton.svelte';
+    import FactsAside from '#lib/components/player/FactsAside.svelte';
+    import Icon from '#lib/components/player/Icon.svelte';
+    import InfoBlock from '#lib/components/player/InfoBlock.svelte';
     import {
         CAMERA,
         CAPTION,
@@ -24,23 +23,24 @@
         SHRINK,
         SOUND_OFF,
         SOUND_ON,
-    } from '$lib/components/player/icons';
-    import { playerKeys } from '$lib/components/player/keys';
-    import MediaStack from '$lib/components/player/MediaStack.svelte';
-    import PlayerStage from '$lib/components/player/PlayerStage.svelte';
-    import PlayerVeil from '$lib/components/player/PlayerVeil.svelte';
-    import SpeedMenu, { SPEED_KEY, storedSpeed } from '$lib/components/player/SpeedMenu.svelte';
-    import StageNote from '$lib/components/player/StageNote.svelte';
-    import { snapshotter } from '$lib/components/player/shot.svelte';
-    import Toasts, { type Notice } from '$lib/components/Toasts.svelte';
-    import { programDetail } from '$lib/detail.svelte';
-    import { clock as clockLabel, time } from '$lib/format';
-    import { write as remind } from '$lib/keep';
-    import { livePlayer } from '$lib/live-player.svelte';
-    import { liveUpdates } from '$lib/live-updates.svelte';
-    import { keepResume } from '$lib/resume';
-    import { SPEEDS } from '$lib/ts/pacing';
-    import { type Tap, tap, zoneOf } from '$lib/ts/watch';
+    } from '#lib/components/player/icons.js';
+    import { playerKeys } from '#lib/components/player/keys.js';
+    import MediaStack from '#lib/components/player/MediaStack.svelte';
+    import PlayerStage from '#lib/components/player/PlayerStage.svelte';
+    import PlayerVeil from '#lib/components/player/PlayerVeil.svelte';
+    import SpeedMenu, { SPEED_KEY, storedSpeed } from '#lib/components/player/SpeedMenu.svelte';
+    import StageNote from '#lib/components/player/StageNote.svelte';
+    import { snapshotter } from '#lib/components/player/shot.svelte.js';
+    import Toasts, { type Notice } from '#lib/components/Toasts.svelte';
+    import { programDetail } from '#lib/detail.svelte.js';
+    import { clock as clockLabel, time } from '#lib/format.js';
+    import { write as remind } from '#lib/keep.js';
+    import { livePlayer } from '#lib/live-player.svelte.js';
+    import { liveUpdates } from '#lib/live-updates.svelte.js';
+    import { keepResume } from '#lib/resume.js';
+    import { SPEEDS } from '#lib/ts/pacing.js';
+    import { type Tap, tap, zoneOf } from '#lib/ts/watch.js';
+    import { resolve } from '$app/paths';
 
     /**
      * 追っかけ再生 ([issue #16](https://github.com/danything/denpa/issues/16))。
@@ -74,7 +74,7 @@
     let encoded = $state(false);
     liveUpdates([], {
         recordings: () => {
-            void fetch(`${base}/api/recordings/${data.rec.id}`)
+            void fetch(resolve(`api/recordings/${data.rec.id}`))
                 .then((res) => (res.ok ? res.json() : null))
                 .then((body: { encoded?: boolean } | null) => {
                     if (body?.encoded === true) encoded = true;
@@ -182,7 +182,7 @@
     /**
      * 視聴位置をサーバへ (15秒おき)。録り終えて焼き上がったら、観る画面の
      * 続き再生がここから拾う — 追っかけで観たぶんを二度観ずに済む。
-     * 送り方は観る画面と共通 (`$lib/resume.ts`。閉じ際は sendBeacon)
+     * 送り方は観る画面と共通 (`#lib/resume.ts`。閉じ際は sendBeacon)
      */
     function sendResume(leaving = false): void {
         if (line === null || pos <= 0) return;
@@ -282,7 +282,7 @@
 
         <!-- 右上の列。**観る画面と同じ並び** (閉じる・切り抜き) -->
         <ControlBar side shown={controls.shown} testid="chase-side">
-            <a class="{OVERLAY_BTN} {OVERLAY} close" href="{base}/" aria-label="一覧へ戻る">
+            <a class="{OVERLAY_BTN} {OVERLAY} close" href={resolve('')} aria-label="一覧へ戻る">
                 <Icon path={CLOSE} />
             </a>
             <ControlButton
@@ -411,7 +411,7 @@
             <div class="encoded" data-testid="chase-encoded">
                 <a
                     class="to-watch"
-                    href="{base}/watch/{data.rec.id}"
+                    href={resolve(`watch/${data.rec.id}`)}
                     data-testid="chase-to-watch"
                 >
                     エンコードが終わりました — 続きは再生画面で ▶

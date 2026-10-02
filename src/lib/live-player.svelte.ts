@@ -7,11 +7,10 @@
  */
 
 import type { ResponseMessage } from 'web-bml/protocol';
-import { base } from '$app/paths';
-import type { AudioTrack } from '$lib/arib';
-import { eachFrame } from '$lib/components/player/frames';
-import { clearOverlay, drawOverlay } from '$lib/components/player/paint';
-import { forget, read, write } from '$lib/keep';
+import type { AudioTrack } from '#lib/arib.js';
+import { eachFrame } from '#lib/components/player/frames.js';
+import { clearOverlay, drawOverlay } from '#lib/components/player/paint.js';
+import { forget, read, write } from '#lib/keep.js';
 import {
     type CaptionTrack,
     CHANNEL,
@@ -22,11 +21,12 @@ import {
     type Notice,
     SOCKET_PATH,
     type Tuned,
-} from '$lib/live';
-import { RawEngine } from '$lib/raw/engine';
-import { rawUnsupported } from '$lib/raw/support';
-import { CLOCK, type Cue, currentCue, insertCue, trimCues } from '$lib/ts/captions';
-import { CEILING, FLOOR, nextTarget, pacing } from '$lib/ts/pacing';
+} from '#lib/live.js';
+import { RawEngine } from '#lib/raw/engine.js';
+import { rawUnsupported } from '#lib/raw/support.js';
+import { CLOCK, type Cue, currentCue, insertCue, trimCues } from '#lib/ts/captions.js';
+import { CEILING, FLOOR, nextTarget, pacing } from '#lib/ts/pacing.js';
+import { resolve } from '$app/paths';
 
 export type LiveState = 'idle' | 'connecting' | 'playing' | 'error';
 
@@ -1508,7 +1508,7 @@ export function livePlayer() {
          */
         let ticket: string;
         try {
-            const res = await fetch(`${base}/api/live/ticket`, { method: 'POST' });
+            const res = await fetch(resolve('api/live/ticket'), { method: 'POST' });
             if (!res.ok) throw new Error(String(res.status));
             ticket = ((await res.json()) as { ticket: string }).ticket;
         } catch {
@@ -1519,7 +1519,11 @@ export function livePlayer() {
         }
 
         const scheme = location.protocol === 'https:' ? 'wss' : 'ws';
-        const ws = new WebSocket(`${scheme}://${location.host}${base}${SOCKET_PATH}?ticket=${ticket}`);
+        // 口は SvelteKit のルートではない (server.js が受ける) ので、型の付いた `resolve` に
+        // 道ごとは渡せない。頭 (`resolve('')` = 接頭辞 + `/`) だけ借りる
+        const ws = new WebSocket(
+            `${scheme}://${location.host}${resolve('')}${SOCKET_PATH.slice(1)}?ticket=${ticket}`,
+        );
         ws.binaryType = 'arraybuffer';
         socket = ws;
 

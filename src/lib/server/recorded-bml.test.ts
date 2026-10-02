@@ -13,7 +13,7 @@ import {
     programMap,
     stream,
     tdtPacket as tdt,
-} from '$lib/ts/synth';
+} from '#lib/ts/synth.js';
 import type { Recording } from '../types';
 
 // DB は一時ファイルへ (番組の名乗りを組むのに services を引く。files.test.ts と同じ手)

@@ -1,4 +1,4 @@
-import { base } from '$app/paths';
+import { resolve } from '$app/paths';
 import type { Program, ProgramDetail } from './types';
 
 /** 行が自分で持っている分。EPG から引けなくても、これだけは必ず出せる */
@@ -66,7 +66,7 @@ export function programDetail() {
             };
             if (programId === null) return;
 
-            const res = await fetch(`${base}/api/programs/${programId}`);
+            const res = await fetch(resolve(`api/programs/${programId}`));
             if (res.ok && token === opened) current = await res.json();
         },
     };

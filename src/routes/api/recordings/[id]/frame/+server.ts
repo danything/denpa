@@ -1,7 +1,7 @@
 import { error } from '@sveltejs/kit';
-import { config } from '$lib/server/config';
-import { recordingOr404 } from '$lib/server/recording';
-import { run } from '$lib/server/stream';
+import { config } from '#lib/server/config.js';
+import { recordingOr404 } from '#lib/server/recording.js';
+import { run } from '#lib/server/stream.js';
 
 /**
  * 録画から1コマだけ切り出して返す。

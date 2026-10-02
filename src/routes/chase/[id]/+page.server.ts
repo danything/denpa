@@ -1,8 +1,8 @@
 import { error, redirect } from '@sveltejs/kit';
 import { eq } from 'drizzle-orm';
-import { orm } from '$lib/server/db';
-import { relative } from '$lib/server/paths';
-import { recordings } from '$lib/server/schema';
+import { orm } from '#lib/server/db.js';
+import { relative } from '#lib/server/paths.js';
+import { recordings } from '#lib/server/schema.js';
 import type { PageServerLoad } from './$types';
 
 /**

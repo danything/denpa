@@ -1,5 +1,5 @@
 <script lang="ts">
-    import { LIVE_CODECS, type LiveCodec } from '$lib/live';
+    import { LIVE_CODECS, type LiveCodec } from '#lib/live.js';
     import ControlButton from './ControlButton.svelte';
     import OverlayMenu from './OverlayMenu.svelte';
 

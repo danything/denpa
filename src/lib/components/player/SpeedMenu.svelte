@@ -1,6 +1,6 @@
 <script lang="ts" module>
-    import { read } from '$lib/keep';
-    import { SPEEDS } from '$lib/ts/pacing';
+    import { read } from '#lib/keep.js';
+    import { SPEEDS } from '#lib/ts/pacing.js';
 
     /** 録画の速さを覚える鍵。観る画面と追っかけで共通 (焼く前と後で同じ録画を観る) */
     export const SPEED_KEY = 'watch-speed';

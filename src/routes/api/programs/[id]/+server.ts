@@ -1,8 +1,8 @@
 import { error, json } from '@sveltejs/kit';
 import { eq } from 'drizzle-orm';
-import { orm } from '$lib/server/db';
-import { programs, services } from '$lib/server/schema';
-import type { ProgramDetail } from '$lib/types';
+import { orm } from '#lib/server/db.js';
+import { programs, services } from '#lib/server/schema.js';
+import type { ProgramDetail } from '#lib/types.js';
 
 /**
  * 番組の詳細。予約一覧・録画一覧の行から開くときに使う。

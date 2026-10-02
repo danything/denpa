@@ -1,6 +1,5 @@
-import type { SubmitFunction } from '@sveltejs/kit';
 import { tick } from 'svelte';
-import { enhance } from '$app/forms';
+import { enhance, type SubmitFunction } from '$app/forms';
 
 /**
  * `use:enhance` の代わり。**送信中は押したボタンの上に回るものを出し**、
@@ -38,7 +37,19 @@ export function submitting(node: HTMLFormElement, submit?: SubmitFunction) {
 
         const after = submit?.(input);
 
-        return async (options) => {
+        return async (received) => {
+            /*
+             * **送ったあとも今の画面に居る** (`navigate: false`)。SvelteKit 3 の既定は
+             * 素のフォーム送信をまねて「アクションの URL」へ移る。そこは**サーバから見た
+             * 道** (`/rules`) なので、前段が接頭辞を剥がしていると接頭辞の外へ出てしまう
+             * (server/paths.ts)。`?edit=` のような今の画面の問い合わせも落ちる。
+             * 押したら同じ画面のまま中身だけ変わる、という今までの振る舞いに揃える
+             */
+            const options = {
+                ...received,
+                update: (opts?: Parameters<typeof received.update>[0]) =>
+                    received.update({ navigate: false, ...opts }),
+            };
             try {
                 // 先に止めると、止まってから一拍おいて画面が変わる。
                 // 新しい内容が描き終わるまで回したままにする

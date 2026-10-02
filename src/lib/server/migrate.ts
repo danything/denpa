@@ -14,8 +14,8 @@ import { copyFileSync, existsSync, mkdirSync, renameSync, statSync, unlinkSync }
 import { dirname, join } from 'node:path';
 import { SQL } from 'bun';
 import { and, eq, isNull } from 'drizzle-orm';
-import { parseSearchFields, SEARCH_FIELDS } from '$lib/search';
-import { array, number, read } from '$lib/shape';
+import { parseSearchFields, SEARCH_FIELDS } from '#lib/search.js';
+import { array, number, read } from '#lib/shape.js';
 import { now, orm } from './db';
 import { emit } from './events';
 import { libraryPath, recordedPath } from './library';

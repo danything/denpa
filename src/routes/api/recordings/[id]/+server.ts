@@ -1,7 +1,7 @@
 import { error, json } from '@sveltejs/kit';
-import { emit } from '$lib/server/events';
-import { deleteRecordingFiles } from '$lib/server/files';
-import { recordingOr404 } from '$lib/server/recording';
+import { emit } from '#lib/server/events.js';
+import { deleteRecordingFiles } from '#lib/server/files.js';
+import { recordingOr404 } from '#lib/server/recording.js';
 
 /**
  * 録画の状態を返す。**追っかけ再生の画面が「焼き上がったか」を聞く口** —

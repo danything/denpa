@@ -1,14 +1,14 @@
 import { fail } from '@sveltejs/kit';
 import { and, desc, eq, gt, lte, sql } from 'drizzle-orm';
-import { channelNumber } from '$lib/format';
-import { LAST_COOKIE, type LiveCodec } from '$lib/live';
-import { orm } from '$lib/server/db';
-import { airing, CURRENT_SERVICES, SERVICE_ORDER, SERVICE_TYPE_ORDER } from '$lib/server/epg';
-import { warm } from '$lib/server/live';
-import { reserve } from '$lib/server/reservations';
-import { programs, services as stations } from '$lib/server/schema';
-import { settings } from '$lib/server/settings';
-import type { Service } from '$lib/types';
+import { channelNumber } from '#lib/format.js';
+import { LAST_COOKIE, type LiveCodec } from '#lib/live.js';
+import { orm } from '#lib/server/db.js';
+import { airing, CURRENT_SERVICES, SERVICE_ORDER, SERVICE_TYPE_ORDER } from '#lib/server/epg.js';
+import { warm } from '#lib/server/live.js';
+import { reserve } from '#lib/server/reservations.js';
+import { programs, services as stations } from '#lib/server/schema.js';
+import { settings } from '#lib/server/settings.js';
+import type { Service } from '#lib/types.js';
 import type { Actions } from './$types';
 
 /**

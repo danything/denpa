@@ -1,6 +1,6 @@
 <script lang="ts">
     import type { Snippet } from 'svelte';
-    import { time } from '$lib/format';
+    import { time } from '#lib/format.js';
 
     /**
      * 帯の中の読みもの (二段)。**3画面 (ライブ・観る・追っかけ) で同じ形。**

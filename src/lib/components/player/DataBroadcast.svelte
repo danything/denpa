@@ -1,5 +1,5 @@
 <script module lang="ts">
-    import { base } from '$app/paths';
+    import { resolve } from '$app/paths';
     /**
      * **画面の d ボタン。テレビと同じ振る舞い。** 出ている文書が d を聞いていれば
      * (`pressD` が true) 渡して終わり — 局の待機ページはこれでメニューを開く。
@@ -64,7 +64,7 @@
     import { onDestroy } from 'svelte';
     import type { BMLBrowser, Indicator, IP } from 'web-bml';
     import type { ResponseMessage } from 'web-bml/protocol';
-    import { forget, write } from '$lib/keep';
+    import { forget, write } from '#lib/keep.js';
     import StageNote from './StageNote.svelte';
 
     interface Props {
@@ -253,7 +253,7 @@
      */
     const FONTS = {
         roundGothic: {
-            source: `url('${base}/api/font') format('woff2'), local('Hiragino Maru Gothic ProN'), local('Meiryo')`,
+            source: `url('${resolve('api/font')}') format('woff2'), local('Hiragino Maru Gothic ProN'), local('Meiryo')`,
         },
         squareGothic: { source: "local('Hiragino Kaku Gothic ProN'), local('Meiryo'), local('MS Gothic')" },
     };
@@ -306,7 +306,7 @@
          * そのまま渡して判断させる
          */
         transmitTextDataOverIP: async (uri: string, body: Uint8Array<ArrayBuffer>) => {
-            const response = await fetch(`${base}/api/bml/post?url=${encodeURIComponent(uri)}`, {
+            const response = await fetch(resolve(`api/bml/post?url=${encodeURIComponent(uri)}`), {
                 method: 'POST',
                 headers: { 'content-type': 'application/x-www-form-urlencoded' },
                 body,
@@ -325,7 +325,7 @@
          */
         confirmIPNetwork: async (destination: string, _isICMP: boolean, timeoutMillis: number) => {
             const params = new URLSearchParams({ to: destination, wait: String(timeoutMillis) });
-            const response = await fetch(`${base}/api/bml/confirm?${params}`);
+            const response = await fetch(resolve(`api/bml/confirm?${params}`));
             if (!response.ok) return { success: false, ipAddress: null, responseTimeMillis: null };
             return (await response.json()) as {
                 success: boolean;
@@ -334,7 +334,7 @@
             };
         },
         get: async (uri: string) => {
-            const response = await fetch(`${base}/api/bml/proxy?url=${encodeURIComponent(uri)}`);
+            const response = await fetch(resolve(`api/bml/proxy?url=${encodeURIComponent(uri)}`));
             const body = new Uint8Array(await response.arrayBuffer());
             return { response: body, headers: response.headers, statusCode: response.status };
         },

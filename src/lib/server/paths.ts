@@ -6,7 +6,7 @@
  * `/api/hassio_ingress/<token>/guide` に居る。接頭辞を設定させない (Ingress の
  * 接頭辞はトークン入りで毎回変わる)。代わりに:
  *
- * - 画面の中は `base` (`$app/paths`) を頭に付ける。SvelteKit はこれをブラウザの居る
+ * - 画面の中は `resolve` (`$app/paths`) で頭を付ける。SvelteKit はこれをブラウザの居る
  *   URL から求めるので、接頭辞がそのまま入る (paths.relative。既定)
  * - 転送 (redirect) は**いまの URL からの相対**にする。ブラウザが接頭辞込みで解く
  * - 外 (VLC・OIDC) に渡す絶対 URL だけは接頭辞を知る必要があるので、前段が付ける

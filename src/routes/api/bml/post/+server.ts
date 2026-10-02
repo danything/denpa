@@ -14,7 +14,7 @@
  */
 
 import { error } from '@sveltejs/kit';
-import { postForBml, refusalMessage, requireBmlNetwork } from '$lib/server/bml-network';
+import { postForBml, refusalMessage, requireBmlNetwork } from '#lib/server/bml-network.js';
 import type { RequestHandler } from './$types';
 
 export const POST: RequestHandler = async ({ url, request }) => {

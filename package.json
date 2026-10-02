@@ -5,17 +5,17 @@
         "@anyblades/blades": "3.0.0",
         "@biomejs/biome": "^2.5.6",
         "@playwright/test": "^1.63.0",
-        "@sveltejs/adapter-node": "^5.4.0",
-        "@sveltejs/kit": "^2.49.2",
-        "@sveltejs/vite-plugin-svelte": "^7.0.0",
+        "@sveltejs/adapter-node": "^6.0.0",
+        "@sveltejs/kit": "^3.0.0",
+        "@sveltejs/vite-plugin-svelte": "^7.3.1",
         "@types/bun": "^1.3.5",
         "bits-ui": "2.19.4",
         "drizzle-kit": "0.31.11",
         "drizzle-orm": "^0.45.2",
-        "svelte": "^5.43.10",
-        "svelte-check": "^4.3.7",
-        "typescript": "^5.9.3",
-        "vite": "^8.0.0",
+        "svelte": "^5.57.1",
+        "svelte-check": "^4.7.6",
+        "typescript": "^6.0.0",
+        "vite": "^8.3.2",
         "web-bml": "1.0.1"
     },
     "private": true,
@@ -23,7 +23,7 @@
         "dev": "bunx --bun vite dev",
         "build": "bunx --bun vite build",
         "start": "bun ./server.js",
-        "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
+        "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json && tsc --noEmit -p src/service-worker/tsconfig.json",
         "db:generate": "drizzle-kit generate",
         "test": "bun run lint && bun run check && bun run test:unit && playwright test",
         "test:unit": "bun test src",
@@ -32,5 +32,9 @@
         "lint": "biome check .",
         "format": "biome check --write ."
     },
-    "type": "module"
+    "type": "module",
+    "imports": {
+        "#lib": "./src/lib/index.js",
+        "#lib/*": "./src/lib/*"
+    }
 }

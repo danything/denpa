@@ -1,10 +1,10 @@
 import { basename } from 'node:path';
 import { error } from '@sveltejs/kit';
-import { config } from '$lib/server/config';
-import { activeEncodeJob } from '$lib/server/encoder';
-import { recordingOr404 } from '$lib/server/recording';
-import { contentDisposition, serveFile } from '$lib/server/serve';
-import { type FileSource, parseFileSource } from '$lib/source';
+import { config } from '#lib/server/config.js';
+import { activeEncodeJob } from '#lib/server/encoder.js';
+import { recordingOr404 } from '#lib/server/recording.js';
+import { contentDisposition, serveFile } from '#lib/server/serve.js';
+import { type FileSource, parseFileSource } from '#lib/source.js';
 
 /**
  * **音声だけ** (`?audio=only`)。音声だけで鳴らすもの (スマートスピーカーへの Cast など) 向け。

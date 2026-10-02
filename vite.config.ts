@@ -1,5 +1,7 @@
 import { dirname, resolve } from 'node:path';
+import adapter from '@sveltejs/adapter-node';
 import { sveltekit } from '@sveltejs/kit/vite';
+import { vitePreprocess } from '@sveltejs/vite-plugin-svelte';
 import { defineConfig, type Plugin } from 'vite';
 
 /**
@@ -30,7 +32,23 @@ function cssWithoutSourceMaps(): Plugin {
 }
 
 export default defineConfig({
-    plugins: [cssWithoutSourceMaps(), sveltekit()],
+    plugins: [
+        cssWithoutSourceMaps(),
+        /*
+         * SvelteKit の設定もここに置く (3 から `svelte.config.*` は読まれない)。
+         */
+        sveltekit({
+            preprocess: vitePreprocess(),
+            /*
+             * adapter-node の出力を `bun ./build/index.js` で動かす。bun 前提なので
+             * サーバ側では bun:sqlite などの bun 組み込みモジュールをそのまま使える。
+             *
+             * **入口は `server.js`。** ライブ視聴の WebSocket だけ `Bun.serve` で
+             * 受けて、それ以外をここの出力へ流している (理由はあちらに書いてある)。
+             */
+            adapter: adapter(),
+        }),
+    ],
     server: {
         // compose 上の Jellyfin はサービス名(`http://app:5173`)で開発サーバを叩く。
         // vite の Host チェックに引っかかるので開発時だけ外す(本番は adapter-node で

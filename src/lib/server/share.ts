@@ -1,6 +1,6 @@
 import { randomBytes, timingSafeEqual } from 'node:crypto';
 import { and, eq, gt, lte, sql } from 'drizzle-orm';
-import type { FileSource } from '$lib/source';
+import type { FileSource } from '#lib/source.js';
 import { fileRecordingId } from './auth';
 import { orm } from './db';
 import { shareLinks } from './schema';

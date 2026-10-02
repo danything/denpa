@@ -1,4 +1,4 @@
-import type { Notice } from '$lib/components/Toasts.svelte';
+import type { Notice } from '#lib/components/Toasts.svelte';
 import type { PlayerControls } from './controls.svelte';
 import { clipFrame } from './snapshot';
 

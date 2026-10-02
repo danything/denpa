@@ -1,15 +1,21 @@
 import { fail } from '@sveltejs/kit';
 import { and, count, eq, sql } from 'drizzle-orm';
-import { orm } from '$lib/server/db';
-import { CURRENT_SERVICES } from '$lib/server/epg';
-import { collectNow, collectState } from '$lib/server/epg-collect';
-import { stats as logoStats, sweepNow, sweepState } from '$lib/server/logo';
-import { forgetLogoData, learned, stats as learnStats, siblings, stations } from '$lib/server/logo-data';
-import { refresh, start, stop } from '$lib/server/scan';
-import { LOGO_AREA_AUTO, programs, recordings, services } from '$lib/server/schema';
-import { cardStatus } from '$lib/server/scramble';
-import { type AgentTuner, getTuners, putTuners, type TunerConfig, tunersDetected } from '$lib/server/tuner';
-import type { ChannelType } from '$lib/types';
+import { orm } from '#lib/server/db.js';
+import { CURRENT_SERVICES } from '#lib/server/epg.js';
+import { collectNow, collectState } from '#lib/server/epg-collect.js';
+import { stats as logoStats, sweepNow, sweepState } from '#lib/server/logo.js';
+import { forgetLogoData, learned, stats as learnStats, siblings, stations } from '#lib/server/logo-data.js';
+import { refresh, start, stop } from '#lib/server/scan.js';
+import { LOGO_AREA_AUTO, programs, recordings, services } from '#lib/server/schema.js';
+import { cardStatus } from '#lib/server/scramble.js';
+import {
+    type AgentTuner,
+    getTuners,
+    putTuners,
+    type TunerConfig,
+    tunersDetected,
+} from '#lib/server/tuner.js';
+import type { ChannelType } from '#lib/types.js';
 
 /** 局1つぶんの、CM検出ロゴの覚え具合 */
 interface CmLogo {

@@ -22,7 +22,7 @@
  * 絵を出してしまう。
  */
 
-import { AdtsSplitter, type Pes, PesDemuxer, unwrap } from '$lib/ts/pes';
+import { AdtsSplitter, type Pes, PesDemuxer, unwrap } from '#lib/ts/pes.js';
 import { DecodeBudget } from './budget';
 import type { FromWorker, ToWorker } from './messages';
 import { YuvRenderer } from './render';

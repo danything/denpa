@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { type AudioSide, audioTracks } from '$lib/arib';
+import { type AudioSide, audioTracks } from '#lib/arib.js';
 import { codecsFor, encodeArgs, whyNotTuned } from './live';
 
 /** 1本目の音声をそのまま。番組表が何も言っていないときの既定 */

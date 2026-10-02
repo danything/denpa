@@ -1,18 +1,18 @@
 import { basename } from 'node:path';
 import { fail } from '@sveltejs/kit';
 import { eq, not } from 'drizzle-orm';
-import { HW_CODECS, HW_KINDS, type HwAllow, hwAllowed } from '$lib/hw';
-import { isCmMode } from '$lib/server/cm';
-import { now, orm } from '$lib/server/db';
-import { describeDevice, type HwEncode, hwEncode, probe } from '$lib/server/hwenc';
-import { available as migrateAvailable, source, start, status } from '$lib/server/migrate';
-import { webhooks } from '$lib/server/schema';
-import { normalizePostalCode, saveSettings, settings } from '$lib/server/settings';
-import { serializeTargets, targets, type VlcTarget } from '$lib/server/vlc';
-import { send } from '$lib/server/webhook';
-import type { VideoCodec } from '$lib/types';
-import { normalizeVlcHost } from '$lib/vlc-host';
-import { EVENTS } from '$lib/webhook-events';
+import { HW_CODECS, HW_KINDS, type HwAllow, hwAllowed } from '#lib/hw.js';
+import { isCmMode } from '#lib/server/cm.js';
+import { now, orm } from '#lib/server/db.js';
+import { describeDevice, type HwEncode, hwEncode, probe } from '#lib/server/hwenc.js';
+import { available as migrateAvailable, source, start, status } from '#lib/server/migrate.js';
+import { webhooks } from '#lib/server/schema.js';
+import { normalizePostalCode, saveSettings, settings } from '#lib/server/settings.js';
+import { serializeTargets, targets, type VlcTarget } from '#lib/server/vlc.js';
+import { send } from '#lib/server/webhook.js';
+import type { VideoCodec } from '#lib/types.js';
+import { normalizeVlcHost } from '#lib/vlc-host.js';
+import { EVENTS } from '#lib/webhook-events.js';
 
 /** 画面に渡す形。口ごとの一言 (`summary`) と、testid に使う口の名前 (`port`) を添える */
 function forScreen(hw: HwEncode) {

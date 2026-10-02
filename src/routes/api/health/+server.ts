@@ -1,10 +1,10 @@
 import { json } from '@sveltejs/kit';
 import { count } from 'drizzle-orm';
-import { config } from '$lib/server/config';
-import { orm } from '$lib/server/db';
-import { activeRecordingIds } from '$lib/server/recorder';
-import { services } from '$lib/server/schema';
-import { updateAvailable } from '$lib/server/update';
+import { config } from '#lib/server/config.js';
+import { orm } from '#lib/server/db.js';
+import { activeRecordingIds } from '#lib/server/recorder.js';
+import { services } from '#lib/server/schema.js';
+import { updateAvailable } from '#lib/server/update.js';
 
 /**
  * compose の healthcheck と E2E の起動待ちに使う。DBまで触って初めて ok を返す。

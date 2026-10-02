@@ -159,7 +159,12 @@ test.describe('OIDC でのログイン', () => {
         await login(get);
         expect((await get('/')).res.status).toBe(200);
 
-        const { res, jar } = await get('/logout', { method: 'POST' });
+        // ブラウザと同じく Origin を付ける。SvelteKit 3 は Content-Type の無い POST も
+        // CSRF の判定に掛けるので、付けないと「よそからの送信」として断られる
+        const { res, jar } = await get('/logout', {
+            method: 'POST',
+            headers: { origin: 'https://denpa.test' },
+        });
         expect(res.status).toBe(303);
         expect(res.headers.get('location')).toBe('./login/out');
         expect(jar.has('denpa_session')).toBe(false);
