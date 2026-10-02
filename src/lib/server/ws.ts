@@ -126,7 +126,7 @@ export function serve(pathname: string, route: Route): void {
  * そのあとになりうる。**入口側は毎回 `globalThis` を引き直す**ので、
  * ここに置くのは1回で足りる。
  */
-export interface LiveEntry {
+interface LiveEntry {
     /** そもそも受け持つ道か。**断り方を変えるために `accept` と分けてある** */
     handles(url: URL): boolean;
     /** 握手してよいか。ここで札を使い切る */

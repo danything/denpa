@@ -471,7 +471,7 @@ async function importReservations(connection: SQL, options: MigrateOptions): Pro
  * 取り込みを走らせる。進捗は {@link status} に入る。
  * 画面からは待たずに呼ぶ (`start`)。返り値は終わったときの進み具合
  */
-export async function run(options: MigrateOptions): Promise<MigrateStatus> {
+async function run(options: MigrateOptions): Promise<MigrateStatus> {
     status_ = freshStatus({
         state: 'running',
         apply: options.apply,

@@ -260,7 +260,7 @@ function store(networkId: number, serviceIds: number[], logoType: number, data: 
  *
  * 失敗しても黙って諦める。ロゴが無くても番組表は出るし、録画には何の関係も無い。
  */
-export function watch(networkId: number): Feed {
+function watch(networkId: number): Feed {
     const collector = new LogoCollector(networkId);
     let broken = false;
     /** 同じものを何度も書きに行かない。ロゴは滅多に変わらない */
@@ -302,7 +302,7 @@ export function watch(networkId: number): Feed {
 }
 
 /** 食わせる口。ついでに「この中継にロゴがあるか」を覗ける */
-export interface Feed {
+interface Feed {
     (chunk: Uint8Array): void;
     readonly hasSatelliteLogo: boolean | null;
 }
@@ -353,7 +353,7 @@ function repaint(serviceId: number): void {
 }
 
 /** ロゴを取りに行く単位。1つの物理チャンネルと、そこに乗っている局 */
-export interface Target {
+interface Target {
     type: string;
     channel: string;
     network_id: number;
@@ -442,7 +442,7 @@ function currentServices(): { id: number; type: string; channel: string; network
  * もう選局できないチャンネルを1局ずつ開いては諦めることになり、
  * 本当に要る局まで順番が回ってこない。
  */
-export function missing(): Target[] {
+function missing(): Target[] {
     const services = currentServices();
     const targets = new Map<string, Target>();
     const add = (service: { type: string; channel: string; network_id: number }) => {

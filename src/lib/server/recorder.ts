@@ -392,7 +392,7 @@ async function pump(recording: Recording, controller: AbortController): Promise<
 }
 
 /** 録画完了。エンコードするならキューに積み、しないならそのまま保存先に置く */
-export function finish(recordingId: number, size: number): void {
+function finish(recordingId: number, size: number): void {
     const at = now();
     // 録り終えた時刻が入った時点で「録画済み」になる (recordings.state は生成列)
     orm()

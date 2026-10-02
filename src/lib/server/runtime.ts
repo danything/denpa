@@ -228,7 +228,7 @@ function listenToAgent(): void {
     );
 }
 
-export function stop(): void {
+function stop(): void {
     for (const timer of timers) clearInterval(timer);
     timers.length = 0;
     unlisten?.();

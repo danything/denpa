@@ -1694,7 +1694,7 @@ function openChase(asked: ChaseAsked, viewer: Viewer, connection: Connection): S
     return session;
 }
 
-export interface NowPlaying {
+interface NowPlaying {
     /**
      * 放送が名乗っている番号 (ARIB の service_id = TS の program_number)。
      * **`services.id` とは別物** — あちらは `network_id * 100000 + service_id` の

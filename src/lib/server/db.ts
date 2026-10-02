@@ -16,7 +16,7 @@ import * as schema from './schema';
  */
 let instance: Database | null = null;
 
-export function database(): Database {
+function database(): Database {
     if (instance !== null) return instance;
 
     mkdirSync(dirname(config.dbPath), { recursive: true });
