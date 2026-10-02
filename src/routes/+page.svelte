@@ -1,5 +1,6 @@
 <script lang="ts">
     import { DropdownMenu } from 'bits-ui';
+    import { onMount } from 'svelte';
     import { submitting } from '#lib/actions.js';
     import { arming } from '#lib/arming.svelte.js';
     import ProgramDetail from '#lib/components/ProgramDetail.svelte';
@@ -515,6 +516,16 @@
     const deletedLabel = $derived(data.showDeleted ? '削除済みを隠す' : '削除済みも表示');
     /** 録画の見出しの「⋯」。照合を送り終えたら閉じる */
     let toolsOpen = $state(false);
+    /**
+     * **「⋯」の中身はサーバでは描かない。** Bits UI は浮かせる枠の id を
+     * プロセス全体の数え上げで振る (`bits-1`, `bits-3`, …) ので、サーバで描くと
+     * 読むたびに HTML が変わり、指紋 (ETag) が合わず 304 が返らなくなる。
+     * 開けるのはハイドレーションの後なので、それまで無くて困ることは無い
+     */
+    let mounted = $state(false);
+    onMount(() => {
+        mounted = true;
+    });
     function rightText(row: RightRow): string {
         if (row.kind === 'missed') {
             const res = row.res;
@@ -829,41 +840,43 @@
                                 <circle cx="19" cy="12" r="2" />
                             </svg>
                         </DropdownMenu.Trigger>
-                        <DropdownMenu.Content forceMount align="end" sideOffset={4} collisionPadding={8}>
-                            {#snippet child({ wrapperProps, props, open })}
-                                <div {...wrapperProps}>
-                                    <div {...props} class="more-menu tools-menu" hidden={!open} data-testid="recordings-more-menu">
-                                        <DropdownMenu.Item>
-                                            {#snippet child({ props: itemProps })}
-                                                <a {...itemProps} href={deletedHref} class="menu-link">{deletedLabel}</a>
-                                            {/snippet}
-                                        </DropdownMenu.Item>
-                                        <form
-                                            method="POST"
-                                            action="?/reconcile"
-                                            class="menu-form"
-                                            use:submitting={() => async (options) => {
-                                                await options.update();
-                                                toolsOpen = false;
-                                            }}
-                                        >
-                                            <DropdownMenu.Item closeOnSelect={false}>
+                        {#if mounted}
+                            <DropdownMenu.Content forceMount align="end" sideOffset={4} collisionPadding={8}>
+                                {#snippet child({ wrapperProps, props, open })}
+                                    <div {...wrapperProps}>
+                                        <div {...props} class="more-menu tools-menu" hidden={!open} data-testid="recordings-more-menu">
+                                            <DropdownMenu.Item>
                                                 {#snippet child({ props: itemProps })}
-                                                    <button
-                                                        {...itemProps}
-                                                        type="submit"
-                                                        class="menu-button"
-                                                        data-testid="reconcile-menu-button"
-                                                    >
-                                                        ファイルと照合
-                                                    </button>
+                                                    <a {...itemProps} href={deletedHref} class="menu-link">{deletedLabel}</a>
                                                 {/snippet}
                                             </DropdownMenu.Item>
-                                        </form>
+                                            <form
+                                                method="POST"
+                                                action="?/reconcile"
+                                                class="menu-form"
+                                                use:submitting={() => async (options) => {
+                                                    await options.update();
+                                                    toolsOpen = false;
+                                                }}
+                                            >
+                                                <DropdownMenu.Item closeOnSelect={false}>
+                                                    {#snippet child({ props: itemProps })}
+                                                        <button
+                                                            {...itemProps}
+                                                            type="submit"
+                                                            class="menu-button"
+                                                            data-testid="reconcile-menu-button"
+                                                        >
+                                                            ファイルと照合
+                                                        </button>
+                                                    {/snippet}
+                                                </DropdownMenu.Item>
+                                            </form>
+                                        </div>
                                     </div>
-                                </div>
-                            {/snippet}
-                        </DropdownMenu.Content>
+                                {/snippet}
+                            </DropdownMenu.Content>
+                        {/if}
                     </DropdownMenu.Root>
                 </div>
             </div>
