@@ -34,11 +34,15 @@ export function snapshotter(controls: PlayerControls) {
             if (busy) return;
             busy = true;
             controls.stir();
+            let got: Frame | null = null;
             try {
-                const notice = await clipFrame(await frame, caption, title);
+                got = await frame;
+                const notice = await clipFrame(got, caption, title);
                 if (notice !== null) shot = notice;
             } finally {
                 busy = false;
+                // 生で貰った絵 (1080 で 8MB) は写し終えたら手放す。GC 任せだと押すたびに溜まる
+                if (got?.image instanceof ImageBitmap) got.image.close();
             }
         },
     };
