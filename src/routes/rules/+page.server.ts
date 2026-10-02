@@ -221,8 +221,8 @@ export async function load({ url }) {
      * 条件に当たる番組の下見。**いちばん重い。**
      *
      * これから先の番組を**全部**引いて JS で絞るので、実データでは番組表の
-     * 24時間ぶんより重い。しかも**番組表の検索窓が飛ばす先はここ**
-     * (`<form action="/rules">`) なので、待たされるのはたいていこの道。
+     * 24時間ぶんより重い。しかも**番組表の検索窓が飛ばす先はここ**なので、
+     * 待たされるのはたいていこの道。
      *
      * ここだけ後から流して、条件の枠とルールの一覧は先に出す
      * (番組表と同じ。`guide/+page.server.ts` の `gridOf`)。
@@ -239,11 +239,7 @@ export async function load({ url }) {
         }
     }
 
-    function readPreview(conditions: Rule): {
-        total: number;
-        programs: PreviewRow[];
-        conflicts: number;
-    } {
+    function readPreview(conditions: Rule): Omit<Preview, 'failed'> {
         // 条件のほどきは1回だけ。番組ごとにやり直すと、番組の数だけ JSON を読むことになる
         const compiled = compile(conditions);
         /*
@@ -516,7 +512,7 @@ const EMPTY_RULE = 'キーワード・チャンネル・ジャンルのいずれ
  * create と update で同じ8つ。**焼き方は書かない** — エンコードもCMも全体設定で、
  * 焼くときに読む
  */
-function ruleValues(conditions: ReturnType<typeof conditionsOf>, form: FormData) {
+function ruleValues(conditions: Conditions, form: FormData) {
     return {
         name: ruleName(conditions),
         keyword: conditions.keyword,

@@ -36,7 +36,7 @@ export function load() {
          * promise のまま渡す — 画面は「確認中」を出して待つ
          */
         hw: hw.probed ? forScreen(hw) : probe().then(forScreen),
-        /** データ放送に渡すもの。いまは郵便番号だけ */
+        /** データ放送に渡すもの。郵便番号と、双方向の中継を許すか */
         broadcast: { postalCode: current.postalCode, bmlNetwork: current.bmlNetwork },
         /** テレビの VLC の居場所。画面は名前・IP・ポート・コーデックの行として編集する */
         vlc: { targets: targets() },
