@@ -2,6 +2,8 @@ using System.Buffers.Binary;
 using System.Diagnostics;
 using System.Net.Sockets;
 using System.Runtime.InteropServices;
+using System.Text.Json;
+using System.Text.Json.Nodes;
 using Microsoft.Win32.SafeHandles;
 
 namespace Denpa.Agent;
@@ -29,7 +31,7 @@ namespace Denpa.Agent;
 ///
 /// <para>
 /// **機種のことは何も持たない。** 刺さっている筐体と、それぞれの受信機が何を
-/// 受けられるかは <c>px4d --list</c> に聞く (<see cref="Enclosures"/>)。USB ID や
+/// 受けられるかは <c>px4d --list-json</c> に聞く (<see cref="Enclosures"/>)。USB ID や
 /// 筐体の番号の決まりは px4-userland の中にあり、対応機種が増えても
 /// px4-userland を上げるだけで追従する。
 /// </para>
@@ -94,28 +96,269 @@ public static class Px4Userland
     public static string Name(string model, string id, int receiver) => $"{model}-{id[^4..]} #{receiver}";
 
     /// <summary>
-    /// 刺さっている筐体。**<c>px4d --list</c> に聞く。**
+    /// 刺さっている筐体。**<c>px4d --list-json</c> に聞き、無ければ <c>px4d --list</c>。**
     ///
     /// <para>
     /// 読むだけで筐体を掴まないので、px4d が動いていても聞ける。px4-userland が
     /// 入っていない環境 (手元の開発など) では空。
     /// </para>
+    ///
+    /// <para>
+    /// <c>--list-json</c> は px4-userland 0.1.9 から (SPEC 4.6 v0.26)。テキストの <c>--list</c> は
+    /// いずれ廃止すると言われている。それより前の px4d は知らないオプションとして断る (exit 2)
+    /// ので、そのときだけテキストで聞き直す。
+    /// </para>
     /// </summary>
-    public static List<Enclosure> Enclosures()
+    /// <param name="warn">使えない筐体の理由を残す先。省けば記録 (<see cref="Log"/>)</param>
+    public static List<Enclosure> Enclosures(Action<string>? warn = null)
     {
+        warn ??= Log.Write;
         var px4d = Path.Combine(Dir, "px4d");
         if (!File.Exists(px4d)) return [];
-        var (code, output) = Shell.Run(px4d, ["--list"], TimeSpan.FromSeconds(15)).GetAwaiter().GetResult();
+        var (code, output) = Shell.Run(px4d, ["--list-json"], TimeSpan.FromSeconds(15)).GetAwaiter().GetResult();
+        if (code == 0)
+        {
+            try
+            {
+                return ParseJson(output, warn);
+            }
+            catch (Exception error) when (error is JsonException or FormatException)
+            {
+                // 文書として読めないときだけ。形の違いは ParseJson が読めたところまで使う
+                warn($"px4d --list-json の答えが読めないので、--list で聞き直します ({error.Message})");
+            }
+        }
+        (code, output) = Shell.Run(px4d, ["--list"], TimeSpan.FromSeconds(15)).GetAwaiter().GetResult();
         if (code != 0)
         {
-            Log.Write($"px4-userland の筐体を挙げられません (px4d --list exit {code}: {output})");
+            warn($"px4-userland の筐体を挙げられません (px4d --list exit {code}: {output})");
             return [];
         }
-        return ParseList(output, Log.Write);
+        return ParseList(output, warn);
+    }
+
+    /// <summary>
+    /// <c>px4d --list-json</c> の出力を読む (px4-userland SPEC 4.6 v0.26)。**使えるのは <c>status=ready</c> で
+    /// <c>serial_unique=true</c> の筐体だけ。**
+    ///
+    /// <para>
+    /// <c>{"enclosures":[{serial, model, usb, status, serial_unique, devices, candidates, receivers}],
+    /// "ungrouped_usb_devices":[…]}</c> の1行。<c>schema_version</c> は無く、消費側は知らない鍵を
+    /// 無視する決まり。**形が違っても止まらない** — 無い鍵・型の違う値は既定で埋めて読み進め、
+    /// 版ずれを疑う旨を1度だけ <paramref name="warn"/> で残す。止めるのは筐体の番号と受信機の番号
+    /// (それが無いと <c>px4:&lt;番号&gt;:&lt;受信機&gt;</c> が作れない) が読めないときだけで、それも
+    /// その筐体・受信機だけを飛ばす。
+    /// </para>
+    ///
+    /// <para>
+    /// 出力は stdout と stderr を繋げたもの (<see cref="Shell.Run"/>) なので、<c>{</c> で始まる最初の行を
+    /// 文書とみなす。libusb が stderr に何か言っても読めるように。
+    /// </para>
+    /// </summary>
+    /// <exception cref="JsonException">JSON として読めない</exception>
+    /// <exception cref="FormatException">文書が無い・object でない</exception>
+    public static List<Enclosure> ParseJson(string output, Action<string> warn)
+    {
+        var line = output.Split('\n').Select(raw => raw.Trim()).FirstOrDefault(raw => raw.StartsWith('{'))
+            ?? throw new FormatException("JSON の文書がありません");
+        var root = JsonNode.Parse(line) as JsonObject ?? throw new FormatException("JSON の文書が object ではありません");
+        var shape = new JsonShape();
+        var found = new List<Enclosure>();
+
+        foreach (var item in shape.Array(root, "enclosures", ""))
+        {
+            if (item is not JsonObject enclosure)
+            {
+                shape.Skew("enclosures[] が object ではない");
+                continue;
+            }
+            var id = shape.Text(enclosure, "serial", "enclosures[]") ?? "";
+            var model = shape.Text(enclosure, "model", "enclosures[]") ?? "px4";
+            var status = shape.Text(enclosure, "status", "enclosures[]") ?? "";
+            // 無ければ 0.1.8 までと同じく一意とみなす。番号が重なれば px4d が起動を断る (exit 2) だけ
+            var unique = shape.Flag(enclosure, "serial_unique", "enclosures[]") ?? true;
+            var where = Where(
+                shape.Array(enclosure, "devices", "enclosures[]").Concat(shape.Array(enclosure, "candidates", "enclosures[]"))
+                    .OfType<JsonObject>()
+                    .Select(device => (shape.Text(device, "port", "devices[]", optional: true),
+                        shape.Number(device, "bus", "devices[]", optional: true),
+                        shape.Number(device, "address", "devices[]", optional: true))));
+
+            if (Usable(id, model, status, unique, where, warn))
+            {
+                var receivers = new List<Px4Receiver>();
+                foreach (var entry in shape.Array(enclosure, "receivers", "enclosures[]"))
+                {
+                    if (entry is not JsonObject receiver)
+                    {
+                        shape.Skew("receivers[] が object ではない");
+                        continue;
+                    }
+                    var number = shape.Number(receiver, "receiver", "receivers[]");
+                    var system = shape.Text(receiver, "system", "receivers[]");
+                    if (number is null || system is null)
+                    {
+                        warn($"{model} {id} の受信機が読めません: {receiver.ToJsonString()}");
+                        continue;
+                    }
+                    var lnb = shape.Flag(receiver, "lnb_15v_supported", "receivers[]");
+                    if (Px4Receiver.From(number.Value, system, lnb, warn) is { } known) receivers.Add(known);
+                }
+                found.Add(new Enclosure(id, model, receivers));
+            }
+        }
+
+        foreach (var item in shape.Array(root, "ungrouped_usb_devices", ""))
+        {
+            if (item is not JsonObject device)
+            {
+                shape.Skew("ungrouped_usb_devices[] が object ではない");
+                continue;
+            }
+            Rejected(
+                shape.Text(device, "model", "ungrouped_usb_devices[]"),
+                shape.Text(device, "usb", "ungrouped_usb_devices[]"),
+                shape.Text(device, "status", "ungrouped_usb_devices[]") ?? "",
+                Where([(shape.Text(device, "port", "ungrouped_usb_devices[]", optional: true),
+                    shape.Number(device, "bus", "ungrouped_usb_devices[]", optional: true),
+                    shape.Number(device, "address", "ungrouped_usb_devices[]", optional: true))]),
+                warn);
+        }
+
+        if (shape.Notes.Count > 0)
+        {
+            warn($"px4d --list-json の形が思っていたのと違います (px4-userland の版がずれている?)。読めたところだけ使います: {string.Join(", ", shape.Notes)}");
+        }
+        return found;
+    }
+
+    /// <summary>
+    /// JSON の値を拾う。**形が違えば null を返し、違ったことを <see cref="Notes"/> に溜める。**
+    /// 反射で型に流し込む道 (JsonSerializer) は Native AOT で使えないので、木 (<c>JsonNode</c>) を直に読む
+    /// </summary>
+    private sealed class JsonShape
+    {
+        public SortedSet<string> Notes { get; } = new(StringComparer.Ordinal);
+
+        public void Skew(string note) => Notes.Add(note);
+
+        /// <summary>
+        /// 鍵の値。無い・型が違う・(<paramref name="optional"/> でなければ) null は版ずれとして残す。
+        /// 位置 (bus など) は「取れなかった」を null で言う決まりなので optional
+        /// </summary>
+        private JsonValue? Value(JsonObject obj, string key, string where, bool optional)
+        {
+            if (!obj.TryGetPropertyValue(key, out var node))
+            {
+                Skew($"{where}.{key} が無い");
+                return null;
+            }
+            if (node is null)
+            {
+                if (!optional) Skew($"{where}.{key} が null");
+                return null;
+            }
+            if (node is JsonValue value) return value;
+            Skew($"{where}.{key} の型が違う");
+            return null;
+        }
+
+        public string? Text(JsonObject obj, string key, string where, bool optional = false)
+        {
+            var value = Value(obj, key, where, optional);
+            if (value is null) return null;
+            if (value.TryGetValue<string>(out var text)) return text;
+            Skew($"{where}.{key} が文字列ではない");
+            return null;
+        }
+
+        public int? Number(JsonObject obj, string key, string where, bool optional = false)
+        {
+            var value = Value(obj, key, where, optional);
+            if (value is null) return null;
+            if (value.TryGetValue<int>(out var number)) return number;
+            Skew($"{where}.{key} が整数ではない");
+            return null;
+        }
+
+        public bool? Flag(JsonObject obj, string key, string where, bool optional = false)
+        {
+            var value = Value(obj, key, where, optional);
+            if (value is null) return null;
+            if (value.TryGetValue<bool>(out var flag)) return flag;
+            Skew($"{where}.{key} が真偽値ではない");
+            return null;
+        }
+
+        public IEnumerable<JsonNode?> Array(JsonObject obj, string key, string where)
+        {
+            var path = where.Length == 0 ? key : $"{where}.{key}";
+            if (!obj.TryGetPropertyValue(key, out var node))
+            {
+                Skew($"{path} が無い");
+                return [];
+            }
+            if (node is JsonArray array) return array;
+            Skew($"{path} が配列ではない");
+            return [];
+        }
+    }
+
+    /// <summary>
+    /// 筐体を使うか決める。使わないなら理由を残す。
+    ///
+    /// <para>
+    /// **番号が重なる筐体 (<c>serial_unique=false</c>) は使わない。** PX-M1UR と PX-S1UR は
+    /// どれも USB の serial が <c>000000000000001</c> で、px4-userland 0.1.9 からは同時に挿すと
+    /// 別々の ready な筐体として並ぶ (0.1.8 までは1つの <c>duplicate</c>)。そのまま組み立てると
+    /// 同じ <c>px4:000000000000001:0</c> の本が2冊でき、どちらも起こせない —
+    /// <c>px4d --device</c> は番号だけでは1台に決められず、掴む前に断る (exit 2)。
+    /// 番号だけを選択子として控えるな、とも SPEC 4.6 にある。
+    /// </para>
+    /// </summary>
+    private static bool Usable(string id, string model, string status, bool unique, string where, Action<string> warn)
+    {
+        if (status != "ready")
+        {
+            warn($"{model} {id} は使えません (px4d --list: status={status}{where})");
+            return false;
+        }
+        if (!Digits(id))
+        {
+            warn($"{model} の番号 {id} が読めません (数字だけのはず)");
+            return false;
+        }
+        if (!unique)
+        {
+            warn($"{model} {id} は使いません。同じ番号の筐体がほかにも刺さっていて、px4d が番号だけでは"
+                + $"どれを開くか決められません (serial_unique=false{where}。PX-M1UR と PX-S1UR はどれも 000000000000001)。"
+                + "同じ番号のものは1台だけ挿してください");
+            return false;
+        }
+        return true;
+    }
+
+    /// <summary>まとめられなかった USB デバイスの理由を残す。権限が無いときに黙って「チューナーが無い」にならないように</summary>
+    private static void Rejected(string? model, string? usb, string status, string where, Action<string> warn) =>
+        warn($"{model} ({usb}) を使えません: {status}{where}"
+            + (status == "open_failed" ? " (/dev/bus/usb を開く権限が無いかもしれません)" : ""));
+
+    /// <summary>
+    /// USB の場所を理由に添える形にする (<c>, USB 1-2.3</c>)。同じ番号のものが並んだとき、どれの話か分かるように。
+    /// 何も取れなければ空
+    /// </summary>
+    private static string Where(IEnumerable<(string? Port, int? Bus, int? Address)> places)
+    {
+        var named = places
+            .Select(place => place.Port ?? (place.Bus is { } bus && place.Address is { } address ? $"{bus}:{address}" : null))
+            .OfType<string>()
+            .ToArray();
+        return named.Length == 0 ? "" : $", USB {string.Join(" / ", named)}";
     }
 
     /// <summary>
     /// <c>px4d --list</c> の出力を読む (px4-userland SPEC 4.6)。**使えるのは <c>status=ready</c> の筐体だけ。**
+    /// <c>--list-json</c> を知らない px4d (0.1.8 まで) のためのもの (<see cref="Enclosures"/>)。
     ///
     /// <para>
     /// <c>serial=… model=… usb=… status=… receivers=N</c> の行のあとに、
@@ -123,6 +366,12 @@ public static class Px4Userland
     /// USB デバイスは <c>rejected …</c> の行で来る。使えない筐体と rejected は
     /// 理由を <paramref name="warn"/> で残す — 権限が無いとき (<c>open_failed</c>) に
     /// 黙って「チューナーが無い」にならないように。
+    /// </para>
+    ///
+    /// <para>
+    /// 0.1.9 から行の末尾に項目が増えた (筐体の <c>serial_unique</c> と <c>dev1_port</c> など、
+    /// 受信機の <c>lnb_15v_supported</c>)。<c>serial_unique=false</c> の筐体は使わない
+    /// (<see cref="Usable"/>)。項目が無い古い px4d では一意とみなす。
     /// </para>
     /// </summary>
     public static List<Enclosure> ParseList(string output, Action<string> warn)
@@ -137,15 +386,13 @@ public static class Px4Userland
             var id = current.GetValueOrDefault("serial") ?? "";
             var model = current.GetValueOrDefault("model") ?? "px4";
             var status = current.GetValueOrDefault("status") ?? "";
-            if (status != "ready")
-            {
-                warn($"{model} {id} は使えません (px4d --list: status={status})");
-            }
-            else if (!Digits(id))
-            {
-                warn($"{model} の番号 {id} が読めません (数字だけのはず)");
-            }
-            else
+            var unique = current.GetValueOrDefault("serial_unique") != "false";
+            // dev1_port / dev2_port / candidate1_port …。位置は理由に添えるだけ
+            var where = Where(current
+                .Where(pair => pair.Key.EndsWith("_port", StringComparison.Ordinal))
+                .OrderBy(pair => pair.Key, StringComparer.Ordinal)
+                .Select(pair => ((string?)pair.Value, (int?)null, (int?)null)));
+            if (Usable(id, model, status, unique, where, warn))
             {
                 found.Add(new Enclosure(id, model, Px4Receiver.ParseList(receivers.ToString(), warn)));
             }
@@ -169,9 +416,12 @@ public static class Px4Userland
             {
                 Flush();
                 var fields = Fields(line["rejected ".Length..]);
-                var status = fields.GetValueOrDefault("status") ?? "";
-                warn($"{fields.GetValueOrDefault("model")} ({fields.GetValueOrDefault("usb")}) を使えません: {status}"
-                    + (status == "open_failed" ? " (/dev/bus/usb を開く権限が無いかもしれません)" : ""));
+                Rejected(
+                    fields.GetValueOrDefault("model"),
+                    fields.GetValueOrDefault("usb"),
+                    fields.GetValueOrDefault("status") ?? "",
+                    Where([(fields.GetValueOrDefault("port"), null, null)]),
+                    warn);
             }
         }
         Flush();
@@ -211,6 +461,31 @@ public static class Px4Userland
         return found;
     }
 
+    /// <summary>
+    /// 受信機ごとの注意書き (<c>px4:&lt;番号&gt;:&lt;受信機&gt;</c> → 文)。選局は通るが設定どおりには
+    /// 動いていないこと (15V を出せない受信機で 0V にした、など。<see cref="Px4Tuner.Lnb"/>) を
+    /// チューナー画面に出す (<see cref="TunerPool.Status"/> の <c>error</c>)
+    /// </summary>
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, (object Owner, string Text)> Notices =
+        new(StringComparer.Ordinal);
+
+    public static string? Notice(string? device) =>
+        device is not null && Notices.TryGetValue(device, out var notice) ? notice.Text : null;
+
+    internal static void SetNotice(string device, object owner, string text) => Notices[device] = (owner, text);
+
+    /// <summary>
+    /// <paramref name="owner"/> が出したものだけ消す。設定を変えて開き直すとき、古い本の後始末が
+    /// 新しい本の出したものを消さないように (文は同じなので、出した者で見分ける)
+    /// </summary>
+    internal static void ClearNotice(string device, object owner)
+    {
+        if (Notices.TryGetValue(device, out var notice) && ReferenceEquals(notice.Owner, owner))
+        {
+            Notices.TryRemove(new KeyValuePair<string, (object, string)>(device, notice));
+        }
+    }
+
     /// <summary>設定に出てくる筐体。px4d を起こす相手</summary>
     public static IEnumerable<string> IdsIn(IEnumerable<TunerSpec> specs) => specs
         .Where(spec => !spec.Disabled && spec.Device is not null)
@@ -220,14 +495,21 @@ public static class Px4Userland
 }
 
 /// <summary>
-/// 受信機1本。**<c>px4d --list</c> / <c>px4ctl list</c> で px4-userland に聞いたもの。**
+/// 受信機1本。**<c>px4d --list-json</c> (<c>--list</c>) / <c>px4ctl list</c> で px4-userland に聞いたもの。**
 ///
 /// <para>
 /// Q3U4 は受信機ごとに地上波か衛星かが決まっていて、MLT5 系はどれも両方受けられる
 /// (選局のたびに切り替える)。その違いはここに入ってくるだけで、こちらは機種を見ない。
 /// </para>
+///
+/// <para>
+/// <c>Lnb15v</c> は LNB に 15V を出せるか (<c>lnb_15v_supported</c>、px4-userland 0.1.9 から)。
+/// **分からなければ null** で、そのときは頼まれたとおり頼む (合わなければ px4d が断る)。
+/// <c>px4ctl list</c> には載らない (IPC の形は変えないと SPEC 4.1 v0.26) ので、筐体の一覧から写す
+/// (<see cref="Px4Daemon.Ensure"/>)。
+/// </para>
 /// </summary>
-public sealed record Px4Receiver(int Index, bool Terrestrial, bool Satellite)
+public sealed record Px4Receiver(int Index, bool Terrestrial, bool Satellite, bool? Lnb15v = null)
 {
     public string[] Types => [.. Terrestrial ? ["GR"] : Array.Empty<string>(), .. Satellite ? ["BS", "CS"] : Array.Empty<string>()];
 
@@ -255,23 +537,32 @@ public sealed record Px4Receiver(int Index, bool Terrestrial, bool Satellite)
                 warn($"px4ctl list の受信機番号が読めません: {line.Trim()}");
                 continue;
             }
-            switch (system)
+            bool? lnb = fields.GetValueOrDefault("lnb_15v_supported") switch
             {
-                case "ISDB-T":
-                    found.Add(new Px4Receiver(number, true, false));
-                    break;
-                case "ISDB-S":
-                    found.Add(new Px4Receiver(number, false, true));
-                    break;
-                case "ISDB-T/S":
-                    found.Add(new Px4Receiver(number, true, true));
-                    break;
-                default:
-                    warn($"受信機 {number} の方式 {system} を知りません (px4-userland が新しい?)。この受信機は使いません");
-                    break;
-            }
+                "true" => true,
+                "false" => false,
+                _ => null,
+            };
+            if (From(number, system, lnb, warn) is { } receiver) found.Add(receiver);
         }
         return found;
+    }
+
+    /// <summary>方式の名前から組み立てる。知らない方式なら理由を残して null</summary>
+    internal static Px4Receiver? From(int number, string system, bool? lnb15v, Action<string> warn)
+    {
+        switch (system)
+        {
+            case "ISDB-T":
+                return new Px4Receiver(number, true, false, lnb15v);
+            case "ISDB-S":
+                return new Px4Receiver(number, false, true, lnb15v);
+            case "ISDB-T/S":
+                return new Px4Receiver(number, true, true, lnb15v);
+            default:
+                warn($"受信機 {number} の方式 {system} を知りません (px4-userland が新しい?)。この受信機は使いません");
+                return null;
+        }
     }
 }
 
@@ -352,6 +643,16 @@ public sealed class Px4Daemon
     /// <summary>動いていなければ起こして ready まで待つ。駄目なら理由を添えて投げる</summary>
     public void Ensure()
     {
+        if (Running) return;
+        /*
+         * **15V を出せるかは起こす前に一覧で聞いておく。** px4ctl list (LIST) には載らない。
+         * 一覧は筐体を掴まないが、起こしたあとだと OS によっては開けない。錠の外で聞く —
+         * --list-json と --list を続けて待つと最悪 30 秒で、その間 Dispose も選局も待たされる。
+         * 使えない筐体の理由は Detect が残すので、ここでは黙る
+         */
+        var listed = Px4Userland.Enclosures(_ => { })
+            .FirstOrDefault(enclosure => enclosure.Id == _id)?.Receivers;
+
         lock (_gate)
         {
             if (Running) return;
@@ -416,7 +717,7 @@ public sealed class Px4Daemon
                 if (Status(TimeSpan.FromSeconds(5)).Code == 0)
                 {
                     Log.Write($"[px4d {_id}] ready");
-                    Receivers = ListReceivers();
+                    Receivers = WithLnb(ListReceivers(), listed);
                     return;
                 }
                 Thread.Sleep(500);
@@ -434,6 +735,16 @@ public sealed class Px4Daemon
         Path.Combine(Px4Userland.Dir, "px4ctl"),
         ["--device", _id, "--runtime-dir", Px4Userland.RuntimeDir, command],
         timeout).GetAwaiter().GetResult();
+
+    /// <summary>
+    /// 筐体に聞いた受信機に、一覧で聞いた 15V の可否を写す。一覧に無い受信機 (一覧を聞けなかった・
+    /// 古い px4d) は null のまま
+    /// </summary>
+    internal static List<Px4Receiver>? WithLnb(List<Px4Receiver>? asked, IReadOnlyList<Px4Receiver>? listed) =>
+        asked?.Select(receiver => receiver with
+        {
+            Lnb15v = listed?.FirstOrDefault(entry => entry.Index == receiver.Index)?.Lnb15v,
+        }).ToList();
 
     /// <summary><c>px4ctl list</c> で受信機を聞く。聞けなければ null (理由は記録に)</summary>
     private List<Px4Receiver>? ListReceivers()
@@ -540,6 +851,9 @@ public sealed class Px4Tuner : ITuneDevice
 
     private Px4Stream? _stream;
 
+    /// <summary>15V を落としたことを記録に残したか (<see cref="WarnLnb"/>)</summary>
+    private bool _lnbWarned;
+
     public Px4Tuner(string id, int receiver, string? lnb)
         : this(id, receiver, lnb, Px4Userland.RuntimeDir, () =>
         {
@@ -627,19 +941,52 @@ public sealed class Px4Tuner : ITuneDevice
     {
         lock (_gate)
         {
-            Check(_prepare(), _receiver, tuning);
+            var receivers = _prepare();
+            Check(receivers, _receiver, tuning);
+            var lnb = Lnb(receivers, _receiver, tuning, _lnb);
+            if (lnb != _lnb) WarnLnb();
             DropStream();
             var reused = _control is not null;
             try
             {
-                Attempt(tuning, streamId);
+                Attempt(tuning, streamId, lnb);
             }
             catch (IOException error) when (reused && Lost(error))
             {
                 Log.Write($"[{_name}] px4d との接続が切れていたので、受信機を借り直します ({error.Message})");
-                Attempt(tuning, streamId);
+                Attempt(tuning, streamId, lnb);
             }
         }
+    }
+
+    /// <summary>
+    /// TUNE で頼む LNB。**15V を出せない受信機なら、15V と書いてあっても 0V で選局する。**
+    ///
+    /// <para>
+    /// px4-userland 0.1.8 から、1受信機の機種 (PX-M1UR / DTV02-1T1S-U など) は 15V の頼みを
+    /// <c>--allow-lnb-power</c> があっても UNSUPPORTED で断る (給電の経路が無い。SPEC 4.2)。
+    /// そのまま頼むと衛星の選局が全部落ち、EPG の取り直しもスキャンも衛星だけ通らなくなる。
+    /// 断る代わりに 0V で合わせるのは、この機種は 0V での衛星受信を対応範囲にしていて、
+    /// アンテナは別の機器 (ほかのチューナー・ブースター・分配器) から給電されていることが多いから。
+    /// 給電が無ければ「同期しませんでした」で落ちるので、なぜ 0V なのかは記録と画面に残す
+    /// (<see cref="WarnLnb"/>)。可否が分からない (null) ときは頼まれたとおり頼む。
+    /// </para>
+    /// </summary>
+    public static string? Lnb(IReadOnlyList<Px4Receiver>? receivers, int index, ChannelTable.Tuning tuning, string? lnb)
+    {
+        if (lnb != "15v" || !tuning.Satellite) return lnb;
+        var receiver = receivers?.FirstOrDefault(r => r.Index == index);
+        return receiver?.Lnb15v == false ? null : lnb;
+    }
+
+    /// <summary>15V を落としたことを残す。**記録は1度だけ** (局替えのたびに出すと埋もれる)、画面には居る間ずっと</summary>
+    private void WarnLnb()
+    {
+        const string notice = "この受信機は LNB に 15V を出せないので、0V で選局しています (設定の LNB 15V は効きません。アンテナへの給電はほかの機器から)";
+        Px4Userland.SetNotice(Px4Userland.Device(_id, _receiver), this, notice);
+        if (_lnbWarned) return;
+        _lnbWarned = true;
+        Log.Write($"[{_name}] {notice}");
     }
 
     /// <summary>
@@ -661,12 +1008,12 @@ public sealed class Px4Tuner : ITuneDevice
     private static bool Keeps(IOException error) =>
         error is Px4StreamError { KeepsLease: true } || error is Px4Error { Code: Px4Error.Timeout or Px4Error.InvalidArgument };
 
-    private void Attempt(ChannelTable.Tuning tuning, uint streamId)
+    private void Attempt(ChannelTable.Tuning tuning, uint streamId, string? lnb)
     {
         try
         {
             if (_control is null) Open();
-            Run(tuning, streamId);
+            Run(tuning, streamId, lnb);
         }
         catch (IOException error) when (!Keeps(error))
         {
@@ -704,7 +1051,7 @@ public sealed class Px4Tuner : ITuneDevice
     }
 
     /// <summary>(流していれば止めて) 合わせて、流し始めて、TS を受け取りにいく</summary>
-    private void Run(ChannelTable.Tuning tuning, uint streamId)
+    private void Run(ChannelTable.Tuning tuning, uint streamId, string? lnb)
     {
         var control = _control!;
         var lease = new byte[8];
@@ -723,7 +1070,7 @@ public sealed class Px4Tuner : ITuneDevice
             _started = false;
         }
 
-        var tune = TuneRequest(_lease, tuning, streamId, _lnb);
+        var tune = TuneRequest(_lease, tuning, streamId, lnb);
         var busyUntil = DateTime.UtcNow + BusyRetry;
         byte[] answer;
         while (true)
@@ -813,6 +1160,8 @@ public sealed class Px4Tuner : ITuneDevice
     public void Dispose()
     {
         lock (_gate) Close();
+        // 設定が変わって閉じるときも通る。次の本が 15V をやめていれば、もう出さない
+        Px4Userland.ClearNotice(Px4Userland.Device(_id, _receiver), this);
     }
 }
 

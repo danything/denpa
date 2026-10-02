@@ -53,6 +53,9 @@ public class Px4TunerTests
         /// <summary>制御ソケットに来た型 (来た順)</summary>
         public List<ushort> Received { get; } = [];
 
+        /// <summary>TUNE で頼まれた LNB の電圧 (来た順)</summary>
+        public List<byte> Lnbs { get; } = [];
+
         /// <summary>stream.sock を相手が閉じた回数</summary>
         public int StreamsClosed;
 
@@ -196,6 +199,7 @@ public class Px4TunerTests
                         if (lease != _lease || _lease == 0) return (failed, Error(3));
                         if (_armed || _active) return (failed, Error(4));
                         var khz = BinaryPrimitives.ReadUInt64LittleEndian(payload.AsSpan(9));
+                        Lnbs.Add(payload[25]);
                         _tuned = false;
                         if (TuneError(khz) is var code and not 0) return (failed, Error(code));
                         _khz = khz;
@@ -528,5 +532,25 @@ public class Px4TunerTests
             if (DateTime.UtcNow > deadline) throw new TimeoutException("待ちきれませんでした");
             await Task.Delay(50, cancel);
         }
+    }
+
+    [Test]
+    public async Task _15V_を出せない受信機には_0V_で頼み_画面に理由を出す(CancellationToken cancel)
+    {
+        await Task.Yield();
+        using var px4d = new FakePx4d();
+        // PX-M1UR のような受信機 (衛星も受けるが 15V は出せない)。設定には 15v と書いてある
+        IReadOnlyList<Px4Receiver> receivers = [new(2, true, true, false)];
+        var tuner = new Px4Tuner(Id, 2, "15v", px4d.Runtime.FullName, () => receivers);
+        var bs = ChannelTable.Parse("BS15_0")!;
+
+        tuner.Tune(bs, ChannelTable.NoStreamId);
+        tuner.Tune(bs, ChannelTable.NoStreamId);
+        await Assert.That(px4d.Lnbs.ToArray()).IsEquivalentTo(new byte[] { 0, 0 }, TUnit.Assertions.Enums.CollectionOrdering.Matching);
+        await Assert.That(Px4Userland.Notice(Px4Userland.Device(Id, 2))).Contains("15V を出せない");
+
+        // 閉じたら消す (設定を変えて開き直したとき、古い注意書きを残さない)
+        tuner.Dispose();
+        await Assert.That(Px4Userland.Notice(Px4Userland.Device(Id, 2))).IsNull();
     }
 }

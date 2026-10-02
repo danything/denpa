@@ -269,4 +269,161 @@ public class Px4Tests
         Px4Tuner.Check(null, 7, ChannelTable.Parse("BS15_0")!);
         await Task.CompletedTask;
     }
+
+    /// <summary>
+    /// px4-userland 0.1.9 の <c>px4d --list-json</c> の形 (SPEC 4.6 v0.26、px4d_list_format_tests.cpp の期待値)。
+    /// PX-M1UR と PX-S1UR を同時に挿すと、どちらも 000000000000001 で ready の筐体が2つ並ぶ
+    /// </summary>
+    private const string JsonList = """
+        {"enclosures":[{"serial":"000000000012345","model":"PX-MLT5PE","usb":"0511:024e","status":"ready","serial_unique":true,"devices":[{"device":1,"serial":"000000000012345","bus":1,"address":5,"port":"1-2"}],"candidates":[],"receivers":[{"receiver":0,"device":1,"local":0,"system":"ISDB-T/S","lnb_15v_supported":true},{"receiver":1,"device":1,"local":1,"system":"ISDB-T/S","lnb_15v_supported":true}]},{"serial":"00001205000960","model":"PX-Q3U4","usb":"0511:084a","status":"ready","serial_unique":true,"devices":[{"device":1,"serial":"000012050009601","bus":1,"address":8,"port":"1-3.1"},{"device":2,"serial":"000012050009602","bus":1,"address":9,"port":"1-3.2"}],"candidates":[],"receivers":[{"receiver":0,"device":1,"local":0,"system":"ISDB-S","lnb_15v_supported":true},{"receiver":2,"device":1,"local":2,"system":"ISDB-T","lnb_15v_supported":false}]},{"serial":"000000000000001","model":"PX-M1UR","usb":"0511:0854","status":"ready","serial_unique":false,"devices":[{"device":1,"serial":"000000000000001","bus":1,"address":6,"port":"1-2.3"}],"candidates":[],"receivers":[{"receiver":0,"device":1,"local":0,"system":"ISDB-T/S","lnb_15v_supported":false}]},{"serial":"000000000000001","model":"PX-S1UR","usb":"0511:0855","status":"ready","serial_unique":false,"devices":[{"device":1,"serial":"000000000000001","bus":1,"address":7,"port":"1-2.4"}],"candidates":[],"receivers":[{"receiver":0,"device":1,"local":0,"system":"ISDB-T","lnb_15v_supported":false}]},{"serial":"00001205000123","model":"PX-Q3U4","usb":"0511:084a","status":"incomplete","serial_unique":false,"devices":[{"device":1,"serial":"000012050001231","bus":2,"address":3,"port":"2-1"}],"candidates":[],"receivers":[]}],"ungrouped_usb_devices":[{"serial":null,"model":"PX-W3U4","usb":"0511:083f","status":"open_failed","bus":null,"address":null,"port":null}]}
+        """;
+
+    [Test]
+    public async Task px4d_list_json_の_ready_で番号が一意な筐体だけ使う()
+    {
+        var warned = new List<string>();
+        var found = Px4Userland.ParseJson(JsonList, warned.Add);
+
+        await Assert.That(found.Select(e => (e.Id, e.Model))).IsEquivalentTo(
+            [("000000000012345", "PX-MLT5PE"), ("00001205000960", "PX-Q3U4")], CollectionOrdering.Matching);
+        await Assert.That(found[0].Receivers.Select(r => r.Lnb15v)).IsEquivalentTo(
+            new bool?[] { true, true }, CollectionOrdering.Matching);
+        await Assert.That(found[1].Receivers[1].Types).IsEquivalentTo(["GR"], CollectionOrdering.Matching);
+        await Assert.That(found[1].Receivers[1].Lnb15v).IsFalse();
+
+        // 番号が重なる2台は両方使わない (同じ px4:…:0 が2冊できて、どちらも起こせない)。どれの話か分かるよう場所も添える
+        await Assert.That(warned.Count).IsEqualTo(4);
+        await Assert.That(warned[0]).Contains("PX-M1UR 000000000000001 は使いません");
+        await Assert.That(warned[0]).Contains("serial_unique=false");
+        await Assert.That(warned[0]).Contains("USB 1-2.3");
+        await Assert.That(warned[1]).Contains("PX-S1UR");
+        await Assert.That(warned[2]).Contains("status=incomplete");
+        await Assert.That(warned[3]).Contains("open_failed");
+        await Assert.That(warned[3]).Contains("権限");
+        // 形は思っていたとおりなので、版ずれの話はしない
+        await Assert.That(warned.Any(w => w.Contains("版"))).IsFalse();
+    }
+
+    [Test]
+    public async Task px4d_list_json_は形が違っても読めたところを使う()
+    {
+        var warned = new List<string>();
+        var found = Px4Userland.ParseJson(
+            """
+            {"schema":"next","enclosures":[{"serial":"000000000012345","model":"PX-MLT5PE","status":"ready","extra":{"a":1},"receivers":[{"receiver":0,"system":"ISDB-T/S"},{"receiver":"1","system":"ISDB-T/S","lnb_15v_supported":true},{"receiver":2,"system":"ISDB-T/S","lnb_15v_supported":"yes"}]},{"model":"PX-Q3U4","status":"ready","receivers":[]},"junk"]}
+            """,
+            warned.Add);
+
+        // 知らない鍵は見ない。serial_unique が無ければ一意とみなす。15V の可否が読めなければ null (頼まれたとおり頼む)
+        await Assert.That(found.Count).IsEqualTo(1);
+        await Assert.That(found[0].Receivers.Select(r => (r.Index, r.Lnb15v))).IsEquivalentTo(
+            [(0, (bool?)null), (2, (bool?)null)], CollectionOrdering.Matching);
+
+        // 止めるのは番号が読めないものだけ (受信機 "1"・番号の無い筐体)。版ずれは1度だけまとめて言う
+        await Assert.That(warned.Count(w => w.Contains("受信機が読めません"))).IsEqualTo(1);
+        await Assert.That(warned.Count(w => w.Contains("PX-Q3U4 の番号"))).IsEqualTo(1);
+        var skew = warned.Single(w => w.Contains("版がずれている"));
+        await Assert.That(skew).Contains("enclosures[].serial_unique が無い");
+        await Assert.That(skew).Contains("receivers[].lnb_15v_supported が真偽値ではない");
+        await Assert.That(skew).Contains("ungrouped_usb_devices が無い");
+        await Assert.That(skew).Contains("enclosures[] が object ではない");
+    }
+
+    [Test]
+    public async Task px4d_list_json_は_stderr_が混ざっても読む()
+    {
+        var found = Px4Userland.ParseJson(
+            "{\"enclosures\":[],\"ungrouped_usb_devices\":[]}\nlibusb: warning [op_get_configuration] something\n", _ => { });
+        await Assert.That(found).IsEmpty();
+    }
+
+    [Test]
+    public async Task px4d_list_json_が文書でなければ投げてテキストに戻らせる()
+    {
+        // 古い px4d が知らないオプションを usage で断った、など。Enclosures はこれを見て --list で聞き直す
+        Assert.Throws<FormatException>(() => Px4Userland.ParseJson("usage: px4d --list | --device SERIAL …", _ => { }));
+        Assert.Throws<FormatException>(() => Px4Userland.ParseJson("[]", _ => { }));
+        Assert.Throws<System.Text.Json.JsonException>(() => Px4Userland.ParseJson("{\"enclosures\":[", _ => { }));
+        await Task.CompletedTask;
+    }
+
+    [Test]
+    public async Task px4d_list_の_0_1_9_の項目も読む()
+    {
+        var warned = new List<string>();
+        var found = Px4Userland.ParseList(
+            """
+            serial=00001205000960 model=PX-Q3U4 usb=0511:084a status=ready receivers=2 serial_unique=true dev1_bus=1 dev1_address=8 dev1_port=1-3.1 dev2_bus=1 dev2_address=9 dev2_port=1-3.2
+            receiver=0 device=1 local=0 system=ISDB-S lnb_15v_supported=true
+            receiver=2 device=1 local=2 system=ISDB-T lnb_15v_supported=false
+            serial=000000000000001 model=PX-M1UR usb=0511:0854 status=ready receivers=1 serial_unique=false dev1_bus=1 dev1_address=6 dev1_port=1-2.3
+            receiver=0 device=1 local=0 system=ISDB-T/S lnb_15v_supported=false
+            serial=000000000000001 model=PX-S1UR usb=0511:0855 status=ready receivers=1 serial_unique=false dev1_bus=1 dev1_address=7 dev1_port=1-2.4
+            receiver=0 device=1 local=0 system=ISDB-T lnb_15v_supported=false
+            rejected serial= model=PX-W3U4 usb=0511:083f status=open_failed bus=3 address=2 port=3-1
+            """,
+            warned.Add);
+
+        await Assert.That(found.Select(e => e.Id)).IsEquivalentTo(["00001205000960"], CollectionOrdering.Matching);
+        await Assert.That(found[0].Receivers.Select(r => r.Lnb15v)).IsEquivalentTo(
+            new bool?[] { true, false }, CollectionOrdering.Matching);
+        await Assert.That(warned.Count).IsEqualTo(3);
+        await Assert.That(warned[0]).Contains("serial_unique=false, USB 1-2.3");
+        await Assert.That(warned[1]).Contains("USB 1-2.4");
+        await Assert.That(warned[2]).Contains("USB 3-1");
+    }
+
+    [Test]
+    public async Task 古い_px4d_の一覧では_15V_の可否は分からない()
+    {
+        // 0.1.8 までは lnb_15v_supported が無い。分からないので null (頼まれたとおり頼む)
+        var found = Px4Userland.ParseList(List, _ => { });
+        await Assert.That(found.SelectMany(e => e.Receivers).All(r => r.Lnb15v is null)).IsTrue();
+    }
+
+    [Test]
+    public async Task px4ctl_list_の受信機に一覧の_15V_の可否を写す()
+    {
+        var asked = Receivers(Q3u4List);
+        List<Px4Receiver> listed = [new(0, false, true, true), new(2, true, false, false)];
+        var merged = Px4Daemon.WithLnb(asked, listed)!;
+        await Assert.That(merged.Count).IsEqualTo(8);
+        await Assert.That(merged[0].Lnb15v).IsTrue();
+        await Assert.That(merged[2].Lnb15v).IsFalse();
+        // 一覧に無い受信機は分からないまま
+        await Assert.That(merged[1].Lnb15v).IsNull();
+        await Assert.That(Px4Daemon.WithLnb(null, listed)).IsNull();
+        await Assert.That(Px4Daemon.WithLnb(asked, null)!.All(r => r.Lnb15v is null)).IsTrue();
+    }
+
+    [Test]
+    public async Task _15V_を出せない受信機では_0V_で選局する()
+    {
+        var bs = ChannelTable.Parse("BS15_0")!;
+        List<Px4Receiver> m1ur = [new(0, true, true, false)];
+        List<Px4Receiver> mlt5 = [new(0, true, true, true)];
+        List<Px4Receiver> unknown = [new(0, true, true)];
+
+        await Assert.That(Px4Tuner.Lnb(m1ur, 0, bs, "15v")).IsNull();
+        // 出せる・分からない・受信機を聞けていない、は頼まれたとおり
+        await Assert.That(Px4Tuner.Lnb(mlt5, 0, bs, "15v")).IsEqualTo("15v");
+        await Assert.That(Px4Tuner.Lnb(unknown, 0, bs, "15v")).IsEqualTo("15v");
+        await Assert.That(Px4Tuner.Lnb(null, 0, bs, "15v")).IsEqualTo("15v");
+        // 地上波・15V を頼まない本は触らない
+        await Assert.That(Px4Tuner.Lnb(m1ur, 0, ChannelTable.Parse("T27")!, "15v")).IsEqualTo("15v");
+        await Assert.That(Px4Tuner.Lnb(m1ur, 0, bs, null)).IsNull();
+    }
+
+    [Test]
+    public async Task 注意書きは出した本だけが消す()
+    {
+        // 設定を変えて開き直すとき、古い本の後始末 (Dispose) が新しい本の出した注意書きを消さない
+        const string device = "px4:000000000099999:0";
+        object old = new(), fresh = new();
+        Px4Userland.SetNotice(device, fresh, "0V で選局しています");
+        Px4Userland.ClearNotice(device, old);
+        await Assert.That(Px4Userland.Notice(device)).IsEqualTo("0V で選局しています");
+        Px4Userland.ClearNotice(device, fresh);
+        await Assert.That(Px4Userland.Notice(device)).IsNull();
+    }
 }
