@@ -255,7 +255,7 @@
     const notices = $derived<Notice[]>(shooter.notices);
     function snapshot(): void {
         void shooter.take(
-            videoFrame(video),
+            () => videoFrame(video),
             player.captions && player.hasCaptions ? overlay : null,
             data.rec.name,
         );

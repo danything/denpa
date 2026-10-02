@@ -213,7 +213,7 @@
 
     function snapshot(): void {
         void shooter.take(
-            player.raw ? rawFrame() : videoFrame(video),
+            () => (player.raw ? rawFrame() : videoFrame(video)),
             // 字幕を出しているときだけ重ねる
             player.captions && player.hasCaptions ? overlay : null,
             current?.now?.name ?? current?.name ?? 'ライブ',

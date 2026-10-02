@@ -118,6 +118,9 @@ export async function clipFrame(
         } catch (error) {
             // 閉じた (やめた) なら何もしない。それ以外 (勢いが切れた・断られた) は落とす
             if (error instanceof DOMException && error.name === 'AbortError') return null;
+            // **共有できなかったことは言う。** 黙って落とすと、シートが出なかった理由が分からない
+            download(blob, name);
+            return { key, kind: 'info', text: `共有できなかったので保存しました: ${name}` };
         }
     }
 

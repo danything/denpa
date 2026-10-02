@@ -1065,7 +1065,7 @@
      */
     function snapshot(): void {
         // 字幕を出しているときだけ重ねる
-        void shooter.take(videoFrame(video), captions && showing !== null ? overlay : null, rec.name);
+        void shooter.take(() => videoFrame(video), captions && showing !== null ? overlay : null, rec.name);
     }
 </script>
 

@@ -22,12 +22,14 @@ export function snapshotter(controls: PlayerControls) {
         },
         /**
          * いまの1コマを字幕ごと切り抜く。
-         * @param frame 写す絵。生で見ているときは worker から貰うので待つ (`raw/engine.ts` の `grab`)
+         * @param frame 写す絵を取りに行く口。**撮れると決まってから呼ぶ** (`busy` の後) — 生で
+         *   見ているときは worker に1枚頼む (`raw/engine.ts` の `grab`) ので、先に呼ぶと
+         *   弾いた押しのぶんの絵 (1080 で 8MB) が誰にも閉じられずに残る
          * @param caption 出している字幕の canvas。出していなければ null
          * @param title 番組名 (ファイル名の頭)
          */
         async take(
-            frame: Frame | null | Promise<Frame | null>,
+            frame: () => Frame | null | Promise<Frame | null>,
             caption: HTMLCanvasElement | null,
             title: string,
         ): Promise<void> {
@@ -36,7 +38,7 @@ export function snapshotter(controls: PlayerControls) {
             controls.stir();
             let got: Frame | null = null;
             try {
-                got = await frame;
+                got = await frame();
                 const notice = await clipFrame(got, caption, title);
                 if (notice !== null) shot = notice;
             } finally {
