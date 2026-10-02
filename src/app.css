@@ -323,6 +323,40 @@ td {
 .check input {
     margin: 0;
 }
+/*
+ * 説明の続き。`<details class="more"><summary>詳しく</summary><p>…</p></details>`
+ *
+ * **見出しや欄の下には要点を1行だけ置き、残りはここに畳む。** 小さく薄い字の段落が
+ * 欄ごとに続いていた頃は、画面が重く、どれが肝心なのかが読めなかった。
+ *
+ * Pico の開け閉め (`details summary`) は幅いっぱいの段で、矢印を右端に浮かせる。
+ * 文の下に添える小さな口なので、**矢印を字のすぐ後ろに寄せて、押せる幅も字のぶんだけ**にする
+ */
+details.more > summary {
+    display: inline-flex;
+    align-items: center;
+    width: fit-content;
+    color: var(--pico-muted-color);
+    font-size: 0.8rem;
+    line-height: 1.5;
+}
+details.more > summary::after {
+    width: 0.8rem;
+    height: 0.8rem;
+    margin-inline-start: 0.2rem;
+    float: none;
+    background-size: 0.8rem auto;
+}
+details.more[open] > summary {
+    margin-bottom: 0.25rem;
+}
+details.more > :not(summary) {
+    font-size: 0.85rem;
+    opacity: 0.8;
+}
+details.more > :not(summary) + :not(summary) {
+    margin-top: 0.35rem;
+}
 
 /* ---- ボタン ---- */
 /* リンクのままボタンの見た目にする(role="button" にするとリンクでなくなる)。<a class="button"> */

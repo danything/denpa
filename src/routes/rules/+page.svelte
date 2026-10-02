@@ -197,9 +197,13 @@
                             <h2>
                                 {data.editing ? 'ルールを編集' : 'ルールを追加'}
                             </h2>
-                            <p class="small lead">
-                                これから放送される番組のうち、条件に合うものを自動で予約します。ルール名はキーワードから付けます。
-                            </p>
+                            <p class="small lead">条件に合う番組を自動で予約します</p>
+                            <details class="more">
+                                <summary>詳しく</summary>
+                                <p>
+                                    これから放送される番組のうち、条件に合うものが対象です。ルール名はキーワードから付けます。
+                                </p>
+                            </details>
                         </div>
                         {#if data.editing}
                             <input type="hidden" name="id" value={data.editing.id} />
@@ -250,28 +254,33 @@
                                     空白で区切ると<strong>どれか1つでも含む</strong>ものを除外します
                                 </span>
                             </label>
-                            <label class="field">
-                                <span class="label">優先度</span>
-                                <input
-                                    type="number"
-                                    name="priority"
-                                    value={data.seed?.priority ?? 1}
-                                    min="0"
-                                    max="9"
-                                    data-testid="rule-priority"
-                                />
-                                <!--
-                        **比べる相手は予約だけ。** チューナー画面に出ている「掴む強さ」
-                        (番組表 3 / スキャン 5 …) とは別の物差しで、そちらとは比べない。
-                        録画は必ずいちばん強い値で掴むので、番組表集めに負けることはない
-                    -->
-                                <span class="hint">
-                                    <strong>予約どうし</strong>の優先度です。チューナーが足りないときは<strong
-                                        >大きいほうを録ります</strong
-                                    >
-                                    (手動予約は 2)。番組表やロゴの取得とは比べません。録画はそれらより常に優先されます。
-                                </span>
-                            </label>
+                            <div class="field">
+                                <label class="field">
+                                    <span class="label">優先度</span>
+                                    <input
+                                        type="number"
+                                        name="priority"
+                                        value={data.seed?.priority ?? 1}
+                                        min="0"
+                                        max="9"
+                                        data-testid="rule-priority"
+                                    />
+                                    <!--
+                            **比べる相手は予約だけ。** チューナー画面に出ている「掴む強さ」
+                            (番組表 3 / スキャン 5 …) とは別の物差しで、そちらとは比べない。
+                            録画は必ずいちばん強い値で掴むので、番組表集めに負けることはない
+                        -->
+                                    <span class="hint">
+                                        チューナーが足りないときは<strong>大きいほうを録ります</strong>
+                                    </span>
+                                </label>
+                                <details class="more">
+                                    <summary>詳しく</summary>
+                                    <p>
+                                        <strong>予約どうし</strong>の優先度です (手動予約は 2)。番組表やロゴの取得とは比べません。録画はそれらより常に優先されます。
+                                    </p>
+                                </details>
+                            </div>
                         </div>
 
                         <div class="fields">
@@ -477,12 +486,17 @@
                             いまの番組表では1件も一致しません。条件を緩めてください。
                         </p>
                     {:else}
-                        <p class="tiny muted">
-                            予約済みの番組はここで取り消せます
-                            (取り消した番組をルールが予約し直すことはありません)。
-                            条件を変えても入っている予約は残るため、条件から外れたものは
-                            <span class="tag">条件外</span> として表示します。
-                        </p>
+                        <div class="note-block">
+                            <p class="small muted">予約済みの番組はここで取り消せます</p>
+                            <details class="more">
+                                <summary>詳しく</summary>
+                                <p>取り消した番組をルールが予約し直すことはありません。</p>
+                                <p>
+                                    条件を変えても入っている予約は残るため、条件から外れたものは
+                                    <span class="tag">条件外</span> として表示します。
+                                </p>
+                            </details>
+                        </div>
                         <ul class="preview-list">
                             {#each preview.programs as program (program.id)}
                                 <li class="preview-row small" data-testid="preview-row" data-program-id={program.id}>
@@ -634,19 +648,31 @@
                         </div>
                     </div>
                 {:else}
-                    <div class="rule-row small muted">
-                        {data.rules.length === 0 ? 'ルールはまだありません' : '一致するルールはありません'}
-                    </div>
+                    {#if data.rules.length === 0}
+                        <!--
+                            **1件も無いときは、札の真ん中に。** 左上に小さく出していた頃は、
+                            大きな空の札の隅に埋もれて、まだ何も無いのか読み込み途中なのかが
+                            分からなかった。次に何をすればよいかも添える
+                        -->
+                        <div class="empty" data-testid="rule-empty">
+                            <p class="empty-title">ルールはまだありません</p>
+                            <p class="small muted">
+                                キーワードを入れて「追加」すると、合う番組を自動で予約します
+                            </p>
+                        </div>
+                    {:else}
+                        <div class="rule-row small muted">一致するルールはありません</div>
+                    {/if}
                 {/each}
                 <!-- 下端に近づいたら続きを足す。まだ出していない件数を添えて、終わりではないと分かるように -->
                 {#if paged.more}
-                    <div class="rule-row small muted more" use:sentinel={() => paged.reveal()}>
+                    <div class="rule-row small muted tail" use:sentinel={() => paged.reveal()}>
                         残り {paged.rest} 件
                     </div>
                 {/if}
                 <!-- 絞った結果の件数は末尾に。入力欄の隣に出すと、打つたびに欄の幅が変わる -->
                 {#if filter !== ''}
-                    <div class="rule-row small muted more">
+                    <div class="rule-row small muted tail">
                         {data.rules.length} 件中 {filtered.length} 件
                     </div>
                 {/if}
@@ -829,8 +855,14 @@
         font-weight: 500;
     }
     .hint {
-        font-size: 0.75rem;
-        opacity: 0.6;
+        font-size: 0.8rem;
+        opacity: 0.7;
+    }
+    /* 要点の1行と、その下に畳んだ「詳しく」 */
+    .note-block {
+        display: flex;
+        flex-direction: column;
+        gap: 0.25rem;
     }
     .fields {
         display: grid;
@@ -998,8 +1030,27 @@
         min-width: 0;
         margin: 0;
     }
-    .more {
+    .tail {
         text-align: center;
+    }
+    .empty {
+        display: flex;
+        min-height: 12rem;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 0.5rem;
+        padding: 2rem 1rem;
+        text-align: center;
+    }
+    @media (min-width: 768px) {
+        /* 一覧の札は列の残りを埋めている。その高さいっぱいの真ん中に置く */
+        .empty {
+            height: 100%;
+        }
+    }
+    .empty-title {
+        font-weight: 700;
     }
     .conditions {
         display: flex;

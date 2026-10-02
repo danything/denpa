@@ -150,13 +150,19 @@
                     <strong>{withEpg}</strong>
                 </div>
                 <!--
-                    **注はここ1つだけ。** 数のすぐ下に、数がそろわない理由と、
-                    上のボタンが何をするものかをまとめて置く
+                    **注はここ1つだけ。** 数のすぐ下に、数がそろわない理由を1行で。
+                    上のボタンが何をするものかは「詳しく」に畳む
                 -->
-                <div class="tiny muted">
-                    1つの周波数に複数の局が乗っているので、周波数と局の数は一致しません。番組表はスキャンのあと、局ごとに埋まっていきます。
-                    待てないときは<strong>「番組表をいますぐ集める」</strong
-                    >で、空いているチューナーを全部使って集められます (録画中のチューナーは使いません)。
+                <div class="note-block">
+                    <div class="small soft">1つの周波数に複数の局が乗るので、周波数と局の数はそろいません</div>
+                    <details class="more">
+                        <summary>詳しく</summary>
+                        <p>番組表はスキャンのあと、局ごとに埋まっていきます。</p>
+                        <p>
+                            待てないときは<strong>「番組表をいますぐ集める」</strong>で、空いているチューナーを全部使って集められます
+                            (録画中のチューナーは使いません)。
+                        </p>
+                    </details>
                 </div>
                 <!-- カードの中で巻かない。長くても全部並べる (巻くのはページごと) -->
                 <div class="table-wrap">
@@ -211,11 +217,20 @@
 
         <section class="panel card" data-testid="scan-card">
             <h2>チャンネルスキャン</h2>
-            <p class="small soft">
-                受信できるチャンネルを選局して探します。<strong
-                    >空いているチューナーを全部使います</strong
-                >。<strong>録画中でも実行できます</strong> (録画中のチューナーは使いません)。見つかったチャンネルは保存し、終わると番組表も集め直します。
-            </p>
+            <div class="note-block">
+                <!-- 何分もかかって空きチューナーを全部使う。そこは畳まずに見せておく -->
+                <p class="small soft">
+                    <strong>空いているチューナーを全部使います</strong>。録画中でも実行できます
+                </p>
+                <details class="more">
+                    <summary>詳しく</summary>
+                    <p>
+                        受信できるチャンネルを選局して探します。録画中でも実行できます
+                        (録画中のチューナーは使いません)。
+                    </p>
+                    <p>見つかったチャンネルは保存し、終わると番組表も集め直します。</p>
+                </details>
+            </div>
 
             <form method="POST" action="?/scan" use:submitting class="stack">
                 <div>
@@ -608,14 +623,23 @@
                             </form>
                         </dd>
                     {/if}
-                    <dd class="tiny muted full">
-                        ロゴが放送波に流れるのは数十秒〜数分に一度、
-                        <strong>衛星は十数分に一度</strong>です。普段は
-                        <strong>番組表を集める選局のついでに</strong>拾うので、
-                        ロゴのためにチューナーを使うことはありません。取れたロゴも1週間ごとに取り直します。
-                        「いますぐ取りに行く」では衛星も回ります。<strong
-                            >BS と CS のロゴは同じ1つの中継で流れる</strong
-                        >ため、そこだけ最大20分かかります (他の中継は数秒で終わります)。
+                    <dd class="full note-block">
+                        <div class="small soft">
+                            番組表を集める選局のついでに拾います
+                        </div>
+                        <details class="more">
+                            <summary>詳しく</summary>
+                            <p>
+                                ロゴが放送波に流れるのは数十秒〜数分に一度、<strong>衛星は十数分に一度</strong>です。
+                                ついでに拾うので、ロゴのためにチューナーを使うことはありません。
+                                取れたロゴも1週間ごとに取り直します。
+                            </p>
+                            <p>
+                                「いますぐ取りに行く」では衛星も回ります。<strong
+                                    >BS と CS のロゴは同じ1つの中継で流れる</strong
+                                >ため、そこだけ最大20分かかります (他の中継は数秒で終わります)。
+                            </p>
+                        </details>
                         {#if data.logos.unavailable > 0}
                             <!--
                                 取れないものを「まだ取れていない」と出し続けると、
@@ -626,9 +650,10 @@
                                 降ってくる。中継で数えていた頃は、取れる CS の54局を
                                 まとめて「取れません」と出していた
                             -->
-                            <br />
-                            <strong>{data.logos.unavailable} 局</strong
-                            >はロゴが放送に載っていないため取れません (1週間後にまた確かめます)。
+                            <div class="small soft">
+                                <strong>{data.logos.unavailable} 局</strong
+                                >はロゴが放送に載っていないため取れません (1週間後にまた確かめます)
+                            </div>
                         {/if}
                     </dd>
                     <!--
@@ -667,9 +692,15 @@
                     <dd class="tag">
                         {data.cmLogoStats.have} / {data.cmLogoStats.total} 局
                     </dd>
-                    <dd class="tiny muted full">
-                        チューナーが空いているときに放送を数分見て、自動で覚えます。覚えられなかった局は、
-                        下の一覧から位置を教えてください (薄いロゴや動くロゴは自動では見つかりません)。
+                    <dd class="full note-block">
+                        <div class="small soft">自動で覚えます。覚えられない局は、下で位置を教えてください</div>
+                        <details class="more">
+                            <summary>詳しく</summary>
+                            <p>
+                                チューナーが空いているときに放送を数分見て覚えます。薄いロゴや動くロゴは
+                                自動では見つからないので、下の一覧から位置を教えてください。
+                            </p>
+                        </details>
                     </dd>
                     {#if cmLogos.length > 0}
                         <dd class="full cm-logos">
@@ -736,6 +767,12 @@
     }
     .soft {
         opacity: 0.7;
+    }
+    /* 要点の1行と、その下に畳んだ「詳しく」 */
+    .note-block {
+        display: flex;
+        flex-direction: column;
+        gap: 0.25rem;
     }
     .faint {
         opacity: 0.4;
