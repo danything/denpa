@@ -413,4 +413,17 @@ public class Px4Tests
         await Assert.That(Px4Tuner.Lnb(m1ur, 0, ChannelTable.Parse("T27")!, "15v")).IsEqualTo("15v");
         await Assert.That(Px4Tuner.Lnb(m1ur, 0, bs, null)).IsNull();
     }
+
+    [Test]
+    public async Task 注意書きは出した本だけが消す()
+    {
+        // 設定を変えて開き直すとき、古い本の後始末 (Dispose) が新しい本の出した注意書きを消さない
+        const string device = "px4:000000000099999:0";
+        object old = new(), fresh = new();
+        Px4Userland.SetNotice(device, fresh, "0V で選局しています");
+        Px4Userland.ClearNotice(device, old);
+        await Assert.That(Px4Userland.Notice(device)).IsEqualTo("0V で選局しています");
+        Px4Userland.ClearNotice(device, fresh);
+        await Assert.That(Px4Userland.Notice(device)).IsNull();
+    }
 }

@@ -466,15 +466,24 @@ public static class Px4Userland
     /// 動いていないこと (15V を出せない受信機で 0V にした、など。<see cref="Px4Tuner.Lnb"/>) を
     /// チューナー画面に出す (<see cref="TunerPool.Status"/> の <c>error</c>)
     /// </summary>
-    private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, string> Notices =
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, (object Owner, string Text)> Notices =
         new(StringComparer.Ordinal);
 
-    public static string? Notice(string? device) => device is null ? null : Notices.GetValueOrDefault(device);
+    public static string? Notice(string? device) =>
+        device is not null && Notices.TryGetValue(device, out var notice) ? notice.Text : null;
 
-    internal static void SetNotice(string device, string? notice)
+    internal static void SetNotice(string device, object owner, string text) => Notices[device] = (owner, text);
+
+    /// <summary>
+    /// <paramref name="owner"/> が出したものだけ消す。設定を変えて開き直すとき、古い本の後始末が
+    /// 新しい本の出したものを消さないように (文は同じなので、出した者で見分ける)
+    /// </summary>
+    internal static void ClearNotice(string device, object owner)
     {
-        if (notice is null) Notices.TryRemove(device, out _);
-        else Notices[device] = notice;
+        if (Notices.TryGetValue(device, out var notice) && ReferenceEquals(notice.Owner, owner))
+        {
+            Notices.TryRemove(new KeyValuePair<string, (object, string)>(device, notice));
+        }
     }
 
     /// <summary>設定に出てくる筐体。px4d を起こす相手</summary>
@@ -634,6 +643,16 @@ public sealed class Px4Daemon
     /// <summary>動いていなければ起こして ready まで待つ。駄目なら理由を添えて投げる</summary>
     public void Ensure()
     {
+        if (Running) return;
+        /*
+         * **15V を出せるかは起こす前に一覧で聞いておく。** px4ctl list (LIST) には載らない。
+         * 一覧は筐体を掴まないが、起こしたあとだと OS によっては開けない。錠の外で聞く —
+         * --list-json と --list を続けて待つと最悪 30 秒で、その間 Dispose も選局も待たされる。
+         * 使えない筐体の理由は Detect が残すので、ここでは黙る
+         */
+        var listed = Px4Userland.Enclosures(_ => { })
+            .FirstOrDefault(enclosure => enclosure.Id == _id)?.Receivers;
+
         lock (_gate)
         {
             if (Running) return;
@@ -646,14 +665,6 @@ public sealed class Px4Daemon
             }
             var px4d = Path.Combine(Px4Userland.Dir, "px4d");
             if (!File.Exists(px4d)) throw new IOException($"px4-userland が入っていません: {px4d}");
-
-            /*
-             * **15V を出せるかは起こす前に一覧で聞いておく。** px4ctl list (LIST) には載らない。
-             * 一覧は筐体を掴まないので順番はどちらでもよいが、起こしたあとだと OS によっては
-             * 開けない。使えない筐体の理由は Detect が残すので、ここでは黙る
-             */
-            var listed = Px4Userland.Enclosures(_ => { })
-                .FirstOrDefault(enclosure => enclosure.Id == _id)?.Receivers;
 
             // ランタイムルートは呼ぶ側が用意する決まり (px4d は下の階層しか作らない)
             Directory.CreateDirectory(Px4Userland.RuntimeDir);
@@ -972,7 +983,7 @@ public sealed class Px4Tuner : ITuneDevice
     private void WarnLnb()
     {
         const string notice = "この受信機は LNB に 15V を出せないので、0V で選局しています (設定の LNB 15V は効きません。アンテナへの給電はほかの機器から)";
-        Px4Userland.SetNotice(Px4Userland.Device(_id, _receiver), notice);
+        Px4Userland.SetNotice(Px4Userland.Device(_id, _receiver), this, notice);
         if (_lnbWarned) return;
         _lnbWarned = true;
         Log.Write($"[{_name}] {notice}");
@@ -1150,7 +1161,7 @@ public sealed class Px4Tuner : ITuneDevice
     {
         lock (_gate) Close();
         // 設定が変わって閉じるときも通る。次の本が 15V をやめていれば、もう出さない
-        Px4Userland.SetNotice(Px4Userland.Device(_id, _receiver), null);
+        Px4Userland.ClearNotice(Px4Userland.Device(_id, _receiver), this);
     }
 }
 
