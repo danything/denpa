@@ -83,6 +83,9 @@ export function withProgramInfo(timeline: PlacedMessage[], recording: Recording)
     return info === null ? timeline : [{ at: 0, message: info }, ...timeline];
 }
 
+/** 1回に読む大きさ */
+const CHUNK = 1 << 20;
+
 /**
  * TS を 1MB ずつ読んで解く。**丸ごと抱えない** (録画は数GBになる) し、
  * **読む間も息をつく** (チャンクごとに await)。
@@ -93,20 +96,20 @@ export function withProgramInfo(timeline: PlacedMessage[], recording: Recording)
  * を **1周 2時間で 5回** 繰り返した (2026-08-17 実機)。エンコードそのものは
  * 終わっていて、最後のこの一手で全部を捨てていた
  */
-async function capture(path: string, size = 1 << 20): Promise<TimedMessage[]> {
-    const capture = new DataBroadcastCapture();
+async function capture(path: string): Promise<TimedMessage[]> {
+    const found = new DataBroadcastCapture();
     const file = await open(path, 'r');
     try {
-        const buffer = Buffer.alloc(size);
+        const buffer = Buffer.alloc(CHUNK);
         for (;;) {
-            const { bytesRead } = await file.read(buffer, 0, size, null);
+            const { bytesRead } = await file.read(buffer, 0, CHUNK, null);
             if (bytesRead <= 0) break;
-            capture.feed(buffer.subarray(0, bytesRead));
+            found.feed(buffer.subarray(0, bytesRead));
         }
     } finally {
         await file.close();
     }
-    return capture.result();
+    return found.result();
 }
 
 /**

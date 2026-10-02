@@ -17,7 +17,6 @@ import { audioTitles, DUAL_MONO } from '#lib/arib.js';
 import { HW_KIND_LABEL, type HwCodec } from '../hw';
 import { encodeSource } from '../source';
 import type { EncodeJob, EncodePhase, Recording } from '../types';
-import { SUBTITLE_FONTS } from './captions';
 import {
     type CmDetection,
     chapterMetadata,
@@ -1411,7 +1410,7 @@ async function runJob(jobId: number): Promise<void> {
      * 数え直したうえで、映像が出るまで (`headSkip`) を捨てる。同じところを引く
      */
     const startAt = measured.formatStart + headSkip(encodeOptions.videoStart);
-    const pgs = await buildPgs(source, encodeOptions.canvasSize, SUBTITLE_FONTS, startAt, signal);
+    const pgs = await buildPgs(source, encodeOptions.canvasSize, startAt, signal);
     if (pgs !== null) {
         encodeOptions.pgsFile = pgs.path;
         // 名前も放送が名乗っているものにする (「字幕 (日本語)」)

@@ -1,7 +1,7 @@
 /**
  * WebSocket に繋ぐための使い捨ての札。
  *
- * **ブラウザは WebSocket の握手に `Authorization` を付けてくれない。** 画面が
+ * **ブラウザは WebSocket の握手に `Authorization` を付けてくれない。** OIDC で
  * 画面に入れていても、そこから張る WebSocket は素通しで届いてしまう。
  * チューナーを掴む口をそのまま開けておくわけにはいかない。
  *

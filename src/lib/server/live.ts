@@ -33,6 +33,7 @@ import {
     captionOutput,
     frame,
     NO_SUBTITLE,
+    programSpec,
     rawCaptionArgs,
     TrackList,
     worthLogging,
@@ -48,6 +49,12 @@ import { openWhenFree } from './tuner';
 import type { Connection } from './ws';
 
 /**
+ * セッションの焼き方。画面が選ぶのは LiveCodec だけで、`audio` は外から使う口
+ * (`/api/services/<id>/live?audio=only`) の**音声だけ**。映像も字幕も焼かず、AAC の fMP4 を出す
+ */
+type StreamCodec = LiveCodec | 'audio';
+
+/**
  * 焼き方。**形は見ている人が選ぶ** (`LiveCodec`)。
  *
  * H.264 と AV1 で共通なのはここ。それぞれの中身は `videoArgs` / `audioArgs`。
@@ -55,7 +62,7 @@ import type { Connection } from './ws';
  * - `-fflags nobuffer` … 読む側で溜めない
  * - `-probesize` … **開いてから絵が出るまでの待ちの、削れる部分。**
  *   渡す前に1局へ絞ってあるが、**字幕まで見つけさせる**ので 100KB 採る
- *   (下の「渡す前に1局へ絞る」に実測)
+ *   (下の「局を名指しで選ぶ」に実測)
  * - `-frag_duration` … 0.05秒ぶんずつ moof/mdat を出す。既定では ffmpeg が
  *   数秒溜めてから出すので、その場でライブでなくなる
  * - `-copyts` は**付けない**。付けると放送の絶対時刻が mp4 の多重化器まで届き、
@@ -165,12 +172,6 @@ import type { Connection } from './ws';
  *   字幕を持たない放送に頼むと ffmpeg は組み立ての時点で降りるので、
  *   そうと分かったらこちらで焼き直す (`Session.run`)
  */
-/**
- * セッションの焼き方。画面が選ぶのは LiveCodec だけで、`audio` は外から使う口
- * (`/api/services/<id>/live?audio=only`) の**音声だけ**。映像も字幕も焼かず、AAC の fMP4 を出す
- */
-type StreamCodec = LiveCodec | 'audio';
-
 export function encodeArgs(
     program: number,
     audio: AudioTrack,
@@ -178,7 +179,7 @@ export function encodeArgs(
     caption: number | null = 0,
 ): string[] {
     const video = codec !== 'audio';
-    const from = Number.isFinite(program) && program > 0 ? `0:p:${program}` : '0';
+    const from = programSpec(program);
     // デュアルモノは片側だけを両耳へ。そのままだと左右から別の言語が同時に鳴る
     const pan =
         audio.side === 'main'
@@ -290,7 +291,7 @@ export function encodeArgs(
  * **付けてもまだ溜め込む。** 電波が届いてから塊が出るまで H.264 の 0.24〜0.49秒
  * に対し **1.1〜1.5秒**。低遅延指定 (`pred-struct=1`) は
  * 実時間に間に合わなくなるので使えない。**AV1 を選ぶと放送の今から1秒ぶん
- * 離れる** — 切り替えにもそう出してある (`LIVE_CODECS`)。
+ * 離れる** (切り替えの画面には出していない)。
  */
 function videoArgs(codec: LiveCodec): string[] {
     if (codec === 'av1') {
@@ -448,6 +449,12 @@ const captionless = new Map<number, number>();
 /** 忘れるまで (ms)。番組の変わり目より短く採る */
 const FORGET_CAPTIONLESS = 15 * 60_000;
 
+/** 字幕が無いと覚えている局か (`captionless`) */
+function captionlessNow(serviceId: number): boolean {
+    const at = captionless.get(serviceId);
+    return at !== undefined && Date.now() - at < FORGET_CAPTIONLESS;
+}
+
 /** 放送の実時刻を配り直す間隔 (ms)。配り続ける理由は `Session.tellClock` */
 const CLOCK_EVERY = 5_000;
 
@@ -491,17 +498,8 @@ class Session {
     /** 字幕が無いと言われたか。言われたら字幕なしで焼き直す */
     private noSubtitle = false;
     /**
-     * データ放送を解く側 ([databroadcast.ts](./databroadcast.ts))。
-     *
-     * **頼まれてから作る。** 1局に絞ったあとの TS を分けるだけなので `tee` も
-     * 別プロセスも要らない (stream.md §5.6) が、**見ている人のほとんどは
-     * 押さない**ものなので、全員のぶんを解き続ける理由が無い。
-     *
-     * 引き換えに、**押してから出るまでカルーセルが一周するのを待つ**ことになる
-     * (実測で数秒〜。大きいモジュールほど間隔が空く)。
-     *
-     * 誰も出していなければ畳む — 掴んだままにしても覚えているモジュールが
-     * 古くなるだけで、次に押した人はどのみち回ってくるのを待つ
+     * データ放送を解く側。**頼まれてから作り、誰も出していなければ畳む**
+     * (理由と引き換えは databroadcast.ts の冒頭)
      */
     private data: DataBroadcast | null = null;
     /**
@@ -698,22 +696,8 @@ class Session {
         const label = `${this.channelType}:${this.channel}`;
         if (this.raw) return this.runRaw(label);
         try {
-            /*
-             * **空きが無ければ待って掛け直す** (チャンネルを変える一瞬は2本要る。
-             * `tuner.openWhenFree`)。追っかけ (`source`) はチューナーを掴まない —
-             * 電波は録画が受けている
-             */
-            const tuned =
-                this.source !== undefined
-                    ? null
-                    : await openWhenFree(
-                          this.channelType,
-                          this.channel,
-                          this.aborter.signal,
-                          `live ${this.channelType}/${this.channel}`,
-                          config.priority.live,
-                          () => this.stopped,
-                      );
+            // 追っかけ (`source`) はチューナーを掴まない — 電波は録画が受けている
+            const tuned = this.source !== undefined ? null : await this.tune();
 
             /*
              * **字幕なしで焼き直せるようにしておく。**
@@ -722,13 +706,8 @@ class Session {
              * 時点で降りる — **映像も出ない**。そうと分かったら字幕を外して
              * もう一度起こす。TS は流れ続けているので、掴み直しは要らない
              */
-            const forgotten = captionless.get(this.serviceId);
             // 音声だけなら字幕は焼かない
-            let wanted =
-                this.codec === 'audio' ||
-                (forgotten !== undefined && Date.now() - forgotten < FORGET_CAPTIONLESS)
-                    ? null
-                    : this.track;
+            let wanted = this.codec === 'audio' || captionlessNow(this.serviceId) ? null : this.track;
             for (;;) {
                 // ライブは同じ TS が流れ続けている。追っかけは焼き直しのたびに読み直す
                 const stream = tuned ?? this.source?.();
@@ -810,23 +789,40 @@ class Session {
     }
 
     /**
-     * 焼けなくなったことを、**見ている人に伝える。**
-     *
-     * 伝えずに消えていた頃は、ffmpeg が入口で落ちても画面には何も出ず、
-     * **前の絵が貼られたまま6秒たって黒くなる**だけだった (`live-player` の
-     * `HOLD_MOST`)。見た目は「切り替えが 6 秒かかった」で、実際には
-     * 失敗しているのに、そうとは分からない出方をする。
-     *
-     * 実機で出たのは tvk (T15) — 局が3つ相乗りしている TS で、`-probesize` が
-     * 足りずに `-map 0:p:24632:v:0` を解決できないまま ffmpeg が降りていた。
-     *
-     * こちらから畳んだとき (`stop`) は言わない。見ている人が居なくなったか、
-     * 選び直されたかで、どちらも知らせるようなことではない
+     * 焼けなくなったことを、**見ている人に伝える。** 黙って消えると前の絵が
+     * `HOLD_MOST` (6秒) 貼られて黒くなるだけで、失敗に見えなかった (tvk T15 で
+     * `-map 0:p:…` を解決できずに ffmpeg が降りていた)。こちらから畳んだとき (`stop`) は言わない
      */
     private died(label: string, why: string, message: string): void {
         if (this.stopped) return;
         console.warn(`[live] ${label}: ${why}`);
         this.tell({ type: 'error', message });
+    }
+
+    /** チューナーを掴む。**空きが無ければ待って掛け直す** (チャンネルを変える一瞬は2本要る) */
+    private tune() {
+        return openWhenFree(
+            this.channelType,
+            this.channel,
+            this.aborter.signal,
+            `live ${this.channelType}/${this.channel}`,
+            config.priority.live,
+            () => this.stopped,
+        );
+    }
+
+    /**
+     * 届いた塊を1局に絞り (`pump` の説明)、**絞ったあとを** データ放送・時計・
+     * Hybridcast の見張りへ分ける。データ放送は誰も出していなければ解かない (`wantData`)
+     */
+    private tap(filter: ServiceFilter | null, chunk: Uint8Array): Uint8Array {
+        const out = filter === null ? chunk : filter.filter(chunk);
+        if (filter !== null) this.tsid = filter.transportStreamId;
+        if (out.length === 0) return out;
+        this.data?.feed(out);
+        this.clock.feed(out);
+        this.findHybridcast(out);
+        return out;
     }
 
     /**
@@ -870,14 +866,8 @@ class Session {
         try {
             for await (const chunk of chunks(stream)) {
                 if (this.stopped) break;
-                const out = filter === null ? chunk : filter.filter(chunk);
-                if (filter !== null) this.tsid = filter.transportStreamId;
+                const out = this.tap(filter, chunk);
                 if (out.length === 0) continue;
-                // **絞ったあとを、もう一方へ分ける。** ffmpeg に渡すのと同じもの。
-                // 誰も出していなければ解かない (`wantData`)
-                this.data?.feed(out);
-                this.clock.feed(out);
-                this.findHybridcast(out);
                 // **書けたことを待つ** (上の説明)。待たないと、転んだときに拾い手が居ない
                 await writer.write(out);
                 await writer.flush();
@@ -920,15 +910,7 @@ class Session {
         }
     }
 
-    /**
-     * 1枚配る。**同じ絵は配り直さない。**
-     *
-     * sub2video は同じものを何度も出す。映像と同じ ffmpeg にしてからは映像の
-     * コマが心拍になるので、実機で毎秒8枚ほど出てくるが、**中身が変わって
-     * いるのはごく一部**。そのまま流すと帯域を食うだけになる。
-     *
-     * **空の枚も配る。** 全部透明な絵を重ねるのは「消す」と同じ結果になる
-     */
+    /** 1枚配る。**同じ絵は配り直さない、空の枚も配る** (理由は captions.ts「変わったときだけ送る」) */
     private deliver(caption: Caption): void {
         const seen = Bun.hash(caption.data).toString(36);
         if (seen === this.last) return;
@@ -1114,7 +1096,7 @@ class Session {
     }
 
     /**
-     * **焼かずに、1局に絞った TS をそのまま配る** (stream.md §5.5「生で送る」)。
+     * **焼かずに、1局に絞った TS をそのまま配る** (stream.md §5.5)。
      *
      *     エージェント → 1局に絞る → WebSocket (`CHANNEL.rawTs`) → ブラウザが自分で解く
      *
@@ -1129,27 +1111,13 @@ class Session {
     private async runRaw(label: string): Promise<void> {
         let captioner: RawCaptions | null = null;
         try {
-            const tuned = await openWhenFree(
-                this.channelType,
-                this.channel,
-                this.aborter.signal,
-                `live ${this.channelType}/${this.channel}`,
-                config.priority.live,
-                () => this.stopped,
-            );
-            const forgotten = captionless.get(this.serviceId);
-            if (forgotten === undefined || Date.now() - forgotten >= FORGET_CAPTIONLESS) {
-                captioner = this.captions();
-            }
+            const tuned = await this.tune();
+            if (!captionlessNow(this.serviceId)) captioner = this.captions();
             const filter = this.program > 0 ? new ServiceFilter(this.program) : null;
             for await (const chunk of chunks(tuned)) {
                 if (this.stopped) break;
-                const out = filter === null ? chunk : filter.filter(chunk);
-                if (filter !== null) this.tsid = filter.transportStreamId;
+                const out = this.tap(filter, chunk);
                 if (out.length === 0) continue;
-                this.data?.feed(out);
-                this.clock.feed(out);
-                this.findHybridcast(out);
                 // **詰まったら捨てる** (`hand` の説明)。遅れて全部届くより、飛んで今が映るほうがいい
                 for (const viewer of this.viewers) this.hand(viewer, CHANNEL.rawTs, out);
                 this.tellClock();
@@ -1316,9 +1284,7 @@ export function liveStream(serviceId: number, codec: StreamCodec | 'raw'): Reada
     let closed = false;
     const viewer: Viewer = { connection: { send: () => {} }, ready: false, wantsData: false };
     const leave = () => {
-        if (session === null) return;
-        session.remove(viewer);
-        if (session.empty) session.stop();
+        if (session !== null) depart(session, viewer);
         session = null;
     };
     return new ReadableStream<Uint8Array>(
@@ -1498,6 +1464,12 @@ function parseCommand(message: Record<string, unknown>): Asked | null {
     }
 }
 
+/** 見ている人を降ろす。**最後の1人が抜けたら畳む** — 残すとチューナーを掴んだままになる */
+function depart(session: Session, viewer: Viewer): void {
+    session.remove(viewer);
+    if (session.empty) session.stop();
+}
+
 /**
  * 1本ぶんの受け持ち。**繋いでいる間だけチューナーを掴む。**
  *
@@ -1509,10 +1481,7 @@ export function attend(connection: Connection): void {
     let current: Session | null = null;
 
     const leave = () => {
-        if (current === null) return;
-        current.remove(viewer);
-        // **最後の1人が抜けたら畳む。** 残すとチューナーを掴んだままになる
-        if (current.empty) current.stop();
+        if (current !== null) depart(current, viewer);
         current = null;
     };
 
@@ -1534,13 +1503,12 @@ export function attend(connection: Connection): void {
         if (asked.type === 'chase') {
             leave();
             viewer.ready = false;
-            current = openChase(asked, viewer, connection);
+            current = openChase(asked, viewer);
             return;
         }
-        const { channelType, channel, serviceId, audio, codec, caption } = asked;
+        const { channelType, channel, serviceId, audio, codec, caption, raw } = asked;
 
         const now = nowPlaying(serviceId, audio);
-        const raw = asked.raw;
 
         /*
          * **同じものを焼いているなら、焼き直さない。**
@@ -1616,11 +1584,10 @@ export function attend(connection: Connection): void {
  * 違うので、同じものを観る2人はほぼ起きない。セッションの一覧 (`sessions`) にも
  * 載せない (見ている人が選び直すか抜ければ `leave` が畳む)。
  *
- * シークはバイト比例で当たりを付ける (`chasePlan`)。生TSに時間の索引は無いが、
- * 放送TSはレートがほぼ一定なので大きくは外れない。
+ * シークの当たりの付け方は `chasePlan` (chase.ts の冒頭)。
  */
-function openChase(asked: ChaseAsked, viewer: Viewer, connection: Connection): Session | null {
-    const tell = (notice: Notice) => connection.send(CHANNEL.control, 0n, json(notice));
+function openChase(asked: ChaseAsked, viewer: Viewer): Session | null {
+    const tell = (notice: Notice) => viewer.connection.send(CHANNEL.control, 0n, json(notice));
     const refuse = (text: string): null => {
         tell({ type: 'error', message: text });
         return null;
