@@ -15,7 +15,7 @@ import type { FakeService } from './services';
 
 const PORT = Number(process.env['FAKE_AGENT_PORT'] ?? 25252);
 /** denpa の生TSの置き場。本物では同じものをエージェント側にも見せてある */
-const RECORDED = resolve(process.env['RECORDED_DIR'] ?? '/recorded');
+const RECORDED = resolve(process.env['RAW_DIR'] ?? '/media/raw');
 
 /** テストから切り替えるつまみ。本物では `tune.ts` がファイル越しに読む */
 const knobs: Knobs = { ...DEFAULT_KNOBS, scrambled: process.env['FAKE_SCRAMBLED'] === '1' };

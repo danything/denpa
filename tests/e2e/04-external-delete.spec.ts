@@ -10,7 +10,7 @@ test.describe('外で消された録画の反映', () => {
     test('外で消した録画が一覧から消え、削除済みとして残る', async ({ page, request, stack }) => {
         test.setTimeout(180_000);
         const { id: recordingId, libraryPath } = await recordOne(page, request);
-        expect(libraryPath).toContain(stack.libraryDir);
+        expect(libraryPath).toContain(stack.encodedDir);
 
         // ファイルが在るうちは照合しても何も起きない
         await page.getByTestId('reconcile-button').click();

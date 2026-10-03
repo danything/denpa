@@ -183,7 +183,7 @@ function sweepLeftovers(): { swept: number; strays: number; pruned: number } {
     const at = now();
     let swept = 0;
     let strays = 0;
-    for (const root of [config.recordedDir, config.libraryDir]) {
+    for (const root of [config.rawDir, config.encodedDir]) {
         const { files } = walk(root);
         const videos = new Set(files.filter((path) => VIDEO.test(path)));
         for (const path of videos) {
@@ -217,7 +217,7 @@ function sweepLeftovers(): { swept: number; strays: number; pruned: number } {
      * いま になるので、消しながら見ると**自分の掃除で親が作りたてに化けて**
      * シリーズのフォルダだけ残る
      */
-    const dirs = walk(config.libraryDir)
+    const dirs = walk(config.encodedDir)
         .dirs.filter((dir) => !settling(dir, at))
         .sort((a, b) => b.length - a.length);
     let pruned = 0;

@@ -36,13 +36,12 @@ services:
             - 'c 212:* rmw'
         environment:
             TZ: Asia/Tokyo
-            # 掛かったまま録れたTSを解く先。denpa と同じ実体を見せる
-            RECORDED_DIR: /denpa-recorded
         volumes:
             # 設定。チューナーもチャンネルも denpa の画面から書く。
             # スキャンの結果 (channels.json) も同じところへ書き戻される
-            - ./config:/app-config
-            - denpa-recorded:/denpa-recorded
+            - ./config:/config
+            # 掛かったまま録れたTSを解く先。denpa と同じ実体を同じ名前 (/media/raw) で見せる
+            - denpa-recorded:/media/raw
             # デバイスはディレクトリごと bind する (挿し直しで増えるノードも見えるように)
             - /dev/bus/usb:/dev/bus/usb
             - /dev/dvb:/dev/dvb
@@ -69,9 +68,11 @@ services:
             # 家の外に出す構成では OIDC を使う (README の注意も読むこと)
             TRUSTED_NETWORKS: 192.168.0.0/16,10.0.0.0/8,172.16.0.0/12
         volumes:
-            - denpa-data:/app/data
-            - denpa-recorded:/app/recorded
-            - denpa-library:/library
+            # 置き場は既定のまま (DB は /data、生TS は /media/raw、焼いたものは /media/encoded)。
+            # ボリュームの名前は前のまま (中身はそのまま使える)
+            - denpa-data:/data
+            - denpa-recorded:/media/raw
+            - denpa-library:/media/encoded
         ports:
             - '3000:3000'
         # Intel の GPU で焼くなら /dev/dri を渡す (docs/encode.md「GPU で焼く」)。

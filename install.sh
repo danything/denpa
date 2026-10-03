@@ -397,7 +397,7 @@ mac_main() {
     <key>PX4_RUNTIME_DIR</key><string>$RUNTIME</string>
     <key>SIANO_USERLAND_DIR</key><string>$PREFIX/siano-userland</string>
     <key>SIANO_FIRMWARE</key><string>$PREFIX/siano-userland/firmware/isdbt_rio.inp</string>
-    <key>RECORDED_DIR</key><string>$MEDIA/recorded</string>
+    <key>RAW_DIR</key><string>$MEDIA/recorded</string>
   </dict>
 </dict>
 </plist>

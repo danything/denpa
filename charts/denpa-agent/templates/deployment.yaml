@@ -32,15 +32,14 @@ spec:
           env:
             - name: TZ
               value: {{ .Values.timezone | quote }}
-            - name: RECORDED_DIR
-              value: /denpa-recorded
           ports:
             - containerPort: 25252
           volumeMounts:
             - name: agent-config
-              mountPath: /app-config
+              mountPath: /config
+            # 掛かったまま録れたTSを解く先。denpa と同じ実体を同じ名前 (既定の /media/raw) で見せる
             - name: denpa-recorded
-              mountPath: /denpa-recorded
+              mountPath: /media/raw
             {{- range .Values.hostDevices }}
             - name: {{ .name }}
               mountPath: {{ .path }}

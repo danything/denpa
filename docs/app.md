@@ -184,9 +184,10 @@ SQLite が拒むので、事実と状態が食い違いません。文字列で�
 | 変数 | 既定値 | 説明 |
 | --- | --- | --- |
 | `TUNER_AGENT_URL` | `http://tuner-agent:25252` | チューナーエージェント。選局もカードも解除もここ1つ |
-| `DENPA_DB` | `/app/data/denpa.db` | SQLite の置き場。局ロゴと `.lgd` もこの隣 |
-| `RECORDED_DIR` | `/app/recorded` | 生TSの作業領域 |
-| `LIBRARY_DIR` | `/library` | エンコード済みの置き場。ここから配る |
+| `DENPA_DB` | `/data/denpa.db` | SQLite の置き場。局ロゴと `.lgd` もこの隣 |
+| `MEDIA_DIR` | `/media` | 録画の置き場の親。生TSは `raw`、焼いたものは `encoded` に分けて置く。エージェントも同じ変数を見る |
+| `RAW_DIR` | `$MEDIA_DIR/raw` | 生TSの作業領域。別のディスクに分けたいときだけ |
+| `ENCODED_DIR` | `$MEDIA_DIR/encoded` | エンコード済みの置き場。ここから配る。別のディスクに分けたいときだけ |
 | `FFMPEG` / `FFPROBE` | `/usr/local/bin/...` | 開発時は偽物に差し替える |
 | `MPEG2_DIR` | `/opt/denpa/mpeg2` | ライブを生で見るときにブラウザへ配る MPEG-2 の復号器 (WASM) の置き場。イメージの `mpeg2wasm` 段が置く。無ければ生の道は使えず焼いたものに戻る ([stream.md](stream.md#55-放送そのままmpeg-2を送る)) |
 | `DENPA_VERSION` | `dev` | 動いている版。リリースのイメージにだけ入る (リリース時に main のイメージへ 1 層足す。`.github/release.Dockerfile`)。`dev` (develop・手元) なら新しい版の知らせを出さない |
@@ -228,6 +229,34 @@ SQLite が拒むので、事実と状態が食い違いません。文字列で�
 | `EPGSTATION_DB_HOST` / `_PORT` | `db` / `3306` | 引き継ぎ元の MariaDB |
 | `EPGSTATION_DB_USER` / `_PASSWORD` / `_NAME` | `root` / `epgstation` / `epgstation` | 〃 |
 | `DENPA_AUTOSTART` | `1` | `0` で常駐処理を止める |
+
+### 置き場を変えた (前の版から上げるとき)
+
+既定の置き場を、中身ごとに1つの名前にそろえた。**古い名前を読み替える仕組みは持たない**ので、
+既定に頼って繋いでいた環境は、上げるときに繋ぐ先 (マウント先) を書き換える。ボリュームや PVC の
+中身はそのまま使える (名前を変えるのは繋ぐ先だけ)。
+
+| 中身 | 前 | いま |
+| --- | --- | --- |
+| DB・局ロゴ | `/app/data` | `/data` |
+| 生TS (本体) | `/app/recorded` (`RECORDED_DIR`) | `/media/raw` (`RAW_DIR`) |
+| 生TS (エージェント) | `/denpa-recorded` (`RECORDED_DIR`) | `/media/raw` (`RAW_DIR`。本体と同じ) |
+| 焼いたもの | `/library` (`LIBRARY_DIR`) | `/media/encoded` (`ENCODED_DIR`) |
+| エージェントの設定 | `/app-config` | `/config` |
+
+- `RECORDED_DIR` / `LIBRARY_DIR` は読まない。置き場を変えていたなら `RAW_DIR` / `ENCODED_DIR` に
+  書き直すか、親の `MEDIA_DIR` 1つにまとめる (本体とエージェントの両方が見る)
+- **DB の中の録画ファイルの場所は、起動時のマイグレーションで置き場からの相対に直る**
+  (`drizzle/0002_relative-media-paths.sql`。生TS はファイル名、焼いたものは `シリーズ/ファイル`)。
+  絶対パスで持っていた頃は、置き場を変えると録画が全部辿れなくなった。以後は置き場をどこへ
+  移しても DB は触らずに済む (`schema.ts` の `mediaPath`)
+- **上げる前に DB を控えておく** (マイグレーションは行を書き換える)。前の置き場の外を指していた
+  絶対パスの行も、ファイル名 (焼いたものは最後の2段) だけが残って新しい置き場の下として引かれる。
+  置き場の外に録画を置いていたなら、先に置き場へ寄せる
+- `RECORDED_DIR` / `LIBRARY_DIR` が残っていたら、起動時に記録で知らせる (読みはしない)
+- このリポジトリの compose・chart・`denpa-aio`・Mac / Windows のインストーラは一緒に直してある。
+  Mac / Windows はインストーラを流し直すとエージェントの変数 (`RAW_DIR`) が書き直る
+
 
 ## 画面
 
@@ -292,8 +321,8 @@ SQLite が拒むので、事実と状態が食い違いません。文字列で�
 地上波か衛星かまで判別する。書いてあればそちらが勝つ (LNB・1本だけ止める、は
 人にしか決められない)。聞き方は [agent.md](agent.md#選局コマンドは画面から渡させない)。
 
-環境変数は `AGENT_PORT` (既定 `25252`)・`TUNERS_FILE` / `CHANNELS_FILE` (既定 `/app-config/` の下)・
-`RECORDED_DIR` (denpa と同じ生TSの置き場)・`CARD_URL` (手元にカードが無い拠点だけ。鍵を貰う先)・
+環境変数は `AGENT_PORT` (既定 `25252`)・`TUNERS_FILE` / `CHANNELS_FILE` (既定 `/config/` の下)・
+`MEDIA_DIR` / `RAW_DIR` (denpa と同じ。生TSの置き場)・`CARD_URL` (手元にカードが無い拠点だけ。鍵を貰う先)・
 `SHUTDOWN_WAIT` (denpa と同じ)。同梱のドライバの置き場 `PX4_USERLAND_DIR` / `PX4_FIRMWARE` / `PX4_RUNTIME_DIR` /
 `SIANO_USERLAND_DIR` / `SIANO_FIRMWARE` はイメージの既定のままでよい (Mac の `install.sh` だけが書き換える)。
 `FAKE_TUNE` は適合テストだけが使う。

@@ -54,8 +54,19 @@ export function start(): void {
     if (started) return;
     started = true;
 
-    mkdirSync(config.recordedDir, { recursive: true });
-    mkdirSync(config.libraryDir, { recursive: true });
+    /*
+     * 前の版の置き場の変数は読まない (docs/app.md「置き場を変えた」)。黙って既定に変わると
+     * 空の置き場を見て「録画が全部消えた」ように見えるので、残っていたら言う
+     */
+    for (const old of ['RECORDED_DIR', 'LIBRARY_DIR']) {
+        if (process.env[old]) {
+            console.warn(
+                `[boot] ${old} はもう読みません。RAW_DIR / ENCODED_DIR か MEDIA_DIR に書き直してください`,
+            );
+        }
+    }
+    mkdirSync(config.rawDir, { recursive: true });
+    mkdirSync(config.encodedDir, { recursive: true });
 
     /*
      * 昔の Jellyfin 流レイアウト (Season フォルダ + episodedetails + `-thumb.jpg`) の

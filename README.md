@@ -144,12 +144,13 @@ docker run -d --name denpa --restart unless-stopped --stop-timeout 21900 \
   --device-cgroup-rule 'c 189:* rmw' --device-cgroup-rule 'c 212:* rmw' \
   -v /dev/bus/usb:/dev/bus/usb -v /dev/dvb:/dev/dvb \
   -e TRUSTED_NETWORKS=192.168.0.0/16,10.0.0.0/8,172.16.0.0/12 \
-  -v ./config:/app-config -v denpa-data:/app/data \
-  -v denpa-recorded:/app/recorded -v denpa-library:/library \
+  -v ./config:/config -v denpa-data:/data -v denpa-media:/media \
   -p 3000:3000 ghcr.io/danything/denpa-aio:latest
 ```
 
-- 設定の置き場 (`tuners.json` / `channels.json`) は `/app-config`、ほかは denpa と同じ
+- 置き場は既定のまま: エージェントの設定 (`tuners.json` / `channels.json`) は `/config`、DB は `/data`、
+  録画は `/media` の下 (生TS は `raw`、焼いたものは `encoded`)。前の版から上げるときは
+  [docs/app.md](docs/app.md#置き場を変えた-前の版から上げるとき) を見る
 - `--privileged` は要りません。USB (189) と DVB (212) のデバイスを開く許可と、pipe を広げる
   `SYS_RESOURCE` だけ渡します。デバイスはディレクトリごと見せるので、挿し直しても再起動は要りません
 - 止めるときは両方に伝え、録画の終わりを待ちます (`--stop-timeout` を長くしておく。compose の `stop_grace_period` と同じ)。

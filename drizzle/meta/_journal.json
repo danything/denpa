@@ -15,6 +15,13 @@
       "when": 1790209785813,
       "tag": "0001_conscious_molly_hayes",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1791039066820,
+      "tag": "0002_relative-media-paths",
+      "breakpoints": true
     }
   ]
 }

@@ -38,8 +38,8 @@ interface Stack {
     appUrl: string;
     agentUrl: string;
     webhookUrl: string;
-    recordedDir: string;
-    libraryDir: string;
+    rawDir: string;
+    encodedDir: string;
     /** 引き継ぎ元。あえて作らずに始めて、マウント前後の見え方を試す */
     epgstationDir: string;
     /** これを置くと偽 ffmpeg がエンコードに失敗する */
@@ -135,8 +135,8 @@ async function boot(index: number): Promise<{ stack: Stack; shutdown: () => Prom
         appUrl: `http://127.0.0.1:${appPort}`,
         agentUrl: `http://127.0.0.1:${agentPort}`,
         webhookUrl: `http://127.0.0.1:${webhookPort}`,
-        recordedDir: `${root}/recorded`,
-        libraryDir: `${root}/library`,
+        rawDir: `${root}/raw`,
+        encodedDir: `${root}/encoded`,
         epgstationDir: `${root}/epgstation-recorded`,
         failFile: `${root}/fail-encode`,
         slowFile: `${root}/slow-encode`,
@@ -148,8 +148,8 @@ async function boot(index: number): Promise<{ stack: Stack; shutdown: () => Prom
     };
 
     rmSync(root, { recursive: true, force: true });
-    mkdirSync(stack.recordedDir, { recursive: true });
-    mkdirSync(stack.libraryDir, { recursive: true });
+    mkdirSync(stack.rawDir, { recursive: true });
+    mkdirSync(stack.encodedDir, { recursive: true });
     mkdirSync(stack.hwDir, { recursive: true });
 
     const started: Started[] = [];
@@ -164,7 +164,7 @@ async function boot(index: number): Promise<{ stack: Stack; shutdown: () => Prom
             FAKE_SLOTS: '30',
             // スクランブル解除はパスだけ受け取って直接ファイルを触る。
             // 本物でも denpa とエージェントの両方に同じ置き場を見せている
-            RECORDED_DIR: stack.recordedDir,
+            RAW_DIR: stack.rawDir,
         });
         started.push(agent);
 
@@ -183,8 +183,8 @@ async function boot(index: number): Promise<{ stack: Stack; shutdown: () => Prom
              * `ORIGIN` は adapter-node 6 で無くなった
              */
             DENPA_DB: `${root}/denpa.db`,
-            RECORDED_DIR: stack.recordedDir,
-            LIBRARY_DIR: stack.libraryDir,
+            RAW_DIR: stack.rawDir,
+            ENCODED_DIR: stack.encodedDir,
             FFMPEG: './tests/fake/ffmpeg.sh',
             // 選局もスクランブル解除もスキャンも、窓口はここ1つ
             TUNER_AGENT_URL: stack.agentUrl,
@@ -304,8 +304,8 @@ export async function bootOidc(
              */
             HOST_HEADER: 'x-forwarded-host',
             DENPA_DB: `${root}/oidc.db`,
-            RECORDED_DIR: `${root}/oidc-recorded`,
-            LIBRARY_DIR: `${root}/oidc-library`,
+            RAW_DIR: `${root}/oidc-recorded`,
+            ENCODED_DIR: `${root}/oidc-library`,
             // 常駐処理は要らない。ログインの道だけ見る
             DENPA_AUTOSTART: '0',
             SHUTDOWN_WAIT: '0',
@@ -346,8 +346,8 @@ export async function bootClosed(
         HOST: '127.0.0.1',
         PORT: String(port),
         DENPA_DB: `${root}/closed.db`,
-        RECORDED_DIR: `${root}/closed-recorded`,
-        LIBRARY_DIR: `${root}/closed-library`,
+        RAW_DIR: `${root}/closed-recorded`,
+        ENCODED_DIR: `${root}/closed-library`,
         // 常駐処理は要らない。断り方だけを見る
         DENPA_AUTOSTART: '0',
         SHUTDOWN_WAIT: '0',

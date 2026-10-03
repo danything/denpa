@@ -1,3 +1,4 @@
+import { isAbsolute, join, relative, sep } from 'node:path';
 import { sql } from 'drizzle-orm';
 import {
     type AnySQLiteColumn,
@@ -11,6 +12,7 @@ import {
 import type { Audio, Genre } from '../arib';
 import type { ChannelType, ReservationState } from '../types';
 import type { Range } from './cm';
+import { config } from './config';
 
 /**
  * **テーブルの定義はここにしか無い** (drizzle)。
@@ -58,6 +60,30 @@ function json<T>(name: string, read: (value: unknown) => T) {
             }
             return read(value);
         },
+    })(name);
+}
+
+/**
+ * 録画ファイルの場所を持つ列。**DB には置き場からの相対で持ち、読み書きするコードには絶対パスで見せる。**
+ *
+ * 絶対パスで持っていた頃は、置き場のマウント先を変えると全部の録画が辿れなくなった
+ * (`/app/recorded` → `/media/raw` に移したときがそう)。相対なら、置き場をどこへ
+ * 移しても DB は触らずに済む。読み替えはここだけで済ませ、使う側は今までどおり
+ * 絶対パスで扱う (`eq()` や `set()` に渡した値もここを通る)。
+ *
+ * 置き場の外のもの (Windows で書かれた古い行など) は絶対のまま持ち、そのまま返す。
+ * 置き場は呼ばれるたびに config から引く (テストが差し替える)
+ */
+function mediaPath(name: string, root: () => string) {
+    return customType<{ data: string; driverData: string }>({
+        dataType: () => 'text',
+        toDriver: (value) => {
+            const rel = relative(root(), value);
+            return isAbsolute(value) && rel !== '' && !rel.startsWith('..') && !isAbsolute(rel)
+                ? rel.split(sep).join('/')
+                : value;
+        },
+        fromDriver: (raw) => (isAbsolute(raw) ? raw : join(root(), raw)),
     })(name);
 }
 
@@ -336,18 +362,19 @@ export const recordings = sqliteTable(
         start_at: integer('start_at').notNull(),
         end_at: integer('end_at').notNull(),
         audio_type: integer('audio_type'),
-        ts_path: text('ts_path'),
+        /** 生TS。生TSの置き場 (`config.rawDir`) からの相対で持つ (`mediaPath`) */
+        ts_path: mediaPath('ts_path', () => config.rawDir),
         ts_size: integer('ts_size').notNull().default(0),
         /**
          * 焼いたもの (再生・ダウンロードで主に使う)。両方のコーデックを焼いたときは
          * **AV1 のほう** (小さいので既定の再生に向く)
          */
-        library_path: text('library_path'),
+        library_path: mediaPath('library_path', () => config.encodedDir),
         /**
          * もう一方のコーデックで焼いたもの。両方を選んだときだけ入る (AV1 が主なら H.264)。
          * 古いテレビのように AV1 を解けない相手はこちらを開く
          */
-        alt_path: text('alt_path'),
+        alt_path: mediaPath('alt_path', () => config.encodedDir),
         /** 録り終えた時刻。NULL なら**まだチューナーを掴んでいる**。「録画中かどうか」を文字列で持たないための、ただ一つの事実 */
         finished_at: integer('finished_at'),
         /**

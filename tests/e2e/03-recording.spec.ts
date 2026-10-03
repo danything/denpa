@@ -41,7 +41,7 @@ test.describe('録画とエンコード', () => {
         await goto(page, '/');
         const recording = page.locator(recordingRow);
         const videoPath = (await recording.getAttribute('data-library-path')) ?? '';
-        expect(videoPath).toContain(stack.libraryDir);
+        expect(videoPath).toContain(stack.encodedDir);
         expect(videoPath).toContain('.mkv');
 
         /*

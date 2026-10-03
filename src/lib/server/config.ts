@@ -10,7 +10,7 @@
  * 追いにくくなるだけだった。**画面から変えたいものは設定画面** (settings.ts)。
  */
 
-import { dirname } from 'node:path';
+import { dirname, join } from 'node:path';
 import type { CmMode, VideoCodec } from '../types';
 
 function str(key: string, fallback: string): string {
@@ -34,9 +34,15 @@ function bool(key: string, fallback: boolean): boolean {
 const SEC = 1000;
 const MIN = 60 * SEC;
 
-const dbPath = str('DENPA_DB', '/app/data/denpa.db');
+const dbPath = str('DENPA_DB', '/data/denpa.db');
 /** DBの隣。運用でいちいち2つ指す意味が無い */
 const dataDir = dirname(dbPath);
+/**
+ * 録画の置き場の親。生TS (`raw`) と焼いたもの (`encoded`) をこの下に分けて置く。
+ * 別のディスクに分けたいときだけ `RAW_DIR` / `ENCODED_DIR` で片方を差し替える。
+ * エージェントも同じ変数で生TSの置き場を決める (掛かったままのTSを後から解くため)
+ */
+const mediaDir = str('MEDIA_DIR', '/media');
 
 export const config = {
     /**
@@ -83,9 +89,9 @@ export const config = {
     /** DBと並べて置くもの。局ロゴと、jls が作るロゴデータ */
     dataDir,
     /** 生TSの置き場。エンコード後は(keep_original でなければ)消える作業領域 */
-    recordedDir: str('RECORDED_DIR', '/app/recorded'),
+    rawDir: str('RAW_DIR', join(mediaDir, 'raw')),
     /** エンコード済みの置き場。プレイヤーにはここのファイルを配る */
-    libraryDir: str('LIBRARY_DIR', '/library'),
+    encodedDir: str('ENCODED_DIR', join(mediaDir, 'encoded')),
 
     ffmpeg: str('FFMPEG', '/usr/local/bin/ffmpeg'),
     /**

@@ -15,8 +15,8 @@ mock.module('./webhook', () => ({ notify: (payload: { event: string }) => posted
 const { config } = await import('./config');
 // 生TSの置き場とエンコード済みの置き場を同じ実在ディレクトリへ。重複は畳まれて1つになる
 const dir = mkdtempSync(join(tmpdir(), 'denpa-disk-'));
-config.recordedDir = dir;
-config.libraryDir = dir;
+config.rawDir = dir;
+config.encodedDir = dir;
 
 const { checkDisk } = await import('./disk');
 

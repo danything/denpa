@@ -145,7 +145,7 @@ describe('古い履歴の片付け', () => {
 describe('実体との照合', () => {
     /** 置き場を作り直して、そこに置いたファイルの一覧を返す */
     function files(): string[] {
-        return readdirSync(config.recordedDir).sort();
+        return readdirSync(config.rawDir).sort();
     }
 
     /**
@@ -165,10 +165,10 @@ describe('実体との照合', () => {
 
     function fresh(): void {
         const root = mkdtempSync(join(tmpdir(), 'denpa-recon-'));
-        config.recordedDir = join(root, 'recorded');
-        config.libraryDir = join(root, 'library');
-        mkdirSync(config.recordedDir, { recursive: true });
-        mkdirSync(config.libraryDir, { recursive: true });
+        config.rawDir = join(root, 'recorded');
+        config.encodedDir = join(root, 'library');
+        mkdirSync(config.rawDir, { recursive: true });
+        mkdirSync(config.encodedDir, { recursive: true });
         orm().delete(recordings).run();
     }
 
@@ -179,10 +179,10 @@ describe('実体との照合', () => {
      */
     test('連れ合いの消えた索引を片付ける', () => {
         fresh();
-        put(config.recordedDir, 'のこる.m2ts');
-        put(config.recordedDir, 'のこる.m2ts.dtvi');
-        put(config.recordedDir, 'きえた.m2ts.dtvi');
-        put(config.recordedDir, 'きえた.m2ts.jls.chapterexe.txt');
+        put(config.rawDir, 'のこる.m2ts');
+        put(config.rawDir, 'のこる.m2ts.dtvi');
+        put(config.rawDir, 'きえた.m2ts.dtvi');
+        put(config.rawDir, 'きえた.m2ts.jls.chapterexe.txt');
 
         expect(reconcile().swept).toBe(2);
         expect(files()).toEqual(['のこる.m2ts', 'のこる.m2ts.dtvi']);
@@ -190,9 +190,9 @@ describe('実体との照合', () => {
 
     test('動画の残っている NFO とポスターは残す', () => {
         fresh();
-        put(config.libraryDir, '番組/番組 - 1.mkv');
-        put(config.libraryDir, '番組/番組 - 1.nfo');
-        put(config.libraryDir, '番組/番組 - 1-poster.jpg');
+        put(config.encodedDir, '番組/番組 - 1.mkv');
+        put(config.encodedDir, '番組/番組 - 1.nfo');
+        put(config.encodedDir, '番組/番組 - 1-poster.jpg');
 
         expect(reconcile().swept).toBe(0);
     });
@@ -203,22 +203,22 @@ describe('実体との照合', () => {
      */
     test('使わなくなった tvshow.nfo は掃く', () => {
         fresh();
-        put(config.libraryDir, '番組/番組 - 1.mkv');
-        put(config.libraryDir, '番組/tvshow.nfo');
+        put(config.encodedDir, '番組/番組 - 1.mkv');
+        put(config.encodedDir, '番組/tvshow.nfo');
 
         expect(reconcile().swept).toBe(1);
-        expect(existsSync(join(config.libraryDir, '番組/tvshow.nfo'))).toBe(false);
-        expect(existsSync(join(config.libraryDir, '番組/番組 - 1.mkv'))).toBe(true);
+        expect(existsSync(join(config.encodedDir, '番組/tvshow.nfo'))).toBe(false);
+        expect(existsSync(join(config.encodedDir, '番組/番組 - 1.mkv'))).toBe(true);
     });
 
     test('動画の消えた NFO とサムネイルは、シリーズごと片付ける', () => {
         fresh();
-        put(config.libraryDir, '番組/Season 2026/番組 - 1.nfo');
-        put(config.libraryDir, '番組/Season 2026/番組 - 1-thumb.jpg');
-        put(config.libraryDir, '番組/tvshow.nfo');
+        put(config.encodedDir, '番組/Season 2026/番組 - 1.nfo');
+        put(config.encodedDir, '番組/Season 2026/番組 - 1-thumb.jpg');
+        put(config.encodedDir, '番組/tvshow.nfo');
 
         expect(reconcile().swept).toBe(3);
-        expect(existsSync(join(config.libraryDir, '番組'))).toBe(false);
+        expect(existsSync(join(config.encodedDir, '番組'))).toBe(false);
     });
 
     /*
@@ -229,14 +229,14 @@ describe('実体との照合', () => {
      */
     test('すでに空のフォルダも畳む', () => {
         fresh();
-        const season = join(config.libraryDir, '消した番組/Season 2026');
+        const season = join(config.encodedDir, '消した番組/Season 2026');
         mkdirSync(season, { recursive: true });
         const old = new Date(Date.now() - 2 * 60 * 60 * 1000);
         utimesSync(season, old, old);
         utimesSync(dirname(season), old, old);
 
         expect(reconcile().pruned).toBe(2);
-        expect(existsSync(join(config.libraryDir, '消した番組'))).toBe(false);
+        expect(existsSync(join(config.encodedDir, '消した番組'))).toBe(false);
     });
 
     /*
@@ -245,32 +245,32 @@ describe('実体との照合', () => {
      */
     test('作りたての空フォルダは畳まない', () => {
         fresh();
-        mkdirSync(join(config.libraryDir, '焼いている番組'), { recursive: true });
+        mkdirSync(join(config.encodedDir, '焼いている番組'), { recursive: true });
 
         expect(reconcile().pruned).toBe(0);
-        expect(existsSync(join(config.libraryDir, '焼いている番組'))).toBe(true);
+        expect(existsSync(join(config.encodedDir, '焼いている番組'))).toBe(true);
     });
 
     /** 動画の残っているフォルダは、当然そのまま */
     test('中身のあるフォルダは畳まない', () => {
         fresh();
-        put(config.libraryDir, '生きている番組/生きている番組 - 1.mkv');
+        put(config.encodedDir, '生きている番組/生きている番組 - 1.mkv');
         // フォルダ自体も古くしておく (作りたて避けに引っかからないように)
         const old = new Date(Date.now() - 2 * 60 * 60 * 1000);
-        utimesSync(join(config.libraryDir, '生きている番組'), old, old);
+        utimesSync(join(config.encodedDir, '生きている番組'), old, old);
 
         expect(reconcile().pruned).toBe(0);
-        expect(existsSync(join(config.libraryDir, '生きている番組'))).toBe(true);
+        expect(existsSync(join(config.encodedDir, '生きている番組'))).toBe(true);
     });
 
     test('DBに無い動画は数えるだけ。手で置いたものかもしれない', () => {
         fresh();
-        put(config.libraryDir, '手で置いた/手で置いた - 1.mkv');
+        put(config.encodedDir, '手で置いた/手で置いた - 1.mkv');
 
         const result = reconcile();
         expect(result.strays).toBe(1);
         expect(result.swept).toBe(0);
-        expect(existsSync(join(config.libraryDir, '手で置いた/手で置いた - 1.mkv'))).toBe(true);
+        expect(existsSync(join(config.encodedDir, '手で置いた/手で置いた - 1.mkv'))).toBe(true);
     });
 
     /*
@@ -283,7 +283,7 @@ describe('実体との照合', () => {
      */
     test('焼いている途中の .encoding は消さない', () => {
         fresh();
-        const working = put(config.libraryDir, '番組/番組 - 1.mkv.encoding', false);
+        const working = put(config.encodedDir, '番組/番組 - 1.mkv.encoding', false);
 
         expect(reconcile().swept).toBe(0);
         expect(existsSync(working)).toBe(true);
@@ -291,7 +291,7 @@ describe('実体との照合', () => {
 
     test('落ちて取り残された .encoding は、時間が経てば片付く', () => {
         fresh();
-        const left = put(config.libraryDir, '番組/番組 - 1.mkv.encoding');
+        const left = put(config.encodedDir, '番組/番組 - 1.mkv.encoding');
 
         expect(reconcile().swept).toBe(1);
         expect(existsSync(left)).toBe(false);
@@ -299,8 +299,8 @@ describe('実体との照合', () => {
 
     test('切り出したばかりのTSは「実体だけ」に数えない', () => {
         fresh();
-        put(config.recordedDir, '番組.m2ts');
-        put(config.recordedDir, '番組.m2ts.cut.m2ts', false);
+        put(config.rawDir, '番組.m2ts');
+        put(config.rawDir, '番組.m2ts.cut.m2ts', false);
 
         // 生TSのほうはDBに無いので1件。書きたての .cut.m2ts は数えない
         expect(reconcile().strays).toBe(1);
@@ -308,8 +308,8 @@ describe('実体との照合', () => {
 
     /** 両方のコーデックを焼いた録画を1件入れる。返り値は {av1, h264} の実パス */
     function twoCodec(): { av1: string; h264: string } {
-        const av1 = put(config.libraryDir, '二本立て/二本立て - 1.mkv');
-        const h264 = put(config.libraryDir, '二本立て/二本立て - 1 [H264].mkv');
+        const av1 = put(config.encodedDir, '二本立て/二本立て - 1.mkv');
+        const h264 = put(config.encodedDir, '二本立て/二本立て - 1 [H264].mkv');
         orm()
             .insert(recordings)
             .values({

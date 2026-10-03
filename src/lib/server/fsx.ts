@@ -53,11 +53,11 @@ export function removeByPrefix(input: string, suffixes: readonly string[]): void
 /**
  * ファイルを消した後に空になったフォルダ (シリーズ、昔の `Season 年/`) を畳む。
  * 残しておくと、フォルダを辿るプレイヤーに中身の無いシリーズが並び続けるため。
- * libraryDir 自身より上には絶対に遡らない。
+ * encodedDir 自身より上には絶対に遡らない。
  */
 export function pruneEmptyDirs(path: string): void {
     let dir = dirname(path);
-    while (dir.startsWith(config.libraryDir) && dir !== config.libraryDir) {
+    while (dir.startsWith(config.encodedDir) && dir !== config.encodedDir) {
         try {
             rmdirSync(dir);
         } catch {
