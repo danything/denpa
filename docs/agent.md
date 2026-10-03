@@ -359,6 +359,12 @@ Q3U4 なら8本で受信機ごとに地上波か衛星か決まっており、ML
   DVB と同じです (電波が来なくても畳める・蹴られたら 200ms で降りる)。pipe は 8MB に
   広げます (既定の 64KB は地上波で 30ms ぶん)。選局のたびに新しい pipe なので、前の局の
   TS は混ざりません
+- **pipe を広げるには `CAP_SYS_RESOURCE` を渡します** (compose の `cap_add`、HA のアドオンの
+  `privileged: [SYS_RESOURCE]`)。無いと上限 (`pipe-max-size`、既定 1MB) までしか広げられず、
+  さらに uid ごとの pipe の合計が上限 (`pipe-user-pages-soft`、既定 64MB) を超えていると
+  **1MB も断られて数 KB のまま**になります (ライブが SLOW_CONSUMER で切れる)。Home Assistant OS の
+  アドオンは、ホスト中の root と uid 0 を分け合うのでこれに当たります。広げられなかったときは
+  記録にいまの深さと理由が出ます (`ChildTs.WidenPipe`)
 - **同期の判定は TUNE の答え。** `px4d` は同期するまで答えず、5 秒 (`timeout_ms`) で
   諦めて TIMEOUT を返します。そのあと最初の TS が 3 秒以内に来れば成功。**同期しなくても
   受信機は借りたまま**なので、総当たりのスキャンで同期しないチャンネルが続いても電源は

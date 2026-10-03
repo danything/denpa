@@ -25,9 +25,17 @@ internal static class ChildTs
     /// 既定 (64KB) だと地上波の 18Mbit/秒 で **30ms** しか無い。読む側が GC で
     /// 一瞬止まるだけで書き手が詰まり、向こうの溜め (px4d / siano-ts) も埋まれば
     /// 切られる。DVB の環 (8MB = 3.5秒) に揃える。
-    /// 上限 (<c>/proc/sys/fs/pipe-max-size</c>、既定 1MB) を超えるには
-    /// CAP_SYS_RESOURCE が要るが、コンテナは privileged なので通る。
-    /// 通らなければ 1MB で妥協する
+    /// 上限 (<c>/proc/sys/fs/pipe-max-size</c>、既定 1MB) を超えるには CAP_SYS_RESOURCE が要る。
+    /// 無ければ 1MB で妥協する
+    /// </para>
+    ///
+    /// <para>
+    /// **1MB も断られることがある。** uid ごとの pipe の合計が上限
+    /// (<c>/proc/sys/fs/pipe-user-pages-soft</c>、既定 64MB) を超えていると、CAP_SYS_RESOURCE が無い限り
+    /// 広げる頼みは <c>EPERM</c> になり、新しい pipe は最小 (数 KB) のまま。Home Assistant OS の
+    /// アドオンはホスト中の root (Supervisor やほかのアドオン) と uid 0 を分け合うので、ここに当たる
+    /// (アドオンの作者が実機の記録で見つけた)。数 KB では読み手が数ミリ秒止まるだけで詰まり、
+    /// ライブが SLOW_CONSUMER で切れる。そういう環境では CAP_SYS_RESOURCE を渡してもらう
     /// </para>
     /// </summary>
     private const int PipeSize = 8 * 1024 * 1024;
@@ -73,7 +81,10 @@ internal static class ChildTs
         if (!OperatingSystem.IsLinux()) return;
         if (Sys.Fcntl(fd, Sys.SetPipeSize, PipeSize) < 0 && Sys.Fcntl(fd, Sys.SetPipeSize, FallbackPipeSize) < 0)
         {
-            Log.Write($"[{name}] pipe を広げられませんでした ({Marshal.GetLastPInvokeErrorMessage()})");
+            var why = Marshal.GetLastPInvokeErrorMessage();
+            Log.Write($"[{name}] pipe を広げられませんでした ({why}。いまの深さ {Sys.Fcntl(fd, Sys.GetPipeSize, 0)} バイト)。"
+                + "pipe の合計が uid ごとの上限 (pipe-user-pages-soft) を超えているかもしれません。"
+                + "コンテナに CAP_SYS_RESOURCE を渡すと広げられます (docs/agent.md)");
         }
     }
 
