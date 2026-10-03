@@ -651,9 +651,14 @@ export class EpgReader {
      * 画面に何も出ない
      */
     takeChanged(): EitEvent[] {
-        const out = [...this.changed].map((id) => this.events.get(id)!);
+        const out = [...this.changed].flatMap((id) => this.events.get(id) ?? []);
         this.changed.clear();
         return out;
+    }
+
+    /** 書けなかったぶんを、次の `takeChanged` でもう一度返す */
+    requeue(events: EitEvent[]): void {
+        for (const event of events) this.changed.add(`${event.serviceId}:${event.eventId}`);
     }
 
     /** 溜まった番組。開始時刻の順に並べて返す */

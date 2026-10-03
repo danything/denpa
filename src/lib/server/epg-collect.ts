@@ -243,8 +243,18 @@ async function collectChannel(
         flushedAt = Date.now();
         const batch = reader.takeChanged();
         if (batch.length === 0) return;
-        saved += savePrograms(batch);
-        emit('programs');
+        /*
+         * 書けなくても読むのはやめない。読み取りの失敗 (下の catch) と混ざると
+         * 「掴めなかった」と出て、理由が追えなくなる。最後にまとめて書き直すので、
+         * 書けなかったぶんは読み手に戻しておく
+         */
+        try {
+            saved += savePrograms(batch);
+            emit('programs');
+        } catch (error) {
+            reader.requeue(batch);
+            console.warn(`[epg] ${label} の番組表を書けませんでした: ${error}`);
+        }
     };
     try {
         const stream = await openChannelStream(
