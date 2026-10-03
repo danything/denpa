@@ -257,11 +257,11 @@ function forgetMissing(at: number, seen: Set<number>): number {
  * 局によっては数分かかる。局だけ先に出しておかないと、スキャンの直後に
  * 番組表が空のまま何も出ない時間が続く。
  */
-export async function syncServicesOnly(): Promise<number> {
+export function syncServicesOnly(channels: AgentChannel[]): number {
     const current = () =>
         orm().select({ n: count() }).from(services).where(sql.raw(CURRENT_SERVICES)).get()?.n ?? 0;
     const before = current();
-    const synced = syncServices(await getChannels());
+    const synced = syncServices(channels);
     /*
      * 数が変わったときだけ知らせる。毎回知らせると、番組表を開いている端末が
      * 何も変わっていないのに1分おきに読み直すことになる

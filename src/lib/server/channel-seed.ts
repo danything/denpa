@@ -18,27 +18,34 @@
 import type { ChannelType } from '../types';
 import SEED from './channel-seed.json';
 import { refresh as scanState } from './scan';
-import { type AgentChannel, getChannels, getTuners, putChannels } from './tuner';
+import { type AgentChannel, getTuners, putChannels } from './tuner';
 
 const TYPES: ChannelType[] = ['BS', 'CS'];
 
 /**
  * 入れるべきなら入れる。入れた種別を返す (無ければ空)。
  *
+ * **見るのは局の一覧を取り込むとき** (runtime.ts の `syncChannels`。起動時と
+ * `CHANNEL_SYNC_INTERVAL` ごと)。条件は「一覧に BS/CS が無い」なので、一覧を読んだ
+ * その場で見るのが素直。繋がった・選局されたといった出来事に合わせていた頃は、
+ * 起動直後にすんなり繋がると誰も呼ばず、いつまでも入らなかった (#376)。
+ * 局の一覧は呼ぶ側が読んだものを受け取り、チューナーは入れる候補があるときだけ聞く。
+ *
  * 局を入れたらエージェントが `channels` を知らせてくるので、取り込み直しと
  * 番組表の集め直しはその知らせで走る (runtime.ts)。ここでは預けるだけ
  */
-export async function seedChannels(): Promise<ChannelType[]> {
+export async function seedChannels(channels: AgentChannel[]): Promise<ChannelType[]> {
     /*
      * **スキャンの最中は入れない。** スキャンは結果を最後にまとめて預けるので、その間は
-     * 局が空のまま。そこへチューナーの知らせ (選局のたびに来る) で割り込むと、
-     * スキャンの途中で標準の表に切り替わり、番組表集めがそちらへ走る (レビュー指摘)
+     * 局が空のまま。そこへ割り込むと、スキャンの途中で標準の表に切り替わり、
+     * 番組表集めがそちらへ走る (レビュー指摘)
      */
     if (scanState().state === 'running') return [];
-    const [tuners, channels] = await Promise.all([getTuners(), getChannels()]);
     const present = new Set(channels.map((c) => c.type));
-    const receivable = new Set(tuners.filter((t) => !t.disabled).flatMap((t) => t.types));
-    const types = TYPES.filter((type) => receivable.has(type) && !present.has(type));
+    const missing = TYPES.filter((type) => !present.has(type));
+    if (missing.length === 0) return [];
+    const receivable = new Set((await getTuners()).filter((t) => !t.disabled).flatMap((t) => t.types));
+    const types = missing.filter((type) => receivable.has(type));
     if (types.length === 0) return [];
 
     const seed = (SEED as AgentChannel[]).filter((c) => types.includes(c.type));

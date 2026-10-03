@@ -53,10 +53,11 @@ const { programs, reservations, services } = await import('./schema');
 const { airing, savePrograms, SERVICE_ORDER, SERVICE_TYPE_ORDER, settle, syncServicesOnly } = await import(
     './epg'
 );
+const { getChannels } = await import('./tuner');
 
 describe('syncServicesOnly', () => {
     test('番組表を待たずに局だけ取り込む', async () => {
-        expect(await syncServicesOnly()).toBe(1);
+        expect(syncServicesOnly(await getChannels())).toBe(1);
 
         const rows = orm()
             .select({ id: services.id, name: services.name, type: services.type })
@@ -72,7 +73,7 @@ describe('syncServicesOnly', () => {
     });
 
     test('何度呼んでも増えない', async () => {
-        await syncServicesOnly();
+        syncServicesOnly(await getChannels());
         expect(orm().select({ n: count() }).from(services).get()).toEqual({ n: 1 });
     });
 });
@@ -126,14 +127,14 @@ describe('消えた局の片付け', () => {
     }
 
     test('番組表は消し、まだ始めていない予約は取り消す。局の行は残す', async () => {
-        await syncServicesOnly();
+        syncServicesOnly(await getChannels());
         seed(3239123608);
 
         // 局が丸ごと入れ替わった (スキャンのやり直し)
         offered = [channel(23609, '別の局')];
-        await syncServicesOnly();
+        syncServicesOnly(await getChannels());
         unseenFor(3239123608, config.serviceForgetAfter + 1);
-        await syncServicesOnly();
+        syncServicesOnly(await getChannels());
 
         expect(orm().select({ n: count() }).from(programs).get()).toEqual({ n: 0 });
         expect(
@@ -154,7 +155,7 @@ describe('消えた局の片付け', () => {
 
     test('1局も返ってこなかった回では何もしない', async () => {
         offered = [channel(23608, 'ＴＯＫＹＯ　ＭＸ')];
-        await syncServicesOnly();
+        syncServicesOnly(await getChannels());
         seed(3239123608);
 
         /*
@@ -162,7 +163,7 @@ describe('消えた局の片付け', () => {
          * 読むと、次の取り込みまで番組表が丸ごと消える
          */
         offered = [];
-        await syncServicesOnly();
+        syncServicesOnly(await getChannels());
 
         expect(orm().select({ n: count() }).from(programs).get()).toEqual({ n: 1 });
         expect(
@@ -184,12 +185,12 @@ describe('消えた局の片付け', () => {
      */
     test('1回見かけなかっただけでは片付けない', async () => {
         offered = [channel(23608, 'ＴＯＫＹＯ　ＭＸ'), channel(23609, '別の局')];
-        await syncServicesOnly();
+        syncServicesOnly(await getChannels());
         seed(3239123608);
 
         // 一覧が欠けた回
         offered = [channel(23609, '別の局')];
-        await syncServicesOnly();
+        syncServicesOnly(await getChannels());
 
         expect(orm().select({ n: count() }).from(programs).get()).toEqual({ n: 1 });
         expect(
@@ -234,7 +235,7 @@ describe('savePrograms', () => {
 
     test('題名の無い回で、入っている題名を消さない', async () => {
         offered = [channel(23608, 'ＴＯＫＹＯ　ＭＸ')];
-        await syncServicesOnly();
+        syncServicesOnly(await getChannels());
         orm().delete(programs).run();
 
         savePrograms([event()]);
@@ -261,7 +262,7 @@ describe('savePrograms', () => {
      */
     test('番組表が動いたら、まだ始めていない予約だけ追従する', async () => {
         offered = [channel(23608, 'ＴＯＫＹＯ　ＭＸ')];
-        await syncServicesOnly();
+        syncServicesOnly(await getChannels());
         orm().delete(programs).run();
         orm().delete(reservations).run();
 
@@ -318,7 +319,7 @@ describe('savePrograms', () => {
 
     test('題名だけ読めた回で、入っている番組内容を消さない', async () => {
         offered = [channel(23608, 'ＴＯＫＹＯ　ＭＸ')];
-        await syncServicesOnly();
+        syncServicesOnly(await getChannels());
         orm().delete(programs).run();
 
         savePrograms([event({ name: '', description: '', extended: { 番組内容: 'あらすじ' } })]);
@@ -331,7 +332,7 @@ describe('savePrograms', () => {
 
     test('題名の書き換えはこれまでどおり通る', async () => {
         offered = [channel(23608, 'ＴＯＫＹＯ　ＭＸ')];
-        await syncServicesOnly();
+        syncServicesOnly(await getChannels());
         orm().delete(programs).run();
 
         savePrograms([event()]);
@@ -344,7 +345,7 @@ describe('savePrograms', () => {
 
     test('延長で重なった番組は消える (あとから来たほうが勝つ)', async () => {
         offered = [channel(23608, 'ＴＯＫＹＯ　ＭＸ')];
-        await syncServicesOnly();
+        syncServicesOnly(await getChannels());
         orm().delete(programs).run();
 
         const base = Date.now();
@@ -365,7 +366,7 @@ describe('savePrograms', () => {
 
     test('隣り合っているだけ (境界が同じ) の番組は消えない', async () => {
         offered = [channel(23608, 'ＴＯＫＹＯ　ＭＸ')];
-        await syncServicesOnly();
+        syncServicesOnly(await getChannels());
         orm().delete(programs).run();
 
         const base = Date.now();
