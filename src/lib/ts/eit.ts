@@ -555,10 +555,12 @@ export class EpgReader {
      * @param options.other ほかの TS の局の番組表も読む。ネットワーク全局ぶんを
      *   1つの中継から先に入れるときに使う (`epg-collect.ts` の初回)
      * @param options.settle `other` のとき、新しい局が出てこなくなってから閉じるまで (ms)
+     * @param options.expect `other` のとき、来るはずの局 (service_id)。全部見えて揃えば
+     *   `settle` を待たずに閉じる。受信できない局が混ざっていれば `settle` で閉じる
      */
     constructor(
         private readonly now: () => number = Date.now,
-        private readonly options: { other?: boolean; settle?: number } = {},
+        private readonly options: { other?: boolean; settle?: number; expect?: readonly number[] } = {},
     ) {}
 
     /** 任意の長さのバイト列を食わせる。番組が1つでも増えたら true */
@@ -659,12 +661,14 @@ export class EpgReader {
     get complete(): boolean {
         if (this.progress.size === 0) return false;
         /*
-         * ほかの TS の局まで読むときは、**しばらく新しい局が出てこないことも待つ。**
-         * 局ごとに流れてくる順はばらばらで、見かけた局が揃っただけでは
-         * まだ1度も来ていない局を置いていく
+         * ほかの TS の局まで読むときは、**来るはずの局が全部見えるか、しばらく新しい局が
+         * 出てこないことも待つ。** 局ごとに流れてくる順はばらばらで、見かけた局が
+         * 揃っただけではまだ1度も来ていない局を置いていく。来るはずの局を知っていれば
+         * すぐ閉じられる (WebTS.app・Mirakurun と同じ)
          */
         if (
             this.options.other === true &&
+            !this.sawExpected() &&
             this.now() - this.lastNewService < (this.options.settle ?? 60_000)
         ) {
             return false;
@@ -673,6 +677,12 @@ export class EpgReader {
             if (!progress.complete) return false;
         }
         return true;
+    }
+
+    /** 来るはずの局を教わっていて、それが全部見えたか */
+    private sawExpected(): boolean {
+        const expect = this.options.expect ?? [];
+        return expect.length > 0 && expect.every((serviceId) => this.progress.has(serviceId));
     }
 
     /**

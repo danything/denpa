@@ -476,6 +476,18 @@ describe('EpgReader', () => {
         expect(reader.complete).toBe(true);
     });
 
+    test('来るはずの局が全部見えて揃えば、待たずに閉じる', () => {
+        const reader = new EpgReader(() => DAY_START, {
+            other: true,
+            settle: 60_000,
+            expect: [SERVICE, SERVICE + 1],
+        });
+        reader.feed(packets(section([event()])));
+        expect(reader.complete).toBe(false);
+        reader.feed(packets(section([event()], { tableId: 0x60, serviceId: SERVICE + 1 })));
+        expect(reader.complete).toBe(true);
+    });
+
     test('EIT[p/f] の「放送中」は別に持つ。録画の延長追従に使う', () => {
         const reader = new EpgReader();
         const pf = section([event({ runningStatus: 4, name: 'いま放送中' })], { tableId: 0x4e });

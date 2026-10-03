@@ -9,7 +9,7 @@ import type { AgentChannel } from './tuner';
  * なっていた ([config.ts](config.ts) の epgChannelTimeout)。
  */
 const { config } = await import('./config');
-const { firstSweeps, lastOf, pickChannels, reachOf } = await import('./epg-collect');
+const { firstSweeps, lastOf, networkSweeps, pickChannels, reachOf } = await import('./epg-collect');
 const { serviceKey } = await import('./tuner');
 
 const NETWORK = 32391;
@@ -142,7 +142,7 @@ describe('最後に集めた時刻', () => {
     });
 });
 
-describe('初回は衛星をネットワークごとに1中継で埋める', () => {
+describe('初回は BS をネットワークごとに1中継で埋める', () => {
     const BS = 4;
     const sat = (name: string, networkId: number, services: number[]) =>
         ({ ...channel(name, services), type: networkId === BS ? 'BS' : 'CS', networkId }) as AgentChannel;
@@ -154,8 +154,8 @@ describe('初回は衛星をネットワークごとに1中継で埋める', () 
         sat('CS04', 7, [55]),
     ];
 
-    test('番組が1件も無いネットワークから、1つずつ選ぶ (地上波は対象外)', () => {
-        expect(firstSweeps(channels, new Map()).map((c) => c.channel)).toEqual(['BS01_0', 'CS02', 'CS04']);
+    test('番組が1件も無いネットワークから、1つずつ選ぶ (地上波と CS は対象外)', () => {
+        expect(firstSweeps(channels, new Map()).map((c) => c.channel)).toEqual(['BS01_0']);
     });
 
     test('いちばん長く行っていない中継を選ぶ (受信できない中継に当たり続けない)', () => {
@@ -165,6 +165,22 @@ describe('初回は衛星をネットワークごとに1中継で埋める', () 
 
     test('1局でも埋まっているネットワークは選ばない (受信できない局が残っていても)', () => {
         const reach = new Map([[serviceKey(BS, 151), Date.now()]]);
-        expect(firstSweeps(channels, reach).map((c) => c.channel)).toEqual(['CS02', 'CS04']);
+        expect(firstSweeps(channels, reach)).toEqual([]);
+    });
+
+    /*
+     * CS は詳細を流していないので、中継ごとに開かずいつも全局読み。
+     * 選ばれた中継が1つでもあるネットワークを、行っていない順の1中継にまとめる
+     */
+    test('CS はネットワークごとに1中継へまとめる', () => {
+        const cs = [
+            sat('CS02', 6, [296]),
+            sat('CS06', 6, [227]),
+            sat('CS04', 7, [55]),
+            sat('CS08', 7, [800]),
+        ];
+        const last = (c: AgentChannel) => (c.channel === 'CS02' ? Date.now() : 0);
+        expect(networkSweeps([cs[0]!, channels[1]!], cs, last).map((c) => c.channel)).toEqual(['CS06']);
+        expect(networkSweeps([cs[0]!, cs[3]!], cs, last).map((c) => c.channel)).toEqual(['CS06', 'CS04']);
     });
 });
