@@ -210,7 +210,10 @@ export function pickChannels(
  *
  * `whole` のときは**ほかの TS の局の番組表も読む** (`firstSweeps`)。
  */
-async function collectChannel(channel: AgentChannel, whole = false): Promise<number> {
+async function collectChannel(
+    channel: AgentChannel,
+    whole = false,
+): Promise<{ programs: number; complete: boolean }> {
     const reader = new EpgReader(Date.now, { other: whole, settle: config.epgSweepSettle });
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), config.epgChannelTimeout);
@@ -276,8 +279,9 @@ async function collectChannel(channel: AgentChannel, whole = false): Promise<num
     }
 
     const events = reader.all();
-    if (events.length === 0) return 0;
-    return savePrograms(events);
+    const complete = opened && reader.complete;
+    if (events.length === 0) return { programs: 0, complete };
+    return { programs: savePrograms(events), complete };
 }
 
 /** 走っている周回。重なった呼び出しはこれに相乗りする */
@@ -331,7 +335,11 @@ export function collectNow(): Promise<number> {
  * 「初回」は、そのネットワークの局に番組が1件も無いとき。受信できない局が
  * 残っていても、ほかの局が埋まっていれば走らない (毎周回6分ずつ塞がない)
  */
-export function firstSweeps(channels: AgentChannel[], reach: Map<number, number>): AgentChannel[] {
+export function firstSweeps(
+    channels: AgentChannel[],
+    reach: Map<number, number>,
+    lastOf: (channel: AgentChannel) => number = () => 0,
+): AgentChannel[] {
     const byNetwork = new Map<number, AgentChannel[]>();
     for (const channel of channels) {
         if (channel.type === 'GR') continue;
@@ -342,7 +350,8 @@ export function firstSweeps(channels: AgentChannel[], reach: Map<number, number>
         const filled = members.some((channel) =>
             channel.services.some((service) => reach.has(serviceKey(channel.networkId, service.serviceId))),
         );
-        if (!filled) sweeps.push(members[0]!);
+        // いちばん長く行っていない中継から。受信できない中継に当たり続けない
+        if (!filled) sweeps.push([...members].sort((a, b) => lastOf(a) - lastOf(b))[0]!);
     }
     return sweeps;
 }
@@ -376,7 +385,7 @@ async function run(): Promise<number> {
 
     // 全局ぶんを読んだ中継は、自分の中継の詳細もそこで取れている。続きでは回らない
     // 行ったばかりなら休ませる (局が来なかったネットワークで毎周回6分ずつ塞がない)
-    const sweeps = firstSweeps(channels, reach).filter(
+    const sweeps = firstSweeps(channels, reach, lastOf).filter(
         (channel) => at - lastOf(channel) >= config.epgChannelRetry,
     );
     const rest = targets.filter((channel) => !sweeps.includes(channel));
@@ -417,7 +426,16 @@ async function run(): Promise<number> {
                 const job = take(types);
                 if (job === undefined) return;
                 update({ pending: state.pending - 1 });
-                programs += await collectChannel(job.channel, job.whole);
+                const result = await collectChannel(job.channel, job.whole);
+                programs += result.programs;
+                /*
+                 * 全局読みが揃わないまま上限で切れたら、その中継の詳細も欠けている。
+                 * 列の後ろへ戻して、いつもどおり自分の中継ぶんを読み直す
+                 */
+                if (job.whole && !result.complete) {
+                    queue.push({ channel: job.channel, whole: false });
+                    update({ pending: state.pending + 1, total: state.total + 1 });
+                }
                 if (job.whole && --sweepsLeft === 0) update({ sweeping: false });
             }
         };

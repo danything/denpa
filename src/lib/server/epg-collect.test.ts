@@ -158,6 +158,11 @@ describe('初回は衛星をネットワークごとに1中継で埋める', () 
         expect(firstSweeps(channels, new Map()).map((c) => c.channel)).toEqual(['BS01_0', 'CS02', 'CS04']);
     });
 
+    test('いちばん長く行っていない中継を選ぶ (受信できない中継に当たり続けない)', () => {
+        const last = (c: AgentChannel) => (c.channel === 'BS01_0' ? Date.now() : 0);
+        expect(firstSweeps(channels, new Map(), last)[0]?.channel).toBe('BS03_0');
+    });
+
     test('1局でも埋まっているネットワークは選ばない (受信できない局が残っていても)', () => {
         const reach = new Map([[serviceKey(BS, 151), Date.now()]]);
         expect(firstSweeps(channels, reach).map((c) => c.channel)).toEqual(['CS02', 'CS04']);
