@@ -94,6 +94,10 @@ export interface CollectState {
     active: string[];
     /** この周回で残っている数 */
     pending: number;
+    /** この周回で回る数 (進み具合の分母) */
+    total: number;
+    /** 初回の、衛星をネットワークごとに1中継で埋めている最中か (`firstSweeps`) */
+    sweeping: boolean;
     startedAt: number | null;
     finishedAt: number | null;
     /** 直近の周回で取り込んだ番組数 */
@@ -106,6 +110,8 @@ let state: CollectState = {
     running: false,
     active: [],
     pending: 0,
+    total: 0,
+    sweeping: false,
     startedAt: null,
     finishedAt: null,
     programs: 0,
@@ -199,14 +205,21 @@ export function pickChannels(
         .map((item) => item.channel);
 }
 
-/** 1チャンネル開いて、番組表が揃うまで読む */
-async function collectChannel(channel: AgentChannel): Promise<number> {
-    const reader = new EpgReader();
+/**
+ * 1チャンネル開いて、番組表が揃うまで読む。
+ *
+ * `whole` のときは**ほかの TS の局の番組表も読む** (`firstSweeps`)。
+ */
+async function collectChannel(
+    channel: AgentChannel,
+    whole = false,
+): Promise<{ programs: number; complete: boolean }> {
+    const reader = new EpgReader(Date.now, { other: whole, settle: config.epgSweepSettle });
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), config.epgChannelTimeout);
     timer.unref?.();
 
-    const label = key(channel);
+    const label = whole ? `${key(channel)} (${channel.type} 全局)` : key(channel);
     const startedAt = Date.now();
     update({ active: [...state.active, label] });
     /**
@@ -252,7 +265,7 @@ async function collectChannel(channel: AgentChannel): Promise<number> {
          * **1件も取れなくても「行った」と覚える。** 番組の行から数え直すだけだった頃は、
          * EIT が来ない局の `last` が永久に 0 のままで、周回のたびに選ばれ続けていた
          */
-        collected.set(label, Date.now());
+        collected.set(key(channel), Date.now());
         const secs = Math.round((Date.now() - startedAt) / 1000);
         if (reader.complete) {
             console.log(`[epg] ${label}: 揃ったので ${secs}秒で離しました`);
@@ -266,8 +279,9 @@ async function collectChannel(channel: AgentChannel): Promise<number> {
     }
 
     const events = reader.all();
-    if (events.length === 0) return 0;
-    return savePrograms(events);
+    const complete = opened && reader.complete;
+    if (events.length === 0) return { programs: 0, complete };
+    return { programs: savePrograms(events), complete };
 }
 
 /** 走っている周回。重なった呼び出しはこれに相乗りする */
@@ -307,6 +321,41 @@ export function collectNow(): Promise<number> {
     });
 }
 
+/**
+ * **初回は、衛星をネットワークごとに1つの中継で先に埋める。**
+ *
+ * BS・CS はどの中継にもネットワーク全局ぶんの番組表 (基本) が流れている。
+ * 1つ読めば約6分で BS 45局ぶんが7日先まで揃う (実測。docs/data.md)。中継を
+ * 1つずつ回ると衛星のチューナー2本で数十分かかり、その間は番組表が空のまま。
+ *
+ * **詳細 (番組内容・出演者) は自分の中継にしか流れていない** ので、そのあと
+ * いつもどおり中継ごとに回って足す。初回はどの中継も「まっさら」なので、
+ * 同じ周回の続きで必ず回る。
+ *
+ * 「初回」は、そのネットワークの局に番組が1件も無いとき。受信できない局が
+ * 残っていても、ほかの局が埋まっていれば走らない (毎周回6分ずつ塞がない)
+ */
+export function firstSweeps(
+    channels: AgentChannel[],
+    reach: Map<number, number>,
+    lastOf: (channel: AgentChannel) => number = () => 0,
+): AgentChannel[] {
+    const byNetwork = new Map<number, AgentChannel[]>();
+    for (const channel of channels) {
+        if (channel.type === 'GR') continue;
+        byNetwork.set(channel.networkId, [...(byNetwork.get(channel.networkId) ?? []), channel]);
+    }
+    const sweeps: AgentChannel[] = [];
+    for (const members of byNetwork.values()) {
+        const filled = members.some((channel) =>
+            channel.services.some((service) => reach.has(serviceKey(channel.networkId, service.serviceId))),
+        );
+        // いちばん長く行っていない中継から。受信できない中継に当たり続けない
+        if (!filled) sweeps.push([...members].sort((a, b) => lastOf(a) - lastOf(b))[0]!);
+    }
+    return sweeps;
+}
+
 async function run(): Promise<number> {
     const all = await getChannels().catch(() => [] as AgentChannel[]);
     if (all.length === 0) return 0;
@@ -333,11 +382,27 @@ async function run(): Promise<number> {
     const targets = boosted
         ? [...channels].sort((a, b) => thinnest(a) - thinnest(b))
         : pickChannels(channels, thinnest, lastOf, at);
-    if (targets.length === 0) return 0;
+
+    // 全局ぶんを読んだ中継は、自分の中継の詳細もそこで取れている。続きでは回らない
+    // 行ったばかりなら休ませる (局が来なかったネットワークで毎周回6分ずつ塞がない)
+    const sweeps = firstSweeps(channels, reach, lastOf).filter(
+        (channel) => at - lastOf(channel) >= config.epgChannelRetry,
+    );
+    const rest = targets.filter((channel) => !sweeps.includes(channel));
+    const total = sweeps.length + rest.length;
+    if (total === 0) return 0;
 
     const tuners = (await getTuners().catch(() => [])).filter((tuner) => !tuner.disabled);
 
-    update({ running: true, startedAt: at, finishedAt: null, pending: targets.length, programs: 0 });
+    update({
+        running: true,
+        startedAt: at,
+        finishedAt: null,
+        pending: total,
+        total,
+        sweeping: sweeps.length > 0,
+        programs: 0,
+    });
     let programs = 0;
     try {
         /*
@@ -346,28 +411,43 @@ async function run(): Promise<number> {
          * BS でも CS でも1人前に見える)。溢れたぶんは 409 で弾かれ、その回は
          * 集められないまま落ちる。1つの列を全チューナーで引けば数は合う
          */
-        const queue = [...targets];
+        let sweepsLeft = sweeps.length;
+        // 全局ぶんを読む中継を列の先頭に置く。衛星のチューナーが最初に取る
+        const queue = [
+            ...sweeps.map((channel) => ({ channel, whole: true })),
+            ...rest.map((channel) => ({ channel, whole: false })),
+        ];
         const take = (types: string[]) => {
-            const at = queue.findIndex((channel) => types.includes(channel.type));
+            const at = queue.findIndex((job) => types.includes(job.channel.type));
             return at === -1 ? undefined : queue.splice(at, 1)[0];
         };
         const lane = async (types: string[]) => {
             for (;;) {
-                const channel = take(types);
-                if (channel === undefined) return;
+                const job = take(types);
+                if (job === undefined) return;
                 update({ pending: state.pending - 1 });
-                programs += await collectChannel(channel);
+                const result = await collectChannel(job.channel, job.whole);
+                programs += result.programs;
+                /*
+                 * 全局読みが揃わないまま上限で切れたら、その中継の詳細も欠けている。
+                 * 列の後ろへ戻して、いつもどおり自分の中継ぶんを読み直す
+                 */
+                if (job.whole && !result.complete) {
+                    queue.push({ channel: job.channel, whole: false });
+                    update({ pending: state.pending + 1, total: state.total + 1 });
+                }
+                if (job.whole && --sweepsLeft === 0) update({ sweeping: false });
             }
         };
 
         // エージェントに聞けなかったときは1本だけで回す (聞けないだけで、居はする)
         await Promise.all(
             tuners.length === 0
-                ? [lane([...new Set(targets.map((channel) => channel.type))])]
+                ? [lane([...new Set(queue.map((job) => job.channel.type))])]
                 : tuners.map((tuner) => lane(tuner.types)),
         );
     } finally {
-        update({ running: false, finishedAt: Date.now(), active: [], pending: 0, programs });
+        update({ running: false, finishedAt: Date.now(), active: [], pending: 0, sweeping: false, programs });
     }
 
     if (programs > 0) {

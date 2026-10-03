@@ -451,6 +451,31 @@ describe('EpgReader', () => {
         expect(reader.services()).toEqual([SERVICE, SERVICE + 1]);
     });
 
+    /*
+     * 衛星の初回 (epg-collect の firstSweeps)。ほかの中継の局の番組表は
+     * 0x60〜 で来る。並びは自局の 0x50〜 と同じなので、揃い方も同じに数える
+     */
+    test('ほかの TS の局は、頼んだときだけ読む', () => {
+        const other = section([event()], {
+            tableId: 0x60,
+            serviceId: SERVICE + 1,
+            transportStreamId: TSID + 1,
+        });
+        expect(parseEit(other)).toBeNull();
+        expect(parseEit(other, { other: true })?.tableId).toBe(0x50);
+
+        let at = DAY_START;
+        const reader = new EpgReader(() => at, { other: true, settle: 60_000 });
+        reader.feed(packets(section([event()])));
+        reader.feed(packets(other));
+        expect(reader.services()).toEqual([SERVICE, SERVICE + 1]);
+        expect(reader.all()).toHaveLength(2);
+        // 見かけた局は揃っても、まだ来ていない局があるかもしれないので待つ
+        expect(reader.complete).toBe(false);
+        at += 60_000;
+        expect(reader.complete).toBe(true);
+    });
+
     test('EIT[p/f] の「放送中」は別に持つ。録画の延長追従に使う', () => {
         const reader = new EpgReader();
         const pf = section([event({ runningStatus: 4, name: 'いま放送中' })], { tableId: 0x4e });

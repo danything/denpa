@@ -113,9 +113,22 @@
             </div>
             {#if data.collect.running}
                 <!-- 1チャンネルに数分かかる。黙っていると止まって見える -->
-                <div class="small soft" data-testid="epg-collect">
-                    {data.collect.boosted ? '最優先で集めています' : '番組表を集めています'}
-                    ({data.collect.active.join(', ') || '準備中'}) ・ 残り {data.collect.pending} チャンネル
+                <div class="progress-block" data-testid="epg-collect">
+                    <div class="small soft">
+                        {data.collect.boosted ? '最優先で集めています' : '番組表を集めています'}
+                        ({data.collect.active.join(', ') || '準備中'}) ・ 残り {data.collect.pending} チャンネル
+                    </div>
+                    <progress
+                        value={data.collect.total - data.collect.pending - data.collect.active.length}
+                        max={Math.max(1, data.collect.total)}
+                    ></progress>
+                    {#if data.collect.sweeping}
+                        <!-- 初回だけ。番組名が先に出て、詳細があとから埋まるのを不具合と思わせない -->
+                        <div class="tiny muted" data-testid="epg-sweeping">
+                            BS・CS は、まず1つの中継から全局の番組名を入れています (数分)。
+                            番組内容・出演者などの詳細は、そのあと中継ごとに回って足します
+                        </div>
+                    {/if}
                 </div>
             {/if}
             {#if coverage.length === 0}
@@ -158,6 +171,10 @@
                     <details class="more">
                         <summary>詳しく</summary>
                         <p>番組表はスキャンのあと、局ごとに埋まっていきます。</p>
+                        <p>
+                            BS・CS の初回は、1つの中継から全局の番組名を先に入れ (数分)、番組内容などの詳細は
+                            そのあと中継ごとに回って足します。詳細は各局が自分の中継にしか流していないためです。
+                        </p>
                         <p>
                             待てないときは<strong>「番組表をいますぐ集める」</strong>で、空いているチューナーを全部使って集められます
                             (録画中のチューナーは使いません)。
@@ -220,7 +237,8 @@
             <div class="note-block">
                 <!-- 何分もかかって空きチューナーを全部使う。そこは畳まずに見せておく -->
                 <p class="small soft">
-                    <strong>空いているチューナーを全部使います</strong>。録画中でも実行できます
+                    <strong>空いているチューナーを全部使います</strong>。録画中でも実行できます。
+                    始めたら、画面を移ったり閉じたりしてもかまいません (サーバで続きます)
                 </p>
                 <details class="more">
                     <summary>詳しく</summary>

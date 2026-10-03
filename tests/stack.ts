@@ -213,6 +213,8 @@ async function boot(index: number): Promise<{ stack: Stack; shutdown: () => Prom
             CHANNEL_SYNC_INTERVAL: '86400000',
             // 1チャンネル読むのに待つ上限。偽エージェントは開いた直後に全部流す
             EPG_CHANNEL_TIMEOUT: '10000',
+            // 偽の放送にはほかの中継の番組表が無い。初回の全局読みで待たない
+            EPG_SWEEP_SETTLE: '500',
             SCHEDULER_TICK: '500',
             START_MARGIN: '0',
             END_MARGIN: '500',

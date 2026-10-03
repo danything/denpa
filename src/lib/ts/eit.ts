@@ -43,6 +43,17 @@ function isEitActual(tableId: number): boolean {
     return tableId === TABLE_PF_ACTUAL || (tableId >= SCHEDULE_ACTUAL_MIN && tableId <= SCHEDULE_ACTUAL_MAX);
 }
 
+/**
+ * 同じネットワークの**ほかの TS の局**の番組表 (EIT[schedule other])。
+ * 並びは自局のもの (0x50〜0x5F) と同じで、`OTHER_SHIFT` だけずれている。
+ *
+ * BS・CS はどの中継にもネットワーク全局ぶんが流れているが、**詳細はほぼ付かない**
+ * (実測で BS 45 局のうち2局ぶん。docs/data.md)。いま/次 (0x4F) は読まない
+ */
+const SCHEDULE_OTHER_MIN = 0x60;
+const SCHEDULE_OTHER_MAX = 0x6f;
+const OTHER_SHIFT = SCHEDULE_OTHER_MIN - SCHEDULE_ACTUAL_MIN;
+
 export interface EventAudio {
     componentType: number;
     langs: string[];
@@ -294,10 +305,17 @@ function readDescriptors(event: EitEvent, body: Uint8Array): void {
  * 中身が揃っているものだけ。それでも長さの辻褄が合わないことはあるので、
  * **読める番組まで返す**。
  */
-export function parseEit(section: Uint8Array): EitSection | null {
+export function parseEit(section: Uint8Array, options: { other?: boolean } = {}): EitSection | null {
     if (section.length < 18) return null;
-    const tableId = section[0]!;
-    if (!isEitActual(tableId)) return null;
+    const raw = section[0]!;
+    /*
+     * ほかの TS のものは、**自局の同じ位置の表として読む。** 並びが同じなので、
+     * 揃ったかどうかの数え方 (`ScheduleProgress`) をそのまま使える
+     */
+    const other = options.other === true && raw >= SCHEDULE_OTHER_MIN && raw <= SCHEDULE_OTHER_MAX;
+    if (!other && !isEitActual(raw)) return null;
+    const shift = other ? OTHER_SHIFT : 0;
+    const tableId = raw - shift;
 
     const result: EitSection = {
         tableId,
@@ -308,7 +326,7 @@ export function parseEit(section: Uint8Array): EitSection | null {
         transportStreamId: (section[8]! << 8) | section[9]!,
         originalNetworkId: (section[10]! << 8) | section[11]!,
         segmentLastSectionNumber: section[12]!,
-        lastTableId: section[13]!,
+        lastTableId: section[13]! - shift,
         events: [],
     };
 
@@ -529,17 +547,29 @@ export class EpgReader {
     /** p/f で「いま流れている」と言われた番組。録画の延長追従はこれを見る */
     readonly present = new Map<number, EitEvent>();
 
-    /** @param now いまの時刻。局ごとの `ScheduleProgress` にそのまま渡す */
-    constructor(private readonly now: () => number = Date.now) {}
+    /** 最後に新しい局を見かけた時刻 (`other` のときだけ使う) */
+    private lastNewService = 0;
+
+    /**
+     * @param now いまの時刻。局ごとの `ScheduleProgress` にそのまま渡す
+     * @param options.other ほかの TS の局の番組表も読む。ネットワーク全局ぶんを
+     *   1つの中継から先に入れるときに使う (`epg-collect.ts` の初回)
+     * @param options.settle `other` のとき、新しい局が出てこなくなってから閉じるまで (ms)
+     */
+    constructor(
+        private readonly now: () => number = Date.now,
+        private readonly options: { other?: boolean; settle?: number } = {},
+    ) {}
 
     /** 任意の長さのバイト列を食わせる。番組が1つでも増えたら true */
     feed(chunk: Uint8Array): boolean {
         let added = false;
         for (const packet of this.packets.feed(chunk)) {
             for (const raw of this.sections.feed(packet)) {
-                const section = parseEit(raw);
+                const section = parseEit(raw, this.options);
                 if (section === null) continue;
                 if (section.tableId >= SCHEDULE_ACTUAL_MIN) {
+                    if (!this.progress.has(section.serviceId)) this.lastNewService = this.now();
                     const progress = this.progress.get(section.serviceId) ?? new ScheduleProgress(this.now);
                     progress.add(section);
                     this.progress.set(section.serviceId, progress);
@@ -628,6 +658,17 @@ export class EpgReader {
      */
     get complete(): boolean {
         if (this.progress.size === 0) return false;
+        /*
+         * ほかの TS の局まで読むときは、**しばらく新しい局が出てこないことも待つ。**
+         * 局ごとに流れてくる順はばらばらで、見かけた局が揃っただけでは
+         * まだ1度も来ていない局を置いていく
+         */
+        if (
+            this.options.other === true &&
+            this.now() - this.lastNewService < (this.options.settle ?? 60_000)
+        ) {
+            return false;
+        }
         for (const progress of this.progress.values()) {
             if (!progress.complete) return false;
         }
