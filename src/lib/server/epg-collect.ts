@@ -232,6 +232,20 @@ async function collectChannel(
      * 開けなかっただけの局まで `epgChannelRetry` で休ませると、番組表が古くなる
      */
     let opened = false;
+    /*
+     * **読みながら少しずつ保存する。** 揃うまで待ってからまとめて書くと、全局読みの
+     * 数分のあいだ画面に何も出ない。今日・明日の番組は先に流れてくるので、開いて
+     * 数十秒で番組表が埋まり始める。予約の組み直しは周回の終わりにまとめて (`settle`)
+     */
+    let saved = 0;
+    let flushedAt = Date.now();
+    const flush = () => {
+        flushedAt = Date.now();
+        const batch = reader.takeChanged();
+        if (batch.length === 0) return;
+        saved += savePrograms(batch);
+        emit('programs');
+    };
     try {
         const stream = await openChannelStream(
             channel.type,
@@ -244,6 +258,7 @@ async function collectChannel(
         opened = true;
         for await (const chunk of chunks(stream)) {
             if (reader.feed(chunk) && reader.complete) break;
+            if (Date.now() - flushedAt >= FLUSH_EVERY) flush();
         }
     } catch (error) {
         // 掴めなかった・途中で切れた。**読めたところまでは取り込む** —
@@ -283,11 +298,13 @@ async function collectChannel(
         }
     }
 
-    const events = reader.all();
-    const complete = opened && reader.complete;
-    if (events.length === 0) return { programs: 0, complete };
-    return { programs: savePrograms(events), complete };
+    flush();
+    // 同じ番組を何度か書いているので、数えるのは読めた番組の数まで
+    return { programs: Math.min(saved, reader.all().length), complete: opened && reader.complete };
 }
+
+/** 読みながら保存する間隔 (`collectChannel`) */
+const FLUSH_EVERY = 30_000;
 
 /** 走っている周回。重なった呼び出しはこれに相乗りする */
 let inflight: Promise<number> | null = null;

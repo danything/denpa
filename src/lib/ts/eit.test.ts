@@ -476,6 +476,15 @@ describe('EpgReader', () => {
         expect(reader.complete).toBe(true);
     });
 
+    test('前に取り出してから増えた・変わった番組だけを返す (読みながら保存するため)', () => {
+        const reader = new EpgReader();
+        reader.feed(packets(section([event()])));
+        expect(reader.takeChanged().map((e) => e.eventId)).toEqual([1]);
+        expect(reader.takeChanged()).toEqual([]);
+        reader.feed(packets(section([event({ eventId: 2 })], { sectionNumber: 1, lastSectionNumber: 1 })));
+        expect(reader.takeChanged().map((e) => e.eventId)).toEqual([2]);
+    });
+
     test('来るはずの局が全部見えて揃えば、待たずに閉じる', () => {
         const reader = new EpgReader(() => DAY_START, {
             other: true,

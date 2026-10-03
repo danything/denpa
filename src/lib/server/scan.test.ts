@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test';
-import { nitSection, packetize, sdtSection } from '../ts/synth';
+import { EpgReader } from '../ts/eit';
+import { eitSection, nitSection, packetize, sdtSection } from '../ts/synth';
 import { channelEntry, channelsFor, readServices } from './scan';
 import { type AgentChannel, twinOf, withoutTwins } from './tuner';
 
@@ -142,6 +143,21 @@ describe('同じ TS を指している枠', () => {
 });
 
 describe('1チャンネルの読み取り', () => {
+    test('局を探しているあいだに流れてきた番組表も拾う', async () => {
+        const epg = new EpgReader();
+        const eit = eitSection({
+            tableId: 0x50,
+            serviceId: 1024,
+            transportStreamId: 0x0408,
+            originalNetworkId: 0x7fe0,
+            events: [{ eventId: 1, startAt: Date.now() + 3600_000, duration: 1800_000, name: '拾った番組' }],
+        });
+        const data = Uint8Array.from([...packetize(0x0012, eit), ...stream([[1024, 0x01, 'TOKYO MX1']])]);
+        const { error } = await readServices(fromBytes(data), 5000, undefined, epg);
+        expect(error).toBeNull();
+        expect(epg.all().map((e) => e.name)).toEqual(['拾った番組']);
+    });
+
     test('流れてきた TS からサービスを読む', async () => {
         const { services, error } = await readServices(
             fromBytes(

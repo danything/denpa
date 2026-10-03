@@ -17,10 +17,11 @@
  * 掴んでいるチューナーは使われないだけ (空きが無ければ待ち、飛ばさない)。
  */
 
+import { type EitEvent, EpgReader } from '../ts/eit';
 import { type FoundService, ServiceReader } from '../ts/psi';
 import type { ChannelType } from '../types';
 import { config } from './config';
-import { sync } from './epg';
+import { savePrograms, settle, sync } from './epg';
 import { collectOnce } from './epg-collect';
 import { emit } from './events';
 import {
@@ -98,6 +99,8 @@ export async function readServices(
     stream: ReadableStream<Uint8Array>,
     timeout = TUNE_TIMEOUT,
     abort?: AbortSignal,
+    /** 同じ流れから番組表も拾う。読む時間は延ばさない (揃った時点で打ち切るのは同じ) */
+    epg?: EpgReader,
 ): Promise<ScanResult> {
     const reader = new ServiceReader();
     const source = stream.getReader();
@@ -115,6 +118,7 @@ export async function readServices(
             const { done, value } = await source.read();
             if (done || value === undefined) return;
             bytes += value.byteLength;
+            epg?.feed(value);
             if (reader.feed(value)) return;
         }
     })().catch((error: unknown) => {
@@ -225,6 +229,12 @@ class Scanner {
     private readonly tuned = new Map<ScannableType, number>();
     /** 電波は来たのに局情報が揃わなかったチャンネル。1周したあとで回し直す */
     private retry: Job[] = [];
+    /**
+     * 局を探している間に流れてきた番組表。**ついでに拾っておく。** NIT と SDT を待つ
+     * 数秒〜十数秒で「いま・次」と今日ぶんくらいは来るので、スキャンが終わった
+     * 時点で番組表が空にならない。局が DB に入ってから書く (`runScan`)
+     */
+    readonly events: EitEvent[] = [];
 
     constructor(private readonly onProgress: (progress: Progress) => void) {}
 
@@ -366,7 +376,13 @@ class Scanner {
                 continue;
             }
 
-            const { services, error, signal } = await readServices(stream, TUNE_TIMEOUT, this.aborter.signal);
+            const epg = new EpgReader();
+            const { services, error, signal } = await readServices(
+                stream,
+                TUNE_TIMEOUT,
+                this.aborter.signal,
+                epg,
+            );
             closer.abort();
             if (this.aborted) return;
             const counts = first ? { scanned: 1 } : {};
@@ -395,6 +411,7 @@ class Scanner {
             }
 
             this.found.set(`${type}:${channel}`, entry);
+            this.events.push(...epg.all());
             this.onProgress({ line: `${channel}: ${services.length} サービス`, ...counts, channels: 1 });
         }
     }
@@ -440,6 +457,11 @@ async function runScan(targets: [ScannableType, string[]][]): Promise<void> {
          * 見つかった局をその場で取り込んで、そのまま集めに行く
          */
         await sync().catch(() => undefined);
+        // 局が入ったので、スキャン中に拾った番組表を書ける
+        if (scanner.events.length > 0) {
+            const saved = savePrograms(scanner.events);
+            if (saved > 0) settle(saved);
+        }
         emit('services');
         void collectOnce().catch(() => undefined);
     } catch (error) {
