@@ -24,11 +24,16 @@ services:
         # denpa と同じ (下の説明)。TS を流しているのはこちらなので、先に消えると録画ごと切れる
         stop_grace_period: 6h5m
         # チューナーとカードリーダーに触るため。PX-Q3U4 などはホストにドライバを入れず、
-        # /dev/bus (USB) が見えればイメージ同梱の px4-userland が掴む (docs/agent.md)
-        privileged: true
-        devices:
-            - /dev/bus
-            - /dev/dvb
+        # /dev/bus/usb が見えればイメージ同梱の px4-userland が掴む (docs/agent.md)。
+        # **privileged にはしない。** 要るのは USB と DVB のデバイスと、pipe を広げる権限だけ
+        cap_add:
+            # pipe を 8MB まで広げる (無くても 1MB で動く。agent/Denpa.Agent/ChildTs.cs)
+            - SYS_RESOURCE
+        # USB (189) と DVB (212) の文字デバイスを開いてよい。**挿し直しで増えるノードも。**
+        # `devices:` だけだと起こした時点のノードしか開けず、挿し直すと再起動まで使えない
+        device_cgroup_rules:
+            - 'c 189:* rmw'
+            - 'c 212:* rmw'
         environment:
             TZ: Asia/Tokyo
             # 掛かったまま録れたTSを解く先。denpa と同じ実体を見せる
@@ -38,6 +43,9 @@ services:
             # スキャンの結果 (channels.json) も同じところへ書き戻される
             - ./config:/app-config
             - denpa-recorded:/denpa-recorded
+            # デバイスはディレクトリごと bind する (挿し直しで増えるノードも見えるように)
+            - /dev/bus/usb:/dev/bus/usb
+            - /dev/dvb:/dev/dvb
         ports:
             - '25252:25252'
 
