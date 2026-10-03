@@ -96,7 +96,8 @@ public class Px4Tests
     public async Task 筐体と受信機から設定の形に組み立てる()
     {
         var found = Px4Userland.Specs(Px4Userland.ParseJson(JsonList, _ => { }));
-        await Assert.That(found.Count).IsEqualTo(4);
+        // MLT5PE 2本 + Q3U4 2本 + 番号の重なる M1UR / S1UR 1本ずつ
+        await Assert.That(found.Count).IsEqualTo(6);
         await Assert.That(found[0].Device).IsEqualTo("px4:000000000012345:0");
         await Assert.That(found[0].Name).IsEqualTo("PX-MLT5PE-2345 #0");
         await Assert.That(found[0].Types).IsEquivalentTo(["GR", "BS", "CS"], CollectionOrdering.Matching);
@@ -104,6 +105,8 @@ public class Px4Tests
         await Assert.That(found[2].Name).IsEqualTo("PX-Q3U4-0960 #0");
         await Assert.That(found[3].Device).IsEqualTo("px4:00001205000960:2");
         await Assert.That(found[3].Types).IsEquivalentTo(["GR"], CollectionOrdering.Matching);
+        await Assert.That(found[4].Device).IsEqualTo("px4:000000000000001_1-2.3:0");
+        await Assert.That(found[5].Name).IsEqualTo("PX-S1UR-USB 1-2.4 #0");
         await Assert.That(found.All(spec => !spec.Disabled)).IsTrue();
     }
 
@@ -117,6 +120,11 @@ public class Px4Tests
         await Assert.That(Px4Userland.Parse("px4:00001205000960:8")).IsEqualTo(("00001205000960", 8));
         await Assert.That(Px4Userland.Parse("px4:00001205000960:-1")).IsNull();
         await Assert.That(Px4Userland.Parse("px4:0000abc:0")).IsNull();
+        // 番号が重なる筐体は挿し口を足した名前 (px4d の --instance にそのまま使える字だけ)
+        await Assert.That(Px4Userland.Parse("px4:000000000000001_1-2.3:0")).IsEqualTo(("000000000000001_1-2.3", 0));
+        await Assert.That(Px4Userland.Parse("px4:000000000000001_1/2:0")).IsNull();
+        await Assert.That(Px4Userland.Name("PX-M1UR", "000000000000001_1-2.3", 0)).IsEqualTo("PX-M1UR-USB 1-2.3 #0");
+        await Assert.That(Px4Userland.Name("PX-Q3U4", "00001205000960", 2)).IsEqualTo("PX-Q3U4-0960 #2");
         await Assert.That(Px4Userland.Parse("px4:00001205000960")).IsNull();
         await Assert.That(Px4Userland.Parse("q3u4:00001205000960:3")).IsNull();
         await Assert.That(Px4Userland.Parse("/dev/dvb/adapter0/frontend0")).IsNull();
@@ -226,27 +234,33 @@ public class Px4Tests
         """;
 
     [Test]
-    public async Task px4d_list_json_の_ready_で番号が一意な筐体だけ使う()
+    public async Task px4d_list_json_の_ready_な筐体を使い_番号が重なるものは挿し口で見分ける()
     {
         var warned = new List<string>();
         var found = Px4Userland.ParseJson(JsonList, warned.Add);
 
         await Assert.That(found.Select(e => (e.Id, e.Model))).IsEquivalentTo(
-            [("000000000012345", "PX-MLT5PE"), ("00001205000960", "PX-Q3U4")], CollectionOrdering.Matching);
+            [
+                ("000000000012345", "PX-MLT5PE"),
+                ("00001205000960", "PX-Q3U4"),
+                ("000000000000001_1-2.3", "PX-M1UR"),
+                ("000000000000001_1-2.4", "PX-S1UR"),
+            ], CollectionOrdering.Matching);
+        // 番号が一意なら挿し口は使わない。重なるものは px4d に番号と挿し口を渡す
+        await Assert.That(found[1].UsbPaths.Count).IsEqualTo(0);
+        await Assert.That(found[2].Serial).IsEqualTo("000000000000001");
+        await Assert.That(found[2].UsbPaths).IsEquivalentTo(["1-2.3"], CollectionOrdering.Matching);
         await Assert.That(found[0].Receivers.Select(r => r.Lnb15v)).IsEquivalentTo(
             new bool?[] { true, true }, CollectionOrdering.Matching);
         await Assert.That(found[1].Receivers[1].Types).IsEquivalentTo(["GR"], CollectionOrdering.Matching);
         await Assert.That(found[1].Receivers[1].Lnb15v).IsFalse();
 
-        // 番号が重なる2台は両方使わない (同じ px4:…:0 が2冊できて、どちらも起こせない)。どれの話か分かるよう場所も添える
-        await Assert.That(warned.Count).IsEqualTo(4);
-        await Assert.That(warned[0]).Contains("PX-M1UR 000000000000001 は使いません");
-        await Assert.That(warned[0]).Contains("serial_unique=false");
-        await Assert.That(warned[0]).Contains("USB 1-2.3");
-        await Assert.That(warned[1]).Contains("PX-S1UR");
-        await Assert.That(warned[2]).Contains("status=incomplete");
-        await Assert.That(warned[3]).Contains("open_failed");
-        await Assert.That(warned[3]).Contains("権限");
+        // 使えないものは、どれの話か分かるよう場所も添えて理由を残す
+        await Assert.That(warned.Count).IsEqualTo(2);
+        await Assert.That(warned[0]).Contains("status=incomplete");
+        await Assert.That(warned[0]).Contains("USB 2-1");
+        await Assert.That(warned[1]).Contains("open_failed");
+        await Assert.That(warned[1]).Contains("権限");
         // 形は思っていたとおりなので、版ずれの話はしない
         await Assert.That(warned.Any(w => w.Contains("版"))).IsFalse();
     }

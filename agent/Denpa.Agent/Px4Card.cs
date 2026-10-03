@@ -57,12 +57,12 @@ public sealed class Px4Card : ICardLink
         [
             .. Directory.EnumerateDirectories(root)
                 .Select(dir => (Id: Path.GetFileName(dir), Socket: Px4Control.Endpoint(runtimeDir, Path.GetFileName(dir), "control.sock")))
-                .Where(found => found.Id.Length >= 4 && found.Id.All(char.IsAsciiDigit) && File.Exists(found.Socket))
+                .Where(found => found.Id.Length >= 4 && Px4Userland.ValidId(found.Id) && File.Exists(found.Socket))
                 .OrderBy(found => found.Id, StringComparer.Ordinal)
                 .Select(found =>
                 {
                     // pcscd に見せていた頃と同じ名前 (画面で見分けがつくように)
-                    var name = $"px4-userland {found.Id[^4..]} Internal Card Reader";
+                    var name = $"px4-userland {Px4Userland.Label(found.Id)} Internal Card Reader";
                     return new CardLinkCandidate(name, () => Open(name, found.Socket));
                 }),
         ];
