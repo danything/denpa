@@ -458,9 +458,14 @@ async function runScan(targets: [ScannableType, string[]][]): Promise<void> {
          */
         await sync().catch(() => undefined);
         // 局が入ったので、スキャン中に拾った番組表を書ける
+        // ついでの保存なので、失敗しても局の知らせと番組表集めは止めない
         if (scanner.events.length > 0) {
-            const saved = savePrograms(scanner.events);
-            if (saved > 0) settle(saved);
+            try {
+                const saved = savePrograms(scanner.events);
+                if (saved > 0) settle(saved);
+            } catch (error) {
+                console.warn(`[scan] スキャン中に拾った番組表を書けませんでした: ${error}`);
+            }
         }
         emit('services');
         void collectOnce().catch(() => undefined);
