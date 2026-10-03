@@ -12,14 +12,14 @@
  * (`ts/eit.ts` の ScheduleProgress)。揃えばすぐ離すので、次のチャンネルへ回せる。
  */
 
-import { max } from 'drizzle-orm';
+import { max, sql } from 'drizzle-orm';
 import { EpgReader } from '../ts/eit';
 import { config } from './config';
 import { orm } from './db';
-import { savePrograms, settle, syncServices } from './epg';
+import { CURRENT_SERVICES, savePrograms, settle, syncServices } from './epg';
 import { emit } from './events';
 import { resolveConflicts } from './scheduler';
-import { programs } from './schema';
+import { programs, services } from './schema';
 import { chunks } from './stream';
 import {
     type AgentChannel,
@@ -212,14 +212,19 @@ export function pickChannels(
  */
 async function collectChannel(
     channel: AgentChannel,
-    whole = false,
+    /** 全局読みのとき、来るはずの局 (service_id)。普段 (自分の中継だけ) は null */
+    whole: number[] | null = null,
 ): Promise<{ programs: number; complete: boolean }> {
-    const reader = new EpgReader(Date.now, { other: whole, settle: config.epgSweepSettle });
+    const reader = new EpgReader(Date.now, {
+        other: whole !== null,
+        settle: config.epgSweepSettle,
+        expect: whole ?? [],
+    });
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), config.epgChannelTimeout);
     timer.unref?.();
 
-    const label = whole ? `${key(channel)} (${channel.type} 全局)` : key(channel);
+    const label = whole !== null ? `${key(channel)} (${channel.type} 全局)` : key(channel);
     const startedAt = Date.now();
     update({ active: [...state.active, label] });
     /**
@@ -322,15 +327,24 @@ export function collectNow(): Promise<number> {
 }
 
 /**
- * **初回は、衛星をネットワークごとに1つの中継で先に埋める。**
+ * **番組表に詳細を流していない種別。** 中継ごとに開いても取れるものが変わらないので、
+ * いつもネットワークごとに1中継で全局ぶんを読む (`networkSweeps`)。
  *
- * BS・CS はどの中継にもネットワーク全局ぶんの番組表 (基本) が流れている。
- * 1つ読めば約6分で BS 45局ぶんが7日先まで揃う (実測。docs/data.md)。中継を
+ * CS は自分の中継のぶんにも詳細 (`0x58-0x5F`) が1つも来ない (実測。docs/data.md)。
+ * 1中継を約3分読めば、そのネットワークの全局の基本が7日先まで揃う
+ */
+const WHOLE_ONLY = new Set(['CS']);
+
+/**
+ * **初回は、BS をネットワークごとに1つの中継で先に埋める。**
+ *
+ * BS はどの中継にもネットワーク全局ぶんの番組表 (基本) が流れている。
+ * 1つ読めば約6分で 45局ぶんが7日先まで揃う (実測。docs/data.md)。中継を
  * 1つずつ回ると衛星のチューナー2本で数十分かかり、その間は番組表が空のまま。
  *
  * **詳細 (番組内容・出演者) は自分の中継にしか流れていない** ので、そのあと
  * いつもどおり中継ごとに回って足す。初回はどの中継も「まっさら」なので、
- * 同じ周回の続きで必ず回る。
+ * 同じ周回の続きで必ず回る。CS は詳細が無いので、いつも全局読み (`WHOLE_ONLY`)。
  *
  * 「初回」は、そのネットワークの局に番組が1件も無いとき。受信できない局が
  * 残っていても、ほかの局が埋まっていれば走らない (毎周回6分ずつ塞がない)
@@ -342,7 +356,7 @@ export function firstSweeps(
 ): AgentChannel[] {
     const byNetwork = new Map<number, AgentChannel[]>();
     for (const channel of channels) {
-        if (channel.type === 'GR') continue;
+        if (channel.type === 'GR' || WHOLE_ONLY.has(channel.type)) continue;
         byNetwork.set(channel.networkId, [...(byNetwork.get(channel.networkId) ?? []), channel]);
     }
     const sweeps: AgentChannel[] = [];
@@ -354,6 +368,24 @@ export function firstSweeps(
         if (!filled) sweeps.push([...members].sort((a, b) => lastOf(a) - lastOf(b))[0]!);
     }
     return sweeps;
+}
+
+/**
+ * 詳細の無い種別 (`WHOLE_ONLY`) の、この周回で読むべきものを**ネットワークごとに1中継**へまとめる。
+ * そのネットワークの中継が1つでも選ばれていれば、いちばん長く行っていない中継で全局を読む
+ */
+export function networkSweeps(
+    targets: AgentChannel[],
+    channels: AgentChannel[],
+    lastOf: (channel: AgentChannel) => number,
+): AgentChannel[] {
+    const wanted = new Set(targets.filter((c) => WHOLE_ONLY.has(c.type)).map((c) => c.networkId));
+    return [...wanted].map(
+        (network) =>
+            channels
+                .filter((c) => WHOLE_ONLY.has(c.type) && c.networkId === network)
+                .sort((a, b) => lastOf(a) - lastOf(b))[0]!,
+    );
 }
 
 async function run(): Promise<number> {
@@ -378,19 +410,47 @@ async function run(): Promise<number> {
      */
     const last = lastCollected(channels);
     const lastOf = (channel: AgentChannel) => last.get(key(channel)) ?? 0;
+    /*
+     * 全局読みの種別は**ネットワークで1つの時刻**にする。全局読みで開くのは1中継だけなので、
+     * 中継ごとの時刻だと残りが「行っていない」に見え、受信できない局の居る中継が
+     * 周回のたびにネットワークごと読み直させる
+     */
+    const networkLast = (channel: AgentChannel) =>
+        WHOLE_ONLY.has(channel.type)
+            ? Math.max(0, ...channels.filter((c) => c.networkId === channel.networkId).map(lastOf))
+            : lastOf(channel);
 
     const targets = boosted
         ? [...channels].sort((a, b) => thinnest(a) - thinnest(b))
-        : pickChannels(channels, thinnest, lastOf, at);
+        : pickChannels(channels, thinnest, networkLast, at);
 
     // 全局ぶんを読んだ中継は、自分の中継の詳細もそこで取れている。続きでは回らない
     // 行ったばかりなら休ませる (局が来なかったネットワークで毎周回6分ずつ塞がない)
-    const sweeps = firstSweeps(channels, reach, lastOf).filter(
+    const first = firstSweeps(channels, reach, lastOf).filter(
         (channel) => at - lastOf(channel) >= config.epgChannelRetry,
     );
-    const rest = targets.filter((channel) => !sweeps.includes(channel));
+    const sweeps = [...first, ...networkSweeps(targets, channels, lastOf)];
+    const rest = targets.filter((channel) => !sweeps.includes(channel) && !WHOLE_ONLY.has(channel.type));
     const total = sweeps.length + rest.length;
     if (total === 0) return 0;
+
+    /*
+     * 全局読みで来るはずの局。**DB に居る局だけ** (映像の無い局は入れていない)。
+     * 全部見えて揃えばすぐ閉じる
+     */
+    const known = new Set(
+        orm()
+            .select({ id: services.id })
+            .from(services)
+            .where(sql.raw(CURRENT_SERVICES))
+            .all()
+            .map((row) => row.id),
+    );
+    const expect = (sweep: AgentChannel) =>
+        channels
+            .filter((c) => c.type !== 'GR' && c.networkId === sweep.networkId)
+            .flatMap((c) => c.services.map((service) => service.serviceId))
+            .filter((serviceId) => known.has(serviceKey(sweep.networkId, serviceId)));
 
     const tuners = (await getTuners().catch(() => [])).filter((tuner) => !tuner.disabled);
 
@@ -400,7 +460,8 @@ async function run(): Promise<number> {
         finishedAt: null,
         pending: total,
         total,
-        sweeping: sweeps.length > 0,
+        // 画面の「詳細はあとで足す」は BS の初回だけ。CS はいつもの全局読み
+        sweeping: first.length > 0,
         programs: 0,
     });
     let programs = 0;
@@ -411,11 +472,11 @@ async function run(): Promise<number> {
          * BS でも CS でも1人前に見える)。溢れたぶんは 409 で弾かれ、その回は
          * 集められないまま落ちる。1つの列を全チューナーで引けば数は合う
          */
-        let sweepsLeft = sweeps.length;
+        let sweepsLeft = first.length;
         // 全局ぶんを読む中継を列の先頭に置く。衛星のチューナーが最初に取る
-        const queue = [
-            ...sweeps.map((channel) => ({ channel, whole: true })),
-            ...rest.map((channel) => ({ channel, whole: false })),
+        const queue: { channel: AgentChannel; whole: number[] | null }[] = [
+            ...sweeps.map((channel) => ({ channel, whole: expect(channel) })),
+            ...rest.map((channel) => ({ channel, whole: null })),
         ];
         const take = (types: string[]) => {
             const at = queue.findIndex((job) => types.includes(job.channel.type));
@@ -431,12 +492,13 @@ async function run(): Promise<number> {
                 /*
                  * 全局読みが揃わないまま上限で切れたら、その中継の詳細も欠けている。
                  * 列の後ろへ戻して、いつもどおり自分の中継ぶんを読み直す
+                 * (詳細の無い種別は、読み直しても取れるものが無い)
                  */
-                if (job.whole && !result.complete) {
-                    queue.push({ channel: job.channel, whole: false });
+                if (job.whole !== null && !result.complete && !WHOLE_ONLY.has(job.channel.type)) {
+                    queue.push({ channel: job.channel, whole: null });
                     update({ pending: state.pending + 1, total: state.total + 1 });
                 }
-                if (job.whole && --sweepsLeft === 0) update({ sweeping: false });
+                if (first.includes(job.channel) && --sweepsLeft === 0) update({ sweeping: false });
             }
         };
 
