@@ -120,6 +120,9 @@ internal static unsafe partial class Sys
     /// <summary><c>F_SETPIPE_SZ</c>。pipe の深さを変える (**Linux だけ**。macOS には無い)</summary>
     public const int SetPipeSize = 1031;
 
+    /// <summary><c>F_GETPIPE_SZ</c>。いまの pipe の深さ (広げられなかったときに記録へ出す)</summary>
+    public const int GetPipeSize = 1032;
+
     /// <summary>
     /// 書けるようになるか、<paramref name="timeoutMs"/> 経つまで待つ。どちらで起きたかは見ない
     /// (呼んだ側が書いてみて確かめる)
