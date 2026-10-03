@@ -547,6 +547,9 @@ export class EpgReader {
     /** p/f で「いま流れている」と言われた番組。録画の延長追従はこれを見る */
     readonly present = new Map<number, EitEvent>();
 
+    /** `takeChanged` のあとに増えた・変わった番組 (`serviceId:eventId`) */
+    private readonly changed = new Set<string>();
+
     /** 最後に新しい局を見かけた時刻 (`other` のときだけ使う) */
     private lastNewService = 0;
 
@@ -608,6 +611,7 @@ export class EpgReader {
      */
     private merge(event: EitEvent): void {
         const id = `${event.serviceId}:${event.eventId}`;
+        this.changed.add(id);
         const old = this.events.get(id);
         if (old === undefined) {
             this.events.set(id, event);
@@ -639,6 +643,22 @@ export class EpgReader {
     private onAir(section: EitSection, event: EitEvent): boolean {
         if (event.runningStatus === 4) return true;
         return event.runningStatus === 0 && section.sectionNumber === 0;
+    }
+
+    /**
+     * 前に呼んでから増えた・変わった番組。**読みながら少しずつ保存する**ため
+     * (`epg-collect.ts`)。揃うまで待ってからまとめて書くと、全局読みの数分のあいだ
+     * 画面に何も出ない
+     */
+    takeChanged(): EitEvent[] {
+        const out = [...this.changed].flatMap((id) => this.events.get(id) ?? []);
+        this.changed.clear();
+        return out;
+    }
+
+    /** 書けなかったぶんを、次の `takeChanged` でもう一度返す */
+    requeue(events: EitEvent[]): void {
+        for (const event of events) this.changed.add(`${event.serviceId}:${event.eventId}`);
     }
 
     /** 溜まった番組。開始時刻の順に並べて返す */
