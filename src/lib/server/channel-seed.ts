@@ -5,10 +5,12 @@
  * 全国どこでも同じ。総当たりすると BS だけで 92 か所を選局し、局の居るところでは
  * NIT が来るまで待つので数分かかる。決まった表を持っていれば、その待ちが要らない。
  *
- * **入れるのは、局が1つも無いときだけ** (初めて起こしたとき)。一度でもスキャン
- * したら触らない — 利用者が BS を消した (アンテナが無いなど) のに戻ってくるのは困る。
- * 入れるのは、受けられるチューナーがある種別だけ。局の入れ替え (BS の再編など) で
- * 表が古くなったら、画面のスキャンで上書きできる。
+ * **入れるのは、その種別の局が1つも無いとき** (BS と CS それぞれ)。地上波だけ
+ * スキャンしてある環境にも入る — 「局が1つも無いときだけ」にしていた頃は、前から
+ * 地上波を入れていた環境 (Home Assistant のアドオンの更新など) に BS/CS が永久に
+ * 入らず、アドオンが自前で追記していた。1局でもあれば触らない (スキャンした結果を
+ * 上書きしない)。入れるのは、受けられるチューナーがある種別だけ。局の入れ替え
+ * (BS の再編など) で表が古くなったら、画面のスキャンで上書きできる。
  *
  * エージェントに繋がったときと、チューナーの知らせ (選局のたびに来る) で見る (runtime.ts)。
  * 表は Khronos31/hassio-addons の denpa アドオンが初回起動で入れていたもの (MIT)
@@ -34,9 +36,9 @@ export async function seedChannels(): Promise<ChannelType[]> {
      */
     if (scanState().state === 'running') return [];
     const [tuners, channels] = await Promise.all([getTuners(), getChannels()]);
-    if (channels.length > 0) return [];
+    const present = new Set(channels.map((c) => c.type));
     const receivable = new Set(tuners.filter((t) => !t.disabled).flatMap((t) => t.types));
-    const types = TYPES.filter((type) => receivable.has(type));
+    const types = TYPES.filter((type) => receivable.has(type) && !present.has(type));
     if (types.length === 0) return [];
 
     const seed = (SEED as AgentChannel[]).filter((c) => types.includes(c.type));

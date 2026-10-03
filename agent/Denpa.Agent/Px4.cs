@@ -46,8 +46,40 @@ public static class Px4Userland
     /// <summary>設定の <c>device</c> の頭。これで始まっていれば px4-userland で掴む</summary>
     public const string Scheme = "px4:";
 
-    /// <summary>刺さっている筐体1台。<c>Id</c> は px4d に <c>--device</c> で渡す番号</summary>
-    public sealed record Enclosure(string Id, string Model, IReadOnlyList<Px4Receiver> Receivers);
+    /// <summary>
+    /// 刺さっている筐体1台。
+    ///
+    /// <para>
+    /// <c>Id</c> は設定の <c>px4:&lt;Id&gt;:&lt;受信機&gt;</c> に入る名前で、px4d のソケットの置き場の名前でもある。
+    /// 番号が一意なら番号そのもの。**番号が重なる筐体** (PX-M1UR と PX-S1UR はどれも <c>000000000000001</c>) は
+    /// 挿し口を足した名前 (<see cref="AliasOf"/>) にして、px4d を <c>--usb-path</c> と <c>--instance</c> で起こす
+    /// (<see cref="UsbPaths"/> が空でない)。
+    /// </para>
+    /// </summary>
+    public sealed record Enclosure(
+        string Id,
+        string Model,
+        IReadOnlyList<Px4Receiver> Receivers,
+        string? Serial = null,
+        IReadOnlyList<string>? UsbPaths = null)
+    {
+        /// <summary>筐体の番号 (USB の serial)。px4d の <c>--device</c> に渡す</summary>
+        public string Serial { get; init; } = Serial ?? Id;
+
+        /// <summary>番号が重なるときだけ。px4d の <c>--usb-path</c> に渡す (dev 1 / dev 2 の順)</summary>
+        public IReadOnlyList<string> UsbPaths { get; init; } = UsbPaths ?? [];
+    }
+
+    /// <summary>
+    /// 番号が重なる筐体の名前。**番号と挿し口** (<c>000000000000001_1-2.3</c>)。
+    ///
+    /// <para>
+    /// px4d の <c>--instance</c> にそのまま使えるよう、英数字と <c>_ - .</c> だけにする
+    /// (px4-userland SPEC 4.1)。挿し口が <c>BUS:ADDRESS</c> でしか分からないときは <c>b1a6</c> と書く。
+    /// **挿し口を変えると別の筐体になる** (px4-userland も「抜き差し後の物理個体を保証しない」と言っている)
+    /// </para>
+    /// </summary>
+    public static string AliasOf(string serial, IEnumerable<string> places) => $"{serial}_{string.Join('_', places)}";
 
     /// <summary>配布アーカイブを展開した場所 (Dockerfile)</summary>
     public static string Dir =>
@@ -85,15 +117,34 @@ public static class Px4Userland
     {
         if (!Is(device)) return null;
         var parts = device[Scheme.Length..].Split(':');
-        if (parts.Length != 2 || !Digits(parts[0])) return null;
+        if (parts.Length != 2 || !ValidId(parts[0])) return null;
         if (!int.TryParse(parts[1], out var receiver) || receiver < 0) return null;
         return (parts[0], receiver);
     }
 
     private static bool Digits(string value) => value.Length > 0 && value.All(char.IsAsciiDigit);
 
-    /// <summary>画面に出す名前。筐体は番号の末尾4桁で見分ける</summary>
-    public static string Name(string model, string id, int receiver) => $"{model}-{id[^4..]} #{receiver}";
+    /// <summary>番号そのもの、または番号と挿し口 (<see cref="AliasOf"/>)</summary>
+    internal static bool ValidId(string id)
+    {
+        var cut = id.IndexOf('_');
+        if (cut < 0) return Digits(id);
+        return Digits(id[..cut]) && id.Length <= 80 && cut < id.Length - 1
+            && id[(cut + 1)..].All(c => char.IsAsciiLetterOrDigit(c) || c is '_' or '-' or '.');
+    }
+
+    /// <summary>
+    /// 画面で筐体を見分ける短い名前。番号の末尾4桁、**番号が重なる筐体は挿し口**
+    /// (末尾4桁が同じなので見分けにならない)
+    /// </summary>
+    public static string Label(string id)
+    {
+        var cut = id.IndexOf('_');
+        return cut < 0 ? id[^4..] : $"USB {id[(cut + 1)..].Replace('_', '/')}";
+    }
+
+    /// <summary>画面に出す名前</summary>
+    public static string Name(string model, string id, int receiver) => $"{model}-{Label(id)} #{receiver}";
 
     /// <summary>
     /// 刺さっている筐体。**<c>px4d --list-json</c> に聞く。**
@@ -134,8 +185,8 @@ public static class Px4Userland
     }
 
     /// <summary>
-    /// <c>px4d --list-json</c> の出力を読む (px4-userland SPEC 4.6 v0.26)。**使えるのは <c>status=ready</c> で
-    /// <c>serial_unique=true</c> の筐体だけ。**
+    /// <c>px4d --list-json</c> の出力を読む (px4-userland SPEC 4.6 v0.26)。**使えるのは <c>status=ready</c> の筐体。**
+    /// 番号が重なる筐体 (<c>serial_unique=false</c>) は挿し口で見分ける (<see cref="AliasOf"/>)。
     ///
     /// <para>
     /// <c>{"enclosures":[{serial, model, usb, status, serial_unique, devices, candidates, receivers}],
@@ -173,14 +224,44 @@ public static class Px4Userland
             var status = shape.Text(enclosure, "status", "enclosures[]") ?? "";
             // 無ければ一意とみなす (版ずれとしては残る)。番号が重なれば px4d が起動を断る (exit 2) だけ
             var unique = shape.Flag(enclosure, "serial_unique", "enclosures[]") ?? true;
+            var devices = shape.Array(enclosure, "devices", "enclosures[]").OfType<JsonObject>()
+                .Select(device => (
+                    Device: shape.Number(device, "device", "devices[]", optional: true) ?? 0,
+                    Port: shape.Text(device, "port", "devices[]", optional: true),
+                    Bus: shape.Number(device, "bus", "devices[]", optional: true),
+                    Address: shape.Number(device, "address", "devices[]", optional: true)))
+                .OrderBy(device => device.Device)
+                .ToList();
             var where = Where(
-                shape.Array(enclosure, "devices", "enclosures[]").Concat(shape.Array(enclosure, "candidates", "enclosures[]"))
-                    .OfType<JsonObject>()
-                    .Select(device => (shape.Text(device, "port", "devices[]", optional: true),
-                        shape.Number(device, "bus", "devices[]", optional: true),
-                        shape.Number(device, "address", "devices[]", optional: true))));
+                devices.Select(device => (device.Port, device.Bus, device.Address)).Concat(
+                    shape.Array(enclosure, "candidates", "enclosures[]").OfType<JsonObject>()
+                        .Select(device => (shape.Text(device, "port", "devices[]", optional: true),
+                            shape.Number(device, "bus", "devices[]", optional: true),
+                            shape.Number(device, "address", "devices[]", optional: true)))));
 
-            if (Usable(id, model, status, unique, where, warn))
+            /*
+             * **番号が重なる筐体は、挿し口で見分ける。** px4d には挿し口 (`--usb-path`) と、ソケットの
+             * 置き場の名前 (`--instance`) を渡す。番号だけを選択子として控えるな、と SPEC 4.6 にある
+             */
+            IReadOnlyList<string> paths = [];
+            var alias = id;
+            if (!unique && status == "ready" && Digits(id))
+            {
+                var places = devices.Select(device =>
+                    device.Port is { Length: > 0 } port ? (Path: port, Name: port)
+                    : device.Bus is { } bus && device.Address is { } address ? (Path: $"{bus}:{address}", Name: $"b{bus}a{address}")
+                    : default).ToList();
+                if (places.Count is 0 or > 2 || places.Any(place => place.Path is null))
+                {
+                    warn($"{model} {id} は使えません。同じ番号の筐体がほかにも刺さっていて、挿し口も分からないので"
+                        + $"見分けられません (serial_unique=false{where})");
+                    continue;
+                }
+                paths = [.. places.Select(place => place.Path!)];
+                alias = AliasOf(id, places.Select(place => place.Name!));
+            }
+
+            if (Usable(id, model, status, where, warn))
             {
                 var receivers = new List<Px4Receiver>();
                 foreach (var entry in shape.Array(enclosure, "receivers", "enclosures[]"))
@@ -200,7 +281,7 @@ public static class Px4Userland
                     var lnb = shape.Flag(receiver, "lnb_15v_supported", "receivers[]");
                     if (Px4Receiver.From(number.Value, system, lnb, warn) is { } known) receivers.Add(known);
                 }
-                found.Add(new Enclosure(id, model, receivers));
+                found.Add(new Enclosure(alias, model, receivers, id, paths));
             }
         }
 
@@ -304,15 +385,14 @@ public static class Px4Userland
     /// 筐体を使うか決める。使わないなら理由を残す。
     ///
     /// <para>
-    /// **番号が重なる筐体 (<c>serial_unique=false</c>) は使わない。** PX-M1UR と PX-S1UR は
-    /// どれも USB の serial が <c>000000000000001</c> で、px4-userland 0.1.9 からは同時に挿すと
-    /// 別々の ready な筐体として並ぶ (0.1.8 までは1つの <c>duplicate</c>)。そのまま組み立てると
-    /// 同じ <c>px4:000000000000001:0</c> の本が2冊でき、どちらも起こせない —
-    /// <c>px4d --device</c> は番号だけでは1台に決められず、掴む前に断る (exit 2)。
-    /// 番号だけを選択子として控えるな、とも SPEC 4.6 にある。
+    /// 番号が重なる筐体 (<c>serial_unique=false</c>) も使う。PX-M1UR と PX-S1UR はどれも USB の serial が
+    /// <c>000000000000001</c> で、番号のままだと同じ <c>px4:000000000000001:0</c> が2冊でき、
+    /// <c>px4d --device</c> も番号だけでは1台に決められず断る (exit 2)。そこで挿し口を足した名前にする
+    /// (<see cref="ParseJson"/>)。前は使わずに理由だけ残していて、Home Assistant のアドオンが
+    /// px4d / px4ctl を差し替えるラッパーで補っていた。
     /// </para>
     /// </summary>
-    private static bool Usable(string id, string model, string status, bool unique, string where, Action<string> warn)
+    private static bool Usable(string id, string model, string status, string where, Action<string> warn)
     {
         if (status != "ready")
         {
@@ -322,13 +402,6 @@ public static class Px4Userland
         if (!Digits(id))
         {
             warn($"{model} の番号 {id} が読めません (数字だけのはず)");
-            return false;
-        }
-        if (!unique)
-        {
-            warn($"{model} {id} は使いません。同じ番号の筐体がほかにも刺さっていて、px4d が番号だけでは"
-                + $"どれを開くか決められません (serial_unique=false{where}。PX-M1UR と PX-S1UR はどれも 000000000000001)。"
-                + "同じ番号のものは1台だけ挿してください");
             return false;
         }
         return true;
@@ -569,8 +642,16 @@ public sealed class Px4Daemon
          * 一覧は最悪 15 秒待つので、錠の中だとその間 Dispose も選局も待たされる。
          * 使えない筐体の理由は Detect が残すので、ここでは黙る
          */
-        var listed = Px4Userland.Enclosures(_ => { })
-            .FirstOrDefault(enclosure => enclosure.Id == _id)?.Receivers;
+        var enclosure = Px4Userland.Enclosures(_ => { }).FirstOrDefault(found => found.Id == _id);
+        var listed = enclosure?.Receivers;
+        /*
+         * 挿し口で見分ける筐体は、一覧に居ないと起こせない (挿し口を知る手段が一覧しか無い)。
+         * 挿し口を変えると別の名前になるので、設定に書いた名前は見つからなくなる
+         */
+        if (_id.Contains('_') && enclosure is null)
+        {
+            throw new IOException($"{Px4Userland.Label(_id)} の筐体が見つかりません (抜けたか、挿し口を変えた?)");
+        }
 
         lock (_gate)
         {
@@ -595,7 +676,7 @@ public sealed class Px4Daemon
 
             var start = new ProcessStartInfo(px4d,
             [
-                "--device", _id,
+                .. Select(enclosure),
                 "--firmware", Px4Userland.Firmware,
                 "--runtime-dir", Px4Userland.RuntimeDir,
                 /*
@@ -647,12 +728,21 @@ public sealed class Px4Daemon
         }
     }
 
+    /// <summary>
+    /// px4d にどの筐体かを伝える引数。番号が一意なら <c>--device</c> だけ、重なるなら挿し口と
+    /// ソケットの置き場の名前も (px4-userland SPEC 4.1。<c>--usb-path</c> には <c>--instance</c> が要る)
+    /// </summary>
+    private string[] Select(Px4Userland.Enclosure? enclosure) => enclosure is { UsbPaths.Count: > 0 }
+        ? ["--device", enclosure.Serial, .. enclosure.UsbPaths.SelectMany(path => new[] { "--usb-path", path }), "--instance", _id]
+        : ["--device", _id];
+
     /// <summary><c>px4ctl status</c>。exit 0 なら ready</summary>
     public (int Code, string Output) Status(TimeSpan timeout) => Control("status", timeout);
 
     private (int Code, string Output) Control(string command, TimeSpan timeout) => Shell.Run(
         Path.Combine(Px4Userland.Dir, "px4ctl"),
-        ["--device", _id, "--runtime-dir", Px4Userland.RuntimeDir, command],
+        // 挿し口で起こした筐体は、ソケットの置き場の名前で呼ぶ (番号で呼ぶと別の筐体に繋がりうる)
+        [_id.Contains('_') ? "--instance" : "--device", _id, "--runtime-dir", Px4Userland.RuntimeDir, command],
         timeout);
 
     /// <summary>
