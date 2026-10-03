@@ -232,6 +232,12 @@ export const config = {
      */
     epgChannelTimeout: num('EPG_CHANNEL_TIMEOUT', 10 * MIN),
     /**
+     * 初回に衛星の全局ぶんを1中継で読むとき (`epg-collect.firstSweeps`)、
+     * **新しい局が出てこなくなってからこれだけ待って**閉じる。局ごとに
+     * 流れてくる順はばらばらで、見かけた局が揃っただけでは来ていない局を置いていく
+     */
+    epgSweepSettle: num('EPG_SWEEP_SETTLE', MIN),
+    /**
      * 番組表がこの先まで埋まっていない局は、周期を待たずに集め直す。
      *
      * スキャンの直後や初回起動では全部が空なので、ここで先に埋まる

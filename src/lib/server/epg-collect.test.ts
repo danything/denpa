@@ -9,7 +9,7 @@ import type { AgentChannel } from './tuner';
  * なっていた ([config.ts](config.ts) の epgChannelTimeout)。
  */
 const { config } = await import('./config');
-const { lastOf, pickChannels, reachOf } = await import('./epg-collect');
+const { firstSweeps, lastOf, pickChannels, reachOf } = await import('./epg-collect');
 const { serviceKey } = await import('./tuner');
 
 const NETWORK = 32391;
@@ -139,5 +139,27 @@ describe('最後に集めた時刻', () => {
 
     test('1件も入っていなければ「まっさら」', () => {
         expect(lastOf(new Map(), channel('BS01_0', [101]))).toBe(0);
+    });
+});
+
+describe('初回は衛星をネットワークごとに1中継で埋める', () => {
+    const BS = 4;
+    const sat = (name: string, networkId: number, services: number[]) =>
+        ({ ...channel(name, services), type: networkId === BS ? 'BS' : 'CS', networkId }) as AgentChannel;
+    const channels = [
+        channel('T16', [1024]),
+        sat('BS01_0', BS, [101]),
+        sat('BS03_0', BS, [151]),
+        sat('CS02', 6, [296]),
+        sat('CS04', 7, [55]),
+    ];
+
+    test('番組が1件も無いネットワークから、1つずつ選ぶ (地上波は対象外)', () => {
+        expect(firstSweeps(channels, new Map()).map((c) => c.channel)).toEqual(['BS01_0', 'CS02', 'CS04']);
+    });
+
+    test('1局でも埋まっているネットワークは選ばない (受信できない局が残っていても)', () => {
+        const reach = new Map([[serviceKey(BS, 151), Date.now()]]);
+        expect(firstSweeps(channels, reach).map((c) => c.channel)).toEqual(['CS02', 'CS04']);
     });
 });
