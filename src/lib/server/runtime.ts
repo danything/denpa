@@ -19,6 +19,7 @@ import { tick } from './scheduler';
 import { prune as pruneSessions } from './session';
 import { beginDraining } from './shutdown';
 import { redeem } from './tickets';
+import { getChannels } from './tuner';
 import { checkForUpdate } from './update';
 import { notify } from './webhook';
 import { serve } from './ws';
@@ -119,7 +120,7 @@ export function start(): void {
      * 局の一覧はエージェントが持っている (スキャンの結果) ので、そこから取る
      */
     void guard('epg', sync);
-    every(config.channelSyncInterval, 'services', syncServicesOnly);
+    nowAndEvery(config.channelSyncInterval, 'services', syncChannels);
 
     /*
      * **番組表を自分で集める。**
@@ -174,6 +175,17 @@ export function start(): void {
 }
 
 /**
+ * 局の一覧をエージェントから取り込む。**BS / CS が無ければ、そのついでに標準の表から入れる**
+ * (channel-seed.ts)。一覧は1回だけ読んで両方に使う。エージェントが後から起きても、
+ * 次の周期 (`CHANNEL_SYNC_INTERVAL`、既定1分) で入る
+ */
+async function syncChannels(): Promise<void> {
+    const channels = await getChannels();
+    syncServicesOnly(channels);
+    await seedChannels(channels);
+}
+
+/**
  * エージェントからの知らせを受け取る。
  *
  * チューナーの様子も局の入れ替わりも、これまでは決まった間隔で覗きに行っていた。
@@ -195,8 +207,6 @@ function listenToAgent(): void {
                      * 開いた瞬間に来る知らせなので、ここで乗る
                      */
                     void guard('logo', ride);
-                    // BS / CS を受けられるチューナーが挿さったなら、標準の表から局を入れる
-                    void guard('channels', seedChannels);
                     break;
                 case 'channels':
                     // スキャンで局が入れ替わった。取り込み直して番組表も集め直す
@@ -214,8 +224,6 @@ function listenToAgent(): void {
         (up) => {
             if (up) {
                 console.log('[agent] チューナーに繋がりました');
-                // BS / CS の局がまだ無ければ、標準の表から入れる (channel-seed.ts)
-                void guard('channels', seedChannels);
                 notify({ event: 'agent.up', text: 'チューナーエージェントに繋がりました' });
             } else {
                 console.error('[agent] チューナーに繋がりません');
