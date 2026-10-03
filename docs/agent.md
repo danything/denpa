@@ -164,7 +164,7 @@ CM検出用のロゴ (`.lgd`) はチューナーを掴みません。録れた�
 
 ## 設定は2つのファイルに分ける
 
-PVC に置きます (`/app-config`)。どちらも無くて構いません (機材は自分で見つけ、
+PVC に置きます (`/config`)。どちらも無くて構いません (機材は自分で見つけ、
 チャンネルはスキャンするまで空。ただし衛星を受けられる機材があれば、BS / CS の局が
 無いうちに denpa が標準の表を預けてくる。`src/lib/server/channel-seed.ts`)。
 
@@ -725,7 +725,7 @@ compose.prod.yml から tuner-agent を外したもの)。
 
 LaunchAgent の環境変数は、コンテナ既定の置き場を Mac の置き場に向け直すものだけです
 (`AGENT_PORT` (25252 のまま) `TUNERS_FILE` `CHANNELS_FILE` `PX4_USERLAND_DIR` `PX4_FIRMWARE` `PX4_RUNTIME_DIR`
-`SIANO_USERLAND_DIR` `SIANO_FIRMWARE` `RECORDED_DIR`)。`PX4_RUNTIME_DIR` を
+`SIANO_USERLAND_DIR` `SIANO_FIRMWARE` `RAW_DIR`)。`PX4_RUNTIME_DIR` を
 `~/Library/Caches/denpa-agent` と短くしているのは、px4d の制御ソケットのパスが macOS では
 104 バイトまでだからです。IT930x のファームウェアはコンテナと同じく PLEX のドライバから
 手元で切り出します (ハッシュ3つで確かめる)。

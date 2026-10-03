@@ -251,7 +251,7 @@ async function importOne(row: Row, options: MigrateOptions): Promise<'imported' 
      * EPGStation の video_file.type は 'ts'(未エンコード) か 'encoded'。
      * 生TSを保存先に置くと denpa からは「エンコード済み」に見えてしまい、
      * 録り直せず、プレイヤーにも巨大な MPEG-2 が並ぶ。denpa 自身が録ったときと
-     * 同じ形 (生TSは recorded、完成品は library) に揃える
+     * 同じ形 (生TSは raw、完成品は encoded) に揃える
      */
     const raw = row.fileType !== 'encoded';
     const extension = from.slice(from.lastIndexOf('.')) || (raw ? '.m2ts' : '.mkv');

@@ -53,8 +53,8 @@ export function start(): void {
     if (started) return;
     started = true;
 
-    mkdirSync(config.recordedDir, { recursive: true });
-    mkdirSync(config.libraryDir, { recursive: true });
+    mkdirSync(config.rawDir, { recursive: true });
+    mkdirSync(config.encodedDir, { recursive: true });
 
     /*
      * 昔の Jellyfin 流レイアウト (Season フォルダ + episodedetails + `-thumb.jpg`) の

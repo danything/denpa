@@ -39,7 +39,7 @@ spec:
         # スクリプトに空白を入れないこと: k8up は注釈をシェル風に分割するので、
         # 引用符が効くのは -e の前後 2 か所だけで済ませる。
         k8up.io/backupcommand: >-
-          bun -e 'process.stdout.write(new(require("bun:sqlite").Database)("/app/data/denpa.db",{readonly:true}).serialize())'
+          bun -e 'process.stdout.write(new(require("bun:sqlite").Database)("/data/denpa.db",{readonly:true}).serialize())'
         k8up.io/file-extension: .db
         {{- with .Values.imageMarks.denpa }}
         # 入れ替えの合図 (values.yaml の imageMarks)
@@ -102,12 +102,14 @@ spec:
             initialDelaySeconds: {{ .Values.denpa.livenessProbe.initialDelaySeconds }}
             periodSeconds: {{ .Values.denpa.livenessProbe.periodSeconds }}
           volumeMounts:
+            # 置き場は既定のまま (DB は /data、生TS は /media/raw、焼いたものは /media/encoded)。
+            # PVC は前と同じものを、繋ぐ先だけ変えて使う
             - name: denpa-data
-              mountPath: /app/data
+              mountPath: /data
             - name: denpa-recorded
-              mountPath: /app/recorded
+              mountPath: /media/raw
             - name: library
-              mountPath: /library
+              mountPath: /media/encoded
             {{- if .Values.denpa.gpu.hostPath }}
             - name: dri
               mountPath: /dev/dri

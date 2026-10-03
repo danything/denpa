@@ -80,8 +80,8 @@ public sealed class Config(string tunersFile, string channelsFile)
     public string ChannelsFile { get; } = channelsFile;
 
     public static Config FromEnvironment() => new(
-        Environment.GetEnvironmentVariable("TUNERS_FILE") ?? "/app-config/tuners.json",
-        Environment.GetEnvironmentVariable("CHANNELS_FILE") ?? "/app-config/channels.json");
+        Environment.GetEnvironmentVariable("TUNERS_FILE") ?? "/config/tuners.json",
+        Environment.GetEnvironmentVariable("CHANNELS_FILE") ?? "/config/channels.json");
 
     private static JsonArray ReadArray(string path, string? key)
     {

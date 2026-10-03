@@ -217,7 +217,7 @@ export async function descramble(
      * 掛かったままのTSは必ずここにある(引き継いだ録画も、移行のときに
      * 未エンコードのものは生TSとしてここへ入る)
      */
-    const base = config.recordedDir;
+    const base = config.rawDir;
     const from = relative(base, input);
     const to = relative(base, output);
     if (from.startsWith('..') || to.startsWith('..')) {

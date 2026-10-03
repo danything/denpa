@@ -61,7 +61,7 @@ test.describe('スクランブルされたまま録れたとき', () => {
             await waitWatchable(page, page.locator(row));
 
             // 掛かったままのTSを取っておいても、あとから解ける保証は無いので置き換える
-            expect(scrambledFiles(stack.recordedDir)).toEqual([]);
+            expect(scrambledFiles(stack.rawDir)).toEqual([]);
 
             /*
              * 生TSを残しているなら、その大きさも行に出す。

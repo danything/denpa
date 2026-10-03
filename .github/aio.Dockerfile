@@ -6,8 +6,8 @@
 # arm64 もエミュレーション無しで数秒で組める。どちらの土台も Debian trixie-slim なので、
 # エージェントが要るもの (setsid) は本体の側にもある。
 #
-# 起こし方と止め方は aio-entrypoint.sh。設定の置き場はエージェントと同じ `/app-config`
-# (`tuners.json` / `channels.json`)、それ以外は denpa と同じ
+# 起こし方と止め方は aio-entrypoint.sh。置き場は既定のまま両方で同じ: DB は `/data`、
+# エージェントの設定 (`tuners.json` / `channels.json`) は `/config`、録画は `/media` の下
 ARG DENPA
 ARG AGENT
 FROM ${AGENT} AS agent
@@ -17,8 +17,6 @@ COPY --from=agent /usr/local/bin/denpa-agent /usr/local/bin/denpa-agent
 COPY --from=agent /opt/px4-userland /opt/px4-userland
 COPY --from=agent /opt/siano-userland /opt/siano-userland
 COPY --chmod=755 .github/aio-entrypoint.sh /usr/local/bin/denpa-aio
-# エージェントは同じコンテナの中。生TSの置き場は両方で同じ所を指す
-# (エージェントは録ったあとの解除で読む。既定がそれぞれ違うのでそろえる)
-ENV TUNER_AGENT_URL=http://127.0.0.1:25252 \
-    RECORDED_DIR=/app/recorded
+# エージェントは同じコンテナの中。生TSの置き場は既定が両方 `/media/raw` なので書かない
+ENV TUNER_AGENT_URL=http://127.0.0.1:25252
 CMD ["/usr/local/bin/denpa-aio"]

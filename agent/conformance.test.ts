@@ -162,7 +162,7 @@ beforeAll(async () => {
             AGENT_PORT: String(PORT),
             TUNERS_FILE: paths().tuners,
             CHANNELS_FILE: paths().channels,
-            RECORDED_DIR: paths().recorded,
+            RAW_DIR: paths().recorded,
             FAKE_TUNE: TUNE,
             // 番組を作る本数。総当たりの1チャンネルあたりを軽くする
             FAKE_SLOTS: '4',
@@ -480,7 +480,7 @@ describe('カードとスクランブル解除', () => {
                 AGENT_PORT: String(port),
                 TUNERS_FILE: join(room, 'tuners.json'),
                 CHANNELS_FILE: join(room, 'channels.json'),
-                RECORDED_DIR: join(room, 'recorded'),
+                RAW_DIR: join(room, 'recorded'),
                 FAKE_TUNE: TUNE,
                 CARD_URL: BASE,
             },
@@ -649,7 +649,7 @@ describe('止まれと言われたとき', () => {
                 AGENT_PORT: String(PORT2),
                 TUNERS_FILE: join(room, 'tuners.json'),
                 CHANNELS_FILE: join(room, 'channels.json'),
-                RECORDED_DIR: join(room, 'recorded'),
+                RAW_DIR: join(room, 'recorded'),
                 FAKE_TUNE: TUNE,
                 FAKE_SLOTS: '4',
                 // 本番は6時間。テストなので短くするが、待つ道は同じ

@@ -114,12 +114,12 @@ RUN set -eu && cd /tmp && \
     echo "${ISDBT_RIO_SHA256}  /opt/siano-userland/firmware/isdbt_rio.inp" | sha256sum -c - && \
     rm -rf /tmp/*
 
-# 設定は PVC (/app-config) に置く。**どちらも denpa の画面が書く。**
+# 設定は PVC (/config) に置く。**どちらも denpa の画面が書く。**
 #
 # **どちらも無くて構わない。** tuners.json が無ければ刺さっている機材を
 # 自分で見つけるし、channels.json はスキャンするまで空でよい。
-ENV TUNERS_FILE=/app-config/tuners.json \
-    CHANNELS_FILE=/app-config/channels.json
+ENV TUNERS_FILE=/config/tuners.json \
+    CHANNELS_FILE=/config/channels.json
 COPY --from=build /out/denpa-agent /usr/local/bin/denpa-agent
 
 EXPOSE 25252

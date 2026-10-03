@@ -142,12 +142,13 @@ docker compose up -d
 docker run -d --name denpa --restart unless-stopped --stop-timeout 21900 \
   --privileged --device /dev/bus --device /dev/dvb \
   -e TRUSTED_NETWORKS=192.168.0.0/16,10.0.0.0/8,172.16.0.0/12 \
-  -v ./config:/app-config -v denpa-data:/app/data \
-  -v denpa-recorded:/app/recorded -v denpa-library:/library \
+  -v ./config:/config -v denpa-data:/data -v denpa-media:/media \
   -p 3000:3000 ghcr.io/danything/denpa-aio:latest
 ```
 
-- 設定の置き場 (`tuners.json` / `channels.json`) は `/app-config`、ほかは denpa と同じ
+- 置き場は既定のまま: エージェントの設定 (`tuners.json` / `channels.json`) は `/config`、DB は `/data`、
+  録画は `/media` の下 (生TS は `raw`、焼いたものは `encoded`)。前の版から上げるときは
+  [docs/app.md](docs/app.md#置き場を変えた-前の版から上げるとき) を見る
 - 止めるときは両方に伝え、録画の終わりを待ちます (`--stop-timeout` を長くしておく。compose の `stop_grace_period` と同じ)。
   どちらかが落ちたらコンテナごと終わるので、起こし直しは `--restart` に任せます
 

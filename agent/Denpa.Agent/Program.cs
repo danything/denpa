@@ -34,7 +34,14 @@ if (args.ElementAtOrDefault(0) == "--card") return Probe.Card();
 var port = int.TryParse(Environment.GetEnvironmentVariable("AGENT_PORT"), out var configured)
     ? configured
     : 25252;
-var recorded = Path.GetFullPath(Environment.GetEnvironmentVariable("RECORDED_DIR") ?? "/denpa-recorded");
+/*
+ * 生TSの置き場。**denpa と同じ変数で決める** (`RAW_DIR`、無ければ `MEDIA_DIR/raw`、どちらも無ければ
+ * `/media/raw`)。掛かったまま録れたTSを後から解く (/denpa/decode) ときに読むので、denpa と
+ * 同じ実体を同じ名前で見せる。ここの外のファイルは頼まれても触らない
+ */
+var recorded = Path.GetFullPath(
+    Environment.GetEnvironmentVariable("RAW_DIR")
+    ?? Path.Combine(Environment.GetEnvironmentVariable("MEDIA_DIR") ?? "/media", "raw"));
 
 var config = Config.FromEnvironment();
 var events = new Events();

@@ -21,9 +21,6 @@ services:
         command: bun run dev --host 0.0.0.0 --port 5173
         environment:
             TZ: Asia/Tokyo
-            DENPA_DB: /data/denpa.db
-            RECORDED_DIR: /recorded
-            LIBRARY_DIR: /library
             # 開発では本物の ffmpeg (ビルドに数十分) の代わりに偽物を使う。
             # 実エンコードを試したいときだけ FFMPEG=/usr/local/bin/ffmpeg にして runtime ステージで動かす
             FFMPEG: /app/tests/fake/ffmpeg.sh
@@ -36,9 +33,10 @@ services:
         volumes:
             - .:/app
             - app-node-modules:/app/node_modules
+            # 置き場は既定のまま (src/lib/server/config.ts)
             - denpa-data:/data
-            - denpa-recorded:/recorded
-            - denpa-library:/library
+            - denpa-recorded:/media/raw
+            - denpa-library:/media/encoded
         labels:
             caddy: http://denpa.localhost
             caddy.reverse_proxy: '{{upstreams 5173}}'

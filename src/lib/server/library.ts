@@ -55,10 +55,10 @@ function libraryRelPath(rec: LibraryNameInput, ext: string): string {
  */
 export function libraryPath(rec: LibraryNameInput, ext: string): string {
     const rel = libraryRelPath(rec, ext);
-    const abs = join(config.libraryDir, rel);
+    const abs = join(config.encodedDir, rel);
     // 自分がいま置いてある2本 (主・もう一方) は衝突ではない
     if (!existsSync(abs) || abs === rec.library_path || abs === rec.alt_path) return abs;
-    return join(config.libraryDir, libraryRelPath(rec, ` [${rec.id}]${ext}`));
+    return join(config.encodedDir, libraryRelPath(rec, ` [${rec.id}]${ext}`));
 }
 
 /**
@@ -89,12 +89,12 @@ export function encodedCodec(path: string): 'av1' | 'h264' {
  */
 export function libraryFamily(rec: LibraryNameInput): string[] {
     const exts = ['.mkv', ` [${rec.id}].mkv`, ' [H264].mkv', ` [${rec.id}] [H264].mkv`];
-    return exts.map((ext) => join(config.libraryDir, libraryRelPath(rec, ext)));
+    return exts.map((ext) => join(config.encodedDir, libraryRelPath(rec, ext)));
 }
 
 /** 生TSの置き場。保存先と違い人が見るものではないので平置きでよい */
 export function recordedPath(rec: LibraryNameInput, ext = '.m2ts'): string {
     const d = new Date(rec.start_at);
     const stamp = `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}-${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}`;
-    return join(config.recordedDir, `${sanitizeFileName(rec.series)}-${stamp}-${rec.id}${ext}`);
+    return join(config.rawDir, `${sanitizeFileName(rec.series)}-${stamp}-${rec.id}${ext}`);
 }

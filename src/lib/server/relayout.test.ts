@@ -10,7 +10,7 @@ import { eq } from 'drizzle-orm';
  */
 const { config } = await import('./config');
 config.dbPath = join(mkdtempSync(join(tmpdir(), 'denpa-relayout-')), 'denpa.db');
-config.libraryDir = mkdtempSync(join(tmpdir(), 'denpa-relayout-lib-'));
+config.encodedDir = mkdtempSync(join(tmpdir(), 'denpa-relayout-lib-'));
 
 const { orm } = await import('./db');
 const { recordings } = await import('./schema');
@@ -19,7 +19,7 @@ const { relayoutLibrary } = await import('./relayout');
 const START = new Date(2026, 7, 12, 0, 0).getTime();
 
 function put(rel: string, content = 'x'): string {
-    const path = join(config.libraryDir, rel);
+    const path = join(config.encodedDir, rel);
     mkdirSync(dirname(path), { recursive: true });
     writeFileSync(path, content);
     return path;
@@ -62,10 +62,10 @@ function insert(over: Partial<typeof DEFAULTS>): void {
 
 function reset(): void {
     orm().delete(recordings).run();
-    // 実体もまっさらに戻す (テストは同じ libraryDir を使い回すので、前のテストの
+    // 実体もまっさらに戻す (テストは同じ encodedDir を使い回すので、前のテストの
     // 残りが「新しい置き場が既に埋まっている」= 衝突として効いてしまう)
-    rmSync(config.libraryDir, { recursive: true, force: true });
-    mkdirSync(config.libraryDir, { recursive: true });
+    rmSync(config.encodedDir, { recursive: true, force: true });
+    mkdirSync(config.encodedDir, { recursive: true });
 }
 
 function libPath(id: number): { lib: string | null; alt: string | null } {
@@ -90,7 +90,7 @@ describe('relayoutLibrary', () => {
 
         relayoutLibrary();
 
-        const newBase = join(config.libraryDir, '番組/番組 - 2026-08-12 - 0000');
+        const newBase = join(config.encodedDir, '番組/番組 - 2026-08-12 - 0000');
         // 本体は Season を抜けて上がる
         expect(libPath(1).lib).toBe(`${newBase}.mkv`);
         expect(existsSync(`${newBase}.mkv`)).toBe(true);
@@ -102,8 +102,8 @@ describe('relayoutLibrary', () => {
         // NFO はもう書かない (旧いのを捨てるだけ)
         expect(existsSync(`${newBase}.nfo`)).toBe(false);
         // 旧 Season フォルダと tvshow.nfo は残さない
-        expect(existsSync(join(config.libraryDir, OLD_DIR))).toBe(false);
-        expect(existsSync(join(config.libraryDir, '番組/tvshow.nfo'))).toBe(false);
+        expect(existsSync(join(config.encodedDir, OLD_DIR))).toBe(false);
+        expect(existsSync(join(config.encodedDir, '番組/tvshow.nfo'))).toBe(false);
     });
 
     test('命名規則が変わる前の素名はぐれ (孤児) を旧フォルダごと片付ける', () => {
@@ -116,8 +116,8 @@ describe('relayoutLibrary', () => {
         relayoutLibrary();
 
         // 孤児は消え、旧フォルダも畳まれ、本体はきれいな素名で上がる
-        expect(existsSync(join(config.libraryDir, OLD_DIR))).toBe(false);
-        expect(libPath(1).lib).toBe(join(config.libraryDir, '番組/番組 - 2026-08-12 - 0000.mkv'));
+        expect(existsSync(join(config.encodedDir, OLD_DIR))).toBe(false);
+        expect(libPath(1).lib).toBe(join(config.encodedDir, '番組/番組 - 2026-08-12 - 0000.mkv'));
     });
 
     test('両コーデック: 両方を移し、もう一方(H264)にもポスターを付ける', () => {
@@ -130,8 +130,8 @@ describe('relayoutLibrary', () => {
         relayoutLibrary();
 
         const row = libPath(1);
-        const altBase = join(config.libraryDir, '番組/番組 - 2026-08-12 - 0000 [H264]');
-        expect(row.lib).toBe(join(config.libraryDir, '番組/番組 - 2026-08-12 - 0000.mkv'));
+        const altBase = join(config.encodedDir, '番組/番組 - 2026-08-12 - 0000 [H264]');
+        expect(row.lib).toBe(join(config.encodedDir, '番組/番組 - 2026-08-12 - 0000.mkv'));
         expect(row.alt).toBe(`${altBase}.mkv`);
         expect(existsSync(row.lib as string)).toBe(true);
         expect(existsSync(row.alt as string)).toBe(true);
@@ -148,7 +148,7 @@ describe('relayoutLibrary', () => {
 
         relayoutLibrary();
 
-        const altBase = join(config.libraryDir, '番組/番組 - 2026-08-12 - 0000 [H264]');
+        const altBase = join(config.encodedDir, '番組/番組 - 2026-08-12 - 0000 [H264]');
         expect(existsSync(`${altBase}-poster.jpg`)).toBe(true);
         // 本体は動かさない (既に新しい形)
         expect(libPath(1).lib).toBe(av1);

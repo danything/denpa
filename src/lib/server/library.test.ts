@@ -9,7 +9,7 @@ import { dirname, join } from 'node:path';
  * 環境変数ではなく設定そのものを書き換えている (理由は files.test.ts と同じ)。
  */
 const { config } = await import('./config');
-config.libraryDir = mkdtempSync(join(tmpdir(), 'denpa-lib-'));
+config.encodedDir = mkdtempSync(join(tmpdir(), 'denpa-lib-'));
 
 const { libraryPath, encodedPath, libraryFamily } = await import('./library');
 
@@ -28,7 +28,7 @@ const PLAIN = '番組/番組 - 2026-08-03 - 2230.mkv';
 const WITH_ID = '番組/番組 - 2026-08-03 - 2230 [39].mkv';
 
 function place(rel: string): string {
-    const path = join(config.libraryDir, rel);
+    const path = join(config.encodedDir, rel);
     mkdirSync(dirname(path), { recursive: true });
     writeFileSync(path, 'x');
     return path;
@@ -36,7 +36,7 @@ function place(rel: string): string {
 
 describe('保存先での名前', () => {
     test('空いていれば素の名前', () => {
-        expect(libraryPath(recording(), '.mkv')).toBe(join(config.libraryDir, PLAIN));
+        expect(libraryPath(recording(), '.mkv')).toBe(join(config.encodedDir, PLAIN));
     });
 
     /*
@@ -54,7 +54,7 @@ describe('保存先での名前', () => {
     test('別の録画のファイルとぶつかったら録画IDを足す', () => {
         place(PLAIN);
         // 自分はまだどこにも置いていない (初回) / 置き場が違う
-        expect(libraryPath(recording({ library_path: null }), '.mkv')).toBe(join(config.libraryDir, WITH_ID));
+        expect(libraryPath(recording({ library_path: null }), '.mkv')).toBe(join(config.encodedDir, WITH_ID));
     });
 
     /*
@@ -66,10 +66,10 @@ describe('保存先での名前', () => {
         // 他のテストが置いた PLAIN と衝突しないよう、別のシリーズで見る
         const rec = { id: 7, series: '別番組', subtitle: '', start_at: recording().start_at };
         expect(encodedPath(rec, 'av1')).toBe(
-            join(config.libraryDir, '別番組/別番組 - 2026-08-03 - 2230.mkv'),
+            join(config.encodedDir, '別番組/別番組 - 2026-08-03 - 2230.mkv'),
         );
         expect(encodedPath(rec, 'h264')).toBe(
-            join(config.libraryDir, '別番組/別番組 - 2026-08-03 - 2230 [H264].mkv'),
+            join(config.encodedDir, '別番組/別番組 - 2026-08-03 - 2230 [H264].mkv'),
         );
     });
 
@@ -87,7 +87,7 @@ describe('保存先での名前', () => {
      * 使う (encoder.ts のはぐれ掃除)
      */
     test('取りうる置き場所4通りを列挙する', () => {
-        const dir = config.libraryDir;
+        const dir = config.encodedDir;
         expect(new Set(libraryFamily(recording()))).toEqual(
             new Set([
                 join(dir, '番組/番組 - 2026-08-03 - 2230.mkv'),

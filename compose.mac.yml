@@ -33,15 +33,15 @@ services:
             TRUSTED_NETWORKS: 192.168.0.0/16,10.0.0.0/8,172.16.0.0/12
         volumes:
             # DB は名前付きボリュームに置く (SQLite のロックが、OS から見せたフォルダ越しだと当てにならない)
-            - denpa-data:/app/data
-            # 生TSの置き場は**エージェントと同じ OS のフォルダ** (エージェントの RECORDED_DIR)。
+            - denpa-data:/data
+            # 生TSの置き場は**エージェントと同じ OS のフォルダ** (エージェントの RAW_DIR)。
             # 掛かったまま録れたものを後から解くとき、エージェントが直に読み書きする
             # (置き場からの相対パスで頼まれる)。HOME はシェルのものなので .env は要らない。
             # **Windows には HOME が無い**ので、install.ps1 が ${HOME}/Movies/denpa を
             # ビデオのフォルダ (…/Videos/denpa) に書き換えて置く (この2行の形のまま残すこと)
-            - ${HOME}/Movies/denpa/recorded:/app/recorded
+            - ${HOME}/Movies/denpa/recorded:/media/raw
             # 出来上がった録画は Finder / エクスプローラーからも見える所に
-            - ${HOME}/Movies/denpa/library:/library
+            - ${HOME}/Movies/denpa/library:/media/encoded
         ports:
             - '3000:3000'
 

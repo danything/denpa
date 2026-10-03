@@ -326,7 +326,7 @@ function Install-Agent([string]$Ref) {
     $vars = [ordered]@{
         AGENT_PORT = $Port; TUNERS_FILE = "$DenpaDir\config\tuners.json"; CHANNELS_FILE = "$DenpaDir\config\channels.json"
         SIANO_USERLAND_DIR = "$Prefix\siano-userland"; SIANO_FIRMWARE = "$Prefix\siano-userland\firmware\isdbt_rio.inp"
-        RECORDED_DIR = "$Media\recorded"
+        RAW_DIR = "$Media\recorded"
     }
     $lines = @('@chcp 65001 >nul', '@echo off', 'rem Written by install.ps1 (denpa). Re-run the installer instead of editing this file.')
     foreach ($key in $vars.Keys) { $lines += "set `"$key=$(([string]$vars[$key]).Replace('%', '%%'))`"" }
