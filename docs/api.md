@@ -106,6 +106,22 @@
 末尾の 30 秒は「覚えない」(消す) 扱いです。答えは `{ "resume": 覚えた秒 または null, "edge": 30 }`。
 15 秒おきくらいに送れば、ほかの端末 (画面・ほかのテレビ) でも続きから観られます
 
+## 変化の知らせ `GET /api/events`
+
+Server-Sent Events (`text/event-stream`) で、サーバ側の変化を流し続けます。受け取ったら該当の一覧を読み直してください。
+
+```
+event: recordings
+data: 1
+
+event: encode
+data: {"recordingId":12,"percent":42.5,"etaMs":600000,"log":"…"}
+```
+
+- 名前: `recordings` `services` `programs` `tuners` `encode` ほか (画面向けのもの)。知らない名前は読み捨ててください
+- `data` は `encode` だけが中身 (`recordingId` `percent` `etaMs` `log`) を運び、ほかは `1`
+- 25 秒おきに `event: ping` が来ます。60 秒ほど何も届かなければ繋ぎ直してください (黙って切れた繋ぎを見分けるため)
+
 ## 入り方
 
 | 相手 | 入り方 |
