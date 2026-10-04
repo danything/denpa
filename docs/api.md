@@ -5,6 +5,9 @@
 
 - **入り方は画面と同じです** ([下記](#入り方))。`TRUSTED_NETWORKS` に入っている相手はそのまま通ります
   (家の LAN の Home Assistant や Cast 端末)。それ以外はログインか、アプリの鍵が要ります
+- **書き込み (POST・DELETE) には `Content-Type: application/json` を付けます** (本文が無い DELETE でも)。
+  付けないと、SvelteKit の CSRF の守りが「よそのサイトからのフォーム送信」とみなして 403 を返します
+  (アプリは Origin を付けないため)。テレビのアプリの削除がこれで失敗していました
 - **URL は denpa の根からの相対で返します** (`api/services/…`)。denpa を開いている URL に足して使います。
   前段の接頭辞 (`/denpa/` など) の下で動かしていても、そのまま解けます
 

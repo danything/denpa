@@ -411,20 +411,45 @@
          * **録画は一番下 (いちばん古いもの) を見せて開く。** 並びは新しい順のまま。
          * 溜まった録画は古いものから片付けたいので、開くたびに下まで送らずに済むように。
          * 枠の中がスクロールするとき (広い画面で2つ並べたとき) だけ。狭い画面は
-         * ページごと縦に積むので、下へ送ると上の予約が見えなくなる
+         * ページごと縦に積むので、下へ送ると上の予約が見えなくなる。
+         *
+         * **枠の高さが決まるのを待ってから送る。** 開いた直後は枠がまだ画面の高さに縮んで
+         * おらず (高さは測ってから当てる)、ここで見ると「スクロールが要らない」に見えて
+         * 何もしていなかった (実機)。初めてスクロールできるようになった時点で1回だけ送る。
+         * それより先に人が触っていたら (ホイール・タッチ・キー・スクロールバーを掴む) 送らない
          */
-        if (recordingBox !== undefined && recordingBox.scrollHeight > recordingBox.clientHeight) {
+        const box = recordingBox;
+        if (box === undefined) return;
+        let touched = false;
+        const listening = new AbortController();
+        const touch = () => {
+            touched = true;
+            listening.abort();
+        };
+        for (const type of ['wheel', 'touchstart', 'pointerdown', 'keydown']) {
+            box.addEventListener(type, touch, { passive: true, signal: listening.signal });
+        }
+        const settle = new ResizeObserver(() => {
+            if (touched) return settle.disconnect();
+            if (box.scrollHeight <= box.clientHeight) return;
+            settle.disconnect();
             /*
              * **先に全部描いてから送る。** 描いているのは頭の60件だけで、そのまま下へ送ると
              * 着くのは60件目。しかも下の端に着いた合図 (`sentinel`) で続きが足され、位置がずれる。
              * 出すのは新しいほうから300件まで (`+page.server.ts`) なので、全部描いても重くない
              */
-            const box = recordingBox;
             recordingPage.revealAll();
             void tick().then(() => {
-                box.scrollTop = box.scrollHeight;
+                if (!touched) box.scrollTop = box.scrollHeight;
             });
-        }
+        });
+        settle.observe(box);
+        // 中身の行が増えて高さが変わったときも気付けるよう、一覧のほうも見る
+        if (box.firstElementChild !== null) settle.observe(box.firstElementChild);
+        return () => {
+            settle.disconnect();
+            listening.abort();
+        };
     });
     function rightText(row: RightRow): string {
         if (row.kind === 'missed') {

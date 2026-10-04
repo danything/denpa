@@ -18,3 +18,7 @@ docs/images/.capture/
 
 # 手元だけの上書き (Compose が自動で読む)
 compose.override.yml
+
+# 手元の作業 (エミュレータ・トンネル) が置くもの
+/*.pid
+/ssh.log
