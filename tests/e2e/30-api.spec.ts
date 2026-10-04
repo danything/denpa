@@ -17,6 +17,15 @@ test.describe('外から使う口', () => {
             name: expect.any(String),
         });
         expect(first.live).toBe(`api/services/${first.id}/live`);
+        // いま放送中の番組。偽の番組表はいまを跨ぐ番組を持っているので、どこかの局には付く
+        const now = services.find((s: { now: unknown }) => s.now !== null)?.now;
+        expect(now).toMatchObject({
+            title: expect.any(String),
+            startAt: expect.any(Number),
+            endAt: expect.any(Number),
+        });
+        expect(now.startAt).toBeLessThanOrEqual(Date.now());
+        expect(now.endAt).toBeGreaterThan(Date.now());
 
         // 生の TS は焼かずに流す。頭は同期バイト 0x47
         const controller = new AbortController();
@@ -42,6 +51,8 @@ test.describe('外から使う口', () => {
         expect(Array.isArray(recordings)).toBe(true);
         for (const rec of recordings) {
             expect(rec.audio).toBe(`api/recordings/${rec.id}/file?audio=only`);
+            // 続きの位置は、無ければ null (鍵ごと消さない)
+            expect(rec).toHaveProperty('resumeMs');
             for (const file of rec.files) {
                 expect(['av1', 'h264', 'mpeg2']).toContain(file.codec);
                 expect(file.url).toBe(`api/recordings/${rec.id}/file?source=${file.source}`);
