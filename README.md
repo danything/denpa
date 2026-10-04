@@ -110,10 +110,11 @@ curl -fsSL https://raw.githubusercontent.com/danything/denpa/main/install.sh | b
 - **Mac** (Apple Silicon) — チューナーに触るエージェントは Mac の上で直接、denpa 本体は Docker で動かします
   ([docs/agent.md](docs/agent.md#mac-でチューナーを使う))
 - **Windows** (x64) は PowerShell で `irm https://raw.githubusercontent.com/danything/denpa/main/install.ps1 | iex`。
-  構成は Mac と同じです。チューナーは PX-S1UD など siano-userland の機材だけで、ドライバを WinUSB にします
+  エージェントは Windows の上で直接、denpa 本体は WSL のコンテナ (`wslc`) で動かします。**Docker Desktop は要りません**
+  (`wsl --update` で入る)。チューナーは PX-S1UD など siano-userland の機材だけで、ドライバを WinUSB にします
   ([docs/agent.md](docs/agent.md#windows-でチューナーを使う))
-- **Docker は入れません。** 無ければ入れ方を示して止まります (Linux は <https://get.docker.com>、
-  Mac は Docker Desktop か OrbStack、Windows は Docker Desktop)
+- **Docker・WSL は入れません。** 無ければ入れ方を示して止まります (Linux は <https://get.docker.com>、
+  Mac は Docker Desktop か OrbStack、Windows は `wsl --update`)
 - **入口は [genkan](https://github.com/danything/genkan)** (ホスト名で振り分けるリバースプロキシ)。
   動いていればそれを使います。無ければ 80 と 443 が空いているときだけ `~/genkan` に入れ、
   <http://denpa.localhost> で開きます。ポートが埋まっていれば入れず、<http://localhost:3000> で開きます。
