@@ -403,8 +403,19 @@
      * 開けるのはハイドレーションの後なので、それまで無くて困ることは無い
      */
     let mounted = $state(false);
+    /** 録画の枠 (中だけスクロールする)。開いたときに一番下へ送る */
+    let recordingBox: HTMLElement | undefined = $state();
     onMount(() => {
         mounted = true;
+        /*
+         * **録画は一番下 (いちばん古いもの) を見せて開く。** 並びは新しい順のまま。
+         * 溜まった録画は古いものから片付けたいので、開くたびに下まで送らずに済むように。
+         * 枠の中がスクロールするとき (広い画面で2つ並べたとき) だけ。狭い画面は
+         * ページごと縦に積むので、下へ送ると上の予約が見えなくなる
+         */
+        if (recordingBox !== undefined && recordingBox.scrollHeight > recordingBox.clientHeight) {
+            recordingBox.scrollTop = recordingBox.scrollHeight;
+        }
     });
     function rightText(row: RightRow): string {
         if (row.kind === 'missed') {
@@ -761,7 +772,7 @@
                 </div>
             </div>
 
-            <div class="board-box">
+            <div class="board-box" bind:this={recordingBox}>
                 <div class="rows" data-testid="recording-list">
                     {#each recordingPage.rows as row (row.key)}
                     {#if row.kind === 'missed'}
