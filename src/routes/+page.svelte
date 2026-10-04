@@ -1,6 +1,6 @@
 <script lang="ts">
     import { DropdownMenu } from 'bits-ui';
-    import { onMount } from 'svelte';
+    import { onMount, tick } from 'svelte';
     import { submitting } from '#lib/actions.js';
     import { arming } from '#lib/arming.svelte.js';
     import ProgramDetail from '#lib/components/ProgramDetail.svelte';
@@ -414,7 +414,16 @@
          * ページごと縦に積むので、下へ送ると上の予約が見えなくなる
          */
         if (recordingBox !== undefined && recordingBox.scrollHeight > recordingBox.clientHeight) {
-            recordingBox.scrollTop = recordingBox.scrollHeight;
+            /*
+             * **先に全部描いてから送る。** 描いているのは頭の60件だけで、そのまま下へ送ると
+             * 着くのは60件目。しかも下の端に着いた合図 (`sentinel`) で続きが足され、位置がずれる。
+             * 出すのは新しいほうから300件まで (`+page.server.ts`) なので、全部描いても重くない
+             */
+            const box = recordingBox;
+            recordingPage.revealAll();
+            void tick().then(() => {
+                box.scrollTop = box.scrollHeight;
+            });
         }
     });
     function rightText(row: RightRow): string {

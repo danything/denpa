@@ -56,6 +56,11 @@ export class Paged<T> {
         this.shown = Math.min(this.items().length, this.shown + this.step);
     }
 
+    /** 残りを全部出す。一番下から見せたいとき (録画の枠を開いたとき) */
+    revealAll(): void {
+        this.shown = this.items().length;
+    }
+
     /** 先頭に戻す。絞り込みや並べ替えで顔ぶれが変わったとき */
     reset(): void {
         this.shown = this.step;
