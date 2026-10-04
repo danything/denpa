@@ -749,12 +749,11 @@ LaunchAgent の環境変数は、コンテナ既定の置き場を Mac の置き
 - **Mac の実機でチューナーとカードを繋いで確かめたことはまだありません。** CI で焼いて起こし、
   入れ方を最後まで流すところまで (`.github/workflows/test.yml` の `agent-macos`。
   Mac のランナーには Docker が無いので、compose.mac.yml は Linux のジョブ (`install-linux`) で書き方だけ見る)
-- compose.mac.yml は Windows (install.ps1) と共用です
 
 ## Windows でチューナーを使う
 
 **x64 の Windows なら、PowerShell の1行で denpa ごと立ち上がってブラウザが開きます**
-(`install.ps1`。作りは Mac と同じ)。Windows 用は 1.23.1 からで、
+(`install.ps1`)。Windows 用は 1.23.1 からで、
 それより前の版は入れられません (install.ps1 がそう言って止まる)。
 
 ```powershell
@@ -762,31 +761,50 @@ irm https://raw.githubusercontent.com/danything/denpa/main/install.ps1 | iex
 ```
 
 引数を渡すときは `& ([scriptblock]::Create((irm https://raw.githubusercontent.com/danything/denpa/main/install.ps1))) -Uninstall`
-の形で (`-NoOpen` ブラウザを開かない / `-Uninstall` 止めて外す / `-NoDocker` エージェントだけ)。
+の形で (`-NoOpen` ブラウザを開かない / `-Uninstall` 止めて外す / `-AgentOnly` エージェントだけ)。
 
-**エージェントは Windows の上でそのまま、denpa 本体は Docker Desktop で動かします** (Docker Desktop も
-コンテナに USB を渡せない)。denpa のコンテナからは `host.docker.internal` でエージェントを呼びます
-(Mac と同じ `compose.mac.yml`。録画の置き場だけ install.ps1 が Windows のフォルダに書き換える)。
+**エージェントは Windows の上でそのまま、denpa 本体は WSL のコンテナ (`wslc`) で動かします。** Docker Desktop は
+要りません (wslc は WSL に入っていて、`wsl --update` で使えるようになる)。コンテナには USB を渡せないので、
+チューナーとカードに触るエージェントはコンテナに入れられません。
 
 1. **エージェント** — 最新のリリースから取り、タスク スケジューラに「ログオンしたら起こす」
    タスク (`denpa-agent`) を載せます。自分のアカウントのタスクなので管理者は要りません。窓は出さず
    (`conhost --headless`)、落ちたら 5 秒置いて起こし直します (起こすのは `denpa-agent.cmd` の輪。
    タスク スケジューラの「失敗したら再起動」は終了コードでは効かないため)
-2. **denpa 本体** — エージェントと同じ版の compose.mac.yml を `~/denpa/compose.yml` に置いて
-   `docker compose up -d`。genkan は入れません。もう動いていれば、Linux・Mac と同じく
-   `http://denpa.localhost` で開けるようにします。無ければ `http://localhost:3000` で開きます
+2. **denpa 本体** — エージェントと同じ版のイメージを `wslc pull` し、ログオン時に起こすタスク (`denpa`) を
+   載せて、いま1度流します。起こすのは `denpa-start.ps1` (install.ps1 が書く)
 
-- **Docker は勝手に入れません。** 無い・起きていない・Windows コンテナのときは、エージェントだけ
-  入れ、Docker Desktop を入れる (起こす・Linux コンテナにする) よう言って終わります
+`denpa-start.ps1` は**起こすたびに、コンテナを作り直すか決めます。** 実機 (wslc 3.0.1) で確かめた wslc の癖に合わせています。
+
+- **コンテナから Windows のエージェントへは、Hyper-V の Default Switch の IP で届きます。**
+  `host.docker.internal` のような名前はありません。その IP は Windows を起こし直すと変わりうるので、
+  起こすたびに調べ、`TUNER_AGENT_URL` か版が変わっていれば作り直します (DB はボリューム、録画は
+  Windows のフォルダなので消えない)。変わっていなければ `wslc start` だけ
+- **自動で起こし直す指定 (`--restart`) がありません。** ログオン時のタスクが代わりに起こします
+- **ポートは既定で 127.0.0.1 にしか出ません。** `-p 0.0.0.0:3000:3000` で出して、LAN のほかの機器からも開けるようにします
+- **この PC のブラウザから入ると、送信元は `169.254.x.x` に見えます** (wslc がポートを中継するため)。
+  LAN のほかの機器は本当の IP のまま届きます。なので `TRUSTED_NETWORKS` の既定に `169.254.0.0/16` を足してあります
+- **DB は wslc のボリューム (`denpa-data`) に置きます。** Windows のフォルダ越し (virtiofs) だと SQLite のロックが当てにならないため
+- **compose はまだありません** (Microsoft は次の優先課題と言っている)。Windows で動かすコンテナは本体の1つだけなので、`wslc run` で足ります
+- 録画中に上げ直すと、`wslc stop` が録画の終わりを待ってから入れ替えます (`--stop-timeout 21900`)
+
+**前の版 (Docker Desktop の compose) から上げるとき**は、install.ps1 が `docker compose down` で止め
+(録画中なら待つ)、DB を Docker のボリューム `denpa_denpa-data` から wslc のボリュームへ移し、
+`compose.yml` を `compose.yml.docker` に退けます。このときだけ Docker Desktop を起こしておく必要があります
+(移したあとは要りません。Docker のボリュームは消さずに残す)。
+
+- **WSL は勝手に入れません。** wslc が無いときは、エージェントだけ入れて `wsl --update` (WSL が無ければ
+  管理者で `wsl --install --no-distribution`) を流すよう言って終わります
 - ドライバは入れません (下)。刺さっている Siano のチューナーが WinUSB でなければ、そう言います
+- genkan (`http://denpa.localhost`) には繋ぎません (genkan は Docker のネットワークに居て、wslc のコンテナからは入れない)
 
 | 置き場 | 中身 |
 | --- | --- |
-| `~/denpa/` (`DENPA_HOME`) | Linux・Mac と同じ。`compose.yml`・`compose.override.yml`・`config/` と、エージェントのログ `denpa-agent.log` |
-| `%LOCALAPPDATA%\denpa-agent\` | エージェント・siano-userland・起こす `denpa-agent.cmd` (環境変数はここに書く。Mac の plist と同じもの) |
-| `~/Videos/denpa/recorded` | 生TS。エージェントとコンテナの両方に見せる (Mac と同じ理由) |
-| `~/Videos/denpa/library` | 出来上がった録画 (エクスプローラーから見える) |
-| Docker のボリューム `denpa_denpa-data` | DB |
+| `~/denpa/` (`DENPA_HOME`) | `denpa.env` (コンテナの環境変数。手で足すならここ。無いときだけ雛形を作る)・`config/`・エージェントのログ `denpa-agent.log` |
+| `%LOCALAPPDATA%\denpa-agent\` | エージェント・siano-userland・起こす `denpa-agent.cmd` と `denpa-start.ps1` |
+| `~/Videos/denpa/recorded` | 生TS。エージェントとコンテナ (`/media/raw`) の両方に見せる |
+| `~/Videos/denpa/library` | 出来上がった録画 (コンテナの `/media/encoded`。エクスプローラーから見える) |
+| wslc のボリューム `denpa-data` | DB |
 
 **使えるもの。**
 
@@ -814,14 +832,15 @@ irm https://raw.githubusercontent.com/danything/denpa/main/install.ps1 | iex
 - 子の標準出力は poll できないので、裏の1本に読ませて 200ms ごとに起きます (`DeviceStream`)。
   pipe は広げられず 4KB ほどで、読み手が少し止まったぶんは siano-ts の中の溜め
   (16KB × 256) が吸う
-- タスクの優先度は普通にしてあります (既定の「低い」だと、Docker がエンコードで CPU を食う間
+- タスクの優先度は普通にしてあります (既定の「低い」だと、denpa のコンテナがエンコードで CPU を食う間
   siano-ts が後回しにされる)
 - ログは cmd がファイルへ足すだけで、回しません (Mac と同じ)
-- LAN のほかの機械からエージェントに繋ぐとき (`-NoDocker`) は、Windows ファイアウォールでポート 25252 を
-  許します (初めて起きたときに確認の窓が出ることがある)。Docker Desktop のコンテナからは要りません
+- LAN のほかの機械からエージェントに繋ぐとき (`-AgentOnly`) は、Windows ファイアウォールでポート 25252 を
+  許します (初めて起きたときに確認の窓が出ることがある)。wslc のコンテナからは要りません
 - **Windows の実機でチューナーとカードを繋いで確かめたことはまだありません。** CI (`agent-windows`) で
-  焼いて起こし、口が答えることと入れ方 (`-NoDocker`) を最後まで流すところまで。ランナーの Docker は
-  Windows コンテナなので、compose.mac.yml を Windows で起こすところは通していません
+  焼いて起こし、口が答えることと入れ方 (`-AgentOnly`) を最後まで流すところまで。ランナーには wslc が
+  無いので、denpa 本体を wslc で起こすところは手元の Windows 11 (wslc 3.0.1) で確かめました
+  (入れる・この PC と LAN から開ける・エージェントに繋がる・起こし直し・外す。Docker Desktop からの移行は未確認)
 
 ## B-CASカードとデスクランブル
 

@@ -4,23 +4,23 @@
 #   irm https://raw.githubusercontent.com/danything/denpa/main/install.ps1 | iex
 #   & ([scriptblock]::Create((irm https://raw.githubusercontent.com/danything/denpa/main/install.ps1))) -Uninstall
 #       引数を渡すときはこの形。-NoOpen (ブラウザを開かない) / -Uninstall (止めて外す。~/denpa・録画・DB は残す) /
-#       -NoDocker (エージェントだけ。denpa 本体は別の Linux で動かす)
+#       -AgentOnly (エージェントだけ。denpa 本体は別の Linux で動かす)
 #
-# **Mac (install.sh) と同じ作り。** エージェントは Windows の上でそのまま動かし (タスク スケジューラで
-# ログオン時に起こす)、denpa 本体だけ Docker Desktop で (compose.mac.yml)。Docker Desktop は
-# コンテナに USB を渡せないので、チューナーとカードに触るエージェントはコンテナに入れられない。
+# **エージェントは Windows の上でそのまま動かし** (タスク スケジューラでログオン時に起こす)、**denpa 本体は
+# WSL のコンテナ (wslc) で動かす。** Docker Desktop は要らない (WSL に入っているので `wsl --update` だけで使える)。
+# コンテナには USB を渡せないので、チューナーとカードに触るエージェントはコンテナに入れられない。
 # **Windows で使えるチューナーは siano-userland の機材 (PX-S1UD など) だけ** (px4-userland は
 # Windows を出しておらず、DVB も無い)。ドライバを WinUSB にするのは人の手で (Zadig。docs/agent.md)。
 #
-# **Docker は勝手に入れない。** 無い・起きていないときはエージェントだけ入れて、入れ方を言って終わる。
-# **genkan も入れない** (動いていれば使い、http://denpa.localhost で開けるようにする)。
-# もう一度流せば上げ直し。compose ファイルもイメージも**エージェントと同じリリースの版**に揃える。
+# **WSL は勝手に入れない。** wslc が無いときはエージェントだけ入れて、入れ方を言って終わる。
+# もう一度流せば上げ直し。イメージは**エージェントと同じリリースの版**に揃える。
 #
 # 置き場:
-#   ~/denpa (DENPA_HOME)                  compose.yml (上げ直すたびに上書き)・compose.override.yml (手を入れるならここ。
-#                                         無いときだけ雛形を作り、あれば触らない)・config/・denpa-agent.log
-#   %LOCALAPPDATA%\denpa-agent\           エージェント・siano-userland・起こす .cmd
+#   ~/denpa (DENPA_HOME)                  denpa.env (コンテナの環境変数。無いときだけ雛形を作り、あれば触らない)・
+#                                         config/・denpa-agent.log
+#   %LOCALAPPDATA%\denpa-agent\           エージェント・siano-userland・起こす .cmd と denpa-start.ps1
 #   ~/Videos/denpa/{recorded,library}     生TS (エージェントとコンテナの両方が見る) と出来上がった録画
+#   wslc のボリューム denpa-data          DB (Windows のフォルダ越しだと SQLite のロックが当てにならない)
 #
 # 環境変数: DENPA_VERSION (v1.2.3 のように。既定は最新のリリース。CI はコミットを渡す)、DENPA_HOME、
 # DENPA_AGENT_ZIP (手元で焼いたエージェントの zip を絶対パスで。CI と開発用)
@@ -28,7 +28,7 @@
 # Windows に最初から入っている PowerShell 5.1 で動くように書く (pwsh でも動く)。
 # `irm | iex` は呼んだ人のセッションでそのまま走るので、exit は使わない (窓ごと閉じる)。
 # ---------------------------------------------------------------------------
-param([switch]$NoOpen, [switch]$Uninstall, [switch]$NoDocker)
+param([switch]$NoOpen, [switch]$Uninstall, [switch]$AgentOnly)
 
 # siano-userland の版。**agent/Dockerfile・install.sh と揃える** (Renovate が一緒に上げる)。
 # 中身は配布元の SHA256SUMS で確かめるので、版を上げてもここのハッシュは要らない
@@ -38,33 +38,16 @@ $IsdbtRioSha256 = '054520642d5d09cb7ab7d08dbd6fd9ba9365de56adf2e7d7d06927f9845ff
 
 $Repo = 'danything/denpa'
 $Url = 'http://localhost:3000'
-$GenkanUrl = 'http://denpa.localhost'
 $DenpaDir = if ($env:DENPA_HOME) { $env:DENPA_HOME } else { Join-Path $env:USERPROFILE 'denpa' }
 $Prefix = Join-Path $env:LOCALAPPDATA 'denpa-agent'
 $Media = Join-Path $env:USERPROFILE 'Videos\denpa'
 $Log = Join-Path $DenpaDir 'denpa-agent.log'
 $TaskName = 'denpa-agent'
-# compose.mac.yml の TUNER_AGENT_URL と揃える
+$DenpaTask = 'denpa'
+$Container = 'denpa'
+$Volume = 'denpa-data'
 $Port = 25252
-# install.ps1 が書いた compose.yml の1行目
-$Mark = '# install.ps1 が置いた (版'
-$DockerHelp = 'Docker Desktop (https://www.docker.com/products/docker-desktop/) を入れて起こしてから、もう一度流してください'
-
-# genkan に denpa を登録する断片 (install.sh と同じ。理由もそちらに)
-$GenkanOverride = @'
-services:
-  denpa:
-    labels:
-      caddy: http://denpa.localhost
-      caddy.@outside: not remote_ip private_ranges
-      caddy.respond: "@outside 403"
-      caddy.reverse_proxy: "{{upstreams 3000}}"
-    networks: [default, genkan]
-
-networks:
-  genkan:
-    external: true
-'@
+$WslHelp = 'WSL を新しくしてください (PowerShell で wsl --update。WSL が無ければ管理者の PowerShell で wsl --install --no-distribution)。そのあと、もう一度流してください'
 
 function Say([string]$Message) { Write-Host "==> $Message" -ForegroundColor Cyan }
 
@@ -130,125 +113,154 @@ function Stop-Agent {
 # stderr の1行目で止まる。呼んだ関数の中だけ Continue にする (Set-Variable -Scope 1)
 function Use-Continue { Set-Variable -Scope 1 -Name ErrorActionPreference -Value Continue }
 
-# Docker (Linux のコンテナ) が使えるか。駄目なら理由と入れ方を言って $false (-Quiet なら黙って)
-function Test-Docker([switch]$Quiet) {
+# wslc (WSL のコンテナ) が使えるか。駄目なら理由と入れ方を言って $false (-Quiet なら黙って)
+function Test-Wslc([switch]$Quiet) {
     Use-Continue
     $why = $null
-    if (-not (Get-Command docker -ErrorAction SilentlyContinue)) {
-        $why = "Docker が見当たりません。$DockerHelp"
+    if (-not (Get-Command wslc -ErrorAction SilentlyContinue)) {
+        $why = "wslc が見当たりません。$WslHelp"
     } else {
-        $os = & docker info --format '{{.OSType}}' 2>$null
-        if ($LASTEXITCODE -ne 0) {
-            $why = "Docker が起きていません。$DockerHelp"
-        } elseif ($os -ne 'linux') {
-            $why = 'Docker Desktop が Windows コンテナのほうになっています。タスク トレイのメニューから Linux コンテナに切り替えてから、もう一度流してください'
-        }
+        & wslc info *> $null
+        if ($LASTEXITCODE -ne 0) { $why = "wslc が動きません (wslc info)。$WslHelp" }
     }
     if ($why -and -not $Quiet) { Say $why }
     return -not $why
 }
 
-# genkan が入っているか (genkan ネットワークがあるか) と、動いているか (そこに Caddy が居るか)。install.sh と同じ見方
-function Test-GenkanInstalled {
-    Use-Continue
-    & docker network inspect genkan *> $null
+function Test-Health {
+    & curl.exe -fs -o NUL "$Url/api/health"
     return $LASTEXITCODE -eq 0
 }
-function Test-GenkanRunning {
-    if (-not (Test-GenkanInstalled)) { return $false }
-    return [bool](& docker ps --filter network=genkan --format '{{.Image}}' | Select-String -SimpleMatch caddy-docker-proxy)
-}
 
-function Invoke-Compose {
+# **前の版は Docker Desktop の compose で動いていた。** DB (Docker のボリューム) を wslc のボリュームへ移して、
+# compose.yml を退ける。1度だけ (退けたあとはここに来ない)。録画中なら compose down が終わるまで待つ
+function Move-FromDocker {
+    Use-Continue
+    $compose = Join-Path $DenpaDir 'compose.yml'
+    if (-not (Test-Path -LiteralPath $compose)) { return }
+    if (-not (Get-Command docker -ErrorAction SilentlyContinue)) {
+        throw "前の版は Docker Desktop で動いていました。DB を移すので、一度 Docker Desktop を起こしてから流し直してください (移したあとは Docker Desktop は要りません)"
+    }
+    & docker info *> $null
+    if ($LASTEXITCODE -ne 0) { throw '前の版の DB を移すので、Docker Desktop を起こしてから流し直してください' }
+    Say 'Docker Desktop の denpa を止めて、DB を wslc へ移します (録画中なら終わるまで待ちます)'
     Push-Location $DenpaDir
     try {
-        & docker compose @args
-        if ($LASTEXITCODE -ne 0) { throw "docker compose $args に失敗しました" }
+        & docker compose down
+        if ($LASTEXITCODE -ne 0) { throw 'docker compose down に失敗しました' }
     } finally {
         Pop-Location
     }
-}
-
-function Test-Health([string]$Target, [string[]]$Extra = @()) {
-    & curl.exe -fs -o NUL @Extra "$Target/api/health"
-    return $LASTEXITCODE -eq 0
-}
-
-# compose.mac.yml を ~/denpa/compose.yml に置いて起こす (install.sh の start_denpa と同じ手順)
-function Start-Denpa([string]$Ref, [switch]$NoOpen) {
-    Say "denpa $Ref を $DenpaDir に置きます"
-    $compose = Join-Path $DenpaDir 'compose.yml'
-    $orig = Join-Path $DenpaDir '.compose.yml.orig'
-    $override = Join-Path $DenpaDir 'compose.override.yml'
-    $fetched = Join-Path $DenpaDir 'compose.yml.new'
+    $work = Join-Path ([IO.Path]::GetTempPath()) "denpa-move-$([Guid]::NewGuid().ToString('N'))"
+    New-Item -ItemType Directory -Force -Path $work | Out-Null
     try {
-        Get-Url "https://raw.githubusercontent.com/$Repo/$Ref/compose.mac.yml" $fetched
-    } catch {
-        throw "$Ref に compose.mac.yml がありません。Windows 用は 1.23.1 からなので、それより前の版は Windows に入れられません"
+        & docker run --rm -v denpa_denpa-data:/d -v "${work}:/o" alpine tar -C /d -cf /o/data.tar .
+        if ($LASTEXITCODE -ne 0) { throw 'Docker のボリューム denpa_denpa-data を読めません' }
+        & wslc volume create $Volume *> $null
+        & wslc run --rm -v "${Volume}:/d" -v "${work}:/o" alpine tar -C /d -xf /o/data.tar
+        if ($LASTEXITCODE -ne 0) { throw "wslc のボリューム $Volume に書けません" }
+    } finally {
+        Remove-Item -Recurse -Force -LiteralPath $work -ErrorAction SilentlyContinue
     }
-    $text = [IO.File]::ReadAllText($fetched)
-    Remove-Item -LiteralPath $fetched
-    # **版は札で揃える** (x.y.z のときだけ。コミットやブランチなら latest のまま)。
-    # **Windows には HOME が無い**ので、録画の置き場も書き換える (compose.mac.yml の2行)
+    foreach ($name in 'compose.yml', 'compose.override.yml', '.compose.yml.orig') {
+        $path = Join-Path $DenpaDir $name
+        if (Test-Path -LiteralPath $path) { Move-Item -Force -LiteralPath $path -Destination "$path.docker" }
+    }
+    Say "移しました。Docker のボリューム denpa_denpa-data と compose.yml.docker は残してあります (要らなければ消してください)"
+}
+
+# 起こすスクリプト。**起こすたびに作り直すかを決める**: コンテナから Windows のエージェントへは
+# Hyper-V の Default Switch の IP で届くが (host.docker.internal は無い)、その IP は再起動で変わりうる。
+# 宛先か版が変わっていればコンテナを作り直す (DB はボリューム、録画は Windows のフォルダなので消えない)。
+# wslc には restart の指定が無いので、ログオン時のタスクがこれを流す。
+# **ポートは 0.0.0.0 に出す** (既定は 127.0.0.1 だけで、LAN のほかの機器から開けない)
+function Write-StartScript([string]$Image) {
+    $start = Join-Path $Prefix 'denpa-start.ps1'
+    $body = @'
+# Written by install.ps1 (denpa). Re-run the installer instead of editing this file.
+$ErrorActionPreference = 'Continue'
+$image = '__IMAGE__'
+$envFile = '__ENVFILE__'
+$raw = '__RAW__'
+$encoded = '__ENCODED__'
+$ip = (Get-NetIPAddress -AddressFamily IPv4 -InterfaceAlias 'vEthernet (Default Switch)' -ErrorAction SilentlyContinue).IPAddress | Select-Object -First 1
+if (-not $ip) { $ip = (Get-NetIPAddress -AddressFamily IPv4 | Where-Object InterfaceAlias -like 'vEthernet*' | Select-Object -First 1).IPAddress }
+$agent = "http://${ip}:__PORT__"
+$info = & wslc inspect __NAME__ 2>$null | Out-String
+if ($LASTEXITCODE -eq 0 -and $info.Trim()) {
+    $c = @(ConvertFrom-Json $info)[0]
+    if ($c.Config.Image -eq $image -and $c.Config.Env -contains "TUNER_AGENT_URL=$agent") {
+        & wslc start __NAME__ | Out-Null
+        exit 0
+    }
+    # Waits for recordings (stop-timeout) before replacing the container
+    & wslc stop __NAME__ | Out-Null
+    & wslc rm __NAME__ | Out-Null
+}
+& wslc run -d --name __NAME__ --stop-timeout 21900 -p 0.0.0.0:3000:3000 --env-file $envFile `
+    -e "TUNER_AGENT_URL=$agent" -v '__VOLUME__:/data' -v "${raw}:/media/raw" -v "${encoded}:/media/encoded" $image | Out-Null
+exit $LASTEXITCODE
+'@
+    $body = $body.Replace('__IMAGE__', $Image).Replace('__ENVFILE__', (Join-Path $DenpaDir 'denpa.env')).
+        Replace('__RAW__', "$Media\recorded").Replace('__ENCODED__', "$Media\library").
+        Replace('__PORT__', [string]$Port).Replace('__NAME__', $Container).Replace('__VOLUME__', $Volume)
+    # 5.1 は BOM の無い .ps1 を ANSI で読む。パスに日本語が入りうるので BOM を付ける
+    Write-Text $start $body (New-Object Text.UTF8Encoding $true)
+    return $start
+}
+
+# denpa 本体を wslc で起こす。エージェントと同じ版のイメージ (x.y.z のときだけ。コミットなら latest)
+function Start-Denpa([string]$Ref, [switch]$NoOpen) {
     $version = $Ref -replace '^v', ''
-    if ($version -match '^\d+\.\d+\.\d+$') {
-        $text = $text -replace '(image: ghcr\.io/danything/[a-z-]+):latest', "`$1:$version"
-    }
-    if (-not $text.Contains('${HOME}/Movies/denpa/')) { throw "$Ref の compose.mac.yml に録画の置き場 (`${HOME}/Movies/denpa) が見当たりません" }
-    $text = $text.Replace('${HOME}/Movies/denpa/', ($Media -replace '\\', '/') + '/')
+    $tag = if ($version -match '^\d+\.\d+\.\d+$') { $version } else { 'latest' }
+    $image = "ghcr.io/$Repo`:$tag"
+    Move-FromDocker
 
-    # 手で置いた・手を入れた compose.yml は黙って上書きせず、compose.yml.bak に退ける
-    if (Test-Path -LiteralPath $compose) {
-        $old = [IO.File]::ReadAllText($compose)
-        $mine = $old.StartsWith($Mark) -and (Test-Path -LiteralPath $orig) -and
-            $old.Substring($old.IndexOf("`n") + 1) -eq [IO.File]::ReadAllText($orig)
-        if (-not $mine) {
-            Move-Item -Force -LiteralPath $compose -Destination "$compose.bak"
-            Say "手を入れた $compose を compose.yml.bak に退避しました。変更は compose.override.yml に移してください"
-        }
-    }
-    Write-Text $orig $text
-    Write-Text $compose ("$Mark $($Ref)。手を入れず、足すものは compose.override.yml に)`n" + $text)
-
-    $registered = (Test-Path -LiteralPath $override) -and (Select-String -LiteralPath $override -SimpleMatch 'denpa.localhost' -Quiet)
-    if ($registered -and -not (Test-GenkanInstalled)) {
-        throw "genkan が見当たりません。$override の genkan への登録 (labels・networks) を消すか、genkan を入れ直してから流し直してください"
-    }
-    $genkan = $registered -and (Test-GenkanRunning)
-    if (-not (Test-Path -LiteralPath $override)) {
-        $genkan = Test-GenkanRunning
-        $head = "# 手元で足したい・変えたいものはここに書く。compose.yml は install.ps1 が上げ直すたびに`n" +
-            "# 上書きするが、このファイルには触らない (Compose が compose.yml に重ねて読む)。`n" +
-            "# たとえば denpa の environment に TRUSTED_NETWORKS: 192.168.1.0/24 を足すなど`n"
-        $body = if ($genkan) { "#`n# genkan (http://denpa.localhost) への登録は install.ps1 が書いた`n$GenkanOverride" } else { "services: {}`n" }
-        Write-Text $override ($head + $body)
-    } elseif (-not $registered -and (Test-GenkanRunning)) {
-        Say "compose.override.yml には触りません。genkan の http://denpa.localhost で開くなら、次を足して流し直してください:"
-        Write-Host $GenkanOverride
+    # コンテナの環境変数。**手で書き足すのはここ** (上げ直しても触らない)
+    $envFile = Join-Path $DenpaDir 'denpa.env'
+    if (-not (Test-Path -LiteralPath $envFile)) {
+        Write-Text $envFile (@(
+                '# denpa (wslc のコンテナ) の環境変数。install.ps1 は無いときだけ作り、あとは触らない',
+                'TZ=Asia/Tokyo',
+                'ENCODE_CONCURRENCY=2',
+                '# 誰を通すか (docs/auth.md)。169.254.0.0/16 はこの PC のブラウザ (wslc はポートを中継するので、',
+                '# localhost から入るとこう見える)。LAN のほかの機器は本当の IP のまま届く',
+                'TRUSTED_NETWORKS=169.254.0.0/16,192.168.0.0/16,10.0.0.0/8,172.16.0.0/12'
+            ) -join "`n")
     }
 
-    Invoke-Compose pull
-    # 録画中に上げ直すと、録画が終わるまで待ってから入れ替わる (stop_grace_period)
-    Invoke-Compose up -d
+    Say "denpa $Ref を wslc で起こします ($image)"
+    Use-Continue
+    & wslc pull $image
+    if ($LASTEXITCODE -ne 0) { throw "イメージを取れません: $image" }
+    & wslc volume create $Volume *> $null
+    $start = Write-StartScript $image
+
+    # ログオンしたら起こす (エージェントと同じく、自分のアカウントのタスク。窓は出さない)
+    $me = [Security.Principal.WindowsIdentity]::GetCurrent().Name
+    $action = New-ScheduledTaskAction -Execute 'powershell.exe' `
+        -Argument "-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File `"$start`""
+    $trigger = New-ScheduledTaskTrigger -AtLogOn -User $me
+    $principal = New-ScheduledTaskPrincipal -UserId $me -LogonType Interactive -RunLevel Limited
+    $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries `
+        -ExecutionTimeLimit ([TimeSpan]::Zero) -MultipleInstances IgnoreNew
+    Register-ScheduledTask -TaskName $DenpaTask -Action $action -Trigger $trigger -Principal $principal -Settings $settings `
+        -Description 'denpa 本体 (wslc のコンテナ。install.ps1 が入れた)' -Force | Out-Null
+
+    # いま起こす (録画中に上げ直すと、録画が終わるまで待ってから入れ替わる)
+    & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $start
+    if ($LASTEXITCODE -ne 0) { throw "denpa を起こせません。wslc logs $Container を見てください" }
 
     Say 'denpa の応答を待ちます'
     for ($i = 0; $i -lt 90; $i++) {
-        if (Test-Health $Url) {
-            $open = $Url
-            if ($genkan) {
-                # Caddy がラベルを読むまで少し掛かる
-                for ($j = 0; $j -lt 15; $j++) {
-                    if (Test-Health $GenkanUrl @('--resolve', 'denpa.localhost:80:127.0.0.1')) { $open = $GenkanUrl; break }
-                    Start-Sleep -Seconds 2
-                }
-            }
-            Say "起動しました: $open (このマシンからは $Url でも開けます。LAN のほかの機器からは http://$($env:COMPUTERNAME):3000)"
-            if (-not $NoOpen) { Start-Process $open }
+        if (Test-Health) {
+            Say "起動しました: $Url (LAN のほかの機器からは http://$($env:COMPUTERNAME):3000)"
+            if (-not $NoOpen) { Start-Process $Url }
             return
         }
         Start-Sleep -Seconds 2
     }
-    throw "denpa が応答しません。cd $DenpaDir; docker compose logs を見てください"
+    throw "denpa が応答しません。wslc logs $Container を見てください"
 }
 
 # Siano のチューナーが刺さっていれば、ドライバが WinUSB かを見る (入れ替えは人の手で。Zadig)
@@ -335,7 +347,7 @@ function Install-Agent([string]$Ref) {
 
     # ログオンしたら起こす。**窓を出さない** (conhost --headless。コンソールのプログラムは、そのままだと窓が開く)。
     # 自分のアカウントのタスクなので管理者は要らない。時間の上限は外す (既定は 3 日で止められる)。
-    # **優先度は普通 (4) に。** 既定の 7 だと CPU も I/O も後回しにされ、Docker がエンコードで CPU を
+    # **優先度は普通 (4) に。** 既定の 7 だと CPU も I/O も後回しにされ、denpa のコンテナがエンコードで CPU を
     # 食っている間に siano-ts が USB を読みに行けず TS を落としうる (Mac の ProcessType Interactive と同じ理由)
     $me = [Security.Principal.WindowsIdentity]::GetCurrent().Name
     $action = New-ScheduledTaskAction -Execute "$env:WINDIR\System32\conhost.exe" `
@@ -361,18 +373,24 @@ function Install-Agent([string]$Ref) {
     throw "エージェントが応答しません。ログを見てください: $Log"
 }
 
-function Invoke-Main([switch]$NoOpen, [switch]$Uninstall, [switch]$NoDocker) {
+function Invoke-Main([switch]$NoOpen, [switch]$Uninstall, [switch]$AgentOnly) {
     $ErrorActionPreference = 'Stop'
     $ProgressPreference = 'SilentlyContinue'
 
     if ($Uninstall) {
-        # **録画中なら終わるまで待つ** (コンテナは stop_grace_period、エージェントは Stop-Agent)
-        if ((Test-Path -LiteralPath "$DenpaDir\compose.yml") -and (Test-Docker -Quiet)) { Invoke-Compose down }
+        # **録画中なら終わるまで待つ** (コンテナは stop-timeout、エージェントは Stop-Agent)
+        Unregister-ScheduledTask -TaskName $DenpaTask -Confirm:$false -ErrorAction SilentlyContinue
+        if (Test-Wslc -Quiet) {
+            Use-Continue
+            & wslc stop $Container *> $null
+            & wslc rm $Container *> $null
+            $ErrorActionPreference = 'Stop'
+        }
         Stop-Agent
         Unregister-ScheduledTask -TaskName $TaskName -Confirm:$false -ErrorAction SilentlyContinue
         if (Test-Path -LiteralPath $Prefix) { Remove-Item -Recurse -Force -LiteralPath $Prefix }
         Say '外しました。残してあるもの (要らなければ手で消してください):'
-        Say "  compose と設定とログ $DenpaDir / 録画 $Media / DB は docker volume rm denpa_denpa-data"
+        Say "  設定とログ $DenpaDir / 録画 $Media / DB は wslc volume rm $Volume"
         return
     }
 
@@ -381,17 +399,17 @@ function Invoke-Main([switch]$NoOpen, [switch]$Uninstall, [switch]$NoDocker) {
     $ref = if ($env:DENPA_AGENT_ZIP) { '' } else { Get-Version }
     Install-Agent $ref
     Show-Tuner
-    if ($NoDocker) {
+    if ($AgentOnly) {
         Say "エージェントだけ入れました。denpa の TUNER_AGENT_URL に http://$($env:COMPUTERNAME):$Port を書いてください"
         Say '(LAN から繋ぐなら、Windows ファイアウォールでポート 25252 への受信を許してください)'
         return
     }
-    if (-not (Test-Docker)) {
+    if (-not (Test-Wslc)) {
         Say "エージェントは入っています (http://127.0.0.1:$Port)"
         return
     }
-    # --- denpa 本体 (Docker)。エージェントと同じ版に。手元の zip を入れたときは main と latest ---
+    # --- denpa 本体 (wslc)。エージェントと同じ版に。手元の zip を入れたときは latest ---
     Start-Denpa $(if ($ref) { $ref } else { 'main' }) -NoOpen:$NoOpen
 }
 
-Invoke-Main -NoOpen:$NoOpen -Uninstall:$Uninstall -NoDocker:$NoDocker
+Invoke-Main -NoOpen:$NoOpen -Uninstall:$Uninstall -AgentOnly:$AgentOnly

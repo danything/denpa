@@ -238,7 +238,7 @@ jobs:
   #
   # agent-macos と同じく、Native AOT は Linux から Windows へ焼けないので Windows のランナーで焼いて起こす。
   # 実機は無いので、確かめるのは「焼ける・テストが通る・起きて口が答える・入れ方が最後まで通る」まで。
-  # ランナーの Docker は Windows コンテナなので、denpa 本体 (Linux のイメージ) は -NoDocker で外す。
+  # ランナーには wslc (WSL のコンテナ) が無いので、denpa 本体は -AgentOnly で外す。
   # **必須チェックにはしない** (agent-macos と同じ理由)
   agent-windows:
     runs-on: windows-latest
@@ -311,7 +311,7 @@ jobs:
           Compress-Archive -Path out\denpa-agent.exe -DestinationPath "$env:RUNNER_TEMP\denpa-agent.zip"
           $env:DENPA_AGENT_ZIP = "$env:RUNNER_TEMP\denpa-agent.zip"
           $script = [scriptblock]::Create((Get-Content install.ps1 -Raw -Encoding UTF8))
-          & $script -NoDocker -NoOpen
+          & $script -AgentOnly -NoOpen
           $prefix = "$env:LOCALAPPDATA\denpa-agent"
           Get-ScheduledTask -TaskName denpa-agent | Format-List TaskName, State
           Invoke-RestMethod http://127.0.0.1:25252/denpa/card | ConvertTo-Json -Compress
@@ -319,7 +319,7 @@ jobs:
           "siano-ts --list: exit $LASTEXITCODE"
           Get-Content "$prefix\denpa-agent.cmd"
 
-          & $script -NoDocker -NoOpen
+          & $script -AgentOnly -NoOpen
           $tuners = Invoke-RestMethod http://127.0.0.1:25252/denpa/tuners
           if ($null -eq $tuners.tuners) { throw 'agent does not answer after the upgrade' }
 

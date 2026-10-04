@@ -1,15 +1,15 @@
-# Mac と Windows で denpa 本体を動かす (install.sh / install.ps1 が ~/denpa/compose.yml として置いて起こす)。
+# Mac で denpa 本体を動かす (install.sh が ~/denpa/compose.yml として置いて起こす)。
 #
 # compose.prod.yml から tuner-agent を外したもの。denpa サービスは compose.prod.yml と揃える。
-# Mac と Windows の Docker (Docker Desktop / OrbStack / colima) はコンテナに USB を渡せないので、
-# エージェントは OS の上で直接動かし (Mac は LaunchAgent、Windows はタスク スケジューラ)、
+# Mac の Docker (Docker Desktop / OrbStack / colima) はコンテナに USB を渡せないので、
+# エージェントは OS の上で直接動かし (LaunchAgent)、
 # denpa はそれを host.docker.internal で呼ぶ。
 #
 # **このファイルには手を入れない** (更新のたびに上書きする)。足したいものは
 # 同じ場所の compose.override.yml に書く (Compose が自分で読む)。
 #
-# Windows でも使うが、**名前は mac のままにする**。main の install.sh / install.ps1 はリリースのタグから
-# この名前で取るので、変えると出した版 (v1.23.0 など) を Mac に入れられなくなる。
+# Windows (install.ps1) は wslc で起こすので、このファイルは使わない (前の版の install.ps1 は使っていた)。
+# main の install.sh はリリースのタグからこの名前で取るので、名前は変えない。
 name: denpa
 
 services:
@@ -36,11 +36,9 @@ services:
             - denpa-data:/data
             # 生TSの置き場は**エージェントと同じ OS のフォルダ** (エージェントの RAW_DIR)。
             # 掛かったまま録れたものを後から解くとき、エージェントが直に読み書きする
-            # (置き場からの相対パスで頼まれる)。HOME はシェルのものなので .env は要らない。
-            # **Windows には HOME が無い**ので、install.ps1 が ${HOME}/Movies/denpa を
-            # ビデオのフォルダ (…/Videos/denpa) に書き換えて置く (この2行の形のまま残すこと)
+            # (置き場からの相対パスで頼まれる)。HOME はシェルのものなので .env は要らない
             - ${HOME}/Movies/denpa/recorded:/media/raw
-            # 出来上がった録画は Finder / エクスプローラーからも見える所に
+            # 出来上がった録画は Finder からも見える所に
             - ${HOME}/Movies/denpa/library:/media/encoded
         ports:
             - '3000:3000'
