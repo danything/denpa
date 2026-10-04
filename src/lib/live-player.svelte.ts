@@ -25,6 +25,7 @@ import {
 import { RawEngine } from '#lib/raw/engine.js';
 import { rawUnsupported } from '#lib/raw/support.js';
 import { CLOCK, type Cue, currentCue, insertCue, trimCues } from '#lib/ts/captions.js';
+import { pickMediaSource } from '#lib/ts/media-source.js';
 import { CEILING, FLOOR, nextTarget, pacing } from '#lib/ts/pacing.js';
 import { resolve } from '$app/paths';
 
@@ -1367,7 +1368,8 @@ export function livePlayer() {
 
     /** 中身。**断り書きを消さない**ので、戻すときにも使える */
     function swapCodec(next: LiveCodec): void {
-        if (element === null || next === codec) return;
+        // 出せなかった後は、同じ形でも頼み直す (選び直すのが、やり直しの口にもなる)
+        if (element === null || (next === codec && state !== 'error')) return;
         // 追っかけも同じ理屈で焼き直し。**居た場所から**開き直す
         if (chase !== null) {
             codec = next;
@@ -1731,7 +1733,9 @@ export function livePlayer() {
     function start(video: HTMLVideoElement, codecs: string, baked: LiveCodec): void {
         // 生から焼いたものへ戻るとき (諦めた・LAN の外)。canvas を畳んで <video> を出す
         stopRaw();
-        if (!('MediaSource' in globalThis) || !MediaSource.isTypeSupported(codecs)) {
+        // iPhone の Safari には MediaSource が無く、ManagedMediaSource だけがある (`ts/media-source.ts`)
+        const picked = pickMediaSource();
+        if (picked === null || !picked.Source.isTypeSupported(codecs)) {
             if (baked !== 'h264') {
                 warning = 'この端末では AV1 を再生できないので、H.264 に戻しました';
                 swapCodec('h264');
@@ -1749,8 +1753,24 @@ export function livePlayer() {
         // 焼き方が変われば太さも変わる。数え直す
         received = 0;
         receivedFrom = 0;
-        const media = new MediaSource();
+        const media = new picked.Source();
         source = media;
+        /*
+         * **ManagedMediaSource は AirPlay を断らないと開かない。** AirPlay へ渡す
+         * 別の道 (HLS) は持っていないので断る。付ける前に立てておく
+         *
+         * 違いは他に2つあるが、どちらも手当てしない:
+         *
+         * - **送り込む頃合いをブラウザが言う** (`startstreaming` / `endstreaming`)。
+         *   ライブは放送が待ってくれないので聞かずに足し続ける。追っかけはサーバが
+         *   倍速で送り込んでくる (`server/chase.ts`) ので、本当は `endstreaming` で
+         *   止めたいが、止める口は「抱えきれない」の `starved` しか無く、あれは
+         *   届いたぶんを捨てて再開時に読み直す作り — 止めるたびに読み直すことになる
+         * - **溜めたものをブラウザが捨てる** (`bufferedchange`)。こちらの刈り取り
+         *   (`trim`) も `pace` も毎回 `buffered` を読み直すので、捨てられても
+         *   食い違わない
+         */
+        if (picked.managed) video.disableRemotePlayback = true;
         video.src = URL.createObjectURL(media);
         media.addEventListener(
             'sourceopen',
