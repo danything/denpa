@@ -37,18 +37,15 @@
             </p>
         {:else if pending}
             <h1>{view.name} を設定しています…</h1>
-            <p class="code mono" data-testid="device-code">{view.userCode}</p>
             <form method="POST" bind:this={auto}>
                 <input type="hidden" name="code" value={view.userCode} />
                 <noscript><button type="submit">設定する</button></noscript>
             </form>
         {:else if view.state === 'approved' || view.state === 'consumed'}
             <h1 data-testid="device-done">{view.name} を設定しました</h1>
-            <p class="code mono" data-testid="device-code">{view.userCode}</p>
-            <p class="small muted">テレビに戻ってください。テレビに出ている札と同じなら済んでいます。</p>
+            <p class="small muted">テレビに戻ってください。</p>
         {:else}
             <h1>この札は切れています</h1>
-            <p class="code mono">{view.userCode}</p>
             <p class="small muted">テレビでペアリングをやり直してください。札は10分で切れます。</p>
         {/if}
     </div>
@@ -71,9 +68,5 @@
         max-width: 24rem;
         padding: 2rem;
         text-align: center;
-    }
-    .code {
-        font-size: 1.5rem;
-        letter-spacing: 0.1em;
     }
 </style>

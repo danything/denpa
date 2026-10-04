@@ -30,7 +30,6 @@ test.describe('テレビのペアリング', () => {
         // スマホで QR を開く。開いたら自分で送って済む (許す / 断るは聞かない)
         await goto(page, `/${code.verificationUriComplete}`);
         await expect(page.getByTestId('device-done')).toContainText('E2E のテレビ を設定しました');
-        await expect(page.getByTestId('device-code')).toHaveText(code.userCode);
 
         // 間隔を守って聞き直すと、鍵を1度だけ受け取れる
         await new Promise((resolve) => setTimeout(resolve, 5_000));
