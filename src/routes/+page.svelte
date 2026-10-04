@@ -1,6 +1,6 @@
 <script lang="ts">
     import { DropdownMenu } from 'bits-ui';
-    import { onMount, tick } from 'svelte';
+    import { onMount, tick, untrack } from 'svelte';
     import { submitting } from '#lib/actions.js';
     import { arming } from '#lib/arming.svelte.js';
     import ProgramDetail from '#lib/components/ProgramDetail.svelte';
@@ -444,8 +444,14 @@
     }
     const recordingRows = $derived(rightRows.filter((row) => matches(recordingQuery, rightText(row))));
     const recordingPage = new Paged(() => recordingRows, 60);
+    /*
+     * 絞り込みの言葉が**変わったときだけ**先頭に戻す。開いた直後の1回で戻すと、
+     * 一番下から見せるために全部描いたもの (`onMount` の `revealAll`) を60件に戻してしまう
+     */
+    let recordingQueryShown = untrack(() => recordingQuery);
     $effect(() => {
-        recordingQuery;
+        if (recordingQuery === recordingQueryShown) return;
+        recordingQueryShown = recordingQuery;
         recordingPage.reset();
     });
 </script>
