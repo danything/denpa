@@ -778,8 +778,9 @@ irm https://raw.githubusercontent.com/danything/denpa/main/install.ps1 | iex
 
 - **コンテナから Windows のエージェントへは、Hyper-V の Default Switch の IP で届きます。**
   `host.docker.internal` のような名前はありません。その IP は Windows を起こし直すと変わりうるので、
-  起こすたびに調べ、`TUNER_AGENT_URL` か版が変わっていれば作り直します (DB はボリューム、録画は
-  Windows のフォルダなので消えない)。変わっていなければ `wslc start` だけ
+  起こすたびに調べ、`TUNER_AGENT_URL` か版か `denpa.env` (ハッシュをコンテナのラベルに持つ) が変わっていれば
+  作り直します (環境変数は作るときに焼き込まれる。DB はボリューム、録画は Windows のフォルダなので消えない)。
+  変わっていなければ `wslc start` だけ。`denpa.env` を直したら、install.ps1 を流し直すかログオンし直せば効く
 - **自動で起こし直す指定 (`--restart`) がありません。** ログオン時のタスクが代わりに起こします
 - **ポートは既定で 127.0.0.1 にしか出ません。** `-p 0.0.0.0:3000:3000` で出して、LAN のほかの機器からも開けるようにします
 - **この PC のブラウザから入ると、送信元は `169.254.x.x` に見えます** (wslc がポートを中継するため)。
@@ -790,7 +791,8 @@ irm https://raw.githubusercontent.com/danything/denpa/main/install.ps1 | iex
 
 **前の版 (Docker Desktop の compose) から上げるとき**は、install.ps1 が `docker compose down` で止め
 (録画中なら待つ)、DB を Docker のボリューム `denpa_denpa-data` から wslc のボリュームへ移し、
-`compose.yml` を `compose.yml.docker` に退けます。このときだけ Docker Desktop を起こしておく必要があります
+`compose.yml` を `compose.yml.docker` に退けます。`compose.override.yml` に足していた環境変数は引き継がないので、
+`denpa.env` に書き移します (退けたときにそう言う)。このときだけ Docker Desktop を起こしておく必要があります
 (移したあとは要りません。Docker のボリュームは消さずに残す)。
 
 - **WSL は勝手に入れません。** wslc が無いときは、エージェントだけ入れて `wsl --update` (WSL が無ければ

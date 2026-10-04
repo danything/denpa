@@ -167,11 +167,15 @@ function Move-FromDocker {
         if (Test-Path -LiteralPath $path) { Move-Item -Force -LiteralPath $path -Destination "$path.docker" }
     }
     Say "移しました。Docker のボリューム denpa_denpa-data と compose.yml.docker は残してあります (要らなければ消してください)"
+    if (Test-Path -LiteralPath (Join-Path $DenpaDir 'compose.override.yml.docker')) {
+        Say "compose.override.yml は compose.override.yml.docker に退けました。足していた環境変数 (TRUSTED_NETWORKS など) は $DenpaDir\denpa.env に書き移してから、もう一度流してください"
+    }
 }
 
 # 起こすスクリプト。**起こすたびに作り直すかを決める**: コンテナから Windows のエージェントへは
 # Hyper-V の Default Switch の IP で届くが (host.docker.internal は無い)、その IP は再起動で変わりうる。
-# 宛先か版が変わっていればコンテナを作り直す (DB はボリューム、録画は Windows のフォルダなので消えない)。
+# 宛先か版か denpa.env が変わっていればコンテナを作り直す (環境変数は作るときに焼き込まれる。
+# DB はボリューム、録画は Windows のフォルダなので消えない)。
 # wslc には restart の指定が無いので、ログオン時のタスクがこれを流す。
 # **ポートは 0.0.0.0 に出す** (既定は 127.0.0.1 だけで、LAN のほかの機器から開けない)
 function Write-StartScript([string]$Image) {
@@ -186,10 +190,12 @@ $encoded = '__ENCODED__'
 $ip = (Get-NetIPAddress -AddressFamily IPv4 -InterfaceAlias 'vEthernet (Default Switch)' -ErrorAction SilentlyContinue).IPAddress | Select-Object -First 1
 if (-not $ip) { $ip = (Get-NetIPAddress -AddressFamily IPv4 | Where-Object InterfaceAlias -like 'vEthernet*' | Select-Object -First 1).IPAddress }
 $agent = "http://${ip}:__PORT__"
+# Env vars are baked in at creation, so a changed denpa.env also means recreating
+$envHash = (Get-FileHash -Algorithm SHA256 -LiteralPath $envFile).Hash
 $info = & wslc inspect __NAME__ 2>$null | Out-String
 if ($LASTEXITCODE -eq 0 -and $info.Trim()) {
     $c = @(ConvertFrom-Json $info)[0]
-    if ($c.Config.Image -eq $image -and $c.Config.Env -contains "TUNER_AGENT_URL=$agent") {
+    if ($c.Config.Image -eq $image -and $c.Config.Env -contains "TUNER_AGENT_URL=$agent" -and $c.Config.Labels.'denpa.env' -eq $envHash) {
         & wslc start __NAME__ | Out-Null
         exit 0
     }
@@ -197,7 +203,7 @@ if ($LASTEXITCODE -eq 0 -and $info.Trim()) {
     & wslc stop __NAME__ | Out-Null
     & wslc rm __NAME__ | Out-Null
 }
-& wslc run -d --name __NAME__ --stop-timeout 21900 -p 0.0.0.0:3000:3000 --env-file $envFile `
+& wslc run -d --name __NAME__ --stop-timeout 21900 -p 0.0.0.0:3000:3000 --env-file $envFile -l "denpa.env=$envHash" `
     -e "TUNER_AGENT_URL=$agent" -v '__VOLUME__:/data' -v "${raw}:/media/raw" -v "${encoded}:/media/encoded" $image | Out-Null
 exit $LASTEXITCODE
 '@
@@ -219,14 +225,15 @@ function Start-Denpa([string]$Ref, [switch]$NoOpen) {
     # コンテナの環境変数。**手で書き足すのはここ** (上げ直しても触らない)
     $envFile = Join-Path $DenpaDir 'denpa.env'
     if (-not (Test-Path -LiteralPath $envFile)) {
-        Write-Text $envFile (@(
+        # 最後も改行で終える (行を書き足したときに、前の行にくっつかないように)
+        Write-Text $envFile ((@(
                 '# denpa (wslc のコンテナ) の環境変数。install.ps1 は無いときだけ作り、あとは触らない',
                 'TZ=Asia/Tokyo',
                 'ENCODE_CONCURRENCY=2',
                 '# 誰を通すか (docs/auth.md)。169.254.0.0/16 はこの PC のブラウザ (wslc はポートを中継するので、',
                 '# localhost から入るとこう見える)。LAN のほかの機器は本当の IP のまま届く',
                 'TRUSTED_NETWORKS=169.254.0.0/16,192.168.0.0/16,10.0.0.0/8,172.16.0.0/12'
-            ) -join "`n")
+            ) -join "`n") + "`n")
     }
 
     Say "denpa $Ref を wslc で起こします ($image)"
