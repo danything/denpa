@@ -51,8 +51,17 @@ export function fileRecordingId(pathname: string): number | null {
  *   ホーム画面に置けなくなる。static に置いてあった頃は adapter-node が
  *   hooks より手前で返していて、そもそも掛かっていなかった。出しているのは
  *   アプリの名前とアイコンの場所だけ
+ * - **ペアリングの札と鍵の受け取り** (`/api/device/code`・`/api/device/token`)。テレビは
+ *   まだ何の資格も持っていない。札を出すだけでは入れず、許すのは `/device` (ここは守る)。
+ *   誰でも叩けるので、生きている札の数に上限がある (device-auth.ts の `MAX_PENDING`)
  */
-const OPEN_PATHS = [/^\/login(\/|$)/, /^\/logout$/, /^\/api\/health$/, /^\/manifest\.webmanifest$/];
+const OPEN_PATHS = [
+    /^\/login(\/|$)/,
+    /^\/logout$/,
+    /^\/api\/health$/,
+    /^\/manifest\.webmanifest$/,
+    /^\/api\/device\/(code|token)$/,
+];
 
 export function isFilePath(pathname: string): boolean {
     return fileRecordingId(pathname) !== null;

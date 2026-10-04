@@ -1,6 +1,7 @@
 import { redirect } from '@sveltejs/kit';
 import {
     clientAddress,
+    configured,
     denied,
     isFilePath,
     isOpenPath,
@@ -8,6 +9,7 @@ import {
     sessionMayRead,
     trusted,
 } from '#lib/server/auth.js';
+import { bearerToken, verifyToken } from '#lib/server/device-auth.js';
 import { relative } from '#lib/server/paths.js';
 import { start } from '#lib/server/runtime.js';
 import { COOKIE, find } from '#lib/server/session.js';
@@ -18,6 +20,29 @@ start();
 
 export async function handle({ event, resolve }) {
     const { pathname, search } = event.url;
+
+    /*
+     * **アプリの鍵** (`Authorization: Bearer denpa_…`、device-auth.ts)。ペアリングで渡したもの。
+     * 生きていればログインした人と同じに通す (どこから来ても。家の外の OIDC 越しでも使えるように)。
+     *
+     * **出された鍵が駄目なら、ほかの道へ回さずに 401。** 信頼するネットワークの中でも同じ —
+     * 取り消された鍵で黙って通すと、アプリは取り消されたことに気付けず、外へ出た途端に
+     * 使えなくなる。401 ならアプリは「ペアリングし直し」と分かる。
+     * `denpa_` で始まらない Bearer (前段の SSO などが付けるもの) は見ずに、いつもの道へ回す
+     */
+    const bearer = bearerToken(event.request.headers.get('authorization'));
+    if (bearer !== null) {
+        const owner = verifyToken(bearer);
+        if (owner === null) {
+            return Response.json(
+                { error: 'invalid_token' },
+                { status: 401, headers: { 'www-authenticate': 'Bearer error="invalid_token"' } },
+            );
+        }
+        event.locals.user = { subject: `token:${owner.id}`, name: owner.name };
+        event.locals.token = owner.id;
+        return finish(await resolve(event));
+    }
 
     /*
      * **何も聞かずに通す相手。** 住所が `TRUSTED_NETWORKS` に当たったときだけ。
@@ -60,19 +85,37 @@ export async function handle({ event, resolve }) {
                  * 意味の分からない失敗になる。401 なら画面側は「切れた」と分かる
                  */
                 const wantsHtml = event.request.headers.get('accept')?.includes('text/html') === true;
-                if (event.request.method !== 'GET' || !wantsHtml) {
-                    return new Response('login required', { status: 401 });
+                if (event.request.method !== 'GET' || !wantsHtml || pathname.startsWith('/api/')) {
+                    return needsPairing();
                 }
                 redirect(302, relative(event.url, `/login?to=${encodeURIComponent(pathname + search)}`));
             }
+        } else if (configured() && pathname.startsWith('/api/')) {
+            // 信頼するネットワークの外から、鍵を持たずに来た。アプリはこれで「ペアリングが要る」と分かる
+            return needsPairing();
         } else {
-            // OIDC も TRUSTED_NETWORKS も無い。入る道が無いことを言葉で返す (auth.denied)
+            // 入る道が無い (設定していないか、信頼するネットワークの外の画面)。言葉で返す (auth.denied)
             return denied();
         }
     }
 
-    const response = await resolve(event);
+    return finish(await resolve(event));
+}
 
+/**
+ * 資格の無い API の呼び出しへの答え。**いつも同じ形の 401 JSON** (docs/api.md)。
+ * テレビのアプリは鍵を持たずにまず API を叩き、これが返ればペアリングに進む
+ * (信頼するネットワークの中なら通るので、ペアリングは要らない)。HTML のログイン画面へ
+ * 回すと、アプリは JSON として読もうとして意味の分からない失敗になる
+ */
+function needsPairing(): Response {
+    return Response.json(
+        { error: 'unauthorized' },
+        { status: 401, headers: { 'www-authenticate': 'Bearer realm="denpa"' } },
+    );
+}
+
+function finish(response: Response): Response {
     /*
      * **画面の HTML は毎回聞き直させる。**
      *

@@ -495,3 +495,53 @@ export const sessions = sqliteTable(
     // 切れたものを片付けるときに舐める
     (t) => [index('sessions_expires').on(t.expires_at)],
 );
+
+/**
+ * **アプリに渡した鍵** (device-auth.ts)。テレビのアプリ (danything/denpa-tv) などが
+ * `Authorization: Bearer <鍵>` で入るためのもの。
+ *
+ * **鍵そのものは持たない。** 持つのは SHA-256 だけで、鍵は渡すときに1度だけ返す。
+ * DB が漏れても、ここから入れる鍵は作れない。消さずに `revoked_at` で止める
+ * (いつ・誰が許したかを設定画面に残すため)
+ */
+export const apiTokens = sqliteTable('api_tokens', {
+    id: integer('id').primaryKey({ autoIncrement: true }),
+    /** 端末が名乗った名前 (「居間のテレビ」など)。画面で見分けるためだけ */
+    name: text('name').notNull(),
+    token_hash: text('token_hash').notNull().unique(),
+    created_at: integer('created_at').notNull(),
+    /** 最後に使われた時刻。1分に1度しか書かない (毎回書くと映像の Range ごとに書く) */
+    last_used_at: integer('last_used_at'),
+    revoked_at: integer('revoked_at'),
+    /** 許した人。OIDC なら sub、信頼するネットワークから許したなら 'trusted-network' */
+    created_by: text('created_by'),
+});
+
+/**
+ * **ペアリングの途中** (device-auth.ts。OAuth のデバイス認可 (RFC 8628) と同じ形)。
+ *
+ * 端末が持つ `device_code` は推測できない秘密で、持つのは SHA-256 だけ。QR に載る
+ * `user_code` (ABCD-EFGH) は短いので、10分で切れる。開いた人が入れる人なら許したことにし、
+ * 端末が次に聞きに来たときに鍵を作って1度だけ渡し、`consumed_at` を付ける。
+ * 断る手順は持たない (家で使う前提。札は10分で切れ、1度しか使えない)
+ */
+export const deviceCodes = sqliteTable(
+    'device_codes',
+    {
+        id: integer('id').primaryKey({ autoIncrement: true }),
+        device_code_hash: text('device_code_hash').notNull().unique(),
+        user_code: text('user_code').notNull().unique(),
+        name: text('name').notNull(),
+        created_at: integer('created_at').notNull(),
+        expires_at: integer('expires_at').notNull(),
+        last_polled_at: integer('last_polled_at'),
+        /** 許された時刻と、許した人。**鍵はまだ作らない** (渡すときに作る。生の鍵を DB に置かないため) */
+        approved_at: integer('approved_at'),
+        approved_by: text('approved_by'),
+        /** 渡した鍵 */
+        approved_token_id: integer('approved_token_id').references((): AnySQLiteColumn => apiTokens.id),
+        consumed_at: integer('consumed_at'),
+    },
+    // 切れたものを片付けるときに舐める
+    (t) => [index('device_codes_expires').on(t.expires_at)],
+);

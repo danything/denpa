@@ -376,6 +376,37 @@
             </form>
         </section>
 
+        <!--
+            テレビのアプリ (danything/denpa-tv) に渡した鍵。家の外から OIDC 越しに使うテレビは
+            QR でペアリングして鍵を持つ (信頼するネットワークの中なら鍵は要らない)。
+            なくしたテレビ・手放したテレビはここで止める
+        -->
+        <section class="panel card" data-testid="devices-card">
+            <h2>テレビのアプリ</h2>
+            <p class="small lead">QR でペアリングしたテレビです。取り消すと、そのテレビはペアリングし直しになります</p>
+            {#if data.devices.length === 0}
+                <p class="small muted">まだありません</p>
+            {:else}
+                <div class="rows" data-testid="device-list">
+                    {#each data.devices as device (device.id)}
+                        <div class="row device" data-testid="device-row">
+                            <div class="small"><strong>{device.name}</strong></div>
+                            <div class="tiny muted">
+                                ペアリング {dateTime(device.created_at)} ・ 最後に使った
+                                {device.last_used_at === null ? 'まだ' : dateTime(device.last_used_at)}
+                            </div>
+                            <form method="POST" action="?/revokeDevice" use:submitting>
+                                <input type="hidden" name="id" value={device.id} />
+                                <button type="submit" class="xs outline danger" data-testid="device-revoke">
+                                    取り消す
+                                </button>
+                            </form>
+                        </div>
+                    {/each}
+                </div>
+            {/if}
+        </section>
+
         <section class="panel card">
             <h2>通知</h2>
             <p class="small lead">録画の開始・完了・失敗などを外部に通知します</p>
