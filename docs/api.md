@@ -14,10 +14,12 @@
 
 ```json
 [{ "id": 3227310008, "type": "GR", "name": "TOKYO MX", "remoteControlKey": 9,
-   "logo": "api/services/3227310008/logo", "live": "api/services/3227310008/live" }]
+   "logo": "api/services/3227310008/logo", "live": "api/services/3227310008/live",
+   "now": { "title": "ニュース", "startAt": 1790000000000, "endAt": 1790001800000 } }]
 ```
 
 - `logo` は局ロゴをまだ拾えていなければ `null`
+- `now` はいま放送中の番組 (時刻は epoch ms)。番組表に無ければ `null`
 
 ## ライブ `GET /api/services/<id>/live`
 
@@ -40,7 +42,7 @@
 ```json
 [{ "id": 12, "title": "番組 第1話", "name": "[新]番組 第1話[字]",
    "serviceId": 3227310008, "serviceName": "TOKYO MX",
-   "startAt": 1790000000000, "endAt": 1790001800000, "durationMs": 1800000,
+   "startAt": 1790000000000, "endAt": 1790001800000, "durationMs": 1800000, "resumeMs": 754000,
    "poster": "api/recordings/12/poster",
    "files": [
      { "source": "encoded", "codec": "av1",   "url": "api/recordings/12/file?source=encoded" },
@@ -54,3 +56,10 @@
   焼いたものは Matroska (`video/x-matroska`)、生は TS (`video/mp2t`)。Range に応じます
 - `audio` は主音声だけを AAC (ADTS、`audio/aac`) で流します。画面の無いスピーカーへの Cast 向け。
   `source` と一緒に渡せば、元にするファイルを選べます
+- `resumeMs` は続きから観る位置 (画面の「続き」と同じもの)。観ていない・観終えたものは `null`
+
+## 観た位置 `POST /api/recordings/<id>/resume`
+
+本文は `{ "at": 秒, "length": 尺の秒 }` (`length` は分からなければ省く)。画面と同じく、頭の少しと
+末尾の 30 秒は「覚えない」(消す) 扱いです。答えは `{ "resume": 覚えた秒 または null, "edge": 30 }`。
+15 秒おきくらいに送れば、ほかの端末 (画面・ほかのテレビ) でも続きから観られます

@@ -24,6 +24,7 @@ export function GET({ url }) {
             startAt: recordings.start_at,
             endAt: recordings.end_at,
             durationMs: recordings.duration_ms,
+            resumeMs: recordings.resume_ms,
             library: recordings.library_path,
             alt: recordings.alt_path,
             ts: recordings.ts_path,
@@ -61,6 +62,8 @@ export function GET({ url }) {
                 startAt: row.startAt,
                 endAt: row.endAt,
                 durationMs: row.durationMs,
+                // 続きから観る位置 (画面と同じ。`POST api/recordings/<id>/resume` で書く)。観終えた・未視聴なら null
+                resumeMs: row.resumeMs,
                 poster: `api/recordings/${row.id}/poster`,
                 files,
                 audio: `api/recordings/${row.id}/file?audio=only`,

@@ -19,8 +19,8 @@ import { RESUME_EDGE, resumePoint } from '#lib/ts/watch.js';
  * ## 知らせは出さない
  *
  * 15秒おきに呼ばれるので、`emit('recordings')` すると一覧が繋いでいる人の
- * 画面がそのたびに書き換わる。**観た位置は一覧に出していない**ので、
- * 誰にも伝える必要が無い
+ * 画面がそのたびに書き換わる。観た位置は開いたときに読めば足りる (画面も
+ * `GET /api/recordings` の `resumeMs` も)ので、誰にも伝える必要が無い
  */
 export async function POST({ params, request }) {
     const recording = recordingOr404(params.id);
