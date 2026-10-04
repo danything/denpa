@@ -26,6 +26,9 @@ const READ_SIZE = 256 * 1024;
 /** 書き足されるのを待つ間隔 (ms)。放送は約2MB/秒なので、これで十分細かい */
 const WAIT_MORE = 300;
 
+/** 読む側が詰まっているときに、空くのを待つ間隔 (ms) */
+const WAIT_READER = 50;
+
 /**
  * 送り込みの上限 — **実時間の倍速まで。**
  *
@@ -77,13 +80,20 @@ export function chasePlan(size: number, recordedSec: number, atSec: number): Cha
  * 尻 (EOF) に着いたら書き足されるのを待って読み足す。**録画が終わっていて**
  * 尻に着いたら、それが本当の終わり。
  *
+ * **読む側が詰まっていたら読まない。** 受け取る口 (ffmpeg の標準入力・HTTP の応答) が
+ * 先へ進まない間は、こちらも次を読まずに待つ。待たずに読むと、倍速で送り込むぶんが
+ * どこかに溜まり続ける。
+ *
  * @param done もう書き足されないか (録画が終わったか)。EOF のたびに訊く
+ * @param hold ほかの理由で止めておくか (HTTP の追っかけで、焼いた先が読まれていないとき。
+ *   `live.ts` の `chaseStream`)。省けば止めない
  */
 export function followFile(
     path: string,
     offset: number,
     paceBytesPerSec: number,
     done: () => boolean,
+    hold: () => boolean = () => false,
 ): ReadableStream<Uint8Array> {
     let cancelled = false;
     return new ReadableStream<Uint8Array>({
@@ -95,6 +105,10 @@ export function followFile(
             try {
                 const buffer = new Uint8Array(READ_SIZE);
                 while (!cancelled) {
+                    if ((controller.desiredSize ?? 1) <= 0 || hold()) {
+                        await Bun.sleep(WAIT_READER);
+                        continue;
+                    }
                     const { bytesRead } = await handle.read(buffer, 0, READ_SIZE, position);
                     if (bytesRead > 0) {
                         position += bytesRead;

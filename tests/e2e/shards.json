@@ -9,7 +9,8 @@
         "14-serve",
         "02-reservation",
         "25-chase",
-        "30-api"
+        "30-api",
+        "32-chase-api"
     ],
     "3": ["03-recording", "22-watch", "18-pwa", "12-encode-failure", "05-rules", "28-live-raw", "31-device"],
     "4": [

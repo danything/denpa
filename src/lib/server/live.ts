@@ -1257,7 +1257,18 @@ function watch(
 }
 
 /** HTTP のライブで、読まれずに溜まってよい量 (バイト)。超えたら閉じる */
-const LIVE_STREAM_BACKLOG = 32 * 1024 * 1024;
+export const LIVE_STREAM_BACKLOG = 32 * 1024 * 1024;
+
+/**
+ * HTTP の追っかけで、読まれずに溜まったら**生TSの送り込みを止める**量 (バイト)。
+ * 追っかけは倍速で送り込むので、相手が観る速さでしか読まなければ溜まり続け、
+ * いずれ上の上限で閉じてしまう。ライブと違って入力 (伸びているファイル) は待てるので、
+ * 止めて待つ (`chase.ts` の `followFile` の `hold`)。
+ *
+ * **閉じる上限 (`LIVE_STREAM_BACKLOG`) より必ず小さくする。** 逆だと止める前に閉じて
+ * しまい、止める意味が無い。焼き上がりは塊で届くので、間を十分あけておく (live.test.ts で固定)
+ */
+export const CHASE_STREAM_HOLD = 4 * 1024 * 1024;
 
 /**
  * **HTTP で流すライブ** (`GET /api/services/<id>/live`)。画面の外のもの
@@ -1267,9 +1278,7 @@ const LIVE_STREAM_BACKLOG = 32 * 1024 * 1024;
  * `audio` なら音声だけ (AAC の fMP4。画面の無いスピーカーへの Cast 向け)。
  *
  * 画面の視聴者と同じ取り合いに乗る — 同じ局・同じ焼き方を誰かが見ていれば相乗りし、
- * 最後の1人が抜けたら畳む。流すのは映像の器 (init + 中身) だけで、字幕・データ放送・
- * 知らせは捨てる。焼けなくなったら (`error` / `ended`) 応答を閉じる。
- * 局が無ければ null
+ * 最後の1人が抜けたら畳む。局が無ければ null
  */
 export function liveStream(serviceId: number, codec: StreamCodec | 'raw'): ReadableStream<Uint8Array> | null {
     const row = orm()
@@ -1278,7 +1287,61 @@ export function liveStream(serviceId: number, codec: StreamCodec | 'raw'): Reada
         .where(eq(services.id, serviceId))
         .get();
     if (row === undefined) return null;
+    return sessionStream((viewer) => {
+        const raw = codec === 'raw';
+        return watch(
+            row.type,
+            row.channel,
+            serviceId,
+            nowPlaying(serviceId, undefined),
+            raw ? 'h264' : codec,
+            0,
+            raw,
+            viewer,
+        );
+    });
+}
 
+/**
+ * **HTTP で流す追っかけ再生** (`GET /api/recordings/<id>/chase`)。テレビのアプリ向け。
+ *
+ * - `raw` … 録画中の生TSを、`at` 秒に当たるところから**そのまま**流し、伸びるのを追い読みする
+ *   (位置の当て方は `chasePlan` のバイト比例)。録り終えて尻まで読んだら閉じる
+ * - `h264` / `av1` … 画面の追っかけ (`openChase`) と同じ焼き直しを、WebSocket ではなく
+ *   HTTP の fMP4 で流す。読み切ったら (`ended`) 閉じる
+ *
+ * シークは `at` を変えて頼み直す (画面の追っかけと同じく、位置ごとに立て直す)。
+ * 録画が無い・まだ何も録れていなければ null
+ */
+export function chaseStream(
+    recordingId: number,
+    codec: LiveCodec | 'raw',
+    at: number,
+): ReadableStream<Uint8Array> | null {
+    const rec = orm().select().from(recordings).where(eq(recordings.id, recordingId)).get();
+    if (rec === undefined || rec.deleted_at !== null || rec.ts_path === null) return null;
+    const size = fileSize(rec.ts_path);
+    if (size === null || size === 0) return null;
+    if (codec === 'raw') {
+        const plan = chasePlan(size, recordedSec(rec), at);
+        return followFile(rec.ts_path, plan.offset, plan.paceBytesPerSec, () => recordingDone(rec.id));
+    }
+    return sessionStream((viewer, held) =>
+        openChase({ type: 'chase', recordingId, at, audio: undefined, codec, caption: 0 }, viewer, held),
+    );
+}
+
+/**
+ * 焼いたもの (`Session`) を HTTP の応答に流す口。ライブと追っかけで共通。
+ *
+ * 流すのは映像の器 (init + 中身) と生TSだけで、字幕・データ放送・知らせは捨てる。
+ * 焼けなくなったら・読み切ったら (`error` / `ended`) 応答を閉じる。読むのが追いつかない
+ * 相手も閉じる (溜め続けるとメモリが増え続け、fMP4 は途中を捨てると壊れる)。
+ * `held` は溜まりすぎて送り込みを止めたいか (追っかけだけが使う。`CHASE_STREAM_HOLD`)
+ */
+export function sessionStream(
+    open: (viewer: Viewer, held: () => boolean) => Session | null,
+): ReadableStream<Uint8Array> {
     let session: Session | null = null;
     /** もう閉じたか。加えている最中 (watch の中) に閉じることがあるので、戻ってから見る */
     let closed = false;
@@ -1290,23 +1353,19 @@ export function liveStream(serviceId: number, codec: StreamCodec | 'raw'): Reada
     return new ReadableStream<Uint8Array>(
         {
             start(controller) {
+                const close = () => {
+                    closed = true;
+                    leave();
+                    controller.close();
+                };
                 viewer.connection = {
                     send(kind, _pts, payload) {
                         if (closed) return;
-                        const close = () => {
-                            closed = true;
-                            leave();
-                            controller.close();
-                        };
                         if (
                             kind === CHANNEL.videoInit ||
                             kind === CHANNEL.videoMedia ||
                             kind === CHANNEL.rawTs
                         ) {
-                            /*
-                             * **読むのが追いつかない相手は閉じる。** 溜め続けるとメモリが増え続ける。
-                             * fMP4 は途中の中身を捨てると壊れるので、捨てずに閉じる
-                             */
                             if ((controller.desiredSize ?? 0) < -LIVE_STREAM_BACKLOG) return close();
                             controller.enqueue(payload);
                             return;
@@ -1316,9 +1375,7 @@ export function liveStream(serviceId: number, codec: StreamCodec | 'raw'): Reada
                         if (notice.type === 'error' || notice.type === 'ended') close();
                     },
                 };
-                const raw = codec === 'raw';
-                const now = nowPlaying(serviceId, undefined);
-                session = watch(row.type, row.channel, serviceId, now, raw ? 'h264' : codec, 0, raw, viewer);
+                session = open(viewer, () => (controller.desiredSize ?? 0) < -CHASE_STREAM_HOLD);
                 if (closed) leave();
             },
             cancel() {
@@ -1586,7 +1643,7 @@ export function attend(connection: Connection): void {
  *
  * シークの当たりの付け方は `chasePlan` (chase.ts の冒頭)。
  */
-function openChase(asked: ChaseAsked, viewer: Viewer): Session | null {
+function openChase(asked: ChaseAsked, viewer: Viewer, hold?: () => boolean): Session | null {
     const tell = (notice: Notice) => viewer.connection.send(CHANNEL.control, 0n, json(notice));
     const refuse = (text: string): null => {
         tell({ type: 'error', message: text });
@@ -1604,11 +1661,7 @@ function openChase(asked: ChaseAsked, viewer: Viewer): Session | null {
     if (size === null || size === 0) return refuse('まだ何も録れていません');
 
     const finished = rec.finished_at !== null;
-    // 録れている長さ。録り終えていれば実測、まだなら**録り始めてからの経過**
-    const recordedSec = finished
-        ? (rec.duration_ms ?? rec.end_at - rec.start_at) / 1000
-        : (Date.now() - rec.created_at) / 1000;
-    const plan = chasePlan(size, recordedSec, at);
+    const plan = chasePlan(size, recordedSec(rec), at);
 
     const tracks = audioTracks(parseAudios(rec));
     const audio = pickTrack(tracks, wanted);
@@ -1645,20 +1698,34 @@ function openChase(asked: ChaseAsked, viewer: Viewer): Session | null {
         codec,
         caption,
         false,
-        () =>
-            followFile(path, plan.offset, plan.paceBytesPerSec, () => {
-                // 録り終えたら (行が消えたときも)、尻に着いた時点で読み終わり
-                const row = orm()
-                    .select({ finished_at: recordings.finished_at })
-                    .from(recordings)
-                    .where(eq(recordings.id, rec.id))
-                    .get();
-                return row === undefined || row.finished_at !== null;
-            }),
+        () => followFile(path, plan.offset, plan.paceBytesPerSec, () => recordingDone(rec.id), hold),
     );
     void session.run();
     session.add(viewer);
     return session;
+}
+
+/** 録れている長さ (秒)。録り終えていれば実測、まだなら**録り始めてからの経過** */
+function recordedSec(rec: {
+    finished_at: number | null;
+    duration_ms: number | null;
+    start_at: number;
+    end_at: number;
+    created_at: number;
+}): number {
+    return rec.finished_at !== null
+        ? (rec.duration_ms ?? rec.end_at - rec.start_at) / 1000
+        : (Date.now() - rec.created_at) / 1000;
+}
+
+/** もう書き足されないか。録り終えたら (行が消えたときも)、尻に着いた時点で読み終わり */
+function recordingDone(id: number): boolean {
+    const row = orm()
+        .select({ finished_at: recordings.finished_at })
+        .from(recordings)
+        .where(eq(recordings.id, id))
+        .get();
+    return row === undefined || row.finished_at !== null;
 }
 
 interface NowPlaying {
