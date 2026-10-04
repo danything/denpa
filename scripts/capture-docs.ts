@@ -26,8 +26,7 @@ mkdirSync(OUT, { recursive: true });
 // 自分の値の入る欄と、映像はぼかす
 const BLUR = `
 [data-testid="webhook-list"] .url, [data-testid="webhook-url"],
-[data-testid="vlc-name"], [data-testid="vlc-ip"], [data-testid="postal-code"],
-[data-testid="vlc-card"] .rows input { filter: blur(6px) !important; }
+[data-testid="postal-code"] { filter: blur(6px) !important; }
 video, .media-stack canvas, [data-testid="live-video"], [data-testid="watch-video"] { filter: blur(16px) !important; }
 `;
 

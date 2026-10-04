@@ -100,7 +100,7 @@ export function shareTokenAllows(pathname: string, searchParams: URLSearchParams
  * title は履歴や通知にしか回らず、見出しには効かない。名前の区切りは
  * サーバでは読み捨てる (`file/[name]/+server.ts`) — 資格はトークンだけ。
  * 名前は `[字][デ]` を残す (markedTitle)。テレビの見出しはこれしか出ないので。
- * `source` の名指しはクエリに焼き込む (テレビごとのコーデック設定の実現手段)。
+ * `source` の名指しはクエリに焼き込む (AV1 を解けないプレイヤーに H.264 や生TSを渡すとき)。
  * プレイリストのほう (`playlist/[name]/+server.ts`) は、その中身にファイルの
  * URL を同じ資格で書く
  */

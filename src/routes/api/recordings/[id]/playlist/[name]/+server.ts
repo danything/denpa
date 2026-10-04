@@ -6,8 +6,8 @@ import { markedTitle } from '#lib/server/title.js';
 import { parseFileSource } from '#lib/source.js';
 
 /**
- * 録画を**続きの位置から**指す XSPF。テレビの VLC へ飛ばすときに、ファイルの
- * URL の代わりに渡す (`+page.svelte` の `playOnTv`。経緯は `server/playlist.ts`)。
+ * 録画を**続きの位置から**指す XSPF。続きから始めさせたいプレイヤーに、ファイルの
+ * URL の代わりに渡す (共有リンクの `playlist`。経緯は `server/playlist.ts`)。
  *
  * 中の `<location>` は同じ録画のファイルの口で、**資格 (`?token=`) と名指し
  * (`?source=`) はこの URL から写す** — プレイリストを開けた相手はファイルも

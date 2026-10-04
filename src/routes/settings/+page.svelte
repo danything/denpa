@@ -1,5 +1,4 @@
 <script lang="ts">
-    import { untrack } from 'svelte';
     import { submitting } from '#lib/actions.js';
     import Toasts, { errorNotice, type Notice } from '#lib/components/Toasts.svelte';
     import { dateTime, stateLabel } from '#lib/format.js';
@@ -36,42 +35,13 @@
      * 「今の値を編集する」フォームは、保存してもフォームを reset させない。
      *
      * enhance の既定は成功後に `form.reset()` — 入力欄がデフォルト (空) に戻る。
-     * バインドした状態は reset を聞かないので、**何も変えずに保存すると入力欄
-     * だけが空に見える** (サーバの一覧が変わったときしか写し直さないため、
-     * 書き戻しも走らない)。空にしたいのは追加系 (Webhook) だけ
+     * 今の値を見せている欄が、**何も変えずに保存しただけで空に見える**。
+     * 空にしたいのは追加系 (Webhook) だけ
      */
     const keepValues: SubmitFunction = () => async (options) => {
         await options.update({ reset: false });
     };
 
-    /**
-     * テレビの一覧も同じ写し方 (名前+ホスト+コーデックの行編集)。名前がホストと
-     * 同じなのは「名前を付けていない」印なので、名前の欄は空で出す。
-     *
-     * **書き戻すのは、サーバの一覧そのものが変わったときだけ** (tvSeen)。
-     * load はどのフォームを保存しても走り直すので、素直に写すと**別のカードを
-     * 保存しただけで編集中の行が巻き戻って**いた (複数行をいじる編集では
-     * パスワード欄より実害が大きい)
-     */
-    // ホストは `IP:ポート` で持っている (parseTargets が補うのでポートは必ず在る)。
-    // 画面は欄を分けるので、ここで割って、保存 (saveVlc) がまた繋ぐ
-    const tvRowsOf = () =>
-        data.vlc.targets.map((t) => ({
-            name: t.name === t.host ? '' : t.name,
-            ip: t.host.split(':')[0],
-            port: t.host.split(':')[1] ?? '8080',
-            codec: t.codec,
-        }));
-    let tvRows = $state(untrack(tvRowsOf));
-    let tvSeen = JSON.stringify(untrack(tvRowsOf));
-
-    $effect(() => {
-        const rows = tvRowsOf();
-        const key = JSON.stringify(rows);
-        if (key === tvSeen) return;
-        tvSeen = key;
-        tvRows = rows;
-    });
 </script>
 
 {#snippet checkRow(
@@ -281,97 +251,6 @@
                 )}
                 <div class="span-2">
                     <button type="submit" data-testid="save-recording">保存</button>
-                </div>
-            </form>
-        </section>
-
-        <!--
-            **テレビの VLC で再生。** VLC for Android (3.6+) のリモートアクセスへ、
-            **画面を開いている端末が** URL を投げて再生させる (server/vlc.ts は
-            一覧を持つだけ)。相手の居場所だけここで決め、
-            ペアリング (テレビに出る6桁のコード) は録画詳細の「テレビで再生」を
-            初めて押したときにその場でやる
-        -->
-        <section class="panel card" data-testid="vlc-card">
-            <h2>テレビで再生 (VLC)</h2>
-            <p class="small lead">
-                <strong>いま開いている端末から</strong>、テレビの VLC で録画を再生します
-            </p>
-            <details class="more">
-                <summary>詳しく</summary>
-                <p>
-                    テレビの VLC の「リモートアクセス」を使います。VLC で
-                    <strong>その他 → リモートアクセス</strong> を有効にして、ここにテレビを登録すると、
-                    録画詳細に「テレビで再生」が出ます。
-                </p>
-                <p>
-                    初回だけ VLC のペア設定が開きます。セキュアな接続 (自己署名の証明書) を受け入れ、
-                    テレビに出る6桁のコードを入れれば、次からはそのまま再生できます。
-                </p>
-                <p>
-                    AV1 を再生できないテレビは、コーデックを H.264 か生TSにすると、
-                    そのテレビにだけ別のファイルを渡します。
-                </p>
-                <p>
-                    名前が空ならボタンに IP を表示します。ポートが空なら VLC の既定 (8080) を使います。
-                </p>
-            </details>
-            <form method="POST" action="?/saveVlc" use:submitting={keepValues} class="stack">
-                {#each tvRows as row (row)}
-                    <div class="tv-row">
-                        <input
-                            name="vlcName"
-                            bind:value={row.name}
-                            class="w-name"
-                            placeholder="名前 (例 リビング)"
-                            data-testid="vlc-name"
-                        />
-                        <input
-                            name="vlcIp"
-                            bind:value={row.ip}
-                            class="mono w-ip"
-                            placeholder="IP (例 192.168.10.20)"
-                            data-testid="vlc-ip"
-                        />
-                        <input
-                            name="vlcPort"
-                            bind:value={row.port}
-                            class="mono w-port"
-                            placeholder="8080"
-                            data-testid="vlc-port"
-                        />
-                        <!--
-                            そのテレビに渡すファイル。おまかせ (今いいほう) が既定で、
-                            AV1 を解けないテレビは H.264、エンコード済み自体が重い
-                            テレビは生TS。無い形式を選んでいたら、おまかせに落ちる
-                        -->
-                        <select name="vlcCodec" bind:value={row.codec} data-testid="vlc-codec">
-                            <option value="auto">おまかせ</option>
-                            <option value="h264">H.264</option>
-                            <option value="ts">生TS</option>
-                        </select>
-                        <button
-                            type="button"
-                            class="small ghost"
-                            onclick={() => tvRows.splice(tvRows.indexOf(row), 1)}
-                            data-testid="vlc-remove"
-                        >
-                            外す
-                        </button>
-                    </div>
-                {:else}
-                    <p class="small muted">まだテレビがありません</p>
-                {/each}
-                <div class="cluster">
-                    <button
-                        type="button"
-                        class="secondary"
-                        onclick={() => tvRows.push({ name: '', ip: '', port: '8080', codec: 'auto' })}
-                        data-testid="vlc-add"
-                    >
-                        テレビを追加
-                    </button>
-                    <button type="submit" data-testid="save-vlc">保存</button>
                 </div>
             </form>
         </section>
@@ -920,24 +799,6 @@
     }
     .w-postal {
         width: 10rem;
-    }
-    .tv-row {
-        display: flex;
-        flex-wrap: wrap;
-        align-items: center;
-        gap: 0.5rem;
-    }
-    .tv-row select {
-        width: auto;
-    }
-    .w-name {
-        width: 10rem;
-    }
-    .w-ip {
-        width: 11rem;
-    }
-    .w-port {
-        width: 6rem;
     }
     .log {
         border: 1px solid var(--dp-base-300);

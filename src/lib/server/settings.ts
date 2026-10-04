@@ -82,11 +82,6 @@ export interface Settings {
      */
     postalCode: string;
     /**
-     * テレビの VLC (リモートアクセス) の居場所。`名前=ホスト:ポート#コーデック` のカンマ区切り
-     * (`リビング=192.168.10.20:8080`。書式は vlc.ts)。空なら「テレビで再生」は出ない
-     */
-    vlcTargets: string;
-    /**
      * データ放送の双方向 (通信系コンテンツ) を使うか。**既定は切。**
      *
      * 入れると denpa のサーバが**放送局のサーバへ代理で取りに行き、送りもします**
@@ -184,7 +179,6 @@ export function settings(): Settings {
         fpsDetect: flag('fpsDetect', true),
         logoLevel: logoLevel(stored('logoLevel')),
         postalCode: normalizePostalCode(stored('postalCode') ?? ''),
-        vlcTargets: stored('vlcTargets') ?? '',
         // **入れるまで外へ出ない。** 黙って通信が始まらないようにする
         bmlNetwork: flag('bmlNetwork', false),
     };

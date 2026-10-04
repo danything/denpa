@@ -2,7 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import { xspf } from './playlist';
 
 /**
- * テレビの VLC に「続きから」を伝える 1 枚。VLC の `/play` に位置を渡す口が
+ * プレイヤーに「続きから」を伝える 1 枚。URL で渡す再生には位置を渡す口が
  * 無いので、ファイルの代わりにこれを渡す
  */
 describe('続きから始める XSPF', () => {

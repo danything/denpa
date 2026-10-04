@@ -9,7 +9,7 @@
  * - 画面の中は `resolve` (`$app/paths`) で頭を付ける。SvelteKit はこれをブラウザの居る
  *   URL から求めるので、接頭辞がそのまま入る (paths.relative。既定)
  * - 転送 (redirect) は**いまの URL からの相対**にする。ブラウザが接頭辞込みで解く
- * - 外 (VLC・OIDC) に渡す絶対 URL だけは接頭辞を知る必要があるので、前段が付ける
+ * - 外 (共有リンク・OIDC) に渡す絶対 URL だけは接頭辞を知る必要があるので、前段が付ける
  *   `X-Forwarded-Prefix` か `X-Ingress-Path` (Home Assistant) を頭に付ける
  */
 

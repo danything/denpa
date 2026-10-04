@@ -7,8 +7,8 @@ PX-Q3U4 などはドライバがエージェントのイメージに入ってい
 変えたい設定は全部画面から変えられます。
 
 予約は番組表から押すだけ。CM は自動で飛ばし、ライブも録画もブラウザで字幕・データ放送
-つきで観られます。テレビの VLC へ飛ばすことも、落として好きなプレイヤーで観ることも
-できます。メディアサーバも要りません。
+つきで観られます。テレビは専用のアプリ ([denpa-tv](https://github.com/danything/denpa-tv)) で、
+落として好きなプレイヤーで観ることもできます。メディアサーバも要りません。
 
 <p align="center">
   <img src="docs/images/home-watch-anim.webp" alt="録画の行を押すと、そのまま観る画面へ" width="720">
@@ -31,7 +31,7 @@ PX-Q3U4 などはドライバがエージェントのイメージに入ってい
 
 ```text
 チューナー ── エージェント ── denpa ── 録画(mkv) ─┬─→ ブラウザでそのまま観る
-                                                    └─→ テレビの VLC へ飛ばす / 落として好きなプレイヤーで
+                                                    └─→ テレビのアプリ (denpa-tv) / 落として好きなプレイヤーで
 ```
 
 エージェントは**チャンネルを掴んで素のTSを流すだけ**です。番組表を読むのも、局を
@@ -69,11 +69,9 @@ AV1 / H.264 の mkv に焼き、字幕は放送のまま絵で入れます。
 - **字幕・倍速 (1〜2倍)・切り抜き** (いまの場面を字幕ごと PNG に。スマホは共有シートから写真へ、PC は保存してクリップボードにも)
 - **続きから再生します。** 別の端末で開いても続きから。観終わったらその場で消せます
 
-**テレビ (Android TV / Fire TV) で観るときは、テレビの VLC に飛ばします。**
-VLC のリモートアクセスを有効にしてテレビを設定に登録すると、録画詳細の
-「テレビで再生」で、いま開いている端末からテレビへ直接飛ばせます。
-初回だけ、証明書を受け入れ、テレビに出る6桁のコードでペアリングします。
-AV1 を再生できないテレビには、テレビごとに H.264 か生TSを渡せます。
+**テレビ (Android TV / Fire TV) では、専用のアプリ [denpa-tv](https://github.com/danything/denpa-tv) で観ます。**
+ライブと録画、続きから・CM 飛ばし・低遅延のライブ。テレビに出る QR をスマホで読めば繋がります
+(家の外からは OIDC でログインして、アプリの鍵を発行)。
 
 **ほかのプレイヤーでは「再生リンクをコピー」を使います。** 24時間有効の URL で、
 どのプレイヤーにも貼れます。字幕は mkv の中に入っているのでそのまま出ます
@@ -196,7 +194,7 @@ docker compose) で動かすなら `oci://ghcr.io/danything/charts/denpa-agent` 
 ように書きます ([docs/architecture.md](docs/architecture.md#イメージのタグ))。
 
 前段で `/denpa` のような接頭辞の下に置いても動きます (Home Assistant の Ingress など)。
-接頭辞は denpa に教えません。VLC や OIDC に渡す URL にだけ、前段が付ける
+接頭辞は denpa に教えません。再生リンクや OIDC に渡す URL にだけ、前段が付ける
 `X-Forwarded-Prefix` (Home Assistant は `X-Ingress-Path`) を頭に付けます。
 
 ## 誰を通すか
@@ -205,7 +203,7 @@ docker compose) で動かすなら `oci://ghcr.io/danything/charts/denpa-agent` 
 通し方は次の2つで、どちらか (または両方) を設定します。
 
 - **`TRUSTED_NETWORKS`** — このネットワークからのアクセスはログインなしで通します
-  (例 `TRUSTED_NETWORKS=192.168.1.0/24`。テレビの VLC に資格情報を入れずに
+  (例 `TRUSTED_NETWORKS=192.168.1.0/24`。テレビのアプリやプレイヤーに資格情報を入れずに
   使わせるのもこれ)。すべて許可するなら `TRUSTED_NETWORKS=0.0.0.0/0`
 - **OIDC** — 画面をログインで守ります。`OIDC_ISSUER` など3つを渡すと有効になります
 
@@ -252,7 +250,7 @@ docker compose) で動かすなら `oci://ghcr.io/danything/charts/denpa-agent` 
 - [docs/agent.md](docs/agent.md) — チューナーを掴むところ (エージェント・取り合い・B-CAS)
 - [docs/encode.md](docs/encode.md) — CM とエンコード (字幕・AV1・CM検出)
 - [docs/logo.md](docs/logo.md) — 局ロゴ (番組表の PNG と CM検出用の `.lgd`)
-- [docs/library.md](docs/library.md) — 録画の置き場と配り方 (テレビの VLC・再生リンク・削除・通知)
+- [docs/library.md](docs/library.md) — 録画の置き場と配り方 (テレビのアプリ・再生リンク・削除・通知)
 - [docs/offline.md](docs/offline.md) — 端末に落として電波の無いところで観る
 - [docs/auth.md](docs/auth.md) — **誰を通すか** (OIDC でのログイン・信頼したネットワーク・期限付きのリンク)
 - [docs/migrate.md](docs/migrate.md) — **EPGStation からの引き継ぎ**
