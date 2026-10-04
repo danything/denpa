@@ -20,12 +20,26 @@ config.dbPath = join(dir, 'denpa.db');
  * ものを使い、先に消す)。ffmpeg の差し替えは終わったら戻す
  */
 const realFfmpeg = config.ffmpeg;
+const realAgent = config.agentUrl;
+/*
+ * 偽のエージェント。選局には 200 を返して、何も流さないまま繋いでおく (セッションが生きたままになる)。
+ * ライブの字幕の口は、いま流しているセッションに乗るだけなので、乗る先を作るのに要る
+ */
+const agent = Bun.serve({
+    port: 0,
+    fetch: () => new Response(new ReadableStream({ start() {} })),
+});
+config.agentUrl = `http://127.0.0.1:${agent.port}`;
 afterAll(() => {
     config.ffmpeg = realFfmpeg;
+    config.agentUrl = realAgent;
+    void agent.stop(true);
     rmSync(dir, { recursive: true, force: true });
 });
 const SERVICE = 990_007;
 const RECORDING = 990_001;
+/** 録っている最中の録画 (書き足しを待ち続けるので、字幕の ffmpeg が降りない) */
+const RECORDING_NOW = 990_002;
 
 const MKV = join(dir, 'captions.mkv');
 writeFileSync(
@@ -54,12 +68,13 @@ config.ffmpeg = FAKE;
 const { eq } = await import('drizzle-orm');
 const { orm } = await import('./db');
 const { recordings, services } = await import('./schema');
-const { liveCaptions, recordingCaptions } = await import('./live');
+const { CAPTION_PER_RECORDING, liveCaptions, liveStream, recordingCaptions } = await import('./live');
 
 const TS = join(dir, 'rec.ts');
 // 188 バイトの塊が 100 個 (中身は見ない)
 writeFileSync(TS, new Uint8Array(188 * 100).fill(0x47));
 orm().delete(recordings).where(eq(recordings.id, RECORDING)).run();
+orm().delete(recordings).where(eq(recordings.id, RECORDING_NOW)).run();
 orm().delete(services).where(eq(services.id, SERVICE)).run();
 orm()
     .insert(services)
@@ -86,6 +101,19 @@ orm()
         updated_at: now,
         finished_at: now,
         duration_ms: 60_000,
+        ts_path: TS,
+    })
+    .run();
+orm()
+    .insert(recordings)
+    .values({
+        id: RECORDING_NOW,
+        service_id: SERVICE,
+        name: '録画中',
+        start_at: now - 60_000,
+        end_at: now + 60_000,
+        created_at: now - 60_000,
+        updated_at: now,
         ts_path: TS,
     })
     .run();
@@ -134,8 +162,22 @@ describe('録画の字幕 (recordingCaptions)', () => {
         expect(Bun.file(FED).size).toBe(188 * 100);
     });
 
+    /*
+     * シークのたびに頼み直すので、前の繋ぎが切れたと分かるのが遅れると並ぶ。古いものから畳む
+     * (録っている最中の録画は書き足しを待ち続けるので、畳まない限り閉じない)
+     */
+    test('1本の録画に起こす ffmpeg は上限まで。超えたら古いものを畳む', async () => {
+        const streams = Array.from(
+            { length: CAPTION_PER_RECORDING + 1 },
+            () => recordingCaptions(RECORDING_NOW, 0)!,
+        );
+        // いちばん古いものは閉じる (読み切れる)
+        await new Response(streams[0]).arrayBuffer();
+        for (const stream of streams.slice(1)) await stream.cancel();
+    });
+
     test('無い録画は null', () => {
-        expect(recordingCaptions(RECORDING + 1, 0)).toBeNull();
+        expect(recordingCaptions(RECORDING + 100, 0)).toBeNull();
     });
 });
 
@@ -144,5 +186,20 @@ describe('ライブの字幕 (liveCaptions)', () => {
     test('生で流していない局には乗らない', () => {
         expect(liveCaptions(SERVICE)).toBeNull();
         expect(liveCaptions(SERVICE + 1)).toBeNull();
+    });
+
+    // 脇の字幕の口は畳む判断に数えない。字幕のためだけにチューナーを掴み続けない
+    test('字幕の口が抜けても映像は続き、映像が抜けたら字幕の口も閉じる', async () => {
+        const media = liveStream(SERVICE, 'raw')!;
+        const first = liveCaptions(SERVICE);
+        expect(first).not.toBeNull();
+        await first!.cancel();
+        // 映像はまだ流れている (同じセッションにもう一度乗れる)
+        const second = liveCaptions(SERVICE);
+        expect(second).not.toBeNull();
+        // 映像が抜けたら畳まれて、字幕の口も閉じる (読み切れる)
+        await media.cancel();
+        await new Response(second!).arrayBuffer();
+        expect(liveCaptions(SERVICE)).toBeNull();
     });
 });

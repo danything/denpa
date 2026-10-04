@@ -1377,6 +1377,17 @@ export const CAPTION_LEAD = 10;
 const CAPTION_AHEAD = 10;
 
 /**
+ * 1本の録画に同時に起こしておく字幕の ffmpeg の数。**超えたら古いものから畳む。**
+ *
+ * アプリはシークのたびに頼み直すので、前の繋ぎが切れたと分かるのが遅れる (前段の nginx 越しなど) と
+ * 一時的に何本も並ぶ。古いほどもう観ていない位置なので、新しいものを断るより古いものを畳む
+ */
+export const CAPTION_PER_RECORDING = 3;
+
+/** 録画ごとに、いま起こしている字幕の ffmpeg の畳み方 (古い順) */
+const recordingCaptioners = new Map<number, (() => void)[]>();
+
+/**
  * **アプリ向けの録画の字幕** (`GET /api/recordings/<id>/captions?from=<秒>`。docs/api.md)。
  * 生TS (録画中の追っかけ `chase?codec=raw` と、録り終えた `file?source=ts`) を観ているアプリに、
  * 字幕の絵を放送の PTS のまま流す。
@@ -1421,7 +1432,14 @@ export function recordingCaptions(recordingId: number, at: number): ReadableStre
             stopped = true;
             reader.cancel().catch(() => undefined);
             proc.kill();
+            const rest = (recordingCaptioners.get(rec.id) ?? []).filter((held) => held !== stop);
+            if (rest.length > 0) recordingCaptioners.set(rec.id, rest);
+            else recordingCaptioners.delete(rec.id);
         };
+        // 多すぎたら古いものから畳む (`CAPTION_PER_RECORDING`)。畳まれた口は ffmpeg が降りて閉じる
+        const held = recordingCaptioners.get(rec.id) ?? [];
+        for (const old of held.slice(0, Math.max(0, held.length - CAPTION_PER_RECORDING + 1))) old();
+        recordingCaptioners.set(rec.id, [...(recordingCaptioners.get(rec.id) ?? []), stop]);
 
         // 流し込み。**書けたことを待つ** (ffmpeg が詰まったら読むのも止まる)
         void (async () => {

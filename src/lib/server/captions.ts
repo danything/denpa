@@ -380,6 +380,11 @@ export function captionFeed(open: (out: CaptionOut) => () => void): ReadableStre
     return new ReadableStream<Uint8Array>(
         {
             start(controller) {
+                // 読まない相手に積み続けない。閉じれば受け側は頼み直す
+                const push = (kind: number, pts: bigint, payload: Uint8Array) => {
+                    if ((controller.desiredSize ?? 0) < -CAPTION_FEED_BACKLOG) return out.close();
+                    controller.enqueue(appFrame(kind, pts, payload));
+                };
                 const out: CaptionOut = {
                     send(kind, pts, payload) {
                         if (closed) return;
@@ -390,9 +395,7 @@ export function captionFeed(open: (out: CaptionOut) => () => void): ReadableStre
                         } else if (kind !== CHANNEL.subtitle) {
                             return;
                         }
-                        // 読まない相手に積み続けない。閉じれば受け側は頼み直す
-                        if ((controller.desiredSize ?? 0) < -CAPTION_FEED_BACKLOG) return out.close();
-                        controller.enqueue(appFrame(kind, pts, payload));
+                        push(kind, pts, payload);
                     },
                     close() {
                         if (closed) return;
@@ -401,7 +404,7 @@ export function captionFeed(open: (out: CaptionOut) => () => void): ReadableStre
                     },
                 };
                 timer = setInterval(() => {
-                    if (!closed) controller.enqueue(appFrame(CHANNEL.control, 0n, PING));
+                    if (!closed) push(CHANNEL.control, 0n, PING);
                 }, CAPTION_PING_MS);
                 const leave = open(out);
                 // 作っている最中に閉じた (セッションがもう畳まれていた) ら、すぐ後始末する
