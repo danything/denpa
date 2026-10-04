@@ -88,7 +88,7 @@ function holding<T extends Assignable>(rivals: Accepted<T>[], at: number) {
  * 種別ごとに数えていた頃は、衛星チューナー1本が BS で1本・CS で1本と倍に数えられ、
  * BS と CS の番組が重なっても競合にならなかった
  */
-export function poolOf(type: string): string {
+function poolOf(type: string): string {
     return type === 'BS' || type === 'CS' ? 'BS/CS' : type;
 }
 

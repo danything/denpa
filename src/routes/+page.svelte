@@ -25,7 +25,6 @@
         stateLabel,
         time,
     } from '#lib/format.js';
-    import { forget, forgetPrefix, read, write } from '#lib/keep.js';
     import { liveUpdates } from '#lib/live-updates.svelte.js';
     import { clearFailed, offline, removeLocal, saveOffline } from '#lib/offline.svelte.js';
     import { matches } from '#lib/paging.js';
@@ -90,21 +89,17 @@
     /** 端末への保存の結果。フォームではないので自前で持つ */
     let offlineNote = $state<Notice | null>(null);
 
-    /** テレビ再生・リンクコピー・ダウンロードの結果。こちらもフォームではないので自前で持つ */
+    /** リンクコピー・ダウンロードの結果。こちらもフォームではないので自前で持つ */
     let actionNote = $state<Notice | null>(null);
-    // 旧版が端末に覚えていた出先のIP (詳細のIP入力ごとやめた)。残りは掃除する
-    forget('vlc-other-host');
-    // 旧版の「飛ばしたことがある」印。ペア設定を経ずに立つことがあり、当てにならない
-    forgetPrefix('vlc-fired:');
 
     function noteAction(kind: 'info' | 'error', text: string): void {
-        actionNote = { key: `vlc-${Date.now()}`, kind, text };
+        actionNote = { key: `action-${Date.now()}`, kind, text };
     }
 
     /**
      * 閉じた (自分で消えた) 知らせは持ち主が捨てる。
      *
-     * 持ったままにしていた頃は、**別のボタンを押すたびに「テレビへ飛ばしました」が
+     * 持ったままにしていた頃は、**別のボタンを押すたびに前の知らせが
      * 蘇っていた** — Toasts は返事 (`form`) が変わると閉じたことを忘れる作りで
      * (同じ失敗を2回したときに2回出すため)、フォームではないこちらの知らせまで
      * 一緒に出し直していた
@@ -114,125 +109,10 @@
         if (offlineNote?.key === key) offlineNote = null;
     }
 
-    type ShareLink = { url: string; playlist: string; expiresAt: number };
-
-    /**
-     * 期限付きの再生リンクを作る (share.ts)。テレビへ飛ばすのもコピーするのも同じ1本。
-     * `source` を渡すと、そのファイル (`?source=` の名指し) を指すリンクになる —
-     * テレビごとのコーデック設定 (settings) の実現手段
-     */
-    async function mintShareLink(id: number, source?: 'ts' | 'alt'): Promise<ShareLink> {
-        const query = source === undefined ? '' : `?source=${source}`;
-        const res = await fetch(resolve(`api/recordings/${id}/share${query}`), { method: 'POST' });
-        return (await res.json()) as ShareLink;
-    }
-
-    /**
-     * テレビの VLC へ、**この端末から**直接飛ばす。
-     *
-     * VLC のリモートアクセスの `/play` はただの GET なので、`http://<テレビ>:8080/
-     * play?id=0&path=<再生URL>` を**トップレベルで開けば**そのまま再生が始まる。
-     * fetch だと混在コンテンツ・自己署名・CORS・Cookie の4つに塞がれるが、
-     * ページ遷移にはどれも掛からず、SameSite=Lax の合鍵 Cookie も付く。
-     * サーバから叩く形は落とした — 家のサーバからは出先のテレビに届かない
-     * (`server/vlc.ts` の先頭に経緯)。
-     *
-     * **初回はペア設定 (ログイン) の画面そのものを開く。** ペア前に `/play` を叩いても
-     * VLC は素の 401 ページを返すだけで、ログインへは誘導しない (作りがそう)。
-     * ログインは VLC の画面が https (自己署名・ポート8443) へ誘導するので、
-     * 証明書を受け入れてテレビの画面の6桁コードを入れる。できた Cookie (約1年) に
-     * Secure は付いておらず、以後は http の `/play` にもそのまま乗る。
-     *
-     * **窓は押した瞬間に開けておく。** リンク先はトークンを取ってから入れる —
-     * await の後の window.open はポップアップ扱いで塞がれることがある。
-     * 応答 (OK だけの白いタブ) は**テレビの返事に切り替わったら**畳む (`closeWhenLanded`)。
-     *
-     * **途中まで観たものは続きから。** VLC の `/play` に位置を渡す口は無いので、
-     * ファイルではなく、それを続きの位置から指す XSPF (`playlist`) を渡す
-     * (`server/playlist.ts`)。まだ観ていないものは今までどおりファイルを渡す —
-     * プレイリストを読めない版の VLC でも、少なくとも頭からは観られるように
-     */
-    async function playOnTv(
-        tv: (typeof data.vlcTargets)[number],
-        rec: (typeof data.recordings)[number],
-    ): Promise<void> {
-        const host = tv.host;
-        if (read(`vlc-paired:${host}`) !== '1') {
-            window.open(`http://${host}/`, '_blank');
-            write(`vlc-paired:${host}`, '1');
-            noteAction(
-                'info',
-                '初回はテレビとのペア設定が必要です。開いたタブで「セキュアな接続を使用」から証明書を受け入れ、テレビに出る6桁のコードを入れてから、もう一度このボタンを押してください',
-            );
-            return;
-        }
-        const win = window.open('about:blank', '_blank');
-        /*
-         * そのテレビのコーデック設定 (settings のテレビ一覧) をファイルの名指しに写す。
-         * H.264 は両方焼いた録画の H.264 のほう (`alt`)、生TSは残っていれば `ts`。
-         * 指した形式が無い録画では黙っておまかせ (今いいほう) に落ちる —
-         * 押した人がテレビの前で選び直せるものではない
-         */
-        const source =
-            tv.codec === 'h264' && hasAlt(rec)
-                ? ('alt' as const)
-                : tv.codec === 'ts' && rec.ts_path !== null
-                  ? ('ts' as const)
-                  : undefined;
-        const resumeMs = rec.resume_ms ?? 0;
-        let shareUrl: string;
-        try {
-            const links = await mintShareLink(rec.id, source);
-            shareUrl = resumeMs > 0 ? links.playlist : links.url;
-        } catch {
-            win?.close();
-            noteAction('error', '再生リンクを作れませんでした');
-            return;
-        }
-        const play = `http://${host}/play?id=0&path=${encodeURIComponent(shareUrl)}`;
-        if (win === null) {
-            // ポップアップを塞がれた。同じタブで開くしかない (戻るで帰れる)
-            location.href = play;
-            return;
-        }
-        win.location.href = play;
-        closeWhenLanded(win);
-        noteAction(
-            'info',
-            resumeMs > 0 ? `テレビで再生を始めました (${durationMs(resumeMs)} から)` : 'テレビで再生を始めました',
-        );
-        detail.close();
-    }
-
-    /** テレビの返事を待つ上限。過ぎたら畳まずに残す (繋がらなかった画面がそのまま見える) */
-    const LANDING_WAIT_MS = 15_000;
-
-    /**
-     * 飛ばした窓を、**テレビの返事に切り替わったら**畳む。
-     *
-     * 返事は別オリジンなので、中身も読み込み完了 (`load`) もこちらからは読めない。
-     * 読めるのは「まだこちらの about:blank のままか」だけ — `win.document` に触れて
-     * 例外が出れば、向こうの文書に切り替わっている (= `/play` がテレビに届いて
-     * 返事が来た)。決め打ちの秒数で畳んでいた頃は、テレビの返事が遅いと
-     * **届く前に畳んで再生が始まらず**、早ければそのぶん白いタブが残っていた。
-     *
-     * 上限を過ぎたら畳まない。繋がらないときの画面を残すほうが、何も起きなかった
-     * ように見えるよりまし
-     */
-    function closeWhenLanded(win: Window): void {
-        const started = Date.now();
-        const timer = setInterval(() => {
-            if (win.closed || Date.now() - started > LANDING_WAIT_MS) {
-                clearInterval(timer);
-                return;
-            }
-            try {
-                void win.document;
-            } catch {
-                clearInterval(timer);
-                win.close();
-            }
-        }, 100);
+    /** 期限付きの再生リンクを作る (share.ts) */
+    async function mintShareLink(id: number): Promise<{ url: string; expiresAt: number }> {
+        const res = await fetch(resolve(`api/recordings/${id}/share`), { method: 'POST' });
+        return await res.json();
     }
 
     /**
@@ -1330,28 +1210,11 @@
         {@const rec = detailRec}
         {#if hasFile(rec)}
             <!--
-                **並べるのはよく押すものだけ** — テレビへ飛ばすのと、端末に保存。
+                **並べるのはよく押すものだけ** — 端末に保存。
                 条件が揃うと10個のボタンが同じ見た目で並び、狭い画面では文字の
                 途中で折り返していた。めったに押さないもの (落とす・リンクを
                 コピー・焼き直し) は「その他…」に畳む。
             -->
-            <!--
-                **テレビの VLC に、この端末から飛ばして再生させる** (`playOnTv`)。
-                渡すのは期限付きの再生リンクなので、テレビ側にパスワードは残らない。
-                出るのは設定に並べたテレビだけ — 1台も無ければボタンごと出ない。
-                詳細でIPをその場入力する口も置いていた (自動で設定に載せる) が、
-                めったに使わないので落とした。テレビは設定で並べる
-            -->
-            {#each data.vlcTargets as tv (tv.host)}
-                <button
-                    type="button"
-                    class="secondary outline"
-                    onclick={() => playOnTv(tv, rec)}
-                    data-testid="vlc-play-button"
-                >
-                    ▶ {data.vlcTargets.length === 1 ? 'テレビで再生' : tv.name}
-                </button>
-            {/each}
             {#if offline.usable && rec.library_path !== null}
                 <!--
                     **端末に保存 (オフライン視聴)。** 落とすのは焼いたもの

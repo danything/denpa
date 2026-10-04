@@ -9,10 +9,8 @@ import { describeDevice, type HwEncode, hwEncode, probe } from '#lib/server/hwen
 import { available as migrateAvailable, source, start, status } from '#lib/server/migrate.js';
 import { webhooks } from '#lib/server/schema.js';
 import { normalizePostalCode, saveSettings, settings } from '#lib/server/settings.js';
-import { serializeTargets, targets, type VlcTarget } from '#lib/server/vlc.js';
 import { send } from '#lib/server/webhook.js';
 import type { VideoCodec } from '#lib/types.js';
-import { normalizeVlcHost } from '#lib/vlc-host.js';
 import { EVENTS } from '#lib/webhook-events.js';
 
 /** 画面に渡す形。口ごとの一言 (`summary`) と、testid に使う口の名前 (`port`) を添える */
@@ -39,8 +37,6 @@ export function load() {
         hw: hw.probed ? forScreen(hw) : probe().then(forScreen),
         /** データ放送に渡すもの。郵便番号と、双方向の中継を許すか */
         broadcast: { postalCode: current.postalCode, bmlNetwork: current.bmlNetwork },
-        /** テレビの VLC の居場所。画面は名前・IP・ポート・コーデックの行として編集する */
-        vlc: { targets: targets() },
         webhooks: orm().select().from(webhooks).orderBy(webhooks.id).all(),
         /** ペアリングしたテレビ (アプリの鍵。device-auth.ts) */
         devices: liveTokens(),
@@ -129,48 +125,6 @@ export const actions = {
             return fail(400, { message: '郵便番号は数字7桁で入れてください (例 1000001)' });
         }
         saveSettings({ postalCode, bmlNetwork: form.get('bmlNetwork') === 'on' });
-        return { success: true, saved: true };
-    },
-
-    /**
-     * テレビの VLC の居場所。画面からは**名前+IP+ポート+コーデックの行**で来る
-     * (vlcName / vlcIp / vlcPort / vlcCodec の同順の配列)。DBには
-     * `名前=ホスト:ポート#コーデック` のカンマ区切りで置く (serializeTargets) —
-     * 名前とコーデックは略せるので、古いDBの `名前=ホスト:ポート` もそのまま読める。
-     * 全部外して保存すれば空にできる — 「テレビで再生」ボタンが出なくなるだけ
-     */
-    saveVlc: async ({ request }) => {
-        const form = await request.formData();
-        const names = form.getAll('vlcName').map(String);
-        const ips = form.getAll('vlcIp').map(String);
-        const ports = form.getAll('vlcPort').map(String);
-        const codecs = form.getAll('vlcCodec').map(String);
-        const list: VlcTarget[] = [];
-        for (const [i, rawIp] of ips.entries()) {
-            /*
-             * IPの欄は貼り付けも受ける (http:// 剥がし等は normalizeVlcHost)。
-             * `IP:ポート` ごと貼っても読めるが、ポートの欄に入れた値が勝つ。
-             * ポートを空にしたら VLC の既定 (8080、normalizeVlcHost が補う)
-             */
-            const base = normalizeVlcHost(rawIp);
-            // IPの無い行 (名前だけ・空行) と、読めないポートの行は黙って落とす
-            if (base === '') continue;
-            const port = (ports[i] ?? '').trim();
-            if (port !== '' && !/^\d{1,5}$/.test(port)) continue;
-            const host = port === '' ? base : `${base.split(':')[0]}:${port}`;
-            // 同じテレビを2行入れても1つに。録画詳細の {#each} がホストを
-            // 鍵にしているので、重複したまま保存すると一覧が描けなくなる
-            if (list.some((t) => t.host === host)) continue;
-            // `,` `=` `#` は保存の書式の区切り。名前に混ざると読み直せない
-            const name = (names[i] ?? '').trim().replace(/[,=#]/g, '');
-            const codec = codecs[i];
-            list.push({
-                name: name === '' ? host : name,
-                host,
-                codec: codec === 'h264' || codec === 'ts' ? codec : 'auto',
-            });
-        }
-        saveSettings({ vlcTargets: serializeTargets(list) });
         return { success: true, saved: true };
     },
 

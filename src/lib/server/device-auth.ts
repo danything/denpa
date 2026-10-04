@@ -32,7 +32,7 @@ export const POLL_INTERVAL_MS = 5 * 1000;
  */
 export const MAX_PENDING = 20;
 /** 名前の長さ。画面で見分けるためだけのもの */
-export const NAME_MAX = 40;
+const NAME_MAX = 40;
 /** 鍵の頭。ほかの Bearer (前段の SSO など) と取り違えないための印 */
 export const TOKEN_PREFIX = 'denpa_';
 /** 最後に使った時刻を書く間隔。映像は Range ごとに来るので、毎回は書かない */

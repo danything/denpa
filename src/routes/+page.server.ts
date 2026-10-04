@@ -19,7 +19,6 @@ import {
     services,
 } from '#lib/server/schema.js';
 import { settings } from '#lib/server/settings.js';
-import { targets } from '#lib/server/vlc.js';
 import { encodeSource } from '#lib/source.js';
 import type { EncodeJob, Recording, Reservation, ReservationState } from '#lib/types.js';
 
@@ -300,8 +299,6 @@ export function load({ url }) {
         showFinished,
         showDeleted,
         q,
-        // 「テレビで再生」を出すかどうか。設定にテレビが書いてあるときだけ (vlc.ts)
-        vlcTargets: targets(),
     };
 }
 
