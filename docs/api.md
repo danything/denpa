@@ -121,6 +121,7 @@ data: {"recordingId":12,"percent":42.5,"etaMs":600000,"log":"…"}
 - 名前: `recordings` `services` `programs` `tuners` `encode` ほか (画面向けのもの)。知らない名前は読み捨ててください
 - `data` は `encode` だけが中身 (`recordingId` `percent` `etaMs` `log`) を運び、ほかは `1`
 - 25 秒おきに `event: ping` が来ます。60 秒ほど何も届かなければ繋ぎ直してください (黙って切れた繋ぎを見分けるため)
+- 繋ぎ直したら一覧を1度読み直してください。切れていた間の知らせは送り直しません (`Last-Event-ID` は使わない)
 
 ## 入り方
 
