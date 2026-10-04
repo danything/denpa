@@ -760,6 +760,54 @@ test.describe('ライブ視聴', () => {
     });
 
     /*
+     * **出せない形でも、焼き方を選び直す口は残す。**
+     *
+     * 失敗している間は操作列を隠していた頃は、「この端末では再生できない形式です」
+     * と出たきり、別の形 (や生) へ逃げる手立てが無かった
+     */
+    test('出せない形でも、操作列から焼き方を選び直せる', async ({ page }) => {
+        await page.addInitScript(() => {
+            MediaSource.isTypeSupported = () => false;
+        });
+        await goto(page, '/live');
+        await page.getByTestId('live-channel').first().click();
+
+        await expect(page.getByTestId('live-status')).toContainText('この端末では再生できない形式です', {
+            timeout: 15_000,
+        });
+        await wakeControls(page, 'live-frame');
+        await expect(page.getByTestId('live-controls')).toBeVisible();
+        await page.getByTestId('live-codec').click();
+        await expect(page.locator('[data-testid="live-codec-option"][data-codec="av1"]')).toBeVisible();
+    });
+
+    /*
+     * **iPhone の Safari には MediaSource が無く、ManagedMediaSource だけがある。**
+     *
+     * 本物は Chromium に無いので、MediaSource を消して同じものを ManagedMediaSource の
+     * 名前で置く。見るのは「器が開いた」(尺が無限になる) と、**開くのに要る
+     * `disableRemotePlayback` を立てた**こと
+     */
+    test('MediaSource が無くても ManagedMediaSource で出す', async ({ page }) => {
+        await page.addInitScript(() => {
+            const scope = window as unknown as { MediaSource?: unknown; ManagedMediaSource?: unknown };
+            scope.ManagedMediaSource = window.MediaSource;
+            delete scope.MediaSource;
+        });
+        await goto(page, '/live');
+        await page.getByTestId('live-channel').first().click();
+        await expect(page.getByTestId('live-title')).toBeVisible();
+
+        await expect(async () => {
+            const seen = await page.getByTestId('live-video').evaluate((v) => {
+                const video = v as HTMLVideoElement;
+                return { duration: video.duration, remote: video.disableRemotePlayback };
+            });
+            expect(seen).toEqual({ duration: Number.POSITIVE_INFINITY, remote: true });
+        }).toPass({ timeout: 15_000 });
+    });
+
+    /*
      * **開いたら、いま映しているものまで送っておく。** 局が100を超える環境では
      * 覚えていた局が画面の外にあるほうが普通で、探させるのはテレビを点けたときの
      * 振る舞いから遠い

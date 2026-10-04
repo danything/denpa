@@ -61,6 +61,7 @@ EPGStation の置き換えとして作ったもので、エンコード設定は
 | `src/lib/live-player.svelte.ts` | ライブ視聴の受け側。WebSocket → MSE、音声の選び直し、切り替え中の絵 |
 | `src/lib/ts/pacing.ts` | ライブの再生位置の決め方 (どれだけ貯めるか。DOM を触らない) |
 | `src/lib/ts/fmp4.ts` | ffmpeg の fMP4 を MSE が食える単位に割る |
+| `src/lib/ts/media-source.ts` | MSE の器を選ぶ。無ければ `ManagedMediaSource` (iPhone の Safari) |
 | `src/lib/server/ws.ts` | WebSocket の受け口 (多重化の頭を付け外しする) |
 | `src/lib/server/tickets.ts` | WebSocket に繋ぐための使い捨ての札 ([auth.md](auth.md)) |
 | `src/lib/arib.ts` | ARIB の符号を言葉に直す (ジャンル・映像・音声)。選べる音声の組み立ても |

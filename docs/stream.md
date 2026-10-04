@@ -521,6 +521,12 @@ preset 12 を採る（13 は目に見えて粗く、10 は間に合わない）�
 **受け取れない端末では H.264 に戻す。** `MediaSource.isTypeSupported` が false なら
 その場で戻し、理由を画面に出す。黙って別の形にすると、切り替えが効かない理由が分からない。
 
+> **iPhone の Safari は `MediaSource` を持たず、`ManagedMediaSource`（iOS 17.1+）だけがある。**
+> 無ければそちらを使う（`ts/media-source.ts`）。`disableRemotePlayback` を立てないと開かない。
+> 送り込む頃合いの合図（`startstreaming` / `endstreaming`）は聞かず、ブラウザの刈り取り
+> （`bufferedchange`）は `buffered` を毎回読み直すので手当てしていない。**実機では未確認。**
+> 出せなかったときも操作列は出したままにしてあり、焼き方を選び直して逃げられる。
+
 HW エンコーダのある機材なら `av1_nvenc`（RTX40以降）/ `av1_qsv`（Arc・Meteor Lake 以降）/
 `av1_amf`（RDNA3以降）に載せ替えられる。
 
