@@ -3,8 +3,8 @@
 画面の外のもの (Home Assistant の連携・スクリプト・VLC・録画ソフト) 向けの口です。
 **JSON の形は保ちます。** 足すことはあっても、名前を変えたり消したりはしません。
 
-- **入り方は画面と同じです。** `TRUSTED_NETWORKS` に入っている相手はそのまま通ります
-  (家の LAN の Home Assistant や Cast 端末)。それ以外はログインが要ります
+- **入り方は画面と同じです** ([下記](#入り方))。`TRUSTED_NETWORKS` に入っている相手はそのまま通ります
+  (家の LAN の Home Assistant や Cast 端末)。それ以外はログインか、アプリの鍵が要ります
 - **URL は denpa の根からの相対で返します** (`api/services/…`)。denpa を開いている URL に足して使います。
   前段の接頭辞 (`/denpa/` など) の下で動かしていても、そのまま解けます
 
@@ -63,3 +63,45 @@
 本文は `{ "at": 秒, "length": 尺の秒 }` (`length` は分からなければ省く)。画面と同じく、頭の少しと
 末尾の 30 秒は「覚えない」(消す) 扱いです。答えは `{ "resume": 覚えた秒 または null, "edge": 30 }`。
 15 秒おきくらいに送れば、ほかの端末 (画面・ほかのテレビ) でも続きから観られます
+
+## 入り方
+
+| 相手 | 入り方 |
+|---|---|
+| 信頼するネットワーク (`TRUSTED_NETWORKS`) の中 | 何も要りません |
+| アプリ (テレビなど) | `Authorization: Bearer denpa_…` (下のペアリングで受け取る鍵)。どこから来ても通ります |
+| ブラウザ | OIDC のログイン (Cookie) |
+
+**資格の無い API の呼び出しには、いつも同じ 401 の JSON を返します** (`{"error":"unauthorized"}`、
+`WWW-Authenticate: Bearer`)。ログイン画面の HTML へは回しません。アプリは鍵なしでまず API を叩き、
+これが返ったときだけペアリングに進めばよい (信頼するネットワークの中なら通るので、ペアリングは要らない)。
+止めた・知らない鍵を出したときは `{"error":"invalid_token"}` の 401 で、信頼するネットワークの中でも
+通しません (ペアリングし直しの合図)。仕組みと守りは [auth.md](auth.md#アプリのペアリング)。
+
+## ペアリング `POST /api/device/code` → `POST /api/device/token`
+
+OAuth のデバイス認可 (RFC 8628) と同じ形です。どちらも資格は要りません。
+
+`POST /api/device/code` (本文 `{ "name": "居間のテレビ" }`。名前は 40 字まで):
+
+```json
+{ "deviceCode": "…", "userCode": "ABCD-EFGH",
+  "verificationUri": "device", "verificationUriComplete": "device?code=ABCD-EFGH",
+  "expiresIn": 600, "interval": 5 }
+```
+
+- `verificationUriComplete` (denpa の根からの相対) を QR にして出します。スマホで開くと、
+  いつもの入り方 (信頼するネットワークか OIDC のログイン) を通ったうえでそのまま済みます
+- 生きている札が多すぎるときは `429 {"error":"too_many_pending"}` (しばらくして出し直す)
+
+`POST /api/device/token` (本文 `{ "deviceCode": "…" }`) を `interval` 秒おきに:
+
+- 済んでいれば `200 { "token": "denpa_…", "tokenType": "Bearer" }`。**1度だけ**返します
+- まだなら `400 {"error":"authorization_pending"}`、急ぎすぎなら `400 {"error":"slow_down"}`
+  (間隔を延ばす)、切れたら `400 {"error":"expired_token"}` (札から出し直す)、
+  知らない・使い終えた札なら `400 {"error":"invalid_grant"}`。断る手順は無いので `access_denied` は返しません
+
+## 鍵を止める `POST /api/device/logout`
+
+`Authorization: Bearer` で出している鍵を止めます (アプリの「サーバーから外す」)。`204` を返します。
+ほかの端末の鍵は、設定画面の「テレビのアプリ」から取り消します。

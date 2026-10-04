@@ -4,6 +4,7 @@ import { eq, not } from 'drizzle-orm';
 import { HW_CODECS, HW_KINDS, type HwAllow, hwAllowed } from '#lib/hw.js';
 import { isCmMode } from '#lib/server/cm.js';
 import { now, orm } from '#lib/server/db.js';
+import { liveTokens, revokeToken } from '#lib/server/device-auth.js';
 import { describeDevice, type HwEncode, hwEncode, probe } from '#lib/server/hwenc.js';
 import { available as migrateAvailable, source, start, status } from '#lib/server/migrate.js';
 import { webhooks } from '#lib/server/schema.js';
@@ -41,6 +42,8 @@ export function load() {
         /** テレビの VLC の居場所。画面は名前・IP・ポート・コーデックの行として編集する */
         vlc: { targets: targets() },
         webhooks: orm().select().from(webhooks).orderBy(webhooks.id).all(),
+        /** ペアリングしたテレビ (アプリの鍵。device-auth.ts) */
+        devices: liveTokens(),
         events: EVENTS,
         migrate: {
             available: migrateAvailable(),
@@ -194,6 +197,15 @@ export const actions = {
             .set({ enabled: not(webhooks.enabled) })
             .where(eq(webhooks.id, id))
             .run();
+        return { success: true };
+    },
+
+    /** テレビの鍵を止める。テレビは次に API を叩いたときに 401 を受けて、ペアリングし直しになる */
+    revokeDevice: async ({ request }) => {
+        const form = await request.formData();
+        const id = Number(form.get('id'));
+        if (!Number.isInteger(id)) return fail(400, { message: 'IDが不正です' });
+        revokeToken(id);
         return { success: true };
     },
 
