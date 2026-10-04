@@ -411,23 +411,24 @@
          * **録画は一番下 (いちばん古いもの) を見せて開く。** 並びは新しい順のまま。
          * 溜まった録画は古いものから片付けたいので、開くたびに下まで送らずに済むように。
          * 枠の中がスクロールするとき (広い画面で2つ並べたとき) だけ。狭い画面は
-         * ページごと縦に積むので、下へ送ると上の予約が見えなくなる
-         */
-        /*
+         * ページごと縦に積むので、下へ送ると上の予約が見えなくなる。
+         *
          * **枠の高さが決まるのを待ってから送る。** 開いた直後は枠がまだ画面の高さに縮んで
          * おらず (高さは測ってから当てる)、ここで見ると「スクロールが要らない」に見えて
          * 何もしていなかった (実機)。初めてスクロールできるようになった時点で1回だけ送る。
-         * それより先に人がスクロールしていたら触らない
+         * それより先に人が触っていたら (ホイール・タッチ・キー・スクロールバーを掴む) 送らない
          */
         const box = recordingBox;
         if (box === undefined) return;
         let touched = false;
+        const listening = new AbortController();
         const touch = () => {
             touched = true;
+            listening.abort();
         };
-        box.addEventListener('wheel', touch, { passive: true, once: true });
-        box.addEventListener('touchstart', touch, { passive: true, once: true });
-        box.addEventListener('keydown', touch, { once: true });
+        for (const type of ['wheel', 'touchstart', 'pointerdown', 'keydown']) {
+            box.addEventListener(type, touch, { passive: true, signal: listening.signal });
+        }
         const settle = new ResizeObserver(() => {
             if (touched) return settle.disconnect();
             if (box.scrollHeight <= box.clientHeight) return;
@@ -445,7 +446,10 @@
         settle.observe(box);
         // 中身の行が増えて高さが変わったときも気付けるよう、一覧のほうも見る
         if (box.firstElementChild !== null) settle.observe(box.firstElementChild);
-        return () => settle.disconnect();
+        return () => {
+            settle.disconnect();
+            listening.abort();
+        };
     });
     function rightText(row: RightRow): string {
         if (row.kind === 'missed') {
