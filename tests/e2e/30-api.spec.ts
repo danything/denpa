@@ -53,8 +53,8 @@ test.describe('外から使う口', () => {
             expect(rec.audio).toBe(`api/recordings/${rec.id}/file?audio=only`);
             // 続きの位置は、無ければ null (鍵ごと消さない)
             expect(rec).toHaveProperty('resumeMs');
-            // 1件の口は番組の説明も返す (テレビのアプリの詳細)
-            const one = await (await request.get(`/api/recordings/${rec.id}`)).json();
+            // 番組の中身は別の口 (テレビのアプリの詳細)
+            const one = await (await request.get(`/api/recordings/${rec.id}/detail`)).json();
             expect(one).toMatchObject({
                 id: rec.id,
                 description: expect.any(String),

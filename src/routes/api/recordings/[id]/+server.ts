@@ -2,29 +2,17 @@ import { error, json } from '@sveltejs/kit';
 import { emit } from '#lib/server/events.js';
 import { deleteRecordingFiles } from '#lib/server/files.js';
 import { recordingOr404 } from '#lib/server/recording.js';
-import { displayTitle } from '#lib/server/title.js';
 
 /**
- * 録画の状態と中身を返す。
- *
- * - **追っかけ再生の画面が「焼き上がったか」を聞く口** (`encoded` / `state`) —
- *   録り終えてから焼き上がるまでの間 (CM検出・エンコード) も追っかけの器で
- *   観られるが、焼き上がれば普通の観る画面 (シークも字幕も揃う) に移りたい。
- *   画面は `recordings` の知らせ (SSE) を受けるたびにここを読む
- * - **番組の説明** (`description` / `extended`)。テレビのアプリの詳細で出す。一覧
- *   (`GET /api/recordings`) に入れないのは、詳細 (出演者など) が長く、一覧を重くするため
+ * 録画の状態を返す。**追っかけ再生の画面が「焼き上がったか」を聞く口** —
+ * 録り終えてから焼き上がるまでの間 (CM検出・エンコード) も追っかけの器で
+ * 観られるが、焼き上がれば普通の観る画面 (シークも字幕も揃う) に移りたい。
+ * 画面は `recordings` の知らせ (SSE) を受けるたびにここを読む。
+ * 中身は行そのものではなく、判断に要るもの (焼けたか・状態) だけ
  */
 export function GET({ params }) {
     const recording = recordingOr404(params.id);
-    return json({
-        id: recording.id,
-        encoded: recording.library_path !== null,
-        state: recording.state,
-        title: displayTitle(recording.name),
-        name: recording.name,
-        description: recording.description,
-        extended: recording.extended ?? {},
-    });
+    return json({ id: recording.id, encoded: recording.library_path !== null, state: recording.state });
 }
 
 /**

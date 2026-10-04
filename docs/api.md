@@ -58,15 +58,15 @@
   `source` と一緒に渡せば、元にするファイルを選べます
 - `resumeMs` は続きから観る位置 (画面の「続き」と同じもの)。観ていない・観終えたものは `null`
 
-## 録画1件 `GET /api/recordings/<id>`
+## 番組の中身 `GET /api/recordings/<id>/detail`
 
 ```json
-{ "id": 12, "encoded": true, "state": "available", "title": "番組 第1話", "name": "[新]番組 第1話[字]",
+{ "id": 12, "title": "番組 第1話", "name": "[新]番組 第1話[字]",
   "description": "番組の概要", "extended": { "出演者": "…", "番組内容": "…" } }
 ```
 
-- `description` は短い説明、`extended` は放送の詳細 (見出し → 本文)。無ければ `""` / `{}`。
-  一覧 (`GET /api/recordings`) には入れていない (長くて一覧が重くなる)。テレビのアプリの詳細で使う
+- `description` は短い説明、`extended` は放送の詳細 (見出し → 本文)。無ければ `""` / `{}`
+- 一覧 (`GET /api/recordings`) には入れていない (長くて一覧が重くなる)。テレビのアプリの詳細で使う
 
 ## 観た位置 `POST /api/recordings/<id>/resume`
 
