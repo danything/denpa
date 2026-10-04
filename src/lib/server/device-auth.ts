@@ -126,9 +126,13 @@ export function viewCode(userCode: string, at = now()): CodeView | null {
 
 /**
  * 許す。**何度呼んでも同じ** (画面を読み直しても鍵は2本にならない — 鍵を作るのは
- * 端末が受け取るときで、ここは印を付けるだけ)。札の今の様子を返す (無ければ null)
+ * 端末が受け取るときで、ここは印を付けるだけ)。札の今の様子を返す (無ければ null)。
+ *
+ * **アプリの鍵で入った相手は許せない** (`viaToken`)。盗まれた鍵で別の鍵を作れると、
+ * 元の鍵を取り消しても作った鍵が生き残る。許すのはブラウザ (信頼するネットワークか OIDC) だけ
  */
-export function approve(userCode: string, by: string, at = now()): CodeView | null {
+export function approve(userCode: string, by: string, viaToken: boolean, at = now()): CodeView | null {
+    if (viaToken) throw new TokenCannotApprove();
     const row = orm().select().from(deviceCodes).where(eq(deviceCodes.user_code, userCode)).get();
     if (row === undefined) return null;
     const state = stateOf(row, at);
@@ -140,6 +144,13 @@ export function approve(userCode: string, by: string, at = now()): CodeView | nu
             .run();
     }
     return { userCode: row.user_code, name: row.name, state: state === 'pending' ? 'approved' : state };
+}
+
+/** アプリの鍵で許そうとした (`approve`) */
+export class TokenCannotApprove extends Error {
+    constructor() {
+        super('アプリの鍵ではペアリングを許せません');
+    }
 }
 
 /** 端末への答え (RFC 8628 の名前)。断る手順が無いので `access_denied` は返さない */

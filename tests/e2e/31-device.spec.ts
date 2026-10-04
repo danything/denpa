@@ -46,6 +46,20 @@ test.describe('テレビのペアリング', () => {
         const auth = { authorization: `Bearer ${token}` };
         expect((await request.get('/api/recordings', { headers: auth })).status()).toBe(200);
 
+        // アプリの鍵では、別の札を済ませられない (盗まれた鍵で鍵を増やせないように)
+        const other = await (await request.post('/api/device/code', { data: { name: '鍵から' } })).json();
+        const viaToken = await request.get(`/${other.verificationUriComplete}`, { headers: auth });
+        expect(await viaToken.text()).toContain('アプリの鍵では設定できません');
+        const posted = await request.post(`/${other.verificationUriComplete}`, {
+            headers: { ...auth, origin: new URL(viaToken.url()).origin },
+            form: { code: other.userCode },
+        });
+        expect(posted.status()).toBe(403);
+        const stillPending = await request.post('/api/device/token', {
+            data: { deviceCode: other.deviceCode },
+        });
+        expect(await stillPending.json()).toEqual({ error: 'authorization_pending' });
+
         // 設定画面に並ぶ
         await goto(page, '/settings');
         await expect(page.getByTestId('device-row').filter({ hasText: 'E2E のテレビ' })).toBeVisible();

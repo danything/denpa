@@ -12,7 +12,8 @@
     let { data, form } = $props();
 
     const view = $derived(form?.view ?? data.view);
-    const pending = $derived(form === null && data.view?.state === 'pending');
+    // 送る前の `form` は SvelteKit では null のことも undefined のこともある。どちらも「まだ送っていない」
+    const pending = $derived(!form && !data.viaToken && data.view?.state === 'pending');
 
     let auto: HTMLFormElement | undefined = $state();
     onMount(() => {
@@ -24,7 +25,12 @@
 
 <div class="wrap">
     <div class="panel card" data-testid="device-card">
-        {#if view === null}
+        {#if data.viaToken || form?.viaToken}
+            <h1 data-testid="device-refused">アプリの鍵では設定できません</h1>
+            <p class="small muted">
+                テレビのペアリングは、ブラウザ (信頼するネットワークか OIDC のログイン) で開いてください。
+            </p>
+        {:else if view === null}
             <h1>この札は見つかりません</h1>
             <p class="small muted">
                 QR を読み直すか、テレビでペアリングをやり直してください。札は10分で切れます。
