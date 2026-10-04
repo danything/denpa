@@ -12,10 +12,20 @@ import { CHANNEL } from '#lib/live.js';
  * DB は一時ファイルへ (encoder-pump.test.ts と同じ理由で、設定そのものを書き換える)
  */
 const dir = mkdtempSync(join(tmpdir(), 'denpa-appcap-'));
-afterAll(() => rmSync(dir, { recursive: true, force: true }));
 
 const { config } = await import('./config');
 config.dbPath = join(dir, 'denpa.db');
+/*
+ * **ほかの試験と同じプロセスで走る。** DB は先に開かれていればそちらに相乗りする (番号はほかと被らない
+ * ものを使い、先に消す)。ffmpeg の差し替えは終わったら戻す
+ */
+const realFfmpeg = config.ffmpeg;
+afterAll(() => {
+    config.ffmpeg = realFfmpeg;
+    rmSync(dir, { recursive: true, force: true });
+});
+const SERVICE = 990_007;
+const RECORDING = 990_001;
 
 const MKV = join(dir, 'captions.mkv');
 writeFileSync(
@@ -41,6 +51,7 @@ writeFileSync(
 chmodSync(FAKE, 0o755);
 config.ffmpeg = FAKE;
 
+const { eq } = await import('drizzle-orm');
 const { orm } = await import('./db');
 const { recordings, services } = await import('./schema');
 const { liveCaptions, recordingCaptions } = await import('./live');
@@ -48,10 +59,12 @@ const { liveCaptions, recordingCaptions } = await import('./live');
 const TS = join(dir, 'rec.ts');
 // 188 バイトの塊が 100 個 (中身は見ない)
 writeFileSync(TS, new Uint8Array(188 * 100).fill(0x47));
+orm().delete(recordings).where(eq(recordings.id, RECORDING)).run();
+orm().delete(services).where(eq(services.id, SERVICE)).run();
 orm()
     .insert(services)
     .values({
-        id: 7,
+        id: SERVICE,
         service_id: 1024,
         network_id: 4,
         name: 'テスト局',
@@ -64,8 +77,8 @@ const now = Date.now();
 orm()
     .insert(recordings)
     .values({
-        id: 1,
-        service_id: 7,
+        id: RECORDING,
+        service_id: SERVICE,
         name: '番組',
         start_at: now - 60_000,
         end_at: now,
@@ -96,7 +109,7 @@ async function frames(stream: ReadableStream<Uint8Array>) {
 
 describe('録画の字幕 (recordingCaptions)', () => {
     test('選べる字幕を知らせ、字幕の絵を放送の時刻のまま流して、読み切ったら閉じる', async () => {
-        const stream = recordingCaptions(1, 0);
+        const stream = recordingCaptions(RECORDING, 0);
         expect(stream).not.toBeNull();
         const got = await frames(stream!);
 
@@ -122,14 +135,14 @@ describe('録画の字幕 (recordingCaptions)', () => {
     });
 
     test('無い録画は null', () => {
-        expect(recordingCaptions(99, 0)).toBeNull();
+        expect(recordingCaptions(RECORDING + 1, 0)).toBeNull();
     });
 });
 
 describe('ライブの字幕 (liveCaptions)', () => {
     // 乗る先 (生のセッション) が無ければ自分では起こさない。チューナーを字幕のためだけに掴まない
     test('生で流していない局には乗らない', () => {
-        expect(liveCaptions(7)).toBeNull();
-        expect(liveCaptions(99)).toBeNull();
+        expect(liveCaptions(SERVICE)).toBeNull();
+        expect(liveCaptions(SERVICE + 1)).toBeNull();
     });
 });
