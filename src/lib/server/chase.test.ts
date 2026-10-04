@@ -82,6 +82,28 @@ describe('伸びるファイルの追い読み (followFile)', () => {
         expect(new TextDecoder().decode(got)).toBe('456789');
     });
 
+    /*
+     * HTTP の追っかけで、焼いた先が読まれていない間は送り込みを止める (`live.ts` の
+     * `chaseStream`)。止めている間は読まず、外れたら続きから読む
+     */
+    test('止めておく間 (hold) は読まず、外れたら続きを読む', async () => {
+        dir = mkdtempSync(join(tmpdir(), 'chase-'));
+        const path = join(dir, 'rec.ts');
+        writeFileSync(path, 'abcdef');
+        let held = 0;
+        const got = await readAll(
+            followFile(
+                path,
+                0,
+                1e9,
+                () => true,
+                () => ++held <= 3,
+            ),
+        );
+        expect(new TextDecoder().decode(got)).toBe('abcdef');
+        expect(held).toBeGreaterThan(3);
+    });
+
     test('無いファイルは転ぶ (エラーとして伝わる)', async () => {
         dir = mkdtempSync(join(tmpdir(), 'chase-'));
         const stream = followFile(join(dir, 'missing.ts'), 0, 1e9, () => true);

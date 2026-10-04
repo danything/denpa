@@ -37,12 +37,13 @@
 
 ## 録画の一覧 `GET /api/recordings`
 
-観られるもの (録り終えて、ファイルがあるもの) を新しい順に。`?limit=` と `?offset=` で区切れます。
+観られるもの (録り終えてファイルがあるものと、**いま録っているもの**) を新しい順に。`?limit=` と `?offset=` で区切れます。
 
 ```json
 [{ "id": 12, "title": "番組 第1話", "name": "[新]番組 第1話[字]",
    "serviceId": 3227310008, "serviceName": "TOKYO MX",
    "startAt": 1790000000000, "endAt": 1790001800000, "durationMs": 1800000, "resumeMs": 754000,
+   "recording": false, "chase": "api/recordings/12/chase", "cmReliable": true,
    "poster": "api/recordings/12/poster",
    "files": [
      { "source": "encoded", "codec": "av1",   "url": "api/recordings/12/file?source=encoded" },
@@ -57,6 +58,29 @@
 - `audio` は主音声だけを AAC (ADTS、`audio/aac`) で流します。画面の無いスピーカーへの Cast 向け。
   `source` と一緒に渡せば、元にするファイルを選べます
 - `resumeMs` は続きから観る位置 (画面の「続き」と同じもの)。観ていない・観終えたものは `null`
+- `recording` はいま録っている最中か。録画中は `durationMs` が `null` で、`files` は生TSだけ (伸びている途中)。
+  録画中・焼き上がる前は `chase` (下) で観る
+- `chase` は追っかけ再生の口。生TSがある間だけ入り、無ければ `null`
+- `cmReliable` は CM 飛ばしを観はじめに入れてよいか (画面と同じ決め方)。ロゴで CM を見分けられなかった
+  録画は無音だけで当てていて外れやすいので `false`。そのときは切って始め、押せば入れる
+
+## 追っかけ再生 `GET /api/recordings/<id>/chase`
+
+録っている最中 (と、録り終えて焼き上がる前) の録画を、伸びている生TSから流します。
+
+| `codec` | 中身 | Content-Type |
+|---|---|---|
+| (なし) / `h264` | 画面の追っかけと同じ焼き直し (H.264 / AAC の fragmented MP4) | `video/mp4` |
+| `av1` | AV1 / Opus の fragmented MP4 | `video/mp4` |
+| `raw` | 焼かずに生TS (MPEG-2) をそのまま | `video/mp2t` |
+
+- `?from=<秒>` で頭からの位置を選びます (既定 0)。**シークは `from` を変えて頼み直します**
+- 生TSには時間の索引が無いので、位置は「いまのファイルの大きさ ÷ 録れている秒数」の比例で
+  当たりを付け、188 バイト (TS パケット) に揃えます。いま書いているところの 5 秒手前より先へは行きません
+- 送り込みは実時間の倍速まで。読む側が詰まっている間は止めて待ちます (焼き直しのほうも、
+  読まれずに溜まったら送り込みを止める)
+- 尻まで読んだら、録っている間は書き足されるのを待って読み続け、**録り終えて尻まで読んだら閉じます**
+- 録画が無い・まだ何も録れていなければ 404
 
 ## 番組の中身 `GET /api/recordings/<id>/detail`
 
