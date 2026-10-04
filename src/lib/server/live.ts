@@ -29,6 +29,7 @@ import { MkvSplitter } from '#lib/ts/mkv.js';
 import { ServiceFilter } from '#lib/ts/service-filter.js';
 import {
     type Caption,
+    captionFeed,
     captionInput,
     captionOutput,
     frame,
@@ -434,6 +435,12 @@ interface Viewer {
     ready: boolean;
     /** データ放送を出しているか。**頼まれた人にだけ配る** */
     wantsData: boolean;
+    /**
+     * **脇から字幕だけ受け取っている** (アプリ向けの字幕の口。`liveCaptions`)。
+     * 居ても畳む判断には数えない — 映像を観ている人が居なくなったら、字幕のためだけに
+     * チューナーを掴み続けない。畳んだら `ended` を伝えて閉じさせる
+     */
+    side?: boolean;
 }
 
 /**
@@ -557,7 +564,9 @@ class Session {
     readonly id: string;
 
     get empty(): boolean {
-        return this.viewers.size === 0;
+        // 脇から字幕だけ受け取っている人は数えない (`Viewer.side`)
+        for (const viewer of this.viewers) if (viewer.side !== true) return false;
+        return true;
     }
 
     /**
@@ -1091,6 +1100,8 @@ class Session {
         this.aborter.abort();
         this.proc?.kill();
         this.data?.close();
+        // 脇から字幕だけ受け取っている人は、映像が終わったことを知らないので伝えて閉じさせる
+        for (const viewer of this.viewers) if (viewer.side === true) this.tellOne(viewer, { type: 'ended' });
         // 選び直しで同じ目印の新しいものが載っていたら、そちらは消さない
         if (sessions.get(this.id) === this) sessions.delete(this.id);
     }
@@ -1329,6 +1340,148 @@ export function chaseStream(
     return sessionStream((viewer, held) =>
         openChase({ type: 'chase', recordingId, at, audio: undefined, codec, caption: 0 }, viewer, held),
     );
+}
+
+/**
+ * **アプリ向けのライブの字幕** (`GET /api/services/<id>/captions`。docs/api.md)。生の TS
+ * (`liveStream` の `raw`) を観ているアプリに、字幕の絵を放送の PTS のまま流す — ブラウザの
+ * 生の道 (stream.md §5.5「字幕」) と同じもの。
+ *
+ * **いま流している生のセッションに脇から乗る**だけで、チューナーも字幕の ffmpeg も
+ * 増やさない (ブラウザで同じ局を生で観ていればそれにも乗る)。乗る先が無ければ null —
+ * 映像 (`live?codec=raw`) を先に開いてから頼むこと。映像が終われば閉じる (`Viewer.side`)
+ */
+export function liveCaptions(serviceId: number): ReadableStream<Uint8Array> | null {
+    const row = orm()
+        .select({ type: services.type, channel: services.channel })
+        .from(services)
+        .where(eq(services.id, serviceId))
+        .get();
+    if (row === undefined) return null;
+    // 生の目印は音声で分けない (`key`)。何を渡しても同じ
+    const session = sessions.get(
+        key(row.type, row.channel, serviceId, nowPlaying(serviceId, undefined).audio, 'raw', 0),
+    );
+    if (session === undefined || !session.alive) return null;
+    return captionFeed((out) => {
+        const viewer: Viewer = { connection: { send: out.send }, ready: false, wantsData: false, side: true };
+        session.add(viewer);
+        return () => depart(session, viewer);
+    });
+}
+
+/** 録画の字幕を、頼まれた位置のどれだけ手前から読むか (秒)。**いま出ている字幕を拾うため** (字幕は次が来るまで出しっぱなし) */
+export const CAPTION_LEAD = 10;
+
+/** 観ている位置より先に読んでおく量 (秒)。頭のここまでは倍速の縛りを掛けずに読む (`followFile` の `burst`) */
+const CAPTION_AHEAD = 10;
+
+/**
+ * **アプリ向けの録画の字幕** (`GET /api/recordings/<id>/captions?from=<秒>`。docs/api.md)。
+ * 生TS (録画中の追っかけ `chase?codec=raw` と、録り終えた `file?source=ts`) を観ているアプリに、
+ * 字幕の絵を放送の PTS のまま流す。
+ *
+ * 字幕だけを描く ffmpeg (`rawCaptionArgs`) を1本起こし、録画の生TSを `from` の
+ * `CAPTION_LEAD` 秒手前から流し込む。位置の当て方は追っかけと同じバイト比例 (`chasePlan`)。
+ * 当たりがずれても受け側は PTS で突き合わせるので、手前に読んだぶんは「いま出ている字幕」になるだけ。
+ *
+ * **録り終えた録画でも、まるごと返さずに流す。** 1時間の BS は 7GB あり、字幕を全部抜くには
+ * それを読み切る必要がある (観はじめが待たされる)。流すなら観る位置から読むだけで済み、
+ * 追っかけと同じ口で両方に答えられる。送り込みは追っかけと同じ倍速まで (頭の
+ * `CAPTION_LEAD + CAPTION_AHEAD` 秒ぶんは縛らず読んで、観ている位置を追い越しておく)。
+ * シークしたら `from` を変えて頼み直す
+ */
+export function recordingCaptions(recordingId: number, at: number): ReadableStream<Uint8Array> | null {
+    const rec = orm().select().from(recordings).where(eq(recordings.id, recordingId)).get();
+    if (rec === undefined || rec.deleted_at !== null || rec.ts_path === null) return null;
+    const size = fileSize(rec.ts_path);
+    if (size === null || size === 0) return null;
+    const recorded = recordedSec(rec);
+    const plan = chasePlan(size, recorded, Math.max(0, at - CAPTION_LEAD));
+    const burst = Math.round((size / Math.max(1, recorded)) * (CAPTION_LEAD + CAPTION_AHEAD));
+    const path = rec.ts_path;
+    const program = aribServiceId(rec.service_id);
+    const label = `rec ${rec.id}`;
+
+    return captionFeed((out) => {
+        const proc: ReturnType<typeof Bun.spawn> = Bun.spawn([config.ffmpeg, ...rawCaptionArgs(program, 0)], {
+            stdio: ['pipe', 'pipe', 'pipe', 'pipe'] as never,
+        });
+        const reader = followFile(
+            path,
+            plan.offset,
+            plan.paceBytesPerSec,
+            () => recordingDone(rec.id),
+            () => false,
+            burst,
+        ).getReader();
+        let stopped = false;
+        const stop = () => {
+            if (stopped) return;
+            stopped = true;
+            reader.cancel().catch(() => undefined);
+            proc.kill();
+        };
+
+        // 流し込み。**書けたことを待つ** (ffmpeg が詰まったら読むのも止まる)
+        void (async () => {
+            const writer = proc.stdin as import('bun').FileSink;
+            try {
+                for (;;) {
+                    const { done, value } = await reader.read();
+                    if (done || stopped) break;
+                    await writer.write(value);
+                    await writer.flush();
+                }
+            } finally {
+                try {
+                    writer.end();
+                } catch {
+                    // もう閉じている
+                }
+            }
+        })().catch(() => undefined);
+
+        // 標準出力には何も出さないはずだが、汲まずに放っておくと詰まったときに止まる
+        void (async () => {
+            for await (const _ of chunks(proc.stdout as ReadableStream<Uint8Array>)) {
+                // 読み捨てる
+            }
+        })().catch(() => undefined);
+
+        // 選べる字幕は入口の見出しから (`TrackList`)。失敗は残す
+        const list = new TrackList(program);
+        void (async () => {
+            for await (const line of lines(proc.stderr as ReadableStream<Uint8Array>)) {
+                if (list.feed(line)) {
+                    out.send(CHANNEL.control, 0n, json({ type: 'captions', tracks: list.tracks, track: 0 }));
+                } else if (worthLogging(line) && !NO_SUBTITLE.test(line)) {
+                    console.warn(`[captions] ${label} ffmpeg: ${line.trim()}`);
+                }
+            }
+        })().catch(() => undefined);
+
+        // 字幕の絵。**同じ絵は配り直さない** (`Session.deliver` と同じ)
+        const fd = (proc.stdio as unknown as number[])[3];
+        const frames = new MkvSplitter();
+        let last: string | null = null;
+        const pictures = (async () => {
+            if (typeof fd !== 'number') return;
+            for await (const chunk of chunks(Bun.file(fd).stream())) {
+                for (const caption of frames.feed(chunk)) {
+                    const seen = Bun.hash(caption.data).toString(36);
+                    if (seen === last) continue;
+                    last = seen;
+                    const { kind, pts, data } = frame(caption);
+                    out.send(kind, pts, data);
+                }
+            }
+        })().catch(() => undefined);
+
+        // 読み切った (字幕を持たない録画なら、ffmpeg が組み立てで降りる) ら閉じる
+        void Promise.all([pictures, proc.exited]).then(() => out.close());
+        return stop;
+    });
 }
 
 /**

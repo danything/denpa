@@ -90,6 +90,29 @@
 - 録画中は一覧の `durationMs` が `null` です (長さが決まっていない)。録れている長さは
   録り始め (`startAt`) からの経過で見積もってください
 
+## 生TSの字幕 `GET /api/services/<id>/captions`・`GET /api/recordings/<id>/captions`
+
+生の TS (`live?codec=raw`・`chase?codec=raw`・`file?source=ts`) には字幕の絵が乗っていない (放送は文字と指定だけ)
+ので、denpa が描いた絵を**放送の PTS のまま**流します。ブラウザの生の道と同じもの ([stream.md](stream.md#字幕))。
+受け側は映像の PTS がそこを過ぎたら重ね、次が来るまで出しておきます (全部透明な絵が来たら消える)。
+
+- ライブ (`services/<id>/captions`) は**いま生で流している局に乗るだけ**です。`live?codec=raw` を開いてから頼みます。
+  流していなければ 404。映像が閉じれば、こちらも閉じます
+- 録画 (`recordings/<id>/captions?from=<秒>`) は、映像を頼んだのと同じ `from` を渡します (シークしたら頼み直す)。
+  `from` の 10 秒手前から読むので、いま出ている字幕も来ます。追っかけと同じく倍速までで先へ進み、録り終えた録画は
+  尻まで読んだら閉じます。生TSが無ければ 404
+- 本文 (`application/octet-stream`) は、WebSocket の1こま ([stream.md](stream.md#53-websocket-プロトコル)) の頭に長さを付けたものが並びます:
+
+```
+[4: 後ろの長さ (BE)][1: 種別][8: 時刻 (90kHz, BE)][中身]
+
+0x20  字幕の絵  [2:x][2:y][2:w][2:h][PNG]  座標は 1920x1080 の上 (いまは画面まるごと)
+0x40  知らせ    JSON。{"type":"captions","tracks":[{"index":0,"lang":"jpn","label":"字幕 (日本語)"}],"track":0}
+                は選べる字幕 (字幕を持たない放送では来ない)。20 秒おきに {"type":"ping"}。知らない種別・type は読み捨てる
+```
+
+- 時刻は放送の PTS (33 ビットで 26.5 時間ごとに一周する)。比べるときは近いほうへ伸ばしてください
+
 ## 番組の中身 `GET /api/recordings/<id>/detail`
 
 ```json

@@ -104,6 +104,21 @@ describe('伸びるファイルの追い読み (followFile)', () => {
         expect(held).toBeGreaterThan(3);
     });
 
+    /*
+     * アプリ向けの字幕の口は、頼まれた位置より手前から読み始めて観ている位置を追い越す
+     * (`live.ts` の `recordingCaptions`)。頭のぶんは倍速の縛りを掛けない
+     */
+    test('頭の burst ぶんは送り込みの上限を掛けずに読む', async () => {
+        dir = mkdtempSync(join(tmpdir(), 'chase-'));
+        const path = join(dir, 'rec.ts');
+        writeFileSync(path, new Uint8Array(600 * 1024));
+        const started = Date.now();
+        // 1KB/秒の縛りなら 10 分かかる量
+        const got = await readAll(followFile(path, 0, 1024, () => true, undefined, 600 * 1024));
+        expect(got.length).toBe(600 * 1024);
+        expect(Date.now() - started).toBeLessThan(2_000);
+    });
+
     test('無いファイルは転ぶ (エラーとして伝わる)', async () => {
         dir = mkdtempSync(join(tmpdir(), 'chase-'));
         const stream = followFile(join(dir, 'missing.ts'), 0, 1e9, () => true);

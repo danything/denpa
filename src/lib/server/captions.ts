@@ -74,7 +74,7 @@
  */
 
 import { LANGUAGE } from '#lib/arib.js';
-import { type CaptionTrack, CHANNEL } from '#lib/live.js';
+import { type CaptionTrack, CHANNEL, type Notice } from '#lib/live.js';
 import type { MkvFrame } from '#lib/ts/mkv.js';
 
 /**
@@ -315,4 +315,103 @@ export function frame(caption: Caption): { kind: number; pts: bigint; data: Uint
         pts: BigInt(Math.max(0, Math.round(caption.at * CLOCK))),
         data: out,
     };
+}
+
+/**
+ * **アプリ向けの字幕の口** (`GET /api/services/<id>/captions`・`GET /api/recordings/<id>/captions`。
+ * docs/api.md) の1こま。WebSocket の1こま (stream.md §5.3) の頭に、後ろの長さを足しただけ:
+ *
+ *     [4:後ろの長さ (BE)][1:種別][8:時刻 (90kHz, BE)][中身...]
+ *
+ * **WebSocket と同じバイトにしたのは、受け側の読み方を1つにするため。** 字幕の絵 (`0x20`) は
+ * 中身の頭に置き場所が付いたまま、知らせ (`0x40`) は JSON のまま。
+ *
+ * **長さを付けるのは、HTTP には区切りが無いから。** WebSocket はこまの区切りを運んでくれるが、
+ * チャンク転送のチャンクの区切りは受け側 (HttpURLConnection など) から見えない。
+ * Server-Sent Events にしなかったのは、PNG を base64 にすると 1/3 太り、行に割って読む手間も要るため
+ */
+export function appFrame(kind: number, pts: bigint, payload: Uint8Array): Uint8Array {
+    const out = new Uint8Array(4 + 1 + 8 + payload.length);
+    const view = new DataView(out.buffer);
+    view.setUint32(0, 1 + 8 + payload.length);
+    view.setUint8(4, kind);
+    view.setBigUint64(5, pts);
+    out.set(payload, 13);
+    return out;
+}
+
+/** 読まれないまま溜まってよい量 (バイト)。超えたら閉じる (受け側は頼み直す) */
+export const CAPTION_FEED_BACKLOG = 8 * 1024 * 1024;
+
+/**
+ * 何も届かなくても送る間 (ms)。**字幕の無い時間は数分続く**ので、黙っていると前段
+ * (nginx の既定は 60 秒) や受け側の読みの時間切れに切られる
+ */
+export const CAPTION_PING_MS = 20_000;
+
+const PING = new TextEncoder().encode(JSON.stringify({ type: 'ping' }));
+
+/** アプリ向けの字幕の口に流し込む側 (`captionFeed`) */
+export interface CaptionOut {
+    /** WebSocket と同じ形で1こま渡す。**字幕の絵と、選べる字幕の知らせだけ通す** */
+    send(kind: number, pts: bigint, payload: Uint8Array): void;
+    /** 終わり (録画を読み切った・セッションが畳まれた) */
+    close(): void;
+}
+
+/**
+ * アプリ向けの字幕の口を作る。中身を作る側 (`open`) は、閉じるときの後始末を返す。
+ *
+ * 通すのは字幕の絵 (`0x20`) と、選べる字幕の知らせ (`0x40` の `captions`) だけ。
+ * `error` / `ended` の知らせが来たら閉じる。ほかの知らせ・データ放送・映像は捨てる
+ * (映像は同じ URL の隣の口 — ライブの `live` や追っかけの `chase` — で受け取っている)
+ */
+export function captionFeed(open: (out: CaptionOut) => () => void): ReadableStream<Uint8Array> {
+    let closed = false;
+    let detach: (() => void) | null = null;
+    let timer: ReturnType<typeof setInterval> | undefined;
+    const finish = () => {
+        closed = true;
+        clearInterval(timer);
+        const leave = detach;
+        detach = null;
+        leave?.();
+    };
+    return new ReadableStream<Uint8Array>(
+        {
+            start(controller) {
+                const out: CaptionOut = {
+                    send(kind, pts, payload) {
+                        if (closed) return;
+                        if (kind === CHANNEL.control) {
+                            const notice = JSON.parse(new TextDecoder().decode(payload)) as Notice;
+                            if (notice.type === 'error' || notice.type === 'ended') return out.close();
+                            if (notice.type !== 'captions') return;
+                        } else if (kind !== CHANNEL.subtitle) {
+                            return;
+                        }
+                        // 読まない相手に積み続けない。閉じれば受け側は頼み直す
+                        if ((controller.desiredSize ?? 0) < -CAPTION_FEED_BACKLOG) return out.close();
+                        controller.enqueue(appFrame(kind, pts, payload));
+                    },
+                    close() {
+                        if (closed) return;
+                        finish();
+                        controller.close();
+                    },
+                };
+                timer = setInterval(() => {
+                    if (!closed) controller.enqueue(appFrame(CHANNEL.control, 0n, PING));
+                }, CAPTION_PING_MS);
+                const leave = open(out);
+                // 作っている最中に閉じた (セッションがもう畳まれていた) ら、すぐ後始末する
+                if (closed) leave();
+                else detach = leave;
+            },
+            cancel() {
+                if (!closed) finish();
+            },
+        },
+        new ByteLengthQueuingStrategy({ highWaterMark: 256 * 1024 }),
+    );
 }
