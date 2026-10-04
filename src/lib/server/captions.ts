@@ -344,6 +344,13 @@ export function appFrame(kind: number, pts: bigint, payload: Uint8Array): Uint8A
 export const CAPTION_FEED_BACKLOG = 8 * 1024 * 1024;
 
 /**
+ * 読まれないまま溜まったら、作る側に**待ってもらう**量 (バイト)。録画の字幕は録画を読む速さで
+ * 作れるので、受け側が先読みを止めたら (アプリは持つ枚数に上限がある) 録画を読むのも止める
+ * (`CaptionOut.backedUp`)。閉じる量より必ず小さくする
+ */
+export const CAPTION_FEED_HOLD = 1024 * 1024;
+
+/**
  * 何も届かなくても送る間 (ms)。**字幕の無い時間は数分続く**ので、黙っていると前段
  * (nginx の既定は 60 秒) や受け側の読みの時間切れに切られる
  */
@@ -357,6 +364,8 @@ export interface CaptionOut {
     send(kind: number, pts: bigint, payload: Uint8Array): void;
     /** 終わり (録画を読み切った・セッションが畳まれた) */
     close(): void;
+    /** 読まれずに溜まっているか (`CAPTION_FEED_HOLD`)。作る側が待てるなら待つ */
+    backedUp(): boolean;
 }
 
 /**
@@ -402,6 +411,7 @@ export function captionFeed(open: (out: CaptionOut) => () => void): ReadableStre
                         finish();
                         controller.close();
                     },
+                    backedUp: () => (controller.desiredSize ?? 0) < -CAPTION_FEED_HOLD,
                 };
                 timer = setInterval(() => {
                     if (!closed) push(CHANNEL.control, 0n, PING);

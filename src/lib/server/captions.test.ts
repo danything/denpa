@@ -4,6 +4,8 @@ import {
     appFrame,
     CANVAS,
     CAPTION_FEED_BACKLOG,
+    CAPTION_FEED_HOLD,
+    type CaptionOut,
     captionFeed,
     captionInput,
     captionOutput,
@@ -350,6 +352,25 @@ describe('アプリ向けの字幕の口', () => {
             return () => left++;
         });
         expect(left).toBe(1);
+    });
+
+    test('待ってもらう量は閉じる量より小さい', () => {
+        expect(CAPTION_FEED_HOLD).toBeLessThan(CAPTION_FEED_BACKLOG);
+    });
+
+    // 録画の字幕は、受け側が読まなくなったら録画を読むのも止める (`recordingCaptions`)
+    test('読まれずに溜まったら待ってほしいと言う', () => {
+        let out: CaptionOut | null = null;
+        const stream = captionFeed((given) => {
+            out = given;
+            return () => {};
+        });
+        expect(out!.backedUp()).toBe(false);
+        const picture = new Uint8Array(512 * 1024);
+        for (let i = 0; i < CAPTION_FEED_HOLD / picture.length + 2; i++)
+            out!.send(CHANNEL.subtitle, 0n, picture);
+        expect(out!.backedUp()).toBe(true);
+        void stream.cancel();
     });
 
     test('読まないまま溜まったら閉じる', () => {

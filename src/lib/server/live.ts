@@ -1399,7 +1399,8 @@ const recordingCaptioners = new Map<number, (() => void)[]>();
  * **録り終えた録画でも、まるごと返さずに流す。** 1時間の BS は 7GB あり、字幕を全部抜くには
  * それを読み切る必要がある (観はじめが待たされる)。流すなら観る位置から読むだけで済み、
  * 追っかけと同じ口で両方に答えられる。送り込みは追っかけと同じ倍速まで (頭の
- * `CAPTION_LEAD + CAPTION_AHEAD` 秒ぶんは縛らず読んで、観ている位置を追い越しておく)。
+ * `CAPTION_LEAD + CAPTION_AHEAD` 秒ぶんは縛らず読んで、観ている位置を追い越しておく)。受け側が
+ * 読まなくなったら (アプリは先読みする枚数に上限がある) 録画を読むのも止める。
  * シークしたら `from` を変えて頼み直す
  */
 export function recordingCaptions(recordingId: number, at: number): ReadableStream<Uint8Array> | null {
@@ -1423,7 +1424,8 @@ export function recordingCaptions(recordingId: number, at: number): ReadableStre
             plan.offset,
             plan.paceBytesPerSec,
             () => recordingDone(rec.id),
-            () => false,
+            // 受け側が読まなくなったら、録画を読むのも止める (作る絵が溜まり続けないように)
+            out.backedUp,
             burst,
         ).getReader();
         let stopped = false;
