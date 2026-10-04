@@ -53,6 +53,13 @@ test.describe('外から使う口', () => {
             expect(rec.audio).toBe(`api/recordings/${rec.id}/file?audio=only`);
             // 続きの位置は、無ければ null (鍵ごと消さない)
             expect(rec).toHaveProperty('resumeMs');
+            // 番組の中身は別の口 (テレビのアプリの詳細)
+            const one = await (await request.get(`/api/recordings/${rec.id}/detail`)).json();
+            expect(one).toMatchObject({
+                id: rec.id,
+                description: expect.any(String),
+                extended: expect.any(Object),
+            });
             for (const file of rec.files) {
                 expect(['av1', 'h264', 'mpeg2']).toContain(file.codec);
                 expect(file.url).toBe(`api/recordings/${rec.id}/file?source=${file.source}`);
