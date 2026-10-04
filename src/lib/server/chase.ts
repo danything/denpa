@@ -87,6 +87,8 @@ export function chasePlan(size: number, recordedSec: number, atSec: number): Cha
  * @param done もう書き足されないか (録画が終わったか)。EOF のたびに訊く
  * @param hold ほかの理由で止めておくか (HTTP の追っかけで、焼いた先が読まれていないとき。
  *   `live.ts` の `chaseStream`)。省けば止めない
+ * @param burst 倍速の縛りを掛けずに読む頭のぶん (バイト)。アプリ向けの字幕の口が、頼まれた位置より
+ *   手前から読み始めて観ている位置を追い越すのに使う (`live.ts` の `recordingCaptions`)。省けば 0
  */
 export function followFile(
     path: string,
@@ -94,6 +96,7 @@ export function followFile(
     paceBytesPerSec: number,
     done: () => boolean,
     hold: () => boolean = () => false,
+    burst = 0,
 ): ReadableStream<Uint8Array> {
     let cancelled = false;
     return new ReadableStream<Uint8Array>({
@@ -115,7 +118,8 @@ export function followFile(
                         sent += bytesRead;
                         controller.enqueue(buffer.slice(0, bytesRead));
                         // 倍速より先へは行かない (上の説明)。遅れているぶんは眠らず進む
-                        const ahead = sent / paceBytesPerSec - (Date.now() - started) / 1000;
+                        const ahead =
+                            Math.max(0, sent - burst) / paceBytesPerSec - (Date.now() - started) / 1000;
                         if (ahead > 0) await Bun.sleep(ahead * 1000);
                         continue;
                     }

@@ -1,7 +1,12 @@
 import { describe, expect, test } from 'bun:test';
 import { CHANNEL } from '#lib/live.js';
 import {
+    appFrame,
     CANVAS,
+    CAPTION_FEED_BACKLOG,
+    CAPTION_FEED_HOLD,
+    type CaptionOut,
+    captionFeed,
     captionInput,
     captionOutput,
     frame,
@@ -283,5 +288,101 @@ describe('worthLogging', () => {
     test('入口の説明は残さない', () => {
         expect(worthLogging('  Stream #0:2[0x130]: Subtitle: arib_caption')).toBe(false);
         expect(worthLogging("Input #0, mpegts, from 'pipe:0':")).toBe(false);
+    });
+});
+
+describe('アプリ向けの字幕の口', () => {
+    const json = (value: unknown) => new TextEncoder().encode(JSON.stringify(value));
+
+    /** WebSocket の1こまの頭に、後ろの長さを足しただけ (受け側の読み方を1つにする) */
+    test('こまは [4:長さ][1:種別][8:時刻][中身]', () => {
+        const out = appFrame(CHANNEL.subtitle, 0x1_2345_6789n, new Uint8Array([1, 2, 3]));
+        const view = new DataView(out.buffer);
+        expect(out.length).toBe(4 + 1 + 8 + 3);
+        expect(view.getUint32(0)).toBe(1 + 8 + 3);
+        expect(view.getUint8(4)).toBe(0x20);
+        expect(view.getBigUint64(5)).toBe(0x1_2345_6789n);
+        expect([...out.subarray(13)]).toEqual([1, 2, 3]);
+    });
+
+    test('字幕の絵と、選べる字幕の知らせだけを通す', async () => {
+        const stream = captionFeed((out) => {
+            out.send(CHANNEL.rawTs, 0n, new Uint8Array(188));
+            out.send(CHANNEL.control, 0n, json({ type: 'clock', at: 1, unixMs: 2, now: 3 }));
+            out.send(CHANNEL.control, 0n, json({ type: 'captions', tracks: [], track: 0 }));
+            out.send(CHANNEL.subtitle, 90_000n, new Uint8Array([9]));
+            out.send(CHANNEL.data, 0n, json({}));
+            out.close();
+            return () => {};
+        });
+        const body = new Uint8Array(await new Response(stream).arrayBuffer());
+        const kinds: number[] = [];
+        for (let at = 0; at < body.length; at += 4 + new DataView(body.buffer).getUint32(at))
+            kinds.push(body[at + 4]!);
+        expect(kinds).toEqual([CHANNEL.control, CHANNEL.subtitle]);
+    });
+
+    // 映像が終わった (セッションが畳まれた・焼けなくなった) ら、字幕の口も閉じる
+    test('ended / error の知らせで閉じて後始末する', async () => {
+        for (const type of ['ended', 'error']) {
+            let left = 0;
+            let send: ((kind: number, pts: bigint, payload: Uint8Array) => void) | null = null;
+            const stream = captionFeed((out) => {
+                send = out.send;
+                return () => left++;
+            });
+            send!(CHANNEL.control, 0n, json({ type, message: '' }));
+            expect(await new Response(stream).arrayBuffer()).toBeDefined();
+            expect(left, type).toBe(1);
+        }
+    });
+
+    test('受け側が閉じたら後始末する', async () => {
+        let left = 0;
+        const stream = captionFeed(() => () => left++);
+        await stream.cancel();
+        expect(left).toBe(1);
+    });
+
+    // 乗ったそばから閉じた (乗る先がもう畳まれていた) ときも、後始末を取りこぼさない
+    test('作っている最中に閉じても後始末する', () => {
+        let left = 0;
+        captionFeed((out) => {
+            out.close();
+            return () => left++;
+        });
+        expect(left).toBe(1);
+    });
+
+    test('待ってもらう量は閉じる量より小さい', () => {
+        expect(CAPTION_FEED_HOLD).toBeLessThan(CAPTION_FEED_BACKLOG);
+    });
+
+    // 録画の字幕は、受け側が読まなくなったら録画を読むのも止める (`recordingCaptions`)
+    test('読まれずに溜まったら待ってほしいと言う', () => {
+        let out: CaptionOut | null = null;
+        const stream = captionFeed((given) => {
+            out = given;
+            return () => {};
+        });
+        expect(out!.backedUp()).toBe(false);
+        const picture = new Uint8Array(512 * 1024);
+        for (let i = 0; i < CAPTION_FEED_HOLD / picture.length + 2; i++)
+            out!.send(CHANNEL.subtitle, 0n, picture);
+        expect(out!.backedUp()).toBe(true);
+        void stream.cancel();
+    });
+
+    test('読まないまま溜まったら閉じる', () => {
+        let left = 0;
+        let send: ((kind: number, pts: bigint, payload: Uint8Array) => void) | null = null;
+        captionFeed((out) => {
+            send = out.send;
+            return () => left++;
+        });
+        const picture = new Uint8Array(1024 * 1024);
+        for (let i = 0; i < CAPTION_FEED_BACKLOG / picture.length + 2; i++)
+            send!(CHANNEL.subtitle, 0n, picture);
+        expect(left).toBe(1);
     });
 });
