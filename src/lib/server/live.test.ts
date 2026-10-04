@@ -1,6 +1,14 @@
 import { describe, expect, test } from 'bun:test';
 import { type AudioSide, audioTracks } from '#lib/arib.js';
-import { codecsFor, encodeArgs, whyNotTuned } from './live';
+import { CHANNEL } from '#lib/live.js';
+import {
+    CHASE_STREAM_HOLD,
+    codecsFor,
+    encodeArgs,
+    LIVE_STREAM_BACKLOG,
+    sessionStream,
+    whyNotTuned,
+} from './live';
 
 /** 1本目の音声をそのまま。番組表が何も言っていないときの既定 */
 const stereo = audioTracks([])[0]!;
@@ -433,5 +441,34 @@ describe('音声だけの焼き方 (外から使う口の ?audio=only)', () => {
         expect(args).not.toContain('-filter_complex');
         expect(args.join(' ')).toContain('-c:a aac');
         expect(args.join(' ')).toContain('-f mp4');
+    });
+});
+
+/*
+ * HTTP の追っかけ (`chaseStream`)。倍速で送り込むので、読む側が追いつかなければ
+ * 送り込みを止める。止める量は閉じる量より手前でないと、止める前に閉じてしまう
+ */
+describe('HTTP で流す器 (sessionStream)', () => {
+    test('止める量は閉じる量より小さい', () => {
+        expect(CHASE_STREAM_HOLD).toBeLessThan(LIVE_STREAM_BACKLOG);
+    });
+
+    test('読まれないまま溜まったら止めたがり、閉じはしない', () => {
+        let send: ((kind: number, pts: bigint, payload: Uint8Array) => void) | null = null;
+        let held: () => boolean = () => false;
+        const stream = sessionStream((viewer, hold) => {
+            send = viewer.connection.send as typeof send;
+            held = hold;
+            return null;
+        });
+        const chunk = new Uint8Array(1024 * 1024);
+        // 溜まりはじめは止めない
+        send!(CHANNEL.videoMedia, 0n, chunk);
+        expect(held()).toBe(false);
+        // 止める量を超えるまで積む (読まない)。閉じる量には届かない
+        for (let i = 0; i < CHASE_STREAM_HOLD / chunk.length + 2; i++) send!(CHANNEL.videoMedia, 0n, chunk);
+        expect(held()).toBe(true);
+        expect(stream.locked).toBe(false);
+        void stream.cancel();
     });
 });

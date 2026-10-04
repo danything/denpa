@@ -1257,15 +1257,18 @@ function watch(
 }
 
 /** HTTP のライブで、読まれずに溜まってよい量 (バイト)。超えたら閉じる */
-const LIVE_STREAM_BACKLOG = 32 * 1024 * 1024;
+export const LIVE_STREAM_BACKLOG = 32 * 1024 * 1024;
 
 /**
  * HTTP の追っかけで、読まれずに溜まったら**生TSの送り込みを止める**量 (バイト)。
  * 追っかけは倍速で送り込むので、相手が観る速さでしか読まなければ溜まり続け、
  * いずれ上の上限で閉じてしまう。ライブと違って入力 (伸びているファイル) は待てるので、
- * 止めて待つ (`chase.ts` の `followFile` の `hold`)
+ * 止めて待つ (`chase.ts` の `followFile` の `hold`)。
+ *
+ * **閉じる上限 (`LIVE_STREAM_BACKLOG`) より必ず小さくする。** 逆だと止める前に閉じて
+ * しまい、止める意味が無い。焼き上がりは塊で届くので、間を十分あけておく (live.test.ts で固定)
  */
-const CHASE_STREAM_HOLD = 4 * 1024 * 1024;
+export const CHASE_STREAM_HOLD = 4 * 1024 * 1024;
 
 /**
  * **HTTP で流すライブ** (`GET /api/services/<id>/live`)。画面の外のもの
@@ -1336,7 +1339,7 @@ export function chaseStream(
  * 相手も閉じる (溜め続けるとメモリが増え続け、fMP4 は途中を捨てると壊れる)。
  * `held` は溜まりすぎて送り込みを止めたいか (追っかけだけが使う。`CHASE_STREAM_HOLD`)
  */
-function sessionStream(
+export function sessionStream(
     open: (viewer: Viewer, held: () => boolean) => Session | null,
 ): ReadableStream<Uint8Array> {
     let session: Session | null = null;
