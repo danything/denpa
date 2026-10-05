@@ -28,6 +28,7 @@
         OVERLAY_BTN,
         OVERLAY_ROUND,
         PAUSE,
+        PIP,
         PLAY,
         PREV,
         SHRINK,
@@ -39,6 +40,7 @@
     import MoreButton from '#lib/components/player/MoreButton.svelte';
     import PlayerStage from '#lib/components/player/PlayerStage.svelte';
     import { clearOverlay, drawOverlay, fitRect } from '#lib/components/player/paint.js';
+    import { pictureInPicture } from '#lib/components/player/pip.svelte.js';
     import Remote from '#lib/components/player/Remote.svelte';
     import SpeedMenu, { SPEED_KEY, storedSpeed } from '#lib/components/player/SpeedMenu.svelte';
     import StageNote from '#lib/components/player/StageNote.svelte';
@@ -273,6 +275,12 @@
     $effect(() => {
         awake.on = true;
     });
+
+    /**
+     * 小窓 (PiP。[pip.svelte.ts](../../../lib/components/player/pip.svelte.ts))。小窓で押された
+     * 止める・再開は `<video>` の `play`/`pause` で拾えているので、合わせる口は要らない
+     */
+    const pip = pictureInPicture({ video: () => video });
     let lastTap: Tap | null = null;
 
     /**
@@ -1056,6 +1064,7 @@
     const notices = $derived<Notice[]>([
         ...errorNotice(form, 'watch-delete'),
         ...shooter.notices,
+        ...pip.notices,
     ]);
 
     /**
@@ -1528,6 +1537,22 @@
                             />
                         </Extras>
 
+                        <!--
+                            **小窓 (PiP)。** ページから出せない端末 (iPhone・iPad のホーム画面から開いたもの・口の無いブラウザ) では
+                            出さない ([pip.svelte.ts](../../../lib/components/player/pip.svelte.ts))。狭い枠では「ほか」に畳む
+                        -->
+                        {#if pip.available}
+                            <Extras>
+                                <ControlButton
+                                    path={PIP}
+                                    label={pip.active ? '小窓をやめる' : '小窓で観る'}
+                                    on={pip.active}
+                                    testid="watch-pip"
+                                    onclick={() => pip.toggle()}
+                                />
+                            </Extras>
+                        {/if}
+
                         <ControlButton
                             path={full ? SHRINK : EXPAND}
                             label={full ? '全画面をやめる' : '全画面'}
@@ -1602,7 +1627,14 @@
     </FactsAside>
 </div>
 
-<Toasts {notices} source={form} ondismiss={shooter.dismiss} />
+<Toasts
+    {notices}
+    source={form}
+    ondismiss={(key) => {
+        shooter.dismiss(key);
+        pip.dismiss(key);
+    }}
+/>
 
 <style>
     .watch {

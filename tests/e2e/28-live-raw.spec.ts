@@ -153,6 +153,106 @@ test.describe('ライブを生で見る', () => {
         expect(lit.bright).toBeGreaterThan(0);
     });
 
+    /*
+     * **生でも小窓 (PiP) に絵が出る。** 絵は worker の canvas に居て `<video>` は空なので、
+     * canvas から流れを取って見えない `<video>` (`pip-raw`) に映し、それを小窓にする。
+     *
+     * その `<video>` は生に入った時点で1枚目まで受け取っておく。押されてから待つと、
+     * iPhone の Safari は「押された直後」と見なさなくなって断った (`NotAllowedError`)。
+     * 押す前に1枚目が届いていること、押したら小窓に入ってコマが流れること、
+     * 小窓で止めると帯も止まることを見る
+     */
+    test('生でも小窓に絵が出て、小窓で止めると帯も止まる', async ({ page }) => {
+        await goto(page, '/live');
+        await page.getByTestId('live-channel').first().click();
+        await expect(page.getByTestId('live-title')).toBeVisible();
+        await chooseRaw(page);
+        const canvas = page.getByTestId('live-raw');
+        await expect
+            .poll(async () => Number((await canvas.getAttribute('data-shown')) ?? 0), { timeout: 30_000 })
+            .toBeGreaterThan(10);
+
+        // 押す前に1枚目が届いている (`HAVE_METADATA` 以上)
+        const proxy = page.getByTestId('pip-raw');
+        await expect
+            .poll(() => proxy.evaluate((v) => (v as HTMLVideoElement).readyState), { timeout: 10_000 })
+            .toBeGreaterThanOrEqual(1);
+
+        /*
+         * **Chrome は worker が描いたコマを直に書き込む** (`MediaStreamTrackGenerator`)。canvas の
+         * 画面への更新から取っていた頃は、Chrome の窓が小窓の後ろに隠れると絵が止まった (Ubuntu)
+         */
+        expect(
+            await proxy.evaluate((v) => {
+                const Generator = (globalThis as { MediaStreamTrackGenerator?: unknown })
+                    .MediaStreamTrackGenerator as (new () => unknown) | undefined;
+                const track = ((v as HTMLVideoElement).srcObject as MediaStream).getVideoTracks()[0];
+                return Generator === undefined || track instanceof Generator;
+            }),
+        ).toBe(true);
+
+        await wakeControls(page, 'live-frame');
+        const pip = page.getByTestId('live-pip');
+        await pip.click();
+        await expect(pip).toHaveAttribute('aria-pressed', 'true');
+        expect(await proxy.evaluate((v) => document.pictureInPictureElement === v)).toBe(true);
+        // 小窓にコマが流れている (押す前は流れを切ってある)
+        const frames = await proxy.evaluate(
+            (v) =>
+                new Promise<number>((done) => {
+                    const video = v as HTMLVideoElement;
+                    let count = 0;
+                    const next = () => {
+                        count += 1;
+                        video.requestVideoFrameCallback(next);
+                    };
+                    video.requestVideoFrameCallback(next);
+                    setTimeout(() => done(count), 1000);
+                }),
+        );
+        expect(frames).toBeGreaterThan(5);
+
+        // 小窓の再生ボタン (代わりの `<video>` を直に止める) で、帯も止まる・再開する
+        const play = page.getByTestId('live-play');
+        await proxy.evaluate((v) => (v as HTMLVideoElement).pause());
+        await expect(play).toHaveAttribute('aria-label', '再生');
+        await proxy.evaluate((v) => (v as HTMLVideoElement).play());
+        await expect(play).toHaveAttribute('aria-label', '一時停止');
+
+        await wakeControls(page, 'live-frame');
+        await pip.click();
+        await expect(pip).toHaveAttribute('aria-pressed', 'false');
+        expect(await page.evaluate(() => document.pictureInPictureElement)).toBeNull();
+    });
+
+    /*
+     * **生の絵の流れを取れない端末では、生の間だけ小窓のボタンを出さない。** Firefox は
+     * 書き込む口 (`MediaStreamTrackGenerator`) が無く、worker に渡した canvas からも流れを
+     * 取れない。押せても必ず断られる
+     */
+    test('生の絵の流れを取れない端末では、生の間は小窓のボタンを出さない', async ({ page }) => {
+        await page.addInitScript(() => {
+            Reflect.deleteProperty(globalThis, 'MediaStreamTrackGenerator');
+            HTMLCanvasElement.prototype.captureStream = () => {
+                throw new DOMException('取れない', 'NotSupportedError');
+            };
+        });
+        await goto(page, '/live');
+        await page.getByTestId('live-channel').first().click();
+        await expect(page.getByTestId('live-title')).toBeVisible();
+        await wakeControls(page, 'live-frame');
+        // 焼いたものでは出る
+        await expect(page.getByTestId('live-pip')).toBeVisible();
+        await chooseRaw(page);
+        await expect
+            .poll(async () => Number((await page.getByTestId('live-raw').getAttribute('data-shown')) ?? 0), {
+                timeout: 30_000,
+            })
+            .toBeGreaterThan(10);
+        await wakeControls(page, 'live-frame');
+        await expect(page.getByTestId('live-pip')).toHaveCount(0);
+    });
+
     test('選んでいなければ、いつもどおり焼いたものを見る', async ({ page }) => {
         await goto(page, '/live');
         await page.getByTestId('live-channel').first().click();

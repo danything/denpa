@@ -24,6 +24,7 @@
         OPEN_OUT,
         OVERLAY,
         PAUSE,
+        PIP,
         PLAY,
         RECORD,
         SHRINK,
@@ -35,6 +36,7 @@
     import OverlayMenu from '#lib/components/player/OverlayMenu.svelte';
     import PlayerStage from '#lib/components/player/PlayerStage.svelte';
     import PlayerVeil from '#lib/components/player/PlayerVeil.svelte';
+    import { pictureInPicture } from '#lib/components/player/pip.svelte.js';
     import Remote from '#lib/components/player/Remote.svelte';
     import SpeedMenu from '#lib/components/player/SpeedMenu.svelte';
     import StageNote from '#lib/components/player/StageNote.svelte';
@@ -192,6 +194,19 @@
         awake.on = player.state !== 'idle' && player.state !== 'error';
     });
 
+    /**
+     * 小窓 (PiP。[pip.svelte.ts](../../lib/components/player/pip.svelte.ts))。生で見ている間は
+     * worker の canvas から流れを取って出す。**小窓で押された止める・再開は player に合わせる**
+     */
+    const pip = pictureInPicture({
+        video: () => video,
+        raw: () => player.raw,
+        capture: () => player.capture(),
+        flow: (on) => player.captureFlow(on),
+        paused: () => player.paused,
+        toggle: () => player.toggle(),
+    });
+
     /** 真ん中あたりを素早く2回で再生/一時停止 (`center-tap.ts`)。1回目は操作列の出し入れ */
     const stageTap = centerTap(() => player.toggle(), controls.toggle);
 
@@ -204,6 +219,7 @@
     const shooter = snapshotter(controls);
     const notices = $derived<Notice[]>([
         ...shooter.notices,
+        ...pip.notices,
         // 録画ボタンの結果 (`?/record`)。押した本人へ、始まったか断られたかを言う
         ...(form?.recorded
             ? [{ key: `record-${form.recorded}`, kind: 'info' as const, text: `録画を始めます: ${form.recorded}` }]
@@ -619,6 +635,22 @@
                             </Extras>
                         {/if}
 
+                        <!--
+                            **小窓 (PiP)。** ページから出せない端末 (iPhone・iPad のホーム画面から開いたもの・口の無いブラウザ) では
+                            出さない ([pip.svelte.ts](../../lib/components/player/pip.svelte.ts))。狭い枠では「ほか」に畳む
+                        -->
+                        {#if pip.available}
+                            <Extras>
+                                <ControlButton
+                                    path={PIP}
+                                    label={pip.active ? '小窓をやめる' : '小窓で観る'}
+                                    on={pip.active}
+                                    testid="live-pip"
+                                    onclick={() => pip.toggle()}
+                                />
+                            </Extras>
+                        {/if}
+
                         <ControlButton
                             path={stage.fullscreened ? SHRINK : EXPAND}
                             label={stage.fullscreened ? '全画面をやめる' : '全画面'}
@@ -811,7 +843,14 @@
 </div>
 
 <!-- 返事が変わったことは `source` で渡す (他の画面と同じ。閉じた知らせの扱いは Toasts) -->
-<Toasts {notices} source={form} ondismiss={shooter.dismiss} />
+<Toasts
+    {notices}
+    source={form}
+    ondismiss={(key) => {
+        shooter.dismiss(key);
+        pip.dismiss(key);
+    }}
+/>
 
 <style>
     /*

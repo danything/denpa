@@ -367,6 +367,8 @@ test.describe('録画を観る', () => {
         await expect(page.getByTestId('watch-forward')).toHaveCount(0);
         // 再生停止は下の帯のいちばん左。ライブと同じ並び
         await expect(page.getByTestId('watch-controls').getByTestId('watch-play')).toBeVisible();
+        // 小窓 (PiP) も下の帯。並べても一段に収まる (下で見る)
+        await expect(page.getByTestId('watch-controls').getByTestId('watch-pip')).toBeVisible();
 
         /*
          * **読むものが長くても帯を割らない。** 折り返すかは中身の幅で決まるので、

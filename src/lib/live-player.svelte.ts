@@ -1949,6 +1949,18 @@ export function livePlayer() {
         grab(): Promise<ImageBitmap | null> {
             return raw && engine !== null ? engine.grab() : Promise.resolve(null);
         },
+        /**
+         * 生で見ているときの絵の流れ (PiP)。**絵は worker の canvas に居て、`<video>` は
+         * 空のまま**なので、その流れを別の `<video>` に映す (`pip.svelte.ts`)。
+         * 取り方は `RawEngine.pipStream`。生でない・取れない (Firefox) なら null
+         */
+        capture(): MediaStream | null {
+            return raw && engine !== null ? engine.pipStream() : null;
+        },
+        /** 小窓へ絵を流すか (`RawEngine.pipFlow`)。出していない間は写さない */
+        captureFlow(on: boolean): void {
+            engine?.pipFlow(on);
+        },
         /** 生で1コマ解くのに掛かっている時間 (ms、95パーセンタイル)。生でなければ 0 */
         get decodeMs() {
             return decodeMs;

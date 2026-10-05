@@ -41,6 +41,25 @@ export interface RawEvents {
     gaveUp(reason: string): void;
 }
 
+/**
+ * **「再生する音」だと Safari に言う** (Audio Session API。Safari にしか無い)。
+ *
+ * 生の音はページが Web Audio で鳴らしている。言わずにおくと iOS はこれを効果音と
+ * 同じに扱い、**Safari を裏へ回すと止める** — 小窓で観ていても音だけ消えた
+ * (iPhone 15 Pro Max、iOS 27.2)。焼いた道は `<video>` が鳴らすので、初めから
+ * 再生の音として扱われている。消音スイッチで黙らないのも `<video>` と同じになる。
+ * 畳むときは既定 (`auto`) に戻す
+ */
+function playbackSession(on: boolean): void {
+    const session = (navigator as Navigator & { audioSession?: { type: string } }).audioSession;
+    if (session === undefined) return;
+    try {
+        session.type = on ? 'playback' : 'auto';
+    } catch {
+        // 受け付けない種類。言えなくても鳴らすことはできる
+    }
+}
+
 export class RawEngine {
     readonly canvas: HTMLCanvasElement;
     private readonly worker: Worker;
@@ -92,6 +111,7 @@ export class RawEngine {
         let context: AudioContext | null = null;
         let worker: Worker | null = null;
         try {
+            playbackSession(true);
             this.context = context = new AudioContext({ latencyHint: 'playback' });
             this.gain = context.createGain();
             this.gain.connect(context.destination);
@@ -110,6 +130,7 @@ export class RawEngine {
         } catch (error) {
             worker?.terminate();
             void context?.close().catch(() => undefined);
+            playbackSession(false);
             this.canvas.remove();
             throw error;
         }
@@ -211,6 +232,39 @@ export class RawEngine {
         });
     }
 
+    /**
+     * 小窓 (PiP) へ出す絵の流れ。**Chrome は worker が描いたコマを直に書き込む**
+     * (`MediaStreamTrackGenerator`。`worker.ts` の `toPip`)。canvas の画面への更新から取る
+     * (`captureStream`) と、窓が隠れて画面の更新が止まったとき絵も止まる。
+     *
+     * 書き込む口が無い Safari は `captureStream` (iPhone で小窓に出せている)。
+     * Firefox はどちらも無い (worker に渡した canvas からは流れを取れない) ので null
+     */
+    pipStream(): MediaStream | null {
+        const Generator = (
+            globalThis as {
+                MediaStreamTrackGenerator?: new (init: {
+                    kind: 'video';
+                }) => MediaStreamTrack & { writable: WritableStream<VideoFrame> };
+            }
+        ).MediaStreamTrackGenerator;
+        try {
+            if (typeof Generator === 'function') {
+                const generator = new Generator({ kind: 'video' });
+                this.send({ type: 'pip', writable: generator.writable }, [generator.writable]);
+                return new MediaStream([generator]);
+            }
+            return this.canvas.captureStream();
+        } catch {
+            return null;
+        }
+    }
+
+    /** 小窓へ書き込むか (`pipStream` の直に書き込む道だけ)。出していない間は写さない */
+    pipFlow(on: boolean): void {
+        this.send({ type: 'pipFlow', on });
+    }
+
     destroy(): void {
         if (this.gone) return;
         this.gone = true;
@@ -219,6 +273,7 @@ export class RawEngine {
         this.stopAll();
         this.worker.terminate();
         void this.context.close().catch(() => undefined);
+        playbackSession(false);
         this.canvas.remove();
     }
 

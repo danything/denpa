@@ -945,6 +945,110 @@ test.describe('ライブ視聴', () => {
     });
 
     /*
+     * **小窓 (PiP) で観られる。小窓で押した止める・再開は帯にも写る。**
+     *
+     * 小窓の再生ボタンは `<video>` を直に止めるが、ライブは「止めているか」を player 側で
+     * 持っている (`live-player` の `paused`)。合わせないと、小窓で止めたのに帯は
+     * 「一時停止」のまま、押すと止まっている絵をもう一度止めることになる。
+     *
+     * 偽の ffmpeg が流すものは MSE が受け取れず再生が始まらない (上) ので、ブラウザの
+     * 小窓の口は差し替えて、押された・出た・閉じたの繋がりだけを見る
+     */
+    test('小窓で観られ、小窓で止めると帯も止まる', async ({ page }) => {
+        await page.addInitScript(() => {
+            let shown: Element | null = null;
+            Object.defineProperty(Document.prototype, 'pictureInPictureEnabled', { get: () => true });
+            Object.defineProperty(Document.prototype, 'pictureInPictureElement', { get: () => shown });
+            HTMLVideoElement.prototype.requestPictureInPicture = async function () {
+                shown = this;
+                this.dispatchEvent(new Event('enterpictureinpicture'));
+                return {} as PictureInPictureWindow;
+            };
+            Document.prototype.exitPictureInPicture = async () => {
+                const was = shown;
+                shown = null;
+                was?.dispatchEvent(new Event('leavepictureinpicture'));
+            };
+        });
+        await goto(page, '/live');
+        await page.getByTestId('live-channel').first().click();
+        await expect(page.getByTestId('live-title')).toBeVisible();
+
+        await wakeControls(page, 'live-frame');
+        const pip = page.getByTestId('live-pip');
+        await expect(pip).toHaveAttribute('aria-label', '小窓で観る');
+        await pip.click();
+        await expect(pip).toHaveAttribute('aria-pressed', 'true');
+        await expect(pip).toHaveAttribute('aria-label', '小窓をやめる');
+        expect(
+            await page.getByTestId('live-video').evaluate((v) => document.pictureInPictureElement === v),
+        ).toBe(true);
+
+        // 小窓の再生ボタンで止める・再開する (`<video>` が直に止まり、`pause` / `play` が来る)
+        const play = page.getByTestId('live-play');
+        const press = (paused: boolean) =>
+            page.getByTestId('live-video').evaluate((v, paused) => {
+                Object.defineProperty(v, 'paused', { configurable: true, get: () => paused });
+                v.dispatchEvent(new Event(paused ? 'pause' : 'play'));
+            }, paused);
+        await expect(play).toHaveAttribute('aria-label', '一時停止');
+        await press(true);
+        await expect(play).toHaveAttribute('aria-label', '再生');
+        await press(false);
+        await expect(play).toHaveAttribute('aria-label', '一時停止');
+
+        await wakeControls(page, 'live-frame');
+        await pip.click();
+        await expect(pip).toHaveAttribute('aria-pressed', 'false');
+        expect(await page.evaluate(() => document.pictureInPictureElement)).toBeNull();
+    });
+
+    /*
+     * **断られたら理由を出す。** 黙って何も起きないと、どこで転んだのか端末の上で
+     * 見分けられない (iPhone の Safari で、生のときだけ出なかった)
+     */
+    test('小窓を断られたら、理由をトーストで言う', async ({ page }) => {
+        await page.addInitScript(() => {
+            Object.defineProperty(Document.prototype, 'pictureInPictureEnabled', { get: () => true });
+            HTMLVideoElement.prototype.requestPictureInPicture = async () => {
+                throw new DOMException('ユーザーの操作が要る', 'NotAllowedError');
+            };
+        });
+        await goto(page, '/live');
+        await page.getByTestId('live-channel').first().click();
+        await expect(page.getByTestId('live-title')).toBeVisible();
+
+        await wakeControls(page, 'live-frame');
+        await page.getByTestId('live-pip').click();
+        await expect(
+            page.getByText('小窓を出せませんでした: ブラウザに断られました (NotAllowedError'),
+        ).toBeVisible();
+        await expect(page.getByTestId('live-pip')).toHaveAttribute('aria-pressed', 'false');
+    });
+
+    /*
+     * **出せない端末ではボタンを出さない。** iPhone・iPad のホーム画面から開いたもの (PWA) は、
+     * 口は有るように見えるのに Safari が小窓を許していない。ページから開かせる口の無いブラウザも出さない
+     * (ブラウザ自身の小窓の切り替えは別に使える)
+     */
+    test('小窓を出せない端末では、小窓のボタンを出さない', async ({ browser }) => {
+        for (const script of [
+            // iPhone のホーム画面から開いた
+            () => Object.defineProperty(Navigator.prototype, 'standalone', { get: () => true }),
+            // ページから開かせる口が無い
+            () => Object.defineProperty(Document.prototype, 'pictureInPictureEnabled', { get: () => false }),
+        ]) {
+            const context = await browser.newContext();
+            const page = await context.newPage();
+            await page.addInitScript(script);
+            await goto(page, '/live');
+            await expect(page.getByTestId('live-full')).toBeVisible();
+            await expect(page.getByTestId('live-pip')).toHaveCount(0);
+            await context.close();
+        }
+    });
+
+    /*
      * **放送に終わりは無いと言っておく。** 何も言わないと MediaSource の尺は
      * 「いま持っている中でいちばん後ろ」になり、0.2秒ごとに中身が届くたびに
      * 伸びる。備え付けの再生位置が右端まで行っては少し左へ戻る、を繰り返す

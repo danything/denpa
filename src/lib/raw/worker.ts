@@ -88,6 +88,11 @@ let near: number | null = null;
 let clock: { pts: number; at: number } | null = null;
 /** いま出しているコマ */
 let current: { pts: number; interlaced: boolean; topFirst: boolean } | null = null;
+/** 描く先。小窓へ書き込むときに、描いたものをここから写す (`toPip`) */
+let surface: OffscreenCanvas | null = null;
+/** 小窓 (PiP) の書き込み口と、書き込むか (`messages.ts` の `pip` / `pipFlow`) */
+let pip: WritableStreamDefaultWriter<VideoFrame> | null = null;
+let pipFlowing = true;
 /** 最後に描いたもの。**同じなら描き直さない** */
 let drawn = { pts: Number.NaN, field: Number.NaN };
 let frameTicks = FRAME;
@@ -284,11 +289,39 @@ function draw(field: number): void {
     if (drawn.pts === current.pts && drawn.field === field) return;
     renderer.draw(field);
     drawn = { pts: current.pts, field };
+    toPip();
     shown++;
     if (!shownSinceReset) {
         shownSinceReset = true;
         post({ type: 'shown' });
     }
+}
+
+/**
+ * 描いたばかりの1コマを小窓へ書き込む。**描いたのと同じ回のうちに写す** — 描いたものは
+ * 残さない作り (`preserveDrawingBuffer` 無し) なので、回をまたぐと消えている。
+ *
+ * canvas の画面への更新 (`captureStream`) から取っていた頃は、Ubuntu (GNOME) で Chrome の
+ * 窓が小窓の後ろに隠れると絵が止まった。隠れた窓は画面の更新が回らず、canvas も
+ * 更新されない (ページは見えている扱いのまま。Alt+Tab で縮小図を描かせると動き出す)。
+ * 書き込みは画面の更新と関係なく流れる。
+ *
+ * **詰まっていたら捨てる** (`desiredSize`)。小窓が受け取りきれないまま積むと遅れていく
+ */
+function toPip(): void {
+    if (pip === null || !pipFlowing || surface === null || (pip.desiredSize ?? 0) <= 0) return;
+    let frame: VideoFrame;
+    try {
+        frame = new VideoFrame(surface, { timestamp: Math.round(performance.now() * 1000) });
+    } catch {
+        return;
+    }
+    const writer = pip;
+    writer.write(frame).catch(() => {
+        // 受け手が畳まれた (小窓の流れを止めた・生を出た)。もう書かない
+        frame.close();
+        if (pip === writer) pip = null;
+    });
 }
 
 /** 刻むたびに: 番の近いものを解き、番が来たコマを出す */
@@ -413,6 +446,7 @@ async function grab(id: number): Promise<void> {
 async function init(canvas: OffscreenCanvas, base: string): Promise<void> {
     try {
         renderer = new YuvRenderer(canvas);
+        surface = canvas;
     } catch (error) {
         fail(`描けません (${error instanceof Error ? error.message : String(error)})`);
         return;
@@ -464,6 +498,15 @@ scope.onmessage = (event: MessageEvent<ToWorker>) => {
             break;
         case 'grab':
             void grab(message.id);
+            break;
+        case 'pip':
+            void pip?.abort().catch(() => undefined);
+            pip = message.writable.getWriter();
+            // 1枚目は書く (受け手がコマの大きさを知るまで小窓に出せない)。そのあとは画面が決める
+            pipFlowing = true;
+            break;
+        case 'pipFlow':
+            pipFlowing = message.on;
             break;
     }
 };
