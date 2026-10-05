@@ -82,7 +82,7 @@ URLは使い続けているかぎり切れません。全部を今すぐ切り�
 
 秘密を含むので環境変数だけから読み、設定画面には出しません。
 
-> **scheme は `x-forwarded-proto` から読みます** (`server.js` が常に設定する)。
+> **scheme は `x-forwarded-proto` から読みます** (`server.js` が常に設定する。前段が付けなければ、受けた接続の scheme を入れる)。
 > 戻ってくる口の住所も、控えの Cookie に `Secure` を付けるかどうかも、リクエストの
 > scheme で決めます。前段が接頭辞を剥がして渡す構成 (`/denpa` の下など) では、前段が付ける
 > `X-Forwarded-Prefix` (Home Assistant は `X-Ingress-Path`) を戻ってくる口の頭に付けます
