@@ -133,6 +133,16 @@ Bun.serve({
         // **消すだけでは効かない。** `fetch` は無ければ自分で付け直すので、
         // 「圧縮しないでくれ」と明示する
         headers.set('accept-encoding', 'identity');
+        /*
+         * **前段が居なければ、受けた接続のスキームを `x-forwarded-proto` に入れる。**
+         * adapter-node はこのヘッダが無いと自分を https と決め打つ。`http://<IP>:3000` に
+         * 直に繋ぐと、ブラウザの Origin (http) と食い違って POST が全部 CSRF の 403 になり、
+         * ライブの札 (POST) も取れず「繋がりませんでした」になっていた (#437)。
+         * 前段が付けてきた値はそのまま使う
+         */
+        if (!headers.has('x-forwarded-proto')) {
+            headers.set('x-forwarded-proto', url.protocol.slice(0, -1));
+        }
         // 本当の接続元 (上の説明)
         headers.set(
             REMOTE_HEADER,

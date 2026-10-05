@@ -13,9 +13,6 @@ import { test as base } from '@playwright/test';
  * 1つのファイルの中でテストが前のテストの結果を当てにしている書き方はそのまま通る。
  */
 
-/** 平文で叩いていることを denpa に伝えるヘッダ (下の `extraHTTPHeaders`) */
-const PLAIN_HTTP = { 'x-forwarded-proto': 'http' };
-
 /** 作業領域。global-setup で毎回まっさらにする */
 export const TEST_ROOT = '/tmp/denpa-e2e';
 
@@ -178,9 +175,8 @@ async function boot(index: number): Promise<{ stack: Stack; shutdown: () => Prom
             HOST: '127.0.0.1',
             PORT: String(appPort),
             /*
-             * 平文で叩いていることは、ブラウザとリクエストの両方に `x-forwarded-proto: http` を
-             * 付けて伝える (下の `extraHTTPHeaders`・`request`)。以前ここで渡していた
-             * `ORIGIN` は adapter-node 6 で無くなった
+             * 平文で叩いていることは伝えない。前段の居ない `http://<IP>:3000` と同じく、
+             * server.js が受けた接続から `x-forwarded-proto: http` を入れる (#437)
              */
             DENPA_DB: `${root}/denpa.db`,
             RAW_DIR: stack.rawDir,
@@ -384,18 +380,6 @@ export const test = base.extend<{ anonymous: Anonymous }, { stack: Stack }>({
         await use(stack.appUrl);
     },
     /*
-     * **平文で来ていると伝える。** 前段が居ないと adapter-node は https と決め打ち、
-     * 自分の origin (`https://…`) とブラウザの Origin (`http://…`) が食い違って、
-     * フォームの送信が全部 CSRF として 403 になる (画面上は「押しても何も起きない」)。
-     * 以前は `ORIGIN` で自分の origin を固定していたが、adapter-node 6 で無くなった
-     * (代わりの `paths.origin` は組むときに決まるので、ワーカーごとのポートを入れられない)
-     */
-    // biome-ignore lint/correctness/noEmptyPattern: Playwright は分割代入でないと受け付けない
-    extraHTTPHeaders: async ({}, use) => {
-        await use(PLAIN_HTTP);
-    },
-
-    /*
      * API から直接投げるとき用。
      *
      * SvelteKit はフォーム形式の POST を Origin ヘッダで見ていて、付いていないものは
@@ -407,7 +391,7 @@ export const test = base.extend<{ anonymous: Anonymous }, { stack: Stack }>({
     request: async ({ playwright, stack, httpCredentials }, use) => {
         const context = await playwright.request.newContext({
             baseURL: stack.appUrl,
-            extraHTTPHeaders: { Origin: stack.appUrl, ...PLAIN_HTTP },
+            extraHTTPHeaders: { Origin: stack.appUrl },
             ...(httpCredentials === undefined ? {} : { httpCredentials }),
         });
         await use(context);
