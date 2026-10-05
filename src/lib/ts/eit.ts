@@ -54,7 +54,7 @@ const SCHEDULE_OTHER_MIN = 0x60;
 const SCHEDULE_OTHER_MAX = 0x6f;
 const OTHER_SHIFT = SCHEDULE_OTHER_MIN - SCHEDULE_ACTUAL_MIN;
 
-export interface EventAudio {
+interface EventAudio {
     componentType: number;
     langs: string[];
     samplingRate?: number;

@@ -1,7 +1,7 @@
-import { statSync } from 'node:fs';
 import { fail } from '@sveltejs/kit';
 import { and, asc, desc, eq, getTableColumns, inArray, isNull, like, ne, not, or, sql } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/sqlite-core';
+import { fileSize } from '#lib/server/chase.js';
 import { orm } from '#lib/server/db.js';
 import { cancel as cancelEncode, enqueue, isCanceling, pump } from '#lib/server/encoder.js';
 import { emit } from '#lib/server/events.js';
@@ -100,19 +100,6 @@ interface ReservationRow extends Omit<Reservation, 'state'> {
     has_logo: boolean | null;
     /** 録画中の録画のID。追っかけ再生 (`/chase/<id>`) への入口 (issue #16) */
     recording_id: number | null;
-}
-
-/**
- * ファイルの大きさ (`raw_size` / `alt_size`。出すときの決まりは RecordingRow)。
- * 実ファイルを見るのは、外から消されていることがあるため (files.reconcile)
- */
-function fileSize(path: string | null): number | null {
-    if (path === null) return null;
-    try {
-        return statSync(path).size;
-    } catch {
-        return null;
-    }
 }
 
 /**
@@ -248,8 +235,9 @@ export function load({ url }) {
         .all()
         .map((row) => ({
             ...row,
-            raw_size: row.library_path === null ? null : fileSize(row.ts_path),
-            alt_size: fileSize(row.alt_path),
+            // 実ファイルを見る。外から消されていることがあるため (files.reconcile)。出すときの決まりは RecordingRow
+            raw_size: row.library_path === null || row.ts_path === null ? null : fileSize(row.ts_path),
+            alt_size: row.alt_path === null ? null : fileSize(row.alt_path),
             job_canceling: row.job_id !== null && isCanceling(row.job_id),
         }));
 

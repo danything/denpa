@@ -102,7 +102,7 @@ export function issueCode(name: string, at = now()): IssuedCode | null {
     throw new Error('札を作れませんでした');
 }
 
-export type CodeState = 'pending' | 'approved' | 'expired' | 'consumed';
+type CodeState = 'pending' | 'approved' | 'expired' | 'consumed';
 
 export interface CodeView {
     userCode: string;

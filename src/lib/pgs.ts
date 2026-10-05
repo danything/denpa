@@ -123,12 +123,14 @@ export function isBt709(height: number): boolean {
     return height <= 0 || height > 576;
 }
 
+/** 色の成分を 0〜255 の整数に収める */
+const clamp = (v: number) => Math.max(0, Math.min(255, Math.round(v)));
+
 function toYCrCb(r: number, g: number, b: number, bt709: boolean): [number, number, number] {
     // 係数は読む側 (YUV_TO_RGB1_CCIR / _BT709) の裏返し。224/255 ÷ 各係数
     const y = bt709 ? 0.2126 * r + 0.7152 * g + 0.0722 * b : 0.299 * r + 0.587 * g + 0.114 * b;
     const toCb = bt709 ? 0.473_39 : 0.495_73;
     const toCr = bt709 ? 0.557_8 : 0.626_56;
-    const clamp = (v: number) => Math.max(0, Math.min(255, Math.round(v)));
     return [clamp(16 + (y * 219) / 255), clamp((r - y) * toCr + 128), clamp((b - y) * toCb + 128)];
 }
 
@@ -537,7 +539,6 @@ function fromYCrCb(y: number, cr: number, cb: number, bt709: boolean): [number, 
     const kg = bt709 ? 0.7152 : 0.587;
     const kb = bt709 ? 0.0722 : 0.114;
     const g = (luma - kr * r - kb * b) / kg;
-    const clamp = (v: number) => Math.max(0, Math.min(255, Math.round(v)));
     return [clamp(r), clamp(g), clamp(b)];
 }
 
