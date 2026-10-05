@@ -322,7 +322,7 @@ SQLite が拒むので、事実と状態が食い違いません。文字列で�
 | `agent/Denpa.Agent/Program.cs` | HTTP の口 (Kestrel)。選局・チャンネルの控え・カード・解除・知らせ |
 | `agent/Denpa.Agent/TunerPool.cs` | 優先度つきの取り合いと、掴んでいるデバイスの面倒 |
 | `agent/Denpa.Agent/Tuning.cs` | 選局そのもの (DVB)。掴んだまま変えられる |
-| `agent/Denpa.Agent/Px4.cs` | px4-userland の機材 (PX-Q3U4 / PX-MLT 系 …) を掴む。筐体と受信機は `px4d --list-json` (古い px4d は `--list`) に聞き、受信機は px4d の制御ソケットで借りたまま選局し直す |
+| `agent/Denpa.Agent/Px4.cs` | px4-userland の機材 (PX-Q3U4 / PX-MLT 系 …) を掴む。筐体と受信機は `px4d --list-json` (px4-userland 0.1.9 以上) に聞き、受信機は px4d の制御ソケットで借りたまま選局し直す |
 | `agent/Denpa.Agent/Siano.cs` | siano-userland の機材 (PX-S1UD …) を掴む。機材は `siano-ts --list` に聞き、カーネルが掴んでいないものだけを `--control` で起こしたまま選局し直す |
 | `agent/Denpa.Agent/Px4Control.cs` | px4d の制御ソケット (SPEC 6 節の portable IPC)。受信機 (`Px4.cs`) とカード (`Px4Card.cs`) が使う |
 | `agent/Denpa.Agent/ChildTs.cs` | 子プロセス (siano-ts) の標準出力を読み口に載せる。pipe の広げ方・閉じ方 |
@@ -331,7 +331,7 @@ SQLite が拒むので、事実と状態が食い違いません。文字列で�
 | `agent/Denpa.Agent/B25.cs` / `Multi2.cs` | B25 の解除 (TS から ECM を拾い、鍵を貰って MULTI2 で解く) |
 | `agent/Denpa.Agent/BCas.cs` / `CardLinks.cs` | B-CAS へのコマンドと、カードリーダーを探して繋ぎ直す |
 | `agent/Denpa.Agent/Ccid.cs` / `T1.cs` / `UsbFs.cs` | USB の CCID カードリーダーを usbfs で直に叩く (pcscd を使わない) |
-| `agent/Denpa.Agent/Pcsc.cs` | macOS の USB カードリーダー (OS の PCSC.framework 越し) |
+| `agent/Denpa.Agent/Pcsc.cs` | macOS と Windows の USB カードリーダー (OS の PC/SC 越し。PCSC.framework / winscard.dll) |
 | `agent/Denpa.Agent/Px4Card.cs` | px4-userland の内蔵カードリーダーに px4d の control socket で APDU を投げる |
 | `agent/Denpa.Agent/CardShare.cs` | 鍵をどこから貰うか (手元のカード / 別の拠点) と、鍵を他の拠点へ配る口 |
 | `agent/Denpa.Agent/Card.cs` | カードが読めているかと、掛かったまま録れた TS の後からの解除 |
@@ -348,7 +348,7 @@ SQLite が拒むので、事実と状態が食い違いません。文字列で�
 環境変数は `AGENT_PORT` (既定 `25252`)・`TUNERS_FILE` / `CHANNELS_FILE` (既定 `/config/` の下)・
 `MEDIA_DIR` / `RAW_DIR` (denpa と同じ。生TSの置き場)・`CARD_URL` (手元にカードが無い拠点だけ。鍵を貰う先)・
 `SHUTDOWN_WAIT` (denpa と同じ)。同梱のドライバの置き場 `PX4_USERLAND_DIR` / `PX4_FIRMWARE` / `PX4_RUNTIME_DIR` /
-`SIANO_USERLAND_DIR` / `SIANO_FIRMWARE` はイメージの既定のままでよい (Mac の `install.sh` だけが書き換える)。
+`SIANO_USERLAND_DIR` / `SIANO_FIRMWARE` はイメージの既定のままでよい (Mac の `install.sh` と Windows の `install.ps1` だけが書き換える)。
 `FAKE_TUNE` は適合テストだけが使う。
 
 ## テスト

@@ -9,10 +9,10 @@ COPY package.json bun.lock* ./
 RUN bun install
 
 # ---------------------------------------------------------------------------
-# 放送の MPEG-2 をブラウザで解く WebAssembly (docs/stream.md §5.5「生で送る」)
+# 放送の MPEG-2 と AAC をブラウザで解く WebAssembly (docs/stream.md §5.5「生で送る」)
 #
-# **ブラウザには MPEG-2 の復号器が無い**ので、FFmpeg の mpeg2video だけを組んで
-# 持ち込む。出てくるのは decoder.mjs と decoder.wasm の2つ (合わせて 500KB ほど) で、
+# **ブラウザには MPEG-2 の復号器が無い**ので、FFmpeg の mpeg2video と aac だけを組んで
+# 持ち込む。出てくるのは decoder.mjs と decoder.wasm の2つ (wasm 855KB + mjs 14KB で 870KB ほど) で、
 # どの arch で組んでも中身は同じ (wasm なので)。**置き場はアプリの外** (/opt/denpa/mpeg2) —
 # 開発と E2E の compose はソースを /app に被せるので、/app の中に置くと隠れる。
 # 配るのは `/api/live/mpeg2/<名前>` (MPEG2_DIR を読む)。
