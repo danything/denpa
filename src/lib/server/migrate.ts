@@ -9,16 +9,29 @@
  * 取り込みが済んで中身を確認してから消せる。容量が無いときは move を使う。
  *
  * 何度実行しても同じ結果になる。取り込み済みのものは EPGStation 側のIDで判別して飛ばす。
+ * ファイルを置き終えてから行を入れるので、途中で止まっても「ファイルの無い行」は残らない ({@link importOne})。
  */
-import { copyFileSync, existsSync, mkdirSync, renameSync, statSync, unlinkSync } from 'node:fs';
-import { dirname, join } from 'node:path';
+import {
+    copyFileSync,
+    existsSync,
+    linkSync,
+    mkdirSync,
+    readdirSync,
+    renameSync,
+    rmSync,
+    statSync,
+    unlinkSync,
+} from 'node:fs';
+import { dirname, extname, join } from 'node:path';
 import { SQL } from 'bun';
 import { and, eq, isNull } from 'drizzle-orm';
 import { parseSearchFields, SEARCH_FIELDS } from '#lib/search.js';
 import { array, number, read } from '#lib/shape.js';
+import type { Recording } from '../types';
+import { config } from './config';
 import { now, orm } from './db';
 import { emit } from './events';
-import { libraryPath, recordedPath } from './library';
+import { type LibraryNameInput, libraryPath, recordedPath } from './library';
 import { writeThumbnail } from './metadata';
 import { reserve } from './reservations';
 import { programs, recordings, rules, services } from './schema';
@@ -129,7 +142,7 @@ function record(message: string): void {
     if (status_.log.length > LOG_LIMIT) status_.log.splice(0, status_.log.length - LOG_LIMIT);
 }
 
-interface Row {
+export interface Row {
     id: number;
     name: string;
     description: string | null;
@@ -185,15 +198,113 @@ async function fetchRows(): Promise<Row[]> {
     }
 }
 
-/** 1件を取り込む。結果は imported / skipped (取り込み済み) / missing (ファイルが無い) */
-async function importOne(row: Row, options: MigrateOptions): Promise<'imported' | 'skipped' | 'missing'> {
-    // 取り込み済みは EPGStation 側のIDで判別する
-    const already = orm()
-        .select({ id: recordings.id })
+/**
+ * 取り込みの途中のファイル (`.epgstation-<EPGStationのID><拡張子>.migrating`)。
+ *
+ * **置き場と同じフォルダに書き、写し終えてから最終の名前へ rename する。**
+ * 同じファイルシステムの中なので rename は一瞬で済み、最終の名前に
+ * 書きかけのものが並ぶことは無い。頭の `.` は、フォルダを辿るプレイヤーに見せないため。
+ * 落ちて取り残されたものは次の実行の頭で片付ける ({@link sweepTemporaries})
+ */
+const TEMPORARY = /^\.epgstation-\d+\..+\.migrating$/;
+
+function temporaryPath(dir: string, sourceId: number, extension: string): string {
+    return join(dir, `.epgstation-${sourceId}${extension}.migrating`);
+}
+
+/**
+ * 前の実行が取り残した書きかけを消す。
+ *
+ * 置き場は生TSの置き場の直下と、保存先のシリーズのフォルダ (`libraryPath` の形)。
+ * 走るのは一度に1つだけ (`start`) なので、ここで見つかるものは誰も書いていない
+ */
+export function sweepTemporaries(): number {
+    const dirs = [config.rawDir, config.encodedDir];
+    try {
+        for (const entry of readdirSync(config.encodedDir, { withFileTypes: true })) {
+            if (entry.isDirectory()) dirs.push(join(config.encodedDir, entry.name));
+        }
+    } catch {
+        // 保存先がまだ無い。書きかけも無い
+    }
+    let removed = 0;
+    for (const dir of dirs) {
+        let names: string[];
+        try {
+            names = readdirSync(dir);
+        } catch {
+            continue;
+        }
+        for (const name of names) {
+            if (!TEMPORARY.test(name)) continue;
+            rmSync(join(dir, name), { force: true });
+            removed++;
+        }
+    }
+    return removed;
+}
+
+/**
+ * 元のファイルを書きかけの名前へ置く。
+ *
+ * **移動でも元はまだ消さない。** 消すのは DB に入れ終えてから (`importOne`)。
+ * 先に消すと、途中で落ちたときに元も行も無くなる。同じファイルシステムなら
+ * ハードリンクで済ませる (容量を食わない)。PVC をまたぐと張れないので写す。
+ *
+ * ハードリンクの書きかけは mtime が元のまま (古い) なので、`reconcile` の掃除
+ * (書きたてかを mtime で見る) から守られない。ただしリンクを張ってから rename するまでは
+ * 同期処理だけで await を挟まないので、同じプロセスの `reconcile` が割り込む余地は無い
+ */
+function stage(from: string, temporary: string, move: boolean): void {
+    if (move) {
+        try {
+            linkSync(from, temporary);
+            return;
+        } catch {
+            // EXDEV (PVCをまたぐ) など。写せば済む
+        }
+    }
+    copyFileSync(from, temporary);
+}
+
+/** 取り込み済みの行。EPGStation 側のIDの符号を反転して program_id に入れてある */
+function importedRow(sourceId: number): Recording | undefined {
+    return orm()
+        .select()
         .from(recordings)
-        .where(and(eq(recordings.program_id, -row.id), isNull(recordings.reservation_id)))
+        .where(and(eq(recordings.program_id, -sourceId), isNull(recordings.reservation_id)))
         .get();
-    if (already !== undefined) return 'skipped';
+}
+
+/** 行の指すファイルが1つでも実在するか */
+function hasFile(recording: Recording): boolean {
+    return [recording.ts_path, recording.library_path, recording.alt_path].some(
+        (path) => path !== null && existsSync(path),
+    );
+}
+
+/**
+ * 1件を取り込む。結果は imported / skipped (取り込み済み) / missing (ファイルが無い)。
+ *
+ * **ファイルを置き終えてから行を入れる。** 写す → 最終の名前へ rename → DB、の順で、
+ * rename と DB への書き込みを1つのトランザクションに入れる。途中で落ちても、
+ * 失敗しても「ファイルの無い行」は残らない:
+ *
+ * - 写している途中で落ちた・失敗した … 行は無い。書きかけは消す (落ちたなら次の実行の頭で)
+ * - rename したあとに DB が失敗した … 置いたファイルを消す。元はまだ残っているので、
+ *   次の実行で最初からやり直せる
+ *
+ * **行はあるのにファイルが無いものは、取り込み済みと見なさない。** 先に行を入れていた
+ * 頃の版が途中で止まると、そういう行が残っている。同じ行 (同じ録画ID) のまま置き直す。
+ * ただし denpa 側で消したもの (`deleted_at`。外から消えて `reconcile` が倒したものも含む)
+ * は戻さない — 消したという判断のほうを尊重する
+ */
+export async function importOne(
+    row: Row,
+    options: MigrateOptions,
+): Promise<'imported' | 'skipped' | 'missing'> {
+    const existing = importedRow(row.id);
+    if (existing !== undefined && (existing.deleted_at !== null || hasFile(existing))) return 'skipped';
 
     if (row.filePath === null) {
         record(`ファイルが無い: ${row.name}`);
@@ -206,44 +317,11 @@ async function importOne(row: Row, options: MigrateOptions): Promise<'imported' 
     }
 
     const name = toHalfWidth(row.name);
-    record(`${options.apply ? '取り込む' : '取り込む(予定)'}: ${name}`);
+    const verb = existing === undefined ? '取り込む' : '取り込み直す';
+    record(`${options.apply ? verb : `${verb}(予定)`}: ${name}`);
     if (!options.apply) return 'imported';
 
     const parsed = parseTitle(name);
-    // 局が分からない行 (networkId / serviceId が NULL) は照合しない。局名だけ写す
-    const service =
-        row.networkId === null || row.serviceId === null
-            ? undefined
-            : orm()
-                  .select({ id: services.id, name: services.name })
-                  .from(services)
-                  .where(and(eq(services.network_id, row.networkId), eq(services.service_id, row.serviceId)))
-                  .get();
-
-    const at = now();
-    // program_id は EPGStation のIDの符号を反転して入れる。
-    // denpa の番組IDと衝突せず、二重取り込みの判定にも使える
-    const { id } = orm()
-        .insert(recordings)
-        // 録り終えた時刻を入れておく。あとでファイルの置き場所が入れば「視聴可能」になる
-        .values({
-            reservation_id: null,
-            program_id: -row.id,
-            service_id: service?.id ?? 0,
-            service_name: service?.name ?? toHalfWidth(row.channelName ?? ''),
-            name,
-            series: parsed.series,
-            subtitle: parsed.subtitle,
-            description: toHalfWidth(row.description ?? ''),
-            start_at: Number(row.startAt),
-            end_at: Number(row.endAt),
-            finished_at: at,
-            created_at: at,
-            updated_at: at,
-        })
-        .returning({ id: recordings.id })
-        .get()!;
-    const recording = orm().select().from(recordings).where(eq(recordings.id, id)).get()!;
 
     /*
      * 生TSは保存先ではなく作業領域へ置く。
@@ -254,28 +332,111 @@ async function importOne(row: Row, options: MigrateOptions): Promise<'imported' 
      * 同じ形 (生TSは raw、完成品は encoded) に揃える
      */
     const raw = row.fileType !== 'encoded';
-    const extension = from.slice(from.lastIndexOf('.')) || (raw ? '.m2ts' : '.mkv');
-    const to = raw ? recordedPath(recording, extension) : libraryPath(recording, extension);
+    // 拡張子の無い名前で `lastIndexOf('.')` が -1 になると、末尾の1文字を拡張子と読んでしまう
+    const extension = extname(from) || (raw ? '.m2ts' : '.mkv');
+    const destination = (recording: LibraryNameInput) =>
+        raw ? recordedPath(recording, extension) : libraryPath(recording, extension);
 
-    mkdirSync(dirname(to), { recursive: true });
+    /*
+     * 最終の名前は録画IDから決まる (行を入れるまで分からない) が、置くフォルダは
+     * 決まっている (生TSの置き場の直下か、保存先のシリーズのフォルダ)。
+     * そこに書きかけを作るので、あとの rename は同じファイルシステムの中で済む
+     */
+    const dir = dirname(
+        destination(
+            existing ?? {
+                id: 0,
+                series: parsed.series,
+                subtitle: parsed.subtitle,
+                start_at: Number(row.startAt),
+            },
+        ),
+    );
+    mkdirSync(dir, { recursive: true });
+    const temporary = temporaryPath(dir, row.id, extension);
+    rmSync(temporary, { force: true });
+
+    // rename まで済んだら、その置き場所。DB が失敗したときに消すもの
+    let placed: string | null = null;
+    let to: string;
+    try {
+        stage(from, temporary, options.move);
+        const size = statSync(temporary).size;
+
+        // 局が分からない行 (networkId / serviceId が NULL) は照合しない。局名だけ写す
+        const service =
+            row.networkId === null || row.serviceId === null
+                ? undefined
+                : orm()
+                      .select({ id: services.id, name: services.name })
+                      .from(services)
+                      .where(
+                          and(eq(services.network_id, row.networkId), eq(services.service_id, row.serviceId)),
+                      )
+                      .get();
+
+        to = orm().transaction((tx) => {
+            const at = now();
+            // program_id は EPGStation のIDの符号を反転して入れる。
+            // denpa の番組IDと衝突せず、二重取り込みの判定にも使える
+            const recording =
+                existing ??
+                tx
+                    .insert(recordings)
+                    .values({
+                        reservation_id: null,
+                        program_id: -row.id,
+                        service_id: service?.id ?? 0,
+                        service_name: service?.name ?? toHalfWidth(row.channelName ?? ''),
+                        name,
+                        series: parsed.series,
+                        subtitle: parsed.subtitle,
+                        description: toHalfWidth(row.description ?? ''),
+                        start_at: Number(row.startAt),
+                        end_at: Number(row.endAt),
+                        finished_at: at,
+                        created_at: at,
+                        updated_at: at,
+                    })
+                    .returning()
+                    .get();
+            const target = destination(recording);
+            renameSync(temporary, target);
+            placed = target;
+            // 置き直すときは、行に残っている実体の無いパスも外す
+            tx.update(recordings)
+                .set({
+                    ts_path: raw ? target : null,
+                    library_path: raw ? null : target,
+                    alt_path: null,
+                    ts_size: size,
+                    updated_at: at,
+                })
+                .where(eq(recordings.id, recording.id))
+                .run();
+            return target;
+        });
+    } catch (error) {
+        // 行は入っていない (トランザクションごと戻る)。置いたものも書きかけも片付けて、
+        // 失敗はこれまでどおり上 (run) へ投げる。元は残っているので次の実行でやり直せる
+        rmSync(temporary, { force: true });
+        if (placed !== null) rmSync(placed, { force: true });
+        throw error;
+    }
+    /*
+     * 移動なら、行が入ってはじめて元を消す。
+     *
+     * **消せなくても取り込みは失敗にしない。** 行もファイルも揃っていて、次の実行は
+     * 取り込み済みとして飛ばす。元の置き場が読み取り専用などで消せないときは、
+     * 元が残ったことだけ記録に出す
+     */
     if (options.move) {
         try {
-            renameSync(from, to);
-        } catch {
-            // PVCをまたぐと rename は使えない
-            copyFileSync(from, to);
             unlinkSync(from);
+        } catch (error) {
+            record(`取り込んだが元を消せなかった: ${from} (${String(error)})`);
         }
-    } else {
-        copyFileSync(from, to);
     }
-
-    const placed = raw ? { ts_path: to } : { library_path: to };
-    orm()
-        .update(recordings)
-        .set({ ...placed, ts_size: statSync(to).size, updated_at: now() })
-        .where(eq(recordings.id, id))
-        .run();
 
     // サムネイルは保存先に置いたものにだけ付ける。作業領域は画面に出ない
     if (!raw) {
@@ -495,6 +656,11 @@ async function run(options: MigrateOptions): Promise<void> {
                 `予約 取り込み ${status_.reservations.imported} 件 / 対象外 ${status_.reservations.skipped} 件`,
         );
         emit('migrate');
+
+        if (options.apply) {
+            const swept = sweepTemporaries();
+            if (swept > 0) record(`前の実行の書きかけを片付けました: ${swept} 件`);
+        }
 
         const rows = await fetchRows();
         status_.total = rows.length;
