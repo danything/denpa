@@ -534,8 +534,14 @@
         color: var(--pico-primary);
         font-weight: 600;
     }
+    /*
+     * **余白の幅は `--dp-gutter` で配る。** スマホの縦で映像だけ端まで広げる
+     * (`PlayerStage`) のに、同じ幅だけ外へはみ出させるため。数字を2か所に
+     * 書くと、片方だけ変えたときに映像が横にずれる
+     */
     main {
-        padding: 1rem;
+        --dp-gutter: 1rem;
+        padding: var(--dp-gutter);
     }
     @media (min-width: 640px) {
         ul.links {
@@ -547,7 +553,7 @@
     }
     @media (min-width: 768px) {
         main {
-            padding: 1.5rem;
+            --dp-gutter: 1.5rem;
         }
         .shell.fill {
             height: 100%;

@@ -394,7 +394,8 @@ test.describe('録画を観る', () => {
 });
 
 /**
- * **スマホの縦で、全画面をやめて観る。** 枠は 358x224 しか無い。
+ * **スマホの縦で、全画面をやめて観る。** 枠は 390x224 しか無い (画面の端から端まで。
+ * 余白の内側に置いていた頃は 358x224)。
  *
  * 48px の押すものを全部並べていた頃は、帯が折れて絵を覆い、右の縦列 (閉じる・
  * 切り抜き・削除) がシークバーや再生ボタンに重なっていた (実機の報告)。狭い枠では
@@ -442,12 +443,15 @@ test.describe('スマホの縦で観る', () => {
                     (el) => rect(el).left < stage.left || rect(el).right > stage.right,
                 ),
                 横に動く: document.documentElement.scrollWidth > document.documentElement.clientWidth,
+                枠: { left: Math.round(stage.left), width: Math.round(stage.width) },
             };
         });
         expect(shape.右の列は帯より上).toBe(true);
         expect(shape.いちばん小さい).toBeGreaterThanOrEqual(40);
         expect(shape.枠からはみ出す).toBe(false);
         expect(shape.横に動く).toBe(false);
+        // **絵は画面の端から端まで** (余白の内側に置くと 358px に縮み、周りに縁が出る)
+        expect(shape.枠).toEqual({ left: 0, width: 390 });
         // 押すものは一段 (40px)。折れると倍になる
         const row = await page.getByTestId('watch-play').boundingBox();
         const full = await page.getByTestId('watch-full').boundingBox();
