@@ -20,7 +20,7 @@
  */
 
 import { and, eq, gt, lte } from 'drizzle-orm';
-import { type Audio, type AudioTrack, audioTracks, pickTrack } from '#lib/arib.js';
+import { type Audio, type AudioTrack, audioTracks, parseAudios, pickTrack } from '#lib/arib.js';
 import { CHANNEL, type HybridcastLink, type LiveCodec, type Notice } from '#lib/live.js';
 import { AitReader, APPLICATION_TYPE_HTML5, CONTROL } from '#lib/ts/ait.js';
 import { BroadcastClock, parseStart } from '#lib/ts/clock.js';
@@ -1360,7 +1360,7 @@ class RawCaptions {
  * 出すかが違えば別のものになる (`encodeArgs`)。言語が複数ある放送でしか
  * 動かないところなので、そのために起こし直すのは年に数回のこと
  */
-const key = (
+export const key = (
     type: string,
     channel: string,
     serviceId: number,
@@ -1426,10 +1426,17 @@ export const CHASE_STREAM_HOLD = 4 * 1024 * 1024;
  * `raw` なら焼かずに、1局に絞っただけの生の TS を流す (画面の「生」と同じ道)。
  * `audio` なら音声だけ (AAC の fMP4。画面の無いスピーカーへの Cast 向け)。
  *
- * 画面の視聴者と同じ取り合いに乗る — 同じ局・同じ焼き方を誰かが見ていれば相乗りし、
- * 最後の1人が抜けたら畳む。局が無ければ null
+ * `audio` は焼く音声 (`AudioTrack.id`。画面の `TuneCommand.audio` と同じもの)。無いもの・省けば主音声。
+ * 生では効かない (全部の音声を送り、アプリが選ぶ)。
+ *
+ * 画面の視聴者と同じ取り合いに乗る — 同じ局・同じ焼き方・**同じ音声**を誰かが見ていれば
+ * 相乗りし (`key`)、最後の1人が抜けたら畳む。局が無ければ null
  */
-export function liveStream(serviceId: number, codec: StreamCodec | 'raw'): ReadableStream<Uint8Array> | null {
+export function liveStream(
+    serviceId: number,
+    codec: StreamCodec | 'raw',
+    audio?: string,
+): ReadableStream<Uint8Array> | null {
     const row = orm()
         .select({ type: services.type, channel: services.channel })
         .from(services)
@@ -1442,7 +1449,7 @@ export function liveStream(serviceId: number, codec: StreamCodec | 'raw'): Reada
             row.type,
             row.channel,
             serviceId,
-            nowPlaying(serviceId, undefined),
+            nowPlaying(serviceId, audio),
             raw ? 'h264' : codec,
             0,
             raw,
@@ -1460,12 +1467,14 @@ export function liveStream(serviceId: number, codec: StreamCodec | 'raw'): Reada
  *   HTTP の fMP4 で流す。読み切ったら (`ended`) 閉じる
  *
  * シークは `at` を変えて頼み直す (画面の追っかけと同じく、位置ごとに立て直す)。
+ * `audio` は焼く音声 (`AudioTrack.id`)。無いもの・省けば主音声で、生では効かない。
  * 録画が無い・まだ何も録れていなければ null
  */
 export function chaseStream(
     recordingId: number,
     codec: LiveCodec | 'raw',
     at: number,
+    audio?: string,
 ): ReadableStream<Uint8Array> | null {
     const rec = orm().select().from(recordings).where(eq(recordings.id, recordingId)).get();
     if (rec === undefined || rec.deleted_at !== null || rec.ts_path === null) return null;
@@ -1476,7 +1485,7 @@ export function chaseStream(
         return followFile(rec.ts_path, plan.offset, plan.paceBytesPerSec, () => recordingDone(rec.id));
     }
     return sessionStream((viewer, held) =>
-        openChase({ type: 'chase', recordingId, at, audio: undefined, codec, caption: 0 }, viewer, held),
+        openChase({ type: 'chase', recordingId, at, audio, codec, caption: 0 }, viewer, held),
     );
 }
 
@@ -2099,18 +2108,4 @@ function aribServiceId(serviceId: number): number {
             .where(eq(services.id, serviceId))
             .get()?.service_id ?? 0
     );
-}
-
-/**
- * 番組表が持っている音声の構成。
- *
- * `audios` は放送から拾ったものをそのまま持っているだけなので、無い・壊れている
- * (壊れた行は列の読み手が空にする。`schema.ts`) ことはありうる。そのときは
- * `audio_type` に落とし、それも無ければ何も無いことにする — どの道 `audioTracks` が
- * 「そのまま出す」1つを返す
- */
-function parseAudios(row: { audio_type: number | null; audios: Audio[] | null } | undefined): Audio[] {
-    if (row === undefined) return [];
-    if (row.audios !== null && row.audios.length > 0) return row.audios;
-    return row.audio_type === null ? [] : [{ componentType: row.audio_type }];
 }

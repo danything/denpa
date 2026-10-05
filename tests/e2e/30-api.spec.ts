@@ -24,6 +24,14 @@ test.describe('外から使う口', () => {
             startAt: expect.any(Number),
             endAt: expect.any(Number),
         });
+        // 選べる音声。番組表が何も言っていなくても「そのまま出す」1つは入る
+        expect(now.audios.length).toBeGreaterThan(0);
+        expect(now.audios[0]).toMatchObject({
+            id: expect.any(String),
+            stream: expect.any(Number),
+            side: expect.stringMatching(/^(main|sub|both)$/),
+            label: expect.any(String),
+        });
         expect(now.startAt).toBeLessThanOrEqual(Date.now());
         expect(now.endAt).toBeGreaterThan(Date.now());
 
@@ -53,6 +61,9 @@ test.describe('外から使う口', () => {
             expect(rec.audio).toBe(`api/recordings/${rec.id}/file?audio=only`);
             // 続きの位置は、無ければ null (鍵ごと消さない)
             expect(rec).toHaveProperty('resumeMs');
+            // 放送の音声の構成 (追っかけの ?audio=<id> で選ぶ)。空にはならない
+            expect(rec.audios.length).toBeGreaterThan(0);
+            expect(rec.audios[0]).toMatchObject({ id: expect.any(String), stream: expect.any(Number) });
             // 番組の中身は別の口 (テレビのアプリの詳細)
             const one = await (await request.get(`/api/recordings/${rec.id}/detail`)).json();
             expect(one).toMatchObject({

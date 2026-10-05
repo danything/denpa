@@ -1,5 +1,6 @@
 import { json } from '@sveltejs/kit';
 import { and, desc, eq, isNotNull, ne, or } from 'drizzle-orm';
+import { audioTracks, parseAudios } from '#lib/arib.js';
 import { logoUnusable } from '#lib/format.js';
 import { orm } from '#lib/server/db.js';
 import { encodedCodec } from '#lib/server/library.js';
@@ -16,6 +17,7 @@ import { displayTitle } from '#lib/server/title.js';
  *
  * `files` は出せるものを全部、コーデック付きで並べる。どれを開くかは呼ぶ側が決める
  * (Cast なら H.264、新しいテレビなら AV1、録画ソフトなら生TS)。URL は denpa の根からの相対。
+ * `audios` は放送の音声の構成で、追っかけ (`chase?audio=<id>`) で選ぶもの。
  * `?limit=` と `?offset=` で区切れる (既定は全部)
  */
 export function GET({ url }) {
@@ -36,6 +38,8 @@ export function GET({ url }) {
             ts: recordings.ts_path,
             state: recordings.state,
             cmNote: recordings.cm_note,
+            audio_type: recordings.audio_type,
+            audios: recordings.audios,
         })
         .from(recordings)
         .where(
@@ -85,6 +89,8 @@ export function GET({ url }) {
                 poster: `api/recordings/${row.id}/poster`,
                 files,
                 audio: `api/recordings/${row.id}/file?audio=only`,
+                // 放送の音声の構成 (画面の追っかけと同じ一覧)。`chase?audio=<id>` で選ぶ
+                audios: audioTracks(parseAudios(row)),
             };
         }),
     );
