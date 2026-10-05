@@ -1,3 +1,4 @@
+import { untrack } from 'svelte';
 import type { Notice } from '#lib/components/Toasts.svelte';
 
 /**
@@ -23,6 +24,14 @@ import type { Notice } from '#lib/components/Toasts.svelte';
  * 黒い小窓になる。canvas から流れを取って (`captureStream`) 別の `<video>` に映し、
  * それを小窓にする。音は今までどおりページ (`AudioContext`) から鳴る。
  *
+ * **代わりの `<video>` は生に入った時点で用意しておく** (`prepare`)。押されてから
+ * 流れを繋いで1枚目を待っていた頃は、iPhone の Safari で必ず断られていた
+ * (`NotAllowedError: The request is not triggered by a user activation.`) — 待っている
+ * 間に「押された直後」が切れる。小窓を頼むのは押されたその場でなければならず、
+ * そのためには1枚目が既に届いている (`HAVE_METADATA`) 必要がある。
+ * 1枚目が届いたら流れを切っておき (`enabled = false`)、押されたら戻す。
+ * 小窓に出していない間まで絵を写し続けない
+ *
  * ## 止める・再開する
  *
  * 小窓にもブラウザの再生ボタンがあり、押すと `<video>` を直に止める。**ライブと
@@ -42,9 +51,6 @@ interface Options {
     paused?: () => boolean;
     toggle?: () => void;
 }
-
-/** 1枚目を待つ長さ。**来ないまま黙って待ち続けない** (生の canvas から流れが取れていない) */
-const FIRST_FRAME = 3000;
 
 /** どこで断られたか。**押しても何も起きない、で終わらせない** — 端末ごとに転ぶ所が違う */
 class Refused extends Error {}
@@ -106,6 +112,8 @@ export function pictureInPicture(options: Options): Pip {
     let on = $state<HTMLVideoElement | null>(null);
     /** 生のときに小窓へ出す代わりの video。要るときに作る */
     let proxy: HTMLVideoElement | null = null;
+    /** 用意できなかった理由 (`prepare`)。押されたときに言う */
+    let unprepared: Refused | null = null;
     /** 出せなかった理由 */
     let refused = $state<Notice | null>(null);
 
@@ -122,7 +130,7 @@ export function pictureInPicture(options: Options): Pip {
         const update = () => {
             if (shown(video)) on = video;
             else if (on === video) on = null;
-            if (video === proxy && on !== proxy) release();
+            if (video === proxy && on !== proxy) flowing(false);
         };
         video.addEventListener('enterpictureinpicture', update);
         video.addEventListener('leavepictureinpicture', update);
@@ -178,6 +186,13 @@ export function pictureInPicture(options: Options): Pip {
         if (on !== null && (on === proxy) !== wantProxy) leave();
     });
 
+    /** 生に入ったら代わりの video を用意しておく。出たら畳む (canvas ごと無くなる) */
+    $effect(() => {
+        if (!able || !raw() || !canCapture || options.capture === undefined) return;
+        untrack(prepare);
+        return release;
+    });
+
     /** 生のとき、代わりの video も止める・再開を合わせる (押されたのが帯のボタンのとき) */
     $effect(() => {
         const paused = options.paused?.() ?? false;
@@ -210,7 +225,36 @@ export function pictureInPicture(options: Options): Pip {
         return video;
     }
 
-    /** 代わりの video の流れを止める。**取り続けると worker の canvas から写し続ける** */
+    /**
+     * 代わりの video に流れを繋いで、1枚目まで受け取っておく。**押されてからでは遅い** (上の説明)。
+     * 1枚目が来たら流れを切る — 小窓に出すまで写し続けない
+     */
+    function prepare(): void {
+        unprepared = null;
+        const stream = options.capture?.() ?? null;
+        if (stream === null) {
+            unprepared = new Refused('MPEG-2 の絵を取り出せません (captureStream)');
+            return;
+        }
+        if (stream.getVideoTracks().length === 0) {
+            unprepared = new Refused('MPEG-2 の絵の流れが空です');
+            return;
+        }
+        const video = makeProxy();
+        video.srcObject = stream;
+        video.addEventListener('loadedmetadata', () => on !== video && flowing(false), { once: true });
+        void video.play().catch((error: unknown) => {
+            unprepared = new Refused(`代わりの映像を再生できません (${reason(error)})`);
+        });
+    }
+
+    /** 代わりの video へ絵を流すか。**切っても1枚目の大きさは覚えたまま** (`readyState` は下がらない) */
+    function flowing(flow: boolean): void {
+        const stream = proxy?.srcObject;
+        if (stream instanceof MediaStream) for (const track of stream.getVideoTracks()) track.enabled = flow;
+    }
+
+    /** 代わりの video を畳む。生を出たとき (canvas ごと無くなる) */
     function release(): void {
         if (proxy === null) return;
         const stream = proxy.srcObject;
@@ -218,33 +262,22 @@ export function pictureInPicture(options: Options): Pip {
         proxy.srcObject = null;
     }
 
+    /**
+     * 小窓に出す。**頼むまでに `await` を挟まない** — 挟むと Safari は「押された直後」と
+     * 見なさなくなって断る (`NotAllowedError`)
+     */
     async function enter(): Promise<void> {
         let video: WebkitVideo | null = options.video();
         if (raw()) {
-            const stream = options.capture?.() ?? null;
-            if (stream === null) throw new Refused('MPEG-2 の絵を取り出せません (captureStream)');
-            if (stream.getVideoTracks().length === 0) throw new Refused('MPEG-2 の絵の流れが空です');
-            video = makeProxy();
-            video.srcObject = stream;
-            // 1枚目が来るまで待つ。来る前に頼むと断られる (`InvalidStateError`)
-            const proxied = video;
-            await new Promise<void>((done, fail) => {
-                const timer = setTimeout(
-                    () => fail(new Refused(`MPEG-2 の絵が流れてきません (${FIRST_FRAME / 1000}秒待った)`)),
-                    FIRST_FRAME,
-                );
-                proxied.play().then(
-                    () => {
-                        clearTimeout(timer);
-                        done();
-                    },
-                    (error: unknown) => {
-                        clearTimeout(timer);
-                        fail(new Refused(`代わりの映像を再生できません (${reason(error)})`));
-                    },
-                );
-            });
+            if (unprepared !== null) throw unprepared;
+            if (proxy === null || proxy.srcObject === null)
+                throw new Refused('MPEG-2 の絵を用意できていません');
+            if (proxy.readyState < HTMLMediaElement.HAVE_METADATA)
+                throw new Refused('MPEG-2 の絵がまだ届いていません。少し待ってから押し直してください');
+            video = proxy;
+            flowing(true);
             if (options.paused?.() === true) video.pause();
+            else void video.play().catch(() => undefined);
         }
         if (video === null) return;
         if (standard()) await video.requestPictureInPicture();
@@ -267,7 +300,7 @@ export function pictureInPicture(options: Options): Pip {
             kind: 'error',
             text: `小窓を出せませんでした: ${reason(error)}`,
         };
-        release();
+        flowing(false);
     }
 
     function leave(): void {
@@ -276,7 +309,7 @@ export function pictureInPicture(options: Options): Pip {
         if (document.pictureInPictureElement === video)
             void document.exitPictureInPicture().catch(() => undefined);
         else if (video.webkitPresentationMode === MODE) video.webkitSetPresentationMode?.('inline');
-        if (video === proxy) release();
+        if (video === proxy) flowing(false);
     }
 
     return {
