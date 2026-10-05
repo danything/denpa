@@ -555,6 +555,11 @@ class Session {
      * GPU からソフトウェアに降りたときの断り書き。**途中から入ってきた人にも渡す** (`add`)
      */
     private note: Notice | null = null;
+    /**
+     * ソフトウェアで焼き直している GPU の道 (`hwKey`)。**ソフトウェアで映像が出たら**
+     * GPU のせいだったと決めて覚え、断り書きを出す (`blameGpu`)
+     */
+    private blame: string | null = null;
     /** 入口の見出しから拾った、選べる字幕 */
     private readonly list: TrackList;
     private readonly aborter = new AbortController();
@@ -788,24 +793,19 @@ class Session {
             let wanted = this.codec === 'audio' || captionlessNow(this.serviceId) ? null : this.track;
             // GPU で焼くか (`pickLiveHw`)。降りたらソフトウェアで焼き直す (下)
             let hw = this.codec === 'audio' ? null : pickLiveHw(this.codec);
-            /** 前の ffmpeg への流し込み。**読み口を手放すのを待ってから**次を起こす (下) */
-            let pumping: Promise<void> | null = null;
+            /*
+             * **ライブの TS は読み口を1つだけ作って、起こし直しても使い回す。**
+             *
+             * 読み口 (`getReader`) は1人しか持てない。ffmpeg ごとに作ると、前の流し込みが
+             * 手放すまで次が読めない — 手放すのは相手が降りたあと次の塊を書こうとして転んだとき
+             * だが、書き込みは返ってこないこともある (下の「終わりは ffmpeg の終了で見る」)。
+             * 使い回せば前の流し込みは何も握っていない。追っかけは読み直すので毎回作る
+             */
+            const feed = tuned === null ? null : chunks(tuned);
             for (;;) {
                 // ライブは同じ TS が流れ続けている。追っかけは焼き直しのたびに読み直す
-                const stream = tuned ?? this.source?.();
+                const stream = feed ?? (this.source === undefined ? undefined : chunks(this.source()));
                 if (stream === undefined) return;
-                /*
-                 * **同じ TS の読み口は1人しか持てない** (`getReader`)。前の流し込みは、相手が
-                 * 降りたあと次の塊を書こうとして転ぶか、`this.proc` が自分でなくなったのを見て
-                 * 抜けるまで握っている。
-                 * 放送は流れ続けているので普通はすぐだが、書き込みが返ってこないこともある
-                 * (下の「終わりは ffmpeg の終了で見る」) ので、待つのは少しだけ
-                 */
-                if (pumping !== null && tuned !== null) {
-                    this.proc = null;
-                    await Promise.race([pumping, Bun.sleep(1000)]);
-                }
-                if (this.stopped) return;
                 this.produced = false;
                 const proc = Bun.spawn(
                     [config.ffmpeg, ...encodeArgs(this.program, this.audio, this.codec, wanted, hw)],
@@ -827,9 +827,8 @@ class Session {
                  */
                 let trouble: unknown = null;
                 const watching = this.watch(proc);
-                pumping = this.pump(stream, proc);
                 const running = Promise.all([
-                    pumping,
+                    this.pump(stream, proc, feed === null),
                     this.drain(proc),
                     watching,
                     wanted === null ? Promise.resolve() : this.subtitles(proc),
@@ -869,10 +868,8 @@ class Session {
                     console.warn(
                         `[live] ${label}: GPU (${hw.way.device} の ${hw.way.kind}${hw.full ? '・復号から' : ''}) で焼けなかったので、ソフトウェアで焼き直します`,
                     );
-                    gpuFailed.set(hwKey(this.codec, hw), Date.now());
+                    this.blame = hwKey(this.codec, hw);
                     hw = null;
-                    this.note = { type: 'notice', message: GPU_GAVE_UP };
-                    this.tell(this.note);
                     continue;
                 }
                 if (wanted === null || !this.noSubtitle) {
@@ -973,28 +970,51 @@ class Session {
      * いいだけで、放送を落とすことにはならない (汲み出しは別に回っている)
      */
     private async pump(
-        stream: ReadableStream<Uint8Array>,
+        stream: AsyncGenerator<Uint8Array>,
         proc: ReturnType<typeof Bun.spawn>,
+        /** 読み口を自分で閉じるか。ライブは起こし直しても使い回すので閉じない (`run`) */
+        own: boolean,
     ): Promise<void> {
         const writer = proc.stdin as import('bun').FileSink;
         const filter = this.program > 0 ? new ServiceFilter(this.program) : null;
         try {
-            for await (const chunk of chunks(stream)) {
-                // 起こし直したあとの古い流し込みは抜けて、読み口を次へ渡す (`run`)
+            for (;;) {
+                // `for await` にしない — 抜けると読み口ごと閉じてしまう (使い回せなくなる)
+                const next = await stream.next();
+                if (next.done === true) break;
+                /*
+                 * 起こし直したあとの古い流し込みは抜ける。その1塊は捨てるが、次の ffmpeg は
+                 * どのみち鍵フレームから拾うので欠けは見えない
+                 */
                 if (this.stopped || this.proc !== proc) break;
-                const out = this.tap(filter, chunk);
+                const out = this.tap(filter, next.value);
                 if (out.length === 0) continue;
                 // **書けたことを待つ** (上の説明)。待たないと、転んだときに拾い手が居ない
                 await writer.write(out);
                 await writer.flush();
             }
         } finally {
+            if (own) await stream.return(undefined);
             try {
                 writer.end();
             } catch {
                 // もう閉じている
             }
         }
+    }
+
+    /**
+     * GPU のせいだったと決める。**ソフトウェアに替えて映像が出たときだけ** — 選局直後で
+     * 映像がまだ来ていない・入力が途切れた、のように GPU と関係なく降りたのなら、
+     * ソフトウェアでも出ずに「映像を出せませんでした」になる。そのとき GPU を15分
+     * 外したり「GPU で焼けなかった」と言ったりすると嘘になる
+     */
+    private blameGpu(): void {
+        if (this.blame === null) return;
+        gpuFailed.set(this.blame, Date.now());
+        this.blame = null;
+        this.note = { type: 'notice', message: GPU_GAVE_UP };
+        this.tell(this.note);
     }
 
     /**
@@ -1010,7 +1030,10 @@ class Session {
                     for (const viewer of this.viewers) this.hand(viewer, CHANNEL.videoInit, segment.data);
                 } else {
                     // 起こし直したあとに届いた前の ffmpeg の残りは数えない
-                    if (this.proc === proc) this.produced = true;
+                    if (this.proc === proc && !this.produced) {
+                        this.produced = true;
+                        this.blameGpu();
+                    }
                     for (const viewer of this.viewers) this.hand(viewer, CHANNEL.videoMedia, segment.data);
                     this.tellClock();
                 }
