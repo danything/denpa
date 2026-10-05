@@ -7,13 +7,14 @@ import type { Notice } from '#lib/components/Toasts.svelte';
  * 絵だけを小窓にして、他の画面・他のアプリを触りながら観る。出すのは `<video>` そのもの
  * なので、**字幕 (canvas に重ねている) と操作列は小窓に付いていかない**。
  *
- * ## 出せないところ
+ * ## ボタンを出さないところ
  *
  * - **iPhone / iPad のホーム画面から開いたもの (PWA)。** Safari が許していない。
  *   口は有るように見える (`pictureInPictureEnabled` が立つ) のに押しても出ないので、
  *   `navigator.standalone` (Apple の端末にしか無い) で見分けて、ボタンごと出さない
- * - **Firefox。** 口 (`requestPictureInPicture`) が無い。映像に重なる自前の切り替えは
- *   あるが、ページからは呼べない
+ * - **Firefox。** ページから小窓を開かせる口 (`requestPictureInPicture`) が無い。
+ *   小窓そのものは Firefox が持っていて (映像の上の切り替え・右クリック)、そちらは
+ *   ページと関係なく使える。押しても何も起きないボタンを並べないだけ
  *
  * Safari は標準の口のほかに `webkitSetPresentationMode` を持っていて、古い iOS の
  * Safari にはそちらしか無い。標準が無ければそちらで出す。
