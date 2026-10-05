@@ -215,6 +215,25 @@ docker compose) で動かすなら `oci://ghcr.io/danything/charts/denpa-agent` 
   無いと接続元がすべてプロキシのアドレスになり、`TRUSTED_NETWORKS` が誰にも当たりません
   (プロキシが無ければ要りません)。ただし、プロキシを通らずに届く経路があると
   このヘッダは詐称できます。denpa へはプロキシ経由でしか届かないことを確かめてから設定してください
+- **リバースプロキシには、`Host` をそのまま渡すことと WebSocket を通すことが要ります。**
+  `Host` が書き換わると設定の保存などの POST が `403 Cross-site POST form submissions are forbidden`
+  で断られ、WebSocket が通らないとライブが「繋がりませんでした」になります。Caddy・Traefik・
+  Envoy (Gateway API) は何もしなくても満たします。nginx は自分で書きます:
+
+  ```nginx
+  location / {
+      proxy_pass http://<denpa>:3000;
+      proxy_set_header Host $host;
+      proxy_set_header X-Forwarded-Proto $scheme;
+      proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+      proxy_http_version 1.1;
+      proxy_set_header Upgrade $http_upgrade;
+      proxy_set_header Connection "upgrade";
+      proxy_buffering off;  # SSE とライブを溜めずに流す
+  }
+  ```
+
+  Nginx Proxy Manager は「Websockets Support」を入れてください
 - 録画の再生・ダウンロードのリンクは期限付きの URL です (発行から24時間で失効。作り直すと
   同じ URL のまま期限が延びる)。リンクが漏れても、ずっと使える入口にはなりません
 
