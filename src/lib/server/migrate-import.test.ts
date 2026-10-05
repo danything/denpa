@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import {
+    chmodSync,
     existsSync,
     mkdirSync,
     mkdtempSync,
@@ -31,7 +32,7 @@ config.encodedDir = join(root, 'encoded');
 
 const { orm } = await import('./db');
 const { recordings } = await import('./schema');
-const { importOne, source, sweepTemporaries } = await import('./migrate');
+const { importOne, source, status, sweepTemporaries } = await import('./migrate');
 type Row = import('./migrate').Row;
 
 const sourceDir = join(root, 'epgstation');
@@ -135,6 +136,22 @@ describe('録画の取り込み', () => {
         expect(await importOne(target, { apply: true, move: true })).toBe('imported');
         expect(existsSync(from)).toBe(false);
         expect(readFileSync(imported(3)[0]!.ts_path!, 'utf8')).toBe(CONTENT);
+    });
+
+    // root はパーミッションを無視して消せてしまうので、そこでは確かめられない
+    test.skipIf(process.getuid?.() === 0)('移動で元を消せなくても、取り込みは済んだことにする', async () => {
+        const target = row(8);
+        const from = join(sourceDir, target.filePath!);
+        // 元の置き場を読み取り専用にする (中のファイルを消せない)
+        chmodSync(sourceDir, 0o555);
+        try {
+            expect(await importOne(target, { apply: true, move: true })).toBe('imported');
+        } finally {
+            chmodSync(sourceDir, 0o755);
+        }
+        expect(existsSync(from)).toBe(true);
+        expect(readFileSync(imported(8)[0]!.ts_path!, 'utf8')).toBe(CONTENT);
+        expect(status().log.at(-1)).toContain('元を消せなかった');
     });
 
     test('前の版が残した「ファイルの無い行」は、同じ行のまま置き直す', async () => {

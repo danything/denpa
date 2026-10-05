@@ -249,7 +249,11 @@ export function sweepTemporaries(): number {
  *
  * **移動でも元はまだ消さない。** 消すのは DB に入れ終えてから (`importOne`)。
  * 先に消すと、途中で落ちたときに元も行も無くなる。同じファイルシステムなら
- * ハードリンクで済ませる (容量を食わない)。PVC をまたぐと張れないので写す
+ * ハードリンクで済ませる (容量を食わない)。PVC をまたぐと張れないので写す。
+ *
+ * ハードリンクの書きかけは mtime が元のまま (古い) なので、`reconcile` の掃除
+ * (書きたてかを mtime で見る) から守られない。ただしリンクを張ってから rename するまでは
+ * 同期処理だけで await を挟まないので、同じプロセスの `reconcile` が割り込む余地は無い
  */
 function stage(from: string, temporary: string, move: boolean): void {
     if (move) {
@@ -419,8 +423,20 @@ export async function importOne(
         if (placed !== null) rmSync(placed, { force: true });
         throw error;
     }
-    // 移動なら、行が入ってはじめて元を消す
-    if (options.move) unlinkSync(from);
+    /*
+     * 移動なら、行が入ってはじめて元を消す。
+     *
+     * **消せなくても取り込みは失敗にしない。** 行もファイルも揃っていて、次の実行は
+     * 取り込み済みとして飛ばす。元の置き場が読み取り専用などで消せないときは、
+     * 元が残ったことだけ記録に出す
+     */
+    if (options.move) {
+        try {
+            unlinkSync(from);
+        } catch (error) {
+            record(`取り込んだが元を消せなかった: ${from} (${String(error)})`);
+        }
+    }
 
     // サムネイルは保存先に置いたものにだけ付ける。作業領域は画面に出ない
     if (!raw) {
