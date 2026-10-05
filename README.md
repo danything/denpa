@@ -261,7 +261,8 @@ docker compose) で動かすなら `oci://ghcr.io/danything/charts/denpa-agent` 
 
 **手を入れてくれた人** (ありがとうございます):
 
-- [@Khronos31](https://github.com/Khronos31) — px4-userland / siano-userland で選局できなかったのを、PX-Q3U4 の実機で見つけて直してくれました (#188)
+- [@Khronos31](https://github.com/Khronos31) — px4-userland / siano-userland で選局できなかったのを、PX-Q3U4 の実機で見つけて直してくれました (#188)。ほかにも不具合を報告してくれました (#195 #376 #377)
+- [@unlimish](https://github.com/unlimish) — ライブ・追っかけ・観る画面に小窓 (PiP) を足してくれました (#431)。非力な機材で複数のライブを観るときの詰まりを実測つきで報告してくれ、ライブを GPU で焼く道ができました (#417)
 
 **土台にしている仕事** — とくにチューナーまわりは、次の方々の仕事に支えられています:
 
