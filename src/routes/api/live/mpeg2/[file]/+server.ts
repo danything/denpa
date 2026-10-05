@@ -11,8 +11,9 @@
  * 無ければ 404。画面はそれを見て焼いたものに戻る (`raw/worker.ts`)
  */
 
-import { existsSync, statSync } from 'node:fs';
+import { existsSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
+import { brotliCompressSync, constants, gzipSync } from 'node:zlib';
 import { error } from '@sveltejs/kit';
 import { config } from '#lib/server/config.js';
 import type { RequestHandler } from './$types';
@@ -22,6 +23,26 @@ const TYPES: Record<string, string> = {
     // **これでないと `instantiateStreaming` が受け取らない** (読み込み口がそれを使う)
     'decoder.wasm': 'application/wasm',
 };
+
+/**
+ * **縮めて配る。** wasm は AAC の復号器を足して 855KB になり、縮めれば 3 分の 1 になる
+ * (brotli 292KB / gzip 364KB。docs/stream.md §5.5)。前段に縮める proxy が無い家が多いので
+ * ここで縮める。縮めるのは中身が変わったとき (ETag が変わったとき) の1度だけで、あとは覚えたものを返す
+ */
+const packed = new Map<string, { tag: string; br: Buffer<ArrayBuffer>; gzip: Buffer<ArrayBuffer> }>();
+
+function pack(path: string, tag: string) {
+    const hit = packed.get(path);
+    if (hit?.tag === tag) return hit;
+    const raw = readFileSync(path);
+    const entry = {
+        tag,
+        br: brotliCompressSync(raw, { params: { [constants.BROTLI_PARAM_QUALITY]: 11 } }),
+        gzip: gzipSync(raw, { level: 9 }),
+    };
+    packed.set(path, entry);
+    return entry;
+}
 
 export const GET: RequestHandler = ({ params, request }) => {
     // `constructor` などの継いだ名前を拾わない
@@ -35,8 +56,16 @@ export const GET: RequestHandler = ({ params, request }) => {
      */
     const stat = statSync(path);
     const tag = `"${stat.size.toString(36)}-${Math.floor(stat.mtimeMs).toString(36)}"`;
-    if (request.headers.get('if-none-match') === tag) return new Response(null, { status: 304 });
-    return new Response(Bun.file(path).stream(), {
-        headers: { 'content-type': type, 'cache-control': 'no-cache', etag: tag },
-    });
+    const headers: Record<string, string> = {
+        'content-type': type,
+        'cache-control': 'no-cache',
+        etag: tag,
+        vary: 'Accept-Encoding',
+    };
+    if (request.headers.get('if-none-match') === tag) return new Response(null, { status: 304, headers });
+    const accept = request.headers.get('accept-encoding') ?? '';
+    const encoding = /\bbr\b/.test(accept) ? 'br' : /\bgzip\b/.test(accept) ? 'gzip' : null;
+    if (encoding === null) return new Response(Bun.file(path).stream(), { headers });
+    const body = pack(path, tag)[encoding];
+    return new Response(body, { headers: { ...headers, 'content-encoding': encoding } });
 };

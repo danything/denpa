@@ -54,7 +54,7 @@ test.describe('ライブを生で見る', () => {
         const first = await shown();
         await expect.poll(shown, { timeout: 15_000 }).toBeGreaterThan(first + 10);
 
-        // **音も解けている** (AudioDecoder が ADTS を受け取った)
+        // **音も解けている** (WASM の AAC 復号器が ADTS を解いた)
         await expect
             .poll(async () => Number((await canvas.getAttribute('data-audio')) ?? 0), { timeout: 15_000 })
             .toBeGreaterThan(0);
@@ -162,10 +162,10 @@ test.describe('ライブを生で見る', () => {
     });
 
     test('解けない端末では焼いたものに戻り、理由を出す', async ({ page }) => {
-        // AAC を解く口が無い端末 (http で開いたときもこうなる)
+        // worker へ描く先を渡せない端末 (OffscreenCanvas の無い古い Safari)
         await page.addInitScript(() => {
             // biome-ignore lint/suspicious/noExplicitAny: 端末に無いことにする
-            delete (globalThis as any).AudioDecoder;
+            delete (HTMLCanvasElement.prototype as any).transferControlToOffscreen;
         });
         await goto(page, '/live');
         await page.getByTestId('live-channel').first().click();

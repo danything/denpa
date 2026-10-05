@@ -346,9 +346,8 @@ export class RawEngine {
         /*
          * **デュアルモノは片側を両耳へ** (焼く道の `pan` と同じ)。
          *
-         * 5.1ch の番組は**頭の2本だけ**鳴らす — ちゃんと下げる (中央と後ろを混ぜる) には
-         * AudioDecoder が面をどの順で返すかを知る必要があり、ブラウザごとに実機で
-         * 確かめていない (stream.md §5.5「実機で確かめること」)
+         * 5.1ch の番組は**頭の2本 (前の左右) だけ**鳴らす。面の並びは FFmpeg の決まりで
+         * 分かっている (worker の WASM が解く) が、中央と後ろを混ぜる下げ方はまだ持っていない
          */
         const left = chunk.planes[0]!;
         const right = chunk.planes[1] ?? left;
