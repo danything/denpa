@@ -227,6 +227,8 @@
         paused: () => player.paused,
         toggle: () => player.toggle(),
         auto: () => background.on,
+        overlay: () => overlay,
+        captions: () => player.captions && player.hasCaptions,
     });
     // 生の音を「再生する音」と言うのは、入れているときと小窓を開いている間だけ (`raw/engine.ts`)
     $effect(() => {

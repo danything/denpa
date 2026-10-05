@@ -32,10 +32,17 @@ export interface Overlay {
     source: CanvasImageSource | ImageData;
 }
 
-/** 何も出さない。**消し忘れると次の字幕まで残る** */
+/**
+ * 何も出さない。**消し忘れると次の字幕まで残る**。
+ *
+ * 描いているかの印 (`data-drawn`) もここで下ろす。小窓に字幕を重ねるかをそれで決める
+ * (`compose.ts`。透明な面を毎コマ重ねない)
+ */
 export function clearOverlay(canvas: HTMLCanvasElement | null): void {
-    const ctx = canvas?.getContext('2d');
-    if (ctx === null || ctx === undefined || canvas === null) return;
+    if (canvas === null) return;
+    delete canvas.dataset['drawn'];
+    const ctx = canvas.getContext('2d');
+    if (ctx === null) return;
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 }
 
@@ -58,6 +65,7 @@ export function drawOverlay(canvas: HTMLCanvasElement | null, overlay: Overlay |
     const ctx = canvas.getContext('2d');
     if (ctx === null) return;
     ctx.clearRect(0, 0, canvas.width, canvas.height);
+    canvas.dataset['drawn'] = '';
     if (overlay.source instanceof ImageData) {
         // **`putImageData` は重ねずに置き換える。** 透明なところも上書きされるが、
         // 直前に全部消しているので同じこと
