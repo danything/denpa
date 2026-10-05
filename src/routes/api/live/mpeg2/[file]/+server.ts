@@ -29,7 +29,7 @@ const TYPES: Record<string, string> = {
  * (brotli 292KB / gzip 364KB。docs/stream.md §5.5)。前段に縮める proxy が無い家が多いので
  * ここで縮める。縮めるのは中身が変わったとき (ETag が変わったとき) の1度だけで、あとは覚えたものを返す
  */
-const packed = new Map<string, { tag: string; br: Uint8Array; gzip: Uint8Array }>();
+const packed = new Map<string, { tag: string; br: Buffer<ArrayBuffer>; gzip: Buffer<ArrayBuffer> }>();
 
 function pack(path: string, tag: string) {
     const hit = packed.get(path);
