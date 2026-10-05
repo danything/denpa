@@ -61,7 +61,7 @@ export const CONTROL = {
     playbackAutostart: 0x08,
 } as const;
 
-export interface HybridcastApp {
+interface HybridcastApp {
     /** 放送局を表す番号 (organisation_id) */
     organisationId: number;
     applicationId: number;

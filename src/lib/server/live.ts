@@ -510,7 +510,7 @@ const FORGET_GPU_FAILED = 15 * 60_000;
 let liveTurn = 0;
 
 /** GPU からソフトウェアに降りたときに画面へ出す一行 */
-export const GPU_GAVE_UP = 'GPU でエンコードできなかったので、ソフトウェアでエンコードしています';
+const GPU_GAVE_UP = 'GPU でエンコードできなかったので、ソフトウェアでエンコードしています';
 
 function hwKey(codec: StreamCodec, hw: LiveHw): string {
     return `${codec}:${hw.way.device}:${hw.way.kind}:${hw.full}`;
@@ -1518,7 +1518,7 @@ export function liveCaptions(serviceId: number): ReadableStream<Uint8Array> | nu
 }
 
 /** 録画の字幕を、頼まれた位置のどれだけ手前から読むか (秒)。**いま出ている字幕を拾うため** (字幕は次が来るまで出しっぱなし) */
-export const CAPTION_LEAD = 10;
+const CAPTION_LEAD = 10;
 
 /** 観ている位置より先に読んでおく量 (秒)。頭のここまでは倍速の縛りを掛けずに読む (`followFile` の `burst`) */
 const CAPTION_AHEAD = 10;

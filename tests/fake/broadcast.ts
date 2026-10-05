@@ -231,7 +231,7 @@ function present(events: SynthEvent[]): SynthEvent | undefined {
  * 全部を 0x47 で埋めると 4バイト目の上位2ビットが立ち、denpa の
  * スクランブル判定が「掛かっている」と誤って読む。
  */
-export function payload(pid: number, count: number, scrambled: boolean): Uint8Array {
+function payload(pid: number, count: number, scrambled: boolean): Uint8Array {
     const buffer = new Uint8Array(188 * count);
     for (let i = 0; i < count; i++) {
         const at = i * 188;
@@ -352,7 +352,7 @@ function logoPackets(service: FakeService): Uint8Array {
  * スキャンの結果を作り物で返していたので要らなかったが、本物のエージェントに
  * 食わせるならこれが無いとどのチャンネルも見つからない。
  */
-export function tables(services: FakeService[]): Uint8Array {
+function tables(services: FakeService[]): Uint8Array {
     /*
      * ロゴを積んでいる中継にはエンジニアリングサービス (929) が居る。
      * **PAT に載せるかどうかがそのまま「当たり外れ」になる** — denpa は
@@ -422,7 +422,7 @@ export function tables(services: FakeService[]): Uint8Array {
 }
 
 /** 番組表 (EIT[schedule])。開いたら1回で全部流す */
-export function schedule(services: FakeService[]): Uint8Array {
+function schedule(services: FakeService[]): Uint8Array {
     const parts: number[] = [];
     for (const service of services) {
         const events = programsFor(service);

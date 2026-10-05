@@ -24,9 +24,9 @@ export const WINDOW = 1_000;
 /** これだけ続いたら諦める (窓の数) */
 export const STRIKES = 5;
 /** 1コマの長さのうち、解くのに使ってよい割合 */
-export const SHARE = 0.8;
+const SHARE = 0.8;
 /** 絵がこれだけ時計から遅れたら「間に合っていない」(秒) */
-export const LATE = 0.25;
+const LATE = 0.25;
 /** 窓の中にこれより少なければ数えない (止めている間・選局の直後) */
 const LEAST = 5;
 
