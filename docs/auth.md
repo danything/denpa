@@ -139,13 +139,10 @@ OIDC_GROUP=6f1b2c3d-4e5f-6789-abcd-ef0123456789
 信頼するネットワークの中ならペアリングは要りません (アプリは鍵なしで API を叩き、
 401 の JSON が返ったときだけペアリングに進む。[api.md](api.md#入り方))。
 
-形は OAuth のデバイス認可 (RFC 8628) と同じです。
-
-1. テレビが `POST /api/device/code` で `deviceCode` (秘密) と `userCode` (`ABCD-EFGH`) を貰う
-2. テレビは `device?code=ABCD-EFGH` を QR にして出す。スマホで開くと、いつもの入り方
-   (信頼するネットワーク、無ければ OIDC のログイン) を通ったうえで**そのまま済む**
-3. テレビは `POST /api/device/token` を `interval` 秒おきに叩き、済んでいれば鍵を1度だけ受け取る
-4. 以後は `Authorization: Bearer denpa_…` で、画面以外の口 (API・ファイル・ライブ・ロゴ・ポスター) に入る
+形は OAuth のデバイス認可 (RFC 8628) と同じです (口の形は [api.md](api.md#ペアリング-post-apidevicecode--post-apidevicetoken))。
+テレビが札を貰って `device?code=…` を QR に出し、スマホで開くと、いつもの入り方
+(信頼するネットワーク、無ければ OIDC のログイン) を通ったうえで**そのまま済む**。テレビは待っていた鍵を1度だけ受け取り、
+以後は `Authorization: Bearer denpa_…` でどの口にも入る (`/device` で別の端末を済ませることだけは断る。下記)。
 
 **「許す / 断る」は聞きません。** 家で使う前提で、QR を読めるのはテレビの前に居る人だからです。
 その代わり:
