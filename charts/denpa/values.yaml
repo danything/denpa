@@ -117,11 +117,11 @@ persistence:
     size: 5Gi
     existingClaim: ""
   # 生TSの作業領域。エンコードが終われば消えるのでライブラリほど要らない
-  recorded:
+  raw:
     size: 300Gi
     existingClaim: ""
   # エンコード済みの置き場
-  library:
+  encoded:
     size: 1Ti
     existingClaim: ""
   # エージェントの設定 (tuners.json / channels.json)。denpa の画面から書く

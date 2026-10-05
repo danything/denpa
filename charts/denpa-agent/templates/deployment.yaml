@@ -38,7 +38,7 @@ spec:
             - name: agent-config
               mountPath: /config
             # 掛かったまま録れたTSを解く先。denpa と同じ実体を同じ名前 (既定の /media/raw) で見せる
-            - name: denpa-recorded
+            - name: raw
               mountPath: /media/raw
             {{- range .Values.hostDevices }}
             - name: {{ .name }}
@@ -64,9 +64,9 @@ spec:
         - name: agent-config
           persistentVolumeClaim:
             claimName: {{ .Values.persistence.config.existingClaim | default "agent-config" }}
-        - name: denpa-recorded
+        - name: raw
           persistentVolumeClaim:
-            claimName: {{ .Values.persistence.recorded.existingClaim | default "denpa-recorded" }}
+            claimName: {{ .Values.persistence.raw.existingClaim | default "denpa-raw" }}
         {{- range .Values.hostDevices }}
         - name: {{ .name }}
           hostPath:
