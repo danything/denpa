@@ -408,6 +408,11 @@
     let mounted = $state(false);
     /** 録画の枠 (中だけスクロールする)。開いたときに一番下へ送る */
     let recordingBox: HTMLElement | undefined = $state();
+    /**
+     * 録画の枠を一番下へ送り終えたか。**送るまでは枠を見せない** (広い画面だけ。CSS の `.placing`)。
+     * 見せたまま送ると、開いた瞬間に一番上が映ってから下へ跳ぶ (実機)
+     */
+    let recordingPlaced = $state(false);
     onMount(() => {
         mounted = true;
         /*
@@ -425,9 +430,15 @@
         if (box === undefined) return;
         let touched = false;
         const listening = new AbortController();
+        const place = () => {
+            recordingPlaced = true;
+        };
+        // スクロールが要らないまま (録画が少ない) なら送る時は来ない。待たせすぎない
+        const giveUp = setTimeout(place, 1000);
         const touch = () => {
             touched = true;
             listening.abort();
+            place();
         };
         for (const type of ['wheel', 'touchstart', 'pointerdown', 'keydown']) {
             box.addEventListener(type, touch, { passive: true, signal: listening.signal });
@@ -444,6 +455,7 @@
             recordingPage.revealAll();
             void tick().then(() => {
                 if (!touched) box.scrollTop = box.scrollHeight;
+                place();
             });
         });
         settle.observe(box);
@@ -452,6 +464,7 @@
         return () => {
             settle.disconnect();
             listening.abort();
+            clearTimeout(giveUp);
         };
     });
     function rightText(row: RightRow): string {
@@ -811,7 +824,7 @@
                 </div>
             </div>
 
-            <div class="board-box" bind:this={recordingBox}>
+            <div class="board-box" class:placing={!recordingPlaced} bind:this={recordingBox}>
                 <div class="rows" data-testid="recording-list">
                     {#each recordingPage.rows as row (row.key)}
                     {#if row.kind === 'missed'}
@@ -1444,6 +1457,19 @@
         .board-box {
             flex: 1;
             min-height: 0;
+        }
+        /*
+         * 一番下へ送るまで隠す (`recordingPlaced`)。JS が動かなくても出るよう、
+         * 隠すのは長くても 1.5 秒まで
+         */
+        .board-box.placing {
+            visibility: hidden;
+            animation: placed 0s 1.5s forwards;
+        }
+        @keyframes placed {
+            to {
+                visibility: visible;
+            }
         }
     }
     .board-head {
