@@ -2,7 +2,7 @@
  * **1局に絞った TS から、映像と音声の PES を取り出す** (ライブを生で送る道。docs/stream.md §5.5)。
  *
  * 焼く道ではここを ffmpeg がやっていた。生で送ると TS がそのままブラウザへ来るので、
- * 絵は WASM の復号器 (`wasm/mpeg2`)、音はブラウザの AudioDecoder に渡す前に、
+ * 絵も音も WASM の復号器 (`wasm/mpeg2`) に渡す前に、
  * こちらで PES に戻す。サーバが1局に絞ってある (`ServiceFilter`) ので、PAT に
  * 載っている局は1つだけ — その PMT を読んで、映像1本と音声 (並んだ順) を拾う。
  *
@@ -194,7 +194,7 @@ export class PesDemuxer {
 const RATES = [96000, 88200, 64000, 48000, 44100, 32000, 24000, 22050, 16000, 12000, 11025, 8000, 7350];
 
 export interface AdtsFrame {
-    /** 頭 (7 か 9 バイト) ごと。AudioDecoder は ADTS のまま受け取る */
+    /** 頭 (7 か 9 バイト) ごと。WASM の AAC 復号器は ADTS のまま受け取る */
     data: Uint8Array;
     /** 90kHz */
     pts: number;

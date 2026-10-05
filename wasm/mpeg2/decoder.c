@@ -1,9 +1,13 @@
 /*
- * 放送の MPEG-2 映像を、ブラウザの中で解く (docs/stream.md §5.5)。
+ * 放送の MPEG-2 映像と AAC 音声を、ブラウザの中で解く (docs/stream.md §5.5)。
  *
  * **ブラウザには MPEG-2 の復号器が無い** (MSE も WebCodecs も mp2v を受け取らない)
- * ので、FFmpeg の mpeg2video だけを WebAssembly に組んで持ち込む。ここはその
+ * ので、FFmpeg の mpeg2video を WebAssembly に組んで持ち込む。ここはその
  * 薄い口で、JS (src/lib/raw/worker.ts) から呼ぶ。
+ *
+ * 音 (AAC) も同じ FFmpeg の `aac` で解く (`aac_*`)。WebCodecs の AudioDecoder は
+ * 安全な繋ぎ (https) でしか出てこず、iPhone の Safari には iOS 26 まで無いので、
+ * それに頼ると LAN の http と古い iPhone で生の道が使えない。
  *
  * - `dec_push` … PES の中身 (ES) を渡す。**区切りは FFmpeg の parser に任せる** —
  *   放送はふつう 1 PES = 1 枚だが、決まりではない。PTS も一緒に渡し、
@@ -19,6 +23,7 @@
 #include <emscripten/emscripten.h>
 #include <libavcodec/avcodec.h>
 #include <libavutil/frame.h>
+#include <libavutil/samplefmt.h>
 
 /** 待たせておく絵の上限。**溢れたら古いほうから捨てる** (JS 側が見せ遅れているだけなので) */
 #define QUEUE 24
@@ -156,3 +161,61 @@ EMSCRIPTEN_KEEPALIVE void dec_pop(void) {
     head = (head + 1) % QUEUE;
     count--;
 }
+
+/* ---------------------------------------------------------------------------
+ * 音 (AAC)。**ADTS の1コマずつ渡して、その場で1コマ受け取る** — 区切りと時刻は
+ * JS の AdtsSplitter (ts/pes.ts) が付けているので parser は組まない。ADTS の頭は
+ * 復号器が自分で読む (extradata 無しで開くと ADTS として読む決まり)
+ * ------------------------------------------------------------------------- */
+
+/** 返せる面の数。AAC は 7.1 (8本) まで */
+#define AAC_PLANES 8
+
+static AVCodecContext *aac;
+static AVPacket *aac_pkt;
+static AVFrame *aac_frame;
+/** JS へ渡す1コマぶんの控え (aac_push) */
+static int aac_info[3 + AAC_PLANES];
+
+/** 開く。**2回目以降は開き直し** — 局を変えた・標本化周波数や本数が変わったときに呼ぶ */
+EMSCRIPTEN_KEEPALIVE int aac_open(void) {
+    const AVCodec *codec = avcodec_find_decoder(AV_CODEC_ID_AAC);
+    if (codec == NULL) return -1;
+    avcodec_free_context(&aac);
+    aac = avcodec_alloc_context3(codec);
+    if (aac == NULL) return -2;
+    if (avcodec_open2(aac, codec, NULL) < 0) return -3;
+    if (aac_pkt == NULL) aac_pkt = av_packet_alloc();
+    if (aac_frame == NULL) aac_frame = av_frame_alloc();
+    return aac_pkt != NULL && aac_frame != NULL ? 0 : -4;
+}
+
+/**
+ * ADTS の1コマ (頭ごと) を解く。**返すのは解けた標本数** (0 は出てこなかった、負は壊れたコマ)。
+ * 解けたものは `aac_peek` で読む:
+ *
+ *     [0] 本数 [1] 標本化周波数 [2] 標本数 [3..] 各面の番地 (float -1〜1、標本数ぶん)
+ *
+ * 面の並びは FFmpeg の決まり (5.1ch なら 前左・前右・中央・LFE・後左・後右)。
+ * **次の aac_push までしか持たない** (同じ AVFrame を使い回す)
+ */
+EMSCRIPTEN_KEEPALIVE int aac_push(const uint8_t *data, int len) {
+    if (aac == NULL) return -1;
+    aac_pkt->data = (uint8_t *)data;
+    aac_pkt->size = len;
+    int sent = avcodec_send_packet(aac, aac_pkt);
+    if (sent < 0) return sent;
+    av_frame_unref(aac_frame);
+    if (avcodec_receive_frame(aac, aac_frame) != 0) return 0;
+    // `aac` は面ごとの float しか出さない (Web Audio がそのまま受け取る形)。違えば読み違えるので転ばせる
+    if (aac_frame->format != AV_SAMPLE_FMT_FLTP) return -2;
+    int channels = aac_frame->ch_layout.nb_channels;
+    if (channels > AAC_PLANES) channels = AAC_PLANES;
+    aac_info[0] = channels;
+    aac_info[1] = aac_frame->sample_rate;
+    aac_info[2] = aac_frame->nb_samples;
+    for (int i = 0; i < channels; i++) aac_info[3 + i] = (int)(intptr_t)aac_frame->extended_data[i];
+    return aac_frame->nb_samples;
+}
+
+EMSCRIPTEN_KEEPALIVE int *aac_peek(void) { return aac_info; }

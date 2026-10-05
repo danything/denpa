@@ -1,13 +1,15 @@
 #!/bin/bash
-# 放送の MPEG-2 を解く WebAssembly を組む (docs/stream.md §5.5)。
+# 放送の MPEG-2 と AAC を解く WebAssembly を組む (docs/stream.md §5.5)。
 #
 #   build.sh <FFmpeg のソース> <出口>
 #
 # emscripten/emsdk の中で動かす (Dockerfile の `mpeg2wasm` 段)。出口に
 # decoder.mjs (読み込み口) と decoder.wasm ができる。
 #
-# **組むのは mpeg2video の復号器と、絵の区切りを探す parser だけ。** 他は全部切る
-# (`--disable-everything`)。音声の AAC はブラウザの AudioDecoder が解けるので持ち込まない。
+# **組むのは mpeg2video の復号器と、絵の区切りを探す parser と、AAC の復号器だけ。**
+# 他は全部切る (`--disable-everything`)。AAC はブラウザの AudioDecoder に任せていたが、
+# https でしか出てこず iPhone の Safari には iOS 26 まで無いので、こちらで解く。
+# AAC の parser は組まない — ADTS の区切りと時刻は JS (ts/pes.ts の AdtsSplitter) が付ける
 #
 # - `--disable-asm` … x86 の手書きアセンブリは wasm では使えない
 # - スレッドも SIMD も使わない。スレッド版は SharedArrayBuffer のために COOP/COEP
@@ -28,7 +30,7 @@ emconfigure "$SRC/configure" \
     --disable-programs --disable-doc --disable-debug --disable-runtime-cpudetect \
     --disable-autodetect --disable-network --disable-pthreads \
     --disable-avdevice --disable-avformat --disable-avfilter --disable-swresample --disable-swscale \
-    --disable-everything --enable-decoder=mpeg2video --enable-parser=mpegvideo \
+    --disable-everything --enable-decoder=mpeg2video,aac --enable-parser=mpegvideo \
     --nm=emnm --ar=emar --ranlib=emranlib --cc=emcc --cxx=em++ --objcc=emcc --dep-cc=emcc \
     --extra-cflags=-O3 >configure.log
 emmake make -j"$(nproc)" >make.log 2>&1 || { tail -50 make.log; exit 1; }
