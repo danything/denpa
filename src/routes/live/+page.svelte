@@ -202,6 +202,7 @@
         video: () => video,
         raw: () => player.raw,
         capture: () => player.capture(),
+        flow: (on) => player.captureFlow(on),
         paused: () => player.paused,
         toggle: () => player.toggle(),
     });
@@ -635,7 +636,7 @@
                         {/if}
 
                         <!--
-                            **小窓 (PiP)。** ページから出せない端末 (iPhone・iPad のホーム画面から開いたもの、Firefox) では
+                            **小窓 (PiP)。** ページから出せない端末 (iPhone・iPad のホーム画面から開いたもの・口の無いブラウザ) では
                             出さない ([pip.svelte.ts](../../lib/components/player/pip.svelte.ts))。狭い枠では「ほか」に畳む
                         -->
                         {#if pip.available}

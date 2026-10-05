@@ -232,6 +232,39 @@ export class RawEngine {
         });
     }
 
+    /**
+     * 小窓 (PiP) へ出す絵の流れ。**Chrome は worker が描いたコマを直に書き込む**
+     * (`MediaStreamTrackGenerator`。`worker.ts` の `toPip`)。canvas の画面への更新から取る
+     * (`captureStream`) と、窓が隠れて画面の更新が止まったとき絵も止まる。
+     *
+     * 書き込む口が無い Safari は `captureStream` (iPhone で小窓に出せている)。
+     * Firefox はどちらも無い (worker に渡した canvas からは流れを取れない) ので null
+     */
+    pipStream(): MediaStream | null {
+        const Generator = (
+            globalThis as {
+                MediaStreamTrackGenerator?: new (init: {
+                    kind: 'video';
+                }) => MediaStreamTrack & { writable: WritableStream<VideoFrame> };
+            }
+        ).MediaStreamTrackGenerator;
+        try {
+            if (typeof Generator === 'function') {
+                const generator = new Generator({ kind: 'video' });
+                this.send({ type: 'pip', writable: generator.writable }, [generator.writable]);
+                return new MediaStream([generator]);
+            }
+            return this.canvas.captureStream();
+        } catch {
+            return null;
+        }
+    }
+
+    /** 小窓へ書き込むか (`pipStream` の直に書き込む道だけ)。出していない間は写さない */
+    pipFlow(on: boolean): void {
+        this.send({ type: 'pipFlow', on });
+    }
+
     destroy(): void {
         if (this.gone) return;
         this.gone = true;

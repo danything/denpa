@@ -1951,16 +1951,15 @@ export function livePlayer() {
         },
         /**
          * 生で見ているときの絵の流れ (PiP)。**絵は worker の canvas に居て、`<video>` は
-         * 空のまま**なので、canvas から流れを取って別の `<video>` に映す (`pip.svelte.ts`)。
-         * 生でない・取れない (`captureStream` が無い) なら null
+         * 空のまま**なので、その流れを別の `<video>` に映す (`pip.svelte.ts`)。
+         * 取り方は `RawEngine.pipStream`。生でない・取れない (Firefox) なら null
          */
         capture(): MediaStream | null {
-            if (!raw || engine === null) return null;
-            try {
-                return engine.canvas.captureStream();
-            } catch {
-                return null;
-            }
+            return raw && engine !== null ? engine.pipStream() : null;
+        },
+        /** 小窓へ絵を流すか (`RawEngine.pipFlow`)。出していない間は写さない */
+        captureFlow(on: boolean): void {
+            engine?.pipFlow(on);
         },
         /** 生で1コマ解くのに掛かっている時間 (ms、95パーセンタイル)。生でなければ 0 */
         get decodeMs() {

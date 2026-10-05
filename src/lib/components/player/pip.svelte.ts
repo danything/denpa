@@ -12,9 +12,9 @@ import type { Notice } from '#lib/components/Toasts.svelte';
  * - **iPhone / iPad のホーム画面から開いたもの (PWA)。** Safari が許していない。
  *   口は有るように見える (`pictureInPictureEnabled` が立つ) のに押しても出ないので、
  *   `navigator.standalone` (Apple の端末にしか無い) で見分けて、ボタンごと出さない
- * - **Firefox。** ページから小窓を開かせる口 (`requestPictureInPicture`) が無い。
- *   小窓そのものは Firefox が持っていて (映像の上の切り替え・右クリック)、そちらは
- *   ページと関係なく使える。押しても何も起きないボタンを並べないだけ
+ * - **ページから小窓を開かせる口 (`requestPictureInPicture`) が無いブラウザ。** 押しても
+ *   何も起きないボタンを並べない。ブラウザ自身の小窓の切り替えは、ページと関係なく使える
+ * - **生 (MPEG-2) の絵の流れを取れないブラウザ (Firefox)**。生の間だけ出さない (下)
  *
  * Safari は標準の口のほかに `webkitSetPresentationMode` を持っていて、古い iOS の
  * Safari にはそちらしか無い。標準が無ければそちらで出す。
@@ -22,8 +22,9 @@ import type { Notice } from '#lib/components/Toasts.svelte';
  * ## 生 (MPEG-2) で見ているとき
  *
  * **絵は worker の canvas に居て、`<video>` は空** (`raw/engine.ts`)。そのまま出すと
- * 黒い小窓になる。canvas から流れを取って (`captureStream`) 別の `<video>` に映し、
- * それを小窓にする。音は今までどおりページ (`AudioContext`) から鳴る。
+ * 黒い小窓になる。worker が描いた絵の流れを別の `<video>` に映し、それを小窓にする
+ * (流れの取り方は `RawEngine.pipStream`。Chrome は worker が直に書き込み、Safari は
+ * canvas から取る。Firefox はどちらもできない)。音は今までどおりページ (`AudioContext`) から鳴る。
  *
  * **代わりの `<video>` は生に入った時点で用意しておく** (`prepare`)。押されてから
  * 流れを繋いで1枚目を待っていた頃は、iPhone の Safari で必ず断られていた
@@ -48,6 +49,8 @@ interface Options {
     raw?: () => boolean;
     /** 生の絵の流れ (`live-player` の `capture`) */
     capture?: () => MediaStream | null;
+    /** 生の絵を流すか (`live-player` の `captureFlow`)。小窓に出していない間は止める */
+    flow?: (on: boolean) => void;
     /** 止めているか (ライブ・追っかけ)。**小窓で押された止める・再開を合わせる先** */
     paused?: () => boolean;
     toggle?: () => void;
@@ -113,8 +116,11 @@ export function pictureInPicture(options: Options): Pip {
     let on = $state<HTMLVideoElement | null>(null);
     /** 生のときに小窓へ出す代わりの video。要るときに作る */
     let proxy: HTMLVideoElement | null = null;
-    /** 用意できなかった理由 (`prepare`)。押されたときに言う */
-    let unprepared: Refused | null = null;
+    /**
+     * 用意できなかった理由 (`prepare`)。**立っている間はボタンを出さない** — Firefox は生の
+     * 絵の流れを取れず、押せても必ず断られる
+     */
+    let unprepared = $state<Refused | null>(null);
     /** 出せなかった理由 */
     let refused = $state<Notice | null>(null);
 
@@ -253,6 +259,7 @@ export function pictureInPicture(options: Options): Pip {
     function flowing(flow: boolean): void {
         const stream = proxy?.srcObject;
         if (stream instanceof MediaStream) for (const track of stream.getVideoTracks()) track.enabled = flow;
+        options.flow?.(flow);
     }
 
     /** 代わりの video を畳む。生を出たとき (canvas ごと無くなる) */
@@ -315,7 +322,7 @@ export function pictureInPicture(options: Options): Pip {
 
     return {
         get available() {
-            return able && (!raw() || (canCapture && options.capture !== undefined));
+            return able && (!raw() || (canCapture && options.capture !== undefined && unprepared === null));
         },
         get active() {
             return on !== null;

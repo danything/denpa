@@ -30,7 +30,14 @@ export type ToWorker =
      * 画面の側からは画素を読めない** (`transferControlToOffscreen` で渡したので)。
      * `id` は返事 (`frame`) と組にするため
      */
-    | { type: 'grab'; id: number };
+    | { type: 'grab'; id: number }
+    /**
+     * 小窓 (PiP) へ出す絵の書き込み口 (`MediaStreamTrackGenerator` の `writable`)。
+     * **描いた1コマをその場で書き込む** — canvas の画面への更新を待たない (`engine.ts` の `pipStream`)
+     */
+    | { type: 'pip'; writable: WritableStream<VideoFrame> }
+    /** 小窓へ書き込むか。出していない間は書かない (1コマごとに写すぶん重い) */
+    | { type: 'pipFlow'; on: boolean };
 
 /** worker → 画面 */
 export type FromWorker =

@@ -178,6 +178,19 @@ test.describe('ライブを生で見る', () => {
             .poll(() => proxy.evaluate((v) => (v as HTMLVideoElement).readyState), { timeout: 10_000 })
             .toBeGreaterThanOrEqual(1);
 
+        /*
+         * **Chrome は worker が描いたコマを直に書き込む** (`MediaStreamTrackGenerator`)。canvas の
+         * 画面への更新から取っていた頃は、Chrome の窓が小窓の後ろに隠れると絵が止まった (Ubuntu)
+         */
+        expect(
+            await proxy.evaluate((v) => {
+                const Generator = (globalThis as { MediaStreamTrackGenerator?: unknown })
+                    .MediaStreamTrackGenerator as (new () => unknown) | undefined;
+                const track = ((v as HTMLVideoElement).srcObject as MediaStream).getVideoTracks()[0];
+                return Generator === undefined || track instanceof Generator;
+            }),
+        ).toBe(true);
+
         await wakeControls(page, 'live-frame');
         const pip = page.getByTestId('live-pip');
         await pip.click();
@@ -210,6 +223,34 @@ test.describe('ライブを生で見る', () => {
         await pip.click();
         await expect(pip).toHaveAttribute('aria-pressed', 'false');
         expect(await page.evaluate(() => document.pictureInPictureElement)).toBeNull();
+    });
+
+    /*
+     * **生の絵の流れを取れない端末では、生の間だけ小窓のボタンを出さない。** Firefox は
+     * 書き込む口 (`MediaStreamTrackGenerator`) が無く、worker に渡した canvas からも流れを
+     * 取れない。押せても必ず断られる
+     */
+    test('生の絵の流れを取れない端末では、生の間は小窓のボタンを出さない', async ({ page }) => {
+        await page.addInitScript(() => {
+            Reflect.deleteProperty(globalThis, 'MediaStreamTrackGenerator');
+            HTMLCanvasElement.prototype.captureStream = () => {
+                throw new DOMException('取れない', 'NotSupportedError');
+            };
+        });
+        await goto(page, '/live');
+        await page.getByTestId('live-channel').first().click();
+        await expect(page.getByTestId('live-title')).toBeVisible();
+        await wakeControls(page, 'live-frame');
+        // 焼いたものでは出る
+        await expect(page.getByTestId('live-pip')).toBeVisible();
+        await chooseRaw(page);
+        await expect
+            .poll(async () => Number((await page.getByTestId('live-raw').getAttribute('data-shown')) ?? 0), {
+                timeout: 30_000,
+            })
+            .toBeGreaterThan(10);
+        await wakeControls(page, 'live-frame');
+        await expect(page.getByTestId('live-pip')).toHaveCount(0);
     });
 
     test('選んでいなければ、いつもどおり焼いたものを見る', async ({ page }) => {

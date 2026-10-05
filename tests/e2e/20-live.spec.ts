@@ -1028,14 +1028,14 @@ test.describe('ライブ視聴', () => {
 
     /*
      * **出せない端末ではボタンを出さない。** iPhone・iPad のホーム画面から開いたもの (PWA) は、
-     * 口は有るように見えるのに Safari が小窓を許していない。Firefox はページから開かせる口が無い
-     * (小窓そのものは Firefox が自前の切り替えで出せる)
+     * 口は有るように見えるのに Safari が小窓を許していない。ページから開かせる口の無いブラウザも出さない
+     * (ブラウザ自身の小窓の切り替えは別に使える)
      */
     test('小窓を出せない端末では、小窓のボタンを出さない', async ({ browser }) => {
         for (const script of [
             // iPhone のホーム画面から開いた
             () => Object.defineProperty(Navigator.prototype, 'standalone', { get: () => true }),
-            // 口が無い (Firefox)
+            // ページから開かせる口が無い
             () => Object.defineProperty(Document.prototype, 'pictureInPictureEnabled', { get: () => false }),
         ]) {
             const context = await browser.newContext();
