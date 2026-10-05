@@ -354,7 +354,7 @@ export const CAPTION_FEED_HOLD = 1024 * 1024;
  * 何も届かなくても送る間 (ms)。**字幕の無い時間は数分続く**ので、黙っていると前段
  * (nginx の既定は 60 秒) や受け側の読みの時間切れに切られる
  */
-export const CAPTION_PING_MS = 20_000;
+const CAPTION_PING_MS = 20_000;
 
 const PING = new TextEncoder().encode(JSON.stringify({ type: 'ping' }));
 

@@ -242,7 +242,7 @@ export type Command =
  * ffmpeg ごと立て直す (ライブの選局し直しと同じ流儀)。バッファに残っている
  * 範囲内なら画面は送らずに `video.currentTime` だけ動かす
  */
-export type ChaseCommand = {
+type ChaseCommand = {
     type: 'chase';
     recordingId: number;
     /** 再生開始位置 (秒)。省くと頭から */
@@ -255,7 +255,7 @@ export type ChaseCommand = {
     caption?: number;
 };
 
-export type TuneCommand = {
+type TuneCommand = {
     type: 'tune';
     channelType: string;
     channel: string;

@@ -25,8 +25,8 @@ export const FRAME_TICKS = 3003;
 export const AUDIO_TICKS = 1920;
 
 /** 絵の大きさ。**16 の倍数** (マクロブロックで割り切る) */
-export const WIDTH = 256;
-export const HEIGHT = 144;
+const WIDTH = 256;
+const HEIGHT = 144;
 
 class Bits {
     private readonly out: number[] = [];
