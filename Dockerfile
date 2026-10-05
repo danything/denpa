@@ -273,6 +273,8 @@ COPY --from=build /app/package.json ./package.json
 COPY --from=build /app/drizzle ./drizzle
 # ライブ視聴の WebSocket を受ける入口。中身の理由はファイルの頭に書いてある
 COPY --from=build /app/server.js ./server.js
+# 入口が接続元を決めるのに使う (アプリと同じものを共有する。bun は .ts をそのまま読む)
+COPY --from=build /app/src/lib/server/address.ts ./src/lib/server/address.ts
 
 EXPOSE 3000
 # 動いている版。ここでは `dev` のまま — リリースのときに、このイメージを土台に

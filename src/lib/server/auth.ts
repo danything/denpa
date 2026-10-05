@@ -1,3 +1,4 @@
+import { inAny, networks, unreadable } from './address';
 import { config } from './config';
 import { enabled as oidcEnabled } from './oidc';
 
@@ -79,11 +80,15 @@ export function isOpenPath(pathname: string): boolean {
  * 掛かってはいるが**受け取り損ねると誰も入れない**うえ、その状態と区別が付かなかった。
  */
 export function configured(): boolean {
-    return oidcEnabled() || entries().length > 0;
+    return oidcEnabled() || networks(config.trustedNetworks).length > 0;
 }
 
-/** 入る道が無いまま上がったときの案内。起動ログに1度だけ出す */
+/** 入る道が無いまま上がったとき (と、TRUSTED_NETWORKS の書き損じ) の案内。起動ログに1度だけ出す */
 export function warnIfClosed(): void {
+    // 書き損じは当たらないだけなので、気づけるように知らせる
+    for (const entry of unreadable(networks(config.trustedNetworks))) {
+        console.warn(`[boot] TRUSTED_NETWORKS の「${entry}」は読めないので無視します`);
+    }
     if (configured()) return;
     console.warn(
         '[boot] 入る道が設定されていないため、すべてのアクセスを断ります。\n' +
@@ -124,15 +129,16 @@ export function sessionMayRead(loggedIn: boolean): boolean {
  * 片方だけ直して食い違うほうが危ない。
  */
 export function trusted(address: string): boolean {
-    return entries().some((network) => inNetwork(address, network));
+    return inAny(address, networks(config.trustedNetworks));
 }
 
 /**
  * 接続元の住所。**読めなければ空文字を返す。**
  *
- * adapter-node は `ADDRESS_HEADER` を渡してあるのにそのヘッダが無いリクエストが
- * 来ると**例外を投げる**。前段 (リバースプロキシ) を通らずに Pod へ直に届くもの (kubelet の
- * ヘルスチェックなど) がそれで、そのまま呼ぶと 500 になる。
+ * 住所は入口の server.js が決めて `x-denpa-remote` に入れ、adapter-node はそれを読む
+ * (`ADDRESS_HEADER` は server.js が固定する。前段をどこまで信じるかは `TRUSTED_PROXIES`)。
+ * adapter-node はそのヘッダが空だと**例外を投げる** — server.js が相手の住所を
+ * 読めなかったときがそれで、そのまま呼ぶと 500 になる。
  *
  * **読めなかったときは素通しにしない** (空文字はどの CIDR にも当たらない)。
  * 分からないほうを通すと、ヘッダを外すだけで認証を抜けられてしまう
@@ -143,46 +149,6 @@ export function clientAddress(event: { getClientAddress(): string }): string {
     } catch {
         return '';
     }
-}
-
-function entries(): string[] {
-    return config.trustedNetworks
-        .split(',')
-        .map((raw) => raw.trim())
-        .filter((raw) => raw !== '');
-}
-
-/**
- * 住所がそのネットワークの中か。IPv4 の CIDR (`10.10.0.0/16`) か、そのままの住所。
- * **IPv6 は書いたとおりに一致したときだけ**通す (前置き長での判定は入れていない)。
- */
-export function inNetwork(address: string, entry: string): boolean {
-    // ::ffff:10.0.0.1 のような書き方で届くことがある
-    const target = address.replace(/^::ffff:/i, '');
-    const [network = '', bits] = entry.split('/');
-    const left = toIpv4(target);
-    const right = toIpv4(network.replace(/^::ffff:/i, ''));
-    if (left === null || right === null) return target === network;
-
-    const length = bits === undefined ? 32 : Number(bits);
-    if (!Number.isInteger(length) || length < 0 || length > 32) return false;
-    if (length === 0) return true;
-    // >>> で符号なしに戻す。32bit シフトは 0 シフトになるので上で外してある
-    const mask = (0xffffffff << (32 - length)) >>> 0;
-    return (left & mask) >>> 0 === (right & mask) >>> 0;
-}
-
-function toIpv4(value: string): number | null {
-    const parts = value.split('.');
-    if (parts.length !== 4) return null;
-    let out = 0;
-    for (const part of parts) {
-        if (!/^\d{1,3}$/.test(part)) return null;
-        const byte = Number(part);
-        if (byte > 255) return null;
-        out = ((out << 8) | byte) >>> 0;
-    }
-    return out;
 }
 
 /** OIDC でログインを求めるか (素通しの口とファイルの口は呼ぶ側 (hooks) が先に振り分ける) */

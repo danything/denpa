@@ -81,9 +81,9 @@ spec:
             - name: TRUSTED_NETWORKS
               value: {{ . | quote }}
             {{- end }}
-            {{- with .Values.denpa.addressHeader }}
-            # 前段の後ろに居るときだけ。無いと接続元が前段の住所になる
-            - name: ADDRESS_HEADER
+            {{- with .Values.denpa.trustedProxies }}
+            # 前段 (Gateway など) の住所。ここから来たときだけ X-Forwarded-For を読む
+            - name: TRUSTED_PROXIES
               value: {{ . | quote }}
             {{- end }}
             {{- with .Values.denpa.pwaNames }}

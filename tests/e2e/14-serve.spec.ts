@@ -49,7 +49,7 @@ test.describe('入る道を何も設定していないとき', () => {
 test.describe('接続元の住所', () => {
     /*
      * server.js の中継は、本当の接続元を `x-denpa-remote` に**上書きで**入れて内側へ渡す
-     * (前段が居ないときの ADDRESS_HEADER の既定)。外から同じ名前を付けて来ても消えるので、
+     * (adapter-node は常にそれを読む)。外から同じ名前を付けて来ても消えるので、
      * ヘッダを書くだけで信頼したネットワークを名乗ることはできない
      */
     test('外から x-denpa-remote を付けても、信頼したネットワークは名乗れない', async ({ stack }) => {
@@ -58,6 +58,46 @@ test.describe('接続元の住所', () => {
         });
         try {
             const spoofed = await fetch(`${closed.appUrl}/`, { headers: { 'x-denpa-remote': '10.10.5.9' } });
+            expect(spoofed.status).toBe(403);
+        } finally {
+            await closed.shutdown();
+        }
+    });
+
+    /*
+     * `X-Forwarded-For` は、直の相手が `TRUSTED_PROXIES` に入っているときだけ読む。
+     * テストの相手は 127.0.0.1 なので、入れていなければ付けても効かない
+     */
+    test('前段と認めていない相手の x-forwarded-for は読まない', async ({ stack }) => {
+        const closed = await bootClosed(test.info().workerIndex, stack.root, {
+            TRUSTED_NETWORKS: '10.10.0.0/16',
+            // 前の版の設定が残っていても読まない (起動時に知らせるだけ)
+            ADDRESS_HEADER: 'x-forwarded-for',
+        });
+        try {
+            const spoofed = await fetch(`${closed.appUrl}/`, { headers: { 'x-forwarded-for': '10.10.5.9' } });
+            expect(spoofed.status).toBe(403);
+        } finally {
+            await closed.shutdown();
+        }
+    });
+
+    test('前段と認めた相手なら、x-forwarded-for を右から辿る', async ({ stack }) => {
+        const closed = await bootClosed(test.info().workerIndex, stack.root, {
+            TRUSTED_NETWORKS: '10.10.0.0/16',
+            TRUSTED_PROXIES: '127.0.0.1,10.42.0.0/16',
+        });
+        try {
+            // 2段目の前段 (10.42.0.7) を飛ばして、その左が接続元
+            const inside = await fetch(`${closed.appUrl}/`, {
+                headers: { 'x-forwarded-for': '10.10.5.9, 10.42.0.7' },
+            });
+            // 通ったことだけ見る (断られれば 403。画面の中身はここでは問わない)
+            expect(inside.status).not.toBe(403);
+            // 客が左に偽の住所を足して来ても、前段が足した右端 (本当の相手) を使う
+            const spoofed = await fetch(`${closed.appUrl}/`, {
+                headers: { 'x-forwarded-for': '10.10.5.9, 203.0.113.9' },
+            });
             expect(spoofed.status).toBe(403);
         } finally {
             await closed.shutdown();

@@ -213,14 +213,21 @@ docker compose) で動かすなら `oci://ghcr.io/danything/charts/denpa-agent` 
 
 - **`0.0.0.0/0` はインターネットに向けて開くのと同じです。** 録画も設定も
   誰でも触れます。家の外に出す構成では使わず、OIDC を設定してください
-- **リバースプロキシの後ろに置くなら `ADDRESS_HEADER=x-forwarded-for` を設定します。**
-  無いと接続元がすべてプロキシのアドレスになり、`TRUSTED_NETWORKS` が誰にも当たりません
-  (プロキシが無ければ要りません)。ただし、プロキシを通らずに届く経路があると
-  このヘッダは詐称できます。denpa へはプロキシ経由でしか届かないことを確かめてから設定してください
+- **リバースプロキシの後ろに置くなら、プロキシのアドレスを `TRUSTED_PROXIES` に設定します**
+  (CIDR のカンマ区切り。例 `TRUSTED_PROXIES=172.16.0.0/12` や `TRUSTED_PROXIES=10.42.0.0/16`)。
+  ここから来た接続だけ `X-Forwarded-For` を読み、本当の接続元を決めます。無いと接続元がすべて
+  プロキシのアドレスになり、`TRUSTED_NETWORKS` が誰にも当たりません (プロキシが無ければ要りません)。
+  ほかのアドレスから届いた `X-Forwarded-For` は読まないので、プロキシを通らずに届く経路があっても
+  詐称はできません。プロキシを2段重ねるなら両方のアドレスを入れます
+- **前の版で `ADDRESS_HEADER=x-forwarded-for` を設定していたなら、`TRUSTED_PROXIES` に置き換えてください。**
+  `ADDRESS_HEADER` はもう読みません (起動時に1行知らせます)。置き換えるまでは接続元がプロキシの
+  アドレスになり、`TRUSTED_NETWORKS` から来ていた人にもログインを求めるか断ります
+  ([docs/app.md](docs/app.md#接続元の読み方を変えた-前の版から上げるとき))
 - **リバースプロキシには、`Host` をそのまま渡すことと WebSocket を通すことが要ります。**
   `Host` が書き換わると設定の保存などの POST が `403 Cross-site POST form submissions are forbidden`
   で断られ、WebSocket が通らないとライブが「繋がりませんでした」になります。Caddy・Traefik・
-  Envoy (Gateway API) は何もしなくても満たします。nginx は自分で書きます:
+  Envoy (Gateway API) は何もしなくても満たします。nginx は自分で書きます
+  (denpa 側には nginx のアドレスを `TRUSTED_PROXIES` に入れておく):
 
   ```nginx
   location / {
