@@ -1,4 +1,4 @@
-import { inAny, networks } from './address';
+import { inAny, networks, unreadable } from './address';
 import { config } from './config';
 import { enabled as oidcEnabled } from './oidc';
 
@@ -83,8 +83,12 @@ export function configured(): boolean {
     return oidcEnabled() || networks(config.trustedNetworks).length > 0;
 }
 
-/** 入る道が無いまま上がったときの案内。起動ログに1度だけ出す */
+/** 入る道が無いまま上がったとき (と、TRUSTED_NETWORKS の書き損じ) の案内。起動ログに1度だけ出す */
 export function warnIfClosed(): void {
+    // 書き損じは当たらないだけなので、気づけるように知らせる
+    for (const entry of unreadable(networks(config.trustedNetworks))) {
+        console.warn(`[boot] TRUSTED_NETWORKS の「${entry}」は読めないので無視します`);
+    }
     if (configured()) return;
     console.warn(
         '[boot] 入る道が設定されていないため、すべてのアクセスを断ります。\n' +

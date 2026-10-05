@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { inNetwork, normalize, resolveClient } from './address';
+import { inNetwork, normalize, resolveClient, unreadable } from './address';
 
 describe('住所がネットワークの中か', () => {
     test('CIDR の中と外', () => {
@@ -139,5 +139,17 @@ describe('本当の接続元を決める', () => {
 
     test('相手が読めなければ空 (どこにも当たらない)', () => {
         expect(resolveClient('', '10.10.5.9', proxies)).toBe('');
+    });
+});
+
+describe('読めない項目を拾う', () => {
+    test('書き損じだけを返す', () => {
+        expect(unreadable(['10.42.0.0/16', 'fd42::/64', '192.168.1.5'])).toEqual([]);
+        expect(unreadable(['10.42.0.0/16', '10.42.0/16', '10.0.0.0/33', 'fd42::/129', 'localhost'])).toEqual([
+            '10.42.0/16',
+            '10.0.0.0/33',
+            'fd42::/129',
+            'localhost',
+        ]);
     });
 });

@@ -28,20 +28,29 @@ export function normalize(address: string): string | null {
  */
 export function inNetwork(address: string, entry: string): boolean {
     const target = parse(address.trim());
+    const network = parseEntry(entry);
+    if (target === null || network === null || target.v4 !== network.v4) return false;
+    const shift = BigInt((target.v4 ? 32 : 128) - network.length);
+    return target.value >> shift === network.value >> shift;
+}
+
+/**
+ * 読めない項目 (書き損じ)。**黙って当たらないだけ**だと気づけないので、起動時に知らせるのに使う
+ * (`TRUSTED_PROXIES` は server.js、`TRUSTED_NETWORKS` は auth.ts)
+ */
+export function unreadable(entries: readonly string[]): string[] {
+    return entries.filter((entry) => parseEntry(entry) === null);
+}
+
+function parseEntry(entry: string): (Parsed & { length: number }) | null {
     const [network = '', bits, ...rest] = entry.trim().split('/');
     const base = parse(network);
-    if (target === null || base === null || rest.length > 0) return false;
-    if (target.v4 !== base.v4) return false;
-
-    const width = target.v4 ? 32 : 128;
-    let length = width;
-    if (bits !== undefined) {
-        if (!/^\d{1,3}$/.test(bits)) return false;
-        length = Number(bits);
-        if (length > width) return false;
-    }
-    const shift = BigInt(width - length);
-    return target.value >> shift === base.value >> shift;
+    if (base === null || rest.length > 0) return null;
+    const width = base.v4 ? 32 : 128;
+    if (bits === undefined) return { ...base, length: width };
+    if (!/^\d{1,3}$/.test(bits)) return null;
+    const length = Number(bits);
+    return length > width ? null : { ...base, length };
 }
 
 /** カンマ区切りの並び (`TRUSTED_NETWORKS`・`TRUSTED_PROXIES`) を項目に分ける */

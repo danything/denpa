@@ -29,7 +29,7 @@
  * ため、ここが効く (名前は charts/denpa/values.yaml の ingress.hosts)。
  */
 
-import { networks, resolveClient } from './src/lib/server/address.ts';
+import { networks, resolveClient, unreadable } from './src/lib/server/address.ts';
 
 /** `src/lib/server/ws.ts` が置く名前 */
 const LIVE = '__denpaLive';
@@ -78,6 +78,10 @@ if (process.env.ADDRESS_HEADER && process.env.ADDRESS_HEADER !== REMOTE_HEADER) 
 }
 process.env.ADDRESS_HEADER = REMOTE_HEADER;
 const proxies = networks(process.env.TRUSTED_PROXIES ?? '');
+// 書き損じは当たらないだけなので、気づけるように知らせる
+for (const entry of unreadable(proxies)) {
+    console.warn(`TRUSTED_PROXIES の「${entry}」は読めないので無視します`);
+}
 await import('./build/index.js');
 // こちらが公開する側なので、元に戻しておく (アプリが自分の口を見るとき用)
 process.env.PORT = String(publicPort);
