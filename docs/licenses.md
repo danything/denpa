@@ -131,7 +131,7 @@ denpa 本体は上と同じコンテナイメージ `denpa` を、Mac の Docker
 
 | 名前 | 何に | 出どころ | ライセンス |
 | --- | --- | --- | --- |
-| FFmpeg (libavcodec の mpeg2video 復号器と parser、libavutil だけ) | 放送の MPEG-2 をブラウザで解く | <https://ffmpeg.org> | LGPL-2.1+ |
+| FFmpeg (libavcodec の mpeg2video・aac 復号器と mpegvideo parser、libavutil だけ) | 放送の MPEG-2 と AAC をブラウザで解く | <https://ffmpeg.org> | LGPL-2.1+ |
 | emscripten の読み込み口 (`decoder.mjs` に埋まる実行時の糊) | WASM を worker に読み込む | <https://github.com/emscripten-core/emscripten> | MIT / University of Illinois/NCSA |
 
 ## 使っていないもの (書いておく価値のあるもの)

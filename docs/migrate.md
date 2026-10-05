@@ -12,7 +12,7 @@
 | 何を | どうやって | 変数 |
 | --- | --- | --- |
 | EPGStation の録画置き場 | その PVC (かディレクトリ) を denpa の Pod にマウントする | `EPGSTATION_RECORDED_DIR` (既定 `/epgstation-recorded`) |
-| EPGStation v2 の MariaDB (`recorded` / `rule` / `reserve`。v1 は見ない) | denpa から届くところに置く。読むだけ | `EPGSTATION_DB_*` (既定は [app.md](app.md#環境変数)) |
+| EPGStation v2 の MariaDB (`recorded`・`video_file`・`channel` / `rule` / `reserve`。v1 は見ない) | denpa から届くところに置く。読むだけ | `EPGSTATION_DB_*` (既定は [app.md](app.md#環境変数)) |
 
 録画置き場が見えていないと、設定画面は実行の欄を出しません (`migrate.available`)。「引き継ぎ元 ○○ が
 見つかりません」と出ていれば、まだマウントできていません。**`charts/` にも `compose.prod.yml` にも
@@ -81,7 +81,7 @@
 
 ## 済んだら
 
-**マウントと `EPGSTATION_*` を外します。** 残すと設定画面にボタンが出たままになります。
+**マウントと `EPGSTATION_*` を外します。** マウントが残っていると設定画面にボタンが出たままになります (`EPGSTATION_DB_*` は残っても使われないだけ)。
 
 元の PVC は、denpa 側で中身を確かめてから消してください
 (コピーで取り込んだ場合、消すまでは EPGStation もそのまま動きます)。
