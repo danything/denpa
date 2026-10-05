@@ -218,6 +218,7 @@
     const shooter = snapshotter(controls);
     const notices = $derived<Notice[]>([
         ...shooter.notices,
+        ...pip.notices,
         // 録画ボタンの結果 (`?/record`)。押した本人へ、始まったか断られたかを言う
         ...(form?.recorded
             ? [{ key: `record-${form.recorded}`, kind: 'info' as const, text: `録画を始めます: ${form.recorded}` }]
@@ -841,7 +842,14 @@
 </div>
 
 <!-- 返事が変わったことは `source` で渡す (他の画面と同じ。閉じた知らせの扱いは Toasts) -->
-<Toasts {notices} source={form} ondismiss={shooter.dismiss} />
+<Toasts
+    {notices}
+    source={form}
+    ondismiss={(key) => {
+        shooter.dismiss(key);
+        pip.dismiss(key);
+    }}
+/>
 
 <style>
     /*

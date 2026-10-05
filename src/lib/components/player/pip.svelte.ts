@@ -1,3 +1,5 @@
+import type { Notice } from '#lib/components/Toasts.svelte';
+
 /**
  * ピクチャーインピクチャー (PiP)。**3画面 (ライブ・追っかけ・観る画面) で同じもの。**
  *
@@ -41,12 +43,27 @@ interface Options {
     toggle?: () => void;
 }
 
+/** 1枚目を待つ長さ。**来ないまま黙って待ち続けない** (生の canvas から流れが取れていない) */
+const FIRST_FRAME = 3000;
+
+/** どこで断られたか。**押しても何も起きない、で終わらせない** — 端末ごとに転ぶ所が違う */
+class Refused extends Error {}
+
+function reason(error: unknown): string {
+    if (error instanceof Refused) return error.message;
+    if (error instanceof DOMException) return `ブラウザに断られました (${error.name}: ${error.message})`;
+    return String(error);
+}
+
 export interface Pip {
     /** この端末・いまの見え方で出せるか。**出せなければボタンを出さない** */
     readonly available: boolean;
     /** 小窓で出しているか */
     readonly active: boolean;
     toggle: () => void;
+    /** 出せなかった理由 (トーストへ混ぜる)。出せていれば空 */
+    readonly notices: Notice[];
+    dismiss: (key: string) => void;
 }
 
 /** Safari だけの口 */
@@ -89,6 +106,8 @@ export function pictureInPicture(options: Options): Pip {
     let on = $state<HTMLVideoElement | null>(null);
     /** 生のときに小窓へ出す代わりの video。要るときに作る */
     let proxy: HTMLVideoElement | null = null;
+    /** 出せなかった理由 */
+    let refused = $state<Notice | null>(null);
 
     const canCapture =
         typeof HTMLCanvasElement !== 'undefined' && 'captureStream' in HTMLCanvasElement.prototype;
@@ -203,16 +222,52 @@ export function pictureInPicture(options: Options): Pip {
         let video: WebkitVideo | null = options.video();
         if (raw()) {
             const stream = options.capture?.() ?? null;
-            if (stream === null) return;
+            if (stream === null) throw new Refused('MPEG-2 の絵を取り出せません (captureStream)');
+            if (stream.getVideoTracks().length === 0) throw new Refused('MPEG-2 の絵の流れが空です');
             video = makeProxy();
             video.srcObject = stream;
             // 1枚目が来るまで待つ。来る前に頼むと断られる (`InvalidStateError`)
-            await video.play();
+            const proxied = video;
+            await new Promise<void>((done, fail) => {
+                const timer = setTimeout(
+                    () => fail(new Refused(`MPEG-2 の絵が流れてきません (${FIRST_FRAME / 1000}秒待った)`)),
+                    FIRST_FRAME,
+                );
+                proxied.play().then(
+                    () => {
+                        clearTimeout(timer);
+                        done();
+                    },
+                    (error: unknown) => {
+                        clearTimeout(timer);
+                        fail(new Refused(`代わりの映像を再生できません (${reason(error)})`));
+                    },
+                );
+            });
             if (options.paused?.() === true) video.pause();
         }
         if (video === null) return;
         if (standard()) await video.requestPictureInPicture();
-        else if (webkit(video)) video.webkitSetPresentationMode?.(MODE);
+        else if (webkit(video)) {
+            video.webkitSetPresentationMode?.(MODE);
+            // Safari の口は断っても何も言わない。切り替わったかを見て言う
+            const target = video;
+            setTimeout(() => {
+                if (on !== target)
+                    refuse(new Refused('Safari が小窓に切り替えませんでした (webkitSetPresentationMode)'));
+            }, 1000);
+        }
+    }
+
+    /** 出せなかった理由を言う。**コンソールにも残す** (端末によってはトーストより読みやすい) */
+    function refuse(error: unknown): void {
+        console.warn('[pip]', error);
+        refused = {
+            key: `pip-${Date.now()}`,
+            kind: 'error',
+            text: `小窓を出せませんでした: ${reason(error)}`,
+        };
+        release();
     }
 
     function leave(): void {
@@ -232,12 +287,15 @@ export function pictureInPicture(options: Options): Pip {
             return on !== null;
         },
         toggle() {
+            refused = null;
             if (on !== null) leave();
-            else
-                void enter().catch(() => {
-                    // 絵がまだ来ていない・ブラウザに断られた。押し直せばよい
-                    release();
-                });
+            else void enter().catch(refuse);
+        },
+        get notices() {
+            return refused === null ? [] : [refused];
+        },
+        dismiss(key: string) {
+            if (refused?.key === key) refused = null;
         },
     };
 }

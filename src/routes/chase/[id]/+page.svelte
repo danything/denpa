@@ -263,7 +263,7 @@
 
     /** いまの1コマを字幕ごと切り抜いて PNG に (ライブ・観る画面と同じ。`snapshot.ts`) */
     const shooter = snapshotter(controls);
-    const notices = $derived<Notice[]>(shooter.notices);
+    const notices = $derived<Notice[]>([...shooter.notices, ...pip.notices]);
     function snapshot(): void {
         void shooter.take(
             () => videoFrame(video),
@@ -491,7 +491,13 @@
     </FactsAside>
 </div>
 
-<Toasts {notices} ondismiss={shooter.dismiss} />
+<Toasts
+    {notices}
+    ondismiss={(key) => {
+        shooter.dismiss(key);
+        pip.dismiss(key);
+    }}
+/>
 
 <style>
     /* 映像が左、番組の中身が右。畳まれる幅では縦に積んでページごとスクロール */

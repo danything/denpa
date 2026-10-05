@@ -1004,6 +1004,29 @@ test.describe('ライブ視聴', () => {
     });
 
     /*
+     * **断られたら理由を出す。** 黙って何も起きないと、どこで転んだのか端末の上で
+     * 見分けられない (iPhone の Safari で、生のときだけ出なかった)
+     */
+    test('小窓を断られたら、理由をトーストで言う', async ({ page }) => {
+        await page.addInitScript(() => {
+            Object.defineProperty(Document.prototype, 'pictureInPictureEnabled', { get: () => true });
+            HTMLVideoElement.prototype.requestPictureInPicture = async () => {
+                throw new DOMException('ユーザーの操作が要る', 'NotAllowedError');
+            };
+        });
+        await goto(page, '/live');
+        await page.getByTestId('live-channel').first().click();
+        await expect(page.getByTestId('live-title')).toBeVisible();
+
+        await wakeControls(page, 'live-frame');
+        await page.getByTestId('live-pip').click();
+        await expect(
+            page.getByText('小窓を出せませんでした: ブラウザに断られました (NotAllowedError'),
+        ).toBeVisible();
+        await expect(page.getByTestId('live-pip')).toHaveAttribute('aria-pressed', 'false');
+    });
+
+    /*
      * **出せない端末ではボタンを出さない。** iPhone・iPad のホーム画面から開いたもの (PWA) は、
      * 口は有るように見えるのに Safari が小窓を許していない。Firefox は口そのものが無い
      */

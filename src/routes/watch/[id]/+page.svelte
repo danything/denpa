@@ -1064,6 +1064,7 @@
     const notices = $derived<Notice[]>([
         ...errorNotice(form, 'watch-delete'),
         ...shooter.notices,
+        ...pip.notices,
     ]);
 
     /**
@@ -1626,7 +1627,14 @@
     </FactsAside>
 </div>
 
-<Toasts {notices} source={form} ondismiss={shooter.dismiss} />
+<Toasts
+    {notices}
+    source={form}
+    ondismiss={(key) => {
+        shooter.dismiss(key);
+        pip.dismiss(key);
+    }}
+/>
 
 <style>
     .watch {
