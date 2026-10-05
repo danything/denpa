@@ -247,7 +247,8 @@ export function livePlayer() {
     /**
      * 断り書き。**失敗ではないが、頼まれたとおりにできなかったとき。**
      *
-     * いまのところ「AV1 を出せない端末なので H.264 に戻した」の1つだけ。
+     * 「AV1 を出せない端末なので H.264 に戻した」と、サーバが言ってきたもの
+     * (`notice`。GPU で焼けずにソフトウェアへ降りた、など)。
      * `message` と分けてあるのは、あちらが選局のたびに消えるため — 戻した理由は
      * 戻した先が映り始めても残っていないと、なぜ変わったのか分からない
      */
@@ -1584,6 +1585,9 @@ export function livePlayer() {
                 const notice = JSON.parse(new TextDecoder().decode(body)) as Notice;
                 if (notice.type === 'error') {
                     fail(notice.message);
+                } else if (notice.type === 'notice') {
+                    // 絵は出ている。断り書きに残す (GPU で焼けずにソフトウェアへ降りた、など)
+                    warning = notice.message;
                 } else if (notice.type === 'captions') {
                     /*
                      * **1枚も届いていなくても、あることは分かる。** 届いてから

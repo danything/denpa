@@ -1,5 +1,6 @@
-import { readdirSync, readFileSync } from 'node:fs';
-import { basename, dirname } from 'node:path';
+import { mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { basename, dirname, join } from 'node:path';
 import {
     CODEC_LABEL,
     HW_CODECS,
@@ -22,6 +23,8 @@ import { run } from './stream';
  * 「GPU」カードに口ごとに出て、使えるものには自動で印が付く (`settings().hwAllow` と
  * 突き合わせるのは `hwChain`)。**QSV を先に、VA-API は逃げ道** — 同じ GPU なら速さは
  * 変わらないが、QSV のほうがレート制御が豊富で Intel が手入れしている。
+ *
+ * **ライブも同じ印で GPU に載る** (`liveHw`)。設定項目は増やさず、印を外せば CPU に戻る。
  * 全体の話は docs/encode.md「GPU で焼く」
  */
 
@@ -35,6 +38,16 @@ export interface HwDevice {
     qsv: HwCodec[];
     /** VA-API で焼けたコーデック */
     vaapi: HwCodec[];
+    /**
+     * VA-API のうち、**ICQ が通らず CQP でだけ焼けた**コーデック。
+     * i965 (Gemini Lake などの古いドライバ) は ICQ を持たない (`hwArgs`)
+     */
+    cqp: HwCodec[];
+    /**
+     * VA-API のうち、**放送の MPEG-2 を GPU で解いて、GPU でインタレ解除して焼ける**と
+     * 確かめられたコーデック (`probeFull`)。ライブはこれなら CPU に絵を降ろさない (`liveHwArgs`)
+     */
+    full: HwCodec[];
 }
 
 export interface HwEncode {
@@ -50,6 +63,8 @@ export interface HwEncode {
 export interface HwWay {
     device: string;
     kind: HwKind;
+    /** VA-API を ICQ ではなく CQP で頼む (`HwDevice.cqp`)。試し焼きの結果から `hwChain` が付ける */
+    cqp?: true;
 }
 
 let state: HwEncode = { probed: false, devices: [], message: '' };
@@ -73,7 +88,12 @@ export function hwChain(codec: HwCodec, allow: HwAllow, turn = 0, devices = stat
         .map((device) =>
             HW_KINDS.filter(
                 (kind) => device[kind].includes(codec) && hwAllowed(allow, device.path, kind, codec),
-            ).map((kind) => ({ device: device.path, kind })),
+            ).map(
+                (kind): HwWay =>
+                    kind === 'vaapi' && device.cqp.includes(codec)
+                        ? { device: device.path, kind, cqp: true }
+                        : { device: device.path, kind },
+            ),
         )
         .filter((ways) => ways.length > 0);
     if (perDevice.length === 0) return [];
@@ -98,7 +118,16 @@ export function hwChain(codec: HwCodec, allow: HwAllow, turn = 0, devices = stat
  * ソフトウェア側の 23 も持ってきていない (あちらは実測で決めた値で、こちらは
  * 1つの値で両コーデックを賄う別の建て付け。測らずに写すと二重に当てずっぽうになる)。
  * ソフトウェアで焼いたものと大きさが違って見えたら、ここを動かす。
- * QSV の `-preset medium` は7段 (veryfast〜veryslow) の真ん中
+ * QSV の `-preset medium` は7段 (veryfast〜veryslow) の真ん中。
+ *
+ * ## ICQ を持たないドライバには CQP で頼む
+ *
+ * **i965 (Gemini Lake などの VA-API ドライバ) は ICQ を持たない** — 試し焼きが落ちて
+ * 「焼けない」に見えていた (issue #417)。ICQ が落ちたら CQP (`-qp`、量子化の幅を固定)
+ * でも試し (`probeOnce`)、通ればそちらで焼く (`HwWay.cqp`)。値は ICQ と同じ 24 —
+ * H.264 の qp は 0〜51 で ICQ と同じ軸。AV1 の qp は 0〜255 なので、比で写して 120。
+ * **どちらも実測はまだ** (ICQ と同じく当てずっぽう。CQP は場面に応じて量を
+ * 変えないので、動きの多い場面で ICQ より大きく、静かな場面で小さくなるはず)
  */
 export function hwArgs(
     way: HwWay,
@@ -114,7 +143,106 @@ export function hwArgs(
     return {
         device: ['-init_hw_device', `vaapi=va:${way.device}`, '-filter_hw_device', 'va'],
         filter: ['format=nv12', 'hwupload'],
-        encoder: [`${codec}_vaapi`, '-rc_mode', 'ICQ', '-global_quality', '24'],
+        encoder: [`${codec}_vaapi`, ...vaapiQuality(way, codec)],
+    };
+}
+
+/** VA-API の画質の頼み方。ICQ を持たないドライバには CQP (`hwArgs` の説明) */
+function vaapiQuality(way: HwWay, codec: HwCodec): string[] {
+    if (way.cqp === true) return ['-rc_mode', 'CQP', '-qp', codec === 'av1' ? '120' : '24'];
+    return ['-rc_mode', 'ICQ', '-global_quality', '24'];
+}
+
+/** ライブで GPU を使うときの道。`full` なら復号とインタレ解除まで GPU (`liveHwArgs`) */
+export interface LiveHw {
+    way: HwWay;
+    full: boolean;
+}
+
+/**
+ * **ライブをどの GPU で焼くか。** 無ければ null (ソフトウェア)。
+ *
+ * 録画と同じ `hwChain` — 設定の印をそのまま使う (項目は増やさない)。そのうえで
+ * **復号から GPU で通せる道 (`HwDevice.full`) があれば先に採る。** 焼くところだけ GPU に
+ * 移しても、CPU に残る復号・bwdif・nv12 への変換で非力な機材は3本目が間に合わない
+ * (issue #417 の実測: Celeron J4125 で3本同時、焼くだけ GPU 0.76x / 全部 GPU 1.2x)。
+ * 同じ口の QSV より VA-API の全部 GPU を上に置くのはそのため
+ */
+export function liveHw(codec: HwCodec, allow: HwAllow, turn = 0, devices = state.devices): LiveHw | null {
+    const chain = hwChain(codec, allow, turn, devices);
+    const full = chain.find(
+        (way) => way.kind === 'vaapi' && devices.some((d) => d.path === way.device && d.full.includes(codec)),
+    );
+    if (full !== undefined) return { way: full, full: true };
+    const first = chain[0];
+    return first === undefined ? null : { way: first, full: false };
+}
+
+/**
+ * **ライブで GPU に焼かせる引数。** 録画の `hwArgs` との違いは遅れを作らないこと:
+ *
+ * - `-bf 0` … B フレームを作らない。作ると必ず1枚以上待つ (x264 の `zerolatency` と同じ狙い)
+ * - `-async_depth 1` … GPU に先積みしない。既定 (VA-API 2・QSV 4) のぶんだけ絵が遅れて出る
+ * - QSV は `-preset veryfast`。先読み (`look_ahead`) は既定で切れているので触らない —
+ *   書いて名前が変わると、焼けずにソフトウェアへ落ちるだけになる
+ * - 画質は録画と同じ ICQ 24 (CQP なら同じ値の qp)。x264 ultrafast の既定 (crf 23) と
+ *   同じ軸のつもりだが、**手元に GPU が無いので見比べていない**
+ *
+ * `-g` はライブの側 (`live.ts` の `videoArgs`) が足す。
+ *
+ * ## `full` — 復号とインタレ解除も GPU (VA-API だけ)
+ *
+ * `-hwaccel vaapi -hwaccel_output_format vaapi` で放送の MPEG-2 を GPU で解き、絵を GPU に
+ * 置いたまま `deinterlace_vaapi=rate=field` (フィールドごとに1コマ。bwdif の既定と同じ
+ * 59.94p) に通して、そのまま焼く。**CPU のフィルタは1つも挟めない** — 挟むなら
+ * `hwdownload` が要り、降ろしたぶんだけ遅くなる。ライブの映像の鎖はインタレ解除だけ
+ * なので挟むものは無い (`-fpsmax` はコマを間引くだけでフィルタではなく、字幕と音声は
+ * 別の流れ)。インタレ解除の絵は bwdif と変わる — **まだ見比べていない**。
+ *
+ * `filter` は「復号のあとに通すもの全部」。`full` でなければインタレ解除は含まないので、
+ * 呼ぶ側が CPU の bwdif を前に足す
+ */
+export function liveHwArgs(
+    hw: LiveHw,
+    codec: HwCodec,
+): { input: string[]; filter: string[]; encoder: string[] } {
+    const { way } = hw;
+    if (way.kind === 'qsv') {
+        const base = hwArgs(way, codec);
+        return {
+            input: base.device,
+            filter: base.filter,
+            encoder: [
+                `${codec}_qsv`,
+                '-preset',
+                'veryfast',
+                '-global_quality',
+                '24',
+                '-bf',
+                '0',
+                '-async_depth',
+                '1',
+            ],
+        };
+    }
+    const encoder = [`${codec}_vaapi`, ...vaapiQuality(way, codec), '-bf', '0', '-async_depth', '1'];
+    if (!hw.full) {
+        const base = hwArgs(way, codec);
+        return { input: base.device, filter: base.filter, encoder };
+    }
+    return {
+        input: [
+            '-init_hw_device',
+            `vaapi=va:${way.device}`,
+            '-hwaccel',
+            'vaapi',
+            '-hwaccel_output_format',
+            'vaapi',
+            '-hwaccel_device',
+            'va',
+        ],
+        filter: ['deinterlace_vaapi=rate=field'],
+        encoder,
     };
 }
 
@@ -186,34 +314,113 @@ export function probe(): Promise<HwEncode> {
 async function probeOnce(): Promise<HwEncode> {
     const devices: HwDevice[] = [];
     for (const path of findDevices()) {
-        const device: HwDevice = { path, label: labelOf(path), qsv: [], vaapi: [] };
+        const device: HwDevice = { path, label: labelOf(path), qsv: [], vaapi: [], cqp: [], full: [] };
         for (const kind of HW_KINDS) {
             for (const codec of HW_CODECS) {
-                const hw = hwArgs({ device: path, kind }, codec);
-                const ok = await tryEncode([
-                    ...hw.device,
-                    ...SOURCE,
-                    '-vf',
-                    hw.filter.join(','),
-                    '-c:v',
-                    ...hw.encoder,
-                ]);
-                if (ok) device[kind].push(codec);
+                if (await tryWay({ device: path, kind }, codec)) {
+                    device[kind].push(codec);
+                } else if (kind === 'vaapi' && (await tryWay({ device: path, kind, cqp: true }, codec))) {
+                    // ICQ を持たないドライバ (i965)。CQP で焼く (`hwArgs` の説明)
+                    device[kind].push(codec);
+                    device.cqp.push(codec);
+                }
             }
         }
         devices.push(device);
     }
+    await probeFull(devices);
     const next: HwEncode = { probed: true, devices, message: describe(devices) };
     state = next;
     console.log(`[hwenc] ${next.message}`);
     return next;
 }
 
-/** 口ごとの一言。「QSV: H.264 / AV1、VA-API: H.264」か「焼けません」 */
+/** 録画と同じ引数で1コマ焼いてみる */
+function tryWay(way: HwWay, codec: HwCodec): Promise<boolean> {
+    const hw = hwArgs(way, codec);
+    return tryEncode([...hw.device, ...SOURCE, '-vf', hw.filter.join(','), '-c:v', ...hw.encoder]);
+}
+
+/**
+ * **復号から GPU で通せるか** (`HwDevice.full`)。VA-API で焼けたコーデックだけ確かめる。
+ *
+ * 素材は放送と同じ **インタレの MPEG-2** を、その場で CPU で作る (`nullsrc` を
+ * `mpeg2video` で。一時ファイルに置くのは、`run` が標準入力を渡さないため)。
+ * それをライブと同じ引数 (`liveHwArgs` の `full`) で解いて、解除して、焼く。
+ *
+ * **GPU で解けなかったら必ず落ちる。** ffmpeg は `-hwaccel` が使えないと黙って CPU で
+ * 解くが、その絵は GPU に無いので `deinterlace_vaapi` が受け取れずに降りる。
+ * 「通った = GPU で解けた」と読んでよい
+ */
+async function probeFull(devices: HwDevice[]): Promise<void> {
+    if (!devices.some((d) => d.vaapi.length > 0)) return;
+    const dir = mkdtempSync(join(tmpdir(), 'denpa-hw-'));
+    try {
+        const sample = join(dir, 'mpeg2.ts');
+        const made = await run(
+            [
+                config.ffmpeg,
+                '-v',
+                'error',
+                '-nostdin',
+                '-f',
+                'lavfi',
+                '-i',
+                'nullsrc=s=320x240:r=30000/1001:d=0.3',
+                '-c:v',
+                'mpeg2video',
+                '-flags',
+                '+ilme+ildct',
+                '-f',
+                'mpegts',
+                sample,
+            ],
+            { timeoutMs: config.hwProbeTimeout },
+        );
+        if (made.code !== 0) {
+            console.warn('[hwenc] MPEG-2 の試し素材を作れなかったので、復号から GPU で通す道は使いません');
+            return;
+        }
+        for (const device of devices) {
+            for (const codec of device.vaapi) {
+                const way: HwWay = device.cqp.includes(codec)
+                    ? { device: device.path, kind: 'vaapi', cqp: true }
+                    : { device: device.path, kind: 'vaapi' };
+                const hw = liveHwArgs({ way, full: true }, codec);
+                const ok = await tryEncode([
+                    ...hw.input,
+                    '-i',
+                    sample,
+                    '-vf',
+                    hw.filter.join(','),
+                    '-c:v',
+                    ...hw.encoder,
+                ]);
+                if (ok) device.full.push(codec);
+            }
+        }
+    } finally {
+        rmSync(dir, { recursive: true, force: true });
+    }
+}
+
+/**
+ * 口ごとの一言。「QSV: H.264 / AV1、VA-API: H.264 (CQP)」か「焼けません」。
+ * ICQ を持たないドライバで CQP に落としたものには (CQP) を添え、復号から GPU で
+ * 通せるもの (ライブで使う) は最後に分けて書く
+ */
 export function describeDevice(device: HwDevice): string {
     const parts = HW_KINDS.filter((kind) => device[kind].length > 0).map(
-        (kind) => `${HW_KIND_LABEL[kind]}: ${device[kind].map((c) => CODEC_LABEL[c]).join(' / ')}`,
+        (kind) =>
+            `${HW_KIND_LABEL[kind]}: ${device[kind]
+                .map((c) =>
+                    kind === 'vaapi' && device.cqp.includes(c) ? `${CODEC_LABEL[c]} (CQP)` : CODEC_LABEL[c],
+                )
+                .join(' / ')}`,
     );
+    if (device.full.length > 0) {
+        parts.push(`ライブは復号から GPU: ${device.full.map((c) => CODEC_LABEL[c]).join(' / ')}`);
+    }
     return parts.length > 0
         ? parts.join('、')
         : 'GPU でエンコードできません (ドライバが合っていないか、権限がありません)';

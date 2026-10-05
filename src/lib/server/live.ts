@@ -44,7 +44,9 @@ import { config } from './config';
 import { DataBroadcast, type ResponseMessage } from './databroadcast';
 import { orm } from './db';
 import { deinterlace } from './encoder';
+import { type LiveHw, liveHw, liveHwArgs } from './hwenc';
 import { programs, recordings, services } from './schema';
+import { settings } from './settings';
 import { chunks, lines } from './stream';
 import { openWhenFree } from './tuner';
 import type { Connection } from './ws';
@@ -172,14 +174,17 @@ type StreamCodec = LiveCodec | 'audio';
  * @param caption 何本目の字幕を出すか。**null なら字幕の出口を付けない** —
  *   字幕を持たない放送に頼むと ffmpeg は組み立ての時点で降りるので、
  *   そうと分かったらこちらで焼き直す (`Session.run`)
+ * @param hw GPU で焼くならその道 (`hwenc.liveHw`)。null ならソフトウェア (`videoArgs`)
  */
 export function encodeArgs(
     program: number,
     audio: AudioTrack,
     codec: StreamCodec = 'h264',
     caption: number | null = 0,
+    hw: LiveHw | null = null,
 ): string[] {
     const video = codec !== 'audio';
+    const picture = codec === 'audio' ? null : videoArgs(codec, hw);
     const from = programSpec(program);
     // デュアルモノは片側だけを両耳へ。そのままだと左右から別の言語が同時に鳴る
     const pan =
@@ -199,10 +204,12 @@ export function encodeArgs(
         '100000',
         // 字幕を絵で受け取るための指定。映像には効かない
         ...(caption === null || !video ? [] : captionInput()),
+        // GPU の口を開ける。復号から GPU なら `-hwaccel` もここ (入力より前でないと効かない)
+        ...(picture?.input ?? []),
         '-i',
         'pipe:0',
         // 音声だけなら映像は焼かない (StreamCodec)
-        ...(video
+        ...(picture !== null
             ? [
                   /*
                    * インタレ解除 (上の説明)。**ライブは常に60コマ。** 録画は本編映像から実測して
@@ -210,7 +217,7 @@ export function encodeArgs(
                    * 決めないといけない。60 に倒しておけば動きは絶対に落ちない (アニメで無駄が出るだけ)
                    */
                   '-vf',
-                  deinterlace(true),
+                  picture.filter,
                   '-map',
                   `${from}:v:0`,
                   /*
@@ -234,7 +241,7 @@ export function encodeArgs(
                    */
                   '-fpsmax',
                   '60000/1001',
-                  ...videoArgs(codec),
+                  ...picture.encoder,
               ]
             : []),
         // 何本目の音声か。複数入っている放送では 0 が主とは限らない
@@ -293,8 +300,35 @@ export function encodeArgs(
  * に対し **1.1〜1.5秒**。低遅延指定 (`pred-struct=1`) は
  * 実時間に間に合わなくなるので使えない。**AV1 を選ぶと放送の今から1秒ぶん
  * 離れる** (切り替えの画面には出していない)。
+ *
+ * ## GPU
+ *
+ * 設定の「GPU」カードでそのコーデックに印が付いていれば、**録画と同じ GPU で焼く**
+ * (`hwenc.liveHw`。低遅延の引数とインタレ解除まで GPU に寄せる話は `hwenc.liveHwArgs`)。
+ * 非力な機材 (Celeron J4125) では x264 ultrafast で2本目から追いつかなくなるため (issue #417)。
+ * GPU が映像を1つも出さずに降りたら、ソフトウェアで焼き直す (`Session.run`)
+ *
+ * @returns `input` は `-i` より前、`filter` は `-vf`、`encoder` は `-c:v` から
  */
-function videoArgs(codec: LiveCodec): string[] {
+function videoArgs(
+    codec: LiveCodec,
+    hw: LiveHw | null,
+): { input: string[]; filter: string; encoder: string[] } {
+    if (hw !== null) {
+        const gpu = liveHwArgs(hw, codec);
+        return {
+            input: gpu.input,
+            // 復号から GPU なら CPU のインタレ解除は挟まない (挟むと絵を降ろすことになる)
+            filter: (hw.full ? gpu.filter : [deinterlace(true), ...gpu.filter]).join(','),
+            // -g はソフトウェアと揃える。合流の待ちは鍵フレームの間隔で決まる
+            encoder: ['-c:v', ...gpu.encoder, '-g', '60'],
+        };
+    }
+    return { input: [], filter: deinterlace(true), encoder: softwareArgs(codec) };
+}
+
+/** ソフトウェアで焼くときの `-c:v` から (上の説明) */
+function softwareArgs(codec: LiveCodec): string[] {
     if (codec === 'av1') {
         // -g は H.264 と揃える。合流の待ちは鍵フレームの間隔で決まる
         return ['-c:v', 'libsvtav1', '-preset', '12', '-g', '60', '-svtav1-params', 'lookahead=0'];
@@ -462,6 +496,34 @@ function captionlessNow(serviceId: number): boolean {
     return at !== undefined && Date.now() - at < FORGET_CAPTIONLESS;
 }
 
+/**
+ * GPU でライブを焼けなかった道と、その時刻。**しばらくはソフトウェアで焼く** (`pickLiveHw`)。
+ *
+ * 落ちる GPU は選局のたびに落ちるので、覚えておかないと毎回「GPU で起こして降りて
+ * 焼き直す」ぶん待たせ、毎回断り書きを出すことになる。ドライバや素材が変われば
+ * 通ることもあるので、字幕と同じくしばらくしたら忘れる
+ */
+const gpuFailed = new Map<string, number>();
+/** 忘れるまで (ms) */
+const FORGET_GPU_FAILED = 15 * 60_000;
+/** GPU の口を回す番。録画と同じく、セッションごとに先頭の口を入れ替える (`hwenc.hwChain`) */
+let liveTurn = 0;
+
+/** GPU からソフトウェアに降りたときに画面へ出す一行 */
+export const GPU_GAVE_UP = 'GPU でエンコードできなかったので、ソフトウェアでエンコードしています';
+
+function hwKey(codec: StreamCodec, hw: LiveHw): string {
+    return `${codec}:${hw.way.device}:${hw.way.kind}:${hw.full}`;
+}
+
+/** このセッションを GPU で焼くか。設定の印と試し焼き (`hwenc.liveHw`)、最近落ちたか */
+function pickLiveHw(codec: LiveCodec): LiveHw | null {
+    const hw = liveHw(codec, settings().hwAllow, liveTurn++);
+    if (hw === null) return null;
+    const at = gpuFailed.get(hwKey(codec, hw));
+    return at !== undefined && Date.now() - at < FORGET_GPU_FAILED ? null : hw;
+}
+
 /** 放送の実時刻を配り直す間隔 (ms)。配り続ける理由は `Session.tellClock` */
 const CLOCK_EVERY = 5_000;
 
@@ -484,9 +546,20 @@ class Session {
     private startPts = Number.NaN;
     /** 最後に時計を配った時刻 (`tellClock`) */
     private toldClockAt = 0;
-    private readonly splitter = new Fmp4Splitter();
-    /** 字幕の器を割る。時刻はコマに付いてくる ([ts/mkv.ts](../ts/mkv.ts)) */
-    private readonly frames = new MkvSplitter();
+    /**
+     * いまの ffmpeg が映像の中身 (init の次の塊) を1つでも出したか。
+     * **GPU から降りてよいのは出す前だけ** (`run`) — 出したあとで落ちたのは GPU のせいとは限らない
+     */
+    private produced = false;
+    /**
+     * GPU からソフトウェアに降りたときの断り書き。**途中から入ってきた人にも渡す** (`add`)
+     */
+    private note: Notice | null = null;
+    /**
+     * ソフトウェアで焼き直している GPU の道 (`hwKey`)。**ソフトウェアで映像が出たら**
+     * GPU のせいだったと決めて覚え、断り書きを出す (`blameGpu`)
+     */
+    private blame: string | null = null;
     /** 入口の見出しから拾った、選べる字幕 */
     private readonly list: TrackList;
     private readonly aborter = new AbortController();
@@ -598,6 +671,7 @@ class Session {
         if (viewer.wantsData) this.refreshData(viewer);
         const clock = this.clockNotice();
         if (clock !== null) this.tellOne(viewer, clock);
+        if (this.note !== null) this.tellOne(viewer, this.note);
     }
 
     /**
@@ -717,12 +791,24 @@ class Session {
              */
             // 音声だけなら字幕は焼かない
             let wanted = this.codec === 'audio' || captionlessNow(this.serviceId) ? null : this.track;
+            // GPU で焼くか (`pickLiveHw`)。降りたらソフトウェアで焼き直す (下)
+            let hw = this.codec === 'audio' ? null : pickLiveHw(this.codec);
+            /*
+             * **ライブの TS は読み口を1つだけ作って、起こし直しても使い回す。**
+             *
+             * 読み口 (`getReader`) は1人しか持てない。ffmpeg ごとに作ると、前の流し込みが
+             * 手放すまで次が読めない — 手放すのは相手が降りたあと次の塊を書こうとして転んだとき
+             * だが、書き込みは返ってこないこともある (下の「終わりは ffmpeg の終了で見る」)。
+             * 使い回せば前の流し込みは何も握っていない。追っかけは読み直すので毎回作る
+             */
+            const feed = tuned === null ? null : chunks(tuned);
             for (;;) {
                 // ライブは同じ TS が流れ続けている。追っかけは焼き直しのたびに読み直す
-                const stream = tuned ?? this.source?.();
+                const stream = feed ?? (this.source === undefined ? undefined : chunks(this.source()));
                 if (stream === undefined) return;
+                this.produced = false;
                 const proc = Bun.spawn(
-                    [config.ffmpeg, ...encodeArgs(this.program, this.audio, this.codec, wanted)],
+                    [config.ffmpeg, ...encodeArgs(this.program, this.audio, this.codec, wanted, hw)],
                     // 字幕は3本目の口へ出させる。**stdio の配列でしか増やせない**
                     { stdio: ['pipe', 'pipe', 'pipe', ...(wanted === null ? [] : ['pipe'])] as never },
                 );
@@ -742,7 +828,7 @@ class Session {
                 let trouble: unknown = null;
                 const watching = this.watch(proc);
                 const running = Promise.all([
-                    this.pump(stream, proc),
+                    this.pump(stream, proc, feed === null),
                     this.drain(proc),
                     watching,
                     wanted === null ? Promise.resolve() : this.subtitles(proc),
@@ -759,7 +845,7 @@ class Session {
                  * 必ず閉じるので、ここで待つのは安全 (流し込みのほうは閉じても
                  * 例外にならないことがあるので待てない)
                  */
-                if (wanted !== null) await watching.catch(() => undefined);
+                if (wanted !== null || hw !== null) await watching.catch(() => undefined);
                 /*
                  * 追っかけが**録れているところまで読み切った** (ffmpeg が入力を
                  * 食べ終えて 0 で終わる)。終わりであってエラーではない。
@@ -768,6 +854,23 @@ class Session {
                 if (this.source !== undefined && (await proc.exited) === 0) {
                     this.tell({ type: 'ended' });
                     return;
+                }
+                /*
+                 * **GPU が映像を1つも出さずに降りたら、ソフトウェアで焼き直す。**
+                 *
+                 * 試し焼きが通っても、放送の素材 (大きさ・途中の切り替わり) で GPU が
+                 * 降りることはある。出す前なら見ている人はまだ何も受け取っていないので、
+                 * 道を替えて起こし直すだけで済む。字幕が無くて降りたのなら GPU のせいではない
+                 * ので先にそちらを直す (下)。**黙って替えず、一行だけ言う** — 遅れ・CPU の重さが
+                 * 変わるので、設定の印を外すかどうか決める手がかりになる
+                 */
+                if (hw !== null && !this.produced && !(wanted !== null && this.noSubtitle)) {
+                    console.warn(
+                        `[live] ${label}: GPU (${hw.way.device} の ${hw.way.kind}${hw.full ? '・復号から' : ''}) で焼けなかったので、ソフトウェアで焼き直します`,
+                    );
+                    this.blame = hwKey(this.codec, hw);
+                    hw = null;
+                    continue;
                 }
                 if (wanted === null || !this.noSubtitle) {
                     // ここまで来たのは ffmpeg が自分で降りたとき
@@ -867,21 +970,31 @@ class Session {
      * いいだけで、放送を落とすことにはならない (汲み出しは別に回っている)
      */
     private async pump(
-        stream: ReadableStream<Uint8Array>,
+        stream: AsyncGenerator<Uint8Array>,
         proc: ReturnType<typeof Bun.spawn>,
+        /** 読み口を自分で閉じるか。ライブは起こし直しても使い回すので閉じない (`run`) */
+        own: boolean,
     ): Promise<void> {
         const writer = proc.stdin as import('bun').FileSink;
         const filter = this.program > 0 ? new ServiceFilter(this.program) : null;
         try {
-            for await (const chunk of chunks(stream)) {
-                if (this.stopped) break;
-                const out = this.tap(filter, chunk);
+            for (;;) {
+                // `for await` にしない — 抜けると読み口ごと閉じてしまう (使い回せなくなる)
+                const next = await stream.next();
+                if (next.done === true) break;
+                /*
+                 * 起こし直したあとの古い流し込みは抜ける。その1塊は捨てるが、次の ffmpeg は
+                 * どのみち鍵フレームから拾うので欠けは見えない
+                 */
+                if (this.stopped || this.proc !== proc) break;
+                const out = this.tap(filter, next.value);
                 if (out.length === 0) continue;
                 // **書けたことを待つ** (上の説明)。待たないと、転んだときに拾い手が居ない
                 await writer.write(out);
                 await writer.flush();
             }
         } finally {
+            if (own) await stream.return(undefined);
             try {
                 writer.end();
             } catch {
@@ -890,14 +1003,37 @@ class Session {
         }
     }
 
-    /** ffmpeg が出した fMP4 を割って配る */
+    /**
+     * GPU のせいだったと決める。**ソフトウェアに替えて映像が出たときだけ** — 選局直後で
+     * 映像がまだ来ていない・入力が途切れた、のように GPU と関係なく降りたのなら、
+     * ソフトウェアでも出ずに「映像を出せませんでした」になる。そのとき GPU を15分
+     * 外したり「GPU で焼けなかった」と言ったりすると嘘になる
+     */
+    private blameGpu(): void {
+        if (this.blame === null) return;
+        gpuFailed.set(this.blame, Date.now());
+        this.blame = null;
+        this.note = { type: 'notice', message: GPU_GAVE_UP };
+        this.tell(this.note);
+    }
+
+    /**
+     * ffmpeg が出した fMP4 を割って配る。**割る道具は ffmpeg ごとに作る** — 起こし直したとき
+     * (`run`)、前の ffmpeg の書きかけを次へ持ち越さない
+     */
     private async drain(proc: ReturnType<typeof Bun.spawn>): Promise<void> {
+        const splitter = new Fmp4Splitter();
         for await (const chunk of chunks(proc.stdout as ReadableStream<Uint8Array>)) {
-            for (const segment of this.splitter.feed(chunk)) {
+            for (const segment of splitter.feed(chunk)) {
                 if (segment.kind === 'init') {
                     this.init = segment.data;
                     for (const viewer of this.viewers) this.hand(viewer, CHANNEL.videoInit, segment.data);
                 } else {
+                    // 起こし直したあとに届いた前の ffmpeg の残りは数えない
+                    if (this.proc === proc && !this.produced) {
+                        this.produced = true;
+                        this.blameGpu();
+                    }
                     for (const viewer of this.viewers) this.hand(viewer, CHANNEL.videoMedia, segment.data);
                     this.tellClock();
                 }
@@ -914,8 +1050,10 @@ class Session {
     private async subtitles(proc: ReturnType<typeof Bun.spawn>): Promise<void> {
         const fd = (proc.stdio as unknown as number[])[3];
         if (typeof fd !== 'number') return;
+        // 割る道具は ffmpeg ごと (`drain` と同じ理由)
+        const frames = new MkvSplitter();
         for await (const chunk of chunks(Bun.file(fd).stream())) {
-            for (const found of this.frames.feed(chunk)) this.deliver(found);
+            for (const found of frames.feed(chunk)) this.deliver(found);
         }
     }
 

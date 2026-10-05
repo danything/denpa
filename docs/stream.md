@@ -108,7 +108,7 @@ PGS は色を YCrCb 限定レンジでしか持てず、サーバで変換して
 
 | 役割 | 採用 | 備考 |
 | --- | --- | --- |
-| エンコード | FFmpeg (ライブはソフトウェア。録画のエンコードは GPU も使う — encode.md「GPU で焼く」) | CLI パイプラインで差し替え可能 |
+| エンコード | FFmpeg (設定の「GPU」カードで印があれば、ライブも録画も GPU で焼く — encode.md「GPU で焼く」) | CLI パイプラインで差し替え可能 |
 | 字幕の描画 | xqq/libaribcaption | `-sub_type bitmap` + sub2video。録画側と同じ。denpa の ffmpeg は `--enable-libaribcaption` で組んである |
 | データ放送 | otya128/web-bml | BMLブラウザ。描画側だけ借り、解く側は自前 ([§5.6](#56-データ放送の統合)) |
 | 再生 | MSE 直接 (借り物なし) | AV1+Opus fMP4。mediabunny は候補のまま (§8) |
@@ -527,8 +527,18 @@ preset 12 を採る（13 は目に見えて粗く、10 は間に合わない）�
 > （`bufferedchange`）は `buffered` を毎回読み直すので手当てしていない。**実機では未確認。**
 > 出せなかったときも操作列は出したままにしてあり、焼き方を選び直して逃げられる。
 
-HW エンコーダのある機材なら `av1_nvenc`（RTX40以降）/ `av1_qsv`（Arc・Meteor Lake 以降）/
-`av1_amf`（RDNA3以降）に載せ替えられる。
+#### GPU で焼く
+
+設定の「GPU」カードでそのコーデックに印があれば、**録画と同じ GPU で焼く**（Intel の QSV / VA-API。
+引数と決め方は [encode.md「ライブも同じ印で GPU に載る」](encode.md#ライブも同じ印で-gpu-に載る)）。
+MPEG-2 を GPU で解ける口では復号とインタレ解除も GPU に寄せ、映像の鎖に CPU のフィルタを挟まない。
+`-fpsmax`・字幕の出口（`pipe:3`）・音声はそのまま通る（字幕と音声は別の流れで、`-fpsmax` はコマを間引くだけ）。
+
+**映像を出す前に GPU の ffmpeg が降りたら、ソフトウェアで焼き直す。** 画面には断り書きを一行出す（`notice`。
+AV1 を出せない端末で H.264 に戻したときと同じ札）。出す前なら誰も何も受け取っていないので、道を替えて起こし
+直すだけで済む。HTTP の口（`sessionStream`）は知らせを捨てるので、アプリには焼き直しが少し遅れて見えるだけ。
+
+NVIDIA / AMD（`av1_nvenc` / `av1_amf`）はまだ試し焼きに入れていない。
 
 ### 5.2 字幕（sub2video）
 

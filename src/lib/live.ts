@@ -190,6 +190,15 @@ export type Notice =
            */
           now: number;
       }
+    | {
+          /**
+           * **失敗ではないが、頼まれたとおりにできなかった**ことの一行。絵は出ている。
+           * いまは「GPU で焼けなかったのでソフトウェアで焼いている」だけ (`server/live.ts` の
+           * `GPU_GAVE_UP`)。画面は断り書き (`warning`) に出す
+           */
+          type: 'notice';
+          message: string;
+      }
     | { type: 'error'; message: string };
 
 /** 画面に出す Hybridcast のアプリ。**押すと別のタブで開くだけ** */
