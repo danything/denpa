@@ -754,7 +754,7 @@ compose はソースを `/app` に被せるので、中に置くと隠れます�
 
 | | |
 | --- | --- |
-| 大きさ | `decoder.wasm` 855KB（brotli 292KB / gzip 364KB）+ 読み込み口 `decoder.mjs` 14KB。AAC を足す前は 474KB（brotli 163KB / gzip 196KB） |
+| 大きさ | `decoder.wasm` 855KB（brotli 292KB / gzip 364KB）+ 読み込み口 `decoder.mjs` 14KB。**配るときは denpa が縮める**（`Accept-Encoding` を見て brotli か gzip。中身が変わったときに1度だけ縮めて覚える）。AAC を足す前は 474KB（brotli 163KB / gzip 196KB） |
 | 速さ（手元の Chromium、ヘッドレス） | BS の 1920x1080i で **90〜97 コマ/秒**、1440x1080i で 110〜130 コマ/秒 — **実時間の3倍** |
 | 音の速さ（同じ） | AAC-LC 48kHz の音1秒を解いて写すのに **ステレオ 256kbps で 1.0〜1.6ms、5.1ch 384kbps で 2.3〜2.9ms**（絵は1秒で 300ms ほど） |
 | 組む時間 | 2分ほど（amd64 / arm64 どちらのランナーでも。中身は同じ） |
