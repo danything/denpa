@@ -6,6 +6,7 @@
     import ProgramFacts from '#lib/components/ProgramFacts.svelte';
     import AudioMenu from '#lib/components/player/AudioMenu.svelte';
     import { screenAwake } from '#lib/components/player/awake.svelte.js';
+    import { backgroundPlayback } from '#lib/components/player/background.svelte.js';
     import ControlBar from '#lib/components/player/ControlBar.svelte';
     import ControlButton from '#lib/components/player/ControlButton.svelte';
     import { playerControls } from '#lib/components/player/controls.svelte.js';
@@ -16,6 +17,7 @@
     import Icon from '#lib/components/player/Icon.svelte';
     import InfoBlock from '#lib/components/player/InfoBlock.svelte';
     import {
+        BACKGROUND,
         CAMERA,
         CAPTION,
         CHECK,
@@ -280,7 +282,15 @@
      * 小窓 (PiP。[pip.svelte.ts](../../../lib/components/player/pip.svelte.ts))。小窓で押された
      * 止める・再開は `<video>` の `play`/`pause` で拾えているので、合わせる口は要らない
      */
-    const pip = pictureInPicture({ video: () => video });
+    const pip = pictureInPicture({ video: () => video, auto: () => background.on });
+
+    /** バックグラウンド再生 ([background.svelte.ts](../../../lib/components/player/background.svelte.ts))。既定は切で、裏に回ったら止め、戻ったら止めた所から */
+    const background = backgroundPlayback({
+        pip: () => pip.active,
+        paused: () => video?.paused ?? true,
+        pause: () => video?.pause(),
+        resume: () => void video?.play().catch(() => undefined),
+    });
     let lastTap: Tap | null = null;
 
     /**
@@ -1541,6 +1551,16 @@
                             **小窓 (PiP)。** ページから出せない端末 (iPhone・iPad のホーム画面から開いたもの・口の無いブラウザ) では
                             出さない ([pip.svelte.ts](../../../lib/components/player/pip.svelte.ts))。狭い枠では「ほか」に畳む
                         -->
+                        <!-- **バックグラウンド再生。** 既定は切で、裏に回したら止める。端末ごとに覚える (`background.svelte.ts`) -->
+                        <Extras>
+                            <ControlButton
+                                path={BACKGROUND}
+                                label={background.on ? 'バックグラウンド再生をやめる' : 'バックグラウンド再生を入れる'}
+                                on={background.on}
+                                testid="watch-background"
+                                onclick={() => background.toggle()}
+                            />
+                        </Extras>
                         {#if pip.available}
                             <Extras>
                                 <ControlButton

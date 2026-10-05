@@ -25,6 +25,12 @@ export const SHRINK = 'M5 16h3v3h2v-5H5v2zm3-8H5v2h5V5H8v3zm6 11h2v-3h3v-2h-5v5z
  */
 export const PIP =
     'M19 11h-8v6h8v-6zm4 8V4.98C23 3.88 22.1 3 21 3H3c-1.1 0-2 .88-2 1.98V19c0 1.1.9 2 2 2h18c1.1 0 2-.9 2-2zm-2 .02H3V4.97h18v14.05z';
+/**
+ * バックグラウンド再生 (裏に回しても止めない)。ヘッドホン (Material Symbols の `headphones`) —
+ * 裏で続けるのはたいてい聴くため。入れている間は押されている見た目 (`OVERLAY_ON`)
+ */
+export const BACKGROUND =
+    'M12 1c-4.97 0-9 4.03-9 9v7c0 1.66 1.34 3 3 3h3v-8H5v-2c0-3.87 3.13-7 7-7s7 3.13 7 7v2h-4v8h3c1.66 0 3-1.34 3-3v-7c0-4.97-4.03-9-9-9z';
 
 /**
  * ここから下は主に観る画面で使うもの。**チャプター送り (`PREV`/`NEXT`)・CM飛ばし

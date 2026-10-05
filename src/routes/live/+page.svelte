@@ -4,6 +4,7 @@
     import ProgramFacts from '#lib/components/ProgramFacts.svelte';
     import AudioMenu from '#lib/components/player/AudioMenu.svelte';
     import { screenAwake } from '#lib/components/player/awake.svelte.js';
+    import { backgroundPlayback } from '#lib/components/player/background.svelte.js';
     import CodecMenu from '#lib/components/player/CodecMenu.svelte';
     import ControlBar from '#lib/components/player/ControlBar.svelte';
     import ControlButton from '#lib/components/player/ControlButton.svelte';
@@ -16,6 +17,7 @@
     import Icon from '#lib/components/player/Icon.svelte';
     import InfoBlock from '#lib/components/player/InfoBlock.svelte';
     import {
+        BACKGROUND,
         CAMERA,
         CAPTION,
         DATA,
@@ -195,6 +197,25 @@
     });
 
     /**
+     * バックグラウンド再生 ([background.svelte.ts](../../lib/components/player/background.svelte.ts))。
+     * 既定は切で、裏に回ったら止める。**戻ったら、張り付いていたなら放送の今へ** (止めた所からではなく)
+     */
+    let wasLive = false;
+    const background = backgroundPlayback({
+        pip: () => pip.active,
+        paused: () => player.paused,
+        pause: () => {
+            wasLive = player.live;
+            player.toggle();
+        },
+        resume: () => {
+            if (wasLive) player.goLive();
+            // 戻る先がまだ無い (貯まりが空) と goLive は何もしないので、そのときは再開だけ
+            if (player.paused) player.toggle();
+        },
+    });
+
+    /**
      * 小窓 (PiP。[pip.svelte.ts](../../lib/components/player/pip.svelte.ts))。生で見ている間は
      * worker の canvas から流れを取って出す。**小窓で押された止める・再開は player に合わせる**
      */
@@ -205,6 +226,11 @@
         flow: (on) => player.captureFlow(on),
         paused: () => player.paused,
         toggle: () => player.toggle(),
+        auto: () => background.on,
+    });
+    // 生の音を「再生する音」と言うのは、入れているときと小窓を開いている間だけ (`raw/engine.ts`)
+    $effect(() => {
+        player.playback = background.on || pip.active;
     });
 
     /** 真ん中あたりを素早く2回で再生/一時停止 (`center-tap.ts`)。1回目は操作列の出し入れ */
@@ -639,6 +665,16 @@
                             **小窓 (PiP)。** ページから出せない端末 (iPhone・iPad のホーム画面から開いたもの・口の無いブラウザ) では
                             出さない ([pip.svelte.ts](../../lib/components/player/pip.svelte.ts))。狭い枠では「ほか」に畳む
                         -->
+                        <!-- **バックグラウンド再生。** 既定は切で、裏に回したら止める。端末ごとに覚える (`background.svelte.ts`) -->
+                        <Extras>
+                            <ControlButton
+                                path={BACKGROUND}
+                                label={background.on ? 'バックグラウンド再生をやめる' : 'バックグラウンド再生を入れる'}
+                                on={background.on}
+                                testid="live-background"
+                                onclick={() => background.toggle()}
+                            />
+                        </Extras>
                         {#if pip.available}
                             <Extras>
                                 <ControlButton

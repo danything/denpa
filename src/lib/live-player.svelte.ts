@@ -343,6 +343,11 @@ export function livePlayer() {
     let rawProblem: string | null | undefined;
     /** 映像の入れ物。生の canvas はここに差し込む (`attach`) */
     let host: HTMLElement | null = null;
+    /**
+     * 生の音を「再生する音」だと言うか (`RawEngine.background`)。**バックグラウンド再生を
+     * 入れているか、押して小窓を開いている間** (画面が決める。`background.svelte.ts`)
+     */
+    let playback = false;
     /** 生の道の刻み。貯まり・貯める量の決め直しを回す */
     let rawTimer: ReturnType<typeof setInterval> | null = null;
     /** 生で1コマ解くのに掛かっている時間 (ms、95パーセンタイル)。**画面に出す** */
@@ -1845,16 +1850,22 @@ export function livePlayer() {
             try {
                 const box = host ?? video.parentElement;
                 if (box === null) throw new Error('入れ物が無い');
-                engine = new RawEngine(box, still, target, {
-                    shown: () => thaw(),
-                    stalled: () => {
-                        if (paused || Date.now() < quiet) return;
-                        stalled = true;
-                        stalls += 1;
-                        lastStall = Date.now();
+                engine = new RawEngine(
+                    box,
+                    still,
+                    target,
+                    {
+                        shown: () => thaw(),
+                        stalled: () => {
+                            if (paused || Date.now() < quiet) return;
+                            stalled = true;
+                            stalls += 1;
+                            lastStall = Date.now();
+                        },
+                        gaveUp: (reason) => fallBack(reason),
                     },
-                    gaveUp: (reason) => fallBack(reason),
-                });
+                    playback,
+                );
             } catch (error) {
                 fallBack(
                     `生の器を作れませんでした (${error instanceof Error ? error.message : String(error)})`,
@@ -1960,6 +1971,11 @@ export function livePlayer() {
         /** 小窓へ絵を流すか (`RawEngine.pipFlow`)。出していない間は写さない */
         captureFlow(on: boolean): void {
             engine?.pipFlow(on);
+        },
+        /** 生の音を「再生する音」だと言うか (`playback`)。焼いた道は `<video>` が鳴らすので関係ない */
+        set playback(on: boolean) {
+            playback = on;
+            if (engine !== null) engine.background = on;
         },
         /** 生で1コマ解くのに掛かっている時間 (ms、95パーセンタイル)。生でなければ 0 */
         get decodeMs() {

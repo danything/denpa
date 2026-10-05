@@ -40,6 +40,13 @@ import type { Notice } from '#lib/components/Toasts.svelte';
  * 追っかけは「止めているか」を player 側で持っている** (`live-player` の `paused`) ので、
  * 渡された `paused` / `toggle` で合わせる。観る画面は `<video>` の `play`/`pause` を
  * そのまま見ているので要らない
+ *
+ * ## OS・ブラウザが自分で小窓にするのを止める
+ *
+ * バックグラウンド再生を切っている間 (`auto` が false。`background.svelte.ts`) は
+ * `disablePictureInPicture` を立てておく。全画面からホームへ戻る (iPhone)・タブを移る
+ * (Chrome) だけで勝手に小窓が出て、裏で鳴り続けていた。**押して開く小窓には効かせない** —
+ * 頼む直前に下ろし (`enter`)、出している間は下ろしたまま (立てると小窓が閉じる)
  */
 
 interface Options {
@@ -54,6 +61,8 @@ interface Options {
     /** 止めているか (ライブ・追っかけ)。**小窓で押された止める・再開を合わせる先** */
     paused?: () => boolean;
     toggle?: () => void;
+    /** OS・ブラウザが自分で小窓にするのを許すか (バックグラウンド再生)。渡さなければ許す */
+    auto?: () => boolean;
 }
 
 /** どこで断られたか。**押しても何も起きない、で終わらせない** — 端末ごとに転ぶ所が違う */
@@ -200,6 +209,14 @@ export function pictureInPicture(options: Options): Pip {
         return release;
     });
 
+    /** 押さずに小窓にされないようにする (上の説明)。出している video は下ろしたまま */
+    function guard(): void {
+        const allow = options.auto?.() ?? true;
+        for (const video of [options.video(), proxy])
+            if (video !== null) video.disablePictureInPicture = !allow && on !== video;
+    }
+    $effect(guard);
+
     /** 生のとき、代わりの video も止める・再開を合わせる (押されたのが帯のボタンのとき) */
     $effect(() => {
         const paused = options.paused?.() ?? false;
@@ -208,9 +225,13 @@ export function pictureInPicture(options: Options): Pip {
         else void proxy.play().catch(() => undefined);
     });
 
-    // 画面を離れたら閉じる。player は止まるので、小窓に残しても絵は来ない
+    /*
+     * 画面を離れたら閉じる。player は止まるので、小窓に残しても絵は来ない。
+     * **流れもここで止める** — 生の `$effect` の後始末が先に走るとは限らない
+     */
     $effect(() => () => {
         leave();
+        release();
         proxy?.remove();
         proxy = null;
     });
@@ -229,6 +250,7 @@ export function pictureInPicture(options: Options): Pip {
         listen(video);
         follow(video);
         proxy = video;
+        guard();
         return video;
     }
 
@@ -288,13 +310,25 @@ export function pictureInPicture(options: Options): Pip {
             else void video.play().catch(() => undefined);
         }
         if (video === null) return;
+        // 押して開くものは止めない (勝手に開かせないための印。上の説明)
+        video.disablePictureInPicture = false;
         if (standard()) await video.requestPictureInPicture();
         else if (webkit(video)) {
-            video.webkitSetPresentationMode?.(MODE);
-            // Safari の口は断っても何も言わない。切り替わったかを見て言う
+            /*
+             * Safari の口は断っても何も言わない。切り替わったかを見て言う。
+             * **一度でも切り替わったかで見る** — 1秒の間に閉じられた・画面を離れたものまで
+             * 「切り替わらなかった」と言っていた
+             */
             const target = video;
+            let reached = false;
+            const mark = () => {
+                if (shown(target)) reached = true;
+            };
+            target.addEventListener('webkitpresentationmodechanged', mark);
+            target.webkitSetPresentationMode?.(MODE);
             setTimeout(() => {
-                if (on !== target)
+                target.removeEventListener('webkitpresentationmodechanged', mark);
+                if (!reached && on !== target)
                     refuse(new Refused('Safari が小窓に切り替えませんでした (webkitSetPresentationMode)'));
             }, 1000);
         }
@@ -309,6 +343,8 @@ export function pictureInPicture(options: Options): Pip {
             text: `小窓を出せませんでした: ${reason(error)}`,
         };
         flowing(false);
+        // 頼む前に下ろした印を戻す (`enter`)
+        guard();
     }
 
     function leave(): void {

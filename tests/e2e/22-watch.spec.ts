@@ -388,6 +388,62 @@ test.describe('録画を観る', () => {
         expect(await rowHeight()).toBe(before);
     });
 
+    /*
+     * **バックグラウンド再生は既定で切。** 裏に回すと止め、戻ると止めた所から再開する。
+     * OS が勝手に小窓にしないよう `disablePictureInPicture` も立てる (`background.svelte.ts`)。
+     *
+     * 偽 ffmpeg の録画は絵が出ない (上) ので、`<video>` の止める・再開を差し替えて、
+     * 呼ばれたかだけを見る。裏に回るのは `visibilityState` を差し替えて知らせを送る
+     */
+    test('バックグラウンド再生は既定で切。裏に回すと止まり、入れると止まらない', async ({
+        page,
+        request,
+    }) => {
+        test.setTimeout(180_000);
+        const id = await watchable(page, request);
+        await goto(page, `/watch/${id}`);
+
+        const video = page.getByTestId('watch-video');
+        await expect
+            .poll(() => video.evaluate((v) => (v as HTMLVideoElement).disablePictureInPicture))
+            .toBe(true);
+        // 再生中のふり。止める・再開は印を動かすだけ
+        await video.evaluate((v) => {
+            const media = v as HTMLVideoElement & { fake: boolean };
+            media.fake = false;
+            Object.defineProperty(media, 'paused', { configurable: true, get: () => media.fake });
+            media.pause = () => {
+                media.fake = true;
+            };
+            media.play = async () => {
+                media.fake = false;
+            };
+        });
+        const paused = () => video.evaluate((v) => (v as HTMLVideoElement).paused);
+        const turn = (state: 'hidden' | 'visible') =>
+            page.evaluate((state) => {
+                Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => state });
+                document.dispatchEvent(new Event('visibilitychange'));
+            }, state);
+
+        await turn('hidden');
+        expect(await paused()).toBe(true);
+        await turn('visible');
+        expect(await paused()).toBe(false);
+
+        await wakeControls(page, 'watch-stage');
+        const toggle = page.getByTestId('watch-background');
+        await expect(toggle).toHaveAttribute('aria-pressed', 'false');
+        await toggle.click();
+        await expect(toggle).toHaveAttribute('aria-pressed', 'true');
+        await expect
+            .poll(() => video.evaluate((v) => (v as HTMLVideoElement).disablePictureInPicture))
+            .toBe(false);
+        await turn('hidden');
+        expect(await paused()).toBe(false);
+        await turn('visible');
+    });
+
     /** 無い録画を開いても、黙って空の画面を出さない */
     test('無い録画は 404', async ({ request }) => {
         const res = await request.get('/watch/999999');
