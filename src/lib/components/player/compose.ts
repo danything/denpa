@@ -87,15 +87,18 @@ export function compose(input: MediaStreamTrack, overlay: () => HTMLCanvasElemen
                 controller.enqueue(frame);
                 return;
             }
+            let composed: VideoFrame;
             try {
                 context.drawImage(frame, 0, 0, width, height);
                 context.drawImage(caption, 0, 0, width, height);
-                controller.enqueue(new VideoFrame(canvas, { timestamp: frame.timestamp }));
+                composed = new VideoFrame(canvas, { timestamp: frame.timestamp });
             } catch {
-                // 描けなかった1枚。次のコマで描き直す
-            } finally {
-                frame.close();
+                // 重ねられなかった1枚は字幕無しで出す。捨てると小窓の絵が飛ぶ
+                controller.enqueue(frame);
+                return;
             }
+            frame.close();
+            controller.enqueue(composed);
         },
     });
     void processor.readable

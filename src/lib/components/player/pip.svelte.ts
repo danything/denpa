@@ -43,7 +43,7 @@ import { type Composed, canCompose, compose } from './compose';
  *
  * - **生のとき**: 生の流れに重ねたものを、代わりの `<video>` に用意しておく。字幕が出ていない
  *   コマは素通し
- * - **焼いたもの (ライブ・追っかけ・観る画面)**: 押した時点で字幕を出しているときだけ、
+ * - **焼いたもの (ライブ・追っかけ・観る画面)**: 押した時点で字幕を出して再生しているときだけ、
  *   `<video>` から流れを取って (`captureStream`) 重ね、代わりの `<video>` を小窓にする。
  *   字幕が無い・消しているときは `<video>` をそのまま出す (重ねるぶん重い)。**用意するのは
  *   小窓に出している間だけ**で、閉じたら畳む。音は今までどおり元の `<video>` から鳴る。
@@ -334,6 +334,7 @@ export function pictureInPicture(options: Options): Pip {
         const video = makeProxy();
         // 字幕を重ねられる端末では重ねたものを出す (字幕が出ていないコマは素通し。`compose.ts`)
         const track = stream.getVideoTracks()[0];
+        rawComposed?.stop();
         rawComposed =
             options.overlay === undefined || track === undefined ? null : compose(track, options.overlay);
         video.srcObject = rawComposed?.stream ?? stream;
@@ -361,9 +362,14 @@ export function pictureInPicture(options: Options): Pip {
         proxy.srcObject = null;
     }
 
-    /** 焼いたものに字幕を重ねるか。**押した時点で字幕を出しているときだけ** (上の説明) */
+    /**
+     * 焼いたものに字幕を重ねるか。**押した時点で字幕を出しているときだけ** (上の説明)。
+     * 止めている間も重ねない — `captureStream` は止まった `<video>` からコマを出さないので、
+     * 1枚目を待ちきれずに元の `<video>` へ落ちるだけになる
+     */
     function composable(video: HTMLVideoElement): boolean {
         return (
+            !video.paused &&
             standard() &&
             canCompose() &&
             options.overlay !== undefined &&
@@ -412,7 +418,6 @@ export function pictureInPicture(options: Options): Pip {
             if (baked === composed) dropBaked();
             return null;
         }
-        if (video.paused) target.pause();
         return target;
     }
 
