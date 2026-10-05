@@ -689,13 +689,13 @@ channel:
 ### 5.5 放送そのまま（MPEG-2）を送る
 
 **ブラウザで焼かずに見られます。** 1局に絞った TS をそのまま
-WebSocket に流し、ブラウザが WebAssembly の MPEG-2 復号器で解いて WebGL2 で描き、音は
-AudioDecoder で解いて Web Audio で鳴らします。**ライブの画質の切り替えで MPEG-2 を選ぶ**と
+WebSocket に流し、ブラウザが WebAssembly の MPEG-2 復号器で解いて WebGL2 で描き、音も
+同じ WebAssembly の AAC 復号器で解いて Web Audio で鳴らします。**ライブの画質の切り替えで MPEG-2 を選ぶ**と
 生になり、焼き方と同じく端末ごとに覚えます（`LAST_COOKIE`。既定は H.264）。
 
 ```
 エージェント → 1局に絞る ┬→ WebSocket (0x02 生の TS) → worker ┬→ PES → WASM (mpeg2video) → WebGL2 (bob)
-                         │                                    └→ ADTS → AudioDecoder ─→ 画面 → Web Audio (時計)
+                         │                                    └→ ADTS → WASM (aac) ─→ 画面 → Web Audio (時計)
                          ├→ ffmpeg (字幕だけ。-copyts) → 0x20 字幕の絵 (放送の PTS のまま)
                          └→ BmlDecoder → 0x30 データ放送 (焼く道と同じ)
 ```
@@ -721,25 +721,32 @@ AudioDecoder で解いて Web Audio で鳴らします。**ライブの画質の
 | | 誰が見る | 外れたら |
 | --- | --- | --- |
 | 画質の切り替えで MPEG-2 を選んでいる | 画面 (`LAST_COOKIE` の `raw`) | いつもどおり焼く |
-| その端末で解ける (WebAssembly・worker の WebGL2・AudioDecoder の AAC・AudioContext) | 画面 (`raw/support.ts`) | 焼いたものを頼み、理由を断り書きに出す |
+| その端末で解ける (WebAssembly・worker の WebGL2・AudioContext) | 画面 (`raw/support.ts`) | 焼いたものを頼み、理由を断り書きに出す |
 
 **家の外からでも生にできます。** 回線が 1局ぶん（下の「払うもの」）出るかは見る人が決める
 （MPEG-2 を選んだ端末だけが生になる）。足りない回線では貯め直しを繰り返し、音が5秒来なければ焼いたものへ戻ります。
 
-**AudioDecoder は安全な繋ぎ（https か localhost）でしか出てこない**ので、LAN でも http で
-開いていると生にはなりません（[player.md](player.md#lan-でも-https-で開く)）。
+**http で開いた LAN でも生にできます。** 音を WebCodecs の AudioDecoder で解いていた頃は、
+それが安全な繋ぎ（https か localhost）でしか出てこないので http では生にならず、iPhone の
+Safari には iOS 26 まで AudioDecoder が無かった。iOS 27 の Safari では出てくるのに ADTS の
+まま渡すと転び（実機。1枚目の絵のあと「音声を解けませんでした」）、生の AAC と
+AudioSpecificConfig を求めているらしい。ブラウザごとの癖を追うより、絵と同じ FFmpeg で
+解くことにした（1つの道だけ。AudioDecoder と切り替えない）。WebAssembly の無い端末
+（iOS の Gecko など）は「WebAssembly が使えません」と出して焼いたものに戻ります。
 
 **生で見ている途中でも、焼いたものへ自分で戻ります**（戻したら、その画面を開いている間は
 頼み直さない — 戻しては諦めるを繰り返すと、そのたびに絵が止まる）:
 
 - 解くのが間に合わない（下の「間に合わないとき」）
 - 復号器が入っていない（`/api/live/mpeg2` が 404）・worker が落ちた
-- 絵は出ているのに音が 5 秒来ない・AudioDecoder が続けて転ぶ
+- 絵は出ているのに音が 5 秒来ない・AAC の復号器が壊れたコマで 20 回続けて転ぶ（1回なら飛ばす）
 
 #### 復号器
 
-FFmpeg の **mpeg2video の復号器と絵の区切りを探す parser だけ**を emscripten で組んだもの
-（`wasm/mpeg2/`）。**Dockerfile の `mpeg2wasm` 段で毎回組み**、git には入れません（生成物を
+FFmpeg の **mpeg2video の復号器と絵の区切りを探す parser、AAC の復号器だけ**を emscripten で組んだもの
+（`wasm/mpeg2/`）。AAC の parser は組まない — ADTS の区切りと時刻は JS（`ts/pes.ts` の
+`AdtsSplitter`）が付け、復号器は ADTS の頭を自分で読む。音も絵と同じ worker で解く
+（1秒ぶんで数 ms と、絵の 1% に届かないので worker を分けるほどではない）。**Dockerfile の `mpeg2wasm` 段で毎回組み**、git には入れません（生成物を
 抱えると FFmpeg を上げるたびに差し替えが要り、組んだ手順と中身が食い違っても気づけない）。
 FFmpeg はサーバの ffmpeg と同じ版に揃え、emsdk は版で固定しています。置き場はアプリの外
 （`/opt/denpa/mpeg2`、`MPEG2_DIR`）で、`/api/live/mpeg2/<名前>` から配ります — 開発と E2E の
@@ -747,8 +754,9 @@ compose はソースを `/app` に被せるので、中に置くと隠れます�
 
 | | |
 | --- | --- |
-| 大きさ | `decoder.wasm` 473KB（brotli 160KB / gzip 196KB）+ 読み込み口 `decoder.mjs` 14KB |
+| 大きさ | `decoder.wasm` 855KB（brotli 292KB / gzip 364KB）+ 読み込み口 `decoder.mjs` 14KB。AAC を足す前は 474KB（brotli 163KB / gzip 196KB） |
 | 速さ（手元の Chromium、ヘッドレス） | BS の 1920x1080i で **90〜97 コマ/秒**、1440x1080i で 110〜130 コマ/秒 — **実時間の3倍** |
+| 音の速さ（同じ） | AAC-LC 48kHz の音1秒を解いて写すのに **ステレオ 256kbps で 1.0〜1.6ms、5.1ch 384kbps で 2.3〜2.9ms**（絵は1秒で 300ms ほど） |
 | 組む時間 | 2分ほど（amd64 / arm64 どちらのランナーでも。中身は同じ） |
 | **GPU が無いとき** | 描くほうが間に合わない。ソフトウェアの WebGL（SwiftShader）では 1080 の1コマを上げて描くのに 40〜60ms かかり、10〜14 コマ/秒しか出ない — 5秒で焼いたものに戻る（下の「間に合わないとき」）。E2E が通るのは絵が小さい（256x144）から |
 
@@ -872,19 +880,20 @@ HTTP で流します（チューナーも ffmpeg も増えない。乗っても�
   - **止めて再開は放送の今から**（止めた所からは見られない）。5分戻る帯・追っかけの速さも無い。
     1局 15Mbit/s を遡れるだけ持つと 5 分で 600MB になる
   - 焼き方（H.264 / AV1）の選び直し（焼いていない）
-  - 5.1ch の番組は頭の2本だけ鳴らす（下げ方を持っていない）
+  - 5.1ch の番組は頭の2本（前の左右）だけ鳴らす（下げ方を持っていない）
 - インタレ解除はコマの中だけで決める（上）ので、`bwdif` よりは落ちる
 
 #### 実機で確かめること
 
 ヘッドレスの Chromium（GPU 無し・SwiftShader）と偽の放送（`src/lib/ts/synth-av.ts` の小さい
-MPEG-2 と無音の AAC）でしか通していません。本物の GPU・本物の放送で見るべきところ:
+MPEG-2 と無音の AAC）でしか通していません（AAC の復号器だけは ffmpeg で作ったステレオ・5.1ch・
+壊したコマ・途中で形の変わる ADTS でも確かめた）。本物の GPU・本物の放送で見るべきところ:
 
 - **口合わせ**（`getOutputTimestamp` の遅れの見積もりが Bluetooth などの出口で合っているか）
 - 止まっているテロップがちらつかないか、動くところが櫛にならないか（櫛が見えるなら
   織るのをやめる幅 8/255〜16/255 を詰める。ちらつくなら motion adaptive を足す）
 - 1080i を実時間で解けるか（ノート・古い PC・Firefox / Safari）。「解く N ms」を見る
-- **デュアルモノ**（二カ国語）と**複数音声**の切り替え、**5.1ch** の番組（AudioDecoder の面の順）
+- **デュアルモノ**（二カ国語）と**複数音声**の切り替え、**5.1ch** の番組（前の左右が出ているか）
 - 長時間（数時間）見て、音の時計と放送の時計のずれで跳び（溜まりすぎ）が何回起きるか
 - 携帯・タブレットの電池（MPEG-2 を選んだときにどれだけ減るか）
 

@@ -3,7 +3,10 @@
  * **生で送られてきた TS を解いて描く** worker (docs/stream.md §5.5)。
  *
  *     TS ─→ PES (ts/pes.ts) ┬→ 映像: WASM の MPEG-2 復号器 (wasm/mpeg2) → WebGL2 (render.ts)
- *                           └→ 音声: ADTS → AudioDecoder → 画面へ (鳴らすのは画面)
+ *                           └→ 音声: ADTS → 同じ WASM の AAC 復号器 → 画面へ (鳴らすのは画面)
+ *
+ * 音を解くのも同じ worker。AAC は1秒ぶんで数 ms (stream.md §5.5) と、絵を解く手間の
+ * 1% にも届かないので、worker を分けて受け渡しを増やすほどではない。
  *
  * **時計は画面が持つ** (鳴っている音。`playout.ts`)。ここは届いた時計に合わせて、番が
  * 来たコマを出すだけ。
@@ -46,6 +49,9 @@ const AUDIO_ERRORS_MOST = 20;
 
 interface Decoder {
     _dec_open(): number;
+    _aac_open(): number;
+    _aac_push(data: number, length: number): number;
+    _aac_peek(): number;
     _dec_push(data: number, length: number, pts: number): number;
     _dec_count(): number;
     _dec_peek(): number;
@@ -89,9 +95,11 @@ let lastFramePts: number | null = null;
 let shownSinceReset = false;
 let failed = false;
 
-let audio: AudioDecoder | null = null;
+/** いま開いている音の形 (`標本化周波数/本数`)。変わったら開き直す */
 let audioConfig = '';
 let audioErrors = 0;
+/** 音のコマを WASM のメモリへ写す置き場 (`input` は映像が使う) */
+let audioInput = { pointer: 0, size: 0 };
 
 const budget = new DecodeBudget();
 let dropped = 0;
@@ -162,71 +170,70 @@ function skipTo(target: number): void {
 }
 
 function onAudio(pes: Pes): void {
+    if (decoder === null) return;
     for (const frame of adts.feed(pes.data, pes.pts === null ? null : extend(pes.pts))) {
+        /*
+         * 形が変わったら (局・番組の切り替わりで 5.1ch ⇔ ステレオ、標本化周波数) 開き直す。
+         * 復号器は ADTS の頭を読んで自分で合わせもするが、前の形の持ち越し (重ね合わせの
+         * 半コマ) を新しい形に混ぜないため
+         */
         const config = `${frame.sampleRate}/${frame.channels}`;
-        if (audio === null || audio.state === 'closed' || config !== audioConfig) {
-            if (audio !== null && audio.state !== 'closed') audio.close();
-            audio = openAudio(frame.sampleRate, frame.channels);
+        if (config !== audioConfig) {
+            if (decoder._aac_open() !== 0) {
+                fail('音声を解けませんでした');
+                return;
+            }
             audioConfig = config;
         }
-        if (audio === null) return;
-        audio.decode(
-            new EncodedAudioChunk({
-                type: 'key',
-                timestamp: (frame.pts * 1_000_000) / CLOCK,
-                duration: (frame.duration * 1_000_000) / CLOCK,
-                data: frame.data,
-            }),
-        );
+        decodeAudio(decoder, frame.data, frame.pts);
     }
 }
 
 /**
- * 音の復号器を開く。**ADTS のまま渡す** (description を付けなければ ADTS として読む決まり)。
- * 転んだら (壊れたコマ) 次のコマで開き直す。続けて転ぶなら諦める
+ * ADTS の1コマを解いて画面へ渡す。**壊れたコマは飛ばす** (放送の取りこぼし)。
+ * 続けて転ぶなら諦める
  */
-function openAudio(sampleRate: number, channels: number): AudioDecoder | null {
-    try {
-        const decoder = new AudioDecoder({
-            output: (data) => {
-                audioErrors = 0;
-                const planes: Float32Array[] = [];
-                for (let i = 0; i < data.numberOfChannels; i++) {
-                    const plane = new Float32Array(data.numberOfFrames);
-                    data.copyTo(plane, { planeIndex: i, format: 'f32-planar' });
-                    planes.push(plane);
-                }
-                post(
-                    {
-                        type: 'audio',
-                        pts: Math.round((data.timestamp * CLOCK) / 1_000_000),
-                        duration: (data.numberOfFrames / data.sampleRate) * CLOCK,
-                        sampleRate: data.sampleRate,
-                        planes,
-                    },
-                    planes.map((plane) => plane.buffer),
-                );
-                data.close();
-            },
-            error: () => {
-                if (++audioErrors > AUDIO_ERRORS_MOST) fail('音声を解けませんでした');
-            },
-        });
-        decoder.configure({ codec: 'mp4a.40.2', sampleRate, numberOfChannels: channels });
-        return decoder;
-    } catch {
-        fail('音声を解けませんでした');
-        return null;
+function decodeAudio(decoder: Decoder, data: Uint8Array, pts: number): void {
+    audioInput = ensure(decoder, audioInput, data.length);
+    decoder.HEAPU8.set(data, audioInput.pointer);
+    const samples = decoder._aac_push(audioInput.pointer, data.length);
+    if (samples < 0) {
+        if (++audioErrors > AUDIO_ERRORS_MOST) fail('音声を解けませんでした');
+        return;
     }
+    if (samples === 0) return;
+    audioErrors = 0;
+    // 解いたあとに読む — メモリが伸びると HEAPU8 の下の ArrayBuffer が替わる
+    const info = decoder._aac_peek() >> 2;
+    const heap = decoder.HEAP32;
+    const channels = heap[info]!;
+    const sampleRate = heap[info + 1]!;
+    const planes: Float32Array[] = [];
+    for (let i = 0; i < channels; i++) {
+        // 写して持ち出す。復号器の面は次のコマで上書きされる
+        planes.push(new Float32Array(decoder.HEAPU8.buffer, heap[info + 3 + i]!, samples).slice());
+    }
+    post(
+        { type: 'audio', pts, duration: (samples / sampleRate) * CLOCK, sampleRate, planes },
+        planes.map((plane) => plane.buffer),
+    );
+}
+
+/** WASM のメモリに `size` バイトの置き場を用意する。**足りるうちは使い回す** */
+function ensure(
+    decoder: Decoder,
+    slot: { pointer: number; size: number },
+    size: number,
+): { pointer: number; size: number } {
+    if (size <= slot.size) return slot;
+    if (slot.pointer !== 0) decoder._free(slot.pointer);
+    return { pointer: decoder._malloc(size), size };
 }
 
 /** 1 PES ぶんを復号器へ。**WASM のメモリへ写してから渡す** */
 function decode(item: Pending): void {
     if (decoder === null) return;
-    if (item.data.length > input.size) {
-        if (input.pointer !== 0) decoder._free(input.pointer);
-        input = { pointer: decoder._malloc(item.data.length), size: item.data.length };
-    }
+    input = ensure(decoder, input, item.data.length);
     decoder.HEAPU8.set(item.data, input.pointer);
     decoder._dec_push(input.pointer, item.data.length, item.pts);
     budget.record(decoder._dec_last_ms());
@@ -379,8 +386,9 @@ function reset(): void {
     shownSinceReset = false;
     budget.reset();
     decoder?._dec_open();
-    if (audio !== null && audio.state !== 'closed') audio.reset();
+    // 次のコマで開き直す (前の局の持ち越しを捨てる)
     audioConfig = '';
+    audioErrors = 0;
 }
 
 /**
@@ -417,7 +425,7 @@ async function init(canvas: OffscreenCanvas, base: string): Promise<void> {
         decoder = await module.default({
             locateFile: (name: string) => new URL(`${base}/${name}`, scope.location.origin).href,
         });
-        if (decoder._dec_open() !== 0) throw new Error('開けません');
+        if (decoder._dec_open() !== 0 || decoder._aac_open() !== 0) throw new Error('開けません');
     } catch {
         fail('この denpa には MPEG-2 の復号器が入っていません');
         return;
@@ -451,6 +459,8 @@ scope.onmessage = (event: MessageEvent<ToWorker>) => {
             audioIndex = message.index;
             demuxer.selectAudio(message.index);
             adts.reset();
+            // 別の音声の持ち越しを混ぜない。次のコマで開き直す
+            audioConfig = '';
             break;
         case 'grab':
             void grab(message.id);
