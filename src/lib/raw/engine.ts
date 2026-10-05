@@ -48,7 +48,10 @@ export interface RawEvents {
  * 同じに扱い、**Safari を裏へ回すと止める** — 小窓で観ていても音だけ消えた
  * (iPhone 15 Pro Max、iOS 27.2)。焼いた道は `<video>` が鳴らすので、初めから
  * 再生の音として扱われている。消音スイッチで黙らないのも `<video>` と同じになる。
- * 畳むときは既定 (`auto`) に戻す
+ * 畳むときは既定 (`auto`) に戻す。
+ *
+ * **言うのはバックグラウンド再生を入れているときと、押して小窓を開いている間だけ**
+ * (`RawEngine.background`)。切っているのに言うと、裏で鳴らす音として扱われる
  */
 function playbackSession(on: boolean): void {
     const session = (navigator as Navigator & { audioSession?: { type: string } }).audioSession;
@@ -91,12 +94,14 @@ export class RawEngine {
     /**
      * @param host 映像の入れ物。canvas はここに入る (**データ放送が入れ物ごと動かす**ので中に置く)
      * @param before この前に差し込む (字幕の canvas より下に来るように)
+     * @param background 「再生する音」だと言うか (`playbackSession`)。あとから変えるときは `background`
      */
     constructor(
         host: HTMLElement,
         before: Element | null,
         target: number,
         private readonly events: RawEvents,
+        background = false,
     ) {
         this.playout = new Playout(target);
         this.canvas = document.createElement('canvas');
@@ -111,7 +116,7 @@ export class RawEngine {
         let context: AudioContext | null = null;
         let worker: Worker | null = null;
         try {
-            playbackSession(true);
+            playbackSession(background);
             this.context = context = new AudioContext({ latencyHint: 'playback' });
             this.gain = context.createGain();
             this.gain.connect(context.destination);
@@ -141,6 +146,11 @@ export class RawEngine {
     /** どれだけ貯めるか (秒)。**決めるのは焼く道と同じ `pacing.nextTarget`** (live-player) */
     set target(seconds: number) {
         this.playout.target = seconds;
+    }
+
+    /** 「再生する音」だと言うか (`playbackSession`)。バックグラウンド再生・小窓の出し入れで変わる */
+    set background(on: boolean) {
+        if (!this.gone) playbackSession(on);
     }
 
     /** 音を鳴らせていないか (自動再生を断られた)。**押して `unmute` してもらう** */

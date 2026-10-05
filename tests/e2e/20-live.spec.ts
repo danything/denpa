@@ -1049,6 +1049,54 @@ test.describe('ライブ視聴', () => {
     });
 
     /*
+     * **バックグラウンド再生は既定で切。** 裏に回すと止め、戻ると再開する。OS が勝手に小窓に
+     * しないよう `disablePictureInPicture` も立てておく (全画面からホームへ戻っただけで小窓が
+     * 出て鳴り続けていた)。入れれば裏でも止めず、端末ごとに覚える (`background.svelte.ts`)。
+     *
+     * 裏に回るのはページの外の出来事なので、`visibilityState` を差し替えて知らせだけ送る
+     */
+    test('バックグラウンド再生は既定で切。裏に回すと止まり、入れると止まらない', async ({ page }) => {
+        await goto(page, '/live');
+        await page.getByTestId('live-channel').first().click();
+        await expect(page.getByTestId('live-title')).toBeVisible();
+
+        const turn = (state: 'hidden' | 'visible') =>
+            page.evaluate((state) => {
+                Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => state });
+                document.dispatchEvent(new Event('visibilitychange'));
+            }, state);
+        const guarded = () =>
+            page.getByTestId('live-video').evaluate((v) => (v as HTMLVideoElement).disablePictureInPicture);
+        const play = page.getByTestId('live-play');
+
+        await expect(play).toHaveAttribute('aria-label', '一時停止');
+        await expect.poll(guarded).toBe(true);
+        await turn('hidden');
+        await expect(play).toHaveAttribute('aria-label', '再生');
+        await turn('visible');
+        await expect(play).toHaveAttribute('aria-label', '一時停止');
+
+        await wakeControls(page, 'live-frame');
+        const toggle = page.getByTestId('live-background');
+        await expect(toggle).toHaveAttribute('aria-pressed', 'false');
+        await toggle.click();
+        await expect(toggle).toHaveAttribute('aria-pressed', 'true');
+        await expect.poll(guarded).toBe(false);
+        await turn('hidden');
+        // 止まらない (止めるなら知らせを受けたその場で止めている)
+        await page.waitForTimeout(500);
+        await expect(play).toHaveAttribute('aria-label', '一時停止');
+        await turn('visible');
+
+        // 端末ごとに覚える。開き直しても入のまま
+        await goto(page, '/live');
+        await page.getByTestId('live-channel').first().click();
+        await expect(page.getByTestId('live-title')).toBeVisible();
+        await wakeControls(page, 'live-frame');
+        await expect(page.getByTestId('live-background')).toHaveAttribute('aria-pressed', 'true');
+    });
+
+    /*
      * **放送に終わりは無いと言っておく。** 何も言わないと MediaSource の尺は
      * 「いま持っている中でいちばん後ろ」になり、0.2秒ごとに中身が届くたびに
      * 伸びる。備え付けの再生位置が右端まで行っては少し左へ戻る、を繰り返す
