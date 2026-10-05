@@ -1,8 +1,8 @@
 /**
- * ブラウザで MPEG-2 を解く WebAssembly を配る (ライブを生で送る道。docs/stream.md §5.5)。
+ * ブラウザで MPEG-2 と AAC を解く WebAssembly を配る (ライブを生で送る道。docs/stream.md §5.5)。
  *
  * **static/ に置かないのは、組むのがイメージの中だから** (Dockerfile の `mpeg2wasm` 段。
- * emscripten で FFmpeg の復号器を組む)。git には入れない — 500KB の生成物を抱えると
+ * emscripten で FFmpeg の復号器を組む)。git には入れない — 850KB ほどの生成物を抱えると
  * FFmpeg を上げるたびに差し替えが要り、組んだ手順と中身が食い違っても気づけない。
  *
  * 配るのは2つだけ: 読み込み口 (`decoder.mjs`) と中身 (`decoder.wasm`)。**名前は決め打ち** —

@@ -131,7 +131,7 @@ JSON で持つ列 (ジャンル・音声の構成・ルールの対象チャン�
 
 外から来る JSON (チューナーエージェントの答え、OIDC の相手、取り込み元の DB) は
 `res.json() as X` と書かず、`src/lib/shape.ts` の読み手で形を確かめてから型にする
-(`tolerate(array(AGENT_CHANNEL), await res.json(), 'エージェントの /denpa/channels')`)。型は形から
+(`tolerate(array(AGENT_CHANNEL), await res.json(), 'エージェントの PUT /denpa/channels')`。`tuner.ts`)。型は形から
 導く (`Infer<typeof AGENT_CHANNEL>`) ので、形と型を別々に書かない。
 
 読み方は 2 つ。`tolerate` は形が違っても止めず、警告を 1 回出して来たものをそのまま使う

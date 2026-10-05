@@ -64,7 +64,7 @@ AV1 / H.264 の mkv に焼き、字幕は放送のまま絵で入れます。
 **録画一覧の行を押すと、その場で再生が始まります。** 別のアプリは要りません。
 番組の中身は右に並んで出ます。
 
-- **どこを押しても再生/一時停止。** 左右の端をすばやく2回押すと10秒戻す/送る
+- **マウスはどこを押しても再生/一時停止** (指は1回で操作列の出し入れ)。左右の端をすばやく2回押すと10秒戻す/送る
 - **CM は自動で飛ばします** (既定で入)。CM のコマは1枚も出しません。送りボタンで手動でも飛ばせます
 - **字幕・倍速 (1〜2倍)・切り抜き** (いまの場面を字幕ごと PNG に。スマホは共有シートから写真へ、PC は保存してクリップボードにも)
 - **続きから再生します。** 別の端末で開いても続きから。観終わったらその場で消せます
@@ -113,15 +113,17 @@ curl -fsSL https://raw.githubusercontent.com/danything/denpa/main/install.sh | b
   ([docs/agent.md](docs/agent.md#windows-でチューナーを使う))
 - **Docker・WSL は入れません。** 無ければ入れ方を示して止まります (Linux は <https://get.docker.com>、
   Mac は Docker Desktop か OrbStack、Windows は `wsl --update`)
-- **入口は [genkan](https://github.com/danything/genkan)** (ホスト名で振り分けるリバースプロキシ)。
+- **入口は [genkan](https://github.com/danything/genkan)** (ホスト名で振り分けるリバースプロキシ。Linux・Mac)。
   動いていればそれを使います。無ければ 80 と 443 が空いているときだけ `~/genkan` に入れ、
   <http://denpa.localhost> で開きます。ポートが埋まっていれば入れず、<http://localhost:3000> で開きます。
   `denpa.localhost` はそのマシンでしか開けないので、LAN のほかの機器 (テレビ・スマホ) からは
   `http://<IP>:3000` で開きます
-- 置き場は `~/denpa` (`DENPA_HOME`)。`compose.yml` は更新のたびに上書きするので、
+- 置き場は `~/denpa` (`DENPA_HOME`)。Linux・Mac では `compose.yml` を更新のたびに上書きするので、
   **変えたいことは同じ場所の `compose.override.yml` に書きます** (Compose が重ねて読み、install.sh は触らない)
 - もう一度流すと最新のリリースに上がります。`… | bash -s -- --uninstall` で止めて外します
   (`~/denpa`・録画・DB は残す)。ブラウザを開かないなら `--no-open`
+- Windows は <http://localhost:3000> で開き、変えたい環境変数は `~/denpa/denpa.env` に書きます。
+  止めて外すのは `-Uninstall`、ブラウザを開かないなら `-NoOpen` (渡し方は install.ps1 の頭)
 
 ### Docker Compose を手で置く
 
