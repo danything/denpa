@@ -5,7 +5,7 @@
 # 本体も同じクラスタに置くなら、charts/denpa がエージェントも一緒に出す。
 #
 # **掛かったまま録れた TS を後から解くには、denpa と同じ置き場が見えている必要がある**
-# (persistence.recorded)。別の機械で動かすなら NFS などで同じ実体を両方に見せる。
+# (persistence.raw)。別の機械で動かすなら NFS などで同じ実体を両方に見せる。
 # 見せられなくても録画中はその場で解くので、困るのは録画中にカードが読めなかった
 # ときだけ (docs/agent.md「B-CASカードとデスクランブル」)
 
@@ -47,7 +47,7 @@ persistence:
   # denpa の生TSの置き場。**denpa と同じ実体を見せる** (上の説明)。
   # existingClaim に denpa 側の PVC を渡す。空なら chart が自分の分を作る
   # (= 別の機械で動かしていて共有できない構成)
-  recorded:
+  raw:
     size: 300Gi
     existingClaim: ""
 

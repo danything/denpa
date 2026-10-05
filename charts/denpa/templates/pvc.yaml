@@ -15,9 +15,9 @@ BACKUP_SKIP_WITHOUT_ANNOTATION=true なので、**注釈そのものが「取る
     (dict "key" "data" "name" "denpa-data" "k8up" "true"
           "k8upArgs" "[\"--exclude\",\"denpa.db*\"]"
           "note" "denpa の DB と logos/。DB は Pod 側の backupcommand で取るので除外し、logos/ だけをファイルとして取る")
-    (dict "key" "recorded" "name" "denpa-recorded" "k8up" "false"
+    (dict "key" "raw" "name" "denpa-raw" "k8up" "false"
           "note" "生TSの作業領域。エンコードが終われば消える。容量が大きく数時間で入れ替わるので取らない")
-    (dict "key" "library" "name" "denpa-library" "k8up" "true"
+    (dict "key" "encoded" "name" "denpa-encoded" "k8up" "true"
           "note" "エンコード済みの置き場。denpa がここから配り、削除も denpa がやる")
 }}
 {{- $p := index $root.Values.persistence $item.key }}
