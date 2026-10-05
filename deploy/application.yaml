@@ -60,7 +60,7 @@ spec:
           oidcSecretName: denpa-oidc
 
         persistence:
-          storageClassName: local-path-retain
+          storageClassName: local-path
           # **「git で消したものは消える」を優先する** という判断
           # (danything/gitops の docs/decisions.md「PVC を守る仕掛けをやめた」)。
           # 後ろ盾は日次の restic (R2) で、復元リハーサルは通っている

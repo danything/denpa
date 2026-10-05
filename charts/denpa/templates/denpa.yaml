@@ -106,9 +106,9 @@ spec:
             # PVC は前と同じものを、繋ぐ先だけ変えて使う
             - name: denpa-data
               mountPath: /data
-            - name: denpa-recorded
+            - name: raw
               mountPath: /media/raw
-            - name: library
+            - name: encoded
               mountPath: /media/encoded
             {{- if .Values.denpa.gpu.hostPath }}
             - name: dri
@@ -139,12 +139,12 @@ spec:
         - name: denpa-data
           persistentVolumeClaim:
             claimName: {{ include "denpa.pvcName" (dict "Values" .Values "key" "data" "name" "denpa-data") }}
-        - name: denpa-recorded
+        - name: raw
           persistentVolumeClaim:
-            claimName: {{ include "denpa.pvcName" (dict "Values" .Values "key" "recorded" "name" "denpa-recorded") }}
-        - name: library
+            claimName: {{ include "denpa.pvcName" (dict "Values" .Values "key" "raw" "name" "denpa-raw") }}
+        - name: encoded
           persistentVolumeClaim:
-            claimName: {{ include "denpa.pvcName" (dict "Values" .Values "key" "library" "name" "denpa-library") }}
+            claimName: {{ include "denpa.pvcName" (dict "Values" .Values "key" "encoded" "name" "denpa-encoded") }}
         {{- if .Values.denpa.gpu.hostPath }}
         - name: dri
           hostPath:

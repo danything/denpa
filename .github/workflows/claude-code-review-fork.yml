@@ -62,6 +62,10 @@ jobs:
           # pull_request_target では 401 (Invalid OIDC token) で断られる。コメントを
           # 書くのはワークフローの GITHUB_TOKEN (pull-requests: write) で足りる
           github_token: ${{ secrets.GITHUB_TOKEN }}
+          # action は起こした人に write 権限があるかを見る。ラベルを貼ったとき (labeled) は
+          # メンテナだが、push し直したとき (synchronize) は fork の作者なので断られていた。
+          # 承認はラベルで済んでいるので、**この PR の作者だけ**通す (`*` にはしない)
+          allowed_non_write_users: ${{ github.event.pull_request.user.login }}
           track_progress: true
           prompt: |
             REPO: ${{ github.repository }}

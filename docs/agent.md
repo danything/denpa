@@ -675,7 +675,7 @@ protocol の選び方ではありません。なので、いちばん退屈な�
   1 台のマシンのふつうの構成でも、動くものは 2 つ
   (プロセスを分ける理由は[上記](#エージェントは-net-native-aot))
 - **チューナーの刺さったマシンにエージェントだけ置き、denpa は別の所で動かせます**
-  (`charts/denpa-agent`)。生TSの置き場 (`denpa-recorded`) は両方に見せます
+  (`charts/denpa-agent`)。生TSの置き場 (`denpa-raw`) は両方に見せます
   ([下記](#b-casカードとデスクランブル))
 - **繋げるエージェントはいまは1つだけ**です (`TUNER_AGENT_URL`)。複数のエージェントを
   1つの denpa に束ねるのはまだ入っていません。入れるなら
@@ -854,7 +854,7 @@ irm https://raw.githubusercontent.com/danything/denpa/main/install.ps1 | iex
 - **録画は止めません。** 電波は二度と来ないので、スクランブルされたままでも
   録ります。denpa がエンコードの前に見て、掛かったままならエージェントに
   解かせます (`src/lib/server/scramble.ts` → `/denpa/decode`)
-- やり取りするのはパスだけです。生TSの置き場 (`denpa-recorded`) を両方のコンテナに
+- やり取りするのはパスだけです。生TSの置き場 (`denpa-raw`) を両方のコンテナに
   見せてあるので、読み書きはエージェントが直接やり、数十GBを HTTP で往復させません
   (**両方の Pod が同じノードに居ることが前提**です)
 - 生TSを残す設定のときは、残るのは解除済みのTSだけです。掛かったままのものは、
