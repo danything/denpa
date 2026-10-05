@@ -9,6 +9,10 @@
     import { startOffline } from '#lib/offline.svelte.js';
     import { followNavigation, reload } from '#lib/reload.svelte.js';
     import { navigating, page } from '$app/state';
+    import Contrast from '~icons/lucide/contrast';
+    import MenuIcon from '~icons/lucide/menu';
+    import Moon from '~icons/lucide/moon';
+    import Sun from '~icons/lucide/sun';
 
     let { children, data } = $props();
 
@@ -80,12 +84,8 @@
     /** 既定はダーク (映像を観るものはダークが基本)。system は端末の設定に従う */
     let mode = $state<'system' | 'light' | 'dark'>('dark');
     const LABEL = { system: '端末に合わせる', light: 'ライト', dark: 'ダーク' };
-    /** 月・太陽・半分塗った丸 (Pico の見本と同じ月)。絵文字は端末ごとに絵が違い、太さも揃わなかった */
-    const ICON = {
-        dark: 'M12 3a9 9 0 1 0 9 9c0-.46-.04-.92-.1-1.36a5.389 5.389 0 0 1-4.4 2.26 5.403 5.403 0 0 1-3.14-9.8c-.44-.06-.9-.1-1.36-.1z',
-        light: 'M12 7a5 5 0 1 0 0 10 5 5 0 0 0 0-10zM2 13h2a1 1 0 0 0 0-2H2a1 1 0 0 0 0 2zm18 0h2a1 1 0 0 0 0-2h-2a1 1 0 0 0 0 2zM11 2v2a1 1 0 0 0 2 0V2a1 1 0 0 0-2 0zm0 18v2a1 1 0 0 0 2 0v-2a1 1 0 0 0-2 0zM5.99 4.58a1 1 0 0 0-1.41 1.41l1.06 1.06a1 1 0 0 0 1.41-1.41L5.99 4.58zm12.37 12.37a1 1 0 0 0-1.41 1.41l1.06 1.06a1 1 0 0 0 1.41-1.41l-1.06-1.06zm1.06-10.96a1 1 0 0 0-1.41-1.41l-1.06 1.06a1 1 0 0 0 1.41 1.41l1.06-1.06zM7.05 18.36a1 1 0 0 0-1.41-1.41l-1.06 1.06a1 1 0 0 0 1.41 1.41l1.06-1.06z',
-        system: 'M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm0 18V4a8 8 0 0 1 0 16z',
-    };
+    /** 月・太陽・半分塗った丸 (Lucide)。絵文字は端末ごとに絵が違い、太さも揃わなかった */
+    const ICON = { dark: Moon, light: Sun, system: Contrast };
 
     function apply() {
         const dark =
@@ -276,7 +276,7 @@
                 data-testid="theme-toggle"
                 data-mode={mode}
             >
-                <Icon path={ICON[mode]} size="size-5" />
+                <Icon icon={ICON[mode]} size="size-5" />
             </button>
             <!--
                 広い画面はそのまま並べる。狭い画面では下のハンバーガーに畳む。
@@ -304,18 +304,7 @@
             -->
             <details class="burger" bind:this={menu} data-testid="nav-menu">
                 <summary aria-label="メニュー">
-                    <svg
-                        viewBox="0 0 24 24"
-                        width="20"
-                        height="20"
-                        fill="none"
-                        stroke="currentColor"
-                        stroke-width="2"
-                        stroke-linecap="round"
-                        aria-hidden="true"
-                    >
-                        <path d="M4 6h16M4 12h16M4 18h16" />
-                    </svg>
+                    <Icon icon={MenuIcon} size="size-5" />
                 </summary>
                 <ul class="burger-list">
                     {#each links as link (link.href)}

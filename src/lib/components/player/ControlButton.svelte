@@ -1,6 +1,6 @@
 <script lang="ts">
     import Icon from './Icon.svelte';
-    import { OVERLAY, OVERLAY_BTN, OVERLAY_DANGER, OVERLAY_ON, OVERLAY_ROUND } from './icons';
+    import { type IconShape, OVERLAY, OVERLAY_BTN, OVERLAY_DANGER, OVERLAY_ON, OVERLAY_ROUND } from './icons';
 
     /**
      * 映像の上に置くボタン。**3画面 (ライブ・追っかけ・観る画面) で同じもの。**
@@ -13,7 +13,7 @@
      * 「音声」「H.264」のように名前が要るものはライブ側にいくつかある
      */
     let {
-        path,
+        icon,
         label,
         on = false,
         danger = false,
@@ -22,8 +22,8 @@
         onclick,
         children,
     }: {
-        /** アイコンの `d` (`icons.ts`)。文字だけのボタンでは省く */
-        path?: string;
+        /** アイコン (`icons.ts`)。文字だけのボタンでは省く */
+        icon?: IconShape;
         /** 読み上げに出す名前。押すと役目が変わるものは、いまの役目を書く */
         label: string;
         /** 押されている間か。字幕を出しているときなど */
@@ -50,8 +50,8 @@
     aria-pressed={on}
     data-testid={testid}
 >
-    {#if path !== undefined}
-        <Icon {path} />
+    {#if icon !== undefined}
+        <Icon {icon} />
     {/if}
     {@render children?.()}
 </button>

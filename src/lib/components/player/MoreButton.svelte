@@ -17,7 +17,7 @@
 
 {#if stage.compact}
     <ControlButton
-        path={MORE}
+        icon={MORE}
         label={stage.more ? 'ほかの操作を閉じる' : 'ほかの操作'}
         on={stage.more}
         {testid}

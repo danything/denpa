@@ -4,6 +4,7 @@
     import { submitting } from '#lib/actions.js';
     import { arming } from '#lib/arming.svelte.js';
     import ProgramDetail from '#lib/components/ProgramDetail.svelte';
+    import Icon from '#lib/components/player/Icon.svelte';
     import Toasts, { errorNotice, type Notice } from '#lib/components/Toasts.svelte';
     import { type DetailSeed, programDetail } from '#lib/detail.svelte.js';
     import { startDownload } from '#lib/download.js';
@@ -32,6 +33,8 @@
     import { encodeSource, type FileSource } from '#lib/source.js';
     import { goto } from '$app/navigation';
     import { resolve } from '$app/paths';
+    import Ellipsis from '~icons/lucide/ellipsis';
+    import Play from '~icons/lucide/play';
 
     let { data, form } = $props();
 
@@ -765,11 +768,7 @@
                             aria-label="その他の操作"
                             data-testid="recordings-more"
                         >
-                            <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden="true">
-                                <circle cx="5" cy="12" r="2" />
-                                <circle cx="12" cy="12" r="2" />
-                                <circle cx="19" cy="12" r="2" />
-                            </svg>
+                            <Icon icon={Ellipsis} size="size-4.5" />
                         </DropdownMenu.Trigger>
                         {#if mounted}
                             <DropdownMenu.Content forceMount align="end" sideOffset={4} collisionPadding={8}>
@@ -915,14 +914,7 @@
                                             />
                                         {/if}
                                         <span class="poster-play" aria-hidden="true">
-                                            <svg
-                                                viewBox="0 0 24 24"
-                                                class="poster-icon"
-                                                fill="currentColor"
-                                                aria-hidden="true"
-                                            >
-                                                <path d="M8 5v14l11-7z" />
-                                            </svg>
+                                            <Play class="poster-icon" aria-hidden="true" />
                                         </span>
                                     </div>
                                 {/if}
@@ -1646,7 +1638,7 @@
         background: rgb(0 0 0 / 0);
         transition: background-color 0.15s;
     }
-    .poster-icon {
+    .poster-play :global(.poster-icon) {
         width: 1.5rem;
         height: 1.5rem;
         opacity: 0;
@@ -1656,7 +1648,7 @@
     .playable:hover .poster-play {
         background: rgb(0 0 0 / 0.4);
     }
-    .playable:hover .poster-icon {
+    .playable:hover :global(.poster-icon) {
         opacity: 1;
     }
     .offline-tag {

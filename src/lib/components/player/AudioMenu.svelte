@@ -23,7 +23,7 @@
 
 <OverlayMenu {testid} attrName="audio" {items} {onselect}>
     {#snippet trigger()}
-        <ControlButton path={AUDIO} label="音声を選ぶ" {testid}>
+        <ControlButton icon={AUDIO} label="音声を選ぶ" {testid}>
             <span class="name">
                 {items.find((item) => item.active)?.label ?? '音声'}
             </span>

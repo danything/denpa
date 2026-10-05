@@ -12,8 +12,8 @@
 
 | | 何を持つか |
 | --- | --- |
-| `icons.ts` | アイコンの形と、絵の上に置くボタンの色 |
-| `Icon.svelte` | アイコン1つ |
+| `icons.ts` | アイコン（Lucide。[下](#アイコンは-lucide-を組むときに埋め込みます)）と、絵の上に置くボタンの色 |
+| `Icon.svelte` | アイコン1つ（大きさと `aria-hidden`） |
 | `ControlButton.svelte` | 重ねるボタン。押されている間の見え方もここ |
 | `ControlBar.svelte` | 絵に重ねる列。下端の帯（黒いぼかしつき）と、右端の縦の列（中身は画面ごと: 観る画面は閉じる・d・切り抜き・削除、ライブは録画・d・切り抜き、追っかけは閉じる・切り抜き）。低い枠では右の列を右上の一行に寝かせる |
 | `controls.svelte.ts` | 出すか消すかの決め方。マウスは動かせば、指は押せば出て、どちらも 2.5 秒で消える。止めていても消える（一時停止は絵の中の文字を見るためで、帯が残っては意味が無い）。残すのはキーボードで触っている間とメニューを開いている間だけ |
@@ -68,6 +68,29 @@
 
 **押して開いた小窓（`pip.svelte.ts`）は切でも使えます。** 出している間は裏に回しても止めず、
 生の音も `playback` にします。閉じた時点でまだ裏なら、そこで止めます。
+
+### アイコンは Lucide を、組むときに埋め込みます
+
+**アイコンは [Lucide](https://lucide.dev/icons) に揃えています**（線の太さ 2・角丸。
+`currentColor` で文字の色に従う）。読み込みは **Iconify の形の束 (`@iconify-json/*`) を
+[unplugin-icons](https://github.com/unplugin/unplugin-icons) で組むときに Svelte の部品へ
+変える**やり方です（`import Play from '~icons/lucide/play'`。`vite.config.ts`）。
+
+- **実行中に取りに行かない。** denpa は家の LAN だけ・オフラインでも開くものなので、
+  Iconify の API から形を取る `@iconify/svelte` の既定の使い方は採りません。束に入るのは
+  使ったアイコンの `<svg>` だけで、SSR でもそのまま出ます（後から絵が差し込まれてずれることもない）。
+  service worker が持つのも普通の JS の束です
+- **`@iconify/svelte` を形を渡して使う道も比べました。** 実行時の部品と、形のデータ
+  (`@iconify-json/*` は1つの束で全部入り、`@iconify-icons/*` は古い形式) を両方
+  束に入れることになり、unplugin-icons より重く、依存も増えます
+- **`lucide-svelte` を直に使わないのは、ほかの集まりも同じ書き方で足せるから。**
+  局やサービスのロゴが要るときは `@iconify-json/simple-icons` を足して `~icons/simple-icons/*`
+- 足した依存はどちらも開発時だけ（`devDependencies`）。束に入るのは Lucide の形 (ISC) だけです
+  ([licenses.md](licenses.md))
+- **Lucide に無い形は `src/lib/icons/*.svg` に置きます**（`~icons/denpa/*`）。いまはデータ放送の
+  「d」だけ（リモコンと同じ字。線の太さと角は Lucide に揃えた）
+
+ロゴ・PWA のアイコン (`static/`)・局ロゴ・データ放送の画面は「アイコン」ではないので対象外です。
 
 ## LAN でも https で開く
 
