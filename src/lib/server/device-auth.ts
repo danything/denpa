@@ -57,7 +57,7 @@ export function newUserCode(): string {
     return `${chars.slice(0, 4)}-${chars.slice(4)}`;
 }
 
-/** 打ち込まれた札を揃える (小文字・ハイフン抜け・空白を許す)。形が違えば null */
+/** URL から来た札を揃える (小文字・ハイフン抜け・空白を許す)。形が違えば null */
 export function normalizeUserCode(input: string): string | null {
     const chars = input.toUpperCase().replace(/[^A-Z0-9]/g, '');
     if (chars.length !== 8 || [...chars].some((c) => !ALPHABET.includes(c))) return null;

@@ -36,7 +36,7 @@ function pair(name = '居間のテレビ', at = 1_000_000) {
 }
 
 describe('札', () => {
-    test('人が見比べる札は見間違えない字だけで ABCD-EFGH の形', () => {
+    test('札は見間違えない字だけで ABCD-EFGH の形', () => {
         for (let i = 0; i < 200; i++) {
             const code = newUserCode();
             expect(code).toMatch(/^[A-Z2-9]{4}-[A-Z2-9]{4}$/);
@@ -44,7 +44,7 @@ describe('札', () => {
         }
     });
 
-    test('打ち込まれた札は揃えて読む。形が違えば null', () => {
+    test('URL から来た札は揃えて読む。形が違えば null', () => {
         expect(normalizeUserCode('abcd efgh')).toBe('ABCD-EFGH');
         expect(normalizeUserCode('ABCD-EFG')).toBeNull();
         // 0 と O は札に使わない字
