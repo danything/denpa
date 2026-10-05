@@ -212,6 +212,46 @@ test.describe('ライブを生で見る', () => {
         );
         expect(frames).toBeGreaterThan(5);
 
+        /*
+         * **字幕も小窓に出る** (`compose.ts`)。偽の放送に字幕は乗っていないので、画面の字幕の
+         * canvas に赤い帯を描いて「描いている」印を立てる (`paint.ts` の `drawOverlay` と同じ)。
+         * 小窓のコマの同じ所が赤くなり、印を下ろせば (字幕を消した) 元の絵に戻る
+         */
+        const captionShown = (on: boolean) =>
+            page.getByTestId('live-captions').evaluate((c, on) => {
+                const canvas = c as HTMLCanvasElement;
+                canvas.width = 1920;
+                canvas.height = 1080;
+                const ctx = canvas.getContext('2d') as CanvasRenderingContext2D;
+                ctx.clearRect(0, 0, 1920, 1080);
+                if (on) {
+                    ctx.fillStyle = 'rgb(255, 0, 0)';
+                    ctx.fillRect(0, 810, 1920, 216);
+                    canvas.dataset['drawn'] = '';
+                } else delete canvas.dataset['drawn'];
+            }, on);
+        // 小窓のコマの、字幕の帯の真ん中 (下から 1/6) の色
+        const pipPixel = () =>
+            proxy.evaluate((v) => {
+                const video = v as HTMLVideoElement;
+                const canvas = document.createElement('canvas');
+                canvas.width = video.videoWidth;
+                canvas.height = video.videoHeight;
+                const ctx = canvas.getContext('2d') as CanvasRenderingContext2D;
+                ctx.drawImage(video, 0, 0);
+                const [r = 0, g = 0, b = 0] = ctx.getImageData(
+                    Math.floor(canvas.width / 2),
+                    Math.floor((canvas.height * 11) / 12),
+                    1,
+                    1,
+                ).data;
+                return r > 200 && g < 60 && b < 60;
+            });
+        await captionShown(true);
+        await expect.poll(pipPixel, { timeout: 5_000 }).toBe(true);
+        await captionShown(false);
+        await expect.poll(pipPixel, { timeout: 5_000 }).toBe(false);
+
         // 小窓の再生ボタン (代わりの `<video>` を直に止める) で、帯も止まる・再開する
         const play = page.getByTestId('live-play');
         await proxy.evaluate((v) => (v as HTMLVideoElement).pause());

@@ -282,7 +282,12 @@
      * 小窓 (PiP。[pip.svelte.ts](../../../lib/components/player/pip.svelte.ts))。小窓で押された
      * 止める・再開は `<video>` の `play`/`pause` で拾えているので、合わせる口は要らない
      */
-    const pip = pictureInPicture({ video: () => video, auto: () => background.on });
+    const pip = pictureInPicture({
+        video: () => video,
+        auto: () => background.on,
+        overlay: () => overlay,
+        captions: () => captions && hasCaptions,
+    });
 
     /** バックグラウンド再生 ([background.svelte.ts](../../../lib/components/player/background.svelte.ts))。既定は切で、裏に回ったら止め、戻ったら止めた所から */
     const background = backgroundPlayback({

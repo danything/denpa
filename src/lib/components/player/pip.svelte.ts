@@ -1,11 +1,11 @@
 import { untrack } from 'svelte';
 import type { Notice } from '#lib/components/Toasts.svelte';
+import { type Composed, canCompose, compose } from './compose';
 
 /**
  * ピクチャーインピクチャー (PiP)。**3画面 (ライブ・追っかけ・観る画面) で同じもの。**
  *
- * 絵だけを小窓にして、他の画面・他のアプリを触りながら観る。出すのは `<video>` そのもの
- * なので、**字幕 (canvas に重ねている) と操作列は小窓に付いていかない**。
+ * 絵だけを小窓にして、他の画面・他のアプリを触りながら観る。操作列は小窓に付いていかない。
  *
  * ## ボタンを出さないところ
  *
@@ -34,12 +34,31 @@ import type { Notice } from '#lib/components/Toasts.svelte';
  * 1枚目が届いたら流れを切っておき (`enabled = false`)、押されたら戻す。
  * 小窓に出していない間まで絵を写し続けない
  *
+ * ## 字幕も小窓に出す
+ *
+ * 字幕は `<video>` の上に重ねた canvas なので、`<video>` をそのまま小窓にすると付いていかない。
+ * **コマごとに字幕の canvas を重ねた流れを作り** (`compose.ts`)、代わりの `<video>` を小窓にする。
+ * 重ねられるのは Chrome・Edge だけ (`MediaStreamTrackProcessor`)。Safari・Firefox は今までどおり
+ * 字幕無しで出す。
+ *
+ * - **生のとき**: 生の流れに重ねたものを、代わりの `<video>` に用意しておく。字幕が出ていない
+ *   コマは素通し
+ * - **焼いたもの (ライブ・追っかけ・観る画面)**: 押した時点で字幕を出しているときだけ、
+ *   `<video>` から流れを取って (`captureStream`) 重ね、代わりの `<video>` を小窓にする。
+ *   字幕が無い・消しているときは `<video>` をそのまま出す (重ねるぶん重い)。**用意するのは
+ *   小窓に出している間だけ**で、閉じたら畳む。音は今までどおり元の `<video>` から鳴る。
+ *   流れには時刻が無いので、小窓の中で位置を動かすことはできない
+ *
+ * 小窓を出したあとで字幕を出し消しすると、重ねたものはそれに付いてくる。字幕を消した
+ * まま出した (重ねていない) 小窓は、あとで字幕を出しても付いてこない — 開き直す
+ *
  * ## 止める・再開する
  *
  * 小窓にもブラウザの再生ボタンがあり、押すと `<video>` を直に止める。**ライブと
  * 追っかけは「止めているか」を player 側で持っている** (`live-player` の `paused`) ので、
  * 渡された `paused` / `toggle` で合わせる。観る画面は `<video>` の `play`/`pause` を
- * そのまま見ているので要らない
+ * そのまま見ているので要らない。**字幕を重ねた小窓 (代わりの `<video>`) は、押されたら
+ * 元の `<video>` を止める・再開する** (代わりのほうは流れを映しているだけで、止めても音は止まらない)
  *
  * ## OS・ブラウザが自分で小窓にするのを止める
  *
@@ -63,6 +82,10 @@ interface Options {
     toggle?: () => void;
     /** OS・ブラウザが自分で小窓にするのを許すか (バックグラウンド再生)。渡さなければ許す */
     auto?: () => boolean;
+    /** 字幕を重ねている canvas。**小窓にも重ねる** (`compose.ts`) */
+    overlay?: () => HTMLCanvasElement | null;
+    /** 字幕を出しているか (持っていて、消していない)。焼いたものを字幕ごと小窓に出すかを決める */
+    captions?: () => boolean;
 }
 
 /** どこで断られたか。**押しても何も起きない、で終わらせない** — 端末ごとに転ぶ所が違う */
@@ -93,6 +116,11 @@ type WebkitVideo = HTMLVideoElement & {
 };
 
 const MODE = 'picture-in-picture';
+/** 字幕を重ねた流れの1枚目を待つ上限 (ms)。過ぎたら元の video をそのまま出す */
+const FIRST_FRAME = 2_000;
+
+/** `captureStream` は Chrome・Firefox にある (型には無い) */
+type CapturableVideo = HTMLVideoElement & { captureStream?: () => MediaStream };
 
 /** 標準の口が使えるか */
 function standard(): boolean {
@@ -123,8 +151,14 @@ export function pictureInPicture(options: Options): Pip {
     let able = $state(false);
     /** 小窓に出している video (本体か、生のときの代わり)。出していなければ null */
     let on = $state<HTMLVideoElement | null>(null);
-    /** 生のときに小窓へ出す代わりの video。要るときに作る */
+    /** 生のとき・字幕を重ねるときに小窓へ出す代わりの video。要るときに作る */
     let proxy: HTMLVideoElement | null = null;
+    /** 生の流れに字幕を重ねたもの (`prepare`)。重ねられない端末では null (生の流れをそのまま出す) */
+    let rawComposed: Composed | null = null;
+    /** 小窓を頼んでいる最中か (`toggle`) */
+    let entering = false;
+    /** 焼いたものに字幕を重ねたもの (`composeBaked`)。**小窓に出している間だけ** 居る */
+    let baked = $state<Composed | null>(null);
     /**
      * 用意できなかった理由 (`prepare`)。**立っている間はボタンを出さない** — Firefox は生の
      * 絵の流れを取れず、押せても必ず断られる
@@ -136,6 +170,8 @@ export function pictureInPicture(options: Options): Pip {
     const canCapture =
         typeof HTMLCanvasElement !== 'undefined' && 'captureStream' in HTMLCanvasElement.prototype;
     const raw = (): boolean => options.raw?.() ?? false;
+    /** いま小窓に出すのは代わりの video か (生・字幕を重ねた焼いたもの) */
+    const proxied = (): boolean => raw() || baked !== null;
 
     $effect(() => {
         able = supported();
@@ -146,7 +182,11 @@ export function pictureInPicture(options: Options): Pip {
         const update = () => {
             if (shown(video)) on = video;
             else if (on === video) on = null;
-            if (video === proxy && on !== proxy) flowing(false);
+            if (video === proxy && on !== proxy) {
+                flowing(false);
+                // 焼いたものに重ねていたなら畳む。小窓に出していない間まで重ねない
+                dropBaked();
+            }
         };
         video.addEventListener('enterpictureinpicture', update);
         video.addEventListener('leavepictureinpicture', update);
@@ -168,10 +208,17 @@ export function pictureInPicture(options: Options): Pip {
      */
     function follow(video: HTMLVideoElement): () => void {
         const { paused, toggle } = options;
-        if (paused === undefined || toggle === undefined) return () => {};
         const sync = () => {
-            if (on !== video || (video === proxy) !== raw()) return;
-            if (video.paused !== paused()) toggle();
+            if (on !== video || (video === proxy) !== proxied()) return;
+            if (paused !== undefined && toggle !== undefined) {
+                if (video.paused !== paused()) toggle();
+                return;
+            }
+            // 観る画面で、字幕を重ねた小窓 (代わりの video) で押された。元の video を合わせる
+            const main = options.video();
+            if (video !== proxy || main === null || main.paused === video.paused) return;
+            if (video.paused) main.pause();
+            else void main.play().catch(() => undefined);
         };
         video.addEventListener('pause', sync);
         video.addEventListener('play', sync);
@@ -186,9 +233,22 @@ export function pictureInPicture(options: Options): Pip {
         if (video === null) return;
         const unlisten = listen(video);
         const unfollow = follow(video);
+        /*
+         * 観る画面で、字幕を重ねた小窓を出している間に帯で止めた・再開した。小窓の
+         * 再生ボタンの見た目を合わせる (ライブと追っかけは下の `paused` の $effect が合わせる)
+         */
+        const mirror = () => {
+            if (options.paused !== undefined || baked === null || proxy === null || on !== proxy) return;
+            if (video.paused) proxy.pause();
+            else void proxy.play().catch(() => undefined);
+        };
+        video.addEventListener('pause', mirror);
+        video.addEventListener('play', mirror);
         return () => {
             unlisten();
             unfollow();
+            video.removeEventListener('pause', mirror);
+            video.removeEventListener('play', mirror);
         };
     });
 
@@ -198,8 +258,10 @@ export function pictureInPicture(options: Options): Pip {
      * 止まった絵の小窓が居座る
      */
     $effect(() => {
-        const wantProxy = raw();
-        if (on !== null && (on === proxy) !== wantProxy) leave();
+        const isRaw = raw();
+        if (on === null) return;
+        // 字幕を重ねた小窓は焼いたほうの絵なので、生のものではない
+        if ((on === proxy && baked === null) !== isRaw) leave();
     });
 
     /** 生に入ったら代わりの video を用意しておく。出たら畳む (canvas ごと無くなる) */
@@ -270,7 +332,11 @@ export function pictureInPicture(options: Options): Pip {
             return;
         }
         const video = makeProxy();
-        video.srcObject = stream;
+        // 字幕を重ねられる端末では重ねたものを出す (字幕が出ていないコマは素通し。`compose.ts`)
+        const track = stream.getVideoTracks()[0];
+        rawComposed =
+            options.overlay === undefined || track === undefined ? null : compose(track, options.overlay);
+        video.srcObject = rawComposed?.stream ?? stream;
         video.addEventListener('loadedmetadata', () => on !== video && flowing(false), { once: true });
         void video.play().catch((error: unknown) => {
             unprepared = new Refused(`代わりの映像を再生できません (${reason(error)})`);
@@ -286,15 +352,83 @@ export function pictureInPicture(options: Options): Pip {
 
     /** 代わりの video を畳む。生を出たとき (canvas ごと無くなる) */
     function release(): void {
+        rawComposed?.stop();
+        rawComposed = null;
+        dropBaked();
         if (proxy === null) return;
         const stream = proxy.srcObject;
         if (stream instanceof MediaStream) for (const track of stream.getTracks()) track.stop();
         proxy.srcObject = null;
     }
 
+    /** 焼いたものに字幕を重ねるか。**押した時点で字幕を出しているときだけ** (上の説明) */
+    function composable(video: HTMLVideoElement): boolean {
+        return (
+            standard() &&
+            canCompose() &&
+            options.overlay !== undefined &&
+            options.captions?.() === true &&
+            typeof (video as CapturableVideo).captureStream === 'function'
+        );
+    }
+
+    /**
+     * 焼いたものに字幕を重ねて、代わりの video に1枚目まで受け取る。**押されてから作る** —
+     * 重ねられるのは Chrome・Edge だけで、あちらは「押された直後」が数秒続く (Safari と違って
+     * 待っても断られない)。小窓に出していない間まで重ね続けないため。
+     * 作れなければ null (元の video をそのまま出す)
+     */
+    async function composeBaked(video: HTMLVideoElement): Promise<HTMLVideoElement | null> {
+        let track: MediaStreamTrack | undefined;
+        try {
+            track = (video as CapturableVideo).captureStream?.().getVideoTracks()[0];
+        } catch {
+            return null;
+        }
+        if (track === undefined || options.overlay === undefined) return null;
+        const composed = compose(track, options.overlay);
+        if (composed === null) {
+            track.stop();
+            return null;
+        }
+        dropBaked();
+        const target = makeProxy();
+        baked = composed;
+        target.srcObject = composed.stream;
+        const ready = new Promise<boolean>((done) => {
+            if (target.readyState >= HTMLMediaElement.HAVE_METADATA) return done(true);
+            const timer = setTimeout(() => done(false), FIRST_FRAME);
+            target.addEventListener(
+                'loadedmetadata',
+                () => {
+                    clearTimeout(timer);
+                    done(true);
+                },
+                { once: true },
+            );
+        });
+        void target.play().catch(() => undefined);
+        if (!(await ready) || baked !== composed) {
+            if (baked === composed) dropBaked();
+            return null;
+        }
+        if (video.paused) target.pause();
+        return target;
+    }
+
+    /** 焼いたものに重ねていたら畳む。**元の流れ (`captureStream`) も止める** */
+    function dropBaked(): void {
+        const composed = baked;
+        if (composed === null) return;
+        baked = null;
+        composed.stop();
+        if (proxy !== null && proxy.srcObject === composed.stream) proxy.srcObject = null;
+    }
+
     /**
      * 小窓に出す。**頼むまでに `await` を挟まない** — 挟むと Safari は「押された直後」と
-     * 見なさなくなって断る (`NotAllowedError`)
+     * 見なさなくなって断る (`NotAllowedError`)。字幕を重ねるときだけ1枚目を待つ
+     * (`composeBaked`。そこへ来るのは待っても断られない Chrome・Edge だけ)
      */
     async function enter(): Promise<void> {
         let video: WebkitVideo | null = options.video();
@@ -308,7 +442,7 @@ export function pictureInPicture(options: Options): Pip {
             flowing(true);
             if (options.paused?.() === true) video.pause();
             else void video.play().catch(() => undefined);
-        }
+        } else if (video !== null && composable(video)) video = (await composeBaked(video)) ?? video;
         if (video === null) return;
         // 押して開くものは止めない (勝手に開かせないための印。上の説明)
         video.disablePictureInPicture = false;
@@ -343,6 +477,8 @@ export function pictureInPicture(options: Options): Pip {
             text: `小窓を出せませんでした: ${reason(error)}`,
         };
         flowing(false);
+        // 字幕を重ねて用意したものは、出せなかったなら畳む
+        if (on === null) dropBaked();
         // 頼む前に下ろした印を戻す (`enter`)
         guard();
     }
@@ -366,7 +502,15 @@ export function pictureInPicture(options: Options): Pip {
         toggle() {
             refused = null;
             if (on !== null) leave();
-            else void enter().catch(refuse);
+            // 字幕を重ねる用意 (1枚目待ち) の間に押し直されたら、二重に頼まない
+            else if (!entering) {
+                entering = true;
+                void enter()
+                    .catch(refuse)
+                    .finally(() => {
+                        entering = false;
+                    });
+            }
         },
         get notices() {
             return refused === null ? [] : [refused];
