@@ -45,7 +45,7 @@ spec:
         # **入れ替えの合図。** CI が「そのイメージの中身を最後に変えたコミット」を書く。
         # 手で触らない
         imageMarks:
-          denpa: sha-9a8103e68314
+          denpa: sha-a86f80bfb443
           agent: sha-8dc89fa95110
 
         denpa:
@@ -92,3 +92,14 @@ spec:
       - CreateNamespace=true
       # 素のマニフェストで入っていた同名のリソースを chart 側が引き取る
       - ServerSideApply=true
+      # 下の ignoreDifferences を「比べない」だけでなく「適用でも触らない」にする
+      - RespectIgnoreDifferences=true
+  # **PVC の volumeName は触らない。** chart は書かないが、PV に結び付いた PVC には入っていて、
+  # 一度でも ArgoCD がその欄の持ち主になると (既存の PV に結んで作り直したとき)、server-side
+  # apply のたびに消しにいき、作成後は変えられない欄なので同期が毎回 PVC で落ちる。
+  # 2026-10-05 にこれで新しいイメージの切り替えが止まり、宅内でも OIDC を求められた
+  ignoreDifferences:
+    - group: ""
+      kind: PersistentVolumeClaim
+      jsonPointers:
+        - /spec/volumeName
