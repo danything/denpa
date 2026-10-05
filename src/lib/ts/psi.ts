@@ -34,7 +34,7 @@ const DESC_TS_INFORMATION = 0xcd;
  * ラジオ (0x02) とデータ (0xc0) も入る。映像の無いものを番組表に並べないのは
  * 取り込むほう (epg.ts の DIGITAL_TV)
  */
-export const SERVICE_TYPES = new Set([0x01, 0x02, 0xa1, 0xa4, 0xa5, 0xad, 0xc0]);
+const SERVICE_TYPES = new Set([0x01, 0x02, 0xa1, 0xa4, 0xa5, 0xad, 0xc0]);
 
 const CRC32_TABLE = (() => {
     const table = new Uint32Array(256);
@@ -49,7 +49,7 @@ const CRC32_TABLE = (() => {
 })();
 
 /** MPEG-2 の CRC32。セクション末尾の4バイトを含めて回すと 0 になる */
-export function crc32(data: Uint8Array): number {
+function crc32(data: Uint8Array): number {
     let crc = 0xffffffff;
     for (const byte of data) {
         crc = (((crc << 8) >>> 0) ^ CRC32_TABLE[((crc >>> 24) ^ byte) & 0xff]!) >>> 0;

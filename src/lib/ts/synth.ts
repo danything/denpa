@@ -136,7 +136,7 @@ export interface SynthEvent {
 }
 
 /** 音声1本ぶん。**放送が付けた名前まで持てる** (解説放送の見分けに要る) */
-export interface SynthAudio {
+interface SynthAudio {
     /** audio_component_descriptor の component_type (3 = ステレオ) */
     type: number;
     /** ISO 639-2。省くと jpn */

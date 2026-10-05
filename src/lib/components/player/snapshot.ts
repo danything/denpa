@@ -1,4 +1,5 @@
 import type { Notice } from '#lib/components/Toasts.svelte';
+import { pad } from '#lib/format.js';
 
 /** 写す1コマ。`<video>` か、生で見ているときに worker から貰った絵 (`raw/engine.ts` の `grab`) */
 export interface Frame {
@@ -36,9 +37,8 @@ export function shotName(title: string, at: Date): string {
             .slice(0, NAME_MOST)
             // 末尾の点と空白は Windows が黙って落とす
             .replace(/[. ]+$/, '') || 'denpa';
-    const two = (n: number) => String(n).padStart(2, '0');
-    const day = `${at.getFullYear()}${two(at.getMonth() + 1)}${two(at.getDate())}`;
-    const time = `${two(at.getHours())}${two(at.getMinutes())}${two(at.getSeconds())}`;
+    const day = `${at.getFullYear()}${pad(at.getMonth() + 1)}${pad(at.getDate())}`;
+    const time = `${pad(at.getHours())}${pad(at.getMinutes())}${pad(at.getSeconds())}`;
     return `${name}_${day}-${time}.png`;
 }
 
