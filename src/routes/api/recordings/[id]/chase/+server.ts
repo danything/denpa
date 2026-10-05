@@ -1,4 +1,5 @@
 import { error } from '@sveltejs/kit';
+import { askedTrack } from '#lib/arib.js';
 import { chaseStream } from '#lib/server/live.js';
 
 /**
@@ -7,7 +8,8 @@ import { chaseStream } from '#lib/server/live.js';
  *
  * `?codec=` は `h264` (既定) / `av1` / `raw`。`h264` と `av1` は画面の追っかけと同じ焼き直しの
  * fMP4、`raw` は焼かずに生TS (MPEG-2) をそのまま。`?from=<秒>` で頭からの位置を選ぶ
- * (シークは頼み直す)。伸びているファイルを追い読みし、録り終えて尻まで読んだら閉じる
+ * (シークは頼み直す)。`?audio=<音声ID>` (一覧の `audios` の `id`) で焼く音声を選ぶ (知らないものは主音声、
+ * `raw` では効かない)。伸びているファイルを追い読みし、録り終えて尻まで読んだら閉じる
  * (`live.ts` の `chaseStream`)
  */
 export function GET({ params, url }) {
@@ -16,7 +18,12 @@ export function GET({ params, url }) {
     const asked = url.searchParams.get('codec');
     const codec = asked === 'av1' || asked === 'raw' ? asked : 'h264';
     const from = Number(url.searchParams.get('from') ?? 0);
-    const stream = chaseStream(id, codec, Number.isFinite(from) ? Math.max(0, from) : 0);
+    const stream = chaseStream(
+        id,
+        codec,
+        Number.isFinite(from) ? Math.max(0, from) : 0,
+        askedTrack(url.searchParams.get('audio')),
+    );
     if (stream === null) error(404, '録画がないか、まだ何も録れていません');
     return new Response(stream, {
         headers: {

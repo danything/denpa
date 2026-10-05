@@ -1,10 +1,11 @@
 import { describe, expect, test } from 'bun:test';
-import { type AudioSide, audioTracks } from '#lib/arib.js';
+import { type AudioSide, askedTrack, audioTracks, pickTrack } from '#lib/arib.js';
 import { CHANNEL } from '#lib/live.js';
 import {
     CHASE_STREAM_HOLD,
     codecsFor,
     encodeArgs,
+    key,
     LIVE_STREAM_BACKLOG,
     sessionStream,
     whyNotTuned,
@@ -441,6 +442,38 @@ describe('音声だけの焼き方 (外から使う口の ?audio=only)', () => {
         expect(args).not.toContain('-filter_complex');
         expect(args.join(' ')).toContain('-c:a aac');
         expect(args.join(' ')).toContain('-f mp4');
+    });
+});
+
+/**
+ * **HTTP の口で音声を選ぶ** (`live?audio=<id>`・`chase?audio=<id>`)。画面の WebSocket と同じ
+ * 合言葉 (`AudioTrack.id`) を、同じ `pickTrack` → `encodeArgs` に通す
+ */
+describe('外から選ぶ音声 (?audio=<id>)', () => {
+    const tracks = audioTracks([{ componentType: 2, langs: ['jpn', 'eng'] }]);
+    const chosen = (asked: string | null) => pickTrack(tracks, askedTrack(asked));
+
+    test('デュアルモノの副音声は右だけを両耳に配って焼く', () => {
+        const args = encodeArgs(1024, chosen('0:sub'));
+        expect(args).toContain('0:p:1024:a:0');
+        expect(args[args.indexOf('-af') + 1]).toBe('pan=stereo|c0=c1|c1=c1');
+    });
+
+    test('知らないものは主音声で焼く (断らない)', () => {
+        const args = encodeArgs(1024, chosen('3:sub'));
+        expect(args[args.indexOf('-af') + 1]).toBe('pan=stereo|c0=c0|c1=c0');
+        expect(chosen('only').id).toBe('0:main');
+    });
+
+    /*
+     * **音声が違えば相乗りしない。** 同じ局を主音声で観ている人の焼いたものに、
+     * 副音声を頼んだ人が乗ると、頼んだ音が出ない。生は全部の音声を送るので分けない
+     */
+    test('焼くものは音声ごとに別のセッション、生は1つ', () => {
+        const main = chosen('0:main');
+        const sub = chosen('0:sub');
+        expect(key('GR', '27', 1, main, 'h264', 0)).not.toBe(key('GR', '27', 1, sub, 'h264', 0));
+        expect(key('GR', '27', 1, main, 'raw', 0)).toBe(key('GR', '27', 1, sub, 'raw', 0));
     });
 });
 

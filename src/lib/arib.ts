@@ -399,6 +399,20 @@ export function audioTitles(audios: Audio[], dualMono: boolean): string[] {
 }
 
 /**
+ * 番組表が持っている音声の構成。
+ *
+ * `audios` は放送から拾ったものをそのまま持っているだけなので、無い・壊れている
+ * (壊れた行は列の読み手が空にする。`schema.ts`) ことはありうる。そのときは
+ * `audio_type` に落とし、それも無ければ何も無いことにする — どの道 `audioTracks` が
+ * 「そのまま出す」1つを返す
+ */
+export function parseAudios(row: { audio_type: number | null; audios: Audio[] | null } | undefined): Audio[] {
+    if (row === undefined) return [];
+    if (row.audios !== null && row.audios.length > 0) return row.audios;
+    return row.audio_type === null ? [] : [{ componentType: row.audio_type }];
+}
+
+/**
  * 頼まれたものを選ぶ。**知らないものを頼まれたら主音声。**
  *
  * 番組が変われば音声の構成も変わる (二カ国語の映画が終わればステレオに戻る)。
@@ -410,6 +424,16 @@ export function audioTitles(audios: Audio[], dualMono: boolean): string[] {
 export function pickTrack(tracks: AudioTrack[], wanted: string | undefined): AudioTrack {
     // `audioTracks` は1本も無くても「音声」を1つ返すので、先頭は必ずある
     return tracks.find((track) => track.id === wanted) ?? tracks.find((track) => track.main) ?? tracks[0]!;
+}
+
+/**
+ * 外から頼まれた音声の合言葉 (`AudioTrack.id`) を読む。**形が違えば頼まれなかったことにする。**
+ *
+ * HTTP の口 (`?audio=0:sub`。docs/api.md) から来るもの。形が合っていても無いもの
+ * (番組が替わって消えた副音声など) は `pickTrack` が主音声に落とすので、ここで断らない
+ */
+export function askedTrack(value: string | null): string | undefined {
+    return value !== null && /^\d{1,2}:(main|sub|both)$/.test(value) ? value : undefined;
 }
 
 const VIDEO_TYPE: Record<string, string> = {

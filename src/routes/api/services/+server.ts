@@ -1,5 +1,6 @@
 import { json } from '@sveltejs/kit';
 import { and, gt, inArray, lte, sql } from 'drizzle-orm';
+import { audioTracks, parseAudios } from '#lib/arib.js';
 import { orm } from '#lib/server/db.js';
 import { CURRENT_SERVICES, SERVICE_ORDER, SERVICE_TYPE_ORDER } from '#lib/server/epg.js';
 import { programs, services } from '#lib/server/schema.js';
@@ -7,7 +8,8 @@ import { programs, services } from '#lib/server/schema.js';
 /**
  * **局の一覧** (画面の外のもの向けの口。docs/api.md)。並びはテレビと同じ
  * (種別 → リモコン番号 → サービスID)。ライブは `live` の URL をそのまま開けばよい。
- * `now` はいま放送中の番組 (番組表に無ければ null)。テレビのアプリがライブの列に出す
+ * `now` はいま放送中の番組 (番組表に無ければ null)。テレビのアプリがライブの列に出す。
+ * `now.audios` はその番組で選べる音声 (画面のライブと同じ一覧。`live?audio=<id>` で選ぶ)
  */
 export function GET() {
     const rows = orm()
@@ -30,6 +32,8 @@ export function GET() {
                 name: programs.name,
                 startAt: programs.start_at,
                 endAt: programs.end_at,
+                audio_type: programs.audio_type,
+                audios: programs.audios,
             })
             .from(programs)
             .where(
@@ -43,7 +47,10 @@ export function GET() {
                 ),
             )
             .all()
-            .map((p) => [p.serviceId, { title: p.name, startAt: p.startAt, endAt: p.endAt }]),
+            .map((p) => [
+                p.serviceId,
+                { title: p.name, startAt: p.startAt, endAt: p.endAt, audios: audioTracks(parseAudios(p)) },
+            ]),
     );
     return json(
         rows.map((row) => ({

@@ -1,5 +1,15 @@
 import { describe, expect, test } from 'bun:test';
-import { audioLabel, audioTitles, audioTracks, genreLabel, genreName, pickTrack, videoLabel } from './arib';
+import {
+    askedTrack,
+    audioLabel,
+    audioTitles,
+    audioTracks,
+    genreLabel,
+    genreName,
+    parseAudios,
+    pickTrack,
+    videoLabel,
+} from './arib';
 
 /**
  * ルールの条件に出す名前。
@@ -196,6 +206,60 @@ describe('pickTrack', () => {
             { componentType: 3, langs: ['jpn'], text: '主音声ステレオ', main: true },
         ]);
         expect(pickTrack(two, undefined).label).toBe('主音声ステレオ (日本語)');
+    });
+});
+
+/**
+ * **古い行には `audios` が無い。** そのときは `audio_type` だけでデュアルモノかを見る。
+ * 外から使う口 (`now.audios`・録画の `audios`) も画面のライブ・追っかけと同じ読み方をする
+ */
+describe('parseAudios', () => {
+    test('audios があればそれを使う', () => {
+        const audios = [{ componentType: 3, langs: ['jpn'] }];
+        expect(parseAudios({ audio_type: 2, audios })).toBe(audios);
+    });
+
+    test('audios が無ければ audio_type に落とす', () => {
+        expect(parseAudios({ audio_type: 2, audios: null })).toEqual([{ componentType: 2 }]);
+        expect(parseAudios({ audio_type: 2, audios: [] })).toEqual([{ componentType: 2 }]);
+        expect(audioTracks(parseAudios({ audio_type: 2, audios: null })).map((t) => t.id)).toEqual([
+            '0:main',
+            '0:sub',
+            '0:both',
+        ]);
+    });
+
+    test('どちらも無ければ空 (audioTracks は「音声」を1つ返す)', () => {
+        expect(parseAudios({ audio_type: null, audios: null })).toEqual([]);
+        expect(parseAudios(undefined)).toEqual([]);
+    });
+});
+
+/**
+ * HTTP の口の `?audio=<id>`。形が違えば頼まれなかったことにする (主音声で焼く)。
+ * 形が合っていて無いものは `pickTrack` が主音声に落とす
+ */
+describe('askedTrack', () => {
+    test('AudioTrack.id の形なら通す', () => {
+        expect(askedTrack('0:main')).toBe('0:main');
+        expect(askedTrack('1:sub')).toBe('1:sub');
+        expect(askedTrack('2:both')).toBe('2:both');
+    });
+
+    test('形が違えば undefined', () => {
+        expect(askedTrack(null)).toBeUndefined();
+        expect(askedTrack('')).toBeUndefined();
+        expect(askedTrack('only')).toBeUndefined();
+        expect(askedTrack('0:left')).toBeUndefined();
+        expect(askedTrack('main')).toBeUndefined();
+        expect(askedTrack(' 0:main')).toBeUndefined();
+        expect(askedTrack('999:main')).toBeUndefined();
+    });
+
+    test('無いものは pickTrack が主音声に落とす', () => {
+        const tracks = audioTracks([{ componentType: 3, langs: ['jpn'], main: true }]);
+        expect(pickTrack(tracks, askedTrack('0:sub')).id).toBe('0:both');
+        expect(pickTrack(tracks, askedTrack('nonsense')).id).toBe('0:both');
     });
 });
 
