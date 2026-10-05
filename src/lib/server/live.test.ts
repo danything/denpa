@@ -444,6 +444,58 @@ describe('音声だけの焼き方 (外から使う口の ?audio=only)', () => {
     });
 });
 
+/**
+ * **GPU で焼く** (issue #417)。道を選ぶのは `hwenc.liveHw` で、ここは引数の組み立てだけ。
+ * 手元に GPU が無いので、**字幕・コマ数の上限・音声がソフトウェアのときと同じに残る**ことを見る
+ */
+describe('GPU で焼く', () => {
+    const device = '/dev/dri/renderD128';
+    const encodeOnly = () =>
+        encodeArgs(1024, stereo, 'h264', 0, { way: { device, kind: 'vaapi' }, full: false });
+    const full = () => encodeArgs(1024, stereo, 'h264', 0, { way: { device, kind: 'vaapi' }, full: true });
+    const before = (args: string[], what: string) => args.indexOf(what) < args.indexOf('-i');
+
+    test('焼くところだけ GPU — インタレ解除は CPU の bwdif のまま、上げてから渡す', () => {
+        const args = encodeOnly();
+        expect(before(args, '-init_hw_device')).toBe(true);
+        expect(args[args.indexOf('-vf') + 1]).toBe('bwdif,format=nv12,hwupload');
+        expect(args.join(' ')).toContain('-c:v h264_vaapi');
+        expect(args.join(' ')).toContain('-bf 0 -async_depth 1 -g 60');
+        expect(args).not.toContain('libx264');
+        expect(args).not.toContain('-hwaccel');
+    });
+
+    test('復号から GPU — `-hwaccel` は入力より前、CPU のフィルタは挟まない', () => {
+        const args = full();
+        expect(before(args, '-hwaccel')).toBe(true);
+        expect(before(args, '-hwaccel_output_format')).toBe(true);
+        expect(args[args.indexOf('-vf') + 1]).toBe('deinterlace_vaapi=rate=field');
+        expect(args.join(' ')).not.toContain('bwdif');
+        expect(args.join(' ')).not.toContain('hwupload');
+    });
+
+    test('字幕の出口・コマ数の上限・音声はソフトウェアのときと同じ', () => {
+        for (const args of [encodeOnly(), full()]) {
+            expect(args[args.indexOf('-fpsmax') + 1]).toBe('60000/1001');
+            expect(args.join(' ')).toContain('[0:p:1024:s:0]null');
+            expect(args).toContain('pipe:3');
+            expect(args.join(' ')).toContain('-c:a aac');
+            // 字幕を絵で受け取る指定も入力より前に残る
+            expect(before(args, '-sub_type')).toBe(true);
+        }
+        // AV1 は Opus のまま
+        const av1 = encodeArgs(1024, stereo, 'av1', 0, { way: { device, kind: 'qsv' }, full: false });
+        expect(av1.join(' ')).toContain('-c:v av1_qsv');
+        expect(av1.join(' ')).toContain('-c:a libopus');
+    });
+
+    test('音声だけなら GPU の口も開けない', () => {
+        const args = encodeArgs(1024, stereo, 'audio', 0, { way: { device, kind: 'vaapi' }, full: true });
+        expect(args).not.toContain('-init_hw_device');
+        expect(args).not.toContain('-hwaccel');
+    });
+});
+
 /*
  * HTTP の追っかけ (`chaseStream`)。倍速で送り込むので、読む側が追いつかなければ
  * 送り込みを止める。止める量は閉じる量より手前でないと、止める前に閉じてしまう

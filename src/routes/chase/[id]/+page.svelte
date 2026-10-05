@@ -430,6 +430,9 @@
         {:else if player.chaseEnded}
             <!-- 録れているところまで観た。録画が終わっていれば、この先はもう来ない -->
             <StageNote testid="chase-ended">録れているところまで観ました</StageNote>
+        {:else if player.warning}
+            <!-- 頼まれたとおりにできなかった断り書き (GPU で焼けずにソフトウェアへ降りた、など) -->
+            <StageNote testid="chase-warning">{player.warning}</StageNote>
         {/if}
 
         {#if player.state !== 'playing'}
