@@ -22,6 +22,8 @@
 
 <script lang="ts">
     import { untrack } from 'svelte';
+    import X from '~icons/lucide/x';
+    import Icon from './player/Icon.svelte';
 
     /**
      * 操作の結果を画面の右下に浮かせて出す。
@@ -117,7 +119,7 @@
                     aria-label="閉じる"
                     data-testid="{notice.key}-close"
                 >
-                    ✕
+                    <Icon icon={X} size="size-4.5" />
                 </button>
             </div>
         {/each}
@@ -154,6 +156,8 @@
     }
     .close {
         flex: none;
+        display: inline-flex;
+        align-items: center;
         border-radius: 999px;
     }
 </style>

@@ -4,76 +4,81 @@
  * 別々に持っていた頃は、同じ「再生」でも画面によって形が違っていた
  * (両方に同じ `d` を書き写していて、片方だけ直したときにずれる)。
  *
- * **インラインの SVG。** 絵文字にしていた頃は、端末ごとに形も大きさも変わっていた。
- * 出どころは Material Symbols で、24x24 のマス目に合わせてある
- */
-
-export const PLAY = 'M8 5v14l11-7z';
-export const PAUSE = 'M6 19h4V5H6v14zm8-14v14h4V5h-4z';
-export const SOUND_ON =
-    'M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z';
-export const SOUND_OFF =
-    'M16.5 12c0-1.77-1.02-3.29-2.5-4.03v2.21l2.45 2.45c.03-.2.05-.41.05-.63zM19 12c0 .94-.2 1.82-.54 2.64l1.51 1.51C20.63 14.91 21 13.5 21 12c0-4.28-2.99-7.86-7-8.77v2.06c2.89.86 5 3.54 5 6.71zM4.27 3L3 4.27 7.73 9H3v6h4l5 5v-6.73l4.25 4.25c-.67.52-1.42.93-2.25 1.18v2.06c1.38-.31 2.63-.95 3.69-1.81L19.73 21 21 19.73l-9-9L4.27 3zM12 4L9.91 6.09 12 8.18V4z';
-export const AUDIO = 'M7 18h2V6H7v12zm4 4h2V2h-2v20zm-8-8h2v-4H3v4zm12 4h2V6h-2v12zm4-8v4h2v-4h-2z';
-export const CAPTION =
-    'M19 4H5c-1.11 0-2 .9-2 2v12c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm-8 7H9.5v-.5h-2v3h2V13H11v1c0 .55-.45 1-1 1H7c-.55 0-1-.45-1-1v-4c0-.55.45-1 1-1h3c.55 0 1 .45 1 1v1zm7 0h-1.5v-.5h-2v3h2V13H18v1c0 .55-.45 1-1 1h-3c-.55 0-1-.45-1-1v-4c0-.55.45-1 1-1h3c.55 0 1 .45 1 1v1z';
-export const EXPAND = 'M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z';
-export const SHRINK = 'M5 16h3v3h2v-5H5v2zm3-8H5v2h5V5H8v3zm6 11h2v-3h3v-2h-5v5zm2-11V5h-2v5h5V8h-3z';
-/**
- * ピクチャーインピクチャー (小窓)。大きな枠の右下に小さな枠 (Material Symbols の
- * `picture_in_picture_alt`)。出している間は押されている見た目 (`OVERLAY_ON`) にする
- */
-export const PIP =
-    'M19 11h-8v6h8v-6zm4 8V4.98C23 3.88 22.1 3 21 3H3c-1.1 0-2 .88-2 1.98V19c0 1.1.9 2 2 2h18c1.1 0 2-.9 2-2zm-2 .02H3V4.97h18v14.05z';
-/**
- * バックグラウンド再生 (裏に回しても止めない)。ヘッドホン (Material Symbols の `headphones`) —
- * 裏で続けるのはたいてい聴くため。入れている間は押されている見た目 (`OVERLAY_ON`)
- */
-export const BACKGROUND =
-    'M12 1c-4.97 0-9 4.03-9 9v7c0 1.66 1.34 3 3 3h3v-8H5v-2c0-3.87 3.13-7 7-7s7 3.13 7 7v2h-4v8h3c1.66 0 3-1.34 3-3v-7c0-4.97-4.03-9-9-9z';
-
-/**
- * ここから下は主に観る画面で使うもの。**チャプター送り (`PREV`/`NEXT`)・CM飛ばし
- * (`CUT`)・削除 (`TRASH`/`CHECK`) はライブに無い。** 切り抜き (`CAMERA`)・情報
- * (`INFO`)・データ放送 (`DATA`) は**ライブでも使う** (切り抜きとデータ放送は両方に置いた)。
+ * **形は Lucide** (`~icons/lucide/*`。組むときに `<svg>` ごと埋め込まれる Svelte の部品)。
+ * 絵文字にしていた頃は端末ごとに形も大きさも変わり、`d` を手で写していた頃は
+ * 足すたびに出どころを探していた。名前は https://lucide.dev/icons で引ける。
+ * 置き方は `Icon.svelte` (大きさと aria-hidden)。
+ *
+ * **チャプター送り (`PREV`/`NEXT`)・CM飛ばし (`CUT`)・削除 (`TRASH`/`CHECK`) は
+ * 観る画面だけ。** 切り抜き (`CAMERA`)・情報 (`INFO`)・データ放送 (`DATA`) は
+ * **ライブでも使う** (切り抜きとデータ放送は両方に置いた)。
  *
  * **10秒送り・戻しの絵は持たない。** PCは矢印キー、指は左右の端を素早く2回
- * (`ts/watch.ts` の `tap`) でできるので、絵の上に常に2つ置くだけの用が無かった
+ * (`ts/watch.ts` の `tap`) でできるので、絵の上に常に2つ置くだけの用が無かった。
+ *
+ * 並びは名前順 (biome が揃える)
  */
-/** 録画 (ライブの右上)。押すといま流れている番組の録画が始まる */
-export const RECORD = 'M19,12A7,7 0 0,1 12,19A7,7 0 0,1 5,12A7,7 0 0,1 12,5A7,7 0 0,1 19,12Z';
-export const PREV = 'M6 6h2v12H6zm3.5 6l8.5 6V6z';
-export const NEXT = 'M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z';
-export const CAMERA =
-    'M9 2L7.17 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2h-3.17L15 2H9zm3 15c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.65 0-3 1.35-3 3s1.35 3 3 3 3-1.35 3-3-1.35-3-3-3z';
-export const TRASH = 'M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z';
-/** CM飛ばし。**鋏**にしてあるのは、送りのボタン (`NEXT`) と見分けるため */
-export const CUT =
-    'M9.64 7.64c.23-.5.36-1.05.36-1.64 0-2.21-1.79-4-4-4S2 3.79 2 6s1.79 4 4 4c.59 0 1.14-.13 1.64-.36L10 12l-2.36 2.36C7.14 14.13 6.59 14 6 14c-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4c0-.59-.13-1.14-.36-1.64L12 14l7 7h3v-1L9.64 7.64zM6 8c-1.1 0-2-.89-2-2s.9-2 2-2 2 .89 2 2-.9 2-2 2zm0 12c-1.1 0-2-.89-2-2s.9-2 2-2 2 .89 2 2-.9 2-2 2zm6-7.5c-.28 0-.5-.22-.5-.5s.22-.5.5-.5.5.22.5.5-.22.5-.5.5zM19 3l-6 6 2 2 7-7V3z';
-/** 聞き返しの2回目 (レ点)。**文字を出さずに「これでいいか」を言う** */
-export const CHECK = 'M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z';
-export const CLOSE =
-    'M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z';
 
-/**
- * 「ほか」(⋯)。**狭い枠でだけ出す** — 毎回は使わないもの (音声・送り・焼き方・速さ) を
- * 畳んでおく口 (`Extras.svelte`)。Material Symbols の `more_horiz`
- */
-export const MORE =
-    'M6 10c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm12 0c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm-6 0c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z';
+import type { Component } from 'svelte';
+import type { SvelteHTMLElements } from 'svelte/elements';
 
-/** 中身を読む。丸に i (Material Symbols の `info`) */
-export const INFO =
-    'M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z';
+/** アイコン1つの型 (`~icons/*` が返す部品) */
+export type IconShape = Component<SvelteHTMLElements['svg']>;
 
 /**
  * データ放送。**テレビのリモコンと同じ「d」**。
  *
- * 絵柄では何のことか伝わらないので、字そのものを形にしてある
- * (角丸の四角に白抜きの d)
+ * 絵柄では何のことか伝わらないので、字そのものを形にしてある (角丸の四角に d)。
+ * Lucide に無いので自前 (`src/lib/icons/data.svg`)。線の太さと角は Lucide に揃える
  */
-export const DATA =
-    'M4 4h16a2 2 0 012 2v12a2 2 0 01-2 2H4a2 2 0 01-2-2V6a2 2 0 012-2zm9 3v3.2A2.8 2.8 0 0011 9.6 3.4 3.4 0 007.6 13 3.4 3.4 0 0011 16.4a2.8 2.8 0 002-.85V16h2V7h-2zm-2 4.4A1.6 1.6 0 019.6 13 1.6 1.6 0 0111 14.6 1.6 1.6 0 0112.6 13 1.6 1.6 0 0111 11.4z';
+export { default as DATA } from '~icons/denpa/data';
+/** 音声を選ぶ (主・副・二か国語) */
+export { default as AUDIO } from '~icons/lucide/audio-lines';
+/** 切り抜き (いまの1コマを PNG に) */
+export { default as CAMERA } from '~icons/lucide/camera';
+export { default as CAPTION } from '~icons/lucide/captions';
+/** 聞き返しの2回目 (レ点)。**文字を出さずに「これでいいか」を言う** */
+export { default as CHECK } from '~icons/lucide/check';
+/** 録画 (ライブの右上)。押すといま流れている番組の録画が始まる。丸に点 (録画の印) */
+export { default as RECORD } from '~icons/lucide/circle-dot';
+/**
+ * 「ほか」(⋯)。**狭い枠でだけ出す** — 毎回は使わないもの (音声・送り・焼き方・速さ) を
+ * 畳んでおく口 (`Extras.svelte`)
+ */
+export { default as MORE } from '~icons/lucide/ellipsis';
+/**
+ * Hybridcast。**別のタブへ出ていく**ので「四角から飛び出す矢印」。
+ *
+ * データ放送の `d` と並べるものなので、**同じ形にはしない** — あちらは
+ * denpa の中で開くもの、こちらは外へ出ていくもので、押した結果がまるで違う
+ */
+export { default as OPEN_OUT } from '~icons/lucide/external-link';
+/**
+ * バックグラウンド再生 (裏に回しても止めない)。ヘッドホン — 裏で続けるのはたいてい
+ * 聴くため。入れている間は押されている見た目 (`OVERLAY_ON`)
+ */
+export { default as BACKGROUND } from '~icons/lucide/headphones';
+/** 中身を読む。丸に i */
+export { default as INFO } from '~icons/lucide/info';
+/** 全画面にする / 戻す */
+export { default as EXPAND } from '~icons/lucide/maximize';
+export { default as SHRINK } from '~icons/lucide/minimize';
+export { default as PAUSE } from '~icons/lucide/pause';
+/**
+ * ピクチャーインピクチャー (小窓)。大きな枠の右下に小さな枠。
+ * 出している間は押されている見た目 (`OVERLAY_ON`)
+ */
+export { default as PIP } from '~icons/lucide/picture-in-picture-2';
+export { default as PLAY } from '~icons/lucide/play';
+/** CM飛ばし。**鋏**にしてあるのは、送りのボタン (`NEXT`) と見分けるため */
+export { default as CUT } from '~icons/lucide/scissors';
+/** チャプター送り・戻し */
+export { default as PREV } from '~icons/lucide/skip-back';
+export { default as NEXT } from '~icons/lucide/skip-forward';
+export { default as TRASH } from '~icons/lucide/trash';
+export { default as SOUND_ON } from '~icons/lucide/volume-2';
+export { default as SOUND_OFF } from '~icons/lucide/volume-off';
+export { default as CLOSE } from '~icons/lucide/x';
 
 /**
  * 絵の上に置くボタンの見た目。**読めるように黒く敷く。**
@@ -112,13 +117,3 @@ export const OVERLAY_DANGER = 'ov-danger';
 
 /** 押されている間の見た目 (字幕を出しているときなど。ライブに居るときは EdgeButton の OVERLAY_DANGER) */
 export const OVERLAY_ON = 'ov-on';
-
-/**
- * Hybridcast。**別のタブへ出ていく**ので「四角から飛び出す矢印」
- * (Material Symbols の `open_in_new`)。
- *
- * データ放送の `d` と並べるものなので、**同じ形にはしない** — あちらは
- * denpa の中で開くもの、こちらは外へ出ていくもので、押した結果がまるで違う
- */
-export const OPEN_OUT =
-    'M19 19H5V5h7V3H5a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7h-2v7zM14 3v2h3.59l-9.83 9.83 1.41 1.41L19 6.41V10h2V3h-7z';

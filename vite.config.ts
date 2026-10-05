@@ -2,6 +2,8 @@ import { dirname, resolve } from 'node:path';
 import adapter from '@sveltejs/adapter-node';
 import { sveltekit } from '@sveltejs/kit/vite';
 import { vitePreprocess } from '@sveltejs/vite-plugin-svelte';
+import { FileSystemIconLoader } from 'unplugin-icons/loaders';
+import Icons from 'unplugin-icons/vite';
 import { defineConfig, type Plugin } from 'vite';
 
 /**
@@ -47,6 +49,21 @@ export default defineConfig({
              * 受けて、それ以外をここの出力へ流している (理由はあちらに書いてある)。
              */
             adapter: adapter(),
+        }),
+        /*
+         * **アイコンは組むときに SVG ごと埋め込む** (`~icons/lucide/play` が Svelte の
+         * 部品になる)。家の LAN だけ・オフラインでも開くものなので、Iconify の API へ
+         * 取りに行く形 (`@iconify/svelte` の既定) は使わない。形は `@iconify-json/*`
+         * (開発時だけの依存) から読むので、束に入るのは使ったアイコンの `<svg>` だけ。
+         *
+         * `denpa` は Lucide に無い自前の形 (`src/lib/icons/*.svg`。データ放送の d)。
+         * 理由は docs/player.md の「アイコン」
+         */
+        Icons({
+            compiler: 'svelte',
+            customCollections: {
+                denpa: FileSystemIconLoader('./src/lib/icons'),
+            },
         }),
     ],
     server: {

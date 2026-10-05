@@ -1320,7 +1320,7 @@
                         aria-label="一覧へ戻る"
                         data-testid="watch-close"
                     >
-                        <Icon path={CLOSE} />
+                        <Icon icon={CLOSE} />
                     </a>
                     <!--
                         **データ放送 (d) は右上に置く。** 焼いてある録画でだけ出す
@@ -1330,7 +1330,7 @@
                     -->
                     {#if data.hasData}
                         <ControlButton
-                            path={DATA}
+                            icon={DATA}
                             label={showData ? 'データ放送を消す' : 'データ放送を出す'}
                             on={showData}
                             testid="watch-data-button"
@@ -1342,7 +1342,7 @@
                         観ている場面を人に見せるのに、いちいち撮り直さずに済む
                     -->
                     <ControlButton
-                        path={CAMERA}
+                        icon={CAMERA}
                         label="この場面を切り抜く"
                         testid="watch-shot"
                         onclick={() => void snapshot()}
@@ -1360,7 +1360,7 @@
                         <input type="hidden" name="id" value={rec.id} />
                         {#if deleting.armed !== null}
                             <ControlButton
-                                path={CHECK}
+                                icon={CHECK}
                                 label="削除する"
                                 danger
                                 submit
@@ -1368,7 +1368,7 @@
                             />
                         {:else}
                             <ControlButton
-                                path={TRASH}
+                                icon={TRASH}
                                 label="削除"
                                 testid="watch-delete"
                                 onclick={() => deleting.arm(rec.id)}
@@ -1426,13 +1426,13 @@
                             **閉じる・d・切り抜き・削除は右の列** (上の `watch-side`)
                         -->
                         <ControlButton
-                            path={playing ? PAUSE : PLAY}
+                            icon={playing ? PAUSE : PLAY}
                             label={playing ? '一時停止' : '再生'}
                             testid="watch-play"
                             onclick={togglePlay}
                         />
                         <ControlButton
-                            path={muted ? SOUND_OFF : SOUND_ON}
+                            icon={muted ? SOUND_OFF : SOUND_ON}
                             label={muted ? '音を出す' : '音を消す'}
                             onclick={() => {
                                 if (video !== null) video.muted = !video.muted;
@@ -1446,7 +1446,7 @@
                         -->
                         {#if hasCaptions}
                             <ControlButton
-                                path={CAPTION}
+                                icon={CAPTION}
                                 label={captions ? '字幕を消す' : '字幕を出す'}
                                 on={captions}
                                 testid="watch-captions"
@@ -1484,13 +1484,13 @@
                         -->
                         {#if chapters.length > 1}
                             <ControlButton
-                                path={PREV}
+                                icon={PREV}
                                 label="前のチャプター"
                                 testid="watch-prev-chapter"
                                 onclick={() => seekTo(prevChapterAt(chapters, at))}
                             />
                             <ControlButton
-                                path={NEXT}
+                                icon={NEXT}
                                 label="次のチャプター"
                                 testid="watch-next-chapter"
                                 onclick={() => seekTo(nextChapterAt(chapters, at))}
@@ -1503,7 +1503,7 @@
                         -->
                         {#if hasCm}
                             <ControlButton
-                                path={CUT}
+                                icon={CUT}
                                 label={skipCm ? 'CM飛ばしをやめる' : 'CMを自動で飛ばす'}
                                 on={skipCm}
                                 testid="watch-skip-cm"
@@ -1559,7 +1559,7 @@
                         <!-- **バックグラウンド再生。** 既定は切で、裏に回したら止める。端末ごとに覚える (`background.svelte.ts`) -->
                         <Extras>
                             <ControlButton
-                                path={BACKGROUND}
+                                icon={BACKGROUND}
                                 label={background.on ? 'バックグラウンド再生をやめる' : 'バックグラウンド再生を入れる'}
                                 on={background.on}
                                 testid="watch-background"
@@ -1569,7 +1569,7 @@
                         {#if pip.available}
                             <Extras>
                                 <ControlButton
-                                    path={PIP}
+                                    icon={PIP}
                                     label={pip.active ? '小窓をやめる' : '小窓で観る'}
                                     on={pip.active}
                                     testid="watch-pip"
@@ -1579,7 +1579,7 @@
                         {/if}
 
                         <ControlButton
-                            path={full ? SHRINK : EXPAND}
+                            icon={full ? SHRINK : EXPAND}
                             label={full ? '全画面をやめる' : '全画面'}
                             testid="watch-full"
                             onclick={toggleFull}

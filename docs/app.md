@@ -43,6 +43,7 @@ EPGStation の置き換えとして作ったもので、エンコード設定は
 | `src/lib/pgs.ts` | PGS (Blu-ray の字幕) の組み立てと読み出し。ffmpeg に符号器が無いので自前。読むほうはブラウザで使う (`readSup`) |
 | `src/lib/download.ts` | 録画のダウンロード開始 (押されてから期限付きのURLを作る) |
 | `src/lib/ts/watch.ts` | 録画を観るときの押したことの読み方 (2回押し・チャプター送り・続きの位置。DOM を触らない) |
+| `src/lib/icons/` | Lucide に無いアイコンの形 (`~icons/denpa/*`。いまはデータ放送の d だけ。[player.md](player.md#アイコンは-lucide-を組むときに埋め込みます)) |
 | `src/lib/components/player/` | 映像の上に置くもの。3画面 (ライブ・追っかけ・観る画面) で共通 (アイコン・重ねボタン・操作列・出し入れの決め方・字幕の重ね方) |
 | `src/lib/server/library.ts` | 保存先でのファイル配置 |
 | `src/lib/server/metadata.ts` | サムネイル (`-poster.jpg`) と、その置き場の決めごと |

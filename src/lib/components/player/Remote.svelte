@@ -1,4 +1,10 @@
 <script lang="ts">
+    import ArrowDown from '~icons/lucide/arrow-down';
+    import ArrowLeft from '~icons/lucide/arrow-left';
+    import ArrowRight from '~icons/lucide/arrow-right';
+    import ArrowUp from '~icons/lucide/arrow-up';
+    import Icon from './Icon.svelte';
+
     /**
      * 指で押すリモコン。**データ放送を出している間だけ、右の列に出す。**
      *
@@ -89,16 +95,16 @@
     <div class="pad">
         <div></div>
         <button type="button" class="secondary key" onclick={() => press(UP)}
-            aria-label="上">↑</button>
+            aria-label="上"><Icon icon={ArrowUp} size="size-5" /></button>
         <div></div>
         <button type="button" class="secondary key" onclick={() => press(LEFT)}
-            aria-label="左">←</button>
+            aria-label="左"><Icon icon={ArrowLeft} size="size-5" /></button>
         <button type="button" class="key enter" onclick={() => press(ENTER)}>決定</button>
         <button type="button" class="secondary key" onclick={() => press(RIGHT)}
-            aria-label="右">→</button>
+            aria-label="右"><Icon icon={ArrowRight} size="size-5" /></button>
         <div></div>
         <button type="button" class="secondary key" onclick={() => press(DOWN)}
-            aria-label="下">↓</button>
+            aria-label="下"><Icon icon={ArrowDown} size="size-5" /></button>
         <div></div>
     </div>
 

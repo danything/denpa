@@ -345,10 +345,10 @@
                     -->
                     <form method="POST" action="?/record" use:submitting>
                         <input type="hidden" name="service" value={player.tuned.serviceId} />
-                        <ControlButton path={RECORD} label="いまの番組を録画する" submit testid="live-record" />
+                        <ControlButton icon={RECORD} label="いまの番組を録画する" submit testid="live-record" />
                     </form>
                     <ControlButton
-                        path={DATA}
+                        icon={DATA}
                         label={player.showData ? 'データ放送を消す' : 'データ放送を出す'}
                         on={player.showData}
                         testid="live-data-button"
@@ -359,7 +359,7 @@
                         そちらに1枚頼む (`rawFrame`)
                     -->
                     <ControlButton
-                        path={CAMERA}
+                        icon={CAMERA}
                         label="この場面を切り抜く"
                         testid="live-shot"
                         onclick={() => void snapshot()}
@@ -416,13 +416,13 @@
                     <!-- **並びは観る画面と同じ。** 再生・音・字幕が左から順で、全画面が右端 -->
                     <div class="cluster control-row">
                         <ControlButton
-                            path={player.paused ? PLAY : PAUSE}
+                            icon={player.paused ? PLAY : PAUSE}
                             label={player.paused ? '再生' : '一時停止'}
                             testid="live-play"
                             onclick={() => player.toggle()}
                         />
                         <ControlButton
-                            path={player.silenced ? SOUND_OFF : SOUND_ON}
+                            icon={player.silenced ? SOUND_OFF : SOUND_ON}
                             label={player.silenced ? '音を出す' : '音を消す'}
                             testid="live-sound"
                             onclick={() => (player.silenced ? player.unmute() : player.mute())}
@@ -442,7 +442,7 @@
                     -->
                         {#if player.hasCaptions}
                             <ControlButton
-                                path={CAPTION}
+                                icon={CAPTION}
                                 label={player.captions ? '字幕を消す' : '字幕を出す'}
                                 on={player.captions}
                                 testid="live-caption"
@@ -478,7 +478,7 @@
                         {#if player.hybridcast[0] !== undefined}
                             {@const app = player.hybridcast[0]}
                             <ControlButton
-                                path={OPEN_OUT}
+                                icon={OPEN_OUT}
                                 label="{app.name === '' ? 'Hybridcast' : app.name} を別のタブで開く"
                                 testid="live-hybridcast"
                                 onclick={() => window.open(app.url, '_blank', 'noopener,noreferrer')}
@@ -670,7 +670,7 @@
                         <!-- **バックグラウンド再生。** 既定は切で、裏に回したら止める。端末ごとに覚える (`background.svelte.ts`) -->
                         <Extras>
                             <ControlButton
-                                path={BACKGROUND}
+                                icon={BACKGROUND}
                                 label={background.on ? 'バックグラウンド再生をやめる' : 'バックグラウンド再生を入れる'}
                                 on={background.on}
                                 testid="live-background"
@@ -680,7 +680,7 @@
                         {#if pip.available}
                             <Extras>
                                 <ControlButton
-                                    path={PIP}
+                                    icon={PIP}
                                     label={pip.active ? '小窓をやめる' : '小窓で観る'}
                                     on={pip.active}
                                     testid="live-pip"
@@ -690,7 +690,7 @@
                         {/if}
 
                         <ControlButton
-                            path={stage.fullscreened ? SHRINK : EXPAND}
+                            icon={stage.fullscreened ? SHRINK : EXPAND}
                             label={stage.fullscreened ? '全画面をやめる' : '全画面'}
                             testid="live-full"
                             onclick={() => stage.full()}
@@ -870,7 +870,7 @@
                                 aria-label="{channel.now.name} の詳細"
                                 data-testid="live-channel-detail"
                             >
-                                <Icon path={INFO} size="size-5" />
+                                <Icon icon={INFO} size="size-5" />
                             </button>
                         {/if}
                     </li>

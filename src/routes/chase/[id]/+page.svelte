@@ -316,10 +316,10 @@
         <!-- 右上の列。**観る画面と同じ並び** (閉じる・切り抜き) -->
         <ControlBar side shown={controls.shown} testid="chase-side">
             <a class="{OVERLAY_BTN} {OVERLAY_ROUND} {OVERLAY}" href={resolve('')} aria-label="一覧へ戻る">
-                <Icon path={CLOSE} />
+                <Icon icon={CLOSE} />
             </a>
             <ControlButton
-                path={CAMERA}
+                icon={CAMERA}
                 label="この場面を切り抜く"
                 testid="chase-shot"
                 onclick={() => void snapshot()}
@@ -343,20 +343,20 @@
             <!-- **並びはライブと同じ。** 再生・音・字幕、焼き方・音声・端 (最新)、読みもの、速さ、全画面 -->
             <div class="cluster buttons">
                 <ControlButton
-                    path={player.paused ? PLAY : PAUSE}
+                    icon={player.paused ? PLAY : PAUSE}
                     label={player.paused ? '再生' : '一時停止'}
                     testid="chase-play"
                     onclick={() => player.toggle()}
                 />
                 <ControlButton
-                    path={player.silenced ? SOUND_OFF : SOUND_ON}
+                    icon={player.silenced ? SOUND_OFF : SOUND_ON}
                     label={player.silenced ? '音を出す' : '音を消す'}
                     testid="chase-sound"
                     onclick={() => (player.silenced ? player.unmute() : player.mute())}
                 />
                 {#if player.hasCaptions}
                     <ControlButton
-                        path={CAPTION}
+                        icon={CAPTION}
                         label={player.captions ? '字幕を消す' : '字幕を出す'}
                         on={player.captions}
                         testid="chase-caption"
@@ -439,7 +439,7 @@
                 <!-- **バックグラウンド再生。** 既定は切で、裏に回したら止める。端末ごとに覚える (`background.svelte.ts`) -->
                 <Extras>
                     <ControlButton
-                        path={BACKGROUND}
+                        icon={BACKGROUND}
                         label={background.on ? 'バックグラウンド再生をやめる' : 'バックグラウンド再生を入れる'}
                         on={background.on}
                         testid="chase-background"
@@ -449,7 +449,7 @@
                 {#if pip.available}
                     <Extras>
                         <ControlButton
-                            path={PIP}
+                            icon={PIP}
                             label={pip.active ? '小窓をやめる' : '小窓で観る'}
                             on={pip.active}
                             testid="chase-pip"
@@ -459,7 +459,7 @@
                 {/if}
 
                 <ControlButton
-                    path={stage.fullscreened ? SHRINK : EXPAND}
+                    icon={stage.fullscreened ? SHRINK : EXPAND}
                     label={stage.fullscreened ? '全画面をやめる' : '全画面'}
                     testid="chase-full"
                     onclick={() => stage.full()}
