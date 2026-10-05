@@ -258,6 +258,28 @@ SQLite が拒むので、事実と状態が食い違いません。文字列で�
 - このリポジトリの compose・chart・`denpa-aio`・Mac / Windows のインストーラは一緒に直してある。
   Mac / Windows はインストーラを流し直すとエージェントの変数 (`RAW_DIR`) が書き直る
 
+### Helm の PVC の名前も置き場にそろえた
+
+**chart の PVC と values のキーを `raw` / `encoded` に改めた**(2026-10-05)。中身の名前
+(`/media/raw` と `/media/encoded`)と PVC の名前が食い違っていたため。
+
+| 中身 | 前 (PVC / values のキー) | いま |
+| --- | --- | --- |
+| 生TS | `denpa-recorded` / `persistence.recorded` | `denpa-raw` / `persistence.raw` |
+| 焼いたもの | `denpa-library` / `persistence.library` | `denpa-encoded` / `persistence.encoded` |
+
+**そのまま上げると、新しい名前の空の PVC ができる。** 古い PVC は `helm.sh/resource-policy: keep`
+で残るので消えはしないが、録画は見えなくなる。どちらかで繋ぐ:
+
+- **古い PVC をそのまま使う**: `persistence.raw.existingClaim: denpa-recorded` /
+  `persistence.encoded.existingClaim: denpa-library`(denpa-agent の chart は
+  `persistence.raw.existingClaim`)
+- **名前ごと移す**: アプリを止め、PV の reclaim を `Retain` にして古い PVC を消し、PV の
+  `claimRef` を外してから、新しい名前の PVC を `volumeName` で同じ PV に結ぶ。中身はコピーしない
+  (danything/gitops はこのやり方で移した)
+- compose の名前付きボリューム (`denpa-recorded` / `denpa-library`) は**変えていない**。
+  Docker のボリューム名を変えると既存の録画から外れるため
+
 
 ## 画面
 

@@ -198,7 +198,8 @@ ApplicationSet が読めない)。
 このリポジトリには `denpa` namespace のアプリ本体しか入っていません。クラスタの初期構築や
 共通アドオンは別の bootstrap リポジトリ側です。適用前に以下が要ります。
 
-- **StorageClass `local-path-retain`** — `reclaimPolicy: Retain` の local-path
+- **StorageClass `local-path`** — 既定の local-path (`reclaimPolicy: Delete`)。PVC を守るのは
+  ArgoCD の Prune ではなく日次の restic (2026-10-05 に `local-path-retain` から寄せた)
 - **Gateway API の Gateway** — chart の `httpRoute.parentRefs` が指す先。証明書は
   Gateway 側のリスナーが持ちます
 - **ArgoCD** — 上の ApplicationSet が `deploy/argocd.yaml` を見て Application を拾います
