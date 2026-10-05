@@ -90,6 +90,7 @@ EPGStation の置き換えとして作ったもので、エンコード設定は
 | `src/lib/server/paths.ts` | 前段の接頭辞 (`/denpa` など) の下でも動く URL。転送は相対、外に渡す絶対 URL だけ `X-Forwarded-Prefix` / `X-Ingress-Path` を頭に付ける (`publicBase`) |
 | `src/lib/server/playlist.ts` | 続きの位置から始めさせる XSPF (VLC などのプレイヤーに、ファイルの代わりに渡す) |
 | `src/lib/server/auth.ts` | どの口をどう守るか ([auth.md](auth.md)) |
+| `src/lib/server/address.ts` | アドレスと CIDR の判定、前段越しの本当の接続元 (`TRUSTED_PROXIES`)。入口の `server.js` もこれを直に import する (イメージにもこの1枚を置く) ([auth.md](auth.md#前段の後ろに置くとき-trusted_proxies)) |
 | `src/lib/server/oidc.ts` | OIDC (discovery・PKCE・ID トークンの検証)。ライブラリは使っていない |
 | `src/lib/server/session.ts` | ログインの控え (DBに持つ。Cookie に入るのは32バイトだけ) |
 | `src/lib/server/device-auth.ts` | テレビのアプリのペアリング (デバイス認可) と、アプリに渡す鍵 (`Authorization: Bearer`)。秘密は SHA-256 だけ持つ ([auth.md](auth.md#アプリのペアリング)) |
@@ -220,9 +221,10 @@ SQLite が拒むので、事実と状態が食い違いません。文字列で�
 | `OIDC_ISSUER` | (空) | OIDC の発行元。ここを含む3つが揃うと OIDC が有効になる ([auth.md](auth.md)) |
 | `OIDC_CLIENT_ID` / `OIDC_CLIENT_SECRET` | (空) | アプリ登録のIDと秘密 |
 | `OIDC_GROUP` | (空) | このグループに居る人だけ通す。空なら入れた人は全員 |
-| `TRUSTED_NETWORKS` | (空) | CIDR のカンマ区切り。ここから来たら認証を掛けない (前段が居るなら `ADDRESS_HEADER` も要る) |
+| `TRUSTED_NETWORKS` | (空) | CIDR (IPv4・IPv6) のカンマ区切り。ここから来たら認証を掛けない (前段が居るなら `TRUSTED_PROXIES` も要る) |
+| `TRUSTED_PROXIES` | (空) | 前段 (リバースプロキシ) のアドレス。CIDR (IPv4・IPv6) のカンマ区切り。直の相手がここに当たるときだけ `X-Forwarded-For` を右から辿り、前段でない最初のアドレスを接続元にする (`src/lib/server/address.ts`)。前段が居るのに空だと `TRUSTED_NETWORKS` が誰にも当たらない ([auth.md](auth.md#前段の後ろに置くとき-trusted_proxies)) |
 | `DENPA_INNER_PORT` | `PORT+1` | server.js の中継の内側で adapter-node が待つ口 (127.0.0.1 だけ) |
-| `ADDRESS_HEADER` | (空) | 接続元の住所を読むヘッダ (adapter-node)。前段が居るときだけ `x-forwarded-for` を渡す (居なければ server.js が本当の接続元を伝えるので不要)。前段が居るのに渡さないと `TRUSTED_NETWORKS` が誰にも当たらない ([auth.md](auth.md)) |
+| `ADDRESS_HEADER` | — | 読みません (廃止。`TRUSTED_PROXIES` を使う)。設定してあれば起動時に知らせる。`server.js` が内側の adapter-node 向けに `x-denpa-remote` へ固定する |
 | `PROTOCOL_HEADER` | — | 選べません。 `server.js` が常に `x-forwarded-proto` に固定します |
 | `OIDC_SESSION_TTL` | `2592000000` | ログインの有効期間(ms)。既定30日 |
 | `PWA_NAMES` | (空) | `ホスト名=表示名` のカンマ区切り。ホーム画面に置いたときの名前を、来た名前ごとに変える ([player.md](player.md#ホーム画面に置く)) |
@@ -230,6 +232,25 @@ SQLite が拒むので、事実と状態が食い違いません。文字列で�
 | `EPGSTATION_DB_HOST` / `_PORT` | `db` / `3306` | 引き継ぎ元の MariaDB |
 | `EPGSTATION_DB_USER` / `_PASSWORD` / `_NAME` | `root` / `epgstation` / `epgstation` | 〃 |
 | `DENPA_AUTOSTART` | `1` | `0` で常駐処理を止める |
+
+### 接続元の読み方を変えた (前の版から上げるとき)
+
+**`ADDRESS_HEADER` を読まなくなった。** 前段 (リバースプロキシ) の後ろに置いているなら、前段の
+アドレスを `TRUSTED_PROXIES` に書く (CIDR のカンマ区切り。chart は `denpa.trustedProxies`)。
+**古い名前を読み替える仕組みは持たない** (`ADDRESS_HEADER` が残っていたら、起動時に1行知らせる)。
+
+- 前は `ADDRESS_HEADER=x-forwarded-for` を渡すと、adapter-node が**誰から来た**
+  `X-Forwarded-For` でも右端を信じていた。denpa の口 (:3000) へ前段を通らずに届く経路があると、
+  ヘッダを付けるだけで `TRUSTED_NETWORKS` を名乗れた。前段を2段重ねると `XFF_DEPTH` も要った
+- いまは入口 (`server.js`) が、直の相手が `TRUSTED_PROXIES` の中のときだけ `X-Forwarded-For` を読み、
+  右から前段を飛ばして最初の前段でないアドレスを接続元にする (nginx の `set_real_ip_from` +
+  `real_ip_recursive on` と同じ)。段数を数える必要はない
+- **置き換えないまま上げると、安全側に倒れる。** 前段越しの接続元が前段のアドレスになり、
+  `TRUSTED_NETWORKS` から来ていた人にもログインを求める (OIDC が無ければ断る)。開きはしない
+- 前段が居ない構成 (compose の既定・Mac / Windows のインストーラ・`denpa-aio`) は何もしなくてよい
+- 前段のアドレスの例: Docker の compose で同じネットワークに居るなら `172.16.0.0/12`、k3s の
+  Pod や hostNetwork の Gateway (Cilium の Envoy など) なら Pod の網 (`10.42.0.0/16`)
+- `TRUSTED_NETWORKS` も IPv6 を CIDR で書けるようになった (前は書いたとおりの一致だけ)
 
 ### 置き場を変えた (前の版から上げるとき)
 

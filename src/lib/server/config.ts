@@ -318,14 +318,14 @@ export const config = {
      */
     oidcGroup: str('OIDC_GROUP', ''),
     /**
-     * **何も聞かずに通すネットワーク。** CIDR (か住所そのまま) のカンマ区切り
+     * **何も聞かずに通すネットワーク。** CIDR (IPv4・IPv6。住所そのままでも) のカンマ区切り
      * (`10.10.0.0/16`)。当たると OIDC も掛からない
      * (どう効くかは `auth.trusted`)。
      *
-     * **前段 (リバースプロキシ) が居るなら `ADDRESS_HEADER=x-forwarded-for` を一緒に渡す。**
-     * 渡さないと接続元が前段の住所になり、ここが誰にも当たらない。逆に、denpa へ
-     * 直に届く経路があると住所を詐称できる。前段が居なければ何も要らない
-     * (server.js の中継が本当の接続元を内側へ伝える)
+     * **前段 (リバースプロキシ) が居るなら `TRUSTED_PROXIES` に前段の住所を書く。**
+     * 書かないと接続元が前段の住所になり、ここが誰にも当たらない。`TRUSTED_PROXIES` は
+     * アプリではなく入口の server.js が読む (接続元を決めて `x-denpa-remote` で渡す。
+     * `address.resolveClient`) ので、ここには置かない
      */
     trustedNetworks: str('TRUSTED_NETWORKS', ''),
     /** ログインしてからの有効期間。切れたらもう一度 Entra へ行く */

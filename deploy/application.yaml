@@ -52,8 +52,11 @@ spec:
           encodeConcurrency: 2
           # LAN から来たときだけ何も聞かずに通す (docs/auth.md)
           trustedNetworks: 10.10.0.0/16
-          # Gateway (Envoy) の後ろに居るので、接続元は x-forwarded-for から読む
-          addressHeader: x-forwarded-for
+          # Gateway (Cilium の Envoy。hostNetwork) は Pod の網の住所 (cilium_host) から繋いでくる
+          # (実測 10.42.0.148)。ここから来たときだけ X-Forwarded-For を読む。値は Pod の網
+          # (danything/gitops の talos/patches/cluster.yaml) で、同じ Gateway の後ろの
+          # oauth2-proxy (bootstrap/auth/) の --trusted-proxy-ip とそろえてある
+          trustedProxies: 10.42.0.0/16,fd42::/64
           # 同じ denpa を2つの名前で出しているので、ホーム画面の名前を分ける
           pwaNames: dp.doany.io=denpa,dp.l.doany.io=denpa 宅内
           # OIDC。中身は InfisicalSecret (deploy/oidc-secret.yaml) が Infisical から作る Secret

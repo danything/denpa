@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
-import { configured, inNetwork, isFilePath, isOpenPath, trusted } from './auth';
+import { configured, isFilePath, isOpenPath, trusted } from './auth';
 import { config } from './config';
 
 /**
@@ -127,51 +127,5 @@ describe('ネットワークの中なら素通しにする', () => {
         // CIDR でなく住所そのままでも書ける
         expect(trusted('192.168.1.5')).toBe(true);
         expect(trusted('192.168.1.6')).toBe(false);
-    });
-});
-
-describe('住所がネットワークの中か', () => {
-    test('CIDR の中と外', () => {
-        expect(inNetwork('10.10.0.1', '10.10.0.0/16')).toBe(true);
-        expect(inNetwork('10.10.255.254', '10.10.0.0/16')).toBe(true);
-        // 隣の /16。1ビット違いを通してしまわないこと
-        expect(inNetwork('10.11.0.1', '10.10.0.0/16')).toBe(false);
-        expect(inNetwork('10.9.255.255', '10.10.0.0/16')).toBe(false);
-    });
-
-    test('境界の長さ', () => {
-        expect(inNetwork('192.168.1.5', '192.168.1.5/32')).toBe(true);
-        expect(inNetwork('192.168.1.6', '192.168.1.5/32')).toBe(false);
-        // /0 は全部。書いた人がそう書いたなら通す
-        expect(inNetwork('8.8.8.8', '0.0.0.0/0')).toBe(true);
-    });
-
-    test('長さを書かなければ1台だけ', () => {
-        expect(inNetwork('10.0.0.1', '10.0.0.1')).toBe(true);
-        expect(inNetwork('10.0.0.2', '10.0.0.1')).toBe(false);
-    });
-
-    /*
-     * IPv4 の住所が IPv6 の形で届くことがある。素で比べると
-     * `::ffff:10.10.0.1` が `10.10.0.0/16` に当たらず、LAN から入れなくなる
-     */
-    test('IPv6 に包まれた IPv4 も解く', () => {
-        expect(inNetwork('::ffff:10.10.0.1', '10.10.0.0/16')).toBe(true);
-        expect(inNetwork('::FFFF:10.11.0.1', '10.10.0.0/16')).toBe(false);
-    });
-
-    test('IPv6 は書いたとおりに一致したときだけ', () => {
-        expect(inNetwork('fd00::1', 'fd00::1')).toBe(true);
-        expect(inNetwork('fd00::2', 'fd00::1')).toBe(false);
-        expect(inNetwork('fd00::1', 'fd00::/8')).toBe(false);
-    });
-
-    test('壊れた指定では通さない', () => {
-        expect(inNetwork('10.0.0.1', '10.0.0.0/33')).toBe(false);
-        expect(inNetwork('10.0.0.1', '10.0.0.0/-1')).toBe(false);
-        expect(inNetwork('10.0.0.1', '10.0.0.0/abc')).toBe(false);
-        expect(inNetwork('10.0.0.1', '')).toBe(false);
-        // 桁が溢れているもの。数として読めても住所ではない
-        expect(inNetwork('10.0.0.1', '10.0.0.256/24')).toBe(false);
     });
 });

@@ -315,7 +315,8 @@ export async function bootOidc(
             OIDC_GROUP: oidc.group,
             // このネットワークから来たら何も聞かない
             TRUSTED_NETWORKS: oidc.trustedNetwork,
-            ADDRESS_HEADER: 'x-forwarded-for',
+            // テストは 127.0.0.1 から前段のふりをして x-forwarded-for を付ける
+            TRUSTED_PROXIES: '127.0.0.1',
         });
         started.push(app);
         // 生死確認は守られていないので、ログインを通さずに待てる

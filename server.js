@@ -29,6 +29,8 @@
  * ため、ここが効く (名前は charts/denpa/values.yaml の ingress.hosts)。
  */
 
+import { networks, resolveClient } from './src/lib/server/address.ts';
+
 /** `src/lib/server/ws.ts` が置く名前 */
 const LIVE = '__denpaLive';
 
@@ -49,20 +51,33 @@ process.env.HOST = '127.0.0.1';
  * 無いと adapter-node が http と決め打ち、前段 (リバースプロキシ) が https を受ける構成
  * で CSRF 判定が食い違って POST が全部 403 になる。偽装されても得るものが無い —
  * ブラウザ経由の CSRF ではこのヘッダを付けられないし、直に付けて来る相手が
- * 変えられるのは自分に返る origin の見た目だけ。
- * 接続元の住所 (`ADDRESS_HEADER`) は逆で、**信頼できる前段が居るときだけ**
- * 明示的に設定する — TRUSTED_NETWORKS の判定材料なので、既定で信じると
- * ヘッダを付けるだけで信頼ネットワークを名乗れてしまう。
+ * 変えられるのは自分に返る origin の見た目だけ。`TRUSTED_PROXIES` の前段からだけ読む
+ * ようにはしない — 守れるものが無いのに、前段を設定し忘れた構成の POST を全部止める。
  *
- * **前段が居ないときは、この中継が本当の接続元を内側へ伝える。** 内側の adapter-node
- * から見える接続元は常にこの中継 (127.0.0.1) なので、何もしないと
- * TRUSTED_NETWORKS が LAN の住所に一度も当たらない (compose の既定で開くはずの画面が
- * 403 になっていた)。ここで見た相手の住所を `x-denpa-remote` に**上書きで**入れ
- * (外から同名で付けて来ても消える)、`ADDRESS_HEADER` が無ければそれを読ませる
+ * **接続元の住所はこの中継が決める** (TRUSTED_NETWORKS の判定材料。`src/lib/server/address.ts`)。
+ * 内側の adapter-node から見える相手は常にこの中継 (127.0.0.1) なので、ここで決めた住所を
+ * `x-denpa-remote` に**上書きで**入れ (外から同名で付けて来ても消える)、adapter-node には
+ * 必ずそれを読ませる。
+ *
+ * - 直の相手が `TRUSTED_PROXIES` (前段の CIDR のカンマ区切り) の中なら、`X-Forwarded-For` を
+ *   右から辿って前段でない最初の住所を接続元にする (nginx の `real_ip_recursive` と同じ)
+ * - そうでなければ相手そのもの。`X-Forwarded-For` は誰でも付けられるので読まない
+ *
+ * 以前は `ADDRESS_HEADER=x-forwarded-for` を渡すと adapter-node が誰から来たヘッダでも
+ * 信じていた — :3000 へ直に届く経路があると、ヘッダを付けるだけで信頼ネットワークを
+ * 名乗れた。**`ADDRESS_HEADER` はもう読まない** (互換の道は残さない。README の
+ * 「公開するときの注意」)。設定してあれば起動時に1行だけ知らせる
  */
 process.env.PROTOCOL_HEADER = 'x-forwarded-proto';
 const REMOTE_HEADER = 'x-denpa-remote';
-if (!process.env.ADDRESS_HEADER) process.env.ADDRESS_HEADER = REMOTE_HEADER;
+if (process.env.ADDRESS_HEADER && process.env.ADDRESS_HEADER !== REMOTE_HEADER) {
+    console.warn(
+        `ADDRESS_HEADER=${process.env.ADDRESS_HEADER} はもう読みません。前段 (リバースプロキシ) の後ろに居るなら ` +
+            'TRUSTED_PROXIES に前段の住所 (CIDR) を設定してください。設定するまで、前段越しの接続元は前段の住所になります',
+    );
+}
+process.env.ADDRESS_HEADER = REMOTE_HEADER;
+const proxies = networks(process.env.TRUSTED_PROXIES ?? '');
 await import('./build/index.js');
 // こちらが公開する側なので、元に戻しておく (アプリが自分の口を見るとき用)
 process.env.PORT = String(publicPort);
@@ -114,8 +129,15 @@ Bun.serve({
         // **消すだけでは効かない。** `fetch` は無ければ自分で付け直すので、
         // 「圧縮しないでくれ」と明示する
         headers.set('accept-encoding', 'identity');
-        // 本当の接続元 (上の説明)。前段が居る構成では ADDRESS_HEADER が別を指すので読まれない
-        headers.set(REMOTE_HEADER, server.requestIP(request)?.address ?? '');
+        // 本当の接続元 (上の説明)
+        headers.set(
+            REMOTE_HEADER,
+            resolveClient(
+                server.requestIP(request)?.address ?? '',
+                request.headers.get('x-forwarded-for'),
+                proxies,
+            ),
+        );
 
         return fetch(`${inner}${url.pathname}${url.search}`, {
             method: request.method,

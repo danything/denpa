@@ -12,7 +12,8 @@
  *
  * 宛先は `BASE` (既定 http://localhost:3399)、置き場は `OUT` (既定 docs/images の隣の作業場)。
  * 本番は LAN (TRUSTED_NETWORKS) から来た人だけ素通しなので、x-forwarded-for に LAN の住所を付ける
- * (`XFF` で変えられる)。自分の値が入る欄と映像はぼかす (BLUR)。
+ * (`XFF` で変えられる。ノードから繋いだトンネルは Pod の網の住所で届き、そこは本番の
+ * TRUSTED_PROXIES に入っているので読まれる)。自分の値が入る欄と映像はぼかす (BLUR)。
  */
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
