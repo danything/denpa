@@ -24,6 +24,7 @@
         OPEN_OUT,
         OVERLAY,
         PAUSE,
+        PIP,
         PLAY,
         RECORD,
         SHRINK,
@@ -35,6 +36,7 @@
     import OverlayMenu from '#lib/components/player/OverlayMenu.svelte';
     import PlayerStage from '#lib/components/player/PlayerStage.svelte';
     import PlayerVeil from '#lib/components/player/PlayerVeil.svelte';
+    import { pictureInPicture } from '#lib/components/player/pip.svelte.js';
     import Remote from '#lib/components/player/Remote.svelte';
     import SpeedMenu from '#lib/components/player/SpeedMenu.svelte';
     import StageNote from '#lib/components/player/StageNote.svelte';
@@ -190,6 +192,18 @@
     const awake = screenAwake();
     $effect(() => {
         awake.on = player.state !== 'idle' && player.state !== 'error';
+    });
+
+    /**
+     * 小窓 (PiP。[pip.svelte.ts](../../lib/components/player/pip.svelte.ts))。生で見ている間は
+     * worker の canvas から流れを取って出す。**小窓で押された止める・再開は player に合わせる**
+     */
+    const pip = pictureInPicture({
+        video: () => video,
+        raw: () => player.raw,
+        capture: () => player.capture(),
+        paused: () => player.paused,
+        toggle: () => player.toggle(),
     });
 
     /** 真ん中あたりを素早く2回で再生/一時停止 (`center-tap.ts`)。1回目は操作列の出し入れ */
@@ -615,6 +629,22 @@
                                     label="追っかけの速さ"
                                     speed={player.speed}
                                     onselect={(speed) => player.setSpeed(speed)}
+                                />
+                            </Extras>
+                        {/if}
+
+                        <!--
+                            **小窓 (PiP)。** 出せない端末 (iPhone・iPad のホーム画面から開いたもの、Firefox) では
+                            出さない ([pip.svelte.ts](../../lib/components/player/pip.svelte.ts))。狭い枠では「ほか」に畳む
+                        -->
+                        {#if pip.available}
+                            <Extras>
+                                <ControlButton
+                                    path={PIP}
+                                    label={pip.active ? '小窓をやめる' : '小窓で観る'}
+                                    on={pip.active}
+                                    testid="live-pip"
+                                    onclick={() => pip.toggle()}
                                 />
                             </Extras>
                         {/if}

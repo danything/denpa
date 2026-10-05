@@ -21,6 +21,7 @@
         OVERLAY_BTN,
         OVERLAY_ROUND,
         PAUSE,
+        PIP,
         PLAY,
         SHRINK,
         SOUND_OFF,
@@ -31,6 +32,7 @@
     import MoreButton from '#lib/components/player/MoreButton.svelte';
     import PlayerStage from '#lib/components/player/PlayerStage.svelte';
     import PlayerVeil from '#lib/components/player/PlayerVeil.svelte';
+    import { pictureInPicture } from '#lib/components/player/pip.svelte.js';
     import SpeedMenu, { SPEED_KEY, storedSpeed } from '#lib/components/player/SpeedMenu.svelte';
     import StageNote from '#lib/components/player/StageNote.svelte';
     import { snapshotter } from '#lib/components/player/shot.svelte.js';
@@ -231,6 +233,15 @@
         }
     }
 
+    /** 小窓 (PiP)。小窓で押された止める・再開は player に合わせる (ライブと同じ。`pip.svelte.ts`) */
+    const pip = pictureInPicture({
+        video: () => video,
+        raw: () => player.raw,
+        capture: () => player.capture(),
+        paused: () => player.paused,
+        toggle: () => player.toggle(),
+    });
+
     /** 全画面の出入り。操作列のボタンと同じことをキーからもできるように */
     function toggleFull(): void {
         if (document.fullscreenElement !== null) void document.exitFullscreen().catch(() => {});
@@ -402,6 +413,22 @@
                         onselect={setSpeed}
                     />
                 </Extras>
+
+                <!--
+                    **小窓 (PiP)。** 出せない端末 (iPhone・iPad のホーム画面から開いたもの、Firefox) では
+                    出さない ([pip.svelte.ts](../../../lib/components/player/pip.svelte.ts))。狭い枠では「ほか」に畳む
+                -->
+                {#if pip.available}
+                    <Extras>
+                        <ControlButton
+                            path={PIP}
+                            label={pip.active ? '小窓をやめる' : '小窓で観る'}
+                            on={pip.active}
+                            testid="chase-pip"
+                            onclick={() => pip.toggle()}
+                        />
+                    </Extras>
+                {/if}
 
                 <ControlButton
                     path={stage.fullscreened ? SHRINK : EXPAND}
