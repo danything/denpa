@@ -4,11 +4,11 @@
  * テレビのアプリ (danything/denpa-tv) は Cookie の控えを持てず、リモコンで OIDC の
  * ログイン画面を操作するのもつらい。そこで OAuth のデバイス認可 (RFC 8628) と同じ形にする:
  *
- * 1. テレビが `POST /api/device/code` で `device_code` (秘密) と `user_code` (人が見比べる短い札) を貰う
- * 2. テレビは QR (`device?code=…`) と札を出す。スマホで開くと、denpa のいつもの入り方
+ * 1. テレビが `POST /api/device/code` で `device_code` (秘密) と `user_code` (QR の URL に入れる短い札) を貰う
+ * 2. テレビは QR (`device?code=…`) を出す。スマホで開くと、denpa のいつもの入り方
  *    (信頼するネットワークか OIDC) を通ったうえで、**そのまま許す** (`/device`)。
  *    「許す / 断る」を聞かないのは家で使う前提だから — QR を読めるのはテレビの前に居る人で、
- *    札は10分で切れ、1度しか使えない。札は完了の画面にも出す (テレビと見比べられるように)
+ *    札は10分で切れ、1度しか使えない。完了の画面には端末の名前を出す (札は出さない。docs/auth.md)
  * 3. テレビは `POST /api/device/token` を間を置いて叩き、許されたら鍵を1度だけ受け取る
  * 4. 以後は `Authorization: Bearer <鍵>` で API とファイルの口に入る
  *
@@ -50,7 +50,7 @@ export function sha256(value: string): string {
     return createHash('sha256').update(value).digest('hex');
 }
 
-/** 人が見比べる札。`ABCD-EFGH` */
+/** QR の URL に入れる札。`ABCD-EFGH` (RFC 8628 の user_code の形) */
 export function newUserCode(): string {
     const bytes = crypto.getRandomValues(new Uint8Array(8));
     const chars = [...bytes].map((byte) => ALPHABET[byte % ALPHABET.length]).join('');

@@ -43,7 +43,7 @@
 ## ライブ `GET /api/services/<id>/live`
 
 流し続けます。閉じれば止まり、誰も見ていなければチューナーを返します (画面のライブと同じ取り合い。
-同じ局・同じ形を誰かが見ていれば相乗りします)。
+同じ局・同じ形を誰かが見ていれば相乗りします)。知らない局は 404。
 
 | `codec` | 中身 | Content-Type | 向いている相手 |
 |---|---|---|---|
@@ -82,7 +82,8 @@
 - `audio` は主音声だけを AAC (ADTS、`audio/aac`) で流します。画面の無いスピーカーへの Cast 向け。
   `source` と一緒に渡せば、元にするファイルを選べます
 - `resumeMs` は続きから観る位置 (画面の「続き」と同じもの)。観ていない・観終えたものは `null`
-- `recording` はいま録っている最中か。録画中は `durationMs` が `null` で、`files` は生TSだけ (伸びている途中)。
+- `poster` は一覧のサムネイル (JPEG)。焼く前の録画や生TSしか無いものでは 404
+- `recording` はいま録っている最中か。録画中は `durationMs` が `null` (途中で切れて録り直したものは、それまでに録れた長さ) で、`files` は生TSだけ (伸びている途中)。
   録画中・焼き上がる前は `chase` (下) で観る
 - `chase` は追っかけ再生の口。生TSがある間だけ入り、無ければ `null`
 - `audios` は放送の音声の構成 ([上記](#音声の一覧-audios))。追っかけの `?audio=<id>` に渡します。焼いたもの (`files`) は
@@ -134,7 +135,7 @@
 
 0x20  字幕の絵  [2:x][2:y][2:w][2:h][PNG]  座標は 1920x1080 の上 (いまは画面まるごと)
 0x40  知らせ    JSON。{"type":"captions","tracks":[{"index":0,"lang":"jpn","label":"字幕 (日本語)"}],"track":0}
-                は選べる字幕 (字幕を持たない放送では来ない)。20 秒おきに {"type":"ping"}。知らない種別・type は読み捨てる
+                は選べる字幕 (字幕を持たない放送では来ない。`lang` は放送が名乗っていなければ null)。20 秒おきに {"type":"ping"}。知らない種別・type は読み捨てる
 ```
 
 - 時刻は放送の PTS (33 ビットで 26.5 時間ごとに一周する)。比べるときは近いほうへ伸ばしてください
@@ -168,7 +169,7 @@ data: {"recordingId":12,"percent":0.425,"etaMs":600000,"log":"…"}
 ```
 
 - 名前: `recordings` `services` `programs` `tuners` `encode` ほか (画面向けのもの)。知らない名前は読み捨ててください
-- `data` は `encode` だけが中身 (`recordingId` `percent` `etaMs` `log`) を運び、ほかは `1`。`percent` は 0〜1 (名前に反して百分率ではない)
+- `data` は `encode` だけが中身 (`recordingId` `percent` `etaMs` `log`) を運び、ほかは `1`。`percent` は 0〜1 (名前に反して百分率ではない)。`etaMs` は見積もれなければ `null`
 - 25 秒おきに `event: ping` が来ます。60 秒ほど何も届かなければ繋ぎ直してください (黙って切れた繋ぎを見分けるため)
 - 繋ぎ直したら一覧を1度読み直してください。切れていた間の知らせは送り直しません (`Last-Event-ID` は使わない)
 
@@ -181,10 +182,13 @@ data: {"recordingId":12,"percent":0.425,"etaMs":600000,"log":"…"}
 | ブラウザ | OIDC のログイン (Cookie) |
 
 **資格の無い API の呼び出しには、いつも同じ 401 の JSON を返します** (`{"error":"unauthorized"}`、
-`WWW-Authenticate: Bearer`)。ログイン画面の HTML へは回しません。アプリは鍵なしでまず API を叩き、
+`WWW-Authenticate: Bearer realm="denpa"`)。ログイン画面の HTML へは回しません。アプリは鍵なしでまず API を叩き、
 これが返ったときだけペアリングに進めばよい (信頼するネットワークの中なら通るので、ペアリングは要らない)。
-止めた・知らない鍵を出したときは `{"error":"invalid_token"}` の 401 で、信頼するネットワークの中でも
-通しません (ペアリングし直しの合図)。仕組みと守りは [auth.md](auth.md#アプリのペアリング)。
+止めた・知らない鍵を出したときは `{"error":"invalid_token"}` の 401 (`WWW-Authenticate: Bearer error="invalid_token"`) で、
+信頼するネットワークの中でも通しません (ペアリングし直しの合図)。仕組みと守りは [auth.md](auth.md#アプリのペアリング)。
+
+**ファイルの口 (`file`・`playlist`) だけは 401 ではなく 403 (text/plain)** です。ログインの控えか
+期限付きのリンク (`share`) でも開けるようにしてあり、どれも無ければ言葉で断ります。アプリは Bearer を付けて開きます。
 
 ## ペアリング `POST /api/device/code` → `POST /api/device/token`
 
@@ -198,7 +202,8 @@ OAuth のデバイス認可 (RFC 8628) と同じ形です。どちらも資格�
   "expiresIn": 600, "interval": 5 }
 ```
 
-- `verificationUriComplete` (denpa の根からの相対) を QR にして出します。スマホで開くと、
+- **QR にするのは `verificationUriComplete`** (denpa の根からの相対) です。`userCode`・`verificationUri` は
+  RFC の形に合わせて返すだけで、札を打ち込む画面はありません (札は画面に出さなくてよい)。スマホで開くと、
   いつもの入り方 (信頼するネットワークか OIDC のログイン) を通ったうえでそのまま済みます
 - 生きている札が多すぎるときは `429 {"error":"too_many_pending"}` (しばらくして出し直す)
 
@@ -213,3 +218,9 @@ OAuth のデバイス認可 (RFC 8628) と同じ形です。どちらも資格�
 
 `Authorization: Bearer` で出している鍵を止めます (アプリの「サーバーから外す」)。`204` を返します。
 ほかの端末の鍵は、設定画面の「テレビのアプリ」から取り消します。
+
+## 録画を消す `DELETE /api/recordings/<id>`
+
+ファイルごと消して `204` を返します。もう消えていても `204`、録画中は `409`、録画が無ければ `404`
+(どれも呼ぶ側は「済んだ」か「消せない」と読めばよい。端末の消しておいた分をあとで送り直すため、何度叩いても同じ結果になる)。
+本文は要りませんが、`Content-Type: application/json` は付けます ([上記](#外から使う口-api))。
