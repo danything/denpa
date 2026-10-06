@@ -1,6 +1,7 @@
 <script lang="ts">
     import { type Snippet, setContext } from 'svelte';
     import { PLAYER_CONTROLS, PLAYER_STAGE, type PlayerControls } from './controls.svelte';
+    import type { StageFullscreen } from './fullscreen.svelte.js';
 
     /**
      * 絵の舞台。**3つの視聴画面 (ライブ・追っかけ・録画) で同じ配線を1本に。**
@@ -8,7 +9,9 @@
      * 持つのは枠と、どの画面でも同じだった配線だけ:
      * - ポインタで操作列を出す/隠す・触らないとカーソルも消す (`controls`)
      * - キーボードで触っている間は操作列を残す (focusin/focusout)
-     * - 全画面 — **枠ごと**入れる (映像だけでなく操作列も一緒に大きくする)
+     * - 全画面 — **枠ごと**入れる (映像だけでなく操作列も一緒に大きくする)。
+     *   出入りは画面側が持つ `fullscreen` (`fullscreen.svelte.ts`。`f` キーからも使うため)。
+     *   iPhone では枠を画面いっぱいに広げて代わりにする (`data-pseudo`。下の style)
      * - 枠の大きさから、操作列の詰め方を決める (`compact` / `low`。下の説明)
      *
      * 中身 (video・重ねる canvas・操作列) は画面ごとに違うので snippet で受ける。
@@ -19,6 +22,8 @@
         testid: string;
         /** 枠そのもの。画面側で要るとき (録画視聴の開いた時点の全画面) に bind する */
         element?: HTMLElement | null;
+        /** 全画面の出入り (`stageFullscreen(() => element)`) */
+        fullscreen: StageFullscreen;
         children: Snippet<[StageApi]>;
     }
     interface StageApi {
@@ -34,6 +39,7 @@
         controls,
         testid,
         element = $bindable(null),
+        fullscreen,
         children,
     }: Props = $props();
 
@@ -42,12 +48,6 @@
     // メニューを枠の中に収める先 (`OverlayMenu`)。bind で入るので取り手で渡す
     setContext(PLAYER_STAGE, () => element);
 
-    let fullscreened = $state(false);
-    function full(): void {
-        if (element === null) return;
-        if (document.fullscreenElement === null) void element.requestFullscreen().catch(() => {});
-        else void document.exitFullscreen().catch(() => {});
-    }
     /**
      * **枠の大きさで操作列の詰め方を変える。**
      *
@@ -95,12 +95,6 @@
     $effect(() => {
         if (!controls.shown || !compact) more = false;
     });
-
-    $effect(() => {
-        const update = () => (fullscreened = document.fullscreenElement !== null);
-        document.addEventListener('fullscreenchange', update);
-        return () => document.removeEventListener('fullscreenchange', update);
-    });
 </script>
 
 <!-- svelte-ignore a11y_no_static_element_interactions -->
@@ -116,6 +110,7 @@
     data-compact={compact ? '' : undefined}
     data-low={low || compact ? '' : undefined}
     data-more={more ? '' : undefined}
+    data-pseudo={fullscreen.pseudo ? '' : undefined}
     onpointermove={controls.wake}
     onpointerdown={controls.wake}
     onpointerleave={controls.away}
@@ -134,7 +129,10 @@
     onfocusout={() => (controls.keyboard = false)}
     data-testid={testid}
 >
-    {@render children({ full, fullscreened, compact, more, toggleMore: () => (more = !more) })}
+    {@render children({
+        full: fullscreen.toggle,
+        fullscreened: fullscreen.active,
+        compact, more, toggleMore: () => (more = !more) })}
 </div>
 
 <style>
@@ -166,5 +164,27 @@
         .stage {
             margin-inline: calc(-1 * var(--dp-gutter, 1rem));
         }
+    }
+    /*
+     * **広げた全画面 (iPhone。`fullscreen.svelte.ts`)。** 画面いっぱいに被せ、
+     * 形 (16:9)・高さの上下限・端まで出す余白はみな外す。絵は video の
+     * `object-fit` (既定の contain) で収まり、上下か左右が黒帯になる。
+     *
+     * 端は安全域 (切り欠き・ホームバー) の内側で止める — 操作列を指の届く所に
+     * 置くため。外側の帯は `html[data-stage-fullscreen]` の黒が見える (`app.css`)。
+     * いまの viewport は `viewport-fit=cover` ではないので env() は 0 で、横持ちの
+     * 切り欠きは Safari がページの外として避けてくれる。cover にしたときもこのまま効く
+     */
+    .stage[data-pseudo] {
+        position: fixed;
+        top: env(safe-area-inset-top, 0px);
+        right: env(safe-area-inset-right, 0px);
+        bottom: env(safe-area-inset-bottom, 0px);
+        left: env(safe-area-inset-left, 0px);
+        z-index: 90;
+        margin: 0;
+        aspect-ratio: auto;
+        max-height: none;
+        min-height: 0;
     }
 </style>

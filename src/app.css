@@ -138,6 +138,17 @@ body {
     line-break: strict;
 }
 /*
+ * **舞台を広げている間 (iPhone の全画面の代わり。`player/fullscreen.svelte.ts`) は
+ * 後ろのページを止めて黒く。** 枠は画面いっぱいに被さるが、指でなぞると後ろが
+ * 転がる。横持ちの切り欠きの帯は Safari がページの地の色で塗るので、黒にしておく
+ */
+html[data-stage-fullscreen],
+html[data-stage-fullscreen] body {
+    overflow: hidden;
+    overscroll-behavior: none;
+    background: #000;
+}
+/*
  * **使わない Pico の部品を打ち消す。** Blades の Pico は部品を選べず丸ごと1枚で来る
  * (部品ごとに読めるようにする話は anyblades/discussions#168)。Pico の Sass で外していた
  * 部品のうち、こちらの要素に当たるものだけをここで戻す。部品ごとに読めるようになったら、

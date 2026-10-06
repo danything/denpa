@@ -14,6 +14,7 @@
     import Extras from '#lib/components/player/Extras.svelte';
     import FactsAside from '#lib/components/player/FactsAside.svelte';
     import { eachFrame } from '#lib/components/player/frames.js';
+    import { stageFullscreen } from '#lib/components/player/fullscreen.svelte.js';
     import Icon from '#lib/components/player/Icon.svelte';
     import InfoBlock from '#lib/components/player/InfoBlock.svelte';
     import {
@@ -109,6 +110,8 @@
     let video = $state<HTMLVideoElement | null>(null);
     /** 映像とその上の操作をまとめた箱。全画面にするのはこちら */
     let stage = $state<HTMLElement | null>(null);
+    /** 全画面の出入り (3画面共通。[fullscreen.svelte.ts](../../../lib/components/player/fullscreen.svelte.ts)) */
+    const fullscreen = stageFullscreen(() => stage);
 
     /*
      * --- 録画のデータ放送 ---
@@ -191,7 +194,6 @@
     let at = $state(0);
     let length = $state(0);
     let muted = $state(false);
-    let full = $state(false);
     /**
      * 選べる音声トラック。**ブラウザが器から出せたときだけ。**
      *
@@ -417,13 +419,8 @@
         if (!ready) return;
         video?.play().catch(() => undefined);
         // 指のときは最初から全画面。テレビと同じで、観るために置いてある画面なので
-        if (coarse) enterFull();
-        const onFull = () => {
-            full = document.fullscreenElement !== null;
-            // 全画面は枠が変わるので、描き終わってから測り直す
-            requestAnimationFrame(place);
-        };
-        document.addEventListener('fullscreenchange', onFull);
+        // iPhone では枠を広げる (`fullscreen.svelte.ts`) — 押した勢いが要らないので読み込み直しても入る
+        if (coarse) fullscreen.enter();
         // 枠が変われば重ねる場所も変わる (全画面・持ち替え・窓の伸び縮み)
         const onResize = () => place();
         window.addEventListener('resize', onResize);
@@ -438,7 +435,6 @@
             if (playing) remember();
         }, REMEMBER);
         return () => {
-            document.removeEventListener('fullscreenchange', onFull);
             window.removeEventListener('resize', onResize);
             window.removeEventListener('pagehide', onLeave);
             // 貼り直しの追いかけを畳む。外さないと画面を離れたあとも回り続ける
@@ -643,15 +639,6 @@
             // 同じ src を読み直す。位置を戻すのは尺が分かってから (`resume`)
             video?.load();
         }, wait);
-    }
-
-    function enterFull(): void {
-        stage?.requestFullscreen?.().catch(() => undefined);
-    }
-
-    function toggleFull(): void {
-        if (document.fullscreenElement !== null) void document.exitFullscreen().catch(() => undefined);
-        else enterFull();
     }
 
     /**
@@ -925,6 +912,16 @@
         }
     }
 
+    /*
+     * **全画面の出入りで測り直す** (本物でも広げたのでも)。枠が変わるので、描き
+     * 終わってから。iPhone で広げたときは窓の `resize` が来ないので、ここで拾う
+     */
+    $effect(() => {
+        void fullscreen.active;
+        const frame = requestAnimationFrame(place);
+        return () => cancelAnimationFrame(frame);
+    });
+
     /**
      * いまの位置に合う1枚を重ねる。**変わったときだけ描く。**
      *
@@ -1021,7 +1018,7 @@
         seekBy,
         toggleCaptions,
         snapshot: () => void snapshot(),
-        toggleFull,
+        toggleFull: fullscreen.toggle,
         // 早送りは順送り。**戻る側も付ける** (行き過ぎたら戻れないと不便)
         stepSpeed,
         toggleMute: () => {
@@ -1134,7 +1131,7 @@
                 舞台 (映像と操作をまとめた箱。全画面にするのはここ) は3画面で共通 (PlayerStage)。
                 全画面はこちら側の癖 (開いた時点で入る) が要るので自前のまま
             -->
-            <PlayerStage {controls} testid="watch-stage" bind:element={stage}>
+            <PlayerStage {controls} {fullscreen} testid="watch-stage" bind:element={stage}>
                 {#snippet children(layout)}
                 <!--
                     **押すのは絵そのもの。** ボタンを避けて敷くのではなく、
@@ -1579,10 +1576,10 @@
                         {/if}
 
                         <ControlButton
-                            icon={full ? SHRINK : EXPAND}
-                            label={full ? '全画面をやめる' : '全画面'}
+                            icon={fullscreen.active ? SHRINK : EXPAND}
+                            label={fullscreen.active ? '全画面をやめる' : '全画面'}
                             testid="watch-full"
-                            onclick={toggleFull}
+                            onclick={fullscreen.toggle}
                         />
                     </div>
                 </ControlBar>

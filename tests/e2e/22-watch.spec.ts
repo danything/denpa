@@ -578,3 +578,98 @@ test.describe('指で観る', () => {
         await expect(bar).toHaveAttribute('data-shown', 'false', { timeout: 5000 });
     });
 });
+
+/**
+ * **iPhone の全画面は、枠を画面いっぱいに広げて代わりにする** (#471。`fullscreen.svelte.ts`)。
+ *
+ * iPhone の Safari は要素の全画面 (`requestFullscreen` / `webkitRequestFullscreen`) を
+ * 持たない。口を消して iPhone の横持ち (844x390) に見立てる。指の端末は開いた時点で
+ * 全画面に入るので、開いたら広がっていること。出口は同じボタン・Esc・戻る
+ */
+test.describe('iPhone で全画面', () => {
+    test.use({ hasTouch: true, isMobile: true, viewport: { width: 844, height: 390 } });
+
+    test('開くと枠が画面いっぱいに広がり、重ねものも付いてくる。ボタン・Esc・戻るで出る', async ({
+        page,
+        request,
+    }) => {
+        test.setTimeout(180_000);
+        const id = await watchable(page, request);
+        await page.addInitScript(() => {
+            for (const proto of [Element.prototype, HTMLElement.prototype]) {
+                delete (proto as Partial<Element>).requestFullscreen;
+                delete (proto as { webkitRequestFullscreen?: unknown }).webkitRequestFullscreen;
+            }
+        });
+        await goto(page, `/watch/${id}`);
+
+        const stage = page.getByTestId('watch-stage');
+        const full = page.getByTestId('watch-full');
+        const covers = async () => {
+            await expect(stage).toHaveAttribute('data-pseudo', '');
+            await expect.poll(() => stage.boundingBox()).toEqual({ x: 0, y: 0, width: 844, height: 390 });
+            // 後ろのページは止める
+            await expect(page.locator('html')).toHaveAttribute('data-stage-fullscreen', '');
+            await expect(full).toHaveAttribute('aria-label', '全画面をやめる');
+        };
+        const restored = async () => {
+            await expect(stage).not.toHaveAttribute('data-pseudo', '');
+            await expect.poll(async () => (await stage.boundingBox())?.height).toBeLessThan(390);
+            await expect(page.locator('html')).not.toHaveAttribute('data-stage-fullscreen', '');
+            await expect(full).toHaveAttribute('aria-label', '全画面');
+            await expect(page).toHaveURL(new RegExp(`/watch/${id}$`));
+        };
+        const showControls = async () => {
+            const bar = page.getByTestId('watch-controls');
+            if ((await bar.getAttribute('data-shown')) !== 'true') {
+                const box = (await stage.boundingBox())!;
+                await page.touchscreen.tap(box.x + box.width / 2, box.y + box.height / 2);
+            }
+            await expect(bar).toHaveAttribute('data-shown', 'true');
+        };
+
+        // 開いた時点で広がっている。本物の全画面には入っていない
+        await covers();
+        expect(await page.evaluate(() => document.fullscreenElement)).toBeNull();
+
+        // 字幕の面は映像に、映像は枠に重なる。操作列は画面の中
+        await showControls();
+        const layout = await page.evaluate(() => {
+            const rect = (id: string) => {
+                const r = document.querySelector(`[data-testid="${id}"]`)!.getBoundingClientRect();
+                return {
+                    x: Math.round(r.x),
+                    y: Math.round(r.y),
+                    w: Math.round(r.width),
+                    h: Math.round(r.height),
+                };
+            };
+            return {
+                video: rect('watch-video'),
+                captions: rect('watch-captions-canvas'),
+                bar: rect('watch-controls'),
+            };
+        });
+        expect(layout.video).toEqual({ x: 0, y: 0, w: 844, h: 390 });
+        expect(layout.captions).toEqual(layout.video);
+        expect(layout.bar.y + layout.bar.h).toBeLessThanOrEqual(390);
+
+        // 同じボタンで出る
+        await full.tap();
+        await restored();
+
+        // もう一度入って、Esc で出る
+        await showControls();
+        await full.tap();
+        await covers();
+        await page.keyboard.press('Escape');
+        await restored();
+
+        // もう一度入って、戻るで出る。画面は離れない
+        await showControls();
+        await full.tap();
+        await covers();
+        await page.evaluate(() => history.back());
+        await restored();
+    });
+});

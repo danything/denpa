@@ -15,5 +15,9 @@ declare global {
             /** アプリの鍵 (`Authorization: Bearer`) で入ったときの鍵の ID (device-auth.ts) */
             token?: number;
         }
+        interface PageState {
+            /** 舞台を広げた (iPhone の全画面の代わり) ときに積む段 (`player/fullscreen.svelte.ts`) */
+            fullscreen?: boolean;
+        }
     }
 }
