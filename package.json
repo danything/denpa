@@ -13,7 +13,7 @@
         "bits-ui": "2.19.5",
         "drizzle-kit": "0.31.11",
         "drizzle-orm": "^0.45.3",
-        "svelte": "^5.57.1",
+        "svelte": "^5.57.2",
         "svelte-check": "^4.7.6",
         "typescript": "^6.0.0",
         "unplugin-icons": "^24.0.0",
