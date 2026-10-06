@@ -18,7 +18,8 @@
 ```json
 [{ "id": 3227310008, "type": "GR", "name": "TOKYO MX", "remoteControlKey": 9,
    "logo": "api/services/3227310008/logo", "live": "api/services/3227310008/live",
-   "now": { "title": "ニュース", "startAt": 1790000000000, "endAt": 1790001800000,
+   "now": { "id": 32736103210001, "title": "ニュース", "startAt": 1790000000000, "endAt": 1790001800000,
+            "reserved": false, "recording": false,
             "audios": [{ "id": "0:main", "stream": 0, "side": "main", "label": "主音声 (日本語)", "main": true },
                        { "id": "0:sub",  "stream": 0, "side": "sub",  "label": "副音声 (英語)", "main": true },
                        { "id": "0:both", "stream": 0, "side": "both", "label": "主+副", "main": true }] } }]
@@ -27,6 +28,10 @@
 - `logo` は局ロゴをまだ拾えていなければ `null`
 - `now` はいま放送中の番組 (時刻は epoch ms)。番組表に無ければ `null`
 - `now.audios` はその番組で選べる音声 ([下記](#音声の一覧-audios))。ライブの `?audio=<id>` に渡します
+- `now.id` は番組ID (`GET /api/programs/<id>` で中身を引けます)
+- `now.reserved` はその番組を録る予定か (予約が入っていて、競合で弾かれていない)、`now.recording` は
+  いま録っている最中か (録画中なら `reserved` も `true`)。番組表のマスの印と同じ物差しです。
+  録画ボタンの印に使い、押すのは [`POST /api/services/<id>/record`](#いまの番組を録る-post-apiservicesidrecord)
 
 ### 音声の一覧 `audios`
 
@@ -57,6 +62,22 @@
 `?audio=<id>` (`now.audios` の `id`) で焼く音声を選びます。デュアルモノの `main` / `sub` は片側を両耳に配って焼きます。
 知らない・形の違う `id` は断らずに主音声で焼きます (番組が替わって消えた音声など)。**選び直すには頼み直します**
 (同じ局・同じ形・同じ音声を見ている人とだけ相乗りする)。`raw` では効きません (全部の音声が入っているので、受け側が選ぶ)。
+
+## いまの番組を録る `POST /api/services/<id>/record`
+
+その局でいま流れている番組を予約します (画面のライブの録画ボタンと同じ)。本文は要りませんが、
+`Content-Type: application/json` は付けます ([上記](#外から使う口-api))。
+
+```json
+{ "recorded": "ニュース", "programId": 32736103210001, "reserved": true }
+```
+
+- 既に始まっている番組は、数秒後 (次のスケジューラの周期) に録りはじめます
+- **何度押しても二重には録りません** (予約は番組ごとに1本)。予約済み・録画中でも同じ答えが返ります
+- `reserved` が `false` なら予約はできたものの、チューナーが足りず**競合**で録らない状態です
+  (画面の予約の一覧で優先を変えられます)
+- 番組表にいまの番組が無ければ `404`、予約できなければ (放送が終わったところなど) `400`。
+  どちらも `message` に画面に出せる理由が入ります
 
 ## 録画の一覧 `GET /api/recordings`
 

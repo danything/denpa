@@ -1,11 +1,11 @@
 import { fail } from '@sveltejs/kit';
-import { and, desc, eq, gt, lte, sql } from 'drizzle-orm';
+import { and, gt, lte, sql } from 'drizzle-orm';
 import { channelNumber } from '#lib/format.js';
 import { LAST_COOKIE, type LiveCodec } from '#lib/live.js';
 import { orm } from '#lib/server/db.js';
 import { airing, CURRENT_SERVICES, SERVICE_ORDER, SERVICE_TYPE_ORDER } from '#lib/server/epg.js';
 import { warm } from '#lib/server/live.js';
-import { reserve } from '#lib/server/reservations.js';
+import { recordAiring } from '#lib/server/reservations.js';
 import { programs, services as stations } from '#lib/server/schema.js';
 import { settings } from '#lib/server/settings.js';
 import type { Service } from '#lib/types.js';
@@ -183,34 +183,17 @@ export const actions = {
     /**
      * **いま観ている番組を録る** (絵の右上の録画ボタン)。
      *
-     * 番組表からいま流れている番組を引いて、手動予約と同じ道に乗せる
-     * (`reserve`)。既に始まっている番組の予約は次のスケジューラ周期 (数秒) で
-     * そのまま録りはじめる。既に予約済み・録画中なら upsert されるだけで、
-     * 二重には録らない (`reservations` は program_id で1本)
+     * 番組表からいま流れている番組を引いて、手動予約と同じ道に乗せる (`recordAiring`)。
+     * 既に予約済み・録画中なら二重には録らない (予約は番組ごとに1本)
      */
     record: async ({ request }) => {
         const form = await request.formData();
         const serviceId = Number(form.get('service'));
         if (!Number.isInteger(serviceId)) return fail(400, { message: 'チャンネルの指定が不正です' });
 
-        const at = Date.now();
-        const program = orm()
-            .select({ id: programs.id, name: programs.name })
-            .from(programs)
-            .where(
-                and(eq(programs.service_id, serviceId), lte(programs.start_at, at), gt(programs.end_at, at)),
-            )
-            .orderBy(desc(programs.start_at))
-            .limit(1)
-            .get();
-        if (program === undefined) {
-            return fail(404, { message: 'いま流れている番組が番組表に見つかりません' });
-        }
-        try {
-            await reserve(program.id);
-        } catch (error) {
-            return fail(400, { message: error instanceof Error ? error.message : String(error) });
-        }
-        return { recorded: program.name };
+        // アプリの `POST /api/services/<id>/record` と同じ道 (`recordAiring`)
+        const result = await recordAiring(serviceId);
+        if (!result.ok) return fail(result.status, { message: result.message });
+        return { recorded: result.name };
     },
 } satisfies Actions;

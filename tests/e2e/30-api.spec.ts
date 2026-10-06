@@ -1,3 +1,4 @@
+import { BS_NO_LOGO } from '../fake/services';
 import { expect, syncEpg, test } from './helpers';
 
 /**
@@ -20,9 +21,13 @@ test.describe('外から使う口', () => {
         // いま放送中の番組。偽の番組表はいまを跨ぐ番組を持っているので、どこかの局には付く
         const now = services.find((s: { now: unknown }) => s.now !== null)?.now;
         expect(now).toMatchObject({
+            id: expect.any(Number),
             title: expect.any(String),
             startAt: expect.any(Number),
             endAt: expect.any(Number),
+            // 録画ボタンの印 (`POST /api/services/<id>/record`)
+            reserved: expect.any(Boolean),
+            recording: expect.any(Boolean),
         });
         // 選べる音声。番組表が何も言っていなくても「そのまま出す」1つは入る
         expect(now.audios.length).toBeGreaterThan(0);
@@ -50,6 +55,19 @@ test.describe('外から使う口', () => {
          * fMP4 を作らないので、何も届かない。焼き方の引数は live.test.ts が押さえている
          */
         expect((await request.get('/api/services/1/live')).status()).toBe(404);
+    });
+
+    /*
+     * 録れる側 (予約が入る・2度押しても1本) は record-airing.test.ts が押さえる。ここで録らせると、
+     * 同じ組の試験がチューナーを取り合う
+     */
+    test('いまの番組を録る口は、番組表に無ければ 404 と理由を返す', async ({ request }) => {
+        await syncEpg(request);
+        const json = { 'content-type': 'application/json' };
+        const missing = await request.post(`/api/services/${BS_NO_LOGO.id}/record`, { headers: json });
+        expect(missing.status()).toBe(404);
+        expect((await missing.json()).message).toBe('いま流れている番組が番組表に見つかりません');
+        expect((await request.post('/api/services/x/record', { headers: json })).status()).toBe(400);
     });
 
     test('録画の一覧は配列で、files はコーデック付き', async ({ request }) => {

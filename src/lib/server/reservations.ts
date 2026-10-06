@@ -1,9 +1,10 @@
-import { and, eq, sql } from 'drizzle-orm';
-import type { Reservation } from '../types';
+import { and, desc, eq, gt, inArray, lte, ne, sql } from 'drizzle-orm';
+import { alias } from 'drizzle-orm/sqlite-core';
+import type { Reservation, ReservationState } from '../types';
 import { now, orm } from './db';
 import { stopRecording } from './recorder';
 import { resolveConflicts } from './scheduler';
-import { programs, recordings, reservations } from './schema';
+import { programs, recordings, reservationState, reservations } from './schema';
 import { settings } from './settings';
 
 /** 手動予約。ルール由来の予約が既にあれば手動扱いに昇格させて優先度を上げる */
@@ -103,4 +104,67 @@ export async function cancel(reservationId: number): Promise<void> {
         .where(eq(reservations.id, reservationId))
         .run();
     await resolveConflicts();
+}
+
+/** {@link recordAiring} の答え。断ったときは HTTP の状態と、そのまま出せる文言を持つ */
+export type RecordAiring =
+    | { ok: true; programId: number; name: string; state: ReservationState }
+    | { ok: false; status: 400 | 404; message: string };
+
+/**
+ * **局でいま流れている番組を録る** (ライブの録画ボタンと、アプリの `POST /api/services/<id>/record`)。
+ *
+ * 番組表からいま流れている番組を引いて、手動予約と同じ道 ({@link reserve}) に乗せる。
+ * 既に始まっている番組の予約は次のスケジューラ周期 (数秒) でそのまま録りはじめる。
+ * 既に予約済み・録画中なら upsert されるだけで、二重には録らない (予約は program_id で1本)。
+ *
+ * **画面とアプリで同じものを使う。** 番組の引き方や断り方が口ごとにずれると、
+ * 片方でだけ録れない番組が出る
+ */
+export async function recordAiring(serviceId: number, at = now()): Promise<RecordAiring> {
+    const program = orm()
+        .select({ id: programs.id, name: programs.name })
+        .from(programs)
+        .where(and(eq(programs.service_id, serviceId), lte(programs.start_at, at), gt(programs.end_at, at)))
+        .orderBy(desc(programs.start_at))
+        .limit(1)
+        .get();
+    if (program === undefined) {
+        return { ok: false, status: 404, message: 'いま流れている番組が番組表に見つかりません' };
+    }
+    try {
+        await reserve(program.id);
+    } catch (error) {
+        return { ok: false, status: 400, message: error instanceof Error ? error.message : String(error) };
+    }
+    // 競合で弾かれたかは予約のあとでしか分からない。番組表と同じ物差しで読む
+    const state = reservationStates([program.id]).get(program.id) ?? 'scheduled';
+    return { ok: true, programId: program.id, name: program.name, state };
+}
+
+/**
+ * **番組ごとの予約の状態** (番組表のマスと同じ物差し `reservationState`)。
+ * 取り消したものと、予約の無い番組は入らない。
+ *
+ * 録画の状態は録画の行から引く — 予約側は録り始めた時刻しか持たないので、
+ * `reservations.state` だけでは録画中と録り終えたものの見分けがつかない
+ */
+export function reservationStates(programIds: number[]): Map<number, ReservationState> {
+    if (programIds.length === 0) return new Map();
+    const r = alias(reservations, 'r');
+    const rec = alias(recordings, 'rec');
+    const rows = orm()
+        .select({ programId: r.program_id, state: reservationState(r, rec) })
+        .from(r)
+        // 録り直すと同じ番組に複数ぶら下がる。いちばん新しい現存分だけ見る (番組表と同じ)
+        .leftJoin(
+            rec,
+            eq(
+                rec.id,
+                sql`(SELECT id FROM recordings WHERE program_id = ${r.program_id} AND deleted_at IS NULL ORDER BY id DESC LIMIT 1)`,
+            ),
+        )
+        .where(and(inArray(r.program_id, programIds), ne(r.state, 'canceled')))
+        .all();
+    return new Map(rows.map((row) => [row.programId, row.state]));
 }
