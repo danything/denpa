@@ -11,6 +11,7 @@
     import EdgeButton from '#lib/components/player/EdgeButton.svelte';
     import Extras from '#lib/components/player/Extras.svelte';
     import FactsAside from '#lib/components/player/FactsAside.svelte';
+    import { stageFullscreen } from '#lib/components/player/fullscreen.svelte.js';
     import Icon from '#lib/components/player/Icon.svelte';
     import InfoBlock from '#lib/components/player/InfoBlock.svelte';
     import {
@@ -67,6 +68,8 @@
     let overlay = $state<HTMLCanvasElement | null>(null);
     /** 全画面にする枠 (`PlayerStage` が bind する)。キーの `f` から使う */
     let stageEl = $state<HTMLElement | null>(null);
+    /** 全画面の出入り (3画面共通。[fullscreen.svelte.ts](../../../lib/components/player/fullscreen.svelte.ts)) */
+    const fullscreen = stageFullscreen(() => stageEl);
 
     /** 右端を伸ばすための時計。1秒刻みで十分 (バーの目盛りより細かい) */
     let clock = $state(Date.now());
@@ -260,19 +263,13 @@
         player.playback = background.on || pip.active;
     });
 
-    /** 全画面の出入り。操作列のボタンと同じことをキーからもできるように */
-    function toggleFull(): void {
-        if (document.fullscreenElement !== null) void document.exitFullscreen().catch(() => {});
-        else if (stageEl !== null) void stageEl.requestFullscreen().catch(() => {});
-    }
-
     /** キーでも動かせるようにする。割り当ては観る画面と共通 (`player/keys.ts`) */
     const keys = playerKeys({
         togglePlay: () => player.toggle(),
         seekBy,
         toggleCaptions: () => player.toggleCaptions(),
         snapshot,
-        toggleFull,
+        toggleFull: fullscreen.toggle,
         stepSpeed,
         // **消音は player 側の印で切り替える。** 絵の要素を直に触ると、繋ぎ直しの
         // たびに `silenced` で上書きされて戻り、ボタンの見た目ともずれる
@@ -301,7 +298,7 @@
 <div class="layout">
     <section class="main">
     <!-- 舞台の配線と映像の束はライブと共通 (PlayerStage / MediaStack) -->
-    <PlayerStage {controls} testid="chase" bind:element={stageEl}>
+    <PlayerStage {controls} {fullscreen} testid="chase" bind:element={stageEl}>
         {#snippet children(stage)}
         <MediaStack
             holding={player.holding}

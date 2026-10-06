@@ -14,6 +14,7 @@
     import EdgeButton from '#lib/components/player/EdgeButton.svelte';
     import Extras from '#lib/components/player/Extras.svelte';
     import FactsAside from '#lib/components/player/FactsAside.svelte';
+    import { stageFullscreen } from '#lib/components/player/fullscreen.svelte.js';
     import Icon from '#lib/components/player/Icon.svelte';
     import InfoBlock from '#lib/components/player/InfoBlock.svelte';
     import {
@@ -185,6 +186,9 @@
 
     /** 操作列の出し入れ ([controls.svelte.ts](../../lib/components/player/controls.svelte.ts))。観る画面と同じ */
     const controls = playerControls();
+    /** 全画面にする枠と、その出入り (3画面共通。[fullscreen.svelte.ts](../../lib/components/player/fullscreen.svelte.ts)) */
+    let stageEl = $state<HTMLElement | null>(null);
+    const fullscreen = stageFullscreen(() => stageEl);
 
     /**
      * 観ている間は画面を落とさせない ([awake.svelte.ts](../../lib/components/player/awake.svelte.ts))。
@@ -295,7 +299,7 @@
             映像と重ねものの束も追っかけと共通 ([MediaStack.svelte](../../lib/components/player/MediaStack.svelte)) —
             なぜ style で書くか・なぜ入れ物を分けるかはあちらに
         -->
-        <PlayerStage {controls} testid="live-frame">
+        <PlayerStage {controls} {fullscreen} testid="live-frame" bind:element={stageEl}>
             {#snippet children(stage)}
             <MediaStack
                 holding={player.holding}

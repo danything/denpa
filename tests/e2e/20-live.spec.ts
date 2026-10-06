@@ -1049,6 +1049,73 @@ test.describe('ライブ視聴', () => {
     });
 
     /*
+     * **iPhone の全画面は、枠を画面いっぱいに広げて代わりにする** (#471。`fullscreen.svelte.ts`)。
+     * 要素の全画面の口を消して iPhone の横持ち (844x390) に見立てる。字幕の面とデータ放送の
+     * 入れ物は枠から測るので、広げても映像に重なったまま。出口は同じボタン・Esc・戻る
+     */
+    test('全画面の口が無い端末では、枠を画面いっぱいに広げる', async ({ browser }) => {
+        const context = await browser.newContext({ viewport: { width: 844, height: 390 } });
+        const page = await context.newPage();
+        await page.addInitScript(() => {
+            for (const proto of [Element.prototype, HTMLElement.prototype]) {
+                delete (proto as Partial<Element>).requestFullscreen;
+                delete (proto as { webkitRequestFullscreen?: unknown }).webkitRequestFullscreen;
+            }
+        });
+        await goto(page, '/live');
+        await page.getByTestId('live-channel').first().click();
+        await expect(page.getByTestId('live-title')).toBeVisible();
+
+        const stage = page.getByTestId('live-frame');
+        const full = page.getByTestId('live-full');
+        const enter = async () => {
+            await wakeControls(page, 'live-frame');
+            await full.click();
+            await expect(stage).toHaveAttribute('data-pseudo', '');
+            await expect.poll(() => stage.boundingBox()).toEqual({ x: 0, y: 0, width: 844, height: 390 });
+            await expect(page.locator('html')).toHaveAttribute('data-stage-fullscreen', '');
+            await expect(full).toHaveAttribute('aria-label', '全画面をやめる');
+        };
+        const restored = async () => {
+            await expect(stage).not.toHaveAttribute('data-pseudo', '');
+            await expect.poll(async () => (await stage.boundingBox())?.height).toBeLessThan(390);
+            await expect(page.locator('html')).not.toHaveAttribute('data-stage-fullscreen', '');
+            await expect(full).toHaveAttribute('aria-label', '全画面');
+            await expect(page).toHaveURL(/\/live/);
+        };
+
+        await enter();
+        expect(await page.evaluate(() => document.fullscreenElement)).toBeNull();
+        // 字幕の面は映像と同じ枠、映像は枠いっぱい。操作列は画面の中
+        await sameBox(page.getByTestId('live-captions'), page.getByTestId('live-video'), expect);
+        expect(await page.getByTestId('live-video').boundingBox()).toEqual({
+            x: 0,
+            y: 0,
+            width: 844,
+            height: 390,
+        });
+        await wakeControls(page, 'live-frame');
+        const bar = (await full.boundingBox())!;
+        expect(bar.y + bar.height).toBeLessThanOrEqual(390);
+
+        // 同じボタンで出る
+        await wakeControls(page, 'live-frame');
+        await full.click();
+        await restored();
+
+        // Esc で出る
+        await enter();
+        await page.keyboard.press('Escape');
+        await restored();
+
+        // 戻るで出る。画面は離れない
+        await enter();
+        await page.evaluate(() => history.back());
+        await restored();
+        await context.close();
+    });
+
+    /*
      * **バックグラウンド再生は既定で切。** 裏に回すと止め、戻ると再開する。OS が勝手に小窓に
      * しないよう `disablePictureInPicture` も立てておく (全画面からホームへ戻っただけで小窓が
      * 出て鳴り続けていた)。入れれば裏でも止めず、端末ごとに覚える (`background.svelte.ts`)。
