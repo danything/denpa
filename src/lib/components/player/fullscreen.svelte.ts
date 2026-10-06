@@ -1,3 +1,4 @@
+import { untrack } from 'svelte';
 import { beforeNavigate, goto } from '$app/navigation';
 import { page } from '$app/state';
 import { exitNative, fullscreenMode, nativeFullscreenElement, requestNative } from './fullscreen';
@@ -72,17 +73,51 @@ export function stageFullscreen(target: () => HTMLElement | null): StageFullscre
     /*
      * **戻るで畳む。** 積んだ段 (`fullscreen: true`) から降りたら広げたのをやめる。
      * 見るのは「立っていた札が下りた」ときだけ — 積む前 (`goto` が済むまで) は
-     * 札がまだ無いので、それを「降りた」と取り違えない
+     * 札がまだ無いので、それを「降りた」と取り違えない。
+     *
+     * **こちらが戻した段** (ボタン・Esc で出た) は、もう出ているので畳まない。
+     * 戻り切る前に入り直されていれば、そこで改めて積む
      */
     let stacked = false;
     $effect(() => {
         const on = page.state.fullscreen === true;
-        if (stacked && !on) pseudo = false;
+        if (stacked && !on) {
+            if (!popping) pseudo = false;
+            else {
+                popping = false;
+                if (untrack(() => pseudo)) push();
+            }
+        }
         stacked = on;
     });
 
     /** 段を積んでいる最中か。済む前に出て入り直したとき、二重に積まない */
     let pushing = false;
+    /** 積んだ段をこちらから戻している最中か */
+    let popping = false;
+
+    function pop(): void {
+        popping = true;
+        history.back();
+    }
+
+    /*
+     * 積めなくても広げたまま (開いた直後で道案内がまだ動いていないなど)。ボタン・Esc で出られる。
+     * **積み終わる前に出られたら、積んだ段をそこで戻す** — 出た時点では段がまだ無く
+     * `exit` は戻さないので、放っておくと何も広げていない段が1つ残る
+     */
+    function push(): void {
+        pushing = true;
+        goto(location.href, { state: { ...page.state, fullscreen: true }, shallow: true }).then(
+            () => {
+                pushing = false;
+                if (!pseudo && page.state.fullscreen === true) pop();
+            },
+            () => {
+                pushing = false;
+            },
+        );
+    }
 
     beforeNavigate((navigation) => {
         if (navigation.to?.url.pathname !== navigation.from?.url.pathname) pseudo = false;
@@ -98,23 +133,11 @@ export function stageFullscreen(target: () => HTMLElement | null): StageFullscre
         }
         if (pseudo) return;
         pseudo = true;
+        // 積んでいる・戻している最中なら、済んだところで合わせる (上の effect と push)
+        if (pushing || popping) return;
         // 札が残っている段 (よそから戻ってきた) なら積み増さない。戻ればそのまま下の段へ降りる
-        if (page.state.fullscreen === true || pushing) return;
-        pushing = true;
-        /*
-         * 積めなくても広げたまま (開いた直後で道案内がまだ動いていないなど)。ボタン・Esc で出られる。
-         * **積み終わる前に出られたら、積んだ段をそこで戻す** — 出た時点では段がまだ無く
-         * `exit` は戻さないので、放っておくと何も広げていない段が1つ残る
-         */
-        goto(location.href, { state: { ...page.state, fullscreen: true }, shallow: true }).then(
-            () => {
-                pushing = false;
-                if (!pseudo && page.state.fullscreen === true) history.back();
-            },
-            () => {
-                pushing = false;
-            },
-        );
+        if (page.state.fullscreen === true) return;
+        push();
     }
 
     function exit(): void {
@@ -124,7 +147,7 @@ export function stageFullscreen(target: () => HTMLElement | null): StageFullscre
         }
         if (!pseudo) return;
         pseudo = false;
-        if (page.state.fullscreen === true) history.back();
+        if (page.state.fullscreen === true && !pushing && !popping) pop();
     }
 
     return {
