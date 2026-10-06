@@ -81,6 +81,9 @@ export function stageFullscreen(target: () => HTMLElement | null): StageFullscre
         stacked = on;
     });
 
+    /** 段を積んでいる最中か。済む前に出て入り直したとき、二重に積まない */
+    let pushing = false;
+
     beforeNavigate((navigation) => {
         if (navigation.to?.url.pathname !== navigation.from?.url.pathname) pseudo = false;
     });
@@ -96,7 +99,8 @@ export function stageFullscreen(target: () => HTMLElement | null): StageFullscre
         if (pseudo) return;
         pseudo = true;
         // 札が残っている段 (よそから戻ってきた) なら積み増さない。戻ればそのまま下の段へ降りる
-        if (page.state.fullscreen === true) return;
+        if (page.state.fullscreen === true || pushing) return;
+        pushing = true;
         /*
          * 積めなくても広げたまま (開いた直後で道案内がまだ動いていないなど)。ボタン・Esc で出られる。
          * **積み終わる前に出られたら、積んだ段をそこで戻す** — 出た時点では段がまだ無く
@@ -104,9 +108,12 @@ export function stageFullscreen(target: () => HTMLElement | null): StageFullscre
          */
         goto(location.href, { state: { ...page.state, fullscreen: true }, shallow: true }).then(
             () => {
+                pushing = false;
                 if (!pseudo && page.state.fullscreen === true) history.back();
             },
-            () => {},
+            () => {
+                pushing = false;
+            },
         );
     }
 
