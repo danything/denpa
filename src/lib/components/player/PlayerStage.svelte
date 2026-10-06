@@ -132,7 +132,10 @@
     {@render children({
         full: fullscreen.toggle,
         fullscreened: fullscreen.active,
-        compact, more, toggleMore: () => (more = !more) })}
+        compact,
+        more,
+        toggleMore: () => (more = !more),
+    })}
 </div>
 
 <style>

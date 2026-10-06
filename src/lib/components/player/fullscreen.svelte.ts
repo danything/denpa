@@ -38,10 +38,7 @@ export function stageFullscreen(target: () => HTMLElement | null): StageFullscre
     let pseudo = $state(false);
 
     $effect(() => {
-        const update = () => {
-            const element = nativeFullscreenElement(document);
-            native = element !== null;
-        };
+        const update = () => (native = nativeFullscreenElement(document) !== null);
         update();
         document.addEventListener('fullscreenchange', update);
         document.addEventListener('webkitfullscreenchange', update);
@@ -51,7 +48,11 @@ export function stageFullscreen(target: () => HTMLElement | null): StageFullscre
         };
     });
 
-    // 広げている間: 後ろを止めて黒く、Esc で出る
+    /*
+     * 広げている間: 後ろを止めて黒く、Esc で出る。**枠の中のメニューが開いていれば
+     * そちらに譲る** — Bits UI は document で Esc を受けて `preventDefault` するので、
+     * window まで上がってきたときには印が付いている
+     */
     $effect(() => {
         if (!pseudo) return;
         const root = document.documentElement;
@@ -96,8 +97,15 @@ export function stageFullscreen(target: () => HTMLElement | null): StageFullscre
         pseudo = true;
         // 札が残っている段 (よそから戻ってきた) なら積み増さない。戻ればそのまま下の段へ降りる
         if (page.state.fullscreen === true) return;
-        // 積めなくても広げたまま (開いた直後で道案内がまだ動いていないなど)。ボタン・Esc で出られる
-        void goto(location.href, { state: { ...page.state, fullscreen: true }, shallow: true }).catch(
+        /*
+         * 積めなくても広げたまま (開いた直後で道案内がまだ動いていないなど)。ボタン・Esc で出られる。
+         * **積み終わる前に出られたら、積んだ段をそこで戻す** — 出た時点では段がまだ無く
+         * `exit` は戻さないので、放っておくと何も広げていない段が1つ残る
+         */
+        goto(location.href, { state: { ...page.state, fullscreen: true }, shallow: true }).then(
+            () => {
+                if (!pseudo && page.state.fullscreen === true) history.back();
+            },
             () => {},
         );
     }
