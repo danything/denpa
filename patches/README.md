@@ -10,7 +10,8 @@ Dockerfile の `ffmpeg` 段で、`./configure` の前に `patch -p1` で当て�
 
 放送は字幕の区切りごとに、**CS (画面消去) だけを載せた字幕文**を送ってきます
 (実機の BS-TBS で確認。`1f 20 00 00 01 0c` の `0c` が CS)。これを受けた
-libaribcaption は `region_count == 0` の字幕を返します。
+libaribcaption は `ARIBCC_CAPTIONFLAGS_CLEARSCREEN` が立った `region_count == 0`
+の字幕を返します。
 
 ffmpeg のラッパは、
 
@@ -25,9 +26,17 @@ denpa は絵で受け取る (`server/captions.ts`) ので後者です。しか�
 生放送 (`server/live.ts`) も焼き込み (`server/subtitle.ts` の PGS) も同じ
 デコーダを通るので、**ここ1箇所で両方直ります**。
 
-**投げ先は ffmpeg (ffmpeg-devel) です。** libaribcaption 自身は
-`region_count == 0` の字幕をちゃんと返していて、それを捨てているのは
-ffmpeg 側のラッパなので、あちらに出しても直せません。
+直しは「**CS のフラグが立っていたら**、空の字幕 (`num_rects = 0`) を返す」です。
+`region_count == 0` で見てはいけません — **TIME (待ち時間) だけの字幕文**も
+領域0で返ってくるので、それで消すと表示中の字幕を消してしまいます
+(最初に当てていた版はこれで判定していた。2026-10-06 にフラグの版へ差し替え)。
+
+**投げ先は ffmpeg です**:
+[PR #24067](https://code.ffmpeg.org/FFmpeg/FFmpeg/pulls/24067)。
+libaribcaption 自身は字幕をちゃんと返していて、それを捨てているのは ffmpeg 側の
+ラッパなので、あちらに出しても直せません (libaribcaption の作者も
+「LGTM」で承認済み)。FATE の試験 `fate-sub-aribcaption-clear` 付き。
+**マージされて denpa の ffmpeg がそれを含む版に上がったら、このパッチは消します。**
 
 同じ100秒を通した実測 (数字は出てきた PNG のバイト数。10609B が全部透明):
 
