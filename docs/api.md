@@ -28,7 +28,7 @@
 - `logo` は局ロゴをまだ拾えていなければ `null`
 - `now` はいま放送中の番組 (時刻は epoch ms)。番組表に無ければ `null`
 - `now.audios` はその番組で選べる音声 ([下記](#音声の一覧-audios))。ライブの `?audio=<id>` に渡します
-- `now.id` は番組ID (`GET /api/programs/<id>` で中身を引けます)
+- `now.id` は番組ID ([`GET /api/programs/<id>`](#番組表の番組の中身-get-apiprogramsid) で中身を引けます)
 - `now.reserved` はその番組を録る予定か (予約が入っていて、競合で弾かれていない)、`now.recording` は
   いま録っている最中か (録画中なら `reserved` も `true`)。番組表のマスの印と同じ物差しです。
   録画ボタンの印に使い、押すのは [`POST /api/services/<id>/record`](#いまの番組を録る-post-apiservicesidrecord)
@@ -160,6 +160,30 @@
 ```
 
 - 時刻は放送の PTS (33 ビットで 26.5 時間ごとに一周する)。比べるときは近いほうへ伸ばしてください
+
+## 番組表の番組の中身 `GET /api/programs/<id>`
+
+`<id>` は番組ID (局の `now.id`)。画面の番組の詳細と同じものを返します (テレビのアプリのライブの詳細で使う)。
+**この口だけ鍵は snake_case** (画面と同じ形をそのまま返している)。
+
+```json
+{ "name": "[新]番組 第1話[字]", "service_name": "TOKYO MX",
+  "start_at": 1790000000000, "end_at": 1790001800000,
+  "description": "番組の概要", "extended": { "番組内容": "…", "出演者": "…" },
+  "genre_detail": [{ "lv1": 7, "lv2": 0 }],
+  "audios": [{ "componentType": 3, "langs": ["jpn"], "main": true },
+             { "componentType": 3, "langs": ["jpn"], "text": "解説ステレオ" }],
+  "video_type": "mpeg2", "video_resolution": "1080i", "is_free": true }
+```
+
+- `name` は放送のままの名前 (記号 `[字]` などを含む)。時刻は UNIX ミリ秒
+- `extended` は放送の詳細 (見出し → 本文)、`genre_detail` はジャンル (ARIB の大分類 `lv1`・中分類 `lv2`)、
+  `audios` は番組表の音声 (`componentType` は ARIB の音声の構成。2 がデュアルモノ、3 がステレオ。`text` は放送が付けた名前)。
+  どれも番組表に無ければ `null`
+- `video_type` (`mpeg2` / `h.264` など)・`video_resolution` (`1080i` / `480i` など) も、無ければ `null`
+- `is_free` は無料放送か
+- 番組表は終わった番組を消していくので、**引けないことがあります** (`404`)。そのときは呼ぶ側が持っている分
+  (`now` の番組名・時刻など) だけを出してください
 
 ## 番組の中身 `GET /api/recordings/<id>/detail`
 
