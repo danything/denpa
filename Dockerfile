@@ -66,7 +66,7 @@ CMD ["bun", "run", "test"]
 # 札 (`trixie-slim`) だけだと月に何度か中身が入れ替わり、CI は `pull: true` なので
 # その日の push が — CSS を1行直しただけでも — ffmpeg の組み直し (10分強) に巻き込まれる。
 # 固定しておけば組み直すのは Renovate が digest を上げる PR のときだけになる
-FROM docker.io/library/debian:trixie-slim@sha256:a99cfc517144bc59b1978475ec53b46ecabec7e43635402ee5b77cc54cd1b20a AS ffmpeg
+FROM docker.io/library/debian:trixie-slim@sha256:a29215f6a35e51e22adffa17f89e9d2ef06214e64a2bad10d765c46aea49f11f AS ffmpeg
 SHELL ["/bin/bash", "-c"]
 # **arch ごとに、その arch のランナーで組む** (CI は amd64 と arm64 を別の機械で。QEMU で
 # ffmpeg を組むと何倍も掛かる)。digest は複数 arch の索引を指しているので、上の FROM は
@@ -160,7 +160,7 @@ RUN case "${TARGETARCH}" in \
 # — JL の文字コードが版で違い (4.0 は Shift-JIS、5.x は BOM付きUTF-8)、取り違えると
 # 「何も切らない」。仕組みと出どころの経緯は docs/encode.md「検出方法は2つ」
 # ---------------------------------------------------------------------------
-FROM docker.io/library/debian:trixie-slim@sha256:a99cfc517144bc59b1978475ec53b46ecabec7e43635402ee5b77cc54cd1b20a AS jls
+FROM docker.io/library/debian:trixie-slim@sha256:a29215f6a35e51e22adffa17f89e9d2ef06214e64a2bad10d765c46aea49f11f AS jls
 ENV DEBIAN_FRONTEND=noninteractive
 ENV CURL="curl -fsSL --retry 5 --retry-delay 5 --retry-all-errors --connect-timeout 20"
 RUN apt-get update && \
@@ -212,7 +212,7 @@ RUN bun run build
 # ---------------------------------------------------------------------------
 # 本番イメージ
 # ---------------------------------------------------------------------------
-FROM docker.io/library/debian:trixie-slim@sha256:a99cfc517144bc59b1978475ec53b46ecabec7e43635402ee5b77cc54cd1b20a AS runtime
+FROM docker.io/library/debian:trixie-slim@sha256:a29215f6a35e51e22adffa17f89e9d2ef06214e64a2bad10d765c46aea49f11f AS runtime
 WORKDIR /app
 ENV NODE_ENV=production \
     TZ=Asia/Tokyo \
