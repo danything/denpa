@@ -132,13 +132,17 @@ export async function recordAiring(serviceId: number, at = now()): Promise<Recor
     if (program === undefined) {
         return { ok: false, status: 404, message: 'いま流れている番組が番組表に見つかりません' };
     }
+    let reservation: Reservation;
     try {
-        await reserve(program.id);
+        reservation = await reserve(program.id);
     } catch (error) {
         return { ok: false, status: 400, message: error instanceof Error ? error.message : String(error) };
     }
-    // 競合で弾かれたかは予約のあとでしか分からない。番組表と同じ物差しで読む
-    const state = reservationStates([program.id]).get(program.id) ?? 'scheduled';
+    /*
+     * 競合で弾かれたかは予約のあとでしか分からない。番組表と同じ物差しで読む (録画中かは録画の行を見ないと
+     * 分からないため)。取り消し扱いで引けなければ、予約の行の状態をそのまま答える
+     */
+    const state = reservationStates([program.id]).get(program.id) ?? reservation.state;
     return { ok: true, programId: program.id, name: program.name, state };
 }
 
