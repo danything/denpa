@@ -410,12 +410,15 @@ a.button.secondary {
     --pico-border-color: var(--pico-secondary-border);
     --pico-color: var(--pico-secondary-inverse);
 }
+/* 枠も字と同じ色にする (Pico の button.outline と同じ)。素の枠の色では、隣の枠だけのボタンより沈んで見えた */
 a.button.outline {
     --pico-background-color: transparent;
     --pico-color: var(--pico-primary);
+    --pico-border-color: var(--pico-primary);
 }
 a.button.secondary.outline {
     --pico-color: var(--pico-secondary);
+    --pico-border-color: var(--pico-secondary);
 }
 /* リンクのボタンの :hover。枠だけのものは地を塗らない(塗ると枠の色の文字が地に沈む) */
 a.button.secondary:hover {
