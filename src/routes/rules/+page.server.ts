@@ -11,14 +11,14 @@ import { relative } from '#lib/server/paths.js';
 import { cancel, reserve } from '#lib/server/reservations.js';
 import {
     applyRules,
-    canceledBroadcasts,
     compile,
     coveringRule,
-    dedupeSkips,
     haystack,
+    keepsReservation,
     likePatterns,
     matchesCompiled,
     prefillFrom,
+    previewSkips,
 } from '#lib/server/rules.js';
 import { resolveConflicts, tunerCapacity } from '#lib/server/scheduler.js';
 import {
@@ -355,17 +355,11 @@ export async function load({ url }) {
         /*
          * **同じ回は最初の放送だけ。** 録らないものも行には出す (黙って消すと、
          * 条件が当たっていないのか、当たったうえで外したのか読めない)。
-         * 選び方は予約を立てるときと同じもの (`rules.applyRules`)。人が取り消した放送は
-         * あちらも立てないので、「最初の放送」の候補に入れない
+         * 選び方は予約を立てるときと同じもの (`rules.previewSkips`)
          */
-        let skips: ReturnType<typeof dedupeSkips<(typeof hits)[number]>> = new Map();
-        if (conditions.dedupe) {
-            const declined = canceledBroadcasts(now());
-            skips = dedupeSkips(
-                hits.filter((p) => !declined.has({ ...p, channel: p.service_channel })),
-                now(),
-            );
-        }
+        const skips: ReturnType<typeof previewSkips<(typeof hits)[number]>> = conditions.dedupe
+            ? previewSkips(hits, now())
+            : new Map();
         const skipOf = (id: number): PreviewRow['skip'] => {
             const skip = skips.get(id);
             if (skip === undefined) return null;
@@ -425,11 +419,8 @@ export async function load({ url }) {
                 conflicts: [],
                 conflict_reason:
                     held?.state === 'conflict' ? (held.conflict_reason ?? 'チューナーが足りません') : null,
-                // 手動の予約と猶予の内の予約は引っ込めない (`rules.applyRules`)。それなら「録らない」とは言わない
-                skip:
-                    held === null || (!held.manual && held.start_at >= now() + config.ruleRetractGrace)
-                        ? skipOf(p.id)
-                        : null,
+                // 引っ込めない予約 (手動・猶予の内) が立っているなら録る。「録らない」とは言わない
+                skip: held !== null && keepsReservation(held, now()) ? null : skipOf(p.id),
             };
         });
 

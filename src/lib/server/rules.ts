@@ -283,7 +283,7 @@ const DECLINE_WINDOW = 10 * 60 * 1000;
  * 手動予約を人が取り消したぶんは含める — 今までも id が同じ限りルールを止めていたので、
  * その振る舞いを id が変わっても続けるだけ。
  */
-export function canceledBroadcasts(at: number): Declined {
+function canceledBroadcasts(at: number): Declined {
     const rows = orm()
         .select({
             channel: services.channel,
@@ -374,6 +374,28 @@ export function dedupeSkips<T extends Omit<Airing, 'type'> & { service_type: str
         blockedPrograms(),
         recordedEpisodes(at),
     );
+}
+
+/**
+ * ルール画面の下見の「録らない」({@link dedupeSkips})。人が取り消した放送は `applyRules` も
+ * 立てないので、「最初の放送」の候補に入れない
+ */
+export function previewSkips<
+    T extends Omit<Airing, 'type'> & { service_type: string; service_channel: string },
+>(hits: T[], at: number) {
+    const declined = canceledBroadcasts(at);
+    return dedupeSkips(
+        hits.filter((p) => !declined.has({ ...p, channel: p.service_channel })),
+        at,
+    );
+}
+
+/**
+ * 外れても引っ込めない予約か (`applyRules`)。手動のものと、もうすぐ始まる (猶予の内) もの。
+ * 録り始めたものは予約の候補 (`started_at` が空) に入らないので、ここには来ない
+ */
+export function keepsReservation(held: { manual: boolean; start_at: number }, at: number): boolean {
+    return held.manual || held.start_at < at + config.ruleRetractGrace;
 }
 
 export interface RuleSync {
