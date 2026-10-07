@@ -48,7 +48,7 @@
     import { write as remember, read as stored } from '#lib/keep.js';
     import { liveUpdates } from '#lib/live-updates.svelte.js';
     import { clearFailed, offline, removeLocal, saveOffline } from '#lib/offline.svelte.js';
-    import { matches } from '#lib/paging.js';
+    import { matches, normalize } from '#lib/paging.js';
     import { Paged, sentinel } from '#lib/paging.svelte.js';
     import { encodeSource, type FileSource } from '#lib/source.js';
     import { goto } from '$app/navigation';
@@ -550,10 +550,12 @@
      * **絞っている間は番組を全部開く** — 当たった回が見出しの奥に隠れていると、
      * 絞った意味が無い
      */
+    /** 絞り込みが効いているか。空白だけなら何も絞らない (`matches` と同じ読み方) */
+    const filtering = $derived(normalize(recordingQuery).trim() !== '');
     const recordingLines = $derived<GroupLine<RightRow>[]>(
         grouped
             ? groupLines(groupBySeries(recordingRows), (group) =>
-                  recordingQuery !== '' ? !closedWhileFiltering.has(group) : openedGroups.has(group),
+                  filtering ? !closedWhileFiltering.has(group) : openedGroups.has(group),
               )
             : flatLines(recordingRows),
     );
@@ -571,7 +573,7 @@
     });
 
     function toggleGroup(group: string): void {
-        const set = recordingQuery !== '' ? closedWhileFiltering : openedGroups;
+        const set = filtering ? closedWhileFiltering : openedGroups;
         if (set.has(group)) set.delete(group);
         else set.add(group);
     }
