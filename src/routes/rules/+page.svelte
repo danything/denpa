@@ -203,6 +203,27 @@
                                 </p>
                             </details>
                         </div>
+                        {#if data.origin !== null}
+                            <!--
+                                **録画から来たとき。** 何を元に入れたのかと、次に何を押せばよいかを1行で。
+                                このシリーズを既に録っているルールがあれば、作らずにそちらを案内する
+                            -->
+                            {#if !data.origin.found}
+                                <p class="notice warning small" data-testid="rule-origin">録画が見つかりませんでした</p>
+                            {:else if data.origin.rule !== null}
+                                <p class="notice info small" data-testid="rule-origin">
+                                    この番組はルール「<a href={resolve(`rules?edit=${data.origin.rule.id}`)} data-testid="rule-origin-link">{data.origin.rule.name}</a>」で録っています{data.origin.rule.enabled ? '' : ' (いまは無効)'}
+                                </p>
+                            {:else if data.origin.prefilled}
+                                <p class="notice info small" data-testid="rule-origin">
+                                    録画「{data.origin.name}」から条件を入れました。下の一覧で確かめて「追加」を押してください
+                                </p>
+                            {:else}
+                                <p class="notice warning small" data-testid="rule-origin">
+                                    「{data.origin.name}」から番組名を読み取れませんでした。キーワードを入れてください
+                                </p>
+                            {/if}
+                        {/if}
                         {#if data.editing}
                             <input type="hidden" name="id" value={data.editing.id} />
                             <!-- 「この条件で何が録れるか見る」は GET でこの画面に戻ってくる。
@@ -252,6 +273,27 @@
                                     空白で区切ると<strong>どれか1つでも含む</strong>ものを除外します
                                 </span>
                             </label>
+                            <div class="field">
+                                <!-- 外したチェックは何も送らない。「外した」と「指定なし」を分けるための隠し (`dedupeOf`) -->
+                                <input type="hidden" name="dedupe" value="0" />
+                                <label class="check">
+                                    <input
+                                        type="checkbox"
+                                        name="dedupe"
+                                        value="1"
+                                        checked={data.seed?.dedupe ?? true}
+                                        data-testid="rule-dedupe"
+                                    />
+                                    <span class="label">同じ回は最初の放送だけ録る</span>
+                                </label>
+                                <span class="hint">再放送や別の局の同じ回は録りません</span>
+                                <details class="more">
+                                    <summary>詳しく</summary>
+                                    <p>
+                                        同じ回かどうかは番組名のシリーズ名と話数・副題で見ます。同じ時刻に流れているなら字幕のあるもの、次に BS/CS を選びます。選んだ放送がチューナー不足で録れないときは、次の放送で録ります。話数も副題も無い番組は、同じ時刻の同時放送だけをまとめます。
+                                    </p>
+                                </details>
+                            </div>
                             <div class="field">
                                 <label class="field">
                                     <span class="label">優先度</span>
@@ -468,6 +510,12 @@
                             </span>
                         {/if}
                         <!-- 重なりを見るのは出している分だけ (`readPreview`)。全部は見ていないと分かる書き方にする -->
+                        {#if preview.skipped > 0}
+                            <!-- 録らないものも行に出す。数は全体の数 (下見の 100 件の中ではない) -->
+                            <span class="small muted normal" data-testid="preview-skipped">
+                                (うち同じ回の {preview.skipped} 件は録りません)
+                            </span>
+                        {/if}
                         {#if preview.conflicts > 0}
                             <span class="tag error outline">
                                 {preview.total > preview.programs.length ? '表示分のうち' : ''}競合 {preview.conflicts} 件
@@ -492,7 +540,7 @@
                         </div>
                         <ul class="preview-list">
                             {#each preview.programs as program (program.id)}
-                                <li class="preview-row small" data-testid="preview-row" data-program-id={program.id}>
+                                <li class="preview-row small" class:skipped={program.skip !== null} data-testid="preview-row" data-program-id={program.id}>
                                     <!--
                                 押すと番組詳細が出る。予約一覧・番組表と同じもの。
 
@@ -520,6 +568,9 @@
                                             {#if !program.matched}
                                                 <span class="tag">条件外</span>
                                             {/if}
+                                            {#if program.skip !== null}
+                                                <span class="tag" data-testid="preview-skip">録らない</span>
+                                            {/if}
                                             <span class="truncate">{program.name}</span>
                                         </div>
                                         <div class="tiny muted">
@@ -536,6 +587,14 @@
                                     3本ぶつかっていても1本しか見えず、どれを諦めれば
                                     いいのかが読めなかった
                                 -->
+                                        {#if program.skip !== null}
+                                            <!-- なぜ録らないのか。どの放送で録るのかまで書けば、確かめに行ける -->
+                                            <div class="tiny muted" data-testid="preview-skip-reason">
+                                                {program.skip.kind === 'repeat'
+                                                    ? `同じ回を ${program.skip.service_name} (${dateTime(program.skip.start_at)}) で録ります`
+                                                    : `同じ回は録画済みです (${program.skip.service_name} ・ ${dateTime(program.skip.start_at)})`}
+                                            </div>
+                                        {/if}
                                         {#if program.conflict_reason}
                                             <div class="text-error tiny">
                                                 {program.conflict_reason}
@@ -612,6 +671,9 @@
                             <!-- 優先度と予約数は札で。列にしていた頃は見出しが無いと何の数か分からなかった -->
                             <span class="tag">優先度 {rule.priority}</span>
                             <span class="tag">予約 {rule.reservations} 件</span>
+                            {#if rule.dedupe}
+                                <span class="tag" title="同じ回は最初の放送だけ録る">同じ回は1度</span>
+                            {/if}
                         </div>
                         <div class="conditions small">
                             <!-- どこを見て当たったのか分からないと、絞り込みの直しようがない -->
@@ -990,6 +1052,10 @@
     }
     .preview-open:hover {
         background: color-mix(in srgb, var(--dp-base-200) 60%, transparent);
+    }
+    /* 録らない行 (同じ回の2回目以降)。消さずに出すが、録るものより沈める */
+    .preview-row.skipped .preview-open {
+        opacity: 0.6;
     }
     .tight {
         --gap: 0.25rem 0.5rem;

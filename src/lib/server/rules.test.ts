@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import type { Program, Rule } from '../types';
-import { compile, likePatterns, matches } from './rules';
+import { compile, coveringRule, likePatterns, matches, prefillFrom } from './rules';
 
 /**
  * ルールの判定。DBには触らない (matches は純粋関数にしてある)。
@@ -21,6 +21,7 @@ function rule(fields: Partial<Rule>): Rule {
         genres: null,
         enabled: true,
         priority: 2,
+        dedupe: false,
         source: null,
         created_at: 0,
         ...fields,
@@ -123,5 +124,48 @@ describe('下見の SQL 前絞り (likePatterns)', () => {
 
     test('語が無ければ null', () => {
         expect(likePatterns(compiledOf(''))).toBeNull();
+    });
+});
+
+/** 録画から作るルールの下書きと、このシリーズを既に録っているルール */
+describe('録画からルールを作る', () => {
+    const recording = {
+        name: '[新]テストアニメ #1「はじまり」[字]',
+        series: 'テストアニメ',
+        service_id: 211,
+        genre_detail: [{ lv1: 7, lv2: 0 }],
+    };
+
+    test('キーワードはシリーズ名、ジャンルは大分類だけ', () => {
+        expect(prefillFrom(recording)).toEqual({ keyword: 'テストアニメ', genres: ['7'] });
+    });
+
+    test('シリーズ名を持たない録画は番組名から切り出す', () => {
+        expect(prefillFrom({ ...recording, series: '', genre_detail: null })).toEqual({
+            keyword: 'テストアニメ',
+            genres: null,
+        });
+    });
+
+    test('番組名が空なら下書きは作らない (ジャンルだけのルールになる)', () => {
+        expect(prefillFrom({ ...recording, name: '', series: '' })).toBeNull();
+    });
+
+    test('シリーズ名に当たるルールがあればそれを返す。無効のものより有効のものを先に', () => {
+        const off = rule({ id: 1, keyword: 'テストアニメ', enabled: false });
+        const on = rule({ id: 2, keyword: 'テスト アニメ' });
+        expect(coveringRule([off, on], recording)?.id).toBe(2);
+        expect(coveringRule([off], recording)?.id).toBe(1);
+    });
+
+    test('録れた回の題名にしか当たらないルール ([新]) は、シリーズを録っているとは言わない', () => {
+        expect(coveringRule([rule({ keyword: '[新]' })], recording)).toBeUndefined();
+    });
+
+    test('ジャンルや局で外れるルールは当たらない', () => {
+        expect(coveringRule([rule({ keyword: 'テストアニメ', genres: ['1'] })], recording)).toBeUndefined();
+        expect(
+            coveringRule([rule({ keyword: 'テストアニメ', service_ids: [999] })], recording),
+        ).toBeUndefined();
     });
 });

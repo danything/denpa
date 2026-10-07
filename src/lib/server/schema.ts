@@ -279,6 +279,13 @@ export const rules = sqliteTable('rules', {
      * ルールは 1、手動予約は 2。比べる相手は予約どうしだけなので小さいところから数える
      */
     priority: integer('priority').notNull().default(1),
+    /**
+     * **同じ回は最初の放送だけ録る** (`episode.firstAirings`)。局を替えた再放送・
+     * 同時放送のうち、いちばん早いもの (同時なら字幕付き → 衛星) だけを予約する。
+     * 画面で新しく作るルールは入れた状態で始まる。列を足す前のルールは 0 のまま
+     * (今までどおり全部録る。黙って振る舞いを変えない)
+     */
+    dedupe: flag('dedupe').notNull().default(sql`0`),
     created_at: integer('created_at').notNull(),
     /** 引き継ぎ元での識別子 (例: epgstation:12)。自分で作ったものは NULL */
     source: text('source'),

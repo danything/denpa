@@ -1,0 +1,1 @@
+ALTER TABLE `rules` ADD `dedupe` integer DEFAULT 0 NOT NULL;
