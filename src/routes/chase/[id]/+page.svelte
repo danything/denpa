@@ -15,18 +15,14 @@
     import Icon from '#lib/components/player/Icon.svelte';
     import InfoBlock from '#lib/components/player/InfoBlock.svelte';
     import {
-        BACKGROUND,
         CAMERA,
         CAPTION,
         CLOSE,
-        EXPAND,
         OVERLAY,
         OVERLAY_BTN,
         OVERLAY_ROUND,
         PAUSE,
-        PIP,
         PLAY,
-        SHRINK,
         SOUND_OFF,
         SOUND_ON,
     } from '#lib/components/player/icons.js';
@@ -38,6 +34,7 @@
     import { pictureInPicture } from '#lib/components/player/pip.svelte.js';
     import SpeedMenu, { SPEED_KEY, storedSpeed } from '#lib/components/player/SpeedMenu.svelte';
     import StageNote from '#lib/components/player/StageNote.svelte';
+    import StageTail from '#lib/components/player/StageTail.svelte';
     import { snapshotter } from '#lib/components/player/shot.svelte.js';
     import { videoFrame } from '#lib/components/player/snapshot.js';
     import Toasts, { type Notice } from '#lib/components/Toasts.svelte';
@@ -429,38 +426,7 @@
                     />
                 </Extras>
 
-                <!--
-                    **小窓 (PiP)。** ページから出せない端末 (iPhone・iPad のホーム画面から開いたもの・口の無いブラウザ) では
-                    出さない ([pip.svelte.ts](../../../lib/components/player/pip.svelte.ts))。狭い枠では「ほか」に畳む
-                -->
-                <!-- **バックグラウンド再生。** 既定は切で、裏に回したら止める。端末ごとに覚える (`background.svelte.ts`) -->
-                <Extras>
-                    <ControlButton
-                        icon={BACKGROUND}
-                        label={background.on ? 'バックグラウンド再生をやめる' : 'バックグラウンド再生を入れる'}
-                        on={background.on}
-                        testid="chase-background"
-                        onclick={() => background.toggle()}
-                    />
-                </Extras>
-                {#if pip.available}
-                    <Extras>
-                        <ControlButton
-                            icon={PIP}
-                            label={pip.active ? '小窓をやめる' : '小窓で観る'}
-                            on={pip.active}
-                            testid="chase-pip"
-                            onclick={() => pip.toggle()}
-                        />
-                    </Extras>
-                {/if}
-
-                <ControlButton
-                    icon={stage.fullscreened ? SHRINK : EXPAND}
-                    label={stage.fullscreened ? '全画面をやめる' : '全画面'}
-                    testid="chase-full"
-                    onclick={() => stage.full()}
-                />
+                <StageTail prefix="chase" {background} {pip} {fullscreen} />
             </div>
         </ControlBar>
 
