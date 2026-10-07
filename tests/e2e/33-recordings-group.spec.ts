@@ -104,9 +104,17 @@ test.describe('録画一覧のまとめて表示', () => {
         const toggle = page.getByTestId('recordings-group-toggle');
         await expect(toggle).toHaveAttribute('aria-pressed', 'false');
         await expect(toggle).toHaveAccessibleName('まとめて表示');
+        // 入っていないときは枠だけの灰色
+        await expect(toggle).toHaveClass(/\bsecondary\b/);
 
         await toggle.click();
         await expect(toggle).toHaveAttribute('aria-pressed', 'true');
+        /*
+         * **入っているときは主の色で塗る** (ライブの種別の切り替えと同じ)。灰色の塗りと
+         * 灰色の枠で分けていた頃は、入っているのか見分けが付かなかった
+         */
+        await expect(toggle).not.toHaveClass(/\bsecondary\b/);
+        await expect(toggle).not.toHaveClass(/\boutline\b/);
 
         // 閉じた見出しと1本ものが、いちばん新しい回の日付で並ぶ
         expect((await listed(page)).slice(0, 4)).toEqual([
@@ -186,5 +194,52 @@ test.describe('録画一覧のまとめて表示', () => {
         await expect.poll(async () => (await scroll(page)).rest).toBeLessThanOrEqual(1);
         await open(page);
         await expect(page.getByTestId('recordings-group-toggle')).toHaveAttribute('aria-pressed', 'false');
+    });
+
+    /**
+     * **録画からルールを作る。** シリーズ名を入れた下書きを持ってルールの画面へ行き、
+     * 確かめてから保存する。作ったあとに同じ番組から来れば、作らずにそのルールを案内する
+     */
+    test('番組の見出しと録画の詳細から、その番組のルールを作れる', async ({ page }) => {
+        await goto(page, '/');
+        await page.getByTestId('recordings-group-toggle').click();
+        const anime = page.locator('[data-testid="recording-group"][data-group="グループ試験アニメ"]');
+        // 閉じている番組には出さない (見出しが並ぶだけの一覧を押すもので埋めない)
+        await expect(page.getByTestId('group-rule')).toHaveCount(0);
+        await anime.click();
+        await page.getByTestId('group-rule').click();
+
+        // 下書きは URL に載る (「何が録れるか見る」と同じ形)。同じ回は最初の放送だけ、が入っている
+        await expect(page).toHaveURL(/\/rules\?.*keyword=/);
+        await page.locator('[data-hydrated="true"]').waitFor();
+        await expect(page.getByTestId('rule-keyword')).toHaveValue('グループ試験アニメ');
+        await expect(page.getByTestId('rule-dedupe')).toBeChecked();
+        await expect(page.getByTestId('rule-origin')).toContainText('条件を入れました');
+
+        try {
+            await page.getByTestId('rule-submit').click();
+            // 作ったら、この番組はそのルールで録っていると出る
+            await expect(page.getByTestId('rule-origin')).toContainText('で録っています');
+            await expect(page.getByTestId('rule-origin-link')).toHaveText('グループ試験アニメ');
+
+            // 録画の詳細からも同じ入口。もうルールがあるので、作らずにそちらを案内する
+            await goto(page, '/');
+            await anime.click();
+            await page.getByTestId('recording-list').getByText('グループ試験アニメ #2').click();
+            const detail = page.getByTestId('program-detail');
+            await detail.getByTestId('detail-more').click();
+            await detail.getByTestId('rule-from-recording').click();
+            await expect(page).toHaveURL(/\/rules\?from=\d+$/);
+            await expect(page.getByTestId('rule-origin')).toContainText('で録っています');
+            await expect(page.getByTestId('rule-keyword')).toHaveValue('');
+        } finally {
+            // 後続に残さない
+            await goto(page, '/rules');
+            const made = page.getByTestId('rule-row').filter({ hasText: 'グループ試験アニメ' });
+            if ((await made.count()) > 0) {
+                await made.first().getByTestId('rule-delete').click();
+                await expect(made).toHaveCount(0);
+            }
+        }
     });
 });

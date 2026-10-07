@@ -7,11 +7,28 @@ import { config } from '#lib/server/config.js';
 import { type Capacity, contending, type Occupant, rivalsOf } from '#lib/server/conflict.js';
 import { now, orm } from '#lib/server/db.js';
 import { CURRENT_SERVICES, watchableServices } from '#lib/server/epg.js';
+import { firstAirings, type Skip } from '#lib/server/episode.js';
 import { relative } from '#lib/server/paths.js';
 import { cancel, reserve } from '#lib/server/reservations.js';
-import { applyRules, compile, haystack, likePatterns, matchesCompiled } from '#lib/server/rules.js';
+import {
+    applyRules,
+    blockedPrograms,
+    compile,
+    coveringRule,
+    haystack,
+    likePatterns,
+    matchesCompiled,
+    prefillFrom,
+    recordedEpisodes,
+} from '#lib/server/rules.js';
 import { resolveConflicts, tunerCapacity } from '#lib/server/scheduler.js';
-import { programs, reservations, rules as ruleTable, services as serviceTable } from '#lib/server/schema.js';
+import {
+    programs,
+    recordings,
+    reservations,
+    rules as ruleTable,
+    services as serviceTable,
+} from '#lib/server/schema.js';
 import { settings } from '#lib/server/settings.js';
 import type { Program, Rule } from '#lib/types.js';
 
@@ -45,6 +62,8 @@ interface Conditions {
     serviceIds: number[] | null;
     serviceTypes: string[] | null;
     genres: string[] | null;
+    /** 同じ回は最初の放送だけ録る (`rules.dedupe`) */
+    dedupe: boolean;
     /** 何も入っていない。全番組に当たってディスクを埋めるので、保存はさせない */
     empty: boolean;
 }
@@ -73,8 +92,23 @@ function conditionsOf(fields: Fields): Conditions {
         serviceIds: some(ids),
         serviceTypes: some(types),
         genres: some(genres),
+        dedupe: dedupeOf(fields),
         empty: keyword === '' && ids.length === 0 && types.length === 0 && genres.length === 0,
     };
+}
+
+/**
+ * 「同じ回は最初の放送だけ」。フォームは**隠しの `0` とチェックの `1`** を両方送る
+ * (外したチェックは何も送らないので、隠しが無いと「外した」と「指定なし」が
+ * 区別できない)。
+ *
+ * **指定なしなら入れる** — 番組表の検索から来たときと、録画から作るとき。
+ * 新しく作るルールはこれが既定。既にあるルールは編集画面がいまの値を送るので、
+ * ここで変わることはない
+ */
+function dedupeOf(fields: Fields): boolean {
+    const sent = fields.getAll('dedupe').map(String);
+    return sent.length === 0 || sent.includes('1');
 }
 
 /**
@@ -107,6 +141,7 @@ function conditionsFrom(params: URLSearchParams): Rule | null {
          * フォームの値は全部 URL に乗っている — 読まなければ落ちるだけ
          */
         priority: rulePriority(params),
+        dedupe: conditions.dedupe,
         source: null,
         created_at: 0,
     };
@@ -119,6 +154,8 @@ function conditionsFrom(params: URLSearchParams): Rule | null {
  */
 export interface Preview {
     total: number;
+    /** 同じ回の2回目以降で、録らないもの (`PreviewRow.skip`) */
+    skipped: number;
     programs: PreviewRow[];
     conflicts: number;
     failed: string | null;
@@ -148,6 +185,11 @@ export interface PreviewRow {
     conflicts: string[];
     /** スケジューラが既にチューナー不足と判断していれば、その理由 */
     conflict_reason: string | null;
+    /**
+     * **録らない理由** (同じ回は最初の放送だけ。`episode.firstAirings`)。録るなら null。
+     * `repeat` は同じ回を別の放送で録る (その放送の局と時刻)、`recorded` はもう録ってある
+     */
+    skip: { kind: 'repeat' | 'recorded'; service_name: string; start_at: number } | null;
 }
 
 interface Pending {
@@ -214,6 +256,27 @@ export async function load({ url }) {
      * ?edit=<id> と書き換えたフォームの値が一緒に飛んでくるので、保存済みのほうを
      * 使うと**いま画面に入っている条件ではない結果**が出てしまう。
      */
+    const origin = originOf(url);
+    /*
+     * 録画から来た (`?from=<録画ID>`) ときは、下書きの条件を URL に載せて出直す。
+     * **条件はいつも URL にある**ので (「何が録れるか見る」と同じ形)、下見も
+     * フォームの初期値もそのまま組める。既にこのシリーズを録っているルールが
+     * あれば出直さず、そちらへの入口を出す
+     */
+    if (
+        origin !== null &&
+        origin.rule === null &&
+        origin.prefill !== null &&
+        !url.searchParams.has('keyword')
+    ) {
+        const query = new URLSearchParams({
+            keyword: origin.prefill.keyword,
+            dedupe: '1',
+            from: String(origin.id),
+        });
+        for (const genre of origin.prefill.genres ?? []) query.append('genres', genre);
+        redirect(303, relative(url, `/rules?${query}`));
+    }
     const conditions = conditionsFrom(url.searchParams) ?? editing ?? null;
     const wanted = conditions !== null && url.searchParams.size > 0;
 
@@ -235,7 +298,7 @@ export async function load({ url }) {
             return { ...readPreview(conditions as Rule), failed: null };
         } catch (error) {
             console.error('[rules] 下見を組めませんでした', error);
-            return { total: 0, programs: [], conflicts: 0, failed: String(error) };
+            return { total: 0, skipped: 0, programs: [], conflicts: 0, failed: String(error) };
         }
     }
 
@@ -289,6 +352,23 @@ export async function load({ url }) {
         );
 
         /*
+         * **同じ回は最初の放送だけ。** 録らないものも行には出す (黙って消すと、
+         * 条件が当たっていないのか、当たったうえで外したのか読めない)。
+         * 選び方は予約を立てるときと同じもの (`rules.applyRules`)
+         */
+        const airings = hits.map((p) => ({ ...p, type: p.service_type }));
+        const skips = conditions.dedupe
+            ? firstAirings(airings, blockedPrograms(), recordedEpisodes(now()))
+            : new Map<number, Skip<(typeof airings)[number]>>();
+        const skipOf = (id: number): PreviewRow['skip'] => {
+            const skip = skips.get(id);
+            if (skip === undefined) return null;
+            return skip.kind === 'repeat'
+                ? { kind: 'repeat', service_name: skip.first.service_name, start_at: skip.first.start_at }
+                : { kind: 'recorded', service_name: skip.service_name, start_at: skip.start_at };
+        };
+
+        /*
          * 重なりを数える相手。**立っている予約と、この条件で録れる番組の両方。**
          *
          * 予約としか比べていなかった頃は、保存前のルールでは重なりが1件も
@@ -297,6 +377,8 @@ export async function load({ url }) {
          */
         const occupants = new Map<number, Occupant>();
         for (const p of hits) {
+            // 録らないものはチューナーを取り合わない
+            if (skips.has(p.id)) continue;
             occupants.set(p.id, {
                 programId: p.id,
                 name: p.name,
@@ -337,6 +419,7 @@ export async function load({ url }) {
                 conflicts: [],
                 conflict_reason:
                     held?.state === 'conflict' ? (held.conflict_reason ?? 'チューナーが足りません') : null,
+                skip: skipOf(p.id),
             };
         });
 
@@ -365,6 +448,7 @@ export async function load({ url }) {
                     conflicts: [],
                     conflict_reason:
                         held.state === 'conflict' ? (held.conflict_reason ?? 'チューナーが足りません') : null,
+                    skip: null,
                 });
             }
         }
@@ -384,6 +468,7 @@ export async function load({ url }) {
          */
         const shown = rows.slice(0, 100);
         for (const row of shown) {
+            if (row.skip !== null) continue;
             const where = occupants.get(row.id);
             if (where === undefined) continue;
             row.conflicts = contending(
@@ -402,6 +487,7 @@ export async function load({ url }) {
 
         return {
             total: rows.length,
+            skipped: skips.size,
             // 数えるのは**行の数**。1行に3本重なっていても、困っている番組は1つ
             conflicts: shown.filter((row) => row.conflicts.length > 0 || row.conflict_reason !== null).length,
             programs: shown,
@@ -438,11 +524,60 @@ export async function load({ url }) {
         services,
         editing: editing ?? null,
         seed: conditions,
+        /** 録画から作るとき、どの録画からか (`originOf`) */
+        origin:
+            origin === null
+                ? null
+                : {
+                      name: origin.name,
+                      found: origin.found,
+                      rule:
+                          origin.rule === null
+                              ? null
+                              : { id: origin.rule.id, name: origin.rule.name, enabled: origin.rule.enabled },
+                      prefilled: origin.prefill !== null,
+                  },
         /** 下見。**条件が付いているときだけ、後から流れてくる** */
         preview: wanted ? previewOf() : null,
         defaults,
         // 詳細の「視聴」を出すかどうか。決め方は番組表と揃えてある (watchableServices)
         watchable: watchableServices(now()),
+    };
+}
+
+/**
+ * **録画からルールを作るときの元** (`?from=<録画ID>`。録画の「この番組のルールを作る」)。
+ *
+ * 下書き (`rules.prefillFrom`) と、このシリーズを既に録っているルール
+ * (`rules.coveringRule`) を一緒に引く。ルールがあれば作らせずにそちらを案内する —
+ * 同じ番組のルールが2つあっても予約は1本だが、どちらを直せばいいか分からなくなる
+ */
+function originOf(url: URL) {
+    const raw = url.searchParams.get('from');
+    if (raw === null) return null;
+    const id = Number(raw);
+    const recording = Number.isInteger(id)
+        ? orm()
+              .select({
+                  name: recordings.name,
+                  series: recordings.series,
+                  service_id: recordings.service_id,
+                  genre_detail: recordings.genre_detail,
+                  type: serviceTable.type,
+              })
+              .from(recordings)
+              .leftJoin(serviceTable, eq(serviceTable.id, recordings.service_id))
+              .where(eq(recordings.id, id))
+              .get()
+        : undefined;
+    if (recording === undefined) return { id, name: '', found: false, prefill: null, rule: null };
+    const rules = orm().select().from(ruleTable).all();
+    return {
+        id,
+        name: recording.name,
+        found: true,
+        prefill: prefillFrom(recording),
+        rule: coveringRule(rules, recording, recording.type ?? undefined) ?? null,
     };
 }
 
@@ -509,7 +644,7 @@ async function reapply(rule?: number): Promise<number> {
 const EMPTY_RULE = 'キーワード・チャンネル・ジャンルのいずれかを指定してください';
 
 /**
- * create と update で同じ8つ。**焼き方は書かない** — エンコードもCMも全体設定で、
+ * create と update で同じもの。**焼き方は書かない** — エンコードもCMも全体設定で、
  * 焼くときに読む
  */
 function ruleValues(conditions: Conditions, form: FormData) {
@@ -522,6 +657,7 @@ function ruleValues(conditions: Conditions, form: FormData) {
         service_types: conditions.serviceTypes,
         genres: conditions.genres,
         priority: rulePriority(form),
+        dedupe: conditions.dedupe,
     };
 }
 

@@ -4,9 +4,10 @@ import { parseSearchFields, type SearchField } from '../search';
 import type { Program, Rule } from '../types';
 import { config } from './config';
 import { now, orm } from './db';
-import { programs as programTable, reservations, rules as ruleTable, services } from './schema';
+import { episodeKey, firstAirings, type Taken } from './episode';
+import { programs as programTable, recordings, reservations, rules as ruleTable, services } from './schema';
 import { settings } from './settings';
-import { toHalfWidth } from './title';
+import { parseTitle, toHalfWidth } from './title';
 
 /** 空の並びは「指定なし」。NULL と同じに扱う */
 function nonEmpty<T>(list: T[] | null): T[] | null {
@@ -182,6 +183,70 @@ function textCache(program: Program): (fields: SearchField[]) => string {
     };
 }
 
+/** 録画から作るルールの下書き (`prefillFrom`) */
+export interface RulePrefill {
+    keyword: string;
+    genres: string[] | null;
+}
+
+/** 録画から読む分 */
+export interface RuleSource {
+    name: string;
+    series: string;
+    service_id: number;
+    genre_detail: Genre[] | null;
+}
+
+/** シリーズ名。録るときに切り出したもの、無ければ番組名から (録画一覧の「まとめて表示」と同じ) */
+function seriesOf(source: Pick<RuleSource, 'name' | 'series'>): string {
+    const series = source.series.trim();
+    return series !== '' ? series : source.name.trim() === '' ? '' : parseTitle(source.name).series.trim();
+}
+
+/**
+ * **録画から作るルールの下書き** (録画の「この番組のルールを作る」)。
+ *
+ * - キーワードは**シリーズ名**。話数・副題・`[新]` を落とした名前なので、次の回にも当たる。
+ *   ルールのキーワードは空白で区切った語を**すべて含む**もので、引用の書き方は無い。
+ *   シリーズ名は番組名の一部なので、空白で割れても同じ番組に当たる
+ * - 局は絞らない。同じ回が別の局で流れても、ルールの「同じ回は最初の放送だけ」が
+ *   いちばん早いものを選ぶ。局を絞ると、そちらで先に流れたときに遅いほうを待つことになる
+ * - ジャンルは**大分類だけ**入れる。シリーズ名が短いと別の番組まで拾うので、その歯止め。
+ *   中分類は局によって付け方が揺れるので使わない
+ *
+ * シリーズ名が読めなければ null (条件がジャンルだけになり、そのジャンルを全部録ってしまう)
+ */
+export function prefillFrom(source: RuleSource): RulePrefill | null {
+    const keyword = seriesOf(source);
+    if (keyword === '') return null;
+    const lv1 = source.genre_detail?.[0]?.lv1;
+    return { keyword, genres: lv1 === undefined ? null : [String(lv1)] };
+}
+
+/**
+ * **このシリーズを既に録っているルール。** 有効なものを先に返す。
+ *
+ * 当てるのは録れた回の題名ではなく**シリーズ名だけ**。`[新]` で拾った第1話は
+ * 「[新]」のルールにも当たるが、そのルールは第2話を録らない。
+ * 次の回の題名に何が付くかは分からないので、いちばん素の名前で確かめる
+ */
+export function coveringRule(rules: Rule[], source: RuleSource, serviceType?: string): Rule | undefined {
+    const name = seriesOf(source);
+    if (name === '') return undefined;
+    const future = { name, description: '', extended: null };
+    const program = {
+        service_id: source.service_id,
+        is_free: true,
+        genres: null,
+        genre_detail: source.genre_detail,
+    };
+    return [...rules]
+        .sort((a, b) => Number(b.enabled) - Number(a.enabled))
+        .find((rule) =>
+            matchesCompiled(compile(rule), program, serviceType, false, (fields) => haystack(future, fields)),
+        );
+}
+
 /** 取り消し済みの放送に、番組が当たるかどうか */
 interface Declined {
     has(program: Pick<Program, 'name' | 'start_at'> & { channel: string }): boolean;
@@ -253,6 +318,49 @@ function canceledBroadcasts(at: number): Declined {
     };
 }
 
+/**
+ * 「録ってある回」として見る範囲。同じ回の再放送は**だいたい同じクールの内**に
+ * 流れるので、それより昔の録画は読まない (毎回ぜんぶ読むと録画の数だけ重くなる)
+ */
+const TAKEN_WINDOW = 30 * 24 * 60 * 60 * 1000;
+
+/**
+ * **もう録ってある回** (`episode.firstAirings` の `taken`)。
+ *
+ * これが無いと、いちばん早い放送を録り終えた途端 (番組表の「これから」から
+ * 抜けた途端)、次の再放送が「いちばん早い放送」に繰り上がって録れてしまう。
+ *
+ * **失敗した録画は数えない** — 再放送は録り直す好機。消したものは数える
+ * (観て消したものをまた録っても困る)
+ */
+export function recordedEpisodes(at: number): Taken {
+    const rows = orm()
+        .select({
+            name: recordings.name,
+            start_at: recordings.start_at,
+            service_name: recordings.service_name,
+        })
+        .from(recordings)
+        .where(and(gt(recordings.start_at, at - TAKEN_WINDOW), ne(recordings.state, 'failed')))
+        .all();
+    const taken: Taken = new Map();
+    for (const row of rows) {
+        const key = episodeKey(row.name);
+        if (key !== null && !taken.has(key)) taken.set(key, row);
+    }
+    return taken;
+}
+
+/** チューナー不足で弾かれている番組。同じ回の次の放送で拾う (`episode.firstAirings` の `blocked`) */
+export function blockedPrograms(): Set<number> {
+    const rows = orm()
+        .select({ id: reservations.program_id })
+        .from(reservations)
+        .where(eq(reservations.state, 'conflict'))
+        .all();
+    return new Set(rows.map((row) => row.id));
+}
+
 export interface RuleSync {
     /** 新しく立てた予約 */
     created: number;
@@ -322,7 +430,7 @@ export function applyRules(options: { rule?: number } = {}): RuleSync {
     const declined = canceledBroadcasts(at);
 
     /** 番組 → 受け持つルール。同じ番組に何本当たっても予約は1つで、**先勝ち** */
-    const wanted = new Map<number, { rule: Rule; program: Program }>();
+    const wanted = new Map<number, { rule: Rule; program: (typeof programs)[number] }>();
     /**
      * **同じ放送は1本だけ。** 同じ物理チャンネルの中で、同じ時刻に同じ題名が
      * 流れていたら同じ放送とみなし、いちばん小さい局だけを残す。
@@ -362,6 +470,21 @@ export function applyRules(options: { rule?: number } = {}): RuleSync {
             wanted.set(program.id, { rule: candidate.rule, program });
             break;
         }
+    }
+
+    /*
+     * **同じ回は最初の放送だけ** (ルールの `dedupe`)。局を替えた再放送・同時放送のうち
+     * いちばん早いものだけ残す (`episode.firstAirings`)。外したものは予約を立てず、
+     * 立っていれば下で引っ込む (番組表が動いたときと同じ扱い・同じ猶予)
+     */
+    const deduping = [...wanted.values()].filter(({ rule }) => rule.dedupe);
+    if (deduping.length > 0) {
+        const skips = firstAirings(
+            deduping.map(({ program }) => ({ ...program, type: program.service_type })),
+            blockedPrograms(),
+            recordedEpisodes(at),
+        );
+        for (const id of skips.keys()) wanted.delete(id);
     }
 
     /** いまルールが立てている予約。手動と、録り始めたものは入らない */

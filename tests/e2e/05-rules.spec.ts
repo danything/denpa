@@ -50,6 +50,8 @@ test.describe('自動予約ルール', () => {
 
         await goto(page, '/rules');
         await page.getByTestId('rule-keyword').fill('テストアニメ');
+        // 偽の放送は同じ題名を何度も流す。見たいのは予約が立つことなので、同じ回を1度にまとめない
+        await page.getByTestId('rule-dedupe').uncheck();
         // チャンネルは既定で畳んである
         await page.getByTestId('channel-summary').click();
         await page.getByTestId('rule-services').locator(`input[value="${BS11.id}"]`).check();

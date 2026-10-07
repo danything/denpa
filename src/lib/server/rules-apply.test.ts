@@ -3,6 +3,7 @@ import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { eq } from 'drizzle-orm';
+import type { ChannelType } from '../types';
 
 /**
  * ルールを番組表に当て直して、予約をそろえるところ。
@@ -16,12 +17,19 @@ config.dbPath = join(mkdtempSync(join(tmpdir(), 'denpa-rules-')), 'denpa.db');
 
 const { now, orm } = await import('./db');
 const { applyRules } = await import('./rules');
-const { programs, reservations: reservationTable, rules: ruleTable, services } = await import('./schema');
+const {
+    programs,
+    recordings,
+    reservations: reservationTable,
+    rules: ruleTable,
+    services,
+} = await import('./schema');
 
 const SERVICE = 3239123608;
 const HOUR = 60 * 60 * 1000;
 
 function clear(): void {
+    orm().delete(recordings).run();
     orm().delete(reservationTable).run();
     orm().delete(programs).run();
     orm().delete(ruleTable).run();
@@ -51,7 +59,7 @@ function reset(): void {
 }
 
 /** 局を1つ置く (置き直し)。MX の枝番も同じ物理チャンネルに乗る */
-function sub(id: number, name: string, channel = 'T16'): void {
+function sub(id: number, name: string, channel = 'T16', type: ChannelType = 'GR'): void {
     orm().delete(services).where(eq(services.id, id)).run();
     orm()
         .insert(services)
@@ -60,7 +68,7 @@ function sub(id: number, name: string, channel = 'T16'): void {
             service_id: id % 100000,
             network_id: 32391,
             name,
-            type: 'GR',
+            type,
             service_type: 1,
             channel,
             updated_at: now(),
@@ -92,11 +100,20 @@ function program(id: number, name: string, startsIn = 3 * HOUR): void {
     on(SERVICE, id, name, startsIn);
 }
 
-function rule(id: number, keyword: string, enabled = true, priority = 1): void {
+function rule(id: number, keyword: string, enabled = true, priority = 1, dedupe = false): void {
     orm().delete(ruleTable).where(eq(ruleTable.id, id)).run();
     orm()
         .insert(ruleTable)
-        .values({ id, name: keyword, keyword, search_fields: 'name', enabled, priority, created_at: now() })
+        .values({
+            id,
+            name: keyword,
+            keyword,
+            search_fields: 'name',
+            enabled,
+            priority,
+            dedupe,
+            created_at: now(),
+        })
         .run();
 }
 
@@ -538,5 +555,104 @@ describe('取り消した放送には立てない', () => {
         sub(3273801040, 'テレビ愛知', 'T23');
         on(3273801040, 21, '幼女戦記Ⅱ #5「貧乏籤」');
         expect(applyRules()).toMatchObject({ created: 1 });
+    });
+});
+
+/**
+ * **同じ回は最初の放送だけ** (ルールの `dedupe`)。判定そのものは `episode.test.ts` で見ていて、
+ * ここではそれが予約にどう効くか (立てない・引っ込める・録ったものを数える) を見る
+ */
+describe('同じ回は最初の放送だけ録る', () => {
+    const BS11 = 400211;
+    const DAY = 24 * HOUR;
+
+    function withBs(): void {
+        reset();
+        sub(BS11, 'BS11', 'BS09_0', 'BS');
+    }
+
+    test('いちばん早い放送だけ予約し、局を替えた再放送には立てない', () => {
+        withBs();
+        rule(1, 'テストアニメ', true, 1, true);
+        program(10, '[新]テストアニメ #1「はじまり」');
+        on(BS11, 11, 'テストアニメ #1「はじまり」', DAY);
+        program(12, 'テストアニメ #2「つづき」', 7 * DAY);
+
+        expect(applyRules()).toMatchObject({ created: 2 });
+        expect(reservations().map((r) => r.program_id)).toEqual([10, 12]);
+    });
+
+    test('入れていないルール (列を足す前のもの) は今までどおり全部録る', () => {
+        withBs();
+        rule(1, 'テストアニメ');
+        program(10, 'テストアニメ #1');
+        on(BS11, 11, 'テストアニメ #1', DAY);
+
+        applyRules();
+        expect(reservations().map((r) => r.program_id)).toEqual([10, 11]);
+    });
+
+    test('同じ時刻の同時放送は字幕のある衛星を録る', () => {
+        withBs();
+        rule(1, 'テストアニメ', true, 1, true);
+        program(10, 'テストアニメ #1');
+        on(BS11, 11, 'テストアニメ #1[字]');
+
+        applyRules();
+        expect(reservations().map((r) => r.program_id)).toEqual([11]);
+    });
+
+    test('入れた後は、もう立っている再放送の予約を引っ込める', () => {
+        withBs();
+        rule(1, 'テストアニメ');
+        program(10, 'テストアニメ #1');
+        on(BS11, 11, 'テストアニメ #1', DAY);
+        applyRules();
+
+        rule(1, 'テストアニメ', true, 1, true);
+        expect(applyRules()).toMatchObject({ dropped: 1 });
+        expect(reservations().map((r) => r.program_id)).toEqual([10]);
+    });
+
+    test('最初の放送を録ったあと、再放送が繰り上がって録れることはない', () => {
+        withBs();
+        rule(1, 'テストアニメ', true, 1, true);
+        // 最初の放送はもう終わっていて、録画が残っている
+        orm()
+            .insert(recordings)
+            .values({
+                service_id: SERVICE,
+                service_name: 'TOKYO MX1',
+                name: '[新]テストアニメ #1「はじまり」',
+                start_at: base - DAY,
+                end_at: base - DAY + HOUR,
+                finished_at: base - DAY + HOUR,
+                created_at: now(),
+                updated_at: now(),
+            })
+            .run();
+        on(BS11, 11, 'テストアニメ #1「はじまり」', DAY);
+
+        expect(applyRules()).toMatchObject({ created: 0 });
+    });
+
+    test('最初の放送がチューナー不足で弾かれていたら、次の放送も予約する', () => {
+        withBs();
+        rule(1, 'テストアニメ', true, 1, true);
+        program(10, 'テストアニメ #1');
+        on(BS11, 11, 'テストアニメ #1', DAY);
+        applyRules();
+        expect(reservations().map((r) => r.program_id)).toEqual([10]);
+
+        orm()
+            .update(reservationTable)
+            .set({ state: 'conflict' })
+            .where(eq(reservationTable.program_id, 10))
+            .run();
+        applyRules();
+        expect(reservations()).toEqual([
+            { program_id: 10, rule_id: 1, state: 'conflict' },
+            { program_id: 11, rule_id: 1, state: 'scheduled' },
+        ]);
     });
 });

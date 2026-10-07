@@ -317,6 +317,20 @@
      * 録画の状態まで 'failed' にしていた頃は、中身のあるTSを持っているのに
      * ダウンロードまで消えていた
      */
+    /** 録画からルールを作る入口 (`rules/+page.server.ts` の `originOf`) */
+    function ruleFrom(id: number): string {
+        return resolve(`rules?from=${id}`);
+    }
+
+    /** 番組の見出しから作るルールの元。**いちばん新しい録画** (録り逃しだけの番組には出さない) */
+    function groupSource(group: SeriesGroup<RightRow>): number | null {
+        for (let i = group.items.length - 1; i >= 0; i--) {
+            const row = group.items[i]!;
+            if (row.kind === 'rec') return row.rec.id;
+        }
+        return null;
+    }
+
     function hasFile(rec: (typeof data.recordings)[number]): boolean {
         if (rec.deleted_at !== null) return false;
         if ((rec.library_path ?? rec.ts_path) === null) return false;
@@ -1099,6 +1113,17 @@
             <span class="row-meta">最新 {dateTime(group.newest.at)}</span>
         </span>
     </button>
+    <!--
+        開いた番組の頭に「この番組のルールを作る」。見出しそのものは開閉のボタンなので、
+        中には入れられない (押す的が入れ子になる)。中身の行と同じだけ下げて、その番組の
+        ものだと分かるようにする
+    -->
+    {@const source = open ? groupSource(group) : null}
+    {#if source !== null}
+        <div class="group-tools">
+            <a class="button small secondary outline" href={ruleFrom(source)} data-testid="group-rule">この番組のルールを作る</a>
+        </div>
+    {/if}
 {/snippet}
 
 <!--
@@ -1292,13 +1317,17 @@
                     </form>
                     <!--
                         **まとめて表示** (番組ごと。issue #480)。狭い列では絵だけにする
-                        (名前は aria-label で読む)。入っているかは aria-pressed と地の色で
+                        (名前は aria-label で読む)。入っているかは aria-pressed と地の色で。
+
+                        **入っているときは主の色で塗る** (ライブの種別の切り替えと同じ形)。
+                        灰色の塗り (`secondary`) と枠だけの灰色では、どちらが入っているのか
+                        見分けが付かなかった
                     -->
                     <button
                         type="button"
-                        class="secondary small group-toggle"
-                        class:outline={!grouped}
+                        class="small group-toggle {grouped ? '' : 'secondary outline'}"
                         aria-pressed={grouped}
+                        title={grouped ? 'まとめて表示中 (押すと戻します)' : '番組ごとにまとめて表示'}
                         aria-label="まとめて表示"
                         onclick={() => setGrouped(!grouped)}
                         data-testid="recordings-group-toggle"
@@ -1516,7 +1545,8 @@
                     </button>
                 {/if}
             {/if}
-            <!--
+        {/if}
+        <!--
                 **めったに押さないものの置き場。** 上に開く (フッターは画面の
                 下端に居るので、下に開くと枠から出る)。中身は上から
                 「持ち出す」「渡す」「直す」の順。
@@ -1536,6 +1566,7 @@
                     {#snippet child({ wrapperProps, props, open })}
                         <div {...wrapperProps}>
                             <div {...props} class="more-menu" hidden={!open} data-testid="detail-more-menu">
+                                {#if hasFile(rec)}
                                 <!--
                                     まだエンコードしていないものや、引き継いだ未エンコードの録画は
                                     生TSしか無い。配信は library_path ?? ts_path を返すので、
@@ -1616,12 +1647,24 @@
                                         </DropdownMenu.Item>
                                     </form>
                                 {/if}
+                                {/if}
+                                <!--
+                                    **この番組のルールを作る。** ルールの画面へ、シリーズ名を入れた
+                                    下書きを持って行く (保存はあちらで確かめてから)。既にこの番組を
+                                    録っているルールがあれば、あちらがそのルールを案内する
+                                -->
+                                <DropdownMenu.Item>
+                                    {#snippet child({ props: itemProps })}
+                                        <a {...itemProps} href={ruleFrom(rec.id)} class="menu-link" data-testid="rule-from-recording">
+                                            この番組のルールを作る
+                                        </a>
+                                    {/snippet}
+                                </DropdownMenu.Item>
                             </div>
                         </div>
                     {/snippet}
                 </DropdownMenu.Content>
             </DropdownMenu.Root>
-        {/if}
     {/if}
     <button type="button" class="secondary" onclick={() => detail.close()} data-testid="detail-close">閉じる</button>
 {/snippet}
@@ -1910,6 +1953,12 @@
     }
     .group-chevron.open {
         transform: rotate(90deg);
+    }
+    /* 開いた番組の頭の押すもの。中身の行と同じだけ下げる */
+    .rows > .group-tools {
+        padding: 0 0.75rem 0.5rem 2.25rem;
+        /* 見出しとの間には線を引かない (見出しの続き) */
+        border-top: 0;
     }
     /* 番組の中の行。一段下げて、左に線を引いてどの見出しの中かを見せる */
     .row.nested {

@@ -195,6 +195,8 @@ test.describe('操作したときの反応', () => {
         // ルールを作ると、条件に合う番組の予約がその場で立つ
         await goto(page, '/rules');
         await page.getByTestId('rule-keyword').fill('テストアニメ');
+        // 偽の放送は同じ題名を何度も流す。見たいのは予約が立つことなので、同じ回を1度にまとめない
+        await page.getByTestId('rule-dedupe').uncheck();
         await page.getByTestId('rule-submit').click();
         await expect(page.getByTestId('rule-row')).toHaveCount(1);
 
