@@ -124,11 +124,11 @@ export function remuxPlayer(
     }
 
     /** 後ろの捨ててよいぶんを捨てる。捨てたら true */
-    async function trim(): Promise<boolean> {
+    async function trim(mine: number): Promise<boolean> {
         const cut = video.currentTime - BEHIND;
         const first = buffered()[0];
         if (first === undefined || first[0] >= cut) return false;
-        await update((target) => target.remove(0, cut));
+        await update((target) => target.remove(0, cut), mine);
         return true;
     }
 
@@ -154,7 +154,7 @@ export function remuxPlayer(
             } catch (error) {
                 // 溜めきれない。後ろを捨てて入れ直す。捨てるものが無ければ観て減るのを待つ
                 if (!(error instanceof DOMException && error.name === 'QuotaExceededError')) throw error;
-                if (!(await trim())) {
+                if (!(await trim(mine))) {
                     await new Promise<void>((resolve) => {
                         wake = resolve;
                     });
@@ -199,7 +199,8 @@ export function remuxPlayer(
                     options.state('flowing');
                 }
                 // 後ろを捨てるのは足したついでに。捨てる長さが溜まってから (毎回は削らない)
-                if (video.currentTime - (buffered()[0]?.[0] ?? video.currentTime) > BEHIND * 2) await trim();
+                if (video.currentTime - (buffered()[0]?.[0] ?? video.currentTime) > BEHIND * 2)
+                    await trim(mine);
             }
             if (mine !== run) return;
             loadingFrom = null;
