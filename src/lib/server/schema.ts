@@ -442,6 +442,13 @@ export const recordings = sqliteTable(
          * 続けられるようにするため (`api/recordings/<id>/resume`)
          */
         resume_ms: integer('resume_ms'),
+        /**
+         * 末尾まで観た時刻。NULL なら**まだ観終えていない** (一覧の「未視聴」の印)。
+         * `resume_ms` は観終えると消えるので、未視聴と観終えたものを見分けられない。
+         * 書くのは末尾まで来たとき (`api/recordings/<id>/resume`) と、詳細の「視聴済みにする」。
+         * 消すのは「未視聴に戻す」だけ (観直して途中で止めても観終えたまま)
+         */
+        watched_at: integer('watched_at'),
     },
     (t) => [
         index('recordings_state').on(t.state),

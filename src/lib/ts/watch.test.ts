@@ -11,6 +11,7 @@ import {
     skipCmAtStart,
     skipTarget,
     tap,
+    watchedToEnd,
     zoneOf,
 } from './watch';
 
@@ -299,6 +300,21 @@ describe('続きから観る', () => {
 
     test('尺が分からなければ末尾の判断はしない', () => {
         expect(resumePoint(600, 0)).toBe(600);
+    });
+});
+
+/** 一覧の「未視聴」を外す境目。続きの目印を消す境目と揃える */
+describe('観終えたか', () => {
+    test('目印を消すところから先が観終えた', () => {
+        expect(watchedToEnd(1790, 1800)).toBe(true);
+        expect(resumePoint(1790, 1800)).toBeNull();
+        expect(watchedToEnd(1770, 1800)).toBe(false);
+    });
+
+    test('頭のそばや尺が分からないときは観終えていない', () => {
+        expect(watchedToEnd(5, 1800)).toBe(false);
+        expect(watchedToEnd(600, 0)).toBe(false);
+        expect(watchedToEnd(600, Number.NaN)).toBe(false);
     });
 });
 

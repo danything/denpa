@@ -262,9 +262,20 @@ test.describe('録画を観る', () => {
             return (await res.json()).resume;
         };
 
+        const watchedAt = async () => {
+            const list: { id: number; watchedAt: number | null }[] = await (
+                await request.get('/api/recordings')
+            ).json();
+            return list.find((rec) => String(rec.id) === id)?.watchedAt;
+        };
+
         expect(await put(600, 1800)).toBe(600);
+        // 途中ではまだ観終えていない (一覧の「未視聴」は進捗バーに替わるだけ)
+        expect(await watchedAt()).toBeNull();
         // 末尾まで観たものは忘れる。覚えるとエンドロールから始まってしまう
         expect(await put(1790, 1800)).toBeNull();
+        // 代わりに観終えた時刻が入る (一覧の「未視聴」の印が外れる)
+        expect(await watchedAt()).toEqual(expect.any(Number));
     });
 
     /**

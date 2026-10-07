@@ -252,6 +252,15 @@ export function resumePoint(at: number, length: number): number | null {
     return at;
 }
 
+/**
+ * 末尾まで観たか。**一覧の「未視聴」を外す境目** (`recordings.watched_at`)。
+ * 続きの目印を消す境目 (`resumePoint`) と同じにしておく — 片方だけ動くと、
+ * 目印は消えたのに未視聴のまま、が起きる。尺が分からなければ観終えたとは言わない
+ */
+export function watchedToEnd(at: number, length: number): boolean {
+    return Number.isFinite(at) && Number.isFinite(length) && length > 0 && at > length - RESUME_EDGE;
+}
+
 /** 末尾のここから先は「観終えた」とみなす (秒) */
 export const RESUME_EDGE = 30;
 /** 頭のここまでは「まだ観ていない」とみなす (秒) */

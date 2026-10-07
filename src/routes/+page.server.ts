@@ -1,9 +1,11 @@
 import { fail } from '@sveltejs/kit';
 import { and, asc, desc, eq, getTableColumns, inArray, isNull, like, ne, not, or, sql } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/sqlite-core';
+import { capacityLabel } from '#lib/format.js';
 import { GROUPED_COOKIE, storedGrouped } from '#lib/grouping.js';
 import { fileSize } from '#lib/server/chase.js';
-import { orm } from '#lib/server/db.js';
+import { now, orm } from '#lib/server/db.js';
+import { capacity } from '#lib/server/disk.js';
 import { cancel as cancelEncode, enqueue, isCanceling, pump } from '#lib/server/encoder.js';
 import { emit } from '#lib/server/events.js';
 import { deleteRecordingFiles, reconcile } from '#lib/server/files.js';
@@ -303,6 +305,8 @@ export function load({ url, cookies }) {
         // 予約はシリーズ名を持たないので、番組名から切り出す (録るときと同じ)
         .map((row) => ({ ...row, ...seriesGroup('', row.name) }));
 
+    const room = capacity();
+
     return {
         reservations,
         recordings,
@@ -310,6 +314,8 @@ export function load({ url, cookies }) {
         showFinished,
         showDeleted,
         q,
+        /** 録画の見出しに出す空きと、あと何時間録れるかの目安 (`disk.capacity`)。読めなければ null */
+        capacity: room === null ? null : capacityLabel(room.free, room.hours),
         /** まとめて表示 (`#lib/grouping.ts`)。サーバで描く形を、端末の覚えに合わせる */
         grouped: storedGrouped(cookies.get(GROUPED_COOKIE)),
     };
@@ -352,6 +358,25 @@ export const actions = {
         // 畳み終わってから返る。ここで待たないと、この直後の読み直しが
         // まだ「エンコード中」を拾って、押しても何も変わらないように見える
         await cancelEncode(id);
+        return { success: true };
+    },
+
+    /**
+     * 「視聴済みにする」「未視聴に戻す」(詳細の「その他…」)。**続きの位置は触らない** —
+     * 途中まで観たものを視聴済みにしても、続きから観たいことはある
+     */
+    watched: async ({ request }) => {
+        const form = await request.formData();
+        const recording = recordingFromForm(form);
+        if (recording === undefined) return fail(400, { message: '録画が見つかりません' });
+        const watched = form.get('watched') === '1';
+        orm()
+            .update(recordingTable)
+            .set({ watched_at: watched ? now() : null, updated_at: now() })
+            .where(eq(recordingTable.id, recording.id))
+            .run();
+        // 同じ一覧を見ているほかの端末の印も変える
+        emit('recordings');
         return { success: true };
     },
 

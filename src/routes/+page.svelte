@@ -308,6 +308,14 @@
     }
 
     /**
+     * **まだ観ていない** (一覧の点)。観終えた時刻 (`watched_at`) が無く、続きの位置も無いもの。
+     * 途中まで観たものは進捗バーのほうで分かるので点は付けない。観られないものにも付けない
+     */
+    function unwatched(rec: (typeof data.recordings)[number]): boolean {
+        return rec.watched_at === null && rec.resume_ms === null && watchLink(rec) !== null;
+    }
+
+    /**
      * ファイルを持っているか。**落とす口を出すかどうか。**
      *
      * **エンコードの失敗はここに出てこない。** 落ちたのは焼き直しのほうで
@@ -592,10 +600,20 @@
     右に押すもの。狭いところでは押すものが下へ回り込むだけで、出るものは変わらない。
     押すものは指で押せる大きさ (既定のボタン) にしてある
 -->
-{#snippet title(state: string, badge: string, name: string, testid: string)}
+<!--
+    `fresh` はまだ観ていない録画 (`unwatched`)。番組名の頭に小さな点を置く。
+    札 (「NEW」など) にしないのは、番組名に入っている [新] と紛れるのと、
+    状態の札と2つ並ぶと番組名が押し出されるため
+-->
+{#snippet title(state: string, badge: string, name: string, testid: string, fresh = false)}
     <div class="cluster">
         <span class="tag {badge}" data-testid={testid}>{state}</span>
-        <span class="row-name">{name}</span>
+        <span class="row-name">
+            {#if fresh}
+                <span class="unwatched-dot" role="img" aria-label="未視聴" data-testid="recording-unwatched"></span>
+            {/if}
+            {name}
+        </span>
     </div>
 {/snippet}
 
@@ -771,7 +789,7 @@
                         (rowState)。消したもの (deleted) も録画の状態から
                         決まるので、ここで書き分けることは何も無い
                     -->
-                    {@render title(shown.label, shown.badge, rec.name, 'recording-state')}
+                    {@render title(shown.label, shown.badge, rec.name, 'recording-state', unwatched(rec))}
                     {#if held !== undefined}
                         <!-- 端末に入っている印。保存中はエンコードと同じく割合を添える -->
                         <span
@@ -1009,6 +1027,8 @@
 {#snippet groupHead(group: SeriesGroup<RightRow>, open: boolean)}
     <!-- 見出しの絵は**いちばん新しい回のポスター**。焼いたものが無い回 (録り逃し・削除済み・焼く前) は飛ばして、その前の回を探す -->
     {@const poster = newestRec(group, (rec) => rec.library_path !== null && rec.deleted_at === null)}
+    <!-- 閉じたままでも、まだ観ていない回があると分かるように数を添える (行の点と同じ決め方) -->
+    {@const fresh = group.items.filter((row) => row.kind === 'rec' && unwatched(row.rec)).length}
     <button
         type="button"
         class="group-head"
@@ -1028,6 +1048,11 @@
         <span class="row-body">
             <span class="cluster">
                 <span class="tag" data-testid="recording-group-count">{group.items.length}本</span>
+                {#if fresh > 0}
+                    <span class="group-unwatched tiny" data-testid="recording-group-unwatched">
+                        <span class="unwatched-dot" aria-hidden="true"></span>未視聴{fresh}
+                    </span>
+                {/if}
                 <span class="row-name" data-testid="recording-group-name">{group.name}</span>
             </span>
             <span class="row-meta">最新 {dateTime(group.newest.at)}</span>
@@ -1216,7 +1241,18 @@
         <section class="board-col recordings">
             <!-- 見出しの高さと下の余白は予約側と揃える。並べたときにずれて見えるため -->
             <div class="board-head">
-                <h2>録画</h2>
+                <!--
+                    **空きと、あと何時間録れるか** (issue #505。`disk.capacity`)。見出しの脇に小さく置く。
+                    見出しの行を2段にしないよう、列が狭くなるにつれて削り、最後は「⋯」の頭に回す (下の `@container`)
+                -->
+                <div class="head-title">
+                    <h2>録画</h2>
+                    {#if data.capacity !== null}
+                        <span class="capacity muted tiny" data-testid="recordings-capacity">
+                            {data.capacity.free}{#if data.capacity.hours !== null}<span class="capacity-hours">・{data.capacity.hours}</span>{/if}
+                        </span>
+                    {/if}
+                </div>
                 <div class="cluster">
                     <!--
                         打てば手元で絞り、**Enter で `?q=` をサーバに聞く** (上の `recordingQuery`)。
@@ -1254,7 +1290,7 @@
                         data-testid="recordings-group-toggle"
                     >
                         <Icon icon={ListTree} size="size-4" />
-                        <span class="wide-only">まとめて表示</span>
+                        <span class="group-label">まとめて表示</span>
                     </button>
                     <a class="button secondary outline small wide-only" href={deletedHref}>
                         {deletedLabel}
@@ -1285,6 +1321,11 @@
                                 {#snippet child({ wrapperProps, props, open })}
                                     <div {...wrapperProps}>
                                         <div {...props} class="more-menu tools-menu" hidden={!open} data-testid="recordings-more-menu">
+                                            {#if data.capacity !== null}
+                                                <div class="menu-note muted small" data-testid="recordings-capacity-menu">
+                                                    {data.capacity.free}{data.capacity.hours === null ? '' : `・${data.capacity.hours}`}
+                                                </div>
+                                            {/if}
                                             <DropdownMenu.Item>
                                                 {#snippet child({ props: itemProps })}
                                                     <a {...itemProps} href={deletedHref} class="menu-link">{deletedLabel}</a>
@@ -1557,6 +1598,35 @@
                                 >
                                     再生リンクをコピー
                                 </DropdownMenu.Item>
+                                <!--
+                                    **未視聴の印を付け外しする** (`?/watched`)。末尾まで観れば勝手に外れる
+                                    ので、押すのは観直したいときか、よそで観たときくらい。
+                                    詳細は開いたときの行を持っているので、送ったら閉じる (再エンコードと同じ)
+                                -->
+                                <form
+                                    method="POST"
+                                    action="?/watched"
+                                    class="menu-form"
+                                    use:submitting={() => async (options) => {
+                                        await options.update();
+                                        detail.close();
+                                    }}
+                                >
+                                    <input type="hidden" name="id" value={rec.id} />
+                                    <input type="hidden" name="watched" value={rec.watched_at === null ? '1' : '0'} />
+                                    <DropdownMenu.Item closeOnSelect={false}>
+                                        {#snippet child({ props: itemProps })}
+                                            <button
+                                                {...itemProps}
+                                                type="submit"
+                                                class="menu-button"
+                                                data-testid="watched-button"
+                                            >
+                                                {rec.watched_at === null ? '視聴済みにする' : '未視聴に戻す'}
+                                            </button>
+                                        {/snippet}
+                                    </DropdownMenu.Item>
+                                </form>
                                 {#if rec.job_id === null && encodeSource(rec) !== null}
                                     <!--
                                         録り直しの元になるのは生TS。エンコード済みを元にしても
@@ -1818,9 +1888,63 @@
         }
     }
     @container recordings (max-width: 35.99rem) {
-        .cluster .wide-only {
+        .cluster .wide-only,
+        .capacity {
             display: none;
         }
+    }
+    /*
+     * **空きを足しても見出しを1行に保つ。** 並べたものに空き (「空き 1.2TB・約900時間」)
+     * を足すと、列が 50rem ほど無いと2行目に落ちる (1200px の画面の列で 680px)。
+     * そこまでは「まとめて表示」を絵だけにして絞り込みの欄を狭め、さらに狭ければ時間を落とす。
+     * 36rem より狭い列では空きごと「⋯」の頭へ回す (上)
+     */
+    @container recordings (max-width: 49.99rem) {
+        .group-label {
+            display: none;
+        }
+    }
+    /* 狭い列 (36rem 未満) の欄は画面の幅で決まる (上の `.filter`)。ここで触るのは並べている間だけ */
+    @container recordings (min-width: 36rem) and (max-width: 49.99rem) {
+        .filter {
+            width: 10rem;
+        }
+    }
+    @container recordings (max-width: 41.99rem) {
+        .capacity-hours {
+            display: none;
+        }
+    }
+    /* 見出しと空き。空きは見出しの字の並びに揃えて、小さく添える */
+    .head-title {
+        display: flex;
+        align-items: baseline;
+        gap: 0.5rem;
+        min-width: 0;
+    }
+    .capacity {
+        white-space: nowrap;
+    }
+    /* 「⋯」の頭の空き。押せるものではないので、項目と同じ余白で字だけ置く */
+    .menu-note {
+        padding: 0.4rem 0.6rem;
+        border-bottom: 1px solid var(--dp-base-300);
+        white-space: nowrap;
+    }
+    /* まだ観ていない録画の点 (`unwatched`)。続きのバーと同じ主の色 */
+    .unwatched-dot {
+        display: inline-block;
+        width: 0.5rem;
+        height: 0.5rem;
+        margin-right: 0.3rem;
+        border-radius: 999px;
+        background: var(--pico-primary-background);
+        vertical-align: 0.1em;
+    }
+    .group-unwatched {
+        display: inline-flex;
+        align-items: center;
+        white-space: nowrap;
     }
     .truncated {
         border-top: 1px solid var(--dp-base-300);

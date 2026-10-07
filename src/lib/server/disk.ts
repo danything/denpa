@@ -1,6 +1,10 @@
 import { statfsSync } from 'node:fs';
+import { and, desc, gte, isNotNull, isNull, or } from 'drizzle-orm';
 import { size } from '../format';
+import { fileSize } from './chase';
 import { config } from './config';
+import { orm } from './db';
+import { activeEncodeJobId, recordings } from './schema';
 import { notify } from './webhook';
 
 /**
@@ -58,3 +62,65 @@ export function checkDisk(): void {
         }
     }
 }
+
+/**
+ * 録画の見出しに出す**空きと、あと何時間録れるかの目安** (issue #505)。読めなければ null。
+ *
+ * 空きは置き場のうち**いちばん少ないもの**。生TS (`rawDir`) は録っている間に書かれ、
+ * 焼いたもの (`encodedDir`) はその後に残る。録れなくなるのはどちらかが先に埋まったときで、
+ * たいていは同じパーティションに載っている。
+ *
+ * 時間は空き ÷ **最近の録画が1時間あたりに置いていった量**。焼いたもの・残した生TS・
+ * H.264 の控えを全部足す (設定で残すものが変わっても、実際に残った量で決まる)。
+ * 置き場が分かれているときも両方の量を少ないほうの空きで割るので、短めに出る —
+ * 目安なので、外れるなら少なく見積もるほうにしておく。焼く前の録画は生TSの大きさしか
+ * 持たず、焼くと縮むので数えない。本数が足りなければ時間は出さない (null)
+ */
+export function capacity(): { free: number; hours: number | null } | null {
+    const frees = watched()
+        .map(freeBytes)
+        .filter((free) => free !== null);
+    if (frees.length === 0) return null;
+    const free = Math.min(...frees);
+
+    const rows = orm()
+        .select({
+            duration: recordings.duration_ms,
+            size: recordings.ts_size,
+            ts: recordings.ts_path,
+            library: recordings.library_path,
+            alt: recordings.alt_path,
+        })
+        .from(recordings)
+        .where(
+            and(
+                isNotNull(recordings.finished_at),
+                isNull(recordings.deleted_at),
+                gte(recordings.duration_ms, SAMPLE_MIN_MS),
+                or(isNotNull(recordings.library_path), isNull(activeEncodeJobId(recordings.id))),
+            ),
+        )
+        .orderBy(desc(recordings.finished_at))
+        .limit(SAMPLES)
+        .all();
+    if (rows.length < SAMPLES_MIN) return { free, hours: null };
+
+    let bytes = 0;
+    let ms = 0;
+    for (const row of rows) {
+        // `ts_size` はいま配っているもの (焼いていれば焼いたもの) の大きさ。残した生TSと控えは別に量る
+        bytes += row.size;
+        if (row.library !== null && row.ts !== null) bytes += fileSize(row.ts) ?? 0;
+        if (row.alt !== null) bytes += fileSize(row.alt) ?? 0;
+        ms += row.duration ?? 0;
+    }
+    const perHour = bytes / (ms / 3_600_000);
+    return { free, hours: perHour > 0 ? free / perHour : null };
+}
+
+/** 目安に使う録画の本数。新しいものから。設定を変えたらすぐ追いつくように多くは見ない */
+const SAMPLES = 20;
+/** これより少なければ時間は出さない。1本だけだと、その番組の画の細かさに引きずられる */
+const SAMPLES_MIN = 3;
+/** 短すぎる録画は量りに入れない (途中で止めたもの等。頭の固定分で1時間あたりが膨らむ) */
+const SAMPLE_MIN_MS = 5 * 60_000;
