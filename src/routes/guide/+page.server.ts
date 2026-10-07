@@ -11,6 +11,7 @@ import {
     reservations,
     services as serviceTable,
 } from '#lib/server/schema.js';
+import { mainOf, SUBCHANNELS_COOKIE, storedSubchannels } from '#lib/subchannels.js';
 import type { ChannelType, Program, ReservationState, Service } from '#lib/types.js';
 
 const HOUR = 60 * 60 * 1000;
@@ -128,10 +129,16 @@ function readGrid(type: ChannelType, start: number, end: number) {
         .orderBy(p.start_at)
         .all();
 
+    /*
+     * 放送していない局は出さない (終わったチャンネル)。**放送局ごとに決める** —
+     * どれか1つが放送していれば揃って残し、サブの列を立てるかは画面が決める
+     * (分割放送のある日だけ。`#lib/subchannels.ts`)
+     */
+    const main = mainOf(services);
+    const alive = new Set(airing(services, programs).map((service) => main.get(service.id)));
     return {
         programs,
-        // 放送していない局は出さない (終わったチャンネル・相乗り中のサブチャンネル)
-        services: airing(services, programs),
+        services: services.filter((service) => alive.has(main.get(service.id))),
         /** 組めなかった理由。組めていれば null */
         failed: null as string | null,
     };
@@ -141,7 +148,7 @@ function readGrid(type: ChannelType, start: number, end: number) {
  * 時間×チャンネルのグリッドを返す。並びを眺めて選ぶとき用
  * (キーワードで探すのはルール画面 `/rules` に寄せてある)
  */
-export function load({ url }) {
+export function load({ url, cookies }) {
     const type = (TYPES.find((t) => t === url.searchParams.get('type')) ?? 'GR') as ChannelType;
 
     // 既定は今日の放送日。めくるときだけ start が付く
@@ -156,6 +163,8 @@ export function load({ url }) {
         hours: WINDOW_HOURS,
         // 詳細の「視聴」を出すかどうか。決め方はライブ画面と揃えてある (watchableServices)
         watchable: watchableServices(Date.now()),
+        /** サブチャンネルも出すか (`#lib/subchannels.ts`)。端末ごとに覚える */
+        subchannels: storedSubchannels(cookies.get(SUBCHANNELS_COOKIE)),
         /** 表の中身。**promise のまま渡して、後から流す** */
         grid: gridOf(type, start, end),
     };

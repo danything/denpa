@@ -1,4 +1,5 @@
 import { and, count, eq, gt, inArray, isNull, lt, lte, ne, or, sql } from 'drizzle-orm';
+import { type Airing, mainOf, type Station, splitOf } from '../subchannels';
 import type { EitEvent } from '../ts/eit';
 import { config } from './config';
 import { affected, now, orm } from './db';
@@ -50,7 +51,10 @@ export const SERVICE_ORDER = 'remote_control_key IS NULL, remote_control_key, se
 export const SERVICE_TYPE_ORDER = `CASE type WHEN 'GR' THEN 0 WHEN 'BS' THEN 1 ELSE 2 END`;
 
 /**
- * 番組表に出す局。**名前の付いた番組が1つも無い局は出さない。**
+ * 番組表とライブに出す局。**名前の付いた番組が1つも無い局は出さない。**
+ *
+ * 番組表はこれを放送局ごとに当てる (サブチャンネルの列は分割放送のある日だけ立てる。
+ * `#lib/subchannels.ts`)。
  *
  * 出したくないものが2種類ある。どちらも「枠はあるが放送していない」。
  *
@@ -58,7 +62,9 @@ export const SERVICE_TYPE_ORDER = `CASE type WHEN 'GR' THEN 0 WHEN 'BS' THEN 1 E
  *   終えたが、SDT には枠が残っている (局名も消されて「-」)。番組は1つも来ない
  * - **相乗り中のサブチャンネル。** NHK総合2 や Eテレ2/3 は、マルチ編成をして
  *   いないときは本チャンネルと同じ絵を流していて、EIT には**名前の無い番組**が
- *   並ぶ。番組表がその局だけ「(番組情報なし)」で埋まる
+ *   並ぶ。**名前が付いていても本チャンネルと同じ番組**のこともある (重なる時間の
+ *   本チャンネルの番組と同じ名前)。どちらも相乗りとして外す — 決め方は番組表と同じ
+ *   (`splitOf`)。名前だけ見ていた頃は、同じ番組の名前を載せてくるサブがライブに並んでいた
  *
  * **局の行も、スキャンの結果も消さない。** マルチ編成が始まればその日の番組表に
  * 名前が付いて出てくるし、放送が再開されれば勝手に戻る。
@@ -66,12 +72,13 @@ export const SERVICE_TYPE_ORDER = `CASE type WHEN 'GR' THEN 0 WHEN 'BS' THEN 1 E
  * **1局も残らないときは全部出す。** 入れたばかりで番組表がまだ空のときに
  * 列ごと消えると、何も映らない画面から先へ進めない
  */
-export function airing<S extends { id: number }, P extends { service_id: number; name: string }>(
-    services: S[],
-    programs: P[],
-): S[] {
+export function airing<S extends Station, P extends Omit<Airing, 'id'>>(services: S[], programs: P[]): S[] {
+    const main = mainOf(services);
+    const split = splitOf(programs, main);
     const named = new Set(programs.filter((program) => program.name !== '').map((p) => p.service_id));
-    const shown = services.filter((service) => named.has(service.id));
+    const shown = services.filter(
+        (service) => named.has(service.id) && (main.get(service.id) === service.id || split.has(service.id)),
+    );
     return shown.length === 0 ? services : shown;
 }
 
@@ -92,9 +99,23 @@ export function airing<S extends { id: number }, P extends { service_id: number;
  */
 export function watchableServices(at: number): number[] {
     return airing(
-        orm().select({ id: services.id }).from(services).where(sql.raw(CURRENT_SERVICES)).all(),
         orm()
-            .select({ service_id: programs.service_id, name: programs.name })
+            .select({
+                id: services.id,
+                service_id: services.service_id,
+                network_id: services.network_id,
+                type: services.type,
+            })
+            .from(services)
+            .where(sql.raw(CURRENT_SERVICES))
+            .all(),
+        orm()
+            .select({
+                service_id: programs.service_id,
+                name: programs.name,
+                start_at: programs.start_at,
+                end_at: programs.end_at,
+            })
             .from(programs)
             .where(and(lte(programs.start_at, at), gt(programs.end_at, at)))
             .all(),
