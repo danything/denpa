@@ -204,6 +204,41 @@ test.describe('予約の細かい指定', () => {
         await expect(detail.getByTestId('detail-cancel')).toHaveCount(0);
     });
 
+    /*
+     * 番組表・予約の詳細からもルールを作れる。行き先は録画と同じルールの画面で、
+     * 番組から下書きを入れる (`?program=<番組ID>`)
+     */
+    test('番組表と予約の詳細から、その番組のルールを作りに行ける', async ({ page }) => {
+        await goto(page, '/guide?type=GR');
+        const [target] = await upcoming(page);
+        const ruleUrl = new RegExp(`/rules\\?(.*&)?program=${target.programId}(&|$)`);
+        const detail = page.getByTestId('program-detail');
+        await cellOf(page, target.programId).getByTestId('program-button').click();
+        await detail.getByTestId('detail-rule').click();
+        await expect(page).toHaveURL(ruleUrl);
+        await expect(page.getByTestId('rule-origin')).toBeVisible();
+
+        await goto(page, '/guide?type=GR');
+        await cellOf(page, target.programId).getByTestId('program-button').click();
+        await detail.getByTestId('detail-reserve').click();
+        await expect(cellOf(page, target.programId)).toContainText('予約済み');
+        await goto(page, '/');
+        const reservation = page.locator(
+            `[data-testid="reservation-row"][data-program-id="${target.programId}"]`,
+        );
+        try {
+            await reservation.getByTestId('row-body').click();
+            await detail.getByTestId('detail-rule').click();
+            await expect(page).toHaveURL(ruleUrl);
+            await expect(page.getByTestId('rule-origin')).toBeVisible();
+        } finally {
+            // 後続に残さない
+            await goto(page, '/');
+            await reservation.getByTestId('cancel-button').click();
+            await expect(reservation).toHaveCount(0);
+        }
+    });
+
     test('番組表の詳細から取り消すと、その場で予約する口に戻る', async ({ page }) => {
         await goto(page, '/guide?type=GR');
         const [target] = await upcoming(page);

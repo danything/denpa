@@ -204,19 +204,20 @@
                             </details>
                         </div>
                         {#if data.origin !== null}
+                            {@const what = data.origin.kind === 'recording' ? '録画' : '番組'}
                             <!--
-                                **録画から来たとき。** 何を元に入れたのかと、次に何を押せばよいかを1行で。
+                                **録画・番組から来たとき。** 何を元に入れたのかと、次に何を押せばよいかを1行で。
                                 このシリーズを既に録っているルールがあれば、作らずにそちらを案内する
                             -->
                             {#if !data.origin.found}
-                                <p class="notice warning small" data-testid="rule-origin">録画が見つかりませんでした</p>
+                                <p class="notice warning small" data-testid="rule-origin">{what}が見つかりませんでした</p>
                             {:else if data.origin.rule !== null}
                                 <p class="notice info small" data-testid="rule-origin">
                                     この番組はルール「<a href={resolve(`rules?edit=${data.origin.rule.id}`)} data-testid="rule-origin-link">{data.origin.rule.name}</a>」で録っています{data.origin.rule.enabled ? '' : ' (いまは無効)'}
                                 </p>
                             {:else if data.origin.prefilled}
                                 <p class="notice info small" data-testid="rule-origin">
-                                    録画「{data.origin.name}」から条件を入れました。下の一覧で確かめて「追加」を押してください
+                                    {what}「{data.origin.name}」から条件を入れました。下の一覧で確かめて「追加」を押してください
                                 </p>
                             {:else}
                                 <p class="notice warning small" data-testid="rule-origin">

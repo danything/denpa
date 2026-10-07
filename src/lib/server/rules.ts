@@ -183,28 +183,28 @@ function textCache(program: Program): (fields: SearchField[]) => string {
     };
 }
 
-/** 録画から作るルールの下書き (`prefillFrom`) */
+/** 録画・番組から作るルールの下書き (`prefillFrom`) */
 export interface RulePrefill {
     keyword: string;
     genres: string[] | null;
 }
 
-/** 録画から読む分 */
+/** 録画・番組から読む分。シリーズ名は録画だけが持つ (番組表の行には無い) */
 export interface RuleSource {
     name: string;
-    series: string;
+    series?: string;
     service_id: number;
     genre_detail: Genre[] | null;
 }
 
 /** シリーズ名。録るときに切り出したもの、無ければ (空白だけでも) 番組名から切り出す */
 function seriesOf(source: Pick<RuleSource, 'name' | 'series'>): string {
-    const series = source.series.trim();
+    const series = source.series?.trim() ?? '';
     return series !== '' ? series : source.name.trim() === '' ? '' : parseTitle(source.name).series.trim();
 }
 
 /**
- * **録画から作るルールの下書き** (録画の「この番組のルールを作る」)。
+ * **録画・番組から作るルールの下書き** (詳細の「この番組のルールを作る」)。
  *
  * - キーワードは**シリーズ名**。話数・副題・`[新]` を落とした名前なので、次の回にも当たる。
  *   ルールのキーワードは空白で区切った語を**すべて含む**もので、引用の書き方は無い。

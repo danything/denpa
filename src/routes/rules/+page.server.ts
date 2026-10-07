@@ -252,7 +252,7 @@ export async function load({ url }) {
 
     const origin = originOf(url);
     /*
-     * 録画から来た (`?from=<録画ID>`) ときは、下書きの条件を URL に載せて出直す。
+     * 録画・番組から来た (`originOf`) ときは、下書きの条件を URL に載せて出直す。
      * **条件はいつも URL にある**ので (「何が録れるか見る」と同じ形)、下見も
      * フォームの初期値もそのまま組める。既にこのシリーズを録っているルールが
      * あれば出直さず、そちらへの入口を出す
@@ -266,7 +266,7 @@ export async function load({ url }) {
         const query = new URLSearchParams({
             keyword: origin.prefill.keyword,
             dedupe: '1',
-            from: String(origin.id),
+            [origin.kind]: String(origin.id),
         });
         for (const genre of origin.prefill.genres ?? []) query.append('genres', genre);
         redirect(303, relative(url, `/rules?${query}`));
@@ -529,11 +529,12 @@ export async function load({ url }) {
         services,
         editing: editing ?? null,
         seed: conditions,
-        /** 録画から作るとき、どの録画からか (`originOf`) */
+        /** 録画・番組から作るとき、どれからか (`originOf`) */
         origin:
             origin === null
                 ? null
                 : {
+                      kind: origin.kind,
                       name: origin.name,
                       found: origin.found,
                       rule:
@@ -551,39 +552,79 @@ export async function load({ url }) {
 }
 
 /**
- * **録画からルールを作るときの元** (`?from=<録画ID>`。録画の「この番組のルールを作る」)。
+ * **録画・番組からルールを作るときの元** (詳細の「この番組のルールを作る」)。
+ * `?recording=<録画ID>` か `?program=<番組ID>` (番組表・予約の詳細から)。
  *
  * 下書き (`rules.prefillFrom`) と、このシリーズを既に録っているルール
  * (`rules.coveringRule`) を一緒に引く。ルールがあれば作らせずにそちらを案内する —
  * 同じ番組のルールが2つあっても予約は1本だが、どちらを直せばいいか分からなくなる
  */
 function originOf(url: URL) {
-    const raw = url.searchParams.get('from');
-    if (raw === null) return null;
-    const id = Number(raw);
-    const recording = Number.isInteger(id)
-        ? orm()
-              .select({
-                  name: recordings.name,
-                  series: recordings.series,
-                  service_id: recordings.service_id,
-                  genre_detail: recordings.genre_detail,
-                  type: serviceTable.type,
-              })
-              .from(recordings)
-              .leftJoin(serviceTable, eq(serviceTable.id, recordings.service_id))
-              .where(eq(recordings.id, id))
-              .get()
+    const kind = url.searchParams.has('recording')
+        ? 'recording'
+        : url.searchParams.has('program')
+          ? 'program'
+          : null;
+    if (kind === null) return null;
+    const id = Number(url.searchParams.get(kind));
+    const source = Number.isInteger(id)
+        ? kind === 'recording'
+            ? recordingSource(id)
+            : programSource(id)
         : undefined;
-    if (recording === undefined) return { id, name: '', found: false, prefill: null, rule: null };
+    if (source === undefined) return { kind, id, name: '', found: false, prefill: null, rule: null };
     const rules = orm().select().from(ruleTable).all();
     return {
+        kind,
         id,
-        name: recording.name,
+        name: source.name,
         found: true,
-        prefill: prefillFrom(recording),
-        rule: coveringRule(rules, recording, recording.type ?? undefined) ?? null,
+        prefill: prefillFrom(source),
+        rule: coveringRule(rules, source, source.type ?? undefined) ?? null,
     };
+}
+
+/** 録画から読む分。シリーズ名は録ったときに切り出してある */
+function recordingSource(id: number) {
+    return orm()
+        .select({
+            name: recordings.name,
+            series: recordings.series,
+            service_id: recordings.service_id,
+            genre_detail: recordings.genre_detail,
+            type: serviceTable.type,
+        })
+        .from(recordings)
+        .leftJoin(serviceTable, eq(serviceTable.id, recordings.service_id))
+        .where(eq(recordings.id, id))
+        .get();
+}
+
+/**
+ * 番組から読む分。**番組表の行が無ければ予約の行から** — 番組表は終わった番組を
+ * 消していくが、予約の一覧には済んだものも残る。予約の行はジャンルを持たないので、
+ * そのときの下書きはキーワードだけになる
+ */
+function programSource(id: number) {
+    const program = orm()
+        .select({
+            name: programs.name,
+            service_id: programs.service_id,
+            genre_detail: programs.genre_detail,
+            type: serviceTable.type,
+        })
+        .from(programs)
+        .leftJoin(serviceTable, eq(serviceTable.id, programs.service_id))
+        .where(eq(programs.id, id))
+        .get();
+    if (program !== undefined) return program;
+    const reservation = orm()
+        .select({ name: reservations.name, service_id: reservations.service_id, type: serviceTable.type })
+        .from(reservations)
+        .leftJoin(serviceTable, eq(serviceTable.id, reservations.service_id))
+        .where(eq(reservations.program_id, id))
+        .get();
+    return reservation === undefined ? undefined : { ...reservation, genre_detail: null };
 }
 
 /**

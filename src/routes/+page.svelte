@@ -315,9 +315,9 @@
      * 録画の状態まで 'failed' にしていた頃は、中身のあるTSを持っているのに
      * ダウンロードまで消えていた
      */
-    /** 録画からルールを作る入口 (`rules/+page.server.ts` の `originOf`) */
-    function ruleFrom(id: number): string {
-        return resolve(`rules?from=${id}`);
+    /** 録画・番組からルールを作る入口 (`rules/+page.server.ts` の `originOf`) */
+    function ruleFrom(kind: 'recording' | 'program', id: number): string {
+        return resolve(`rules?${kind}=${id}`);
     }
 
     /** 番組の中で、いちばん新しい回から遡って `test` に合う録画。無ければ null */
@@ -1042,7 +1042,7 @@
     {@const source = open ? newestRec(group) : null}
     {#if source !== null}
         <div class="group-tools">
-            <a class="button small secondary outline" href={ruleFrom(source)} data-testid="group-rule">この番組のルールを作る</a>
+            <a class="button small secondary outline" href={ruleFrom('recording', source)} data-testid="group-rule">この番組のルールを作る</a>
         </div>
     {/if}
 {/snippet}
@@ -1404,6 +1404,16 @@
     取り消した行は一覧から消える (完了分を出しているときは「戻す」に変わる)
 -->
 {#snippet reservationActions()}
+    {#if detailRes !== null}
+        <!-- 録画の詳細と同じ入口。予約は番組を指しているので番組から作る -->
+        <a
+            class="button secondary outline"
+            href={ruleFrom('program', detailRes.program_id)}
+            data-testid="detail-rule"
+        >
+            この番組のルールを作る
+        </a>
+    {/if}
     {#if detailRes !== null && active.includes(detailRes.state)}
         <form
             method="POST"
@@ -1434,7 +1444,7 @@
         {@const rec = detailRec}
         {#if hasFile(rec)}
             <!--
-                **並べるのはよく押すものだけ** — 端末に保存。
+                **並べるのはよく押すものだけ** — 端末に保存・この番組のルールを作る。
                 条件が揃うと10個のボタンが同じ見た目で並び、狭い画面では文字の
                 途中で折り返していた。めったに押さないもの (落とす・リンクを
                 コピー・焼き直し) は「その他…」に畳む。
@@ -1471,6 +1481,15 @@
             {/if}
         {/if}
         <!--
+            **この番組のルールを作る。** ルールの画面へ、シリーズ名を入れた下書きを
+            持って行く (保存はあちらで確かめてから)。既にこの番組を録っているルールが
+            あれば、あちらがそのルールを案内する
+        -->
+        <a class="button secondary outline" href={ruleFrom('recording', rec.id)} data-testid="detail-rule">
+            この番組のルールを作る
+        </a>
+        {#if hasFile(rec)}
+            <!--
                 **めったに押さないものの置き場。** 上に開く (フッターは画面の
                 下端に居るので、下に開くと枠から出る)。中身は上から
                 「持ち出す」「渡す」「直す」の順。
@@ -1490,7 +1509,6 @@
                     {#snippet child({ wrapperProps, props, open })}
                         <div {...wrapperProps}>
                             <div {...props} class="more-menu" hidden={!open} data-testid="detail-more-menu">
-                                {#if hasFile(rec)}
                                 <!--
                                     まだエンコードしていないものや、引き継いだ未エンコードの録画は
                                     生TSしか無い。配信は library_path ?? ts_path を返すので、
@@ -1571,24 +1589,12 @@
                                         </DropdownMenu.Item>
                                     </form>
                                 {/if}
-                                {/if}
-                                <!--
-                                    **この番組のルールを作る。** ルールの画面へ、シリーズ名を入れた
-                                    下書きを持って行く (保存はあちらで確かめてから)。既にこの番組を
-                                    録っているルールがあれば、あちらがそのルールを案内する
-                                -->
-                                <DropdownMenu.Item>
-                                    {#snippet child({ props: itemProps })}
-                                        <a {...itemProps} href={ruleFrom(rec.id)} class="menu-link" data-testid="rule-from-recording">
-                                            この番組のルールを作る
-                                        </a>
-                                    {/snippet}
-                                </DropdownMenu.Item>
                             </div>
                         </div>
                     {/snippet}
                 </DropdownMenu.Content>
             </DropdownMenu.Root>
+        {/if}
     {/if}
     <button type="button" class="secondary" onclick={() => detail.close()} data-testid="detail-close">閉じる</button>
 {/snippet}
