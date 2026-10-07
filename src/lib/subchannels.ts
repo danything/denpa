@@ -172,6 +172,11 @@ export function cellsOf<S extends Station, P extends Airing>(
         });
 
         for (const program of own) {
+            // 長さの無い枠は切りようが無い。これまでどおり本チャンネルの列に1行だけ出す (`place`)
+            if (program.end_at <= program.start_at) {
+                add(program, column, 1, program.start_at, program.end_at);
+                continue;
+            }
             // 番組の中で、分割放送が始まる・終わる時刻で切る
             const edges = new Set([program.start_at, program.end_at]);
             for (const list of split) {

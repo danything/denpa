@@ -149,6 +149,10 @@ describe('マスを組む', () => {
         ]);
     });
 
+    test('長さの無い枠も消さない', () => {
+        expect(shape(cellsOf(columns, [program(TX.id, 4, 4)], main))).toEqual([[TX.id, 0, 1, 4, 4]]);
+    });
+
     test('マスの鍵は重ならない', () => {
         const programs = [program(TX.id, 4, 8), program(TX2.id, 5, 6, '野球')];
         const keys = cellsOf(columns, programs, main).map((c) => c.key);
