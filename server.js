@@ -26,7 +26,7 @@
  * **`Host` はそのまま渡す。** 書き換わると SvelteKit の CSRF 判定が自分の
  * origin と食い違い、フォーム送信が全部弾かれる。denpa は名前を2つ持っていて
  * 自分の origin を1つに固定できない (SvelteKit の `paths.origin`。組むときに決まる)
- * ため、ここが効く (名前は charts/denpa/values.yaml の ingress.hosts)。
+ * ため、ここが効く (名前は charts/denpa/values.yaml の httpRoute.hostnames。無ければ ingress.hosts)。
  */
 
 import { networks, resolveClient, unreadable } from './src/lib/server/address.ts';
@@ -47,9 +47,9 @@ const innerPort = Number(process.env.DENPA_INNER_PORT ?? publicPort + 1);
 process.env.PORT = String(innerPort);
 process.env.HOST = '127.0.0.1';
 /*
- * **https の目印は常に `x-forwarded-proto` から読む** (選べるオプションにしない)。
- * 無いと adapter-node が http と決め打ち、前段 (リバースプロキシ) が https を受ける構成
- * で CSRF 判定が食い違って POST が全部 403 になる。偽装されても得るものが無い —
+ * **スキームは常に `x-forwarded-proto` から読む** (選べるオプションにしない)。
+ * adapter-node は読めないと https と決め打つので、http で受ける構成 (前段の居ない直結など)
+ * で CSRF 判定が食い違って POST が全部 403 になる (前段が居なければ下で入れる)。偽装されても得るものが無い —
  * ブラウザ経由の CSRF ではこのヘッダを付けられないし、直に付けて来る相手が
  * 変えられるのは自分に返る origin の見た目だけ。`TRUSTED_PROXIES` の前段からだけ読む
  * ようにはしない — 守れるものが無いのに、前段を設定し忘れた構成の POST を全部止める。

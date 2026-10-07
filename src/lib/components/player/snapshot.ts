@@ -15,6 +15,15 @@ export function videoFrame(video: HTMLVideoElement | null): Frame | null {
 }
 
 /**
+ * **生で見ているときは worker に1枚貰う。** 絵は worker の canvas に居て、
+ * `<video>` は空のまま (`raw/engine.ts`)
+ */
+export async function grabbedFrame(bitmap: Promise<ImageBitmap | null>): Promise<Frame | null> {
+    const image = await bitmap;
+    return image === null ? null : { image, width: image.width, height: image.height };
+}
+
+/**
  * ファイル名に使えない字。Windows が断る `\ / : * ? " < > |` と制御文字。
  * 番組名には「／」(全角) や「:」がよく入る — 全角は通るので残し、半角だけ替える
  */

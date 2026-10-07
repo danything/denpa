@@ -44,7 +44,7 @@
     import SpeedMenu from '#lib/components/player/SpeedMenu.svelte';
     import StageNote from '#lib/components/player/StageNote.svelte';
     import { snapshotter } from '#lib/components/player/shot.svelte.js';
-    import { type Frame, videoFrame } from '#lib/components/player/snapshot.js';
+    import { grabbedFrame, videoFrame } from '#lib/components/player/snapshot.js';
     import Toasts, { errorNotice, type Notice } from '#lib/components/Toasts.svelte';
     import { programDetail } from '#lib/detail.svelte.js';
     import { SERVICE_TYPE_LABEL } from '#lib/format.js';
@@ -261,20 +261,11 @@
 
     function snapshot(): void {
         void shooter.take(
-            () => (player.raw ? rawFrame() : videoFrame(video)),
+            () => (player.raw ? grabbedFrame(player.grab()) : videoFrame(video)),
             // 字幕を出しているときだけ重ねる
             player.captions && player.hasCaptions ? overlay : null,
             current?.now?.name ?? current?.name ?? 'ライブ',
         );
-    }
-
-    /**
-     * **生で見ているときは worker に1枚貰う。** 絵は worker の canvas に居て、
-     * `<video>` は空のまま (`raw/engine.ts`)。以前はこの間だけ切り抜きを出していなかった
-     */
-    async function rawFrame(): Promise<Frame | null> {
-        const bitmap = await player.grab();
-        return bitmap === null ? null : { image: bitmap, width: bitmap.width, height: bitmap.height };
     }
 </script>
 
@@ -360,7 +351,7 @@
                     />
                     <!--
                         **生で見ている間も切り抜ける。** 絵は worker の canvas に居るので、
-                        そちらに1枚頼む (`rawFrame`)
+                        そちらに1枚頼む (`snapshot.grabbedFrame`)
                     -->
                     <ControlButton
                         icon={CAMERA}

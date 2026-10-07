@@ -8,7 +8,7 @@ import { exitNative, fullscreenMode, nativeFullscreenElement, requestNative } fr
  *
  * 入り方は端末の口で決める (`fullscreen.ts`)。本物の全画面 (標準・webkit) が無い
  * iPhone の Safari では**枠を画面いっぱいに広げて代わりにする** (以下「広げる」)。
- * 押す口・ボタンの絵・`f` キーはどれでも同じ。
+ * 押す口・ボタンの絵・`f` キー (観る画面と追っかけ) はどれでも同じ。
  *
  * ## 広げる (iPhone)
  *

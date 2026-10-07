@@ -95,7 +95,7 @@ export const config = {
 
     ffmpeg: str('FFMPEG', '/usr/local/bin/ffmpeg'),
     /**
-     * ブラウザで MPEG-2 を解く WebAssembly の置き場 (ライブを生で送る道。docs/stream.md §5.5)。
+     * ブラウザで MPEG-2 と AAC を解く WebAssembly の置き場 (ライブを生で送る道。docs/stream.md §5.5)。
      * Dockerfile の `mpeg2wasm` 段が置く。**アプリの外にあるのは、開発の compose がソースを
      * /app に被せるため** (中に置くと隠れる)。無ければ生の道は使えず、画面は焼いたものに戻る
      */

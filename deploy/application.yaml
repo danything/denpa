@@ -49,7 +49,6 @@ spec:
           agent: sha-8dc89fa95110
 
         denpa:
-          encodeConcurrency: 2
           # LAN から来たときだけ何も聞かずに通す (docs/auth.md)
           trustedNetworks: 10.10.0.0/16
           # Gateway (Cilium の Envoy。hostNetwork) は Pod の網の住所 (cilium_host) から繋いでくる
