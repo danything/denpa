@@ -315,7 +315,7 @@ export async function clearRules(page: Page): Promise<void> {
  * 少しずつ出す一覧を**全部出させる** (`#lib/paging.svelte`)。
  *
  * ホームの予約・録画とルールの一覧は、最初は 1 画面と少しだけ描き、末尾の印
- * (`<一覧>-more`。`use:sentinel`) が画面に入るたびに続きを足す。件数を数える・
+ * (`<一覧>-more`。`use:sentinel`。まとめない録画は頭と尻の間) が画面に入るたびに続きを足す。件数を数える・
  * 行を番号で名指しするテストは、その前にこれを呼ぶ (ホームは `goto` が呼ぶ)。
  *
  * **印を巻き取って見せる**のはブラウザの `scrollIntoView` で。一覧は自分の箱の中で

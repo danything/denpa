@@ -82,7 +82,7 @@ describe('描く行に開く', () => {
 });
 
 test('覚えていた値。既定はまとめない', () => {
-    expect(storedGrouped(null)).toBe(false);
+    expect(storedGrouped(undefined)).toBe(false);
     expect(storedGrouped('0')).toBe(false);
     expect(storedGrouped('1')).toBe(true);
 });

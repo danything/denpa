@@ -1,6 +1,7 @@
 import { fail } from '@sveltejs/kit';
 import { and, asc, desc, eq, getTableColumns, inArray, isNull, like, ne, not, or, sql } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/sqlite-core';
+import { GROUPED_COOKIE, storedGrouped } from '#lib/grouping.js';
 import { fileSize } from '#lib/server/chase.js';
 import { orm } from '#lib/server/db.js';
 import { cancel as cancelEncode, enqueue, isCanceling, pump } from '#lib/server/encoder.js';
@@ -127,7 +128,7 @@ interface ReservationRow extends Omit<Reservation, 'state'> {
  * 「これから何が録れるか」と「録れたものが今どうなっているか」は続きものなので、
  * 行き来せずに見えるほうがいい。左に予約、右に録画。
  */
-export function load({ url }) {
+export function load({ url, cookies }) {
     const showFinished = url.searchParams.get('all') === '1';
     const showDeleted = url.searchParams.get('deleted') === '1';
     /*
@@ -309,6 +310,8 @@ export function load({ url }) {
         showFinished,
         showDeleted,
         q,
+        /** まとめて表示 (`#lib/grouping.ts`)。サーバで描く形を、端末の覚えに合わせる */
+        grouped: storedGrouped(cookies.get(GROUPED_COOKIE)),
     };
 }
 

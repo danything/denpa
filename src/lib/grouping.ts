@@ -107,10 +107,13 @@ export function flatLines<T extends Groupable>(items: T[]): GroupLine<T>[] {
     return items.map((item) => ({ kind: 'row', key: item.key, item, nested: false }));
 }
 
-/** 端末ごとに覚える鍵 (`keep.ts`) */
-export const GROUPED_KEY = 'recordings-grouped';
+/**
+ * 端末ごとに覚える cookie。**読むのはサーバ** (`+page.server.ts`) — 描く前に
+ * どちらの形か分かっていれば、覚えを読むまで枠を隠さずに済む
+ */
+export const GROUPED_COOKIE = 'denpa_recordings_grouped';
 
 /** 覚えていた値。**既定はまとめない** (今までどおりの一覧) */
-export function storedGrouped(saved: string | null): boolean {
+export function storedGrouped(saved: string | undefined): boolean {
     return saved === '1';
 }

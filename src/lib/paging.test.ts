@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { matches, normalize } from './paging';
+import { ends, matches, normalize } from './paging';
 
 describe('一覧の絞り込み', () => {
     test('空なら全部残す', () => {
@@ -16,5 +16,23 @@ describe('一覧の絞り込み', () => {
         expect(matches('nhk', 'NHK総合')).toBe(true);
         expect(matches('ＮＨＫ', 'NHK総合')).toBe(true);
         expect(normalize('ＡＢＣ１２３')).toBe('abc123');
+    });
+});
+
+describe('頭と尻を切り出す (録画の枠)', () => {
+    const items = Array.from({ length: 10 }, (_, i) => i);
+
+    test('間を空けて両端を出す。残りは間の件数', () => {
+        expect(ends(items, 3, 2)).toEqual({ head: [0, 1, 2], tail: [8, 9], rest: 5 });
+    });
+
+    test('重なったら間は無く、全部を頭に (同じ行を2度描かない)', () => {
+        expect(ends(items, 6, 6)).toEqual({ head: items, tail: [], rest: 0 });
+        expect(ends(items, 5, 5)).toEqual({ head: items, tail: [], rest: 0 });
+    });
+
+    test('尻が 0 件なら頭からだけ (まとめて表示)', () => {
+        expect(ends(items, 4, 0)).toEqual({ head: [0, 1, 2, 3], tail: [], rest: 6 });
+        expect(ends([], 4, 0)).toEqual({ head: [], tail: [], rest: 0 });
     });
 });
