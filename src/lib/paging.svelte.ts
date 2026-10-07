@@ -1,4 +1,4 @@
-import { matches } from './paging';
+import { ends, matches } from './paging';
 
 /**
  * 長い一覧を**少しずつ出す**。
@@ -48,17 +48,19 @@ export class Paged<T> {
         return this.ends() ? Math.ceil(this.step / 2) : this.step;
     }
 
+    /** 頭と尻と間。頭からだけ出すときは尻が 0 件 */
+    private get split() {
+        return ends(this.items(), this.shown, this.ends() ? this.tailShown : 0);
+    }
+
     /** 出す行 (頭のほう)。間が無くなれば全部 */
     get rows(): T[] {
-        const all = this.items();
-        return this.more ? all.slice(0, this.shown) : all;
+        return this.split.head;
     }
 
     /** 尻のほう。間 (`more`) より後ろに描く。頭からだけ出すときは空 */
     get tail(): T[] {
-        if (!this.more || !this.ends()) return [];
-        const all = this.items();
-        return all.slice(all.length - this.tailShown);
+        return this.split.tail;
     }
 
     /** まだ出していない行があるか */
@@ -68,7 +70,7 @@ export class Paged<T> {
 
     /** 出していない残り */
     get rest(): number {
-        return Math.max(0, this.items().length - this.shown - (this.ends() ? this.tailShown : 0));
+        return this.split.rest;
     }
 
     /** 続きを足す。両端から出すときは両方に足す (見えていないほうに足しても位置は動かない) */

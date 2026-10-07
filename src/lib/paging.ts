@@ -16,3 +16,13 @@ export function matches(query: string, text: string): boolean {
 export function normalize(text: string): string {
     return text.normalize('NFKC').toLowerCase();
 }
+
+/**
+ * 頭から `head` 件、尻から `tail` 件を切り出す (`Paged`)。重なれば間は無く、全部を `head` に。
+ * `rest` は間に残った件数
+ */
+export function ends<T>(items: T[], head: number, tail: number): { head: T[]; tail: T[]; rest: number } {
+    const rest = Math.max(0, items.length - head - tail);
+    if (rest === 0) return { head: items, tail: [], rest };
+    return { head: items.slice(0, head), tail: tail > 0 ? items.slice(items.length - tail) : [], rest };
+}

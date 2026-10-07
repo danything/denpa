@@ -566,10 +566,13 @@
         box.scrollTop = on ? -box.scrollHeight : box.scrollHeight;
     }
 
-    /* 絞り込みの言葉が変わったら先頭に戻す */
+    /*
+     * 絞り込みの言葉が変わったら先頭に戻す。`reset` は `grouped` を読むので、
+     * 切り替えのたびに戻さないよう外す
+     */
     $effect(() => {
         recordingQuery;
-        recordingPage.reset();
+        untrack(() => recordingPage.reset());
     });
 </script>
 
