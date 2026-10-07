@@ -456,9 +456,16 @@
      * 先に読むとサーバの描いたものと食い違う
      */
     let grouped = $state(false);
+    /**
+     * 覚えを読み終えたか。**読むまで録画の枠を見せない** (CSS の `.reading`)。
+     * 狭い画面では、まとめて表示を覚えている端末でも平らな一覧 (最大300件) が
+     * 一度出てから縮み、ページが跳ねていた (広い画面は `.placing` が隠している)
+     */
+    let groupedRead = $state(false);
     onMount(() => {
         mounted = true;
         grouped = storedGrouped(stored(GROUPED_KEY));
+        groupedRead = true;
         /*
          * **まとめて表示は一番上から見せる。** 番組は新しい順に並ぶので、
          * 頭に居るのが最近録れた番組。下へ送る理由 (古い録画から片付ける) は
@@ -545,14 +552,28 @@
      */
     const recordingLines = $derived<GroupLine<RightRow>[]>(
         grouped
-            ? groupLines(groupBySeries(recordingRows), (group) => recordingQuery !== '' || openedGroups.has(group))
+            ? groupLines(groupBySeries(recordingRows), (group) =>
+                  recordingQuery !== '' ? !closedWhileFiltering.has(group) : openedGroups.has(group),
+              )
             : flatLines(recordingRows),
     );
     const recordingPage = new Paged(() => recordingLines, 60);
 
+    /**
+     * 絞っている間に閉じた番組。**絞り込みが変わったら忘れる。**
+     * 絞っている間の開閉を `openedGroups` で覚えると、見た目は開いたまま
+     * 覚えだけが裏返り、絞り込みを消したときに思わぬ番組が開いて (閉じて) いた
+     */
+    const closedWhileFiltering = new SvelteSet<string>();
+    $effect(() => {
+        recordingQuery;
+        untrack(() => closedWhileFiltering.clear());
+    });
+
     function toggleGroup(group: string): void {
-        if (openedGroups.has(group)) openedGroups.delete(group);
-        else openedGroups.add(group);
+        const set = recordingQuery !== '' ? closedWhileFiltering : openedGroups;
+        if (set.has(group)) set.delete(group);
+        else set.add(group);
     }
 
     /**
@@ -1325,7 +1346,8 @@
                 </div>
             </div>
 
-            <div class="board-box" class:placing={!recordingPlaced} bind:this={recordingBox}>
+            <div class="board-box" class:placing={!recordingPlaced}
+                class:reading={!groupedRead} bind:this={recordingBox}>
                 <div class="rows" data-testid="recording-list">
                     {#each recordingPage.rows as line (line.key)}
                         {#if line.kind === 'head'}
@@ -1638,6 +1660,16 @@
             to {
                 visibility: visible;
             }
+        }
+    }
+    /* 覚え (まとめて表示) を読むまで隠す (`groupedRead`)。JS が動かなくても出るよう 1.5 秒まで */
+    .board-box.reading {
+        visibility: hidden;
+        animation: read 0s 1.5s forwards;
+    }
+    @keyframes read {
+        to {
+            visibility: visible;
         }
     }
     .board-head {

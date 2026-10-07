@@ -172,7 +172,12 @@ test.describe('録画一覧のまとめて表示', () => {
             'グループ試験ニュース 第1回',
             'グループ試験ニュース 第2回',
         ]);
+        // 絞っている間も見出しで閉じられる。閉じたことは絞り込みを消すと忘れる (元の閉じた状態に戻る)
+        await news.click();
+        await expect(news).toHaveAttribute('aria-expanded', 'false');
+        expect(await listed(page)).toEqual(['group:グループ試験ニュース']);
         await page.getByLabel('録画を絞り込む').fill('');
+        await expect(news).toHaveAttribute('aria-expanded', 'false');
 
         // 戻すと一番下へ。次に開いたときもまとめない
         await page.getByTestId('recordings-group-toggle').click();
