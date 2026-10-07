@@ -4,7 +4,7 @@ import { parseSearchFields, type SearchField } from '../search';
 import type { Program, Rule } from '../types';
 import { config } from './config';
 import { now, orm } from './db';
-import { type Airing, episodeKey, firstAirings, type Taken } from './episode';
+import { type Airing, episodeOf, firstAirings, type Taken } from './episode';
 import { programs as programTable, recordings, reservations, rules as ruleTable, services } from './schema';
 import { settings } from './settings';
 import { parseTitle, toHalfWidth } from './title';
@@ -337,16 +337,20 @@ function recordedEpisodes(at: number): Taken {
     const rows = orm()
         .select({
             name: recordings.name,
+            description: recordings.description,
+            extended: recordings.extended,
             start_at: recordings.start_at,
             service_name: recordings.service_name,
         })
         .from(recordings)
         .where(and(gt(recordings.start_at, at - TAKEN_WINDOW), ne(recordings.state, 'failed')))
+        .orderBy(recordings.start_at)
         .all();
-    const taken: Taken = new Map();
-    for (const row of rows) {
-        const key = episodeKey(row.name);
-        if (key !== null && !taken.has(key)) taken.set(key, row);
+    const taken: Taken = [];
+    for (const { start_at, service_name, ...described } of rows) {
+        // 番組表の番組と同じ読み方をする。録画は録ったときの題名・概要・詳細を持っている
+        const episode = episodeOf(described);
+        if (episode !== null) taken.push({ episode, start_at, service_name });
     }
     return taken;
 }

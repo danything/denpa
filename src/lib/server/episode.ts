@@ -8,34 +8,156 @@
  * 判定は画面に触らない純粋な計算にしてある (単体テストで固定する)。
  * DB を読むのは呼ぶ側 (`rules.applyRules` とルール画面の下見)。
  */
-import { displayTitle, parseTitle, sanitizeFileName, toHalfWidth } from './title';
+import { displayTitle, parseTitle, toHalfWidth } from './title';
 
 /** 比べる前に揃える。空白の有無・大文字小文字は局によって揺れる */
 function squash(text: string): string {
     return toHalfWidth(text).replace(/\s+/g, '').toLowerCase();
 }
 
+/** 回を読む元。番組表の番組と録画のどちらも持っている */
+export interface Described {
+    name: string;
+    description: string;
+    /** 詳細 (拡張形式)。JSON {見出し:本文} */
+    extended: Record<string, string> | null;
+}
+
+/** その回が何か (`episodeOf`)。2つが同じ回かは `sameEpisode` */
+export interface Episode {
+    /** シリーズ名を均したもの */
+    series: string;
+    /** シリーズ名のうちいちばん長い語。局ごとの飾り (頭の「アニメ」、後ろの枠の名前) を除けた芯 */
+    core: string;
+    number: number | null;
+    /** 副題を均したもの */
+    subtitle: string;
+}
+
+const KANJI_DIGITS = '〇一二三四五六七八九';
+const NUMERAL = `\\d{1,4}|[${KANJI_DIGITS}十百]{1,5}`;
+/** 概要に出る話数と副題。`#18「月下の花」` `第18話「…」` `第十八話『…』` */
+const NUMBERED_SUBTITLE = new RegExp(
+    `(?:#\\s*(\\d{1,4})|第\\s*(${NUMERAL})\\s*[話回])\\s*[「『]([^」』]{1,80})[」』]`,
+    'g',
+);
 /**
- * **その回の名札。** 同じ名札なら同じ回。
+ * 副題の無い話数。**行の頭に単独で出たものだけ** (`#18 猫猫は…`)。地の文の「第3話から登場」
+ * 「#1ヒット」は読まない。「第3回」も地の文に紛れやすいので読まない
+ */
+const NUMBER_ONLY = new RegExp(
+    `^\\s*(?:#\\s*(\\d{1,4})|第\\s*(${NUMERAL})\\s*話)(?=[\\s「『:.、。]|$)`,
+    'gm',
+);
+/**
+ * 「前回 #17「…」」「前回のあらすじ #17「…」」はこの回の話数ではない。同じ文の前のほうを見る
+ * (`NUMBERED_SUBTITLE` 用。`NUMBER_ONLY` は行の頭だけなので前置きがあれば当たらない)
+ */
+const ANOTHER_EPISODE = /前回|次回|予告/;
+
+/** `18` / `十八` / `一〇` を数に */
+function numeral(text: string): number {
+    if (/^\d+$/.test(text)) return Number(text);
+    if (!/[十百]/.test(text)) return Number([...text].map((c) => KANJI_DIGITS.indexOf(c)).join(''));
+    let total = 0;
+    let current = 0;
+    for (const c of text) {
+        if (c === '百' || c === '十') {
+            total += (current || 1) * (c === '百' ? 100 : 10);
+            current = 0;
+        } else current = KANJI_DIGITS.indexOf(c);
+    }
+    return total + current;
+}
+
+/** 概要・詳細から、この回の話数と副題 (読めなければ null) */
+function describedEpisode(texts: string[]): { number: number | null; subtitle: string } | null {
+    for (const [pattern, withSubtitle] of [
+        [NUMBERED_SUBTITLE, true],
+        [NUMBER_ONLY, false],
+    ] as const) {
+        for (const text of texts) {
+            for (const match of text.matchAll(pattern)) {
+                const sentence =
+                    text
+                        .slice(0, match.index)
+                        .split(/[。\n」』]/)
+                        .at(-1) ?? '';
+                if (ANOTHER_EPISODE.test(sentence)) continue;
+                return {
+                    number: numeral((match[1] ?? match[2])!),
+                    subtitle: withSubtitle ? squash(match[3]!) : '',
+                };
+            }
+        }
+    }
+    return null;
+}
+
+/** 「第2期」のように、`parseTitle` が話数に読んでしまう期の番号 */
+const SEASON = /^(期|シーズン|クール|章|部)$/;
+
+/**
+ * **その回が何か。** 回が分からなければ null。
  *
- * - シリーズは焼いたものを置くフォルダと同じ決め方 (`library.seriesFolder`。録画一覧の
- *   「まとめて表示」の鍵) から、全角半角・空白・大文字小文字の揺れを均したもの
- * - 回は**話数と副題の両方**で見分ける。片方だけで当てると、`第2期 #1` が
+ * - 回は**話数と副題の両方**で見分ける (`sameEpisode`)。片方だけで当てると、`第2期 #1` が
  *   「第2話」に読める (`parseTitle` の癖) ので、2期の全話が1つの回に潰れる。
- *   局によって副題を出したり出さなかったりすると同じ回でも別の名札になるが、
+ *   局によって副題を出したり出さなかったりすると同じ回でも別の回に見えるが、
  *   そのときは2本録れるだけ (録り逃すより安い)
- * - **話数も副題も無ければ null**。その番組は「回」が分からないので、
+ * - **題名に話数も副題も無ければ、概要 (無ければ詳細) から読む。** 題名は飾りだけで
+ *   (「薬屋のひとりごと FRIDAY ANIME NIGHT」)、話数は概要の `#18「月下の花」` に
+ *   しか無い局がある。題名に片方でもあれば題名だけを使う — 概要で埋めると、埋められた局と
+ *   埋められなかった局で同じ回が別の回になる
+ * - **どちらにも無ければ null**。その番組は「回」が分からないので、
  *   時刻をまたいでは束ねない (毎日の「ニュース」が初回しか録れなくなる)。
  *   同じ時刻に同じ題名が流れる同時放送だけは束ねる (`firstAirings`)
  */
-export function episodeKey(name: string): string | null {
-    const parsed = parseTitle(name);
-    const subtitle = squash(parsed.subtitle);
-    if (parsed.episode === null && subtitle === '') return null;
-    // `library.seriesFolder('', name)` を均したもの。題名はもう切ってあるので、切り直さずに使う
-    const series = squash(sanitizeFileName(parsed.series));
-    const episode = parsed.episode === null ? '' : `#${parsed.episode}`;
-    return `${series}\n${episode}\n${subtitle}`;
+export function episodeOf(program: Described): Episode | null {
+    const parsed = parseTitle(program.name);
+    let series = parsed.series;
+    let number = parsed.episode;
+    let subtitle = squash(parsed.subtitle);
+    if (number !== null && SEASON.test(subtitle)) {
+        // 「X 第2期」だけの題名。毎回同じなので、話数ではなくシリーズ名の一部
+        series = `${series} 第${number}${subtitle}`;
+        number = null;
+        subtitle = '';
+    }
+    if (number === null && subtitle === '') {
+        const texts = [program.description, Object.values(program.extended ?? {}).join('\n')].map(
+            toHalfWidth,
+        );
+        const described = describedEpisode(texts);
+        if (described === null) return null;
+        ({ number, subtitle } = described);
+    }
+    // ARIB の囲み文字 (🈑🈞) は局によって付いたり付かなかったりする
+    const bare = series.replace(/[\u{1F210}-\u{1F23B}]/gu, ' ');
+    const words = bare
+        .split(/[\s[\]【】<>()〈〉《》≪≫]+/)
+        .map(squash)
+        .filter((word) => word !== '');
+    const core = words.reduce((longest, word) => (word.length > longest.length ? word : longest), '');
+    return { series: squash(bare), core, number, subtitle };
+}
+
+/**
+ * **同じ回か。** 話数と副題が揃っていて、シリーズも同じもの。
+ *
+ * シリーズ名は局によって飾りが違う (「アニメ 薬屋のひとりごと」と
+ * 「薬屋のひとりごと FRIDAY ANIME NIGHT」)。飾りを並べて消すのではなく、
+ * **片方の芯 (いちばん長い語) がもう片方に入っていれば**同じシリーズとみる。
+ * ただしそれは**副題まで揃っているときだけ**。話数だけで緩めると、1期の再放送と
+ * 「X 2」の同じ話数がくっつく。副題の無い回はシリーズ名がぴったり同じものだけ。
+ * 芯が2文字以下なら緩めない (「最終回」のような短い副題で別の番組に紛れる)
+ */
+export function sameEpisode(a: Episode, b: Episode): boolean {
+    if (a.number !== b.number || a.subtitle !== b.subtitle) return false;
+    if (a.series === b.series) return true;
+    if (a.subtitle === '') return false;
+    return (
+        (a.core.length >= 3 && b.series.includes(a.core)) || (b.core.length >= 3 && a.series.includes(b.core))
+    );
 }
 
 /** 字幕付きか。放送の題名に `[字]` (外字。ARIB の囲み文字なら 🈑) が付く */
@@ -48,9 +170,8 @@ function satellite(type: string): boolean {
     return type !== 'GR';
 }
 
-export interface Airing {
+export interface Airing extends Described {
     id: number;
-    name: string;
     start_at: number;
     end_at: number;
     service_id: number;
@@ -58,8 +179,8 @@ export interface Airing {
     type: string;
 }
 
-/** 録ったことのある回 (`episodeKey` → いつ・どこで) */
-export type Taken = Map<string, { start_at: number; service_name: string }>;
+/** 録ったことのある回と、いつ・どこで録ったか。同じ回は `sameEpisode` で探す */
+export type Taken = { episode: Episode; start_at: number; service_name: string }[];
 
 /** 録らない放送と、その理由 */
 export type Skip<T extends Airing> =
@@ -87,7 +208,7 @@ const overlaps = (a: Airing, b: Airing) => a.start_at < b.end_at && b.start_at <
 /**
  * 同じ回の放送のうち、**録らないもの**を返す (番組ID → 理由)。返らなかったものは録る。
  *
- * 1. 同じ回 (`episodeKey`) をまとめ、**いちばん早く始まる放送**を録る
+ * 1. 同じ回 (`sameEpisode`) をまとめ、**いちばん早く始まる放送**を録る
  * 2. それと時間が重なっている放送 (同時放送) があれば、その中から
  *    **字幕のあるもの → 衛星** の順に選ぶ
  * 3. **選んだものがチューナー不足で弾かれていたら** (`blocked`)、次の放送も録る。
@@ -95,7 +216,7 @@ const overlaps = (a: Airing, b: Airing) => a.start_at < b.end_at && b.start_at <
  * 4. 同じ回をもう録ってあれば (`taken`)、どれも録らない
  *
  * 話数も副題も無い番組は**同じ時刻に同じ題名が流れているときだけ**まとめる
- * (`episodeKey` の注)。
+ * (`episodeOf` の注)。
  *
  * @param blocked チューナー不足で弾かれている放送 (予約の状態が `conflict`)
  * @param taken 録ったことのある回
@@ -103,19 +224,28 @@ const overlaps = (a: Airing, b: Airing) => a.start_at < b.end_at && b.start_at <
 export function firstAirings<T extends Airing>(
     airings: readonly T[],
     blocked: ReadonlySet<number> = new Set(),
-    taken: Taken = new Map(),
+    taken: Taken = [],
 ): Map<number, Skip<T>> {
     const skips = new Map<number, Skip<T>>();
-    const episodes = new Map<string, T[]>();
+    /** 話数と副題 (副題が無ければシリーズ名も) が同じ放送。シリーズ名は飾りの違いを許すので、この中で `sameEpisode` で束ねる */
+    const numbered = new Map<string, { airing: T; episode: Episode }[]>();
     /** 回の分からない放送。題名ごとに、同じ時刻のものだけ束ねる */
     const loose = new Map<string, T[]>();
     for (const airing of airings) {
-        const key = episodeKey(airing.name);
-        const [bucket, at] =
-            key === null ? [loose, `=${squash(displayTitle(airing.name))}`] : [episodes, key];
-        const list = bucket.get(at);
-        if (list === undefined) bucket.set(at, [airing]);
-        else list.push(airing);
+        const episode = episodeOf(airing);
+        if (episode === null) {
+            const at = squash(displayTitle(airing.name));
+            const list = loose.get(at);
+            if (list === undefined) loose.set(at, [airing]);
+            else list.push(airing);
+            continue;
+        }
+        // 副題が無ければシリーズ名がぴったり同じものしか同じ回にならない (`sameEpisode`)。
+        // 鍵に入れておけば、`#1` だけの回が番組をまたいで1つのバケツに溜まらない
+        const at = `${episode.number}\n${episode.subtitle || `\n${episode.series}`}`;
+        const list = numbered.get(at);
+        if (list === undefined) numbered.set(at, [{ airing, episode }]);
+        else list.push({ airing, episode });
     }
 
     /** 束ねたものから録る1本 (弾かれていれば次も) を選び、残りを録らないことにする */
@@ -132,13 +262,33 @@ export function firstAirings<T extends Airing>(
         for (const airing of rest) skips.set(airing.id, { kind: 'repeat', first: chosen! });
     }
 
-    for (const [key, list] of episodes) {
-        const done = taken.get(key);
-        if (done !== undefined) {
-            for (const airing of list) skips.set(airing.id, { kind: 'recorded', ...done });
-            continue;
+    for (const list of numbered.values()) {
+        // 飾りの違うシリーズ名は芯で繋がるので、繋がったものを1つの回にまとめる (並び順に依らない)
+        const group = list.map((_, i) => i);
+        const root = (i: number): number => {
+            let at = i;
+            while (group[at] !== at) at = group[at]!;
+            return at;
+        };
+        for (let i = 0; i < list.length; i++)
+            for (let j = i + 1; j < list.length; j++)
+                if (sameEpisode(list[i]!.episode, list[j]!.episode)) group[root(j)] = root(i);
+        const clusters = new Map<number, { airing: T; episode: Episode }[]>();
+        list.forEach((entry, i) => {
+            const cluster = clusters.get(root(i));
+            if (cluster === undefined) clusters.set(root(i), [entry]);
+            else cluster.push(entry);
+        });
+        for (const cluster of clusters.values()) {
+            const done = taken.find((t) => cluster.some(({ episode }) => sameEpisode(t.episode, episode)));
+            if (done !== undefined) {
+                const { start_at, service_name } = done;
+                for (const { airing } of cluster)
+                    skips.set(airing.id, { kind: 'recorded', start_at, service_name });
+                continue;
+            }
+            settle(cluster.map(({ airing }) => airing));
         }
-        settle(list);
     }
     for (const list of loose.values()) {
         // 同じ題名でも別の時刻なら別の放送。重なっているものだけを1つに束ねる

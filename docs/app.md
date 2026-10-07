@@ -22,7 +22,7 @@ EPGStation の置き換えとして作ったもので、エンコード設定は
 | `src/lib/server/scan.ts` | チャンネルスキャンの総当たり (選局はエージェント、NIT/SDT を読むのはこちら) |
 | `src/lib/server/channel-seed.ts` | BS / CS の局が無いとき、その種別の局を標準の表 (`channel-seed.json`) から入れる (全国で同じなのでスキャン不要) |
 | `src/lib/server/rules.ts` | ルール(キーワード/チャンネル/ジャンル)から予約を作る |
-| `src/lib/server/episode.ts` | 同じ回は最初の放送だけ録る (`firstAirings`)。同じ回の見分け (`episodeKey`) と、同時放送の選び方 (字幕 → 衛星) |
+| `src/lib/server/episode.ts` | 同じ回は最初の放送だけ録る (`firstAirings`)。同じ回の見分け (`episodeOf` / `sameEpisode`。題名に話数が無ければ概要から読む) と、同時放送の選び方 (字幕 → 衛星) |
 | `src/lib/server/reservations.ts` | 手動予約と取り消し |
 | `src/lib/server/conflict.ts` | チューナー割り当てと競合判定 (純粋関数) |
 | `src/lib/server/scheduler.ts` | 予約 → 録画の状態遷移 |
