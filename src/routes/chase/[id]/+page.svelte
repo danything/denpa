@@ -36,7 +36,7 @@
     import StageNote from '#lib/components/player/StageNote.svelte';
     import StageTail from '#lib/components/player/StageTail.svelte';
     import { snapshotter } from '#lib/components/player/shot.svelte.js';
-    import { videoFrame } from '#lib/components/player/snapshot.js';
+    import { grabbedFrame, videoFrame } from '#lib/components/player/snapshot.js';
     import Toasts, { type Notice } from '#lib/components/Toasts.svelte';
     import { programDetail } from '#lib/detail.svelte.js';
     import { clock as clockLabel } from '#lib/format.js';
@@ -278,7 +278,7 @@
     const notices = $derived<Notice[]>([...shooter.notices, ...pip.notices]);
     function snapshot(): void {
         void shooter.take(
-            () => videoFrame(video),
+            () => (player.raw ? grabbedFrame(player.grab()) : videoFrame(video)),
             player.captions && player.hasCaptions ? overlay : null,
             data.rec.name,
         );

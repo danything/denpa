@@ -253,7 +253,7 @@ RUN ldconfig && fc-cache -f
 # 3つのコマンドは denpa (src/lib/server/cm-jls.ts) から直接起動する
 COPY --from=jls /opt/jls /opt/jls
 
-# ライブを生で送るときにブラウザへ配る MPEG-2 の復号器 (`mpeg2wasm` 段)
+# ライブを生で送るときにブラウザへ配る MPEG-2 と AAC の復号器 (`mpeg2wasm` 段)
 COPY --from=mpeg2wasm /opt/denpa/mpeg2 /opt/denpa/mpeg2
 
 # **node_modules は載せない。**

@@ -21,7 +21,7 @@
 | `frames.ts` | 映した1枚ごとに呼ぶ。字幕の貼り直しと CM の跨ぎがこれに乗る（`timeupdate` は 250ms ごとにしか来ない） |
 | `paint.ts` | 字幕の重ね方。映像の画素そのままの大きさで敷いて、放送の座標に置く |
 | `PlayerStage.svelte` | 舞台の枠。ポインタ・キー・全画面の配線と、黒地で 16:9 の枠。枠の大きさを測って詰め方を決める（幅 448px 未満 = `data-compact`: スマホの縦。高さ 360px 未満 = `data-low`） |
-| `Extras.svelte` / `MoreButton.svelte` | 狭い枠で「毎回は使わないもの」（音声・送り・CM 飛ばし・焼き方・速さ）を「ほか」(⋯) に畳む。広い枠では何もしない。並べ替えは CSS の `order` だけ（DOM は1か所） |
+| `Extras.svelte` / `MoreButton.svelte` | 狭い枠で「毎回は使わないもの」（音声・送り・CM 飛ばし・焼き方・速さ・バックグラウンド再生・小窓）を「ほか」(⋯) に畳む。広い枠では何もしない。並べ替えは CSS の `order` だけ（DOM は1か所） |
 | `MediaStack.svelte` | 映像と重ねもの（前の絵・字幕 canvas）の束。BML が触るので class でなく style |
 | `PlayerVeil.svelte` | 読み込み中・失敗・待ちの幕。前の絵を貼っている間は塗り潰さない |
 | `OverlayMenu.svelte` | 絵の上のドロップダウンの共通部分（選択肢の並びと閉じ方） |

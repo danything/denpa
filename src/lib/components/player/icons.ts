@@ -42,7 +42,7 @@ export { default as CHECK } from '~icons/lucide/check';
 /** 録画 (ライブの右上)。押すといま流れている番組の録画が始まる。丸に点 (録画の印) */
 export { default as RECORD } from '~icons/lucide/circle-dot';
 /**
- * 「ほか」(⋯)。**狭い枠でだけ出す** — 毎回は使わないもの (音声・送り・焼き方・速さ) を
+ * 「ほか」(⋯)。**狭い枠でだけ出す** — 毎回は使わないもの (音声・送り・CM 飛ばし・焼き方・速さ・バックグラウンド再生・小窓) を
  * 畳んでおく口 (`Extras.svelte`)
  */
 export { default as MORE } from '~icons/lucide/ellipsis';

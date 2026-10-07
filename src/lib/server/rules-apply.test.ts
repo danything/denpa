@@ -16,7 +16,7 @@ const { config } = await import('./config');
 config.dbPath = join(mkdtempSync(join(tmpdir(), 'denpa-rules-')), 'denpa.db');
 
 const { now, orm } = await import('./db');
-const { applyRules } = await import('./rules');
+const { applyRules, keepsReservation, previewSkips } = await import('./rules');
 const {
     programs,
     recordings,
@@ -676,5 +676,71 @@ describe('同じ回は最初の放送だけ録る', () => {
         orm().update(reservationTable).set({ state: 'scheduled' }).run();
         expect(applyRules()).toMatchObject({ dropped: 1 });
         expect(reservations().map((r) => r.program_id)).toEqual([10, 12, 13]);
+    });
+
+    test('外した再放送でも、入れていない別のルールが当たっていればそちらで録る', () => {
+        withBs();
+        rule(1, 'テストアニメ', true, 1, true);
+        rule(2, 'テストアニメ');
+        program(10, 'テストアニメ #1');
+        on(BS11, 11, 'テストアニメ #1', DAY);
+
+        applyRules();
+        expect(reservations()).toEqual([
+            { program_id: 10, rule_id: 1, state: 'scheduled' },
+            { program_id: 11, rule_id: 2, state: 'scheduled' },
+        ]);
+    });
+
+    test('最初の放送を入れていないルールが持っていても、再放送は録らない', () => {
+        withBs();
+        // 最初の放送 (10) は先に当たるルール 1 (入れていない。MX だけ) が持つ。再放送 (11) にはルール 2 だけが当たる
+        rule(1, 'テストアニメ');
+        orm()
+            .update(ruleTable)
+            .set({ service_ids: [SERVICE] })
+            .where(eq(ruleTable.id, 1))
+            .run();
+        rule(2, 'テストアニメ', true, 1, true);
+        program(10, 'テストアニメ #1');
+        on(BS11, 11, 'テストアニメ #1', DAY);
+
+        applyRules();
+        expect(reservations()).toEqual([{ program_id: 10, rule_id: 1, state: 'scheduled' }]);
+    });
+
+    /** 下見に渡す形 (ルール画面の `readPreview` と同じ列) */
+    function hit(id: number, serviceId: number, type: string, channel: string) {
+        const row = orm().select().from(programs).where(eq(programs.id, id)).get()!;
+        return { ...row, service_type: type, service_channel: channel, service_name: String(serviceId) };
+    }
+
+    test('下見: 人が取り消した放送は最初の放送に選ばず、次の放送を録ると出す', () => {
+        withBs();
+        rule(1, 'テストアニメ', true, 1, true);
+        program(10, 'テストアニメ #1');
+        on(BS11, 11, 'テストアニメ #1', DAY);
+        applyRules();
+        orm()
+            .update(reservationTable)
+            .set({ state: 'canceled', canceled_by: 'user' })
+            .where(eq(reservationTable.program_id, 10))
+            .run();
+        applyRules();
+        expect(reservations().map((r) => [r.program_id, r.state])).toEqual([
+            [10, 'canceled'],
+            [11, 'scheduled'],
+        ]);
+
+        const skips = previewSkips([hit(10, SERVICE, 'GR', 'T16'), hit(11, BS11, 'BS', 'BS09_0')], now());
+        expect(skips.has(11)).toBe(false);
+    });
+
+    test('下見: 手動と猶予の内の予約は引っ込めないので「録らない」と言わない', () => {
+        const at = now();
+        const later = at + config.ruleRetractGrace + HOUR;
+        expect(keepsReservation({ manual: false, start_at: later }, at)).toBe(false);
+        expect(keepsReservation({ manual: true, start_at: later }, at)).toBe(true);
+        expect(keepsReservation({ manual: false, start_at: at + 10 * 60 * 1000 }, at)).toBe(true);
     });
 });

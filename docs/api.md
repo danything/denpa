@@ -29,7 +29,7 @@
 - `now` はいま放送中の番組 (時刻は epoch ms)。番組表に無ければ `null`
 - `now.audios` はその番組で選べる音声 ([下記](#音声の一覧-audios))。ライブの `?audio=<id>` に渡します
 - `now.id` は番組ID ([`GET /api/programs/<id>`](#番組表の番組の中身-get-apiprogramsid) で中身を引けます)
-- `now.reserved` はその番組を録る予定か (予約が入っていて、競合で弾かれていない)、`now.recording` は
+- `now.reserved` はその番組を録る予定か (予約が予約済みか録画中。競合で弾かれたものは `false`)、`now.recording` は
   いま録っている最中か (録画中なら `reserved` も `true`)。番組表のマスの印と同じ物差しです。
   録画ボタンの印に使い、押すのは [`POST /api/services/<id>/record`](#いまの番組を録る-post-apiservicesidrecord)
 
@@ -74,7 +74,7 @@
 
 - 既に始まっている番組は、数秒後 (次のスケジューラの周期) に録りはじめます
 - **何度押しても二重には録りません** (予約は番組ごとに1本)。予約済み・録画中でも同じ答えが返ります
-- `reserved` が `false` なら予約はできたものの、チューナーが足りず**競合**で録らない状態です
+- `reserved` が `false` なら予約はあるものの録らない状態です。たいていはチューナーが足りない**競合**
   (画面の予約の一覧で優先を変えられます)
 - 番組表にいまの番組が無ければ `404`、予約できなければ (放送が終わったところなど) `400`。
   どちらも `message` に画面に出せる理由が入ります
@@ -265,6 +265,15 @@ OAuth のデバイス認可 (RFC 8628) と同じ形です。どちらも資格�
 
 `Authorization: Bearer` で出している鍵を止めます (アプリの「サーバーから外す」)。`204` を返します。
 ほかの端末の鍵は、設定画面の「テレビのアプリ」から取り消します。
+
+## 録画の状態 `GET /api/recordings/<id>`
+
+```json
+{ "id": 12, "encoded": false, "state": "recording" }
+```
+
+- `encoded` は焼き上がっているか、`state` は録画の状態 (`recording` `recorded` `available` `failed`)。録画が無い・消したものは `404`
+- 追っかけ再生の画面は `recordings` の知らせ ([上記](#変化の知らせ-get-apievents)) のたびにこれを読み、焼き上がったら観る画面へ移る
 
 ## 録画を消す `DELETE /api/recordings/<id>`
 

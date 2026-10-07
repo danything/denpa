@@ -10,7 +10,7 @@
 #
 # 手元に合わせるのは次の2つ。チューナーは自動で見つけるので、普段は画面 (/tuners) で
 # 確かめるだけでよい。
-#   1. 下の devices          … チューナーとカードリーダーのデバイス
+#   1. 下の volumes の /dev … チューナーとカードリーダーのデバイス (device_cgroup_rules も)
 #   2. 下の TRUSTED_NETWORKS … 誰を通すか
 name: denpa
 

@@ -18,8 +18,8 @@ function squash(text: string): string {
 /**
  * **その回の名札。** 同じ名札なら同じ回。
  *
- * - シリーズは焼いたものを置くフォルダと同じ決め方 (`library.seriesFolder`)。
- *   録画一覧の「まとめて表示」とも同じ単位になる
+ * - シリーズは焼いたものを置くフォルダと同じ決め方 (`library.seriesFolder`。録画一覧の
+ *   「まとめて表示」の鍵) から、全角半角・空白・大文字小文字の揺れを均したもの
  * - 回は**話数と副題の両方**で見分ける。片方だけで当てると、`第2期 #1` が
  *   「第2話」に読める (`parseTitle` の癖) ので、2期の全話が1つの回に潰れる。
  *   局によって副題を出したり出さなかったりすると同じ回でも別の名札になるが、
@@ -32,7 +32,7 @@ export function episodeKey(name: string): string | null {
     const parsed = parseTitle(name);
     const subtitle = squash(parsed.subtitle);
     if (parsed.episode === null && subtitle === '') return null;
-    // `library.seriesFolder('', name)` と同じもの。題名はもう切ってあるので、切り直さずに使う
+    // `library.seriesFolder('', name)` を均したもの。題名はもう切ってあるので、切り直さずに使う
     const series = squash(sanitizeFileName(parsed.series));
     const episode = parsed.episode === null ? '' : `#${parsed.episode}`;
     return `${series}\n${episode}\n${subtitle}`;
