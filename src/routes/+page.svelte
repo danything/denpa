@@ -322,13 +322,13 @@
         return resolve(`rules?from=${id}`);
     }
 
-    /** 番組の見出しから作るルールの元。**いちばん新しい録画** (録り逃しだけの番組には出さない) */
-    function groupSource(group: SeriesGroup<RightRow>): number | null {
-        for (let i = group.items.length - 1; i >= 0; i--) {
-            const row = group.items[i]!;
-            if (row.kind === 'rec') return row.rec.id;
-        }
-        return null;
+    /** 番組の中で、いちばん新しい回から遡って `test` に合う録画。無ければ null */
+    function newestRec(
+        group: SeriesGroup<RightRow>,
+        test: (rec: (typeof data.recordings)[number]) => boolean = () => true,
+    ): number | null {
+        const row = group.items.findLast((row) => row.kind === 'rec' && test(row.rec));
+        return row?.kind === 'rec' ? row.rec.id : null;
     }
 
     function hasFile(rec: (typeof data.recordings)[number]): boolean {
@@ -632,17 +632,6 @@
         box.scrollTop = box.scrollHeight;
     }
 
-    /**
-     * 見出しに出す絵。**いちばん新しい回のポスター**。焼いたものが無い回
-     * (録り逃し・削除済み・焼く前) は飛ばして、その前の回を探す
-     */
-    function groupPoster(group: SeriesGroup<RightRow>): number | null {
-        for (let i = group.items.length - 1; i >= 0; i--) {
-            const row = group.items[i]!;
-            if (row.kind === 'rec' && row.rec.library_path !== null && row.rec.deleted_at === null) return row.rec.id;
-        }
-        return null;
-    }
     /*
      * 絞り込みの言葉が**変わったときだけ**先頭に戻す。開いた直後の1回で戻すと、
      * 一番下から見せるために全部描いたもの (`onMount` の `revealAll`) を60件に戻してしまう
@@ -726,6 +715,19 @@
             {/if}
         {/if}
     </div>
+{/snippet}
+
+{#snippet posterImg(id: number)}
+    <!-- 読めなければ絵を隠して枠だけ残す -->
+    <img
+        src={resolve(`api/recordings/${id}/poster`)}
+        alt=""
+        loading="lazy"
+        class="poster-img"
+        onerror={(event) => {
+            (event.currentTarget as HTMLImageElement).style.display = 'none';
+        }}
+    />
 {/snippet}
 
 <!--
@@ -822,16 +824,7 @@
                     -->
                     <div class="poster" data-testid="play-hint">
                         {#if rec.library_path !== null}
-                            <img
-                                src={resolve(`api/recordings/${rec.id}/poster`)}
-                                alt=""
-                                loading="lazy"
-                                class="poster-img"
-                                onerror={(event) => {
-                                    (event.currentTarget as HTMLImageElement).style.display =
-                                        'none';
-                                }}
-                            />
+                            {@render posterImg(rec.id)}
                         {/if}
                         <span class="poster-play" aria-hidden="true">
                             <Play class="poster-icon" aria-hidden="true" />
@@ -1080,7 +1073,8 @@
     中身は見出しのすぐ下に放送順で続く (`#lib/grouping.ts`)
 -->
 {#snippet groupHead(group: SeriesGroup<RightRow>, open: boolean)}
-    {@const poster = groupPoster(group)}
+    <!-- 見出しの絵は**いちばん新しい回のポスター**。焼いたものが無い回 (録り逃し・削除済み・焼く前) は飛ばして、その前の回を探す -->
+    {@const poster = newestRec(group, (rec) => rec.library_path !== null && rec.deleted_at === null)}
     <button
         type="button"
         class="group-head"
@@ -1094,15 +1088,7 @@
         </span>
         <span class="poster">
             {#if poster !== null}
-                <img
-                    src={resolve(`api/recordings/${poster}/poster`)}
-                    alt=""
-                    loading="lazy"
-                    class="poster-img"
-                    onerror={(event) => {
-                        (event.currentTarget as HTMLImageElement).style.display = 'none';
-                    }}
-                />
+                {@render posterImg(poster)}
             {/if}
         </span>
         <span class="row-body">
@@ -1118,7 +1104,8 @@
         中には入れられない (押す的が入れ子になる)。中身の行と同じだけ下げて、その番組の
         ものだと分かるようにする
     -->
-    {@const source = open ? groupSource(group) : null}
+    <!-- ルールの元は**いちばん新しい録画** (録り逃しだけの番組には出さない) -->
+    {@const source = open ? newestRec(group) : null}
     {#if source !== null}
         <div class="group-tools">
             <a class="button small secondary outline" href={ruleFrom(source)} data-testid="group-rule">この番組のルールを作る</a>

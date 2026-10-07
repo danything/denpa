@@ -88,12 +88,9 @@
     --dp-warn-text: #fecc63; /* amber-150 */
     --dp-info-text: #0ccece; /* cyan-250 */
 }
-/* Pico は送信ボタンを横幅いっぱいにする。ボタンは中身の幅にし、広げたいところだけ .full を付ける */
+/* Pico は送信ボタンを横幅いっぱいにする。ボタンは中身の幅に */
 button[type="submit"] {
     width: auto;
-}
-button[type="submit"].full {
-    width: 100%;
 }
 /*
  * 押せる入れ物 (行やカードを丸ごと押すもの。`<div role="button">`)。Pico は [role=button] をボタンの見た目にするので、
@@ -291,10 +288,6 @@ td {
     border: 1px solid var(--dp-base-300);
     border-radius: 1rem;
     padding: 1rem;
-}
-.panel.soft {
-    background: var(--dp-base-200);
-    border-color: transparent;
 }
 
 /* ---- 文字 ---- */
@@ -579,10 +572,6 @@ button.danger:not(.outline):is(:hover, :active, :focus) {
 }
 .tag.solid.error {
     background: var(--dp-rec);
-    color: #fff;
-}
-.tag.solid.success {
-    background: var(--dp-ok);
     color: #fff;
 }
 
