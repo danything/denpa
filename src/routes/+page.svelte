@@ -572,6 +572,19 @@
         untrack(() => closedWhileFiltering.clear());
     });
 
+    /**
+     * まだ描いていない**録画の本数** (「残り N 件」)。`recordingPage.rest` は描く行の
+     * 数で、まとめると閉じた見出し1つに何本も入っているので、そちらでは数えない
+     */
+    const recordingRest = $derived.by(() => {
+        let shown = 0;
+        for (const line of recordingPage.rows) {
+            if (line.kind === 'row') shown += 1;
+            else if (!line.open) shown += line.group.items.length;
+        }
+        return Math.max(0, recordingRows.length - shown);
+    });
+
     function toggleGroup(group: string): void {
         const set = filtering ? closedWhileFiltering : openedGroups;
         if (set.has(group)) set.delete(group);
@@ -582,7 +595,7 @@
      * まとめる・まとめないを切り替える。**開いたときと同じ位置に置き直す** —
      * まとめたら一番上 (最近の番組)、戻したら一番下 (いちばん古い録画)。
      * 前の位置のままだと、並びが丸ごと変わったあとの中途半端な所が映る。
-     * 枠の中がスクロールする広い画面だけの話 (狭い画面は枠が伸びるだけで、何も起きない)
+     * 枠の中がスクロールする広い画面だけの話 (狭い画面はページごとスクロールするので触らない)
      */
     async function setGrouped(on: boolean): Promise<void> {
         grouped = on;
@@ -590,9 +603,19 @@
         recordingPlaced = true;
         const box = recordingBox;
         if (box === undefined) return;
-        if (!on) recordingPage.revealAll();
         await tick();
-        box.scrollTop = on ? 0 : box.scrollHeight;
+        if (on) {
+            box.scrollTop = 0;
+            return;
+        }
+        /*
+         * 一番下へ送るのは枠の中がスクロールするときだけ。そのときは送る前に全部描く
+         * (`onMount` と同じ理由)。狭い画面で全部描くと、少しずつ描く意味が無くなる
+         */
+        if (box.scrollHeight <= box.clientHeight) return;
+        recordingPage.revealAll();
+        await tick();
+        box.scrollTop = box.scrollHeight;
     }
 
     /**
@@ -1382,7 +1405,7 @@
                             use:sentinel={() => recordingPage.reveal()}
                             data-testid="recording-more"
                         >
-                            残り {recordingPage.rest} 件
+                            残り {recordingRest} 件
                         </div>
                     {/if}
                     <!-- 手元で絞っているぶん (予約側と同じく末尾に)。送る前でも何件残るかが分かる -->
