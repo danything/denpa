@@ -115,6 +115,23 @@ describe('同じ回の見分け', () => {
         expect(episode).toMatchObject({ number: 18 });
     });
 
+    test('前回の話数は、間に語が挟まっても読まない', () => {
+        const episode = episodeOf({
+            name: '薬屋のひとりごと',
+            description: '前回のあらすじ #17「街歩き」。#18「月下の花」',
+            extended: null,
+        });
+        expect(episode).toMatchObject({ number: 18 });
+    });
+
+    test('副題の無い話数は行の頭のものだけ。地の文の話数は読まない', () => {
+        const prose = (description: string) =>
+            episodeOf({ name: 'テストドラマ', description, extended: null });
+        expect(prose('第3話から登場した刑事が再び現れる')).toBeNull();
+        expect(prose('#1ヒットを生んだ歌手が出演')).toBeNull();
+        expect(prose('#18 猫猫は壬氏に連れられて…')).toMatchObject({ number: 18, subtitle: '' });
+    });
+
     test('概要に無ければ詳細から読む', () => {
         const episode = episodeOf({
             name: '薬屋のひとりごと',

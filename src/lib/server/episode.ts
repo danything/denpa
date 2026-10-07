@@ -41,10 +41,16 @@ const NUMBERED_SUBTITLE = new RegExp(
     `(?:#\\s*(\\d{1,4})|第\\s*(${NUMERAL})\\s*[話回])\\s*[「『]([^」』]{1,80})[」』]`,
     'g',
 );
-/** 副題の無い話数。地の文に紛れやすい「第3回」は読まない */
-const NUMBER_ONLY = new RegExp(`#\\s*(\\d{1,4})(?!\\d)|第\\s*(${NUMERAL})\\s*話`, 'g');
-/** 「前回 #17「…」」「次回 第19話」はこの回の話数ではない */
-const ANOTHER_EPISODE = /(前回|次回|予告)[\s:は、の]*$/;
+/**
+ * 副題の無い話数。**行の頭に単独で出たものだけ** (`#18 猫猫は…`)。地の文の「第3話から登場」
+ * 「#1ヒット」は読まない。「第3回」も地の文に紛れやすいので読まない
+ */
+const NUMBER_ONLY = new RegExp(
+    `^\\s*(?:#\\s*(\\d{1,4})|第\\s*(${NUMERAL})\\s*話)(?=[\\s「『:.、。]|$)`,
+    'gm',
+);
+/** 「前回 #17「…」」「次回 第19話」「前回のあらすじ …」はこの回の話数ではない。同じ文の前のほうを見る */
+const ANOTHER_EPISODE = /前回|次回|予告/;
 
 /** `18` / `十八` / `一〇` を数に */
 function numeral(text: string): number {
@@ -69,7 +75,12 @@ function describedEpisode(texts: string[]): { number: number | null; subtitle: s
     ] as const) {
         for (const text of texts) {
             for (const match of text.matchAll(pattern)) {
-                if (ANOTHER_EPISODE.test(text.slice(0, match.index))) continue;
+                const sentence =
+                    text
+                        .slice(0, match.index)
+                        .split(/[。\n」』]/)
+                        .at(-1) ?? '';
+                if (ANOTHER_EPISODE.test(sentence)) continue;
                 return {
                     number: numeral((match[1] ?? match[2])!),
                     subtitle: withSubtitle ? squash(match[3]!) : '',
