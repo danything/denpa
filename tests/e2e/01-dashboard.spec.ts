@@ -258,10 +258,13 @@ test.describe('ダッシュボードと画面遷移', () => {
          * `auto` のまま残り、後に続く録画の行が上に重なっていた (`app.css`)。
          * 塗りが不透明であることと、包みが前に出ていることを見る
          */
-        const layer = await menu.evaluate((el) => ({
-            background: getComputedStyle(el).backgroundColor,
-            wrapperZ: el.parentElement === null ? '' : getComputedStyle(el.parentElement).zIndex,
-        }));
+        const layer = await menu.evaluate((el) => {
+            const wrapper = el.closest('[data-bits-floating-content-wrapper]');
+            return {
+                background: getComputedStyle(el).backgroundColor,
+                wrapperZ: wrapper === null ? '' : getComputedStyle(wrapper).zIndex,
+            };
+        });
         expect(layer.background).toMatch(/^rgb\(/);
         expect(layer.wrapperZ).toBe('50');
         await menu.getByTestId('reconcile-menu-button').click();
