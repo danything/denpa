@@ -2053,12 +2053,22 @@
     .menu-form {
         display: contents;
     }
-    .menu-button {
+    /*
+     * 送信ボタンの項目 (再エンコード・ファイルと照合)。Pico のボタンの地・枠・フォーカスの輪を消し、
+     * ほかの項目と同じ見た目にする (選んでいるときの地は [data-highlighted])
+     */
+    .menu-button,
+    .menu-button:is(:hover, :active, :focus) {
         width: 100%;
+        margin: 0;
         border: 0;
+        box-shadow: none;
         background: transparent;
         color: inherit;
         text-align: left;
-        font-size: inherit;
+        font: inherit;
+    }
+    .menu-button[data-highlighted] {
+        background: var(--dp-base-200);
     }
 </style>
