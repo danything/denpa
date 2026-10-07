@@ -79,10 +79,10 @@ interface RecordingRow extends Recording {
  * (`library.seriesFolder`)。見出しに出すのは削る前のシリーズ名
  */
 function seriesGroup(series: string, name: string): { group_key: string; group_name: string } {
-    return {
-        group_key: seriesFolder(series, name),
-        group_name: series === '' ? parseTitle(name).series : series,
-    };
+    const key = seriesFolder(series, name);
+    const shown = (series === '' ? parseTitle(name).series : series).trim();
+    // 名前が空白だけのときはフォルダ名 (`untitled`) を出す。見出しが「N本」だけになるため
+    return { group_key: key, group_name: shown === '' ? key : shown };
 }
 
 /**
