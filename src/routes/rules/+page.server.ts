@@ -249,13 +249,6 @@ export async function load({ url }) {
         .all();
     const reserved = new Map(pending.map((row) => [row.program_id, row]));
 
-    /*
-     * 条件が入っていれば、その条件で録れる番組を出す。
-     *
-     * URL に載っている条件を優先する。編集中に「この条件で何が録れるか見る」を押すと
-     * ?edit=<id> と書き換えたフォームの値が一緒に飛んでくるので、保存済みのほうを
-     * 使うと**いま画面に入っている条件ではない結果**が出てしまう。
-     */
     const origin = originOf(url);
     /*
      * 録画から来た (`?from=<録画ID>`) ときは、下書きの条件を URL に載せて出直す。
@@ -277,6 +270,13 @@ export async function load({ url }) {
         for (const genre of origin.prefill.genres ?? []) query.append('genres', genre);
         redirect(303, relative(url, `/rules?${query}`));
     }
+    /*
+     * 条件が入っていれば、その条件で録れる番組を出す。
+     *
+     * URL に載っている条件を優先する。編集中に「この条件で何が録れるか見る」を押すと
+     * ?edit=<id> と書き換えたフォームの値が一緒に飛んでくるので、保存済みのほうを
+     * 使うと**いま画面に入っている条件ではない結果**が出てしまう。
+     */
     const conditions = conditionsFrom(url.searchParams) ?? editing ?? null;
     const wanted = conditions !== null && url.searchParams.size > 0;
 
@@ -419,7 +419,8 @@ export async function load({ url }) {
                 conflicts: [],
                 conflict_reason:
                     held?.state === 'conflict' ? (held.conflict_reason ?? 'チューナーが足りません') : null,
-                skip: skipOf(p.id),
+                // 予約がもう立っているなら録る (手動で入れた・猶予の内)。「録らない」とは言わない
+                skip: held === null ? skipOf(p.id) : null,
             };
         });
 
@@ -487,7 +488,7 @@ export async function load({ url }) {
 
         return {
             total: rows.length,
-            skipped: skips.size,
+            skipped: rows.filter((row) => row.skip !== null).length,
             // 数えるのは**行の数**。1行に3本重なっていても、困っている番組は1つ
             conflicts: shown.filter((row) => row.conflicts.length > 0 || row.conflict_reason !== null).length,
             programs: shown,
