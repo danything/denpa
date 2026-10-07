@@ -19,7 +19,7 @@ config.rawDir = dir;
 config.encodedDir = dir;
 config.dbPath = join(dir, 'denpa.db');
 
-const { capacity, checkDisk } = await import('./disk');
+const { measure: capacity, checkDisk } = await import('./disk');
 const { orm } = await import('./db');
 const { recordings } = await import('./schema');
 

@@ -276,6 +276,18 @@ test.describe('録画を観る', () => {
         expect(await put(1790, 1800)).toBeNull();
         // 代わりに観終えた時刻が入る (一覧の「未視聴」の印が外れる)
         expect(await watchedAt()).toEqual(expect.any(Number));
+
+        // 詳細の「その他…」から未視聴に戻すと、一覧に点が戻る
+        await goto(page, '/');
+        const row = page.locator(`[data-testid="recording-row"][data-recording-id="${id}"]`);
+        await expect(row.getByTestId('recording-unwatched')).toHaveCount(0);
+        await row.getByTestId('detail-button').click();
+        const detail = page.getByTestId('program-detail');
+        await detail.getByTestId('detail-more').click();
+        await expect(detail.getByTestId('watched-button')).toHaveText('未視聴に戻す');
+        await detail.getByTestId('watched-button').click();
+        await expect(row.getByTestId('recording-unwatched')).toHaveCount(1);
+        expect(await watchedAt()).toBeNull();
     });
 
     /**

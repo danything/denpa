@@ -362,8 +362,10 @@ export const actions = {
     },
 
     /**
-     * 「視聴済みにする」「未視聴に戻す」(詳細の「その他…」)。**続きの位置は触らない** —
-     * 途中まで観たものを視聴済みにしても、続きから観たいことはある
+     * 「視聴済みにする」「未視聴に戻す」(詳細の「その他…」)。**どちらも続きの位置を消す。**
+     * 一覧は続きの位置があれば進捗バーを出し、印 (点) を出さない。残したままだと、
+     * 視聴済みにしても進捗バーのまま・未視聴に戻しても点が出ない、と押した結果が見えない。
+     * 末尾まで観たとき (`api/recordings/<id>/resume`) と同じ形 (観終えた = 位置なし) に揃える
      */
     watched: async ({ request }) => {
         const form = await request.formData();
@@ -372,7 +374,7 @@ export const actions = {
         const watched = form.get('watched') === '1';
         orm()
             .update(recordingTable)
-            .set({ watched_at: watched ? now() : null, updated_at: now() })
+            .set({ watched_at: watched ? now() : null, resume_ms: null, updated_at: now() })
             .where(eq(recordingTable.id, recording.id))
             .run();
         // 同じ一覧を見ているほかの端末の印も変える

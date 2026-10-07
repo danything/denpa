@@ -74,9 +74,25 @@ export function checkDisk(): void {
  * H.264 の控えを全部足す (設定で残すものが変わっても、実際に残った量で決まる)。
  * 置き場が分かれているときも両方の量を少ないほうの空きで割るので、短めに出る —
  * 目安なので、外れるなら少なく見積もるほうにしておく。焼く前の録画は生TSの大きさしか
- * 持たず、焼くと縮むので数えない。本数が足りなければ時間は出さない (null)
+ * 持たず、焼くと縮むので数えない。焼くジョブの無いもの (エンコードしない設定・焼くのに失敗したもの) は
+ * 生TSのまま残るので、その大きさで数える。本数が足りなければ時間は出さない (null)
+ *
+ * **しばらく覚えておく** (`CAPACITY_TTL`)。一覧は知らせ (`emit('recordings')`) のたびに
+ * 読み直すので、そのたびに statfs と標本の stat を回すことになる。目安なので数十秒古くても困らない
  */
-export function capacity(): { free: number; hours: number | null } | null {
+export function capacity(): Capacity | null {
+    const at = Date.now();
+    if (cached === null || at - cached.at >= CAPACITY_TTL) cached = { at, value: measure() };
+    return cached.value;
+}
+
+type Capacity = { free: number; hours: number | null };
+/** 空きを覚えておく長さ (ms) */
+const CAPACITY_TTL = 30_000;
+let cached: { at: number; value: Capacity | null } | null = null;
+
+/** 量り直す (`capacity`)。試験は覚えを通さずにこちらを呼ぶ */
+export function measure(): Capacity | null {
     const frees = watched()
         .map(freeBytes)
         .filter((free) => free !== null);
