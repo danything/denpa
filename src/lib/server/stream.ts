@@ -120,3 +120,45 @@ export async function run(
         options.signal?.removeEventListener('abort', kill);
     }
 }
+
+/**
+ * **ffmpeg の出口をそのまま応答の本文にする** (音声だけ・詰め替え。`stdout` に流させる)。
+ *
+ * - 読まれたぶんしか取りに行かない (`pull`)。相手が読まなければ出口が詰まり、ffmpeg も止まる
+ * - 閉じられたら (`cancel`) ffmpeg を殺す
+ * - **途中で落ちたら、ログに残して本文もエラーで終える。** 200 のまま静かに閉じると、
+ *   受け手は最後まで届いたと思い、どこで何が起きたのかも残らなかった (レビュー指摘)
+ *
+ * `-loglevel error` で起こすこと。出るのは失敗の理由だけで、それをログへ回す
+ *
+ * @param what ログの頭 (`[audio] 音声だけの取り出し …`)
+ */
+export function ffmpegBody(argv: string[], what: string): ReadableStream<Uint8Array> {
+    const ffmpeg = Bun.spawn(argv, { stdin: 'ignore', stdout: 'pipe', stderr: 'pipe' });
+    const stderr = new Response(ffmpeg.stderr).text().catch(() => '');
+    let canceled = false;
+    const reader = ffmpeg.stdout.getReader();
+    return new ReadableStream<Uint8Array>({
+        async pull(controller) {
+            const { done, value } = await reader.read();
+            if (!done) {
+                controller.enqueue(value);
+                return;
+            }
+            const code = await ffmpeg.exited;
+            // 受け手が閉じたあとは、もう閉じてある (二度閉じると投げる)
+            if (canceled) return;
+            if (code === 0) {
+                controller.close();
+                return;
+            }
+            const why = (await stderr).trim().split('\n').slice(-3).join(' / ');
+            console.warn(`${what}が止まりました (${code}): ${why}`);
+            controller.error(new Error(`ffmpeg exited with ${code}`));
+        },
+        cancel() {
+            canceled = true;
+            ffmpeg.kill();
+        },
+    });
+}

@@ -54,9 +54,12 @@
     import { loadOffline } from '#lib/offline.svelte.js';
     import type { OfflineVideo } from '#lib/offline-db.js';
     import { captionAt, type Drawn, pixels, readSup } from '#lib/pgs.js';
+    import { type RemuxPlayer, remuxPlayer } from '#lib/remux-player.js';
     import { keepResume } from '#lib/resume.js';
     import { feedFor, type PlacedMessage, replayAt } from '#lib/ts/data-timeline.js';
+    import { pickMediaSource } from '#lib/ts/media-source.js';
     import { SPEEDS } from '#lib/ts/pacing.js';
+    import { type MediaFile, type Playback, pickPlayback } from '#lib/ts/remux.js';
     import {
         type Chapter,
         chapterAt,
@@ -90,19 +93,72 @@
     let localSrc = $state<string | null>(null);
     let localChecked = $state(false);
     let localCopy: OfflineVideo | null = null;
+    /**
+     * どれを、どう観るか (`ts/remux.ts` の `pickPlayback`)。**そのまま読めないブラウザでは、
+     * サーバで fMP4 に詰め替えて MSE に流す** (iPhone の Safari で H.264 の録画。#503)。
+     * 中身を聞けなかった (オフライン) ときは、今までどおり主をそのまま渡す
+     */
+    let playback = $state<Playback>({ way: 'direct', source: 'encoded' });
+    /** 詰め替えて流しているときの器 (`remux-player.ts`) */
+    let remux: RemuxPlayer | null = null;
     onMount(() => {
         void (async () => {
-            localCopy = await loadOffline(rec.id);
-            if (localCopy?.video !== undefined) localSrc = URL.createObjectURL(localCopy.video);
+            const [held, files] = await Promise.all([loadOffline(rec.id), ready ? loadMedia() : []]);
+            localCopy = held;
+            playback = pickPlayback(files, {
+                play: (type) => document.createElement('video').canPlayType(type) !== '',
+                mse: (type) => pickMediaSource()?.Source.isTypeSupported(type) ?? false,
+            });
+            // 詰め替えるなら端末のコピーは使えない (そのまま読めないのは同じ)
+            if (localCopy?.video !== undefined && playback.way === 'direct') {
+                localSrc = URL.createObjectURL(localCopy.video);
+            }
             localChecked = true;
         })();
         return () => {
             if (localSrc !== null) URL.revokeObjectURL(localSrc);
+            remux?.destroy();
         };
     });
+
+    /** 焼いたファイルの中身 (`api/recordings/<id>/media`)。聞けなければ空 (= そのまま渡す) */
+    async function loadMedia(): Promise<MediaFile[]> {
+        try {
+            const res = await fetch(resolve(`api/recordings/${rec.id}/media`));
+            return res.ok ? ((await res.json()).files ?? []) : [];
+        } catch {
+            return [];
+        }
+    }
+
     const src = $derived(
-        localChecked ? (localSrc ?? resolve(`api/recordings/${rec.id}/file?source=encoded`)) : undefined,
+        localChecked && playback.way === 'direct'
+            ? (localSrc ?? resolve(`api/recordings/${rec.id}/file?source=${playback.source}`))
+            : undefined,
     );
+
+    /** 詰め替えて観るなら、器を作って流しはじめる。**続きの位置から頼む** (頭から読んで捨てない) */
+    $effect(() => {
+        if (!localChecked || playback.way !== 'remux' || video === null || remux !== null) return;
+        const picked = pickMediaSource();
+        if (picked === null) return;
+        const plan = playback;
+        const from = rec.resume_ms === null ? null : resumePoint(rec.resume_ms / 1000, plan.duration);
+        remux = remuxPlayer(video, picked, {
+            url: (at, audio) =>
+                resolve(
+                    `api/recordings/${rec.id}/remux?source=${plan.source}&from=${at.toFixed(3)}&audio=${audio}`,
+                ),
+            codecs: plan.codecs,
+            duration: plan.duration,
+            start: from ?? 0,
+            audio: audioIndex,
+            state: (state) => {
+                resuming = state === 'retrying';
+                if (state === 'failed') broken = true;
+            },
+        });
+    });
 
     let video = $state<HTMLVideoElement | null>(null);
     /** 映像とその上の操作をまとめた箱。全画面にするのはこちら */
@@ -554,6 +610,14 @@
 
     /** いま器が持っている音声トラックを読み直す (`loadedmetadata` と `addtrack` から) */
     function syncAudio(): void {
+        /*
+         * **詰め替えて流しているときは、入れ物の音声の名前から並べる。** 流しているのは
+         * 選んだ1本だけなので、器 (`audioTracks`) には1本しか出ない (`remux-player.ts`)
+         */
+        if (playback.way === 'remux') {
+            audios = playback.audios.map((label, i) => ({ label: label.trim() || `音声 ${i + 1}` }));
+            return;
+        }
         const tracks = audioTrackList();
         if (tracks === null) {
             audios = [];
@@ -571,8 +635,13 @@
         audioIndex = enabled;
     }
 
-    /** 音声を選ぶ。**選んだものだけ有効にする** (ブラウザはそれで切り替える) */
+    /** 音声を選ぶ。**選んだものだけ有効にする** (ブラウザはそれで切り替える)。詰め替えなら頼み直す */
     function selectAudio(index: number): void {
+        if (remux !== null) {
+            remux.setAudio(index);
+            audioIndex = index;
+            return;
+        }
         const tracks = audioTrackList();
         if (tracks === null) return;
         for (let i = 0; i < tracks.length; i++) {
@@ -620,7 +689,8 @@
     function recover(): void {
         if (video === null) return;
         const code = video.error?.code ?? 0;
-        if (code !== MediaError.MEDIA_ERR_NETWORK || retries >= RETRIES) {
+        // 詰め替えて流しているときの切れ目は `remux-player.ts` が拾い直す。ここに来るのは読めない中身
+        if (remux !== null || code !== MediaError.MEDIA_ERR_NETWORK || retries >= RETRIES) {
             broken = true;
             resuming = false;
             return;
