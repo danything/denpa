@@ -38,14 +38,12 @@
     } from '#lib/format.js';
     import {
         flatLines,
-        GROUPED_KEY,
+        GROUPED_COOKIE,
         type GroupLine,
         groupBySeries,
         groupLines,
         type SeriesGroup,
-        storedGrouped,
     } from '#lib/grouping.js';
-    import { write as remember, read as stored } from '#lib/keep.js';
     import { liveUpdates } from '#lib/live-updates.svelte.js';
     import { clearFailed, offline, removeLocal, saveOffline } from '#lib/offline.svelte.js';
     import { matches, normalize } from '#lib/paging.js';
@@ -457,90 +455,17 @@
      * 開けるのはハイドレーションの後なので、それまで無くて困ることは無い
      */
     let mounted = $state(false);
-    /** 録画の枠 (中だけスクロールする)。開いたときに一番下へ送る */
+    /** 録画の枠 (中だけスクロールする)。まとめる・まとめないを切り替えたときに置き直す */
     let recordingBox: HTMLElement | undefined = $state();
     /**
-     * 録画の枠を一番下へ送り終えたか。**送るまでは枠を見せない** (広い画面だけ。CSS の `.placing`)。
-     * 見せたまま送ると、開いた瞬間に一番上が映ってから下へ跳ぶ (実機)
+     * **「まとめて表示」(issue #480)。** 端末ごとに cookie で覚え、**サーバが読む**
+     * (`+page.server.ts`)。localStorage に置いていた頃はハイドレーションの後でしか
+     * 読めず、読むまで枠を隠していた (狭い画面で平らな一覧が一度出てから縮むため)
      */
-    let recordingPlaced = $state(false);
-    /**
-     * **「まとめて表示」(issue #480)。** 端末ごとに覚える (`keep.ts`)。
-     * 読むのはハイドレーションの後 (`onMount`) — サーバは端末の覚えを知らないので、
-     * 先に読むとサーバの描いたものと食い違う
-     */
-    let grouped = $state(false);
-    /**
-     * 覚えを読み終えたか。**読むまで録画の枠を見せない** (CSS の `.reading`)。
-     * 狭い画面では、まとめて表示を覚えている端末でも平らな一覧 (最大300件) が
-     * 一度出てから縮み、ページが跳ねていた (広い画面は `.placing` が隠している)
-     */
-    let groupedRead = $state(false);
+    // svelte-ignore state_referenced_locally
+    let grouped = $state(data.grouped);
     onMount(() => {
         mounted = true;
-        grouped = storedGrouped(stored(GROUPED_KEY));
-        groupedRead = true;
-        /*
-         * **まとめて表示は一番上から見せる。** 番組は新しい順に並ぶので、
-         * 頭に居るのが最近録れた番組。下へ送る理由 (古い録画から片付ける) は
-         * まとめないときの話で、こちらで送ると最近の番組を探しに上まで戻ることになる
-         */
-        if (grouped) {
-            recordingPlaced = true;
-            return;
-        }
-        /*
-         * **録画は一番下 (いちばん古いもの) を見せて開く。** 並びは新しい順のまま。
-         * 溜まった録画は古いものから片付けたいので、開くたびに下まで送らずに済むように。
-         * 枠の中がスクロールするとき (広い画面で2つ並べたとき) だけ。狭い画面は
-         * ページごと縦に積むので、下へ送ると上の予約が見えなくなる。
-         *
-         * **枠の高さが決まるのを待ってから送る。** 開いた直後は枠がまだ画面の高さに縮んで
-         * おらず (高さは測ってから当てる)、ここで見ると「スクロールが要らない」に見えて
-         * 何もしていなかった (実機)。初めてスクロールできるようになった時点で1回だけ送る。
-         * それより先に人が触っていたら (ホイール・タッチ・キー・スクロールバーを掴む) 送らない
-         */
-        const box = recordingBox;
-        if (box === undefined) return;
-        let touched = false;
-        const listening = new AbortController();
-        const place = () => {
-            recordingPlaced = true;
-        };
-        // スクロールが要らないまま (録画が少ない) なら送る時は来ない。待たせすぎない
-        const giveUp = setTimeout(place, 1000);
-        const touch = () => {
-            touched = true;
-            listening.abort();
-            place();
-        };
-        for (const type of ['wheel', 'touchstart', 'pointerdown', 'keydown']) {
-            box.addEventListener(type, touch, { passive: true, signal: listening.signal });
-        }
-        const settle = new ResizeObserver(() => {
-            // 送る前にまとめて表示へ切り替えたら、そちらの置き方 (一番上) に任せる
-            if (touched || grouped) return settle.disconnect();
-            if (box.scrollHeight <= box.clientHeight) return;
-            settle.disconnect();
-            /*
-             * **先に全部描いてから送る。** 描いているのは頭の60件だけで、そのまま下へ送ると
-             * 着くのは60件目。しかも下の端に着いた合図 (`sentinel`) で続きが足され、位置がずれる。
-             * 出すのは新しいほうから300件まで (`+page.server.ts`) なので、全部描いても重くない
-             */
-            recordingPage.revealAll();
-            void tick().then(() => {
-                if (!touched && !grouped) box.scrollTop = box.scrollHeight;
-                place();
-            });
-        });
-        settle.observe(box);
-        // 中身の行が増えて高さが変わったときも気付けるよう、一覧のほうも見る
-        if (box.firstElementChild !== null) settle.observe(box.firstElementChild);
-        return () => {
-            settle.disconnect();
-            listening.abort();
-            clearTimeout(giveUp);
-        };
     });
     function rightText(row: RightRow): string {
         if (row.kind === 'missed') {
@@ -573,7 +498,22 @@
               )
             : flatLines(recordingRows),
     );
-    const recordingPage = new Paged(() => recordingLines, 60);
+    /*
+     * **まとめないときは頭と尻の両方を描く** (`Paged` の `ends`)。広い画面では
+     * 一番下 (いちばん古い録画) から見せるので、尻が描けていないと開いた所が空になる。
+     * 狭い画面はページごと上から見るので頭が要る。サーバはどちらの幅か知らないので両方。
+     * 続きは間 (「残り N 件」) に足す
+     */
+    const recordingPage = new Paged(() => recordingLines, 60, () => !grouped);
+    /** 間に置く印。頭からだけ出すとき (まとめて表示) は末尾に来る */
+    const GAP = { kind: 'gap', key: 'gap' } as const;
+    /**
+     * 描くもの。**1本の `each` で回す** — 頭と尻を別の `each` にすると、間が
+     * 詰まったときに尻の行が全部作り直しになる
+     */
+    const recordingShown = $derived(
+        recordingPage.more ? [...recordingPage.rows, GAP, ...recordingPage.tail] : recordingPage.rows,
+    );
 
     /**
      * 絞っている間に閉じた番組。**絞り込みが変わったら忘れる。**
@@ -592,8 +532,9 @@
      */
     const recordingRest = $derived.by(() => {
         let shown = 0;
-        for (const line of recordingPage.rows) {
+        for (const line of recordingShown) {
             if (line.kind === 'row') shown += 1;
+            else if (line.kind === 'gap') continue;
             else if (!line.open) shown += line.group.items.length;
         }
         return Math.max(0, recordingRows.length - shown);
@@ -608,38 +549,26 @@
     /**
      * まとめる・まとめないを切り替える。**開いたときと同じ位置に置き直す** —
      * まとめたら一番上 (最近の番組)、戻したら一番下 (いちばん古い録画)。
-     * 前の位置のままだと、並びが丸ごと変わったあとの中途半端な所が映る。
-     * 枠の中がスクロールする広い画面だけの話 (狭い画面はページごとスクロールするので触らない)
+     * 前の位置のままだと、並びが丸ごと変わったあとの中途半端な所が映る
      */
     async function setGrouped(on: boolean): Promise<void> {
         grouped = on;
-        remember(GROUPED_KEY, on ? '1' : '0');
-        recordingPlaced = true;
+        // 道は接頭辞込み (`live-player.svelte.ts` の `remember` と同じ)
+        document.cookie = `${GROUPED_COOKIE}=${on ? '1' : '0'}; path=${resolve('')}; max-age=31536000; samesite=lax`;
         const box = recordingBox;
         if (box === undefined) return;
         await tick();
-        if (on) {
-            box.scrollTop = 0;
-            return;
-        }
         /*
-         * 一番下へ送るのは枠の中がスクロールするときだけ。そのときは送る前に全部描く
-         * (`onMount` と同じ理由)。狭い画面で全部描くと、少しずつ描く意味が無くなる
+         * まとめないときの枠は下から積む (CSS の `.from-end`) ので、0 が一番下で上へは負。
+         * 端を越えた値は端に丸まるので、どちらの向きでも大きく振れば端に着く。
+         * 狭い画面では枠がスクロールしないので何も起きない
          */
-        if (box.scrollHeight <= box.clientHeight) return;
-        recordingPage.revealAll();
-        await tick();
-        box.scrollTop = box.scrollHeight;
+        box.scrollTop = on ? -box.scrollHeight : box.scrollHeight;
     }
 
-    /*
-     * 絞り込みの言葉が**変わったときだけ**先頭に戻す。開いた直後の1回で戻すと、
-     * 一番下から見せるために全部描いたもの (`onMount` の `revealAll`) を60件に戻してしまう
-     */
-    let recordingQueryShown = untrack(() => recordingQuery);
+    /* 絞り込みの言葉が変わったら先頭に戻す */
     $effect(() => {
-        if (recordingQuery === recordingQueryShown) return;
-        recordingQueryShown = recordingQuery;
+        recordingQuery;
         recordingPage.reset();
     });
 </script>
@@ -1387,11 +1316,24 @@
                 </div>
             </div>
 
-            <div class="board-box" class:placing={!recordingPlaced}
-                class:reading={!groupedRead} bind:this={recordingBox}>
+            <!--
+                **まとめないときは一番下 (いちばん古い録画) から見せる** (`.from-end`)。
+                溜まった録画は古いものから片付けたいので、開くたびに下まで送らずに済むように。
+                並びは新しい順のまま。**まとめたときは一番上から** — 頭に居るのが最近録れた番組
+            -->
+            <div class="board-box" class:from-end={!grouped} bind:this={recordingBox}>
                 <div class="rows" data-testid="recording-list">
-                    {#each recordingPage.rows as line (line.key)}
-                        {#if line.kind === 'head'}
+                    {#each recordingShown as line (line.key)}
+                        {#if line.kind === 'gap'}
+                            <!-- 続きを足す印 (`sentinel`)。間に近づいたら足す。残りが無くなれば消える -->
+                            <div
+                                class="row-empty muted small"
+                                use:sentinel={() => recordingPage.reveal()}
+                                data-testid="recording-more"
+                            >
+                                残り {recordingRest} 件
+                            </div>
+                        {:else if line.kind === 'head'}
                             {@render groupHead(line.group, line.open)}
                         {:else}
                             {@render rightRow(line.item, line.nested)}
@@ -1414,16 +1356,6 @@
                             </div>
                         {/if}
                     {/each}
-                    <!-- 下端に近づいたら続きを足す (`sentinel`)。残りが無くなれば消える -->
-                    {#if recordingPage.more}
-                        <div
-                            class="row-empty muted small"
-                            use:sentinel={() => recordingPage.reveal()}
-                            data-testid="recording-more"
-                        >
-                            残り {recordingRest} 件
-                        </div>
-                    {/if}
                     <!-- 手元で絞っているぶん (予約側と同じく末尾に)。送る前でも何件残るかが分かる -->
                     {#if recordingQuery !== data.q}
                         <div class="row-empty muted small">
@@ -1704,27 +1636,21 @@
             min-height: 0;
         }
         /*
-         * 一番下へ送るまで隠す (`recordingPlaced`)。JS が動かなくても出るよう、
-         * 隠すのは長くても 1.5 秒まで
+         * **下から積む。** 枠は初めから一番下を映し、JS を待たない。中身は `.rows` の
+         * 1つだけなので、並びは逆にならない。行が足りなければ `.rows` が伸びて
+         * (`flex: 1 0 auto`) 上から並ぶ。間に行を足しても下からの位置は変わらない —
+         * Chromium・Firefox の scroll anchoring は切る (`overflow-anchor`)。間が画面の中に
+         * あるとき、上の行を留めて下 (見ていた古い録画) を押し下げてしまう。
+         * 狭い画面はページごと縦に積むので、ここ (広い画面) だけ。
+         *
+         * JS で一番下へ送っていた頃は、送り終わるまで枠を隠していた (見せたまま送ると
+         * 一番上が映ってから跳ぶ)。送る前に残りを全部描くのが重く、4倍遅い CPU では
+         * 枠が出るまで 2 秒かかっていた。録画が少なくスクロールしないときは、送る時が
+         * 来ないので待ちきり (1 秒) まで隠れたままだった
          */
-        .board-box.placing {
-            visibility: hidden;
-            animation: placed 0s 1.5s forwards;
-        }
-        @keyframes placed {
-            to {
-                visibility: visible;
-            }
-        }
-    }
-    /* 覚え (まとめて表示) を読むまで隠す (`groupedRead`)。JS が動かなくても出るよう 1.5 秒まで */
-    .board-box.reading {
-        visibility: hidden;
-        animation: read 0s 1.5s forwards;
-    }
-    @keyframes read {
-        to {
-            visibility: visible;
+        .board-box.from-end {
+            flex-direction: column-reverse;
+            overflow-anchor: none;
         }
     }
     .board-head {

@@ -22,48 +22,66 @@ import { matches } from './paging';
  * ```
  */
 export class Paged<T> {
-    /** いま出している行数 */
+    /** いま出している行数 (頭から) */
     shown = $state(0);
+    /** 尻から出している行数。`ends` のときだけ使う */
+    tailShown = $state(0);
 
     /**
      * @param items 元の一覧。絞り込み後のものを渡す
      * @param step 一度に足す行数。1画面ぶんより少し多め
+     * @param ends **頭と尻の両方から出す**か。一番下から見せる一覧 (録画の枠) のため。
+     *     間を空けて両端を半分ずつ描き、続きは間に足す。**描く数は片側だけのときと同じ** —
+     *     両端に `step` ずつ描くと、開いたときにハイドレーションする行が倍になり、
+     *     4倍遅い CPU で操作できるまでが 1 秒以上延びた
      */
     constructor(
         private readonly items: () => T[],
         readonly step = 60,
+        private readonly ends: () => boolean = () => false,
     ) {
-        this.shown = step;
+        this.reset();
     }
 
-    /** 出す行。元の一覧の先頭から `shown` 件 */
+    /** 片側に一度に足す行数 */
+    private get side(): number {
+        return this.ends() ? Math.ceil(this.step / 2) : this.step;
+    }
+
+    /** 出す行 (頭のほう)。間が無くなれば全部 */
     get rows(): T[] {
-        return this.items().slice(0, this.shown);
+        const all = this.items();
+        return this.more ? all.slice(0, this.shown) : all;
+    }
+
+    /** 尻のほう。間 (`more`) より後ろに描く。頭からだけ出すときは空 */
+    get tail(): T[] {
+        if (!this.more || !this.ends()) return [];
+        const all = this.items();
+        return all.slice(all.length - this.tailShown);
     }
 
     /** まだ出していない行があるか */
     get more(): boolean {
-        return this.shown < this.items().length;
+        return this.rest > 0;
     }
 
     /** 出していない残り */
     get rest(): number {
-        return Math.max(0, this.items().length - this.shown);
+        return Math.max(0, this.items().length - this.shown - (this.ends() ? this.tailShown : 0));
     }
 
-    /** 続きを足す */
+    /** 続きを足す。両端から出すときは両方に足す (見えていないほうに足しても位置は動かない) */
     reveal(): void {
-        this.shown = Math.min(this.items().length, this.shown + this.step);
-    }
-
-    /** 残りを全部出す。一番下から見せたいとき (録画の枠を開いたとき) */
-    revealAll(): void {
-        this.shown = this.items().length;
+        const length = this.items().length;
+        this.shown = Math.min(length, this.shown + this.side);
+        this.tailShown = Math.min(length, this.tailShown + this.side);
     }
 
     /** 先頭に戻す。絞り込みや並べ替えで顔ぶれが変わったとき */
     reset(): void {
-        this.shown = this.step;
+        this.shown = this.side;
+        this.tailShown = this.side;
     }
 }
 

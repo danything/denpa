@@ -73,16 +73,26 @@ async function listed(page: Page): Promise<string[]> {
         );
 }
 
-/** 録画の枠のスクロール位置。`rest` は下の端までの残り */
+/**
+ * 録画の枠のスクロール位置。`top` は上の端から、`rest` は下の端までの残り。
+ * **`scrollTop` では見ない** — まとめないときの枠は下から積む (`column-reverse`) ので、
+ * 0 が一番下になる。一覧と枠の見えている所の差で測る
+ */
 async function scroll(page: Page): Promise<{ top: number; rest: number; scrollable: boolean }> {
-    return await page
-        .getByTestId('recording-list')
-        .locator('..')
-        .evaluate((box) => ({
-            top: box.scrollTop,
-            rest: box.scrollHeight - box.clientHeight - box.scrollTop,
+    return await page.getByTestId('recording-list').evaluate((list) => {
+        const box = list.parentElement!;
+        const shown = box.getBoundingClientRect();
+        const inner = {
+            top: shown.top + box.clientTop,
+            bottom: shown.top + box.clientTop + box.clientHeight,
+        };
+        const rows = list.getBoundingClientRect();
+        return {
+            top: Math.round(inner.top - rows.top),
+            rest: Math.round(rows.bottom - inner.bottom),
             scrollable: box.scrollHeight > box.clientHeight + 1,
-        }));
+        };
+    });
 }
 
 /**
@@ -170,6 +180,10 @@ test.describe('録画一覧のまとめて表示', () => {
         await expect(page.getByTestId('recording-group').first()).toBeVisible();
         expect((await scroll(page)).scrollable).toBe(true);
         expect((await scroll(page)).top).toBe(0);
+        // 覚えはサーバが読む (cookie)。描いた時点でもうまとまっている
+        expect(await page.context().cookies()).toContainEqual(
+            expect.objectContaining({ name: 'denpa_recordings_grouped', value: '1' }),
+        );
 
         // 絞っている間は、当たった番組を開いて出す
         await page.getByLabel('録画を絞り込む').fill('グループ試験ニュース');
@@ -194,6 +208,28 @@ test.describe('録画一覧のまとめて表示', () => {
         await expect.poll(async () => (await scroll(page)).rest).toBeLessThanOrEqual(1);
         await open(page);
         await expect(page.getByTestId('recordings-group-toggle')).toHaveAttribute('aria-pressed', 'false');
+    });
+
+    /**
+     * **置き方は JS を待たない。** 送り終わるまで枠を隠していた頃は、4倍遅い CPU で
+     * 枠が出るまで 2 秒かかっていた。サーバが描いた時点で正しい所が映っていること
+     */
+    test('JS が無くても、まとめないときは一番下、まとめたときは一番上が映る', async ({ browser, stack }) => {
+        const context = await browser.newContext({ baseURL: stack.appUrl, javaScriptEnabled: false });
+        try {
+            const page = await context.newPage();
+            await page.goto('/');
+            await expect.poll(async () => (await scroll(page)).scrollable).toBe(true);
+            expect((await scroll(page)).rest).toBeLessThanOrEqual(1);
+
+            await context.addCookies([{ name: 'denpa_recordings_grouped', value: '1', url: stack.appUrl }]);
+            await page.goto('/');
+            await expect(page.getByTestId('recordings-group-toggle')).toHaveAttribute('aria-pressed', 'true');
+            await expect(page.getByTestId('recording-group').first()).toBeVisible();
+            expect((await scroll(page)).top).toBe(0);
+        } finally {
+            await context.close();
+        }
     });
 
     /**
