@@ -15,7 +15,6 @@
      * - 枠の大きさから、操作列の詰め方を決める (`compact` / `low`。下の説明)
      *
      * 中身 (video・重ねる canvas・操作列) は画面ごとに違うので snippet で受ける。
-     * 全画面の口は snippet の引数で渡す — ボタンは各画面の操作列にあるため。
      */
     interface Props {
         controls: PlayerControls;
@@ -27,8 +26,6 @@
         children: Snippet<[StageApi]>;
     }
     interface StageApi {
-        full: () => void;
-        fullscreened: boolean;
         /** 狭い枠か (スマホの縦)。**押すものを減らして「ほか」に畳む** */
         compact: boolean;
         /** 「ほか」を開いているか */
@@ -130,8 +127,6 @@
     data-testid={testid}
 >
     {@render children({
-        full: fullscreen.toggle,
-        fullscreened: fullscreen.active,
         compact,
         more,
         toggleMore: () => (more = !more),
