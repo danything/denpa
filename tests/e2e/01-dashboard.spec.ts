@@ -253,6 +253,20 @@ test.describe('ダッシュボードと画面遷移', () => {
         await more.click();
         const menu = page.getByTestId('recordings-more-menu');
         await expect(menu).toBeVisible();
+        /*
+         * **下の行が透けて見えない** (#481)。iOS の Safari では包みの z-index が
+         * `auto` のまま残り、後に続く録画の行が上に重なっていた (`app.css`)。
+         * 塗りが不透明であることと、包みが前に出ていることを見る
+         */
+        const layer = await menu.evaluate((el) => {
+            const wrapper = el.closest('[data-bits-floating-content-wrapper]');
+            return {
+                background: getComputedStyle(el).backgroundColor,
+                wrapperZ: wrapper === null ? '' : getComputedStyle(wrapper).zIndex,
+            };
+        });
+        expect(layer.background).toMatch(/^rgb\(/);
+        expect(layer.wrapperZ).toBe('50');
         await menu.getByTestId('reconcile-menu-button').click();
         await expect(page.getByTestId('reconcile-result')).toBeVisible();
         // 送り終えたら閉じる

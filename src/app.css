@@ -657,6 +657,19 @@ button[aria-busy="true"]::after {
 }
 
 /* ---- Bits UI のメニューの見た目(開閉は Bits UI、見た目はここ) ---- */
+/*
+ * **重なりの順は包みに直に書く (iOS の Safari で後ろが透けて見えた #481)。**
+ * Bits UI は中身を `position: fixed` の包みに入れ、包みの `z-index` には中身の
+ * `getComputedStyle().zIndex` を**付けた瞬間に1度だけ**写す。WebKit はそのとき
+ * まだ隠れている中身 (`forceMount` + `hidden`) には `auto` と答え、包みが `auto` の
+ * まま DOM の順に描かれて、後に続く `position: relative` の行 (録画の一覧) が
+ * 上に重なっていた。Chromium は 50 と答えるので出ない。
+ * 写された値は style 属性に入るので、`!important` で上書きして Chromium と同じ 50 に揃える
+ */
+[data-bits-floating-content-wrapper] {
+    /* biome-ignore lint/complexity/noImportantStyles: Bits UI が style 属性に書く値を上書きする */
+    z-index: 50 !important;
+}
 [data-dropdown-menu-content] {
     z-index: 50;
     min-width: 10rem;
