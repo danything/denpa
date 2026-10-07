@@ -21,7 +21,8 @@ export interface LibraryNameInput {
  * 録画一覧の「まとめて表示」も同じ名前でまとめる。画面だけ別の見分け方をすると、
  * ディスクでは1つのフォルダなのに一覧では2つに割れる (またはその逆) ことが起きる。
  * シリーズ名を持たない行 (録り逃し・古い取り込み) は番組名から切り出す
- * (録るときと同じ `parseTitle`)
+ * (録るときと同じ `parseTitle`)。**ここだけはディスクと違う** — 焼くときは空のまま
+ * `untitled/` に入るが、一覧で無関係な番組が1つにまとまっても探しにくいだけなので
  */
 export function seriesFolder(series: string, name: string): string {
     return sanitizeFileName(series === '' ? parseTitle(name).series : series);
