@@ -7,19 +7,18 @@ import { config } from '#lib/server/config.js';
 import { type Capacity, contending, type Occupant, rivalsOf } from '#lib/server/conflict.js';
 import { now, orm } from '#lib/server/db.js';
 import { CURRENT_SERVICES, watchableServices } from '#lib/server/epg.js';
-import { firstAirings, type Skip } from '#lib/server/episode.js';
 import { relative } from '#lib/server/paths.js';
 import { cancel, reserve } from '#lib/server/reservations.js';
 import {
     applyRules,
-    blockedPrograms,
+    canceledBroadcasts,
     compile,
     coveringRule,
+    dedupeSkips,
     haystack,
     likePatterns,
     matchesCompiled,
     prefillFrom,
-    recordedEpisodes,
 } from '#lib/server/rules.js';
 import { resolveConflicts, tunerCapacity } from '#lib/server/scheduler.js';
 import {
@@ -195,6 +194,7 @@ export interface PreviewRow {
 interface Pending {
     id: number;
     rule_id: number | null;
+    manual: boolean;
     program_id: number;
     name: string;
     service_id: number;
@@ -231,6 +231,7 @@ export async function load({ url }) {
         .select({
             id: reservations.id,
             rule_id: reservations.rule_id,
+            manual: reservations.manual,
             program_id: reservations.program_id,
             name: reservations.name,
             service_id: reservations.service_id,
@@ -354,12 +355,17 @@ export async function load({ url }) {
         /*
          * **同じ回は最初の放送だけ。** 録らないものも行には出す (黙って消すと、
          * 条件が当たっていないのか、当たったうえで外したのか読めない)。
-         * 選び方は予約を立てるときと同じもの (`rules.applyRules`)
+         * 選び方は予約を立てるときと同じもの (`rules.applyRules`)。人が取り消した放送は
+         * あちらも立てないので、「最初の放送」の候補に入れない
          */
-        const airings = hits.map((p) => ({ ...p, type: p.service_type }));
-        const skips = conditions.dedupe
-            ? firstAirings(airings, blockedPrograms(), recordedEpisodes(now()))
-            : new Map<number, Skip<(typeof airings)[number]>>();
+        let skips: ReturnType<typeof dedupeSkips<(typeof hits)[number]>> = new Map();
+        if (conditions.dedupe) {
+            const declined = canceledBroadcasts(now());
+            skips = dedupeSkips(
+                hits.filter((p) => !declined.has({ ...p, channel: p.service_channel })),
+                now(),
+            );
+        }
         const skipOf = (id: number): PreviewRow['skip'] => {
             const skip = skips.get(id);
             if (skip === undefined) return null;
@@ -419,8 +425,11 @@ export async function load({ url }) {
                 conflicts: [],
                 conflict_reason:
                     held?.state === 'conflict' ? (held.conflict_reason ?? 'チューナーが足りません') : null,
-                // 予約がもう立っているなら録る (手動で入れた・猶予の内)。「録らない」とは言わない
-                skip: held === null ? skipOf(p.id) : null,
+                // 手動の予約と猶予の内の予約は引っ込めない (`rules.applyRules`)。それなら「録らない」とは言わない
+                skip:
+                    held === null || (!held.manual && held.start_at >= now() + config.ruleRetractGrace)
+                        ? skipOf(p.id)
+                        : null,
             };
         });
 

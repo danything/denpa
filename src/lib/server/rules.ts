@@ -4,7 +4,7 @@ import { parseSearchFields, type SearchField } from '../search';
 import type { Program, Rule } from '../types';
 import { config } from './config';
 import { now, orm } from './db';
-import { episodeKey, firstAirings, type Taken } from './episode';
+import { type Airing, episodeKey, firstAirings, type Taken } from './episode';
 import { programs as programTable, recordings, reservations, rules as ruleTable, services } from './schema';
 import { settings } from './settings';
 import { parseTitle, toHalfWidth } from './title';
@@ -197,7 +197,7 @@ export interface RuleSource {
     genre_detail: Genre[] | null;
 }
 
-/** シリーズ名。録るときに切り出したもの、無ければ番組名から (録画一覧の「まとめて表示」と同じ) */
+/** シリーズ名。録るときに切り出したもの、無ければ (空白だけでも) 番組名から切り出す */
 function seriesOf(source: Pick<RuleSource, 'name' | 'series'>): string {
     const series = source.series.trim();
     return series !== '' ? series : source.name.trim() === '' ? '' : parseTitle(source.name).series.trim();
@@ -283,7 +283,7 @@ const DECLINE_WINDOW = 10 * 60 * 1000;
  * 手動予約を人が取り消したぶんは含める — 今までも id が同じ限りルールを止めていたので、
  * その振る舞いを id が変わっても続けるだけ。
  */
-function canceledBroadcasts(at: number): Declined {
+export function canceledBroadcasts(at: number): Declined {
     const rows = orm()
         .select({
             channel: services.channel,
@@ -333,7 +333,7 @@ const TAKEN_WINDOW = 30 * 24 * 60 * 60 * 1000;
  * **失敗した録画は数えない** — 再放送は録り直す好機。消したものは数える
  * (観て消したものをまた録っても困る)
  */
-export function recordedEpisodes(at: number): Taken {
+function recordedEpisodes(at: number): Taken {
     const rows = orm()
         .select({
             name: recordings.name,
@@ -352,13 +352,28 @@ export function recordedEpisodes(at: number): Taken {
 }
 
 /** チューナー不足で弾かれている番組。同じ回の次の放送で拾う (`episode.firstAirings` の `blocked`) */
-export function blockedPrograms(): Set<number> {
+function blockedPrograms(): Set<number> {
     const rows = orm()
         .select({ id: reservations.program_id })
         .from(reservations)
         .where(eq(reservations.state, 'conflict'))
         .all();
     return new Set(rows.map((row) => row.id));
+}
+
+/**
+ * **同じ回は最初の放送だけ** (ルールの `dedupe`)。録らない番組 → 理由 (`episode.firstAirings`)。
+ * 予約を立てるとき (`applyRules`) とルール画面の下見で同じものを使う
+ */
+export function dedupeSkips<T extends Omit<Airing, 'type'> & { service_type: string }>(
+    list: T[],
+    at: number,
+) {
+    return firstAirings(
+        list.map((program) => ({ ...program, type: program.service_type })),
+        blockedPrograms(),
+        recordedEpisodes(at),
+    );
 }
 
 export interface RuleSync {
@@ -429,8 +444,15 @@ export function applyRules(options: { rule?: number } = {}): RuleSync {
 
     const declined = canceledBroadcasts(at);
 
-    /** 番組 → 受け持つルール。同じ番組に何本当たっても予約は1つで、**先勝ち** */
-    const wanted = new Map<number, { rule: Rule; program: (typeof programs)[number] }>();
+    /**
+     * 番組 → 受け持つルール。同じ番組に何本当たっても予約は1つで、**先勝ち**。
+     * `dedupe` は「同じ回は最初の放送だけ」のルールが当たったか、`plain` はそうでない
+     * ルールのうち最初に当たったもの (下の dedupe で外れたときの受け手)
+     */
+    const wanted = new Map<
+        number,
+        { rule: Rule; program: (typeof programs)[number]; dedupe: boolean; plain: Rule | undefined }
+    >();
     /**
      * **同じ放送は1本だけ。** 同じ物理チャンネルの中で、同じ時刻に同じ題名が
      * 流れていたら同じ放送とみなし、いちばん小さい局だけを残す。
@@ -449,42 +471,55 @@ export function applyRules(options: { rule?: number } = {}): RuleSync {
     const simulcast = new Map<string, { serviceId: number; programId: number }>();
     for (const program of programs) {
         const textOf = textCache(program);
+        let owner: Rule | undefined;
+        let plain: Rule | undefined;
+        let dedupe = false;
+        // 先勝ちの持ち主のほかに、dedupe の有無どちらのルールが当たるかも見る (下の dedupe)
         for (const candidate of searching) {
             if (!matchesCompiled(candidate, program, program.service_type, recording.freeOnly, textOf))
                 continue;
-            /*
-             * **人が取り消した放送には立てない。** 取り消しの記録は番組の id
-             * (局 + event_id) に付いているので、`INSERT OR IGNORE` だけに頼ると
-             * 枝番違いや event_id の変更ですり抜ける (上の `canceledBroadcasts`)
-             */
-            if (declined.has(program)) break;
-            const key = `${program.channel} ${program.start_at} ${program.name}`;
-            const twin = simulcast.get(key);
-            if (twin !== undefined) {
-                // 枝番の小さいほうが本線 (MX1 なら 23608)。並び順に左右されないよう、
-                // あとから小さいものが来たら入れ替える
-                if (twin.serviceId <= program.service_id) break;
-                wanted.delete(twin.programId);
-            }
-            simulcast.set(key, { serviceId: program.service_id, programId: program.id });
-            wanted.set(program.id, { rule: candidate.rule, program });
-            break;
+            owner ??= candidate.rule;
+            if (candidate.rule.dedupe) dedupe = true;
+            else plain ??= candidate.rule;
+            if (dedupe && plain !== undefined) break;
         }
+        if (owner === undefined) continue;
+        /*
+         * **人が取り消した放送には立てない。** 取り消しの記録は番組の id
+         * (局 + event_id) に付いているので、`INSERT OR IGNORE` だけに頼ると
+         * 枝番違いや event_id の変更ですり抜ける (上の `canceledBroadcasts`)
+         */
+        if (declined.has(program)) continue;
+        const key = `${program.channel} ${program.start_at} ${program.name}`;
+        const twin = simulcast.get(key);
+        if (twin !== undefined) {
+            // 枝番の小さいほうが本線 (MX1 なら 23608)。並び順に左右されないよう、
+            // あとから小さいものが来たら入れ替える
+            if (twin.serviceId <= program.service_id) continue;
+            wanted.delete(twin.programId);
+        }
+        simulcast.set(key, { serviceId: program.service_id, programId: program.id });
+        wanted.set(program.id, { rule: owner, program, dedupe, plain });
     }
 
     /*
      * **同じ回は最初の放送だけ** (ルールの `dedupe`)。局を替えた再放送・同時放送のうち
-     * いちばん早いものだけ残す (`episode.firstAirings`)。外したものは予約を立てず、
-     * 立っていれば下で引っ込む (番組表が動いたときと同じ扱い・同じ猶予)
+     * いちばん早いものだけ残す (`episode.firstAirings`)。比べるのは dedupe のルールが
+     * 当たった放送すべて — 持ち主が別のルールでも、録るならそれが「最初の放送」になる。
+     * 外したものは、dedupe でないルールも当たっていればそちらが受け持ち、無ければ
+     * 予約を立てず、立っていれば下で引っ込む (番組表が動いたときと同じ扱い・同じ猶予)
      */
-    const deduping = [...wanted.values()].filter(({ rule }) => rule.dedupe);
+    const deduping = [...wanted.values()].filter((entry) => entry.dedupe);
     if (deduping.length > 0) {
-        const skips = firstAirings(
-            deduping.map(({ program }) => ({ ...program, type: program.service_type })),
-            blockedPrograms(),
-            recordedEpisodes(at),
+        const skips = dedupeSkips(
+            deduping.map(({ program }) => program),
+            at,
         );
-        for (const id of skips.keys()) wanted.delete(id);
+        for (const id of skips.keys()) {
+            const entry = wanted.get(id)!;
+            if (entry.plain === undefined) wanted.delete(id);
+            else entry.rule = entry.plain;
+        }
     }
 
     /** いまルールが立てている予約。手動と、録り始めたものは入らない */

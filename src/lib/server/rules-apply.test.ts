@@ -677,4 +677,35 @@ describe('同じ回は最初の放送だけ録る', () => {
         expect(applyRules()).toMatchObject({ dropped: 1 });
         expect(reservations().map((r) => r.program_id)).toEqual([10, 12, 13]);
     });
+
+    test('外した再放送でも、入れていない別のルールが当たっていればそちらで録る', () => {
+        withBs();
+        rule(1, 'テストアニメ', true, 1, true);
+        rule(2, 'テストアニメ');
+        program(10, 'テストアニメ #1');
+        on(BS11, 11, 'テストアニメ #1', DAY);
+
+        applyRules();
+        expect(reservations()).toEqual([
+            { program_id: 10, rule_id: 1, state: 'scheduled' },
+            { program_id: 11, rule_id: 2, state: 'scheduled' },
+        ]);
+    });
+
+    test('最初の放送を入れていないルールが持っていても、再放送は録らない', () => {
+        withBs();
+        // 最初の放送 (10) は先に当たるルール 1 (入れていない。MX だけ) が持つ。再放送 (11) にはルール 2 だけが当たる
+        rule(1, 'テストアニメ');
+        orm()
+            .update(ruleTable)
+            .set({ service_ids: [SERVICE] })
+            .where(eq(ruleTable.id, 1))
+            .run();
+        rule(2, 'テストアニメ', true, 1, true);
+        program(10, 'テストアニメ #1');
+        on(BS11, 11, 'テストアニメ #1', DAY);
+
+        applyRules();
+        expect(reservations()).toEqual([{ program_id: 10, rule_id: 1, state: 'scheduled' }]);
+    });
 });
