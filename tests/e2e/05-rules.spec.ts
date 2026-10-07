@@ -115,6 +115,16 @@ test.describe('キーワードを当てる範囲', () => {
         await page.getByTestId('rule-keyword').fill('テストアニメ');
         await page.getByTestId('rule-preview').click();
 
+        /*
+         * **同じ回は最初の放送だけ** (新しいルールは入った状態)。偽の放送は同じ回 (#12) を
+         * 何度も流すので、2回目以降は「録らない」と、どの放送で録るのかが行に出る
+         */
+        await expect(page.getByTestId('rule-dedupe')).toBeChecked();
+        await expect(page.getByTestId('preview-skipped')).toBeVisible();
+        await expect(page.getByTestId('preview-skip-reason').first()).toContainText(
+            /同じ回を .+ で録ります|同じ回は録画済みです/,
+        );
+
         const row = page.getByTestId('preview-row').first();
         await expect(row).toBeVisible();
         await row.getByTestId('preview-open').click();
