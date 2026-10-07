@@ -62,8 +62,8 @@ interface Conditions {
     serviceIds: number[] | null;
     serviceTypes: string[] | null;
     genres: string[] | null;
-    /** 同じ回は最初の放送だけ録る (`rules.dedupe`) */
-    dedupe: boolean;
+    /** 同じ回は最初の放送だけ録る (`rules.dedupe`)。送られてこなければ null (`dedupeOf`) */
+    dedupe: boolean | null;
     /** 何も入っていない。全番組に当たってディスクを埋めるので、保存はさせない */
     empty: boolean;
 }
@@ -102,13 +102,13 @@ function conditionsOf(fields: Fields): Conditions {
  * (外したチェックは何も送らないので、隠しが無いと「外した」と「指定なし」が
  * 区別できない)。
  *
- * **指定なしなら入れる** — 番組表の検索から来たときと、録画から作るとき。
- * 新しく作るルールはこれが既定。既にあるルールは編集画面がいまの値を送るので、
- * ここで変わることはない
+ * **送られてこなければ null。** 新しく作るとき (下見・追加) は入れる — 番組表の検索から
+ * 来たときと、録画から作るとき。**更新では今の値のまま** — 編集画面は必ず送るが、
+ * それ以外の口から来た更新で、入れていないルールが黙って変わらないように
  */
-function dedupeOf(fields: Fields): boolean {
+function dedupeOf(fields: Fields): boolean | null {
     const sent = fields.getAll('dedupe').map(String);
-    return sent.length === 0 || sent.includes('1');
+    return sent.length === 0 ? null : sent.includes('1');
 }
 
 /**
@@ -141,7 +141,7 @@ function conditionsFrom(params: URLSearchParams): Rule | null {
          * フォームの値は全部 URL に乗っている — 読まなければ落ちるだけ
          */
         priority: rulePriority(params),
-        dedupe: conditions.dedupe,
+        dedupe: conditions.dedupe ?? true,
         source: null,
         created_at: 0,
     };
@@ -658,7 +658,8 @@ function ruleValues(conditions: Conditions, form: FormData) {
         service_types: conditions.serviceTypes,
         genres: conditions.genres,
         priority: rulePriority(form),
-        dedupe: conditions.dedupe,
+        // 送られてこなければ触らない (更新では今の値のまま。追加は下で入れる)
+        ...(conditions.dedupe === null ? {} : { dedupe: conditions.dedupe }),
     };
 }
 
@@ -670,7 +671,13 @@ export const actions = {
 
         const created = orm()
             .insert(ruleTable)
-            .values({ ...ruleValues(conditions, form), enabled: true, created_at: now() })
+            .values({
+                ...ruleValues(conditions, form),
+                // 新しく作るルールは入れて始める (`dedupeOf`)
+                dedupe: conditions.dedupe ?? true,
+                enabled: true,
+                created_at: now(),
+            })
             .returning({ id: ruleTable.id })
             .get()!;
 
