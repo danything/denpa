@@ -91,11 +91,17 @@ export function remuxPlayer(
         );
     }
 
-    /** 1つ頼んで、終わるまで待つ。読めない中身なら投げる */
-    async function update(job: (target: SourceBuffer) => void): Promise<void> {
+    /**
+     * 1つ頼んで、終わるまで待つ。読めない中身なら投げる。
+     *
+     * `mine` を渡したら、手が空くのを待つ間に頼み直されていれば (`load`) 何もしない。
+     * 古い流れの残りを、新しい流れの捨てた後へ足さないため
+     */
+    async function update(job: (target: SourceBuffer) => void, mine?: number): Promise<void> {
         const target = buffer;
         if (target === null) return;
         await idle();
+        if (mine !== undefined && mine !== run) return;
         await new Promise<void>((resolve, reject) => {
             const done = (): void => {
                 target.removeEventListener('error', fail);
@@ -143,7 +149,7 @@ export function remuxPlayer(
         for (;;) {
             if (mine !== run) return;
             try {
-                await update((target) => target.appendBuffer(data as BufferSource));
+                await update((target) => target.appendBuffer(data as BufferSource), mine);
                 return;
             } catch (error) {
                 // 溜めきれない。後ろを捨てて入れ直す。捨てるものが無ければ観て減るのを待つ
@@ -172,7 +178,8 @@ export function remuxPlayer(
             if (mine !== run || buffer === null) return;
             // 前の流れの読みかけを落とす。尻まで読み終えて閉じていれば、足せば開き直る
             if (media.readyState === 'open') buffer.abort();
-            if (buffered().length > 0) await update((target) => target.remove(0, Number.POSITIVE_INFINITY));
+            if (buffered().length > 0)
+                await update((target) => target.remove(0, Number.POSITIVE_INFINITY), mine);
             if (mine !== run) return;
             const response = await fetch(options.url(from, audio), { signal: abort.signal });
             if (!response.ok || response.body === null) throw new Error(`HTTP ${response.status}`);
