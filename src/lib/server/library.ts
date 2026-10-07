@@ -2,7 +2,7 @@ import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { pad } from '#lib/format.js';
 import { config } from './config';
-import { sanitizeFileName } from './title';
+import { parseTitle, sanitizeFileName } from './title';
 
 export interface LibraryNameInput {
     id: number;
@@ -13,6 +13,18 @@ export interface LibraryNameInput {
     library_path?: string | null;
     /** もう一方のコーデックの置き場所。これも「自分自身」なので衝突と読まない */
     alt_path?: string | null;
+}
+
+/**
+ * **シリーズのフォルダ名。** 焼いたものはこの名前のフォルダに並ぶ (下の `libraryRelPath`)。
+ *
+ * 録画一覧の「まとめて表示」も同じ名前でまとめる。画面だけ別の見分け方をすると、
+ * ディスクでは1つのフォルダなのに一覧では2つに割れる (またはその逆) ことが起きる。
+ * シリーズ名を持たない行 (録り逃し・古い取り込み) は番組名から切り出す
+ * (録るときと同じ `parseTitle`)
+ */
+export function seriesFolder(series: string, name: string): string {
+    return sanitizeFileName(series === '' ? parseTitle(name).series : series);
 }
 
 /**

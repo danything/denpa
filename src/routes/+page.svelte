@@ -1,3 +1,13 @@
+<script lang="ts" module>
+    import { SvelteSet } from 'svelte/reactivity';
+
+    /**
+     * 「まとめて表示」で開いている番組 (まとめる鍵)。**その場かぎり覚える** —
+     * モジュールに置くので、観る画面へ行って戻っても開いたまま。読み込み直すと閉じる
+     */
+    const openedGroups = new SvelteSet<string>();
+</script>
+
 <script lang="ts">
     import { DropdownMenu } from 'bits-ui';
     import { onMount, tick, untrack } from 'svelte';
@@ -26,6 +36,16 @@
         stateLabel,
         time,
     } from '#lib/format.js';
+    import {
+        flatLines,
+        GROUPED_KEY,
+        type GroupLine,
+        groupBySeries,
+        groupLines,
+        type SeriesGroup,
+        storedGrouped,
+    } from '#lib/grouping.js';
+    import { write as remember, read as stored } from '#lib/keep.js';
     import { liveUpdates } from '#lib/live-updates.svelte.js';
     import { clearFailed, offline, removeLocal, saveOffline } from '#lib/offline.svelte.js';
     import { matches } from '#lib/paging.js';
@@ -33,7 +53,9 @@
     import { encodeSource, type FileSource } from '#lib/source.js';
     import { goto } from '$app/navigation';
     import { resolve } from '$app/paths';
+    import ChevronRight from '~icons/lucide/chevron-right';
     import Ellipsis from '~icons/lucide/ellipsis';
+    import ListTree from '~icons/lucide/list-tree';
     import Play from '~icons/lucide/play';
 
     let { data, form } = $props();
@@ -335,9 +357,10 @@
      * 終わった — `+page.server.ts` の `missed`) ので、ここで差し込む。
      * 鍵は種類ごとに接頭辞を付ける (録画と予約でIDの空間が別のため)
      */
-    type RightRow =
-        | { kind: 'rec'; key: string; at: number; rec: (typeof data.recordings)[number] }
-        | { kind: 'missed'; key: string; at: number; res: (typeof data.missed)[number] };
+    type RightRow = { key: string; at: number; group: string; groupName: string } & (
+        | { kind: 'rec'; rec: (typeof data.recordings)[number] }
+        | { kind: 'missed'; res: (typeof data.missed)[number] }
+    );
 
     /**
      * 録り逃しの詳細。**失敗した録画と同じ形**で、開いたときに理由を出す。
@@ -351,10 +374,24 @@
     const rightRows = $derived(
         [
             ...data.recordings.map(
-                (rec) => ({ kind: 'rec', key: `rec-${rec.id}`, at: rec.start_at, rec }) as RightRow,
+                (rec): RightRow => ({
+                    kind: 'rec',
+                    key: `rec-${rec.id}`,
+                    at: rec.start_at,
+                    group: rec.group_key,
+                    groupName: rec.group_name,
+                    rec,
+                }),
             ),
             ...data.missed.map(
-                (res) => ({ kind: 'missed', key: `missed-${res.id}`, at: res.start_at, res }) as RightRow,
+                (res): RightRow => ({
+                    kind: 'missed',
+                    key: `missed-${res.id}`,
+                    at: res.start_at,
+                    group: res.group_key,
+                    groupName: res.group_name,
+                    res,
+                }),
             ),
         ].sort((a, b) => b.at - a.at),
     );
@@ -413,8 +450,24 @@
      * 見せたまま送ると、開いた瞬間に一番上が映ってから下へ跳ぶ (実機)
      */
     let recordingPlaced = $state(false);
+    /**
+     * **「まとめて表示」(issue #480)。** 端末ごとに覚える (`keep.ts`)。
+     * 読むのはハイドレーションの後 (`onMount`) — サーバは端末の覚えを知らないので、
+     * 先に読むとサーバの描いたものと食い違う
+     */
+    let grouped = $state(false);
     onMount(() => {
         mounted = true;
+        grouped = storedGrouped(stored(GROUPED_KEY));
+        /*
+         * **まとめて表示は一番上から見せる。** 番組は新しい順に並ぶので、
+         * 頭に居るのが最近録れた番組。下へ送る理由 (古い録画から片付ける) は
+         * まとめないときの話で、こちらで送ると最近の番組を探しに上まで戻ることになる
+         */
+        if (grouped) {
+            recordingPlaced = true;
+            return;
+        }
         /*
          * **録画は一番下 (いちばん古いもの) を見せて開く。** 並びは新しい順のまま。
          * 溜まった録画は古いものから片付けたいので、開くたびに下まで送らずに済むように。
@@ -444,7 +497,8 @@
             box.addEventListener(type, touch, { passive: true, signal: listening.signal });
         }
         const settle = new ResizeObserver(() => {
-            if (touched) return settle.disconnect();
+            // 送る前にまとめて表示へ切り替えたら、そちらの置き方 (一番上) に任せる
+            if (touched || grouped) return settle.disconnect();
             if (box.scrollHeight <= box.clientHeight) return;
             settle.disconnect();
             /*
@@ -454,7 +508,7 @@
              */
             recordingPage.revealAll();
             void tick().then(() => {
-                if (!touched) box.scrollTop = box.scrollHeight;
+                if (!touched && !grouped) box.scrollTop = box.scrollHeight;
                 place();
             });
         });
@@ -484,7 +538,51 @@
         ].join(' ');
     }
     const recordingRows = $derived(rightRows.filter((row) => matches(recordingQuery, rightText(row))));
-    const recordingPage = new Paged(() => recordingRows, 60);
+    /**
+     * 描く行。まとめるときは番組ごとに見出しを立てる (`#lib/grouping.ts`)。
+     * **絞っている間は番組を全部開く** — 当たった回が見出しの奥に隠れていると、
+     * 絞った意味が無い
+     */
+    const recordingLines = $derived<GroupLine<RightRow>[]>(
+        grouped
+            ? groupLines(groupBySeries(recordingRows), (group) => recordingQuery !== '' || openedGroups.has(group))
+            : flatLines(recordingRows),
+    );
+    const recordingPage = new Paged(() => recordingLines, 60);
+
+    function toggleGroup(group: string): void {
+        if (openedGroups.has(group)) openedGroups.delete(group);
+        else openedGroups.add(group);
+    }
+
+    /**
+     * まとめる・まとめないを切り替える。**開いたときと同じ位置に置き直す** —
+     * まとめたら一番上 (最近の番組)、戻したら一番下 (いちばん古い録画)。
+     * 前の位置のままだと、並びが丸ごと変わったあとの中途半端な所が映る。
+     * 枠の中がスクロールする広い画面だけの話 (狭い画面は枠が伸びるだけで、何も起きない)
+     */
+    async function setGrouped(on: boolean): Promise<void> {
+        grouped = on;
+        remember(GROUPED_KEY, on ? '1' : '0');
+        recordingPlaced = true;
+        const box = recordingBox;
+        if (box === undefined) return;
+        if (!on) recordingPage.revealAll();
+        await tick();
+        box.scrollTop = on ? 0 : box.scrollHeight;
+    }
+
+    /**
+     * 見出しに出す絵。**いちばん新しい回のポスター**。焼いたものが無い回
+     * (録り逃し・削除済み・焼く前) は飛ばして、その前の回を探す
+     */
+    function groupPoster(group: SeriesGroup<RightRow>): number | null {
+        for (let i = group.items.length - 1; i >= 0; i--) {
+            const row = group.items[i]!;
+            if (row.kind === 'rec' && row.rec.library_path !== null && row.rec.deleted_at === null) return row.rec.id;
+        }
+        return null;
+    }
     /*
      * 絞り込みの言葉が**変わったときだけ**先頭に戻す。開いた直後の1回で戻すと、
      * 一番下から見せるために全部描いたもの (`onMount` の `revealAll`) を60件に戻してしまう
@@ -568,6 +666,393 @@
             {/if}
         {/if}
     </div>
+{/snippet}
+
+<!--
+    録画一覧の1行 (録画・録り逃し)。まとめて表示では番組の中にも同じ行を出す (`nested` で一段下げる)
+-->
+{#snippet rightRow(row: RightRow, nested: boolean)}
+    {#if row.kind === 'missed'}
+        {@const res = row.res}
+        {@const press = (event: MouseEvent | KeyboardEvent) => rowClick(event, null, () => openMissed(res))}
+        <!--
+            録り逃し。観るものが無いので、押すと詳細だけ出す (予約の行と
+            同じ扱い)。ボタンも置かない — 放送は終わっているので、
+            この行からできることが無い (再放送は番組表から予約し直す)
+        -->
+        <div
+            data-program-id={res.program_id}
+            class="row"
+            class:nested={nested}
+            role="button"
+            tabindex="0"
+            onclick={press}
+            onkeydown={press}
+        >
+            <div class="row-inner">
+                <div class="row-body" data-testid="row-body">
+                    {@render title(stateLabel('missed'), badgeClass('missed'), res.name, 'missed-state')}
+                    {@render meta([res.service_name, airing(res)], res)}
+                    <!-- 録画側の流儀に合わせて手動とも書く (見返すものなので) -->
+                    {@render source(res.rule_id, res.rule_name, res.manual)}
+                </div>
+                <!--
+                    確かめ終わったら畳める (録画の削除と同じ2回押し)。
+                    消すのは予約の行 (`?/deleteMissed`) — 録画の行が無いので。
+                    構えの鍵は負の値にして、録画のIDと混ざらないようにする
+                    (deleting は録画と共用で、IDの空間が別のため)
+                -->
+                <div class="row-actions">
+                    <form method="POST" action="?/deleteMissed" use:submitting>
+                        <input type="hidden" name="id" value={res.id} />
+                        {@render armedDelete(-res.id)}
+                    </form>
+                </div>
+            </div>
+        </div>
+    {:else}
+        {@const rec = row.rec}
+        {@const link = watchLink(rec)}
+        {@const press = (event: MouseEvent | KeyboardEvent) =>
+            rowClick(event, link, () => openRecording(rec))}
+        {@const canPlay = link !== null}
+        {@const shown = rowState(rec)}
+        <!-- 端末に入っているか (オフライン視聴)。行の印と、下のバーで見る -->
+        {@const held = offline.entries[rec.id]}
+        <!--
+            押すと再生。中身を読みたいときは行の中の「詳細」から。
+
+            **吹き出し (title) は出さない。** 行に指を乗せると色が反転し、
+            再生の印も出ているので、そこを押せば再生になることは見れば分かる。
+            出していた頃は、行を読もうとするたびに文字の上へ札が被さっていた。
+
+            置き場と尺と**切ったCMの位置**は属性にだけ持たせる。普段は見ない
+            もので (CM の位置はチャプターとして動画に入っている)、
+            画面に並べると番組名を押し出すが、確かめる手段は残しておきたい
+        -->
+        <div
+            data-testid="recording-row"
+            data-recording-id={rec.id}
+            data-program-id={rec.program_id}
+            data-library-path={rec.library_path}
+            data-alt-path={rec.alt_path}
+            data-duration-ms={rec.duration_ms}
+            data-cm-ranges={rec.cm_ranges === null ? null : JSON.stringify(rec.cm_ranges)}
+            class="row playable"
+            class:nested={nested}
+            role="button"
+            tabindex="0"
+            onclick={press}
+            onkeydown={press}
+        >
+            <div class="row-inner">
+                <!--
+                    再生の印。**押すもの (button) にはしない。**
+                    行そのものが再生なので、同じ働きの的を二重に置くと
+                    「印を外すと再生されない」ように見える。
+                    行に指を乗せると色が反転して、押す先がここだと分かる
+                -->
+                {#if canPlay}
+                    <!--
+                        **ポスターを出す。** 焼いたときに動画の隣へ置いた
+                        `-poster.jpg` (`api/.../poster`)。文字だけの行より
+                        ずっと選びやすい。**無い録画もある**
+                        (ポスターより前に焼いたもの等) ので、読めなければ絵を
+                        隠して枠だけ残す (`onerror`)。枠と再生印はいつでも出す
+                    -->
+                    <div class="poster" data-testid="play-hint">
+                        {#if rec.library_path !== null}
+                            <img
+                                src={resolve(`api/recordings/${rec.id}/poster`)}
+                                alt=""
+                                loading="lazy"
+                                class="poster-img"
+                                onerror={(event) => {
+                                    (event.currentTarget as HTMLImageElement).style.display =
+                                        'none';
+                                }}
+                            />
+                        {/if}
+                        <span class="poster-play" aria-hidden="true">
+                            <Play class="poster-icon" aria-hidden="true" />
+                        </span>
+                    </div>
+                {/if}
+                <div class="row-body" data-testid="row-body">
+                    <!--
+                        録画の状態とエンコードの状態を1つにまとめて出す
+                        (rowState)。消したもの (deleted) も録画の状態から
+                        決まるので、ここで書き分けることは何も無い
+                    -->
+                    {@render title(shown.label, shown.badge, rec.name, 'recording-state')}
+                    {#if held !== undefined}
+                        <!-- 端末に入っている印。保存中はエンコードと同じく割合を添える -->
+                        <span
+                            class="tag offline-tag {held.state === 'ready'
+                                ? 'success'
+                                : held.state === 'failed'
+                                  ? 'error'
+                                  : ''}"
+                        >
+                            {held.state === 'ready'
+                                ? '端末に保存済み'
+                                : held.state === 'failed'
+                                  ? '端末に保存できませんでした — 詳細からやり直せます'
+                                  : `端末に保存中${held.progress === null ? '…' : ` ${percent(held.progress)}`}`}
+                        </span>
+                    {/if}
+                    <!--
+                        放送日時・尺・サイズは1行にまとめる。列に分けていた頃は、
+                        画面が狭いと表ごと横スクロールになって番組名まで隠れていた。
+                        ファイルの置き場所は普段は見ないので出さない (data-library-path)
+                    -->
+                    {@render meta(
+                        [
+                            rec.service_name,
+                            // 番組表の尺ではなく実際に録れた長さ。
+                            // 途中で止めたときやCMを切ったときは合わない
+                            `${dateTime(rec.start_at)} (${recordedDuration(rec)})`,
+                            // 在るものは全部出す (`sizeLabel`)。片方しか
+                            // 出していなかった頃は、消していいのか・
+                            // どれだけ空くのかが画面から分からなかった
+                            sizeLabel(rec),
+                            rec.deleted_at !== null ? `${date(rec.deleted_at)} に削除` : '',
+                        ],
+                        rec,
+                    )}
+                    <!--
+                        **欠けているなら、そう言う。** チューナーの取り合いで
+                        頭か尻を譲った録画は、番組の一部が入っていない
+                        (`server/conflict.ts` の「入るところまで録る」)。
+                        尺だけ見ても「短い番組」と見分けが付かないので、
+                        行に書く
+                    -->
+                    {#if clipNote(rec, true) !== null}
+                        <div class="row-sub text-warning small">
+                            {clipNote(rec, true)}
+                        </div>
+                    {/if}
+                    <!--
+                        **途中まで観たものは残りを出す。** 観た位置
+                        (`resume_ms`) は続きから始めるために持っていて、末尾まで
+                        観たものは消える (`api/.../resume`) ので、**残っている =
+                        まだ途中**。押せば `/watch` が続きから始める。
+                        分母は実際に録れた長さ。無ければ番組表の尺で代用する。
+                        添える言葉は割合ではなく**あと何分か** — 「観終わるのに
+                        どれだけ掛かるか」が知りたいことで、4% では換算がいる
+                    -->
+                    {#if canPlay && rec.deleted_at === null && rec.resume_ms !== null && rec.resume_ms > 0}
+                        {@const total = rec.duration_ms ?? rec.end_at - rec.start_at}
+                        {@const frac =
+                            total > 0 ? Math.min(1, rec.resume_ms / total) : 0}
+                        <div class="resume">
+                            <div class="resume-track">
+                                <div class="resume-fill" style="width: {frac * 100}%"></div>
+                            </div>
+                            <span class="resume-left muted tiny num">
+                                残り{durationMs(Math.max(0, total - rec.resume_ms))}
+                            </span>
+                        </div>
+                    {/if}
+                    <!--
+                        何で録れた1本か。**予約から来たものだけ**。
+                        取り込んだ録画 (EPGStation から引き継いだもの) には
+                        予約が無いので、何も出さない
+                    -->
+                    {#if rec.from_manual !== null}
+                        {@render source(rec.rule_id, rec.rule_name, rec.from_manual)}
+                    {/if}
+                    <!--
+                        失敗・削除の理由や CM の検出元は長いので行に出さず、
+                        詳細 (openRecording) に回す。状態はバッジで分かる
+                    -->
+                    {#if logoUnusable(rec.cm_note) && rec.deleted_at === null}
+                        <!--
+                            ロゴでの判定が使えなかったので、無音だけでCMを判定している。
+                            精度が落ちているのを黙っていると「なぜか切れていない」に
+                            なるので出す。**位置を教える口はチューナー画面にある** —
+                            録画ごとではなく局ごとの話で、教えれば以降の全部に効く。
+
+                            **見つけられなかったときだけではない。** ロゴには合致した
+                            のに結果が使い物にならなかったとき (番組の 100% がCM判定など)
+                            も、覚えているほうが怪しいので同じ口を出す
+                        -->
+                        <div class="row-sub text-warning small">
+                            ロゴでCMを判定できませんでした (無音だけで判定)
+                            <span class="muted"
+                                >— チューナー画面でロゴの位置を教えられます</span
+                            >
+                        </div>
+                    {/if}
+                    <!--
+                        エンコード中だけ、割合と残りの見込みを添える。
+                        ffmpeg が回っていない段階 (解除中・CM検出中) は
+                        進み具合が取れないので、代わりに**いま何をしているか**を出す。
+                        CM検出は中で3つの道具を数分ずつ回すので、
+                        段階の名前だけだと止まっているように見えていた
+                    -->
+                    {#if rec.job_state === 'running' && rec.job_phase === 'encode'}
+                        <!-- SSE の生放送 (encode-live) があればそちら。読み直しを待たずに動く -->
+                        {@const live = encodeLive.entries[rec.id]}
+                        {@const liveEta = live !== undefined ? live.etaMs : rec.job_eta_ms}
+                        <div class="row-sub muted tiny" data-testid="encode-progress">
+                            {percent(live?.percent ?? rec.job_percent ?? 0)}
+                            {#if eta(liveEta)}・{eta(liveEta)}{/if}
+                        </div>
+                    {:else if rec.job_state === 'running' && rec.job_log}
+                        <div class="row-sub muted tiny">
+                            {rec.job_log}
+                        </div>
+                    {/if}
+                </div>
+
+                <!--
+                    押すものはすべて枠付きにする。枠も地も無いボタン (ghost) は
+                    行の文字と見分けが付かず、どこからどこまでが押せるのか
+                    分からなかった
+                -->
+                <div class="row-actions">
+                    <!--
+                        中身を読む入口は、**行を押しても詳細にならない行だけ**に置く。
+                        観られる行は押すと再生に行くので、説明やCMの位置を見たい
+                        ときの別口が要る。観られない行 (録画そのものの失敗・
+                        削除済み・まだ何も録れていない) は行そのものが詳細の
+                        入口 (rowClick) なので、同じ働きのボタンを並べない
+                        (録り逃しの行とも揃う)。焼いている最中は観られる (追っかけ)
+                    -->
+                    {#if canPlay}
+                        <button
+                            type="button"
+                            class="secondary outline"
+                            onclick={() => openRecording(rec)}
+                            data-testid="detail-button"
+                        >
+                            詳細
+                        </button>
+                    {/if}
+                    {#if rec.deleted_at === null}
+                        <!-- ダウンロードと録り直しは詳細の中 (recordingActions) -->
+                        {#if rec.job_id !== null}
+                            <!--
+                                動いている間は中止だけ。この裏で ffmpeg が
+                                元のTSを読んでいるので、消させると道連れになる
+                            -->
+                            {#if rec.job_canceling}
+                                <!--
+                                    **畳み終わるまで回したままにする。** 押した返事は
+                                    上限 (encoder.CANCEL_WAIT_MS) で切り上げることが
+                                    あり、返事でボタンを戻すと「回るのが止まったのに
+                                    まだエンコード中」になっていた。行が消える
+                                    (畳み終わりの知らせ) までは、まだ中止の途中
+                                -->
+                                <button type="button"
+                                    class="outline danger"
+                                    disabled
+                                    aria-busy="true"
+                                    data-testid="encode-cancel"
+                                >
+                                    エンコード中止
+                                </button>
+                            {:else}
+                                <form method="POST" action="?/cancelEncode" use:submitting>
+                                    <input type="hidden" name="id" value={rec.job_id} />
+                                    <button type="submit"
+                                        class="outline danger"
+                                        data-testid="encode-cancel"
+                                    >
+                                        エンコード中止
+                                    </button>
+                                </form>
+                            {/if}
+                        {:else}
+                            <!-- サーバから消したら、端末に落としてあったコピーも片付ける -->
+                            <form
+                                method="POST"
+                                action="?/delete"
+                                use:submitting={() => async (options) => {
+                                    await options.update();
+                                    // held は使わない。use: の引数は作ったときのまま閉じ込められるので、
+                                    // あとから端末に保存した録画でも古い「無い」を見てしまう
+                                    if (options.result.type === 'success' && offline.entries[rec.id] !== undefined) {
+                                        void removeLocal(rec.id);
+                                    }
+                                }}
+                            >
+                                <input type="hidden" name="id" value={rec.id} />
+                                {@render armedDelete(rec.id)}
+                            </form>
+                        {/if}
+                    {/if}
+                </div>
+            </div>
+
+            <!--
+                進み具合は行の下端いっぱいに敷く。別の行に分けていた頃は、
+                行と行の間に隙間ができて、どの録画のものか分かりにくかった。
+
+                ffmpeg が回っていない段階でも割合を出すようにしたが、
+                取れないものもあるので、そのときは動いているだけのバーにする
+            -->
+            {#if rec.job_id !== null}
+                {@const barPercent = encodeLive.entries[rec.id]?.percent ?? rec.job_percent ?? 0}
+                <progress
+                    class="row-bar"
+                    value={rec.job_state === 'running' && barPercent > 0
+                        ? barPercent
+                        : undefined}
+                    max="1"
+                ></progress>
+            {:else if held?.state === 'downloading'}
+                <!-- 端末への保存もエンコードと同じ見せ方。測れない間は動くだけのバー -->
+                <progress
+                    class="row-bar success"
+                    value={held.progress ?? undefined}
+                    max="1"
+                ></progress>
+            {/if}
+        </div>
+    {/if}
+{/snippet}
+
+<!--
+    **番組の見出し** (まとめて表示)。押すと開く・閉じる。本物の button なので、
+    Tab で辿れて Enter / Space で開く。開いているかは `aria-expanded` で読み上げる。
+    中身は見出しのすぐ下に放送順で続く (`#lib/grouping.ts`)
+-->
+{#snippet groupHead(group: SeriesGroup<RightRow>, open: boolean)}
+    {@const poster = groupPoster(group)}
+    <button
+        type="button"
+        class="group-head"
+        aria-expanded={open}
+        onclick={() => toggleGroup(group.group)}
+        data-testid="recording-group"
+        data-group={group.group}
+    >
+        <span class="group-chevron" class:open aria-hidden="true">
+            <Icon icon={ChevronRight} size="size-4" />
+        </span>
+        <span class="poster">
+            {#if poster !== null}
+                <img
+                    src={resolve(`api/recordings/${poster}/poster`)}
+                    alt=""
+                    loading="lazy"
+                    class="poster-img"
+                    onerror={(event) => {
+                        (event.currentTarget as HTMLImageElement).style.display = 'none';
+                    }}
+                />
+            {/if}
+        </span>
+        <span class="row-body">
+            <span class="cluster">
+                <span class="tag" data-testid="recording-group-count">{group.items.length}本</span>
+                <span class="row-name" data-testid="recording-group-name">{group.name}</span>
+            </span>
+            <span class="row-meta">最新 {dateTime(group.newest.at)}</span>
+        </span>
+    </button>
 {/snippet}
 
 <!--
@@ -759,6 +1244,22 @@
                             aria-label="録画を絞り込む"
                         />
                     </form>
+                    <!--
+                        **まとめて表示** (番組ごと。issue #480)。狭い列では絵だけにする
+                        (名前は aria-label で読む)。入っているかは aria-pressed と地の色で
+                    -->
+                    <button
+                        type="button"
+                        class="secondary small group-toggle"
+                        class:outline={!grouped}
+                        aria-pressed={grouped}
+                        aria-label="まとめて表示"
+                        onclick={() => setGrouped(!grouped)}
+                        data-testid="recordings-group-toggle"
+                    >
+                        <Icon icon={ListTree} size="size-4" />
+                        <span class="wide-only">まとめて表示</span>
+                    </button>
                     <a class="button secondary outline small wide-only" href={deletedHref}>
                         {deletedLabel}
                     </a>
@@ -826,345 +1327,12 @@
 
             <div class="board-box" class:placing={!recordingPlaced} bind:this={recordingBox}>
                 <div class="rows" data-testid="recording-list">
-                    {#each recordingPage.rows as row (row.key)}
-                    {#if row.kind === 'missed'}
-                        {@const res = row.res}
-                        {@const press = (event: MouseEvent | KeyboardEvent) => rowClick(event, null, () => openMissed(res))}
-                        <!--
-                            録り逃し。観るものが無いので、押すと詳細だけ出す (予約の行と
-                            同じ扱い)。ボタンも置かない — 放送は終わっているので、
-                            この行からできることが無い (再放送は番組表から予約し直す)
-                        -->
-                        <div
-                            data-program-id={res.program_id}
-                            class="row"
-                            role="button"
-                            tabindex="0"
-                            onclick={press}
-                            onkeydown={press}
-                        >
-                            <div class="row-inner">
-                                <div class="row-body" data-testid="row-body">
-                                    {@render title(stateLabel('missed'), badgeClass('missed'), res.name, 'missed-state')}
-                                    {@render meta([res.service_name, airing(res)], res)}
-                                    <!-- 録画側の流儀に合わせて手動とも書く (見返すものなので) -->
-                                    {@render source(res.rule_id, res.rule_name, res.manual)}
-                                </div>
-                                <!--
-                                    確かめ終わったら畳める (録画の削除と同じ2回押し)。
-                                    消すのは予約の行 (`?/deleteMissed`) — 録画の行が無いので。
-                                    構えの鍵は負の値にして、録画のIDと混ざらないようにする
-                                    (deleting は録画と共用で、IDの空間が別のため)
-                                -->
-                                <div class="row-actions">
-                                    <form method="POST" action="?/deleteMissed" use:submitting>
-                                        <input type="hidden" name="id" value={res.id} />
-                                        {@render armedDelete(-res.id)}
-                                    </form>
-                                </div>
-                            </div>
-                        </div>
-                    {:else}
-                        {@const rec = row.rec}
-                        {@const link = watchLink(rec)}
-                        {@const press = (event: MouseEvent | KeyboardEvent) =>
-                            rowClick(event, link, () => openRecording(rec))}
-                        {@const canPlay = link !== null}
-                        {@const shown = rowState(rec)}
-                        <!-- 端末に入っているか (オフライン視聴)。行の印と、下のバーで見る -->
-                        {@const held = offline.entries[rec.id]}
-                        <!--
-                            押すと再生。中身を読みたいときは行の中の「詳細」から。
-
-                            **吹き出し (title) は出さない。** 行に指を乗せると色が反転し、
-                            再生の印も出ているので、そこを押せば再生になることは見れば分かる。
-                            出していた頃は、行を読もうとするたびに文字の上へ札が被さっていた。
-
-                            置き場と尺と**切ったCMの位置**は属性にだけ持たせる。普段は見ない
-                            もので (CM の位置はチャプターとして動画に入っている)、
-                            画面に並べると番組名を押し出すが、確かめる手段は残しておきたい
-                        -->
-                        <div
-                            data-testid="recording-row"
-                            data-recording-id={rec.id}
-                            data-program-id={rec.program_id}
-                            data-library-path={rec.library_path}
-                            data-alt-path={rec.alt_path}
-                            data-duration-ms={rec.duration_ms}
-                            data-cm-ranges={rec.cm_ranges === null ? null : JSON.stringify(rec.cm_ranges)}
-                            class="row playable"
-                            role="button"
-                            tabindex="0"
-                            onclick={press}
-                            onkeydown={press}
-                        >
-                            <div class="row-inner">
-                                <!--
-                                    再生の印。**押すもの (button) にはしない。**
-                                    行そのものが再生なので、同じ働きの的を二重に置くと
-                                    「印を外すと再生されない」ように見える。
-                                    行に指を乗せると色が反転して、押す先がここだと分かる
-                                -->
-                                {#if canPlay}
-                                    <!--
-                                        **ポスターを出す。** 焼いたときに動画の隣へ置いた
-                                        `-poster.jpg` (`api/.../poster`)。文字だけの行より
-                                        ずっと選びやすい。**無い録画もある**
-                                        (ポスターより前に焼いたもの等) ので、読めなければ絵を
-                                        隠して枠だけ残す (`onerror`)。枠と再生印はいつでも出す
-                                    -->
-                                    <div class="poster" data-testid="play-hint">
-                                        {#if rec.library_path !== null}
-                                            <img
-                                                src={resolve(`api/recordings/${rec.id}/poster`)}
-                                                alt=""
-                                                loading="lazy"
-                                                class="poster-img"
-                                                onerror={(event) => {
-                                                    (event.currentTarget as HTMLImageElement).style.display =
-                                                        'none';
-                                                }}
-                                            />
-                                        {/if}
-                                        <span class="poster-play" aria-hidden="true">
-                                            <Play class="poster-icon" aria-hidden="true" />
-                                        </span>
-                                    </div>
-                                {/if}
-                                <div class="row-body" data-testid="row-body">
-                                    <!--
-                                        録画の状態とエンコードの状態を1つにまとめて出す
-                                        (rowState)。消したもの (deleted) も録画の状態から
-                                        決まるので、ここで書き分けることは何も無い
-                                    -->
-                                    {@render title(shown.label, shown.badge, rec.name, 'recording-state')}
-                                    {#if held !== undefined}
-                                        <!-- 端末に入っている印。保存中はエンコードと同じく割合を添える -->
-                                        <span
-                                            class="tag offline-tag {held.state === 'ready'
-                                                ? 'success'
-                                                : held.state === 'failed'
-                                                  ? 'error'
-                                                  : ''}"
-                                        >
-                                            {held.state === 'ready'
-                                                ? '端末に保存済み'
-                                                : held.state === 'failed'
-                                                  ? '端末に保存できませんでした — 詳細からやり直せます'
-                                                  : `端末に保存中${held.progress === null ? '…' : ` ${percent(held.progress)}`}`}
-                                        </span>
-                                    {/if}
-                                    <!--
-                                        放送日時・尺・サイズは1行にまとめる。列に分けていた頃は、
-                                        画面が狭いと表ごと横スクロールになって番組名まで隠れていた。
-                                        ファイルの置き場所は普段は見ないので出さない (data-library-path)
-                                    -->
-                                    {@render meta(
-                                        [
-                                            rec.service_name,
-                                            // 番組表の尺ではなく実際に録れた長さ。
-                                            // 途中で止めたときやCMを切ったときは合わない
-                                            `${dateTime(rec.start_at)} (${recordedDuration(rec)})`,
-                                            // 在るものは全部出す (`sizeLabel`)。片方しか
-                                            // 出していなかった頃は、消していいのか・
-                                            // どれだけ空くのかが画面から分からなかった
-                                            sizeLabel(rec),
-                                            rec.deleted_at !== null ? `${date(rec.deleted_at)} に削除` : '',
-                                        ],
-                                        rec,
-                                    )}
-                                    <!--
-                                        **欠けているなら、そう言う。** チューナーの取り合いで
-                                        頭か尻を譲った録画は、番組の一部が入っていない
-                                        (`server/conflict.ts` の「入るところまで録る」)。
-                                        尺だけ見ても「短い番組」と見分けが付かないので、
-                                        行に書く
-                                    -->
-                                    {#if clipNote(rec, true) !== null}
-                                        <div class="row-sub text-warning small">
-                                            {clipNote(rec, true)}
-                                        </div>
-                                    {/if}
-                                    <!--
-                                        **途中まで観たものは残りを出す。** 観た位置
-                                        (`resume_ms`) は続きから始めるために持っていて、末尾まで
-                                        観たものは消える (`api/.../resume`) ので、**残っている =
-                                        まだ途中**。押せば `/watch` が続きから始める。
-                                        分母は実際に録れた長さ。無ければ番組表の尺で代用する。
-                                        添える言葉は割合ではなく**あと何分か** — 「観終わるのに
-                                        どれだけ掛かるか」が知りたいことで、4% では換算がいる
-                                    -->
-                                    {#if canPlay && rec.deleted_at === null && rec.resume_ms !== null && rec.resume_ms > 0}
-                                        {@const total = rec.duration_ms ?? rec.end_at - rec.start_at}
-                                        {@const frac =
-                                            total > 0 ? Math.min(1, rec.resume_ms / total) : 0}
-                                        <div class="resume">
-                                            <div class="resume-track">
-                                                <div class="resume-fill" style="width: {frac * 100}%"></div>
-                                            </div>
-                                            <span class="resume-left muted tiny num">
-                                                残り{durationMs(Math.max(0, total - rec.resume_ms))}
-                                            </span>
-                                        </div>
-                                    {/if}
-                                    <!--
-                                        何で録れた1本か。**予約から来たものだけ**。
-                                        取り込んだ録画 (EPGStation から引き継いだもの) には
-                                        予約が無いので、何も出さない
-                                    -->
-                                    {#if rec.from_manual !== null}
-                                        {@render source(rec.rule_id, rec.rule_name, rec.from_manual)}
-                                    {/if}
-                                    <!--
-                                        失敗・削除の理由や CM の検出元は長いので行に出さず、
-                                        詳細 (openRecording) に回す。状態はバッジで分かる
-                                    -->
-                                    {#if logoUnusable(rec.cm_note) && rec.deleted_at === null}
-                                        <!--
-                                            ロゴでの判定が使えなかったので、無音だけでCMを判定している。
-                                            精度が落ちているのを黙っていると「なぜか切れていない」に
-                                            なるので出す。**位置を教える口はチューナー画面にある** —
-                                            録画ごとではなく局ごとの話で、教えれば以降の全部に効く。
-
-                                            **見つけられなかったときだけではない。** ロゴには合致した
-                                            のに結果が使い物にならなかったとき (番組の 100% がCM判定など)
-                                            も、覚えているほうが怪しいので同じ口を出す
-                                        -->
-                                        <div class="row-sub text-warning small">
-                                            ロゴでCMを判定できませんでした (無音だけで判定)
-                                            <span class="muted"
-                                                >— チューナー画面でロゴの位置を教えられます</span
-                                            >
-                                        </div>
-                                    {/if}
-                                    <!--
-                                        エンコード中だけ、割合と残りの見込みを添える。
-                                        ffmpeg が回っていない段階 (解除中・CM検出中) は
-                                        進み具合が取れないので、代わりに**いま何をしているか**を出す。
-                                        CM検出は中で3つの道具を数分ずつ回すので、
-                                        段階の名前だけだと止まっているように見えていた
-                                    -->
-                                    {#if rec.job_state === 'running' && rec.job_phase === 'encode'}
-                                        <!-- SSE の生放送 (encode-live) があればそちら。読み直しを待たずに動く -->
-                                        {@const live = encodeLive.entries[rec.id]}
-                                        {@const liveEta = live !== undefined ? live.etaMs : rec.job_eta_ms}
-                                        <div class="row-sub muted tiny" data-testid="encode-progress">
-                                            {percent(live?.percent ?? rec.job_percent ?? 0)}
-                                            {#if eta(liveEta)}・{eta(liveEta)}{/if}
-                                        </div>
-                                    {:else if rec.job_state === 'running' && rec.job_log}
-                                        <div class="row-sub muted tiny">
-                                            {rec.job_log}
-                                        </div>
-                                    {/if}
-                                </div>
-
-                                <!--
-                                    押すものはすべて枠付きにする。枠も地も無いボタン (ghost) は
-                                    行の文字と見分けが付かず、どこからどこまでが押せるのか
-                                    分からなかった
-                                -->
-                                <div class="row-actions">
-                                    <!--
-                                        中身を読む入口は、**行を押しても詳細にならない行だけ**に置く。
-                                        観られる行は押すと再生に行くので、説明やCMの位置を見たい
-                                        ときの別口が要る。観られない行 (録画そのものの失敗・
-                                        削除済み・まだ何も録れていない) は行そのものが詳細の
-                                        入口 (rowClick) なので、同じ働きのボタンを並べない
-                                        (録り逃しの行とも揃う)。焼いている最中は観られる (追っかけ)
-                                    -->
-                                    {#if canPlay}
-                                        <button
-                                            type="button"
-                                            class="secondary outline"
-                                            onclick={() => openRecording(rec)}
-                                            data-testid="detail-button"
-                                        >
-                                            詳細
-                                        </button>
-                                    {/if}
-                                    {#if rec.deleted_at === null}
-                                        <!-- ダウンロードと録り直しは詳細の中 (recordingActions) -->
-                                        {#if rec.job_id !== null}
-                                            <!--
-                                                動いている間は中止だけ。この裏で ffmpeg が
-                                                元のTSを読んでいるので、消させると道連れになる
-                                            -->
-                                            {#if rec.job_canceling}
-                                                <!--
-                                                    **畳み終わるまで回したままにする。** 押した返事は
-                                                    上限 (encoder.CANCEL_WAIT_MS) で切り上げることが
-                                                    あり、返事でボタンを戻すと「回るのが止まったのに
-                                                    まだエンコード中」になっていた。行が消える
-                                                    (畳み終わりの知らせ) までは、まだ中止の途中
-                                                -->
-                                                <button type="button"
-                                                    class="outline danger"
-                                                    disabled
-                                                    aria-busy="true"
-                                                    data-testid="encode-cancel"
-                                                >
-                                                    エンコード中止
-                                                </button>
-                                            {:else}
-                                                <form method="POST" action="?/cancelEncode" use:submitting>
-                                                    <input type="hidden" name="id" value={rec.job_id} />
-                                                    <button type="submit"
-                                                        class="outline danger"
-                                                        data-testid="encode-cancel"
-                                                    >
-                                                        エンコード中止
-                                                    </button>
-                                                </form>
-                                            {/if}
-                                        {:else}
-                                            <!-- サーバから消したら、端末に落としてあったコピーも片付ける -->
-                                            <form
-                                                method="POST"
-                                                action="?/delete"
-                                                use:submitting={() => async (options) => {
-                                                    await options.update();
-                                                    // held は使わない。use: の引数は作ったときのまま閉じ込められるので、
-                                                    // あとから端末に保存した録画でも古い「無い」を見てしまう
-                                                    if (options.result.type === 'success' && offline.entries[rec.id] !== undefined) {
-                                                        void removeLocal(rec.id);
-                                                    }
-                                                }}
-                                            >
-                                                <input type="hidden" name="id" value={rec.id} />
-                                                {@render armedDelete(rec.id)}
-                                            </form>
-                                        {/if}
-                                    {/if}
-                                </div>
-                            </div>
-
-                            <!--
-                                進み具合は行の下端いっぱいに敷く。別の行に分けていた頃は、
-                                行と行の間に隙間ができて、どの録画のものか分かりにくかった。
-
-                                ffmpeg が回っていない段階でも割合を出すようにしたが、
-                                取れないものもあるので、そのときは動いているだけのバーにする
-                            -->
-                            {#if rec.job_id !== null}
-                                {@const barPercent = encodeLive.entries[rec.id]?.percent ?? rec.job_percent ?? 0}
-                                <progress
-                                    class="row-bar"
-                                    value={rec.job_state === 'running' && barPercent > 0
-                                        ? barPercent
-                                        : undefined}
-                                    max="1"
-                                ></progress>
-                            {:else if held?.state === 'downloading'}
-                                <!-- 端末への保存もエンコードと同じ見せ方。測れない間は動くだけのバー -->
-                                <progress
-                                    class="row-bar success"
-                                    value={held.progress ?? undefined}
-                                    max="1"
-                                ></progress>
-                            {/if}
-                        </div>
-                    {/if}
+                    {#each recordingPage.rows as line (line.key)}
+                        {#if line.kind === 'head'}
+                            {@render groupHead(line.group, line.open)}
+                        {:else}
+                            {@render rightRow(line.item, line.nested)}
+                        {/if}
                     {:else}
                         {#if recordingQuery === ''}
                             <div class="empty" data-testid="recording-empty">
@@ -1632,6 +1800,72 @@
     }
     .truncated {
         border-top: 1px solid var(--dp-base-300);
+    }
+    /*
+     * まとめて表示の切り替え。絵と字を横に並べる (狭い列では字を隠して絵だけ)
+     */
+    .group-toggle {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.375rem;
+    }
+    /*
+     * 番組の見出し。**行と同じ形** (左にポスター、右に名前と日付) にして、
+     * 1本だけの番組 (まとめずに混ぜる行) と並んでも浮かないようにする。
+     * 押すものなので button だが、ボタンの見た目 (地・枠・中寄せ) は外す
+     */
+    .group-head {
+        display: flex;
+        align-items: flex-start;
+        gap: 0.5rem 0.75rem;
+        width: 100%;
+        margin: 0;
+        padding: 0.75rem;
+        border: 0;
+        border-radius: 0;
+        box-shadow: none;
+        background: transparent;
+        color: inherit;
+        font-size: inherit;
+        font-weight: inherit;
+        text-align: left;
+        cursor: pointer;
+    }
+    /* 行どうしの区切り線 (`.rows > * + *`) は、上で枠を外したぶん引き直す */
+    .rows > .group-head:not(:first-child) {
+        border-top: 1px solid var(--dp-base-300);
+    }
+    .group-head:hover {
+        background: color-mix(in srgb, var(--dp-base-200) 60%, transparent);
+    }
+    .group-head:focus-visible {
+        outline: 2px solid var(--pico-primary-background);
+        outline-offset: -2px;
+    }
+    .group-head .row-body,
+    .group-head .row-meta {
+        display: block;
+    }
+    .group-chevron {
+        display: inline-flex;
+        align-self: center;
+        transition: transform 0.15s;
+    }
+    .group-chevron.open {
+        transform: rotate(90deg);
+    }
+    /* 番組の中の行。一段下げて、左に線を引いてどの見出しの中かを見せる */
+    .row.nested {
+        padding-left: 2.25rem;
+        background: color-mix(in srgb, var(--dp-base-200) 30%, transparent);
+    }
+    .row.nested::before {
+        content: '';
+        position: absolute;
+        inset-block: 0;
+        left: 1.25rem;
+        width: 2px;
+        background: var(--dp-base-300);
     }
     /* ポスターと再生の印。行に指を乗せると印が浮かぶ */
     .poster {
