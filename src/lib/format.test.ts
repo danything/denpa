@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import {
+    capacityLabel,
     clipNote,
     clock,
     duration,
@@ -160,5 +161,19 @@ describe('カードリーダーの名前', () => {
     test('括弧の無い名前はそのまま', () => {
         const name = 'px4-userland 0960 Internal Card Reader';
         expect(splitReaderName(name)).toEqual({ name, where: null });
+    });
+});
+
+describe('空きと残り時間', () => {
+    const GB = 1024 ** 3;
+    test('1TB からは TB で、時間は桁で丸める', () => {
+        expect(capacityLabel(1.25 * 1024 * GB, 937.4)).toEqual({ free: '空き 1.3TB', hours: '約930時間' });
+        expect(capacityLabel(512.7 * GB, 64.9)).toEqual({ free: '空き 512GB', hours: '約64時間' });
+        expect(capacityLabel(4 * 1024 * GB, 2345)).toEqual({ free: '空き 4.0TB', hours: '約2300時間' });
+    });
+
+    test('目安が無ければ空きだけ、残りわずかはそう言う', () => {
+        expect(capacityLabel(300 * GB, null)).toEqual({ free: '空き 300GB', hours: null });
+        expect(capacityLabel(0.5 * GB, 0.2)).toEqual({ free: '空き 1GB未満', hours: '1時間未満' });
     });
 });

@@ -33,6 +33,7 @@ export function GET({ url }) {
             endAt: recordings.end_at,
             durationMs: recordings.duration_ms,
             resumeMs: recordings.resume_ms,
+            watchedAt: recordings.watched_at,
             library: recordings.library_path,
             alt: recordings.alt_path,
             ts: recordings.ts_path,
@@ -82,6 +83,8 @@ export function GET({ url }) {
                 durationMs: row.durationMs,
                 // 続きから観る位置 (画面と同じ。`POST api/recordings/<id>/resume` で書く)。観終えた・未視聴なら null
                 resumeMs: row.resumeMs,
+                // 末尾まで観た時刻 (ms)。まだなら null。null かつ resumeMs も null なら未視聴 (画面の印と同じ)
+                watchedAt: row.watchedAt,
                 recording: row.state === 'recording',
                 // 生TSがある間 (録画中・焼く前) は追っかけで観られる
                 chase: row.ts === null ? null : `api/recordings/${row.id}/chase`,

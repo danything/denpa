@@ -86,7 +86,7 @@
 ```json
 [{ "id": 12, "title": "番組 第1話", "name": "[新]番組 第1話[字]",
    "serviceId": 3227310008, "serviceName": "TOKYO MX",
-   "startAt": 1790000000000, "endAt": 1790001800000, "durationMs": 1800000, "resumeMs": 754000,
+   "startAt": 1790000000000, "endAt": 1790001800000, "durationMs": 1800000, "resumeMs": 754000, "watchedAt": null,
    "recording": false, "chase": "api/recordings/12/chase", "cmReliable": true,
    "poster": "api/recordings/12/poster",
    "files": [
@@ -103,6 +103,8 @@
 - `audio` は主音声だけを AAC (ADTS、`audio/aac`) で流します。画面の無いスピーカーへの Cast 向け。
   `source` と一緒に渡せば、元にするファイルを選べます
 - `resumeMs` は続きから観る位置 (画面の「続き」と同じもの)。観ていない・観終えたものは `null`
+- `watchedAt` は末尾まで観た時刻 (ms)。まだなら `null`。`watchedAt` も `resumeMs` も `null` なら未視聴 (画面の一覧の印と同じ)。
+  `resume` に末尾 (尺の30秒手前より後) を送ると入ります。画面の「未視聴に戻す」で `null` に戻ります (「視聴済みにする」「未視聴に戻す」はどちらも `resumeMs` も消します)
 - `poster` は一覧のサムネイル (JPEG)。焼く前の録画や生TSしか無いものでは 404
 - `recording` はいま録っている最中か。録画中は `durationMs` が `null` (途中で切れて録り直したものは、それまでに録れた長さ) で、`files` は生TSだけ (伸びている途中)。
   録画中・焼き上がる前は `chase` (下) で観る
@@ -199,7 +201,10 @@
 
 本文は `{ "at": 秒, "length": 尺の秒 }` (`length` は分からなければ省く)。画面と同じく、頭の少しと
 末尾の 30 秒は「覚えない」(消す) 扱いです。答えは `{ "resume": 覚えた秒 または null, "edge": 30 }`。
-15 秒おきくらいに送れば、ほかの端末 (画面・ほかのテレビ) でも続きから観られます
+15 秒おきくらいに送れば、ほかの端末 (画面・ほかのテレビ) でも続きから観られます。
+
+末尾の 30 秒に入った位置を送ると「観終えた」になり、一覧の `watchedAt` が入ります (`length` が要ります)。
+再生が終わったときにも位置を送ってください (末尾の CM を飛ばすと、15 秒おきの控えが末尾に届かないため)
 
 ## 変化の知らせ `GET /api/events`
 

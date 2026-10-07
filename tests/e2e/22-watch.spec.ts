@@ -262,9 +262,32 @@ test.describe('録画を観る', () => {
             return (await res.json()).resume;
         };
 
+        const watchedAt = async () => {
+            const list: { id: number; watchedAt: number | null }[] = await (
+                await request.get('/api/recordings')
+            ).json();
+            return list.find((rec) => String(rec.id) === id)?.watchedAt;
+        };
+
         expect(await put(600, 1800)).toBe(600);
+        // 途中ではまだ観終えていない (一覧の「未視聴」は進捗バーに替わるだけ)
+        expect(await watchedAt()).toBeNull();
         // 末尾まで観たものは忘れる。覚えるとエンドロールから始まってしまう
         expect(await put(1790, 1800)).toBeNull();
+        // 代わりに観終えた時刻が入る (一覧の「未視聴」の印が外れる)
+        expect(await watchedAt()).toEqual(expect.any(Number));
+
+        // 詳細の「その他…」から未視聴に戻すと、一覧に点が戻る
+        await goto(page, '/');
+        const row = page.locator(`[data-testid="recording-row"][data-recording-id="${id}"]`);
+        await expect(row.getByTestId('recording-unwatched')).toHaveCount(0);
+        await row.getByTestId('detail-button').click();
+        const detail = page.getByTestId('program-detail');
+        await detail.getByTestId('detail-more').click();
+        await expect(detail.getByTestId('watched-button')).toHaveText('未視聴に戻す');
+        await detail.getByTestId('watched-button').click();
+        await expect(row.getByTestId('recording-unwatched')).toHaveCount(1);
+        expect(await watchedAt()).toBeNull();
     });
 
     /**
