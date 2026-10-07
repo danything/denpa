@@ -553,6 +553,8 @@
      */
     async function setGrouped(on: boolean): Promise<void> {
         grouped = on;
+        // 描く数も置き直す。前の形の数 (片側 30 件など) のままにしない
+        recordingPage.reset();
         // 道は接頭辞込み (`live-player.svelte.ts` の `remember` と同じ)
         document.cookie = `${GROUPED_COOKIE}=${on ? '1' : '0'}; path=${resolve('')}; max-age=31536000; samesite=lax`;
         const box = recordingBox;
@@ -567,8 +569,8 @@
     }
 
     /*
-     * 絞り込みの言葉が変わったら先頭に戻す。`reset` は `grouped` を読むので、
-     * 切り替えのたびに戻さないよう外す
+     * 絞り込みの言葉が変わったら先頭に戻す。`reset` は `grouped` を読むので外す
+     * (切り替えたときは `setGrouped` が戻す)
      */
     $effect(() => {
         recordingQuery;
