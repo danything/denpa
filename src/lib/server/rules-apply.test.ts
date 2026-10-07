@@ -636,6 +636,32 @@ describe('同じ回は最初の放送だけ録る', () => {
         expect(applyRules()).toMatchObject({ created: 0 });
     });
 
+    test('題名に話数が無くても、録画の概要の話数で録った回を見つける', () => {
+        withBs();
+        rule(1, '薬屋のひとりごと', true, 1, true);
+        orm()
+            .insert(recordings)
+            .values({
+                service_id: SERVICE,
+                service_name: '日テレ1',
+                name: '薬屋のひとりごと FRIDAY ANIME NIGHT[字][デ]',
+                description: '第18話「月下の花」',
+                start_at: base - DAY,
+                end_at: base - DAY + HOUR,
+                finished_at: base - DAY + HOUR,
+                created_at: now(),
+                updated_at: now(),
+            })
+            .run();
+        on(BS11, 11, 'アニメ 薬屋のひとりごと');
+        on(BS11, 12, 'アニメ 薬屋のひとりごと', 7 * DAY);
+        orm().update(programs).set({ description: '#18「月下の花」' }).where(eq(programs.id, 11)).run();
+        orm().update(programs).set({ description: '#19「蝉の声」' }).where(eq(programs.id, 12)).run();
+
+        applyRules();
+        expect(reservations().map((r) => r.program_id)).toEqual([12]);
+    });
+
     test('最初の放送がチューナー不足で弾かれていたら、次の放送も予約する', () => {
         withBs();
         rule(1, 'テストアニメ', true, 1, true);

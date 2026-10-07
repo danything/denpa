@@ -322,7 +322,8 @@ export async function load({ url }) {
         );
         /*
          * **読む列も絞る。** 判定に要らない JSON 列 (音声 106KB、映像) は読まない。
-         * 詳細説明は検索範囲に入っているときだけ。JSON 列の読み出しが 33,000 行ぶんで
+         * 詳細説明は検索範囲に入っているときと、同じ回を見分けるとき (題名に話数が無い局は
+         * 概要・詳細から読む。`episode.episodeOf`) だけ。JSON 列の読み出しが 33,000 行ぶんで
          * 43ms あった
          */
         const {
@@ -335,7 +336,10 @@ export async function load({ url }) {
         const all = orm()
             .select({
                 ...light,
-                extended: compiled.fields.includes('extended') ? extended : sql<Program['extended']>`NULL`,
+                extended:
+                    compiled.fields.includes('extended') || conditions.dedupe
+                        ? extended
+                        : sql<Program['extended']>`NULL`,
                 service_type: serviceTable.type,
                 service_name: serviceTable.name,
                 service_channel: serviceTable.channel,

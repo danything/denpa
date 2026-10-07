@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { type Airing, captioned, episodeKey, firstAirings } from './episode';
+import { type Airing, captioned, episodeOf, firstAirings, sameEpisode } from './episode';
 
 /**
  * 同じ回は1度だけ録る (ルールの「同じ回は最初の放送だけ録る」)。
@@ -12,7 +12,24 @@ const DAY = 24 * HOUR;
 let next = 1;
 function airing(name: string, at: number, fields: Partial<Airing> = {}): Airing {
     const id = next++;
-    return { id, name, start_at: at, end_at: at + HOUR / 2, service_id: 1000 + id, type: 'GR', ...fields };
+    return {
+        id,
+        name,
+        description: '',
+        extended: null,
+        start_at: at,
+        end_at: at + HOUR / 2,
+        service_id: 1000 + id,
+        type: 'GR',
+        ...fields,
+    };
+}
+
+/** 題名 (と概要) だけで同じ回か */
+function same(a: string, b: string, descriptions: [string, string] = ['', '']): boolean {
+    const one = episodeOf({ name: a, description: descriptions[0], extended: null });
+    const two = episodeOf({ name: b, description: descriptions[1], extended: null });
+    return one !== null && two !== null && sameEpisode(one, two);
 }
 
 /** 録る放送の id */
@@ -21,36 +38,104 @@ function kept(airings: Airing[]): number[] {
     return airings.filter((a) => !skips.has(a.id)).map((a) => a.id);
 }
 
-describe('episodeKey', () => {
+describe('同じ回の見分け', () => {
     test('局によって話数の書き方が違っても同じ回', () => {
-        expect(episodeKey('[新]テストアニメ #1「はじまり」')).toBe(
-            episodeKey('テストアニメ 第1話「はじまり」[字]'),
-        );
+        expect(same('[新]テストアニメ #1「はじまり」', 'テストアニメ 第1話「はじまり」[字]')).toBe(true);
     });
 
     test('全角と半角、空白の有無は揃える', () => {
-        expect(episodeKey('テストアニメ　＃３')).toBe(episodeKey('テストアニメ #3'));
+        expect(same('テストアニメ　＃３', 'テストアニメ #3')).toBe(true);
     });
 
     test('話数が違えば別の回', () => {
-        expect(episodeKey('テストアニメ #1')).not.toBe(episodeKey('テストアニメ #2'));
+        expect(same('テストアニメ #1', 'テストアニメ #2')).toBe(false);
     });
 
     test('シリーズが違えば別の回', () => {
-        expect(episodeKey('テストアニメ #1')).not.toBe(episodeKey('別のアニメ #1'));
+        expect(same('テストアニメ #1', '別のアニメ #1')).toBe(false);
     });
 
     test('「第2期 #1」のように話数が2つ読めても、各話は潰れない', () => {
         // parseTitle は「第2」を話数に読むので、後ろの #1 / #2 は副題に残る
-        expect(episodeKey('テストアニメ 第2期 #1')).not.toBe(episodeKey('テストアニメ 第2期 #2'));
+        expect(same('テストアニメ 第2期 #1', 'テストアニメ 第2期 #2')).toBe(false);
+        expect(same('テストアニメ 第2期 #1', 'テストアニメ 第2話')).toBe(false);
     });
 
     test('副題だけでも回が分かる', () => {
-        expect(episodeKey('ドキュメント「港町の朝」')).toBe(episodeKey('ドキュメント 「港町の朝」[再]'));
+        expect(same('ドキュメント「港町の朝」', 'ドキュメント 「港町の朝」[再]')).toBe(true);
     });
 
     test('話数も副題も無ければ回は分からない', () => {
-        expect(episodeKey('ニュース')).toBeNull();
+        expect(episodeOf({ name: 'ニュース', description: '', extended: null })).toBeNull();
+        expect(
+            episodeOf({
+                name: 'ニュース',
+                description: '今日の出来事を伝えます',
+                extended: { 出演者: '山田' },
+            }),
+        ).toBeNull();
+    });
+
+    test('題名に話数が無ければ概要から読む。局ごとの飾りは違っていてよい', () => {
+        expect(
+            same('薬屋のひとりごと FRIDAY ANIME NIGHT[字][デ]', 'アニメ 薬屋のひとりごと', [
+                '第18話「月下の花」 猫猫は壬氏に連れられて…',
+                '#18「月下の花」',
+            ]),
+        ).toBe(true);
+        expect(
+            same('＜アニメイズム＞薬屋のひとりごと', '【アニメ】薬屋のひとりごと', [
+                '#18「月下の花」',
+                '#18「月下の花」',
+            ]),
+        ).toBe(true);
+    });
+
+    test('概要の漢数字の話数も読む', () => {
+        expect(
+            same('薬屋のひとりごと', 'アニメ 薬屋のひとりごと', ['第十八話「月下の花」', '#18「月下の花」']),
+        ).toBe(true);
+    });
+
+    test('概要から読んでも、話数や副題が違えば別の回', () => {
+        expect(
+            same('薬屋のひとりごと FRIDAY ANIME NIGHT', 'アニメ 薬屋のひとりごと', [
+                '#18「月下の花」',
+                '#19「蝉の声」',
+            ]),
+        ).toBe(false);
+    });
+
+    test('概要の「前回」「次回」の話数は読まない', () => {
+        const episode = episodeOf({
+            name: '薬屋のひとりごと',
+            description: '前回の#17「街歩き」に続き… #18「月下の花」',
+            extended: null,
+        });
+        expect(episode).toMatchObject({ number: 18 });
+    });
+
+    test('概要に無ければ詳細から読む', () => {
+        const episode = episodeOf({
+            name: '薬屋のひとりごと',
+            description: '',
+            extended: { 番組内容: '第18話「月下の花」\n猫猫は…' },
+        });
+        expect(episode).toMatchObject({ number: 18 });
+    });
+
+    test('飾りの違いを許すのは副題まで揃うときだけ。話数だけなら名前がぴったり同じもの', () => {
+        // 1期の再放送と2期が同じ時期に流れても、副題の無い #1 どうしはくっつけない
+        expect(same('テストアニメ', 'テストアニメ 2', ['#1', '#1'])).toBe(false);
+        expect(same('テストアニメ', 'テストアニメ', ['#1', '#1'])).toBe(true);
+    });
+
+    test('題名が「第2期」だけなら、全話を1つの回にしない', () => {
+        // parseTitle は「第2」を話数に読むが、毎回同じなので回にはならない
+        expect(episodeOf({ name: 'テストアニメ 第2期', description: '', extended: null })).toBeNull();
+        expect(same('テストアニメ 第2期', 'テストアニメ 第2期', ['#1「はじまり」', '#2「つづき」'])).toBe(
+            false,
+        );
     });
 });
 
@@ -118,8 +203,8 @@ describe('firstAirings', () => {
 
     test('もう録ってある回はどれも録らない', () => {
         const later = airing('テストアニメ #1', base + DAY);
-        const key = episodeKey(later.name)!;
-        const taken = new Map([[key, { start_at: base - DAY, service_name: 'TOKYO MX' }]]);
+        const episode = episodeOf(later)!;
+        const taken = [{ episode, start_at: base - DAY, service_name: 'TOKYO MX' }];
         expect(firstAirings([later], new Set(), taken).get(later.id)).toEqual({
             kind: 'recorded',
             start_at: base - DAY,
@@ -137,5 +222,40 @@ describe('firstAirings', () => {
         const bs = airing('ニュース', base, { type: 'BS' });
         const tomorrow = airing('ニュース', base + DAY);
         expect(kept([gr, bs, tomorrow])).toEqual([gr.id, tomorrow.id]);
+    });
+
+    test('題名に話数の無い再放送も、概要の話数で同じ回とみる', () => {
+        const ntv = airing('薬屋のひとりごと FRIDAY ANIME NIGHT[字][デ]', base, {
+            description: '第18話「月下の花」 猫猫は壬氏に連れられて…',
+        });
+        const bs = airing('アニメ 薬屋のひとりごと', base + DAY, {
+            type: 'BS',
+            description: '#18「月下の花」',
+        });
+        const next = airing('アニメ 薬屋のひとりごと', base + 8 * DAY, {
+            type: 'BS',
+            description: '#19「蝉の声」',
+        });
+        const skips = firstAirings([bs, next, ntv]);
+        expect(skips.get(bs.id)).toEqual({ kind: 'repeat', first: ntv });
+        expect(skips.has(ntv.id)).toBe(false);
+        expect(skips.has(next.id)).toBe(false);
+    });
+
+    test('概要の話数で、録画済みの回も見つける', () => {
+        const recorded = episodeOf({
+            name: '薬屋のひとりごと FRIDAY ANIME NIGHT[字][デ]',
+            description: '第18話「月下の花」',
+            extended: null,
+        })!;
+        const taken = [{ episode: recorded, start_at: base - DAY, service_name: '日テレ1' }];
+        const bs = airing('アニメ 薬屋のひとりごと', base, { type: 'BS', description: '#18「月下の花」' });
+        const other = airing('アニメ 薬屋のひとりごと', base + 7 * DAY, {
+            type: 'BS',
+            description: '#19「蝉の声」',
+        });
+        const skips = firstAirings([bs, other], new Set(), taken);
+        expect(skips.get(bs.id)).toEqual({ kind: 'recorded', start_at: base - DAY, service_name: '日テレ1' });
+        expect(skips.has(other.id)).toBe(false);
     });
 });
