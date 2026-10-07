@@ -5,6 +5,7 @@
     import { startDownload } from '#lib/download.js';
     import { channelNumber, date, SERVICE_TYPE_LABEL, stateLabel, time } from '#lib/format.js';
     import { reload } from '#lib/reload.svelte.js';
+    import { cellsOf, columnsOf, hasSubchannels, mainOf, SUBCHANNELS_COOKIE } from '#lib/subchannels.js';
     import type { ProgramDetail as Facts } from '#lib/types.js';
     import { preloadData } from '$app/navigation';
     import { resolve } from '$app/paths';
@@ -56,7 +57,7 @@
             const fresh = shownKey !== key;
             sheet = next;
             shownKey = key;
-            if (fresh) drawGradually(next.programs.length);
+            if (fresh) drawGradually(cells.length);
             else drawAll();
         });
         return () => {
@@ -66,6 +67,26 @@
 
     const services = $derived(sheet?.services ?? []);
     const programs = $derived(sheet?.programs ?? []);
+
+    /**
+     * サブチャンネル (テレ東2・3、Eテレ2・3 など) の列を出すか。**既定は出さない**
+     * (テレビの番組表と同じ。`#lib/subchannels.ts`)。端末ごとに cookie で覚える
+     */
+    let subchannels = $state(untrack(() => data.subchannels));
+    const main = $derived(mainOf(services));
+    /** 切り替えは、サブチャンネルを持つ局があるときだけ出す (BS・CS は束ねないので出ない) */
+    const canSplit = $derived(hasSubchannels(main));
+    const columns = $derived(columnsOf(services, main, subchannels));
+    /** 表のマス。相乗り中のサブの列には本チャンネルのマスが伸びてくる */
+    const cells = $derived(cellsOf(columns, programs, main));
+
+    function setSubchannels(on: boolean): void {
+        subchannels = on;
+        // 列が増減するだけなので、少しずつ描き直さない (`drawAll`)
+        drawAll();
+        // 道は接頭辞込み (録画一覧の「まとめて表示」と同じ)
+        document.cookie = `${SUBCHANNELS_COOKIE}=${on ? '1' : '0'}; path=${resolve('')}; max-age=31536000; samesite=lax`;
+    }
 
     /**
      * 一度に描くマスの数。
@@ -117,8 +138,8 @@
     $effect(() => () => cancelAnimationFrame(drawFrame));
 
     /** まだ描き終えていない。`aria-busy` で外から分かるようにする */
-    const drawing = $derived(shownCells < programs.length);
-    const visibleCells = $derived(drawing ? programs.slice(0, shownCells) : programs);
+    const drawing = $derived(shownCells < cells.length);
+    const visibleCells = $derived(drawing ? cells.slice(0, shownCells) : cells);
 
     /** クリックした番組。詳細を出してから予約するかどうか決める */
     let selected = $state<Sheet['programs'][number] | null>(null);
@@ -273,8 +294,6 @@
         return { row: from + 2, span: Math.max(1, to - from) };
     }
 
-    const columnOf = $derived(new Map(services.map((s, i) => [s.id, i + 2])));
-
     const hourMarks = $derived(
         Array.from({ length: data.hours }, (_, i) => ({
             at: data.start + i * HOUR,
@@ -420,6 +439,26 @@
         </div>
 
         <!--
+            **サブチャンネルを出すか** (issue #509)。テレビの番組表の「サブチャンネル表示」と同じ。
+            見え方の好みなので設定画面ではなくここに置き、端末ごとに覚える。
+            入っているかは aria-pressed と地の色で (録画一覧の「まとめて表示」と同じ形)。
+            サブチャンネルを持つ局が無ければ出さない
+        -->
+        {#if canSplit}
+            <button
+                type="button"
+                class="small {subchannels ? '' : 'secondary outline'}"
+                aria-pressed={subchannels}
+                title={subchannels ? 'サブチャンネルを表示中 (押すと隠します)' : 'サブチャンネルも表示'}
+                aria-label="サブチャンネル表示"
+                onclick={() => setSubchannels(!subchannels)}
+                data-testid="subchannel-toggle"
+            >
+                サブch
+            </button>
+        {/if}
+
+        <!--
         探すのは右端に寄せる。見るための操作とは別のことなので、間を空ける。
 
         **見出しは置かない** — 枠の中の字が同じことを言っている。検索と条件の
@@ -502,7 +541,7 @@
         -->
             <div
                 class="rows"
-                style="grid-template-columns: {TIME_COLUMN} repeat({services.length}, minmax(11rem, 1fr)); grid-template-rows: auto repeat({slots}, 0.75rem); width: calc({TIME_COLUMN} + {services.length} * 11rem); min-width: 100%;"
+                style="grid-template-columns: {TIME_COLUMN} repeat({columns.length}, minmax(11rem, 1fr)); grid-template-rows: auto repeat({slots}, 0.75rem); width: calc({TIME_COLUMN} + {columns.length} * 11rem); min-width: 100%;"
                 data-testid="guide-rows"
             >
                 <!-- 左上の角。時刻列とチャンネル行の交点で、どちらにも追従させる -->
@@ -511,7 +550,7 @@
                     style="grid-column: 1; grid-row: 1;"
                     bind:clientHeight={headHeight}
                 ></div>
-                {#each services as service, i (service.id)}
+                {#each columns as service, i (service.id)}
                     <div
                         class="service"
                         style="grid-column: {i + 2}; grid-row: 1;"
@@ -606,14 +645,17 @@
                     </div>
                 {/if}
 
-                <!-- 少しずつ足していく (`drawGradually`)。全部出るまで `aria-busy` が付いている -->
-                {#each visibleCells as program (program.id)}
-                    {@const pos = place(program)}
+                <!--
+                    少しずつ足していく (`drawGradually`)。全部出るまで `aria-busy` が付いている。
+                    相乗り中のサブチャンネルの列へは本チャンネルのマスを横に伸ばす (`span`)。
+                    分割放送の前後で幅が変わると、同じ番組が上下2つのマスになる (`cell.key`)
+                -->
+                {#each visibleCells as cell (cell.key)}
+                    {@const program = cell.program}
+                    {@const pos = place(cell)}
                     <div
                         class="cell"
-                        style="grid-column: {columnOf.get(
-                            program.service_id,
-                        )}; grid-row: {pos.row} / span {pos.span};"
+                        style="grid-column: {cell.column + 2} / span {cell.span}; grid-row: {pos.row} / span {pos.span};"
                         data-testid="grid-program"
                         data-program-id={program.id}
                         data-service-id={program.service_id}

@@ -50,7 +50,10 @@ export const SERVICE_ORDER = 'remote_control_key IS NULL, remote_control_key, se
 export const SERVICE_TYPE_ORDER = `CASE type WHEN 'GR' THEN 0 WHEN 'BS' THEN 1 ELSE 2 END`;
 
 /**
- * 番組表に出す局。**名前の付いた番組が1つも無い局は出さない。**
+ * 番組表とライブに出す局。**名前の付いた番組が1つも無い局は出さない。**
+ *
+ * 番組表はこれを放送局ごとに当てる (サブチャンネルは本チャンネルと一緒に残して、
+ * 相乗り中は本チャンネルのマスを伸ばす。`#lib/subchannels.ts`)。
  *
  * 出したくないものが2種類ある。どちらも「枠はあるが放送していない」。
  *
