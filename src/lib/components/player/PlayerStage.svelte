@@ -15,7 +15,7 @@
      * - 枠の大きさから、操作列の詰め方を決める (`compact` / `low`。下の説明)
      *
      * 中身 (video・重ねる canvas・操作列) は画面ごとに違うので snippet で受ける。
-         */
+     */
     interface Props {
         controls: PlayerControls;
         testid: string;
