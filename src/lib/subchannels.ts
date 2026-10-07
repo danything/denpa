@@ -6,10 +6,11 @@
  * - **既定は本チャンネルだけ。** テレ東2・3 や Eテレ2・3 の列は出さない。
  *   ほとんどの時間は本チャンネルと同じものを流していて、列が増えても横に広がるだけ
  * - **出すときは、同じものを流している間は1つのマスにまとめる。** 本チャンネルの番組を
- *   サブの列まで横に伸ばし、分割放送をしている間だけサブに自分のマスを立てる
+ *   サブの列まで横に伸ばし、分割放送をしている間だけサブに自分のマスを立てる。
+ *   その日ずっと相乗りのサブは列ごと立てない
  *
- * 録画のルールとライブ画面には関わらない。どちらもサブチャンネルを局として扱い続ける
- * (ライブは相乗り中のサブを `epg.airing` で別に外している)
+ * 録画のルールには関わらない (サブチャンネルも局として扱い続ける)。ライブの一覧は
+ * いま相乗り中のサブを外す (`epg.airing`)。相乗りの決め方はここ (`splitOf`) と同じ
  */
 
 /** 局の見分けに使う列 (`services` の行) */
@@ -58,25 +59,71 @@ export function mainOf(services: Station[]): Map<number, number> {
     );
 }
 
-/** サブチャンネルを持つ局があるか。無ければ切り替えを出さない */
-export function hasSubchannels(main: Map<number, number>): boolean {
-    for (const [id, of] of main) if (id !== of) return true;
-    return false;
+/**
+ * サブチャンネルの**分割放送**。サブの id → 本チャンネルと違う番組 (無いサブは入らない)。
+ *
+ * サブの番組が本チャンネルと違うものかどうか:
+ *
+ * - **名前が無い** → 相乗り。マルチ編成をしていない間の NHK総合2 や Eテレ2・3 は
+ *   名前の無い枠が並ぶ
+ * - **重なる時間の本チャンネルの番組と同じ名前** → 相乗り。サブの EIT に本チャンネルと
+ *   同じ番組を載せてくる局もある (時刻は揃っているとは限らないので、名前で見る)
+ * - それ以外 → 分割放送
+ *
+ * 番組が無い時間も相乗りとみなす (サブの番組表がまだ集まっていないときも、これで済む)。
+ *
+ * 番組表 (`cellsOf`) とライブの一覧 (`epg.airing`) で同じ決め方をする。
+ * 片方だけ直すと、番組表で独立していない局がライブに並ぶ
+ */
+export function splitOf<P extends Omit<Airing, 'id'>>(
+    programs: P[],
+    main: Map<number, number>,
+): Map<number, P[]> {
+    const ofMain = new Map<number, P[]>();
+    for (const program of programs) {
+        if (main.get(program.service_id) !== program.service_id) continue;
+        const list = ofMain.get(program.service_id);
+        if (list === undefined) ofMain.set(program.service_id, [program]);
+        else list.push(program);
+    }
+    const split = new Map<number, P[]>();
+    for (const program of programs) {
+        const of = main.get(program.service_id);
+        if (of === undefined || of === program.service_id || program.name === '') continue;
+        const same = (ofMain.get(of) ?? []).some(
+            (m) =>
+                m.name === program.name &&
+                (m.start_at === program.start_at ||
+                    (m.start_at < program.end_at && m.end_at > program.start_at)),
+        );
+        if (same) continue;
+        const list = split.get(program.service_id);
+        if (list === undefined) split.set(program.service_id, [program]);
+        else list.push(program);
+    }
+    return split;
 }
 
 /**
  * 表の列。本チャンネルの並びは渡した順 (`SERVICE_ORDER`) のまま、サブはその**すぐ右**。
  *
+ * **出すサブは、その日に分割放送のあるものだけ。** ずっと相乗りのサブは列を立てても
+ * 本チャンネルのマスが伸びてくるだけなので、立てずに済ませる (テレビの番組表も同じ)。
+ *
  * 渡す順でも普通は隣り合う (リモコン番号 → サービスID) が、別の地域の同じ番号の局を
  * 一緒に受けていると間に挟まる。横に伸ばすマスは隣り合っていないと描けないので寄せ直す
  *
- * @param subs サブチャンネルも出すか
+ * @param split 分割放送 (`splitOf`)。サブを出さないときは null
  */
-export function columnsOf<S extends Station>(services: S[], main: Map<number, number>, subs: boolean): S[] {
+export function columnsOf<S extends Station>(
+    services: S[],
+    main: Map<number, number>,
+    split: Map<number, unknown[]> | null,
+): S[] {
     const children = new Map<number, S[]>();
     for (const service of services) {
         const of = main.get(service.id) ?? service.id;
-        if (of === service.id) continue;
+        if (of === service.id || !split?.has(service.id)) continue;
         const list = children.get(of);
         if (list === undefined) children.set(of, [service]);
         else list.push(service);
@@ -85,7 +132,7 @@ export function columnsOf<S extends Station>(services: S[], main: Map<number, nu
     for (const service of services) {
         if ((main.get(service.id) ?? service.id) !== service.id) continue;
         columns.push(service);
-        if (subs) columns.push(...(children.get(service.id) ?? []));
+        columns.push(...(children.get(service.id) ?? []));
     }
     return columns;
 }
@@ -105,17 +152,8 @@ export interface Cell<P extends Airing> {
 }
 
 /**
- * マスを組む。**サブの列は、自分の番組を流している間だけ自分のマスを持つ。**
+ * マスを組む。**サブの列は、分割放送 (`splitOf`) の間だけ自分のマスを持つ。**
  * それ以外の時間は本チャンネルのマスが横に伸びてくる。
- *
- * サブの番組が「自分の番組」かどうか:
- *
- * - **名前が無い** → 相乗り。マルチ編成をしていない間の NHK総合2 や Eテレ2・3 は
- *   名前の無い枠が並ぶ
- * - **本チャンネルと名前も時刻も同じ** → 相乗り。サブの EIT に本チャンネルと同じ番組を
- *   載せてくる局もある
- * - **番組が無い** → 相乗り (サブの番組表がまだ集まっていないときも、これで済む)
- * - それ以外 → 分割放送。サブに自分のマスを立てる
  *
  * 分割放送が本チャンネルの番組の途中で始まったり終わったりしたら、その時刻で
  * 本チャンネルのマスを切って、幅を変えたマスを上下に積む (テレビの番組表も同じ形)。
@@ -126,6 +164,7 @@ export function cellsOf<S extends Station, P extends Airing>(
     columns: S[],
     programs: P[],
     main: Map<number, number>,
+    split: Map<number, P[]>,
 ): Cell<P>[] {
     const index = new Map(columns.map((service, i) => [service.id, i]));
     const byService = new Map<number, P[]>();
@@ -160,14 +199,9 @@ export function cellsOf<S extends Station, P extends Airing>(
             return;
         }
 
-        const same = new Set(own.map((p) => `${p.start_at}:${p.end_at}:${p.name}`));
         // サブごとの分割放送
-        const split = subs.map((sub) =>
-            (byService.get(sub.id) ?? []).filter(
-                (p) => p.name !== '' && !same.has(`${p.start_at}:${p.end_at}:${p.name}`),
-            ),
-        );
-        split.forEach((list, i) => {
+        const lists = subs.map((sub) => split.get(sub.id) ?? []);
+        lists.forEach((list, i) => {
             for (const program of list) add(program, column + 1 + i, 1, program.start_at, program.end_at);
         });
 
@@ -179,7 +213,7 @@ export function cellsOf<S extends Station, P extends Airing>(
             }
             // 番組の中で、分割放送が始まる・終わる時刻で切る
             const edges = new Set([program.start_at, program.end_at]);
-            for (const list of split) {
+            for (const list of lists) {
                 for (const p of list) {
                     if (p.start_at > program.start_at && p.start_at < program.end_at) edges.add(p.start_at);
                     if (p.end_at > program.start_at && p.end_at < program.end_at) edges.add(p.end_at);
@@ -197,7 +231,7 @@ export function cellsOf<S extends Station, P extends Airing>(
                 const start = cuts[c]!;
                 const end = cuts[c + 1]!;
                 const next: [number, number][] = [[column, 1]];
-                split.forEach((list, i) => {
+                lists.forEach((list, i) => {
                     if (list.some((p) => p.start_at < end && p.end_at > start)) return;
                     const last = next[next.length - 1]!;
                     // 1つ左の列も出しているなら、そのマスを伸ばす

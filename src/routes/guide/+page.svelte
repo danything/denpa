@@ -5,7 +5,7 @@
     import { startDownload } from '#lib/download.js';
     import { channelNumber, date, SERVICE_TYPE_LABEL, stateLabel, time } from '#lib/format.js';
     import { reload } from '#lib/reload.svelte.js';
-    import { cellsOf, columnsOf, hasSubchannels, mainOf, SUBCHANNELS_COOKIE } from '#lib/subchannels.js';
+    import { cellsOf, columnsOf, mainOf, SUBCHANNELS_COOKIE, splitOf } from '#lib/subchannels.js';
     import type { ProgramDetail as Facts } from '#lib/types.js';
     import { preloadData } from '$app/navigation';
     import { resolve } from '$app/paths';
@@ -74,11 +74,16 @@
      */
     let subchannels = $state(untrack(() => data.subchannels));
     const main = $derived(mainOf(services));
-    /** 切り替えは、サブチャンネルを持つ局があるときだけ出す (BS・CS は束ねないので出ない) */
-    const canSplit = $derived(hasSubchannels(main));
-    const columns = $derived(columnsOf(services, main, subchannels));
+    /** サブチャンネルの分割放送。ずっと相乗りのサブは入らない */
+    const split = $derived(splitOf(programs, main));
+    /**
+     * 切り替えは、その日に分割放送があるときだけ出す。無ければ出しても列が増えない
+     * (ずっと相乗りのサブは列を立てない。BS・CS は束ねないので出ない)
+     */
+    const canSplit = $derived(split.size > 0);
+    const columns = $derived(columnsOf(services, main, subchannels ? split : null));
     /** 表のマス。相乗り中のサブの列には本チャンネルのマスが伸びてくる */
-    const cells = $derived(cellsOf(columns, programs, main));
+    const cells = $derived(cellsOf(columns, programs, main, split));
 
     function setSubchannels(on: boolean): void {
         subchannels = on;
@@ -442,7 +447,7 @@
             **サブチャンネルを出すか** (issue #509)。テレビの番組表の「サブチャンネル表示」と同じ。
             見え方の好みなので設定画面ではなくここに置き、端末ごとに覚える。
             入っているかは aria-pressed と地の色で (録画一覧の「まとめて表示」と同じ形)。
-            サブチャンネルを持つ局が無ければ出さない
+            その日に分割放送が無ければ出さない (押しても列が増えない)
         -->
         {#if canSplit}
             <button

@@ -131,8 +131,8 @@ function readGrid(type: ChannelType, start: number, end: number) {
 
     /*
      * 放送していない局は出さない (終わったチャンネル)。**放送局ごとに決める** —
-     * 相乗り中のサブチャンネルは名前の無い枠しか持たないが、列を出すなら本チャンネルの
-     * マスがそこまで伸びてくる (`#lib/subchannels.ts`)。どれか1つが放送していれば揃って残す
+     * どれか1つが放送していれば揃って残し、サブの列を立てるかは画面が決める
+     * (分割放送のある日だけ。`#lib/subchannels.ts`)
      */
     const main = mainOf(services);
     const alive = new Set(airing(services, programs).map((service) => main.get(service.id)));

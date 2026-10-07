@@ -390,8 +390,19 @@ describe('savePrograms', () => {
  * - 相乗り中のサブチャンネル (NHK総合2 は、マルチ編成でない間ずっと名前が無い)
  */
 describe('番組表に出す局', () => {
-    const service = (id: number) => ({ id });
-    const program = (serviceId: number, name: string) => ({ service_id: serviceId, name });
+    // 別々の放送局 (ネットワークID が違う)。サブチャンネルは下で別に作る
+    const service = (id: number, networkId = id) => ({
+        id,
+        service_id: 1024 + id,
+        network_id: networkId,
+        type: 'GR',
+    });
+    const program = (serviceId: number, name: string, start = 0, end = 1) => ({
+        service_id: serviceId,
+        name,
+        start_at: start,
+        end_at: end,
+    });
 
     test('名前の付いた番組が1つも無い局は出さない', () => {
         const services = [service(1), service(2), service(3)];
@@ -412,6 +423,18 @@ describe('番組表に出す局', () => {
         const programs = [program(2, ''), program(2, '大相撲')];
 
         expect(airing(services, programs).map((s) => s.id)).toEqual([2]);
+    });
+
+    test('本チャンネルと同じ名前の番組を流しているサブチャンネルは出さない', () => {
+        // 1 が本チャンネル、2・3 はサブ (同じネットワークID)。番組表の `splitOf` と同じ決め方
+        const services = [service(1, 9), service(2, 9), service(3, 9)];
+        const programs = [
+            program(1, 'ニュース', 0, 10),
+            program(2, 'ニュース', 5, 15),
+            program(3, '野球', 0, 10),
+        ];
+
+        expect(airing(services, programs).map((s) => s.id)).toEqual([1, 3]);
     });
 
     test('1局も残らないときは全部出す', () => {
