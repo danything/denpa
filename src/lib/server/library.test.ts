@@ -11,7 +11,7 @@ import { dirname, join } from 'node:path';
 const { config } = await import('./config');
 config.encodedDir = mkdtempSync(join(tmpdir(), 'denpa-lib-'));
 
-const { libraryPath, encodedPath, libraryFamily } = await import('./library');
+const { libraryPath, encodedPath, libraryFamily, seriesFolder } = await import('./library');
 
 /** 2026-08-03 22:30 開始の録画 */
 function recording(overrides: { library_path?: string | null; alt_path?: string | null } = {}) {
@@ -96,5 +96,21 @@ describe('保存先での名前', () => {
                 join(dir, '番組/番組 - 2026-08-03 - 2230 [39] [H264].mkv'),
             ]),
         );
+    });
+});
+
+describe('シリーズのフォルダ名 (一覧の「まとめて表示」も同じ名前でまとめる)', () => {
+    test('焼いたものを置くフォルダと同じ名前になる', () => {
+        const rec = recording();
+        expect(dirname(libraryPath(rec, '.mkv'))).toBe(join(config.encodedDir, seriesFolder(rec.series, '')));
+    });
+
+    test('ファイル名に使えない文字は焼くときと同じに落とす', () => {
+        expect(seriesFolder('番組: 特別編', '')).toBe('番組 特別編');
+    });
+
+    test('シリーズ名が無ければ番組名から切り出す (話数・副題・記号を落とす)', () => {
+        expect(seriesFolder('', '【新】テストアニメ #12 決戦[字]')).toBe('テストアニメ');
+        expect(seriesFolder('', 'テストアニメ 第3話「出会い」')).toBe('テストアニメ');
     });
 });

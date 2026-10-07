@@ -6,6 +6,7 @@ import { orm } from '#lib/server/db.js';
 import { cancel as cancelEncode, enqueue, isCanceling, pump } from '#lib/server/encoder.js';
 import { emit } from '#lib/server/events.js';
 import { deleteRecordingFiles, reconcile } from '#lib/server/files.js';
+import { seriesFolder } from '#lib/server/library.js';
 import { recordingFromForm } from '#lib/server/recording.js';
 import { cancel, restore } from '#lib/server/reservations.js';
 import {
@@ -19,6 +20,7 @@ import {
     services,
 } from '#lib/server/schema.js';
 import { settings } from '#lib/server/settings.js';
+import { parseTitle } from '#lib/server/title.js';
 import { encodeSource } from '#lib/source.js';
 import type { EncodeJob, Recording, Reservation, ReservationState } from '#lib/types.js';
 
@@ -67,6 +69,20 @@ interface RecordingRow extends Recording {
     from_manual: boolean | null;
     /** 局ロゴを拾えているか。局名の隣に出す */
     has_logo: boolean | null;
+    /** 「まとめて表示」でまとめる鍵と見出し (`seriesGroup`) */
+    group_key: string;
+    group_name: string;
+}
+
+/**
+ * 「まとめて表示」の単位。**焼いたものを置くシリーズのフォルダと同じ名前でまとめる**
+ * (`library.seriesFolder`)。見出しに出すのは削る前のシリーズ名
+ */
+function seriesGroup(series: string, name: string): { group_key: string; group_name: string } {
+    const key = seriesFolder(series, name);
+    const shown = (series === '' ? parseTitle(name).series : series).trim();
+    // 名前が空白だけのときはフォルダ名 (`untitled`) を出す。見出しが「N本」だけになるため
+    return { group_key: key, group_name: shown === '' ? key : shown };
 }
 
 /**
@@ -89,6 +105,9 @@ export interface MissedRow {
     rule_name: string | null;
     /** チューナー不足で落とされたものは理由を持っている。詳細で見せる */
     conflict_reason: string | null;
+    /** 「まとめて表示」でまとめる鍵と見出し。録画の行と同じ決め方 (`seriesGroup`) */
+    group_key: string;
+    group_name: string;
 }
 
 interface ReservationRow extends Omit<Reservation, 'state'> {
@@ -239,6 +258,7 @@ export function load({ url }) {
             raw_size: row.library_path === null || row.ts_path === null ? null : fileSize(row.ts_path),
             alt_size: row.alt_path === null ? null : fileSize(row.alt_path),
             job_canceling: row.job_id !== null && isCanceling(row.job_id),
+            ...seriesGroup(row.series, row.name),
         }));
 
     /*
@@ -278,7 +298,9 @@ export function load({ url }) {
         )
         .orderBy(desc(r.start_at))
         .limit(100)
-        .all();
+        .all()
+        // 予約はシリーズ名を持たないので、番組名から切り出す (録るときと同じ)
+        .map((row) => ({ ...row, ...seriesGroup('', row.name) }));
 
     return {
         reservations,
