@@ -227,9 +227,8 @@ test.describe('録画一覧のまとめて表示', () => {
             await anime.click();
             await page.getByTestId('recording-list').getByText('グループ試験アニメ #2').click();
             const detail = page.getByTestId('program-detail');
-            await detail.getByTestId('detail-more').click();
-            await detail.getByTestId('rule-from-recording').click();
-            await expect(page).toHaveURL(/\/rules\?from=\d+$/);
+            await detail.getByTestId('detail-rule').click();
+            await expect(page).toHaveURL(/\/rules\?recording=\d+$/);
             await expect(page.getByTestId('rule-origin')).toContainText('で録っています');
             await expect(page.getByTestId('rule-keyword')).toHaveValue('');
         } finally {

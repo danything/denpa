@@ -743,6 +743,19 @@
                     </a>
                 {/if}
 
+                <!--
+                    **この番組のルールを作る。** 予約・録画の詳細と同じ入口
+                    (`rules/+page.server.ts` の `originOf`)。毎回録りたい番組を番組表で
+                    見つけたとき、ルールの画面で探し直さずに済む
+                -->
+                <a
+                    class="button secondary outline"
+                    href={resolve(`rules?program=${program.id}`)}
+                    data-testid="detail-rule"
+                >
+                    この番組のルールを作る
+                </a>
+
                 {#if CANCELABLE.includes(program.reservation_state ?? '')}
                     <!-- 予約したあと番組表から止められないと、わざわざ予約一覧まで行くことになる -->
                     <form

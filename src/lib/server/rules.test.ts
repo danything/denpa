@@ -169,3 +169,28 @@ describe('録画からルールを作る', () => {
         ).toBeUndefined();
     });
 });
+
+/** 番組表・予約の詳細から。番組はシリーズ名を持たないので、題名から切り出す */
+describe('番組からルールを作る', () => {
+    const program = {
+        name: '[新]テストアニメ #1「はじまり」[字]',
+        service_id: 211,
+        genre_detail: [{ lv1: 7, lv2: 0 }],
+    };
+
+    test('キーワードは題名から切り出したシリーズ名、ジャンルは大分類だけ', () => {
+        expect(prefillFrom(program)).toEqual({ keyword: 'テストアニメ', genres: ['7'] });
+    });
+
+    test('ジャンルの無い番組 (予約の行から読んだとき) はキーワードだけ', () => {
+        expect(prefillFrom({ ...program, genre_detail: null })).toEqual({
+            keyword: 'テストアニメ',
+            genres: null,
+        });
+    });
+
+    test('このシリーズを録っているルールを返す。[新] だけのルールは当たらない', () => {
+        expect(coveringRule([rule({ id: 3, keyword: 'テストアニメ' })], program)?.id).toBe(3);
+        expect(coveringRule([rule({ keyword: '[新]' })], program)).toBeUndefined();
+    });
+});
