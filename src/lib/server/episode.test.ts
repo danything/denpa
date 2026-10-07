@@ -147,6 +147,11 @@ describe('同じ回の見分け', () => {
         expect(same('テストアニメ', 'テストアニメ', ['#1', '#1'])).toBe(true);
     });
 
+    test('芯が2文字以下なら、副題が揃っても名前の違うシリーズとはくっつけない', () => {
+        expect(same('銀魂 #1「最終回」', '金銀魂 #1「最終回」')).toBe(false);
+        expect(same('銀魂 #1「最終回」', '銀魂 #1「最終回」[再]')).toBe(true);
+    });
+
     test('題名が「第2期」だけなら、全話を1つの回にしない', () => {
         // parseTitle は「第2」を話数に読むが、毎回同じなので回にはならない
         expect(episodeOf({ name: 'テストアニメ 第2期', description: '', extended: null })).toBeNull();

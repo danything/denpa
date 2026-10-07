@@ -49,7 +49,10 @@ const NUMBER_ONLY = new RegExp(
     `^\\s*(?:#\\s*(\\d{1,4})|第\\s*(${NUMERAL})\\s*話)(?=[\\s「『:.、。]|$)`,
     'gm',
 );
-/** 「前回 #17「…」」「次回 第19話」「前回のあらすじ …」はこの回の話数ではない。同じ文の前のほうを見る */
+/**
+ * 「前回 #17「…」」「前回のあらすじ #17「…」」はこの回の話数ではない。同じ文の前のほうを見る
+ * (`NUMBERED_SUBTITLE` 用。`NUMBER_ONLY` は行の頭だけなので前置きがあれば当たらない)
+ */
 const ANOTHER_EPISODE = /前回|次回|予告/;
 
 /** `18` / `十八` / `一〇` を数に */
@@ -145,14 +148,15 @@ export function episodeOf(program: Described): Episode | null {
  * 「薬屋のひとりごと FRIDAY ANIME NIGHT」)。飾りを並べて消すのではなく、
  * **片方の芯 (いちばん長い語) がもう片方に入っていれば**同じシリーズとみる。
  * ただしそれは**副題まで揃っているときだけ**。話数だけで緩めると、1期の再放送と
- * 「X 2」の同じ話数がくっつく。副題の無い回はシリーズ名がぴったり同じものだけ
+ * 「X 2」の同じ話数がくっつく。副題の無い回はシリーズ名がぴったり同じものだけ。
+ * 芯が2文字以下なら緩めない (「最終回」のような短い副題で別の番組に紛れる)
  */
 export function sameEpisode(a: Episode, b: Episode): boolean {
     if (a.number !== b.number || a.subtitle !== b.subtitle) return false;
     if (a.series === b.series) return true;
     if (a.subtitle === '') return false;
     return (
-        (a.core.length >= 2 && b.series.includes(a.core)) || (b.core.length >= 2 && a.series.includes(b.core))
+        (a.core.length >= 3 && b.series.includes(a.core)) || (b.core.length >= 3 && a.series.includes(b.core))
     );
 }
 
@@ -223,7 +227,7 @@ export function firstAirings<T extends Airing>(
     taken: Taken = [],
 ): Map<number, Skip<T>> {
     const skips = new Map<number, Skip<T>>();
-    /** 話数と副題が同じ放送。シリーズ名は飾りの違いを許すので、この中で `sameEpisode` で束ねる */
+    /** 話数と副題 (副題が無ければシリーズ名も) が同じ放送。シリーズ名は飾りの違いを許すので、この中で `sameEpisode` で束ねる */
     const numbered = new Map<string, { airing: T; episode: Episode }[]>();
     /** 回の分からない放送。題名ごとに、同じ時刻のものだけ束ねる */
     const loose = new Map<string, T[]>();
@@ -236,7 +240,9 @@ export function firstAirings<T extends Airing>(
             else list.push(airing);
             continue;
         }
-        const at = `${episode.number}\n${episode.subtitle}`;
+        // 副題が無ければシリーズ名がぴったり同じものしか同じ回にならない (`sameEpisode`)。
+        // 鍵に入れておけば、`#1` だけの回が番組をまたいで1つのバケツに溜まらない
+        const at = `${episode.number}\n${episode.subtitle || `\n${episode.series}`}`;
         const list = numbered.get(at);
         if (list === undefined) numbered.set(at, [{ airing, episode }]);
         else list.push({ airing, episode });
