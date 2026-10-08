@@ -709,7 +709,7 @@ function ruleValues(conditions: Conditions, form: FormData) {
 }
 
 export const actions = {
-    create: async ({ request }) => {
+    create: async ({ request, url }) => {
         const form = await request.formData();
         const conditions = conditionsOf(form);
         if (conditions.empty) return fail(400, { message: EMPTY_RULE });
@@ -728,7 +728,8 @@ export const actions = {
 
         // 足したルールは他の予約を外せないので、そのルールだけ当てれば足りる
         await reapply(created.id);
-        return { success: true };
+        // 書く欄を初めの状態に戻す (「何が録れるか見る」の条件も URL から外す)。更新と同じ
+        redirect(303, relative(url, '/rules'));
     },
 
     update: async ({ request, url }) => {

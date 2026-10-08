@@ -55,6 +55,12 @@
     const seedServices = $derived(data.seed?.service_ids ?? []);
     const seedGenres = $derived(data.seed?.genres ?? []);
     const seedFields = $derived(parseSearchFields(data.seed?.search_fields));
+    /**
+     * 足した・直したあとに書く欄を描き直すための鍵。**フォームの reset では初期値に戻らない** —
+     * チェックは `checked` を中身として当てているので、reset すると既定 (外れ) になり、
+     * 番組名・種別・「同じ回は…」まで全部外れていた。描き直して初期値から組み直す
+     */
+    let formKey = $state(0);
 
     /**
      * プレビューの行から開く番組詳細 (detail.svelte.ts)。予約一覧と同じ見せ方。
@@ -189,7 +195,17 @@
                     ときに「追加」まで探して降りることになるので、`<form>` 自身を
                     縦の入れ物にして、上だけを巻き取る
                 -->
-                <form method="POST" use:submitting class="rule-form">
+                {#key formKey}
+                <form
+                    method="POST"
+                    class="rule-form"
+                    use:submitting={() =>
+                        async ({ result, update }) => {
+                            await update({ reset: false });
+                            // 足した・直した (どちらも /rules へ戻る) ら、書く欄を初期値で描き直す
+                            if (result.type === 'redirect') formKey += 1;
+                        }}
+                >
                     <div class="form-scroll" data-testid="rule-form">
                         <div class="heading">
                             <h2>
@@ -470,6 +486,7 @@
                         {/if}
                     </div>
                 </form>
+                {/key}
             </div>
         </section>
 

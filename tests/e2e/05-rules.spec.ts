@@ -61,6 +61,10 @@ test.describe('自動予約ルール', () => {
         const rule = page.getByTestId('rule-row').first();
         await expect(rule).toContainText('テストアニメ');
         await expect(rule).toContainText('有効');
+        // 足したら書く欄は初めの状態に戻る (reset でチェックが全部外れていた)
+        await expect(page.getByTestId('rule-keyword')).toHaveValue('');
+        await expect(page.getByTestId('rule-search-fields').locator('input[value="name"]')).toBeChecked();
+        await expect(page.getByTestId('rule-dedupe')).toBeChecked();
 
         // 偽エージェントは同じ番組名を周期的に返すので、ルール作成と同時に予約が立つ
         await goto(page, '/');
