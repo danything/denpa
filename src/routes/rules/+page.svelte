@@ -233,14 +233,20 @@
                         {/if}
                         <!-- 横に並べない。左の列は 26rem までなので、並べると入力欄が潰れる -->
                         <div class="fields">
-                            <label class="field">
-                                <span class="label">キーワード</span>
-                                <input
-                                    name="keyword"
-                                    placeholder="例: 名探偵"
-                                    value={data.seed?.keyword ?? ''}
-                                    data-testid="rule-keyword"
-                                />
+                            <!--
+                                外側は label にしない。Pico はチェックボックスを含む label を中身の幅
+                                (fit-content) に縮めるので、当てる範囲のチェックまで包むと入力欄だけ短くなっていた
+                            -->
+                            <div class="field">
+                                <label class="field">
+                                    <span class="label">キーワード</span>
+                                    <input
+                                        name="keyword"
+                                        placeholder="例: 名探偵"
+                                        value={data.seed?.keyword ?? ''}
+                                        data-testid="rule-keyword"
+                                    />
+                                </label>
                                 <span class="hint">
                                     空白で区切ると<strong>すべて含む</strong>ものに一致します
                                 </span>
@@ -261,7 +267,7 @@
                                         </label>
                                     {/each}
                                 </div>
-                            </label>
+                            </div>
                             <label class="field">
                                 <span class="label">除外キーワード</span>
                                 <input
