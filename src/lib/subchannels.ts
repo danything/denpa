@@ -3,11 +3,11 @@
  *
  * テレビの番組表と同じ形にする:
  *
- * - **既定は本チャンネルだけ。** テレ東2・3 や Eテレ2・3 の列は出さない。
- *   ほとんどの時間は本チャンネルと同じものを流していて、列が増えても横に広がるだけ
- * - **出すときは、同じものを流している間は1つのマスにまとめる。** 本チャンネルの番組を
- *   サブの列まで横に伸ばし、分割放送をしている間だけサブに自分のマスを立てる。
- *   その日ずっと相乗りのサブは列ごと立てない
+ * - **既定はサブも出す。** テレ東2・3、Eテレ2・3、BS朝日2・3 などの列。ただし
+ *   その日に分割放送のあるサブだけで、ずっと相乗りのサブは列ごと立てない
+ * - **同じものを流している間は1つのマスにまとめる。** 本チャンネルの番組を
+ *   サブの列まで横に伸ばし、分割放送をしている間だけサブに自分のマスを立てる
+ * - 「サブch」を切ると本チャンネルだけになる (端末ごとに覚える)
  *
  * 録画のルールには関わらない (サブチャンネルも局として扱い続ける)。ライブの一覧は
  * いま相乗り中のサブを外す (`epg.airing`)。相乗りの決め方はここ (`splitOf`) と同じ
@@ -17,7 +17,8 @@
 export interface Station {
     id: number;
     service_id: number;
-    network_id: number;
+    /** 物理チャンネル (`T27`、`BS01_3`)。選局に使う名前で、1つの TS を指す */
+    channel: string;
     type: string;
 }
 
@@ -33,29 +34,38 @@ export interface Airing {
 /**
  * 局ごとの本チャンネル。局の id → 本チャンネルの id (本チャンネルは自分を指す)。
  *
- * **地上波だけ束ねる。** 地上波はネットワークID が放送局ごとに振られていて
- * (テレ東 / テレ東2 / テレ東3 は同じ値)、同じ値なら同じ放送局と言い切れる。
- * 本チャンネルはサービスID のいちばん若いもの (ARIB TR-B14 でサービス番号 0 が先頭。
- * NHK総合1 1024 / 総合2 1025、テレ東 1072 / 1073 / 1074)。
+ * **地上波と BS は、同じ TS (`channel`) に乗っている局を束ねる。** 相乗り
+ * (同じ映像を複数のサービスで流す「イベント共有」) は同じ TS の中でしかできない決まり
+ * (ARIB TR-B14 第四編 17.2「TS 内」、TR-B15 第一部 第四編 17.2「同じ事業者かつ同じ TS 内」)。
+ * 本チャンネルはサービスID のいちばん若い局 (NHK総合1 1024 / 総合2 1025、
+ * テレ東 1072〜1074、BS朝日 151〜153)。
  *
- * BS と CS はネットワークID が全局で同じ (BS は 4) なので、これでは束ねられない。
- * サービスID の並びでも決められない — BS朝日1・2・3 (151〜153) はサブだが、
- * WOWOW のプライム・ライブ・シネマ (191〜193) はそれぞれが本チャンネル。
- * 取り違えると見たい局が消えるので、衛星はこれまでどおり1局1列にしておく
+ * - **地上波**は1放送局が1つの TS (TR-B14 第四編 5.3: transport_stream_id は
+ *   network_id と同じ値)。チャンネルで束ねても、ネットワークID で束ねていた頃と同じ
+ * - **BS** はネットワークID が全局で同じ (4) なので、チャンネル (= TS) で見る。
+ *   BS朝日1・2・3 は3つとも `BS01_3`。WOWOW のプライム・ライブ・シネマ (191〜193) は
+ *   同じ会社でも TS が別々 (`BS03_3` / `BS05_3` / `BS05_1`) で、それぞれが本チャンネル。
+ *   サービスID の番号帯や事業者 (broadcaster_id) で束ねると、ここを取り違える
+ * - **CS と SKY は束ねない。** 1つの TS に別々の会社の局が乗っていて、同じ TS でも
+ *   相乗りの仲間とは限らない
+ *
+ * チャンネルの名前は TS ごとに1つ (同じ TS を指す写しはスキャンで落とす。`tuner.twinOf`)
  */
 export function mainOf(services: Station[]): Map<number, number> {
-    const first = new Map<number, Station>();
+    const tsOf = (service: Station) =>
+        service.type === 'GR' || service.type === 'BS' ? `${service.type}:${service.channel}` : null;
+    const first = new Map<string, Station>();
     for (const service of services) {
-        if (service.type !== 'GR') continue;
-        const known = first.get(service.network_id);
-        if (known === undefined || service.service_id < known.service_id)
-            first.set(service.network_id, service);
+        const ts = tsOf(service);
+        if (ts === null) continue;
+        const known = first.get(ts);
+        if (known === undefined || service.service_id < known.service_id) first.set(ts, service);
     }
     return new Map(
-        services.map((service) => [
-            service.id,
-            service.type === 'GR' ? (first.get(service.network_id)?.id ?? service.id) : service.id,
-        ]),
+        services.map((service) => {
+            const ts = tsOf(service);
+            return [service.id, ts === null ? service.id : (first.get(ts)?.id ?? service.id)];
+        }),
     );
 }
 
@@ -71,6 +81,7 @@ export function mainOf(services: Station[]): Map<number, number> {
  * - それ以外 → 分割放送
  *
  * サブに番組が無い時間も相乗りとみなす (サブの番組表がまだ集まっていないときも、これで済む)。
+ * 番組が1つも来ないサブ (NHK BS の 103。局名も「-」) は、ずっと相乗りとして本チャンネルにまとまる。
  * 逆に**本チャンネルに番組が無い**時間のサブの番組は、見比べる相手が無いので分割放送として扱う
  * (本チャンネルの番組表がまだ集まっていないと、その間だけサブが独立して見える)。
  *
@@ -260,7 +271,7 @@ export function cellsOf<S extends Station, P extends Airing>(
  */
 export const SUBCHANNELS_COOKIE = 'denpa_guide_subchannels';
 
-/** 覚えていた値。**既定は出さない** (テレビの番組表と同じ) */
+/** 覚えていた値。**既定は出す** — 隠すのは「サブch」を切った ("0") ときだけ */
 export function storedSubchannels(saved: string | undefined): boolean {
-    return saved === '1';
+    return saved !== '0';
 }

@@ -390,12 +390,12 @@ describe('savePrograms', () => {
  * - 相乗り中のサブチャンネル (NHK総合2 は、マルチ編成でない間ずっと名前が無い)
  */
 describe('番組表に出す局', () => {
-    // 別々の放送局 (ネットワークID が違う)。サブチャンネルは下で別に作る
-    const service = (id: number, networkId = id) => ({
+    // 別々の放送局 (TS が違う)。サブチャンネルは下で別に作る
+    const service = (id: number, channel = `T${id}`, type = 'GR') => ({
         id,
         service_id: 1024 + id,
-        network_id: networkId,
-        type: 'GR',
+        channel,
+        type,
     });
     const program = (serviceId: number, name: string, start = 0, end = 1) => ({
         service_id: serviceId,
@@ -426,8 +426,8 @@ describe('番組表に出す局', () => {
     });
 
     test('本チャンネルと同じ名前の番組を流しているサブチャンネルは出さない', () => {
-        // 1 が本チャンネル、2・3 はサブ (同じネットワークID)。番組表の `splitOf` と同じ決め方
-        const services = [service(1, 9), service(2, 9), service(3, 9)];
+        // 1 が本チャンネル、2・3 はサブ (同じ TS)。番組表の `splitOf` と同じ決め方
+        const services = [service(1, 'T9'), service(2, 'T9'), service(3, 'T9')];
         const programs = [
             program(1, 'ニュース', 0, 10),
             program(2, 'ニュース', 5, 15),
@@ -435,6 +435,46 @@ describe('番組表に出す局', () => {
         ];
 
         expect(airing(services, programs).map((s) => s.id)).toEqual([1, 3]);
+    });
+
+    test('BS も同じ TS のサブは相乗り中なら出さない。TS が別なら同じ会社でも出す', () => {
+        const bs = (sid: number, channel: string) => ({ id: sid, service_id: sid, channel, type: 'BS' });
+        const services = [
+            // BS朝日1〜3
+            bs(151, 'BS01_3'),
+            bs(152, 'BS01_3'),
+            bs(153, 'BS01_3'),
+            // NHK BS。103 は番組の来ない枠 (局名「-」)
+            bs(101, 'BS15_0'),
+            bs(103, 'BS15_0'),
+            // WOWOW プライム・ライブ・シネマ。TS が別々
+            bs(191, 'BS03_3'),
+            bs(192, 'BS05_3'),
+            bs(193, 'BS05_1'),
+            // J SPORTS 1・2
+            bs(242, 'BS19_1'),
+            bs(243, 'BS19_2'),
+        ];
+        const programs = [
+            program(151, 'ニュース', 0, 10),
+            program(152, 'ニュース', 0, 10),
+            program(153, '野球', 0, 10),
+            program(101, 'ニュース', 0, 10),
+            program(191, '映画', 0, 10),
+            program(192, 'ライブ', 0, 10),
+            program(193, '映画', 0, 10),
+            program(242, 'サッカー', 0, 10),
+            program(243, 'サッカー', 0, 10),
+        ];
+
+        expect(airing(services, programs).map((s) => s.id)).toEqual([151, 153, 101, 191, 192, 193, 242, 243]);
+    });
+
+    test('CS は同じ TS でも束ねない', () => {
+        const services = [service(1, 'CS2', 'CS'), service(2, 'CS2', 'CS')];
+        const programs = [program(1, 'ニュース'), program(2, 'ニュース')];
+
+        expect(airing(services, programs).map((s) => s.id)).toEqual([1, 2]);
     });
 
     test('1局も残らないときは全部出す', () => {
