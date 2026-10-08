@@ -535,6 +535,7 @@ export async function load({ url }) {
                 ? null
                 : {
                       kind: origin.kind,
+                      id: origin.id,
                       name: origin.name,
                       found: origin.found,
                       rule:
@@ -728,8 +729,12 @@ export const actions = {
 
         // 足したルールは他の予約を外せないので、そのルールだけ当てれば足りる
         await reapply(created.id);
-        // 書く欄を初めの状態に戻す (「何が録れるか見る」の条件も URL から外す)。更新と同じ
-        redirect(303, relative(url, '/rules'));
+        /*
+         * 書く欄を初めの状態に戻す (「何が録れるか見る」の条件も URL から外す)。更新と同じ。
+         * 録画・番組から作ったときはその元だけ残す — 作ったルールで録っていると出る (`originOf`)
+         */
+        const from = String(form.get('origin') ?? '').match(/^(recording|program):(\d+)$/);
+        redirect(303, relative(url, from === null ? '/rules' : `/rules?${from[1]}=${from[2]}`));
     },
 
     update: async ({ request, url }) => {

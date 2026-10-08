@@ -241,6 +241,10 @@
                                 </p>
                             {/if}
                         {/if}
+                        {#if data.origin !== null && data.editing === null}
+                            <!-- 足したあとも、元の録画・番組を案内し直す (`create`) -->
+                            <input type="hidden" name="origin" value="{data.origin.kind}:{data.origin.id}" />
+                        {/if}
                         {#if data.editing}
                             <input type="hidden" name="id" value={data.editing.id} />
                             <!-- 「この条件で何が録れるか見る」は GET でこの画面に戻ってくる。
