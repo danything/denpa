@@ -53,7 +53,7 @@ export const SERVICE_TYPE_ORDER = `CASE type WHEN 'GR' THEN 0 WHEN 'BS' THEN 1 E
 /**
  * 番組表とライブに出す局。**名前の付いた番組が1つも無い局は出さない。**
  *
- * 番組表はこれを放送局ごとに当てる (サブチャンネルの列は分割放送のある日だけ立てる。
+ * 番組表はこれを放送局 (同じ TS) ごとに当てる (サブチャンネルの列は分割放送のある日だけ立てる。
  * `#lib/subchannels.ts`)。
  *
  * 出したくないものが2種類ある。どちらも「枠はあるが放送していない」。
@@ -103,7 +103,7 @@ export function watchableServices(at: number): number[] {
             .select({
                 id: services.id,
                 service_id: services.service_id,
-                network_id: services.network_id,
+                channel: services.channel,
                 type: services.type,
             })
             .from(services)

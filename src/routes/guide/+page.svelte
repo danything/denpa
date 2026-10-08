@@ -69,8 +69,8 @@
     const programs = $derived(sheet?.programs ?? []);
 
     /**
-     * サブチャンネル (テレ東2・3、Eテレ2・3 など) の列を出すか。**既定は出さない**
-     * (テレビの番組表と同じ。`#lib/subchannels.ts`)。端末ごとに cookie で覚える
+     * サブチャンネル (テレ東2・3、Eテレ2・3、BS朝日2・3 など) の列を出すか。**既定は出す**
+     * (分割放送のあるサブだけ。`#lib/subchannels.ts`)。切ったら端末ごとに cookie で覚える
      */
     let subchannels = $state(untrack(() => data.subchannels));
     const main = $derived(mainOf(services));
@@ -78,7 +78,7 @@
     const split = $derived(splitOf(programs, main));
     /**
      * 切り替えは、その日に分割放送があるときだけ出す。無ければ出しても列が増えない
-     * (ずっと相乗りのサブは列を立てない。BS・CS は束ねないので出ない)
+     * (ずっと相乗りのサブは列を立てない。CS・SKY は束ねないので出ない)
      */
     const canSplit = $derived(split.size > 0);
     const columns = $derived(columnsOf(services, main, subchannels ? split : null));
