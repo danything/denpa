@@ -7,6 +7,7 @@
     import { badgeClass, CM_LABEL, dateTime, SERVICE_TYPE_LABEL, stateLabel } from '#lib/format.js';
     import { matches, Paged, sentinel } from '#lib/paging.svelte.js';
     import { parseSearchFields, SEARCH_FIELD_LABEL, SEARCH_FIELDS, searchFieldLabel } from '#lib/search.js';
+    import { afterNavigate } from '$app/navigation';
     import { resolve } from '$app/paths';
     import { page } from '$app/state';
     import type { Preview, PreviewRow } from './+page.server';
@@ -61,6 +62,15 @@
      * 番組名・種別・「同じ回は…」まで全部外れていた。描き直して初期値から組み直す
      */
     let formKey = $state(0);
+    /*
+     * **編集を押したら描き直す。** チェックは `checked` の値が変わったときしか当て直さないので、
+     * 手で外したまま別のルールの「編集」を押すと、同じ値 (概要にチェック) のルールでは外れたまま
+     * 残っていた。リンクと戻る/進むで来たら、そのルールの値から組み直す。
+     * 「何が録れるか見る」(GET の送信) は打ち込んだ値がそのまま返るので描き直さない
+     */
+    afterNavigate(({ type }) => {
+        if (type === 'link' || type === 'popstate') formKey += 1;
+    });
 
     /**
      * プレビューの行から開く番組詳細 (detail.svelte.ts)。予約一覧と同じ見せ方。
