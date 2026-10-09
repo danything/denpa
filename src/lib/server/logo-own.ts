@@ -35,12 +35,15 @@ import { run } from './stream';
  * 2. **当てる** — ロゴの枠だけを全部のコマで切り出して点を付け、区間にする。
  *    ついでに散らしたコマを足して、覚えたものを育てる
  *
- * 覚えたものは `.lgd` と同じ局ごとの入れ物に置く (`logoRepo`)。位置を教え直したときや
+ * 覚えたものは `.lgd` と同じ局ごとの入れ物に、コマの大きさごとに置く (`logoRepo`・`modelFile`)。位置を教え直したときや
  * 「この絵は違う」で丸ごと捨てると、こちらも一緒に消える。
  */
 
-/** 覚えたものの置き場 (局ごとの入れ物の中) */
-export const MODEL_FILE = 'own-logo.bin';
+/**
+ * 覚えたものの置き場 (局ごとの入れ物の中)。**コマの大きさごとに分ける** — 同じ局で SD と HD の録画が
+ * 交互に来ると、1つの名前では毎回入れ替わって育たない
+ */
+export const modelFile = (width: number, height: number) => `own-logo-${width}x${height}.bin`;
 
 /** 覚えるときに見るキーフレームの数 */
 const LEARN_FRAMES = 600;
@@ -56,9 +59,10 @@ export interface OwnResult {
     timing: { learn: number; detect: number; compute: number; frames: number };
 }
 
-export function load(repo: string): LogoModel | null {
+export function load(repo: string, width: number, height: number): LogoModel | null {
     try {
-        return decodeModel(readFileSync(join(repo, MODEL_FILE)));
+        const model = decodeModel(readFileSync(join(repo, modelFile(width, height))));
+        return model?.frameWidth === width && model.frameHeight === height ? model : null;
     } catch {
         return null;
     }
@@ -70,7 +74,7 @@ export function load(repo: string): LogoModel | null {
  * (2 本ずつ焼くので、同じ局の録画が同時に書きに来ることがある)
  */
 export function save(repo: string, model: LogoModel): void {
-    const path = join(repo, MODEL_FILE);
+    const path = join(repo, modelFile(model.frameWidth, model.frameHeight));
     const temp = `${path}.${process.pid}-${Math.random().toString(36).slice(2)}.tmp`;
     try {
         mkdirSync(repo, { recursive: true });
@@ -288,8 +292,7 @@ export async function ownLogoFrames(
     };
 
     // 覚えていれば使う。コマの大きさが違うもの (SD と HD) には当てない
-    const stored = load(repo);
-    let model = stored?.frameWidth === probed.width && stored.frameHeight === probed.height ? stored : null;
+    let model = load(repo, probed.width, probed.height);
     let learnedNow = false;
     /** 覚え直したものを持ち帰るか。前のロゴと違う所で覚えたなら、この回だけ使って持ち帰らない */
     let keep = true;

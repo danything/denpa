@@ -73,7 +73,7 @@ EPGStation の置き換えとして作ったもので、エンコード設定は
 | `src/lib/ts/logo-area.ts` | ロゴの在り処を絵から割り出す当てはめ (純粋関数。隅だけを見る) |
 | `src/lib/server/logo-area.ts` | 上に渡すコマを録れたものから抜き、出た枠を `services.logo_area` に入れる |
 | `src/lib/ts/logo-detect.ts` | 自前のロゴ判定 (`CM_LOGO=own`)。線の向きで覚え、コマごとに当て、logoframe と同じ形の区間にする (純粋関数) |
-| `src/lib/server/logo-own.ts` | 上に渡すコマを ffmpeg で抜き、覚えたもの (`own-logo.bin`) を局ごとの入れ物に置く |
+| `src/lib/server/logo-own.ts` | 上に渡すコマを ffmpeg で抜き、覚えたもの (`own-logo-<幅>x<高さ>.bin`) を局ごとの入れ物に置く |
 | `src/lib/components/ProgramFacts.svelte` | 番組の中身そのもの (枠は持たない)。モーダルと観る画面の両方から使う |
 | `src/lib/components/LogoArea.svelte` | CM検出用のロゴを画面で確かめ、位置を教え、捨てる |
 | `src/lib/components/Toasts.svelte` | 押した結果を画面の右下に浮かせて出す (本文を押し下げない) |

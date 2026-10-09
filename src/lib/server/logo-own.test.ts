@@ -3,7 +3,7 @@ import { mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { emptyOrientation, type LogoModel } from '../ts/logo-detect';
-import { load, MODEL_FILE, save } from './logo-own';
+import { load, modelFile, save } from './logo-own';
 
 /**
  * 自前のロゴ判定の、覚えたものの置き場 (`logo-own.ts` の `save`/`load`)。
@@ -38,18 +38,18 @@ describe('覚えたものの置き場', () => {
         withRepo((repo) => {
             save(repo, model(3));
             save(repo, model(5));
-            const back = load(repo);
+            const back = load(repo, 1440, 1080);
             expect(back?.rect).toEqual({ x: 1300, y: 30, width: 8, height: 4 });
             expect(back?.orientation.sx[0]).toBe(5);
-            expect(readdirSync(repo)).toEqual([MODEL_FILE]);
+            expect(readdirSync(repo)).toEqual([modelFile(1440, 1080)]);
         });
     });
 
     test('無い・壊れているなら null', () => {
         withRepo((repo) => {
-            expect(load(repo)).toBeNull();
-            writeFileSync(join(repo, MODEL_FILE), 'broken');
-            expect(load(repo)).toBeNull();
+            expect(load(repo, 1440, 1080)).toBeNull();
+            writeFileSync(join(repo, modelFile(1440, 1080)), 'broken');
+            expect(load(repo, 1440, 1080)).toBeNull();
         });
     });
 
