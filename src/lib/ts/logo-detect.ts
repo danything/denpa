@@ -112,7 +112,7 @@ const AREA_FLOOR = 0.15;
 /**
  * 隅の帯から、ロゴの在り処を割り出す。
  *
- * `bands` は上と下の帯 (幅はコマと同じ、高さは `bandHeight`)。かたまりの選び方は
+ * `bands` は上と下の帯 (幅はコマと同じ、高さはどちらも同じ)。かたまりの選び方は
  * logoframe に渡す枠と同じ (`logo-area.pickArea`) で、強さに揃い方を使う
  */
 export function findArea(
@@ -264,7 +264,7 @@ export function score(t: Template, data: Uint8Array): number {
     return on - off / 4;
 }
 
-/** 型の画素の平均の明るさ (0〜255)。ロゴが溶けて見えない明るさを外すのに使う (`readable`) */
+/** 型の画素の平均の明るさ (0〜255)。ロゴが溶けて見えない明るさを外すのに使う (`byLevel`) */
 export function level(t: Template, data: Uint8Array): number {
     let sum = 0;
     for (const at of t.points) sum += data[at]!;
@@ -379,7 +379,8 @@ export interface Readings {
  *
  * 決め方は2回。どちらも局ごとに決め打ちせず、その録画の絵から決まる。
  *
- * 1. 明るさの段ごとに点の上位 5% を見て、ON に届かない段は判断しない
+ * 1. 明るさの段ごとに点の上位 5% を見て、ON に届かない段は判断しない (前後 2 秒にロゴが
+ *    はっきり見えたコマだけで数える。CM にしか出ない後ろを「見えない」と取り違えないように)。
  *    (番組の大半にロゴが出ているので、見える段なら上位 5% は ON を超える)。
  *    白いロゴなら明るい段が、黒い縁取りのロゴなら暗い段が外れる
  * 2. 1 で出した区間の中 (= ロゴが出ているはずのコマ) で、明るさ × 肌理の段ごとに
@@ -389,8 +390,19 @@ export interface Readings {
  * 判断しないコマは、直前の判断を持ち越す (`logoSpans`)
  */
 function byLevel(r: Readings, fps: number): Uint8Array {
+    /*
+     * **数えるのは、前後 `CONTEXT` 秒のどこかでロゴがはっきり見えたコマだけ。** CM の間のコマまで
+     * 数えると、CM にしか出ない後ろは上位 5% も 0 なので「判断できない」になり、CM の頭へ
+     * 判断が持ち越される
+     */
+    const near = new Uint8Array(r.scores.length);
+    const reach = Math.round(CONTEXT * fps);
+    for (let i = 0; i < r.scores.length; i++) {
+        if (r.scores[i]! < ON) continue;
+        near.fill(1, Math.max(0, i - reach), Math.min(r.scores.length, i + reach + 1));
+    }
     const bins: number[][] = Array.from({ length: 16 }, () => []);
-    for (let i = 0; i < r.scores.length; i++) bins[r.levels[i]! >> 4]!.push(r.scores[i]!);
+    for (let i = 0; i < r.scores.length; i++) if (near[i] === 1) bins[r.levels[i]! >> 4]!.push(r.scores[i]!);
     const ok = Uint8Array.from(bins, (values) => {
         // 少なすぎる段は確かめようがないので、見えるものとして扱う
         if (values.length < CELL_MIN * fps) return 1;
@@ -425,6 +437,8 @@ function byCell(r: Readings, first: Span[], known: Uint8Array, fps: number): Uin
 }
 /** 段を判断するのに要る長さ (秒) */
 const CELL_MIN = 2;
+/** 明るさの段を数えるとき、ロゴがはっきり見えたコマからどれだけ離れたコマまで入れるか (秒) */
+const CONTEXT = 2;
 /** ロゴが出ているはずのコマで、これより多く点が割れる後ろは当てにしない */
 const MISS_MAX = 0.1;
 
@@ -434,10 +448,23 @@ const MISS_MAX = 0.1;
  */
 export function logoSpans(r: Readings, fps: number): Span[] {
     const s = smooth(r.scores);
-    const known = byLevel(r, fps);
+    const known = flat(r, byLevel(r, fps));
     const first = spansOf(r.scores, s, known, fps);
-    return spansOf(r.scores, s, byCell(r, first, known, fps), fps);
+    return spansOf(r.scores, s, flat(r, byCell(r, first, known, fps)), fps);
 }
+
+/**
+ * **のっぺりして白くない後ろは、いつでも判断できる。** そこにロゴが乗っていれば必ず縁が立つので、
+ * 縁が無ければ無い。段ごとの数え方 (`byLevel`) だと、番組の切れ目の真っ黒 (局がロゴごと消す) が
+ * ロゴの近くにしか出ないぶん「見えない段」になり、番組の終わりのロゴが黒い間 15 秒ぶん
+ * 持ち越された (実機の BS11)
+ */
+function flat(r: Readings, known: Uint8Array): Uint8Array {
+    for (let i = 0; i < known.length; i++) if (r.textures[i]! < 1 && r.levels[i]! < FLAT_LEVEL) known[i] = 1;
+    return known;
+}
+/** これより明るいのっぺりは白飛び。白いロゴは溶けるので、のっぺりでも判断しない */
+const FLAT_LEVEL = 200;
 
 function spansOf(scores: Float32Array, s: Float32Array, known: Uint8Array, fps: number): Span[] {
     const half = Math.round(PEAK_WINDOW * fps);

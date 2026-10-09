@@ -188,7 +188,11 @@ describe('区間にする', () => {
                 levels.push(light);
             }
         }
-        return { scores: Float32Array.from(scores), levels: Uint8Array.from(levels), textures: new Uint8Array(scores.length) };
+        return {
+            scores: Float32Array.from(scores),
+            levels: Uint8Array.from(levels),
+            textures: new Uint8Array(scores.length),
+        };
     }
 
     test('出ている区間の境目をコマで返す', () => {

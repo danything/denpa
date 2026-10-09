@@ -226,7 +226,11 @@ async function detect(
     job.timing.frames = scores.length;
     if (result.code !== 0) return `コマが抜けませんでした (code ${result.code})`;
     const spans = logoSpans(
-        { scores: Float32Array.from(scores), levels: Uint8Array.from(levels), textures: Uint8Array.from(textures) },
+        {
+            scores: Float32Array.from(scores),
+            levels: Uint8Array.from(levels),
+            textures: Uint8Array.from(textures),
+        },
         job.fps,
     );
     return { spans, frames: scores.length, grow, points: template.points.length };
