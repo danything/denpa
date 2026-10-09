@@ -189,18 +189,19 @@ export interface RulePrefill {
     genres: string[] | null;
 }
 
-/** 録画・番組から読む分。シリーズ名は録画だけが持つ (番組表の行には無い) */
+/** 録画・番組から読む分 */
 export interface RuleSource {
     name: string;
-    series?: string;
     service_id: number;
     genre_detail: Genre[] | null;
 }
 
-/** シリーズ名。録るときに切り出したもの、無ければ (空白だけでも) 番組名から切り出す */
-function seriesOf(source: Pick<RuleSource, 'name' | 'series'>): string {
-    const series = source.series?.trim() ?? '';
-    return series !== '' ? series : source.name.trim() === '' ? '' : parseTitle(source.name).series.trim();
+/**
+ * シリーズ名。**録画でもいまの番組名から切り出す** — 録画の `series` は録ったときの
+ * 切り出し方のままで、`「東京リベンジャーズ」三天戦争編` のように鍵括弧ごと残っているものがある
+ */
+function seriesOf(source: Pick<RuleSource, 'name'>): string {
+    return source.name.trim() === '' ? '' : parseTitle(source.name).series.trim();
 }
 
 /**

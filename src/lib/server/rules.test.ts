@@ -131,7 +131,6 @@ describe('下見の SQL 前絞り (likePatterns)', () => {
 describe('録画からルールを作る', () => {
     const recording = {
         name: '[新]テストアニメ #1「はじまり」[字]',
-        series: 'テストアニメ',
         service_id: 211,
         genre_detail: [{ lv1: 7, lv2: 0 }],
     };
@@ -140,15 +139,22 @@ describe('録画からルールを作る', () => {
         expect(prefillFrom(recording)).toEqual({ keyword: 'テストアニメ', genres: ['7'] });
     });
 
-    test('シリーズ名を持たない録画は番組名から切り出す', () => {
-        expect(prefillFrom({ ...recording, series: '', genre_detail: null })).toEqual({
+    test('ジャンルの無い録画はキーワードだけ', () => {
+        expect(prefillFrom({ ...recording, genre_detail: null })).toEqual({
             keyword: 'テストアニメ',
             genres: null,
         });
     });
 
+    test('鍵括弧の作品名に編が続く題名は、作品名だけをキーワードにする', () => {
+        expect(
+            prefillFrom({ ...recording, name: '[新]「東京リベンジャーズ」三天戦争編 第51話【アニメイズム】' })
+                ?.keyword,
+        ).toBe('東京リベンジャーズ');
+    });
+
     test('番組名が空なら下書きは作らない (ジャンルだけのルールになる)', () => {
-        expect(prefillFrom({ ...recording, name: '', series: '' })).toBeNull();
+        expect(prefillFrom({ ...recording, name: '' })).toBeNull();
     });
 
     test('シリーズ名に当たるルールがあればそれを返す。無効のものより有効のものを先に', () => {
