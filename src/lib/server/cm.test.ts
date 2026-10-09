@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test';
+import { logoUnusable } from '../format';
 import {
     boundaries,
     chapterMetadata,
@@ -18,7 +19,7 @@ import {
     shiftRanges,
     widenKeep,
 } from './cm';
-import { cmRatio, parseLogoFrames, parseTrimRanges, tooMuchCm } from './cm-jls';
+import { cmRatio, logoFailure, parseLogoFrames, parseTrimRanges, tooMuchCm } from './cm-jls';
 
 describe('parseSilences', () => {
     test('silencedetect のログから無音区間と尺を取る', () => {
@@ -434,6 +435,37 @@ describe('ロゴの位置を教える口を出すか', () => {
         expect(logoUnusable('join_logo_scp')).toBe(false);
         expect(logoUnusable('無音 8 箇所')).toBe(false);
         expect(logoUnusable(null)).toBe(false);
+    });
+});
+
+describe('logoframe が降りたときの覚え書き', () => {
+    const area = {
+        code: 1,
+        stderr: 'managed logo: …\nerror: Insufficient frames with a uniform background around the logo\n',
+    };
+    const bare = {
+        code: 1,
+        stderr: 'error: Automatic logo position detection found no persistent edge; specify -logo-area x,y,w,h\n',
+    };
+
+    test('枠を渡していなければ、そのときの理由', () => {
+        expect(logoFailure(bare, null)).toBe(
+            'logoframe が失敗 (code 1): error: Automatic logo position detection found no persistent edge; specify -logo-area x,y,w,h',
+        );
+    });
+
+    /*
+     * 実機の BSテレ東。位置を教えてあっても「枠を渡せ」とだけ残っていて、
+     * 渡した枠がなぜ駄目だったのかが分からなかった
+     */
+    test('枠ありでも枠なしでも転んだら、枠を渡したときの理由を先に書く', () => {
+        const note = logoFailure(bare, { area: '1233,21,207,63', step: area });
+        expect(note).toStartWith(
+            'logoframe が失敗 (code 1): 枠 1233,21,207,63 では error: Insufficient frames with a uniform background',
+        );
+        expect(note).toContain('/ 枠なしでは error: Automatic logo position detection');
+        // 位置を教える口は出したまま
+        expect(logoUnusable(`無音 36 箇所 (jls は使えず: ${note})`)).toBe(true);
     });
 });
 
