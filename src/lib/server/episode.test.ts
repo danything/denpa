@@ -56,7 +56,7 @@ describe('同じ回の見分け', () => {
     });
 
     test('「第2期 #1」のように話数が2つ読めても、各話は潰れない', () => {
-        // parseTitle は「第2」を話数に読むので、後ろの #1 / #2 は副題に残る
+        // 「第2期」は編。後ろの #1 / #2 が話数
         expect(same('テストアニメ 第2期 #1', 'テストアニメ 第2期 #2')).toBe(false);
         expect(same('テストアニメ 第2期 #1', 'テストアニメ 第2話')).toBe(false);
     });
@@ -153,11 +153,40 @@ describe('同じ回の見分け', () => {
     });
 
     test('題名が「第2期」だけなら、全話を1つの回にしない', () => {
-        // parseTitle は「第2」を話数に読むが、毎回同じなので回にはならない
+        // 「第2期」は編で話数ではない。毎回同じなので回にはならない
         expect(episodeOf({ name: 'テストアニメ 第2期', description: '', extended: null })).toBeNull();
         expect(same('テストアニメ 第2期', 'テストアニメ 第2期', ['#1「はじまり」', '#2「つづき」'])).toBe(
             false,
         );
+    });
+
+    test('副題を出さない局とも、シリーズ名が同じなら同じ回', () => {
+        expect(
+            same(
+                '「東京リベンジャーズ」三天戦争編 第52話「Be left behind the times」',
+                '東京リベンジャーズ 三天戦争編▼第52話',
+            ),
+        ).toBe(true);
+        expect(
+            same(
+                '[新]てつりょー!meet with 鉄道むすめ #1「どんなところに、行こうかな?」',
+                '<アニメギルド>てつりょー! meet with  鉄道むすめ #1[新]',
+            ),
+        ).toBe(true);
+        // 副題が無いほうの名前が違えば別の回 (飾りの違いを許すのは副題が揃うときだけ)
+        expect(same('テストアニメ #1「はじまり」', 'アニメ テストアニメ #1')).toBe(false);
+    });
+
+    test('編を書かない局とも、作品名が同じなら同じ回。編が違えば別の回', () => {
+        expect(
+            same(
+                '[新]「東京リベンジャーズ」三天戦争編 第51話【アニメイズム】',
+                '[無][新]東京リベンジャーズ #51 [字]',
+            ),
+        ).toBe(true);
+        expect(same('「テストアニメ」A編 #1', '「テストアニメ」B編 #1')).toBe(false);
+        // 副題が揃っても、編が違えば別の回 (芯の一致で緩めない)
+        expect(same('時代劇・第36部 #9 ◆主演', '時代劇・第37部 #9 ◆主演')).toBe(false);
     });
 });
 
@@ -262,6 +291,46 @@ describe('firstAirings', () => {
         expect(skips.get(bs.id)).toEqual({ kind: 'repeat', first: ntv });
         expect(skips.has(ntv.id)).toBe(false);
         expect(skips.has(next.id)).toBe(false);
+    });
+
+    test('副題を出す局と出さない局の同じ回は、早いほうだけ録る', () => {
+        const tbs = airing('「東京リベンジャーズ」三天戦争編 第52話「Be left behind the times」', base);
+        const bs = airing('東京リベンジャーズ 三天戦争編▼第52話', base + HOUR, { type: 'BS' });
+        expect(firstAirings([bs, tbs]).get(bs.id)).toEqual({ kind: 'repeat', first: tbs });
+    });
+
+    test('同時放送で片方に副題が無くても1本にする', () => {
+        const mx = airing('[新]てつりょー!meet with 鉄道むすめ #1「どんなところに、行こうかな?」', base);
+        const bs = airing('<アニメギルド>てつりょー! meet with  鉄道むすめ #1[新]', base, { type: 'BS' });
+        expect(kept([mx, bs])).toEqual([bs.id]);
+    });
+
+    test('副題の無い放送は、相手が1つに決まるときだけ束ねる', () => {
+        // 副題の違う2つの回のどちらとも読めるなら、どちらにも寄せない (取り違えて録り逃さない)
+        const one = airing('テストアニメ #1「はじまり」', base);
+        const other = airing('テストアニメ #1「別の話」', base + DAY);
+        const bare = airing('テストアニメ #1', base + 2 * DAY);
+        expect(kept([one, other, bare])).toEqual([one.id, other.id, bare.id]);
+        // 編を書かない局の放送も同じ。どちらの編か決まらなければ束ねない
+        const a = airing('「テストアニメ」A編 #1', base);
+        const b = airing('「テストアニメ」B編 #1', base + DAY);
+        const plain = airing('テストアニメ #1', base + 2 * DAY);
+        expect(kept([a, b, plain])).toEqual([a.id, b.id, plain.id]);
+    });
+
+    test('編を書かない局の再放送も、録画済みの回として外す', () => {
+        const recorded = episodeOf({
+            name: '[新]「東京リベンジャーズ」三天戦争編 第51話【アニメイズム】',
+            description: '',
+            extended: null,
+        })!;
+        const taken = [{ episode: recorded, start_at: base - 7 * DAY, service_name: 'TBS1' }];
+        const atx = airing('[無][新]東京リベンジャーズ #51 [字]', base, { type: 'CS' });
+        expect(firstAirings([atx], new Set(), taken).get(atx.id)).toEqual({
+            kind: 'recorded',
+            start_at: base - 7 * DAY,
+            service_name: 'TBS1',
+        });
     });
 
     test('概要の話数で、録画済みの回も見つける', () => {

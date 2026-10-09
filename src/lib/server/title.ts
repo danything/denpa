@@ -7,13 +7,30 @@
  */
 
 // 【新】【終】[字][解][再] のような装飾記号。先頭・末尾どこにでも出る
-const DECORATION = /[【[(]\s*(新|終|再|字|解|デ|二|多|SS|初|最終回|無料|生|映)\s*[】\])]/g;
+const DECORATION = /[【[(]\s*(新|終|再|字|解|デ|二|多|SS|初|最終回|無料|無|生|映)\s*[】\])]/g;
+
+// 局が頭に付ける枠の名前。`<アニメギルド>てつりょー!` (全角の ＜＞ は半角に寄せてから見る)
+const FRAME = /^<[^<>]{1,20}>\s*/;
 
 // 「サブタイトル」形式。番組名の末尾に出てきたものだけをサブタイトル扱いにする
 const BRACKET_SUBTITLE = /[「『](.+?)[」』]\s*$/;
 
+// 頭の「作品名」。後ろは編の名前 (`「東京リベンジャーズ」三天戦争編`)
+const LEADING_TITLE = /^[「『]([^「『」』]+)[」』]\s*(.*)$/;
+
+// 第2期 / 第3シーズン。話数ではなく編として持つ。話数の前か題名の終わりにあるものだけ —
+// 「将棋)第34期 銀河戦」のように後ろに名前が続くものは、どこまでが編か分からない
+const SEASON =
+    /\s*第\s*(?:\d{1,4}|[一二三四五六七八九十]{1,3})\s*(?:期|シーズン|クール|章|部)(?=\s*(?:#|第\s*\d|$))/;
+
 // #12 / 第12話 / ＃12 のような話数表記
 const EPISODE = /\s*(?:#|＃|第)\s*(\d{1,4})\s*(?:話|回)?/;
+
+// 話数の後ろが枠の名前だけ (`第51話【アニメイズム】`) なら副題ではない
+const LABELS_ONLY = /^(?:【[^】]*】\s*)+$/;
+
+// 名前の後ろに残る区切り記号 (`番組名 - ` や、`作品名 編▼第52話` の ▼)
+const TRAILING_SEPARATOR = /[\s\-~〜:：|｜▼▽]+$/;
 
 // ファイル名に使えない文字。制御文字は別途コードポイントで弾く
 const FORBIDDEN = '/\\:*?"<>|';
@@ -51,7 +68,13 @@ export function markedTitle(rawName: string): string {
 }
 
 export interface ParsedTitle {
+    /** 作品名。ルールの下書きのキーワード・保存先のフォルダ・録画一覧のまとめに使う */
     series: string;
+    /**
+     * 作品名に続く編・期 (`「東京リベンジャーズ」三天戦争編` の「三天戦争編」、`第2期`)。
+     * 話数を編ごとに振り直す番組があるので、同じ回か (`episode.episodeOf`) はこれも含めて見る
+     */
+    arc: string;
     subtitle: string;
     episode: number | null;
 }
@@ -62,12 +85,24 @@ export function parseTitle(rawName: string): ParsedTitle {
         .trim();
 
     let subtitle = '';
-    let series = name;
+    let series = name.replace(FRAME, '');
 
-    const bracket = series.match(BRACKET_SUBTITLE);
+    // 頭の鍵括弧は副題ではなく作品名 (`「名探偵コナン」` `「東京リベンジャーズ」三天戦争編`)。副題はその後ろから探す
+    const head = series.match(LEADING_TITLE)?.[1]?.length;
+    const from = head === undefined ? 0 : head + 2;
+    const bracket = series.slice(from).match(BRACKET_SUBTITLE);
     if (bracket !== null) {
         subtitle = (bracket[1] ?? '').trim();
-        series = series.slice(0, bracket.index).trim();
+        series = series.slice(0, from + (bracket.index ?? 0)).trim();
+    }
+
+    const arcs: string[] = [];
+    const season = series.match(SEASON);
+    if (season !== null) {
+        // 「X 第2期 #1」の「第2」を話数に読まないよう、先に抜く
+        arcs.push(season[0].trim());
+        const at = season.index ?? 0;
+        series = `${series.slice(0, at)} ${series.slice(at + season[0].length)}`.trim();
     }
 
     let episode: number | null = null;
@@ -76,15 +111,22 @@ export function parseTitle(rawName: string): ParsedTitle {
         episode = Number(ep[1]);
         // 話数以降(「番組名 #12 サブタイトル」の後半)はサブタイトル扱いにして series からは落とす
         const tail = series.slice((ep.index ?? 0) + ep[0].length).trim();
-        if (subtitle === '' && tail !== '') subtitle = tail;
+        if (subtitle === '' && tail !== '' && !LABELS_ONLY.test(tail)) subtitle = tail;
         series = series.slice(0, ep.index).trim();
     }
 
+    const lead = series.replace(TRAILING_SEPARATOR, '').match(LEADING_TITLE);
+    if (lead !== null) {
+        series = lead[1] ?? '';
+        const rest = (lead[2] ?? '').replace(TRAILING_SEPARATOR, '').trim();
+        if (rest !== '') arcs.unshift(rest);
+    }
+
     // 区切り記号だけが残るケース (「番組名 - 」など) を掃除する
-    series = series.replace(/[\s\-~〜:：|｜]+$/, '').trim();
+    series = series.replace(TRAILING_SEPARATOR, '').trim();
     if (series === '') series = name === '' ? 'untitled' : name;
 
-    return { series, subtitle, episode };
+    return { series, arc: arcs.join(' '), subtitle, episode };
 }
 
 /**
