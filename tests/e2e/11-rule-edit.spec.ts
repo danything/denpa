@@ -45,6 +45,32 @@ test.describe('ルールの編集', () => {
         await cancelAllReservations(page);
     });
 
+    test('チェックを外したまま別のルールの「編集」を押しても、そのルールの値が入る', async ({ page }) => {
+        await goto(page, '/rules');
+        const description = page.getByTestId('rule-search-fields').locator('input[value="description"]');
+        // どの番組にも当たらない語。予約を立てずに済む
+        for (const keyword of ['当たらない語A', '当たらない語B']) {
+            await page.getByTestId('rule-keyword').fill(keyword);
+            await description.check();
+            await page.getByTestId('rule-submit').click();
+            await expect(page.getByTestId('rule-row').filter({ hasText: keyword })).toBeVisible();
+        }
+        const edit = (keyword: string) =>
+            page.getByTestId('rule-row').filter({ hasText: keyword }).getByTestId('rule-edit').click();
+
+        await edit('当たらない語A');
+        await expect(page.getByTestId('rule-keyword')).toHaveValue('当たらない語A');
+        await expect(description).toBeChecked();
+        // 保存せずに外す。`checked` は値が変わったときしか当て直さないので、外れたまま残っていた
+        await description.uncheck();
+
+        await edit('当たらない語B');
+        await expect(page.getByTestId('rule-keyword')).toHaveValue('当たらない語B');
+        await expect(description).toBeChecked();
+
+        await clearRules(page);
+    });
+
     test('編集中に「何が録れるか見る」を押しても編集のまま', async ({ page }) => {
         await goto(page, '/rules');
         await page.getByTestId('rule-keyword').fill('テストアニメ');
