@@ -54,3 +54,30 @@ describe('run の標準出力', () => {
         expect(Date.now() - started).toBeLessThan(1_000);
     });
 });
+
+describe('run の標準出力を流して受ける (onStdout)', () => {
+    test('溜めずに来たそばから渡し、stdout は空で返る', async () => {
+        let total = 0;
+        const size = 4 * 1024 * 1024;
+        const { code, stdout } = await run(['head', '-c', String(size), '/dev/zero'], {
+            onStdout: (chunk) => {
+                total += chunk.length;
+            },
+        });
+        expect(code).toBe(0);
+        expect(total).toBe(size);
+        expect(stdout.length).toBe(0);
+    });
+
+    /** 受け手が投げたら道具を止める。止めないと誰も読まない管が詰まり、時間切れまで居座る */
+    test('受け手が投げたら、道具を止めて投げ直す', async () => {
+        const started = Date.now();
+        const failing = run(['cat', '/dev/zero'], {
+            onStdout: () => {
+                throw new Error('壊れた');
+            },
+        });
+        await expect(failing).rejects.toThrow('壊れた');
+        expect(Date.now() - started).toBeLessThan(5_000);
+    });
+});

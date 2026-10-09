@@ -1,4 +1,4 @@
-import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { Rect } from '../ts/logo-area';
 import {
@@ -56,7 +56,7 @@ export interface OwnResult {
     timing: { learn: number; detect: number; compute: number; frames: number };
 }
 
-function load(repo: string): LogoModel | null {
+export function load(repo: string): LogoModel | null {
     try {
         return decodeModel(readFileSync(join(repo, MODEL_FILE)));
     } catch {
@@ -64,12 +64,31 @@ function load(repo: string): LogoModel | null {
     }
 }
 
-function save(repo: string, model: LogoModel): void {
-    mkdirSync(repo, { recursive: true });
+/**
+ * 覚えたものを書く。**書けなくても検出は落とさない** (次の録画で覚え直せば済む)。
+ * 書きかけを読まれないよう隣に書いてから差し替える。隣の名前はジョブごとに変える
+ * (2 本ずつ焼くので、同じ局の録画が同時に書きに来ることがある)
+ */
+export function save(repo: string, model: LogoModel): void {
     const path = join(repo, MODEL_FILE);
-    // 書きかけを読まれないよう、隣に書いてから差し替える
-    writeFileSync(`${path}.tmp`, encodeModel(model));
-    renameSync(`${path}.tmp`, path);
+    const temp = `${path}.${process.pid}-${Math.random().toString(36).slice(2)}.tmp`;
+    try {
+        mkdirSync(repo, { recursive: true });
+        writeFileSync(temp, encodeModel(model));
+        renameSync(temp, path);
+    } catch (error) {
+        try {
+            rmSync(temp, { force: true });
+        } catch {
+            // 置き場ごと作れなかった。消すものも無い
+        }
+        console.warn(`[cm] 覚えたロゴを書けませんでした: ${error}`);
+    }
+}
+
+/** 2つの枠が重なるか */
+function overlaps(a: Rect, b: Rect): boolean {
+    return a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height;
 }
 
 /** `x,y,w,h` を枠に。読めなければ `null` */
@@ -272,6 +291,8 @@ export async function ownLogoFrames(
     const stored = load(repo);
     let model = stored?.frameWidth === probed.width && stored.frameHeight === probed.height ? stored : null;
     let learnedNow = false;
+    /** 覚え直したものを持ち帰るか。前のロゴと違う所で覚えたなら、この回だけ使って持ち帰らない */
+    let keep = true;
     if (model === null) {
         const learned = await learn(job);
         if (typeof learned === 'string') return fail(learned);
@@ -288,6 +309,12 @@ export async function ownLogoFrames(
         console.warn('[cm] 覚えていたロゴが当たらないので、この録画から覚え直します');
         const learned = await learn(job);
         if (typeof learned === 'string') return fail(learned);
+        /*
+         * **在り処が前と重ならなければ、この回だけ使って持ち帰らない。** ロゴを替えた局は
+         * たいてい同じ所に出すが、ロゴの無い特番では別の動かない縁 (番組の透かし) を
+         * 覚えてしまう。それで局の型を上書きすると、次の録画から外れる
+         */
+        keep = overlaps(model.rect, learned.rect);
         model = learned;
         learnedNow = true;
         found = await detect(job, model);
@@ -300,14 +327,14 @@ export async function ownLogoFrames(
     writeFileSync(out, formatLogoFrames(found.spans, Math.round(dropped * job.fps)));
 
     // 写っていたなら育てる。この回に覚えたものは、覚えるときに足したぶんで足りている
-    save(repo, learnedNow ? model : mergeModel(model, found.grow));
+    if (keep) save(repo, learnedNow ? model : mergeModel(model, found.grow));
 
     const { rect } = model;
     const lit = found.spans.reduce((sum, span) => sum + span.end - span.start + 1, 0);
     const share = Math.round((lit / found.frames) * 100);
     return {
         code: 0,
-        stderr: `枠 ${rect.x},${rect.y},${rect.width},${rect.height} 型 ${found.points} 画素 / ロゴ ${share}%${learnedNow ? ' (この録画で覚えた)' : ''}`,
+        stderr: `枠 ${rect.x},${rect.y},${rect.width},${rect.height} 型 ${found.points} 画素 / ロゴ ${share}%${learnedNow ? (keep ? ' (この録画で覚えた)' : ' (この録画だけで覚えた。前の型は残す)') : ''}`,
         timing,
     };
 }

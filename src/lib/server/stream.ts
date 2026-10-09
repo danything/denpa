@@ -105,8 +105,14 @@ export async function run(
         const [stdout, stderr] = await Promise.all([
             onStdout !== undefined
                 ? (async () => {
-                      for await (const chunk of chunks(proc.stdout as ReadableStream<Uint8Array>))
-                          onStdout(chunk);
+                      try {
+                          for await (const chunk of chunks(proc.stdout as ReadableStream<Uint8Array>))
+                              onStdout(chunk);
+                      } catch (error) {
+                          // 受け手が投げたら誰も読まなくなる。詰まって居座らないよう止めてから投げ直す
+                          kill();
+                          throw error;
+                      }
                       return new Uint8Array();
                   })()
                 : options.stdout === true
