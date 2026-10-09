@@ -132,6 +132,12 @@ export const config = {
     jlsRule: '/opt/jls/JL/JL_標準.txt',
     /** logoframe が作るロゴデータ (.lgd) の置き場。放送波から拾った局ロゴ (PNG) の隣 */
     jlsLogoDir: `${dataDir}/logos/jls`,
+    /**
+     * 局ロゴの出ているコマを誰に拾わせるか。`logoframe` (既定) か、自前の `own`
+     * (`server/logo-own.ts`。線の向きで覚えるので、後ろがのっぺりしていなくても覚えられる)。
+     * 実機で突き合わせるまでの切り替え口 (docs/encode.md「ロゴを自分で拾う」)
+     */
+    cmLogo: (str('CM_LOGO', 'logoframe') === 'own' ? 'own' : 'logoframe') as 'own' | 'logoframe',
     /** ロゴを覚えるときに見るコマ数。増やすほど綺麗に出るが、その分だけ読む */
     jlsLogoSamples: 600,
     /**

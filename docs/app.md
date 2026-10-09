@@ -72,6 +72,8 @@ EPGStation の置き換えとして作ったもので、エンコード設定は
 | `src/lib/server/logo-data.ts` | logoframe が覚えたロゴ (`.lgd`) の置き場・読み取り・破棄 |
 | `src/lib/ts/logo-area.ts` | ロゴの在り処を絵から割り出す当てはめ (純粋関数。隅だけを見る) |
 | `src/lib/server/logo-area.ts` | 上に渡すコマを録れたものから抜き、出た枠を `services.logo_area` に入れる |
+| `src/lib/ts/logo-detect.ts` | 自前のロゴ判定 (`CM_LOGO=own`)。線の向きで覚え、コマごとに当て、logoframe と同じ形の区間にする (純粋関数) |
+| `src/lib/server/logo-own.ts` | 上に渡すコマを ffmpeg で抜き、覚えたもの (`own-logo-<幅>x<高さ>.bin`) を局ごとの入れ物に置く |
 | `src/lib/components/ProgramFacts.svelte` | 番組の中身そのもの (枠は持たない)。モーダルと観る画面の両方から使う |
 | `src/lib/components/LogoArea.svelte` | CM検出用のロゴを画面で確かめ、位置を教え、捨てる |
 | `src/lib/components/Toasts.svelte` | 押した結果を画面の右下に浮かせて出す (本文を押し下げない) |
@@ -218,6 +220,7 @@ SQLite が拒むので、事実と状態が食い違いません。文字列で�
 | `RULE_RETRACT_GRACE` | `3600000` | 条件から外れた予約を引っ込めなくなる、放送開始までの余裕(ms) |
 | `JLS_LOGO_LEVEL` | `6` | ロゴをどれだけ当てにするか(1〜8)の初期値。設定画面で変えられる |
 | `CM_CUT_MARGIN` | `0.8` | CMを実カットするとき、残す区間の頭を戻す長さ(秒) |
+| `CM_LOGO` | `logoframe` | 局ロゴの写っているコマを誰に拾わせるか。`own` で自前 (試験中。docs/encode.md「ロゴを自分で拾う」) |
 | `FPS_SURVIVE` | `0.5` | コマ数の実測の閾値。60コマ化→重複落とし後の生存率がこれ以下なら30コマ ([encode.md](encode.md#コマ数は本編の映像から測って決める)) |
 | `BML_DNS` | `1.1.1.1,8.8.8.8` | データ放送の双方向で名前を引く DNS。家庭の DNS フィルタが局のドメインを 0.0.0.0 に落とすことがあるので、素の DNS を名指しする。空なら OS の設定どおり |
 | `SHUTDOWN_WAIT` | `21600000` | 止められたとき、録画が終わるまで待つ上限(ms)。`0` で待たない。エージェントも同じ変数を見る |

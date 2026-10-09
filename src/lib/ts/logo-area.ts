@@ -53,7 +53,8 @@ export interface Rect {
  * 探す隅。**右上から見ます** — 国内の地上波はほぼここ。
  * 決め打ちにしないのは、確かめられたのが手元の局だけだからです
  */
-const CORNERS = ['top-right', 'top-left', 'bottom-right', 'bottom-left'] as const;
+export const CORNERS = ['top-right', 'top-left', 'bottom-right', 'bottom-left'] as const;
+export type Corner = (typeof CORNERS)[number];
 
 /** 隅として見る範囲。横は 1/3、縦は 1/5 まで */
 const REGION_W = 1 / 3;
@@ -154,7 +155,7 @@ function median(values: number[]): number {
 }
 
 /** 隅の範囲。`width`/`height` はコマの大きさ */
-function regionOf(corner: (typeof CORNERS)[number], width: number, height: number): Rect {
+export function regionOf(corner: Corner, width: number, height: number): Rect {
     const w = Math.round(width * REGION_W);
     const h = Math.round(height * REGION_H);
     return {
@@ -186,7 +187,7 @@ export function medianImage(frames: Frame[], region: Rect, width: number): Float
  * Sobel の横と縦。`src[offset + y * stride + x]` を読み、`gx`/`gy` に書く (外周 1 画素は 0)。
  * コマごとに呼ぶので、入れ物は呼ぶ側が使い回す
  */
-function sobel(
+export function sobel(
     src: ArrayLike<number>,
     offset: number,
     stride: number,
@@ -430,64 +431,81 @@ export function findLogoArea(frames: Frame[]): Rect | null {
     for (const corner of CORNERS) {
         const region = regionOf(corner, width, height);
         const strength = steadyEdges(frames, region, width, medianImage(frames, region, width));
-
-        const sorted = Array.from(strength).sort((a, b) => a - b);
-        const middle = sorted[Math.floor(sorted.length * 0.5)]!;
-        const limit = sorted[Math.floor(sorted.length * (1 - EDGE_TOP))]!;
-        // ロゴを出していない隅では、上位 1% も中央値とたいして変わらない
-        if (limit < EDGE_FLOOR || limit < middle * EDGE_RATIO) continue;
-
-        const mask = new Uint8Array(strength.length);
-        for (let at = 0; at < strength.length; at++) mask[at] = strength[at]! >= limit ? 1 : 0;
-
-        /*
-         * **太らせたぶんを戻す。** 外接枠は「縁を繋ぐために広げた幅」と
-         * 「Sobel が縁の外側にも出す1画素」のぶんだけ大きくなっているので、
-         * そのまま大きさを見ると本物より太って見え、余白もそのぶん過剰になる
-         */
-        const found = blobs(
-            dilate(mask, region.width, region.height, DILATE),
-            mask,
-            region.width,
-            region.height,
-        ).map((blob) => ({ ...blob, rect: deflate(blob.rect, DILATE + 1) }));
-        /*
-         * **ロゴより大きいかたまりは、ロゴと張り合わない。** いちばん大きいかたまりだけを
-         * 見ていた頃は、BSテレ東 でテロップの帯の下の線 (343×9) を選んで大きさで弾き、
-         * 隣にあるロゴを見ずに諦めていた。帯・黒帯の縁は画面の幅ほどあるので、ここで除ける
-         */
-        const tooBig = (r: Rect) => r.width > width * MAX_W || r.height > height * MAX_H;
-        const fits = (r: Rect) => !tooBig(r) && r.width >= width * MIN_W && r.height >= height * MIN_H;
-        let rivals = 0;
-        let best: { rect: Rect; strong: number } | null = null;
-        for (const blob of found) {
-            if (tooBig(blob.rect)) continue;
-            rivals += blob.strong;
-            if (fits(blob.rect) && (best === null || blob.strong > best.strong)) best = blob;
-        }
-        if (best === null) continue;
-
-        /*
-         * **すぐ隣のかたまりは同じロゴとして括る。** テレビ朝日 のロゴは図形と文字が
-         * 縦に離れていて、文字だけの枠では logoframe が覚えられなかった (両方入れると覚える)
-         */
-        let rect = best.rect;
-        let strong = best.strong;
-        for (const blob of found) {
-            if (blob === best || tooBig(blob.rect) || blob.strong < best.strong * MERGE_SHARE) continue;
-            if (gap(rect, blob.rect) > MERGE_GAP) continue;
-            const merged = union(rect, blob.rect);
-            if (!fits(merged)) continue;
-            rect = merged;
-            strong += blob.strong;
-        }
-        // 強い縁が隅のあちこちに散っている。ロゴと言い切れない (EDGE_SHARE)
-        if (strong < rivals * EDGE_SHARE) continue;
-
-        const core = trim(mask, region.width, rect);
-        return padded({ ...core, x: core.x + region.x, y: core.y + region.y }, width, height);
+        const rect = pickArea(strength, region, width, height, EDGE_FLOOR);
+        if (rect !== null) return rect;
     }
     return null;
+}
+
+/**
+ * 隅の「縁の強さ」から、ロゴのかたまりを選んで枠にする。言い切れなければ `null`。
+ *
+ * 強さの測り方は呼ぶ側が決める (ここでは `steadyEdges`、自前のロゴ判定では
+ * 向きの揃い方そのもの。`logo-detect.ts`)。`floor` はその尺度での「縁がある」下限。
+ * 返す枠はコマの座標で、余白を足してある
+ */
+export function pickArea(
+    strength: Float32Array,
+    region: Rect,
+    width: number,
+    height: number,
+    floor: number,
+): Rect | null {
+    const sorted = Array.from(strength).sort((a, b) => a - b);
+    const middle = sorted[Math.floor(sorted.length * 0.5)]!;
+    const limit = sorted[Math.floor(sorted.length * (1 - EDGE_TOP))]!;
+    // ロゴを出していない隅では、上位 1% も中央値とたいして変わらない
+    if (limit < floor || limit < middle * EDGE_RATIO) return null;
+
+    const mask = new Uint8Array(strength.length);
+    for (let at = 0; at < strength.length; at++) mask[at] = strength[at]! >= limit ? 1 : 0;
+
+    /*
+     * **太らせたぶんを戻す。** 外接枠は「縁を繋ぐために広げた幅」と
+     * 「Sobel が縁の外側にも出す1画素」のぶんだけ大きくなっているので、
+     * そのまま大きさを見ると本物より太って見え、余白もそのぶん過剰になる
+     */
+    const found = blobs(
+        dilate(mask, region.width, region.height, DILATE),
+        mask,
+        region.width,
+        region.height,
+    ).map((blob) => ({ ...blob, rect: deflate(blob.rect, DILATE + 1) }));
+    /*
+     * **ロゴより大きいかたまりは、ロゴと張り合わない。** いちばん大きいかたまりだけを
+     * 見ていた頃は、BSテレ東 でテロップの帯の下の線 (343×9) を選んで大きさで弾き、
+     * 隣にあるロゴを見ずに諦めていた。帯・黒帯の縁は画面の幅ほどあるので、ここで除ける
+     */
+    const tooBig = (r: Rect) => r.width > width * MAX_W || r.height > height * MAX_H;
+    const fits = (r: Rect) => !tooBig(r) && r.width >= width * MIN_W && r.height >= height * MIN_H;
+    let rivals = 0;
+    let best: { rect: Rect; strong: number } | null = null;
+    for (const blob of found) {
+        if (tooBig(blob.rect)) continue;
+        rivals += blob.strong;
+        if (fits(blob.rect) && (best === null || blob.strong > best.strong)) best = blob;
+    }
+    if (best === null) return null;
+
+    /*
+     * **すぐ隣のかたまりは同じロゴとして括る。** テレビ朝日 のロゴは図形と文字が
+     * 縦に離れていて、文字だけの枠では logoframe が覚えられなかった (両方入れると覚える)
+     */
+    let rect = best.rect;
+    let strong = best.strong;
+    for (const blob of found) {
+        if (blob === best || tooBig(blob.rect) || blob.strong < best.strong * MERGE_SHARE) continue;
+        if (gap(rect, blob.rect) > MERGE_GAP) continue;
+        const merged = union(rect, blob.rect);
+        if (!fits(merged)) continue;
+        rect = merged;
+        strong += blob.strong;
+    }
+    // 強い縁が隅のあちこちに散っている。ロゴと言い切れない (EDGE_SHARE)
+    if (strong < rivals * EDGE_SHARE) return null;
+
+    const core = trim(mask, region.width, rect);
+    return padded({ ...core, x: core.x + region.x, y: core.y + region.y }, width, height);
 }
 
 /** `-logo-area` に渡す形。`services.logo_area` に入るのもこの形 */

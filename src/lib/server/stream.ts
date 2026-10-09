@@ -71,6 +71,11 @@ export async function run(
         timeoutMs?: number;
         stdout?: boolean;
         stderr?: boolean;
+        /**
+         * 標準出力を溜めずに、来たそばから渡す。録画1本ぶんの生の絵のように
+         * 溜めると収まらないもの向け (`stdout` より優先。そのとき `stdout` は空で返る)
+         */
+        onStdout?: (chunk: Uint8Array) => void;
     } = {},
 ): Promise<RunResult> {
     /*
@@ -86,7 +91,7 @@ export async function run(
     try {
         proc = Bun.spawn(argv, {
             stdin: 'ignore',
-            stdout: options.stdout === true ? 'pipe' : 'ignore',
+            stdout: options.stdout === true || options.onStdout !== undefined ? 'pipe' : 'ignore',
             stderr: options.stderr === true ? 'pipe' : 'ignore',
         });
     } catch (error) {
@@ -96,21 +101,34 @@ export async function run(
     options.signal?.addEventListener('abort', kill, { once: true });
     const timer = options.timeoutMs === undefined ? null : setTimeout(kill, options.timeoutMs);
     try {
+        const onStdout = options.onStdout;
         const [stdout, stderr] = await Promise.all([
-            options.stdout === true
-                ? /*
-                   * **`.bytes()` は使わない。** Bun 1.3.14 は 1MB を境に返すものが
-                   * 変わる — それ未満は Uint8Array、それ以上は **ArrayBuffer**
-                   * (`.length` が `undefined` になる)。型は Uint8Array のままなので
-                   * 型検査では気付けず、`String(out.length)` が "undefined" になって
-                   * `Content-Length: undefined` を送り、**本文が丸ごと落ちていた**
-                   * (6.4MB の字幕を持つ録画で字幕が出ない)。
-                   * `arrayBuffer()` は版によらず ArrayBuffer なので、自分で包む
-                   */
-                  new Response(proc.stdout as ReadableStream<Uint8Array>)
-                      .arrayBuffer()
-                      .then((buffer) => new Uint8Array(buffer))
-                : Promise.resolve(new Uint8Array()),
+            onStdout !== undefined
+                ? (async () => {
+                      try {
+                          for await (const chunk of chunks(proc.stdout as ReadableStream<Uint8Array>))
+                              onStdout(chunk);
+                      } catch (error) {
+                          // 受け手が投げたら誰も読まなくなる。詰まって居座らないよう止めてから投げ直す
+                          kill();
+                          throw error;
+                      }
+                      return new Uint8Array();
+                  })()
+                : options.stdout === true
+                  ? /*
+                     * **`.bytes()` は使わない。** Bun 1.3.14 は 1MB を境に返すものが
+                     * 変わる — それ未満は Uint8Array、それ以上は **ArrayBuffer**
+                     * (`.length` が `undefined` になる)。型は Uint8Array のままなので
+                     * 型検査では気付けず、`String(out.length)` が "undefined" になって
+                     * `Content-Length: undefined` を送り、**本文が丸ごと落ちていた**
+                     * (6.4MB の字幕を持つ録画で字幕が出ない)。
+                     * `arrayBuffer()` は版によらず ArrayBuffer なので、自分で包む
+                     */
+                    new Response(proc.stdout as ReadableStream<Uint8Array>)
+                        .arrayBuffer()
+                        .then((buffer) => new Uint8Array(buffer))
+                  : Promise.resolve(new Uint8Array()),
             options.stderr === true ? text(proc.stderr as ReadableStream<Uint8Array>) : Promise.resolve(''),
         ]);
         const code = await proc.exited;
