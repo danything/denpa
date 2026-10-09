@@ -16,6 +16,13 @@
  * その中央値画像に Sobel をかけ、**いちばん強い縁 1% のかたまり**を取れば、
  * それがロゴです (実測でロゴがはっきり読める絵が残ります)。
  *
+ * ただし中央値の輪郭だけでは、ロゴより強く残るもの (黒帯の縁、滲み残り、出し続ける
+ * テロップ) に負けます。そこで**各コマの線の向きが中央値と揃っている割合**を掛け
+ * (`steadyEdges`)、ロゴより大きいかたまりは張り合わせず、隣り合うかたまりは括り、
+ * 外接枠を中の縁で締めます。実機の 16 本で、前は出せなかった テレ東・BS日テレ・
+ * TOKYO MX1・BS-TBS (黒帯) を出せるようになり、出した枠で logoframe が覚えました
+ * (`docs/encode.md`「ロゴの在り処はこちらで割り出す」)。
+ *
  * **「動かなさ」では駄目でした。** 半透明の重ねは `画素 = (1-α)×中身 + α×ロゴ色`
  * なので振れ幅が縮む — という筋で MAD を測りましたが、実素材ではロゴの所が
  * `46.4`、隅全体の中央値が `60.5` と**差が小さすぎて**分けられません
@@ -75,8 +82,8 @@ const EDGE_RATIO = 3;
 const EDGE_FLOOR = 2;
 
 /**
- * 選んだかたまりが、上位 1% の縁のうちどれだけを持っているか。**半分に届かなければ
- * 言い切らない** (その隅は飛ばす。どこも駄目なら `null` で logoframe に任せる)。
+ * 選んだかたまりが、上位 1% の縁のうちどれだけを持っているか (ロゴより大きいかたまりの
+ * ぶんは数えない)。**届かなければ言い切らない** (その隅は飛ばす。どこも駄目なら `null` で logoframe に任せる)。
  *
  * 外すのは、ロゴと張り合う「動かない縁」が同じ隅にあるときです — 背景の窓枠
  * (MX1)、番組が出し続けるテロップ、動かないセット。中央値にロゴと並んで残るので、
@@ -88,8 +95,12 @@ const EDGE_FLOOR = 2;
  * 外れは 19 → 1 (本番と同じ散らし方では 10 → 0)、当たりは 78 回残りました。
  * `null` なら次の録画でまた割り出すので、**外れた枠を覚えるより安い**。
  * 比 (EDGE_RATIO) では分けられませんでした — ロゴの無い隅でも 4〜6 倍は出ます
+ *
+ * **向きの揃い方を掛けてからは 0.65。** ロゴのある 15 本 (BS 6局・地上波 6局) は
+ * 0.73〜1.00 に上がり、ロゴの無い隅は 0.31 以下のまま。BSテレ東 (番組がずっと出している
+ * テロップの帯の飾りがロゴと繋がる) は 0.55 で、ロゴと飾りをまとめた枠になるので出さない
  */
-const EDGE_SHARE = 0.5;
+const EDGE_SHARE = 0.65;
 
 /**
  * 縁を太らせる幅。**文字の画数どうしを繋ぐため。**
@@ -115,10 +126,21 @@ const MAX_H = 0.1;
  * 実測: 文字は 75×30 で、`1310,35,120,55` と `1290,20,140,80` はどちらも
  * 合致 99.9% を出しましたが、広げすぎた `1240,10,190,100` は**合致 0%**
  * でした (有効画素が薄まる)。まわりの背景も見て決めているので、
- * 少し空けるが空けすぎない
+ * 少し空けるが空けすぎない。
+ *
+ * **0.3 から 0.15 に詰めた。** 実機の BS日テレ で、0.3 の `1247,47,144,56` は
+ * logoframe が `Insufficient full-strength logo frames` で降り、0.15 の
+ * `1260,47,118,56` で覚えた。BS-TBS も 0.3 (220 幅) は降り、0.15 (172 幅) で覚えた
  */
-const PAD_RATIO = 0.3;
+const PAD_RATIO = 0.15;
 const PAD_MIN = 12;
+
+/** 枠を締めるとき、上下左右それぞれから切り捨ててよい強い縁の割合 */
+const TRIM = 0.025;
+
+/** 同じロゴとして括る隣のかたまり: 離れ (画素) と、選んだかたまりに対する縁の多さ */
+const MERGE_GAP = 16;
+const MERGE_SHARE = 0.1;
 
 /**
  * 真ん中の値。**渡された配列をその場で並べ替えます** (画素ごとに呼ぶので、
@@ -143,8 +165,11 @@ function regionOf(corner: (typeof CORNERS)[number], width: number, height: numbe
     };
 }
 
-/** コマをまたいだ画素ごとの中央値。**中身が滲んで消え、ロゴだけ残る** */
-function medianImage(frames: Frame[], region: Rect, width: number): Float32Array {
+/**
+ * コマをまたいだ画素ごとの中央値。**中身が滲んで消え、ロゴだけ残る。**
+ * 位置を教える画面にもこのまま出す (薄いロゴでも字が読める。`api/recordings/<id>/logo-still`)
+ */
+export function medianImage(frames: Frame[], region: Rect, width: number): Float32Array {
     const out = new Float32Array(region.width * region.height);
     const scratch = new Array<number>(frames.length);
     for (let y = 0; y < region.height; y++) {
@@ -157,28 +182,88 @@ function medianImage(frames: Frame[], region: Rect, width: number): Float32Array
     return out;
 }
 
-/** 中央値画像の勾配 (Sobel)。輪郭の強さ */
-function edges(image: Float32Array, w: number, h: number): Float32Array {
-    const out = new Float32Array(w * h);
+/**
+ * Sobel の横と縦。`src[offset + y * stride + x]` を読み、`gx`/`gy` に書く (外周 1 画素は 0)。
+ * コマごとに呼ぶので、入れ物は呼ぶ側が使い回す
+ */
+function sobel(
+    src: ArrayLike<number>,
+    offset: number,
+    stride: number,
+    w: number,
+    h: number,
+    gx: Float32Array,
+    gy: Float32Array,
+): void {
     for (let y = 1; y < h - 1; y++) {
+        const up = offset + (y - 1) * stride;
+        const mid = up + stride;
+        const down = mid + stride;
         for (let x = 1; x < w - 1; x++) {
-            const at = (xx: number, yy: number) => image[yy * w + xx]!;
-            const gx =
-                -at(x - 1, y - 1) -
-                2 * at(x - 1, y) -
-                at(x - 1, y + 1) +
-                at(x + 1, y - 1) +
-                2 * at(x + 1, y) +
-                at(x + 1, y + 1);
-            const gy =
-                -at(x - 1, y - 1) -
-                2 * at(x, y - 1) -
-                at(x + 1, y - 1) +
-                at(x - 1, y + 1) +
-                2 * at(x, y + 1) +
-                at(x + 1, y + 1);
-            out[y * w + x] = Math.hypot(gx, gy);
+            const a = src[up + x - 1]!;
+            const b = src[up + x]!;
+            const c = src[up + x + 1]!;
+            const d = src[mid + x - 1]!;
+            const f = src[mid + x + 1]!;
+            const g = src[down + x - 1]!;
+            const i = src[down + x]!;
+            const j = src[down + x + 1]!;
+            gx[y * w + x] = c + 2 * f + j - a - 2 * d - g;
+            gy[y * w + x] = g + 2 * i + j - a - 2 * b - c;
         }
+    }
+}
+
+/** 1コマで、これより弱い勾配は向きを数えない (のっぺりした所の揺らぎ) */
+const STEADY_FLOOR = 4;
+/** 向きが揃っているとみなす cos。ロゴは明るさが逆になっても線の向きは同じなので、符号は見ない */
+const STEADY_COS = 0.9;
+
+/**
+ * **縁の強さ × 向きの揃い方²。**
+ *
+ * 中央値の輪郭だけだと、ロゴより強く残るものに負けます。実機では
+ * 映画の黒帯の縁 (BS-TBS)、中身の滲み残り (テレ東・BS日テレ・TOKYO MX1。輪郭は
+ * あるが弱く、上位 1% を取り切れない)、番組が出し続けるテロップの帯 (BSテレ東)。
+ *
+ * そこで、**各コマの勾配の向きが中央値の勾配の向きと揃っているコマの割合**を掛けます。
+ * ロゴは後ろが何であれ毎コマ同じ所に同じ向きの線を出すので、割合が 1 に近い。
+ * 滲み残りは中央値にたまたま残った線なので、各コマの向きはばらばら。
+ * テロップや黒帯は出ている間だけ揃うので、出ていない場面のぶん下がる。
+ * 二乗するのは、半分しか揃わないもの (場面の半分に出るテロップ) を 1/4 まで沈めるため
+ */
+function steadyEdges(frames: Frame[], region: Rect, width: number, median: Float32Array): Float32Array {
+    const { width: w, height: h } = region;
+    const size = w * h;
+    const mx = new Float32Array(size);
+    const my = new Float32Array(size);
+    sobel(median, 0, w, w, h, mx, my);
+    const magnitude = new Float32Array(size);
+    for (let at = 0; at < size; at++) magnitude[at] = Math.hypot(mx[at]!, my[at]!);
+
+    const count = new Uint16Array(size);
+    const fx = new Float32Array(size);
+    const fy = new Float32Array(size);
+    const floor = STEADY_FLOOR * STEADY_FLOOR;
+    const cos = STEADY_COS * STEADY_COS;
+    for (const frame of frames) {
+        sobel(frame.data, region.y * width + region.x, width, w, h, fx, fy);
+        for (let at = 0; at < size; at++) {
+            const m = magnitude[at]!;
+            if (m === 0) continue;
+            const x = fx[at]!;
+            const y = fy[at]!;
+            const f = x * x + y * y;
+            if (f < floor) continue;
+            // |cos| >= STEADY_COS を、平方根を取らずに比べる
+            const dot = x * mx[at]! + y * my[at]!;
+            if (dot * dot >= cos * f * m * m) count[at]!++;
+        }
+    }
+    const out = new Float32Array(size);
+    for (let at = 0; at < size; at++) {
+        const share = count[at]! / frames.length;
+        out[at] = magnitude[at]! * share * share;
     }
     return out;
 }
@@ -203,27 +288,19 @@ function dilate(mask: Uint8Array, w: number, h: number, radius: number): Uint8Ar
 }
 
 /**
- * 繋がっているかたまりのうち、いちばん大きいものの外接枠と、そこに入った
- * 太らせる前の縁の数 (`strong`)。
+ * 繋がっているかたまり**全部**の外接枠と、そこに入った太らせる前の縁の数 (`strong`)。
  *
  * かたまりで見るのは、**ロゴは一箇所にまとまっている**ため。散らばった縁を
  * 1つの枠に括ると、枠が隅いっぱいに広がります
  */
-function largestBlob(
-    mask: Uint8Array,
-    strong: Uint8Array,
-    w: number,
-    h: number,
-): { rect: Rect; strong: number } | null {
+function blobs(mask: Uint8Array, strong: Uint8Array, w: number, h: number): { rect: Rect; strong: number }[] {
     const seen = new Uint8Array(mask.length);
-    let best: { rect: Rect; strong: number } | null = null;
-    let bestCount = 0;
+    const found: { rect: Rect; strong: number }[] = [];
     const stack: number[] = [];
     for (let start = 0; start < mask.length; start++) {
         if (mask[start] === 0 || seen[start] === 1) continue;
         stack.push(start);
         seen[start] = 1;
-        let count = 0;
         let own = 0;
         let minX = w;
         let maxX = -1;
@@ -233,7 +310,6 @@ function largestBlob(
             const at = stack.pop() as number;
             const x = at % w;
             const y = (at / w) | 0;
-            count++;
             own += strong[at]!;
             if (x < minX) minX = x;
             if (x > maxX) maxX = x;
@@ -251,15 +327,63 @@ function largestBlob(
                 stack.push(next);
             }
         }
-        if (count > bestCount) {
-            bestCount = count;
-            best = {
-                rect: { x: minX, y: minY, width: maxX - minX + 1, height: maxY - minY + 1 },
-                strong: own,
-            };
+        found.push({
+            rect: { x: minX, y: minY, width: maxX - minX + 1, height: maxY - minY + 1 },
+            strong: own,
+        });
+    }
+    return found;
+}
+
+/**
+ * かたまりの枠を、**中の強い縁の 95% が収まるところまで**締める (上下左右から 2.5% ずつ)。
+ *
+ * 太らせて繋いだかたまりには、ロゴの縁に触れた滲み残りがぶら下がる。外接枠のままだと
+ * 実機の BS日テレ で 100×66 (ロゴは 85×30 ほど) になり、余白を足した 160×106 では
+ * logoframe が覚えても合致 0% だった (108×54 なら 88%)
+ */
+function trim(mask: Uint8Array, w: number, rect: Rect): Rect {
+    const cols = new Array<number>(rect.width).fill(0);
+    const rows = new Array<number>(rect.height).fill(0);
+    let total = 0;
+    for (let y = 0; y < rect.height; y++) {
+        for (let x = 0; x < rect.width; x++) {
+            if (mask[(rect.y + y) * w + rect.x + x] === 0) continue;
+            cols[x]!++;
+            rows[y]!++;
+            total++;
         }
     }
-    return best;
+    const span = (counts: number[]): [number, number] => {
+        const cut = total * TRIM;
+        let from = 0;
+        for (let sum = 0; from < counts.length - 1 && sum + counts[from]! <= cut; from++)
+            sum += counts[from]!;
+        let to = counts.length - 1;
+        for (let sum = 0; to > from && sum + counts[to]! <= cut; to--) sum += counts[to]!;
+        return [from, to];
+    };
+    const [x0, x1] = span(cols);
+    const [y0, y1] = span(rows);
+    return { x: rect.x + x0, y: rect.y + y0, width: x1 - x0 + 1, height: y1 - y0 + 1 };
+}
+
+/** 2つの枠の離れ (重なっていれば 0) */
+function gap(a: Rect, b: Rect): number {
+    const dx = Math.max(0, Math.max(a.x, b.x) - Math.min(a.x + a.width, b.x + b.width));
+    const dy = Math.max(0, Math.max(a.y, b.y) - Math.min(a.y + a.height, b.y + b.height));
+    return Math.max(dx, dy);
+}
+
+function union(a: Rect, b: Rect): Rect {
+    const x = Math.min(a.x, b.x);
+    const y = Math.min(a.y, b.y);
+    return {
+        x,
+        y,
+        width: Math.max(a.x + a.width, b.x + b.width) - x,
+        height: Math.max(a.y + a.height, b.y + b.height) - y,
+    };
 }
 
 /** 太らせたぶんを削る。潰れないよう最低 1 画素は残す */
@@ -305,7 +429,7 @@ export function findLogoArea(frames: Frame[]): Rect | null {
 
     for (const corner of CORNERS) {
         const region = regionOf(corner, width, height);
-        const strength = edges(medianImage(frames, region, width), region.width, region.height);
+        const strength = steadyEdges(frames, region, width, medianImage(frames, region, width));
 
         const sorted = Array.from(strength).sort((a, b) => a - b);
         const middle = sorted[Math.floor(sorted.length * 0.5)]!;
@@ -314,32 +438,54 @@ export function findLogoArea(frames: Frame[]): Rect | null {
         if (limit < EDGE_FLOOR || limit < middle * EDGE_RATIO) continue;
 
         const mask = new Uint8Array(strength.length);
-        let total = 0;
-        for (let at = 0; at < strength.length; at++) {
-            mask[at] = strength[at]! >= limit ? 1 : 0;
-            total += mask[at]!;
-        }
-
-        const found = largestBlob(
-            dilate(mask, region.width, region.height, DILATE),
-            mask,
-            region.width,
-            region.height,
-        );
-        if (found === null) continue;
+        for (let at = 0; at < strength.length; at++) mask[at] = strength[at]! >= limit ? 1 : 0;
 
         /*
          * **太らせたぶんを戻す。** 外接枠は「縁を繋ぐために広げた幅」と
          * 「Sobel が縁の外側にも出す1画素」のぶんだけ大きくなっているので、
          * そのまま大きさを見ると本物より太って見え、余白もそのぶん過剰になる
          */
-        const blob = deflate(found.rect, DILATE + 1);
-        if (blob.width < width * MIN_W || blob.width > width * MAX_W) continue;
-        if (blob.height < height * MIN_H || blob.height > height * MAX_H) continue;
-        // 強い縁が隅のあちこちに散っている。ロゴと言い切れない (EDGE_SHARE)
-        if (found.strong < total * EDGE_SHARE) continue;
+        const found = blobs(
+            dilate(mask, region.width, region.height, DILATE),
+            mask,
+            region.width,
+            region.height,
+        ).map((blob) => ({ ...blob, rect: deflate(blob.rect, DILATE + 1) }));
+        /*
+         * **ロゴより大きいかたまりは、ロゴと張り合わない。** いちばん大きいかたまりだけを
+         * 見ていた頃は、BSテレ東 でテロップの帯の下の線 (343×9) を選んで大きさで弾き、
+         * 隣にあるロゴを見ずに諦めていた。帯・黒帯の縁は画面の幅ほどあるので、ここで除ける
+         */
+        const tooBig = (r: Rect) => r.width > width * MAX_W || r.height > height * MAX_H;
+        const fits = (r: Rect) => !tooBig(r) && r.width >= width * MIN_W && r.height >= height * MIN_H;
+        let rivals = 0;
+        let best: { rect: Rect; strong: number } | null = null;
+        for (const blob of found) {
+            if (tooBig(blob.rect)) continue;
+            rivals += blob.strong;
+            if (fits(blob.rect) && (best === null || blob.strong > best.strong)) best = blob;
+        }
+        if (best === null) continue;
 
-        return padded({ ...blob, x: blob.x + region.x, y: blob.y + region.y }, width, height);
+        /*
+         * **すぐ隣のかたまりは同じロゴとして括る。** テレビ朝日 のロゴは図形と文字が
+         * 縦に離れていて、文字だけの枠では logoframe が覚えられなかった (両方入れると覚える)
+         */
+        let rect = best.rect;
+        let strong = best.strong;
+        for (const blob of found) {
+            if (blob === best || tooBig(blob.rect) || blob.strong < best.strong * MERGE_SHARE) continue;
+            if (gap(rect, blob.rect) > MERGE_GAP) continue;
+            const merged = union(rect, blob.rect);
+            if (!fits(merged)) continue;
+            rect = merged;
+            strong += blob.strong;
+        }
+        // 強い縁が隅のあちこちに散っている。ロゴと言い切れない (EDGE_SHARE)
+        if (strong < rivals * EDGE_SHARE) continue;
+
+        const core = trim(mask, region.width, rect);
+        return padded({ ...core, x: core.x + region.x, y: core.y + region.y }, width, height);
     }
     return null;
 }

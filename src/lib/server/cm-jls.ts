@@ -231,7 +231,10 @@ export async function detectWithJls(
          * (`logo-area.forgetArea`)
          */
         const hadArea = areaReady() && channel !== '';
+        /** 枠を渡して転んだときの結果。枠なしでも転んだら、こちらを伝える */
+        let withArea: Step | null = null;
         if (frames.code !== 0 && hadArea) {
+            withArea = frames;
             console.warn(`[cm] ロゴの枠 ${logoAreaText} では見つかりませんでした。枠なしで試します`);
             step('局ロゴが写っているコマを探しています (枠なし)');
             frames = await findFrames(false);
@@ -244,7 +247,10 @@ export async function detectWithJls(
             }
         }
         if (frames.code !== 0) {
-            return { cm: [], note: failure('logoframe', frames) };
+            return {
+                cm: [],
+                note: logoFailure(frames, withArea === null ? null : { area: logoAreaText, step: withArea }),
+            };
         }
         /*
          * **覚えたものを、同じ絵を映している局にも配る** (`logo-data.share`)。
@@ -402,5 +408,22 @@ function cleanup(input: string): void {
  * 標準エラーは末尾だけ。TSの読み込み警告が延々と並ぶので、全部載せると読めない
  */
 function failure(step: string, result: Step): string {
-    return `${step} が失敗 (code ${result.code}): ${result.stderr.trim().split('\n').at(-1) ?? ''}`;
+    return `${step} が失敗 (code ${result.code}): ${lastLine(result)}`;
+}
+
+function lastLine(result: Step): string {
+    return result.stderr.trim().split('\n').at(-1) ?? '';
+}
+
+/**
+ * logoframe が降りたときの覚え書き。
+ *
+ * **枠を渡して転び、枠なしでも転んだら、枠を渡したときの理由を先に書く。**
+ * 枠なしの理由だけを残していた頃は、BSテレ東 に位置を教えてあるのに
+ * `specify -logo-area x,y,w,h` (枠を渡せ) と出ていて、渡した枠がなぜ駄目だったのかが
+ * どこにも残らなかった (枠を渡すと、その文言は出ない)
+ */
+export function logoFailure(result: Step, withArea: { area: string; step: Step } | null): string {
+    if (withArea === null) return failure('logoframe', result);
+    return `logoframe が失敗 (code ${withArea.step.code}): 枠 ${withArea.area} では ${lastLine(withArea.step)} / 枠なしでは ${lastLine(result)}`;
 }
