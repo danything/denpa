@@ -304,7 +304,8 @@ export async function ownLogoFrames(
      * **覚えていたもので1コマも当たらなければ、覚え直す。** 局がロゴを替えたとき、
      * 前のロゴの型のまま「写っていない」を出し続けないように
      */
-    if (!learnedNow && (typeof found === 'string' || found.spans.length === 0)) {
+    // 抜けなかった (ffmpeg の失敗・時間切れ) ときは覚え直さない。理由はそのまま返す
+    if (!learnedNow && typeof found !== 'string' && found.spans.length === 0) {
         if (options.signal?.aborted === true) return fail('中止されました', 143);
         console.warn('[cm] 覚えていたロゴが当たらないので、この録画から覚え直します');
         const learned = await learn(job);
