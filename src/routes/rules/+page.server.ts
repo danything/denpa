@@ -585,12 +585,11 @@ function originOf(url: URL) {
     };
 }
 
-/** 録画から読む分。シリーズ名は録ったときに切り出してある */
+/** 録画から読む分 */
 function recordingSource(id: number) {
     return orm()
         .select({
             name: recordings.name,
-            series: recordings.series,
             service_id: recordings.service_id,
             genre_detail: recordings.genre_detail,
             type: serviceTable.type,
