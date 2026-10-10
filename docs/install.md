@@ -1,24 +1,19 @@
 # 立てる
 
-用意するもの、入れ方 (1行・Compose・1コンテナ・Helm)、立てたあとの手順、前段 (リバースプロキシ) の後ろに置くとき。
+README の手順の細かいところ。用意するもの、入れ方 (1行・Compose・1コンテナ・Helm)、前段 (リバースプロキシ) の後ろに置くとき。
 Mac と Windows の入れ方の中身は [agent.md](agent.md#mac-でチューナーを使う) に。
 
 ## 用意するもの
 
-- **チューナー** — 挿してあれば自動で見つけ、種別 (地上波 / 衛星) も見分けます
-  - Linux DVB の機材 (PT2/PT3、PX-BCUD、PX-S1UD など)。ドライバはホストに入れておく
-  - **px4-userland の対応機種** (PLEX PX-Q3U4 / PX-W3U4 / PX-MLT 系、e-Better / Digibest 系など)。
-    ドライバはエージェントのイメージに入っているので、ホストには何も入れない
-    ([agent.md](agent.md#px-q3u4-などは-px4-userland-でカーネルドライバは入れてもらわない))
-  - PX-S1UD はホストで smsusb を blacklist しておけば、同梱の siano-userland で動く (ホストにドライバは要らない)
-    ([agent.md](agent.md#px-s1ud-はカーネルが掴んでいなければ-siano-userland-で))
-  - PX-W3U3 は **試験的** に asicen-userland で受ける用意だけある。上流のリリース待ちで、まだイメージに入らない
-    ([agent.md](agent.md#px-w3u3-は-asicen-userland-で-試験的上流のリリース待ち))
-- **B-CASカード** と PC/SC 対応のカードリーダー (px4-userland の機材は内蔵リーダーでもよい)
-- **Docker** (Compose) か **Kubernetes** (Helm)。amd64 と arm64 のどちらでも動きます
-  (イメージは両方を同じタグにまとめてある)。Apple Silicon の Mac と x64 の Windows でも、[1行](#1行で入れる)で立ちます
-- あれば **Intel の GPU** — `/dev/dri` が見えれば起動時に見つけて GPU で焼き、無ければソフトウェアで焼きます
-  (Helm は既定で渡す)。QSV は amd64 だけで、arm64 は VA-API かソフトウェア ([encode.md](encode.md#gpu-で焼く-intel-qsv--va-api))
+一覧は [README](../README.md#1-要るもの)。機材ごとの細かいことは agent.md に。
+
+- px4-userland の対応機種 (e-Better / Digibest 系も) — [agent.md](agent.md#px-q3u4-などは-px4-userland-でカーネルドライバは入れてもらわない)
+- PX-S1UD を siano-userland で使うときの blacklist — [agent.md](agent.md#px-s1ud-はカーネルが掴んでいなければ-siano-userland-で)
+- PX-W3U3 (試験的) — [agent.md](agent.md#px-w3u3-は-asicen-userland-で-試験的上流のリリース待ち)
+- イメージは amd64 と arm64 を同じタグにまとめてあり、自分のアーキテクチャのものが降ってきます
+- **Intel の GPU** — `/dev/dri` が見えれば起動時に見つけて GPU で焼きます。compose.prod.yml では渡す行をコメントにしてあるので、
+  `compose.override.yml` で渡します (Helm は既定で渡す)。QSV は amd64 だけで、arm64 は VA-API かソフトウェア
+  ([encode.md](encode.md#gpu-で焼く-intel-qsv--va-api))
 
 ## 1行で入れる
 
@@ -102,19 +97,10 @@ helm install denpa oci://ghcr.io/danything/charts/denpa \
 `latest` はリリースのたびに新しくなります。版を固定するなら `1.20.0` のように書きます
 ([architecture.md](architecture.md#イメージのタグ))。
 
-## 立てたあと
+## うまくいかないとき
 
-1. **開く** — <http://denpa.localhost> (genkan を入れたとき) か <http://localhost:3000>。
-   compose の `TRUSTED_NETWORKS` (Helm は `denpa.trustedNetworks`) の初期値は家の中 (私設網) だけを通す値です。
-   変えるときは [auth.md](auth.md)
-2. **チューナーを確かめる** — 「チューナー」の画面に、見つかったものの本数と種別 (地上波 / 衛星) が並びます
-3. **スキャンする** — 同じ画面から。BS と CS は全国で同じなので、衛星を受けられるチューナーがあれば
-   最初から局が入っています。地上波はスキャンするまで番組表も空です (総当たりで十数分)
-4. **待つ** — スキャンが終わると番組表を自動で集めます (数分)
-5. **予約する** — 番組表から選ぶか、「ルール」にキーワードを登録して自動で
-
-うまくいかないときも「チューナー」の画面を見ます。エージェントとカードリーダーの状態、スキャンの結果、
-番組表の集まり具合が出ます。**カードリーダーが NG のまま録ると、成功したように見えても中身はスクランブルされたままです。**
+立てたあとの手順は [README](../README.md#3-開く)。うまくいかないときは「チューナー」の画面を見ます。エージェントと
+カードリーダーの状態、スキャンの結果、番組表の集まり具合が出ます。Helm の `TRUSTED_NETWORKS` は `denpa.trustedNetworks` です。
 
 ## 前段 (リバースプロキシ) の後ろに置く
 

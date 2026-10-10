@@ -34,39 +34,83 @@ Mirakurun や EDCB、メディアサーバは要りません。番組表から�
 部品はチャンネルを掴んで素の TS を流す **チューナーエージェント** と、それ以外の全部 (番組表・予約・録画・
 エンコード・配信) をやる **denpa** の2つだけです ([docs/architecture.md](docs/architecture.md))。
 
-## 用意するもの
-
-| チューナー | 口 | ホストに入れるもの |
-| --- | --- | --- |
-| PT2 / PT3、PX-BCUD、PX-S1UD など | Linux DVB | ドライバ |
-| PX-Q3U4 / PX-W3U4 / PX-MLT 系など (px4-userland の対応機種) | px4-userland (同梱) | なし |
-| PX-S1UD (smsusb を blacklist したとき。Windows も) | siano-userland (同梱) | なし |
-| PX-W3U3 | asicen-userland (**試験的**。上流のリリース待ちで、まだ入らない) | なし |
-
-ほかに **B-CASカード** と PC/SC のカードリーダー、**Docker** か **Kubernetes** (amd64 / arm64)。
-詳しくは [docs/install.md](docs/install.md#用意するもの) と [docs/agent.md](docs/agent.md)。
-
 ## 立てる
 
-**Linux と Mac (Apple Silicon) は1行で立ち上がり、ブラウザが開きます。**
+### 1. 要るもの
+
+- **チューナー** — 挿してあれば自動で見つけ、種別 (地上波 / 衛星) も見分けます
+
+  | チューナー | 口 | ホストに入れるもの |
+  | --- | --- | --- |
+  | PT2 / PT3、PX-BCUD、PX-S1UD など | Linux DVB | ドライバ |
+  | PX-Q3U4 / PX-W3U4 / PX-MLT 系など (px4-userland の対応機種) | px4-userland (同梱) | なし |
+  | PX-S1UD (smsusb を blacklist したとき。Windows も) | siano-userland (同梱) | なし |
+  | PX-W3U3 | asicen-userland (**試験的**。上流のリリース待ちで、まだ入らない) | なし |
+
+- **B-CASカード** と PC/SC のカードリーダー (px4-userland の機材は内蔵リーダーでもよい)
+- **OS** — Linux (amd64 / arm64)、Mac (Apple Silicon)、Windows (x64)
+- **Docker** (Linux・Mac。Compose 込み) か、Windows は WSL (`wsl --update` で入る `wslc`。Docker Desktop は要らない)。
+  Kubernetes なら Helm
+- あれば Intel の GPU (`/dev/dri` を渡す。[docs/install.md](docs/install.md#用意するもの))。無ければソフトウェアで焼きます
+
+### 2. 入れる
+
+**1行で、denpa 本体とチューナーのエージェントの両方が立ち上がり、ブラウザが開きます。** clone は要りません。
 
 ```sh
+# Linux / Mac
 curl -fsSL https://raw.githubusercontent.com/danything/denpa/main/install.sh | bash
 ```
 
-Windows (x64) は PowerShell で `irm https://raw.githubusercontent.com/danything/denpa/main/install.ps1 | iex`。
-Compose を手で置く・1コンテナ (`denpa-aio`)・Helm、立てたあとの手順は [docs/install.md](docs/install.md)。
+```powershell
+# Windows (PowerShell)
+irm https://raw.githubusercontent.com/danything/denpa/main/install.ps1 | iex
+```
 
-開いたら「チューナー」の画面でスキャンを押し、番組表が集まったら予約できます。
+エージェントの置き場は OS で違います (どれも上の1行がやる)。
 
-## 誰を通すか
+- **Linux** — エージェントも本体も Docker Compose のコンテナ (`~/denpa/compose.yml`)
+- **Mac** — エージェントは Mac の上で直接 (LaunchAgent)、本体は Docker。USB をコンテナに渡せないため
+- **Windows** — エージェントは Windows の上で直接 (タスク スケジューラ)、本体は `wslc` のコンテナ。
+  チューナーは siano-userland の機材だけで、ドライバを WinUSB にしておく
 
-**通し方を設定するまで、すべてのアクセスを断ります。** 家の中から素通しにするなら `TRUSTED_NETWORKS`
-(compose の初期値は私設網)、画面をログインで守るなら OIDC。テレビのアプリは QR でペアリングして外からも使えます。
+Linux で Compose を手で置くなら、これだけです (エージェントは `tuner-agent` として一緒に立つ)。
 
-**`TRUSTED_NETWORKS=0.0.0.0/0` はインターネットに向けて開くのと同じです。** 家の外に出すなら OIDC を使います。
-リバースプロキシの後ろに置くなら `TRUSTED_PROXIES` も要ります ([docs/install.md](docs/install.md#前段-リバースプロキシ-の後ろに置く))。
-詳しくは [docs/auth.md](docs/auth.md)。
+```sh
+mkdir denpa && cd denpa
+curl -Lo compose.yml https://raw.githubusercontent.com/danything/denpa/main/compose.prod.yml
+docker compose up -d
+```
+
+もう一度流すと最新のリリースに上がります。変えたい設定は `~/denpa/compose.override.yml`
+(Windows は `~/denpa/denpa.env`) に書きます。
+
+### 3. 開く
+
+- <http://denpa.localhost> (Linux・Mac で [genkan](https://github.com/danything/genkan) を入れられたとき) か
+  <http://localhost:3000>。LAN のほかの機器 (テレビ・スマホ) からは `http://<IP>:3000`
+- **誰を通すか** — 設定するまで全部断ります。compose の `TRUSTED_NETWORKS` の初期値は家の中 (私設網) で、
+  ここからはログインなしで通ります。画面をログインで守るなら OIDC の3つを渡します
+  (リダイレクト URI は `https://<denpa>/login/callback`)
+
+  ```yaml
+  # ~/denpa/compose.override.yml
+  services:
+      denpa:
+          environment:
+              TRUSTED_NETWORKS: 192.168.1.0/24
+              OIDC_ISSUER: https://login.microsoftonline.com/<tenant>/v2.0
+              OIDC_CLIENT_ID: <アプリケーションID>
+              OIDC_CLIENT_SECRET: <クライアントシークレット>
+  ```
+
+  **`TRUSTED_NETWORKS=0.0.0.0/0` はインターネットに向けて開くのと同じです。** 家の外に出すなら OIDC を使います
+- 「チューナー」の画面で、見つかったチューナーを確かめて**スキャン**を押します。衛星は最初から局が入っていて、
+  地上波は十数分。終わると番組表を集めるので (数分)、あとは番組表から予約するだけです
+- **カードリーダーが NG のまま録ると、中身はスクランブルされたままです** (同じ画面に出ます)
+
+1コンテナ (`denpa-aio`)・Helm・リバースプロキシの後ろに置くとき・困ったときは [docs/install.md](docs/install.md)、
+ログインの細かいことは [docs/auth.md](docs/auth.md)。
 
 ## 観る
 
@@ -77,7 +121,7 @@ Compose を手で置く・1コンテナ (`denpa-aio`)・Helm、立てたあと�
 
 ## もっと詳しく
 
-- [docs/install.md](docs/install.md) — **立てる** (用意するもの・入れ方・前段の後ろに置く)
+- [docs/install.md](docs/install.md) — **立てる** (入れ方の選択肢・1コンテナ・Helm・前段の後ろに置く)
 - [docs/screens.md](docs/screens.md) — 画面 (実機の絵)
 - [docs/architecture.md](docs/architecture.md) — **なぜこの形なのか** (決めたこと・踏んだ落とし穴)
 - [docs/app.md](docs/app.md) — **どこに何があるか** (ファイル・環境変数・画面・状態遷移)
