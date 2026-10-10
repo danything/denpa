@@ -1,6 +1,6 @@
 # 外から使う口 (API)
 
-画面の外のもの (Home Assistant の連携・スクリプト・VLC・録画ソフト) 向けの口です。
+画面の外のもの (テレビのアプリ・Home Assistant の連携・スクリプト) 向けの口です。
 **JSON の形は保ちます。** 足すことはあっても、名前を変えたり消したりはしません。
 
 - **入り方は画面と同じです** ([下記](#入り方))。`TRUSTED_NETWORKS` に入っている相手はそのまま通ります
@@ -52,9 +52,9 @@
 
 | `codec` | 中身 | Content-Type | 向いている相手 |
 |---|---|---|---|
-| (なし) / `h264` | H.264 / AAC の fragmented MP4 | `video/mp4` | Cast・テレビ・古い VLC (いちばん広く再生できる) |
+| (なし) / `h264` | H.264 / AAC の fragmented MP4 | `video/mp4` | Cast・テレビ (いちばん広く再生できる) |
 | `av1` | AV1 / Opus の fragmented MP4 | `video/mp4` | AV1 を解ける新しい端末 |
-| `raw` | 焼かずに1局に絞っただけの TS (MPEG-2) | `video/mp2t` | VLC・ffplay・録画ソフト (いちばん軽い) |
+| `raw` | 焼かずに1局に絞っただけの TS (MPEG-2) | `video/mp2t` | テレビのアプリ (いちばん軽い。MPEG-2 をハードで解ける端末) |
 
 `?audio=only` で音声だけ (AAC の fragmented MP4、`audio/mp4`)。画面の無いスピーカーへの Cast 向け。
 映像を焼かないので軽い。録画の `audio` と同じ書き方です。`codec` と一緒に渡すと、`audio=only` が勝ちます。
@@ -206,7 +206,7 @@
   - `drcs` は置き換えられなかった外字。`text` は「〓」で、`drcs` の絵を字の枠いっぱいに `fg` で描く
 - `drcs` の絵は左上から1画素 `bits` ビットずつ上の桁から詰めたもの (base64)。値 v の濃さは v / (`depth` − 1)。
   小さい (16〜36 画素) ので、なめらかに引き伸ばします。置き換え表で字にできたもの (〓 にならないもの) はここに来ません
-- 色は `#rrggbbaa`。字はデータ放送と同じ丸ゴシック (`GET /api/font/denpa-font.woff2`。Denpa Font) で描きます
+- 色は `#rrggbbaa`。字はデータ放送と同じ丸ゴシック (`GET /api/font/denpa-font.woff2`。Denpa Font) で描きます。版なしの URL は毎回確かめる (`no-cache` + ETag) ので、そのまま取っても古い字は残りません
 
 ## 番組表の番組の中身 `GET /api/programs/<id>`
 
@@ -282,7 +282,7 @@ data: {"recordingId":12,"percent":0.425,"etaMs":600000,"log":"…"}
 止めた・知らない鍵を出したときは `{"error":"invalid_token"}` の 401 (`WWW-Authenticate: Bearer error="invalid_token"`) で、
 信頼するネットワークの中でも通しません (ペアリングし直しの合図)。仕組みと守りは [auth.md](auth.md#アプリのペアリング)。
 
-**ファイルの口 (`file`・`playlist`) だけは 401 ではなく 403 (text/plain)** です。ログインの控えか
+**ファイルの口 (`file`) だけは 401 ではなく 403 (text/plain)** です。ログインの控えか
 期限付きのリンク (`share`) でも開けるようにしてあり、どれも無ければ言葉で断ります。アプリは Bearer を付けて開きます。
 もう1つ、入る道 (OIDC か `TRUSTED_NETWORKS`) を何も設定していない denpa は、どの口も 403 で断ります
 (ペアリングもできない。[auth.md](auth.md#入る道が無ければ全部断る))。

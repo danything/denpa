@@ -170,6 +170,15 @@ export function pacing({ start, end, at, playing, target, chasing, speed }: Buff
  */
 export const SPEEDS = [1, 1.25, 1.5, 2] as const;
 
+/**
+ * 速さを1段ずつ動かす (キーの順送り。観る画面と追っかけで共通)。端では止まる。
+ * **戻る側も持つ** — 行き過ぎたら戻れないと不便。並びに無い速さからは等速の位置から数える
+ */
+export function stepSpeed(speed: number, by: number): number {
+    const at = Math.max(0, SPEEDS.indexOf(speed as (typeof SPEEDS)[number]));
+    return SPEEDS[Math.min(SPEEDS.length - 1, Math.max(0, at + by))] ?? speed;
+}
+
 /** 貯める量と、その下限 */
 export interface Buffering {
     /** どれだけ貯めてから出すか (秒) */

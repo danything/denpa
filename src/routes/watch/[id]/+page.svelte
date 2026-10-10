@@ -8,8 +8,10 @@
     import AudioMenu from '#lib/components/player/AudioMenu.svelte';
     import { screenAwake } from '#lib/components/player/awake.svelte.js';
     import { backgroundPlayback } from '#lib/components/player/background.svelte.js';
+    import CloseLink from '#lib/components/player/CloseLink.svelte';
     import ControlBar from '#lib/components/player/ControlBar.svelte';
     import ControlButton from '#lib/components/player/ControlButton.svelte';
+    import ControlRow from '#lib/components/player/ControlRow.svelte';
     import { CaptionPainter } from '#lib/components/player/caption-draw.js';
     import { playerControls } from '#lib/components/player/controls.svelte.js';
     import DataBroadcast, { pressD } from '#lib/components/player/DataBroadcast.svelte';
@@ -17,19 +19,14 @@
     import FactsAside from '#lib/components/player/FactsAside.svelte';
     import { eachFrame } from '#lib/components/player/frames.js';
     import { stageFullscreen } from '#lib/components/player/fullscreen.svelte.js';
-    import Icon from '#lib/components/player/Icon.svelte';
     import InfoBlock from '#lib/components/player/InfoBlock.svelte';
     import {
         CAMERA,
         CAPTION,
         CHECK,
-        CLOSE,
         CUT,
         DATA,
         NEXT,
-        OVERLAY,
-        OVERLAY_BTN,
-        OVERLAY_ROUND,
         PAUSE,
         PLAY,
         PREV,
@@ -39,17 +36,21 @@
     } from '#lib/components/player/icons.js';
     import { playerKeys } from '#lib/components/player/keys.js';
     import MoreButton from '#lib/components/player/MoreButton.svelte';
+    import PlayerLayout from '#lib/components/player/PlayerLayout.svelte';
     import PlayerStage from '#lib/components/player/PlayerStage.svelte';
     import { fitRect } from '#lib/components/player/paint.js';
     import { pictureInPicture } from '#lib/components/player/pip.svelte.js';
     import Remote from '#lib/components/player/Remote.svelte';
+    import SeekBar from '#lib/components/player/SeekBar.svelte';
     import SpeedMenu, { SPEED_KEY, storedSpeed } from '#lib/components/player/SpeedMenu.svelte';
     import StageNote from '#lib/components/player/StageNote.svelte';
     import StageTail from '#lib/components/player/StageTail.svelte';
     import { snapshotter } from '#lib/components/player/shot.svelte.js';
     import { videoFrame } from '#lib/components/player/snapshot.js';
+    import { stageTap } from '#lib/components/player/stage-tap.js';
     import Toasts, { errorNotice, type Notice } from '#lib/components/Toasts.svelte';
-    import { programDetail } from '#lib/detail.svelte.js';
+    import { programDetail, recordingFacts } from '#lib/detail.svelte.js';
+    import { denpaFontUrl } from '#lib/font.js';
     import { clock, cmNoteWorthShowing, recordedDuration, size } from '#lib/format.js';
     import { write as remind, read as stored } from '#lib/keep.js';
     import { loadOffline } from '#lib/offline.svelte.js';
@@ -59,7 +60,7 @@
     import { type Cue, showing as captionShowing, currentCue } from '#lib/ts/captions.js';
     import { feedFor, type PlacedMessage, replayAt } from '#lib/ts/data-timeline.js';
     import { pickMediaSource } from '#lib/ts/media-source.js';
-    import { SPEEDS } from '#lib/ts/pacing.js';
+    import { stepSpeed } from '#lib/ts/pacing.js';
     import { type MediaFile, type Playback, pickPlayback } from '#lib/ts/remux.js';
     import {
         type Chapter,
@@ -70,9 +71,6 @@
         resumePoint,
         skipCmAtStart,
         skipTarget,
-        type Tap,
-        tap,
-        zoneOf,
     } from '#lib/ts/watch.js';
     import { resolve } from '$app/paths';
 
@@ -284,7 +282,7 @@
     let shownPage: CaptionPage | null = null;
     $effect(() => {
         if (overlay === null) return;
-        const made = new CaptionPainter(overlay, resolve('api/font/denpa-font.woff2'));
+        const made = new CaptionPainter(overlay, denpaFontUrl());
         painter = made;
         return () => {
             made.close();
@@ -326,15 +324,6 @@
     let retryAt = 0;
     let chapters = $state<Chapter[]>([]);
 
-    /**
-     * 指で触っているか。**全画面にするかと、押したときの読み方が変わる。**
-     *
-     * 画面の幅では決めない — 狭い窓で開いた PC まで全画面になる。
-     * `(pointer: coarse)` は「いま使っている指し手が粗いか」なので、
-     * タッチのノートPCでも当たる
-     */
-    let coarse = $state(false);
-
     /** 操作列の出し入れ ([controls.svelte.ts](../../../lib/components/player/controls.svelte.ts))。ライブと同じ */
     const controls = playerControls();
 
@@ -365,7 +354,6 @@
         pause: () => video?.pause(),
         resume: () => void video?.play().catch(() => undefined),
     });
-    let lastTap: Tap | null = null;
 
     /**
      * 早送りの速さ。**ライブの追っかけと同じ並び** (`ts/pacing` の `SPEEDS`)。
@@ -471,7 +459,6 @@
      * どちらも転んでも無視する (押せば始まる)
      */
     onMount(() => {
-        coarse = window.matchMedia('(pointer: coarse)').matches;
         // 前に選んだ速さで始める。覚えるのは端末ごと
         setSpeed(storedSpeed(), false);
         skipCm = skipCmAtStart(rec.cm_note, stored(SKIP_CM_KEY));
@@ -479,15 +466,16 @@
         // 取りに行っている間そのまま流れていた (`settle`)
         if (skipCm) shut();
         void loadChapters().then(settle);
-        loadDetail();
+        void detail.open(rec.program_id, facts);
         // 字幕は既定で出す (ライブと同じ)。持っていない録画では何も起きない
         if (captions) void loadCaptions();
         if (video !== null) follow(video);
         if (!ready) return;
         video?.play().catch(() => undefined);
         // 指のときは最初から全画面。テレビと同じで、観るために置いてある画面なので
-        // iPhone では枠を広げる (`fullscreen.svelte.ts`) — 押した勢いが要らないので読み込み直しても入る
-        if (coarse) fullscreen.enter();
+        // iPhone では枠を広げる (`fullscreen.svelte.ts`) — 押した勢いが要らないので読み込み直しても入る。
+        // 画面の幅では決めない — 狭い窓で開いた PC まで全画面になる
+        if (window.matchMedia('(pointer: coarse)').matches) fullscreen.enter();
         // 枠が変われば重ねる場所も変わる (全画面・持ち替え・窓の伸び縮み)
         const onResize = () => place();
         window.addEventListener('resize', onResize);
@@ -836,13 +824,6 @@
         if (!waiting) open();
     }
 
-    /** 速さを1段ずつ動かす。端では止まる */
-    function stepSpeed(by: number): void {
-        const at = SPEEDS.indexOf(speed as (typeof SPEEDS)[number]);
-        const next = SPEEDS[Math.min(Math.max(at + by, 0), SPEEDS.length - 1)];
-        if (next !== undefined) setSpeed(next);
-    }
-
     function togglePlay(): void {
         if (video === null) return;
         if (video.paused) void video.play().catch(() => undefined);
@@ -1013,31 +994,8 @@
         controls.stir();
     }
 
-    /**
-     * 絵を押されたときの読み方は `ts/watch.ts` が決める。**ここは効かせるだけ。**
-     *
-     * - マウス … 1回で再生/一時停止、左右の端を素早く2回で 10秒
-     * - 指 … 1回で操作列の出し入れ、左右の端を素早く2回で 10秒
-     */
-    function press(event: MouseEvent): void {
-        if (video === null) return;
-        const box = (event.currentTarget as HTMLElement).getBoundingClientRect();
-        const { action, next } = tap(
-            lastTap,
-            event.timeStamp,
-            zoneOf(event.clientX - box.left, box.width),
-            coarse,
-        );
-        lastTap = next;
-        if (action.kind === 'play') togglePlay();
-        // 出し入れの判断は `controls` が持つ (押す前に出ていたかで決める)
-        else if (action.kind === 'controls') controls.toggle();
-        else {
-            // 2回目。マウスは1回目で再生を切り替えているので、それも戻す
-            if (action.undo) togglePlay();
-            seekBy(action.by);
-        }
-    }
+    /** 絵を押されたときの読み方は追っかけと同じ (`stage-tap.ts`) */
+    const press = stageTap({ toggle: togglePlay, controls: () => controls.toggle(), seekBy });
 
     /**
      * **押す口は自分で繋ぐ** (`onclick={press}` と書かない)。
@@ -1069,8 +1027,7 @@
         toggleCaptions,
         snapshot: () => void snapshot(),
         toggleFull: fullscreen.toggle,
-        // 早送りは順送り。**戻る側も付ける** (行き過ぎたら戻れないと不便)
-        stepSpeed,
+        stepSpeed: (by) => setSpeed(stepSpeed(speed, by)),
         toggleMute: () => {
             if (video !== null) video.muted = !video.muted;
         },
@@ -1091,37 +1048,12 @@
     const remaining = $derived(Math.max(0, (length - at) / (speed || 1)));
 
     /**
-     * 右に出す中身。**録画の行が持っているぶんだけ**で組み立てる。
+     * 右に出す中身。**録画の行が持っているぶんだけ**で組み立てる (追っかけと同じ `recordingFacts`)。
      *
      * 出演者などは番組表の側にあり、24時間で消える。引けるうちは開いた時点で
-     * 引き直す (`loadDetail`)
+     * 引き直す (`onMount`)。引けなければ行のぶんだけが出たままになる
      */
-    const facts = $derived({
-        name: rec.name,
-        service_name: rec.service_name,
-        start_at: rec.start_at,
-        end_at: rec.end_at,
-        description: rec.description,
-        // 番組表から写してある分 (recorder が録り始めに写す)。番組表が消えたあとはこれだけ
-        extended: rec.extended,
-        genre_detail: rec.genre_detail,
-        audios: rec.audios,
-        video_type: null,
-        video_resolution: null,
-        is_free: true,
-    });
-
-    /**
-     * 番組表から引き直す。**押させずに、開いた時点で引く。**
-     *
-     * 出演者や詳細情報は番組表の側にあり、録画の行は持っていない。
-     * 引けなければ行のぶんだけが出たままになる (古い録画は消えている)
-     */
-    function loadDetail(): void {
-        // 種は右に出している中身そのもの。**別に組み直さない** — 組み直していた頃は
-        // ジャンル・音声を落としていて、番組表から消えた録画で札が出なかった
-        void detail.open(rec.program_id, facts);
-    }
+    const facts = $derived(recordingFacts(rec));
 
     /** 切り抜きの結果。**貼れたかどうかは言う** (黙って何も起きないと分からない) */
     const shooter = snapshotter(controls);
@@ -1148,16 +1080,8 @@
 <svelte:head><title>{rec.name} - denpa</title></svelte:head>
 <svelte:window onclick={deleting.stand} onkeydown={keys} />
 
-<!--
-    **ライブ (`/live`) と同じ形・同じ作り。** 映像が左 (16:9 で高さいっぱいまで)、
-    読むものが右 (固定幅で残りの高さをぜんぶ使う)。
-
-    右は映像の高さに合わせない。**タブレット (`md` = 768px) から2段組**、狭い画面では映像が上・詳細が下。
-    **周りの余白も横幅の頭打ちも足さない** — 外の `<main>` ([+layout.svelte](../../+layout.svelte)) が持っている
--->
-<div class="watch" data-testid="watch">
-    <!-- **映像を先に書く。** 縦積みになったときに上へ来るのはこちら -->
-    <section class="player">
+<!-- **ライブ (`/live`) と同じ形・同じ作り** (PlayerLayout)。映像が左、読むものが右 -->
+<PlayerLayout testid="watch">
         {#if !ready}
             <!-- 生TSがあれば load が追っかけへ送るので、ここに来るのは焼いたものも生TSも無い録画 -->
             <div class="panel stack not-ready">
@@ -1339,14 +1263,7 @@
                     聞き返しがあるので消えはしない
                 -->
                 <ControlBar side shown={controls.shown} testid="watch-side">
-                    <a
-                        class="{OVERLAY_BTN} {OVERLAY_ROUND} {OVERLAY}"
-                        href={resolve('')}
-                        aria-label="一覧へ戻る"
-                        data-testid="watch-close"
-                    >
-                        <Icon icon={CLOSE} />
-                    </a>
+                    <CloseLink testid="watch-close" />
                     <!--
                         **データ放送 (d) は右上に置く。** 焼いてある録画でだけ出す
                         (`data.hasData`)。データ操作 (リモコン) を右カラムに出すので、
@@ -1408,38 +1325,15 @@
                         **帯にはチャプターの切れ目を出す。** どこで CM が挟まって
                         いるかが見えると、送りのボタンを何回押すかが分かる
                     -->
-                    <div class="seek">
-                        <input
-                            type="range"
-                            class="fill"
-                            style="--fill: {length > 0 ? (at / length) * 100 : 0}%"
-                            min="0"
-                            max={length || 0}
-                            step="0.1"
-                            value={at}
-                            oninput={(e) => seekTo(Number(e.currentTarget.value))}
-                            aria-label="再生位置"
-                        />
-                        {#if chapters.length > 1 && length > 0}
-                            <div class="marks">
-                                <!--
-                                    **つまみの往復ぶんを引く。** つまみは幅の
-                                    ぶんだけ内側を動く (端で枠から出ないため) ので、
-                                    切れ目を素の百分率で置くと**つまみとずれます** —
-                                    実機では、まだ来ていない CM の印が再生位置の
-                                    左に出ていた。つまみは 1rem (下の `.seek input`)
-                                -->
-                                {#each chapters.slice(1) as chapter (chapter.start)}
-                                    <span
-                                        class="mark"
-                                        style="left: calc(0.5rem + {chapter.start / length} * (100% - 1rem))"
-                                    ></span>
-                                {/each}
-                            </div>
-                        {/if}
-                    </div>
+                    <SeekBar
+                        value={at}
+                        max={length || 0}
+                        step={0.1}
+                        onseek={seekTo}
+                        marks={chapters.slice(1).map((chapter) => chapter.start)}
+                    />
 
-                    <div class="cluster buttons" data-testid="watch-buttons">
+                    <ControlRow testid="watch-buttons">
                         <!--
                             **並びはライブと同じ。** 再生・音・字幕が左から順で、
                             全画面がいちばん右。画面を移っても同じ場所にあると、
@@ -1578,19 +1472,17 @@
                         </Extras>
 
                         <StageTail prefix="watch" {background} {pip} {fullscreen} />
-                    </div>
+                    </ControlRow>
                 </ControlBar>
                 {/snippet}
             </PlayerStage>
         {/if}
-    </section>
 
     <!--
         **右は番組の中身。観ながら読めるよう、映像に被せず全部ここに出す。**
-        中身は一覧のモーダルと同じ部品 (`ProgramFacts`)。長ければここだけが巻き取られる。
-        高さは画面の残りぜんぶ、幅も枠の作りもライブの右の列と同じ
+        中身は一覧のモーダルと同じ部品 (`ProgramFacts`)。枠は追っかけと同じ部品 (FactsAside)
     -->
-    <!-- 枠は追っかけと同じ部品 (FactsAside)。幅・巻き取り・貼り付けの決めごとはそちら -->
+    {#snippet aside()}
     <FactsAside testid="watch-facts">
         {#snippet top()}
             <!--
@@ -1621,7 +1513,8 @@
             ダウンロードは録画の詳細の「その他…」にある。観ている横に要らない
         -->
     </FactsAside>
-</div>
+    {/snippet}
+</PlayerLayout>
 
 <Toasts
     {notices}
@@ -1633,27 +1526,6 @@
 />
 
 <style>
-    .watch {
-        display: flex;
-        flex-direction: column;
-        gap: 1rem;
-    }
-    .player {
-        display: flex;
-        min-width: 0;
-        flex: 1;
-        flex-direction: column;
-    }
-    @media (min-width: 768px) {
-        .watch {
-            height: 100%;
-            min-height: 0;
-            flex-direction: row;
-        }
-        .player {
-            min-height: 0;
-        }
-    }
     .not-ready h2 {
         font-size: 1rem;
     }
@@ -1693,45 +1565,6 @@
         background: rgb(0 0 0 / 0.8);
         text-align: center;
         color: #fff;
-    }
-    .seek {
-        position: relative;
-    }
-    /* 細い帯。つまみは 1rem (切れ目の位置の計算がこれを前提にしている) */
-    .seek input {
-        --pico-range-thumb-height: 1rem;
-        --pico-range-thumb-width: 1rem;
-        --pico-range-height: 0.25rem;
-        --pico-range-thumb-color: var(--pico-primary-background);
-        --pico-range-thumb-active-color: var(--pico-primary-background);
-        width: 100%;
-        height: 1rem;
-        margin: 0;
-        accent-color: var(--pico-primary-background);
-    }
-    .marks {
-        pointer-events: none;
-        position: absolute;
-        left: 0;
-        right: 0;
-        top: 0;
-        height: 0.25rem;
-    }
-    .mark {
-        position: absolute;
-        top: 0;
-        height: 0.25rem;
-        width: 1px;
-        background: rgb(255 255 255 / 0.7);
-    }
-    .buttons {
-        --gap: 0.25rem;
-        margin-top: 0.25rem;
-        color: #fff;
-    }
-    /* 狭い枠では全画面だけ右端へ寄せる (読みものが上の行へ移って、間を埋めるものが無い) */
-    :global(.stage[data-compact]) .buttons > :global(:last-child) {
-        margin-left: auto;
     }
     .local {
         flex-shrink: 0;

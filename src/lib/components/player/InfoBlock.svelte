@@ -44,11 +44,11 @@
     <div class="top">
         {#if badge}{@render badge()}{/if}
         <span class="keep">
-            {#if range !== null}{time(range.start)} 〜 {time(range.end)} ・ {/if}{service}
+            {#if range !== null}{time(range.start)} 〜 {time(range.end)} ・ {/if}<span class="broadcast">{service}</span>
         </span>
         {#if title !== null && title !== ''}
             <span class="cut">
-                ・ <span data-testid={titleTestid}>{title}</span>
+                ・ <span class="broadcast" data-testid={titleTestid}>{title}</span>
             </span>
         {/if}
     </div>

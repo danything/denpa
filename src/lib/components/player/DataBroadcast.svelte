@@ -1,4 +1,5 @@
 <script module lang="ts">
+    import { denpaFontUrl } from '#lib/font.js';
     import { resolve } from '$app/paths';
     /**
      * **画面の d ボタン。テレビと同じ振る舞い。** 出ている文書が d を聞いていれば
@@ -253,7 +254,7 @@
      */
     const FONTS = {
         roundGothic: {
-            source: `url('${resolve('api/font/denpa-font.woff2')}') format('woff2'), local('Hiragino Maru Gothic ProN'), local('Meiryo')`,
+            source: `url('${denpaFontUrl()}') format('woff2'), local('Hiragino Maru Gothic ProN'), local('Meiryo')`,
         },
         squareGothic: { source: "local('Hiragino Kaku Gothic ProN'), local('Meiryo'), local('MS Gothic')" },
     };

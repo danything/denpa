@@ -207,6 +207,7 @@ test.describe('操作したときの反応', () => {
 
         await goto(page, '/rules');
         await page.getByTestId('rule-row').first().getByTestId('rule-delete').click();
+        await page.getByTestId('rule-delete-confirm').click();
         await expect(page.getByTestId('rule-row')).toHaveCount(0);
 
         // ルールが無くなったのに予約だけ残ると、止めたつもりが録れ続ける

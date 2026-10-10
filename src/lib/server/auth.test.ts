@@ -11,10 +11,6 @@ import { config } from './config';
 describe('ファイルを取りに来る口', () => {
     test('録画の配信', () => {
         expect(isFilePath('/api/recordings/12/file')).toBe(true);
-        // 尻に番組名を付けた形 (プレイヤーの見出し用)。読み捨てる1段だけ通す
-        expect(isFilePath('/api/recordings/12/file/%E7%95%AA%E7%B5%84.mkv')).toBe(true);
-        // 続きの位置から指す XSPF (テレビの VLC が取りに来る)。ファイルと同じ資格で開く
-        expect(isFilePath('/api/recordings/12/playlist/%E7%95%AA%E7%B5%84.xspf')).toBe(true);
     });
 
     test('画面と、それ以外の API は含まない', () => {
@@ -24,7 +20,8 @@ describe('ファイルを取りに来る口', () => {
         expect(isFilePath('/api/recordings/12/frame')).toBe(false);
         // 似ているだけの道。前方一致で緩めない
         expect(isFilePath('/api/recordings/12/files')).toBe(false);
-        expect(isFilePath('/api/recordings/12/file/a/b')).toBe(false);
+        expect(isFilePath('/api/recordings/12/file/a')).toBe(false);
+        expect(isFilePath('/api/recordings/12/playlist')).toBe(false);
     });
 });
 

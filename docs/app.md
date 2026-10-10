@@ -75,6 +75,9 @@ EPGStation の置き換えとして作ったもので、エンコード設定は
 | `src/lib/server/logo-own.ts` | 覚えるコマを ffmpeg で抜き (当てるコマは cm-scan から受け取る)、覚えたもの (`own-logo-<幅>x<高さ>.bin`) を局ごとの入れ物に置く |
 | `src/lib/components/ProgramFacts.svelte` | 番組の中身そのもの (枠は持たない)。モーダルと観る画面の両方から使う |
 | `src/lib/components/LearnedLogo.svelte` | CM検出用に覚えたロゴを画面で確かめ、捨てる |
+| `src/lib/components/ServiceLogo.svelte` | 局ロゴ (一覧・番組表・ライブ)。まだ拾えていない局の出し方は画面ごと |
+| `src/lib/components/ActionButton.svelte` / `ArmedDelete.svelte` | 送るだけのボタン (`submitting` 付きの POST) と、2回押しで消すボタン (`arming.svelte.ts`。録画・予約・ルール・通知先) |
+| `src/lib/components/JobProgress.svelte` | 時間の掛かる仕事の進み具合 (帯と「いくつ中いくつ」) |
 | `src/lib/components/Toasts.svelte` | 押した結果を画面の右下に浮かせて出す (本文を押し下げない) |
 | `src/lib/paging.svelte.ts` / `paging.ts` | 長い一覧を少しずつ出す (`Paged` + `sentinel`。無限スクロール) と、その代わりの絞り込み (`matches`。空白区切りの語をすべて含む)。予約・録画・ルールの一覧が使う |
 | `src/lib/ts/psi.ts` | TS の PSI (PAT / PMT / NIT / SDT) を読む。チャンネルスキャンで局の一覧を知るのに使う (エージェントは NIT も SDT も読まない) |
@@ -90,9 +93,8 @@ EPGStation の置き換えとして作ったもので、エンコード設定は
 | `src/lib/ts/synth.ts` | TS のセクションを組み立てる (テストと偽エージェント用) |
 | `src/lib/server/migrate.ts` | EPGStation からの引き継ぎ ([migrate.md](migrate.md)) |
 | `src/lib/server/share.ts` | 期限付きの再生リンク (プレイヤーへ渡す) |
-| `src/lib/server/title.ts` | 番組名からシリーズ名・編 (`「作品名」〇〇編` `第2期`)・副題を切り出す。一覧の名前 (`displayTitle`) とプレイヤーに渡す名前 (`markedTitle`。`[字]` `[デ]` を残す) |
+| `src/lib/server/title.ts` | 番組名からシリーズ名・編 (`「作品名」〇〇編` `第2期`)・副題を切り出す。一覧と入れ物の title の名前 (`displayTitle`) |
 | `src/lib/server/paths.ts` | 前段の接頭辞 (`/denpa` など) の下でも動く URL。転送は相対、外に渡す絶対 URL だけ `X-Forwarded-Prefix` / `X-Ingress-Path` を頭に付ける (`publicBase`) |
-| `src/lib/server/playlist.ts` | 続きの位置から始めさせる XSPF (VLC などのプレイヤーに、ファイルの代わりに渡す) |
 | `src/lib/server/auth.ts` | どの口をどう守るか ([auth.md](auth.md)) |
 | `src/lib/server/address.ts` | アドレスと CIDR の判定、前段越しの本当の接続元 (`TRUSTED_PROXIES`)。入口の `server.js` もこれを直に import する (イメージにもこの1枚を置く) ([auth.md](auth.md#前段の後ろに置くとき-trusted_proxies)) |
 | `src/lib/server/oidc.ts` | OIDC (discovery・PKCE・ID トークンの検証)。ライブラリは使っていない |
@@ -329,12 +331,12 @@ SQLite が拒むので、事実と状態が食い違いません。文字列で�
 | `/login` / `/login/callback` / `/logout` | OIDC でのログインとログアウト。`/login` と `/login/callback` は設定していなければ 404。`/logout` はいつでも控えを消して `/login/out` へ ([auth.md](auth.md)) |
 | `/device` | テレビのアプリの QR で開く画面。開くと自分でフォームを送って (POST) ペアリングを済ませ、端末の名前を出す ([auth.md](auth.md#アプリのペアリング)) |
 | `/api/services/<id>/logo-data` | CM検出のためにいま覚えているロゴ (線の向きの揃い方の白黒PNG)。番組表に出すロゴとは別物で、絵になっているかを確かめるためのもの |
-| `/api/recordings/<id>/share` | 期限付きの再生リンクを作る (share.ts)。**リンクの尻は `/file/<番組名>.mkv`** (生TS の名指しなら `.m2ts`。番組名は `[字]` `[デ]` を残す `markedTitle`)。VLC などのプレイヤーは URL の最後の区切りを見出しにする (入れ物の title は効かない) ので、名前をここに乗せる。サーバはその段を読み捨てる (`file/[name]/+server.ts`) |
+| `/api/recordings/<id>/share` | 期限付きの再生リンクを作る (share.ts)。返すのは `/api/recordings/<id>/file?token=…` (`?source=` の名指しも写す。ダウンロードの口も同じものを使う) |
 | 画面の高さの採り方 | **単位で言い当てない。** `app.css` が `html, body` に高さを与え、土台も番組詳細の窓もそこから `%` で降りる。`100vh` も `100dvh` も実機の PWA (Android Chrome) で画面より 56px 大きく出た。56px は Chrome for Android のアドレスバーの高さそのもの。`%` なら JS も測り直しも要らず、描く前から正しい。`%` が届かないのは番組表の表だけ (畳まれる幅では途中の入れ物に高さが決まらない) で、そこは3つの単位のうち見えている範囲を超えない `svh` を使う |
 | `?measure` (どの画面でも) | **その端末の高さを読む札** (`components/Measure.svelte`)。窓・枠・中身の高さと、`dvh`/`svh`/`lvh`/`vh` の実測、はみ出している要素を出す。縦のはみ出しは端末でしか起きないことがあり (引っ込むアドレスバー、切り欠き)、自動運転のブラウザでは作れない。PWA にはアドレスバーが無いので、設定画面にも入り切りがある (そちらは覚える。端末ごとで、サーバには置かない) |
 | 長い一覧 (どの画面でも) | **少しずつ出す** (`paging.svelte.ts`)。予約・録画・ルールは最初に 1 画面と少しだけ描き、下端に近づいたら足す。数百行を一度に描くと開いた直後に一瞬止まって見えた。全部は描かないので Ctrl+F では探せず、一覧ごとに絞り込みの欄を置く (打った端から手元の行に当たる。録画は送ればサーバの絞り込みにもなる)。番組表のマスも同じ理由で数百個ずつ描く (描いている間は `guide-grid` に `aria-busy`)。遷移が 150ms を超えたら上端に細いバーを出す (`nav-progress`)。押してから次の画面が届くまで何も変わらないと「止まった」に見えていた |
 | ヘッダー (どの画面でも) | **新しい版が出ていれば札を出す** (`v1.8.0 が公開されています`。押せば GitHub のリリース)。サーバが 1 時間に 1 度、動いている版 (`DENPA_VERSION`。リリースのイメージにだけ入っている) と GitHub の最新のリリースを数で比べる (`server/update.ts`)。develop のイメージは版を持たないので出さない (main を追う限りリリースより常に先)。リリースを消せば、最新が消したあとの版になるので引っ込む。閉じる口は置いていない (上げるか、消えるまで出ている) |
-| `/api/services`・`/api/recordings`・`/api/services/<id>/live` ほか | 画面の外のもの (テレビのアプリ・Home Assistant・スクリプト・VLC) 向けの口 (追っかけ・字幕・番組の中身・続き・変化の知らせ・ペアリングも)。形と使い方は [api.md](api.md) |
+| `/api/services`・`/api/recordings`・`/api/services/<id>/live` ほか | 画面の外のもの (テレビのアプリ・Home Assistant・スクリプト) 向けの口 (追っかけ・字幕・番組の中身・続き・変化の知らせ・ペアリングも)。形と使い方は [api.md](api.md) |
 | `/manifest.webmanifest` | PWA のマニフェスト。来た名前で表示名が変わるので静的ファイルではない。認証を掛けていない口の1つ (ブラウザが資格情報を付けずに取りに来るため。他は `/login*`・`/logout`・`/api/health`・`/api/device/code`・`/api/device/token`。`auth.ts` の `OPEN_PATHS`) |
 
 ## チューナーエージェント (`agent/`)

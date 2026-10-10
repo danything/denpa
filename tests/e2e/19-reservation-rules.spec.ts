@@ -86,6 +86,7 @@ test.describe('ルールで立った予約', () => {
 
         await goto(page, '/rules');
         await page.getByTestId('rule-row').first().getByTestId('rule-delete').click();
+        await page.getByTestId('rule-delete-confirm').click();
         await expect(page.getByTestId('rule-row')).toHaveCount(0);
 
         await goto(page, '/?all=1');
@@ -146,6 +147,7 @@ test.describe('ルールで立った予約', () => {
 
         await goto(page, '/rules');
         await page.getByTestId('rule-row').first().getByTestId('rule-delete').click();
+        await page.getByTestId('rule-delete-confirm').click();
         await expect(page.getByTestId('rule-row')).toHaveCount(0);
 
         await goto(page, '/');
