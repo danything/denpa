@@ -291,7 +291,7 @@ export function splitReaderName(name: string): { name: string; where: string | n
     return { name: found[1] ?? name, where: found[2] ?? null };
 }
 
-/** ロゴまで見て判定できたときの覚え書き (`cm.detectCm`) */
+/** ロゴまで見て判定できたときの覚え書き (`cm.openCm`) */
 export const LOGO_OK = 'ロゴ';
 
 /**

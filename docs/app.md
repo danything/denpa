@@ -32,7 +32,6 @@ EPGStation の置き換えとして作ったもので、エンコード設定は
 | `src/lib/ts/cm-decide.ts` | CM の境目を決める (ロゴの消えている所を無音の切れ目と CM の並びで詰める。ロゴが無ければ CM の尺だけで。純粋関数) |
 | `src/lib/server/encoder.ts` | 録画のエンコード (AV1 / H.264) |
 | `src/lib/server/hwenc.ts` | GPU (QSV / VA-API) で焼けるかを起動時に確かめ、口ごとの道を決める。共有の型と名前は `src/lib/hw.ts` |
-| `src/lib/server/subtitle.ts` | ARIB字幕を絵にして `.sup` にする (sub2video) |
 | `src/lib/server/databroadcast.ts` | データ放送。1局に絞った TS を解いて、組み立て終わったモジュールを配る |
 | `src/lib/ts/bml.ts` | データ放送を解く (PMT の記述子 → カルーセル → ファイル) |
 | `src/lib/ts/dsmcc.ts` | データカルーセル (DSM-CC) の DII/DDB。ロゴとデータ放送で分け合う |
@@ -220,7 +219,7 @@ SQLite が拒むので、事実と状態が食い違いません。文字列で�
 | `CHANNEL_SYNC_INTERVAL` | `60000` | 局だけを取り直す間隔(ms)。スキャンの結果はここで届く |
 | `SERVICE_FORGET_AFTER` | `1800000` | 局を見かけなくなってから持ち物を片付けるまで(ms)。1回の欠けでは片付けない |
 | `RULE_RETRACT_GRACE` | `3600000` | 条件から外れた予約を引っ込めなくなる、放送開始までの余裕(ms) |
-| `CM_CUT_MARGIN` | `0.8` | CMを実カットするとき、残す区間の頭を戻す長さ(秒) |
+| `CM_CUT_MARGIN` | `0.8` | CMを実カットするとき、境目にキーフレームが無ければ CM 側へ寄せてよい長さ(秒) |
 | `FPS_SURVIVE` | `0.5` | コマ数の実測の閾値。60コマ化→重複落とし後の生存率がこれ以下なら30コマ ([encode.md](encode.md#コマ数は本編の映像から測って決める)) |
 | `BML_DNS` | `1.1.1.1,8.8.8.8` | データ放送の双方向で名前を引く DNS。家庭の DNS フィルタが局のドメインを 0.0.0.0 に落とすことがあるので、素の DNS を名指しする。空なら OS の設定どおり |
 | `SHUTDOWN_WAIT` | `21600000` | 止められたとき、録画が終わるまで待つ上限(ms)。`0` で待たない。エージェントも同じ変数を見る |

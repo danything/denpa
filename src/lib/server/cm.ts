@@ -1,7 +1,7 @@
 import { LOGO_OK, LOGO_UNUSABLE } from '../format';
 import { decideCm, type Range } from '../ts/cm-decide';
 import type { CmMode } from '../types';
-import { type Scan, scan } from './cm-scan';
+import { type Scan, type ScanWant, scan } from './cm-scan';
 import { config } from './config';
 import { logoRepo, share } from './logo-data';
 import { openLogo } from './logo-own';
@@ -74,40 +74,13 @@ export function invertRanges(ranges: Range[], duration: number): Range[] {
 }
 
 /**
- * 残す区間の**頭を少し前へ戻す**。
- *
- * 切り出しは `-ss` で頭出ししてから `-c copy` するので、**キーフレーム単位**に
- * なる。ffmpeg は指定した時刻の次のキーフレームから書き出すため、本編の頭が
- * 1 GOP ぶん (地上波の MPEG-2 で 0.5 秒ほど) 削れることがある。実機でも
- * 「本編の頭が一瞬欠ける」形で出ていた。
- *
- * 戻したぶんだけ CM の尻が残るが、**本編を削るよりそちらのほうが被害が小さい**
- * (この判断は `MAX_CM_RATIO` と同じ)。
- *
- * 戻した結果 前の区間とくっついたら1つにまとめる (切り出しが1回減る)。
- */
-export function widenKeep(keep: Range[], margin: number): Range[] {
-    const out: Range[] = [];
-    for (const range of [...keep].sort((a, b) => a.start - b.start)) {
-        const previous = out.at(-1);
-        const start = Math.max(0, range.start - margin, previous?.end ?? 0);
-        if (previous !== undefined && start <= previous.end) {
-            previous.end = Math.max(previous.end, range.end);
-            continue;
-        }
-        out.push({ start, end: range.end });
-    }
-    return out;
-}
-
-/**
  * 区間の時刻を、捨てた頭のぶんだけ前へ詰める。
  *
  * エンコードは頭 (映像が出るまでの音声だけの区間、実機で 0.5〜0.9 秒) を
  * `-ss` で捨てて 0 秒から始める (`encoder.headSkip`)。検出した時刻をそのまま
  * チャプターに書くと**全チャプターがそのぶん遅れて入り**、CMの自動スキップは
  * 毎回そのぶんCMを見せてから跳んで、着地も本編に食い込んでいた
- * (字幕は同じ引き算をしている。`subtitle.rebase`)。
+ * (字幕は焼く ffmpeg が映像と一緒に詰める)。
  *
  * 詰めた結果ほとんど残らない区間は落とす (invertRanges の 0.5 秒と同じ判断)。
  */
@@ -116,19 +89,6 @@ export function shiftRanges(ranges: Range[], by: number): Range[] {
     return ranges
         .map((r) => ({ start: Math.max(0, r.start - by), end: r.end - by }))
         .filter((r) => r.end - r.start > 0.5);
-}
-
-/**
- * 一番長い区間を返す。コマ数の実測 (encoder.measureSmoothMotion) が測る場所を
- * 選ぶのに使う — 最初の本編区間はアバン+OPに当たりやすく、OPの激しい動きが
- * 60コマ判定に化ける (本番の実測)。一番長い区間なら本編そのもの。
- */
-export function longestRange(ranges: Range[]): Range | null {
-    let longest: Range | null = null;
-    for (const r of ranges) {
-        if (longest === null || r.end - r.start > longest.end - longest.start) longest = r;
-    }
-    return longest;
 }
 
 /**
@@ -268,9 +228,9 @@ export async function probeVideo(input: string): Promise<{
          *
          * ffmpeg は入力の時刻からこれを引いて 0 から数え直す。**同じ TS を
          * 別々に ffmpeg へ通すときは、双方が同じものを引いていないと噛み合わない** —
-         * 字幕を絵にするとき (`subtitle.ts`) がまさにそれで、あちらは
+         * 字幕を絵にしていた頃 (PGS) がまさにそれで、あちらは
          * 字幕1枚目を 0 とみなしていたため、出来上がりで字幕だけ 10 秒早く出ていた。
-         * 引く数をこちらから渡して揃える
+         * 頭出し (`probeLeadIn`) もこれを引いて測る
          */
         formatStart: Number.isFinite(formatStart) ? formatStart : NaN,
         /** 映像の最初の**パケット**の時刻 (PTS)。復号できるコマを探せなかったときの代用 */
@@ -426,143 +386,151 @@ export interface CmOptions {
     serviceId: number;
     /** 番組の尺 (秒。番組表)。録画の頭と尻に入った前後の番組を見分けるのに使う */
     programLength?: number;
-    /** 番組表どおりなら番組が始まる秒 (録画の前のマージン) */
+    /** 番組表どおりなら番組が始まる秒 (録画の前のマージン。入れ物の頭から) */
     programStart?: number;
-    /** 読み込みの進み具合 (0〜1) */
-    onProgress?: (percent: number) => void;
     /** いま何をしているか。段階の名前だけでは進み具合が分からない */
     onStep?: (label: string) => void;
 }
 
-/**
- * CM区間を求める。
- *
- * **返す秒は ffmpeg の時刻** (入れ物の頭から)。焼くときは頭を捨てる `-ss` と同じだけ詰める
- * (`encoder.rebaseChapters`)。TS を切るとき (`-ss`) はそのまま使える
- */
-export async function detectCm(input: string, options: CmOptions): Promise<CmDetection> {
-    const { signal, onProgress, serviceId } = options;
-    const step = options.onStep ?? (() => {});
-    /*
-     * 尺は先に測る。進み具合の分母と、ロゴを覚えるときにキーフレームを散らす間隔に要る。
-     * フレームレートはロゴの区間をならす窓の幅に使う
+/** 読み方 (`openCm`) と、読んだ材料からの決め方 */
+export interface CmReading {
+    /**
+     * 1回の復号で何を読むか。エンコードの ffmpeg に `cm-scan.scanReader` の出口を足す。
+     * **復号するたびに呼ぶ** — ロゴの点は読むたびに一から数える (焼き直しで途中までを持ち越さない)
      */
+    want(): ScanWant;
+    /**
+     * 読み終えた材料から CM を決める。
+     *
+     * 材料の時刻は**頭を `skip` 秒捨てた ffmpeg の時刻** (エンコードの `-ss` と同じだけ。`before` はその引数)。
+     * 返す区間も同じ物差し — つまり**焼いたものの時刻**。ロゴを覚え直したときは、枠だけ同じ捨て方で読み直す。
+     * `video` が偽なら絵は読めていない (音だけ読み直した) ので、尺だけで決める
+     */
+    decide(found: Scan, at: { skip: number; before: string[]; video?: boolean }): Promise<CmDetection>;
+}
+
+/**
+ * CM検出の支度。尺と絵の大きさを測り、ロゴを開く (覚えていなければこの録画から覚える。
+ * キーフレームだけ読むので速い)。**覚えられなくても続ける** — 無音と切れ目だけで決め直せる
+ */
+export async function openCm(input: string, options: CmOptions): Promise<CmReading> {
+    const { signal, serviceId } = options;
+    const step = options.onStep ?? (() => {});
     const probed = await probeVideo(input);
     const { duration: measured } = probed;
+    // フレームレートはロゴの区間をならす窓の幅に使う
     const fps = Number.isFinite(probed.fps) ? probed.fps : config.cmFallbackFps;
-    const deadline = Date.now() + config.cmDetectTimeout;
-    const left = () => Math.max(0, deadline - Date.now());
-    /** ロゴが使えなかった理由。尺だけで決めたときの覚え書きに足す */
-    let why = '';
+    // 絵の無い録画 (ラジオ。尺は測れて大きさが無い) は音だけ読む。絵の出口を足すと ffmpeg ごと落ちる
+    const video = !(Number.isNaN(probed.width) && Number.isFinite(measured));
+    /** 支度で分かった、ロゴが使えない理由 (`decide` が尺だけで決めたときの覚え書きに足す) */
+    let opening = video ? '' : '絵がありません';
 
-    /*
-     * 1. ロゴを覚えていれば読み、無ければこの録画から覚える (キーフレームだけ読むので速い)。
-     *    **覚えられなくても読み込みは続ける** — 無音と切れ目だけで決め直せる
-     */
     let logo: Exclude<Awaited<ReturnType<typeof openLogo>>, string> | null = null;
-    step('局ロゴを確かめています');
-    const opened =
-        probed.width > 0 && probed.height > 0
-            ? await openLogo(input, probed, { repo: logoRepo(serviceId), signal, deadline })
-            : '大きさが測れませんでした';
-    if (typeof opened === 'string') why = `ロゴ判定が失敗: ${opened}`;
-    else logo = opened;
-
-    // 2. 1回だけ復号して、無音・切れ目・ロゴの枠をまとめて読む
-    step('無音と場面の切れ目とロゴを読んでいます');
-    const read = (video: boolean) =>
-        scan(input, {
-            signal,
-            timeoutMs: left(),
-            video,
-            audio: true,
-            logo: video ? (logo?.scan ?? null) : null,
-            ...(onProgress ? { onProgress } : {}),
-            duration: measured,
-        });
-    const failed = (scan: Scan) =>
-        `${left() <= 0 ? '時間切れ' : '失敗'} (code ${scan.code}): ${scan.stderr.trim().split('\n').at(-1) ?? ''}`;
-    const stopped = () => signal?.aborted === true;
-    let found = await read(true);
-    if (stopped()) throw new Error('中止されました');
-    // 絵のほうで落ちたなら (壊れた絵・フィルタ)、音だけ読み直して尺だけで決める
-    if (found.code !== 0 && left() > 0) {
-        why = `絵の読み込みが${failed(found)}`;
-        logo = null;
-        found = await read(false);
-        if (stopped()) throw new Error('中止されました');
-    }
-    if (found.code !== 0) return { cm: [], duration: measured, note: `CM検出の読み込みが${failed(found)}` };
-
-    /*
-     * 秒は ffmpeg の時刻 (入れ物の頭から) のまま決める。焼くときに `-ss` と同じだけ詰める。
-     * 尺が ffprobe で測れなかったら、ffmpeg が言ってきた尺、それも無ければ読めた最後のコマで代える
-     */
-    const duration = Number.isFinite(measured)
-        ? measured
-        : Number.isFinite(found.duration)
-          ? found.duration
-          : (found.times.at(-1) ?? Number.NaN);
-    if (!Number.isFinite(duration)) return { cm: [], duration: measured, note: '尺が測れませんでした' };
-    const at = (frame: number) => (frame < found.times.length ? found.times[frame]! : duration);
-    const material = {
-        duration,
-        silences: found.silences,
-        times: found.times,
-        cuts: found.cuts,
-        ...(options.programLength !== undefined ? { programLength: options.programLength } : {}),
-        ...(options.programStart !== undefined ? { programStart: options.programStart } : {}),
-    };
-
-    // ロゴの枠とコマの時刻は順番で突き合わせる。数が合わなければ読み落としがあるので使わない
-    if (logo && found.logoFrames !== found.times.length) {
-        why = `ロゴの枠の数 (${found.logoFrames}) とコマの数 (${found.times.length}) が合いません`;
-        logo = null;
+    if (video) {
+        step('局ロゴを確かめています');
+        const opened =
+            probed.width > 0 && probed.height > 0
+                ? await openLogo(input, probed, {
+                      repo: logoRepo(serviceId),
+                      signal,
+                      timeoutMs: config.cmDetectTimeout,
+                  })
+                : '大きさが測れませんでした';
+        if (typeof opened === 'string') opening = `ロゴ判定が失敗: ${opened}`;
+        else logo = opened;
     }
 
-    // 3. ロゴの区間を出す (覚えていたものが当たらなければ、覚え直して枠だけ読み直す)
-    if (logo) {
-        step('本編とCMに分けています');
-        const result = await logo.finish(
-            fps,
-            async (again) =>
-                (await scan(input, { signal, timeoutMs: left(), video: true, audio: false, logo: again }))
-                    .code,
-        );
-        if (result.code === 0) {
-            console.log(`[cm] ロゴ判定: ${result.note}`);
-            /*
-             * **覚えたものを、同じ絵を映している局にも配る** (`logo-data.share`)。
-             * サブチャンネルの枠で録れた番組が一から覚え直さないように
-             */
-            if (result.learned !== null) share(serviceId, result.learned.file, result.learned.again);
-            const cm = decideCm({
-                ...material,
-                logo: result.spans.map((s) => ({ start: at(s.start), end: at(s.end + 1) })),
-                logoScores: result.scores,
-            });
-            if (cm.length === 0) why = 'ロゴの消えている所がありませんでした';
-            // 番組の半分以上がCMになったら、その結果は捨てて尺だけで決め直す (tooMuchCm)
-            else if (tooMuchCm(cm, duration))
-                why = `番組の ${cmRatio(cm, duration)}% がCMという結果だったので捨てました`;
-            else return { cm, duration, note: LOGO_OK };
-        } else {
-            why = `ロゴ判定が失敗: ${result.note}`;
-        }
-    }
-
-    // 4. ロゴを使わずに、CM の尺 (15秒の倍数) だけで決める
-    const cm = decideCm(material);
-    /*
-     * 落ちた理由まで書く。「無音 8 箇所」とだけ出していた頃は、
-     * なぜロゴを使わなかったのかが画面から分からなかった。
-     *
-     * **この文言から「ロゴで判定できなかった」と画面に出すかを決める** (format.logoUnusable)。
-     * 別の列で持っていた頃は、後から条件を広げても既に録ってある分に効かなかった
-     */
     return {
-        cm: tooMuchCm(cm, duration) ? [] : cm,
-        duration,
-        note: `無音 ${material.silences.length} 箇所 (${LOGO_UNUSABLE}: ${why})`,
+        want: () => ({ video, logo: logo?.scan() ?? null, audio: true }),
+        async decide(found, { skip, before, video: read = true }) {
+            /** ロゴが使えなかった理由。呼ぶたびに支度のときの理由から始める */
+            let why = opening;
+            /*
+             * 尺が ffprobe で測れなかったら、ffmpeg が言ってきた尺 (入れ物の尺)、
+             * それも無ければ読めた最後のコマで代える。捨てた頭のぶんは引く
+             */
+            const container = Number.isFinite(measured) ? measured : found.duration;
+            const duration = Number.isFinite(container)
+                ? container - skip
+                : (found.times.at(-1) ?? Number.NaN);
+            if (!Number.isFinite(duration) || duration <= 0)
+                return { cm: [], duration: Number.NaN, note: '尺が測れませんでした' };
+            const at = (frame: number) => (frame < found.times.length ? found.times[frame]! : duration);
+            const material = {
+                duration,
+                silences: found.silences,
+                times: found.times,
+                cuts: found.cuts,
+                ...(options.programLength !== undefined ? { programLength: options.programLength } : {}),
+                ...(options.programStart !== undefined ? { programStart: options.programStart - skip } : {}),
+            };
+
+            // ロゴの枠とコマの時刻は順番で突き合わせる。数が合わなければ読み落としがあるので使わない
+            let current = logo;
+            // 絵の読み込みが落ちて音だけ読み直したなら、尺だけで決める (`encoder.ts`)
+            if (!read) {
+                why = '絵の読み込みが失敗しました';
+                current = null;
+            }
+            if (current && found.logoFrames !== found.times.length) {
+                why = `ロゴの枠の数 (${found.logoFrames}) とコマの数 (${found.times.length}) が合いません`;
+                current = null;
+            }
+
+            // ロゴの区間を出す (覚えていたものが当たらなければ、覚え直して枠だけ読み直す)
+            if (current) {
+                step('本編とCMに分けています');
+                const result = await current.finish(
+                    fps,
+                    async (again) =>
+                        (
+                            await scan(input, {
+                                signal,
+                                timeoutMs: config.cmDetectTimeout,
+                                video: true,
+                                audio: false,
+                                logo: again,
+                                before,
+                            })
+                        ).code,
+                );
+                if (result.code === 0) {
+                    console.log(`[cm] ロゴ判定: ${result.note}`);
+                    /*
+                     * **覚えたものを、同じ絵を映している局にも配る** (`logo-data.share`)。
+                     * サブチャンネルの枠で録れた番組が一から覚え直さないように
+                     */
+                    if (result.learned !== null) share(serviceId, result.learned.file, result.learned.again);
+                    const cm = decideCm({
+                        ...material,
+                        logo: result.spans.map((s) => ({ start: at(s.start), end: at(s.end + 1) })),
+                        logoScores: result.scores,
+                    });
+                    if (cm.length === 0) why = 'ロゴの消えている所がありませんでした';
+                    // 番組の半分以上がCMになったら、その結果は捨てて尺だけで決め直す (tooMuchCm)
+                    else if (tooMuchCm(cm, duration))
+                        why = `番組の ${cmRatio(cm, duration)}% がCMという結果だったので捨てました`;
+                    else return { cm, duration, note: LOGO_OK };
+                } else {
+                    why = `ロゴ判定が失敗: ${result.note}`;
+                }
+            }
+
+            // ロゴを使わずに、CM の尺 (15秒の倍数) だけで決める
+            const cm = decideCm(material);
+            /*
+             * 落ちた理由まで書く。「無音 8 箇所」とだけ出していた頃は、ロゴを選んで
+             * いるのになぜ無音検出になったのかが画面から分からなかった。
+             *
+             * **この文言から「ロゴで判定できなかった」と画面に出すかを決める** (format.logoUnusable)。
+             * 別の列で持っていた頃は、後から条件を広げても既に録ってある分に効かなかった
+             */
+            const note = `無音 ${material.silences.length} 箇所`;
+            return {
+                cm: tooMuchCm(cm, duration) ? [] : cm,
+                duration,
+                note: `${note} (${LOGO_UNUSABLE}: ${why})`,
+            };
+        },
     };
 }

@@ -1,4 +1,5 @@
-import { existsSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
+import { dirname } from 'node:path';
 import {
     cellOf,
     expect,
@@ -170,7 +171,7 @@ test.describe('録画とエンコード', () => {
 });
 
 test.describe('CMの実カット', () => {
-    test('CMを切っても字幕は残る', async ({ page, request }) => {
+    test('CMを切っても字幕は残る', async ({ page, request, stack }) => {
         test.setTimeout(180_000);
         await syncEpg(request);
 
@@ -195,12 +196,31 @@ test.describe('CMの実カット', () => {
         const recording = page.locator(recordingRow);
         expect(await recording.getAttribute('data-cm-ranges')).toContain('300');
 
-        // 字幕はエンコードの前にTSを切ることで残している。
+        // 字幕も CM ごと焼いて、焼いたものと一緒に切る (cm-cut.ts)。
         // フィルタで切っていた頃は -sn で落とすしかなかった
         const videoPath = (await recording.getAttribute('data-library-path')) ?? '';
         expect(videoPath).toContain('.mkv');
-        // 切るための作業ファイルは片付いていること
-        expect(existsSync(`${videoPath.replace(/\.mkv$/, '')}.cut.m2ts`)).toBe(false);
+        // 切るための作業ファイル (焼いたものの隣) は片付いていること。偽の ffmpeg では切れずに CM ごと置かれる
+        // (ffprobe が無くキーフレームが読めない) が、片付けは同じ
+        expect(readdirSync(dirname(videoPath)).filter((name) => /\.(post|ffconcat)$/.test(name))).toEqual([]);
+
+        /*
+         * **1本目は場面の切れ目ごとにキーフレームを置いて焼き、境目にキーフレームが無ければ境目を指して
+         * ソフトウェアで焼き直す** (cm-cut.ts)。偽の ffmpeg ではキーフレームが読めない (ffprobe が無い) ので、
+         * 焼き直しまで進み、それでも切れずにチャプターに落ちる。境目 (300 秒・360 秒) を 1ms 手前で指していること
+         */
+        const id = (await recording.getAttribute('data-recording-id')) ?? '';
+        const mine = new RegExp(`-${id}\\.m2ts$`);
+        const runs = existsSync(stack.encodeArgsFile)
+            ? readFileSync(stack.encodeArgsFile, 'utf8')
+                  .split('---\n')
+                  .map((run) => run.split('\n'))
+                  .filter((run) => run.some((a) => a.endsWith('.encoding')))
+                  .filter((run) => run.some((a, i) => run[i - 1] === '-i' && mine.test(a)))
+            : [];
+        const keyframes = runs.map((run) => run[run.indexOf('-force_key_frames:v') + 1]);
+        expect(keyframes).toEqual(['scd_metadata', '299.999,359.999']);
+        expect(runs[1]).toContain('libsvtav1');
     });
 });
 
