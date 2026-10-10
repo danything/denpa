@@ -4,6 +4,7 @@ import {
     cellOf,
     expect,
     goto,
+    recordOne,
     reserveSoon,
     setRecording,
     syncEpg,
@@ -324,5 +325,44 @@ test.describe('エンコードしない', () => {
         await page.getByTestId('codec-av1').check();
         await page.getByTestId('save-recording').click();
         await expect(page.getByTestId('saved-result')).toBeVisible();
+    });
+});
+
+test.describe('CM検出のやり直し', () => {
+    test.afterEach(async ({ request }) => {
+        await setRecording(request);
+    });
+
+    /*
+     * **CM 検出だけやり直す** (詳細の「その他…」)。焼き直さずに CM を探し直して、焼いたもののチャプターを
+     * 書き直す (`encoder.runCmJob`)。CM を探さずに焼いた録画で押せば、探した結果が入る。
+     * 生TSは焼き終えると消える設定 (既定) なので、焼いたものから読む
+     */
+    test('CM検出だけやり直せる (焼き直さない)', async ({ page, request }) => {
+        test.setTimeout(180_000);
+        await setRecording(request, { cmCut: 'off' });
+        const { id, libraryPath } = await recordOne(page, request);
+        const row = page.locator(`[data-testid="recording-row"][data-recording-id="${id}"]`);
+        expect(await row.getAttribute('data-cm-ranges')).toBeNull();
+
+        await setRecording(request, { cmCut: 'chapter' });
+        await goto(page, '/');
+        await row.getByTestId('detail-button').click();
+        const detail = page.getByTestId('program-detail');
+        await detail.getByTestId('detail-more').click();
+        await detail.getByTestId('cm-redo-button').click();
+
+        // 焼くジョブと同じ待ち行列に並ぶ。終われば CM が入り、置き場所は変わらない (焼き直していない)
+        await expect
+            .poll(
+                async () => {
+                    await goto(page, '/');
+                    return row.getAttribute('data-cm-ranges');
+                },
+                { timeout: 60_000, intervals: [500] },
+            )
+            .toContain('300');
+        await waitWatchable(page, row);
+        expect(await row.getAttribute('data-library-path')).toBe(libraryPath);
     });
 });

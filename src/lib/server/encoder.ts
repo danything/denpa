@@ -15,7 +15,7 @@ import { and, eq, getTableColumns, inArray, sql } from 'drizzle-orm';
 import { audioTitles, DUAL_MONO } from '#lib/arib.js';
 import { HW_KIND_LABEL, type HwCodec } from '../hw';
 import { encodeSource } from '../source';
-import type { EncodeJob, EncodePhase, Recording } from '../types';
+import type { EncodeJob, EncodeKind, EncodePhase, Recording } from '../types';
 import { programSpec } from './captions';
 import {
     type CmDetection,
@@ -556,13 +556,17 @@ export function activeEncodeJob(recordingId: number): number | undefined {
         .get()?.id;
 }
 
-export function enqueue(recordingId: number): number {
+/**
+ * 待ち行列に入れる。**その録画に生きているジョブがあれば、それを返すだけ** (種類が違っても) —
+ * 焼いている最中に CM 検出のやり直しを重ねる (またはその逆) と、同じファイルを2つが書き換える
+ */
+export function enqueue(recordingId: number, kind: EncodeKind = 'encode'): number {
     const existing = activeEncodeJob(recordingId);
     if (existing !== undefined) return existing;
 
     return orm()
         .insert(encodeJobs)
-        .values({ recording_id: recordingId, state: 'queued', created_at: now() })
+        .values({ recording_id: recordingId, kind, state: 'queued', created_at: now() })
         .returning({ id: encodeJobs.id })
         .get()!.id;
 }
@@ -1043,12 +1047,12 @@ function markFailed(jobId: number, reason: string): void {
  * 録画そのものを「失敗」にすると観られるはずのものが観られなくなる (実際にそうなっていた)。
  * 理由はジョブが持ち、一覧は最新のジョブを見て出す
  */
-function fail(jobId: number, recording: Recording, reason: string): void {
+function fail(jobId: number, recording: Recording, reason: string, what = 'エンコード'): void {
     markFailed(jobId, reason);
     emit('recordings');
     notify({
         event: 'encode.failed',
-        text: `エンコードに失敗しました: ${recording.name} (${recording.service_name})`,
+        text: `${what}に失敗しました: ${recording.name} (${recording.service_name})`,
         recording: recordingSummary(recording),
         error: reason,
     });
@@ -1279,7 +1283,7 @@ async function runJob(jobId: number): Promise<void> {
      * どれか1つでも失敗すれば、そのジョブごと失敗にする (途中まで置いたものは消す)。
      */
     const codecs = settings().codecs.length > 0 ? settings().codecs : (['av1'] as const);
-    const placed: { codec: HwCodec; path: string }[] = [];
+    const placed: { codec: HwCodec; path: string; skip: number }[] = [];
     // 測れなかったときの尺の当て。ffmpeg が言ってきた値 (下の duration_ms)
     let lastOutTimeUs = 0;
     /** CM 検出の結果 (入れ物の頭からの秒)。1本目を焼き終えたら決まる */
@@ -1617,7 +1621,7 @@ async function runJob(jobId: number): Promise<void> {
          * ずれた字幕が付いたままになる
          */
         removeIfExists(sidecarPaths(output).subtitle);
-        placed.push({ codec, path: output });
+        placed.push({ codec, path: output, skip });
     }
 
     // 主は AV1 (小さいので既定の再生に向く)。無ければ焼いたほう
@@ -1708,7 +1712,19 @@ async function runJob(jobId: number): Promise<void> {
     // 主は AV1 (`output`)、もう一方は `alt` (両方焼いたときだけ)。
     // コマ数 (実測か既定の60) も一緒に書く — 番組詳細の札はここからしか出せない
     const fps = encodeOptions.smoothMotion === true ? 60 : 30;
-    const finished = { library_path: output, alt_path: alt, ts_size: size, fps, updated_at: now() };
+    /*
+     * 切って残した区間と、頭から捨てた長さも書く。CM 検出をやり直すとき (`runCmJob`) に、
+     * 切ったものかどうか・生TSの時刻を焼いたものの時刻へどう直すかを、これで知る
+     */
+    const finished = {
+        library_path: output,
+        alt_path: alt,
+        ts_size: size,
+        fps,
+        cm_kept: kept,
+        encode_skip: primary.skip,
+        updated_at: now(),
+    };
     if (settings().keepOriginal) {
         orm().update(recordings).set(finished).where(eq(recordings.id, recording.id)).run();
     } else {
@@ -1721,11 +1737,187 @@ async function runJob(jobId: number): Promise<void> {
     }
 }
 
+/**
+ * **CM 検出だけやり直す** (録画の詳細の「その他…」→「CM検出をやり直す」)。焼き直さない。
+ *
+ * - 生TSがあれば生TSから、無ければ焼いたもの (mkv) から読む。どちらからでもロゴ・切れ目・無音は取れる
+ *   (焼いたものは絵の大きさが違うので、ロゴは大きさごとに覚えたものを使う。`logo-own.modelFile`)
+ * - 境目は入れ物の頭からの秒で覚える (`cm_ranges`。焼くときと同じ物差し)。焼いたものから読んだなら
+ *   焼いたときに捨てた頭 (`encode_skip`) を足して直す
+ * - 焼いたものには CM の扱いの設定どおりにチャプターを書き直す: 「チャプター」「切り取る」なら差し替え、
+ *   「何もしない」なら外す。`-c copy` で写すだけ
+ * - **CM を切って焼いたもの (`cm_kept`) は戻せない**ので受けない (ボタンの側で断っている。ここは念のため)
+ *
+ * 待ち行列・中止・進み具合・失敗の知らせは焼くジョブと同じ (`pump`)
+ */
+async function runCmJob(jobId: number): Promise<void> {
+    const controller = new AbortController();
+    aborts.set(jobId, controller);
+    const signal = controller.signal;
+    const what = 'CM検出';
+
+    const job = orm().select().from(encodeJobs).where(eq(encodeJobs.id, jobId)).get()!;
+    const recording = orm().select().from(recordings).where(eq(recordings.id, job.recording_id)).get();
+    if (recording === undefined) {
+        markFailed(jobId, '録画が見つかりません');
+        return;
+    }
+    if (recording.cm_kept !== null) {
+        fail(jobId, recording, CM_CUT_ALREADY, what);
+        return;
+    }
+    // 掛かったままの生TSは解かない (焼くジョブの仕事)。焼いたものがあればそちらを読む
+    // 焼かずに置いた録画 (「エンコードしない」) は、置き場の TS が生TSそのもの
+    const placedTs = recording.library_path?.endsWith('.mkv') === false ? recording.library_path : null;
+    const raw = encodeSource(recording) ?? placedTs;
+    const ts = raw !== null && !isScrambled(raw) ? raw : null;
+    const files = [recording.library_path, recording.alt_path].filter(
+        (path): path is string => path?.endsWith('.mkv') === true && existsSync(path),
+    );
+    const input = ts ?? files[0];
+    if (input === undefined) {
+        fail(jobId, recording, 'CMを探す元 (生TS・焼いたもの) がありません', what);
+        return;
+    }
+    emit('recordings');
+
+    /*
+     * 焼いたものの時刻 = 入れ物の頭からの秒 − 焼いたときに捨てた頭。覚えていない (この列を足す前に焼いた)
+     * なら、焼くときと同じく生TSの頭の音声だけの区間から出す (再試行で足した頭捨ては分からない)
+     */
+    let skip = recording.encode_skip ?? 0;
+    if (recording.encode_skip === null && ts !== null) {
+        const probed = await probeVideo(ts);
+        skip = headSkip(await probeLeadIn(ts, probed.formatStart, probed.packetStart));
+    }
+    /*
+     * **焼いたものが生TSより明らかに短ければ、切って焼いたもの**とみなして断る。生TSの時刻で書いた
+     * チャプターが合わなくなる。`cm_kept` を覚える前に切って焼いた録画もこれで止まる
+     */
+    if (ts !== null && files[0] !== undefined) {
+        const [whole, made] = await Promise.all([probeVideo(ts), probeVideo(files[0])]);
+        if (whole.duration - skip - made.duration > CUT_SHORTER) {
+            fail(jobId, recording, CM_CUT_ALREADY, what);
+            return;
+        }
+    }
+    /** 読んだものの時刻を入れ物の頭からの秒に直すぶん。生TSなら 0 */
+    const shift = ts === null ? skip : 0;
+
+    let detection: CmDetection;
+    try {
+        setPhase(jobId, 'cm', '局ロゴを確かめています');
+        const programStart =
+            (recording.start_at - (recording.record_from ?? recording.start_at - config.startMargin)) / 1000;
+        const reading = await openCm(input, {
+            signal,
+            serviceId: recording.service_id,
+            programLength: (recording.end_at - recording.start_at) / 1000,
+            programStart: programStart - shift,
+            onStep: (label) => setStep(jobId, label),
+        });
+        if (canceled.has(jobId)) return finishCanceled(jobId, null);
+        setStep(jobId, `${ts === null ? '焼いたもの' : '生TS'}から無音と場面の切れ目とロゴを読んでいます`);
+        const report = progressReporter(jobId, reading.duration);
+        const found = await scan(input, {
+            ...reading.want(),
+            signal,
+            timeoutMs: config.cmDetectTimeout,
+            onTime: report,
+        });
+        if (canceled.has(jobId)) return finishCanceled(jobId, null);
+        if (found.code !== 0) {
+            fail(jobId, recording, `読み込みに失敗しました (code ${found.code}): ${found.stderr}`, what);
+            return;
+        }
+        const decided = await reading.decide(found, { skip: 0, before: [] });
+        detection = {
+            ...decided,
+            cm: decided.cm.map((range) => ({ start: range.start + shift, end: range.end + shift })),
+            duration: decided.duration + shift,
+        };
+    } catch (error) {
+        if (canceled.has(jobId)) return finishCanceled(jobId, null);
+        fail(jobId, recording, String(error), what);
+        return;
+    }
+    setStep(jobId, `CM ${detection.cm.length} 箇所 (${detection.note})`);
+
+    /*
+     * 焼いたものにチャプターを書き直す。「何もしない」なら外す。
+     * **全部書き終えてから差し替える** — 2本 (AV1 と H.264) のうち片方だけ新しくなる形を残さない。
+     * 覚え書き (`cm_ranges`) も差し替えたあとに書く
+     */
+    const cm = settings().cmCut === 'off' ? [] : shiftRanges(detection.cm, skip);
+    const chapters = cm.length > 0 ? `${input}.${jobId}.chapters.txt` : null;
+    if (chapters !== null) writeFileSync(chapters, chapterMetadata(cm, detection.duration - skip));
+    const outputs = files.map((file) => `${file}.${jobId}.post`);
+    const discard = () => {
+        for (const output of outputs) removeIfExists(output);
+    };
+    try {
+        for (const [i, file] of files.entries()) {
+            const output = outputs[i]!;
+            const code = (await run(chapterArgs(file, chapters, output), { signal })).code;
+            if (canceled.has(jobId)) {
+                discard();
+                return finishCanceled(jobId, null);
+            }
+            if (code !== 0 || !existsSync(output)) {
+                discard();
+                fail(jobId, recording, `チャプターを書き直せませんでした (code ${code})`, what);
+                return;
+            }
+        }
+        for (const [i, file] of files.entries()) renameSync(outputs[i]!, file);
+    } finally {
+        removeIfExists(chapters);
+    }
+    orm()
+        .update(recordings)
+        .set({ cm_ranges: detection.cm, cm_note: detection.note, updated_at: now() })
+        .where(eq(recordings.id, recording.id))
+        .run();
+
+    orm()
+        .update(encodeJobs)
+        .set({ state: 'done', percent: 1, finished_at: now() })
+        .where(eq(encodeJobs.id, jobId))
+        .run();
+    emit('recordings');
+}
+
+/** 焼いたものが生TSよりこれ以上短ければ、CM を切って焼いたものとみなす (秒。CM は 15 秒から) */
+const CUT_SHORTER = 5;
+
+/** CM を切って焼いた録画は、焼いたものから CM を戻せない。やり直すなら生TSから焼き直す */
+export const CM_CUT_ALREADY = 'CMを切って焼いた録画です。CMを検出し直すには再エンコードしてください';
+
+/**
+ * 段階の中の進み具合 (CM 検出だけやり直すとき)。読んだコマの時刻 ÷ 尺。
+ * 書き戻しはエンコード中と同じ間隔まで (細かく書くと WAL が膨らむだけ)
+ */
+function progressReporter(jobId: number, duration: number): (seconds: number) => void {
+    let lastWrite = 0;
+    return (seconds) => {
+        if (!(Number.isFinite(duration) && duration > 0)) return;
+        const at = Date.now();
+        if (at - lastWrite < PROGRESS_INTERVAL) return;
+        lastWrite = at;
+        orm()
+            .update(encodeJobs)
+            .set({ percent: Math.min(0.99, Math.max(0, seconds / duration)) })
+            .where(eq(encodeJobs.id, jobId))
+            .run();
+        emit('recordings');
+    };
+}
+
 /** 同時実行数の空きぶんだけキューを消化する。録画完了時と定期tickの両方から呼ばれる */
 export function pump(): void {
     while (runningJobs.size < config.encodeConcurrency) {
         const next = orm()
-            .select({ id: encodeJobs.id, attempts: encodeJobs.attempts })
+            .select({ id: encodeJobs.id, kind: encodeJobs.kind, attempts: encodeJobs.attempts })
             .from(encodeJobs)
             .where(eq(encodeJobs.state, 'queued'))
             .orderBy(encodeJobs.id)
@@ -1770,7 +1962,7 @@ export function pump(): void {
         runningJobs.add(jobId);
         // 待機中が走り出したことも伝える。押した直後に何も変わらないと止まって見える
         emit('recordings');
-        void runJob(jobId)
+        void (next.kind === 'cm' ? runCmJob(jobId) : runJob(jobId))
             .catch((error) => markFailed(jobId, String(error)))
             .finally(() => {
                 runningJobs.delete(jobId);

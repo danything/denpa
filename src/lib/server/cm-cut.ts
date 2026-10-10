@@ -207,8 +207,8 @@ export function cutArgs(list: string, output: string): string[] {
     ];
 }
 
-/** チャプターだけ足して書き直す。焼き直さない */
-export function chapterArgs(input: string, chapters: string, output: string): string[] {
+/** チャプターを差し替えて書き直す。焼き直さない。`chapters` が null ならチャプターを外す */
+export function chapterArgs(input: string, chapters: string | null, output: string): string[] {
     return [
         config.ffmpeg,
         '-y',
@@ -216,12 +216,9 @@ export function chapterArgs(input: string, chapters: string, output: string): st
         'error',
         '-i',
         input,
-        '-i',
-        chapters,
-        '-map',
-        '0',
-        '-map_chapters',
-        '1',
+        ...(chapters === null
+            ? ['-map', '0', '-map_chapters', '-1']
+            : ['-i', chapters, '-map', '0', '-map_chapters', '1']),
         '-c',
         'copy',
         '-f',
