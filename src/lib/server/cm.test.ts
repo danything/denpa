@@ -8,12 +8,10 @@ import {
     invertRanges,
     leadIn,
     liveAudioIndexes,
-    longestRange,
     parseFrameRate,
     parseRatio,
     shiftRanges,
     tooMuchCm,
-    widenKeep,
 } from './cm';
 
 describe('区間の裏返し', () => {
@@ -61,62 +59,6 @@ describe('チャプターの時刻を頭出しに合わせる', () => {
     test('捨てるものが無ければそのまま', () => {
         const cm = [{ start: 10, end: 20 }];
         expect(shiftRanges(cm, 0)).toBe(cm);
-    });
-});
-
-/**
- * コマ数の実測は一番長い本編区間で行う。最初の区間はアバン+OPに当たりやすく、
- * OPの動きで60コマに誤判定していた (本番の実測)
- */
-describe('一番長い区間を選ぶ', () => {
-    test('アバン+OPの短い先頭区間ではなく本編を選ぶ', () => {
-        expect(
-            longestRange([
-                { start: 7, end: 198 }, // アバン+OP (191秒)
-                { start: 388, end: 1088 }, // 本編A (700秒)
-                { start: 1178, end: 1420 }, // 本編B (242秒)
-            ]),
-        ).toEqual({ start: 388, end: 1088 });
-    });
-
-    test('区間が無ければ null', () => {
-        expect(longestRange([])).toBeNull();
-    });
-});
-
-/**
- * 切り出しはキーフレーム単位なので、判定どおりの位置から始めると本編の頭が
- * 1 GOP ぶん削れる。実機で「本編の頭が一瞬欠ける」形で出ていた
- */
-describe('残す区間の頭を戻す', () => {
-    test('頭だけ戻す。尻はそのまま', () => {
-        expect(widenKeep([{ start: 100, end: 200 }], 0.8)).toEqual([{ start: 99.2, end: 200 }]);
-    });
-
-    test('0 より前には戻さない', () => {
-        expect(widenKeep([{ start: 0.3, end: 60 }], 0.8)).toEqual([{ start: 0, end: 60 }]);
-    });
-
-    test('前の区間に食い込まない', () => {
-        // 戻した先が前の区間の中なら、そこで止める (同じところを2回書き出さない)
-        const keep = [
-            { start: 0, end: 100 },
-            { start: 100.5, end: 200 },
-        ];
-
-        expect(widenKeep(keep, 0.8)).toEqual([{ start: 0, end: 200 }]);
-    });
-
-    test('離れている区間は1つにまとめない', () => {
-        const keep = [
-            { start: 0, end: 100 },
-            { start: 130, end: 200 },
-        ];
-
-        expect(widenKeep(keep, 0.8)).toEqual([
-            { start: 0, end: 100 },
-            { start: 129.2, end: 200 },
-        ]);
     });
 });
 

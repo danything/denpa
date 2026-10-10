@@ -108,10 +108,10 @@ function cropTo(rect: Rect, video: Video): string {
     );
 }
 
-/** 止める合図と、全体の締め切り (ms の時刻) */
+/** 止める合図と、ffmpeg 1回ぶんの時間切れ (ms) */
 interface Limits {
     signal?: AbortSignal | undefined;
-    deadline: number;
+    timeoutMs: number;
 }
 
 /** キーフレームを散らして抜き、上下の帯で向きを足し合わせて在り処を割り出す */
@@ -149,7 +149,7 @@ async function learn(input: string, video: Video, limits: Limits): Promise<LogoM
         ],
         {
             signal: limits.signal,
-            timeoutMs: Math.max(0, limits.deadline - Date.now()),
+            timeoutMs: limits.timeoutMs,
             stderr: true,
             onStdout: framer(width * band * 2, (bytes) => {
                 addFrame(top, bytes, 0, width);
@@ -236,7 +236,8 @@ export interface LogoResult {
 
 /**
  * ロゴの判定を始める。覚えていれば読み、無ければこの録画から覚える。
- * 返った `scan` を CM 検出の復号に渡し、読み終えたら `finish` を呼ぶ
+ * `scan()` を CM 検出の復号に渡し、読み終えたら `finish` を呼ぶ。復号をやり直すとき (エンコードの
+ * 焼き直し) は `scan()` をもう一度呼ぶ — 点は読むたびに一から数える
  */
 export async function openLogo(
     input: string,
@@ -245,7 +246,7 @@ export async function openLogo(
 ): Promise<
     | string
     | {
-          scan: ScanLogo;
+          scan(): ScanLogo;
           /**
            * 区間を出し、覚えたものを書く。**覚えていたもので1コマも当たらなければ覚え直す** (局がロゴを
            * 替えたとき)。覚え直したら枠だけもう一度切り出す (`rescan`。無音と切れ目は取り直さない)
@@ -265,11 +266,16 @@ export async function openLogo(
     } else {
         model = loaded;
     }
-    const first = tracker(model, video);
-    if (typeof first === 'string') return first;
+    const opened = tracker(model, video);
+    if (typeof opened === 'string') return opened;
+    let first: Tracker = opened;
 
     return {
-        scan: first.scan,
+        scan() {
+            // 型は開いたときに作れているので、同じものからはまた作れる
+            first = tracker(model, video) as Tracker;
+            return first.scan;
+        },
         async finish(fps, rescan) {
             const fail = (note: string, code = 1): LogoResult => ({
                 code,

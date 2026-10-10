@@ -4,9 +4,6 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
     buildArgs,
-    buildConcatArgs,
-    buildSegmentArgs,
-    concatList,
     encodeProgress,
     expectedFrames,
     failureReason,
@@ -67,7 +64,7 @@ describe('録画エンコードの引数', () => {
 });
 
 /**
- * **焼いたものの音声と字幕に名前を入れる** (`arib.audioTitles` / `buildPgs`)。
+ * **焼いたものの音声と字幕に名前を入れる** (`arib.audioTitles`)。
  *
  * 入れていなかった頃は、プレイヤーの切り替えに「Audio 1」「Audio 2」しか
  * 出なかった — 二カ国語や解説放送でどちらがどちらか分からない。
@@ -113,16 +110,10 @@ describe('トラックの名前', () => {
         expect(buildArgs('/in.m2ts', '/out.mkv', 1, null, 'av1', { audioStreams: [] })).toContain('0:a');
     });
 
-    /** 字幕は放送が名乗っている言語まで入れる。無ければ「字幕」 */
+    /** 字幕には「字幕」と日本語の札 */
     test('字幕にも名前を入れる', () => {
-        const withLabel = buildArgs('/in.m2ts', '/out.mkv', 1, null, 'av1', {
-            pgsFile: '/x.sup',
-            captionTitle: '字幕 (日本語)',
-        });
-        expect(title(withLabel, '-metadata:s:s:0')).toBe('title=字幕 (日本語)');
-
-        const plain = buildArgs('/in.m2ts', '/out.mkv', 1, null, 'av1', { pgsFile: '/x.sup' });
-        expect(title(plain, '-metadata:s:s:0')).toBe('title=字幕');
+        const args = buildArgs('/in.m2ts', '/out.mkv', 1, null);
+        expect(title(args, '-metadata:s:s:0')).toBe('title=字幕');
     });
 
     /**
@@ -219,28 +210,20 @@ describe('コマ数の決め方', () => {
         expect(buildArgs('/in.m2ts', '/out.mkv', 1, null, 'h264')).not.toContain('-init_hw_device');
     });
 
-    test('字幕は PGS 1本だけ。入力も1回しか開かない', () => {
+    test('字幕は1本だけ。入力も1回しか開かない', () => {
         for (const codec of ['av1', 'h264'] as const) {
-            const args = buildArgs('/in.m2ts', '/out.mkv', 1, null, codec, { pgsFile: '/tmp/s.sup' });
+            const args = buildArgs('/in.m2ts', '/out.mkv', 1, null, codec);
             /*
              * ASS (外字が「〓」になる) と dvdsub (1枚4色) を作るために同じ入力を
-             * 2回開いていた頃の名残を残さない。PGS が放送どおりに出るので、
-             * 見た目の違うものを「字幕」として並べる理由が無くなった
+             * 2回開いていた頃の名残を残さない
              */
             expect(args.filter((a) => a === '/in.m2ts')).toHaveLength(1);
             expect(args).not.toContain('ass');
             expect(args).not.toContain('dvdsub');
-            expect(argValue(args, '-c:s:0')).toBe('copy');
             expect(argValue(args, '-disposition:s:0')).toBe('default');
             expect(argValue(args, '-c:s:1')).toBeUndefined();
             expect(argValue(args, '-c:a')).toBe('libopus');
         }
-    });
-
-    test('画面の大きさはここでは使わない', () => {
-        // 絵にするのは .sup を作る側 (buildPgs)。エンコード側は copy するだけ
-        const args = buildArgs('/in.m2ts', '/out.mkv', 1, null, 'av1', { canvasSize: '1920x1080' });
-        expect(args).not.toContain('-canvas_size');
     });
 
     test('デュアルモノは左右を別トラックに分ける', () => {
@@ -255,13 +238,10 @@ describe('コマ数の決め方', () => {
     });
 
     test('CMを切っても字幕は落とさない', () => {
-        // CMはエンコードの前にTSの段階で切るので、エンコード側は素直に字幕を通すだけ
-        const args = buildArgs('/in.m2ts', '/out.mkv', 1, null, 'av1', {
-            keep: [{ start: 0, end: 300 }],
-            pgsFile: '/tmp/s.sup',
-        });
+        // 字幕も CM ごと写して、焼いたものと一緒に切る (cm-cut.ts)
+        const args = buildArgs('/in.m2ts', '/out.mkv', 1, null, 'av1', { keyframes: 'scene' });
         expect(args).not.toContain('-sn');
-        expect(argValue(args, '-c:s:0')).toBe('copy');
+        expect(argValue(args, '-c:s')).toBe('copy');
     });
 
     test('チャプターだけならそれが2つ目の入力になる', () => {
@@ -270,25 +250,13 @@ describe('コマ数の決め方', () => {
         expect(argValue(args, '-map_chapters')).toBe('1');
     });
 
-    test('PGS は copy でそのまま入れる', () => {
-        /*
-         * 放送どおりの色数 (1枚256色) が入るのはこれだけ。ffmpeg は PGS を
-         * 作れないので denpa が .sup を書いて渡す (src/lib/pgs.ts)
-         */
-        const args = buildArgs('/in.m2ts', '/out.mkv', 1, null, 'av1', { pgsFile: '/tmp/s.sup' });
-        expect(args).toContain('/tmp/s.sup');
-        expect(args).toContain('1:s:0?');
-        expect(argValue(args, '-c:s:0')).toBe('copy');
-    });
-
-    test('PGS とチャプターが両方あっても番号がずれない', () => {
-        const args = buildArgs('/in.m2ts', '/out.mkv', 1, null, 'av1', {
-            pgsFile: '/tmp/s.sup',
-            chaptersFile: '/tmp/c.txt',
-        });
-        expect(args).toContain('1:s:0?');
-        // 入力は 本編 / sup / チャプター の順
-        expect(argValue(args, '-map_chapters')).toBe('2');
+    test('字幕は放送の ARIB 字幕を局で名指しして写す', () => {
+        // 名指ししない既定の選び方では ARIB の字幕が落ちる。Matroska には S_ARIBSUB で入る
+        const args = buildArgs('/in.m2ts', '/out.mkv', 1, null, 'av1', { program: 1024 });
+        expect(args).toContain('0:p:1024:s:0?');
+        expect(argValue(args, '-c:s')).toBe('copy');
+        // 局が分からなければ入力の頭の字幕
+        expect(buildArgs('/in.m2ts', '/out.mkv', 1, null)).toContain('0:s:0?');
     });
 
     /**
@@ -345,12 +313,6 @@ describe('コマ数の決め方', () => {
         expect(argValue(buildArgs('/in.m2ts', '/out.mkv', 1, null), '-vf')).toBe(
             'bwdif=mode=send_frame,format=yuv420p',
         );
-    });
-
-    test('PGS が無ければ字幕トラックは入らない', () => {
-        const args = buildArgs('/in.m2ts', '/out.mkv', 1, null);
-        expect(argValue(args, '-c:s:0')).toBeUndefined();
-        expect(args.filter((a) => a.startsWith('-disposition:s'))).toHaveLength(0);
     });
 });
 
@@ -524,32 +486,60 @@ describe('failureReason', () => {
     });
 });
 
-describe('CMを切ったTSを作る', () => {
-    test('区間ごとに -c copy で切り出す', () => {
-        const args = buildSegmentArgs('/in.m2ts', '/in.m2ts.part0.m2ts', { start: 12.5, end: 300 });
-        // 再エンコードしないので速く、字幕もデータも落ちない
-        expect(args).toContain('-c');
-        expect(args).toContain('copy');
-        expect(argValue(args, '-ss')).toBe('12.5');
-        expect(argValue(args, '-to')).toBe('300');
-        expect(argValue(args, '-f')).toBe('mpegts');
+describe('CM を探しながら焼く', () => {
+    const outputs = ['-an', '-vf', 'scdet@cm=threshold=0', '-f', 'null', '-'];
+
+    test('CM 検出の出口は焼く出口のあとに足す', () => {
+        const args = buildArgs('/in.m2ts', '/out.mkv', 1, null, 'av1', { analysis: outputs });
+        // -map は出口ごとなので、焼く出口の指定が検出の出口に効かないよう後ろに置く
+        expect(args.indexOf('/out.mkv')).toBeLessThan(args.indexOf('scdet@cm=threshold=0'));
+        expect(args.slice(-outputs.length)).toEqual(outputs);
     });
 
-    test('繋ぎ直しは concat デマクサで、時刻を振り直す', () => {
-        const args = buildConcatArgs('/tmp/list.txt', '/out.ts');
-        expect(argValue(args, '-f')).toBe('concat');
-        expect(args).toContain('-safe');
-        // 切れ目で時刻が飛ぶので振り直す
-        expect(argValue(args, '-fflags')).toBe('+genpts');
+    test('進み具合は fd 3 へ (標準出力はロゴの枠、標準エラーは検出の行が使う)', () => {
+        const args = buildArgs('/in.m2ts', '/out.mkv', 1, null);
+        expect(argValue(args, '-progress')).toBe('pipe:3');
+        expect(args).toContain('-nostats');
+    });
+});
+
+describe('CM を切るときのキーフレーム', () => {
+    test('1本目は場面の切れ目ごと。CM 検出と同じコマで測って印を付ける', () => {
+        const args = buildArgs('/in.m2ts', '/out.mkv', 1, null, 'av1', {
+            keyframes: 'scene',
+            displaySize: { width: 1920, height: 1080 },
+        });
+        const filter = argValue(args, '-vf') ?? '';
+        // CM 検出と同じコマ (インタレ解除の前) で測る
+        expect(filter.indexOf('scdet@key')).toBeLessThan(filter.indexOf('bwdif'));
+        expect(argValue(args, '-force_key_frames:v')).toBe('scd_metadata');
     });
 
-    test('一覧のパスは ' + "'" + ' をエスケープする', () => {
-        expect(concatList(['/tmp/a.ts', "/tmp/b's.ts"])).toBe("file '/tmp/a.ts'\nfile '/tmp/b'\\''s.ts'");
+    test('境目が決まっていれば、その時刻を 1ms 手前で指す', () => {
+        const args = buildArgs('/in.m2ts', '/out.mkv', 1, null, 'h264', { keyframes: [120.5, 300] });
+        expect(argValue(args, '-force_key_frames:v')).toBe('120.499,299.999');
+        expect(argValue(args, '-vf')).not.toContain('scdet');
+    });
+
+    test('QSV は頼まないと IDR にならない', () => {
+        const args = buildArgs('/in.m2ts', '/out.mkv', 1, null, 'h264', {
+            keyframes: 'scene',
+            hardware: { kind: 'qsv', device: '/dev/dri/renderD128' },
+        });
+        expect(argValue(args, '-forced_idr')).toBe('1');
+        // 印は GPU へ上げる前に付ける
+        const filter = argValue(args, '-vf') ?? '';
+        expect(filter.indexOf('scdet@key')).toBeLessThan(filter.indexOf('format=nv12'));
+    });
+
+    test('切らないなら何も足さない', () => {
+        const args = buildArgs('/in.m2ts', '/out.mkv', 1, null);
+        expect(args).not.toContain('-force_key_frames:v');
+        expect(argValue(args, '-vf')).not.toContain('scdet');
     });
 });
 
 /*
- * **焼くほうと字幕を作るほうで、捨てる長さを同じにする。**
  *
  * 片方だけ「短いから捨てない」と判断すると、そのぶん字幕がずれる。
  * 判断そのものを1箇所に置いてある
