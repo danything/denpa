@@ -1,5 +1,5 @@
 /**
- * データ放送を描くための字。**字幕を焼いているのと同じフォントを配る。**
+ * データ放送と字幕を描くための字。**字幕を焼いているのと同じフォントを配る。**
  *
  * BML は仕様で**等幅**を求めていて (狭い画面で空白を使って組むため)、
  * **丸ゴシック**を名指しし、**ARIB の外字**を使う。イメージに入れてある
@@ -9,7 +9,8 @@
  *
  * **ttf と woff2 の2つを置いてある** (Dockerfile)。字幕は ffmpeg が fontconfig
  * 越しに ttf を読み、こちらはブラウザへ woff2 を渡す。同じ字なので、
- * **データ放送と字幕で字形が揃う**。
+ * **データ放送と字幕で字形が揃う**。テレビのアプリ (Android の Typeface は
+ * woff2 を読めない) は `?format=ttf` で ttf を取る。
  *
  * 手元での開発ではイメージに入っていないので、無ければ 404 を返す。画面側は
  * `local(...)` を並べてあるので、そのときは端末のフォントで出る。
@@ -20,13 +21,18 @@ import { error } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 
 /** Dockerfile が置く場所。ffmpeg (字幕) が読むのと同じディレクトリ */
-const FONT = '/usr/share/fonts/truetype/rounded-mplus-arib/rounded-mplus-1m-arib.woff2';
+const DIR = '/usr/share/fonts/truetype/rounded-mplus-arib';
+const FONTS = {
+    woff2: { file: `${DIR}/rounded-mplus-1m-arib.woff2`, type: 'font/woff2' },
+    ttf: { file: `${DIR}/rounded-mplus-1m-arib.ttf`, type: 'font/ttf' },
+};
 
-export const GET: RequestHandler = () => {
-    if (!existsSync(FONT)) error(404, 'フォントが入っていません');
-    return new Response(Bun.file(FONT).stream(), {
+export const GET: RequestHandler = ({ url }) => {
+    const font = url.searchParams.get('format') === 'ttf' ? FONTS.ttf : FONTS.woff2;
+    if (!existsSync(font.file)) error(404, 'フォントが入っていません');
+    return new Response(Bun.file(font.file).stream(), {
         headers: {
-            'content-type': 'font/woff2',
+            'content-type': font.type,
             /*
              * **イメージごとに変わるものなので、長く持たせて構わない。**
              * 入れ替えれば URL ごと変わる (`?v=`) — 付けるのは画面側
