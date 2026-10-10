@@ -78,7 +78,6 @@ ARG TARGETARCH
 # 一度これで ffmpeg の取得に失敗してデプロイが止まった
 ENV CURL="curl -fsSL --retry 5 --retry-delay 5 --retry-all-errors --connect-timeout 20"
 
-# woff2 は ARIB フォントをブラウザ用に縮めるのに使う (データ放送。下の説明)
 # libvpl-dev / libva-dev は Intel の GPU (QSV) 向け (docs/encode.md「GPU で焼く」)。
 # ffmpeg に libvpl (QSV = h264_qsv / av1_qsv) を組み込み、実行イメージにドライバを
 # 入れてある。コンテナから /dev/dri が見えれば、起動時に server/hwenc.ts が試し焼きで
@@ -90,7 +89,7 @@ ENV CURL="curl -fsSL --retry 5 --retry-delay 5 --retry-all-errors --connect-time
 # amd64 にしか無い (Intel の GPU が載る arm の機械は無い)。arm64 では libvpl を外して組み、
 # VA-API だけ残す — 起動時の試し焼き (server/hwenc.ts) で QSV が落ちて、VA-API か
 # ソフトウェアで焼くだけなので、denpa の側は何も変えない
-ENV DEV="curl ca-certificates build-essential cmake pkg-config nasm patch zlib1g-dev libfreetype6-dev libopus-dev libx264-dev libdav1d-dev libfontconfig-dev woff2 libva-dev"
+ENV DEV="curl ca-certificates build-essential cmake pkg-config nasm patch zlib1g-dev libfreetype6-dev libopus-dev libx264-dev libdav1d-dev libfontconfig-dev libva-dev"
 
 # 9.0 / 9.0.1 は 60コマで焼くと 20〜25分で音声が黙って終わった (CLI の溢れ FIFO の上限)。
 # 9.0.2 でその FIFO ごと無くなり、当てていた patches/ffmpeg-sched-overflow.patch は
@@ -104,13 +103,6 @@ ENV FFMPEG_VERSION=9.0.2
 ARG SVT_AV1_VERSION=v4.2.0
 # renovate: datasource=github-tags depName=xqq/libaribcaption
 ARG LIBARIBCAPTION_VERSION=v1.1.2
-# renovate: datasource=git-refs depName=https://github.com/danything/arib-font branch=main
-#
-# **同じ字を2つの形で置く。** 字幕を焼くのは ffmpeg (fontconfig 経由の ttf)、
-# データ放送を描くのはブラウザなので web フォント (woff2) も要る。5.5MB → 2MB ほど。
-# BML は**等幅・丸ゴシック・ARIB外字**を要求していて、この1本が3つとも満たす
-# (借りている側は Kosugi を 4.4MB ぶん抱えているが、外字は入っていない)
-ARG ARIB_FONT_SHA=a9c834099818c59ba9c3721a2b1a860f6c0af61a
 
 # **上流に投げるつもりの直しだけを当てる** (理由は patches/README.md)。
 # `--fuzz=0` にしてあるのは、ffmpeg を上げたときに当たらなくなったら
@@ -127,10 +119,6 @@ RUN case "${TARGETARCH}" in \
     esac && \
     apt-get update && \
     apt-get -y --no-install-recommends install $DEV $qsv_dev && \
-    mkdir -p /usr/share/fonts/truetype/rounded-mplus-arib && \
-    $CURL https://raw.githubusercontent.com/danything/arib-font/${ARIB_FONT_SHA}/rounded-mplus-1m-arib.ttf \
-      -o /usr/share/fonts/truetype/rounded-mplus-arib/rounded-mplus-1m-arib.ttf && \
-    woff2_compress /usr/share/fonts/truetype/rounded-mplus-arib/rounded-mplus-1m-arib.ttf && \
     mkdir /tmp/arib && cd /tmp/arib && \
     $CURL https://github.com/xqq/libaribcaption/archive/refs/tags/${LIBARIBCAPTION_VERSION}.tar.gz | tar -xz --strip-components=1 && \
     for p in /patches/libaribcaption-*.patch; do patch -p1 --fuzz=0 < "$p"; done && \
@@ -201,7 +189,24 @@ COPY --from=docker.io/oven/bun:1.4-slim /usr/local/bin/bun /usr/local/bin/bun
 
 COPY --from=ffmpeg /usr/local/bin/ffmpeg /usr/local/bin/ffprobe /usr/local/bin/
 COPY --from=ffmpeg /usr/local/lib/libaribcaption.* /usr/local/lib/
-COPY --from=ffmpeg /usr/share/fonts/truetype/rounded-mplus-arib /usr/share/fonts/truetype/rounded-mplus-arib
+
+# 字幕とデータ放送の字 (Denpa Font。danything/denpa-font のリリース)。
+# **同じ字を2つの形で置く。** 字幕を焼くのは ffmpeg (fontconfig 経由の ttf)、
+# データ放送と字幕を描くブラウザには web フォント (woff2。`/api/font/denpa-font.woff2`) を渡す。
+# BML は**等幅・丸ゴシック・ARIB外字**を要求していて、この1本が3つとも満たす
+# (借りている側は Kosugi を 4.4MB ぶん抱えているが、外字は入っていない)。
+# 版はタグで、中身は sha256 で留める。**Renovate が版を上げたら、そのリリースの
+# SHA256SUMS の値を下の2つへ写す** (写さないと ADD が止まって焼けない)
+# renovate: datasource=github-releases depName=danything/denpa-font
+ARG DENPA_FONT_VERSION=v2.0
+ARG DENPA_FONT_TTF_SHA256=dd0dea4fe80fd37239a92fd2b89e95be092d02bf84abaf2694235c7e2386c1dd
+ARG DENPA_FONT_WOFF2_SHA256=cd6b96c40c62fdd0479b7f2658d65455abb7784006b3e6514c4200246f7e91d7
+ADD --chmod=644 --checksum=sha256:${DENPA_FONT_TTF_SHA256} \
+    https://github.com/danything/denpa-font/releases/download/${DENPA_FONT_VERSION}/denpa-font.ttf \
+    /usr/share/fonts/truetype/denpa-font/denpa-font.ttf
+ADD --chmod=644 --checksum=sha256:${DENPA_FONT_WOFF2_SHA256} \
+    https://github.com/danything/denpa-font/releases/download/${DENPA_FONT_VERSION}/denpa-font.woff2 \
+    /usr/share/fonts/truetype/denpa-font/denpa-font.woff2
 RUN ldconfig && fc-cache -f
 
 # ライブを生で送るときにブラウザへ配る MPEG-2 と AAC の復号器 (`mpeg2wasm` 段)

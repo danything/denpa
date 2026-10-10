@@ -36,7 +36,7 @@ describe('放送の時刻から出来上がりの時刻へ', () => {
 });
 
 describe('字幕を取り出す引数', () => {
-    const args = pgsArgs('/rec/a.m2ts', '1920x1080', 'Rounded M+ 1m for ARIB');
+    const args = pgsArgs('/rec/a.m2ts', '1920x1080', 'Denpa Font');
 
     test('時刻を数え直させない', () => {
         // これが無いと ffmpeg は最初の字幕を 0 秒とみなす

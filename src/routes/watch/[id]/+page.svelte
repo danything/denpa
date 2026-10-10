@@ -287,7 +287,7 @@
     let shownPage: CaptionPage | null = null;
     $effect(() => {
         if (overlay === null) return;
-        const made = new CaptionPainter(overlay, resolve('api/font'));
+        const made = new CaptionPainter(overlay, resolve('api/font/denpa-font.woff2'));
         painter = made;
         return () => {
             made.close();

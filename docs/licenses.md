@@ -37,7 +37,7 @@ Dockerfile の行・`package.json`) を優先し、上流の表示に拠るも�
 
 | 名前 | 何に | 出どころ | ライセンス |
 | --- | --- | --- | --- |
-| rounded-mplus-1m-arib | 字幕の焼き込みと、データ放送の web フォント (`/api/font` で配る) | <https://github.com/danything/arib-font> (自家製 Rounded M+ 1m と和田研中丸ゴシック 2004ARIB の派生) | M+ FONT LICENSE (上流の LICENSE: 使用・複製・配布・改変を商用非商用問わず無制限に許可) |
+| Denpa Font | 字幕の焼き込みと、データ放送・字幕の web フォント (`/api/font/denpa-font.woff2` で配る) | <https://github.com/danything/denpa-font> のリリース (ttf と woff2 をタグと sha256 で留めて取る)。源柔ゴシック等幅 (源ノ角ゴシック + M+ OUTLINE FONTS) に和田研中丸ゴシック 2004ARIB の記号を足したもの | SIL OFL 1.1 (元の源柔ゴシックと同じ。M+ 由来の字形は M+ FONTS LICENSE、和田研の字形は改変・再配布可の許諾。原文は denpa-font の README) |
 
 ### ランタイム
 

@@ -55,7 +55,7 @@ import { type MkvFrame, MkvSplitter } from '#lib/ts/mkv.js';
 export const CANVAS = { width: 1920, height: 1080 };
 
 /** 字幕に使う字。ライブも録画 (encoder → buildPgs) も同じものを使う (見た目を揃えるため) */
-export const SUBTITLE_FONTS = 'Rounded M+ 1m for ARIB';
+export const SUBTITLE_FONTS = 'Denpa Font';
 
 /** 失敗を言っている行。**それ以外は入り口の説明なので捨てる** */
 const TROUBLE = /error|Error|failed|Failed|Cannot|Unable|No such|Invalid data/;

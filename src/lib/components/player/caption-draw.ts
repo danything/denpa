@@ -11,7 +11,7 @@
  * - 置き換えられなかった外字は、点の絵を字の枠いっぱいに**なめらかに**引き伸ばす
  *
  * **canvas は画面の画素で敷く。** 絵を伸ばしていた頃と違って、全画面にすれば字もそのぶん
- * 細かく描き直す (`ResizeObserver`)。字形は字幕を焼いていたのと同じ丸ゴシック (`/api/font`)。
+ * 細かく描き直す (`ResizeObserver`)。字形は字幕を焼いていたのと同じ丸ゴシック (`/api/font/denpa-font.woff2`)。
  */
 
 import {
@@ -28,7 +28,7 @@ import { fitRect } from './paint';
 export const CAPTION_FONT = 'denpa-caption';
 let fontLoading: Promise<void> | null = null;
 
-/** 字を読み込む。**1回だけ** (`url` は `/api/font`) */
+/** 字を読み込む。**1回だけ** (`url` は `/api/font/denpa-font.woff2`) */
 export function loadCaptionFont(url: string): Promise<void> {
     if (fontLoading !== null) return fontLoading;
     const face = new FontFace(
@@ -222,7 +222,7 @@ export class CaptionPainter {
 
     constructor(
         private readonly canvas: HTMLCanvasElement,
-        /** 字の置き場 (`resolve('api/font')`) */
+        /** 字の置き場 (`resolve('api/font/denpa-font.woff2')`) */
         font: string,
     ) {
         this.resize = typeof ResizeObserver === 'function' ? new ResizeObserver(() => this.draw()) : null;
