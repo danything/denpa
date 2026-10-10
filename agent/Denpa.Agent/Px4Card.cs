@@ -27,14 +27,16 @@ public sealed class Px4Card : ICardLink
     private static readonly TimeSpan Timeout = TimeSpan.FromSeconds(5);
 
     private readonly Px4Control _control;
+    private readonly string _daemon;
     private ulong _handle;
 
     public string Name { get; }
 
-    private Px4Card(string name, Px4Control control)
+    private Px4Card(string name, Px4Control control, string daemon)
     {
         Name = name;
         _control = control;
+        _daemon = daemon;
     }
 
     /// <summary>
@@ -49,35 +51,45 @@ public sealed class Px4Card : ICardLink
     /// </summary>
     public static IReadOnlyList<CardLinkCandidate> Find() => Find(Px4Userland.RuntimeDir);
 
-    internal static IReadOnlyList<CardLinkCandidate> Find(string runtimeDir)
+    internal static IReadOnlyList<CardLinkCandidate> Find(string runtimeDir) => Find(
+        runtimeDir, Px4Wire.Px4, id => id.Length >= 4 && Px4Userland.ValidId(id),
+        // pcscd に見せていた頃と同じ名前 (画面で見分けがつくように)
+        id => $"px4-userland {Px4Userland.Label(id)} Internal Card Reader");
+
+    /// <summary>
+    /// <paramref name="wire"/> のデーモンが起きている筐体ぶん。asicen-userland の asicend も
+    /// 内蔵カードを同じ IPC で出すので、置き場と名前だけ変えて使う (Asicen.cs)
+    /// </summary>
+    internal static IReadOnlyList<CardLinkCandidate> Find(
+        string runtimeDir, Px4Wire wire, Func<string, bool> valid, Func<string, string> name)
     {
-        var root = Path.Combine(runtimeDir, "px4-userland");
+        var root = Path.Combine(runtimeDir, wire.Product);
         if (!Directory.Exists(root)) return [];
         return
         [
             .. Directory.EnumerateDirectories(root)
-                .Select(dir => (Id: Path.GetFileName(dir), Socket: Px4Control.Endpoint(runtimeDir, Path.GetFileName(dir), "control.sock")))
-                .Where(found => found.Id.Length >= 4 && Px4Userland.ValidId(found.Id) && File.Exists(found.Socket))
+                .Select(dir => (Id: Path.GetFileName(dir), Socket: Px4Control.Endpoint(runtimeDir, Path.GetFileName(dir), "control.sock", wire)))
+                .Where(found => valid(found.Id) && File.Exists(found.Socket))
                 .OrderBy(found => found.Id, StringComparer.Ordinal)
                 .Select(found =>
                 {
-                    // pcscd に見せていた頃と同じ名前 (画面で見分けがつくように)
-                    var name = $"px4-userland {Px4Userland.Label(found.Id)} Internal Card Reader";
-                    return new CardLinkCandidate(name, () => Open(name, found.Socket));
+                    var label = name(found.Id);
+                    return new CardLinkCandidate(label, () => Open(label, found.Socket, wire));
                 }),
         ];
     }
 
     /// <summary>ソケットに繋いで HELLO まで済ませる。**カードにはまだ触らない** (<see cref="Reset"/>)</summary>
-    public static Px4Card Open(string name, string socketPath)
+    public static Px4Card Open(string name, string socketPath, Px4Wire? wire = null)
     {
-        var control = Px4Control.Connect(socketPath, CardCapability, Timeout);
+        wire ??= Px4Wire.Px4;
+        var control = Px4Control.Connect(socketPath, CardCapability, Timeout, wire);
         if ((control.Capabilities & CardCapability) == 0)
         {
             control.Dispose();
-            throw new IOException("px4d がカードに対応していません");
+            throw new IOException($"{wire.Daemon} がカードに対応していません");
         }
-        return new Px4Card(name, control);
+        return new Px4Card(name, control, wire.Daemon);
     }
 
     /// <summary>
@@ -95,7 +107,7 @@ public sealed class Px4Card : ICardLink
             var answer = _control.Request(Px4Control.CardConnect, [1]);
             if (answer.Length < 9 || answer.Length != 9 + answer[8])
             {
-                throw new IOException($"px4d の CARD_CONNECT の答えが崩れています ({answer.Length} バイト)");
+                throw new IOException($"{_daemon} の CARD_CONNECT の答えが崩れています ({answer.Length} バイト)");
             }
             _handle = BinaryPrimitives.ReadUInt64LittleEndian(answer);
             return answer[9..];
@@ -106,7 +118,7 @@ public sealed class Px4Card : ICardLink
         var atr = _control.Request(Px4Control.CardReset, payload);
         if (atr.Length < 1 || atr.Length != 1 + atr[0])
         {
-            throw new IOException($"px4d の CARD_RESET の答えが崩れています ({atr.Length} バイト)");
+            throw new IOException($"{_daemon} の CARD_RESET の答えが崩れています ({atr.Length} バイト)");
         }
         return atr[1..];
     }
@@ -127,7 +139,7 @@ public sealed class Px4Card : ICardLink
         var answer = _control.Request(Px4Control.CardTransmit, payload);
         if (answer.Length < 4 || answer.Length != 4 + BinaryPrimitives.ReadUInt32LittleEndian(answer))
         {
-            throw new IOException($"px4d の CARD_TRANSMIT の答えが崩れています ({answer.Length} バイト)");
+            throw new IOException($"{_daemon} の CARD_TRANSMIT の答えが崩れています ({answer.Length} バイト)");
         }
         return answer[4..];
     }

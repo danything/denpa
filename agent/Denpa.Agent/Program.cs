@@ -62,7 +62,12 @@ var pool = new TunerPool(tuners, () => events.Emit("tuners"), tune) { Detected =
  * **px4-userland の筐体の px4d を起こす。** 顔ぶれ (設定か、自動で見つけたもの) にある筐体ぶん。
  * 筐体も受信機も px4d --list-json で分かっているので、ここで顔ぶれは変わらない (Px4.cs)
  */
-void PreparePx4() => Px4Daemon.Prepare(Px4Userland.IdsIn(pool.Tuners).ToList());
+void PrepareDaemons()
+{
+    Px4Daemon.Prepare(Px4Userland.IdsIn(pool.Tuners).ToList());
+    // asicen-userland の筐体の asicend も同じ折に (Asicen.cs)。配布物が無ければ顔ぶれにも出ない
+    AsicenDaemon.Prepare(AsicenUserland.IdsIn(pool.Tuners).ToList());
+}
 
 var builder = WebApplication.CreateSlimBuilder(args);
 builder.WebHost.ConfigureKestrel(options =>
@@ -267,7 +272,7 @@ app.MapPut("/denpa/tuners", async (HttpContext http) =>
     pool.Detected = auto;
     pool.Replace(resolved);
     // 新しく書かれた筐体があれば px4d を起こす。数秒かかるので返事は待たせない
-    _ = Task.Run(PreparePx4);
+    _ = Task.Run(PrepareDaemons);
     await Respond.Write(http, new JsonObject { ["tuners"] = pool.Status(), ["detected"] = pool.Detected });
 });
 
@@ -369,7 +374,7 @@ app.MapFallback((HttpContext http) =>
  * 数秒、駄目な筐体なら 30 秒待つので、ここで待つと HTTP の口 (= PT3 など他の
  * チューナーの提供) まで遅れる。筐体が無ければ何もしない
  */
-_ = Task.Run(PreparePx4);
+_ = Task.Run(PrepareDaemons);
 
 /*
  * **畳むのは、流し終えてから。** `ApplicationStopping` でやっていた頃は、止まれの合図の
@@ -381,6 +386,7 @@ app.Lifetime.ApplicationStopped.Register(() =>
     pool.CloseAll();
     // 読み手を全部離してから px4d を止める。SIGTERM で LNB を 0V に戻して終わる
     Px4Daemon.StopAll();
+    AsicenDaemon.StopAll();
 });
 
 Log.Write($"listening on :{port} (tuners: {config.TunersFile} / channels: {config.ChannelsFile})");

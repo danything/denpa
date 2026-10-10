@@ -279,6 +279,7 @@ public sealed class TunerPool(
     /// <item><c>/dev/dvb/adapterN/frontendM</c> … Linux DVB (Tuning.cs)</item>
     /// <item><c>px4:&lt;筐体の番号&gt;:&lt;受信機&gt;</c> … px4-userland の機材 (Px4.cs)</item>
     /// <item><c>siano:&lt;USB のポート&gt;</c> … siano-userland の機材 (Siano.cs)。カーネルが掴んでいれば開かない</item>
+    /// <item><c>asicen:&lt;挿し口&gt;:&lt;受信機&gt;</c> … asicen-userland の機材 (Asicen.cs。試験的)</item>
     /// </list>
     ///
     /// <para>それ以外は投げる。<c>px4_drv</c> の chardev はもう受け取らない</para>
@@ -295,9 +296,10 @@ public sealed class TunerPool(
         }
         if (Px4Userland.Parse(path) is { } px4) return new Px4Tuner(px4.Id, px4.Receiver, lnb);
         if (SianoUserland.Parse(path) is { } port) return new SianoTuner(port);
+        if (AsicenUserland.Parse(path) is { } asicen) return AsicenUserland.Open(asicen.Id, asicen.Receiver, lnb);
         if (path.Contains("/dvb/", StringComparison.Ordinal)) return new DvbTuner(path, lnb);
         throw new IOException(
-            $"{path} は対応していないデバイスです (/dev/dvb/adapterN/frontendM か {Px4Userland.Scheme}<筐体の番号>:<受信機> か {SianoUserland.Scheme}<USB のポート>)");
+            $"{path} は対応していないデバイスです (/dev/dvb/adapterN/frontendM か {Px4Userland.Scheme}<筐体の番号>:<受信機> か {SianoUserland.Scheme}<USB のポート> か {AsicenUserland.Scheme}<挿し口>:<受信機>)");
     }
 
     /// <summary>実体を手放す。**定義が変わったときと、止めるときだけ**</summary>

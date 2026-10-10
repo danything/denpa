@@ -86,6 +86,9 @@ AV1 / H.264 の mkv に焼き、字幕は放送のまま絵で入れます。
     ([docs/agent.md](docs/agent.md#px-q3u4-などは-px4-userland-でカーネルドライバは入れてもらわない))
   - PX-S1UD も、ホストで smsusb を blacklist しておけば同梱の siano-userland で動き、ホストにドライバは要らない
     ([docs/agent.md](docs/agent.md#px-s1ud-はカーネルが掴んでいなければ-siano-userland-で))
+  - PX-W3U3 は **試験的** に asicen-userland で受ける用意だけある (上流のリリース待ちで、まだイメージに入らない。
+    入っても選局できるのは受信機 0 の衛星と 1 の T27 だけ。Linux x86_64 のみ)
+    ([docs/agent.md](docs/agent.md#px-w3u3-は-asicen-userland-で-試験的上流のリリース待ち))
 - **B-CASカード** と PC/SC 対応のカードリーダー
 - **Docker** (Compose) か **Kubernetes** (Helm)。amd64 (x86_64) と arm64 (aarch64) の
   どちらでも動きます。イメージは両方を同じタグにまとめてあり、自分のアーキテクチャのものが降ってきます。
