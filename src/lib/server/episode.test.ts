@@ -459,10 +459,15 @@ describe('firstAirings', () => {
 
     test('「request 15.」の地上波と BS は同じ回。早いほうだけ録る', () => {
         // 毎週同じ番組紹介なので、回は題名の話数でしか分からない
-        const intro = { description: 'そのホテルのお客様は殺し屋様。決してNOと告げないコンシェルジュの物語、開幕!' };
+        const intro = {
+            description: 'そのホテルのお客様は殺し屋様。決してNOと告げないコンシェルジュの物語、開幕!',
+        };
         const gr = airing('テストホテル request 15.[字][多][解]', base, intro);
         const bs = airing('テストホテル request 15.[字]', base + DAY, { ...intro, type: 'BS' });
-        const cs = airing('テストホテル #15', base + 2 * DAY, { type: 'CS', description: '#15 ピアノ・レッスン2' });
+        const cs = airing('テストホテル #15', base + 2 * DAY, {
+            type: 'CS',
+            description: '#15 ピアノ・レッスン2',
+        });
         const other = airing('テストホテル request 2.', base + DAY, intro);
         expect(kept([gr, bs, cs, other])).toEqual([gr.id, other.id]);
     });
