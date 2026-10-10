@@ -1,6 +1,6 @@
 # 実運用向け。リポジトリの中では開発用の compose.yml と並ぶので別名にしているが、
 # 使う人は `compose.yml` として置く (`-f` を書かずに済む)。Linux では
-# install.sh (README「立てる」) が ~/denpa に置いて起動する。手で置くなら
+# install.sh (docs/install.md) が ~/denpa に置いて起動する。手で置くなら
 #
 #   curl -Lo compose.yml .../compose.prod.yml && docker compose up -d
 #
@@ -63,7 +63,7 @@ services:
             # **誰を通すか (docs/auth.md)。設定するまで全部のアクセスを断る。**
             # このネットワークからのアクセスはログインなしで通す。自分の LAN に合わせて書き換える。
             # 0.0.0.0/0 で全部開くが、インターネットに向けて開くのと同じなので、
-            # 家の外に出す構成では OIDC を使う (README の注意も読むこと)
+            # 家の外に出す構成では OIDC を使う (docs/auth.md の注意も読むこと)
             TRUSTED_NETWORKS: 192.168.0.0/16,10.0.0.0/8,172.16.0.0/12
         volumes:
             # 置き場は既定のまま (DB は /data、生TS は /media/raw、焼いたものは /media/encoded)。
