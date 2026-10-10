@@ -202,10 +202,26 @@ internal sealed class Px4Control : IDisposable
             body);
     }
 
+    /// <summary>
+    /// 読み切る。**上限 (ReceiveTimeout) があるときは Poll で待ってから読む。**
+    ///
+    /// <para>
+    /// <see cref="ConnectWithin"/> の ConnectAsync で、.NET はソケットを内部で非ブロッキングにする。
+    /// そのあとの同期の Receive は .NET の epoll の受け手に起こしてもらう作りで、起こすのがスレッド
+    /// プールに回ると、池が塞がっている間は**答えが届いていても起きない** (CI で、28 バイトの答えが
+    /// 受信バッファにあるまま 4 秒の上限で TimedOut になった)。Poll は poll(2) を直に呼ぶので池に
+    /// 頼らない。読めると分かってから読めば Receive は待たずに返る
+    /// </para>
+    /// </summary>
     private static void Receive(Socket socket, Span<byte> into, Px4Wire wire)
     {
+        var limit = socket.ReceiveTimeout;
         while (into.Length > 0)
         {
+            if (limit > 0 && !socket.Poll(TimeSpan.FromMilliseconds(limit), SelectMode.SelectRead))
+            {
+                throw new SocketException((int)SocketError.TimedOut);
+            }
             var got = socket.Receive(into);
             if (got == 0) throw new IOException($"{wire.Daemon} が接続を閉じました");
             into = into[got..];

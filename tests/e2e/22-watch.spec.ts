@@ -233,13 +233,13 @@ test.describe('録画を観る', () => {
         const id = await watchable(page, request);
 
         await goto(page, `/watch/${id}`);
-        await expect(page.getByTestId('watch-speed')).toContainText('1×');
+        await expect(page.getByTestId('watch-speed')).toContainText('×1');
         await page.getByTestId('watch-speed').click();
-        await page.getByTestId('watch-speed-option').filter({ hasText: '1.5×' }).click();
-        await expect(page.getByTestId('watch-speed')).toContainText('1.5×');
+        await page.getByTestId('watch-speed-option').filter({ hasText: '×1.5' }).click();
+        await expect(page.getByTestId('watch-speed')).toContainText('×1.5');
         // 選んだ速さは覚える。開き直しても同じ速さで始まる
         await goto(page, `/watch/${id}`);
-        await expect(page.getByTestId('watch-speed')).toContainText('1.5×');
+        await expect(page.getByTestId('watch-speed')).toContainText('×1.5');
         expect(
             await page.getByTestId('watch-video').evaluate((v) => (v as HTMLVideoElement).playbackRate),
         ).toBe(1.5);
@@ -549,8 +549,8 @@ test.describe('スマホの縦で観る', () => {
             );
         });
         expect(inside).toBe(true);
-        await page.getByTestId('watch-speed-option').filter({ hasText: '1.5×' }).tap();
-        await expect(page.getByTestId('watch-speed')).toContainText('1.5×');
+        await page.getByTestId('watch-speed-option').filter({ hasText: '×1.5' }).tap();
+        await expect(page.getByTestId('watch-speed')).toContainText('×1.5');
     });
 });
 
@@ -587,9 +587,9 @@ test.describe('指で観る', () => {
         await expect(bar).toHaveAttribute('data-shown', 'true');
 
         // 選べば閉じて、そこから時計が動き出す
-        await page.getByTestId('watch-speed-option').filter({ hasText: '1.5×' }).tap();
+        await page.getByTestId('watch-speed-option').filter({ hasText: '×1.5' }).tap();
         await expect(menu).toBeHidden();
-        await expect(page.getByTestId('watch-speed')).toContainText('1.5×');
+        await expect(page.getByTestId('watch-speed')).toContainText('×1.5');
         await expect(bar).toHaveAttribute('data-shown', 'false', { timeout: 5000 });
     });
 });
