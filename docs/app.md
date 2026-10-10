@@ -82,7 +82,7 @@ EPGStation の置き換えとして作ったもので、エンコード設定は
 | `src/lib/ts/bytes.ts` | バイト列の細かい道具 (繋ぐ)。中身の意味は持たない |
 | `src/lib/ts/clock.ts` | PCR をサーバが受け取った時刻に結びつけ、焼いたものの物差しに直す (TDT は局ごとにずれるので使わない) |
 | `src/lib/ts/aribtext.ts` | ARIB STD-B24 の8単位符号を読む (番組名・局名) |
-| `src/lib/ts/aribtext-gaiji.ts` | ARIB 外字の対応表 (`[新]` `[字]` はここ) |
+| `src/lib/ts/aribtext-gaiji.ts` | ARIB 外字の対応表 (`🈟` `🈑` はここ)。字は字幕の表 `b24-tables.ts` を引き、番組表だけで違える数点を持つ |
 | `src/lib/ts/eit.ts` | EIT[schedule] と EIT[p/f]。集まり具合の判定も |
 | `src/lib/ts/service-filter.ts` | チャンネル丸ごとの TS から1局ぶんを抜く |
 | `src/lib/ts/logo.ts` | TS から局ロゴを読む (地上波は CDT、衛星は下記) |
