@@ -1,5 +1,5 @@
+import type { Range } from '../ts/cm-decide';
 import { framer } from '../ts/logo-detect';
-import type { Range } from './cm';
 import { config } from './config';
 import { run } from './stream';
 
@@ -13,7 +13,8 @@ import { run } from './stream';
  * - **無音** — 主音声に `silencedetect` (標準エラー)
  *
  * 以前は chapter_exe (dtvindex で TS を読み直す) と自前のロゴ判定 (もう一度 ffmpeg で復号する) が
- * 別々に全コマを復号していた。時間のほとんどは MPEG-2 の復号なので、1回にまとめるだけで半分になる。
+ * 別々に TS を読んでいた。chapter_exe は索引を作るのにファイルを頭から読み直すので、1回にまとめると
+ * 壁時計が半分近くになる (実機 16 本で 1 時間あたり 140 → 76 秒。CPU はほぼ同じ)。
  * 時刻も1つの物差しになる — chapter_exe は「コマ番号 ÷ fps」で秒に直していたので、
  * 24コマの絵を 30コマで流す録画 (RFF) ではずれていった。
  */
@@ -58,16 +59,19 @@ export interface Scan {
     silences: Range[];
     /** 届いたロゴの枠の数。`times` と食い違えば読み落としがある */
     logoFrames: number;
+    /** ffmpeg が言ってきた入れ物の尺 (秒)。ffprobe で測れなかったときの代わり。無ければ NaN */
+    duration: number;
 }
 
 const SCDET = /lavfi\.scd\.score:\s*([\d.]+),\s*lavfi\.scd\.time:\s*(-?[\d.]+)/;
 const SILENCE_START = /silence_start:\s*(-?[\d.]+)/;
 const SILENCE_END = /silence_end:\s*(-?[\d.]+)/;
 const PROGRESS = /^out_time_us=(\d+)$/;
+const DURATION = /Duration:\s*(\d+):(\d+):(\d+(?:\.\d+)?)/;
 
 /**
  * 標準エラーの1行を読む。`scdet` は1コマ1行、`silencedetect` は始まりと終わりで1行ずつ、
- * 読んだ所 (`-progress`) は秒で。それ以外 (復号の警告など) は捨てる
+ * 読んだ所 (`-progress`) と入れ物の尺 (`Duration:`) は秒で。それ以外 (復号の警告など) は捨てる
  */
 export function scanLine(
     line: string,
@@ -76,6 +80,7 @@ export function scanLine(
     | { silenceStart: number }
     | { silenceEnd: number }
     | { progress: number }
+    | { duration: number }
     | null {
     const cut = SCDET.exec(line);
     if (cut !== null) return { cut: Number(cut[1]), time: Number(cut[2]) };
@@ -85,6 +90,9 @@ export function scanLine(
     if (end !== null) return { silenceEnd: Number(end[1]) };
     const progress = PROGRESS.exec(line);
     if (progress !== null) return { progress: Number(progress[1]) / 1e6 };
+    const length = DURATION.exec(line);
+    if (length !== null)
+        return { duration: Number(length[1]) * 3600 + Number(length[2]) * 60 + Number(length[3]) };
     return null;
 }
 
@@ -134,8 +142,11 @@ export async function scan(input: string, options: ScanOptions): Promise<Scan> {
     const silences: Range[] = [];
     let pending: number | null = null;
     let logoFrames = 0;
+    let told = Number.NaN;
     const other: string[] = [];
-    const { logo, onProgress, duration = Number.NaN } = options;
+    const { logo, onProgress } = options;
+    const known = () =>
+        options.duration !== undefined && Number.isFinite(options.duration) ? options.duration : told;
 
     // チャンクの境目はコマの境目と揃わない
     const onStdout = logo ? framer(logo.size, (bytes) => logo.onFrame(bytes, logoFrames++)) : undefined;
@@ -156,9 +167,12 @@ export async function scan(input: string, options: ScanOptions): Promise<Scan> {
                 times.push(read.time);
                 cuts.push(read.cut);
             } else if ('progress' in read) {
+                const duration = known();
                 if (onProgress && Number.isFinite(duration) && duration > 0) {
                     onProgress(Math.min(1, read.progress / duration));
                 }
+            } else if ('duration' in read) {
+                if (Number.isNaN(told)) told = read.duration;
             } else if ('silenceStart' in read) {
                 pending = read.silenceStart;
             } else if (pending !== null) {
@@ -168,6 +182,7 @@ export async function scan(input: string, options: ScanOptions): Promise<Scan> {
         },
     });
     // 終わりまで続いた無音は閉じる (尺が分かるときだけ)
+    const duration = known();
     if (pending !== null && Number.isFinite(duration)) silences.push({ start: pending, end: duration });
-    return { code: result.code, stderr: other.join('\n'), times, cuts, silences, logoFrames };
+    return { code: result.code, stderr: other.join('\n'), times, cuts, silences, logoFrames, duration: told };
 }

@@ -19,6 +19,12 @@ describe('標準エラーの1行を読む', () => {
         });
     });
 
+    test('入れ物の尺 (Duration:) は秒で。ffprobe が使えないときの代わり', () => {
+        expect(scanLine('  Duration: 00:30:00.50, start: 6115.51, bitrate: 15000 kb/s')).toEqual({
+            duration: 1800.5,
+        });
+    });
+
     test('読んだ所 (-progress) は秒で', () => {
         expect(scanLine('out_time_us=12500000')).toEqual({ progress: 12.5 });
         expect(scanLine('out_time_us=N/A')).toBeNull();

@@ -1,7 +1,7 @@
 import { LOGO_OK, LOGO_UNUSABLE } from '../format';
 import { decideCm, type Range } from '../ts/cm-decide';
 import type { CmMode } from '../types';
-import { scan } from './cm-scan';
+import { type Scan, scan } from './cm-scan';
 import { config } from './config';
 import { logoRepo, share } from './logo-data';
 import { openLogo } from './logo-own';
@@ -463,41 +463,52 @@ export async function detectCm(input: string, options: CmOptions): Promise<CmDet
      * 1. ロゴを覚えていれば読み、無ければこの録画から覚える (キーフレームだけ読むので速い)。
      *    **覚えられなくても読み込みは続ける** — 無音と切れ目だけで決め直せる
      */
-    let logo: Awaited<ReturnType<typeof openLogo>> | null = null;
+    let logo: Exclude<Awaited<ReturnType<typeof openLogo>>, string> | null = null;
     if (useLogo) {
         step('局ロゴを確かめています');
-        logo =
+        const opened =
             probed.width > 0 && probed.height > 0
                 ? await openLogo(input, probed, { repo: logoRepo(serviceId), signal, deadline })
                 : '大きさが測れませんでした';
-        if (typeof logo === 'string') {
-            why = `ロゴ判定が失敗: ${logo}`;
-            logo = null;
-        }
+        if (typeof opened === 'string') why = `ロゴ判定が失敗: ${opened}`;
+        else logo = opened;
     }
 
     // 2. 1回だけ復号して、無音・切れ目・ロゴの枠をまとめて読む
     step(useLogo ? '無音と場面の切れ目とロゴを読んでいます' : '無音を探しています');
-    const found = await scan(input, {
-        signal,
-        timeoutMs: left(),
-        video: useLogo,
-        audio: true,
-        logo: logo?.scan ?? null,
-        ...(onProgress ? { onProgress } : {}),
-        duration: measured,
-    });
-    if (signal?.aborted === true) throw new Error('中止されました');
-    if (found.code !== 0) {
-        const last = found.stderr.trim().split('\n').at(-1) ?? '';
-        return { cm: [], duration: measured, note: `CM検出の読み込みが失敗 (code ${found.code}): ${last}` };
+    const read = (video: boolean) =>
+        scan(input, {
+            signal,
+            timeoutMs: left(),
+            video,
+            audio: true,
+            logo: video ? (logo?.scan ?? null) : null,
+            ...(onProgress ? { onProgress } : {}),
+            duration: measured,
+        });
+    const failed = (scan: Scan) =>
+        `${left() <= 0 ? '時間切れ' : '失敗'} (code ${scan.code}): ${scan.stderr.trim().split('\n').at(-1) ?? ''}`;
+    const stopped = () => signal?.aborted === true;
+    let found = await read(useLogo);
+    if (stopped()) throw new Error('中止されました');
+    // 絵のほうで落ちたなら (壊れた絵・フィルタ)、音だけ読み直して尺だけで決める
+    if (found.code !== 0 && useLogo && left() > 0) {
+        why = `絵の読み込みが${failed(found)}`;
+        logo = null;
+        found = await read(false);
+        if (stopped()) throw new Error('中止されました');
     }
+    if (found.code !== 0) return { cm: [], duration: measured, note: `CM検出の読み込みが${failed(found)}` };
 
     /*
      * 秒は ffmpeg の時刻 (入れ物の頭から) のまま決める。焼くときに `-ss` と同じだけ詰める。
-     * 尺が測れなかったら、読めた最後のコマで代える
+     * 尺が ffprobe で測れなかったら、ffmpeg が言ってきた尺、それも無ければ読めた最後のコマで代える
      */
-    const duration = Number.isFinite(measured) ? measured : (found.times.at(-1) ?? Number.NaN);
+    const duration = Number.isFinite(measured)
+        ? measured
+        : Number.isFinite(found.duration)
+          ? found.duration
+          : (found.times.at(-1) ?? Number.NaN);
     if (!Number.isFinite(duration)) return { cm: [], duration: measured, note: '尺が測れませんでした' };
     const at = (frame: number) => (frame < found.times.length ? found.times[frame]! : duration);
     const material = {
@@ -511,7 +522,7 @@ export async function detectCm(input: string, options: CmOptions): Promise<CmDet
 
     // ロゴの枠とコマの時刻は順番で突き合わせる。数が合わなければ読み落としがあるので使わない
     if (logo && found.logoFrames !== found.times.length) {
-        why = `ロゴの枠  コマと場面の切れ目  コマが合いません`;
+        why = `ロゴの枠の数 (${found.logoFrames}) とコマの数 (${found.times.length}) が合いません`;
         logo = null;
     }
 
