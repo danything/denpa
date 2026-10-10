@@ -179,12 +179,12 @@ function drawRun(
             ctx.drawImage(drcsImage(drcs, run.fg), x, y, glyphW, h);
             return;
         }
+        if (isSpace(char.codePointAt(0) ?? 0)) return;
         if (run.underline === true) {
             ctx.fillStyle = run.fg;
             const thick = Math.max(1, fontPx * 0.05);
             ctx.fillRect(left, y + baseline + fontPx * 0.135, right - left, thick);
         }
-        if (isSpace(char.codePointAt(0) ?? 0)) return;
         ctx.save();
         ctx.translate(x, y + baseline);
         // 横は字の枠の幅に合わせて縮める (FreeType に幅と高さを別々に渡していたのと同じ)

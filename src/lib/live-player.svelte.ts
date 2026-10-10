@@ -1203,6 +1203,9 @@ export function livePlayer() {
         reset();
         stopRaw();
         thaw();
+        // 字幕を描く係も畳む (canvas の大きさの見張りを外す)
+        painter?.close();
+        painter = null;
     }
 
     /** 出せなかったことにする。**貼った絵は剥がす** — 動いて見えるほうが悪い */

@@ -279,7 +279,7 @@
      */
     let drawn = $state<Drawn[]>([]);
     /** 文字の配置。時刻の順 */
-    let cues = $state<Cue[]>([]);
+    let cues = $state.raw<Cue[]>([]);
     const hasCaptions = $derived(drawn.length > 0 || cues.length > 0);
     /** 文字の配置を描く係 (`overlay` ができたら作る) */
     let painter: CaptionPainter | null = null;
