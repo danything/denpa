@@ -104,7 +104,7 @@ ENV FFMPEG_VERSION=9.0.2
 ARG SVT_AV1_VERSION=v4.2.0
 # renovate: datasource=github-tags depName=xqq/libaribcaption
 ARG LIBARIBCAPTION_VERSION=v1.1.2
-# renovate: datasource=git-refs depName=https://github.com/5ym/arib-font branch=main
+# renovate: datasource=git-refs depName=https://github.com/danything/arib-font branch=main
 #
 # **同じ字を2つの形で置く。** 字幕を焼くのは ffmpeg (fontconfig 経由の ttf)、
 # データ放送を描くのはブラウザなので web フォント (woff2) も要る。5.5MB → 2MB ほど。
@@ -128,7 +128,7 @@ RUN case "${TARGETARCH}" in \
     apt-get update && \
     apt-get -y --no-install-recommends install $DEV $qsv_dev && \
     mkdir -p /usr/share/fonts/truetype/rounded-mplus-arib && \
-    $CURL https://raw.githubusercontent.com/5ym/arib-font/${ARIB_FONT_SHA}/rounded-mplus-1m-arib.ttf \
+    $CURL https://raw.githubusercontent.com/danything/arib-font/${ARIB_FONT_SHA}/rounded-mplus-1m-arib.ttf \
       -o /usr/share/fonts/truetype/rounded-mplus-arib/rounded-mplus-1m-arib.ttf && \
     woff2_compress /usr/share/fonts/truetype/rounded-mplus-arib/rounded-mplus-1m-arib.ttf && \
     mkdir /tmp/arib && cd /tmp/arib && \
