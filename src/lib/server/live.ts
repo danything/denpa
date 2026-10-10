@@ -1380,6 +1380,13 @@ class Session {
                     }
                 }
             })().catch(() => undefined);
+            // 降りたら手放す。次に絵を頼むアプリが来たら起こし直す (`wantPictures`)
+            void proc.exited.then(() => {
+                if (this.pictures !== captioner) return;
+                this.pictures = null;
+                this.picture = null;
+                this.last = null;
+            });
         }
         void this.subtitles(proc, form).catch(() => undefined);
         return captioner;

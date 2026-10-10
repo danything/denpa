@@ -326,11 +326,22 @@ export interface CaptionShown {
  */
 export class CaptionText {
     private readonly decoder = new B24CaptionDecoder();
+    /** 読めなかったと言ったか。**1回だけ言う** (壊れた放送は続けて壊れていることが多い) */
+    private told = false;
 
-    /** 出すものが無いコマ (字幕管理データ・送り直し・待ちだけ) なら null */
+    /**
+     * 出すものが無いコマ (字幕管理データ・送り直し・待ちだけ) なら null。
+     * **読めないコマは捨てて続ける** — 投げると、受けている側 (ライブの字幕の口) ごと止まる
+     */
     feed(frame: MkvFrame): CaptionShown | null {
-        const page = this.decoder.decode(frame.data);
-        return page === null ? null : { at: frame.at, page };
+        try {
+            const page = this.decoder.decode(frame.data);
+            return page === null ? null : { at: frame.at, page };
+        } catch (error) {
+            if (!this.told) console.warn(`[captions] 字幕を1コマ読めませんでした: ${String(error)}`);
+            this.told = true;
+            return null;
+        }
     }
 }
 
