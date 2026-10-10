@@ -114,6 +114,54 @@ RUN set -eu && cd /tmp && \
     echo "${ISDBT_RIO_SHA256}  /opt/siano-userland/firmware/isdbt_rio.inp" | sha256sum -c - && \
     rm -rf /tmp/*
 
+# ---------------------------------------------------------------------------
+# PLEX PX-W3U3 などの ASICEN 系は asicen-userland で掴む (Asicen.cs)。**試験的。**
+#
+# **上流がまだリリースを出していないので、いまは何も入らない。** 版の 0.0.0 は
+# 「まだ無い」の印で、この段は空の /opt/asicen-userland を作るだけ (エージェントは
+# 配布物が無ければ機材を挙げない)。0.1.0 が出れば Renovate が版を上げる PR を出し、
+# そこで初めて取ってくる (自動では入れない。renovate.json)。
+#
+# 取ってくるのは px4-userland と同じ名前の付け方を見込んだ配布アーカイブ (上流の
+# scripts/package-linux-variant.py の形: 頭に1段のディレクトリ、bin/ にコマンド3つ、musl の
+# 完全静的 ELF)。名前の glibc / musl は同梱の IFD ハンドラ (使わない) の libc の違いで、
+# コマンドはどちらも同じ musl の静的 ELF。名前や形が違えば、版を上げる PR の CI (イメージを焼く) で落ちて分かる
+# (SHA256SUMS にそのアーカイブの行が無ければ落とす。--ignore-missing は行が無くても通るので使わない)。
+# 受信機もカードも asicend の制御ソケットで直に話すので、asicen-ts と IFD ハンドラは使わない。
+# 上流の第一弾は Linux x86_64 だけなので、arm64 では入れずに先へ進む。
+#
+# **ファームウェアは上流のアーカイブに入っているものをそのまま使う** (上流 NOTICES.md:
+# Git には入れず、配布物には入れる)。再配布の権利は確かめられていない。上流が添える
+# licenses/VENDOR-FIRMWARE-NOTICE.txt (権利未確定・元の成果物・大きさ・SHA-256) も一緒に置く。
+# 入っていれば上流の記録 (HARDWARE-VALIDATION.md) の SHA-256 と突き合わせる。
+# 入っていなければ焼くのは止めず、エージェントが「ファームウェアがありません」と記録して
+# その機材を使わない。
+# ---------------------------------------------------------------------------
+# renovate: datasource=github-releases depName=Khronos31/asicen-userland extractVersion=^v(?<version>.*)$
+ARG ASICEN_USERLAND_VERSION=0.0.0
+ARG ASICEN_FIRMWARE_SHA256=b45d510200a1690b3ca358d93de13f40e1d3567b663c17e773349ad96f597aa8
+RUN set -eu && mkdir -p /opt/asicen-userland && cd /tmp && \
+    if [ "${ASICEN_USERLAND_VERSION}" = 0.0.0 ]; then \
+      echo "asicen-userland: まだリリースが無いので入れません"; \
+    elif [ "${TARGETARCH}" != amd64 ]; then \
+      echo "asicen-userland: ${TARGETARCH} の配布物はまだ無いので入れません"; \
+    else \
+      base="https://github.com/Khronos31/asicen-userland/releases/download/v${ASICEN_USERLAND_VERSION}" && \
+      archive="asicen-userland-${ASICEN_USERLAND_VERSION}-linux-glibc-x86_64.tar.gz" && \
+      curl -fsSLO "${base}/${archive}" && curl -fsSLO "${base}/SHA256SUMS" && \
+      grep -E "^[0-9a-f]{64} [ *]${archive}\$" SHA256SUMS > archive.sum && \
+      sha256sum -c archive.sum && \
+      tar -xzf "${archive}" -C /opt/asicen-userland --strip-components=1 && \
+      for bin in asicend asicenctl; do test -x "/opt/asicen-userland/bin/${bin}"; done && \
+      if [ -f /opt/asicen-userland/firmware/asicen-loader.bin ]; then \
+        echo "${ASICEN_FIRMWARE_SHA256}  /opt/asicen-userland/firmware/asicen-loader.bin" | sha256sum -c - && \
+        test -f /opt/asicen-userland/licenses/VENDOR-FIRMWARE-NOTICE.txt; \
+      else \
+        echo "asicen-userland: ファームウェアがありません (配布物に入っていませんでした)" >&2; \
+      fi; \
+    fi && \
+    rm -rf /tmp/*
+
 # 設定は PVC (/config) に置く。**どちらも denpa の画面が書く。**
 #
 # **どちらも無くて構わない。** tuners.json が無ければ刺さっている機材を

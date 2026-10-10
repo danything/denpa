@@ -309,6 +309,7 @@ BS は再編があるので焼き込んだ表はいつか古くなります (実
 | PX-S1UD (ISDB-T / USB) | DVB (mainline の Siano `smsusb` + `smsdvb`。firmware `isdbt_rio.inp` が要る)。smsusb を blacklist してあれば siano-userland (同梱。`Siano.cs`。[下記](#px-s1ud-はカーネルが掴んでいなければ-siano-userland-で)) |
 | PX-BCUD (ISDB-S / USB) | DVB (Linux 4.7 以降 mainline) |
 | PX-Q3U4 / PX-W3U4 / PX-MLT 系、e-Better / Digibest 系など (USB・PCIe) | px4-userland (同梱。`Px4.cs`)。px4-userland の対応機種ならそのまま使う ([一覧](https://github.com/Khronos31/px4-userland#対応機種動作環境)) |
+| PX-W3U3 (ISDB-T/S / USB) | **試験的。** asicen-userland (`Asicen.cs`)。上流のリリース待ちで、いまはイメージに入らない ([下記](#px-w3u3-は-asicen-userland-で-試験的上流のリリース待ち)) |
 
 **使うのは2つ。** `px4d` が筐体 (USB 機能・受信機・内蔵カードリーダー) を所有する
 デーモンで、筐体1台につき1つ起こします。`px4ctl` は状態を聞きます。受信機は
@@ -473,6 +474,57 @@ sudo reboot
 - **地上波だけ。** 衛星は siano-ts を起こす前に断ります
 - **実機に当てていません。** siano-userland 側で実機確認済みなのは PX-S1UD (`3275:0080`) だけで、
   `187f:0600` / `187f:0302` はあちらでも未検証です
+
+### PX-W3U3 は asicen-userland で (試験的。上流のリリース待ち)
+
+[asicen-userland](https://github.com/Khronos31/asicen-userland) は、px4-userland と同じ作者による
+ASICEN 系 (PLEX PX-W3U3) のユーザー空間ドライバです。**まだリリースが無い** (0.1.0 の予定) ので、
+いまは受け口だけ用意してあり、**イメージには何も入りません** (`agent/Dockerfile` の
+`ASICEN_USERLAND_VERSION=0.0.0` が「まだ無い」の印)。配布物が無ければエージェントは機材を挙げず、
+選局もしないので、main は今のまま出せます。0.1.0 が出ると Renovate が版を上げる PR を出し
+(自動では入れない。`renovate.json`)、そこで初めて取ってきます。PR の CI でイメージを焼くので、
+配布物の名前や形が見込み (下) と違えばそこで落ちて分かります。
+
+上流の現状 (2026-10): 受信機の並びは `0:S, 1:T, 2:S, 3:T` だが、実機で選局できるのは **受信機 0 の衛星と
+受信機 1 の T27 だけ**、借りられる受信機は**同時に1本**、LNB の給電はできない、1台のホストで**1筐体まで**
+(筐体の錠が `/tmp` に1つ)。上流自身が「まだ4本の受信機として動くドライバではない」と言っています。
+
+- **IPC は px4d と同じ。** asicen-userland は px4-userland の portable IPC を取り込み、枠の頭 (`ASCN`) と
+  ソケットの置き場 (`<ランタイム>/asicen-userland/<instance>/`) だけ変えています。受信機の貸し借り・
+  選局し直し・TS・内蔵カードは `Px4Tuner` / `Px4Card` をそのまま使い、違いは `Px4Wire` に閉じ込めました。
+  同梱の `asicen-ts` (1回1チャンネルの CLI。チャンネルの書き方は px4-ts と同じ) は使いません
+  (px4-ts を使わないのと同じ理由)。上流の `asicend --mock` と話すテストがあります (`AsicenMockTests`。
+  CI では上流の決めたコミットを組んで回す `agent-asicen-mock`。必須にはしない)
+- **USB の serial が無いので、挿し口で見分けます。** PX-W3U3 は1つの筐体に USB 機能が2つ (内蔵ハブの
+  `.1` と `.2`) あり、それぞれに衛星と地上波の受信機が1本ずつ。筐体の名前は内蔵ハブの挿し口 (`1-2`) にして、
+  `asicend --instance` とソケットの置き場にもそのまま使います (PX-M1UR を挿し口で見分けるのと同じ考え)。
+  **設定の `device` は `asicen:<挿し口>:<受信機>`** (`asicen:1-2:1`)。**挿し口を変えると別のチューナーになります**
+- **機材は sysfs で見つけます** (`AsicenUserland.Scan`)。上流の配布物 (`bin/` の asicend・asicenctl・asicen-ts) には
+  機材を並べる道具が無く (`asicen-probe` は入らない。`asicend --list` も実機ではまだ並べない)、asicend には
+  USB の番地と挿し口を2組とも渡す決まり (`--primary` が `.1`、`--sibling` が `.2`) なので、
+  `/sys/bus/usb/devices` の USB ID と番地を読みます。見る USB ID は上流の asicend が受け付けるもの
+  (`0b06:0005`、ファームウェア待ちの `1738:5211` / `1738:5216`) だけ。`.1` がファームウェア待ちの筐体は使いません
+  (`.2` は待ちのままでも asicend が受け付ける)。上流が並べる口を出したら、そちらに聞くよう変えます
+- **asicend は筐体1台につき1つ、起動時に起こします** (`AsicenDaemon`)。番地は挿し直すたびに変わるので
+  起こす直前に読み直し、ready は `asicenctl list` が通ることで見ます (`status` はカードの様子も要る)。
+  受信機も `asicenctl list` に聞きます (形は `px4ctl list` と同じ)
+- **LNB は出せません。** 設定に `15v` と書いてあっても 0V で選局し、チューナー画面にその旨を出します
+  (px4-userland の 1受信機機種と同じ扱い)
+- **カードは asicend の内蔵リーダーを、px4d と同じ IPC で読みます** (`AsicenUserland.Cards`)。上流が用意する
+  pcscd 用の `libifd-asicen.so` (recisdb で解くための道) は使いません。B25 は今までどおりエージェントが解きます
+  ([下記](#b25-の解除もカードリーダーも自前))
+- **ファームウェアは上流の配布アーカイブに入っているものをそのまま使います** (`firmware/asicen-loader.bin`。
+  上流 NOTICES.md: Git には入れず、配布物には入れる)。**再配布の権利は確かめられていません**。上流が添える
+  `licenses/VENDOR-FIRMWARE-NOTICE.txt` (権利未確定・元の成果物・大きさ・SHA-256) も一緒に置き、焼くときに
+  上流の記録の SHA-256 (`b45d5102…`) と突き合わせます ([licenses.md](licenses.md))。挿した直後の PX-W3U3 は
+  ファームウェア待ちで現れ、asicend は自分では流し込まないので、配布物に `asicen-probe` があればエージェントが
+  1つずつ流し込みます (流すたびに並べ直す。上流は流し込むと同じ筐体のもう片方も出直すのを観測している)。
+  **配布物にファームウェアが無ければ「ファームウェアがありません」と記録して、その機材は使いません**
+- **見込みで書いたところ** (0.1.0 が出たら確かめる): 配布物の名前
+  (`asicen-userland-<版>-linux-glibc-x86_64.tar.gz`、タグは `v<版>`、`SHA256SUMS` を添える)、
+  アーカイブの形 (頭に1段のディレクトリ、`bin/` にコマンド、`firmware/` と `licenses/`)。
+  上流の第一弾は Linux x86_64 だけなので、arm64 のイメージ・Mac・Windows には入りません
+- **実機には当てていません** (手元に PX-W3U3 が無い)。当てるなら `denpa-agent --tune asicen:1-2:1 T27`
 
 ### B25 の解除もカードリーダーも自前
 

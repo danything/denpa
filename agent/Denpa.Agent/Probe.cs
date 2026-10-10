@@ -17,6 +17,7 @@ namespace Denpa.Agent;
 /// denpa-agent --tune /dev/dvb/adapter1/frontend0 T27,T21   # 掴んだまま切り替える
 /// denpa-agent --tune px4:00001205000960:2 T27               # px4-userland の機材。Q3U4 なら受信機 2 は地上波
 /// denpa-agent --tune siano:1-2 T27                          # siano-userland の機材 (smsusb を blacklist した PX-S1UD)
+/// denpa-agent --tune asicen:1-2:1 T27                       # asicen-userland の機材 (PX-W3U3。試験的。受信機 1 は地上波)
 /// denpa-agent --tune /dev/dvb/adapter1/frontend0 T27 --decode [--card-url http://…]
 /// denpa-agent --card                                        # カードリーダーを並べ、カードに INT を通す (エージェントを止めて)
 /// </code>
@@ -78,6 +79,7 @@ public static class Probe
     {
         Console.WriteLine(OperatingSystem.IsLinux() ? Ccid.Describe() : PcscLink.Describe());
         foreach (var found in Px4Card.Find()) Console.WriteLine($"内蔵 {found.Name}");
+        foreach (var found in AsicenUserland.Cards()) Console.WriteLine($"内蔵 {found.Name}");
         try
         {
             using var card = CardLinks.Open();

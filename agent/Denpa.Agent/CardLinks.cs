@@ -15,12 +15,13 @@ public static class CardLinks
     ///
     /// <para>
     /// USB のリーダーは、Linux なら usbfs を直に (Ccid.cs)、macOS と Windows なら OS の PC/SC 越しに
-    /// (Pcsc.cs)。**macOS と Windows には usbfs が無い。** Windows には px4-userland も無い
+    /// (Pcsc.cs)。**macOS と Windows には usbfs が無い。** Windows には px4-userland も無い。
+    /// asicen-userland の asicend も内蔵カードを px4d と同じ IPC で出す (Asicen.cs)
     /// </para>
     /// </summary>
     public static IReadOnlyList<CardLinkCandidate> Find() =>
         OperatingSystem.IsWindows() ? PcscLink.Find()
-        : [.. OperatingSystem.IsLinux() ? Ccid.Find() : PcscLink.Find(), .. Px4Card.Find()];
+        : [.. OperatingSystem.IsLinux() ? Ccid.Find() : PcscLink.Find(), .. Px4Card.Find(), .. AsicenUserland.Cards()];
 
     /// <summary>
     /// カードが刺さっていて INT に答えた最初のリーダーで B-CAS を開く。どれも駄目なら投げる。
