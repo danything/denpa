@@ -1290,8 +1290,8 @@ async function runJob(jobId: number): Promise<void> {
     let kept: Range[] | null = null;
     /** 本編の最初の区間 (焼いたものの時刻)。CM を残したときのサムネ */
     let contentStart: Range | null = null;
-    /** CM を絵まで見て決めたか (切ってよいか) */
-    let byPicture = true;
+    /** CM を切ってよいか。音だけで決めたとき・1本目を切れなかったときは切らずにチャプターにする */
+    let cuttable = true;
     const frameRate = Number.isFinite(measured.fps) ? measured.fps : config.cmFallbackFps;
 
     /**
@@ -1483,6 +1483,17 @@ async function runJob(jobId: number): Promise<void> {
         }));
     };
 
+    /** 焼いたものにチャプターを書き足す (焼き直さない。中身はそのまま写すだけ)。2本目からは焼くときに入れる */
+    const addChapters = async (working: string, skip: number): Promise<void> => {
+        encodeOptions.chaptersFile = `${sourceTs}.chapters.txt`;
+        writeChapters(skip);
+        const file = encodeOptions.chaptersFile;
+        if (!(await rewrite(working, (output) => chapterArgs(working, file, output))))
+            console.error('[cm] チャプターを書き足せませんでした。チャプター無しで置きます');
+        // CM が残るので、サムネを本編の最初の区間から取る
+        contentStart = own(skip).keep[0] ?? null;
+    };
+
     for (const [index, codec] of codecs.entries()) {
         /*
          * 別名に書いてから置き換える (入力と出力が同じ場所でも元を壊さない。失敗しても元が残る)。
@@ -1492,7 +1503,7 @@ async function runJob(jobId: number): Promise<void> {
         const working = `${encodedPath(recording, codec)}.${jobId}.${codec}.encoding`;
         const first = index === 0;
         // 切るのは CM を探せるときだけ (支度で転んだら CM 無しで焼く。音だけで決めたら切らない)
-        const cutting = mode === 'cut' && reading !== null && byPicture;
+        const cutting = mode === 'cut' && reading !== null && cuttable;
 
         const done = await encodeWays(codec, working, {
             analysis: first && reading !== null,
@@ -1516,6 +1527,8 @@ async function runJob(jobId: number): Promise<void> {
             return;
         }
         lastOutTimeUs = done.result.outTimeUs;
+        /** この1本で頭から捨てた長さ (境目を指して焼き直したら変わる) */
+        let skip = done.skip;
 
         if (first && reading !== null) {
             setPhase(jobId, 'cm', 'CMの境目を決めています');
@@ -1524,7 +1537,7 @@ async function runJob(jobId: number): Promise<void> {
              * 音だけで決めた (絵の読み込みが落ちて探さずに焼き直した) なら切らない。キーフレームも置いて
              * いないので、切るにはもう1回焼くことになる。尺だけの判定で本編を削るより CM を残す
              */
-            byPicture = done.video;
+            cuttable = done.video;
             firstFrame = (done.found?.times[0] ?? Number.NaN) + done.skip;
             orm()
                 .update(recordings)
@@ -1533,18 +1546,8 @@ async function runJob(jobId: number): Promise<void> {
                 .run();
             setStep(jobId, `CM ${detection.cm.length} 箇所 (${detection.note})`);
             // 切らないと決めたとき (音だけで決めた) もチャプターにする
-            if (detection.cm.length > 0 && (mode === 'chapter' || !byPicture)) {
-                /*
-                 * 1本目にはチャプターを書き足す (焼き直さない。中身はそのまま写すだけ)。
-                 * 2本目からは焼くときに入れる (`buildArgs` の `chaptersFile`)
-                 */
-                encodeOptions.chaptersFile = `${sourceTs}.chapters.txt`;
-                writeChapters(done.skip);
-                const file = encodeOptions.chaptersFile;
-                if (!(await rewrite(working, (output) => chapterArgs(working, file, output))))
-                    console.error('[cm] チャプターを書き足せませんでした。チャプター無しで置きます');
-                // CM が残るので、サムネを本編の最初の区間から取る
-                contentStart = own(done.skip).keep[0] ?? null;
+            if (detection.cm.length > 0 && (mode === 'chapter' || !cuttable)) {
+                await addChapters(working, done.skip);
             }
             if (canceled.has(jobId)) {
                 cleanup(working);
@@ -1552,7 +1555,7 @@ async function runJob(jobId: number): Promise<void> {
             }
         }
 
-        if (cutting && byPicture && detection !== null && detection.cm.length > 0) {
+        if (cutting && cuttable && detection !== null && detection.cm.length > 0) {
             setPhase(jobId, 'cut', 'CMを切っています');
             let cut = await cutWorking(working, done.skip);
             if (cut === 'keys' && !canceled.has(jobId)) {
@@ -1576,15 +1579,22 @@ async function runJob(jobId: number): Promise<void> {
                     return;
                 }
                 lastOutTimeUs = again.result.outTimeUs;
+                skip = again.skip;
                 setPhase(jobId, 'cut', 'CMを切っています');
-                cut = await cutWorking(working, again.skip);
+                cut = await cutWorking(working, skip);
             }
-            // 切れなければ CM ごと置く。録れているものを捨てない
-            if (typeof cut === 'string')
+            /*
+             * 切れなければ CM ごと置き、チャプターを書き足す。録れているものを捨てない。
+             * **1本目を切れなかったら2本目も切らない** — 2本で長さが食い違うと、データ放送の時刻 (`kept`) や
+             * チャプターがどちらかに合わなくなる。2本目はチャプターを入れて焼く
+             */
+            if (typeof cut === 'string') {
                 console.error(
                     `[cm] CMを切れませんでした (${cut === 'keys' ? '境目にキーフレームがありません' : '繋ぎ直しに失敗しました'})。CMを残したまま置きます (${codec})`,
                 );
-            else if (first) kept = cut;
+                cuttable = false;
+                await addChapters(working, skip);
+            } else if (first) kept = cut;
             if (canceled.has(jobId)) {
                 cleanup(working);
                 return finishCanceled(jobId, null);
