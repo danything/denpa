@@ -15,7 +15,6 @@ import { probe } from './hwenc';
 import { attend } from './live';
 import { reconcile as logoReconcile, ride, sweep } from './logo';
 import { activeRecordingIds, recoverOrphanedRecordings } from './recorder';
-import { relayoutLibrary } from './relayout';
 import { tick } from './scheduler';
 import { prune as pruneSessions } from './session';
 import { beginDraining } from './shutdown';
@@ -68,13 +67,6 @@ export function start(): void {
     }
     mkdirSync(config.rawDir, { recursive: true });
     mkdirSync(config.encodedDir, { recursive: true });
-
-    /*
-     * 昔の Jellyfin 流レイアウト (Season フォルダ + episodedetails + `-thumb.jpg`) の
-     * 録画をいまの形へ移し、書かなくなった .nfo も片付ける。要るものだけ・起動時に1回
-     * (relayout.ts)。DENPA_AUTOSTART=0 でも通す — 実体とDBを揃える片付けなので
-     */
-    relayoutLibrary();
 
     /*
      * **入る道が無ければ、無いことを起動ログに出す。** 何も設定していなければ

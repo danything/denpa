@@ -30,7 +30,7 @@ export type { Range };
  * **ロゴでも尺だけでも同じ値を使う。** どちらも「番組が丸ごとCM」は
  * 検出が効いていない兆候で、本編を削るよりCMが残るほうが被害が小さい。
  */
-export const MAX_CM_RATIO = 0.5;
+const MAX_CM_RATIO = 0.5;
 
 export function isCmMode(value: unknown): value is CmMode {
     return value === 'off' || value === 'chapter' || value === 'cut';
@@ -47,7 +47,6 @@ export function cmRatio(cm: Range[], duration: number): number {
  * CM判定が多すぎないか。
  *
  * ロゴを覚えたてのときなど、「頭の2秒だけ本編」のような結果になることがある。
- * 実機では30分アニメ2本が丸ごとCM扱いになっていた (join_logo_scp の頃。CM 2秒〜1802秒)
  */
 export function tooMuchCm(cm: Range[], duration: number): boolean {
     return cmRatio(cm, duration) > MAX_CM_RATIO * 100;
@@ -56,8 +55,7 @@ export function tooMuchCm(cm: Range[], duration: number): boolean {
 /**
  * 区間の裏返し。CMを渡して残す区間をもらう (チャプター・実カット)。
  *
- * **渡された区間は並べ替えてから使う。** 同じものを2箇所に置いていた頃は、片方だけが
- * 並べ替えていて、**同じ入力から違う答えが出る**状態になっていた。
+ * 渡された区間は並べ替えてから使う。
  *
  * 0.5秒より短い隙間は作らない (切っても意味が無く、チャプターだけが増える)。
  */
@@ -118,22 +116,9 @@ export function chapterMetadata(cm: Range[], duration: number): string {
 /**
  * ffprobe の `key=value` 出力を読む。**位置では読まない。**
  *
- * ここは実機で2回踏んでいる。どちらも「1本のTSに局が何本も乗っている」ことが効く
- * (TOKYO MX は MX1 と MX2 が同じTSにいる):
- *
- * 1. **同じ行が番組の数だけ並ぶ。** `-select_streams v:0` を付けても、ffprobe は
- *    番組ごとに v:0 を1つずつ出す。`avg_frame_rate` だけを取って丸ごと
- *    `split('/')` していた頃は、分母が `1001\n30000` になって NaN に落ち、
- *    分子の **30000** をフレームレートとして採っていた。
- * 2. **`-show_entries` に書いた順では返らない。** `avg_frame_rate,width,height`
- *    と頼んでも `1440,1080,30000/1001` (幅,高さ,fps) の順で来る。位置で受けていた
- *    頃は **1440** をフレームレートとして採り、ついでに高さが `30000/1001` に
- *    なっていた (字幕を焼くときの画面の大きさが壊れる)。
- *
- * どちらも当時の join_logo_scp の `Trim` をコマから秒に直すところに効いて、
- * 30分アニメの本編4万2千コマが 1.4秒 / 29秒 に潰れ、「番組の 100% / 98% がCM」で
- * 毎回捨てられていた。ロゴは合致率79%で正しく当たっていたので、
- * 画面からはロゴが悪いようにしか見えなかった (実機の録画34・35・38)。
+ * - 1本のTSに局が何本も乗っていると (TOKYO MX)、`-select_streams v:0` でも
+ *   **同じ行が番組の数だけ並ぶ**
+ * - `-show_entries` に**書いた順では返らない** (`avg_frame_rate,width,height` が幅,高さ,fps の順で来る)
  *
  * 鍵で引き、**同じ鍵は最初のものを採る**。
  */
@@ -162,10 +147,7 @@ async function probe(input: string, args: string[]): Promise<string> {
 }
 
 /**
- * 尺とフレームレートを先に取る。
- *
- * ffmpeg の stderr に出る `Duration:` を当てにしていた頃は、TS によっては
- * 拾えず、進み具合が最後まで 0% のままになっていた。先に ffprobe で押さえる。
+ * 尺とフレームレートを先に取る (ffmpeg の stderr の `Duration:` は TS によっては出ない)。
  *
  * **頭出し (`probeLeadIn`) はここに含めない。** あちらは実際に復号してみる
  * ぶんだけ高くつくのに、要るのは焼く前の1回だけ
@@ -226,9 +208,7 @@ export async function probeVideo(input: string): Promise<{
          * この録画では 6115.51 だった。
          *
          * ffmpeg は入力の時刻からこれを引いて 0 から数え直す。**同じ TS を
-         * 別々に ffmpeg へ通すときは、双方が同じものを引いていないと噛み合わない** —
-         * 字幕を絵にしていた頃 (PGS) がまさにそれで、あちらは
-         * 字幕1枚目を 0 とみなしていたため、出来上がりで字幕だけ 10 秒早く出ていた。
+         * 別々に ffmpeg へ通すときは、双方が同じものを引いていないと噛み合わない**。
          * 頭出し (`probeLeadIn`) もこれを引いて測る
          */
         formatStart: Number.isFinite(formatStart) ? formatStart : NaN,
@@ -261,9 +241,8 @@ export function liveAudioIndexes(json: string): number[] {
  * 焼くときに拾う音声 (音声の何本目か)。**頭に中身の無い音声は拾わない。**
  *
  * 録画の尻には次の番組の頭が少し入る。次の番組が副音声つきだと、その音声の PID が
- * 最後の十数秒だけ現れ、`-map 0:a` はそれも1本の音声として拾っていた。出来上がりに
- * **末尾13秒にしか中身の無い音声トラック**が入り、テレビの VLC (Android) はその録画で
- * 字幕 (PGS) を出さなくなった (実機。同じ日の、音声が1本の録画では出る)。
+ * 最後の十数秒だけ現れ、`-map 0:a` はそれも1本の音声として拾ってしまう
+ * (出来上がりに**末尾にしか中身の無い音声トラック**が入る)。
  *
  * **探りの長さは焼くほうと揃える** (`TS_PROBE`)。何本目かで名指しするので、
  * 見えている音声の並びが食い違うと別の音声を指してしまう。
@@ -520,13 +499,7 @@ export async function openCm(input: string, options: CmOptions): Promise<CmReadi
 
             // ロゴを使わずに、CM の尺 (15秒の倍数) だけで決める
             const cm = decideCm(material);
-            /*
-             * 落ちた理由まで書く。「無音 8 箇所」とだけ出していた頃は、ロゴを選んで
-             * いるのになぜ無音検出になったのかが画面から分からなかった。
-             *
-             * **この文言から「ロゴで判定できなかった」と画面に出すかを決める** (format.logoUnusable)。
-             * 別の列で持っていた頃は、後から条件を広げても既に録ってある分に効かなかった
-             */
+            // 落ちた理由まで書く。**この文言から「ロゴで判定できなかった」と画面に出すかを決める** (format.logoUnusable)
             const note = `無音 ${material.silences.length} 箇所`;
             return {
                 cm: tooMuchCm(cm, duration) ? [] : cm,

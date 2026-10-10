@@ -70,7 +70,7 @@ export function usedByOther(path: string, recordingId: number): boolean {
  *
  * - **行はあるが実体が無い。** ファイルマネージャなど外から録画を消すと、DBには
  *   実体の無い行だけが残る。削除済みに倒して一覧から外す
- * - **実体はあるが行が無い。** 動画の付き添い (索引・字幕・NFO・サムネイル) は
+ * - **実体はあるが行が無い。** 動画の付き添い (作業ファイル・サムネイル・データ放送) は
  *   動画と同じ名前で隣に置くので、動画が消えたあとに取り残されることがある
  *
  * **動画そのものには触らない。** 行の無い動画は、手で置いたものかもしれない。
@@ -134,9 +134,7 @@ const VIDEO = /\.(m2ts|ts|mkv|mp4)$/i;
  * **これから連れ合いになるファイルを巻き添えにしないため。** 名前だけで
  * 「連れ合いが居ない」と決めているので、*まだ出来ていない動画*の付き添いは
  * 全部そう見える。エンコードは出来上がるまで `<最終の名前>.encoding` に書いていて、
- * その `.mkv` はまだどこにも無い。実機では**焼いている途中のものが5分ごとに
- * 消され**、ffmpeg は開いたままの fd に書き終えて 0 で帰り、置き換えるところで
- * `ENOENT ... rename` になっていた。
+ * その `.mkv` はまだどこにも無い (消すと置き換えるところで `ENOENT ... rename` になる)。
  *
  * 書いている最中なら更新時刻が新しいので、そこで避ける。名前で除外しないのは、
  * 作業ファイルの名前がこの先も増えるため。**落ちて取り残されたものも、
@@ -158,11 +156,9 @@ function settling(path: string, at: number): boolean {
  *
  * 付き添いは**動画と同じ名前で隣に置く**決まりなので、名前から連れ合いが分かる。
  *
- * - `<動画>.chapters.txt` … チャプターの作業ファイル。`<動画>.sup` (字幕の絵) は昔の名残
- * - `<動画から拡張子を取ったもの>-poster.jpg` / `.bml.jsonl` … サムネイルと録画のデータ放送。
- *   `.nfo` `.ja.ass` `-thumb.jpg` は昔の名残 (いまは作らない)
+ * - `<動画>.…` … 作業ファイル (`.chapters.txt` など)
+ * - `<動画から拡張子を取ったもの>-poster.jpg` / `.bml.jsonl` … サムネイルと録画のデータ放送
  *
- * 実機では生TSの置き場に、CM検出の道具 (chapter_exe) が作っていた索引が9本 (22MB) 残っていた。
  * 生TSを残さない設定だと、TS が消えたあとも付き添いだけが居座り、録るたびに積もる。
  */
 function sweepLeftovers(): { swept: number; strays: number; pruned: number } {
@@ -204,9 +200,7 @@ function sweepLeftovers(): { swept: number; strays: number; pruned: number } {
      * **すでに空のフォルダも畳む。**
      *
      * 上の掃除は「ファイルを消した道すがら」しか畳まない。ファイルの無い
-     * フォルダは `walk` (ファイルだけを返す) の目に入らず、**一生残る** —
-     * 実機の保存先に、中身が1つも無いシリーズのフォルダが7組残っていた。
-     * ディスクを直接覗いたときに、中身の無いシリーズとして並び続ける。
+     * フォルダは `walk` (ファイルだけを返す) の目に入らず、**一生残る**。
      *
      * 深いものから試す。親は子が消えてはじめて空になる。**空でなければ
      * `rmdir` が断ってくれる**ので、中身の確認はしない。作りたては飛ばす —
@@ -236,11 +230,10 @@ function sweepLeftovers(): { swept: number; strays: number; pruned: number } {
 
 /** 付き添いで、かつ連れ合いの動画が1つも無いか */
 function orphan(path: string, videos: Set<string>): boolean {
-    // 作業ファイル。動画の名前をまるごと頭に持つ (`….m2ts.sup`)
+    // 作業ファイル。動画の名前をまるごと頭に持つ (`….m2ts.chapters.txt`)
     const trailing = /^(.+\.(?:m2ts|ts|mkv|mp4))\.[^/]+$/i.exec(path);
     if (trailing?.[1] !== undefined) return !videos.has(trailing[1]);
-    // NFO・ポスター・データ放送。動画の拡張子を取り替えた形 (metadata.ts の
-    // SIDECAR_SUFFIXES。もう作らないものも前に置いたのが残っているので拾う。tvshow.nfo も同じ道で片付く)
+    // ポスター・データ放送。動画の拡張子を取り替えた形 (metadata.ts の SIDECAR_SUFFIXES)
     const base = SIDECAR_ORPHAN.exec(path);
     if (base === null) return false;
     // どの入れ物で置いたかまでは名前から分からないので、当てはまるものを全部見る
@@ -311,10 +304,9 @@ export function pruneHistory(): { reservations: number; recordings: number; jobs
         .run();
 
     /*
-     * 終わったエンコードの記録も期限を切る。
+     * 終わったエンコードの記録も期限を切る (録画の行が残っていても)。
      *
-     * 録画の行が残っている限り消していなかったので、失敗のたびに1行ずつ積もり続けていた
-     * (実機で失敗22件)。**いちばん新しい1件だけは残す。** 一覧はそれを見て
+     * **いちばん新しい1件だけは残す。** 一覧はそれを見て
      * 「いま失敗しているか」を決めているため、消してしまうと状態が読めなくなる。
      */
     const jobs = affected(

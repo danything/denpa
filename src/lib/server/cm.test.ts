@@ -190,10 +190,7 @@ describe('ffprobe の読み取り', () => {
 
 describe('CM判定が多すぎないか', () => {
     test('番組の半分以上がCMになったら信じない', () => {
-        /*
-         * 実機で起きたやつ。ロゴを覚えたての回で「頭の2秒だけ本編」になり、
-         * 30分アニメが丸ごとCM扱いになっていた (join_logo_scp の頃)
-         */
+        // ロゴを覚えたての回で「頭の2秒だけ本編」になり、30分アニメが丸ごとCM扱いになる
         const whole = invertRanges([{ start: 0, end: 2 }], 1802);
         expect(cmRatio(whole, 1802)).toBe(100);
         expect(tooMuchCm(whole, 1802)).toBe(true);

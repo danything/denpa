@@ -131,8 +131,7 @@ async function surviveRatio(input: string, at: number, signal: AbortSignal): Pro
 /**
  * 30コマか60コマかを、録画から5窓測って決める。
  *
- * 以前はジャンル (国内アニメだけ30コマ) で決めていたが、放送の TS に
- * 「本当のコマ数」は入っていない — EIT も符号化ヘッダも、素材が 24p の
+ * 放送の TS に「本当のコマ数」は入っていない — EIT も符号化ヘッダも、素材が 24p の
  * アニメでも**全部 1080i/60 と名乗る** (本番の実測)。それでも、**60コマに
  * 起こして同じ絵が続く割合を数えれば**見分けはつく — アニメ (24p/30p 由来) は
  * 同じ絵が2〜3枚ずつ並ぶので重複を落とすとコマが大きく減り、本物の 60i
@@ -142,8 +141,7 @@ async function surviveRatio(input: string, at: number, signal: AbortSignal): Pro
  * **窓は録画全体に散らす。** CM (実写 60i) に乗った窓は釣り上がるが、CM は焼きながら探すので
  * (`cm-scan.ts`)、測る時点ではまだ分からない。散らせば CM に乗るのは5窓のうち多くて2つで、
  * 中央値は動かない (本番の録画 117 本の CM 位置で数えて、3つ以上乗るものは無かった)。
- * 最初の本編区間に5窓を固めていた頃は、アバン+OPに窓が乗って OP の激しい動きが
- * 57〜74% の生存率になり、30コマの本編 (実測 20〜32%) を 60コマと誤判定していた (本番の実測、2026-08)。
+ * 頭に固めると、アバン+OP の激しい動きに引きずられて 30コマの本編を 60コマと誤判定する。
  */
 async function measureSmoothMotion(
     source: string,
@@ -226,8 +224,7 @@ function videoArgs(
     const steps = [
         /*
          * 場面の切れ目に印を付ける。**CM 検出と同じコマ (インタレ解除の前) で測る** — 同じ点になるので、
-         * 検出が境目に選んだコマにそのままキーフレームが乗る。インタレ解除の後で測っていた頃は、
-         * 境目の半分ほどで前後1コマずれた (実測)。60コマで出すときは印が両方のフィールドのコマに
+         * 検出が境目に選んだコマにそのままキーフレームが乗る。60コマで出すときは印が両方のフィールドのコマに
          * 写るので、キーフレームが2枚続く
          */
         ...(keyframes === 'scene' ? [KEY_SCDET] : []),
@@ -323,22 +320,14 @@ interface EncodeOptions {
      * 1440x1080 (SAR 4:3) なら 1920x1080。もともと正方形の素材では渡さない
      */
     displaySize?: { width: number; height: number };
-    /**
-     * 音声トラックの名前。**番組表と同じ言い方** (`arib.audioTitles`)。
-     *
-     * 入れていなかった頃は、プレイヤーの切り替えに「Audio 1」「Audio 2」しか
-     * 出なかった — 二カ国語や解説放送でどちらがどちらか分からない
-     */
+    /** 音声トラックの名前。**番組表と同じ言い方** (`arib.audioTitles`) */
     audioTitles?: string[];
     /**
      * 拾う音声 (音声の何本目か。`cm.probeLiveAudio`)。**頭に中身の無い音声を外すため。**
      * 無い・空なら全部拾う。デュアルモノでは使わない (1本を左右に割るだけ)
      */
     audioStreams?: number[];
-    /**
-     * 入れ物 (mkv) の title に焼き込む番組名 (`title.displayTitle`)。テレビの VLC の
-     * 履歴・通知に出る名前 (再生画面の見出しは URL の尻 — share.ts の shareUrls)
-     */
+    /** 入れ物 (mkv) の title に焼き込む番組名 (`title.displayTitle`) */
     mediaTitle?: string;
     /**
      * GPU で焼く道 (どの口を `qsv` / `vaapi` のどちらで)。使えるかどうかは
@@ -383,8 +372,7 @@ export function inputSkip(seek: number | null, videoStart: number | undefined): 
  * **字幕トラックの入れ方。字幕はここ1か所で決める。**
  *
  * 放送の ARIB 字幕を**そのまま写す** (`-c:s copy`。Matroska では `S_ARIBSUB`、CodecPrivate は ffmpeg が書く)。
- * 観る画面はこれをサーバで解いて文字の配置で描く (`api/recordings/<id>/captions.json`)。以前は libaribcaption で
- * 描いた絵を PGS にして入れていた (外のプレイヤー向け)。経緯は docs/encode.md「字幕は放送の ARIB 字幕をそのまま」。
+ * 観る画面はこれをサーバで解いて文字の配置で描く (`api/recordings/<id>/captions.json`)。
  *
  * **局と字幕の筋を名指しする** (`0:p:<局>:s:0`。`captions.programSpec`)。名指ししない既定の選び方では ARIB の字幕が落ちる。
  * 局が分からなければ入力の頭の字幕。? は字幕の無い番組でも止めないため。
@@ -411,8 +399,7 @@ function captionArgs(program: number | undefined): string[] {
 }
 
 /**
- * ffmpeg の引数。元は EPGStation 時代の enc.js で、各フラグの理由はコメントに
- * 残してある (インタレ解除、デュアルモノ分離)。字幕は焼き込まず、放送の ARIB 字幕をそのまま写す (`captionArgs`)。
+ * ffmpeg の引数。字幕は焼き込まず、放送の ARIB 字幕をそのまま写す (`captionArgs`)。
  *
  * CM を切るときは場面の切れ目にキーフレームを置いて焼き (`keyframes`)、焼いたものを
  * キーフレームの所で切る (`cm-cut.ts`)。CM 検出の材料は同じ ffmpeg に取らせる (`analysis`)。
@@ -498,13 +485,7 @@ export function buildArgs(
     }
     args.push('-c:a', 'libopus', '-b:a', '256k'); // 元放送(AAC 256kbps)と同じビットレート
 
-    /*
-     * 字幕は**映像・音声のあと**に map する (= 出来上がりの最後のトラック)。
-     * 以前は最初に map していてトラック0が字幕になっていた — 慣習 (映像が先頭)
-     * から外れると、テレビ組み込みのデマルチプレクサが弱いことがある
-     * (実機のテレビ VLC で、字幕を選ぶと固まる症状の切り分けとして直した)。
-     * 指定は `s:0` (字幕の0番) 型なので、並べ替えてもここは変わらない
-     */
+    // 字幕は**映像・音声のあと**に map する (= 最後のトラック)。映像が先頭でないと弱いデマルチプレクサがある
     args.push(...captionArgs(options.program));
 
     /*
@@ -611,14 +592,10 @@ function wakeStopping(jobId: number): void {
 /**
  * エンコードを中止する。**畳み終わってから返す。**
  *
- * 頼むだけで返していた頃は、**押しても画面が何も変わらなかった** — 押した直後の
- * 読み直しは ffmpeg がまだ死ぬ前に届くので、同じ「エンコード中 60.9%」が
- * そのまま出る。行が変わるのは畳み終わりの知らせ (SSE) が来たときで、その繋ぎが
- * 切れている端末では**リロードするまで永久に変わらなかった**。
- *
+ * 頼むだけで返すと、押した直後の読み直しは ffmpeg が死ぬ前に届き、画面が変わらない。
  * ffmpeg は SIGTERM から1秒ほどで終わるので、待ってから返せば押した人の画面は
  * その場で「録画済み」に変わる。**上限つき** (`CANCEL_WAIT_MS`) で、間に合わ
- * なければ諦めて返す — 待たせ続けるよりは、知らせに任せるほうがまし
+ * なければ諦めて返す (あとは知らせ (SSE) に任せる)
  */
 export async function cancel(jobId: number): Promise<void> {
     canceled.add(jobId);
@@ -673,12 +650,10 @@ function setPhase(jobId: number, phase: EncodePhase, log: string): void {
 /**
  * 段階の中で「いま何をしているか」だけ書き換える。
  *
- * CM検出は中で3つの道具を順に回していて、どれも数分かかる。段階の名前
- * (「CM検出中」) だけでは、進んでいるのか止まっているのかが分からなかった。
+ * 段階の名前 (「CM検出中」) だけでは、進んでいるのか止まっているのかが分からない。
  *
- * **中止を頼まれた後は書き換えない。** `cancel` が書いた「中止しています」を、
- * 畳むまでの間に通る段階 (無音検出に落ちる・字幕を絵にする) が上書きして、
- * 押したのに「CMを探しています」に戻って見えていた
+ * **中止を頼まれた後は書き換えない** — `cancel` が書いた「中止しています」を、
+ * 畳むまでの間に通る段階が上書きしないように
  */
 function setStep(jobId: number, log: string): void {
     if (canceled.has(jobId)) return;
@@ -728,17 +703,9 @@ export function expectedFrames(
  * 進み具合は**焼けたコマ数**から出す (`-progress` の `frame=` ÷ `expectedFrames`)。
  * 残り時間も同じ出どころ (直近30秒で何コマ焼けたか)。
  *
- * **エンコーダが今どこに居るかを直に数えている**のがこの物差しの取り柄で、
- * 前に使っていた2つはどちらも「エンコーダの居場所ではないもの」を見ていた:
- *
- * - `out_time_us` は**出力の mux が最後に書いたパケットの時刻**。疎な字幕が
- *   先に mux されると先に飛び、壊れたストリームが混ざるとそこで止まる
- * - 入力TSの**読み位置** (`/proc/<pid>/fdinfo`) は**デマクサの居場所**。
- *   読むほうだけ先に走ることがあり、実機では焼き上がり半分で読み切って
- *   (RSS 4.9GB ぶん抱えたまま) 99% に貼り付き、残り時間も出なくなった
- *
- * 読み位置は**分母 (尺) が測れなかったときの控え**として残してある。経緯と
- * 実例は docs/encode.md「進み具合は焼けたコマ数から出す」
+ * **エンコーダが今どこに居るかを直に数えている**。`out_time_us` (mux が最後に書いた時刻。
+ * 疎な字幕で先に飛ぶ) や入力の読み位置 (デマクサの居場所。先に読み切ることがある) は使わない。
+ * 読み位置は**分母 (尺) が測れなかったときの控え**。経緯は docs/encode.md「進み具合は焼けたコマ数から出す」
  */
 export function encodeProgress(totalFrames: number, inputBytes: number) {
     const samples: { at: number; done: number }[] = [];
@@ -828,8 +795,7 @@ export function readInputPos(pid: number, fd: number): number {
 /**
  * 失敗の理由を stderr から拾う。
  *
- * 末尾をそのまま切り出すと、ARIB字幕まわりの「オプションが使われなかった」といった
- * 警告ばかりが残って肝心の理由が見えない。エラーらしい行を優先して残す。
+ * 末尾をそのまま切り出すと警告ばかりが残って肝心の理由が見えない。エラーらしい行を優先して残す。
  */
 export function failureReason(stderr: string): string {
     const lines = stderr
@@ -918,12 +884,7 @@ async function runFfmpeg(
         if (wroteAt - lastWrite >= PROGRESS_INTERVAL) {
             lastWrite = wroteAt;
             updateProgress(percent, etaMs, log);
-            /*
-             * 進み具合は**中身ごと**流す (`encode` イベント)。`recordings` で
-             * 流していた頃は、数秒おきに一覧がページ全体を読み直していて、
-             * 遅い回線では読み直しの往復ぶん数字が遅れた。中身が届けば
-             * 画面は該当行の数字を書き換えるだけで済む
-             */
+            // 進み具合は**中身ごと**流す (`encode` イベント)。画面は該当行の数字を書き換えるだけで済む
             emit('encode', {
                 recordingId: job.recording_id,
                 percent,
@@ -1019,8 +980,6 @@ async function decide(
  * `descramble` の `.decoded.m2ts` は、正常終了や失敗なら finally / cleanup で消えるが、
  * **プロセスごと落ちたときは取り残される**。しかも TS の拡張子で終わるので、掃除機は
  * 動画と見なして消さない (`files.ts` の VIDEO)。生TSと同じ大きさのものが丸ごと居座る。
- * (拡張子は `.m2ts` に揃えてある — 録画そのものと同じで、`.ts` は TypeScript と紛れる。
- * `.ts` で作っていた頃の取り残しも一緒に消す)
  *
  * 走らせ直せば作り直すものなので、ジョブを(再)実行する直前と、諦めて failed にするときに
  * 消しておく。自分の入力に紐づくものだけ触るので、他の走っているエンコードには当たらない。
@@ -1028,7 +987,7 @@ async function decide(
  * 取り残されても掃除機が片付ける)
  */
 function clearScratch(input: string): void {
-    for (const ext of ['m2ts', 'ts']) removeIfExists(`${input}.decoded.${ext}`);
+    removeIfExists(`${input}.decoded.m2ts`);
 }
 
 /** ジョブを失敗にする (行を書くだけ。知らせも画面の更新もしない) */
@@ -1248,12 +1207,9 @@ async function runJob(jobId: number): Promise<void> {
      * 画面でも「まだ保存先に無い」と正しく出る
      */
     /*
-     * **DBが指す2本だけでなく、この録画が取りうる名前の“はぐれファイル”も消す。**
-     * 命名規則が `[録画ID]` 付きに変わる前の素名 AV1 などは library_path/alt_path に
-     * 載っていないので、これまで永久に残り、置き場所を毎回「衝突」と読ませて
-     * `[録画ID]` を剥がれなくしていた (library.ts の libraryFamily 参照)。
-     * **他の録画が現に使っている置き場所は消さない** — DBで確認して、はぐれ
-     * (誰も使っていないファイル) だけ片付ける
+     * **DBが指す2本だけでなく、この録画が取りうる名前の“はぐれファイル”も消す** (`libraryFamily`)。
+     * 残っていると置き場所を「衝突」と読ませて `[録画ID]` が付く。
+     * **他の録画が現に使っている置き場所は消さない** (DBで確認する)
      */
     const stalePaths = new Set<string>();
     if (recording.library_path !== null) stalePaths.add(recording.library_path);
@@ -1619,13 +1575,6 @@ async function runJob(jobId: number): Promise<void> {
          */
         const output = encodedPath(recording, codec);
         renameSync(working, output);
-        /*
-         * **字幕は動画の隣に置きません。** 入れ物の中に入っているので、要るときに抜く
-         * (`api/recordings/<id>/captions.json`)。消すほうだけ残してある — 文字の
-         * 写しを置いていた頃 (`.ja.ass`) のものが残っていると、CMを切ったぶんだけ
-         * ずれた字幕が付いたままになる
-         */
-        removeIfExists(sidecarPaths(output).subtitle);
         placed.push({ codec, path: output, skip });
     }
 
@@ -1660,9 +1609,6 @@ async function runJob(jobId: number): Promise<void> {
     // 解除したTSは作業用。元のTSは残したままなので、やり直せる
     removeIfExists(decoded);
 
-    // 番組名が変わって置き場所が動いたぶんは、焼き直す前の掃除
-    // (上の stalePaths) が library_path/alt_path ごと消してあるので、ここでは要らない
-
     let size = 0;
     try {
         size = statSync(output).size;
@@ -1672,11 +1618,7 @@ async function runJob(jobId: number): Promise<void> {
 
     /*
      * 出来上がりの長さで上書きする。CMを切っていれば元のTSより短い。
-     *
-     * **出来上がったものを測る。** ffmpeg が言ってきた `out_time` を書いていた頃は、
-     * 壊れた副音声が1本混ざっている録画で **8.576 秒**と入っていた
-     * (中身は 30分ぶん正しく入っていた)。理由は `out_time` が当てにならないのと同じ
-     * (`encodeProgress` のコメント参照)。測れなかったときだけ、これまでどおり ffmpeg の値に落ちる
+     * **出来上がったものを測る** (`out_time` は当てにならない。`encodeProgress`)。測れなかったときだけ ffmpeg の値
      */
     const made = (await probeVideo(output)).duration;
     const length = Number.isFinite(made) ? made * 1000 : lastOutTimeUs / 1000;

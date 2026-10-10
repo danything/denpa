@@ -46,8 +46,6 @@ describe('覚えたかどうか', () => {
         const repo = join(config.cmLogoDir, '3');
         mkdirSync(repo, { recursive: true });
         writeFileSync(join(repo, 'own-logo-1440x1080.bin.1-abc.tmp'), '');
-        // logoframe が覚えていた頃の .lgd も数えない (もう使わない)
-        writeFileSync(join(repo, 'TEST-v0001.lgd'), '');
 
         expect(learned(3)).toBe(false);
     });

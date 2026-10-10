@@ -6,8 +6,6 @@ describe('sidecarPaths', () => {
         const paths = sidecarPaths('/library/番組/番組 - 2026-08-01 - 2130.mkv');
         expect(paths.thumbnail).toBe('/library/番組/番組 - 2026-08-01 - 2130-poster.jpg');
         expect(paths.dataBroadcast).toBe('/library/番組/番組 - 2026-08-01 - 2130.bml.jsonl');
-        // .nfo はもう書かないが、置いてあった頃のものを片付けるために名前は覚えている
-        expect(paths.nfo).toBe('/library/番組/番組 - 2026-08-01 - 2130.nfo');
     });
 });
 

@@ -66,9 +66,7 @@ function json<T>(name: string, read: (value: unknown) => T) {
 /**
  * 録画ファイルの場所を持つ列。**DB には置き場からの相対で持ち、読み書きするコードには絶対パスで見せる。**
  *
- * 絶対パスで持っていた頃は、置き場のマウント先を変えると全部の録画が辿れなくなった
- * (`/app/recorded` → `/media/raw` に移したときがそう)。相対なら、置き場をどこへ
- * 移しても DB は触らずに済む。読み替えはここだけで済ませ、使う側は今までどおり
+ * 相対なら、置き場のマウント先をどこへ移しても DB は触らずに済む。読み替えはここだけで済ませ、使う側は今までどおり
  * 絶対パスで扱う (`eq()` や `set()` に渡した値もここを通る)。
  *
  * 置き場の外のもの (Windows で書かれた古い行など) は絶対のまま持ち、そのまま返す。
@@ -133,8 +131,8 @@ export function reservationState(
 }
 
 /**
- * 録画の直近のエンコード失敗の理由。**いちばん新しいジョブが失敗していたときだけ**。
- * 「失敗したジョブのうち最新」を拾っていた頃は、焼き直して成功しても前の失敗が残っていた
+ * 録画の直近のエンコード失敗の理由。**いちばん新しいジョブが失敗していたときだけ**
+ * (焼き直して成功したら前の失敗は出さない)
  */
 export function lastEncodeError(recordingId: AnySQLiteColumn) {
     return sql<string | null>`(
@@ -274,8 +272,7 @@ export const rules = sqliteTable('rules', {
 /**
  * DB に入る予約の状態。**録り始めてからの状態は持たない** — 録画の行がそれを
  * 知っているので、画面に出す `recording | done | failed` は録画から引く
- * (`types.ts` の ReservationState、上の `reservationState()`)。
- * 予約側にも書き写していた頃は、録画が失敗しても予約は録画中のまま残っていた
+ * (`types.ts` の ReservationState、上の `reservationState()`)
  */
 const RESERVATION_STATES = ['scheduled', 'conflict', 'canceled', 'missed'] as const;
 
@@ -390,12 +387,7 @@ export const recordings = sqliteTable(
         updated_at: integer('updated_at').notNull(),
         /**
          * 状態は**持たない**。上の列から決まるものを毎回引き直す生成列。
-         *
-         * 文字列で別に持っていた頃は、同じことを二重に書くことになっていた
-         * (エンコードが始まれば 'encoding'、終われば library_path と一緒に 'available')。
-         * 書き忘れれば食い違うし、実際にエンコードの失敗が録画そのものの失敗として
-         * 'failed' に化けて、中身のある生TSを持ったまま再生もできなくなっていた。
-         * 生成列にしておくと SQLite が書き込みを拒むので、食い違いようがない。
+         * SQLite が書き込みを拒むので、上の列と食い違いようがない。
          *
          * CASE は必ずどれかに落ちるので NOT NULL (DB の定義には書かない。生成列の
          * NOT NULL は schema.test.ts も見ない)
@@ -405,8 +397,7 @@ export const recordings = sqliteTable(
             .generatedAlwaysAs(sql.raw(RECORDING_STATE), { mode: 'virtual' }),
         /**
          * CM検出が何をしたか。一覧には出さず、録画の詳細で見せる。
-         * **ロゴを使えたかどうかもここから読む** (`format.logoUnusable`)。別の列で
-         * 持っていた頃は、後から条件を広げても既に録ってある分には効かなかった
+         * **ロゴを使えたかどうかもここから読む** (`format.logoUnusable`)
          */
         cm_note: text('cm_note'),
         /**

@@ -19,17 +19,12 @@ import { run } from './stream';
  * `encoder.ts`)。ここの `scan` が自分で ffmpeg を起こすのは、ロゴを覚え直して枠だけ読み直すときと、
  * CM 検出だけやり直すとき。
  *
- * **材料は標準エラーに出させない。** 以前は `scdet` と `silencedetect` のログの行 (1コマ1行) を標準エラーで読んでいたが、
- * エンコードに相乗りさせると 30分で 54712 行のうち 1 行が届かず、ロゴを使えなくなった (実測。ログは書けなければ黙って捨てる)。
- * ファイルへ書かせれば落ちない。標準エラーから読むのは入れ物の尺 (`Duration:`) だけ。
- *
- * 以前は chapter_exe (dtvindex で TS を読み直す) と自前のロゴ判定 (もう一度 ffmpeg で復号する) が
- * 別々に TS を読んでいた。時刻も1つの物差しになる — chapter_exe は「コマ番号 ÷ fps」で秒に直していたので、
- * 24コマの絵を 30コマで流す録画 (RFF) ではずれていった。
+ * **材料は標準エラーに出させない。** ffmpeg はログを書けなければ黙って捨てるので、エンコードに相乗りさせると
+ * 行が落ちる (実測 30分で 54712 行のうち 1 行)。ファイルへ書かせれば落ちない。標準エラーから読むのは入れ物の尺 (`Duration:`) だけ。
  */
 
-/** 無音とみなす音の大きさ。16ビットで ±50 (chapter_exe の既定と同じ) */
-export const SILENCE_NOISE = 50 / 32768;
+/** 無音とみなす音の大きさ。16ビットで ±50 */
+const SILENCE_NOISE = 50 / 32768;
 /** 拾う無音の最短 (秒)。短いものは判定 (`cm-decide`) で捨てる */
 export const SILENCE_MIN = 0.15;
 
@@ -228,7 +223,7 @@ export function scanReader(want: ScanWant): ScanReader {
 }
 
 /** 自分で ffmpeg を起こして読むときの引数 (`before` は入力の前に置く) */
-export function scanArgs(input: string, outputs: string[], before: string[] = []): string[] {
+function scanArgs(input: string, outputs: string[], before: string[] = []): string[] {
     // 読んだ所は標準エラーへ (`-progress`)。CM 検出だけやり直すときの進み具合 (`onTime`)
     return [
         config.ffmpeg,
