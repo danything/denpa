@@ -352,7 +352,8 @@ SQLite が拒むので、事実と状態が食い違いません。文字列で�
 | `agent/Denpa.Agent/Tuning.cs` | 選局そのもの (DVB)。掴んだまま変えられる |
 | `agent/Denpa.Agent/Px4.cs` | px4-userland の機材 (PX-Q3U4 / PX-MLT 系 …) を掴む。筐体と受信機は `px4d --list-json` (px4-userland 0.1.9 以上) に聞き、受信機は px4d の制御ソケットで借りたまま選局し直す |
 | `agent/Denpa.Agent/Siano.cs` | siano-userland の機材 (PX-S1UD …) を掴む。機材は `siano-ts --list` に聞き、カーネルが掴んでいないものだけを `--control` で起こしたまま選局し直す |
-| `agent/Denpa.Agent/Px4Control.cs` | px4d の制御ソケット (SPEC 6 節の portable IPC)。受信機 (`Px4.cs`) とカード (`Px4Card.cs`) が使う |
+| `agent/Denpa.Agent/Asicen.cs` | asicen-userland の機材 (PX-W3U3。試験的) を掴む。機材は sysfs で見つけて挿し口で名前を付け、asicend を起こし、受信機とカードは px4d と同じ IPC (`Px4Wire.Asicen`) で話す。配布物が無ければ何もしない |
+| `agent/Denpa.Agent/Px4Control.cs` | px4d の制御ソケット (SPEC 6 節の portable IPC)。受信機 (`Px4.cs`) とカード (`Px4Card.cs`) が使う。asicend とも同じ口で話す (違いは `Px4Wire`) |
 | `agent/Denpa.Agent/ChildTs.cs` | 子プロセス (siano-ts) の標準出力を読み口に載せる。pipe の広げ方・閉じ方 |
 | `agent/Denpa.Agent/ChannelTable.cs` | チャンネル名 → 周波数と TSID |
 | `agent/Denpa.Agent/Cas.cs` | B-CAS まわりの境目 (解く・鍵を貰う・カードと話す、の3段の型) |
@@ -363,7 +364,7 @@ SQLite が拒むので、事実と状態が食い違いません。文字列で�
 | `agent/Denpa.Agent/Px4Card.cs` | px4-userland の内蔵カードリーダーに px4d の control socket で APDU を投げる |
 | `agent/Denpa.Agent/CardShare.cs` | 鍵をどこから貰うか (手元のカード / 別の拠点) と、鍵を他の拠点へ配る口 |
 | `agent/Denpa.Agent/Card.cs` | カードが読めているかと、掛かったまま録れた TS の後からの解除 |
-| `agent/Denpa.Agent/DeviceProbe.cs` | チューナーの自動検出 (DVB は ioctl で受けられる方式を聞き、px4 / siano は `--list` に聞く) |
+| `agent/Denpa.Agent/DeviceProbe.cs` | チューナーの自動検出 (DVB は ioctl で受けられる方式を聞き、px4 / siano は `--list` に聞き、asicen は sysfs を読む) |
 | `agent/Denpa.Agent/Config.cs` | `tuners.json` と `channels.json` の読み書き |
 | `agent/Denpa.Agent/Events.cs` | 知らせ (`/denpa/events`、SSE) |
 | `agent/Denpa.Agent/Probe.cs` | 実機で選局と復号だけ試す口 (`denpa-agent --tune …`)。サーバは立てない |
@@ -376,7 +377,7 @@ SQLite が拒むので、事実と状態が食い違いません。文字列で�
 環境変数は `AGENT_PORT` (既定 `25252`)・`TUNERS_FILE` / `CHANNELS_FILE` (既定 `/config/` の下)・
 `MEDIA_DIR` / `RAW_DIR` (denpa と同じ。生TSの置き場)・`CARD_URL` (手元にカードが無い拠点だけ。鍵を貰う先)・
 `SHUTDOWN_WAIT` (denpa と同じ)。同梱のドライバの置き場 `PX4_USERLAND_DIR` / `PX4_FIRMWARE` / `PX4_RUNTIME_DIR` /
-`SIANO_USERLAND_DIR` / `SIANO_FIRMWARE` はイメージの既定のままでよい (Mac の `install.sh` と Windows の `install.ps1` だけが書き換える)。
+`SIANO_USERLAND_DIR` / `SIANO_FIRMWARE` / `ASICEN_USERLAND_DIR` / `ASICEN_FIRMWARE` / `ASICEN_RUNTIME_DIR` はイメージの既定のままでよい (Mac の `install.sh` と Windows の `install.ps1` だけが書き換える)。
 `FAKE_TUNE` は適合テストだけが使う。
 
 ## テスト
