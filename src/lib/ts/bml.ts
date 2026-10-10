@@ -273,7 +273,10 @@ export class BmlDecoder {
      * 分け合うので、切り分けは1回で済ませて配る (`server/live.ts` の `tap`)。
      *
      * **PID で行き先を引く。** 組み立て役を全部に回していた頃は、データ放送と
-     * 関係ない映像のパケットのたびにカルーセルの数だけ呼んでいた
+     * 関係ない映像のパケットのたびにカルーセルの数だけ呼んでいた。
+     *
+     * `packet` は呼び手の塊の上の窓 (`psi.ts` の `PacketStream`)。**返ったあとまで
+     * 持つなら写すこと** — 塊の入れ物は使い回される
      */
     feedPacket(packet: Uint8Array): void {
         const pid = ((packet[1]! & 0x1f) << 8) | packet[2]!;
