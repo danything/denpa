@@ -88,7 +88,10 @@ libaribcaption の `aribcc_renderer_render()` は描いた絵を呼び出し側�
   フォントに字があるもの: 一点しんにょうの「迂」(U+8FC2)、《 》、半角の ｟ ｠。
   電話・テレビ・スピーカーの絵文字はフォントに無いので足しません (足しても絵に戻るだけ)
 
-**投げ先は libaribcaption です** (まだ出していない)。
+**投げ先は libaribcaption です**:
+[PR #21](https://github.com/xqq/libaribcaption/pull/21) (2026-10-10 に出した)。
+上流に出した版は描き方を少し詰めてあり、ここのパッチとは中身が違います — 畳むのは1段だけ、
+Scale2x も1回だけ (重ねると角がどんどん丸まる)、同じ大きさで描くときは双線形でぼかさない。
 **denpa の libaribcaption がそれを含む版に上がったら、このパッチは消します。**
 
 ## `ffmpeg-sched-overflow.patch` (9.0.2 で取り下げ)

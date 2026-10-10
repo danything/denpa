@@ -14,6 +14,8 @@ import { addFrame, emptyOrientation, findArea } from './logo-detect';
 
 const W = 960;
 const H = 720;
+/** 上下の帯の高さ。`server/logo-own.ts` と同じく縦の 1/5 */
+const BAND = Math.round(H / 5) & ~1;
 
 /** 番組のコマ1枚 (8bit グレースケール) */
 interface Frame {
@@ -22,12 +24,11 @@ interface Frame {
 
 /** 上下の帯で向きを足し合わせて割り出す。`server/logo-own.ts` の覚え方と同じ */
 function find(frames: Frame[]): Rect | null {
-    const band = Math.round(H / 5) & ~1;
-    const top = emptyOrientation(W, band);
-    const bottom = emptyOrientation(W, band);
+    const top = emptyOrientation(W, BAND);
+    const bottom = emptyOrientation(W, BAND);
     for (const { data } of frames) {
         addFrame(top, data, 0, W);
-        addFrame(bottom, data, (H - band) * W, W);
+        addFrame(bottom, data, (H - BAND) * W, W);
     }
     return findArea({ top, bottom }, W, H);
 }
@@ -68,6 +69,8 @@ function make(count: number, logo: Rect | null, alpha: number, logoValue = 255, 
             amp: 30 + rand() * 30,
         }));
         for (let y = 0; y < H; y++) {
+            // 見るのは上下の帯だけ (`find`)。間は描かない — 全面を描いていた頃は1件 8 秒かかり、CI で時間切れになっていた
+            if (y >= BAND && y < H - BAND) continue;
             for (let x = 0; x < W; x++) {
                 let value = 128 + (rand() - 0.5) * 16;
                 for (const w of waves) value += w.amp * sin(w.fx * x + w.fy * y + w.phase);
