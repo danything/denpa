@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # 偽 ffmpeg。E2E で「エンコードが走って mkv が出来る」ところまでを実 ffmpeg 無しで通す。
-# 本物と同じく stderr に Duration を、stdout に -progress の key=value ブロックを吐く。
+# 本物と同じく stderr に Duration を、-progress の key=value ブロックを fd 3 (焼くほうの `-progress pipe:3`。
+# 開いていなければ stdout) に吐く。
 set -uo pipefail
 
 # 最後の引数が出力ファイル。ただし `-` は本物と同じく「ファイルではない」
@@ -45,21 +46,23 @@ for arg in "$@"; do
     prev="$arg"
 done
 
-# 入力の名前に broken-video が入っていたら、CM検出で絵も読むとき (scdet) だけ落とす。音だけ読み直す道を試すため
-if [[ "$input" == *broken-video* ]] && printf '%s\n' "$@" | grep -q scdet; then
-    echo "Error while filtering: Invalid data found when processing input" >&2
-    exit 1
-fi
-
-# CM検出パス (silencedetect) は本編とは別物として応答する。
-# 300秒と360秒に境界が来るので、300-360 の 60 秒がCMブロックとして検出される。
+# CM検出 (silencedetect)。300秒と360秒に境界が来るので、300-360 の 60 秒がCMブロックとして検出される。
+# 焼く出口 (`-f matroska`) があればエンコードに相乗りしている (encoder.ts) ので、材料を出してから
+# 下の焼く道へ進む。無ければ検出だけ (ロゴの枠を読み直すとき)
+mkv=""
+prev=""
+for arg in "$@"; do
+    if [ "$prev" = "matroska" ]; then mkv="$arg"; fi
+    prev="$arg"
+done
 if printf '%s\n' "$@" | grep -q silencedetect; then
     echo "  Duration: 00:10:00.00, start: 0.000000, bitrate: 15000 kb/s" >&2
     echo "[silencedetect @ 0x1] silence_start: 299.5" >&2
     echo "[silencedetect @ 0x1] silence_end: 300.5 | silence_duration: 1.0" >&2
     echo "[silencedetect @ 0x1] silence_start: 359.5" >&2
     echo "[silencedetect @ 0x1] silence_end: 360.5 | silence_duration: 1.0" >&2
-    exit 0
+    if [ -z "$mkv" ]; then exit 0; fi
+    output="$mkv"
 fi
 
 # 焼いたものから字幕の絵を抜くパス (`api/recordings/<id>/captions.sup`)。
@@ -153,6 +156,9 @@ if [ -f "${FAKE_FFMPEG_FAIL_FILE:-/nonexistent}" ]; then
     exit 1
 fi
 
+# 進み具合の出口。焼くほうは fd 3 を開いて渡す (`-progress pipe:3`)。開いていなければ stdout
+if { true >&3; } 2>/dev/null; then exec 4>&3; else exec 4>&1; fi
+
 # E2E から「このエンコードを長引かせる」と指示するための目印。走っている最中に
 # 押すもの (エンコード中止) を試すのに要る。**刻みは細かいまま** — 1回の sleep を
 # 長くすると、trap に入るのがそのぶん遅れる (sh は走っている子を待ってから trap を回す)。
@@ -169,7 +175,7 @@ fi
 for i in $(seq 1 "$steps"); do
     out_time_us=$((i * 10000000 / steps))
     printf 'frame=%d\nfps=120\nbitrate=2000.0kbits/s\ntotal_size=%d\nout_time_us=%d\nspeed=8.0x\ndrop_frames=0\nprogress=continue\n' \
-        "$((i * 300))" "$((i * 1000000))" "$out_time_us"
+        "$((i * 300))" "$((i * 1000000))" "$out_time_us" >&4
     sleep 0.2
 done
 
@@ -179,5 +185,5 @@ if [ "$output" != "-" ]; then
     head -c 4096 /dev/zero > "$output"
 fi
 
-printf 'frame=1200\nfps=120\nbitrate=2000.0kbits/s\ntotal_size=4096\nout_time_us=10000000\nspeed=8.0x\ndrop_frames=0\nprogress=end\n'
+printf 'frame=1200\nfps=120\nbitrate=2000.0kbits/s\ntotal_size=4096\nout_time_us=10000000\nspeed=8.0x\ndrop_frames=0\nprogress=end\n' >&4
 exit 0
