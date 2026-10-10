@@ -2,7 +2,7 @@
 
 実機の絵です (映像はぼかしてあります)。
 
-立て方は [README](../README.md#立てる)。
+立て方は [install.md](install.md)。
 
 ## 予約と録画
 

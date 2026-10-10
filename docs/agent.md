@@ -303,6 +303,7 @@ BS は再編があるので焼き込んだ表はいつか古くなります (実
 代わりに [px4-userland](https://github.com/Khronos31/px4-userland) を**エージェントの
 イメージに同梱**します (`agent/Dockerfile`)。libusb だけで USB を叩くユーザー空間の
 ドライバで、`/dev/bus/usb` が見えれば動き、カーネルモジュールも DKMS も要りません。
+**手元に実機が無く、選局と内蔵カードリーダーは自分では試せていません** (動いた/動かなかったは Issue へ)。
 
 | 機材 | 口 |
 | --- | --- |
@@ -438,6 +439,7 @@ siano-ts 自身が、カーネルのドライバが掴んでいるデバイス�
 
 siano-userland で使うなら、ホストで `smsusb` / `smsdvb` / `smsmdtv` を blacklist して
 再起動します (挿したまま unbind するのは上の理由で勧めません)。
+**siano-userland で掴んだときの選局は、実機で試せていません** (動いた/動かなかったは Issue へ)。
 
 ```sh
 printf 'blacklist smsusb\nblacklist smsdvb\nblacklist smsmdtv\n' | sudo tee /etc/modprobe.d/denpa-siano.conf
@@ -759,7 +761,7 @@ compose.prod.yml から tuner-agent を外したもの)。
    (launchd に殺されないよう、待ちの上限を 6 時間より長くしてある)
 2. **denpa 本体** — エージェントと同じ版の compose.mac.yml を `~/denpa/compose.yml` に置いて
    `docker compose up -d`。答えたらブラウザで開きます (`--no-open` で開かない)。genkan が動いているか
-   80・443 が空いていれば、Linux と同じく `http://denpa.localhost` で開けるようにします (README「立てる」)
+   80・443 が空いていれば、Linux と同じく `http://denpa.localhost` で開けるようにします ([install.md](install.md#1行で入れる))
 
 - **要るのは Docker だけ。** px4-userland / siano-userland の Mac 版は libusb を中に抱えている
   (px4-userland 0.1.7・siano-userland 0.1.9 から) ので、Homebrew は要りません。
