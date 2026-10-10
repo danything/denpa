@@ -72,7 +72,7 @@
                 rel="noopener noreferrer">{part.text}</a
             >{:else}{part.text}{/if}{/each}{/snippet}
 
-<h3 class="title">{program.name}</h3>
+<h3 class="title broadcast">{program.name}</h3>
 <p class="meta small muted">
     {program.service_name} ・ {dateTime(program.start_at)} 〜 {time(program.end_at)}
     ({duration(program.start_at, program.end_at)})
@@ -100,13 +100,13 @@
 </div>
 
 {#if program.description}
-    <p class="block small pre">{@render body(program.description)}</p>
+    <p class="block small pre broadcast">{@render body(program.description)}</p>
 {/if}
 
 {#each extended as [heading, text] (heading)}
     <div class="block">
-        <div class="small head">{heading}</div>
-        <div class="small pre soft">{@render body(text)}</div>
+        <div class="small head broadcast">{heading}</div>
+        <div class="small pre soft broadcast">{@render body(text)}</div>
     </div>
 {/each}
 

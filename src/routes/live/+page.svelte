@@ -807,7 +807,7 @@
                                     {channel.name}
                                 </span>
                                 {#if channel.now}
-                                    <span class="channel-now">
+                                    <span class="channel-now broadcast">
                                         {channel.now.name}
                                     </span>
                                 {/if}

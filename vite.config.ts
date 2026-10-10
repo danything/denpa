@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import adapter from '@sveltejs/adapter-node';
 import { sveltekit } from '@sveltejs/kit/vite';
@@ -33,7 +34,26 @@ function cssWithoutSourceMaps(): Plugin {
     };
 }
 
+/**
+ * イメージに入れる Denpa Font の版 (Dockerfile の `ARG DENPA_FONT_VERSION`)。
+ * 字の URL に付けて、版ごとに1年持たせる (`src/lib/font.ts`)。読めなければ空
+ */
+const denpaFontVersion = (() => {
+    try {
+        return (
+            readFileSync(new URL('./Dockerfile', import.meta.url), 'utf8').match(
+                /^ARG DENPA_FONT_VERSION=(\S+)/m,
+            )?.[1] ?? ''
+        );
+    } catch {
+        return '';
+    }
+})();
+
 export default defineConfig({
+    define: {
+        'import.meta.env.DENPA_FONT_VERSION': JSON.stringify(denpaFontVersion),
+    },
     plugins: [
         cssWithoutSourceMaps(),
         /*

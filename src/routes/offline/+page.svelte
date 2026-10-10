@@ -129,7 +129,7 @@
                 ontimeupdate={onTime}
             ></video>
             <div class="player-bar">
-                <span class="name small">{playing.name}</span>
+                <span class="name small broadcast">{playing.name}</span>
                 <button type="button" class="ghost xs" onclick={stop}>閉じる</button>
             </div>
         </div>
@@ -154,7 +154,7 @@
                         <div class="thumb blank"></div>
                     {/if}
                     <div class="info">
-                        <div class="name small">{item.name}</div>
+                        <div class="name small broadcast">{item.name}</div>
                         <div class="tiny muted">
                             {item.serviceName} ・ {dateTime(item.startAt)}
                             {#if item.durationMs !== null}

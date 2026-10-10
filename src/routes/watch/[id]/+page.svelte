@@ -50,6 +50,7 @@
     import { videoFrame } from '#lib/components/player/snapshot.js';
     import Toasts, { errorNotice, type Notice } from '#lib/components/Toasts.svelte';
     import { programDetail } from '#lib/detail.svelte.js';
+    import { denpaFontUrl } from '#lib/font.js';
     import { clock, cmNoteWorthShowing, recordedDuration, size } from '#lib/format.js';
     import { write as remind, read as stored } from '#lib/keep.js';
     import { loadOffline } from '#lib/offline.svelte.js';
@@ -284,7 +285,7 @@
     let shownPage: CaptionPage | null = null;
     $effect(() => {
         if (overlay === null) return;
-        const made = new CaptionPainter(overlay, resolve('api/font/denpa-font.woff2'));
+        const made = new CaptionPainter(overlay, denpaFontUrl());
         painter = made;
         return () => {
             made.close();

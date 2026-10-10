@@ -4,6 +4,7 @@
     import { onMount } from 'svelte';
     import Measure from '#lib/components/Measure.svelte';
     import Icon from '#lib/components/player/Icon.svelte';
+    import { denpaFontUrl } from '#lib/font.js';
     import { write } from '#lib/keep.js';
     import { measure } from '#lib/measure.svelte.js';
     import { startOffline } from '#lib/offline.svelte.js';
@@ -213,10 +214,18 @@
         page.url.pathname;
         if (menu !== null) menu.open = false;
     });
+
+    /**
+     * **放送の字 (Denpa Font) をここで名乗らせる** (使うのは `app.css` の `.broadcast`)。
+     * 版付きの URL は組むときに決まるので、`app.css` には書けない (`#lib/font.ts`)。
+     * 使う字が画面に出たときだけ落ちてくる。届くまでは画面の字で出しておく (`swap`)
+     */
+    const fontFace = `<style>@font-face{font-family:"Denpa Font";src:url("${denpaFontUrl()}") format("woff2");font-display:swap}</style>`;
 </script>
 
 <svelte:head>
     <title>{title}</title>
+    {@html fontFace}
 </svelte:head>
 
 <!--

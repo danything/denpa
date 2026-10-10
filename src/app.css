@@ -17,6 +17,14 @@
     --pico-font-family-sans-serif: "BIZ UDPGothic", "Hiragino Sans", "Noto Sans JP", system-ui, sans-serif;
     /* 16px(Tailwind の頃と同じ)。番組表の 1 マスなど rem で組んだ寸法がそのまま保たれる */
     --pico-font-size: 16px;
+    /*
+     * **放送から来た字は Denpa Font で** (番組名・説明・番組表のマス・録画の名前)。
+     * 字幕・データ放送と同じ丸ゴシックで、ARIB の外字 (🈑 Ⓗ など) を持っているので
+     * テレビと同じ白黒の字で出る。`@font-face` は版付きの URL が要るので
+     * `+layout.svelte` が置く (`#lib/font.ts`)。手元の開発では 404 なので画面の字に落ちる。
+     * こちらで書いた文言 (ボタン・見出し・設定) は画面の字のまま。`.broadcast` で付ける
+     */
+    --broadcast-font: "Denpa Font", var(--pico-font-family-sans-serif);
     --pico-line-height: 1.6;
     --pico-spacing: 1rem;
     --pico-typography-spacing-vertical: 0.75rem;
@@ -361,6 +369,9 @@ td {
 }
 .mono {
     font-family: var(--pico-font-family-monospace);
+}
+.broadcast {
+    font-family: var(--broadcast-font);
 }
 .truncate {
     min-width: 0;

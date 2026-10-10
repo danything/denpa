@@ -27,7 +27,7 @@ import { fitRect } from './paint';
 const CAPTION_FONT = 'denpa-caption';
 let fontLoading: Promise<void> | null = null;
 
-/** 字を読み込む。**1回だけ** (`url` は `/api/font/denpa-font.woff2`) */
+/** 字を読み込む。**1回だけ** (`url` は `#lib/font.ts` の `denpaFontUrl()`) */
 function loadCaptionFont(url: string): Promise<void> {
     if (fontLoading !== null) return fontLoading;
     const face = new FontFace(
@@ -241,7 +241,7 @@ export class CaptionPainter {
 
     constructor(
         private readonly canvas: HTMLCanvasElement,
-        /** 字の置き場 (`resolve('api/font/denpa-font.woff2')`) */
+        /** 字の置き場 (`denpaFontUrl()`。版付き) */
         font: string,
     ) {
         this.resize = typeof ResizeObserver === 'function' ? new ResizeObserver(() => this.draw()) : null;

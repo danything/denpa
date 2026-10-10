@@ -659,7 +659,7 @@
                             <span class="title">
                                 {time(program.start_at)}
                                 {#if program.name}
-                                    {program.name}
+                                    <span class="broadcast">{program.name}</span>
                                 {:else}
                                     <span class="faint">(番組情報なし)</span>
                                 {/if}
@@ -669,7 +669,7 @@
                                     {stateLabel(program.reservation_state)}
                                 </span>
                             {:else}
-                                <span class="desc">
+                                <span class="desc broadcast">
                                     {program.description}
                                 </span>
                             {/if}
