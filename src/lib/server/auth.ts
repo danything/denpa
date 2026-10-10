@@ -16,7 +16,7 @@ import { enabled as oidcEnabled } from './oidc';
  * 起動時に自動で掛けていたが、廃止した — パスワードを使う場面 (プレイヤー登録・
  * ダウンロードURL) が全部期限付きのリンクに置き換わり、残っていたのは「画面に出して
  * 覚えさせるパスワード」だけだった。全部開けたいなら `TRUSTED_NETWORKS=0.0.0.0/0`
- * (公開の注意は README)。
+ * (公開の注意は docs/auth.md)。
  *
  * **プレイヤーはリダイレクトを扱えない。** ログイン画面へ飛ばされたところで
  * 何もできず「再生できません」で終わる。だからファイルの口は、ログインではなく
@@ -90,7 +90,7 @@ export function warnIfClosed(): void {
     console.warn(
         '[boot] 入る道が設定されていないため、すべてのアクセスを断ります。\n' +
             '       OIDC (docs/auth.md) か TRUSTED_NETWORKS (CIDR のカンマ区切り) を設定してください。\n' +
-            '       すべて開けるなら TRUSTED_NETWORKS=0.0.0.0/0 (公開時の注意は README)',
+            '       すべて開けるなら TRUSTED_NETWORKS=0.0.0.0/0 (公開時の注意は docs/auth.md)',
     );
 }
 

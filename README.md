@@ -1,14 +1,10 @@
 # denpa
 
 **チューナーを挿して起動すれば、そのまま使える自宅用のテレビ録画サーバ**です。
-設定ファイルは1行も書きません。チューナーは種別 (地上波 / 衛星) まで自動で見分けます。
-PX-Q3U4 などはドライバがエージェントのイメージに入っているので、ホストには何も入れません。
-あとはチューナーの画面でスキャンを押すだけです。Mirakurun や EDCB を別に立てる必要はなく、
-変えたい設定は全部画面から変えられます。
-
-予約は番組表から押すだけ。CM は自動で飛ばし、ライブも録画もブラウザで字幕・データ放送
-つきで観られます。テレビは専用のアプリ ([denpa-tv](https://github.com/danything/denpa-tv)) で、
-落として好きなプレイヤーで観ることもできます。メディアサーバも要りません。
+設定ファイルは書かず、チューナーは種別 (地上波 / 衛星) まで自動で見分け、あとは画面でスキャンを押すだけ。
+Mirakurun や EDCB、メディアサーバは要りません。番組表から予約し、CM は自動で飛ばし、
+ライブも録画もブラウザで字幕・データ放送つきで観られます。テレビは専用のアプリ
+[denpa-tv](https://github.com/danything/denpa-tv) で。
 
 <p align="center">
   <img src="docs/images/home-watch-anim.webp" alt="録画の行を押すと、そのまま観る画面へ" width="720">
@@ -22,113 +18,63 @@ PX-Q3U4 などはドライバがエージェントのイメージに入ってい
   </tr>
 </table>
 
-画面の一覧は [docs/screens.md](docs/screens.md) にあります (実機の画面。番組表・ルール・チューナー・設定も)。
-
-## しくみ
-
-部品は **チューナーエージェント** (選局) と **denpa** (番組表・予約・録画・エンコード・
-配信・ライブ視聴) の2つだけです。
-
-```text
-チューナー ── エージェント ── denpa ── 録画(mkv) ─┬─→ ブラウザでそのまま観る
-                                                    └─→ テレビのアプリ (denpa-tv) / 落として好きなプレイヤーで
-```
-
-エージェントは**チャンネルを掴んで素のTSを流すだけ**です。番組表を読むのも、局を
-選り分けるのも、CMを見つけるのも denpa がやります。録画は CM をチャプターにして
-AV1 / H.264 の mkv に焼き、字幕は放送の ARIB 字幕のまま入れます (描くのはブラウザとテレビのアプリ)。
+ほかの画面 (番組表・ルール・チューナー・設定) は [docs/screens.md](docs/screens.md)。
 
 ## できること
 
-番組表から押すほか、「ルール」にキーワードを登録すれば自動で予約します。
-録画は CM を自動で見つけてから焼き、行を押せばそのまま観られます。
+- **予約** — 番組表から押すか、「ルール」のキーワードで自動で。同じ回は最初の放送だけ録る
+- **録画** — CM を見つけてチャプターにし、AV1 / H.264 の mkv に焼く。字幕は放送の ARIB 字幕のまま入れる。Intel の GPU があれば使う
+- **ライブ** — 放送から 1 秒ほどで。止めれば追っかけ、二カ国語・解説放送も選べる ([docs/stream.md](docs/stream.md))
+- **データ放送** — テレビと同じ BML がブラウザで動く (d ボタン)。ライブでも録画でも
+- **観る** — 行を押せばその場で再生。CM は1コマも見せずに飛ばし、続きから・倍速 (×1〜×2)・切り抜き (字幕ごと PNG)
+- **字幕と放送の字** — 字幕は放送どおりの位置に描き、番組名・局名も含めて Denpa Font で外字まで崩さない
+- **端末に落として観る** — 電波の無いところでも ([docs/offline.md](docs/offline.md))
+- **EPGStation から引き継ぐ** — ルール・予約・録画 ([docs/migrate.md](docs/migrate.md))
 
-### いま流れているものを観る
-
-**「ライブ」を開くと、放送中のものがそのまま観られます。** 前回見ていた局から
-開くので、テレビを点けたときと同じです。
-
-- **放送から 1 秒ほどで観られます。** 止めた所から続きを観られ、追いつくときの速さも
-  選べます。放送との差は画面に出します。隣に置いたテレビとの差にあたる値で、
-  焼く時間から回線・手元のバッファまで全部含みます
-  ([docs/stream.md](docs/stream.md#遅延は2つある))
-- **焼き方を選べます。** H.264 はどの端末でも再生でき、AV1 は軽い (宅外向け)
-- **音声も字幕も放送どおり。** 二カ国語や解説放送も選べ、字幕は放送どおりの位置に描き、
-  外字も Denpa Font で崩れません
-- **データ放送も出ます** (d ボタン)。テレビと同じ BML がそのまま動き、指で押せる
-  リモコンが右に並びます。地元の天気を出すには、設定に郵便番号を入れます
-  ([docs/stream.md](docs/stream.md#56-データ放送の統合))
-
-### 録画を観る
-
-**録画一覧の行を押すと、その場で再生が始まります。** 別のアプリは要りません。
-番組の中身は右に並んで出ます。
-
-- **マウスはどこを押しても再生/一時停止** (指は1回で操作列の出し入れ)。左右の端をすばやく2回押すと10秒戻す/送る
-- **CM は自動で飛ばします** (既定で入)。CM のコマは1枚も出しません。送りボタンで手動でも飛ばせます
-- **字幕・倍速 (1〜2倍)・切り抜き** (いまの場面を字幕ごと PNG に。スマホは共有シートから写真へ、PC は保存してクリップボードにも)
-- **続きから再生します。** 別の端末で開いても続きから。観終わったらその場で消せます
-
-**テレビ (Android TV / Fire TV) では、専用のアプリ [denpa-tv](https://github.com/danything/denpa-tv) で観ます。**
-ライブと録画、続きから・CM 飛ばし・低遅延のライブ。テレビに出る QR をスマホで読めば繋がります
-(家の外からは OIDC でログインして、アプリの鍵を発行)。
-
-**ログインできない端末では「再生リンクをコピー」を使います。** 24時間有効の URL で、
-ログインせずにファイルを開けます
-([docs/library.md](docs/library.md#手元のプレイヤーで観る))。
-
-## 用意するもの
-
-- **チューナー** — 次のどれでも、挿してあれば自動で見つけます
-  - Linux DVB の機材 (PT2/PT3、PX-S1UD など)。ドライバはホストに入れておく
-  - **px4-userland の対応機種** (PLEX PX-Q3U4 / PX-W3U4 / PX-MLT 系、e-Better / Digibest 系など)。
-    ドライバはエージェントのイメージに入っているので、ホストには何も入れない
-    ([docs/agent.md](docs/agent.md#px-q3u4-などは-px4-userland-でカーネルドライバは入れてもらわない))
-  - PX-S1UD も、ホストで smsusb を blacklist しておけば同梱の siano-userland で動き、ホストにドライバは要らない
-    ([docs/agent.md](docs/agent.md#px-s1ud-はカーネルが掴んでいなければ-siano-userland-で))
-  - PX-W3U3 は **試験的** に asicen-userland で受ける用意だけある (上流のリリース待ちで、まだイメージに入らない。
-    入っても選局できるのは受信機 0 の衛星と 1 の T27 だけ。Linux x86_64 のみ)
-    ([docs/agent.md](docs/agent.md#px-w3u3-は-asicen-userland-で-試験的上流のリリース待ち))
-- **B-CASカード** と PC/SC 対応のカードリーダー
-- **Docker** (Compose) か **Kubernetes** (Helm)。amd64 (x86_64) と arm64 (aarch64) の
-  どちらでも動きます。イメージは両方を同じタグにまとめてあり、自分のアーキテクチャのものが降ってきます。
-  Apple Silicon の Mac と x64 の Windows でも、[下の1行](#立てる)でエージェントと denpa が立ち上がります
-  ([docs/agent.md](docs/agent.md#mac-でチューナーを使う))
-- あれば **Intel の GPU** — `/dev/dri` が見えれば起動時に見つけて GPU で焼き、無ければソフトウェアで焼きます
-  (Helm は既定で渡す。[docs/encode.md](docs/encode.md#gpu-で焼く-intel-qsv--va-api))。
-  Intel QSV は amd64 だけで、arm64 は VA-API かソフトウェアです
+部品はチャンネルを掴んで素の TS を流す **チューナーエージェント** と、それ以外の全部 (番組表・予約・録画・
+エンコード・配信) をやる **denpa** の2つだけです ([docs/architecture.md](docs/architecture.md))。
 
 ## 立てる
 
-**Linux でも Mac でも、この1行で立ち上がってブラウザが開きます。** イメージは公開してあるので、
-リポジトリの clone は要りません。
+### 1. 要るもの
+
+- **チューナー** — 挿してあれば自動で見つけ、種別 (地上波 / 衛星) も見分けます
+
+  | チューナー | 口 | ホストに入れるもの |
+  | --- | --- | --- |
+  | PT2 / PT3、PX-BCUD、PX-S1UD など | Linux DVB | ドライバ |
+  | PX-Q3U4 / PX-W3U4 / PX-MLT 系など (px4-userland の対応機種) | px4-userland (同梱) | なし |
+  | PX-S1UD (smsusb を blacklist したとき。Windows も) | siano-userland (同梱) | なし |
+  | PX-W3U3 | asicen-userland (**試験的**。上流のリリース待ちで、まだ入らない) | なし |
+
+- **B-CASカード** と PC/SC のカードリーダー (px4-userland の機材は内蔵リーダーでもよい)
+- **OS** — Linux (amd64 / arm64)、Mac (Apple Silicon)、Windows (x64)
+- **Docker** (Linux・Mac。Compose 込み) か、Windows は WSL (`wsl --update` で入る `wslc`。Docker Desktop は要らない)。
+  Kubernetes なら Helm
+- あれば Intel の GPU (`/dev/dri` を渡す。[docs/install.md](docs/install.md#用意するもの))。無ければソフトウェアで焼きます
+
+### 2. 入れる
+
+**1行で、denpa 本体とチューナーのエージェントの両方が立ち上がり、ブラウザが開きます。** clone は要りません。
 
 ```sh
+# Linux / Mac
 curl -fsSL https://raw.githubusercontent.com/danything/denpa/main/install.sh | bash
 ```
 
-- **Linux** (amd64 / arm64) — 全部 Docker Compose で動かします。`~/denpa` に compose.prod.yml を置いて起動します
-- **Mac** (Apple Silicon) — チューナーに触るエージェントは Mac の上で直接、denpa 本体は Docker で動かします
-  ([docs/agent.md](docs/agent.md#mac-でチューナーを使う))
-- **Windows** (x64) は PowerShell で `irm https://raw.githubusercontent.com/danything/denpa/main/install.ps1 | iex`。
-  エージェントは Windows の上で直接、denpa 本体は WSL のコンテナ (`wslc`) で動かします。**Docker Desktop は要りません**
-  (`wsl --update` で入る)。チューナーは PX-S1UD など siano-userland の機材だけで、ドライバを WinUSB にします
-  ([docs/agent.md](docs/agent.md#windows-でチューナーを使う))
-- **Docker・WSL は入れません。** 無ければ入れ方を示して止まります (Linux は <https://get.docker.com>、
-  Mac は Docker Desktop か OrbStack、Windows は `wsl --update`)
-- **入口は [genkan](https://github.com/danything/genkan)** (ホスト名で振り分けるリバースプロキシ。Linux・Mac)。
-  動いていればそれを使います。無ければ 80 と 443 が空いているときだけ `~/genkan` に入れ、
-  <http://denpa.localhost> で開きます。ポートが埋まっていれば入れず、<http://localhost:3000> で開きます。
-  `denpa.localhost` はそのマシンでしか開けないので、LAN のほかの機器 (テレビ・スマホ) からは
-  `http://<IP>:3000` で開きます
-- 置き場は `~/denpa` (`DENPA_HOME`)。Linux・Mac では `compose.yml` を更新のたびに上書きするので、
-  **変えたいことは同じ場所の `compose.override.yml` に書きます** (Compose が重ねて読み、install.sh は触らない)
-- もう一度流すと最新のリリースに上がります。`… | bash -s -- --uninstall` で止めて外します
-  (`~/denpa`・録画・DB は残す)。ブラウザを開かないなら `--no-open`
-- Windows は <http://localhost:3000> で開き、変えたい環境変数は `~/denpa/denpa.env` に書きます。
-  止めて外すのは `-Uninstall`、ブラウザを開かないなら `-NoOpen` (渡し方は install.ps1 の頭)
+```powershell
+# Windows (PowerShell)
+irm https://raw.githubusercontent.com/danything/denpa/main/install.ps1 | iex
+```
 
-### Docker Compose を手で置く
+エージェントの置き場は OS で違います (どれも上の1行がやる)。
+
+- **Linux** — エージェントも本体も Docker Compose のコンテナ (`~/denpa/compose.yml`)
+- **Mac** — エージェントは Mac の上で直接 (LaunchAgent)、本体は Docker。USB をコンテナに渡せないため
+- **Windows** — エージェントは Windows の上で直接 (タスク スケジューラ)、本体は `wslc` のコンテナ。
+  チューナーは siano-userland の機材だけで、ドライバを WinUSB にしておく
+
+Linux で Compose を手で置くなら、これだけです (エージェントは `tuner-agent` として一緒に立つ)。
 
 ```sh
 mkdir denpa && cd denpa
@@ -136,152 +82,66 @@ curl -Lo compose.yml https://raw.githubusercontent.com/danything/denpa/main/comp
 docker compose up -d
 ```
 
-### 1つのコンテナで (`denpa-aio`)
+もう一度流すと最新のリリースに上がります。変えたい設定は `~/denpa/compose.override.yml`
+(Windows は `~/denpa/denpa.env`) に書きます。
 
-本体とチューナーエージェントを1つのコンテナにまとめたイメージもあります。
-チューナーを挿した機械でそのまま全部動かすとき (NAS や、ほかの仕組みに載せるとき) 向けです。
-中身は上の2つのイメージと同じで、分けるかまとめるかだけが違います。
+### 3. 開く
 
-```sh
-docker run -d --name denpa --restart unless-stopped --stop-timeout 21900 \
-  --cap-add SYS_RESOURCE \
-  --device-cgroup-rule 'c 189:* rmw' --device-cgroup-rule 'c 212:* rmw' \
-  -v /dev/bus/usb:/dev/bus/usb -v /dev/dvb:/dev/dvb \
-  -e TRUSTED_NETWORKS=192.168.0.0/16,10.0.0.0/8,172.16.0.0/12 \
-  -v ./config:/config -v denpa-data:/data -v denpa-media:/media \
-  -p 3000:3000 ghcr.io/danything/denpa-aio:latest
-```
+- <http://denpa.localhost> (Linux・Mac で [genkan](https://github.com/danything/genkan) を入れられたとき) か
+  <http://localhost:3000>。LAN のほかの機器 (テレビ・スマホ) からは `http://<IP>:3000`
+- **誰を通すか** — 設定するまで全部断ります。compose の `TRUSTED_NETWORKS` の初期値は家の中 (私設網) で、
+  ここからはログインなしで通ります。画面をログインで守るなら OIDC の3つを渡します
+  (リダイレクト URI は `https://<denpa>/login/callback`)
 
-- 置き場は既定のまま: エージェントの設定 (`tuners.json` / `channels.json`) は `/config`、DB は `/data`、
-  録画は `/media` の下 (生TS は `raw`、焼いたものは `encoded`)。前の版から上げるときは
-  [docs/app.md](docs/app.md#置き場を変えた-前の版から上げるとき) を見る
-- `--privileged` は要りません。USB (189) と DVB (212) のデバイスを開く許可と、pipe を広げる
-  `SYS_RESOURCE` だけ渡します。デバイスはディレクトリごと見せるので、挿し直しても再起動は要りません
-- 止めるときは両方に伝え、録画の終わりを待ちます (`--stop-timeout` を長くしておく。compose の `stop_grace_period` と同じ)。
-  どちらかが落ちたらコンテナごと終わるので、起こし直しは `--restart` に任せます
-
-### Helm (Kubernetes)
-
-```sh
-# 本体 + チューナーエージェント (同じクラスタに置く)
-helm install denpa oci://ghcr.io/danything/charts/denpa \
-  --namespace denpa --create-namespace \
-  --set denpa.trustedNetworks=192.168.0.0/16 \
-  --set httpRoute.enabled=true \
-  --set 'httpRoute.parentRefs[0].name=my-gateway' \
-  --set 'httpRoute.parentRefs[0].namespace=gateway-system' \
-  --set 'httpRoute.hostnames[0]=denpa.example.home'
-```
-
-チューナーを挿した機械にはエージェントだけを置き、本体を別の所 (別ノードや
-docker compose) で動かすなら `oci://ghcr.io/danything/charts/denpa-agent` を使います
-(本体側は `TUNER_AGENT_URL` でそこを指す)。値の一覧と意味は
-[charts/denpa/values.yaml](charts/denpa/values.yaml) にコメントで全部書いてあります。
-
-### 立てたあと
-
-1. **開く** — <http://denpa.localhost> (genkan を入れたとき) か <http://localhost:3000>。
-   compose.yml の `TRUSTED_NETWORKS` の初期値は、家の中 (プライベートネットワーク) だけを通す値です
-   (Helm は `denpa.trustedNetworks`)。変えるときは下の「[誰を通すか](#誰を通すか)」を読んでください
-2. **チューナーを確かめる** — 「チューナー」の画面に、見つかったものが並んでいます。
-   本数と種別 (地上波 / 衛星) が合っていれば次へ
-3. **スキャンする** — 同じ画面から。BS と CS は全国で同じなので、衛星を受けられる
-   チューナーがあれば最初から局が入っています。地上波は地域で違うので、スキャンするまで
-   番組表も空です。地上波の総当たりで十数分
-4. **待つ** — スキャンが終わると、番組表を自動で集めます (数分)
-5. **予約する** — 番組表から選ぶか、「ルール」にキーワードを登録して自動で
-
-うまくいかないときも「チューナー」の画面を見てください。エージェントとカード
-リーダーの状態、スキャンの結果、番組表の集まり具合が出ます。**カードリーダーが NG の
-まま録画すると、成功したように見えても中身はスクランブルされたままです。**
-
-イメージのタグは `latest` で、リリースのたびに新しくなります。版を固定したいなら `1.20.0` の
-ように書きます ([docs/architecture.md](docs/architecture.md#イメージのタグ))。
-
-前段で `/denpa` のような接頭辞の下に置いても動きます (Home Assistant の Ingress など)。
-接頭辞は denpa に教えません。再生リンクや OIDC に渡す URL にだけ、前段が付ける
-`X-Forwarded-Prefix` (Home Assistant は `X-Ingress-Path`) を頭に付けます。
-
-## 誰を通すか
-
-**通し方を設定するまで、すべてのアクセスを断ります** (理由つきの 403)。
-通し方は次の2つで、どちらか (または両方) を設定します。
-
-- **`TRUSTED_NETWORKS`** — このネットワークからのアクセスはログインなしで通します
-  (例 `TRUSTED_NETWORKS=192.168.1.0/24`。テレビのアプリやプレイヤーに資格情報を入れずに
-  使わせるのもこれ)。すべて許可するなら `TRUSTED_NETWORKS=0.0.0.0/0`
-- **OIDC** — 画面をログインで守ります。`OIDC_ISSUER` など3つを渡すと有効になります
-
-**公開するときの注意:**
-
-- **`0.0.0.0/0` はインターネットに向けて開くのと同じです。** 録画も設定も
-  誰でも触れます。家の外に出す構成では使わず、OIDC を設定してください
-- **リバースプロキシの後ろに置くなら、プロキシのアドレスを `TRUSTED_PROXIES` に設定します**
-  (CIDR のカンマ区切り。例 `TRUSTED_PROXIES=172.16.0.0/12` や `TRUSTED_PROXIES=10.42.0.0/16`)。
-  ここから来た接続だけ `X-Forwarded-For` を読み、本当の接続元を決めます。無いと接続元がすべて
-  プロキシのアドレスになり、`TRUSTED_NETWORKS` が誰にも当たりません (プロキシが無ければ要りません)。
-  ほかのアドレスから届いた `X-Forwarded-For` は読まないので、プロキシを通らずに届く経路があっても
-  詐称はできません。プロキシを2段重ねるなら両方のアドレスを入れます
-- **前の版で `ADDRESS_HEADER=x-forwarded-for` を設定していたなら、`TRUSTED_PROXIES` に置き換えてください。**
-  `ADDRESS_HEADER` はもう読みません (起動時に1行知らせます)。置き換えるまでは接続元がプロキシの
-  アドレスになり、`TRUSTED_NETWORKS` から来ていた人にもログインを求めるか断ります
-  ([docs/app.md](docs/app.md#接続元の読み方を変えた-前の版から上げるとき))
-- **リバースプロキシには、`Host` をそのまま渡すことと WebSocket を通すことが要ります。**
-  `Host` が書き換わると設定の保存などの POST が `403 Cross-site POST form submissions are forbidden`
-  で断られ、WebSocket が通らないとライブが「繋がりませんでした」になります。Caddy・Traefik・
-  Envoy (Gateway API) は何もしなくても満たします。nginx は自分で書きます
-  (denpa 側には nginx のアドレスを `TRUSTED_PROXIES` に入れておく):
-
-  ```nginx
-  location / {
-      proxy_pass http://<denpa>:3000;
-      proxy_set_header Host $host;
-      proxy_set_header X-Forwarded-Proto $scheme;
-      proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-      proxy_http_version 1.1;
-      proxy_set_header Upgrade $http_upgrade;
-      proxy_set_header Connection "upgrade";
-      proxy_buffering off;  # SSE とライブを溜めずに流す
-  }
+  ```yaml
+  # ~/denpa/compose.override.yml
+  services:
+      denpa:
+          environment:
+              TRUSTED_NETWORKS: 192.168.1.0/24
+              OIDC_ISSUER: https://login.microsoftonline.com/<tenant>/v2.0
+              OIDC_CLIENT_ID: <アプリケーションID>
+              OIDC_CLIENT_SECRET: <クライアントシークレット>
   ```
 
-  Nginx Proxy Manager は「Websockets Support」を入れてください
-- 録画の再生・ダウンロードのリンクは期限付きの URL です (発行から24時間で失効。作り直すと
-  同じ URL のまま期限が延びる)。リンクが漏れても、ずっと使える入口にはなりません
+  Windows は同じ名前を `KEY=値` で `~/denpa/denpa.env` に書きます。
+  **`TRUSTED_NETWORKS=0.0.0.0/0` はインターネットに向けて開くのと同じです。** 家の外に出すなら OIDC を使います
+- 「チューナー」の画面で、見つかったチューナーを確かめて**スキャン**を押します。衛星は最初から局が入っていて、
+  地上波は十数分。終わると番組表を集めるので (数分)、あとは番組表から予約するだけです
+- **カードリーダーが NG のまま録ると、中身はスクランブルされたままです** (同じ画面に出ます)
 
-設定のしかたと理由は [docs/auth.md](docs/auth.md) にあります。
+1コンテナ (`denpa-aio`)・Helm・リバースプロキシの後ろに置くとき・困ったときは [docs/install.md](docs/install.md)、
+ログインの細かいことは [docs/auth.md](docs/auth.md)。
 
-## 確かめきれていないこと (情報を募っています)
+## 観る
 
-**手元の機材では確かめられていないところです。** 動いた/動かなかったを
-[Issue](https://github.com/danything/denpa/issues) で教えてもらえると、ここを埋められます。
-
-- **px4-userland の機材 (PX-Q3U4 など) での選局と内蔵カードリーダー** (同梱の px4-userland に任せていますが、
-  手元に実機が無く試せていません)
-- **PX-S1UD を siano-userland で掴んだときの選局** (smsusb を blacklist した場合。同梱の siano-ts に
-  任せていますが、実機で試せていません)
-- **ロゴと同じくらい毎コマ動かない縁が隅にある録画で、ロゴの位置の割り出しが外れないか。**
-  実機の 16 本 (12局) では全部ロゴを当てましたが、ロゴか縁か決めきれない回は覚えずに
-  無音検出へ落とすだけで、縁のほうを覚えてしまうと防げません (画面で捨てて覚え直す)。
-  TOKYO MX1 で窓枠を掴んだ回の録画は残っておらず、試せていません
-  ([docs/encode.md](docs/encode.md#在り処の割り出し))
+- **ブラウザ** — ホーム画面にも置ける ([docs/player.md](docs/player.md))
+- **テレビ** (Android TV / Fire TV) — [denpa-tv](https://github.com/danything/denpa-tv)。テレビに出る QR をスマホで読めば繋がる
+- **再生リンク** — ログインできない端末向けに、24時間有効の URL を渡す ([docs/library.md](docs/library.md#テレビのアプリと再生リンク))
+- **外から使う口** — 局・録画の一覧、ライブ、音声だけ (Home Assistant やスクリプト向け。[docs/api.md](docs/api.md))
 
 ## もっと詳しく
 
+- [docs/install.md](docs/install.md) — **立てる** (入れ方の選択肢・1コンテナ・Helm・前段の後ろに置く)
+- [docs/screens.md](docs/screens.md) — 画面 (実機の絵)
 - [docs/architecture.md](docs/architecture.md) — **なぜこの形なのか** (決めたこと・踏んだ落とし穴)
 - [docs/app.md](docs/app.md) — **どこに何があるか** (ファイル・環境変数・画面・状態遷移)
 - [docs/data.md](docs/data.md) — エージェントに都度聞くもの / denpa が持つもの
-- [docs/development.md](docs/development.md) — **手を入れるとき** (開発環境・テスト)
-- [docs/player.md](docs/player.md) — ホーム画面に置く、LAN でも https で開く
-- [docs/agent.md](docs/agent.md) — チューナーを掴むところ (エージェント・取り合い・B-CAS)
+- [docs/agent.md](docs/agent.md) — チューナーを掴むところ (エージェント・取り合い・B-CAS・Mac / Windows)
 - [docs/encode.md](docs/encode.md) — CM とエンコード (字幕・AV1・CM検出)
 - [docs/logo.md](docs/logo.md) — 局ロゴ (番組表の PNG と CM検出用に覚えたロゴ)
 - [docs/library.md](docs/library.md) — 録画の置き場と配り方 (テレビのアプリ・再生リンク・削除・通知)
+- [docs/stream.md](docs/stream.md) — **ライブ視聴**
+- [docs/player.md](docs/player.md) — ホーム画面に置く、LAN でも https で開く
 - [docs/offline.md](docs/offline.md) — 端末に落として電波の無いところで観る
-- [docs/auth.md](docs/auth.md) — **誰を通すか** (OIDC でのログイン・信頼したネットワーク・期限付きのリンク)
+- [docs/auth.md](docs/auth.md) — **誰を通すか** (OIDC・信頼したネットワーク・ペアリング・期限付きのリンク)
+- [docs/api.md](docs/api.md) — **外から使う口**
 - [docs/migrate.md](docs/migrate.md) — **EPGStation からの引き継ぎ**
-- [docs/stream.md](docs/stream.md) — **ライブ視聴** (放送中のものを観る)
-- [docs/api.md](docs/api.md) — **外から使う口** (局・録画の一覧、ライブを HTTP で。Home Assistant やスクリプト向け)
+- [docs/development.md](docs/development.md) — **手を入れるとき** (開発環境・テスト)
+- [docs/licenses.md](docs/licenses.md) — 借りているもの
+
+手元の機材で試せていないもの (px4-userland・siano-userland の実機など) は各文書に書いてあります。
+動いた/動かなかったを [Issue](https://github.com/danything/denpa/issues) で教えてもらえると助かります。
 
 ## 謝辞
 
@@ -290,28 +150,13 @@ docker compose) で動かすなら `oci://ghcr.io/danything/charts/denpa-agent` 
 - [@Khronos31](https://github.com/Khronos31) — px4-userland / siano-userland で選局できなかったのを、PX-Q3U4 の実機で見つけて直してくれました (#188)。ほかにも不具合を報告してくれました (#195 #376 #377)
 - [@unlimish](https://github.com/unlimish) — ライブ・追っかけ・観る画面に小窓 (PiP) を足してくれました (#431)。非力な機材で複数のライブを観るときの詰まりを実測つきで報告してくれ、ライブを GPU で焼く道ができました (#417)
 
-**土台にしている仕事** — とくにチューナーまわりは、次の方々の仕事に支えられています:
+**土台にしている仕事**:
 
-- [px4-userland](https://github.com/Khronos31/px4-userland) / [siano-userland](https://github.com/Khronos31/siano-userland) (@Khronos31) — PX-Q3U4 などと PX-S1UD を、ホストにドライバを入れずに使えるのはこれのおかげです。PX-MLT5PE / DTV02A-5TS-P の対応は @siketyan
+- [px4-userland](https://github.com/Khronos31/px4-userland) / [siano-userland](https://github.com/Khronos31/siano-userland) (@Khronos31) — ホストにドライバを入れずにチューナーを使えるのはこれのおかげです。PX-MLT5PE / DTV02A-5TS-P の対応は @siketyan
 - [web-bml](https://github.com/otya128/web-bml) (otya128) — データ放送を描く
-
-ほかに借りているものと出どころは [docs/licenses.md](docs/licenses.md) にあります。
 
 ## ライセンス
 
-**AGPL-3.0-or-later** ([LICENSE](LICENSE))。denpa は自分の家に置いて外から使うものなので、
-ネットワーク越しに使わせる形で配るなら、その中身も同じ条件で渡せるようにしてほしい、
-という理由で選んでいます。
-
-借りているもののライセンスは元のままです。主なもの:
-
-| | ライセンス |
-| --- | --- |
-| **ffmpeg** (x264 / SVT-AV1 / dav1d / Opus / libva / libvpl を繋いだ自前ビルド) | GPL-2.0+ (x264 のため) ほか BSD / MIT |
-| **Denpa Font** (字幕・データ放送のフォント。[danything/denpa-font](https://github.com/danything/denpa-font)) | SIL OFL 1.1 |
-| **web-bml / es2** (npm の `web-bml`。データ放送を描く) | MIT |
-| **Svelte / SvelteKit / Blades / Bits UI** と束に入る npm 一式 | MIT (drizzle-orm と crc-32 は Apache-2.0) |
-| **Lucide** (アイコン。組むときに使うぶんだけ埋め込む) | ISC |
-| [patches/](patches) — ffmpeg に当てる直しの置き場 (上流に投げる前提。いまは空) | 当てる先と同じ |
-
-**全部の一覧 (出どころ・何に使っているか・根拠) は [docs/licenses.md](docs/licenses.md)。**
+**AGPL-3.0-or-later** ([LICENSE](LICENSE))。ネットワーク越しに使わせる形で配るなら、その中身も同じ条件で
+渡せるようにしてほしい、という理由で選んでいます。借りているもの (ffmpeg・Denpa Font・web-bml ほか) は
+元のライセンスのままで、一覧は [docs/licenses.md](docs/licenses.md)。

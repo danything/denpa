@@ -65,8 +65,8 @@ process.env.HOST = '127.0.0.1';
  *
  * 以前は `ADDRESS_HEADER=x-forwarded-for` を渡すと adapter-node が誰から来たヘッダでも
  * 信じていた — :3000 へ直に届く経路があると、ヘッダを付けるだけで信頼ネットワークを
- * 名乗れた。**`ADDRESS_HEADER` はもう読まない** (互換の道は残さない。README の
- * 「公開するときの注意」)。設定してあれば起動時に1行だけ知らせる
+ * 名乗れた。**`ADDRESS_HEADER` はもう読まない** (互換の道は残さない。docs/auth.md の
+ * 「前段の後ろに置くとき」)。設定してあれば起動時に1行だけ知らせる
  */
 process.env.PROTOCOL_HEADER = 'x-forwarded-proto';
 const REMOTE_HEADER = 'x-denpa-remote';
