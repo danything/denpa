@@ -559,7 +559,7 @@
                         {#if channelNumber(service) !== null}
                             <span class="tag ch-number" data-testid="guide-number">{channelNumber(service)}</span>
                         {/if}
-                        <span class="name">{service.name}</span>
+                        <span class="name broadcast">{service.name}</span>
                     </div>
                 {/each}
 
@@ -956,6 +956,7 @@
         font-weight: 500;
     }
     .name {
+        min-width: 0;
         overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;

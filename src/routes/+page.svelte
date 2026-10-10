@@ -602,14 +602,16 @@
 
 <!-- 局名・放送日時・尺・サイズ。1行にまとめて、空のものは出さない -->
 <!-- 局ロゴは**まだ拾えていない局では何も出さない** (ServiceLogo) -->
-{#snippet meta(parts: string[], row: { service_id: number; has_logo: boolean | null })}
+<!-- 局名は放送から来た字なので放送の字 (`.broadcast`)。残りはこちらで書いた字 -->
+{#snippet meta(service: string, parts: string[], row: { service_id: number; has_logo: boolean | null })}
+    {@const rest = parts.filter(Boolean).join(' ・ ')}
     <div class="row-meta">
         <ServiceLogo
             id={row.service_id}
             has={row.has_logo}
             style="height: 1rem; margin-right: 0.375rem; vertical-align: -0.1875rem"
         />
-        <span>{parts.filter(Boolean).join(' ・ ')}</span>
+        <span><span class="broadcast">{service}</span>{service && rest ? ' ・ ' : ''}{rest}</span>
     </div>
 {/snippet}
 
@@ -700,7 +702,7 @@
             <div class="row-inner">
                 <div class="row-body" data-testid="row-body">
                     {@render title(stateLabel('missed'), badgeClass('missed'), res.name, 'missed-state')}
-                    {@render meta([res.service_name, airing(res)], res)}
+                    {@render meta(res.service_name, [airing(res)], res)}
                     <!-- 録画側の流儀に合わせて手動とも書く (見返すものなので) -->
                     {@render source(res.rule_id, res.rule_name, res.manual)}
                 </div>
@@ -810,8 +812,8 @@
                         ファイルの置き場所は普段は見ないので出さない (data-library-path)
                     -->
                     {@render meta(
+                        rec.service_name,
                         [
-                            rec.service_name,
                             // 番組表の尺ではなく実際に録れた長さ。
                             // 途中で止めたときやCMを切ったときは合わない
                             `${dateTime(rec.start_at)} (${recordedDuration(rec)})`,
@@ -1114,7 +1116,7 @@
                                         res.name,
                                         'reservation-state',
                                     )}
-                                    {@render meta([res.service_name, airing(res)], res)}
+                                    {@render meta(res.service_name, [airing(res)], res)}
                                     {#if res.conflict_reason}
                                         <div class="row-sub text-error small">{res.conflict_reason}</div>
                                     {/if}

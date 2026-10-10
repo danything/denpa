@@ -793,7 +793,7 @@
                                 fallback={channel.type}
                             />
                             <span class="channel-text">
-                                <span class="channel-name">
+                                <span class="channel-name broadcast">
                                     {channel.name}
                                 </span>
                                 {#if channel.now}

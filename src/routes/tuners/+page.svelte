@@ -210,7 +210,7 @@
                                         {channel.channel}
                                     </td>
                                     <td class="small">
-                                        <div>
+                                        <div class="broadcast">
                                             {channel.services.map((service) => service.name).join(', ')}
                                         </div>
                                     </td>
@@ -715,7 +715,7 @@
                             {#each cmLogos as service (service.id)}
                                 <details class="cm-logo">
                                     <summary class="small">
-                                        {service.name}
+                                        <span class="broadcast">{service.name}</span>
                                         <!--
                                             覚えたかどうかは畳んだまま分かるようにする。
                                             開かないと分からない頃は、100局ぶん開いて回る
