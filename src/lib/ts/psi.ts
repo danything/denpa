@@ -95,6 +95,9 @@ export interface NetworkInfo {
     transportStreams: TransportInfo[];
 }
 
+/** 何も組み上がらなかったときの返り。使い回すので凍らせてある */
+const NONE: readonly Uint8Array[] = Object.freeze([]);
+
 /**
  * PSI セクションを組み立てる。
  *
@@ -118,29 +121,37 @@ export class SectionAssembler {
         private readonly crc: 'always' | 'syntax' = 'always',
     ) {}
 
-    /** パケットを1つ食わせる。組み上がったセクションを返す */
-    feed(packet: Uint8Array): Uint8Array[] {
-        if (packet[0] !== SYNC) return [];
+    /**
+     * パケットを1つ食わせる。組み上がったセクションを返す。
+     *
+     * 返りは**読むだけ**にすること。何も組み上がらないとき (ほとんどのパケット) は
+     * 使い回しの空配列を返す — 関係ないパケットのたびに配列を作っていた
+     */
+    feed(packet: Uint8Array): readonly Uint8Array[] {
+        if (packet[0] !== SYNC) return NONE;
         const pid = ((packet[1]! & 0x1f) << 8) | packet[2]!;
-        if (pid !== this.pid) return [];
+        if (pid !== this.pid) return NONE;
         // トランスポートエラーが立っているものは信用しない
-        if (packet[1]! & 0x80) return [];
+        if (packet[1]! & 0x80) return NONE;
 
         const adaptation = (packet[3]! >> 4) & 0x03;
-        if (adaptation === 0 || adaptation === 2) return [];
+        if (adaptation === 0 || adaptation === 2) return NONE;
         let offset = 4;
         if (adaptation === 3) offset += 1 + packet[4]!;
-        if (offset >= PACKET) return [];
+        if (offset >= PACKET) return NONE;
 
         const payload = packet.subarray(offset);
         if (packet[1]! & 0x40) {
             const pointer = payload[0]!;
-            if (1 + pointer > payload.length) return [];
+            if (1 + pointer > payload.length) return NONE;
             // pointer_field の手前は前のセクションの続き
             this.append(payload.subarray(1, 1 + pointer));
             const done = this.flush();
+            // 写す。パケットは届いた塊の上の窓で、塊は使い回される (PacketStream)
             this.buffer = payload.slice(1 + pointer);
-            return [...done, ...this.flush()];
+            const next = this.flush();
+            if (done.length === 0) return next;
+            return next.length === 0 ? done : [...done, ...next];
         }
 
         this.append(payload);
@@ -155,23 +166,25 @@ export class SectionAssembler {
         this.buffer = joined;
     }
 
-    private flush(): Uint8Array[] {
-        const sections: Uint8Array[] = [];
+    private flush(): readonly Uint8Array[] {
+        let sections: Uint8Array[] | null = null;
         for (;;) {
-            if (this.buffer.length < 3) return sections;
+            if (this.buffer.length < 3) return sections ?? NONE;
             // 詰め物。ここから先にセクションは無い
             if (this.buffer[0] === 0xff) {
                 this.buffer = new Uint8Array(0);
-                return sections;
+                return sections ?? NONE;
             }
             const length = 3 + (((this.buffer[1]! & 0x0f) << 8) | this.buffer[2]!);
-            if (this.buffer.length < length) return sections;
+            if (this.buffer.length < length) return sections ?? NONE;
             const section = this.buffer.slice(0, length);
             this.buffer = this.buffer.slice(length);
             // 壊れたセクションを読むと嘘の局が並ぶので、CRC を通ったものだけ使う
             const syntax = (section[1]! & 0x80) !== 0;
-            if (this.crc === 'syntax' && !syntax) sections.push(section);
-            else if (crc32(section) === 0) sections.push(section);
+            if ((this.crc === 'syntax' && !syntax) || crc32(section) === 0) {
+                sections ??= [];
+                sections.push(section);
+            }
         }
     }
 }
@@ -182,9 +195,9 @@ export class SectionAssembler {
  */
 const CONFIRM = 3;
 
-/** `from` 以降で、188 間隔に 0x47 が続くところを探す。無ければ -1 */
-function findSync(data: Uint8Array, from = 0): number {
-    for (let at = from; at + PACKET * (CONFIRM - 1) < data.length; at++) {
+/** `from` 以降 `until` の手前までで、188 間隔に 0x47 が続くところを探す。無ければ -1 */
+function findSync(data: Uint8Array, from = 0, until = data.length): number {
+    for (let at = from; at < until && at + PACKET * (CONFIRM - 1) < data.length; at++) {
         let ok = true;
         for (let i = 0; i < CONFIRM; i++) {
             if (data[at + i * PACKET] !== SYNC) {
@@ -203,28 +216,77 @@ function findSync(data: Uint8Array, from = 0): number {
  * 頭が必ずパケットの先頭とは限らず、電波が弱いと途中で数バイト落ちる。
  * ずれたままだと**以降ずっと1パケットも読めなくなる**ので、頭が 0x47 でなければ
  * 取り直す。普段は先頭が 0x47 なので、探しに行くのはずれたときだけ。
+ *
+ * **出すパケットは渡された塊の上の窓** (写しではない)。塊を丸ごと写していた頃は、
+ * それだけで録画の処理の 1/3 を食っていた。塊の入れ物を使い回す呼び手が居る
+ * (`server/recorded-bml.ts`) ので、**次の `feed` より後まで持つなら写すこと**。
+ * いまの読み手 (`SectionAssembler`・`PesDemuxer`) は溜めるときに写している
  */
 export class PacketStream {
     private rest = new Uint8Array(0);
 
     *feed(chunk: Uint8Array): Generator<Uint8Array> {
-        const data = new Uint8Array(this.rest.length + chunk.length);
-        data.set(this.rest);
-        data.set(chunk, this.rest.length);
-
+        /*
+         * 前の残り (`rest`) と塊を繋いだ並びの上を歩く。位置 `at` はその並びでの位置。
+         * 繋ぐのは**残りに頭があるパケットを読むのに要るぶんだけ** (頭を探すのに
+         * 3パケットぶん先まで見る)
+         */
+        const split = this.rest.length;
+        const total = split + chunk.length;
         let at = 0;
-        while (at + PACKET <= data.length) {
-            if (data[at] !== SYNC) {
-                const found = findSync(data, at);
-                if (found < 0) break;
-                at = found;
-                if (at + PACKET > data.length) break;
+        let lost = false;
+        if (split > 0) {
+            const head = new Uint8Array(split + Math.min(chunk.length, PACKET * CONFIRM));
+            head.set(this.rest);
+            head.set(chunk.subarray(0, head.length - split), split);
+            while (at < split && at + PACKET <= total) {
+                if (head[at] !== SYNC) {
+                    const found = findSync(head, at, split);
+                    // 残りの中には無い。塊のほうを探す
+                    if (found < 0) {
+                        lost = true;
+                        break;
+                    }
+                    at = found;
+                }
+                yield head.subarray(at, at + PACKET);
+                at += PACKET;
             }
-            yield data.subarray(at, at + PACKET);
-            at += PACKET;
         }
+
+        let offset = at - split;
+        if (lost) {
+            const found = findSync(chunk);
+            if (found >= 0) {
+                offset = found;
+                lost = false;
+            }
+        }
+        if (!lost) {
+            while (offset + PACKET <= chunk.length) {
+                if (chunk[offset] !== SYNC) {
+                    const found = findSync(chunk, offset);
+                    if (found < 0) break;
+                    offset = found;
+                    if (offset + PACKET > chunk.length) break;
+                }
+                yield chunk.subarray(offset, offset + PACKET);
+                offset += PACKET;
+            }
+            at = split + offset;
+        }
+
         // 同期が取れないまま溜め込まないよう、頭を探せるぶんだけ残す
-        this.rest = data.slice(Math.max(at, data.length - PACKET * CONFIRM));
+        const from = Math.max(at, total - PACKET * CONFIRM);
+        if (from >= split) {
+            this.rest = chunk.slice(from - split);
+        } else {
+            // 塊が短くて、前の残りにまだ食い込んでいる
+            const rest = new Uint8Array(total - from);
+            rest.set(this.rest.subarray(from));
+            rest.set(chunk, split - from);
+            this.rest = rest;
+        }
     }
 }
 

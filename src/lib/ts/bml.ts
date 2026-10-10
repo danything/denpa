@@ -265,13 +265,28 @@ export class BmlDecoder {
 
     /** 1局に絞った TS を食わせる */
     feed(chunk: Uint8Array): void {
-        for (const packet of this.packets.feed(chunk)) {
-            for (const section of this.pat.feed(packet)) this.onPat(section);
-            for (const section of this.pmt?.feed(packet) ?? []) this.onPmt(section);
-            for (const section of this.time.feed(packet)) this.onTime(section);
-            for (const component of this.components.values()) {
-                for (const section of component.sections.feed(packet)) this.onCarousel(component, section);
-            }
+        for (const packet of this.packets.feed(chunk)) this.feedPacket(packet);
+    }
+
+    /**
+     * 切り分け済みのパケットを1つ。ライブは同じ TS を時計や Hybridcast とも
+     * 分け合うので、切り分けは1回で済ませて配る (`server/live.ts` の `tap`)。
+     *
+     * **PID で行き先を引く。** 組み立て役を全部に回していた頃は、データ放送と
+     * 関係ない映像のパケットのたびにカルーセルの数だけ呼んでいた。
+     *
+     * `packet` は呼び手の塊の上の窓 (`psi.ts` の `PacketStream`)。**返ったあとまで
+     * 持つなら写すこと** — 塊の入れ物は使い回される
+     */
+    feedPacket(packet: Uint8Array): void {
+        const pid = ((packet[1]! & 0x1f) << 8) | packet[2]!;
+        // 同じ PID を2役が名乗ることもあるので、else でつながない
+        if (pid === PID_PAT) for (const section of this.pat.feed(packet)) this.onPat(section);
+        if (pid === this.pmtPid) for (const section of this.pmt?.feed(packet) ?? []) this.onPmt(section);
+        if (pid === PID_TIME) for (const section of this.time.feed(packet)) this.onTime(section);
+        const component = this.components.get(pid);
+        if (component !== undefined) {
+            for (const section of component.sections.feed(packet)) this.onCarousel(component, section);
         }
     }
 

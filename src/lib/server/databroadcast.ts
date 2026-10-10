@@ -58,10 +58,24 @@ export class DataBroadcast {
         try {
             this.decoder.feed(chunk);
         } catch (error) {
-            // 言うのは1回だけ。転び続けると記録がそれで埋まる
-            console.error(`[data] データ放送を解くのをやめました: ${error}`);
-            this.close();
+            this.fell(error);
         }
+    }
+
+    /** 切り分け済みのパケットを1つ (`BmlDecoder.feedPacket`)。転び方は `feed` と同じ */
+    feedPacket(packet: Uint8Array): void {
+        if (this.closed) return;
+        try {
+            this.decoder.feedPacket(packet);
+        } catch (error) {
+            this.fell(error);
+        }
+    }
+
+    private fell(error: unknown): void {
+        // 言うのは1回だけ。転び続けると記録がそれで埋まる
+        console.error(`[data] データ放送を解くのをやめました: ${error}`);
+        this.close();
     }
 
     /** 繋いできた人に配り直すぶん ([Carousel](../ts/carousel.ts)) */

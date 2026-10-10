@@ -123,15 +123,18 @@ export class BroadcastClock {
      *   見えるだけで、塊の最後の PCR がいちばん小さく出て選ばれる
      */
     feed(chunk: Uint8Array, receivedAt = Date.now()): void {
-        for (const packet of this.packets.feed(chunk)) {
-            const pid = ((packet[1]! & 0x1f) << 8) | packet[2]!;
-            if (this.pcrPid === null || pid === this.pcrPid) {
-                const at = readPcr(packet);
-                if (Number.isFinite(at)) this.onPcr(at, receivedAt);
-            }
-            for (const section of this.pat.feed(packet)) this.onPat(section);
-            for (const section of this.pmt?.feed(packet) ?? []) this.onPmt(section);
+        for (const packet of this.packets.feed(chunk)) this.feedPacket(packet, receivedAt);
+    }
+
+    /** 切り分け済みのパケットを1つ (`BmlDecoder.feedPacket` と同じ事情) */
+    feedPacket(packet: Uint8Array, receivedAt: number): void {
+        const pid = ((packet[1]! & 0x1f) << 8) | packet[2]!;
+        if (this.pcrPid === null || pid === this.pcrPid) {
+            const at = readPcr(packet);
+            if (Number.isFinite(at)) this.onPcr(at, receivedAt);
         }
+        if (pid === PID_PAT) for (const section of this.pat.feed(packet)) this.onPat(section);
+        if (pid === this.pmtPid) for (const section of this.pmt?.feed(packet) ?? []) this.onPmt(section);
     }
 
     private onPcr(at: number, receivedAt: number): void {

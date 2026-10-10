@@ -22,10 +22,11 @@
 import { and, eq, gt, lte } from 'drizzle-orm';
 import { type Audio, type AudioTrack, audioTracks, parseAudios, pickTrack } from '#lib/arib.js';
 import { CHANNEL, type HybridcastLink, type LiveCodec, type Notice } from '#lib/live.js';
-import { AitReader, APPLICATION_TYPE_HTML5, CONTROL } from '#lib/ts/ait.js';
+import { type Ait, AitReader, APPLICATION_TYPE_HTML5, CONTROL } from '#lib/ts/ait.js';
 import { BroadcastClock, parseStart } from '#lib/ts/clock.js';
 import { Fmp4Splitter } from '#lib/ts/fmp4.js';
 import { MkvSplitter } from '#lib/ts/mkv.js';
+import { PacketStream } from '#lib/ts/psi.js';
 import { ServiceFilter } from '#lib/ts/service-filter.js';
 import {
     type Caption,
@@ -548,6 +549,8 @@ class Session {
      * ので、ここより手前で溜めると、そのぶん遅れて見える
      */
     private readonly clock = new BroadcastClock();
+    /** 絞ったあとを 188 バイトに切るもの。データ放送・時計・Hybridcast で分け合う (`tap`) */
+    private readonly packets = new PacketStream();
     /** ffmpeg が入口で 0 に寄せたぶん (秒)。`start:` から拾う */
     private startPts = Number.NaN;
     /** 最後に時計を配った時刻 (`tellClock`) */
@@ -948,9 +951,24 @@ class Session {
         const out = filter === null ? chunk : filter.filter(chunk);
         if (filter !== null) this.tsid = filter.transportStreamId;
         if (out.length === 0) return out;
-        this.data?.feed(out);
-        this.clock.feed(out);
-        this.findHybridcast(out);
+        /*
+         * **188 バイトに切るのは1回だけ。** 3つがそれぞれ切っていた頃は、同じ塊を
+         * 3回なめていた (ライブの処理でいちばん重いところだった)
+         */
+        const receivedAt = Date.now();
+        const data = this.data;
+        let ait: AitReader | null = null;
+        if (this.program > 0) {
+            this.ait ??= new AitReader(this.program);
+            ait = this.ait;
+        }
+        const found: Ait[] = [];
+        for (const packet of this.packets.feed(out)) {
+            data?.feedPacket(packet);
+            this.clock.feedPacket(packet, receivedAt);
+            ait?.feedPacket(packet, found);
+        }
+        if (found.length > 0) this.findHybridcast(found);
         return out;
     }
 
@@ -1240,10 +1258,8 @@ class Session {
      * 違いでしかなく、`present` (人が呼んだら始めるもの) も**在ることに変わりは
      * ない**ためです。押したときの言い方だけ変えます
      */
-    private findHybridcast(chunk: Uint8Array): void {
-        if (this.program <= 0) return;
-        this.ait ??= new AitReader(this.program);
-        for (const ait of this.ait.feed(chunk)) {
+    private findHybridcast(found: Ait[]): void {
+        for (const ait of found) {
             if (ait.applicationType !== APPLICATION_TYPE_HTML5) continue;
             const apps: HybridcastLink[] = ait.applications
                 .filter((app) => app.controlCode === CONTROL.autostart || app.controlCode === CONTROL.present)
