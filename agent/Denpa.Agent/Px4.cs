@@ -103,8 +103,6 @@ public static class Px4Userland
 
     public static string Device(string id, int receiver) => $"{Scheme}{id}:{receiver}";
 
-    public static bool Is(string? device) => device?.StartsWith(Scheme, StringComparison.Ordinal) == true;
-
     /// <summary>
     /// <c>px4:00001205000960:2</c> を割る。形が違えば null。
     ///
@@ -113,11 +111,14 @@ public static class Px4Userland
     /// 合わなければ px4d が理由を付けて断る。
     /// </para>
     /// </summary>
-    public static (string Id, int Receiver)? Parse(string device)
+    public static (string Id, int Receiver)? Parse(string device) => Parse(device, Scheme, ValidId);
+
+    /// <summary><c>&lt;頭&gt;&lt;筐体&gt;:&lt;受信機&gt;</c> を割る (<c>asicen:</c> も同じ形)。形が違えば null</summary>
+    internal static (string Id, int Receiver)? Parse(string device, string scheme, Func<string, bool> validId)
     {
-        if (!Is(device)) return null;
-        var parts = device[Scheme.Length..].Split(':');
-        if (parts.Length != 2 || !ValidId(parts[0])) return null;
+        if (!device.StartsWith(scheme, StringComparison.Ordinal)) return null;
+        var parts = device[scheme.Length..].Split(':');
+        if (parts.Length != 2 || !validId(parts[0])) return null;
         if (!int.TryParse(parts[1], out var receiver) || receiver < 0) return null;
         return (parts[0], receiver);
     }
@@ -429,23 +430,13 @@ public static class Px4Userland
     public static List<TunerSpec> Detect() => Specs(Enclosures());
 
     /// <summary>筐体の一覧から、設定の形に組み立てる</summary>
-    public static List<TunerSpec> Specs(IEnumerable<Enclosure> enclosures)
-    {
-        var found = new List<TunerSpec>();
-        foreach (var enclosure in enclosures)
-        {
-            foreach (var receiver in enclosure.Receivers)
-            {
-                if (receiver.Types.Length == 0) continue;
-                found.Add(new TunerSpec(
-                    Name(enclosure.Model, enclosure.Id, receiver.Index),
-                    receiver.Types,
-                    false,
-                    Device(enclosure.Id, receiver.Index)));
-            }
-        }
-        return found;
-    }
+    public static List<TunerSpec> Specs(IEnumerable<Enclosure> enclosures) =>
+    [
+        .. enclosures.SelectMany(enclosure => enclosure.Receivers
+            .Where(receiver => receiver.Types.Length > 0)
+            .Select(receiver => new TunerSpec(
+                Name(enclosure.Model, enclosure.Id, receiver.Index), receiver.Types, false, Device(enclosure.Id, receiver.Index)))),
+    ];
 
     /// <summary>
     /// 受信機ごとの注意書き (<c>px4:&lt;番号&gt;:&lt;受信機&gt;</c> → 文)。選局は通るが設定どおりには
@@ -473,9 +464,12 @@ public static class Px4Userland
     }
 
     /// <summary>設定に出てくる筐体。px4d を起こす相手</summary>
-    public static IEnumerable<string> IdsIn(IEnumerable<TunerSpec> specs) => specs
+    public static IEnumerable<string> IdsIn(IEnumerable<TunerSpec> specs) => IdsIn(specs, Parse);
+
+    /// <summary>設定に出てくる筐体 (<paramref name="parse"/> で割れる <c>device</c> のもの)</summary>
+    internal static IEnumerable<string> IdsIn(IEnumerable<TunerSpec> specs, Func<string, (string Id, int Receiver)?> parse) => specs
         .Where(spec => !spec.Disabled && spec.Device is not null)
-        .Select(spec => Parse(spec.Device!)?.Id)
+        .Select(spec => parse(spec.Device!)?.Id)
         .OfType<string>()
         .Distinct(StringComparer.Ordinal);
 }
@@ -559,57 +553,51 @@ public sealed record Px4Receiver(int Index, bool Terrestrial, bool Satellite, bo
 }
 
 /// <summary>
-/// <c>px4d</c> 1つ。**筐体1台につき1つ、起こしたら止めるまで居る。**
+/// 筐体を持つ常駐 (<c>px4d</c> / <c>asicend</c>)。**筐体1台につき1つ、起こしたら止めるまで居る。**
 ///
 /// <para>
 /// 起こすのは最初に要ったとき (起動時の <see cref="Prepare"/> か、初めての選局)。
 /// ファームウェアを流し込んでから ready になるので、数秒かかる。
 /// 落ちていたら次に要ったときに起こし直す。
 /// </para>
-///
-/// <para>
-/// **ready になったら受信機を聞く** (<c>px4ctl list</c>、<see cref="Receivers"/>)。
-/// 何本あって何を受けられるかは筐体の答えを使う。
-/// </para>
 /// </summary>
-public sealed class Px4Daemon
+public abstract class UserlandDaemon(string name, string id)
 {
     private static readonly Lock Registry = new();
-    private static readonly Dictionary<string, Px4Daemon> All = new(StringComparer.Ordinal);
+    private static readonly Dictionary<string, UserlandDaemon> All = new(StringComparer.Ordinal);
 
     /// <summary>ready を待つ上限。ファームウェアの流し込みは数秒で済む</summary>
     private static readonly TimeSpan ReadyTimeout = TimeSpan.FromSeconds(30);
 
-    private readonly string _id;
+    protected string Id { get; } = id;
     private readonly Lock _gate = new();
     private Process? _process;
-    private string _stderr = "";
-
-    private Px4Daemon(string id) => _id = id;
-
-    public static Px4Daemon For(string id)
-    {
-        lock (Registry)
-        {
-            if (!All.TryGetValue(id, out var daemon))
-            {
-                daemon = new Px4Daemon(id);
-                All[id] = daemon;
-            }
-            return daemon;
-        }
-    }
+    private volatile string _stderr = "";
 
     public bool Running => _process is { HasExited: false };
 
     /// <summary>
     /// 筐体に聞いた受信機。**ready になるまで null。** 聞けなかったときも null のままで、
-    /// そのときは選局を px4d に任せる (合わなければあちらが断る)
+    /// そのときは選局を常駐に任せる (合わなければあちらが断る)
     /// </summary>
-    public IReadOnlyList<Px4Receiver>? Receivers { get; private set; }
+    public IReadOnlyList<Px4Receiver>? Receivers { get; protected set; }
+
+    protected static T For<T>(string id, Func<T> create) where T : UserlandDaemon
+    {
+        lock (Registry)
+        {
+            var key = $"{typeof(T).Name} {id}";
+            if (!All.TryGetValue(key, out var daemon))
+            {
+                daemon = create();
+                All[key] = daemon;
+            }
+            return (T)daemon;
+        }
+    }
 
     /// <summary>
-    /// 挙げた筐体ぶん、px4d を起こして ready まで待つ。**起動時と、設定を書き換えたとき。**
+    /// 挙げた筐体ぶん起こして ready まで待つ。**起動時と、設定を書き換えたとき。**
     ///
     /// <para>
     /// **起こせなくても止まらない。** 筐体が抜けている・ファームウェアが無い、は
@@ -617,92 +605,62 @@ public sealed class Px4Daemon
     /// 理由は記録に残し、選局のときにもう一度試す。
     /// </para>
     /// </summary>
-    public static void Prepare(IEnumerable<string> ids)
+    public static void Prepare(IEnumerable<string> ids, Func<string, UserlandDaemon> daemon)
     {
         foreach (var id in ids)
         {
+            var target = daemon(id);
             try
             {
-                For(id).Ensure();
+                target.Ensure();
             }
             catch (Exception error)
             {
-                Log.Write($"[px4d {id}] {error.Message}");
+                target.Write(error.Message);
             }
         }
     }
 
     /// <summary>動いていなければ起こして ready まで待つ。駄目なら理由を添えて投げる</summary>
-    public void Ensure()
-    {
-        if (Running) return;
-        /*
-         * **15V を出せるかは起こす前に一覧で聞いておく。** px4ctl list (LIST) には載らない。
-         * 一覧は筐体を掴まないが、起こしたあとだと OS によっては開けない。錠の外で聞く —
-         * 一覧は最悪 15 秒待つので、錠の中だとその間 Dispose も選局も待たされる。
-         * 使えない筐体の理由は Detect が残すので、ここでは黙る
-         */
-        var enclosure = Px4Userland.Enclosures(_ => { }).FirstOrDefault(found => found.Id == _id);
-        var listed = enclosure?.Receivers;
-        /*
-         * 挿し口で見分ける筐体は、一覧に居ないと起こせない (挿し口を知る手段が一覧しか無い)。
-         * 挿し口を変えると別の名前になるので、設定に書いた名前は見つからなくなる
-         */
-        if (_id.Contains('_') && enclosure is null)
-        {
-            throw new IOException($"{Px4Userland.Label(_id)} の筐体が見つかりません (抜けたか、挿し口を変えた?)");
-        }
+    public abstract void Ensure();
 
+    protected void Write(string message) => Log.Write($"[{name} {Id}] {message}");
+
+    /// <summary>
+    /// 起こして、<paramref name="ready"/> が通るまで待つ。<paramref name="runtimeDir"/> (ランタイムルート) は
+    /// 呼ぶ側が用意する決まり (常駐は下の階層しか作らない)
+    /// </summary>
+    protected void Launch(string program, IReadOnlyList<string> args, string runtimeDir, Func<bool> ready, Action onReady)
+    {
         lock (_gate)
         {
             if (Running) return;
             _process?.Dispose();
             _process = null;
 
-            if (!File.Exists(Px4Userland.Firmware))
-            {
-                throw new IOException($"ファームウェアがありません: {Px4Userland.Firmware}");
-            }
-            var px4d = Path.Combine(Px4Userland.Dir, "px4d");
-            if (!File.Exists(px4d)) throw new IOException($"px4-userland が入っていません: {px4d}");
-
-            // ランタイムルートは呼ぶ側が用意する決まり (px4d は下の階層しか作らない)
-            Directory.CreateDirectory(Px4Userland.RuntimeDir);
+            Directory.CreateDirectory(runtimeDir);
             if (!OperatingSystem.IsWindows())
             {
-                File.SetUnixFileMode(
-                    Px4Userland.RuntimeDir, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+                File.SetUnixFileMode(runtimeDir, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
             }
 
-            var start = new ProcessStartInfo(px4d,
-            [
-                .. Select(enclosure),
-                "--firmware", Px4Userland.Firmware,
-                "--runtime-dir", Px4Userland.RuntimeDir,
-                /*
-                 * 15V を出してよいかの門は2段。ここは「頼まれたら出す」で開けておき、
-                 * 本当に頼むかどうかは設定の `lnb` で決める (TUNE で 15V を頼むのは
-                 * `15v` と書いてある本だけ。Px4Tuner.TuneRequest)
-                 */
-                "--allow-lnb-power",
-            ])
+            var start = new ProcessStartInfo(program, args)
             {
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
                 UseShellExecute = false,
             };
-
-            var process = Process.Start(start) ?? throw new IOException("px4d を起動できません");
+            var process = Process.Start(start) ?? throw new IOException($"{name} を起動できません");
             _process = process;
             _stderr = "";
             _ = Task.Run(async () =>
             {
-                // 診断は全部 stderr に来る。ready の合図もここ
+                // 診断は全部 stderr に来る
                 using var reader = process.StandardError;
                 while (await reader.ReadLineAsync() is { } line)
                 {
                     _stderr = line;
-                    Log.Write($"[px4d {_id}] {line}");
+                    Write(line);
                 }
             });
             _ = Task.Run(() => process.StandardOutput.ReadToEndAsync());
@@ -712,67 +670,38 @@ public sealed class Px4Daemon
             {
                 if (process.HasExited)
                 {
-                    throw new IOException($"px4d が終了しました (exit {process.ExitCode}: {_stderr})");
+                    throw new IOException($"{name} が終了しました (exit {process.ExitCode}: {_stderr})");
                 }
-                if (Status(TimeSpan.FromSeconds(5)).Code == 0)
+                if (ready())
                 {
-                    Log.Write($"[px4d {_id}] ready");
-                    Receivers = WithLnb(ListReceivers(), listed);
+                    Write("ready");
+                    onReady();
                     return;
                 }
                 Thread.Sleep(500);
             }
 
             Stop();
-            throw new IOException($"px4d が {ReadyTimeout.TotalSeconds} 秒以内に ready になりません ({_stderr})");
+            throw new IOException($"{name} が {ReadyTimeout.TotalSeconds} 秒以内に ready になりません ({_stderr})");
         }
     }
 
-    /// <summary>
-    /// px4d にどの筐体かを伝える引数。番号が一意なら <c>--device</c> だけ、重なるなら挿し口と
-    /// ソケットの置き場の名前も (px4-userland SPEC 4.1。<c>--usb-path</c> には <c>--instance</c> が要る)
-    /// </summary>
-    private string[] Select(Px4Userland.Enclosure? enclosure) => enclosure is { UsbPaths.Count: > 0 }
-        ? ["--device", enclosure.Serial, .. enclosure.UsbPaths.SelectMany(path => new[] { "--usb-path", path }), "--instance", _id]
-        : ["--device", _id];
-
-    /// <summary><c>px4ctl status</c>。exit 0 なら ready</summary>
-    public (int Code, string Output) Status(TimeSpan timeout) => Control("status", timeout);
-
-    private (int Code, string Output) Control(string command, TimeSpan timeout) => Shell.Run(
-        Path.Combine(Px4Userland.Dir, "px4ctl"),
-        // 挿し口で起こした筐体は、ソケットの置き場の名前で呼ぶ (番号で呼ぶと別の筐体に繋がりうる)
-        [_id.Contains('_') ? "--instance" : "--device", _id, "--runtime-dir", Px4Userland.RuntimeDir, command],
-        timeout);
-
-    /// <summary>
-    /// 筐体に聞いた受信機に、一覧で聞いた 15V の可否を写す。一覧に無い受信機 (一覧を聞けなかった) は
-    /// null のまま
-    /// </summary>
-    internal static List<Px4Receiver>? WithLnb(List<Px4Receiver>? asked, IReadOnlyList<Px4Receiver>? listed) =>
-        asked?.Select(receiver => receiver with
-        {
-            Lnb15v = listed?.FirstOrDefault(entry => entry.Index == receiver.Index)?.Lnb15v,
-        }).ToList();
-
-    /// <summary><c>px4ctl list</c> で受信機を聞く。聞けなければ null (理由は記録に)</summary>
-    private List<Px4Receiver>? ListReceivers()
+    /// <summary>受信機の行 (<c>px4ctl list</c> の形) を読んで記録に残す。1本も読めなければ null</summary>
+    protected List<Px4Receiver>? ListReceivers(string output, string command)
     {
-        var (code, output) = Control("list", TimeSpan.FromSeconds(5));
-        if (code != 0)
+        var receivers = Px4Receiver.ParseList(output, Write);
+        if (receivers.Count == 0)
         {
-            Log.Write($"[px4d {_id}] 受信機を聞けません (px4ctl list exit {code}: {output})");
+            Write($"受信機を聞けません ({command}: {output})");
             return null;
         }
-        var receivers = Px4Receiver.ParseList(output, message => Log.Write($"[px4d {_id}] {message}"));
-        Log.Write($"[px4d {_id}] 受信機 {receivers.Count} 本: "
-            + string.Join(", ", receivers.Select(r => $"#{r.Index} {string.Join("/", r.Types)}")));
+        Write($"受信機 {receivers.Count} 本: " + string.Join(", ", receivers.Select(r => $"#{r.Index} {string.Join("/", r.Types)}")));
         return receivers;
     }
 
     /// <summary>
-    /// 止める。**SIGTERM で。** px4d は合図を受けると LNB を 0V に戻し、
-    /// socket を消してから終わる。SIGKILL だとそこが保証されない
+    /// 止める。**SIGTERM で。** px4d / asicend は合図を受けると後片付け (LNB を 0V に戻す・
+    /// socket を消す) をしてから終わる。SIGKILL だとそこが保証されない
     /// </summary>
     public void Stop()
     {
@@ -792,9 +721,94 @@ public sealed class Px4Daemon
 
     public static void StopAll()
     {
-        List<Px4Daemon> daemons;
+        List<UserlandDaemon> daemons;
         lock (Registry) daemons = [.. All.Values];
         foreach (var daemon in daemons) daemon.Stop();
+    }
+}
+
+/// <summary>
+/// <c>px4d</c> 1つ。**ready になったら受信機を聞く** (<c>px4ctl list</c>、<see cref="UserlandDaemon.Receivers"/>)。
+/// 何本あって何を受けられるかは筐体の答えを使う。
+/// </summary>
+public sealed class Px4Daemon(string id) : UserlandDaemon("px4d", id)
+{
+    public static Px4Daemon For(string id) => For(id, () => new Px4Daemon(id));
+
+    public override void Ensure()
+    {
+        if (Running) return;
+        /*
+         * **15V を出せるかは起こす前に一覧で聞いておく。** px4ctl list (LIST) には載らない。
+         * 一覧は筐体を掴まないが、起こしたあとだと OS によっては開けない。錠の外で聞く —
+         * 一覧は最悪 15 秒待つので、錠の中だとその間 Dispose も選局も待たされる。
+         * 使えない筐体の理由は Detect が残すので、ここでは黙る
+         */
+        var enclosure = Px4Userland.Enclosures(_ => { }).FirstOrDefault(found => found.Id == Id);
+        var listed = enclosure?.Receivers;
+        /*
+         * 挿し口で見分ける筐体は、一覧に居ないと起こせない (挿し口を知る手段が一覧しか無い)。
+         * 挿し口を変えると別の名前になるので、設定に書いた名前は見つからなくなる
+         */
+        if (Id.Contains('_') && enclosure is null)
+        {
+            throw new IOException($"{Px4Userland.Label(Id)} の筐体が見つかりません (抜けたか、挿し口を変えた?)");
+        }
+        if (!File.Exists(Px4Userland.Firmware))
+        {
+            throw new IOException($"ファームウェアがありません: {Px4Userland.Firmware}");
+        }
+        var px4d = Path.Combine(Px4Userland.Dir, "px4d");
+        if (!File.Exists(px4d)) throw new IOException($"px4-userland が入っていません: {px4d}");
+
+        Launch(px4d,
+            [
+                .. Select(enclosure),
+                "--firmware", Px4Userland.Firmware,
+                "--runtime-dir", Px4Userland.RuntimeDir,
+                /*
+                 * 15V を出してよいかの門は2段。ここは「頼まれたら出す」で開けておき、
+                 * 本当に頼むかどうかは設定の `lnb` で決める (TUNE で 15V を頼むのは
+                 * `15v` と書いてある本だけ。Px4Tuner.TuneRequest)
+                 */
+                "--allow-lnb-power",
+            ],
+            Px4Userland.RuntimeDir,
+            () => Control("status", TimeSpan.FromSeconds(5)).Code == 0,
+            () => Receivers = WithLnb(AskReceivers(), listed));
+    }
+
+    /// <summary>
+    /// px4d にどの筐体かを伝える引数。番号が一意なら <c>--device</c> だけ、重なるなら挿し口と
+    /// ソケットの置き場の名前も (px4-userland SPEC 4.1。<c>--usb-path</c> には <c>--instance</c> が要る)
+    /// </summary>
+    private string[] Select(Px4Userland.Enclosure? enclosure) => enclosure is { UsbPaths.Count: > 0 }
+        ? ["--device", enclosure.Serial, .. enclosure.UsbPaths.SelectMany(path => new[] { "--usb-path", path }), "--instance", Id]
+        : ["--device", Id];
+
+    private (int Code, string Output) Control(string command, TimeSpan timeout) => Shell.Run(
+        Path.Combine(Px4Userland.Dir, "px4ctl"),
+        // 挿し口で起こした筐体は、ソケットの置き場の名前で呼ぶ (番号で呼ぶと別の筐体に繋がりうる)
+        [Id.Contains('_') ? "--instance" : "--device", Id, "--runtime-dir", Px4Userland.RuntimeDir, command],
+        timeout);
+
+    /// <summary>
+    /// 筐体に聞いた受信機に、一覧で聞いた 15V の可否を写す。一覧に無い受信機 (一覧を聞けなかった) は
+    /// null のまま
+    /// </summary>
+    internal static List<Px4Receiver>? WithLnb(List<Px4Receiver>? asked, IReadOnlyList<Px4Receiver>? listed) =>
+        asked?.Select(receiver => receiver with
+        {
+            Lnb15v = listed?.FirstOrDefault(entry => entry.Index == receiver.Index)?.Lnb15v,
+        }).ToList();
+
+    /// <summary><c>px4ctl list</c> で受信機を聞く。聞けなければ null (理由は記録に)</summary>
+    private List<Px4Receiver>? AskReceivers()
+    {
+        var (code, output) = Control("list", TimeSpan.FromSeconds(5));
+        if (code == 0) return ListReceivers(output, "px4ctl list");
+        Write($"受信機を聞けません (px4ctl list exit {code}: {output})");
+        return null;
     }
 }
 

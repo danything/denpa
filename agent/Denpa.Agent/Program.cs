@@ -64,9 +64,9 @@ var pool = new TunerPool(tuners, () => events.Emit("tuners"), tune) { Detected =
  */
 void PrepareDaemons()
 {
-    Px4Daemon.Prepare(Px4Userland.IdsIn(pool.Tuners).ToList());
+    UserlandDaemon.Prepare(Px4Userland.IdsIn(pool.Tuners).ToList(), Px4Daemon.For);
     // asicen-userland の筐体の asicend も同じ折に (Asicen.cs)。配布物が無ければ顔ぶれにも出ない
-    AsicenDaemon.Prepare(AsicenUserland.IdsIn(pool.Tuners).ToList());
+    UserlandDaemon.Prepare(AsicenUserland.IdsIn(pool.Tuners).ToList(), AsicenDaemon.For);
 }
 
 var builder = WebApplication.CreateSlimBuilder(args);
@@ -384,9 +384,8 @@ _ = Task.Run(PrepareDaemons);
 app.Lifetime.ApplicationStopped.Register(() =>
 {
     pool.CloseAll();
-    // 読み手を全部離してから px4d を止める。SIGTERM で LNB を 0V に戻して終わる
-    Px4Daemon.StopAll();
-    AsicenDaemon.StopAll();
+    // 読み手を全部離してから px4d / asicend を止める。SIGTERM で LNB を 0V に戻して終わる
+    UserlandDaemon.StopAll();
 });
 
 Log.Write($"listening on :{port} (tuners: {config.TunersFile} / channels: {config.ChannelsFile})");

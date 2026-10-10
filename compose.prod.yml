@@ -16,7 +16,7 @@ name: denpa
 
 services:
     # チューナーエージェント。**機材に触るのはここだけ。**
-    # 選局・チャンネルスキャン・B-CASカード・スクランブル解除を受け持ち、
+    # 選局・B-CASカード・スクランブル解除を受け持ち、
     # 素のTSを denpa へ流す (番組表を読むのは denpa の仕事)
     tuner-agent:
         image: ghcr.io/danything/denpa-agent:latest
@@ -34,8 +34,6 @@ services:
         device_cgroup_rules:
             - 'c 189:* rmw'
             - 'c 212:* rmw'
-        environment:
-            TZ: Asia/Tokyo
         volumes:
             # 設定。チューナーもチャンネルも denpa の画面から書く。
             # スキャンの結果 (channels.json) も同じところへ書き戻される

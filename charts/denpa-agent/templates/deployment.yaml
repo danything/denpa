@@ -29,9 +29,6 @@ spec:
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           securityContext:
             privileged: {{ .Values.privileged }}
-          env:
-            - name: TZ
-              value: {{ .Values.timezone | quote }}
           ports:
             - containerPort: 25252
           volumeMounts:

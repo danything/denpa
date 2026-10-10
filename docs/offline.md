@@ -45,7 +45,7 @@
 DB 名 `denpa-offline`、ストア3つ (実体は [offline-db.ts](../src/lib/offline-db.ts) の型が正):
 
 - `videos` (key: 録画ID) … 落とした録画1本。`video: Blob` と付き添い
-  (`captions: Blob`・`poster: Blob`・`chapters`/`databroadcast`: JSON) を1行にまとめ、
+  (`captionText`: `captions.json` の JSON・`poster: Blob`・`chapters`/`databroadcast`: JSON) を1行にまとめ、
   名前・局名・開始時刻・尺・どちらを落としたか (`source: 'encoded' | 'alt'`)、
   試みの印 (`attempt`)、状態 (`state`) を持つ。
 - `outbox` (key: 録画ID) … オンライン復帰で処理する予約 (`{op: 'delete', name, queuedAt}`)。
