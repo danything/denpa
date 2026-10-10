@@ -1,87 +1,20 @@
 import { describe, expect, test } from 'bun:test';
 import { logoUnusable } from '../format';
 import {
-    boundaries,
     chapterMetadata,
-    detectCmRanges,
-    droppedHead,
+    cmRatio,
     fields,
     firstFrameTime,
     invertRanges,
-    isCmLength,
     leadIn,
     liveAudioIndexes,
     longestRange,
-    packetTimes,
     parseFrameRate,
     parseRatio,
-    parseSilences,
     shiftRanges,
+    tooMuchCm,
     widenKeep,
 } from './cm';
-import { cmRatio, parseLogoFrames, parseTrimRanges, tooMuchCm } from './cm-jls';
-
-describe('parseSilences', () => {
-    test('silencedetect のログから無音区間と尺を取る', () => {
-        const log = [
-            "Input #0, mpegts, from 'a.m2ts':",
-            '  Duration: 00:30:00.00, start: 0.000000, bitrate: 15000 kb/s',
-            '[silencedetect @ 0x1] silence_start: 299.8',
-            '[silencedetect @ 0x1] silence_end: 300.2 | silence_duration: 0.4',
-        ].join('\n');
-        const { silences, duration } = parseSilences(log);
-        expect(duration).toBe(1800);
-        expect(silences).toEqual([{ start: 299.8, end: 300.2 }]);
-    });
-
-    test('silence_end が来ていない途中の無音は捨てる', () => {
-        const { silences } = parseSilences('[silencedetect] silence_start: 10.0');
-        expect(silences).toHaveLength(0);
-    });
-});
-
-describe('isCmLength', () => {
-    test('15秒の倍数を許容誤差内で判定する', () => {
-        expect(isCmLength(15, 0.6)).toBe(true);
-        expect(isCmLength(59.7, 0.6)).toBe(true);
-        expect(isCmLength(90, 0.6)).toBe(true);
-        expect(isCmLength(22, 0.6)).toBe(false);
-        // 本編は15の倍数に乗っても長すぎるので弾く
-        expect(isCmLength(600, 0.6)).toBe(false);
-    });
-});
-
-describe('detectCmRanges', () => {
-    const silencesAt = (points: number[]) => points.map((t) => ({ start: t - 0.2, end: t + 0.2 }));
-
-    test('無音で区切られた60秒の塊をCMとして拾う', () => {
-        const cm = detectCmRanges(silencesAt([300, 360]), 1800);
-        expect(cm).toEqual([{ start: 300, end: 360 }]);
-    });
-
-    test('連続するCM尺セグメントは1ブロックにまとめる', () => {
-        const cm = detectCmRanges(silencesAt([300, 330, 360, 390]), 1800);
-        expect(cm).toEqual([{ start: 300, end: 390 }]);
-    });
-
-    test('単発の15秒は本編のコーナーと区別が付かないので拾わない', () => {
-        expect(detectCmRanges(silencesAt([300, 315]), 1800)).toEqual([]);
-    });
-
-    test('半分以上がCM判定になったら検出失敗とみなして何も返さない', () => {
-        // 60秒ごとに無音が入っている = ほぼ全部がCM尺になってしまうケース
-        const points = Array.from({ length: 20 }, (_, i) => (i + 1) * 60);
-        expect(detectCmRanges(silencesAt(points), 1260)).toEqual([]);
-    });
-
-    test('尺が取れないときは何も返さない', () => {
-        expect(detectCmRanges(silencesAt([300, 360]), NaN)).toEqual([]);
-    });
-
-    test('境界は先頭と末尾を必ず含む', () => {
-        expect(boundaries(silencesAt([100]), 200)).toEqual([0, 100, 200]);
-    });
-});
 
 describe('区間の裏返し', () => {
     test('CMを渡すと残す区間になる', () => {
@@ -95,7 +28,7 @@ describe('区間の裏返し', () => {
         expect(invertRanges([{ start: 0, end: 60 }], 600)).toEqual([{ start: 60, end: 600 }]);
     });
 
-    test('並んでいなくても同じ答えになる (jls の Trim は順不同で来うる)', () => {
+    test('並んでいなくても同じ答えになる', () => {
         expect(
             invertRanges(
                 [
@@ -241,81 +174,6 @@ describe('頭から捨てる長さの上限', () => {
     });
 });
 
-const FPS = 30000 / 1001;
-
-/** 復号の順に並べた映像パケットの表示時刻 (ffprobe -show_packets の形) */
-const packets = (times: number[]): string => times.map((t) => `pts_time=${t.toFixed(6)}`).join('\n');
-
-/**
- * 実機 (ブチ切れ令嬢 / 2026-08-18) の TS から取った並び。**先頭は表示の順に
- * 並んでいない** — 先行 B のほうが I より早い時刻を持つ。P から始まるので穴は無い
- */
-const HEAD_PACKETS = packets([
-    72575.629533, 72575.5628, 72575.596167, 72575.729633, 72575.6629, 72575.696267,
-]);
-
-/**
- * 実機 (令和のダラさん / 2026-09-24) の頭。**B から始まっていて、表示の時刻に穴がある**
- * — 69117.164667 に出るはずの P は復号の順で前にあり、録れていない。
- * 9本のうち 8本がこの形だった
- */
-const HOLED_PACKETS = packets([
-    69117.097933, 69117.1313, 69117.264767, 69117.198033, 69117.2314, 69117.364867, 69117.298133, 69117.3315,
-    69117.464967, 69117.398233, 69117.4316, 69117.565067, 69117.498333, 69117.5317,
-]);
-
-/**
- * 実機 (全国映画祭 短編シネマセレクション / 2026-09-25) の頭。**閉じた GOP** で、
- * I (71493.751589) の前の B が2つ復号できる — 焼いたものは B から始まる
- */
-const CLOSED_GOP_PACKETS = packets([
-    71493.217722, 71493.351189, 71493.284456, 71493.317822, 71493.451289, 71493.384556, 71493.417922,
-    71493.551389, 71493.484656, 71493.518022, 71493.651489, 71493.584756, 71493.618122, 71493.751589,
-    71493.684856, 71493.718222, 71493.851689,
-]);
-
-describe('捨てられるコマぶん (チャプターを詰める量)', () => {
-    test('パケットの表示時刻を並んだとおりに読む。読めない行は飛ばす', () => {
-        expect(packetTimes(HEAD_PACKETS)).toHaveLength(6);
-        expect(packetTimes('pts_time=N/A\npts_time=1.5\n')).toEqual([1.5]);
-    });
-
-    /*
-     * 引く量を `leadIn` (0.5825) と取り違えていた頃は 0.416 秒 = 12.5 コマ
-     * 引きすぎていて、跳んだ先が CM の途中に着地していた
-     */
-    test('復号できる1コマ目より前にあるコマの数だけ', () => {
-        const first = 72575.729633;
-        expect(droppedHead(first, packetTimes(HEAD_PACKETS), FPS)).toBeCloseTo(5 / FPS, 4);
-        // 入れ物の頭から数えたほうは、音声だけの区間まで含んでしまう
-        expect(leadIn(first, 72575.147089)).toBeCloseTo(0.5825, 4);
-    });
-
-    /*
-     * 時刻の差 (first - いちばん早い絵) で引いていた頃は 0.367 秒 = 11 コマで、
-     * チャプターがどれも実際の境目の1コマ手前に入っていた
-     */
-    test('表示の時刻に穴があっても、数えるのはコマの数', () => {
-        const first = 69117.464967;
-        expect(droppedHead(first, packetTimes(HOLED_PACKETS), FPS)).toBeCloseTo(10 / FPS, 4);
-    });
-
-    test('閉じた GOP では、I の前の B から数える', () => {
-        expect(droppedHead(71493.684856, packetTimes(CLOSED_GOP_PACKETS), FPS)).toBeCloseTo(13 / FPS, 4);
-    });
-
-    test('読めない・逆さま・大きすぎるときは 0', () => {
-        const head = packetTimes(HEAD_PACKETS);
-        expect(droppedHead(Number.NaN, head, FPS)).toBe(0);
-        expect(droppedHead(72575.729633, [], FPS)).toBe(0);
-        expect(droppedHead(72575.729633, head, Number.NaN)).toBe(0);
-        expect(droppedHead(72575.5, head, FPS)).toBe(0);
-        // 1 GOP を超えるずれは読み違い
-        const many = Array.from({ length: 40 }, (_, i) => 10 + i / FPS);
-        expect(droppedHead(12, many, FPS)).toBe(0);
-    });
-});
-
 describe('画素の横長さ', () => {
     test('比を数にする', () => {
         expect(parseRatio('4:3')).toBeCloseTo(4 / 3, 6);
@@ -388,37 +246,24 @@ describe('ffprobe の読み取り', () => {
     });
 });
 
-describe('join_logo_scp の出力', () => {
-    test('avs の Trim をフレームから秒に直す', () => {
-        const ranges = parseTrimRanges('Trim(0,2996)++Trim(4497,8993)', 30000 / 1001);
-        expect(ranges[0]!.start).toBeCloseTo(0, 3);
-        expect(ranges[0]!.end).toBeCloseTo(99.99, 1);
-        expect(ranges[1]!.start).toBeCloseTo(150.05, 1);
-    });
-
-    test('Trim が無ければ空', () => {
-        expect(parseTrimRanges('# no trim here', 29.97)).toEqual([]);
-    });
-
+describe('CM判定が多すぎないか', () => {
     test('番組の半分以上がCMになったら信じない', () => {
         /*
-         * 実機で起きたやつ。ロゴを覚えたての回で join_logo_scp が Trim(0,59) だけを
-         * 返し、30分アニメが丸ごとCM扱いになっていた
+         * 実機で起きたやつ。ロゴを覚えたての回で「頭の2秒だけ本編」になり、
+         * 30分アニメが丸ごとCM扱いになっていた (join_logo_scp の頃)
          */
-        const whole = invertRanges(parseTrimRanges('Trim(0,59)', 30000 / 1001), 1802);
+        const whole = invertRanges([{ start: 0, end: 2 }], 1802);
         expect(cmRatio(whole, 1802)).toBe(100);
         expect(tooMuchCm(whole, 1802)).toBe(true);
 
-        // まともな結果 (本編4ブロック) は通す
-        const normal = invertRanges(
-            parseTrimRanges(
-                'Trim(52,7513) ++ Trim(9313,20520) ++ Trim(22320,46354) ++ Trim(48154,48602)',
-                30000 / 1001,
-            ),
-            1802,
-        );
+        // まともな結果 (CM 3 か所で 10%) は通す
+        const normal = [
+            { start: 0, end: 10 },
+            { start: 600, end: 660 },
+            { start: 1700, end: 1802 },
+        ];
         expect(tooMuchCm(normal, 1802)).toBe(false);
-        expect(cmRatio(normal, 1802)).toBeLessThan(30);
+        expect(cmRatio(normal, 1802)).toBe(10);
     });
 });
 
@@ -428,53 +273,18 @@ describe('ロゴで判定できなかったと扱うか', () => {
          * 実機に残っていた文言。印を別に持っていた頃は、後から条件を広げても
          * 既に録ってある分には効かなかった
          */
-        expect(logoUnusable('無音 8 箇所 (jls は使えず: logoframe が失敗 (code 1): ...)')).toBe(true);
-        expect(logoUnusable('無音 8 箇所 (jls は使えず: ロゴ判定が失敗 (code 1): ...)')).toBe(true);
-        expect(logoUnusable('無音 30 箇所 (jls は使えず: 結果の 100% がCM判定なので使いません)')).toBe(true);
+        expect(
+            logoUnusable('無音 8 箇所 (ロゴは使えず: ロゴ判定が失敗: ロゴの在り処が割り出せませんでした)'),
+        ).toBe(true);
+        expect(
+            logoUnusable('無音 30 箇所 (ロゴは使えず: 番組の 100% がCMという結果だったので捨てました)'),
+        ).toBe(true);
         // ロゴで判定できている。ここで出すと、直しようのないものまで拾う
-        expect(logoUnusable('join_logo_scp')).toBe(false);
+        expect(logoUnusable('ロゴ')).toBe(false);
         expect(logoUnusable('無音 8 箇所')).toBe(false);
         expect(logoUnusable(null)).toBe(false);
     });
 });
-
-/*
- * join_logo_scp が本編とCMに分けられなかったときの受け皿。ロゴ判定は
- * 「どのコマにロゴが出ているか」を別に出しているので、その在り処を裏返せば
- * それだけでCMになる。実機の TOKYO MX の録画がこれで、無音検出に落ちて
- * 本編を60秒ぶん取り違えていた
- */
-describe('ロゴの写っているコマ', () => {
-    // 実機の logoframe が出したもの (自前のロゴ判定も同じ形で書く。末尾の列は使わない)
-    const output = [
-        '   284 S 0 BTM    284    284',
-        '  3280 E 0 TOP   3280   3280',
-        '  5079 S 0 BTM   5079   5079',
-        ' 24978 E 0 ALL  24978  24978',
-    ].join('\n');
-
-    test('S と E の対を区間にする', () => {
-        expect(parseLogoFrames(output, 30)).toEqual([
-            { start: 284 / 30, end: 3281 / 30 },
-            { start: 5079 / 30, end: 24979 / 30 },
-        ]);
-    });
-
-    test('相手のいない S は捨てる。まだロゴが出たままで終わった録画', () => {
-        expect(parseLogoFrames('  100 S 0 BTM  100  100', 30)).toEqual([]);
-    });
-
-    test('読めない中身なら何も返さない', () => {
-        expect(parseLogoFrames('checking 54682/54682 ended.', 30)).toEqual([]);
-    });
-});
-
-/*
- * ロゴをどれだけ当てにするか (`logo_level`) は `-set` で外から渡す。
- * 規則ファイルの `Default` は未定義のときだけ効くので、先に決めたほうが勝つ。
- * 書き換えた写しを渡していた頃は、規則が JL フォルダの外へ出て隣のファイルを
- * 見失っていた (実測で `warning: not found setup-file JL_common.txt`)
- */
 
 /**
  * 録画の尻に次の番組の副音声が入ると、探りの間に中身の来ない音声が1本増える。

@@ -1,5 +1,4 @@
 import { describe, expect, test } from 'bun:test';
-import { parseLogoFrames } from '../server/cm-jls';
 import type { Rect } from './logo-area';
 import {
     addFrame,
@@ -9,7 +8,6 @@ import {
     emptyOrientation,
     encodeModel,
     findArea,
-    formatLogoFrames,
     framer,
     type LogoModel,
     level,
@@ -273,15 +271,6 @@ describe('区間にする', () => {
         ]);
         const spans = logoSpans(readings, FPS);
         expect(spans.map((s) => [s.start, s.end])).toEqual([[0, 1202]]);
-    });
-
-    test('logoframe と同じ形で書き、join_logo_scp と同じ読み方で戻る', () => {
-        const text = formatLogoFrames(
-            [{ start: 236, end: 21927, startLo: 230, startHi: 240, endLo: 21927, endHi: 21927 }],
-            1,
-        );
-        expect(text).toBe('   237 S 0 ALL    231    241\n 21928 E 0 ALL  21928  21928\n');
-        expect(parseLogoFrames(text, 30)).toEqual([{ start: 237 / 30, end: 21929 / 30 }]);
     });
 });
 

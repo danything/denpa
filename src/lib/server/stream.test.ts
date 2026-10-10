@@ -81,3 +81,20 @@ describe('run の標準出力を流して受ける (onStdout)', () => {
         expect(Date.now() - started).toBeLessThan(5_000);
     });
 });
+
+describe('run の標準エラーを1行ずつ受ける (onStderrLine)', () => {
+    test('行ごとに渡し、返る stderr は末尾の数行だけ', async () => {
+        const seen: string[] = [];
+        const { code, stderr } = await run(
+            ['sh', '-c', 'for i in $(seq 1 100); do echo "line $i" >&2; done'],
+            {
+                onStderrLine: (line) => seen.push(line),
+            },
+        );
+        expect(code).toBe(0);
+        expect(seen).toHaveLength(100);
+        expect(seen[0]).toBe('line 1');
+        expect(stderr.split('\n').at(-1)).toBe('line 100');
+        expect(stderr.split('\n').length).toBeLessThan(100);
+    });
+});

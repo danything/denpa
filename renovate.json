@@ -49,15 +49,6 @@
       "matchDatasources": ["docker"],
       "matchPackageNames": ["mcr.microsoft.com/dotnet/sdk"],
       "allowedVersions": "<11"
-    },
-    {
-      "description": "CM検出の一式は毎週書き換わっている。まとめて1本の PR にして、上げるときは実機で確かめる",
-      "matchDepNames": [
-        "https://github.com/tobitti0/dtvindex",
-        "https://github.com/tobitti0/chapter_exe",
-        "yobibi/join_logo_scp"
-      ],
-      "groupName": "CM検出 (join_logo_scp 一式)"
     }
   ]
 }
