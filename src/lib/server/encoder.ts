@@ -292,14 +292,6 @@ interface EncodeOptions {
      */
     videoStart?: number;
     /**
-     * 焼く前に捨てられるコマぶんの時間(秒)。**チャプターを詰める量** (`droppedHead`)。
-     *
-     * **`videoStart` とは別物。** あちらは入れ物の頭から数えた量で、CM 検出は
-     * そこを見ていない (絵を頭から数えている)。混ぜると引きすぎて、跳んだ先が
-     * CM の途中に着地する
-     */
-    chapterDrop?: number;
-    /**
      * 正方形の画素で出したときの大きさ。**渡されたときだけ引き伸ばす。**
      * 1440x1080 (SAR 4:3) なら 1920x1080。もともと正方形の素材では渡さない
      */
@@ -521,7 +513,7 @@ export function buildArgs(
  * 残す区間を1つずつ `-c copy` で切り出し、concat デマクサで繋ぐ。
  * 再エンコードしないので速く、字幕もデータ放送も落ちない。
  * キーフレーム単位の切り出しになるが、日本の地上波の MPEG-2 は GOP が
- * 0.5 秒程度なので CM検出の許容誤差 (config.cmTolerance) に収まる。
+ * 0.5 秒程度なので CM検出の許容誤差 (15秒の倍数とみなす誤差。cm-decide.CM_TOLERANCE) に収まる。
  */
 export function buildSegmentArgs(input: string, output: string, range: Range): string[] {
     return [
@@ -1044,6 +1036,11 @@ async function prepareCm(
         detection = await detectCm(input, {
             signal,
             serviceId: recording.service_id,
+            // 録画の頭と尻に入った前後の番組を見分ける (cm-decide.withinProgram)
+            programLength: (recording.end_at - recording.start_at) / 1000,
+            programStart:
+                (recording.start_at - (recording.record_from ?? recording.start_at - config.startMargin)) /
+                1000,
             onProgress: progressReporter(jobId),
             onStep: (label) => setStep(jobId, label),
         });
@@ -1358,10 +1355,7 @@ async function runJob(jobId: number): Promise<void> {
     }
     encodeOptions.audioStreams = await probeLiveAudio(source);
     // 映像が出るまでの音声だけの区間。頭から捨てて 0 秒から始める
-    const head = await probeLeadIn(source, measured.formatStart, measured.packetStart, measured.fps);
-    encodeOptions.videoStart = head.lead;
-    // チャプターを詰める量は別 (理由は cm.ts の droppedHead)
-    encodeOptions.chapterDrop = head.dropped;
+    encodeOptions.videoStart = await probeLeadIn(source, measured.formatStart, measured.packetStart);
 
     /*
      * 画素が横長なら、正方形に直した大きさで焼く (地上波HDは 1440x1080 の SAR 4:3)。
@@ -1463,19 +1457,14 @@ async function runJob(jobId: number): Promise<void> {
     /**
      * チャプターを、焼いたものの 0 秒に合わせて詰めて書き直す。
      *
-     * **引く量は `-ss` と同じではない** (字幕とはここが違う)。CM 検出は TS の絵を
-     * 頭から数えていて、**音声だけの区間を見ていない** — 引くのは
-     * 「復号できないので捨てられるコマ」ぶんだけ (`droppedHead`)。`-ss` と同じ量を
-     * 引いていた頃は 0.4 秒引きすぎていて、**跳んだ先が CM の途中に着地し、
-     * 本編が始まるまでの CM が見えていた** (実機で 12.5 コマぶん)。
-     *
-     * やり直しの `-ss` (`encodeRetrySeek`) はそのぶん本当に頭が減るので、こちらは足す。
-     * attempt で変わるので、焼く直前に毎回引き直す
+     * **引く量は `-ss` と同じ** (字幕と同じ)。CM 検出は ffmpeg の時刻 (入れ物の頭から) で
+     * 境目を返すので、頭から捨てた長さを引けば焼いたものの時刻になる。
+     * attempt で `-ss` が変わる (`encodeRetrySeek`) ので、焼く直前に毎回引き直す
      */
     const rebaseChapters = (seek: number | null): void => {
         const src = encodeOptions.chapterSource;
         if (src === null || encodeOptions.chaptersFile === null) return;
-        const skip = (seek ?? 0) + (encodeOptions.chapterDrop ?? 0);
+        const skip = inputSkip(seek, encodeOptions.videoStart);
         writeFileSync(
             encodeOptions.chaptersFile,
             chapterMetadata(shiftRanges(src.cm, skip), src.duration - skip),

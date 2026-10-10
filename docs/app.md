@@ -27,8 +27,9 @@ EPGStation の置き換えとして作ったもので、エンコード設定は
 | `src/lib/server/conflict.ts` | チューナー割り当てと競合判定 (純粋関数) |
 | `src/lib/server/scheduler.ts` | 予約 → 録画の状態遷移 |
 | `src/lib/server/recorder.ts` | TS の受信とファイル書き出し |
-| `src/lib/server/cm.ts` | CM検出 (無音 + CM尺) |
-| `src/lib/server/cm-jls.ts` | CM検出 (join_logo_scp。任意) |
+| `src/lib/server/cm.ts` | CM検出。材料を読んで境目を決め、チャプター・実カット用の区間にする |
+| `src/lib/server/cm-scan.ts` | CM検出の材料 (無音・場面の切れ目・局ロゴの枠) を1本の ffmpeg で1回だけ復号して読む |
+| `src/lib/ts/cm-decide.ts` | CM の境目を決める (ロゴの消えている所を無音の切れ目と CM の並びで詰める。ロゴが無ければ CM の尺だけで。純粋関数) |
 | `src/lib/server/encoder.ts` | 録画のエンコード (AV1 / H.264) |
 | `src/lib/server/hwenc.ts` | GPU (QSV / VA-API) で焼けるかを起動時に確かめ、口ごとの道を決める。共有の型と名前は `src/lib/hw.ts` |
 | `src/lib/server/subtitle.ts` | ARIB字幕を絵にして `.sup` にする (sub2video) |
@@ -71,8 +72,8 @@ EPGStation の置き換えとして作ったもので、エンコード設定は
 | `src/lib/server/logo.ts` | 局ロゴの収集と保存 (番組表に出すPNG) |
 | `src/lib/server/logo-data.ts` | CM検出のために覚えたロゴ (`own-logo-*.bin`) の置き場・絵にする・破棄・同じ絵の局へ配る |
 | `src/lib/ts/logo-area.ts` | 隅の縁の強さからロゴのかたまりを選んで枠にする (純粋関数。隅だけを見る) |
-| `src/lib/ts/logo-detect.ts` | CM検出のロゴ判定。線の向きで覚え、コマごとに当て、join_logo_scp が読む形 (logoframe の `-oa`) の区間にする (純粋関数) |
-| `src/lib/server/logo-own.ts` | 上に渡すコマを ffmpeg で抜き、覚えたもの (`own-logo-<幅>x<高さ>.bin`) を局ごとの入れ物に置く |
+| `src/lib/ts/logo-detect.ts` | CM検出のロゴ判定。線の向きで覚え、コマごとに当てて区間にする (純粋関数) |
+| `src/lib/server/logo-own.ts` | 覚えるコマを ffmpeg で抜き (当てるコマは cm-scan から受け取る)、覚えたもの (`own-logo-<幅>x<高さ>.bin`) を局ごとの入れ物に置く |
 | `src/lib/components/ProgramFacts.svelte` | 番組の中身そのもの (枠は持たない)。モーダルと観る画面の両方から使う |
 | `src/lib/components/LearnedLogo.svelte` | CM検出用に覚えたロゴを画面で確かめ、捨てる |
 | `src/lib/components/Toasts.svelte` | 押した結果を画面の右下に浮かせて出す (本文を押し下げない) |
@@ -217,7 +218,6 @@ SQLite が拒むので、事実と状態が食い違いません。文字列で�
 | `CHANNEL_SYNC_INTERVAL` | `60000` | 局だけを取り直す間隔(ms)。スキャンの結果はここで届く |
 | `SERVICE_FORGET_AFTER` | `1800000` | 局を見かけなくなってから持ち物を片付けるまで(ms)。1回の欠けでは片付けない |
 | `RULE_RETRACT_GRACE` | `3600000` | 条件から外れた予約を引っ込めなくなる、放送開始までの余裕(ms) |
-| `JLS_LOGO_LEVEL` | `6` | ロゴをどれだけ当てにするか(1〜8)の初期値。設定画面で変えられる |
 | `CM_CUT_MARGIN` | `0.8` | CMを実カットするとき、残す区間の頭を戻す長さ(秒) |
 | `FPS_SURVIVE` | `0.5` | コマ数の実測の閾値。60コマ化→重複落とし後の生存率がこれ以下なら30コマ ([encode.md](encode.md#コマ数は本編の映像から測って決める)) |
 | `BML_DNS` | `1.1.1.1,8.8.8.8` | データ放送の双方向で名前を引く DNS。家庭の DNS フィルタが局のドメインを 0.0.0.0 に落とすことがあるので、素の DNS を名指しする。空なら OS の設定どおり |

@@ -285,14 +285,10 @@ export function texture(t: Template, data: Uint8Array): number {
     return Math.min(255, Math.round(sum / (height * (width - 1))));
 }
 
-/** ロゴが出ていた区間。コマ番号で、終わりも含む。`*Lo`〜`*Hi` は境目のあいまいな幅 */
+/** ロゴが出ていた区間。コマ番号で、終わりも含む */
 export interface Span {
     start: number;
     end: number;
-    startLo: number;
-    startHi: number;
-    endLo: number;
-    endHi: number;
 }
 
 /**
@@ -502,43 +498,7 @@ function spansOf(scores: Float32Array, s: Float32Array, known: Uint8Array, fps: 
     }
     runs = merged.filter(([a, b]) => b - a + 1 >= Math.round(MIN_SPAN * fps));
 
-    // 境目のあいまいな幅: ならした点が ON と OFF の間にいたコマ
-    const unsure = (i: number) => s[i]! < ON && s[i]! >= OFF;
-    const widen = (at: number): [number, number] => {
-        let lo = at;
-        let hi = at;
-        while (lo > 0 && unsure(lo - 1)) lo--;
-        while (hi < s.length - 1 && unsure(hi + 1)) hi++;
-        return [lo, hi];
-    };
-    return runs.map(([start, end]) => {
-        const [startLo, startHi] = widen(start);
-        const [endLo, endHi] = widen(end);
-        return { start, end, startLo, startHi, endLo, endHi };
-    });
-}
-
-/**
- * logoframe の `-oa` と同じ形にする。join_logo_scp がそのまま読む。
- *
- * ```
- *    236 S 0 ALL    230    355     ← コマ番号・出る/消える・フェードのコマ数・フィールド・あいまいな幅
- *  21928 E 0 ALL  21928  21928
- * ```
- *
- * `offset` はコマ番号に足す数。こちらは ffmpeg が復号できた1コマ目を 0 と数えるが、
- * join_logo_scp に渡す番号は chapter_exe と同じ dtvindex の数え方 (頭の復号できないコマも数える。
- * `cm.droppedHead`) なので、そのぶん足す
- */
-export function formatLogoFrames(spans: Span[], offset: number): string {
-    const pad = (n: number) => String(n + offset).padStart(6);
-    return spans
-        .map(
-            (span) =>
-                `${pad(span.start)} S 0 ALL ${pad(span.startLo)} ${pad(span.startHi)}\n` +
-                `${pad(span.end)} E 0 ALL ${pad(span.endLo)} ${pad(span.endHi)}\n`,
-        )
-        .join('');
+    return runs.map(([start, end]) => ({ start, end }));
 }
 
 /** 覚えたものの書き出し。頭に印と数、あとは向きの和 */

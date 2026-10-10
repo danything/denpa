@@ -260,7 +260,7 @@ export const CM_LABEL: Record<string, string> = {
  * ロゴでの判定が使えなかったときに、CM検出の覚え書き (`recordings.cm_note`) へ
  * 入れる目印。無音検出に落ちた理由はこの後ろに続く。
  */
-export const JLS_UNUSABLE = 'jls は使えず';
+export const LOGO_UNUSABLE = 'ロゴは使えず';
 
 /**
  * その録画を「ロゴでCMを判定できなかった」(無音だけで判定) と扱うか。
@@ -274,7 +274,7 @@ export const JLS_UNUSABLE = 'jls は使えず';
  * 出しておく。理由は覚え書きに書いてあるし、精度が落ちていることに変わりはない。
  */
 export function logoUnusable(cmNote: string | null): boolean {
-    return cmNote?.includes(JLS_UNUSABLE) === true;
+    return cmNote?.includes(LOGO_UNUSABLE) === true;
 }
 
 /**
@@ -291,18 +291,18 @@ export function splitReaderName(name: string): { name: string; where: string | n
     return { name: found[1] ?? name, where: found[2] ?? null };
 }
 
-/** ロゴまで見て判定できたときの覚え書き (`cm-jls.detectWithJls`) */
-const JLS_OK = 'join_logo_scp';
+/** ロゴまで見て判定できたときの覚え書き (`cm.detectCm`) */
+export const LOGO_OK = 'ロゴ';
 
 /**
  * その覚え書きを画面に出すか。
  *
- * **うまくいったときは何も出しません。** `join_logo_scp` とだけ書いてあっても
+ * **うまくいったときは何も出しません。** `ロゴ` とだけ書いてあっても
  * 読む人には何の情報にもならず、チャプターを見れば結果は分かります。ここに
  * 何か書いてあること自体が「いつもの精度は出ていない」の合図になります。
  */
 export function cmNoteWorthShowing(cmNote: string | null): boolean {
-    return cmNote !== null && cmNote !== '' && cmNote !== JLS_OK;
+    return cmNote !== null && cmNote !== '' && cmNote !== LOGO_OK;
 }
 
 /*

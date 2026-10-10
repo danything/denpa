@@ -62,7 +62,7 @@ CMD ["bun", "run", "test"]
 # ffmpeg (自前ビルド。ARIB字幕 libaribcaption + AV1 libsvtav1/dav1d + H.264 x264 +
 # Opus + Intel GPU (VA-API/QSV)。上流に投げる直しを patches/ から当てる)
 # ---------------------------------------------------------------------------
-# **debian は digest で固定する** (ffmpeg / jls / runtime の3つとも同じもの)。
+# **debian は digest で固定する** (ffmpeg / runtime の2つとも同じもの)。
 # 札 (`trixie-slim`) だけだと月に何度か中身が入れ替わり、CI は `pull: true` なので
 # その日の push が — CSS を1行直しただけでも — ffmpeg の組み直し (10分強) に巻き込まれる。
 # 固定しておけば組み直すのは Renovate が digest を上げる PR のときだけになる
@@ -152,51 +152,6 @@ RUN case "${TARGETARCH}" in \
     rm -rf /var/lib/apt/lists/* /tmp/*
 
 # ---------------------------------------------------------------------------
-# join_logo_scp 一式 (CM検出。設定画面の「CMの探し方」の既定)
-#
-# 3つ持ってくる: dtvindex (chapter_exe が TS を読む静的ライブラリ)、chapter_exe
-# (tobitti0 の Linux 移植)、join_logo_scp (本家筋の **yobibi 版** 5.1.1。
-# Linux が本流に入っていて移植版を使う理由が無い)。**実行ファイルと JL は必ず対で採る**
-# — JL の文字コードが版で違い (4.0 は Shift-JIS、5.x は BOM付きUTF-8)、取り違えると
-# 「何も切らない」。仕組みと出どころの経緯は docs/encode.md「検出方法は2つ」
-# ---------------------------------------------------------------------------
-FROM docker.io/library/debian:trixie-slim@sha256:a29215f6a35e51e22adffa17f89e9d2ef06214e64a2bad10d765c46aea49f11f AS jls
-ENV DEBIAN_FRONTEND=noninteractive
-ENV CURL="curl -fsSL --retry 5 --retry-delay 5 --retry-all-errors --connect-timeout 20"
-RUN apt-get update && \
-    apt-get -y --no-install-recommends install \
-      curl ca-certificates build-essential pkg-config \
-      libavformat-dev libavcodec-dev libavutil-dev libswscale-dev libswresample-dev && \
-    rm -rf /var/lib/apt/lists/*
-
-# **どれも版で固定する。** master を追っていた頃は、同じコミットから焼いても
-# 中身が違いえた。dtvindex と chapter_exe は実際に毎週書き換わっているので、次のデプロイで
-# CM検出の中身が黙って変わる。Renovate が新しいコミットを見つけて PR を出す
-# ので、上げるのは意識してやる (renovate.json の customManagers)。
-WORKDIR /src
-# renovate: datasource=git-refs depName=https://github.com/tobitti0/dtvindex branch=main
-ARG DTVINDEX_SHA=2fdbe1ba116b2ad6a018149716454635c7dfb7b9
-# renovate: datasource=git-refs depName=https://github.com/tobitti0/chapter_exe branch=master
-ARG CHAPTER_EXE_SHA=266ff66f1052a684552a0a3e962b4b796862b8ac
-# renovate: datasource=github-tags depName=yobibi/join_logo_scp extractVersion=^v(?<version>.*)$
-ARG JOIN_LOGO_SCP_VERSION=5.1.1
-RUN mkdir -p dtvindex chapter_exe join_logo_scp && \
-    $CURL https://github.com/tobitti0/dtvindex/archive/${DTVINDEX_SHA}.tar.gz \
-      | tar -xz --strip-components=1 -C dtvindex && \
-    $CURL https://github.com/tobitti0/chapter_exe/archive/${CHAPTER_EXE_SHA}.tar.gz \
-      | tar -xz --strip-components=1 -C chapter_exe && \
-    $CURL https://github.com/yobibi/join_logo_scp/archive/refs/tags/v${JOIN_LOGO_SCP_VERSION}.tar.gz \
-      | tar -xz --strip-components=1 -C join_logo_scp
-
-RUN make -C dtvindex build/libdtvindex.a && \
-    make -C chapter_exe/src WITH_AVISYNTH=no DTVINDEX_DIR=/src/dtvindex && \
-    make -C join_logo_scp/src && \
-    mkdir -p /opt/jls/bin && \
-    cp chapter_exe/src/chapter_exe join_logo_scp/src/join_logo_scp /opt/jls/bin/ && \
-    cp -r join_logo_scp/JL /opt/jls/JL && \
-    test -f /opt/jls/JL/JL_標準.txt
-
-# ---------------------------------------------------------------------------
 # 本番ビルド
 # ---------------------------------------------------------------------------
 FROM deps AS build
@@ -216,8 +171,6 @@ ENV NODE_ENV=production \
 
 # B-CASカードは触らない。掛かったまま録れたTSの解除はチューナーエージェントに
 # 投げる(カードリーダーを叩くのはあちら)。recisdb も libpcsclite も要らない
-# libav* は join_logo_scp 一式のため。あちらは Debian の共有ライブラリに繋いである
-# (denpa 自身の ffmpeg は下で入れる自前ビルド)
 # libvpl2 + libmfx-gen1.2 (QSV のランタイム) + libva* + intel-media-va-driver (iHD) は
 # Intel の GPU (QSV / VA-API) 向け (上の ffmpeg 段の説明)。GPU の無い機械でも害は無い
 # (起動時の試し焼きが落ちて、ソフトウェアで焼くだけ)。**Intel の3つは amd64 だけ**
@@ -231,7 +184,6 @@ RUN case "${TARGETARCH}" in \
     apt-get update && \
     apt-get -y --no-install-recommends install \
       libopus0 libx264-164 libdav1d7 libfontconfig1 libfreetype6 \
-      libavformat61 libavcodec61 libavutil59 libswscale8 libswresample5 \
       libva2 libva-drm2 $intel \
       fontconfig ca-certificates tzdata && \
     apt-get clean && rm -rf /var/lib/apt/lists/*
@@ -243,10 +195,6 @@ COPY --from=ffmpeg /usr/local/bin/ffmpeg /usr/local/bin/ffprobe /usr/local/bin/
 COPY --from=ffmpeg /usr/local/lib/libaribcaption.* /usr/local/lib/
 COPY --from=ffmpeg /usr/share/fonts/truetype/rounded-mplus-arib /usr/share/fonts/truetype/rounded-mplus-arib
 RUN ldconfig && fc-cache -f
-
-# CM検出の一式。**これが既定** (設定画面の「CMの探し方」で「無音だけ」に戻せる)。
-# 2つのコマンドは denpa (src/lib/server/cm-jls.ts) から直接起動する
-COPY --from=jls /opt/jls /opt/jls
 
 # ライブを生で送るときにブラウザへ配る MPEG-2 と AAC の復号器 (`mpeg2wasm` 段)
 COPY --from=mpeg2wasm /opt/denpa/mpeg2 /opt/denpa/mpeg2

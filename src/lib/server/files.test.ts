@@ -173,19 +173,18 @@ describe('実体との照合', () => {
     }
 
     /*
-     * chapter_exe は TS を直接読むのに dtvindex の索引を作り、
-     * `<入力>.dtvi` に置く。生TSを残さない設定だと TS が消えたあとも索引だけが
-     * 居座り、録るたびに3MBずつ積もる (実機で9本 22MB)
+     * 作業ファイルは `<入力>.…` に置く。生TSを残さない設定だと TS が消えたあとも
+     * 付き添いだけが居座り、録るたびに積もる (実機で9本 22MB。CM検出の道具が作っていた索引)
      */
-    test('連れ合いの消えた索引を片付ける', () => {
+    test('連れ合いの消えた作業ファイルを片付ける', () => {
         fresh();
         put(config.rawDir, 'のこる.m2ts');
-        put(config.rawDir, 'のこる.m2ts.dtvi');
-        put(config.rawDir, 'きえた.m2ts.dtvi');
-        put(config.rawDir, 'きえた.m2ts.jls.chapterexe.txt');
+        put(config.rawDir, 'のこる.m2ts.sup');
+        put(config.rawDir, 'きえた.m2ts.sup');
+        put(config.rawDir, 'きえた.m2ts.chapters.txt');
 
         expect(reconcile().swept).toBe(2);
-        expect(files()).toEqual(['のこる.m2ts', 'のこる.m2ts.dtvi']);
+        expect(files()).toEqual(['のこる.m2ts', 'のこる.m2ts.sup']);
     });
 
     test('動画の残っている NFO とポスターは残す', () => {
