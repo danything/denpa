@@ -5,6 +5,7 @@
     import Toasts, { errorNotice, type Notice } from '#lib/components/Toasts.svelte';
     import { programDetail } from '#lib/detail.svelte.js';
     import { badgeClass, CM_LABEL, dateTime, SERVICE_TYPE_LABEL, stateLabel } from '#lib/format.js';
+    import { CODEC_LABEL } from '#lib/hw.js';
     import { matches, Paged, sentinel } from '#lib/paging.svelte.js';
     import { parseSearchFields, SEARCH_FIELD_LABEL, SEARCH_FIELDS, searchFieldLabel } from '#lib/search.js';
     import { afterNavigate } from '$app/navigation';
@@ -176,7 +177,14 @@
     });
 
     /** 押した結果 */
-    const notices = $derived<Notice[]>(errorNotice(form, 'rule-error'));
+    const notices = $derived.by<Notice[]>(() => {
+        const list = errorNotice(form, 'rule-error');
+        if (form?.canceled !== undefined) {
+            const text = form.canceled > 0 ? `ルールを削除しました (予約 ${form.canceled} 件を取り消し)` : 'ルールを削除しました';
+            list.push({ key: 'rule-deleted', kind: 'success', text });
+        }
+        return list;
+    });
 </script>
 
 <!--
@@ -221,7 +229,7 @@
                             <h2>
                                 {data.editing ? 'ルールを編集' : 'ルールを追加'}
                             </h2>
-                            <p class="small lead">条件に合う番組を自動で予約します</p>
+                            <p class="small soft">条件に合う番組を自動で予約します</p>
                             <details class="more">
                                 <summary>詳しく</summary>
                                 <p>
@@ -269,7 +277,7 @@
                             -->
                             <div class="field">
                                 <label class="field">
-                                    <span class="label">キーワード</span>
+                                    <span class="field-label">キーワード</span>
                                     <input
                                         name="keyword"
                                         placeholder="例: 名探偵"
@@ -299,7 +307,7 @@
                                 </div>
                             </div>
                             <label class="field">
-                                <span class="label">除外キーワード</span>
+                                <span class="field-label">除外キーワード</span>
                                 <input
                                     name="ignoreKeyword"
                                     placeholder="例: 再放送 総集編"
@@ -321,7 +329,7 @@
                                         checked={data.seed?.dedupe ?? true}
                                         data-testid="rule-dedupe"
                                     />
-                                    <span class="label">同じ回は最初の放送だけ録る</span>
+                                    <span class="field-label">同じ回は最初の放送だけ録る</span>
                                 </label>
                                 <span class="hint">再放送や別の局の同じ回は録りません</span>
                                 <details class="more">
@@ -333,7 +341,7 @@
                             </div>
                             <div class="field">
                                 <label class="field">
-                                    <span class="label">優先度</span>
+                                    <span class="field-label">優先度</span>
                                     <input
                                         type="number"
                                         name="priority"
@@ -469,8 +477,8 @@
                         </div>
 
                         <p class="small muted">
-                            エンコードのしかたと無料放送の扱いは<a href={resolve('settings')}>設定</a
-                            >で決めます ({data.defaults.codec.toUpperCase()}
+                            録画のしかたと無料放送の扱いは<a href={resolve('settings')}>設定</a
+                            >で決めます ({data.defaults.codecs.map((codec) => CODEC_LABEL[codec]).join(' + ') || 'エンコードしない'}
                             / CM: {CM_LABEL[data.defaults.cmCut]}{data.defaults.freeOnly
                                 ? ' / 無料放送のみ'
                                 : ''})
@@ -511,9 +519,7 @@
 
             このルールが押さえている予約は**フォームの外**に出してある。中に
             入れると form が入れ子になって、1件取り消すつもりでルールの更新まで
-            送ってしまう。条件を狭めても既に立った予約は残る (意図して個別に
-            残していることがあるので勝手には消さない) ので、要らないものだけ
-            ここで外す
+            送ってしまう。要らないものだけここで外す
         -->
         <section class="result-col">
             {#if data.preview !== null && preview === null}
@@ -571,7 +577,7 @@
                                 <summary>詳しく</summary>
                                 <p>取り消した番組をルールが予約し直すことはありません。</p>
                                 <p>
-                                    条件を変えても入っている予約は残るため、条件から外れたものは
+                                    条件から外れた予約は取り消されます。手動の予約と、まもなく始まる予約は残り、
                                     <span class="tag">条件外</span> として表示します。
                                 </p>
                             </details>
@@ -944,22 +950,9 @@
         background: var(--dp-base-200);
     }
 
-    .lead {
-        opacity: 0.7;
-    }
-    .label {
-        font-size: 0.875rem;
-        font-weight: 500;
-    }
     .hint {
         font-size: 0.8rem;
         opacity: 0.7;
-    }
-    /* 要点の1行と、その下に畳んだ「詳しく」 */
-    .note-block {
-        display: flex;
-        flex-direction: column;
-        gap: 0.25rem;
     }
     .fields {
         display: grid;
@@ -1011,12 +1004,6 @@
     }
     .children {
         margin: 0.25rem 0 0 1.5rem;
-    }
-    .truncate {
-        min-width: 0;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
     }
     .form-actions {
         flex-shrink: 0;

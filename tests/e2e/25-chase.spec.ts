@@ -97,7 +97,9 @@ test.describe('追っかけ再生の入口', () => {
          * 番組表から引き直す口を 404 にして作る (開き直すので、上で移した入れ物も戻る)
          */
         await page.route('/api/programs/*', (route) => route.fulfill({ status: 404, body: '' }));
-        await goto(page, `/chase/${id}`);
+        // 焼けていない録画の観る画面は、追っかけへ送られる
+        await goto(page, `/watch/${id}`);
+        await expect(page).toHaveURL(new RegExp(`/chase/${id}$`));
         const badges = page.getByTestId('chase-facts').getByTestId('detail-badges');
         await expect(badges.getByTestId('detail-genre').first()).toHaveText('アニメ／特撮 > 国内アニメ');
         await expect(badges.getByTestId('detail-audio').first()).toBeVisible();

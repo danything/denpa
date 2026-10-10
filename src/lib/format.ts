@@ -251,9 +251,9 @@ export function stateLabel(state: string): string {
 }
 
 export const CM_LABEL: Record<string, string> = {
-    off: 'そのまま',
+    off: '何もしない',
     chapter: 'チャプター',
-    cut: 'カット',
+    cut: '切り取る',
 };
 
 /**

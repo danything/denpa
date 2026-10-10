@@ -162,9 +162,6 @@
     .pre {
         white-space: pre-wrap;
     }
-    .soft {
-        opacity: 0.7;
-    }
     .link {
         color: var(--pico-primary);
         word-break: break-all;

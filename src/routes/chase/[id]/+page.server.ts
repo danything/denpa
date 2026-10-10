@@ -17,8 +17,9 @@ export const load: PageServerLoad = ({ params, url }) => {
     if (!Number.isInteger(id)) error(404, '録画が見つかりません');
 
     const rec = orm().select().from(recordings).where(eq(recordings.id, id)).get();
-    if (rec === undefined || rec.deleted_at !== null) error(404, '録画が見つかりません');
-    // 焼き上がっているなら普通の視聴画面へ。あちらはシークも字幕も揃っている
+    if (rec === undefined) error(404, '録画が見つかりません');
+    if (rec.deleted_at !== null) error(410, 'この録画は削除されています');
+    // 焼き上がっているなら観る画面へ。CM飛ばし・チャプター・データ放送が揃い、サーバの焼き直しも要らない
     if (rec.library_path !== null) redirect(302, relative(url, `/watch/${rec.id}`));
     if (rec.ts_path === null) error(404, 'まだ何も録れていません');
 

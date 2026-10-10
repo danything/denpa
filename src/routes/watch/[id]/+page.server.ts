@@ -6,7 +6,7 @@ import { deleteRecordingFiles } from '#lib/server/files.js';
 import { sidecarPaths } from '#lib/server/metadata.js';
 import { relative } from '#lib/server/paths.js';
 import { recordingFromForm } from '#lib/server/recording.js';
-import { activeEncodeJobId, lastEncodeError, recordings } from '#lib/server/schema.js';
+import { lastEncodeError, recordings } from '#lib/server/schema.js';
 import { settings } from '#lib/server/settings.js';
 import type { Recording } from '#lib/types.js';
 
@@ -16,7 +16,7 @@ import type { Recording } from '#lib/types.js';
  * ## なぜ一覧の中ではなく1枚の画面なのか
  *
  * ポップアップの中に映像と番組の説明を並べると、どちらも中途半端な幅になる
- * (説明は数百字あり、CMの注記もダウンロードも削除も入る)。1枚の画面にすると:
+ * (説明は数百字あり、CMの注記も削除も入る)。1枚の画面にすると:
  *
  * - **端末の「戻る」がそのまま効く。** 全画面を抜けたあと、閉じるための×を
  *   画面から探さずに済む
@@ -26,17 +26,16 @@ import type { Recording } from '#lib/types.js';
  *
  * 生TSは MPEG-2 で、**ブラウザに復号器が無い** (docs/stream.md §5.5)。
  * 焼いたもの (AV1 か H.264 の Matroska) はそのまま読める。
- * まだ焼けていない録画では、この画面は「まだ焼けていません」を出す。
+ * 焼けていない録画は、生TSがあれば追っかけ再生 (`/chase`。サーバが焼き直して運ぶ) へ送る。
+ * どちらも無ければ「まだ観られません」と理由を出す。
  */
 
 interface WatchRow extends Recording {
     /** 直近のエンコード失敗の理由。焼けていない理由として出す */
     encode_error: string | null;
-    /** 動いているエンコード。焼いている最中かどうかが分かる */
-    job_id: number | null;
 }
 
-export function load({ params }) {
+export function load({ params, url }) {
     const id = Number(params.id);
     if (!Number.isFinite(id)) error(404, '録画が見つかりません');
 
@@ -44,13 +43,14 @@ export function load({ params }) {
         .select({
             ...getTableColumns(recordings),
             encode_error: lastEncodeError(recordings.id),
-            job_id: activeEncodeJobId(recordings.id),
         })
         .from(recordings)
         .where(eq(recordings.id, id))
         .get();
     if (recording === undefined) error(404, '録画が見つかりません');
     if (recording.deleted_at !== null) error(410, 'この録画は削除されています');
+    if (recording.library_path === null && recording.ts_path !== null)
+        redirect(302, relative(url, `/chase/${id}`));
 
     // データ放送を焼いてあるか (無い局・古い録画では出さない)。中身は d ボタンで別に取る
     const hasData =

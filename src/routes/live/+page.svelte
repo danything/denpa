@@ -772,7 +772,7 @@
         -->
             <ul bind:this={list} class="channels" data-testid="live-channels">
                 {#each listed as channel (channel.id)}
-                    <!-- いま映しているものかどうかは、この行の中で5回使う -->
+                    <!-- いま映しているものかどうかは、この行の中で何度も使う -->
                     {@const tuned = current?.id === channel.id}
                     <li class="channel-item">
                         <button type="button"

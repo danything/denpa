@@ -120,12 +120,8 @@
     }
 
     /**
-     * 閉じた (自分で消えた) 知らせは持ち主が捨てる。
-     *
-     * 持ったままにしていた頃は、**別のボタンを押すたびに前の知らせが
-     * 蘇っていた** — Toasts は返事 (`form`) が変わると閉じたことを忘れる作りで
-     * (同じ失敗を2回したときに2回出すため)、フォームではないこちらの知らせまで
-     * 一緒に出し直していた
+     * 閉じた (自分で消えた) 知らせは持ち主が捨てる。Toasts は返事 (`form`) が変わると
+     * 閉じたことを忘れるので、持ったままだと別のボタンを押すたびに蘇る
      */
     function dropNote(key: string): void {
         if (actionNote?.key === key) actionNote = null;
@@ -299,9 +295,7 @@
         /*
          * **焼き上がる前でも観られる。** 録っている最中はもちろん、録り終えて
          * CM検出やエンコードを待っている間も、生TSはある。追っかけ再生の器
-         * (`/chase`。ライブと同じくサーバが焼き直して運ぶ) で頭から観られる。
-         * 以前は焼き上がるまで行が押せず、30分番組を録り終えたあと数分〜十数分
-         * 「観られるのに観られない」時間があった
+         * (`/chase`。ライブと同じくサーバが焼き直して運ぶ) で頭から観られる
          */
         if (rec.ts_path !== null) return resolve(`chase/${rec.id}`);
         return null;
@@ -315,14 +309,6 @@
         return rec.watched_at === null && rec.resume_ms === null && watchLink(rec) !== null;
     }
 
-    /**
-     * ファイルを持っているか。**落とす口を出すかどうか。**
-     *
-     * **エンコードの失敗はここに出てこない。** 落ちたのは焼き直しのほうで
-     * 生TSは無事なので、落とせるし録り直しもできる。エンコードで落ちると
-     * 録画の状態まで 'failed' にしていた頃は、中身のあるTSを持っているのに
-     * ダウンロードまで消えていた
-     */
     /** 録画・番組からルールを作る入口 (`rules/+page.server.ts` の `originOf`) */
     function ruleFrom(kind: 'recording' | 'program', id: number): string {
         return resolve(`rules?${kind}=${id}`);
@@ -337,6 +323,10 @@
         return row?.kind === 'rec' ? row.rec.id : null;
     }
 
+    /**
+     * ファイルを持っているか。**落とす口を出すかどうか。**
+     * エンコードの失敗はここに出てこない — 落ちたのは焼き直しのほうで、生TSは無事なので落とせる
+     */
     function hasFile(rec: (typeof data.recordings)[number]): boolean {
         if (rec.deleted_at !== null) return false;
         if ((rec.library_path ?? rec.ts_path) === null) return false;
@@ -346,12 +336,8 @@
     /**
      * 録画の詳細。
      *
-     * 失敗の理由は**ここでしか出さない**。一覧の行に生のエラーを並べていた頃は、
-     * 数行ぶんの高さを1行が占めて、他の録画が画面から押し出されていた。
-     *
-     * 理由は3種類あって、それぞれ別物。見出しを付けて分けて渡す。
-     * 「エンコードに失敗しました」で全部まとめていた頃は、録画そのものが
-     * 失敗した行を開いても嘘の見出しが出ていた
+     * 失敗の理由は**ここでしか出さない** (一覧の行の高さを揃えるため)。
+     * 理由は3種類あって、それぞれ別物なので見出しを付けて分けて渡す
      */
     function openRecording(rec: (typeof data.recordings)[number]): void {
         const notes: { title: string; text: string }[] = [];
@@ -492,13 +478,13 @@
         ].join(' ');
     }
     const recordingRows = $derived(rightRows.filter((row) => matches(recordingQuery, rightText(row))));
+    /** 絞り込みが効いているか。空白だけなら何も絞らない (`matches` と同じ読み方) */
+    const filtering = $derived(normalize(recordingQuery).trim() !== '');
     /**
      * 描く行。まとめるときは番組ごとに見出しを立てる (`#lib/grouping.ts`)。
      * **絞っている間は番組を全部開く** — 当たった回が見出しの奥に隠れていると、
      * 絞った意味が無い
      */
-    /** 絞り込みが効いているか。空白だけなら何も絞らない (`matches` と同じ読み方) */
-    const filtering = $derived(normalize(recordingQuery).trim() !== '');
     const recordingLines = $derived<GroupLine<RightRow>[]>(
         grouped
             ? groupLines(groupBySeries(recordingRows), (group) =>
@@ -590,13 +576,7 @@
 <svelte:window onclick={deleting.stand} />
 
 <!--
-    予約も録画も、行の形を揃える。
-
-    以前は列に分けた表だった。状態も日時もサイズも1列ずつ持たせていたので、
-    タブレットくらいの幅で表そのものが横スクロールになり、番組名が隠れていた。
-    列を減らすと今度は画面ごとに出るものが違ってしまう。
-
-    そこで**どの幅でも同じ1つの形**にした。左に「状態 + 番組名 + その他ぜんぶ」、
+    予約も録画も、**どの幅でも同じ1つの行の形**にする。左に「状態 + 番組名 + その他ぜんぶ」、
     右に押すもの。狭いところでは押すものが下へ回り込むだけで、出るものは変わらない。
     押すものは指で押せる大きさ (既定のボタン) にしてある
 -->
@@ -646,12 +626,8 @@
 {/snippet}
 
 <!--
-    **何でこの1本が立ったのか。** 予約にも録画にも同じ形で出す。
-
-    録画の側に出していなかった頃は、録れたものを見ても「どのルールが拾ったのか」が
-    分からなかった。要らないものが混ざっていたときに、直す先 (どのルールの条件か)
-    を探すのに番組名からルールを推し量るしかなかった。
-
+    **何でこの1本が立ったのか。** 予約にも録画にも同じ形で出し、要らないものが
+    混ざっていたときに直す先 (どのルールか) が分かるようにする。
     ルール名をそのまま入口にする。行にボタンを足すと窮屈になる
 -->
 {#snippet source(ruleId: number | null, ruleName: string | null, manual: boolean)}
@@ -691,8 +667,7 @@
         {@const press = (event: MouseEvent | KeyboardEvent) => rowClick(event, null, () => openMissed(res))}
         <!--
             録り逃し。観るものが無いので、押すと詳細だけ出す (予約の行と
-            同じ扱い)。ボタンも置かない — 放送は終わっているので、
-            この行からできることが無い (再放送は番組表から予約し直す)
+            同じ扱い)。置くのは畳むための削除だけ (再放送は番組表から予約し直す)
         -->
         <div
             data-program-id={res.program_id}
@@ -891,8 +866,6 @@
                         エンコード中だけ、割合と残りの見込みを添える。
                         ffmpeg が回っていない段階 (解除中・CM検出中) は
                         進み具合が取れないので、代わりに**いま何をしているか**を出す。
-                        CM検出は中で3つの道具を数分ずつ回すので、
-                        段階の名前だけだと止まっているように見えていた
                     -->
                     {#if rec.job_state === 'running' && rec.job_phase === 'encode'}
                         <!-- SSE の生放送 (encode-live) があればそちら。読み直しを待たずに動く -->
@@ -1071,16 +1044,9 @@
 {/snippet}
 
 <!--
-    広い画面では2つの一覧を横に並べ、画面の残りを丁度使い切る。
-    高さをJSで測って入れていた頃は、測る前の当ての値で一度描かれるので
-    読み込むたびに一覧が縮んだ状態から伸びて見えた。ここは全部 CSS で決める。
-
+    広い画面では2つの一覧を横に並べ、画面の残りを丁度使い切る (全部 CSS で決める)。
     畳まれる幅 (md 未満) では素直にページごとスクロールさせる。
-    小さい画面で中だけスクロールさせると、指の届く範囲が二重になって使いづらい。
-
-    **横に並べはじめる幅は全画面で `md` (768px)**
-    ([+layout.svelte](./+layout.svelte) の `FILLED`)。画面ごとに違えていた頃は、
-    同じ幅なのに画面によって1段だったり2段だったりした
+    **横に並べはじめる幅は全画面で `md` (768px)** ([+layout.svelte](./+layout.svelte) の `FILLED`)
 -->
 <div class="board">
     <Toasts {notices} source={form} ondismiss={dropNote} />
@@ -1089,10 +1055,6 @@
         <section class="board-col reservations">
             <div class="board-head">
                 <h2>予約</h2>
-                <!--
-                    「競合を再計算」は置いていない。番組表を取り直したときとルールを
-                    いじったときに必ず走るので、押す機会が無かった
-                -->
                 <div class="cluster">
                     <input
                         type="search"
@@ -1152,15 +1114,6 @@
                                     {#if !res.manual}
                                         {@render source(res.rule_id, res.rule_name, false)}
                                     {/if}
-                                    <!--
-                                        **焼き方の札は出さない。**
-
-                                        予約の行にも「TSのみ」「生TSも残す」が写して
-                                        あったが、それは予約を立てた時点の値で、実際に
-                                        効くのは**焼くときの設定** (settings)。
-                                        設定を変えても札は昔のまま残るので、画面が
-                                        嘘をついていた。決まるところは設定画面ひとつ
-                                    -->
                                 </div>
 
                                 <div class="row-actions">
@@ -1533,14 +1486,11 @@
                 下端に居るので、下に開くと枠から出る)。中身は上から
                 「持ち出す」「渡す」「直す」の順。
 
-                **開閉は Bits UI の DropdownMenu。** 位置は Bits UI が枠に収まるように
-                ずらす (daisyUI の頃は、スマホ幅でフッターが折り返すと左へ伸びた分が
-                modal-box からはみ出して切れていた)。
+                **開閉は Bits UI の DropdownMenu。** 位置は Bits UI が枠に収まるようにずらす。
 
                 **閉じている間も中身は DOM に置く (`forceMount`)。** どの口が出るかを
                 開かずに確かめられるように (e2e が数を見ている)。閉じている間は
                 `hidden` で消す — 見えないまま居座ってクリックを食うことが無いように
-                (daisyUI の頃に実機で発覚した「見えないダウンロード」の二の舞を避ける)
             -->
             <DropdownMenu.Root>
                 <DropdownMenu.Trigger class="secondary outline" data-testid="detail-more">その他…</DropdownMenu.Trigger>
@@ -1760,12 +1710,7 @@
          * (`flex: 1 0 auto`) 上から並ぶ。間に行を足しても下からの位置は変わらない —
          * Chromium・Firefox の scroll anchoring は切る (`overflow-anchor`)。間が画面の中に
          * あるとき、上の行を留めて下 (見ていた古い録画) を押し下げてしまう。
-         * 狭い画面はページごと縦に積むので、ここ (広い画面) だけ。
-         *
-         * JS で一番下へ送っていた頃は、送り終わるまで枠を隠していた (見せたまま送ると
-         * 一番上が映ってから跳ぶ)。送る前に残りを全部描くのが重く、4倍遅い CPU では
-         * 枠が出るまで 2 秒かかっていた。録画が少なくスクロールしないときは、送る時が
-         * 来ないので待ちきり (1 秒) まで隠れたままだった
+         * 狭い画面はページごと縦に積むので、ここ (広い画面) だけ
          */
         .board-box.from-end {
             flex-direction: column-reverse;

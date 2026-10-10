@@ -29,7 +29,7 @@ test.describe('テレビのペアリング', () => {
 
         // スマホで QR を開く。開いたら自分で送って済む (許す / 断るは聞かない)
         await goto(page, `/${code.verificationUriComplete}`);
-        await expect(page.getByTestId('device-done')).toContainText('E2E のテレビ を設定しました');
+        await expect(page.getByTestId('device-done')).toContainText('E2E のテレビ とペアリングしました');
 
         // 間隔を守って聞き直すと、鍵を1度だけ受け取れる
         await new Promise((resolve) => setTimeout(resolve, 5_000));
@@ -48,7 +48,7 @@ test.describe('テレビのペアリング', () => {
         // アプリの鍵では、別の札を済ませられない (盗まれた鍵で鍵を増やせないように)
         const other = await (await request.post('/api/device/code', { data: { name: '鍵から' } })).json();
         const viaToken = await request.get(`/${other.verificationUriComplete}`, { headers: auth });
-        expect(await viaToken.text()).toContain('アプリの鍵では設定できません');
+        expect(await viaToken.text()).toContain('アプリの鍵ではペアリングできません');
         const posted = await request.post(`/${other.verificationUriComplete}`, {
             headers: { ...auth, origin: new URL(viaToken.url()).origin },
             form: { code: other.userCode },

@@ -298,6 +298,45 @@ td {
     padding: 1rem;
 }
 
+/* 真ん中に1枚だけ置く画面 (ログアウト・テレビのペアリング) */
+.solo {
+    display: flex;
+    min-height: 60vh;
+    align-items: center;
+    justify-content: center;
+    padding: 1rem;
+}
+.solo > .panel {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.5rem;
+    width: 100%;
+    max-width: 24rem;
+    padding: 2rem;
+    text-align: center;
+}
+.solo h1 {
+    font-size: 1.25rem;
+}
+/* 設定・チューナーの1枚ずつの面 (`panel card`) */
+.card {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    padding: 1.5rem;
+    box-shadow: 0 1px 3px rgb(0 0 0 / 0.2);
+}
+.card h2 {
+    font-size: 1.15rem;
+}
+/* 要点の1行と、その下に畳んだ「詳しく」 */
+.note-block {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+}
+
 /* ---- 文字 ---- */
 .muted {
     opacity: 0.65;
@@ -315,6 +354,18 @@ td {
     font-variant-numeric: tabular-nums;
 }
 .nowrap {
+    white-space: nowrap;
+}
+.soft {
+    opacity: 0.7;
+}
+.mono {
+    font-family: var(--pico-font-family-monospace);
+}
+.truncate {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
     white-space: nowrap;
 }
 /*
@@ -335,7 +386,8 @@ td {
     gap: 0.25rem;
     min-width: 0;
 }
-.field > span:first-child {
+.field > span:first-child,
+.field-label {
     font-size: 0.8rem;
     font-weight: 500;
     opacity: 0.7;
