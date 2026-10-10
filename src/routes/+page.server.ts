@@ -42,8 +42,6 @@ interface RecordingRow extends Recording {
      * にするための印 (`encoder.isCanceling`)。DB には無く、動いている間だけ
      */
     job_canceling: boolean;
-    /** その局に入れてあるロゴの位置。詳細で指定し直せるように渡す */
-    logo_area: string | null;
     /**
      * 生TSの大きさ。エンコード済みと**両方ある**ときだけ入る。
      *
@@ -217,7 +215,6 @@ export function load({ url, cookies }) {
             job_percent: j.percent,
             job_eta_ms: j.eta_ms,
             job_log: j.log,
-            logo_area: services.logo_area,
             has_logo: services.has_logo,
             // 何で録れた1本か。予約とルールから引く (録画には持たせない)
             rule_id: res.rule_id,

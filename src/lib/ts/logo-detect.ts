@@ -1,11 +1,11 @@
 import { CORNERS, pickArea, type Rect, regionOf } from './logo-area';
 
 /**
- * **局ロゴを自分で覚えて、どのコマに出ているかを当てる。** logoframe の代わり (`CM_LOGO=own`)。
+ * **局ロゴを自分で覚えて、どのコマに出ているかを当てる。** 以前は logoframe に任せていた。
  *
- * logoframe はロゴを「色と濃さ (α)」で覚えます。濃さを測るには**ロゴの後ろが
+ * logoframe はロゴを「色と濃さ (α)」で覚えていました。濃さを測るには**ロゴの後ろが
  * のっぺりしたコマ**が要り、BSテレ東 のように後ろが明るいセットばかりの局では
- * `initial logo estimate contains too few active pixels` で降ります (`docs/encode.md`)。
+ * `initial logo estimate contains too few active pixels` で降りていました (`docs/encode.md`)。
  *
  * こちらが覚えるのは**線の向き**だけです。ロゴは後ろが何であれ毎コマ同じ所に同じ向きの
  * 縁を出し、中身の縁の向きはコマごとにばらばら。画素ごとに勾配の向きを足し合わせると、
@@ -113,7 +113,7 @@ const AREA_FLOOR = 0.15;
  * 隅の帯から、ロゴの在り処を割り出す。
  *
  * `bands` は上と下の帯 (幅はコマと同じ、高さはどちらも同じ)。かたまりの選び方は
- * logoframe に渡す枠と同じ (`logo-area.pickArea`) で、強さに揃い方を使う
+ * `logo-area.pickArea` で、強さに揃い方を使う
  */
 export function findArea(
     bands: { top: Orientation; bottom: Orientation },

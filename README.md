@@ -257,12 +257,11 @@ docker compose) で動かすなら `oci://ghcr.io/danything/charts/denpa-agent` 
   手元に実機が無く試せていません)
 - **PX-S1UD を siano-userland で掴んだときの選局** (smsusb を blacklist した場合。同梱の siano-ts に
   任せていますが、実機で試せていません)
-- **ロゴより強い「動かない縁」が隅にある録画で、ロゴの位置の割り出しが外れないか。**
-  4局9本で測り、ロゴか縁か決めきれない回は自動検出に回すようにしました
-  (本番と同じ取り方で外れ 10/72 → 0)。ただし縁のほうが強く大きいと防げません。
-  TOKYO MX1 で窓枠を掴んだ回の録画は残っておらず、閾値を決めたテレ東の録画でも
-  測り直せていません
-  ([docs/encode.md](docs/encode.md#言い切れないときは出さない))
+- **ロゴと同じくらい毎コマ動かない縁が隅にある録画で、ロゴの位置の割り出しが外れないか。**
+  実機の 16 本 (12局) では全部ロゴを当てましたが、ロゴか縁か決めきれない回は覚えずに
+  無音検出へ落とすだけで、縁のほうを覚えてしまうと防げません (画面で捨てて覚え直す)。
+  TOKYO MX1 で窓枠を掴んだ回の録画は残っておらず、試せていません
+  ([docs/encode.md](docs/encode.md#在り処の割り出し))
 - **受信が途中で欠けた録画で、CMの境目がずれないか。** CM検出は映像のコマを数えて
   `番号 ÷ fps` で秒に直すので、途中でコマが抜けるとそこから先がずれるはずです。
   突き合わせた9本 (4局・70箇所) には欠けが無く、確かめられていません
@@ -277,7 +276,7 @@ docker compose) で動かすなら `oci://ghcr.io/danything/charts/denpa-agent` 
 - [docs/player.md](docs/player.md) — ホーム画面に置く、LAN でも https で開く
 - [docs/agent.md](docs/agent.md) — チューナーを掴むところ (エージェント・取り合い・B-CAS)
 - [docs/encode.md](docs/encode.md) — CM とエンコード (字幕・AV1・CM検出)
-- [docs/logo.md](docs/logo.md) — 局ロゴ (番組表の PNG と CM検出用の `.lgd`)
+- [docs/logo.md](docs/logo.md) — 局ロゴ (番組表の PNG と CM検出用に覚えたロゴ)
 - [docs/library.md](docs/library.md) — 録画の置き場と配り方 (テレビのアプリ・再生リンク・削除・通知)
 - [docs/offline.md](docs/offline.md) — 端末に落として電波の無いところで観る
 - [docs/auth.md](docs/auth.md) — **誰を通すか** (OIDC でのログイン・信頼したネットワーク・期限付きのリンク)
@@ -295,7 +294,7 @@ docker compose) で動かすなら `oci://ghcr.io/danything/charts/denpa-agent` 
 **土台にしている仕事** — とくにチューナーまわりは、次の方々の仕事に支えられています:
 
 - [px4-userland](https://github.com/Khronos31/px4-userland) / [siano-userland](https://github.com/Khronos31/siano-userland) (@Khronos31) — PX-Q3U4 などと PX-S1UD を、ホストにドライバを入れずに使えるのはこれのおかげです。PX-MLT5PE / DTV02A-5TS-P の対応は @siketyan
-- [join_logo_scp](https://github.com/yobibi/join_logo_scp) (yobibi) と chapter_exe / logoframe (tobitti0 版) — CM 検出
+- [join_logo_scp](https://github.com/yobibi/join_logo_scp) (yobibi) と chapter_exe (tobitti0 版) — CM 検出
 - [web-bml](https://github.com/otya128/web-bml) (otya128) — データ放送を描く
 
 ほかに借りているものと出どころは [docs/licenses.md](docs/licenses.md) にあります。
@@ -311,7 +310,7 @@ docker compose) で動かすなら `oci://ghcr.io/danything/charts/denpa-agent` 
 | | ライセンス |
 | --- | --- |
 | **ffmpeg** (x264 / SVT-AV1 / dav1d / Opus / libaribcaption / libva / libvpl を繋いだ自前ビルド) | GPL-2.0+ (x264 のため) ほか BSD / MIT |
-| **CM 検出** — join_logo_scp・chapter_exe・logoframe・dtvindex | GPL-3.0 (join_logo_scp は正式なライセンス文書無し。「転載・改変は連絡不要」の表示に拠る) |
+| **CM 検出** — join_logo_scp・chapter_exe・dtvindex | GPL-3.0 (join_logo_scp は正式なライセンス文書無し。「転載・改変は連絡不要」の表示に拠る) |
 | **rounded-mplus-1m-arib** (字幕とデータ放送のフォント) | M+ FONT LICENSE (無制限) |
 | **web-bml / es2** (npm の `web-bml`。データ放送を描く) | MIT |
 | **Svelte / SvelteKit / Blades / Bits UI** と束に入る npm 一式 | MIT (drizzle-orm と crc-32 は Apache-2.0) |

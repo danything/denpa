@@ -1,9 +1,10 @@
-import { cpSync, readdirSync, readFileSync, rmSync, statSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { deflateSync } from 'node:zlib';
 import { and, eq, ne, sql } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/sqlite-core';
 import { joinBytes } from '../ts/bytes';
+import { coherence, decodeModel } from '../ts/logo-detect';
 import { pngChunk } from '../ts/logo-palette';
 import { config } from './config';
 import { orm } from './db';
@@ -11,148 +12,107 @@ import { CURRENT_SERVICES } from './epg';
 import { services } from './schema';
 
 /**
- * logoframe が覚えたロゴ (`.lgd`) の置き場と、その中身。
+ * CM検出のために覚えた局ロゴ (`own-logo-<幅>x<高さ>.bin`。`logo-own.ts`) の置き場と、その中身。
  *
  * **これは放送波から拾う局ロゴ (PNG) とは別物。** あちら (`server/logo.ts`) は番組表に
- * 出すための絵で、こちらは「画面のどこにロゴが出ているか」を録画から学習したもの。
+ * 出すための絵で、こちらは「画面のどこにロゴが出ているか」を録画から覚えたもの。
  */
 
 /**
- * 覚えたロゴの置き場。**局ごとに分ける。**
- *
- * logoframe は局名をファイル名に埋めて覚えるが、その名前は多バイト文字を
- * `_E7_B7_8F` のように潰したもので、こちらから組み立て直しても当たる保証がない。
- * 局ごとの入れ物にしておけば、位置を教え直したときに丸ごと捨てられる。
- *
- * **捨てられることが要る。** `-logo-area` はロゴを覚えるときにしか効かず、
- * 既に覚えているものがあれば合致率が落ちるまで作り直さない。捨てられないと、
- * 位置を教えても覚えているほうが使われ続ける。
+ * 覚えたロゴの置き場。**局ごとに分ける。** 「この絵は違う」で丸ごと捨てられるように
  */
 export function logoRepo(serviceId: number): string {
-    return join(config.jlsLogoDir, String(serviceId));
+    return join(config.cmLogoDir, String(serviceId));
+}
+
+/** 覚えたもののファイル名 (`logo-own.modelFile`)。コマの大きさごとに1つ */
+const MODEL = /^own-logo-\d+x\d+\.bin$/;
+
+/** その局の覚えたもの。読めなければ空 (置き場がまだ無い = 1本も焼いていない) */
+function models(serviceId: number): string[] {
+    try {
+        return readdirSync(logoRepo(serviceId)).filter((name) => MODEL.test(name));
+    } catch {
+        return [];
+    }
 }
 
 /**
- * その局の覚えたロゴを捨てる。次のエンコードで、教えてもらった枠から覚え直す。
- * 覚え直しは録画1本ぶん余計にかかるが、当たらないまま回り続けるよりはいい
+ * その局の覚えたロゴを捨てる。次にその局の録画を焼くときに一から覚える
  */
 export function forgetLogoData(serviceId: number): void {
     rmSync(logoRepo(serviceId), { recursive: true, force: true });
 }
 
-/**
- * `.lgd` の中身。
- *
- * ```
- * 0x00 char[28] "<logo data file ver0.1>" + NUL 詰め
- * 0x1C uint32BE 入っているロゴの数 (denpa の使い方では常に1)
- * 0x20 char[32] 局名
- * 0x40 int16LE  x, y, 高さ, 幅, fi, fo, st, ed
- * 0x50 以降     画素ごとに int16LE × 6 (dp_y, y, dp_cb, cb, dp_cr, cr)
- * ```
- *
- * **高さが先。** `-logo-area x,y,w,h` を渡して書かせたものと突き合わせて確かめた
- * (`200,70` を渡すと 0x44 に 70、0x46 に 200 が入る)。逆に読んでいた頃は、
- * 画面に出る枠も絵も転置されていた。
- *
- * 色は使われていない。実機の `.lgd` は cb/cr が全画素 0 で、意味を持つのは
- * **濃さ (dp_y)** だけだった。y は int16 の端まで振り切れていて色にならない。
- */
-const HEADER = 80;
-const PIXEL = 12;
-/** 濃さの満点。logoframe/AviUtl 系のロゴ形式はこの尺度で持つ */
-const FULL_DEPTH = 1000;
-
 export interface LearnedLogo {
-    /** logoframe が覚えた局名 */
-    name: string;
     /** 覚えている枠。**記録されているコマの座標** (地上波のHDなら 1440×1080 の中) */
     x: number;
     y: number;
     width: number;
     height: number;
     /**
-     * いちばん濃いところ (0〜1000)。画面には出さない — 半透明の細いロゴ (TOKYO MX)
-     * はちゃんと写っていても 241 で、数字は良し悪しの材料にならなかった
-     */
-    depth: number;
-    /**
-     * 濃さを明るさにした白黒の PNG。原寸なので、出すときは拡大する。
+     * 線の向きの揃い方を明るさにした白黒の PNG (縁が白)。原寸なので、出すときは拡大する。
      *
-     * **いちばん濃いところが白になるように伸ばしてある。** 満点 (1000) を白に
-     * していた頃は、薄いものが真っ黒になって「薄い」ことしか分からなかった。
-     * 知りたいのは形のほうなので伸ばす
+     * **いちばん揃うところが白になるように伸ばしてある。** ロゴの縁の揃い方は
+     * 「ロゴが出ていたコマの割合」(実機で 0.5〜0.6) までしか上がらないので、
+     * 1 を白にすると灰色にしかならない。知りたいのは形のほう
      */
     png: Uint8Array;
     /**
-     * いつ覚えたか (ファイルの更新時刻)。
+     * いつ書いたか (ファイルの更新時刻)。当てるたびに育てて書き直すので、最後に当てた時刻に近い。
      *
      * **これが無いと画面が嘘に見える。** 詳細に出ているロゴは*いまの*もので、
-     * 隣に出ている「CM判定に失敗」は*そのとき*の記録。実機では、失敗した録画の
-     * 18時間後に覚え直したロゴが並んで出ていて、「ロゴは正しいのに検出できない」
-     * ように読めた (実際には別のロゴで判定していた)
+     * 隣に出ている「CM判定に失敗」は*そのとき*の記録
      */
     learnedAt: number;
 }
 
-/** いちばん新しい `.lgd`。logoframe は作り直すたびに `-vNNNN` を上げていく */
-function latest(dir: string): string | null {
-    try {
-        const files = readdirSync(dir)
-            .filter((name) => name.endsWith('.lgd'))
-            .sort();
-        const newest = files.at(-1);
-        return newest === undefined ? null : join(dir, newest);
-    } catch {
-        // まだ1本も録っていない局。置き場ごと無い
-        return null;
+/**
+ * いちばん最後に書いたもの。コマの大きさが違うもの (SD と HD) を両方持っていれば、
+ * 最後に焼いた録画のほう
+ */
+function newest(serviceId: number): { path: string; at: number } | null {
+    const dir = logoRepo(serviceId);
+    let found: { path: string; at: number } | null = null;
+    for (const name of models(serviceId)) {
+        const path = join(dir, name);
+        try {
+            const at = statSync(path).mtimeMs;
+            if (found === null || at > found.at) found = { path, at };
+        } catch {
+            // 消えた。他のものを見る
+        }
     }
+    return found;
 }
 
+/** 覚えたものを最後に書いた時刻。覚えていなければ `null` */
+export function learnedAt(serviceId: number): number | null {
+    return newest(serviceId)?.at ?? null;
+}
+
+/** いま覚えているロゴを絵にする (`newest`) */
 export function readLearnedLogo(serviceId: number): LearnedLogo | null {
-    const path = latest(logoRepo(serviceId));
-    if (path === null) return null;
+    const latest = newest(serviceId);
+    if (latest === null) return null;
 
     let bytes: Uint8Array;
     try {
-        bytes = readFileSync(path);
+        bytes = readFileSync(latest.path);
     } catch {
         return null;
     }
-    if (bytes.length < HEADER) return null;
+    const model = decodeModel(bytes);
+    if (model === null) return null;
 
-    const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
-    const name = new TextDecoder().decode(bytes.subarray(32, 64)).replace(/\0.*$/, '');
-    const x = view.getInt16(64, true);
-    const y = view.getInt16(66, true);
-    const height = view.getInt16(68, true);
-    const width = view.getInt16(70, true);
-    if (width <= 0 || height <= 0) return null;
-    if (bytes.length < HEADER + width * height * PIXEL) return null;
-
-    // 濃さを明るさにする。色は入っていない (cb/cr は全画素 0)
-    const depths = new Int16Array(width * height);
-    let depth = 0;
-    for (let i = 0; i < width * height; i++) {
-        const value = view.getInt16(HEADER + i * PIXEL, true);
-        depths[i] = value;
-        depth = Math.max(depth, value);
-    }
-    // いちばん濃いところを白にする。満点で割ると、薄いものが真っ黒で形が見えない
-    const top = Math.max(1, Math.min(FULL_DEPTH, depth));
+    const { width, height } = model.orientation;
+    const r = coherence(model.orientation);
+    let top = 0;
+    for (const value of r) top = Math.max(top, value);
     const gray = new Uint8Array(width * height);
-    for (const [i, value] of depths.entries()) {
-        gray[i] = Math.round((Math.max(0, Math.min(top, value)) / top) * 255);
-    }
+    if (top > 0) for (const [i, value] of r.entries()) gray[i] = Math.round((value / top) * 255);
 
-    let learnedAt = 0;
-    try {
-        learnedAt = statSync(path).mtimeMs;
-    } catch {
-        // 時刻が読めなくても絵は出せる
-    }
-
-    return { name, x, y, width, height, depth, learnedAt, png: encodeGray(gray, width, height) };
+    return { ...model.rect, learnedAt: latest.at, png: encodeGray(gray, width, height) };
 }
 
 /** 8bit グレースケールの PNG。出すのは1枚だけなので、素直に組む */
@@ -179,12 +139,7 @@ function encodeGray(gray: Uint8Array, width: number, height: number): Uint8Array
 
 /** その局のロゴを覚えているか。**中身が1つでもあれば覚えている** */
 export function learned(serviceId: number): boolean {
-    try {
-        return readdirSync(logoRepo(serviceId)).some((name) => name.endsWith('.lgd'));
-    } catch {
-        // 置き場がまだ無い = 覚えていない
-        return false;
-    }
+    return models(serviceId).length > 0;
 }
 
 /**
@@ -199,8 +154,7 @@ export function learned(serviceId: number): boolean {
  * ```
  *
  * のように並んでいた。**同じ絵なのでロゴは1つ覚えれば足りる。** 束ねずに
- * 回していた頃は、画面に「TOKYO MX1」が2つ並び、掴むほうも同じ局を
- * 3回ぶん5分ずつ塞いでいた。
+ * 並べていた頃は、画面に「TOKYO MX1」が2つ並んでいた。
  *
  * 代表は**もう覚えている局を優先**する。無ければ先頭 (呼ぶ側の並び順)。
  *
@@ -233,18 +187,22 @@ export function siblings(serviceId: number): number[] {
 /**
  * 覚えたロゴを、同じ絵を映している局にも配る。
  *
- * 束ねて1局ぶんしか掴まないので (`stations`)、そのままだとサブチャンネルの枠で
- * 録れた番組が「ロゴを覚えていない」ことになる。中身は同じなので写せば足りる。
+ * 束ねて1局ぶんしか画面に出さないので (`stations`)、そのままだとサブチャンネルの枠で
+ * 録れた番組が一から覚え直すことになる。中身は同じなので写せば足りる。
+ * **向こうが同じ大きさのものを持っていれば写さない** (自分で育てたほうが確か)
  */
 export function share(serviceId: number): void {
     const from = logoRepo(serviceId);
     for (const id of siblings(serviceId)) {
-        try {
-            // 向こうが自分で覚えているなら、そちらのほうが確か
-            if (learned(id)) continue;
-            cpSync(from, logoRepo(id), { recursive: true });
-        } catch {
-            // 写せなくても、その局はエンコードのときに覚え直せる
+        const to = logoRepo(id);
+        for (const name of models(serviceId)) {
+            try {
+                if (existsSync(join(to, name))) continue;
+                mkdirSync(to, { recursive: true });
+                copyFileSync(join(from, name), join(to, name));
+            } catch {
+                // 写せなくても、その局はエンコードのときに覚えられる
+            }
         }
     }
 }

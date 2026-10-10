@@ -40,7 +40,7 @@ import { encodedPath, libraryFamily, libraryPath } from './library';
 import { removeSidecars, sidecarPaths, writeThumbnail } from './metadata';
 import { saveRecordedBml } from './recorded-bml';
 import { recordingSummary } from './recording';
-import { encodeJobs, recordings, services } from './schema';
+import { encodeJobs, recordings } from './schema';
 import { descramble, isScrambled } from './scramble';
 import { settings } from './settings';
 import { chunks, run } from './stream';
@@ -1041,20 +1041,9 @@ async function prepareCm(
 
     let detection: CmDetection;
     try {
-        /*
-         * ロゴの位置を手で入れてもらっていれば渡す。自動で見つからない局
-         * (薄い・動くロゴ) はこれが無いとロゴ無しの判定に落ちる
-         */
-        const service = orm()
-            .select({ logo_area: services.logo_area })
-            .from(services)
-            .where(eq(services.id, recording.service_id))
-            .get();
         detection = await detectCm(input, {
             signal,
-            channel: recording.service_name,
             serviceId: recording.service_id,
-            area: service?.logo_area ?? '',
             onProgress: progressReporter(jobId),
             onStep: (label) => setStep(jobId, label),
         });
@@ -1065,7 +1054,7 @@ async function prepareCm(
 
     /*
      * ロゴを使えたかどうかは覚え書きに書いてある (cm.detectCm)。別の列では持たない。
-     * 持っていた頃は、後から「位置を教える口を出す条件」を広げても、既に録ってある
+     * 持っていた頃は、後から「ロゴで判定できなかったと出す条件」を広げても、既に録ってある
      * 分には効かなかった
      */
     orm()

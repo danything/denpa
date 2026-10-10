@@ -1,6 +1,6 @@
 <script lang="ts">
     import { submitting } from '#lib/actions.js';
-    import LogoArea from '#lib/components/LogoArea.svelte';
+    import LearnedLogo from '#lib/components/LearnedLogo.svelte';
     import Toasts, { errorNotice, type Notice } from '#lib/components/Toasts.svelte';
     import { SERVICE_TYPE_LABEL, STATE_LABEL as SHARED_STATE_LABEL, splitReaderName } from '#lib/format.js';
     import { held, liveUpdates } from '#lib/live-updates.svelte.js';
@@ -22,7 +22,9 @@
      * 「当たらない」と思ったときに絵を見られることのほうが要る。
      * 畳んであるので、並べても1行ずつ
      */
-    const cmLogos = $derived([...data.cmLogos].sort((a, b) => Number(a.learned) - Number(b.learned)));
+    const cmLogos = $derived(
+        [...data.cmLogos].sort((a, b) => Number(a.learned_at !== null) - Number(b.learned_at !== null)),
+    );
 
     /** チューナーが受けられる種別。設定の表で並べる順 */
     const TYPES = ['GR', 'BS', 'CS'] as const;
@@ -700,10 +702,10 @@
                 </div>
                 <!--
                     CM検出のロゴ。**番組表に出す局ロゴとは別物** (logo-data.ts)。
-                    こちらは「画面のどこにロゴが出ているか」を logoframe に覚えさせたもの。
+                    こちらは「画面のどこにロゴが出ているか」を録画から覚えたもの。
 
                     置き場所を録画の詳細からここへ移した。**録画ごとの話ではなく
-                    局ごとの話**で、教えたら以降その局の全部に効く
+                    局ごとの話**で、覚えたものは以降その局の全部に効く
                 -->
                 <div class="cluster">
                     <dt class="term">CM検出のロゴ</dt>
@@ -711,12 +713,12 @@
                         {data.cmLogoStats.have} / {data.cmLogoStats.total} 局
                     </dd>
                     <dd class="full note-block">
-                        <div class="small soft">自動で覚えます。覚えられない局は、下で位置を教えてください</div>
+                        <div class="small soft">録画を焼くときに、その録画から自動で覚えます</div>
                         <details class="more">
                             <summary>詳しく</summary>
                             <p>
-                                チューナーが空いているときに放送を数分見て覚えます。薄いロゴや動くロゴは
-                                自動では見つからないので、下の一覧から位置を教えてください。
+                                画面の隅で線の向きが毎コマ揃うところをロゴとして覚え、焼くたびに育てます。
+                                違うものを覚えていたら、下の一覧から消せば次の録画で覚え直します。
                             </p>
                         </details>
                     </dd>
@@ -731,20 +733,14 @@
                                             開かないと分からない頃は、100局ぶん開いて回る
                                             しかなかった
                                         -->
-                                        <span class="tag {service.learned ? 'success' : ''}">
-                                            {service.learned ? '覚えました' : 'まだ'}
+                                        <span class="tag {service.learned_at !== null ? 'success' : ''}">
+                                            {service.learned_at !== null ? '覚えました' : 'まだ'}
                                         </span>
-                                        {#if service.logo_area !== null}
-                                            <span class="tiny muted">
-                                                — 教えた範囲 {service.logo_area}
-                                            </span>
-                                        {/if}
                                     </summary>
-                                    <LogoArea
-                                        recordingId={service.recording_id}
+                                    <LearnedLogo
                                         serviceId={service.id}
                                         serviceName={service.name}
-                                        area={service.logo_area}
+                                        learnedAt={service.learned_at}
                                     />
                                 </details>
                             {/each}

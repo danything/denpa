@@ -1,6 +1,7 @@
-import { rmSync } from 'node:fs';
+import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { emptyOrientation, encodeModel } from '../../src/lib/ts/logo-detect';
 import { BS_NO_LOGO, BS11, FUJI, MX } from '../fake/services';
-import { expect, goto, recordOne, syncEpg, test } from './helpers';
+import { expect, goto, syncEpg, test } from './helpers';
 
 /**
  * 局ロゴ。
@@ -179,40 +180,54 @@ test.describe('衛星の局ロゴ', () => {
 });
 
 /**
- * CM検出のロゴの位置を教える口 (`LogoArea.svelte`)。**済んだことは済んだ色で出す。**
+ * CM検出のために覚えたロゴ (`LearnedLogo.svelte`)。**番組表に出す局ロゴとは別物。**
  *
- * 済んだ言葉を fail と同じ `message` に載せていたので、位置を受け取れても
- * 自動に戻せても、失敗の赤 (`tuner-error`) で出ていた。囲う枠はコマの絵が
- * 要り、偽 ffmpeg では出ないので、位置はフォームと同じものを投げて入れる
+ * 覚えるのは録画を焼くときで、偽 ffmpeg では覚えられないので、覚えたものは
+ * 本物と同じ形で置いておく (`logo-detect.encodeModel`)。見るのは、覚えた局が
+ * 「覚えました」と絵で出ること、「この絵は違う」で消せて済んだ色で知らせること
  */
-test.describe('CM検出のロゴの位置', () => {
-    test('位置を自動に戻すと、済んだ知らせで出る', async ({ page, request }) => {
-        test.setTimeout(180_000);
-        // 囲う口は録画が1本ある局にだけ出る (コマを出すため)。BS の偽番組は5秒
-        await recordOne(page, request);
-        const res = await request.post('/tuners?/logoArea', {
-            form: { serviceId: String(BS11.id), area: '1500,20,300,120' },
-        });
-        expect(res.ok()).toBe(true);
+test.describe('CM検出のロゴ', () => {
+    test('覚えた絵を出し、「この絵は違う」で消すと済んだ知らせで出る', async ({ page, request, stack }) => {
+        await syncEpg(request);
+
+        // 縁が一筋だけ揃っている 40×20 の枠
+        const orientation = emptyOrientation(40, 20);
+        orientation.count = 10;
+        for (let x = 0; x < 40; x++) orientation.sx[10 * 40 + x] = 10;
+        const repo = `${stack.root}/logos/cm/${BS11.id}`;
+        mkdirSync(repo, { recursive: true });
+        writeFileSync(
+            `${repo}/own-logo-1440x1080.bin`,
+            encodeModel({
+                frameWidth: 1440,
+                frameHeight: 1080,
+                rect: { x: 1300, y: 40, width: 40, height: 20 },
+                orientation,
+            }),
+        );
+
+        const image = await request.get(`/api/services/${BS11.id}/logo-data`);
+        expect(image.status()).toBe(200);
+        expect(image.headers()['content-type']).toContain('image/png');
 
         await goto(page, '/tuners');
         // 局名は画面では半角に揃えてある (ＢＳ１１ → BS11)
         const card = page.locator('details.cm-logo').filter({ hasText: 'BS11' });
+        await expect(card.locator('summary .tag')).toHaveText('覚えました');
         await card.locator('summary').first().click();
-        await expect(card).toContainText('教えた範囲 1500,20,300,120');
+        const shown = card.getByRole('img', { name: 'いま覚えているロゴ' });
+        await expect(shown).toBeVisible();
+        // 絵として読めていること (壊れた PNG だと幅が 0 になる)
+        await expect.poll(() => shown.evaluate((img: HTMLImageElement) => img.naturalWidth)).toBe(40);
 
-        // 囲う場所は、覚えているものがあると畳んである。畳んであれば開く
-        const reset = card.getByRole('button', { name: '自動に戻す' });
-        await expect(async () => {
-            if (!(await reset.isVisible())) await card.getByText('ロゴを四角で囲って教える').click();
-            await expect(reset).toBeVisible({ timeout: 1_000 });
-        }).toPass({ timeout: 15_000 });
-        await reset.click();
+        await card.getByRole('button', { name: 'この絵は違う' }).click();
 
         const done = page.getByTestId('tuner-done');
-        await expect(done).toContainText('自動に戻しました');
+        await expect(done).toContainText('覚えたロゴを消しました');
         await expect(done).toHaveClass(/\bsuccess\b/);
         await expect(page.getByTestId('tuner-error')).toHaveCount(0);
-        await expect(card).not.toContainText('教えた範囲');
+        await expect(card.locator('summary .tag')).toHaveText('まだ');
+        expect(existsSync(repo)).toBe(false);
+        expect((await request.get(`/api/services/${BS11.id}/logo-data`)).status()).toBe(404);
     });
 });

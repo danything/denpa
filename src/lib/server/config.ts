@@ -126,27 +126,12 @@ export const config = {
     /** CMの扱いの初期値。実カットは事故ると本編が消えるのでチャプターのみ */
     cmCutDefault: 'chapter' as CmMode,
 
-    /** chapter_exe / logoframe / join_logo_scp の置き場。イメージに入っている */
+    /** chapter_exe / join_logo_scp の置き場。イメージに入っている */
     jlsBin: '/opt/jls/bin',
     /** join_logo_scp の判定規則。join_logo_scp_trial に付いてくるもの */
     jlsRule: '/opt/jls/JL/JL_標準.txt',
-    /** logoframe が作るロゴデータ (.lgd) の置き場。放送波から拾った局ロゴ (PNG) の隣 */
-    jlsLogoDir: `${dataDir}/logos/jls`,
-    /**
-     * 局ロゴの出ているコマを誰に拾わせるか。`logoframe` (既定) か、自前の `own`
-     * (`server/logo-own.ts`。線の向きで覚えるので、後ろがのっぺりしていなくても覚えられる)。
-     * 実機で突き合わせるまでの切り替え口 (docs/encode.md「ロゴを自分で拾う」)
-     */
-    cmLogo: (str('CM_LOGO', 'logoframe') === 'own' ? 'own' : 'logoframe') as 'own' | 'logoframe',
-    /** ロゴを覚えるときに見るコマ数。増やすほど綺麗に出るが、その分だけ読む */
-    jlsLogoSamples: 600,
-    /**
-     * 「ずっと同じ縁がある」と認める強さ。**logoframe の既定のまま** — 60 に上げると
-     * 実機の TOKYO MX (細い白文字) が覚えられない (docs/encode.md「ロゴの覚え方」)
-     */
-    jlsLogoEdgeThreshold: 40,
-    /** 覚えているロゴの合致率がこれ(%)を下回ったら覚え直す。**既定のまま** (上げる根拠が無かった。同上) */
-    jlsLogoMatch: 10,
+    /** CM検出のために覚えた局ロゴ (`own-logo-*.bin`) の置き場。放送波から拾った局ロゴ (PNG) の隣 */
+    cmLogoDir: `${dataDir}/logos/cm`,
     /**
      * join_logo_scp が番組の構成を推測するとき、ロゴをどれだけ当てにするか
      * (JL の `logo_level`。1:使わない 〜 8:最優先)。設定画面で変えられる (docs/encode.md「ロゴをどれだけ当てにするか」)

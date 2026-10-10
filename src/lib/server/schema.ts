@@ -198,27 +198,7 @@ export const services = sqliteTable('services', {
     remote_control_key: integer('remote_control_key'),
     has_logo: flag('has_logo').notNull().default(sql`0`),
     updated_at: integer('updated_at').notNull(),
-    /** 局ロゴの位置 ("x,y,w,h")。CM検出 (jls) で自動検出できなかった局だけ手で入れる */
-    logo_area: text('logo_area'),
-    /** `logo_area` を誰が入れたか (LOGO_AREA_AUTO) */
-    logo_area_auto: integer('logo_area_auto').$type<LogoAreaAuto>().notNull().default(0),
 });
-
-/**
- * `services.logo_area` を誰が入れたか。
- *
- * **外した枠は出し直さない**ために `missed` がある。外れた枠を捨てるだけにすると、
- * 次のエンコードでまた同じ絵から同じ枠を割り出して同じところで転ぶ (logo-area.ts)
- */
-export const LOGO_AREA_AUTO = {
-    /** 人が入れた (または無し) */
-    human: 0,
-    /** こちらが割り出した */
-    guessed: 1,
-    /** 割り出したが外れた */
-    missed: 2,
-} as const;
-export type LogoAreaAuto = (typeof LOGO_AREA_AUTO)[keyof typeof LOGO_AREA_AUTO];
 
 export const programs = sqliteTable(
     'programs',

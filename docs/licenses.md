@@ -35,15 +35,14 @@ Dockerfile の行・`package.json`) を優先し、上流の表示に拠るも�
 
 ### CM 検出
 
-`/opt/jls` に入る 3 本のバイナリと判定規則。**GPL-3.0 のバイナリを同梱**しています。
+`/opt/jls` に入る 2 本のバイナリと判定規則。**GPL-3.0 のバイナリを同梱**しています。
 
 | 名前 | 何に | 出どころ | ライセンス |
 | --- | --- | --- | --- |
 | join_logo_scp | 本編と CM の判定 (`JL_*.txt` の規則も同梱) | <https://github.com/yobibi/join_logo_scp> (nekopanda 版のフォーク) | **正式なライセンス文書は無し**。README に「転載・改変は連絡不要 (各自の責任で)」とだけ。その表示に拠っています |
 | chapter_exe | 無音とシーンチェンジ | <https://github.com/tobitti0/chapter_exe> (原作 ru、Linux 移植 sogaani) | GPL-3.0 |
-| logoframe | 局ロゴの検出と学習 (`.lgd`) | <https://github.com/tobitti0/logoframe> (原作 Yobi、移植 sogaani) | GPL-3.0 |
-| dtvindex | 上の 2 本が TS を読むための静的ライブラリ | <https://github.com/tobitti0/dtvindex> | GPL-3.0 |
-| Debian の FFmpeg 共有ライブラリ (`libavcodec61` ほか) | 上の 3 本が繋ぐぶんだけ | Debian | LGPL-2.1+ (Debian のビルドは GPL 有効) |
+| dtvindex | chapter_exe が TS を読むための静的ライブラリ | <https://github.com/tobitti0/dtvindex> | GPL-3.0 |
+| Debian の FFmpeg 共有ライブラリ (`libavcodec61` ほか) | chapter_exe が (dtvindex 越しに) 繋ぐぶんだけ | Debian | LGPL-2.1+ (Debian のビルドは GPL 有効) |
 
 ### フォント
 

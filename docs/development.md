@@ -171,7 +171,7 @@ QEMU が要り、ffmpeg や AOT はかなり遅い)。
 ffmpeg・libaribcaption・CM検出の一式・ARIB のフォント・px4-userland / siano-userland は、どれも
 `ARG` / `ENV` に版 (タグかコミット) を書いてから取ってきます。**`master` を
 追っていた頃は、同じコミットから焼いても中身が違いえました** (実機の中身は Pod へ入らないと
-分からなかった)。CM検出の3つ (`logoframe`・`chapter_exe`・`dtvindex`) は
+分からなかった)。CM検出の2つ (`chapter_exe`・`dtvindex`) は
 毎週書き換わるので、固定しないと次のデプロイで判定の中身が黙って変わります。
 
 上げるのは Renovate 任せで、`# renovate:` の注釈と `renovate.json` の `customManagers` で
