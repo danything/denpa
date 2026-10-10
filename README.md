@@ -140,7 +140,6 @@ docker compose up -d
 - [docs/development.md](docs/development.md) — **手を入れるとき** (開発環境・テスト)
 - [docs/licenses.md](docs/licenses.md) — 借りているもの
 
-手元の機材で試せていないもの (px4-userland・siano-userland の実機など) は各文書に書いてあります。
 動いた/動かなかったを [Issue](https://github.com/danything/denpa/issues) で教えてもらえると助かります。
 
 ## 謝辞
