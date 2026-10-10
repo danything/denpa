@@ -86,6 +86,24 @@ describe('ARIB 8単位符号', () => {
         expect(decodeAribText(bytes(0x1b, 0x24))).toBe('');
     });
 
+    test('90・91区の記号は規格の字にする。EUC-JP の IBM 拡張漢字に化けない', () => {
+        // 90区1点 (事故)・91区17点 (温泉)・91区43点 (電話)
+        expect(decodeAribText(bytes(0x7a, 0x21, 0x7b, 0x31, 0x7b, 0x4b))).toBe('⛌♨☎');
+        // 89区は規格で空き。EUC-JP なら「纊」になるところ
+        expect(decodeAribText(bytes(0x79, 0x21))).toBe('□');
+    });
+
+    test('のちの版で足された外字も読む', () => {
+        // 85区47点・86区1点 (漢字)、93区26点 (亀甲括弧の S)、93区39点 (リットル)
+        expect(decodeAribText(bytes(0x75, 0x4f, 0x76, 0x21, 0x7d, 0x3a, 0x7d, 0x47))).toBe('鿄鿅🄪ℓ');
+    });
+
+    test('JIS互換漢字2面は1面と混ぜない', () => {
+        // 85区1点は1面 (外字) なら「㐂」。2面の同じ区点は外字の表で引かない
+        expect(decodeAribText(bytes(0x75, 0x21))).toBe('㐂');
+        expect(decodeAribText(bytes(0x1b, 0x24, 0x3a, 0x75, 0x21))).not.toBe('㐂');
+    });
+
     test('JIS にも外字にも無い区点は印を残す。黙って消さない', () => {
         // 94区94点。外字表の末尾 (㉛) の1つ先で、JIS にも当たらない
         expect(decodeAribText(bytes(0x7e, 0x7e))).toBe('□');
