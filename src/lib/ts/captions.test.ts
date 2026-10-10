@@ -1,22 +1,11 @@
 import { describe, expect, test } from 'bun:test';
-import { CLOCK, type Cue, currentCue, insertCue, KEEP_CUES, showing, trimCues } from './captions';
+import { type Cue, currentCue, insertCue, KEEP_CUES, showing, trimCues } from './captions';
 
 const cue = (at: number): Cue => ({ at, page: null });
 
 /**
- * **時刻はサーバが添えてくる。** 映像と同じ ffmpeg が付けた mp4 の物差しなので、
- * 再生位置と直に比べられる (`server/captions.ts`)。取り決めの刻みは 90kHz。
- */
-describe('CLOCK', () => {
-    test('90kHz を秒に直せる', () => {
-        expect(135_000 / CLOCK).toBeCloseTo(1.5);
-        expect(0 / CLOCK).toBe(0);
-    });
-});
-
-/**
  * **字幕は映像より早く届く。** 映像はエンコードを通るぶん遅れるが、字幕は
- * 絵にするだけで通り抜ける。届いた端から出すと、口が動く前に台詞が出る。
+ * 解くだけで通り抜ける。届いた端から出すと、口が動く前に台詞が出る。
  */
 describe('currentCue', () => {
     const cues = [cue(10), cue(20), cue(30)];

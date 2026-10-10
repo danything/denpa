@@ -3,9 +3,7 @@
  *
  * [data-timeline.ts](data-timeline.ts) の並べ方・再生の側と分けてある —
  * あちらは観る画面 (ブラウザ) も読み込むが、TS を解く [bml.ts](bml.ts) は
- * `node:zlib` / `node:buffer` を使うのでブラウザには持ち込めない。同居させていた
- * 頃はブラウザ向けのビルドが「externalized for browser compatibility」と
- * 警告し続けていた (実害は無いが、警告に慣れると本物を見落とす)。
+ * `node:zlib` / `node:buffer` を使うのでブラウザには持ち込めない。
  */
 
 import { BmlDecoder } from './bml';

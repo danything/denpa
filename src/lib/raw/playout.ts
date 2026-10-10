@@ -24,8 +24,8 @@
  * DOM も Web Audio も触らないので、ここだけ単体で確かめられる (`playout.test.ts`)。
  */
 
-/** 90kHz */
-const CLOCK = 90_000;
+import { CLOCK } from '#lib/ts/pes.js';
+
 /** 鳴らし始めを予約するときの先回り (秒)。今すぐにすると頭が欠ける */
 export const LEAD = 0.05;
 /** 残りがこれを切ったら「使い切った」(秒) */
