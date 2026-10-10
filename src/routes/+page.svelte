@@ -48,7 +48,7 @@
     import { clearFailed, offline, removeLocal, saveOffline } from '#lib/offline.svelte.js';
     import { matches, normalize } from '#lib/paging.js';
     import { Paged, sentinel } from '#lib/paging.svelte.js';
-    import { encodeSource, type FileSource } from '#lib/source.js';
+    import { cmRedo, encodeSource, type FileSource } from '#lib/source.js';
     import { goto } from '$app/navigation';
     import { resolve } from '$app/paths';
     import ChevronRight from '~icons/lucide/chevron-right';
@@ -1657,6 +1657,45 @@
                                             {/snippet}
                                         </DropdownMenu.Item>
                                     </form>
+                                {/if}
+                                {#if rec.job_id === null && cmRedo(rec).state !== 'hidden'}
+                                    {@const redo = cmRedo(rec)}
+                                    <!--
+                                        **CM 検出だけやり直す** (焼き直さない。encoder.runCmJob)。生TSがあれば生TSから、
+                                        無ければ焼いたものから読み、チャプターを書き直す。CM を切って焼いたものは戻せないので、
+                                        生TSがあれば押したときに再エンコードを促し (サーバが断る)、無ければ理由を出して押せない。
+                                        閉じるのは投げ終わってから (再エンコードと同じ)
+                                    -->
+                                    {#if redo.state === 'disabled'}
+                                        <DropdownMenu.Item disabled data-testid="cm-redo-button">
+                                            CM検出をやり直す
+                                        </DropdownMenu.Item>
+                                        <div class="menu-note muted small" data-testid="cm-redo-reason">{redo.reason}</div>
+                                    {:else}
+                                        <form
+                                            method="POST"
+                                            action="?/redetectCm"
+                                            class="menu-form"
+                                            use:submitting={() => async (options) => {
+                                                await options.update();
+                                                detail.close();
+                                            }}
+                                        >
+                                            <input type="hidden" name="id" value={rec.id} />
+                                            <DropdownMenu.Item closeOnSelect={false}>
+                                                {#snippet child({ props: itemProps })}
+                                                    <button
+                                                        {...itemProps}
+                                                        type="submit"
+                                                        class="menu-button"
+                                                        data-testid="cm-redo-button"
+                                                    >
+                                                        CM検出をやり直す
+                                                    </button>
+                                                {/snippet}
+                                            </DropdownMenu.Item>
+                                        </form>
+                                    {/if}
                                 {/if}
                             </div>
                         </div>

@@ -1,4 +1,5 @@
 import type {
+    ENCODE_KINDS,
     ENCODE_PHASES,
     encodeJobs,
     programs,
@@ -81,5 +82,6 @@ export type Recording = typeof recordings.$inferSelect;
  * 進み具合が出せない代わりにこれを状態として出す。
  */
 export type EncodePhase = (typeof ENCODE_PHASES)[number];
+export type EncodeKind = (typeof ENCODE_KINDS)[number];
 
 export type EncodeJob = typeof encodeJobs.$inferSelect;

@@ -256,6 +256,56 @@ describe('savePrograms', () => {
         ]);
     });
 
+    // 文を使い回す形にしたとき (drizzle の placeholder)、null が文字の "null" になりかけた
+    test('空の JSON 列は NULL のまま、中身があれば JSON の文字で入る', async () => {
+        offered = [channel(23608, 'ＴＯＫＹＯ　ＭＸ')];
+        syncServicesOnly(await getChannels());
+        orm().delete(programs).run();
+
+        savePrograms([
+            event({ eventId: 1 }),
+            event({
+                eventId: 2,
+                startAt: Date.now() + 3600_000,
+                isFree: false,
+                extended: { 番組内容: 'あらすじ' },
+                genres: [{ lv1: 7, lv2: 0 }],
+                audios: [{ componentType: 3, langs: ['jpn'], text: '解説' }],
+                video: { type: 'mpeg2', resolution: '1080i' },
+            }),
+        ]);
+
+        const raw = orm().all<Record<string, unknown>>(
+            sql`SELECT event_id, typeof(extended) AS kind, extended, genres, genre_detail, audios, audio_type, is_free, video_type, video_resolution FROM programs ORDER BY event_id`,
+        );
+        expect(raw).toEqual([
+            {
+                event_id: 1,
+                kind: 'null',
+                extended: null,
+                genres: null,
+                genre_detail: null,
+                audios: null,
+                audio_type: null,
+                is_free: 1,
+                video_type: null,
+                video_resolution: null,
+            },
+            {
+                event_id: 2,
+                kind: 'text',
+                extended: '{"番組内容":"あらすじ"}',
+                genres: '[7]',
+                genre_detail: '[{"lv1":7,"lv2":0}]',
+                audios: '[{"componentType":3,"langs":["jpn"],"text":"解説"}]',
+                audio_type: 3,
+                is_free: 0,
+                video_type: 'mpeg2',
+                video_resolution: '1080i',
+            },
+        ]);
+    });
+
     /*
      * **予約の追従。** 番組表が書き換わったぶんを、まだ始めていない予約に写す。
      * 時刻だけでなく名前も (「[新]」が付く、サブタイトルが入る)。録り始めた予約は動かさない
