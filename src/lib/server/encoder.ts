@@ -1841,35 +1841,43 @@ async function runCmJob(jobId: number): Promise<void> {
         fail(jobId, recording, String(error), what);
         return;
     }
+    setStep(jobId, `CM ${detection.cm.length} 箇所 (${detection.note})`);
+
+    /*
+     * 焼いたものにチャプターを書き直す。「何もしない」なら外す。
+     * **全部書き終えてから差し替える** — 2本 (AV1 と H.264) のうち片方だけ新しくなる形を残さない。
+     * 覚え書き (`cm_ranges`) も差し替えたあとに書く
+     */
+    const cm = settings().cmCut === 'off' ? [] : shiftRanges(detection.cm, skip);
+    const chapters = cm.length > 0 ? `${input}.${jobId}.chapters.txt` : null;
+    if (chapters !== null) writeFileSync(chapters, chapterMetadata(cm, detection.duration - skip));
+    const outputs = files.map((file) => `${file}.${jobId}.post`);
+    const discard = () => {
+        for (const output of outputs) removeIfExists(output);
+    };
+    try {
+        for (const [i, file] of files.entries()) {
+            const output = outputs[i]!;
+            const code = (await run(chapterArgs(file, chapters, output), { signal })).code;
+            if (canceled.has(jobId)) {
+                discard();
+                return finishCanceled(jobId, null);
+            }
+            if (code !== 0 || !existsSync(output)) {
+                discard();
+                fail(jobId, recording, `チャプターを書き直せませんでした (code ${code})`, what);
+                return;
+            }
+        }
+        for (const [i, file] of files.entries()) renameSync(outputs[i]!, file);
+    } finally {
+        removeIfExists(chapters);
+    }
     orm()
         .update(recordings)
         .set({ cm_ranges: detection.cm, cm_note: detection.note, updated_at: now() })
         .where(eq(recordings.id, recording.id))
         .run();
-    setStep(jobId, `CM ${detection.cm.length} 箇所 (${detection.note})`);
-
-    // 焼いたものにチャプターを書き直す。「何もしない」なら外す
-    const cm = settings().cmCut === 'off' ? [] : shiftRanges(detection.cm, skip);
-    const chapters = cm.length > 0 ? `${input}.${jobId}.chapters.txt` : null;
-    if (chapters !== null) writeFileSync(chapters, chapterMetadata(cm, detection.duration - skip));
-    try {
-        for (const file of files) {
-            const output = `${file}.${jobId}.post`;
-            const code = (await run(chapterArgs(file, chapters, output), { signal })).code;
-            if (canceled.has(jobId)) {
-                removeIfExists(output);
-                return finishCanceled(jobId, null);
-            }
-            if (code !== 0 || !existsSync(output)) {
-                removeIfExists(output);
-                fail(jobId, recording, `チャプターを書き直せませんでした (code ${code})`, what);
-                return;
-            }
-            renameSync(output, file);
-        }
-    } finally {
-        removeIfExists(chapters);
-    }
 
     orm()
         .update(encodeJobs)
