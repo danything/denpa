@@ -19,6 +19,7 @@
  */
 
 import { GAIJI } from './aribtext-gaiji';
+import { HIRAGANA as HIRAGANA_TABLE, JISX0201_HALF, KATAKANA as KATAKANA_TABLE } from './b24-tables';
 
 /** 符号表の種類。バイト数と読み方だけ分かればいい */
 interface Charset {
@@ -65,20 +66,16 @@ const CHARSETS = new Map<number, Charset>([
 const UNKNOWN = '□';
 
 /**
- * ひらがな・カタカナ表の末尾。**両方で共通**。
+ * 1バイトの集合は字幕と同じ表 ([b24-tables.ts](b24-tables.ts)) を引く。**番組表で違えるところ**:
  *
- * ひらがなは 0x74〜0x76 が規格で未定義なので飛ばす (カタカナはヴヵヶ。表には置かない)。
+ * - ひらがなの 0x74〜0x76 は規格で空き。字幕は全角の空白で埋めるが、番組表では何も出さない
+ * - JIS X 0201 カタカナはいつも半角 (字幕は大きさで全角と半角を描き分ける)
+ * - 英数は ASCII のまま (字幕の半角の表は 0x5C が ¥、0x7E が ‾。番組表は検索で打つ字に合わせる)
+ * - 漢字は EUC-JP のまま読む (字幕は 1区33点の 〜・34点の ‖・61点の − などを差し替える。`KANJI_DIFF`)
  */
-const KANA_TAIL = new Map<number, [string, string]>([
-    [0x77, ['ゝ', 'ヽ']],
-    [0x78, ['ゞ', 'ヾ']],
-    [0x79, ['ー', 'ー']],
-    [0x7a, ['。', '。']],
-    [0x7b, ['「', '「']],
-    [0x7c, ['」', '」']],
-    [0x7d, ['、', '、']],
-    [0x7e, ['・', '・']],
-]);
+const HIRA = [...HIRAGANA_TABLE];
+const KATA = [...KATAKANA_TABLE];
+const ANK = [...JISX0201_HALF];
 
 const eucjp = new TextDecoder('euc-jp');
 /**
@@ -241,14 +238,14 @@ function oneByte(code: number, kind: Charset['kind']): string {
             // 英数集合はそのまま ASCII として読める。全角に直すのは呼び出し側の仕事
             return String.fromCharCode(code);
         case 'hiragana':
-            if (code <= 0x73) return String.fromCharCode(0x3041 + (code - 0x21));
-            return KANA_TAIL.get(code)?.[0] ?? '';
+            return code >= 0x74 && code <= 0x76 ? '' : (HIRA[code - 0x21] ?? '');
         case 'katakana':
-            if (code <= 0x76) return String.fromCharCode(0x30a1 + (code - 0x21));
-            return KANA_TAIL.get(code)?.[1] ?? '';
-        case 'ank':
-            // JIS X 0201 の右半分。半角カナが U+FF61 から並んでいる
-            return code <= 0x5f ? String.fromCharCode(0xff61 + (code - 0x21)) : '';
+            return KATA[code - 0x21] ?? '';
+        case 'ank': {
+            // JIS X 0201 の右半分 (半角カナ)。0x60 から先は空き
+            const char = ANK[code - 0x21];
+            return char === undefined || char === '�' ? '' : char;
+        }
         default:
             // モザイクと DRCS。絵なので文字にはならないが、消えたことは見せる
             return kind === 'blank' ? '' : UNKNOWN;
