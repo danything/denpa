@@ -6,7 +6,7 @@ import { GROUPED_COOKIE, storedGrouped } from '#lib/grouping.js';
 import { fileSize } from '#lib/server/chase.js';
 import { now, orm } from '#lib/server/db.js';
 import { capacity } from '#lib/server/disk.js';
-import { cancel as cancelEncode, enqueue, isCanceling, pump } from '#lib/server/encoder.js';
+import { CM_CUT_ALREADY, cancel as cancelEncode, enqueue, isCanceling, pump } from '#lib/server/encoder.js';
 import { emit } from '#lib/server/events.js';
 import { deleteRecordingFiles, reconcile } from '#lib/server/files.js';
 import { seriesFolder } from '#lib/server/library.js';
@@ -24,7 +24,7 @@ import {
 } from '#lib/server/schema.js';
 import { settings } from '#lib/server/settings.js';
 import { parseTitle } from '#lib/server/title.js';
-import { encodeSource } from '#lib/source.js';
+import { cmRedo, encodeSource } from '#lib/source.js';
 import type { EncodeJob, Recording, Reservation, ReservationState } from '#lib/types.js';
 
 interface RecordingRow extends Recording {
@@ -344,6 +344,24 @@ export const actions = {
             });
         }
         enqueue(recording.id);
+        pump();
+        return { success: true };
+    },
+
+    /**
+     * 「CM検出をやり直す」(詳細の「その他…」)。焼き直さず、CM を探し直して焼いたもののチャプターを
+     * 書き直す (`encoder.runCmJob`)。焼くジョブと同じ待ち行列に並び、同じ録画に2つは積まない
+     */
+    redetectCm: async ({ request }) => {
+        const recording = recordingFromForm(await request.formData());
+        if (recording === undefined) return fail(400, { message: '録画が見つかりません' });
+        const redo = cmRedo(recording);
+        if (redo.state === 'hidden')
+            return fail(400, { message: 'CMを探す元 (生TS・焼いたもの) がありません' });
+        if (redo.state === 'disabled') return fail(400, { message: redo.reason });
+        // 切ったものからは戻せない。生TSはあるので、焼き直しを促す
+        if (redo.state === 'prompt') return fail(400, { message: CM_CUT_ALREADY });
+        enqueue(recording.id, 'cm');
         pump();
         return { success: true };
     },

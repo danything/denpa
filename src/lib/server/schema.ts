@@ -410,6 +410,16 @@ export const recordings = sqliteTable(
          */
         cm_note: text('cm_note'),
         /**
+         * CM を切って焼いたときに**残した区間** (入れ物の頭からの秒)。NULL は切っていない。
+         * 切ったものからは CM を戻せないので、CM検出のやり直しはこれを見て断る (再エンコードを促す)
+         */
+        cm_kept: json('cm_kept', objects<Range>()),
+        /**
+         * 焼くときに頭から捨てた長さ (秒。`encoder.inputSkip`)。焼いたものの時刻 = 入れ物の頭からの秒 − これ。
+         * 生TSから CM を検出し直して焼いたものにチャプターを書くときに引く。NULL は焼いていない (取り込んだ録画など)
+         */
+        encode_skip: real('encode_skip'),
+        /**
          * **実際に掴めた区間** (前後マージン込み。NULL = 番組どおり丸ごと)。予約から写す。
          * 一覧で「頭が欠けている」と言うのに要る — **番組の時刻 (`start_at`) は
          * 動かさない**ので、そちらとの差が欠けた幅になる
@@ -446,11 +456,18 @@ const ENCODE_STATES = ['queued', 'running', 'done', 'failed', 'canceled'] as con
  */
 export const ENCODE_PHASES = ['descramble', 'cm', 'cut', 'encode'] as const;
 
+/**
+ * ジョブの種類。`encode` は焼く (CM 検出も相乗り)、`cm` は**CM 検出だけやり直す**
+ * (焼いたものにはチャプターを書き直すだけ。`encoder.runCmJob`)。同じ待ち行列に並べ、同時に走る本数も一緒に数える
+ */
+export const ENCODE_KINDS = ['encode', 'cm'] as const;
+
 export const encodeJobs = sqliteTable(
     'encode_jobs',
     {
         id: integer('id').primaryKey({ autoIncrement: true }),
         recording_id: integer('recording_id').notNull(),
+        kind: text('kind', { enum: ENCODE_KINDS }).notNull().default('encode'),
         state: text('state', { enum: ENCODE_STATES }).notNull().default('queued'),
         phase: text('phase', { enum: ENCODE_PHASES }).notNull().default('encode'),
         percent: real('percent').notNull().default(0),

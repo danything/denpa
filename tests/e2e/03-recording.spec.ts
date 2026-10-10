@@ -1,8 +1,10 @@
-import { existsSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
+import { dirname } from 'node:path';
 import {
     cellOf,
     expect,
     goto,
+    recordOne,
     reserveSoon,
     setRecording,
     syncEpg,
@@ -170,7 +172,7 @@ test.describe('録画とエンコード', () => {
 });
 
 test.describe('CMの実カット', () => {
-    test('CMを切っても字幕は残る', async ({ page, request }) => {
+    test('CMを切っても字幕は残る', async ({ page, request, stack }) => {
         test.setTimeout(180_000);
         await syncEpg(request);
 
@@ -195,12 +197,31 @@ test.describe('CMの実カット', () => {
         const recording = page.locator(recordingRow);
         expect(await recording.getAttribute('data-cm-ranges')).toContain('300');
 
-        // 字幕はエンコードの前にTSを切ることで残している。
+        // 字幕も CM ごと焼いて、焼いたものと一緒に切る (cm-cut.ts)。
         // フィルタで切っていた頃は -sn で落とすしかなかった
         const videoPath = (await recording.getAttribute('data-library-path')) ?? '';
         expect(videoPath).toContain('.mkv');
-        // 切るための作業ファイルは片付いていること
-        expect(existsSync(`${videoPath.replace(/\.mkv$/, '')}.cut.m2ts`)).toBe(false);
+        // 切るための作業ファイル (焼いたものの隣) は片付いていること。偽の ffmpeg では切れずに CM ごと置かれる
+        // (ffprobe が無くキーフレームが読めない) が、片付けは同じ
+        expect(readdirSync(dirname(videoPath)).filter((name) => /\.(post|ffconcat)$/.test(name))).toEqual([]);
+
+        /*
+         * **1本目は場面の切れ目ごとにキーフレームを置いて焼き、境目にキーフレームが無ければ境目を指して
+         * ソフトウェアで焼き直す** (cm-cut.ts)。偽の ffmpeg ではキーフレームが読めない (ffprobe が無い) ので、
+         * 焼き直しまで進み、それでも切れずにチャプターに落ちる。境目 (300 秒・360 秒) を 1ms 手前で指していること
+         */
+        const id = (await recording.getAttribute('data-recording-id')) ?? '';
+        const mine = new RegExp(`-${id}\\.m2ts$`);
+        const runs = existsSync(stack.encodeArgsFile)
+            ? readFileSync(stack.encodeArgsFile, 'utf8')
+                  .split('---\n')
+                  .map((run) => run.split('\n'))
+                  .filter((run) => run.some((a) => a.endsWith('.encoding')))
+                  .filter((run) => run.some((a, i) => run[i - 1] === '-i' && mine.test(a)))
+            : [];
+        const keyframes = runs.map((run) => run[run.indexOf('-force_key_frames:v') + 1]);
+        expect(keyframes).toEqual(['scd_metadata', '299.999,359.999']);
+        expect(runs[1]).toContain('libsvtav1');
     });
 });
 
@@ -304,5 +325,44 @@ test.describe('エンコードしない', () => {
         await page.getByTestId('codec-av1').check();
         await page.getByTestId('save-recording').click();
         await expect(page.getByTestId('saved-result')).toBeVisible();
+    });
+});
+
+test.describe('CM検出のやり直し', () => {
+    test.afterEach(async ({ request }) => {
+        await setRecording(request);
+    });
+
+    /*
+     * **CM 検出だけやり直す** (詳細の「その他…」)。焼き直さずに CM を探し直して、焼いたもののチャプターを
+     * 書き直す (`encoder.runCmJob`)。CM を探さずに焼いた録画で押せば、探した結果が入る。
+     * 生TSは焼き終えると消える設定 (既定) なので、焼いたものから読む
+     */
+    test('CM検出だけやり直せる (焼き直さない)', async ({ page, request }) => {
+        test.setTimeout(180_000);
+        await setRecording(request, { cmCut: 'off' });
+        const { id, libraryPath } = await recordOne(page, request);
+        const row = page.locator(`[data-testid="recording-row"][data-recording-id="${id}"]`);
+        expect(await row.getAttribute('data-cm-ranges')).toBeNull();
+
+        await setRecording(request, { cmCut: 'chapter' });
+        await goto(page, '/');
+        await row.getByTestId('detail-button').click();
+        const detail = page.getByTestId('program-detail');
+        await detail.getByTestId('detail-more').click();
+        await detail.getByTestId('cm-redo-button').click();
+
+        // 焼くジョブと同じ待ち行列に並ぶ。終われば CM が入り、置き場所は変わらない (焼き直していない)
+        await expect
+            .poll(
+                async () => {
+                    await goto(page, '/');
+                    return row.getAttribute('data-cm-ranges');
+                },
+                { timeout: 60_000, intervals: [500] },
+            )
+            .toContain('300');
+        await waitWatchable(page, row);
+        expect(await row.getAttribute('data-library-path')).toBe(libraryPath);
     });
 });

@@ -14,12 +14,13 @@ import { expect, goto, reserveSoon, setRecording, syncEpg, test, waitWatchable }
  * 焼くときに偽 ffmpeg へ渡された引数、1回ぶんずつ。**書き途中の名前 (`.encoding`) へ
  * 出しているものだけ** — サムネイルなど、同じ道を通る他の呼び出しは省く。
  *
- * **この録画のぶんだけ。** 入力は生TS (`…-<録画の番号>.m2ts`、切り出したものもこれが頭)。
- * 同じワーカーの前のテストが残した予約が録れて焼かれると、そのぶんまで混ざっていた (CI)
+ * **この録画のぶんだけ。** 入力は生TS (`…-<録画の番号>.m2ts`)。
+ * 同じワーカーの前のテストが残した予約が録れて焼かれると、そのぶんまで混ざっていた (CI)。
+ * 名前の尻で合わせる — 焼いたものにチャプターを書き足すとき (`-c copy`) の `<生TS>.chapters.txt` を拾わないように
  */
 function encodeRuns(file: string, recordingId: string | null): string[][] {
     if (!existsSync(file)) return [];
-    const mine = new RegExp(`-${recordingId}\\.m2ts`);
+    const mine = new RegExp(`-${recordingId}\\.m2ts$`);
     return readFileSync(file, 'utf8')
         .split('---\n')
         .filter((run) => run.trim() !== '')
