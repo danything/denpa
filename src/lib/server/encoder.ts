@@ -1506,6 +1506,11 @@ async function runJob(jobId: number): Promise<void> {
          */
         const working = `${encodedPath(recording, codec)}.${jobId}.${codec}.encoding`;
         const first = index === 0;
+        /*
+         * **2本目は段階をエンコードに戻す。** 1本目の後の「CMの境目を決めています」(cm)・
+         * 「CMを切っています」(cut) が残ったままだと、焼いている間ずっと「CM検出中」と出ていた
+         */
+        if (!first) setPhase(jobId, 'encode', `${codec} でエンコードしています`);
         // 切るのは CM を探せるときだけ (支度で転んだら CM 無しで焼く。音だけで決めたら切らない)
         const cutting = mode === 'cut' && reading !== null && cuttable;
 
