@@ -41,7 +41,21 @@ export interface Episode {
      * 揃えば同じ回の決め手にするが、食い違っても別の回とはしない (`sameEpisode`)
      */
     inferred: boolean;
+    /**
+     * 概要を均したもの。短いもの (`SUMMARY_MIN` 文字未満) は空。局を替えても概要はそのまま
+     * 流れることが多く、話数と概要がぴったり同じなら、題名の飾りや副題が違っても同じ回とみる (`sameSummary`)
+     */
+    summary: string;
 }
+
+/** 回の決め手にする概要の長さ。短いものはどの回にも当たりやすい */
+const SUMMARY_MIN = 30;
+
+/**
+ * 局が作品名の頭に付ける枠の名前 (`アニメA・貸した魔力は…` `ドラマ・天狗の台所`)。
+ * 「・」で始まる頭はほかにも多い (`新・BS日本のうた` `続・深夜食堂` `ザ・ミステリー`) ので決め打ち
+ */
+const SLOT = /^(?:アニメ|ドラマ)[A-Za-z]?・/;
 
 const KANJI_DIGITS = '〇一二三四五六七八九';
 const NUMERAL = `\\d{1,4}|[${KANJI_DIGITS}十百]{1,5}`;
@@ -167,7 +181,8 @@ export function episodeOf(program: Described): Episode | null {
     }
     // ARIB の囲み文字 (🈑🈞) は局によって付いたり付かなかったりする
     const bare = (text: string) => text.replace(/[\u{1F210}-\u{1F23B}]/gu, ' ');
-    const series = bare(`${parsed.series} ${parsed.arc}`);
+    const work = parsed.series.replace(SLOT, '') || parsed.series;
+    const series = bare(`${work} ${parsed.arc}`);
     const words = series
         .split(/[\s[\]【】<>()〈〉《》≪≫]+/)
         .map(squash)
@@ -175,13 +190,19 @@ export function episodeOf(program: Described): Episode | null {
     const core = words.reduce((longest, word) => (word.length > longest.length ? word : longest), '');
     return {
         series: squash(series),
-        work: squash(bare(parsed.series)),
+        work: squash(bare(work)),
         arc: squash(bare(parsed.arc)),
         core,
         number,
         subtitle,
         inferred,
+        summary: summaryOf(program.description),
     };
+}
+
+function summaryOf(description: string): string {
+    const summary = squash(description ?? '');
+    return summary.length >= SUMMARY_MIN ? summary : '';
 }
 
 /**
@@ -190,6 +211,25 @@ export function episodeOf(program: Described): Episode | null {
  */
 function sameSeries(a: Episode, b: Episode): boolean {
     return a.series === b.series || (a.work === b.work && (a.arc === '' || b.arc === ''));
+}
+
+/** シリーズ名の中の数字 (`汚職特捜班 5` の 5)。期の数字のことが多い */
+const digits = (text: string) => text.match(/\d+/g)?.join(' ') ?? '';
+
+/**
+ * 話数と概要がぴったり同じか (`Episode.summary`)。シリーズ名は同じか、片方がもう片方を
+ * そっくり含むもの (`【釣りの日SP】ロンブー亮の…` と `ロンブー亮の…`) だけ。芯だけ重なるものは
+ * 除く — 曜日ごとの枠 (`… Monday #4` と `… Tuesday #4`) が同じ番組紹介を持つ。
+ * 話数の無いもの、確かな副題が食い違うもの、シリーズ名の数字が違うもの
+ * (`汚職特捜班 5 #6` と `汚職特捜班 6 #6` が「エピソード6」+ 番組紹介 の同じ概要を持つ) も除く
+ */
+function sameSummary(a: Episode, b: Episode): boolean {
+    if (a.number === null || a.number !== b.number || a.summary === '' || a.summary !== b.summary)
+        return false;
+    if (a.subtitle !== '' && b.subtitle !== '' && a.subtitle !== b.subtitle && !a.inferred && !b.inferred)
+        return false;
+    if (a.series !== b.series && digits(a.series) !== digits(b.series)) return false;
+    return sameSeries(a, b) || a.series.includes(b.series) || b.series.includes(a.series);
 }
 
 /**
@@ -207,11 +247,16 @@ function sameSeries(a: Episode, b: Episode): boolean {
  * 同じ (`sameSeries`) ものを同じ回とみる。確かでない副題 (`Episode.inferred`) が
  * 食い違うときも同じ。
  *
+ * **話数と概要がぴったり同じなら** (`sameSummary`)、飾りや副題の有無が違っても同じ回
+ * (`ロンブー亮の釣りならまかせろ! #42` と `【釣りの日SP】ロンブー亮の… #42`)。
+ * 毎週同じ番組紹介を流す番組は、呼ぶ側 (`firstAirings`) が概要を消してから渡す
+ *
  * **編がどちらにも書いてあって違えば別の回** (`水戸黄門・第36部 #9` と `第37部 #9`)
  */
 export function sameEpisode(a: Episode, b: Episode): boolean {
     if (a.number !== b.number) return false;
     if (a.arc !== '' && b.arc !== '' && a.arc !== b.arc) return false;
+    if (sameSummary(a, b)) return true;
     if (a.subtitle === '' || b.subtitle === '') return sameSeries(a, b);
     // 確かでない副題は、食い違っても副題が無いものとして見る
     if (a.subtitle !== b.subtitle) return (a.inferred || b.inferred) && sameSeries(a, b);
@@ -279,6 +324,9 @@ const overlaps = (a: Airing, b: Airing) => a.start_at < b.end_at && b.start_at <
  * 話数も副題も無い番組は**同じ時刻に同じ題名が流れているときだけ**まとめる
  * (`episodeOf` の注)。
  *
+ * 渡された放送と録画のうち、話数の違う回にも出てくる概要 (毎週同じ番組紹介) は、
+ * 同じ回の決め手 (`sameSummary`) にしない
+ *
  * @param blocked チューナー不足で弾かれている放送 (予約の状態が `conflict`)
  * @param taken 録ったことのある回
  */
@@ -306,6 +354,28 @@ export function firstAirings<T extends Airing>(
         if (list === undefined) numbered.set(at, [{ airing, episode }]);
         else list.push({ airing, episode });
     }
+    // 話数の違う回にも出てくる概要は、毎週同じ番組紹介。回の決め手にしない。
+    // 数字は除いて比べる (「エピソード6」+ 番組紹介 のように話数だけ差し替えるものがある)
+    const template = (summary: string) => summary.replace(/\d+/g, '#');
+    const numbers = new Map<string, Set<number | null>>();
+    const known = [
+        ...[...numbered.values()].flat().map(({ episode }) => episode),
+        ...taken.map((t) => t.episode),
+    ];
+    for (const { summary, number } of known) {
+        if (summary === '') continue;
+        const key = template(summary);
+        const seen = numbers.get(key);
+        if (seen === undefined) numbers.set(key, new Set([number]));
+        else seen.add(number);
+    }
+    const generic = (e: Episode) => e.summary !== '' && numbers.get(template(e.summary))!.size > 1;
+    for (const list of numbered.values())
+        for (const entry of list)
+            if (generic(entry.episode)) entry.episode = { ...entry.episode, summary: '' };
+    const recorded = taken.map((t) =>
+        generic(t.episode) ? { ...t, episode: { ...t.episode, summary: '' } } : t,
+    );
 
     /** 束ねたものから録る1本 (弾かれていれば次も) を選び、残りを録らないことにする */
     function settle(cluster: T[]): void {
@@ -323,7 +393,7 @@ export function firstAirings<T extends Airing>(
 
     for (const list of numbered.values()) {
         for (const cluster of episodes(list)) {
-            const done = taken.find((t) => cluster.some(({ episode }) => sameEpisode(t.episode, episode)));
+            const done = recorded.find((t) => cluster.some(({ episode }) => sameEpisode(t.episode, episode)));
             if (done !== undefined) {
                 const { start_at, service_name } = done;
                 for (const { airing } of cluster)
@@ -360,9 +430,10 @@ function episodes<T>(list: { airing: T; episode: Episode }[]): { airing: T; epis
     // ただし確かでない副題どうしが食い違うなら、確かとはしない (相手が1つに決まるときだけ繋ぐ)
     const blank = (e: Episode) => e.subtitle === '' || e.inferred;
     const sure = (a: Episode, b: Episode) =>
-        a.subtitle !== '' && a.subtitle === b.subtitle
+        sameSummary(a, b) ||
+        (a.subtitle !== '' && a.subtitle === b.subtitle
             ? sameEpisode(a, b)
-            : (a.subtitle === '' || b.subtitle === '') && blank(a) && blank(b) && a.series === b.series;
+            : (a.subtitle === '' || b.subtitle === '') && blank(a) && blank(b) && a.series === b.series);
     const group = list.map((_, i) => i);
     const root = (i: number): number => {
         let at = i;

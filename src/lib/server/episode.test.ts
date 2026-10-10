@@ -240,6 +240,41 @@ describe('同じ回の見分け', () => {
         ).toBe(true);
         expect(same('テストドラマ 第2話★主演A', 'テストドラマ 第2話★主演A ドラマ特')).toBe(true);
     });
+
+    test('頭の「アニメA・」「ドラマ・」は枠の名前', () => {
+        // テレ朝は副題を出さず枠の名前 (【ヌマニメーション】)、BS朝日は頭に「アニメA・」
+        expect(
+            same(
+                '貸した魔力は【リボ払い】で強制徴収 #2【ヌマニメーション】[字]',
+                '[字]アニメA・貸した魔力は【リボ払い】で強制徴収 #2「契約」',
+            ),
+        ).toBe(true);
+        expect(same('ドラマ・テストドラマ #3', 'テストドラマ #3')).toBe(true);
+        // ほかの「・」は作品名のうち
+        expect(same('新・テスト番組 #3', 'テスト番組 #3')).toBe(false);
+        expect(same('続・テストドラマ #3', 'テストドラマ #3')).toBe(false);
+    });
+
+    test('話数と概要がぴったり同じなら、題名の飾りが違っても同じ回', () => {
+        const summary =
+            '「釣りの裾野を広げる!」をモットーに、様々な釣りをご紹介!第42話 マダイ釣りならまかせろ!';
+        const [one, sp] = ['テスト釣り番組 #42', '【釣りの日SP】テスト釣り番組 #42'];
+        expect(same(one, sp, [summary, summary])).toBe(true);
+        expect(same(one, sp)).toBe(false);
+        // 短い概要は決め手にしない
+        expect(same(one, sp, ['マダイ釣り', 'マダイ釣り'])).toBe(false);
+        // 話数が違えば別の回
+        expect(same(one, '【釣りの日SP】テスト釣り番組 #43', [summary, summary])).toBe(false);
+    });
+
+    test('概要が同じでも、名前の芯しか重ならない枠・数字の違うシリーズ・食い違う副題は別の回', () => {
+        const blurb = '芸人たちの動画チャンネルから、毎日更新し続ける厳選動画を芸人たちが紹介する番組です。';
+        expect(same('テスト大賞 Monday #4', 'テスト大賞 Tuesday #4', [blurb, blurb])).toBe(false);
+        const series =
+            'エピソード6\n汚職特捜班が、不正に手を染めた汚職警官に立ち向かう、英国のクライムドラマ!';
+        expect(same('テスト特捜班 5 #6', 'テスト特捜班 6 #6', [series, series])).toBe(false);
+        expect(same('テストアニメ #1「はじまり」', 'テストアニメ #1「別の話」', [blurb, blurb])).toBe(false);
+    });
 });
 
 describe('captioned', () => {
@@ -441,5 +476,50 @@ describe('firstAirings', () => {
         const other = airing('テストアニメ #1「別の話」', base + DAY);
         const bare = airing('テストアニメ #1', base + 2 * DAY);
         expect(kept([one, decorated, other, bare])).toEqual([one.id, other.id, bare.id]);
+    });
+
+    test('テレ朝と BS朝日 (アニメA・) の同じ回は早いほうだけ。録画済みの回も外す', () => {
+        const description =
+            'ギフト妖精エムピーの導きで、レントはガイたちにスキル【強制徴収】を発動。笑顔の裏に…“魔力リボ払い"で…。';
+        const ex = airing('貸した魔力は【リボ払い】で強制徴収 #2【ヌマニメーション】[字]', base, {
+            description,
+        });
+        const bs = airing('[字]アニメA・貸した魔力は【リボ払い】で強制徴収 #2「契約」', base + DAY, {
+            type: 'BS',
+            description,
+        });
+        expect(kept([ex, bs])).toEqual([ex.id]);
+        const recorded = episodeOf({
+            name: '[新]貸した魔力は【リボ払い】で強制徴収 #1【ヌマニメーション】[字]',
+            description: '',
+            extended: null,
+        })!;
+        const first = airing('[字][新]アニメA・貸した魔力は【リボ払い】で強制徴収 #1「追放」', base, {
+            type: 'BS',
+        });
+        const taken = [{ episode: recorded, start_at: base - DAY, service_name: 'テレビ朝日' }];
+        expect(firstAirings([first], new Set(), taken).get(first.id)?.kind).toBe('recorded');
+    });
+
+    test('毎週同じ番組紹介は概要が揃っても決め手にしない', () => {
+        const blurb =
+            '「釣りの裾野を広げる!」をモットーに、様々な釣りをご紹介!毎週いろいろな釣りに挑戦します。';
+        const one = airing('テスト釣り番組 #5', base, { description: blurb });
+        const sp = airing('【SP】テスト釣り番組 #5', base + DAY, { description: blurb });
+        expect(kept([one, sp])).toEqual([one.id]);
+        // 別の回 (#6) にも同じ概要が出てくれば、番組紹介とみる
+        const next = airing('テスト釣り番組 #6', base + 7 * DAY, { description: blurb });
+        expect(kept([one, sp, next])).toEqual([one.id, sp.id, next.id]);
+        // 話数だけ差し替えた概要 (「エピソード5」「エピソード6」) も同じ
+        const numbered = (n: number, at: number, name: string) =>
+            airing(name, at, { description: `エピソード${n}\n${blurb}` });
+        const five = numbered(5, base, 'テスト釣り番組 #5');
+        const fiveSp = numbered(5, base + DAY, '【SP】テスト釣り番組 #5');
+        const six = numbered(6, base + 7 * DAY, 'テスト釣り番組 #6');
+        expect(kept([five, fiveSp, six])).toEqual([five.id, fiveSp.id, six.id]);
+        // 録画済みの回に出てきた概要も数える
+        const recorded = episodeOf({ name: 'テスト釣り番組 #4', description: blurb, extended: null })!;
+        const taken = [{ episode: recorded, start_at: base - 7 * DAY, service_name: 'MONDO TV' }];
+        expect(firstAirings([one, sp], new Set(), taken).size).toBe(0);
     });
 });
