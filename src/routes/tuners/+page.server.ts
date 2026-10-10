@@ -4,9 +4,9 @@ import { orm } from '#lib/server/db.js';
 import { CURRENT_SERVICES } from '#lib/server/epg.js';
 import { collectNow, collectState } from '#lib/server/epg-collect.js';
 import { stats as logoStats, sweepNow, sweepState } from '#lib/server/logo.js';
-import { forgetLogoData, learned, stats as learnStats, siblings, stations } from '#lib/server/logo-data.js';
+import { forgetLogoData, learnedAt, stats as learnStats, siblings, stations } from '#lib/server/logo-data.js';
 import { refresh, start, stop } from '#lib/server/scan.js';
-import { LOGO_AREA_AUTO, programs, recordings, services } from '#lib/server/schema.js';
+import { programs, recordings, services } from '#lib/server/schema.js';
 import { cardStatus } from '#lib/server/scramble.js';
 import {
     type AgentTuner,
@@ -21,12 +21,8 @@ import type { ChannelType } from '#lib/types.js';
 interface CmLogo {
     id: number;
     name: string;
-    /** 画面から教えた範囲 ("x,y,w,h")。教えていなければ null */
-    logo_area: string | null;
-    /** 位置を教えるときにコマを出す録画。1本も無ければ null */
-    recording_id: number | null;
-    /** logoframe が既に覚えているか */
-    learned: boolean;
+    /** 覚えたものを最後に書いた時刻。覚えていなければ null */
+    learned_at: number | null;
 }
 
 const TYPES: ChannelType[] = ['GR', 'BS', 'CS'];
@@ -170,7 +166,7 @@ export async function load() {
         /*
          * CM検出のロゴ。**番組表に出す局ロゴとは別物** (logo-data.ts)。
          *
-         * 覚えられなかった局はここで位置を教える。**録画の詳細ではなく局の話**
+         * 覚えたものを確かめて、違っていれば捨てる。**録画の詳細ではなく局の話**
          * なので、局を並べているこの画面に置く
          */
         cmLogos: cmLogoState(),
@@ -179,96 +175,35 @@ export async function load() {
 }
 
 /**
- * 局ごとの、CM検出ロゴの覚え具合。教えるときのコマは直近の録画から出す。
- *
- * **録画は `services.id` で引く。** `recordings.service_id` に入っているのは
- * denpa の内部ID (3239123608) で、`services.service_id` の ARIB のサービスID
- * (23608) とは別物。突き合わせる相手を間違えていた頃は**どの局も1本も
- * 見つからず**、全部の局が「位置を教えるにはこの局の録画が1本要ります」に
- * なっていた (実機で、録画が3本ある TOKYO MX1 でもそう出ていた)。
+ * 局ごとの、CM検出ロゴの覚え具合。
  *
  * **いま選局できる局だけ**にする。数え上げ (`logo-data.stats`) と揃えないと、
  * 「6 / 46 局」と出ている下に 125 局が並ぶ。
  */
 function cmLogoState(): CmLogo[] {
     const rows = orm()
-        .select({
-            id: services.id,
-            network_id: services.network_id,
-            name: services.name,
-            logo_area: services.logo_area,
-            /**
-             * その局の、いちばん新しい現存の録画 (枠を囲うのに絵を出す)。
-             *
-             * **外の局は `services.id` と書き切る** (`${services.id}` にしない)。表が1つの
-             * select では drizzle が列を `"id"` とだけ書くので、副問い合わせの中では
-             * **録画の id を指してしまい**、どの局も録画が0本に見えていた (囲う口が出ない)
-             */
-            recording_id: sql<number | null>`(SELECT r.id FROM recordings r
-                 WHERE r.service_id = services.id AND r.deleted_at IS NULL
-                 ORDER BY r.id DESC LIMIT 1)`,
-        })
+        .select({ id: services.id, network_id: services.network_id, name: services.name })
         .from(services)
         .where(and(eq(services.service_type, 1), sql.raw(CURRENT_SERVICES)))
         .orderBy(sql`${services.remote_control_key} IS NULL`, services.remote_control_key, services.id)
         .all();
     // 同じ絵を映しているサブチャンネルの枠は束ねる (実機で「TOKYO MX1」が2つ並んでいた)
-    return stations(rows).map((service) => ({ ...service, learned: learned(service.id) }));
-}
-
-/**
- * 教えたロゴの位置を置く (null で自動に戻す)。同じ絵を映しているサブチャンネルの枠にも
- * 同じことをする (`logo-data.stations`)。覚えたロゴも捨てる — 残っていると効かない
- */
-function setLogoArea(serviceId: number, area: string | null): void {
-    for (const id of [serviceId, ...siblings(serviceId)]) {
-        orm()
-            .update(services)
-            .set({ logo_area: area, logo_area_auto: LOGO_AREA_AUTO.human })
-            .where(eq(services.id, id))
-            .run();
-        forgetLogoData(id);
-    }
+    return stations(rows).map((service) => ({
+        id: service.id,
+        name: service.name,
+        learned_at: learnedAt(service.id),
+    }));
 }
 
 export const actions = {
     /**
-     * 局ロゴの位置を覚える。
+     * 覚えたロゴを捨てる。
      *
-     * CM検出 (jls) で logoframe が自分で見つけられなかった局だけ、画面から
-     * 囲ってもらう。局ごとの設定なので、次にその局を掴んだときから効く。
+     * 自動の割り出しが拾うのは「画面の隅で線の向きが毎コマ揃うこと」だけなので、
+     * ロゴではないもの (番組がずっと出しているテロップの飾り、常時出ている枠) を
+     * 覚えることがある。
      *
-     * **覚え込んだロゴも一緒に捨てる。** `-logo-area` はロゴを覚えるときにしか
-     * 効かないので、既に覚えているものが残っていると教え直しても使われない
-     * (合致率が落ちるまで作り直さない)
-     */
-    logoArea: async ({ request }) => {
-        const form = await request.formData();
-        const serviceId = Number(form.get('serviceId'));
-        const area = String(form.get('area') ?? '').trim();
-        if (!Number.isFinite(serviceId)) return fail(400, { message: '局IDが不正です' });
-        // logoframe に渡す形。数字4つ以外は受けない
-        if (!/^\d+,\d+,\d+,\d+$/.test(area)) {
-            return fail(400, { message: 'ロゴの範囲を囲ってください' });
-        }
-        setLogoArea(serviceId, area);
-        return {
-            success: true,
-            done: `ロゴの位置を保存しました (${area})。次にこの局を受信したとき、この範囲でロゴを覚え直します`,
-        };
-    },
-
-    /**
-     * 覚えたロゴを捨てる。**位置は教えないまま。**
-     *
-     * 自動探索が拾うのは「画面の隅にずっと同じ縁があること」だけなので、
-     * ロゴではないもの (字幕の下地、常時出ている枠) を覚えることがある。
-     * 実機の NHK総合 は文字の判読できない染みを覚えていた。
-     *
-     * 捨てれば、**次にその局を録ってエンコードしたときに覚え直します**
-     * (`cm-jls`)。在り処もそのとき絵から割り出すので (`logo-area`)、
-     * 自動探索が外していた局はここで直ります。それでも駄目な局だけ、
-     * 下で位置を教える
+     * 捨てれば、**次にその局を録ってエンコードしたときに一から覚え直します** (`logo-own`)
      */
     logoForget: async ({ request }) => {
         const form = await request.formData();
@@ -277,14 +212,6 @@ export const actions = {
         // 同じ絵を映しているサブチャンネルの枠にも配ってある (`logo-data.share`)
         for (const id of [serviceId, ...siblings(serviceId)]) forgetLogoData(id);
         return { success: true, done: '覚えたロゴを消しました。次にこの局を録画したときに覚え直します' };
-    },
-
-    logoAreaClear: async ({ request }) => {
-        const form = await request.formData();
-        const serviceId = Number(form.get('serviceId'));
-        if (!Number.isFinite(serviceId)) return fail(400, { message: '局IDが不正です' });
-        setLogoArea(serviceId, null);
-        return { success: true, done: 'ロゴの位置を自動に戻しました' };
     },
 
     /**

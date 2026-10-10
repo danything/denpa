@@ -55,7 +55,6 @@
       "matchDepNames": [
         "https://github.com/tobitti0/dtvindex",
         "https://github.com/tobitti0/chapter_exe",
-        "https://github.com/tobitti0/logoframe",
         "yobibi/join_logo_scp"
       ],
       "groupName": "CM検出 (join_logo_scp 一式)"

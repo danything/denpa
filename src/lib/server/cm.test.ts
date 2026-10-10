@@ -19,7 +19,7 @@ import {
     shiftRanges,
     widenKeep,
 } from './cm';
-import { cmRatio, logoFailure, parseLogoFrames, parseTrimRanges, tooMuchCm } from './cm-jls';
+import { cmRatio, parseLogoFrames, parseTrimRanges, tooMuchCm } from './cm-jls';
 
 describe('parseSilences', () => {
     test('silencedetect のログから無音区間と尺を取る', () => {
@@ -422,14 +422,14 @@ describe('join_logo_scp の出力', () => {
     });
 });
 
-describe('ロゴの位置を教える口を出すか', () => {
-    test('CM検出の覚え書きから決める。別の印は持たない', async () => {
-        const { logoUnusable } = await import('../format');
+describe('ロゴで判定できなかったと扱うか', () => {
+    test('CM検出の覚え書きから決める。別の印は持たない', () => {
         /*
          * 実機に残っていた文言。印を別に持っていた頃は、後から条件を広げても
          * 既に録ってある分には効かなかった
          */
         expect(logoUnusable('無音 8 箇所 (jls は使えず: logoframe が失敗 (code 1): ...)')).toBe(true);
+        expect(logoUnusable('無音 8 箇所 (jls は使えず: ロゴ判定が失敗 (code 1): ...)')).toBe(true);
         expect(logoUnusable('無音 30 箇所 (jls は使えず: 結果の 100% がCM判定なので使いません)')).toBe(true);
         // ロゴで判定できている。ここで出すと、直しようのないものまで拾う
         expect(logoUnusable('join_logo_scp')).toBe(false);
@@ -438,45 +438,14 @@ describe('ロゴの位置を教える口を出すか', () => {
     });
 });
 
-describe('logoframe が降りたときの覚え書き', () => {
-    const area = {
-        code: 1,
-        stderr: 'managed logo: …\nerror: Insufficient frames with a uniform background around the logo\n',
-    };
-    const bare = {
-        code: 1,
-        stderr: 'error: Automatic logo position detection found no persistent edge; specify -logo-area x,y,w,h\n',
-    };
-
-    test('枠を渡していなければ、そのときの理由', () => {
-        expect(logoFailure(bare, null)).toBe(
-            'logoframe が失敗 (code 1): error: Automatic logo position detection found no persistent edge; specify -logo-area x,y,w,h',
-        );
-    });
-
-    /*
-     * 実機の BSテレ東。位置を教えてあっても「枠を渡せ」とだけ残っていて、
-     * 渡した枠がなぜ駄目だったのかが分からなかった
-     */
-    test('枠ありでも枠なしでも転んだら、枠を渡したときの理由を先に書く', () => {
-        const note = logoFailure(bare, { area: '1233,21,207,63', step: area });
-        expect(note).toStartWith(
-            'logoframe が失敗 (code 1): 枠 1233,21,207,63 では error: Insufficient frames with a uniform background',
-        );
-        expect(note).toContain('/ 枠なしでは error: Automatic logo position detection');
-        // 位置を教える口は出したまま
-        expect(logoUnusable(`無音 36 箇所 (jls は使えず: ${note})`)).toBe(true);
-    });
-});
-
 /*
- * join_logo_scp が本編とCMに分けられなかったときの受け皿。logoframe は
+ * join_logo_scp が本編とCMに分けられなかったときの受け皿。ロゴ判定は
  * 「どのコマにロゴが出ているか」を別に出しているので、その在り処を裏返せば
  * それだけでCMになる。実機の TOKYO MX の録画がこれで、無音検出に落ちて
  * 本編を60秒ぶん取り違えていた
  */
 describe('ロゴの写っているコマ', () => {
-    // 実機の logoframe が出したもの (末尾の列は使わない)
+    // 実機の logoframe が出したもの (自前のロゴ判定も同じ形で書く。末尾の列は使わない)
     const output = [
         '   284 S 0 BTM    284    284',
         '  3280 E 0 TOP   3280   3280',

@@ -173,7 +173,7 @@ describe('実体との照合', () => {
     }
 
     /*
-     * chapter_exe と logoframe は TS を直接読むのに dtvindex の索引を作り、
+     * chapter_exe は TS を直接読むのに dtvindex の索引を作り、
      * `<入力>.dtvi` に置く。生TSを残さない設定だと TS が消えたあとも索引だけが
      * 居座り、録るたびに3MBずつ積もる (実機で9本 22MB)
      */

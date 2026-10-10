@@ -158,7 +158,7 @@ function settling(path: string, at: number): boolean {
  *
  * 付き添いは**動画と同じ名前で隣に置く**決まりなので、名前から連れ合いが分かる。
  *
- * - `<動画>.dtvi` … chapter_exe / logoframe が作る索引 (1本3MB)
+ * - `<動画>.dtvi` … chapter_exe が作る索引 (1本3MB)
  * - `<動画>.sup` `<動画>.jls…` … 字幕とCM検出の作業ファイル
  * - `<動画から拡張子を取ったもの>-poster.jpg` / `.bml.jsonl` … サムネイルと録画のデータ放送。
  *   `.nfo` `.ja.ass` `-thumb.jpg` は昔の名残 (いまは作らない)

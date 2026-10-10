@@ -555,7 +555,7 @@ export function firstFrameTime(output: string): number {
  * 始まり、頭のコマは参照先が録れていないためです。焼いたものの 0 秒はその1コマ
  * (ふつうは I。閉じた GOP なら I の前の B から出る。実機で1本)。
  *
- * ところが**CM 検出は捨てません。** logoframe / chapter_exe は dtvindex の索引で
+ * ところが**CM 検出は捨てません。** chapter_exe は dtvindex の索引で
  * TS の**映像パケットを全部**表示の順に並べて頭から数え、その番号を `番号 ÷ fps` で
  * 秒に直す (`cm-jls.ts`)。焼いたものより捨てたコマぶんだけ先に進んでいる。
  *
@@ -627,12 +627,8 @@ export interface CmDetection {
 
 export interface CmOptions {
     signal?: AbortSignal;
-    /** 局名。logoframe に渡すとこの名前でロゴを覚える */
-    channel?: string;
     /** 局のID。覚えたロゴの置き場を局ごとに分けるのに使う */
     serviceId: number;
-    /** 手で教えてもらったロゴの位置 ("x,y,w,h") */
-    area?: string;
     /** 無音検出の進み具合 */
     onProgress?: (percent: number) => void;
     /** jls の中でいま何をしているか。段階の名前だけでは進み具合が分からない */
@@ -670,7 +666,7 @@ export async function detectCm(input: string, options: CmOptions): Promise<CmDet
      * 落ちた理由まで書く。「無音 8 箇所」とだけ出していた頃は、jls を選んで
      * いるのになぜ無音検出になったのかが画面から分からなかった。
      *
-     * **この文言から「ロゴの位置を教える口を出すか」を決める** (format.logoUnusable)。
+     * **この文言から「ロゴで判定できなかった」と画面に出すかを決める** (format.logoUnusable)。
      * 別の列で持っていた頃は、後から条件を広げても既に録ってある分に効かなかった
      */
     const note = `無音 ${silences.length} 箇所`;

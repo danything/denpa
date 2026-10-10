@@ -2,15 +2,14 @@ import { error } from '@sveltejs/kit';
 import { readLearnedLogo } from '#lib/server/logo-data.js';
 
 /**
- * その局について logoframe が**覚えたロゴ**を絵にして返す。
+ * その局について CM検出のために**覚えたロゴ**を絵にして返す。
  *
  * 番組表に出すロゴ (`/api/services/<id>/logo`) とは別物。あちらは放送波から
  * 拾った局のマークで、こちらは「画面のどこにロゴが出ているか」を録画から
- * 学習したもの。覚えているものが絵になっていない (ロゴではない縁を拾った) とき、
- * それを確かめる手立てが無かったので出す。
+ * 覚えたもの。覚えているものが絵になっていない (ロゴではない縁を拾った) とき、
+ * それを確かめる手立てが要る。
  *
- * 濃さをそのまま明るさにした白黒。原寸は小さいので (実機の TOKYO MX で 48×158)、
- * 出す側で拡大する。
+ * 線の向きの揃い方を明るさにした白黒 (縁が白)。原寸は小さいので、出す側で拡大する。
  */
 export function GET({ params }) {
     const logo = readLearnedLogo(Number(params.serviceId));
@@ -19,12 +18,8 @@ export function GET({ params }) {
     return new Response(new Uint8Array(logo.png), {
         headers: {
             'Content-Type': 'image/png',
-            // 覚え直すまで中身は変わらないが、覚え直したらすぐ見たい
+            // 焼くたびに書き直す。画面は書いた時刻を URL に付けて取り直す
             'Cache-Control': 'no-cache',
-            /*
-             * いつ覚えたか。「CM判定に失敗」の記録より新しければ、その失敗は別のロゴのもの。
-             * 枠と濃さは渡さない — 見ても判断の材料にならなかった
-             */
             'X-Logo-Learned-At': String(logo.learnedAt),
         },
     });

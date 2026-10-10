@@ -25,7 +25,7 @@ import { config } from './config';
 import { run } from './stream';
 
 /**
- * **自前のロゴ判定** (`CM_LOGO=own`)。logoframe と同じ形の「ロゴが写っているコマ」を書く。
+ * **局ロゴの判定。** join_logo_scp が読む形 (logoframe の `-oa` と同じ) で「ロゴが写っているコマ」を書く。
  *
  * 覚え方と当て方は [logo-detect.ts](../ts/logo-detect.ts)。ここはコマを抜いて渡すところと、
  * 覚えたものの置き場です。
@@ -35,8 +35,8 @@ import { run } from './stream';
  * 2. **当てる** — ロゴの枠だけを全部のコマで切り出して点を付け、区間にする。
  *    ついでに散らしたコマを足して、覚えたものを育てる
  *
- * 覚えたものは `.lgd` と同じ局ごとの入れ物に、コマの大きさごとに置く (`logoRepo`・`modelFile`)。位置を教え直したときや
- * 「この絵は違う」で丸ごと捨てると、こちらも一緒に消える。
+ * 覚えたものは局ごとの入れ物に、コマの大きさごとに置く (`logo-data.logoRepo`・`modelFile`)。
+ * 「この絵は違う」で入れ物ごと捨てると、次の録画で一から覚える。
  */
 
 /**
@@ -51,8 +51,13 @@ const LEARN_FRAMES = 600;
 const GROW_EVERY = 90;
 
 export interface OwnResult {
-    /** 0 で書けた。それ以外は logoframe が降りたときと同じ扱いにする */
+    /** 0 で書けた。それ以外は無音検出に落とす */
     code: number;
+    /**
+     * この回に覚えて持ち帰ったもの (同じ絵の局へ配る合図。`logo-data.share`)。
+     * `again` は覚えていたものが当たらず覚え直した (局がロゴを替えた) とき
+     */
+    learned: { file: string; again: boolean } | null;
     /** 覚え書き (落ちたときの理由 / 通ったときの要約) */
     stderr: string;
     /** 実測用の内訳 (ms)。覚える・当てる・そのうちロゴの計算そのもの */
@@ -95,14 +100,6 @@ function overlaps(a: Rect, b: Rect): boolean {
     return a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height;
 }
 
-/** `x,y,w,h` を枠に。読めなければ `null` */
-function parseArea(text: string | undefined): Rect | null {
-    const m = /^(\d+),(\d+),(\d+),(\d+)$/.exec(text ?? '');
-    if (m === null) return null;
-    const [x, y, width, height] = m.slice(1).map(Number) as [number, number, number, number];
-    return width > 0 && height > 0 ? { x, y, width, height } : null;
-}
-
 type Probed = Awaited<ReturnType<typeof probeVideo>>;
 
 /** 1回ぶんの材料 */
@@ -110,7 +107,6 @@ interface Job {
     input: string;
     probed: Probed;
     fps: number;
-    area: string | undefined;
     signal: AbortSignal | undefined;
     deadline: number;
     timing: OwnResult['timing'];
@@ -179,15 +175,7 @@ async function learn(job: Job): Promise<LogoModel | string> {
     job.timing.learn += performance.now() - started;
     if (result.code !== 0) return `覚えるためのコマが抜けませんでした (code ${result.code})`;
 
-    let rect = findArea({ top, bottom }, width, height);
-    if (rect === null) {
-        // 割り出せなければ、画面で教わった枠を使う (帯の中にあるときだけ)
-        const taught = parseArea(job.area);
-        const inBand = (t: Rect) =>
-            t.x + t.width <= width &&
-            (t.y + t.height <= band || (t.y >= height - band && t.y + t.height <= height));
-        if (taught !== null && inBand(taught)) rect = taught;
-    }
+    const rect = findArea({ top, bottom }, width, height);
     if (rect === null) return 'ロゴの在り処が割り出せませんでした';
     const inTop = rect.y + rect.height <= band;
     const orientation = cropOrientation(inTop ? top : bottom, {
@@ -262,16 +250,16 @@ async function detect(
 /**
  * 録画からロゴを覚え、写っているコマを logoframe の `-oa` と同じ形で `out` に書く。
  *
- * `repo` は局ごとの入れ物、`area` は画面から教わった枠 (自分で割り出せなかったときだけ使う)
+ * `repo` は局ごとの入れ物 (`logo-data.logoRepo`)
  */
 export async function ownLogoFrames(
     input: string,
     out: string,
-    options: { repo: string; area?: string; signal?: AbortSignal | undefined; timeoutMs: number },
+    options: { repo: string; signal?: AbortSignal | undefined; timeoutMs: number },
 ): Promise<OwnResult> {
     const { repo } = options;
     const timing = { learn: 0, detect: 0, compute: 0, frames: 0 };
-    const fail = (stderr: string, code = 1): OwnResult => ({ code, stderr, timing });
+    const fail = (stderr: string, code = 1): OwnResult => ({ code, learned: null, stderr, timing });
 
     let probed: Probed;
     try {
@@ -285,7 +273,6 @@ export async function ownLogoFrames(
         probed,
         // 測れなかったときだけ既定に落とす (cm-jls と同じ)
         fps: Number.isFinite(probed.fps) && probed.fps > 0 ? probed.fps : config.cmJlsFallbackFps,
-        area: options.area,
         signal: options.signal,
         deadline: Date.now() + options.timeoutMs,
         timing,
@@ -294,6 +281,8 @@ export async function ownLogoFrames(
     // 覚えていれば使う。コマの大きさが違うもの (SD と HD) には当てない
     let model = load(repo, probed.width, probed.height);
     let learnedNow = false;
+    /** 覚えていたものが当たらず、この録画から覚え直した */
+    let relearned = false;
     /** 覚え直したものを持ち帰るか。前のロゴと違う所で覚えたなら、この回だけ使って持ち帰らない */
     let keep = true;
     if (model === null) {
@@ -321,6 +310,7 @@ export async function ownLogoFrames(
         keep = overlaps(model.rect, learned.rect);
         model = learned;
         learnedNow = true;
+        relearned = true;
         found = await detect(job, model);
     }
     if (typeof found === 'string') return fail(found);
@@ -338,6 +328,10 @@ export async function ownLogoFrames(
     const share = Math.round((lit / found.frames) * 100);
     return {
         code: 0,
+        learned:
+            learnedNow && keep
+                ? { file: modelFile(model.frameWidth, model.frameHeight), again: relearned }
+                : null,
         stderr: `枠 ${rect.x},${rect.y},${rect.width},${rect.height} 型 ${found.points} 画素 / ロゴ ${share}%${learnedNow ? (keep ? ' (この録画で覚えた)' : ' (この録画だけで覚えた。前の型は残す)') : ''}`,
         timing,
     };
