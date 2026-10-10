@@ -47,7 +47,7 @@ describe('MkvSplitter', () => {
     test('コマと時刻を取り出す', () => {
         const frames = new MkvSplitter().feed(bytes());
         expect(frames.map((f) => f.at)).toEqual([0, 40, 80, 120]);
-        // 中身は PNG そのまま。受け側はこれをそのまま絵にする
+        // 中身はコマそのまま (この見本は PNG)
         for (const frame of frames) {
             expect([...frame.data.subarray(0, 4)]).toEqual([0x89, 0x50, 0x4e, 0x47]);
         }

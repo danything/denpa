@@ -18,7 +18,7 @@ import { run } from './stream';
  * (`cm-decide` の `CUT_MIN`)。CM 検出と同じコマ (インタレ解除の前) で測るので、点も同じになる。
  * 実測は docs/encode.md「CM を切るときは場面の切れ目にキーフレームを置く」
  */
-export const KEY_SCENE = 8;
+const KEY_SCENE = 8;
 
 /**
  * 焼く鎖の頭に足すフィルタ。印 (`lavfi.scd.time`) の付いたコマを `-force_key_frames scd_metadata` が

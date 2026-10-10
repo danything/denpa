@@ -930,10 +930,7 @@ class Session {
         const out = filter === null ? chunk : filter.filter(chunk);
         if (filter !== null) this.tsid = filter.transportStreamId;
         if (out.length === 0) return out;
-        /*
-         * **188 バイトに切るのは1回だけ。** 3つがそれぞれ切っていた頃は、同じ塊を
-         * 3回なめていた (ライブの処理でいちばん重いところだった)
-         */
+        // **188 バイトに切るのは1回だけ** (3つの読み手で使い回す。ライブの処理でいちばん重いところ)
         const receivedAt = Date.now();
         const data = this.data;
         let ait: AitReader | null = null;
@@ -954,9 +951,8 @@ class Session {
     /**
      * エージェントから来た TS を ffmpeg へ。**その局のぶんだけ渡す。**
      *
-     * 録画と同じ絞り方 (`ts/service-filter.ts`)。丸ごと渡していた頃は、局が
-     * 3つ乗っている TS で ffmpeg が局を見つけられずに降りていた (`encodeArgs`
-     * の説明)。
+     * 録画と同じ絞り方 (`ts/service-filter.ts`)。丸ごと渡すと、局が3つ乗っている TS で
+     * ffmpeg が局を見つけられずに降りる (`encodeArgs` の説明)。
      *
      * **量はほとんど減らない。** 実測は tvk で 17.6 → 16.8 Mbit/s、日テレで
      * 17.3 → 14.5 Mbit/s。相乗りしている局は**同じ ES を指している**ことが
@@ -1821,8 +1817,7 @@ type ChaseAsked = {
  * 焼き方は H.264 に、数でないものは 0 に落とす。読めないもの (知らない type、
  * 局の名指しが無い tune) は null で、黙って捨てる。
  *
- * 読むのをここ1箇所にしてある。選局と追っかけで別々に読んでいた頃は、字幕の
- * 取り決めのように**両方に足すもの**が片方だけになりやすかった
+ * 選局と追っかけで読むのをここ1箇所にしてある (両方に足すものが片方だけにならないように)
  */
 function parseCommand(message: Record<string, unknown>): Asked | null {
     const audio = typeof message['audio'] === 'string' ? message['audio'] : undefined;

@@ -4,13 +4,7 @@ import { removeIfExists } from './fsx';
 import { run } from './stream';
 
 /**
- * サムネイルを動画の隣にサイドカーとして置く。
- *
- * 番組情報そのものはDBが持ち、denpa の画面が出す。以前はプレイヤー向けの `.nfo` も
- * 書いて WebDAV 経由のプレイヤー (Nova) に読ませていたが、その道ごとやめた —
- * 手元のプレイヤーには、URL を渡して再生させる (VLC のリモートアクセス /
- * 期限付きの再生リンク)。`.nfo` はもう**書かない**が、置いてあった頃の名前は
- * 片付けのために覚えている (`sidecarPaths` / `removeSidecars`)。
+ * 動画の隣に置くサイドカー。番組情報そのものはDBが持ち、denpa の画面が出す。
  */
 
 /**
@@ -19,40 +13,24 @@ import { run } from './stream';
  * サムネ (`-poster.jpg`) は denpa の画面 (`/api/recordings/<id>/poster`) が配る絵。
  *
  * **字幕は置きません。** 入れ物の中に入っていて、抜くのは実測で0.1〜1秒
- * (`api/recordings/<id>/captions.json`)。置くと動画1本ぶん場所を積む上に、
- * 焼き直しのたびに揃え直すことになる。
- *
- * `nfo` と `subtitle` が残っているのは**片付けるため**。番組情報を `.nfo` に、
- * 文字の写しを `.ja.ass` として置いていた頃のものが、焼き直しても消えずに
- * 残るのを防ぐ
+ * (`api/recordings/<id>/captions.json`)。
  */
-export function sidecarPaths(videoPath: string): {
-    nfo: string;
-    thumbnail: string;
-    subtitle: string;
-    dataBroadcast: string;
-} {
+export function sidecarPaths(videoPath: string): { thumbnail: string; dataBroadcast: string } {
     const base = sidecarBase(videoPath);
     return {
-        nfo: `${base}.nfo`,
         thumbnail: `${base}-poster.jpg`,
-        subtitle: `${base}.ja.ass`,
         // 録画のデータ放送 (再生位置つきの変化ログ)。d ボタンで出す (server/recorded-bml.ts)
         dataBroadcast: `${base}.bml.jsonl`,
     };
 }
 
 /** 付き添いの名前の土台 (動画の拡張子を落としたもの) */
-export function sidecarBase(videoPath: string): string {
+function sidecarBase(videoPath: string): string {
     return videoPath.slice(0, videoPath.length - extname(videoPath).length);
 }
 
-/**
- * 付き添いの接尾辞。**もう作らないもの (`.nfo` / `.ja.ass` / `-thumb.jpg`) も含む** —
- * 前に置いたものが残っているので、片付けと拾い上げ (files.ts の孤児探し) は
- * この一覧で見る。増やすときはここだけ
- */
-export const SIDECAR_SUFFIXES = ['.nfo', '-poster.jpg', '-thumb.jpg', '.ja.ass', '.bml.jsonl'] as const;
+/** 付き添いの接尾辞。片付けと拾い上げ (files.ts の孤児探し) はこの一覧で見る。増やすときはここだけ */
+export const SIDECAR_SUFFIXES = ['-poster.jpg', '.bml.jsonl'] as const;
 
 /**
  * 位置から数えて何コマの中から代表を選ぶか。60コマ/秒の録画で約7.5秒ぶん。

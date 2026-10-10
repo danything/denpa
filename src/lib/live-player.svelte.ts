@@ -25,9 +25,10 @@ import {
 } from '#lib/live.js';
 import { RawEngine } from '#lib/raw/engine.js';
 import { rawUnsupported } from '#lib/raw/support.js';
-import { CLOCK, type Cue, currentCue, insertCue, showing, trimCues } from '#lib/ts/captions.js';
+import { type Cue, currentCue, insertCue, showing, trimCues } from '#lib/ts/captions.js';
 import { pickMediaSource } from '#lib/ts/media-source.js';
 import { CEILING, FLOOR, nextTarget, pacing } from '#lib/ts/pacing.js';
+import { CLOCK } from '#lib/ts/pes.js';
 import { resolve } from '$app/paths';
 
 export type LiveState = 'idle' | 'connecting' | 'playing' | 'error';

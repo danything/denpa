@@ -111,6 +111,39 @@ jobs:
       - name: Conformance
         run: bun run test:conformance
 
+  # asicen-userland (PX-W3U3。試験的) の模擬の asicend と話す。上流はまだリリースが無いので、
+  # 決めたコミットを手元で組んで `asicend --mock` を起こす (AsicenMockTests。機材にもファームウェアにも
+  # 触らない)。**必須チェックにはしない** (上流の取得と組み立てで揺れる・必須の context を増やさない)。
+  # 0.1.0 が出たら配布物を取る形に替える (docs/agent.md)
+  agent-asicen-mock:
+    runs-on: ubuntu-latest
+    env:
+      ASICEN_USERLAND_REF: 2718916cce028055290d5561ffde2df2d0153312
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Checkout asicen-userland
+        uses: actions/checkout@v7
+        with:
+          repository: Khronos31/asicen-userland
+          ref: ${{ env.ASICEN_USERLAND_REF }}
+          path: asicen-userland
+
+      - name: Build asicen-userland (mock)
+        run: |
+          sudo apt-get update && sudo apt-get install -y cmake g++ pkg-config libusb-1.0-0-dev
+          cmake -S asicen-userland -B asicen-build -DCMAKE_BUILD_TYPE=Release
+          cmake --build asicen-build --parallel 4 --target asicend asicenctl
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: '10.0.401'
+
+      - name: Unit tests (.NET agent, asicend --mock)
+        run: ASICEN_USERLAND_DIR="$PWD/asicen-build" dotnet test --project agent/Denpa.Agent.Tests/Denpa.Agent.Tests.csproj --treenode-filter '/*/*/AsicenMockTests/*'
+
   # 入れ方 (install.sh) を Linux で通しで。compose.prod.yml を置いて、本物のイメージを引いて起こし、
   # denpa が答えるまで。最後に外す。**必須チェックにはしない** (イメージを引くので重く、
   # レジストリの機嫌でも揺れる)。compose ファイルはこのコミットのものを取らせる (DENPA_VERSION)

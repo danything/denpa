@@ -1,14 +1,5 @@
-import {
-    copyFileSync,
-    existsSync,
-    mkdirSync,
-    readdirSync,
-    renameSync,
-    rmdirSync,
-    rmSync,
-    unlinkSync,
-} from 'node:fs';
-import { basename, dirname, join } from 'node:path';
+import { copyFileSync, existsSync, mkdirSync, renameSync, rmdirSync, unlinkSync } from 'node:fs';
+import { dirname } from 'node:path';
 import { config } from './config';
 
 /**
@@ -34,24 +25,7 @@ export function removeIfExists(path: string | null | undefined): boolean {
 }
 
 /**
- * `<input><接尾辞>…` の形で始まるものを、同じフォルダから全部消す。
- * 本数の決まらない作業ファイル (CMの区間 `.part0.m2ts` `.part1.m2ts`…) の片付け用。置き場ごと無ければ何もしない
- */
-export function removeByPrefix(input: string, suffixes: readonly string[]): void {
-    const dir = dirname(input);
-    const heads = suffixes.map((suffix) => `${basename(input)}${suffix}`);
-    try {
-        for (const name of readdirSync(dir)) {
-            if (heads.some((head) => name.startsWith(head))) rmSync(join(dir, name), { force: true });
-        }
-    } catch {
-        // 置き場ごと消えていることもある。片付けで録画を止めない
-    }
-}
-
-/**
- * ファイルを消した後に空になったフォルダ (シリーズ、昔の `Season 年/`) を畳む。
- * 残しておくと、フォルダを辿るプレイヤーに中身の無いシリーズが並び続けるため。
+ * ファイルを消した後に空になったフォルダ (シリーズ) を畳む。
  * encodedDir 自身より上には絶対に遡らない。
  */
 export function pruneEmptyDirs(path: string): void {

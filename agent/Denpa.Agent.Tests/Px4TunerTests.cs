@@ -28,9 +28,9 @@ public class Px4TunerTests
     private static readonly byte[] Nonce = [.. Enumerable.Range(1, 16).Select(i => (byte)i)];
 
     /// <summary>周波数から TS の印を作る</summary>
-    private static byte Mark(ulong khz) => (byte)(khz % 251);
+    internal static byte Mark(ulong khz) => (byte)(khz % 251);
 
-    private sealed class FakePx4d : IDisposable
+    internal sealed class FakePx4d : IDisposable
     {
         private readonly Socket _control;
         private readonly Socket _stream;
@@ -71,9 +71,13 @@ public class Px4TunerTests
         /// <summary>最初の流れだけ、これだけ流したら STREAM_END (この番号) で止める</summary>
         public (int Frames, uint Code)? EndFirstStream { get; init; }
 
-        public FakePx4d()
+        /// <summary>どちらのふりをするか (asicend は枠の頭とソケットの置き場だけ違う。AsicenTests)</summary>
+        public Px4Wire Wire { get; }
+
+        public FakePx4d(Px4Wire? wire = null, string id = Id)
         {
-            var dir = Path.Combine(Runtime.FullName, "px4-userland", Id);
+            Wire = wire ?? Px4Wire.Px4;
+            var dir = Path.Combine(Runtime.FullName, Wire.Product, id);
             Directory.CreateDirectory(dir);
             _control = Listen(Path.Combine(dir, "control.sock"));
             _stream = Listen(Path.Combine(dir, "stream.sock"));
@@ -150,10 +154,10 @@ public class Px4TunerTests
             {
                 while (true)
                 {
-                    var (type, _, id, payload) = Px4Control.ReadFrame(client, Px4Control.MaxPayload);
+                    var (type, _, id, payload) = Px4Control.ReadFrame(client, Px4Control.MaxPayload, Wire);
                     lock (Received) Received.Add(type);
                     var (flags, answer) = Answer(type, payload);
-                    Px4Control.SendAll(client, Px4Control.Encode(type, flags, id, answer));
+                    Px4Control.SendAll(client, Px4Control.Encode(type, flags, id, answer, Wire));
                 }
             }
             finally
@@ -233,7 +237,7 @@ public class Px4TunerTests
 
         private void ServeStream(Socket client)
         {
-            var (type, _, id, payload) = Px4Control.ReadFrame(client, Px4Control.MaxPayload);
+            var (type, _, id, payload) = Px4Control.ReadFrame(client, Px4Control.MaxPayload, Wire);
             int attachment;
             ulong khz;
             lock (_gate)
@@ -242,7 +246,7 @@ public class Px4TunerTests
                     && BinaryPrimitives.ReadUInt64LittleEndian(payload) == _lease && payload.AsSpan(8).SequenceEqual(Nonce);
                 if (!good)
                 {
-                    Px4Control.SendAll(client, Px4Control.Encode(Px4Control.AttachStream, 3, id, Error(3)));
+                    Px4Control.SendAll(client, Px4Control.Encode(Px4Control.AttachStream, 3, id, Error(3), Wire));
                     return;
                 }
                 _armed = false;
@@ -250,7 +254,7 @@ public class Px4TunerTests
                 attachment = ++_attachments;
                 khz = _khz;
             }
-            Px4Control.SendAll(client, Px4Control.Encode(Px4Control.AttachStream, Px4Control.ResponseFlag, id, []));
+            Px4Control.SendAll(client, Px4Control.Encode(Px4Control.AttachStream, Px4Control.ResponseFlag, id, [], Wire));
 
             try
             {
@@ -272,13 +276,13 @@ public class Px4TunerTests
                         var body = new byte[68];
                         if (ending) BinaryPrimitives.WriteUInt32LittleEndian(body.AsSpan(64), EndFirstStream!.Value.Code);
                         lock (_gate) if (ending) _active = false;
-                        Px4Control.SendAll(client, Px4Control.Encode(Px4Control.StreamEnd, 0, 0, body));
+                        Px4Control.SendAll(client, Px4Control.Encode(Px4Control.StreamEnd, 0, 0, body, Wire));
                         // 本物と同じく、閉じるのは相手
                         while (client.Receive(new byte[16]) > 0) { }
                         return;
                     }
                     BinaryPrimitives.WriteUInt64LittleEndian(frame, sequence);
-                    Px4Control.SendAll(client, Px4Control.Encode(Px4Control.TsData, 0, 0, frame));
+                    Px4Control.SendAll(client, Px4Control.Encode(Px4Control.TsData, 0, 0, frame, Wire));
                     Thread.Sleep(2);
                 }
             }
@@ -336,7 +340,7 @@ public class Px4TunerTests
         new(Id, 2, null, px4d.Runtime.FullName, () => null) { StallLimit = stallLimit ?? Px4Stream.DefaultStallLimit };
 
     /// <summary>TS を1パケットぶん読んで、その印を返す</summary>
-    private static byte ReadMark(Stream output)
+    internal static byte ReadMark(Stream output)
     {
         var buffer = new byte[188];
         var read = Task.Run(() =>

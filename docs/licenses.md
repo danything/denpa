@@ -60,13 +60,15 @@ denpa-font の `DENPA_COMMIT` を上げて (元に無い字は描き方を足し
 | px4-userland (`/opt/px4-userland`) | PLEX PX-Q3U4 / PX-W3U4 / PX-MLT 系、e-Better / Digibest 系のユーザー空間ドライバ。`px4d` / `px4ctl` (配布物に入っている `px4-ts` と pcscd 用 IFD ハンドラは使わない) | <https://github.com/Khronos31/px4-userland> | **GPL-2.0-only** (実行ファイルに静的リンクの libusb 1.0.30 は LGPL-2.1+。配布物の `THIRD_PARTY_NOTICES.md` を同梱のまま置いてある) |
 | IT930x ファームウェア (`/opt/px4-userland/firmware/it930x-firmware.bin`、2,169 バイト) | 挿すたびに流し込む (px4-userland の対応機種で共通) | PLEX 公式の Windows ドライバ (`pxw3u4_BDA_ver1x64.zip` の `PXW3U4.sys`、著作権表示は Digital Warrior Corp.) から焼くときに切り出す (agent/Dockerfile) | **ライセンス無し** (再配布の許諾は誰も持っていない。権利者が動いていない実態に乗る判断。[agent.md](agent.md#px-q3u4-などは-px4-userland-でカーネルドライバは入れてもらわない)) |
 | siano-userland (`/opt/siano-userland`) | PLEX PX-S1UD など Siano RIO 系のユーザー空間ドライバ。`siano-ts` | <https://github.com/Khronos31/siano-userland> | **GPL-2.0-or-later** (実行ファイルに静的リンクの libusb 1.0.30 は LGPL-2.1+。配布物の `COPYING`・`libusb/COPYING`・`DEPENDENCY-NOTICE.txt` を同梱のまま置いてある) |
+| asicen-userland (`/opt/asicen-userland`。**上流のリリース待ちで、いまは空**) | PLEX PX-W3U3 のユーザー空間ドライバ (試験的)。`asicend` / `asicenctl`、あればファームウェアを流す `asicen-probe` (配布物に入っている `asicen-ts` と pcscd 用 IFD ハンドラは使わない) | <https://github.com/Khronos31/asicen-userland> | **GPL-2.0** (px4-userland 由来の GPL-2.0-only と GPL-2.0-or-later の組み合わせ。静的リンクの libusb は LGPL-2.1+、musl と GCC ランタイムもそれぞれの条件。配布物の `licenses/` を同梱のまま置く) |
+| ASICEN ファームウェア (`/opt/asicen-userland/firmware/asicen-loader.bin`、16,384 バイト。**入るのは上流のリリースから**) | 挿した直後の PX-W3U3 に流し込む | asicen-userland の配布アーカイブに入っているものをそのまま (元は PLEX 公式 Linux ドライバの `loader.ko` の `FirmBin`、SHA-256 `b45d510200a1690b3ca358d93de13f40e1d3567b663c17e773349ad96f597aa8`。焼くときに突き合わせる) | **ライセンス無し・再配布の権利は未確定** (上流 NOTICES.md の判断で配布物に入る。上流が添える `licenses/VENDOR-FIRMWARE-NOTICE.txt` に権利未確定・元の成果物・大きさ・SHA-256 が書いてあり、同じ場所に置いてある。[agent.md](agent.md#px-w3u3-は-asicen-userland-で-試験的上流のリリース待ち)) |
 | Siano ISDB-T ファームウェア (`/opt/siano-userland/firmware/isdbt_rio.inp`、85,840 バイト) | siano-ts が USB で流し込む | siano-userland の配布アーカイブに入っているもの (Siano Mobile Silicon) | **Siano の再配布許諾** (無改変なら再配布可。解析は禁止。許諾の文面 `LICENCE.siano` を同じ場所に置いてある) |
 | procps / curl / zlib / ca-certificates / tzdata | 道具 | Debian | GPL-2.0+ / curl / zlib / MPL-2.0 / PD |
 
 ### Mac に入れるもの (`install.sh`)
 
 リリースに添えた `denpa-agent-<版>-darwin-arm64.tar.gz` (上と同じ .NET の Native AOT のバイナリ1個) と、
-上と同じ px4-userland / siano-userland の **Mac 版** (`darwin-arm64`)・同じファームウェア。
+上と同じ px4-userland / siano-userland の **Mac 版** (`darwin-arm64`)・同じファームウェア (asicen-userland は Mac 版が出ていないので入れません)。
 libusb 1.0.30 (LGPL-2.1+) が実行ファイルに静的リンクなのも上と同じで、
 配布物の `DEPENDENCY-NOTICE.txt` / `THIRD_PARTY_NOTICES.md` もそのまま置きます。
 USB のカードリーダーは macOS の PCSC.framework (OS の一部) を呼びます。
@@ -75,12 +77,12 @@ denpa 本体は上と同じコンテナイメージ `denpa` を、Mac の Docker
 ### Windows に入れるもの (`install.ps1`)
 
 リリースに添えた `denpa-agent-<版>-windows-x64.zip` (`denpa-agent.exe` 1個) と、siano-userland の
-**Windows 版** (`windows-x64`)・同じファームウェア。px4-userland は入れません (Windows 版が無い)。
+**Windows 版** (`windows-x64`)・同じファームウェア。px4-userland と asicen-userland は入れません (Windows 版が無い)。
 カードリーダーは Windows の WinSCard (`winscard.dll`。OS の一部) を呼びます。
 
 ### `denpa-aio`
 
-上の `denpa` に、`denpa-agent` の実行ファイルと `/opt/px4-userland`・`/opt/siano-userland` を
+上の `denpa` に、`denpa-agent` の実行ファイルと `/opt/px4-userland`・`/opt/siano-userland`・`/opt/asicen-userland` を
 写しただけのもの (`.github/aio.Dockerfile`)。中身もライセンスも上の2つと同じです。
 
 ## リポジトリに写してあるもの・借りた表
