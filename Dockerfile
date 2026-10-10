@@ -91,10 +91,6 @@ ENV CURL="curl -fsSL --retry 5 --retry-delay 5 --retry-all-errors --connect-time
 # ソフトウェアで焼くだけなので、denpa の側は何も変えない
 ENV DEV="curl ca-certificates build-essential cmake pkg-config nasm patch zlib1g-dev libopus-dev libx264-dev libdav1d-dev libva-dev"
 
-# 9.0 / 9.0.1 は 60コマで焼くと 20〜25分で音声が黙って終わった (CLI の溢れ FIFO の上限)。
-# 9.0.2 でその FIFO ごと無くなり、当てていた patches/ffmpeg-sched-overflow.patch は
-# 取り下げた (経緯と数字は patches/README.md)。上げるときはパッチが当たるかを
-# ビルド (--fuzz=0) が見る — 当たらなくなったら、上流に入ったのかまず疑う
 # renovate: datasource=github-tags depName=FFmpeg/FFmpeg extractVersion=^n(?<version>.*)$
 ENV FFMPEG_VERSION=9.0.2
 # SVT-AV1 は**上流の最新をソースから組む** (Debian trixie のパッケージは 2 系で古い。
@@ -102,10 +98,8 @@ ENV FFMPEG_VERSION=9.0.2
 # renovate: datasource=gitlab-tags depName=AOMediaCodec/SVT-AV1 registryUrl=https://gitlab.com
 ARG SVT_AV1_VERSION=v4.2.0
 
-# **上流に投げるつもりの直しだけを当てる** (理由は patches/README.md)。
-# `--fuzz=0` にしてあるのは、ffmpeg を上げたときに当たらなくなったら
-# **黙ってずれて当たるより、ビルドを止めてほしい**ため。
-# いまは当てるものが無い (patches/README.md)。置いたら `ffmpeg-*.patch` の名前で拾う
+# **上流に投げるつもりの直しだけを当てる** (patches/README.md。いまは無い)。`--fuzz=0` は、
+# ffmpeg を上げて当たらなくなったら黙ってずれて当たるより、ビルドを止めてほしいため
 COPY patches/ /patches/
 
 RUN case "${TARGETARCH}" in \

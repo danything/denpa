@@ -81,7 +81,6 @@ denpa:
   affinity: {}
 
 agent:
-  timezone: Asia/Tokyo
   # チューナーとカードリーダーに触るために特権が要る
   privileged: true
   # ホストのデバイス。/dev/bus (USB) と /dev/dvb (DVB 型のチューナー)

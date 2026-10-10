@@ -168,11 +168,10 @@ QEMU が要り、ffmpeg や AOT はかなり遅い)。
 
 ### 外から持ってくるものは版で固定する
 
-ffmpeg・SVT-AV1・ARIB のフォント・px4-userland / siano-userland は、どれも
+ffmpeg・SVT-AV1・emsdk・Denpa Font・px4-userland / siano-userland / asicen-userland は、どれも
 `ARG` / `ENV` に版 (タグかコミット) を書いてから取ってきます。**`master` を
 追っていた頃は、同じコミットから焼いても中身が違いえました** (実機の中身は Pod へ入らないと
-分からなかった)。以前持ってきていた CM検出の道具 (chapter_exe・dtvindex) は
-毎週書き換わっていて、固定しないと次のデプロイで判定の中身が黙って変わるところでした。
+分からなかった)。
 
 上げるのは Renovate 任せで、`# renovate:` の注釈と `renovate.json` の `customManagers` で
 場所を教えてあります。タグのあるものはタグで、無いものは枝の先頭のコミット (`git-refs`) で追います。
