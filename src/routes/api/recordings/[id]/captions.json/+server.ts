@@ -16,11 +16,16 @@ import { run } from '#lib/server/stream.js';
 /** 待ち時間の上限。壊れたファイルで居座らせない */
 const TIMEOUT = 30_000;
 
+/** 溜める量の上限。字幕の筋だけなら1時間で数百KB。壊れたファイルで膨らんでもここで止める */
+const LIMIT = 32 * 1024 * 1024;
+
 export async function GET({ params }) {
     const recording = recordingOr404(params.id);
     if (recording.library_path === null) error(404, '字幕がありません');
 
-    const { stdout: out, code } = await run(
+    const parts: Uint8Array[] = [];
+    let size = 0;
+    const { code } = await run(
         [
             config.ffmpeg,
             '-v',
@@ -36,8 +41,21 @@ export async function GET({ params }) {
             'matroska',
             'pipe:1',
         ],
-        { timeoutMs: TIMEOUT, stdout: true },
+        {
+            timeoutMs: TIMEOUT,
+            onStdout: (chunk) => {
+                if (size + chunk.length > LIMIT) return;
+                parts.push(chunk);
+                size += chunk.length;
+            },
+        },
     );
+    const out = new Uint8Array(size);
+    let at = 0;
+    for (const part of parts) {
+        out.set(part, at);
+        at += part.length;
+    }
     // 字幕を持たない番組のほうが多い (ffmpeg は「その筋は無い」で降りる)
     if (code !== 0 || out.length === 0) error(404, '字幕がありません');
     const pages = pagesFromMkv(out);
