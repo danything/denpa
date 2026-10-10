@@ -349,6 +349,47 @@ export function savePrograms(events: EitEvent[]): number {
     const at = now();
     let count = 0;
     orm().transaction((tx) => {
+        /*
+         * **文は1回だけ組んで使い回す。** 番組ごとに drizzle で SQL を組み、SQLite に
+         * 文を作らせていた頃は、それだけで1番組 190µs かかっていた (全局ぶんの
+         * 番組表で数秒止まる)
+         */
+        const overlap = tx
+            .delete(programs)
+            .where(
+                and(
+                    eq(programs.service_id, sql.placeholder('service_id')),
+                    ne(programs.id, sql.placeholder('id')),
+                    lt(programs.start_at, sql.placeholder('end_at')),
+                    gt(programs.end_at, sql.placeholder('start_at')),
+                ),
+            )
+            .prepare();
+        const upsert = tx
+            .insert(programs)
+            .values({
+                id: sql.placeholder('id'),
+                service_id: sql.placeholder('service_id'),
+                network_id: sql.placeholder('network_id'),
+                event_id: sql.placeholder('event_id'),
+                start_at: sql.placeholder('start_at'),
+                end_at: sql.placeholder('end_at'),
+                name: sql.placeholder('name'),
+                description: sql.placeholder('description'),
+                // JSON の列は**こちらで畳んで渡す** (`encoded`)。drizzle に任せると null まで "null" になる
+                extended: sql`${sql.placeholder('extended')}`,
+                genres: sql`${sql.placeholder('genres')}`,
+                genre_detail: sql`${sql.placeholder('genre_detail')}`,
+                is_free: sql.placeholder('is_free'),
+                audio_type: sql.placeholder('audio_type'),
+                audios: sql`${sql.placeholder('audios')}`,
+                video_type: sql.placeholder('video_type'),
+                video_resolution: sql.placeholder('video_resolution'),
+                updated_at: sql.placeholder('updated_at'),
+            })
+            .onConflictDoUpdate({ target: programs.id, set: refresh })
+            .prepare();
+
         for (const event of events) {
             // 開始も尺も決まっていないものは録画の時刻が決まらない
             if (event.startAt === null || event.duration === null || event.duration === 0) continue;
@@ -358,55 +399,53 @@ export function savePrograms(events: EitEvent[]): number {
             const extended = Object.keys(event.extended).length === 0 ? null : event.extended;
             const key = programKey(event.originalNetworkId, event.serviceId, event.eventId);
             const endAt = event.startAt + event.duration;
-            tx.delete(programs)
-                .where(
-                    and(
-                        eq(programs.service_id, serviceId),
-                        ne(programs.id, key),
-                        lt(programs.start_at, endAt),
-                        gt(programs.end_at, event.startAt),
-                    ),
-                )
-                .run();
-            tx.insert(programs)
-                .values({
-                    id: key,
-                    service_id: serviceId,
-                    network_id: event.originalNetworkId,
-                    event_id: event.eventId,
-                    start_at: event.startAt,
-                    end_at: endAt,
-                    name: toHalfWidth(event.name),
-                    description: toHalfWidth(event.description),
-                    extended,
-                    genres: event.genres.length === 0 ? null : event.genres.map((g) => g.lv1),
-                    genre_detail: event.genres.length === 0 ? null : event.genres,
-                    is_free: event.isFree,
-                    audio_type: event.audios[0]?.componentType ?? null,
-                    audios:
-                        event.audios.length === 0
-                            ? null
-                            : /*
-                               * **放送が付けた名前も残す。** 解説放送や二重音声は、
-                               * 種別も言語も同じ音声が2本並ぶので、符号だけでは
-                               * 「ステレオ (日本語)」が2つになって見分けが付かない
-                               */
-                              event.audios.map((a) => ({
-                                  componentType: a.componentType,
-                                  langs: a.langs,
-                                  ...(a.text === undefined ? {} : { text: a.text }),
-                                  ...(a.main === undefined ? {} : { main: a.main }),
-                              })),
-                    video_type: event.video?.type ?? null,
-                    video_resolution: event.video?.resolution ?? null,
-                    updated_at: at,
-                })
-                .onConflictDoUpdate({ target: programs.id, set: refresh })
-                .run();
+            overlap.run({ service_id: serviceId, id: key, end_at: endAt, start_at: event.startAt });
+            upsert.run({
+                id: key,
+                service_id: serviceId,
+                network_id: event.originalNetworkId,
+                event_id: event.eventId,
+                start_at: event.startAt,
+                end_at: endAt,
+                name: toHalfWidth(event.name),
+                description: toHalfWidth(event.description),
+                extended: encoded(programs.extended, extended),
+                genres: encoded(
+                    programs.genres,
+                    event.genres.length === 0 ? null : event.genres.map((g) => g.lv1),
+                ),
+                genre_detail: encoded(programs.genre_detail, event.genres.length === 0 ? null : event.genres),
+                is_free: event.isFree,
+                audio_type: event.audios[0]?.componentType ?? null,
+                audios: encoded(
+                    programs.audios,
+                    event.audios.length === 0
+                        ? null
+                        : /*
+                           * **放送が付けた名前も残す。** 解説放送や二重音声は、
+                           * 種別も言語も同じ音声が2本並ぶので、符号だけでは
+                           * 「ステレオ (日本語)」が2つになって見分けが付かない
+                           */
+                          event.audios.map((a) => ({
+                              componentType: a.componentType,
+                              langs: a.langs,
+                              ...(a.text === undefined ? {} : { text: a.text }),
+                              ...(a.main === undefined ? {} : { main: a.main }),
+                          })),
+                ),
+                video_type: event.video?.type ?? null,
+                video_resolution: event.video?.resolution ?? null,
+                updated_at: at,
+            });
             count++;
         }
     });
     return count;
+}
+
+/** 列の畳み方で DB に渡す形にする。null は null のまま (drizzle がふだん通す形と同じ) */
+function encoded<T>(column: { mapToDriverValue(value: T): unknown }, value: T | null): unknown {
+    return value === null ? null : column.mapToDriverValue(value);
 }
 
 /**

@@ -196,27 +196,33 @@ export class AitReader {
      */
     public feed(chunk: Uint8Array): Ait[] {
         const found: Ait[] = [];
-        for (const packet of this.packets.feed(chunk)) {
+        for (const packet of this.packets.feed(chunk)) this.feedPacket(packet, found);
+        return found;
+    }
+
+    /** 切り分け済みのパケットを1つ。見つかったものは `found` に足す (`BmlDecoder.feedPacket` と同じ事情) */
+    public feedPacket(packet: Uint8Array, found: Ait[]): void {
+        const pid = ((packet[1]! & 0x1f) << 8) | packet[2]!;
+        if (pid === PID_PAT) {
             for (const section of this.pat.feed(packet)) {
-                const pid = parsePat(section).get(this.serviceId);
-                if (pid === undefined || pid === this.pmtPid) continue;
+                const next = parsePat(section).get(this.serviceId);
+                if (next === undefined || next === this.pmtPid) continue;
                 // 局が変わった。PMT も AIT も拾い直す
-                this.pmtPid = pid;
-                this.pmt = new SectionAssembler(pid);
+                this.pmtPid = next;
+                this.pmt = new SectionAssembler(next);
                 this.aits = new Map();
             }
+        }
+        if (pid === this.pmtPid) {
             for (const section of this.pmt?.feed(packet) ?? []) {
-                for (const pid of aitPidsFromPmt(section)) {
-                    if (!this.aits.has(pid)) this.aits.set(pid, new SectionAssembler(pid));
-                }
-            }
-            for (const reader of this.aits.values()) {
-                for (const section of reader.feed(packet)) {
-                    const ait = parseAit(section);
-                    if (ait !== null) found.push(ait);
+                for (const ait of aitPidsFromPmt(section)) {
+                    if (!this.aits.has(ait)) this.aits.set(ait, new SectionAssembler(ait));
                 }
             }
         }
-        return found;
+        for (const section of this.aits.get(pid)?.feed(packet) ?? []) {
+            const ait = parseAit(section);
+            if (ait !== null) found.push(ait);
+        }
     }
 }

@@ -156,6 +156,7 @@ export class PesDemuxer {
             // 次の頭が来た。**長さ 0 の PES (映像) はここで終わりが分かる**
             this.finish(pid, kind, out);
             const expected = payload.length >= 6 ? 6 + ((payload[4]! << 8) | payload[5]!) : 0;
+            // 溜めるものは写す。パケットは届いた塊の上の窓で、塊は使い回される (psi.ts の PacketStream)
             this.partial.set(pid, {
                 parts: [payload.slice()],
                 size: payload.length,
