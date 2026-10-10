@@ -949,7 +949,7 @@ INT を通させ、他のリーダーは開いて覗いて閉じます (USB の�
 `remote` (配り役の URL)・`ids`・`tuners` が付き、`readers` は空です。
 
 ```sh
-# compose は 25252 を出してある。Kubernetes は kubectl -n denpa port-forward deploy/tuner-agent 25252 を挟む
+# ホストから叩く (イメージに curl は無い)。compose は 25252 を出してある。Kubernetes は kubectl -n denpa port-forward deploy/tuner-agent 25252 を挟む
 curl -s localhost:25252/denpa/card
 ```
 
