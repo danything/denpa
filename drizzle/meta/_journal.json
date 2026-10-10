@@ -57,6 +57,13 @@
       "when": 1791598654853,
       "tag": "0007_cm-one-pass",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "6",
+      "when": 1791605099725,
+      "tag": "0008_drop-cm-detector",
+      "breakpoints": true
     }
   ]
 }

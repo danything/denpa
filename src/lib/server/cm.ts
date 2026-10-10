@@ -5,7 +5,6 @@ import { type Scan, scan } from './cm-scan';
 import { config } from './config';
 import { logoRepo, share } from './logo-data';
 import { openLogo } from './logo-own';
-import { settings } from './settings';
 import { run } from './stream';
 import { TS_PROBE } from './ts-probe';
 
@@ -15,10 +14,9 @@ import { TS_PROBE } from './ts-probe';
  * **1本の ffmpeg で1回だけ復号して材料を取り** (`cm-scan.ts`。無音・場面の切れ目・局ロゴの枠)、
  * 境目は TS で決める (`ts/cm-decide.ts`)。
  *
- * - 既定 (`logo`) は**ロゴの消えている所を CM にする**。境目は近くの「無音 + 切れ目」に寄せる
+ * - **ロゴの消えている所を CM にする**。境目は近くの「無音 + 切れ目」に寄せる
  * - ロゴが使えない (覚えられない・当たらない・結果がおかしい) ときは、同じ材料から
  *   **CM の尺 (15秒の倍数) だけで**決め直す。もう一度復号はしない
- * - 設定で「無音だけ」(`silence`) にすると、絵を復号せず音だけ読む。速いが本編の「間」を拾うことがある
  *
  * 誤爆したときの被害が大きい(本編が消える)ので、既定は実カットではなく
  * チャプター付与にしてある (`config.cmCutDefault`)。設定の CMの扱いを `cut` にしたときだけ実際に切る。
@@ -437,7 +435,7 @@ export interface CmOptions {
 }
 
 /**
- * 設定された検出のしかたでCM区間を求める。
+ * CM区間を求める。
  *
  * **返す秒は ffmpeg の時刻** (入れ物の頭から)。焼くときは頭を捨てる `-ss` と同じだけ詰める
  * (`encoder.rebaseChapters`)。TS を切るとき (`-ss`) はそのまま使える
@@ -454,8 +452,6 @@ export async function detectCm(input: string, options: CmOptions): Promise<CmDet
     const fps = Number.isFinite(probed.fps) ? probed.fps : config.cmFallbackFps;
     const deadline = Date.now() + config.cmDetectTimeout;
     const left = () => Math.max(0, deadline - Date.now());
-    // 検出のしかたは設定画面で決める (ロゴまで見るのは確かだが、絵を全部復号する)
-    const useLogo = settings().cmDetector === 'logo';
     /** ロゴが使えなかった理由。尺だけで決めたときの覚え書きに足す */
     let why = '';
 
@@ -464,18 +460,16 @@ export async function detectCm(input: string, options: CmOptions): Promise<CmDet
      *    **覚えられなくても読み込みは続ける** — 無音と切れ目だけで決め直せる
      */
     let logo: Exclude<Awaited<ReturnType<typeof openLogo>>, string> | null = null;
-    if (useLogo) {
-        step('局ロゴを確かめています');
-        const opened =
-            probed.width > 0 && probed.height > 0
-                ? await openLogo(input, probed, { repo: logoRepo(serviceId), signal, deadline })
-                : '大きさが測れませんでした';
-        if (typeof opened === 'string') why = `ロゴ判定が失敗: ${opened}`;
-        else logo = opened;
-    }
+    step('局ロゴを確かめています');
+    const opened =
+        probed.width > 0 && probed.height > 0
+            ? await openLogo(input, probed, { repo: logoRepo(serviceId), signal, deadline })
+            : '大きさが測れませんでした';
+    if (typeof opened === 'string') why = `ロゴ判定が失敗: ${opened}`;
+    else logo = opened;
 
     // 2. 1回だけ復号して、無音・切れ目・ロゴの枠をまとめて読む
-    step(useLogo ? '無音と場面の切れ目とロゴを読んでいます' : '無音を探しています');
+    step('無音と場面の切れ目とロゴを読んでいます');
     const read = (video: boolean) =>
         scan(input, {
             signal,
@@ -489,10 +483,10 @@ export async function detectCm(input: string, options: CmOptions): Promise<CmDet
     const failed = (scan: Scan) =>
         `${left() <= 0 ? '時間切れ' : '失敗'} (code ${scan.code}): ${scan.stderr.trim().split('\n').at(-1) ?? ''}`;
     const stopped = () => signal?.aborted === true;
-    let found = await read(useLogo);
+    let found = await read(true);
     if (stopped()) throw new Error('中止されました');
     // 絵のほうで落ちたなら (壊れた絵・フィルタ)、音だけ読み直して尺だけで決める
-    if (found.code !== 0 && useLogo && left() > 0) {
+    if (found.code !== 0 && left() > 0) {
         why = `絵の読み込みが${failed(found)}`;
         logo = null;
         found = await read(false);
@@ -560,16 +554,15 @@ export async function detectCm(input: string, options: CmOptions): Promise<CmDet
     // 4. ロゴを使わずに、CM の尺 (15秒の倍数) だけで決める
     const cm = decideCm(material);
     /*
-     * 落ちた理由まで書く。「無音 8 箇所」とだけ出していた頃は、ロゴを選んで
-     * いるのになぜ無音検出になったのかが画面から分からなかった。
+     * 落ちた理由まで書く。「無音 8 箇所」とだけ出していた頃は、
+     * なぜロゴを使わなかったのかが画面から分からなかった。
      *
      * **この文言から「ロゴで判定できなかった」と画面に出すかを決める** (format.logoUnusable)。
      * 別の列で持っていた頃は、後から条件を広げても既に録ってある分に効かなかった
      */
-    const note = `無音 ${material.silences.length} 箇所`;
     return {
         cm: tooMuchCm(cm, duration) ? [] : cm,
         duration,
-        note: useLogo ? `${note} (${LOGO_UNUSABLE}: ${why})` : note,
+        note: `無音 ${material.silences.length} 箇所 (${LOGO_UNUSABLE}: ${why})`,
     };
 }

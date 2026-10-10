@@ -153,9 +153,9 @@
                 </fieldset>
                 <!--
                     **並びは話題ごとに。** 2列に流し込むので、DOM の順がそのまま
-                    「どれとどれが同じ行に来るか」になる。CM の2つ (切り方・探し方) が
-                    斜めに離れていた頃は、同じ話の設定に見えなかった。
-                    1行目は「出来上がるもの」(コーデックと生TS)、2行目は CM。
+                    「どれとどれが同じ行に来るか」になる。
+                    1行目は「出来上がるもの」(コーデックと生TS)、2行目は焼く前に映像を読んで
+                    決めるもの (CM とコマ数)。
 
                     生TSを残すか・無料放送だけにするかも、ここで決める。
                     画面に出していなかった頃は、保存を押すたびに未送信のチェックボックスとして
@@ -179,18 +179,7 @@
                         <option value="cut" selected={recording.cmCut === 'cut'}>切り取る</option>
                         <option value="off" selected={recording.cmCut === 'off'}>何もしない</option>
                     </select>
-                </label>
-                <label class="field">
-                    <span class="label">CMの探し方</span>
-                    <select name="cmDetector">
-                        <option value="logo" selected={recording.cmDetector === 'logo'}>
-                            ロゴまで見る (確実・遅い)
-                        </option>
-                        <option value="silence" selected={recording.cmDetector === 'silence'}>
-                            無音だけ (速い)
-                        </option>
-                    </select>
-                    <span class="hint">ロゴまで見ると30分の録画で1分ほどかかります</span>
+                    <span class="hint">局ロゴの消えている所をCMとみます。ロゴが使えなければ無音と長さで決めます</span>
                 </label>
                 <!--
                     コマ数 (30/60) は本編映像から実測して決める (encoder.measureSmoothMotion)。

@@ -36,7 +36,7 @@ export interface ScanLogo {
 export interface ScanOptions {
     signal?: AbortSignal | undefined;
     timeoutMs: number;
-    /** 絵を見るか (場面の切れ目とロゴ)。無音だけで決めるときは要らない */
+    /** 絵を見るか (場面の切れ目とロゴ)。音だけ読み直すとき (絵の読み込みが落ちたとき) は要らない */
     video: boolean;
     /** ロゴの枠。無ければ切れ目だけ */
     logo?: ScanLogo | null;
