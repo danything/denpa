@@ -35,7 +35,7 @@ Dockerfile の行・`package.json`) を優先し、上流の表示に拠るも�
 
 | 名前 | 何に | 出どころ | ライセンス |
 | --- | --- | --- | --- |
-| Denpa Font | データ放送・字幕と、画面の放送の字 (番組名・説明など) の web フォント (`/api/font/denpa-font.woff2` で配る) | <https://github.com/danything/denpa-font> のリリースの woff2 (タグで留め、同じリリースの SHA256SUMS で照らす)。源柔ゴシック等幅 (源ノ角ゴシック + M+ OUTLINE FONTS) に、源柔の字の部品と線の太さで描いた ARIB の記号を足したもの | SIL OFL 1.1 (元の源柔ゴシックと同じ。M+ 由来の字形は M+ FONTS LICENSE。原文は denpa-font の README) |
+| Denpa Font | データ放送・字幕と、画面の放送の字 (番組名・説明など) の web フォント (`/api/font/denpa-font.woff2` で配る) | <https://github.com/danything/denpa-font> のリリースの woff2 (タグで留め、同じリリースの SHA256SUMS で照らす)。BIZ UDゴシック (モリサワ) の角を丸め、BIZ UDゴシックに無い ARIB の記号・字を BIZ UDゴシックの部品で組んで足したもの | SIL OFL 1.1 (元の BIZ UDゴシックと同じ。原文は denpa-font の README) |
 
 フォントに入る字は denpa の字の表 (`b24-tables.ts`・`aribtext-gaiji.ts` など) から作られる (denpa-font の fetch.sh が版を留めて読む)。
 **表に字を足したら**: `src/lib/ts/font-coverage.test.ts` が取ってくるフォントに無い字を出して落ちる →
