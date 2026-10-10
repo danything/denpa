@@ -81,18 +81,7 @@ if [ "$output" = "pipe:1" ] && printf '%s\n' "$@" | grep -qx -- '-c:s' && printf
     exit 0
 fi
 
-# 字幕を絵で取り出すパス (`server/subtitle.ts` の `buildPgs`)。
-# 目印は sub2video の filter で、これを渡すのはこの経路だけ。
-#
-# denpa 側が .sup を組み立てるので、ここで返すのは**showinfo の行と生の RGBA**。
-# 1枚だけ、4x2 の白い四角を返す (中身が透明だと切り抜きで消えて0枚になる)
-if printf '%s\n' "$@" | grep -q '0:s:0\]showinfo'; then
-    echo "[Parsed_showinfo_0 @ 0x1] n:0 pts:135000 pts_time:1.5 pos:-1 fmt:rgba sar:1/1 s:4x2 i:P iskey:1 type:I" >&2
-    for _ in $(seq 1 32); do printf '\377'; done
-    exit 0
-fi
-
-# CMを切るパス (-c copy で区間を切り出す / concat で繋ぐ)。
+# 焼き直さずに書き直すパス (-c copy。チャプターを足す / CM を切って concat で繋ぐ)。
 # 進捗も Duration も出さず、出力ファイルだけ作って終わる本物と同じ振る舞いにする
 if printf '%s\n' "$@" | grep -qx -- '-c' && printf '%s\n' "$@" | grep -qx -- 'copy'; then
     mkdir -p "$(dirname "$output")"

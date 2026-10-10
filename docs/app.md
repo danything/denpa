@@ -32,7 +32,6 @@ EPGStation の置き換えとして作ったもので、エンコード設定は
 | `src/lib/ts/cm-decide.ts` | CM の境目を決める (ロゴの消えている所を無音の切れ目と CM の並びで詰める。ロゴが無ければ CM の尺だけで。純粋関数) |
 | `src/lib/server/encoder.ts` | 録画のエンコード (AV1 / H.264) |
 | `src/lib/server/hwenc.ts` | GPU (QSV / VA-API) で焼けるかを起動時に確かめ、口ごとの道を決める。共有の型と名前は `src/lib/hw.ts` |
-| `src/lib/server/subtitle.ts` | ARIB字幕を絵にして `.sup` にする (sub2video) |
 | `src/lib/server/databroadcast.ts` | データ放送。1局に絞った TS を解いて、組み立て終わったモジュールを配る |
 | `src/lib/ts/bml.ts` | データ放送を解く (PMT の記述子 → カルーセル → ファイル) |
 | `src/lib/ts/dsmcc.ts` | データカルーセル (DSM-CC) の DII/DDB。ロゴとデータ放送で分け合う |

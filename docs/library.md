@@ -151,16 +151,14 @@ WebDAV (`/dav`) + `.nfo` + Nova は、プレイヤー側の制約 (WebDAV 越し
     書いた XSPF もあります (`/api/recordings/<id>/playlist/<番組名>.xspf`、`server/playlist.ts`)。
     中身は取りに来たときに作るので、履歴の同じ URL でもそのときの続きから
 
-VLC は AV1・Opus・Matroska を自前で解き、PGS 字幕もそのまま出ます (AV1 非対応の
+VLC は AV1・Opus・Matroska を自前で解きます (AV1 非対応の
 Fire TV でも dav1d のソフトデコードで滑らか)。
 
 ## 字幕はどこから出るか
 
-**入れ物の中の、放送どおりに描いた絵 (PGS) だけです** (隣に付き添いは置かない)。
-denpa の観る画面は PGS を抜いて渡し、ブラウザが解いて重ねます (ライブと同じ)。抜くのは
-実測 0.1〜1秒で、既にある録画も焼き直し不要です。VLC などは入れ物の PGS をそのまま出します。
-絵にした理由 (文字に直すと位置・背景の箱・外字・ルビが落ちる) は
-[encode.md](encode.md#字幕は-pgs-1本だけ) に。
+**入れ物の中の、放送の ARIB 字幕 (`S_ARIBSUB`) です** (隣に付き添いは置かない)。denpa の観る画面はサーバで解いて
+文字の配置で渡し、ブラウザが描きます (ライブと同じ。`api/recordings/<id>/captions.json`)。前の録画は放送どおりに描いた絵
+(PGS) が入っていて、そちらは抜いて絵で重ねます。入れ方は [encode.md](encode.md#字幕は放送の-arib-字幕をそのまま) に。
 
 ## 誰が取れるか
 

@@ -64,7 +64,7 @@ describe('録画エンコードの引数', () => {
 });
 
 /**
- * **焼いたものの音声と字幕に名前を入れる** (`arib.audioTitles` / `buildPgs`)。
+ * **焼いたものの音声と字幕に名前を入れる** (`arib.audioTitles`)。
  *
  * 入れていなかった頃は、プレイヤーの切り替えに「Audio 1」「Audio 2」しか
  * 出なかった — 二カ国語や解説放送でどちらがどちらか分からない。
@@ -110,16 +110,10 @@ describe('トラックの名前', () => {
         expect(buildArgs('/in.m2ts', '/out.mkv', 1, null, 'av1', { audioStreams: [] })).toContain('0:a');
     });
 
-    /** 字幕は放送が名乗っている言語まで入れる。無ければ「字幕」 */
+    /** 字幕には「字幕」と日本語の札 */
     test('字幕にも名前を入れる', () => {
-        const withLabel = buildArgs('/in.m2ts', '/out.mkv', 1, null, 'av1', {
-            pgsFile: '/x.sup',
-            captionTitle: '字幕 (日本語)',
-        });
-        expect(title(withLabel, '-metadata:s:s:0')).toBe('title=字幕 (日本語)');
-
-        const plain = buildArgs('/in.m2ts', '/out.mkv', 1, null, 'av1', { pgsFile: '/x.sup' });
-        expect(title(plain, '-metadata:s:s:0')).toBe('title=字幕');
+        const args = buildArgs('/in.m2ts', '/out.mkv', 1, null);
+        expect(title(args, '-metadata:s:s:0')).toBe('title=字幕');
     });
 
     /**
@@ -216,28 +210,20 @@ describe('コマ数の決め方', () => {
         expect(buildArgs('/in.m2ts', '/out.mkv', 1, null, 'h264')).not.toContain('-init_hw_device');
     });
 
-    test('字幕は PGS 1本だけ。入力も1回しか開かない', () => {
+    test('字幕は1本だけ。入力も1回しか開かない', () => {
         for (const codec of ['av1', 'h264'] as const) {
-            const args = buildArgs('/in.m2ts', '/out.mkv', 1, null, codec, { pgsFile: '/tmp/s.sup' });
+            const args = buildArgs('/in.m2ts', '/out.mkv', 1, null, codec);
             /*
              * ASS (外字が「〓」になる) と dvdsub (1枚4色) を作るために同じ入力を
-             * 2回開いていた頃の名残を残さない。PGS が放送どおりに出るので、
-             * 見た目の違うものを「字幕」として並べる理由が無くなった
+             * 2回開いていた頃の名残を残さない
              */
             expect(args.filter((a) => a === '/in.m2ts')).toHaveLength(1);
             expect(args).not.toContain('ass');
             expect(args).not.toContain('dvdsub');
-            expect(argValue(args, '-c:s:0')).toBe('copy');
             expect(argValue(args, '-disposition:s:0')).toBe('default');
             expect(argValue(args, '-c:s:1')).toBeUndefined();
             expect(argValue(args, '-c:a')).toBe('libopus');
         }
-    });
-
-    test('画面の大きさはここでは使わない', () => {
-        // 絵にするのは .sup を作る側 (buildPgs)。エンコード側は copy するだけ
-        const args = buildArgs('/in.m2ts', '/out.mkv', 1, null, 'av1', { canvasSize: '1920x1080' });
-        expect(args).not.toContain('-canvas_size');
     });
 
     test('デュアルモノは左右を別トラックに分ける', () => {
@@ -252,13 +238,10 @@ describe('コマ数の決め方', () => {
     });
 
     test('CMを切っても字幕は落とさない', () => {
-        // 字幕も CM ごと焼いて、焼いたものと一緒に切る (cm-cut.ts)
-        const args = buildArgs('/in.m2ts', '/out.mkv', 1, null, 'av1', {
-            keyframes: 'scene',
-            pgsFile: '/tmp/s.sup',
-        });
+        // 字幕も CM ごと写して、焼いたものと一緒に切る (cm-cut.ts)
+        const args = buildArgs('/in.m2ts', '/out.mkv', 1, null, 'av1', { keyframes: 'scene' });
         expect(args).not.toContain('-sn');
-        expect(argValue(args, '-c:s:0')).toBe('copy');
+        expect(argValue(args, '-c:s')).toBe('copy');
     });
 
     test('チャプターだけならそれが2つ目の入力になる', () => {
@@ -267,25 +250,13 @@ describe('コマ数の決め方', () => {
         expect(argValue(args, '-map_chapters')).toBe('1');
     });
 
-    test('PGS は copy でそのまま入れる', () => {
-        /*
-         * 放送どおりの色数 (1枚256色) が入るのはこれだけ。ffmpeg は PGS を
-         * 作れないので denpa が .sup を書いて渡す (src/lib/pgs.ts)
-         */
-        const args = buildArgs('/in.m2ts', '/out.mkv', 1, null, 'av1', { pgsFile: '/tmp/s.sup' });
-        expect(args).toContain('/tmp/s.sup');
-        expect(args).toContain('1:s:0?');
-        expect(argValue(args, '-c:s:0')).toBe('copy');
-    });
-
-    test('PGS とチャプターが両方あっても番号がずれない', () => {
-        const args = buildArgs('/in.m2ts', '/out.mkv', 1, null, 'av1', {
-            pgsFile: '/tmp/s.sup',
-            chaptersFile: '/tmp/c.txt',
-        });
-        expect(args).toContain('1:s:0?');
-        // 入力は 本編 / sup / チャプター の順
-        expect(argValue(args, '-map_chapters')).toBe('2');
+    test('字幕は放送の ARIB 字幕を局で名指しして写す', () => {
+        // 名指ししない既定の選び方では ARIB の字幕が落ちる。Matroska には S_ARIBSUB で入る
+        const args = buildArgs('/in.m2ts', '/out.mkv', 1, null, 'av1', { program: 1024 });
+        expect(args).toContain('0:p:1024:s:0?');
+        expect(argValue(args, '-c:s')).toBe('copy');
+        // 局が分からなければ入力の頭の字幕
+        expect(buildArgs('/in.m2ts', '/out.mkv', 1, null)).toContain('0:s:0?');
     });
 
     /**

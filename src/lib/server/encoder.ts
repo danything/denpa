@@ -31,6 +31,7 @@ import {
 } from './cm';
 import { chapterArgs, cutArgs, cutList, cutPoints, KEY_SCDET, listKeyframes, planCut } from './cm-cut';
 import { type Scan, type ScanReader, scan, scanOutputs, scanReader } from './cm-scan';
+import { programSpec } from './captions';
 import { config } from './config';
 import { affected, now, orm } from './db';
 import { type EncodeProgress, emit } from './events';
@@ -41,11 +42,10 @@ import { encodedPath, libraryFamily, libraryPath } from './library';
 import { removeSidecars, sidecarPaths, writeThumbnail } from './metadata';
 import { saveRecordedBml } from './recorded-bml';
 import { recordingSummary } from './recording';
-import { encodeJobs, recordings } from './schema';
+import { encodeJobs, recordings, services } from './schema';
 import { descramble, isScrambled } from './scramble';
 import { settings } from './settings';
 import { chunks, lines, run } from './stream';
-import { buildPgs } from './subtitle';
 import { displayTitle } from './title';
 import { TS_PROBE } from './ts-probe';
 import { notify } from './webhook';
@@ -307,19 +307,10 @@ interface EncodeOptions {
      * 読ませる。ロゴの枠は標準出力に来るので、進み具合は標準エラーで受ける (`-progress pipe:2`)
      */
     analysis?: string[];
+    /** 局の番号 (PMT の番組番号)。字幕の筋を名指しする (`captionArgs`)。分からなければ入力の頭の字幕 */
+    program?: number | undefined;
     /** 60コマ/秒で出す。滑らかになる代わりに時間もサイズも約2倍 (measureSmoothMotion で決める) */
     smoothMotion?: boolean;
-    /**
-     * 字幕を絵にするときの画面の大きさ ("1920x1080")。無ければ 1440x1080 とみなされる。
-     * 使うのは .sup を作る側 (buildPgs) で、buildArgs はこれを見ない
-     */
-    canvasSize?: string;
-    /**
-     * 放送どおりに描いた字幕を入れた PGS (.sup)。
-     * denpa が別に作って渡す (src/lib/server/subtitle.ts)。無ければ字幕は入らない
-     */
-    pgsFile?: string | null;
-    /**
      * 映像が出るまでの音声だけの区間(秒)。**頭から捨てる長さ** (`probeLeadIn`)。
      *
      * 捨てると映像・音声・字幕が同じ瞬間から始まるので、時刻を読むプレイヤーでも
@@ -344,8 +335,6 @@ interface EncodeOptions {
      * 無い・空なら全部拾う。デュアルモノでは使わない (1本を左右に割るだけ)
      */
     audioStreams?: number[];
-    /** 字幕トラックの名前。放送が名乗っている言語まで入る (`buildPgs`) */
-    captionTitle?: string;
     /**
      * 入れ物 (mkv) の title に焼き込む番組名 (`title.displayTitle`)。テレビの VLC の
      * 履歴・通知に出る名前 (再生画面の見出しは URL の尻 — share.ts の shareUrls)
@@ -391,17 +380,24 @@ export function inputSkip(seek: number | null, videoStart: number | undefined): 
 }
 
 /**
- * 字幕トラックの渡し方 (`input` は .sup の入力の番号)。字幕の作り方は `prepareCaptions` と2つで1組
+ * **字幕トラックの入れ方。字幕はここ1か所で決める。**
+ *
+ * 放送の ARIB 字幕を**そのまま写す** (`-c:s copy`。Matroska では `S_ARIBSUB`、CodecPrivate は ffmpeg が書く)。
+ * 観る画面はこれをサーバで解いて文字の配置で描く (`api/recordings/<id>/captions.json`)。以前は libaribcaption で
+ * 描いた絵を PGS にして入れていた (外のプレイヤー向け)。経緯は docs/encode.md「字幕は放送の ARIB 字幕をそのまま」。
+ *
+ * **局と字幕の筋を名指しする** (`0:p:<局>:s:0`。`captions.programSpec`)。名指ししない既定の選び方では ARIB の字幕が落ちる。
+ * 局が分からなければ入力の頭の字幕。? は字幕の無い番組でも止めないため。
+ * 時刻は映像と同じだけ詰まる (頭捨ての `-ss` も、CM を切る concat も筋ごとに同じ)
  */
-function captionArgs(input: number, title = '字幕'): string[] {
+function captionArgs(program: number | undefined): string[] {
     return [
-        // 名前は放送が名乗っているものを使う (「字幕 (日本語)」)。無ければ「字幕」
         '-map',
-        `${input}:s:0?`,
-        '-c:s:0',
+        `${programSpec(program ?? 0)}:s:0?`,
+        '-c:s',
         'copy',
         '-metadata:s:s:0',
-        `title=${title}`,
+        'title=字幕',
         /*
          * 言語も付ける。default の印だけだと、プレイヤーの字幕自動選択
          * (「端末の言語に合う字幕を出す」設定) が言語不明の札を跳ばすことがある。
@@ -416,7 +412,7 @@ function captionArgs(input: number, title = '字幕'): string[] {
 
 /**
  * ffmpeg の引数。元は EPGStation 時代の enc.js で、各フラグの理由はコメントに
- * 残してある (インタレ解除、デュアルモノ分離)。字幕は焼き込まず、別に作った PGS を入れる。
+ * 残してある (インタレ解除、デュアルモノ分離)。字幕は焼き込まず、放送の ARIB 字幕をそのまま写す (`captionArgs`)。
  *
  * CM を切るときは場面の切れ目にキーフレームを置いて焼き (`keyframes`)、焼いたものを
  * キーフレームの所で切る (`cm-cut.ts`)。CM 検出の材料は同じ ffmpeg に取らせる (`analysis`)。
@@ -455,27 +451,16 @@ export function buildArgs(
      *   失敗することがある。最初の失敗を検知した後だけ渡す
      *   (常時捨てると本編側が削れるため)
      *
-     * 字幕 (`.sup`) は捨てたぶんを引いた時刻で作ってある (subtitle.rebase)。
+     * 字幕は同じ入力から写すので、映像と同じだけ詰まる。
      */
     const skip = inputSkip(seek, options.videoStart);
     if (skip > 0) args.push('-ss', String(skip));
     args.push(...TS_PROBE);
     args.push('-i', input);
 
-    /*
-     * 字幕は**PGS 1本だけ**。denpa が別に作った .sup をそのまま copy する
-     * (作り方は subtitle.ts、なぜ PGS だけかは docs/encode.md)。
-     * 作れなかったとき (字幕の無い番組・sub2video が落ちた場合) は字幕トラックが入らない
-     */
-    let next = 1;
-    let pgs = -1;
-    if (options.pgsFile != null) {
-        pgs = next++;
-        args.push('-i', options.pgsFile);
-    }
     if (options.chaptersFile != null) {
-        // CM位置をチャプターとして持たせる。ファイルは切らないので誤検出しても本編は失われない
-        args.push('-i', options.chaptersFile, '-map_chapters', String(next++));
+        // CM位置をチャプターとして持たせる (2つ目の入力)。ファイルは切らないので誤検出しても本編は失われない
+        args.push('-i', options.chaptersFile, '-map_chapters', '1');
     }
     // mapで解決できない(型が不明な)ストリームは黙ってスキップする。エンコード自体を止めないため
     args.push('-ignore_unknown');
@@ -515,13 +500,12 @@ export function buildArgs(
 
     /*
      * 字幕は**映像・音声のあと**に map する (= 出来上がりの最後のトラック)。
-     * ?は .sup が空だった場合でもエンコードを止めないため。
      * 以前は最初に map していてトラック0が字幕になっていた — 慣習 (映像が先頭)
      * から外れると、テレビ組み込みのデマルチプレクサが弱いことがある
      * (実機のテレビ VLC で、字幕を選ぶと固まる症状の切り分けとして直した)。
      * 指定は `s:0` (字幕の0番) 型なので、並べ替えてもここは変わらない
      */
-    if (pgs >= 0) args.push(...captionArgs(pgs, options.captionTitle));
+    args.push(...captionArgs(options.program));
 
     /*
      * **音声にも名前を付ける** (`arib.audioTitles`)。番組表と同じ言い方にするので、
@@ -1084,38 +1068,6 @@ function finishCanceled(jobId: number, working: string | null): void {
     emit('recordings');
 }
 
-/**
- * **字幕トラックを用意する。** 字幕の作り方はここと `captionArgs` (焼く ffmpeg への渡し方) の2つに寄せてある。
- *
- * いまは放送どおりに描いた字幕を PGS にして (`subtitle.buildPgs`)、焼くときに copy で入れる。
- * ffmpeg には PGS の符号器が無いので denpa が書く。焼くほうを dvdsub だけにしていた頃は1枚4色までで、
- * 実測230色の字幕から縁のなめらかさと色分けが落ちていた。作れなければ黙って諦める (字幕トラックが
- * 1本減るだけ)。CM を切るときも CM ごと作り、焼いたものと一緒に切る (`cm-cut.ts`)
- */
-async function prepareCaptions(
-    jobId: number,
-    source: string,
-    options: EncodeOptions,
-    formatStart: number,
-    signal: AbortSignal,
-): Promise<void> {
-    setPhase(jobId, 'encode', '字幕を画像にしています');
-    /*
-     * 字幕の 0 秒を**焼き上がりの 0 秒に合わせる。** 焼くほうは入れ物の始まりから
-     * 数え直したうえで、映像が出るまで (`headSkip`) を捨てる。同じところを引く
-     */
-    const startAt = formatStart + headSkip(options.videoStart);
-    const pgs = await buildPgs(source, options.canvasSize, startAt, signal);
-    if (pgs === null) return;
-    options.pgsFile = pgs.path;
-    // 名前も放送が名乗っているものにする (「字幕 (日本語)」)
-    options.captionTitle = pgs.label;
-    orm()
-        .update(encodeJobs)
-        .set({ log: `字幕 ${pgs.captions} 枚を PGS にしました` })
-        .where(eq(encodeJobs.id, jobId))
-        .run();
-}
 
 async function runJob(jobId: number): Promise<void> {
     const controller = new AbortController();
@@ -1216,10 +1168,9 @@ async function runJob(jobId: number): Promise<void> {
             console.error(`[cm] 検出の支度に失敗したためCM処理をスキップします: ${error}`);
         }
     }
-    /** 途中でやめるときに、ここまでの作業ファイル (チャプター・字幕) を片付ける */
+    /** 途中でやめるときに、ここまでの作業ファイル (チャプター) を片付ける */
     const discardWork = (): void => {
         removeIfExists(encodeOptions.chaptersFile);
-        removeIfExists(encodeOptions.pgsFile);
     };
     if (canceled.has(jobId)) return finishCanceled(jobId, decoded);
 
@@ -1247,11 +1198,6 @@ async function runJob(jobId: number): Promise<void> {
     // 尺と毎秒コマ数は進み具合の分母にもなる (encodeProgress。下で probed に渡す)
     const measured = await probeVideo(sourceTs);
     encodeOptions.probed = { duration: measured.duration, fps: measured.fps };
-    // 字幕を絵で焼くときの画面の大きさ。渡さないと 1440x1080 とみなされ、
-    // 1920x1080 の録画では字幕だけ横に伸びる
-    if (Number.isFinite(measured.width) && Number.isFinite(measured.height)) {
-        encodeOptions.canvasSize = `${measured.width}x${measured.height}`;
-    }
     encodeOptions.audioStreams = await probeLiveAudio(sourceTs);
     // 映像が出るまでの音声だけの区間。頭から捨てて 0 秒から始める
     encodeOptions.videoStart = await probeLeadIn(sourceTs, measured.formatStart, measured.packetStart);
@@ -1267,8 +1213,12 @@ async function runJob(jobId: number): Promise<void> {
         }
     }
 
-    // 字幕トラックを用意する (作り方は `prepareCaptions` に寄せてある)
-    await prepareCaptions(jobId, sourceTs, encodeOptions, measured.formatStart, signal);
+    // 字幕の筋を局で名指しするための局の番号 (`captionArgs`)
+    encodeOptions.program = orm()
+        .select({ program: services.service_id })
+        .from(services)
+        .where(eq(services.id, recording.service_id))
+        .get()?.program;
 
     if (canceled.has(jobId)) {
         discardWork();
@@ -1341,7 +1291,7 @@ async function runJob(jobId: number): Promise<void> {
     const frameRate = Number.isFinite(measured.fps) ? measured.fps : config.cmFallbackFps;
 
     /**
-     * CM の区間を、頭を `skip` 秒捨てて焼いたものの時刻に直す (字幕と同じ引き算。`subtitle.rebase`)。
+     * CM の区間を、頭を `skip` 秒捨てて焼いたものの時刻に直す (`-ss` で映像・音声・字幕が詰まるのと同じ引き算)。
      * 焼き直し (`encodeRetrySeek`) で捨てる長さが変わるので、焼くたびに引き直す
      */
     const own = (skip: number) => {

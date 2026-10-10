@@ -80,7 +80,7 @@ export function invertRanges(ranges: Range[], duration: number): Range[] {
  * `-ss` で捨てて 0 秒から始める (`encoder.headSkip`)。検出した時刻をそのまま
  * チャプターに書くと**全チャプターがそのぶん遅れて入り**、CMの自動スキップは
  * 毎回そのぶんCMを見せてから跳んで、着地も本編に食い込んでいた
- * (字幕は同じ引き算をしている。`subtitle.rebase`)。
+ * (字幕は焼く ffmpeg が映像と一緒に詰める)。
  *
  * 詰めた結果ほとんど残らない区間は落とす (invertRanges の 0.5 秒と同じ判断)。
  */
@@ -228,9 +228,9 @@ export async function probeVideo(input: string): Promise<{
          *
          * ffmpeg は入力の時刻からこれを引いて 0 から数え直す。**同じ TS を
          * 別々に ffmpeg へ通すときは、双方が同じものを引いていないと噛み合わない** —
-         * 字幕を絵にするとき (`subtitle.ts`) がまさにそれで、あちらは
+         * 字幕を絵にしていた頃 (PGS) がまさにそれで、あちらは
          * 字幕1枚目を 0 とみなしていたため、出来上がりで字幕だけ 10 秒早く出ていた。
-         * 引く数をこちらから渡して揃える
+         * 頭出し (`probeLeadIn`) もこれを引いて測る
          */
         formatStart: Number.isFinite(formatStart) ? formatStart : NaN,
         /** 映像の最初の**パケット**の時刻 (PTS)。復号できるコマを探せなかったときの代用 */
