@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -17,7 +17,7 @@ const work = mkdtempSync(join(tmpdir(), 'denpa-logo-data-'));
 const { config } = await import('./config');
 config.cmLogoDir = join(work, 'cm');
 
-const { learned, stations } = await import('./logo-data');
+const { copyModel, learned, logoRepo, stations } = await import('./logo-data');
 
 function service(id: number, name: string, networkId = 32391) {
     return { id, service_id: id % 100000, network_id: networkId, name, type: 'GR' as const, channel: 'T13' };
@@ -75,5 +75,39 @@ describe('同じ絵を映している局を束ねる', () => {
         const rows = [service(40, 'サンテレビ', 32391), service(41, 'サンテレビ', 32400)];
 
         expect(stations(rows).map((row) => row.id)).toEqual([40, 41]);
+    });
+});
+
+describe('同じ絵の局へ写す', () => {
+    const FILE = 'own-logo-1440x1080.bin';
+    function put(id: number, body: string) {
+        mkdirSync(logoRepo(id), { recursive: true });
+        writeFileSync(join(logoRepo(id), FILE), body);
+    }
+    const read = (id: number) => readFileSync(join(logoRepo(id), FILE), 'utf8');
+
+    test('まだ持っていない局へ写す', () => {
+        put(50, 'new');
+        copyModel(logoRepo(50), [logoRepo(51)], FILE, false);
+
+        expect(read(51)).toBe('new');
+        // 書きかけは残さない
+        expect(readdirSync(logoRepo(51))).toEqual([FILE]);
+    });
+
+    test('向こうが同じ大きさのものを持っていれば、ふだんは写さない (自分で育てたほうが確か)', () => {
+        put(60, 'new');
+        put(61, 'grown');
+        copyModel(logoRepo(60), [logoRepo(61)], FILE, false);
+
+        expect(read(61)).toBe('grown');
+    });
+
+    test('覚え直した (局がロゴを替えた) ときは上書きする。向こうの型も古い', () => {
+        put(70, 'new');
+        put(71, 'old');
+        copyModel(logoRepo(70), [logoRepo(71)], FILE, true);
+
+        expect(read(71)).toBe('new');
     });
 });

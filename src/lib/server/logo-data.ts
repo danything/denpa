@@ -1,4 +1,13 @@
-import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync } from 'node:fs';
+import {
+    copyFileSync,
+    existsSync,
+    mkdirSync,
+    readdirSync,
+    readFileSync,
+    renameSync,
+    rmSync,
+    statSync,
+} from 'node:fs';
 import { join } from 'node:path';
 import { deflateSync } from 'node:zlib';
 import { and, eq, ne, sql } from 'drizzle-orm';
@@ -185,24 +194,35 @@ export function siblings(serviceId: number): number[] {
 }
 
 /**
- * 覚えたロゴを、同じ絵を映している局にも配る。
+ * 覚えたロゴを、同じ絵を映している局にも配る (`copyModel`)。
  *
  * 束ねて1局ぶんしか画面に出さないので (`stations`)、そのままだとサブチャンネルの枠で
  * 録れた番組が一から覚え直すことになる。中身は同じなので写せば足りる。
- * **向こうが同じ大きさのものを持っていれば写さない** (自分で育てたほうが確か)
  */
-export function share(serviceId: number): void {
-    const from = logoRepo(serviceId);
-    for (const id of siblings(serviceId)) {
-        const to = logoRepo(id);
-        for (const name of models(serviceId)) {
-            try {
-                if (existsSync(join(to, name))) continue;
-                mkdirSync(to, { recursive: true });
-                copyFileSync(join(from, name), join(to, name));
-            } catch {
-                // 写せなくても、その局はエンコードのときに覚えられる
-            }
+export function share(serviceId: number, file: string, replace: boolean): void {
+    copyModel(logoRepo(serviceId), siblings(serviceId).map(logoRepo), file, replace);
+}
+
+/**
+ * 覚えたもの1つ (`file`) を、他の局の入れ物へ写す。
+ *
+ * **向こうが同じ大きさのものを持っていれば、ふだんは写さない** (自分で育てたほうが確か)。
+ * 覚え直した (`replace`。局がロゴを替えた) ときだけは上書きする — 同じ絵なので向こうの型も
+ * 古く、残すと向こうは古い型で当てて外すか、覚え直しに1本ぶん余計にかかる。
+ * 書きかけを読まれないよう、隣に写してから差し替える (`logo-own.save` と同じ)
+ */
+export function copyModel(from: string, to: string[], file: string, replace: boolean): void {
+    for (const dir of to) {
+        if (!replace && existsSync(join(dir, file))) continue;
+        const temp = join(dir, `${file}.${process.pid}-share.tmp`);
+        try {
+            mkdirSync(dir, { recursive: true });
+            copyFileSync(join(from, file), temp);
+            renameSync(temp, join(dir, file));
+        } catch (error) {
+            rmSync(temp, { force: true });
+            // 写せなくても、その局はエンコードのときに覚えられる
+            console.warn(`[cm] 覚えたロゴを ${dir} へ写せませんでした: ${error}`);
         }
     }
 }

@@ -53,8 +53,11 @@ const GROW_EVERY = 90;
 export interface OwnResult {
     /** 0 で書けた。それ以外は無音検出に落とす */
     code: number;
-    /** この回に覚えて持ち帰った (同じ絵の局へ配る合図。`logo-data.share`) */
-    learned: boolean;
+    /**
+     * この回に覚えて持ち帰ったもの (同じ絵の局へ配る合図。`logo-data.share`)。
+     * `again` は覚えていたものが当たらず覚え直した (局がロゴを替えた) とき
+     */
+    learned: { file: string; again: boolean } | null;
     /** 覚え書き (落ちたときの理由 / 通ったときの要約) */
     stderr: string;
     /** 実測用の内訳 (ms)。覚える・当てる・そのうちロゴの計算そのもの */
@@ -256,7 +259,7 @@ export async function ownLogoFrames(
 ): Promise<OwnResult> {
     const { repo } = options;
     const timing = { learn: 0, detect: 0, compute: 0, frames: 0 };
-    const fail = (stderr: string, code = 1): OwnResult => ({ code, learned: false, stderr, timing });
+    const fail = (stderr: string, code = 1): OwnResult => ({ code, learned: null, stderr, timing });
 
     let probed: Probed;
     try {
@@ -278,6 +281,8 @@ export async function ownLogoFrames(
     // 覚えていれば使う。コマの大きさが違うもの (SD と HD) には当てない
     let model = load(repo, probed.width, probed.height);
     let learnedNow = false;
+    /** 覚えていたものが当たらず、この録画から覚え直した */
+    let relearned = false;
     /** 覚え直したものを持ち帰るか。前のロゴと違う所で覚えたなら、この回だけ使って持ち帰らない */
     let keep = true;
     if (model === null) {
@@ -305,6 +310,7 @@ export async function ownLogoFrames(
         keep = overlaps(model.rect, learned.rect);
         model = learned;
         learnedNow = true;
+        relearned = true;
         found = await detect(job, model);
     }
     if (typeof found === 'string') return fail(found);
@@ -322,7 +328,10 @@ export async function ownLogoFrames(
     const share = Math.round((lit / found.frames) * 100);
     return {
         code: 0,
-        learned: learnedNow && keep,
+        learned:
+            learnedNow && keep
+                ? { file: modelFile(model.frameWidth, model.frameHeight), again: relearned }
+                : null,
         stderr: `枠 ${rect.x},${rect.y},${rect.width},${rect.height} 型 ${found.points} 画素 / ロゴ ${share}%${learnedNow ? (keep ? ' (この録画で覚えた)' : ' (この録画だけで覚えた。前の型は残す)') : ''}`,
         timing,
     };

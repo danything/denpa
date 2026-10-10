@@ -175,7 +175,7 @@ export async function detectWithJls(
          * **覚えたものを、同じ絵を映している局にも配る** (`logo-data.share`)。
          * サブチャンネルの枠で録れた番組が一から覚え直さないように
          */
-        if (own.learned) share(serviceId);
+        if (own.learned !== null) share(serviceId, own.learned.file, own.learned.again);
 
         // 2. 無音とシーンチェンジを拾う
         step('無音とシーンの切れ目を探しています');
