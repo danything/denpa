@@ -49,6 +49,12 @@
       "matchDatasources": ["docker"],
       "matchPackageNames": ["mcr.microsoft.com/dotnet/sdk"],
       "allowedVersions": "<11"
+    },
+    {
+      "description": "danything/denpa-font の版は vX.Y のタグだけ (元フォントを置いた source-… のリリースは版ではない)",
+      "matchDatasources": ["github-releases"],
+      "matchPackageNames": ["danything/denpa-font"],
+      "allowedVersions": "/^v\\d+\\.\\d+$/"
     }
   ]
 }
