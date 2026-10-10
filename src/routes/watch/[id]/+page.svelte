@@ -1666,22 +1666,10 @@
         <div class="small muted meta" data-testid="watch-meta">
             {recordedDuration(rec)} ・ {size(rec.ts_size)}
         </div>
-
-        {#snippet footer()}
-            <!--
-                **「一覧へ」は置かない。** 絵の右上の「×」が同じ行き先で、
-                2つ並べる意味が無かった
-            -->
-            <!-- 押されてから期限付きの署名URLを作って落とす (#lib/download) -->
-            <button
-                type="button"
-                class="outline small"
-                onclick={() => void startDownload(rec.id, 'encoded')}
-                data-testid="watch-download"
-            >
-                ダウンロード
-            </button>
-        {/snippet}
+        <!--
+            **押すものは置かない。** 「一覧へ」は絵の右上の「×」と同じ行き先、
+            ダウンロードは録画の詳細の「その他…」にある。観ている横に要らない
+        -->
     </FactsAside>
 </div>
 
