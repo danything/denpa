@@ -17,6 +17,14 @@ describe('一覧の絞り込み', () => {
         expect(matches('ＮＨＫ', 'NHK総合')).toBe(true);
         expect(normalize('ＡＢＣ１２３')).toBe('abc123');
     });
+
+    test('外字は規格の字のまま持っていても、昔の書き方で当たる', () => {
+        expect(matches('吉野家', '𠮷野家')).toBe(true);
+        expect(matches('[新]', '🈟アニメ')).toBe(true);
+        expect(matches('末廣亭', '末廣𠅘')).toBe(true);
+        // 逆向き (規格の字で探して、昔の書き方の録画に当てる) も
+        expect(matches('𠮷野家', '吉野家')).toBe(true);
+    });
 });
 
 describe('頭と尻を切り出す (録画の枠)', () => {

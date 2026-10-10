@@ -46,6 +46,20 @@ export function loadCaptionFont(url: string): Promise<void> {
     return fontLoading;
 }
 
+/** 絵文字の字体を持ちうる字。数字や # も入るので、ASCII は `textStyle` で除く */
+const EMOJI = /^\p{Emoji}$/u;
+
+/**
+ * **絵文字になりうる字は字で描く** (市販のテレビと同じ白黒)。後ろに VS15 (U+FE0E) を足す。
+ *
+ * 外字の ⚡ ⛅ 🈚 は、何もしないとブラウザがカラーの絵文字の字体へ回す。画面の文字は
+ * CSS (`font-variant-emoji: text`、`app.css`) で言えるが、canvas には効かない。
+ * 描くときに足すだけで、文字列そのもの (`CaptionRun.text`) は変えない
+ */
+export function textStyle(char: string): string {
+    return (char.codePointAt(0) ?? 0) > 0x7f && EMOJI.test(char) ? `${char}\uFE0E` : char;
+}
+
 /** 「永」の墨の上下 (字の大きさ 1 あたり)。基準線を決めるのに使う */
 interface Ink {
     ascent: number;
@@ -195,10 +209,10 @@ function drawRun(
             // 縦の太さを合わせる (横に縮めた字では横が少し細くなる)
             ctx.lineWidth = strokePx * 2;
             ctx.strokeStyle = run.stroke;
-            ctx.strokeText(char, 0, 0);
+            ctx.strokeText(textStyle(char), 0, 0);
         }
         ctx.fillStyle = run.fg;
-        ctx.fillText(char, 0, 0);
+        ctx.fillText(textStyle(char), 0, 0);
         ctx.restore();
     });
 }

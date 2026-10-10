@@ -1,5 +1,18 @@
 import { fail } from '@sveltejs/kit';
-import { and, asc, desc, eq, getTableColumns, inArray, isNull, like, ne, not, or, sql } from 'drizzle-orm';
+import {
+    type AnyColumn,
+    and,
+    asc,
+    desc,
+    eq,
+    getTableColumns,
+    inArray,
+    isNull,
+    ne,
+    not,
+    or,
+    sql,
+} from 'drizzle-orm';
 import { alias } from 'drizzle-orm/sqlite-core';
 import { capacityLabel } from '#lib/format.js';
 import { GROUPED_COOKIE, storedGrouped } from '#lib/grouping.js';
@@ -12,6 +25,7 @@ import { deleteRecordingFiles, reconcile } from '#lib/server/files.js';
 import { seriesFolder } from '#lib/server/library.js';
 import { recordingFromForm } from '#lib/server/recording.js';
 import { cancel, restore } from '#lib/server/reservations.js';
+import { likeTerms } from '#lib/server/rules.js';
 import {
     activeEncodeJobId,
     encodeJobs,
@@ -23,7 +37,7 @@ import {
     services,
 } from '#lib/server/schema.js';
 import { settings } from '#lib/server/settings.js';
-import { parseTitle } from '#lib/server/title.js';
+import { parseTitle, searchable } from '#lib/server/title.js';
 import { cmRedo, encodeSource } from '#lib/source.js';
 import type { EncodeJob, Recording, Reservation, ReservationState } from '#lib/types.js';
 
@@ -201,7 +215,14 @@ export function load({ url, cookies }) {
      * ずれてページごとスクロールバーが生えていた。同じ番組が2箇所に並んでもいた。
      * 「録れたものが今どうなっているか」の一形態なので、行の状態として出すのが素直。
      */
-    const pattern = q === '' ? null : `%${q}%`;
+    /*
+     * 絞り込みの言葉は語ごとに AND (手元の絞り込みと同じ読み方)。外字は規格の字 (𠮷) の
+     * まま入っているので、昔の書き方 (吉) に寄せた字が絡む所は抜いて当てる (`rules.likeTerms`)。
+     * それで絞れない語 (「吉」だけ) は、手元の絞り込みに任せる
+     */
+    const terms = likeTerms(searchable(q).split(/\s+/).filter(Boolean));
+    const search = (...columns: AnyColumn[]) =>
+        and(...terms.map((term) => or(...columns.map((column) => sql`${column} LIKE ${term} ESCAPE '\\'`))));
     const res = alias(reservationTable, 'res');
     const j = alias(encodeJobs, 'j');
     const recordings: RecordingRow[] = orm()
@@ -235,14 +256,12 @@ export function load({ url, cookies }) {
                  * 消したかどうかを確かめるのに一覧を行き来することになっていた
                  */
                 showDeleted ? undefined : isNull(recordingTable.deleted_at),
-                pattern === null
-                    ? undefined
-                    : or(
-                          like(recordingTable.name, pattern),
-                          like(recordingTable.series, pattern),
-                          like(recordingTable.subtitle, pattern),
-                          like(recordingTable.service_name, pattern),
-                      ),
+                search(
+                    recordingTable.name,
+                    recordingTable.series,
+                    recordingTable.subtitle,
+                    recordingTable.service_name,
+                ),
             ),
         )
         /*
@@ -289,13 +308,7 @@ export function load({ url, cookies }) {
         .from(r)
         .innerJoin(services, eq(services.id, r.service_id))
         .leftJoin(ruleTable, eq(ruleTable.id, r.rule_id))
-        .where(
-            and(
-                eq(r.state, 'missed'),
-                isNull(r.started_at),
-                pattern === null ? undefined : or(like(r.name, pattern), like(services.name, pattern)),
-            ),
-        )
+        .where(and(eq(r.state, 'missed'), isNull(r.started_at), search(r.name, services.name)))
         .orderBy(desc(r.start_at))
         .limit(100)
         .all()
