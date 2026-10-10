@@ -14,9 +14,10 @@
 
 import { max, sql } from 'drizzle-orm';
 import { EpgReader } from '../ts/eit';
+import { ServiceReader } from '../ts/psi';
 import { config } from './config';
 import { orm } from './db';
-import { CURRENT_SERVICES, savePrograms, settle, syncServices } from './epg';
+import { CURRENT_SERVICES, savePrograms, settle, syncServices, widenServices } from './epg';
 import { emit } from './events';
 import { resolveConflicts } from './scheduler';
 import { programs, services } from './schema';
@@ -266,7 +267,27 @@ async function collectChannel(
             boosted ? config.priority.epgNow : config.priority.epg,
         );
         opened = true;
+        /*
+         * **局の名前の幅も放送から取り直す** (`epg.widenServices`)。SDT は1秒足らずで来るので、
+         * 読めたら手放す (その先のパケットまで2度ばらさない)。来ないまま `SDT_LIMIT` を過ぎても手放す
+         */
+        let sdt: ServiceReader | null = new ServiceReader();
+        let sdtBytes = 0;
         for await (const chunk of chunks(stream)) {
+            if (sdt !== null) {
+                sdt.feed(chunk);
+                sdtBytes += chunk.length;
+                if (sdt.transport === null && sdtBytes > SDT_LIMIT) {
+                    sdt = null;
+                } else if (sdt.transport !== null) {
+                    try {
+                        widenServices(sdt.transport.originalNetworkId, sdt.transport.services);
+                    } catch (error) {
+                        console.warn(`[epg] ${label} の局名を書けませんでした: ${error}`);
+                    }
+                    sdt = null;
+                }
+            }
             if (reader.feed(chunk) && reader.complete) break;
             if (Date.now() - flushedAt >= FLUSH_EVERY) flush();
         }
@@ -312,6 +333,9 @@ async function collectChannel(
     // 同じ番組を何度か書いているので、数えるのは読めた番組の数まで
     return { programs: Math.min(saved, reader.all().length), complete: opened && reader.complete };
 }
+
+/** SDT を待つ上限 (`collectChannel`)。BS の数秒ぶん。SDT は 2秒に1回は流れる */
+const SDT_LIMIT = 32 * 1024 * 1024;
 
 /** 読みながら保存する間隔 (`collectChannel`) */
 const FLUSH_EVERY = 30_000;

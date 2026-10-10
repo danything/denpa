@@ -150,8 +150,8 @@ test.describe('録画とエンコード', () => {
         expect(events).toContain('recording.finished');
         expect(events).toContain('encode.finished');
         for (const call of state.webhookCalls as { text: string; recording?: { service: string } }[]) {
-            expect(call.text).toContain('BS11イレブン');
-            expect(call.recording?.service).toBe('BS11イレブン');
+            expect(call.text).toContain('ＢＳ１１イレブン');
+            expect(call.recording?.service).toBe('ＢＳ１１イレブン');
         }
 
         /*

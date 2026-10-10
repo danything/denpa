@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test';
-import { displayTitle, parseTitle, sanitizeFileName, toHalfWidth } from './title';
+import { toHalfWidth } from '../fold';
+import { displayTitle, parseTitle, sanitizeFileName } from './title';
 
 describe('parseTitle', () => {
     test('装飾記号を落としてシリーズ名にする', () => {
@@ -28,10 +29,6 @@ describe('parseTitle', () => {
     test('第N話 表記も拾う', () => {
         expect(parseTitle('ドラマ 第3話').episode).toBe(3);
         expect(parseTitle('ドラマ 第3話').series).toBe('ドラマ');
-    });
-
-    test('全角は半角に寄せる', () => {
-        expect(toHalfWidth('ＴＯＫＹＯ　ＭＸ')).toBe('TOKYO MX');
     });
 
     test('空文字でも落ちない', () => {
@@ -183,6 +180,57 @@ describe('parseTitle', () => {
     });
 });
 
+/**
+ * 放送のとおりの全角 (「Ｖｅｎｕｅ１０１」) で来た番組名。**切り出しは半角と同じ所で、字は元のまま返す**
+ * (探す・比べる側と保存先の名前が半角に寄せる)
+ */
+describe('parseTitle (全角の番組名)', () => {
+    test('話数・副題・飾りを半角と同じように読み、字は全角のまま', () => {
+        expect(parseTitle('［新］Ｖｅｎｕｅ１０１　＃１２「ゲスト」［字］')).toEqual({
+            series: 'Ｖｅｎｕｅ１０１',
+            arc: '',
+            subtitle: 'ゲスト',
+            episode: 12,
+        });
+        expect(parseTitle('【字】テストホテル　ｒｅｑｕｅｓｔ　１５．')).toEqual({
+            series: 'テストホテル',
+            arc: '',
+            subtitle: '',
+            episode: 15,
+        });
+        expect(parseTitle('テストアニメ　第２期　＃３　決戦の日')).toEqual({
+            series: 'テストアニメ',
+            arc: '第２期',
+            subtitle: '決戦の日',
+            episode: 3,
+        });
+        expect(parseTitle('＜アニメギルド＞「東京リベンジャーズ」三天戦争編　第５２話')).toMatchObject({
+            series: '東京リベンジャーズ',
+            arc: '三天戦争編',
+            episode: 52,
+        });
+    });
+
+    test('半角に寄せれば、半角で来た番組名と同じ結果になる (保存先の名前が変わらない)', () => {
+        for (const name of [
+            '［新］Ｖｅｎｕｅ１０１　＃１２「ゲスト」［字］',
+            'テストアニメ　第２期　＃３　決戦の日',
+            '［字］アニメ　追放された転生重騎士はゲーム知識で無双する　Ｃｈａｐｔｅｒ　１５',
+            '紫禁・御猫房～紫禁城猫警備室～　＃１「冒険の始まり」',
+        ]) {
+            const wide = parseTitle(name);
+            const half = parseTitle(toHalfWidth(name));
+            expect({
+                series: toHalfWidth(wide.series),
+                arc: toHalfWidth(wide.arc),
+                subtitle: toHalfWidth(wide.subtitle),
+                episode: wide.episode,
+            }).toEqual(half);
+            expect(sanitizeFileName(wide.series)).toBe(sanitizeFileName(half.series));
+        }
+    });
+});
+
 /** 入れ物の title に焼き込む番組名。プレイヤーがURLの代わりに出す */
 describe('displayTitle', () => {
     test('装飾記号だけ落とし、話数もサブタイトルも残す', () => {
@@ -195,6 +243,11 @@ describe('displayTitle', () => {
         expect(displayTitle('🈚転生したらスライムだった件 #88 🈑')).toBe(
             '🈚転生したらスライムだった件 #88 🈑',
         );
+    });
+
+    test('全角は放送のまま。飾りは全角でも落とす', () => {
+        expect(displayTitle('Ｖｅｎｕｅ１０１　＃１２［字］')).toBe('Ｖｅｎｕｅ１０１　＃１２');
+        expect(displayTitle('【新】Ｖｅｎｕｅ１０１　［字］　ＳＰ')).toBe('Ｖｅｎｕｅ１０１　ＳＰ');
     });
 
     test('全部消えたら元の名前のまま', () => {
@@ -213,6 +266,10 @@ describe('sanitizeFileName', () => {
 
     test('全部消えたら untitled にする', () => {
         expect(sanitizeFileName('///')).toBe('untitled');
+    });
+
+    test('全角の英数は半角に寄せる。寄せて取り込んでいた頃のファイル名と同じになる', () => {
+        expect(sanitizeFileName('Ｖｅｎｕｅ１０１　ＳＰ／後編')).toBe('Venue101 SP 後編');
     });
 
     test('長すぎる名前は切り詰める', () => {

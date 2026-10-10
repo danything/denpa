@@ -17,14 +17,14 @@ describe('ARIB 8単位符号', () => {
         expect(decodeAribText(bytes(0xa2, 0xa4, 0xa6))).toBe('あいう');
     });
 
-    test('ESC で G0 を英数に差し替えられる', () => {
-        expect(decodeAribText(bytes(0x1b, 0x28, 0x4a, 0x41, 0x42, 0x43))).toBe('ABC');
+    test('ESC で G0 を英数に差し替えられる。標準の大きさなので全角', () => {
+        expect(decodeAribText(bytes(0x1b, 0x28, 0x4a, 0x41, 0x42, 0x43))).toBe('ＡＢＣ');
     });
 
     test('ESC 0x24 は G0 への2バイト集合の指示', () => {
         // いったん英数にしてから漢字へ戻す
         const data = bytes(0x1b, 0x28, 0x4a, 0x41, 0x1b, 0x24, 0x42, 0x46, 0x7c);
-        expect(decodeAribText(data)).toBe('A日');
+        expect(decodeAribText(data)).toBe('Ａ日');
     });
 
     test('SS2 は1文字だけ G2 を使い、すぐ戻る', () => {
@@ -33,7 +33,7 @@ describe('ARIB 8単位符号', () => {
     });
 
     test('LS1 は GL を G1 (英数) に切り替えたままにする', () => {
-        expect(decodeAribText(bytes(0x0e, 0x41, 0x42, 0x0f, 0x46, 0x7c))).toBe('AB日');
+        expect(decodeAribText(bytes(0x0e, 0x41, 0x42, 0x0f, 0x46, 0x7c))).toBe('ＡＢ日');
     });
 
     test('カタカナ集合と半角カナ集合', () => {
@@ -118,8 +118,50 @@ describe('ARIB 8単位符号', () => {
         expect(decodeAribText(bytes(0x9b, 0x31, 0x3b, 0x32, 0x53, 0x46, 0x7c))).toBe('日');
     });
 
-    test('空白は半角にする。GR 側の 0xA0 も同じ', () => {
-        expect(decodeAribText(bytes(0x20, 0xa0))).toBe('  ');
+    /**
+     * 英数の幅は文字の大きさで決まる (ARIB TR-B14)。SI の初期状態は標準 (NSZ) で、テレビは全角で描く。
+     * 半角にしたい局は中型 (MSZ) を挟む。**放送のとおりに出す** (寄せるのは探す側)
+     */
+    describe('英数と空白の幅', () => {
+        /** 英数を G0 に指示して、続けて並べる */
+        const alnum = (...values: number[]) => bytes(0x1b, 0x28, 0x4a, ...values);
+
+        test('標準の大きさでは全角。「Ｖｅｎｕｅ１０１」', () => {
+            const venue = [0x56, 0x65, 0x6e, 0x75, 0x65, 0x31, 0x30, 0x31];
+            expect(decodeAribText(alnum(...venue))).toBe('Ｖｅｎｕｅ１０１');
+        });
+
+        test('中型 (MSZ) のあいだは半角。標準 (NSZ) で全角に戻る', () => {
+            // MSZ "Ep" NSZ "1"
+            expect(decodeAribText(alnum(0x89, 0x45, 0x70, 0x8a, 0x31))).toBe('Ep１');
+        });
+
+        test('小型 (SSZ) と超小型 (SZX 0x60) も半角。倍角 (SZX 0x41) は標準と同じ幅', () => {
+            expect(decodeAribText(alnum(0x88, 0x41))).toBe('A');
+            expect(decodeAribText(alnum(0x8b, 0x60, 0x41))).toBe('A');
+            expect(decodeAribText(alnum(0x89, 0x8b, 0x41, 0x41))).toBe('Ａ');
+        });
+
+        test('記号も同じ。`toHalfWidth` でそのまま戻る字 (U+FF01〜) にする', () => {
+            // [ 字 ] を英数で: ［ と ］ (0x5C は ＼、0x7E は ～)
+            expect(decodeAribText(alnum(0x5b, 0x5c, 0x5d, 0x7e))).toBe('［＼］～');
+            expect(decodeAribText(alnum(0x89, 0x5b, 0x5c, 0x5d, 0x7e))).toBe('[\\]~');
+        });
+
+        test('空白も大きさに従う。GR 側の 0xA0 も同じ', () => {
+            expect(decodeAribText(bytes(0x20, 0xa0))).toBe('　　');
+            expect(decodeAribText(bytes(0x89, 0x20, 0xa0))).toBe('  ');
+        });
+
+        test('漢字・かなは大きさで変えない (半角の字が無い)', () => {
+            // MSZ 日 あ
+            expect(decodeAribText(bytes(0x89, 0x46, 0x7c, 0xa2))).toBe('日あ');
+        });
+
+        test('大きさは文字列ごとに標準から始まる', () => {
+            expect(decodeAribText(alnum(0x89, 0x41))).toBe('A');
+            expect(decodeAribText(alnum(0x41))).toBe('Ａ');
+        });
     });
 
     /**

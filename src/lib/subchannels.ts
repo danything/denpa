@@ -12,6 +12,7 @@
  * 録画のルールには関わらない (サブチャンネルも局として扱い続ける)。ライブの一覧は
  * いま相乗り中のサブを外す (`epg.airing`)。相乗りの決め方はここ (`splitOf`) と同じ
  */
+import { toHalfWidth } from './fold';
 
 /** 局の見分けに使う列 (`services` の行) */
 export interface Station {
@@ -77,7 +78,8 @@ export function mainOf(services: Station[]): Map<number, number> {
  * - **名前が無い** → 相乗り。マルチ編成をしていない間の NHK総合2 や Eテレ2・3 は
  *   名前の無い枠が並ぶ
  * - **重なる時間の本チャンネルの番組と同じ名前** → 相乗り。サブの EIT に本チャンネルと
- *   同じ番組を載せてくる局もある (時刻は揃っているとは限らないので、名前で見る)
+ *   同じ番組を載せてくる局もある (時刻は揃っているとは限らないので、名前で見る。幅は寄せて比べる —
+ *   名前は放送のとおりの幅で持っていて、英数を全角で送るか半角で送るかは EIT ごとに違いうる)
  * - それ以外 → 分割放送
  *
  * サブに番組が無い時間も相乗りとみなす (サブの番組表がまだ集まっていないときも、これで済む)。
@@ -105,7 +107,7 @@ export function splitOf<P extends Omit<Airing, 'id'>>(
         if (of === undefined || of === program.service_id || program.name === '') continue;
         const same = (ofMain.get(of) ?? []).some(
             (m) =>
-                m.name === program.name &&
+                toHalfWidth(m.name) === toHalfWidth(program.name) &&
                 (m.start_at === program.start_at ||
                     (m.start_at < program.end_at && m.end_at > program.start_at)),
         );

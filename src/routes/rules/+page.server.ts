@@ -13,9 +13,9 @@ import {
     applyRules,
     compile,
     coveringRule,
+    globPatterns,
     haystack,
     keepsReservation,
-    likePatterns,
     matchesCompiled,
     prefillFrom,
     previewSkips,
@@ -309,16 +309,16 @@ export async function load({ url }) {
         /*
          * **SQL で候補を減らしてから JS で当てる。** これから放送される全番組
          * (実データ相当で 33,000 件) を全列で読むだけで 330〜400ms かかり、条件が
-         * 1語でもそれは同じだった。番組名 (と概要) に `LIKE` を掛ければ当たった
+         * 1語でもそれは同じだった。番組名 (と概要) に `GLOB` を掛ければ当たった
          * 行だけ読めて 33ms。当てるのは今までどおり `matchesCompiled` で、
-         * SQL は「必ず含むはずの語」を落とすだけ (`likePatterns`)
+         * SQL は「必ず含むはずの語」を落とすだけ (`globPatterns`)
          */
-        const patterns = likePatterns(compiled);
+        const patterns = globPatterns(compiled);
         const columns = compiled.fields.includes('description')
             ? [programs.name, programs.description]
             : [programs.name];
         const narrowed = (patterns ?? []).map((pattern) =>
-            or(...columns.map((column) => sql`${column} LIKE ${pattern} ESCAPE '\\'`)),
+            or(...columns.map((column) => sql`${column} GLOB ${pattern}`)),
         );
         /*
          * **読む列も絞る。** 判定に要らない JSON 列 (音声 106KB、映像) は読まない。

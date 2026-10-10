@@ -212,7 +212,7 @@ test.describe('CM検出のロゴ', () => {
 
         await goto(page, '/tuners');
         // 局名は画面では半角に揃えてある (ＢＳ１１ → BS11)
-        const card = page.locator('details.cm-logo').filter({ hasText: 'BS11' });
+        const card = page.locator('details.cm-logo').filter({ hasText: 'ＢＳ１１' });
         await expect(card.locator('summary .tag')).toHaveText('覚えました');
         await card.locator('summary').first().click();
         const shown = card.getByRole('img', { name: 'いま覚えているロゴ' });

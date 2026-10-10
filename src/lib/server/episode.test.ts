@@ -275,6 +275,24 @@ describe('同じ回の見分け', () => {
         expect(same('テスト特捜班 5 #6', 'テスト特捜班 6 #6', [series, series])).toBe(false);
         expect(same('テストアニメ #1「はじまり」', 'テストアニメ #1「別の話」', [blurb, blurb])).toBe(false);
     });
+
+    /** 番組名は放送のとおり全角混じりで持つ。比べるときに寄せる */
+    test('全角で来た番組名も、半角の番組名と同じ回に読む', () => {
+        expect(same('テストホテル　ｒｅｑｕｅｓｔ　１５．［字］', 'テストホテル request 15.')).toBe(true);
+        expect(same('ＴＥＳＴアニメ　Ｃｈａｐｔｅｒ　１５', 'TESTアニメ Chapter 15')).toBe(true);
+        expect(same('アニメＡ・テスト転生記　＃４', 'テスト転生記 #4')).toBe(true);
+        expect(same('テストホテル　ｒｅｑｕｅｓｔ　１５．', 'テストホテル request 16.')).toBe(false);
+    });
+
+    test('概要の話数と副題も全角のまま読める', () => {
+        const wide = episodeOf({
+            name: 'テストアニメ　ＦＲＩＤＡＹ　ＡＮＩＭＥ　ＮＩＧＨＴ',
+            description: '＃１８「月下の花」',
+            extended: null,
+        });
+        expect(wide?.number).toBe(18);
+        expect(wide?.subtitle).toBe('月下の花');
+    });
 });
 
 describe('captioned', () => {
@@ -282,6 +300,9 @@ describe('captioned', () => {
         expect(captioned('テストアニメ #1[字]')).toBe(true);
         expect(captioned('テストアニメ #1 🈑')).toBe(true);
         expect(captioned('テストアニメ #1')).toBe(false);
+        // 放送のとおりの全角でも
+        expect(captioned('テストアニメ　＃１［字］')).toBe(true);
+        expect(captioned('テストアニメ　＃１【字】')).toBe(true);
     });
 });
 

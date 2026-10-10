@@ -7,6 +7,14 @@
  * 0x21〜0x7E は GL に、0xA1〜0xFE は GR に割り当てられた表で引く。
  * SI の初期状態は G0=漢字 / G1=英数 / G2=ひらがな / G3=カタカナ、GL=G0・GR=G2。
  *
+ * ## 英数の幅は文字の大きさで決まる
+ *
+ * 英数集合 (と空白) は**いまの文字の大きさ**で描く。SI の初期状態は標準 (NSZ) で、
+ * テレビはこれを全角で描く。半角にしたい局は中型 (MSZ) を挟んでくる (ARIB TR-B14)。
+ * 番組名の「Ｖｅｎｕｅ１０１」は英数集合を標準のまま送ったもの。**放送のとおりに出す** —
+ * 探すときや比べるときに半角へ寄せるのは使う側 (`fold.toHalfWidth` / `title.searchable`)。
+ * 全角は `toHalfWidth` でそのまま戻る字 (U+FF01〜U+FF5E) にする (0x5C は ＼、0x7E は ～)
+ *
  * ## 漢字は EUC-JP に押し付ける
  *
  * 2バイトの漢字集合は JIS X 0208 そのもので、区点は (第1-0x20, 第2-0x20)。
@@ -67,7 +75,7 @@ const UNKNOWN = '□';
  *
  * - ひらがなの 0x74〜0x76 は規格で空き。字幕は全角の空白で埋めるが、番組表では何も出さない
  * - JIS X 0201 カタカナはいつも半角 (字幕は大きさで全角と半角を描き分ける)
- * - 英数は ASCII のまま (字幕の半角の表は 0x5C が ¥、0x7E が ‾。番組表は検索で打つ字に合わせる)
+ * - 英数は大きさに従って全角か ASCII (字幕の半角の表は 0x5C が ¥、0x7E が ‾。番組表は検索で打つ字に合わせる)
  * - 漢字は EUC-JP のまま読む (字幕は 1区33点の 〜・34点の ‖・61点の − などを差し替える。`KANJI_DIFF`)
  */
 const HIRA = [...HIRAGANA_TABLE];
@@ -109,6 +117,16 @@ const C0_PARAMS = new Map<number, number>([
     [0x16, 1], // PAPF
     [0x1c, 2], // APS
 ]);
+/** 文字の大きさ (C1)。小型 SSZ と中型 MSZ は英数と空白を半角で描く */
+const SSZ = 0x88;
+const MSZ = 0x89;
+const NSZ = 0x8a;
+const SZX = 0x8b;
+/** SZX の引数のうち半角にあたるもの (超小型 TSZ)。ほかは倍角・特殊で、幅は標準と同じに扱う */
+const SZX_TINY = 0x60;
+/** 標準の大きさの空白 (U+3000) */
+const WIDE_SPACE = String.fromCharCode(0x3000);
+
 /** C1 も同じ。COL/CDC は最初の引数が 0x20 のときだけもう1つ増える */
 const C1_PARAMS = new Map<number, number>([
     [0x8b, 1], // SZX
@@ -134,6 +152,8 @@ export function decodeAribText(data: Uint8Array): string {
     let gr = 2;
     /** 単発シフト (SS2/SS3)。1文字だけ別の表を使ったら元に戻す */
     let single: number | null = null;
+    /** 英数と空白を半角で描く大きさか (MSZ/SSZ)。SI の初期状態は標準 (NSZ) で全角 */
+    let half = false;
 
     let out = '';
     let at = 0;
@@ -157,9 +177,9 @@ export function decodeAribText(data: Uint8Array): string {
                 case 0x0a: // APD。局によってはこちらで改行してくる
                     out += '\n';
                     break;
-                case 0x20: // SP
+                case 0x20: // SP。空白の幅も大きさに従う
                 case 0xa0:
-                    out += ' ';
+                    out += half ? ' ' : WIDE_SPACE;
                     break;
                 case 0x0e: // LS1
                     gl = 1;
@@ -201,6 +221,9 @@ export function decodeAribText(data: Uint8Array): string {
                 at++;
                 continue;
             }
+            if (byte === SSZ || byte === MSZ) half = true;
+            else if (byte === NSZ) half = false;
+            else if (byte === SZX) half = data[at] === SZX_TINY;
             let params = C1_PARAMS.get(byte) ?? 0;
             // COL と CDC は「色を直に指定する」形のときだけ引数が1つ増える
             if ((byte === 0x90 || byte === 0x92) && data[at] === 0x20) params = 2;
@@ -223,17 +246,17 @@ export function decodeAribText(data: Uint8Array): string {
         }
 
         at += 1;
-        out += oneByte(first, set.kind);
+        out += oneByte(first, set.kind, half);
     }
 
     return out;
 }
 
-function oneByte(code: number, kind: Charset['kind']): string {
+function oneByte(code: number, kind: Charset['kind'], half: boolean): string {
     switch (kind) {
         case 'alnum':
-            // 英数集合はそのまま ASCII として読める。全角に直すのは呼び出し側の仕事
-            return String.fromCharCode(code);
+            // 英数集合は ASCII と同じ並び。標準の大きさなら全角 (U+FF01〜) にずらす
+            return String.fromCharCode(half ? code : code + 0xfee0);
         case 'hiragana':
             return code >= 0x74 && code <= 0x76 ? '' : (HIRA[code - 0x21] ?? '');
         case 'katakana':

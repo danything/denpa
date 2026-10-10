@@ -6,7 +6,7 @@ test.describe('ダッシュボードと画面遷移', () => {
         await goto(page, '/guide?type=GR');
         // 映像が入っていないので録っても中身が無い。番組表に出るとルールが引っかけて
         // 録画が失敗する
-        await expect(page.locator('[data-testid="guide-grid"]')).not.toContainText('MXデータ');
+        await expect(page.locator('[data-testid="guide-grid"]')).not.toContainText('ＭＸデータ');
     });
 
     test('EPG取得後に局・番組が反映され、全ページを開ける', async ({ page, request }) => {
@@ -388,7 +388,7 @@ test.describe('ダッシュボードと画面遷移', () => {
         await page.getByTestId('rule-preview').click();
         await page.waitForURL(/serviceTypes=BS/);
         for (const row of await page.getByTestId('preview-row').all()) {
-            await expect(row).toContainText('BS11イレブン');
+            await expect(row).toContainText('ＢＳ１１イレブン');
         }
 
         // そのまま保存できる

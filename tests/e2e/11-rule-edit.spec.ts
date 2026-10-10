@@ -33,7 +33,7 @@ test.describe('ルールの編集', () => {
         const row = page.getByTestId('rule-row').first();
         await expect(row).toContainText('ニュース');
         await expect(row).toContainText('再放送');
-        await expect(row).toContainText('BS11イレブン');
+        await expect(row).toContainText('ＢＳ１１イレブン');
 
         // 編集画面に入り直しても、変えた内容が入っている
         await page.getByTestId('rule-edit').first().click();

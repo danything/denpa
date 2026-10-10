@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { FOLD, foldForSearch, likePieces } from './fold';
+import { FOLD, foldForSearch, likePieces, toHalfWidth } from './fold';
 
 const VS15 = String.fromCodePoint(0xfe0e);
 const VS16 = String.fromCodePoint(0xfe0f);
@@ -59,5 +59,21 @@ describe('LIKE に掛けられる切れ端 (likePieces)', () => {
         expect(likePieces('anf')).toEqual(['n']);
         // 新番組 の「新」は「[新]」の真ん中とは並び方が合わないので残す
         expect(likePieces('新番組')).toEqual(['新番組']);
+    });
+});
+
+describe('全角を半角に (toHalfWidth)', () => {
+    test('全角の英数・記号・空白を半角に', () => {
+        expect(toHalfWidth('ＴＯＫＹＯ　ＭＸ１')).toBe('TOKYO MX1');
+        expect(toHalfWidth('［字］＃１２！～')).toBe('[字]#12!~');
+    });
+
+    test('1文字を1文字に写す (位置がそろう)', () => {
+        const wide = 'Ｖｅｎｕｅ１０１　＃３「ゲスト」';
+        expect(toHalfWidth(wide).length).toBe(wide.length);
+    });
+
+    test('かな・漢字・外字は触らない', () => {
+        expect(toHalfWidth('テスト番組🈑𠮷')).toBe('テスト番組🈑𠮷');
     });
 });

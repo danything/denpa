@@ -174,6 +174,12 @@ describe('本チャンネルとサブチャンネル', () => {
         expect(splitOf(programs, main).size).toBe(0);
     });
 
+    test('名前の幅だけ違っても同じ番組 (英数を全角で送るか半角で送るかは EIT ごとに違いうる)', () => {
+        const main = mainOf([TX, TX2]);
+        const programs = [program(TX.id, 4, 6, 'ＷＢＳ　２３時'), program(TX2.id, 4, 6, 'WBS 23時')];
+        expect(splitOf(programs, main).size).toBe(0);
+    });
+
     test('出すのは分割放送のあるサブだけ。本チャンネルのすぐ右に寄せる', () => {
         // 別の地域の局が間に挟まっていても寄せる
         const other = station(9, 1040, 'T30');

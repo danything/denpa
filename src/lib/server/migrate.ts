@@ -27,6 +27,7 @@ import { SQL } from 'bun';
 import { and, eq, isNull } from 'drizzle-orm';
 import { parseSearchFields, SEARCH_FIELDS } from '#lib/search.js';
 import { array, number, read } from '#lib/shape.js';
+import { toHalfWidth } from '../fold';
 import type { Recording } from '../types';
 import { config } from './config';
 import { now, orm } from './db';
@@ -35,7 +36,7 @@ import { type LibraryNameInput, libraryPath, recordedPath } from './library';
 import { writeThumbnail } from './metadata';
 import { reserve } from './reservations';
 import { programs, recordings, rules, services } from './schema';
-import { parseTitle, toHalfWidth } from './title';
+import { parseTitle } from './title';
 
 const env = (key: string, fallback: string) => process.env[key] ?? fallback;
 
@@ -316,7 +317,8 @@ export async function importOne(
         return 'missing';
     }
 
-    const name = toHalfWidth(row.name);
+    // 番組名は EPGStation が持っていたまま (半角に寄せない。保存先の名前は `sanitizeFileName` が寄せる)
+    const name = row.name;
     const verb = existing === undefined ? '取り込む' : '取り込み直す';
     record(`${options.apply ? verb : `${verb}(予定)`}: ${name}`);
     if (!options.apply) return 'imported';
@@ -387,11 +389,11 @@ export async function importOne(
                         reservation_id: null,
                         program_id: -row.id,
                         service_id: service?.id ?? 0,
-                        service_name: service?.name ?? toHalfWidth(row.channelName ?? ''),
+                        service_name: service?.name ?? row.channelName ?? '',
                         name,
                         series: parsed.series,
                         subtitle: parsed.subtitle,
-                        description: toHalfWidth(row.description ?? ''),
+                        description: row.description ?? '',
                         start_at: Number(row.startAt),
                         end_at: Number(row.endAt),
                         finished_at: at,
@@ -617,12 +619,12 @@ async function importReservations(connection: SQL, options: MigrateOptions): Pro
             .get();
         if (program === undefined) {
             // 番組表を取り込む前だと出る。EPG を取り直してからもう一度実行すれば入る
-            record(`番組表に無いので取り込めません: ${toHalfWidth(row.name ?? String(row.programId))}`);
+            record(`番組表に無いので取り込めません: ${row.name ?? String(row.programId)}`);
             status_.reservations.skipped++;
             continue;
         }
 
-        record(`${options.apply ? '予約' : '予約(予定)'}: ${toHalfWidth(row.name ?? '')}`);
+        record(`${options.apply ? '予約' : '予約(予定)'}: ${row.name ?? ''}`);
         if (options.apply) await reserve(program.id);
         status_.reservations.imported++;
     }
@@ -668,7 +670,7 @@ async function run(options: MigrateOptions): Promise<void> {
         emit('migrate');
 
         for (const row of rows) {
-            status_.current = toHalfWidth(row.name);
+            status_.current = row.name;
             const result = await importOne(row, options);
             status_[result]++;
             emit('migrate');
