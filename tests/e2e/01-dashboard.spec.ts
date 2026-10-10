@@ -388,7 +388,7 @@ test.describe('ダッシュボードと画面遷移', () => {
         await page.getByTestId('rule-preview').click();
         await page.waitForURL(/serviceTypes=BS/);
         for (const row of await page.getByTestId('preview-row').all()) {
-            await expect(row).toContainText('BS11イレブン');
+            await expect(row).toContainText('ＢＳ１１イレブン');
         }
 
         // そのまま保存できる

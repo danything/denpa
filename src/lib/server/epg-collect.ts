@@ -269,13 +269,17 @@ async function collectChannel(
         opened = true;
         /*
          * **局の名前の幅も放送から取り直す** (`epg.widenServices`)。SDT は1秒足らずで来るので、
-         * 読めたら手放す (その先のパケットまで2度ばらさない)
+         * 読めたら手放す (その先のパケットまで2度ばらさない)。来ないまま `SDT_LIMIT` を過ぎても手放す
          */
         let sdt: ServiceReader | null = new ServiceReader();
+        let sdtBytes = 0;
         for await (const chunk of chunks(stream)) {
             if (sdt !== null) {
                 sdt.feed(chunk);
-                if (sdt.transport !== null) {
+                sdtBytes += chunk.length;
+                if (sdt.transport === null && sdtBytes > SDT_LIMIT) {
+                    sdt = null;
+                } else if (sdt.transport !== null) {
                     try {
                         widenServices(sdt.transport.originalNetworkId, sdt.transport.services);
                     } catch (error) {
@@ -329,6 +333,9 @@ async function collectChannel(
     // 同じ番組を何度か書いているので、数えるのは読めた番組の数まで
     return { programs: Math.min(saved, reader.all().length), complete: opened && reader.complete };
 }
+
+/** SDT を待つ上限 (`collectChannel`)。BS の数秒ぶん。SDT は 2秒に1回は流れる */
+const SDT_LIMIT = 32 * 1024 * 1024;
 
 /** 読みながら保存する間隔 (`collectChannel`) */
 const FLUSH_EVERY = 30_000;
