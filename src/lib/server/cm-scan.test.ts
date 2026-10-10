@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { existsSync, writeFileSync } from 'node:fs';
+import { dirname } from 'node:path';
 import { parseCuts, parseSilences, scanLine, scanOutputs, scanReader } from './cm-scan';
 
 /**
@@ -91,8 +92,8 @@ describe('読み手', () => {
             audio: true,
             logo: { filter: 'crop=2:2:0:0', size: 4, onFrame: (_f, i) => frames.push(i) },
         });
-        const cuts = /file=([^,]+\.cuts)/.exec(reader.outputs.join(' '))![1]!;
-        const silences = /file=([^,\s]+\.silences)/.exec(reader.outputs.join(' '))![1]!;
+        const cuts = /file=([^,\s]+\/cuts)/.exec(reader.outputs.join(' '))![1]!;
+        const silences = /file=([^,\s]+\/silences)/.exec(reader.outputs.join(' '))![1]!;
         writeFileSync(
             cuts,
             'frame:0 pts:0 pts_time:0.5\nlavfi.scd.score=1\nframe:1 pts:1 pts_time:0.533\nlavfi.scd.score=30\n',
@@ -108,6 +109,7 @@ describe('読み手', () => {
         expect(found.logoFrames).toBe(2);
         expect(frames).toEqual([0, 1]);
         expect(found.duration).toBe(600);
-        expect(existsSync(cuts) || existsSync(silences)).toBe(false);
+        // 一時フォルダごと片付ける
+        expect(existsSync(dirname(cuts))).toBe(false);
     });
 });

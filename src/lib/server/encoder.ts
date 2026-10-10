@@ -1290,6 +1290,8 @@ async function runJob(jobId: number): Promise<void> {
     let kept: Range[] | null = null;
     /** 本編の最初の区間 (焼いたものの時刻)。CM を残したときのサムネ */
     let contentStart: Range | null = null;
+    /** CM を絵まで見て決めたか (切ってよいか) */
+    let byPicture = true;
     const frameRate = Number.isFinite(measured.fps) ? measured.fps : config.cmFallbackFps;
 
     /**
@@ -1377,7 +1379,8 @@ async function runJob(jobId: number): Promise<void> {
             const want = extra.analysis ? reading?.want() : undefined;
             const reader = want === undefined ? undefined : scanReader(want);
             const keyframes = extra.keyframes?.(skip);
-            result = await runFfmpeg(
+            // 起こせずに投げたときも、書き出しの一時フォルダは片付ける
+            const pending = runFfmpeg(
                 job,
                 sourceTs,
                 working,
@@ -1392,6 +1395,10 @@ async function runJob(jobId: number): Promise<void> {
                 },
                 reader,
             );
+            result = await pending.catch((error) => {
+                reader?.result(-1, '');
+                throw error;
+            });
             if (result.code === 0) {
                 if (reader !== undefined) found = reader.result(0, '', measured.duration - skip);
                 break;
@@ -1443,12 +1450,12 @@ async function runJob(jobId: number): Promise<void> {
     };
 
     /**
-     * 焼いたものから CM を切る (`cm-cut.ts`)。残した区間を入れ物の頭からの秒で返す。
-     * 境目にキーフレームが無い・切れなかったら null
+     * 焼いたものから CM を切る (`cm-cut.ts`)。残した区間を入れ物の頭からの秒で返す。境目にキーフレームが無ければ
+     * `keys` (境目を指して焼き直せば切れる)、繋ぎ直しで転んだら `failed` (焼き直しても変わらない。ディスクなど)
      */
-    const cutWorking = async (working: string, skip: number): Promise<Range[] | null> => {
+    const cutWorking = async (working: string, skip: number): Promise<Range[] | 'keys' | 'failed'> => {
         const found = await listKeyframes(working);
-        if (found === null) return null;
+        if (found === null) return 'keys';
         const { keep, duration } = own(skip);
         // 焼いたものの時刻と、検出の時刻 (どちらも同じ1コマ目から) のずれ。muxer が数ミリ秒ずらす
         const offset =
@@ -1461,7 +1468,7 @@ async function runJob(jobId: number): Promise<void> {
             margin: config.cmCutMargin,
             duration,
         });
-        if (plan === null) return null;
+        if (plan === null) return 'keys';
         console.log(
             `[cm] 切った所のずれ (コマ): ${plan.errors.map((e) => (e * frameRate).toFixed(1)).join(' / ') || 'なし'}`,
         );
@@ -1469,7 +1476,7 @@ async function runJob(jobId: number): Promise<void> {
         writeFileSync(list, cutList(working, plan.pieces));
         const ok = await rewrite(working, (output) => cutArgs(list, output));
         removeIfExists(list);
-        if (!ok) return null;
+        if (!ok) return 'failed';
         return plan.pieces.map((piece) => ({
             start: piece.start - offset + skip,
             end: (piece.end === null ? duration : piece.end - offset) + skip,
@@ -1484,8 +1491,8 @@ async function runJob(jobId: number): Promise<void> {
          */
         const working = `${encodedPath(recording, codec)}.${jobId}.${codec}.encoding`;
         const first = index === 0;
-        // 切るのは CM を探せるときだけ (支度で転んだら CM 無しで焼く)
-        const cutting = mode === 'cut' && reading !== null;
+        // 切るのは CM を探せるときだけ (支度で転んだら CM 無しで焼く。音だけで決めたら切らない)
+        const cutting = mode === 'cut' && reading !== null && byPicture;
 
         const done = await encodeWays(codec, working, {
             analysis: first && reading !== null,
@@ -1513,6 +1520,11 @@ async function runJob(jobId: number): Promise<void> {
         if (first && reading !== null) {
             setPhase(jobId, 'cm', 'CMの境目を決めています');
             detection = await decide(reading, done.found, done.skip, done.video);
+            /*
+             * 音だけで決めた (絵の読み込みが落ちて探さずに焼き直した) なら切らない。キーフレームも置いて
+             * いないので、切るにはもう1回焼くことになる。尺だけの判定で本編を削るより CM を残す
+             */
+            byPicture = done.video;
             firstFrame = (done.found?.times[0] ?? Number.NaN) + done.skip;
             orm()
                 .update(recordings)
@@ -1520,7 +1532,8 @@ async function runJob(jobId: number): Promise<void> {
                 .where(eq(recordings.id, recording.id))
                 .run();
             setStep(jobId, `CM ${detection.cm.length} 箇所 (${detection.note})`);
-            if (detection.cm.length > 0 && mode === 'chapter') {
+            // 切らないと決めたとき (音だけで決めた) もチャプターにする
+            if (detection.cm.length > 0 && (mode === 'chapter' || !byPicture)) {
                 /*
                  * 1本目にはチャプターを書き足す (焼き直さない。中身はそのまま写すだけ)。
                  * 2本目からは焼くときに入れる (`buildArgs` の `chaptersFile`)
@@ -1539,10 +1552,10 @@ async function runJob(jobId: number): Promise<void> {
             }
         }
 
-        if (cutting && detection !== null && detection.cm.length > 0) {
+        if (cutting && byPicture && detection !== null && detection.cm.length > 0) {
             setPhase(jobId, 'cut', 'CMを切っています');
             let cut = await cutWorking(working, done.skip);
-            if (cut === null && !canceled.has(jobId)) {
+            if (cut === 'keys' && !canceled.has(jobId)) {
                 /*
                  * 境目にキーフレームが無かった (無音の真ん中に置いた境目・GPU が頼みを聞かなかった)。
                  * 境目を指して焼き直してから切る
@@ -1567,7 +1580,10 @@ async function runJob(jobId: number): Promise<void> {
                 cut = await cutWorking(working, again.skip);
             }
             // 切れなければ CM ごと置く。録れているものを捨てない
-            if (cut === null) console.error(`[cm] CMを切れませんでした。CMを残したまま置きます (${codec})`);
+            if (typeof cut === 'string')
+                console.error(
+                    `[cm] CMを切れませんでした (${cut === 'keys' ? '境目にキーフレームがありません' : '繋ぎ直しに失敗しました'})。CMを残したまま置きます (${codec})`,
+                );
             else if (first) kept = cut;
             if (canceled.has(jobId)) {
                 cleanup(working);

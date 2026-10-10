@@ -1,4 +1,4 @@
-import { readFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { Range } from '../ts/cm-decide';
@@ -185,23 +185,25 @@ export interface ScanReader {
     result(code: number, stderr: string, duration?: number): Scan;
 }
 
-/** 一時ファイルの名前。フィルタの引数に入るので `:` `,` などを含まない */
-function scratch(kind: string): string {
-    return join(tmpdir(), `denpa-scan-${process.pid}-${Math.random().toString(36).slice(2)}.${kind}`);
+/**
+ * 書き出しの置き場。読み手ごとに一時フォルダを1つ作る (名前は他と重ならない)。
+ * **パスはフィルタの引数に入る**ので、`:` `,` などを含まない一時フォルダの下に固定の名前で置く
+ */
+function scratch(): { dir: string; cuts: string; silences: string } {
+    const dir = mkdtempSync(join(tmpdir(), 'denpa-scan-'));
+    return { dir, cuts: join(dir, 'cuts'), silences: join(dir, 'silences') };
 }
 
-function readAndRemove(path: string): string {
+function read(path: string): string {
     try {
         return readFileSync(path, 'utf8');
     } catch {
         return '';
-    } finally {
-        rmSync(path, { force: true });
     }
 }
 
 export function scanReader(want: ScanWant): ScanReader {
-    const files = { cuts: scratch('cuts'), silences: scratch('silences') };
+    const files = scratch();
     const { logo } = want;
     let logoFrames = 0;
     let told = Number.NaN;
@@ -217,8 +219,9 @@ export function scanReader(want: ScanWant): ScanReader {
         },
         result(code, stderr, duration) {
             const end = duration !== undefined && Number.isFinite(duration) ? duration : told;
-            const { times, cuts } = parseCuts(readAndRemove(files.cuts));
-            const silences = parseSilences(readAndRemove(files.silences), end);
+            const { times, cuts } = parseCuts(read(files.cuts));
+            const silences = parseSilences(read(files.silences), end);
+            rmSync(files.dir, { recursive: true, force: true });
             return { code, stderr, times, cuts, silences, logoFrames, duration: told };
         },
     };

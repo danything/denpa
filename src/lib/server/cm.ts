@@ -422,8 +422,8 @@ export async function openCm(input: string, options: CmOptions): Promise<CmReadi
     const fps = Number.isFinite(probed.fps) ? probed.fps : config.cmFallbackFps;
     // 絵の無い録画 (ラジオ。尺は測れて大きさが無い) は音だけ読む。絵の出口を足すと ffmpeg ごと落ちる
     const video = !(Number.isNaN(probed.width) && Number.isFinite(measured));
-    /** ロゴが使えなかった理由。尺だけで決めたときの覚え書きに足す */
-    let why = video ? '' : '絵がありません';
+    /** 支度で分かった、ロゴが使えない理由 (`decide` が尺だけで決めたときの覚え書きに足す) */
+    let opening = video ? '' : '絵がありません';
 
     let logo: Exclude<Awaited<ReturnType<typeof openLogo>>, string> | null = null;
     if (video) {
@@ -436,13 +436,15 @@ export async function openCm(input: string, options: CmOptions): Promise<CmReadi
                       timeoutMs: config.cmDetectTimeout,
                   })
                 : '大きさが測れませんでした';
-        if (typeof opened === 'string') why = `ロゴ判定が失敗: ${opened}`;
+        if (typeof opened === 'string') opening = `ロゴ判定が失敗: ${opened}`;
         else logo = opened;
     }
 
     return {
         want: () => ({ video, logo: logo?.scan() ?? null, audio: true }),
         async decide(found, { skip, before, video: read = true }) {
+            /** ロゴが使えなかった理由。呼ぶたびに支度のときの理由から始める */
+            let why = opening;
             /*
              * 尺が ffprobe で測れなかったら、ffmpeg が言ってきた尺 (入れ物の尺)、
              * それも無ければ読めた最後のコマで代える。捨てた頭のぶんは引く
