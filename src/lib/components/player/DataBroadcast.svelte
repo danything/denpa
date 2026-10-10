@@ -240,7 +240,7 @@
     /**
      * 放送が名指しする字。**字幕を焼いているのと同じフォントを使う。**
      *
-     * イメージに入れてある `rounded-mplus-1m-arib` は、BML が要る3つ — **等幅**
+     * イメージに入れてある Denpa Font (danything/denpa-font) は、BML が要る3つ — **等幅**
      * (狭い画面で空白を使って組むため、仕様で必須)・**丸ゴシック**・**ARIB の
      * 外字** — を1本で満たす。借りている側が抱えている Kosugi (4.4MB) は
      * 外字を持っていないので、こちらのほうが適している。
@@ -249,11 +249,11 @@
      *
      * 角ゴシックだけは端末のものに任せる — 丸い字で代用すると、放送が
      * 「ここは角」と言っている意味が消える。手元での開発や、イメージに入っていない
-     * ときのために `local(...)` を後ろに並べてある (`api/font` は 404 を返す)
+     * ときのために `local(...)` を後ろに並べてある (`api/font/denpa-font.woff2` は 404 を返す)
      */
     const FONTS = {
         roundGothic: {
-            source: `url('${resolve('api/font')}') format('woff2'), local('Hiragino Maru Gothic ProN'), local('Meiryo')`,
+            source: `url('${resolve('api/font/denpa-font.woff2')}') format('woff2'), local('Hiragino Maru Gothic ProN'), local('Meiryo')`,
         },
         squareGothic: { source: "local('Hiragino Kaku Gothic ProN'), local('Meiryo'), local('MS Gothic')" },
     };

@@ -1015,7 +1015,7 @@ browser.destroy();
 | | |
 | --- | --- |
 | 束 | 700KB (gzip 前)。押すまで落ちてこない (`import()` で分けてある。どのみちカルーセルの一周を待つので、そこに紛れる) |
-| フォント | 字幕を焼くのと同じ `rounded-mplus-1m-arib`。BML が要る等幅・丸ゴシック・ARIB外字を1本で満たす (借りている側の Kosugi 4.4MB は外字を持たない)。イメージには ttf と woff2 を置き、`/api/font` で配る |
+| フォント | 字幕と同じ Denpa Font (danything/denpa-font)。BML が要る等幅・丸ゴシック・ARIB外字を1本で満たす (借りている側の Kosugi 4.4MB は外字を持たない)。イメージにはリリースの woff2 を置き、`/api/font/denpa-font.woff2` で配る |
 | 覚えるもの | NVRAM は端末の localStorage。`denpa_bml_denpa_nvram_` で他と混ざらないようにしてある |
 | 郵便番号 | 設定画面から入れて、器を作る前に NVRAM へ写す (`nvram://receiverinfo/zipcode`)。放送はこれで天気・地域のニュース・防災情報の場所を決め、入れないと「郵便番号が正しく設定されていません」と出る。家の場所は端末で変わらないので、置き場はサーバ |
 | リモコン | 十字・決定・戻る・数字・色・d をそのまま渡す (`keyCodeToAribKey`)。指で押すぶんは自前 (`components/player/Remote.svelte`: 色・十字・決定・戻る・d・数字) で、右の列に置く。放送の画面は枠を下まで塗り潰すので、映像に重ねると埋もれる |

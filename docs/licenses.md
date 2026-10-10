@@ -35,7 +35,12 @@ Dockerfile の行・`package.json`) を優先し、上流の表示に拠るも�
 
 | 名前 | 何に | 出どころ | ライセンス |
 | --- | --- | --- | --- |
-| rounded-mplus-1m-arib | 字幕の焼き込みと、データ放送の web フォント (`/api/font` で配る) | <https://github.com/danything/arib-font> (自家製 Rounded M+ 1m と和田研中丸ゴシック 2004ARIB の派生) | M+ FONT LICENSE (上流の LICENSE: 使用・複製・配布・改変を商用非商用問わず無制限に許可) |
+| Denpa Font | データ放送・字幕の web フォント (`/api/font/denpa-font.woff2` で配る) | <https://github.com/danything/denpa-font> のリリースの woff2 (タグで留め、同じリリースの SHA256SUMS で照らす)。源柔ゴシック等幅 (源ノ角ゴシック + M+ OUTLINE FONTS) に、源柔の字の部品と線の太さで描いた ARIB の記号を足したもの | SIL OFL 1.1 (元の源柔ゴシックと同じ。M+ 由来の字形は M+ FONTS LICENSE。原文は denpa-font の README) |
+
+フォントに入る字は denpa の字の表 (`b24-tables.ts`・`aribtext-gaiji.ts` など) から作られる (denpa-font の fetch.sh が版を留めて読む)。
+**表に字を足したら**: `src/lib/ts/font-coverage.test.ts` が取ってくるフォントに無い字を出して落ちる →
+denpa-font の `DENPA_COMMIT` を上げて (元に無い字は描き方を足して) 版を出す → ここの Dockerfile の
+`DENPA_FONT_VERSION` (タグ) を上げる (Renovate の github-releases)。
 
 ### ランタイム
 

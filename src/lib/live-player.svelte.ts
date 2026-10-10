@@ -1374,7 +1374,7 @@ export function livePlayer() {
     ): void {
         still = frozen;
         painter?.close();
-        painter = new CaptionPainter(subtitles, resolve('api/font'));
+        painter = new CaptionPainter(subtitles, resolve('api/font/denpa-font.woff2'));
         host = box;
     }
 

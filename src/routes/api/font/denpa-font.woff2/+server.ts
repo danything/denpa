@@ -1,0 +1,40 @@
+/**
+ * データ放送と字幕を描くための字 (Denpa Font。danything/denpa-font のリリースの woff2 をそのまま)。
+ *
+ * BML は仕様で**等幅**を求めていて (狭い画面で空白を使って組むため)、
+ * **丸ゴシック**を名指しし、**ARIB の外字**を使う。Denpa Font は3つとも満たす —
+ * 借りている側が抱えている Kosugi は外字を持っていないので、こちらのほうが適している
+ * ([docs/stream.md](../../../../../docs/stream.md#56-データ放送の統合))。
+ * 字幕もブラウザがこの字で描くので、**データ放送と字幕で字形が揃う**。
+ *
+ * 手元での開発ではイメージに入っていないので、無ければ 404 を返す。画面側は
+ * `local(...)` を並べてあるので、そのときは端末のフォントで出る。
+ */
+
+import { createHash } from 'node:crypto';
+import { existsSync, readFileSync } from 'node:fs';
+import { error } from '@sveltejs/kit';
+import type { RequestHandler } from './$types';
+
+/** Dockerfile が置く場所 (リリースの woff2 そのまま) */
+const FONT = '/usr/share/denpa-font/denpa-font.woff2';
+
+/** 中身の指紋。字はイメージに焼いてあり、動いている間は変わらないので1度だけ測る */
+let tag: string | null = null;
+
+export const GET: RequestHandler = ({ request }) => {
+    if (!existsSync(FONT)) error(404, 'フォントが入っていません');
+    tag ??= `"${createHash('sha256').update(readFileSync(FONT)).digest('base64url')}"`;
+    /*
+     * **持たせてよいが、毎回確かめさせる** (`no-cache` + ETag)。イメージを入れ替えて
+     * 字が変わっても URL は同じなので、長く持たせると古い字が残る
+     * (以前は `/api/font` を1年 immutable で配っていて、字を足しても届かなかった)
+     */
+    const headers = { 'content-type': 'font/woff2', 'cache-control': 'no-cache', etag: tag };
+    // 前段の proxy が弱い形 (`W/"…"`) にしたり、いくつも並べたりしても 304 にする
+    const asked = (request.headers.get('if-none-match') ?? '')
+        .split(',')
+        .map((t) => t.trim().replace(/^W\//, ''));
+    if (asked.includes(tag)) return new Response(null, { status: 304, headers });
+    return new Response(Bun.file(FONT).stream(), { headers });
+};

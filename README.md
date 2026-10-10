@@ -305,7 +305,7 @@ docker compose) で動かすなら `oci://ghcr.io/danything/charts/denpa-agent` 
 | | ライセンス |
 | --- | --- |
 | **ffmpeg** (x264 / SVT-AV1 / dav1d / Opus / libva / libvpl を繋いだ自前ビルド) | GPL-2.0+ (x264 のため) ほか BSD / MIT |
-| **rounded-mplus-1m-arib** (字幕とデータ放送のフォント) | M+ FONT LICENSE (無制限) |
+| **Denpa Font** (字幕・データ放送のフォント。[danything/denpa-font](https://github.com/danything/denpa-font)) | SIL OFL 1.1 |
 | **web-bml / es2** (npm の `web-bml`。データ放送を描く) | MIT |
 | **Svelte / SvelteKit / Blades / Bits UI** と束に入る npm 一式 | MIT (drizzle-orm と crc-32 は Apache-2.0) |
 | **Lucide** (アイコン。組むときに使うぶんだけ埋め込む) | ISC |
