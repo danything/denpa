@@ -9,8 +9,9 @@ import { run } from '#lib/server/stream.js';
  * (`components/player/caption-draw.ts`)。
  *
  * 焼いたもの (mkv) に入っている放送の字幕そのもの (`S_ARIBSUB`) を抜いて、サーバで解く。
- * 抜くのは `captions.sup` と同じく速い (動画を舐めるだけ)。**前に焼いた録画は絵 (PGS) が
- * 入っている**ので 404 を返し、画面はそちらの口 (`captions.sup`) へ回る。
+ * 抜くのは速い (動画を舐めるだけ。実測 0.1〜1秒)。**ずっと前に焼いた録画は絵 (PGS) が
+ * 入っている**ことがあり、それは読まずに 404 を返す (字幕なし)。生TSが残っていれば、焼き直すと
+ * ARIB の字幕が入る。
  */
 
 /** 待ち時間の上限。壊れたファイルで居座らせない */
@@ -59,7 +60,7 @@ export async function GET({ params }) {
     // 字幕を持たない番組のほうが多い (ffmpeg は「その筋は無い」で降りる)
     if (code !== 0 || out.length === 0) error(404, '字幕がありません');
     const pages = pagesFromMkv(out);
-    if (pages === null) error(404, '文字の字幕がありません (絵の字幕は captions.sup)');
+    if (pages === null) error(404, '字幕がありません (絵の字幕 (PGS) は読みません)');
 
     return json(pages, {
         // 同じファイルなら中身は変わらない。焼き直せばパスごと変わる

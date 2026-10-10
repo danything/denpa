@@ -1,98 +1,14 @@
-# ffmpeg と libaribcaption に当てている直し
+# ffmpeg に当てる直し
 
-Dockerfile の `ffmpeg` 段で、それぞれ組む前に `patch -p1` で当てています
-(ファイル名の頭 `ffmpeg-` / `libaribcaption-` で当てる先が決まる)。
-**上流に投げるつもりのものだけ**を置きます — 手元の都合で ffmpeg の挙動を
-変えたくなったら、まず denpa 側で済ませられないかを考えます。
+Dockerfile の `ffmpeg` 段で、組む前に `patch -p1 --fuzz=0` で当てます
+(`ffmpeg-*.patch` の名前で拾う)。**上流に投げるつもりのものだけ**を置きます — 手元の都合で
+ffmpeg の挙動を変えたくなったら、まず denpa 側で済ませられないかを考えます。
 
-## `ffmpeg-aribcaption-clear.patch`
-
-**字幕が消えずに出っぱなしになるのを直します。**
-
-放送は字幕の区切りごとに、**CS (画面消去) だけを載せた字幕文**を送ってきます
-(実機の BS-TBS で確認。`1f 20 00 00 01 0c` の `0c` が CS)。これを受けた
-libaribcaption は `ARIBCC_CAPTIONFLAGS_CLEARSCREEN` が立った `region_count == 0`
-の字幕を返します。
-
-ffmpeg のラッパは、
-
-- **`-sub_type text`** … `""` の rect を1つ作って返す → 前の字幕が消える
-- **`-sub_type bitmap`** … 描くものが無いので `0` を返す →
-  **`*got_sub_ptr` が立たず、字幕が終わったことが誰にも伝わらない**
-
-denpa は絵で受け取る (`server/captions.ts`) ので後者です。しかも直前の字幕は
-`wait_duration` が無期限で `end_display_time = UINT32_MAX` になっているため、
-**次の字幕が来るまで永久に消えません**。実機の録画では22分35秒間出たままでした。
-
-生放送 (`server/live.ts`) も焼き込み (`server/subtitle.ts` の PGS) も同じ
-デコーダを通るので、**ここ1箇所で両方直ります**。
-
-直しは「**CS のフラグが立っていたら**、空の字幕 (`num_rects = 0`) を返す」です。
-`region_count == 0` で見てはいけません — **TIME (待ち時間) だけの字幕文**も
-領域0で返ってくるので、それで消すと表示中の字幕を消してしまいます
-(最初に当てていた版はこれで判定していた。2026-10-06 にフラグの版へ差し替え)。
-
-**上流の ffmpeg に入りました**:
-[PR #24067](https://code.ffmpeg.org/FFmpeg/FFmpeg/pulls/24067) (2026-10-09 に master へ。
-`9a4111b1`、FATE の試験 `fate-sub-aribcaption-clear` 付き)。
-libaribcaption 自身は字幕をちゃんと返していて、それを捨てているのは ffmpeg 側の
-ラッパなので、あちらに出しても直せません (libaribcaption の作者も「LGTM」で承認)。
-**denpa の ffmpeg がそれを含む版に上がったら、このパッチは消します** (9.0.2 には入っていない)。
-
-同じ100秒を通した実測 (数字は出てきた PNG のバイト数。10609B が全部透明):
-
-```text
-当てる前   … 64.82s 45790B   66.98s 45790B ← ここに「消せ」が来ている
-              69.50s 45790B   74.77s 45790B   79.79s 45790B   84.82s 45790B
-              89.84s 45790B   94.84s 45790B   99.86s 45790B  … 100秒間出っぱなし
-当てた後   … 64.82s 45790B   66.98s 10609B ← 消えた
-              67.85s 10609B   70.09s 10609B   75.11s 10609B   80.13s 10609B
-              85.15s 10609B   90.16s 10609B   95.18s 10609B  … 透明のまま
-```
-
-## `ffmpeg-aribcaption-render-leak.patch`
-
-**字幕を絵にするたびにメモリが漏れるのを直します。**
-
-libaribcaption の `aribcc_renderer_render()` は描いた絵を呼び出し側に渡し、使い終わったら
-`aribcc_render_result_cleanup()` で返してもらう作りです。ffmpeg のラッパは、絵を
-字幕 (`AVSubtitleRect`) に写したあとにこれを呼んでおらず、次の描画で上書きして捨てていました。
-**字幕が1枚出るたびに、その絵のぶんが漏れます。** denpa は絵で受け取るので、生放送のように
-長くデコードし続けるほど増えます。
-
-上流と同じ試験用の短い字幕 (表示1回) を ASan で通すと、当てる前は **38,440 バイト
-(2か所)** の漏れ、当てた後は 0。
-
-**投げ先は ffmpeg です**:
-[PR #24992](https://code.ffmpeg.org/FFmpeg/FFmpeg/pulls/24992) (text / ass の直しと一緒)。
-`ffmpeg-aribcaption-clear.patch` の後に当てる前提です (ファイル名の順で当たる)。
-**denpa の ffmpeg がそれを含む版に上がったら、このパッチは消します。**
-
-## `libaribcaption-drcs.patch`
-
-**字幕の外字 (DRCS) がギザギザに出るのを直します。**
-
-放送は、フォントに無い字や記号を**外字 (DRCS)** として小さな白黒の絵で送ってきます
-(36x36。中身は 18x18 を縦横2倍に水増ししたものが多い)。libaribcaption は絵の MD5 を
-表で引き、Unicode に置き換えられたらフォントの字で、引けなければ**絵のまま**描きます。
-その拡大が**最近傍**なので、1920x1080 の字幕では元の 1 ドットが 4x4 の四角になり、
-フォントの字と並ぶと「この字だけジャギジャギ」に見えます。
-
-直しは2つです。
-
-- **拡大を滑らかにする。** 水増しされた行・列を畳み (中身は減らない)、Scale2x で斜めの
-  段を丸めてから、最後を双線形にして縁をなめらかにします。作った絵で確かめる試験
-  (`test/drcs_smooth`。斜め線の段が 2px 以内、塗りは不透明のまま) を付けてあり、
-  Dockerfile のビルドで回します。当てる前の描き方だと段が 4px になって落ちます
-- **置き換え表に足す。** 2026-10-10 時点の録画 58 本を通して表に無かった 10 種のうち、
-  フォントに字があるもの: 一点しんにょうの「迂」(U+8FC2)、《 》、半角の ｟ ｠。
-  電話・テレビ・スピーカーの絵文字はフォントに無いので足しません (足しても絵に戻るだけ)
-
-**投げ先は libaribcaption です**:
-[PR #21](https://github.com/xqq/libaribcaption/pull/21) (2026-10-10 に出した)。
-上流に出した版は描き方を少し詰めてあり、ここのパッチとは中身が違います — 畳むのは1段だけ、
-Scale2x も1回だけ (重ねると角がどんどん丸まる)、同じ大きさで描くときは双線形でぼかさない。
-**denpa の libaribcaption がそれを含む版に上がったら、このパッチは消します。**
+**いまは当てているものはありません。** 以前は字幕を絵にする libaribcaption まわりの直し
+(`ffmpeg-aribcaption-clear.patch` / `ffmpeg-aribcaption-render-leak.patch` /
+`libaribcaption-drcs.patch`) を当てていましたが、字幕を解かずに写して denpa が解くように
+なって libaribcaption ごと外したので、一緒に消しました。中身と経緯は git の履歴にあります
+(`git log -- patches/`)。外字の置き換え表に足した分は `src/lib/ts/b24-tables.ts` に引き継いでいます。
 
 ## `ffmpeg-sched-overflow.patch` (9.0.2 で取り下げ)
 

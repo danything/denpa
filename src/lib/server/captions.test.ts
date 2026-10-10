@@ -1,16 +1,13 @@
 import { describe, expect, test } from 'bun:test';
 import { CHANNEL } from '#lib/live.js';
-import { encodeAribText, management, text } from '#lib/ts/synth-caption.js';
+import { encodeAribText, management, captionMkv as mkv, text } from '#lib/ts/synth-caption.js';
 import {
     appFrame,
-    CANVAS,
     CAPTION_FEED_BACKLOG,
     CAPTION_FEED_HOLD,
     type CaptionOut,
     captionFeed,
-    captionInput,
     captionOutput,
-    frame,
     NO_SUBTITLE,
     pagesFromMkv,
     rawCaptionArgs,
@@ -19,60 +16,22 @@ import {
     worthLogging,
 } from './captions';
 
-/**
- * PNG 1枚ぶん。**かたまりの形まで真似る** — 切れ目を `IEND` で見つけるので、
- * 署名だけの偽物では確かめられない。
- *
- *     [8バイトの署名][4:長さ][4:種別][中身][4:CRC] … [0][IEND][CRC]
- */
-const png = (fill: number, body = 8) => {
-    const out = new Uint8Array(8 + 12 + body + 12);
-    out.set([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a], 0);
-    const view = new DataView(out.buffer);
-    // IDAT のつもりのかたまり1つ
-    view.setUint32(8, body);
-    out.set([0x49, 0x44, 0x41, 0x54], 12);
-    out.fill(fill, 16, 16 + body);
-    // IEND
-    view.setUint32(8 + 12 + body, 0);
-    out.set([0x49, 0x45, 0x4e, 0x44], 8 + 12 + body + 4);
-    return out;
-};
-
 describe('字幕の取り出し方', () => {
-    /*
-     * **`-canvas_size` が要る。** 無いと libaribcaption は 1440x1080 (PROFILE_A)
-     * とみなすので、1920x1080 の放送では字幕だけ横に伸びる
-     */
-    test('画面の大きさを渡す', () => {
-        const args = captionInput();
-        expect(args[args.indexOf('-canvas_size') + 1]).toBe(`${CANVAS.width}x${CANVAS.height}`);
-        expect(args[args.indexOf('-sub_type') + 1]).toBe('bitmap');
-    });
-
-    /*
-     * **PNG まで ffmpeg に組ませる。** 実機で同じ TS 30秒ぶんを通した実測:
-     * 生の RGBA 1.94秒 (406MB) / PNG 1.05秒 (1.76MB) / 256色 PNG 4.30秒 (0.94MB)。
-     * 生のほうが遅いのは書く量が桁違いだから
-     */
-    test('絵は PNG で受け取る', () => {
+    /** 字幕は解かずに写す (`S_ARIBSUB`)。解くのは denpa なので、ffmpeg に字幕の復号器は要らない */
+    test('解かずに写す', () => {
         const args = captionOutput('0:p:1024', 0);
-        expect(args[args.indexOf('-c:v') + 1]).toBe('png');
-        expect(args).not.toContain('rawvideo');
+        expect(args.join(' ')).toContain('-map 0:p:1024:s:0 -c:s copy');
+        expect(args).not.toContain('-sub_type');
+        expect(args).not.toContain('-filter_complex');
     });
 
     /*
-     * **時刻を運べる器で受ける。**
-     *
-     * 生の PNG を並べただけ (`image2pipe`) では時刻が乗らない。別の口
-     * (`showinfo`) に喋らせて来た順に組にしていた頃は**数が合わずにずれた** —
-     * 実機の日テレで70秒測ると PNG 77枚に対し showinfo 79行。一度ずれると
-     * 戻らず、字幕が遅れて出て消えるのも遅れる
+     * **時刻を運べる器で受ける。** 並べただけでは時刻が乗らない。別の口 (`showinfo`) に
+     * 喋らせて来た順に組にしていた頃は**数が合わずにずれた**
      */
     test('時刻はコマと一緒に運ばせる', () => {
         const args = captionOutput('0:p:1024', 0);
         expect(args[args.indexOf('-f') + 1]).toBe('matroska');
-        expect(args).not.toContain('image2pipe');
         expect(args).not.toContain('showinfo');
     });
 
@@ -88,33 +47,13 @@ describe('字幕の取り出し方', () => {
         expect(args[args.indexOf('-flush_packets') + 1]).toBe('1');
     });
 
-    /** 局を名指しする。1本の物理チャンネルに複数の局が乗っている (映像と同じ) */
-    test('選んだ局の字幕を採る', () => {
-        expect(captionOutput('0:p:1032', 0).join(' ')).toContain('[0:p:1032:s:0]null');
-    });
-
-    test('局が分からなければ最初に見つけた字幕', () => {
-        expect(captionOutput('0', 0).join(' ')).toContain('[0:s:0]null');
-    });
-
-    /** **言語が複数ある放送**では2本目を選べる */
-    test('何本目かを選べる', () => {
-        expect(captionOutput('0:p:1024', 1).join(' ')).toContain('[0:p:1024:s:1]null');
-    });
-
-    /** 出てきた枚をそのまま出す。詰め直させると時刻がずれる */
-    test('コマ数を揃え直させない', () => {
-        const args = captionOutput('0:p:1024', 0);
-        expect(args[args.indexOf('-fps_mode') + 1]).toBe('passthrough');
+    /** 局を名指しする。1本の物理チャンネルに複数の局が乗っている (映像と同じ)。言語が複数ある放送では2本目も選べる */
+    test('選んだ局の何本目かを採る', () => {
+        expect(captionOutput('0:p:1032', 1).join(' ')).toContain('-map 0:p:1032:s:1');
+        expect(captionOutput('0', 0).join(' ')).toContain('-map 0:s:0');
     });
 });
 
-/**
- * **字幕を持たない放送は普通にある** (ショッピングやサブチャンネル)。
- *
- * そこに字幕を頼むと ffmpeg は組み立ての時点で降りる — **映像も出ない**。
- * そうと分かったら字幕なしで焼き直すので、その言い分を見分けられること
- */
 /*
  * **生の道の字幕は、放送の時刻のまま出させる** (docs/stream.md §5.5)。受け側の時計は
  * 放送の PTS そのもの (自分で PES から読む) なので、ffmpeg に 0 へ寄せさせると合わない
@@ -136,25 +75,18 @@ describe('生の道の字幕', () => {
     test('何本目の字幕かを選べる', () => {
         expect(rawCaptionArgs(1024, 1).join(' ')).toContain('-map 0:p:1024:s:1');
     });
-
-    /** テレビのアプリ向けの絵 (第3段階で外す) は、前と同じく libaribcaption に描かせる */
-    test('絵を頼まれたら描かせる', () => {
-        const args = rawCaptionArgs(1024, 0, 'png');
-        expect(args.join(' ')).toContain('[0:p:1024:s:0]null[s]');
-        expect(args.indexOf('-sub_type')).toBeLessThan(args.indexOf('-i'));
-        expect(args.slice(-2)).toEqual(['matroska', 'pipe:3']);
-    });
 });
 
+/**
+ * **字幕を持たない放送は普通にある** (ショッピングやサブチャンネル)。
+ *
+ * そこに字幕を頼むと ffmpeg は組み立ての時点で降りる — **映像も出ない**。
+ * そうと分かったら字幕なしで焼き直すので、その言い分を見分けられること
+ */
 describe('字幕が無いと分かる', () => {
     /** 実機で出させたものそのまま */
     test('ffmpeg の言い分から見分ける', () => {
-        expect(
-            NO_SUBTITLE.test(
-                "[fc#0 @ 0x1] Stream specifier ':s:0' in filtergraph description [0:s:0]null[s] matches no streams.",
-            ),
-        ).toBe(true);
-        expect(NO_SUBTITLE.test('Error binding filtergraph inputs/outputs: Invalid argument')).toBe(true);
+        expect(NO_SUBTITLE.test("[out#0/matroska @ 0x1] Stream map '' matches no streams.")).toBe(true);
         expect(
             NO_SUBTITLE.test('[fc#0 @ 0x1] No program with ID 1024 exists, stream specifier can never match'),
         ).toBe(false);
@@ -179,11 +111,11 @@ describe('TrackList', () => {
         '  Program 1032 ',
         '  Stream #0:0[0x100]: Video: mpeg2video (Main), 1440x1080, 29.97 fps',
         '  Stream #0:1[0x110]: Audio: aac (LC), 48000 Hz, stereo',
-        '  Stream #0:2[0x130]: Subtitle: arib_caption (libaribcaption) (Profile A), 1920x1080',
+        '  Stream #0:2[0x130]: Subtitle: arib_caption (Profile A), 1920x1080',
         '  Stream #0:3[0x138]: Data: bin_data',
         '  Program 1033 ',
         '  Stream #0:4[0x101]: Video: mpeg2video (Main), 1440x1080, 29.97 fps',
-        '  Stream #0:5[0x131]: Subtitle: arib_caption (libaribcaption) (Profile A), 1920x1080',
+        '  Stream #0:5[0x131]: Subtitle: arib_caption (Profile A), 1920x1080',
     ];
 
     test('選んだ局の字幕だけ数える', () => {
@@ -231,41 +163,6 @@ describe('TrackList', () => {
 });
 
 /**
- * 送る形。頭に置き場所を付ける (stream.md §5.3)。いまは画面まるごとを送るので
- * x,y は 0 だが、**あとで切り抜くようにしても受け側を変えずに済む**。
- */
-describe('frame', () => {
-    test('絵は種別 0x20 で、頭に置き場所が付く', () => {
-        const data = png(0x11);
-        const out = frame({ at: 0, data });
-        expect(out.kind).toBe(CHANNEL.subtitle);
-        const view = new DataView(out.data.buffer, out.data.byteOffset);
-        expect([view.getUint16(0), view.getUint16(2), view.getUint16(4), view.getUint16(6)]).toEqual([
-            0,
-            0,
-            CANVAS.width,
-            CANVAS.height,
-        ]);
-        expect(out.data.subarray(8)).toEqual(data);
-    });
-
-    /*
-     * **いつ出すかを添える。** 映像と同じ ffmpeg が付けた mp4 の物差しなので、
-     * 受け側は再生位置と直に比べられる。
-     *
-     * 添えずに「届いた時点の再生位置」に置いていた頃は、焼く手間のぶん字幕の
-     * ほうが先に届くぶんだけ早く出ていた。その量を測って足し引きしようとして
-     * 3回外している (docs/stream.md §5.4) — 別々の ffmpeg では測れなかった
-     */
-    test('いつ出すかを 90kHz で添える', () => {
-        expect(frame({ at: 0, data: png(0x11) }).pts).toBe(0n);
-        // 1.5 秒 = 135000
-        expect(frame({ at: 1500, data: png(0x11) }).pts).toBe(135_000n);
-        expect(frame({ at: 1500.4, data: png(0x11) }).pts).toBe(135_036n);
-    });
-});
-
-/**
  * **放送の欠けにいちいち言われるぶんは残さない。**
  *
  * 選べる字幕を入口の見出しから拾うために `-loglevel` を info まで開けたので、
@@ -309,21 +206,21 @@ describe('アプリ向けの字幕の口', () => {
 
     /** WebSocket の1こまの頭に、後ろの長さを足しただけ (受け側の読み方を1つにする) */
     test('こまは [4:長さ][1:種別][8:時刻][中身]', () => {
-        const out = appFrame(CHANNEL.subtitle, 0x1_2345_6789n, new Uint8Array([1, 2, 3]));
+        const out = appFrame(CHANNEL.captionText, 0x1_2345_6789n, new Uint8Array([1, 2, 3]));
         const view = new DataView(out.buffer);
         expect(out.length).toBe(4 + 1 + 8 + 3);
         expect(view.getUint32(0)).toBe(1 + 8 + 3);
-        expect(view.getUint8(4)).toBe(0x20);
+        expect(view.getUint8(4)).toBe(0x22);
         expect(view.getBigUint64(5)).toBe(0x1_2345_6789n);
         expect([...out.subarray(13)]).toEqual([1, 2, 3]);
     });
 
-    test('字幕の絵と、選べる字幕の知らせだけを通す', async () => {
+    test('字幕と、選べる字幕の知らせだけを通す', async () => {
         const stream = captionFeed((out) => {
             out.send(CHANNEL.rawTs, 0n, new Uint8Array(188));
             out.send(CHANNEL.control, 0n, json({ type: 'clock', at: 1, unixMs: 2, now: 3 }));
             out.send(CHANNEL.control, 0n, json({ type: 'captions', tracks: [], track: 0 }));
-            out.send(CHANNEL.subtitle, 90_000n, new Uint8Array([9]));
+            out.send(CHANNEL.captionText, 90_000n, new Uint8Array([9]));
             out.send(CHANNEL.data, 0n, json({}));
             out.close();
             return () => {};
@@ -332,7 +229,7 @@ describe('アプリ向けの字幕の口', () => {
         const kinds: number[] = [];
         for (let at = 0; at < body.length; at += 4 + new DataView(body.buffer).getUint32(at))
             kinds.push(body[at + 4]!);
-        expect(kinds).toEqual([CHANNEL.control, CHANNEL.subtitle]);
+        expect(kinds).toEqual([CHANNEL.control, CHANNEL.captionText]);
     });
 
     // 映像が終わった (セッションが畳まれた・焼けなくなった) ら、字幕の口も閉じる
@@ -379,9 +276,9 @@ describe('アプリ向けの字幕の口', () => {
             return () => {};
         });
         expect(out!.backedUp()).toBe(false);
-        const picture = new Uint8Array(512 * 1024);
-        for (let i = 0; i < CAPTION_FEED_HOLD / picture.length + 2; i++)
-            out!.send(CHANNEL.subtitle, 0n, picture);
+        const page = new Uint8Array(512 * 1024);
+        for (let i = 0; i < CAPTION_FEED_HOLD / page.length + 2; i++)
+            out!.send(CHANNEL.captionText, 0n, page);
         expect(out!.backedUp()).toBe(true);
         void stream.cancel();
     });
@@ -393,56 +290,20 @@ describe('アプリ向けの字幕の口', () => {
             send = out.send;
             return () => left++;
         });
-        const picture = new Uint8Array(1024 * 1024);
-        for (let i = 0; i < CAPTION_FEED_BACKLOG / picture.length + 2; i++)
-            send!(CHANNEL.subtitle, 0n, picture);
+        const page = new Uint8Array(1024 * 1024);
+        for (let i = 0; i < CAPTION_FEED_BACKLOG / page.length + 2; i++) send!(CHANNEL.captionText, 0n, page);
         expect(left).toBe(1);
     });
 });
 
-/** EBML の要素1つ。大きさは8バイトで書く (読む側はどの長さでも読める) */
-function element(id: number[], body: number[]): number[] {
-    const size = body.length;
-    return [
-        ...id,
-        0x01,
-        0,
-        0,
-        0,
-        (size >>> 24) & 0xff,
-        (size >>> 16) & 0xff,
-        (size >>> 8) & 0xff,
-        size & 0xff,
-        ...body,
-    ];
-}
-
-/** ffmpeg が `-c:s copy -f matroska` で書くのと同じ骨組み (軌道1本・コマごとに塊1つ) */
-function mkv(codec: string, frames: [ms: number, data: Uint8Array][]): Uint8Array {
-    const tracks = element(
-        [0x16, 0x54, 0xae, 0x6b],
-        element([0xae], element([0x86], [...new TextEncoder().encode(codec)])),
-    );
-    const clusters = frames.flatMap(([ms, data]) =>
-        element(
-            [0x1f, 0x43, 0xb6, 0x75],
-            [
-                ...element([0xe7], [(ms >> 8) & 0xff, ms & 0xff]),
-                ...element([0xa3], [0x81, 0x00, 0x00, 0x80, ...data]),
-            ],
-        ),
-    );
-    return Uint8Array.from(element([0x18, 0x53, 0x80, 0x67], [...tracks, ...clusters]));
-}
-
 /**
  * **録画の字幕を文字の配置で渡す** (`captions.json`)。新しく焼いた録画には放送の字幕が
- * そのまま (`S_ARIBSUB`) 入っている。前に焼いた録画は絵 (PGS) なので null を返し、画面は絵の口へ回る
+ * そのまま (`S_ARIBSUB`) 入っている。ずっと前に焼いた録画は絵 (PGS) のことがあり、それは読まない (null。字幕なし)
  */
 describe('pagesFromMkv', () => {
     test('S_ARIBSUB を解いて、時刻 (秒) と1枚ずつに', () => {
         const pages = pagesFromMkv(
-            mkv('S_ARIBSUB', [
+            mkv([
                 [0, management()],
                 [1500, text(encodeAribText('字幕'))],
                 [4000, text([0x0c])],
@@ -456,7 +317,7 @@ describe('pagesFromMkv', () => {
     });
 
     test('絵の字幕 (PGS) なら null', () => {
-        expect(pagesFromMkv(mkv('S_HDMV/PGS', [[0, Uint8Array.of(0x50, 0x47)]]))).toBeNull();
+        expect(pagesFromMkv(mkv([[0, Uint8Array.of(0x50, 0x47)]], 'S_HDMV/PGS'))).toBeNull();
     });
 });
 
@@ -467,5 +328,19 @@ describe('textFrame', () => {
         expect(kind).toBe(CHANNEL.captionText);
         expect(pts).toBe(135_000n);
         expect(JSON.parse(new TextDecoder().decode(data))).toEqual(page);
+    });
+
+    /*
+     * **いつ出すかを添える。** 映像と同じ ffmpeg が付けた mp4 の物差しなので、
+     * 受け側は再生位置と直に比べられる。
+     *
+     * 添えずに「届いた時点の再生位置」に置いていた頃は、焼く手間のぶん字幕の
+     * ほうが先に届くぶんだけ早く出ていた。その量を測って足し引きしようとして
+     * 3回外している (docs/stream.md §5.4) — 別々の ffmpeg では測れなかった
+     */
+    test('時刻は丸めて添える', () => {
+        const page = { v: 1 as const, plane: [960, 540] as [number, number], duration: null, runs: [] };
+        expect(textFrame({ at: 0, page }).pts).toBe(0n);
+        expect(textFrame({ at: 1500.4, page }).pts).toBe(135_036n);
     });
 });

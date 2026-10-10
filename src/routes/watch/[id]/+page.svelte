@@ -40,7 +40,7 @@
     import { playerKeys } from '#lib/components/player/keys.js';
     import MoreButton from '#lib/components/player/MoreButton.svelte';
     import PlayerStage from '#lib/components/player/PlayerStage.svelte';
-    import { clearOverlay, drawOverlay, fitRect } from '#lib/components/player/paint.js';
+    import { fitRect } from '#lib/components/player/paint.js';
     import { pictureInPicture } from '#lib/components/player/pip.svelte.js';
     import Remote from '#lib/components/player/Remote.svelte';
     import SpeedMenu, { SPEED_KEY, storedSpeed } from '#lib/components/player/SpeedMenu.svelte';
@@ -55,7 +55,6 @@
     import { write as remind, read as stored } from '#lib/keep.js';
     import { loadOffline } from '#lib/offline.svelte.js';
     import type { OfflineVideo } from '#lib/offline-db.js';
-    import { captionAt, type Drawn, pixels, readSup } from '#lib/pgs.js';
     import { type RemuxPlayer, remuxPlayer } from '#lib/remux-player.js';
     import { keepResume } from '#lib/resume.js';
     import { type Cue, showing as captionShowing, currentCue } from '#lib/ts/captions.js';
@@ -270,17 +269,16 @@
      */
     let captions = $state(true);
     /**
-     * 字幕。**開いた時点で取りに行く** (既定で出すので)。新しく焼いた録画は文字の配置
-     * (`captions.json`。ライブと同じ描き方)、前に焼いた録画は絵 (PGS。`captions.sup`)。
+     * 字幕。**開いた時点で取りに行く** (既定で出すので)。焼いた録画に入っている放送の字幕を
+     * 文字の配置で受け取る (`captions.json`。ライブと同じ描き方)。ずっと前に焼いた録画の絵の字幕 (PGS) は読まない。
      *
      * 持っている番組かどうかは**取ってみるまで分からない** — 入れ物から抜くので、
      * 無ければ 404 が返る。ライブと同じで、持っているときだけボタンを出す
      * (`live-player` の `hasCaptions`)
      */
-    let drawn = $state<Drawn[]>([]);
     /** 文字の配置。時刻の順 */
     let cues = $state.raw<Cue[]>([]);
-    const hasCaptions = $derived(drawn.length > 0 || cues.length > 0);
+    const hasCaptions = $derived(cues.length > 0);
     /** 文字の配置を描く係 (`overlay` ができたら作る) */
     let painter: CaptionPainter | null = null;
     /** いま描いている文字の配置。同じものを描き直さない */
@@ -296,8 +294,6 @@
     });
     /** 重ねる先 (`/live` と同じやり方。`server/captions.ts`) */
     let overlay = $state<HTMLCanvasElement | null>(null);
-    /** いま出している1枚。同じものを描き直さないため */
-    let showing: Drawn | null = null;
     /** 貼り直しを追わせている映像。二重に回さないための目印 (`follow`) */
     let following: HTMLVideoElement | null = null;
     /** 読めなかったとき。**黙って黒いままにしない** */
@@ -855,12 +851,10 @@
     }
 
     /**
-     * 字幕の出し入れ。**絵を canvas に重ねる** — ライブ (`/live`) と同じやり方。
+     * 字幕の出し入れ。**canvas に描いて重ねる** — ライブ (`/live`) と同じやり方 (`caption-draw.ts`)。
      *
-     * 文字に直して `<track>` に渡す道も通したが、**放送どおりには出ない** —
-     * 左右の位置も、背景の箱も、外字も落ちる。焼くときに作った絵 (PGS) が
-     * 動画の隣に置いてあるので、それを denpa 自身が解いて重ねる
-     * ([pgs.ts](../../../lib/pgs.ts) の `readSup`)
+     * 文字を `<track>` に渡す道は**放送どおりには出ない** — 左右の位置も、背景の箱も、
+     * 外字も落ちる。放送が言う置き場所のまま描く
      */
     function toggleCaptions(): void {
         captions = !captions;
@@ -870,16 +864,15 @@
     }
 
     /**
-     * 字幕の絵を取ってくる。**既定で出すので、開いた時点で取りに行く**
+     * 字幕を取ってくる。**既定で出すので、開いた時点で取りに行く**
      * (`onMount`)。一度読めていれば読み直さない。
      *
-     * 実機の30分もので 6.0MB (697枚)。動画そのものが 300MB なので誤差。
      * 端末に保存したものがあればそちらから読む (オフラインでも字幕が出る)
      */
     async function loadCaptions(): Promise<void> {
-        if (drawn.length > 0 || cues.length > 0) return;
+        if (cues.length > 0) return;
         try {
-            // 文字の配置が先 (新しく焼いた録画)。端末に保存したものがあればそちら
+            // 端末に保存したものがあればそちら。**字幕を持たない番組は 404** (ボタンを出さないだけで、異常ではない)
             const text =
                 localCopy !== null
                     ? (localCopy.captionText as CaptionPages | undefined)
@@ -889,30 +882,7 @@
             if (text?.v === CAPTION_TEXT_VERSION && text.pages.length > 0) {
                 cues = text.pages.map(({ at, page }) => ({ at, page }));
                 paint();
-                return;
             }
-            // 端末に保存したものがあればそちら (オフラインでも字幕が出る)
-            if (localCopy?.captions !== undefined) {
-                drawn = readSup(new Uint8Array(await localCopy.captions.arrayBuffer()));
-                paint();
-                return;
-            }
-            const res = await fetch(resolve(`api/recordings/${rec.id}/captions.sup`));
-            // **字幕を持たない番組は 404。** ボタンを出さないだけで、異常ではない
-            if (res.status === 404) return;
-            if (!res.ok) {
-                console.warn(`[captions] 取れませんでした (${res.status})`);
-                return;
-            }
-            drawn = readSup(new Uint8Array(await res.arrayBuffer()));
-            /*
-             * **200 なのに読めないのは異常。** 黙って捨てると「持っているのに
-             * ボタンが出ない」になり、どこが悪いのか画面からも記録からも
-             * 辿れなかった (`Content-Length: undefined` で本文が落ちていたとき、
-             * これが無いせいで原因に辿り着くのに時間がかかった)
-             */
-            if (drawn.length === 0) console.warn('[captions] 中身を読めませんでした (先頭が PGS ではない)');
-            paint();
         } catch (error) {
             // 出せないだけ。観るのに支障は無い
             console.warn('[captions] 取れませんでした', error);
@@ -939,10 +909,8 @@
     }
 
     function clearCaptions(): void {
-        showing = null;
         shownPage = null;
         painter?.show(null);
-        clearOverlay(overlay);
     }
 
     /**
@@ -1033,32 +1001,13 @@
         // 蓋の下。いま描くと CM の字幕を仕込むことになる
         if (hopping) return;
         if (!captions || overlay === null) return;
-        // 文字の配置 (新しく焼いた録画)。描き方はライブと同じ (`caption-draw.ts`)
-        if (cues.length > 0) {
-            const at = video?.currentTime ?? 0;
-            const page = captionShowing(currentCue(cues, at), at);
-            if (page === shownPage) return;
-            shownPage = page;
-            place();
-            painter?.show(page);
-            return;
-        }
-        const next = captionAt(drawn, video?.currentTime ?? 0);
-        if (next === showing) return;
-        showing = next;
-        if (next === null) {
-            clearOverlay(overlay);
-            return;
-        }
+        // 描き方はライブと同じ (`caption-draw.ts`)
+        const at = video?.currentTime ?? 0;
+        const page = captionShowing(currentCue(cues, at), at);
+        if (page === shownPage) return;
+        shownPage = page;
         place();
-        drawOverlay(overlay, {
-            x: next.x,
-            y: next.y,
-            videoWidth: next.videoWidth,
-            videoHeight: next.videoHeight,
-            // 広げるのはここだけ。持っているのは畳んだ形 (`pgs.ts` の `Drawn`)
-            source: new ImageData(new Uint8ClampedArray(pixels(next)), next.width, next.height),
-        });
+        painter?.show(page);
     }
 
     /** 秒で動かす。**端は超えさせない** (超えると勝手に終わる) */
@@ -1196,7 +1145,7 @@
      */
     function snapshot(): void {
         // 字幕を出しているときだけ重ねる
-        const drawn = captions && (showing !== null || shownPage !== null);
+        const drawn = captions && shownPage !== null;
         void shooter.take(() => videoFrame(video), drawn ? overlay : null, rec.name);
     }
 </script>
@@ -1250,10 +1199,9 @@
                 -->
                 <!-- svelte-ignore a11y_media_has_caption -->
                 <!--
-                    **字幕は `<track>` ではない。** 焼いたものに入っているのは PGS で、
-                    文字ではなく**絵** (docs/encode.md)。文字に直して渡す道も通したが、
-                    放送どおりには出ない (左右の位置・背景の箱・外字が落ちる)。
-                    絵のまま重ねる — ライブと同じやり方 (下の canvas)
+                    **字幕は `<track>` ではない。** 文字を渡す道は放送どおりには出ない
+                    (左右の位置・背景の箱・外字が落ちる)。放送の置き場所のまま canvas に描いて
+                    重ねる — ライブと同じやり方 (下の canvas)
                 -->
                 <!--
                     **映像の箱。BML はこれを動かす** (`DataBroadcast` の place)。ライブと同じ。

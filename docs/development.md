@@ -121,7 +121,7 @@ JSON で持つ列 (ジャンル・音声の構成・ルールの対象チャン�
 
 `noUncheckedIndexedAccess` の書き分け:
 
-- **バイト列の読み** (`data[i]`、`src/lib/ts/` の TS/PSI/EIT/PGS の読み手) は、長さを確かめた
+- **バイト列の読み** (`data[i]`、`src/lib/ts/` の TS/PSI/EIT/字幕の読み手) は、長さを確かめた
   上で `data[i]!`。1 バイトごとに undefined を見ても読み手が二倍の長さになるだけ。
   確認が無いところに `!` を足さない
 - **配列の先頭・regex の group・`split()` の結果** は undefined を見る (`?? ''`、
@@ -168,7 +168,7 @@ QEMU が要り、ffmpeg や AOT はかなり遅い)。
 
 ### 外から持ってくるものは版で固定する
 
-ffmpeg・libaribcaption・ARIB のフォント・px4-userland / siano-userland は、どれも
+ffmpeg・SVT-AV1・ARIB のフォント・px4-userland / siano-userland は、どれも
 `ARG` / `ENV` に版 (タグかコミット) を書いてから取ってきます。**`master` を
 追っていた頃は、同じコミットから焼いても中身が違いえました** (実機の中身は Pod へ入らないと
 分からなかった)。以前持ってきていた CM検出の道具 (chapter_exe・dtvindex) は

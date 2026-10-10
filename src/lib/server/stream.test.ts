@@ -20,7 +20,7 @@ describe('run の標準出力', () => {
      *
      * Bun 1.3.14 の `Response.bytes()` は 1MB を境に ArrayBuffer を返し、
      * `.length` が `undefined` になっていた。型は Uint8Array のままなので
-     * 型検査では気付けず、`captions.sup` が `Content-Length: undefined` を
+     * 型検査では気付けず、字幕の絵 (以前の `captions.sup`) が `Content-Length: undefined` を
      * 送って**本文ごと落ちていた** (6.4MB の字幕を持つ録画で字幕が出ない)。
      * `.length` を見るのはそれが壊れていた値だから
      */

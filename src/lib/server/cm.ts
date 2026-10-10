@@ -218,8 +218,7 @@ export async function probeVideo(input: string): Promise<{
     return {
         duration: positive(duration),
         fps: positive(fps),
-        // 字幕を絵で焼くときの画面の大きさ。libaribcaption は既定で 1440x1080 と
-        // みなすので、渡さないと 1920x1080 の録画で字幕だけ横に伸びる
+        // 映像の大きさ (焼き先の大きさ・映像が在るかの見分け・ロゴ探し)
         width: positive(width),
         height: positive(height),
         /**

@@ -8,7 +8,7 @@
  * - **時刻は画面の字幕と同じ** — 重ねるのは画面の canvas そのものなので、出し消し
  *   (字幕のボタン) も出す時刻もそちらに乗る
  * - **字幕が出ていないコマは素通し** (描き直さない)。描いているかは canvas の印で見る
- *   (`paint.ts` の `drawOverlay` が立てる `data-drawn`)
+ *   (`caption-draw.ts` の `CaptionPainter` が立てる `data-drawn`)
  * - **コマが来るたびに回す** (`MediaStreamTrackProcessor`)。画面の更新 (`requestAnimationFrame`
  *   や canvas の `captureStream`) に頼ると、窓が隠れたときに絵が止まる (`raw/worker.ts` の `toPip`)
  *
@@ -40,7 +40,7 @@ export function canCompose(): boolean {
     return apis() !== null;
 }
 
-/** 字幕を描いているか (`paint.ts` の `drawOverlay` / `clearOverlay` が出し入れする印) */
+/** 字幕を描いているか (`caption-draw.ts` の `CaptionPainter` が出し入れする印) */
 export function captionDrawn(canvas: HTMLCanvasElement | null): canvas is HTMLCanvasElement {
     return canvas !== null && canvas.dataset['drawn'] !== undefined && canvas.width > 0 && canvas.height > 0;
 }
