@@ -116,7 +116,8 @@ ARG ARIB_FONT_SHA=a9c834099818c59ba9c3721a2b1a860f6c0af61a
 # `--fuzz=0` にしてあるのは、ffmpeg を上げたときに当たらなくなったら
 # **黙ってずれて当たるより、ビルドを止めてほしい**ため。
 # ファイル名の頭 (`ffmpeg-` / `libaribcaption-`) で当てる先を分ける
-# (libaribcaption のほうは、付けた試験もここで回す)
+# (libaribcaption のほうは、付けた試験もここで回す。cmake の試験一式を有効にすると
+# ffmpeg の開発用ヘッダまで要求されるので、1本だけ g++ で直に組む)
 COPY patches/ /patches/
 
 RUN case "${TARGETARCH}" in \
