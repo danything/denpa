@@ -335,12 +335,12 @@
             {#if shownTuners.value !== undefined}
                 {@const rows = [...shownTuners.value.list, null]}
                 <form method="POST" action="?/tuners" use:submitting>
-                    <div class="table-wrap">
+                    <div class="table-wrap config-wrap">
                         <table class="config">
                             <thead>
                                 <tr>
                                     <th>名前</th>
-                                    <th>デバイス</th>
+                                    <th class="device-col">デバイス</th>
                                     <th>受信できる種別</th>
                                     <th>LNB</th>
                                     <th>無効</th>
@@ -365,7 +365,7 @@
                                                 placeholder="/dev/dvb/adapter0/frontend0"
                                             />
                                         </td>
-                                        <td class="nowrap">
+                                        <td class="types-cell">
                                             {#each TYPES as type (type)}
                                                 <label class="check type-check">
                                                     <input
@@ -785,6 +785,35 @@
     .table-wrap {
         overflow-x: auto;
     }
+    /*
+     * **チューナーの設定は、広い画面で横に巻かせない。** 欄の幅を決め打ちしていた
+     * 頃は表が 784px より縮まず、1920px の画面でも Windows の拡大 125% (= 1536px)
+     * では列が 675px しかなく、中に横スクロールが出ていた。
+     * デバイスの欄だけを伸び縮みさせて、余った幅を全部そこにあげる。
+     * 列が狭い (44rem 未満) ときは種別を縦に積んで詰める。
+     * それでも入らない幅 (スマートフォン) だけ、中で横に巻く
+     */
+    .config-wrap {
+        container-type: inline-size;
+    }
+    .config {
+        width: 100%;
+    }
+    .device-col {
+        width: 100%;
+    }
+    .types-cell {
+        white-space: nowrap;
+    }
+    @container (max-width: 44rem) {
+        .types-cell {
+            white-space: normal;
+        }
+        .types-cell .type-check {
+            display: flex;
+            margin-right: 0;
+        }
+    }
     .table-wrap table {
         margin: 0;
     }
@@ -826,7 +855,8 @@
         width: 8rem;
     }
     .w-device {
-        width: 18rem;
+        width: 100%;
+        min-width: 11rem;
     }
     .w-lnb {
         width: 5rem;
