@@ -8,8 +8,9 @@
 
 import type { ResponseMessage } from 'web-bml/protocol';
 import type { AudioTrack } from '#lib/arib.js';
+import { CAPTION_TEXT_VERSION, type CaptionPage } from '#lib/caption-text.js';
+import { CaptionPainter } from '#lib/components/player/caption-draw.js';
 import { eachFrame } from '#lib/components/player/frames.js';
-import { clearOverlay, drawOverlay } from '#lib/components/player/paint.js';
 import { forget, read, write } from '#lib/keep.js';
 import {
     type CaptionTrack,
@@ -24,7 +25,7 @@ import {
 } from '#lib/live.js';
 import { RawEngine } from '#lib/raw/engine.js';
 import { rawUnsupported } from '#lib/raw/support.js';
-import { CLOCK, type Cue, currentCue, insertCue, trimCues } from '#lib/ts/captions.js';
+import { CLOCK, type Cue, currentCue, insertCue, showing, trimCues } from '#lib/ts/captions.js';
 import { pickMediaSource } from '#lib/ts/media-source.js';
 import { CEILING, FLOOR, nextTarget, pacing } from '#lib/ts/pacing.js';
 import { resolve } from '$app/paths';
@@ -360,8 +361,8 @@ export function livePlayer() {
     let element: HTMLVideoElement | null = null;
     /** 前の絵の写し先。画面から預かる */
     let still: HTMLCanvasElement | null = null;
-    /** 字幕を重ねる先。画面から預かる */
-    let overlay: HTMLCanvasElement | null = null;
+    /** 字幕を描く係。重ねる先の canvas は画面から預かる (`attach`) */
+    let painter: CaptionPainter | null = null;
     /** 貼りっぱなしを避けるための目覚まし */
     let holdTimer: ReturnType<typeof setTimeout> | null = null;
     /**
@@ -372,15 +373,8 @@ export function livePlayer() {
      * 再生位置が追いつくまで持っておく
      */
     let cues: Cue[] = [];
-    /** いま重ねている1枚。同じものを描き直さない */
-    let shown: Cue | null = null;
-    /**
-     * 選局の代。**絵にし終わる頃には局が変わっていることがある。**
-     *
-     * PNG を `ImageBitmap` にするのは非同期なので、その間に選び直されると
-     * 前の局の字幕が新しい局の上に出る。番号が変わっていたら捨てる
-     */
-    let generation = 0;
+    /** いま描いている1枚。同じものを描き直さない */
+    let shown: CaptionPage | null = null;
     /** もう再生を始めたか。始めるまでは貯める */
     let running = false;
     /**
@@ -638,45 +632,24 @@ export function livePlayer() {
      * 追い越していない中の、最後の1つ」([ts/captions.ts](./ts/captions.ts))。
      * 跳んだ直後もこれで追いつく。
      *
-     * **絵は画面まるごとの大きさで来る** (1920x1080)。canvas を映像と同じ枠に
-     * 敷いて、そこへ引き伸ばして描くので、位置合わせはブラウザ任せでよい
+     * 来るのは**文字の配置** (`caption-text.ts`)。描くのは `CaptionPainter` で、canvas を
+     * 映像と同じ枠に敷いて画面の画素で描く。出しておく長さが決まっている字幕は、次が
+     * 来なくても消す (`showing`)
      */
     function paint(at: number): boolean {
-        if (overlay === null) return false;
-        // 消しているときは何も選ばない (下で clearRect に落ちる)
-        const next = captions ? currentCue(cues, at) : null;
+        if (painter === null) return false;
+        // 消しているときは何も選ばない
+        const next = captions ? showing(currentCue(cues, at), at) : null;
         if (next === shown) return false;
         shown = next;
-
-        /*
-         * 置き方は観る画面と同じ (`components/player/paint.ts`)。
-         * **こちらの絵は画面まるごと**なので、置くのは左上 (0,0) になる
-         */
-        const bitmap = next?.bitmap ?? null;
-        drawOverlay(
-            overlay,
-            bitmap === null
-                ? null
-                : {
-                      x: 0,
-                      y: 0,
-                      videoWidth: bitmap.width,
-                      videoHeight: bitmap.height,
-                      source: bitmap,
-                  },
-        );
+        painter.show(next);
         return true;
     }
 
     /** 待たせているぶんを片付ける。**いま出している1枚は残す** (出しっぱなしのため) */
     function sweep(at: number): void {
         const kept = trimCues(cues, at);
-        if (kept.length === cues.length) return;
-        for (const cue of cues) {
-            if (kept.includes(cue) || cue === shown) continue;
-            cue.bitmap?.close();
-        }
-        cues = kept;
+        if (kept.length !== cues.length) cues = kept;
     }
 
     function drain(): void {
@@ -1217,11 +1190,9 @@ export function livePlayer() {
 
     /** 待たせている字幕を捨てる。**焼き直しのたび** (`forget` の説明) */
     function clearCaptions(): void {
-        generation++;
-        for (const cue of cues) cue.bitmap?.close();
         cues = [];
         shown = null;
-        clearOverlay(overlay);
+        painter?.show(null);
     }
 
     /** 画面を離れる。**貼った絵も剥がす** — 戻ってきたときに残っていては困る */
@@ -1399,7 +1370,8 @@ export function livePlayer() {
         box: HTMLElement | null = null,
     ): void {
         still = frozen;
-        overlay = subtitles;
+        painter?.close();
+        painter = new CaptionPainter(subtitles, resolve('api/font'));
         host = box;
     }
 
@@ -1685,13 +1657,10 @@ export function livePlayer() {
             }
 
             /*
-             * **字幕。** 中身の頭は `[2:x][2:y][2:w][2:h][PNG...]`
-             * ([stream.md](../../docs/stream.md) §5.3)。
-             *
-             * 置き場所 (x,y,w,h) はいま使わない — 画面まるごとが来るため。
-             * **あとで切り抜くようにしてもここを変えずに済む**ように読んでおく
+             * **字幕。** 中身は文字の配置の JSON (`caption-text.ts`。[stream.md](../../docs/stream.md) §5.3)。
+             * 前の1枚を丸ごと置き換える。描くのは `paint`
              */
-            if (kind === CHANNEL.subtitle || kind === CHANNEL.subtitleClear) {
+            if (kind === CHANNEL.captionText) {
                 if (element === null) return;
                 /*
                  * **添えられた時刻に置く** ([ts/captions.ts](./ts/captions.ts))。
@@ -1706,28 +1675,15 @@ export function livePlayer() {
                 const stamp = Number(new DataView(data).getBigUint64(1));
                 // 生の道は放送の PTS のまま来る (`server/captions.ts` の `rawCaptionArgs`)。一周をまたいだら伸ばす
                 const at = (raw && engine !== null ? engine.unwrap(stamp) : stamp) / CLOCK;
-
-                if (kind === CHANNEL.subtitleClear) {
-                    cues = insertCue(cues, { at, bitmap: null });
-                    return;
+                let page: CaptionPage;
+                try {
+                    page = JSON.parse(new TextDecoder().decode(new Uint8Array(data, 9))) as CaptionPage;
+                } catch {
+                    return; // 壊れた1枚。次が来る
                 }
-                /*
-                 * **絵にするのは非同期。** 待っている間に選局が変わることが
-                 * あるので、そのときは捨てる (`generation`)
-                 */
-                const mine = generation;
-                const png = new Uint8Array(data, 9 + 8);
-                void createImageBitmap(new Blob([png as BlobPart], { type: 'image/png' }))
-                    .then((bitmap) => {
-                        if (mine !== generation) {
-                            bitmap.close();
-                            return;
-                        }
-                        cues = insertCue(cues, { at, bitmap });
-                    })
-                    .catch(() => {
-                        /* 壊れた1枚。次が来る */
-                    });
+                // 知らない版は描かない (置き場所の読み方が違うかもしれない)
+                if (page.v !== CAPTION_TEXT_VERSION) return;
+                cues = insertCue(cues, { at, page });
             }
         };
     }

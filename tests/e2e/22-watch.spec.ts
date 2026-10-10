@@ -140,6 +140,19 @@ test.describe('録画を観る', () => {
         expect(sup.length).toBeGreaterThan(0);
         expect(String.fromCharCode(sup[0]!, sup[1]!)).toBe('PG');
 
+        /*
+         * **新しく焼いた録画は文字の配置で渡す** (`captions.json`)。入れ物に入っている放送の字幕
+         * (`S_ARIBSUB`) をサーバが解いたもの。画面はこちらを先に取り、無ければ絵 (上) へ回る
+         */
+        const text = await request.get(`/api/recordings/${id}/captions.json`);
+        expect(text.ok()).toBe(true);
+        const pages = (await text.json()) as {
+            v: number;
+            pages: { at: number; page: { runs: unknown[] } }[];
+        };
+        expect(pages.v).toBe(1);
+        expect(pages.pages.some((p) => p.page.runs.length > 0)).toBe(true);
+
         await goto(page, `/watch/${id}`);
         // 重ねる先は映像と同じ枠に敷いてある。**押す邪魔をしない**
         const canvas = page.getByTestId('watch-captions-canvas');

@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { CHANNEL } from '#lib/live.js';
+import { encodeAribText, management, text } from '#lib/ts/synth-caption.js';
 import {
     appFrame,
     CANVAS,
@@ -11,8 +12,10 @@ import {
     captionOutput,
     frame,
     NO_SUBTITLE,
+    pagesFromMkv,
     rawCaptionArgs,
     TrackList,
+    textFrame,
     worthLogging,
 } from './captions';
 
@@ -125,11 +128,21 @@ describe('生の道の字幕', () => {
         expect(args).not.toContain('-vf');
         // 出口は焼く道と同じ (Matroska を 3 本目の口へ)
         expect(args.slice(-2)).toEqual(['matroska', 'pipe:3']);
-        expect(args.join(' ')).toContain('[0:p:1024:s:0]null[s]');
+        // 字幕は解かずに写す (解くのは denpa)。字幕を描く指定は要らない
+        expect(args.join(' ')).toContain('-map 0:p:1024:s:0 -c:s copy');
+        expect(args).not.toContain('-sub_type');
     });
 
     test('何本目の字幕かを選べる', () => {
-        expect(rawCaptionArgs(1024, 1).join(' ')).toContain('[0:p:1024:s:1]');
+        expect(rawCaptionArgs(1024, 1).join(' ')).toContain('-map 0:p:1024:s:1');
+    });
+
+    /** テレビのアプリ向けの絵 (第3段階で外す) は、前と同じく libaribcaption に描かせる */
+    test('絵を頼まれたら描かせる', () => {
+        const args = rawCaptionArgs(1024, 0, 'png');
+        expect(args.join(' ')).toContain('[0:p:1024:s:0]null[s]');
+        expect(args.indexOf('-sub_type')).toBeLessThan(args.indexOf('-i'));
+        expect(args.slice(-2)).toEqual(['matroska', 'pipe:3']);
     });
 });
 
@@ -384,5 +397,75 @@ describe('アプリ向けの字幕の口', () => {
         for (let i = 0; i < CAPTION_FEED_BACKLOG / picture.length + 2; i++)
             send!(CHANNEL.subtitle, 0n, picture);
         expect(left).toBe(1);
+    });
+});
+
+/** EBML の要素1つ。大きさは8バイトで書く (読む側はどの長さでも読める) */
+function element(id: number[], body: number[]): number[] {
+    const size = body.length;
+    return [
+        ...id,
+        0x01,
+        0,
+        0,
+        0,
+        (size >>> 24) & 0xff,
+        (size >>> 16) & 0xff,
+        (size >>> 8) & 0xff,
+        size & 0xff,
+        ...body,
+    ];
+}
+
+/** ffmpeg が `-c:s copy -f matroska` で書くのと同じ骨組み (軌道1本・コマごとに塊1つ) */
+function mkv(codec: string, frames: [ms: number, data: Uint8Array][]): Uint8Array {
+    const tracks = element(
+        [0x16, 0x54, 0xae, 0x6b],
+        element([0xae], element([0x86], [...new TextEncoder().encode(codec)])),
+    );
+    const clusters = frames.flatMap(([ms, data]) =>
+        element(
+            [0x1f, 0x43, 0xb6, 0x75],
+            [
+                ...element([0xe7], [(ms >> 8) & 0xff, ms & 0xff]),
+                ...element([0xa3], [0x81, 0x00, 0x00, 0x80, ...data]),
+            ],
+        ),
+    );
+    return Uint8Array.from(element([0x18, 0x53, 0x80, 0x67], [...tracks, ...clusters]));
+}
+
+/**
+ * **録画の字幕を文字の配置で渡す** (`captions.json`)。新しく焼いた録画には放送の字幕が
+ * そのまま (`S_ARIBSUB`) 入っている。前に焼いた録画は絵 (PGS) なので null を返し、画面は絵の口へ回る
+ */
+describe('pagesFromMkv', () => {
+    test('S_ARIBSUB を解いて、時刻 (秒) と1枚ずつに', () => {
+        const pages = pagesFromMkv(
+            mkv('S_ARIBSUB', [
+                [0, management()],
+                [1500, text(encodeAribText('字幕'))],
+                [4000, text([0x0c])],
+            ]),
+        );
+        expect(pages?.v).toBe(1);
+        expect(pages?.pages.map((p) => [p.at, p.page.runs.map((r) => r.text).join('')])).toEqual([
+            [1.5, '字幕'],
+            [4, ''],
+        ]);
+    });
+
+    test('絵の字幕 (PGS) なら null', () => {
+        expect(pagesFromMkv(mkv('S_HDMV/PGS', [[0, Uint8Array.of(0x50, 0x47)]]))).toBeNull();
+    });
+});
+
+describe('textFrame', () => {
+    test('時刻は 90kHz、中身は JSON', () => {
+        const page = { v: 1 as const, plane: [960, 540] as [number, number], duration: null, runs: [] };
+        const { kind, pts, data } = textFrame({ at: 1500, page });
+        expect(kind).toBe(CHANNEL.captionText);
+        expect(pts).toBe(135_000n);
+        expect(JSON.parse(new TextDecoder().decode(data))).toEqual(page);
     });
 });

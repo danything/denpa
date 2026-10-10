@@ -29,14 +29,17 @@ import { MkvSplitter } from '#lib/ts/mkv.js';
 import { ServiceFilter } from '#lib/ts/service-filter.js';
 import {
     type Caption,
+    type CaptionForm,
+    type CaptionShown,
+    CaptionText,
     captionFeed,
-    captionInput,
-    captionOutput,
     frame,
     NO_SUBTITLE,
     programSpec,
     rawCaptionArgs,
     TrackList,
+    textCaptionOutput,
+    textFrame,
     worthLogging,
 } from './captions';
 import { chasePlan, fileSize, followFile } from './chase';
@@ -106,10 +109,10 @@ type StreamCodec = LiveCodec | 'audio';
  * コマ数を倍にしないのも録画と揃える — 元が毎秒24コマ前後なので、倍にしても
  * 同じ絵が並ぶだけで、CPU だけ倍かかる。
  *
- * ## 字幕も同じ ffmpeg で焼く。**出口を2つ持つ**
+ * ## 字幕も同じ ffmpeg から受ける。**出口を2つ持つ**
  *
- * 映像は `pipe:1` に fMP4、字幕は `pipe:3` に Matroska
- * ([captions.ts](captions.ts) の `captionOutput`)。**時刻を揃えるにはこうするしか
+ * 映像は `pipe:1` に fMP4、字幕は `pipe:3` に Matroska (解かずに写したもの。
+ * [captions.ts](captions.ts) の `textCaptionOutput`)。**時刻を揃えるにはこうするしか
  * なかった** — 理由と実測、引き換え (選び直すと字幕も焼き直し) は captions.ts の冒頭。
  *
  * **`-loglevel` は下げない。** 選べる字幕は入口の見出しから拾っていて
@@ -202,8 +205,6 @@ export function encodeArgs(
         // 1局に絞ってあるが、字幕まで見つけさせるぶん要る (上の説明)
         '-probesize',
         '100000',
-        // 字幕を絵で受け取るための指定。映像には効かない
-        ...(caption === null || !video ? [] : captionInput()),
         // GPU の口を開ける。復号から GPU なら `-hwaccel` もここ (入力より前でないと効かない)
         ...(picture?.input ?? []),
         '-i',
@@ -259,8 +260,8 @@ export function encodeArgs(
         '-flush_packets',
         '1',
         'pipe:1',
-        // **2つ目の出口。** 字幕の絵を、映像と同じ物差しの時刻付きで出す
-        ...(caption === null || !video ? [] : captionOutput(from, caption)),
+        // **2つ目の出口。** 字幕をそのまま、映像と同じ物差しの時刻付きで出す
+        ...(caption === null || !video ? [] : textCaptionOutput(from, caption)),
     ];
 }
 
@@ -475,6 +476,11 @@ interface Viewer {
      * チューナーを掴み続けない。畳んだら `ended` を伝えて閉じさせる
      */
     side?: boolean;
+    /**
+     * 字幕をどの形で受け取るか。**ブラウザは文字の配置 (`text`)。** 絵 (`png`) はテレビのアプリが
+     * 脇から頼んだときだけ (第3段階で外す)。無ければ `text`
+     */
+    captions?: CaptionForm;
 }
 
 /**
@@ -572,9 +578,17 @@ class Session {
      * 字幕は次が来るまで出しっぱなしなので、渡さないとその人には
      * 次の字幕まで何も出ない (数十秒あく)
      */
-    private showing: Caption | null = null;
+    private showing: CaptionShown | null = null;
+    /** いま出ている絵 (テレビのアプリ向け。`Viewer.captions`)。役目は `showing` と同じ */
+    private picture: Caption | null = null;
     /** 前に配った絵。**同じものを配り直さない** (sub2video は出し直しが多い) */
     private last: string | null = null;
+    /**
+     * 生の道で字幕を絵にしている ffmpeg。**絵を頼んだアプリが居る間だけ起こす** (`wantPictures`)
+     */
+    private pictures: RawCaptions | null = null;
+    /** 生の道の TS を流しているか。絵の ffmpeg を後から起こしてよいか */
+    private feeding = false;
     /** 字幕が無いと言われたか。言われたら字幕なしで焼き直す */
     private noSubtitle = false;
     /**
@@ -662,7 +676,9 @@ class Session {
         if (this.list.tracks.length > 0) {
             this.tellOne(viewer, { type: 'captions', tracks: this.list.tracks, track: this.track });
         }
-        if (this.showing !== null) this.handCaption(viewer, this.showing);
+        if (this.showing !== null) this.handText(viewer, this.showing);
+        if (this.picture !== null) this.handCaption(viewer, this.picture);
+        this.wantPictures();
         // **待たせない。** 途中から来た人にも、分かっているぶんはその場で渡す
         if (this.toldApps !== '') {
             this.tellOne(viewer, { type: 'hybridcast', apps: JSON.parse(this.toldApps) });
@@ -754,6 +770,7 @@ class Session {
 
     remove(viewer: Viewer): void {
         this.viewers.delete(viewer);
+        this.wantPictures();
         // 出していた人が抜けたら、誰も出していないかを見直す (意思は消さない)
         this.refreshData();
     }
@@ -831,7 +848,7 @@ class Session {
                     this.pump(stream, proc, feed === null),
                     this.drain(proc),
                     watching,
-                    wanted === null ? Promise.resolve() : this.subtitles(proc),
+                    wanted === null ? Promise.resolve() : this.subtitles(proc, 'text'),
                 ]).catch((error: unknown) => {
                     // 相手が降りたあとの EPIPE。**ここで拾わないと焼き直しに来られない**
                     trouble = error;
@@ -1047,22 +1064,36 @@ class Session {
      * 器は Matroska ([ts/mkv.ts](../ts/mkv.ts))。生の PNG を並べただけでは
      * 時刻が乗らず、別の口に喋らせると数が合わずにずれる (`captions.ts`)
      */
-    private async subtitles(proc: ReturnType<typeof Bun.spawn>): Promise<void> {
+    private async subtitles(proc: ReturnType<typeof Bun.spawn>, form: CaptionForm): Promise<void> {
         const fd = (proc.stdio as unknown as number[])[3];
         if (typeof fd !== 'number') return;
-        // 割る道具は ffmpeg ごと (`drain` と同じ理由)
+        // 割る道具も解く道具も ffmpeg ごと (`drain` と同じ理由。解く側は書式を字幕文を跨いで持つ)
         const frames = new MkvSplitter();
+        const text = new CaptionText();
         for await (const chunk of chunks(Bun.file(fd).stream())) {
-            for (const found of frames.feed(chunk)) this.deliver(found);
+            for (const found of frames.feed(chunk)) {
+                if (form === 'png') {
+                    this.deliver(found);
+                    continue;
+                }
+                const shown = text.feed(found);
+                if (shown !== null) this.deliverText(shown);
+            }
         }
     }
 
-    /** 1枚配る。**同じ絵は配り直さない、空の枚も配る** (理由は captions.ts「変わったときだけ送る」) */
+    /** 文字の配置を1枚配る。**解いて出てくるのは変わったときだけ**なので、間引かない */
+    private deliverText(shown: CaptionShown): void {
+        this.showing = shown;
+        for (const viewer of this.viewers) this.handText(viewer, shown);
+    }
+
+    /** 絵を1枚配る。**同じ絵は配り直さない、空の枚も配る** (sub2video は同じ絵を何度も出す) */
     private deliver(caption: Caption): void {
         const seen = Bun.hash(caption.data).toString(36);
         if (seen === this.last) return;
         this.last = seen;
-        this.showing = caption;
+        this.picture = caption;
         for (const viewer of this.viewers) this.handCaption(viewer, caption);
     }
 
@@ -1153,7 +1184,14 @@ class Session {
         };
     }
 
+    private handText(viewer: Viewer, shown: CaptionShown): void {
+        if (viewer.captions === 'png') return;
+        const { kind, pts, data } = textFrame(shown);
+        viewer.connection.send(kind, pts, data);
+    }
+
     private handCaption(viewer: Viewer, caption: Caption): void {
+        if (viewer.captions !== 'png') return;
         const { kind, pts, data } = frame(caption);
         viewer.connection.send(kind, pts, data);
     }
@@ -1238,6 +1276,7 @@ class Session {
         this.aborter.abort();
         this.proc?.kill();
         this.data?.close();
+        this.wantPictures();
         // 脇から字幕だけ受け取っている人は、映像が終わったことを知らないので伝えて閉じさせる
         for (const viewer of this.viewers) if (viewer.side === true) this.tellOne(viewer, { type: 'ended' });
         // 選び直しで同じ目印の新しいものが載っていたら、そちらは消さない
@@ -1250,8 +1289,9 @@ class Session {
      *     エージェント → 1局に絞る → WebSocket (`CHANNEL.rawTs`) → ブラウザが自分で解く
      *
      * 映像の ffmpeg は起こさない — 立ち上がりの 0.5秒も、焼いているぶんの遅れも、サーバの
-     * CPU (350〜470%) も消える。**起こすのは字幕を描く ffmpeg だけ** (`rawCaptionArgs`)。
-     * 字幕は放送に絵が乗っていないので、どこかで描く必要がある (§2「字幕はサーバで絵にする」)。
+     * CPU (350〜470%) も消える。**起こすのは字幕を写す ffmpeg だけ** (`rawCaptionArgs`)。
+     * 字幕は denpa が解いて文字の配置にする (焼く道と同じ)。テレビのアプリが絵を頼んだら、
+     * その間だけ字幕を描く ffmpeg ももう1本起こす (`wantPictures`)。
      *
      * **字幕の ffmpeg が転んでも映像は止めない。** 焼く道と違って、映像はそもそも
      * ffmpeg を通っていない。字幕を持たない放送で降りたら、覚えておいて (`captionless`)
@@ -1261,7 +1301,9 @@ class Session {
         let captioner: RawCaptions | null = null;
         try {
             const tuned = await this.tune();
-            if (!captionlessNow(this.serviceId)) captioner = this.captions();
+            if (!captionlessNow(this.serviceId)) captioner = this.captions('text');
+            this.feeding = true;
+            this.wantPictures();
             const filter = this.program > 0 ? new ServiceFilter(this.program) : null;
             for await (const chunk of chunks(tuned)) {
                 if (this.stopped) break;
@@ -1271,21 +1313,50 @@ class Session {
                 for (const viewer of this.viewers) this.hand(viewer, CHANNEL.rawTs, out);
                 this.tellClock();
                 captioner?.feed(out);
+                this.pictures?.feed(out);
             }
             this.died(label, '放送が途切れました', '映像を出せませんでした');
         } catch (error) {
             this.died(label, String(error), whyNotTuned(String(error), resting(this.serviceId)));
         } finally {
             captioner?.stop();
+            this.feeding = false;
+            this.wantPictures();
             this.stop();
         }
     }
 
-    /** 生の道の字幕を描く ffmpeg を起こす (`rawCaptionArgs`)。**字幕の口と見出しを汲み続ける** */
-    private captions(): RawCaptions {
-        const proc = Bun.spawn([config.ffmpeg, ...rawCaptionArgs(this.program, this.track)], {
-            stdio: ['pipe', 'pipe', 'pipe', 'pipe'] as never,
-        });
+    /**
+     * 生の道で、字幕を絵にする ffmpeg を起こす・畳む。**絵を頼んだアプリが居る間だけ** (`Viewer.captions`)。
+     * ブラウザは文字の配置で受けるので、アプリが居なければ字幕を描く手間はどこにも無い
+     */
+    private wantPictures(): void {
+        const wanted =
+            this.raw &&
+            this.feeding &&
+            !this.stopped &&
+            [...this.viewers].some((viewer) => viewer.captions === 'png');
+        if (wanted && this.pictures === null && !captionlessNow(this.serviceId))
+            this.pictures = this.captions('png');
+        if (!wanted && this.pictures !== null) {
+            this.pictures.stop();
+            this.pictures = null;
+            this.picture = null;
+            this.last = null;
+        }
+    }
+
+    /**
+     * 生の道の字幕の ffmpeg を起こす (`rawCaptionArgs`)。**字幕の口と見出しを汲み続ける。**
+     * 選べる字幕と「字幕が無い」は文字の配置のほう (`text`。いつも起きている) から拾う
+     */
+    private captions(form: CaptionForm): RawCaptions {
+        const proc: ReturnType<typeof Bun.spawn> = Bun.spawn(
+            [config.ffmpeg, ...rawCaptionArgs(this.program, this.track, form)],
+            {
+                stdio: ['pipe', 'pipe', 'pipe', 'pipe'] as never,
+            },
+        );
         const captioner = new RawCaptions(proc);
         // 標準出力には何も出さないはずだが、**汲まずに放っておくと詰まったときに止まる**
         void (async () => {
@@ -1293,12 +1364,24 @@ class Session {
                 // 読み捨てる
             }
         })().catch(() => undefined);
-        void this.watch(proc)
-            .then(() => {
-                if (this.noSubtitle) captionless.set(this.serviceId, Date.now());
-            })
-            .catch(() => undefined);
-        void this.subtitles(proc).catch(() => undefined);
+        if (form === 'text') {
+            void this.watch(proc)
+                .then(() => {
+                    if (this.noSubtitle) captionless.set(this.serviceId, Date.now());
+                })
+                .catch(() => undefined);
+        } else {
+            void (async () => {
+                for await (const line of lines(proc.stderr as ReadableStream<Uint8Array>)) {
+                    if (worthLogging(line) && !NO_SUBTITLE.test(line)) {
+                        console.warn(
+                            `[live] ${this.channelType}:${this.channel} 字幕の絵の ffmpeg: ${line.trim()}`,
+                        );
+                    }
+                }
+            })().catch(() => undefined);
+        }
+        void this.subtitles(proc, form).catch(() => undefined);
         return captioner;
     }
 }
@@ -1491,14 +1574,21 @@ export function chaseStream(
 
 /**
  * **アプリ向けのライブの字幕** (`GET /api/services/<id>/captions`。docs/api.md)。生の TS
- * (`liveStream` の `raw`) を観ているアプリに、字幕の絵を放送の PTS のまま流す — ブラウザの
+ * (`liveStream` の `raw`) を観ているアプリに、字幕を放送の PTS のまま流す — ブラウザの
  * 生の道 (stream.md §5.5「字幕」) と同じもの。
  *
- * **いま流している生のセッションに脇から乗る**だけで、チューナーも字幕の ffmpeg も
- * 増やさない (ブラウザで同じ局を生で観ていればそれにも乗る)。乗る先が無ければ null —
+ * `form` が `text` なら文字の配置 (0x22。ブラウザと同じもの)、`png` なら絵 (0x20)。絵は
+ * 頼まれている間だけ字幕を描く ffmpeg を1本起こす (`Session.wantPictures`)。既定は絵
+ * (いまのアプリが読むのはこちら。アプリが文字の配置を描けるようになったら外す)。
+ *
+ * **いま流している生のセッションに脇から乗る**だけで、チューナーは増やさない
+ * (ブラウザで同じ局を生で観ていればそれにも乗る)。乗る先が無ければ null —
  * 映像 (`live?codec=raw`) を先に開いてから頼むこと。映像が終われば閉じる (`Viewer.side`)
  */
-export function liveCaptions(serviceId: number): ReadableStream<Uint8Array> | null {
+export function liveCaptions(
+    serviceId: number,
+    form: CaptionForm = 'png',
+): ReadableStream<Uint8Array> | null {
     const row = orm()
         .select({ type: services.type, channel: services.channel })
         .from(services)
@@ -1511,7 +1601,13 @@ export function liveCaptions(serviceId: number): ReadableStream<Uint8Array> | nu
     );
     if (session === undefined || !session.alive) return null;
     return captionFeed((out) => {
-        const viewer: Viewer = { connection: { send: out.send }, ready: false, wantsData: false, side: true };
+        const viewer: Viewer = {
+            connection: { send: out.send },
+            ready: false,
+            wantsData: false,
+            side: true,
+            captions: form,
+        };
         session.add(viewer);
         return () => depart(session, viewer);
     });
@@ -1537,9 +1633,9 @@ const recordingCaptioners = new Map<number, (() => void)[]>();
 /**
  * **アプリ向けの録画の字幕** (`GET /api/recordings/<id>/captions?from=<秒>`。docs/api.md)。
  * 生TS (録画中の追っかけ `chase?codec=raw` と、録り終えた `file?source=ts`) を観ているアプリに、
- * 字幕の絵を放送の PTS のまま流す。
+ * 字幕を放送の PTS のまま流す。`form` は `liveCaptions` と同じ (`text` は文字の配置、`png` は絵。既定は絵)。
  *
- * 字幕だけを描く ffmpeg (`rawCaptionArgs`) を1本起こし、録画の生TSを `from` の
+ * 字幕だけを写す (か描く) ffmpeg (`rawCaptionArgs`) を1本起こし、録画の生TSを `from` の
  * `CAPTION_LEAD` 秒手前から流し込む。位置の当て方は追っかけと同じバイト比例 (`chasePlan`)。
  * 当たりがずれても受け側は PTS で突き合わせるので、手前に読んだぶんは「いま出ている字幕」になるだけ。
  *
@@ -1550,7 +1646,11 @@ const recordingCaptioners = new Map<number, (() => void)[]>();
  * 読まなくなったら (アプリは先読みする枚数に上限がある) 録画を読むのも止める。
  * シークしたら `from` を変えて頼み直す
  */
-export function recordingCaptions(recordingId: number, at: number): ReadableStream<Uint8Array> | null {
+export function recordingCaptions(
+    recordingId: number,
+    at: number,
+    form: CaptionForm = 'png',
+): ReadableStream<Uint8Array> | null {
     const rec = orm().select().from(recordings).where(eq(recordings.id, recordingId)).get();
     if (rec === undefined || rec.deleted_at !== null || rec.ts_path === null) return null;
     const size = fileSize(rec.ts_path);
@@ -1563,9 +1663,12 @@ export function recordingCaptions(recordingId: number, at: number): ReadableStre
     const label = `rec ${rec.id}`;
 
     return captionFeed((out) => {
-        const proc: ReturnType<typeof Bun.spawn> = Bun.spawn([config.ffmpeg, ...rawCaptionArgs(program, 0)], {
-            stdio: ['pipe', 'pipe', 'pipe', 'pipe'] as never,
-        });
+        const proc: ReturnType<typeof Bun.spawn> = Bun.spawn(
+            [config.ffmpeg, ...rawCaptionArgs(program, 0, form)],
+            {
+                stdio: ['pipe', 'pipe', 'pipe', 'pipe'] as never,
+            },
+        );
         const reader = followFile(
             path,
             plan.offset,
@@ -1628,14 +1731,22 @@ export function recordingCaptions(recordingId: number, at: number): ReadableStre
             }
         })().catch(() => undefined);
 
-        // 字幕の絵。**同じ絵は配り直さない** (`Session.deliver` と同じ)
+        // 字幕。**同じ絵は配り直さない** (`Session.deliver` と同じ)。文字の配置は変わったときしか出てこない
         const fd = (proc.stdio as unknown as number[])[3];
         const frames = new MkvSplitter();
+        const text = new CaptionText();
         let last: string | null = null;
         const pictures = (async () => {
             if (typeof fd !== 'number') return;
             for await (const chunk of chunks(Bun.file(fd).stream())) {
                 for (const caption of frames.feed(chunk)) {
+                    if (form === 'text') {
+                        const shown = text.feed(caption);
+                        if (shown === null) continue;
+                        const { kind, pts, data } = textFrame(shown);
+                        out.send(kind, pts, data);
+                        continue;
+                    }
                     const seen = Bun.hash(caption.data).toString(36);
                     if (seen === last) continue;
                     last = seen;

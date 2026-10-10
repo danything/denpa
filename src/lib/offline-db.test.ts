@@ -32,6 +32,7 @@ describe('落とすものの仕分け', () => {
     test('URL から種類が分かる', () => {
         expect(kindOf('https://x/api/recordings/42/file?source=encoded')).toBe('video');
         expect(kindOf('https://x/api/recordings/42/captions.sup')).toBe('captions');
+        expect(kindOf('https://x/api/recordings/42/captions.json')).toBe('captionText');
         expect(kindOf('https://x/api/recordings/42/chapters')).toBe('chapters');
         expect(kindOf('https://x/api/recordings/42/databroadcast')).toBe('databroadcast');
         expect(kindOf('https://x/api/recordings/42/poster')).toBe('poster');

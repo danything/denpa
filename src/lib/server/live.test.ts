@@ -171,7 +171,9 @@ describe('ライブの焼き方', () => {
         expect(args).toContain('pipe:3');
         // 映像の出口が先。字幕はそのあと
         expect(args.indexOf('pipe:1')).toBeLessThan(args.indexOf('pipe:3'));
-        expect(args.join(' ')).toContain('[0:p:1024:s:0]null');
+        // 字幕は解かずに写す。描く指定 (-sub_type) も要らない
+        expect(args.join(' ')).toContain('-map 0:p:1024:s:0 -c:s copy');
+        expect(args).not.toContain('-sub_type');
     });
 
     /*
@@ -191,7 +193,7 @@ describe('ライブの焼き方', () => {
 
     /** **言語が複数ある放送**では2本目を選べる */
     test('何本目の字幕かを選べる', () => {
-        expect(encodeArgs(1024, stereo, 'h264', 1).join(' ')).toContain('[0:p:1024:s:1]null');
+        expect(encodeArgs(1024, stereo, 'h264', 1).join(' ')).toContain('-map 0:p:1024:s:1 -c:s copy');
     });
 
     /*
@@ -510,11 +512,9 @@ describe('GPU で焼く', () => {
     test('字幕の出口・コマ数の上限・音声はソフトウェアのときと同じ', () => {
         for (const args of [encodeOnly(), full()]) {
             expect(args[args.indexOf('-fpsmax') + 1]).toBe('60000/1001');
-            expect(args.join(' ')).toContain('[0:p:1024:s:0]null');
+            expect(args.join(' ')).toContain('-map 0:p:1024:s:0 -c:s copy');
             expect(args).toContain('pipe:3');
             expect(args.join(' ')).toContain('-c:a aac');
-            // 字幕を絵で受け取る指定も入力より前に残る
-            expect(before(args, '-sub_type')).toBe(true);
         }
         // AV1 は Opus のまま
         const av1 = encodeArgs(1024, stereo, 'av1', 0, { way: { device, kind: 'qsv' }, full: false });

@@ -9,12 +9,13 @@
  *
  * Matroska を選んだのは、**必要なところだけなら小さいから**。NUT はコマの
  * 見出しを組み立てるのに表を復元する必要があり、mp4 は PNG を入れられない。
- * ここが読むのは4つだけ:
+ * ここが読むのは5つだけ:
  *
  *     Segment > Info > TimestampScale       時刻の刻み (既定 1ms)
  *     Segment > Cluster > Timestamp         その塊の頭の時刻
  *     Segment > Cluster > SimpleBlock       コマ本体 (頭からの差 + 中身)
  *     Segment > Cluster > BlockGroup > Block  同上 (書き手によってはこちら)
+ *     Segment > Tracks > TrackEntry > CodecID  中身の種類 (録画の字幕が S_ARIBSUB かを見る)
  *
  * EBML は `[ID][大きさ][中身]` の入れ子。**中身に入るものと飛ばすものを
  * 決めておけば、知らない要素は大きさぶん飛ばせる**ので、全部を知らなくてよい。
@@ -25,13 +26,17 @@ const SEGMENT = 0x18538067;
 const INFO = 0x1549a966;
 const CLUSTER = 0x1f43b675;
 const BLOCK_GROUP = 0xa0;
-const DESCEND = new Set([SEGMENT, INFO, CLUSTER, BLOCK_GROUP]);
+const TRACKS = 0x1654ae6b;
+const TRACK_ENTRY = 0xae;
+const DESCEND = new Set([SEGMENT, INFO, CLUSTER, BLOCK_GROUP, TRACKS, TRACK_ENTRY]);
 
 /** 中身を読むもの */
 const TIMESTAMP_SCALE = 0x2ad7b1;
 const TIMESTAMP = 0xe7;
 const SIMPLE_BLOCK = 0xa3;
 const BLOCK = 0xa1;
+/** 軌道の中身の種類 (`S_ARIBSUB` など)。入っているものを確かめるのに使う */
+const CODEC_ID = 0x86;
 
 /** 大きさが「不明」の印 (全部 1)。頭だけ書いて流し始める器で出てくる */
 const UNKNOWN = -1;
@@ -101,6 +106,8 @@ export class MkvSplitter {
     private scale = DEFAULT_SCALE;
     /** いま居る塊の頭の時刻 (刻みの単位) */
     private base = 0;
+    /** 見出しに書いてあった軌道の種類 (書いてある順) */
+    readonly codecs: string[] = [];
 
     feed(chunk: Uint8Array): MkvFrame[] {
         const joined = new Uint8Array(this.buffer.length + chunk.length);
@@ -123,6 +130,7 @@ export class MkvSplitter {
             const body = this.buffer.subarray(head.body, end);
             if (head.id === TIMESTAMP_SCALE) this.scale = uint(body) || DEFAULT_SCALE;
             else if (head.id === TIMESTAMP) this.base = uint(body);
+            else if (head.id === CODEC_ID) this.codecs.push(new TextDecoder().decode(body));
             else if (head.id === SIMPLE_BLOCK || head.id === BLOCK) {
                 const frame = this.block(body);
                 if (frame !== null) out.push(frame);
