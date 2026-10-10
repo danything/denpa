@@ -231,7 +231,11 @@ function withinProgram(spans: Range[], input: CmInput, candidates: Boundary[]): 
         distance = Math.abs(at - programStart);
         head = at;
     }
-    const start = snap(head, candidates).at;
+    /*
+     * 置き場所の手がかりが番組表だけのときは、頭は切らない。録画が遅れて始まると番組表どおりの頭は
+     * 実際より後ろになり、番組の頭を削ってしまう (尻の次の番組は削っても番組は減らない)
+     */
+    const start = places.length > 0 ? snap(head, candidates).at : 0;
     const end = snap(head + length, candidates).at;
     return spans
         .map((span) => ({ start: Math.max(span.start, start), end: Math.min(span.end, end) }))
