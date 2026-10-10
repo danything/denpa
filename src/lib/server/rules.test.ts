@@ -98,6 +98,16 @@ describe('キーワードを当てる範囲', () => {
         expect(matches(r, target)).toBe(true);
         expect(matches(rule({ ...r, keyword: '青の 届かない' }), target)).toBe(false);
     });
+
+    test('外字は昔の書き方のキーワードでも当たる (吉 → 𠮷、[新] → 🈟)', () => {
+        const aired = program({ name: '🈟𠮷野家の1日🈑' });
+        expect(matches(rule({ keyword: '吉野家' }), aired)).toBe(true);
+        expect(matches(rule({ keyword: '[新]' }), aired)).toBe(true);
+        expect(matches(rule({ keyword: '[字]' }), aired)).toBe(true);
+        expect(
+            matches(rule({ keyword: 'アニメ', ignore_keyword: '[新]' }), program({ name: '🈟アニメ' })),
+        ).toBe(false);
+    });
 });
 
 describe('下見の SQL 前絞り (likePatterns)', () => {
@@ -108,8 +118,8 @@ describe('下見の SQL 前絞り (likePatterns)', () => {
     });
 
     test('% _ \\ は字そのものとして当てる', () => {
-        expect(likePatterns(compiledOf('100%'))).toEqual(['%100\\%%']);
-        expect(likePatterns(compiledOf('a_b'))).toEqual(['%a\\_b%']);
+        expect(likePatterns(compiledOf('名%前'))).toEqual(['%名\\%前%']);
+        expect(likePatterns(compiledOf('名_前'))).toEqual(['%名\\_前%']);
     });
 
     test('大文字小文字を持つ非 ASCII の語は使わない (LIKE が揃えられない)', () => {
@@ -124,6 +134,12 @@ describe('下見の SQL 前絞り (likePatterns)', () => {
 
     test('語が無ければ null', () => {
         expect(likePatterns(compiledOf(''))).toBeNull();
+    });
+
+    test('外字に寄せた字が絡む所は抜く (DB には 𠮷 🈟 のまま入っている)', () => {
+        expect(likePatterns(compiledOf('吉野家'))).toEqual(['%野家%']);
+        expect(likePatterns(compiledOf('[新]アニメ'))).toEqual(['%アニメ%']);
+        expect(likePatterns(compiledOf('[新]'))).toBeNull();
     });
 });
 

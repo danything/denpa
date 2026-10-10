@@ -8,11 +8,11 @@
  * 判定は画面に触らない純粋な計算にしてある (単体テストで固定する)。
  * DB を読むのは呼ぶ側 (`rules.applyRules` とルール画面の下見)。
  */
-import { displayTitle, parseTitle, toHalfWidth } from './title';
+import { displayTitle, parseTitle, searchable, toHalfWidth } from './title';
 
-/** 比べる前に揃える。空白の有無・大文字小文字は局によって揺れる */
+/** 比べる前に揃える。空白の有無・大文字小文字は局によって揺れる。外字は昔の書き方に (`fold.ts`) */
 function squash(text: string): string {
-    return toHalfWidth(text).replace(/\s+/g, '').toLowerCase();
+    return searchable(text).replace(/\s+/g, '');
 }
 
 /** 回を読む元。番組表の番組と録画のどちらも持っている */

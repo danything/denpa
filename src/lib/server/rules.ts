@@ -1,5 +1,6 @@
 import { and, eq, getTableColumns, gt, inArray, isNull, ne, or } from 'drizzle-orm';
 import { type Genre, genreMatches } from '#lib/arib.js';
+import { likeTerms } from '../fold';
 import { parseSearchFields, type SearchField } from '../search';
 import type { Program, Rule } from '../types';
 import { config } from './config';
@@ -7,7 +8,7 @@ import { now, orm } from './db';
 import { type Airing, episodeOf, firstAirings, type Taken } from './episode';
 import { programs as programTable, recordings, reservations, rules as ruleTable, services } from './schema';
 import { settings } from './settings';
-import { parseTitle, toHalfWidth } from './title';
+import { parseTitle, searchable } from './title';
 
 /** 空の並びは「指定なし」。NULL と同じに扱う */
 function nonEmpty<T>(list: T[] | null): T[] | null {
@@ -30,7 +31,7 @@ export function haystack(
     const parts = fields.map((field) =>
         field === 'extended' ? extendedText(program.extended) : program[field],
     );
-    return toHalfWidth(parts.join(' ')).toLowerCase();
+    return searchable(parts.join(' '));
 }
 
 /**
@@ -73,9 +74,9 @@ export function compile(rule: Rule): CompiledRule {
         genres: nonEmpty(rule.genres),
         fields: parseSearchFields(rule.search_fields),
         // キーワードは空白区切りの AND。「アニメ 再放送」で両方含むものだけ拾える
-        keywords: toHalfWidth(rule.keyword).toLowerCase().split(/\s+/).filter(Boolean),
+        keywords: searchable(rule.keyword).split(/\s+/).filter(Boolean),
         // 除外キーワードは OR。1つでも当たれば落とす
-        ignores: toHalfWidth(rule.ignore_keyword).toLowerCase().split(/\s+/).filter(Boolean),
+        ignores: searchable(rule.ignore_keyword).split(/\s+/).filter(Boolean),
     };
 }
 
@@ -95,6 +96,8 @@ export function compile(rule: Rule): CompiledRule {
  *   `toLowerCase` で全部揃えるので、大文字小文字を持つ非 ASCII の字
  *   (キリル文字など) を含む語は使わない
  * - `%` `_` `\` は `ESCAPE '\'` で字そのものとして当てる
+ * - 外字は規格の字 (𠮷 🈟) のまま入っていて、語のほうは昔の書き方 (吉 [新]) に
+ *   寄せてある (`fold.ts`)。寄せた字が絡む所は抜き、残りの切れ端を当てる
  *
  * 番組名と概要は取り込み時に半角へ直してある (`epg.ts`) ので、`compile` が
  * 半角に直した語をそのまま当てられる。
@@ -103,11 +106,8 @@ export function compile(rule: Rule): CompiledRule {
  */
 export function likePatterns(compiled: CompiledRule): string[] | null {
     if (compiled.fields.includes('extended')) return null;
-    const safe = compiled.keywords.filter((word) =>
-        [...word].every((ch) => /[a-z0-9]/.test(ch) || ch.toLowerCase() === ch.toUpperCase()),
-    );
-    if (safe.length === 0) return null;
-    return safe.map((word) => `%${word.replace(/[\\%_]/g, (ch) => `\\${ch}`)}%`);
+    const patterns = likeTerms(compiled.keywords);
+    return patterns.length === 0 ? null : patterns;
 }
 
 /**

@@ -5,9 +5,19 @@
  * 毎回変わる部分(話数・サブタイトル)を番組名から落として安定したシリーズ名を作るのが目的。
  * 放送局ごとに表記が揺れるため完璧は狙わず、実害の出やすいパターンだけ潰す。
  */
+import { FOLD, foldForSearch } from '../fold';
 
 // 【新】【終】[字][解][再] のような装飾記号。先頭・末尾どこにでも出る
 const DECORATION = /[【[(]\s*(新|終|再|字|解|デ|二|多|SS|初|最終回|無料|無|生|映)\s*[】\])]/g;
+
+// 同じ記号の外字 (🈟🈡🈑…)。番組表は規格の字のまま持つので、こちらも落とす
+const DECORATION_MARK = new RegExp(
+    `[${[...FOLD]
+        .filter(([, folded]) => new RegExp(`^${DECORATION.source}$`).test(folded))
+        .map(([mark]) => mark)
+        .join('')}]`,
+    'gu',
+);
 
 // 局が頭に付ける枠の名前。`<アニメギルド>てつりょー!` (全角の ＜＞ は半角に寄せてから見る)
 const FRAME = /^<[^<>]{1,20}>\s*/;
@@ -34,8 +44,8 @@ const LABELED_EPISODE = /\s*(?<![A-Za-z0-9【[(])(?:chapter|episode|ep)\s*\.?\s*
 // 話数の後ろが枠の名前だけ (`第51話【アニメイズム】`) なら副題ではない
 const LABELS_ONLY = /^(?:【[^】]*】\s*)+$/;
 
-// 名前の後ろに残る区切り記号 (`番組名 - ` や、`作品名 編▼第52話` の ▼)
-const TRAILING_SEPARATOR = /[\s\-~〜:：|｜▼▽]+$/;
+// 名前の後ろに残る区切り記号 (`番組名 - ` や、`作品名 編▼第52話` の ▼。外字の ⛊⛉ も)
+const TRAILING_SEPARATOR = /[\s\-~〜:：|｜▼▽⛊⛉]+$/u;
 
 // ファイル名に使えない文字。制御文字は別途コードポイントで弾く
 const FORBIDDEN = '/\\:*?"<>|';
@@ -45,6 +55,11 @@ export function toHalfWidth(input: string): string {
     return input
         .replace(/[！-～]/g, (c) => String.fromCharCode(c.charCodeAt(0) - 0xfee0))
         .replace(/　/g, ' ');
+}
+
+/** 探すときの形。全角を半角に、外字を昔の書き方に (`fold.ts`)、小文字に */
+export function searchable(input: string): string {
+    return foldForSearch(toHalfWidth(input)).toLowerCase();
 }
 
 /**
@@ -64,11 +79,14 @@ export function displayTitle(rawName: string): string {
  * **テレビの VLC に出す番組名。** `[字][デ][二]` のような記号を**残す** (displayTitle は落とす)。
  * 一覧と違ってテレビの見出しはこれしか出ないので、字幕があるか・二か国語かがここで分かる。
  *
- * ARIB の囲み文字 (🈑🈞🈔) は `[字][デ][二]` に開く。テレビの VLC は絵文字の字形を
- * 持っていないことがあり、豆腐になる
+ * 外字 (🈑🈞🈔 𠮷) は `[字][再][二]` 吉 のように昔の書き方に開く (`fold.ts`)。
+ * テレビの VLC は絵文字の字形を持っていないことがあり、豆腐になる
  */
 export function markedTitle(rawName: string): string {
-    const opened = (rawName ?? '').replace(/[\u{1F210}-\u{1F23B}]/gu, (c) => `[${c.normalize('NFKC')}]`);
+    const opened = foldForSearch(rawName ?? '').replace(
+        /[\u{1F210}-\u{1F23B}]/gu,
+        (c) => `[${c.normalize('NFKC')}]`,
+    );
     return toHalfWidth(opened).replace(/\s+/g, ' ').trim();
 }
 
@@ -87,6 +105,7 @@ export interface ParsedTitle {
 export function parseTitle(rawName: string): ParsedTitle {
     const name = toHalfWidth(rawName ?? '')
         .replace(DECORATION, '')
+        .replace(DECORATION_MARK, '')
         .trim();
 
     let subtitle = '';
