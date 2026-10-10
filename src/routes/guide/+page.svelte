@@ -2,6 +2,7 @@
     import { untrack } from 'svelte';
     import { dragScroll, submitting } from '#lib/actions.js';
     import ProgramDetail from '#lib/components/ProgramDetail.svelte';
+    import ServiceLogo from '#lib/components/ServiceLogo.svelte';
     import { startDownload } from '#lib/download.js';
     import { channelNumber, date, SERVICE_TYPE_LABEL, stateLabel, time } from '#lib/format.js';
     import { reload } from '#lib/reload.svelte.js';
@@ -546,21 +547,14 @@
                         <!--
                         ロゴを持たない局もあるので、有るものだけ出す。場所は
                         どちらでも空けておく — 局名の頭が列ごとにずれると、
-                        横に並べたときにどれがどの局か追いにくい。
-
-                        **出せなかったときに引っ込めない** (`onerror` で消すと Svelte の節点を横から触ることになる)。
-                        `alt=""` なので、出せなければ場所だけが残る = 持っていない局と同じ見た目になる
+                        横に並べたときにどれがどの局か追いにくい
                     -->
-                        {#if service.has_logo}
-                            <img
-                                src={resolve(`api/services/${service.id}/logo`)}
-                                alt=""
-                                class="logo"
-                                loading="lazy"
-                            />
-                        {:else}
-                            <span class="logo"></span>
-                        {/if}
+                        <ServiceLogo
+                            id={service.id}
+                            has={service.has_logo}
+                            style="display: block; width: 2rem; height: 1.25rem"
+                            fallback=""
+                        />
                         <!-- テレビに出ている番号。札の形はライブの一覧と同じ (format.ts の channelNumber) -->
                         {#if channelNumber(service) !== null}
                             <span class="tag ch-number" data-testid="guide-number">{channelNumber(service)}</span>
@@ -961,13 +955,6 @@
         line-height: 1.25rem;
         font-weight: 500;
     }
-    .logo {
-        display: block;
-        height: 1.25rem;
-        width: 2rem;
-        flex-shrink: 0;
-        object-fit: contain;
-    }
     .name {
         overflow: hidden;
         text-overflow: ellipsis;
@@ -1064,7 +1051,7 @@
         --wash: 14%;
     }
     .program:hover {
-        background: var(--dp-base-300);
+        background: var(--dp-hover);
     }
     .program[data-genre] {
         background: color-mix(in srgb, var(--tint) var(--wash), var(--dp-surface));

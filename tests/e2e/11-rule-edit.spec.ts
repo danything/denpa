@@ -42,6 +42,7 @@ test.describe('ルールの編集', () => {
 
         await page.getByTestId('rule-cancel-edit').click();
         await page.getByTestId('rule-delete').first().click();
+        await page.getByTestId('rule-delete-confirm').click();
         await cancelAllReservations(page);
     });
 
@@ -113,6 +114,7 @@ test.describe('ルールの編集', () => {
         await page.getByTestId('rule-cancel-edit').click();
         await expect(page.getByTestId('rule-row')).toHaveCount(1);
         await page.getByTestId('rule-delete').first().click();
+        await page.getByTestId('rule-delete-confirm').click();
         await expect(page.getByTestId('rule-row')).toHaveCount(0);
         await cancelAllReservations(page);
     });
@@ -164,6 +166,7 @@ test.describe('ルールの編集', () => {
         // 残りはルールごと畳む。まだ始まっていない予約は行ごと消える
         await goto(page, '/rules');
         await page.getByTestId('rule-delete').first().click();
+        await page.getByTestId('rule-delete-confirm').click();
         await expect(page.getByTestId('rule-row')).toHaveCount(0);
         await goto(page, '/');
         await expect(page.getByTestId('reservation-row').filter({ hasText: 'テスト番組C' })).toHaveCount(0);
@@ -195,6 +198,7 @@ test.describe('ルールの作り直し', () => {
 
             await goto(page, '/rules');
             await page.getByTestId('rule-row').first().getByTestId('rule-delete').click();
+            await page.getByTestId('rule-delete-confirm').click();
             await expect(page.getByTestId('rule-row')).toHaveCount(0);
         }
     });

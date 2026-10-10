@@ -41,3 +41,5 @@ export function arming(spare: string) {
         },
     };
 }
+
+export type Arming = ReturnType<typeof arming>;

@@ -45,12 +45,12 @@
     import StageTail from '#lib/components/player/StageTail.svelte';
     import { snapshotter } from '#lib/components/player/shot.svelte.js';
     import { grabbedFrame, videoFrame } from '#lib/components/player/snapshot.js';
+    import ServiceLogo from '#lib/components/ServiceLogo.svelte';
     import Toasts, { errorNotice, type Notice } from '#lib/components/Toasts.svelte';
     import { programDetail } from '#lib/detail.svelte.js';
     import { SERVICE_TYPE_LABEL } from '#lib/format.js';
     import { livePlayer } from '#lib/live-player.svelte.js';
     import { FLOOR } from '#lib/ts/pacing.js';
-    import { resolve } from '$app/paths';
     import type { LiveChannel } from './+page.server';
 
     let { data, form } = $props();
@@ -786,13 +786,12 @@
                             <span class="channel-number" data-testid="live-number">
                                 {#if channel.number !== null}<span class="tag">{channel.number}</span>{/if}
                             </span>
-                            {#if channel.hasLogo}
-                                <img src={resolve(`api/services/${channel.id}/logo`)} alt="" class="channel-logo" />
-                            {:else}
-                                <span class="channel-logo channel-type">
-                                    {channel.type}
-                                </span>
-                            {/if}
+                            <ServiceLogo
+                                id={channel.id}
+                                has={channel.hasLogo}
+                                style="width: 2rem; height: 2rem"
+                                fallback={channel.type}
+                            />
                             <span class="channel-text">
                                 <span class="channel-name">
                                     {channel.name}
@@ -938,7 +937,7 @@
     }
     .channel:hover {
         border-color: color-mix(in srgb, var(--pico-color) 30%, transparent);
-        background: var(--dp-base-200);
+        background: var(--dp-hover);
     }
     .channel.tuned {
         border-color: var(--pico-primary-background);
@@ -950,20 +949,6 @@
         flex-shrink: 0;
         text-align: right;
         font-variant-numeric: tabular-nums;
-    }
-    .channel-logo {
-        width: 2rem;
-        height: 2rem;
-        flex-shrink: 0;
-        border-radius: 0.25rem;
-        object-fit: contain;
-    }
-    .channel-type {
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        background: var(--dp-base-300);
-        font-size: 0.75rem;
     }
     .channel-text {
         min-width: 0;

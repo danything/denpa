@@ -109,6 +109,7 @@ test.describe('接頭辞の下で', () => {
         await page.getByTestId('rule-update').click();
         await expect(page).toHaveURL(`${origin}${PREFIX}/rules`);
         await row.getByTestId('rule-delete').click();
+        await page.getByTestId('rule-delete-confirm').click();
         await expect(row).toHaveCount(0);
 
         // ライブ: 札 (fetch) を取って、接頭辞の中の WebSocket に繋ぎ、TS が届く

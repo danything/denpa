@@ -273,6 +273,7 @@ test.describe('録画一覧のまとめて表示', () => {
             const made = page.getByTestId('rule-row').filter({ hasText: 'グループ試験アニメ' });
             if ((await made.count()) > 0) {
                 await made.first().getByTestId('rule-delete').click();
+                await page.getByTestId('rule-delete-confirm').click();
                 await expect(made).toHaveCount(0);
             }
         }

@@ -13,8 +13,11 @@
     import { onMount, tick, untrack } from 'svelte';
     import { submitting } from '#lib/actions.js';
     import { arming } from '#lib/arming.svelte.js';
+    import ActionButton from '#lib/components/ActionButton.svelte';
+    import ArmedDelete from '#lib/components/ArmedDelete.svelte';
     import ProgramDetail from '#lib/components/ProgramDetail.svelte';
     import Icon from '#lib/components/player/Icon.svelte';
+    import ServiceLogo from '#lib/components/ServiceLogo.svelte';
     import Toasts, { errorNotice, type Notice } from '#lib/components/Toasts.svelte';
     import { type DetailSeed, programDetail } from '#lib/detail.svelte.js';
     import { startDownload } from '#lib/download.js';
@@ -598,31 +601,47 @@
 {/snippet}
 
 <!-- 局名・放送日時・尺・サイズ。1行にまとめて、空のものは出さない -->
-<!--
-    局ロゴは放送波から拾ったもの (`/api/services/<id>/logo`)。**まだ拾えていない局は
-    何も出さない** — ライブ画面と違って一覧は行が細く、代わりの箱を置くと局名より目立つ
--->
+<!-- 局ロゴは**まだ拾えていない局では何も出さない** (ServiceLogo) -->
 {#snippet meta(parts: string[], row: { service_id: number; has_logo: boolean | null })}
     <div class="row-meta">
-        {#if row.has_logo}
-            <img src={resolve(`api/services/${row.service_id}/logo`)} alt="" loading="lazy" class="service-logo" />
-        {/if}
+        <ServiceLogo
+            id={row.service_id}
+            has={row.has_logo}
+            style="height: 1rem; margin-right: 0.375rem; vertical-align: -0.1875rem"
+        />
         <span>{parts.filter(Boolean).join(' ・ ')}</span>
     </div>
 {/snippet}
 
 <!--
-    削除の2回押し (`deleting`)。
-    幅が変わるとボタンが動いて押し間違えるので、どちらも2文字で揃える
+    「その他…」の中の、送るだけの口。**閉じるのは送り終わってから** (`done`) — 先に閉じると、
+    断られたときの知らせ (Toasts) が出る前に画面が変わってしまう
 -->
-{#snippet armedDelete(key: number)}
-    {#if deleting.armed === key}
-        <button type="submit" class="danger" data-testid="delete-confirm">確定</button>
-    {:else}
-        <button type="button" class="outline danger" onclick={() => deleting.arm(key)} data-testid="delete-button">
-            削除
-        </button>
-    {/if}
+{#snippet menuSubmit(
+    action: string,
+    label: string,
+    testid: string,
+    fields: Record<string, string | number>,
+    done: () => void,
+)}
+    <form
+        method="POST"
+        {action}
+        class="menu-form"
+        use:submitting={() => async (options) => {
+            await options.update();
+            done();
+        }}
+    >
+        {#each Object.entries(fields) as [name, value] (name)}
+            <input type="hidden" {name} {value} />
+        {/each}
+        <DropdownMenu.Item closeOnSelect={false}>
+            {#snippet child({ props: itemProps })}
+                <button {...itemProps} type="submit" class="menu-button" data-testid={testid}>{label}</button>
+            {/snippet}
+        </DropdownMenu.Item>
+    </form>
 {/snippet}
 
 <!--
@@ -692,10 +711,14 @@
                     (deleting は録画と共用で、IDの空間が別のため)
                 -->
                 <div class="row-actions">
-                    <form method="POST" action="?/deleteMissed" use:submitting>
-                        <input type="hidden" name="id" value={res.id} />
-                        {@render armedDelete(-res.id)}
-                    </form>
+                    <ArmedDelete
+                        {deleting}
+                        armKey={-res.id}
+                        action="?/deleteMissed"
+                        fields={{ id: res.id }}
+                        testid="delete-button"
+                        confirmTestid="delete-confirm"
+                    />
                 </div>
             </div>
         </div>
@@ -930,22 +953,22 @@
                                     エンコード中止
                                 </button>
                             {:else}
-                                <form method="POST" action="?/cancelEncode" use:submitting>
-                                    <input type="hidden" name="id" value={rec.job_id} />
-                                    <button type="submit"
-                                        class="outline danger"
-                                        data-testid="encode-cancel"
-                                    >
-                                        エンコード中止
-                                    </button>
-                                </form>
+                                <ActionButton
+                                    action="?/cancelEncode"
+                                    fields={{ id: rec.job_id }}
+                                    class="outline danger"
+                                    testid="encode-cancel"
+                                >
+                                    エンコード中止
+                                </ActionButton>
                             {/if}
                         {:else}
                             <!-- サーバから消したら、端末に落としてあったコピーも片付ける -->
-                            <form
-                                method="POST"
-                                action="?/delete"
-                                use:submitting={() => async (options) => {
+                            <ArmedDelete
+                                {deleting}
+                                armKey={rec.id}
+                                fields={{ id: rec.id }}
+                                submit={() => async (options) => {
                                     await options.update();
                                     // held は使わない。use: の引数は作ったときのまま閉じ込められるので、
                                     // あとから端末に保存した録画でも古い「無い」を見てしまう
@@ -953,10 +976,9 @@
                                         void removeLocal(rec.id);
                                     }
                                 }}
-                            >
-                                <input type="hidden" name="id" value={rec.id} />
-                                {@render armedDelete(rec.id)}
-                            </form>
+                                testid="delete-button"
+                                confirmTestid="delete-confirm"
+                            />
                         {/if}
                     {/if}
                 </div>
@@ -1127,24 +1149,17 @@
                                         </a>
                                     {/if}
                                     {#if active.includes(res.state)}
-                                        <form method="POST" action="?/cancel" use:submitting>
-                                            <input type="hidden" name="id" value={res.id} />
-                                            <button type="submit"
-                                                class="outline danger"
-                                                data-testid="cancel-button"
-                                            >
-                                                取消
-                                            </button>
-                                        </form>
+                                        <ActionButton action="?/cancel" fields={{ id: res.id }} class="outline danger" testid="cancel-button">
+                                            取消
+                                        </ActionButton>
                                     {:else if res.state === 'canceled' && res.end_at > Date.now()}
                                         <!--
                                             取り消した予約はルールが作り直さないので、
                                             気が変わったときに戻せるのはここだけ
                                         -->
-                                        <form method="POST" action="?/restore" use:submitting>
-                                            <input type="hidden" name="id" value={res.id} />
-                                            <button type="submit" class="secondary" data-testid="restore-button">戻す</button>
-                                        </form>
+                                        <ActionButton action="?/restore" fields={{ id: res.id }} class="secondary" testid="restore-button">
+                                            戻す
+                                        </ActionButton>
                                     {/if}
                                 </div>
                             </div>
@@ -1282,28 +1297,7 @@
                                                     <a {...itemProps} href={deletedHref} class="menu-link">{deletedLabel}</a>
                                                 {/snippet}
                                             </DropdownMenu.Item>
-                                            <form
-                                                method="POST"
-                                                action="?/reconcile"
-                                                class="menu-form"
-                                                use:submitting={() => async (options) => {
-                                                    await options.update();
-                                                    toolsOpen = false;
-                                                }}
-                                            >
-                                                <DropdownMenu.Item closeOnSelect={false}>
-                                                    {#snippet child({ props: itemProps })}
-                                                        <button
-                                                            {...itemProps}
-                                                            type="submit"
-                                                            class="menu-button"
-                                                            data-testid="reconcile-menu-button"
-                                                        >
-                                                            ファイルと照合
-                                                        </button>
-                                                    {/snippet}
-                                                </DropdownMenu.Item>
-                                            </form>
+                                            {@render menuSubmit('?/reconcile', 'ファイルと照合', 'reconcile-menu-button', {}, () => (toolsOpen = false))}
                                         </div>
                                     </div>
                                 {/snippet}
@@ -1550,63 +1544,21 @@
                                     **未視聴の印を付け外しする** (`?/watched`)。末尾まで観れば勝手に外れる
                                     ので、押すのは観直したいときか、よそで観たときくらい。どちらも続きの位置は消す
                                     (残すと進捗バーが残って、押した結果が一覧に出ない)。
-                                    詳細は開いたときの行を持っているので、送ったら閉じる (再エンコードと同じ)
+                                    詳細は開いたときの行を持っているので、送ったら閉じる (`menuSubmit`)
                                 -->
-                                <form
-                                    method="POST"
-                                    action="?/watched"
-                                    class="menu-form"
-                                    use:submitting={() => async (options) => {
-                                        await options.update();
-                                        detail.close();
-                                    }}
-                                >
-                                    <input type="hidden" name="id" value={rec.id} />
-                                    <input type="hidden" name="watched" value={rec.watched_at === null ? '1' : '0'} />
-                                    <DropdownMenu.Item closeOnSelect={false}>
-                                        {#snippet child({ props: itemProps })}
-                                            <button
-                                                {...itemProps}
-                                                type="submit"
-                                                class="menu-button"
-                                                data-testid="watched-button"
-                                            >
-                                                {rec.watched_at === null ? '視聴済みにする' : '未視聴に戻す'}
-                                            </button>
-                                        {/snippet}
-                                    </DropdownMenu.Item>
-                                </form>
+                                {@render menuSubmit(
+                                    '?/watched',
+                                    rec.watched_at === null ? '視聴済みにする' : '未視聴に戻す',
+                                    'watched-button',
+                                    { id: rec.id, watched: rec.watched_at === null ? '1' : '0' },
+                                    detail.close,
+                                )}
                                 {#if rec.job_id === null && encodeSource(rec) !== null}
                                     <!--
                                         録り直しの元になるのは生TS。エンコード済みを元にしても
-                                        画質は戻らないので、生TSがあるときだけ出す。
-
-                                        **閉じるのは投げ終わってから。** 先に閉じると、断られた
-                                        ときの知らせ (Toasts) が出る前に画面が変わってしまう
+                                        画質は戻らないので、生TSがあるときだけ出す
                                     -->
-                                    <form
-                                        method="POST"
-                                        action="?/reencode"
-                                        class="menu-form"
-                                        use:submitting={() => async (options) => {
-                                            await options.update();
-                                            detail.close();
-                                        }}
-                                    >
-                                        <input type="hidden" name="id" value={rec.id} />
-                                        <DropdownMenu.Item closeOnSelect={false}>
-                                            {#snippet child({ props: itemProps })}
-                                                <button
-                                                    {...itemProps}
-                                                    type="submit"
-                                                    class="menu-button"
-                                                    data-testid="reencode-button"
-                                                >
-                                                    再エンコード
-                                                </button>
-                                            {/snippet}
-                                        </DropdownMenu.Item>
-                                    </form>
+                                    {@render menuSubmit('?/reencode', '再エンコード', 'reencode-button', { id: rec.id }, detail.close)}
                                 {/if}
                                 {#if rec.job_id === null && cmRedo(rec).state !== 'hidden'}
                                     {@const redo = cmRedo(rec)}
@@ -1622,29 +1574,7 @@
                                         </DropdownMenu.Item>
                                         <div class="menu-note muted small" data-testid="cm-redo-reason">{redo.reason}</div>
                                     {:else}
-                                        <form
-                                            method="POST"
-                                            action="?/redetectCm"
-                                            class="menu-form"
-                                            use:submitting={() => async (options) => {
-                                                await options.update();
-                                                detail.close();
-                                            }}
-                                        >
-                                            <input type="hidden" name="id" value={rec.id} />
-                                            <DropdownMenu.Item closeOnSelect={false}>
-                                                {#snippet child({ props: itemProps })}
-                                                    <button
-                                                        {...itemProps}
-                                                        type="submit"
-                                                        class="menu-button"
-                                                        data-testid="cm-redo-button"
-                                                    >
-                                                        CM検出をやり直す
-                                                    </button>
-                                                {/snippet}
-                                            </DropdownMenu.Item>
-                                        </form>
+                                        {@render menuSubmit('?/redetectCm', 'CM検出をやり直す', 'cm-redo-button', { id: rec.id }, detail.close)}
                                     {/if}
                                 {/if}
                             </div>
@@ -1763,7 +1693,7 @@
         padding: 0.75rem;
     }
     .row:hover {
-        background: color-mix(in srgb, var(--dp-base-200) 60%, transparent);
+        background: var(--dp-hover);
     }
     .row-inner {
         display: flex;
@@ -1799,15 +1729,6 @@
     }
     .row-sub {
         margin-top: 0.125rem;
-    }
-    .service-logo {
-        display: inline-block;
-        height: 1rem;
-        width: auto;
-        margin-right: 0.375rem;
-        vertical-align: -0.1875rem;
-        border-radius: 0.125rem;
-        object-fit: contain;
     }
     .row-empty {
         padding: 0.75rem;
@@ -1967,7 +1888,7 @@
         border-top: 1px solid var(--dp-base-300);
     }
     .group-head:hover {
-        background: color-mix(in srgb, var(--dp-base-200) 60%, transparent);
+        background: var(--dp-hover);
     }
     .group-head:focus-visible {
         outline: 2px solid var(--pico-primary-background);
@@ -2113,6 +2034,6 @@
         font: inherit;
     }
     .menu-button[data-highlighted] {
-        background: var(--dp-base-200);
+        background: var(--dp-hover);
     }
 </style>

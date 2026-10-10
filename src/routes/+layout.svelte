@@ -493,7 +493,7 @@
     }
     .burger summary:hover,
     .burger[open] summary {
-        background: var(--dp-base-200);
+        background: var(--dp-hover);
     }
     .burger summary::after {
         display: none;
@@ -523,7 +523,7 @@
         text-decoration: none;
     }
     .burger-list a:hover {
-        background: var(--dp-base-200);
+        background: var(--dp-hover);
     }
     /* 畳んだメニューでも同じ色。縦に並ぶので下線ではなく左端に印を立てる */
     ul.burger-list a[aria-current='page'] {
