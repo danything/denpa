@@ -146,8 +146,24 @@ describe('parseTitle', () => {
         // # があればそちらが話数
         expect(parseTitle('テストアニメ Episode 3 #12').episode).toBe(12);
         // 後ろのドットは話数の終わり。`Ep.3.5` のような小数は読まない
-        expect(parseTitle('テストアニメ Chapter 15.').episode).toBe(15);
+        expect(parseTitle('テストアニメ Chapter 15.')).toMatchObject({ subtitle: '', episode: 15 });
         expect(parseTitle('テストアニメ Ep.3.5').episode).toBeNull();
+    });
+
+    test('作品ごとの呼び方 (request / FILE / Case …) の話数も拾う', () => {
+        expect(parseTitle('テストホテル request 15.[字]')).toEqual({
+            series: 'テストホテル',
+            arc: '',
+            subtitle: '',
+            episode: 15,
+        });
+        expect(parseTitle('テスト警察 FILE.2 危ない人たち')).toMatchObject({
+            series: 'テスト警察',
+            subtitle: '危ない人たち',
+            episode: 2,
+        });
+        // 年は話数ではない
+        expect(parseTitle('SONG FILE 70年代ヒット').episode).toBeNull();
     });
 
     test('Season / Part / Vol. や語の途中の ep は話数にしない', () => {
