@@ -51,14 +51,13 @@
     title: string,
     hint: string,
     more: string = '',
-    wrap: string = '',
 )}
     <!--
         チェック + 見出し + 1行の要点。この画面の決まりの形 (6行が同じ骨格だった)。
         続きの説明 (`more`) は畳んで、label の外に置く — label の中に details を
         入れると、「詳しく」を押したつもりでチェックまで切り替わりかねない
     -->
-    <div class="check-item {wrap}">
+    <div class="check-item">
         <label class="check-row">
             <input type="checkbox" {name} {checked} data-testid={testid} />
             <span class="small">
@@ -121,7 +120,7 @@
                             checked={recording.codecs.includes('av1')}
                             data-testid="codec-av1"
                         />
-                        <span>AV1 (小さい・遅い)</span>
+                        <span class="small">AV1 (小さい・遅い)</span>
                     </label>
                     <label class="check">
                         <input
@@ -131,7 +130,7 @@
                             checked={recording.codecs.includes('h264')}
                             data-testid="codec-h264"
                         />
-                        <span>H.264 (古いテレビ向け・大きい)</span>
+                        <span class="small">H.264 (古いテレビ向け・大きい)</span>
                     </label>
                     {#if recording.codecs.length === 0}
                         <span class="hint">
@@ -160,16 +159,21 @@
                     生TSを残すか・無料放送だけにするかも、ここで決める。
                     画面に出していなかった頃は、保存を押すたびに未送信のチェックボックスとして
                     全部 false で上書きされていた
+
+                    **どの升目も「小さい見出し → 中身 → 要点 → 詳しく」の形にそろえる。**
+                    チェックだけの升目に見出しが無かった頃は、隣のコーデックや CM と
+                    頭の高さが合わず、真ん中寄せにしても浮いて見えた
                 -->
-                {@render checkRow(
-                    'keepOriginal',
-                    recording.keepOriginal,
-                    'global-keep',
-                    '生TSも残す',
-                    'エンコードしたあとも元のTSを消しません。容量を多く使います',
-                    '',
-                    'self-center',
-                )}
+                <div class="field">
+                    <span class="label">元のTS</span>
+                    {@render checkRow(
+                        'keepOriginal',
+                        recording.keepOriginal,
+                        'global-keep',
+                        '生TSも残す',
+                        'エンコードしたあとも元のTSを消しません。容量を多く使います',
+                    )}
+                </div>
                 <label class="field">
                     <span class="label">CM</span>
                     <select name="cmCut" data-testid="global-cmcut">
@@ -187,23 +191,27 @@
                     本当のコマ数は入っていない。60コマに起こして同じ絵が並ぶ割合を
                     数えるのが唯一の見分け方だった (実測: アニメ 21〜55% / 生放送 71%)
                 -->
-                {@render checkRow(
-                    'fpsDetect',
-                    recording.fpsDetect,
-                    'global-fps-detect',
-                    'コマ数を映像から決める',
-                    'アニメなどは 30コマにして、時間とサイズを半分にします',
-                    '同じコマが続く映像 (アニメなど) を見分けて 30コマでエンコードします。外すとすべて 60コマになります。',
-                )}
-                {@render checkRow(
-                    'freeOnly',
-                    recording.freeOnly,
-                    'global-free-only',
-                    '自動予約は無料放送だけにする',
-                    '契約していない有料放送は、録画してもスクランブルのままで観られません',
-                    '',
-                    'span-2',
-                )}
+                <div class="field">
+                    <span class="label">コマ数</span>
+                    {@render checkRow(
+                        'fpsDetect',
+                        recording.fpsDetect,
+                        'global-fps-detect',
+                        'コマ数を映像から決める',
+                        'アニメなどは 30コマにして、時間とサイズを半分にします',
+                        '同じコマが続く映像 (アニメなど) を見分けて 30コマでエンコードします。外すとすべて 60コマになります。',
+                    )}
+                </div>
+                <div class="field span-2">
+                    <span class="label">自動予約</span>
+                    {@render checkRow(
+                        'freeOnly',
+                        recording.freeOnly,
+                        'global-free-only',
+                        '自動予約は無料放送だけにする',
+                        '契約していない有料放送は、録画してもスクランブルのままで観られません',
+                    )}
+                </div>
                 <div class="span-2">
                     <button type="submit" data-testid="save-recording">保存</button>
                 </div>
@@ -656,9 +664,11 @@
     .mono {
         font-family: var(--pico-font-family-monospace);
     }
+    /* 升目は上でそろえる。背の違う升目を真ん中に寄せると、隣と頭が合わずに浮く */
     .two-col {
         display: grid;
-        gap: 1rem;
+        align-items: start;
+        gap: 1.25rem 1.5rem;
     }
     @media (min-width: 640px) {
         .two-col {
@@ -666,9 +676,6 @@
         }
         .span-2 {
             grid-column: span 2;
-        }
-        .self-center {
-            align-self: center;
         }
     }
     .check-item {
