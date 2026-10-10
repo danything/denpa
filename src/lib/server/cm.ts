@@ -399,6 +399,8 @@ export interface CmReading {
      * **復号するたびに呼ぶ** — ロゴの点は読むたびに一から数える (焼き直しで途中までを持ち越さない)
      */
     want(): ScanWant;
+    /** 入れ物の尺 (秒。ffprobe)。測れなければ NaN */
+    duration: number;
     /**
      * 読み終えた材料から CM を決める。
      *
@@ -442,6 +444,7 @@ export async function openCm(input: string, options: CmOptions): Promise<CmReadi
 
     return {
         want: () => ({ video, logo: logo?.scan() ?? null, audio: true }),
+        duration: measured,
         async decide(found, { skip, before, video: read = true }) {
             /** ロゴが使えなかった理由。呼ぶたびに支度のときの理由から始める */
             let why = opening;
