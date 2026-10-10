@@ -157,13 +157,26 @@ export function foldForSearch(text: string): string {
     return text.replace(SELECTOR, '').replace(KEYS, (c) => FOLD.get(c) ?? c);
 }
 
-/** 寄せ先の文字列 (小文字)。LIKE に掛けられない所を探すのに使う */
+/**
+ * **全角の英数・記号と全角の空白を半角に寄せる。** 比べるとき・ファイル名にするときに通す。
+ *
+ * 番組表は放送のとおり全角混じりで持つ (`ts/aribtext.ts`)。人が打つのは半角なので、
+ * 探す・比べる側で揃える。**1文字を1文字に写す** (UTF-16 の長さが変わらない) ので、
+ * 寄せた写しで探した位置で元の文字列を切れる (`server/title.parseTitle`)
+ */
+export function toHalfWidth(input: string): string {
+    return input
+        .replace(/[！-～]/g, (c) => String.fromCharCode(c.charCodeAt(0) - 0xfee0))
+        .replace(/　/g, ' ');
+}
+
+/** 寄せ先の文字列 (小文字)。SQL に掛けられない所を探すのに使う */
 const OUTPUTS = [...new Set([...FOLD.values()].map((v) => [...v.toLowerCase()]))];
 
 /**
- * **SQL の `LIKE` に掛けてよい切れ端。** 語は寄せて小文字にしたもの。
+ * **SQL の前絞りに掛けてよい切れ端。** 語は寄せて小文字にしたもの。
  *
- * DB には規格の字のまま入っているので、寄せた語を丸ごと `LIKE` に掛けると
+ * DB には規格の字のまま入っているので、寄せた語を丸ごと掛けると
  * 「吉野家」が「𠮷野家」を落とす。寄せ先の字に重なりうる所 — 寄せ先がまるごと
  * 入っている所と、語の端が寄せ先の途中で切れている所 (「新」は「[新]」の中) — を
  * 抜き、残りの切れ端を返す。切れ端は**全部含むはず**なので AND で掛けられる。
@@ -195,15 +208,32 @@ export function likePieces(word: string): string[] {
 }
 
 /**
- * 寄せて小文字にした語 (`server/title.searchable`) を `LIKE` の形 (`%切れ端%`、`ESCAPE '\'`) にする。
- * どれも**必ず含むはず**のものなので AND で掛けられる。大文字小文字を持つ非 ASCII の字
- * (キリル文字など。LIKE が揃えられない) を含む切れ端と、絞れない語は何も返さない
+ * 半角の1字を、全角・大文字も当たる GLOB の字の組にする (`a` → `[ａＡaA]`)。
+ * `]` は組の頭でしか字にならず、`^` は頭だと否定、`-` は間だと範囲になるので、
+ * 全角を先・半角を後に並べる (`]` だけは半角を頭に)
  */
-export function likeTerms(words: string[]): string[] {
+function globChar(ch: string): string {
+    if (ch < '!' || ch > '~') return ch;
+    const wide = (c: string) => String.fromCharCode(c.charCodeAt(0) + 0xfee0);
+    if (ch === ']') return `[]${wide(ch)}]`;
+    const upper = ch.toUpperCase();
+    return upper === ch ? `[${wide(ch)}${ch}]` : `[${wide(ch)}${wide(upper)}${ch}${upper}]`;
+}
+
+/**
+ * 寄せて小文字にした語 (`server/title.searchable`) を SQL の `GLOB` の形 (`*切れ端*`) にする。
+ * どれも**必ず含むはず**のものなので AND で掛けられる。
+ *
+ * **LIKE ではなく GLOB。** DB の番組名は放送のとおり全角混じり (「Ｖｅｎｕｅ１０１」) で、
+ * 語は半角に寄せてある。GLOB なら英数・記号の1字ごとに全角と大文字を並べた組
+ * (`[ｖＶvV]`) で当てられる。大文字小文字も組で揃えるので、組を作れない
+ * 大文字小文字を持つ非 ASCII の字 (キリル文字など) を含む切れ端と、絞れない語は何も返さない
+ */
+export function globTerms(words: string[]): string[] {
     return words
         .flatMap(likePieces)
         .filter((piece) =>
             [...piece].every((ch) => /[a-z0-9]/.test(ch) || ch.toLowerCase() === ch.toUpperCase()),
         )
-        .map((piece) => `%${piece.replace(/[\\%_]/g, (ch) => `\\${ch}`)}%`);
+        .map((piece) => `*${[...piece].map(globChar).join('')}*`);
 }

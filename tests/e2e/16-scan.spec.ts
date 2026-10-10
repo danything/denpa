@@ -112,7 +112,8 @@ test.describe('チューナー画面', () => {
         // スキャンで見つかった物理チャンネルと、denpa が取り込んだ局名
         const channels = page.getByTestId('channel-list');
         await expect(channels.getByTestId('channel-row').first()).toBeVisible();
-        await expect(channels).toContainText('TOKYO MX');
+        // 局名は放送のとおりの幅で出す (全角の英数は全角のまま)
+        await expect(channels).toContainText('ＴＯＫＹＯ　ＭＸ');
 
         /*
          * どこまで進んだかを1行で出す。時間がかかるのは1チャンネルずつ選局して

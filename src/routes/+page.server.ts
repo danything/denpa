@@ -14,7 +14,7 @@ import {
     sql,
 } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/sqlite-core';
-import { likeTerms } from '#lib/fold.js';
+import { globTerms } from '#lib/fold.js';
 import { capacityLabel } from '#lib/format.js';
 import { GROUPED_COOKIE, storedGrouped } from '#lib/grouping.js';
 import { fileSize } from '#lib/server/chase.js';
@@ -217,12 +217,13 @@ export function load({ url, cookies }) {
      */
     /*
      * 絞り込みの言葉は語ごとに AND (手元の絞り込みと同じ読み方)。外字は規格の字 (𠮷) の
-     * まま入っているので、昔の書き方 (吉) に寄せた字が絡む所は抜いて当てる (`fold.likeTerms`)。
+     * まま入っているので、昔の書き方 (吉) に寄せた字が絡む所は抜いて当てる。番組名は放送のとおり
+     * 全角混じりなので、英数は全角と大文字も当たる組にする (`fold.globTerms`)。
      * それで絞れない語 (「吉」だけ) は、手元の絞り込みに任せる
      */
-    const terms = likeTerms(searchable(q).split(/\s+/).filter(Boolean));
+    const terms = globTerms(searchable(q).split(/\s+/).filter(Boolean));
     const search = (...columns: AnyColumn[]) =>
-        and(...terms.map((term) => or(...columns.map((column) => sql`${column} LIKE ${term} ESCAPE '\\'`))));
+        and(...terms.map((term) => or(...columns.map((column) => sql`${column} GLOB ${term}`))));
     const res = alias(reservationTable, 'res');
     const j = alias(encodeJobs, 'j');
     const recordings: RecordingRow[] = orm()

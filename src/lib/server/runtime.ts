@@ -15,6 +15,7 @@ import { probe } from './hwenc';
 import { attend } from './live';
 import { reconcile as logoReconcile, ride, sweep } from './logo';
 import { activeRecordingIds, recoverOrphanedRecordings } from './recorder';
+import { restoreWidths } from './restore-width';
 import { tick } from './scheduler';
 import { prune as pruneSessions } from './session';
 import { beginDraining } from './shutdown';
@@ -160,6 +161,20 @@ export function start(): void {
      * 実体はもう無いので、消えて困るものはない。照合と同じ周期でよい
      */
     nowAndEvery(config.reconcileInterval, 'prune', pruneHistory);
+
+    /*
+     * 番組名を半角に寄せて取り込んでいた頃の録画を、生TSの EIT から放送のとおりの幅に戻す
+     * (restore-width.ts)。見た録画は覚えるので、2回目からは録り終えた新しいぶんだけ見る
+     */
+    nowAndEvery(config.reconcileInterval, 'restore-width', async () => {
+        const result = await restoreWidths();
+        if (result.restored > 0 || result.missed > 0) {
+            console.log(
+                `[restore-width] 録画 ${result.seen} 件を見ました: 生TSから戻した ${result.restored} 件 / ` +
+                    `もとから放送のとおり ${result.already} 件 / 戻せなかった ${result.missed} 件`,
+            );
+        }
+    });
 
     /*
      * 切れたログインの控えを片付ける。**入れなくなる人は居ません** — 切れたものは

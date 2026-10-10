@@ -1,6 +1,7 @@
+import { Database } from 'bun:sqlite';
 import { describe, expect, test } from 'bun:test';
 import type { Program, Rule } from '../types';
-import { compile, coveringRule, likePatterns, matches, prefillFrom } from './rules';
+import { compile, coveringRule, globPatterns, matches, prefillFrom } from './rules';
 
 /**
  * ルールの判定。DBには触らない (matches は純粋関数にしてある)。
@@ -108,38 +109,75 @@ describe('キーワードを当てる範囲', () => {
             matches(rule({ keyword: 'アニメ', ignore_keyword: '[新]' }), program({ name: '🈟アニメ' })),
         ).toBe(false);
     });
+
+    test('放送のとおりの全角の番組名にも、半角で打ったキーワードで当たる', () => {
+        const aired = program({ name: 'Ｖｅｎｕｅ１０１　＃３［字］' });
+        expect(matches(rule({ keyword: 'venue101' }), aired)).toBe(true);
+        expect(matches(rule({ keyword: 'Venue101 [字]' }), aired)).toBe(true);
+        expect(matches(rule({ keyword: 'venue101', ignore_keyword: '#3' }), aired)).toBe(false);
+    });
 });
 
-describe('下見の SQL 前絞り (likePatterns)', () => {
+describe('下見の SQL 前絞り (globPatterns)', () => {
     const compiledOf = (keyword: string, search_fields = 'name') => compile(rule({ keyword, search_fields }));
 
-    test('空白区切りの語ごとに %語% を作る (半角・小文字に揃えたあと)', () => {
-        expect(likePatterns(compiledOf('名探偵 ＮＨＫ'))).toEqual(['%名探偵%', '%nhk%']);
+    test('空白区切りの語ごとに *語* を作る。英数は全角・大文字も当たる組にする', () => {
+        expect(globPatterns(compiledOf('名探偵 ＮＨＫ'))).toEqual(['*名探偵*', '*[ｎＮnN][ｈＨhH][ｋＫkK]*']);
+        expect(globPatterns(compiledOf('第#5話'))).toEqual(['*第[＃#][５5]話*']);
     });
 
-    test('% _ \\ は字そのものとして当てる', () => {
-        expect(likePatterns(compiledOf('名%前'))).toEqual(['%名\\%前%']);
-        expect(likePatterns(compiledOf('名_前'))).toEqual(['%名\\_前%']);
+    test('GLOB の記号も字そのものとして当てる', () => {
+        expect(globPatterns(compiledOf('名*前?'))).toEqual(['*名[＊*]前[？?]*']);
+        expect(globPatterns(compiledOf('名]-^前'))).toEqual(['*名[]］][－-][＾^]前*']);
     });
 
-    test('大文字小文字を持つ非 ASCII の語は使わない (LIKE が揃えられない)', () => {
-        expect(likePatterns(compiledOf('名探偵 Привет'))).toEqual(['%名探偵%']);
-        expect(likePatterns(compiledOf('Привет'))).toBeNull();
+    test('大文字小文字を持つ非 ASCII の語は使わない (組を作れない)', () => {
+        expect(globPatterns(compiledOf('名探偵 Привет'))).toEqual(['*名探偵*']);
+        expect(globPatterns(compiledOf('Привет'))).toBeNull();
     });
 
     test('詳細説明まで検索するときは SQL では当てない', () => {
-        expect(likePatterns(compiledOf('名探偵', 'name,description,extended'))).toBeNull();
-        expect(likePatterns(compiledOf('名探偵', 'name,description'))).toEqual(['%名探偵%']);
+        expect(globPatterns(compiledOf('名探偵', 'name,description,extended'))).toBeNull();
+        expect(globPatterns(compiledOf('名探偵', 'name,description'))).toEqual(['*名探偵*']);
     });
 
     test('語が無ければ null', () => {
-        expect(likePatterns(compiledOf(''))).toBeNull();
+        expect(globPatterns(compiledOf(''))).toBeNull();
     });
 
     test('外字に寄せた字が絡む所は抜く (DB には 𠮷 🈟 のまま入っている)', () => {
-        expect(likePatterns(compiledOf('吉野家'))).toEqual(['%野家%']);
-        expect(likePatterns(compiledOf('[新]アニメ'))).toEqual(['%アニメ%']);
-        expect(likePatterns(compiledOf('[新]'))).toBeNull();
+        expect(globPatterns(compiledOf('吉野家'))).toEqual(['*野家*']);
+        expect(globPatterns(compiledOf('[新]アニメ'))).toEqual(['*アニメ*']);
+        expect(globPatterns(compiledOf('[新]'))).toBeNull();
+    });
+
+    /** 番組名は放送のとおり全角混じり。半角で打った語で SQLite が実際に当てるか */
+    test('SQLite の GLOB が全角・半角・大文字小文字の混じった番組名に当たる', () => {
+        const db = new Database(':memory:');
+        const names = [
+            'Ｖｅｎｕｅ１０１',
+            'VENUE101',
+            'ｖｅｎｕｅ101',
+            'venue 101',
+            '[新]アニメ*',
+            'ニュース',
+            'テスト-^記号',
+            'テスト－＾記号',
+            'テスト^-記号',
+        ];
+        const hit = (keyword: string) =>
+            names.filter((name) =>
+                (globPatterns(compiledOf(keyword)) ?? []).every(
+                    (pattern) =>
+                        (db.query('SELECT ? GLOB ? AS hit').get(name, pattern) as { hit: number }).hit === 1,
+                ),
+            );
+        expect(hit('venue101')).toEqual(['Ｖｅｎｕｅ１０１', 'VENUE101', 'ｖｅｎｕｅ101']);
+        expect(hit('Venue 101')).toEqual(['Ｖｅｎｕｅ１０１', 'VENUE101', 'ｖｅｎｕｅ101', 'venue 101']);
+        expect(hit('アニメ*')).toEqual(['[新]アニメ*']);
+        // 組の中の - と ^ も字そのもの (範囲や否定にならない)
+        expect(hit('-^記号')).toEqual(['テスト-^記号', 'テスト－＾記号']);
+        db.close();
     });
 });
 

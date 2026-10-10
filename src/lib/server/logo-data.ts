@@ -11,7 +11,7 @@ import {
 import { join } from 'node:path';
 import { deflateSync } from 'node:zlib';
 import { and, eq, ne, sql } from 'drizzle-orm';
-import { alias } from 'drizzle-orm/sqlite-core';
+import { toHalfWidth } from '../fold';
 import { joinBytes } from '../ts/bytes';
 import { coherence, decodeModel } from '../ts/logo-detect';
 import { pngChunk } from '../ts/logo-palette';
@@ -168,28 +168,34 @@ export function learned(serviceId: number): boolean {
  * 代表は**もう覚えている局を優先**する。無ければ先頭 (呼ぶ側の並び順)。
  *
  * ネットワークもそろえて見る。局名だけで束ねると、たまたま同名の別系列を
- * 1つにしてしまう
+ * 1つにしてしまう。幅は寄せて比べる (局名の幅は SDT を読んだ局から放送のとおりに直るので、
+ * 直る前と後の局が並ぶことがある。`epg.widenServices`)
  */
 export function stations<T extends { id: number; network_id: number; name: string }>(rows: T[]): T[] {
     const groups = new Map<string, T>();
     for (const row of rows) {
-        const key = `${row.network_id}:${row.name}`;
+        const key = `${row.network_id}:${toHalfWidth(row.name)}`;
         const chosen = groups.get(key);
         if (chosen === undefined || (!learned(chosen.id) && learned(row.id))) groups.set(key, row);
     }
     return [...groups.values()];
 }
 
-/** 同じ絵を映している他の局。覚えたロゴを分け合うのに使う */
+/** 同じ絵を映している他の局。覚えたロゴを分け合うのに使う。名前の幅は寄せて比べる (`stations`) */
 export function siblings(serviceId: number): number[] {
-    const me = alias(services, 'me');
-    const other = alias(services, 'other');
+    const me = orm()
+        .select({ network_id: services.network_id, name: services.name })
+        .from(services)
+        .where(eq(services.id, serviceId))
+        .get();
+    if (me === undefined) return [];
+    const name = toHalfWidth(me.name);
     return orm()
-        .select({ id: other.id })
-        .from(me)
-        .innerJoin(other, and(eq(other.network_id, me.network_id), eq(other.name, me.name)))
-        .where(and(eq(me.id, serviceId), ne(other.id, serviceId)))
+        .select({ id: services.id, name: services.name })
+        .from(services)
+        .where(and(eq(services.network_id, me.network_id), ne(services.id, serviceId)))
         .all()
+        .filter((row) => toHalfWidth(row.name) === name)
         .map((row) => row.id);
 }
 

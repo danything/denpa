@@ -60,7 +60,7 @@ test.describe('操作したときの反応', () => {
         ]);
         // どの局のものかは詳細だけ見ても分かるようにする。
         // 先頭に来るのがどちらの局かは時刻次第なので、地上波のどちらかであればよい
-        await expect(detail).toContainText(/TOKYO MX|フジテレビ/);
+        await expect(detail).toContainText(/ＴＯＫＹＯ　ＭＸ|フジテレビ/);
 
         await detail.getByTestId('detail-reserve').click();
 

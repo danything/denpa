@@ -14,9 +14,10 @@
 
 import { max, sql } from 'drizzle-orm';
 import { EpgReader } from '../ts/eit';
+import { ServiceReader } from '../ts/psi';
 import { config } from './config';
 import { orm } from './db';
-import { CURRENT_SERVICES, savePrograms, settle, syncServices } from './epg';
+import { CURRENT_SERVICES, savePrograms, settle, syncServices, widenServices } from './epg';
 import { emit } from './events';
 import { resolveConflicts } from './scheduler';
 import { programs, services } from './schema';
@@ -266,7 +267,23 @@ async function collectChannel(
             boosted ? config.priority.epgNow : config.priority.epg,
         );
         opened = true;
+        /*
+         * **局の名前の幅も放送から取り直す** (`epg.widenServices`)。SDT は1秒足らずで来るので、
+         * 読めたら手放す (その先のパケットまで2度ばらさない)
+         */
+        let sdt: ServiceReader | null = new ServiceReader();
         for await (const chunk of chunks(stream)) {
+            if (sdt !== null) {
+                sdt.feed(chunk);
+                if (sdt.transport !== null) {
+                    try {
+                        widenServices(sdt.transport.originalNetworkId, sdt.transport.services);
+                    } catch (error) {
+                        console.warn(`[epg] ${label} の局名を書けませんでした: ${error}`);
+                    }
+                    sdt = null;
+                }
+            }
             if (reader.feed(chunk) && reader.complete) break;
             if (Date.now() - flushedAt >= FLUSH_EVERY) flush();
         }

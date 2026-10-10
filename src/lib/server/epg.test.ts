@@ -49,10 +49,9 @@ const server = Bun.serve({
 config.agentUrl = `http://127.0.0.1:${server.port}`;
 
 const { orm } = await import('./db');
-const { programs, reservations, services } = await import('./schema');
-const { airing, savePrograms, SERVICE_ORDER, SERVICE_TYPE_ORDER, settle, syncServicesOnly } = await import(
-    './epg'
-);
+const { programs, recordings, reservations, services } = await import('./schema');
+const { airing, savePrograms, SERVICE_ORDER, SERVICE_TYPE_ORDER, settle, syncServicesOnly, widenServices } =
+    await import('./epg');
 const { getChannels } = await import('./tuner');
 
 describe('syncServicesOnly', () => {
@@ -63,9 +62,9 @@ describe('syncServicesOnly', () => {
             .select({ id: services.id, name: services.name, type: services.type })
             .from(services)
             .all();
-        // 全角英数は取り込むときに直す。他の画面と字面がずれると別の局に見える
+        // 局名は放送のとおり (全角の英数は全角のまま)。比べるときに寄せる
         // 内部IDは networkId * 100000 + serviceId。録画が参照しているので変えられない
-        expect(rows).toEqual([{ id: 3239123608, name: 'TOKYO MX', type: 'GR' }]);
+        expect(rows).toEqual([{ id: 3239123608, name: 'ＴＯＫＹＯ　ＭＸ', type: 'GR' }]);
 
         // 選局していないこと。局の一覧はスキャンの結果を読むだけで手に入る
         expect(asked).toEqual(['/denpa/channels']);
@@ -75,6 +74,64 @@ describe('syncServicesOnly', () => {
     test('何度呼んでも増えない', async () => {
         syncServicesOnly(await getChannels());
         expect(orm().select({ n: count() }).from(services).get()).toEqual({ n: 1 });
+    });
+});
+
+/**
+ * 局名の幅。エージェントの控えはスキャンしたときの読み方のままなので、英数を半角で
+ * 読んでいた頃のスキャンなら「TOKYO MX」。放送のとおりの幅は SDT から入れる (`widenServices`)
+ */
+describe('局名の幅', () => {
+    const name = () =>
+        orm().select({ name: services.name }).from(services).where(eq(services.id, 3239123608)).get()?.name;
+
+    test('SDT の幅に直す。録画の局名も一緒に', async () => {
+        // 半角に寄せて取り込んでいた頃の行と、英数を半角で読んでいた頃のスキャン
+        orm().update(services).set({ name: 'TOKYO MX' }).where(eq(services.id, 3239123608)).run();
+        offered = [channel(23608, 'TOKYO MX')];
+        syncServicesOnly(await getChannels());
+        expect(name()).toBe('TOKYO MX');
+        const at = Date.now();
+        const recording = (id: number, service_name: string) => ({
+            id,
+            service_id: 3239123608,
+            service_name,
+            name: '番組',
+            start_at: at,
+            end_at: at + 1000,
+            created_at: at,
+            updated_at: at,
+        });
+        orm()
+            .insert(recordings)
+            .values([recording(1, 'TOKYO MX'), recording(2, '昔の局名')])
+            .run();
+
+        expect(widenServices(32391, [{ serviceId: 23608, name: 'ＴＯＫＹＯ　ＭＸ' }])).toBe(1);
+        expect(name()).toBe('ＴＯＫＹＯ　ＭＸ');
+        expect(
+            orm().select({ id: recordings.id, service_name: recordings.service_name }).from(recordings).all(),
+        ).toEqual([
+            { id: 1, service_name: 'ＴＯＫＹＯ　ＭＸ' },
+            // 局名が変わる前に録ったものは、その頃の名前のまま
+            { id: 2, service_name: '昔の局名' },
+        ]);
+        orm().delete(recordings).run();
+    });
+
+    test('毎分の取り込みは幅だけ違う名前で戻さない。名前そのものが変われば入れ替える', async () => {
+        syncServicesOnly(await getChannels());
+        expect(name()).toBe('ＴＯＫＹＯ　ＭＸ');
+
+        offered = [channel(23608, 'ＴＯＫＹＯ　ＭＸ２')];
+        syncServicesOnly(await getChannels());
+        expect(name()).toBe('ＴＯＫＹＯ　ＭＸ２');
+    });
+
+    test('SDT は名前そのものを変えない (スキャンが決める)', () => {
+        expect(widenServices(32391, [{ serviceId: 23608, name: '別の局' }])).toBe(0);
+        expect(name()).toBe('ＴＯＫＹＯ　ＭＸ２');
+        offered = [channel(23608, 'ＴＯＫＹＯ　ＭＸ'), channel(700, 'ＭＸデータ１', 192)];
     });
 });
 

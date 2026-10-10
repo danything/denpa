@@ -1,6 +1,6 @@
 import { and, eq, getTableColumns, gt, inArray, isNull, ne, or } from 'drizzle-orm';
 import { type Genre, genreMatches } from '#lib/arib.js';
-import { likeTerms } from '../fold';
+import { globTerms } from '../fold';
 import { parseSearchFields, type SearchField } from '../search';
 import type { Program, Rule } from '../types';
 import { config } from './config';
@@ -81,32 +81,28 @@ export function compile(rule: Rule): CompiledRule {
 }
 
 /**
- * SQL の `LIKE` で候補を減らすための語。**減らすだけで、当てるのは `matchesCompiled`。**
+ * SQL の `GLOB` で候補を減らすための形。**減らすだけで、当てるのは `matchesCompiled`。**
  *
  * 下見 (`rules/+page.server.ts`) はこれから放送される番組を全部引いて JS で絞っていた。
  * 実データ相当 (33,000 件) で全列を読むだけで 330〜400ms、条件が1語でも同じだけ
- * かかる。番組名に `LIKE '%語%'` を掛ければ 33ms で当たった行だけ読める。
+ * かかる。番組名に `GLOB '*語*'` を掛ければ当たった行だけ読める。
  *
  * **必ず含むはずの語だけ使う。** キーワードは空白区切りの AND なので、1語でも
  * 含まない番組は当たらない — SQL で落としても結果は変わらない。ただし
  *
- * - `extended` (詳細説明) は JSON のまま入っていて全角も直していないので、
- *   検索範囲がそこまで及ぶときは SQL では当てない (null を返す)
- * - 大文字小文字の違いを `LIKE` が吸収するのは ASCII だけ。JS 側は
- *   `toLowerCase` で全部揃えるので、大文字小文字を持つ非 ASCII の字
- *   (キリル文字など) を含む語は使わない
- * - `%` `_` `\` は `ESCAPE '\'` で字そのものとして当てる
+ * - `extended` (詳細説明) は JSON のまま入っているので、検索範囲がそこまで及ぶときは
+ *   SQL では当てない (null を返す)
+ * - 番組名と概要は放送のとおり全角混じりで、語は半角に寄せてある。英数・記号は1字ごとに
+ *   全角と大文字も並べた組 (`[ｖＶvV]`) にして当てる (`fold.globTerms`)。組を作れない
+ *   大文字小文字を持つ非 ASCII の字 (キリル文字など) を含む語は使わない
  * - 外字は規格の字 (𠮷 🈟) のまま入っていて、語のほうは昔の書き方 (吉 [新]) に
  *   寄せてある (`fold.ts`)。寄せた字が絡む所は抜き、残りの切れ端を当てる
  *
- * 番組名と概要は取り込み時に半角へ直してある (`epg.ts`) ので、`compile` が
- * 半角に直した語をそのまま当てられる。
- *
- * @returns `LIKE` に渡す形 (`%語%`)。使えなければ null
+ * @returns `GLOB` に渡す形 (`*語*`)。使えなければ null
  */
-export function likePatterns(compiled: CompiledRule): string[] | null {
+export function globPatterns(compiled: CompiledRule): string[] | null {
     if (compiled.fields.includes('extended')) return null;
-    const patterns = likeTerms(compiled.keywords);
+    const patterns = globTerms(compiled.keywords);
     return patterns.length === 0 ? null : patterns;
 }
 

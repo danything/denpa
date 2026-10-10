@@ -8,7 +8,8 @@
  * 判定は画面に触らない純粋な計算にしてある (単体テストで固定する)。
  * DB を読むのは呼ぶ側 (`rules.applyRules` とルール画面の下見)。
  */
-import { displayTitle, parseTitle, searchable, toHalfWidth } from './title';
+import { toHalfWidth } from '../fold';
+import { displayTitle, parseTitle, searchable } from './title';
 
 /** 比べる前に揃える。空白の有無・大文字小文字は局によって揺れる。外字は昔の書き方に (`fold.ts`) */
 function squash(text: string): string {
@@ -159,7 +160,8 @@ function describedEpisode(
  *   同じ時刻に同じ題名が流れる同時放送だけは束ねる (`firstAirings`)
  */
 export function episodeOf(program: Described): Episode | null {
-    const parsed = parseTitle(program.name);
+    // 番組名は放送のとおり全角混じり。この下の規則 (`SLOT` の英字など) は半角で書いてあるので寄せてから読む
+    const parsed = parseTitle(toHalfWidth(program.name));
     let number = parsed.episode;
     let subtitle = squash(parsed.subtitle);
     let inferred = MARKED.test(subtitle);

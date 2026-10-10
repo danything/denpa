@@ -1,4 +1,5 @@
 import { and, count, eq, gt, inArray, isNull, lt, lte, ne, or, sql } from 'drizzle-orm';
+import { toHalfWidth } from '../fold';
 import { type Airing, mainOf, type Station, splitOf } from '../subchannels';
 import type { EitEvent } from '../ts/eit';
 import { config } from './config';
@@ -6,8 +7,7 @@ import { affected, now, orm } from './db';
 import { emit } from './events';
 import { applyRules } from './rules';
 import { resolveConflicts } from './scheduler';
-import { programs, reservations, services } from './schema';
-import { toHalfWidth } from './title';
+import { programs, recordings, reservations, services } from './schema';
 import { type AgentChannel, getChannels, programKey, serviceKey } from './tuner';
 
 /**
@@ -131,6 +131,13 @@ export function syncServices(channels: AgentChannel[]): number {
     const seen = new Set<number>();
     let canceled = 0;
     orm().transaction((tx) => {
+        const known = new Map(
+            tx
+                .select({ id: services.id, name: services.name })
+                .from(services)
+                .all()
+                .map((row) => [row.id, row.name]),
+        );
         for (const channel of channels) {
             for (const service of channel.services) {
                 const id = serviceKey(channel.networkId, service.serviceId);
@@ -145,7 +152,7 @@ export function syncServices(channels: AgentChannel[]): number {
                         id,
                         service_id: service.serviceId,
                         network_id: channel.networkId,
-                        name: toHalfWidth(service.name),
+                        name: widthKept(known.get(id), service.name),
                         type: channel.type,
                         service_type: service.serviceType,
                         channel: channel.channel,
@@ -189,6 +196,52 @@ export function syncServices(channels: AgentChannel[]): number {
     // 取り消した予約は一覧に出ている。同じものを見ている端末が食い違わないように
     if (canceled > 0) emit('reservations');
     return count;
+}
+
+/**
+ * 局の名前。**幅だけ違うなら今の名前を残す。**
+ *
+ * エージェントが預かっている名前はスキャンしたときのもので、英数を半角で読んでいた頃の
+ * スキャンなら「TOKYO MX1」のまま。放送のとおりの幅 (「ＴＯＫＹＯ　ＭＸ１」) は番組表を
+ * 集めるときに SDT から入れる (`widenServices`)。ここで毎分エージェントの名前に戻すと
+ * それが消えるので、半角に寄せて同じなら触らない。名前そのものが変わったときだけ入れ替える
+ */
+function widthKept(current: string | undefined, incoming: string): string {
+    return current !== undefined && toHalfWidth(current) === toHalfWidth(incoming) ? current : incoming;
+}
+
+/**
+ * **局の名前の幅を放送のとおりにする。** 番組表を集めるときに読んだ SDT から (`epg-collect.ts`)。
+ *
+ * 入れるのは半角に寄せて今の名前と同じものだけ — 名前そのものはスキャン (エージェントの控え) が
+ * 決める。ここで変えると、毎分の取り込み (`syncServices`) と取り合いになる。
+ *
+ * **その局で録った録画の局名も同じに直す** (録画は録ったときの局名を写して持つ)。今の名前と
+ * ぴったり同じものだけ — 局名が変わる前に録ったものは、その頃の名前のまま残す
+ *
+ * @returns 書き換えた局の数
+ */
+export function widenServices(networkId: number, found: { serviceId: number; name: string }[]): number {
+    let changed = 0;
+    orm().transaction((tx) => {
+        for (const service of found) {
+            const id = serviceKey(networkId, service.serviceId);
+            const row = tx.select({ name: services.name }).from(services).where(eq(services.id, id)).get();
+            if (row === undefined || row.name === service.name) continue;
+            if (toHalfWidth(row.name) !== toHalfWidth(service.name)) continue;
+            tx.update(services).set({ name: service.name }).where(eq(services.id, id)).run();
+            tx.update(recordings)
+                .set({ service_name: service.name })
+                .where(and(eq(recordings.service_id, id), eq(recordings.service_name, row.name)))
+                .run();
+            changed++;
+        }
+    });
+    if (changed > 0) {
+        emit('services');
+        emit('recordings');
+    }
+    return changed;
 }
 
 /**
@@ -400,8 +453,8 @@ export function savePrograms(events: EitEvent[]): number {
                 event_id: event.eventId,
                 start_at: event.startAt,
                 end_at: endAt,
-                name: toHalfWidth(event.name),
-                description: toHalfWidth(event.description),
+                name: event.name,
+                description: event.description,
                 extended: encoded(programs.extended, extended),
                 genres: encoded(
                     programs.genres,

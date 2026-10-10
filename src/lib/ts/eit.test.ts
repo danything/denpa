@@ -84,7 +84,7 @@ describe('EIT の解析', () => {
         const hex = (text: string) => (text.match(/../g) ?? []).map((pair) => Number.parseInt(pair, 16));
         /** 見出し「番組概要」 */
         const heading = hex('4856414833354d57');
-        /** 1つ目。上限いっぱいで「音楽:菅野祐」の途中まで */
+        /** 1つ目。上限いっぱいで「音楽：菅野祐」の途中まで */
         const first = hex(
             '38363a6e1b7eba39434865432b47260d416d34464644ba3a3446234d3a3b300d34464644ba406e4c6e4b63487e0d2537256a213c253a393d402eba313a482a432349270d1b7cade3e9afbf213cc7b6a4f3fe416d3a6e3268344646441b7eba455a3230373d0d487e3d51405f446aba3f793b333f383b4b0d3f273a4c405f3757ba436646623e48487e0d4a543d38ba444d3e6f3f3f4d7d3b520d323b364134464644ba3e2e4074352a32700d323b3641387a324cba3b33432b3e303f4d0d4f3f323b44344030ba45374c6e4e364d4e0d323b335aba3f7b4c6e4d3438',
         );
@@ -108,9 +108,11 @@ describe('EIT の解析', () => {
             section([event({ rawDescriptors: [0x4e, one.length, ...one, 0x4e, two.length, ...two] })]),
         );
 
-        expect(parsed?.events[0]?.extended['番組概要']).toContain('音楽:菅野祐悟');
-        expect(parsed?.events[0]?.extended['番組概要']).toContain('音楽制作:ONE MUSIC');
-        expect(parsed?.events[0]?.extended['番組概要']).toContain('音響制作:ビットグルーブプロモーション');
+        // 実際の放送のバイト。区切りのコロンは英数を標準の大きさで送っているので全角、
+        // 「ONE MUSIC」は字だけ中型 (MSZ) で半角・間の空白は標準で全角。テレビもこう描く
+        expect(parsed?.events[0]?.extended['番組概要']).toContain('音楽：菅野祐悟');
+        expect(parsed?.events[0]?.extended['番組概要']).toContain('音楽制作：ONE　MUSIC');
+        expect(parsed?.events[0]?.extended['番組概要']).toContain('音響制作：ビットグルーブプロモーション');
     });
 
     test('詳細情報は見出しごとに繋ぎ直す', () => {
