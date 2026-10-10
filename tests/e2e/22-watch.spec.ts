@@ -122,28 +122,16 @@ test.describe('録画を観る', () => {
     });
 
     /**
-     * **字幕は絵のまま重ねる。** ライブ (`/live`) と同じやり方。
+     * **字幕は canvas に描いて重ねる。** ライブ (`/live`) と同じやり方。
      *
-     * 焼いたものに入っているのは PGS (絵) で、ブラウザに復号器が無い。文字に
-     * 直して `<track>` に渡す道も通したが、放送どおりには出ない (左右の位置・
-     * 背景の箱・外字が落ちる)。焼くときに作った絵を動画の隣に置いて、
-     * denpa 自身が解いて重ねる (`src/lib/pgs.ts` の `readSup`)
+     * 文字を `<track>` に渡す道は放送どおりには出ない (左右の位置・背景の箱・外字が落ちる)。
+     * 入れ物に入っている放送の字幕 (`S_ARIBSUB`) をサーバが解いて文字の配置で渡し
+     * (`captions.json`)、画面が描く (`caption-draw.ts`)
      */
-    test('字幕の絵が届き、持っているときだけボタンが出る', async ({ page, request }) => {
+    test('字幕が届き、持っているときだけボタンが出る', async ({ page, request }) => {
         test.setTimeout(180_000);
         const id = await watchable(page, request);
 
-        const res = await request.get(`/api/recordings/${id}/captions.sup`);
-        expect(res.ok()).toBe(true);
-        const sup = await res.body();
-        // PGS の節は 'PG' で始まる
-        expect(sup.length).toBeGreaterThan(0);
-        expect(String.fromCharCode(sup[0]!, sup[1]!)).toBe('PG');
-
-        /*
-         * **新しく焼いた録画は文字の配置で渡す** (`captions.json`)。入れ物に入っている放送の字幕
-         * (`S_ARIBSUB`) をサーバが解いたもの。画面はこちらを先に取り、無ければ絵 (上) へ回る
-         */
         const text = await request.get(`/api/recordings/${id}/captions.json`);
         expect(text.ok()).toBe(true);
         const pages = (await text.json()) as {

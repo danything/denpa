@@ -158,7 +158,7 @@ function settling(path: string, at: number): boolean {
  *
  * 付き添いは**動画と同じ名前で隣に置く**決まりなので、名前から連れ合いが分かる。
  *
- * - `<動画>.sup` `<動画>.chapters.txt` … 字幕とチャプターの作業ファイル
+ * - `<動画>.chapters.txt` … チャプターの作業ファイル。`<動画>.sup` (字幕の絵) は昔の名残
  * - `<動画から拡張子を取ったもの>-poster.jpg` / `.bml.jsonl` … サムネイルと録画のデータ放送。
  *   `.nfo` `.ja.ass` `-thumb.jpg` は昔の名残 (いまは作らない)
  *

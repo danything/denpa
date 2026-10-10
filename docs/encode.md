@@ -34,18 +34,14 @@ ffmpeg -i <録画.m2ts> ... -map 0:p:<局>:s:0? -c:s copy <出力.mkv>   # 字�
   (CM を切るのは焼いたものをキーフレームで切る `-map 0 -c copy`。チャプターの書き足しも同じで、字幕の筋は落ちない)
 - 字幕の無い番組では字幕トラックが入らない
 
-**前の録画は PGS (`S_HDMV/PGS`) が入っています。** libaribcaption で放送どおりに描いた絵を denpa が `.sup` に書いて
-(ffmpeg には PGS の符号器が無い)、焼くときに入れていました。観る画面は `S_ARIBSUB` が無い録画だけ、これまでどおり
-PGS を絵で重ねます (`api/recordings/<id>/captions.sup`、`src/lib/pgs.ts`)。文字 (ASS) は外字が「〓」になり、
-4色の絵 (dvdsub) は縁のなめらかさと話者ごとの色分けが落ちるので、PGS の前に外していました。
+**ずっと前に焼いた録画は PGS (`S_HDMV/PGS`) が入っています。** libaribcaption で放送どおりに描いた絵を denpa が
+`.sup` に書いて (ffmpeg には PGS の符号器が無い)、焼くときに入れていました。**この絵の字幕はもう読みません** — 観る画面では
+字幕が出ません (`captions.json` は 404)。生TSが残っていれば、焼き直すと ARIB の字幕が入ります
+(詳細の「その他…」→「再エンコード」)。libaribcaption はもう組み込んでいないので、絵を作り直す道もありません。
 
-**「消せ」を拾うために ffmpeg に直しを当てています** ([patches/README.md](../patches/README.md))。
-ffmpeg の libaribcaption ラッパは、字幕を絵で受け取るときだけ画面消去 (CS) を捨てていて、
-CM に入った字幕が次の字幕まで出たままでした (実機で22分35秒)。ライブの絵の字幕で効きます。
-
-**外字 (DRCS) の描き方も libaribcaption に直しを当てています** (同じ README)。
-放送が絵で送ってくる字のうちフォントの字に置き換えられないものは、絵を拡大して描くしかなく、
-最近傍のままだと1字だけジャギジャギになっていました。
+**ffmpeg は ARIB 字幕を解きません。** `-c:s copy` は中身をそのまま器に移すだけなので、字幕の復号器
+(`--enable-libaribcaption`) は要らない (ffprobe も復号器なしで `Subtitle: arib_caption` と名乗る)。
+解くのはライブも録画も denpa ([`ts/b24caption.ts`](../src/lib/ts/b24caption.ts))。
 
 ## トラックの名前は放送のものを入れる
 

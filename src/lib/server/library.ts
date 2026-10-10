@@ -77,7 +77,7 @@ export function libraryPath(rec: LibraryNameInput, ext: string): string {
 /**
  * コーデックごとの置き場所。
  *
- * どちらも Matroska (`.mkv`) — mp4 は放送どおりに描いた字幕 (PGS) を持てない
+ * どちらも Matroska (`.mkv`) — mp4 は放送の字幕 (ARIB 字幕。Matroska なら `S_ARIBSUB`) を持てない
  * ため、両方 mkv で揃える。**H.264 のほうは名前に印を付ける** (`[H264]`)。
  * 同じフォルダに2本並ぶので、名前が違わないと衝突するのと、テレビで
  * どちらを選べばよいか名前で分かるようにするため。

@@ -41,7 +41,6 @@ EPGStation の置き換えとして作ったもので、エンコード設定は
 | `src/lib/components/player/Remote.svelte` | 指で押すリモコン (色・十字・決定・戻る・d・数字)。映像の上ではなく右の列 |
 | `src/lib/ts/ait.ts` | Hybridcast の在り処 (AIT)。読むだけで動かさない |
 | `src/lib/server/bml-network.ts` | データ放送の双方向の中継 (`/api/bml/proxy`・`/post`・`/confirm`)。既定は切・公開の相手だけ |
-| `src/lib/pgs.ts` | PGS (Blu-ray の字幕) の組み立てと読み出し。ffmpeg に符号器が無いので自前。読むほうはブラウザで使う (`readSup`) |
 | `src/lib/download.ts` | 録画のダウンロード開始 (押されてから期限付きのURLを作る) |
 | `src/lib/ts/watch.ts` | 録画を観るときの押したことの読み方 (2回押し・チャプター送り・続きの位置。DOM を触らない) |
 | `src/lib/icons/` | Lucide に無いアイコンの形 (`~icons/denpa/*`。いまはデータ放送の d だけ。[player.md](player.md#アイコンは-lucide-を組むときに埋め込みます)) |
@@ -56,8 +55,8 @@ EPGStation の置き換えとして作ったもので、エンコード設定は
 | `src/lib/server/scramble.ts` | スクランブルの検出と、チューナー側への解除依頼 |
 | `src/lib/server/live.ts` | ライブ視聴。焼き方・相乗り・見ている人の勘定 ([stream.md](stream.md))。追っかけ再生の入口 (`openChase`) もここ |
 | `src/lib/server/chase.ts` | 追っかけ再生の追い読み。録画中の伸びる生TSを尻から読み続け、バイト比例でシークの当たりを付ける ([issue #16](https://github.com/danything/denpa/issues/16)) |
-| `src/lib/server/captions.ts` | ライブの字幕。映像と同じ ffmpeg から字幕をそのまま写して受け、解いて文字の配置にして配る (別々に起こすと時刻が揃わない)。テレビのアプリ向けの絵の口も (第3段階で外す) |
-| `src/lib/ts/b24caption.ts` | 放送の字幕 (ARIB STD-B24) を解いて字の置き場所まで決める。libaribcaption の解き手を写したもの。表は `b24-tables.ts` (`scripts/b24-tables.ts` で作る) |
+| `src/lib/server/captions.ts` | ライブの字幕。映像と同じ ffmpeg から字幕をそのまま写して受け、解いて文字の配置にして配る (別々に起こすと時刻が揃わない) |
+| `src/lib/ts/b24caption.ts` | 放送の字幕 (ARIB STD-B24) を解いて字の置き場所まで決める。libaribcaption の解き手を写したもの。表は `b24-tables.ts` (手で持つ。始まりは libaribcaption の表の写し) |
 | `src/lib/caption-text.ts` | 字幕の文字の配置の形 (サーバと画面とテレビのアプリの取り決め。[api.md](api.md#字幕の文字の配置)) |
 | `src/lib/ts/captions.ts` | 届いた字幕を、映像に合わせて出す順に並べる (DOM を触らない) |
 | `src/lib/ts/mkv.ts` | Matroska からコマと時刻を取り出す。字幕は時刻をコマに付けて運ぶ (録画の字幕が S_ARIBSUB かも見る) |
@@ -319,8 +318,7 @@ SQLite が拒むので、事実と状態が食い違いません。文字列で�
 | `/chase/<id>` | **追っかけ再生** ([issue #16](https://github.com/danything/denpa/issues/16))。録画中の録画を頭から観る。一覧の予約側の録画中の行の「追っかけ」から (録れている最中の行はまだ予約の側に居る)。生TSはブラウザで読めないので、サーバが伸びるファイルを追い読みしてライブと同じ器 (fMP4 → WebSocket → MSE) で焼き直す。チューナーは掴まない。押し方は観る画面と同じ (空白・矢印・画面内クリック、指は端2回で10秒)。速さも同じところに覚える。シークバーは番組の全長で、右端 (いま録れているところ) は伸びていく。手元に残っている範囲は即座に、外は `chase` の送り直し (ffmpeg 立て直し) で跳ぶ。視聴位置は15秒おきにサーバへ写すので、焼き上がったあとの `/watch` が続きから拾う。焼き上がった録画で開くと `/watch` へ回す |
 | `/watch/<id>` | **録画をブラウザで観る。** 画面の形と操作 (2段組・全画面・端2回で10秒・CM飛ばし・字幕・速さ・続き・その場で削除) は [library.md](library.md#観るのはブラウザで)。観られるのは焼いたものだけ (`?source=encoded`)。音声トラックも選べる。二カ国語・二重音声を焼いたものは両方入っているので、ブラウザが器から出せたときだけ切り替えを出す (`video.audioTracks`。ライブと違いサーバは焼き直さない)。番組表から消えた録画でもジャンル・音声・詳細の札は出る。録り始めに `recordings` へ写してあり、詳細の種はそれを既定の null で潰さない (`detail.svelte.ts`) |
 | `/api/recordings/<id>/resume` | どこまで観たかを覚える (POST)。端末ではなくサーバに置くので別の端末でも続く。末尾まで観たものは忘れる |
-| `/api/recordings/<id>/captions.json` | 字幕を文字の配置で返す。入れ物の中の放送の字幕 (S_ARIBSUB) を抜いてサーバで解く。前に焼いた録画 (PGS) は 404 で、画面は下の絵の口へ回る |
-| `/api/recordings/<id>/captions.sup` | 字幕の絵 (PGS) を返す。入れ物から直に抜く (実測 0.1〜1秒)。ブラウザが解いて canvas に重ねる。無ければ 404 (画面はボタンを出さない) (前に焼いた録画向け) |
+| `/api/recordings/<id>/captions.json` | 字幕を文字の配置で返す。入れ物の中の放送の字幕 (S_ARIBSUB) を抜いてサーバで解く。字幕を持たない録画と、ずっと前に焼いた録画 (絵の字幕 PGS。もう読まない) は 404 (画面はボタンを出さない) |
 | `/api/recordings/<id>/chapters` | 焼いたものに入っているチャプター (CM飛ばしの行き先)。DB ではなくファイルから読む。CMを切って焼いたものと引き継いだ録画では DB と食い違う |
 | `/api/recordings/<id>/media` | 焼いたファイルの中身 (映像・音声の codecs・音声の名前・尺)。観る画面がそのまま渡すか詰め替えるかを決める |
 | `/api/recordings/<id>/remux?from=<秒>` | 焼いたものを fMP4 (映像はそのまま・音声は AAC) に詰め替えて流す。シークは頼み直す。`?source=alt`・`?audio=<何本目>` |

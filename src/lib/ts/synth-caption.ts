@@ -109,3 +109,43 @@ export function captionPackets(
 ): { packets: Uint8Array; counter: number } {
     return packetizePes(CAPTION_PID, pes(0xbd, pts, data), counter);
 }
+
+/** EBML の要素1つ。大きさは8バイトで書く (読む側はどの長さでも読める) */
+function element(id: number[], body: number[]): number[] {
+    const size = body.length;
+    return [
+        ...id,
+        0x01,
+        0,
+        0,
+        0,
+        (size >>> 24) & 0xff,
+        (size >>> 16) & 0xff,
+        (size >>> 8) & 0xff,
+        size & 0xff,
+        ...body,
+    ];
+}
+
+/**
+ * ffmpeg が `-c:s copy -f matroska` で書くのと同じ骨組みの Matroska (軌道1本・コマごとに塊1つ)。
+ * 中身は字幕の PES の中身 (`text(...)` など) をそのまま入れる
+ *
+ * @param frames [時刻 (ミリ秒。65535 まで), 中身] の並び
+ */
+export function captionMkv(frames: [ms: number, data: Uint8Array][], codec = 'S_ARIBSUB'): Uint8Array {
+    const tracks = element(
+        [0x16, 0x54, 0xae, 0x6b],
+        element([0xae], element([0x86], [...new TextEncoder().encode(codec)])),
+    );
+    const clusters = frames.flatMap(([ms, data]) =>
+        element(
+            [0x1f, 0x43, 0xb6, 0x75],
+            [
+                ...element([0xe7], [(ms >> 8) & 0xff, ms & 0xff]),
+                ...element([0xa3], [0x81, 0x00, 0x00, 0x80, ...data]),
+            ],
+        ),
+    );
+    return Uint8Array.from(element([0x18, 0x53, 0x80, 0x67], [...tracks, ...clusters]));
+}

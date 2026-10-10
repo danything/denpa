@@ -304,11 +304,11 @@ docker compose) で動かすなら `oci://ghcr.io/danything/charts/denpa-agent` 
 
 | | ライセンス |
 | --- | --- |
-| **ffmpeg** (x264 / SVT-AV1 / dav1d / Opus / libaribcaption / libva / libvpl を繋いだ自前ビルド) | GPL-2.0+ (x264 のため) ほか BSD / MIT |
+| **ffmpeg** (x264 / SVT-AV1 / dav1d / Opus / libva / libvpl を繋いだ自前ビルド) | GPL-2.0+ (x264 のため) ほか BSD / MIT |
 | **rounded-mplus-1m-arib** (字幕とデータ放送のフォント) | M+ FONT LICENSE (無制限) |
 | **web-bml / es2** (npm の `web-bml`。データ放送を描く) | MIT |
 | **Svelte / SvelteKit / Blades / Bits UI** と束に入る npm 一式 | MIT (drizzle-orm と crc-32 は Apache-2.0) |
 | **Lucide** (アイコン。組むときに使うぶんだけ埋め込む) | ISC |
-| [patches/](patches) — ffmpeg と libaribcaption に当てている直し (上流に投げる前提) | 当てる先と同じ |
+| [patches/](patches) — ffmpeg に当てる直しの置き場 (上流に投げる前提。いまは空) | 当てる先と同じ |
 
 **全部の一覧 (出どころ・何に使っているか・根拠) は [docs/licenses.md](docs/licenses.md)。**

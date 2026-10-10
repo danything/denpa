@@ -38,9 +38,10 @@ export interface OfflineVideo {
     downloadedAt: number;
     /** 動画の実体。downloading の間は無い */
     video?: Blob;
-    /** 絵の字幕 (PGS。前に焼いた録画) */
-    captions?: Blob;
-    /** 文字の字幕 (`captions.json`。新しく焼いた録画) */
+    /**
+     * 字幕 (`captions.json`)。以前は絵の字幕 (PGS) を `captions` に持っていたが、もう読まない
+     * (前に保存した控えに残っていても、使わないだけで害は無い)
+     */
     captionText?: unknown;
     poster?: Blob;
     chapters?: unknown;
@@ -100,7 +101,6 @@ export function downloadRequests(id: number, source: 'encoded' | 'alt'): string[
     return [
         `/api/recordings/${id}/file?source=${source}`,
         `/api/recordings/${id}/captions.json`,
-        `/api/recordings/${id}/captions.sup`,
         `/api/recordings/${id}/chapters`,
         `/api/recordings/${id}/databroadcast`,
         `/api/recordings/${id}/poster`,
@@ -110,10 +110,9 @@ export function downloadRequests(id: number, source: 'encoded' | 'alt'): string[
 /** URL がどの付き添いか。Background Fetch の結果を仕分けるのに使う */
 export function kindOf(
     url: string,
-): 'video' | 'captions' | 'captionText' | 'chapters' | 'databroadcast' | 'poster' | null {
+): 'video' | 'captionText' | 'chapters' | 'databroadcast' | 'poster' | null {
     const path = new URL(url, 'http://x').pathname;
     if (path.endsWith('/file')) return 'video';
-    if (path.endsWith('/captions.sup')) return 'captions';
     if (path.endsWith('/captions.json')) return 'captionText';
     if (path.endsWith('/chapters')) return 'chapters';
     if (path.endsWith('/databroadcast')) return 'databroadcast';
@@ -135,7 +134,6 @@ export async function storeResponse(
     const kind = kindOf(url);
     if (kind === null) return;
     if (kind === 'video') held.video = await readVideo(response);
-    else if (kind === 'captions') held.captions = await response.blob();
     else if (kind === 'captionText') held.captionText = await response.json().catch(() => undefined);
     else if (kind === 'poster') held.poster = await response.blob();
     else if (kind === 'chapters') held.chapters = await response.json().catch(() => undefined);

@@ -1278,7 +1278,7 @@ async function runJob(jobId: number): Promise<void> {
     /*
      * **選ばれたコーデックごとに焼く。** 両方選べば AV1 と H.264 の2本を作る (`settings().codecs`)。
      * CM は1本目を焼きながら探し、2本目は決まった境目で焼く (チャプターを入れる・境目に
-     * キーフレームを置く)。字幕の絵起こしは上でひとまとめに済ませてある。
+     * キーフレームを置く)。
      *
      * どれか1つでも失敗すれば、そのジョブごと失敗にする (途中まで置いたものは消す)。
      */
@@ -1616,7 +1616,7 @@ async function runJob(jobId: number): Promise<void> {
         renameSync(working, output);
         /*
          * **字幕は動画の隣に置きません。** 入れ物の中に入っているので、要るときに抜く
-         * (`api/recordings/<id>/captions.sup`)。消すほうだけ残してある — 文字の
+         * (`api/recordings/<id>/captions.json`)。消すほうだけ残してある — 文字の
          * 写しを置いていた頃 (`.ja.ass`) のものが残っていると、CMを切ったぶんだけ
          * ずれた字幕が付いたままになる
          */

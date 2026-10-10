@@ -3,12 +3,13 @@ import { chmodSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { CHANNEL } from '#lib/live.js';
+import { captionMkv, encodeAribText, management, text } from '#lib/ts/synth-caption.js';
 
 /**
  * アプリ向けの字幕の口 (`liveCaptions` / `recordingCaptions`)。
  *
  * ffmpeg は偽物に差し替える — 入口の見出しを標準エラーへ書き、標準入力を読み切ってから、
- * 本物の ffmpeg が吐いた Matroska (mkv.test.ts と同じ 4 コマ) を字幕の口 (fd 3) へ流す。
+ * 字幕を写した Matroska (`S_ARIBSUB`。ffmpeg が `-c:s copy` で書くのと同じ骨組み) を字幕の口 (fd 3) へ流す。
  * DB は一時ファイルへ (encoder-pump.test.ts と同じ理由で、設定そのものを書き換える)
  */
 const dir = mkdtempSync(join(tmpdir(), 'denpa-appcap-'));
@@ -44,10 +45,11 @@ const RECORDING_NOW = 990_002;
 const MKV = join(dir, 'captions.mkv');
 writeFileSync(
     MKV,
-    Buffer.from(
-        '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',
-        'base64',
-    ),
+    captionMkv([
+        [0, management()],
+        [40, text(encodeAribText('字幕'))],
+        [3000, text([0x0c])],
+    ]),
 );
 const FED = join(dir, 'fed.bin');
 const FAKE = join(dir, 'ffmpeg');
@@ -136,7 +138,7 @@ async function frames(stream: ReadableStream<Uint8Array>) {
 }
 
 describe('録画の字幕 (recordingCaptions)', () => {
-    test('選べる字幕を知らせ、字幕の絵を放送の時刻のまま流して、読み切ったら閉じる', async () => {
+    test('選べる字幕を知らせ、字幕 (文字の配置) を放送の時刻のまま流して、読み切ったら閉じる', async () => {
         const stream = recordingCaptions(RECORDING, 0);
         expect(stream).not.toBeNull();
         const got = await frames(stream!);
@@ -148,15 +150,15 @@ describe('録画の字幕 (recordingCaptions)', () => {
             track: 0,
         });
 
-        const pictures = got.filter((f) => f.kind === CHANNEL.subtitle);
-        expect(pictures.length).toBeGreaterThan(0);
-        // 時刻は 90kHz (器の 40ms = 3600)。中身は置き場所 (画面まるごと) と PNG
-        expect(pictures.map((f) => f.pts)).toContain(3600n);
-        for (const picture of pictures) {
-            const view = new DataView(picture.payload.buffer, picture.payload.byteOffset);
-            expect([view.getUint16(4), view.getUint16(6)]).toEqual([1920, 1080]);
-            expect([...picture.payload.subarray(8, 12)]).toEqual([0x89, 0x50, 0x4e, 0x47]);
-        }
+        const pages = got.filter((f) => f.kind === CHANNEL.captionText);
+        // 時刻は 90kHz (器の 40ms = 3600)。中身は文字の配置の JSON。消す1枚 (runs が空) も来る
+        expect(pages.map((f) => f.pts)).toEqual([3600n, 270_000n]);
+        const runs = pages.map((f) =>
+            JSON.parse(new TextDecoder().decode(f.payload))
+                .runs.map((r: { text: string }) => r.text)
+                .join(''),
+        );
+        expect(runs).toEqual(['字幕', '']);
 
         // 録り終えた録画は尻まで流し込んで終わる (頭から頼んだので全部)
         expect(Bun.file(FED).size).toBe(188 * 100);

@@ -21,9 +21,9 @@
  * その時刻を 0 に詰め直す**ので、受け側から見た 0 がどの放送時刻かは外から知りようがない。
  * 1本にすれば入口の寄せが1回だけになって両方の出口に効く (実機で 1ms 以内で一致)。
  *
- * 字幕は**解かずに写す** (`-c:s copy`)。時刻は絵にしていた頃と同じものが付く — 同じ
- * ffmpeg に絵と写しの両方を出させて突き合わせると、実機の録画で全部の字幕が同じ時刻
- * (0.838 / 2.840 / 7.811 …) だった。
+ * 字幕は**解かずに写す** (`-c:s copy`)。ffmpeg に字幕の復号器 (libaribcaption) は要らない。
+ * 時刻は絵にしていた頃と同じものが付く — 同じ ffmpeg に絵と写しの両方を出させて突き合わせると、
+ * 実機の録画で全部の字幕が同じ時刻 (0.838 / 2.840 / 7.811 …) だった。
  *
  * ## 時刻は字幕と一緒に運ばせる
  *
@@ -31,11 +31,8 @@
  * ずれた**)。Matroska で受ける ([ts/mkv.ts](../ts/mkv.ts)) と時刻がコマそのものに付いてくる。
  * ffmpeg の Matroska は ARIB の字幕を `S_ARIBSUB` としてそのまま入れられる。
  *
- * ## 絵の道 (テレビのアプリ向け。第3段階で外す)
- *
- * テレビのアプリ (denpa-tv) はまだ絵 (PNG) で受け取っている (`captionFeed`)。そのための
- * `captionInput` / `captionOutput` / `frame` と、字幕だけを描かせる `rawCaptionArgs` の
- * `png` は、アプリが文字の配置を描けるようになるまで残す。
+ * テレビのアプリ (denpa-tv) も 0.16.0 から文字の配置を描くので、絵 (PNG。種別 0x20) を
+ * 配る道は外した。
  */
 
 import { LANGUAGE } from '#lib/arib.js';
@@ -43,19 +40,6 @@ import { CAPTION_TEXT_VERSION, type CaptionPage, type CaptionPages } from '#lib/
 import { type CaptionTrack, CHANNEL, type Notice } from '#lib/live.js';
 import { B24CaptionDecoder } from '#lib/ts/b24caption.js';
 import { type MkvFrame, MkvSplitter } from '#lib/ts/mkv.js';
-
-/**
- * 字幕を描く画面の大きさ。
- *
- * **指定は要る。** 無いと libaribcaption は 1440x1080 (PROFILE_A) とみなすので、
- * 1920x1080 の放送では字幕だけ横に伸びる。受け側は映像の枠に合わせて伸ばすだけ
- * なので、放送が 1440x1080 でもここを 1920x1080 にしておけば辻褄が合う
- * (どちらも表示は 16:9)。
- */
-export const CANVAS = { width: 1920, height: 1080 };
-
-/** 字幕に使う字 (ライブの絵の字幕)。 */
-export const SUBTITLE_FONTS = 'Rounded M+ 1m for ARIB';
 
 /** 失敗を言っている行。**それ以外は入り口の説明なので捨てる** */
 const TROUBLE = /error|Error|failed|Failed|Cannot|Unable|No such|Invalid data/;
@@ -79,65 +63,6 @@ export function worthLogging(line: string): boolean {
 }
 
 /**
- * 字幕を絵で受け取るための、**入口の指定**。
- *
- * 映像と同じ ffmpeg なので入口は1つ。ここは復号のしかたの話で、
- * 映像には何も影響しない。
- *
- * - `-sub_type bitmap` … 文字ではなく絵で受け取る。描くのは libaribcaption
- * - `-canvas_size` … 上の説明。無いと 1440x1080 とみなされる
- */
-export function captionInput(): string[] {
-    return [
-        '-sub_type',
-        'bitmap',
-        '-canvas_size',
-        `${CANVAS.width}x${CANVAS.height}`,
-        '-font',
-        SUBTITLE_FONTS,
-    ];
-}
-
-/**
- * 字幕の出口。**映像とは別の口 (`pipe:3`) に出す。**
- *
- * - `null` … **何もしないフィルタ。** 字幕をフィルタに通すこと自体が目的で
- *   (それで sub2video が働く)、通す先は何でもよい。ここが `showinfo` だった
- *   頃は、その行と PNG を組にしていて**ずれていた** (上の説明)
- * - `-fps_mode passthrough` … 出てきた枚をそのまま出す。詰め直させない
- * - `-c:v png` … PNG まで ffmpeg に組ませる (上の説明)
- * - `matroska` … **時刻をコマと一緒に運ぶ器**。塊の上限を最小にして、
- *   1枚ごとに書き出させる (溜められるとそのぶん遅れる)
- *
- * @param from ffmpeg に渡す局の指定 (`0:p:<局>` か `0`)
- * @param track その局の中で何本目の字幕を出すか。**言語が複数ある放送**では
- *   2本以上乗っている (`TrackList`)
- */
-export function captionOutput(from: string, track: number): string[] {
-    return [
-        '-filter_complex',
-        `[${from}:s:${track}]null[s]`,
-        '-map',
-        '[s]',
-        '-fps_mode',
-        'passthrough',
-        '-c:v',
-        'png',
-        '-pix_fmt',
-        'rgba',
-        '-cluster_time_limit',
-        '1',
-        '-cluster_size_limit',
-        '1',
-        '-flush_packets',
-        '1',
-        '-f',
-        'matroska',
-        'pipe:3',
-    ];
-}
-
-/**
  * 字幕を**解かずに写す**出口。映像とは別の口 (`pipe:3`) に出す。
  *
  * - `-c:s copy` … 字幕の PES の中身をそのまま (`S_ARIBSUB`)。解くのは denpa (`CaptionText`)
@@ -148,7 +73,7 @@ export function captionOutput(from: string, track: number): string[] {
  * @param track その局の中で何本目の字幕を出すか。**言語が複数ある放送**では
  *   2本以上乗っている (`TrackList`)
  */
-export function textCaptionOutput(from: string, track: number): string[] {
+export function captionOutput(from: string, track: number): string[] {
     return [
         '-map',
         `${from}:s:${track}`,
@@ -173,7 +98,7 @@ export function programSpec(program: number): string {
 
 /**
  * **生で送る道の字幕** (docs/stream.md §5.5)。映像は焼かないので、ffmpeg には字幕だけを
- * 写させる (`text`。ブラウザ向け) か、描かせる (`png`。テレビのアプリ向け。第3段階で外す)。
+ * 写させる。
  *
  * 焼く道で「同じ ffmpeg に両方焼かせる」のは、ffmpeg が入口で時刻を 0 に寄せ、その
  * 寄せ幅がプロセスごとに違うからだった (上の説明)。生の道では**寄せない** (`-copyts`) —
@@ -186,12 +111,12 @@ export function programSpec(program: number): string {
  * 違う値にし (同じ録画で 0.3〜0.7秒ずれた)、それを外から知る方法が無い。
  *
  * 映像を解かない (字幕の ES だけを読む) ので、焼く ffmpeg と違って CPU はほとんど使わない
- * (写すだけの `text` なら字幕も解かない)
+ * (字幕も解かずに写すだけ)
  *
  * @param program ffmpeg に名指しさせる局の番号 (0以下なら最初の局)
  * @param track その局の中で何本目の字幕か
  */
-export function rawCaptionArgs(program: number, track: number, form: CaptionForm = 'text'): string[] {
+export function rawCaptionArgs(program: number, track: number): string[] {
     const from = programSpec(program);
     return [
         '-hide_banner',
@@ -201,15 +126,11 @@ export function rawCaptionArgs(program: number, track: number, form: CaptionForm
         '-probesize',
         '100000',
         '-copyts',
-        ...(form === 'png' ? captionInput() : []),
         '-i',
         'pipe:0',
-        ...(form === 'png' ? captionOutput(from, track) : textCaptionOutput(from, track)),
+        ...captionOutput(from, track),
     ];
 }
-
-/** 字幕をどの形で受け取るか。`text` は文字の配置 (0x22)、`png` は絵 (0x20。テレビのアプリ向け) */
-export type CaptionForm = 'text' | 'png';
 
 /**
  * 字幕がその放送に無いときに ffmpeg が言うこと。
@@ -218,19 +139,9 @@ export type CaptionForm = 'text' | 'png';
  * `0:p:X:s:0` を頼むと、ffmpeg は**組み立ての時点で降りる** — つまり
  * **映像も出ない**。そうと分かったら字幕なしで焼き直す (`Session.run`)。
  *
- * 写す出口 (`-map`) なら `Stream map '' matches no streams.`、絵の出口 (`-filter_complex`) なら
- * `Stream specifier ':s:0' in filtergraph description [0:s:0]null[s] matches no streams.` と
- * `Error binding filtergraph inputs/outputs` が出る
+ * ffmpeg は `Stream map '' matches no streams.` と言う
  */
-export const NO_SUBTITLE = /matches no streams|Error binding filtergraph/;
-
-/**
- * 字幕1枚。**器から出てきたコマそのもの** ([ts/mkv.ts](../ts/mkv.ts))。
- *
- * `at` は出す時刻 (ミリ秒。**映像の mp4 と同じ物差し** — stream.md §5.4)、
- * `data` はパレットではない RGBA の PNG で、画面まるごとの大きさ
- */
-export type Caption = MkvFrame;
+export const NO_SUBTITLE = /matches no streams/;
 
 /** ffmpeg が入口の見出しに書く行 */
 const PROGRAM = /^\s*Program (\d+)/;
@@ -284,36 +195,6 @@ function label(index: number, lang: string | null): string {
 /** 90kHz。取り決めの時刻はこの刻み (stream.md §5.3) */
 const CLOCK = 90;
 
-/**
- * 送る形にする。**頭に置き場所を付ける** (stream.md §5.3)。
- *
- *     [1:種別][8:時刻 (90kHz)][2:x][2:y][2:w][2:h][PNG...]
- *
- * いまは画面まるごとを送るので x,y は 0 だが、**あとで切り抜くようにしても
- * 受け側を変えずに済む**ように持たせてある。
- *
- * **時刻は映像と同じ物差し** — 映像と同じ ffmpeg が付けたもの (上の説明)。
- * 受け側はこれを再生位置と突き合わせて、その瞬間に出す。
- *
- * **消すための別の種別は使わない。** 全部透明な絵を重ねれば消えるので、
- * 空かどうかを見分ける必要そのものが無い (上の説明)
- */
-export function frame(caption: Caption): { kind: number; pts: bigint; data: Uint8Array } {
-    const out = new Uint8Array(8 + caption.data.length);
-    const view = new DataView(out.buffer);
-    view.setUint16(0, 0);
-    view.setUint16(2, 0);
-    view.setUint16(4, CANVAS.width);
-    view.setUint16(6, CANVAS.height);
-    out.set(caption.data, 8);
-    return {
-        kind: CHANNEL.subtitle,
-        // 負にはならないが、丸めで -0 が出ると符号なしに詰められない
-        pts: BigInt(Math.max(0, Math.round(caption.at * CLOCK))),
-        data: out,
-    };
-}
-
 /** 文字の配置の1枚と、出す時刻 (ミリ秒。器のコマの時刻そのまま) */
 export interface CaptionShown {
     at: number;
@@ -346,7 +227,7 @@ export class CaptionText {
 }
 
 /**
- * 送る形にする。**中身は JSON** (`CaptionPage`)、頭の時刻は絵と同じ物差し (90kHz)。
+ * 送る形にする。**中身は JSON** (`CaptionPage`)、頭の時刻は映像と同じ物差し (90kHz。stream.md §5.3)。
  * 前の1枚を丸ごと置き換えるので、消すのも同じ種別 (`runs` が空) で送る
  */
 export function textFrame(shown: CaptionShown): { kind: number; pts: bigint; data: Uint8Array } {
@@ -363,12 +244,13 @@ export function textFrame(shown: CaptionShown): { kind: number; pts: bigint; dat
  *
  *     [4:後ろの長さ (BE)][1:種別][8:時刻 (90kHz, BE)][中身...]
  *
- * **WebSocket と同じバイトにしたのは、受け側の読み方を1つにするため。** 字幕の絵 (`0x20`) は
- * 中身の頭に置き場所が付いたまま、知らせ (`0x40`) は JSON のまま。
+ * **WebSocket と同じバイトにしたのは、受け側の読み方を1つにするため。** 字幕 (`0x22`) も
+ * 知らせ (`0x40`) も JSON のまま。
  *
  * **長さを付けるのは、HTTP には区切りが無いから。** WebSocket はこまの区切りを運んでくれるが、
  * チャンク転送のチャンクの区切りは受け側 (HttpURLConnection など) から見えない。
- * Server-Sent Events にしなかったのは、PNG を base64 にすると 1/3 太り、行に割って読む手間も要るため
+ * Server-Sent Events にしなかったのは、字幕を絵で送っていた頃の名残 (PNG を base64 にすると 1/3 太る)。
+ * いまも行に割って読む手間が要らないぶん、こちらのほうが軽い
  */
 export function appFrame(kind: number, pts: bigint, payload: Uint8Array): Uint8Array {
     const out = new Uint8Array(4 + 1 + 8 + payload.length);
@@ -400,7 +282,7 @@ const PING = new TextEncoder().encode(JSON.stringify({ type: 'ping' }));
 
 /** アプリ向けの字幕の口に流し込む側 (`captionFeed`) */
 export interface CaptionOut {
-    /** WebSocket と同じ形で1こま渡す。**字幕 (絵か文字の配置) と、選べる字幕の知らせだけ通す** */
+    /** WebSocket と同じ形で1こま渡す。**字幕 (文字の配置) と、選べる字幕の知らせだけ通す** */
     send(kind: number, pts: bigint, payload: Uint8Array): void;
     /** 終わり (録画を読み切った・セッションが畳まれた) */
     close(): void;
@@ -411,7 +293,7 @@ export interface CaptionOut {
 /**
  * アプリ向けの字幕の口を作る。中身を作る側 (`open`) は、閉じるときの後始末を返す。
  *
- * 通すのは字幕 (絵 `0x20` か文字の配置 `0x22`。頼まれた形のほう) と、選べる字幕の知らせ (`0x40` の `captions`) だけ。
+ * 通すのは字幕 (文字の配置 `0x22`) と、選べる字幕の知らせ (`0x40` の `captions`) だけ。
  * `error` / `ended` の知らせが来たら閉じる。ほかの知らせ・データ放送・映像は捨てる
  * (映像は同じ URL の隣の口 — ライブの `live` や追っかけの `chase` — で受け取っている)
  */
@@ -441,7 +323,7 @@ export function captionFeed(open: (out: CaptionOut) => () => void): ReadableStre
                             const notice = JSON.parse(new TextDecoder().decode(payload)) as Notice;
                             if (notice.type === 'error' || notice.type === 'ended') return out.close();
                             if (notice.type !== 'captions') return;
-                        } else if (kind !== CHANNEL.subtitle && kind !== CHANNEL.captionText) {
+                        } else if (kind !== CHANNEL.captionText) {
                             return;
                         }
                         push(kind, pts, payload);
@@ -469,14 +351,10 @@ export function captionFeed(open: (out: CaptionOut) => () => void): ReadableStre
     );
 }
 
-/** アプリ向けの字幕の口の `?format=`。`text` なら文字の配置、それ以外 (省いたとき) は絵 */
-export function captionForm(url: URL): CaptionForm {
-    return url.searchParams.get('format') === 'text' ? 'text' : 'png';
-}
-
 /**
  * 焼いたもの (mkv) から抜いた字幕の軌道を解く。**入っているのが ARIB の字幕 (`S_ARIBSUB`) の
- * ときだけ** — 前に焼いた録画は絵 (PGS) が入っていて、そちらは観る画面が自分で解く (`pgs.ts`)
+ * ときだけ** — 前に焼いた録画は絵 (PGS) が入っていることがあり、それはもう読まない
+ * (字幕なしとして扱う。生TSが残っていれば焼き直すと ARIB の字幕が入る)
  *
  * @param data ffmpeg に `-map 0:s:0 -c:s copy -f matroska` で抜かせたもの
  * @returns ARIB の字幕でなければ null

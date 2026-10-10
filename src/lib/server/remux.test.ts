@@ -30,7 +30,7 @@ describe('ffprobe の読み (mediaInfo)', () => {
             { codec_type: 'video', codec_name: 'h264', profile: 'High', level: 40 },
             { codec_type: 'audio', codec_name: 'opus', tags: { title: '主音声' } },
             { codec_type: 'audio', codec_name: 'opus' },
-            { codec_type: 'subtitle', codec_name: 'hdmv_pgs_subtitle' },
+            { codec_type: 'subtitle', codec_name: 'arib_caption' },
         ]);
         expect(mediaInfo('encoded', json)).toEqual({
             source: 'encoded',

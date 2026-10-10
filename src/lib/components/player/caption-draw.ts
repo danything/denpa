@@ -224,14 +224,14 @@ function drawRun(
  * - 字がまだ届いていなければ、届いてから描き直す
  * - 点滅があれば、その間だけ時計を回す
  *
- * 描いているかの印 (`data-drawn`) を立てる/下ろすのは、絵を重ねていた頃 (`paint.ts`) と同じ。
+ * 描いているかの印 (`data-drawn`) もここで立てる/下ろす。
  * 小窓 (`compose.ts`) とスクリーンショットがそれを見る
  */
 export class CaptionPainter {
     private page: CaptionPage | null = null;
     private readonly resize: ResizeObserver | null;
     private flashTimer: ReturnType<typeof setInterval> | null = null;
-    /** いま canvas に描いてあるのが自分のものか。**他の描き手 (録画の絵の字幕) の絵は消さない** */
+    /** いま canvas に何か描いてあるか。描いていなければ消しに行かない */
     private painted = false;
 
     constructor(
