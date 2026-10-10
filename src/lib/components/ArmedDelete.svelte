@@ -32,9 +32,19 @@
         testid: string;
         confirmTestid?: string;
     } = $props();
+
+    /** 送り終えたら構えを下ろす。断られて行が残ったとき、「確定」を出したままにしない */
+    const sent: SubmitFunction = (input) => {
+        const after = submit?.(input);
+        return async (options) => {
+            if (typeof after === 'function') await after(options);
+            else await options.update();
+            deleting.fire();
+        };
+    };
 </script>
 
-<form method="POST" {action} use:submitting={submit}>
+<form method="POST" {action} use:submitting={sent}>
     {#each Object.entries(fields) as [name, value] (name)}
         <input type="hidden" {name} {value} />
     {/each}
