@@ -38,7 +38,7 @@ import { usedByOther } from './files';
 import { removeIfExists } from './fsx';
 import { type HwWay, hwArgs, hwChain } from './hwenc';
 import { encodedPath, libraryFamily, libraryPath } from './library';
-import { removeSidecars, sidecarPaths, writeThumbnail } from './metadata';
+import { removeSidecars, sidecarPaths, thumbnailPlace, writeThumbnail } from './metadata';
 import { saveRecordedBml } from './recorded-bml';
 import { recordingSummary } from './recording';
 import { encodeJobs, recordings, services } from './schema';
@@ -1248,8 +1248,6 @@ async function runJob(jobId: number): Promise<void> {
     let firstFrame = Number.NaN;
     /** 実際に切って残した区間 (入れ物の頭からの秒)。データ放送の時刻を詰めるのに使う */
     let kept: Range[] | null = null;
-    /** 本編の最初の区間 (焼いたものの時刻)。CM を残したときのサムネ */
-    let contentStart: Range | null = null;
     /** CM を切ってよいか。音だけで決めたとき・1本目を切れなかったときは切らずにチャプターにする */
     let cuttable = true;
     const frameRate = Number.isFinite(measured.fps) ? measured.fps : config.cmFallbackFps;
@@ -1450,8 +1448,6 @@ async function runJob(jobId: number): Promise<void> {
         const file = encodeOptions.chaptersFile;
         if (!(await rewrite(working, (output) => chapterArgs(working, file, output))))
             console.error('[cm] チャプターを書き足せませんでした。チャプター無しで置きます');
-        // CM が残るので、サムネを本編の最初の区間から取る
-        contentStart = own(skip).keep[0] ?? null;
     };
 
     for (const [index, codec] of codecs.entries()) {
@@ -1605,6 +1601,38 @@ async function runJob(jobId: number): Promise<void> {
         console.error(`[bml] データ放送の取り出しに失敗しました (録画 ${recording.id}): ${error}`);
     }
 
+    /*
+     * **サムネイルは生TSから取る** (解除したTSを消す前に)。焼いた AV1 を復号し直すと
+     * ソフトウェア復号で数百コマぶん重い。生TSの MPEG-2/H.264 なら軽い。
+     * 位置は生TSの時刻で決める (`thumbnailPlace`): CM を切ったなら残した区間をつないで数え、
+     * CM を残したなら本編の最初の区間から取る (CMの絵を避ける)
+     */
+    const duration = (recording.end_at - recording.start_at) / 1000;
+    const content =
+        kept === null && detection !== null && detection.cm.length > 0
+            ? own(primary.skip).keep[0]
+            : undefined;
+    await writeThumbnail(output, duration, {
+        source: sourceTs,
+        place: thumbnailPlace(duration, {
+            skip: primary.skip,
+            kept,
+            content:
+                content === undefined
+                    ? null
+                    : { start: content.start + primary.skip, end: content.end + primary.skip },
+        }),
+    });
+    /*
+     * **もう一方 (H.264) の隣にもポスターを複製しておく** (同じ絵。ffmpeg を
+     * もう一度は回さない)。主 (AV1) を消すと残ったほうが主に繰り上がるので、
+     * そのときも画面のサムネが途切れない
+     */
+    if (alt !== null) {
+        const primaryPoster = sidecarPaths(output).thumbnail;
+        if (existsSync(primaryPoster)) copyFileSync(primaryPoster, sidecarPaths(alt).thumbnail);
+    }
+
     removeIfExists(encodeOptions.chaptersFile);
     // 解除したTSは作業用。元のTSは残したままなので、やり直せる
     removeIfExists(decoded);
@@ -1628,19 +1656,6 @@ async function runJob(jobId: number): Promise<void> {
             .set({ duration_ms: Math.round(length) })
             .where(eq(recordings.id, recording.id))
             .run();
-    }
-
-    // サムネイルを動画の隣に書く。動画を置いた直後に作る。
-    // CMを切っていない録画は、本編の最初の区間からサムネを取る (CMの絵を避ける)
-    await writeThumbnail(output, (recording.end_at - recording.start_at) / 1000, contentStart ?? undefined);
-    /*
-     * **もう一方 (H.264) の隣にもポスターを複製しておく** (同じ絵。ffmpeg を
-     * もう一度は回さない)。主 (AV1) を消すと残ったほうが主に繰り上がるので、
-     * そのときも画面のサムネが途切れない
-     */
-    if (alt !== null) {
-        const primaryPoster = sidecarPaths(output).thumbnail;
-        if (existsSync(primaryPoster)) copyFileSync(primaryPoster, sidecarPaths(alt).thumbnail);
     }
 
     orm()
