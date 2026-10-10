@@ -50,6 +50,20 @@
       "when": 1791593684918,
       "tag": "0006_drop-logo-area",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "6",
+      "when": 1791598654853,
+      "tag": "0007_cm-one-pass",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "6",
+      "when": 1791605099725,
+      "tag": "0008_drop-cm-detector",
+      "breakpoints": true
     }
   ]
 }

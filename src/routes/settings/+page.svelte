@@ -153,9 +153,9 @@
                 </fieldset>
                 <!--
                     **並びは話題ごとに。** 2列に流し込むので、DOM の順がそのまま
-                    「どれとどれが同じ行に来るか」になる。CM の2つ (切り方・探し方) が
-                    斜めに離れていた頃は、同じ話の設定に見えなかった。
-                    1行目は「出来上がるもの」(コーデックと生TS)、2行目は CM。
+                    「どれとどれが同じ行に来るか」になる。
+                    1行目は「出来上がるもの」(コーデックと生TS)、2行目は焼く前に映像を読んで
+                    決めるもの (CM とコマ数)。
 
                     生TSを残すか・無料放送だけにするかも、ここで決める。
                     画面に出していなかった頃は、保存を押すたびに未送信のチェックボックスとして
@@ -179,53 +179,8 @@
                         <option value="cut" selected={recording.cmCut === 'cut'}>切り取る</option>
                         <option value="off" selected={recording.cmCut === 'off'}>何もしない</option>
                     </select>
+                    <span class="hint">局ロゴの消えている所をCMとみます。ロゴが使えなければ無音と長さで決めます</span>
                 </label>
-                <label class="field">
-                    <span class="label">CMの探し方</span>
-                    <select name="cmDetector">
-                        <option value="jls" selected={recording.cmDetector === 'jls'}>
-                            ロゴまで見る (確実・遅い)
-                        </option>
-                        <option value="silence" selected={recording.cmDetector === 'silence'}>
-                            無音だけ (速い)
-                        </option>
-                    </select>
-                    <span class="hint">ロゴまで見ると録画1本あたり数分かかります</span>
-                </label>
-                <!--
-                    **ロゴをどれだけ当てにするか** (JL の logo_level)。
-                    ロゴが出ているコマは別に拾っていて (logo-own.ts)、それを
-                    無音・シーンチェンジと突き合わせて番組の構成を推測するのが
-                    join_logo_scp。その推測でロゴをどれだけ優先するかがここ。
-
-                    数字 (1〜8) をそのまま出しても「6 は高いのか」を考えさせる
-                    だけなので、言葉で選ばせる
-                -->
-                <div class="field">
-                    <label class="field">
-                        <span class="label">ロゴの重み</span>
-                        <select
-                            name="logoLevel"
-                            disabled={recording.cmDetector !== 'jls'}
-                        >
-                            <option value="8" selected={recording.logoLevel >= 8}> ロゴを最優先する </option>
-                            <option value="6" selected={recording.logoLevel < 8 && recording.logoLevel >= 5}>
-                                ふつう (おすすめ)
-                            </option>
-                            <option value="3" selected={recording.logoLevel < 5 && recording.logoLevel >= 2}>
-                                ロゴは参考程度
-                            </option>
-                            <option value="1" selected={recording.logoLevel <= 1}> ロゴを使わない </option>
-                        </select>
-                        <span class="hint">CMを取り違えるときに変えます</span>
-                    </label>
-                    <details class="more">
-                        <summary>詳しく</summary>
-                        <p>
-                            ロゴは合っているのにCMを取り違えるなら「最優先」寄りに、覚えたロゴ自体が怪しいなら「参考程度」寄りにしてください。
-                        </p>
-                    </details>
-                </div>
                 <!--
                     コマ数 (30/60) は本編映像から実測して決める (encoder.measureSmoothMotion)。
                     放送は素材が何でも 1080i/60 で来るので、ジャンルにもTSのヘッダにも

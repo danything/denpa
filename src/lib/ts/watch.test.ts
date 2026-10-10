@@ -328,8 +328,8 @@ describe('観終えたか', () => {
 describe('観はじめの CM 飛ばし', () => {
     /** ロゴで当てられた録画。無音検出だけの覚え書きは「失敗」ではない */
     const ok = '無音 8 箇所';
-    /** ロゴが使えず無音検出に落ちた録画 (format.JLS_UNUSABLE がこの形で入る) */
-    const fell = '無音 8 箇所 (jls は使えず: ロゴに合致しませんでした)';
+    /** ロゴが使えず無音検出に落ちた録画 (format.LOGO_UNUSABLE がこの形で入る) */
+    const fell = '無音 8 箇所 (ロゴは使えず: ロゴの写っているコマがありませんでした)';
 
     test('覚えていなければ入れて始める', () => {
         expect(skipCmAtStart(ok, null)).toBe(true);

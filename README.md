@@ -262,10 +262,6 @@ docker compose) で動かすなら `oci://ghcr.io/danything/charts/denpa-agent` 
   無音検出へ落とすだけで、縁のほうを覚えてしまうと防げません (画面で捨てて覚え直す)。
   TOKYO MX1 で窓枠を掴んだ回の録画は残っておらず、試せていません
   ([docs/encode.md](docs/encode.md#在り処の割り出し))
-- **受信が途中で欠けた録画で、CMの境目がずれないか。** CM検出は映像のコマを数えて
-  `番号 ÷ fps` で秒に直すので、途中でコマが抜けるとそこから先がずれるはずです。
-  突き合わせた9本 (4局・70箇所) には欠けが無く、確かめられていません
-  ([docs/encode.md](docs/encode.md#チャプターを詰める量は-ss-と同じではない))
 
 ## もっと詳しく
 
@@ -294,7 +290,6 @@ docker compose) で動かすなら `oci://ghcr.io/danything/charts/denpa-agent` 
 **土台にしている仕事** — とくにチューナーまわりは、次の方々の仕事に支えられています:
 
 - [px4-userland](https://github.com/Khronos31/px4-userland) / [siano-userland](https://github.com/Khronos31/siano-userland) (@Khronos31) — PX-Q3U4 などと PX-S1UD を、ホストにドライバを入れずに使えるのはこれのおかげです。PX-MLT5PE / DTV02A-5TS-P の対応は @siketyan
-- [join_logo_scp](https://github.com/yobibi/join_logo_scp) (yobibi) と chapter_exe (tobitti0 版) — CM 検出
 - [web-bml](https://github.com/otya128/web-bml) (otya128) — データ放送を描く
 
 ほかに借りているものと出どころは [docs/licenses.md](docs/licenses.md) にあります。
@@ -310,7 +305,6 @@ docker compose) で動かすなら `oci://ghcr.io/danything/charts/denpa-agent` 
 | | ライセンス |
 | --- | --- |
 | **ffmpeg** (x264 / SVT-AV1 / dav1d / Opus / libaribcaption / libva / libvpl を繋いだ自前ビルド) | GPL-2.0+ (x264 のため) ほか BSD / MIT |
-| **CM 検出** — join_logo_scp・chapter_exe・dtvindex | GPL-3.0 (join_logo_scp は正式なライセンス文書無し。「転載・改変は連絡不要」の表示に拠る) |
 | **rounded-mplus-1m-arib** (字幕とデータ放送のフォント) | M+ FONT LICENSE (無制限) |
 | **web-bml / es2** (npm の `web-bml`。データ放送を描く) | MIT |
 | **Svelte / SvelteKit / Blades / Bits UI** と束に入る npm 一式 | MIT (drizzle-orm と crc-32 は Apache-2.0) |

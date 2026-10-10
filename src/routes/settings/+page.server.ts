@@ -71,8 +71,6 @@ export const actions = {
             codec: (codecs.length > 0 ? codecs.join(',') : 'none') as VideoCodec,
             encode: codecs.length > 0,
             cmCut,
-            cmDetector: form.get('cmDetector') === 'silence' ? 'silence' : 'jls',
-            logoLevel: Number(form.get('logoLevel')),
             keepOriginal: form.get('keepOriginal') === 'on',
             freeOnly: form.get('freeOnly') === 'on',
             fpsDetect: form.get('fpsDetect') === 'on',

@@ -126,29 +126,12 @@ export const config = {
     /** CMの扱いの初期値。実カットは事故ると本編が消えるのでチャプターのみ */
     cmCutDefault: 'chapter' as CmMode,
 
-    /** chapter_exe / join_logo_scp の置き場。イメージに入っている */
-    jlsBin: '/opt/jls/bin',
-    /** join_logo_scp の判定規則。join_logo_scp_trial に付いてくるもの */
-    jlsRule: '/opt/jls/JL/JL_標準.txt',
     /** CM検出のために覚えた局ロゴ (`own-logo-*.bin`) の置き場。放送波から拾った局ロゴ (PNG) の隣 */
     cmLogoDir: `${dataDir}/logos/cm`,
-    /**
-     * join_logo_scp が番組の構成を推測するとき、ロゴをどれだけ当てにするか
-     * (JL の `logo_level`。1:使わない 〜 8:最優先)。設定画面で変えられる (docs/encode.md「ロゴをどれだけ当てにするか」)
-     */
-    jlsLogoLevel: num('JLS_LOGO_LEVEL', 6),
-    /** jls が返す Trim はフレーム番号なので、秒に直すためのfps。ffprobeで取れなければこれを使う */
-    cmJlsFallbackFps: 30000 / 1001,
+    /** CM検出でロゴの区間をならすときの fps。ffprobe で取れなければこれを使う (地上波・BS は 30000/1001) */
+    cmFallbackFps: 30000 / 1001,
     /** 検出に掛ける上限時間(ms)。超えたら諦めてCM無しとして扱う */
     cmDetectTimeout: 30 * MIN,
-    /** 無音とみなす音量。地上波のCM境界は -50dB 程度まで落ちる */
-    cmSilenceNoise: '-50dB',
-    /** 無音とみなす最短の長さ(秒)。短くしすぎると曲間や間(ま)を拾う */
-    cmSilenceDuration: 0.4,
-    /** 「15秒の倍数」判定の許容誤差(秒) */
-    cmTolerance: 0.6,
-    /** CMブロックとして採用する最短の長さ(秒)。単発15秒は本編のコーナーと紛らわしい */
-    cmMinBlock: 30,
     /**
      * CMを実際に切るとき、残す区間の頭を戻しておく長さ(秒)。
      *

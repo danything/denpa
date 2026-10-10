@@ -47,12 +47,6 @@ export interface Settings {
     /** 自動予約で無料放送だけを対象にするか */
     freeOnly: boolean;
     /**
-     * CM検出のしかた。
-     * jls     : ロゴが消えるかどうかまで見る。確かだが録画1本あたり数分かかる
-     * silence : 無音とCM尺だけ。速いが本編の「間」を拾うことがある
-     */
-    cmDetector: 'jls' | 'silence';
-    /**
      * コマ数 (30/60) を本編映像から実測して決めるか。
      *
      * 入り: 60p に起こして重複コマの割合を測り、同じ絵が並ぶ素材 (アニメ・
@@ -60,15 +54,6 @@ export interface Settings {
      * 切り: 測らず**全部 60コマ**で出す。時間とサイズはかさむが、動きは絶対に落ちない
      */
     fpsDetect: boolean;
-    /**
-     * **ロゴをどれだけ当てにするか** (1〜8、既定 6)。
-     *
-     * join_logo_scp は無音・シーンチェンジと「ロゴが出ているか」を突き合わせて
-     * 番組の構成を推測する。その推測でロゴ情報をどれだけ優先するかがこれ
-     * (JL の `logo_level`)。ロゴが正しいのにCMを取り違えるなら上げる、
-     * ロゴを覚え違えているようなら下げる。1 でロゴを使わなくなる
-     */
-    logoLevel: number;
     /**
      * データ放送に渡す郵便番号 (数字7桁。空なら渡さない)。
      *
@@ -102,12 +87,6 @@ export interface Settings {
 export function normalizePostalCode(value: string): string {
     const digits = value.replace(/[^0-9]/g, '');
     return digits.length === 7 ? digits : '';
-}
-
-/** JL の logo_level。範囲の外は既定に倒す (規則ファイルに書き込む値なので) */
-function logoLevel(value: string | undefined): number {
-    const level = Number(value);
-    return Number.isInteger(level) && level >= 1 && level <= 8 ? level : config.jlsLogoLevel;
 }
 
 function stored(key: string): string | undefined {
@@ -175,9 +154,7 @@ export function settings(): Settings {
         encode: codecs.length > 0,
         keepOriginal: flag('keepOriginal', false),
         freeOnly: flag('freeOnly', true),
-        cmDetector: stored('cmDetector') === 'silence' ? 'silence' : 'jls',
         fpsDetect: flag('fpsDetect', true),
-        logoLevel: logoLevel(stored('logoLevel')),
         postalCode: normalizePostalCode(stored('postalCode') ?? ''),
         // **入れるまで外へ出ない。** 黙って通信が始まらないようにする
         bmlNetwork: flag('bmlNetwork', false),

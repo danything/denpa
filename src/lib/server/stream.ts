@@ -43,6 +43,9 @@ export async function* lines(stream: ReadableStream<Uint8Array>): AsyncGenerator
     if (buffer.trim() !== '') yield buffer.trim();
 }
 
+/** `onStderrLine` のとき返す標準エラーの行数 */
+const STDERR_TAIL = 20;
+
 export interface RunResult {
     /** 終了コード。起こせなかったときは 127、時間切れや中止で殺したときは殺された後のコード */
     code: number;
@@ -76,6 +79,11 @@ export async function run(
          * 溜めると収まらないもの向け (`stdout` より優先。そのとき `stdout` は空で返る)
          */
         onStdout?: (chunk: Uint8Array) => void;
+        /**
+         * 標準エラーを溜めずに1行ずつ渡す。コマごとに1行出させるもの (CM検出の `scdet`) 向け。
+         * `stderr` より優先し、返る `stderr` は末尾の数行だけ (落ちた理由を読むため)
+         */
+        onStderrLine?: (line: string) => void;
     } = {},
 ): Promise<RunResult> {
     /*
@@ -92,7 +100,7 @@ export async function run(
         proc = Bun.spawn(argv, {
             stdin: 'ignore',
             stdout: options.stdout === true || options.onStdout !== undefined ? 'pipe' : 'ignore',
-            stderr: options.stderr === true ? 'pipe' : 'ignore',
+            stderr: options.stderr === true || options.onStderrLine !== undefined ? 'pipe' : 'ignore',
         });
     } catch (error) {
         return { code: 127, stdout: new Uint8Array(), stderr: String(error) };
@@ -101,7 +109,24 @@ export async function run(
     options.signal?.addEventListener('abort', kill, { once: true });
     const timer = options.timeoutMs === undefined ? null : setTimeout(kill, options.timeoutMs);
     try {
-        const onStdout = options.onStdout;
+        const { onStdout, onStderrLine } = options;
+        const readStderr = async (): Promise<string> => {
+            if (onStderrLine === undefined) {
+                return options.stderr === true ? text(proc.stderr as ReadableStream<Uint8Array>) : '';
+            }
+            const tail: string[] = [];
+            try {
+                for await (const line of lines(proc.stderr as ReadableStream<Uint8Array>)) {
+                    onStderrLine(line);
+                    tail.push(line);
+                    if (tail.length > STDERR_TAIL) tail.shift();
+                }
+            } catch (error) {
+                kill();
+                throw error;
+            }
+            return tail.join('\n');
+        };
         const [stdout, stderr] = await Promise.all([
             onStdout !== undefined
                 ? (async () => {
@@ -129,7 +154,7 @@ export async function run(
                         .arrayBuffer()
                         .then((buffer) => new Uint8Array(buffer))
                   : Promise.resolve(new Uint8Array()),
-            options.stderr === true ? text(proc.stderr as ReadableStream<Uint8Array>) : Promise.resolve(''),
+            readStderr(),
         ]);
         const code = await proc.exited;
         return { code, stdout, stderr };

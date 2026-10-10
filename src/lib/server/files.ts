@@ -158,13 +158,12 @@ function settling(path: string, at: number): boolean {
  *
  * 付き添いは**動画と同じ名前で隣に置く**決まりなので、名前から連れ合いが分かる。
  *
- * - `<動画>.dtvi` … chapter_exe が作る索引 (1本3MB)
- * - `<動画>.sup` `<動画>.jls…` … 字幕とCM検出の作業ファイル
+ * - `<動画>.sup` `<動画>.chapters.txt` … 字幕とチャプターの作業ファイル
  * - `<動画から拡張子を取ったもの>-poster.jpg` / `.bml.jsonl` … サムネイルと録画のデータ放送。
  *   `.nfo` `.ja.ass` `-thumb.jpg` は昔の名残 (いまは作らない)
  *
- * 実機では生TSの置き場に `.dtvi` が9本 (22MB) 残っていた。生TSを残さない設定だと
- * TS が消えたあとも索引だけが居座り、録るたびに積もる。
+ * 実機では生TSの置き場に、CM検出の道具 (chapter_exe) が作っていた索引が9本 (22MB) 残っていた。
+ * 生TSを残さない設定だと、TS が消えたあとも付き添いだけが居座り、録るたびに積もる。
  */
 function sweepLeftovers(): { swept: number; strays: number; pruned: number } {
     const known = new Set(
@@ -237,7 +236,7 @@ function sweepLeftovers(): { swept: number; strays: number; pruned: number } {
 
 /** 付き添いで、かつ連れ合いの動画が1つも無いか */
 function orphan(path: string, videos: Set<string>): boolean {
-    // 索引や作業ファイル。動画の名前をまるごと頭に持つ (`….m2ts.dtvi`)
+    // 作業ファイル。動画の名前をまるごと頭に持つ (`….m2ts.sup`)
     const trailing = /^(.+\.(?:m2ts|ts|mkv|mp4))\.[^/]+$/i.exec(path);
     if (trailing?.[1] !== undefined) return !videos.has(trailing[1]);
     // NFO・ポスター・データ放送。動画の拡張子を取り替えた形 (metadata.ts の

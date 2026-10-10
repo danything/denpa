@@ -45,14 +45,20 @@ for arg in "$@"; do
     prev="$arg"
 done
 
+# 入力の名前に broken-video が入っていたら、CM検出で絵も読むとき (scdet) だけ落とす。音だけ読み直す道を試すため
+if [[ "$input" == *broken-video* ]] && printf '%s\n' "$@" | grep -q scdet; then
+    echo "Error while filtering: Invalid data found when processing input" >&2
+    exit 1
+fi
+
 # CM検出パス (silencedetect) は本編とは別物として応答する。
 # 300秒と360秒に境界が来るので、300-360 の 60 秒がCMブロックとして検出される。
 if printf '%s\n' "$@" | grep -q silencedetect; then
     echo "  Duration: 00:10:00.00, start: 0.000000, bitrate: 15000 kb/s" >&2
-    echo "[silencedetect @ 0x1] silence_start: 299.8" >&2
-    echo "[silencedetect @ 0x1] silence_end: 300.2 | silence_duration: 0.4" >&2
-    echo "[silencedetect @ 0x1] silence_start: 359.8" >&2
-    echo "[silencedetect @ 0x1] silence_end: 360.2 | silence_duration: 0.4" >&2
+    echo "[silencedetect @ 0x1] silence_start: 299.5" >&2
+    echo "[silencedetect @ 0x1] silence_end: 300.5 | silence_duration: 1.0" >&2
+    echo "[silencedetect @ 0x1] silence_start: 359.5" >&2
+    echo "[silencedetect @ 0x1] silence_end: 360.5 | silence_duration: 1.0" >&2
     exit 0
 fi
 
