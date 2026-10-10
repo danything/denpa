@@ -75,6 +75,9 @@ EPGStation の置き換えとして作ったもので、エンコード設定は
 | `src/lib/server/logo-own.ts` | 覚えるコマを ffmpeg で抜き (当てるコマは cm-scan から受け取る)、覚えたもの (`own-logo-<幅>x<高さ>.bin`) を局ごとの入れ物に置く |
 | `src/lib/components/ProgramFacts.svelte` | 番組の中身そのもの (枠は持たない)。モーダルと観る画面の両方から使う |
 | `src/lib/components/LearnedLogo.svelte` | CM検出用に覚えたロゴを画面で確かめ、捨てる |
+| `src/lib/components/ServiceLogo.svelte` | 局ロゴ (一覧・番組表・ライブ)。まだ拾えていない局の出し方は画面ごと |
+| `src/lib/components/ActionButton.svelte` / `ArmedDelete.svelte` | 送るだけのボタン (`submitting` 付きの POST) と、2回押しで消すボタン (`arming.svelte.ts`。録画・予約・ルール・通知先) |
+| `src/lib/components/JobProgress.svelte` | 時間の掛かる仕事の進み具合 (帯と「いくつ中いくつ」) |
 | `src/lib/components/Toasts.svelte` | 押した結果を画面の右下に浮かせて出す (本文を押し下げない) |
 | `src/lib/paging.svelte.ts` / `paging.ts` | 長い一覧を少しずつ出す (`Paged` + `sentinel`。無限スクロール) と、その代わりの絞り込み (`matches`。空白区切りの語をすべて含む)。予約・録画・ルールの一覧が使う |
 | `src/lib/ts/psi.ts` | TS の PSI (PAT / PMT / NIT / SDT) を読む。チャンネルスキャンで局の一覧を知るのに使う (エージェントは NIT も SDT も読まない) |
