@@ -588,7 +588,7 @@
 {#snippet title(state: string, badge: string, name: string, testid: string, fresh = false)}
     <div class="cluster">
         <span class="tag {badge}" data-testid={testid}>{state}</span>
-        <span class="row-name">
+        <span class="row-name broadcast">
             {#if fresh}
                 <span class="unwatched-dot" role="img" aria-label="未視聴" data-testid="recording-unwatched"></span>
             {/if}
@@ -1024,7 +1024,7 @@
                         <span class="unwatched-dot" aria-hidden="true"></span>未視聴{fresh}
                     </span>
                 {/if}
-                <span class="row-name" data-testid="recording-group-name">{group.name}</span>
+                <span class="row-name broadcast" data-testid="recording-group-name">{group.name}</span>
             </span>
             <span class="row-meta">最新 {dateTime(group.newest.at)}</span>
         </span>

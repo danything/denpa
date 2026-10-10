@@ -11,6 +11,7 @@ import type { AudioTrack } from '#lib/arib.js';
 import { CAPTION_TEXT_VERSION, type CaptionPage } from '#lib/caption-text.js';
 import { CaptionPainter } from '#lib/components/player/caption-draw.js';
 import { eachFrame } from '#lib/components/player/frames.js';
+import { denpaFontUrl } from '#lib/font.js';
 import { forget, read, write } from '#lib/keep.js';
 import {
     type CaptionTrack,
@@ -1375,7 +1376,7 @@ export function livePlayer() {
     ): void {
         still = frozen;
         painter?.close();
-        painter = new CaptionPainter(subtitles, resolve('api/font/denpa-font.woff2'));
+        painter = new CaptionPainter(subtitles, denpaFontUrl());
         host = box;
     }
 

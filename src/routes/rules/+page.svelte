@@ -251,11 +251,11 @@
                                 </p>
                             {:else if data.origin.prefilled}
                                 <p class="notice info small" data-testid="rule-origin">
-                                    {what}「{data.origin.name}」から条件を入れました。下の一覧で確かめて「追加」を押してください
+                                    {what}「<span class="broadcast">{data.origin.name}</span>」から条件を入れました。下の一覧で確かめて「追加」を押してください
                                 </p>
                             {:else}
                                 <p class="notice warning small" data-testid="rule-origin">
-                                    「{data.origin.name}」から番組名を読み取れませんでした。キーワードを入れてください
+                                    「<span class="broadcast">{data.origin.name}</span>」から番組名を読み取れませんでした。キーワードを入れてください
                                 </p>
                             {/if}
                         {/if}
@@ -615,7 +615,7 @@
                                             {#if program.skip !== null}
                                                 <span class="tag" data-testid="preview-skip">録らない</span>
                                             {/if}
-                                            <span class="truncate">{program.name}</span>
+                                            <span class="truncate broadcast">{program.name}</span>
                                         </div>
                                         <div class="tiny muted">
                                             {program.service_name} ・ {dateTime(program.start_at)}
