@@ -25,15 +25,13 @@
  * 絵を出してしまう。
  */
 
-import { AdtsSplitter, type Pes, PesDemuxer, unwrap } from '#lib/ts/pes.js';
+import { AdtsSplitter, CLOCK, type Pes, PesDemuxer, unwrap } from '#lib/ts/pes.js';
 import { DecodeBudget } from './budget';
 import type { FromWorker, ToWorker } from './messages';
 import { YuvRenderer } from './render';
 
 const scope = self as unknown as DedicatedWorkerGlobalScope;
 
-/** 90kHz */
-const CLOCK = 90_000;
 /** 番のこれだけ前から解く (90kHz)。解くのは1コマ 10ms 前後 */
 const AHEAD = 0.3 * CLOCK;
 /** 解けた絵を待たせる上限。**これ以上は先に解かない** (1枚 3MB) */

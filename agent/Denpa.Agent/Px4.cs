@@ -847,6 +847,12 @@ public sealed class Px4Tuner : ITuneDevice
     private readonly string _runtimeDir;
     private readonly Func<IReadOnlyList<Px4Receiver>?> _prepare;
     private readonly string _name;
+
+    /// <summary>話す相手 (px4d か asicend)。IPC は同じで、枠の頭とソケットの置き場だけ違う</summary>
+    private readonly Px4Wire _wire;
+
+    /// <summary>設定の <c>device</c> (注意書きの鍵。<see cref="Px4Userland.Notice"/>)</summary>
+    private readonly string _device;
     private readonly Lock _gate = new();
 
     /// <summary>受信機を借りている制御ソケット。null なら借りていない</summary>
@@ -877,14 +883,21 @@ public sealed class Px4Tuner : ITuneDevice
     /// 選局の前に呼ぶ。px4d を起こして、筐体に聞いた受信機を返す (聞けていなければ null)。
     /// テストは px4d のふりをするので何もしない
     /// </param>
-    internal Px4Tuner(string id, int receiver, string? lnb, string runtimeDir, Func<IReadOnlyList<Px4Receiver>?> prepare)
+    /// <param name="wire">話す相手。省けば px4d。asicen-userland の機材は <see cref="Px4Wire.Asicen"/> (Asicen.cs)</param>
+    /// <param name="device">設定の <c>device</c>。省けば <c>px4:&lt;番号&gt;:&lt;受信機&gt;</c></param>
+    /// <param name="name">記録に出す名前。省けば <c>px4-&lt;番号の末尾4桁&gt; #&lt;受信機&gt;</c></param>
+    internal Px4Tuner(
+        string id, int receiver, string? lnb, string runtimeDir, Func<IReadOnlyList<Px4Receiver>?> prepare,
+        Px4Wire? wire = null, string? device = null, string? name = null)
     {
         _id = id;
         _receiver = receiver;
         _lnb = lnb;
         _runtimeDir = runtimeDir;
         _prepare = prepare;
-        _name = $"px4-{id[^4..]} #{receiver}";
+        _wire = wire ?? Px4Wire.Px4;
+        _device = device ?? Px4Userland.Device(id, receiver);
+        _name = name ?? $"px4-{id[^4..]} #{receiver}";
     }
 
     /// <summary>読み手が居ないまま pipe が空かなければ、この時間で TS の流れを畳む</summary>
@@ -962,7 +975,7 @@ public sealed class Px4Tuner : ITuneDevice
             }
             catch (IOException error) when (reused && Lost(error))
             {
-                Log.Write($"[{_name}] px4d との接続が切れていたので、受信機を借り直します ({error.Message})");
+                Log.Write($"[{_name}] {_wire.Daemon} との接続が切れていたので、受信機を借り直します ({error.Message})");
                 Attempt(tuning, streamId, lnb);
             }
         }
@@ -992,7 +1005,7 @@ public sealed class Px4Tuner : ITuneDevice
     private void WarnLnb()
     {
         const string notice = "この受信機は LNB に 15V を出せないので、0V で選局しています (設定の LNB 15V は効きません。アンテナへの給電はほかの機器から)";
-        Px4Userland.SetNotice(Px4Userland.Device(_id, _receiver), this, notice);
+        Px4Userland.SetNotice(_device, this, notice);
         if (_lnbWarned) return;
         _lnbWarned = true;
         Log.Write($"[{_name}] {notice}");
@@ -1034,13 +1047,13 @@ public sealed class Px4Tuner : ITuneDevice
     /// <summary>繋いで受信機を借りる (HELLO → ACQUIRE)</summary>
     private void Open()
     {
-        var control = Px4Control.Connect(Px4Control.Endpoint(_runtimeDir, _id, "control.sock"), 0, RequestTimeout);
+        var control = Px4Control.Connect(Px4Control.Endpoint(_runtimeDir, _id, "control.sock", _wire), 0, RequestTimeout, _wire);
         try
         {
             var answer = control.Request(Px4Control.Acquire, [(byte)_receiver]);
-            if (answer.Length != 24) throw new IOException($"px4d の ACQUIRE の答えが {answer.Length} バイトです (24 のはず)");
+            if (answer.Length != 24) throw new IOException($"{_wire.Daemon} の ACQUIRE の答えが {answer.Length} バイトです (24 のはず)");
             var lease = BinaryPrimitives.ReadUInt64LittleEndian(answer);
-            if (lease == 0) throw new IOException("px4d の ACQUIRE の答えの lease が 0 です");
+            if (lease == 0) throw new IOException($"{_wire.Daemon} の ACQUIRE の答えの lease が 0 です");
             _lease = lease;
             _nonce = answer[8..24];
         }
@@ -1112,7 +1125,7 @@ public sealed class Px4Tuner : ITuneDevice
         control.Request(Px4Control.StartStream, lease, RequestTimeout);
         _started = true;
         _stream = Px4Stream.Attach(
-            Px4Control.Endpoint(_runtimeDir, _id, "stream.sock"), _lease, _nonce, _name, StallLimit, FirstTsGrace);
+            Px4Control.Endpoint(_runtimeDir, _id, "stream.sock", _wire), _lease, _nonce, _name, StallLimit, FirstTsGrace, _wire);
     }
 
     /// <summary>
@@ -1176,7 +1189,7 @@ public sealed class Px4Tuner : ITuneDevice
     {
         lock (_gate) Close();
         // 設定が変わって閉じるときも通る。次の本が 15V をやめていれば、もう出さない
-        Px4Userland.ClearNotice(Px4Userland.Device(_id, _receiver), this);
+        Px4Userland.ClearNotice(_device, this);
     }
 }
 
@@ -1226,6 +1239,7 @@ internal sealed unsafe class Px4Stream
     private readonly Socket _socket;
     private readonly string _name;
     private readonly TimeSpan _stallLimit;
+    private readonly Px4Wire _wire;
     private readonly ManualResetEventSlim _first = new();
     private SafeFileHandle? _write;
     private Thread? _pump;
@@ -1245,11 +1259,12 @@ internal sealed unsafe class Px4Stream
     /// <summary>流れが終わった (px4d が止めた・切れた・読み手が居なくて畳んだ・こちらで止めた)</summary>
     public bool Ended => _ended;
 
-    private Px4Stream(Socket socket, string name, TimeSpan stallLimit)
+    private Px4Stream(Socket socket, string name, TimeSpan stallLimit, Px4Wire wire)
     {
         _socket = socket;
         _name = name;
         _stallLimit = stallLimit;
+        _wire = wire;
     }
 
     /// <summary>
@@ -1257,28 +1272,29 @@ internal sealed unsafe class Px4Stream
     /// <see cref="Px4StreamError"/> を投げる (繋いだものは閉じてある)
     /// </summary>
     public static Px4Stream Attach(
-        string socketPath, ulong lease, byte[] nonce, string name, TimeSpan stallLimit, TimeSpan firstTs)
+        string socketPath, ulong lease, byte[] nonce, string name, TimeSpan stallLimit, TimeSpan firstTs, Px4Wire? wire = null)
     {
+        wire ??= Px4Wire.Px4;
         var socket = new Socket(AddressFamily.Unix, SocketType.Stream, ProtocolType.Unspecified)
         {
             SendTimeout = 4000,
             ReceiveTimeout = 4000,
         };
-        var stream = new Px4Stream(socket, name, stallLimit);
+        var stream = new Px4Stream(socket, name, stallLimit, wire);
         try
         {
-            Px4Control.ConnectWithin(socket, socketPath, TimeSpan.FromSeconds(4));
+            Px4Control.ConnectWithin(socket, socketPath, TimeSpan.FromSeconds(4), wire);
             var payload = new byte[8 + nonce.Length];
             BinaryPrimitives.WriteUInt64LittleEndian(payload, lease);
             nonce.CopyTo(payload, 8);
             // px4-ts と同じく request_id 0。最初の枠は ATTACH_STREAM でなければならない (HELLO は無い)
-            Px4Control.SendAll(socket, Px4Control.Encode(Px4Control.AttachStream, 0, 0, payload));
-            var (type, flags, _, body) = Px4Control.ReadFrame(socket, Px4Control.MaxPayload);
+            Px4Control.SendAll(socket, Px4Control.Encode(Px4Control.AttachStream, 0, 0, payload, wire));
+            var (type, flags, _, body) = Px4Control.ReadFrame(socket, Px4Control.MaxPayload, wire);
             if (type != Px4Control.AttachStream || (flags & Px4Control.ResponseFlag) == 0)
             {
-                throw new IOException($"px4d から ATTACH_STREAM の答えではないものが来ました (型 0x{type:x4})");
+                throw new IOException($"{wire.Daemon} から ATTACH_STREAM の答えではないものが来ました (型 0x{type:x4})");
             }
-            if ((flags & Px4Control.ErrorFlag) != 0) throw Px4Control.Failed(body);
+            if ((flags & Px4Control.ErrorFlag) != 0) throw Px4Control.Failed(body, wire);
             stream._attached = true;
             // 待つのは pump のほう。ここからは Poll で起きるので、読むときの上限は途中で詰まったときだけ
             socket.ReceiveTimeout = (int)SilenceLimit.TotalMilliseconds;
@@ -1287,7 +1303,7 @@ internal sealed unsafe class Px4Stream
         catch (Exception error) when (error is IOException or SocketException)
         {
             socket.Dispose();
-            throw new Px4StreamError($"px4d から TS を受け取れません ({error.Message})", stream._attached);
+            throw new Px4StreamError($"{wire.Daemon} から TS を受け取れません ({error.Message})", stream._attached);
         }
 
         if (!stream._first.Wait(firstTs))
@@ -1298,7 +1314,7 @@ internal sealed unsafe class Px4Stream
         // 1枚でも渡せていれば成功。すぐ後に終わっても、読み手は TS を読んでから理由を受け取る
         if (!stream._delivered)
         {
-            var reason = stream._reason ?? "px4d との TS の接続が切れました";
+            var reason = stream._reason ?? $"{wire.Daemon} との TS の接続が切れました";
             stream.Stop();
             throw new Px4StreamError(reason, keepsLease: true);
         }
@@ -1339,20 +1355,20 @@ internal sealed unsafe class Px4Stream
                 if (!_socket.Poll(TimeSpan.FromMilliseconds(200), SelectMode.SelectRead))
                 {
                     if (heard.Elapsed < SilenceLimit) continue;
-                    End($"px4d から TS が {SilenceLimit.TotalSeconds:F0} 秒来ません");
+                    End($"{_wire.Daemon} から TS が {SilenceLimit.TotalSeconds:F0} 秒来ません");
                     return;
                 }
-                var (type, flags, _, body) = Px4Control.ReadFrame(_socket, Px4Control.MaxTsPayload);
+                var (type, flags, _, body) = Px4Control.ReadFrame(_socket, Px4Control.MaxTsPayload, _wire);
                 if (type == Px4Control.StreamEnd && body.Length >= 68)
                 {
                     // final counters (u64 × 8) のあとに u32 error_code
                     var code = BinaryPrimitives.ReadUInt32LittleEndian(body.AsSpan(64));
-                    End(code == 0 ? "px4d が TS を止めました" : $"px4d が TS を止めました ({Px4Control.Reason(code)})");
+                    End(code == 0 ? $"{_wire.Daemon} が TS を止めました" : $"{_wire.Daemon} が TS を止めました ({Px4Control.Reason(code)})");
                     return;
                 }
                 if (type != Px4Control.TsData || flags != 0 || body.Length < 20)
                 {
-                    End($"px4d から知らない枠が来ました (型 0x{type:x4})");
+                    End($"{_wire.Daemon} から知らない枠が来ました (型 0x{type:x4})");
                     return;
                 }
                 // u64 sequence, u64 cumulative_drop_count, u32 byte_count, bytes
@@ -1361,17 +1377,17 @@ internal sealed unsafe class Px4Stream
                 var count = BinaryPrimitives.ReadUInt32LittleEndian(body.AsSpan(16));
                 if (count != body.Length - 20 || count % 188 != 0)
                 {
-                    End($"px4d の TS_DATA の長さが崩れています ({count} バイト)");
+                    End($"{_wire.Daemon} の TS_DATA の長さが崩れています ({count} バイト)");
                     return;
                 }
                 if (dropped != 0)
                 {
-                    End($"px4d が TS を {dropped} 回捨てました ({Px4Control.Reason(15)})");
+                    End($"{_wire.Daemon} が TS を {dropped} 回捨てました ({Px4Control.Reason(15)})");
                     return;
                 }
                 if (sequence != _sequence)
                 {
-                    End($"px4d の TS_DATA の番号が飛びました ({_sequence} のはずが {sequence})");
+                    End($"{_wire.Daemon} の TS_DATA の番号が飛びました ({_sequence} のはずが {sequence})");
                     return;
                 }
                 _sequence++;
@@ -1383,7 +1399,7 @@ internal sealed unsafe class Px4Stream
         }
         catch (Exception error) when (error is IOException or SocketException or ObjectDisposedException)
         {
-            End($"px4d との TS の接続が切れました ({error.Message})");
+            End($"{_wire.Daemon} との TS の接続が切れました ({error.Message})");
         }
         finally
         {

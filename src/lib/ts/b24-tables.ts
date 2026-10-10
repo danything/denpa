@@ -2,11 +2,13 @@
  * 字幕の文字の表。**denpa が手で持つ** (字幕を解くのは [b24caption.ts](b24caption.ts)、番組表の外字は
  * [aribtext-gaiji.ts](aribtext-gaiji.ts) がここの追加記号を引いて作る)。
  *
- * 始まりは libaribcaption の表の写し (b24_conv_tables.hpp / b24_gaiji_table.hpp / b24_colors.cpp /
- * b24_drcs_conv.cpp。v1.1.2 に denpa の外字の直しを当てたもの)。字幕を絵にしていた頃と同じ字を選ぶため。
- * libaribcaption を外したので、いまはここが元 — 上流の表が変わっても自動では追わない。
+ * 元は libaribcaption v1.1.2 の表 (b24_conv_tables.hpp / b24_gaiji_table.hpp / b24_colors.cpp /
+ * b24_drcs_conv.cpp) に denpa の外字の直しを当てたもの。ここが元で、上流は追わない。
  *
  * libaribcaption: Copyright (C) 2021 magicxqq <xqq@xqq.im> (MIT。docs/licenses.md)
+ *
+ * **表の名前と `export const` の形は変えない。** danything/denpa-font の道具がこのファイルを
+ * 名前で読んでフォントに入れる字を決める (`ADDITIONAL_ROWS` も。`aribtext-gaiji.ts`・`fold.ts` も同じ)。
  *
  * - 漢字は EUC-JP で読んだものと違うところだけ持つ (`KANJI_DIFF`。番組表は EUC-JP のまま読む —
  *   1区33点の 〜 / ～ などは字幕と番組表で違えてある。aribtext.ts の説明)

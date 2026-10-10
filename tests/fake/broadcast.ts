@@ -10,6 +10,8 @@
  * (`src/lib/ts/synth.ts`)。こうしておかないと、denpa 側の解析が通っているか
  * どうかをテストで確かめられない。
  */
+
+import { CLOCK } from '../../src/lib/ts/pes';
 import {
     aitSection,
     aitSignallingDescriptor,
@@ -28,7 +30,6 @@ import {
 } from '../../src/lib/ts/synth';
 import {
     AUDIO_TICKS,
-    CLOCK,
     FRAME_TICKS,
     mpeg2Frame,
     packetizePes,

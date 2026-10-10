@@ -166,6 +166,12 @@ public static class DeviceProbe
          */
         found.AddRange(SianoUserland.Detect());
 
+        /*
+         * asicen-userland の機材 (PX-W3U3 など。試験的)。配布物が無ければ何もしない (Asicen.cs)。
+         * ファームウェア待ちのものには、ここで流し込んでから並べる
+         */
+        found.AddRange(AsicenUserland.Detect());
+
         return found;
     }
 

@@ -28,7 +28,6 @@ export const GET: RequestHandler = ({ request }) => {
     /*
      * **持たせてよいが、毎回確かめさせる** (`no-cache` + ETag)。イメージを入れ替えて
      * 字が変わっても URL は同じなので、長く持たせると古い字が残る
-     * (以前は `/api/font` を1年 immutable で配っていて、字を足しても届かなかった)
      */
     const headers = { 'content-type': 'font/woff2', 'cache-control': 'no-cache', etag: tag };
     // 前段の proxy が弱い形 (`W/"…"`) にしたり、いくつも並べたりしても 304 にする

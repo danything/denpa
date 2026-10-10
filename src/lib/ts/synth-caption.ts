@@ -6,7 +6,6 @@
  */
 
 import { encodeAribText } from './synth';
-import { packetizePes, pes } from './synth-av';
 
 export { encodeAribText };
 
@@ -90,24 +89,6 @@ export function drcsUnit(code: number, rows: string[]): number[] {
         height,
         ...bytes,
     ]);
-}
-
-/** 字幕を載せた TS の PID と、PMT の記述子 (部品タグ 0x30・字幕の符号化方式 0x0008) */
-export const CAPTION_PID = 0x130;
-export const CAPTION_DESCRIPTORS = [0x52, 0x01, 0x30, 0xfd, 0x03, 0x00, 0x08, 0x3d];
-
-/** PMT に並べる字幕の ES (種別 0x06) */
-export function captionStream(): [number, number, number[]] {
-    return [0x06, CAPTION_PID, CAPTION_DESCRIPTORS];
-}
-
-/** 字幕の PES の中身を、時刻を付けて TS パケットにする (私的ストリーム 1 = 0xBD) */
-export function captionPackets(
-    data: Uint8Array,
-    pts: number,
-    counter: number,
-): { packets: Uint8Array; counter: number } {
-    return packetizePes(CAPTION_PID, pes(0xbd, pts, data), counter);
 }
 
 /** EBML の要素1つ。大きさは8バイトで書く (読む側はどの長さでも読める) */

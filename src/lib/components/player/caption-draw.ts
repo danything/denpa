@@ -2,7 +2,7 @@
  * **字幕の文字の配置を canvas に描く** ([caption-text.ts](../../caption-text.ts))。ライブ・追っかけ・観る画面で同じもの。
  *
  * サーバが置き場所まで決めて送ってくるので、ここは言われたとおりに塗るだけ。描き方は
- * 絵にしていた頃の libaribcaption (region_renderer / text_renderer_freetype) に揃えてある:
+ * libaribcaption の描き手 (region_renderer / text_renderer_freetype) に揃えてある:
  *
  * - 背景は区画 (`w`x`h`) ごとに塗る。空白も塗る
  * - 字は字の枠の左端をペンの位置にして、**縦は「永」の墨の上下を枠の真ん中に置く**
@@ -10,8 +10,7 @@
  * - 縁取りは字の外側へ `STROKE_WIDTH`、字より先に塗る
  * - 置き換えられなかった外字は、点の絵を字の枠いっぱいに**なめらかに**引き伸ばす
  *
- * **canvas は画面の画素で敷く。** 絵を伸ばしていた頃と違って、全画面にすれば字もそのぶん
- * 細かく描き直す (`ResizeObserver`)。字形はデータ放送と同じ丸ゴシック (`/api/font/denpa-font.woff2`)。
+ * **canvas は画面の画素で敷く。** 全画面にすれば字もそのぶん細かく描き直す (`ResizeObserver`)。
  */
 
 import {
@@ -24,12 +23,12 @@ import {
 } from '#lib/caption-text.js';
 import { fitRect } from './paint';
 
-/** 字幕を焼いていたのと同じ字。手元ではイメージに無いので、端末の丸ゴシックへ落ちる */
-export const CAPTION_FONT = 'denpa-caption';
+/** データ放送と同じ Denpa Font。手元の開発ではイメージに無いので、端末の丸ゴシックへ落ちる */
+const CAPTION_FONT = 'denpa-caption';
 let fontLoading: Promise<void> | null = null;
 
 /** 字を読み込む。**1回だけ** (`url` は `/api/font/denpa-font.woff2`) */
-export function loadCaptionFont(url: string): Promise<void> {
+function loadCaptionFont(url: string): Promise<void> {
     if (fontLoading !== null) return fontLoading;
     const face = new FontFace(
         CAPTION_FONT,
@@ -116,7 +115,7 @@ function rgba(color: string): [number, number, number, number] {
 const transparent = (color: string) => color.endsWith('00');
 
 /** 点滅しているものがあるか */
-export function flashes(page: CaptionPage | null): boolean {
+function flashes(page: CaptionPage | null): boolean {
     return page?.runs.some((run) => run.flash === true) ?? false;
 }
 
@@ -125,7 +124,7 @@ export function flashes(page: CaptionPage | null): boolean {
  *
  * @param now 点滅の位相を決める時刻 (ms)
  */
-export function drawPage(ctx: CanvasRenderingContext2D, page: CaptionPage, now = 0): void {
+function drawPage(ctx: CanvasRenderingContext2D, page: CaptionPage, now = 0): void {
     const { width, height } = ctx.canvas;
     const sx = width / page.plane[0];
     const sy = height / page.plane[1];
@@ -207,7 +206,7 @@ function drawRun(
         }
         ctx.save();
         ctx.translate(x, y + baseline);
-        // 横は字の枠の幅に合わせて縮める (FreeType に幅と高さを別々に渡していたのと同じ)
+        // 横は字の枠の幅に合わせて縮める (libaribcaption が FreeType に幅と高さを別々に渡すのと同じ)
         ctx.scale(glyphW / fontPx, 1);
         if (run.stroke !== undefined) {
             ctx.lineJoin = 'round';

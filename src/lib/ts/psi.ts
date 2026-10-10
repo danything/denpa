@@ -217,8 +217,8 @@ function findSync(data: Uint8Array, from = 0, until = data.length): number {
  * ずれたままだと**以降ずっと1パケットも読めなくなる**ので、頭が 0x47 でなければ
  * 取り直す。普段は先頭が 0x47 なので、探しに行くのはずれたときだけ。
  *
- * **出すパケットは渡された塊の上の窓** (写しではない)。塊を丸ごと写していた頃は、
- * それだけで録画の処理の 1/3 を食っていた。塊の入れ物を使い回す呼び手が居る
+ * **出すパケットは渡された塊の上の窓** (写しではない。写すと録画の処理の 1/3 を食う)。
+ * 塊の入れ物を使い回す呼び手が居る
  * (`server/recorded-bml.ts`) ので、**次の `feed` より後まで持つなら写すこと**。
  * いまの読み手 (`SectionAssembler`・`PesDemuxer`) は溜めるときに写している
  */
@@ -319,9 +319,6 @@ export function pmtProgramInfo(section: Uint8Array): Uint8Array {
  * DSM-CC セクション (0x0D) を名乗るので、見分けるのは記述子のほう
  * (component_tag や application_signalling) です。だからここは**素通しで並べる
  * だけ**にして、選り分けは呼ぶ側に置いてあります。
- *
- * 同じ歩き方を4箇所 (データ放送・AIT・ロゴ・局の抜き出し) で書いていた頃は、
- * 番兵 (`section.length - 4` = CRC の手前) の書き方まで少しずつ違っていました
  */
 export function* pmtStreams(section: Uint8Array): Generator<[number, number, Uint8Array]> {
     if (section[0] !== TABLE_PMT || section.length < 16) return;

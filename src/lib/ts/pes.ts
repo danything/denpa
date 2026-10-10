@@ -9,8 +9,11 @@
  * DOM も WASM も触らないので、ここだけ単体で確かめられる (`pes.test.ts`)。
  */
 
+import { joinBytes } from './bytes';
 import { PACKET, PacketStream, PID_PAT, parsePat, pmtStreams, SectionAssembler } from './psi';
 
+/** PTS・PCR の刻み (90kHz)。取り決めの時刻もこの刻み (`docs/stream.md` §5.3) */
+export const CLOCK = 90_000;
 /** PTS の一周 (33ビット)。26.5 時間 */
 export const WRAP = 2 ** 33;
 
@@ -218,7 +221,7 @@ export class AdtsSplitter {
     feed(data: Uint8Array, pts: number | null): AdtsFrame[] {
         // 余りが無いときだけ PES の時刻に合わせ直す (余りがあれば頭のコマはその続き)
         if (pts !== null && this.rest.length === 0) this.next = pts;
-        const buffer = this.rest.length === 0 ? data : joinTwo(this.rest, data);
+        const buffer = this.rest.length === 0 ? data : joinBytes([this.rest, data]);
         const out: AdtsFrame[] = [];
         let at = 0;
         while (at + 7 <= buffer.length) {
@@ -234,7 +237,7 @@ export class AdtsSplitter {
             if (at + length > buffer.length) break;
             const rate = RATES[(buffer[at + 2]! >> 2) & 0x0f] ?? 48000;
             const channels = ((buffer[at + 2]! & 0x01) << 2) | (buffer[at + 3]! >> 6);
-            const duration = Math.round((1024 * 90_000) / rate);
+            const duration = Math.round((1024 * CLOCK) / rate);
             if (this.next !== null) {
                 out.push({
                     data: buffer.slice(at, at + length),
@@ -259,13 +262,6 @@ export class AdtsSplitter {
         this.rest = new Uint8Array(0);
         this.next = null;
     }
-}
-
-function joinTwo(a: Uint8Array, b: Uint8Array): Uint8Array {
-    const out = new Uint8Array(a.length + b.length);
-    out.set(a);
-    out.set(b, a.length);
-    return out;
 }
 
 /**

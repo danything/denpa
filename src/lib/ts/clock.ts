@@ -39,10 +39,9 @@
  * 永久には持たず、**30秒ごとに選び直します** (直前の区切りのぶんも残して比べる)
  */
 
+import { CLOCK } from './pes';
 import { PacketStream, PID_PAT, parsePat, SectionAssembler, TABLE_PMT } from './psi';
 
-/** PCR の刻み。映像の PTS と同じ */
-const CLOCK = 90_000;
 /** 33ビットで一周する長さ (秒)。26.5 時間ほど */
 const WRAP = 2 ** 33 / CLOCK;
 /** 組を選び直す区切り (ms)。水晶どうしのずれは 30秒で 1ms にも届かない */
