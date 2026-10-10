@@ -94,6 +94,14 @@ describe('ARIB 8単位符号', () => {
         expect(decodeAribText(bytes(0x7d, 0x4e, 0x7d, 0x77))).toBe('・　');
     });
 
+    test('4K8K 用の記号 (STD-B62 表 5-3) は区点が無いので表に無い', () => {
+        const uhd = [...ADDITIONAL].filter((c) => {
+            const cp = c.codePointAt(0)!;
+            return (cp >= 0x1f19b && cp <= 0x1f1ac) || cp === 0x1f23b;
+        });
+        expect(uhd).toEqual([]);
+    });
+
     test('改行。CR に続く LF は1回にまとめる', () => {
         expect(decodeAribText(bytes(0x46, 0x7c, 0x0d, 0x0a, 0x4b, 0x5c))).toBe('日\n本');
         expect(decodeAribText(bytes(0x46, 0x7c, 0x0a, 0x4b, 0x5c))).toBe('日\n本');
