@@ -370,10 +370,7 @@ function blockedPrograms(): Set<number> {
  * **同じ回は最初の放送だけ** (ルールの `dedupe`)。録らない番組 → 理由 (`episode.firstAirings`)。
  * 予約を立てるとき (`applyRules`) とルール画面の下見で同じものを使う
  */
-export function dedupeSkips<T extends Omit<Airing, 'type'> & { service_type: string }>(
-    list: T[],
-    at: number,
-) {
+function dedupeSkips<T extends Omit<Airing, 'type'> & { service_type: string }>(list: T[], at: number) {
     return firstAirings(
         list.map((program) => ({ ...program, type: program.service_type })),
         blockedPrograms(),

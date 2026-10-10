@@ -174,49 +174,34 @@ describe('実体との照合', () => {
 
     /*
      * 作業ファイルは `<入力>.…` に置く。生TSを残さない設定だと TS が消えたあとも
-     * 付き添いだけが居座り、録るたびに積もる (実機で9本 22MB。CM検出の道具が作っていた索引)
+     * 付き添いだけが居座り、録るたびに積もる
      */
     test('連れ合いの消えた作業ファイルを片付ける', () => {
         fresh();
         put(config.rawDir, 'のこる.m2ts');
-        put(config.rawDir, 'のこる.m2ts.sup');
-        put(config.rawDir, 'きえた.m2ts.sup');
+        put(config.rawDir, 'のこる.m2ts.chapters.txt');
+        put(config.rawDir, 'きえた.m2ts.ffconcat');
         put(config.rawDir, 'きえた.m2ts.chapters.txt');
 
         expect(reconcile().swept).toBe(2);
-        expect(files()).toEqual(['のこる.m2ts', 'のこる.m2ts.sup']);
+        expect(files()).toEqual(['のこる.m2ts', 'のこる.m2ts.chapters.txt']);
     });
 
-    test('動画の残っている NFO とポスターは残す', () => {
+    test('動画の残っているポスターとデータ放送は残す', () => {
         fresh();
         put(config.encodedDir, '番組/番組 - 1.mkv');
-        put(config.encodedDir, '番組/番組 - 1.nfo');
+        put(config.encodedDir, '番組/番組 - 1.bml.jsonl');
         put(config.encodedDir, '番組/番組 - 1-poster.jpg');
 
         expect(reconcile().swept).toBe(0);
     });
 
-    /*
-     * **もう使わない tvshow.nfo は、動画があっても片付ける。** 映画型に移して
-     * シリーズの覚え書きは書かなくなったので、連れ合いの動画を持たない付き添いとして掃く
-     */
-    test('使わなくなった tvshow.nfo は掃く', () => {
+    test('動画の消えたポスターとデータ放送は、シリーズごと片付ける', () => {
         fresh();
-        put(config.encodedDir, '番組/番組 - 1.mkv');
-        put(config.encodedDir, '番組/tvshow.nfo');
+        put(config.encodedDir, '番組/番組 - 1.bml.jsonl');
+        put(config.encodedDir, '番組/番組 - 1-poster.jpg');
 
-        expect(reconcile().swept).toBe(1);
-        expect(existsSync(join(config.encodedDir, '番組/tvshow.nfo'))).toBe(false);
-        expect(existsSync(join(config.encodedDir, '番組/番組 - 1.mkv'))).toBe(true);
-    });
-
-    test('動画の消えた NFO とサムネイルは、シリーズごと片付ける', () => {
-        fresh();
-        put(config.encodedDir, '番組/Season 2026/番組 - 1.nfo');
-        put(config.encodedDir, '番組/Season 2026/番組 - 1-thumb.jpg');
-        put(config.encodedDir, '番組/tvshow.nfo');
-
-        expect(reconcile().swept).toBe(3);
+        expect(reconcile().swept).toBe(2);
         expect(existsSync(join(config.encodedDir, '番組'))).toBe(false);
     });
 

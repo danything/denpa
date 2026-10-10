@@ -48,7 +48,6 @@ EPGStation の置き換えとして作ったもので、エンコード設定は
 | `src/lib/server/library.ts` | 保存先でのファイル配置 |
 | `src/lib/server/metadata.ts` | サムネイル (`-poster.jpg`) と、その置き場の決めごと |
 | `src/lib/server/files.ts` | 録画の削除と、実体とDBの突き合わせ |
-| `src/lib/server/relayout.ts` | 保存先を今の命名へ整える (起動時に1回。昔の `Season` フォルダや `.nfo` を片付ける) |
 | `src/lib/server/disk.ts` | 保存先の残量の見張り (閾値をまたいだときに1回だけ知らせる) |
 | `src/lib/server/fsx.ts` | ファイル操作の道具 (PVC をまたぐ移動・空フォルダを畳む) |
 | `src/lib/server/serve.ts` | ファイルの配信 (Range 対応) |

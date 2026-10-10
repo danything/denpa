@@ -1,5 +1,5 @@
 /**
- * ライブ視聴の字幕。**映像と同じ ffmpeg から放送の字幕をそのまま受け取り、denpa が解いて
+ * 字幕 (ライブ・録画)。**映像と同じ ffmpeg から放送の字幕をそのまま受け取り、denpa が解いて
  * 「字の配置」にして配る** ([caption-text.ts](../caption-text.ts))。描くのは受け側。
  *
  *     エージェント (MPEG-TS) → ffmpeg ┬→ fMP4 (映像・音声)              → WebSocket → MSE
@@ -7,13 +7,11 @@
  *                                                                        → WebSocket (0x22 JSON) → canvas
  *
  * 放送に絵は流れてこない — 乗っているのは文字と「どこに・どの大きさで・何色で」という
- * 指定で、テレビはそれを見て毎回自分で描いている。以前はその描画を libaribcaption に
- * させて (`-sub_type bitmap`) PNG を配っていたが、**置き場所を決めるところまではサーバで、
- * 描くのは受け側で**に分けた。画面の画素で描けるので全画面でも字が粗くならず、
+ * 指定で、テレビはそれを見て毎回自分で描いている。**置き場所を決めるところまではサーバで、
+ * 描くのは受け側で。** 画面の画素で描けるので全画面でも字が粗くならず、
  * 配る量は数百バイト/枚、サーバは絵を描かない (実測は docs/stream.md §5.2)。
- * 置き場所の計算は libaribcaption の解き手をそのまま写したので、絵と同じ所に出る。
  *
- * ## 映像と同じ ffmpeg で受ける。**それが時刻を揃える唯一の道だった**
+ * ## 映像と同じ ffmpeg で受ける。**それが時刻を揃える唯一の道**
  *
  * ffmpeg は入口で時刻を 0 に寄せ直すが、その寄せ幅は**プロセスごとに違う** —
  * 別々に起こした2本は焼き始めの鍵フレームが 0〜0.5秒 ずれる (装置を5通り作って
@@ -21,18 +19,12 @@
  * その時刻を 0 に詰め直す**ので、受け側から見た 0 がどの放送時刻かは外から知りようがない。
  * 1本にすれば入口の寄せが1回だけになって両方の出口に効く (実機で 1ms 以内で一致)。
  *
- * 字幕は**解かずに写す** (`-c:s copy`)。ffmpeg に字幕の復号器 (libaribcaption) は要らない。
- * 時刻は絵にしていた頃と同じものが付く — 同じ ffmpeg に絵と写しの両方を出させて突き合わせると、
- * 実機の録画で全部の字幕が同じ時刻 (0.838 / 2.840 / 7.811 …) だった。
+ * 字幕は**解かずに写す** (`-c:s copy`)。ffmpeg に字幕の復号器は要らない。
  *
  * ## 時刻は字幕と一緒に運ばせる
  *
- * 並べただけでは時刻が乗らない (以前 `showinfo` の行と PNG を組にしていて**数が合わず
- * ずれた**)。Matroska で受ける ([ts/mkv.ts](../ts/mkv.ts)) と時刻がコマそのものに付いてくる。
+ * Matroska で受ける ([ts/mkv.ts](../ts/mkv.ts)) と時刻がコマそのものに付いてくる。
  * ffmpeg の Matroska は ARIB の字幕を `S_ARIBSUB` としてそのまま入れられる。
- *
- * テレビのアプリ (denpa-tv) も 0.16.0 から文字の配置を描くので、絵 (PNG。種別 0x20) を
- * 配る道は外した。
  */
 
 import { LANGUAGE } from '#lib/arib.js';
@@ -40,6 +32,7 @@ import { CAPTION_TEXT_VERSION, type CaptionPage, type CaptionPages } from '#lib/
 import { type CaptionTrack, CHANNEL, type Notice } from '#lib/live.js';
 import { B24CaptionDecoder } from '#lib/ts/b24caption.js';
 import { type MkvFrame, MkvSplitter } from '#lib/ts/mkv.js';
+import { CLOCK } from '#lib/ts/pes.js';
 
 /** 失敗を言っている行。**それ以外は入り口の説明なので捨てる** */
 const TROUBLE = /error|Error|failed|Failed|Cannot|Unable|No such|Invalid data/;
@@ -47,10 +40,9 @@ const TROUBLE = /error|Error|failed|Failed|Cannot|Unable|No such|Invalid data/;
 /**
  * 放送の欠けにいちいち言われるぶん。**残さない。**
  *
- * 電波の欠けは日常的にあり、復号器はそのたびに「直した」「捨てた」を喋る。
- * `-loglevel error` で黙らせていた頃は見えなかったが、**選べる字幕を入口の
- * 見出しから拾うために info まで開けた**ので、そのまま流れてくるようになった。
- * 実機の弱い局では毎秒何行も出て、**本当の失敗がその中に埋もれる**。
+ * 電波の欠けは日常的にあり、復号器はそのたびに「直した」「捨てた」を喋る
+ * (選べる字幕を入口の見出しから拾うためにログは info まで開けてある)。
+ * 弱い局では毎秒何行も出て、**本当の失敗がその中に埋もれる**。
  *
  * 消すのは「1パケットぶんの取りこぼし」だけ。組み立てや符号器の失敗
  * (`Error opening output`, `Error binding filtergraph`) は残る
@@ -150,9 +142,7 @@ const STREAM = /^\s*Stream #0:(\d+)\[0x[0-9a-f]+\](?:\((\w+)\))?: (\w+):/;
 /**
  * ffmpeg の入口の見出しから、その局の字幕ストリームを拾う。
  *
- * **字幕が1枚も来ていなくても、あることは分かる。** 届いてから画面に
- * 切り替えを出していた頃は、**間隔の空く番組を開くとボタンが出なかった**
- * (実機の「みんなの手話」。番組表には [字] と出ているのに出ない)。
+ * **字幕が1枚も来ていなくても、あることは分かる** (字幕の間隔が空く番組でも切り替えを出せる)。
  *
  * ついでに**何本あるか**も分かる。言語が複数ある放送はここで2本になる。
  */
@@ -192,9 +182,6 @@ function label(index: number, lang: string | null): string {
     return `${head} (${LANGUAGE[lang] ?? lang})`;
 }
 
-/** 90kHz。取り決めの時刻はこの刻み (stream.md §5.3) */
-const CLOCK = 90;
-
 /** 文字の配置の1枚と、出す時刻 (ミリ秒。器のコマの時刻そのまま) */
 export interface CaptionShown {
     at: number;
@@ -233,7 +220,7 @@ export class CaptionText {
 export function textFrame(shown: CaptionShown): { kind: number; pts: bigint; data: Uint8Array } {
     return {
         kind: CHANNEL.captionText,
-        pts: BigInt(Math.max(0, Math.round(shown.at * CLOCK))),
+        pts: BigInt(Math.max(0, Math.round((shown.at * CLOCK) / 1000))),
         data: new TextEncoder().encode(JSON.stringify(shown.page)),
     };
 }
@@ -249,8 +236,7 @@ export function textFrame(shown: CaptionShown): { kind: number; pts: bigint; dat
  *
  * **長さを付けるのは、HTTP には区切りが無いから。** WebSocket はこまの区切りを運んでくれるが、
  * チャンク転送のチャンクの区切りは受け側 (HttpURLConnection など) から見えない。
- * Server-Sent Events にしなかったのは、字幕を絵で送っていた頃の名残 (PNG を base64 にすると 1/3 太る)。
- * いまも行に割って読む手間が要らないぶん、こちらのほうが軽い
+ * Server-Sent Events より、行に割って読む手間が要らないぶん軽い
  */
 export function appFrame(kind: number, pts: bigint, payload: Uint8Array): Uint8Array {
     const out = new Uint8Array(4 + 1 + 8 + payload.length);

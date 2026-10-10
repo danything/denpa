@@ -36,11 +36,7 @@ export interface Settings {
     hwAllow: HwAllow;
     /** CMの扱い。off / chapter / cut */
     cmCut: CmMode;
-    /**
-     * エンコードするか。**コーデックの選択から決まる** (`none` 以外なら する)。
-     * 別のチェックとして持っていた頃は、外したときにコーデックの選択だけが残り、
-     * どちらが効いているのか画面から読めなかった
-     */
+    /** エンコードするか。**コーデックの選択から決まる** (`none` 以外なら する) */
     encode: boolean;
     /** エンコードしたあとも生TSを残すか */
     keepOriginal: boolean;
