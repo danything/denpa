@@ -391,6 +391,30 @@ export function inputSkip(seek: number | null, videoStart: number | undefined): 
 }
 
 /**
+ * 字幕トラックの渡し方 (`input` は .sup の入力の番号)。字幕の作り方は `prepareCaptions` と2つで1組
+ */
+function captionArgs(input: number, title = '字幕'): string[] {
+    return [
+        // 名前は放送が名乗っているものを使う (「字幕 (日本語)」)。無ければ「字幕」
+        '-map',
+        `${input}:s:0?`,
+        '-c:s:0',
+        'copy',
+        '-metadata:s:s:0',
+        `title=${title}`,
+        /*
+         * 言語も付ける。default の印だけだと、プレイヤーの字幕自動選択
+         * (「端末の言語に合う字幕を出す」設定) が言語不明の札を跳ばすことがある。
+         * 放送の字幕 (ARIB) は日本語しか来ない
+         */
+        '-metadata:s:s:0',
+        'language=jpn',
+        '-disposition:s:0',
+        'default',
+    ];
+}
+
+/**
  * ffmpeg の引数。元は EPGStation 時代の enc.js で、各フラグの理由はコメントに
  * 残してある (インタレ解除、デュアルモノ分離)。字幕は焼き込まず、別に作った PGS を入れる。
  *
@@ -497,18 +521,7 @@ export function buildArgs(
      * (実機のテレビ VLC で、字幕を選ぶと固まる症状の切り分けとして直した)。
      * 指定は `s:0` (字幕の0番) 型なので、並べ替えてもここは変わらない
      */
-    if (pgs >= 0) {
-        // 名前は放送が名乗っているものを使う (「字幕 (日本語)」)。無ければ「字幕」
-        const title = options.captionTitle ?? '字幕';
-        args.push('-map', `${pgs}:s:0?`, '-c:s:0', 'copy', '-metadata:s:s:0', `title=${title}`);
-        /*
-         * 言語も付ける。default の印だけだと、プレイヤーの字幕自動選択
-         * (「端末の言語に合う字幕を出す」設定) が言語不明の札を跳ばすことがある。
-         * 放送の字幕 (ARIB) は日本語しか来ない
-         */
-        args.push('-metadata:s:s:0', 'language=jpn');
-        args.push('-disposition:s:0', 'default');
-    }
+    if (pgs >= 0) args.push(...captionArgs(pgs, options.captionTitle));
 
     /*
      * **音声にも名前を付ける** (`arib.audioTitles`)。番組表と同じ言い方にするので、
@@ -1066,6 +1079,39 @@ function finishCanceled(jobId: number, working: string | null): void {
     emit('recordings');
 }
 
+/**
+ * **字幕トラックを用意する。** 字幕の作り方はここと `captionArgs` (焼く ffmpeg への渡し方) の2つに寄せてある。
+ *
+ * いまは放送どおりに描いた字幕を PGS にして (`subtitle.buildPgs`)、焼くときに copy で入れる。
+ * ffmpeg には PGS の符号器が無いので denpa が書く。焼くほうを dvdsub だけにしていた頃は1枚4色までで、
+ * 実測230色の字幕から縁のなめらかさと色分けが落ちていた。作れなければ黙って諦める (字幕トラックが
+ * 1本減るだけ)。CM を切るときも CM ごと作り、焼いたものと一緒に切る (`cm-cut.ts`)
+ */
+async function prepareCaptions(
+    jobId: number,
+    source: string,
+    options: EncodeOptions,
+    formatStart: number,
+    signal: AbortSignal,
+): Promise<void> {
+    setPhase(jobId, 'encode', '字幕を画像にしています');
+    /*
+     * 字幕の 0 秒を**焼き上がりの 0 秒に合わせる。** 焼くほうは入れ物の始まりから
+     * 数え直したうえで、映像が出るまで (`headSkip`) を捨てる。同じところを引く
+     */
+    const startAt = formatStart + headSkip(options.videoStart);
+    const pgs = await buildPgs(source, options.canvasSize, startAt, signal);
+    if (pgs === null) return;
+    options.pgsFile = pgs.path;
+    // 名前も放送が名乗っているものにする (「字幕 (日本語)」)
+    options.captionTitle = pgs.label;
+    orm()
+        .update(encodeJobs)
+        .set({ log: `字幕 ${pgs.captions} 枚を PGS にしました` })
+        .where(eq(encodeJobs.id, jobId))
+        .run();
+}
+
 async function runJob(jobId: number): Promise<void> {
     const controller = new AbortController();
     aborts.set(jobId, controller);
@@ -1216,31 +1262,8 @@ async function runJob(jobId: number): Promise<void> {
         }
     }
 
-    /*
-     * 放送どおりに描いた字幕を PGS にしておく。
-     *
-     * ffmpeg には PGS の符号器が無いので denpa が書く。焼くほうを dvdsub だけに
-     * していた頃は1枚4色までで、実測230色の字幕から縁のなめらかさと色分けが落ちていた。
-     * 作れなければ黙って諦める (字幕トラックが1本減るだけ)。CM を切るときも CM ごと作り、
-     * 焼いたものと一緒に切る (`cm-cut.ts`)
-     */
-    setPhase(jobId, 'encode', '字幕を画像にしています');
-    /*
-     * 字幕の 0 秒を**焼き上がりの 0 秒に合わせる。** 焼くほうは入れ物の始まりから
-     * 数え直したうえで、映像が出るまで (`headSkip`) を捨てる。同じところを引く
-     */
-    const startAt = measured.formatStart + headSkip(encodeOptions.videoStart);
-    const pgs = await buildPgs(sourceTs, encodeOptions.canvasSize, startAt, signal);
-    if (pgs !== null) {
-        encodeOptions.pgsFile = pgs.path;
-        // 名前も放送が名乗っているものにする (「字幕 (日本語)」)
-        encodeOptions.captionTitle = pgs.label;
-        orm()
-            .update(encodeJobs)
-            .set({ log: `字幕 ${pgs.captions} 枚を PGS にしました` })
-            .where(eq(encodeJobs.id, jobId))
-            .run();
-    }
+    // 字幕トラックを用意する (作り方は `prepareCaptions` に寄せてある)
+    await prepareCaptions(jobId, sourceTs, encodeOptions, measured.formatStart, signal);
 
     if (canceled.has(jobId)) {
         discardWork();

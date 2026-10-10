@@ -1,4 +1,5 @@
-import { existsSync } from 'node:fs';
+import { existsSync, readdirSync } from 'node:fs';
+import { dirname } from 'node:path';
 import {
     cellOf,
     expect,
@@ -195,12 +196,13 @@ test.describe('CMの実カット', () => {
         const recording = page.locator(recordingRow);
         expect(await recording.getAttribute('data-cm-ranges')).toContain('300');
 
-        // 字幕はエンコードの前にTSを切ることで残している。
+        // 字幕も CM ごと焼いて、焼いたものと一緒に切る (cm-cut.ts)。
         // フィルタで切っていた頃は -sn で落とすしかなかった
         const videoPath = (await recording.getAttribute('data-library-path')) ?? '';
         expect(videoPath).toContain('.mkv');
-        // 切るための作業ファイルは片付いていること
-        expect(existsSync(`${videoPath.replace(/\.mkv$/, '')}.cut.m2ts`)).toBe(false);
+        // 切るための作業ファイル (焼いたものの隣) は片付いていること。偽の ffmpeg では切れずに CM ごと置かれる
+        // (ffprobe が無くキーフレームが読めない) が、片付けは同じ
+        expect(readdirSync(dirname(videoPath)).filter((name) => /\.(post|ffconcat)$/.test(name))).toEqual([]);
     });
 });
 
