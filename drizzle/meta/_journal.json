@@ -71,6 +71,13 @@
       "when": 1791610797959,
       "tag": "0009_cm-redo",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "6",
+      "when": 1791639801740,
+      "tag": "0010_drop-webhook-name",
+      "breakpoints": true
     }
   ]
 }

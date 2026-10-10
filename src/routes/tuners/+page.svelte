@@ -1,5 +1,7 @@
 <script lang="ts">
     import { submitting } from '#lib/actions.js';
+    import ActionButton from '#lib/components/ActionButton.svelte';
+    import JobProgress from '#lib/components/JobProgress.svelte';
     import LearnedLogo from '#lib/components/LearnedLogo.svelte';
     import Toasts, { errorNotice, type Notice } from '#lib/components/Toasts.svelte';
     import { SERVICE_TYPE_LABEL, STATE_LABEL as SHARED_STATE_LABEL, splitReaderName } from '#lib/format.js';
@@ -30,9 +32,6 @@
     const TYPES = ['GR', 'BS', 'CS'] as const;
     /** スキャンの状態の呼び名。共通のものに、スキャンだけの2つを足す */
     const STATE_LABEL: Record<string, string> = { ...SHARED_STATE_LABEL, canceled: '中断', idle: '待機中' };
-
-    /** 進捗。総数が分かっているので割合で出せる */
-    const progress = $derived(scan.total > 0 ? scan.scanned / scan.total : 0);
 
     /*
      * 物理チャンネルと、そこに乗っている局。**denpa 自身のDBから来る。**
@@ -102,16 +101,14 @@
                     譲るので、何か動いていると番組表がなかなか埋まらない。
                     押されている間は録画以外を蹴って、全チューナーで回る
                 -->
-                <form method="POST" action="?/collectNow" use:submitting>
-                    <button
-                        type="submit"
-                        class="small secondary"
-                        disabled={data.collect.boosted}
-                        data-testid="epg-collect-now"
-                    >
-                        {data.collect.boosted ? '集めています…' : '番組表をいますぐ集める'}
-                    </button>
-                </form>
+                <ActionButton
+                    action="?/collectNow"
+                    class="small secondary"
+                    disabled={data.collect.boosted}
+                    testid="epg-collect-now"
+                >
+                    {data.collect.boosted ? '集めています…' : '番組表をいますぐ集める'}
+                </ActionButton>
             </div>
             {#if data.collect.running}
                 <!-- 1チャンネルに数分かかる。黙っていると止まって見える -->
@@ -301,10 +298,7 @@
                     </div>
 
                     <!-- 総当たりなので何分かかるか分かりにくい。どこまで進んだかを出す -->
-                    <progress value={progress} max="1"></progress>
-                    <div class="tiny muted" data-testid="scan-count">
-                        {scan.scanned} / {scan.total} チャンネル
-                    </div>
+                    <JobProgress done={scan.scanned} total={scan.total} unit="チャンネル" testid="scan-count" />
 
                     {#if scan.error}
                         <div class="notice error">{scan.error}</div>
@@ -636,11 +630,9 @@
                     -->
                     {#if data.logos.pending > 0}
                         <dd>
-                            <form method="POST" action="?/logoSweep" use:submitting>
-                                <button type="submit" class="xs secondary" data-testid="logo-sweep">
-                                    {data.logoSweep.running ? '取得中…' : 'いますぐ取りに行く'}
-                                </button>
-                            </form>
+                            <ActionButton action="?/logoSweep" class="xs secondary" testid="logo-sweep">
+                                {data.logoSweep.running ? '取得中…' : 'いますぐ取りに行く'}
+                            </ActionButton>
                         </dd>
                     {/if}
                     <dd class="full note-block">
@@ -682,16 +674,12 @@
                     -->
                     {#if data.logoSweep.startedAt !== null}
                         <dd class="full sweep" data-testid="logo-sweep-progress">
-                            <progress value={data.logoSweep.done} max={Math.max(1, data.logoSweep.total)}></progress>
-                            <div class="tiny soft">
-                                <span>
-                                    {data.logoSweep.done} / {data.logoSweep.total} チャンネル
-                                </span>
+                            <JobProgress done={data.logoSweep.done} total={data.logoSweep.total} unit="チャンネル">
                                 ・ 取得 <strong>{data.logoSweep.found} 局</strong>
                                 {#if data.logoSweep.channels.length > 0}
                                     ・ 受信中 {data.logoSweep.channels.join(', ')}
                                 {/if}
-                            </div>
+                            </JobProgress>
                             {#if data.logoSweep.message !== ''}
                                 <div class="tiny muted" data-testid="logo-sweep-done">
                                     {data.logoSweep.message}

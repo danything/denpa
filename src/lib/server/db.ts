@@ -15,9 +15,15 @@ import * as schema from './schema';
  * 要るようになってしまう(実際、CIで /app を掘ろうとして落ちた)。
  */
 let instance: Database | null = null;
+/**
+ * 開いた置き場。**置き場が変われば開き直す** — 試験はファイルごとに `config.dbPath` を
+ * 一時ファイルへ差し替える (`bun test` は全部を1つのプロセスで走らせる)。最初に開いた
+ * 1本を使い回していた頃は、前のファイルが残した行が次のファイルの試験に混ざっていた
+ */
+let openedPath = '';
 
 function database(): Database {
-    if (instance !== null) return instance;
+    if (instance !== null && openedPath === config.dbPath) return instance;
 
     mkdirSync(dirname(config.dbPath), { recursive: true });
     const db = new Database(config.dbPath, { create: true });
@@ -29,6 +35,7 @@ function database(): Database {
     bootstrap(db);
 
     instance = db;
+    openedPath = config.dbPath;
     return instance;
 }
 
@@ -76,11 +83,12 @@ function verify(db: Database): void {
     }
 }
 
-function wrap() {
-    return drizzle({ client: database(), schema });
+function wrap(client: Database) {
+    return drizzle({ client, schema });
 }
 
 let typed: ReturnType<typeof wrap> | null = null;
+let typedFor: Database | null = null;
 
 /**
  * 同じ接続を drizzle で包んだもの。**型の付いた読み書きはこちらから。**
@@ -91,8 +99,11 @@ let typed: ReturnType<typeof wrap> | null = null;
  * 挟む。生の SQL の文字列に型を付けて返す口は置かない (キャストになるので)
  */
 export function orm() {
-    if (typed !== null) return typed;
-    typed = wrap();
+    const client = database();
+    if (typed === null || typedFor !== client) {
+        typed = wrap(client);
+        typedFor = client;
+    }
     return typed;
 }
 

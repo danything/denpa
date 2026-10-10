@@ -16,10 +16,7 @@ const dir = mkdtempSync(join(tmpdir(), 'denpa-appcap-'));
 
 const { config } = await import('./config');
 config.dbPath = join(dir, 'denpa.db');
-/*
- * **ほかの試験と同じプロセスで走る。** DB は先に開かれていればそちらに相乗りする (番号はほかと被らない
- * ものを使い、先に消す)。ffmpeg の差し替えは終わったら戻す
- */
+/* **ほかの試験と同じプロセスで走る。** ffmpeg の差し替えは終わったら戻す */
 const realFfmpeg = config.ffmpeg;
 const realAgent = config.agentUrl;
 /*

@@ -1,6 +1,9 @@
 <script lang="ts">
     import { submitting } from '#lib/actions.js';
     import { GENRE_TREE, genreName } from '#lib/arib.js';
+    import { arming } from '#lib/arming.svelte.js';
+    import ActionButton from '#lib/components/ActionButton.svelte';
+    import ArmedDelete from '#lib/components/ArmedDelete.svelte';
     import ProgramDetail from '#lib/components/ProgramDetail.svelte';
     import Toasts, { errorNotice, type Notice } from '#lib/components/Toasts.svelte';
     import { programDetail } from '#lib/detail.svelte.js';
@@ -81,6 +84,8 @@
      * 詳細にしか無く、確かめるには番組表を別に開いて探し直すことになっていた
      */
     const detail = programDetail();
+    /** ルールの削除は2回押させる (録画・通知先と同じ。[arming.svelte.ts](../../lib/arming.svelte.ts)) */
+    const deleting = arming('[data-testid^="rule-delete"]');
     /**
      * 詳細を開いている行そのもの。**`detail.current` とは別に持つ。**
      *
@@ -186,6 +191,8 @@
         return list;
     });
 </script>
+
+<svelte:window onclick={deleting.stand} />
 
 <!--
     **左に書く欄、右に一覧。** 縦に積んでいた頃は、条件をいじるたびに
@@ -661,12 +668,14 @@
                                         {/if}
                                     </div>
                                     {#if program.reservation_id !== null}
-                                        <form method="POST" action="?/cancelReservation" use:submitting>
-                                            <input type="hidden" name="reservationId" value={program.reservation_id} />
-                                            <button type="submit" class="xs outline danger" data-testid="rule-pending-cancel">
-                                                取消
-                                            </button>
-                                        </form>
+                                        <ActionButton
+                                            action="?/cancelReservation"
+                                            fields={{ reservationId: program.reservation_id }}
+                                            class="xs outline danger"
+                                            testid="rule-pending-cancel"
+                                        >
+                                            取消
+                                        </ActionButton>
                                     {/if}
                                 </li>
                             {/each}
@@ -732,18 +741,11 @@
                         </div>
                         <div class="cluster">
                             <a class="button small secondary" href={resolve(`rules?edit=${rule.id}`)} data-testid="rule-edit">編集</a>
-                            <form method="POST" action="?/toggle" use:submitting>
-                                <input type="hidden" name="id" value={rule.id} />
-                                <button type="submit" class="small secondary" data-testid="rule-toggle">
-                                    {rule.enabled ? '無効化' : '有効化'}
-                                </button>
-                            </form>
-                            <form method="POST" action="?/delete" use:submitting>
-                                <input type="hidden" name="id" value={rule.id} />
-                                <button type="submit" class="small outline danger" data-testid="rule-delete">
-                                    削除
-                                </button>
-                            </form>
+                            <ActionButton action="?/toggle" fields={{ id: rule.id }} class="small secondary" testid="rule-toggle">
+                                {rule.enabled ? '無効化' : '有効化'}
+                            </ActionButton>
+                            <!-- 押し間違い防止に2回押させる (録画の削除と同じ) -->
+                            <ArmedDelete {deleting} armKey={rule.id} fields={{ id: rule.id }} class="small" testid="rule-delete" />
                         </div>
                     </div>
                 {:else}
@@ -1076,7 +1078,7 @@
         border-radius: 0.25rem;
     }
     .preview-open:hover {
-        background: color-mix(in srgb, var(--dp-base-200) 60%, transparent);
+        background: var(--dp-hover);
     }
     /* 録らない行 (同じ回の2回目以降)。消さずに出すが、録るものより沈める */
     .preview-row.skipped .preview-open {

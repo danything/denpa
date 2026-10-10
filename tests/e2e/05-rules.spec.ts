@@ -79,6 +79,7 @@ test.describe('自動予約ルール', () => {
         await expect(page.getByTestId('rule-row').first()).toContainText('無効');
 
         await page.getByTestId('rule-row').first().getByTestId('rule-delete').click();
+        await page.getByTestId('rule-delete-confirm').click();
         await expect(page.getByTestId('rule-row')).toHaveCount(0);
 
         // 後続に影響しないよう、このルールが作った予約は片付ける

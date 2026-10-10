@@ -167,8 +167,6 @@ export const shareLinks = sqliteTable('share_links', {
 /** 録画の節目を外部に飛ばす先。Discord や Slack の Incoming Webhook を想定している */
 export const webhooks = sqliteTable('webhooks', {
     id: integer('id').primaryKey({ autoIncrement: true }),
-    /** 名前は廃止。既存の行を消さないので列だけ残してある */
-    name: text('name').notNull().default(''),
     url: text('url').notNull(),
     /** JSON 配列。空配列は「全部」 */
     events: json('events', strings).notNull(),

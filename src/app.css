@@ -47,6 +47,12 @@
     --dp-warn: #c79400; /* amber-350 */
     --dp-info: #058686; /* cyan-500 */
     --dp-error: var(--dp-rec);
+    /*
+     * 指を乗せた行・選んでいる項目の地。**押せる行はどこでもこの1色** (一覧の行・見出し・
+     * ルールのプレビュー・番組表のマス・ライブの局・メニュー)。画面ごとに3通りあった頃は、
+     * 同じ「押せる」が画面を移ると違う濃さで返ってきた
+     */
+    --dp-hover: var(--dp-base-200);
 }
 /*
  * テーマごとの色。**値は Pico の色見本 (pico.colors.css の 50〜950 の段) から選ぶ。**
@@ -752,21 +758,5 @@ button[aria-busy="true"]::after {
     outline: none;
 }
 [data-dropdown-menu-item][data-highlighted] {
-    background: var(--dp-base-200);
-}
-
-/*
- * 再生位置の帯。Pico の range は溝を1色で塗るだけで、どこまで進んだかが見えない。
- * 進んだぶん (--fill、画面側で 0〜100% を渡す) を主の色で塗る。Firefox は ::-moz-range-progress が持つ
- */
-input[type="range"].fill::-webkit-slider-runnable-track {
-    background:
-        linear-gradient(var(--pico-primary-background), var(--pico-primary-background)) 0 0 / var(--fill, 0%)
-        100% no-repeat,
-        var(--pico-range-border-color);
-}
-input[type="range"].fill::-moz-range-progress {
-    height: var(--pico-range-height);
-    border-radius: var(--pico-border-radius);
-    background: var(--pico-primary-background);
+    background: var(--dp-hover);
 }

@@ -303,6 +303,7 @@ export async function clearRules(page: Page): Promise<void> {
         const count = await rows.count();
         if (count === 0) break;
         await page.getByTestId('rule-delete').first().click();
+        await page.getByTestId('rule-delete-confirm').click();
         await expect(rows).toHaveCount(count - 1);
     }
     await expect(rows).toHaveCount(0);

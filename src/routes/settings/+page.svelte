@@ -1,5 +1,9 @@
 <script lang="ts">
     import { submitting } from '#lib/actions.js';
+    import { arming } from '#lib/arming.svelte.js';
+    import ActionButton from '#lib/components/ActionButton.svelte';
+    import ArmedDelete from '#lib/components/ArmedDelete.svelte';
+    import JobProgress from '#lib/components/JobProgress.svelte';
     import Toasts, { errorNotice, type Notice } from '#lib/components/Toasts.svelte';
     import { dateTime, stateLabel } from '#lib/format.js';
     import { CODEC_LABEL, HW_CODECS, HW_KIND_LABEL, HW_KINDS, hwAllowed } from '#lib/hw.js';
@@ -51,7 +55,11 @@
         await options.update({ reset: false });
     };
 
+    /** 通知先の削除は2回押させる (録画・ルールと同じ。[arming.svelte.ts](../../lib/arming.svelte.ts)) */
+    const deleting = arming('[data-testid^="webhook-delete"]');
 </script>
+
+<svelte:window onclick={deleting.stand} />
 
 {#snippet checkRow(
     name: string,
@@ -227,12 +235,9 @@
                                 ペアリング {dateTime(device.created_at)} ・ 最後に使った
                                 {device.last_used_at === null ? 'まだ' : dateTime(device.last_used_at)}
                             </div>
-                            <form method="POST" action="?/revokeDevice" use:submitting>
-                                <input type="hidden" name="id" value={device.id} />
-                                <button type="submit" class="xs outline danger" data-testid="device-revoke">
-                                    取り消す
-                                </button>
-                            </form>
+                            <ActionButton action="?/revokeDevice" fields={{ id: device.id }} class="xs outline danger" testid="device-revoke">
+                                取り消す
+                            </ActionButton>
                         </div>
                     {/each}
                 </div>
@@ -306,22 +311,21 @@
                                 {/if}
                             </div>
                             <div class="cluster">
-                                <form method="POST" action="?/testWebhook" use:submitting>
-                                    <input type="hidden" name="id" value={webhook.id} />
-                                    <button type="submit" class="xs secondary" data-testid="webhook-test">テスト送信</button>
-                                </form>
-                                <form method="POST" action="?/toggleWebhook" use:submitting>
-                                    <input type="hidden" name="id" value={webhook.id} />
-                                    <button type="submit" class="xs secondary" data-testid="webhook-toggle">
-                                        {webhook.enabled ? '無効化' : '有効化'}
-                                    </button>
-                                </form>
-                                <form method="POST" action="?/deleteWebhook" use:submitting>
-                                    <input type="hidden" name="id" value={webhook.id} />
-                                    <button type="submit" class="xs outline danger" data-testid="webhook-delete">
-                                        削除
-                                    </button>
-                                </form>
+                                <ActionButton action="?/testWebhook" fields={{ id: webhook.id }} class="xs secondary" testid="webhook-test">
+                                    テスト送信
+                                </ActionButton>
+                                <ActionButton action="?/toggleWebhook" fields={{ id: webhook.id }} class="xs secondary" testid="webhook-toggle">
+                                    {webhook.enabled ? '無効化' : '有効化'}
+                                </ActionButton>
+                                <!-- 押し間違い防止に2回押させる (録画・ルールの削除と同じ) -->
+                                <ArmedDelete
+                                    {deleting}
+                                    armKey={webhook.id}
+                                    action="?/deleteWebhook"
+                                    fields={{ id: webhook.id }}
+                                    class="xs"
+                                    testid="webhook-delete"
+                                />
                             </div>
                         </div>
                     {/each}
@@ -553,11 +557,9 @@
                     </div>
 
                     {#if migrate.total > 0}
-                        <progress value={done} max={migrate.total}></progress>
-                        <div class="hint">
-                            {done} / {migrate.total}
+                        <JobProgress {done} total={migrate.total}>
                             {#if migrate.current}— {migrate.current}{/if}
-                        </div>
+                        </JobProgress>
                     {/if}
 
                     {#if migrate.error}

@@ -168,6 +168,8 @@ test.describe('録画とエンコード', () => {
         // 後続のテストに通知先を持ち越さない
         await goto(page, '/settings');
         await page.getByTestId('webhook-delete').first().click();
+        await page.getByTestId('webhook-delete-confirm').click();
+        await expect(page.getByTestId('webhook-delete-confirm')).toHaveCount(0);
     });
 });
 

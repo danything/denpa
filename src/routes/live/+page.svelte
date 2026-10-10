@@ -8,6 +8,7 @@
     import CodecMenu from '#lib/components/player/CodecMenu.svelte';
     import ControlBar from '#lib/components/player/ControlBar.svelte';
     import ControlButton from '#lib/components/player/ControlButton.svelte';
+    import ControlRow from '#lib/components/player/ControlRow.svelte';
     import { centerTap } from '#lib/components/player/center-tap.js';
     import { playerControls } from '#lib/components/player/controls.svelte.js';
     import DataBroadcast, { pressD } from '#lib/components/player/DataBroadcast.svelte';
@@ -33,21 +34,23 @@
     import MediaStack from '#lib/components/player/MediaStack.svelte';
     import MoreButton from '#lib/components/player/MoreButton.svelte';
     import OverlayMenu from '#lib/components/player/OverlayMenu.svelte';
+    import PlayerLayout from '#lib/components/player/PlayerLayout.svelte';
     import PlayerStage from '#lib/components/player/PlayerStage.svelte';
     import PlayerVeil from '#lib/components/player/PlayerVeil.svelte';
     import { pictureInPicture } from '#lib/components/player/pip.svelte.js';
     import Remote from '#lib/components/player/Remote.svelte';
+    import SeekBar from '#lib/components/player/SeekBar.svelte';
     import SpeedMenu from '#lib/components/player/SpeedMenu.svelte';
     import StageNote from '#lib/components/player/StageNote.svelte';
     import StageTail from '#lib/components/player/StageTail.svelte';
     import { snapshotter } from '#lib/components/player/shot.svelte.js';
     import { grabbedFrame, videoFrame } from '#lib/components/player/snapshot.js';
+    import ServiceLogo from '#lib/components/ServiceLogo.svelte';
     import Toasts, { errorNotice, type Notice } from '#lib/components/Toasts.svelte';
     import { programDetail } from '#lib/detail.svelte.js';
     import { SERVICE_TYPE_LABEL } from '#lib/format.js';
     import { livePlayer } from '#lib/live-player.svelte.js';
     import { FLOOR } from '#lib/ts/pacing.js';
-    import { resolve } from '$app/paths';
     import type { LiveChannel } from './+page.server';
 
     let { data, form } = $props();
@@ -274,13 +277,9 @@
     映像を見ながら選ぶものなので、ページが動くと絵が画面から出ていく。
     動くのは右の一覧だけ。
 
-    **二段組にする幅は観る画面 (`/watch/<id>`) と同じ `md` (768px)。** 映像を左、
-    一覧を右に置く形は同じなのに、こちらだけ 1024px からにしていた頃は、
-    **同じ幅で絵の大きさが変わって**いた (縦のiPad 820px で、ライブ 772px に
-    対して観る画面 436px)
+    外枠は観る画面・追っかけと同じ (PlayerLayout)
 -->
-<div class="live" data-testid="live">
-    <div class="live-main">
+<PlayerLayout testid="live">
         <!-- 映像は高さのほうを上限にする。横幅いっぱいにすると縦がはみ出す -->
         <!--
             **舞台の配線は3画面で共通** ([PlayerStage.svelte](../../lib/components/player/PlayerStage.svelte))。
@@ -383,30 +382,22 @@
                         「勝手に戻っている」としか映らない
                     -->
                     <!--
-                        操作の色は `input[type=range].fill` (app.css)。ライブ中の赤は「ライブ」ボタンが言う。
+                        帯は3画面共通 (SeekBar)。ライブ中の赤は「ライブ」ボタンが言う。
                         **生で見ている間は出さない** — 遡れるほど持っていない (止めて再開は放送の今から)
                     -->
                     {#if !player.raw}
-                    <input
-                        type="range"
-                        class="seek fill"
-                        style="--fill: {player.newest > player.oldest
-                            ? (((player.live ? player.newest : player.position) - player.oldest) /
-                                  (player.newest - player.oldest)) *
-                              100
-                            : 100}%"
-                        min={player.oldest}
-                        max={player.newest}
-                        step="0.1"
-                        value={player.live ? player.newest : player.position}
-                        oninput={(event) => player.seek(Number(event.currentTarget.value))}
-                        aria-label="再生位置"
-                        data-testid="live-seek"
-                    />
+                        <SeekBar
+                            value={player.live ? player.newest : player.position}
+                            min={player.oldest}
+                            max={player.newest}
+                            step={0.1}
+                            onseek={(at) => player.seek(at)}
+                            testid="live-seek"
+                        />
                     {/if}
 
                     <!-- **並びは観る画面と同じ。** 再生・音・字幕が左から順で、全画面が右端 -->
-                    <div class="cluster control-row">
+                    <ControlRow>
                         <ControlButton
                             icon={player.paused ? PLAY : PAUSE}
                             label={player.paused ? '再生' : '一時停止'}
@@ -656,7 +647,7 @@
                         {/if}
 
                         <StageTail prefix="live" {background} {pip} {fullscreen} />
-                    </div>
+                    </ControlRow>
                 </ControlBar>
             {/if}
 
@@ -712,7 +703,6 @@
             {/if}
             {/snippet}
         </PlayerStage>
-    </div>
 
     <!--
         **右の列。** 幅は固定にして、映像側だけ伸ばす。番組表と同じ並び
@@ -722,6 +712,7 @@
         **高さは残りぜんぶ。** 高さを 70vh で切っていた頃は、画面の下に
         余白があるのに一覧のほうが先に終わっていた
     -->
+    {#snippet aside()}
     {#if detail.current}
         <!--
             **番組の中身は、この列を入れ替えて出す。モーダルにしない** —
@@ -795,13 +786,12 @@
                             <span class="channel-number" data-testid="live-number">
                                 {#if channel.number !== null}<span class="tag">{channel.number}</span>{/if}
                             </span>
-                            {#if channel.hasLogo}
-                                <img src={resolve(`api/services/${channel.id}/logo`)} alt="" class="channel-logo" />
-                            {:else}
-                                <span class="channel-logo channel-type">
-                                    {channel.type}
-                                </span>
-                            {/if}
+                            <ServiceLogo
+                                id={channel.id}
+                                has={channel.hasLogo}
+                                style="width: 2rem; height: 2rem"
+                                fallback={channel.type}
+                            />
                             <span class="channel-text">
                                 <span class="channel-name">
                                     {channel.name}
@@ -839,7 +829,8 @@
             </ul>
         </aside>
     {/if}
-</div>
+    {/snippet}
+</PlayerLayout>
 
 <!-- 返事が変わったことは `source` で渡す (他の画面と同じ。閉じた知らせの扱いは Toasts) -->
 <Toasts
@@ -852,35 +843,12 @@
 />
 
 <style>
-    /*
-     * 映像を左、局を右。畳まれる幅では縦に積む。
-     * 広い画面 (md = 768px) ではページごとスクロールさせず、動くのは右の一覧だけ。
-     * min-height: 0 が要る — 付けないと flex の子は中身の高さで突っ張って、外側の overflow が効かない
-     */
-    .live {
-        display: flex;
-        flex-direction: column;
-        gap: 1rem;
-    }
-    .live-main {
-        display: flex;
-        min-width: 0;
-        flex: 1;
-        flex-direction: column;
-    }
+    /* 右の一覧の列。幅と高さの決めごとは FactsAside と同じ (min-height: 0 が無いと中身の高さで突っ張って巻き取られない) */
     .live-side {
         display: flex;
         flex-direction: column;
     }
     @media (min-width: 768px) {
-        .live {
-            height: 100%;
-            min-height: 0;
-            flex-direction: row;
-        }
-        .live-main {
-            min-height: 0;
-        }
         .live-side {
             width: 16rem;
             min-height: 0;
@@ -891,21 +859,6 @@
         .live-side {
             width: 20rem;
         }
-    }
-    /* 操作の色は3画面同一。摘みは主の色 */
-    .seek {
-        width: 100%;
-        margin: 0;
-        accent-color: var(--pico-primary-background);
-    }
-    .control-row {
-        --gap: 0.25rem;
-        margin-top: 0.25rem;
-        color: #fff;
-    }
-    /* 狭い枠では全画面だけ右端へ寄せる (観る画面と同じ) */
-    :global(.stage[data-compact]) .control-row > :global(:last-child) {
-        margin-left: auto;
     }
     .track-label {
         display: inline-block;
@@ -984,7 +937,7 @@
     }
     .channel:hover {
         border-color: color-mix(in srgb, var(--pico-color) 30%, transparent);
-        background: var(--dp-base-200);
+        background: var(--dp-hover);
     }
     .channel.tuned {
         border-color: var(--pico-primary-background);
@@ -996,20 +949,6 @@
         flex-shrink: 0;
         text-align: right;
         font-variant-numeric: tabular-nums;
-    }
-    .channel-logo {
-        width: 2rem;
-        height: 2rem;
-        flex-shrink: 0;
-        border-radius: 0.25rem;
-        object-fit: contain;
-    }
-    .channel-type {
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        background: var(--dp-base-300);
-        font-size: 0.75rem;
     }
     .channel-text {
         min-width: 0;

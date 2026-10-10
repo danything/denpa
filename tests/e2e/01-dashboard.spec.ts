@@ -396,6 +396,7 @@ test.describe('ダッシュボードと画面遷移', () => {
         await expect(page.getByTestId('rule-row').first()).toContainText('テストアニメ');
 
         await page.getByTestId('rule-row').first().getByTestId('rule-delete').click();
+        await page.getByTestId('rule-delete-confirm').click();
         await expect(page.getByTestId('rule-row')).toHaveCount(0);
         await cancelAllReservations(page);
     });
