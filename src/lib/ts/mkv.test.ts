@@ -38,6 +38,12 @@ const TINY =
 const bytes = () => new Uint8Array(Buffer.from(TINY, 'base64'));
 
 describe('MkvSplitter', () => {
+    test('軌道の種類を読む (録画の字幕が S_ARIBSUB かを見る)', () => {
+        const splitter = new MkvSplitter();
+        splitter.feed(bytes());
+        expect(splitter.codecs).toEqual(['V_MS/VFW/FOURCC']);
+    });
+
     test('コマと時刻を取り出す', () => {
         const frames = new MkvSplitter().feed(bytes());
         expect(frames.map((f) => f.at)).toEqual([0, 40, 80, 120]);

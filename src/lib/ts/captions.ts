@@ -11,14 +11,24 @@
  * **測らずに、書いてある時刻に置く**。
  */
 
+import type { CaptionPage } from '../caption-text';
+
 /** 90kHz。取り決めの時刻はこの刻み (`docs/stream.md` §5.3) */
 export const CLOCK = 90_000;
 
-/** 出す時刻と、その絵。`bitmap` が null なら「消す」 */
+/** 出す時刻と、その1枚 (文字の配置)。`page` が null か `runs` が空なら「消す」 */
 export interface Cue {
     /** 受け側の再生位置 (秒)。ここを追い越したら出す */
     at: number;
-    bitmap: ImageBitmap | null;
+    page: CaptionPage | null;
+}
+
+/** 出しておく長さ (`CaptionPage.duration`) を過ぎていれば消す。**次の1枚を待たずに消える字幕がある** */
+export function showing(cue: Cue | null, at: number): CaptionPage | null {
+    const page = cue?.page ?? null;
+    if (page === null || cue === null) return null;
+    if (page.duration !== null && at >= cue.at + page.duration / 1000) return null;
+    return page;
 }
 
 /**

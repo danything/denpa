@@ -1398,10 +1398,8 @@ test.describe('ライブ視聴', () => {
      *
      * - `-copyts` を**付けない** … 付けると放送の絶対時刻が mp4 の多重化器まで
      *   届き、あれが 0 に詰め直すので受け側から見た 0 の意味が分からなくなる
-     * - `-canvas_size` … 無いと libaribcaption は 1440x1080 とみなすので、
-     *   1920x1080 の放送では字幕だけ横に伸びる
-     * - PNG で受ける … 生の RGBA だと毎秒 13MB 流れる。実機で測ると PNG のほうが
-     *   速い (30秒ぶんで 1.05秒 対 1.94秒)
+     * - 字幕は**解かずに写す** (`-c:s copy`) … 解いて置き場所を決めるのは denpa
+     *   (`ts/b24caption.ts`)。絵にしていた頃の `-sub_type bitmap` は要らない
      * - Matroska で受ける … **時刻をコマと一緒に運ばせる**。生の PNG を並べる
      *   だけでは時刻が乗らず、別の口 (`showinfo`) に喋らせると数が合わずにずれる
      */
@@ -1417,14 +1415,12 @@ test.describe('ライブ視聴', () => {
         expect(args).toContain('pipe:3');
         expect(args).not.toContain('-copyts');
 
-        expect(args[args.indexOf('-canvas_size') + 1]).toMatch(/^\d+x\d+$/);
-        expect(args[args.indexOf('-sub_type') + 1]).toBe('bitmap');
-        expect(args).not.toContain('rawvideo');
+        expect(args).not.toContain('-sub_type');
+        expect(args[args.indexOf('-c:s') + 1]).toBe('copy');
         expect(args[args.indexOf('-f', args.indexOf('pipe:1')) + 1]).toBe('matroska');
 
         // 字幕も局を名指しする。1本の物理チャンネルに複数の局が乗っている
-        const filter = args[args.indexOf('-filter_complex') + 1];
-        expect(filter).toMatch(/^\[0:p:\d+:s:0\]null/);
+        expect(args[args.lastIndexOf('-map') + 1]).toMatch(/^0:p:\d+:s:0$/);
 
         /*
          * **別の口には喋らせない。** 時刻と「空かどうか」を `showinfo` に喋らせ、

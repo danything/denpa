@@ -3,12 +3,14 @@
     import type { ResponseMessage } from 'web-bml/protocol';
     import { submitting } from '#lib/actions.js';
     import { arming } from '#lib/arming.svelte.js';
+    import { CAPTION_TEXT_VERSION, type CaptionPage, type CaptionPages } from '#lib/caption-text.js';
     import ProgramFacts from '#lib/components/ProgramFacts.svelte';
     import AudioMenu from '#lib/components/player/AudioMenu.svelte';
     import { screenAwake } from '#lib/components/player/awake.svelte.js';
     import { backgroundPlayback } from '#lib/components/player/background.svelte.js';
     import ControlBar from '#lib/components/player/ControlBar.svelte';
     import ControlButton from '#lib/components/player/ControlButton.svelte';
+    import { CaptionPainter } from '#lib/components/player/caption-draw.js';
     import { playerControls } from '#lib/components/player/controls.svelte.js';
     import DataBroadcast, { pressD } from '#lib/components/player/DataBroadcast.svelte';
     import Extras from '#lib/components/player/Extras.svelte';
@@ -56,6 +58,7 @@
     import { captionAt, type Drawn, pixels, readSup } from '#lib/pgs.js';
     import { type RemuxPlayer, remuxPlayer } from '#lib/remux-player.js';
     import { keepResume } from '#lib/resume.js';
+    import { type Cue, showing as captionShowing, currentCue } from '#lib/ts/captions.js';
     import { feedFor, type PlacedMessage, replayAt } from '#lib/ts/data-timeline.js';
     import { pickMediaSource } from '#lib/ts/media-source.js';
     import { SPEEDS } from '#lib/ts/pacing.js';
@@ -267,14 +270,30 @@
      */
     let captions = $state(true);
     /**
-     * 字幕の絵。**開いた時点で取りに行く** (既定で出すので)。
+     * 字幕。**開いた時点で取りに行く** (既定で出すので)。新しく焼いた録画は文字の配置
+     * (`captions.json`。ライブと同じ描き方)、前に焼いた録画は絵 (PGS。`captions.sup`)。
      *
      * 持っている番組かどうかは**取ってみるまで分からない** — 入れ物から抜くので、
      * 無ければ 404 が返る。ライブと同じで、持っているときだけボタンを出す
      * (`live-player` の `hasCaptions`)
      */
     let drawn = $state<Drawn[]>([]);
-    const hasCaptions = $derived(drawn.length > 0);
+    /** 文字の配置。時刻の順 */
+    let cues = $state.raw<Cue[]>([]);
+    const hasCaptions = $derived(drawn.length > 0 || cues.length > 0);
+    /** 文字の配置を描く係 (`overlay` ができたら作る) */
+    let painter: CaptionPainter | null = null;
+    /** いま描いている文字の配置。同じものを描き直さない */
+    let shownPage: CaptionPage | null = null;
+    $effect(() => {
+        if (overlay === null) return;
+        const made = new CaptionPainter(overlay, resolve('api/font'));
+        painter = made;
+        return () => {
+            made.close();
+            if (painter === made) painter = null;
+        };
+    });
     /** 重ねる先 (`/live` と同じやり方。`server/captions.ts`) */
     let overlay = $state<HTMLCanvasElement | null>(null);
     /** いま出している1枚。同じものを描き直さないため */
@@ -858,8 +877,20 @@
      * 端末に保存したものがあればそちらから読む (オフラインでも字幕が出る)
      */
     async function loadCaptions(): Promise<void> {
-        if (drawn.length > 0) return;
+        if (drawn.length > 0 || cues.length > 0) return;
         try {
+            // 文字の配置が先 (新しく焼いた録画)。端末に保存したものがあればそちら
+            const text =
+                localCopy !== null
+                    ? (localCopy.captionText as CaptionPages | undefined)
+                    : await fetch(resolve(`api/recordings/${rec.id}/captions.json`)).then((res) =>
+                          res.ok ? (res.json() as Promise<CaptionPages>) : undefined,
+                      );
+            if (text?.v === CAPTION_TEXT_VERSION && text.pages.length > 0) {
+                cues = text.pages.map(({ at, page }) => ({ at, page }));
+                paint();
+                return;
+            }
             // 端末に保存したものがあればそちら (オフラインでも字幕が出る)
             if (localCopy?.captions !== undefined) {
                 drawn = readSup(new Uint8Array(await localCopy.captions.arrayBuffer()));
@@ -909,6 +940,8 @@
 
     function clearCaptions(): void {
         showing = null;
+        shownPage = null;
+        painter?.show(null);
         clearOverlay(overlay);
     }
 
@@ -1000,6 +1033,16 @@
         // 蓋の下。いま描くと CM の字幕を仕込むことになる
         if (hopping) return;
         if (!captions || overlay === null) return;
+        // 文字の配置 (新しく焼いた録画)。描き方はライブと同じ (`caption-draw.ts`)
+        if (cues.length > 0) {
+            const at = video?.currentTime ?? 0;
+            const page = captionShowing(currentCue(cues, at), at);
+            if (page === shownPage) return;
+            shownPage = page;
+            place();
+            painter?.show(page);
+            return;
+        }
         const next = captionAt(drawn, video?.currentTime ?? 0);
         if (next === showing) return;
         showing = next;
@@ -1153,7 +1196,8 @@
      */
     function snapshot(): void {
         // 字幕を出しているときだけ重ねる
-        void shooter.take(() => videoFrame(video), captions && showing !== null ? overlay : null, rec.name);
+        const drawn = captions && (showing !== null || shownPage !== null);
+        void shooter.take(() => videoFrame(video), drawn ? overlay : null, rec.name);
     }
 </script>
 

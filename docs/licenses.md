@@ -87,6 +87,7 @@ denpa 本体は上と同じコンテナイメージ `denpa` を、Mac の Docker
 | BS / CS の標準の局の表 | [src/lib/server/channel-seed.json](../src/lib/server/channel-seed.json) | BS・CS の局が無いときに入れる BS 26 + CS 12 TS (`channel-seed.ts`) | Khronos31/hassio-addons の denpa アドオンの `seed/channels.bs.json` | MIT |
 | ARIB ロゴの CLUT (129 色) | [src/lib/ts/logo-palette.ts](../src/lib/ts/logo-palette.ts) | 局ロゴの PNG 化 | node-aribts / @chinachu/aribts の `logo_clut.js` と同じ並び | MIT (上流) |
 | ARIB 外字表 | [src/lib/ts/aribtext-gaiji.ts](../src/lib/ts/aribtext-gaiji.ts) | 番組名の「[新]」「[字]」など | epgdump_py (Yasumasa Murakami, 2011) → ariblib に引き継がれた表 | MIT (ariblib。上流) |
+| 字幕の文字の表と解き方 | [src/lib/ts/b24-tables.ts](../src/lib/ts/b24-tables.ts) / [b24caption.ts](../src/lib/ts/b24caption.ts) | 字幕を文字の配置にする (表は `scripts/b24-tables.ts` で写す。解き方は decoder_impl.cpp を TypeScript に写したもの) | libaribcaption (magicxqq) | MIT (上流) |
 | 選局表の値と選局手順 | [agent/Denpa.Agent/ChannelTable.cs](../agent/Denpa.Agent/ChannelTable.cs) / `Tuning.cs` | チャンネル名 → 周波数、DVB の手順 | recisdb-rs の `dvbv5_channels_isdbs.conf` / `dvbv5.rs` を参照 (コードは写していない) | GPL-3.0 (上流) |
 | エンコード再試行の秒数 (0.2) | [src/lib/server/config.ts](../src/lib/server/config.ts) | 値だけ | EPGStation の `enc.js` | MIT (上流) |
 | アイコン類 | [static/](../static) | PWA のアイコン | 自作 | AGPL (denpa と同じ) |

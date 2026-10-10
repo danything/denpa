@@ -70,6 +70,14 @@ if printf '%s\n' "$@" | grep -qx -- 'sup'; then
     exit 0
 fi
 
+# 焼いたものから字幕をそのまま抜くパス (`api/recordings/<id>/captions.json`)。
+# 本物は入れ物の中の S_ARIBSUB をそのまま出す。ここでは作り置きの mkv を返す
+# (中身は作り物の字幕。本物の ffmpeg に `-map 0:s:0 -c:s copy -f matroska` で書かせたもの)
+if [ "$output" = "pipe:1" ] && printf '%s\n' "$@" | grep -qx -- '-c:s' && printf '%s\n' "$@" | grep -qx -- 'matroska'; then
+    cat "$(dirname "$0")/captions.mkv"
+    exit 0
+fi
+
 # 字幕を絵で取り出すパス (`server/subtitle.ts` の `buildPgs`)。
 # 目印は sub2video の filter で、これを渡すのはこの経路だけ。
 #

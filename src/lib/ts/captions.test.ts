@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
-import { CLOCK, type Cue, currentCue, insertCue, KEEP_CUES, trimCues } from './captions';
+import { CLOCK, type Cue, currentCue, insertCue, KEEP_CUES, showing, trimCues } from './captions';
 
-const cue = (at: number): Cue => ({ at, bitmap: null });
+const cue = (at: number): Cue => ({ at, page: null });
 
 /**
  * **時刻はサーバが添えてくる。** 映像と同じ ffmpeg が付けた mp4 の物差しなので、
@@ -86,10 +86,32 @@ describe('insertCue', () => {
 
     /** 出し直しなので、同じ時刻なら後から来たほうが正しい */
     test('同じ時刻は後から来たほうを採る', () => {
-        const first = { at: 10, bitmap: null };
-        const second = { at: 10, bitmap: null };
+        const first = { at: 10, page: null };
+        const second = { at: 10, page: null };
         const cues = insertCue(insertCue([], first), second);
         expect(cues).toHaveLength(1);
         expect(cues[0]).toBe(second);
+    });
+});
+
+/** **待ち (TIME) のある字幕は、次が来なくても消える** (libaribcaption の描き手と同じ) */
+describe('showing', () => {
+    const page = (duration: number | null) => ({
+        v: 1 as const,
+        plane: [960, 540] as [number, number],
+        duration,
+        runs: [],
+    });
+
+    test('出しておく長さを過ぎたら消す', () => {
+        const held = { at: 10, page: page(2000) };
+        expect(showing(held, 11.9)).toBe(held.page);
+        expect(showing(held, 12)).toBeNull();
+    });
+
+    test('長さが無ければ次の1枚まで出しっぱなし', () => {
+        const held = { at: 10, page: page(null) };
+        expect(showing(held, 9999)).toBe(held.page);
+        expect(showing(null, 10)).toBeNull();
     });
 });

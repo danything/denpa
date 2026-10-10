@@ -42,7 +42,7 @@ function jisTable(): Map<string, number> {
  * 初期状態 (G0=漢字) から始めて、ASCII のところだけ英数集合へ切り替える。
  * 本物の放送はもっと凝った切り替え方をするが、**読む側が同じ道を通れば足りる**。
  */
-function encodeAribText(text: string): number[] {
+export function encodeAribText(text: string): number[] {
     const out: number[] = [];
     let alnum = false;
     for (const char of text) {
