@@ -27,18 +27,22 @@ docker compose run --rm unit bun run check  # 型 (svelte-check)
 
 ## README の絵
 
-`docs/images/` の絵は **動いている denpa から撮ります** (偽エージェントではなく、
-番組表も録画も入っているもの)。撮る条件 (1600×900・暗いテーマ・ja-JP・Asia/Tokyo。
-動く絵も同じ広さで撮り、貼るときに 1120×630 へ縮める) は `scripts/capture-docs.ts` の頭にあります。
+`docs/images/` の絵は **偽の放送で撮ります** — 局も番組もロゴも映像も字幕も作り物
+(`tests/fake/docs.ts`)。本物の放送・ロゴ・本番の画面は絵に出しません。
+E2E と同じ一式 (denpa + 偽エージェント) を立て、ルール・予約・録画を入れてから撮り、webp にして置きます。
 
 ```sh
-ssh -N -L 3399:<denpa の ClusterIP>:3000 <ホスト>   # 見えるところに繋ぐ
-bun scripts/capture-docs.ts                          # 全部 (名前を挙げるとそのぶんだけ)
-python3 scripts/docs-webp.py                         # 動く絵を組み立てて docs/images へ
+docker compose run --rm docs                                          # 全部撮り直して docs/images へ
+docker compose run --rm docs bun scripts/capture-docs.ts watch live   # 名前を挙げるとそのぶんだけ
 ```
 
-閲覧だけで、予約も削除も保存もしません。自分の値が入る欄 (通知先・郵便番号) と
-映像はぼかします。見た目を変えたら撮り直してください (古い絵は README を見て入れた人を迷わせます)。
+手元で回せなければ Actions の **Screenshots** (`.github/workflows/screenshots.yml`) を手で走らせると、
+撮った絵が artifact に上がります。
+
+撮るイメージ (Dockerfile の `docs` 段) には、本番と同じ字が入っています — 画面の BIZ UDPゴシック
+(OFL 版) と、放送の字の Denpa Font (denpa-font のリリースの woff2)。撮る条件 (1600×900・暗いテーマ・
+ja-JP・Asia/Tokyo。動く絵も同じ広さで撮り、貼るときに 1120×630 へ縮める) は `scripts/capture-docs.ts` の頭に
+あります。見た目を変えたら撮り直してください (古い絵は README を見て入れた人を迷わせます)。
 
 ## テストの方針
 

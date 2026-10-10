@@ -29,7 +29,7 @@ const WEBHOOK_PORT = 8096;
 const BOOT_TIMEOUT = 120_000;
 const BOOT_POLL = 200;
 
-interface Stack {
+export interface Stack {
     /** このワーカーの作業領域 */
     root: string;
     appUrl: string;
@@ -121,7 +121,8 @@ async function stop(started: Started): Promise<void> {
     if (started.proc.exitCode === null) started.proc.kill('SIGKILL');
 }
 
-async function boot(index: number): Promise<{ stack: Stack; shutdown: () => Promise<void> }> {
+/** 1式立てる。テストはワーカーごとに下の `stack` から、絵を撮るときは scripts/capture-docs.ts から */
+export async function boot(index: number): Promise<{ stack: Stack; shutdown: () => Promise<void> }> {
     const appPort = APP_PORT + index * STRIDE;
     const agentPort = AGENT_PORT + index * STRIDE;
     const webhookPort = WEBHOOK_PORT + index * STRIDE;

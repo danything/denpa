@@ -36,7 +36,11 @@ import {
     pes,
     silentAac,
 } from '../../src/lib/ts/synth-av';
+import { docsColor, docsLogo, docsProgram } from './docs';
 import { type FakeService, SERVICES } from './services';
+
+/** 絵を撮るための作り物の放送 (`tests/fake/docs.ts`)。番組とロゴもそちらに差し替える */
+const DOCS = process.env['FAKE_PROFILE'] === 'docs';
 
 /**
  * 放送に乗るのと同じ形のロゴ (実機の地上波から拾った 48x24)。
@@ -98,6 +102,10 @@ export const DEFAULT_KNOBS: Knobs = { scrambled: false, extendedMs: 0, noPresent
 /** 1枠の本数。E2E では短くして「数秒後に始まる番組」を作る */
 const SLOTS = Number(process.env['FAKE_SLOTS'] ?? 60);
 
+/** 局のロゴ。絵を撮るときは局ごとに作った作り物、テストは上の2枚 */
+const logoOf = (service: FakeService, large: boolean): Uint8Array =>
+    DOCS ? docsLogo(service, large ? 64 : 48, large ? 36 : 24) : large ? LOGO_PNG_LARGE : LOGO_PNG;
+
 function programsFor(service: FakeService): SynthEvent[] {
     const slotMs = service.slotMs;
     /*
@@ -107,11 +115,19 @@ function programsFor(service: FakeService): SynthEvent[] {
      * 本物でも普通に起きる。ロゴの中継まわりを見るためだけに置いてある局にまで
      * 番組を生やすと、他のテストが数えている本数がずれる
      */
-    const count = service.noPrograms === true ? 0 : Math.max(SLOTS, Math.min(600, Math.ceil(DAY / slotMs)));
+    const count =
+        service.noPrograms === true
+            ? 0
+            : DOCS
+              ? Math.ceil((2 * DAY) / slotMs)
+              : Math.max(SLOTS, Math.min(600, Math.ceil(DAY / slotMs)));
     // 作れる本数で覆える幅。尺が短い局は本数の上限で頭打ちになる
     const span = Math.min(DAY, count * slotMs);
-    // 少し過去から始める。全部を過去にすると予約できる番組が1つも無くなる
-    const base = Math.floor((Date.now() - span / 3) / slotMs) * slotMs;
+    /*
+     * 少し過去から始める。全部を過去にすると予約できる番組が1つも無くなる。
+     * 絵を撮るときは前後 30 時間ずつ — いつ撮っても、その日の番組表 (4時〜翌4時) が頭から埋まる
+     */
+    const base = Math.floor((Date.now() - (DOCS ? DAY : span / 3)) / slotMs) * slotMs;
     const programs: SynthEvent[] = [];
     for (let i = 0; i < count; i++) {
         const startAt = base + i * slotMs;
@@ -152,6 +168,7 @@ function programsFor(service: FakeService): SynthEvent[] {
                 { type: 3, text: '解説ステレオ', main: false },
             ],
             video: [0x01, 0xb1],
+            ...(DOCS ? docsProgram(service, slot) : {}),
         });
     }
     return programs;
@@ -173,7 +190,7 @@ const channelOf = (service: FakeService) => ({
     channel: service.channel,
     networkId: service.networkId,
     transportStreamId: service.networkId,
-    remoteControlKeyId: service.type === 'GR' ? 9 : null,
+    remoteControlKeyId: service.type === 'GR' ? (service.remoteKey ?? 9) : null,
     services: [serviceOf(service)],
 });
 
@@ -270,13 +287,25 @@ const pidsOf = (index: number) => ({
 const ENGINEERING = { service: 929, pmt: 0x1f0, es: 0x1f1 };
 
 function carouselPackets(services: FakeService[]): Uint8Array {
-    const module = logoModule(0x05, [
-        {
-            logoId: services[0]!.serviceId % 512,
-            services: services.map((s) => [s.networkId, s.serviceId] as [number, number]),
-            data: LOGO_PNG_LARGE,
-        },
-    ]);
+    /*
+     * テストは1枚を全局で使い回す。絵を撮るときは局ごとに別の絵 (番組表に並ぶので見分けが付くように)
+     */
+    const module = logoModule(
+        0x05,
+        DOCS
+            ? services.map((s) => ({
+                  logoId: s.serviceId % 512,
+                  services: [[s.networkId, s.serviceId] as [number, number]],
+                  data: logoOf(s, true),
+              }))
+            : [
+                  {
+                      logoId: services[0]!.serviceId % 512,
+                      services: services.map((s) => [s.networkId, s.serviceId] as [number, number]),
+                      data: LOGO_PNG_LARGE,
+                  },
+              ],
+    );
     return Uint8Array.from([
         ...packetize(
             ENGINEERING.es,
@@ -339,9 +368,9 @@ function logoPackets(service: FakeService): Uint8Array {
         ...be(1),
         ...be(service.networkId),
     ]);
-    const small = packetize(0x0029, cdt(0x00, LOGO_PNG));
+    const small = packetize(0x0029, cdt(0x00, logoOf(service, false)));
     // 同じ PID の続きなので、連続性カウンタは前のぶんの続きから
-    const large = packetize(0x0029, cdt(0x05, LOGO_PNG_LARGE), small.length / 188);
+    const large = packetize(0x0029, cdt(0x05, logoOf(service, true)), small.length / 188);
     return Uint8Array.from([...small, ...packetize(0x0011, sdt, 5), ...large]);
 }
 
@@ -414,7 +443,7 @@ function tables(services: FakeService[]): Uint8Array {
     parts.push(
         ...packetize(
             0x0010,
-            nitSection(first.networkId, first.type === 'GR' ? 9 : null, [
+            nitSection(first.networkId, first.type === 'GR' ? (first.remoteKey ?? 9) : null, [
                 [first.networkId, first.networkId, services.map((s) => [s.serviceId, s.serviceType])],
             ]),
         ),
@@ -470,7 +499,7 @@ const TICK = 100;
  * **PTS は PCR より 0.4 秒先にする。** 本物の放送もそう作ってある (受信機は PTS まで
  * 待って映す。stream.md §4「貯まりより小さく出ることはある」)
  */
-const FRAMES = Array.from({ length: 30 }, (_, n) => mpeg2Frame(n));
+const FRAMES = Array.from({ length: 30 }, (_, n) => (DOCS ? mpeg2Frame(n, docsColor) : mpeg2Frame(n)));
 const SILENCE = silentAac();
 const PTS_AHEAD = 0.4 * CLOCK;
 

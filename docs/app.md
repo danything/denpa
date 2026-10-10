@@ -387,7 +387,7 @@ SQLite が拒むので、事実と状態が食い違いません。文字列で�
 | --- | --- |
 | `tests/e2e/` | Playwright。番号順に、予約 → 録画 → ルール → 引き継ぎ → 放送の延長。ファイル単位で並ぶので、長いものは割ってある |
 | `tests/stack.ts` | ワーカーごとに denpa と偽エージェントを1式立てる (これでファイル単位に並べられる) |
-| `tests/fake/` | 偽エージェント・偽の選局 (`tune.ts`。本物のエージェントの `FAKE_TUNE` に渡す)・偽の通知先・偽ffmpeg。電波は `broadcast.ts` が組み立てる (EIT も SDT も NIT も。同じものを偽エージェントと偽の選局の両方が流す) |
+| `tests/fake/` | 偽エージェント・偽の選局 (`tune.ts`。本物のエージェントの `FAKE_TUNE` に渡す)・偽の通知先・偽ffmpeg。電波は `broadcast.ts` が組み立てる (EIT も SDT も NIT も。同じものを偽エージェントと偽の選局の両方が流す)。README の絵を撮るときは `docs.ts` の作り物の局・番組・ロゴに替わる (`FAKE_PROFILE=docs`) |
 | `src/**/*.test.ts` | 純粋関数の境界条件 (bun test) |
 | `agent/Denpa.Agent.Tests/` | エージェント側 (設定の読み書き、選局表、読み口、px4-userland / siano-userland の答えの読み方と引数) |
 | `agent/conformance.test.ts` | 本物のエージェントを起こして HTTP の口に当てる (`bun run test:conformance`)。チューナーの代わりは偽の選局 (`FAKE_TUNE`)、起こすエージェントは `AGENT_CMD` で差し替えられる |

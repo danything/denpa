@@ -1,10 +1,12 @@
+import { DOCS_SERVICES } from './docs';
+
 /** 偽エージェントが返す局。テスト側からもIDを参照するのでここに置く */
 export interface FakeService {
     id: number;
     serviceId: number;
     networkId: number;
     name: string;
-    type: 'GR' | 'BS';
+    type: 'GR' | 'BS' | 'CS';
     channel: string;
     /**
      * 1番組の長さ。
@@ -37,9 +39,11 @@ export interface FakeService {
      * 住所だけなので、偽の放送でも本物と同じものが作れる ([ts/ait.ts](../../src/lib/ts/ait.ts))
      */
     hybridcast?: { name: string; base: string; path: string };
+    /** リモコンのボタン (地上波だけ)。省けば 9 */
+    remoteKey?: number;
 }
 
-export const SERVICES: FakeService[] = [
+const TEST_SERVICES: FakeService[] = [
     {
         id: 3239123608,
         serviceId: 23608,
@@ -102,8 +106,14 @@ export const SERVICES: FakeService[] = [
     },
 ];
 
-export const MX = SERVICES[0]!;
-export const FUJI = SERVICES[1]!;
-export const DATA = SERVICES[2]!;
-export const BS11 = SERVICES[3]!;
-export const BS_NO_LOGO = SERVICES[4]!;
+/**
+ * **絵を撮るときは作り物の局に差し替える** (`FAKE_PROFILE=docs`。`tests/fake/docs.ts`)。
+ * 読むのは偽エージェントの側だけで、テストは下の名指し (MX など) をそのまま使う
+ */
+export const SERVICES: FakeService[] = process.env['FAKE_PROFILE'] === 'docs' ? DOCS_SERVICES : TEST_SERVICES;
+
+export const MX = TEST_SERVICES[0]!;
+export const FUJI = TEST_SERVICES[1]!;
+export const DATA = TEST_SERVICES[2]!;
+export const BS11 = TEST_SERVICES[3]!;
+export const BS_NO_LOGO = TEST_SERVICES[4]!;
