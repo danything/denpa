@@ -64,7 +64,7 @@ RUN set -eu && mkdir -p /opt/px4-userland/firmware && cd /tmp && \
 # (Px4.cs / Px4Card.cs)、配布物の px4-ts と IFD ハンドラ (ifd/*.so、pcscd 用) は使わない。
 # **0.1.9 より下げない。** 筐体は `px4d --list-json` (0.1.9 から) でしか聞かない。
 # renovate: datasource=github-releases depName=Khronos31/px4-userland extractVersion=^v(?<version>.*)$
-ARG PX4_USERLAND_VERSION=0.1.10
+ARG PX4_USERLAND_VERSION=0.2.0
 RUN set -eu && cd /tmp && \
     case "${TARGETARCH}" in amd64) arch=x86_64 ;; arm64) arch=aarch64 ;; esac && \
     base="https://github.com/Khronos31/px4-userland/releases/download/v${PX4_USERLAND_VERSION}" && \
