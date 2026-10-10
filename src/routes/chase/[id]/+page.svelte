@@ -4,48 +4,40 @@
     import AudioMenu from '#lib/components/player/AudioMenu.svelte';
     import { screenAwake } from '#lib/components/player/awake.svelte.js';
     import { backgroundPlayback } from '#lib/components/player/background.svelte.js';
+    import CloseLink from '#lib/components/player/CloseLink.svelte';
     import CodecMenu from '#lib/components/player/CodecMenu.svelte';
     import ControlBar from '#lib/components/player/ControlBar.svelte';
     import ControlButton from '#lib/components/player/ControlButton.svelte';
+    import ControlRow from '#lib/components/player/ControlRow.svelte';
     import { playerControls } from '#lib/components/player/controls.svelte.js';
     import EdgeButton from '#lib/components/player/EdgeButton.svelte';
     import Extras from '#lib/components/player/Extras.svelte';
     import FactsAside from '#lib/components/player/FactsAside.svelte';
     import { stageFullscreen } from '#lib/components/player/fullscreen.svelte.js';
-    import Icon from '#lib/components/player/Icon.svelte';
     import InfoBlock from '#lib/components/player/InfoBlock.svelte';
-    import {
-        CAMERA,
-        CAPTION,
-        CLOSE,
-        OVERLAY,
-        OVERLAY_BTN,
-        OVERLAY_ROUND,
-        PAUSE,
-        PLAY,
-        SOUND_OFF,
-        SOUND_ON,
-    } from '#lib/components/player/icons.js';
+    import { CAMERA, CAPTION, PAUSE, PLAY, SOUND_OFF, SOUND_ON } from '#lib/components/player/icons.js';
     import { playerKeys } from '#lib/components/player/keys.js';
     import MediaStack from '#lib/components/player/MediaStack.svelte';
     import MoreButton from '#lib/components/player/MoreButton.svelte';
+    import PlayerLayout from '#lib/components/player/PlayerLayout.svelte';
     import PlayerStage from '#lib/components/player/PlayerStage.svelte';
     import PlayerVeil from '#lib/components/player/PlayerVeil.svelte';
     import { pictureInPicture } from '#lib/components/player/pip.svelte.js';
+    import SeekBar from '#lib/components/player/SeekBar.svelte';
     import SpeedMenu, { SPEED_KEY, storedSpeed } from '#lib/components/player/SpeedMenu.svelte';
     import StageNote from '#lib/components/player/StageNote.svelte';
     import StageTail from '#lib/components/player/StageTail.svelte';
     import { snapshotter } from '#lib/components/player/shot.svelte.js';
     import { grabbedFrame, videoFrame } from '#lib/components/player/snapshot.js';
+    import { stageTap } from '#lib/components/player/stage-tap.js';
     import Toasts, { type Notice } from '#lib/components/Toasts.svelte';
-    import { programDetail } from '#lib/detail.svelte.js';
+    import { programDetail, recordingFacts } from '#lib/detail.svelte.js';
     import { clock as clockLabel } from '#lib/format.js';
     import { write as remind } from '#lib/keep.js';
     import { livePlayer } from '#lib/live-player.svelte.js';
     import { liveUpdates } from '#lib/live-updates.svelte.js';
     import { keepResume } from '#lib/resume.js';
-    import { SPEEDS } from '#lib/ts/pacing.js';
-    import { type Tap, tap, zoneOf } from '#lib/ts/watch.js';
+    import { stepSpeed } from '#lib/ts/pacing.js';
     import { resolve } from '$app/paths';
 
     /**
@@ -92,24 +84,11 @@
     });
 
     /**
-     * 右に出す番組の中身 (観る画面と同じ考え方)。録画の行が持っているぶんで
-     * 組み立てて、番組表から引ければそちらで上書きする (`programDetail`)。
-     * 追っかけは放送中なので、たいてい引ける。
+     * 右に出す番組の中身 (観る画面と同じ `recordingFacts`)。番組表から引ければ
+     * そちらで上書きする (`programDetail`)。追っかけは放送中なので、たいてい引ける。
      */
     const detail = programDetail();
-    const facts = $derived({
-        name: data.rec.name,
-        service_name: data.rec.service_name,
-        start_at: data.rec.start_at,
-        end_at: data.rec.end_at,
-        description: data.rec.description,
-        extended: data.rec.extended,
-        genre_detail: data.rec.genre_detail,
-        audios: data.rec.audios,
-        video_type: null,
-        video_resolution: null,
-        is_free: true,
-    });
+    const facts = $derived(recordingFacts(data.rec));
 
     onMount(() => {
         want = storedSpeed();
@@ -117,8 +96,6 @@
         // 前に途中まで観ていたら、そこから
         if (video !== null) void player.openChase(video, data.rec.id, data.rec.resumeSec);
         // 出演者などは番組表の側にある。押させずに、開いた時点で引く (観る画面と同じ)
-        // 種は右に出している中身そのもの (観る画面の loadDetail と同じ)。**組み直さない** —
-        // 組み直していた頃はジャンル・音声を落としていて、番組表に無い番組で札が消えた
         void detail.open(data.rec.program_id, facts);
         const ticker = setInterval(() => (clock = Date.now()), 1000);
         const keeper = setInterval(() => sendResume(), 15_000);
@@ -180,13 +157,6 @@
         if (player.state === 'playing' && player.speed !== want) player.setSpeed(want);
     });
 
-    /** 順送り。行き過ぎたら戻れるように、戻る側も持つ (観る画面と同じ) */
-    function stepSpeed(direction: number): void {
-        const at = SPEEDS.indexOf(want as (typeof SPEEDS)[number]);
-        const next = SPEEDS[Math.min(SPEEDS.length - 1, Math.max(0, (at === -1 ? 0 : at) + direction))];
-        if (next !== undefined) setSpeed(next);
-    }
-
     /**
      * 視聴位置をサーバへ (15秒おき)。録り終えて焼き上がったら、観る画面の
      * 続き再生がここから拾う — 追っかけで観たぶんを二度観ずに済む。
@@ -205,35 +175,8 @@
         awake.on = player.state !== 'idle' && player.state !== 'error';
     });
 
-    /**
-     * 押したことの読み方は**観る画面と同じ** (`ts/watch.ts` の `tap`)。
-     *
-     * - マウス … 1回で再生/一時停止、左右の端を素早く2回で 10秒
-     * - 指 … 1回で操作列の出し入れ、真ん中を素早く2回で再生/一時停止、端2回で 10秒
-     *
-     * 前は真ん中の2回だけを見ていたので (`center-tap.ts`)、**マウスで絵を押しても
-     * 止まらず、端2回の送りも無かった**。観ているものは焼き上がった録画と同じなのに、
-     * 焼く前だけ押し方が違っていた
-     */
-    let lastTap: Tap | null = null;
-    const coarse = typeof window === 'undefined' ? false : window.matchMedia('(pointer: coarse)').matches;
-    function press(event: MouseEvent): void {
-        const box = (event.currentTarget as HTMLElement).getBoundingClientRect();
-        const { action, next } = tap(
-            lastTap,
-            event.timeStamp,
-            zoneOf(event.clientX - box.left, box.width),
-            coarse,
-        );
-        lastTap = next;
-        if (action.kind === 'play') player.toggle();
-        else if (action.kind === 'controls') controls.toggle();
-        else {
-            // 2回目。マウスは1回目で再生を切り替えているので、それも戻す
-            if (action.undo) player.toggle();
-            seekBy(action.by);
-        }
-    }
+    /** 押したことの読み方は観る画面と同じ (`stage-tap.ts`) */
+    const press = stageTap({ toggle: () => player.toggle(), controls: () => controls.toggle(), seekBy });
 
     /** バックグラウンド再生 (`background.svelte.ts`)。既定は切で、裏に回ったら止め、戻ったら止めた所から */
     const background = backgroundPlayback({
@@ -267,7 +210,7 @@
         toggleCaptions: () => player.toggleCaptions(),
         snapshot,
         toggleFull: fullscreen.toggle,
-        stepSpeed,
+        stepSpeed: (by) => setSpeed(stepSpeed(want, by)),
         // **消音は player 側の印で切り替える。** 絵の要素を直に触ると、繋ぎ直しの
         // たびに `silenced` で上書きされて戻り、ボタンの見た目ともずれる
         toggleMute: () => (player.silenced ? player.unmute() : player.mute()),
@@ -291,9 +234,8 @@
 
 <svelte:window onkeydown={keys} />
 
-<!-- **ライブ・観る画面と同じ形。** 映像が左、番組の中身が右。決めごとは watch/[id] のコメント -->
-<div class="layout">
-    <section class="main">
+<!-- **ライブ・観る画面と同じ形** (PlayerLayout)。映像が左、番組の中身が右 -->
+<PlayerLayout>
     <!-- 舞台の配線と映像の束はライブと共通 (PlayerStage / MediaStack) -->
     <PlayerStage {controls} {fullscreen} testid="chase" bind:element={stageEl}>
         {#snippet children(stage)}
@@ -309,9 +251,7 @@
 
         <!-- 右上の列。**観る画面と同じ並び** (閉じる・切り抜き) -->
         <ControlBar side shown={controls.shown} testid="chase-side">
-            <a class="{OVERLAY_BTN} {OVERLAY_ROUND} {OVERLAY}" href={resolve('')} aria-label="一覧へ戻る">
-                <Icon icon={CLOSE} />
-            </a>
+            <CloseLink testid="chase-close" />
             <ControlButton
                 icon={CAMERA}
                 label="この場面を切り抜く"
@@ -322,20 +262,10 @@
 
         <ControlBar shown={controls.shown} testid="chase-controls">
             <!-- 帯は番組の全長。**録れていないところ (右側) へは跳べない** (`seekTo`) -->
-            <input
-                type="range"
-                class="seek fill"
-                style="--fill: {total > 0 ? (pos / total) * 100 : 0}%"
-                min="0"
-                max={total}
-                step="1"
-                value={pos}
-                oninput={(event) => seekTo(Number(event.currentTarget.value))}
-                aria-label="再生位置"
-            />
+            <SeekBar value={pos} max={total} step={1} onseek={seekTo} />
 
             <!-- **並びはライブと同じ。** 再生・音・字幕、焼き方・音声・端 (最新)、読みもの、速さ、全画面 -->
-            <div class="cluster buttons">
+            <ControlRow>
                 <ControlButton
                     icon={player.paused ? PLAY : PAUSE}
                     label={player.paused ? '再生' : '一時停止'}
@@ -427,7 +357,7 @@
                 </Extras>
 
                 <StageTail prefix="chase" {background} {pip} {fullscreen} />
-            </div>
+            </ControlRow>
         </ControlBar>
 
         {#if encoded}
@@ -474,13 +404,14 @@
         {/if}
         {/snippet}
     </PlayerStage>
-    </section>
 
     <!-- 右は番組の中身。枠は観る画面と同じ部品 (FactsAside)、中身も同じ (ProgramFacts) -->
-    <FactsAside testid="chase-facts">
-        <ProgramFacts program={detail.current ?? facts} />
-    </FactsAside>
-</div>
+    {#snippet aside()}
+        <FactsAside testid="chase-facts">
+            <ProgramFacts program={detail.current ?? facts} />
+        </FactsAside>
+    {/snippet}
+</PlayerLayout>
 
 <Toasts
     {notices}
@@ -491,41 +422,6 @@
 />
 
 <style>
-    /* 映像が左、番組の中身が右。畳まれる幅では縦に積んでページごとスクロール */
-    .layout {
-        display: flex;
-        flex-direction: column;
-        gap: 1rem;
-    }
-    .main {
-        display: flex;
-        min-width: 0;
-        flex: 1 1 0%;
-        flex-direction: column;
-    }
-    @media (min-width: 768px) {
-        .layout {
-            height: 100%;
-            min-height: 0;
-            flex-direction: row;
-        }
-        .main {
-            min-height: 0;
-        }
-    }
-    .seek {
-        width: 100%;
-        margin: 0;
-    }
-    .buttons {
-        --gap: 0.25rem;
-        margin-top: 0.25rem;
-        color: #fff;
-    }
-    /* 狭い枠では全画面だけ右端へ寄せる (観る画面と同じ) */
-    :global(.stage[data-compact]) .buttons > :global(:last-child) {
-        margin-left: auto;
-    }
     .rec {
         display: inline-flex;
         align-items: baseline;

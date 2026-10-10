@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { CEILING, FLOOR, JUMP, nextTarget, pacing, SETTLED } from './pacing';
+import { CEILING, FLOOR, JUMP, nextTarget, pacing, SETTLED, stepSpeed } from './pacing';
 
 /** 宅内で落ち着いている状態 */
 const at = (over: Partial<Parameters<typeof pacing>[0]>) =>
@@ -289,5 +289,17 @@ describe('貯める量の下限', () => {
         let now = nextTarget({ target: FLOOR, floor: FLOOR }, true, 0, 0);
         for (let i = 0; i < 200; i++) now = nextTarget(now, false, 1800, 1800);
         expect(now.target).toBe(FLOOR);
+    });
+});
+
+describe('stepSpeed', () => {
+    test('1段ずつ動き、端では止まる', () => {
+        expect(stepSpeed(1, 1)).toBe(1.25);
+        expect(stepSpeed(1.5, -1)).toBe(1.25);
+        expect(stepSpeed(2, 1)).toBe(2);
+        expect(stepSpeed(1, -1)).toBe(1);
+    });
+    test('並びに無い速さからは等速の位置から数える', () => {
+        expect(stepSpeed(3, 1)).toBe(1.25);
     });
 });

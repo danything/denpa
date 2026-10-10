@@ -19,6 +19,30 @@ export interface DetailSeed {
     extended?: Program['extended'];
 }
 
+/** 行の分を番組詳細の形にする。足りないところは既定 (番組表から引けたら差し替わる) */
+function filled(seed: DetailSeed): ProgramDetail {
+    return {
+        description: '',
+        extended: null,
+        genre_detail: null,
+        audios: null,
+        video_type: null,
+        video_resolution: null,
+        is_free: true,
+        ...seed,
+    };
+}
+
+/**
+ * 録画の行から出す番組の中身。**観る画面と追っかけの右の列で同じもの。**
+ * 開いた時点で `programDetail().open` の種にもそのまま渡す — 別に組み直していた頃は
+ * ジャンル・音声を落としていて、番組表から消えた録画で札が出なかった
+ */
+export function recordingFacts(rec: Required<DetailSeed>): ProgramDetail {
+    const { name, service_name, start_at, end_at, description, extended, genre_detail, audios } = rec;
+    return filled({ name, service_name, start_at, end_at, description, extended, genre_detail, audios });
+}
+
 /**
  * 行を押して出す番組詳細。**まず行が持っている分をすぐ出し、EPG から引けたら差し替える。**
  *
@@ -54,16 +78,7 @@ export function programDetail() {
              * 番組表から引けるうちは引き直しで戻るので気付かず、**番組表から
              * 消えた録画 (24時間過ぎ) だけジャンルの札が出なかった** (実機)
              */
-            current = {
-                description: '',
-                extended: null,
-                genre_detail: null,
-                audios: null,
-                video_type: null,
-                video_resolution: null,
-                is_free: true,
-                ...seed,
-            };
+            current = filled(seed);
             if (programId === null) return;
 
             const res = await fetch(resolve(`api/programs/${programId}`));
