@@ -105,7 +105,7 @@ function seriesGroup(series: string, name: string): { group_key: string; group_n
  * ファイルどころか recordings の行も無い)。予約の行から、録画一覧に差し込むのに
  * 要る分だけ持ってくる。
  */
-export interface MissedRow {
+interface MissedRow {
     id: number;
     program_id: number | null;
     name: string;

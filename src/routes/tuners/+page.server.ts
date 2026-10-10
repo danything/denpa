@@ -215,7 +215,7 @@ export const actions = {
     },
 
     /**
-     * 番組表をいますぐ集める。**全チューナーで、録画以外は蹴って。**
+     * 番組表をいますぐ集める。**全チューナーで、録画とライブ視聴以外は蹴って。**
      *
      * 入れたばかりのときのためのもの。普段の周回はスキャンにもロゴにも譲るので、
      * 何か動いていると番組表がなかなか埋まらない。
@@ -225,7 +225,10 @@ export const actions = {
      */
     collectNow: async () => {
         void collectNow().catch(() => undefined);
-        return { success: true, scan: '番組表を集めています。空いているチューナーを全部使います' };
+        return {
+            success: true,
+            scan: '番組表を集めています。録画とライブ視聴に使っていないチューナーを全部使います',
+        };
     },
 
     scan: async ({ request }) => {

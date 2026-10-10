@@ -179,8 +179,8 @@
                             CS は詳細を流していないので、いつも1つの中継で全局ぶんを集めます。
                         </p>
                         <p>
-                            待てないときは<strong>「番組表をいますぐ集める」</strong>で、空いているチューナーを全部使って集められます
-                            (録画中のチューナーは使いません)。
+                            待てないときは<strong>「番組表をいますぐ集める」</strong>で、録画とライブ視聴に使っていないチューナーを全部使って集められます
+                            (スキャンやロゴの取得は止めます)。
                         </p>
                     </details>
                 </div>
@@ -254,7 +254,7 @@
 
             <form method="POST" action="?/scan" use:submitting class="stack">
                 <div>
-                    <span class="label">種別</span>
+                    <span class="field-label">種別</span>
                     <div class="types" data-testid="scan-types">
                         {#each TYPES as type (type)}
                             <label class="check">
@@ -515,7 +515,7 @@
             -->
             <div class="reader">
                 <div class="cluster">
-                    <span class="label">カードリーダー</span>
+                    <span class="field-label">カードリーダー</span>
                     {#if shownCard.value === undefined}
                         <span class="tag" data-testid="status-card-reader">確認中</span>
                     {:else}
@@ -753,34 +753,8 @@
 </div>
 
 <style>
-    .card {
-        display: flex;
-        flex-direction: column;
-        gap: 0.75rem;
-        padding: 1.5rem;
-        box-shadow: 0 1px 3px rgb(0 0 0 / 0.2);
-    }
-    .card h2 {
-        font-size: 1.15rem;
-    }
-    .soft {
-        opacity: 0.7;
-    }
-    /* 要点の1行と、その下に畳んだ「詳しく」 */
-    .note-block {
-        display: flex;
-        flex-direction: column;
-        gap: 0.25rem;
-    }
     .faint {
         opacity: 0.4;
-    }
-    .label {
-        font-size: 0.875rem;
-        font-weight: 500;
-    }
-    .mono {
-        font-family: var(--pico-font-family-monospace);
     }
     .table-wrap {
         overflow-x: auto;
@@ -823,11 +797,6 @@
     }
     .wide {
         width: 100%;
-    }
-    .truncate {
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
     }
     .types {
         display: flex;

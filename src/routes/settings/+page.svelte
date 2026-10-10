@@ -21,6 +21,15 @@
         if (form?.migrate) list.push({ key: 'migrate-started', kind: 'info', text: form.migrate });
         list.push(...errorNotice(form, 'settings-error'));
         if (form?.saved) list.push({ key: 'saved-result', kind: 'success', text: '保存しました' });
+        if (form?.probed) list.push({ key: 'hw-probed', kind: 'success', text: 'GPU を確かめ直しました' });
+        if (form?.webhookAdded) list.push({ key: 'webhook-added', kind: 'success', text: '通知先を追加しました' });
+        if (form?.tested) {
+            list.push({
+                key: 'webhook-tested',
+                kind: form.tested === 'ok' ? 'success' : 'error',
+                text: `テスト送信の結果: ${form.tested}`,
+            });
+        }
         return list;
     });
 
@@ -77,21 +86,14 @@
 <Toasts {notices} source={form} />
 
 <!--
-    カードを縦に積むと1枚ずつが横に間延びして、下のほうは開かないと見えない。
-    広い画面では**全部を2列に収める**。
-
-    表を持つカードだけ幅いっぱいに広げていた頃は、2列の下に幅いっぱいの帯が
-    続く形になり、**どこまでが左の列の続きなのかが読めなかった**。表は中で
-    横に巻き取れる (`overflow-x: auto`) ので、半分の幅でも読める。
-
-    列は grid の行ではなく独立した縦並びにしてある。行で組むと段ごとに
-    高さが揃えられ、背の低いカードの隣に大きな穴が空く
+    広い画面では**全部を2列に収める**。列は grid の行ではなく独立した縦並びにしてある
+    (行で組むと段ごとに高さが揃えられ、背の低いカードの隣に大きな穴が空く)
 -->
 <div class="columns">
     <div class="column">
         <section class="panel card">
             <h2>録画のしかた</h2>
-            <p class="small lead">
+            <p class="small soft">
                 すべての録画に効きます。ルールや予約ごとには変えられません。
             </p>
             <form
@@ -104,14 +106,10 @@
                     **コーデックは複数選べる。** 両方入れると1本の録画を両方で
                     焼く — 古いテレビは AV1 を解けないので H.264 も置いておくと、
                     同じ録画をどちらの端末でも観られる。どちらも入れなければ
-                    「エンコードしない」(生TSのまま)。
-
-                    単一選択 (`<select>`) だった頃は「どちらか一方」しか持てず、
-                    テレビ用に H.264 を選ぶとブラウザ用の小さい AV1 を諦めることに
-                    なっていた
+                    「エンコードしない」(生TSのまま)
                 -->
                 <fieldset class="field">
-                    <span class="label">映像コーデック</span>
+                    <span class="field-label">映像コーデック</span>
                     <label class="check">
                         <input
                             type="checkbox"
@@ -154,18 +152,10 @@
                     **並びは話題ごとに。** 2列に流し込むので、DOM の順がそのまま
                     「どれとどれが同じ行に来るか」になる。
                     1行目は「出来上がるもの」(コーデックと生TS)、2行目は焼く前に映像を読んで
-                    決めるもの (CM とコマ数)。
-
-                    生TSを残すか・無料放送だけにするかも、ここで決める。
-                    画面に出していなかった頃は、保存を押すたびに未送信のチェックボックスとして
-                    全部 false で上書きされていた
-
-                    **どの升目も「小さい見出し → 中身 → 要点 → 詳しく」の形にそろえる。**
-                    チェックだけの升目に見出しが無かった頃は、隣のコーデックや CM と
-                    頭の高さが合わず、真ん中寄せにしても浮いて見えた
+                    決めるもの (CM とコマ数)。どの升目も「小さい見出し → 中身 → 要点 → 詳しく」の形にそろえる
                 -->
                 <div class="field">
-                    <span class="label">元のTS</span>
+                    <span class="field-label">元のTS</span>
                     {@render checkRow(
                         'keepOriginal',
                         recording.keepOriginal,
@@ -175,7 +165,7 @@
                     )}
                 </div>
                 <label class="field">
-                    <span class="label">CM</span>
+                    <span class="field-label">CM</span>
                     <select name="cmCut" data-testid="global-cmcut">
                         <option value="chapter" selected={recording.cmCut === 'chapter'}>
                             チャプターを打つだけ (安全)
@@ -192,7 +182,7 @@
                     数えるのが唯一の見分け方だった (実測: アニメ 21〜55% / 生放送 71%)
                 -->
                 <div class="field">
-                    <span class="label">コマ数</span>
+                    <span class="field-label">コマ数</span>
                     {@render checkRow(
                         'fpsDetect',
                         recording.fpsDetect,
@@ -203,7 +193,7 @@
                     )}
                 </div>
                 <div class="field span-2">
-                    <span class="label">自動予約</span>
+                    <span class="field-label">自動予約</span>
                     {@render checkRow(
                         'freeOnly',
                         recording.freeOnly,
@@ -225,7 +215,7 @@
         -->
         <section class="panel card" data-testid="devices-card">
             <h2>テレビのアプリ</h2>
-            <p class="small lead">QR でペアリングしたテレビです。取り消すと、そのテレビはペアリングし直しになります</p>
+            <p class="small soft">QR でペアリングしたテレビです。取り消すと、そのテレビはペアリングし直しになります</p>
             {#if data.devices.length === 0}
                 <p class="small muted">まだありません</p>
             {:else}
@@ -251,7 +241,7 @@
 
         <section class="panel card">
             <h2>通知</h2>
-            <p class="small lead">録画の開始・完了・失敗などを外部に通知します</p>
+            <p class="small soft">録画の開始・完了・失敗などを外部に通知します</p>
             <details class="more">
                 <summary>詳しく</summary>
                 <p>Discord や Slack の Incoming Webhook の URL をそのまま入れられます。</p>
@@ -260,17 +250,13 @@
                 </p>
             </details>
 
-            {#if form?.tested}
-                <div class="notice" data-testid="webhook-tested">テスト送信の結果: {form.tested}</div>
-            {/if}
-
             <form method="POST" action="?/addWebhook" use:submitting class="two-col">
                 <label class="field span-2">
-                    <span class="label">URL</span>
+                    <span class="field-label">URL</span>
                     <input name="url" placeholder="https://..." data-testid="webhook-url" />
                 </label>
                 <div class="span-2">
-                    <span class="label">送る通知</span>
+                    <span class="field-label">送る通知</span>
                     <div class="events" data-testid="webhook-events">
                         {#each data.events as event (event)}
                             <label class="check">
@@ -288,10 +274,8 @@
 
             {#if data.webhooks.length > 0}
                 <!--
-                    **表ではなく行のカード** (録画一覧と同じ形)。列にしていた頃は
-                    半分の幅で「送る通知」がはみ出して横に巻いていた。1件を
-                    URL・送る通知・直近の結果・ボタン の順に縦に積めば、幅がいくらでも
-                    横には出ない (URL だけは折らずに `text-overflow: ellipsis` で止める)
+                    **表ではなく行のカード** (録画一覧と同じ形)。1件を URL・送る通知・直近の結果・ボタン の順に
+                    縦に積めば、幅がいくらでも横には出ない (URL だけは `text-overflow: ellipsis` で止める)
                 -->
                 <div class="rows webhooks" data-testid="webhook-list">
                     {#each data.webhooks as webhook (webhook.id)}
@@ -357,7 +341,7 @@
         -->
         <section class="panel card">
             <h2>データ放送</h2>
-            <p class="small lead">データ放送 (d ボタン) の地域を、郵便番号で決めます</p>
+            <p class="small soft">データ放送 (d ボタン) の地域を、郵便番号で決めます</p>
             <details class="more">
                 <summary>詳しく</summary>
                 <p>
@@ -368,7 +352,7 @@
             </details>
             <form method="POST" action="?/saveBroadcast" use:submitting={keepValues} class="wrap-form">
                 <label class="field">
-                    <span class="label">郵便番号</span>
+                    <span class="field-label">郵便番号</span>
                     <input
                         name="postalCode"
                         value={data.broadcast.postalCode}
@@ -428,7 +412,7 @@
         -->
         <section class="panel card">
             <h2>GPU</h2>
-            <p class="small lead">GPU でエンコードするかを、デバイスとコーデックごとに選びます</p>
+            <p class="small soft">GPU でエンコードするかを、デバイスとコーデックごとに選びます</p>
             <details class="more">
                 <summary>詳しく</summary>
                 <p>
@@ -501,7 +485,7 @@
 
         <section class="panel card">
             <h2>EPGStation からの引き継ぎ</h2>
-            <p class="small lead">
+            <p class="small soft">
                 EPGStation から<strong>ルール・手動予約・録画</strong>を取り込みます
             </p>
             <details class="more">
@@ -605,7 +589,7 @@
         -->
         <section class="panel card">
             <h2>画面の高さを見る</h2>
-            <p class="small lead">右下に、この端末での画面の高さを出します</p>
+            <p class="small soft">右下に、この端末での画面の高さを出します</p>
 
             <label class="check">
                 <input
@@ -635,34 +619,14 @@
 </div>
 
 <style>
-    .card {
-        display: flex;
-        flex-direction: column;
-        gap: 0.75rem;
-        padding: 1.5rem;
-        box-shadow: 0 1px 3px rgb(0 0 0 / 0.2);
-    }
-    .card h2 {
-        font-size: 1.15rem;
-    }
-    .lead {
-        opacity: 0.7;
-    }
     /* 要点の1行と「詳しく」は1つの話。カードの段の間隔 (0.75rem) で離さない */
-    .lead + .more {
+    .soft + .more {
         margin-top: -0.5rem;
-    }
-    .label {
-        font-size: 0.875rem;
-        font-weight: 500;
     }
     .hint {
         display: block;
         font-size: 0.8rem;
         opacity: 0.7;
-    }
-    .mono {
-        font-family: var(--pico-font-family-monospace);
     }
     /* 升目は上でそろえる。背の違う升目を真ん中に寄せると、隣と頭が合わずに浮く */
     .two-col {

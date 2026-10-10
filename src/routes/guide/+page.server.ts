@@ -12,7 +12,7 @@ import {
     services as serviceTable,
 } from '#lib/server/schema.js';
 import { mainOf, SUBCHANNELS_COOKIE, storedSubchannels } from '#lib/subchannels.js';
-import type { ChannelType, Program, ReservationState, Service } from '#lib/types.js';
+import type { ChannelType, Program, Recording, ReservationState, Service } from '#lib/types.js';
 
 const HOUR = 60 * 60 * 1000;
 /**
@@ -48,6 +48,8 @@ interface GridProgram
      * 録画一覧まで戻って同じ番組を探し直させないため
      */
     recording_id: number | null;
+    /** 録画そのものが失敗していれば観る口・落とす口を出さない (一覧の `hasFile` と同じ) */
+    recording_state: Recording['state'] | null;
     /** 配信は library_path ?? ts_path を返すので、どちらかがあれば開ける */
     library_path: string | null;
     ts_path: string | null;
@@ -111,6 +113,7 @@ function readGrid(type: ChannelType, start: number, end: number) {
              */
             reservation_state: sql<ReservationState | null>`CASE WHEN ${r.id} IS NULL THEN NULL ELSE ${reservationState(r, rec)} END`,
             recording_id: rec.id,
+            recording_state: rec.state,
             library_path: rec.library_path,
             ts_path: rec.ts_path,
         })

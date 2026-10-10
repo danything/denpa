@@ -50,7 +50,6 @@
     import { videoFrame } from '#lib/components/player/snapshot.js';
     import Toasts, { errorNotice, type Notice } from '#lib/components/Toasts.svelte';
     import { programDetail } from '#lib/detail.svelte.js';
-    import { startDownload } from '#lib/download.js';
     import { clock, cmNoteWorthShowing, recordedDuration, size } from '#lib/format.js';
     import { write as remind, read as stored } from '#lib/keep.js';
     import { loadOffline } from '#lib/offline.svelte.js';
@@ -951,13 +950,7 @@
     }
 
     /**
-     * 字幕を**映像の絵が出ているところ**にぴったり重ねる。
-     *
-     * **字幕の面と映像は縦横比が違う。** 地上波は 1440x1080 の横長画素で、
-     * 焼くときに正方形 (1920x1080) へ直しているのに、字幕の面は放送のまま。
-     * `object-contain` で敷いていた頃は字幕だけ4:3に letterbox されて
-     * **横に縮み、位置もずれて**いた。プレイヤーと同じく、映像の枠いっぱいに
-     * 引き伸ばす (`fitRect`)
+     * 字幕と CM の蓋を**映像の絵が出ているところ**にぴったり重ねる (`fitRect`)
      */
     function place(): void {
         if (video === null) return;
@@ -992,10 +985,7 @@
 
     /**
      * いまの位置に合う1枚を重ねる。**変わったときだけ描く。**
-     *
-     * canvas は**字幕の面の画素そのままの大きさ**にして、置き場所と大きさは
-     * `place` (fitRect) が映像の絵に合わせる。こちらは放送が言う座標に
-     * そのまま置けばよい — **左右の位置がそのまま出る**のはこのため
+     * canvas の箱は `place` が映像の絵に合わせ、中の座標は `CaptionPainter` が放送の面から写す
      */
     function paint(): void {
         // 蓋の下。いま描くと CM の字幕を仕込むことになる
@@ -1070,9 +1060,10 @@
 
     /**
      * キーでも動かせるようにする。全画面のときはこれがいちばん早い。
-     * **割り当ては追っかけと共通** (`player/keys.ts`。修飾キーの扱いもあちら)
+     * **割り当ては追っかけと共通** (`player/keys.ts`。修飾キーの扱いもあちら)。
+     * データ放送を出している間の十字キーはあちらのカーソル (`DataBroadcast`) なので、送りには使わない
      */
-    const keys = playerKeys({
+    const playerKey = playerKeys({
         togglePlay,
         seekBy,
         toggleCaptions,
@@ -1084,6 +1075,10 @@
             if (video !== null) video.muted = !video.muted;
         },
     });
+    function keys(event: KeyboardEvent): void {
+        if (showData && event.key.startsWith('Arrow')) return;
+        playerKey(event);
+    }
 
     const current = $derived(chapterAt(chapters, at));
     /** CM の入っている録画でだけ、飛ばす口を出す (押しても何も起きない操作を並べない) */
@@ -1157,34 +1152,20 @@
     **ライブ (`/live`) と同じ形・同じ作り。** 映像が左 (16:9 で高さいっぱいまで)、
     読むものが右 (固定幅で残りの高さをぜんぶ使う)。
 
-    **右を映像の高さに合わせない。** 揃えていた頃はライブと違う作りを抱えたうえ、
-    縦長の画面では下が空いているのに説明だけ狭い窓から覗くことになっていた。
-
-    **タブレット (`md` = 768px) から2段組**、狭い画面では映像が上・詳細が下。
-    **周りの余白も横幅の頭打ちも足さない** — 外の `<main>` が余白を持っていて
-    ([+layout.svelte](../../+layout.svelte))、足すと他の画面より内側から始まり、
-    縦がはみ出してスクロールバーが出ていた
+    右は映像の高さに合わせない。**タブレット (`md` = 768px) から2段組**、狭い画面では映像が上・詳細が下。
+    **周りの余白も横幅の頭打ちも足さない** — 外の `<main>` ([+layout.svelte](../../+layout.svelte)) が持っている
 -->
 <div class="watch" data-testid="watch">
     <!-- **映像を先に書く。** 縦積みになったときに上へ来るのはこちら -->
     <section class="player">
         {#if !ready}
-            <!--
-                **焼けていないものは観られない。** 生TSは MPEG-2 で、ブラウザに
-                復号器が無い (持ち込んだ WASM の復号器はライブの生の道だけ。docs/stream.md §5.5)。
-                黙って黒い枠を出すより、そう言って落とす口を出すほうがいい
-            -->
+            <!-- 生TSがあれば load が追っかけへ送るので、ここに来るのは焼いたものも生TSも無い録画 -->
             <div class="panel stack not-ready">
                 <h2>まだ観られません</h2>
-                <p class="small muted">
-                        {#if rec.job_id !== null}
-                            いまエンコードしています。終わるとここで観られます。
-                        {:else if rec.encode_error}
-                            エンコードに失敗しました。生TSをダウンロードすれば観られます。
-                        {:else}
-                            まだエンコードしていません。終わるとここで観られます。
-                        {/if}
-                </p>
+                <p class="small muted">観られるファイルがありません。</p>
+                {#if rec.encode_error}
+                    <p class="small muted">{rec.encode_error}</p>
+                {/if}
             </div>
         {:else}
             <!--
@@ -1277,7 +1258,7 @@
                 />
 
                 <!--
-                    **放送の字幕。** 字幕の面の画素で敷き、映像の絵に重ねる (`place`)。**押す邪魔をしない**
+                    **放送の字幕。** 映像の絵に重ねる (`place`)。**押す邪魔をしない**
                     (`pointer-events: none`) — 下の絵を押して止められなくなる
                 -->
                 <canvas
@@ -1339,22 +1320,12 @@
                 {/if}
 
                 {#if broken}
-                    <!--
-                        **黙って黒いままにしない。** ブラウザによっては Matroska も
-                        AV1 も読めない (Safari)。そのときは落として観てもらう
-                    -->
+                    <!-- **黙って黒いままにしない。** 観られる先を案内する (外のプレイヤーは相手にしない) -->
                     <div class="broken">
                         <p class="small">
                             このブラウザでは再生できませんでした。<br
-                            />ダウンロードして、お手元のプレイヤーで観てください。
+                            />Chrome・Edge か、テレビのアプリ (denpa-tv) で観てください。
                         </p>
-                        <!-- src は端末のコピー (blob:) のことがあるので、落とす口は API を名指す。
-                            押されてから期限付きの署名URLを作る (#lib/download) -->
-                        <button
-                            type="button"
-                            class="secondary small"
-                            onclick={() => void startDownload(rec.id, 'encoded')}>ダウンロード</button
-                        >
                     </div>
                 {/if}
 
@@ -1362,9 +1333,7 @@
                     **右端は「観るのをやめる」ための列。**
 
                     閉じる・切り抜く・消すは、観ながら使う操作 (音・字幕・送り) とは
-                    押す頻度も並べる理由も違う。1本の帯に混ぜていた頃は押すものが
-                    12個並び、**番組の名前が入る幅が残らなかった** (実機のタブレットで
-                    名前が折り返し、帯が二段になっていた)。
+                    押す頻度も並べる理由も違う。下の帯に混ぜると番組の名前が入る幅が残らない。
 
                     **削除をいちばん下に置く。** 隣を押すつもりで当たっても、
                     聞き返しがあるので消えはしない
@@ -1617,26 +1586,15 @@
     </section>
 
     <!--
-        **右は番組の中身。全部ここに出す。**
-
-        以前はモーダルで開いていた。**映像の上に被さる**ので、観ながら読めない —
-        観る画面で「あらすじを読みながら流す」ができないのは本末転倒だった。
-        中身は一覧のモーダルと同じ部品 (`ProgramFacts`) で、枠だけこちらが持つ。
-
-        **中身が長ければ、ここだけが巻き取られる** (`overflow-y: auto`)。
-        番組の説明は数百字あるので、ページごと動くと映像が画面から出ていく。
-        **押すものは下に貼り付けて、いつでも見えるようにする** (縮めない)。
-
-        **高さは画面の残りぜんぶ。幅も枠の作りもライブの右の列と同じ**
-        ([live/+page.svelte](../../live/+page.svelte))。映像の高さに揃えていた頃は、
-        そのためだけに `absolute` で浮かせる作りをここだけ抱えていた (上の説明)
+        **右は番組の中身。観ながら読めるよう、映像に被せず全部ここに出す。**
+        中身は一覧のモーダルと同じ部品 (`ProgramFacts`)。長ければここだけが巻き取られる。
+        高さは画面の残りぜんぶ、幅も枠の作りもライブの右の列と同じ
     -->
     <!-- 枠は追っかけと同じ部品 (FactsAside)。幅・巻き取り・貼り付けの決めごとはそちら -->
     <FactsAside testid="watch-facts">
         {#snippet top()}
             <!--
-                **データ放送のリモコンは、映像の上ではなく右の列に出す** — ライブと同じ
-                (live/+page.svelte)。以前は映像に重ねていたので、上下の帯や字幕とぶつかっていた。
+                **データ放送のリモコンは、映像の上ではなく右の列に出す** (ライブと同じ)。
                 データ放送を出している間だけ、番組の中身の上に出す
             -->
             {#if dataPress !== null}

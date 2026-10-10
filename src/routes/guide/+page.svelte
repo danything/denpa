@@ -391,33 +391,14 @@
 
 <!--
     **表は画面の残りをぜんぶ使う** (`+layout.svelte` の `FILLED`)。
-    高さを 75vh で切っていた頃は、**画面の下に余白があるのに表のほうが
-    先に終わって**いた (実測で 1880x960 の窓に 130px の余り)。番組表は縦に
-    長いほど読めるものなので、余りは表に回す。
+    畳まれる幅ではページごとスクロールさせるので、そちらは 75% のまま。
 
-    畳まれる幅ではページごとスクロールさせるので、そちらは 75% のまま —
-    小さい画面で中だけスクロールさせると、指の届く範囲が二重になる。
-
-    **ここだけ `%` で降ろせない。** 土台は `html` から `%` で採っているが、
-    畳まれる幅では途中の入れ物 (`main` と外枠) に高さが決まっておらず、
-    `%` が解決しない。
-
-    **そこは `svh` で採る。** 3つの単位のうち `svh` だけが「ブラウザの UI が
-    出ているとき」= いちばん小さい側で、**見えている範囲を超えない**。
-    `vh` と `dvh` は超えることがあり、実機の PWA で 56px ずれた
-    (Chrome for Android のアドレスバーの高さそのもの)。
-
-    ここは天井を決めているだけなので、少し小さく出る側に倒すのが正しい
+    **ここだけ `%` で降ろせない** (畳まれる幅では途中の入れ物に高さが決まっておらず、
+    `%` が解決しない)。そこは `svh` で採る — `svh` だけが見えている範囲を超えない
+    (`vh` と `dvh` は実機の PWA でアドレスバーの高さぶん超えた)。天井なので小さく出る側に倒す
 -->
 <div class="page">
-    <!--
-    **どこを見るかは1行にまとめる。** 種別・日送り・探すを3段に分けていた頃は、
-    絵の出ていない上半分に 130px 使っていた。番組表は縦に長いほど読めるもの
-    なので、**そのぶんを表に回す。**
-
-    「番組 30343 / 局 125」も出していたが、番組表が入っているかどうかは
-    **表そのものを見れば分かる** (集まり具合の内訳はチューナー画面にある)
--->
+    <!-- **どこを見るかは1行にまとめる** (種別・日送り・探す)。縦は表に回す -->
     <div class="cluster toolbar">
         <div role="group" class="types" data-testid="type-tabs">
             {#each ['GR', 'BS', 'CS'] as type (type)}
@@ -567,12 +548,8 @@
                         どちらでも空けておく — 局名の頭が列ごとにずれると、
                         横に並べたときにどれがどの局か追いにくい。
 
-                        **出せなかったときに引っ込めない。** `onerror` で消していた頃は、
-                        Svelte が持っている節点を横から触ることになって並びが崩れ、
-                        しかも一度消すと読み込み直すまで戻らなかった。denpa を入れ替えた
-                        直後は読みかけの画像がまとめて途切れて全局ぶんが消えていた
-                        (ファイルは残っているのに)。`alt=""` なので、出せなければ
-                        場所だけが残る = 持っていない局と同じ見た目になる
+                        **出せなかったときに引っ込めない** (`onerror` で消すと Svelte の節点を横から触ることになる)。
+                        `alt=""` なので、出せなければ場所だけが残る = 持っていない局と同じ見た目になる
                     -->
                         {#if service.has_logo}
                             <img
@@ -738,29 +715,18 @@
                     <span class="tag lead" data-testid="detail-ended">放送終了</span>
                 {/if}
 
-                {#if program.recording_id !== null && (program.library_path ?? program.ts_path) !== null}
+                {#if program.recording_id !== null && program.recording_state !== 'failed' && (program.library_path ?? program.ts_path) !== null}
+                    {@const recordingId = program.recording_id}
                     <!--
-                        録れているなら、ここからそのまま観られるようにする。
-                        番組表で見つけた番組を観るのに、録画一覧へ戻って同じ番組を
-                        探し直させるのは遠回り。
-
-                        **観られるのは焼けたものだけ** (`library_path`)。生TSは
-                        MPEG-2 で、ブラウザに復号器が無い (持ち込んだ WASM の復号器は
-                        ライブの生の道だけ。docs/stream.md §5.5)。焼き上がるまでは落として観てもらう
+                        録れているなら、録画一覧へ戻らずここからそのまま観られるようにする
+                        (一覧の `hasFile` と同じ判定)。焼く前の生TSは観る画面が追っかけ (`/chase`) へ送る
                     -->
-                    {#if program.library_path !== null}
-                        <a
-                            class="button"
-                            href={resolve(`watch/${program.recording_id}`)}
-                        >
-                            再生
-                        </a>
-                    {/if}
+                    <a class="button" href={resolve(`watch/${recordingId}`)}>再生</a>
                     <!-- 押されてから期限付きの署名URLを作って落とす (#lib/download) -->
                     <button
                         type="button"
-                        class="ghost"
-                        onclick={() => void startDownload(program.recording_id ?? -1)}
+                        class="secondary outline"
+                        onclick={() => void startDownload(recordingId)}
                     >
                         ダウンロード
                     </button>
