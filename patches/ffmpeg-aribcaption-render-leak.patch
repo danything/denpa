@@ -1,0 +1,33 @@
+avcodec/libaribcaption: free the render result after converting it
+
+aribcc_renderer_render() fills ctx->render_result with images that are
+owned by the caller and must be released with
+aribcc_render_result_cleanup(). The bitmap path did this only for the
+"unchanged", "no image" and unknown-status returns. After converting the
+images into AVSubtitleRects, and on the error path, the result was left
+allocated, and the next call overwrote it without freeing it. Every
+rendered caption therefore leaked its bitmaps.
+
+The images are not used after conversion, so release them before
+returning from both paths.
+
+diff --git a/libavcodec/libaribcaption.c b/libavcodec/libaribcaption.c
+index e8f7cada73..b68f1a6453 100644
+--- a/libavcodec/libaribcaption.c
++++ b/libavcodec/libaribcaption.c
+@@ -493,6 +493,7 @@ static int aribcaption_trans_bitmap_subtitle(ARIBCaptionContext *ctx)
+             av_log(ctx, AV_LOG_WARNING, "CLUT overflow (%d).\n", ctx->clut_overflow);
+     }
+     sub->num_rects = rect_idx;
++    aribcc_render_result_cleanup(&ctx->render_result);
+ 
+     return rect_idx;
+ 
+@@ -508,6 +509,7 @@ fail:
+         av_freep(&sub->rects);
+     }
+     sub->num_rects = 0;
++    aribcc_render_result_cleanup(&ctx->render_result);
+ 
+     return ret;
+ }

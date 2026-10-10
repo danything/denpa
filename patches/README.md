@@ -31,12 +31,12 @@ denpa は絵で受け取る (`server/captions.ts`) ので後者です。しか�
 領域0で返ってくるので、それで消すと表示中の字幕を消してしまいます
 (最初に当てていた版はこれで判定していた。2026-10-06 にフラグの版へ差し替え)。
 
-**投げ先は ffmpeg です**:
-[PR #24067](https://code.ffmpeg.org/FFmpeg/FFmpeg/pulls/24067)。
+**上流の ffmpeg に入りました**:
+[PR #24067](https://code.ffmpeg.org/FFmpeg/FFmpeg/pulls/24067) (2026-10-09 に master へ。
+`9a4111b1`、FATE の試験 `fate-sub-aribcaption-clear` 付き)。
 libaribcaption 自身は字幕をちゃんと返していて、それを捨てているのは ffmpeg 側の
-ラッパなので、あちらに出しても直せません (libaribcaption の作者も
-「LGTM」で承認済み)。FATE の試験 `fate-sub-aribcaption-clear` 付き。
-**マージされて denpa の ffmpeg がそれを含む版に上がったら、このパッチは消します。**
+ラッパなので、あちらに出しても直せません (libaribcaption の作者も「LGTM」で承認)。
+**denpa の ffmpeg がそれを含む版に上がったら、このパッチは消します** (9.0.2 には入っていない)。
 
 同じ100秒を通した実測 (数字は出てきた PNG のバイト数。10609B が全部透明):
 
@@ -48,6 +48,24 @@ libaribcaption 自身は字幕をちゃんと返していて、それを捨て�
               67.85s 10609B   70.09s 10609B   75.11s 10609B   80.13s 10609B
               85.15s 10609B   90.16s 10609B   95.18s 10609B  … 透明のまま
 ```
+
+## `ffmpeg-aribcaption-render-leak.patch`
+
+**字幕を絵にするたびにメモリが漏れるのを直します。**
+
+libaribcaption の `aribcc_renderer_render()` は描いた絵を呼び出し側に渡し、使い終わったら
+`aribcc_render_result_cleanup()` で返してもらう作りです。ffmpeg のラッパは、絵を
+字幕 (`AVSubtitleRect`) に写したあとにこれを呼んでおらず、次の描画で上書きして捨てていました。
+**字幕が1枚出るたびに、その絵のぶんが漏れます。** denpa は絵で受け取るので、生放送のように
+長くデコードし続けるほど増えます。
+
+上流と同じ試験用の短い字幕 (表示1回) を ASan で通すと、当てる前は **38,440 バイト
+(2か所)** の漏れ、当てた後は 0。
+
+**投げ先は ffmpeg です**:
+[PR #24992](https://code.ffmpeg.org/FFmpeg/FFmpeg/pulls/24992) (text / ass の直しと一緒)。
+`ffmpeg-aribcaption-clear.patch` の後に当てる前提です (ファイル名の順で当たる)。
+**denpa の ffmpeg がそれを含む版に上がったら、このパッチは消します。**
 
 ## `ffmpeg-sched-overflow.patch` (9.0.2 で取り下げ)
 
