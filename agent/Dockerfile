@@ -124,7 +124,8 @@ RUN set -eu && cd /tmp && \
 #
 # 取ってくるのは px4-userland と同じ名前の付け方を見込んだ配布アーカイブ (上流の
 # scripts/package-linux-variant.py の形: 頭に1段のディレクトリ、bin/ にコマンド3つ、musl の
-# 完全静的 ELF)。名前や形が違えば、版を上げる PR の CI (イメージを焼く) で落ちて分かる
+# 完全静的 ELF)。名前の glibc / musl は同梱の IFD ハンドラ (使わない) の libc の違いで、
+# コマンドはどちらも同じ musl の静的 ELF。名前や形が違えば、版を上げる PR の CI (イメージを焼く) で落ちて分かる
 # (SHA256SUMS にそのアーカイブの行が無ければ落とす。--ignore-missing は行が無くても通るので使わない)。
 # 受信機もカードも asicend の制御ソケットで直に話すので、asicen-ts と IFD ハンドラは使わない。
 # 上流の第一弾は Linux x86_64 だけなので、arm64 では入れずに先へ進む。

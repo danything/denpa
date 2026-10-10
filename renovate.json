@@ -51,10 +51,13 @@
       "allowedVersions": "<11"
     },
     {
-      "description": "asicen-userland (PX-W3U3、試験的) は agent/Dockerfile で 0.0.0 (= まだリリースが無い) にしてあり、版が上がると初めてイメージに入る。最初の版は配布物の名前・形・ファームウェアの同梱を人が確かめてから入れたいので、自動ではマージしない (docs/agent.md)",
+      "description": "asicen-userland (PX-W3U3、試験的) は agent/Dockerfile で 0.0.0 (= まだリリースが無い) にしてあり、版が上がると初めてイメージに入る。最初の版は配布物の名前・形・ファームウェアの同梱を人が確かめてから入れたいので、自動ではマージしない (docs/agent.md)。共有の設定は非 major を全部「all dependencies」の1本にまとめて自動マージするので、ここだけ別の PR に分ける (同じ PR に入ると、ほかの依存の自動マージまで止まる)",
       "matchDatasources": ["github-releases"],
       "matchPackageNames": ["Khronos31/asicen-userland"],
-      "automerge": false
+      "groupName": "asicen-userland",
+      "groupSlug": "asicen-userland",
+      "automerge": false,
+      "addLabels": ["needs-review"]
     },
     {
       "description": "danything/denpa-font の版は vX.Y のタグだけ (元フォントを置いた source-… のリリースは版ではない)",
