@@ -115,6 +115,51 @@ describe('parseTitle', () => {
         // 後ろに名前が続くものは、どこまでが編か分からないので今までどおり
         expect(parseTitle('将棋)第34期 銀河戦').arc).toBe('');
     });
+
+    test('英語の話数 (Chapter / Episode / EP) も拾う', () => {
+        expect(parseTitle('[字]アニメ 追放された転生重騎士はゲーム知識で無双する Chapter 15')).toEqual({
+            series: 'アニメ 追放された転生重騎士はゲーム知識で無双する',
+            arc: '',
+            subtitle: '',
+            episode: 15,
+        });
+        expect(parseTitle('推しが我が家にやってきた! Episode.2')).toMatchObject({
+            series: '推しが我が家にやってきた!',
+            episode: 2,
+        });
+        expect(parseTitle('誘女、派遣します episode1').episode).toBe(1);
+        expect(parseTitle('ロック歴史秘話~Rock Legends~Ep17 USパンク')).toMatchObject({
+            series: 'ロック歴史秘話~Rock Legends',
+            subtitle: 'USパンク',
+            episode: 17,
+        });
+        expect(parseTitle('[新]嘘をついた私たちEP1【秘密の“おまじない”】')).toMatchObject({
+            series: '嘘をついた私たち',
+            subtitle: '',
+            episode: 1,
+        });
+        // # があればそちらが話数
+        expect(parseTitle('テストアニメ Episode 3 #12').episode).toBe(12);
+        // 後ろのドットは話数の終わり。`Ep.3.5` のような小数は読まない
+        expect(parseTitle('テストアニメ Chapter 15.').episode).toBe(15);
+        expect(parseTitle('テストアニメ Ep.3.5').episode).toBeNull();
+    });
+
+    test('Season / Part / Vol. や語の途中の ep は話数にしない', () => {
+        expect(parseTitle('探偵はもう、死んでいる。Season2')).toMatchObject({
+            series: '探偵はもう、死んでいる。Season2',
+            episode: null,
+        });
+        expect(parseTitle('ヒロシのぼっちキャンプ Season5 #85')).toMatchObject({
+            series: 'ヒロシのぼっちキャンプ Season5',
+            episode: 85,
+        });
+        expect(parseTitle('テニス★スーパープレー 全仏オープンテニス2026 Part2').episode).toBeNull();
+        expect(parseTitle('GLAY MV COLLECTION Vol.10').episode).toBeNull();
+        expect(parseTitle('鈴木雅之 taste of martini tour 2024 ~Step12…').episode).toBeNull();
+        expect(parseTitle('塩谷育代のベストショット 【EP356】ベルビーチゴルフクラブ').episode).toBeNull();
+        expect(parseTitle('Toy Story 4').episode).toBeNull();
+    });
 });
 
 /** 入れ物の title に焼き込む番組名。プレイヤーがURLの代わりに出す */

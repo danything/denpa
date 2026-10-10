@@ -188,6 +188,58 @@ describe('同じ回の見分け', () => {
         // 副題が揃っても、編が違えば別の回 (芯の一致で緩めない)
         expect(same('時代劇・第36部 #9 ◆主演', '時代劇・第37部 #9 ◆主演')).toBe(false);
     });
+
+    /** TBS と BS日テレ。飾りも話数の書き方も違い、副題は概要にしか無い */
+    const TBS = '追放された転生重騎士はゲーム知識で無双する#15◆スーパーアニメイズムTURBO[字][デ]';
+    const NTV = '[字]アニメ 追放された転生重騎士はゲーム知識で無双する Chapter 15';
+
+    test('題名に話数だけなら、副題は概要から足す (Chapter 15「…」 / Chapter 15 …)', () => {
+        expect(
+            same(TBS, NTV, ['Chapter 15「百足坑道の主」▼レベルアップし…', 'Chapter 15 百足坑道の主']),
+        ).toBe(true);
+        expect(same(TBS, NTV, ['Chapter 15「百足坑道の主」▼レベルアップし…', 'Chapter 16 次の話'])).toBe(
+            false,
+        );
+        // 副題が揃わなければ、飾りの違うシリーズとはくっつけない
+        expect(same(TBS, NTV)).toBe(false);
+    });
+
+    test('概要の話数が題名と違えば副題は足さない', () => {
+        const episode = episodeOf({ name: 'テストアニメ #3', description: '#2「前の話」', extended: null });
+        expect(episode).toMatchObject({ number: 3, subtitle: '' });
+    });
+
+    test('概要の英語の話数も読む', () => {
+        const read = (description: string) =>
+            episodeOf({ name: 'テストアニメ', description, extended: null });
+        expect(read('Chapter.2「少女・ミミ」')).toMatchObject({ number: 2, subtitle: '少女・ミミ' });
+        expect(read('Episode 7 はじまりの街')).toMatchObject({ number: 7, subtitle: 'はじまりの街' });
+        // 括弧の無い副題は、文になっているものは読まない
+        expect(read('#18 猫猫は壬氏に連れられて…')).toMatchObject({ number: 18, subtitle: '' });
+        expect(read('Chapter 3 二人は街へ向かう。そこで…')).toMatchObject({ number: 3, subtitle: '' });
+        // 地の文の Season / Step は話数ではない
+        expect(read('Season 2 が始まる')).toBeNull();
+        expect(read('Step12 の練習')).toBeNull();
+        // 話数の後ろの区切り (`#18: …`) は副題に入れない
+        expect(read('#18: 春の訪れ')).toMatchObject({ number: 18, subtitle: '春の訪れ' });
+    });
+
+    test('概要から足した副題が題名の副題と食い違っても、別の回にはしない', () => {
+        // 局によって書き方が違う (`奈良県` と `奈良`)。足していない頃と同じく、シリーズ名で見る
+        expect(same('私の幸福時間 #1138 奈良県/鹿の写真', '私の幸福時間', ['', '#1138 奈良/鹿の写真'])).toBe(
+            true,
+        );
+        // 題名どうしの副題が食い違えば今までどおり別の回
+        expect(same('テストアニメ #1「はじまり」', 'テストアニメ #1「別の話」')).toBe(false);
+    });
+
+    test('題名の話数の後ろの印 (◆★▼) は副題とは限らない', () => {
+        // 印の後ろは枠の名前や出演者。概要に副題があればそちらで比べる
+        expect(
+            same('テストアニメ#5◆アニメ枠', 'アニメ テストアニメ #5', ['#5「はじまり」', '#5「はじまり」']),
+        ).toBe(true);
+        expect(same('テストドラマ 第2話★主演A', 'テストドラマ 第2話★主演A ドラマ特')).toBe(true);
+    });
 });
 
 describe('captioned', () => {
@@ -348,5 +400,46 @@ describe('firstAirings', () => {
         const skips = firstAirings([bs, other], new Set(), taken);
         expect(skips.get(bs.id)).toEqual({ kind: 'recorded', start_at: base - DAY, service_name: '日テレ1' });
         expect(skips.has(other.id)).toBe(false);
+    });
+
+    test('TBS の #15 を録ってあれば、BS日テレの Chapter 15 は録らない', () => {
+        const recorded = episodeOf({
+            name: '追放された転生重騎士はゲーム知識で無双する#15◆スーパーアニメイズムTURBO[字][デ]',
+            description: 'Chapter 15「百足坑道の主」▼レベルアップし新たなスキルを取得した…',
+            extended: null,
+        })!;
+        const taken = [{ episode: recorded, start_at: base - DAY, service_name: 'TBS1' }];
+        const ntv = airing('[字]アニメ 追放された転生重騎士はゲーム知識で無双する Chapter 15', base, {
+            type: 'BS',
+            description: 'Chapter 15 百足坑道の主',
+        });
+        // 概要がまだ空の回は分からないので録る
+        const later = airing('[字]アニメ 追放された転生重騎士はゲーム知識で無双する', base + 7 * DAY, {
+            type: 'BS',
+        });
+        const skips = firstAirings([ntv, later], new Set(), taken);
+        expect(skips.get(ntv.id)).toEqual({ kind: 'recorded', start_at: base - DAY, service_name: 'TBS1' });
+        expect(skips.has(later.id)).toBe(false);
+    });
+
+    test('飾りの違う局どうしを束ねたあとも、副題の無い局をその束に寄せる', () => {
+        // TBS と BS日テレは副題で束ねる。AT-X は副題が無く、名前が同じ TBS とだけ読める
+        const tbs = airing('追放された転生重騎士はゲーム知識で無双する#15◆スーパーアニメイズムTURBO', base, {
+            description: 'Chapter 15「百足坑道の主」',
+        });
+        const ntv = airing('[字]アニメ 追放された転生重騎士はゲーム知識で無双する Chapter 15', base + DAY, {
+            type: 'BS',
+            description: 'Chapter 15 百足坑道の主',
+        });
+        const atx = airing('追放された転生重騎士はゲーム知識で無双する #15 [字]', base + 2 * DAY, {
+            type: 'CS',
+        });
+        expect(kept([tbs, ntv, atx])).toEqual([tbs.id]);
+        // 束のどれか1つと読めても、読める束が2つあればどちらにも寄せない
+        const one = airing('テストアニメ #1「はじまり」', base);
+        const decorated = airing('アニメ テストアニメ #1', base + HOUR, { description: '#1「はじまり」' });
+        const other = airing('テストアニメ #1「別の話」', base + DAY);
+        const bare = airing('テストアニメ #1', base + 2 * DAY);
+        expect(kept([one, decorated, other, bare])).toEqual([one.id, other.id, bare.id]);
     });
 });
