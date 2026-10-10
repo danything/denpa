@@ -153,10 +153,15 @@ function drawRun(
     const baseline = (fontPx - (metrics.ascent + metrics.descent) * fontPx) / 2 + metrics.ascent * fontPx;
     ctx.font = `${fontPx}px ${CAPTION_FONT}`;
     chars.forEach((char, i) => {
-        const left = (run.x + i * run.w) * sx;
-        const top = run.y * sy;
-        const right = (run.x + (i + 1) * run.w) * sx;
-        const bottom = (run.y + run.h) * sy;
+        /*
+         * **枠は画素の境目にそろえる。** 半端な位置のまま塗ると、隣の字との境の1画素が
+         * 両方から半分ずつしか塗られず、半透明の背景に縦の筋が出ていた。
+         * 隣どうしは同じ値に丸まるので、隙間も重なりもできない
+         */
+        const left = Math.round((run.x + i * run.w) * sx);
+        const top = Math.round(run.y * sy);
+        const right = Math.round((run.x + (i + 1) * run.w) * sx);
+        const bottom = Math.round((run.y + run.h) * sy);
         if (!transparent(run.bg)) {
             ctx.fillStyle = run.bg;
             ctx.fillRect(left, top, right - left, bottom - top);
