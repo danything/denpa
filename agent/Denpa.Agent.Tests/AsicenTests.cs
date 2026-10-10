@@ -131,6 +131,43 @@ public class AsicenTests
             .IsEqualTo(Path.Combine("/run/x", "asicen-userland", "1-2", "control.sock"));
     }
 
+    private static readonly AsicenUserland.Enclosure Ready = new(
+        "1-2", "PX-W3U3", new("0b06:0005", 1, 29, "1-2.1", false), new("1738:5211", 1, 30, "1-2.2", true),
+        AsicenUserland.Receivers(4));
+
+    [Test]
+    public async Task asicend_には_1_と_2_の番地と挿し口を渡す()
+    {
+        var firmware = Path.GetTempFileName();
+        try
+        {
+            await Assert.That(AsicenDaemon.Hardware("1-2", firmware, () => [Ready])).IsEquivalentTo(new[]
+            {
+                "--hardware", "--primary", "1:29", "--primary-port", "1-2.1", "--sibling", "1:30", "--sibling-port", "1-2.2",
+            });
+            var missing = Assert.Throws<IOException>(() => AsicenDaemon.Hardware("3-4", firmware, () => [Ready]));
+            await Assert.That(missing!.Message).Contains("見つかりません");
+        }
+        finally
+        {
+            File.Delete(firmware);
+        }
+    }
+
+    [Test]
+    public async Task ファームウェアが配布物に無ければ_流し込み済みの機材でも起こさない()
+    {
+        var called = false;
+        var error = Assert.Throws<IOException>(() => AsicenDaemon.Hardware("1-2", "/nonexistent/asicen-loader.bin", () =>
+        {
+            called = true;
+            return [Ready];
+        }));
+        await Assert.That(error!.Message).Contains("ファームウェアがありません");
+        // 機材を並べにも行かない (ファームウェアを流し込みにも行かない)
+        await Assert.That(called).IsFalse();
+    }
+
     [Test]
     public async Task 配布物が無ければ何も挙げない()
     {

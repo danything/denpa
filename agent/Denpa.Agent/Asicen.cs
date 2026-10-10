@@ -365,7 +365,7 @@ public sealed class AsicenDaemon
         {
             if (!All.TryGetValue(id, out var daemon))
             {
-                daemon = new AsicenDaemon(id, AsicenUserland.Dir, AsicenUserland.RuntimeDir, () => Hardware(id));
+                daemon = new AsicenDaemon(id, AsicenUserland.Dir, AsicenUserland.RuntimeDir, () => Hardware(id, AsicenUserland.Firmware, () => AsicenUserland.Enclosures(_ => { })));
                 All[id] = daemon;
             }
             return daemon;
@@ -383,13 +383,13 @@ public sealed class AsicenDaemon
     /// (電源を入れ直すと結局ファームウェア待ちに戻って使えなくなる)。
     /// </para>
     /// </summary>
-    private static string[] Hardware(string id)
+    internal static string[] Hardware(string id, string firmware, Func<IEnumerable<AsicenUserland.Enclosure>> enclosures)
     {
-        if (!File.Exists(AsicenUserland.Firmware))
+        if (!File.Exists(firmware))
         {
-            throw new IOException($"ファームウェアがありません: {AsicenUserland.Firmware} (asicen-userland の配布物に入っていませんでした)");
+            throw new IOException($"ファームウェアがありません: {firmware} (asicen-userland の配布物に入っていませんでした)");
         }
-        var enclosure = AsicenUserland.Enclosures(_ => { }).FirstOrDefault(found => found.Id == id)
+        var enclosure = enclosures().FirstOrDefault(found => found.Id == id)
             ?? throw new IOException($"ASICEN の筐体 {id} が見つかりません (抜けたか、挿し口を変えた?)");
         return
         [
