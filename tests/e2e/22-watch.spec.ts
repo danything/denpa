@@ -49,8 +49,8 @@ test.describe('録画を観る', () => {
         // 右には番組の中身。一覧のモーダルと同じものを枠なしで置いてある
         await expect(page.getByTestId('detail-badges')).toBeVisible();
         await expect(page.getByTestId('watch-meta')).toBeVisible();
-        // 落とす口も残す。ブラウザが読めない形式でも手元のプレイヤーでは観られる
-        await expect(page.getByTestId('watch-download')).toBeVisible();
+        // 観ている横にダウンロードは置かない (録画の詳細の「その他…」にある)
+        await expect(page.getByTestId('watch-download')).toHaveCount(0);
     });
 
     /*
@@ -88,7 +88,6 @@ test.describe('録画を観る', () => {
         await expect(page.getByTestId('watch-delete-confirm')).toBeVisible();
 
         // 他所を触ったら取り下げる (一覧と同じ癖)
-        await page.getByTestId('watch-download').click({ trial: true });
         await page.getByTestId('detail-badges').click();
         await expect(page.getByTestId('watch-delete-confirm')).toHaveCount(0);
 
@@ -292,9 +291,9 @@ test.describe('録画を観る', () => {
 
     /**
      * **番組の中身は右に全部出す。モーダルにしない** — 映像の上に被さると
-     * 観ながら読めない。長ければそこだけが巻き取られ、押すものは外に残る
+     * 観ながら読めない。長ければそこだけが巻き取られる
      */
-    test('詳細は右に出たままで、押すものは巻き取られない', async ({ page, request }) => {
+    test('詳細は右に出たまま', async ({ page, request }) => {
         test.setTimeout(180_000);
         const id = await watchable(page, request);
 
@@ -303,14 +302,6 @@ test.describe('録画を観る', () => {
         // 開くための「詳細」は無い。押さなくても出ている
         await expect(page.getByTestId('watch-detail')).toHaveCount(0);
         await expect(page.getByTestId('program-detail')).toHaveCount(0);
-
-        // 押すものは巻き取られる箱の外。中身がどれだけ長くても見えている
-        const outside = await page.evaluate(() => {
-            const box = document.querySelector('[data-testid="watch-facts"]');
-            const link = document.querySelector('[data-testid="watch-download"]');
-            return box !== null && link !== null && !box.contains(link);
-        });
-        expect(outside).toBe(true);
     });
 
     /**
