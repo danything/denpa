@@ -193,3 +193,17 @@ export function likePieces(word: string): string[] {
     if (run !== '') pieces.push(run);
     return pieces;
 }
+
+/**
+ * 寄せて小文字にした語 (`server/title.searchable`) を `LIKE` の形 (`%切れ端%`、`ESCAPE '\'`) にする。
+ * どれも**必ず含むはず**のものなので AND で掛けられる。大文字小文字を持つ非 ASCII の字
+ * (キリル文字など。LIKE が揃えられない) を含む切れ端と、絞れない語は何も返さない
+ */
+export function likeTerms(words: string[]): string[] {
+    return words
+        .flatMap(likePieces)
+        .filter((piece) =>
+            [...piece].every((ch) => /[a-z0-9]/.test(ch) || ch.toLowerCase() === ch.toUpperCase()),
+        )
+        .map((piece) => `%${piece.replace(/[\\%_]/g, (ch) => `\\${ch}`)}%`);
+}

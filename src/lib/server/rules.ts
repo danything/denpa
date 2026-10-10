@@ -1,6 +1,6 @@
 import { and, eq, getTableColumns, gt, inArray, isNull, ne, or } from 'drizzle-orm';
 import { type Genre, genreMatches } from '#lib/arib.js';
-import { likePieces } from '../fold';
+import { likeTerms } from '../fold';
 import { parseSearchFields, type SearchField } from '../search';
 import type { Program, Rule } from '../types';
 import { config } from './config';
@@ -108,19 +108,6 @@ export function likePatterns(compiled: CompiledRule): string[] | null {
     if (compiled.fields.includes('extended')) return null;
     const patterns = likeTerms(compiled.keywords);
     return patterns.length === 0 ? null : patterns;
-}
-
-/**
- * 寄せて小文字にした語 (`searchable`) を `LIKE` の形 (`%切れ端%`、`ESCAPE '\'`) にする。
- * どれも**必ず含むはず**のものなので AND で掛けられる。絞れない語は何も返さない
- */
-export function likeTerms(words: string[]): string[] {
-    return words
-        .flatMap(likePieces)
-        .filter((piece) =>
-            [...piece].every((ch) => /[a-z0-9]/.test(ch) || ch.toLowerCase() === ch.toUpperCase()),
-        )
-        .map((piece) => `%${piece.replace(/[\\%_]/g, (ch) => `\\${ch}`)}%`);
 }
 
 /**

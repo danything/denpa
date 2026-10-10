@@ -14,6 +14,7 @@ import {
     sql,
 } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/sqlite-core';
+import { likeTerms } from '#lib/fold.js';
 import { capacityLabel } from '#lib/format.js';
 import { GROUPED_COOKIE, storedGrouped } from '#lib/grouping.js';
 import { fileSize } from '#lib/server/chase.js';
@@ -25,7 +26,6 @@ import { deleteRecordingFiles, reconcile } from '#lib/server/files.js';
 import { seriesFolder } from '#lib/server/library.js';
 import { recordingFromForm } from '#lib/server/recording.js';
 import { cancel, restore } from '#lib/server/reservations.js';
-import { likeTerms } from '#lib/server/rules.js';
 import {
     activeEncodeJobId,
     encodeJobs,
@@ -217,7 +217,7 @@ export function load({ url, cookies }) {
      */
     /*
      * 絞り込みの言葉は語ごとに AND (手元の絞り込みと同じ読み方)。外字は規格の字 (𠮷) の
-     * まま入っているので、昔の書き方 (吉) に寄せた字が絡む所は抜いて当てる (`rules.likeTerms`)。
+     * まま入っているので、昔の書き方 (吉) に寄せた字が絡む所は抜いて当てる (`fold.likeTerms`)。
      * それで絞れない語 (「吉」だけ) は、手元の絞り込みに任せる
      */
     const terms = likeTerms(searchable(q).split(/\s+/).filter(Boolean));
