@@ -1,0 +1,380 @@
+renderer: smooth upscaled DRCS, and map a few more DRCS patterns
+
+DRCSRenderer scaled DRCS bitmaps with nearest neighbour. At common
+output sizes a 36x36 pattern (often an 18x18 glyph sent pixel-doubled)
+ends up 4x enlarged, so unmapped kanji and symbols look very jagged
+next to font-rendered text.
+
+Drop duplicated rows/columns (lossless), enlarge with Scale2x to round
+off staircase diagonals, then finish with bilinear sampling so edges are
+anti-aliased. Adds test/drcs_smooth with synthetic patterns.
+
+Also map patterns seen on Japanese terrestrial broadcasts (2026-10):
+one-dot shinnyou 迂 (U+8FC2), 《 》 and half-width ｟ ｠.
+
+diff --git a/src/decoder/b24_drcs_conv.cpp b/src/decoder/b24_drcs_conv.cpp
+index d2fe27d..083540b 100644
+--- a/src/decoder/b24_drcs_conv.cpp
++++ b/src/decoder/b24_drcs_conv.cpp
+@@ -42,6 +42,7 @@ extern const std::unordered_map<std::string, uint32_t> kDRCSReplacementMap = {
+     {"2eb49bd25d7eeada006afc0864350da4", 0xff5f},
+     {"a341ee7fe8a368c9737a3341f016ac70", 0xff5f},
+     {"f47048d669ac8d84eeb62477e8420f89", 0xff5f},
++    {"c988da4adf9958a4c66bcb24114f527a", 0xff5f},
+     {"38566b372f4c5a1aead4efa20decd079", 0xff60},
+     {"d84fc83615b75802ed422eda4ba39465", 0xff60},
+     {"5bb8b7731d9473ebd7c842334dfa24f2", 0xff60},
+@@ -56,6 +57,9 @@ extern const std::unordered_map<std::string, uint32_t> kDRCSReplacementMap = {
+     {"2a74d4ad7292c858dc2bb559de67f2d9", 0xff60},
+     {"8c810b8cbe6159e837a88575bb4e6033", 0xff60},
+     {"dc66317cd6fff4f4221069a20f321fce", 0xff60},
++    {"94d501567395c14e37fbacc282f646fb", 0xff60},
++    {"c7b93e8e27f686cbeeb88e871c17327c", 0x300a},
++    {"4eb14b82b3a870763de244c3c21e210b", 0x300b},
+     {"563e1633d226c10ef4ec80638997e4a9", 0x300e},
+     {"0993d5cdf910f481eeefa19e4f09d77c", 0x300e},
+     {"7b80a8345c16e2d4f8ff2691e245c2b1", 0x300e},
+@@ -312,6 +316,7 @@ extern const std::unordered_map<std::string, uint32_t> kDRCSReplacementMap = {
+     {"e28d4c57d97fbe4a0d67aec2cc92e7c8", 0x6365},
+     {"9374173a2e4b7f1dcac75eccd5ee7e7f", 0x698a},
+     {"ec7b2c805a5ba3d52c281ee2296b94d7", 0x8523},
++    {"dedbee40c06e17b51932431dc8cd8334", 0x8fc2},
+ };
+ 
+ }  // namespace aribcaption
+diff --git a/src/renderer/drcs_renderer.cpp b/src/renderer/drcs_renderer.cpp
+index 9c5c472..70e4416 100644
+--- a/src/renderer/drcs_renderer.cpp
++++ b/src/renderer/drcs_renderer.cpp
+@@ -16,7 +16,10 @@
+  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+  */
+ 
++#include <algorithm>
++#include <cmath>
+ #include <cstdint>
++#include <vector>
+ #include "renderer/alphablend.hpp"
+ #include "renderer/bitmap.hpp"
+ #include "renderer/canvas.hpp"
+@@ -24,6 +27,117 @@
+ 
+ namespace aribcaption {
+ 
++namespace {
++
++// Grey-scale (0-255) copy of a DRCS pattern
++struct GreyPattern {
++    int width = 0;
++    int height = 0;
++    std::vector<uint8_t> pixels;
++
++    [[nodiscard]] uint8_t At(int x, int y) const {
++        x = std::clamp(x, 0, width - 1);
++        y = std::clamp(y, 0, height - 1);
++        return pixels[y * width + x];
++    }
++};
++
++GreyPattern DecodePattern(const DRCS& drcs) {
++    GreyPattern pattern;
++    pattern.width = drcs.width;
++    pattern.height = drcs.height;
++    pattern.pixels.resize(static_cast<size_t>(drcs.width) * drcs.height);
++
++    for (int i = 0; i < drcs.width * drcs.height; i++) {
++        intptr_t index = static_cast<intptr_t>(i) * drcs.depth_bits / 8;
++        intptr_t bit_offset = static_cast<intptr_t>(i) * drcs.depth_bits % 8;
++        uint8_t byte = drcs.pixels[index];
++        uint8_t value = (byte >> (8 - (bit_offset + drcs.depth_bits))) & (drcs.depth - 1);
++        pattern.pixels[i] = alphablend::Clamp255((uint32_t)255 * value / (drcs.depth - 1));
++    }
++
++    return pattern;
++}
++
++// Many broadcasters send 2x pixel-doubled patterns (e.g. 18x18 glyphs as 36x36).
++// Drop duplicated columns / rows so that the smoothing below sees the real resolution. Lossless.
++void CollapseDoubled(GreyPattern& pattern) {
++    while (true) {
++        bool cols = pattern.width % 2 == 0;
++        bool rows = pattern.height % 2 == 0;
++        for (int y = 0; y < pattern.height && (cols || rows); y++) {
++            for (int x = 0; x < pattern.width; x++) {
++                if (cols && x % 2 == 0 && pattern.At(x, y) != pattern.At(x + 1, y)) {
++                    cols = false;
++                }
++                if (rows && y % 2 == 0 && pattern.At(x, y) != pattern.At(x, y + 1)) {
++                    rows = false;
++                }
++            }
++        }
++        if (!cols && !rows) {
++            return;
++        }
++
++        GreyPattern collapsed;
++        collapsed.width = cols ? pattern.width / 2 : pattern.width;
++        collapsed.height = rows ? pattern.height / 2 : pattern.height;
++        collapsed.pixels.resize(static_cast<size_t>(collapsed.width) * collapsed.height);
++        for (int y = 0; y < collapsed.height; y++) {
++            for (int x = 0; x < collapsed.width; x++) {
++                collapsed.pixels[y * collapsed.width + x] = pattern.At(cols ? x * 2 : x, rows ? y * 2 : y);
++            }
++        }
++        pattern = std::move(collapsed);
++    }
++}
++
++// Scale2x (EPX): doubles the pattern, rounding off staircase diagonals
++GreyPattern Scale2x(const GreyPattern& src) {
++    GreyPattern dst;
++    dst.width = src.width * 2;
++    dst.height = src.height * 2;
++    dst.pixels.resize(static_cast<size_t>(dst.width) * dst.height);
++
++    for (int y = 0; y < src.height; y++) {
++        for (int x = 0; x < src.width; x++) {
++            uint8_t p = src.At(x, y);
++            uint8_t a = y > 0 ? src.At(x, y - 1) : p;
++            uint8_t b = x < src.width - 1 ? src.At(x + 1, y) : p;
++            uint8_t c = x > 0 ? src.At(x - 1, y) : p;
++            uint8_t d = y < src.height - 1 ? src.At(x, y + 1) : p;
++
++            uint8_t* top = &dst.pixels[(y * 2) * dst.width + x * 2];
++            uint8_t* bottom = top + dst.width;
++            top[0] = (c == a && c != d && a != b) ? a : p;
++            top[1] = (a == b && a != c && b != d) ? b : p;
++            bottom[0] = (d == c && d != b && c != a) ? c : p;
++            bottom[1] = (b == d && b != a && d != c) ? d : p;
++        }
++    }
++
++    return dst;
++}
++
++// Bilinear sample at the center of target pixel (x, y)
++uint8_t SampleBilinear(const GreyPattern& pattern, int x, int y, int target_width, int target_height) {
++    float sx = (static_cast<float>(x) + 0.5f) * pattern.width / target_width - 0.5f;
++    float sy = (static_cast<float>(y) + 0.5f) * pattern.height / target_height - 0.5f;
++    sx = std::clamp(sx, 0.0f, static_cast<float>(pattern.width - 1));
++    sy = std::clamp(sy, 0.0f, static_cast<float>(pattern.height - 1));
++
++    int x0 = static_cast<int>(sx);
++    int y0 = static_cast<int>(sy);
++    float fx = sx - static_cast<float>(x0);
++    float fy = sy - static_cast<float>(y0);
++
++    float top = pattern.At(x0, y0) * (1.0f - fx) + pattern.At(x0 + 1, y0) * fx;
++    float bottom = pattern.At(x0, y0 + 1) * (1.0f - fx) + pattern.At(x0 + 1, y0 + 1) * fx;
++    return static_cast<uint8_t>(std::lround(top * (1.0f - fy) + bottom * fy));
++}
++
++}  // namespace
++
+ bool DRCSRenderer::DrawDRCS(const DRCS& drcs, CharStyle style, ColorRGBA color, ColorRGBA stroke_color,
+                             int stroke_width, int target_width, int target_height,
+                             Bitmap& target_bmp, int target_x, int target_y) {
+@@ -53,21 +167,18 @@ bool DRCSRenderer::DrawDRCS(const DRCS& drcs, CharStyle style, ColorRGBA color,
+ Bitmap DRCSRenderer::DRCSToColoredBitmap(const DRCS& drcs, int target_width, int target_height, ColorRGBA color) {
+     Bitmap bitmap(target_width, target_height, PixelFormat::kRGBA8888);
+ 
+-    float x_fraction = static_cast<float>(drcs.width) / static_cast<float>(target_width);
+-    float y_fraction = static_cast<float>(drcs.height) / static_cast<float>(target_height);
++    // Upscaling a 1-bit glyph with nearest neighbour leaves big jaggies.
++    // Smooth diagonals with Scale2x, then finish with bilinear so edges get anti-aliased.
++    GreyPattern pattern = DecodePattern(drcs);
++    CollapseDoubled(pattern);
++    while (pattern.width * 2 < target_width && pattern.height * 2 < target_height) {
++        pattern = Scale2x(pattern);
++    }
+ 
+     for (int y = 0; y < target_height; y++) {
+         ColorRGBA* dest = bitmap.GetPixelAt(0, y);
+-        int drcs_y = static_cast<int>(y_fraction * static_cast<float>(y));
+         for (int x = 0; x < target_width; x++) {
+-            int drcs_x = static_cast<int>(x_fraction * static_cast<float>(x));
+-
+-            intptr_t index = (drcs_y * drcs.width + drcs_x) * drcs.depth_bits / 8;
+-            intptr_t bit_offset = (drcs_y * drcs.width + drcs_x) * drcs.depth_bits % 8;
+-            uint8_t byte = drcs.pixels[index];
+-
+-            uint8_t value = (byte >> (8 - (bit_offset + drcs.depth_bits))) & (drcs.depth - 1);
+-            uint8_t grey = alphablend::Clamp255((uint32_t)255 * value / (drcs.depth - 1));
++            uint8_t grey = SampleBilinear(pattern, x, y, target_width, target_height);
+ 
+             if (grey) {
+                 uint8_t alpha = (static_cast<uint32_t>(grey) * color.a) >> 8;
+diff --git a/test/CMakeLists.txt b/test/CMakeLists.txt
+index 76934f3..6c154fc 100644
+--- a/test/CMakeLists.txt
++++ b/test/CMakeLists.txt
+@@ -26,5 +26,6 @@ add_subdirectory(caption2srt)
+ add_subdirectory(png_writer)
+ add_subdirectory(decode)
+ add_subdirectory(drcs)
++add_subdirectory(drcs_smooth)
+ add_subdirectory(ffmpeg)
+ add_subdirectory(fontconfig_freetype)
+diff --git a/test/drcs_smooth/CMakeLists.txt b/test/drcs_smooth/CMakeLists.txt
+new file mode 100644
+index 0000000..d9f0c19
+--- /dev/null
++++ b/test/drcs_smooth/CMakeLists.txt
+@@ -0,0 +1,45 @@
++#
++# Copyright (C) 2021 magicxqq <xqq@xqq.im>. All rights reserved.
++#
++# This file is part of libaribcaption.
++#
++# Permission to use, copy, modify, and distribute this software for any
++# purpose with or without fee is hereby granted, provided that the above
++# copyright notice and this permission notice appear in all copies.
++#
++# THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
++# WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
++# MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
++# ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
++# WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
++# ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
++# OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
++#
++
++cmake_minimum_required(VERSION 3.28)
++
++add_executable(test_drcs_smooth
++    EXCLUDE_FROM_ALL
++        test.cpp
++)
++
++target_compile_features(test_drcs_smooth
++    PRIVATE
++        cxx_std_17
++)
++
++target_include_directories(test_drcs_smooth
++    PRIVATE
++        ../../include
++        ../../src
++)
++
++target_link_libraries(test_drcs_smooth
++    PRIVATE
++        aribcaption
++)
++
++set_target_properties(test_drcs_smooth
++    PROPERTIES
++        RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}
++)
+diff --git a/test/drcs_smooth/test.cpp b/test/drcs_smooth/test.cpp
+new file mode 100644
+index 0000000..948f448
+--- /dev/null
++++ b/test/drcs_smooth/test.cpp
+@@ -0,0 +1,105 @@
++/*
++ * Copyright (C) 2021 magicxqq <xqq@xqq.im>. All rights reserved.
++ *
++ * This file is part of libaribcaption.
++ *
++ * Permission to use, copy, modify, and distribute this software for any
++ * purpose with or without fee is hereby granted, provided that the above
++ * copyright notice and this permission notice appear in all copies.
++ *
++ * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
++ * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
++ * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
++ * ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
++ * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
++ * ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
++ * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
++ */
++
++// Checks that DRCS glyphs are smoothed when upscaled, using synthetic patterns.
++
++#include <cstdint>
++#include <cstdio>
++#include <cstdlib>
++#include <vector>
++#include "aribcaption/caption.hpp"
++#include "renderer/bitmap.hpp"
++#include "renderer/drcs_renderer.hpp"
++
++using namespace aribcaption;
++
++#define CHECK(cond)                                                     \
++    do {                                                                \
++        if (!(cond)) {                                                  \
++            fprintf(stderr, "%s:%d: CHECK failed: %s\n", __FILE__, __LINE__, #cond); \
++            exit(1);                                                    \
++        }                                                               \
++    } while (0)
++
++// 1-bit DRCS from an 18x18 picture, pixel-doubled to 36x36 like broadcasters do
++static DRCS MakeDoubled18(bool (*on)(int x, int y)) {
++    DRCS drcs;
++    drcs.width = 36;
++    drcs.height = 36;
++    drcs.depth = 2;
++    drcs.depth_bits = 1;
++    drcs.pixels.assign(36 * 36 / 8, 0);
++    for (int y = 0; y < 36; y++) {
++        for (int x = 0; x < 36; x++) {
++            if (on(x / 2, y / 2)) {
++                int i = y * 36 + x;
++                drcs.pixels[i / 8] |= static_cast<uint8_t>(0x80 >> (i % 8));
++            }
++        }
++    }
++    return drcs;
++}
++
++static Bitmap Render(const DRCS& drcs, int size) {
++    Bitmap bitmap(size, size, PixelFormat::kRGBA8888);
++    DRCSRenderer renderer;
++    CHECK(renderer.DrawDRCS(drcs, kCharStyleDefault, ColorRGBA(255, 255, 255, 255), ColorRGBA(0, 0, 0, 255),
++                            0, size, size, bitmap, 0, 0));
++    return bitmap;
++}
++
++int main() {
++    // A diagonal line: nearest neighbour would leave 4px stairs at 72px
++    Bitmap line = Render(MakeDoubled18([](int x, int y) { return x == y; }), 72);
++    bool has_partial = false;
++    int prev_left = -1;
++    for (int y = 0; y < 72; y++) {
++        int left = -1;
++        for (int x = 0; x < 72; x++) {
++            uint8_t a = line.GetPixelAt(x, y)->a;
++            if (a > 0 && a < 250) {
++                has_partial = true;
++            }
++            if (left < 0 && a >= 128) {
++                left = x;
++            }
++        }
++        CHECK(left >= 0);
++        if (prev_left >= 0) {
++            CHECK(left - prev_left >= 0 && left - prev_left <= 2);
++        }
++        prev_left = left;
++    }
++    CHECK(has_partial);
++    CHECK(line.GetPixelAt(0, 71)->a == 0);
++    CHECK(line.GetPixelAt(71, 0)->a == 0);
++
++    // A filled square stays fully opaque, edges included
++    Bitmap block = Render(MakeDoubled18([](int, int) { return true; }), 72);
++    CHECK(block.GetPixelAt(0, 0)->a >= 250);
++    CHECK(block.GetPixelAt(36, 36)->a >= 250);
++    CHECK(block.GetPixelAt(71, 71)->a >= 250);
++
++    // Same size as the pattern: no blur on an axis-aligned box
++    Bitmap box = Render(MakeDoubled18([](int x, int y) { return x >= 4 && x < 14 && y >= 4 && y < 14; }), 36);
++    CHECK(box.GetPixelAt(18, 18)->a >= 250);
++    CHECK(box.GetPixelAt(2, 2)->a == 0);
++
++    printf("ok\n");
++    return 0;
++}

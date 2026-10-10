@@ -60,7 +60,8 @@ CMD ["bun", "run", "test"]
 
 # ---------------------------------------------------------------------------
 # ffmpeg (自前ビルド。ARIB字幕 libaribcaption + AV1 libsvtav1/dav1d + H.264 x264 +
-# Opus + Intel GPU (VA-API/QSV)。上流に投げる直しを patches/ から当てる)
+# Opus + Intel GPU (VA-API/QSV)。上流に投げる直しを patches/ から ffmpeg と
+# libaribcaption に当てる)
 # ---------------------------------------------------------------------------
 # **debian は digest で固定する** (ffmpeg / jls / runtime の3つとも同じもの)。
 # 札 (`trixie-slim`) だけだと月に何度か中身が入れ替わり、CI は `pull: true` なので
@@ -113,7 +114,9 @@ ARG ARIB_FONT_SHA=a9c834099818c59ba9c3721a2b1a860f6c0af61a
 
 # **上流に投げるつもりの直しだけを当てる** (理由は patches/README.md)。
 # `--fuzz=0` にしてあるのは、ffmpeg を上げたときに当たらなくなったら
-# **黙ってずれて当たるより、ビルドを止めてほしい**ため
+# **黙ってずれて当たるより、ビルドを止めてほしい**ため。
+# ファイル名の頭 (`ffmpeg-` / `libaribcaption-`) で当てる先を分ける
+# (libaribcaption のほうは、付けた試験もここで回す)
 COPY patches/ /patches/
 
 RUN case "${TARGETARCH}" in \
@@ -129,14 +132,18 @@ RUN case "${TARGETARCH}" in \
     woff2_compress /usr/share/fonts/truetype/rounded-mplus-arib/rounded-mplus-1m-arib.ttf && \
     mkdir /tmp/arib && cd /tmp/arib && \
     $CURL https://github.com/xqq/libaribcaption/archive/refs/tags/${LIBARIBCAPTION_VERSION}.tar.gz | tar -xz --strip-components=1 && \
-    mkdir build && cd build && cmake .. -DCMAKE_BUILD_TYPE=Release && cmake --build . -j$(nproc) && cmake --install . && \
+    for p in /patches/libaribcaption-*.patch; do patch -p1 --fuzz=0 < "$p"; done && \
+    mkdir build && cd build && cmake .. -DCMAKE_BUILD_TYPE=Release && cmake --build . -j$(nproc) && \
+    g++ -std=c++17 -I../include -I../src -Iinclude ../test/drcs_smooth/test.cpp libaribcaption.a -o /tmp/test_drcs_smooth && \
+    /tmp/test_drcs_smooth && \
+    cmake --install . && \
     mkdir /tmp/svtav1 && cd /tmp/svtav1 && \
     $CURL https://gitlab.com/AOMediaCodec/SVT-AV1/-/archive/${SVT_AV1_VERSION}/SVT-AV1-${SVT_AV1_VERSION}.tar.gz | tar -xz --strip-components=1 && \
     cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF -DBUILD_APPS=OFF && \
     cmake --build build -j$(nproc) && cmake --install build && \
     mkdir /tmp/ffmpeg_sources && cd /tmp/ffmpeg_sources && \
     $CURL https://ffmpeg.org/releases/ffmpeg-${FFMPEG_VERSION}.tar.bz2 | tar -xj --strip-components=1 && \
-    for p in /patches/*.patch; do patch -p1 --fuzz=0 < "$p"; done && \
+    for p in /patches/ffmpeg-*.patch; do patch -p1 --fuzz=0 < "$p"; done && \
     ./configure \
       --enable-gpl \
       --pkg-config-flags="--static" \
