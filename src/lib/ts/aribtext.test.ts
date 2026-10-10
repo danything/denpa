@@ -1,5 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { decodeAribText } from './aribtext';
+import { GAIJI } from './aribtext-gaiji';
+import { ADDITIONAL } from './b24-tables';
 
 /** 読みやすさのために、バイト列を組み立てる小道具 */
 const bytes = (...values: number[]) => Uint8Array.from(values);
@@ -44,16 +46,43 @@ describe('ARIB 8単位符号', () => {
     });
 
     /**
-     * **番組表でいちばん効くところ。** 「[新]」「[字]」が読めないと、
+     * **番組表でいちばん効くところ。** 「🈟」「🈑」が読めないと、
      * 番組名から印だけが黙って消える
      */
-    test('外字。90区の記号は角括弧付きの文字に開く', () => {
-        expect(decodeAribText(bytes(0x7a, 0x56))).toBe('[字]');
-        expect(decodeAribText(bytes(0x7a, 0x6b, 0x7a, 0x6a))).toBe('[新][再]');
+    test('外字。90区の記号は規格の字 (囲み文字) にする', () => {
+        expect(decodeAribText(bytes(0x7a, 0x56))).toBe('🈑');
+        expect(decodeAribText(bytes(0x7a, 0x6b, 0x7a, 0x6a))).toBe('🈟🈞');
     });
 
     test('追加記号の集合を明示的に指示しても同じ表を引く', () => {
-        expect(decodeAribText(bytes(0x1b, 0x24, 0x3b, 0x7a, 0x56))).toBe('[字]');
+        expect(decodeAribText(bytes(0x1b, 0x24, 0x3b, 0x7a, 0x56))).toBe('🈑');
+    });
+
+    /** 市販のテレビと同じく、寄せずにそのまま出す。探すときの寄せは `fold.ts` */
+    test('規格の字のまま出す。似た字に寄せない', () => {
+        // 85区2点・15点 (つちよし)・39点 (互換漢字の恵)
+        expect(decodeAribText(bytes(0x75, 0x22, 0x75, 0x2f))).toBe('𠅘𠮷');
+        expect(decodeAribText(bytes(0x75, 0x47))).toBe(String.fromCodePoint(0xfa6b));
+        // 93区16点 (野球)・67点 (雪だるま)・70・71点・76・77点
+        expect(decodeAribText(bytes(0x7d, 0x30, 0x7d, 0x63))).toBe('⚾⛄');
+        expect(decodeAribText(bytes(0x7d, 0x66, 0x7d, 0x67, 0x7d, 0x6c, 0x7d, 0x6d))).toBe('⛉⛊⛋⨀');
+        // 93区48点 (2分の1)・94区33点 (括弧の A)
+        expect(decodeAribText(bytes(0x7d, 0x50, 0x7e, 0x41))).toBe('½🄐');
+    });
+
+    test('私用領域にしかない字 (92区56点〜) だけは文字列に開く', () => {
+        expect(decodeAribText(bytes(0x7c, 0x58))).toBe('(vn)');
+    });
+
+    test('外字の表は字幕の表と同じ字。違うのは私用領域だけ', () => {
+        const additional = [...ADDITIONAL];
+        for (const [code, text] of GAIJI) {
+            const at = ((code >> 8) - 0x20 - 85) * 94 + (code & 0xff) - 0x21;
+            const caption = additional[at] ?? '';
+            const cp = caption.codePointAt(0) ?? 0;
+            if (cp === 0xfffd || (cp >= 0xe000 && cp <= 0xf8ff)) continue;
+            expect([code.toString(16), text]).toEqual([code.toString(16), caption]);
+        }
     });
 
     test('改行。CR に続く LF は1回にまとめる', () => {
@@ -84,6 +113,24 @@ describe('ARIB 8単位符号', () => {
         expect(decodeAribText(bytes(0x46, 0x7c, 0x4b))).toBe('日');
         expect(decodeAribText(bytes(0x1b))).toBe('');
         expect(decodeAribText(bytes(0x1b, 0x24))).toBe('');
+    });
+
+    test('90・91区の記号は規格の字にする。EUC-JP の IBM 拡張漢字に化けない', () => {
+        // 90区1点 (事故)・91区17点 (温泉)・91区43点 (電話)
+        expect(decodeAribText(bytes(0x7a, 0x21, 0x7b, 0x31, 0x7b, 0x4b))).toBe('⛌♨☎');
+        // 89区は規格で空き。EUC-JP なら「纊」になるところ
+        expect(decodeAribText(bytes(0x79, 0x21))).toBe('□');
+    });
+
+    test('のちの版で足された外字も読む', () => {
+        // 85区47点・86区1点 (漢字)、93区26点 (亀甲括弧の S)、93区39点 (リットル)
+        expect(decodeAribText(bytes(0x75, 0x4f, 0x76, 0x21, 0x7d, 0x3a, 0x7d, 0x47))).toBe('鿄鿅🄪ℓ');
+    });
+
+    test('JIS互換漢字2面は1面と混ぜない', () => {
+        // 85区1点は1面 (外字) なら「㐂」。2面では外字の表を引かず、2面の表も持たないので「□」
+        expect(decodeAribText(bytes(0x75, 0x21))).toBe('㐂');
+        expect(decodeAribText(bytes(0x1b, 0x24, 0x3a, 0x75, 0x21))).toBe('□');
     });
 
     test('JIS にも外字にも無い区点は印を残す。黙って消さない', () => {

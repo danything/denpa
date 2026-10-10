@@ -133,6 +133,14 @@ body {
     margin: 0;
     word-break: auto-phrase;
     line-break: strict;
+    /*
+     * **外字は絵文字ではなく字で出す (市販のテレビと同じ白黒)。** 番組表の ⚡ ⛅ 🈚 は
+     * 何もしないとカラーの絵文字になる。文字列に VS15 (U+FE0E) を足さずに CSS で
+     * 言うのは、保存する番組名を規格の字のままにしておくため (探すとき・比べるときに
+     * 余計な字が挟まらない)。データ放送の中にも引き継がれる。字幕の canvas は
+     * CSS が効かないので、描くときに VS15 を足す (`player/caption-draw.ts`)
+     */
+    font-variant-emoji: text;
 }
 /*
  * **舞台を広げている間 (iPhone の全画面の代わり。`player/fullscreen.svelte.ts`) は

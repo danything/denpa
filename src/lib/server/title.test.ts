@@ -7,6 +7,11 @@ describe('parseTitle', () => {
         expect(parseTitle('テスト番組[字][解]').series).toBe('テスト番組');
     });
 
+    test('外字の装飾記号 (🈟🈑) も落とす。ほかの外字は規格の字のまま', () => {
+        expect(parseTitle('🈟テスト番組 #1🈑🈞').series).toBe('テスト番組');
+        expect(parseTitle('🈟𠮷野家物語').series).toBe('𠮷野家物語');
+    });
+
     test('鍵括弧をサブタイトルとして切り出す', () => {
         const parsed = parseTitle('推しの番組「はじまりの日」');
         expect(parsed.series).toBe('推しの番組');
@@ -187,6 +192,9 @@ describe('markedTitle', () => {
     });
     test('ARIB の囲み文字は [字] の形に開く (テレビの VLC で豆腐にしない)', () => {
         expect(markedTitle('ニュース\u{1F211}\u{1F213}')).toBe('ニュース[字][デ]');
+    });
+    test('ほかの外字も昔の書き方に開く', () => {
+        expect(markedTitle('𠮷野家⚾中継')).toBe('吉野家○中継');
     });
 });
 

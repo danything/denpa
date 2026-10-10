@@ -90,20 +90,23 @@ const eucjp = new TextDecoder('euc-jp');
 const cache = new Map<number, string>();
 
 function twoByte(code: number, plane2: boolean): string {
-    const cached = cache.get(code);
+    // 2面は同じ区点でも別の字。覚えるときも外字を引くときも1面と混ぜない
+    const key = plane2 ? code | 0x10000 : code;
+    const cached = cache.get(key);
     if (cached !== undefined) return cached;
 
-    const gaiji = GAIJI.get(code);
+    const gaiji = plane2 ? undefined : GAIJI.get(code);
     const high = code >> 8;
     const low = code & 0xff;
     // EUC-JP は最上位を立てたもの。2面は 0x8F を頭に付ける
     const bytes = plane2
         ? Uint8Array.of(0x8f, high | 0x80, low | 0x80)
         : Uint8Array.of(high | 0x80, low | 0x80);
-    const decoded = gaiji ?? eucjp.decode(bytes);
+    // 85区から先は外字の表だけで引く。EUC-JP に渡すと 89〜92区が IBM 拡張の漢字になる
+    const decoded = gaiji ?? (!plane2 && high >= 0x75 ? '' : eucjp.decode(bytes));
     // 変換できないと置換文字が返る。そのまま出すと題名に「�」が並ぶ
     const text = decoded === '' || decoded.includes('�') ? UNKNOWN : decoded;
-    cache.set(code, text);
+    cache.set(key, text);
     return text;
 }
 
