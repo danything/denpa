@@ -36,23 +36,42 @@ export interface Episode {
     number: number | null;
     /** 副題を均したもの */
     subtitle: string;
+    /**
+     * 副題が確かでない (題名に話数しか無く概要から足したもの、括弧の無い副題、題名の印の後ろ)。
+     * 揃えば同じ回の決め手にするが、食い違っても別の回とはしない (`sameEpisode`)
+     */
+    inferred: boolean;
 }
 
 const KANJI_DIGITS = '〇一二三四五六七八九';
 const NUMERAL = `\\d{1,4}|[${KANJI_DIGITS}十百]{1,5}`;
-/** 概要に出る話数と副題。`#18「月下の花」` `第18話「…」` `第十八話『…』` */
+/** 英語の話数 (`Chapter 15` `Episode.2` `EP108`)。語の途中 (`Step12`) は読まない */
+const LABEL = '(?<![A-Za-z0-9])(?:chapter|episode|ep)\\s*\\.?\\s*(\\d{1,4})';
+/** 概要に出る話数と副題。`#18「月下の花」` `第18話「…」` `第十八話『…』` `Chapter 18「…」` */
 const NUMBERED_SUBTITLE = new RegExp(
-    `(?:#\\s*(\\d{1,4})|第\\s*(${NUMERAL})\\s*[話回])\\s*[「『]([^」』]{1,80})[」』]`,
-    'g',
+    `(?:#\\s*(\\d{1,4})|第\\s*(${NUMERAL})\\s*[話回]|${LABEL})\\s*[「『]([^」』]{1,80})[」』]`,
+    'gi',
 );
 /**
  * 副題の無い話数。**行の頭に単独で出たものだけ** (`#18 猫猫は…`)。地の文の「第3話から登場」
  * 「#1ヒット」は読まない。「第3回」も地の文に紛れやすいので読まない
  */
 const NUMBER_ONLY = new RegExp(
-    `^\\s*(?:#\\s*(\\d{1,4})|第\\s*(${NUMERAL})\\s*話)(?=[\\s「『:.、。]|$)`,
-    'gm',
+    `^\\s*(?:#\\s*(\\d{1,4})|第\\s*(${NUMERAL})\\s*話|${LABEL})(?=[\\s「『:.、。]|$)`,
+    'gmi',
 );
+/**
+ * 行の頭の話数に続く、括弧の無い副題 (`Chapter 15 百足坑道の主`)。行の残りが短く、
+ * 文になっていない (句読点や … が無い) ものだけ。`#18 猫猫は壬氏に連れられて…` は副題にしない
+ */
+const BARE_SUBTITLE = /^[^。、,!?！？…]{1,40}$/;
+/** 副題の後ろの区切り (`百足坑道の主▼レベルアップし…`)。その先は粗筋 */
+const SUBTITLE_END = /[▼▽◆◇■□]/;
+/**
+ * 題名の話数の後ろが印で始まるもの (`#15◆スーパーアニメイズムTURBO` `#44 ◆松平健`)。
+ * 枠の名前か出演者で、副題とは限らない
+ */
+const MARKED = /^[▼▽◆◇■□★☆]/;
 /**
  * 「前回 #17「…」」「前回のあらすじ #17「…」」はこの回の話数ではない。同じ文の前のほうを見る
  * (`NUMBERED_SUBTITLE` 用。`NUMBER_ONLY` は行の頭だけなので前置きがあれば当たらない)
@@ -75,7 +94,9 @@ function numeral(text: string): number {
 }
 
 /** 概要・詳細から、この回の話数と副題 (読めなければ null) */
-function describedEpisode(texts: string[]): { number: number | null; subtitle: string } | null {
+function describedEpisode(
+    texts: string[],
+): { number: number | null; subtitle: string; bracketed: boolean } | null {
     for (const [pattern, withSubtitle] of [
         [NUMBERED_SUBTITLE, true],
         [NUMBER_ONLY, false],
@@ -88,9 +109,16 @@ function describedEpisode(texts: string[]): { number: number | null; subtitle: s
                         .split(/[。\n」』]/)
                         .at(-1) ?? '';
                 if (ANOTHER_EPISODE.test(sentence)) continue;
+                const line = text
+                    .slice(match.index + match[0].length)
+                    .split('\n')[0]!
+                    .split(SUBTITLE_END)[0]!
+                    .trim();
+                const subtitle = withSubtitle ? match[4]! : BARE_SUBTITLE.test(line) ? line : '';
                 return {
-                    number: numeral((match[1] ?? match[2])!),
-                    subtitle: withSubtitle ? squash(match[3]!) : '',
+                    number: numeral((match[1] ?? match[2] ?? match[3])!),
+                    subtitle: squash(subtitle),
+                    bracketed: withSubtitle,
                 };
             }
         }
@@ -105,8 +133,12 @@ function describedEpisode(texts: string[]): { number: number | null; subtitle: s
  *   シリーズ名の側に入る (`parseTitle` の `arc`) ので、2期の全話が1つの回に潰れることはない
  * - **題名に話数も副題も無ければ、概要 (無ければ詳細) から読む。** 題名は飾りだけで
  *   (「薬屋のひとりごと FRIDAY ANIME NIGHT」)、話数は概要の `#18「月下の花」` に
- *   しか無い局がある。題名に片方でもあれば題名だけを使う — 概要で埋めると、埋められた局と
- *   埋められなかった局で同じ回が別の回になる
+ *   しか無い局がある。題名に副題があれば題名だけを使う
+ * - **題名に話数だけあれば、副題は概要から足す** (話数が題名と同じときだけ)。
+ *   `追放された…#15◆スーパーアニメイズムTURBO` と `アニメ 追放された… Chapter 15` は
+ *   飾りが違うので、副題 (`Chapter 15「百足坑道の主」`) が揃って初めて同じ回と分かる。
+ *   足せなかった局とは、片方に副題が無いときの見方 (`sameEpisode`) で今までどおり比べる。
+ *   話数の後ろの `◆枠の名前` `▼出演者` も副題とは限らないので、概要に副題があればそちらを使う
  * - **どちらにも無ければ null**。その番組は「回」が分からないので、
  *   時刻をまたいでは束ねない (毎日の「ニュース」が初回しか録れなくなる)。
  *   同じ時刻に同じ題名が流れる同時放送だけは束ねる (`firstAirings`)
@@ -115,13 +147,22 @@ export function episodeOf(program: Described): Episode | null {
     const parsed = parseTitle(program.name);
     let number = parsed.episode;
     let subtitle = squash(parsed.subtitle);
-    if (number === null && subtitle === '') {
+    let inferred = MARKED.test(subtitle);
+    if (subtitle === '' || inferred) {
         const texts = [program.description, Object.values(program.extended ?? {}).join('\n')].map(
             toHalfWidth,
         );
         const described = describedEpisode(texts);
-        if (described === null) return null;
-        ({ number, subtitle } = described);
+        if (number === null) {
+            if (subtitle === '') {
+                if (described === null) return null;
+                ({ number, subtitle } = described);
+                inferred = !described.bracketed;
+            }
+        } else if (described?.number === number && described.subtitle !== '') {
+            subtitle = described.subtitle;
+            inferred = true;
+        }
     }
     // ARIB の囲み文字 (🈑🈞) は局によって付いたり付かなかったりする
     const bare = (text: string) => text.replace(/[\u{1F210}-\u{1F23B}]/gu, ' ');
@@ -138,6 +179,7 @@ export function episodeOf(program: Described): Episode | null {
         core,
         number,
         subtitle,
+        inferred,
     };
 }
 
@@ -161,7 +203,8 @@ function sameSeries(a: Episode, b: Episode): boolean {
  *
  * **副題を出さない局もある** (`東京リベンジャーズ 三天戦争編▼第52話` と、同じ回に
  * `「Be left behind the times」` を付ける局)。片方に副題が無ければ、シリーズ名が
- * 同じ (`sameSeries`) ものを同じ回とみる。
+ * 同じ (`sameSeries`) ものを同じ回とみる。確かでない副題 (`Episode.inferred`) が
+ * 食い違うときも同じ。
  *
  * **編がどちらにも書いてあって違えば別の回** (`水戸黄門・第36部 #9` と `第37部 #9`)
  */
@@ -169,7 +212,8 @@ export function sameEpisode(a: Episode, b: Episode): boolean {
     if (a.number !== b.number) return false;
     if (a.arc !== '' && b.arc !== '' && a.arc !== b.arc) return false;
     if (a.subtitle === '' || b.subtitle === '') return sameSeries(a, b);
-    if (a.subtitle !== b.subtitle) return false;
+    // 確かでない副題は、食い違っても副題が無いものとして見る
+    if (a.subtitle !== b.subtitle) return (a.inferred || b.inferred) && sameSeries(a, b);
     if (sameSeries(a, b)) return true;
     return (
         (a.core.length >= 3 && b.series.includes(a.core)) || (b.core.length >= 3 && a.series.includes(b.core))
@@ -311,10 +355,12 @@ export function firstAirings<T extends Airing>(
  *    両方が当たるなら、どちらとも繋がない — 1本多く録るだけで、取り違えて録り逃すよりよい
  */
 function episodes<T>(list: { airing: T; episode: Episode }[]): { airing: T; episode: Episode }[][] {
+    // 確かでない副題 (`Episode.inferred`) は、揃わなければ副題が無いものとして見る
+    const blank = (e: Episode) => e.subtitle === '' || e.inferred;
     const sure = (a: Episode, b: Episode) =>
-        a.subtitle !== '' && b.subtitle !== ''
+        a.subtitle !== '' && a.subtitle === b.subtitle
             ? sameEpisode(a, b)
-            : a.subtitle === '' && b.subtitle === '' && a.series === b.series;
+            : blank(a) && blank(b) && a.series === b.series;
     const group = list.map((_, i) => i);
     const root = (i: number): number => {
         let at = i;
@@ -332,12 +378,12 @@ function episodes<T>(list: { airing: T; episode: Episode }[]): { airing: T; epis
     });
     const clusters = [...roots.values()];
 
-    /** 束どうしで、どの組み合わせも同じ回と読めるもの */
+    /** 束どうしで、同じ回と読める組み合わせがあるもの。飾りの違う局は副題で束ねてあるので、どれか1つと読めればよい */
     const partners = clusters.map((one) =>
         clusters.filter(
             (other) =>
                 other !== one &&
-                one.every(({ episode: a }) => other.every(({ episode: b }) => sameEpisode(a, b))),
+                one.some(({ episode: a }) => other.some(({ episode: b }) => sameEpisode(a, b))),
         ),
     );
     const merged: { airing: T; episode: Episode }[][] = [];
