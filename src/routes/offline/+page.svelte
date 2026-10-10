@@ -156,7 +156,7 @@
                     <div class="info">
                         <div class="name small broadcast">{item.name}</div>
                         <div class="tiny muted">
-                            {item.serviceName} ・ {dateTime(item.startAt)}
+                            <span class="broadcast">{item.serviceName}</span> ・ {dateTime(item.startAt)}
                             {#if item.durationMs !== null}
                                 ・ {durationMs(item.durationMs)}
                             {/if}

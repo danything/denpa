@@ -120,12 +120,23 @@
     /** ライブ画面が持っている局。**決めているのはサーバ** (`epg.watchableServices`) */
     const watchable = $derived(new Set(data.watchable));
 
-    function channels(rule: { service_types: string[] | null; service_ids: number[] | null }): string {
-        const parts = [
-            ...(rule.service_types ?? []).map((t) => SERVICE_TYPE_LABEL[t] ?? t),
-            ...(rule.service_ids ?? []).map((id) => data.services.find((s) => s.id === id)?.name ?? String(id)),
+    /** 絞り込んでいる種別と局。局名 (`station`) は放送から来た字なので放送の字で出す */
+    function channelParts(rule: {
+        service_types: string[] | null;
+        service_ids: number[] | null;
+    }): { text: string; station: boolean }[] {
+        return [
+            ...(rule.service_types ?? []).map((t) => ({ text: SERVICE_TYPE_LABEL[t] ?? t, station: false })),
+            ...(rule.service_ids ?? []).map((id) => {
+                const name = data.services.find((s) => s.id === id)?.name;
+                return name === undefined ? { text: String(id), station: false } : { text: name, station: true };
+            }),
         ];
-        return parts.length === 0 ? '全局' : parts.join(', ');
+    }
+
+    function channels(rule: { service_types: string[] | null; service_ids: number[] | null }): string {
+        const parts = channelParts(rule);
+        return parts.length === 0 ? '全局' : parts.map((p) => p.text).join(', ');
     }
 
     /** 絞り込んでいるジャンル。条件のうち一番見落としやすいので、名前と並べず条件の行に出す */
@@ -421,7 +432,7 @@
                                                                         service.id,
                                                                     )}
                                                                 />
-                                                                <span class="truncate small">{service.name}</span>
+                                                                <span class="truncate small broadcast">{service.name}</span>
                                                             </label>
                                                         {/each}
                                                     </div>
@@ -625,7 +636,7 @@
                                             <span class="truncate broadcast">{program.name}</span>
                                         </div>
                                         <div class="tiny muted">
-                                            {program.service_name} ・ {dateTime(program.start_at)}
+                                            <span class="broadcast">{program.service_name}</span> ・ {dateTime(program.start_at)}
                                         </div>
                                         <!--
                                     チューナーの取り合いは**録ろうとした時点で初めて分かる**
@@ -641,9 +652,14 @@
                                         {#if program.skip !== null}
                                             <!-- なぜ録らないのか。どの放送で録るのかまで書けば、確かめに行ける -->
                                             <div class="tiny muted" data-testid="preview-skip-reason">
-                                                {program.skip.kind === 'repeat'
-                                                    ? `同じ回を ${program.skip.service_name} (${dateTime(program.skip.start_at)}) で録ります`
-                                                    : `同じ回は録画済みです (${program.skip.service_name} ・ ${dateTime(program.skip.start_at)})`}
+                                                {#if program.skip.kind === 'repeat'}
+                                                    同じ回を <span class="broadcast">{program.skip.service_name}</span>
+                                                    ({dateTime(program.skip.start_at)}) で録ります
+                                                {:else}
+                                                    同じ回は録画済みです (<span class="broadcast"
+                                                        >{program.skip.service_name}</span
+                                                    > ・ {dateTime(program.skip.start_at)})
+                                                {/if}
                                             </div>
                                         {/if}
                                         {#if program.conflict_reason}
@@ -736,7 +752,11 @@
                             {#if rule.ignore_keyword}
                                 <span class="text-error">除外: {rule.ignore_keyword}</span>
                             {/if}
-                            <span>チャンネル: {channels(rule)}</span>
+                            <span
+                                >チャンネル: {#each channelParts(rule) as part, i (i)}{i > 0 ? ', ' : ''}<span
+                                        class:broadcast={part.station}>{part.text}</span
+                                    >{:else}全局{/each}</span
+                            >
                             <span>ジャンル: {genres(rule)}</span>
                         </div>
                         <div class="cluster">

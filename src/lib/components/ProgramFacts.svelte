@@ -74,7 +74,7 @@
 
 <h3 class="title broadcast">{program.name}</h3>
 <p class="meta small muted">
-    {program.service_name} ・ {dateTime(program.start_at)} 〜 {time(program.end_at)}
+    <span class="broadcast">{program.service_name}</span> ・ {dateTime(program.start_at)} 〜 {time(program.end_at)}
     ({duration(program.start_at, program.end_at)})
 </p>
 

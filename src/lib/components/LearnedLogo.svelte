@@ -26,7 +26,7 @@
     {#if learnedAt === null}
         <!-- 見出しは置かない。開いた局の名前 (チューナー画面の `<summary>`) の続きとして読む -->
         <p class="small soft">
-            {serviceName} のロゴはまだ覚えていません。この局の録画を焼くときに、その録画から覚えます。
+            <span class="broadcast">{serviceName}</span> のロゴはまだ覚えていません。この局の録画を焼くときに、その録画から覚えます。
         </p>
     {:else}
         <div class="cluster learned">
