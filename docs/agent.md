@@ -195,6 +195,7 @@ PVC に置きます (`/config`)。どちらも無くて構いません (機材�
 | DVB | `/dev/dvb/*` を開いて `DTV_ENUM_DELSYS` で受けられる方式を聞く (実機の PT3 で adapter0/2 が ISDB-S、adapter1/3 が ISDB-T)。sysfs にはこれを答える口が無い |
 | px4-userland | `px4d --list-json` (0.1.9 以上が要る。[下記](#px-q3u4-などは-px4-userland-でカーネルドライバは入れてもらわない)) |
 | siano-userland | `siano-ts --list` ([下記](#px-s1ud-はカーネルが掴んでいなければ-siano-userland-で)) |
+| asicen-userland | `/sys/bus/usb/devices` の USB ID を読む (試験的。配布物が無ければ挙げない。[下記](#px-w3u3-は-asicen-userland-で-試験的上流のリリース待ち)) |
 
 書いてあれば書いたほうが勝ちます (LNB や1本だけ止めるのは人にしか決められない)。
 
@@ -948,7 +949,8 @@ INT を通させ、他のリーダーは開いて覗いて閉じます (USB の�
 `remote` (配り役の URL)・`ids`・`tuners` が付き、`readers` は空です。
 
 ```sh
-kubectl -n denpa exec deploy/tuner-agent -- curl -s localhost:25252/denpa/card
+# ホストから叩く (イメージに curl は無い)。compose は 25252 を出してある。Kubernetes は kubectl -n denpa port-forward deploy/tuner-agent 25252 を挟む
+curl -s localhost:25252/denpa/card
 ```
 
 - **`readers` が空** — `/dev/bus/usb` がコンテナに見えていない

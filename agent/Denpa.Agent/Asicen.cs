@@ -1,5 +1,3 @@
-using System.Diagnostics;
-
 namespace Denpa.Agent;
 
 /// <summary>
@@ -83,29 +81,14 @@ public static class AsicenUserland
 
     public static string Device(string id, int receiver) => $"{Scheme}{id}:{receiver}";
 
-    public static bool Is(string? device) => device?.StartsWith(Scheme, StringComparison.Ordinal) == true;
-
     /// <summary><c>asicen:1-2:1</c> を割る。形が違えば null</summary>
-    public static (string Id, int Receiver)? Parse(string device)
-    {
-        if (!Is(device)) return null;
-        var parts = device[Scheme.Length..].Split(':');
-        if (parts.Length != 2 || !ValidId(parts[0])) return null;
-        if (!int.TryParse(parts[1], out var receiver) || receiver < 0) return null;
-        return (parts[0], receiver);
-    }
+    public static (string Id, int Receiver)? Parse(string device) => Px4Userland.Parse(device, Scheme, ValidId);
 
     /// <summary>
     /// 挿し口 (<c>1-2</c>、<c>3-1.4</c>)。筐体の名前もこの形で、asicend の <c>--instance</c> に
     /// そのまま通る (英数字と <c>- .</c>、80 文字まで、数字だけの 14・15 桁ではない)
     /// </summary>
-    internal static bool ValidId(string id)
-    {
-        var dash = id.IndexOf('-');
-        if (id.Length > 80 || dash <= 0 || dash == id.Length - 1) return false;
-        return id[..dash].All(char.IsAsciiDigit)
-            && id[(dash + 1)..].Split('.').All(part => part.Length > 0 && part.All(char.IsAsciiDigit));
-    }
+    internal static bool ValidId(string id) => id.Length <= 80 && SianoUserland.IsPort(id);
 
     /// <summary>画面に出す名前</summary>
     public static string Name(string model, string id, int receiver) => $"{model} {id} #{receiver}";
@@ -292,11 +275,7 @@ public static class AsicenUserland
     ];
 
     /// <summary>設定に出てくる筐体。asicend を起こす相手</summary>
-    public static IEnumerable<string> IdsIn(IEnumerable<TunerSpec> specs) => specs
-        .Where(spec => !spec.Disabled && spec.Device is not null)
-        .Select(spec => Parse(spec.Device!)?.Id)
-        .OfType<string>()
-        .Distinct(StringComparer.Ordinal);
+    public static IEnumerable<string> IdsIn(IEnumerable<TunerSpec> specs) => Px4Userland.IdsIn(specs, Parse);
 
     /// <summary>受信機1本を開く。**受信機の貸し借りと選局は px4d と同じ道** (<see cref="Px4Tuner"/>)</summary>
     public static ITuneDevice Open(string id, int receiver, string? lnb) => new Px4Tuner(
@@ -318,7 +297,7 @@ public static class AsicenUserland
 }
 
 /// <summary>
-/// <c>asicend</c> 1つ。**筐体1台につき1つ、起こしたら止めるまで居る** (<see cref="Px4Daemon"/> と同じ扱い)。
+/// <c>asicend</c> 1つ (<see cref="UserlandDaemon"/>。px4d と同じ扱い)。
 ///
 /// <para>
 /// asicend には USB の番地と挿し口を2組とも渡す (<c>--hardware --primary BUS:ADDR --primary-port …
@@ -332,45 +311,16 @@ public static class AsicenUserland
 /// 2台目の asicend は BUSY (exit 4) で終わり、理由は記録に残る。
 /// </para>
 /// </summary>
-public sealed class AsicenDaemon
+/// <param name="select">
+/// どの機材を掴むかの引数 (<c>--hardware …</c>)。起こす直前に呼ぶ。駄目なら投げる。
+/// テストは <c>--mock</c> を返す (上流の模擬の asicend。機材にもファームウェアにも触らない)
+/// </param>
+public sealed class AsicenDaemon(string id, string dir, string runtimeDir, Func<string[]> select)
+    : UserlandDaemon("asicend", id)
 {
-    private static readonly Lock Registry = new();
-    private static readonly Dictionary<string, AsicenDaemon> All = new(StringComparer.Ordinal);
-
-    private static readonly TimeSpan ReadyTimeout = TimeSpan.FromSeconds(30);
-
-    private readonly string _id;
-    private readonly string _dir;
-    private readonly string _runtimeDir;
-    private readonly Func<string[]> _select;
-    private readonly Lock _gate = new();
-    private Process? _process;
-    private volatile string _stderr = "";
-
-    /// <param name="select">
-    /// どの機材を掴むかの引数 (<c>--hardware …</c>)。起こす直前に呼ぶ。駄目なら投げる。
-    /// テストは <c>--mock</c> を返す (上流の模擬の asicend。機材にもファームウェアにも触らない)
-    /// </param>
-    internal AsicenDaemon(string id, string dir, string runtimeDir, Func<string[]> select)
-    {
-        _id = id;
-        _dir = dir;
-        _runtimeDir = runtimeDir;
-        _select = select;
-    }
-
-    public static AsicenDaemon For(string id)
-    {
-        lock (Registry)
-        {
-            if (!All.TryGetValue(id, out var daemon))
-            {
-                daemon = new AsicenDaemon(id, AsicenUserland.Dir, AsicenUserland.RuntimeDir, () => Hardware(id, AsicenUserland.Firmware, () => AsicenUserland.Enclosures(_ => { })));
-                All[id] = daemon;
-            }
-            return daemon;
-        }
-    }
+    public static AsicenDaemon For(string id) => For(id, () => new AsicenDaemon(
+        id, AsicenUserland.Dir, AsicenUserland.RuntimeDir,
+        () => Hardware(id, AsicenUserland.Firmware, () => AsicenUserland.Enclosures(_ => { }))));
 
     /// <summary>
     /// 本物の機材を掴む引数。**ファームウェアが無ければ起こさない** (上流の配布物に入っていなかった)。
@@ -399,135 +349,26 @@ public sealed class AsicenDaemon
         ];
     }
 
-    public bool Running => _process is { HasExited: false };
-
-    /// <summary>筐体に聞いた受信機 (<c>asicenctl list</c>)。聞けていなければ null</summary>
-    public IReadOnlyList<Px4Receiver>? Receivers { get; private set; }
-
-    /// <summary>挙げた筐体ぶん起こす。**起こせなくても止まらない** (理由は記録に、選局のときにもう一度)</summary>
-    public static void Prepare(IEnumerable<string> ids)
-    {
-        foreach (var id in ids)
-        {
-            try
-            {
-                For(id).Ensure();
-            }
-            catch (Exception error)
-            {
-                Log.Write($"[asicend {id}] {error.Message}");
-            }
-        }
-    }
-
-    /// <summary>動いていなければ起こして ready まで待つ。駄目なら理由を添えて投げる</summary>
-    public void Ensure()
+    public override void Ensure()
     {
         if (Running) return;
-        var asicend = AsicenUserland.Bin(_dir, "asicend");
+        var asicend = AsicenUserland.Bin(dir, "asicend");
         if (!File.Exists(asicend)) throw new IOException($"asicen-userland が入っていません: {asicend}");
         // 機材を並べる (最悪 15 秒 + ファームウェアの流し込み) のは錠の外で
-        var select = _select();
-
-        lock (_gate)
-        {
-            if (Running) return;
-            _process?.Dispose();
-            _process = null;
-
-            // ランタイムルートは呼ぶ側が用意する決まり (px4d と同じ)
-            Directory.CreateDirectory(_runtimeDir);
-            if (!OperatingSystem.IsWindows())
+        var args = select();
+        var listed = "";
+        Launch(asicend, [.. args, "--runtime-dir", runtimeDir, "--instance", Id], runtimeDir,
+            () =>
             {
-                File.SetUnixFileMode(_runtimeDir, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
-            }
-
-            var start = new ProcessStartInfo(asicend, [.. select, "--runtime-dir", _runtimeDir, "--instance", _id])
-            {
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                UseShellExecute = false,
-            };
-            var process = Process.Start(start) ?? throw new IOException("asicend を起動できません");
-            _process = process;
-            _stderr = "";
-            _ = Task.Run(async () =>
-            {
-                using var reader = process.StandardError;
-                while (await reader.ReadLineAsync() is { } line)
-                {
-                    _stderr = line;
-                    Log.Write($"[asicend {_id}] {line}");
-                }
-            });
-            _ = Task.Run(() => process.StandardOutput.ReadToEndAsync());
-
-            var deadline = DateTime.UtcNow + ReadyTimeout;
-            while (DateTime.UtcNow < deadline)
-            {
-                if (process.HasExited)
-                {
-                    throw new IOException($"asicend が終了しました (exit {process.ExitCode}: {_stderr})");
-                }
                 var (code, output) = Control("list", TimeSpan.FromSeconds(5));
-                if (code == 0)
-                {
-                    Log.Write($"[asicend {_id}] ready");
-                    Receivers = ListReceivers(output);
-                    return;
-                }
-                Thread.Sleep(500);
-            }
-
-            Stop();
-            throw new IOException($"asicend が {ReadyTimeout.TotalSeconds} 秒以内に ready になりません ({_stderr})");
-        }
+                listed = output;
+                return code == 0;
+            },
+            // **LNB は出せない** (上流が断る) ので 15V の可否は false にする
+            () => Receivers = ListReceivers(listed, "asicenctl list")?.Select(receiver => receiver with { Lnb15v = false }).ToList());
     }
 
     /// <summary><c>asicenctl</c>。筐体はソケットの置き場の名前 (<c>--instance</c>) で呼ぶ (serial が無い)</summary>
     private (int Code, string Output) Control(string command, TimeSpan timeout) => Shell.Run(
-        AsicenUserland.Bin(_dir, "asicenctl"), ["--instance", _id, "--runtime-dir", _runtimeDir, command], timeout);
-
-    /// <summary>
-    /// <c>asicenctl list</c> の受信機の行 (px4ctl list と同じ形)。**LNB は出せない** (上流が断る) ので
-    /// 15V の可否は false にする。読めなければ null
-    /// </summary>
-    private List<Px4Receiver>? ListReceivers(string output)
-    {
-        var receivers = Px4Receiver.ParseList(output, message => Log.Write($"[asicend {_id}] {message}"))
-            .Select(receiver => receiver with { Lnb15v = false })
-            .ToList();
-        if (receivers.Count == 0)
-        {
-            Log.Write($"[asicend {_id}] 受信機を聞けません (asicenctl list: {output})");
-            return null;
-        }
-        Log.Write($"[asicend {_id}] 受信機 {receivers.Count} 本: "
-            + string.Join(", ", receivers.Select(r => $"#{r.Index} {string.Join("/", r.Types)}")));
-        return receivers;
-    }
-
-    /// <summary>止める。**SIGTERM で** (asicend は合図で後片付けをしてから終わる)</summary>
-    public void Stop()
-    {
-        lock (_gate)
-        {
-            var process = _process;
-            _process = null;
-            if (process is null) return;
-            if (!process.HasExited)
-            {
-                Interop.Terminate(process.Id);
-                if (!process.WaitForExit(TimeSpan.FromSeconds(10))) process.Kill();
-            }
-            process.Dispose();
-        }
-    }
-
-    public static void StopAll()
-    {
-        List<AsicenDaemon> daemons;
-        lock (Registry) daemons = [.. All.Values];
-        foreach (var daemon in daemons) daemon.Stop();
-    }
+        AsicenUserland.Bin(dir, "asicenctl"), ["--instance", Id, "--runtime-dir", runtimeDir, command], timeout);
 }

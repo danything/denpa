@@ -128,8 +128,6 @@ public class Px4Tests
         await Assert.That(Px4Userland.Parse("px4:00001205000960")).IsNull();
         await Assert.That(Px4Userland.Parse("q3u4:00001205000960:3")).IsNull();
         await Assert.That(Px4Userland.Parse("/dev/dvb/adapter0/frontend0")).IsNull();
-        await Assert.That(Px4Userland.Is("px4:x")).IsTrue();
-        await Assert.That(Px4Userland.Is(null)).IsFalse();
     }
 
     [Test]

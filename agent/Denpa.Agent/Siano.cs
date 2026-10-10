@@ -66,7 +66,7 @@ public static class SianoUserland
     }
 
     /// <summary>sysfs の USB デバイスの名前 (<c>1-2</c>、<c>1-2.3.1</c>)。インターフェース (<c>1-2:1.0</c>) やルートハブは違う</summary>
-    private static bool IsPort(string name)
+    internal static bool IsPort(string name)
     {
         var dash = name.IndexOf('-');
         if (dash <= 0 || dash == name.Length - 1) return false;

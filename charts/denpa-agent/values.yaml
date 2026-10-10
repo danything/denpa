@@ -17,7 +17,6 @@ image:
 # 入れ替えの合図 (charts/denpa の imageMarks と同じ)。固定タグなら空でよい
 imageMark: ""
 
-timezone: Asia/Tokyo
 # チューナーとカードリーダーに触るために特権が要る。PX-Q3U4 などはホストにドライバを
 # 入れず、/dev/bus (USB) が見えればイメージ同梱の px4-userland が掴む (docs/agent.md)
 privileged: true
@@ -52,7 +51,7 @@ persistence:
     existingClaim: ""
 
 service:
-  # 選局・スキャン・スクランブル解除の口。denpa の TUNER_AGENT_URL がここを指す
+  # 選局・スクランブル解除の口。denpa の TUNER_AGENT_URL がここを指す
   port: 25252
   type: ClusterIP
   # 別のクラスタ/機械の denpa から届かせるなら NodePort か LoadBalancer にする

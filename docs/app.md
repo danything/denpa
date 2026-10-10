@@ -376,7 +376,7 @@ SQLite が拒むので、事実と状態が食い違いません。文字列で�
 環境変数は `AGENT_PORT` (既定 `25252`)・`TUNERS_FILE` / `CHANNELS_FILE` (既定 `/config/` の下)・
 `MEDIA_DIR` / `RAW_DIR` (denpa と同じ。生TSの置き場)・`CARD_URL` (手元にカードが無い拠点だけ。鍵を貰う先)・
 `SHUTDOWN_WAIT` (denpa と同じ)。同梱のドライバの置き場 `PX4_USERLAND_DIR` / `PX4_FIRMWARE` / `PX4_RUNTIME_DIR` /
-`SIANO_USERLAND_DIR` / `SIANO_FIRMWARE` / `ASICEN_USERLAND_DIR` / `ASICEN_FIRMWARE` / `ASICEN_RUNTIME_DIR` はイメージの既定のままでよい (Mac の `install.sh` と Windows の `install.ps1` だけが書き換える)。
+`SIANO_USERLAND_DIR` / `SIANO_FIRMWARE` / `ASICEN_USERLAND_DIR` / `ASICEN_FIRMWARE` / `ASICEN_RUNTIME_DIR` はイメージの既定のままでよい (書き換えるのは Mac の `install.sh` (`PX4_*`・`SIANO_*`) と Windows の `install.ps1` (`SIANO_*`) だけ)。
 `FAKE_TUNE` は適合テストだけが使う。
 
 ## テスト
