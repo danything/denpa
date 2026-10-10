@@ -2,7 +2,7 @@
  * README と docs の絵を撮る。**偽の放送 (作り物の局・番組・ロゴ) だけで撮る** —
  * 本物の放送・ロゴ・本番の画面は絵に出さない。
  *
- *     docker compose run --rm docs                                   # 全部撮って docs/images へ
+ *     docker compose run --rm docs                                          # 全部撮って docs/images へ
  *     docker compose run --rm docs bun scripts/capture-docs.ts watch live   # 名前を挙げるとそのぶんだけ
  *
  * CI でも撮れる (`.github/workflows/screenshots.yml`。手で走らせると絵を artifact に上げる)。
@@ -13,7 +13,7 @@
  *    `FAKE_PROFILE=docs` で立てる。局も番組もロゴも作り物に替わる (`tests/fake/docs.ts`)
  * 2. 番組表を集め、ルールと予約を画面と同じ口から入れる
  * 3. 録画は**DB に直接置く** (偽の放送の録画は数秒の作り物で、一覧に並べると尺が嘘になる)。
- *    中身は本物の ffmpeg で組んだ作り物の映像 (色の流れと番組名だけ) とサムネ、CM のチャプター
+ *    中身は本物の ffmpeg で組んだ作り物の映像 (色が流れるだけ。台詞は作り物の字幕) とサムネ、CM のチャプター
  * 4. 撮って、`scripts/docs-webp.py` で webp にして docs/images に置く
  *
  * **撮る条件はここに書いてある** (散らばると撮り直しのたびに絵の大きさが揃わない):
