@@ -1,5 +1,5 @@
 /**
- * ライブ視聴の字幕。**映像と同じ ffmpeg から放送の字幕をそのまま受け取り、denpa が解いて
+ * 字幕 (ライブ・録画)。**映像と同じ ffmpeg から放送の字幕をそのまま受け取り、denpa が解いて
  * 「字の配置」にして配る** ([caption-text.ts](../caption-text.ts))。描くのは受け側。
  *
  *     エージェント (MPEG-TS) → ffmpeg ┬→ fMP4 (映像・音声)              → WebSocket → MSE
@@ -11,7 +11,7 @@
  * 描くのは受け側で。** 画面の画素で描けるので全画面でも字が粗くならず、
  * 配る量は数百バイト/枚、サーバは絵を描かない (実測は docs/stream.md §5.2)。
  *
- * ## 映像と同じ ffmpeg で受ける。**それが時刻を揃える唯一の道だった**
+ * ## 映像と同じ ffmpeg で受ける。**それが時刻を揃える唯一の道**
  *
  * ffmpeg は入口で時刻を 0 に寄せ直すが、その寄せ幅は**プロセスごとに違う** —
  * 別々に起こした2本は焼き始めの鍵フレームが 0〜0.5秒 ずれる (装置を5通り作って
@@ -32,6 +32,7 @@ import { CAPTION_TEXT_VERSION, type CaptionPage, type CaptionPages } from '#lib/
 import { type CaptionTrack, CHANNEL, type Notice } from '#lib/live.js';
 import { B24CaptionDecoder } from '#lib/ts/b24caption.js';
 import { type MkvFrame, MkvSplitter } from '#lib/ts/mkv.js';
+import { CLOCK } from '#lib/ts/pes.js';
 
 /** 失敗を言っている行。**それ以外は入り口の説明なので捨てる** */
 const TROUBLE = /error|Error|failed|Failed|Cannot|Unable|No such|Invalid data/;
@@ -181,9 +182,6 @@ function label(index: number, lang: string | null): string {
     return `${head} (${LANGUAGE[lang] ?? lang})`;
 }
 
-/** 90kHz。取り決めの時刻はこの刻み (stream.md §5.3) */
-const CLOCK = 90;
-
 /** 文字の配置の1枚と、出す時刻 (ミリ秒。器のコマの時刻そのまま) */
 export interface CaptionShown {
     at: number;
@@ -222,7 +220,7 @@ export class CaptionText {
 export function textFrame(shown: CaptionShown): { kind: number; pts: bigint; data: Uint8Array } {
     return {
         kind: CHANNEL.captionText,
-        pts: BigInt(Math.max(0, Math.round(shown.at * CLOCK))),
+        pts: BigInt(Math.max(0, Math.round((shown.at * CLOCK) / 1000))),
         data: new TextEncoder().encode(JSON.stringify(shown.page)),
     };
 }
