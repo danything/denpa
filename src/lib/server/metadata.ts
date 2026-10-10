@@ -19,7 +19,7 @@ import { run } from './stream';
  * サムネ (`-poster.jpg`) は denpa の画面 (`/api/recordings/<id>/poster`) が配る絵。
  *
  * **字幕は置きません。** 入れ物の中に入っていて、抜くのは実測で0.1〜1秒
- * (`api/recordings/<id>/captions.sup`)。置くと動画1本ぶん場所を積む上に、
+ * (`api/recordings/<id>/captions.json`)。置くと動画1本ぶん場所を積む上に、
  * 焼き直しのたびに揃え直すことになる。
  *
  * `nfo` と `subtitle` が残っているのは**片付けるため**。番組情報を `.nfo` に、

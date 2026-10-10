@@ -1,5 +1,4 @@
 import { error } from '@sveltejs/kit';
-import { captionForm } from '#lib/server/captions.js';
 import { recordingCaptions } from '#lib/server/live.js';
 
 /**
@@ -11,7 +10,7 @@ export function GET({ params, url }) {
     const id = Number(params.id);
     if (!Number.isInteger(id)) error(400, '録画IDが不正です');
     const from = Number(url.searchParams.get('from') ?? 0);
-    const stream = recordingCaptions(id, Number.isFinite(from) ? Math.max(0, from) : 0, captionForm(url));
+    const stream = recordingCaptions(id, Number.isFinite(from) ? Math.max(0, from) : 0);
     if (stream === null) error(404, '録画がないか、生TSがありません');
     return new Response(stream, {
         headers: { 'Content-Type': 'application/octet-stream', 'Cache-Control': 'no-store' },

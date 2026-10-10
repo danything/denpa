@@ -59,9 +59,9 @@ RUN bunx playwright install --with-deps chromium && \
 CMD ["bun", "run", "test"]
 
 # ---------------------------------------------------------------------------
-# ffmpeg (自前ビルド。ARIB字幕 libaribcaption + AV1 libsvtav1/dav1d + H.264 x264 +
-# Opus + Intel GPU (VA-API/QSV)。上流に投げる直しを patches/ から ffmpeg と
-# libaribcaption に当てる)
+# ffmpeg (自前ビルド。AV1 libsvtav1/dav1d + H.264 x264 + Opus + Intel GPU (VA-API/QSV)。
+# 上流に投げる直しがあれば patches/ から当てる。ARIB 字幕は解かずに写すだけなので
+# 復号器 (libaribcaption) は組み込まない — `-c:s copy` に復号器は要らない)
 # ---------------------------------------------------------------------------
 # **debian は digest で固定する** (ffmpeg / runtime の2つとも同じもの)。
 # 札 (`trixie-slim`) だけだと月に何度か中身が入れ替わり、CI は `pull: true` なので
@@ -89,7 +89,7 @@ ENV CURL="curl -fsSL --retry 5 --retry-delay 5 --retry-all-errors --connect-time
 # amd64 にしか無い (Intel の GPU が載る arm の機械は無い)。arm64 では libvpl を外して組み、
 # VA-API だけ残す — 起動時の試し焼き (server/hwenc.ts) で QSV が落ちて、VA-API か
 # ソフトウェアで焼くだけなので、denpa の側は何も変えない
-ENV DEV="curl ca-certificates build-essential cmake pkg-config nasm patch zlib1g-dev libfreetype6-dev libopus-dev libx264-dev libdav1d-dev libfontconfig-dev libva-dev"
+ENV DEV="curl ca-certificates build-essential cmake pkg-config nasm patch zlib1g-dev libopus-dev libx264-dev libdav1d-dev libva-dev"
 
 # 9.0 / 9.0.1 は 60コマで焼くと 20〜25分で音声が黙って終わった (CLI の溢れ FIFO の上限)。
 # 9.0.2 でその FIFO ごと無くなり、当てていた patches/ffmpeg-sched-overflow.patch は
@@ -101,15 +101,11 @@ ENV FFMPEG_VERSION=9.0.2
 # 3 系以降は速度も画質も別物)。静的に繋ぐので実行イメージに共有ライブラリは要らない
 # renovate: datasource=gitlab-tags depName=AOMediaCodec/SVT-AV1 registryUrl=https://gitlab.com
 ARG SVT_AV1_VERSION=v4.2.0
-# renovate: datasource=github-tags depName=xqq/libaribcaption
-ARG LIBARIBCAPTION_VERSION=v1.1.2
 
 # **上流に投げるつもりの直しだけを当てる** (理由は patches/README.md)。
 # `--fuzz=0` にしてあるのは、ffmpeg を上げたときに当たらなくなったら
 # **黙ってずれて当たるより、ビルドを止めてほしい**ため。
-# ファイル名の頭 (`ffmpeg-` / `libaribcaption-`) で当てる先を分ける
-# (libaribcaption のほうは、付けた試験もここで回す。cmake の試験一式を有効にすると
-# ffmpeg の開発用ヘッダまで要求されるので、1本だけ g++ で直に組む)
+# いまは当てるものが無い (patches/README.md)。置いたら `ffmpeg-*.patch` の名前で拾う
 COPY patches/ /patches/
 
 RUN case "${TARGETARCH}" in \
@@ -119,25 +115,17 @@ RUN case "${TARGETARCH}" in \
     esac && \
     apt-get update && \
     apt-get -y --no-install-recommends install $DEV $qsv_dev && \
-    mkdir /tmp/arib && cd /tmp/arib && \
-    $CURL https://github.com/xqq/libaribcaption/archive/refs/tags/${LIBARIBCAPTION_VERSION}.tar.gz | tar -xz --strip-components=1 && \
-    for p in /patches/libaribcaption-*.patch; do patch -p1 --fuzz=0 < "$p"; done && \
-    mkdir build && cd build && cmake .. -DCMAKE_BUILD_TYPE=Release && cmake --build . -j$(nproc) && \
-    g++ -std=c++17 -I../include -I../src -Iinclude ../test/drcs_smooth/test.cpp libaribcaption.a -o /tmp/test_drcs_smooth && \
-    /tmp/test_drcs_smooth && \
-    cmake --install . && \
     mkdir /tmp/svtav1 && cd /tmp/svtav1 && \
     $CURL https://gitlab.com/AOMediaCodec/SVT-AV1/-/archive/${SVT_AV1_VERSION}/SVT-AV1-${SVT_AV1_VERSION}.tar.gz | tar -xz --strip-components=1 && \
     cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF -DBUILD_APPS=OFF && \
     cmake --build build -j$(nproc) && cmake --install build && \
     mkdir /tmp/ffmpeg_sources && cd /tmp/ffmpeg_sources && \
     $CURL https://ffmpeg.org/releases/ffmpeg-${FFMPEG_VERSION}.tar.bz2 | tar -xj --strip-components=1 && \
-    for p in /patches/ffmpeg-*.patch; do patch -p1 --fuzz=0 < "$p"; done && \
+    for p in /patches/ffmpeg-*.patch; do [ -e "$p" ] || continue; patch -p1 --fuzz=0 < "$p"; done && \
     ./configure \
       --enable-gpl \
       --pkg-config-flags="--static" \
       --enable-libopus \
-      --enable-libaribcaption \
       --enable-libsvtav1 \
       --enable-libx264 \
       --enable-libdav1d \
@@ -179,35 +167,26 @@ RUN case "${TARGETARCH}" in \
     esac && \
     apt-get update && \
     apt-get -y --no-install-recommends install \
-      libopus0 libx264-164 libdav1d7 libfontconfig1 libfreetype6 \
+      libopus0 libx264-164 libdav1d7 \
       libva2 libva-drm2 $intel \
-      fontconfig ca-certificates tzdata && \
+      ca-certificates tzdata && \
     apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # bun 本体。SvelteKit(adapter-node) の出力を bun で動かす
 COPY --from=docker.io/oven/bun:1.4-slim /usr/local/bin/bun /usr/local/bin/bun
 
 COPY --from=ffmpeg /usr/local/bin/ffmpeg /usr/local/bin/ffprobe /usr/local/bin/
-COPY --from=ffmpeg /usr/local/lib/libaribcaption.* /usr/local/lib/
 
-# 字幕とデータ放送の字 (Denpa Font。danything/denpa-font のリリース)。
-# **同じ字を2つの形で置く。** 字幕を焼くのは ffmpeg (fontconfig 経由の ttf)、
-# データ放送と字幕を描くブラウザには web フォント (woff2。`/api/font/denpa-font.woff2`) を渡す。
-# BML は**等幅・丸ゴシック・ARIB外字**を要求していて、この1本が3つとも満たす
-# (借りている側は Kosugi を 4.4MB ぶん抱えているが、外字は入っていない)。
-# 版はタグで、中身は sha256 で留める。**Renovate が版を上げたら、そのリリースの
-# SHA256SUMS の値を下の2つへ写す** (写さないと ADD が止まって焼けない)
+# データ放送と字幕を描くブラウザに渡す字 (Denpa Font。danything/denpa-font のリリースの woff2。
+# `/api/font/denpa-font.woff2` が配る)。BML は**等幅・丸ゴシック・ARIB外字**を要求していて、
+# この1本が3つとも満たす (借りている側は Kosugi を 4.4MB ぶん抱えているが、外字は入っていない)。
+# **留めるのはタグだけ** (Renovate はタグだけ上げればよい)。中身は同じリリースの SHA256SUMS で照らす
 # renovate: datasource=github-releases depName=danything/denpa-font
-ARG DENPA_FONT_VERSION=v2.0
-ARG DENPA_FONT_TTF_SHA256=dd0dea4fe80fd37239a92fd2b89e95be092d02bf84abaf2694235c7e2386c1dd
-ARG DENPA_FONT_WOFF2_SHA256=cd6b96c40c62fdd0479b7f2658d65455abb7784006b3e6514c4200246f7e91d7
-ADD --chmod=644 --checksum=sha256:${DENPA_FONT_TTF_SHA256} \
-    https://github.com/danything/denpa-font/releases/download/${DENPA_FONT_VERSION}/denpa-font.ttf \
-    /usr/share/fonts/truetype/denpa-font/denpa-font.ttf
-ADD --chmod=644 --checksum=sha256:${DENPA_FONT_WOFF2_SHA256} \
+ARG DENPA_FONT_VERSION=v2.1
+ADD --chmod=644 https://github.com/danything/denpa-font/releases/download/${DENPA_FONT_VERSION}/SHA256SUMS \
     https://github.com/danything/denpa-font/releases/download/${DENPA_FONT_VERSION}/denpa-font.woff2 \
-    /usr/share/fonts/truetype/denpa-font/denpa-font.woff2
-RUN ldconfig && fc-cache -f
+    /usr/share/denpa-font/
+RUN cd /usr/share/denpa-font && grep ' denpa-font.woff2$' SHA256SUMS | sha256sum -c - && rm SHA256SUMS
 
 # ライブを生で送るときにブラウザへ配る MPEG-2 と AAC の復号器 (`mpeg2wasm` 段)
 COPY --from=mpeg2wasm /opt/denpa/mpeg2 /opt/denpa/mpeg2

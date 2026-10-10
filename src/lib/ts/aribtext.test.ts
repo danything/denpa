@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { decodeAribText } from './aribtext';
-import { GAIJI } from './aribtext-gaiji';
+import { EPG_ONLY, GAIJI } from './aribtext-gaiji';
 import { ADDITIONAL } from './b24-tables';
 
 /** 読みやすさのために、バイト列を組み立てる小道具 */
@@ -74,15 +74,24 @@ describe('ARIB 8単位符号', () => {
         expect(decodeAribText(bytes(0x7c, 0x58))).toBe('(vn)');
     });
 
-    test('外字の表は字幕の表と同じ字。違うのは私用領域だけ', () => {
+    /** 外字は字幕と同じ表 (`ADDITIONAL`) から作る。番組表で違えてよいのは、字幕の表が私用領域か空きの点だけ */
+    test('外字の表は字幕の表と同じ字。違えるのは私用領域と空きだけ', () => {
         const additional = [...ADDITIONAL];
-        for (const [code, text] of GAIJI) {
-            const at = ((code >> 8) - 0x20 - 85) * 94 + (code & 0xff) - 0x21;
-            const caption = additional[at] ?? '';
-            const cp = caption.codePointAt(0) ?? 0;
-            if (cp === 0xfffd || (cp >= 0xe000 && cp <= 0xf8ff)) continue;
-            expect([code.toString(16), text]).toEqual([code.toString(16), caption]);
+        const at = (code: number) => additional[((code >> 8) - 0x20 - 85) * 94 + (code & 0xff) - 0x21] ?? '';
+        for (const code of EPG_ONLY.keys()) {
+            const cp = at(code).codePointAt(0) ?? 0;
+            expect([code.toString(16), cp === 0xfffd || (cp >= 0xe000 && cp <= 0xf8ff)]).toEqual([
+                code.toString(16),
+                true,
+            ]);
         }
+        for (const [code, text] of GAIJI) {
+            if (EPG_ONLY.has(code)) continue;
+            expect([code.toString(16), text]).toEqual([code.toString(16), at(code)]);
+        }
+        // 空きの点は持たない (aribtext.ts が「□」にする)
+        expect(GAIJI.has(0x7e7e)).toBe(false);
+        expect(decodeAribText(bytes(0x7d, 0x4e, 0x7d, 0x77))).toBe('・　');
     });
 
     test('改行。CR に続く LF は1回にまとめる', () => {

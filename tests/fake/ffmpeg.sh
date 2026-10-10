@@ -67,14 +67,6 @@ if printf '%s\n' "$@" | grep -q silencedetect; then
     output="$mkv"
 fi
 
-# 焼いたものから字幕の絵を抜くパス (`api/recordings/<id>/captions.sup`)。
-# 本物は入れ物の中の PGS をそのまま出す。ここでは作り置きの .sup を返す
-# (中身は `src/lib/pgs.ts` の writeSup で作った2枚。読むほうの試験と同じ形)
-if printf '%s\n' "$@" | grep -qx -- 'sup'; then
-    cat "$(dirname "$0")/captions.sup"
-    exit 0
-fi
-
 # 焼いたものから字幕をそのまま抜くパス (`api/recordings/<id>/captions.json`)。
 # 本物は入れ物の中の S_ARIBSUB をそのまま出す。ここでは作り置きの mkv を返す
 # (中身は作り物の字幕。本物の ffmpeg に `-map 0:s:0 -c:s copy -f matroska` で書かせたもの)

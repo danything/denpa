@@ -25,13 +25,11 @@ Dockerfile の行・`package.json`) を優先し、上流の表示に拠るも�
 | SVT-AV1 (ソースから静的リンク) | AV1 のエンコード | <https://gitlab.com/AOMediaCodec/SVT-AV1> | BSD-3-Clause-Clear + AOM 特許ライセンス |
 | dav1d | AV1 のデコード | <https://code.videolan.org/videolan/dav1d> | BSD-2-Clause |
 | Opus (libopus) | 音声 | <https://opus-codec.org> | BSD-3-Clause |
-| libaribcaption (ソースから) | ARIB 字幕を絵にする | <https://github.com/xqq/libaribcaption> | MIT |
-| FreeType / fontconfig | 字幕の描画とフォント解決 | <https://freetype.org> / <https://fontconfig.org> | FTL (or GPL-2.0) / MIT 系 |
 | libva / libva-drm | VA-API (GPU で焼く) | <https://github.com/intel/libva> | MIT |
 | libvpl / libmfx-gen | Intel QSV (GPU で焼く) | <https://github.com/intel/libvpl> / <https://github.com/intel/vpl-gpu-rt> | MIT |
 | intel-media-va-driver (iHD) | Intel の VA-API ドライバ | <https://github.com/intel/media-driver> | MIT (一部 BSD) |
 | zlib | ffmpeg の依存 | <https://zlib.net> | zlib |
-| [patches/](../patches) | ffmpeg と libaribcaption に当てている直し (字幕の「消せ」・外字の描き方など。denpa が書いたもの。上流に投げる前提) | — | 当てる先と同じ (ffmpeg は LGPL/GPL、libaribcaption は MIT) |
+| [patches/](../patches) | ffmpeg に当てる直しの置き場 (いまは空。denpa が書いたもの。上流に投げる前提) | — | 当てる先と同じ (ffmpeg は LGPL/GPL) |
 
 ### フォント
 
@@ -44,7 +42,7 @@ Dockerfile の行・`package.json`) を優先し、上流の表示に拠るも�
 | 名前 | 何に | 出どころ | ライセンス |
 | --- | --- | --- | --- |
 | Bun (実行バイナリだけ `oven/bun` から写す) | denpa 本体を動かす | <https://github.com/oven-sh/bun> | MIT (中の JavaScriptCore は LGPL-2.1) |
-| ca-certificates / tzdata / fontconfig | 証明書・時刻・フォント | Debian | MPL-2.0 / パブリックドメイン / MIT 系 |
+| ca-certificates / tzdata | 証明書・時刻 | Debian | MPL-2.0 / パブリックドメイン |
 
 ## コンテナイメージ `denpa-agent` に入るもの
 
@@ -86,8 +84,8 @@ denpa 本体は上と同じコンテナイメージ `denpa` を、Mac の Docker
 | --- | --- | --- | --- | --- |
 | BS / CS の標準の局の表 | [src/lib/server/channel-seed.json](../src/lib/server/channel-seed.json) | BS・CS の局が無いときに入れる BS 26 + CS 12 TS (`channel-seed.ts`) | Khronos31/hassio-addons の denpa アドオンの `seed/channels.bs.json` | MIT |
 | ARIB ロゴの CLUT (129 色) | [src/lib/ts/logo-palette.ts](../src/lib/ts/logo-palette.ts) | 局ロゴの PNG 化 | node-aribts / @chinachu/aribts の `logo_clut.js` と同じ並び | MIT (上流) |
-| ARIB 外字表 | [src/lib/ts/aribtext-gaiji.ts](../src/lib/ts/aribtext-gaiji.ts) | 番組名の「[新]」「[字]」など | epgdump_py (Yasumasa Murakami, 2011) → ariblib に引き継がれた表 | MIT (ariblib。上流) |
-| 字幕の文字の表と解き方 | [src/lib/ts/b24-tables.ts](../src/lib/ts/b24-tables.ts) / [b24caption.ts](../src/lib/ts/b24caption.ts) | 字幕を文字の配置にする (表は `scripts/b24-tables.ts` で写す。解き方は decoder_impl.cpp を TypeScript に写したもの) | libaribcaption (magicxqq) | MIT (上流) |
+| ARIB 外字表 | [src/lib/ts/aribtext-gaiji.ts](../src/lib/ts/aribtext-gaiji.ts) | 番組名の「🈟」「🈑」など | 字は字幕の表 (下の b24-tables.ts) を引く。番組表だけで違える数点 (楽器の略号の文字列・空きの埋め方) は epgdump_py (Yasumasa Murakami, 2011) → ariblib に引き継がれた表から | MIT (libaribcaption・ariblib。上流) |
+| 字幕の文字の表と解き方 | [src/lib/ts/b24-tables.ts](../src/lib/ts/b24-tables.ts) / [b24caption.ts](../src/lib/ts/b24caption.ts) | 字幕を文字の配置にする (表は libaribcaption の b24_conv_tables.hpp / b24_gaiji_table.hpp / b24_colors.cpp / b24_drcs_conv.cpp を写したもので、いまは denpa が手で持つ。解き方は decoder_impl.cpp を TypeScript に写したもの) | libaribcaption (Copyright (C) 2021 magicxqq) | MIT (上流) |
 | 選局表の値と選局手順 | [agent/Denpa.Agent/ChannelTable.cs](../agent/Denpa.Agent/ChannelTable.cs) / `Tuning.cs` | チャンネル名 → 周波数、DVB の手順 | recisdb-rs の `dvbv5_channels_isdbs.conf` / `dvbv5.rs` を参照 (コードは写していない) | GPL-3.0 (上流) |
 | エンコード再試行の秒数 (0.2) | [src/lib/server/config.ts](../src/lib/server/config.ts) | 値だけ | EPGStation の `enc.js` | MIT (上流) |
 | アイコン類 | [static/](../static) | PWA のアイコン | 自作 | AGPL (denpa と同じ) |

@@ -1,7 +1,7 @@
 /**
  * データ放送。**1局に絞った TS の写しを解いて、組み立て終わったものを配る。**
  *
- *     エージェント (MPEG-TS) → ServiceFilter ┬→ ffmpeg     → fMP4 / 字幕の絵
+ *     エージェント (MPEG-TS) → ServiceFilter ┬→ ffmpeg     → fMP4 / 字幕
  *                                            └→ BmlDecoder → データ放送
  *
  * [stream.md](../../../docs/stream.md) §5.6 にあたる第3段階。
