@@ -1,3 +1,6 @@
+import { readFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import type { Range } from '../ts/cm-decide';
 import { framer } from '../ts/logo-detect';
 import { config } from './config';
@@ -6,15 +9,19 @@ import { run } from './stream';
 /**
  * **CM 検出の材料を、1回だけ復号して取る。**
  *
- * 取るのは3つ。どれもコマの時刻 (ffmpeg の時刻。入れ物の頭から数えた秒) にそろえて返す。
+ * 取るのは3つ。どれもコマの時刻 (ffmpeg の時刻) にそろえて返す。
  *
- * - **場面の切れ目** — `scdet` の点をコマごとに (標準エラーに1コマ1行)
+ * - **場面の切れ目** — `scdet` の点をコマごとに。`metadata` で一時ファイルへ (1コマ2行)
  * - **局ロゴの枠** — 枠だけ切り出した白黒のコマを標準出力へ。点を付けるのは呼ぶ側 (`logo-own.ts`)
- * - **無音** — 主音声に `silencedetect` (標準エラー)
+ * - **無音** — 主音声に `silencedetect`。`ametadata` で一時ファイルへ
  *
- * ふだんは**エンコードと同じ ffmpeg に相乗りする** (`scanOutputs` を焼く出口のあとに足し、
- * 標準エラーと標準出力を `scanReader` で読む。`encoder.ts`)。ここの `scan` が自分で ffmpeg を
- * 起こすのは、ロゴを覚え直して枠だけ読み直すとき (`logo-own.ts`) だけ。
+ * ふだんは**エンコードと同じ ffmpeg に相乗りする** (`scanReader` の `outputs` を焼く出口のあとに足す。
+ * `encoder.ts`)。ここの `scan` が自分で ffmpeg を起こすのは、ロゴを覚え直して枠だけ読み直すときと、
+ * CM 検出だけやり直すとき。
+ *
+ * **材料は標準エラーに出させない。** 以前は `scdet` と `silencedetect` のログの行 (1コマ1行) を標準エラーで読んでいたが、
+ * エンコードに相乗りさせると 30分で 54712 行のうち 1 行が届かず、ロゴを使えなくなった (実測。ログは書けなければ黙って捨てる)。
+ * ファイルへ書かせれば落ちない。標準エラーから読むのは入れ物の尺 (`Duration:`) だけ。
  *
  * 以前は chapter_exe (dtvindex で TS を読み直す) と自前のロゴ判定 (もう一度 ffmpeg で復号する) が
  * 別々に TS を読んでいた。時刻も1つの物差しになる — chapter_exe は「コマ番号 ÷ fps」で秒に直していたので、
@@ -25,12 +32,6 @@ import { run } from './stream';
 export const SILENCE_NOISE = 50 / 32768;
 /** 拾う無音の最短 (秒)。短いものは判定 (`cm-decide`) で捨てる */
 export const SILENCE_MIN = 0.15;
-
-/**
- * 切れ目を測るフィルタの名前。**エンコードに相乗りするときは別の `scdet` も居る**
- * (キーフレームを切れ目に置くためのもの。`encoder.ts`) ので、名前で見分ける
- */
-const SCDET = 'scdet@cm';
 
 export interface ScanLogo {
     /** 枠を切り出すフィルタ (`crop=…`)。白黒にするのはこちらで足す */
@@ -43,7 +44,7 @@ export interface ScanLogo {
 
 /** 何を読むか */
 export interface ScanWant {
-    /** 絵を見るか (場面の切れ目とロゴ) */
+    /** 絵を見るか (場面の切れ目とロゴ)。音だけ読み直すとき (絵の読み込みが落ちたとき) は要らない */
     video: boolean;
     /** ロゴの枠。無ければ切れ目だけ */
     logo?: ScanLogo | null;
@@ -74,50 +75,82 @@ export interface Scan {
     duration: number;
 }
 
-const CUT = new RegExp(
-    `^\\[${SCDET} @ [^\\]]*\\] lavfi\\.scd\\.score:\\s*([\\d.]+),\\s*lavfi\\.scd\\.time:\\s*(-?[\\d.]+)`,
-);
-const SILENCE_START = /silence_start:\s*(-?[\d.]+)/;
-const SILENCE_END = /silence_end:\s*(-?[\d.]+)/;
 const DURATION = /Duration:\s*(\d+):(\d+):(\d+(?:\.\d+)?)/;
 
-/**
- * 標準エラーの1行を読む。`scdet` は1コマ1行、`silencedetect` は始まりと終わりで1行ずつ、
- * 入れ物の尺 (`Duration:`) は秒で。それ以外 (復号の警告・進み具合など) は null
- */
-export function scanLine(
-    line: string,
-):
-    | { cut: number; time: number }
-    | { silenceStart: number }
-    | { silenceEnd: number }
-    | { duration: number }
-    | null {
-    const cut = CUT.exec(line);
-    if (cut !== null) return { cut: Number(cut[1]), time: Number(cut[2]) };
-    const start = SILENCE_START.exec(line);
-    if (start !== null) return { silenceStart: Math.max(0, Number(start[1])) };
-    const end = SILENCE_END.exec(line);
-    if (end !== null) return { silenceEnd: Number(end[1]) };
+/** 標準エラーの1行から入れ物の尺 (`Duration:`) を秒で。それ以外は null */
+export function scanLine(line: string): { duration: number } | null {
     const length = DURATION.exec(line);
-    if (length !== null)
-        return { duration: Number(length[1]) * 3600 + Number(length[2]) * 60 + Number(length[3]) };
-    return null;
+    if (length === null) return null;
+    return { duration: Number(length[1]) * 3600 + Number(length[2]) * 60 + Number(length[3]) };
+}
+
+const FRAME_TIME = /pts_time:\s*(-?[\d.]+)/;
+
+/**
+ * `metadata=mode=print` の書き出しから、コマごとの時刻と `scdet` の点を拾う。1コマ2行:
+ *
+ *     frame:0    pts:58316   pts_time:0.647956
+ *     lavfi.scd.score=0.000
+ */
+export function parseCuts(text: string): { times: number[]; cuts: number[] } {
+    const times: number[] = [];
+    const cuts: number[] = [];
+    let at = Number.NaN;
+    for (const line of text.split('\n')) {
+        const frame = FRAME_TIME.exec(line);
+        if (frame !== null) {
+            at = Number(frame[1]);
+            continue;
+        }
+        if (line.startsWith('lavfi.scd.score=') && Number.isFinite(at)) {
+            times.push(at);
+            cuts.push(Number(line.slice('lavfi.scd.score='.length)));
+            at = Number.NaN;
+        }
+    }
+    return { times, cuts };
 }
 
 /**
- * 材料を取る出口 (ffmpeg の引数の、入力より後ろ)。絵と音で2つに分ける。
+ * `ametadata=mode=print` の書き出しから無音を拾う (`silencedetect` が付けた印。始まりと終わりは別のコマ)。
+ * 終わりまで続いた無音は `end` で閉じる (分からなければ捨てる)
+ */
+export function parseSilences(text: string, end: number): Range[] {
+    const out: Range[] = [];
+    let pending: number | null = null;
+    for (const line of text.split('\n')) {
+        if (line.startsWith('lavfi.silence_start=')) {
+            pending = Math.max(0, Number(line.slice('lavfi.silence_start='.length)));
+        } else if (line.startsWith('lavfi.silence_end=') && pending !== null) {
+            out.push({
+                start: pending,
+                end: Math.max(pending, Number(line.slice('lavfi.silence_end='.length))),
+            });
+            pending = null;
+        }
+    }
+    if (pending !== null && Number.isFinite(end)) out.push({ start: pending, end });
+    return out;
+}
+
+/**
+ * 材料を取る出口 (ffmpeg の引数の、入力より後ろ)。絵と音で2つに分ける。`files` は書き出し先。
  * **エンコードの出口のあとに足しても同じに動く** — `-map` は出口ごとなので、絵の出口は
  * ffmpeg の自動の選び方 (いちばん大きい絵) のまま
  */
-export function scanOutputs(want: ScanWant): string[] {
+export function scanOutputs(want: ScanWant, files: { cuts: string; silences: string }): string[] {
     const args: string[] = [];
     if (want.video) {
         /*
          * 絵は ffmpeg に選ばせる (いちばん大きいもの)。1本の TS に局が何本も乗っていても (TOKYO MX)、
-         * 中身のある絵を拾う。**コマは間引かない・増やさない** — `times` とロゴの枠を順番で突き合わせる
+         * 中身のある絵を拾う。**コマは間引かない・増やさない** — `times` とロゴの枠を順番で突き合わせる。
+         * `scdet` は点を全部のコマに付ける。閾値を上げておくのはログを出させないため (キーフレームを置く
+         * `scdet@key` と名前で分ける)
          */
-        const filters = [`${SCDET}=threshold=0`];
+        const filters = [
+            'scdet@cm=threshold=100',
+            `metadata=mode=print:key=lavfi.scd.score:file=${files.cuts}`,
+        ];
         if (want.logo) filters.push(want.logo.filter, 'format=gray');
         args.push('-an', '-sn', '-dn', '-fps_mode', 'passthrough', '-vf', filters.join(','));
         args.push(...(want.logo ? ['-f', 'rawvideo', 'pipe:1'] : ['-f', 'null', '-']));
@@ -128,7 +161,7 @@ export function scanOutputs(want: ScanWant): string[] {
             '-map',
             '0:a:0',
             '-af',
-            `silencedetect=noise=${SILENCE_NOISE}:d=${SILENCE_MIN}`,
+            `silencedetect=noise=${SILENCE_NOISE}:d=${SILENCE_MIN},ametadata=mode=print:file=${files.silences}`,
             '-f',
             'null',
             '-',
@@ -137,76 +170,98 @@ export function scanOutputs(want: ScanWant): string[] {
     return args;
 }
 
-/** 自分で ffmpeg を起こして読むときの引数 */
-export function scanArgs(input: string, options: ScanWant & { before?: string[] }): string[] {
+/** ffmpeg の出力を読んで材料にする。エンコードに相乗りするときも、自分で読むときも同じもの */
+export interface ScanReader {
+    /** ffmpeg に足す出口 (`scanOutputs`) */
+    outputs: string[];
+    /** 標準出力 (ロゴの枠) の塊。ロゴを読まないときは無い */
+    onStdout: ((chunk: Uint8Array) => void) | undefined;
+    /** 標準エラーの1行。材料だったら true (落ちた理由として残さなくてよい) */
+    line(line: string): boolean;
+    /**
+     * 読み終えたら。書き出しを読んで片付ける。`duration` (ffprobe で測った尺。読んだものの物差しで) は
+     * 終わりまで続いた無音を閉じるのに使う
+     */
+    result(code: number, stderr: string, duration?: number): Scan;
+}
+
+/** 一時ファイルの名前。フィルタの引数に入るので `:` `,` などを含まない */
+function scratch(kind: string): string {
+    return join(tmpdir(), `denpa-scan-${process.pid}-${Math.random().toString(36).slice(2)}.${kind}`);
+}
+
+function readAndRemove(path: string): string {
+    try {
+        return readFileSync(path, 'utf8');
+    } catch {
+        return '';
+    } finally {
+        rmSync(path, { force: true });
+    }
+}
+
+export function scanReader(want: ScanWant): ScanReader {
+    const files = { cuts: scratch('cuts'), silences: scratch('silences') };
+    const { logo } = want;
+    let logoFrames = 0;
+    let told = Number.NaN;
+    return {
+        outputs: scanOutputs(want, files),
+        // チャンクの境目はコマの境目と揃わない
+        onStdout: logo ? framer(logo.size, (bytes) => logo.onFrame(bytes, logoFrames++)) : undefined,
+        line(line) {
+            const read = scanLine(line);
+            if (read === null) return false;
+            if (Number.isNaN(told)) told = read.duration;
+            return true;
+        },
+        result(code, stderr, duration) {
+            const end = duration !== undefined && Number.isFinite(duration) ? duration : told;
+            const { times, cuts } = parseCuts(readAndRemove(files.cuts));
+            const silences = parseSilences(readAndRemove(files.silences), end);
+            return { code, stderr, times, cuts, silences, logoFrames, duration: told };
+        },
+    };
+}
+
+/** 自分で ffmpeg を起こして読むときの引数 (`before` は入力の前に置く) */
+export function scanArgs(input: string, outputs: string[], before: string[] = []): string[] {
+    // 読んだ所は標準エラーへ (`-progress`)。CM 検出だけやり直すときの進み具合 (`onTime`)
     return [
         config.ffmpeg,
         '-hide_banner',
         '-nostats',
         '-v',
         'info',
-        ...(options.before ?? []),
+        '-progress',
+        'pipe:2',
+        ...before,
         '-i',
         input,
-        ...scanOutputs(options),
+        ...outputs,
     ];
 }
 
-/** ffmpeg の出力を読んで材料にする。エンコードに相乗りするときも、自分で読むときも同じもの */
-export interface ScanReader {
-    /** 標準出力 (ロゴの枠) の塊。ロゴを読まないときは無い */
-    onStdout: ((chunk: Uint8Array) => void) | undefined;
-    /** 標準エラーの1行。材料だったら true (落ちた理由として残さなくてよい) */
-    line(line: string): boolean;
-    /** 読み終えたら。`duration` (ffprobe で測った尺) は終わりまで続いた無音を閉じるのに使う */
-    result(code: number, stderr: string, duration?: number): Scan;
-}
-
-export function scanReader(logo: ScanLogo | null | undefined): ScanReader {
-    const times: number[] = [];
-    const cuts: number[] = [];
-    const silences: Range[] = [];
-    let pending: number | null = null;
-    let logoFrames = 0;
-    let told = Number.NaN;
-    return {
-        // チャンクの境目はコマの境目と揃わない
-        onStdout: logo ? framer(logo.size, (bytes) => logo.onFrame(bytes, logoFrames++)) : undefined,
-        line(line) {
-            const read = scanLine(line);
-            if (read === null) return false;
-            if ('cut' in read) {
-                times.push(read.time);
-                cuts.push(read.cut);
-            } else if ('duration' in read) {
-                if (Number.isNaN(told)) told = read.duration;
-            } else if ('silenceStart' in read) {
-                pending = read.silenceStart;
-            } else if (pending !== null) {
-                silences.push({ start: pending, end: Math.max(pending, read.silenceEnd) });
-                pending = null;
-            }
-            return true;
-        },
-        result(code, stderr, duration) {
-            // 終わりまで続いた無音は閉じる (尺が分かるときだけ)
-            const end = duration !== undefined && Number.isFinite(duration) ? duration : told;
-            if (pending !== null && Number.isFinite(end)) silences.push({ start: pending, end });
-            return { code, stderr, times, cuts, silences, logoFrames, duration: told };
-        },
-    };
-}
+const PROGRESS = /^out_time_us=(\d+)$/;
 
 /** 録画を1回だけ復号して、CM 検出の材料を取る (エンコードに相乗りしないとき) */
-export async function scan(input: string, options: ScanOptions): Promise<Scan> {
-    const reader = scanReader(options.logo);
+export async function scan(
+    input: string,
+    options: ScanOptions & { onTime?: (seconds: number) => void },
+): Promise<Scan> {
+    const reader = scanReader(options);
     const other: string[] = [];
-    const result = await run(scanArgs(input, options), {
+    const result = await run(scanArgs(input, reader.outputs, options.before), {
         signal: options.signal,
         timeoutMs: options.timeoutMs,
         ...(reader.onStdout ? { onStdout: reader.onStdout } : {}),
         onStderrLine: (line) => {
             if (reader.line(line)) return;
+            const progress = PROGRESS.exec(line);
+            if (progress !== null) {
+                options.onTime?.(Number(progress[1]) / 1e6);
+                return;
+            }
             // 落ちた理由を読むために、材料でない行 (警告・エラー) の末尾だけ残す
             if (line !== '' && !line.includes('=')) other.push(line);
             if (other.length > 5) other.shift();

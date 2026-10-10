@@ -24,7 +24,11 @@ async function detect(at: { skip?: number; video?: boolean } = {}) {
     const reading = await openCm(input, { serviceId: 1 });
     const want = reading.want();
     const found = await scan(input, { ...want, video: at.video ?? want.video, timeoutMs: 10_000 });
-    return reading.decide(found, { skip: at.skip ?? 0, before: [], ...(at.video === false ? { video: false } : {}) });
+    return reading.decide(found, {
+        skip: at.skip ?? 0,
+        before: [],
+        ...(at.video === false ? { video: false } : {}),
+    });
 }
 
 describe('CM検出の流れ', () => {

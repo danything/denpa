@@ -57,10 +57,12 @@ for arg in "$@"; do
 done
 if printf '%s\n' "$@" | grep -q silencedetect; then
     echo "  Duration: 00:10:00.00, start: 0.000000, bitrate: 15000 kb/s" >&2
-    echo "[silencedetect @ 0x1] silence_start: 299.5" >&2
-    echo "[silencedetect @ 0x1] silence_end: 300.5 | silence_duration: 1.0" >&2
-    echo "[silencedetect @ 0x1] silence_start: 359.5" >&2
-    echo "[silencedetect @ 0x1] silence_end: 360.5 | silence_duration: 1.0" >&2
+    # 無音は ametadata の書き出し先 (`file=`) へ。本物と同じ形 (cm-scan.parseSilences)
+    silences="$(printf '%s\n' "$@" | grep -o 'ametadata=mode=print:file=[^,]*' | head -1)"
+    silences="${silences#ametadata=mode=print:file=}"
+    if [ -n "$silences" ]; then
+        printf 'frame:1 pts:1 pts_time:299.5\nlavfi.silence_start=299.5\nframe:2 pts:2 pts_time:300.5\nlavfi.silence_end=300.5\nlavfi.silence_duration=1\nframe:3 pts:3 pts_time:359.5\nlavfi.silence_start=359.5\nframe:4 pts:4 pts_time:360.5\nlavfi.silence_end=360.5\nlavfi.silence_duration=1\n' > "$silences"
+    fi
     if [ -z "$mkv" ]; then exit 0; fi
     output="$mkv"
 fi

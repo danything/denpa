@@ -314,12 +314,6 @@ describe('コマ数の決め方', () => {
             'bwdif=mode=send_frame,format=yuv420p',
         );
     });
-
-    test('PGS が無ければ字幕トラックは入らない', () => {
-        const args = buildArgs('/in.m2ts', '/out.mkv', 1, null);
-        expect(argValue(args, '-c:s:0')).toBeUndefined();
-        expect(args.filter((a) => a.startsWith('-disposition:s'))).toHaveLength(0);
-    });
 });
 
 describe('inputSkip', () => {

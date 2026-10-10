@@ -395,7 +395,7 @@ export interface CmOptions {
 /** 読み方 (`openCm`) と、読んだ材料からの決め方 */
 export interface CmReading {
     /**
-     * 1回の復号で何を読むか。エンコードの ffmpeg に `cm-scan.scanOutputs` で足す。
+     * 1回の復号で何を読むか。エンコードの ffmpeg に `cm-scan.scanReader` の出口を足す。
      * **復号するたびに呼ぶ** — ロゴの点は読むたびに一から数える (焼き直しで途中までを持ち越さない)
      */
     want(): ScanWant;

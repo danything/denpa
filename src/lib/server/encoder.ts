@@ -7,7 +7,6 @@ import {
     readlinkSync,
     realpathSync,
     renameSync,
-    rmSync,
     statSync,
     writeFileSync,
 } from 'node:fs';
@@ -17,6 +16,7 @@ import { audioTitles, DUAL_MONO } from '#lib/arib.js';
 import { HW_KIND_LABEL, type HwCodec } from '../hw';
 import { encodeSource } from '../source';
 import type { EncodeJob, EncodePhase, Recording } from '../types';
+import { programSpec } from './captions';
 import {
     type CmDetection,
     type CmReading,
@@ -30,8 +30,7 @@ import {
     shiftRanges,
 } from './cm';
 import { chapterArgs, cutArgs, cutList, cutPoints, KEY_SCDET, listKeyframes, planCut } from './cm-cut';
-import { type Scan, type ScanReader, scan, scanOutputs, scanReader } from './cm-scan';
-import { programSpec } from './captions';
+import { type Scan, type ScanReader, scan, scanReader } from './cm-scan';
 import { config } from './config';
 import { affected, now, orm } from './db';
 import { type EncodeProgress, emit } from './events';
@@ -303,14 +302,15 @@ interface EncodeOptions {
     /** キーフレームを置く所 (CM を切るとき。`Keyframes`) */
     keyframes?: Keyframes;
     /**
-     * CM 検出の材料を取る出口 (`cm-scan.scanOutputs`)。焼く出口のあとに足して、**同じ復号から**
-     * 読ませる。ロゴの枠は標準出力に来るので、進み具合は標準エラーで受ける (`-progress pipe:2`)
+     * CM 検出の材料を取る出口 (`cm-scan.scanReader` の `outputs`)。焼く出口のあとに足して、**同じ復号から**
+     * 読ませる。ロゴの枠は標準出力に来るので、進み具合は fd 3 で受ける (`-progress pipe:3`)
      */
     analysis?: string[];
     /** 局の番号 (PMT の番組番号)。字幕の筋を名指しする (`captionArgs`)。分からなければ入力の頭の字幕 */
     program?: number | undefined;
     /** 60コマ/秒で出す。滑らかになる代わりに時間もサイズも約2倍 (measureSmoothMotion で決める) */
     smoothMotion?: boolean;
+    /**
      * 映像が出るまでの音声だけの区間(秒)。**頭から捨てる長さ** (`probeLeadIn`)。
      *
      * 捨てると映像・音声・字幕が同じ瞬間から始まるので、時刻を読むプレイヤーでも
@@ -527,10 +527,8 @@ export function buildArgs(
     /*
      * 進捗を key=value 形式で吐かせる。stderr の人間向けログを目視パースするより確実。
      *
-     * **出口は fd 3 (専用のパイプ)。** 標準出力は CM 検出のロゴの枠が使い (`analysis`)、標準エラーは
-     * CM 検出の材料 (`scdet` のコマごとの行) が使う。標準エラーへ出すと、ログ (av_log。行の頭の
-     * `[scdet@cm @ …] ` と中身を別々に書く) の間に進み具合 (別のスレッドがまとめて書く) が割り込み、
-     * 行が千切れる — 30分の録画で 54695 行のうち 2 行を読み落とし、ロゴを使えなくなった (実測)。
+     * **出口は fd 3 (専用のパイプ)。** 標準出力は CM 検出のロゴの枠が使い (`analysis`)、標準エラーはログで
+     * 混み合う (ログと進み具合は別のスレッドが書くので、同じ口では行が千切れることがある)。
      * 人間向けの進み具合の行 (`frame= …`) も止める
      */
     args.push('-nostats', '-progress', 'pipe:3');
@@ -990,7 +988,12 @@ function inputArgs(skip: number): string[] {
  * 読めなかった・決められなかったときは CM 無しで、理由を覚え書きに残す (焼いたものは捨てない)。
  * `video` が偽なら音だけ読み直したもの
  */
-async function decide(reading: CmReading, found: Scan | null, skip: number, video: boolean): Promise<CmDetection> {
+async function decide(
+    reading: CmReading,
+    found: Scan | null,
+    skip: number,
+    video: boolean,
+): Promise<CmDetection> {
     if (found === null) return { cm: [], duration: Number.NaN, note: 'CM検出の読み込みが失敗しました' };
     try {
         // ロゴを覚え直して枠だけ読み直すときも、焼いたときと同じだけ頭を捨てる
@@ -1068,7 +1071,6 @@ function finishCanceled(jobId: number, working: string | null): void {
     emit('recordings');
 }
 
-
 async function runJob(jobId: number): Promise<void> {
     const controller = new AbortController();
     aborts.set(jobId, controller);
@@ -1145,7 +1147,7 @@ async function runJob(jobId: number): Promise<void> {
 
     /*
      * **CM は焼きながら探す。** 1本目のコーデックを焼く ffmpeg に CM 検出の出口を足して、
-     * TS を1回だけ復号する (`cm-scan.scanOutputs`)。ここでは支度だけ — 尺を測り、局ロゴを開く
+     * TS を1回だけ復号する (`cm-scan.scanReader`)。ここでは支度だけ — 尺を測り、局ロゴを開く
      * (覚えていなければキーフレームだけ読んで覚える)
      */
     const mode = settings().cmCut;
@@ -1373,7 +1375,7 @@ async function runJob(jobId: number): Promise<void> {
             writeChapters(skip);
             // ロゴの点は読むたびに一から数える (落ちた回の途中までを持ち越さない)
             const want = extra.analysis ? reading?.want() : undefined;
-            const reader = want === undefined ? undefined : scanReader(want.logo);
+            const reader = want === undefined ? undefined : scanReader(want);
             const keyframes = extra.keyframes?.(skip);
             result = await runFfmpeg(
                 job,
@@ -1386,7 +1388,7 @@ async function runJob(jobId: number): Promise<void> {
                     ...encodeOptions,
                     hardware: attempt.hardware,
                     ...(keyframes === undefined ? {} : { keyframes }),
-                    ...(want === undefined ? {} : { analysis: scanOutputs(want) }),
+                    ...(want === undefined ? {} : { analysis: reader?.outputs ?? [] }),
                 },
                 reader,
             );
@@ -1394,13 +1396,23 @@ async function runJob(jobId: number): Promise<void> {
                 if (reader !== undefined) found = reader.result(0, '', measured.duration - skip);
                 break;
             }
+            // 落ちた回の書き出しは捨てる (一時ファイルを片付けるだけ)
+            reader?.result(result.code, '');
         }
         /** 絵まで読めたか。探さずに焼き直したら音だけ読み直す */
         let video = true;
         if (result.code !== 0 && extra.analysis && reading !== null && !canceled.has(jobId)) {
             setStep(jobId, `CMを探さずにエンコードし直します (${codec})`);
             skip = inputSkip(null, encodeOptions.videoStart);
-            result = await runFfmpeg(job, sourceTs, working, recording.audio_type, null, codec, encodeOptions);
+            result = await runFfmpeg(
+                job,
+                sourceTs,
+                working,
+                recording.audio_type,
+                null,
+                codec,
+                encodeOptions,
+            );
             if (result.code === 0 && !canceled.has(jobId)) {
                 // 音だけ読み直して、CM の尺だけで決める (音の復号だけなので軽い)
                 setStep(jobId, '無音を探しています');
