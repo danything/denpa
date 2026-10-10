@@ -124,7 +124,8 @@ RUN set -eu && cd /tmp && \
 #
 # 取ってくるのは px4-userland と同じ名前の付け方を見込んだ配布アーカイブ (上流の
 # scripts/package-linux-variant.py の形: 頭に1段のディレクトリ、bin/ にコマンド3つ、musl の
-# 完全静的 ELF)。名前や形が違えば、版を上げる PR の CI (イメージを焼く) で落ちて分かる。
+# 完全静的 ELF)。名前や形が違えば、版を上げる PR の CI (イメージを焼く) で落ちて分かる
+# (SHA256SUMS にそのアーカイブの行が無ければ落とす。--ignore-missing は行が無くても通るので使わない)。
 # 受信機もカードも asicend の制御ソケットで直に話すので、asicen-ts と IFD ハンドラは使わない。
 # 上流の第一弾は Linux x86_64 だけなので、arm64 では入れずに先へ進む。
 #
@@ -147,7 +148,8 @@ RUN set -eu && mkdir -p /opt/asicen-userland && cd /tmp && \
       base="https://github.com/Khronos31/asicen-userland/releases/download/v${ASICEN_USERLAND_VERSION}" && \
       archive="asicen-userland-${ASICEN_USERLAND_VERSION}-linux-glibc-x86_64.tar.gz" && \
       curl -fsSLO "${base}/${archive}" && curl -fsSLO "${base}/SHA256SUMS" && \
-      sha256sum -c --ignore-missing SHA256SUMS && \
+      grep -E "^[0-9a-f]{64} [ *]${archive}\$" SHA256SUMS > archive.sum && \
+      sha256sum -c archive.sum && \
       tar -xzf "${archive}" -C /opt/asicen-userland --strip-components=1 && \
       for bin in asicend asicenctl; do test -x "/opt/asicen-userland/bin/${bin}"; done && \
       if [ -f /opt/asicen-userland/firmware/asicen-loader.bin ]; then \

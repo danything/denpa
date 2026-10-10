@@ -144,7 +144,7 @@ public static class AsicenUserland
             if (!ValidId(port)) continue;
             var vid = Read(dir, "idVendor");
             var pid = Read(dir, "idProduct");
-            var loader = vid == "1738" && pid is "5211" or "5216";
+            var loader = vid == "1738" && (pid is "5211" or "5216");
             if (!(vid == "0b06" && pid == "0005") && !loader) continue;
             if (!int.TryParse(Read(dir, "busnum"), out var bus) || !int.TryParse(Read(dir, "devnum"), out var address)) continue;
             found.Add(new Function($"{vid}:{pid}", bus, address, port, loader));
@@ -228,6 +228,13 @@ public static class AsicenUserland
     /// 同じ挿し口に2度は流さない (上がらなければ諦めて理由を残す。上流も頼み直しはしない)。
     /// **ファームウェアが無ければ流さずに「ファームウェアがありません」と残す。**
     /// 流す道具 (<c>asicen-probe</c>) が配布物に無ければ、そう残す。
+    /// </para>
+    ///
+    /// <para>
+    /// **出直しを待つ間も錠は握ったまま。** わざと。流し込みは筐体の両方の USB 機能を揺らすので、
+    /// その間に別の経路 (<see cref="Detect"/> や asicend を起こす前の並べ直し) が古い番地を読まないよう、
+    /// 流し終えて落ち着くまで待たせる。待つのはファームウェア待ちの機材があるときだけで
+    /// (無ければ1回並べて抜ける)、上流はいま1台のホストで1筐体まで。
     /// </para>
     /// </summary>
     internal static void Boot(Action<string> warn)
@@ -338,7 +345,7 @@ public sealed class AsicenDaemon
     private readonly Func<string[]> _select;
     private readonly Lock _gate = new();
     private Process? _process;
-    private string _stderr = "";
+    private volatile string _stderr = "";
 
     /// <param name="select">
     /// どの機材を掴むかの引数 (<c>--hardware …</c>)。起こす直前に呼ぶ。駄目なら投げる。
@@ -367,7 +374,14 @@ public sealed class AsicenDaemon
 
     /// <summary>
     /// 本物の機材を掴む引数。**ファームウェアが無ければ起こさない** (上流の配布物に入っていなかった)。
-    /// ファームウェア待ちのものには先に流し込む (<see cref="AsicenUserland.Enclosures"/>)
+    /// ファームウェア待ちのものには先に流し込む (<see cref="AsicenUserland.Enclosures"/>)。
+    ///
+    /// <para>
+    /// **すでに流し込み済み (<c>0b06:0005</c>) の機材でも、ファームウェアが無ければ止める。** わざと。
+    /// 配布物に入っていない状態は「上流のリリースの形が見込みと違う」印なので、記録に
+    /// 「ファームウェアがありません」と出して気づけるようにし、半端な配布物のまま動かさない
+    /// (電源を入れ直すと結局ファームウェア待ちに戻って使えなくなる)。
+    /// </para>
     /// </summary>
     private static string[] Hardware(string id)
     {
