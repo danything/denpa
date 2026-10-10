@@ -14,7 +14,7 @@
 @import "@anyblades/blades/pico" layer(pico);
 
 :root {
-    --pico-font-family-sans-serif: "Hiragino Sans", "Yu Gothic UI", "Noto Sans JP", system-ui, sans-serif;
+    --pico-font-family-sans-serif: "BIZ UDPGothic", "Hiragino Sans", "Noto Sans JP", system-ui, sans-serif;
     /* 16px(Tailwind の頃と同じ)。番組表の 1 マスなど rem で組んだ寸法がそのまま保たれる */
     --pico-font-size: 16px;
     --pico-line-height: 1.6;
