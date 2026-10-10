@@ -131,15 +131,8 @@ export function settings(): Settings {
         const value = stored(key);
         return value === undefined ? fallback : value === 'true';
     };
-    /*
-     * **コーデックはカンマ区切りで持つ** (`av1,h264`)。1つだけの古い値
-     * (`av1` / `h264` / `none`) もそのまま読める。
-     *
-     * 「エンコードする」のチェックを持っていた頃のDBは `encode=false` が入って
-     * いる。コーデックの選択に寄せたので、それを `none` として読む
-     */
-    const picked = parseCodecs(codec);
-    const codecs = flag('encode', true) ? picked : [];
+    // **コーデックはカンマ区切りで持つ** (`av1,h264`)。1つだけの古い値 (`av1` / `h264` / `none`) もそのまま読める
+    const codecs = parseCodecs(codec);
     // 主は先頭 (parseCodecs が AV1 を先頭に寄せている — 小さいので既定の再生に向く)
     const primary: VideoCodec = codecs[0] ?? 'none';
     return {
@@ -157,7 +150,8 @@ export function settings(): Settings {
     };
 }
 
-export function saveSettings(patch: Partial<Settings>): Settings {
+/** `encode` はコーデックの選択から決まるだけなので書かない */
+export function saveSettings(patch: Partial<Omit<Settings, 'encode'>>): Settings {
     const at = now();
     orm().transaction((tx) => {
         for (const [key, value] of Object.entries(patch)) {

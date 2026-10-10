@@ -6,8 +6,8 @@ import { liveStream } from '#lib/server/live.js';
  * **ライブを HTTP で流す** (画面の外のもの向けの口。docs/api.md)。
  *
  * 画面と同じ焼き方の fragmented MP4 を流し続ける。既定は H.264 / AAC (Cast・テレビ・
- * 古い VLC までいちばん広く再生できる)。`?codec=av1` で AV1 / Opus、`?codec=raw` で焼かずに
- * 1局に絞っただけの生の TS (MPEG-2。VLC・ffplay・録画ソフト向け。Content-Type で分かる)。
+ * いちばん広く再生できる)。`?codec=av1` で AV1 / Opus、`?codec=raw` で焼かずに
+ * 1局に絞っただけの生の TS (MPEG-2。テレビのアプリ向け。Content-Type で分かる)。
  * `?audio=only` で音声だけ (AAC の fMP4。画面の無いスピーカーへの Cast 向け。録画の口と同じ書き方)。
  * `?audio=<音声ID>` (`now.audios` の `id`。`0:sub` など) で焼く音声を選ぶ。知らないものは主音声、生では効かない。
  * 画面の視聴者と同じチューナーの取り合いに乗り、閉じれば降りる (live.ts の liveStream)

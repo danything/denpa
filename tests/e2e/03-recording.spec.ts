@@ -115,8 +115,8 @@ test.describe('録画とエンコード', () => {
         expect(minted.search).toContain('token=');
         expect(minted.search).toContain('download=1');
         expect(download.url()).not.toContain('denpa:');
-        // URL の尻は番組名 (`/file/<番組名>.mkv`)。テレビの VLC はここを見出しにする
-        expect(decodeURIComponent(minted.pathname)).toMatch(/\/file\/.+\.mkv$/);
+        // ファイルの口そのもの (尻に番組名などは付けない)
+        expect(minted.pathname).toMatch(/\/api\/recordings\/\d+\/file$/);
         await download.cancel();
 
         // 落とし始めたら詳細は畳む (押せたかどうかが分かるように)

@@ -66,8 +66,7 @@ export function searchable(input: string): string {
 
 /**
  * 人に見せる用の番組名。[字][デ] のような装飾記号だけ落とし、話数も
- * サブタイトルも ARIB の囲み文字 (🈚🈑) も残す。エンコードの入れ物の title に
- * 焼き込み、プレイヤー (テレビの VLC など) がURLではなく番組名を出せるようにする
+ * サブタイトルも ARIB の囲み文字 (🈚🈑) も残す。エンコードの入れ物の title にも焼き込む
  */
 export function displayTitle(rawName: string): string {
     const cleaned = toHalfWidth(rawName ?? '')
@@ -75,21 +74,6 @@ export function displayTitle(rawName: string): string {
         .replace(/\s+/g, ' ')
         .trim();
     return cleaned === '' ? (rawName ?? '').trim() : cleaned;
-}
-
-/**
- * **テレビの VLC に出す番組名。** `[字][デ][二]` のような記号を**残す** (displayTitle は落とす)。
- * 一覧と違ってテレビの見出しはこれしか出ないので、字幕があるか・二か国語かがここで分かる。
- *
- * 外字 (🈑🈞🈔 𠮷) は `[字][再][二]` 吉 のように昔の書き方に開く (`fold.ts`)。
- * テレビの VLC は絵文字の字形を持っていないことがあり、豆腐になる
- */
-export function markedTitle(rawName: string): string {
-    const opened = foldForSearch(rawName ?? '').replace(
-        /[\u{1F210}-\u{1F23B}]/gu,
-        (c) => `[${c.normalize('NFKC')}]`,
-    );
-    return toHalfWidth(opened).replace(/\s+/g, ' ').trim();
 }
 
 export interface ParsedTitle {
