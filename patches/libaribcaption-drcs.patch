@@ -43,7 +43,7 @@ index d2fe27d..083540b 100644
  
  }  // namespace aribcaption
 diff --git a/src/renderer/drcs_renderer.cpp b/src/renderer/drcs_renderer.cpp
-index 9c5c472..70e4416 100644
+index 9c5c472..b1c17e6 100644
 --- a/src/renderer/drcs_renderer.cpp
 +++ b/src/renderer/drcs_renderer.cpp
 @@ -16,7 +16,10 @@
@@ -175,9 +175,13 @@ index 9c5c472..70e4416 100644
  bool DRCSRenderer::DrawDRCS(const DRCS& drcs, CharStyle style, ColorRGBA color, ColorRGBA stroke_color,
                              int stroke_width, int target_width, int target_height,
                              Bitmap& target_bmp, int target_x, int target_y) {
-@@ -53,21 +167,18 @@ bool DRCSRenderer::DrawDRCS(const DRCS& drcs, CharStyle style, ColorRGBA color,
+@@ -52,22 +166,22 @@ bool DRCSRenderer::DrawDRCS(const DRCS& drcs, CharStyle style, ColorRGBA color,
+ 
  Bitmap DRCSRenderer::DRCSToColoredBitmap(const DRCS& drcs, int target_width, int target_height, ColorRGBA color) {
      Bitmap bitmap(target_width, target_height, PixelFormat::kRGBA8888);
++    if (drcs.width <= 0 || drcs.height <= 0 || drcs.depth < 2 || drcs.pixels.empty()) {
++        return bitmap;  // nothing to draw (DrawDRCS already rejects these)
++    }
  
 -    float x_fraction = static_cast<float>(drcs.width) / static_cast<float>(target_width);
 -    float y_fraction = static_cast<float>(drcs.height) / static_cast<float>(target_height);
