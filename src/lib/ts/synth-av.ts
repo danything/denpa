@@ -17,8 +17,6 @@
 
 import { PACKET, SYNC } from './psi';
 
-/** 90kHz。PES の PTS の刻み */
-export const CLOCK = 90_000;
 /** 29.97 コマ/秒の1コマ (90kHz)。放送と同じ */
 export const FRAME_TICKS = 3003;
 /** AAC の1コマ (1024 標本 @48kHz を 90kHz で) */

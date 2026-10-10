@@ -150,7 +150,7 @@ describe('B24CaptionDecoder', () => {
         });
     });
 
-    test('外字の置き換え表には denpa のパッチで足した分も入っている', () => {
+    test('外字の置き換え表には denpa で足した分も入っている', () => {
         expect(DRCS_REPLACE.get('dedbee40c06e17b51932431dc8cd8334')).toBe(0x8fc2);
         expect(DRCS_REPLACE.get('c7b93e8e27f686cbeeb88e871c17327c')).toBe(0x300a);
     });

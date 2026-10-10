@@ -1,10 +1,8 @@
 /**
  * 放送の字幕 (ARIB STD-B24 の字幕文) を解いて、**字の置き場所まで決める** ([caption-text.ts](../caption-text.ts))。
  *
- * 絵にしていた頃 (ffmpeg の `-sub_type bitmap`) の中身は libaribcaption で、あちらは
- * 「解く (decoder)」と「描く (renderer)」が分かれている。ここは**解く側をそのまま写した
- * もの** — 置き場所・大きさ・色・外字の置き換えまでは同じ計算で、絵にする手前で止める。
- * 描くのは受け側 (ブラウザ・アプリ)。
+ * libaribcaption の「解く (decoder)」側を写したもの — 置き場所・大きさ・色・外字の置き換えまでは
+ * 同じ計算で、描く (renderer) 手前で止める。描くのは受け側 (ブラウザ・アプリ)。
  *
  * 写したのは日本の放送で要るところだけ: 8単位符号 (JIS)・Profile A (フルセグ)・第1言語。
  * ブラジルの Latin・UTF-8・ワンセグ (Profile C) は持たない。
@@ -885,7 +883,7 @@ export class B24CaptionDecoder {
  *
  * @returns 出すものが無い (待ちだけの字幕文) なら null。CS だけなら「消す」1枚
  */
-export function toPage(caption: Caption, plane: [number, number]): CaptionPage | null {
+function toPage(caption: Caption, plane: [number, number]): CaptionPage | null {
     if (caption.chars.length === 0 && !caption.clear) return null;
     const runs: CaptionRun[] = [];
     const drcs: Record<string, CaptionDrcs> = {};

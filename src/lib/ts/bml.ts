@@ -8,16 +8,13 @@
  * ## なぜ自前なのか
  *
  * **運び方は衛星のロゴと同じ DSM-CC** で、denpa はそれを既に持っている
- * ([dsmcc.ts](dsmcc.ts) / [logo-dsmcc.ts](logo-dsmcc.ts))。借りていた
- * [web-bml](https://github.com/otya128/web-bml) の `decode_ts.ts` は998行あるが、
- * **denpa が通るのは3割だけ**で、残りは EIT/SDT/NIT や字幕の PES —
- * どれも自前のものがある ([eit.ts](eit.ts) / [psi.ts](psi.ts) / ffmpeg)。
- * その3割のために `@chinachu/aribts` (2.3MB) を抱えていた。
+ * ([dsmcc.ts](dsmcc.ts) / [logo-dsmcc.ts](logo-dsmcc.ts))。
+ * [web-bml](https://github.com/otya128/web-bml) の `decode_ts.ts` は使わない — 要るのは
+ * その一部だけで、残り (EIT/SDT/NIT・字幕の PES) は自前で読んでおり
+ * ([eit.ts](eit.ts) / [psi.ts](psi.ts) / ffmpeg)、`@chinachu/aribts` も抱えずに済む。
  *
- * **出す形は借りたまま。** 借りもの (`web-bml/protocol`) の
- * `ResponseMessage` をそのまま作るので、描画側 (web-bml のブラウザ) から見ると
- * 出どころが変わったことは分からない。**型が食い違いを見張ってくれる**のが、
- * ここを自前にできる理由でもある。
+ * **出す形は web-bml のまま。** `web-bml/protocol` の `ResponseMessage` をそのまま
+ * 作るので、描画側 (web-bml のブラウザ) と食い違えば型が見張る。
  *
  * 中身を読むところ (multipart の解体) だけは借りたままにしてある
  * (`entity_parser.ts`)。**依存の無いただの解析**で、書き直しても得るものが無い。
@@ -70,9 +67,7 @@ const COMPRESSION_ZLIB = 0;
  *
  * 地上波は TR-B14 第二分冊 2.1.4 表2-3、BS/CS は TR-B15 第一分冊 5.1.5 表5-4。
  *
- * **`data_component_id` は16ビット。** 借りていた側はここで `aribtsの実装が
- * おかしくて8ビットとして読んでる` という但し書き付きの補正をしていたが、
- * 自前で読むならその歪みごと無い。
+ * **`data_component_id` は16ビット** (aribts は8ビットで読んでいる)。
  */
 export function parseBxmlInfo(data: Uint8Array): AdditionalAribBXMLInfo {
     let at = 0;

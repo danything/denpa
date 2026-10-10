@@ -11,13 +11,11 @@
  */
 
 import type { AudioSide } from '#lib/arib.js';
-import { unwrap } from '#lib/ts/pes.js';
+import { CLOCK, unwrap } from '#lib/ts/pes.js';
 import { resolve } from '$app/paths';
 import type { FromWorker, ToWorker } from './messages';
 import { type Chunk, Playout, type Scheduled } from './playout';
 
-/** 90kHz */
-const CLOCK = 90_000;
 /** 刻み (ms)。音の予約と時計の配り直しをここで回す */
 const TICK = 20;
 /** 絵は出ているのに音が来ないまま、これだけたったら諦める (ms) */
