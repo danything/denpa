@@ -8,6 +8,7 @@
 #                                  (http://denpa-agent.localhost)
 #   docker compose run --rm e2e  … E2E (中で偽エージェント/偽通知先/アプリを起動する)
 #   docker compose run --rm unit … 単体テスト
+#   docker compose run --rm docs … README・docs の絵を撮り直す (docs/development.md)
 #
 # 実チューナーもロゴデータも要らず、ffmpeg も偽物を使うので、
 # 数十分かかる ffmpeg のビルドを待たずに一通り触れる。
@@ -72,6 +73,19 @@ services:
         environment:
             TZ: Asia/Tokyo
             CI: '1'
+        volumes:
+            - .:/app
+            - app-node-modules:/app/node_modules
+
+    # README・docs の絵を撮る (scripts/capture-docs.ts)。偽の放送 (作り物の局と番組) だけで撮り、docs/images に置く
+    docs:
+        build:
+            context: .
+            target: docs
+        profiles: ['docs']
+        command: bun scripts/capture-docs.ts
+        environment:
+            TZ: Asia/Tokyo
         volumes:
             - .:/app
             - app-node-modules:/app/node_modules

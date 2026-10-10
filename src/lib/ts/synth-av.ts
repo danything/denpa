@@ -103,8 +103,12 @@ function colorAt(col: number, row: number, n: number): [number, number, number] 
  * (放送は GOP ごとに書く。試験ではその手間を省く)。
  *
  * @param n 何枚目か。色と time_code に使う
+ * @param color マクロブロック (16x16) ごとの色。既定は流れる縞 (絵を撮るときは色帯。`tests/fake/docs.ts`)
  */
-export function mpeg2Frame(n: number): Uint8Array {
+export function mpeg2Frame(
+    n: number,
+    color: (col: number, row: number, n: number) => [number, number, number] = colorAt,
+): Uint8Array {
     const bits = new Bits();
     const mbWidth = WIDTH / 16;
     const mbHeight = HEIGHT / 16;
@@ -178,7 +182,7 @@ export function mpeg2Frame(n: number): Uint8Array {
         for (let col = 0; col < mbWidth; col++) {
             bits.put(1, 1); // macroblock_address_increment = 1
             bits.put(1, 1); // macroblock_type = intra
-            const [y, cb, cr] = colorAt(col, row, n);
+            const [y, cb, cr] = color(col, row, n);
             for (let i = 0; i < 4; i++) {
                 block(bits, y - predictor[0]!, DC_LUMA);
                 predictor[0] = y;

@@ -37,6 +37,24 @@ FROM scratch AS mpeg2wasm-out
 COPY --from=mpeg2wasm /opt/denpa/mpeg2 /
 
 # ---------------------------------------------------------------------------
+# データ放送と字幕、画面の放送の字を描くブラウザに渡す字 (Denpa Font。danything/denpa-font のリリースの woff2。
+# `/api/font/denpa-font.woff2` が配る)。BML は**等幅・丸ゴシック・ARIB外字**を要求していて、
+# この1本が3つとも満たす (借りている側は Kosugi を 4.4MB ぶん抱えているが、外字は入っていない)。
+# **留めるのはタグだけ** (Renovate はタグだけ上げればよい)。中身は同じリリースの SHA256SUMS で照らす。
+# 画面はこのタグを URL に付けて1年持たせる (vite.config.ts がこの行を読む)。配る側は VERSION と
+# 照らし、合うときだけ immutable にする (src/lib/server/font.ts)。
+# 段を分けてあるのは、本番イメージと絵を撮るイメージ (下の `docs` 段) の両方に同じものを置くため
+# ---------------------------------------------------------------------------
+FROM docker.io/library/debian:trixie-slim@sha256:a29215f6a35e51e22adffa17f89e9d2ef06214e64a2bad10d765c46aea49f11f AS denpa-font
+# renovate: datasource=github-releases depName=danything/denpa-font
+ARG DENPA_FONT_VERSION=v3.0
+ADD --chmod=644 https://github.com/danything/denpa-font/releases/download/${DENPA_FONT_VERSION}/SHA256SUMS \
+    https://github.com/danything/denpa-font/releases/download/${DENPA_FONT_VERSION}/denpa-font.woff2 \
+    /usr/share/denpa-font/
+RUN cd /usr/share/denpa-font && grep ' denpa-font.woff2$' SHA256SUMS | sha256sum -c - && rm SHA256SUMS && \
+    printf '%s\n' "$DENPA_FONT_VERSION" > VERSION
+
+# ---------------------------------------------------------------------------
 # 開発用。compose からソースを bind mount して使う
 # ---------------------------------------------------------------------------
 FROM docker.io/oven/bun:1.4-slim AS dev
@@ -57,6 +75,30 @@ ENV CI=1
 RUN bunx playwright install --with-deps chromium && \
     rm -rf /var/lib/apt/lists/*
 CMD ["bun", "run", "test"]
+
+# ---------------------------------------------------------------------------
+# README・docs の絵を撮る (scripts/capture-docs.ts。docs/development.md「README の絵」)。
+# E2E のイメージに、絵に出る字と、作り物の録画を組む本物の ffmpeg を足す
+# ---------------------------------------------------------------------------
+FROM test AS docs
+RUN apt-get update && \
+    apt-get -y --no-install-recommends install ffmpeg python3-pil && \
+    rm -rf /var/lib/apt/lists/*
+# 画面の字。app.css が最初に挙げる BIZ UDPゴシックは Windows には入っているが、ここには無い。
+# OFL で配られているもの (google/fonts) をコミットで留め、中身を照らす
+ARG BIZ_UD_COMMIT=6ce172f74aa355ea43eb964fa4a91570a4d3064d
+ADD --chmod=644 https://raw.githubusercontent.com/google/fonts/${BIZ_UD_COMMIT}/ofl/bizudpgothic/BIZUDPGothic-Regular.ttf \
+    https://raw.githubusercontent.com/google/fonts/${BIZ_UD_COMMIT}/ofl/bizudpgothic/BIZUDPGothic-Bold.ttf \
+    /usr/share/fonts/truetype/biz-ud/
+RUN cd /usr/share/fonts/truetype/biz-ud && \
+    printf '%s  %s\n' \
+      258d7156c165f2ff774b6efee637c22c3b950de0d8a10e501137061bc8085d01 BIZUDPGothic-Regular.ttf \
+      30eba52fc837e8b62c97d4b82e6706583149fb7294e3712dd71a655eaea80a90 BIZUDPGothic-Bold.ttf | sha256sum -c - && \
+    fc-cache -f
+# 放送の字 (Denpa Font)。本番と同じものを同じ場所に置く (`/api/font/denpa-font.woff2` が読む)
+COPY --from=denpa-font /usr/share/denpa-font /usr/share/denpa-font
+ENV FFPROBE=/usr/bin/ffprobe
+CMD ["bun", "scripts/capture-docs.ts"]
 
 # ---------------------------------------------------------------------------
 # ffmpeg (自前ビルド。AV1 libsvtav1/dav1d + H.264 x264 + Opus + Intel GPU (VA-API/QSV)。
@@ -171,19 +213,8 @@ COPY --from=docker.io/oven/bun:1.4-slim /usr/local/bin/bun /usr/local/bin/bun
 
 COPY --from=ffmpeg /usr/local/bin/ffmpeg /usr/local/bin/ffprobe /usr/local/bin/
 
-# データ放送と字幕を描くブラウザに渡す字 (Denpa Font。danything/denpa-font のリリースの woff2。
-# `/api/font/denpa-font.woff2` が配る)。BML は**等幅・丸ゴシック・ARIB外字**を要求していて、
-# この1本が3つとも満たす (借りている側は Kosugi を 4.4MB ぶん抱えているが、外字は入っていない)。
-# **留めるのはタグだけ** (Renovate はタグだけ上げればよい)。中身は同じリリースの SHA256SUMS で照らす。
-# 画面はこのタグを URL に付けて1年持たせる (vite.config.ts がこの行を読む)。配る側は VERSION と
-# 照らし、合うときだけ immutable にする (src/lib/server/font.ts)
-# renovate: datasource=github-releases depName=danything/denpa-font
-ARG DENPA_FONT_VERSION=v3.0
-ADD --chmod=644 https://github.com/danything/denpa-font/releases/download/${DENPA_FONT_VERSION}/SHA256SUMS \
-    https://github.com/danything/denpa-font/releases/download/${DENPA_FONT_VERSION}/denpa-font.woff2 \
-    /usr/share/denpa-font/
-RUN cd /usr/share/denpa-font && grep ' denpa-font.woff2$' SHA256SUMS | sha256sum -c - && rm SHA256SUMS && \
-    printf '%s\n' "$DENPA_FONT_VERSION" > VERSION
+# データ放送と字幕を描くブラウザに渡す字 (Denpa Font。上の `denpa-font` 段)
+COPY --from=denpa-font /usr/share/denpa-font /usr/share/denpa-font
 
 # ライブを生で送るときにブラウザへ配る MPEG-2 と AAC の復号器 (`mpeg2wasm` 段)
 COPY --from=mpeg2wasm /opt/denpa/mpeg2 /opt/denpa/mpeg2

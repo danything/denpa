@@ -9,6 +9,6 @@
         "noUncheckedIndexedAccess": true,
         "types": ["bun", "$app/types"]
     },
-    "include": ["src", "tests", "vite.config.ts"],
+    "include": ["src", "tests", "scripts", "vite.config.ts"],
     "exclude": ["src/service-worker"]
 }
