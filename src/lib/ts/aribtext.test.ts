@@ -99,9 +99,9 @@ describe('ARIB 8単位符号', () => {
     });
 
     test('JIS互換漢字2面は1面と混ぜない', () => {
-        // 85区1点は1面 (外字) なら「㐂」。2面の同じ区点は外字の表で引かない
+        // 85区1点は1面 (外字) なら「㐂」。2面では外字の表を引かず、2面の表も持たないので「□」
         expect(decodeAribText(bytes(0x75, 0x21))).toBe('㐂');
-        expect(decodeAribText(bytes(0x1b, 0x24, 0x3a, 0x75, 0x21))).not.toBe('㐂');
+        expect(decodeAribText(bytes(0x1b, 0x24, 0x3a, 0x75, 0x21))).toBe('□');
     });
 
     test('JIS にも外字にも無い区点は印を残す。黙って消さない', () => {
