@@ -48,7 +48,7 @@ test.describe('テレビのペアリング', () => {
         // アプリの鍵では、別の札を済ませられない (盗まれた鍵で鍵を増やせないように)
         const other = await (await request.post('/api/device/code', { data: { name: '鍵から' } })).json();
         const viaToken = await request.get(`/${other.verificationUriComplete}`, { headers: auth });
-        expect(await viaToken.text()).toContain('アプリの鍵では設定できません');
+        expect(await viaToken.text()).toContain('アプリの鍵ではペアリングできません');
         const posted = await request.post(`/${other.verificationUriComplete}`, {
             headers: { ...auth, origin: new URL(viaToken.url()).origin },
             form: { code: other.userCode },
