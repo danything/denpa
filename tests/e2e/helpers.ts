@@ -246,7 +246,6 @@ export async function setRecording(
         /** 焼くコーデック。両方焼くなら `['av1', 'h264']`、焼かないなら `[]`。省けば av1 */
         codecs?: string[];
         cmCut?: string;
-        cmDetector?: string;
         keepOriginal?: boolean;
         freeOnly?: boolean;
     } = {},
@@ -261,8 +260,6 @@ export async function setRecording(
     const body = new URLSearchParams();
     for (const codec of chosen) body.append('codecs', codec);
     body.append('cmCut', patch.cmCut ?? 'chapter');
-    // 偽 ffmpeg しか居ないので、外部のコマンドを呼ばないほうで固定する
-    body.append('cmDetector', patch.cmDetector ?? 'silence');
     if (patch.keepOriginal === true) body.append('keepOriginal', 'on');
     /*
      * **1回だけ投げ直す。**

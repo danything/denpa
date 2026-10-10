@@ -47,12 +47,6 @@ export interface Settings {
     /** 自動予約で無料放送だけを対象にするか */
     freeOnly: boolean;
     /**
-     * CM検出のしかた。
-     * logo    : ロゴが消えるかどうかまで見る。確かだが絵を全部復号する (30分で1分ほど)
-     * silence : 無音とCM尺だけ。絵を復号しないので速いが、本編の「間」を拾うことがある
-     */
-    cmDetector: 'logo' | 'silence';
-    /**
      * コマ数 (30/60) を本編映像から実測して決めるか。
      *
      * 入り: 60p に起こして重複コマの割合を測り、同じ絵が並ぶ素材 (アニメ・
@@ -160,7 +154,6 @@ export function settings(): Settings {
         encode: codecs.length > 0,
         keepOriginal: flag('keepOriginal', false),
         freeOnly: flag('freeOnly', true),
-        cmDetector: stored('cmDetector') === 'silence' ? 'silence' : 'logo',
         fpsDetect: flag('fpsDetect', true),
         postalCode: normalizePostalCode(stored('postalCode') ?? ''),
         // **入れるまで外へ出ない。** 黙って通信が始まらないようにする
