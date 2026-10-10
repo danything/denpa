@@ -29,7 +29,7 @@ const EPISODE = /\s*(?:#|＃|第)\s*(\d{1,4})\s*(?:話|回)?/;
 // 英語の話数 (`Chapter 15` `Episode.2` `EP108` `Ep17`)。#/第 が無いときだけ見る。
 // `Season 2` `Part 2` `Vol.3` は話数ではない (期や巻) ので読まない。語の途中 (`Step12`) や
 // `【EP356】` のような括弧の中も読まない
-const LABELED_EPISODE = /\s*(?<![A-Za-z0-9【[(])(?:chapter|episode|ep)\s*\.?\s*(\d{1,4})(?![\d.])/i;
+const LABELED_EPISODE = /\s*(?<![A-Za-z0-9【[(])(?:chapter|episode|ep)\s*\.?\s*(\d{1,4})(?!\.?\d)/i;
 
 // 話数の後ろが枠の名前だけ (`第51話【アニメイズム】`) なら副題ではない
 const LABELS_ONLY = /^(?:【[^】]*】\s*)+$/;

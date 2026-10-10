@@ -113,6 +113,7 @@ function describedEpisode(
                     .slice(match.index + match[0].length)
                     .split('\n')[0]!
                     .split(SUBTITLE_END)[0]!
+                    .replace(/^[\s:.]+/, '')
                     .trim();
                 const subtitle = withSubtitle ? match[4]! : BARE_SUBTITLE.test(line) ? line : '';
                 return {
@@ -355,12 +356,13 @@ export function firstAirings<T extends Airing>(
  *    両方が当たるなら、どちらとも繋がない — 1本多く録るだけで、取り違えて録り逃すよりよい
  */
 function episodes<T>(list: { airing: T; episode: Episode }[]): { airing: T; episode: Episode }[][] {
-    // 確かでない副題 (`Episode.inferred`) は、揃わなければ副題が無いものとして見る
+    // 確かでない副題 (`Episode.inferred`) は、揃わなければ副題が無いものとして見る。
+    // ただし確かでない副題どうしが食い違うなら、確かとはしない (相手が1つに決まるときだけ繋ぐ)
     const blank = (e: Episode) => e.subtitle === '' || e.inferred;
     const sure = (a: Episode, b: Episode) =>
         a.subtitle !== '' && a.subtitle === b.subtitle
             ? sameEpisode(a, b)
-            : blank(a) && blank(b) && a.series === b.series;
+            : (a.subtitle === '' || b.subtitle === '') && blank(a) && blank(b) && a.series === b.series;
     const group = list.map((_, i) => i);
     const root = (i: number): number => {
         let at = i;

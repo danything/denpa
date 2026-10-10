@@ -220,6 +220,8 @@ describe('同じ回の見分け', () => {
         // 地の文の Season / Step は話数ではない
         expect(read('Season 2 が始まる')).toBeNull();
         expect(read('Step12 の練習')).toBeNull();
+        // 話数の後ろの区切り (`#18: …`) は副題に入れない
+        expect(read('#18: 春の訪れ')).toMatchObject({ number: 18, subtitle: '春の訪れ' });
     });
 
     test('概要から足した副題が題名の副題と食い違っても、別の回にはしない', () => {
@@ -433,5 +435,11 @@ describe('firstAirings', () => {
             type: 'CS',
         });
         expect(kept([tbs, ntv, atx])).toEqual([tbs.id]);
+        // 束のどれか1つと読めても、読める束が2つあればどちらにも寄せない
+        const one = airing('テストアニメ #1「はじまり」', base);
+        const decorated = airing('アニメ テストアニメ #1', base + HOUR, { description: '#1「はじまり」' });
+        const other = airing('テストアニメ #1「別の話」', base + DAY);
+        const bare = airing('テストアニメ #1', base + 2 * DAY);
+        expect(kept([one, decorated, other, bare])).toEqual([one.id, other.id, bare.id]);
     });
 });

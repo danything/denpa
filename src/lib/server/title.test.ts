@@ -140,6 +140,9 @@ describe('parseTitle', () => {
         });
         // # があればそちらが話数
         expect(parseTitle('テストアニメ Episode 3 #12').episode).toBe(12);
+        // 後ろのドットは話数の終わり。`Ep.3.5` のような小数は読まない
+        expect(parseTitle('テストアニメ Chapter 15.').episode).toBe(15);
+        expect(parseTitle('テストアニメ Ep.3.5').episode).toBeNull();
     });
 
     test('Season / Part / Vol. や語の途中の ep は話数にしない', () => {
