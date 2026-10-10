@@ -37,7 +37,7 @@ Dockerfile の行・`package.json`) を優先し、上流の表示に拠るも�
 
 | 名前 | 何に | 出どころ | ライセンス |
 | --- | --- | --- | --- |
-| rounded-mplus-1m-arib | 字幕の焼き込みと、データ放送の web フォント (`/api/font` で配る) | <https://github.com/5ym/arib-font> (自家製 Rounded M+ 1m と和田研中丸ゴシック 2004ARIB の派生) | M+ FONT LICENSE (上流の LICENSE: 使用・複製・配布・改変を商用非商用問わず無制限に許可) |
+| rounded-mplus-1m-arib | 字幕の焼き込みと、データ放送の web フォント (`/api/font` で配る) | <https://github.com/danything/arib-font> (自家製 Rounded M+ 1m と和田研中丸ゴシック 2004ARIB の派生) | M+ FONT LICENSE (上流の LICENSE: 使用・複製・配布・改変を商用非商用問わず無制限に許可) |
 
 ### ランタイム
 
