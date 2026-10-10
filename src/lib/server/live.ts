@@ -1436,7 +1436,7 @@ export const CHASE_STREAM_HOLD = 4 * 1024 * 1024;
 
 /**
  * **HTTP で流すライブ** (`GET /api/services/<id>/live`)。画面の外のもの
- * (Home Assistant の Cast・VLC・ffplay) 向けに、画面と同じ焼き方の fMP4 をそのまま流す。
+ * (テレビのアプリ・Home Assistant の Cast) 向けに、画面と同じ焼き方の fMP4 をそのまま流す。
  *
  * `raw` なら焼かずに、1局に絞っただけの生の TS を流す (画面の「生」と同じ道)。
  * `audio` なら音声だけ (AAC の fMP4。画面の無いスピーカーへの Cast 向け)。

@@ -53,11 +53,7 @@ export const actions = {
     /** 録画のしかた。番組ごとに変えたくなることが実際にはほとんど無いので全体で1つ */
     saveRecording: async ({ request }) => {
         const form = await request.formData();
-        /*
-         * **コーデックは複数選べる** (`av1` / `h264` を両方)。1つも選ばなければ
-         * 「エンコードしない」。カンマ区切りで持ち、`encode` も一緒に合わせて
-         * 書く — 古いDBに残っている `encode=false` を確実に上書きするため
-         */
+        // **コーデックは複数選べる** (`av1` / `h264` を両方)。1つも選ばなければ「エンコードしない」。カンマ区切りで持つ
         const codecs = form
             .getAll('codecs')
             .map(String)
@@ -69,7 +65,6 @@ export const actions = {
         saveSettings({
             // 順序は読むとき (parseCodecs) に AV1 を先頭へ寄せる。ここは来たまま
             codec: (codecs.length > 0 ? codecs.join(',') : 'none') as VideoCodec,
-            encode: codecs.length > 0,
             cmCut,
             keepOriginal: form.get('keepOriginal') === 'on',
             freeOnly: form.get('freeOnly') === 'on',

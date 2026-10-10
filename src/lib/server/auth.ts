@@ -9,7 +9,7 @@ import { enabled as oidcEnabled } from './oidc';
  * | --- | --- |
  * | `TRUSTED_NETWORKS` | 信頼したネットワークから来た人。何も聞かずに通す |
  * | OIDC のログイン | 画面から入る人 (`docs/auth.md`) |
- * | 期限付きのリンク (`?token=`、share.ts) | プレイヤー・ダウンロード。**ファイルの口だけ** |
+ * | 期限付きのリンク (`?token=`、share.ts) | 再生リンク・ダウンロード。**ファイルの口だけ** |
  * | 使い捨ての札 | ライブ視聴の WebSocket だけ (`tickets.ts`) |
  *
  * **どれも設定していなければ、全部断る** (`configured`)。以前はベーシック認証を
@@ -24,13 +24,10 @@ import { enabled as oidcEnabled } from './oidc';
  */
 
 /**
- * 期限付きのリンクとログインの控えで開けられる口。**ここは OIDC のリダイレクトにしない。**
- * `file` はファイルそのもの、`playlist` はそれを続きの位置から指す XSPF
- * (`playlist/[name]/+server.ts`)。どちらもプレイヤーが取りに来るので同じ扱い。
- * 尻の1段は番組名 (プレイヤーの見出し用、share.ts の shareUrls)。読み捨てるので何が来ても
- * よいが、それより深くは通さない。**形はここ1つ** — share.ts の突き合わせも同じものを使う
+ * 期限付きのリンクとログインの控えで開けられる口 (録画のファイル)。**ここは OIDC のリダイレクトにしない。**
+ * **形はここ1つ** — share.ts の突き合わせも同じものを使う
  */
-const FILE_PATH = /^\/api\/recordings\/(\d+)\/(?:file|playlist)(?:\/[^/]+)?$/;
+const FILE_PATH = /^\/api\/recordings\/(\d+)\/file$/;
 
 /** ファイルの口なら、そのパスが指す録画ID。違えば null */
 export function fileRecordingId(pathname: string): number | null {
@@ -121,7 +118,7 @@ export function sessionMayRead(loggedIn: boolean): boolean {
  * **何も聞かずに通す相手か。** 見るのは住所だけ (`TRUSTED_NETWORKS`、CIDR の
  * カンマ区切り)。
  *
- * **ここに当たると OIDC も掛かりません。** LAN のテレビのアプリやプレイヤー (VLC など)
+ * **ここに当たると OIDC も掛かりません。** LAN のテレビのアプリ (denpa-tv)
  * に資格情報を入れずに使わせるのが狙いです。
  *
  * **どの名前で来たかは問いません。** 前段 (リバースプロキシ) は名前を届けるだけで、

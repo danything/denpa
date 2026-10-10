@@ -116,10 +116,7 @@ describe('トラックの名前', () => {
         expect(title(args, '-metadata:s:s:0')).toBe('title=字幕');
     });
 
-    /**
-     * 入れ物の title は番組名。URL で渡す再生 (テレビの VLC など) は
-     * これしか出せない — リモートアクセスの /play は表示名を受け取らない
-     */
+    /** 入れ物の title は番組名 */
     test('入れ物に番組名を入れる', () => {
         const args = buildArgs('/in.m2ts', '/out.mkv', 1, null, 'av1', {
             mediaTitle: '転生したらスライムだった件 #88',

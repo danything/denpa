@@ -4,18 +4,16 @@ import type { FileSource } from '#lib/source.js';
 import { fileRecordingId } from './auth';
 import { orm } from './db';
 import { shareLinks } from './schema';
-import { markedTitle } from './title';
 
 /**
  * 期限付きの再生リンク。
  *
- * 出先のプレイヤー (VLC など) に渡すための、時間で切れるURLを作る。
- * 恒久の資格情報入りのURLでも再生自体はできるが、**プレイヤーはURLを履歴に
- * 保存する** — 他人の機器に恒久パスワードを置いてくることになる。期限付きなら
- * 残っても切れたゴミにしかならない。
+ * 録画のファイルを開くための、時間で切れるURLを作る (再生リンクのコピーとダウンロード)。
+ * 恒久の資格情報入りのURLでも開けはするが、**URLは履歴に残る** — 他人の機器に
+ * 恒久パスワードを置いてくることになる。期限付きなら残っても切れたゴミにしかならない。
  *
  * 控えはDBに持つ (`share_links`)。**1録画につき現役のリンクは1本**で、期限内に
- * もう一度発行すると同じトークンのまま期限だけ延びる — テレビの履歴に残った
+ * もう一度発行すると同じトークンのまま期限だけ延びる — 履歴に残った
  * URLが、使い続けているかぎり切れない。以前は HMAC の署名だけで控え無しに
  * していたが、期限がトークンに焼き付いてしまい、延ばすにはURLごと変える
  * しかなかった (履歴のURLは死ぬ)。全部を今すぐ切りたければ `share_links` の
@@ -91,35 +89,14 @@ export function shareTokenAllows(pathname: string, searchParams: URLSearchParams
     return id !== null && verifyShareToken(id, searchParams.get('token'));
 }
 
-/**
- * 再生リンクの形。**ファイルそのもの**と、それを**続きの位置から指す XSPF** の2本。
- *
- * **URL の尻に番組名を置く** (`/file/<番組名>.mkv`)。テレビの VLC (Android) は
- * 再生画面の見出しに **URL の最後の区切りから拡張子を除いたもの** を出す
- * (vlc-android の VideoPlayerActivity / MediaWrapper.getTitle を確認)。入れ物の
- * title は履歴や通知にしか回らず、見出しには効かない。名前の区切りは
- * サーバでは読み捨てる (`file/[name]/+server.ts`) — 資格はトークンだけ。
- * 名前は `[字][デ]` を残す (markedTitle)。テレビの見出しはこれしか出ないので。
- * `source` の名指しはクエリに焼き込む (AV1 を解けないプレイヤーに H.264 や生TSを渡すとき)。
- * プレイリストのほう (`playlist/[name]/+server.ts`) は、その中身にファイルの
- * URL を同じ資格で書く
- */
-export function shareUrls(
-    recording: { id: number; name: string },
+/** 再生リンクの形 (録画のファイルの口)。資格 (`?token=`) と配るファイルの名指し (`?source=`) はクエリに */
+export function shareUrl(
+    recordingId: number,
     origin: string,
-    token: string | null,
+    token: string,
     source: FileSource | null,
-): { file: string; playlist: string } {
-    const query = new URLSearchParams();
-    if (token !== null && token !== '') query.set('token', token);
+): string {
+    const query = new URLSearchParams({ token });
     if (source !== null) query.set('source', source);
-    const qs = query.size === 0 ? '' : `?${query}`;
-    // 名前の中の区切り文字はパスの段を増やすので寄せておく。見た目だけの部分なので厳密でなくてよい
-    const label = markedTitle(recording.name).replace(/[/\\]/g, '／') || String(recording.id);
-    const base = `${origin}/api/recordings/${recording.id}`;
-    // 拡張子は中身に合わせる (生TSは録画と同じ `.m2ts` — `.ts` は TypeScript と紛れる)
-    return {
-        file: `${base}/file/${encodeURIComponent(`${label}.${source === 'ts' ? 'm2ts' : 'mkv'}`)}${qs}`,
-        playlist: `${base}/playlist/${encodeURIComponent(`${label}.xspf`)}${qs}`,
-    };
+    return `${origin}/api/recordings/${recordingId}/file?${query}`;
 }
