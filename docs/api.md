@@ -208,7 +208,7 @@
   - `drcs` は置き換えられなかった外字。`text` は「〓」で、`drcs` の絵を字の枠いっぱいに `fg` で描く
 - `drcs` の絵は左上から1画素 `bits` ビットずつ上の桁から詰めたもの (base64)。値 v の濃さは v / (`depth` − 1)。
   小さい (16〜36 画素) ので、なめらかに引き伸ばします。置き換え表で字にできたもの (〓 にならないもの) はここに来ません
-- 色は `#rrggbbaa`。字は字幕を焼いていたのと同じ丸ゴシック (`GET /api/font/denpa-font.woff2`。Denpa Font) で描きます
+- 色は `#rrggbbaa`。字はデータ放送と同じ丸ゴシック (`GET /api/font/denpa-font.woff2`。Denpa Font) で描きます
 
 ## 番組表の番組の中身 `GET /api/programs/<id>`
 
