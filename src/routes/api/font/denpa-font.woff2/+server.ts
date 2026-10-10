@@ -35,6 +35,10 @@ export const GET: RequestHandler = ({ request }) => {
      * (以前は `/api/font` を1年 immutable で配っていて、字を足しても届かなかった)
      */
     const headers = { 'content-type': 'font/woff2', 'cache-control': 'no-cache', etag: tag };
-    if (request.headers.get('if-none-match') === tag) return new Response(null, { status: 304, headers });
+    // 前段の proxy が弱い形 (`W/"…"`) にしたり、いくつも並べたりしても 304 にする
+    const asked = (request.headers.get('if-none-match') ?? '')
+        .split(',')
+        .map((t) => t.trim().replace(/^W\//, ''));
+    if (asked.includes(tag)) return new Response(null, { status: 304, headers });
     return new Response(Bun.file(FONT).stream(), { headers });
 };
