@@ -30,7 +30,7 @@ import {
     shiftRanges,
 } from './cm';
 import { chapterArgs, cutArgs, cutList, cutPoints, KEY_SCDET, listKeyframes, planCut } from './cm-cut';
-import { type Scan, type ScanReader, scanOutputs, scanReader } from './cm-scan';
+import { type Scan, type ScanReader, scan, scanOutputs, scanReader } from './cm-scan';
 import { config } from './config';
 import { affected, now, orm } from './db';
 import { type EncodeProgress, emit } from './events';
@@ -995,17 +995,22 @@ async function runFfmpeg(
     return { code, stderrTail: failureReason(tail.join('\n')), outTimeUs };
 }
 
+/** 焼くときと同じ入力の前の引数 (頭捨て `-ss` と探りの長さ)。CM 検出で読み直すときもコマの並びを揃える */
+function inputArgs(skip: number): string[] {
+    return [...(skip > 0 ? ['-ss', String(skip)] : []), ...TS_PROBE];
+}
+
 /**
  * 焼きながら読んだ材料から CM を決める。**入れ物の頭からの秒で返す** (焼いたものの時刻に
  * `skip` を足す)。焼くたびに捨てる頭の長さが変わっても、ここを物差しにして引き直す (`own`)。
- * 読めなかった・決められなかったときは CM 無しで、理由を覚え書きに残す (焼いたものは捨てない)
+ * 読めなかった・決められなかったときは CM 無しで、理由を覚え書きに残す (焼いたものは捨てない)。
+ * `video` が偽なら音だけ読み直したもの
  */
-async function decide(reading: CmReading, found: Scan | null, skip: number): Promise<CmDetection> {
+async function decide(reading: CmReading, found: Scan | null, skip: number, video: boolean): Promise<CmDetection> {
     if (found === null) return { cm: [], duration: Number.NaN, note: 'CM検出の読み込みが失敗しました' };
     try {
-        // ロゴを覚え直して枠だけ読み直すときも、焼いたときと同じだけ頭を捨てる (コマの並びを揃える)
-        const before = [...(skip > 0 ? ['-ss', String(skip)] : []), ...TS_PROBE];
-        const decided = await reading.decide(found, { skip, before });
+        // ロゴを覚え直して枠だけ読み直すときも、焼いたときと同じだけ頭を捨てる
+        const decided = await reading.decide(found, { skip, before: inputArgs(skip), video });
         return {
             ...decided,
             cm: decided.cm.map((range) => ({ start: range.start + skip, end: range.end + skip })),
@@ -1372,7 +1377,7 @@ async function runJob(jobId: number): Promise<void> {
      * 失敗になるのは避けたい。GPU の失敗は初期化で落ちるので、やり直しは速い
      *
      * `analysis` なら CM 検出を相乗りさせる。**全部落ちたら、探さずにもう1度だけ焼く** —
-     * 検出の出口が焼くほうを道連れにしたのかもしれない。焼けたものは残し、CM は無しにする
+     * 検出の出口が焼くほうを道連れにしたのかもしれない。焼けたら音だけ読み直して、CM の尺だけで決める
      */
     const encodeWays = async (
         codec: HwCodec,
@@ -1440,20 +1445,27 @@ async function runJob(jobId: number): Promise<void> {
                 break;
             }
         }
+        /** 絵まで読めたか。探さずに焼き直したら音だけ読み直す */
+        let video = true;
         if (result.code !== 0 && extra.analysis && reading !== null && !canceled.has(jobId)) {
             setStep(jobId, `CMを探さずにエンコードし直します (${codec})`);
             skip = inputSkip(null, encodeOptions.videoStart);
-            result = await runFfmpeg(
-                job,
-                sourceTs,
-                working,
-                recording.audio_type,
-                null,
-                codec,
-                encodeOptions,
-            );
+            result = await runFfmpeg(job, sourceTs, working, recording.audio_type, null, codec, encodeOptions);
+            if (result.code === 0 && !canceled.has(jobId)) {
+                // 音だけ読み直して、CM の尺だけで決める (音の復号だけなので軽い)
+                setStep(jobId, '無音を探しています');
+                const audio = await scan(sourceTs, {
+                    video: false,
+                    audio: true,
+                    before: inputArgs(skip),
+                    signal,
+                    timeoutMs: config.cmDetectTimeout,
+                });
+                found = audio.code === 0 ? audio : null;
+                video = false;
+            }
         }
-        return { result, found, skip };
+        return { result, found, skip, video };
     };
 
     /** 焼き直さずに書き直す (チャプターを足す・CM を切る)。出来たら作業ファイルと差し替える */
@@ -1538,7 +1550,7 @@ async function runJob(jobId: number): Promise<void> {
 
         if (first && reading !== null) {
             setPhase(jobId, 'cm', 'CMの境目を決めています');
-            detection = await decide(reading, done.found, done.skip);
+            detection = await decide(reading, done.found, done.skip, done.video);
             firstFrame = (done.found?.times[0] ?? Number.NaN) + done.skip;
             orm()
                 .update(recordings)
