@@ -47,7 +47,7 @@ COPY --from=mpeg2wasm /opt/denpa/mpeg2 /
 # ---------------------------------------------------------------------------
 FROM docker.io/library/debian:trixie-slim@sha256:a29215f6a35e51e22adffa17f89e9d2ef06214e64a2bad10d765c46aea49f11f AS denpa-font
 # renovate: datasource=github-releases depName=danything/denpa-font
-ARG DENPA_FONT_VERSION=v3.0
+ARG DENPA_FONT_VERSION=v3.1
 ADD --chmod=644 https://github.com/danything/denpa-font/releases/download/${DENPA_FONT_VERSION}/SHA256SUMS \
     https://github.com/danything/denpa-font/releases/download/${DENPA_FONT_VERSION}/denpa-font.woff2 \
     /usr/share/denpa-font/

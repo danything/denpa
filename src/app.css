@@ -23,6 +23,7 @@
      * テレビと同じ白黒の字で出る。`@font-face` は版付きの URL が要るので
      * `+layout.svelte` が置く (`#lib/font.ts`)。手元の開発では 404 なので画面の字に落ちる。
      * こちらで書いた文言 (ボタン・見出し・設定) は画面の字のまま。`.broadcast` で付ける
+     * (全角英数字を詰める palt も一緒に付く)
      */
     --broadcast-font: "Denpa Font", var(--pico-font-family-sans-serif);
     --pico-line-height: 1.6;
@@ -376,8 +377,15 @@ td {
 .mono {
     font-family: var(--pico-font-family-monospace);
 }
+/*
+ * 放送から来た字は、全角の英数字・記号 (ＢＳ・ＴＶ・！ など。EPG の字はほとんど全角で来る) を詰めて組む (`palt`)。
+ * Denpa Font の palt は U+FF01–FF5E だけを詰め、既定の送り幅 (1em) は変えない。保存してある字は変えず、見え方だけ。
+ * **字幕 (canvas) とデータ放送 (web-bml) には当てない** — ARIB が字の間と区画を決めている。
+ * どちらも `.broadcast` の外で描く (`caption-draw.ts`・`DataBroadcast.svelte`)
+ */
 .broadcast {
     font-family: var(--broadcast-font);
+    font-feature-settings: "palt";
 }
 .truncate {
     min-width: 0;
