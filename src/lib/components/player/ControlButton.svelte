@@ -22,8 +22,8 @@
         onclick,
         children,
     }: {
-        /** アイコン (`icons.ts`)。文字だけのボタンでは省く */
-        icon?: IconShape;
+        /** アイコン (`icons.ts`)。文字だけのボタンでは省く (`undefined` を渡しても同じ) */
+        icon?: IconShape | undefined;
         /** 読み上げに出す名前。押すと役目が変わるものは、いまの役目を書く */
         label: string;
         /** 押されている間か。字幕を出しているときなど */
@@ -34,7 +34,8 @@
         submit?: boolean;
         testid?: string;
         onclick?: () => void;
-        children?: import('svelte').Snippet;
+        /** 添える文字。渡すと丸くなくなる (`undefined` は渡さないのと同じ。速さは等速のときだけ省く) */
+        children?: import('svelte').Snippet | undefined;
     } = $props();
 </script>
 
