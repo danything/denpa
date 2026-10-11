@@ -4,7 +4,7 @@ import { genreName } from '#lib/arib.js';
 import { SERVICE_TYPE_LABEL } from '#lib/format.js';
 import { parseSearchFields } from '#lib/search.js';
 import { config } from '#lib/server/config.js';
-import { type Capacity, contending, type Occupant, rivalsOf } from '#lib/server/conflict.js';
+import { type Capacity, contentions, type Occupant } from '#lib/server/conflict.js';
 import { now, orm } from '#lib/server/db.js';
 import { CURRENT_SERVICES, watchableServices } from '#lib/server/epg.js';
 import { relative } from '#lib/server/paths.js';
@@ -404,8 +404,6 @@ export async function load({ url }) {
                 end_at: row.end_at,
             });
         }
-        const rivals = rivalsOf(occupants.values(), margins);
-
         const rows: PreviewRow[] = hits.map((p) => {
             const held = reserved.get(p.id) ?? null;
             return {
@@ -459,31 +457,29 @@ export async function load({ url }) {
          * **重なりは、出す 100 件にだけ当てる。**
          *
          * 重なりは**録ろうとした時点で初めて分かる**ので先に見せるのだが、当たった
-         * 全部に当てていた頃は、ゆるい条件 (詳細まで・27,000 件) で `contending` に
-         * 7.5 秒かかり、その間サーバごと止まっていた (SQLite も判定も同期)。
-         * 画面に出るのは先頭 100 件だけなので、そこにだけ当てる。**比べる相手
-         * (`rivals`) は全部のまま** — 出さない番組とも取り合うので、そこは減らせない
-         * (こちらは 27,000 件でも 15ms)。
+         * 全部に当てていた頃は、ゆるい条件 (詳細まで・27,000 件) で 7.5 秒かかり、
+         * その間サーバごと止まっていた (SQLite も判定も同期)。画面に出るのは先頭 100 件
+         * だけなので、そこにだけ当てる。
+         *
+         * **比べる相手は、その 100 件が掛かる時間帯の全部。** 出さない番組とも取り合うので
+         * 相手は減らせないが、競合はその番組と時間が重なる相手だけで決まるので、時間帯の
+         * 外は渡さなくても答えは変わらない (全部を渡すと、なぞるのが番組表まるごとになる)。
          *
          * 「競合 N 件」もその 100 件の中の数になる。画面ではそう書く
          */
         const shown = rows.slice(0, 100);
+        const mine = shown.flatMap((row) => (row.skip === null ? (occupants.get(row.id) ?? []) : []));
+        const from = Math.min(...mine.map((o) => o.start_at)) - margins.start;
+        const to = Math.max(...mine.map((o) => o.end_at)) + margins.end;
+        const contended = contentions(
+            [...occupants.values()].filter(
+                (o) => o.start_at - margins.start < to && from < o.end_at + margins.end,
+            ),
+            capacity,
+            margins,
+        );
         for (const row of shown) {
-            if (row.skip !== null) continue;
-            const where = occupants.get(row.id);
-            if (where === undefined) continue;
-            row.conflicts = contending(
-                {
-                    programId: row.id,
-                    type: where.type,
-                    channel: where.channel,
-                    start_at: row.start_at,
-                    end_at: row.end_at,
-                },
-                rivals,
-                capacity,
-                margins,
-            );
+            if (row.skip === null) row.conflicts = contended.get(row.id) ?? [];
         }
 
         return {

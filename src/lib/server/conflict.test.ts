@@ -4,9 +4,8 @@ import {
     assign,
     type Capacity,
     capacityOf,
-    contending,
+    contentions,
     type Occupant,
-    rivalsOf,
     whole,
 } from './conflict';
 
@@ -265,7 +264,7 @@ function occ(over: Partial<Occupant> & { programId: number }): Occupant {
 const NO_MARGIN = { start: 0, end: 0 };
 
 function against(row: Occupant, others: Occupant[], capacity: Capacity): string[] {
-    return contending(row, rivalsOf([row, ...others], NO_MARGIN), capacity, NO_MARGIN);
+    return contentions([row, ...others], capacity, NO_MARGIN).get(row.programId) ?? [];
 }
 
 describe('チューナーの取り合い (プレビュー)', () => {
@@ -344,5 +343,37 @@ describe('チューナーの取り合い (プレビュー)', () => {
         const mine = occ({ programId: 1, channel: 'T16' });
         const other = occ({ programId: 2, channel: 'T21' });
         expect(against(mine, [other], [])).toEqual([]);
+    });
+
+    test('長さの無い番組はチューナーを掴まない', () => {
+        const mine = occ({ programId: 1, channel: 'T16', start_at: 0, end_at: 60 });
+        const empty = occ({ programId: 2, channel: 'T21', start_at: 30, end_at: 30 });
+        expect(against(mine, [empty], tuners('GR'))).toEqual([]);
+        expect(against(empty, [mine], tuners('GR'))).toEqual([]);
+        /*
+         * 終わりが始まりより前の番組も掴まない。掴んだまま残ると、後ろの番組の
+         * 取り合いが「同じ単位の答え」の使い回しで消えてしまっていた
+         */
+        const broken = occ({ programId: 3, channel: 'T21', start_at: 40, end_at: 20 });
+        const a = occ({ programId: 4, channel: 'T22', start_at: 70, end_at: 90 });
+        const b = occ({ programId: 5, channel: 'T23', start_at: 70, end_at: 90 });
+        expect(against(a, [broken, b], tuners('GR'))).toEqual(['番組5 (局)']);
+    });
+
+    test('名指しするのは、相手がいちばん多い瞬間の相手を開始順に', () => {
+        // 自分 0-60 / 10 分に1本、30 分と 35 分に1本ずつ。いちばん多いのは 35 分の2本
+        const mine = occ({ programId: 1, channel: 'T16', start_at: 0, end_at: 60 });
+        const early = occ({ programId: 2, channel: 'T21', start_at: 10, end_at: 20 });
+        const first = occ({ programId: 3, channel: 'T25', start_at: 30, end_at: 50 });
+        const second = occ({ programId: 4, channel: 'T27', start_at: 35, end_at: 50 });
+        // 渡す順は逆にしておく (並びは開始順で決まる)
+        expect(against(mine, [second, first, early], tuners('GR'))).toEqual(['番組3 (局)', '番組4 (局)']);
+    });
+
+    test('名指しする数が同じなら、早い瞬間の相手', () => {
+        const mine = occ({ programId: 1, channel: 'T16', start_at: 0, end_at: 60 });
+        const early = occ({ programId: 2, channel: 'T21', start_at: 10, end_at: 20 });
+        const late = occ({ programId: 3, channel: 'T25', start_at: 30, end_at: 40 });
+        expect(against(mine, [late, early], tuners('GR'))).toEqual(['番組2 (局)']);
     });
 });
