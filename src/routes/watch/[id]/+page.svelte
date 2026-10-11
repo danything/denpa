@@ -465,7 +465,10 @@
         // **チャプターが来るまで蓋をしておく。** 頭が CM のことが多く、
         // 取りに行っている間そのまま流れていた (`settle`)
         if (skipCm) shut();
-        void loadChapters().then(settle);
+        void loadChapters().then(() => {
+            chaptersReady = true;
+            settle();
+        });
         void detail.open(rec.program_id, facts);
         // 字幕は既定で出す (ライブと同じ)。持っていない録画では何も起きない
         if (captions) void loadCaptions();
@@ -571,14 +574,16 @@
             void video.play().catch(() => undefined);
             return;
         }
-        if (resumed || video === null || rec.resume_ms === null) return;
+        if (resumed || video === null) return;
         resumed = true;
-        const at = rec.resume_ms / 1000;
-        if (resumePoint(at, video.duration) === null) return;
-        video.currentTime = at;
-        // **黙って途中から始めない。** 何が起きたか言って、しばらくで引っ込める
-        continued = true;
-        setTimeout(() => (continued = false), 4000);
+        const at = rec.resume_ms === null ? null : rec.resume_ms / 1000;
+        if (at !== null && resumePoint(at, video.duration) !== null) {
+            video.currentTime = at;
+            // **黙って途中から始めない。** 何が起きたか言って、しばらくで引っ込める
+            continued = true;
+            setTimeout(() => (continued = false), 4000);
+        }
+        settle();
     }
 
     /**
@@ -820,8 +825,14 @@
      * 何もしないと、取れるまでの間だけ**本編前の CM がそのまま流れます** —
      * 実機で見えていた「一瞬の CM」はこれでした。取りに行っている間は
      * 黒い蓋をしておいて、揃ってから跳ぶ・跳ばないを決める
+     *
+     * **始める位置 (続きか頭か) が決まるのも待ちます** (`resume`)。チャプターが先に
+     * 揃うと頭 (0秒) で見てしまい、録画の頭の CM を跳んでから続きへ移っていた —
+     * リロードのたびに「CMを飛ばしました」が出ていたのはこれ。両方から呼び、遅いほうで決める
      */
+    let chaptersReady = false;
     function settle(): void {
+        if (!chaptersReady || !resumed) return;
         hopCm();
         // 跳ばなかった (CM ではなかった・切ってある)。蓋は要らない
         if (!waiting) open();
