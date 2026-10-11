@@ -103,6 +103,23 @@
     --dp-warn-text: #fecc63; /* amber-150 */
     --dp-info-text: #0ccece; /* cyan-250 */
 }
+/*
+ * **キーボードで触っているところは、主の色の線で囲む。**
+ *
+ * Pico の焦点の印は主の色を 25% に薄めた影 (`--pico-primary-focus`) だけで、
+ * 暗い地では押せるものの縁とほとんど見分けが付かず、Tab で進んでも
+ * いまどこに居るのかが読めなかった。線は外側に 2px 離して引くので、
+ * 塗ったボタンの上でも地の色と混ざらない。
+ *
+ * 字を打つ欄は外す。マウスで押しても `:focus-visible` になるうえ、
+ * 枠の色が変わるので居場所は分かる (線まで引くと押すたびに太い枠が出る)。
+ * `:where()` で詳細度を 0 にしてあるので、行や見出しのように内側へ引きたい
+ * ところは各画面の <style> で `outline-offset` を書けば勝つ
+ */
+:where(a, button, summary, select, [tabindex], input:is([type="checkbox"], [type="radio"])):focus-visible {
+    outline: 2px solid var(--pico-primary);
+    outline-offset: 2px;
+}
 /* Pico は送信ボタンを横幅いっぱいにする。ボタンは中身の幅に */
 button[type="submit"] {
     width: auto;
@@ -539,6 +556,15 @@ a.button.small {
 button.xs {
     padding: 0.15rem 0.45rem;
     font-size: 0.75rem;
+}
+/*
+ * **行に並べる操作は、字は小さくても押す的は 40px。** 観る画面の操作列と同じ物差し
+ * (`player/ControlButton.svelte`)。通知先の「テスト送信」が 22px、ルールの「編集」が
+ * 30px しかなく、指では隣を押していた。字の大きさは `.small` / `.xs` のまま、
+ * 高さだけ足す。行の操作を `.row-actions` で囲めば当たる
+ */
+.row-actions :is(button, a.button) {
+    min-height: 2.5rem;
 }
 button.ghost,
 a.button.ghost {

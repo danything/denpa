@@ -3,7 +3,9 @@
 
     開いたらすぐ自分でフォームを送る (許すのは POST の側。先読みで黙って済まないように)。
     JavaScript が動かない端末には、同じフォームのボタンを出す。
-    札は出さない (QR の URL に入って自動で渡り、見比べる相手がいない)。済んだら端末の名前を出す
+    札は出さない (QR の URL に入って自動で渡り、見比べる相手がいない)。済んだら端末の名前を出す。
+    **画面では「札」と書かず「ペアリングコード」と呼ぶ** — 札はコードの中だけの呼び名で、
+    「この札は見つかりません」では何のことか読めなかった
 -->
 
 <script lang="ts">
@@ -31,22 +33,22 @@
                 テレビのペアリングは、ブラウザ (信頼するネットワークか OIDC のログイン) で開いてください。
             </p>
         {:else if view === null}
-            <h1>この札は見つかりません</h1>
+            <h1>このペアリングコードは見つかりません</h1>
             <p class="small muted">
-                QR を読み直すか、テレビでペアリングをやり直してください。札は10分で切れます。
+                QR を読み直すか、テレビでペアリングをやり直してください。コードの期限は10分です。
             </p>
         {:else if pending}
             <h1>{view.name} とペアリングしています…</h1>
             <form method="POST" bind:this={auto}>
                 <input type="hidden" name="code" value={view.userCode} />
-                <noscript><button type="submit">ペアリングする</button></noscript>
+                <noscript><button type="submit">ペアリング</button></noscript>
             </form>
         {:else if view.state === 'approved' || view.state === 'consumed'}
             <h1 data-testid="device-done">{view.name} とペアリングしました</h1>
             <p class="small muted">テレビに戻ってください。</p>
         {:else}
-            <h1>この札は切れています</h1>
-            <p class="small muted">テレビでペアリングをやり直してください。札は10分で切れます。</p>
+            <h1>このペアリングコードは期限切れです</h1>
+            <p class="small muted">テレビでペアリングをやり直してください。コードの期限は10分です。</p>
         {/if}
     </div>
 </div>

@@ -348,8 +348,10 @@ export async function clearWebhooks(page: Page): Promise<void> {
     for (let i = 0; i < 10; i++) {
         const count = await rows.count();
         if (count === 0) break;
+        // 削除は2回押し (`ArmedDelete`)。1回目で「確定」に変わるだけなので、確定まで押す
         await rows.first().click();
-        await expect(rows).toHaveCount(count - 1);
+        await page.getByTestId('webhook-delete-confirm').click();
+        await expect(page.getByTestId('webhook-row')).toHaveCount(count - 1);
     }
 }
 
