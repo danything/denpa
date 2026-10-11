@@ -54,6 +54,11 @@ export { default as MORE } from '~icons/lucide/ellipsis';
  */
 export { default as OPEN_OUT } from '~icons/lucide/external-link';
 /**
+ * 再生の速さ (`SpeedMenu`)。針の付いたメーター。**等速のときだけ出す** —
+ * 速めている間は絵をやめて数字 (「1.25」) だけにする
+ */
+export { default as SPEED } from '~icons/lucide/gauge';
+/**
  * バックグラウンド再生 (裏に回しても止めない)。ヘッドホン — 裏で続けるのはたいてい
  * 聴くため。入れている間は押されている見た目 (`OVERLAY_ON`)
  */

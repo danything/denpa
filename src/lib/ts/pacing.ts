@@ -179,6 +179,15 @@ export function stepSpeed(speed: number, by: number): number {
     return SPEEDS[Math.min(SPEEDS.length - 1, Math.max(0, at + by))] ?? speed;
 }
 
+/**
+ * 速さの口の読み上げ名 (`SpeedMenu`)。**等速のときは `label` だけ、速めているときは速さも読む**
+ * (「再生の速さ 1.25倍」)。口の見た目は等速ならメーターの絵、速めている間は数字だけなので、
+ * 読み上げでも同じことが分かるように
+ */
+export function speedLabel(label: string, speed: number): string {
+    return speed === 1 ? label : `${label} ${speed}倍`;
+}
+
 /** 貯める量と、その下限 */
 export interface Buffering {
     /** どれだけ貯めてから出すか (秒) */
