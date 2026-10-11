@@ -349,10 +349,12 @@ async function seed(): Promise<void> {
         );
     }
 
-    // 通知先と、繋いだテレビ (設定画面に並ぶもの)。どちらも作り物の値
+    // 通知先と、繋いだテレビ (設定画面に並ぶもの)。どちらも作り物の値。
+    // 直近の結果は届いたときに残る値 (`ok`。server/webhook.ts) にする。HTTP の番号 ('204') を
+    // 入れていた頃は、届いていないものとして赤で撮れていた
     db.run(
         `INSERT INTO webhooks (url, events, enabled, last_status, last_sent_at, created_at)
-         VALUES ('https://hooks.example.com/denpa', '[]', 1, '204', ?, ?)`,
+         VALUES ('https://hooks.example.com/denpa', '[]', 1, 'ok', ?, ?)`,
         [now - 3 * 60 * 60_000, now - 7 * 24 * 60 * 60_000],
     );
     db.run(

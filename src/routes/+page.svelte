@@ -52,7 +52,6 @@
     import { matches, normalize } from '#lib/paging.js';
     import { Paged, sentinel } from '#lib/paging.svelte.js';
     import { cmRedo, encodeSource, type FileSource } from '#lib/source.js';
-    import { goto } from '$app/navigation';
     import { resolve } from '$app/paths';
     import ChevronRight from '~icons/lucide/chevron-right';
     import Ellipsis from '~icons/lucide/ellipsis';
@@ -263,26 +262,6 @@
 
     /** 削除は2回押させる。挙動は3画面共通 ([arming.svelte.ts](../lib/arming.svelte.ts)) */
     const deleting = arming('[data-testid="delete-button"], [data-testid="delete-confirm"]');
-
-    /**
-     * 行のどこを押しても、その行でいちばんやりたいことをする。
-     * ボタンやリンクを押したときは邪魔しない。
-     *
-     * 録画なら**観る画面へ** (`/watch/<id>`)。一覧を開くのは観るためなので、
-     * そこを1回で通す。中身を読みたいときは行の中の「詳細」から。
-     * 予約は観るものが無いので、そのまま詳細を出す。
-     *
-     * 跳ぶのは `goto` で — `location.href` だと**文書ごと読み込み直しになり、
-     * 押した勢い (user activation) がそこで切れる**。観る画面は開いた時点で
-     * 再生と全画面を始めるので (`watch/[id]`)、そこが切れると
-     * 「押したのに何も起きない」になる
-     */
-    function rowClick(event: MouseEvent | KeyboardEvent, watch: string | null, open: () => void): void {
-        if (event instanceof KeyboardEvent && event.key !== 'Enter') return;
-        if ((event.target as HTMLElement).closest('a, button, input, label')) return;
-        if (watch !== null) void goto(watch);
-        else open();
-    }
 
     /**
      * その録画を観る画面。**観られないものには無い。**
@@ -588,15 +567,44 @@
     札 (「NEW」など) にしないのは、番組名に入っている [新] と紛れるのと、
     状態の札と2つ並ぶと番組名が押し出されるため
 -->
-{#snippet title(state: string, badge: string, name: string, testid: string, fresh = false)}
-    <div class="cluster">
+<!--
+    **行のどこを押しても、その行でいちばんやりたいことをする。** 入口は番組名で、押せる範囲を
+    `::after` で行いっぱいに広げる (`.row-open`)。
+
+    録画なら**観る画面へ** (`/watch/<id>`) のリンク (`<a>`)。一覧を開くのは観るためなので、
+    そこを1回で通す。中身を読みたいときは行の中の「詳細」から。予約・録り逃し・観られない録画は
+    詳細を開くボタン。リンクは SvelteKit が文書を読み込み直さずに遷移するので、
+    **押した勢い (user activation) が切れない** — 観る画面は開いた時点で再生と全画面を
+    始めるので (`watch/[id]`)、`location.href` で跳ぶと「押したのに何も起きない」になる。
+
+    行の `<div>` を丸ごと `role="button"` にしていた頃は、押せるものの中に「詳細」「削除」の
+    ボタンが入れ子になっていて (読み上げでは中身が平たく1つのボタンに潰れる)、
+    リンクでもないので中クリックで別のタブにも開けなかった。行の中のボタンとルール名の
+    リンクは広げた範囲より上に置く (`.row-actions` など)
+-->
+{#snippet title(
+    state: string,
+    badge: string,
+    name: string,
+    testid: string,
+    open: string | (() => void),
+    fresh = false,
+)}
+    <div class="cluster title-line">
         <span class="tag {badge}" data-testid={testid}>{state}</span>
-        <span class="row-name broadcast">
-            {#if fresh}
-                <span class="unwatched-dot" role="img" aria-label="未視聴" data-testid="recording-unwatched"></span>
-            {/if}
-            {name}
-        </span>
+        {#if typeof open === 'string'}
+            <!-- 行いっぱいが的なので、先読みは押したときだけ (一覧を撫でるだけで何本も読みに行かない) -->
+            <a class="row-name row-open broadcast" href={open} data-sveltekit-preload-data="tap" data-testid="row-open">
+                {#if fresh}
+                    <span class="unwatched-dot" role="img" aria-label="未視聴" data-testid="recording-unwatched"></span>
+                {/if}
+                {name}
+            </a>
+        {:else}
+            <button type="button" class="row-name row-open broadcast" onclick={open} data-testid="row-open">
+                {name}
+            </button>
+        {/if}
     </div>
 {/snippet}
 
@@ -658,7 +666,7 @@
         {:else}
             ルール:
             {#if ruleId !== null}
-                <a href={resolve(`rules?edit=${ruleId}`)}>{ruleName}</a>
+                <a href={resolve(`rules?edit=${ruleId}`)} title={ruleName ?? undefined}>{ruleName}</a>
             {:else}
                 (削除済み)
             {/if}
@@ -685,23 +693,16 @@
 {#snippet rightRow(row: RightRow, nested: boolean)}
     {#if row.kind === 'missed'}
         {@const res = row.res}
-        {@const press = (event: MouseEvent | KeyboardEvent) => rowClick(event, null, () => openMissed(res))}
         <!--
             録り逃し。観るものが無いので、押すと詳細だけ出す (予約の行と
             同じ扱い)。置くのは畳むための削除だけ (再放送は番組表から予約し直す)
         -->
-        <div
-            data-program-id={res.program_id}
-            class="row"
-            class:nested={nested}
-            role="button"
-            tabindex="0"
-            onclick={press}
-            onkeydown={press}
-        >
+        <div data-program-id={res.program_id} class="row" class:nested={nested}>
             <div class="row-inner">
                 <div class="row-body" data-testid="row-body">
-                    {@render title(stateLabel('missed'), badgeClass('missed'), res.name, 'missed-state')}
+                    {@render title(stateLabel('missed'), badgeClass('missed'), res.name, 'missed-state', () =>
+                        openMissed(res),
+                    )}
                     {@render meta(res.service_name, [airing(res)], res)}
                     <!-- 録画側の流儀に合わせて手動とも書く (見返すものなので) -->
                     {@render source(res.rule_id, res.rule_name, res.manual)}
@@ -727,8 +728,6 @@
     {:else}
         {@const rec = row.rec}
         {@const link = watchLink(rec)}
-        {@const press = (event: MouseEvent | KeyboardEvent) =>
-            rowClick(event, link, () => openRecording(rec))}
         {@const canPlay = link !== null}
         {@const shown = rowState(rec)}
         <!-- 端末に入っているか (オフライン視聴)。行の印と、下のバーで見る -->
@@ -754,10 +753,6 @@
             data-cm-ranges={rec.cm_ranges === null ? null : JSON.stringify(rec.cm_ranges)}
             class="row playable"
             class:nested={nested}
-            role="button"
-            tabindex="0"
-            onclick={press}
-            onkeydown={press}
         >
             <div class="row-inner">
                 <!--
@@ -789,7 +784,14 @@
                         (rowState)。消したもの (deleted) も録画の状態から
                         決まるので、ここで書き分けることは何も無い
                     -->
-                    {@render title(shown.label, shown.badge, rec.name, 'recording-state', unwatched(rec))}
+                    {@render title(
+                        shown.label,
+                        shown.badge,
+                        rec.name,
+                        'recording-state',
+                        link ?? (() => openRecording(rec)),
+                        unwatched(rec),
+                    )}
                     {#if held !== undefined}
                         <!-- 端末に入っている印。保存中はエンコードと同じく割合を添える -->
                         <span
@@ -918,7 +920,7 @@
                         観られる行は押すと再生に行くので、説明やCMの位置を見たい
                         ときの別口が要る。観られない行 (録画そのものの失敗・
                         削除済み・まだ何も録れていない) は行そのものが詳細の
-                        入口 (rowClick) なので、同じ働きのボタンを並べない
+                        入口 (`title` の `.row-open`) なので、同じ働きのボタンを並べない
                         (録り逃しの行とも揃う)。焼いている最中は観られる (追っかけ)
                     -->
                     {#if canPlay}
@@ -1054,7 +1056,7 @@
         </span>
     </button>
     <!--
-        開いた番組の頭に「この番組のルールを作る」。見出しそのものは開閉のボタンなので、
+        開いた番組の頭に「ルールを作る」。見出しそのものは開閉のボタンなので、
         中には入れられない (押す的が入れ子になる)。中身の行と同じだけ下げて、その番組の
         ものだと分かるようにする
     -->
@@ -1062,7 +1064,7 @@
     {@const source = open ? newestRec(group) : null}
     {#if source !== null}
         <div class="group-tools">
-            <a class="button small secondary outline" href={ruleFrom('recording', source)} data-testid="group-rule">この番組のルールを作る</a>
+            <a class="button small secondary outline" href={ruleFrom('recording', source)} data-testid="group-rule">ルールを作る</a>
         </div>
     {/if}
 {/snippet}
@@ -1096,17 +1098,11 @@
             <div class="board-box">
                 <div class="rows" data-testid="reservation-list">
                     {#each reservationPage.rows as res (res.id)}
-                        {@const press = (event: MouseEvent | KeyboardEvent) =>
-                            rowClick(event, null, () => openReservation(res))}
                         <div
                             data-testid="reservation-row"
                             data-reservation-id={res.id}
                             data-program-id={res.program_id}
                             class="row"
-                            role="button"
-                            tabindex="0"
-                            onclick={press}
-                            onkeydown={press}
                         >
                             <div class="row-inner">
                                 <div class="row-body" data-testid="row-body">
@@ -1115,6 +1111,7 @@
                                         badgeClass(res.state),
                                         res.name,
                                         'reservation-state',
+                                        () => openReservation(res),
                                     )}
                                     {@render meta(res.service_name, [airing(res)], res)}
                                     {#if res.conflict_reason}
@@ -1236,7 +1233,7 @@
                             name="q"
                             class="filter"
                             bind:value={recordingQuery}
-                            placeholder="番組名・シリーズ・副題・局で絞り込み"
+                            placeholder="番組名・局で絞り込み"
                             aria-label="録画を絞り込む"
                         />
                     </form>
@@ -1399,7 +1396,7 @@
             href={ruleFrom('program', detailRes.program_id)}
             data-testid="detail-rule"
         >
-            この番組のルールを作る
+            ルールを作る
         </a>
     {/if}
     {#if detailRes !== null && active.includes(detailRes.state)}
@@ -1413,7 +1410,7 @@
                 }}
         >
             <input type="hidden" name="id" value={detailRes.id} />
-            <button type="submit" class="outline danger" data-testid="detail-cancel">予約を取り消す</button>
+            <button type="submit" class="outline danger" data-testid="detail-cancel">予約取消</button>
         </form>
     {/if}
     <!-- 位置を動かさないため、いつでもここが最後 -->
@@ -1432,7 +1429,7 @@
         {@const rec = detailRec}
         {#if hasFile(rec)}
             <!--
-                **並べるのはよく押すものだけ** — 端末に保存・この番組のルールを作る。
+                **並べるのはよく押すものだけ** — 端末に保存・ルールを作る。
                 条件が揃うと10個のボタンが同じ見た目で並び、狭い画面では文字の
                 途中で折り返していた。めったに押さないもの (落とす・リンクを
                 コピー・焼き直し) は「その他…」に畳む。
@@ -1469,12 +1466,12 @@
             {/if}
         {/if}
         <!--
-            **この番組のルールを作る。** ルールの画面へ、シリーズ名を入れた下書きを
+            **ルールを作る。** ルールの画面へ、シリーズ名を入れた下書きを
             持って行く (保存はあちらで確かめてから)。既にこの番組を録っているルールが
             あれば、あちらがそのルールを案内する
         -->
         <a class="button secondary outline" href={ruleFrom('recording', rec.id)} data-testid="detail-rule">
-            この番組のルールを作る
+            ルールを作る
         </a>
         {#if hasFile(rec)}
             <!--
@@ -1719,6 +1716,64 @@
         overflow-wrap: anywhere;
     }
     /*
+     * 行の入口 (上の `title`)。**見た目は番組名の字のまま** — リンクの色も下線も、
+     * Pico のボタンの地・枠・余白も付けない。押せる範囲は `::after` で行
+     * (`.row` は `position: relative`) いっぱいに広げる
+     */
+    .row-open {
+        display: inline;
+        width: auto;
+        margin: 0;
+        padding: 0;
+        border: 0;
+        border-radius: 0;
+        background: none;
+        box-shadow: none;
+        color: inherit;
+        /* 字の形は `.broadcast` に任せる (`font` でまとめて戻すと放送の字が外れる) */
+        font-size: inherit;
+        font-weight: 500;
+        line-height: inherit;
+        text-align: inherit;
+        text-decoration: none;
+        cursor: pointer;
+    }
+    /*
+     * **重なりの順を数で書く。** 書かないと、薄くした字 (`.muted`・`.row-meta` の
+     * `opacity`) が広げた範囲より上に描かれ、そこを押しても何も起きなかった
+     * (`opacity` は重なりの層を作り、後に並ぶものが上に来る)。
+     * 行 (`.row`) で層を閉じるので、隣の行や見出しには響かない
+     */
+    .row {
+        isolation: isolate;
+    }
+    .row-open::after {
+        content: '';
+        position: absolute;
+        inset: 0;
+        z-index: 1;
+    }
+    /* 焦点の線は名前ではなく行のまわりに。外へ出すと一覧の枠で切れるので内側に引く */
+    .row-open:focus-visible {
+        outline: none;
+    }
+    .row-open:focus-visible::after {
+        outline: 2px solid var(--pico-primary);
+        outline-offset: -2px;
+    }
+    /*
+     * 広げた範囲より上に置く。行の中のボタンとリンク (ルール名) はそれぞれの働きのまま押せる。
+     * **リンクそのものではなく、それを包む段ごと上げる** — ルール名の段は薄くしてある
+     * (`.muted` の `opacity`) ので、そこで重なりの層が閉じ、中のリンクにいくら大きい
+     * `z-index` を付けても段ごと広げた範囲の下に潜っていた
+     */
+    .row-actions,
+    .row-sub:has(:global(a)),
+    .row-sub:has(:global(button)) {
+        position: relative;
+        z-index: 2;
+    }
+    /*
         flex にしない。録画済みの行は書くことが多く (サイズ・コーデック)、flex-wrap だと
         文字のかたまりごと次の行へ送られて、ロゴだけが1行に取り残される。
         ロゴを文の中の1文字として流せば、折り返すのは文の途中になる
@@ -1731,6 +1786,28 @@
     }
     .row-sub {
         margin-top: 0.125rem;
+    }
+    /*
+     * **番組名・局と日時・ルール名は1行ずつで切る。** 折り返すと題名の長さで行の高さが
+     * 変わり、並んだ「詳細」「削除」の位置が行ごとにずれて押しにくかった。はみ出す分は
+     * 「…」で省く。全部は詳細 (番組名・局) と、押した先のルールの編集・title (ルール名) で読める。
+     * 押せる範囲 (`.row-open::after`) は `.row` を基準に置いているので、ここで切っても欠けない
+     */
+    .title-line {
+        flex-wrap: nowrap;
+        min-width: 0;
+    }
+    .title-line > .tag {
+        flex-shrink: 0;
+    }
+    .title-line .row-name,
+    div.row-meta,
+    .row-sub[data-testid='rule-name'] {
+        display: block;
+        min-width: 0;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
     }
     .row-empty {
         padding: 0.75rem;

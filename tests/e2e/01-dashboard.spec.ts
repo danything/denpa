@@ -56,7 +56,7 @@ test.describe('ダッシュボードと画面遷移', () => {
          */
         const card = page.getByTestId('tuner-card');
         // 相手待ちなので後から流れてくる
-        await expect(card.getByTestId('status-card-reader')).toHaveText('OK');
+        await expect(card.getByTestId('status-card-reader')).toHaveText('正常');
         /*
          * **リーダーごとに1行。** 使うのは1枚だけで、残りは予備。
          * チューナーは使用中の行にだけ並ぶ。読めているときは一言を出さない

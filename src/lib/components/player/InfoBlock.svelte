@@ -13,7 +13,7 @@
      * 後ろから切れる (時間帯と局は縮めない。どちらも短くて、切れると読めない)。
      *
      * **狭い枠 (スマホの縦) では、下の段だけを押すものの上の一行に出す**
-     * (`PlayerStage` の `data-compact`)。押すものの間に挟むと 360px 幅では
+     * (`PlayerStage` の `data-compact` で一行に、`data-under` で上の段を省く)。押すものの間に挟むと 360px 幅では
      * 数十 px しか残らず、位置も番組名も「23:0…」で切れていた。番組名・局・
      * 時間帯は、その幅では絵のすぐ下 (右の列が畳まれて下に来る) に出ているので、
      * 帯では位置と遅れだけを読ませる
@@ -43,12 +43,19 @@
 <div class="info">
     <div class="top">
         {#if badge}{@render badge()}{/if}
+        <!--
+            **中黒の両側は同じ空き** (`.sep`)。文字の空白で書いていた頃は、`{/if}` の前の空白を
+            Svelte が詰めて「19:00 ・局名」と後ろだけ詰まっていた。局名と番組名の間は
+            並びの隙間 (`gap`) が前を受け持つ
+        -->
         <span class="keep">
-            {#if range !== null}{time(range.start)} 〜 {time(range.end)} ・ {/if}<span class="broadcast">{service}</span>
+            {#if range !== null}{time(range.start)} 〜 {time(range.end)}<span class="sep">・</span>{/if}<span
+                class="broadcast">{service}</span
+            >
         </span>
         {#if title !== null && title !== ''}
             <span class="cut">
-                ・ <span class="broadcast" data-testid={titleTestid}>{title}</span>
+                <span class="sep lead">・</span><span class="broadcast" data-testid={titleTestid}>{title}</span>
             </span>
         {/if}
     </div>
@@ -77,6 +84,13 @@
     .keep {
         flex-shrink: 0;
     }
+    /* 並びの隙間 (`gap`) と同じ幅 */
+    .sep {
+        margin-inline: 0.375rem;
+    }
+    .sep.lead {
+        margin-inline-start: 0;
+    }
     .cut {
         min-width: 0;
         overflow: hidden;
@@ -88,7 +102,12 @@
         flex: 1 1 100%;
         padding: 0 0.25rem;
     }
-    :global(.stage[data-compact]) .top {
+    /*
+     * 上の段を省くのは、帯を絵の下に出しているとき (スマホの縦。`data-under`) だけ。
+     * 低い窓で畳んだとき (高さで `compact`) や縦の全画面では、右の列が絵の横に
+     * あるか見えないので、番組名はここでしか読めない
+     */
+    :global(.stage[data-under]) .top {
         display: none;
     }
     .status {

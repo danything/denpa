@@ -19,7 +19,8 @@
  * 放送は字幕の外字を小さな絵で送ってくる。絵の MD5 (`b24caption.ts` が中身の画素から取る) が
  * `DRCS_REPLACE` にあれば、その字に置き換えて描く (無ければ絵のまま)。足すときは:
  *
- * 1. 字幕の JSON (`/api/recordings/<id>/captions.json` の `drcs`) か、b24caption.ts で MD5 を拾う
+ * 1. 字幕の JSON (`/api/recordings/<id>/captions.json` の `drcs`) の `md5` を拾う。`data` の絵は送るために
+ *    なめらかにしたもの (drcs-smooth.ts) なので、`data` から MD5 を取っても表と合わない
  * 2. `[MD5, 字のコードポイント]` を足し、行末に「何の字か・どこで見たか (局・日付)」を書く
  * 3. フォントにその字があること (無い字に置き換えると豆腐になる。絵のままのほうがよい)
  */
@@ -406,4 +407,5 @@ export const DRCS_REPLACE = new Map<string, number>([
     ['9374173a2e4b7f1dcac75eccd5ee7e7f', 0x698a],
     ['ec7b2c805a5ba3d52c281ee2296b94d7', 0x8523],
     ['dedbee40c06e17b51932431dc8cd8334', 0x8fc2], // denpa: 一点しんにょうの「迂」。2026-10-10 時点の録画 58 本で表に無かったもの
+    ['e806d1481cfa721da5f60413531f39bd', 0x1f4f1], // denpa: 携帯電話 📱 (36x36・4階調)。NHK総合 2026-10-11。録画 20 本 (字幕に字のあったのは 9 本) で表に無かったのはこれだけ
 ]);

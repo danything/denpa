@@ -145,7 +145,7 @@
         return parts.length === 0 ? '全ジャンル' : parts.join(', ');
     }
 
-    /** チャンネルは50局以上あるので種別ごとにまとめる */
+    /** 局は50以上あるので種別ごとにまとめる */
     const grouped = $derived(
         ['GR', 'BS', 'CS', 'SKY']
             .map((type) => ({ type, services: data.services.filter((s) => s.type === type) }))
@@ -384,7 +384,7 @@
                         <div class="fields">
                             <details class="box">
                                 <summary class="small bold" data-testid="channel-summary">
-                                    チャンネル
+                                    局
                                     <span class="muted">
                                         ({seedTypes.length + seedServices.length === 0
                                             ? '全局'
@@ -439,7 +439,7 @@
                                                 </div>
                                             {:else}
                                                 <p class="small muted">
-                                                    チャンネルがまだありません。チューナー画面でチャンネルスキャンを実行してください。
+                                                    局がまだありません。チューナー画面でチャンネルスキャンを実行してください。
                                                 </p>
                                             {/each}
                                         </div>
@@ -684,14 +684,16 @@
                                         {/if}
                                     </div>
                                     {#if program.reservation_id !== null}
-                                        <ActionButton
-                                            action="?/cancelReservation"
-                                            fields={{ reservationId: program.reservation_id }}
-                                            class="xs outline danger"
-                                            testid="rule-pending-cancel"
-                                        >
-                                            取消
-                                        </ActionButton>
+                                        <div class="row-actions">
+                                            <ActionButton
+                                                action="?/cancelReservation"
+                                                fields={{ reservationId: program.reservation_id }}
+                                                class="small outline danger"
+                                                testid="rule-pending-cancel"
+                                            >
+                                                取消
+                                            </ActionButton>
+                                        </div>
                                     {/if}
                                 </li>
                             {/each}
@@ -724,7 +726,7 @@
                         <input
                             type="search"
                             class="small"
-                            placeholder="一覧を絞り込む (名前・キーワード・チャンネル・ジャンル)"
+                            placeholder="名前・条件で絞り込み"
                             aria-label="ルールの一覧を絞り込む"
                             bind:value={filter}
                         />
@@ -753,13 +755,13 @@
                                 <span class="text-error">除外: {rule.ignore_keyword}</span>
                             {/if}
                             <span
-                                >チャンネル: {#each channelParts(rule) as part, i (i)}{i > 0 ? ', ' : ''}<span
+                                >局: {#each channelParts(rule) as part, i (i)}{i > 0 ? ', ' : ''}<span
                                         class:broadcast={part.station}>{part.text}</span
                                     >{:else}全局{/each}</span
                             >
                             <span>ジャンル: {genres(rule)}</span>
                         </div>
-                        <div class="cluster">
+                        <div class="cluster row-actions">
                             <a class="button small secondary" href={resolve(`rules?edit=${rule.id}`)} data-testid="rule-edit">編集</a>
                             <ActionButton action="?/toggle" fields={{ id: rule.id }} class="small secondary" testid="rule-toggle">
                                 {rule.enabled ? '無効化' : '有効化'}
@@ -861,7 +863,7 @@
                         }}
                 >
                     <input type="hidden" name="reservationId" value={opened.reservation_id} />
-                    <button type="submit" class="outline danger" data-testid="rule-detail-cancel">予約を取り消す</button>
+                    <button type="submit" class="outline danger" data-testid="rule-detail-cancel">予約取消</button>
                 </form>
             {:else if opened !== null && opened.reservation_state === null && opened.end_at > clock}
                 <!--
@@ -880,7 +882,7 @@
                         }}
                 >
                     <input type="hidden" name="programId" value={opened.id} />
-                    <button type="submit" data-testid="rule-detail-reserve">予約する</button>
+                    <button type="submit" data-testid="rule-detail-reserve">予約</button>
                 </form>
             {/if}
 

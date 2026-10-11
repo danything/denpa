@@ -5,58 +5,27 @@
      * 絵の上に浮かせる短い知らせ。**札の見た目は3画面+データ放送で同じ**
      * (角丸の黒い札。テーマ色を絵に乗せない)。
      *
-     * `place` は置き場だけ — 既定 (`top`) は上端の真ん中、観る画面は操作列と
-     * 重ならない `lower` (上から 3.5rem)、データ放送の「取得中」は右上の隅 (`corner`)。
-     * 札そのものは変えない
+     * **置き場は持たない。** 舞台の「知らせの列」(`PlayerStage` の `notes`) に積む。
+     * 札ごとに絶対配置していた頃は、置き場ごとに上からの距離を書いていて、同時に
+     * 2つ出ると重なっていた (観る画面の「続きから」と「CMを飛ばしました」など)。
+     * 列に積めば、いくつ出ても縦に並ぶ。データ放送の「取得中」は列の外 (右上の隅) に
+     * 置くので、置き場はそちら (`DataBroadcast`) が持つ
      */
     let {
         testid,
-        place = 'top',
         children,
     }: {
         testid: string;
-        /** 置き場。札の色や形はここでは変えない */
-        place?: 'top' | 'lower' | 'corner';
         children: Snippet;
     } = $props();
 </script>
 
-<div class="note {place}" data-testid={testid}>
-    <span class="tag">{@render children()}</span>
-</div>
+<span class="note" data-testid={testid}>{@render children()}</span>
 
 <style>
     .note {
         pointer-events: none;
-        position: absolute;
-        z-index: 10;
-        display: flex;
-    }
-    .top {
-        left: 0;
-        right: 0;
-        top: 0;
-        justify-content: center;
-        padding: 0.5rem;
-    }
-    .lower {
-        left: 0;
-        right: 0;
-        top: 3.5rem;
-        justify-content: center;
-    }
-    /* 低い枠では右の列が右上の一行に寝る (`ControlBar`)。その下から出す */
-    :global(.stage[data-low]) .top {
-        padding-top: 3.25rem;
-    }
-    :global(.stage[data-low]) .lower {
-        top: 4rem;
-    }
-    .corner {
-        top: 0.75rem;
-        right: 0.75rem;
-    }
-    .tag {
+        max-width: 100%;
         padding: 0.25rem 0.75rem;
         border-radius: 1rem;
         background: rgb(0 0 0 / 0.6);

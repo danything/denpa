@@ -24,7 +24,7 @@ test.describe('通知', () => {
         await expect(row).toContainText('未送信');
 
         await row.getByTestId('webhook-test').click();
-        await expect(page.getByTestId('webhook-tested')).toContainText('ok');
+        await expect(page.getByTestId('webhook-tested')).toContainText('届きました');
 
         const state = await (await request.get(`${stack.webhookUrl}/__control/state`)).json();
         expect(state.webhookCalls).toHaveLength(1);
@@ -32,7 +32,7 @@ test.describe('通知', () => {
         expect(state.webhookCalls[0].text).toContain('テスト送信');
 
         // 直近の結果が残る。届いていないことに気づけるように
-        await expect(page.getByTestId('webhook-row').first()).toContainText('ok');
+        await expect(page.getByTestId('webhook-row').first()).toContainText('成功');
     });
 
     test('送る通知を選べる', async ({ page, stack }) => {

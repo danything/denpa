@@ -174,7 +174,7 @@ describe('同じ回の見分け', () => {
             ),
         ).toBe(true);
         // 副題が無いほうの名前が違えば別の回 (飾りの違いを許すのは副題が揃うときだけ)
-        expect(same('テストアニメ #1「はじまり」', 'アニメ テストアニメ #1')).toBe(false);
+        expect(same('テストアニメ #1「はじまり」', 'テストアニメ アニメ枠 #1')).toBe(false);
     });
 
     test('編を書かない局とも、作品名が同じなら同じ回。編が違えば別の回', () => {
@@ -197,11 +197,14 @@ describe('同じ回の見分け', () => {
         expect(
             same(TBS, NTV, ['Chapter 15「百足坑道の主」▼レベルアップし…', 'Chapter 15 百足坑道の主']),
         ).toBe(true);
-        expect(same(TBS, NTV, ['Chapter 15「百足坑道の主」▼レベルアップし…', 'Chapter 16 次の話'])).toBe(
-            false,
+        // BS日テレの「アニメ 」は枠の名前でシリーズ名は同じ。概要から足した副題 (確かでない) が
+        // 食い違っても、話数が同じなら同じ回
+        expect(same(TBS, NTV, ['Chapter 15「百足坑道の主」▼レベルアップし…', 'Chapter 15 次の話'])).toBe(
+            true,
         );
-        // 副題が揃わなければ、飾りの違うシリーズとはくっつけない
-        expect(same(TBS, NTV)).toBe(false);
+        // 概要が無くても、枠の名前を外せばシリーズ名が同じなので同じ回
+        // (飾りの違うシリーズの扱いは「薬屋のひとりごと」の試験で見る)
+        expect(same(TBS, NTV)).toBe(true);
     });
 
     test('概要の話数が題名と違えば副題は足さない', () => {
@@ -250,6 +253,8 @@ describe('同じ回の見分け', () => {
             ),
         ).toBe(true);
         expect(same('ドラマ・テストドラマ #3', 'テストドラマ #3')).toBe(true);
+        // BS日テレは区切りが空白 (全角)
+        expect(same('アニメ　テストアニメです。　第２話', 'テストアニメです。 第2話')).toBe(true);
         // ほかの「・」は作品名のうち
         expect(same('新・テスト番組 #3', 'テスト番組 #3')).toBe(false);
         expect(same('続・テストドラマ #3', 'テストドラマ #3')).toBe(false);
@@ -508,7 +513,7 @@ describe('firstAirings', () => {
         expect(kept([tbs, ntv, atx])).toEqual([tbs.id]);
         // 束のどれか1つと読めても、読める束が2つあればどちらにも寄せない
         const one = airing('テストアニメ #1「はじまり」', base);
-        const decorated = airing('アニメ テストアニメ #1', base + HOUR, { description: '#1「はじまり」' });
+        const decorated = airing('テストアニメ アニメ枠 #1', base + HOUR, { description: '#1「はじまり」' });
         const other = airing('テストアニメ #1「別の話」', base + DAY);
         const bare = airing('テストアニメ #1', base + 2 * DAY);
         expect(kept([one, decorated, other, bare])).toEqual([one.id, other.id, bare.id]);

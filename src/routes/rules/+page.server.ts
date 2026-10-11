@@ -545,7 +545,7 @@ export async function load({ url }) {
 }
 
 /**
- * **録画・番組からルールを作るときの元** (詳細の「この番組のルールを作る」)。
+ * **録画・番組からルールを作るときの元** (詳細の「ルールを作る」)。
  * `?recording=<録画ID>` か `?program=<番組ID>` (番組表・予約の詳細から)。
  *
  * 下書き (`rules.prefillFrom`) と、このシリーズを既に録っているルール
@@ -679,7 +679,7 @@ async function reapply(rule?: number): Promise<number> {
 }
 
 /** 条件が空だと全番組にマッチしてディスクを埋めるので作らせない */
-const EMPTY_RULE = 'キーワード・チャンネル・ジャンルのいずれかを指定してください';
+const EMPTY_RULE = 'キーワード・局・ジャンルのいずれかを指定してください';
 
 /**
  * create と update で同じもの。**焼き方は書かない** — エンコードもCMも全体設定で、

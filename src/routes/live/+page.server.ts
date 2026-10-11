@@ -189,7 +189,7 @@ export const actions = {
     record: async ({ request }) => {
         const form = await request.formData();
         const serviceId = Number(form.get('service'));
-        if (!Number.isInteger(serviceId)) return fail(400, { message: 'チャンネルの指定が不正です' });
+        if (!Number.isInteger(serviceId)) return fail(400, { message: '局の指定が不正です' });
 
         // アプリの `POST /api/services/<id>/record` と同じ道 (`recordAiring`)
         const result = await recordAiring(serviceId);

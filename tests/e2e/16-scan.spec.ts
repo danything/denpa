@@ -120,10 +120,10 @@ test.describe('チューナー画面', () => {
          * 番組表を読むところで、表を上から下まで見ないと分からない状態だと、
          * 止まっているのか進んでいるのか区別が付かない。
          *
-         * 周波数・局・番組表は入れ子で数がそろわないので、3つとも名前を添えて出す
+         * チャンネル・局・番組表は入れ子で数がそろわないので、3つとも名前を添えて出す
          */
         const coverage = page.getByTestId('channel-coverage');
-        await expect(coverage).toContainText('周波数');
+        await expect(coverage).toContainText('チャンネル');
         await expect(coverage).toContainText('局');
         await expect(coverage).toContainText('番組表のある局');
     });

@@ -9,32 +9,43 @@
      * 立てるのもここ1箇所。別々に書いていた頃は、画面ごとに敷き方も
      * 押されている表現も違っていた。
      *
+     * **`aria-pressed` は切り替えのボタンにだけ付ける** (`on` を渡したとき)。いつも
+     * 付けていた頃は、閉じる・切り抜き・全画面まで「切り替え (いまは切)」と読まれていた。
+     * 押すと役目が変わるもの (再生/一時停止・音) は名前のほうで言うので、`on` は渡さない。
+     *
+     * **名前は `title` にも出す。** 絵だけのボタンなので、PC でマウスを重ねたときに
+     * 何のボタンか読めるように (アイコン中心はそのまま。指の端末では出ない)
+     *
      * 文字を添えるときは中身 (`children`) を渡す。**丸くなくなる** —
      * 「音声」「H.264」のように名前が要るものはライブ側にいくつかある
      */
     let {
         icon,
         label,
-        on = false,
+        on,
         danger = false,
         submit = false,
         testid,
         onclick,
         children,
     }: {
-        /** アイコン (`icons.ts`)。文字だけのボタンでは省く */
-        icon?: IconShape;
+        /** アイコン (`icons.ts`)。文字だけのボタンでは省く (`undefined` を渡しても同じ) */
+        icon?: IconShape | undefined;
         /** 読み上げに出す名前。押すと役目が変わるものは、いまの役目を書く */
         label: string;
-        /** 押されている間か。字幕を出しているときなど */
-        on?: boolean;
+        /**
+         * 切り替えのボタンなら、いま入っているか (字幕を出しているときなど)。
+         * **渡したときだけ `aria-pressed` を付ける** — 押すだけのボタン (閉じる・切り抜き) には渡さない
+         */
+        on?: boolean | undefined;
         /** 押すと戻せないもの。**聞き返しの2回目**に立てる (`icons.ts` の `OVERLAY_DANGER`) */
         danger?: boolean;
         /** 中の `<form>` を送るボタンにする (削除など) */
         submit?: boolean;
         testid?: string;
         onclick?: () => void;
-        children?: import('svelte').Snippet;
+        /** 添える文字。渡すと丸くなくなる (`undefined` は渡さないのと同じ。速さは等速のときだけ省く) */
+        children?: import('svelte').Snippet | undefined;
     } = $props();
 </script>
 
@@ -48,6 +59,7 @@
     {onclick}
     aria-label={label}
     aria-pressed={on}
+    title={label}
     data-testid={testid}
 >
     {#if icon !== undefined}

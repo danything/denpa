@@ -47,7 +47,9 @@
      * 枠の大きさは舞台 (`PlayerStage`) が測って `data-compact` / `data-low` に出す。
      * **低い枠では右の列を右上の一行に寝かせる** — 縦に積むと下の帯とぶつかる。
      * **狭い枠 (スマホの縦) では帯の余白も削る** — 絵が 224px しか無いところで
-     * 上に 32px のぼかしを取ると、帯だけで絵の半分になっていた
+     * 上に 32px のぼかしを取ると、帯だけで絵の半分になっていた。
+     * **さらに幅で狭い枠 (スマホの縦) では、下の帯を絵の下に出す** (`data-under`)。
+     * 詰めても帯は絵の半分を覆い、字幕に時刻が重なっていた
      */
     let {
         shown = true,
@@ -70,7 +72,15 @@
      */
 </script>
 
-<div class="bar" class:side class:bottom={!side} class:away={!shown} data-testid={testid} data-shown={shown}>
+<div
+    class="bar"
+    class:side
+    class:bottom={!side}
+    class:away={!shown}
+    data-testid={testid}
+    data-shown={shown}
+    data-stage-bar={side ? undefined : ''}
+>
     {@render children()}
 </div>
 
@@ -109,5 +119,20 @@
     }
     :global(.stage[data-compact]) .bottom {
         padding: 1rem 0.375rem 0.375rem;
+    }
+    /*
+     * **帯を絵の下に出す (スマホの縦。舞台の `data-under`)。** 格子の下の段に置き、
+     * 敷きもの (ぼかし) は外す — 絵に重ならないので要らない。**いつも出しておく** —
+     * 絵を覆わないので、引っ込めても見えるものが増えない。触るたびに出し直す手間が残るだけ
+     */
+    :global(.stage[data-under]) > .bottom {
+        grid-area: 2 / 1 / 3 / 2;
+        position: relative;
+        padding: 0.375rem;
+        background: none;
+    }
+    :global(.stage[data-under]) > .bottom.away {
+        pointer-events: auto;
+        opacity: 1;
     }
 </style>

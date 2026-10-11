@@ -34,6 +34,7 @@ import {
     KANJI_SYMBOLS_HALF,
     KATAKANA,
 } from './b24-tables';
+import { smoothDrcs } from './drcs-smooth';
 
 /** 符号の集合。DRCS は 0〜15 の面 */
 type GraphicSet =
@@ -174,6 +175,27 @@ interface Drcs {
     pixels: Uint8Array;
     /** 置き換えられた字。無ければ絵のまま */
     replaced: number | null;
+    /** 元の絵の MD5。置き換え表を引く鍵で、送る絵を覚えておく鍵でもある */
+    md5: string;
+}
+
+/**
+ * 送る絵 (なめらかにした濃淡。drcs-smooth.ts) を元の絵の MD5 ごとに覚えておく。放送は字幕文のたびに
+ * 同じ外字を定義し直してくるので、定義ごとではなくここで1回だけ作る
+ */
+const smoothed = new Map<string, CaptionDrcs>();
+const SMOOTHED_MAX = 256;
+
+function sendable(drcs: Drcs): CaptionDrcs {
+    // MD5 は画素だけから取っているので、大きさも鍵に入れる
+    const key = `${drcs.md5}:${drcs.width}x${drcs.height}:${drcs.depth}`;
+    let sent = smoothed.get(key);
+    if (sent === undefined) {
+        sent = { ...smoothDrcs(drcs.width, drcs.height, drcs.depth, drcs.bits, drcs.pixels), md5: drcs.md5 };
+        if (smoothed.size >= SMOOTHED_MAX) smoothed.clear();
+        smoothed.set(key, sent);
+    }
+    return sent;
 }
 
 /** 解いた1字。libaribcaption の CaptionChar と同じもの */
@@ -436,6 +458,7 @@ export class B24CaptionDecoder {
                         bits,
                         pixels,
                         replaced: DRCS_REPLACE.get(md5) ?? null,
+                        md5,
                     };
                     if (byteCount === 1) {
                         const set = drcsSet(((code & 0x0f00) >> 8) + 0x40);
@@ -914,13 +937,7 @@ function toPage(caption: Caption, plane: [number, number]): CaptionPage | null {
             run.drcs = key;
             const found = caption.drcs.get(char.drcs);
             if (found !== undefined && drcs[key] === undefined) {
-                drcs[key] = {
-                    w: found.width,
-                    h: found.height,
-                    depth: found.depth,
-                    bits: found.bits,
-                    data: Buffer.from(found.pixels).toString('base64'),
-                };
+                drcs[key] = sendable(found);
             }
         }
         if (char.stroke !== null) run.stroke = char.stroke;

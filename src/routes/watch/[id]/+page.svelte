@@ -465,7 +465,10 @@
         // **チャプターが来るまで蓋をしておく。** 頭が CM のことが多く、
         // 取りに行っている間そのまま流れていた (`settle`)
         if (skipCm) shut();
-        void loadChapters().then(settle);
+        void loadChapters().then(() => {
+            chaptersReady = true;
+            settle();
+        });
         void detail.open(rec.program_id, facts);
         // 字幕は既定で出す (ライブと同じ)。持っていない録画では何も起きない
         if (captions) void loadCaptions();
@@ -571,14 +574,16 @@
             void video.play().catch(() => undefined);
             return;
         }
-        if (resumed || video === null || rec.resume_ms === null) return;
+        if (resumed || video === null) return;
         resumed = true;
-        const at = rec.resume_ms / 1000;
-        if (resumePoint(at, video.duration) === null) return;
-        video.currentTime = at;
-        // **黙って途中から始めない。** 何が起きたか言って、しばらくで引っ込める
-        continued = true;
-        setTimeout(() => (continued = false), 4000);
+        const at = rec.resume_ms === null ? null : rec.resume_ms / 1000;
+        if (at !== null && resumePoint(at, video.duration) !== null) {
+            video.currentTime = at;
+            // **黙って途中から始めない。** 何が起きたか言って、しばらくで引っ込める
+            continued = true;
+            setTimeout(() => (continued = false), 4000);
+        }
+        settle();
     }
 
     /**
@@ -759,6 +764,9 @@
         video.currentTime = to;
         hopTo = to;
         waiting = true;
+        // **続きから始めたばかりなら、そちらだけ言う。** 知らせは列に積むので重なりはしないが、
+        // 観る人にとって起きたのは「続きから始まった」こと (CM を跨いだのは中の都合)
+        if (continued) return;
         skipped = true;
         if (skipNotice !== null) clearTimeout(skipNotice);
         skipNotice = setTimeout(() => (skipped = false), 2500);
@@ -817,8 +825,14 @@
      * 何もしないと、取れるまでの間だけ**本編前の CM がそのまま流れます** —
      * 実機で見えていた「一瞬の CM」はこれでした。取りに行っている間は
      * 黒い蓋をしておいて、揃ってから跳ぶ・跳ばないを決める
+     *
+     * **始める位置 (続きか頭か) が決まるのも待ちます** (`resume`)。チャプターが先に
+     * 揃うと頭 (0秒) で見てしまい、録画の頭の CM を跳んでから続きへ移っていた —
+     * リロードのたびに「CMを飛ばしました」が出ていたのはこれ。両方から呼び、遅いほうで決める
      */
+    let chaptersReady = false;
     function settle(): void {
+        if (!chaptersReady || !resumed) return;
         hopCm();
         // 跳ばなかった (CM ではなかった・切ってある)。蓋は要らない
         if (!waiting) open();
@@ -962,6 +976,18 @@
         void fullscreen.active;
         const frame = requestAnimationFrame(place);
         return () => cancelAnimationFrame(frame);
+    });
+    /*
+     * **映像の箱が変わったら測り直す。** 窓の `resize` も全画面の出入りも無しに変わる
+     * ことがある — スマホの縦は帯を絵の下に出す (`PlayerStage` の `under`) ので、
+     * 枠の形が開いた直後に一度変わる
+     */
+    $effect(() => {
+        const target = video;
+        if (target === null) return;
+        const watcher = new ResizeObserver(() => place());
+        watcher.observe(target);
+        return () => watcher.disconnect();
     });
 
     /**
@@ -1204,16 +1230,6 @@
                     aria-hidden="true"
                 ></canvas>
 
-                {#if continued}
-                    <!--
-                        **続きから出したことを言う。** 黙って途中から始まると、
-                        壊れているのか飛んだのか分からない。lower は操作列よけ
-                    -->
-                    <StageNote testid="watch-resumed" place="lower">
-                        続きから再生しています
-                    </StageNote>
-                {/if}
-
                 {#if buffering && !resuming}
                     <!--
                         **読み込み待ち。** 絵が止まったのが詰まりなのか壊れたのか
@@ -1234,13 +1250,6 @@
                     <div class="wait">
                         <span class="wait-box" aria-busy="true">繋ぎ直しています</span>
                     </div>
-                {/if}
-
-                {#if skipped}
-                    <!-- **黙って跳ばない。** 何が起きたか言わないと壊れて見える -->
-                    <StageNote testid="watch-skipped" place="lower">
-                        CMを飛ばしました
-                    </StageNote>
                 {/if}
 
                 {#if broken}
@@ -1474,6 +1483,21 @@
                         <StageTail prefix="watch" {background} {pip} {fullscreen} />
                     </ControlRow>
                 </ControlBar>
+                {/snippet}
+
+                <!-- 絵の上の知らせは舞台の列に積む (`PlayerStage` の `notes`)。いくつ出ても重ならない -->
+                {#snippet notes()}
+                    {#if continued}
+                        <!--
+                            **続きから出したことを言う。** 黙って途中から始まると、
+                            壊れているのか飛んだのか分からない
+                        -->
+                        <StageNote testid="watch-resumed">続きから再生しています</StageNote>
+                    {/if}
+                    {#if skipped}
+                        <!-- **黙って跳ばない。** 何が起きたか言わないと壊れて見える -->
+                        <StageNote testid="watch-skipped">CMを飛ばしました</StageNote>
+                    {/if}
                 {/snippet}
             </PlayerStage>
         {/if}
