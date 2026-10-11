@@ -407,4 +407,5 @@ export const DRCS_REPLACE = new Map<string, number>([
     ['9374173a2e4b7f1dcac75eccd5ee7e7f', 0x698a],
     ['ec7b2c805a5ba3d52c281ee2296b94d7', 0x8523],
     ['dedbee40c06e17b51932431dc8cd8334', 0x8fc2], // denpa: 一点しんにょうの「迂」。2026-10-10 時点の録画 58 本で表に無かったもの
+    ['e806d1481cfa721da5f60413531f39bd', 0x1f4f1], // denpa: 携帯電話 📱 (36x36・4階調)。NHK総合 2026-10-11。録画 20 本 (字幕に字のあったのは 9 本) で表に無かったのはこれだけ
 ]);
