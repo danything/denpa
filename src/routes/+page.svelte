@@ -666,7 +666,7 @@
         {:else}
             ルール:
             {#if ruleId !== null}
-                <a href={resolve(`rules?edit=${ruleId}`)}>{ruleName}</a>
+                <a href={resolve(`rules?edit=${ruleId}`)} title={ruleName ?? undefined}>{ruleName}</a>
             {:else}
                 (削除済み)
             {/if}
@@ -1786,6 +1786,16 @@
     }
     .row-sub {
         margin-top: 0.125rem;
+    }
+    /*
+     * **ルール名は1行で切る。** ルールの名前は番組名そのままのことが多く、長い題名だと
+     * 最後の1、2文字だけが次の行へ折れていた。どのルールかは頭で分かるので、はみ出す分は
+     * 「…」で省き、全部は押した先 (ルールの編集) と title で読める
+     */
+    .row-sub[data-testid='rule-name'] {
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
     }
     .row-empty {
         padding: 0.75rem;
