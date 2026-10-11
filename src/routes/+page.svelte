@@ -1761,9 +1761,15 @@
         outline: 2px solid var(--pico-primary);
         outline-offset: -2px;
     }
-    /* 広げた範囲より上に置く。行の中のボタンとリンク (ルール名) はそれぞれの働きのまま押せる */
+    /*
+     * 広げた範囲より上に置く。行の中のボタンとリンク (ルール名) はそれぞれの働きのまま押せる。
+     * **リンクそのものではなく、それを包む段ごと上げる** — ルール名の段は薄くしてある
+     * (`.muted` の `opacity`) ので、そこで重なりの層が閉じ、中のリンクにいくら大きい
+     * `z-index` を付けても段ごと広げた範囲の下に潜っていた
+     */
     .row-actions,
-    .row-sub :global(a) {
+    .row-sub:has(:global(a)),
+    .row-sub:has(:global(button)) {
         position: relative;
         z-index: 2;
     }

@@ -804,29 +804,36 @@ async function settled(): Promise<boolean> {
  * 「12 局のロゴを取得しました」と出ていた。相乗り (`ride`) が同じ間に拾ったものも
  * 入らなかった。**この取得の間にロゴが書き込まれた局**を数えれば、どこから来ても数が合う
  */
-function logoStamps(): Map<number, number> {
+export function logoStamps(ids: Iterable<number> = currentServices().map((s) => s.id)): Map<number, number> {
     const stamps = new Map<number, number>();
-    for (const service of currentServices()) {
-        let at = 0;
-        try {
-            at = statSync(logoPath(service.id)).mtimeMs;
-        } catch {
-            // まだ持っていない
-        }
-        stamps.set(service.id, at);
-    }
+    for (const id of ids) stamps.set(id, writtenAt(id));
     return stamps;
 }
 
-/** 控えた時刻 (`logoStamps`) よりあとにロゴが書き込まれた局の数 */
-function writtenSince(stamps: Map<number, number>): number {
+/** その局のロゴを書き込んだ時刻。まだ持っていなければ 0 */
+function writtenAt(serviceId: number): number {
+    try {
+        return statSync(logoPath(serviceId)).mtimeMs;
+    } catch {
+        return 0;
+    }
+}
+
+/**
+ * 控えた時刻 (`logoStamps`) よりあとにロゴが書き込まれた局の数。
+ *
+ * 数えるのは**いまの局**。取得の途中で局の取り込みが走ると、控えたときには無かった
+ * 局が増える — そういう局は「控えた時刻 0」(何も持っていなかった) とみなす。
+ * 控えにだけあって今は無い局 (消えた局) は数えない
+ */
+export function writtenSince(
+    stamps: Map<number, number>,
+    ids: Iterable<number> = currentServices().map((s) => s.id),
+): number {
     let count = 0;
-    for (const [id, before] of stamps) {
-        try {
-            if (statSync(logoPath(id)).mtimeMs > before) count++;
-        } catch {
-            // 無いまま
-        }
+    for (const id of ids) {
+        const now = writtenAt(id);
+        if (now > 0 && now > (stamps.get(id) ?? 0)) count++;
     }
     return count;
 }

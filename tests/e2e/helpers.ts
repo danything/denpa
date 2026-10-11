@@ -17,7 +17,7 @@ export async function goto(page: Page, url: string): Promise<void> {
      * **番組表は器だけ先に出る。** 表は後から流れてくるので
      * (`guide/+page.server.ts` の `gridOf`)、ハイドレーションだけ待って触りに
      * いくと、まだ骨組みしか無いことがある。局が1つも無ければ表の代わりに
-     * 「チャンネルがありません」が出るので、どちらかが出るまで待つ
+     * 「局がありません」が出るので、どちらかが出るまで待つ
      */
     const pathname = new URL(url, 'http://localhost').pathname;
     if (pathname === '/guide') {
