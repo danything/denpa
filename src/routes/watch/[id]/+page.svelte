@@ -759,8 +759,9 @@
         video.currentTime = to;
         hopTo = to;
         waiting = true;
-        // **知らせは1つずつ。** 続きの位置が CM の中だと、出たばかりの「続きから」と同じ場所に重なる
-        continued = false;
+        // **続きから始めたばかりなら、そちらだけ言う。** 続きの位置が CM の中だと同じ場所に重なるうえ、
+        // 観る人にとって起きたのは「続きから始まった」こと
+        if (continued) return;
         skipped = true;
         if (skipNotice !== null) clearTimeout(skipNotice);
         skipNotice = setTimeout(() => (skipped = false), 2500);
