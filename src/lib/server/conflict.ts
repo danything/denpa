@@ -355,8 +355,8 @@ export function contentions(
     margins: Margins,
 ): Map<number, string[]> {
     // 時刻順に並べる。安定ソートなので同時刻は渡された順のまま。掴みはじめの早い順が、名指しの並びになる
-    const events = [...occupants]
-        .flatMap((o) => {
+    const edges = [...occupants]
+        .flatMap((o): Edge[] => {
             const { from, to } = window(o, margins);
             // 長さの無いものはチューナーを掴まない
             if (to <= from) return [];
@@ -367,24 +367,68 @@ export function contentions(
         })
         .sort((a, b) => a.at - b.at);
 
-    /** いま掴んでいる番組 */
-    const active = new Set<Occupant>();
-    /** `tunerKey` → 掴んでいる番組の数 */
-    const count = new Map<string, number>();
-    /** 掴んでいるチャンネル (`tunerKey` → 単位)。異なり数はこの大きさ */
-    const held = new Map<string, string>();
-    /** 単位 → 掴んでいる番組の数 (同じチャンネルも別々に数える。名指しの数になる) */
-    const byPool = new Map<string, number>();
-    /** 名指しする相手がいちばん多い瞬間と、そのとき足りない単位の組 */
-    type Worst = { o: Occupant; size: number; at: number; group: ReadonlySet<string> };
-    const worst = new Map<number, Worst>();
+    // 番組ごとに、名指しする相手がいちばん多い瞬間 (同数なら早いほう)
+    const worst = moments(edges)
+        .filter((moment) => moment.starts)
+        .flatMap((moment) => judge(moment, capacity))
+        .reduce(
+            (best, w) => (w.size > (best.get(w.o.programId)?.size ?? 0) ? best.set(w.o.programId, w) : best),
+            new Map<number, Worst>(),
+        );
 
-    for (let i = 0; i < events.length; ) {
-        const at = events[i]!.at;
-        let starts = false;
-        for (; i < events.length && events[i]!.at === at; i++) {
-            const { o, delta } = events[i]!;
-            if (delta > 0) starts = true;
+    /*
+     * **名前は最後に1回だけ集める。** いちばん多い瞬間が更新されるたびに集めていた頃は、
+     * 同時に掴む数を K として1番組で最大 K 回 × K 件になり、全体が K の3乗で伸びた。
+     * 瞬間だけ覚えておき、もう1度なぞってその瞬間に掴んでいる相手を拾う
+     */
+    const due = Map.groupBy(worst.values(), (w) => w.at);
+    return new Map(
+        moments(edges).flatMap(({ at, active }) =>
+            (due.get(at) ?? []).map(({ o, group }) => {
+                const rivals = [...active].filter(
+                    (x) => group.has(poolOf(x.type)) && x.channel !== o.channel,
+                );
+                return [o.programId, rivals.map((x) => `${x.name} (${x.serviceName})`)] as const;
+            }),
+        ),
+    );
+}
+
+/** 掴みはじめ (+1) と離す (-1) の印 */
+interface Edge {
+    at: number;
+    o: Occupant;
+    delta: 1 | -1;
+}
+
+/** ある瞬間の掴み具合 (`moments`) */
+interface Moment {
+    at: number;
+    /** 誰かが掴みはじめたか。判定するのはこの瞬間だけ */
+    starts: boolean;
+    /** いま掴んでいる番組 (掴みはじめの早い順) */
+    active: ReadonlySet<Occupant>;
+    /** `tunerKey` → 掴んでいる番組の数 */
+    count: ReadonlyMap<string, number>;
+    /** 掴んでいるチャンネル (`tunerKey` → 単位)。異なり数はこの大きさ */
+    held: ReadonlyMap<string, string>;
+    /** 単位 → 掴んでいる番組の数 (同じチャンネルも別々に数える。名指しの数になる) */
+    byPool: ReadonlyMap<string, number>;
+}
+
+/**
+ * 時刻順になぞり、同時刻の出入りをまとめて反映するたびに止まる (区間は半開)。
+ *
+ * **中身は使い回している。** 次へ進むと書き換わるので、止まったその場で読むこと。
+ * 瞬間ごとに写すと、それだけで同時に掴んでいる数ぶんかかる
+ */
+function* moments(edges: readonly Edge[]): Generator<Moment> {
+    const active = new Set<Occupant>();
+    const count = new Map<string, number>();
+    const held = new Map<string, string>();
+    const byPool = new Map<string, number>();
+    for (const [at, batch] of Map.groupBy(edges, (edge) => edge.at)) {
+        for (const { o, delta } of batch) {
             const pool = poolOf(o.type);
             const key = tunerKey(pool, o.channel);
             const n = (count.get(key) ?? 0) + delta;
@@ -395,71 +439,55 @@ export function contentions(
             if (n === 1 && delta > 0) held.set(key, pool);
             if (n === 0) held.delete(key);
         }
-        if (!starts) continue;
-
-        /** 単位 → 足りない単位の組。**自分を足すと録れない数が増えるときだけ** (増えないなら null) */
-        const shortOf = new Map<string, Set<string> | null>();
-        for (const o of active) {
-            const pool = poolOf(o.type);
-            if (!known(capacity, pool)) continue;
-            const key = tunerKey(pool, o.channel);
-            // 同じチャンネルの相手が居れば、その1本に相乗りする
-            if (count.get(key)! > 1) continue;
-            let short = shortOf.get(pool);
-            if (short === undefined) {
-                /*
-                 * 地上波だけが溢れている瞬間に、ちょうど空いている衛星の番組まで
-                 * 競合と言わない (`assign` もそちらを落とさない)。溢れ方は単位ごとの
-                 * 数だけで決まるので、同じ単位の番組はこの答えを使い回せる
-                 */
-                const without = new Map(held);
-                without.delete(key);
-                short =
-                    deficit(capacity, held) > deficit(capacity, without)
-                        ? shortage(capacity, held, pool)
-                        : null;
-                shortOf.set(pool, short);
-            }
-            if (short === null) continue;
-            const group = short;
-            /*
-             * 足りない単位の相手だけを名指しする。それ以外を諦めても空かない。
-             * 同じチャンネルの相手も出さない。1本で足りるので、諦めても何も空かない
-             */
-            let size = 0;
-            for (const p of group) size += (byPool.get(p) ?? 0) - (count.get(tunerKey(p, o.channel)) ?? 0);
-            if (size <= (worst.get(o.programId)?.size ?? 0)) continue;
-            worst.set(o.programId, { o, size, at, group });
-        }
+        yield { at, starts: batch.some((edge) => edge.delta > 0), active, count, held, byPool };
     }
+}
 
-    /*
-     * **名前は最後に1回だけ集める。** いちばん多い瞬間が更新されるたびに集めていた頃は、
-     * 同時に掴む数を K として1番組で最大 K 回 × K 件になり、全体が K の3乗で伸びた。
-     * 瞬間だけ覚えておき、もう1度なぞってその瞬間に掴んでいる相手を拾う
-     */
-    const due = new Map<number, Worst[]>();
-    for (const w of worst.values()) {
-        const list = due.get(w.at);
-        if (list === undefined) due.set(w.at, [w]);
-        else list.push(w);
-    }
-    const named = new Map<number, string[]>();
-    // 1回目をなぞり終えた時点で、長さのある番組はみな離している (`active` は空)
-    for (let i = 0; i < events.length; ) {
-        const at = events[i]!.at;
-        for (; i < events.length && events[i]!.at === at; i++) {
-            const { o, delta } = events[i]!;
-            if (delta > 0) active.add(o);
-            else active.delete(o);
-        }
-        for (const { o, group } of due.get(at) ?? []) {
-            const rivals = [...active].filter((x) => group.has(poolOf(x.type)) && x.channel !== o.channel);
-            named.set(
-                o.programId,
-                rivals.map((x) => `${x.name} (${x.serviceName})`),
+/** 名指しする相手がいちばん多い瞬間と、そのとき足りない単位の組 */
+interface Worst {
+    o: Occupant;
+    /** 名指しする相手の数 */
+    size: number;
+    at: number;
+    group: ReadonlySet<string>;
+}
+
+/** その瞬間に競合している番組と、名指しする相手の数 */
+function judge({ at, active, count, held, byPool }: Moment, capacity: Capacity): Worst[] {
+    /** 単位 → 足りない単位の組。**自分を足すと録れない数が増えるときだけ** (増えないなら null) */
+    const shortOf = new Map<string, ReadonlySet<string> | null>();
+    const short = (pool: string, key: string) => {
+        /*
+         * 地上波だけが溢れている瞬間に、ちょうど空いている衛星の番組まで
+         * 競合と言わない (`assign` もそちらを落とさない)。溢れ方は単位ごとの
+         * 数だけで決まるので、同じ単位の番組はこの答えを使い回せる
+         */
+        if (!shortOf.has(pool)) {
+            const without = new Map(held);
+            without.delete(key);
+            shortOf.set(
+                pool,
+                deficit(capacity, held) > deficit(capacity, without) ? shortage(capacity, held, pool) : null,
             );
         }
-    }
-    return named;
+        return shortOf.get(pool) ?? null;
+    };
+
+    return [...active].flatMap((o) => {
+        const pool = poolOf(o.type);
+        const key = tunerKey(pool, o.channel);
+        // 本数の分からない単位は何も言わない。同じチャンネルの相手が居れば、その1本に相乗りする
+        if (!known(capacity, pool) || count.get(key)! > 1) return [];
+        const group = short(pool, key);
+        if (group === null) return [];
+        /*
+         * 足りない単位の相手だけを名指しする。それ以外を諦めても空かない。
+         * 同じチャンネルの相手も出さない。1本で足りるので、諦めても何も空かない
+         */
+        const size = [...group].reduce(
+            (sum, p) => sum + (byPool.get(p) ?? 0) - (count.get(tunerKey(p, o.channel)) ?? 0),
+            0,
+        );
+        return [{ o, size, at, group }];
+    });
 }
