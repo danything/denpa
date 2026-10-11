@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { boxDown, collapseDoubled, decodeGrey, type Grey, scale2x, smoothDrcs } from './drcs-smooth';
+import { boxDown, collapseDoubled, decodeGrey, type Grey, pack4, scale2x, smoothDrcs } from './drcs-smooth';
 
 /** `size`x`size` の白黒の絵を、放送の詰め方 (1画素1ビット) で作る。`scale` 倍に水増しして送る放送を真似る */
 function pack(size: number, on: (x: number, y: number) => boolean, scale = 1): Uint8Array {
@@ -33,8 +33,14 @@ function rows(g: Grey): string[] {
 /** 送る絵を濃さの絵に開き直す */
 function sent(size: number, on: (x: number, y: number) => boolean, scale = 1): Grey {
     const drcs = smoothDrcs(size * scale, size * scale, 2, 1, pack(size, on, scale));
-    expect(drcs).toMatchObject({ depth: 256, bits: 8 });
-    return { width: drcs.w, height: drcs.h, pixels: Uint8Array.from(Buffer.from(drcs.data, 'base64')) };
+    expect(drcs).toMatchObject({ depth: 16, bits: 4 });
+    return decodeGrey(
+        drcs.w,
+        drcs.h,
+        drcs.depth,
+        drcs.bits,
+        Uint8Array.from(Buffer.from(drcs.data, 'base64')),
+    );
 }
 
 const at = (g: Grey, x: number, y: number) => g.pixels[y * g.width + x]!;
@@ -180,5 +186,12 @@ describe('smoothDrcs', () => {
             depth: 8,
             bits: 3,
         });
+    });
+});
+
+describe('pack4', () => {
+    test('16 階調にして1画素4ビットで詰める (左の画素が上の桁。奇数なら最後の下の桁は 0)', () => {
+        const g = { width: 3, height: 1, pixels: Uint8Array.from([255, 0, 128]) };
+        expect([...pack4(g)]).toEqual([0xf0, 0x80]);
     });
 });

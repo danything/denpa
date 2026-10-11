@@ -78,6 +78,11 @@ export interface CaptionDrcs {
     depth: number;
     bits: number;
     data: string;
+    /**
+     * 放送の元の絵の MD5。外字の置き換え表 (`b24-tables.ts` の `DRCS_REPLACE`) に足すときに使う。
+     * `data` は送るためになめらかにした絵なので、その MD5 は表と合わない。描くのには使わない
+     */
+    md5?: string;
 }
 
 /** 空白として字を描かない (背景だけ塗る) 字。libaribcaption の IsSpaceCharacter と同じ */

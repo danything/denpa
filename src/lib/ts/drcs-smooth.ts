@@ -6,13 +6,14 @@
  * なめらかに引き伸ばしても階段がぼやけて残る (スピーカー 🔊 の外字など)。
  *
  * 以前は libaribcaption の描き手にパッチを当てて同じことをしていた (#554)。描くのを受け側に移したとき (#571〜#586)
- * にその直しが落ちたので、**サーバで1回だけ** やって、濃淡の絵 (`bits: 8`・`depth: 256`) で送る。受け側は
- * もともと `bits` 8 を読めるので変えなくてよい。
+ * にその直しが落ちたので、**サーバで1回だけ** やって、濃淡の絵 (`bits: 4`・`depth: 16`) で送る。受け側は
+ * もともと `bits` 1・2・4・8 を読み、濃さを字の色の不透明度に掛けて引き伸ばすので変えなくてよい。
  *
  * 1. **水増しを畳む** (`collapseDoubled`)。放送はよく 18x18 の字を縦横 2 倍の 36x36 で送ってくる。
  *    同じ並びが 2 つずつ続く行・列を 1 つにする (失うものは無い)。そうしないと次の段で階段を階段と見られない
- * 2. **Scale2x (EPX) で斜めを丸める** (`scale2x`)。縦横の線はそのまま、斜めの階段だけ細かくする
- * 3. **縮めて濃淡にする** (`boxDown`)。細かくした絵を 4x4 ずつ平均し、縁に中間の濃さを付ける。
+ * 2. **Scale2x (EPX) で斜めを丸める** (`scale2x`)。斜めの階段を細かくする。縦横の線はまっすぐのまま残るが、
+ *    塗りの出っ張った角は元の1点ぶんほど丸まる (EPX の性質。#554 のパッチも同じで、フォントの字に近い見た目になる)
+ * 3. **縮めて濃淡にする** (`boxDown`・`pack4`)。細かくした絵を 4x4 ずつ平均し、縁に中間の濃さを付ける。
  *    縦横の線は元の画素の境目に落ちるので、ぼけずにくっきり残る
  *
  * **置き換え表の MD5 は元の絵から取る** (b24caption.ts)。ここで作った絵は送るためだけのもの。
@@ -151,5 +152,17 @@ export function smoothDrcs(
     while (side * scale < TARGET && side * scale * 2 <= MAX) scale *= 2;
     for (let s = 1; s < scale * BOX; s *= 2) g = scale2x(g);
     g = boxDown(g, BOX);
-    return { w: g.width, h: g.height, depth: 256, bits: 8, data: Buffer.from(g.pixels).toString('base64') };
+    return { w: g.width, h: g.height, depth: 16, bits: 4, data: Buffer.from(pack4(g)).toString('base64') };
+}
+
+/**
+ * 濃さを 16 階調にして1画素4ビットで詰める (左の画素が上の桁)。4x4 の平均は白黒の絵からだと 17 階調しか
+ * 出ないので、8 ビットで送っても見た目は変わらず倍の大きさになるだけ (外字の絵は字幕の1枚ごとに付く)
+ */
+export function pack4(g: Grey): Uint8Array {
+    const out = new Uint8Array(Math.ceil(g.pixels.length / 2));
+    g.pixels.forEach((v, i) => {
+        out[i >> 1]! |= Math.round((v * 15) / 255) << (i & 1 ? 0 : 4);
+    });
+    return out;
 }
