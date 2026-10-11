@@ -250,6 +250,8 @@ describe('同じ回の見分け', () => {
             ),
         ).toBe(true);
         expect(same('ドラマ・テストドラマ #3', 'テストドラマ #3')).toBe(true);
+        // BS日テレは区切りが空白 (全角)
+        expect(same('アニメ　テストアニメです。　第２話', 'テストアニメです。 第2話')).toBe(true);
         // ほかの「・」は作品名のうち
         expect(same('新・テスト番組 #3', 'テスト番組 #3')).toBe(false);
         expect(same('続・テストドラマ #3', 'テストドラマ #3')).toBe(false);

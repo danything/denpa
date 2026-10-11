@@ -9,7 +9,7 @@
  * DB を読むのは呼ぶ側 (`rules.applyRules` とルール画面の下見)。
  */
 import { toHalfWidth } from '../fold';
-import { displayTitle, parseTitle, searchable } from './title';
+import { displayTitle, parseTitle, searchable, withoutSlot } from './title';
 
 /** 比べる前に揃える。空白の有無・大文字小文字は局によって揺れる。外字は昔の書き方に (`fold.ts`) */
 function squash(text: string): string {
@@ -51,12 +51,6 @@ export interface Episode {
 
 /** 回の決め手にする概要の長さ。短いものはどの回にも当たりやすい */
 const SUMMARY_MIN = 30;
-
-/**
- * 局が作品名の頭に付ける枠の名前 (`アニメA・貸した魔力は…` `ドラマ・天狗の台所`)。
- * 「・」で始まる頭はほかにも多い (`新・BS日本のうた` `続・深夜食堂` `ザ・ミステリー`) ので決め打ち
- */
-const SLOT = /^(?:アニメ|ドラマ)[A-Za-z]?・/;
 
 const KANJI_DIGITS = '〇一二三四五六七八九';
 const NUMERAL = `\\d{1,4}|[${KANJI_DIGITS}十百]{1,5}`;
@@ -183,7 +177,7 @@ export function episodeOf(program: Described): Episode | null {
     }
     // ARIB の囲み文字 (🈑🈞) は局によって付いたり付かなかったりする
     const bare = (text: string) => text.replace(/[\u{1F210}-\u{1F23B}]/gu, ' ');
-    const work = parsed.series.replace(SLOT, '') || parsed.series;
+    const work = withoutSlot(parsed.series);
     const series = bare(`${work} ${parsed.arc}`);
     const words = series
         .split(/[\s[\]【】<>()〈〉《》≪≫]+/)

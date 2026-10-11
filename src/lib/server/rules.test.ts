@@ -207,6 +207,15 @@ describe('録画からルールを作る', () => {
         ).toBe('東京リベンジャーズ');
     });
 
+    test('頭の枠の名前 (アニメ　/ アニメA・) はキーワードに入れない', () => {
+        expect(prefillFrom({ ...recording, name: '[新]アニメ　テストアニメです。　第1話' })?.keyword).toBe(
+            'テストアニメです。',
+        );
+        expect(prefillFrom({ ...recording, name: '[字]アニメA・テストアニメ #2「契約」' })?.keyword).toBe(
+            'テストアニメ',
+        );
+    });
+
     test('番組名が空なら下書きは作らない (ジャンルだけのルールになる)', () => {
         expect(prefillFrom({ ...recording, name: '' })).toBeNull();
     });
