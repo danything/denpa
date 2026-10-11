@@ -24,6 +24,12 @@
         /** 全画面の出入り (`stageFullscreen(() => element)`) */
         fullscreen: StageFullscreen;
         children: Snippet<[StageApi]>;
+        /**
+         * 絵の上の知らせ (`StageNote`) を積む列。**知らせはみなここへ** — 札ごとに
+         * 絶対配置していた頃は、置き場ごとに上からの距離を書いていて、同時に出ると重なった。
+         * 上端の真ん中から下へ積む。低い枠では右上の一行 (`ControlBar`) の下から
+         */
+        notes?: Snippet;
     }
     interface StageApi {
         /** 狭い枠か (スマホの縦)。**押すものを減らして「ほか」に畳む** */
@@ -38,6 +44,7 @@
         element = $bindable(null),
         fullscreen,
         children,
+        notes,
     }: Props = $props();
 
     // 中のメニュー (`OverlayMenu`) が「開いている間は操作列を残せ」と言う先。取り手で渡す (props は差し替わりうる)
@@ -54,12 +61,21 @@
      * 右の縦列 (閉じる・切り抜き・削除) が帯のシークバーや再生ボタンに重なって**
      * いた (実機の報告「全画面じゃないと操作ボタンがおかしくなる」)。
      *
-     * - `compact` (幅 448px 未満) … 押すものを 40px に縮め、毎回は使わないもの
+     * - `compact` (幅 448px 未満か、16:9 より低く抑えられて高さ 300px 未満) … 押すものを 40px に縮め、毎回は使わないもの
      *   (音声・送り・焼き方・速さなど) を「ほか」(⋯) に畳む。読みものは
      *   一行にして押すものの上へ。スマホの縦は枠が画面の幅そのまま (端まで
      *   広げる。下の `@media`) で、いちばん広いもので 430px。
      *   縦の iPad (絵が 476px) はここに入れない — あちらは 48px の9個が一段に
-     *   収まるように幅を決めてある
+     *   収まるように幅を決めてある。
+     *   **高さでも畳む** — 幅が足りていても、300px に満たない枠に 48px の帯と右上の
+     *   一行を載せると絵がほとんど隠れる (二段組の低い窓など)。横にしたスマホは
+     *   枠を画面の高さいっぱいにする (`PlayerLayout`) のでここには入らない
+     * - `under` (幅で `compact` のとき。全画面は除く) … **下の帯を絵の下 (枠の外) に出す。**
+     *   スマホの縦の枠は 390x219 しか無く、帯 (シークバー・読みもの・押すもの) を
+     *   重ねると絵の半分を覆い、字幕に時刻が重なっていた。「ほか」を開くとさらに隠れる。
+     *   絵の下は余っているので、帯はそこに置いて**いつも出しておく** (絵を覆わないので
+     *   引っ込める理由が無い)。右上の一行 (閉じる・切り抜きなど) は今までどおり絵の上。
+     *   全画面では絵の周りに黒帯があるので、今までどおり重ねる
      * - `low` (高さ 360px 未満) … 右の縦列を横に寝かせて右上の一行にする。縦に
      *   4個積むと 228px、下の帯が 112px で、それより低い枠では重なる (スマホの横や
      *   縦の iPad の二段組)。**大きさは変えない**。狭い枠も低い (224px) ので、
@@ -69,13 +85,29 @@
      * 当たらない (今までどおり)。**決めるのは媒体の幅ではなく枠の大きさ** —
      * 同じ画面幅でも、二段組かどうかで絵の幅がまるで違う
      */
-    let compact = $state(false);
+    let narrow = $state(false);
+    let short = $state(false);
     let low = $state(false);
+    const compact = $derived(narrow || short);
+    /*
+     * **帯を下に出すのは幅で決めたときだけ。** 高さで決めると、帯を出したぶん枠が
+     * 高くなって外れ、外れると低くなってまた入る (行ったり来たりする)。幅は帯を
+     * 出しても変わらない
+     */
+    const under = $derived(narrow && !fullscreen.active);
     $effect(() => {
         const target = element;
         if (target === null) return;
         const measure = () => {
-            compact = target.clientWidth < 448;
+            narrow = target.clientWidth < 448;
+            /*
+             * 高さで畳むのは、**枠が 16:9 より低く抑えられているときだけ** (高さの上限 `max-height`
+             * で切られた、低い窓)。16:9 のままなら低さは幅で決まっていて、幅の線で足りる —
+             * 縦の iPad の二段組 (500x281) まで畳むと、48px の9個が一段に入る幅を捨てることになる。
+             * 幅で畳んでいるときは見ない (帯を下に出すと、枠の高さに帯が入る)
+             */
+            const height = target.clientHeight;
+            short = !narrow && height < 300 && height < (target.clientWidth * 9) / 16 - 1;
             low = target.clientHeight < 360;
         };
         measure();
@@ -86,11 +118,12 @@
 
     /**
      * 「ほか」(⋯) を開いているか。**操作列が引っ込んだら閉じる** — 開いたまま
-     * 残すと、次に出したときに絵の半分を覆った状態から始まる
+     * 残すと、次に出したときに絵の半分を覆った状態から始まる。帯を絵の下に
+     * 出している間 (`under`) は帯が引っ込まないので、閉じるまで開いたまま
      */
     let more = $state(false);
     $effect(() => {
-        if (!controls.shown || !compact) more = false;
+        if ((!controls.shown && !under) || !compact) more = false;
     });
 </script>
 
@@ -107,6 +140,7 @@
     data-compact={compact ? '' : undefined}
     data-low={low || compact ? '' : undefined}
     data-more={more ? '' : undefined}
+    data-under={under ? '' : undefined}
     data-pseudo={fullscreen.pseudo ? '' : undefined}
     onpointermove={controls.wake}
     onpointerdown={controls.wake}
@@ -131,6 +165,9 @@
         more,
         toggleMore: () => (more = !more),
     })}
+    {#if notes}
+        <div class="notes" data-testid="{testid}-notes">{@render notes()}</div>
+    {/if}
 </div>
 
 <style>
@@ -144,6 +181,53 @@
     }
     .quiet {
         cursor: none;
+    }
+    /*
+     * **帯を絵の下に出す (`under`)。** 枠を2段の格子にし、上の段を 16:9 (`::before` が
+     * 形を持つ)、下の段を帯 (`ControlBar` の `.bottom`) にする。中身 (video・字幕・
+     * データ放送・幕・知らせ) は絶対配置のまま上の段に置く — 格子の子の絶対配置は、
+     * その段を入れ物にして `inset: 0` で収まる。中身の書き方は画面ごとに変えずに済む
+     */
+    .stage[data-under] {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr);
+        grid-template-rows: auto auto;
+        aspect-ratio: auto;
+        max-height: none;
+        min-height: 0;
+    }
+    .stage[data-under]::before {
+        content: '';
+        grid-area: 1 / 1;
+        aspect-ratio: 16 / 9;
+    }
+    /*
+     * **終わりの線まで書く。** 絶対配置の子は、終わりを `auto` にすると格子の端
+     * (枠の内側いっぱい) まで伸びる — `1 / 1` だけでは帯の段まで覆ってしまう
+     */
+    .stage[data-under] > :global(*) {
+        grid-area: 1 / 1 / 2 / 2;
+    }
+    /* 知らせの列。押せない (下の絵を押せるように)。押せる知らせは自分で戻す */
+    .notes {
+        pointer-events: none;
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        z-index: 10;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 0.25rem;
+        padding: 0.5rem;
+    }
+    .notes:empty {
+        display: none;
+    }
+    /* 低い枠では右の列が右上の一行に寝る (`ControlBar`)。その下から出す */
+    .stage[data-low] .notes {
+        padding-top: 3.25rem;
     }
     /*
      * **スマホの縦では映像を画面の端から端まで。** 余白 (`--dp-gutter`、

@@ -34,7 +34,7 @@
     import MediaStack from '#lib/components/player/MediaStack.svelte';
     import MoreButton from '#lib/components/player/MoreButton.svelte';
     import OverlayMenu from '#lib/components/player/OverlayMenu.svelte';
-    import PlayerLayout from '#lib/components/player/PlayerLayout.svelte';
+    import PlayerLayout, { PHONE_LANDSCAPE } from '#lib/components/player/PlayerLayout.svelte';
     import PlayerStage from '#lib/components/player/PlayerStage.svelte';
     import PlayerVeil from '#lib/components/player/PlayerVeil.svelte';
     import { pictureInPicture } from '#lib/components/player/pip.svelte.js';
@@ -124,6 +124,16 @@
             serviceId: channel.id,
             codec: player.codec,
         });
+    }
+
+    /**
+     * **横にしたスマホでは、一覧から選んだら絵へ戻す。** その形では絵が画面の高さ
+     * いっぱいを取り、一覧はその下を巻き取って探す (`PlayerLayout`)。選んだのは
+     * 観るためなので、一覧の位置に残すと絵が見えないまま切り替わる
+     */
+    function backToPicture(): void {
+        if (stageEl === null || !window.matchMedia(PHONE_LANDSCAPE).matches) return;
+        stageEl.scrollIntoView({ block: 'start', behavior: 'smooth' });
     }
 
     /**
@@ -666,17 +676,6 @@
                 </button>
             {/if}
 
-            <!--
-                **頼まれたとおりにできなかったときの断り書き。**
-
-                失敗ではないので、絵は出ている。「AV1 を出せない端末なので H.264 に
-                戻した」と「GPU で焼けずにソフトウェアで焼いている」(サーバから)。
-                黙って別の形にすると、なぜ切り替えが効かないのか分からない
-            -->
-            {#if player.warning}
-                <StageNote testid="live-warning">{player.warning}</StageNote>
-            {/if}
-
             {#if player.state !== 'playing'}
                 <!--
                     何も出ていない間に何が起きているかを出す。黒いままだと壊れて
@@ -701,6 +700,20 @@
                     {/snippet}
                 </PlayerVeil>
             {/if}
+            {/snippet}
+
+            <!-- 絵の上の知らせは舞台の列に積む (`PlayerStage` の `notes`)。幕 (`PlayerVeil`) の文言は真ん中なので重ならない -->
+            {#snippet notes()}
+                <!--
+                    **頼まれたとおりにできなかったときの断り書き。**
+
+                    失敗ではないので、絵は出ている。「AV1 を出せない端末なので H.264 に
+                    戻した」と「GPU で焼けずにソフトウェアで焼いている」(サーバから)。
+                    黙って別の形にすると、なぜ切り替えが効かないのか分からない
+                -->
+                {#if player.warning}
+                    <StageNote testid="live-warning">{player.warning}</StageNote>
+                {/if}
             {/snippet}
         </PlayerStage>
 
@@ -770,7 +783,10 @@
                             bind:this={rows[channel.id]}
                             class="channel"
                             class:tuned
-                            onclick={() => select(channel)}
+                            onclick={() => {
+                                select(channel);
+                                backToPicture();
+                            }}
                             aria-current={tuned ? 'true' : undefined}
                             data-testid="live-channel"
                             data-current={tuned ? 'true' : 'false'}
@@ -792,9 +808,18 @@
                                 style="width: 2rem; height: 2rem"
                                 fallback={channel.type}
                             />
+                            <!--
+                                **いま映しているものは、枠の色と局名の前の小さな印 (▶) で。**
+                                色だけだと、色の見え方が違う人に伝わらない。行の右に
+                                「視聴中」の札を置いていた頃は、狭い列 (スマホの横・PC の
+                                256px) で札が幅を取り、局名も番組名も「で…」まで潰れていた。
+                                文字は読み上げにだけ渡す (行は `aria-current` も持つ)
+                            -->
                             <span class="channel-text">
                                 <span class="channel-name broadcast">
-                                    {channel.name}
+                                    {#if tuned}<span class="tuned-mark" data-testid="live-tuned-mark"
+                                            ><Icon icon={PLAY} size="size-3" /></span
+                                        ><span class="hidden-label">視聴中</span>{/if}{channel.name}
                                 </span>
                                 {#if channel.now}
                                     <span class="channel-now broadcast">
@@ -802,10 +827,6 @@
                                     </span>
                                 {/if}
                             </span>
-                            <!-- いま映しているもの。色だけだと、色の見え方が違う人に伝わらない -->
-                            {#if tuned}
-                                <span class="tag solid channel-badge">視聴中</span>
-                            {/if}
                         </button>
 
                         <!--
@@ -972,8 +993,23 @@
         font-size: 0.75rem;
         opacity: 0.6;
     }
-    .channel-badge {
-        flex-shrink: 0;
+    /* 局名の前の印。塗った三角 (Lucide の play は線だけなので塗る) */
+    .tuned-mark {
+        display: inline-flex;
+        margin-inline-end: 0.25rem;
+        vertical-align: -0.0625rem;
+    }
+    .tuned-mark :global(path) {
+        fill: currentColor;
+    }
+    /* 読み上げにだけ渡す字 */
+    .hidden-label {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        overflow: hidden;
+        clip-path: inset(50%);
+        white-space: nowrap;
     }
     .channel-detail {
         height: auto;

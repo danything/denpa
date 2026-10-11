@@ -7,6 +7,6 @@
     let { testid }: { testid: string } = $props();
 </script>
 
-<a class="{OVERLAY_BTN} {OVERLAY_ROUND} {OVERLAY}" href={resolve('')} aria-label="一覧へ戻る" data-testid={testid}>
+<a class="{OVERLAY_BTN} {OVERLAY_ROUND} {OVERLAY}" href={resolve('')} aria-label="一覧へ戻る" title="一覧へ戻る" data-testid={testid}>
     <Icon icon={CLOSE} />
 </a>

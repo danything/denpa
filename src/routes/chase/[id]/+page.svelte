@@ -360,29 +360,6 @@
             </ControlRow>
         </ControlBar>
 
-        {#if encoded}
-            <!--
-                焼き上がった。続きは観る画面で (位置は続き再生が覚えている)。
-                StageNote は押せない札 (`pointer-events: none`) なので、ここだけ押せる形で置く。
-                見た目の決まりは同じ (角丸で黒の半透明)
-            -->
-            <div class="encoded" data-testid="chase-encoded">
-                <a
-                    class="to-watch"
-                    href={resolve(`watch/${data.rec.id}`)}
-                    data-testid="chase-to-watch"
-                >
-                    エンコードが終わりました — 続きは観る画面で
-                </a>
-            </div>
-        {:else if player.chaseEnded}
-            <!-- 録れているところまで観た。録画が終わっていれば、この先はもう来ない -->
-            <StageNote testid="chase-ended">録れているところまで観ました</StageNote>
-        {:else if player.warning}
-            <!-- 頼まれたとおりにできなかった断り書き (GPU で焼けずにソフトウェアへ降りた、など) -->
-            <StageNote testid="chase-warning">{player.warning}</StageNote>
-        {/if}
-
         {#if player.state !== 'playing'}
             <!-- 見た目の決まりはライブと共通 (`PlayerVeil`)。前の絵を貼っている間は塗り潰さない -->
             <PlayerVeil
@@ -402,6 +379,36 @@
                 {/snippet}
             </PlayerVeil>
         {/if}
+        {/snippet}
+
+        <!-- 絵の上の知らせは舞台の列に積む (`PlayerStage` の `notes`)。いくつ出ても重ならない -->
+        {#snippet notes()}
+            {#if encoded}
+                <!--
+                    焼き上がった。続きは観る画面で (位置は続き再生が覚えている)。
+                    この先はみな観る画面の話になるので、これだけを出す。
+                    StageNote は押せない札 (`pointer-events: none`) なので、ここだけ押せる形で置く。
+                    見た目の決まりは同じ (角丸で黒の半透明)
+                -->
+                <span class="encoded" data-testid="chase-encoded">
+                    <a
+                        class="to-watch"
+                        href={resolve(`watch/${data.rec.id}`)}
+                        data-testid="chase-to-watch"
+                    >
+                        エンコードが終わりました — 続きは観る画面で
+                    </a>
+                </span>
+            {:else}
+                {#if player.chaseEnded}
+                    <!-- 録れているところまで観た。録画が終わっていれば、この先はもう来ない -->
+                    <StageNote testid="chase-ended">録れているところまで観ました</StageNote>
+                {/if}
+                {#if player.warning}
+                    <!-- 頼まれたとおりにできなかった断り書き (GPU で焼けずにソフトウェアへ降りた、など) -->
+                    <StageNote testid="chase-warning">{player.warning}</StageNote>
+                {/if}
+            {/if}
         {/snippet}
     </PlayerStage>
 
@@ -435,14 +442,10 @@
         border-radius: 999px;
         background: var(--dp-error);
     }
+    /* 知らせの列は押せない (`PlayerStage`)。この知らせだけ押せるように戻す */
     .encoded {
-        position: absolute;
-        inset-inline: 0;
-        top: 0;
-        z-index: 10;
         display: flex;
-        justify-content: center;
-        padding: 0.5rem;
+        pointer-events: auto;
     }
     .to-watch {
         border-radius: 1rem;
