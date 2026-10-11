@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { DRCS_REPLACE } from './b24-tables';
 import { B24CaptionDecoder } from './b24caption';
+import { smoothDrcs } from './drcs-smooth';
 import { drcsUnit, encodeAribText, management, statement, text, unit } from './synth-caption';
 
 /** CSI の並び。`csi('170;30', 0x5f)` は SDP */
@@ -121,7 +122,7 @@ describe('B24CaptionDecoder', () => {
         ]);
     });
 
-    test('置き換えられない外字は絵のまま送る (1画素1ビット)', () => {
+    test('置き換えられない外字は絵で送る (なめらかにした濃淡。drcs-smooth.ts)', () => {
         const rows = [
             '#.......',
             '.#......',
@@ -141,13 +142,9 @@ describe('B24CaptionDecoder', () => {
         expect(page?.runs).toHaveLength(1);
         const run = page?.runs[0];
         expect(run).toMatchObject({ text: '〓', drcs: String((1 << 16) | 0x21) });
-        expect(page?.drcs?.[run?.drcs ?? '']).toEqual({
-            w: 8,
-            h: 8,
-            depth: 2,
-            bits: 1,
-            data: Buffer.from([0x80, 0x40, 0x20, 0x10, 0x08, 0x04, 0x02, 0x01]).toString('base64'),
-        });
+        const raw = Uint8Array.from([0x80, 0x40, 0x20, 0x10, 0x08, 0x04, 0x02, 0x01]);
+        expect(page?.drcs?.[run?.drcs ?? '']).toEqual(smoothDrcs(8, 8, 2, 1, raw));
+        expect(page?.drcs?.[run?.drcs ?? '']).toMatchObject({ w: 64, h: 64, depth: 256, bits: 8 });
     });
 
     test('外字の置き換え表には denpa で足した分も入っている', () => {

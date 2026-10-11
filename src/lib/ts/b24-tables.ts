@@ -19,7 +19,8 @@
  * 放送は字幕の外字を小さな絵で送ってくる。絵の MD5 (`b24caption.ts` が中身の画素から取る) が
  * `DRCS_REPLACE` にあれば、その字に置き換えて描く (無ければ絵のまま)。足すときは:
  *
- * 1. 字幕の JSON (`/api/recordings/<id>/captions.json` の `drcs`) か、b24caption.ts で MD5 を拾う
+ * 1. b24caption.ts (`defineDrcs`) で MD5 を拾う。字幕の JSON (`captions.json` の `drcs`) の絵は送るために
+ *    なめらかにしたもの (drcs-smooth.ts) で、その MD5 は表と合わない
  * 2. `[MD5, 字のコードポイント]` を足し、行末に「何の字か・どこで見たか (局・日付)」を書く
  * 3. フォントにその字があること (無い字に置き換えると豆腐になる。絵のままのほうがよい)
  */

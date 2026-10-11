@@ -56,6 +56,7 @@ EPGStation の置き換えとして作ったもので、エンコード設定は
 | `src/lib/server/chase.ts` | 追っかけ再生の追い読み。録画中の伸びる生TSを尻から読み続け、バイト比例でシークの当たりを付ける ([issue #16](https://github.com/danything/denpa/issues/16)) |
 | `src/lib/server/captions.ts` | ライブの字幕。映像と同じ ffmpeg から字幕をそのまま写して受け、解いて文字の配置にして配る (別々に起こすと時刻が揃わない) |
 | `src/lib/ts/b24caption.ts` | 放送の字幕 (ARIB STD-B24) を解いて字の置き場所まで決める。libaribcaption の解き手を写したもの。表は `b24-tables.ts` (手で持つ。始まりは libaribcaption の表の写し) |
+| `src/lib/ts/drcs-smooth.ts` | 字にできない外字 (DRCS) の白黒の絵を、斜めを丸めた濃淡の絵にしてから送る (引き伸ばしてもジャギジャギにならない) |
 | `src/lib/caption-text.ts` | 字幕の文字の配置の形 (サーバと画面とテレビのアプリの取り決め。[api.md](api.md#字幕の文字の配置)) |
 | `src/lib/ts/captions.ts` | 届いた字幕を、映像に合わせて出す順に並べる (DOM を触らない) |
 | `src/lib/ts/mkv.ts` | Matroska からコマと時刻を取り出す。字幕は時刻をコマに付けて運ぶ (録画の字幕が S_ARIBSUB かも見る) |

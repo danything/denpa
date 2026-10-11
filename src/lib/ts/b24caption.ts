@@ -34,6 +34,7 @@ import {
     KANJI_SYMBOLS_HALF,
     KATAKANA,
 } from './b24-tables';
+import { smoothDrcs } from './drcs-smooth';
 
 /** 符号の集合。DRCS は 0〜15 の面 */
 type GraphicSet =
@@ -174,6 +175,8 @@ interface Drcs {
     pixels: Uint8Array;
     /** 置き換えられた字。無ければ絵のまま */
     replaced: number | null;
+    /** 送る絵 (なめらかにした濃淡。drcs-smooth.ts)。初めて送るときに作って覚えておく */
+    sent?: CaptionDrcs;
 }
 
 /** 解いた1字。libaribcaption の CaptionChar と同じもの */
@@ -914,13 +917,8 @@ function toPage(caption: Caption, plane: [number, number]): CaptionPage | null {
             run.drcs = key;
             const found = caption.drcs.get(char.drcs);
             if (found !== undefined && drcs[key] === undefined) {
-                drcs[key] = {
-                    w: found.width,
-                    h: found.height,
-                    depth: found.depth,
-                    bits: found.bits,
-                    data: Buffer.from(found.pixels).toString('base64'),
-                };
+                found.sent ??= smoothDrcs(found.width, found.height, found.depth, found.bits, found.pixels);
+                drcs[key] = found.sent;
             }
         }
         if (char.stroke !== null) run.stroke = char.stroke;
