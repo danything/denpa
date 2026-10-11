@@ -590,7 +590,7 @@
     open: string | (() => void),
     fresh = false,
 )}
-    <div class="cluster">
+    <div class="cluster title-line">
         <span class="tag {badge}" data-testid={testid}>{state}</span>
         {#if typeof open === 'string'}
             <!-- 行いっぱいが的なので、先読みは押したときだけ (一覧を撫でるだけで何本も読みに行かない) -->
@@ -1788,11 +1788,23 @@
         margin-top: 0.125rem;
     }
     /*
-     * **ルール名は1行で切る。** ルールの名前は番組名そのままのことが多く、長い題名だと
-     * 最後の1、2文字だけが次の行へ折れていた。どのルールかは頭で分かるので、はみ出す分は
-     * 「…」で省き、全部は押した先 (ルールの編集) と title で読める
+     * **番組名・局と日時・ルール名は1行ずつで切る。** 折り返すと題名の長さで行の高さが
+     * 変わり、並んだ「詳細」「削除」の位置が行ごとにずれて押しにくかった。はみ出す分は
+     * 「…」で省く。全部は詳細 (番組名・局) と、押した先のルールの編集・title (ルール名) で読める。
+     * 押せる範囲 (`.row-open::after`) は `.row` を基準に置いているので、ここで切っても欠けない
      */
+    .title-line {
+        flex-wrap: nowrap;
+        min-width: 0;
+    }
+    .title-line > .tag {
+        flex-shrink: 0;
+    }
+    .title-line .row-name,
+    div.row-meta,
     .row-sub[data-testid='rule-name'] {
+        display: block;
+        min-width: 0;
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
