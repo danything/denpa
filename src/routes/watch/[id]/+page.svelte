@@ -759,6 +759,8 @@
         video.currentTime = to;
         hopTo = to;
         waiting = true;
+        // **知らせは1つずつ。** 続きの位置が CM の中だと、出たばかりの「続きから」と同じ場所に重なる
+        continued = false;
         skipped = true;
         if (skipNotice !== null) clearTimeout(skipNotice);
         skipNotice = setTimeout(() => (skipped = false), 2500);
