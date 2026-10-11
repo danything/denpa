@@ -1056,7 +1056,7 @@
         </span>
     </button>
     <!--
-        開いた番組の頭に「この番組のルールを作る」。見出しそのものは開閉のボタンなので、
+        開いた番組の頭に「ルールを作る」。見出しそのものは開閉のボタンなので、
         中には入れられない (押す的が入れ子になる)。中身の行と同じだけ下げて、その番組の
         ものだと分かるようにする
     -->
@@ -1064,7 +1064,7 @@
     {@const source = open ? newestRec(group) : null}
     {#if source !== null}
         <div class="group-tools">
-            <a class="button small secondary outline" href={ruleFrom('recording', source)} data-testid="group-rule">この番組のルールを作る</a>
+            <a class="button small secondary outline" href={ruleFrom('recording', source)} data-testid="group-rule">ルールを作る</a>
         </div>
     {/if}
 {/snippet}
@@ -1396,7 +1396,7 @@
             href={ruleFrom('program', detailRes.program_id)}
             data-testid="detail-rule"
         >
-            この番組のルールを作る
+            ルールを作る
         </a>
     {/if}
     {#if detailRes !== null && active.includes(detailRes.state)}
@@ -1429,7 +1429,7 @@
         {@const rec = detailRec}
         {#if hasFile(rec)}
             <!--
-                **並べるのはよく押すものだけ** — 端末に保存・この番組のルールを作る。
+                **並べるのはよく押すものだけ** — 端末に保存・ルールを作る。
                 条件が揃うと10個のボタンが同じ見た目で並び、狭い画面では文字の
                 途中で折り返していた。めったに押さないもの (落とす・リンクを
                 コピー・焼き直し) は「その他…」に畳む。
@@ -1466,12 +1466,12 @@
             {/if}
         {/if}
         <!--
-            **この番組のルールを作る。** ルールの画面へ、シリーズ名を入れた下書きを
+            **ルールを作る。** ルールの画面へ、シリーズ名を入れた下書きを
             持って行く (保存はあちらで確かめてから)。既にこの番組を録っているルールが
             あれば、あちらがそのルールを案内する
         -->
         <a class="button secondary outline" href={ruleFrom('recording', rec.id)} data-testid="detail-rule">
-            この番組のルールを作る
+            ルールを作る
         </a>
         {#if hasFile(rec)}
             <!--
