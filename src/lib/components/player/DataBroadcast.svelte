@@ -670,7 +670,9 @@
         ので、テレビより待つ (実測で8秒)。何も言わずに待たせると壊れて見える
     -->
     {#if on && (loading || receiving)}
-        <StageNote testid="live-data-receiving" place="corner">データ取得中…</StageNote>
+        <div class="corner">
+            <StageNote testid="live-data-receiving">データ取得中…</StageNote>
+        </div>
     {/if}
 </div>
 
@@ -681,5 +683,13 @@
         inset: 0;
         z-index: 5;
         overflow: hidden;
+    }
+    /* 「取得中」は右上の隅。テレビと同じ場所 (舞台の知らせの列には積まない) */
+    .corner {
+        position: absolute;
+        top: 0.75rem;
+        right: 0.75rem;
+        z-index: 10;
+        display: flex;
     }
 </style>

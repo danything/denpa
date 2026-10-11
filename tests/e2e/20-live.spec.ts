@@ -1,7 +1,18 @@
 import { existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import type { Locator } from '@playwright/test';
 import { BS_NO_LOGO, SERVICES } from '../fake/services';
-import { airing, cellOf, expect, goto, syncEpg, test, upcoming, wakeControls } from './helpers';
+import {
+    airing,
+    captionsClearOfBar,
+    cellOf,
+    expect,
+    goto,
+    overlayTroubles,
+    syncEpg,
+    test,
+    upcoming,
+    wakeControls,
+} from './helpers';
 
 /**
  * 偽 ffmpeg が残した引数を1回ぶんずつに切って、最後の1回を返す。
@@ -257,7 +268,8 @@ test.describe('ライブ視聴', () => {
 
     /*
      * **いま映しているものが分かるようにする。** 色だけだと、色の見え方が違う人に
-     * 伝わらないので、文字でも出す
+     * 伝わらないので、局名の前に印 (▶) を出し、読み上げには文字で渡す。
+     * **札にはしない** — 狭い列で局名と番組名を潰していた
      */
     test('選局中のチャンネルが分かる', async ({ page }) => {
         await goto(page, '/live');
@@ -267,7 +279,9 @@ test.describe('ライブ視聴', () => {
         await expect(page.getByTestId('live-title')).toBeVisible();
 
         await expect(second).toHaveAttribute('data-current', 'true');
+        await expect(second.getByTestId('live-tuned-mark')).toBeVisible();
         await expect(second).toContainText('視聴中');
+        await expect(page.getByTestId('live-tuned-mark')).toHaveCount(1);
         // 印は1つだけ。ほかの行に残っていたら、どれを見ているのか分からない
         expect(await page.locator('[data-testid="live-channel"][data-current="true"]').count()).toBe(1);
     });
@@ -1534,5 +1548,56 @@ test.describe('ライブ視聴', () => {
 
         await press();
         await expect(notice).toContainText('番組表に見つかりません');
+    });
+});
+
+/**
+ * **横にしたスマホでは絵を画面いっぱいに** (`PlayerLayout`)。見出しと右の一覧を残すと
+ * 絵の枠が 510x280 ほどしか無く、帯が二段に折れてシークバーが絵の真ん中に来ていた。
+ * 一覧は消さずに絵の下へ回す — 消すと局を選べなくなる
+ */
+test.describe('スマホの横でライブ', () => {
+    test.use({ hasTouch: true, isMobile: true, viewport: { width: 844, height: 390 } });
+
+    test('見出しを隠して絵が画面の高さいっぱい。帯は一段、一覧は下で選べる', async ({ page }) => {
+        await goto(page, '/live');
+        const channels = page.getByTestId('live-channel');
+        await channels.first().click();
+        await expect(page.getByTestId('live-title')).toBeVisible();
+
+        const stage = page.getByTestId('live-frame');
+        await expect(page.locator('.navbar')).toBeHidden();
+        // 枠は絵の形 (16:9) で、高さいっぱい・真ん中。左右の黒帯にボタンを出さない
+        await expect
+            .poll(async () => {
+                const box = await stage.boundingBox();
+                return box === null
+                    ? null
+                    : [Math.round(box.x), Math.round(box.y), Math.round(box.width), Math.round(box.height)];
+            })
+            .toEqual([75, 0, 693, 390]);
+
+        const bar = page.getByTestId('live-controls');
+        if ((await bar.getAttribute('data-shown')) !== 'true') {
+            await page.touchscreen.tap(422, 195);
+        }
+        await expect(bar).toHaveAttribute('data-shown', 'true');
+        const play = (await page.getByTestId('live-play').boundingBox())!;
+        const full = (await page.getByTestId('live-full').boundingBox())!;
+        expect(Math.abs(play.y - full.y)).toBeLessThan(2);
+        // どのボタンも重ならず、絵の枠の中に丸ごと見える (右上の3つも)
+        expect(await overlayTroubles(page, 'live-frame')).toEqual([]);
+        // 帯は絵に重ねるので、下の方の字幕は帯の上まで持ち上がる。帯が引っ込めば戻る
+        await captionsClearOfBar(page, 'live-captions', 'live-controls');
+        await expect(bar).toHaveAttribute('data-shown', 'false', { timeout: 6000 });
+        await expect(page.getByTestId('live-captions')).toHaveCSS('translate', 'none');
+
+        // 一覧は絵の下。巻き取って別の局を選べ、選んだら絵へ戻る
+        const second = channels.nth(1);
+        await second.scrollIntoViewIfNeeded();
+        await expect(stage).not.toBeInViewport({ ratio: 0.9 });
+        await second.tap();
+        await expect(second).toHaveAttribute('data-current', 'true');
+        await expect(stage).toBeInViewport({ ratio: 0.9 });
     });
 });

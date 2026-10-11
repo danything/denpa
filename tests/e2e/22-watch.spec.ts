@@ -1,5 +1,5 @@
 import type { APIRequestContext, Page } from '@playwright/test';
-import { expect, goto, recordOne, test, wakeControls } from './helpers';
+import { captionsClearOfBar, expect, goto, overlayTroubles, recordOne, test, wakeControls } from './helpers';
 
 /**
  * 録画をブラウザで観る画面 (`/watch/<id>`)。
@@ -385,6 +385,16 @@ test.describe('録画を観る', () => {
             // 下の帯には無い。同じことをする口を2つ置かない
             expect(await page.getByTestId('watch-controls').getByTestId(testid).count()).toBe(0);
         }
+        /*
+         * **押すだけのボタンは「切り替え」と名乗らない** (`aria-pressed` は切り替えにだけ)。
+         * 絵だけのボタンなので、マウスを重ねたときに名前が出る (`title`)
+         */
+        for (const testid of ['watch-close', 'watch-shot', 'watch-delete', 'watch-play', 'watch-full']) {
+            const button = page.getByTestId(testid);
+            expect(await button.getAttribute('aria-pressed'), testid).toBeNull();
+            expect(await button.getAttribute('title'), testid).toBe(await button.getAttribute('aria-label'));
+        }
+        await expect(page.getByTestId('watch-background')).toHaveAttribute('aria-pressed', /^(true|false)$/);
         // 送り・戻しのボタンは置いていない (PCは矢印キー、指は端を素早く2回)
         await expect(page.getByTestId('watch-back')).toHaveCount(0);
         await expect(page.getByTestId('watch-forward')).toHaveCount(0);
@@ -533,6 +543,17 @@ test.describe('スマホの縦で観る', () => {
         expect(shape.横に動く).toBe(false);
         // **絵は画面の端から端まで** (余白の内側に置くと 358px に縮み、周りに縁が出る)
         expect(shape.枠).toEqual({ left: 0, width: 390 });
+        /*
+         * **下の帯は絵の下 (枠の外) に出す** (`PlayerStage` の `under`)。390x219 の絵に
+         * 重ねていた頃は絵の半分を覆い、字幕に時刻が重なっていた。字幕の面も絵の中に収まる
+         */
+        await expect(stage).toHaveAttribute('data-under', '');
+        const picture = (await page.getByTestId('watch-video').boundingBox())!;
+        const strip = (await bar.boundingBox())!;
+        expect(strip.y).toBeGreaterThanOrEqual(picture.y + picture.height - 1);
+        expect(Math.round(picture.height)).toBe(Math.round((390 * 9) / 16));
+        const captions = (await page.getByTestId('watch-captions-canvas').boundingBox())!;
+        expect(captions.y + captions.height).toBeLessThanOrEqual(picture.y + picture.height + 1);
         // 押すものは一段 (40px)。折れると倍になる
         const row = await page.getByTestId('watch-play').boundingBox();
         const full = await page.getByTestId('watch-full').boundingBox();
@@ -559,6 +580,63 @@ test.describe('スマホの縦で観る', () => {
         expect(inside).toBe(true);
         await page.getByTestId('watch-speed-option').filter({ hasText: '×1.5' }).tap();
         await expect(page.getByTestId('watch-speed')).toHaveText('1.5');
+
+        // 絵を覆わないので、帯は放っておいても引っ込まない (「ほか」も開いたまま)
+        await expect(bar).toHaveAttribute('data-shown', 'false', { timeout: 6000 });
+        expect(await bar.evaluate((el) => getComputedStyle(el).opacity)).toBe('1');
+        await expect(page.getByTestId('watch-speed')).toBeVisible();
+    });
+});
+
+/**
+ * **横にしたスマホでは絵を画面いっぱいに** (`PlayerLayout`)。見出しと右の列を残すと
+ * 絵の枠が 510x280 ほどしか無く、帯が二段に折れてシークバーが絵の真ん中に来ていた
+ */
+test.describe('スマホの横で観る', () => {
+    test.use({ hasTouch: true, isMobile: true, viewport: { width: 844, height: 390 } });
+
+    test('見出しを隠して絵が画面の高さいっぱい。帯は一段で下端に、右の列は下へ', async ({
+        page,
+        request,
+    }) => {
+        test.setTimeout(180_000);
+        const id = await watchable(page, request);
+        await goto(page, `/watch/${id}`);
+        // 指の端末は開いた時点で全画面に入る。やめたところを見る
+        await page.evaluate(() => document.fullscreenElement && document.exitFullscreen());
+        await expect.poll(() => page.evaluate(() => document.fullscreenElement === null)).toBe(true);
+
+        const stage = page.getByTestId('watch-stage');
+        await expect(stage).not.toHaveAttribute('data-pseudo', '');
+        await expect(page.locator('.navbar')).toBeHidden();
+        // 枠は絵の形 (16:9) で、高さいっぱい・真ん中。左右の黒帯にボタンを出さない
+        await expect
+            .poll(async () => roundBox(await stage.boundingBox()))
+            .toEqual({ x: 75, y: 0, width: 693, height: 390 });
+
+        const bar = page.getByTestId('watch-controls');
+        if ((await bar.getAttribute('data-shown')) !== 'true') {
+            await page.touchscreen.tap(422, 195);
+        }
+        await expect(bar).toHaveAttribute('data-shown', 'true');
+        // 押すものは一段
+        const play = (await page.getByTestId('watch-play').boundingBox())!;
+        const full = (await page.getByTestId('watch-full').boundingBox())!;
+        expect(Math.abs(play.y - full.y)).toBeLessThan(2);
+        // シークバーは絵の下の方 (真ん中に来ると、絵を押したつもりで位置が飛ぶ)
+        const seek = (await bar.getByRole('slider').boundingBox())!;
+        expect(seek.y).toBeGreaterThan(390 * 0.6);
+        // どのボタンも重ならず、絵の枠の中に丸ごと見える (右上の3つも)
+        expect(await overlayTroubles(page, 'watch-stage')).toEqual([]);
+        // 帯は絵に重ねるので、下の方の字幕は帯の上まで持ち上がる
+        await captionsClearOfBar(page, 'watch-captions-canvas', 'watch-controls');
+
+        // 右の列 (番組の中身) は消さずに絵の下へ。巻き取れば読める
+        const facts = page.getByTestId('watch-facts');
+        await facts.scrollIntoViewIfNeeded();
+        await expect(facts).toBeInViewport();
+        // ページごとは横に動かない
+        expect(await page.evaluate(() => document.documentElement.scrollWidth <= 844)).toBe(true);
     });
 });
 
@@ -637,7 +715,8 @@ test.describe('iPhone で全画面', () => {
         };
         const restored = async () => {
             await expect(stage).not.toHaveAttribute('data-pseudo', '');
-            await expect.poll(async () => (await stage.boundingBox())?.height).toBeLessThan(390);
+            // 横にしたスマホは全画面でなくても枠が画面の高さいっぱい (`PlayerLayout`)。大きさでは見分けない
+            await expect.poll(() => stage.evaluate((el) => getComputedStyle(el).position)).not.toBe('fixed');
             await expect(page.locator('html')).not.toHaveAttribute('data-stage-fullscreen', '');
             await expect(full).toHaveAttribute('aria-label', '全画面');
             await expect(page).toHaveURL(new RegExp(`/watch/${id}$`));
@@ -696,3 +775,14 @@ test.describe('iPhone で全画面', () => {
         await restored();
     });
 });
+
+function roundBox(box: { x: number; y: number; width: number; height: number } | null) {
+    return box === null
+        ? null
+        : {
+              x: Math.round(box.x),
+              y: Math.round(box.y),
+              width: Math.round(box.width),
+              height: Math.round(box.height),
+          };
+}

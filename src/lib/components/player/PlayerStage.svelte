@@ -2,6 +2,7 @@
     import { type Snippet, setContext } from 'svelte';
     import { PLAYER_CONTROLS, PLAYER_STAGE, type PlayerControls } from './controls.svelte';
     import type { StageFullscreen } from './fullscreen.svelte.js';
+    import { PHONE_LANDSCAPE } from './PlayerLayout.svelte';
 
     /**
      * 絵の舞台。**3つの視聴画面 (ライブ・追っかけ・録画) で同じ配線を1本に。**
@@ -24,6 +25,12 @@
         /** 全画面の出入り (`stageFullscreen(() => element)`) */
         fullscreen: StageFullscreen;
         children: Snippet<[StageApi]>;
+        /**
+         * 絵の上の知らせ (`StageNote`) を積む列。**知らせはみなここへ** — 札ごとに
+         * 絶対配置していた頃は、置き場ごとに上からの距離を書いていて、同時に出ると重なった。
+         * 上端の真ん中から下へ積む。低い枠では右上の一行 (`ControlBar`) の下から
+         */
+        notes?: Snippet;
     }
     interface StageApi {
         /** 狭い枠か (スマホの縦)。**押すものを減らして「ほか」に畳む** */
@@ -38,6 +45,7 @@
         element = $bindable(null),
         fullscreen,
         children,
+        notes,
     }: Props = $props();
 
     // 中のメニュー (`OverlayMenu`) が「開いている間は操作列を残せ」と言う先。取り手で渡す (props は差し替わりうる)
@@ -54,12 +62,21 @@
      * 右の縦列 (閉じる・切り抜き・削除) が帯のシークバーや再生ボタンに重なって**
      * いた (実機の報告「全画面じゃないと操作ボタンがおかしくなる」)。
      *
-     * - `compact` (幅 448px 未満) … 押すものを 40px に縮め、毎回は使わないもの
+     * - `compact` (幅 448px 未満か、16:9 より低く抑えられて高さ 300px 未満か、横にしたスマホ) … 押すものを 40px に縮め、毎回は使わないもの
      *   (音声・送り・焼き方・速さなど) を「ほか」(⋯) に畳む。読みものは
      *   一行にして押すものの上へ。スマホの縦は枠が画面の幅そのまま (端まで
      *   広げる。下の `@media`) で、いちばん広いもので 430px。
      *   縦の iPad (絵が 476px) はここに入れない — あちらは 48px の9個が一段に
-     *   収まるように幅を決めてある
+     *   収まるように幅を決めてある。
+     *   **高さでも畳む** — 幅が足りていても、300px に満たない枠に 48px の帯と右上の
+     *   一行を載せると絵がほとんど隠れる (二段組の低い窓など)。**横にしたスマホも畳む**
+     *   (枠は画面の高さいっぱいの 693x390 ほど。全部並べると読みものが数文字しか残らない)
+     * - `under` (幅で `compact` のとき。全画面は除く) … **下の帯を絵の下 (枠の外) に出す。**
+     *   スマホの縦の枠は 390x219 しか無く、帯 (シークバー・読みもの・押すもの) を
+     *   重ねると絵の半分を覆い、字幕に時刻が重なっていた。「ほか」を開くとさらに隠れる。
+     *   絵の下は余っているので、帯はそこに置いて**いつも出しておく** (絵を覆わないので
+     *   引っ込める理由が無い)。右上の一行 (閉じる・切り抜きなど) は今までどおり絵の上。
+     *   全画面では絵の周りに黒帯があるので、今までどおり重ねる
      * - `low` (高さ 360px 未満) … 右の縦列を横に寝かせて右上の一行にする。縦に
      *   4個積むと 228px、下の帯が 112px で、それより低い枠では重なる (スマホの横や
      *   縦の iPad の二段組)。**大きさは変えない**。狭い枠も低い (224px) ので、
@@ -69,28 +86,116 @@
      * 当たらない (今までどおり)。**決めるのは媒体の幅ではなく枠の大きさ** —
      * 同じ画面幅でも、二段組かどうかで絵の幅がまるで違う
      */
-    let compact = $state(false);
+    let narrow = $state(false);
+    let short = $state(false);
     let low = $state(false);
+    const compact = $derived(narrow || short);
+    /*
+     * **帯を下に出すのは幅で決めたときだけ。** 高さで決めると、帯を出したぶん枠が
+     * 高くなって外れ、外れると低くなってまた入る (行ったり来たりする)。幅は帯を
+     * 出しても変わらない
+     */
+    const under = $derived(narrow && !fullscreen.active);
     $effect(() => {
         const target = element;
         if (target === null) return;
+        /*
+         * **横にしたスマホも畳む** (`PlayerLayout` の `PHONE_LANDSCAPE`)。枠は 693x390 ほどで、
+         * 48px を全部並べると読みもの (時刻・局・番組名) が数文字しか残らず、ライブでは
+         * 「20:3…」まで潰れていた。毎回使うものだけ残して ⋯ に畳み、読みものは一行を取る
+         */
+        const phone = window.matchMedia(PHONE_LANDSCAPE);
         const measure = () => {
-            compact = target.clientWidth < 448;
+            narrow = target.clientWidth < 448;
+            /*
+             * 高さで畳むのは、**枠が 16:9 より低く抑えられているときだけ** (高さの上限 `max-height`
+             * で切られた、低い窓)。16:9 のままなら低さは幅で決まっていて、幅の線で足りる —
+             * 縦の iPad の二段組 (500x281) まで畳むと、48px の9個が一段に入る幅を捨てることになる。
+             * 幅で畳んでいるときは見ない (帯を下に出すと、枠の高さに帯が入る)
+             */
+            const height = target.clientHeight;
+            short = !narrow && ((height < 300 && height < (target.clientWidth * 9) / 16 - 1) || phone.matches);
             low = target.clientHeight < 360;
         };
         measure();
         const watcher = new ResizeObserver(measure);
         watcher.observe(target);
-        return () => watcher.disconnect();
+        phone.addEventListener('change', measure);
+        return () => {
+            watcher.disconnect();
+            phone.removeEventListener('change', measure);
+        };
+    });
+
+    /**
+     * **操作列を出している間は、字幕を操作列の上まで持ち上げる。**
+     *
+     * 帯は絵に重ねるので、下の方に出る字幕 (たいていの字幕) がシークバーと時刻の下に
+     * 潜っていた (横にしたスマホでは2行目が丸ごと隠れた)。字を描く係 (`CaptionPainter`) が
+     * 字の載っている縦の範囲を `data-ink` に書くので、帯の上端と比べて重なるぶんだけ
+     * canvas を上へずらす (`translate`)。字を縮めたりはしない — 放送の升目どおりのまま動かす。
+     *
+     * - 持ち上げるのは重なるときだけ。上の方の字幕は動かない
+     * - 枠の上端より上へは出さない (帯と字幕がどちらも長いときは、上を優先して見せる)
+     * - 帯を絵の下に出している間 (`under`) と帯を引っ込めている間は戻す
+     * - 小窓・切り抜きは canvas の中身を使うので、ずらしても影響しない
+     */
+    $effect(() => {
+        const stage = element;
+        if (stage === null) return;
+        const lifting = controls.shown && !under;
+        /*
+         * 位置は `offsetTop` で測る (枠の中の、ずらす前の位置。`translate` が効かない)。
+         * データ放送が映像の箱を BML の中へ移している間は枠まで辿れないので、動かさない
+         */
+        const offsetIn = (el: HTMLElement): number | null => {
+            let y = 0;
+            let at: Element | null = el;
+            while (at instanceof HTMLElement && at !== stage) {
+                y += at.offsetTop;
+                at = at.offsetParent;
+            }
+            return at === stage ? y : null;
+        };
+        const lift = () => {
+            const bar = stage.querySelector<HTMLElement>(':scope > [data-stage-bar]');
+            const barTop = lifting && bar !== null ? bar.offsetTop : Number.POSITIVE_INFINITY;
+            for (const canvas of stage.querySelectorAll<HTMLElement>('canvas[data-ink]')) {
+                const [inkTop = 0, inkBottom = 0] = (canvas.dataset['ink'] ?? '').split(',').map(Number);
+                const y = offsetIn(canvas);
+                let by = 0;
+                if (y !== null) {
+                    const overlap = y + inkBottom * canvas.offsetHeight - barTop + 4;
+                    const room = Math.max(0, y + inkTop * canvas.offsetHeight);
+                    by = Math.round(Math.min(Math.max(0, overlap), room));
+                }
+                canvas.style.translate = by > 0 ? `0 ${-by}px` : '';
+            }
+        };
+        lift();
+        // 字幕が替わったとき (`data-ink`)・帯や枠の大きさが変わったときに測り直す
+        const inks = new MutationObserver(lift);
+        inks.observe(stage, { subtree: true, attributes: true, attributeFilter: ['data-ink'] });
+        const sizes = new ResizeObserver(lift);
+        sizes.observe(stage);
+        const bar = stage.querySelector(':scope > [data-stage-bar]');
+        if (bar !== null) sizes.observe(bar);
+        for (const canvas of stage.querySelectorAll('canvas')) sizes.observe(canvas);
+        return () => {
+            inks.disconnect();
+            sizes.disconnect();
+            for (const canvas of stage.querySelectorAll<HTMLElement>('canvas[data-ink]')) canvas.style.translate = '';
+        };
     });
 
     /**
      * 「ほか」(⋯) を開いているか。**操作列が引っ込んだら閉じる** — 開いたまま
-     * 残すと、次に出したときに絵の半分を覆った状態から始まる
+     * 残すと、次に出したときに絵の半分を覆った状態から始まる。帯を絵の下に
+     * 出している間 (`under`) は帯が引っ込まないので、閉じるまで開いたまま
      */
     let more = $state(false);
     $effect(() => {
-        if (!controls.shown || !compact) more = false;
+        if ((!controls.shown && !under) || !compact) more = false;
     });
 </script>
 
@@ -107,6 +212,7 @@
     data-compact={compact ? '' : undefined}
     data-low={low || compact ? '' : undefined}
     data-more={more ? '' : undefined}
+    data-under={under ? '' : undefined}
     data-pseudo={fullscreen.pseudo ? '' : undefined}
     onpointermove={controls.wake}
     onpointerdown={controls.wake}
@@ -131,6 +237,9 @@
         more,
         toggleMore: () => (more = !more),
     })}
+    {#if notes}
+        <div class="notes" data-testid="{testid}-notes">{@render notes()}</div>
+    {/if}
 </div>
 
 <style>
@@ -144,6 +253,57 @@
     }
     .quiet {
         cursor: none;
+    }
+    /*
+     * **帯を絵の下に出す (`under`)。** 枠を2段の格子にし、上の段を 16:9 (`::before` が
+     * 形を持つ)、下の段を帯 (`ControlBar` の `.bottom`) にする。中身 (video・字幕・
+     * データ放送・幕・知らせ) は絶対配置のまま上の段に置く — 格子の子の絶対配置は、
+     * その段を入れ物にして `inset: 0` で収まる。中身の書き方は画面ごとに変えずに済む
+     */
+    .stage[data-under] {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr);
+        grid-template-rows: auto auto;
+        aspect-ratio: auto;
+        max-height: none;
+        min-height: 0;
+    }
+    .stage[data-under]::before {
+        content: '';
+        grid-area: 1 / 1;
+        aspect-ratio: 16 / 9;
+    }
+    /*
+     * **終わりの線まで書く。** 絶対配置の子は、終わりを `auto` にすると格子の端
+     * (枠の内側いっぱい) まで伸びる — `1 / 1` だけでは帯の段まで覆ってしまう
+     */
+    .stage[data-under] > :global(*) {
+        grid-area: 1 / 1 / 2 / 2;
+    }
+    /* 字幕の持ち上げ (上の `lift`)。帯の出入り (200ms) と同じ速さで動かす */
+    .stage :global(canvas[data-ink]) {
+        transition: translate 200ms;
+    }
+    /* 知らせの列。押せない (下の絵を押せるように)。押せる知らせは自分で戻す */
+    .notes {
+        pointer-events: none;
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        z-index: 10;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 0.25rem;
+        padding: 0.5rem;
+    }
+    .notes:empty {
+        display: none;
+    }
+    /* 低い枠では右の列が右上の一行に寝る (`ControlBar`)。その下から出す */
+    .stage[data-low] .notes {
+        padding-top: 3.25rem;
     }
     /*
      * **スマホの縦では映像を画面の端から端まで。** 余白 (`--dp-gutter`、
@@ -161,6 +321,21 @@
     @media (max-width: 639px) and (orientation: portrait) {
         .stage {
             margin-inline: calc(-1 * var(--dp-gutter, 1rem));
+        }
+    }
+    /*
+     * **横にしたスマホでは、枠を絵の形 (16:9) に合わせて真ん中に置く。** 高さは画面
+     * いっぱい (`PlayerLayout` が `.main` を画面の高さにする)、幅はそこから決める。
+     * 枠を画面の幅いっぱいにしていた頃は、絵の左右が黒帯になり、帯の端のボタンや右上の
+     * 3つが黒帯の上に出て、地 (黒い丸) が見えず半分潜ったように見えた。
+     * 条件は `PlayerLayout` の `PHONE_LANDSCAPE` と同じ
+     */
+    @media (orientation: landscape) and (max-height: 500px) and (pointer: coarse) {
+        .stage:not([data-pseudo]) {
+            align-self: center;
+            width: auto;
+            max-width: 100%;
+            height: 100%;
         }
     }
     /*
