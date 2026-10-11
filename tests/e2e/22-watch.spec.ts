@@ -1,5 +1,5 @@
 import type { APIRequestContext, Page } from '@playwright/test';
-import { expect, goto, recordOne, test, wakeControls } from './helpers';
+import { captionsClearOfBar, expect, goto, overlayTroubles, recordOne, test, wakeControls } from './helpers';
 
 /**
  * 録画をブラウザで観る画面 (`/watch/<id>`)。
@@ -609,7 +609,10 @@ test.describe('スマホの横で観る', () => {
         const stage = page.getByTestId('watch-stage');
         await expect(stage).not.toHaveAttribute('data-pseudo', '');
         await expect(page.locator('.navbar')).toBeHidden();
-        await expect.poll(() => stage.boundingBox()).toEqual({ x: 0, y: 0, width: 844, height: 390 });
+        // 枠は絵の形 (16:9) で、高さいっぱい・真ん中。左右の黒帯にボタンを出さない
+        await expect
+            .poll(async () => roundBox(await stage.boundingBox()))
+            .toEqual({ x: 75, y: 0, width: 693, height: 390 });
 
         const bar = page.getByTestId('watch-controls');
         if ((await bar.getAttribute('data-shown')) !== 'true') {
@@ -623,6 +626,10 @@ test.describe('スマホの横で観る', () => {
         // シークバーは絵の下の方 (真ん中に来ると、絵を押したつもりで位置が飛ぶ)
         const seek = (await bar.getByRole('slider').boundingBox())!;
         expect(seek.y).toBeGreaterThan(390 * 0.6);
+        // どのボタンも重ならず、絵の枠の中に丸ごと見える (右上の3つも)
+        expect(await overlayTroubles(page, 'watch-stage')).toEqual([]);
+        // 帯は絵に重ねるので、下の方の字幕は帯の上まで持ち上がる
+        await captionsClearOfBar(page, 'watch-captions-canvas', 'watch-controls');
 
         // 右の列 (番組の中身) は消さずに絵の下へ。巻き取れば読める
         const facts = page.getByTestId('watch-facts');
@@ -768,3 +775,14 @@ test.describe('iPhone で全画面', () => {
         await restored();
     });
 });
+
+function roundBox(box: { x: number; y: number; width: number; height: number } | null) {
+    return box === null
+        ? null
+        : {
+              x: Math.round(box.x),
+              y: Math.round(box.y),
+              width: Math.round(box.width),
+              height: Math.round(box.height),
+          };
+}

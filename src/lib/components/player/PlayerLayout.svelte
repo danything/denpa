@@ -84,6 +84,8 @@
         .main {
             flex: none;
             height: 100dvh;
+            /* 絵の形の枠 (`PlayerStage`) の左右は黒。テーマの地を絵の横に出さない */
+            background: #000;
         }
         .layout > :global(aside) {
             width: auto;

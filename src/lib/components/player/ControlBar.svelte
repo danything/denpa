@@ -72,7 +72,15 @@
      */
 </script>
 
-<div class="bar" class:side class:bottom={!side} class:away={!shown} data-testid={testid} data-shown={shown}>
+<div
+    class="bar"
+    class:side
+    class:bottom={!side}
+    class:away={!shown}
+    data-testid={testid}
+    data-shown={shown}
+    data-stage-bar={side ? undefined : ''}
+>
     {@render children()}
 </div>
 

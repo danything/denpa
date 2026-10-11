@@ -1,7 +1,18 @@
 import { existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import type { Locator } from '@playwright/test';
 import { BS_NO_LOGO, SERVICES } from '../fake/services';
-import { airing, cellOf, expect, goto, syncEpg, test, upcoming, wakeControls } from './helpers';
+import {
+    airing,
+    captionsClearOfBar,
+    cellOf,
+    expect,
+    goto,
+    overlayTroubles,
+    syncEpg,
+    test,
+    upcoming,
+    wakeControls,
+} from './helpers';
 
 /**
  * 偽 ffmpeg が残した引数を1回ぶんずつに切って、最後の1回を返す。
@@ -1556,7 +1567,15 @@ test.describe('スマホの横でライブ', () => {
 
         const stage = page.getByTestId('live-frame');
         await expect(page.locator('.navbar')).toBeHidden();
-        await expect.poll(() => stage.boundingBox()).toEqual({ x: 0, y: 0, width: 844, height: 390 });
+        // 枠は絵の形 (16:9) で、高さいっぱい・真ん中。左右の黒帯にボタンを出さない
+        await expect
+            .poll(async () => {
+                const box = await stage.boundingBox();
+                return box === null
+                    ? null
+                    : [Math.round(box.x), Math.round(box.y), Math.round(box.width), Math.round(box.height)];
+            })
+            .toEqual([75, 0, 693, 390]);
 
         const bar = page.getByTestId('live-controls');
         if ((await bar.getAttribute('data-shown')) !== 'true') {
@@ -1566,6 +1585,12 @@ test.describe('スマホの横でライブ', () => {
         const play = (await page.getByTestId('live-play').boundingBox())!;
         const full = (await page.getByTestId('live-full').boundingBox())!;
         expect(Math.abs(play.y - full.y)).toBeLessThan(2);
+        // どのボタンも重ならず、絵の枠の中に丸ごと見える (右上の3つも)
+        expect(await overlayTroubles(page, 'live-frame')).toEqual([]);
+        // 帯は絵に重ねるので、下の方の字幕は帯の上まで持ち上がる。帯が引っ込めば戻る
+        await captionsClearOfBar(page, 'live-captions', 'live-controls');
+        await expect(bar).toHaveAttribute('data-shown', 'false', { timeout: 6000 });
+        await expect(page.getByTestId('live-captions')).toHaveCSS('translate', 'none');
 
         // 一覧は絵の下。巻き取って別の局を選べ、選んだら絵へ戻る
         const second = channels.nth(1);

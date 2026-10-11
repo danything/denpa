@@ -391,3 +391,63 @@ export async function wakeControls(page: Page, stage: string): Promise<void> {
     await page.mouse.move(x, y);
     await page.mouse.move(x, y - 4);
 }
+
+/**
+ * 舞台の上の押すもの (`.ov-btn`) が**丸ごと見えているか**を見る。どれか2つが重なって
+ * いないか (箱が交わらないか)、枠からはみ出していないか。見えていないもの (畳んだもの・
+ * 幅 0) は数えない。返すのは困りごとの一覧 (空なら良し)
+ */
+export async function overlayTroubles(page: Page, stage: string): Promise<string[]> {
+    return page.evaluate((testid) => {
+        const root = document.querySelector(`[data-testid="${testid}"]`);
+        if (root === null) return [`${testid} がありません`];
+        const frame = root.getBoundingClientRect();
+        const name = (el: Element) =>
+            el.getAttribute('data-testid') ?? el.getAttribute('aria-label') ?? el.textContent;
+        const boxes = [...root.querySelectorAll('.ov-btn')]
+            .map((el) => ({ el, r: el.getBoundingClientRect() }))
+            .filter(({ r }) => r.width > 0 && r.height > 0);
+        const troubles: string[] = [];
+        for (const { el, r } of boxes) {
+            if (
+                r.left < frame.left - 0.5 ||
+                r.right > frame.right + 0.5 ||
+                r.top < frame.top - 0.5 ||
+                r.bottom > frame.bottom + 0.5
+            )
+                troubles.push(`${name(el)} が枠の外`);
+        }
+        for (let i = 0; i < boxes.length; i++) {
+            for (let j = i + 1; j < boxes.length; j++) {
+                const a = boxes[i]!.r;
+                const b = boxes[j]!.r;
+                const w = Math.min(a.right, b.right) - Math.max(a.left, b.left);
+                const h = Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top);
+                if (w > 0.5 && h > 0.5)
+                    troubles.push(`${name(boxes[i]!.el)} と ${name(boxes[j]!.el)} が重なる`);
+            }
+        }
+        return troubles;
+    }, stage);
+}
+
+/**
+ * **字幕は操作列の下に潜らない** (`PlayerStage` の持ち上げ)。字幕の canvas に「下の方に
+ * 字が載っている」(`data-ink`。描く係が書くもの) と書き込み、字の下端が帯の上端より
+ * 上へ来るのを待つ。偽の放送には字幕が乗っていないので、載っている範囲だけを作る
+ */
+export async function captionsClearOfBar(page: Page, canvas: string, bar: string): Promise<void> {
+    await page.getByTestId(canvas).evaluate((el) => el.setAttribute('data-ink', '0.8000,0.9700'));
+    await expect
+        .poll(() =>
+            page.evaluate(
+                ([c, b]) => {
+                    const canvasBox = document.querySelector(`[data-testid="${c}"]`)!.getBoundingClientRect();
+                    const barBox = document.querySelector(`[data-testid="${b}"]`)!.getBoundingClientRect();
+                    return Math.round(canvasBox.top + canvasBox.height * 0.97 - barBox.top);
+                },
+                [canvas, bar] as const,
+            ),
+        )
+        .toBeLessThanOrEqual(0);
+}

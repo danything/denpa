@@ -223,6 +223,22 @@ function drawRun(
 }
 
 /**
+ * 字の載っている縦の範囲 `[上, 下]` (面の高さに対する割合 0〜1)。背景の区画まで含める。
+ * 操作列と重なるかを舞台が見るのに使う (`PlayerStage` の持ち上げ)。字が無ければ `[0, 0]`
+ */
+export function inkSpan(page: CaptionPage): [number, number] {
+    const height = page.plane[1];
+    if (page.runs.length === 0 || height <= 0) return [0, 0];
+    let top = Number.POSITIVE_INFINITY;
+    let bottom = 0;
+    for (const run of page.runs) {
+        top = Math.min(top, run.y);
+        bottom = Math.max(bottom, run.y + run.h);
+    }
+    return [Math.max(0, top / height), Math.min(1, bottom / height)];
+}
+
+/**
  * 1枚の canvas に字幕を出し続ける係。**出すものが変わったら `show` を呼ぶだけ。**
  *
  * - canvas の大きさを画面の画素に合わせ直す (全画面の出入りで描き直す)
@@ -283,6 +299,7 @@ export class CaptionPainter {
             if (!this.painted) return;
             this.painted = false;
             delete canvas.dataset['drawn'];
+            delete canvas.dataset['ink'];
             ctx.clearRect(0, 0, canvas.width, canvas.height);
             return;
         }
@@ -300,6 +317,11 @@ export class CaptionPainter {
         }
         ctx.clearRect(0, 0, width, height);
         canvas.dataset['drawn'] = '';
+        // 字の載っている縦の範囲 (canvas の高さに対する割合)。操作列と重なるときに舞台が字幕を持ち上げる (`PlayerStage`)
+        const [top, bottom] = inkSpan(page);
+        const tall = canvas.clientHeight || 1;
+        canvas.dataset['ink'] =
+            `${((box.top + top * box.height) / tall).toFixed(4)},${((box.top + bottom * box.height) / tall).toFixed(4)}`;
         this.painted = true;
         drawPage(ctx, page, performance.now());
     }
