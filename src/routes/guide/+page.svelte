@@ -1,7 +1,8 @@
 <script lang="ts">
-    import { untrack } from 'svelte';
+    import { tick, untrack } from 'svelte';
     import { dragScroll, submitting } from '#lib/actions.js';
     import ProgramDetail from '#lib/components/ProgramDetail.svelte';
+    import Icon from '#lib/components/player/Icon.svelte';
     import ServiceLogo from '#lib/components/ServiceLogo.svelte';
     import { startDownload } from '#lib/download.js';
     import { channelNumber, date, SERVICE_TYPE_LABEL, stateLabel, time } from '#lib/format.js';
@@ -10,6 +11,7 @@
     import type { ProgramDetail as Facts } from '#lib/types.js';
     import { preloadData } from '$app/navigation';
     import { resolve } from '$app/paths';
+    import SearchIcon from '~icons/lucide/search';
 
     let { data, form } = $props();
 
@@ -386,6 +388,23 @@
         return () => cancelIdleCallback(handle);
     });
 
+    /**
+     * **狭い画面では検索欄を畳み、虫眼鏡のボタンで開く。**
+     *
+     * 種別・日送り・検索を折り返して並べると、スマホの幅 (390px) では表の上に
+     * 4段・250px ほどの操作欄が積まれ、表が画面の下半分に押し込まれていた。
+     * 番組表で毎回触るのは種別と日送りで、検索はたまにしか使わない。
+     * 広い画面 (768px 以上) では今までどおり右端に出しておく (CSS で切り替える)
+     */
+    let searching = $state(false);
+    let keyword: HTMLInputElement | null = $state(null);
+    async function openSearch(): Promise<void> {
+        searching = !searching;
+        if (!searching) return;
+        await tick();
+        keyword?.focus();
+    }
+
     /** 予約を取り消せるのはこれから録るものだけ。録り終わったものに出しても何も起きない */
     const CANCELABLE = ['scheduled', 'conflict', 'recording'];
 </script>
@@ -415,11 +434,11 @@
         </div>
 
         <!-- 日送りは種別のすぐ隣。どちらも「表のどこを見るか」の操作なので離さない -->
-        <div class="cluster">
+        <div class="cluster days">
             <a class="button small secondary outline" href={prevHref} data-testid="prev-day">← 前日</a>
-            <span class="small">
-                <!-- 日本の番組表の慣習で、1日は4時から翌4時まで -->
-                {date(data.start)} <span class="muted">(4:00〜翌4:00)</span>
+            <span class="small nowrap">
+                <!-- 日本の番組表の慣習で、1日は4時から翌4時まで。狭い画面では日付だけ -->
+                {date(data.start)} <span class="muted hours">(4:00〜翌4:00)</span>
             </span>
             <a class="button small secondary outline" href={nextHref} data-testid="next-day">翌日 →</a>
             <a class="button small secondary outline" href={href({})}>今日</a>
@@ -452,12 +471,33 @@
         編集はルール画面に寄せてあり (条件を2箇所で書けるようにすると判定が
         ずれる)、探す範囲もあちらで切り替える。既定は番組名だけ
     -->
+        <!-- 狭い画面だけ出る。押すと下の検索欄が1段だけ開く (上の `searching`) -->
+        <button
+            type="button"
+            class="small secondary outline search-toggle"
+            aria-label="番組を探す"
+            aria-expanded={searching}
+            aria-controls="guide-search"
+            onclick={() => void openSearch()}
+            data-testid="guide-search-toggle"
+        >
+            <Icon icon={SearchIcon} size="size-4" />
+        </button>
         <!-- role="search" で入力欄とボタンを1本につなぐ (Pico)。種別の切り替えと同じ見た目の決まり -->
-        <form method="GET" action={resolve('rules')} role="search" class="search" data-testid="guide-filter">
+        <form
+            id="guide-search"
+            method="GET"
+            action={resolve('rules')}
+            role="search"
+            class="search"
+            class:open={searching}
+            data-testid="guide-filter"
+        >
             <input
                 type="search"
                 name="keyword"
-                placeholder="全チャンネルの番組名で検索"
+                bind:this={keyword}
+                placeholder="全局の番組名で検索"
                 class="keyword"
                 data-testid="filter-keyword"
             />
@@ -503,7 +543,7 @@
             <p class="muted">
                 {SERVICE_TYPE_LABEL[
                     data.type
-                ]}のチャンネルがありません。チューナー画面でチャンネルスキャンを実行してください。
+                ]}の局がありません。チューナー画面でチャンネルスキャンを実行してください。
             </p>
         </div>
     {:else}
@@ -776,7 +816,7 @@
                     >
                         <input type="hidden" name="programId" value={program.id} />
                         <button type="submit" class="danger outline" data-testid="detail-cancel">
-                            予約を取り消す
+                            予約取消
                         </button>
                     </form>
                 {:else if program.reservation_state === null && program.end_at > clock}
@@ -796,7 +836,7 @@
                             }}
                     >
                         <input type="hidden" name="programId" value={program.id} />
-                        <button type="submit" data-testid="detail-reserve">予約する</button>
+                        <button type="submit" data-testid="detail-reserve">予約</button>
                     </form>
                 {/if}
 
@@ -827,6 +867,42 @@
         height: auto;
         padding-block: 0.3rem;
         font-size: 0.85rem;
+    }
+    .search-toggle {
+        display: none;
+    }
+    /*
+     * **狭い画面は2段にまとめる** (上の `searching`)。1段目に種別と虫眼鏡、2段目に
+     * 日送り (前日・日付・翌日・今日を1行)。検索欄は虫眼鏡で開いたときだけ3段目に出る。
+     * 並べ替えは `order` で — DOM の順 (種別 → 日送り → 検索) は読み上げの順なので変えない
+     */
+    @media (max-width: 767px) {
+        .days {
+            order: 1;
+            flex-basis: 100%;
+            flex-wrap: nowrap;
+        }
+        .hours {
+            display: none;
+        }
+        .search-toggle {
+            display: inline-flex;
+            align-items: center;
+            margin-left: auto;
+        }
+        .search {
+            display: none;
+        }
+        .search.open {
+            display: flex;
+            order: 2;
+            flex-basis: 100%;
+            margin-left: 0;
+        }
+        .search.open .keyword {
+            width: auto;
+            flex: 1 1 0%;
+        }
     }
     .empty {
         padding: 1.5rem;
@@ -1089,6 +1165,20 @@
     .program[data-state="recording"] {
         --tint: var(--dp-rec);
     }
+    /*
+     * **競合は予約済みと同じ青にしない。** 青のままだと「録れる」に見え、
+     * チューナーが足りずに落ちる番組を表の上で見落とす。一覧の札
+     * (`format.ts` の `badgeClass`。赤い字と赤い枠) と同じ色にそろえる。
+     * 録画中 (赤く塗ったマス) と見分けるため、**地は塗らずに枠と字だけ**赤くする —
+     * 「いま動いているもの」だけを塗る決まり (`app.css`) のとおり
+     */
+    .program[data-state="conflict"] {
+        --tint: var(--dp-rec);
+        background: var(--dp-surface);
+    }
+    .program[data-state="conflict"]:hover {
+        background: color-mix(in srgb, var(--tint) var(--wash), var(--dp-surface));
+    }
     .title {
         display: block;
         font-size: 0.75rem;
@@ -1104,7 +1194,7 @@
         font-weight: 500;
         color: var(--pico-primary);
     }
-    .program[data-state="recording"] .state {
+    .program:is([data-state="recording"], [data-state="conflict"]) .state {
         color: var(--dp-rec-text);
     }
     /* 説明は番組名より一段だけ控える。0.6 まで落とすと淡い下地の上で字が溶けた */

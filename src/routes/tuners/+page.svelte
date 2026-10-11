@@ -30,6 +30,15 @@
 
     /** チューナーが受けられる種別。設定の表で並べる順 */
     const TYPES = ['GR', 'BS', 'CS'] as const;
+    /**
+     * 衛星の給電の選び方。値はエージェントが読む字のまま (小文字。`agent/Denpa.Agent/Tuning.cs`)。
+     * 設定ファイルに手で書いた別の値は、消さずに選べるものとして足す (表の `lnbChoices`)
+     */
+    const LNB_CHOICES = [
+        { value: '', label: 'なし' },
+        { value: '15v', label: '15V' },
+        { value: '11v', label: '11V' },
+    ];
     /** スキャンの状態の呼び名。共通のものに、スキャンだけの2つを足す */
     const STATE_LABEL: Record<string, string> = { ...SHARED_STATE_LABEL, canceled: '中断', idle: '待機中' };
 
@@ -144,7 +153,7 @@
                     同じものの数に見えて「残り65はどこへ行った」となっていた。
                     この3つは入れ子で、数がそろわないのが当たり前:
 
-                      周波数 (T19, BS15_0) ┬ 局 (TOKYO MX1) ─ 番組表
+                      チャンネル (T19, BS15_0) ┬ 局 (TOKYO MX1) ─ 番組表
                                           └ 局 (TOKYO MX2) ─ 番組表
 
                     局と番組表を分けて出すのも、混ざりやすいから。
@@ -152,7 +161,7 @@
                     埋まる時期がずれる (局はあるのに番組表が空、が普通にある)
                 -->
                 <div class="small" data-testid="channel-coverage">
-                    <span class="soft">周波数</span>
+                    <span class="soft">チャンネル</span>
                     <strong>{coverage.length}</strong>
                     <span class="faint">→</span>
                     <span class="soft">局</span>
@@ -166,7 +175,7 @@
                     上のボタンが何をするものかは「詳しく」に畳む
                 -->
                 <div class="note-block">
-                    <div class="small soft">1つの周波数に複数の局が乗るので、周波数と局の数はそろいません</div>
+                    <div class="small soft">1つのチャンネルに複数の局が乗るので、チャンネルと局の数はそろいません</div>
                     <details class="more">
                         <summary>詳しく</summary>
                         <p>番組表はスキャンのあと、局ごとに埋まっていきます。</p>
@@ -182,7 +191,7 @@
                     </details>
                 </div>
                 <!-- カードの中で巻かない。長くても全部並べる (巻くのはページごと) -->
-                <div class="table-wrap">
+                <div class="table-wrap channels-wrap">
                     <table>
                         <thead>
                             <tr>
@@ -268,7 +277,7 @@
                 -->
                 <div class="cluster">
                     <button type="submit" disabled={scan.state === 'running'} data-testid="scan-start">
-                        {scan.state === 'running' ? '実行中…' : '開始する'}
+                        {scan.state === 'running' ? '実行中…' : '開始'}
                     </button>
                     {#if scan.state === 'running'}
                         <!--
@@ -281,7 +290,7 @@
                             class="outline danger"
                             formaction="?/scanStop"
                         >
-                            中断する
+                            中断
                         </button>
                     {/if}
                 </div>
@@ -329,8 +338,8 @@
             {#if shownTuners.value !== undefined}
                 {@const rows = [...shownTuners.value.list, null]}
                 <form method="POST" action="?/tuners" use:submitting>
-                    <div class="table-wrap config-wrap">
-                        <table class="config">
+                    <div class="table-wrap config-wrap stack-wrap">
+                        <table class="config stack">
                             <thead>
                                 <tr>
                                     <th>名前</th>
@@ -342,24 +351,30 @@
                             </thead>
                             <tbody>
                                 {#each rows as tuner, index (index)}
+                                    {@const lnb = tuner?.lnb ?? ''}
+                                    {@const lnbChoices = LNB_CHOICES.some((choice) => choice.value === lnb)
+                                        ? LNB_CHOICES
+                                        : [...LNB_CHOICES, { value: lnb, label: lnb }]}
                                     <tr data-testid="tuner-config-row">
-                                        <td>
+                                        <td class="span" data-label="名前">
                                             <input
                                                 class="w-name"
+                                                aria-label="名前"
                                                 name={`name.${index}`}
                                                 value={tuner?.name ?? ''}
                                                 placeholder={tuner === null ? '名前を入れて追加' : ''}
                                             />
                                         </td>
-                                        <td>
+                                        <td class="span" data-label="デバイス">
                                             <input
                                                 class="w-device mono tiny"
+                                                aria-label="デバイス"
                                                 name={`device.${index}`}
                                                 value={tuner?.device ?? ''}
                                                 placeholder="/dev/dvb/adapter0/frontend0"
                                             />
                                         </td>
-                                        <td class="types-cell">
+                                        <td class="types-cell span" data-label="受信できる種別">
                                             {#each TYPES as type (type)}
                                                 <label class="check type-check">
                                                     <input
@@ -371,19 +386,24 @@
                                                 </label>
                                             {/each}
                                         </td>
-                                        <td>
-                                            <input
-                                                class="w-lnb"
-                                                name={`lnb.${index}`}
-                                                value={tuner?.lnb ?? ''}
-                                                placeholder="15v"
-                                            />
+                                        <td data-label="LNB">
+                                            <!--
+                                                **選ばせる。打たせない。** エージェントが読むのは小文字の
+                                                `15v` / `11v` だけで (`Tuning.cs`)、`15V` と打つと黙って
+                                                給電されない。見せる字は大文字 (電圧の書き方)
+                                            -->
+                                            <select class="w-lnb" name={`lnb.${index}`} aria-label="LNB">
+                                                {#each lnbChoices as choice (choice.value)}
+                                                    <option value={choice.value} selected={choice.value === lnb}>{choice.label}</option>
+                                                {/each}
+                                            </select>
                                         </td>
-                                        <td>
+                                        <td data-label="無効">
                                             <input
                                                 type="checkbox"
                                                 name={`disabled.${index}`}
                                                 checked={tuner?.disabled ?? false}
+                                                aria-label="無効"
                                             />
                                         </td>
                                     </tr>
@@ -394,7 +414,7 @@
                     <p class="tiny muted note">名前を空にすると、その行は消えます。</p>
                     <div class="cluster actions">
                         <button type="submit" class="small" data-testid="tuner-config-save">
-                            保存する
+                            保存
                         </button>
                         <button
                             type="submit"
@@ -435,8 +455,8 @@
                         チューナーがありません。「チューナーの設定」から追加してください。
                     </p>
                 {:else}
-                    <div class="table-wrap">
-                        <table>
+                    <div class="table-wrap stack-wrap">
+                        <table class="stack">
                             <thead>
                                 <tr>
                                     <th>名前</th>
@@ -448,11 +468,11 @@
                             <tbody data-testid="tuner-list">
                                 {#each tuners as tuner (tuner.index)}
                                     <tr data-testid="tuner-row" data-tuner-index={tuner.index}>
-                                        <td class="nowrap">{tuner.name}</td>
-                                        <td class="nowrap small">
+                                        <td class="nowrap" data-label="名前">{tuner.name}</td>
+                                        <td class="nowrap small" data-label="種別">
                                             {tuner.types.map((t) => SERVICE_TYPE_LABEL[t] ?? t).join('/')}
                                         </td>
-                                        <td class="nowrap">
+                                        <td class="nowrap" data-label="状態">
                                             <!-- 何を掴んでいるかも出す。空き/使用中だけでは追えない -->
                                             {#if tuner.disabled}
                                                 <span class="tag">無効</span>
@@ -469,7 +489,7 @@
                                                 </div>
                                             {/if}
                                         </td>
-                                        <td class="small">
+                                        <td class="small span" data-label="使っているもの">
                                             <!--
                                                 **「優先度」とは呼ばない。**
 
@@ -515,7 +535,7 @@
                     {:else}
                         {@const card = shownCard.value}
                         <span class="tag {card.ok ? 'success' : 'error'}" data-testid="status-card-reader">
-                            {card.ok ? 'OK' : 'NG'}
+                            {card.ok ? '正常' : 'エラー'}
                         </span>
                         {#if card.source === 'remote'}
                             <!-- CARD_URL。手元のリーダーは使わず、鍵だけ貰っている -->
@@ -543,8 +563,8 @@
                         </div>
                     {/if}
                     {#if card.readers.length > 0}
-                        <div class="table-wrap">
-                            <table>
+                        <div class="table-wrap stack-wrap">
+                            <table class="stack">
                                 <thead>
                                     <tr>
                                         <th>カードリーダー</th>
@@ -563,7 +583,7 @@
                                                 break-all にしていた頃は、狭い列で「Gempl / us US / B Sma…」と
                                                 1文字ずつ折れて読めなかった。折るのは単語の区切りで
                                             -->
-                                            <td class="reader-name">
+                                            <td class="reader-name span" data-label="カードリーダー">
                                                 <span data-testid="card-reader-name">{label.name}</span>
                                                 {#if label.where !== null}
                                                     <div class="tiny muted mono" data-testid="card-reader-where">
@@ -571,14 +591,14 @@
                                                     </div>
                                                 {/if}
                                             </td>
-                                            <td class="nowrap small mono">
+                                            <td class="nowrap small mono" data-label="カード (番号)">
                                                 {#if reader.ids.length > 0}
                                                     {reader.ids.join(' / ')}
                                                 {:else}
                                                     <span class="muted">—</span>
                                                 {/if}
                                             </td>
-                                            <td class="nowrap">
+                                            <td class="nowrap" data-label="状態">
                                                 <span class="tag {READER_STATE[reader.state].tone}">
                                                     {READER_STATE[reader.state].label}
                                                 </span>
@@ -588,7 +608,7 @@
                                                     </div>
                                                 {/if}
                                             </td>
-                                            <td class="small">
+                                            <td class="small span" data-label="使っているチューナー">
                                                 {#if reader.tuners.length > 0}
                                                     {reader.tuners.join('、')}
                                                 {:else}
@@ -753,7 +773,7 @@
      * では列が 675px しかなく、中に横スクロールが出ていた。
      * デバイスの欄だけを伸び縮みさせて、余った幅を全部そこにあげる。
      * 列が狭い (44rem 未満) ときは種別を縦に積んで詰める。
-     * それでも入らない幅 (スマートフォン) だけ、中で横に巻く
+     * それでも入らない幅 (スマートフォン) は、行を1枚ずつのカードにする (下の 32rem)
      */
     .config-wrap {
         container-type: inline-size;
@@ -783,6 +803,19 @@
     .table-wrap td {
         padding: 0.35rem 0.5rem;
     }
+    /*
+     * 受信できるチャンネルの表は、スマートフォンの幅では欄の間を詰める。
+     * 局の欄が幅を取り、右端の「10/13 まで」が枠の外へ押し出されていた
+     */
+    .channels-wrap {
+        container-type: inline-size;
+    }
+    @container (max-width: 32rem) {
+        .channels-wrap th,
+        .channels-wrap td {
+            padding-inline: 0.3rem;
+        }
+    }
     .wide {
         width: 100%;
     }
@@ -803,10 +836,68 @@
         font-size: 0.75rem;
         white-space: pre-wrap;
     }
-    .config input:not([type='checkbox']) {
+    .config :is(input:not([type='checkbox']), select) {
         height: auto;
+        margin: 0;
         padding: 0.25rem 0.5rem;
         font-size: 0.85rem;
+    }
+    .config select {
+        padding-inline-end: 2rem;
+    }
+    /*
+     * **スマートフォンの幅では、表をやめて1行ずつのカードにする** (設定の通知先と同じ形。`.stack`)。
+     * 横に巻かせていた頃は、チューナーの設定の受信できる種別・LNB・無効、空きの「使っているもの」、
+     * カードリーダーの状態が枠の外にあって、横になぞらないと見えなかった (デバイスも途中で切れていた)。
+     * 見出しの行は隠し、欄ごとに見出しを上に書く (`data-label`)。
+     * 2つずつ並べ、長いもの (`.span`) は1段を使う
+     */
+    .stack-wrap {
+        container-type: inline-size;
+    }
+    @container (max-width: 32rem) {
+        .stack,
+        .stack tbody,
+        .stack td {
+            display: block;
+        }
+        .stack thead {
+            display: none;
+        }
+        .stack tr {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 0.5rem 0.75rem;
+            padding-block: 0.75rem;
+            border-top: 1px solid var(--dp-base-300);
+        }
+        .stack tr:first-child {
+            border-top: 0;
+        }
+        .table-wrap .stack td {
+            padding: 0;
+            border: 0;
+            background: transparent;
+        }
+        .stack td::before {
+            content: attr(data-label);
+            display: block;
+            margin-bottom: 0.25rem;
+            font-size: 0.8rem;
+            font-weight: 500;
+            opacity: 0.7;
+        }
+        .stack .span {
+            grid-column: 1 / -1;
+        }
+        .config :is(.w-name, .w-device) {
+            width: 100%;
+            min-width: 0;
+        }
+        .types-cell .type-check {
+            display: inline-flex;
+            margin-right: 1rem;
+        }
     }
     .w-name {
         width: 8rem;

@@ -683,7 +683,7 @@ async function reapply(rule?: number): Promise<number> {
 }
 
 /** 条件が空だと全番組にマッチしてディスクを埋めるので作らせない */
-const EMPTY_RULE = 'キーワード・チャンネル・ジャンルのいずれかを指定してください';
+const EMPTY_RULE = 'キーワード・局・ジャンルのいずれかを指定してください';
 
 /**
  * create と update で同じもの。**焼き方は書かない** — エンコードもCMも全体設定で、

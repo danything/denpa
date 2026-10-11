@@ -688,7 +688,7 @@
                     busy={player.state === 'connecting'}
                     note={player.resuming ? '繋ぎ直しています' : ''}
                     error={player.state === 'error' ? player.message : ''}
-                    idle="チャンネルを選んでください"
+                    idle="局を選んでください"
                     testid="live-status"
                 >
                     {#snippet actions()}
@@ -737,7 +737,7 @@
             <ProgramFacts program={detail.current} />
             {#snippet footer()}
                 <button type="button" class="small secondary" onclick={() => detail.close()} data-testid="live-detail-close">
-                    チャンネル一覧へ戻る
+                    局の一覧へ戻る
                 </button>
             {/snippet}
         </FactsAside>

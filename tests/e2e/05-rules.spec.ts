@@ -38,7 +38,7 @@ test.describe('自動予約ルール', () => {
         await goto(page, '/rules');
         await page.getByTestId('rule-submit').click();
         await expect(page.getByTestId('rule-error')).toContainText(
-            'キーワード・チャンネル・ジャンルのいずれかを指定してください',
+            'キーワード・局・ジャンルのいずれかを指定してください',
         );
         await expect(page.getByTestId('rule-row')).toHaveCount(0);
         // 1件も無いときは、空の札の隅ではなく真ん中に、次にすることまで出す

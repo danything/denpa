@@ -611,7 +611,7 @@ interface SweepState {
     /** 見終えた物理チャンネル数と、その総数 */
     done: number;
     total: number;
-    /** 拾えた局の数 */
+    /** この取得を始めてからロゴが書き込まれた局の数 (`writtenSince`) */
     found: number;
     /** いまの様子、または終わった理由。そのまま画面に出す */
     message: string;
@@ -654,7 +654,12 @@ function update(patch: Partial<SweepState>): void {
  * 1つ取りかかるたびに空きを見る。録画が始まったのに開きに行くと、掴めないまま
  * 待つことを人数ぶん繰り返すことになる。
  */
-async function drain(queue: Target[], parallel: number, signal: AbortSignal): Promise<void> {
+async function drain(
+    queue: Target[],
+    parallel: number,
+    signal: AbortSignal,
+    stamps: Map<number, number>,
+): Promise<void> {
     /** 空きが無くなった種別。**その種別だけ**諦める (衛星の満杯で地上波を止めない) */
     const full = new Set<string>();
     const worker = async () => {
@@ -677,11 +682,11 @@ async function drain(queue: Target[], parallel: number, signal: AbortSignal): Pr
             update({ channels: [...state.channels, target.channel] });
             // 衛星のカルーセルは十数分に一度しか来ない。当たりの中継はそれまで待つ
             const limit = target.type === 'GR' ? SWEEP_TIMEOUT : SATELLITE_TIMEOUT;
-            const got = await collect(target, limit, signal);
+            await collect(target, limit, signal);
             update({
                 channels: state.channels.filter((channel) => channel !== target.channel),
                 done: state.done + 1,
-                found: state.found + got,
+                found: writtenSince(stamps),
             });
         }
     };
@@ -790,10 +795,54 @@ async function settled(): Promise<boolean> {
     return !state.running;
 }
 
+/**
+ * 各局のロゴの書き込み時刻 (無ければ 0)。取得を始める前に控えておく。
+ *
+ * **拾えた数は「開いた中継で減った数」では数えない。** 1つのTSに他の中継の局の
+ * ロゴが乗ってくることがあり (衛星は1つの中継に全局ぶん。偽の放送 (`tests/fake`) は
+ * 地上波も各中継に全局ぶん流す)、開いた中継の局だけを数えていた頃は、画面の「14 / 14 局」の下に
+ * 「12 局のロゴを取得しました」と出ていた。相乗り (`ride`) が同じ間に拾ったものも
+ * 入らなかった。**この取得の間にロゴが書き込まれた局**を数えれば、どこから来ても数が合う
+ */
+export function logoStamps(ids: Iterable<number> = currentServices().map((s) => s.id)): Map<number, number> {
+    const stamps = new Map<number, number>();
+    for (const id of ids) stamps.set(id, writtenAt(id));
+    return stamps;
+}
+
+/** その局のロゴを書き込んだ時刻。まだ持っていなければ 0 */
+function writtenAt(serviceId: number): number {
+    try {
+        return statSync(logoPath(serviceId)).mtimeMs;
+    } catch {
+        return 0;
+    }
+}
+
+/**
+ * 控えた時刻 (`logoStamps`) よりあとにロゴが書き込まれた局の数。
+ *
+ * 数えるのは**いまの局**。取得の途中で局の取り込みが走ると、控えたときには無かった
+ * 局が増える — そういう局は「控えた時刻 0」(何も持っていなかった) とみなす。
+ * 控えにだけあって今は無い局 (消えた局) は数えない
+ */
+export function writtenSince(
+    stamps: Map<number, number>,
+    ids: Iterable<number> = currentServices().map((s) => s.id),
+): number {
+    let count = 0;
+    for (const id of ids) {
+        const now = writtenAt(id);
+        if (now > 0 && now > (stamps.get(id) ?? 0)) count++;
+    }
+    return count;
+}
+
 /** 実際に回すところ。走っている印を立て、終わったら結果を残す */
 async function run(targets: Target[], parallel: number): Promise<void> {
     const controller = new AbortController();
     inflight = controller;
+    const stamps = logoStamps();
     state = {
         running: true,
         channels: [],
@@ -806,18 +855,26 @@ async function run(targets: Target[], parallel: number): Promise<void> {
     };
     emit('logos');
     try {
-        await drain([...targets], parallel, controller.signal);
+        await drain([...targets], parallel, controller.signal, stamps);
     } finally {
         inflight = null;
-        const left = missing().length;
+        const found = writtenSince(stamps);
+        /*
+         * 残りも**局で**数える (画面の「14 / 14 局」と同じ物差し)。取りに行くチャンネルの
+         * 数 (`missing`) で「未取得のチャンネルは残り N」と出していた頃は、局の数と並べて
+         * 何の数なのか読めなかった。放送に載っていない局は残りに入れない
+         */
+        const { have, total, unavailable } = stats();
+        const left = total - have - unavailable;
         update({
             running: false,
             channels: [],
             finishedAt: Date.now(),
+            found,
             message:
                 state.message !== ''
                     ? state.message
-                    : `${state.found} 局のロゴを取得しました (未取得のチャンネルは残り ${left})`,
+                    : `${found} 局のロゴを取得しました${left > 0 ? ` (まだの局は残り ${left})` : ''}`,
         });
         if (state.found > 0) console.log(`[logo] ${state.message}`);
         emit('services');

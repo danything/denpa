@@ -31,7 +31,8 @@
             list.push({
                 key: 'webhook-tested',
                 kind: form.tested === 'ok' ? 'success' : 'error',
-                text: `テスト送信の結果: ${form.tested}`,
+                // 届いたら `ok` が返る (`server/webhook.ts`)。英語の札のまま出さない
+                text: form.tested === 'ok' ? 'テスト送信が届きました' : `テスト送信に失敗しました: ${form.tested}`,
             });
         }
         return list;
@@ -235,9 +236,11 @@
                                 ペアリング {dateTime(device.created_at)} ・ 最後に使った
                                 {device.last_used_at === null ? 'まだ' : dateTime(device.last_used_at)}
                             </div>
-                            <ActionButton action="?/revokeDevice" fields={{ id: device.id }} class="xs outline danger" testid="device-revoke">
-                                取り消す
-                            </ActionButton>
+                            <div class="row-actions">
+                                <ActionButton action="?/revokeDevice" fields={{ id: device.id }} class="small outline danger" testid="device-revoke">
+                                    取消
+                                </ActionButton>
+                            </div>
                         </div>
                     {/each}
                 </div>
@@ -301,7 +304,7 @@
                                 <span class="muted">直近の結果:</span>
                                 {#if webhook.last_sent_at}
                                     <span class={webhook.last_status === 'ok' ? '' : 'text-error'}>
-                                        {webhook.last_status}
+                                        {webhook.last_status === 'ok' ? '成功' : webhook.last_status}
                                     </span>
                                     <span class="muted tiny">
                                         {dateTime(webhook.last_sent_at)}
@@ -310,11 +313,11 @@
                                     <span class="muted">未送信</span>
                                 {/if}
                             </div>
-                            <div class="cluster">
-                                <ActionButton action="?/testWebhook" fields={{ id: webhook.id }} class="xs secondary" testid="webhook-test">
+                            <div class="cluster row-actions">
+                                <ActionButton action="?/testWebhook" fields={{ id: webhook.id }} class="small secondary" testid="webhook-test">
                                     テスト送信
                                 </ActionButton>
-                                <ActionButton action="?/toggleWebhook" fields={{ id: webhook.id }} class="xs secondary" testid="webhook-toggle">
+                                <ActionButton action="?/toggleWebhook" fields={{ id: webhook.id }} class="small secondary" testid="webhook-toggle">
                                     {webhook.enabled ? '無効化' : '有効化'}
                                 </ActionButton>
                                 <!-- 押し間違い防止に2回押させる (録画・ルールの削除と同じ) -->
@@ -323,7 +326,7 @@
                                     armKey={webhook.id}
                                     action="?/deleteWebhook"
                                     fields={{ id: webhook.id }}
-                                    class="xs"
+                                    class="small"
                                     testid="webhook-delete"
                                 />
                             </div>
@@ -528,7 +531,7 @@
                     )}
                     <div>
                         <button type="submit" disabled={migrate.state === 'running'} data-testid="migrate-run">
-                            {migrate.state === 'running' ? '実行中…' : '実行する'}
+                            {migrate.state === 'running' ? '実行中…' : '実行'}
                         </button>
                     </div>
                 </form>

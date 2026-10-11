@@ -17,7 +17,7 @@ export async function goto(page: Page, url: string): Promise<void> {
      * **番組表は器だけ先に出る。** 表は後から流れてくるので
      * (`guide/+page.server.ts` の `gridOf`)、ハイドレーションだけ待って触りに
      * いくと、まだ骨組みしか無いことがある。局が1つも無ければ表の代わりに
-     * 「チャンネルがありません」が出るので、どちらかが出るまで待つ
+     * 「局がありません」が出るので、どちらかが出るまで待つ
      */
     const pathname = new URL(url, 'http://localhost').pathname;
     if (pathname === '/guide') {
@@ -348,8 +348,10 @@ export async function clearWebhooks(page: Page): Promise<void> {
     for (let i = 0; i < 10; i++) {
         const count = await rows.count();
         if (count === 0) break;
+        // 削除は2回押し (`ArmedDelete`)。1回目で「確定」に変わるだけなので、確定まで押す
         await rows.first().click();
-        await expect(rows).toHaveCount(count - 1);
+        await page.getByTestId('webhook-delete-confirm').click();
+        await expect(page.getByTestId('webhook-row')).toHaveCount(count - 1);
     }
 }
 
