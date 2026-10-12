@@ -11,7 +11,9 @@
  * | `nvram://~/N`・`nvram://~/ext/N`・`nvram://common/N` | BS の事業者・共通 | 0〜15・16〜63・0〜15 |
  * | `nvram://receiverinfo/zipcode` など | 受信機の設定 (読むだけ。郵便番号は denpa が渡す) | |
  *
- * 1 ブロック 64 バイト。中身は置き場 (`store`) に base64 で置く。BS の事業者の区別
+ * 1 ブロック 64 バイト (TR-B15 第一分冊 8.2 表8-1: BS の事業者の領域は 64 バイト × 16 ブロック、
+ * 8.2.2: 違う名前で読み書きしたら読むのは null・書くのは NaN)。番号の外・64 バイトを超える書き込みは
+ * 失敗にして知らせる。中身は置き場 (`store`) に base64 で置く。BS の事業者の区別
  * (broadcaster_id) は BIT が要るが denpa は解かないので、サービスごとに分ける (混ざらない側に倒す)。
  */
 
@@ -51,6 +53,8 @@ export class Nvram {
         private readonly store: Store,
         private readonly receiver: () => ReceiverInfo,
         private readonly who: () => Who,
+        /** 使えない番号・大きすぎる書き込みを知らせる (放送の使い方と規格の食い違いを本番で見る) */
+        private readonly log: (message: string) => void = () => {},
     ) {}
 
     /** 置き場の名前。使えない URI なら null */
@@ -65,8 +69,11 @@ export class Nvram {
         }
         // 放送の文字列で引くので、Object.prototype の名前 (constructor など) を拾わない
         const area = Object.hasOwn(AREAS, prefix!) ? AREAS[prefix!] : undefined;
-        if (area === undefined || affiliation !== undefined || block < area.first || block > area.last)
+        if (area === undefined || affiliation !== undefined) return null;
+        if (block < area.first || block > area.last) {
+            this.log(`NVRAM の番号が領域の外です (${prefix} は ${area.first}〜${area.last}): ${uri}`);
             return null;
+        }
         const who = this.who();
         let scope = '';
         // BS・CS (original_network_id 4・6・7) は局どうしで同じ番号なので、局の領域もサービスで分ける
@@ -130,7 +137,10 @@ export class Nvram {
         } catch {
             return Number.NaN;
         }
-        if (data.length > BLOCK) return Number.NaN;
+        if (data.length > BLOCK) {
+            this.log(`NVRAM の 1 ブロック (${BLOCK} バイト) に収まりません (${data.length} バイト): ${uri}`);
+            return Number.NaN;
+        }
         let binary = '';
         for (const byte of data) binary += String.fromCharCode(byte);
         this.store.set(key, btoa(binary));

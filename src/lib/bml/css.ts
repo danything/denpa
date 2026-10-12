@@ -77,19 +77,37 @@ export function parseStylesheet(text: string, start = 0): Rule[] {
     while (at < source.length) {
         const open = source.indexOf('{', at);
         if (open === -1) break;
-        const head = source.slice(at, open).trim();
-        // 括弧の対応を見て本体の終わりを探す (@ 規則の入れ子を読み飛ばすため)
-        let depth = 1;
-        let i = open + 1;
-        for (; i < source.length && depth > 0; i++) {
-            if (source[i] === '{') depth++;
-            else if (source[i] === '}') depth--;
-        }
-        const body = source.slice(open + 1, i - 1);
-        at = i;
+        // 余った `}` の後ろから読む (前の規則の閉じすぎ)
+        const raw = source.slice(at, open);
+        const head = raw.slice(raw.lastIndexOf('}') + 1).trim();
         // @ 規則 (@media など) は運用されない。`;` で終わる @ 規則は head に混ざるので落とす
         const selectorText = head.replace(/@[^;{]*;/g, '').trim();
-        if (selectorText.startsWith('@')) continue;
+        if (selectorText.startsWith('@')) {
+            // 括弧の対応を見て終わりを探す (@ 規則の入れ子を読み飛ばす)
+            let depth = 1;
+            let i = open + 1;
+            for (; i < source.length && depth > 0; i++) {
+                if (source[i] === '{') depth++;
+                else if (source[i] === '}') depth--;
+            }
+            at = i;
+            continue;
+        }
+        // 本体は次の `}` まで。その前に `{` が来たら閉じ忘れ: そこまでの区切り (`;` か改行) で本体を
+        // 終え、残りは次の規則として読み直す (壊れた所だけ捨てる。後ろの規則まで道連れにしない)
+        const close = source.indexOf('}', open + 1);
+        const inner = source.indexOf('{', open + 1);
+        let body: string;
+        if (inner !== -1 && (close === -1 || inner < close)) {
+            const cut = Math.max(source.lastIndexOf(';', inner), source.lastIndexOf('\n', inner));
+            const end = cut > open ? cut + 1 : open + 1;
+            body = source.slice(open + 1, end);
+            at = end;
+        } else {
+            const end = close === -1 ? source.length : close;
+            body = source.slice(open + 1, end);
+            at = end + 1;
+        }
         const declarations = parseDeclarations(body);
         for (const part of selectorText.split(',')) {
             const selector = parseSelector(part);

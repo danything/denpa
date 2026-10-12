@@ -100,6 +100,7 @@ function setup(): Setup {
             return ABORT;
         },
         quit: () => ABORT,
+        tune: () => Number.NaN,
         setTimer: () => 1,
         timer: () => true,
         sleep: () => new Suspend(Promise.resolve(1)),
@@ -169,6 +170,32 @@ describe('browser.*', () => {
             1,
             1,
         ]);
+    });
+
+    test('getBrowserSupport の APIGroup は、動く関数の組だけ「ある」と答える', async () => {
+        const s = setup();
+        const groups = [
+            'Ctrl.Media',
+            'EPG.Basic',
+            'Ctrl.Cache2',
+            'Com.IP',
+            'Com.IP.Connect',
+            'Com.IP.Params',
+            'Ctrl.AppVersion',
+            'Ctrl.startExtraBrowser',
+            'AITControlledApp.Start',
+            'EPG.Basic2',
+        ];
+        const result = await s.run(`
+            var groups = ${JSON.stringify(groups).replace(/"/g, "'")};
+            var out = [];
+            for (var i = 0; i < groups.length; i++) out[i] = browser.getBrowserSupport("ARIB", "APIGroup", groups[i]);
+            out[groups.length] = browser.isSupportedMedia("1");
+            out[groups.length + 1] = browser.getResidentAppVersion("x");
+            var result = out;
+        `);
+        // Ctrl.Media は isSupportedMedia が答えるのと揃える。PPP・常駐アプリ・外のブラウザ・AIT は無い
+        expect(items(result)).toEqual([1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 1, null]);
     });
 
     test('launchDocument は戻らない', async () => {

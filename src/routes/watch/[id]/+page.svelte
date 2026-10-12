@@ -1093,11 +1093,22 @@
     /** 切り抜きの結果。**貼れたかどうかは言う** (黙って何も起きないと分からない) */
     const shooter = snapshotter(controls);
 
+    /**
+     * **録画の再生中は選局できない。** データ放送が「この局へ」と言ってきたら (epgTune)、文書には失敗を
+     * 返し (`DataBroadcast` の tune)、観ている人にはそう知らせる
+     */
+    let tuneRefused = $state<Notice | null>(null);
+    function refuseTune(): boolean {
+        tuneRefused = { key: `tune-${Date.now()}`, kind: 'info', text: '録画の再生中は選局できません' };
+        return false;
+    }
+
     /** 断られたときだけ知らせる。消せたときは一覧へ戻るので出す先が無い */
     const notices = $derived<Notice[]>([
         ...errorNotice(form, 'watch-delete'),
         ...shooter.notices,
         ...pip.notices,
+        ...(tuneRefused === null ? [] : [tuneRefused]),
     ]);
 
     /**
@@ -1245,6 +1256,7 @@
                     postal={data.broadcast.postalCode}
                     network={false}
                     clock={() => rec.start_at + nowMs()}
+                    tune={refuseTune}
                 />
 
                 {#if buffering && !resuming}
@@ -1563,6 +1575,7 @@
     ondismiss={(key) => {
         shooter.dismiss(key);
         pip.dismiss(key);
+        if (tuneRefused?.key === key) tuneRefused = null;
     }}
 />
 

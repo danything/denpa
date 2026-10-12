@@ -13,6 +13,7 @@ import { cssColor, type Rgba } from './clut';
 import { parseUrl } from './css';
 import type { BmlDocument, BmlElement, BmlNode } from './document';
 import { isDrcs, toDisplay } from './euc';
+import { visibleFrames } from './mng';
 import type { Computed } from './style';
 
 export interface Fonts {
@@ -41,12 +42,37 @@ export interface RenderHost {
     image(url: string, kind: 'background' | 'object', type: string): ImageSource | null;
     /** DRCS の絵 (mask に使う URL)。無ければ null */
     drcs(unit: number, fontSize: number, family: string): string | null;
+    /**
+     * 動く絵 (MNG) を決めた回数だけ動かし終えた。streamstatus を pause にし、出しているコマを
+     * streamposition にするのはエンジン (付属2 4.8.5.3「回し終えたら pause」)
+     */
+    finished(element: BmlElement, position: number): void;
+}
+
+/** 動く絵のコマ (描ける URL と置き方) */
+export interface AnimationFrame {
+    url: string;
+    x: number;
+    y: number;
+    /** 次のコマまでの間 (ミリ秒) */
+    delay: number;
+    /** 前のコマの上に重ねるか (false なら消してから描く) */
+    keep: boolean;
 }
 
 export interface ImageSource {
     url: string;
     width: number | null;
     height: number | null;
+    /** 動く絵 (MNG)。`url` は 1 コマ目 */
+    animation?: { frames: AnimationFrame[]; iterations: number };
+}
+
+/** 動かしている MNG */
+interface Playing {
+    key: string;
+    timer: ReturnType<typeof setTimeout> | null;
+    layer: HTMLElement;
 }
 
 interface View {
@@ -58,6 +84,8 @@ interface View {
     underCss: string;
     image: HTMLImageElement | null;
     imageKey: string;
+    /** 動かしている MNG (object だけ) */
+    playing: Playing | null;
 }
 
 interface TextView {
@@ -128,6 +156,7 @@ export class Renderer {
     }
 
     destroy(): void {
+        for (const view of this.views.values()) this.stopAnimation(view);
         this.root.remove();
         this.views.clear();
         this.texts.clear();
@@ -217,6 +246,7 @@ export class Renderer {
                     underCss: '',
                     image: null,
                     imageKey: '',
+                    playing: null,
                 });
                 target = made;
                 break;
@@ -343,9 +373,78 @@ export class Renderer {
         view.under.style.cssText = css;
     }
 
+    /**
+     * MNG を出す (付属2 4.8.5.3)。streamstatus が stop なら出さない、pause なら streamposition の
+     * コマ、play ならそこから動かす (くり返しは TERM の回数 × streamlooping)。回し終えたら
+     * 最後のコマのまま pause にする (エンジンが属性を書く)
+     */
+    private mng(element: BmlElement, view: View, data: string): void {
+        const status = (element.attr('streamstatus') ?? 'stop').toLowerCase();
+        const position = Math.max(0, Number.parseInt(element.attr('streamposition') ?? '0', 10) || 0);
+        const source =
+            status === 'stop' || data === '' ? null : this.host.image(data, 'object', 'image/x-arib-mng');
+        const animation = source?.animation;
+        const looping = Math.max(1, Number.parseInt(element.attr('streamlooping') ?? '1', 10) || 1);
+        const key =
+            animation === undefined ? '' : `${source!.url}\u0000${status}\u0000${position}\u0000${looping}`;
+        if (key === (view.playing?.key ?? '')) return;
+        this.stopAnimation(view);
+        if (animation === undefined || animation.frames.length === 0) return;
+        const owner = view.element.ownerDocument;
+        const layer = owner.createElement('div');
+        layer.style.cssText = 'position:absolute;left:0;top:0;width:100%;height:100%;overflow:hidden';
+        view.element.appendChild(layer);
+        const playing: Playing = { key, timer: null, layer };
+        view.playing = playing;
+        const frames = animation.frames;
+        const show = (index: number): void => {
+            const imgs = visibleFrames(frames, index).map((frame) => {
+                const img = owner.createElement('img');
+                img.alt = '';
+                img.src = frame.url;
+                img.style.cssText = `position:absolute;left:${frame.x}px;top:${frame.y}px;display:block`;
+                return img;
+            });
+            layer.replaceChildren(...imgs);
+        };
+        let index = Math.min(position, frames.length - 1);
+        show(index);
+        if (status !== 'play') return;
+        let rounds = animation.iterations * looping;
+        const step = (): void => {
+            playing.timer = setTimeout(() => {
+                if (view.playing !== playing) return;
+                if (index + 1 < frames.length) {
+                    index++;
+                } else if (--rounds > 0) {
+                    index = 0;
+                } else {
+                    playing.timer = null;
+                    this.host.finished(element, index);
+                    return;
+                }
+                show(index);
+                step();
+            }, frames[index]!.delay);
+        };
+        step();
+    }
+
+    private stopAnimation(view: View): void {
+        const playing = view.playing;
+        if (playing === null) return;
+        if (playing.timer !== null) clearTimeout(playing.timer);
+        playing.layer.remove();
+        view.playing = null;
+    }
+
     private objectImage(element: BmlElement, view: View): void {
         const type = (element.attr('type') ?? '').toLowerCase();
         const data = element.attr('data') ?? '';
+        if (type === 'image/x-arib-mng') {
+            this.mng(element, view, data);
+            return;
+        }
         const drawable = type === 'image/jpeg' || type === 'image/x-arib-png' || type === 'image/gif';
         const source = drawable && data !== '' ? this.host.image(data, 'object', type) : null;
         const key = source === null ? '' : source.url;

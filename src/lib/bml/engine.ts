@@ -21,15 +21,24 @@ import { type BmlIp, type BrowserHost, defineBinaryTable, defineBrowser } from '
 import { Budget, type BudgetLimits } from './budget';
 import { createRealm } from './builtins';
 import { DEFAULT_CLUT, type Rgba, readClut } from './clut';
-import { compileScript } from './compiler';
+import { type Code, compileScript } from './compiler';
 import { parseStylesheet, parseUrl, type Rule } from './css';
 import { BmlDocument, type BmlElement } from './document';
 import { Dom, type DomHost } from './dom';
 import { fontIdOf, parseDrcs } from './drcs';
 import { decodeEuc } from './euc';
+import { parseMng } from './mng';
 import { Nvram, type ReceiverInfo, type Store } from './nvram';
+import type { Plane } from './plane';
 import { alphaPng, applyClut } from './png';
-import { type Fonts, type ImageSource, type Rect, Renderer, type RenderHost } from './render';
+import {
+    type AnimationFrame,
+    type Fonts,
+    type ImageSource,
+    type Rect,
+    Renderer,
+    type RenderHost,
+} from './render';
 import {
     type CarouselFile,
     type Dii,
@@ -41,6 +50,7 @@ import {
     refToPath,
     STARTUP_COMPONENT,
     STARTUP_MODULE,
+    unknownScheme,
 } from './resources';
 import { Sound } from './sound';
 import { ABORT, type Abort, type NativeResult, ScriptError, Suspend, type Value } from './values';
@@ -49,11 +59,14 @@ import { parseXml } from './xml';
 
 export type { BmlIp } from './browser';
 export type { ReceiverInfo, Store } from './nvram';
+export { type Plane, planeArea } from './plane';
 export type { Fonts, Rect } from './render';
 
-export interface Plane {
-    width: number;
-    height: number;
+/** 局 (`arib://<original_network_id>.<transport_stream_id>.<service_id>` を解いたもの) */
+export interface Service {
+    originalNetworkId: number;
+    transportStreamId: number | null;
+    serviceId: number;
 }
 
 export interface BmlOptions {
@@ -74,6 +87,12 @@ export interface BmlOptions {
     onReceiving?: (receiving: boolean) => void;
     /** 文書が替わった */
     onLoad?: (plane: Plane, path: string) => void;
+    /**
+     * 文書が別の局へ選局したい (epgTune)。**選局するのは呼び手** — 受けたら true (文書はここで
+     * 閉じる)、できなければ false (文書には失敗を返す)。無ければいつも失敗。
+     * `transportStreamId` は分からなければ null (録画など)
+     */
+    onTune?: (service: Service) => boolean;
     log?: (message: string) => void;
     /** ページを握る長さの決まり (既定は [budget.ts](budget.ts) の DEFAULT_BUDGET。テストで縮める) */
     budget?: Partial<BudgetLimits>;
@@ -124,7 +143,16 @@ function keyGroup(code: number): string | null {
 const ACCESS_KEYS: Record<number, string> = { 19: 'X', 21: 'B', 22: 'R', 23: 'G', 24: 'Y', 25: 'E', 26: 'F' };
 
 type Job =
-    | { kind: 'program'; token: number; source: string; name: string }
+    | {
+          kind: 'program';
+          token: number;
+          source: string;
+          name: string;
+          /** 読み終えたもの (setInterval の式は 1 回だけ読む) */
+          code?: Code;
+          /** setInterval から積んだもの */
+          timer?: Timer;
+      }
     | {
           kind: 'handler';
           token: number;
@@ -138,6 +166,9 @@ type Job =
 
 interface Timer {
     code: string;
+    /** `f();` の形なら呼ぶ関数の名前。そうでなければ式を読んだもの (`program`) を動かす */
+    call: string | null;
+    program: Code | null;
     interval: number;
     remaining: number;
     handle: ReturnType<typeof setInterval> | null;
@@ -179,7 +210,7 @@ class Engine implements DomHost, BrowserHost, RenderHost {
     private vm: Vm | null = null;
     private dom: Dom | null = null;
     private table: readonly Rgba[] = DEFAULT_CLUT;
-    private size: Plane = { width: 960, height: 540 };
+    private size: Plane = { width: 960, height: 540, aspect: '16:9' };
     /** 文書の世代。替わったら前の文書の続きは捨てる */
     private token = 0;
     private queue: Job[] = [];
@@ -216,6 +247,8 @@ class Engine implements DomHost, BrowserHost, RenderHost {
     /** 取りに行って「無い」と決まった画像。モジュールが届き直すまで取りに行かない */
     private readonly missingImages = new Set<string>();
     private receiver: ReceiverInfo = { zipcode: '', prefecture: 255 };
+    /** 扱えない名前だと知らせたもの (同じものを何度も知らせない) */
+    private readonly reported = new Set<string>();
     private ticker: ReturnType<typeof setInterval> | null = null;
 
     constructor(private readonly options: BmlOptions) {
@@ -231,6 +264,7 @@ class Engine implements DomHost, BrowserHost, RenderHost {
                 originalNetworkId: this.resources.program?.originalNetworkId ?? null,
                 serviceId: this.resources.program?.serviceId ?? null,
             }),
+            (message) => this.log(message),
         );
         this.resources.onReceiving = (receiving) => options.onReceiving?.(receiving);
         this.ticker = setInterval(() => this.tick(), 1000);
@@ -535,7 +569,11 @@ class Engine implements DomHost, BrowserHost, RenderHost {
         const ref = this.resources.resolve(name, this.current);
         const file = ref === null || ref.module === null ? null : await this.resources.fetch(ref);
         if (token !== this.token || this.destroyed) return;
-        const shown = file !== null && ref !== null && (await this.show(file, refToPath(ref), token));
+        // 問い合わせ (`next.bml?tsid=…`) は、ファイルを引くのには使わず文書の名前に残す。移った先の文書は
+        // getActiveDocument で読む (テレ朝。STD-B24 に放送の文書の問い合わせの決まりは無く、名前の一部として扱う)
+        const query = /\?[^#]*/.exec(name)?.[0] ?? '';
+        const shown =
+            file !== null && ref !== null && (await this.show(file, `${refToPath(ref)}${query}`, token));
         if (token !== this.token || this.destroyed) return;
         this.loading = false;
         this.preparing = false;
@@ -547,7 +585,11 @@ class Engine implements DomHost, BrowserHost, RenderHost {
         }
         // 入口の文書が読めない文書へ移ろうとしたなら、入口のまま止める (出直すと同じ遷移を
         // 繰り返して回り続ける)。そうでなければ入口から出直す
-        if (this.current === `/${hex(STARTUP_COMPONENT, 2)}/${hex(STARTUP_MODULE, 4)}/startup.bml`) return;
+        if (
+            this.current?.replace(/[?#].*$/, '') ===
+            `/${hex(STARTUP_COMPONENT, 2)}/${hex(STARTUP_MODULE, 4)}/startup.bml`
+        )
+            return;
         setTimeout(() => {
             if (token === this.token && !this.destroyed) this.restart();
         }, 0);
@@ -635,7 +677,12 @@ class Engine implements DomHost, BrowserHost, RenderHost {
         this.current = path;
         this.table = table;
         const resolution = body?.style().resolution ?? '960x540';
-        this.size = resolution === '720x480' ? { width: 720, height: 480 } : { width: 960, height: 540 };
+        // 4:3 は 720x480 のときだけ (960x540 は 16:9 しか無い)。既定は 16v9 (第二編 5.4.13.1)
+        const aspect = (body?.style().displayAspectRatio ?? '').toLowerCase() === '4v3' ? '4:3' : '16:9';
+        this.size =
+            resolution === '720x480'
+                ? { width: 720, height: 480, aspect }
+                : { width: 960, height: 540, aspect: '16:9' };
 
         // スクリプトの世界は文書ごとに作り直す
         const realm = createRealm({ now: () => this.now() });
@@ -730,13 +777,13 @@ class Engine implements DomHost, BrowserHost, RenderHost {
                     this.queue.push(...rest);
                     continue;
                 }
-                if (job.kind === 'handler' && job.timer !== undefined) job.timer.queued = false;
+                if (job.timer !== undefined) job.timer.queued = false;
                 const vm = this.vm;
                 const dom = this.dom;
                 if (vm === null || dom === null) continue;
                 try {
                     if (job.kind === 'program') {
-                        vm.startProgram(compileScript(job.source, job.name));
+                        vm.startProgram(job.code ?? compileScript(job.source, job.name));
                         this.currentEvent = dom.event({});
                     } else {
                         const name = /^\s*([A-Za-z_$][\w$]*)\s*\(\s*\)\s*;?\s*$/.exec(job.handler)?.[1];
@@ -929,6 +976,9 @@ class Engine implements DomHost, BrowserHost, RenderHost {
     stream(element: BmlElement, status: string): void {
         const type = (element.attr('type') ?? '').toLowerCase();
         if (type !== 'audio/x-arib-aiff') {
+            // MNG は止めるとコマの位置が 0 に戻る (付属2 4.8.5.3 表4-27)
+            if (type === 'image/x-arib-mng' && status.toLowerCase() === 'stop')
+                element.setAttr('streamposition', '0');
             element.setAttr('streamstatus', status);
             return;
         }
@@ -960,7 +1010,71 @@ class Engine implements DomHost, BrowserHost, RenderHost {
 
     launch(name: string): Abort | number {
         if (name.startsWith('#')) return Number.NaN;
+        // 規格に無い名前の形 (`bml://` など) は、今の文書のまま失敗を返す (STD-B24 第二編 7.6.8: 失敗は NaN)
+        if (this.unknownName(name)) return Number.NaN;
         void this.load(name);
+        return ABORT;
+    }
+
+    /** 規格に無いスキームの名前なら知らせて true (STD-B24 第二編 9.2 に無い。扱えない) */
+    private unknownName(name: string): boolean {
+        const scheme = unknownScheme(name);
+        if (scheme === null) return false;
+        // 描くたびに通る口 (画像) からも来るので、同じ名前は 1 回だけ知らせる
+        if (!this.reported.has(name)) {
+            this.reported.add(name);
+            this.log(`規格に無い名前の形なので扱えません (${scheme}:): ${name}`);
+        }
+        return true;
+    }
+
+    /**
+     * epgTune (STD-B24 第二編 7.6.1・TR-B14 第二分冊 5.12.6.3)。`-1` は今の局と同じ値。
+     * 今の局なら入口から出直す (ブラウザを一度終えて選局し直したのと同じ)。別の局なら denpa の画面に
+     * 頼み (`onTune`)、受けられたら文書を閉じる。後に続くスクリプトは動かさない
+     */
+    tune(serviceRef: string): Abort | number {
+        const match = /^arib:\/\/(-1|[0-9a-f]{1,4})\.(-1|[0-9a-f]{1,4})\.(-1|[0-9a-f]{1,4})$/i.exec(
+            serviceRef.trim(),
+        );
+        if (match === null) {
+            this.log(`epgTune の局の書き方が読めません: ${serviceRef}`);
+            return Number.NaN;
+        }
+        const program = this.resources.program;
+        const value = (text: string, current: number | null | undefined): number | null =>
+            text === '-1' ? (current ?? null) : Number.parseInt(text, 16);
+        const network = value(match[1]!, program?.originalNetworkId);
+        const ts = value(match[2]!, program?.transportStreamId);
+        const service = value(match[3]!, program?.serviceId);
+        if (network === null || service === null) {
+            this.log(`epgTune の局が決まりません (今の局が分からない): ${serviceRef}`);
+            return Number.NaN;
+        }
+        const here =
+            program !== null &&
+            network === program.originalNetworkId &&
+            service === program.serviceId &&
+            (ts === null || program.transportStreamId == null || ts === program.transportStreamId);
+        if (here) {
+            this.resources.unlockAll();
+            this.restart();
+            return ABORT;
+        }
+        if (
+            this.options.onTune?.({
+                originalNetworkId: network,
+                transportStreamId: ts,
+                serviceId: service,
+            }) !== true
+        ) {
+            this.log(`epgTune で選局できません: ${serviceRef}`);
+            return Number.NaN;
+        }
+        // 選局は画面がやり、局が変わればこの器ごと作り直される。それまでに前の局のモジュールが届いても
+        // 入口から出直さない (入口で epgTune を呼ぶ文書だと、選局を頼み直し続ける)
+        this.halted = true;
+        this.exit();
         return ABORT;
     }
 
@@ -972,9 +1086,25 @@ class Engine implements DomHost, BrowserHost, RenderHost {
 
     setTimer(code: string, interval: number, count: number): number {
         if (!(interval > 0)) return Number.NaN;
+        // `f();` は関数を呼ぶだけ。引数つきの呼び出し (`f(3);`) などは式として読んで、刻みごとに動かす
+        // (STD-B24 第二編 7.6.10: 第 1 引数は動かすスクリプトの文字列)。自前の VM で動かすので eval は使わない
+        const call = /^\s*([A-Za-z_$][\w$]*)\s*\(\s*\)\s*;?\s*$/.exec(code)?.[1] ?? null;
+        let program: Code | null = null;
+        if (call === null) {
+            try {
+                program = compileScript(code, 'setInterval');
+            } catch (error) {
+                this.log(
+                    `setInterval の式が読めません: ${code} (${error instanceof Error ? error.message : String(error)})`,
+                );
+                return Number.NaN;
+            }
+        }
         const id = this.nextTimer++;
         const timer: Timer = {
             code,
+            call,
+            program,
             interval,
             remaining: count > 0 ? count : Number.POSITIVE_INFINITY,
             handle: null,
@@ -992,10 +1122,27 @@ class Engine implements DomHost, BrowserHost, RenderHost {
             if (token !== this.token || timer.queued) return;
             timer.remaining--;
             if (timer.remaining <= 0) this.timer(id, 'clear');
-            const name = /^\s*([A-Za-z_$][\w$]*)\s*\(\s*\)\s*;?\s*$/.exec(timer.code)?.[1];
-            if (name === undefined) return;
             timer.queued = true;
-            this.enqueue({ kind: 'handler', token, handler: `${name}()`, target: null, event: {}, timer });
+            if (timer.call !== null) {
+                this.enqueue({
+                    kind: 'handler',
+                    token,
+                    handler: `${timer.call}()`,
+                    target: null,
+                    event: {},
+                    timer,
+                });
+            } else if (timer.program !== null) {
+                const source = timer.code;
+                this.enqueue({
+                    kind: 'program',
+                    token,
+                    source,
+                    name: 'setInterval',
+                    code: timer.program,
+                    timer,
+                });
+            }
         }, timer.interval);
     }
 
@@ -1034,8 +1181,14 @@ class Engine implements DomHost, BrowserHost, RenderHost {
     lock(module: string, kind: LockKind): number {
         const ref = this.moduleRef(module);
         if (ref === null || ref.module === null) return Number.NaN;
-        // Ex で押さえられるのは 0x40・0x50・0x60 だけ (TR-B14 第二分冊 5.12.6.9)
-        if (kind === 'lockEx' && ![0x40, 0x50, 0x60].includes(ref.component)) return Number.NaN;
+        // Ex で押さえられるのは 0x40・0x50・0x60 の部品だけ。地上波 (TR-B14 第二分冊 5.12.6.9・2.3.6.1) も
+        // BS (TR-B15 第一分冊 10.3.3 表10-3「lockModuleOnMemoryEx() (tag values 0x40, 0x50, and 0x60)」) も
+        // 同じ。受信機はこの 3 つと見ている部品の 4 つまでしか並べて取らない。0x61 などにあるモジュールは、
+        // その部品の文書から lockModuleOnMemory で押さえる
+        if (kind === 'lockEx' && ![0x40, 0x50, 0x60].includes(ref.component)) {
+            this.log(`lockModuleOnMemoryEx は 0x40・0x50・0x60 の部品だけ押さえられます: ${module}`);
+            return Number.NaN;
+        }
         const token = this.token;
         return this.resources.lock(ref.component, ref.module, kind, (status) => {
             if (token !== this.token) return;
@@ -1107,9 +1260,43 @@ class Engine implements DomHost, BrowserHost, RenderHost {
         return this.size;
     }
 
+    /** MNG のコマを、CLUT を入れた PNG の URL にする ([mng.ts](mng.ts)) */
+    private mngSource(data: Uint8Array): ImageSource | null {
+        const mng = parseMng(data);
+        if (mng === null) return null;
+        const frames: AnimationFrame[] = [];
+        for (const frame of mng.frames) {
+            const fixed = applyClut(frame.png, this.table);
+            // 1 コマでも組めなければ読めないものとする (コマの番号と streamposition をずらさない)
+            if (fixed === null) {
+                for (const made of frames) URL.revokeObjectURL(made.url);
+                return null;
+            }
+            const url = URL.createObjectURL(new Blob([fixed.data], { type: 'image/png' }));
+            frames.push({ url, x: frame.x, y: frame.y, delay: frame.delay, keep: frame.keep });
+        }
+        if (frames.length === 0) return null;
+        return {
+            url: frames[0]!.url,
+            width: mng.width,
+            height: mng.height,
+            animation: { frames, iterations: mng.iterations },
+        };
+    }
+
+    finished(element: BmlElement, position: number): void {
+        // 回し終えたら pause にして、出しているコマを streamposition に (付属2 4.8.5.3)
+        element.setAttr('streamposition', String(position));
+        element.setAttr('streamstatus', 'pause');
+        this.drawSoon();
+    }
+
     image(url: string, _kind: 'background' | 'object', type: string): ImageSource | null {
         const ref = this.resources.resolve(url, this.current);
-        if (ref === null || ref.module === null) return null;
+        if (ref === null || ref.module === null) {
+            this.unknownName(url);
+            return null;
+        }
         const file = this.resources.file(ref);
         if (file === null) {
             const key = refToPath(ref);
@@ -1131,11 +1318,21 @@ class Engine implements DomHost, BrowserHost, RenderHost {
             return null;
         }
         const png = type === 'image/x-arib-png';
-        const variant = png ? `png:${this.current}` : 'raw';
+        const mng = type === 'image/x-arib-mng';
+        // PNG・MNG の色は文書の CLUT で決まるので、文書ごとに作る
+        // 問い合わせ (`?tsid=…`) は文書の名前の一部だが、CLUT は同じなので作り直さない
+        const page = this.current?.replace(/[?#].*$/, '');
+        const variant = png ? `png:${page}` : mng ? `mng:${page}` : 'raw';
         const made = file.urls.get(variant);
         if (made !== undefined) return made;
         let source: ImageSource | null = null;
-        if (png) {
+        if (mng) {
+            source = this.mngSource(file.data);
+            if (source === null && !this.reported.has(`mng:${refToPath(ref)}`)) {
+                this.reported.add(`mng:${refToPath(ref)}`);
+                this.log(`MNG が読めません: ${url}`);
+            }
+        } else if (png) {
             const fixed = applyClut(file.data, this.table);
             if (fixed !== null) {
                 source = {
@@ -1266,7 +1463,7 @@ class Engine implements DomHost, BrowserHost, RenderHost {
             this.handle(focused, 'onclick', { type: 'click' });
             if (focused.tag === 'a') {
                 const href = focused.attr('href') ?? '';
-                if (href !== '' && !href.startsWith('#')) {
+                if (href !== '' && !href.startsWith('#') && !this.unknownName(href)) {
                     this.enqueue({ kind: 'native', token: this.token, run: () => void this.load(href) });
                 }
             }

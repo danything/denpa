@@ -36,7 +36,7 @@ function chunk(name: string, body: Uint8Array): Uint8Array {
     return out;
 }
 
-function concat(parts: Uint8Array[]): Uint8Array<ArrayBuffer> {
+export function concat(parts: Uint8Array[]): Uint8Array<ArrayBuffer> {
     const out = new Uint8Array(parts.reduce((n, p) => n + p.length, 0));
     let at = 0;
     for (const part of parts) {
@@ -46,7 +46,7 @@ function concat(parts: Uint8Array[]): Uint8Array<ArrayBuffer> {
     return out;
 }
 
-const SIGNATURE = Uint8Array.of(0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a);
+export const SIGNATURE = Uint8Array.of(0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a);
 
 /** 放送の PNG に CLUT の PLTE・tRNS を入れる。大きさも返す。パレットの PNG でなければそのまま */
 export function applyClut(

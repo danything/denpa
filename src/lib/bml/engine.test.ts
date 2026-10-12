@@ -1,6 +1,8 @@
 import { afterEach, describe, expect, test } from 'bun:test';
 import type { ResponseMessage } from '#lib/ts/bml-protocol.js';
-import { type Bml, type BmlOptions, createBml } from './engine';
+import { type Bml, type BmlOptions, createBml, type Plane, planeArea, type Service } from './engine';
+import { sampleMng } from './mng.fixture';
+import type { ImageSource } from './render';
 
 /*
  * エンジンを丸ごと動かす。描く先はブラウザではないので、何でも受け取る小さな偽の DOM に描かせる
@@ -107,6 +109,7 @@ const inside = (bml: Bml) =>
     bml as unknown as {
         ureg: string[];
         resources: { fetch: (...args: unknown[]) => Promise<unknown> };
+        image: (url: string, kind: string, type: string) => ImageSource | null;
     };
 
 /**
@@ -273,5 +276,271 @@ describe('文書のスクリプト', () => {
         expect(done).toBe(true);
         expect(inside(bml).ureg[1]).toBe('10/12 18:01|Chiba|Typhoon');
         expect(logs.filter((line) => line.includes('スクリプトの誤り'))).toEqual([]);
+    });
+});
+
+/** 今の局 (programInfo) */
+const PROGRAM: ResponseMessage = {
+    type: 'programInfo',
+    originalNetworkId: 0x7fe1,
+    transportStreamId: 0x7fe1,
+    serviceId: 0x400,
+    eventId: 0x1234,
+    eventName: 'x',
+    startTimeUnixMillis: Date.UTC(2026, 9, 12, 2),
+    durationSeconds: 3600,
+    indefiniteDuration: false,
+    networkId: 0x7fe1,
+};
+
+/** 文書を 1 つ足す (入口と同じモジュール) */
+function bmlFile(
+    name: string,
+    body: string,
+    script = '',
+    style = 'resolution:960x540',
+): [string, string, string] {
+    return [
+        name,
+        'text/X-arib-bml',
+        `<?xml version="1.0" encoding="EUC-JP"?>
+<bml><head><title>t</title><script><![CDATA[${script}]]></script></head>
+<body style="${style}" onload="start();">${body}</body></bml>`,
+    ];
+}
+
+const feedAll = (bml: Bml, messages: ResponseMessage[]): void => {
+    for (const message of messages) bml.feed(message);
+};
+
+describe('setInterval', () => {
+    test('引数つきの呼び出し (f(3);) も式として刻みごとに動かす', async () => {
+        const { bml, logs } = open();
+        const script = `var seen = "";
+            function start() { browser.setInterval("add(3); add(4);", 5, 2); }
+            function add(n) { seen += n; browser.Ureg[1] = seen; }`;
+        feedAll(bml, carousel([startup('', script)]));
+        const { done } = await watch(() => inside(bml).ureg[1] === '3434');
+        expect(done).toBe(true);
+        await watch(() => false, 100);
+        // 回数 2 で止まる
+        expect(inside(bml).ureg[1]).toBe('3434');
+        expect(logs).toEqual([]);
+    });
+
+    test('回数を変数で渡しても、その回数だけ動く (放送大学の形)', async () => {
+        const { bml } = open();
+        const script = `var n = 0, times = 3;
+            function start() { browser.setInterval("timeManager();", 5, times); }
+            function timeManager() { n++; browser.Ureg[1] = "" + n; }`;
+        feedAll(bml, carousel([startup('', script)]));
+        const { done } = await watch(() => inside(bml).ureg[1] === '3');
+        expect(done).toBe(true);
+        await watch(() => false, 100);
+        expect(inside(bml).ureg[1]).toBe('3');
+    });
+
+    test('読めない式は NaN を返して知らせる', async () => {
+        const { bml, logs } = open();
+        feedAll(
+            bml,
+            carousel([
+                startup('', 'function start() { browser.Ureg[1] = "" + browser.setInterval("f(;", 5, 1); }'),
+            ]),
+        );
+        const { done } = await watch(() => inside(bml).ureg[1] !== '');
+        expect(done).toBe(true);
+        expect(inside(bml).ureg[1]).toBe('NaN');
+        expect(logs.some((line) => line.includes('setInterval の式が読めません'))).toBe(true);
+    });
+});
+
+describe('文書の名前', () => {
+    test('問い合わせつきの launchDocument: ファイルは問い合わせを外して引き、文書からは名前ごと読める', async () => {
+        const { bml, logs } = open();
+        feedAll(
+            bml,
+            carousel([
+                startup(
+                    '',
+                    'function start() { browser.launchDocument("next.bml" + "?tsid=" + "7fe1", "cut"); }',
+                ),
+                bmlFile(
+                    'next.bml',
+                    '',
+                    'function start() { browser.Ureg[1] = browser.getActiveDocument(); }',
+                ),
+            ]),
+        );
+        const { done } = await watch(() => inside(bml).ureg[1] !== '');
+        expect(done).toBe(true);
+        expect(inside(bml).ureg[1]).toBe('/40/0000/next.bml?tsid=7fe1');
+        expect(bml.path).toBe('/40/0000/next.bml?tsid=7fe1');
+        expect(logs).toEqual([]);
+    });
+
+    test('規格に無い名前 (bml://) は今の文書のまま失敗を返して知らせる', async () => {
+        const { bml, logs } = open();
+        const script = `function start() {
+            var r = browser.launchDocument("bml://menu.bml", "cut");
+            browser.Ureg[1] = "" + r;
+        }`;
+        feedAll(bml, carousel([startup('', script)]));
+        const { done } = await watch(() => inside(bml).ureg[1] !== '');
+        expect(done).toBe(true);
+        expect(inside(bml).ureg[1]).toBe('NaN');
+        expect(bml.path).toBe('/40/0000/startup.bml');
+        expect(
+            logs.some((line) => line.includes('規格に無い名前の形') && line.includes('bml://menu.bml')),
+        ).toBe(true);
+    });
+});
+
+describe('lockModuleOnMemoryEx', () => {
+    test('0x40・0x50・0x60 のほか (0x61 など) は NaN を返して知らせる', async () => {
+        const { bml, logs } = open();
+        const script = `function start() {
+            browser.Ureg[1] = browser.lockModuleOnMemoryEx("/61/0000") + "," + browser.lockModuleOnMemoryEx("/40/0000");
+        }`;
+        feedAll(bml, carousel([startup('', script)]));
+        const { done } = await watch(() => inside(bml).ureg[1] !== '');
+        expect(done).toBe(true);
+        expect(inside(bml).ureg[1]).toBe('NaN,1');
+        expect(logs.some((line) => line.includes('/61/0000'))).toBe(true);
+    });
+});
+
+describe('epgTune', () => {
+    const script = `function start() {
+        var r = browser.epgTune(target);
+        browser.Ureg[1] = "after:" + r;
+    }`;
+
+    test('別の局は呼び手に頼み、受けられたら文書を閉じる (後のスクリプトは動かない)', async () => {
+        const asked: Service[] = [];
+        const { bml } = open({
+            onTune: (service) => {
+                asked.push(service);
+                return true;
+            },
+        });
+        feedAll(bml, [PROGRAM, ...carousel([startup('', `var target = "arib://7FE7.-1.0428"; ${script}`)])]);
+        const { done } = await watch(() => asked.length > 0 && bml.path === null);
+        expect(done).toBe(true);
+        expect(asked).toEqual([{ originalNetworkId: 0x7fe7, transportStreamId: 0x7fe1, serviceId: 0x428 }]);
+        await watch(() => false, 50);
+        expect(inside(bml).ureg[1]).toBe('');
+        // 局が変わるまでに前の局のモジュールが届き直しても、入口から出直して頼み直さない
+        feedAll(bml, carousel([startup('', `var target = "arib://7FE7.-1.0428"; ${script}`)], 2));
+        await watch(() => false, 100);
+        expect(asked.length).toBe(1);
+        expect(bml.path).toBeNull();
+    });
+
+    test('呼び手が断る・呼び手が居ない (録画) なら NaN を返して続ける', async () => {
+        for (const onTune of [() => false, undefined]) {
+            const { bml, logs } = open(onTune === undefined ? {} : { onTune });
+            // BinaryTable の行から引いた値と同じ、ただの文字列
+            feedAll(bml, [
+                PROGRAM,
+                ...carousel([startup('', `var target = "arib://7fe7.7fe7.428"; ${script}`)]),
+            ]);
+            const { done } = await watch(() => inside(bml).ureg[1] !== '');
+            expect(done).toBe(true);
+            expect(inside(bml).ureg[1]).toBe('after:NaN');
+            expect(bml.path).toBe('/40/0000/startup.bml');
+            expect(logs.some((line) => line.includes('選局できません'))).toBe(true);
+        }
+    });
+
+    test('今の局 (arib://-1.-1.-1) は呼び手に頼まず入口から出直す', async () => {
+        const asked: Service[] = [];
+        const { bml } = open({ onTune: (service) => asked.push(service) > 0 });
+        const restart = `var target = "arib://-1.-1.-1";
+            function start() {
+                browser.Ureg[2] = browser.Ureg[2] + "s";
+                if (browser.Ureg[2] == "s") browser.epgTune(target);
+            }`;
+        feedAll(bml, [PROGRAM, ...carousel([startup('', restart)])]);
+        // Ureg は局が替わらないので残る。2 回目の入口で止まる
+        const { done } = await watch(() => inside(bml).ureg[2]?.endsWith('ss') === true);
+        expect(done).toBe(true);
+        expect(asked).toEqual([]);
+        expect(bml.path).toBe('/40/0000/startup.bml');
+    });
+
+    test('今の局が分からないまま -1 で書かれたら NaN', async () => {
+        const { bml, logs } = open({ onTune: () => true });
+        feedAll(bml, carousel([startup('', `var target = "arib://-1.-1.-1"; ${script}`)]));
+        const { done } = await watch(() => inside(bml).ureg[1] !== '');
+        expect(done).toBe(true);
+        expect(inside(bml).ureg[1]).toBe('after:NaN');
+        expect(logs.some((line) => line.includes('今の局が分からない'))).toBe(true);
+    });
+});
+
+describe('面の大きさと縦横比', () => {
+    test('720x480 の 4v3 は 4:3、16v9 と 960x540 は 16:9 で知らせる', async () => {
+        for (const [style, want] of [
+            ['resolution:720x480;display-aspect-ratio:4v3', { width: 720, height: 480, aspect: '4:3' }],
+            ['resolution:720x480', { width: 720, height: 480, aspect: '16:9' }],
+            ['resolution:960x540;display-aspect-ratio:4v3', { width: 960, height: 540, aspect: '16:9' }],
+        ] as const) {
+            const planes: Plane[] = [];
+            const { bml } = open({ onLoad: (plane) => planes.push(plane) });
+            feedAll(bml, carousel([bmlFile('startup.bml', '', 'function start() {}', style)]));
+            const { done } = await watch(() => planes.length > 0);
+            expect(done).toBe(true);
+            expect(planes[0]).toEqual(want);
+        }
+    });
+
+    test('4:3 の面は高さを合わせて左右の真ん中、16:9 は枠いっぱい', () => {
+        const box = { width: 1600, height: 900 };
+        expect(planeArea(box, { aspect: '4:3' })).toEqual({
+            left: 200,
+            top: 0,
+            width: 1200,
+            height: 900,
+        });
+        expect(planeArea(box, { aspect: '16:9' })).toEqual({
+            left: 0,
+            top: 0,
+            width: 1600,
+            height: 900,
+        });
+        // 縦に長い枠では幅を合わせて上下の真ん中
+        expect(planeArea({ width: 400, height: 900 }, { aspect: '4:3' })).toEqual({
+            left: 0,
+            top: 300,
+            width: 400,
+            height: 300,
+        });
+    });
+});
+
+describe('MNG', () => {
+    test('コマを CLUT の色の PNG にして渡し、回し終えたら pause と最後のコマを書く', async () => {
+        const { bml } = open();
+        // 2 コマ・くり返し 1 回 (TERM 無し)
+        const data = Buffer.from(sampleMng()).toString('latin1');
+        feedAll(
+            bml,
+            carousel([
+                startup(
+                    '<object id="o" type="image/X-arib-mng" data="a.mng" streamstatus="play" style="left:0px;top:0px;width:64px;height:32px"/>',
+                    'function start() { browser.Ureg[1] = "ready"; }',
+                ),
+                ['a.mng', 'image/X-arib-mng', data],
+            ]),
+        );
+        const { done } = await watch(() => inside(bml).ureg[1] === 'ready');
+        expect(done).toBe(true);
+        const source = inside(bml).image('a.mng', 'object', 'image/x-arib-mng');
+        expect(source?.animation?.frames.length).toBe(2);
+        expect(source?.animation?.iterations).toBe(1);
+        expect(source?.url).toBe(source?.animation?.frames[0]?.url ?? '');
+        // 同じ文書のうちは作り直さない
+        expect(inside(bml).image('a.mng', 'object', 'image/x-arib-mng')).toBe(source);
     });
 });

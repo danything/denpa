@@ -1,4 +1,5 @@
 import type { Page } from '@playwright/test';
+import { FUJI, MX } from '../fake/services';
 import {
     captionsSeenInDataWindow,
     expect,
@@ -208,5 +209,27 @@ test.describe('自前のデータ放送エンジン', () => {
             await page.evaluate(() => (window as unknown as { __bmlPwned?: number }).__bmlPwned),
         ).toBeUndefined();
         expect(await page.evaluate(() => (window as unknown as Seen).__csp)).toEqual([]);
+    });
+
+    test('データ放送の epgTune で別の局へ切り替わる (選局は画面がやる)', async ({ page }) => {
+        await prepare(page);
+        await openData(page);
+        const current = page.locator('[data-testid="live-channel"][data-current="true"]');
+        const from = Number(await current.getAttribute('data-service'));
+        // 今の局でないほうへ。arib://<original_network_id>.<transport_stream_id>.<service_id> (16 進)
+        const to = from === FUJI.id ? MX : FUJI;
+        const target = `arib://${to.networkId.toString(16)}.-1.${to.serviceId.toString(16)}`;
+        await feed(
+            page,
+            `<script><![CDATA[function tune() { browser.epgTune("${target}"); }]]></script><bevent><beitem type="DataButtonPressed" onoccur="tune();" subscribe="subscribe"/></bevent>`,
+        );
+        // 出す操作の d が文書に届くと epgTune。画面が一覧から局を探して切り替える
+        await expect(page.locator(`[data-testid="live-channel"][data-service="${to.id}"]`)).toHaveAttribute(
+            'data-current',
+            'true',
+            { timeout: 15_000 },
+        );
+        // 局が変わったのでデータ放送の器は作り直される (出したまま)
+        await expect(page.getByTestId('live-data')).toHaveAttribute('data-for', new RegExp(`/${to.id}$`));
     });
 });

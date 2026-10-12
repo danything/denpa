@@ -64,7 +64,8 @@
      */
     import { onDestroy } from 'svelte';
     import type { BMLBrowser, Indicator, IP } from 'web-bml';
-    import type { Bml, BmlIp, Rect } from '#lib/bml/engine.js';
+    import type { Bml, BmlIp, Rect, Service } from '#lib/bml/engine.js';
+    import { type Plane, planeArea } from '#lib/bml/plane.js';
     import { forget, read, write } from '#lib/keep.js';
     import type { ResponseMessage } from '#lib/ts/bml-protocol.js';
     import { CAPTION_RESCALE } from './caption-draw.js';
@@ -121,6 +122,12 @@
          * (自前のエンジンだけが使う)
          */
         clock?: (() => number) | null;
+        /**
+         * 文書が別の局へ選局したい (epgTune。自前のエンジンだけ)。**選局は画面がやる** — 局を探して
+         * 切り替えたら true、できなければ false (文書に失敗が返る)。ライブは局の一覧から探し、録画は
+         * 「録画の再生中は選局できません」と知らせて false を返す。渡さなければいつも失敗
+         */
+        tune?: ((service: Service) => boolean) | null;
     }
 
     let {
@@ -133,6 +140,7 @@
         postal,
         network,
         clock = null,
+        tune = null,
     }: Props = $props();
 
     /** リモコンの d。`AribKeyCode.DataButton` と同じ値 (番号で書く理由は `Remote.svelte`) */
@@ -203,7 +211,7 @@
      */
     let seat: { parent: Node; next: Node | null } | null = null;
     /** BML の画面の大きさ。`load` で分かる (960x540 / 720x480 など) */
-    let plane: { width: number; height: number } | null = null;
+    let plane: (Omit<Plane, 'aspect'> & { aspect?: Plane['aspect'] }) | null = null;
     /**
      * まだ電波から取っている最中か。**借りものが教えてくれる**
      * (`Indicator.setReceivingStatus`)。テレビの「データ取得中…」と同じ札で、
@@ -396,9 +404,15 @@
         if (mount === null || host === null || plane === null) return;
         const box = host.getBoundingClientRect();
         if (box.width === 0 || box.height === 0) return;
+        // 4:3 の面 (720x480 の display-aspect-ratio: 4v3) は高さを合わせて左右の真ん中 (`planeArea`)
+        const area = planeArea(box, plane);
+        mount.style.left = `${area.left}px`;
+        mount.style.top = `${area.top}px`;
         mount.style.width = `${plane.width}px`;
         mount.style.height = `${plane.height}px`;
-        mount.style.transform = `scale(${box.width / plane.width}, ${box.height / plane.height})`;
+        mount.style.transform = `scale(${area.width / plane.width}, ${area.height / plane.height})`;
+        // 枠いっぱいでない面では、映像を寄せる先も枠の大きさで変わる
+        if (own !== null && plane.aspect === '4:3') placeOwn(visible);
         // 小窓の中の字幕に、伸ばしたぶん細かく描き直してもらう (canvas の CSS の大きさは変わらず、気づけない)
         window.dispatchEvent(new Event(CAPTION_RESCALE));
     }
@@ -443,12 +457,19 @@
             mediaStyle ??= media.style.cssText;
             // 字幕を帯の上へ持ち上げない印 (`PlayerStage`。小窓の中は帯と重ならない)
             media.dataset['bmlWindow'] = '';
-            const share = (n: number, of: number): string => `${(n / of) * 100}%`;
+            // 面の中の場所を、枠の中の割合に (4:3 の面は枠の真ん中に置いてある。`fit`)
+            const box = host?.getBoundingClientRect() ?? { width: 1, height: 1 };
+            const area = planeArea(box, plane);
+            const left = box.width > 0 ? area.left / box.width : 0;
+            const top = box.height > 0 ? area.top / box.height : 0;
+            const sx = box.width > 0 ? area.width / box.width / plane.width : 1 / plane.width;
+            const sy = box.height > 0 ? area.height / box.height / plane.height : 1 / plane.height;
+            const share = (n: number): string => `${n * 100}%`;
             media.style.inset = 'auto';
-            media.style.left = share(videoRect.left, plane.width);
-            media.style.top = share(videoRect.top, plane.height);
-            media.style.width = share(videoRect.width, plane.width);
-            media.style.height = share(videoRect.height, plane.height);
+            media.style.left = share(left + videoRect.left * sx);
+            media.style.top = share(top + videoRect.top * sy);
+            media.style.width = share(videoRect.width * sx);
+            media.style.height = share(videoRect.height * sy);
             return;
         }
         if (mediaStyle !== null) {
@@ -654,6 +675,8 @@
                 // 映像の場所は画面の大きさが分かってから寄せる
                 place();
             },
+            // 選局は画面に頼む (エンジンは「この局へ」と言うだけ)
+            onTune: (service) => tune?.(service) ?? false,
             log: (message) => console.warn(`[bml] ${message}`),
         });
         own = made;

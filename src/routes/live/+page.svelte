@@ -1,6 +1,7 @@
 <script lang="ts">
     import { onMount } from 'svelte';
     import { submitting } from '#lib/actions.js';
+    import type { Service } from '#lib/bml/engine.js';
     import ProgramFacts from '#lib/components/ProgramFacts.svelte';
     import AudioMenu from '#lib/components/player/AudioMenu.svelte';
     import { screenAwake } from '#lib/components/player/awake.svelte.js';
@@ -116,14 +117,32 @@
      * **音声は引き継がない。** あちらは番組ごとに構成が変わるもので、局が変われば
      * 前の合言葉はもう指すものが無い (サーバが主音声に落とす)
      */
-    function select(channel: LiveChannel): void {
-        if (video === null) return;
+    function select(channel: LiveChannel): boolean {
+        if (video === null) return false;
         void player.tune(video, {
             channelType: channel.type,
             channel: channel.channel,
             serviceId: channel.id,
             codec: player.codec,
         });
+        return true;
+    }
+
+    /**
+     * **データ放送が「この局へ」と言ってきた (epgTune)。** 一覧から局を探して、手で選んだのと同じ道
+     * (`select`) で切り替える。データ放送の器は局が変わると作り直されるので、切り替えた先の局の
+     * データ放送が出る。
+     *
+     * 探すのは original_network_id と service_id。service_id はネットワークの中で 1 つに決まる
+     * (局の一覧は transport_stream_id を持っていない)。一覧に無い局 (取り残し・映像の無い局) なら
+     * false — 文書には失敗が返り、文書が自分で案内する
+     */
+    function tuneFromData(service: Service): boolean {
+        const found = channels.find(
+            (c) => c.networkId === service.originalNetworkId && c.serviceId === service.serviceId,
+        );
+        // 映像がまだ無い (選局できない) なら失敗にする。文書は閉じない
+        return found !== undefined && select(found);
     }
 
     /**
@@ -325,6 +344,7 @@
                 bind:pressD={dataButton}
                 postal={data.postalCode}
                 network={data.bmlNetwork}
+                tune={tuneFromData}
             />
 
             <!--
