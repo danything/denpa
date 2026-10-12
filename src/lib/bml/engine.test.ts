@@ -214,8 +214,28 @@ describe('エンジンはページを固めない', () => {
         expect(longest).toBeLessThan(100);
     }, 30_000);
 
+    test('setInterval の受け手が間隔より重くても、待ちに重ねて積まない', async () => {
+        const { bml } = open();
+        // 1ms ごとに、1 回に区切りを何度もまたぐ受け手。直す前は動いている間の刻みが全部積まれ、
+        // 止めた後も積んだ分が動き続けた
+        const script = `var n = 0, id;
+            function start() { id = browser.setInterval("tick();", 1, 0); }
+            function tick() {
+                n++;
+                browser.Ureg[1] = "" + n;
+                if (n >= 5) browser.clearTimer(id);
+                var s = 0;
+                for (var i = 0; i < 300000; i++) s += i;
+            }`;
+        for (const message of carousel([startup('', script)])) bml.feed(message);
+        const { done } = await watch(() => Number(inside(bml).ureg[1]) >= 5, 20_000);
+        expect(done).toBe(true);
+        await watch(() => false, 500);
+        expect(Number(inside(bml).ureg[1])).toBeLessThanOrEqual(6);
+    }, 30_000);
+
     test('手が空かないまま続く文書は止めて知らせる', async () => {
-        const { bml, logs } = open({ budget: { window: 200 } });
+        const { bml, logs } = open({ budget: { window: 100 } });
         // 終わらないループ。命令の数の上限に届く前に、手が空かない時間の上限で止まる
         for (const message of carousel([startup('', 'function start() { for (;;) {} }')])) bml.feed(message);
         const { longest, done } = await watch(() => bml.path === null && logs.length > 0, 20_000);
