@@ -26,7 +26,7 @@ import { run } from './stream';
 /** 無音とみなす音の大きさ。16ビットで ±50 */
 const SILENCE_NOISE = 50 / 32768;
 /** 拾う無音の最短 (秒)。短いものは判定 (`cm-decide`) で捨てる */
-export const SILENCE_MIN = 0.15;
+const SILENCE_MIN = 0.15;
 
 export interface ScanLogo {
     /** 枠を切り出すフィルタ (`crop=…`)。白黒にするのはこちらで足す */

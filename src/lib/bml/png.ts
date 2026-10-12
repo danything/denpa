@@ -7,34 +7,8 @@
  *   PNG を組むので、canvas も圧縮の口も要らない
  */
 
+import { PNG_SIGNATURE, pngChunk } from '#lib/ts/png.js';
 import type { Rgba } from './clut';
-
-const CRC_TABLE = (() => {
-    const table = new Uint32Array(256);
-    for (let n = 0; n < 256; n++) {
-        let c = n;
-        for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
-        table[n] = c >>> 0;
-    }
-    return table;
-})();
-
-export function crc32(data: Uint8Array): number {
-    let c = 0xffffffff;
-    for (let i = 0; i < data.length; i++) c = CRC_TABLE[(c ^ data[i]!) & 0xff]! ^ (c >>> 8);
-    return (c ^ 0xffffffff) >>> 0;
-}
-
-/** PNG の塊 (長さ・名前・中身・CRC) */
-function chunk(name: string, body: Uint8Array): Uint8Array {
-    const out = new Uint8Array(12 + body.length);
-    const view = new DataView(out.buffer);
-    view.setUint32(0, body.length);
-    for (let i = 0; i < 4; i++) out[4 + i] = name.charCodeAt(i);
-    out.set(body, 8);
-    view.setUint32(8 + body.length, crc32(out.subarray(4, 8 + body.length)));
-    return out;
-}
 
 export function concat(parts: Uint8Array[]): Uint8Array<ArrayBuffer> {
     const out = new Uint8Array(parts.reduce((n, p) => n + p.length, 0));
@@ -45,8 +19,6 @@ export function concat(parts: Uint8Array[]): Uint8Array<ArrayBuffer> {
     }
     return out;
 }
-
-export const SIGNATURE = Uint8Array.of(0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a);
 
 /** 放送の PNG に CLUT の PLTE・tRNS を入れる。大きさも返す。パレットの PNG でなければそのまま */
 export function applyClut(
@@ -65,7 +37,7 @@ export function applyClut(
         plte.set([r, g, b], i * 3);
         trns[i] = a;
     });
-    const parts: Uint8Array[] = [SIGNATURE];
+    const parts: Uint8Array[] = [PNG_SIGNATURE];
     let placed = false;
     let at = 8;
     while (at + 12 <= png.length) {
@@ -77,7 +49,7 @@ export function applyClut(
         if (name === 'IHDR' && png[at + 8 + 9] !== 3) return { data: concat([png]), width, height };
         // PLTE・tRNS は最初の IDAT の前に (gAMA などの後ろでよい。PNG の塊の順)
         if (name === 'IDAT' && !placed) {
-            parts.push(chunk('PLTE', plte), chunk('tRNS', trns));
+            parts.push(pngChunk('PLTE', plte), pngChunk('tRNS', trns));
             placed = true;
         }
         if (name !== 'PLTE' && name !== 'tRNS') parts.push(png.subarray(at, end));
@@ -104,10 +76,10 @@ export function alphaPng(width: number, height: number, alpha: Uint8Array): Uint
     ihdr[8] = 8; // 8 ビット
     ihdr[9] = 4; // 灰 + 透明度
     return concat([
-        SIGNATURE,
-        chunk('IHDR', ihdr),
-        chunk('IDAT', storedZlib(raw)),
-        chunk('IEND', new Uint8Array()),
+        PNG_SIGNATURE,
+        pngChunk('IHDR', ihdr),
+        pngChunk('IDAT', storedZlib(raw)),
+        pngChunk('IEND', new Uint8Array()),
     ]);
 }
 

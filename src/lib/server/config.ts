@@ -84,7 +84,7 @@ export const config = {
     dbPath,
     /** DBと並べて置くもの。放送波から拾った局ロゴと、CM検出のために覚えた局ロゴ */
     dataDir,
-    /** 元のTSの置き場。エンコード後は(keep_original でなければ)消える作業領域 */
+    /** 元のTSの置き場。エンコード後は (元のTSを残す設定でなければ) 消える作業領域 */
     rawDir: str('RAW_DIR', join(mediaDir, 'raw')),
     /** エンコード済みの置き場。プレイヤーにはここのファイルを配る */
     encodedDir: str('ENCODED_DIR', join(mediaDir, 'encoded')),

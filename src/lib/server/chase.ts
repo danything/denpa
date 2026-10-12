@@ -16,9 +16,7 @@
 
 import { statSync } from 'node:fs';
 import { open } from 'node:fs/promises';
-
-/** TS パケットの大きさ。読み出しの頭はこれに揃える (途中から読んでも同期できる) */
-const PACKET = 188;
+import { PACKET } from '../ts/psi';
 
 /** 1回に読む量。露骨に小さいと read の回数だけ損する */
 const READ_SIZE = 256 * 1024;

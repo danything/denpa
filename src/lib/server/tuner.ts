@@ -56,7 +56,7 @@ const AGENT_TUNER = object({
      * 使われる前提で数える (`conflict.ts`、docs/agent.md「選ぶ順の約束」)
      */
     rank: nullable(number),
-    /** 選局に使うデバイス。ここからエージェントがコマンドを組み立てる */
+    /** 選局に使うデバイス。エージェントはこれを直に開く */
     device: nullable(string),
     /** 衛星の給電。要る構成だけ */
     lnb: nullable(string),
@@ -130,19 +130,19 @@ export async function putChannels(found: AgentChannel[], scanned: ChannelType[])
     return tolerate(array(AGENT_CHANNEL), await res.json(), 'エージェントの PUT /denpa/channels');
 }
 
-export async function getTuners(): Promise<AgentTuner[]> {
-    return (await get('/denpa/tuners', TUNERS)).tuners;
+/** 一覧と、定義を書いていないので自分で見つけた状態か (`detected`。チューナー画面に出す) を1度に */
+export function tunerList(): Promise<Infer<typeof TUNERS>> {
+    return get('/denpa/tuners', TUNERS);
 }
 
-/** 定義を書いていないので自分で見つけた状態か。画面に出す */
-export async function tunersDetected(): Promise<boolean> {
-    return (await get('/denpa/tuners', TUNERS)).detected === true;
+export async function getTuners(): Promise<AgentTuner[]> {
+    return (await tunerList()).tuners;
 }
 
 /**
  * 機材の定義を書き換える。
  *
- * **選局コマンドは無い。** エージェントがデバイスと種別から組み立てる
+ * **選局コマンドは無い。** エージェントがデバイスと種別から選局する
  * (渡せると、denpa に入れた人が privileged なチューナー側で好きなコマンドを走らせられる)。
  *
  * **空を渡すと定義そのものが消える** = 自動検出に戻す。

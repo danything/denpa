@@ -1,6 +1,7 @@
 import { closeSync, openSync, readSync } from 'node:fs';
 import { relative } from 'node:path';
 import { array, boolean, type Infer, literal, object, optional, string, tolerate } from '../shape';
+import { PACKET, SYNC } from '../ts/psi';
 import { config } from './config';
 
 /**
@@ -18,9 +19,6 @@ import { config } from './config';
  * やり取りするのはパスだけ。
  */
 
-/** MPEG-TS のパケット長 */
-const PACKET = 188;
-const SYNC = 0x47;
 /** 何パケット見るか。全部読むと数GBのTSで時間がかかる */
 const SAMPLE = 20_000;
 /** これを超えていたらスクランブルされているとみなす */

@@ -12,7 +12,8 @@
  * - TERM: くり返しの回数 (0x7fffffff は限り無し)
  */
 
-import { concat, SIGNATURE } from './png';
+import { PNG_SIGNATURE } from '#lib/ts/png.js';
+import { concat } from './png';
 
 export interface MngFrame {
     /** CLUT を入れる前の PNG */
@@ -96,7 +97,7 @@ export function parseMng(data: Uint8Array): Mng | null {
                 }
                 break;
             case 'IHDR':
-                png = [SIGNATURE, whole];
+                png = [PNG_SIGNATURE, whole];
                 break;
             case 'IEND':
                 if (png !== null) {

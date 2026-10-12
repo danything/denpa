@@ -15,9 +15,9 @@
 import { read, write } from '#lib/keep.js';
 
 /** 入れたか切ったか (`on` / `off`)。無ければ UA で決める */
-export const CANVAS_VIDEO = 'canvas-video';
+const CANVAS_VIDEO = 'canvas-video';
 /** 運転中の注意を見せたか (`1`) */
-export const DRIVE_NOTICE = 'canvas-drive-notice';
+const DRIVE_NOTICE = 'canvas-drive-notice';
 
 export type CanvasChoice = 'on' | 'off' | null;
 
@@ -32,7 +32,7 @@ export function decide(choice: CanvasChoice, ua: string): boolean {
 }
 
 /** 明示した値。触っていなければ null */
-export function canvasChoice(): CanvasChoice {
+function canvasChoice(): CanvasChoice {
     const value = read(CANVAS_VIDEO);
     return value === 'on' || value === 'off' ? value : null;
 }

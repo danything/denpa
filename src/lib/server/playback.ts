@@ -145,7 +145,7 @@ const probed = new Map<string, { mtime: number; file: MediaFile }>();
 const KEEP = 64;
 
 /** エンコードしたファイルの中身を読む (見出しだけ。一瞬で返る) */
-export async function probeMedia(source: EncodedSource, path: string): Promise<MediaFile> {
+async function probeMedia(source: EncodedSource, path: string): Promise<MediaFile> {
     let mtime = -1;
     try {
         mtime = statSync(path).mtimeMs;
@@ -233,7 +233,7 @@ const PROBE_BYTES = 4 * 1024 * 1024;
 const tsProbed = new Map<string, { key: string; ts: TsFile | null }>();
 
 /** 元の TS の頭と尺を読む。読めなければ null */
-export async function probeTs(path: string): Promise<TsFile | null> {
+async function probeTs(path: string): Promise<TsFile | null> {
     let size = 0;
     let mtime = 0;
     try {
@@ -538,7 +538,7 @@ export function tsTranscodeArgs(
 }
 
 /** 読まれずに詰まった ffmpeg を畳むまで (ms) */
-export const IDLE_LIMIT = 5 * 60_000;
+const IDLE_LIMIT = 5 * 60_000;
 /** 詰まりを見る間隔 (ms) */
 const IDLE_CHECK = 30_000;
 

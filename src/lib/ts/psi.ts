@@ -18,12 +18,12 @@ export const SYNC = 0x47;
 /** PAT。どの PID に PMT が居るかを持つ。**入口はいつもここ** */
 export const PID_PAT = 0x0000;
 const PID_NIT = 0x0010;
-const PID_SDT = 0x0011;
+export const PID_SDT = 0x0011;
 
 export const TABLE_PAT = 0x00;
 export const TABLE_PMT = 0x02;
 const TABLE_NIT_ACTUAL = 0x40;
-const TABLE_SDT_ACTUAL = 0x42;
+export const TABLE_SDT_ACTUAL = 0x42;
 
 const DESC_SERVICE_LIST = 0x41;
 const DESC_SERVICE = 0x48;

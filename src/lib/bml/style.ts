@@ -156,7 +156,7 @@ export interface Cascade {
  * 生の値を重ねる。返すのは「この要素で効いている値」(継ぐものは親から引いてくる前)。
  * `state` を渡すと、その状態のときの値 (`focusStyle` の読み出し)
  */
-export function declared(node: Cascade, state: State = node.state): Declarations {
+function declared(node: Cascade, state: State = node.state): Declarations {
     const out: Declarations = new Map();
     const important = new Set<string>();
     const put = (property: string, value: string, isImportant: boolean): void => {
@@ -177,7 +177,7 @@ export function declared(node: Cascade, state: State = node.state): Declarations
 }
 
 /** 生の値を決めた値に (継ぐものは親から)。親の値は `parentValue` で引く */
-export function resolved(node: Cascade, property: string, state: State = node.state): string | null {
+function resolved(node: Cascade, property: string, state: State = node.state): string | null {
     const value = declared(node, state).get(property);
     if (value !== undefined && value.toLowerCase() !== 'inherit') return value.trim();
     if ((value !== undefined || INHERITED.has(property)) && node.parent !== null) {
@@ -187,7 +187,7 @@ export function resolved(node: Cascade, property: string, state: State = node.st
 }
 
 /** `10px` / `10` (px は書かなくてよい) */
-export function parsePx(value: string | null): number | null {
+function parsePx(value: string | null): number | null {
     if (value === null) return null;
     const match = /^(-?\d+)(?:px)?$/i.exec(value.trim());
     return match === null ? null : Number(match[1]);

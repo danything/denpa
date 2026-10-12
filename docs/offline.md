@@ -89,9 +89,11 @@ DB 名 `denpa-offline`、ストア3つ (実体は [offline-db.ts](../src/lib/off
 
 ### 観る
 
-- **オンラインの `/watch`** は、`videos` に `ready` があれば `URL.createObjectURL(blob)`、
-  無ければ従来の API URL を `src` にする。src を差し替えるだけなので操作
+- **オンラインの `/watch`** は、`videos` に `ready` があり、ファイルをそのまま読む道を自動で選んだときは
+  `URL.createObjectURL(blob)` を `src` にする (コーデックを選んだときや、サーバが流すものを選んだときはサーバから)。
+  src を差し替えるだけなので操作
   (チャプター・CM飛ばし・速度・字幕・データ放送) はそのままで、付き添いも端末のものを読む。
+  互換モードでは保存した Matroska をそのまま canvas に描く (`mkv-source.ts`。[stream.md](stream.md#録画の観る画面も-canvas-に描く))。
 - **オフラインの `/offline`** は素の `<video controls>` で、動画だけを流す
   (字幕・チャプター・データ放送は落としてあっても使わない)。位置は5秒ごとに `resume` ストアへ。
 - 使い終わったら `URL.revokeObjectURL` する。

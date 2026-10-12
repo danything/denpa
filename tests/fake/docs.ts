@@ -6,6 +6,8 @@
  * 作り物に差し替える。並べ方 (中継・サービス種別・カルーセルの載り方) はテストと同じ道を通る
  */
 import { deflateSync } from 'node:zlib';
+import { joinBytes } from '../../src/lib/ts/bytes';
+import { PNG_SIGNATURE, pngChunk } from '../../src/lib/ts/png';
 import { captionMkv, encodeAribText, management, text } from '../../src/lib/ts/synth-caption';
 import type { FakeService } from './services';
 
@@ -219,35 +221,6 @@ export function docsProgram(service: FakeService, slot: number) {
 /** ARIB の決め打ちの色の表 (STD-B24) の番号。0 黒 1 赤 2 緑 3 黄 4 青 5 マゼンタ 6 シアン 7 白 8 透明 */
 const LOGO_COLORS = [1, 4, 2, 5, 6, 3, 1, 4, 2, 5, 6, 3];
 
-const CRC_TABLE = Array.from({ length: 256 }, (_, n) => {
-    let c = n;
-    for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
-    return c >>> 0;
-});
-
-function crc32(bytes: Uint8Array): number {
-    let c = 0xffffffff;
-    for (const b of bytes) c = CRC_TABLE[(c ^ b) & 0xff]! ^ (c >>> 8);
-    return (c ^ 0xffffffff) >>> 0;
-}
-
-function chunk(type: string, data: Uint8Array): number[] {
-    const body = Uint8Array.from([...type].map((c) => c.charCodeAt(0)).concat([...data]));
-    const len = data.length;
-    const crc = crc32(body);
-    return [
-        (len >>> 24) & 0xff,
-        (len >>> 16) & 0xff,
-        (len >>> 8) & 0xff,
-        len & 0xff,
-        ...body,
-        (crc >>> 24) & 0xff,
-        (crc >>> 16) & 0xff,
-        (crc >>> 8) & 0xff,
-        crc & 0xff,
-    ];
-}
-
 /** 角を落とした色の四角に、白い丸と電波の弧を2本。どの局も同じ形で、色だけ違う */
 export function docsLogo(service: FakeService, width: number, height: number): Uint8Array {
     const index = DOCS_SERVICES.indexOf(service);
@@ -288,18 +261,11 @@ export function docsLogo(service: FakeService, width: number, height: number): U
         0,
         0,
     ]);
-    return Uint8Array.from([
-        0x89,
-        0x50,
-        0x4e,
-        0x47,
-        0x0d,
-        0x0a,
-        0x1a,
-        0x0a,
-        ...chunk('IHDR', ihdr),
-        ...chunk('IDAT', deflateSync(Uint8Array.from(raw))),
-        ...chunk('IEND', new Uint8Array(0)),
+    return joinBytes([
+        PNG_SIGNATURE,
+        pngChunk('IHDR', ihdr),
+        pngChunk('IDAT', deflateSync(Uint8Array.from(raw))),
+        pngChunk('IEND', new Uint8Array(0)),
     ]);
 }
 

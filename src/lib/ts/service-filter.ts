@@ -200,7 +200,7 @@ export class ServiceFilter {
 
             // PCR。映像と同じ PID のことが多いが、別に振られていることもある
             const pcrPid = ((section[8]! & 0x1f) << 8) | section[9]!;
-            if (pcrPid !== 0x1fff) pids.add(pcrPid);
+            if (pcrPid !== PID_NULL) pids.add(pcrPid);
 
             collectCa(pmtProgramInfo(section), pids);
             for (const [, elementaryPid, info] of pmtStreams(section)) {

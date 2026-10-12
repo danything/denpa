@@ -66,7 +66,7 @@ export type ToWorker =
 
 /** worker → 画面 */
 export type FromWorker =
-    /** 使えなくなった (デコーダが無い・音がデコードできない・間に合わない。`budget.ts`)。**画面はエンコードしたものに戻る** */
+    /** 使えなくなった (デコーダが無い・音がデコードできない・間に合わない。`budget.ts`)。**次の形に移るか止まるかは画面が決める** */
     | { type: 'fail'; reason: string }
     /**
      * デコードできた音1コマ。面ごとの float (-1〜1)。**時刻は伸ばした PTS** (`pes.unwrap`)

@@ -95,7 +95,7 @@ interface TextView {
 
 const VIDEO_TYPES = new Set(['video/x-arib-mpeg2', 'video/x-arib-h264', 'video/x-arib-h265']);
 
-export function isVideo(element: BmlElement): boolean {
+function isVideo(element: BmlElement): boolean {
     return element.tag === 'object' && VIDEO_TYPES.has((element.attr('type') ?? '').toLowerCase());
 }
 

@@ -29,9 +29,15 @@ import { RawEngine } from '#lib/raw/engine.js';
 import type { RawInput } from '#lib/raw/messages.js';
 import { Fmp4Splitter } from '#lib/ts/fmp4.js';
 import { CLOCK, WRAP } from '#lib/ts/pes.js';
-import { ORIGIN_HEADER } from '#lib/ts/playback.js';
+import {
+    busyAnswer,
+    ORIGIN_HEADER,
+    retryable,
+    retryWait,
+    STREAM_RETRIES,
+    type StreamState,
+} from '#lib/ts/playback.js';
 import { sinceHead } from '#lib/ts/seek.js';
-import { busyAnswer } from './remux-player';
 
 /** 鳴らし始めるまでに貯める長さ (秒) */
 const TARGET = 1;
@@ -43,14 +49,10 @@ const EARLY_BYTES = 8 * 1024 * 1024;
 const WAIT = 100;
 /** 時計を画面へ配る間 (ms)。字幕の貼り直し・CM の跨ぎ・データ放送はこれで回る */
 const TICK = 40;
-/** 続けて頼み直す上限 (`remux-player.ts` と同じ) */
-const RETRIES = 8;
 /** 尻からこれより手前へ飛んだら、頼まずに終わりにする (秒) */
 const END_EDGE = 0.5;
 
-export type CanvasState = 'flowing' | 'retrying' | 'failed' | 'busy';
-
-export interface CanvasOptions {
+interface CanvasOptions {
     /** 映像の入れ物。canvas はここに入る (データ放送が入れ物ごと動かす) */
     host: HTMLElement;
     /** この前に差し込む (字幕の canvas より下に来るように) */
@@ -71,7 +73,7 @@ export interface CanvasOptions {
     /** 止めて始めるか */
     paused: boolean;
     /** 繋ぎ直している・諦めた・戻った・混んでいて断られた */
-    state(state: CanvasState): void;
+    state(state: StreamState): void;
     /** 描けなくなった (間に合わない・デコーダが転び続ける・音が来ない)。**画面がほかの形へ移す** */
     gaveUp(reason: string): void;
     /** 外 (ロック画面・車の操作) から止められた・再開された */
@@ -278,7 +280,7 @@ export function canvasPlayer(options: CanvasOptions): CanvasPlayer {
             void reader?.cancel().catch(() => undefined);
             if (mine !== run || closed) return;
             // 繋がらない・途中で落ちた・サーバの 5xx なら頼み直す。4xx・読めない中身は何度やっても同じ
-            if (!(error instanceof TypeError || /^Error: HTTP 5/.test(String(error)))) {
+            if (!retryable(error)) {
                 console.warn('[canvas] 流せませんでした', error);
                 options.state('failed');
                 return;
@@ -289,11 +291,11 @@ export function canvasPlayer(options: CanvasOptions): CanvasPlayer {
 
     /** 切れた。倍々に待って、観ていた位置から頼み直す */
     function retry(): void {
-        if (retries >= RETRIES) {
+        if (retries >= STREAM_RETRIES) {
             options.state('failed');
             return;
         }
-        const wait = Math.min(10_000, 1000 * 2 ** retries);
+        const wait = retryWait(retries);
         retries++;
         options.state('retrying');
         retryTimer = setTimeout(() => {
