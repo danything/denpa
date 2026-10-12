@@ -55,6 +55,30 @@ describe('文字の空白 (付属2 5.3.2)', () => {
             .children.map((c) => (c.kind === 'text' ? c.data : `[${c.tag}]`));
         expect(texts).toEqual(['A ', '[span]', ' C']);
     });
+
+    test('空の p・span・a も文字を 1 つ持つ (スクリプトが firstChild.data に書く先)', () => {
+        const doc = load(
+            '<bml><body><p id="empty"></p><p id="blank">\n   \n</p><p id="cdata"><![CDATA[]]></p><p id="self"/><p id="wrap"><span id="s"></span></p><a id="a" href="x.bml"></a><div id="d"></div></body></bml>',
+        );
+        for (const id of ['empty', 'blank', 'cdata', 'self', 's', 'a']) {
+            const children = doc.getElementById(id)!.children;
+            expect(children.length).toBe(1);
+            expect(children[0]?.kind === 'text' && children[0].data).toBe('');
+        }
+        // 中に要素があれば足さない (firstChild は span のまま)。div は字を持たない
+        expect(doc.getElementById('wrap')!.children.map((c) => c.kind)).toEqual(['element']);
+        expect(doc.getElementById('d')!.children).toEqual([]);
+    });
+
+    test('実体参照で書いた空白は詰めない', () => {
+        const doc = load('<bml><body><p id="p">&#x20;</p><p id="q">\n&#32;&#x3000;\n</p></body></bml>');
+        const text = (id: string) => {
+            const first = doc.getElementById(id)!.children[0];
+            return first?.kind === 'text' ? first.data : null;
+        };
+        expect(text('p')).toBe(' ');
+        expect(text('q')).toBe(' 　');
+    });
 });
 
 describe('CSS', () => {

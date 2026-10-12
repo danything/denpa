@@ -248,3 +248,30 @@ describe('エンジンはページを固めない', () => {
         expect(bml.path).toBeNull();
     }, 30_000);
 });
+
+describe('文書のスクリプト', () => {
+    test('空の p の firstChild.data に書いても止まらず、後に続く処理まで動く', async () => {
+        const { bml, logs } = open();
+        // 2026-10-12 本番 (NHK 総合の録画) で、空の p に日時・局名を書くところで「null の data に
+        // 書けません」と止まり、後に続くメニューと天気の表が出なかった形 (字は ASCII。偽のカルーセルは latin1 で詰める)
+        const script = `function start() {
+            document.getElementById("date").firstChild.data = "10/12 18:01";
+            document.getElementById("area").firstChild.data = "Chiba";
+            document.getElementById("blank").firstChild.data = "Typhoon";
+            browser.Ureg[1] = document.getElementById("date").firstChild.data + "|" +
+                document.getElementById("area").firstChild.data + "|" +
+                document.getElementById("blank").firstChild.data;
+        }`;
+        for (const message of carousel([
+            startup(
+                '<p id="date" style="left:0px;top:0px;width:200px;height:30px"></p><p id="area"/><p id="blank">\n  \n</p>',
+                script,
+            ),
+        ]))
+            bml.feed(message);
+        const { done } = await watch(() => inside(bml).ureg[1] !== '');
+        expect(done).toBe(true);
+        expect(inside(bml).ureg[1]).toBe('10/12 18:01|Chiba|Typhoon');
+        expect(logs.filter((line) => line.includes('スクリプトの誤り'))).toEqual([]);
+    });
+});
