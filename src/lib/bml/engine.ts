@@ -9,13 +9,16 @@
  *
  * - 映像は動かさない。映像の object の場所を `onVideoRect` で知らせ、置くのは呼び手
  * - 文書は自前の XML の読み手 → 中身の木 → 影の中の絶対配置の div ([render.ts](render.ts))
- * - スクリプトは自前の VM ([vm.ts](vm.ts))。イベントは 1 つずつ順に動かし、1 回 5ms で手を放す
+ * - スクリプトは自前の VM ([vm.ts](vm.ts))。イベントは 1 つずつ順に動かす
+ * - **ページを握るのは 1 つの仕事 (タスクとそれに続くマイクロタスク) で 5ms まで** ([budget.ts](budget.ts))。
+ *   スクリプト・描き直し・約束の続きは全部その下で動かし、休みなく回り続ける文書は止める
  *
  * 時計は `clock` (録画は再生位置から放送の時刻を出す)。無ければ TOT + 経過時間。
  */
 
 import type { ResponseMessage } from '#lib/ts/bml-protocol.js';
 import { type BmlIp, type BrowserHost, defineBinaryTable, defineBrowser } from './browser';
+import { Budget, type BudgetLimits } from './budget';
 import { createRealm } from './builtins';
 import { DEFAULT_CLUT, type Rgba, readClut } from './clut';
 import { compileScript } from './compiler';
@@ -72,6 +75,8 @@ export interface BmlOptions {
     /** 文書が替わった */
     onLoad?: (plane: Plane, path: string) => void;
     log?: (message: string) => void;
+    /** ページを握る長さの決まり (既定は [budget.ts](budget.ts) の DEFAULT_BUDGET。テストで縮める) */
+    budget?: Partial<BudgetLimits>;
 }
 
 export interface Bml {
@@ -126,6 +131,8 @@ type Job =
           handler: string;
           target: BmlElement | null;
           event: Record<string, Value>;
+          /** setInterval から積んだもの (動き始めたら次を積めるようにする) */
+          timer?: Timer;
       }
     | { kind: 'native'; token: number; run: () => void };
 
@@ -134,10 +141,9 @@ interface Timer {
     interval: number;
     remaining: number;
     handle: ReturnType<typeof setInterval> | null;
+    /** 積んだ受け手がまだ動いていない (重ねて積まない) */
+    queued: boolean;
 }
-
-/** 1 回に動かす長さ (ms)。過ぎたら手を放して続きは次の隙間に */
-const SLICE = 5;
 
 /** JPEG の大きさ (SOF) */
 function jpegSize(data: Uint8Array): { width: number; height: number } | null {
@@ -199,8 +205,16 @@ class Engine implements DomHost, BrowserHost, RenderHost {
     private service: number | null = null;
     /** 文書を読み込んでいる間。外から来るイベントは捨てる (onload より前に受け手を動かさない) */
     private preparing = false;
-    /** 今の区切り (SLICE) の始まり */
-    private sliceStart = 0;
+    private readonly budget: Budget;
+    /** 暴れたので止めた。この器ではもう文書を出さない */
+    private halted = false;
+    /** 続きを次のタスクに回してある (pump・描き直し) */
+    private deferred = false;
+    private drawDeferred = false;
+    /** 計っている仕事の入れ子 (外側だけ数える) */
+    private depth = 0;
+    /** 取りに行って「無い」と決まった画像。モジュールが届き直すまで取りに行かない */
+    private readonly missingImages = new Set<string>();
     private receiver: ReceiverInfo = { zipcode: '', prefecture: 255 };
     private ticker: ReturnType<typeof setInterval> | null = null;
 
@@ -208,6 +222,7 @@ class Engine implements DomHost, BrowserHost, RenderHost {
         this.fonts = options.fonts;
         this.ip = options.ip;
         this.receiver = { ...this.receiver, ...options.receiver };
+        this.budget = new Budget(options.budget);
         this.shadow = options.root.attachShadow({ mode: 'open' });
         this.nvram = new Nvram(
             options.store,
@@ -289,10 +304,20 @@ class Engine implements DomHost, BrowserHost, RenderHost {
                 }
                 return;
             }
-            case 'module':
+            case 'module': {
+                // 届き直したモジュールの「無い」と決めた画像は、もう一度探す
+                const prefix = `${refToPath({ component: event.component, module: event.module, file: null })}/`;
+                let retry = false;
+                for (const key of this.missingImages) {
+                    if (!key.startsWith(prefix)) continue;
+                    this.missingImages.delete(key);
+                    retry = true;
+                }
+                if (retry) this.doc?.touch();
                 this.maybeStart();
                 this.drawSoon();
                 return;
+            }
             case 'dii':
                 this.moduleUpdated();
                 this.dataEvent(event.component, event.dii, event.previous);
@@ -354,7 +379,7 @@ class Engine implements DomHost, BrowserHost, RenderHost {
 
     /** 文書が無いときに、入口のモジュールが揃っていれば始める (同じ版が送り直されても始める) */
     private maybeStart(): void {
-        if (this.doc !== null || this.loading || this.destroyed) return;
+        if (this.doc !== null || this.loading || this.destroyed || this.halted) return;
         if (this.resources.pmtSeen && !this.resources.pmt.has(STARTUP_COMPONENT)) return;
         if (!this.resources.has(STARTUP_COMPONENT, STARTUP_MODULE)) return;
         void this.startup();
@@ -483,6 +508,7 @@ class Engine implements DomHost, BrowserHost, RenderHost {
     // ---- 文書を替える ----
 
     private async startup(): Promise<void> {
+        if (this.halted) return;
         const base = `/${hex(STARTUP_COMPONENT, 2)}/${hex(STARTUP_MODULE, 4)}`;
         const ref = this.resources.resolve(base, null)!;
         this.loading = true;
@@ -501,6 +527,7 @@ class Engine implements DomHost, BrowserHost, RenderHost {
      * 読めなければ入口から出直す (入口が読めなければ止める)
      */
     private async load(name: string, entry = false): Promise<void> {
+        if (this.halted) return;
         this.abandon();
         const token = this.token;
         this.loading = true;
@@ -547,9 +574,12 @@ class Engine implements DomHost, BrowserHost, RenderHost {
 
     /** 文書を組んで出す。スクリプト・onload を積み終えたら true */
     private async show(file: CarouselFile, path: string, token: number): Promise<boolean> {
+        // 組み立ては同期で重い。動いた時間に数える (読み込みをくり返す文書も止められるように)
+        let started = performance.now();
         const xml = parseXml(decodeEuc(file.data));
-        if (xml === null) return false;
-        const doc = new BmlDocument(xml);
+        const doc = xml === null ? null : new BmlDocument(xml);
+        this.charge(started);
+        if (doc === null || token !== this.token) return false;
         // 要るファイル (link のスタイル・CLUT・script の src) は、文書を替える前に全部そろえる
         const fetchText = async (url: string): Promise<string | null> => {
             const ref = this.resources.resolve(url, path);
@@ -592,6 +622,7 @@ class Engine implements DomHost, BrowserHost, RenderHost {
         }
 
         // ここから文書を替える (以降は同期で積み終える)
+        started = performance.now();
         const previous = this.current === null ? null : this.resources.resolve(this.current, null);
         const next = this.resources.resolve(path, null);
         // 別の部品の文書へ移ったら lockModuleOnMemory で押さえたものを外す (TR-B14 第二分冊 表5-11)
@@ -645,6 +676,7 @@ class Engine implements DomHost, BrowserHost, RenderHost {
                     this.handle(this.focusedElement, 'onfocus', { type: 'focus' });
             },
         });
+        this.charge(started);
         return true;
     }
 
@@ -652,14 +684,12 @@ class Engine implements DomHost, BrowserHost, RenderHost {
 
     private enqueue(job: Job): void {
         if (job.token !== this.token) return;
-        // 待ちが空のところへ来たものだけ、新しい区切りを始める
-        const fresh = this.queue.length === 0 && !this.running;
         this.queue.push(job);
-        if (this.scheduled || this.running) return;
+        // 動いている・回してある間は、そちらが続けて動かす
+        if (this.scheduled || this.running || this.deferred) return;
         this.scheduled = true;
         queueMicrotask(() => {
             this.scheduled = false;
-            if (fresh) this.sliceStart = performance.now();
             this.pump();
         });
     }
@@ -678,60 +708,73 @@ class Engine implements DomHost, BrowserHost, RenderHost {
         return { kind: 'handler', token: this.token, handler, target: element, event };
     }
 
+    /** 待っているものを順に動かす。区切りを使い切ったら、続きは次のタスクへ (ページを固めない) */
     private pump(): void {
-        while (!this.running && !this.destroyed) {
-            // 区切りを過ぎたら、続きは次の隙間に (ページを固めない)
-            if (this.queue.length > 0 && performance.now() - this.sliceStart > SLICE) {
-                this.later();
-                return;
-            }
-            const job = this.queue.shift();
-            if (job === undefined) {
-                this.draw();
-                return;
-            }
-            if (job.token !== this.token) continue;
-            if (job.kind === 'native') {
-                // 中で積んだものは、もう待っているものより先に (積んだ順で) 動かす
-                const rest = this.queue;
-                this.queue = [];
-                job.run();
-                this.queue.push(...rest);
-                continue;
-            }
-            const vm = this.vm;
-            const dom = this.dom;
-            if (vm === null || dom === null) continue;
-            try {
-                if (job.kind === 'program') {
-                    vm.startProgram(compileScript(job.source, job.name));
-                    this.currentEvent = dom.event({});
-                } else {
-                    const name = /^\s*([A-Za-z_$][\w$]*)\s*\(\s*\)\s*;?\s*$/.exec(job.handler)?.[1];
-                    if (name === undefined) throw new ScriptError(`受け手の形が読めません: ${job.handler}`);
-                    this.currentEvent = dom.event({ ...job.event, target: dom.wrap(job.target) });
-                    vm.startCall(vm.realm.global.get(name));
+        this.work(() => {
+            while (!this.running && !this.destroyed) {
+                if (this.queue.length > 0 && this.budget.spent()) {
+                    this.later();
+                    return;
                 }
-            } catch (error) {
-                this.log(
-                    `スクリプトを始められません: ${error instanceof Error ? error.message : String(error)}`,
-                );
-                continue;
+                const job = this.queue.shift();
+                if (job === undefined) {
+                    this.draw();
+                    return;
+                }
+                if (job.token !== this.token) continue;
+                if (job.kind === 'native') {
+                    // 中で積んだものは、もう待っているものより先に (積んだ順で) 動かす
+                    const rest = this.queue;
+                    this.queue = [];
+                    job.run();
+                    this.queue.push(...rest);
+                    continue;
+                }
+                if (job.kind === 'handler' && job.timer !== undefined) job.timer.queued = false;
+                const vm = this.vm;
+                const dom = this.dom;
+                if (vm === null || dom === null) continue;
+                try {
+                    if (job.kind === 'program') {
+                        vm.startProgram(compileScript(job.source, job.name));
+                        this.currentEvent = dom.event({});
+                    } else {
+                        const name = /^\s*([A-Za-z_$][\w$]*)\s*\(\s*\)\s*;?\s*$/.exec(job.handler)?.[1];
+                        if (name === undefined)
+                            throw new ScriptError(`受け手の形が読めません: ${job.handler}`);
+                        this.currentEvent = dom.event({ ...job.event, target: dom.wrap(job.target) });
+                        vm.startCall(vm.realm.global.get(name));
+                    }
+                } catch (error) {
+                    this.log(
+                        `スクリプトを始められません: ${error instanceof Error ? error.message : String(error)}`,
+                    );
+                    continue;
+                }
+                this.running = true;
+                this.step(job.token, vm);
             }
-            this.running = true;
-            this.step(job.token, vm);
-        }
+        });
     }
 
+    /**
+     * スクリプトを続ける。約束の続き (すぐ返る待ちのくり返し) で来ても、今の仕事の区切りを
+     * 使い切っていれば次のタスクへ回す
+     */
     private step(token: number, vm: Vm): void {
         if (token !== this.token || this.destroyed || vm !== this.vm) return;
-        const result = vm.run(performance.now() + SLICE);
+        if (this.budget.spent()) {
+            setTimeout(() => this.step(token, vm), 0);
+            return;
+        }
+        this.work(() => this.advance(token, vm));
+    }
+
+    private advance(token: number, vm: Vm): void {
+        const result = vm.run(this.budget.deadline());
         switch (result.kind) {
             case 'yield':
-                setTimeout(() => {
-                    this.sliceStart = performance.now();
-                    this.step(token, vm);
-                }, 0);
+                setTimeout(() => this.step(token, vm), 0);
                 return;
             case 'suspend':
                 // 待つ間 (sleep など) に、ここまでの変化を見せる
@@ -739,7 +782,6 @@ class Engine implements DomHost, BrowserHost, RenderHost {
                 void result.promise.then(
                     (value) => {
                         if (token !== this.token || vm !== this.vm) return;
-                        this.sliceStart = performance.now();
                         vm.resume(value);
                         this.step(token, vm);
                     },
@@ -766,10 +808,12 @@ class Engine implements DomHost, BrowserHost, RenderHost {
         queueMicrotask(() => this.pump());
     }
 
-    /** 続きを次の隙間に */
+    /** 続きを次のタスクに (重ねて回さない) */
     private later(): void {
+        if (this.deferred) return;
+        this.deferred = true;
         setTimeout(() => {
-            this.sliceStart = performance.now();
+            this.deferred = false;
             this.pump();
         }, 0);
     }
@@ -778,8 +822,47 @@ class Engine implements DomHost, BrowserHost, RenderHost {
         if (!this.screenLocked) this.renderer?.draw();
     }
 
+    /** 外から (モジュール・画像が届いた) の描き直し。区切りを使い切っていれば次のタスクで */
     private drawSoon(): void {
-        if (!this.running) this.draw();
+        if (this.running) return;
+        if (this.budget.spent()) {
+            if (this.drawDeferred) return;
+            this.drawDeferred = true;
+            setTimeout(() => {
+                this.drawDeferred = false;
+                this.drawSoon();
+            }, 0);
+            return;
+        }
+        this.work(() => this.draw());
+    }
+
+    /** エンジンの仕事を動かして、動いた時間を数える (入れ子は外側だけ数える) */
+    private work(task: () => void): void {
+        if (this.depth > 0) {
+            task();
+            return;
+        }
+        const started = performance.now();
+        this.depth++;
+        try {
+            task();
+        } finally {
+            this.depth--;
+            this.charge(started);
+        }
+    }
+
+    /** `started` から今までを動いた時間に足す。休みなく動き続けていたら文書を止める */
+    private charge(started: number): void {
+        if (this.depth > 0 || this.halted || this.destroyed) return;
+        if (!this.budget.account(performance.now() - started)) return;
+        const { window, ratio } = this.budget.limits;
+        this.halted = true;
+        this.log(
+            `文書が休みなく動き続けるので止めました (${window}ms のうち ${Math.round(ratio * 100)}% を超えて動いた): ${this.current ?? ''}`,
+        );
+        this.exit();
     }
 
     log(message: string): void {
@@ -895,6 +978,7 @@ class Engine implements DomHost, BrowserHost, RenderHost {
             interval,
             remaining: count > 0 ? count : Number.POSITIVE_INFINITY,
             handle: null,
+            queued: false,
         };
         this.timers.set(id, timer);
         this.startTimer(id, timer);
@@ -904,12 +988,14 @@ class Engine implements DomHost, BrowserHost, RenderHost {
     private startTimer(id: number, timer: Timer): void {
         const token = this.token;
         timer.handle = setInterval(() => {
-            if (token !== this.token) return;
+            // 前に積んだものがまだ動いていなければ積まない (受け手が間隔より重いと、待ちが際限なく伸びる)
+            if (token !== this.token || timer.queued) return;
             timer.remaining--;
             if (timer.remaining <= 0) this.timer(id, 'clear');
             const name = /^\s*([A-Za-z_$][\w$]*)\s*\(\s*\)\s*;?\s*$/.exec(timer.code)?.[1];
             if (name === undefined) return;
-            this.enqueue({ kind: 'handler', token, handler: `${name}()`, target: null, event: {} });
+            timer.queued = true;
+            this.enqueue({ kind: 'handler', token, handler: `${name}()`, target: null, event: {}, timer });
         }, timer.interval);
     }
 
@@ -1027,10 +1113,17 @@ class Engine implements DomHost, BrowserHost, RenderHost {
         const file = this.resources.file(ref);
         if (file === null) {
             const key = refToPath(ref);
-            if (!this.waitingImages.has(key)) {
+            if (!this.waitingImages.has(key) && !this.missingImages.has(key)) {
                 this.waitingImages.add(key);
                 void this.resources.fetch(ref).then(() => {
                     this.waitingImages.delete(key);
+                    // 描けるようにならなかった (来ないと決まった・押さえた古い版に無い) なら描き直さない。
+                    // 描き直すとまたここへ来て、すぐ「無い」と返るのをくり返す (2026-10-12 本番で
+                    // タブが固まった)。モジュールが届き直したら探し直す
+                    if (this.resources.file(ref) === null) {
+                        this.missingImages.add(key);
+                        return;
+                    }
                     this.doc?.touch();
                     this.drawSoon();
                 });
