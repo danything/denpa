@@ -400,6 +400,12 @@
     function pauseMedia(): void {
         if (canvas !== null) {
             canvas.pause();
+            /*
+             * **止めた位置を時計にすぐ出す。** 刻み (`canvasTick`) を待つと、押した直後は1つ前の刻みの位置が
+             * 出ていて、次の刻みで1秒進んだように見えた。0.05 秒より小さな差は刻みでは直さないので、
+             * 止めている間ずっとずれたままのこともあった (`<video>` は止めたときに `timeupdate` が来る)
+             */
+            at = canvas.currentTime;
             playing = false;
             flowing();
             return;

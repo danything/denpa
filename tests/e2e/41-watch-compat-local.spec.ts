@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import type { Page } from '@playwright/test';
 import { mkvFromClip } from '../fake/mkv-clip';
-import { expect, FAKE_CAPTION, goto, recordOne, test, wakeControls } from './helpers';
+import { expect, FAKE_CAPTION, goto, recordOne, setRecording, test, wakeControls } from './helpers';
 
 /**
  * **互換モードで、端末に保存した録画も canvas に描く** (`src/lib/mkv-source.ts`・`src/lib/raw/mkv.ts`)。
@@ -26,6 +26,11 @@ test('端末に保存した録画も canvas に描き、飛ぶ・CM 飛ばし・
     request,
 }) => {
     test.setTimeout(180_000);
+    /*
+     * **エンコードする録画にする** (既定)。CM 検出が走り、偽の録画ではロゴの判定に失敗したと覚え書きに残るので、
+     * 観はじめの CM 飛ばしは切れている (下で押して入れる)。設定はワーカーのアプリに残るので、前のテストに任せない
+     */
+    await setRecording(request, {});
     const { id } = await recordOne(page, request);
     const mkv = mkvFromClip(
         new Uint8Array(readFileSync(new URL('../fake/live-av1.mp4', import.meta.url))),
