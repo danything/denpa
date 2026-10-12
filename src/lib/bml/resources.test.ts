@@ -1,0 +1,156 @@
+import { describe, expect, test } from 'bun:test';
+import type { ResponseMessage } from '#lib/ts/bml-protocol.js';
+import { parseDrcs } from './drcs';
+import { isDrcs } from './euc';
+import { alphaPng, applyClut, crc32 } from './png';
+import { Resources, refToPath } from './resources';
+
+const media = (type: string, subtype: string) => ({
+    type,
+    originalType: type,
+    subtype,
+    originalSubtype: subtype,
+    parameters: [],
+});
+const b64 = (text: string) => Buffer.from(text).toString('base64');
+
+function pmt(...components: number[]): ResponseMessage {
+    return {
+        type: 'pmt',
+        components: components.map((componentId) => ({
+            pid: 0x100 + componentId,
+            componentId,
+            streamType: 0x0d,
+        })),
+    };
+}
+function dii(component: number, modules: [number, number][], dataEventId = 1): ResponseMessage {
+    return {
+        type: 'moduleListUpdated',
+        componentId: component,
+        modules: modules.map(([id, version]) => ({ id, version, size: 1 })),
+        dataEventId,
+    };
+}
+function module(
+    component: number,
+    id: number,
+    version: number,
+    files: [string, string][],
+    dataEventId = 1,
+): ResponseMessage {
+    return {
+        type: 'moduleDownloaded',
+        componentId: component,
+        moduleId: id,
+        version,
+        dataEventId,
+        files: files.map(([name, body]) => ({
+            contentLocation: name,
+            contentType: media('text', 'plain'),
+            dataBase64: b64(body),
+        })),
+    };
+}
+
+describe('カルーセルのファイル', () => {
+    test('名前を解く (絶対・相対・~・arib-dc・大文字小文字)', () => {
+        const r = new Resources();
+        const base = '/40/0000/startup.bml';
+        expect(r.resolve('/40/0001/A.PNG', null)).toEqual({ component: 0x40, module: 1, file: 'a.png' });
+        expect(r.resolve('a.bml', base)).toEqual({ component: 0x40, module: 0, file: 'a.bml' });
+        expect(r.resolve('~/0FFF', base)).toEqual({ component: 0x40, module: 0xfff, file: null });
+        expect(r.resolve('/50/0fFf/x.bml', base)).toEqual({ component: 0x50, module: 0xfff, file: 'x.bml' });
+        expect(r.resolve('arib-dc://-1.-1.-1/40/0002/b.bml', null)).toEqual({
+            component: 0x40,
+            module: 2,
+            file: 'b.bml',
+        });
+        expect(r.resolve('../0003/c.bml', base)).toEqual({ component: 0x40, module: 3, file: 'c.bml' });
+        expect(r.resolve('http://example.jp/', base)).toBeNull();
+        expect(refToPath({ component: 0x40, module: 1, file: 'a.bml' })).toBe('/40/0001/a.bml');
+    });
+
+    test('届くのを待つ。DII に無いもの・PMT に無い部品は待たない', async () => {
+        const r = new Resources();
+        const receiving: boolean[] = [];
+        r.onReceiving = (on) => receiving.push(on);
+        r.feed(pmt(0x40));
+        r.feed(dii(0x40, [[0, 1]]));
+        const waiting = r.fetch({ component: 0x40, module: 0, file: 'startup.bml' });
+        expect(receiving).toEqual([true]);
+        r.feed(module(0x40, 0, 1, [['startup.bml', '<bml/>']]));
+        expect(new TextDecoder().decode((await waiting)?.data)).toBe('<bml/>');
+        expect(receiving).toEqual([true, false]);
+        expect(await r.fetch({ component: 0x40, module: 9, file: null })).toBeNull();
+        expect(await r.fetch({ component: 0x50, module: 0, file: null })).toBeNull();
+    });
+
+    test('押さえたモジュールは版が上がっても持ち続ける。外すと新しい版', async () => {
+        const r = new Resources();
+        r.feed(pmt(0x40));
+        r.feed(dii(0x40, [[1, 1]]));
+        r.feed(module(0x40, 1, 1, [['a.txt', 'old']]));
+        const statuses: number[] = [];
+        expect(r.lock(0x40, 1, 'lock', (s) => statuses.push(s))).toBe(1);
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        expect(statuses).toEqual([0]);
+        expect(r.lock(0x40, 1, 'lockEx', () => {})).toBeNaN();
+        r.feed(dii(0x40, [[1, 2]]));
+        r.feed(module(0x40, 1, 2, [['a.txt', 'new']]));
+        const read = () =>
+            new TextDecoder().decode(r.file({ component: 0x40, module: 1, file: 'a.txt' })?.data);
+        expect(read()).toBe('old');
+        expect(r.locked()).toEqual([['/40/0001', false, false]]);
+        r.unlock(0x40, 1);
+        expect(read()).toBe('new');
+    });
+
+    test('DII に無いモジュールを Ex で押さえると -2、PMT に無ければ -3', async () => {
+        const r = new Resources();
+        r.feed(pmt(0x40));
+        r.feed(dii(0x40, [[1, 1]]));
+        const statuses: number[] = [];
+        expect(r.lock(0x40, 5, 'lockEx', (s) => statuses.push(s))).toBe(1);
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        expect(statuses).toEqual([-2]);
+        expect(r.lock(0x60, 0, 'lockEx', () => {})).toBe(-3);
+    });
+
+    test('データイベントが変わったら前のものを捨てる', () => {
+        const r = new Resources();
+        r.feed(pmt(0x40));
+        r.feed(dii(0x40, [[1, 1]], 1));
+        r.feed(module(0x40, 1, 1, [['a.txt', 'x']], 1));
+        const events = r.feed(dii(0x40, [[1, 1]], 2));
+        expect(events[0]).toMatchObject({
+            type: 'dii',
+            previous: { dataEventId: 1 },
+            dii: { dataEventId: 2 },
+        });
+        expect(r.has(0x40, 1)).toBe(false);
+    });
+});
+
+describe('DRCS・PNG', () => {
+    test('DRCS: 字数 0 は空、4 階調の 16x16 を読む', () => {
+        expect(parseDrcs(Uint8Array.of(0))).toEqual([]);
+        // 1 字・87 区 1 点・字体 1 つ (fontId 1, mode 1)・深さ 2 (4 階調)・16x16
+        const pixels = new Uint8Array(64).fill(0b11100100);
+        const glyphs = parseDrcs(Uint8Array.from([1, 0x77, 0x21, 1, 0x11, 2, 16, 16, ...pixels]));
+        expect(glyphs.length).toBe(1);
+        const [unit, glyph] = glyphs[0]!;
+        expect(isDrcs(unit)).toBe(true);
+        expect([glyph.fontId, glyph.width, glyph.height]).toEqual([1, 16, 16]);
+        expect([...glyph.alpha.subarray(0, 4)]).toEqual([255, 170, 85, 0]);
+    });
+
+    test('PNG: CRC と、CLUT の PLTE・tRNS を差し込む', () => {
+        expect(crc32(new TextEncoder().encode('IEND'))).toBe(0xae426082);
+        const mask = alphaPng(2, 1, Uint8Array.of(0, 255));
+        const fixed = applyClut(mask, [[1, 2, 3, 4]]);
+        expect(fixed?.width).toBe(2);
+        // 灰 + 透明度の PNG (色の型 4) には手を入れない
+        expect(fixed?.data.length).toBe(mask.length);
+    });
+});

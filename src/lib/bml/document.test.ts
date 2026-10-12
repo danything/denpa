@@ -1,0 +1,157 @@
+import { describe, expect, test } from 'bun:test';
+import { DEFAULT_CLUT, readClut } from './clut';
+import { parseStylesheet, parseUrl } from './css';
+import { BmlDocument } from './document';
+import { videoRect } from './render';
+import { parseXml } from './xml';
+
+function load(source: string, css = ''): BmlDocument {
+    const xml = parseXml(source);
+    if (xml === null) throw new Error('読めない');
+    const doc = new BmlDocument(xml);
+    doc.applyRules(parseStylesheet(css));
+    return doc;
+}
+
+describe('XML', () => {
+    test('寛容に読む: 閉じ忘れ・実体参照・CDATA・DOCTYPE・前置き', () => {
+        const xml = parseXml(
+            '<?xml version="1.0" encoding="EUC-JP"?><!DOCTYPE bml PUBLIC "x" "y"><bml><body><bml:p a="&quot;q&quot;" b=raw>A &amp; B &unknown;<![CDATA[<raw>]]></bml:p><div></body></bml>',
+        );
+        expect(xml?.name).toBe('bml');
+        const body = xml?.children[0];
+        expect(body?.kind === 'element' && body.name).toBe('body');
+        const p = body?.kind === 'element' ? body.children[0] : undefined;
+        expect(p?.kind === 'element' && p.name).toBe('p');
+        if (p?.kind !== 'element') throw new Error();
+        expect(p.attrs.get('a')).toBe('"q"');
+        expect(p.attrs.get('b')).toBe('raw');
+        expect(p.children.map((c) => (c.kind === 'text' ? c.text : ''))).toEqual([
+            'A & B &unknown;',
+            '<raw>',
+        ]);
+    });
+
+    test('script の中の < はタグにしない', () => {
+        const xml = parseXml('<bml><head><script>if (a < b) x();</script></head></bml>');
+        const script = xml?.children[0]?.kind === 'element' ? xml.children[0].children[0] : undefined;
+        expect(
+            script?.kind === 'element' && script.children[0]?.kind === 'text' && script.children[0].text,
+        ).toBe('if (a < b) x();');
+    });
+});
+
+describe('文字の空白 (付属2 5.3.2)', () => {
+    test('頭と尻と、2 バイト文字どうしのあいだの改行は消える', () => {
+        const doc = load('<bml><body><p id="p">\n  天気\n  予報  \n</p></body></bml>');
+        const p = doc.getElementById('p');
+        expect(p?.children[0]?.kind === 'text' && p.children[0].data).toBe('天気予報');
+    });
+
+    test('span の前後は空白 1 つに', () => {
+        const doc = load('<bml><body><p id="p">A\n<span>B</span>\nC</p></body></bml>');
+        const texts = doc
+            .getElementById('p')!
+            .children.map((c) => (c.kind === 'text' ? c.data : `[${c.tag}]`));
+        expect(texts).toEqual(['A ', '[span]', ' C']);
+    });
+});
+
+describe('CSS', () => {
+    test('使える単純セレクタだけ読み、子孫と @ 規則は読み飛ばす', () => {
+        const rules = parseStylesheet(
+            '@charset "EUC-JP"; /* x */ p.a { color-index: 3 } div p { left: 9px } #b, * { top: 1px } a:focus { color-index: 5 }',
+        );
+        expect(
+            rules.map((r) => [r.selector.tag, r.selector.id, r.selector.classes, r.selector.pseudo]),
+        ).toEqual([
+            ['p', null, ['a'], null],
+            [null, 'b', [], null],
+            [null, null, [], null],
+            ['a', null, [], 'focus'],
+        ]);
+    });
+
+    test('url() を解く', () => {
+        expect(parseUrl('url("/40/0001/a.clt")')).toBe('/40/0001/a.clt');
+        expect(parseUrl('url( b.png )')).toBe('b.png');
+        expect(parseUrl('none')).toBeNull();
+    });
+
+    test('重ね合わせ: 詳細度・順番・style 属性・継承・inherit・!important', () => {
+        const doc = load(
+            '<bml><body><div id="d" class="c" style="left: 30px; top: 7"><p id="p" class="k" style="font-size: inherit">x<span id="s">y</span></p></div></body></bml>',
+            '#d { left: 10px !important; width: 100px; color-index: 4 } .c { left: 20px; width: 50px } div { width: 70px } p.k { font-size: 30px } div { font-size: 20px; grayscale-color-index: 1\t 2 }',
+        );
+        const d = doc.getElementById('d')!.style();
+        expect([d.left, d.top, d.width]).toEqual([10, 7, 100]);
+        const p = doc.getElementById('p')!.style();
+        expect(p.colorIndex).toBe(4);
+        expect(p.fontSize).toBe(20);
+        // p は既定の 30 15 を持つので継がない。div はタブと空白 2 つで区切っても読む
+        expect(p.grayscale).toEqual([30, 15]);
+        expect(d.grayscale).toEqual([1, 2]);
+        expect(doc.getElementById('s')!.style().colorIndex).toBe(4);
+    });
+
+    test('フォーカス中は :focus と focusStyle が重なる', () => {
+        const doc = load(
+            '<bml><body><p id="p">x</p></body></bml>',
+            'p { color-index: 1 } p:focus { color-index: 2 }',
+        );
+        const p = doc.getElementById('p')!;
+        expect(p.style().colorIndex).toBe(1);
+        p.setState('focus');
+        expect(p.style().colorIndex).toBe(2);
+        p.inline.focus.set('color-index', '3');
+        p.document.touch();
+        expect(p.style().colorIndex).toBe(3);
+        expect(p.styleIn('normal').colorIndex).toBe(1);
+    });
+
+    test('値は確かめる: 数でないもの・範囲の外は既定に', () => {
+        const doc = load(
+            '<bml><body><div id="d" style="left: 1em; color-index: 300; nav-index: 506"></div></body></bml>',
+        );
+        const d = doc.getElementById('d')!.style();
+        expect(d.left).toBe(0);
+        expect(d.colorIndex).toBe(7);
+        expect(d.navIndex).toBe(506);
+    });
+});
+
+describe('映像の場所', () => {
+    test('祖先の位置と枠を足し、親のはみ出しで切る', () => {
+        const doc = load(
+            '<bml><body><div style="left:100px;top:50px;width:200px;height:100px;border-width:2px;border-style:solid"><object type="video/X-arib-mpeg2" style="left:10px;top:20px;width:300px;height:60px"/></div></body></bml>',
+        );
+        expect(videoRect(doc)?.rect).toEqual({ left: 112, top: 72, width: 190, height: 60 });
+    });
+
+    test('隠れていれば無い', () => {
+        const doc = load(
+            '<bml><body><object type="video/X-arib-mpeg2" style="left:0px;top:0px;width:10px;height:10px;visibility:hidden"/></body></bml>',
+        );
+        expect(videoRect(doc)).toBeNull();
+    });
+});
+
+describe('CLUT', () => {
+    test('既定の表 (規則で作る)', () => {
+        expect(DEFAULT_CLUT[1]).toEqual([255, 0, 0, 255]);
+        expect(DEFAULT_CLUT[8]).toEqual([0, 0, 0, 0]);
+        expect(DEFAULT_CLUT[15]).toEqual([0xaa, 0xaa, 0xaa, 255]);
+        expect(DEFAULT_CLUT[16]).toEqual([0, 0, 0x55, 255]);
+        expect(DEFAULT_CLUT[64]).toEqual([0xff, 0xff, 0xaa, 255]);
+        expect(DEFAULT_CLUT[65]).toEqual([0, 0, 0, 0x80]);
+        expect(DEFAULT_CLUT[73]).toEqual([0xaa, 0, 0, 0x80]);
+        expect(DEFAULT_CLUT[127]).toEqual([0xff, 0xff, 0x55, 0x80]);
+    });
+
+    test('CLUT のファイルで 17 番から差し替える (YCbCr)', () => {
+        // type=0 depth=1 region=0 start_end=1、17〜17 を Y=235 Cb=128 Cr=128 (白) A=255
+        const table = readClut(Uint8Array.of(0x28, 17, 17, 235, 128, 128, 255));
+        expect(table[17]).toEqual([254, 254, 254, 255]);
+        expect(table[16]).toEqual(DEFAULT_CLUT[16]!);
+    });
+});

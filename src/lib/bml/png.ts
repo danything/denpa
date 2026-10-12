@@ -1,0 +1,135 @@
+/**
+ * PNG を組み直す。**ブラウザの画像の口にそのまま渡すため。**
+ *
+ * - 放送の PNG はパレット (PLTE) を持たず、色は文書の CLUT で決まる (STD-B24 付属3)。
+ *   CLUT から PLTE と tRNS を作って差し込む
+ * - DRCS (外字) の絵を、字の色で塗るための mask にする。圧縮しない zlib (stored) で
+ *   PNG を組むので、canvas も圧縮の口も要らない
+ */
+
+import type { Rgba } from './clut';
+
+const CRC_TABLE = (() => {
+    const table = new Uint32Array(256);
+    for (let n = 0; n < 256; n++) {
+        let c = n;
+        for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
+        table[n] = c >>> 0;
+    }
+    return table;
+})();
+
+export function crc32(data: Uint8Array): number {
+    let c = 0xffffffff;
+    for (let i = 0; i < data.length; i++) c = CRC_TABLE[(c ^ data[i]!) & 0xff]! ^ (c >>> 8);
+    return (c ^ 0xffffffff) >>> 0;
+}
+
+/** PNG の塊 (長さ・名前・中身・CRC) */
+function chunk(name: string, body: Uint8Array): Uint8Array {
+    const out = new Uint8Array(12 + body.length);
+    const view = new DataView(out.buffer);
+    view.setUint32(0, body.length);
+    for (let i = 0; i < 4; i++) out[4 + i] = name.charCodeAt(i);
+    out.set(body, 8);
+    view.setUint32(8 + body.length, crc32(out.subarray(4, 8 + body.length)));
+    return out;
+}
+
+function concat(parts: Uint8Array[]): Uint8Array<ArrayBuffer> {
+    const out = new Uint8Array(parts.reduce((n, p) => n + p.length, 0));
+    let at = 0;
+    for (const part of parts) {
+        out.set(part, at);
+        at += part.length;
+    }
+    return out;
+}
+
+const SIGNATURE = Uint8Array.of(0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a);
+
+/** 放送の PNG に CLUT の PLTE・tRNS を入れる。大きさも返す。パレットの PNG でなければそのまま */
+export function applyClut(
+    png: Uint8Array,
+    clut: readonly Rgba[],
+): { data: Uint8Array<ArrayBuffer>; width: number; height: number } | null {
+    if (png.length < 33) return null;
+    const view = new DataView(png.buffer, png.byteOffset, png.byteLength);
+    const width = view.getUint32(16);
+    const height = view.getUint32(20);
+    const plte = new Uint8Array(clut.length * 3);
+    const trns = new Uint8Array(clut.length);
+    clut.forEach(([r, g, b, a], i) => {
+        plte.set([r, g, b], i * 3);
+        trns[i] = a;
+    });
+    const parts: Uint8Array[] = [SIGNATURE];
+    let at = 8;
+    while (at + 12 <= png.length) {
+        const length = view.getUint32(at);
+        const name = String.fromCharCode(...png.subarray(at + 4, at + 8));
+        const end = at + 12 + length;
+        if (end > png.length) return null;
+        if (name !== 'PLTE' && name !== 'tRNS') parts.push(png.subarray(at, end));
+        if (name === 'IHDR') {
+            // パレット (色の型 3) 以外は運用されない。来たら手を入れない
+            if (png[at + 8 + 9] !== 3) return { data: concat([png]), width, height };
+            parts.push(chunk('PLTE', plte), chunk('tRNS', trns));
+        }
+        at = end;
+    }
+    return { data: concat(parts), width, height };
+}
+
+/** 濃さ (0〜255) の並びを、白の上の透明度の PNG にする (mask に使う) */
+export function alphaPng(width: number, height: number, alpha: Uint8Array): Uint8Array<ArrayBuffer> {
+    // 1 行 = フィルタ 1 バイト + (灰 1・透明度 1) × 幅
+    const raw = new Uint8Array(height * (1 + width * 2));
+    for (let y = 0; y < height; y++) {
+        const row = y * (1 + width * 2);
+        for (let x = 0; x < width; x++) {
+            raw[row + 1 + x * 2] = 0xff;
+            raw[row + 2 + x * 2] = alpha[y * width + x] ?? 0;
+        }
+    }
+    const ihdr = new Uint8Array(13);
+    const view = new DataView(ihdr.buffer);
+    view.setUint32(0, width);
+    view.setUint32(4, height);
+    ihdr[8] = 8; // 8 ビット
+    ihdr[9] = 4; // 灰 + 透明度
+    return concat([
+        SIGNATURE,
+        chunk('IHDR', ihdr),
+        chunk('IDAT', storedZlib(raw)),
+        chunk('IEND', new Uint8Array()),
+    ]);
+}
+
+/** 圧縮しない zlib (stored のブロックを並べるだけ) */
+function storedZlib(data: Uint8Array): Uint8Array {
+    const blocks: Uint8Array[] = [Uint8Array.of(0x78, 0x01)];
+    for (let at = 0; at < data.length || at === 0; at += 0xffff) {
+        const piece = data.subarray(at, at + 0xffff);
+        const last = at + 0xffff >= data.length;
+        const head = Uint8Array.of(
+            last ? 1 : 0,
+            piece.length & 0xff,
+            piece.length >> 8,
+            ~piece.length & 0xff,
+            (~piece.length >> 8) & 0xff,
+        );
+        blocks.push(head, piece);
+        if (last) break;
+    }
+    let a = 1;
+    let b = 0;
+    for (let i = 0; i < data.length; i++) {
+        a = (a + data[i]!) % 65521;
+        b = (b + a) % 65521;
+    }
+    const adler = new Uint8Array(4);
+    new DataView(adler.buffer).setUint32(0, ((b << 16) | a) >>> 0);
+    blocks.push(adler);
+    return concat(blocks);
+}

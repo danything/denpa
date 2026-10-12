@@ -1,0 +1,421 @@
+/**
+ * 文書 ([document.ts](document.ts)) をページに描く。
+ *
+ * - 作るのは絶対配置の div / span / br と、画像の img だけ。**innerHTML も属性の写しも
+ *   使わない** — 字は textContent、見た目は確かめた値 (px の数・CLUT の色・列挙) から組んだ
+ *   style だけ。放送の on* や任意の属性がページに出ることは無い
+ * - 映像は動かさない。映像の object の場所を `onVideoRect` で知らせ、そこより前に描くものの
+ *   背景には穴を開ける (映像は下に居て、穴から見える。web-bml の clipVideoPlane と同じ考え)
+ * - 文書の世代 (`generation`) が変わったときだけ描き直す。変わった style だけ書き換える
+ */
+
+import { cssColor, type Rgba } from './clut';
+import { parseUrl } from './css';
+import type { BmlDocument, BmlElement, BmlNode } from './document';
+import { isDrcs, toDisplay } from './euc';
+import type { Computed } from './style';
+
+export interface Fonts {
+    /** 丸ゴシック (CSS の font-family の並び) */
+    round: string;
+    /** 太丸ゴシック */
+    boldRound: string;
+    /** 角ゴシック */
+    square: string;
+}
+
+export interface Rect {
+    left: number;
+    top: number;
+    width: number;
+    height: number;
+}
+
+/** 描くのに要るもの (エンジンが渡す) */
+export interface RenderHost {
+    fonts: Fonts;
+    clut(): readonly Rgba[];
+    /** 画面の大きさ (resolution) */
+    resolution(): { width: number; height: number };
+    /** 文書の中の URL を、描ける URL (blob:) にする。まだ無ければ null (届いたら描き直す) */
+    image(url: string, kind: 'background' | 'object', type: string): ImageSource | null;
+    /** DRCS の絵 (mask に使う URL)。無ければ null */
+    drcs(unit: number, fontSize: number, family: string): string | null;
+}
+
+export interface ImageSource {
+    url: string;
+    width: number | null;
+    height: number | null;
+}
+
+interface View {
+    element: HTMLElement;
+    /** 最後に書いた style (同じなら書かない) */
+    css: string;
+    /** 背景の穴を開けるための下敷き (映像を含む要素だけ) */
+    under: HTMLElement | null;
+    underCss: string;
+    image: HTMLImageElement | null;
+    imageKey: string;
+}
+
+interface TextView {
+    container: HTMLElement;
+    key: string;
+}
+
+const VIDEO_TYPES = new Set(['video/x-arib-mpeg2', 'video/x-arib-h264', 'video/x-arib-h265']);
+
+export function isVideo(element: BmlElement): boolean {
+    return element.tag === 'object' && VIDEO_TYPES.has((element.attr('type') ?? '').toLowerCase());
+}
+
+/** 映像の object と、その場所 (画面の座標。祖先の位置と枠と、はみ出しの切り取りを足したもの) */
+export function videoRect(document: BmlDocument): { element: BmlElement; rect: Rect } | null {
+    for (const element of document.root.descendants()) {
+        if (!isVideo(element)) continue;
+        if (!element.style().visible) return null;
+        let { left, top } = element.style();
+        let { width, height } = element.style();
+        for (let parent = element.parent; parent !== null && parent.tag !== 'body'; parent = parent.parent) {
+            const s = parent.style();
+            const inset = s.borderStyle === 'none' ? 0 : s.borderWidth;
+            left += s.left + inset + s.padding[3];
+            top += s.top + inset + s.padding[0];
+            // 親ははみ出しを切る
+            const right = Math.min(left + width, s.left + inset + s.padding[3] + s.width);
+            const bottom = Math.min(top + height, s.top + inset + s.padding[0] + s.height);
+            left = Math.max(left, s.left + inset + s.padding[3]);
+            top = Math.max(top, s.top + inset + s.padding[0]);
+            width = Math.max(0, right - left);
+            height = Math.max(0, bottom - top);
+        }
+        return { element, rect: { left, top, width, height } };
+    }
+    return null;
+}
+
+/** 四角に穴を開ける clip-path (要素の中の座標) */
+function hole(rect: Rect): string {
+    const { left: l, top: t } = rect;
+    const r = rect.left + rect.width;
+    const b = rect.top + rect.height;
+    return `polygon(evenodd, 0 0, 100% 0, 100% 100%, 0 100%, 0 0, ${l}px ${t}px, ${r}px ${t}px, ${r}px ${b}px, ${l}px ${b}px, ${l}px ${t}px)`;
+}
+
+export class Renderer {
+    private readonly views = new Map<BmlElement, View>();
+    private readonly texts = new Map<BmlNode, TextView>();
+    private drawn = -1;
+    private lastVideo = '';
+    readonly root: HTMLDivElement;
+
+    constructor(
+        container: HTMLElement | ShadowRoot,
+        private readonly document: BmlDocument,
+        private readonly host: RenderHost,
+        private readonly onVideoRect: (rect: Rect | null) => void,
+    ) {
+        const owner = (container instanceof ShadowRoot ? container.host : container).ownerDocument;
+        this.root = owner.createElement('div');
+        this.root.style.cssText = 'position:absolute;left:0;top:0;overflow:hidden;';
+        this.build(document.root, this.root);
+        container.appendChild(this.root);
+    }
+
+    destroy(): void {
+        this.root.remove();
+        this.views.clear();
+        this.texts.clear();
+    }
+
+    /** 変わっていれば描き直す */
+    draw(force = false): void {
+        if (!force && this.drawn === this.document.generation) return;
+        this.drawn = this.document.generation;
+        const { width, height } = this.host.resolution();
+        this.root.style.width = `${width}px`;
+        this.root.style.height = `${height}px`;
+        const video = videoRect(this.document);
+        const key = video === null ? '' : JSON.stringify(video.rect);
+        if (key !== this.lastVideo) {
+            this.lastVideo = key;
+            this.onVideoRect(video?.rect ?? null);
+        }
+        // 映像より前 (文書の順) の要素と、映像を含む要素の背景に穴を開ける
+        const before = new Set<BmlElement>();
+        const containing = new Set<BmlElement>();
+        if (video !== null) {
+            for (let p = video.element.parent; p !== null; p = p.parent) containing.add(p);
+            for (const element of this.document.root.descendants()) {
+                if (element === video.element) break;
+                if (!containing.has(element)) before.add(element);
+            }
+        }
+        const offset = new Map<BmlElement, { left: number; top: number }>();
+        const origin = (element: BmlElement): { left: number; top: number } => {
+            const known = offset.get(element);
+            if (known !== undefined) return known;
+            const s = element.style();
+            const parent = element.parent === null || element.tag === 'body' ? null : origin(element.parent);
+            const inset = s.borderStyle === 'none' ? 0 : s.borderWidth;
+            const at =
+                parent === null
+                    ? { left: 0, top: 0 }
+                    : {
+                          left: parent.left + s.left + inset + s.padding[3],
+                          top: parent.top + s.top + inset + s.padding[0],
+                      };
+            offset.set(element, at);
+            return at;
+        };
+        for (const [element, view] of this.views) {
+            const s = element.style();
+            let clip: string | null = null;
+            if (video !== null && (before.has(element) || containing.has(element))) {
+                const at = origin(element);
+                const local = {
+                    ...video.rect,
+                    left: video.rect.left - at.left,
+                    top: video.rect.top - at.top,
+                };
+                clip = hole(local);
+            }
+            this.apply(element, view, s, clip, containing.has(element));
+        }
+        for (const [node, view] of this.texts) this.text(node, view);
+    }
+
+    private build(element: BmlElement, parent: HTMLElement): void {
+        const owner = parent.ownerDocument;
+        let target = parent;
+        switch (element.tag) {
+            case 'body':
+            case 'div':
+            case 'p':
+            case 'object':
+            case 'input':
+            case 'span':
+            case 'a': {
+                const inline = element.tag === 'span' || element.tag === 'a';
+                const made = owner.createElement(inline ? 'span' : 'div');
+                parent.appendChild(made);
+                this.views.set(element, {
+                    element: made,
+                    css: '',
+                    under: null,
+                    underCss: '',
+                    image: null,
+                    imageKey: '',
+                });
+                target = made;
+                break;
+            }
+            case 'br':
+                parent.appendChild(owner.createElement('br'));
+                return;
+            case 'bml':
+                break;
+            default:
+                // head・script・style・bevent などは描かない
+                return;
+        }
+        for (const child of element.children) {
+            if (child.kind === 'element') {
+                this.build(child, target);
+                continue;
+            }
+            if (element.tag === 'object') continue;
+            const container = owner.createElement('span');
+            target.appendChild(container);
+            this.texts.set(child, { container, key: '' });
+        }
+    }
+
+    private family(name: string): string {
+        const fonts = this.host.fonts;
+        if (name.includes('角ゴシック')) return fonts.square;
+        if (name.includes('太丸ゴシック')) return fonts.boldRound;
+        return fonts.round;
+    }
+
+    private apply(
+        element: BmlElement,
+        view: View,
+        s: Computed,
+        clip: string | null,
+        contains: boolean,
+    ): void {
+        const clut = this.host.clut();
+        const css: string[] = [];
+        const inline = element.tag === 'span' || element.tag === 'a';
+        const block = !inline;
+        if (element.tag === 'body') {
+            const { width, height } = this.host.resolution();
+            css.push(`position:absolute;left:0;top:0;width:${width}px;height:${height}px;overflow:hidden`);
+        } else if (block) {
+            css.push(
+                `position:absolute;left:${s.left}px;top:${s.top}px;width:${s.width}px;height:${s.height}px;overflow:hidden`,
+            );
+        }
+        css.push(`visibility:${s.visible ? 'visible' : 'hidden'}`);
+        const background =
+            element.tag === 'object'
+                ? 'transparent'
+                : (s.backgroundColor ?? cssColor(clut[s.backgroundColorIndex]));
+        let image: string | null = null;
+        if (s.backgroundImage !== null) {
+            const url = parseUrl(s.backgroundImage);
+            const source = url === null ? null : this.host.image(url, 'background', 'image/jpeg');
+            if (source !== null) {
+                image = `background-image:url("${source.url}");background-repeat:no-repeat`;
+                // 960x540 の画面では静止画を半分の大きさで描く (960x540 の画像はそのまま)
+                if (source.width !== null && source.height !== null && this.host.resolution().width === 960) {
+                    const full = source.width === 960 && source.height === 540;
+                    const scale = full ? 1 : 0.5;
+                    image += `;background-size:${source.width * scale}px ${source.height * scale}px`;
+                }
+            }
+        }
+        // 映像を含む要素は、背景を下敷きに移して穴を開ける (子は切らない)
+        const moveBackground = contains && clip !== null;
+        if (!moveBackground) {
+            css.push(`background-color:${background}`);
+            if (image !== null) css.push(image);
+        }
+        if (clip !== null && !contains) css.push(`clip-path:${clip}`);
+        if (block && s.borderStyle !== 'none' && s.borderWidth > 0) {
+            const [t, r, b, l] = s.borderColorIndex.map((i) => cssColor(clut[i]));
+            css.push(`border:${s.borderWidth}px ${s.borderStyle === 'solid' ? 'solid' : s.borderStyle}`);
+            css.push(`border-color:${t} ${r} ${b} ${l}`);
+        }
+        if (block) css.push(`padding:${s.padding.map((n) => `${n}px`).join(' ')}`);
+        css.push(`color:${s.color ?? cssColor(clut[s.colorIndex])}`);
+        css.push(`font-family:${this.family(s.fontFamily)}`);
+        css.push(`font-size:${s.fontSize}px`);
+        css.push(
+            `font-weight:${s.fontWeight === 'bold' || s.fontFamily.includes('太丸') ? 'bold' : 'normal'}`,
+        );
+        css.push(`line-height:${s.lineHeight ?? s.fontSize}px`);
+        css.push(`text-align:${s.textAlign}`);
+        css.push(`letter-spacing:${s.letterSpacing}px`);
+        if (element.tag === 'p' || element.tag === 'input') {
+            css.push('white-space:pre-wrap;word-break:break-all;line-break:anywhere;overflow-wrap:anywhere');
+        }
+        css.push('box-sizing:content-box;margin:0');
+        const text = css.join(';');
+        if (text !== view.css) {
+            view.css = text;
+            view.element.style.cssText = text;
+        }
+        this.under(
+            view,
+            moveBackground
+                ? `position:absolute;left:0;top:0;width:100%;height:100%;background-color:${background};${image ?? ''};clip-path:${clip}`
+                : '',
+        );
+        if (element.tag === 'object') this.objectImage(element, view);
+    }
+
+    private under(view: View, css: string): void {
+        if (css === view.underCss) return;
+        view.underCss = css;
+        if (css === '') {
+            view.under?.remove();
+            view.under = null;
+            return;
+        }
+        if (view.under === null) {
+            view.under = view.element.ownerDocument.createElement('div');
+            view.element.prepend(view.under);
+        }
+        view.under.style.cssText = css;
+    }
+
+    private objectImage(element: BmlElement, view: View): void {
+        const type = (element.attr('type') ?? '').toLowerCase();
+        const data = element.attr('data') ?? '';
+        const drawable = type === 'image/jpeg' || type === 'image/x-arib-png' || type === 'image/gif';
+        const source = drawable && data !== '' ? this.host.image(data, 'object', type) : null;
+        const key = source === null ? '' : source.url;
+        if (key === view.imageKey) return;
+        view.imageKey = key;
+        if (source === null) {
+            view.image?.remove();
+            view.image = null;
+            return;
+        }
+        if (view.image === null) {
+            view.image = view.element.ownerDocument.createElement('img');
+            view.image.alt = '';
+            view.element.appendChild(view.image);
+        }
+        const img = view.image;
+        img.style.cssText = 'position:absolute;left:0;top:0;display:block;';
+        img.src = source.url;
+        const size = (width: number, height: number): void => {
+            // JPEG は 960x540 の画面で半分の大きさ (付属2 表5-3。960x540 で 960x540 の画像だけそのまま)
+            let w = width;
+            let h = height;
+            if (type === 'image/jpeg' && this.host.resolution().width === 960) {
+                const s = element.style();
+                if (!(s.width === 960 && s.height === 540 && width === 960 && height === 540)) {
+                    w = Math.floor(width / 2);
+                    h = Math.floor(height / 2);
+                }
+            }
+            img.style.width = `${w}px`;
+            img.style.height = `${h}px`;
+        };
+        if (source.width !== null && source.height !== null) size(source.width, source.height);
+        else img.onload = () => size(img.naturalWidth, img.naturalHeight);
+    }
+
+    /** 字を描く。DRCS は 1 字ずつ mask の span に (色は字の色) */
+    private text(node: BmlNode, view: TextView): void {
+        if (node.kind !== 'text') return;
+        const parent = node.parent;
+        const s = parent?.style();
+        const family = s === undefined ? '' : s.fontFamily;
+        const size = s?.fontSize ?? 24;
+        const data = node.data;
+        let drcs = false;
+        for (let i = 0; i < data.length && !drcs; i++) drcs = isDrcs(data.charCodeAt(i));
+        const key = drcs ? `${data}\u0000${size}\u0000${family}` : data;
+        if (key === view.key) return;
+        view.key = key;
+        const owner = view.container.ownerDocument;
+        if (!drcs) {
+            view.container.textContent = toDisplay(data);
+            return;
+        }
+        view.container.replaceChildren();
+        let run = '';
+        const flush = (): void => {
+            if (run === '') return;
+            view.container.append(owner.createTextNode(toDisplay(run)));
+            run = '';
+        };
+        for (let i = 0; i < data.length; i++) {
+            const unit = data.charCodeAt(i);
+            if (!isDrcs(unit)) {
+                run += data[i];
+                continue;
+            }
+            flush();
+            const glyph = owner.createElement('span');
+            const mask = this.host.drcs(unit, size, family);
+            const css = [`display:inline-block;width:${size}px;height:${size}px;vertical-align:text-bottom`];
+            if (mask !== null) {
+                css.push(
+                    `background-color:currentColor;mask-image:url("${mask}");-webkit-mask-image:url("${mask}")`,
+                );
+                css.push('mask-size:100% 100%;-webkit-mask-size:100% 100%');
+            }
+            glyph.style.cssText = css.join(';');
+            view.container.append(glyph);
+        }
+        flush();
+    }
+}
