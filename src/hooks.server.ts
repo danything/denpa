@@ -22,11 +22,11 @@ export async function handle({ event, resolve }) {
     const { pathname, search } = event.url;
 
     /*
-     * **アプリの鍵** (`Authorization: Bearer denpa_…`、device-auth.ts)。ペアリングで渡したもの。
+     * **アクセストークン** (`Authorization: Bearer denpa_…`、device-auth.ts)。ペアリングで渡したもの。
      * 生きていればログインした人と同じに通す (どこから来ても。家の外の OIDC 越しでも使えるように)。
      *
-     * **出された鍵が駄目なら、ほかの認証方法へ回さずに 401。** 信頼するネットワークの中でも同じ —
-     * 取り消された鍵で黙って通すと、アプリは取り消されたことに気付けず、外へ出た途端に
+     * **出されたアクセストークンが駄目なら、ほかの認証方法へ回さずに 401。** 信頼するネットワークの中でも同じ —
+     * 取り消されたアクセストークンで黙って通すと、アプリは取り消されたことに気付けず、外へ出た途端に
      * 使えなくなる。401 ならアプリは「ペアリングし直し」と分かる。
      * `denpa_` で始まらない Bearer (前段の SSO などが付けるもの) は見ずに、いつもの認証へ回す
      */
@@ -91,7 +91,7 @@ export async function handle({ event, resolve }) {
                 redirect(302, relative(event.url, `/login?to=${encodeURIComponent(pathname + search)}`));
             }
         } else if (configured() && pathname.startsWith('/api/')) {
-            // 信頼するネットワークの外から、鍵を持たずに来た。アプリはこれで「ペアリングが要る」と分かる
+            // 信頼するネットワークの外から、アクセストークンを持たずに来た。アプリはこれで「ペアリングが要る」と分かる
             return needsPairing();
         } else {
             // 入る手段が無い (設定していないか、信頼するネットワークの外の画面)。言葉で返す (auth.denied)
@@ -104,7 +104,7 @@ export async function handle({ event, resolve }) {
 
 /**
  * 資格の無い API の呼び出しへの答え。**いつも同じ形式の 401 JSON** (docs/api.md)。
- * テレビのアプリは鍵を持たずにまず API を叩き、これが返ればペアリングに進む
+ * テレビのアプリはアクセストークンを持たずにまず API を呼び、これが返ればペアリングに進む
  * (信頼するネットワークの中なら通るので、ペアリングは要らない)。HTML のログイン画面へ
  * 回すと、アプリは JSON として読もうとして意味の分からない失敗になる
  */

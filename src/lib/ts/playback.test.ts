@@ -127,7 +127,7 @@ describe('溜まり方 (aheadOf / covers)', () => {
         expect(aheadOf(ranges, 99.8)).toBeCloseTo(60.2);
     });
 
-    test('読んでいる流れの少し先までは待つ。外れたらリクエストし直す', () => {
+    test('読んでいるストリームの少し先までは待つ。外れたらリクエストし直す', () => {
         // 100秒からリクエストして 160秒まで来ている。10秒送りの 170秒は待てば届く
         expect(covers(ranges, 170, 100, 15)).toBe(true);
         expect(covers(ranges, 200, 100, 15)).toBe(false);

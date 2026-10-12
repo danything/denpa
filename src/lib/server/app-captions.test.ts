@@ -21,7 +21,7 @@ const realFfmpeg = config.ffmpeg;
 const realAgent = config.agentUrl;
 /*
  * 偽のエージェント。選局には 200 を返して、何も流さないまま繋いでおく (セッションが生きたままになる)。
- * ライブの字幕 API は、いま流しているセッションに相乗りするだけなので、相乗りする先を作るのに要る
+ * ライブの字幕 API は、いま流しているセッションを共有するだけなので、共有する先を作るのに要る
  */
 const agent = Bun.serve({
     port: 0,

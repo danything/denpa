@@ -32,7 +32,7 @@ public static class Card
     private static Task<CardSurvey>? _checking;
 
     /// <summary>
-    /// 走っている確かめに相乗りする。**同時に1本だけ** — 切り上げたあとも確かめは
+    /// 走っている確かめの結果を共有する。**同時に1本だけ** — 切り上げたあとも確かめは
     /// 走り続けるので、画面を開き直すたびに足すとロックの前に溜まっていく
     /// </summary>
     private static Task<CardSurvey> Checking()
@@ -191,7 +191,7 @@ public static class Card
     private static readonly Dictionary<string, Task<ReaderState>> Running = [];
 
     /// <summary>
-    /// そのリーダーの覗き。**前の覗きが終わっていなければ、それに相乗りする** — 固まった
+    /// そのリーダーの覗き。**前の覗きが終わっていなければ、その結果を共有する** — 固まった
     /// リーダーは待つのをやめたあとも開いたままなので、重ねて開くと自分で締め出す
     /// </summary>
     private static Task<ReaderState> Peeking(CardLinkCandidate candidate)

@@ -133,7 +133,7 @@ public interface IBulkPipe : IDisposable
 }
 
 /// <summary>
-/// Linux の usbfs (<c>/dev/bus/usb/BBB/DDD</c>) を ioctl で直に叩く。**libusb を使わない。**
+/// Linux の usbfs (<c>/dev/bus/usb/BBB/DDD</c>) を ioctl で直接扱う。**libusb を使わない。**
 ///
 /// <para>
 /// ioctl の番号と構造体は x64 と arm64 で同じ (どちらも LP64 で、arm64 も asm-generic の

@@ -27,7 +27,7 @@ export interface Payload {
     error?: string;
 }
 
-/** 空なら全部受け取る。壊れた行は列の読み手が空にする (`schema.ts`) ので、ここでは構えない */
+/** 空なら全部受け取る。壊れた行は列の読み取り関数が空にする (`schema.ts`) ので、ここでは構えない */
 function subscribed(webhook: Webhook, event: WebhookEvent): boolean {
     return webhook.events.length === 0 || webhook.events.includes(event);
 }

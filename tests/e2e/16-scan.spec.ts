@@ -96,7 +96,7 @@ test.describe('チューナー画面', () => {
         const using = tuners.getByTestId('tuner-row').nth(0);
         await expect(using).toContainText('BS11_0');
         await expect(using.getByTestId('tuner-user').first()).toContainText('録画');
-        // 録画と番組表が同じ選局に相乗りしている。チューナーは増えない
+        // 録画と番組表が同じ選局を共有している。チューナーは増えない
         await expect(using.getByTestId('tuner-user').nth(1)).toContainText('番組表');
         /*
          * **どちらが譲るかは用途の並びで言う。数字は画面に出さない。**

@@ -3,7 +3,7 @@
  *
  * MSE は取ってこない。`appendBuffer()` に渡すバイト列をどこから持ってくるかは
  * こちら次第で、denpa は WebSocket から受ける ([stream.md](../../docs/stream.md) §5.3)。
- * 同じ1本に字幕もデータ放送も相乗りする作りなので、種別で振り分ける。
+ * 同じ1本で字幕もデータ放送も一緒に送る作りなので、種別で振り分ける。
  */
 
 import type { AudioTrack } from '#lib/arib.js';
@@ -135,7 +135,7 @@ const FRAME = 0.02;
 const START_WAIT = 1_500;
 
 /**
- * データ放送の知らせを、受け取る側ができるまでに取っておく数 (`heldData`)。
+ * データ放送の通知を、受け取る側ができるまでに取っておく数 (`heldData`)。
  *
  * **待つのは 700KB を落とす間だけ**なので、実測 (毎秒20通ほど) からすれば
  * 数十で足りる。それでも上限を置くのは、**モジュールは1通が 100KB を超える**
@@ -284,7 +284,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
      * 「出している」が続いているので、そのつど押し直させる筋合いが無い
      */
     let showData = $state(false);
-    /** データ放送の知らせを渡す先。**描いているものがあるときだけ** */
+    /** データ放送の通知を渡す先。**描いているものがあるときだけ** */
     let onData: ((message: ResponseMessage) => void) | null = null;
     /**
      * 受け取る側ができるまでの控え。**押した直後のぶんを捨てない。**
@@ -325,7 +325,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
      * シークで再エンコードするたびに base が変わる。画面に見せる位置は base + position
      */
     let chase = $state<{ recordingId: number; base: number } | null>(null);
-    /** 追っかけの物差し (`timeline` の知らせ)。録画中は右端を壁時計で伸ばして読む */
+    /** 追っかけの物差し (`timeline` の通知)。録画中は右端を壁時計で伸ばして読む */
     let chaseTimeline = $state<{
         recordedSec: number;
         totalSec: number;
@@ -340,12 +340,12 @@ export function livePlayer(options: LivePlayerOptions = {}) {
     /*
      * ---- 録画に譲ったとき ([docs/stream.md](../../docs/stream.md) §4「録画に譲る」) ----
      *
-     * ライブは録画にだけ譲る。蹴られたらサーバが `lost` を言ってくるので、**まず同じ局をリクエストし直す**
+     * ライブは録画にだけ譲る。チューナーを取り上げられたらサーバが `lost` を言ってくるので、**まず同じ局をリクエストし直す**
      * (使ってよいチューナーが空いていればそこに入り、見ているものは変わらない)。リクエストし直しても入れなかった
-     * ときだけ、蹴った録画の追っかけに切り替える。「ライブに戻る」(`backToLive`) はリクエストし直しを試し、
+     * ときだけ、チューナーを取り上げた録画の追っかけに切り替える。「ライブに戻る」(`backToLive`) はリクエストし直しを試し、
      * 入れなければ追っかけに戻る
      */
-    /** 蹴った録画。**リクエストし直しが入れなかったら、これの追っかけに切り替える** (入れたら忘れる) */
+    /** チューナーを取り上げた録画。**リクエストし直しが入れなかったら、これの追っかけに切り替える** (入れたら忘れる) */
     let fallback: YieldedRecording | null = null;
     /**
      * 録画に譲って追っかけを観ている。`back` は戻る先のライブ、`refused` は「ライブに戻る」を
@@ -358,7 +358,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
     /*
      * ---- 変換せずに送る経路 ([stream.md](../../docs/stream.md) §5.5) ----
      *
-     * **MSE の代わりに `raw/engine.ts` を使う。** それ以外 (繋ぎ・知らせ・字幕・データ放送・
+     * **MSE の代わりに `raw/engine.ts` を使う。** それ以外 (繋ぎ・通知・字幕・データ放送・
      * 貯め方の決め方) はエンコードする経路と同じものを通す。違うのは描く先と時計だけ:
      *
      * | | エンコードする経路 | 変換しない経路 |
@@ -461,7 +461,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
     /** 飛び直した回数。**画面に出す** — 直し続けているなら、まだ足りていない */
     let slips = $state(0);
     /**
-     * サーバが受け取った時刻と、エンコードしたものの物差しの対応 (`clock` の知らせ)。
+     * サーバが受け取った時刻と、エンコードしたものの物差しの対応 (`clock` の通知)。
      * **届くまでは null** — 画面は届いてから出す
      */
     let broadcast = $state<{ at: number; unixMs: number } | null>(null);
@@ -623,7 +623,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
     /**
      * 字幕を、**映した1枚ごとに**貼り直す。
      *
-     * 貼り直しを `pace` に相乗りさせていた頃は、**塊が届いたときにしか
+     * 貼り直しを `pace` に便乗させていた頃は、**塊が届いたときにしか
      * 貼り直していなかった**。塊は 0.05秒ごとなので、ずれるのは**遅れる方向
      * だけ** — 実機で測ると、狙った 507ms に対して実際に出るのは平均 522ms・
      * 最大 560ms だった。字幕は 1〜2秒で入れ替わるので、これが「次の表示が
@@ -1404,7 +1404,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
     }
 
     /**
-     * データ放送の知らせを受け取る先を預かる。**描く側がいるときだけ渡す。**
+     * データ放送の通知を受け取る先を預かる。**描く側がいるときだけ渡す。**
      *
      * 渡す形式はデコードする側と描く側の取り決め (`ResponseMessage`。`ts/bml-protocol.ts`) なので、
      * ここは素通しでいい。
@@ -1499,10 +1499,10 @@ export function livePlayer(options: LivePlayerOptions = {}) {
     }
 
     /**
-     * リクエストし直しても入れなかった。**蹴った録画の追っかけに切り替える** (録れているところの少し手前から)。
+     * リクエストし直しても入れなかった。**チューナーを取り上げた録画の追っかけに切り替える** (録れているところの少し手前から)。
      * 戻る先 (いまリクエストしていたライブ) は覚えておく (`backToLive`)
      *
-     * @param refused 「ライブに戻る」を試して入れなかったのか (蹴られた直後のリクエストし直しなら false)
+     * @param refused 「ライブに戻る」を試して入れなかったのか (取り上げられた直後のリクエストし直しなら false)
      */
     function giveWay(recording: YieldedRecording, refused: boolean): void {
         const back = tuned ?? yielded?.back;
@@ -1728,7 +1728,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
                 const notice = JSON.parse(new TextDecoder().decode(body)) as Notice;
                 if (notice.type === 'error') {
                     /*
-                     * **リクエストし直しても入れなかった。** 蹴られた直後なら蹴った録画へ、「ライブに戻る」を
+                     * **リクエストし直しても入れなかった。** 取り上げられた直後ならその録画へ、「ライブに戻る」を
                      * 試していたなら追っかけへ戻る。どちらでもなければいつもの失敗
                      */
                     const to = returning ? (yielded?.recording ?? null) : fallback;
@@ -1736,9 +1736,9 @@ export function livePlayer(options: LivePlayerOptions = {}) {
                     else fail(notice.message);
                 } else if (notice.type === 'lost') {
                     /*
-                     * **チューナーから外された** (録画に蹴られた・エージェントとの繋ぎが切れた)。同じ局を
+                     * **チューナーから外された** (録画にチューナーを取り上げられた・エージェントとの繋ぎが切れた)。同じ局を
                      * リクエストし直す。いつもの繋ぎ直しに乗せる — 待ちが倍々に伸びるので、外されては入るを
-                     * 繰り返しても叩き続けない。入れなかったら蹴った録画へ (上の `error`)
+                     * 繰り返してもリクエストし続けない。入れなかったら取り上げた録画へ (上の `error`)
                      */
                     fallback = notice.recording;
                     reconnect();
@@ -2206,7 +2206,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
         },
         /**
          * MPEG-2 で見ているときの映像ストリーム (PiP)。**映像は worker の canvas にあって、`<video>` は
-         * 空のまま**なので、その流れを別の `<video>` に映す (`pip.svelte.ts`)。
+         * 空のまま**なので、そのストリームを別の `<video>` に映す (`pip.svelte.ts`)。
          * 取り方は `RawEngine.pipStream`。MPEG-2 でない・取れない (Firefox) なら null
          */
         capture(): MediaStream | null {

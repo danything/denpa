@@ -40,7 +40,7 @@ export function fileRecordingId(pathname: string): number | null {
  *
  * - **ログインの入口。** 守ると入れなくなる (ログイン画面へ行くのにログインが要る)
  * - **`/logout`。** ここも素通し (ログアウトするのにログインを要求しない)
- * - **`/api/health`。** Kubernetes の `livenessProbe` が叩く。守ると**Pod が
+ * - **`/api/health`。** Kubernetes の `livenessProbe` が呼ぶ。守ると**Pod が
  *   再起動を繰り返す** (掛ける範囲を選べるのをやめたときに実際に踏んだ —
  *   E2E のスタックが起動待ちで固まった)。出しているのは
  *   「生きているか・動いている版と新しい版・局が何件か・録画が何本か」だけ
@@ -49,9 +49,9 @@ export function fileRecordingId(pathname: string): number | null {
  *   ホーム画面に置けなくなる。static に置いてあった頃は adapter-node が
  *   hooks より手前で返していて、そもそも掛かっていなかった。出しているのは
  *   アプリの名前とアイコンの場所だけ
- * - **ペアリングコードと鍵の受け取り** (`/api/device/code`・`/api/device/token`)。テレビは
+ * - **ペアリングコードとアクセストークンの受け取り** (`/api/device/code`・`/api/device/token`)。テレビは
  *   まだ何の資格も持っていない。コードを出すだけでは入れず、許すのは `/device` (ここは守る)。
- *   誰でも叩けるので、有効なコードの数に上限がある (device-auth.ts の `MAX_PENDING`)
+ *   誰でも呼べるので、有効なコードの数に上限がある (device-auth.ts の `MAX_PENDING`)
  */
 const OPEN_PATHS = [
     /^\/login(\/|$)/,

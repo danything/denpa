@@ -6,7 +6,7 @@
  * 「最新のリリース」のタグを 1 時間に 1 度取り、向こうが新しければヘッダーに出す
  * (`+layout.svelte`)。
  *
- * **リリースを消せば知らせも消える** — 「最新」は消したあとの版になるので、次に
+ * **リリースを消せば通知も消える** — 「最新」は消したあとの版になるので、次に
  * 見比べたときに引っ込む。main (develop) のイメージと手元・試験は `dev` で、何も
  * 出さない — main を追いかけている限りリリースより常に先。読めないタグ (試し版の
  * `v2.0.0-rc1` など) も同じ。繋がらないときは**前に分かっていたことをそのまま持つ**
@@ -61,7 +61,7 @@ export function newer(a: [number, number, number], b: [number, number, number]):
 /**
  * 見比べる。**外に出る呼び出しはここだけ。** 試験は `fetcher` を差し替える
  *
- * 404 は「リリースが 1 つも無い」なので知らせ無し。それ以外の失敗は前の結果を持つ
+ * 404 は「リリースが 1 つも無い」なので通知無し。それ以外の失敗は前の結果を持つ
  */
 export async function checkForUpdate(fetcher: Fetcher = fetch): Promise<Available | null> {
     const current = parseVersion(config.version);

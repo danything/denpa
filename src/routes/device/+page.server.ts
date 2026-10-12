@@ -9,7 +9,7 @@ import { approve, normalizeUserCode, viewCode } from '#lib/server/device-auth.js
  * 許すと、ブラウザの先読みやリンクの下見で黙って済んでしまう。画面は開いたら
  * すぐ自分で送るフォーム (POST。CSRF の守りが効く) にし、許すのはそちらでやる。
  *
- * **アプリの鍵 (`Authorization: Bearer`) で来た相手には済ませない** (device-auth.ts の `approve`)
+ * **アクセストークン (`Authorization: Bearer`) で来た相手には済ませない** (device-auth.ts の `approve`)
  */
 export function load({ url, locals }) {
     const raw = url.searchParams.get('code') ?? '';

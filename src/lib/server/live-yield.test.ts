@@ -13,15 +13,15 @@ const found = (id: number): YieldedRecording => ({ id, title: `録画${id}`, ser
 const noWait = () => Promise.resolve();
 
 describe('ライブが譲った録画を名指しする', () => {
-    test('使えたら、自分の読み手がいるチューナーを覚える', () => {
+    test('使えたら、自分の利用者がいるチューナーを覚える', () => {
         const tuners = [tuner(0, 'T16', 'epg T16'), tuner(1, 'T21', 'rec 3', 'live GR/T21')];
         expect(tunerOf(tuners, 'GR', 'T21', 'live GR/T21')).toBe(1);
-        // 同じチャンネルでも読み手が違えば別 (番組表集めだけのチューナーは自分のものではない)
+        // 同じチャンネルでも利用者が違えば別 (番組表集めだけのチューナーは自分のものではない)
         expect(tunerOf(tuners, 'GR', 'T16', 'live GR/T16')).toBeNull();
     });
 
-    test('蹴られたら、覚えたチューナーにいる録画が相手', () => {
-        // ライブの読み手は消え、録画が別のチャンネルで入っている
+    test('取り上げられたら、覚えたチューナーにいる録画が相手', () => {
+        // ライブの利用者は消え、録画が別のチャンネルで入っている
         const after = [tuner(0, 'T16', 'epg T16'), tuner(1, 'T27', 'rec 42')];
         expect(recordingOn(after, 1)).toBe(42);
         // 録画のいないチューナー・知らないチューナーなら分からない
@@ -29,7 +29,7 @@ describe('ライブが譲った録画を名指しする', () => {
         expect(recordingOn(after, 7)).toBeNull();
     });
 
-    test('録画の読み手が載るのが遅れても、少し待って読み直す', async () => {
+    test('録画の利用者が載るのが遅れても、少し待って読み直す', async () => {
         const lists = [[tuner(1, null)], [tuner(1, 'T27', 'rec 42')]];
         let asked = 0;
         const recording = await yieldedTo(

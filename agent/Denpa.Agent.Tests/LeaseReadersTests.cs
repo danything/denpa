@@ -5,8 +5,8 @@ namespace Denpa.Agent.Tests;
 /*
  * **溢れの報告に添える名前。**
  *
- * 報告は1分に1回なので、溢れた瞬間の読み手と報告した瞬間の読み手は違う。
- * 実機の24時間で 302回のうち128回が「読み手なし」になっていて、その多くは
+ * 報告は1分に1回なので、溢れた瞬間の利用者と報告した瞬間の利用者は違う。
+ * 実機の24時間で 302回のうち128回が「利用者なし」になっていて、その多くは
  * 直後の報告に同じ局・同じチューナーで `live` が付いていた。
  * 名前を添えるのは「次に見るところを決める」ためなので、当てにならない名前は
  * 無いのと同じになる。
@@ -18,7 +18,7 @@ public class LeaseReadersTests
     [Test]
     public async Task 誰も来ていなければ読み手なし()
     {
-        await Assert.That(Make().Readers()).IsEqualTo("読み手なし");
+        await Assert.That(Make().Readers()).IsEqualTo("利用者なし");
     }
 
     [Test]
@@ -26,7 +26,7 @@ public class LeaseReadersTests
     {
         var lease = Make();
         lease.Saw("live GR/T27");
-        // 読み手はもういない (Sinks は空のまま) が、いたことは残っている
+        // 利用者はもういない (Sinks は空のまま) が、いたことは残っている
         await Assert.That(lease.Readers()).IsEqualTo("live GR/T27");
     }
 
@@ -36,8 +36,8 @@ public class LeaseReadersTests
         var lease = Make();
         lease.Saw("epg T27");
         await Assert.That(lease.Readers()).IsEqualTo("epg T27");
-        // 次の報告まで誰も来なければ、そこは本当に読み手なし
-        await Assert.That(lease.Readers()).IsEqualTo("読み手なし");
+        // 次の報告まで誰も来なければ、そこは本当に利用者なし
+        await Assert.That(lease.Readers()).IsEqualTo("利用者なし");
     }
 
     [Test]

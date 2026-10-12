@@ -402,7 +402,7 @@ export function audioTitles(audios: Audio[], dualMono: boolean): string[] {
  * 番組表が持っている音声の構成。
  *
  * `audios` は放送から拾ったものをそのまま持っているだけなので、無い・壊れている
- * (壊れた行は列の読み手が空にする。`schema.ts`) ことはありうる。そのときは
+ * (壊れた行は列の読み取り関数が空にする。`schema.ts`) ことはありうる。そのときは
  * `audio_type` に落とし、それも無ければ何も無いことにする — どの道 `audioTracks` が
  * 「そのまま出す」1つを返す
  */

@@ -190,7 +190,7 @@ ENV NODE_ENV=production \
     FFPROBE=/usr/local/bin/ffprobe
 
 # B-CASカードは触らない。掛かったまま録れたTSの解除はチューナーエージェントに
-# 投げる(カードリーダーを叩くのはあちら)。recisdb も libpcsclite も要らない
+# 投げる(カードリーダーとやり取りするのはあちら)。recisdb も libpcsclite も要らない
 # libvpl2 + libmfx-gen1.2 (QSV のランタイム) + libva* + intel-media-va-driver (iHD) は
 # Intel の GPU (QSV / VA-API) 向け (上の ffmpeg 段の説明)。GPU の無い機械でも害は無い
 # (起動時の試しのエンコードが落ちて、ソフトウェアでエンコードするだけ)。**Intel の3つは amd64 だけ**
@@ -241,7 +241,7 @@ COPY --from=build /app/src/lib/server/address.ts ./src/lib/server/address.ts
 
 EXPOSE 3000
 # 動いている版。ここでは `dev` のまま — リリースのときに、このイメージを土台に
-# 版を 1 層足す (.github/release.Dockerfile)。新しい版の知らせはそれと GitHub の
+# 版を 1 層足す (.github/release.Dockerfile)。新しい版の通知はそれと GitHub の
 # 最新のリリースを数で比べて出す (src/lib/server/update.ts)。dev では出さない
 ENV DENPA_VERSION=dev
 

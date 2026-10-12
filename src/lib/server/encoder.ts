@@ -563,7 +563,7 @@ const stopping = new Map<number, (() => void)[]>();
  *
  * ffmpeg は SIGTERM から 1秒ほどで終わる (実測 923ms / 1078ms)。この待ちは
  * その1秒を待って**畳んだ結果を返す**ためのもので、間に合わなければ諦めて
- * 返す — あとは畳み終わりの知らせ (SSE) が追いつく
+ * 返す — あとは畳み終わりの通知 (SSE) が追いつく
  */
 const CANCEL_WAIT_MS = 5_000;
 
@@ -595,7 +595,7 @@ function wakeStopping(jobId: number): void {
  * 中止を伝えるだけで返すと、押した直後の読み直しは ffmpeg が死ぬ前に届き、画面が変わらない。
  * ffmpeg は SIGTERM から1秒ほどで終わるので、待ってから返せば押した人の画面は
  * その場で「録画済み」に変わる。**上限つき** (`CANCEL_WAIT_MS`) で、間に合わ
- * なければ諦めて返す (あとは知らせ (SSE) に任せる)
+ * なければ諦めて返す (あとは通知 (SSE) に任せる)
  */
 export async function cancel(jobId: number): Promise<void> {
     canceled.add(jobId);
@@ -819,7 +819,7 @@ async function runFfmpeg(
     seek: number | null,
     codec: HwCodec,
     options: EncodeOptions = {},
-    /** CM 検出を相乗りさせるときの読み手 (`options.analysis` と組で渡す) */
+    /** CM 検出を一緒に行うときの読み取り関数 (`options.analysis` と組で渡す) */
     reader?: ScanReader,
 ) {
     // fd 3 は進み具合 (`-progress pipe:3`)。標準出力は CM 検出のロゴの枠 (読まないなら捨てる)
@@ -990,7 +990,7 @@ function clearScratch(input: string): void {
     removeIfExists(`${input}.decoded.m2ts`);
 }
 
-/** ジョブを失敗にする (行を書くだけ。知らせも画面の更新もしない) */
+/** ジョブを失敗にする (行を書くだけ。通知も画面の更新もしない) */
 function markFailed(jobId: number, reason: string): void {
     orm()
         .update(encodeJobs)
@@ -1102,7 +1102,7 @@ async function runJob(jobId: number): Promise<void> {
          * 番組表の行は24時間で消えるので、写しておいたものから引く
          * (`recordings.audios`。ジャンルと同じ扱い)。古い録画には写しが無いので、
          * そのときは `audioTitles` の既定 (「音声」/「主音声」「副音声」) に落ちる
-         * (壊れた行を空にするのは列の読み手。`schema.ts`)
+         * (壊れた行を空にするのは列の読み取り関数。`schema.ts`)
          */
         audioTitles: audioTitles(recording.audios ?? [], recording.audio_type === DUAL_MONO),
         mediaTitle: displayTitle(recording.name),
@@ -1288,7 +1288,7 @@ async function runJob(jobId: number): Promise<void> {
      * ありうる (ドライバの対応していない大きさなど)。GPU が駄目なだけで録画が
      * 失敗になるのは避けたい。GPU の失敗は初期化で落ちるので、やり直しは速い
      *
-     * `analysis` なら CM 検出を相乗りさせる。**全部落ちたら、探さずにもう1度だけエンコードする** —
+     * `analysis` なら CM 検出を一緒に行う。**全部落ちたら、探さずにもう1度だけエンコードする** —
      * 検出の出口がエンコードするほうを道連れにしたのかもしれない。エンコードできたら音だけ読み直して、CM の尺だけで決める
      */
     const encodeWays = async (
@@ -1710,7 +1710,7 @@ async function runJob(jobId: number): Promise<void> {
  *   「何もしない」なら外す。`-c copy` で写すだけ
  * - **CM を切ってエンコードしたもの (`cm_kept`) は戻せない**ので受けない (ボタンの側で断っている。ここは念のため)
  *
- * 待ち行列・中止・進み具合・失敗の知らせはエンコードするジョブと同じ (`pump`)
+ * 待ち行列・中止・進み具合・失敗の通知はエンコードするジョブと同じ (`pump`)
  */
 async function runCmJob(jobId: number): Promise<void> {
     const controller = new AbortController();

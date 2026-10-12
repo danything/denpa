@@ -214,7 +214,7 @@ describe('アプリ向けの字幕 API', () => {
         expect([...out.subarray(13)]).toEqual([1, 2, 3]);
     });
 
-    test('字幕と、選べる字幕の知らせだけを通す', async () => {
+    test('字幕と、選べる字幕の通知だけを通す', async () => {
         const stream = captionFeed((out) => {
             out.send(CHANNEL.rawTs, 0n, new Uint8Array(188));
             out.send(CHANNEL.control, 0n, json({ type: 'clock', at: 1, unixMs: 2, now: 3 }));
@@ -232,7 +232,7 @@ describe('アプリ向けの字幕 API', () => {
     });
 
     // 映像が終わった (セッションが畳まれた・エンコードできなくなった) ら、字幕 API も閉じる
-    test('ended / error の知らせで閉じて後始末する', async () => {
+    test('ended / error の通知で閉じて後始末する', async () => {
         for (const type of ['ended', 'error']) {
             let left = 0;
             let send: ((kind: number, pts: bigint, payload: Uint8Array) => void) | null = null;

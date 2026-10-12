@@ -52,8 +52,8 @@ public sealed class BCas : IKeySource, IDisposable
     ///
     /// <para>
     /// 探すのはリーダーを全部開いて電源を入れ直すことで、固まったリーダーだと
-    /// 数十秒かかる。ECM は何本もの流れから数秒ごとに来るので、そのたびに探すと
-    /// ロックの前に全部の流れが並ぶ。カードを挿し直したなら 10 秒後には読める
+    /// 数十秒かかる。ECM は何本ものストリームから数秒ごとに来るので、そのたびに探すと
+    /// ロックの前に全部のストリームが並ぶ。カードを挿し直したなら 10 秒後には読める
     /// </para>
     /// </summary>
     public static readonly TimeSpan RetryAfter = TimeSpan.FromSeconds(10);
@@ -63,7 +63,7 @@ public sealed class BCas : IKeySource, IDisposable
     private readonly Lock _gate = new();
 
     /// <summary>
-    /// 同じ ECM には同じ鍵。**同じチャンネルを見ている流れが多いほど効く。**
+    /// 同じ ECM には同じ鍵。**同じチャンネルを見ているストリームが多いほど効く。**
     ///
     /// <para>
     /// 録画・ライブ・番組表が同じ局にいれば、同じ ECM が同じ時刻に何本も来る。
@@ -159,7 +159,7 @@ public sealed class BCas : IKeySource, IDisposable
 
         lock (_gate)
         {
-            // 待っている間に、同じ ECM を先に聞いた流れがいるかもしれない
+            // 待っている間に、同じ ECM を先に聞いたストリームがあるかもしれない
             if (Cached(name) is { } again) return again;
 
             var answer = Run(link =>

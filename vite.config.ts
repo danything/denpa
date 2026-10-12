@@ -103,7 +103,7 @@ export default defineConfig({
         }),
     ],
     server: {
-        // compose 上の Jellyfin はサービス名(`http://app:5173`)で開発サーバを叩く。
+        // compose 上の Jellyfin はサービス名(`http://app:5173`)で開発サーバにアクセスする。
         // vite の Host チェックに引っかかるので開発時だけ外す(本番は adapter-node で
         // 動かすため、この設定は使われない)
         allowedHosts: true,

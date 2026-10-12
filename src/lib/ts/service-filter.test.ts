@@ -73,7 +73,7 @@ describe('局の選り分け', () => {
         expect(filter.filter(payload(0x100))).toHaveLength(0);
     });
 
-    test('自局の ES だけ通す。相乗りしている局は落とす', () => {
+    test('自局の ES だけ通す。同じ TS のほかの局は落とす', () => {
         const filter = new ServiceFilter(MX1);
         filter.filter(Uint8Array.from([...pat(), ...pmt1(), ...pmt2()]));
         expect(filter.ready).toBe(true);

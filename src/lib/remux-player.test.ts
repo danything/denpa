@@ -150,7 +150,7 @@ describe('その場で流すものの受け方 (remuxPlayer)', () => {
         expect(media().readyState).toBe('ended');
     });
 
-    test('溜まっている所・読んでいる流れの少し先へはリクエストし直さない。遠くへ飛べばリクエストし直して前を捨てる', async () => {
+    test('溜まっている所・読んでいるストリームの少し先へはリクエストし直さない。遠くへ飛べばリクエストし直して前を捨てる', async () => {
         const { video, media } = start(100);
         await settle();
         video.currentTime = 104;
@@ -162,7 +162,7 @@ describe('その場で流すものの受け方 (remuxPlayer)', () => {
         expect(media().buffer?.ranges).toEqual([[300, 306]]);
     });
 
-    test('読んでいる最中に飛んでも、古い流れの残りは新しい流れに混ざらない', async () => {
+    test('読んでいる最中に飛んでも、古いストリームの残りは新しいストリームに混ざらない', async () => {
         let open!: () => void;
         gate = new Promise((resolve) => {
             open = resolve;

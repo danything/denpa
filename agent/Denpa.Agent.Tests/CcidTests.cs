@@ -5,7 +5,7 @@ using TUnit.Core.Enums;
 namespace Denpa.Agent.Tests;
 
 /*
- * USB の CCID リーダーを直に叩くところ。
+ * USB の CCID リーダーを直接扱うところ。
  *
  * 本物のリーダーは無い。ディスクリプタは Gemalto (Gemplus) PC Twin Reader (08e6:3437) の
  * 値で組み (CCID ドライバの readers/GemPCTwin.txt)、リーダーはバルク転送の入口ごと偽物にする。

@@ -50,7 +50,7 @@ const stop = broadcast(services, knobs, (data) => {
         out.write(data);
         out.flush();
     } catch {
-        // 読み手がいなくなった (エージェントに殺された)。静かに畳む
+        // 読む側がいなくなった (エージェントに殺された)。静かに畳む
         closed = true;
         stop();
     }

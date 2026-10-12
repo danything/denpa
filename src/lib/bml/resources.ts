@@ -343,7 +343,7 @@ export class Resources {
         if (held !== undefined && held.kind !== kind) return Number.NaN;
         if (this.pmtSeen && !this.pmt.has(component)) return kind === 'lockEx' ? -3 : -1;
         if (held !== undefined) {
-            // 同じ種類で押さえ直す。待っている途中ならその待ちに任せる (知らせは 1 回)
+            // 同じ種類で押さえ直す。待っている途中ならその待ちに任せる (通知は 1 回)
             if (held.module === null) return 1;
             // 届いている今の版で押さえ直し、前の版を返す (web-bml の lockCachedModule と同じ)
             const now = this.cache.get(k);

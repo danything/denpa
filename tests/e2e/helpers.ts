@@ -181,9 +181,9 @@ export async function reserveSoon(page: Page, request: APIRequestContext, type: 
 
 /**
  * 1回開いて、行の状態が変わるのを待つ。**開き直さない** — 画面はサーバからの
- * 知らせ (liveUpdates) で自分で書き換わるので、待っている間は裏の録画とエンコードに
+ * 通知 (liveUpdates) で自分で書き換わるので、待っている間は裏の録画とエンコードに
  * CPU を回せる。`waitWatchable` はこれの「視聴可能」専用で、あちらは開き直す
- * (行が知らせで書き換わらない場面 = 予約が録画の行に化けるところ を跨ぐため)
+ * (行が通知で書き換わらない場面 = 予約が録画の行に化けるところ を跨ぐため)
  */
 export async function waitRowState(
     page: Page,
@@ -732,7 +732,7 @@ export async function captureSockets(page: Page): Promise<void> {
 }
 
 /**
- * **データ放送の知らせを流す** (`CHANNEL.data` = 0x30 + 多重化の頭 8 バイト + JSON。時刻は 0)。
+ * **データ放送の通知を流す** (`CHANNEL.data` = 0x30 + 多重化の頭 8 バイト + JSON。時刻は 0)。
  * `captureSockets` してから開いた画面で、エンジンができてから呼ぶ (`fakeDataBroadcast` など)
  */
 export async function feedData(page: Page, messages: Record<string, unknown>[]): Promise<void> {
@@ -788,7 +788,7 @@ export const FAKE_CAPTION = {
 /**
  * **字幕を1枚流して描かせる** (ライブ・追っかけ。`prefix` は `live` か `chase`)。
  *
- * 字幕が1本あると知らせ (`CHANNEL.control` = 0x40 の `captions`)、`FAKE_CAPTION` を字幕のチャンネル
+ * 字幕が1本あると通知 (`CHANNEL.control` = 0x40 の `captions`)、`FAKE_CAPTION` を字幕のチャンネル
  * (`CHANNEL.captionText` = 0x22、時刻 0) で渡す。偽の放送は映像が出ず再生位置が進まないので、
  * 描くきっかけ (`paint`) は字幕のボタンを2回押して作る (消して出す)。
  * `captureSockets` してから開いた画面で呼ぶ

@@ -140,4 +140,4 @@ BinaryTable の検索の比べ方・既定のスタイルなど一部は web-bml
   ([player.md](player.md#アイコンは-lucide-を組むときに埋め込みます))。`@iconify/svelte` は既定で
   Iconify の API からアイコンデータを取りに行き、LAN だけ・オフラインで開けない
 - **OIDC のライブラリ** — 入れていません ([auth.md](auth.md))
-- **recisdb** — 選局は自前で ioctl を叩きます。値の出どころとして上に書いてあります
+- **recisdb** — 選局は自前で ioctl を呼びます。値の出どころとして上に書いてあります

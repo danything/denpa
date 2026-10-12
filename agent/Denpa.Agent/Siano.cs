@@ -235,7 +235,7 @@ public static class SianoUserland
 /// <para>
 /// **選局し直す間は、標準出力を読んで捨てる。** siano-ts は1本のループで「TS を書く →
 /// 標準入力を見る」を回していて、書く先の pipe が埋まると書くところで止まり、
-/// 標準入力を読みに来ない。誰も読んでいない間 (前の読み手が降りてから次の選局まで) に
+/// 標準入力を読みに来ない。誰も読んでいない間 (前の読む側が抜けてから次の選局まで) に
 /// pipe は埋まるので、読まずに <c>tune</c> を書くと進まない。読んで捨てれば、
 /// 前のチャンネルの残りも一緒に消える — siano-ts は同期を待つ間 (<c>tuned</c> の前) は
 /// 何も書かないので、<c>tuned</c> が来た時点で残っていた前の TS は読み尽くしてある。
@@ -445,7 +445,7 @@ public sealed class SianoTuner : ITuneDevice
         {
             Volatile.Write(ref answered, 1);
             /*
-             * **読み捨てが降りきるまで返さない。** 降りないまま返すと、次の読み手と
+             * **読み捨てが降りきるまで返さない。** 降りないまま返すと、次の読む側と
              * 同じ fd を取り合う。Read は 200ms ごとに起きて印を見るので普通は
              * すぐ降りるが、降りなければ子ごと捨てる (Drop が読み出し側を止めて閉じる)
              */
@@ -504,7 +504,7 @@ public sealed class SianoTuner : ITuneDevice
 
     /// <summary>
     /// siano-ts を止める。<c>quit</c> を送り、聞かなければ SIGTERM、それでも残れば SIGKILL。
-    /// 読み手が降りきってから fd を閉じる (<see cref="ChildTs.ReaderDrain"/>)。
+    /// 読む側が抜けきってから fd を閉じる (<see cref="ChildTs.ReaderDrain"/>)。
     ///
     /// <para>
     /// **<c>quit</c> を読ませる間は標準出力を読み捨てる** (<see cref="Retune"/> と同じ理由)。

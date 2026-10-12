@@ -9,11 +9,11 @@ using Microsoft.AspNetCore.Http.Features;
  *
  * denpa から触れないものが3つある。
  *
- * - B-CASカード … USB のリーダーも px4d の内蔵リーダーも、こちらが直に叩く (CardLinks.cs。
+ * - B-CASカード … USB のリーダーも px4d の内蔵リーダーも、こちらが直接扱う (CardLinks.cs。
  *   macOS / Windows の USB リーダーだけは OS の PC/SC 越し)
  * - チューナーデバイス … `/dev/dvb/*` と `/dev/bus/usb` が見えているのはこちらだけ
  * - 選局そのもの … デバイスを使って ioctl で選局する (Tuning.cs)。px4-userland /
- *   siano-userland の機材は同梱のものに USB を叩かせる (Px4.cs / Siano.cs)
+ *   siano-userland の機材は同梱のものに USB を扱わせる (Px4.cs / Siano.cs)
  *
  * **中身は読まない。** NIT も SDT も EIT も解析せず、TS をそのまま流す。
  * 読むのは denpa (`src/lib/ts`) で、局を選り分けるのも番組表を組み立てるのも、
@@ -110,7 +110,7 @@ app.MapGet("/denpa/stream", async (HttpContext http) =>
     }
     _ = int.TryParse(query["priority"].ToString(), out var priority);
     var use = query["use"].ToString() is { Length: > 0 } named ? named : "不明";
-    // 引き継ぎ。この読み手たちは、もう離れたものとして選ぶ (TunerPool.Open。何度でも書ける)
+    // 引き継ぎ。この利用者たちは、もう離れたものとして選ぶ (TunerPool.Open。何度でも書ける)
     var after = query["after"].Where(value => !string.IsNullOrEmpty(value)).Select(value => value!).ToHashSet();
 
     Sink sink;
@@ -162,10 +162,10 @@ app.MapGet("/denpa/stream", async (HttpContext http) =>
         }
 
         /*
-         * **蹴られたなら、正常終了として畳まない。**
+         * **チューナーを取り上げられたなら、正常終了として畳まない。**
          *
          * 送っている途中の本文をきれいに閉じると、読む側には「録り終えた」
-         * ように届く。実際それで、蹴られた録画が尻切れのまま成功扱いに
+         * ように届く。実際それで、チューナーを取り上げられた録画が尻切れのまま成功扱いに
          * なっていた (bun 版は接続を壊せなかった)。Kestrel は壊せるので壊す
          */
         if (sink.FailedWith is not null)
@@ -185,9 +185,9 @@ app.MapGet("/denpa/stream", async (HttpContext http) =>
     }
 });
 
-// --- 知らせ (SSE) ---------------------------------------------------------
+// --- 通知 (SSE) -----------------------------------------------------------
 
-// 知らせが無い間に流すコメントの間隔。denpa の fetch が黙った接続を切る 5 分より十分短く
+// 通知が無い間に流すコメントの間隔。denpa の fetch が黙った接続を切る 5 分より十分短く
 var eventsKeepAlive = TimeSpan.FromSeconds(30);
 app.MapGet("/denpa/events", async (HttpContext http) =>
 {
@@ -201,7 +201,7 @@ app.MapGet("/denpa/events", async (HttpContext http) =>
         /*
          * **繋がった時点でヘッダを送り、黙っている間もコメント行を流す。**
          *
-         * 何も書かないうちはヘッダも出ないので、購読した側は最初の知らせが
+         * 何も書かないうちはヘッダも出ないので、購読した側は最初の通知が
          * 来るまで「応答待ち」のまま。denpa (Bun の fetch) は黙っている接続を
          * 5 分で切るので、深夜など選局の動きが 5 分止まると、切れる → 繋ぎ直しても
          * 応答が来ない → 「チューナーに繋がりません」と鳴る、を繰り返していた
@@ -386,7 +386,7 @@ _ = Task.Run(PrepareDaemons);
 app.Lifetime.ApplicationStopped.Register(() =>
 {
     pool.CloseAll();
-    // 読み手を全部離してから px4d / asicend を止める。SIGTERM で LNB を 0V に戻して終わる
+    // 利用者を全部離してから px4d / asicend を止める。SIGTERM で LNB を 0V に戻して終わる
     UserlandDaemon.StopAll();
 });
 

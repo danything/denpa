@@ -13,7 +13,7 @@
  *     Segment > Cues > CuePoint > CueTime・CueTrackPositions (CueTrack・CueClusterPosition)
  *
  * **飛ぶときは、頭 (最初の Cluster の手前まで) に飛び先の Cluster からを繋いで読ませる** (`mkv-source.ts`)。
- * 読む側は位置を確かめないので、繋いだものを1本の流れとして読める。
+ * 読む側は位置を確かめないので、繋いだものを1本のストリームとして読める。
  *
  * DOM も worker も触らない (`mkv-media.test.ts`)
  */

@@ -53,7 +53,7 @@ DB 名 `denpa-offline`、ストア3つ (実体は [offline-db.ts](../src/lib/off
   `POST /api/recordings/<id>/resume` で送る。
 
 `state` は `'downloading' | 'ready' | 'failed'` の3つ。**失敗は消さずに残す。**
-知らせ (トースト) は一瞬なので、控えごと消すと無かったことに見える。残った行がそのまま
+通知 (トースト) は一瞬なので、控えごと消すと無かったことに見える。残った行がそのまま
 「保存をやり直す」の入口になる。進み具合 (%) は IndexedDB に置かず、画面側のメモリだけで持つ (下記)。
 
 一覧・視聴の UI はこの `videos` を参照して「DL 済みか」を分岐する。
@@ -69,7 +69,7 @@ DB 名 `denpa-offline`、ストア3つ (実体は [offline-db.ts](../src/lib/off
 2. `backgroundFetch.fetch(id, urls, {title, downloadTotal})` でブラウザに預ける (タブを
    閉じても続く。`/api/…/file` はログインの控えでも通る: `auth.sessionMayRead`)。登録IDは
    `rec-<録画ID>-<source>-<試みの印>`。同じIDが生きている間は再登録できないので
-   やり直しのたびに印を変え、前回の残骸は登録前に中止する。遅れて届く残骸の中止の知らせが
+   やり直しのたびに印を変え、前回の残骸は登録前に中止する。遅れて届く残骸の中止の通知が
    新しい控えを消さないよう、SW 側は印を照合する。
 3. **進み具合は2秒おきに `get()` で読み直す** (`watchProgress`)。`progress` イベントだけだと、
    遅い回線でブラウザが止めて再開したあとの通知が届かず、割合が張り付く。

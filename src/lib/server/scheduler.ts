@@ -140,7 +140,7 @@ export async function tick(): Promise<void> {
 
     // 止めるほうを先にやる。次の番組が始まるときに前の録画がまだチューナーを
     // 使っていると、台数が足りない環境で後続が丸ごと録れない
-    /** この見回りで止めた録画の読み手。始める録画に引き継ぎとして渡す (下) */
+    /** この定期チェックで止めた録画の利用者。始める録画に引き継ぎとして渡す (下) */
     const stopped: StreamUse[] = [];
     for (const id of activeRecordingIds()) {
         const rec = orm()
@@ -159,7 +159,7 @@ export async function tick(): Promise<void> {
      * **持ち主のいない「録画中」を畳む** (`failStrayRecordings`)。畳む間もなく殺されると
      * (k3s ごと落ちた等) DB の行だけが録画中で残り、予約の一覧に居座って録画の一覧には
      * 出てこない。起動時の拾い直しでは、そのとき放送中だったものを録り直しに行った先で
-     * また殺されると畳めないので、見回りでも同じ片付けをする
+     * また殺されると畳めないので、定期チェックでも同じ片付けをする
      */
     if (failStrayRecordings(at) > 0) {
         emit('recordings');
@@ -245,7 +245,7 @@ export async function tick(): Promise<void> {
          * 同じ時刻なら離すほうを先に数えているので、それと同じになる。
          *
          * どれとどれを組にするかは決めない。どのチューナーに入るかはエージェントが順位で選ぶので、
-         * 止めたものを全部渡せば足りる (選ばれなかったチューナーの読み手には触らない約束)
+         * 止めたものを全部渡せば足りる (選ばれなかったチューナーの利用者には触らない約束)
          */
         await startRecording(reservation, stopped);
     }

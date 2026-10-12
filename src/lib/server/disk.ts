@@ -77,7 +77,7 @@ export function checkDisk(): void {
  * 持たず、エンコードすると縮むので数えない。エンコードするジョブの無いもの (エンコードしない設定・エンコードするのに失敗したもの) は
  * 元のTSのまま残るので、その大きさで数える。本数が足りなければ時間は出さない (null)
  *
- * **しばらく覚えておく** (`CAPACITY_TTL`)。一覧は知らせ (`emit('recordings')`) のたびに
+ * **しばらく覚えておく** (`CAPACITY_TTL`)。一覧は通知 (`emit('recordings')`) のたびに
  * 読み直すので、そのたびに statfs と標本の stat を回すことになる。目安なので数十秒古くても困らない
  */
 export function capacity(): Capacity | null {

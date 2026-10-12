@@ -108,7 +108,7 @@ describe('ペアリングの流れ', () => {
      * 盗まれた鍵で別の鍵を作れると、元の鍵を取り消しても作った鍵が生き残る。
      * 許すのはブラウザ (信頼するネットワークか OIDC) だけ
      */
-    test('アプリの鍵で入った相手は許せない', () => {
+    test('アクセストークンで入った相手は許せない', () => {
         const at = 4_500_000;
         const { deviceCode, userCode } = pair('鍵から', at);
         expect(() => approve(userCode, 'token:1', true, at)).toThrow(TokenCannotApprove);
@@ -141,7 +141,7 @@ describe('ペアリングの流れ', () => {
         expect(poll('nope', 7_000_000)).toEqual({ error: 'invalid_grant' });
     });
 
-    test('有効なコードが上限に達したら、もう出さない (誰でも叩けるので)', () => {
+    test('有効なコードが上限に達したら、もう出さない (誰でも呼べるので)', () => {
         const at = 8_000_000_000;
         for (let i = 0; i < MAX_PENDING; i++) expect(issueCode(`満員${i}`, at)).not.toBeNull();
         expect(issueCode('あふれ', at)).toBeNull();

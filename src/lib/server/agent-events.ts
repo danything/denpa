@@ -5,14 +5,14 @@ import { chunks } from './stream';
  * エージェントが起きたことを教えてくれるエンドポイント (`GET /denpa/events`, SSE)。
  *
  * これが使えると、チューナーの様子も局の入れ替わりも「覗きに行く」必要がない。
- * 定期実行は**知らせが途切れたときの保険**として残してある
+ * 定期実行は**通知が途切れたときの保険**として残してある
  * (つなぎ直しは下でやっているが、黙って止まる可能性は消せない)。
  *
  * 流れてくるもの:
  *
  * | イベント | denpa の使い道 |
  * | --- | --- |
- * | `tuners` | チューナー画面を更新し、開いた選局にロゴ集めが相乗りする |
+ * | `tuners` | チューナー画面を更新し、開いた選局をロゴ集めが共有する |
  * | `channels` | スキャンで局が入れ替わった。取り込み直す |
  *
  * スキャンの進み具合は流れてこない — 走らせているのは denpa 自身 (`scan.ts`)。
@@ -23,7 +23,7 @@ export interface AgentEvent {
     data: Record<string, unknown>;
 }
 
-/** つなぎ直しの待ち。すぐ繋ぎ直すと、相手が落ちている間に叩き続けることになる */
+/** つなぎ直しの待ち。すぐ繋ぎ直すと、相手が落ちている間に呼び続けることになる */
 const RETRY_MIN = 1000;
 const RETRY_MAX = 60_000;
 
@@ -99,18 +99,16 @@ export function listen(
                 // 落ちていると知らせたあとに繋がったときだけ「復帰」を鳴らす
                 if (reachable === false) onReachable?.(true);
                 reachable = true;
-                console.log('[agent] 知らせの購読を開始しました');
+                console.log('[agent] 通知の購読を開始しました');
 
                 for await (const block of blocks(res.body)) {
                     const event = parseBlock(block);
                     if (event !== null) onEvent(event);
                 }
-                if (!stopped) console.warn('[agent] 知らせが途切れました。繋ぎ直します');
+                if (!stopped) console.warn('[agent] 通知が途切れました。繋ぎ直します');
             } catch (error) {
                 if (stopped) return;
-                console.warn(
-                    `[agent] 知らせに繋げません (${Math.round(retry / 1000)}秒後に再試行): ${error}`,
-                );
+                console.warn(`[agent] 通知に繋げません (${Math.round(retry / 1000)}秒後に再試行): ${error}`);
             }
             // 繋がらない状態が猶予を超えて続いたら、一度だけ「落ちている」を鳴らす
             if (downSince === null) downSince = Date.now();

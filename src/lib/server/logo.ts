@@ -16,10 +16,10 @@ import { type AgentTuner, getTuners, openChannelStream } from './tuner';
  * 局ロゴを集める。
  *
  * 放送波の CDT (地上波) とデータカルーセル (衛星) に流れてくるものを取得する。
- * 集め方は Mirakurun と同じで、開いているストリームに相乗りする。
+ * 集め方は Mirakurun と同じで、開いているストリームを共有する。
  *
  * ロゴは滅多に変わらないうえ、放送波に流れてくるのは数十秒〜数分に一度なので、
- * 番組表集めや録画の選局に相乗りして取得する (`ride`)。自分でチューナーを開くのは
+ * 番組表集めや録画の選局を共有して取得する (`ride`)。自分でチューナーを開くのは
  * 画面から求められたとき (`sweepNow`) だけ。
  */
 
@@ -58,8 +58,8 @@ const SATELLITE_TIMEOUT = 20 * 60_000;
  */
 const SATELLITE_QUIET = 15_000;
 /**
- * 相乗りのときの上限。向こうの都合でいつ閉じてもおかしくないので短くする。
- * こちらはチューナーを増やさない (同じチャンネルなら**エージェントが相乗りさせる**)。
+ * 選局を共有するときの上限。向こうの都合でいつ閉じてもおかしくないので短くする。
+ * こちらはチューナーを増やさない (同じチャンネルなら**エージェントが選局を共有させる**)。
  * **実際に集めているのはほぼこちら** (`sweep`)
  */
 const RIDE_TIMEOUT = 3 * 60_000;
@@ -84,7 +84,7 @@ const SWEEP_TUNERS = 2;
  * **CS の12中継には1つもいません** — CS のロゴもこの BS の中継から降ってきます
  * (`CS_LOGO-05`)。つまり CS の物理チャンネルは開くだけ無駄。
  *
- * 覚えておかないと、見回りのたびに CS の12中継を開き直すことになる。
+ * 覚えておかないと、定期チェックのたびに CS の12中継を開き直すことになる。
  * 放送側の都合はいつか変わるので、間隔を空けて確かめ直す。
  */
 const RELAY_RETRY = 7 * 24 * 60 * 60_000;
@@ -122,7 +122,7 @@ interface RelayNotes {
     absent: Record<string, number>;
     /**
      * 地上波で、開けるだけ開けても**大きいロゴ (64×36) が来なかった**局 (局ID → 時刻)。
-     * 控えておかないと、小さいロゴしか流さない局のために見回りのたびに6分開き直す
+     * 控えておかないと、小さいロゴしか流さない局のために定期チェックのたびに6分開き直す
      */
     gaveUp: Record<string, number>;
 }
@@ -459,7 +459,7 @@ function missing(): Target[] {
     return [...targets.values()];
 }
 
-/** その物理チャンネルに相乗りしている局のうち、ロゴを取り直したい数 */
+/** その物理チャンネルに入っている局のうち、ロゴを取り直したい数 */
 function missingOn(channel: string): number {
     return currentServices().filter((s) => s.channel === channel && needsLogo(s)).length;
 }
@@ -479,8 +479,8 @@ function missingSatellites(): number {
 /**
  * いま開いて読んでいる物理チャンネル。
  *
- * **相乗り (`ride`) が自分の開けたものに乗らないように持つ。** こちらが開くと
- * エージェントが `tuners` を飛ばし、それを合図に相乗りが走って同じものを二重に読んでしまう。
+ * **共有 (`ride`) が自分の開けたものに乗らないように持つ。** こちらが開くと
+ * エージェントが `tuners` を飛ばし、それを合図に共有が走って同じものを二重に読んでしまう。
  */
 const collecting = new Set<string>();
 
@@ -500,7 +500,7 @@ async function collect(target: Target, timeout: number, signal?: AbortSignal): P
     /** 当たり外れを書き留めたか。毎回書きに行かないための印 */
     let marked = false;
     const controller = new AbortController();
-    /** 上限まで開けきったか。横から止められた・蹴られたのとは区別する */
+    /** 上限まで開けきったか。横から止められた・取り上げられたのとは区別する */
     let ranOut = false;
     const stop = setTimeout(() => {
         ranOut = true;
@@ -551,7 +551,7 @@ async function collect(target: Target, timeout: number, signal?: AbortSignal): P
             /*
              * **衛星のロゴは1つの中継にしかない** (`RELAY_RETRY`)。外れの中継は PAT を
              * 見た時点で分かるので、待たずに次へ行く。当たり外れは書き留めておく —
-             * そうしないと、二度と来ないものを見回りのたびに開き直すことになる
+             * そうしないと、二度と来ないものを定期チェックのたびに開き直すことになる
              */
             if (satellite && !marked && feed.hasSatelliteLogo !== null) {
                 marked = true;
@@ -567,7 +567,7 @@ async function collect(target: Target, timeout: number, signal?: AbortSignal): P
         signal?.removeEventListener('abort', give);
         controller.abort();
     }
-    // 相乗り (RIDE_TIMEOUT) は短いので、来なかったことの証拠にしない
+    // 共有 (RIDE_TIMEOUT) は短いので、来なかったことの証拠にしない
     if (target.type === 'GR' && ranOut && timeout >= SWEEP_TIMEOUT) markGaveUp(target.channel);
     // 衛星は開いた中継以外の局も一緒に拾える。数えるほうも合わせる
     return before - (target.type !== 'GR' ? missingSatellites() : missingOn(target.channel));
@@ -575,7 +575,7 @@ async function collect(target: Target, timeout: number, signal?: AbortSignal): P
 
 /**
  * **その種別を受けられる**空きチューナーの数 (衛星用の空きは地上波の役に立たない)。無ければ自分では開かない。
- * ロゴの優先度はいちばん下なので、番組表集めに譲る特別扱いは要らない (エージェントが断る・蹴る)。
+ * ロゴの優先度はいちばん下なので、番組表集めに譲る特別扱いは要らない (エージェントが断る・取り上げる)。
  */
 async function freeTuners(type: string): Promise<number> {
     try {
@@ -598,7 +598,7 @@ function openChannels(tuners: AgentTuner[]): Set<string> {
     return open;
 }
 
-/** 同時に2つ走らせない。相乗りの合図 (エージェントの `tuners`) は連続して飛んでくる */
+/** 同時に2つ走らせない。共有の合図 (エージェントの `tuners`) は連続して飛んでくる */
 let riding = false;
 
 /**
@@ -632,7 +632,7 @@ const IDLE: SweepState = {
 
 /**
  * 走っているのは高々1つ。定期実行と画面からの「いますぐ取得」が重なると
- * チューナーを食い合う。相乗り (ride) だけは只なので別勘定にしてある
+ * チューナーを食い合う。共有 (ride) だけは只なので別勘定にしてある
  */
 let state: SweepState = IDLE;
 
@@ -694,10 +694,10 @@ async function drain(
 }
 
 /**
- * **いま開いている選局に相乗りして**ロゴを取得する。
+ * **いま開いている選局を共有して**ロゴを取得する。
  *
  * 番組表集めも録画も、物理チャンネルを丸ごと開く。そこへ同じチャンネルを要求すると
- * **エージェントは新しいチューナーを使わずに相乗りさせる**ので、こちらは只で電波を
+ * **エージェントは新しいチューナーを使わずに選局を共有させる**ので、こちらは只で電波を
  * 読める。空いた時間に自分で開き直すより早く埋まり、チューナーの取り合いも起きない。
  *
  * 合図はエージェントの `tuners`。開いた瞬間に飛んでくるので、閉じるまでの間に読み切る。
@@ -722,7 +722,7 @@ export async function ride(): Promise<number> {
         }
         return found;
     } catch {
-        // エージェントに聞けなければ何もしない。次の知らせでまた来る
+        // エージェントに聞けなければ何もしない。次の通知でまた来る
         return 0;
     } finally {
         riding = false;
@@ -730,10 +730,10 @@ export async function ride(): Promise<number> {
 }
 
 /**
- * 定期の見回り。**相乗りだけで、自分ではチューナーを開かない。**
+ * 定期チェック。**ほかの選局を共有するだけで、自分ではチューナーを開かない。**
  *
  * 番組表集めは全チャンネルを定期的に開くので、その選局へ混ぜてもらえば只で読める
- * (実機では BS の38局ぶんが局調べへの相乗り一度で揃った)。録画とチューナーを取り合う理由がない。
+ * (実機では BS の38局ぶんが局調べの選局を一度共有しただけで揃った)。録画とチューナーを取り合う理由がない。
  * すぐ欲しいときは画面の「いますぐ取得」(`sweepNow`) がある。
  */
 export async function sweep(): Promise<number> {
@@ -753,7 +753,7 @@ export async function sweep(): Promise<number> {
 export async function sweepNow(): Promise<{ started: boolean; message: string }> {
     /*
      * 前の取得が回っていても譲ってもらう。1チャンネルに数分〜20分開くので、
-     * 待たせると押した人の用が済まない。只で読める相乗り (ride) は
+     * 待たせると押した人の用が済まない。只で読める共有 (ride) は
      * 別勘定なので、ここでは触らない
      */
     if (state.running) {
@@ -801,7 +801,7 @@ async function settled(): Promise<boolean> {
  * **拾えた数は「開いた中継で減った数」では数えない。** 1つのTSに他の中継の局の
  * ロゴが乗ってくることがあり (衛星は1つの中継に全局ぶん。偽の放送 (`tests/fake`) は
  * 地上波も各中継に全局ぶん流す)、開いた中継の局だけを数えていた頃は、画面の「14 / 14 局」の下に
- * 「12 局のロゴを取得しました」と出ていた。相乗り (`ride`) が同じ間に拾ったものも
+ * 「12 局のロゴを取得しました」と出ていた。共有 (`ride`) が同じ間に取得したものも
  * 入らなかった。**この取得の間にロゴが書き込まれた局**を数えれば、どこから来ても数が合う
  */
 export function logoStamps(ids: Iterable<number> = currentServices().map((s) => s.id)): Map<number, number> {

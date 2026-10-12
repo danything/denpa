@@ -9,7 +9,7 @@ import { COOKIE, destroy } from '#lib/server/session.js';
  * 巻き添えで切れる。「denpa から出たい」と「Microsoft から出たい」は別の話。
  *
  * 出たあとに `/` へ戻すと、SSO が効いている間は黙って入り直してしまい、
- * 出られたのかどうか画面から分からない。行き先は知らせの画面にする。
+ * 出られたのかどうか画面から分からない。行き先は出たことを伝える画面 (`/login/out`) にする。
  */
 function out(url: URL, cookies: import('@sveltejs/kit').Cookies): never {
     destroy(cookies.get(COOKIE));

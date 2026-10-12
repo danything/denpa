@@ -7,7 +7,7 @@
  * 先へ溜めすぎないことだけ。
  *
  * - **尺は先に言う** (`duration`)。バーは最初から全長で出て、続きの位置へも飛べる
- * - **流れの時刻はページの物差しのまま** (`PlayAxis`)。字幕・チャプター・データ放送は
+ * - **ストリームの時刻はページの物差しのまま** (`PlayAxis`)。字幕・チャプター・データ放送は
  *   `currentTime` で引いているので、そのまま合う
  * - 溜めるのは先 `AHEAD` 秒まで、後ろは `BEHIND` 秒まで。iPhone は溜められる量が小さい
  * - `ManagedMediaSource` (iPhone) は**送り込む頃合いをブラウザが言う**。言われていない間は読まない
@@ -33,7 +33,7 @@ import {
 const AHEAD = 60;
 /** 後ろに残す長さ (秒)。これより前は捨てる */
 const BEHIND = 30;
-/** 読んでいる流れの尻からこれだけ先までは、リクエストし直さずに届くのを待つ (秒。`covers`) */
+/** 読んでいるストリームの尻からこれだけ先までは、リクエストし直さずに届くのを待つ (秒。`covers`) */
 const SLACK = 15;
 interface RemuxOptions {
     /** リクエストする先。`from` 秒から、`audio` (`playback` の `audios` の `id`) の音声で */
@@ -53,7 +53,7 @@ interface RemuxOptions {
 export interface RemuxPlayer {
     /** 音声を選び直す。**いまの位置からリクエストし直す** (選んだ1本だけを流しているため) */
     setAudio(id: string): void;
-    /** 畳む。読んでいる流れを切る (サーバの ffmpeg も止まる) */
+    /** 畳む。読んでいるストリームを切る (サーバの ffmpeg も止まる) */
     destroy(): void;
 }
 
@@ -70,16 +70,16 @@ export function remuxPlayer(
 ): RemuxPlayer {
     const media = new picked.Source();
     let buffer: SourceBuffer | null = null;
-    /** リクエストし直すたびに増やす。古い流れの続きを捨てる目印 */
+    /** リクエストし直すたびに増やす。古いストリームの続きを捨てる目印 */
     let run = 0;
     let controller: AbortController | null = null;
-    /** 読んでいる流れのリクエストした位置。読んでいなければ null */
+    /** 読んでいるストリームのリクエストした位置。読んでいなければ null */
     let loadingFrom: number | null = null;
     let audio = options.audio;
     let retries = 0;
     let retryTimer: ReturnType<typeof setTimeout> | null = null;
     let closed = false;
-    /** 溜めすぎて待っている読み手を起こす */
+    /** 溜めすぎて待っている読み込みを起こす */
     let wake: (() => void) | null = null;
 
     const nudge = (): void => {
@@ -102,7 +102,7 @@ export function remuxPlayer(
      * 1つリクエストして、終わるまで待つ。読めない中身なら投げる。
      *
      * `mine` を渡したら、手が空くのを待つ間にリクエストし直されていれば (`load`) 何もしない。
-     * 古い流れの残りを、新しい流れの捨てた後へ足さないため
+     * 古いストリームの残りを、新しいストリームの捨てた後へ足さないため
      */
     async function update(job: (target: SourceBuffer) => void, mine?: number): Promise<void> {
         const target = buffer;
@@ -183,7 +183,7 @@ export function remuxPlayer(
         try {
             await idle();
             if (mine !== run || buffer === null) return;
-            // 前の流れの読みかけを落とす。尻まで読み終えて閉じていれば、足せば開き直る
+            // 前のストリームの読みかけを落とす。尻まで読み終えて閉じていれば、足せば開き直る
             if (media.readyState === 'open') buffer.abort();
             if (buffered().length > 0)
                 await update((target) => target.remove(0, Number.POSITIVE_INFINITY), mine);
@@ -288,7 +288,7 @@ export function remuxPlayer(
             if (closed) return;
             media.duration = options.duration;
             buffer = media.addSourceBuffer(options.codecs);
-            // 流れの時刻をそのまま使う (ページの物差し。`server/playback.ts`)
+            // ストリームの時刻をそのまま使う (ページの物差し。`server/playback.ts`)
             buffer.mode = 'segments';
             /*
              * **始める位置を先に言っておく。** まだ何も無いうちに代入した位置は、尺が分かった

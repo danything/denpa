@@ -16,7 +16,7 @@ declare global {
     namespace App {
         interface Locals {
             user?: { subject: string; name: string };
-            /** アプリの鍵 (`Authorization: Bearer`) で入ったときの鍵の ID (device-auth.ts) */
+            /** アクセストークン (`Authorization: Bearer`) で入ったときの、そのアクセストークンの ID (device-auth.ts) */
             token?: number;
         }
         interface PageState {

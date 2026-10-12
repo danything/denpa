@@ -34,7 +34,7 @@ public static class ChannelTable
     /// <param name="Type">denpa の種別 (GR / BS / CS)</param>
     /// <param name="Delivery">DVB の方式 (<see cref="SysIsdbt"/> / <see cref="SysIsdbs"/>)</param>
     /// <param name="Frequency">**地上波は Hz、衛星は kHz**</param>
-    /// <param name="RelativeTs">衛星で同じ周波数に相乗りしている何本目か。無ければ -1</param>
+    /// <param name="RelativeTs">衛星で同じ周波数に入っている何本目か。無ければ -1</param>
     /// <param name="Slot">
     /// 衛星のスロット。TSID が分からないときに px4d の TUNE の <c>slot</c> で渡す
     /// (<see cref="Px4Tuner.TuneRequest"/>)。BS は相対番号そのもの、CS は1つしか入っていないので 0
@@ -96,7 +96,7 @@ public static class ChannelTable
     /// DVB に渡す <c>DTV_STREAM_ID</c>。
     ///
     /// <para>
-    /// 衛星は1つの周波数に何本もの TS が相乗りしていて、復調器は
+    /// 衛星は1つの周波数に何本もの TS が入っていて、復調器は
     /// **TSID を書いて選り分ける** (相対番号では選べない)。ところが denpa が
     /// 呼んでくるのは <c>BS15_0</c> のような**相対番号**なので、ここで TSID に直す。
     /// </para>

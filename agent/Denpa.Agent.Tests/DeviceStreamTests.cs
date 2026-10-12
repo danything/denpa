@@ -11,9 +11,9 @@ namespace Denpa.Agent.Tests;
  * デバイスの読み出し側。
  *
  * ここは**電波が来ていないときの振る舞い**が問題になる。デバイスは選局を
- * 跨いで開いたままなので、読み手のほうから降りられないと、蹴られた読み手が
- * 居座ったまま次の選局が始まる。実機では、そのせいで**同じ復号の実体を2本の
- * 流れから叩き**、プロセスごと落ちた (`double free or corruption`)。
+ * 跨いで開いたままなので、読む側から抜けられないと、チューナーを取り上げられた読む側が
+ * 残ったまま次の選局が始まる。実機では、そのせいで**同じ復号の実体を2本の
+ * ストリームから呼び**、プロセスごと落ちた (`double free or corruption`)。
  *
  * 本物のチューナーは要らない。何も来ないパイプで「来ないときにどうするか」は
  * そのまま試せる。
@@ -55,7 +55,7 @@ public partial class DeviceStreamTests
 
     /*
      * **止めたあとは、読みかけが戻るまでだけ待つ** (`WaitReaders`)。局替えのたびに
-     * 固定で 300ms 寝ていたのを、読み手がいなければ待たないようにした
+     * 固定で 300ms 寝ていたのを、読む側がいなければ待たないようにした
      */
     [Test]
     public async Task 読み手が居なければ待たず_居れば戻るまで待つ()
@@ -79,7 +79,7 @@ public partial class DeviceStreamTests
                 () => stream.Read(buffer, 0, buffer.Length, () => false),
                 CancellationToken.None, TaskCreationOptions.LongRunning, TaskScheduler.Default);
             /*
-             * **読み手が中に入ったのを見てから止める。** 決め打ちで 100ms 寝ていた頃は、混んだ Mac の
+             * **読む側が中に入ったのを見てから止める。** 決め打ちで 100ms 寝ていた頃は、混んだ Mac の
              * ランナーでまだ入っていないうちに止めてしまい、待つ相手のいない WaitReaders が
              * すぐ戻って落ちた (CI)
              */
@@ -88,7 +88,7 @@ public partial class DeviceStreamTests
             await Assert.That(stream.Readers).IsEqualTo(1);
             stream.Stop();
             stream.WaitReaders(TimeSpan.FromSeconds(2));
-            // poll は 0.2 秒ごとに起きるので、待ち終えた時点で読み手は戻っている。
+            // poll は 0.2 秒ごとに起きるので、待ち終えた時点で読む側は戻っている。
             // タスクが「終わった」になるのはその少し後なので、見るのは中にいる数
             await Assert.That(stream.Readers).IsEqualTo(0);
             await Assert.That(await reading.WaitAsync(TimeSpan.FromSeconds(1))).IsEqualTo(0);
@@ -164,7 +164,7 @@ public class DeviceStreamPipeTests
         await Assert.That(stream.Read(buffer, 0, buffer.Length, () => clock.ElapsedMilliseconds > 300)).IsEqualTo(0);
         await Assert.That(clock.ElapsedMilliseconds < 1000).IsTrue().Because($"{clock.ElapsedMilliseconds}ms 掛かった");
 
-        // 降りた読み手の読みかけに届いたものも、次の読み手が受け取る (捨てない)
+        // 抜けた側の読みかけに届いたものも、次に読む側が受け取る (捨てない)
         write.Write([0x47, 0x01, 0x02]);
         write.Flush();
         await Assert.That(stream.Read(buffer, 0, 2, () => false)).IsEqualTo(2);

@@ -8,7 +8,7 @@
  *     bml.destroy();
  *
  * - 映像は動かさない。映像の object の場所を `onVideoRect` で知らせ、置くのは呼び手
- * - 文書は自前の XML の読み手 → 中身の木 → 影の中の絶対配置の div ([render.ts](render.ts))
+ * - 文書は自前の XML パーサ → 中身の木 → 影の中の絶対配置の div ([render.ts](render.ts))
  * - スクリプトは自前の VM ([vm.ts](vm.ts))。イベントは 1 つずつ順に動かす
  * - **ページを握るのは 1 つの仕事 (タスクとそれに続くマイクロタスク) で 5ms まで** ([budget.ts](budget.ts))。
  *   スクリプト・描き直し・約束の続きは全部その下で動かし、休みなく回り続ける文書は止める
@@ -461,7 +461,7 @@ class Engine implements DomHost, BrowserHost, RenderHost {
         const ref = this.resources.resolve(moduleRef, this.current);
         if (ref === null || ref.module === null) return;
         const memo = beitem.memo as { exists?: boolean; version?: number; event?: number };
-        // 一度見たもの (subscribe を同じ値で書き直しただけ) は、初めての知らせを出し直さない
+        // 一度見たもの (subscribe を同じ値で書き直しただけ) は、初めての通知を出し直さない
         if (first && memo.exists !== undefined) return;
         const fire = (status: number): void =>
             this.handle(beitem, 'onoccur', { type: 'ModuleUpdated', status, moduleRef });
@@ -761,8 +761,8 @@ class Engine implements DomHost, BrowserHost, RenderHost {
 
     private enqueue(job: Job): void {
         if (job.token !== this.token) return;
-        // 待ちの上限。受け手が待ち (sleep・届かないモジュール) で止まっている間もライブの知らせは
-        // 来続けるので、溢れた分の受け手は捨てる (テレビも動いている間の知らせは取りこぼす)。
+        // 待ちの上限。受け手が待ち (sleep・届かないモジュール) で止まっている間もライブの通知は
+        // 来続けるので、溢れた分の受け手は捨てる (テレビも動いている間の通知は取りこぼす)。
         // エンジンの中の続き (native) は捨てない
         if (job.kind !== 'native' && this.queue.length >= MAX_QUEUE) {
             // 捨てたタイマーの刻みは、次の刻みで積み直せるように

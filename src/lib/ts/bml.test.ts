@@ -57,7 +57,7 @@ function carousel(module: Uint8Array, options: Partial<DiiModuleSpec> = {}): Uin
     return [packetize(BML_PID, diiSection(DOWNLOAD_ID, blockSize, spec)), ...blocks];
 }
 
-/** 食わせて、出てきた知らせを全部集める */
+/** 食わせて、出てきた通知を全部集める */
 function decode(...parts: Uint8Array[]): ResponseMessage[] {
     const out: ResponseMessage[] = [];
     const decoder = new BmlDecoder((message) => out.push(message));

@@ -157,7 +157,7 @@ test.describe('ライブを MPEG-2 のまま見る', () => {
 
     /*
      * **MPEG-2 のままでも小窓 (PiP) に映像が出る。** 映像は worker の canvas にあって `<video>` は空なので、
-     * canvas から流れを取って見えない `<video>` (`pip-raw`) に映し、それを小窓にする。
+     * canvas からストリームを取って見えない `<video>` (`pip-raw`) に映し、それを小窓にする。
      *
      * その `<video>` は MPEG-2 のままに切り替えた時点で1枚目まで受け取っておく。押されてから待つと、
      * iPhone の Safari は「押された直後」と見なさなくなって断った (`NotAllowedError`)。
@@ -269,7 +269,7 @@ test.describe('ライブを MPEG-2 のまま見る', () => {
 
     /*
      * **MPEG-2 のままの映像をストリームにできない端末では、その間だけ小窓のボタンを出さない。** Firefox は
-     * 書き込む API (`MediaStreamTrackGenerator`) が無く、worker に渡した canvas からも流れを
+     * 書き込む API (`MediaStreamTrackGenerator`) が無く、worker に渡した canvas からもストリームを
      * 取れない。押せても必ず断られる
      */
     test('MPEG-2 のままの映像をストリームにできない端末では、その間は小窓のボタンを出さない', async ({
@@ -300,9 +300,9 @@ test.describe('ライブを MPEG-2 のまま見る', () => {
     /*
      * **バックグラウンド再生を入れたら、生の音は `<audio>` から鳴らす** (`raw/engine.ts` の `route`)。
      * Web Audio のまま鳴らすと、ブラウザによっては効果音の扱いで裏へ回すと止まる (テスラの
-     * 車載ブラウザ)。AudioContext の出口を流れにして `<audio>` に渡し、メディアの再生にする。
+     * 車載ブラウザ)。AudioContext の出口をストリームにして `<audio>` に渡し、メディアの再生にする。
      *
-     * 裏に回すのは別のタブを前に出し、`visibilityState` も差し替えて知らせを送る (ヘッドレスは
+     * 裏に回すのは別のタブを前に出し、`visibilityState` も差し替えて通知を送る (ヘッドレスは
      * タブを移っても `visible` のまま)。裏でも音と映像のコマが進み続けること、`<audio>` が鳴って
      * いること、`<audio>` を外から止める・再開する (ロック画面・車の操作) と操作バーが合うこと、
      * 切れば直に鳴らすのに戻ること、CSP に止められないことを見る

@@ -4,11 +4,11 @@ using System.Text;
 namespace Denpa.Agent;
 
 /// <summary>
-/// macOS と Windows の USB カードリーダー。**OS に最初から入っている PC/SC 越しに叩く**
+/// macOS と Windows の USB カードリーダー。**OS に最初から入っている PC/SC 越しに扱う**
 /// (macOS は PCSC.framework、Windows は winscard.dll)。
 ///
 /// <para>
-/// Linux では usbfs を直に叩いている (Ccid.cs) が、macOS には usbfs が無く、CCID の
+/// Linux では usbfs を直接扱っている (Ccid.cs) が、macOS には usbfs が無く、CCID の
 /// リーダーは OS (CryptoTokenKit の ifd-ccid) が先に開く。横取りするより、OS が
 /// 出している PC/SC の API を借りるほうが素直で、入れてもらうものも増えない。
 /// T=1 の枠組みも ATR の読み方も向こうが持つので、ここは APDU を渡すだけ。

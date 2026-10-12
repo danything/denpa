@@ -573,7 +573,7 @@ test.describe('録画を観る', () => {
      * OS が勝手に小窓にしないよう `disablePictureInPicture` も立てる (`background.svelte.ts`)。
      *
      * 偽 ffmpeg の録画は映像が出ない (上) ので、`<video>` の止める・再開を差し替えて、
-     * 呼ばれたかだけを見る。裏に回るのは `visibilityState` を差し替えて知らせを送る
+     * 呼ばれたかだけを見る。裏に回るのは `visibilityState` を差し替えて通知を送る
      */
     test('バックグラウンド再生は既定で切。裏に回すと止まり、入れると止まらない', async ({
         page,

@@ -25,7 +25,7 @@ function join(...parts: Uint8Array[]): Uint8Array {
 describe('fMP4 を割る', () => {
     /*
      * MSE は init セグメント (`ftyp` + `moov`) を先に渡さないと、そのあとの
-     * 中身を1バイトも受け取らない。ffmpeg は1本の流れで出してくる
+     * 中身を1バイトも受け取らない。ffmpeg は1本のストリームで出してくる
      */
     test('頭の ftyp + moov が init になる', () => {
         const splitter = new Fmp4Splitter();

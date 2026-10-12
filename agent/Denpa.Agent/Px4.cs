@@ -14,7 +14,7 @@ namespace Denpa.Agent;
 ///
 /// <para>
 /// **カーネルドライバを入れてもらわない。** px4_drv (DKMS) をホストに入れて
-/// chardev を出す方式は捨てた。px4-userland は libusb だけで USB を叩く
+/// chardev を出す方式は捨てた。px4-userland は libusb だけで USB を扱う
 /// ユーザー空間のドライバで、静的リンクの実行ファイル3つとファームウェアを
 /// イメージに同梱すれば、<c>/dev/bus/usb</c> が見えるだけで動く。
 /// カードリーダーも同じデーモンが持っていて、control socket 越しに APDU を
@@ -826,11 +826,11 @@ public sealed class Px4Daemon(string id) : UserlandDaemon("px4d", id)
 /// <para>
 /// **TS は別のソケット (<c>stream.sock</c>) に来る。** 枠 (TS_DATA) をほどいて pipe に書き、
 /// 読み出し側はその pipe を <see cref="DeviceStream"/> に載せる (<see cref="Px4Stream"/>)。
-/// 読み手の振る舞い (電波が来なくても畳める・蹴られた読み手は 200ms で降りる) は DVB と同じ。
+/// 読む側の振る舞い (電波が来なくても畳める・チューナーを取り上げられたら 200ms で抜ける) は DVB と同じ。
 /// </para>
 ///
 /// <para>
-/// **誰も読まなくなったら TS の流れを畳む。** pipe が埋まったまま空かなければ、こちらから
+/// **誰も読まなくなったら TS のストリームを畳む。** pipe が埋まったまま空かなければ、こちらから
 /// stream.sock を閉じる (放っておくと px4d の溜めが溢れて <c>SLOW_CONSUMER</c> になる)。
 /// 受信機は借りたままなので、次の選局が来たら同じ lease で選局し直す (<see cref="Tuned"/> を
 /// TunerPool が見る)。
@@ -848,7 +848,7 @@ public sealed class Px4Tuner : ITuneDevice
     private static readonly TimeSpan RequestTimeout = TimeSpan.FromSeconds(4);
 
     /// <summary>
-    /// TUNE が BUSY で返ったときに待ち直す上限。前の TS の流れの後始末 (閉じた stream.sock を
+    /// TUNE が BUSY で返ったときに待ち直す上限。前の TS のストリームの後始末 (閉じた stream.sock を
     /// px4d が畳む) と行き違うと、ほんの一瞬だけ BUSY になる
     /// </summary>
     private static readonly TimeSpan BusyRetry = TimeSpan.FromSeconds(1);
@@ -914,7 +914,7 @@ public sealed class Px4Tuner : ITuneDevice
         _name = name ?? $"px4-{id[^4..]} #{receiver}";
     }
 
-    /// <summary>読み手がいないまま pipe が空かなければ、この時間で TS の流れを畳む</summary>
+    /// <summary>読む側がいないまま pipe が空かなければ、この時間で TS のストリームを畳む</summary>
     internal TimeSpan StallLimit { get; init; } = Px4Stream.DefaultStallLimit;
 
     public Stream Output => _stream?.Output ?? throw new InvalidOperationException($"{_name} はまだ選局していません");
@@ -1027,7 +1027,7 @@ public sealed class Px4Tuner : ITuneDevice
 
     /// <summary>
     /// 制御ソケットごと失くした (px4d のエラーの答えではない、または lease がもう無い)。
-    /// **TS の流れの失敗 (<see cref="Px4StreamError"/>) は入れない** — 制御ソケットは生きていて、
+    /// **TS のストリームの失敗 (<see cref="Px4StreamError"/>) は入れない** — 制御ソケットは生きていて、
     /// 黙って借り直すと「接続が切れていた」と嘘の記録が残る
     /// </summary>
     private static bool Lost(IOException error) => error switch
@@ -1160,10 +1160,10 @@ public sealed class Px4Tuner : ITuneDevice
     }
 
     /// <summary>
-    /// TS の流れを畳む。**stream.sock を閉じるのは TUNE より前に。** nonce は lease の間ずっと
+    /// TS のストリームを畳む。**stream.sock を閉じるのは TUNE より前に。** nonce は lease の間ずっと
     /// 同じなので、前の stream.sock の後始末を px4d が次の START_STREAM より後に回すと、
-    /// 新しい流れのほうを取り消してしまう (px4d は閉じた接続の後始末で同じ lease と nonce の
-    /// 流れを取り消す)。先に閉じておけば、px4d は TUNE に答えるより前にそれを見る
+    /// 新しいストリームのほうを取り消してしまう (px4d は閉じた接続の後始末で同じ lease と nonce の
+    /// ストリームを取り消す)。先に閉じておけば、px4d は TUNE に答えるより前にそれを見る
     /// </summary>
     private void DropStream()
     {
@@ -1208,13 +1208,13 @@ public sealed class Px4Tuner : ITuneDevice
 }
 
 /// <summary>
-/// 受信機を借りたままの間に、TS の流れが駄目だった (ATTACH を断られた・TS が来なかった)。
+/// 受信機を借りたままの間に、TS のストリームが駄目だった (ATTACH を断られた・TS が来なかった)。
 /// **受信機は返さない** — 次の選局で同じ lease のまま STOP_STREAM → TUNE からやり直せる
 /// </summary>
 internal sealed class Px4StreamError(string message, bool keepsLease) : IOException(message)
 {
     /// <summary>
-    /// 受信機を借りたまま次に進めるか。**ATTACH_STREAM が通っていれば (流れが active) 進める** —
+    /// 受信機を借りたまま次に進めるか。**ATTACH_STREAM が通っていれば (ストリームが active) 進める** —
     /// 次の STOP_STREAM で畳める。通らなかったときは px4d の lease が「armed」のまま残り、
     /// TUNE も START_STREAM も BUSY で返るようになる (px4d は armed の期限切れを ATTACH でしか
     /// 見ない) ので、返して借り直すしかない
@@ -1233,9 +1233,9 @@ internal sealed class Px4StreamError(string message, bool keepsLease) : IOExcept
 /// </para>
 ///
 /// <para>
-/// **読み手がいないと pipe が埋まる。** 書けないまま <see cref="DefaultStallLimit"/> 経ったら
+/// **読む側がいないと pipe が埋まる。** 書けないまま <see cref="DefaultStallLimit"/> 経ったら
 /// stream.sock を閉じて終わる。こちらが読まないままだと px4d の溜め (既定 65,536 パケット、
-/// 地上波で5秒ほど) が溢れて SLOW_CONSUMER になるが、その知らせ (STREAM_END) も読まない
+/// 地上波で5秒ほど) が溢れて SLOW_CONSUMER になるが、その通知 (STREAM_END) も読まない
 /// ソケットの奥に詰まって届かない。こちらで見切る。
 /// </para>
 /// </summary>
@@ -1261,7 +1261,7 @@ internal sealed unsafe class Px4Stream
     private volatile bool _ended;
     private volatile string? _reason;
 
-    /// <summary>ATTACH_STREAM が通ったか (px4d の側で流れが active になった)</summary>
+    /// <summary>ATTACH_STREAM が通ったか (px4d の側でストリームが active になった)</summary>
     private bool _attached;
 
     /// <summary>pipe に1枚でも書けたか (Attach が待つのはこれ)</summary>
@@ -1270,7 +1270,7 @@ internal sealed unsafe class Px4Stream
 
     public DeviceStream Output { get; private set; } = null!;
 
-    /// <summary>流れが終わった (px4d が止めた・切れた・読み手がいなくて畳んだ・こちらで止めた)</summary>
+    /// <summary>ストリームが終わった (px4d が止めた・切れた・読む側がいなくて畳んだ・こちらで止めた)</summary>
     public bool Ended => _ended;
 
     private Px4Stream(Socket socket, string name, TimeSpan stallLimit, Px4Wire wire)
@@ -1325,7 +1325,7 @@ internal sealed unsafe class Px4Stream
             stream.Stop();
             throw new Px4StreamError($"同期したのに TS が {firstTs.TotalSeconds:F0} 秒来ません", keepsLease: true);
         }
-        // 1枚でも渡せていれば成功。すぐ後に終わっても、読み手は TS を読んでから理由を受け取る
+        // 1枚でも渡せていれば成功。すぐ後に終わっても、読む側は TS を読んでから理由を受け取る
         if (!stream._delivered)
         {
             var reason = stream._reason ?? $"{wire.Daemon} との TS の接続が切れました";
@@ -1425,7 +1425,7 @@ internal sealed unsafe class Px4Stream
         }
     }
 
-    /// <summary>pipe に書き切る。**空かないまま <see cref="_stallLimit"/> 経ったら諦める** (読み手がいない)</summary>
+    /// <summary>pipe に書き切る。**空かないまま <see cref="_stallLimit"/> 経ったら諦める** (読む側がいない)</summary>
     private bool Write(ReadOnlySpan<byte> bytes)
     {
         var fd = (int)_write!.DangerousGetHandle();
@@ -1451,7 +1451,7 @@ internal sealed unsafe class Px4Stream
             stalled ??= Stopwatch.StartNew();
             if (stalled.Elapsed >= _stallLimit)
             {
-                End($"読み手がいないまま {_stallLimit.TotalSeconds:F0} 秒経ったので TS の流れを畳みました (受信機は借りたまま)");
+                End($"読む側がいないまま {_stallLimit.TotalSeconds:F0} 秒経ったので TS のストリームを閉じました (受信機は借りたまま)");
                 return false;
             }
             // 止めろと言われたらすぐ降りたいので短く待つ
@@ -1460,7 +1460,7 @@ internal sealed unsafe class Px4Stream
         return true;
     }
 
-    /// <summary>終わった理由を残す。**こちらで止めたときは残さない** (読み手には普通の終わり)</summary>
+    /// <summary>終わった理由を残す。**こちらで止めたときは残さない** (読む側には普通の終わり)</summary>
     private void End(string reason)
     {
         if (_stopped) return;
@@ -1469,17 +1469,17 @@ internal sealed unsafe class Px4Stream
     }
 
     /// <summary>
-    /// 止める。pump を降ろして stream.sock を閉じ、読みかけの読み手が戻ってから pipe を閉じる
+    /// 止める。pump を降ろして stream.sock を閉じ、読みかけの読む側が戻ってから pipe を閉じる
     /// (<see cref="DeviceStream.WaitReaders"/>、長くても <see cref="ChildTs.ReaderDrain"/>。
-    /// 閉じた番号を次の pipe が使い回すと、降りかけの読み手が新しい流れを読んでしまう)。
+    /// 閉じた番号を次の pipe が使い回すと、抜けかけの読む側が新しいストリームを読んでしまう)。
     /// **局替えのたびに通る**ので、固定では待たない
     /// </summary>
     public void Stop()
     {
         /*
          * **理由は消さない。** ここから先は End が理由を残さない (_stopped) ので、残っているのは
-         * 止める前に向こうから終わった理由だけ。読み手が pipe の残りを読み切る前に次の選局が
-         * 来ても、読み手には「px4d が TS を止めました (…)」が届く
+         * 止める前に向こうから終わった理由だけ。読む側が pipe の残りを読み切る前に次の選局が
+         * 来ても、読む側には「px4d が TS を止めました (…)」が届く
          */
         _stopped = true;
         var stopped = Stopwatch.StartNew();

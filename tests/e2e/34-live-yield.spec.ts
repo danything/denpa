@@ -4,15 +4,15 @@ import type { Stack } from '../stack';
 import { expect, goto, syncEpg, test } from './helpers';
 
 /**
- * **ライブが録画に蹴られたとき** (docs/stream.md §4「録画に譲る」)。
+ * **ライブが録画にチューナーを取り上げられたとき** (docs/stream.md §4「録画に譲る」)。
  *
- * ライブは録画にだけ譲る。蹴られたら画面は同じ局をリクエストし直し、入れなかったときだけ蹴った録画の
- * 追っかけに切り替える。どの録画に蹴られたかはサーバが読む (覚えておいたチューナーにいる `rec <録画ID>`。
+ * ライブは録画にだけ譲る。取り上げられたら画面は同じ局をリクエストし直し、入れなかったときだけその録画の
+ * 追っかけに切り替える。どの録画に取り上げられたかはサーバが読む (覚えておいたチューナーにいる `rec <録画ID>`。
  * `server/live-yield.ts`)。
  *
  * 場面は偽エージェントで作る — 地上波のチューナーを1台だけにして、ライブを観ている間に別の
- * チャンネルを録る。偽エージェントは空きが無ければ弱い読み手を蹴る (`tests/fake/agent.ts` の `preempt`)。
- * 映像は出ない (偽 ffmpeg) ので、見るのは知らせと、エージェントの読み手の顔ぶれ
+ * チャンネルを録る。偽エージェントは空きが無ければ弱い利用者からチューナーを取り上げる (`tests/fake/agent.ts` の `preempt`)。
+ * 映像は出ない (偽 ffmpeg) ので、見るのは通知と、エージェントの利用者の顔ぶれ
  */
 
 /** 偽エージェントの既定のチューナー (tests/fake/agent.ts の `TUNERS`)。偶数が衛星、奇数が地上波 */
@@ -35,7 +35,7 @@ async function setTuners(stack: Stack, count: number): Promise<void> {
     expect(res.ok).toBe(true);
 }
 
-/** 地上波のチューナーにいる読み手の印 (`live GR/T16`・`rec 3` …) */
+/** 地上波のチューナーにいる利用者の印 (`live GR/T16`・`rec 3` …) */
 async function grUsers(stack: Stack): Promise<string[]> {
     const res = await fetch(`${stack.agentUrl}/denpa/tuners`);
     const body = (await res.json()) as { tuners: { types: string[]; users: { use: string }[] }[] };
@@ -75,7 +75,7 @@ async function stopRecording(request: APIRequestContext, service: Listed): Promi
     await request.post('/guide?/cancel', { form: { programId: String(service.programId) } });
 }
 
-test.describe('ライブが録画に蹴られたとき', () => {
+test.describe('ライブが録画にチューナーを取り上げられたとき', () => {
     test.beforeEach(async ({ request, stack }) => {
         await syncEpg(request);
         await setTuners(stack, 3);
@@ -85,8 +85,8 @@ test.describe('ライブが録画に蹴られたとき', () => {
     });
 
     /*
-     * **同じチャンネルの録画は相乗りで、蹴られない。** チューナーは増えないので、地上波が1台でも
-     * ライブはそのまま。切り替えの知らせも出ない
+     * **同じチャンネルの録画は選局を共有するので、取り上げられない。** チューナーは増えないので、地上波が1台でも
+     * ライブはそのまま。切り替えの通知も出ない
      */
     test('同じチャンネルの録画なら、ライブはそのまま', async ({ page, request, stack }) => {
         const [watched] = await twoChannels(request);
@@ -96,7 +96,7 @@ test.describe('ライブが録画に蹴られたとき', () => {
 
         await recordNow(request, watched);
         try {
-            // 録画が同じチューナーに乗る。ライブの読み手も残っている
+            // 録画が同じチューナーに乗る。ライブの利用者も残っている
             await expect
                 .poll(async () => (await grUsers(stack)).some((use) => use.startsWith('rec ')), {
                     timeout: 30_000,
@@ -110,7 +110,7 @@ test.describe('ライブが録画に蹴られたとき', () => {
         }
     });
 
-    test('別のチャンネルの録画に蹴られ、入れなければ録画の追っかけに切り替える', async ({
+    test('別のチャンネルの録画に取り上げられ、入れなければ録画の追っかけに切り替える', async ({
         page,
         request,
         stack,
@@ -122,8 +122,8 @@ test.describe('ライブが録画に蹴られたとき', () => {
         await expect.poll(() => grUsers(stack)).toContain(`live GR/${watched.channel}`);
 
         /*
-         * **テレビのアプリは知らせ (`yielded`) で知る。** HTTP で観ているものには流れの中で伝えられない
-         * ので、画面と同じものを知らせにも流す (docs/api.md)
+         * **テレビのアプリは通知 (`yielded`) で知る。** HTTP で観ているものにはストリームの中で伝えられない
+         * ので、画面と同じものを通知にも流す (docs/api.md)
          */
         const events = new AbortController();
         const heard: string[] = [];
@@ -149,7 +149,7 @@ test.describe('ライブが録画に蹴られたとき', () => {
             expect(users.some((use) => use.startsWith('rec '))).toBe(true);
             expect(users).not.toContain(`live GR/${watched.channel}`);
 
-            // 知らせには、外れた局と、譲った録画が乗る。画面に出した番組名と同じもの
+            // 通知には、外れた局と、譲った録画が乗る。画面に出した番組名と同じもの
             await expect.poll(() => heard.join('').includes('event: yielded')).toBe(true);
             const block = heard
                 .join('')

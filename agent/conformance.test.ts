@@ -38,7 +38,7 @@ const ROOT = resolve(import.meta.dir, '..');
  * 地上波のチューナーは**1台だけ**にしてある。
  *
  * 偽の放送にある地上波は T16 と T21 の2つしかないので、チューナーが2台あると
- * 「空きが無い」も「弱い相手を蹴る」も作れない。総当たりが少し遅くなるだけで
+ * 「空きが無い」も「弱い相手に譲らせる」も作れない。総当たりが少し遅くなるだけで
  * 済むほうを取る。
  *
  * 選局は `FAKE_TUNE` で偽物に差し替える (エージェントが `<種別> <チャンネル>` を足して起こす)。
@@ -127,7 +127,7 @@ async function open(query: string): Promise<Opened> {
     return { status: res.status, reader: res.body.getReader(), close };
 }
 
-/** 読み終わるまで待つ。蹴られたときは reason が入る */
+/** 読み終わるまで待つ。チューナーを取り上げられたときは reason が入る */
 async function drain(reader: ReadableStreamDefaultReader): Promise<{ bytes: number; error: string | null }> {
     let bytes = 0;
     try {
@@ -205,7 +205,7 @@ beforeAll(async () => {
  * 前提が崩れて何を見ているのか分からなくなる。
  *
  * 使っているチャンネル自体は残ってよい — 誰も読まなくなってから5秒は
- * わざと離さない作りで、次に開く人はそこへ相乗りするのが正しい。
+ * わざと離さない作りで、次に開く人はその選局を共有するのが正しい。
  */
 afterEach(async () => {
     // 途中で落ちたテストの開きっぱなしも畳む
@@ -217,7 +217,7 @@ afterEach(async () => {
         const status = await tuners();
         if (status.every((tuner) => tuner.users.length === 0)) return;
         if (Date.now() > until) {
-            throw new Error(`読み手が残っています: ${JSON.stringify(status.map((t) => t.users))}`);
+            throw new Error(`利用者が残っています: ${JSON.stringify(status.map((t) => t.users))}`);
         }
         await sleep(50);
     }
@@ -268,7 +268,7 @@ describe('チューナー', () => {
     });
 
     /** 同じ物理チャンネルなら選局は1本で足りる */
-    test('同じチャンネルなら相乗りする。チューナーは増えない', async () => {
+    test('同じチャンネルなら選局を共有する。チューナーは増えない', async () => {
         const a = await open('type=GR&channel=T21&use=rec%201&priority=10');
         const b = await open('type=GR&channel=T21&use=epg%20T21&priority=3');
         await a.reader?.read();
@@ -284,18 +284,18 @@ describe('チューナー', () => {
     });
 
     /**
-     * **蹴られた側は、そこで読めなくなる。**
+     * **チューナーを取り上げられた側は、そこで読めなくなる。**
      *
      * ここで大事なのは「エラーとして伝わること」ではなく **「勝手には終わらない
      * ものが終わった」こと**。HTTP を1枚挟むと、送っている途中の
      * ReadableStream を `error()` にしても向こうには**正常終了として届く**
      * (Bun は残りの chunk を打ち切って畳むだけで、接続を壊さない)。
      *
-     * なので API の約束はこうする — **選局は読み手が切るまで終わらない。**
+     * なので API の約束はこうする — **選局は利用者が切るまで終わらない。**
      * 向こうから終わったなら、それは失敗である。読む側 (denpa) は EOF を
      * 「録り終えた」と読んではいけない。この約束なら .NET でも成り立つ
      */
-    test('空きが無ければ弱い相手を蹴る。蹴られた側はそこで読めなくなる', async () => {
+    test('空きが無ければ弱い相手に譲らせる。譲った側はそこで読めなくなる', async () => {
         const weak = await open('type=GR&channel=T16&use=logo&priority=1');
         await weak.reader?.read();
         const ended = drain(weak.reader as ReadableStreamDefaultReader);
@@ -351,10 +351,10 @@ describe('チューナー', () => {
     });
 });
 
-describe('知らせ (SSE)', () => {
+describe('通知 (SSE)', () => {
     /**
      * **繋いだ時点で応答が返る。** 何も起きていなくてもヘッダは先に送る — 最初の
-     * 知らせまで黙っていると、denpa の fetch は応答待ちのまま 5 分で切られ、
+     * 通知まで黙っていると、denpa の fetch は応答待ちのまま 5 分で切られ、
      * 静かな時間帯に「チューナーに繋がりません」が鳴る (実機で 1 時間おきに鳴った)
      */
     test('何も起きていなくても、繋いだ時点で応答が返る', async () => {
@@ -527,7 +527,7 @@ describe('カードとスクランブル解除', () => {
      * 「復号できたか」ではなく **黙って壊れないこと** — 復号できなければ理由が返り、
      * 復号できたなら掛かっていない TS が出る。
      *
-     * 復号するのもカードを叩くのもエージェントの中なので、外から偽物を差し込めない
+     * 復号するのもカードを扱うのもエージェントの中なので、外から偽物を差し込めない
      * (`recisdb` を起こしていた頃はそこを差し替えて試せた)。復号のしかたそのものは
      * 単体テスト (B25Tests / BCasTests) で、実際に復号できることは実機で確かめる (docs/agent.md)。
      */
@@ -635,7 +635,7 @@ describe('機材の定義', () => {
             // 場面が前提にしている順位で返しているか。違えば、下の答えも当てにならない
             expect(scene.tuners.map((t) => ranks.get(t.name))).toEqual(scene.tuners.map((t) => t.rank));
 
-            // 読み手の名乗りは場面ごとに変える。前の場面の読み手を取り違えないように
+            // 利用者の名乗りは場面ごとに変える。前の場面の利用者を取り違えないように
             const use = (name: string) => `scene${scenes.indexOf(scene)} ${name}`;
             const gone = async (name: string) => {
                 while ((await tuners()).some((t) => t.users.some((u) => u.use === use(name))))
@@ -645,7 +645,7 @@ describe('機材の定義', () => {
             for (const step of scene.steps) {
                 if ('close' in step) {
                     streams.get(step.close)?.close();
-                    // 読み手が抜けるのを待つ (選局は余韻で残る)
+                    // 利用者が抜けるのを待つ (選局は余韻で残る)
                     await gone(step.close);
                     continue;
                 }
@@ -669,14 +669,14 @@ describe('機材の定義', () => {
                     step.open,
                     step.rank,
                 ]);
-                // 引き継いだ相手は、蹴られたのではなく正常に終わっている (読み手が切るまで終わらない約束の例外)
+                // 引き継いだ相手は、取り上げられたのではなく正常に終わっている (利用者が切るまで終わらない約束の例外)
                 for (const name of step.ended ?? []) {
                     const reader = streams.get(name)?.reader;
                     expect(reader).toBeDefined();
                     expect((await drain(reader as ReadableStreamDefaultReader)).error).toBeNull();
                     await gone(name);
                 }
-                // 選ばれなかったチューナーの読み手には触らない。まだ読めている
+                // 選ばれなかったチューナーの利用者には触らない。まだ読めている
                 for (const name of step.kept ?? []) {
                     expect((await tuners()).some((t) => t.users.some((u) => u.use === use(name)))).toBe(true);
                     const read = await streams.get(name)?.reader?.read();

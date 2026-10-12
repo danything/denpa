@@ -23,32 +23,32 @@ import { type Composed, canCompose, compose } from './compose';
  *
  * **映像は worker の canvas にあって、`<video>` は空** (`raw/engine.ts`)。そのまま出すと
  * 黒い小窓になる。worker が描いた映像のストリームを別の `<video>` に映し、それを小窓にする
- * (流れの取り方は `RawEngine.pipStream`。Chrome は worker が直に書き込み、Safari は
+ * (ストリームの取り方は `RawEngine.pipStream`。Chrome は worker が直に書き込み、Safari は
  * canvas から取る。Firefox はどちらもできない)。音はページ (`AudioContext`) が組み、小窓を出している
  * 間は `<audio>` を通して鳴らす (`RawEngine.route`。Safari は Audio Session)。
  *
  * **代わりの `<video>` はMPEG-2 に切り替えた時点で用意しておく** (`prepare`)。押されてから
- * 流れを繋いで1枚目を待っていた頃は、iPhone の Safari で必ず断られていた
+ * ストリームを繋いで1枚目を待っていた頃は、iPhone の Safari で必ず断られていた
  * (`NotAllowedError: The request is not triggered by a user activation.`) — 待っている
  * 間に「押された直後」が切れる。小窓をリクエストするのは押されたその場でなければならず、
  * そのためには1枚目が既に届いている (`HAVE_METADATA`) 必要がある。
- * 1枚目が届いたら流れを切っておき (`enabled = false`)、押されたら戻す。
+ * 1枚目が届いたらストリームを切っておき (`enabled = false`)、押されたら戻す。
  * 小窓に出していない間まで映像を写し続けない
  *
  * ## 字幕も小窓に出す
  *
  * 字幕は `<video>` の上に重ねた canvas なので、`<video>` をそのまま小窓にすると付いていかない。
- * **コマごとに字幕の canvas を重ねた流れを作り** (`compose.ts`)、代わりの `<video>` を小窓にする。
+ * **コマごとに字幕の canvas を重ねたストリームを作り** (`compose.ts`)、代わりの `<video>` を小窓にする。
  * 重ねられるのは Chrome・Edge だけ (`MediaStreamTrackProcessor`)。Safari・Firefox は今までどおり
  * 字幕無しで出す。
  *
- * - **MPEG-2 のとき**: MPEG-2 の流れに重ねたものを、代わりの `<video>` に用意しておく。字幕が出ていない
+ * - **MPEG-2 のとき**: MPEG-2 のストリームに重ねたものを、代わりの `<video>` に用意しておく。字幕が出ていない
  *   コマは素通し
  * - **変換した映像 (ライブ・追っかけ・観る画面)**: 押した時点で字幕を出して再生しているときだけ、
- *   `<video>` から流れを取って (`captureStream`) 重ね、代わりの `<video>` を小窓にする。
+ *   `<video>` からストリームを取って (`captureStream`) 重ね、代わりの `<video>` を小窓にする。
  *   字幕が無い・消しているときは `<video>` をそのまま出す (重ねるぶん重い)。**用意するのは
  *   小窓に出している間だけ**で、閉じたら畳む。音は今までどおり元の `<video>` から鳴る。
- *   流れには時刻が無いので、小窓の中で位置を動かすことはできない
+ *   ストリームには時刻が無いので、小窓の中で位置を動かすことはできない
  *
  * 小窓を出したあとで字幕を出し消しすると、重ねたものはそれに付いてくる。字幕を消した
  * まま出した (重ねていない) 小窓は、あとで字幕を出しても付いてこない — 開き直す
@@ -59,7 +59,7 @@ import { type Composed, canCompose, compose } from './compose';
  * 追っかけは「止めているか」を player 側で持っている** (`live-player` の `paused`) ので、
  * 渡された `paused` / `toggle` で合わせる。観る画面は `<video>` の `play`/`pause` を
  * そのまま見ているので要らない。**字幕を重ねた小窓 (代わりの `<video>`) は、押されたら
- * 元の `<video>` を止める・再開する** (代わりのほうは流れを映しているだけで、止めても音は止まらない)
+ * 元の `<video>` を止める・再開する** (代わりのほうはストリームを映しているだけで、止めても音は止まらない)
  *
  * ## OS・ブラウザが自分で小窓にするのを止める
  *
@@ -72,7 +72,7 @@ import { type Composed, canCompose, compose } from './compose';
 interface Options {
     /** 映像の `<video>` */
     video: () => HTMLVideoElement | null;
-    /** MPEG-2 で見ているか。立っている間は `capture` の流れを出す */
+    /** MPEG-2 で見ているか。立っている間は `capture` のストリームを出す */
     raw?: () => boolean;
     /** MPEG-2 の映像ストリーム (`live-player` の `capture`) */
     capture?: () => MediaStream | null;
@@ -118,7 +118,7 @@ type WebkitVideo = HTMLVideoElement & {
 };
 
 const MODE = 'picture-in-picture';
-/** 字幕を重ねた流れの1枚目を待つ上限 (ms)。過ぎたら元の video をそのまま出す */
+/** 字幕を重ねたストリームの1枚目を待つ上限 (ms)。過ぎたら元の video をそのまま出す */
 const FIRST_FRAME = 2_000;
 
 /** `captureStream` は Chrome・Firefox にある (型には無い) */
@@ -155,7 +155,7 @@ export function pictureInPicture(options: Options): Pip {
     let on = $state<HTMLVideoElement | null>(null);
     /** MPEG-2 のとき・字幕を重ねるときに小窓へ出す代わりの video。要るときに作る */
     let proxy: HTMLVideoElement | null = null;
-    /** MPEG-2 の流れに字幕を重ねたもの (`prepare`)。重ねられない端末では null (MPEG-2 の流れをそのまま出す) */
+    /** MPEG-2 のストリームに字幕を重ねたもの (`prepare`)。重ねられない端末では null (MPEG-2 のストリームをそのまま出す) */
     let rawComposed: Composed | null = null;
     /** 小窓をリクエストしている最中か (`toggle`) */
     let entering = false;
@@ -291,7 +291,7 @@ export function pictureInPicture(options: Options): Pip {
 
     /*
      * 画面を離れたら閉じる。player は止まるので、小窓に残しても映像は来ない。
-     * **流れもここで止める** — MPEG-2 の `$effect` の後始末が先に走るとは限らない
+     * **ストリームもここで止める** — MPEG-2 の `$effect` の後始末が先に走るとは限らない
      */
     $effect(() => () => {
         leave();
@@ -319,8 +319,8 @@ export function pictureInPicture(options: Options): Pip {
     }
 
     /**
-     * 代わりの video に流れを繋いで、1枚目まで受け取っておく。**押されてからでは遅い** (上の説明)。
-     * 1枚目が来たら流れを切る — 小窓に出すまで写し続けない
+     * 代わりの video にストリームを繋いで、1枚目まで受け取っておく。**押されてからでは遅い** (上の説明)。
+     * 1枚目が来たらストリームを切る — 小窓に出すまで写し続けない
      */
     function prepare(): void {
         unprepared = null;
@@ -423,7 +423,7 @@ export function pictureInPicture(options: Options): Pip {
         return target;
     }
 
-    /** 変換した映像に重ねていたら畳む。**元の流れ (`captureStream`) も止める** */
+    /** 変換した映像に重ねていたら畳む。**元のストリーム (`captureStream`) も止める** */
     function dropBaked(): void {
         const composed = baked;
         if (composed === null) return;

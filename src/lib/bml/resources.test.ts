@@ -159,7 +159,7 @@ describe('DRCS・PNG', () => {
 });
 
 describe('押さえ直し', () => {
-    test('同じ種類で押さえ直すと今の版になり、知らせは 1 回ずつ', async () => {
+    test('同じ種類で押さえ直すと今の版になり、通知は 1 回ずつ', async () => {
         const r = new Resources();
         r.feed(pmt(0x40));
         r.feed(dii(0x40, [[1, 1]]));

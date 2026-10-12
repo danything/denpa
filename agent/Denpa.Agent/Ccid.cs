@@ -4,7 +4,7 @@ using System.Text;
 namespace Denpa.Agent;
 
 /*
- * USB の CCID カードリーダーを直に叩く。**pcscd も pcsc-lite も使わない。**
+ * USB の CCID カードリーダーを直接扱う。**pcscd も pcsc-lite も使わない。**
  *
  * 3段:
  *

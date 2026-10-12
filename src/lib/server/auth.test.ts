@@ -38,7 +38,7 @@ describe('素通しにするエンドポイント', () => {
     });
 
     /*
-     * **死活確認。** Kubernetes の livenessProbe が叩く。守ると Pod が
+     * **死活確認。** Kubernetes の livenessProbe が呼ぶ。守ると Pod が
      * 再起動を繰り返す — 掛ける範囲を選べるのをやめたときに実際に踏んだ
      */
     test('死活確認', () => {

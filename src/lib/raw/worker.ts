@@ -408,7 +408,7 @@ function toPip(): void {
     }
     const writer = pip;
     writer.write(frame).catch(() => {
-        // 受け手が畳まれた (小窓の流れを止めた・変換しない経路を出た)。もう書かない
+        // 受け手が畳まれた (小窓のストリームを止めた・変換しない経路を出た)。もう書かない
         frame.close();
         if (pip === writer) pip = null;
     });

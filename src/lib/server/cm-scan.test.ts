@@ -84,7 +84,7 @@ describe('ffmpeg に渡す出口', () => {
     });
 });
 
-describe('読み手', () => {
+describe('読み取り', () => {
     test('書き出しを読んで片付ける。ロゴの枠は塊の境目に関わらずコマごとに渡す', () => {
         const frames: number[] = [];
         const reader = scanReader({

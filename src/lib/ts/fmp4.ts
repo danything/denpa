@@ -2,7 +2,7 @@
  * ffmpeg が吐く fMP4 を、MSE が食える単位に割る。
  *
  * MSE は**最初に init セグメント (`ftyp` + `moov`) を渡さないと**、そのあとの
- * 中身を1バイトも受け取らない。ffmpeg は1本の流れとして出してくるので、
+ * 中身を1バイトも受け取らない。ffmpeg は1本のストリームとして出してくるので、
  * こちらで切れ目を見つける。
  *
  *     ftyp moov | moof mdat | moof mdat | ...
@@ -107,7 +107,7 @@ export class Fmp4Splitter {
  * `+empty_moov+default_base_moof`) に要るものだけ:
  *
  * - 中身の在りかは moof の頭から数える (`default-base-is-moof`)。tfhd の
- *   `base-data-offset` (流れの頭から数える) は、途中から繋いだ受け側には読めないので扱わない
+ *   `base-data-offset` (ストリームの頭から数える) は、途中から繋いだ受け側には読めないので扱わない
  * - 1コマの長さ・大きさ・印は trun → tfhd → trex (moov の mvex) の順に探す
  * ---------------------------------------------------------------------------
  */

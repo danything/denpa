@@ -773,7 +773,7 @@ test.describe('ライブ視聴', () => {
      * 見た目は「切り替えに6秒かかった」で、実際には失敗しているのに、
      * そうとは分からない出方をする。
      *
-     * 実機で出たのは tvk (T15) — 局が3つ相乗りしている TS で `-probesize` が
+     * 実機で出たのは tvk (T15) — 局が3つ入っている TS で `-probesize` が
      * 足りず、`-map 0:p:24632:v:0` を解決できないまま降りていた
      */
     test('エンコードできなくなったら、黙って消えずに理由を出す', async ({ page, stack }) => {
@@ -1152,7 +1152,7 @@ test.describe('ライブ視聴', () => {
      * しないよう `disablePictureInPicture` も立てておく (全画面からホームへ戻っただけで小窓が
      * 出て鳴り続けていた)。入れれば裏でも止めず、端末ごとに覚える (`background.svelte.ts`)。
      *
-     * 裏に回るのはページの外の出来事なので、`visibilityState` を差し替えて知らせだけ送る
+     * 裏に回るのはページの外の出来事なので、`visibilityState` を差し替えて通知だけ送る
      */
     test('バックグラウンド再生は既定で切。裏に回すと止まり、入れると止まらない', async ({ page }) => {
         await goto(page, '/live');
@@ -1182,7 +1182,7 @@ test.describe('ライブ視聴', () => {
         await expect(toggle).toHaveAttribute('aria-pressed', 'true');
         await expect.poll(guarded).toBe(false);
         await turn('hidden');
-        // 止まらない (止めるなら知らせを受けたその場で止めている)
+        // 止まらない (止めるなら通知を受けたその場で止めている)
         await page.waitForTimeout(500);
         await expect(play).toHaveAttribute('aria-label', '一時停止');
         await turn('visible');
@@ -1557,7 +1557,7 @@ test.describe('ライブ視聴', () => {
     });
 
     /*
-     * **同じ知らせでも、押し直せばもう一度出る。** 閉じたことは key で覚えているので、
+     * **同じ通知でも、押し直せばもう一度出る。** 閉じたことは key で覚えているので、
      * 返事が変わったことを渡さないと (`source`)、同じ文面の2回目は閉じたままになりうる
      * (Toasts)。いまは `applyAction` が一度 form を null にしてから入れ直すので、
      * その隙に閉じた印が捨てられて出ている — **それに頼らない**よう他の画面と揃えて
@@ -1566,7 +1566,7 @@ test.describe('ライブ視聴', () => {
      * 毎回同じ断りを返させるため、録る局だけ番組表の無い局 (BSテレ東) に差し替えて
      * 押す — 本当に録り始めるとチューナーを30分塞ぐ
      */
-    test('同じ知らせを閉じても、押し直せばまた出る', async ({ page }) => {
+    test('同じ通知を閉じても、押し直せばまた出る', async ({ page }) => {
         await goto(page, '/live');
         await page.getByTestId('live-channel').first().click();
         await expect(page.getByTestId('live-title')).toBeVisible();

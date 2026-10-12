@@ -34,7 +34,7 @@ const DECODER = '/api/live/mpeg2';
 /**
  * **`<audio>` を通したとき、出口から耳までの遅れの見込み (秒)** (`RawEngine.route`)。
  *
- * 流れ (MediaStream) へ出した音は、Web Audio が組んだその場で流れに乗る — ページから直に
+ * ストリーム (MediaStream) へ出した音は、Web Audio が組んだその場でストリームに乗る — ページから直に
  * 鳴らすときの出口の遅れ (`baseLatency + outputLatency`。`latencyHint: 'playback'` で
  * 大きめ) を通らず、代わりに `<audio>` の側の出口を通る。その遅れはページから読めないので
  * 見込みで置く。**少なめに置く** — 外れても「音が映像より遅れる」側に倒れる (人は音が先に
@@ -56,7 +56,7 @@ export interface RawEvents {
     gaveUp(reason: string): void;
     /**
      * 外から止められた・再開された (`paused`)。**`<audio>` を通している間だけ** —
-     * ロック画面・車のハンドルの再生ボタン・ブラウザの再生中の知らせは `<audio>` を直に
+     * ロック画面・車のハンドルの再生ボタン・ブラウザの再生中の通知は `<audio>` を直に
      * 止めるので、画面の「止めているか」をそれに合わせる (`RawEngine.route`)
      */
     remote(paused: boolean): void;
@@ -121,7 +121,7 @@ export class RawEngine {
     private gone = false;
     /** デュアルモノのどちらを両耳へ配るか (`AudioTrack.side`) */
     private side: AudioSide = 'both';
-    /** 最後に知った PTS。字幕や時計の知らせを伸ばすのに使う (`unwrap`) */
+    /** 最後に知った PTS。字幕や時計の通知を伸ばすのに使う (`unwrap`) */
     private near: number | null = null;
     /** 鳴らし始める所 (`reset` の `from`。一周の中)。最初の音のコマで伸ばして `Playout` に渡す */
     private aim: number | null = null;
@@ -314,7 +314,7 @@ export class RawEngine {
         return this.playout.playing;
     }
 
-    /** 放送の PTS (90kHz、一周の中) を、いま出しているものの近くへ伸ばす。**字幕と時計の知らせ用** */
+    /** 放送の PTS (90kHz、一周の中) を、いま出しているものの近くへ伸ばす。**字幕と時計の通知用** */
     unwrap(pts: number): number {
         return this.near === null ? pts : unwrap(pts, this.near);
     }
@@ -344,7 +344,7 @@ export class RawEngine {
      * (`captureStream`) と、窓が隠れて画面の更新が止まったとき映像も止まる。
      *
      * 書き込む API が無い Safari は `captureStream` (iPhone で小窓に出せている)。
-     * Firefox はどちらも無い (worker に渡した canvas からは流れを取れない) ので null
+     * Firefox はどちらも無い (worker に渡した canvas からはストリームを取れない) ので null
      */
     pipStream(): MediaStream | null {
         const Generator = (
@@ -390,7 +390,7 @@ export class RawEngine {
 
     /**
      * **音の出口を決め直す。** バックグラウンド再生をオンにしているとき・押して小窓を開いている間
-     * (`wanted`) は、ページから直に鳴らさず、流れ (`createMediaStreamDestination`) にして
+     * (`wanted`) は、ページから直に鳴らさず、ストリーム (`createMediaStreamDestination`) にして
      * `<audio>` で鳴らす。
      *
      * Web Audio の音を、ブラウザによっては効果音と同じに扱い、**裏へ回すと止める**
@@ -401,7 +401,7 @@ export class RawEngine {
      * - **Safari は通さない** — Audio Session を `playback` にすれば裏でも止まらない
      *   (`playbackSession`。iPhone で確かめてある)。iOS で MediaStream を鳴らすと、出口が
      *   通話の扱いに寄ることがあった
-     * - 流れを作れない端末は直に鳴らすまま
+     * - ストリームを作れない端末は直に鳴らすまま
      * - **`play()` を断られたら (自動再生) 直に鳴らす。** 押されたら (`unmute`・`resume`) また試す
      * - 音を消すのは GainNode (`mute`)。`<audio>` の `volume`/`muted` は触らない
      */
@@ -529,7 +529,7 @@ export class RawEngine {
      * いま耳に届いている PTS と、それが届いた時刻 (performance の ms)。
      * **音の時間は「いま予約している位置」なので、出口までの遅れを引く** (`getOutputTimestamp`)
      *
-     * **`<audio>` を通している間は、引くものを差し替える** (`route`)。音は組んだその場で流れに
+     * **`<audio>` を通している間は、引くものを差し替える** (`route`)。音は組んだその場でストリームに
      * 乗るので、ページの出口の遅れ (`baseLatency + outputLatency`) は掛からず、`<audio>` の
      * 出口の遅れ (`STREAM_OUT`) が掛かる。滑らかさは `getOutputTimestamp` の組のまま使い、
      * PTS をその差だけ先へずらす

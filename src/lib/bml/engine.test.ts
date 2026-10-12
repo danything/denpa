@@ -201,10 +201,10 @@ describe('エンジンはページを固めない', () => {
         expect(longest).toBeLessThan(100);
     }, 70_000);
 
-    test('受け手が自分を呼び直し続ける (lockModuleOnMemory の知らせで押さえ直す) と、手を放しながら回る', async () => {
+    test('受け手が自分を呼び直し続ける (lockModuleOnMemory の通知で押さえ直す) と、手を放しながら回る', async () => {
         const { bml } = open();
-        // 押さえ直すと、届いているモジュールはすぐ知らせが来る。直す前は、知らせ → 受け手 →
-        // 押さえ直す → 知らせ… がマイクロタスクで回り続けた
+        // 押さえ直すと、届いているモジュールはすぐ通知が来る。直す前は、通知 → 受け手 →
+        // 押さえ直す → 通知… がマイクロタスクで回り続けた
         const script = `var n = 0;
             function start() { browser.lockModuleOnMemory("/40/0000"); }
             function locked() {

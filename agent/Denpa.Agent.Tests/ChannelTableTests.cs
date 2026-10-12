@@ -74,7 +74,7 @@ public class ChannelTableTests
     [Arguments("T63")]      // 62 まで
     [Arguments("BS02_0")]   // BS は奇数だけ
     [Arguments("BS25_0")]
-    [Arguments("BS19_8")]   // 相乗りは 8 本まで
+    [Arguments("BS19_8")]   // 同じ周波数には 8 本まで
     [Arguments("CS01")]     // CS は偶数だけ
     [Arguments("CS26")]
     [Arguments("")]
@@ -125,7 +125,7 @@ public class StreamIdTests
     [Test]
     public async Task 表にも無ければ選り分けない()
     {
-        // 埋め込んだ表に無い相乗り。TSID を指定せずに選局して、あとは復調器任せ
+        // 埋め込んだ表に無い同じ周波数の TS。TSID を指定せずに選局して、あとは復調器任せ
         var bs = ChannelTable.Parse("BS15_7")!;
         await Assert.That(ChannelTable.StreamId("BS15_7", bs, _ => null)).IsEqualTo(ChannelTable.NoStreamId);
     }

@@ -248,8 +248,8 @@ test.describe('互換モードの追っかけ', () => {
 
         /*
          * **リクエストし直したあとも再生位置が飛ばない。** シークバーを動かすと (溢れの読み直しと同じく) いまの位置から
-         * リクエストし直す。新しい流れの時刻は 0 から数え直しになるので、再生位置はサーバが返す頭 (`timeline`) +
-         * 新しい流れの中の秒になる。前の流れの秒を足したまま先へ飛んでいないことを見る
+         * リクエストし直す。新しいストリームの時刻は 0 から数え直しになるので、再生位置はサーバが返す頭 (`timeline`) +
+         * 新しいストリームの中の秒になる。前のストリームの秒を足したまま先へ飛んでいないことを見る
          */
         // 再生位置は読みものの「m:ss / m:ss」の左 (シークバーの値は録れている長さで頭打ちになるので使わない)
         const status = page.getByTestId('chase-controls').getByText(/^\d+:\d\d \/ \d+:\d\d$/);
@@ -263,7 +263,7 @@ test.describe('互換モードの追っかけ', () => {
         // シークバーを動かすのと同じ (`seekBy`)。頭へ戻す。押したボタンにフォーカスがあると矢印は効かない (`keys.ts`) ので外す
         await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
         await page.keyboard.press('ArrowLeft');
-        // リクエストした所へ戻り、そこから進む。3秒後も、前の再生位置より手前にある (前の流れの秒を足していない)
+        // リクエストした所へ戻り、そこから進む。3秒後も、前の再生位置より手前にある (前のストリームの秒を足していない)
         await expect.poll(shown, { timeout: 15_000 }).toBeGreaterThan((await shown()) + 30);
         await page.waitForTimeout(3_000);
         const after = await where();

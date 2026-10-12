@@ -263,7 +263,7 @@ public class BCasTests
         await Assert.That(error.Message).Contains("カードリーダーが見つかりません");
         await Assert.That(card.Name).IsEqualTo("");
 
-        // しばらくは探し直さずに同じ理由で断る (全部の流れが順番にリーダーを開き直さない)
+        // しばらくは探し直さずに同じ理由で断る (全部のストリームが順番にリーダーを開き直さない)
         var soon = Assert.Throws<IOException>(() => card.Ecm(SampleEcm));
         await Assert.That(soon.Message).Contains("カードリーダーが見つかりません");
         await Assert.That(finds).IsEqualTo(2);

@@ -1,5 +1,5 @@
 /**
- * **アプリのペアリングと、アプリに渡す鍵** (docs/auth.md「アプリのペアリング」)。
+ * **アプリのペアリングと、アプリに渡すアクセストークン** (docs/auth.md「アプリのペアリング」)。
  *
  * テレビのアプリ (danything/denpa-tv) は Cookie の控えを持てず、リモコンで OIDC の
  * ログイン画面を操作するのもつらい。そこで OAuth のデバイス認可 (RFC 8628) と同じ流れにする:
@@ -9,11 +9,11 @@
  *    (信頼するネットワークか OIDC) を通ったうえで、**そのまま許す** (`/device`)。
  *    「許す / 断る」を聞かないのは家で使う前提だから — QR を読めるのはテレビの前にいる人で、
  *    コードは10分で切れ、1度しか使えない。完了の画面には端末の名前を出す (コードは出さない。docs/auth.md)
- * 3. テレビは `POST /api/device/token` を間を置いて叩き、許されたら鍵を1度だけ受け取る
- * 4. 以後は `Authorization: Bearer <鍵>` で API とファイルのエンドポイントに入る
+ * 3. テレビは `POST /api/device/token` を間を置いて呼び、許されたらアクセストークンを1度だけ受け取る
+ * 4. 以後は `Authorization: Bearer <アクセストークン>` で API とファイルのエンドポイントに入る
  *
- * **秘密を平文で DB に置かない。** `device_code` も鍵も SHA-256 だけ持つ。鍵は許した瞬間
- * ではなく**渡すときに作る** — 許してから渡すまでの間に、平文の鍵を預かっておく場所が要らない
+ * **秘密を平文で DB に置かない。** `device_code` もアクセストークンも SHA-256 だけ持つ。アクセストークンは許した瞬間
+ * ではなく**渡すときに作る** — 許してから渡すまでの間に、平文のアクセストークンを預かっておく場所が要らない
  */
 
 import { createHash } from 'node:crypto';
@@ -27,18 +27,18 @@ export const CODE_TTL_MS = 10 * 60 * 1000;
 /** 聞きに来てよい間隔 (`interval`) */
 export const POLL_INTERVAL_MS = 5 * 1000;
 /**
- * 有効なコードの上限。`/api/device/code` は誰でも叩けるので、溜め込ませない。
+ * 有効なコードの上限。`/api/device/code` は誰でも呼べるので、溜め込ませない。
  * 埋めても10分で切れる (そのあいだペアリングできなくなるだけで、入れるようにはならない)
  */
 export const MAX_PENDING = 20;
 /** 名前の長さ。画面で見分けるためだけのもの */
 const NAME_MAX = 40;
-/** 鍵の頭。ほかの Bearer (前段の SSO など) と取り違えないための印 */
+/** アクセストークンの頭。ほかの Bearer (前段の SSO など) と取り違えないための印 */
 export const TOKEN_PREFIX = 'denpa_';
 /** 最後に使った時刻を書く間隔。映像は Range ごとに来るので、毎回は書かない */
 const TOUCH_INTERVAL_MS = 60 * 1000;
 /**
- * 間隔の数え方のゆとり。5秒ごとに叩くアプリでも、タイマーのずれで 4.9 秒になることがある。
+ * 間隔の数え方のゆとり。5秒ごとに呼ぶアプリでも、タイマーのずれで 4.9 秒になることがある。
  * それを `slow_down` で返すと、アプリが間隔を延ばし続けてしまう
  */
 const POLL_SLACK_MS = 1000;
@@ -125,11 +125,11 @@ export function viewCode(userCode: string, at = now()): CodeView | null {
 }
 
 /**
- * 許す。**何度呼んでも同じ** (画面を読み直しても鍵は2本にならない — 鍵を作るのは
+ * 許す。**何度呼んでも同じ** (画面を読み直してもアクセストークンは2本にならない — 作るのは
  * 端末が受け取るときで、ここは印を付けるだけ)。コードの今の様子を返す (無ければ null)。
  *
- * **アプリの鍵で入った相手は許せない** (`viaToken`)。盗まれた鍵で別の鍵を作れると、
- * 元の鍵を取り消しても作った鍵が生き残る。許すのはブラウザ (信頼するネットワークか OIDC) だけ
+ * **アクセストークンで入った相手は許せない** (`viaToken`)。盗まれたアクセストークンで別のものを作れると、
+ * 元のものを取り消しても作ったものが生き残る。許すのはブラウザ (信頼するネットワークか OIDC) だけ
  */
 export function approve(userCode: string, by: string, viaToken: boolean, at = now()): CodeView | null {
     if (viaToken) throw new TokenCannotApprove();
@@ -146,10 +146,10 @@ export function approve(userCode: string, by: string, viaToken: boolean, at = no
     return { userCode: row.user_code, name: row.name, state: state === 'pending' ? 'approved' : state };
 }
 
-/** アプリの鍵で許そうとした (`approve`) */
+/** アクセストークンで許そうとした (`approve`) */
 export class TokenCannotApprove extends Error {
     constructor() {
-        super('アプリの鍵ではペアリングできません');
+        super('アクセストークンではペアリングできません');
     }
 }
 
@@ -157,7 +157,7 @@ export class TokenCannotApprove extends Error {
 export type PollError = 'authorization_pending' | 'slow_down' | 'expired_token' | 'invalid_grant';
 
 /**
- * 端末が聞きに来た。許されていれば**ここで鍵を作り**、1度だけ返す。
+ * 端末が聞きに来た。許されていれば**ここでアクセストークンを作り**、1度だけ返す。
  * 答えの名前は RFC 8628 のものに揃えてある (アプリの側で読み替えずに済むように)
  */
 export function poll(deviceCode: string, at = now()): { token: string } | { error: PollError } {
@@ -201,7 +201,7 @@ export interface TokenOwner {
     name: string;
 }
 
-/** `Authorization` の値から denpa の鍵を取り出す。denpa の鍵でなければ null (ほかの Bearer は見ない) */
+/** `Authorization` の値から denpa のアクセストークンを取り出す。denpa のものでなければ null (ほかの Bearer は見ない) */
 export function bearerToken(authorization: string | null): string | null {
     if (authorization === null) return null;
     const match = /^Bearer\s+(\S+)$/i.exec(authorization.trim());
@@ -209,7 +209,7 @@ export function bearerToken(authorization: string | null): string | null {
     return match[1];
 }
 
-/** 鍵が生きていれば持ち主。止めた・知らない鍵なら null */
+/** アクセストークンが有効なら持ち主。無効にした・知らないものなら null */
 export function verifyToken(token: string, at = now()): TokenOwner | null {
     const row = orm()
         .select({ id: apiTokens.id, name: apiTokens.name, last_used_at: apiTokens.last_used_at })
@@ -223,7 +223,7 @@ export function verifyToken(token: string, at = now()): TokenOwner | null {
     return { id: row.id, name: row.name };
 }
 
-/** 鍵を止める (設定画面の「取り消す」と、アプリの「サーバーから外す」) */
+/** アクセストークンを無効にする (設定画面の「取り消す」と、アプリの「サーバーから外す」) */
 export function revokeToken(id: number, at = now()): boolean {
     return (
         affected(
@@ -235,7 +235,7 @@ export function revokeToken(id: number, at = now()): boolean {
     );
 }
 
-/** 生きている鍵。設定画面に並べる */
+/** 有効なアクセストークン。設定画面に並べる */
 export function liveTokens() {
     return orm()
         .select({

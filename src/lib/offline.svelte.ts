@@ -48,7 +48,7 @@ export const offline = {
     get pendingDelete(): Record<number, boolean> {
         return pendingDelete;
     },
-    /** 保存に失敗した録画のID。画面はこれを見て知らせを出す */
+    /** 保存に失敗した録画のID。画面はこれを見て通知を出す */
     get failed(): number | null {
         return failed;
     },
@@ -115,7 +115,7 @@ function watchProgress(reg: BackgroundFetchRegistration, parsed = parseFetchId(r
             const sw = await navigator.serviceWorker.ready;
             while (true) {
                 const running = await sw.backgroundFetch?.get(reg.id);
-                // 終わった (成功・失敗どちらでも登録は消える)。表示は SW の知らせが変える
+                // 終わった (成功・失敗どちらでも登録は消える)。表示は SW の通知が変える
                 if (running === undefined || running.result !== '') return;
                 const show = () =>
                     setProgress(
@@ -291,7 +291,7 @@ export async function saveOffline(rec: SaveTarget): Promise<void> {
     /*
      * 試みの印。やり直しのたびに変える — Background Fetch は**同じ登録IDが
      * 生きている間は再登録できない**ので、前回の残骸があっても必ず登録できる。
-     * 残骸の中止の知らせが遅れて届いても、印が違えばこの控えは消されない (SW の drop)
+     * 残骸の中止の通知が遅れて届いても、印が違えばこの控えは消されない (SW の drop)
      */
     const attempt = Math.random().toString(36).slice(2, 10);
     const held: OfflineVideo = {

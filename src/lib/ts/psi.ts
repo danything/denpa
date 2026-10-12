@@ -220,7 +220,7 @@ function findSync(data: Uint8Array, from = 0, until = data.length): number {
  * **出すパケットは渡された塊の上の窓** (写しではない。写すと録画の処理の 1/3 を食う)。
  * 塊の入れ物を使い回す呼び出し側がある
  * (`server/recorded-bml.ts`) ので、**次の `feed` より後まで持つなら写すこと**。
- * いまの読み手 (`SectionAssembler`・`PesDemuxer`) は溜めるときに写している
+ * いまのパーサ (`SectionAssembler`・`PesDemuxer`) は溜めるときに写している
  */
 export class PacketStream {
     private rest = new Uint8Array(0);

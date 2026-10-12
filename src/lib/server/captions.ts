@@ -189,7 +189,7 @@ export interface CaptionShown {
 }
 
 /**
- * 写してきた字幕 (`S_ARIBSUB` のコマ) をデコードして、文字の配置にする。**字幕の流れ1本に1つ** —
+ * 写してきた字幕 (`S_ARIBSUB` のコマ) をデコードして、文字の配置にする。**字幕のストリーム1本に1つ** —
  * 書式や位置は字幕文を跨いで続くので、ffmpeg を起こし直したら作り直す
  */
 export class CaptionText {
@@ -232,7 +232,7 @@ export function textFrame(shown: CaptionShown): { kind: number; pts: bigint; dat
  *     [4:後ろの長さ (BE)][1:種別][8:時刻 (90kHz, BE)][中身...]
  *
  * **WebSocket と同じバイトにしたのは、受け側の読み方を1つにするため。** 字幕 (`0x22`) も
- * 知らせ (`0x40`) も JSON のまま。
+ * 通知 (`0x40`) も JSON のまま。
  *
  * **長さを付けるのは、HTTP には区切りが無いから。** WebSocket はフレームの区切りを運んでくれるが、
  * チャンク転送のチャンクの区切りは受け側 (HttpURLConnection など) から見えない。
@@ -268,7 +268,7 @@ const PING = new TextEncoder().encode(JSON.stringify({ type: 'ping' }));
 
 /** アプリ向けの字幕 API に流し込む側 (`captionFeed`) */
 export interface CaptionOut {
-    /** WebSocket と同じ形式で1フレーム渡す。**字幕 (文字の配置) と、選べる字幕の知らせだけ通す** */
+    /** WebSocket と同じ形式で1フレーム渡す。**字幕 (文字の配置) と、選べる字幕の通知だけ通す** */
     send(kind: number, pts: bigint, payload: Uint8Array): void;
     /** 終わり (録画を読み切った・セッションが畳まれた) */
     close(): void;
@@ -279,8 +279,8 @@ export interface CaptionOut {
 /**
  * アプリ向けの字幕 API を作る。中身を作る側 (`open`) は、閉じるときの後始末を返す。
  *
- * 通すのは字幕 (文字の配置 `0x22`) と、選べる字幕の知らせ (`0x40` の `captions`) だけ。
- * `error` / `ended` の知らせが来たら閉じる。ほかの知らせ・データ放送・映像は捨てる
+ * 通すのは字幕 (文字の配置 `0x22`) と、選べる字幕の通知 (`0x40` の `captions`) だけ。
+ * `error` / `ended` の通知が来たら閉じる。ほかの通知・データ放送・映像は捨てる
  * (映像は同じ URL の隣のエンドポイント — ライブの `live` や追っかけの `chase` — で受け取っている)
  */
 export function captionFeed(open: (out: CaptionOut) => () => void): ReadableStream<Uint8Array> {

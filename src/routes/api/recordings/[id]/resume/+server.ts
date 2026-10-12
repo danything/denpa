@@ -18,7 +18,7 @@ import { RESUME_EDGE, resumePoint, watchedToEnd } from '#lib/ts/watch.js';
  * 端に来たぶんは消して、頭から出し直す (境目は `ts/watch.ts`)。
  * 代わりに**観終えた時刻を書く** (`watched_at`)。一覧の「未視聴」の印はこれで外れる
  *
- * ## 知らせは出さない
+ * ## 通知は出さない
  *
  * 15秒おきに呼ばれるので、`emit('recordings')` すると一覧が繋いでいる人の
  * 画面がそのたびに書き換わる。観た位置は開いたときに読めば足りる (画面も

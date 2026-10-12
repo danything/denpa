@@ -43,8 +43,8 @@ public interface ITuneDevice : IDisposable
     /// 前の選局がまだ生きているか。
     ///
     /// <para>
-    /// DVB は一度合わせたら合ったまま。px4-userland は読み手がいなくなると
-    /// TS の流れを畳む (受信機は借りたまま) ので、**同じチャンネルでも選局し直しが要る**ことがある。
+    /// DVB は一度合わせたら合ったまま。px4-userland は読む側がいなくなると
+    /// TS のストリームを畳む (受信機は借りたまま) ので、**同じチャンネルでも選局し直しが要る**ことがある。
     /// TunerPool は「同じチャンネルならそのまま」の前にここを見る。
     /// </para>
     /// </summary>
@@ -172,7 +172,7 @@ internal static unsafe partial class Sys
 /// <param name="handle">読む fd。DVB の dvr でも、子プロセスの標準出力の pipe でも同じ</param>
 /// <param name="ended">
 /// **尽きたときの理由。** 子プロセスの pipe なら EOF は子が終わったということで、
-/// 黙って 0 を返すと読み手には「選局が終了しました」としか伝わらない。
+/// 黙って 0 を返すと読む側には「選局が終了しました」としか伝わらない。
 /// 理由があるなら (終了コード・stderr の末尾) それを投げる。null なら普通の終わり
 /// </param>
 internal sealed unsafe class DeviceStream(SafeFileHandle handle, Func<string?>? ended = null) : Stream
@@ -191,9 +191,9 @@ internal sealed unsafe class DeviceStream(SafeFileHandle handle, Func<string?>? 
         : this(new SafeFileHandle(), ended) => _background = new Background(pipe);
 
     /// <summary>
-    /// **読むのは裏のスレッド、待つのはこちら。** 読みかけの間に読み手が降りても、読めたぶんは
+    /// **読むのは裏のスレッド、待つのはこちら。** 読みかけの間に読む側が抜けても、読めたぶんは
     /// 捨てずに次の <see cref="Read(byte[], int, int, Func{bool}?)"/> に渡す
-    /// (poll で待ってから読む Unix と同じく、降りた読み手が中身を持ち去らない)
+    /// (poll で待ってから読む Unix と同じく、抜けた側が中身を持ち去らない)
     /// </summary>
     private sealed class Background(Stream pipe)
     {
@@ -205,7 +205,7 @@ internal sealed unsafe class DeviceStream(SafeFileHandle handle, Func<string?>? 
 
         /// <summary>
         /// 読めたバイト数。0 は尽きた、null は降りた。**ロックを待つ間も降りる合図を見る** —
-        /// 先の読み手が待っている間、後から来た読み手 (降りたい側) がロックの手前で止まらないように
+        /// 先に読んでいる側が待っている間、後から来た側 (抜けたい側) がロックの手前で止まらないように
         /// </summary>
         public int? Read(Span<byte> target, Func<bool> giveUp)
         {
@@ -282,18 +282,18 @@ internal sealed unsafe class DeviceStream(SafeFileHandle handle, Func<string?>? 
     /// </summary>
     private bool _handed;
 
-    /// <summary>選局の前に溢れていた回数。**読み手のせいではない**ので分けて数える</summary>
+    /// <summary>選局の前に溢れていた回数。**読む側のせいではない**ので分けて数える</summary>
     private int _stale;
 
     /// <summary>
-    /// 前に聞かれてからリングバッファが溢れた回数と、**そのとき読み手がどれだけ空いていたか**。
+    /// 前に聞かれてからリングバッファが溢れた回数と、**そのとき読む側がどれだけ空いていたか**。
     ///
     /// <para>
-    /// 回数だけでは、溜めが浅いのか読み手が止まっているのかが分けられない。
+    /// 回数だけでは、溜めが浅いのか読む側が止まっているのかが分けられない。
     /// リングバッファは 8MB = 地上波で 3.5 秒ぶん (<c>DvrBuffer</c>) なので、**空いた時間が
     /// 3.5 秒に届いていなければ、広げたはずの溜めが効いていない** (カーネルの
     /// 既定 1.8MB のままなら 0.9 秒で溢れる)。届いているなら、溜めの深さでは
-    /// なく**読み手が止まる理由**のほうが本題になる。
+    /// なく**読む側が止まる理由**のほうが本題になる。
     /// </para>
     /// <para>
     /// **聞いたら 0 に戻る。** デバイスは選局を跨いで開きっぱなしなので、
@@ -315,7 +315,7 @@ internal sealed unsafe class DeviceStream(SafeFileHandle handle, Func<string?>? 
     /// <para>
     /// デバイスは選局を跨いで開きっぱなしなので、局を変えている間は誰も
     /// 読んでいない。そのぶんを持ち越すと、**選局に掛かった時間が
-    /// 「読み手が空いていた時間」として出る** (実機で 4.1秒・4.3秒)。
+    /// 「読む側が空いていた時間」として出る** (実機で 4.1秒・4.3秒)。
     /// 読み始めるところで測り直す (<c>Lease.StartNative</c>)。
     /// </para>
     /// </summary>
@@ -330,16 +330,16 @@ internal sealed unsafe class DeviceStream(SafeFileHandle handle, Func<string?>? 
 
     public void Stop() => _closed = true;
 
-    /// <summary>いま <see cref="Read(byte[], int, int, Func{bool}?)"/> の中にいる読み手の数</summary>
+    /// <summary>いま <see cref="Read(byte[], int, int, Func{bool}?)"/> の中にいる読む側の数</summary>
     private int _reading;
 
-    /// <summary>中にいる読み手の数 (テストが「読み手が入った」「戻った」を見る)</summary>
+    /// <summary>中にいる読む側の数 (テストが「読む側が入った」「戻った」を見る)</summary>
     internal int Readers => Volatile.Read(ref _reading);
 
     /// <summary>
-    /// <see cref="Stop"/> のあと、**読みかけの読み手が戻るまで待つ** (長くても <paramref name="most"/>)。
+    /// <see cref="Stop"/> のあと、**読みかけの読む側が戻るまで待つ** (長くても <paramref name="most"/>)。
     /// 止めたあとに始まった Read は fd に触らずに戻るので、見るのは中にいる数だけでよい。
-    /// 読み手が先に降りていれば待たない (局替えのたびに固定で寝ていた 300ms がこれで消える)
+    /// 読む側が先に抜けていれば待たない (局替えのたびに固定で寝ていた 300ms がこれで消える)
     /// </summary>
     public void WaitReaders(TimeSpan most)
     {
@@ -361,12 +361,12 @@ internal sealed unsafe class DeviceStream(SafeFileHandle handle, Func<string?>? 
     /**
      * <param name="giveUp">
      * **読むのをやめる合図。** デバイスは選局を跨いで開いたままなので、
-     * <see cref="Stop"/> は使えない (次の選局が同じものを読む)。読み手のほうが
-     * 降りたいときはこれを渡す。
+     * <see cref="Stop"/> は使えない (次の選局が同じものを読む)。読む側が
+     * 抜けたいときはこれを渡す。
      *
      * <para>
      * 渡さないと、**電波が来ていない間は永久に戻らない** — 0.2秒ごとに起きて
-     * 掛け直すだけで、呼んだ側は降りようがない。実機では、蹴られた読み手が
+     * 掛け直すだけで、呼んだ側は抜けようがない。実機では、チューナーを取り上げられた読む側が
      * ここで止まったまま次の選局が始まり、**同じ読み出し側を2本で取り合った**
      * (デスクランブラを持ち回していた頃は、それでプロセスごと落ちた)。
      * </para>
@@ -745,7 +745,7 @@ public sealed class DvbTuner : ITuneDevice
     public void Dispose()
     {
         // 先に読み出し側を閉じる。demux を止めてから閉じると、dvr で待っている
-        // 読み手が誰にも起こされないまま残る
+        // 読む側が誰にも起こされないまま残る
         _dvr.Dispose();
         _demux.Dispose();
         _frontend.Dispose();

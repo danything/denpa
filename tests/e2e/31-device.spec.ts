@@ -4,12 +4,12 @@ import { expect, goto, test } from './helpers';
 /**
  * **テレビのアプリのペアリング** (docs/auth.md「アプリのペアリング」、device-auth.ts)。
  *
- * テレビがペアリングコードを貰い、スマホで QR (`device?code=…`) を開くとそのまま済み、テレビは鍵を受け取って
+ * テレビがペアリングコードを貰い、スマホで QR (`device?code=…`) を開くとそのまま済み、テレビはアクセストークンを受け取って
  * `Authorization: Bearer` で API に入る。普段のスタックはローカルを信頼しているので、
  * スマホ役のブラウザはログインなしで `/device` に入れる (家の LAN と同じ)
  */
 test.describe('テレビのペアリング', () => {
-    test('コードを貰って QR を開くと済み、鍵で API に入れる。取り消すと 401', async ({ page, request }) => {
+    test('QR を開くと済み、アクセストークンで API に入れる。取り消すと 401', async ({ page, request }) => {
         const issued = await request.post('/api/device/code', { data: { name: 'E2E のテレビ' } });
         expect(issued.status()).toBe(200);
         const code = await issued.json();
@@ -31,7 +31,7 @@ test.describe('テレビのペアリング', () => {
         await goto(page, `/${code.verificationUriComplete}`);
         await expect(page.getByTestId('device-done')).toContainText('E2E のテレビ とペアリングしました');
 
-        // 間隔を守って聞き直すと、鍵を1度だけ受け取れる
+        // 間隔を守って聞き直すと、アクセストークンを1度だけ受け取れる
         await new Promise((resolve) => setTimeout(resolve, 5_000));
         const got = await request.post('/api/device/token', { data: { deviceCode: code.deviceCode } });
         expect(got.status()).toBe(200);
@@ -45,10 +45,10 @@ test.describe('テレビのペアリング', () => {
         const auth = { authorization: `Bearer ${token}` };
         expect((await request.get('/api/recordings', { headers: auth })).status()).toBe(200);
 
-        // アプリの鍵では、別のペアリングコードを済ませられない (盗まれた鍵で鍵を増やせないように)
-        const other = await (await request.post('/api/device/code', { data: { name: '鍵から' } })).json();
+        // アクセストークンでは、別のペアリングコードを済ませられない (盗まれたもので増やせないように)
+        const other = await (await request.post('/api/device/code', { data: { name: '別の端末' } })).json();
         const viaToken = await request.get(`/${other.verificationUriComplete}`, { headers: auth });
-        expect(await viaToken.text()).toContain('アプリの鍵ではペアリングできません');
+        expect(await viaToken.text()).toContain('アクセストークンではペアリングできません');
         const posted = await request.post(`/${other.verificationUriComplete}`, {
             headers: { ...auth, origin: new URL(viaToken.url()).origin },
             form: { code: other.userCode },
@@ -63,7 +63,7 @@ test.describe('テレビのペアリング', () => {
         await goto(page, '/settings');
         await expect(page.getByTestId('device-row').filter({ hasText: 'E2E のテレビ' })).toBeVisible();
 
-        // アプリが自分で外す。止めた鍵は信頼するネットワークからでも 401 (ペアリングし直しと分かるように)
+        // アプリが自分で外す。無効にしたアクセストークンは信頼するネットワークからでも 401 (ペアリングし直しと分かるように)
         expect((await request.post('/api/device/logout', { headers: auth })).status()).toBe(204);
         const revoked = await request.get('/api/recordings', { headers: auth });
         expect(revoked.status()).toBe(401);
@@ -77,10 +77,10 @@ test.describe('テレビのペアリング', () => {
 });
 
 /*
- * テレビは鍵を持たずにまず API を叩き、401 の JSON ならペアリングに進む
+ * テレビはアクセストークンを持たずにまず API を呼び、401 の JSON ならペアリングに進む
  * (信頼するネットワークの中なら通るので、ペアリングは要らない)。ログイン画面の HTML に回さない
  */
-test.describe('信頼するネットワークの外から鍵なしで', () => {
+test.describe('信頼するネットワークの外からアクセストークンなしで', () => {
     test('API は 401 の JSON。ペアリングコードの API は資格なしで開いている', async ({ stack }) => {
         const closed = await bootClosed(test.info().workerIndex, stack.root, {
             TRUSTED_NETWORKS: '10.10.0.0/16',

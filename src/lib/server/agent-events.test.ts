@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { blocks, parseBlock } from './agent-events';
 
-describe('エージェントの知らせ', () => {
+describe('エージェントの通知', () => {
     test('event と data を取り出す', () => {
         expect(parseBlock('event: tuners\ndata: {"index":0}')).toEqual({
             name: 'tuners',

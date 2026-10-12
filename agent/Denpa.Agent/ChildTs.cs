@@ -13,7 +13,7 @@ namespace Denpa.Agent;
 ///
 /// <para>
 /// **読み出し側は <see cref="DeviceStream"/> に載せる。** pipe をそのまま fd として poll で待つので、
-/// 電波が来なくても畳めるし、蹴られた読み手は 200ms で降りる (DVB と同じ振る舞い)。
+/// 電波が来なくても畳めるし、チューナーを取り上げられた読む側は 200ms で抜ける (DVB と同じ振る舞い)。
 /// </para>
 /// </summary>
 internal static class ChildTs
@@ -34,7 +34,7 @@ internal static class ChildTs
     /// (<c>/proc/sys/fs/pipe-user-pages-soft</c>、既定 64MB) を超えていると、CAP_SYS_RESOURCE が無い限り
     /// 広げる要求は <c>EPERM</c> になり、新しい pipe は最小 (数 KB) のまま。Home Assistant OS の
     /// アドオンはホスト中の root (Supervisor やほかのアドオン) と uid 0 を分け合うので、ここに当たる
-    /// (アドオンの作者が実機の記録で見つけた)。数 KB では読み手が数ミリ秒止まるだけで詰まり、
+    /// (アドオンの作者が実機の記録で見つけた)。数 KB では読む側が数ミリ秒止まるだけで詰まり、
     /// ライブが SLOW_CONSUMER で切れる。そういう環境では CAP_SYS_RESOURCE を渡してもらう
     /// </para>
     /// </summary>
@@ -43,9 +43,9 @@ internal static class ChildTs
     private const int FallbackPipeSize = 1024 * 1024;
 
     /// <summary>
-    /// 読み手が降りきるまで待つ上限。<see cref="DeviceStream"/> は 200ms ごとに
-    /// 起きて印を見るので、fd を閉じるのは読み手が戻ってから (閉じた番号を
-    /// 次の pipe が使い回すと、降りかけの読み手が新しい pipe を読んでしまう)。
+    /// 読む側が抜けきるまで待つ上限。<see cref="DeviceStream"/> は 200ms ごとに
+    /// 起きて印を見るので、fd を閉じるのは読む側が戻ってから (閉じた番号を
+    /// 次の pipe が使い回すと、抜けかけの読む側が新しい pipe を読んでしまう)。
     /// 待つのは読みかけがいるときだけ (<see cref="DeviceStream.WaitReaders"/>)。
     /// siano-ts の後始末 (SianoTuner.Drop) と px4d の TS の後始末 (Px4Stream.Stop) で使う
     /// </summary>
@@ -73,7 +73,7 @@ internal static class ChildTs
     /// <para>
     /// **macOS では何もしない。** <c>F_SETPIPE_SZ</c> が無く、pipe の深さは OS 任せ
     /// (書き手が詰まると 64KB まで自分で伸びる)。溜めは px4d / siano-ts の側にもあるので、
-    /// 読み手が一瞬止まる程度なら持つ。ただし Linux の 8MB より浅いことは変わらない
+    /// 読む側が一瞬止まる程度なら持つ。ただし Linux の 8MB より浅いことは変わらない
     /// </para>
     /// </summary>
     internal static void WidenPipe(int fd, string name)

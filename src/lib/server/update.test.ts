@@ -38,7 +38,7 @@ describe('版のタグ', () => {
     });
 });
 
-describe('新しい版の知らせ', () => {
+describe('新しい版の通知', () => {
     test('向こうが新しければ出る。同じ・古ければ出ない', async () => {
         config.version = 'v1.7.1';
         const gh = github(release('v1.8.0'));
@@ -52,7 +52,7 @@ describe('新しい版の知らせ', () => {
         expect(await checkForUpdate(github(release('v1.7.0')))).toBeNull();
     });
 
-    // リリースを消すと「最新」は 1 つ前になる。そこで知らせが引っ込む
+    // リリースを消すと「最新」は 1 つ前になる。そこで通知が引っ込む
     test('リリースが消えれば引っ込む。1 つも無ければ (404) も同じ', async () => {
         config.version = 'v1.7.1';
         await checkForUpdate(github(release('v1.8.0')));

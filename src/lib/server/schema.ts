@@ -39,13 +39,13 @@ import { config } from './config';
 const flag = (name: string) => integer(name, { mode: 'boolean' });
 
 /**
- * JSON を文字列で持つ列。読むときにデコードし、書くときに畳む。**読み手は列ごとに書く。**
+ * JSON を文字列で持つ列。読むときにデコードし、書くときに畳む。**読み取り関数は列ごとに書く。**
  *
  * drizzle の `{ mode: 'json' }` は使わない。あれは読めない行で例外を投げるが、
  * ここに入っているのは放送から拾ったものや、取り込みの時期によって形式が違うもの
  * (古い行は `''`、EPGStation から来たジャンルは数の並び) で、1行が読めないせいで
  * 一覧ごと出なくなるのは困る。読めない行はその列を「持っていない」ことにして、
- * 残りは見えるようにする。NULL の行は drizzle が読み手を呼ばない (NULL のまま)
+ * 残りは見えるようにする。NULL の行は drizzle が読み取り関数を呼ばない (NULL のまま)
  */
 function json<T>(name: string, read: (value: unknown) => T) {
     return customType<{ data: T; driverData: string }>({
@@ -446,7 +446,7 @@ const ENCODE_STATES = ['queued', 'running', 'done', 'failed', 'canceled'] as con
 export const ENCODE_PHASES = ['descramble', 'cm', 'cut', 'encode'] as const;
 
 /**
- * ジョブの種類。`encode` はエンコードする (CM 検出も相乗り)、`cm` は**CM 検出だけやり直す**
+ * ジョブの種類。`encode` はエンコードする (CM 検出も一緒に行う)、`cm` は**CM 検出だけやり直す**
  * (エンコードしたものにはチャプターを書き直すだけ。`encoder.runCmJob`)。同じ待ち行列に並べ、同時に走る本数も一緒に数える
  */
 export const ENCODE_KINDS = ['encode', 'cm'] as const;

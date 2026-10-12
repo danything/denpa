@@ -4,7 +4,7 @@ using System.Net.Http.Headers;
 namespace Denpa.Agent;
 
 /// <summary>
-/// 鍵をどこから貰うか。**プロセスで1つ**で、どのチューナーの流れもここに聞く。
+/// 鍵をどこから貰うか。**プロセスで1つ**で、どのチューナーのストリームもここに聞く。
 ///
 /// <para>
 /// 手元にカードがあれば自分で読み (<see cref="LocalCard"/>)、無い拠点は別の拠点に
@@ -18,7 +18,7 @@ public static class Keys
 
     private static IKeySource? _source;
 
-    /// <summary>流れを復号するときに聞く相手。<see cref="Configure"/> するまでは手元のカード</summary>
+    /// <summary>ストリームを復号するときに聞く相手。<see cref="Configure"/> するまでは手元のカード</summary>
     public static IKeySource Source => _source ?? Local;
 
     /// <summary>CARD_URL が書いてあれば、そちらから貰う。**起動したときに1回**</summary>
@@ -46,7 +46,7 @@ public sealed class LocalCard : IKeySource
 
     /// <summary>
     /// 開いたカード。**開けなかったら、しばらくは探さずに同じ理由で断る**
-    /// (<see cref="BCas.RetryAfter"/>。何本もの流れが順番に全部のリーダーを開き直さない)
+    /// (<see cref="BCas.RetryAfter"/>。何本ものストリームが順番に全部のリーダーを開き直さない)
     /// </summary>
     private BCas Card()
     {
@@ -91,7 +91,7 @@ public sealed class LocalCard : IKeySource
 /// </para>
 ///
 /// <para>
-/// 呼ぶのはデスクランブラのスレッドで、読み手とは別 (TunerPool.cs)。相手が遅くても
+/// 呼ぶのはデスクランブラのスレッドで、読み出しとは別 (TunerPool.cs)。相手が遅くても
 /// 間のキュー (64MB) が呑むうちは録画は欠けず、答えが来てから続きを復号する。
 /// </para>
 /// </summary>

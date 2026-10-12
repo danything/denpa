@@ -163,7 +163,7 @@ describe('本チャンネルとサブチャンネル', () => {
         expect(main.get(sat.id)).toBe(sat.id);
     });
 
-    test('名前の無い枠も、重なる時間の本チャンネルと同じ名前の番組も相乗り', () => {
+    test('名前の無い枠も、重なる時間の本チャンネルと同じ名前の番組も同じ番組', () => {
         const main = mainOf([TX, TX2, TX3]);
         const programs = [
             program(TX.id, 4, 6, 'ニュース'),
@@ -190,7 +190,7 @@ describe('本チャンネルとサブチャンネル', () => {
             main,
         );
         expect(columnsOf(services, main, null).map((s) => s.id)).toEqual([TX.id, other.id, NHK.id]);
-        // テレ東2 はずっと相乗りなので列を立てない
+        // テレ東2 はずっと本チャンネルと同じ番組なので列を立てない
         expect(columnsOf(services, main, split).map((s) => s.id)).toEqual([
             TX.id,
             TX3.id,
@@ -208,7 +208,7 @@ describe('本チャンネルとサブチャンネル', () => {
 });
 
 describe('マスを組む', () => {
-    test('ずっと相乗りなら、出す設定でもサブの列は立たない', () => {
+    test('ずっと本チャンネルと同じ番組なら、出す設定でもサブの列は立たない', () => {
         const { columns, cells } = layout([
             program(TX.id, 4, 5, 'ニュース'),
             program(TX2.id, 4, 5, ''),
@@ -218,7 +218,7 @@ describe('マスを組む', () => {
         expect(shape(cells)).toEqual([[TX.id, 0, 1, 4, 5]]);
     });
 
-    test('相乗り中は本チャンネルのマスがサブの列まで伸びる', () => {
+    test('同じ番組の間は本チャンネルのマスがサブの列まで伸びる', () => {
         const { columns, cells } = layout([
             program(TX.id, 4, 5, 'ニュース'),
             program(TX.id, 5, 6, 'ドラマ'),
@@ -234,7 +234,7 @@ describe('マスを組む', () => {
         ]);
     });
 
-    test('相乗りのサブが本チャンネルと隣り合わないときは別のマスにする', () => {
+    test('同じ番組のサブが本チャンネルと隣り合わないときは別のマスにする', () => {
         const { cells } = layout([
             program(TX.id, 4, 6, '特番'),
             program(TX2.id, 4, 5, '野球'),
@@ -243,7 +243,7 @@ describe('マスを組む', () => {
         expect(shape(cells)).toEqual([
             [TX.id, 0, 1, 4, 5],
             [TX2.id, 1, 1, 4, 5],
-            // テレ東3 は相乗り。間にテレ東2 の野球が挟まる
+            // テレ東3 は本チャンネルと同じ番組。間にテレ東2 の野球が挟まる
             [TX.id, 2, 1, 4, 5],
             [TX.id, 0, 2, 5, 6],
             [TX3.id, 2, 1, 5, 6],
@@ -254,7 +254,7 @@ describe('マスを組む', () => {
         const { columns, cells } = layout([
             program(TX.id, 4, 8, '特番'),
             program(TX3.id, 5, 6, '野球'),
-            // 分割放送の後ろは相乗りに戻る
+            // 分割放送の後ろは本チャンネルと同じ番組に戻る
             program(TX3.id, 6, 8, ''),
         ]);
         expect(columns).toEqual([TX.id, TX3.id]);

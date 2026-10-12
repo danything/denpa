@@ -12,7 +12,7 @@
  * 上書きしない)。入れるのは、受けられるチューナーがある種別だけ。局の入れ替え
  * (BS の再編など) で表が古くなったら、画面のスキャンで上書きできる。
  *
- * エージェントに繋がったときと、チューナーの知らせ (選局のたびに来る) で見る (runtime.ts)。
+ * エージェントに繋がったときと、チューナーの通知 (選局のたびに来る) で見る (runtime.ts)。
  * 表は Khronos31/hassio-addons の denpa アドオンが初回起動で入れていたもの (MIT)
  */
 import type { ChannelType } from '../types';
@@ -32,7 +32,7 @@ const TYPES: ChannelType[] = ['BS', 'CS'];
  * 局の一覧は呼ぶ側が読んだものを受け取り、チューナーは入れる候補があるときだけ聞く。
  *
  * 局を入れたらエージェントが `channels` を知らせてくるので、取り込み直しと
- * 番組表の集め直しはその知らせで走る (runtime.ts)。ここでは預けるだけ
+ * 番組表の集め直しはその通知で走る (runtime.ts)。ここでは預けるだけ
  */
 export async function seedChannels(channels: AgentChannel[]): Promise<ChannelType[]> {
     /*

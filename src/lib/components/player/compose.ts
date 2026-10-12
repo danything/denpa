@@ -3,7 +3,7 @@
  *
  * 字幕は `<video>` の上に重ねた canvas に描いている (`paint.ts`) ので、`<video>` を
  * そのまま小窓にすると字幕は付いていかない。流れてくるコマ1枚ずつに、いま画面に
- * 出している字幕の canvas をそのまま重ねて、別の流れに書き込む。
+ * 出している字幕の canvas をそのまま重ねて、別のストリームに書き込む。
  *
  * - **時刻は画面の字幕と同じ** — 重ねるのは画面の canvas そのものなので、出し消し
  *   (字幕のボタン) も出す時刻もそちらに乗る
@@ -46,9 +46,9 @@ export function captionDrawn(canvas: HTMLCanvasElement | null): canvas is HTMLCa
 }
 
 export interface Composed {
-    /** 字幕を重ねた流れ。代わりの `<video>` に繋ぐ */
+    /** 字幕を重ねたストリーム。代わりの `<video>` に繋ぐ */
     readonly stream: MediaStream;
-    /** 畳む。**元の流れも止める** (`captureStream` で取ったものは止めないと取り続ける) */
+    /** 畳む。**元のストリームも止める** (`captureStream` で取ったものは止めないと取り続ける) */
     stop: () => void;
 }
 

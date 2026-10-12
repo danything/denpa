@@ -28,7 +28,7 @@
 <div class="solo">
     <div class="panel" data-testid="device-card">
         {#if data.viaToken || form?.viaToken}
-            <h1 data-testid="device-refused">アプリの鍵ではペアリングできません</h1>
+            <h1 data-testid="device-refused">アクセストークンではペアリングできません</h1>
             <p class="small muted">
                 テレビのペアリングは、ブラウザ (信頼するネットワークか OIDC のログイン) で開いてください。
             </p>

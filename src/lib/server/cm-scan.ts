@@ -15,11 +15,11 @@ import { run } from './stream';
  * - **局ロゴの枠** — 枠だけ切り出した白黒のコマを標準出力へ。点を付けるのは呼ぶ側 (`logo-own.ts`)
  * - **無音** — 主音声に `silencedetect`。`ametadata` で一時ファイルへ
  *
- * ふだんは**エンコードと同じ ffmpeg に相乗りする** (`scanReader` の `outputs` をエンコードする出口のあとに足す。
+ * ふだんは**エンコードと同じ ffmpeg で一緒に行う** (`scanReader` の `outputs` をエンコードする出口のあとに足す。
  * `encoder.ts`)。ここの `scan` が自分で ffmpeg を起こすのは、ロゴを覚え直して枠だけ読み直すときと、
  * CM 検出だけやり直すとき。
  *
- * **材料は標準エラーに出させない。** ffmpeg はログを書けなければ黙って捨てるので、エンコードに相乗りさせると
+ * **材料は標準エラーに出させない。** ffmpeg はログを書けなければ黙って捨てるので、エンコードと一緒に行うと
  * 行が落ちる (実測 30分で 54712 行のうち 1 行)。ファイルへ書かせれば落ちない。標準エラーから読むのは入れ物の尺 (`Duration:`) だけ。
  */
 
@@ -165,7 +165,7 @@ export function scanOutputs(want: ScanWant, files: { cuts: string; silences: str
     return args;
 }
 
-/** ffmpeg の出力を読んで材料にする。エンコードに相乗りするときも、自分で読むときも同じもの */
+/** ffmpeg の出力を読んで材料にする。エンコードと一緒に行うときも、自分で読むときも同じもの */
 export interface ScanReader {
     /** ffmpeg に足す出口 (`scanOutputs`) */
     outputs: string[];
@@ -181,7 +181,7 @@ export interface ScanReader {
 }
 
 /**
- * 書き出しの置き場。読み手ごとに一時フォルダを1つ作る (名前は他と重ならない)。
+ * 書き出しの置き場。読み取りごとに一時フォルダを1つ作る (名前は他と重ならない)。
  * **パスはフィルタの引数に入る**ので、`:` `,` などを含まない一時フォルダの下に固定の名前で置く
  */
 function scratch(): { dir: string; cuts: string; silences: string } {
@@ -242,7 +242,7 @@ function scanArgs(input: string, outputs: string[], before: string[] = []): stri
 
 const PROGRESS = /^out_time_us=(\d+)$/;
 
-/** 録画を1回だけ復号して、CM 検出の材料を取る (エンコードに相乗りしないとき) */
+/** 録画を1回だけ復号して、CM 検出の材料を取る (エンコードと一緒に行わないとき) */
 export async function scan(
     input: string,
     options: ScanOptions & { onTime?: (seconds: number) => void },

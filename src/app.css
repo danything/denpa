@@ -35,8 +35,8 @@
     /*
 	 * 色は**主の色ひとつ**と、状態の色 4 つだけ。主の色は Blades (Pico) の既定の azure を
 	 * そのまま使う (上書きしない。アイコンの水色とも揃う)。
-	 * 状態の色も Pico の色見本の段から選ぶ (録画中 red・成功 jade・注意 amber・知らせ cyan)。
-	 * 「知らせ」は azure と並ぶと見分けが付かないので、緑寄りの cyan にしてある
+	 * 状態の色も Pico の色見本の段から選ぶ (録画中 red・成功 jade・注意 amber・通知 cyan)。
+	 * 「通知」は azure と並ぶと見分けが付かないので、緑寄りの cyan にしてある
 	 *
 	 * **塗るのは「いま動いているもの」と「押すと戻せないもの」だけ。**
 	 * 以前は予約済み(青)・視聴可能(緑)・取消(赤枠)が行ごとに並んでいて、
@@ -652,7 +652,7 @@ button.danger:not(.outline):is(:hover, :active, :focus) {
     color: inherit;
     border: 1px solid transparent;
 }
-/* 淡い地は、状態の色を地の色 (--dp-surface) に 14% 混ぜる (知らせは 10%)。バッジと知らせで同じ考え */
+/* 淡い地は、状態の色を地の色 (--dp-surface) に 14% 混ぜる (通知は 10%)。バッジと通知で同じ考え */
 .tag.success {
     background: color-mix(in srgb, var(--dp-ok) 14%, var(--dp-surface));
     color: var(--dp-ok-text);
@@ -689,9 +689,9 @@ button.danger:not(.outline):is(:hover, :active, :focus) {
     color: #fff;
 }
 
-/* ---- 知らせ ---- */
+/* ---- 通知 ---- */
 /*
- * 一言の知らせ。**地を塗るのではなく、左の線で種類を示す。**
+ * 一言の通知。**地を塗るのではなく、左の線で種類を示す。**
  * 色で塗りつぶすと、暗いほうでは濁った帯になって字が読みにくかった
  */
 .notice {

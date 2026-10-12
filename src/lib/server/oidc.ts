@@ -308,7 +308,7 @@ export function allowed(claims: Claims): { ok: true } | { ok: false; reason: str
     if (held.length === 0) {
         /*
          * **グループが多い人はここに来ます。** Entra はクレームが大きくなりすぎると
-         * `groups` の代わりに `_claim_names` を入れて「Graph を叩いて取れ」と言う。
+         * `groups` の代わりに `_claim_names` を入れて「Graph を呼んで取れ」と言う。
          * 黙って弾くと「なぜか自分だけ入れない」になるので、理由を出す
          */
         const overflow = claims._claim_names?.['groups'] !== undefined;

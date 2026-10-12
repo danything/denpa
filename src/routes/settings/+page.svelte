@@ -255,8 +255,8 @@
         </section>
 
         <!--
-            テレビのアプリ (danything/denpa-tv) に渡した鍵。家の外から OIDC 越しに使うテレビは
-            QR でペアリングして鍵を持つ (信頼するネットワークの中なら鍵は要らない)。
+            テレビのアプリ (danything/denpa-tv) に渡したアクセストークン。家の外から OIDC 越しに使うテレビは
+            QR でペアリングしてアクセストークンを持つ (信頼するネットワークの中なら要らない)。
             なくしたテレビ・手放したテレビはここで止める
         -->
         <section class="panel card" data-testid="devices-card">

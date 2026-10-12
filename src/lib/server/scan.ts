@@ -57,7 +57,7 @@ const CHANNEL_RANGES: Record<ScannableType, { min: number; max: number }> = {
     CS: { min: 2, max: 24 },
 };
 
-/** BS は1つの物理チャンネルに最大4本の TS が相乗りしている */
+/** BS は1つの物理チャンネルに最大4本の TS が入っている */
 const BS_SLOTS = 4;
 
 /**
@@ -99,7 +99,7 @@ export async function readServices(
     stream: ReadableStream<Uint8Array>,
     timeout = TUNE_TIMEOUT,
     abort?: AbortSignal,
-    /** 同じ流れから番組表も拾う。読む時間は延ばさない (揃った時点で打ち切るのは同じ) */
+    /** 同じストリームから番組表も取得する。読む時間は延ばさない (揃った時点で打ち切るのは同じ) */
     epg?: EpgReader,
 ): Promise<ScanResult> {
     const reader = new ServiceReader();
@@ -362,7 +362,7 @@ class Scanner {
             } catch (error) {
                 /*
                  * チューナーが全部塞がっている。**飛ばさずに待つ。**
-                 * 録画中のチューナーは蹴れないので、ここで諦めるとその
+                 * 録画中のチューナーは取り上げられないので、ここで諦めるとその
                  * チャンネルだけ設定から消える
                  */
                 if (error instanceof TunerBusyError) {
@@ -458,7 +458,7 @@ async function runScan(targets: [ScannableType, string[]][]): Promise<void> {
          */
         await sync().catch(() => undefined);
         // 局が入ったので、スキャン中に拾った番組表を書ける
-        // ついでの保存なので、失敗しても局の知らせと番組表集めは止めない
+        // ついでの保存なので、失敗しても局の通知と番組表集めは止めない
         if (scanner.events.length > 0) {
             try {
                 const saved = savePrograms(scanner.events);

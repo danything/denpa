@@ -6,7 +6,7 @@ import { recordings } from './schema';
 import type { Payload } from './webhook';
 
 /**
- * 知らせ (webhook) に載せる録画の要点。録画とエンコードの節目で同じ形式。
+ * 通知 (webhook) に載せる録画の要点。録画とエンコードの節目で同じ形式。
  * webhook.ts に置かないのは、試験がそちらを差し替える (`disk.test.ts`) ため
  */
 export function recordingSummary(recording: Recording): NonNullable<Payload['recording']> {

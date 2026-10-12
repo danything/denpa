@@ -68,7 +68,7 @@ public class Px4TunerTests
         /// <summary>この番目 (1 から) の ATTACH_STREAM を NOT_FOUND で断る</summary>
         public int RejectAttach { get; init; }
 
-        /// <summary>最初の流れだけ、これだけ流したら STREAM_END (この番号) で止める</summary>
+        /// <summary>最初のストリームだけ、これだけ流したら STREAM_END (この番号) で止める</summary>
         public (int Frames, uint Code)? EndFirstStream { get; init; }
 
         /// <summary>どちらのふりをするか (asicend は枠の頭とソケットの置き場だけ違う。AsicenTests)</summary>
@@ -162,7 +162,7 @@ public class Px4TunerTests
             }
             finally
             {
-                // 本物は接続が閉じると借りたものを返し、流れも畳む
+                // 本物は接続が閉じると借りたものを返し、ストリームも畳む
                 lock (_gate)
                 {
                     if (_controlClient == client)
@@ -288,7 +288,7 @@ public class Px4TunerTests
             }
             finally
             {
-                // 本物は閉じた stream.sock の流れを取り消す (lease は借りたまま)
+                // 本物は閉じた stream.sock のストリームを取り消す (lease は借りたまま)
                 lock (_gate)
                 {
                     if (_attachments == attachment) _active = false;
@@ -414,7 +414,7 @@ public class Px4TunerTests
         ReadMark(tuner.Output);
 
         px4d.DropControl();
-        // 本物は借りたものを返して流れも畳む。TS が尽きれば Tuned が落ちる
+        // 本物は借りたものを返してストリームも畳む。TS が尽きれば Tuned が落ちる
         await WaitUntil(() => !tuner.Tuned, cancel);
 
         tuner.Tune(T28, ChannelTable.NoStreamId);

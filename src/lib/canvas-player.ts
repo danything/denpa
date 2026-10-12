@@ -17,7 +17,7 @@
  *
  * - **飛ぶ** … 持っているものを捨てて、飛び先からリクエストし直す (`seek`)。サーバは飛び先の少し手前 (鍵のコマ・
  *   1 秒前) から流すので、手前は鳴らさず描かない (`RawEngine.reset` の `from`)。描けるまでは前の映像のまま
- * - **先へ読みすぎない** … 手元が `AHEAD` 秒を超えたら読むのを待つ (fetch の流れはそこで詰まり、サーバも
+ * - **先へ読みすぎない** … 手元が `AHEAD` 秒を超えたら読むのを待つ (fetch のストリームはそこで詰まり、サーバも
  *   送るのを待つ)。デコードし始める前 (デコーダの読み込み中) はバイト数で区切る (`EARLY_BYTES`)
  * - **終わり** … 尻まで読んだら `finish`。残りを鳴らしきったら `ended`
  * - **切れたら** 観ていた位置からリクエストし直す (`remux-player.ts` と同じ数)。混んでいて断られたらリクエストし直さない
@@ -136,7 +136,7 @@ export function canvasPlayer(options: CanvasOptions): CanvasPlayer {
     let ended = false;
     /** 最後に分かった位置 (秒)。止めている・貯めている間はこれを返す */
     let time = Math.max(0, options.start);
-    /** 元の TS の物差しの 0 (PTS)。流れごとに応答で知る */
+    /** 元の TS の物差しの 0 (PTS)。ストリームごとに応答で知る */
     let origin = 0;
     let audio = options.audio;
     let run = 0;
@@ -274,7 +274,7 @@ export function canvasPlayer(options: CanvasOptions): CanvasPlayer {
             // 尻まで読んだ。残りを鳴らしきったら終わり
             engine.finish();
         } catch (error) {
-            // 読みかけの流れは手放す (リクエストし直すときは新しく読む)
+            // 読みかけのストリームは手放す (リクエストし直すときは新しく読む)
             void reader?.cancel().catch(() => undefined);
             if (mine !== run || closed) return;
             // 繋がらない・途中で落ちた・サーバの 5xx ならリクエストし直す。4xx・読めない中身は何度やっても同じ

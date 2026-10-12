@@ -105,7 +105,7 @@ describe('retryWhileBusy', () => {
 });
 
 /**
- * **録画中の予約がどのチューナーにいるかは、エージェントの一覧の読み手から読む** (`recordingHolds`)。
+ * **録画中の予約がどのチューナーにいるかは、エージェントの一覧の利用者から読む** (`recordingHolds`)。
  * 名乗り (`rec <録画ID>`) の書き方が変わると黙って読めなくなり、録画中のチューナーを空きとして
  * 割り振ってしまうので、書くほうと読むほうを対にして押さえる
  */
@@ -132,7 +132,7 @@ describe('recordingHolds', () => {
         expect(recordingOf('rec 12x')).toBeNull();
     });
 
-    test('録画の読み手がいるチューナーを、録画が終わるまで塞ぐ', () => {
+    test('録画の利用者がいるチューナーを、録画が終わるまで塞ぐ', () => {
         const ends = new Map([
             [7, 1_000],
             [8, 2_000],
@@ -179,10 +179,10 @@ describe('recordingHolds', () => {
 
 /**
  * **引き継ぎ (`after`) は、選局の API にそのまま並べて渡す。** エージェントは何度でも書ける
- * `after` を読み、その読み手をもう離れたものとして選ぶ (docs/agent.md「選ぶ順の約束」の4)
+ * `after` を読み、その利用者をもう離れたものとして選ぶ (docs/agent.md「選ぶ順の約束」の4)
  */
 describe('openChannelStream の引き継ぎ', () => {
-    test('止めた録画の読み手を after に並べる', async () => {
+    test('止めた録画の利用者を after に並べる', async () => {
         const asked: URLSearchParams[] = [];
         const agent = Bun.serve({
             port: 0,

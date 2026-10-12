@@ -63,7 +63,7 @@ function client(oidc: OidcStack, { xff = OUTSIDE, host = 'denpa.test' } = {}) {
     };
 }
 
-/** 認可エンドポイントまで行って、戻ってきた callback を叩く */
+/** 認可エンドポイントまで行って、戻ってきた callback を呼ぶ */
 async function login(get: ReturnType<typeof client>) {
     const started = await get('/login');
     const authorize = started.res.headers.get('location') ?? '';
@@ -148,7 +148,7 @@ test.describe('OIDC でのログイン', () => {
     });
 
     test('途中の控えが無ければ断る', async ({ oidc }) => {
-        // Cookie を持たずにいきなり callback を叩く
+        // Cookie を持たずにいきなり callback を呼ぶ
         const get = client(oidc);
         const { res } = await get('/login/callback?code=code-1&state=x');
         expect(res.status).toBe(403);

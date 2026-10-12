@@ -167,10 +167,10 @@ function tunerStatus() {
     });
 }
 
-/** 読み手ごとの止める関数。蹴るときと引き継ぐときに、こちらから流れを閉じる */
+/** 利用者ごとの止める関数。取り上げるときと引き継ぐときに、こちらからストリームを閉じる */
 const kicks = new WeakMap<object, AbortController>();
 
-/** 選局を空ける。そこにいた読み手の流れを閉じる */
+/** 選局を空ける。そこにいた利用者のストリームを閉じる */
 function vacate(index: number): void {
     const lease = leases.get(index);
     if (lease === undefined) return;
@@ -183,13 +183,13 @@ function vacate(index: number): void {
  * 前から見て、受けられて次のどれかに当たる最初のチューナーを使う。
  *
  * - 空いているチューナー
- * - 引き継ぐ読み手 (`after`) しかいないチューナー。その読み手は正常に終わらせる
- * - 同じチャンネルを弱い読み手しか読んでいないチューナー。選局し直さずに乗る (`join`)
+ * - 引き継ぐ利用者 (`after`) しかいないチューナー。その利用者は正常に終わらせる
+ * - 同じチャンネルを弱い利用者しか読んでいないチューナー。選局し直さずに乗る (`join`)
  *
- * **空きが無ければ、自分より弱い読み手しかいないチューナーを蹴って使う** (約束の2)。ライブが録画に
- * 蹴られる場面 (`34-live-yield.spec.ts`) を作るため。本物は空きがあっても順の前のチューナーを蹴るが、
+ * **空きが無ければ、自分より弱い利用者しかいないチューナーを取り上げて使う** (約束の2)。ライブが録画に
+ * チューナーを取り上げられる場面 (`34-live-yield.spec.ts`) を作るため。本物は空きがあっても順の前のチューナーを取り上げるが、
  * ここでは**空きが無いときだけ**にしてある — 偽エージェントは spec をまたいで共有で、空きがあるのに
- * 蹴ると、裏で回っている番組表集めやロゴ集めの見え方まで変わる
+ * 取り上げると、裏で回っている番組表集めやロゴ集めの見え方まで変わる
  */
 function pick(
     type: string,
@@ -268,7 +268,7 @@ function openStream(url: URL, signal: AbortSignal): Response {
     if (type === '' || channel === '') return json({ error: 'type と channel が必要です' }, 400);
     const services = on(type, channel);
 
-    // 自分と同じか強い読み手が同じチャンネルを読んでいれば相乗り (約束の3)。無ければ選ぶ
+    // 自分と同じか強い利用者が同じチャンネルを読んでいれば選局を共有 (約束の3)。無ければ選ぶ
     let index = [...leases.entries()].find(
         ([, lease]) =>
             lease.type === type &&
@@ -281,8 +281,8 @@ function openStream(url: URL, signal: AbortSignal): Response {
         index = picked.index;
         /*
          * **放送の無いチャンネルは、チューナーを取ってから選局に落ちる** (本物と同じ順)。1バイトも送る前なので、
-         * 理由を付けて 500 で返す (docs/agent.md「選局は、読み手が切るまで終わらない」)。
-         * 空けたチューナー (蹴った・引き継いだ相手) は戻らない。選局が無いまま空きになる
+         * 理由を付けて 500 で返す (docs/agent.md「選局は、利用者が切るまで終わらない」)。
+         * 空けたチューナー (取り上げた・引き継いだ相手) は戻らない。選局が無いまま空きになる
          */
         if (services.length === 0) {
             emit('tuners');
@@ -304,11 +304,11 @@ function openStream(url: URL, signal: AbortSignal): Response {
     emit('tuners');
 
     const at = index;
-    // リクエストした側が閉じたときと、蹴られた・引き継がれたとき
+    // リクエストした側が閉じたときと、取り上げられた・引き継がれたとき
     const ended = AbortSignal.any([signal, kick.signal]);
     ended.addEventListener('abort', () => {
         lease.users = lease.users.filter((u) => u !== user);
-        // 蹴られた・引き継がれたあとのチューナーは別の選局が使っている。そちらは消さない
+        // 取り上げられた・引き継がれたあとのチューナーは別の選局が使っている。そちらは消さない
         if (lease.users.length === 0 && leases.get(at) === lease) leases.delete(at);
         emit('tuners');
     });
@@ -355,7 +355,7 @@ const options: Bun.ServeOptions = {
          * エージェントの Pod が入れ替わったときと同じ壊れ方。
          *
          * **ストリームを `controller.error()` で壊すのでは足りない。** それだと
-         * 読み手には EOF として届き (実測)、denpa は前から取り直せていた。
+         * 利用者には EOF として届き (実測)、denpa は前から取り直せていた。
          * 直したかったのは例外で切れたほうなので、本当に接続を壊す。
          *
          * この応答を返しきってから壊す (返す前に壊すと、リクエストした側が結果を

@@ -73,7 +73,7 @@ export interface Stack {
     encodeArgsFile: string;
 }
 
-/** 資格情報を持たずに叩く関数。返るのは素の Response */
+/** 資格情報を持たずに呼ぶ関数。返るのは素の Response */
 type Anonymous = (path: string, init?: RequestInit) => Promise<Response>;
 
 interface Started {
@@ -129,7 +129,7 @@ async function waitFor(url: string, started: Started, what: string): Promise<voi
 async function stop(started: Started): Promise<void> {
     if (started.proc.exitCode !== null) return;
     started.proc.kill('SIGTERM');
-    // SHUTDOWN_WAIT=0 なのですぐ止まる。それでも降りてこなければ叩き落とす
+    // SHUTDOWN_WAIT=0 なのですぐ止まる。それでも降りてこなければ強制終了する
     const until = Date.now() + 5000;
     while (started.proc.exitCode === null && Date.now() < until) {
         await new Promise((resolve) => setTimeout(resolve, 50));
@@ -193,7 +193,7 @@ export async function boot(index: number): Promise<{ stack: Stack; shutdown: () 
             HOST: '127.0.0.1',
             PORT: String(appPort),
             /*
-             * 平文で叩いていることは伝えない。前段の無い `http://<IP>:3000` と同じく、
+             * 平文で呼んでいることは伝えない。前段の無い `http://<IP>:3000` と同じく、
              * server.js が受けた接続から `x-forwarded-proto: http` を入れる (#437)
              */
             DENPA_DB: `${root}/denpa.db`,
@@ -216,7 +216,7 @@ export async function boot(index: number): Promise<{ stack: Stack; shutdown: () 
             HW_DEVICES: `${stack.hwDir}/renderD*`,
             FAKE_FFMPEG_ENCODE_ARGS_FILE: stack.encodeArgsFile,
             /*
-             * 新しい版の知らせ。GitHub の代わりに偽通知先が「最新のリリース」を返す
+             * 新しい版の通知。GitHub の代わりに偽通知先が「最新のリリース」を返す
              * (既定は無し)。動いている版は古めにして、置いたリリースが必ず新しく見えるように
              */
             DENPA_VERSION: 'v1.0.0',

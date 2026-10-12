@@ -55,7 +55,7 @@ export function load() {
             choices: Array.from({ length: TRANSCODE_LIMIT_MAX }, (_, i) => i + 1),
         },
         webhooks: orm().select().from(webhooks).orderBy(webhooks.id).all(),
-        /** ペアリングしたテレビ (アプリの鍵。device-auth.ts) */
+        /** ペアリングしたテレビ (アクセストークン。device-auth.ts) */
         devices: liveTokens(),
         events: EVENTS,
         migrate: {
@@ -179,7 +179,7 @@ export const actions = {
         return { success: true };
     },
 
-    /** テレビの鍵を止める。テレビは次に API を叩いたときに 401 を受けて、ペアリングし直しになる */
+    /** テレビのアクセストークンを無効にする。テレビは次に API を呼んだときに 401 を受けて、ペアリングし直しになる */
     revokeDevice: async ({ request }) => {
         const form = await request.formData();
         const id = Number(form.get('id'));

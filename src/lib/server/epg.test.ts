@@ -500,10 +500,10 @@ describe('savePrograms', () => {
 
     /**
      * **ライブで観ている局の「いま・次」(EIT[p/f]) を写す** (`server/live.ts`)。
-     * 番組表と違うときだけ書き、画面に読み直させる (`programs` の知らせ)
+     * 番組表と違うときだけ書き、画面に読み直させる (`programs` の通知)
      */
     describe('followOnAir', () => {
-        /** 写して、書いたかと届いた知らせ (`programs`) の数を返す */
+        /** 写して、書いたかと届いた通知 (`programs`) の数を返す */
         function follow(events: ReturnType<typeof event>[]): { wrote: boolean; told: number } {
             let told = 0;
             const unsubscribe = subscribe((name) => {
@@ -564,7 +564,7 @@ describe('savePrograms', () => {
  * 枠はあるが放送していない局を、番組表から外す。
  *
  * - 終わったチャンネル (BS103 は 2024年3月で放送終了。SDT に枠だけ残る)
- * - 相乗り中のサブチャンネル (NHK総合2 は、マルチ編成でない間ずっと名前が無い)
+ * - 本チャンネルと同じ番組を流しているサブチャンネル (NHK総合2 は、マルチ編成でない間ずっと名前が無い)
  */
 describe('番組表に出す局', () => {
     // 別々の放送局 (TS が違う)。サブチャンネルは下で別に作る
@@ -585,7 +585,7 @@ describe('番組表に出す局', () => {
         const services = [service(1), service(2), service(3)];
         const programs = [
             program(1, 'ニュース'),
-            // 相乗り中のサブチャンネル。名前の無い番組だけが並ぶ
+            // 本チャンネルと同じ番組を流しているサブチャンネル。名前の無い番組だけが並ぶ
             program(2, ''),
             program(2, ''),
             // 3 は終わったチャンネル。番組が1つも来ない
@@ -614,7 +614,7 @@ describe('番組表に出す局', () => {
         expect(airing(services, programs).map((s) => s.id)).toEqual([1, 3]);
     });
 
-    test('BS も同じ TS のサブは相乗り中なら出さない。TS が別なら同じ会社でも出す', () => {
+    test('BS も同じ TS のサブは同じ番組を流している間は出さない。TS が別なら同じ会社でも出す', () => {
         const bs = (sid: number, channel: string) => ({ id: sid, service_id: sid, channel, type: 'BS' });
         const services = [
             // BS朝日1〜3

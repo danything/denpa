@@ -4,14 +4,14 @@
  *     エージェント (MPEG-TS) → ffmpeg (fMP4) → 割る → WebSocket → MSE
  *
  * [stream.md](../../../docs/stream.md) §4 の1番目にあたる。**字幕も同じ
- * ffmpeg から写して受け、同じ WebSocket に相乗りする** (`captions.ts`) — 別々に
- * 起こすと時刻が揃わないため。データ放送 (§5.6) も同じ WebSocket に相乗りする (`databroadcast.ts`)。
+ * ffmpeg から写して受け、同じ WebSocket で一緒に送る** (`captions.ts`) — 別々に
+ * 起こすと時刻が揃わないため。データ放送 (§5.6) も同じ WebSocket で一緒に送る (`databroadcast.ts`)。
  *
  * ## 同じチャンネルは1本でエンコードする
  *
  * 2人が同じチャンネルを見ても、チューナーも ffmpeg も1つで足りる。
  * **数えているのは見ている人の数**で、0になったら畳む。エージェント側でも
- * 同じチャンネルは相乗りになるが、こちらで畳まないと ffmpeg が residual に残る。
+ * 同じチャンネルは選局を共有するが、こちらで畳まないと ffmpeg が residual に残る。
  *
  * ## 途中から入ってきた人
  *
@@ -561,7 +561,7 @@ const CLOCK_EVERY = 5_000;
  */
 const ON_AIR_EVERY = 60_000;
 
-/** 知らせ・データ放送は JSON にして運ぶ */
+/** 通知・データ放送は JSON にして運ぶ */
 function json(value: unknown): Uint8Array {
     return new TextEncoder().encode(JSON.stringify(value));
 }
@@ -648,8 +648,8 @@ class Session {
     private tsid: number | null = null;
     private stopped = false;
     /**
-     * 自分の読み手がいるチューナー (`GET /denpa/tuners` の `index`)。使えたら覚える (`locate`)。
-     * **蹴られたら、このチューナーにいる録画が蹴った相手** (`live-yield.ts`)。蹴られたあとでは自分の読み手が
+     * 自分の利用者がいるチューナー (`GET /denpa/tuners` の `index`)。使えたら覚える (`locate`)。
+     * **取り上げられたら、このチューナーにいる録画が取り上げた相手** (`live-yield.ts`)。取り上げられたあとでは自分の利用者が
      * 一覧から消えているので、前に覚えておくしかない
      */
     private tuner: number | null = null;
@@ -657,13 +657,13 @@ class Session {
     private locating: Promise<void> = Promise.resolve();
     /** チューナーから1塊でも届いたか。届く前に途切れたのは選局の失敗で、届いたあとなら外された (`lose`) */
     private fed = false;
-    /** チューナーからの流れが、こちらが畳む前に途切れた (蹴られた・繋ぎが切れた) */
+    /** チューナーからのストリームが、こちらが畳む前に途切れた (取り上げられた・繋ぎが切れた) */
     private cut = false;
 
     constructor(
         readonly channelType: string,
         readonly channel: string,
-        /** 局の内部ID (`services.id`)。相乗りの目印に使う */
+        /** 局の内部ID (`services.id`)。共有の目印に使う */
         readonly serviceId: number,
         /** 放送が名乗っている番号。**ffmpeg に渡すのはこちら** (NowPlaying の説明) */
         readonly program: number,
@@ -675,7 +675,7 @@ class Session {
         readonly track: number,
         /**
          * **エンコードせずに放送そのままの TS を配るか** (stream.md §5.5。`runRaw`)。音声もエンコード方式も画面が
-         * 決めるので、相乗りの目印からも外れる (`key`)
+         * 決めるので、共有の目印からも外れる (`key`)
          */
         readonly raw: boolean,
         /**
@@ -969,7 +969,7 @@ class Session {
         this.tell({ type: 'error', message });
     }
 
-    /** エージェントに名乗る読み手の印。同じ局を観ている人どうしで同じになる (チューナーも相乗り) */
+    /** エージェントに名乗る利用者の印。同じ局を観ている人どうしで同じになる (チューナーも共有) */
     private get use(): StreamUse {
         return `live ${this.channelType}/${this.channel}`;
     }
@@ -991,7 +991,7 @@ class Session {
         return stream;
     }
 
-    /** 自分の読み手がいるチューナーを覚える。訊けなければ覚えないまま (蹴られても録画を名指しできないだけ) */
+    /** 自分の利用者がいるチューナーを覚える。訊けなければ覚えないまま (取り上げられても録画を名指しできないだけ) */
     private async locate(): Promise<void> {
         try {
             this.tuner = tunerOf(await getTuners(), this.channelType, this.channel, this.use);
@@ -1007,13 +1007,13 @@ class Session {
      * 続きとして読めないため。リクエストし直せばバッファごと作り直しになり、同じ局のライブとして素直に繋がる。
      * リクエストし直すときの使い方はいつもの選局と同じ (`openWhenFree`)。約束どおり使ってよいチューナーがあればそこに入る。
      *
-     * 録画に蹴られたのなら、その録画を添える (`live-yield.ts`)。画面は**リクエストし直しても入れなかったとき
-     * だけ**それの追っかけに切り替える。HTTP で観ているもの (テレビのアプリ) には流れの中で伝えられ
-     * ないので、同じものを知らせ (`yielded`) でも流す
+     * 録画にチューナーを取り上げられたのなら、その録画を添える (`live-yield.ts`)。画面は**リクエストし直しても入れなかったとき
+     * だけ**それの追っかけに切り替える。HTTP で観ているもの (テレビのアプリ) にはストリームの中で伝えられ
+     * ないので、同じものを通知 (`yielded`) でも流す
      */
     private async lose(label: string): Promise<void> {
         /*
-         * 使った直後に蹴られたら、覚えに行った答えがまだ戻っていないことがある。待ってから読む。
+         * 使った直後に取り上げられたら、覚えに行った答えがまだ戻っていないことがある。待ってから読む。
          * それでも一覧から自分が消えたあとに訊いていたら覚えられない (録画を名指しできず、リクエストし直すだけになる)
          */
         await this.locating;
@@ -1034,7 +1034,7 @@ class Session {
         const out = filter === null ? chunk : filter.filter(chunk);
         if (filter !== null) this.tsid = filter.transportStreamId;
         if (out.length === 0) return out;
-        // **188 バイトに切るのは1回だけ** (3つの読み手で使い回す。ライブの処理でいちばん重いところ)
+        // **188 バイトに切るのは1回だけ** (3つのパーサで使い回す。ライブの処理でいちばん重いところ)
         const receivedAt = Date.now();
         const data = this.data;
         let ait: AitReader | null = null;
@@ -1084,7 +1084,7 @@ class Session {
      * ffmpeg が局を見つけられずに降りる (`encodeArgs` の説明)。
      *
      * **量はほとんど減らない。** 実測は tvk で 17.6 → 16.8 Mbit/s、日テレで
-     * 17.3 → 14.5 Mbit/s。相乗りしている局は**同じ ES を指している**ことが
+     * 17.3 → 14.5 Mbit/s。同じ TS に入っている局は**同じ ES を指している**ことが
      * 多いので (tvk1/2/3 は同じ中継を流している)、落ちるのは他局ぶんの表と
      * 詰め物だけ。狙いは量ではなく、**ffmpeg に局を探させないこと**。
      *
@@ -1123,7 +1123,7 @@ class Session {
                 try {
                     next = await stream.next();
                 } catch (error) {
-                    // チューナーの流れが例外で切れた (エージェントが落ちた・蹴られた)。追っかけのファイルは数えない
+                    // チューナーのストリームが例外で切れた (エージェントが落ちた・取り上げられた)。追っかけのファイルは数えない
                     if (!own) this.cut = true;
                     throw error;
                 }
@@ -1347,7 +1347,7 @@ class Session {
      * Hybridcast が載っていれば、在ることと行き先を伝える。
      *
      * **同じものは伝え直さない。** 放送は同じ表を数秒ごとに繰り返し流すので、
-     * 素直に配ると毎秒の知らせになる。
+     * 素直に配ると毎秒の通知になる。
      *
      * `autostart` のものだけ出す判断はしません — テレビが勝手に始めるかどうかの
      * 違いでしかなく、`present` (人が呼んだら始めるもの) も**在ることに変わりは
@@ -1527,7 +1527,7 @@ class RawCaptions {
  * 二カ国語を主音声で見ている人と副音声で見ている人は別のものをエンコードしている。
  * **エンコード方式 (H.264 / AV1) も同じ** — 選んだ方式が違えば別のものになる。
  * 混ぜると片方が意図しないものを見ることになる。チューナーはエージェント側で
- * 相乗りになるので、増えるのは ffmpeg だけ。
+ * 共有になるので、増えるのは ffmpeg だけ。
  *
  * **字幕も入る。** 映像と同じ ffmpeg でエンコードするようになったので、何本目の字幕を
  * 出すかが違えば別のものになる (`encodeArgs`)。言語が複数ある放送でしか
@@ -1560,7 +1560,7 @@ function begin(
     return session;
 }
 
-/** 見に行く。既に同じものをエンコードしていれば相乗りする */
+/** 見に行く。既に同じものをエンコードしていれば、そのセッションを共有する */
 function watch(
     channelType: string,
     channel: string,
@@ -1603,7 +1603,7 @@ export const CHASE_STREAM_HOLD = 4 * 1024 * 1024;
  * 放送そのままでは効かない (全部の音声を送り、アプリが選ぶ)。
  *
  * 画面の視聴者と同じ取り合いに乗る — 同じ局・同じエンコード方式・**同じ音声**を誰かが見ていれば
- * 相乗りし (`key`)、最後の1人が抜けたら畳む。局が無ければ null
+ * 共有し (`key`)、最後の1人が抜けたら畳む。局が無ければ null
  */
 export function liveStream(
     serviceId: number,
@@ -1834,7 +1834,7 @@ export function recordingCaptions(recordingId: number, at: number): ReadableStre
 /**
  * エンコードしたもの (`Session`) を HTTP の応答に流すところ。ライブと追っかけで共通。
  *
- * 流すのは映像のコンテナ (init + 中身) と元のTSだけで、字幕・データ放送・知らせは捨てる。
+ * 流すのは映像のコンテナ (init + 中身) と元のTSだけで、字幕・データ放送・通知は捨てる。
  * エンコードできなくなったら・読み切ったら・チューナーから外されたら (`error` / `ended` / `lost`) 応答を閉じる。読むのが追いつかない
  * 相手も閉じる (溜め続けるとメモリが増え続け、fMP4 は途中を捨てると壊れる)。
  * `held` は溜まりすぎて送り込みを止めたいか (追っかけだけが使う。`CHASE_STREAM_HOLD`)
@@ -1894,7 +1894,7 @@ export function sessionStream(
  *
  * **画面はすぐ来る** — 実測で、ページを組みはじめてから WebSocket が繋がる
  * まで 160ms。それでも来ないなら開いたそばから離れた人なので、使ったままに
- * しない (ライブは録画の次に強いので、放っておくと番組表集めを蹴り続ける)。
+ * しない (ライブは録画の次に強いので、放っておくと番組表集めからチューナーを取り上げ続ける)。
  */
 const WARM_WAIT = 8_000;
 
@@ -2101,7 +2101,7 @@ export function attend(connection: Connection): void {
          * `watch` は既に誰かが見ているチャンネルなら、その場で持っている init を
          * 渡す (`Session.add`)。そのあとで `ready` を戻していた頃は、**渡した直後の
          * init を無かったことにして**いた — 以降の中身が全部 `hand` で止まり、
-         * 相乗りしたときだけ映像が出ない。
+         * 共有したときだけ映像が出ない。
          *
          * `tuned` も先に出す。MediaSource を作るのは画面側で、init はそれより先には使えない。
          */
@@ -2149,7 +2149,7 @@ export function attend(connection: Connection): void {
  * ([issue #16](https://github.com/danything/denpa/issues/16))。
  *
  * チューナーは使わない。録画が書き足している元のTSを追い読みして (`chase.ts`)、
- * ライブと同じ `Session` に流し込む。**相乗りはしない** — 観る位置が人ごとに
+ * ライブと同じ `Session` に流し込む。**共有はしない** — 観る位置が人ごとに
  * 違うので、同じものを観る2人はほぼ起きない。セッションの一覧 (`sessions`) にも
  * 載せない (見ている人が選び直すか抜ければ `leave` が畳む)。
  *

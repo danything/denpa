@@ -100,9 +100,9 @@ async function tellClients(message: unknown): Promise<void> {
 }
 
 /**
- * 知らせの宛先の控え。**画面側の控えが無い (先に消された) か、別の試み
+ * 通知の宛先の控え。**画面側の控えが無い (先に消された) か、別の試み
  * (やり直したあとに届いた前回の残骸) なら null** — やり直しの控えを
- * 前回の残骸の知らせが上書きしないように、印を照合する
+ * 前回の残骸の通知が上書きしないように、印を照合する
  */
 async function heldFor(event: BackgroundFetchEvent): Promise<OfflineVideo | null> {
     const parsed = parseFetchId(event.registration.id);

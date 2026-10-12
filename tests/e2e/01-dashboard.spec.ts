@@ -226,7 +226,7 @@ test.describe('ダッシュボードと画面遷移', () => {
         await expect(button).not.toHaveAttribute('aria-busy', 'true');
 
         /*
-         * 知らせは右下に浮いていて、自分で閉じられる。
+         * 通知は右下に浮いていて、自分で閉じられる。
          * 本文の上に差し込んでいた頃は、出た分だけ表が下へずれていた
          */
         await page.getByTestId('reconcile-result-close').click();
@@ -282,11 +282,11 @@ test.describe('ダッシュボードと画面遷移', () => {
      * (実機で「削除したあと画面が変わらないことがある」として出た。観る画面の
      * 削除は一覧へ戻る遷移を伴う)。
      *
-     * 知らせは録画が動いていれば勝手に飛んでくるので、重なるかどうかは運。
-     * ここでは行き先の読み込みを遅らせて窓を作り、その間に知らせを飛ばす
+     * 通知は録画が動いていれば勝手に飛んでくるので、重なるかどうかは運。
+     * ここでは行き先の読み込みを遅らせて窓を作り、その間に通知を飛ばす
      * (`reconcile` は `emit('recordings')` する)
      */
-    test('遷移中に知らせが来ても、押した先へ着く', async ({ page, request }) => {
+    test('遷移中に通知が来ても、押した先へ着く', async ({ page, request }) => {
         await syncEpg(request);
         await goto(page, '/');
 
@@ -306,12 +306,12 @@ test.describe('ダッシュボードと画面遷移', () => {
     /**
      * **持ち越した読み直しは、遷移が終わったら流れる。**
      *
-     * 遷移に重ねないよう持ち越す以上、流し忘れたら知らせが一度死ぬ。
+     * 遷移に重ねないよう持ち越す以上、流し忘れたら通知が一度死ぬ。
      * 遷移の終わりを `navigating` で見ていると**畳まれた遷移で真のまま残る**ので
      * 流れない。その遷移が持っている `complete` を見ているのはこのため
      * ([reload.svelte.ts](../../src/lib/reload.svelte.ts))。
      *
-     * 番組表は知らせを聞いていない画面なので、2回目の読み込みが来たならそれは
+     * 番組表は通知を聞いていない画面なので、2回目の読み込みが来たならそれは
      * **持ち越しが流れた証拠**にしかならない。
      *
      * **サービスワーカーは止める。** 動いていると2回目から先の取得があちら経由に
@@ -321,7 +321,7 @@ test.describe('ダッシュボードと画面遷移', () => {
     test.describe('持ち越した読み直し', () => {
         test.use({ serviceWorkers: 'block' });
 
-        test('遷移中に来た知らせは、着いてから読み直される', async ({ page, request }) => {
+        test('遷移中に来た通知は、着いてから読み直される', async ({ page, request }) => {
             await syncEpg(request);
             await goto(page, '/');
 
@@ -330,7 +330,7 @@ test.describe('ダッシュボードと画面遷移', () => {
                 // 前日・翌日の先読みは数に入れない (`type` が付く)。数えたいのは
                 // 「いま出している番組表そのもの」の読み込み
                 if (!route.request().url().includes('type=')) loads++;
-                // 1回目だけ遅らせて、知らせが遷移に重なる窓を作る
+                // 1回目だけ遅らせて、通知が遷移に重なる窓を作る
                 if (loads === 1) await new Promise((resolve) => setTimeout(resolve, 3000));
                 await route.continue();
             });

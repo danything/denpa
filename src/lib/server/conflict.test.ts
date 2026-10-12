@@ -528,7 +528,7 @@ describe('兼用のチューナーがあるとき (#668)', () => {
         expect(accepted.find((a) => a.reservation.id === 3)?.from).toBe(at(22));
     });
 
-    test('相乗りの相方が先に抜けても、残ったほうは同じチューナーに居続ける', () => {
+    test('選局を共有する相手が先に抜けても、残ったほうは同じチューナーに居続ける', () => {
         const { accepted } = assign(
             [
                 res({ id: 1, channel: 'T21', start_at: at(20), end_at: at(21) }),
