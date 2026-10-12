@@ -64,8 +64,8 @@
      */
     import { onDestroy } from 'svelte';
     import type { BMLBrowser, Indicator, IP } from 'web-bml';
-    import type { ResponseMessage } from 'web-bml/protocol';
     import { forget, write } from '#lib/keep.js';
+    import type { ResponseMessage } from '#lib/ts/bml-protocol.js';
     import StageNote from './StageNote.svelte';
 
     interface Props {

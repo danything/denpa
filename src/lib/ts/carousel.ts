@@ -32,25 +32,24 @@
  * テレビ朝日の入口の文書がまさにこれで、番組連動データ (`/50`) の DII を
  * 待ったまま止まり、**データ放送が何も出ませんでした** (実機の録画で再現)。
  *
- * `pcr` と `currentTime` は覚えない。**次がすぐ来る**もので、古いものを配ると
- * かえって時計が狂う。
+ * `currentTime` は覚えない。**次がすぐ来る**もので、古いものを配ると
+ * かえって時計が狂う。PCR は作らない (denpa では**映像そのものが時計**。受け側は
+ * `<video>` の再生位置で動いている)。
  *
  * ## 配る価値のあるものだけ通す
  *
  * `take` は「配る価値があるか」を返す。**サイドチャネルは映像と同じ1本**なので、
  * 中身の変わらないものを流し続けると、受け側がそれを捌くだけで手一杯になる。
  *
- * - **`pcr` は通さない。** 毎秒50個ほど来るうえ、denpa では**映像そのものが時計**
- *   (受け側は `<video>` の再生位置で動いている)。放送の PCR を渡す先が無い
- * - **`pmt` と `programInfo` は変わったときだけ。** 放送は同じ表を何度も送るので、
- *   そのまま通すと同じものが延々流れる
+ * **`pmt` と `programInfo` は変わったときだけ。** 放送は同じ表を何度も送るので、
+ * そのまま通すと同じものが延々流れる。
  *
  * 実際に詰まらせたことがある。作りものの放送 (e2e) で表を細かく送ったら、
  * **受け側の 250ms の目覚ましが回らなくなって操作列が消えなくなった**。
  * 映像が出ないより先に、こういう形で出る
  */
 
-import type { ResponseMessage } from 'web-bml/protocol';
+import type { ResponseMessage } from './bml-protocol';
 
 /**
  * 覚えておくモジュールの上限。**溜め込みすぎない歯止め。**
@@ -79,8 +78,6 @@ export class Carousel {
      * @returns 配る価値があるか (上の説明)
      */
     take(message: ResponseMessage): boolean {
-        // 時計は映像が持っている。放送の PCR は渡す先が無い
-        if (message.type === 'pcr') return false;
         if (message.type === 'pmt') {
             const same = this.pmt !== null && JSON.stringify(this.pmt) === JSON.stringify(message);
             this.pmt = message;

@@ -13,28 +13,20 @@
  * その一部だけで、残り (EIT/SDT/NIT・字幕の PES) は自前で読んでおり
  * ([eit.ts](eit.ts) / [psi.ts](psi.ts) / ffmpeg)、`@chinachu/aribts` も抱えずに済む。
  *
- * **出す形は web-bml のまま。** `web-bml/protocol` の `ResponseMessage` をそのまま
- * 作るので、描画側 (web-bml のブラウザ) と食い違えば型が見張る。
- *
- * 中身を読むところ (multipart の解体) だけは借りたままにしてある
- * (`entity_parser.ts`)。**依存の無いただの解析**で、書き直しても得るものが無い。
+ * **出す形は web-bml の頃のまま** ([bml-protocol.ts](bml-protocol.ts))。録画の隣の
+ * `.bml.jsonl` がこの形で残っているので、変えると前に録ったものが読めなくなる。
+ * モジュールの中身 (multipart) は [multipart.ts](multipart.ts) が解く。
  */
 
 import { Buffer } from 'node:buffer';
 import { inflateSync } from 'node:zlib';
-import {
-    EntityParser,
-    entityHeaderToString,
-    parseMediaType,
-    parseMediaTypeFromString,
-} from 'web-bml/entity-parser';
 import type {
     AdditionalAribBXMLInfo,
     ComponentPMT,
     ESEvent,
     ModuleFile,
     ResponseMessage,
-} from 'web-bml/protocol';
+} from './bml-protocol';
 import type { DiiModule } from './dsmcc';
 import {
     dataEventIdOf,
@@ -47,6 +39,7 @@ import {
     u32,
 } from './dsmcc';
 import { PID_TIME, parseTimeTable } from './eit';
+import { parseMediaType, readEntity } from './multipart';
 import { descriptors, PacketStream, PID_PAT, parsePat, pmtStreams, SectionAssembler } from './psi';
 
 const DESC_STREAM_IDENTIFIER = 0x52;
@@ -429,23 +422,23 @@ export class BmlDecoder {
  * 入っている。Type 記述子が無いときも中身は multipart なので、同じ扱いにする。
  */
 export function moduleFiles(data: Uint8Array, contentType: string | null): ModuleFile[] {
-    const declared = contentType === null ? null : parseMediaTypeFromString(contentType).mediaType;
+    const declared = contentType === null ? null : parseMediaType(contentType);
     if (declared !== null && !(declared.type === 'multipart' && declared.subtype === 'mixed')) {
         return [{ contentLocation: null, contentType: declared, dataBase64: base64(data) }];
     }
 
-    const entity = new EntityParser(Buffer.from(data)).readEntity();
-    if (entity?.multipartBody == null) return [];
+    const entity = readEntity(data);
+    if (entity?.parts == null) return [];
     const files: ModuleFile[] = [];
-    for (const part of entity.multipartBody) {
+    for (const part of entity.parts) {
         const location = part.headers.find((header) => header.name === 'content-location');
         const type = part.headers.find((header) => header.name === 'content-type');
         // どちらも必ず入っている。欠けているものは置き場所も読み方も分からない
         if (location === undefined || type === undefined) continue;
-        const mediaType = parseMediaType(type.value).mediaType;
+        const mediaType = parseMediaType(type.value);
         if (mediaType === null) continue;
         files.push({
-            contentLocation: entityHeaderToString(location),
+            contentLocation: location.value,
             contentType: mediaType,
             dataBase64: base64(part.body),
         });

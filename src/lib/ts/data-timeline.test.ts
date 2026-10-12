@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import type { ResponseMessage } from 'web-bml/protocol';
+import type { ResponseMessage } from './bml-protocol';
 import { captureDataBroadcast } from './data-capture';
 import { feedFor, type PlacedMessage, playbackMsAt, replayAt, toPlaybackTimeline } from './data-timeline';
 import {

@@ -6,7 +6,6 @@
  * 同じ1本に字幕もデータ放送も相乗りする作りなので、種別で振り分ける。
  */
 
-import type { ResponseMessage } from 'web-bml/protocol';
 import type { AudioTrack } from '#lib/arib.js';
 import { CAPTION_TEXT_VERSION, type CaptionPage } from '#lib/caption-text.js';
 import { CaptionPainter } from '#lib/components/player/caption-draw.js';
@@ -28,6 +27,7 @@ import {
 } from '#lib/live.js';
 import { RawEngine } from '#lib/raw/engine.js';
 import { rawUnsupported } from '#lib/raw/support.js';
+import type { ResponseMessage } from '#lib/ts/bml-protocol.js';
 import { type Cue, currentCue, insertCue, showing, trimCues } from '#lib/ts/captions.js';
 import { pickMediaSource } from '#lib/ts/media-source.js';
 import { CEILING, FLOOR, nextTarget, pacing } from '#lib/ts/pacing.js';
@@ -1355,8 +1355,8 @@ export function livePlayer() {
     /**
      * データ放送の知らせを受け取る先を預かる。**描く側が居るときだけ渡す。**
      *
-     * 渡す形は借りものの取り決めそのまま (`ResponseMessage`) なので、
-     * ここは素通しでいい (`web-bml/protocol`)。
+     * 渡す形は解く側と描く側の取り決め (`ResponseMessage`。`ts/bml-protocol.ts`) なので、
+     * ここは素通しでいい。
      *
      * **預かった時点で、待たせてあるぶんを先に流す** (`heldData`)
      */

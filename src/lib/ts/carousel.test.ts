@@ -113,9 +113,8 @@ describe('データ放送の覚え書き', () => {
     });
 
     /** 覚えないものは、渡すものにも数にも出てこない */
-    test('pcr と時刻は覚えない', () => {
+    test('時刻は覚えない', () => {
         const held = new Carousel();
-        held.take({ type: 'pcr', pcrBase: 1, pcrExtension: 0 } as unknown as Message);
         held.take({ type: 'currentTime', timeUnixMillis: 1 } as unknown as Message);
         expect(held.replay()).toEqual([]);
         expect(held.held).toBe(0);
@@ -126,11 +125,6 @@ describe('データ放送の覚え書き', () => {
      * ものを流し続けると受け側がそれを捌くだけで手一杯になる (実際に詰まらせた)
      */
     describe('配る価値のあるものだけ通す', () => {
-        test('pcr は通さない。時計は映像が持っている', () => {
-            const held = new Carousel();
-            expect(held.take({ type: 'pcr', pcrBase: 1, pcrExtension: 0 } as unknown as Message)).toBe(false);
-        });
-
         test('pmt は変わったときだけ', () => {
             const held = new Carousel();
             expect(held.take(pmt)).toBe(true);

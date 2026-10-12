@@ -17,7 +17,7 @@
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { open } from 'node:fs/promises';
 import { eq } from 'drizzle-orm';
-import type { ResponseMessage } from 'web-bml/protocol';
+import type { ResponseMessage } from '#lib/ts/bml-protocol.js';
 import { DataBroadcastCapture } from '#lib/ts/data-capture.js';
 import {
     type KeptRange,

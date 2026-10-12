@@ -20,8 +20,8 @@
  * 間隔が空く)。
  */
 
-import type { ResponseMessage } from 'web-bml/protocol';
 import { BmlDecoder } from '#lib/ts/bml.js';
+import type { ResponseMessage } from '#lib/ts/bml-protocol.js';
 import { Carousel } from '#lib/ts/carousel.js';
 
 export type { ResponseMessage };
