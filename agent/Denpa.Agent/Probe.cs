@@ -33,14 +33,6 @@ public static class Probe
     private static readonly TimeSpan Read = TimeSpan.FromSeconds(3);
 
     /// <summary>
-    /// ファイルを1つ復号する。**チューナーを使わずに B25 だけ確かめる。**
-    ///
-    /// <para>
-    /// 掛かったまま録れてしまったものを救うのにも使える (denpa からは
-    /// <c>/denpa/decode</c> が同じことをする)。
-    /// </para>
-    /// </summary>
-    /// <summary>
     /// 鍵を貰いに行く接続の TTL (<c>CARD_TTL</c>。常駐のときと同じ)。設定が読めなければ、
     /// 常駐のときと同じく理由を出して止まる (null)
     /// </summary>
@@ -57,6 +49,14 @@ public static class Probe
         }
     }
 
+    /// <summary>
+    /// ファイルを1つ復号する。**チューナーを使わずに B25 だけ確かめる。**
+    ///
+    /// <para>
+    /// 掛かったまま録れてしまったものを救うのにも使える (denpa からは
+    /// <c>/denpa/decode</c> が同じことをする)。
+    /// </para>
+    /// </summary>
     public static int Decode(string[] args)
     {
         var source = args.ElementAtOrDefault(1);
