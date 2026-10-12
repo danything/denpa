@@ -141,27 +141,58 @@ function tunerStatus() {
     });
 }
 
+/** 読み手ごとの止め口。蹴るときと引き継ぐときに、こちらから流れを閉じる */
+const kicks = new WeakMap<object, AbortController>();
+
+/** 選局を空ける。そこにいた読み手の流れを閉じる */
+function vacate(index: number): void {
+    const lease = leases.get(index);
+    if (lease === undefined) return;
+    leases.delete(index);
+    for (const user of lease.users) kicks.get(user)?.abort();
+}
+
 /**
- * どのチューナーに載せるか。種別が合う空きを前から1つ取るだけ (`rank` は定義の順にしてある)。
- * 引き継ぐ読み手 (`after`) しかいない本も空きとみなし、選んだらその読み手を正常に終わらせる
+ * どのチューナーに載せるか (docs/agent.md「選ぶ順の約束」。`rank` は定義の順にしてある)。
+ * 前から見て、受けられて次のどれかに当たる最初の本を使う。
+ *
+ * - 空いている本
+ * - 引き継ぐ読み手 (`after`) しかいない本。その読み手は正常に終わらせる
+ * - 同じチャンネルを弱い読み手しか読んでいない本。選局し直さずに乗る (`join`)
+ *
+ * **空きが無ければ、自分より弱い読み手しかいない本を蹴って使う** (約束の2)。ライブが録画に
+ * 蹴られる場面 (`34-live-yield.spec.ts`) を作るため。本物は空きがあっても順の前の本を蹴るが、
+ * ここでは**空きが無いときだけ**にしてある — 偽エージェントは spec をまたいで共有で、空きがあるのに
+ * 蹴ると、裏で回っている番組表集めやロゴ集めの見え方まで変わる
  */
-function assign(type: string, after: ReadonlySet<string>): number | null {
-    for (const tuner of TUNERS) {
-        if (!tuner.types.includes(type)) continue;
-        if (busyTuners && tuner.index === 0) continue;
+function pick(
+    type: string,
+    channel: string,
+    priority: number,
+    after: ReadonlySet<string>,
+): { index: number; join: boolean } | null {
+    const usable = TUNERS.filter((tuner) => tuner.types.includes(type) && !(busyTuners && tuner.index === 0));
+    for (const tuner of usable) {
         const lease = leases.get(tuner.index);
-        if (lease === undefined) return tuner.index;
-        if (lease.users.every((u) => after.has(u.use))) {
-            leases.delete(tuner.index);
-            for (const u of lease.users) cuts.get(u)?.abort();
-            return tuner.index;
+        if (lease === undefined) return { index: tuner.index, join: false };
+        const staying = lease.users.filter((u) => !after.has(u.use));
+        if (staying.length === 0) {
+            vacate(tuner.index);
+            return { index: tuner.index, join: false };
         }
+        if (lease.type === type && lease.channel === channel && staying.every((u) => u.priority < priority)) {
+            return { index: tuner.index, join: true };
+        }
+    }
+    for (const tuner of usable) {
+        const lease = leases.get(tuner.index);
+        if (lease === undefined || !lease.users.every((u) => after.has(u.use) || u.priority < priority))
+            continue;
+        vacate(tuner.index);
+        return { index: tuner.index, join: false };
     }
     return null;
 }
-
-/** 読み手ごとの止め口。引き継ぐときに、こちらから正常に終わらせる */
-const cuts = new Map<{ use: string; priority: number }, AbortController>();
 
 /*
  * 起きたことを知らせる口 (SSE)。本物では `/denpa/events`。
@@ -204,6 +235,7 @@ function openStream(url: URL, signal: AbortSignal): Response {
     const channel = url.searchParams.get('channel') ?? '';
     const use = url.searchParams.get('use') ?? '不明';
     const priority = Number(url.searchParams.get('priority') ?? 0);
+    const after = new Set(url.searchParams.getAll('after'));
     /*
      * 知らないチャンネルでも 404 にはしない。**本物は選局を試してから落ちる**ので、
      * 呼んだ側からは「開けたのに1バイトも来ない」に見える。総当たりのスキャンは
@@ -216,36 +248,39 @@ function openStream(url: URL, signal: AbortSignal): Response {
         });
     }
 
-    // 同じチャンネルが開いていれば相乗り。無ければ空きチューナーを取る
+    // 自分と同じか強い読み手が同じチャンネルを読んでいれば相乗り (約束の3)。無ければ選ぶ
     let index = [...leases.entries()].find(
-        ([, lease]) => lease.type === type && lease.channel === channel,
+        ([, lease]) =>
+            lease.type === type &&
+            lease.channel === channel &&
+            lease.users.some((u) => !after.has(u.use) && u.priority >= priority),
     )?.[0];
     if (index === undefined) {
-        const picked = assign(type, new Set(url.searchParams.getAll('after')));
+        const picked = pick(type, channel, priority, after);
         if (picked === null) return json({ error: `${type} のチューナーに空きがありません` }, 409);
-        index = picked;
-        leases.set(index, { type, channel, users: [] });
+        index = picked.index;
+        if (!picked.join) leases.set(index, { type, channel, users: [] });
     }
     const lease = leases.get(index) as Lease;
     const user = { use, priority };
+    const kick = new AbortController();
+    kicks.set(user, kick);
     lease.users.push(user);
     opens.push({ use, priority, type, channel });
     if (opens.length > OPENS_KEEP) opens.shift();
     emit('tuners');
 
     const at = index;
-    const cut = new AbortController();
-    cuts.set(user, cut);
-    signal.addEventListener('abort', () => cut.abort());
-    cut.signal.addEventListener('abort', () => {
-        cuts.delete(user);
+    // 頼んだ側が閉じたときと、蹴られた・引き継がれたとき
+    const ended = AbortSignal.any([signal, kick.signal]);
+    ended.addEventListener('abort', () => {
         lease.users = lease.users.filter((u) => u !== user);
-        // 引き継がれた本には、もう次の選局が入っている
+        // 蹴られた・引き継がれたあとの本は別の選局が使っている。そちらは消さない
         if (lease.users.length === 0 && leases.get(at) === lease) leases.delete(at);
         emit('tuners');
     });
 
-    return new Response(fakeStream(cut.signal, services), {
+    return new Response(fakeStream(ended, services), {
         headers: { 'Content-Type': 'video/MP2T' },
     });
 }

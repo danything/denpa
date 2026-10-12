@@ -45,11 +45,13 @@ import { config } from './config';
 import { DataBroadcast, type ResponseMessage } from './databroadcast';
 import { orm } from './db';
 import { deinterlace } from './encoder';
+import { emit, type Yielded } from './events';
 import { type LiveHw, liveHw, liveHwArgs } from './hwenc';
+import { tunerOf, yieldedTo } from './live-yield';
 import { programs, recordings, services } from './schema';
 import { settings } from './settings';
 import { chunks, lines } from './stream';
-import { openWhenFree } from './tuner';
+import { getTuners, openWhenFree, type StreamUse } from './tuner';
 import type { Connection } from './ws';
 
 /**
@@ -602,6 +604,18 @@ class Session {
      */
     private tsid: number | null = null;
     private stopped = false;
+    /**
+     * 自分の読み手がいる本 (`GET /denpa/tuners` の `index`)。掴めたら覚える (`locate`)。
+     * **蹴られたら、この本にいる録画が蹴った相手** (`live-yield.ts`)。蹴られたあとでは自分の読み手が
+     * 一覧から消えているので、前に覚えておくしかない
+     */
+    private tuner: number | null = null;
+    /** 覚えに行っている最中 (`locate`)。外されたときは、覚え終わるのを待ってから読む (`lose`) */
+    private locating: Promise<void> = Promise.resolve();
+    /** チューナーから1塊でも届いたか。届く前に途切れたのは選局の失敗で、届いたあとなら外された (`lose`) */
+    private fed = false;
+    /** チューナーからの流れが、こちらが畳む前に途切れた (蹴られた・繋ぎが切れた) */
+    private cut = false;
 
     constructor(
         readonly channelType: string,
@@ -837,6 +851,8 @@ class Session {
                 });
                 await Promise.race([running, proc.exited]);
                 if (this.stopped) return;
+                // チューナーから外された。ffmpeg が降りたのは入口が尽きたからで、焼き方のせいではない
+                if (this.cut && this.fed) return await this.lose(label);
                 /*
                  * **降りた理由を読み終えてから決める。** `proc.exited` は最後の
                  * 言い分より先に来るので、待たずに見ると「字幕が無い」を取り
@@ -910,16 +926,61 @@ class Session {
         this.tell({ type: 'error', message });
     }
 
-    /** チューナーを掴む。**空きが無ければ待って掛け直す** (チャンネルを変える一瞬は2本要る) */
-    private tune() {
-        return openWhenFree(
+    /** エージェントに名乗る読み手の印。同じ局を観ている人どうしで同じになる (チューナーも相乗り) */
+    private get use(): StreamUse {
+        return `live ${this.channelType}/${this.channel}`;
+    }
+
+    /**
+     * チューナーを掴む。**空きが無ければ待って掛け直す** (チャンネルを変える一瞬は2本要る)。
+     * 掴めたら、どの本に入ったかを覚えておく (`locate`。待たない)
+     */
+    private async tune(): Promise<ReadableStream<Uint8Array>> {
+        const stream = await openWhenFree(
             this.channelType,
             this.channel,
             this.aborter.signal,
-            `live ${this.channelType}/${this.channel}`,
+            this.use,
             config.priority.live,
             () => this.stopped,
         );
+        this.locating = this.locate();
+        return stream;
+    }
+
+    /** 自分の読み手がいる本を覚える。訊けなければ覚えないまま (蹴られても録画を名指しできないだけ) */
+    private async locate(): Promise<void> {
+        try {
+            this.tuner = tunerOf(await getTuners(), this.channelType, this.channel, this.use);
+        } catch {
+            this.tuner = null;
+        }
+    }
+
+    /**
+     * **チューナーから外された。** 畳んで、見ている人に頼み直させる (`lost`)。
+     *
+     * ここで取り直さないのは、焼いたものを途中から作り直すと受け側の器 (MSE・テレビの fMP4) が
+     * 続きとして読めないため。頼み直せば器ごと作り直しになり、同じ局のライブとして素直に繋がる。
+     * 頼み直しの掴み方はいつもの選局と同じ (`openWhenFree`)。約束どおり使ってよい本があればそこに入る。
+     *
+     * 録画に蹴られたのなら、その録画を添える (`live-yield.ts`)。画面は**頼み直しても入れなかったとき
+     * だけ**それの追っかけに切り替える。HTTP で観ているもの (テレビのアプリ) には流れの中で伝えられ
+     * ないので、同じものを知らせ (`yielded`) でも流す
+     */
+    private async lose(label: string): Promise<void> {
+        /*
+         * 掴んだ直後に蹴られたら、覚えに行った答えがまだ戻っていないことがある。待ってから読む。
+         * それでも一覧から自分が消えたあとに訊いていたら覚えられない (録画を名指しできず、頼み直すだけになる)
+         */
+        await this.locating;
+        const recording = await yieldedTo(this.tuner);
+        if (this.stopped) return;
+        console.warn(
+            `[live] ${label}: チューナーから外されました${recording === null ? '' : ` (録画 ${recording.id} に譲った)`}`,
+        );
+        if (recording !== null) emit('yielded', { serviceId: this.serviceId, recording } satisfies Yielded);
+        this.tell({ type: 'lost', recording });
     }
 
     /**
@@ -990,8 +1051,19 @@ class Session {
         try {
             for (;;) {
                 // `for await` にしない — 抜けると読み口ごと閉じてしまう (使い回せなくなる)
-                const next = await stream.next();
-                if (next.done === true) break;
+                let next: IteratorResult<Uint8Array>;
+                try {
+                    next = await stream.next();
+                } catch (error) {
+                    // チューナーの流れが例外で切れた (エージェントが落ちた・蹴られた)。追っかけのファイルは数えない
+                    if (!own) this.cut = true;
+                    throw error;
+                }
+                if (next.done === true) {
+                    if (!own) this.cut = true;
+                    break;
+                }
+                if (!own) this.fed = true;
                 /*
                  * 起こし直したあとの古い流し込みは抜ける。その1塊は捨てるが、次の ffmpeg は
                  * どのみち鍵フレームから拾うので欠けは見えない
@@ -1272,15 +1344,23 @@ class Session {
             const tuned = await this.tune();
             if (!captionlessNow(this.serviceId)) captioner = this.captions();
             const filter = this.program > 0 ? new ServiceFilter(this.program) : null;
-            for await (const chunk of chunks(tuned)) {
-                if (this.stopped) break;
-                const out = this.tap(filter, chunk);
-                if (out.length === 0) continue;
-                // **詰まったら捨てる** (`hand` の説明)。遅れて全部届くより、飛んで今が映るほうがいい
-                for (const viewer of this.viewers) this.hand(viewer, CHANNEL.rawTs, out);
-                this.tellClock();
-                captioner?.feed(out);
+            try {
+                for await (const chunk of chunks(tuned)) {
+                    if (this.stopped) break;
+                    this.fed = true;
+                    const out = this.tap(filter, chunk);
+                    if (out.length === 0) continue;
+                    // **詰まったら捨てる** (`hand` の説明)。遅れて全部届くより、飛んで今が映るほうがいい
+                    for (const viewer of this.viewers) this.hand(viewer, CHANNEL.rawTs, out);
+                    this.tellClock();
+                    captioner?.feed(out);
+                }
+            } catch (error) {
+                // 届く前に切れたのは選局の失敗 (下の catch)。届いたあとなら外された
+                if (!this.fed) throw error;
             }
+            // 届いたあとで途切れた = チューナーから外された。焼く道と同じく頼み直させる (`lose`)
+            if (this.fed && !this.stopped) return await this.lose(label);
             this.died(label, '放送が途切れました', '映像を出せませんでした');
         } catch (error) {
             this.died(label, String(error), whyNotTuned(String(error), resting(this.serviceId)));
@@ -1674,7 +1754,7 @@ export function recordingCaptions(recordingId: number, at: number): ReadableStre
  * 焼いたもの (`Session`) を HTTP の応答に流す口。ライブと追っかけで共通。
  *
  * 流すのは映像の器 (init + 中身) と生TSだけで、字幕・データ放送・知らせは捨てる。
- * 焼けなくなったら・読み切ったら (`error` / `ended`) 応答を閉じる。読むのが追いつかない
+ * 焼けなくなったら・読み切ったら・チューナーから外されたら (`error` / `ended` / `lost`) 応答を閉じる。読むのが追いつかない
  * 相手も閉じる (溜め続けるとメモリが増え続け、fMP4 は途中を捨てると壊れる)。
  * `held` は溜まりすぎて送り込みを止めたいか (追っかけだけが使う。`CHASE_STREAM_HOLD`)
  */
@@ -1711,7 +1791,9 @@ export function sessionStream(
                         }
                         if (kind !== CHANNEL.control) return;
                         const notice = JSON.parse(new TextDecoder().decode(payload)) as Notice;
-                        if (notice.type === 'error' || notice.type === 'ended') close();
+                        // 外された (`lost`) ときも閉じる。頼み直すのは観ている側 (テレビのアプリは閉じたら頼み直す)
+                        if (notice.type === 'error' || notice.type === 'ended' || notice.type === 'lost')
+                            close();
                     },
                 };
                 session = open(viewer, () => (controller.desiredSize ?? 0) < -CHASE_STREAM_HOLD);

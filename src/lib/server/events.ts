@@ -7,6 +7,8 @@
  * (WebSocket は前段の `Bun.serve` でしか受けられない。`ws.ts`)。
  */
 
+import type { YieldedRecording } from '#lib/live.js';
+
 export type DenpaEvent =
     | 'recordings'
     | 'reservations'
@@ -23,7 +25,20 @@ export type DenpaEvent =
      * 飛ぶので、そのたびにページ全体を読み直させない。画面は該当行の
      * 数字だけを書き換える (`encode-live.svelte.ts`)
      */
-    | 'encode';
+    | 'encode'
+    /**
+     * **ライブがチューナーを録画に譲った** (`server/live.ts` の `lose`)。中身は `Yielded`。
+     * HTTP でライブを観ているもの (テレビのアプリ) 向け — 流れの中では伝えられないので、ここで知る。
+     * 画面 (WebSocket) は同じものを `lost` の知らせで受け取るので、これは読まない
+     */
+    | 'yielded';
+
+/** `yielded` イベントの中身 */
+export interface Yielded {
+    /** 外されたライブの局 (`services.id`)。その局を観ていた人だけが読む */
+    serviceId: number;
+    recording: YieldedRecording;
+}
 
 /** `encode` イベントの中身。一覧の行を名指しで書き換えられるだけの情報 */
 export interface EncodeProgress {

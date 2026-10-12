@@ -16,6 +16,7 @@ import { forget, read, write } from '#lib/keep.js';
 import {
     type CaptionTrack,
     CHANNEL,
+    CHASE_EDGE,
     type Command,
     type HybridcastLink,
     LAST_COOKIE,
@@ -23,6 +24,7 @@ import {
     type Notice,
     SOCKET_PATH,
     type Tuned,
+    type YieldedRecording,
 } from '#lib/live.js';
 import { RawEngine } from '#lib/raw/engine.js';
 import { rawUnsupported } from '#lib/raw/support.js';
@@ -318,6 +320,24 @@ export function livePlayer() {
     let chaseEnded = $state(false);
     /** 読み切ったら、流し残しが尽きたところで器を締める (`finishStream`) */
     let ending = false;
+
+    /*
+     * ---- 録画に譲ったとき ([docs/stream.md](../../docs/stream.md) §4「録画に譲る」) ----
+     *
+     * ライブは録画にだけ譲る。蹴られたらサーバが `lost` を言ってくるので、**まず同じ局を頼み直す**
+     * (使ってよい本が空いていればそこに入り、見ているものは変わらない)。頼み直しても入れなかった
+     * ときだけ、蹴った録画の追っかけに切り替える。「ライブに戻る」(`backToLive`) は頼み直しを試し、
+     * 入れなければ追っかけに戻る
+     */
+    /** 蹴った録画。**頼み直しが入れなかったら、これの追っかけに切り替える** (入れたら忘れる) */
+    let fallback: YieldedRecording | null = null;
+    /**
+     * 録画に譲って追っかけを観ている。`back` は戻る先のライブ、`refused` は「ライブに戻る」を
+     * 試して入れなかったか (画面は「録画が終わるまでライブは見られません」を出す)
+     */
+    let yielded = $state<{ recording: YieldedRecording; back: Tuned; refused: boolean } | null>(null);
+    /** 「ライブに戻る」を試している最中 */
+    let returning = $state(false);
 
     /*
      * ---- 生で送る道 ([stream.md](../../docs/stream.md) §5.5) ----
@@ -1417,6 +1437,50 @@ export function livePlayer() {
     }
 
     /**
+     * 局を選ぶ (画面から)。**録画に譲っていたことは忘れる** — 選び直したのは本人で、
+     * 戻る先も追っかけももう要らない。頼み直し・焼き直しの中から呼ぶ `tune` は忘れない
+     */
+    function choose(video: HTMLVideoElement, target: Tuned): Promise<void> {
+        fallback = null;
+        yielded = null;
+        returning = false;
+        return tune(video, target);
+    }
+
+    /**
+     * 頼み直しても入れなかった。**蹴った録画の追っかけに切り替える** (録れているところの少し手前から)。
+     * 戻る先 (いま頼んでいたライブ) は覚えておく (`backToLive`)
+     *
+     * @param refused 「ライブに戻る」を試して入れなかったのか (蹴られた直後の頼み直しなら false)
+     */
+    function giveWay(recording: YieldedRecording, refused: boolean): void {
+        const back = tuned ?? yielded?.back;
+        if (element === null || back === undefined) return;
+        fallback = null;
+        returning = false;
+        yielded = { recording, back, refused };
+        // 頼み直しで伸びた待ちは持ち越さない (追っかけが切れたら1秒から繋ぎ直す)
+        attempts = 0;
+        void openChase(element, recording.id, CHASE_EDGE);
+    }
+
+    /** 「ライブに戻る」。同じ局を頼み直し、入れなければ追っかけに戻る (`giveWay`) */
+    function backToLive(): void {
+        if (yielded === null || element === null || returning) return;
+        returning = true;
+        void tune(element, yielded.back);
+    }
+
+    /** 頼み直したライブの中身が届いた。**入れた**ので、譲っていたことは忘れる */
+    function arrived(): void {
+        if (tuned === null) return;
+        fallback = null;
+        if (!returning) return;
+        returning = false;
+        yielded = null;
+    }
+
+    /**
      * いま頼みたいこと。**繋いだ直後と繋ぎ直しで同じものを送る** —
      * 中身を書き写していた頃は、足したものをどちらかへ足し忘れると
      * 「繋ぎ直したときだけ抜ける」という出方をした
@@ -1559,6 +1623,7 @@ export function livePlayer() {
              * 多重化の頭なので、そこから先を読ませる
              */
             if (kind === CHANNEL.rawTs) {
+                if (fallback !== null || returning) arrived();
                 engine?.feed(data, 9);
                 return;
             }
@@ -1566,7 +1631,21 @@ export function livePlayer() {
             if (kind === CHANNEL.control) {
                 const notice = JSON.parse(new TextDecoder().decode(body)) as Notice;
                 if (notice.type === 'error') {
-                    fail(notice.message);
+                    /*
+                     * **頼み直しても入れなかった。** 蹴られた直後なら蹴った録画へ、「ライブに戻る」を
+                     * 試していたなら追っかけへ戻る。どちらでもなければいつもの失敗
+                     */
+                    const to = returning ? (yielded?.recording ?? null) : fallback;
+                    if (to !== null && tuned !== null) giveWay(to, returning);
+                    else fail(notice.message);
+                } else if (notice.type === 'lost') {
+                    /*
+                     * **チューナーから外された** (録画に蹴られた・エージェントとの繋ぎが切れた)。同じ局を
+                     * 頼み直す。いつもの繋ぎ直しに乗せる — 待ちが倍々に伸びるので、外されては入るを
+                     * 繰り返しても叩き続けない。入れなかったら蹴った録画へ (上の `error`)
+                     */
+                    fallback = notice.recording;
+                    reconnect();
                 } else if (notice.type === 'notice') {
                     // 絵は出ている。断り書きに残す (GPU で焼けずにソフトウェアへ降りた、など)
                     warning = notice.message;
@@ -1624,6 +1703,7 @@ export function livePlayer() {
             }
 
             if (kind === CHANNEL.videoInit) {
+                if (fallback !== null || returning) arrived();
                 /*
                  * **init が来たら作り直す。** チャンネルを変えると器も変わるので、
                  * 前の SourceBuffer に足すと中身が混ざって再生が止まる
@@ -2075,8 +2155,17 @@ export function livePlayer() {
         goLive,
         relearn,
         mute,
-        tune,
+        tune: choose,
         unmute,
+        /** 録画に譲って、その追っかけを観ているか (戻る先と、戻れなかったか)。譲っていなければ null */
+        get yielded() {
+            return yielded;
+        },
+        /** 「ライブに戻る」を試している最中か */
+        get returning() {
+            return returning;
+        },
+        backToLive,
         setAudio,
         stop,
         /* ---- 追っかけ再生 ([issue #16](https://github.com/danything/denpa/issues/16)) ---- */
