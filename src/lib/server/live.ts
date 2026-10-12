@@ -610,6 +610,8 @@ class Session {
      * 一覧から消えているので、前に覚えておくしかない
      */
     private tuner: number | null = null;
+    /** 覚えに行っている最中 (`locate`)。外されたときは、覚え終わるのを待ってから読む (`lose`) */
+    private locating: Promise<void> = Promise.resolve();
     /** チューナーから1塊でも届いたか。届く前に途切れたのは選局の失敗で、届いたあとなら外された (`lose`) */
     private fed = false;
     /** チューナーからの流れが、こちらが畳む前に途切れた (蹴られた・繋ぎが切れた) */
@@ -942,7 +944,7 @@ class Session {
             config.priority.live,
             () => this.stopped,
         );
-        void this.locate();
+        this.locating = this.locate();
         return stream;
     }
 
@@ -967,6 +969,11 @@ class Session {
      * ないので、同じものを知らせ (`yielded`) でも流す
      */
     private async lose(label: string): Promise<void> {
+        /*
+         * 掴んだ直後に蹴られたら、覚えに行った答えがまだ戻っていないことがある。待ってから読む。
+         * それでも一覧から自分が消えたあとに訊いていたら覚えられない (録画を名指しできず、頼み直すだけになる)
+         */
+        await this.locating;
         const recording = await yieldedTo(this.tuner);
         if (this.stopped) return;
         console.warn(
