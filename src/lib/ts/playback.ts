@@ -165,7 +165,7 @@ export function codecChoices(info: PlaybackInfo, can: MediaAbility): ('h264' | '
  * ---------------------------------------------------------------------------
  * 互換モード (`canvas-video.ts`)。**`<video>` を使わず canvas に描く** (`canvas-player.ts`)。
  * サーバから使えるのは流すもの (`stream` の fMP4 と `raw` の元の TS) だけで、ファイルそのままは使わない
- * (端末に保存した Matroska は別の道で読む。`mkv-source.ts`)
+ * (端末に保存した Matroska は別の道で読む。`src/lib/mkv-source.ts`)
  * ---------------------------------------------------------------------------
  */
 
