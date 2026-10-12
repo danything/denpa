@@ -24,7 +24,8 @@ import { type Composed, canCompose, compose } from './compose';
  * **絵は worker の canvas に居て、`<video>` は空** (`raw/engine.ts`)。そのまま出すと
  * 黒い小窓になる。worker が描いた絵の流れを別の `<video>` に映し、それを小窓にする
  * (流れの取り方は `RawEngine.pipStream`。Chrome は worker が直に書き込み、Safari は
- * canvas から取る。Firefox はどちらもできない)。音は今までどおりページ (`AudioContext`) から鳴る。
+ * canvas から取る。Firefox はどちらもできない)。音はページ (`AudioContext`) が組み、小窓を出している
+ * 間は `<audio>` を通して鳴らす (`RawEngine.route`。Safari は Audio Session)。
  *
  * **代わりの `<video>` は生に入った時点で用意しておく** (`prepare`)。押されてから
  * 流れを繋いで1枚目を待っていた頃は、iPhone の Safari で必ず断られていた

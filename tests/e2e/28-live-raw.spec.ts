@@ -295,6 +295,106 @@ test.describe('ライブを生で見る', () => {
         await expect(page.getByTestId('live-pip')).toHaveCount(0);
     });
 
+    /*
+     * **バックグラウンド再生を入れたら、生の音は `<audio>` から鳴らす** (`raw/engine.ts` の `route`)。
+     * Web Audio のまま鳴らすと、ブラウザによっては効果音の扱いで裏へ回すと止まる (テスラの
+     * 車載ブラウザ)。AudioContext の出口を流れにして `<audio>` に渡し、メディアの再生にする。
+     *
+     * 裏に回すのは別のタブを前に出し、`visibilityState` も差し替えて知らせを送る (ヘッドレスは
+     * タブを移っても `visible` のまま)。裏でも音と絵のコマが進み続けること、`<audio>` が鳴って
+     * いること、`<audio>` を外から止める・再開する (ロック画面・車の操作) と帯が合うこと、
+     * 切れば直に鳴らすのに戻ること、CSP に止められないことを見る
+     */
+    test('バックグラウンド再生を入れると生の音は <audio> から鳴り、裏でも進み続ける', async ({
+        page,
+        context,
+    }) => {
+        await page.addInitScript(() => {
+            const seen: string[] = [];
+            (globalThis as { cspViolations?: string[] }).cspViolations = seen;
+            document.addEventListener('securitypolicyviolation', (event) =>
+                seen.push(`${event.violatedDirective} ${event.blockedURI}`),
+            );
+        });
+        await goto(page, '/live');
+        await page.getByTestId('live-channel').first().click();
+        await expect(page.getByTestId('live-title')).toBeVisible();
+        await chooseRaw(page);
+        const canvas = page.getByTestId('live-raw');
+        const count = async (name: 'shown' | 'audio') =>
+            Number((await canvas.getAttribute(`data-${name}`)) ?? 0);
+        await expect.poll(() => count('shown'), { timeout: 30_000 }).toBeGreaterThan(10);
+
+        // 切っている間は作らない (直に鳴らす)
+        const audio = page.getByTestId('live-raw-audio');
+        await expect(audio).toHaveCount(0);
+
+        await wakeControls(page, 'live-frame');
+        const toggle = page.getByTestId('live-background');
+        await toggle.click();
+        await expect(toggle).toHaveAttribute('aria-pressed', 'true');
+        const paused = () => audio.evaluate((a) => (a as HTMLAudioElement).paused);
+        await expect.poll(paused, { timeout: 10_000 }).toBe(false);
+        expect(
+            await audio.evaluate(
+                (a) => ((a as HTMLAudioElement).srcObject as MediaStream).getAudioTracks().length,
+            ),
+        ).toBe(1);
+
+        // 裏に回す
+        const other = await context.newPage();
+        await other.bringToFront();
+        await page.evaluate(() => {
+            Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => 'hidden' });
+            document.dispatchEvent(new Event('visibilitychange'));
+        });
+        const heard = await count('audio');
+        const shown = await count('shown');
+        await page.waitForTimeout(5_000);
+        // 音は1秒に 47 コマ (48kHz・1024 サンプル)。5秒で半分より多くは進む
+        expect((await count('audio')) - heard).toBeGreaterThan(100);
+        expect((await count('shown')) - shown).toBeGreaterThan(50);
+        expect(await paused()).toBe(false);
+        const play = page.getByTestId('live-play');
+        await expect(play).toHaveAttribute('aria-label', '一時停止');
+
+        // 戻ってくる
+        await other.close();
+        await page.bringToFront();
+        await page.evaluate(() => {
+            Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => 'visible' });
+            document.dispatchEvent(new Event('visibilitychange'));
+        });
+
+        // `<audio>` を外から止める・再開すると (ロック画面・車の操作)、帯も止まる・再開する
+        await audio.evaluate((a) => (a as HTMLAudioElement).pause());
+        await expect(play).toHaveAttribute('aria-label', '再生');
+        await audio.evaluate((a) => (a as HTMLAudioElement).play());
+        await expect(play).toHaveAttribute('aria-label', '一時停止');
+        await expect.poll(paused).toBe(false);
+        // 帯から止める・再開すると `<audio>` も止まる・鳴りだす
+        await wakeControls(page, 'live-frame');
+        await play.click();
+        await expect(play).toHaveAttribute('aria-label', '再生');
+        await expect.poll(paused).toBe(true);
+        await wakeControls(page, 'live-frame');
+        await play.click();
+        await expect(play).toHaveAttribute('aria-label', '一時停止');
+        await expect.poll(paused).toBe(false);
+
+        // 切れば直に鳴らすのに戻る。音は解け続ける
+        await wakeControls(page, 'live-frame');
+        await toggle.click();
+        await expect(toggle).toHaveAttribute('aria-pressed', 'false');
+        await expect.poll(paused).toBe(true);
+        const after = await count('audio');
+        await expect.poll(() => count('audio'), { timeout: 10_000 }).toBeGreaterThan(after + 20);
+
+        expect(await page.evaluate(() => (globalThis as { cspViolations?: string[] }).cspViolations)).toEqual(
+            [],
+        );
+    });
+
     test('選んでいなければ、いつもどおり焼いたものを見る', async ({ page }) => {
         await goto(page, '/live');
         await page.getByTestId('live-channel').first().click();

@@ -69,10 +69,20 @@
 | --- | --- | --- |
 | 裏に回したとき | 止める | 止めない |
 | OS・ブラウザが自分で小窓にする（全画面からホームへ戻った iPhone など） | させない（`disablePictureInPicture`） | 任せる |
-| 生（MPEG-2）の音の Audio Session（Safari） | `auto` のまま | `playback`（裏でも鳴らす） |
+| 生（MPEG-2）の音（Safari） | Audio Session は `auto` のまま | `playback`（裏でも鳴らす） |
+| 生（MPEG-2）の音（Safari 以外） | ページ（Web Audio）から直に鳴らす | `<audio>` を通して鳴らす（メディアの再生として扱わせる） |
 
 **押して開いた小窓（`pip.svelte.ts`）は切でも使えます。** 出している間は裏に回しても止めず、
-生の音も `playback` にします。閉じた時点でまだ裏なら、そこで止めます。
+生の音も入と同じ鳴らし方にします。閉じた時点でまだ裏なら、そこで止めます。
+
+**生の音を `<audio>` に通すのは、Web Audio の音を効果音と同じに扱って裏で止めるブラウザが
+あるからです**（テスラの車載ブラウザ。PC の Chrome は止めない）。AudioContext の出口を流れ
+（`createMediaStreamDestination`）にして `<audio>` の `srcObject` に渡すと、焼いた道の `<video>` と
+同じ「メディアの再生」になり、ロック画面・車の操作・ブラウザの再生中の知らせにも出ます。
+そこで押した止める・再開は帯に写します（`RawEngine` の `remote`）。音量と消音は GainNode で持ち、
+`<audio>` の `volume`/`muted` は触りません。`play()` を断られたら（自動再生）直に鳴らし、
+押されたらまた試します。Safari は Audio Session で足りる（iPhone で確かめてある）ので通しません。
+Media Session の題名（`navigator.mediaSession.metadata`）はまだ出していません（ページの題名が出る）。
 
 ### 全画面は端末の口で入り方を変えます
 

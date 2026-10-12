@@ -367,8 +367,9 @@ export function livePlayer() {
     /** 映像の入れ物。生の canvas はここに差し込む (`attach`) */
     let host: HTMLElement | null = null;
     /**
-     * 生の音を「再生する音」だと言うか (`RawEngine.background`)。**バックグラウンド再生を
-     * 入れているか、押して小窓を開いている間** (画面が決める。`background.svelte.ts`)
+     * 生の音を「再生する音」として鳴らすか (`RawEngine.background`。Safari は Audio Session、
+     * ほかは `<audio>` を通す)。**バックグラウンド再生を入れているか、押して小窓を開いている間**
+     * (画面が決める。`background.svelte.ts`)
      */
     let playback = false;
     /** 生の道の刻み。貯まり・貯める量の決め直しを回す */
@@ -1904,6 +1905,10 @@ export function livePlayer() {
                             lastStall = Date.now();
                         },
                         gaveUp: (reason) => fallBack(reason),
+                        // ロック画面・車の操作で `<audio>` を直に止められた・再開された
+                        remote: (stop) => {
+                            if (stop !== paused) toggle();
+                        },
                     },
                     playback,
                 );
@@ -2013,7 +2018,7 @@ export function livePlayer() {
         captureFlow(on: boolean): void {
             engine?.pipFlow(on);
         },
-        /** 生の音を「再生する音」だと言うか (`playback`)。焼いた道は `<video>` が鳴らすので関係ない */
+        /** 生の音を「再生する音」として鳴らすか (`playback`)。焼いた道は `<video>` が鳴らすので関係ない */
         set playback(on: boolean) {
             playback = on;
             if (engine !== null) engine.background = on;

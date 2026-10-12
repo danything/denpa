@@ -711,12 +711,13 @@ channel:
 
 **ブラウザで焼かずに見られます。** 1局に絞った TS をそのまま
 WebSocket に流し、ブラウザが WebAssembly の MPEG-2 復号器で解いて WebGL2 で描き、音も
-同じ WebAssembly の AAC 復号器で解いて Web Audio で鳴らします。**ライブの画質の切り替えで MPEG-2 を選ぶ**と
+同じ WebAssembly の AAC 復号器で解いて Web Audio で鳴らします（バックグラウンド再生を入れている間は
+`<audio>` を通す。下の「時計と口合わせ」）。**ライブの画質の切り替えで MPEG-2 を選ぶ**と
 生になり、焼き方と同じく端末ごとに覚えます（`LAST_COOKIE`。既定は H.264）。
 
 ```
 エージェント → 1局に絞る ┬→ WebSocket (0x02 生の TS) → worker ┬→ PES → WASM (mpeg2video) → WebGL2 (bob)
-                         │                                    └→ ADTS → WASM (aac) ─→ 画面 → Web Audio (時計)
+                         │                                    └→ ADTS → WASM (aac) ─→ 画面 → Web Audio (時計) [→ <audio>]
                          ├→ ffmpeg (字幕を写すだけ。-copyts) → 解く → 0x22 文字の配置 (放送の PTS のまま)
                          └→ BmlDecoder → 0x30 データ放送 (焼く道と同じ)
 ```
@@ -804,6 +805,29 @@ compose はソースを `/app` に被せるので、中に置くと隠れます�
 - 自動再生で音を断られたら、**壁時計を時計にして絵だけ進め**、「音を出す」を押された時点で
   鳴っている位置のまま音の時計へ移る（`RawEngine.follow`）。逆に音が止められたら（出口が
   外れた・OS に止められた）壁時計へ戻り、絵は止めない
+
+##### `<audio>` を通すとき
+
+**バックグラウンド再生を入れている間と、押して小窓を開いている間は、音を `<audio>` から鳴らします**
+（`RawEngine.route`。Safari は除く — そちらは Audio Session を `playback` にする。理由は
+[player.md](player.md#裏に回したら止めます)）。GainNode の先を `context.destination` から
+`createMediaStreamDestination()` に繋ぎ替え、その流れを `<audio>` の `srcObject` に渡すだけで、
+予約の仕方も時計の物差し（`context.currentTime`）も変わりません。変わるのは**耳に届くまでの遅れ**です:
+
+- 流れへ出した音は **Web Audio が組んだその場で流れに乗る** — ページの出口の遅れ
+  （`baseLatency + outputLatency`。`latencyHint: 'playback'` で大きめ）は通らず、代わりに `<audio>` の
+  出口の遅れが掛かる。ヘッドレスの Chromium で測ると、流れに乗るのは直に鳴らしたときの
+  耳の時刻より **84ms 早かった**（`baseLatency` 23ms + `outputLatency` 72ms = 95ms の大半）
+- `<audio>` の出口の遅れはページから読めないので **見込み（`STREAM_OUT` = 30ms）で置く**。
+  時計は `getOutputTimestamp()` の組のまま、PTS を `baseLatency + outputLatency − STREAM_OUT` だけ先へずらす
+- 見込みは**少なめ**に置く。外れると音が絵より遅れる側に倒れる（人は音が先に来るほうに気づき
+  やすい）。上の測りでは、`<audio>` の出口の遅れを L とすると音が絵より L − 19ms 遅れる。
+  ずらさなければ逆に音が 84 − L ms 先に来ていた
+- 入り切りしたときは、その差のぶん時計が一度だけ跳ぶ（絵が1〜数コマ止まるか飛ぶ）
+- **止める・再開は `<audio>` にも写す。** ロック画面・車の操作・ブラウザの再生中の知らせは
+  `<audio>` を直に止めるので、それも帯に写す（`RawEvents.remote`）
+
+CSP には掛かりません（`srcObject` は URL を読まない。E2E で `securitypolicyviolation` が出ないことを見ている）。
 
 #### 貯め方
 
