@@ -127,7 +127,7 @@ export interface Fmp4Track {
     config: Uint8Array<ArrayBuffer>;
     width: number;
     height: number;
-    /** 音声の本数と標本化周波数 (sample entry に書いてある値) */
+    /** 音声のチャンネル数と標本化周波数 (sample entry に書いてある値) */
     channels: number;
     sampleRate: number;
     /** trex に書いてある既定 (trun・tfhd に無いとき) */
@@ -253,7 +253,7 @@ function readEntry(
         return { ...base, ...size, kind: 'video', codec: av1Codec(av1C), config: av1C.slice() };
     }
     if (entry.type === 'mp4a' || entry.type === 'Opus') {
-        // AudioSampleEntry: 本数は 16、標本化周波数は 24 (16.16 の上半分)、中身の箱は 28 から
+        // AudioSampleEntry: チャンネル数は 16、標本化周波数は 24 (16.16 の上半分)、中身の箱は 28 から
         if (body.length < 28) return null;
         const sound = { channels: v.getUint16(16), sampleRate: v.getUint32(24) >>> 16 };
         const inner = body.subarray(28);
@@ -434,7 +434,7 @@ const ADTS_RATES = [96000, 88200, 64000, 48000, 44100, 32000, 24000, 22050, 1600
 /**
  * **MP4 の AAC の1コマに付ける ADTS の頭。** デコーダ (`wasm/mpeg2` の `aac_push`) は
  * 放送の ADTS を食う作りなので、MP4 の1コマ (頭無し) はそのままでは渡せない。
- * 頭の中身は AudioSpecificConfig (esds) から起こす: 種類 (LC なら 2)・標本化周波数の番号・本数。
+ * 頭の中身は AudioSpecificConfig (esds) から起こす: 種類 (LC なら 2)・標本化周波数の番号・チャンネル数。
  *
  * 頭は 7 バイト (CRC 無し)。ADTS に書ける種類は 1〜4 (Main / LC / SSR / LTP) だけで、
  * それ以外 (HE-AAC など) と、標本化周波数を値で書いたもの (番号 15) は null
@@ -474,7 +474,7 @@ export function opusHead(dOps: Uint8Array): Uint8Array | null {
     const o = new DataView(out.buffer);
     out.set([0x4f, 0x70, 0x75, 0x73, 0x48, 0x65, 0x61, 0x64]); // OpusHead
     out[8] = 1;
-    out[9] = dOps[1]!; // 出す本数
+    out[9] = dOps[1]!; // 出すチャンネル数
     o.setUint16(10, v.getUint16(2), true); // 頭で捨てる標本数
     o.setUint32(12, v.getUint32(4), true); // 元の標本化周波数
     o.setInt16(16, v.getInt16(8), true); // 音量の補正

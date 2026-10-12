@@ -132,7 +132,7 @@ let pendingBytes = 0;
 let floorRaw: number | null = null;
 let floor: number | null = null;
 
-/** いま開いている音の形式 (`標本化周波数/本数`)。変わったら開き直す */
+/** いま開いている音の形式 (`標本化周波数/チャンネル数`)。変わったら開き直す */
 let audioConfig = '';
 let audioErrors = 0;
 /** 音のコマを WASM のメモリへ写す置き場 (`input` は映像が使う) */

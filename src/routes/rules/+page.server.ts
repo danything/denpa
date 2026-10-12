@@ -199,7 +199,7 @@ interface Pending {
     name: string;
     service_id: number;
     service_name: string;
-    /** チャンネル種別 (GR/BS/CS)。チューナーはこの単位で本数が決まる */
+    /** チャンネル種別 (GR/BS/CS)。チューナーはこの単位で台数が決まる */
     type: string;
     /** 物理チャンネル。同じチャンネルなら1台のチューナーで足りる */
     channel: string;
@@ -212,7 +212,7 @@ interface Pending {
 export async function load({ url }) {
     const defaults = settings();
     /*
-     * チューナーの本数。**スケジューラと同じところから取る。**
+     * チューナーの台数。**スケジューラと同じところから取る。**
      * 取れなければ空 (= 何も競合として出さない)。エージェントが落ちているときに
      * 予約表を赤くしても直しようが無いので、スケジューラもそう振る舞う
      */

@@ -68,7 +68,7 @@ export async function resolveConflicts(): Promise<{ accepted: number; rejected: 
         .where(
             and(
                 inArray(reservations.state, ['scheduled', 'conflict']),
-                // 録り始めたものは数え直さない。使う本数はもう決まっている
+                // 録り始めたものは数え直さない。使うチューナーはもう決まっている
                 isNull(reservations.started_at),
                 gt(reservations.end_at, now()),
             ),
@@ -139,7 +139,7 @@ export async function tick(): Promise<void> {
     const at = now();
 
     // 止めるほうを先にやる。次の番組が始まるときに前の録画がまだチューナーを
-    // 使っていると、本数が足りない環境で後続が丸ごと録れない
+    // 使っていると、台数が足りない環境で後続が丸ごと録れない
     /** この見回りで止めた録画の読み手。始める録画に引き継ぎとして渡す (下) */
     const stopped: StreamUse[] = [];
     for (const id of activeRecordingIds()) {

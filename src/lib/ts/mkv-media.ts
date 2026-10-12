@@ -165,7 +165,7 @@ export function opusDops(opus: Uint8Array): Uint8Array<ArrayBuffer> | null {
     const table = family === 0 ? new Uint8Array(0) : opus.subarray(19);
     const out = new Uint8Array(11 + table.length);
     const o = new DataView(out.buffer);
-    out[1] = opus[9]!; // 出す本数
+    out[1] = opus[9]!; // 出すチャンネル数
     o.setUint16(2, v.getUint16(10, true)); // 頭で捨てる標本数
     o.setUint32(4, v.getUint32(12, true)); // 元の標本化周波数
     o.setInt16(8, v.getInt16(16, true)); // 音量の補正

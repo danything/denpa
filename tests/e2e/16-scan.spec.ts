@@ -164,7 +164,7 @@ test.describe('チューナーの設定', () => {
         });
     });
 
-    test('画面から本数と種別を変えられる', async ({ page }) => {
+    test('画面から台数と種別を変えられる', async ({ page }) => {
         await goto(page, '/tuners');
 
         const card = page.getByTestId('tuner-config-card');
