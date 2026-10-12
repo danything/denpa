@@ -138,6 +138,7 @@
      * - 持ち上げるのは重なるときだけ。上の方の字幕は動かない
      * - 枠の上端より上へは出さない (帯と字幕がどちらも長いときは、上を優先して見せる)
      * - 帯を絵の下に出している間 (`under`) と帯を引っ込めている間は戻す
+     * - データ放送の小窓に映像ごと移っている間も戻す (下の `offsetIn`)
      * - 小窓・切り抜きは canvas の中身を使うので、ずらしても影響しない
      */
     $effect(() => {
@@ -146,9 +147,15 @@
         const lifting = controls.shown && !under;
         /*
          * 位置は `offsetTop` で測る (枠の中の、ずらす前の位置。`translate` が効かない)。
-         * データ放送が映像の箱を BML の中へ移している間は枠まで辿れないので、動かさない
+         *
+         * **データ放送の小窓の中では動かさない。** 映像の箱が BML の閉じた影の中へ移されている間、
+         * 字幕は映像と一緒に小窓の中に居る (帯とは重ならない)。`offsetParent` は影の外へも辿れて
+         * しまうが、途中の BML の面は `scale` で縮めてあり、`offsetTop` は縮める前の値なので
+         * 帯の上端とは比べられない。比べると小窓の中で字幕を上へずらし、小窓の端 (BML は
+         * `overflow: hidden`) で切れる。影の中かどうかは根 (`getRootNode`) で見分ける
          */
         const offsetIn = (el: HTMLElement): number | null => {
+            if (el.getRootNode() !== stage.getRootNode()) return null;
             let y = 0;
             let at: Element | null = el;
             while (at instanceof HTMLElement && at !== stage) {
@@ -157,10 +164,17 @@
             }
             return at === stage ? y : null;
         };
+        /*
+         * **ずらしたものは覚えておく。** 映像の箱ごと BML の影の中へ移されると、枠からの
+         * `querySelectorAll` では見つからない。覚えていないと、d を押した瞬間 (操作列が出ている)
+         * に持ち上げたぶんが小窓の中で戻らず、字幕が小窓の端で切れたままになる
+         */
+        const lifted = new Set<HTMLElement>();
         const lift = () => {
             const bar = stage.querySelector<HTMLElement>(':scope > [data-stage-bar]');
             const barTop = lifting && bar !== null ? bar.offsetTop : Number.POSITIVE_INFINITY;
-            for (const canvas of stage.querySelectorAll<HTMLElement>('canvas[data-ink]')) {
+            const canvases = new Set([...stage.querySelectorAll<HTMLElement>('canvas[data-ink]'), ...lifted]);
+            for (const canvas of canvases) {
                 const [inkTop = 0, inkBottom = 0] = (canvas.dataset['ink'] ?? '').split(',').map(Number);
                 const y = offsetIn(canvas);
                 let by = 0;
@@ -170,12 +184,17 @@
                     by = Math.round(Math.min(Math.max(0, overlap), room));
                 }
                 canvas.style.translate = by > 0 ? `0 ${-by}px` : '';
+                if (by > 0) lifted.add(canvas);
+                else lifted.delete(canvas);
             }
         };
         lift();
-        // 字幕が替わったとき (`data-ink`)・帯や枠の大きさが変わったときに測り直す
+        /*
+         * 字幕が替わったとき (`data-ink`)・帯や枠の大きさが変わったとき・映像の箱が
+         * データ放送の小窓へ出入りしたとき (`childList`) に測り直す
+         */
         const inks = new MutationObserver(lift);
-        inks.observe(stage, { subtree: true, attributes: true, attributeFilter: ['data-ink'] });
+        inks.observe(stage, { subtree: true, childList: true, attributes: true, attributeFilter: ['data-ink'] });
         const sizes = new ResizeObserver(lift);
         sizes.observe(stage);
         const bar = stage.querySelector(':scope > [data-stage-bar]');
@@ -184,7 +203,8 @@
         return () => {
             inks.disconnect();
             sizes.disconnect();
-            for (const canvas of stage.querySelectorAll<HTMLElement>('canvas[data-ink]')) canvas.style.translate = '';
+            for (const canvas of [...stage.querySelectorAll<HTMLElement>('canvas[data-ink]'), ...lifted])
+                canvas.style.translate = '';
         };
     });
 

@@ -1,5 +1,18 @@
+import { writeFileSync } from 'node:fs';
+import { extname } from 'node:path';
 import type { APIRequestContext, Page } from '@playwright/test';
-import { captionsClearOfBar, expect, goto, overlayTroubles, recordOne, test, wakeControls } from './helpers';
+import {
+    captionsClearOfBar,
+    captionsSeenInDataWindow,
+    expect,
+    fakeDataBroadcast,
+    goto,
+    holdMedia,
+    overlayTroubles,
+    recordOne,
+    test,
+    wakeControls,
+} from './helpers';
 
 /**
  * 録画をブラウザで観る画面 (`/watch/<id>`)。
@@ -153,6 +166,40 @@ test.describe('録画を観る', () => {
         await wakeControls(page, 'watch-stage');
         await button.click();
         await expect(button).toHaveAttribute('aria-pressed', 'false');
+    });
+
+    /**
+     * **データ放送を出しても字幕は見えている。テレビと同じで映像と一緒に小窓へ縮む。**
+     *
+     * 借りものは映像の箱ごと BML の小窓へ移す。字幕の canvas が箱の外に居た頃は、映像だけ
+     * 小窓へ行き、字幕は枠いっぱいのままデータ放送の面の下に隠れていた (実機で「データ放送を
+     * 出すと字幕が出なくなる」)。偽の録画にはデータ放送が無いので、小窓を持つ BML を
+     * サイドカー (`.bml.jsonl`) に置いてから出す。**操作列を出したまま d を押す**
+     * (持ち上げた字幕が小窓の中に残らないことも見る)
+     */
+    test('データ放送を出しても、字幕は映像と一緒に小窓へ縮んで見えている', async ({ page, request }) => {
+        test.setTimeout(180_000);
+        // サイドカーを足すので、使い回しの1本は汚さない
+        const { id, libraryPath } = await recordOne(page, request);
+        writeFileSync(
+            `${libraryPath.slice(0, libraryPath.length - extname(libraryPath).length)}.bml.jsonl`,
+            `${fakeDataBroadcast()
+                .map((message) => JSON.stringify({ at: 0, message }))
+                .join('\n')}\n`,
+        );
+        await goto(page, `/watch/${id}`);
+        await holdMedia(page, 'watch-video', 'watch-captions-canvas', 'watch-stage');
+        await page
+            .getByTestId('watch-captions-canvas')
+            .evaluate((el) => el.setAttribute('data-ink', '0.8000,0.9700'));
+
+        await wakeControls(page, 'watch-stage');
+        await page.getByTestId('watch-data-button').click();
+        await expect(page.getByTestId('live-data')).toHaveAttribute('data-state', 'ready', {
+            timeout: 15_000,
+        });
+
+        await captionsSeenInDataWindow(page);
     });
 
     /**

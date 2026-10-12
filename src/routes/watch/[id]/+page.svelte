@@ -1190,6 +1190,36 @@
                     data-testid="watch-video"
                 >
                 </video>
+                <!--
+                    **放送の字幕は映像と同じ箱の中に置く** (ライブの `MediaStack` と同じ)。
+                    データ放送を出すと、借りものはこの箱ごと BML の小窓へ移す。外に置いて
+                    いた頃は**映像だけが小窓へ行き、字幕は枠いっぱいのまま**データ放送の面
+                    (`z-index: 5`) の下に隠れていた。中に居れば、テレビと同じで映像と一緒に縮む。
+                    位置と大きさは `place` が映像の絵に合わせて style で書く。ほかも class ではなく
+                    style — 移された先は閉じた影の中で、表の CSS が届かない。
+                    **押す邪魔をしない** (`pointer-events: none`) — 下の絵を押して止められなくなる
+                -->
+                <canvas
+                    bind:this={overlay}
+                    style="position:absolute; pointer-events:none;"
+                    data-testid="watch-captions-canvas"
+                    data-on={captions && hasCaptions}
+                    aria-hidden="true"
+                ></canvas>
+                <!--
+                    **CM を跨ぐ間の蓋。** 字幕より後ろに置く = 字幕の上に載る
+                    (CM の字幕まで隠すため)。帯や報せ (z-index 10) の下には残す。
+                    字幕と同じ理由で箱の中に置き、style で書く (小窓の中でも CM を隠す)。
+                    出し入れは `hidden` のまま — style に式を書くと `hopping` が変わるたびに
+                    属性ごと書き直され、`place` が JS で書いた位置と大きさが消える
+                    (`hidden` は UA の CSS なので影の中でも効く)
+                -->
+                <canvas
+                    bind:this={cover}
+                    style="position:absolute; pointer-events:none;"
+                    hidden={!hopping}
+                    aria-hidden="true"
+                ></canvas>
                 </div>
                 <!--
                     **録画のデータ放送。** 焼くときに取り出した変化ログ (`data.hasData`) を、
@@ -1206,29 +1236,6 @@
                     postal={data.broadcast.postalCode}
                     network={false}
                 />
-
-                <!--
-                    **放送の字幕。** 映像の絵に重ねる (`place`)。**押す邪魔をしない**
-                    (`pointer-events: none`) — 下の絵を押して止められなくなる
-                -->
-                <canvas
-                    bind:this={overlay}
-                    class="layer"
-                    data-testid="watch-captions-canvas"
-                    data-on={captions && hasCaptions}
-                    aria-hidden="true"
-                ></canvas>
-
-                <!--
-                    **CM を跨ぐ間の蓋。** 字幕より後ろに置く = 字幕の上に載る
-                    (CM の字幕まで隠すため)。帯や報せ (z-index 10) の下には残す
-                -->
-                <canvas
-                    bind:this={cover}
-                    class="layer"
-                    hidden={!hopping}
-                    aria-hidden="true"
-                ></canvas>
 
                 {#if buffering && !resuming}
                     <!--
@@ -1552,11 +1559,6 @@
 <style>
     .not-ready h2 {
         font-size: 1rem;
-    }
-    /* 字幕・CM の蓋。位置と大きさは place が style で決める */
-    .layer {
-        pointer-events: none;
-        position: absolute;
     }
     .wait {
         pointer-events: none;

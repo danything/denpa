@@ -453,3 +453,206 @@ export async function captionsClearOfBar(page: Page, canvas: string, bar: string
         )
         .toBeLessThanOrEqual(0);
 }
+
+/**
+ * **偽のデータ放送。** 1枚だけの BML で、映像を右下の小窓 (`DATA_WINDOW`。960x540 の面の上の
+ * 位置) に映し、まわりを青で塗る。実際の局の画面と同じく、小窓の外は面に塞がれる。
+ *
+ * 作りものの放送にはデータ放送が載っていないので、出したときの見え方 (字幕が映像と一緒に
+ * 小窓へ縮むか) はこれを流して確かめる。中身は web-bml の `ResponseMessage` そのまま
+ * (ライブは WebSocket の 0x30、録画はサイドカーの `.bml.jsonl` で渡す)
+ */
+export const DATA_WINDOW = { left: 480, top: 270, width: 480, height: 270 } as const;
+export function fakeDataBroadcast(): Record<string, unknown>[] {
+    const { left, top, width, height } = DATA_WINDOW;
+    const bml = [
+        '<?xml version="1.0" encoding="EUC-JP" ?>',
+        '<!DOCTYPE bml PUBLIC "+//ARIB STD-B24:1999//DTD BML Document for Japanese//JA" "http://www.arib.or.jp/B24/DTD/bml_1_0.dtd">',
+        '<?bml bml-version="1.0" ?>',
+        '<bml><head><title>e2e</title></head>',
+        '<body style="background-color:#0000ff;">',
+        `<object type="video/X-arib-mpeg2" style="left:${left}px;top:${top}px;width:${width}px;height:${height}px;"/>`,
+        '</body></bml>',
+    ].join('\n');
+    const dataEventId = 1;
+    return [
+        {
+            type: 'pmt',
+            components: [
+                {
+                    pid: 0x0740,
+                    componentId: 0x40,
+                    streamType: 0x0d,
+                    // 地上波 (A プロファイル)
+                    dataComponentId: 0x0c,
+                    bxmlInfo: {
+                        transmissionFormat: 0,
+                        entryPointFlag: true,
+                        entryPointInfo: {
+                            autoStartFlag: true,
+                            documentResolution: 0,
+                            useXML: false,
+                            defaultVersionFlag: true,
+                            independentFlag: true,
+                            styleForTVFlag: false,
+                            bmlMajorVersion: 1,
+                            bmlMinorVersion: 0,
+                        },
+                    },
+                },
+            ],
+        },
+        {
+            type: 'moduleListUpdated',
+            componentId: 0x40,
+            modules: [{ id: 0, version: 1, size: bml.length }],
+            dataEventId,
+        },
+        {
+            type: 'moduleDownloaded',
+            componentId: 0x40,
+            moduleId: 0,
+            version: 1,
+            dataEventId,
+            files: [
+                {
+                    contentLocation: 'startup.bml',
+                    contentType: {
+                        type: 'text',
+                        originalType: 'text',
+                        subtype: 'x-arib-bml',
+                        originalSubtype: 'X-arib-bml',
+                        parameters: [{ attribute: 'charset', originalAttribute: 'charset', value: 'euc-jp' }],
+                    },
+                    dataBase64: Buffer.from(bml).toString('base64'),
+                },
+            ],
+        },
+    ];
+}
+
+/** 掴んでおいた要素 (`holdMedia`)。ページの中の `window.__media` */
+interface HeldMedia {
+    __media: { video: HTMLElement; captions: HTMLCanvasElement; stage: HTMLElement };
+}
+
+/**
+ * 映像・字幕・枠の要素を掴んでおく (`captionsSeenInDataWindow` が使う)。**d を押す前に呼ぶ** —
+ * 出したあとは映像の箱が閉じた影の中へ移り、`getByTestId` でも `querySelector` でも届かない
+ */
+export async function holdMedia(page: Page, video: string, captions: string, stage: string): Promise<void> {
+    await page.evaluate(
+        ([v, c, s]) => {
+            const held = window as unknown as HeldMedia;
+            held.__media = {
+                video: document.querySelector(`[data-testid="${v}"]`) as HTMLElement,
+                captions: document.querySelector(`[data-testid="${c}"]`) as HTMLCanvasElement,
+                stage: document.querySelector(`[data-testid="${s}"]`) as HTMLElement,
+            };
+        },
+        [video, captions, stage] as const,
+    );
+}
+
+/**
+ * **データ放送を出しても字幕が見えているかを、絵で確かめる。**
+ *
+ * データ放送を出すと、借りものは映像の箱ごと BML の閉じた影の中 (小窓) へ移す。字幕の
+ * canvas がその外に居ると、映像だけ小窓へ行き、字幕は枠いっぱいのままデータ放送の面
+ * (`z-index: 5`) の下に隠れる (実機で「データ放送を出すと字幕が消える」)。見るのは:
+ * - 映像が小窓 (`DATA_WINDOW`) に縮んでいる (流した BML が効いている)
+ * - 字幕の canvas が映像と同じ箱に居て、小窓の中に収まる。持ち上げ (`translate`) も残っていない
+ * - 字幕を目立つ色で塗って画面を撮ると、**小窓の真ん中はその色** (上に何も被っていない)、
+ *   小窓の外 (左上) はその色でない (字幕が枠いっぱいに残っていない)
+ */
+export async function captionsSeenInDataWindow(page: Page): Promise<void> {
+    type Box = { x: number; y: number; width: number; height: number };
+    const boxes = () =>
+        page.evaluate(() => {
+            const { video, captions, stage } = (window as unknown as HeldMedia).__media;
+            const box = (el: Element): Box => {
+                const r = el.getBoundingClientRect();
+                return { x: r.x, y: r.y, width: r.width, height: r.height };
+            };
+            return {
+                video: box(video),
+                captions: box(captions),
+                stage: box(stage),
+                sameBox: captions.parentElement === video.parentElement,
+                inShadow: video.getRootNode() !== document,
+                translate: getComputedStyle(captions).translate,
+            };
+        });
+    // 映像が小窓に縮むまで (BML を組むのは器ができてから)
+    await expect
+        .poll(
+            async () => {
+                const { video, stage } = await boxes();
+                const want = {
+                    x: stage.x + (stage.width * DATA_WINDOW.left) / 960,
+                    y: stage.y + (stage.height * DATA_WINDOW.top) / 540,
+                    width: (stage.width * DATA_WINDOW.width) / 960,
+                };
+                return [video.x - want.x, video.y - want.y, video.width - want.width].every(
+                    (d) => Math.abs(d) < 2,
+                );
+            },
+            { message: '映像がデータ放送の小窓へ移らない (偽の BML が効いていない)' },
+        )
+        .toBe(true);
+    const { video, captions, stage, sameBox, inShadow, translate } = await boxes();
+    expect.soft(inShadow, '映像の箱が BML の影の中に無い').toBe(true);
+    expect.soft(sameBox, '字幕が映像と同じ箱に居ない (小窓へ一緒に行かない)').toBe(true);
+    expect.soft(translate, '小窓の中で字幕が持ち上げられたまま').toBe('none');
+    // 字幕の面は小窓 (映像の箱) の中に収まる
+    expect.soft(captions.x).toBeGreaterThanOrEqual(video.x - 1);
+    expect.soft(captions.y).toBeGreaterThanOrEqual(video.y - 1);
+    expect.soft(captions.x + captions.width).toBeLessThanOrEqual(video.x + video.width + 1);
+    expect.soft(captions.y + captions.height).toBeLessThanOrEqual(video.y + video.height + 1);
+
+    /*
+     * **絵で見る。** 字幕を塗りつぶして撮り、塗った色の画素の割合を数える。字幕を描く係が
+     * 描き直すと塗りが消えるので、塗るのと撮るのを1組にして待つ
+     */
+    const share = async (clip: Box): Promise<number> => {
+        await page.evaluate(() => {
+            const canvas = (window as unknown as HeldMedia).__media.captions;
+            const ctx = canvas.getContext('2d');
+            if (ctx === null) return;
+            ctx.fillStyle = '#ff00ff';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+        });
+        const png = await page.screenshot({ clip });
+        return page.evaluate(async (b64) => {
+            const image = new Image();
+            image.src = `data:image/png;base64,${b64}`;
+            await image.decode();
+            const canvas = document.createElement('canvas');
+            canvas.width = image.width;
+            canvas.height = image.height;
+            const ctx = canvas.getContext('2d') as CanvasRenderingContext2D;
+            ctx.drawImage(image, 0, 0);
+            const data = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+            let hit = 0;
+            for (let i = 0; i < data.length; i += 4) {
+                if ((data[i] ?? 0) > 200 && (data[i + 1] ?? 255) < 60 && (data[i + 2] ?? 0) > 200) hit++;
+            }
+            return hit / (data.length / 4);
+        }, png.toString('base64'));
+    };
+    const around = (x: number, y: number): Box => ({
+        x: Math.round(x) - 10,
+        y: Math.round(y) - 10,
+        width: 20,
+        height: 20,
+    });
+    await expect
+        .poll(() => share(around(video.x + video.width / 2, video.y + video.height / 2)), {
+            message: '小窓の真ん中に字幕が見えない (データ放送の面の下に隠れている)',
+        })
+        .toBeGreaterThan(0.9);
+    expect(
+        await share(around(stage.x + stage.width / 4, stage.y + stage.height / 4)),
+        '字幕が枠いっぱいに残っている (映像と一緒に縮んでいない)',
+    ).toBeLessThan(0.1);
+}
