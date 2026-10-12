@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { normalizePrefecture, parsePrefectureField, PREFECTURE_UNSET, PREFECTURES } from './prefecture';
+import { normalizePrefecture, PREFECTURE_UNSET, PREFECTURES, parsePrefectureField } from './prefecture';
 
 /*
  * **都道府県の番号は ARIB の県域 (STD-B10 付録G 表G-2)。** JIS の都道府県コードではないので、
