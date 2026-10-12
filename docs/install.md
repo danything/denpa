@@ -125,5 +125,5 @@ helm install denpa oci://ghcr.io/danything/charts/denpa \
   ```
 
 - **`/denpa` のような接頭辞の下にも置けます** (Home Assistant の Ingress など)。接頭辞は denpa に教えません。
-  再生リンクや OIDC に渡す絶対 URL にだけ、前段が付ける `X-Forwarded-Prefix` (Home Assistant は `X-Ingress-Path`) を
+  OIDC に渡す絶対 URL にだけ、前段が付ける `X-Forwarded-Prefix` (Home Assistant は `X-Ingress-Path`) を
   頭に付けます (`paths.ts` の `publicBase`)

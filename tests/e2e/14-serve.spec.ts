@@ -5,7 +5,7 @@ import { expect, test } from './helpers';
  * 誰を通すか (docs/auth.md)。
  *
  * ベーシック認証は廃止した。入る方法は **OIDC / TRUSTED_NETWORKS /
- * 期限付きの署名リンク (ファイルのエンドポイントだけ)** で、どれも設定していなければ
+ * アクセストークン (ペアリングしたアプリ)** で、OIDC も TRUSTED_NETWORKS も設定していなければ
  * **全部断る**。普段のスタックはローカルを信頼したネットワーク (`TRUSTED_NETWORKS=127.0.0.1`)
  * にしてあるので、「何も設定していない」ほうは別の起動 (`bootClosed`) で確かめる。
  */

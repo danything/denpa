@@ -1,29 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
-import { configured, isFilePath, isOpenPath, trusted } from './auth';
+import { configured, isOpenPath, trusted } from './auth';
 import { config } from './config';
-
-/**
- * どのエンドポイントをどう守るか。
- *
- * **プレイヤーが来るエンドポイントは、期限付きの署名リンクで開ける。** 相手は
- * ログイン画面へのリダイレクトを扱えないので、ここを OIDC にすると再生できなくなる。
- */
-describe('ファイルを取りに来るエンドポイント', () => {
-    test('録画の配信', () => {
-        expect(isFilePath('/api/recordings/12/file')).toBe(true);
-    });
-
-    test('画面と、それ以外の API は含まない', () => {
-        expect(isFilePath('/')).toBe(false);
-        expect(isFilePath('/settings')).toBe(false);
-        // 同じ録画でも、コマの切り出しは画面から呼ぶもの
-        expect(isFilePath('/api/recordings/12/frame')).toBe(false);
-        // 似ているだけのパス。前方一致で緩めない
-        expect(isFilePath('/api/recordings/12/files')).toBe(false);
-        expect(isFilePath('/api/recordings/12/file/a')).toBe(false);
-        expect(isFilePath('/api/recordings/12/playlist')).toBe(false);
-    });
-});
 
 /**
  * ログインの入口。**ここを守ると入れなくなる** (ログイン画面へ行くのに

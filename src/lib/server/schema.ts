@@ -154,16 +154,6 @@ export const settings = sqliteTable('settings', {
     updated_at: integer('updated_at').notNull(),
 });
 
-/**
- * 期限付きの再生リンクの控え (share.ts)。**1録画につき現役は1本。**
- * 期限内にもう一度発行すると、同じトークンのまま期限だけ延びる
- */
-export const shareLinks = sqliteTable('share_links', {
-    recording_id: integer('recording_id').primaryKey(),
-    token: text('token').notNull(),
-    expires_at: integer('expires_at').notNull(),
-});
-
 /** 録画の節目を外部に飛ばす先。Discord や Slack の Incoming Webhook を想定している */
 export const webhooks = sqliteTable('webhooks', {
     id: integer('id').primaryKey({ autoIncrement: true }),

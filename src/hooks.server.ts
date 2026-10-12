@@ -1,19 +1,9 @@
 import { redirect } from '@sveltejs/kit';
-import {
-    clientAddress,
-    configured,
-    denied,
-    isFilePath,
-    isOpenPath,
-    needsLogin,
-    sessionMayRead,
-    trusted,
-} from '#lib/server/auth.js';
+import { clientAddress, configured, denied, isOpenPath, needsLogin, trusted } from '#lib/server/auth.js';
 import { bearerToken, verifyToken } from '#lib/server/device-auth.js';
 import { relative } from '#lib/server/paths.js';
 import { start } from '#lib/server/runtime.js';
 import { COOKIE, find } from '#lib/server/session.js';
-import { shareTokenAllows } from '#lib/server/share.js';
 
 // SvelteKit のサーバ起動時に一度だけ走る。EPG取得・スケジューラ・エンコーダを立ち上げる
 start();
@@ -51,31 +41,17 @@ export async function handle({ event, resolve }) {
      */
     const open = trusted(clientAddress(event));
 
-    /*
-     * **ログインの控えは先に読む。** 録画をブラウザで観るようになったので、
-     * `<video>` がファイルのエンドポイント (`/api/recordings/<id>/file`) を取りに来る。
-     * OIDC で入った人をそこで断らないため (`sessionMayRead`)
-     */
-    const session = find(event.cookies.get(COOKIE));
-
     if (!open && !isOpenPath(pathname)) {
-        if (isFilePath(pathname)) {
-            /*
-             * **ファイルのエンドポイントはログインの控えか、期限付きのリンク** (share.ts)。
-             * プレイヤーはリダイレクトを扱えないので、URL そのものが資格になる
-             * リンクで開ける。ベーシック認証は廃止した — パスワードを使う場面が
-             * 全部期限付きのリンクに置き換わったため
-             */
-            if (!sessionMayRead(session !== null) && !shareTokenAllows(pathname, event.url.searchParams)) {
-                return denied();
-            }
-        } else if (needsLogin()) {
+        if (needsLogin()) {
             /*
              * **OIDC でのログイン。** 設定してあるときだけ効く (`auth.needsLogin`)。
              *
              * ここで見るのは Cookie の控えだけ。Entra とのやり取りは `/login` と
              * `/login/callback` に閉じてあり、普段のリクエストで外へ出ることはない。
+             * 録画のファイル (`/api/recordings/<id>/file`) もここで通す — ブラウザで観る
+             * `<video>` もダウンロードも、同じ Cookie を付けてリクエストする
              */
+            const session = find(event.cookies.get(COOKIE));
             if (session !== null) {
                 event.locals.user = { subject: session.subject, name: session.name };
             } else {

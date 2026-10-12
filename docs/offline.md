@@ -67,7 +67,7 @@ DB 名 `denpa-offline`、ストア3つ (実体は [offline-db.ts](../src/lib/off
    在るものだけに絞る。`downloadTotal` を超えても打ち切られるので、HEAD の実測合計 (+2%) を渡す。
    どちらも実機の Edge で踏んだ。
 2. `backgroundFetch.fetch(id, urls, {title, downloadTotal})` でブラウザに預ける (タブを
-   閉じても続く。`/api/…/file` はログインの控えでも通る: `auth.sessionMayRead`)。登録IDは
+   閉じても続く。`/api/…/file` もほかの API と同じくログインの控えで通る)。登録IDは
    `rec-<録画ID>-<source>-<試みの印>`。同じIDが生きている間は再登録できないので
    やり直しのたびに印を変え、前回の残骸は登録前に中止する。遅れて届く残骸の中止の通知が
    新しい控えを消さないよう、SW 側は印を照合する。

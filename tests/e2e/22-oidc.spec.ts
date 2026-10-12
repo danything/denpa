@@ -240,9 +240,8 @@ test.describe('ネットワークで素通し', () => {
     test('ネットワークの外は通さない', async ({ oidc }) => {
         const get = client(oidc, { xff: OUTSIDE });
         expect((await get('/')).res.status).toBe(302);
-        // ファイルのエンドポイントは控えの署名リンクかログインの控えだけ。どちらも無ければ
-        // 403 で断る (ベーシック認証だった頃は 401 チャレンジを返していた)
-        expect((await get('/api/recordings/1/file')).res.status).toBe(403);
+        // ファイルのエンドポイントもほかの API と同じ。ログインの控えが無ければ 401 (ログイン画面へは回さない)
+        expect((await get('/api/recordings/1/file')).res.status).toBe(401);
     });
 
     test('どの名前で来たかは問わない', async ({ oidc }) => {

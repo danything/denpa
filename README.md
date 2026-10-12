@@ -117,7 +117,6 @@ docker compose up -d
 
 - **ブラウザ** — ホーム画面にも置ける ([docs/player.md](docs/player.md))
 - **テレビ** (Android TV / Fire TV) — [denpa-tv](https://github.com/danything/denpa-tv)。テレビに出る QR をスマホで読めば繋がる
-- **再生リンク** — ログインできない端末向けに、24時間有効の URL を渡す ([docs/library.md](docs/library.md#テレビのアプリと再生リンク))
 - **外から使う API** — 局・録画の一覧、ライブ、音声だけ (Home Assistant やスクリプト向け。[docs/api.md](docs/api.md))
 
 ## もっと詳しく
@@ -130,11 +129,11 @@ docker compose up -d
 - [docs/agent.md](docs/agent.md) — チューナーを動かすところ (エージェント・取り合い・B-CAS・Mac / Windows)
 - [docs/encode.md](docs/encode.md) — CM とエンコード (字幕・AV1・CM検出)
 - [docs/logo.md](docs/logo.md) — 局ロゴ (番組表の PNG と CM検出用に覚えたロゴ)
-- [docs/library.md](docs/library.md) — 録画の置き場と配り方 (テレビのアプリ・再生リンク・削除・通知)
+- [docs/library.md](docs/library.md) — 録画の置き場と配り方 (テレビのアプリ・削除・通知)
 - [docs/stream.md](docs/stream.md) — **ライブ視聴**
 - [docs/player.md](docs/player.md) — ホーム画面に置く、LAN でも https で開く
 - [docs/offline.md](docs/offline.md) — 端末に落として電波の無いところで観る
-- [docs/auth.md](docs/auth.md) — **誰を通すか** (OIDC・信頼したネットワーク・ペアリング・期限付きのリンク・画面で動いてよいもの (CSP))
+- [docs/auth.md](docs/auth.md) — **誰を通すか** (OIDC・信頼したネットワーク・ペアリング・画面で動いてよいもの (CSP))
 - [docs/api.md](docs/api.md) — **外から使う API**
 - [docs/migrate.md](docs/migrate.md) — **EPGStation からの引き継ぎ**
 - [docs/development.md](docs/development.md) — **手を入れるとき** (開発環境・テスト)

@@ -78,6 +78,13 @@
       "when": 1791639801740,
       "tag": "0010_drop-webhook-name",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "6",
+      "when": 1791828646319,
+      "tag": "0011_drop-share-links",
+      "breakpoints": true
     }
   ]
 }

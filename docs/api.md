@@ -369,9 +369,7 @@ data: {"recordingId":12,"percent":0.425,"etaMs":600000,"log":"…"}
 無効にした・知らないアクセストークンを出したときは `{"error":"invalid_token"}` の 401 (`WWW-Authenticate: Bearer error="invalid_token"`) で、
 信頼するネットワークの中でも通しません (ペアリングし直しの合図)。仕組みと守りは [auth.md](auth.md#アプリのペアリング)。
 
-**ファイルのエンドポイント (`file`) だけは 401 ではなく 403 (text/plain)** です。ログインの控えか
-期限付きのリンク (`share`) でも開けるようにしてあり、どれも無ければ言葉で断ります。アプリは Bearer を付けて開きます。
-もう1つ、ログイン方法 (OIDC か `TRUSTED_NETWORKS`) を何も設定していない denpa は、認証なしで通すエンドポイントのほかは 403 で断ります
+ログイン方法 (OIDC か `TRUSTED_NETWORKS`) を何も設定していない denpa は、認証なしで通すエンドポイントのほかは 403 で断ります
 (コードは出せても、許す画面 `/device` が開けないのでペアリングはできない。[auth.md](auth.md#ログイン方法が無ければ全部断る))。
 
 ## ペアリング `POST /api/device/code` → `POST /api/device/token`

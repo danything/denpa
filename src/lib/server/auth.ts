@@ -3,37 +3,20 @@ import { config } from './config';
 import { enabled as oidcEnabled } from './oidc';
 
 /**
- * 誰を通すか。**どこでも通る方法が2つと、エンドポイントを限った方法が2つ。**
+ * 誰を通すか。**どこでも通る方法が3つと、エンドポイントを限った方法が1つ。**
  *
  * | 方法 | 何者か |
  * | --- | --- |
  * | `TRUSTED_NETWORKS` | 信頼したネットワークから来た人。何も聞かずに通す |
- * | OIDC のログイン | 画面から入る人 (`docs/auth.md`) |
- * | 期限付きのリンク (`?token=`、share.ts) | 再生リンク・ダウンロード。**ファイルのエンドポイントだけ** |
+ * | OIDC のログイン | 画面から入る人 (`docs/auth.md`)。ブラウザで観る・ダウンロードもこの控え (Cookie) で通る |
+ * | アクセストークン (`Bearer denpa_…`) | ペアリングしたアプリ (`device-auth.ts`) |
  * | 使い捨てのチケット | ライブ視聴の WebSocket だけ (`tickets.ts`) |
  *
  * **どれも設定していなければ、全部断る** (`configured`)。以前はベーシック認証を
- * 起動時に自動で掛けていたが、廃止した — パスワードを使う場面 (プレイヤー登録・
- * ダウンロードURL) が全部期限付きのリンクに置き換わり、残っていたのは「画面に出して
+ * 起動時に自動で掛けていたが、廃止した — 残っていたのは「画面に出して
  * 覚えさせるパスワード」だけだった。全部開けたいなら `TRUSTED_NETWORKS=0.0.0.0/0`
  * (公開の注意は docs/auth.md)。
- *
- * **プレイヤーはリダイレクトを扱えない。** ログイン画面へ飛ばされたところで
- * 何もできず「再生できません」で終わる。だからファイルのエンドポイントは、ログインではなく
- * **URL そのものが資格になる**期限付きのリンクで開ける。
  */
-
-/**
- * 期限付きのリンクとログインの控えで開けられるエンドポイント (録画のファイル)。**ここは OIDC のリダイレクトにしない。**
- * **形式はここ1つ** — share.ts の突き合わせも同じものを使う
- */
-const FILE_PATH = /^\/api\/recordings\/(\d+)\/file$/;
-
-/** ファイルのエンドポイントなら、そのパスが指す録画ID。違えば null */
-export function fileRecordingId(pathname: string): number | null {
-    const m = FILE_PATH.exec(pathname);
-    return m === null ? null : Number(m[1]);
-}
 
 /**
  * 素通しにするエンドポイント。
@@ -60,10 +43,6 @@ const OPEN_PATHS = [
     /^\/manifest\.webmanifest$/,
     /^\/api\/device\/(code|token)$/,
 ];
-
-export function isFilePath(pathname: string): boolean {
-    return fileRecordingId(pathname) !== null;
-}
 
 export function isOpenPath(pathname: string): boolean {
     return OPEN_PATHS.some((pattern) => pattern.test(pathname));
@@ -97,21 +76,9 @@ export function warnIfClosed(): void {
 /** ログイン方法が無い相手への返事。理由が分からない 403 にしない */
 export function denied(): Response {
     const text = configured()
-        ? 'このページは、ログインするか期限付きのリンクからでないと開けません'
+        ? 'このページは、信頼したネットワーク (TRUSTED_NETWORKS) の中からでないと開けません'
         : 'ログイン方法が設定されていません。OIDC か TRUSTED_NETWORKS を設定してください (docs/auth.md)';
     return new Response(text, { status: 403, headers: { 'content-type': 'text/plain; charset=utf-8' } });
-}
-
-/**
- * ファイルのエンドポイントを、**ログイン済みの画面に開けるか**。
- *
- * 録画をブラウザで観るようになったので、`<video>` がファイルのエンドポイントを取りに来る。
- * OIDC で入った人が映像を出そうとした瞬間に断られないように、ログインの控えを
- * ここでも受ける。通る相手が増えるわけではない — 「この denpa に入れる人」のまま
- */
-export function sessionMayRead(loggedIn: boolean): boolean {
-    // ファイルのエンドポイントかどうかは呼ぶ側 (hooks) が振り分けてから来る
-    return loggedIn && oidcEnabled();
 }
 
 /**
@@ -148,7 +115,7 @@ export function clientAddress(event: { getClientAddress(): string }): string {
     }
 }
 
-/** OIDC でログインを求めるか (素通しのエンドポイントとファイルのエンドポイントは呼ぶ側 (hooks) が先に振り分ける) */
+/** OIDC でログインを求めるか (素通しのエンドポイントは呼ぶ側 (hooks) が先に振り分ける) */
 export function needsLogin(): boolean {
     return oidcEnabled();
 }

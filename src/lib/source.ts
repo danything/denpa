@@ -16,7 +16,7 @@ export function encodeSource(recording: { ts_path: string | null }): string | nu
 /**
  * 配るファイルの名指し (`?source=`)。`ts` = 元のTS、`encoded` = 主のエンコード済み
  * (両方エンコードしたときは AV1)、`alt` = もう一方 (H.264)。名指しが無ければ「今いいほう」。
- * 画面 (ダウンロードのボタン)・再生リンク作り・配るエンドポイントで同じ語彙を使う
+ * 画面 (ダウンロードのボタン)・配るエンドポイントで同じ語彙を使う
  */
 export type FileSource = 'ts' | 'encoded' | 'alt';
 

@@ -101,8 +101,8 @@ test.describe('録画とエンコード', () => {
         ).toBe('none');
 
         /*
-         * ダウンロードは押されてから**期限付きの署名URL** (?token=) を作って始める。
-         * 資格情報を URL に埋めていた頃は、パスワードがダウンロード履歴に残り続けた。
+         * ダウンロードはファイルのエンドポイントへそのまま遷移して始める。資格は画面と同じ
+         * (信頼したネットワークか、ログインの控えの Cookie) で、URL には何も埋めない。
          *
          * **ボタンは詳細の中にある。** 一覧の行に並べていた頃は、1行に4つも5つも
          * ボタンが載って狭い画面で横に流れていた
@@ -111,12 +111,11 @@ test.describe('録画とエンコード', () => {
         const started = page.waitForEvent('download');
         await detail.getByTestId('download-link').click();
         const download = await started;
-        const minted = new URL(download.url());
-        expect(minted.search).toContain('token=');
-        expect(minted.search).toContain('download=1');
+        const target = new URL(download.url());
+        expect(target.search).toContain('download=1');
         expect(download.url()).not.toContain('denpa:');
         // ファイルのエンドポイントそのもの (尻に番組名などは付けない)
-        expect(minted.pathname).toMatch(/\/api\/recordings\/\d+\/file$/);
+        expect(target.pathname).toMatch(/\/api\/recordings\/\d+\/file$/);
         await download.cancel();
 
         // 落とし始めたら詳細は畳む (押せたかどうかが分かるように)
@@ -135,8 +134,7 @@ test.describe('録画とエンコード', () => {
         expect((await part.body()).byteLength).toBe(100);
 
         // 名前を付けないと「file」という拡張子の無いファイルとして落ちてくる。
-        // 署名URLは資格情報なしで通る (token が資格そのもの)
-        const attached = await request.get(minted.pathname + minted.search);
+        const attached = await request.get(target.pathname + target.search);
         expect(attached.status()).toBe(200);
         const disposition = attached.headers()['content-disposition'] ?? '';
         expect(disposition).toMatch(/^attachment;/);

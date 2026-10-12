@@ -179,8 +179,8 @@ GHCR に繋がらないと Pod が起動しません。
 映像・音声・字幕・データ放送・双方向 (通信系コンテンツ) まで入っています。
 どこまで入っているか、エンコード方式・遅延の詰め方・WebSocket の作りは [stream.md](stream.md) にあります。
 
-録画済みのものをテレビで観るには、テレビのアプリ ([denpa-tv](https://github.com/danything/denpa-tv)) を使うか、
-期限付きの再生リンクを使います ([library.md](library.md#テレビのアプリと再生リンク))。
+録画済みのものをテレビで観るには、テレビのアプリ ([denpa-tv](https://github.com/danything/denpa-tv)) を使います
+([library.md](library.md#テレビのアプリ))。
 
 ## クラスタ側の前提条件
 

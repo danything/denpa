@@ -88,9 +88,7 @@ test.describe('スクランブルされたまま録れたとき', () => {
             /*
              * **名指しした側が本当に来ること。** 落ちてくる名前で分かる —
              * エンコードしたほうは .mkv、元は .m2ts。ここが同じものを指していたら
-             * ボタンが2つある意味が無い。押すと期限付きの署名URLが作られるので、
-             * その URL を**資格情報なしの Range** で呼んで名前を見る
-             * (token だけで通ることの確認も兼ねる)
+             * ボタンが2つある意味が無い。落とし始めた URL を Range で呼んで名前を見る
              */
             const fetchName = async (testid: string) => {
                 const started = page.waitForEvent('download');
