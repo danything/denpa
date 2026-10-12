@@ -326,7 +326,8 @@ export class CaptionPainter {
          * 借りものは BML の面 (960x540) を原寸で組み、枠いっぱいに `transform: scale` で
          * 伸ばす (`DataBroadcast` の `fit`)。小窓へ移った canvas の CSS の大きさは面の上の
          * 480x270 のままなので、その画素で描いた絵が枠の大きさに合わせて引き伸ばされていた。
-         * `translate` (帯の上への持ち上げ) は大きさを変えないので、倍率には入らない
+         * `translate` (帯の上への持ち上げ) は大きさを変えないので、倍率には入らない。
+         * 祖先に掛かるのは `scale` と `translate` だけの前提 (`rotate` だと外接矩形になり合わない)
          */
         const dpr = window.devicePixelRatio || 1;
         const cssWidth = canvas.clientWidth;
