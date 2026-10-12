@@ -319,6 +319,21 @@ describe('ffmpeg の出口を本文にする (transcodeBody)', () => {
         expect(await new Response(body).text()).toBe('流し込んだもの');
     });
 
+    /*
+     * 読みに来て待っているのは「読まれない」ではない。数えていた頃は、ffmpeg の出だしが
+     * 上限より遅いと、待っている相手を `idle` で切っていた (CI で `sh` の起動が 50ms に
+     * 間に合わなかった回に、下の「畳む」のテストが最初の読みで落ちた)
+     */
+    test('ffmpeg が出すのを待っている間は畳まない', async () => {
+        let done = 0;
+        const body = transcodeBody([{ argv: ['sh', '-c', 'sleep 0.3; printf ok'] }], '[試験]', () => done++, {
+            limit: 50,
+            every: 10,
+        });
+        expect(await new Response(body).text()).toBe('ok');
+        expect(done).toBe(1);
+    });
+
     test('読まれないまま置かれたら畳む', async () => {
         let done = 0;
         const body = transcodeBody([{ argv: ['sh', '-c', 'yes'] }], '[試験]', () => done++, {

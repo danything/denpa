@@ -547,8 +547,17 @@
             </p>
         </div>
     {:else}
+        <!--
+            **見出しの裏を「見えている」に数えない** (`scroll-padding`)。
+
+            チャンネル名の行と時刻の列は `sticky` で表の上に重なっている。そのままだと、
+            キーボードでマスへ移ったとき (`focus`) や `scrollIntoView` のスクロールが、
+            見出しの裏に半分隠れたマスを見えているとみなして動かない (e2e では 3時台に
+            翌日の 4:00 のマスを押すと、真ん中が見出しに当たって詳細が開かなかった)
+        -->
         <div
             class="grid-box"
+            style="scroll-padding: {headHeight}px 0 0 {TIME_COLUMN};"
             use:dragScroll
             bind:this={grid}
             data-testid="guide-grid"

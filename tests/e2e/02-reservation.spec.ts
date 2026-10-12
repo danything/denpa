@@ -1,4 +1,4 @@
-import { cellOf, expect, goto, past, setRecording, syncEpg, test, upcoming } from './helpers';
+import { cellOf, expect, goto, past, setRecording, shownDay, syncEpg, test, upcoming } from './helpers';
 
 test.describe('手動予約', () => {
     test.beforeEach(async ({ request }) => {
@@ -165,6 +165,8 @@ test.describe('予約の細かい指定', () => {
     test('予約の詳細から取り消せる', async ({ page }) => {
         await goto(page, '/guide?type=GR');
         const [target] = await upcoming(page);
+        // 3時台は翌日の表から選ぶので、開き直すときは同じ日を名指しする (`shownDay`)
+        const day = await shownDay(page);
         await cellOf(page, target.programId).getByTestId('program-button').click();
         await page.getByTestId('detail-reserve').click();
         await expect(cellOf(page, target.programId)).toContainText('予約済み');
@@ -196,7 +198,7 @@ test.describe('予約の細かい指定', () => {
         await page.getByTestId('detail-close').click();
 
         // 番組表の詳細でも、取り消したあとは「予約する」に戻っている
-        await goto(page, '/guide?type=GR');
+        await goto(page, day);
         const cell = cellOf(page, target.programId);
         await expect(cell).not.toContainText('予約済み');
         await cell.getByTestId('program-button').click();
@@ -211,6 +213,7 @@ test.describe('予約の細かい指定', () => {
     test('番組表と予約の詳細から、その番組のルールを作りに行ける', async ({ page }) => {
         await goto(page, '/guide?type=GR');
         const [target] = await upcoming(page);
+        const day = await shownDay(page);
         const ruleUrl = new RegExp(`/rules\\?(.*&)?program=${target.programId}(&|$)`);
         const detail = page.getByTestId('program-detail');
         await cellOf(page, target.programId).getByTestId('program-button').click();
@@ -218,7 +221,7 @@ test.describe('予約の細かい指定', () => {
         await expect(page).toHaveURL(ruleUrl);
         await expect(page.getByTestId('rule-origin')).toBeVisible();
 
-        await goto(page, '/guide?type=GR');
+        await goto(page, day);
         await cellOf(page, target.programId).getByTestId('program-button').click();
         await detail.getByTestId('detail-reserve').click();
         await expect(cellOf(page, target.programId)).toContainText('予約済み');
@@ -302,7 +305,9 @@ test.describe('番組表のマスを押す', () => {
         /*
          * **見えるところまで送っておく。** 番組表は 4:00 始まりなので、4時台に
          * 走らせると「これから始まる番組」がグリッドの先頭にあり、真ん中を
-         * 押したつもりが貼り付いた見出しに当たっていた (時計次第で落ちていた)
+         * 押したつもりが貼り付いた見出しに当たっていた (時計次第で落ちていた)。
+         * 半分隠れたマスを見出しの下までスクロールさせるのは表の側 (`scroll-padding`。下の
+         * 「見出しの裏に半分隠れたマスも…」で確かめている)
          */
         await cell.scrollIntoViewIfNeeded();
         const box = (await cell.boundingBox()) ?? { x: 0, y: 0, width: 0, height: 0 };
@@ -380,6 +385,49 @@ test.describe('番組表のマスを押す', () => {
             { x: box.x + box.width / 2, y: box.y + box.height / 2 },
         );
 
+        await expect(page.getByTestId('program-detail')).toBeVisible();
+    });
+
+    /*
+     * **見出しの裏に半分隠れたマスも、スクロールすれば見出しの下に出る。**
+     *
+     * 3時台に走らせると、`upcoming` は翌日へ送って 4:00 のマスを選ぶ。日を送っても縦の
+     * 位置は引き継ぐので、そのマスは貼り付いたチャンネル名の行の裏に半分隠れていた。
+     * `scrollIntoViewIfNeeded` は見出しの裏も見えている場所に数えて、マスを見出しの下まで出さないので、真ん中を押すと
+     * 見出しに当たり、上の2つが 3:30〜4:00 にだけ落ちていた (CI で実際に落ちた)。
+     * 時計に頼らずにその形を作る: マスの下の 16px だけが見出しの下に覗くところまでスクロールする
+     */
+    test('見出しの裏に半分隠れたマスも、スクロールすれば見出しの下に出る', async ({ page }) => {
+        await goto(page, '/guide?type=GR');
+        /*
+         * 先頭の局のいちばん早いマス (マスは局ごとに開始時刻順に並ぶ)。偽の放送は「いま」の
+         * 8 時間前からなので、表の下端 (翌 4:00) までは少なくとも 8 時間あり、
+         * 見出しの裏に入るまでスクロールする余地がある
+         */
+        const cell = page.getByTestId('grid-program').first();
+        await cell.evaluate((el) => {
+            const grid = el.closest<HTMLElement>('[data-testid="guide-grid"]');
+            const head = grid?.querySelector('[data-testid="guide-service"]');
+            if (grid == null || head == null) throw new Error('番組表の見出しが無い');
+            const rect = el.getBoundingClientRect();
+            grid.scrollTop += rect.bottom - 16 - head.getBoundingClientRect().bottom;
+        });
+        /** マスの真ん中にあるのが、そのマスか (見出しではなく) */
+        const centerIsCell = () =>
+            cell.evaluate((el) => {
+                const rect = el.getBoundingClientRect();
+                const hit = document.elementFromPoint(rect.x + rect.width / 2, rect.y + rect.height / 2);
+                return el.contains(hit);
+            });
+        // ここで見出しの裏に入っていなければ、確かめたいことを作れていない
+        expect(await centerIsCell(), 'マスを見出しの裏まで動かせていない').toBe(false);
+
+        await cell.scrollIntoViewIfNeeded();
+        expect(await centerIsCell(), 'マスの真ん中が見出しの裏に残っている').toBe(true);
+        const box = (await cell.boundingBox()) ?? { x: 0, y: 0, width: 0, height: 0 };
+        const x = box.x + box.width / 2;
+        const y = box.y + box.height / 2;
+        await page.mouse.click(x, y);
         await expect(page.getByTestId('program-detail')).toBeVisible();
     });
 });

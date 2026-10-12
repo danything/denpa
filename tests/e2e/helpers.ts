@@ -159,6 +159,19 @@ export async function upcoming(page: Page): Promise<[Cell, ...Cell[]]> {
     return atLeastOne(soon, 'これから始まる番組');
 }
 
+/**
+ * いま開いている番組表の日を、`start` を名指しした URL で返す。
+ *
+ * **番組表を開き直すときはこれを使う。** `upcoming` は放送日の終わり際 (3時台) に翌日へ
+ * 送って選ぶので、`/guide?type=GR` で開き直すと今日の表に戻り、選んだ番組が無い
+ * (3:30〜4:00 に CI で落ちていた)。4時を跨いで「今日」が変わっても同じ日が開く
+ */
+export async function shownDay(page: Page): Promise<string> {
+    const href = await page.locator('[data-testid^="type-"][aria-current="page"]').getAttribute('href');
+    if (href === null) throw new Error('番組表の種別のリンクが無い');
+    return href;
+}
+
 /** 番組表のマスをIDで探す。番組が終わると並びがずれるので位置では追わない */
 export function cellOf(page: Page, programId: string) {
     return page.locator(`[data-testid="grid-program"][data-program-id="${programId}"]`);
