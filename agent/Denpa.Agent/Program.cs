@@ -110,11 +110,13 @@ app.MapGet("/denpa/stream", async (HttpContext http) =>
     }
     _ = int.TryParse(query["priority"].ToString(), out var priority);
     var use = query["use"].ToString() is { Length: > 0 } named ? named : "不明";
+    // 引き継ぎ。この読み手たちは、もう離れたものとして選ぶ (TunerPool.Open。何度でも書ける)
+    var after = query["after"].Where(value => !string.IsNullOrEmpty(value)).Select(value => value!).ToHashSet();
 
     Sink sink;
     try
     {
-        sink = pool.Open(type, channel, priority, use);
+        sink = pool.Open(type, channel, priority, use, after);
     }
     catch (TunerPool.TunerBusyException error)
     {

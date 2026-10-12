@@ -19,8 +19,20 @@ export interface SceneTuner {
 }
 
 export type SceneStep =
-    /** 開く。`rank` は入るはずの本の順位、null なら断られる (409) */
-    | { open: string; type: string; channel: string; priority: number; rank: number | null }
+    /**
+     * 開く。`rank` は入るはずの本の順位、null なら断られる (409)。
+     * `after` は引き継ぐ読み手 (もう離れたものとして選ぶ)。`ended` は、この選局で正常に
+     * 終わらされるはずの読み手 (引き継いだ相手)。denpa から見ると `after` の読み手はこの時点で離れている
+     */
+    | {
+          open: string;
+          type: string;
+          channel: string;
+          priority: number;
+          rank: number | null;
+          after?: string[];
+          ended?: string[];
+      }
     /** 読むのをやめる */
     | { close: string };
 
@@ -113,6 +125,96 @@ export const scenes: Scene[] = [
             { close: 'a' },
             // gr9 が空いていても、T21 を読んでいる mlt9 に乗る
             { open: 'c', type: 'GR', channel: 'T21', priority: RECORDING, rank: 1 },
+        ],
+    },
+    {
+        /*
+         * 録画が別のチャンネルへ続くとき。前の録画を止めたことがエージェントに届く前に次が来ても、
+         * `after` で渡せば前の本がまだ塞がって見えない。相乗りしていた番組表集めは蹴られる
+         */
+        name: '引き継ぐ読み手はもう離れたものとして選び、その本を選んだら終わらせて選局し直す',
+        tuners: [
+            { name: 'mlt9', types: ['GR', 'BS', 'CS'], rank: 1 },
+            { name: 'gr9', types: ['GR'], rank: 0 },
+        ],
+        steps: [
+            { open: 'a', type: 'GR', channel: 'T16', priority: RECORDING, rank: 0 },
+            { open: 'b', type: 'GR', channel: 'T21', priority: RECORDING, rank: 1 },
+            { open: 'epg', type: 'GR', channel: 'T21', priority: 3, rank: 1 },
+            {
+                open: 'c',
+                type: 'BS',
+                channel: 'BS11_0',
+                priority: RECORDING,
+                rank: 1,
+                after: ['b'],
+                ended: ['b'],
+            },
+            { close: 'b' },
+        ],
+    },
+    {
+        name: '引き継ぐときも、順位のより前の本が空いていればそちらを使い、前の読み手には触らない',
+        tuners: [
+            { name: 'mlt9', types: ['GR', 'BS', 'CS'], rank: 1 },
+            { name: 'gr9', types: ['GR'], rank: 0 },
+        ],
+        steps: [
+            { open: 'a', type: 'GR', channel: 'T16', priority: RECORDING, rank: 0 },
+            { open: 'b', type: 'GR', channel: 'T21', priority: RECORDING, rank: 1 },
+            { close: 'a' },
+            { open: 'c', type: 'GR', channel: 'T16', priority: RECORDING, rank: 0, after: ['b'] },
+            { close: 'b' },
+        ],
+    },
+    {
+        name: '引き継ぐ相手の本が受けられない種別なら、ふつうに選ぶ',
+        tuners: [
+            { name: 'gr9', types: ['GR'], rank: 0 },
+            { name: 'bs9', types: ['BS', 'CS'], rank: 1 },
+        ],
+        steps: [
+            { open: 'a', type: 'BS', channel: 'BS11_0', priority: RECORDING, rank: 1 },
+            { open: 'b', type: 'GR', channel: 'T16', priority: RECORDING, rank: 0, after: ['a', 'nobody'] },
+            { close: 'a' },
+        ],
+    },
+    {
+        /*
+         * 録画が同じチャンネルで続くとき。後ろは前の選局に乗るだけで、引き継ぐことも選局し直す
+         * ことも無い。前が離れても後ろはその本に居続ける
+         */
+        name: '同じチャンネルで続くなら乗るだけ。前が離れても後ろは同じ本に残る',
+        tuners: [
+            { name: 'mlt9', types: ['GR', 'BS', 'CS'], rank: 1 },
+            { name: 'gr9', types: ['GR'], rank: 0 },
+        ],
+        steps: [
+            { open: 'a', type: 'GR', channel: 'T16', priority: RECORDING, rank: 0 },
+            { open: 'b', type: 'GR', channel: 'T21', priority: RECORDING, rank: 1 },
+            { open: 'c', type: 'GR', channel: 'T21', priority: RECORDING, rank: 1, after: ['b'] },
+            { close: 'b' },
+            { close: 'a' },
+            // gr9 が空いても c は mlt9 に居るので、衛星は入れない
+            { open: 'd', type: 'BS', channel: 'BS11_0', priority: RECORDING, rank: null },
+        ],
+    },
+    {
+        /*
+         * 弱い読み手 (番組表集め) が広い本で同じチャンネルを読んでいても、録画はそこへ乗らずに
+         * 順位のいちばん前の本へ入る。乗ると、録画の入る本が録画以外に左右される
+         */
+        name: '弱い読み手しかいない同じチャンネルには、その本が順位で先頭の組のときだけ乗る',
+        tuners: [
+            { name: 'mlt9', types: ['GR', 'BS', 'CS'], rank: 1 },
+            { name: 'gr9', types: ['GR'], rank: 0 },
+        ],
+        steps: [
+            { open: 'a', type: 'GR', channel: 'T21', priority: RECORDING, rank: 0 },
+            { open: 'epg', type: 'GR', channel: 'T16', priority: 3, rank: 1 },
+            { close: 'a' },
+            { open: 'b', type: 'GR', channel: 'T16', priority: RECORDING, rank: 0 },
+            { open: 'c', type: 'BS', channel: 'BS11_0', priority: RECORDING, rank: 1 },
         ],
     },
 ];

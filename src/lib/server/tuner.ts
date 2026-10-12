@@ -236,6 +236,10 @@ export class TunerBusyError extends Error {}
  *
  * 同じチャンネルを誰かが既に開いていれば、エージェントが相乗りさせる
  * (チューナーは増えない)。空きが無ければ 409 が返るので、呼んだ側は待って掛け直す。
+ *
+ * `after` の読み手は、もう離れたものとしてエージェントに選ばせる (引き継ぎ。録画を止めて
+ * 同じ見回りで次を始めるとき。docs/agent.md「選ぶ順の約束」)。知らない古いエージェントは
+ * 読み飛ばして、ふつうに選ぶ
  */
 export async function openChannelStream(
     type: string,
@@ -243,8 +247,10 @@ export async function openChannelStream(
     signal: AbortSignal,
     use: StreamUse,
     priority = config.priority.recording,
+    after: readonly StreamUse[] = [],
 ): Promise<ReadableStream<Uint8Array>> {
     const query = new URLSearchParams({ type, channel, priority: String(priority), use });
+    for (const leaving of after) query.append('after', leaving);
     const res = await fetch(`${config.agentUrl}/denpa/stream?${query}`, { signal });
     if (!res.ok || res.body === null) {
         const detail = await res.text().catch(() => '');

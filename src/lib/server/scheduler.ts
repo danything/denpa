@@ -13,7 +13,14 @@ import {
 } from './recorder';
 import { recordings, reservations, services } from './schema';
 import { isDraining } from './shutdown';
-import { type AgentTuner, getTuners, recordingHolds, recordingOf } from './tuner';
+import {
+    type AgentTuner,
+    getTuners,
+    recordingHolds,
+    recordingOf,
+    recordingUse,
+    type StreamUse,
+} from './tuner';
 
 interface Candidate extends Reservation {
     type: string;
@@ -133,6 +140,8 @@ export async function tick(): Promise<void> {
 
     // 止めるほうを先にやる。次の番組が始まるときに前の録画がまだチューナーを
     // 掴んでいると、本数が足りない環境で後続が丸ごと録れない
+    /** この見回りで止めた録画の読み手。始める録画に引き継ぎとして渡す (下) */
+    const stopped: StreamUse[] = [];
     for (const id of activeRecordingIds()) {
         const rec = orm()
             .select({ end_at: recordings.end_at, record_to: recordings.record_to })
@@ -141,7 +150,9 @@ export async function tick(): Promise<void> {
             .get();
         if (rec === undefined) continue;
         // 尻を譲っているならそこで離す (`record_to`)。次の録画がそこから掴む
-        if (at >= recordingUntil(rec)) stopRecording(id);
+        if (at < recordingUntil(rec)) continue;
+        stopRecording(id);
+        stopped.push(recordingUse(id));
     }
 
     /*
@@ -226,6 +237,16 @@ export async function tick(): Promise<void> {
             .returning({ id: reservations.id })
             .get();
         if (claimed === undefined) continue;
-        await startRecording(reservation);
+        /*
+         * **止めた録画を引き継ぎとして渡す** (`after`)。止めたことがエージェントに届くのは
+         * 非同期なので、届く前に次の選局が着くと、前の本がまだ塞がって見えて次の順位の本に
+         * 入っていた (割り振りと違う本に入り、後の録画が録れない)。渡しておけば、エージェントは
+         * 止めた録画をもう離れたものとして選ぶ。割り振り (`conflict.ts`) も、離すのと掴むのが
+         * 同じ時刻なら離すほうを先に数えているので、それと同じになる。
+         *
+         * どれとどれを組にするかは決めない。どの本に入るかはエージェントが順位で選ぶので、
+         * 止めたものを全部渡せば足りる (選ばれなかった本の読み手には触らない約束)
+         */
+        await startRecording(reservation, stopped);
     }
 }

@@ -141,15 +141,27 @@ function tunerStatus() {
     });
 }
 
-/** どのチューナーに載せるか。種別が合う空きを前から1つ取るだけ (`rank` は定義の順にしてある) */
-function assign(type: string): number | null {
+/**
+ * どのチューナーに載せるか。種別が合う空きを前から1つ取るだけ (`rank` は定義の順にしてある)。
+ * 引き継ぐ読み手 (`after`) しかいない本も空きとみなし、選んだらその読み手を正常に終わらせる
+ */
+function assign(type: string, after: ReadonlySet<string>): number | null {
     for (const tuner of TUNERS) {
         if (!tuner.types.includes(type)) continue;
         if (busyTuners && tuner.index === 0) continue;
-        if (!leases.has(tuner.index)) return tuner.index;
+        const lease = leases.get(tuner.index);
+        if (lease === undefined) return tuner.index;
+        if (lease.users.every((u) => after.has(u.use))) {
+            leases.delete(tuner.index);
+            for (const u of lease.users) cuts.get(u)?.abort();
+            return tuner.index;
+        }
     }
     return null;
 }
+
+/** 読み手ごとの止め口。引き継ぐときに、こちらから正常に終わらせる */
+const cuts = new Map<{ use: string; priority: number }, AbortController>();
 
 /*
  * 起きたことを知らせる口 (SSE)。本物では `/denpa/events`。
@@ -209,7 +221,7 @@ function openStream(url: URL, signal: AbortSignal): Response {
         ([, lease]) => lease.type === type && lease.channel === channel,
     )?.[0];
     if (index === undefined) {
-        const picked = assign(type);
+        const picked = assign(type, new Set(url.searchParams.getAll('after')));
         if (picked === null) return json({ error: `${type} のチューナーに空きがありません` }, 409);
         index = picked;
         leases.set(index, { type, channel, users: [] });
@@ -222,13 +234,18 @@ function openStream(url: URL, signal: AbortSignal): Response {
     emit('tuners');
 
     const at = index;
-    signal.addEventListener('abort', () => {
+    const cut = new AbortController();
+    cuts.set(user, cut);
+    signal.addEventListener('abort', () => cut.abort());
+    cut.signal.addEventListener('abort', () => {
+        cuts.delete(user);
         lease.users = lease.users.filter((u) => u !== user);
-        if (lease.users.length === 0) leases.delete(at);
+        // 引き継がれた本には、もう次の選局が入っている
+        if (lease.users.length === 0 && leases.get(at) === lease) leases.delete(at);
         emit('tuners');
     });
 
-    return new Response(fakeStream(signal, services), {
+    return new Response(fakeStream(cut.signal, services), {
         headers: { 'Content-Type': 'video/MP2T' },
     });
 }

@@ -17,7 +17,7 @@ import { recordingSummary } from './recording';
 import { programs, recordings, reservations, services } from './schema';
 import { chunks } from './stream';
 import { parseTitle } from './title';
-import { openChannelStream, recordingUse } from './tuner';
+import { openChannelStream, recordingUse, type StreamUse } from './tuner';
 import { notify } from './webhook';
 
 /** 録画中のストリームを止めるための口。プロセス内にしか無いので再起動で失われる (起動時に拾い直す: recoverOrphanedRecordings) */
@@ -125,8 +125,14 @@ function createRecording(reservation: Reservation): Recording {
 /**
  * 予約を録画に移す。ストリームの読み出しは待たずにバックグラウンドで走らせ、
  * 呼び出し側(スケジューラのtick)を塞がないようにする。
+ *
+ * `after` は、同じ見回りで止めた録画の読み手。チューナーを掴むとき、エージェントはそれらを
+ * もう離れたものとして選ぶ (引き継ぎ。docs/agent.md「選ぶ順の約束」)
  */
-export async function startRecording(reservation: Reservation): Promise<Recording> {
+export async function startRecording(
+    reservation: Reservation,
+    after: readonly StreamUse[] = [],
+): Promise<Recording> {
     const recording = createRecording(reservation);
     emit('recordings');
     notify({
@@ -134,15 +140,15 @@ export async function startRecording(reservation: Reservation): Promise<Recordin
         text: `録画を開始しました: ${recording.name} (${recording.service_name})`,
         recording: recordingSummary(recording),
     });
-    launch(recording);
+    launch(recording, after);
     return recording;
 }
 
 /** 読み出しを裏で走らせる。止める口 (`active`) はここで立てる */
-function launch(recording: Recording): void {
+function launch(recording: Recording, after: readonly StreamUse[] = []): void {
     const controller = new AbortController();
     active.set(recording.id, controller);
-    void pump(recording, controller).catch((error) => {
+    void pump(recording, controller, after).catch((error) => {
         active.delete(recording.id);
         fail(recording.id, String(error));
     });
@@ -231,7 +237,11 @@ function addDuration(recordingId: number, ms: number): void {
  */
 const EPG_SAVE_INTERVAL = 5 * 60_000;
 
-async function pump(recording: Recording, controller: AbortController): Promise<void> {
+async function pump(
+    recording: Recording,
+    controller: AbortController,
+    after: readonly StreamUse[],
+): Promise<void> {
     const path = recording.ts_path!;
     mkdirSync(dirname(path), { recursive: true });
 
@@ -281,6 +291,8 @@ async function pump(recording: Recording, controller: AbortController): Promise<
              * 例外で抜けていた頃はエージェントの Pod を入れ替えただけで番組が丸ごと
              * 失敗した (実機)
              */
+            // 引き継ぎは最初に掴むときだけ。掴み直すころには、止めた録画はもう離れている
+            let handoff = after;
             while (!controller.signal.aborted) {
                 /** 切れた理由。EOF なら null のまま */
                 let broke: unknown = null;
@@ -288,9 +300,11 @@ async function pump(recording: Recording, controller: AbortController): Promise<
                 let stream: ReadableStream<Uint8Array>;
                 try {
                     stream = await openWithRetry(
-                        (signal) => openChannelStream(service.type, service.channel, signal, use),
+                        (signal) =>
+                            openChannelStream(service.type, service.channel, signal, use, undefined, handoff),
                         controller.signal,
                     );
+                    handoff = [];
                 } catch (error) {
                     // **掴み直せなくても諦めない。** エージェントの Pod 入れ替えは
                     // openWithRetry の数十秒を超えることがあり、そこで失敗にすると

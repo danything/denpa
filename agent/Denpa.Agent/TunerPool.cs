@@ -138,8 +138,16 @@ public sealed class TunerPool(
     /// 選局して読み口を返す。掴めなければ <see cref="TunerBusyException"/>。
     ///
     /// <para>同じ物理チャンネルが既に開いていればそこへ混ぜる。**チューナーは増えない。**</para>
+    ///
+    /// <para>
+    /// **<paramref name="after"/> の読み手は、もう離れたものとして選ぶ** (引き継ぎ)。denpa が
+    /// 録画を止めて、同じ見回りで次の録画を始めるときに渡す。止めたことがここに届くのは
+    /// 非同期なので、届く前に次の要求が来ると、前の本がまだ塞がって見えて次の順位の本に
+    /// 入っていた。選んだ本にその読み手がいれば、正常に終わらせてから同じ本で選局し直す。
+    /// 選ばなかったなら触らない (止めるのは denpa)。docs/agent.md「選ぶ順の約束」
+    /// </para>
     /// </summary>
-    public Sink Open(string type, string channel, int priority, string use)
+    public Sink Open(string type, string channel, int priority, string use, IReadOnlySet<string>? after = null)
     {
         int index;
         TunerSpec spec;
@@ -151,21 +159,37 @@ public sealed class TunerPool(
         lock (_gate)
         {
             /*
-             * **読んでいる人がいれば、どの本でもそこに乗る** (約束2)。余韻で残っているだけの
-             * 選局には、ここでは乗らない — その本が選ぶ順で先頭のときだけ、`Pick` が選んで下で使い回す
+             * **自分と同じか強い読み手がいれば、どの本でもそこに乗る** (約束3)。弱い読み手しか
+             * いない選局と、余韻で残っているだけの選局には、ここでは乗らない — その本が選ぶ順で
+             * 先頭の組のときだけ、`Pick` が選んで下で乗る。弱い相手 (番組表集めなど) が広い本に
+             * いるからといって録画がそこへ乗ると、録画の入る本が録画以外に左右される (denpa は録画しか知らない)。
+             * 引き継ぐ読み手 (`after`) は、もう離れたものとして数えない
              */
+            after ??= new HashSet<string>();
             foreach (var open in _leases.Values)
             {
-                if (open.Type == type && open.Channel == channel && open.Sinks.Count > 0) return Join(open, priority, use);
+                if (open.Type != type || open.Channel != channel) continue;
+                bool strong;
+                lock (open.Sinks) strong = open.Sinks.Any(sink => !after.Contains(sink.Use) && sink.Priority >= priority);
+                if (strong) return Join(open, priority, use);
             }
 
-            index = Pick(type, channel, priority)
+            index = Pick(type, channel, priority, after)
                 ?? throw new TunerBusyException($"{type} のチューナーに空きがありません");
 
             if (_leases.TryGetValue(index, out var victim))
             {
-                // 同じチャンネルの余韻なら、選局し直さずにそのまま使い回す
-                if (victim.Sinks.Count == 0 && victim.Type == type && victim.Channel == channel)
+                // 引き継ぐ相手は正常に終わらせる (蹴られたのではない)。残りの弱い読み手は下で蹴る
+                lock (victim.Sinks)
+                {
+                    foreach (var leaving in victim.Sinks.Where(s => after.Contains(s.Use)).ToList())
+                    {
+                        leaving.End();
+                        victim.Sinks.Remove(leaving);
+                    }
+                }
+                // 同じチャンネルなら、選局し直さずにそのまま乗る (余韻ならそのまま使い回し、弱い読み手も残す)
+                if (victim.Type == type && victim.Channel == channel)
                 {
                     return Join(victim, priority, use);
                 }
@@ -441,7 +465,8 @@ public sealed class TunerPool(
     /// <list type="number">
     /// <item>
     /// 使ってよい本 = 空いている本 (選局が無いか、読み手がいなくなって余韻で残っているだけ) と、
-    /// **自分より弱い読み手しかいない本**。録画から見て、ライブや番組表集めの本は空いているのと同じ
+    /// **自分より弱い読み手しかいない本**。録画から見て、ライブや番組表集めの本は空いているのと同じ。
+    /// 引き継ぐ読み手 (`after`) は、もう離れたものとして数える
     /// </item>
     /// <item>そのうち、受けられて**順位 (<see cref="Ranks"/>) がいちばん小さい組**から選ぶ</item>
     /// </list>
@@ -455,7 +480,7 @@ public sealed class TunerPool(
     /// <para>組の中 (受けられる種別がまったく同じ本) では、次の順に選ぶ。</para>
     ///
     /// <list type="number">
-    /// <item>**同じチャンネルの余韻**。選局し直さずにそのまま使い回す</item>
+    /// <item>**同じチャンネルの選局** (余韻か、弱い読み手しかいないもの)。選局し直さずにそのまま乗る</item>
     /// <item>**もうそのチャンネルに合っているもの**。選局し直さずに済む</item>
     /// <item>**ほかの余韻**。1人の視聴で本を2冊塞がない</item>
     /// <item>空いているもの</item>
@@ -474,12 +499,21 @@ public sealed class TunerPool(
     /// 5秒間だけ2冊が埋まる。
     /// </para>
     /// </summary>
-    private int? Pick(string type, string channel, int priority)
+    private int? Pick(string type, string channel, int priority, IReadOnlySet<string> after)
     {
         var ranks = Ranks(Tuners);
-        bool Idle(int index) => _leases.TryGetValue(index, out var lease) && lease.Sinks.Count == 0;
-        bool Usable(int index) =>
-            !_leases.TryGetValue(index, out var lease) || lease.Sinks.Count == 0 || lease.Priority < priority;
+        // 残る読み手の強さ。引き継ぐ相手 (`after`) はもう離れたものとして数えない。誰もいなければ null
+        int? Strongest(int index)
+        {
+            if (!_leases.TryGetValue(index, out var lease)) return null;
+            lock (lease.Sinks)
+            {
+                var staying = lease.Sinks.Where(sink => !after.Contains(sink.Use)).ToList();
+                return staying.Count == 0 ? null : staying.Max(sink => sink.Priority);
+            }
+        }
+        bool Idle(int index) => _leases.ContainsKey(index) && Strongest(index) is null;
+        bool Usable(int index) => Strongest(index) is not { } strongest || strongest < priority;
 
         var usable = Enumerable.Range(0, Tuners.Count)
             .Where(index => ranks[index] is not null && Tuners[index].Types.Contains(type) && Usable(index))
@@ -490,7 +524,8 @@ public sealed class TunerPool(
 
         foreach (var index in group)
         {
-            if (Idle(index) && _leases[index].Type == type && _leases[index].Channel == channel) return index;
+            // 組の中に同じチャンネルの選局があれば乗る (余韻か、弱い読み手しかいないもの)
+            if (_leases.TryGetValue(index, out var same) && same.Type == type && same.Channel == channel) return index;
         }
         foreach (var index in group)
         {
@@ -513,7 +548,7 @@ public sealed class TunerPool(
         {
             if (!_leases.ContainsKey(index)) return index;
         }
-        return group.MinBy(index => _leases[index].Priority);
+        return group.MinBy(index => Strongest(index) ?? int.MinValue);
     }
 
     /// <summary>

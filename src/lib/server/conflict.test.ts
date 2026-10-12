@@ -200,6 +200,29 @@ describe('assign (前後マージン)', () => {
         );
         expect(accepted).toHaveLength(2);
         expect(rejected).toHaveLength(0);
+        /*
+         * 同じチャンネルで続くなら、マージンを削らずに重ねる。後ろは前の選局に乗るので、
+         * 前が離れても同じ本に居続け、止めてから掴む間は生まれない (引き継ぎは要らない)
+         */
+        const [first, second] = [1, 2].map((id) => accepted.find((a) => a.reservation.id === id));
+        expect(first?.to).toBe(115);
+        expect(second?.from).toBe(90);
+    });
+
+    test('同じチャンネルで続く録画は、前が離れても後ろが同じ本に残る (兼用あり)', () => {
+        // T21 が兼用に入り、同じチャンネルで続く。前が離れても後ろは兼用に居るので、衛星はその後から
+        const { accepted } = assign(
+            [
+                res({ id: 1, channel: 'T16', start_at: 0, end_at: 300 }),
+                res({ id: 2, channel: 'T21', start_at: 100, end_at: 200 }),
+                res({ id: 3, channel: 'T21', start_at: 200, end_at: 400 }),
+                res({ id: 4, type: 'BS', channel: 'BS11_0', start_at: 350, end_at: 500, priority: 1 }),
+            ],
+            tuners('GR', 'GR+BS+CS'),
+            MARGINS,
+        );
+        // T21 の尻のマージンは衛星の番組に負けるので、T21 の番組が終わる 400 から
+        expect(accepted.find((a) => a.reservation.id === 4)?.from).toBe(400);
     });
 
     /*
@@ -398,8 +421,12 @@ describe('エージェントと同じ場面', () => {
                 'open' in step && step.priority >= RECORDING ? [{ step, at }] : [],
             );
             const holds = opens.map(({ step, at }) => {
+                // 読むのをやめるか、引き継がれた (`after` に名前が挙がった) ところで離れる
                 const closed = scene.steps.findIndex(
-                    (s, i) => i > at && 'close' in s && s.close === step.open,
+                    (s, i) =>
+                        i > at &&
+                        (('close' in s && s.close === step.open) ||
+                            ('open' in s && (s.after ?? []).includes(step.open))),
                 );
                 return {
                     type: step.type,

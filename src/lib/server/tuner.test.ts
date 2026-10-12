@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import {
     type AgentTuner,
+    openChannelStream,
     recordingHolds,
     recordingOf,
     recordingUse,
@@ -173,5 +174,38 @@ describe('recordingHolds', () => {
             () => undefined,
         );
         expect(holds).toEqual([]);
+    });
+});
+
+/**
+ * **引き継ぎ (`after`) は、選局の口にそのまま並べて渡す。** エージェントは何度でも書ける
+ * `after` を読み、その読み手をもう離れたものとして選ぶ (docs/agent.md「選ぶ順の約束」の4)
+ */
+describe('openChannelStream の引き継ぎ', () => {
+    test('止めた録画の読み手を after に並べる', async () => {
+        const asked: URLSearchParams[] = [];
+        const agent = Bun.serve({
+            port: 0,
+            fetch(request) {
+                asked.push(new URL(request.url).searchParams);
+                return new Response('');
+            },
+        });
+        const { config } = await import('./config');
+        const before = config.agentUrl;
+        config.agentUrl = `http://127.0.0.1:${agent.port}`;
+        try {
+            const aborter = new AbortController();
+            await openChannelStream('BS', 'BS11_0', aborter.signal, recordingUse(9), 10, [
+                recordingUse(7),
+                recordingUse(8),
+            ]);
+            aborter.abort();
+        } finally {
+            config.agentUrl = before;
+            agent.stop(true);
+        }
+        expect(asked[0]?.getAll('after')).toEqual(['rec 7', 'rec 8']);
+        expect(asked[0]?.get('use')).toBe('rec 9');
     });
 });
