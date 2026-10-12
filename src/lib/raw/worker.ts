@@ -497,27 +497,32 @@ function openAudio(codec: 'aac' | 'opus', config: Uint8Array | null): boolean {
     return decoder._opus_open(audioInput.pointer, config.length) === 0;
 }
 
-function startFmp4(canvas: OffscreenCanvas): boolean {
+function startFmp4(canvas: OffscreenCanvas, follow: boolean): boolean {
     if (typeof VideoDecoder !== 'function') {
         fail('この端末では表示できません');
         return false;
     }
     try {
-        fmp4 = new Fmp4Video(canvas, {
-            audio: {
-                open: openAudio,
-                push: (data, pts) => {
-                    if (decoder !== null) decodeAudio(decoder, data, pts);
+        fmp4 = new Fmp4Video(
+            canvas,
+            {
+                audio: {
+                    open: openAudio,
+                    push: (data, pts) => {
+                        if (decoder !== null) decodeAudio(decoder, data, pts);
+                    },
                 },
+                drew: (first) => {
+                    shown++;
+                    toPip();
+                    if (first) post({ type: 'shown' });
+                },
+                fail,
+                record: (ms) => budget.record(ms),
+                full: () => post({ type: 'full' }),
             },
-            drew: (first) => {
-                shown++;
-                toPip();
-                if (first) post({ type: 'shown' });
-            },
-            fail,
-            record: (ms) => budget.record(ms),
-        });
+            follow,
+        );
     } catch (error) {
         fail(`映像を表示できません (${error instanceof Error ? error.message : String(error)})`);
         return false;
@@ -527,11 +532,11 @@ function startFmp4(canvas: OffscreenCanvas): boolean {
     return true;
 }
 
-async function init(canvas: OffscreenCanvas, base: string, kind: RawInput): Promise<void> {
+async function init(canvas: OffscreenCanvas, base: string, kind: RawInput, follow: boolean): Promise<void> {
     mode = kind;
     surface = canvas;
     if (kind === 'fmp4') {
-        if (!startFmp4(canvas)) return;
+        if (!startFmp4(canvas, follow)) return;
     } else {
         try {
             renderer = new YuvRenderer(canvas);
@@ -563,7 +568,7 @@ scope.onmessage = (event: MessageEvent<ToWorker>) => {
     const message = event.data;
     switch (message.type) {
         case 'init':
-            void init(message.canvas, message.decoder, message.input);
+            void init(message.canvas, message.decoder, message.input, message.follow);
             break;
         case 'data': {
             if (failed) return;

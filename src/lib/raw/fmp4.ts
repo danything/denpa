@@ -36,6 +36,13 @@ const PENDING_MOST = 8 * CLOCK;
 const BEHIND_MOST = 0.5 * CLOCK;
 /** 1コマの長さの目安 (90kHz)。59.94 コマ。実際の間隔が分かればそれを使う */
 const FRAME = 1501;
+/**
+ * 追っかけ (`follow`) で圧縮のまま持っておく上限。**時間 (90kHz) とバイト数の小さいほう** —
+ * サーバは倍速で送り込んでくるので、観ている先が伸び続ける。超えたら受け取るのをやめて
+ * `full` を返し、画面が手元の尽きる前に居る場所から頼み直す (焼く道の MSE の `BUDGET` と同じ量)
+ */
+const FOLLOW_AHEAD_MOST = 120 * CLOCK;
+const FOLLOW_BYTES_MOST = 120 * 1024 * 1024;
 /** 復号器が転んでも開き直す回数。**これより続けて転んだら諦める** (1コマでも描ければ数え直す) */
 const ERRORS_MOST = 3;
 
@@ -54,6 +61,8 @@ export interface Fmp4Host {
     fail(reason: string): void;
     /** 1コマを解くのに掛かった時間 (ms。渡してから出てくるまで) */
     record(ms: number): void;
+    /** 抱えきれなくなって、届いたものを捨て始めた (`follow` のときだけ) */
+    full(): void;
 }
 
 interface Pending {
@@ -86,6 +95,10 @@ export class Fmp4Video {
     /** 渡した時刻 (µs → performance.now())。解くのに掛かった時間を測る */
     private readonly started = new Map<number, number>();
     private errors = 0;
+    /** 追っかけで抱えきれなくなったか。**次の init (頼み直し) まで、届いたものは捨てる** */
+    private overflowed = false;
+    /** 圧縮のまま持っているバイト数 (`FOLLOW_BYTES_MOST`) */
+    private pendingBytes = 0;
     private shownSinceReset = false;
     private lastPts: number | null = null;
     /** いま出しているコマの時刻 (90kHz) */
@@ -93,9 +106,14 @@ export class Fmp4Video {
     frameTicks = FRAME;
     dropped = 0;
 
+    /**
+     * @param follow 放送の今を追わない (互換モードの追っかけ)。溜まっても先へ飛ばず、溢れそうなら
+     *   受け取るのをやめる (`messages.ts` の `follow`)
+     */
     constructor(
         private readonly canvas: OffscreenCanvas,
         private readonly host: Fmp4Host,
+        private readonly follow = false,
     ) {
         const context = canvas.getContext('2d', { alpha: false });
         if (context === null) throw new Error('2D で描けません');
@@ -119,7 +137,12 @@ export class Fmp4Video {
             this.init(readInit(bytes));
             return;
         }
-        if (this.tracks.length === 0) return;
+        if (this.tracks.length === 0 || this.overflowed) return;
+        if (this.follow && this.overfull()) {
+            this.overflowed = true;
+            this.host.full();
+            return;
+        }
         for (const sample of readFragment(bytes, this.tracks)) {
             const track = this.tracks.find((t) => t.id === sample.track);
             if (track === undefined) continue;
@@ -204,6 +227,7 @@ export class Fmp4Video {
          */
         const key = this.pending.findIndex((item) => item.key);
         this.pending = key < 0 ? [] : this.pending.slice(key);
+        this.pendingBytes = this.pending.reduce((sum, item) => sum + item.data.length, 0);
         this.needKey = key < 0;
     }
 
@@ -217,8 +241,13 @@ export class Fmp4Video {
             this.needKey = false;
         }
         this.pending.push(item);
-        // 溜め込みすぎ (止めている・裏に回っている)。いちばん新しい鍵から持ち直す
-        if (this.pending.length > 1 && this.pending.at(-1)!.dts - this.pending[0]!.dts > PENDING_MOST) {
+        this.pendingBytes += item.data.length;
+        // 溜め込みすぎ (止めている・裏に回っている)。いちばん新しい鍵から持ち直す。追っかけは捨てない (`overfull`)
+        if (
+            !this.follow &&
+            this.pending.length > 1 &&
+            this.pending.at(-1)!.dts - this.pending[0]!.dts > PENDING_MOST
+        ) {
             this.skipTo(Number.POSITIVE_INFINITY);
         }
     }
@@ -235,10 +264,26 @@ export class Fmp4Video {
         }
         if (found <= 0) return;
         this.pending = this.pending.slice(found);
+        this.pendingBytes = this.pending.reduce((sum, item) => sum + item.data.length, 0);
         this.decoder?.reset();
         this.open();
         // 開き直しで鍵を待つ印が立つが、頭は鍵のコマなのでそのまま渡せる
         this.needKey = false;
+    }
+
+    /** 圧縮の待ちの頭を1つ取り出す */
+    private take(): Pending {
+        const item = this.pending.shift() as Pending;
+        this.pendingBytes -= item.data.length;
+        return item;
+    }
+
+    /** 追っかけで抱えきれる量を超えたか (`FOLLOW_AHEAD_MOST` / `FOLLOW_BYTES_MOST`) */
+    private overfull(): boolean {
+        const first = this.pending[0];
+        const last = this.pending.at(-1);
+        if (first === undefined || last === undefined) return false;
+        return last.dts - first.dts > FOLLOW_AHEAD_MOST || this.pendingBytes > FOLLOW_BYTES_MOST;
     }
 
     private decode(item: Pending): void {
@@ -281,7 +326,7 @@ export class Fmp4Video {
         // **新しい局の1枚目は、解けたらすぐ出して待つ** (worker.ts の MPEG-2 と同じ理由)
         if (!this.shownSinceReset) {
             if (this.frames.length === 0 && decoder.decodeQueueSize === 0 && this.pending.length > 0) {
-                this.decode(this.pending.shift() as Pending);
+                this.decode(this.take());
             }
             const first = this.frames.shift();
             if (first !== undefined) this.draw(first);
@@ -297,7 +342,7 @@ export class Fmp4Video {
             this.frames.length + decoder.decodeQueueSize < DECODED_MOST &&
             this.pending[0]!.dts <= at + AHEAD
         ) {
-            this.decode(this.pending.shift() as Pending);
+            this.decode(this.take());
         }
 
         const now = Math.round((at * 1_000_000) / CLOCK);
@@ -342,6 +387,8 @@ export class Fmp4Video {
     /** 選局し直した。**前の局のものは全部捨てる** (出ている絵は次が出るまで残る) */
     reset(): void {
         this.pending = [];
+        this.pendingBytes = 0;
+        this.overflowed = false;
         this.dropFrames();
         this.started.clear();
         this.tracks = [];

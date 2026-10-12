@@ -21,6 +21,12 @@
  * タブが戻ったとき) 放送の今へ跳ぶ。焼く道のように 1.05倍で詰めることはしない —
  * 音を速めると音程が変わる (MSE は保ったまま速めてくれていた)。
  *
+ * ## 追っかけは放送の今を追わない (`follow`)
+ *
+ * 互換モードの追っかけ (`RawEngine` の `follow`) は録画を観ているので、**溜まっても跳ばない** —
+ * サーバは倍速で送り込んでくる (`server/chase.ts`) ので、溜まりは伸び続けるのが普通。
+ * **止めて再開は止めた所から** (止めている間も届いたぶんは捨てない。溢れないようにするのは worker の側)。
+ *
  * DOM も Web Audio も触らないので、ここだけ単体で確かめられる (`playout.test.ts`)。
  */
 
@@ -75,6 +81,10 @@ export class Playout<T extends Chunk> {
 
     /** どれだけ貯めるか (秒)。呼ぶ側が決める (`pacing.nextTarget`) */
     target: number;
+    /** 放送の今を追わないか (追っかけ。上の説明) */
+    follow = false;
+    /** 止めた位置 (`follow` のとき)。再開はここから */
+    private resumeAt: number | null = null;
 
     constructor(target: number) {
         this.target = target;
@@ -116,8 +126,8 @@ export class Playout<T extends Chunk> {
         if (last !== undefined && chunk.pts < last.pts) return null;
         this.chunks.push(chunk);
         if (!this.running) {
-            // 止めている間は溜め込まない。鳴らし直すときは放送の今から
-            if (this.held) this.keepLast(this.target + SLACK);
+            // 止めている間は溜め込まない。鳴らし直すときは放送の今から (追っかけは止めた所からなので捨てない)
+            if (this.held && !this.follow) this.keepLast(this.target + SLACK);
             return null;
         }
         const when = this.base + (chunk.pts - this.origin) / CLOCK;
@@ -145,7 +155,7 @@ export class Playout<T extends Chunk> {
             this.overSince = Number.NaN;
             return { kind: 'stall' };
         }
-        if (lead > this.target + SLACK) {
+        if (!this.follow && lead > this.target + SLACK) {
             if (Number.isNaN(this.overSince)) this.overSince = now;
             if (now - this.overSince >= SLACK_FOR) {
                 this.overSince = Number.NaN;
@@ -168,12 +178,22 @@ export class Playout<T extends Chunk> {
         return this.plan();
     }
 
-    /** 止める。**再開は放送の今から** (貯め直してから) */
-    hold(): void {
+    /**
+     * 止める。**再開は放送の今から** (貯め直してから)。追っかけ (`follow`) は**止めた所から** —
+     * 鳴り終わったぶんだけ捨てて、止めた位置を覚える (`now` が要る)
+     */
+    hold(now?: number): void {
+        const at = now === undefined ? null : this.position(now);
         this.held = true;
         this.running = false;
         this.overSince = Number.NaN;
-        this.keepLast(this.target + SLACK);
+        if (!this.follow) {
+            this.keepLast(this.target + SLACK);
+            return;
+        }
+        if (at === null) return;
+        this.resumeAt = at;
+        this.chunks = this.chunks.filter((chunk) => end(chunk) > at);
     }
 
     resume(): void {
@@ -185,12 +205,17 @@ export class Playout<T extends Chunk> {
         this.running = false;
         this.chunks = [];
         this.overSince = Number.NaN;
+        this.resumeAt = null;
     }
 
-    /** 放送の今から `target` 手前で鳴らし始める */
+    /** 放送の今から `target` 手前で鳴らし始める。追っかけは止めた所 (無ければいちばん古いもの) から */
     private startAt(now: number): Scheduled<T>[] {
         const newest = this.newest as number;
-        this.origin = Math.max(this.chunks[0]!.pts, newest - this.target * CLOCK);
+        const oldest = this.chunks[0]!.pts;
+        this.origin = this.follow
+            ? Math.max(oldest, this.resumeAt ?? oldest)
+            : Math.max(oldest, newest - this.target * CLOCK);
+        this.resumeAt = null;
         this.base = now + LEAD;
         this.running = true;
         this.chunks = this.chunks.filter((chunk) => end(chunk) > this.origin);

@@ -78,3 +78,36 @@ describe('Playout', () => {
         expect(playout.position(500 + LEAD)).toBeCloseTo(here, 5);
     });
 });
+
+describe('Playout (追っかけ: 放送の今を追わない)', () => {
+    test('溜まりすぎても跳ばない', () => {
+        const playout = new Playout<ReturnType<typeof chunk>>(0.1);
+        playout.follow = true;
+        for (let n = 0; n < 10; n++) playout.push(chunk(n), 0);
+        playout.tick(0);
+        // 倍速で送り込まれて 5 秒ぶん溜まる
+        for (let n = 10; n < 260; n++) playout.push(chunk(n), 0.01);
+        expect(playout.tick(0.02).kind).toBe('none');
+        expect(playout.tick(0.02 + SLACK_FOR).kind).toBe('none');
+        expect(playout.lead(0.02 + SLACK_FOR)).toBeGreaterThan(0.1 + SLACK);
+    });
+
+    test('止めて再開は、止めた所から。止めている間に届いたぶんも捨てない', () => {
+        const playout = new Playout<ReturnType<typeof chunk>>(0.1);
+        playout.follow = true;
+        for (let n = 0; n < 100; n++) playout.push(chunk(n), 0);
+        const started = playout.tick(0);
+        if (started.kind !== 'start') throw new Error('始まらない');
+        // 追っかけは頭 (いちばん古いもの) から鳴らす
+        expect(playout.position(LEAD)).toBeCloseTo(90_000, 5);
+        const here = playout.position(0.5) as number;
+        playout.hold(0.5);
+        for (let n = 100; n < 600; n++) playout.push(chunk(n), 1);
+        expect(playout.tick(5).kind).toBe('none');
+        playout.resume();
+        const resumed = playout.tick(5);
+        expect(resumed.kind).toBe('start');
+        expect(playout.position(5 + LEAD)).toBeCloseTo(here, 5);
+        expect(playout.lead(5 + LEAD)).toBeGreaterThan(10);
+    });
+});

@@ -105,6 +105,11 @@ const RETRY_MOST = 10_000;
  * 「はっきり分かる」に近すぎて、**分かるのに直らない帯**が残る
  */
 const SLIP_MOST = 0.1;
+/**
+ * 互換モードの追っかけで、抱えきれずに受け取るのをやめたあと、手元がこれを切ったら頼み直す (秒)。
+ * 読み直し (ffmpeg の立ち上がりと鍵のコマ待ち) は 1 秒ほどなので、尽きる前に間に合う
+ */
+const REFILL = 5;
 /** 跳び直す間隔の下限 (ms)。**復号が追いつかない状態は跳んでも直らない** */
 const UNSLIP_EVERY = 3_000;
 /*
@@ -373,6 +378,8 @@ export function livePlayer(options: LivePlayerOptions = {}) {
     let engine: RawEngine | null = null;
     /** いまの器が何を受け取っているか (`raw/messages.ts` の `RawInput`)。器が無ければ null */
     let engineInput: RawInput | null = null;
+    /** いまの器が追っかけ用か (`RawEngine` の `chase`。放送の今を追わない)。作るときに決まる */
+    let engineChase = false;
     /*
      * ---- 互換モード (`canvas-video.ts`) ----
      *
@@ -1033,7 +1040,8 @@ export function livePlayer(options: LivePlayerOptions = {}) {
         if (element === null) return;
         /*
          * **生の道は、止めたら再開は放送の今から。** 1局 15Mbit/s を遡れるほど持って
-         * おけない (5分で 600MB) ので、止めている間に届いたものは捨てる
+         * おけない (5分で 600MB) ので、止めている間に届いたものは捨てる。
+         * 互換モードの追っかけは止めた所から (届いたものを捨てない。`RawEngine` の `chase`)
          */
         if (canvas && engine !== null) {
             paused = !paused;
@@ -1138,6 +1146,8 @@ export function livePlayer(options: LivePlayerOptions = {}) {
      * 追いついたら 1 に戻す (`pace`)
      */
     function setSpeed(next: number): void {
+        // canvas で描く道は等速だけ (音を自前で鳴らしている。速めると音程が変わる)
+        if (canvas) return;
         // 追っかけ再生 (`chase`) では常に選べる — 放送の今より先が無いのはライブだけ
         if (!chasing && chase === null) return;
         speed = next;
@@ -1170,6 +1180,11 @@ export function livePlayer(options: LivePlayerOptions = {}) {
      */
     function chaseSeek(to: number): void {
         if (chase === null || element === null) return;
+        // 互換モードは手元に戻れるほど持っていない (圧縮のまま持つのは先だけ)。いつも頼み直す
+        if (canvas) {
+            void openChase(element, chase.recordingId, to, true);
+            return;
+        }
         const local = to - chase.base;
         if (buffer !== null && buffer.buffered.length > 0) {
             const start = buffer.buffered.start(0);
@@ -1558,8 +1573,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
      * どれも描けなければ理由を出して false (頼まない)
      */
     async function prepareCompat(): Promise<boolean> {
-        // 追っかけはまだ `<video>` で観る
-        compat = chase === null && canvasVideo();
+        compat = canvasVideo();
         if (!compat) return true;
         if (!driveNoticeSeen() && options.confirm !== undefined) await options.confirm();
         compatSupport ??= await canvasSupport();
@@ -1568,16 +1582,19 @@ export function livePlayer(options: LivePlayerOptions = {}) {
         const usable = (id: LiveCodec) => !compatGaveUp && compatSupport?.[id] === true;
         if (usable(codec)) return true;
         const other = LIVE_CODECS.find((c) => usable(c.id));
-        if (other !== undefined && tuned !== null) {
+        if (other !== undefined) {
             const before = LIVE_CODECS.find((c) => c.id === codec)?.label ?? codec;
             warning = `${before} を再生できないため、${other.label} に切り替えました`;
             codec = other.id;
-            tuned = { ...tuned, codec };
-            remember({ ...tuned, raw: rawChosen });
+            if (tuned !== null) {
+                tuned = { ...tuned, codec };
+                remember({ ...tuned, raw: rawChosen });
+            }
             return true;
         }
-        // 焼いたものはどちらも描けない。MPEG-2 なら描ける (覚えはしない — 互換モードを切れば元に戻る)
-        if (rawProblem === null && !rawGaveUp && tuned !== null) {
+        // 焼いたものはどちらも描けない。MPEG-2 なら描ける (覚えはしない — 互換モードを切れば元に戻る)。
+        // 追っかけに MPEG-2 は無い (サーバが生で送らない)
+        if (chase === null && rawProblem === null && !rawGaveUp && tuned !== null) {
             rawChosen = true;
             return true;
         }
@@ -1776,7 +1793,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
                     audio = notice.audio;
                     codec = notice.codec;
                     if (notice.raw) startRaw(video);
-                    else if (compat && chase === null) startCompat(video, notice.codec);
+                    else if (compat) startCompat(video, notice.codec);
                     else start(video, notice.codecs, notice.codec);
                 }
                 return;
@@ -2002,7 +2019,8 @@ export function livePlayer(options: LivePlayerOptions = {}) {
      */
     function openEngine(video: HTMLVideoElement, input: RawInput): boolean {
         clear();
-        if (engine !== null && engineInput !== input) stopRaw();
+        const forChase = chase !== null;
+        if (engine !== null && (engineInput !== input || engineChase !== forChase)) stopRaw();
         if (engine === null) {
             // 焼いたものを流していた器は止める。音が二重に鳴らないように
             video.pause();
@@ -2028,9 +2046,14 @@ export function livePlayer(options: LivePlayerOptions = {}) {
                         remote: (stop) => {
                             if (stop !== paused) toggle();
                         },
+                        // 追っかけで抱えきれなくなった。手元が尽きる前に居る場所から頼み直す (`rawPace`)
+                        full: () => {
+                            starved = true;
+                        },
                     },
                     playback,
                     input,
+                    forChase,
                 );
             } catch (error) {
                 const why = error instanceof Error ? error.message : String(error);
@@ -2043,6 +2066,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
                 return false;
             }
             engineInput = input;
+            engineChase = forChase;
             // 押す口は <video> に付いている (`MediaStack`)。見えなくするだけで、そこに残す
             video.style.opacity = '0';
             // 音を消していたなら、生でも消したまま始める
@@ -2068,6 +2092,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
         engine?.destroy();
         engine = null;
         engineInput = null;
+        engineChase = false;
         raw = false;
         canvas = false;
         decodeMs = 0;
@@ -2087,7 +2112,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
         stopRaw();
         if (input === 'fmp4') {
             compatGaveUp = true;
-            if (rawProblem === null && !rawGaveUp && element !== null && tuned !== null) {
+            if (chase === null && rawProblem === null && !rawGaveUp && element !== null && tuned !== null) {
                 warning = `${reason}。MPEG-2 に切り替えました`;
                 void tune(element, { ...tuned, raw: true }, true);
                 return;
@@ -2133,6 +2158,18 @@ export function livePlayer(options: LivePlayerOptions = {}) {
             if (truly !== fromAir) fromAir = truly;
             paint(at);
             sweep(at);
+            // 居場所 (焼き直しの頭からの秒)。追っかけは base を足して通しで出す (`chasePosition`)
+            const tenth = Math.round(at * 10) / 10;
+            if (tenth !== position) position = tenth;
+        }
+        /*
+         * **互換モードの追っかけで抱えきれなくなっていたら、手元が尽きる前に居る場所から頼み直す**
+         * (`RawEvents.full`)。サーバは倍速で送り込むので観ている先が伸び続け、worker は上限で
+         * 受け取るのをやめている。読み直しの間 (1秒ほど) は前の絵のまま止まる
+         */
+        if (chase !== null && starved && !paused && element !== null && engine.lead < REFILL) {
+            starved = false;
+            void openChase(element, chase.recordingId, chase.base + position, true);
         }
         settle();
     }

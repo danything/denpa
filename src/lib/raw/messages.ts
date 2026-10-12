@@ -24,6 +24,11 @@ export type ToWorker =
           /** 復号器の置き場 (`/api/live/mpeg2`)。worker からは絶対 URL で読む */
           decoder: string;
           input: RawInput;
+          /**
+           * 放送の今を追わないか (互換モードの追っかけ)。溜まっても先へ飛ばず、止めている間も
+           * 捨てない。そのかわり溢れそうなら受け取るのをやめて `full` を返す
+           */
+          follow: boolean;
       }
     /**
      * 届いたもの (TS、または fMP4 の init・媒体1つ)。**頭の9バイト (多重化の頭) を飛ばした位置から**。
@@ -72,4 +77,9 @@ export type FromWorker =
     /** 数字 (1秒ごと)。画面に出すもの */
     | { type: 'stats'; dropped: number; p95: number; shown: number }
     /** `grab` の返事。まだ何も出していなければ null */
-    | { type: 'frame'; id: number; bitmap: ImageBitmap | null };
+    | { type: 'frame'; id: number; bitmap: ImageBitmap | null }
+    /**
+     * 抱えきれなくなったので、届いたものを捨て始めた (`follow` のときだけ)。**画面は手元が尽きる前に
+     * 居る場所から頼み直す** (`live-player.svelte.ts` の `starved`)
+     */
+    | { type: 'full' };

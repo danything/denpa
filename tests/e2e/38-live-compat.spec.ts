@@ -1,6 +1,6 @@
 import { rmSync, writeFileSync } from 'node:fs';
 import type { Page } from '@playwright/test';
-import { expect, goto, syncEpg, test, wakeControls } from './helpers';
+import { expect, goto, reserveSoon, syncEpg, test, wakeControls } from './helpers';
 
 /**
  * **互換モード** — ライブの H.264 / AV1 も canvas に描く (`src/lib/canvas-video.ts`・`src/lib/raw/fmp4.ts`)。
@@ -28,7 +28,7 @@ async function watchAv1(page: Page): Promise<void> {
 }
 
 /** canvas に描いて、音も鳴らしていること (数が進む・絵が変わる) */
-async function expectDrawn(page: Page): Promise<void> {
+async function expectDrawn(page: Page, prefix = 'live'): Promise<void> {
     const canvas = page.locator('[data-testid="live-raw"][data-input="fmp4"]');
     await expect(canvas).toBeVisible({ timeout: 30_000 });
     const count = async (name: 'shown' | 'audio') => Number((await canvas.getAttribute(`data-${name}`)) ?? 0);
@@ -43,7 +43,7 @@ async function expectDrawn(page: Page): Promise<void> {
         expect((await canvas.screenshot()).equals(one)).toBe(false);
     }).toPass({ timeout: 10_000 });
     // **`<video>` では再生していない** (MSE を繋いでいない)
-    const video = page.getByTestId('live-video');
+    const video = page.getByTestId(`${prefix}-video`);
     expect(await video.evaluate((v) => (v as HTMLVideoElement).currentSrc)).toBe('');
 }
 
@@ -172,5 +172,57 @@ test.describe('互換モード', () => {
                 .toMatch(/^blob:/);
             await expect(page.getByTestId('live-raw')).toHaveCount(0);
         });
+    });
+});
+
+test.describe('互換モードの追っかけ', () => {
+    test.beforeEach(async ({ request, stack }) => {
+        await syncEpg(request);
+        writeFileSync(stack.liveFmp4File, '');
+    });
+    test.afterEach(async ({ stack }) => {
+        rmSync(stack.liveFmp4File, { force: true });
+    });
+
+    test('追っかけも canvas に描き、速さは出さず、止めた所から再開する', async ({ page, request }) => {
+        test.setTimeout(180_000);
+        // 入れてあり、注意も見せたことにしておく (出し方はライブのテストが見る)
+        await page.addInitScript(() => {
+            localStorage.setItem('canvas-video', 'on');
+            localStorage.setItem('canvas-drive-notice', '1');
+        });
+        await reserveSoon(page, request, 'BS');
+        let id = 0;
+        await expect(async () => {
+            type Item = { id: number; recording: boolean };
+            const list = (await (await request.get('/api/recordings')).json()) as Item[];
+            id = list.find((rec) => rec.recording)?.id ?? 0;
+            expect(id).toBeGreaterThan(0);
+        }).toPass({ timeout: 120_000, intervals: [500] });
+
+        await goto(page, `/chase/${id}`);
+        await expect(page.getByTestId('chase-title')).toBeVisible();
+        await wakeControls(page, 'chase');
+        await page.getByTestId('chase-codec').click();
+        await page.locator('[data-testid="chase-codec-option"][data-codec="av1"]').click();
+        await expectDrawn(page, 'chase');
+
+        // 速さは等速だけ (切り替えを出さない)
+        await wakeControls(page, 'chase');
+        await expect(page.getByTestId('chase-speed')).toHaveCount(0);
+
+        // 止めても絵は止めた所のまま。再開すると続きから描く (頼み直さない — 器はそのまま数え続ける)
+        const canvas = page.locator('[data-testid="live-raw"][data-input="fmp4"]');
+        const shown = async () => Number((await canvas.getAttribute('data-shown')) ?? 0);
+        const play = page.getByTestId('chase-play');
+        await play.click();
+        await expect(play).toHaveAttribute('aria-label', '再生');
+        const paused = await shown();
+        await page.waitForTimeout(1_500);
+        expect(await shown()).toBeLessThanOrEqual(paused + 2);
+        await wakeControls(page, 'chase');
+        await play.click();
+        await expect(play).toHaveAttribute('aria-label', '一時停止');
+        await expect.poll(shown, { timeout: 15_000 }).toBeGreaterThan(paused + 10);
     });
 });

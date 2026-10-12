@@ -1,5 +1,7 @@
 <script lang="ts">
     import { onMount } from 'svelte';
+    import { seeDriveNotice } from '#lib/canvas-video.js';
+    import DriveNotice from '#lib/components/DriveNotice.svelte';
     import ProgramFacts from '#lib/components/ProgramFacts.svelte';
     import AudioMenu from '#lib/components/player/AudioMenu.svelte';
     import { screenAwake } from '#lib/components/player/awake.svelte.js';
@@ -50,7 +52,23 @@
      */
     let { data } = $props();
 
-    const player = livePlayer();
+    /** 運転中の注意 (互換モード。ライブと同じ。`live/+page.svelte`)。押すまで再生を始めない */
+    let driveNotice = $state(false);
+    let noticeWaiters: (() => void)[] = [];
+    const player = livePlayer({
+        confirm: () =>
+            new Promise<void>((done) => {
+                noticeWaiters.push(done);
+                driveNotice = true;
+            }),
+    });
+    function acceptDriveNotice(): void {
+        seeDriveNotice();
+        driveNotice = false;
+        const waiters = noticeWaiters;
+        noticeWaiters = [];
+        for (const done of waiters) done();
+    }
     /** 映像と重ねもの (MediaStack が組む)。bind で受けるので開くまでは null */
     let video = $state<HTMLVideoElement | null>(null);
     let still = $state<HTMLCanvasElement | null>(null);
@@ -189,7 +207,7 @@
     /** 小窓 (PiP)。小窓で押された止める・再開は player に合わせる (ライブと同じ。`pip.svelte.ts`) */
     const pip = pictureInPicture({
         video: () => video,
-        raw: () => player.raw,
+        raw: () => player.canvas,
         capture: () => player.capture(),
         flow: (on) => player.captureFlow(on),
         paused: () => player.paused,
@@ -221,7 +239,7 @@
     const notices = $derived<Notice[]>([...shooter.notices, ...pip.notices]);
     function snapshot(): void {
         void shooter.take(
-            () => (player.raw ? grabbedFrame(player.grab()) : videoFrame(video)),
+            () => (player.canvas ? grabbedFrame(player.grab()) : videoFrame(video)),
             player.captions && player.hasCaptions ? overlay : null,
             data.rec.name,
         );
@@ -295,6 +313,7 @@
                 <CodecMenu
                     testid="chase-codec"
                     codec={player.codec}
+                    unavailable={player.unavailable}
                     onselect={(key) => player.setCodec(key)}
                 />
                 {#if player.audios.length > 1}
@@ -346,15 +365,20 @@
                     {/snippet}
                 </InfoBlock>
 
-                <!-- 追っかけは常に速さを選べる (録れている範囲の中を進むだけ) -->
-                <Extras>
-                    <SpeedMenu
-                        testid="chase-speed"
-                        label="再生の速さ"
-                        speed={want}
-                        onselect={setSpeed}
-                    />
-                </Extras>
+                <!--
+                    追っかけは常に速さを選べる (録れている範囲の中を進むだけ)。
+                    **互換モード (canvas に描く) では出さない** — 音を自前で鳴らしていて、等速だけ
+                -->
+                {#if !player.canvas}
+                    <Extras>
+                        <SpeedMenu
+                            testid="chase-speed"
+                            label="再生の速さ"
+                            speed={want}
+                            onselect={setSpeed}
+                        />
+                    </Extras>
+                {/if}
 
                 <StageTail prefix="chase" {background} {pip} {fullscreen} />
             </ControlRow>
@@ -427,6 +451,9 @@
         pip.dismiss(key);
     }}
 />
+
+<!-- 運転中の注意 (互換モードで初めて再生する前に1回)。押すまで再生を始めない -->
+<DriveNotice open={driveNotice} onaccept={acceptDriveNotice} />
 
 <style>
     .rec {

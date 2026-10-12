@@ -57,6 +57,11 @@ export interface RawEvents {
      * 止めるので、画面の「止めているか」をそれに合わせる (`RawEngine.route`)
      */
     remote(paused: boolean): void;
+    /**
+     * 抱えきれなくなって、届いたものを捨て始めた (`follow` のときだけ)。**手元が尽きる前に、居る場所から
+     * 頼み直してもらう**
+     */
+    full(): void;
 }
 
 /**
@@ -134,6 +139,8 @@ export class RawEngine {
      * @param before この前に差し込む (字幕の canvas より下に来るように)
      * @param background 「再生する音」だと言うか (`playbackSession`・`route`)。あとから変えるときは `background`
      * @param input 何を受け取るか (`messages.ts` の `RawInput`)。生の TS か、焼いたもの (fMP4。互換モード)
+     * @param chase 追っかけ (互換モード)。放送の今を追わない — 溜まっても跳ばず、止めて再開は止めた所から
+     *   (`playout.ts` と worker の `follow`)
      */
     constructor(
         host: HTMLElement,
@@ -142,8 +149,10 @@ export class RawEngine {
         private readonly events: RawEvents,
         background = false,
         readonly input: RawInput = 'ts-mpeg2',
+        readonly chase = false,
     ) {
         this.playout = new Playout(target);
+        this.playout.follow = chase;
         this.wanted = background;
         this.canvas = document.createElement('canvas');
         this.canvas.setAttribute('data-testid', 'live-raw');
@@ -173,7 +182,13 @@ export class RawEngine {
                 this.giveUp(input === 'fmp4' ? '再生が止まりました' : 'MPEG-2 の再生が止まりました');
             const offscreen = this.canvas.transferControlToOffscreen();
             this.send(
-                { type: 'init', canvas: offscreen, decoder: `${resolve('')}${DECODER.slice(1)}`, input },
+                {
+                    type: 'init',
+                    canvas: offscreen,
+                    decoder: `${resolve('')}${DECODER.slice(1)}`,
+                    input,
+                    follow: chase,
+                },
                 [offscreen],
             );
         } catch (error) {
@@ -233,10 +248,13 @@ export class RawEngine {
         this.send({ type: 'audio', index: stream });
     }
 
-    /** 止める。**再開は放送の今から** (生では遡れるだけ持っていない。stream.md §5.5) */
+    /**
+     * 止める。**再開は放送の今から** (生では遡れるだけ持っていない。stream.md §5.5)。
+     * 追っかけ (`follow`) は止めた所から (`playout.ts`)
+     */
     pause(): void {
         this.held = true;
-        this.playout.hold();
+        this.playout.hold(this.now());
         this.stopAll();
         this.tellClock();
         if (this.through) this.out?.audio.pause();
@@ -463,6 +481,9 @@ export class RawEngine {
                 break;
             case 'fail':
                 this.giveUp(message.reason);
+                break;
+            case 'full':
+                if (!this.gone) this.events.full();
                 break;
             case 'frame': {
                 const settle = this.grabs.get(message.id);
