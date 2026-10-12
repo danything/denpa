@@ -182,10 +182,16 @@ test.describe('互換モードの追っかけ', () => {
     });
     test.afterEach(async ({ stack }) => {
         rmSync(stack.liveFmp4File, { force: true });
+        rmSync(stack.failFile, { force: true });
     });
 
-    test('追っかけも canvas に描き、速さは出さず、止めた所から再開する', async ({ page, request }) => {
+    test('追っかけも canvas に描き、速さは出さず、止めた所から再開する', async ({ page, request, stack }) => {
         test.setTimeout(180_000);
+        /*
+         * **焼かせない。** BS の番組は 5 秒で録り終わり、焼けると元の TS が無くなって頼み直しが断られる
+         * (25-chase と同じく、偽 ffmpeg の焼きを失敗させて「焼けていない」録画にしておく)
+         */
+        writeFileSync(stack.failFile, '1');
         // 入れてあり、注意も見せたことにしておく (出し方はライブのテストが見る)
         await page.addInitScript(() => {
             localStorage.setItem('canvas-video', 'on');
@@ -224,5 +230,29 @@ test.describe('互換モードの追っかけ', () => {
         await play.click();
         await expect(play).toHaveAttribute('aria-label', '一時停止');
         await expect.poll(shown, { timeout: 15_000 }).toBeGreaterThan(paused + 10);
+
+        /*
+         * **頼み直したあとも居場所が飛ばない。** 帯を動かすと (溢れの読み直しと同じく) 居る場所から
+         * 頼み直す。新しい流れの時刻は 0 から数え直しになるので、居場所はサーバが返す頭 (`timeline`) +
+         * 新しい流れの中の秒になる。前の流れの秒を足したまま先へ飛んでいないことを見る
+         */
+        // 居場所は読みものの「m:ss / m:ss」の左 (帯の値は録れている長さで頭打ちになるので使わない)
+        const status = page.getByTestId('chase-controls').getByText(/^\d+:\d\d \/ \d+:\d\d$/);
+        const where = async () => {
+            const text = (await status.textContent()) ?? '';
+            const [m = 0, s = 0] = text.split(' / ')[0]!.split(':').map(Number);
+            return m * 60 + s;
+        };
+        await expect.poll(where, { timeout: 30_000 }).toBeGreaterThanOrEqual(8);
+        const before = await where();
+        // 帯を動かすのと同じ (`seekBy`)。頭へ戻す。押したボタンに居ると矢印は効かない (`keys.ts`) ので外す
+        await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+        await page.keyboard.press('ArrowLeft');
+        // 頼んだ所へ戻り、そこから進む。3秒後も、前の居場所より手前に居る (前の流れの秒を足していない)
+        await expect.poll(shown, { timeout: 15_000 }).toBeGreaterThan((await shown()) + 30);
+        await page.waitForTimeout(3_000);
+        const after = await where();
+        expect(after).toBeLessThan(before);
+        await expect.poll(where, { timeout: 15_000 }).toBeGreaterThan(after);
     });
 });
