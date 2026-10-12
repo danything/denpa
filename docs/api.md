@@ -353,7 +353,7 @@ data: {"recordingId":12,"percent":0.425,"etaMs":600000,"log":"…"}
 **ファイルの口 (`file`) だけは 401 ではなく 403 (text/plain)** です。ログインの控えか
 期限付きのリンク (`share`) でも開けるようにしてあり、どれも無ければ言葉で断ります。アプリは Bearer を付けて開きます。
 もう1つ、入る道 (OIDC か `TRUSTED_NETWORKS`) を何も設定していない denpa は、素通しの口のほかは 403 で断ります
-(札は出せても、許す画面 `/device` が開けないのでペアリングはできない。[auth.md](auth.md#入る道が無ければ全部断る))。
+(コードは出せても、許す画面 `/device` が開けないのでペアリングはできない。[auth.md](auth.md#入る道が無ければ全部断る))。
 
 ## ペアリング `POST /api/device/code` → `POST /api/device/token`
 
