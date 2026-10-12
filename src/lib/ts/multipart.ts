@@ -121,12 +121,18 @@ function find(haystack: Uint8Array, needle: Uint8Array, from: number): number {
 
 /**
  * 中身を1つ読む。**ヘッダの終わり (空行) が無いものは null** — どこからが本体か
- * 分からない。`multipart/mixed` なら中まで解く (入れ子も同じ形)
+ * 分からない。`multipart/mixed` なら中まで解く (入れ子も同じ形)。
+ *
+ * @param part multipart の中の部品か。部品はヘッダの行でちょうど終わってよい (下の説明)
  */
-export function readEntity(data: Uint8Array): Entity | null {
+export function readEntity(data: Uint8Array, part = false): Entity | null {
     const headers: EntityHeader[] = [];
     let at = 0;
     for (;;) {
+        // 中身が空の部品は、ヘッダの空行の CRLF が次の区切りの頭に食われて、ヘッダの行で
+        // ちょうど終わる (`--X\r\nContent-Type: a\r\n\r\n--X--`)。空の本体として受ける
+        // (web-bml の entity-parser はここで null を返し、モジュールごと捨てていた)
+        if (part && at === data.length && headers.length > 0) break;
         const end = find(data, CRLF, at);
         if (end === -1) return null;
         if (end === at) {
@@ -181,7 +187,7 @@ function splitParts(body: Uint8Array, boundary: string): Entity[] | null {
             from = end + 1;
             continue;
         }
-        const part = readEntity(body.subarray(at, end));
+        const part = readEntity(body.subarray(at, end), true);
         if (part === null) return null;
         parts.push(part);
         if (close) return parts;

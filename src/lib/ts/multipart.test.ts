@@ -60,6 +60,21 @@ describe('readEntity', () => {
         expect(entity?.parts?.map((part) => str(part.body))).toEqual(['A\r\n--bb', 'C']);
     });
 
+    test('中身が空の部品も 1 つとして数える (空行の CRLF が区切りに食われる形も)', () => {
+        for (const empty of ['\r\n', '']) {
+            const entity = readEntity(
+                bytes(
+                    'Content-Type: multipart/mixed; boundary=b\r\n\r\n' +
+                        `--b\r\nContent-Location: empty.drc\r\n${empty}\r\n` +
+                        '--b\r\nContent-Location: a.bml\r\n\r\nA\r\n' +
+                        '--b--\r\n',
+                ),
+            );
+            expect(entity?.parts?.map((part) => part.headers[0]?.value)).toEqual(['empty.drc', 'a.bml']);
+            expect(entity?.parts?.map((part) => part.body.length)).toEqual([0, 1]);
+        }
+    });
+
     test('閉じの区切りが無ければ捨てる', () => {
         const entity = readEntity(
             bytes('Content-Type: multipart/mixed; boundary=b\r\n\r\n--b\r\nContent-Location: a\r\n\r\nA'),

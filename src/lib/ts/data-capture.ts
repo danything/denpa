@@ -22,8 +22,8 @@ export class DataBroadcastCapture {
     private readonly decoder: BmlDecoder;
 
     constructor() {
-        // 「配る価値があるか」の判定はライブと同じ土俵に乗せる (pcr は落ち、変わらない
-        // pmt/programInfo も落ちる)。中の記憶そのものは使わない — 使うのは take の判定だけ
+        // 「配る価値があるか」の判定はライブと同じ土俵に乗せる (変わらない pmt/programInfo は
+        // 落ちる)。中の記憶そのものは使わない — 使うのは take の判定だけ
         const gate = new Carousel();
         let at: number | null = null;
         this.decoder = new BmlDecoder((message) => {
