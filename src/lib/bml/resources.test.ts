@@ -277,3 +277,69 @@ describe('名前の形', () => {
         expect(new Resources().resolve('bml://startup.bml', '/40/0000/startup.bml')).toBeNull();
     });
 });
+
+describe('長く流し続けても持つものが増えない', () => {
+    /** 作った blob: の URL の代わりに、返したものを数える */
+    function countRevokes(): { revoked: string[]; restore: () => void } {
+        const original = URL.revokeObjectURL;
+        const revoked: string[] = [];
+        URL.revokeObjectURL = (url: string) => {
+            revoked.push(url);
+        };
+        return {
+            revoked,
+            restore: () => {
+                URL.revokeObjectURL = original;
+            },
+        };
+    }
+
+    test('版上げを何千回くり返しても、持つのは今の版だけで、作った URL は全部返す', () => {
+        const { revoked, restore } = countRevokes();
+        try {
+            const r = new Resources();
+            r.feed(pmt(0x40));
+            let made = 0;
+            for (let version = 1; version <= 5000; version++) {
+                r.feed(dii(0x40, [[1, version & 0xff]], 1));
+                r.feed(module(0x40, 1, version & 0xff, [['a.jpg', `v${version}`]]));
+                // 描く側が URL を作ったことにする (engine.ts の image)
+                const file = r.file({ component: 0x40, module: 1, file: 'a.jpg' });
+                file?.urls.set('raw', { url: `blob:${version}`, width: null, height: null });
+                made++;
+            }
+            expect(r.has(0x40, 1)).toBe(true);
+            // 今の版の 1 つだけが残る
+            expect(made - revoked.length).toBe(1);
+            expect((r as unknown as { cache: Map<string, unknown> }).cache.size).toBe(1);
+        } finally {
+            restore();
+        }
+    });
+
+    test('PMT から消えた部品のモジュールは捨てて URL を返す (押さえたものは残す)', async () => {
+        const { revoked, restore } = countRevokes();
+        try {
+            const r = new Resources();
+            r.feed(pmt(0x40, 0x50, 0x60));
+            r.feed(dii(0x50, [[0, 1]]));
+            r.feed(module(0x50, 0, 1, [['a.jpg', 'x']]));
+            r.file({ component: 0x50, module: 0, file: 'a.jpg' })?.urls.set('raw', {
+                url: 'blob:50',
+                width: null,
+                height: null,
+            });
+            r.feed(dii(0x60, [[0, 1]]));
+            r.feed(module(0x60, 0, 1, [['b.jpg', 'y']]));
+            r.lock(0x60, 0, 'lockEx', () => {});
+            await new Promise((resolve) => setTimeout(resolve, 0));
+            r.feed(pmt(0x40));
+            expect(r.has(0x50, 0)).toBe(false);
+            expect(revoked).toEqual(['blob:50']);
+            // 押さえたものは押さえた側が持つ (外すまで読める)
+            expect(r.file({ component: 0x60, module: 0, file: 'b.jpg' })).not.toBeNull();
+        } finally {
+            restore();
+        }
+    });
+});
