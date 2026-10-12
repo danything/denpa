@@ -11,6 +11,8 @@
  * - 置き換えられなかった外字は、点の絵を字の枠いっぱいに**なめらかに**引き伸ばす
  *
  * **canvas は画面の画素で敷く。** 全画面にすれば字もそのぶん細かく描き直す (`ResizeObserver`)。
+ * 画素は CSS の大きさではなく**実際に見えている大きさ** (`transform: scale` 込み) で数える —
+ * データ放送の小窓の中では、BML の面ごと伸ばして見せている (`DataBroadcast` の `fit`)。
  */
 
 import {
@@ -239,6 +241,13 @@ export function inkSpan(page: CaptionPage): [number, number] {
 }
 
 /**
+ * **外から canvas の見える倍率を変えたら、窓へこれを投げる** (`DataBroadcast` の `fit`)。
+ * 祖先の `transform: scale` が変わっても canvas の CSS の大きさは変わらないので、
+ * `ResizeObserver` は呼ばれない。投げてもらって描き直す
+ */
+export const CAPTION_RESCALE = 'denpa:caption-rescale';
+
+/**
  * 1枚の canvas に字幕を出し続ける係。**出すものが変わったら `show` を呼ぶだけ。**
  *
  * - canvas の大きさを画面の画素に合わせ直す (全画面の出入りで描き直す)
@@ -251,6 +260,7 @@ export function inkSpan(page: CaptionPage): [number, number] {
 export class CaptionPainter {
     private page: CaptionPage | null = null;
     private readonly resize: ResizeObserver | null;
+    private readonly rescale = () => this.draw();
     private flashTimer: ReturnType<typeof setInterval> | null = null;
     /** いま canvas に何か描いてあるか。描いていなければ消しに行かない */
     private painted = false;
@@ -262,6 +272,9 @@ export class CaptionPainter {
     ) {
         this.resize = typeof ResizeObserver === 'function' ? new ResizeObserver(() => this.draw()) : null;
         this.resize?.observe(canvas);
+        // ブラウザのズーム (`devicePixelRatio` が変わる) と、外からの倍率の変わり目 (`CAPTION_RESCALE`)
+        window.addEventListener('resize', this.rescale);
+        window.addEventListener(CAPTION_RESCALE, this.rescale);
         void loadCaptionFont(font).then(() => {
             ink = null;
             this.draw();
@@ -284,6 +297,8 @@ export class CaptionPainter {
     /** 畳む。canvas は消して返す */
     close(): void {
         this.resize?.disconnect();
+        window.removeEventListener('resize', this.rescale);
+        window.removeEventListener(CAPTION_RESCALE, this.rescale);
         if (this.flashTimer !== null) clearInterval(this.flashTimer);
         this.flashTimer = null;
         this.page = null;
@@ -304,13 +319,33 @@ export class CaptionPainter {
             return;
         }
         /*
-         * 面の縦横比のまま、見えている枠に収まる大きさ × 画面の画素。canvas は
-         * `object-fit: contain` で敷いてあるので、縦横比さえ合っていれば映像の絵にぴったり重なる
+         * **描く画素は、見えている大きさ × 画面の画素。** 面の縦横比のまま CSS の枠に収めた
+         * 箱 (`box`) を、実際に見えている倍率 (`kx`/`ky`) で数える。
+         *
+         * CSS の大きさ (`clientWidth`) だけで数えると、データ放送の小窓の中で字幕がぼやける。
+         * 借りものは BML の面 (960x540) を原寸で組み、枠いっぱいに `transform: scale` で
+         * 伸ばす (`DataBroadcast` の `fit`)。小窓へ移った canvas の CSS の大きさは面の上の
+         * 480x270 のままなので、その画素で描いた絵が枠の大きさに合わせて引き伸ばされていた。
+         * `translate` (帯の上への持ち上げ) は大きさを変えないので、倍率には入らない。
+         * 祖先に掛かるのは `scale` と `translate` だけの前提 (`rotate` だと外接矩形になり合わない)
          */
         const dpr = window.devicePixelRatio || 1;
-        const box = fitRect(canvas.clientWidth, canvas.clientHeight, page.plane[0], page.plane[1]);
-        const width = Math.max(1, Math.round(box.width * dpr));
-        const height = Math.max(1, Math.round(box.height * dpr));
+        const cssWidth = canvas.clientWidth;
+        const cssHeight = canvas.clientHeight;
+        const shown = canvas.getBoundingClientRect();
+        const kx = cssWidth > 0 ? shown.width / cssWidth : 1;
+        const ky = cssHeight > 0 ? shown.height / cssHeight : 1;
+        const box = fitRect(cssWidth, cssHeight, page.plane[0], page.plane[1]);
+        /*
+         * 箱が枠いっぱい (観る画面は `place` が枠を映像の絵に合わせる。小窓の中も面と同じ 16:9)
+         * なら、見えている大きさそのもので描いて `fill` で敷く — 面を縦と横で別々に伸ばして
+         * いても1画素ずつ合う。枠が余る (枠と面の縦横比が違う) ときは `contain` で真ん中に置く
+         */
+        const fills = box.width >= cssWidth - 1 && box.height >= cssHeight - 1;
+        const fit = fills ? 'fill' : 'contain';
+        if (canvas.style.objectFit !== fit) canvas.style.objectFit = fit;
+        const width = Math.max(1, Math.round((fills ? shown.width : box.width * kx) * dpr));
+        const height = Math.max(1, Math.round((fills ? shown.height : box.height * ky) * dpr));
         if (canvas.width !== width || canvas.height !== height) {
             canvas.width = width;
             canvas.height = height;

@@ -2,14 +2,18 @@ import { writeFileSync } from 'node:fs';
 import { extname } from 'node:path';
 import type { APIRequestContext, Page } from '@playwright/test';
 import {
+    CAPTION_SCREENS,
     captionsClearOfBar,
     captionsSeenInDataWindow,
     expect,
+    expectSharpCaptions,
     fakeDataBroadcast,
     goto,
+    holdCaptions,
     holdMedia,
     overlayTroubles,
     recordOne,
+    routeCaptions,
     test,
     wakeControls,
 } from './helpers';
@@ -833,3 +837,62 @@ function roundBox(box: { x: number; y: number; width: number; height: number } |
               height: Math.round(box.height),
           };
 }
+
+/**
+ * **字幕は、見えている大きさ × 画面の画素で描く** (`caption-draw.ts` の `CaptionPainter`)。
+ *
+ * 実機で「字幕がぼやぁっとしている」— データ放送を出した観る画面で、小窓に入った字幕が
+ * 拡大した絵のように滲んでいた。借りものは BML の面 (960x540) を原寸で組んで枠いっぱいに
+ * `transform: scale` で伸ばすのに、字幕は CSS の大きさ (面の上の 480x270) の画素で描いていた。
+ * 偽の録画は中身が無いので、字幕は `captions.json` を差し替えて 0 秒に1枚置く
+ */
+test.describe('字幕をくっきり描く', () => {
+    test('PC (DPR 1・2) とスマホで、字幕の画素が見えている大きさ × DPR と合う', async ({
+        browser,
+        page,
+        request,
+    }) => {
+        test.setTimeout(240_000);
+        const id = await watchable(page, request);
+        for (const [what, options] of CAPTION_SCREENS) {
+            const context = await browser.newContext(options);
+            const tab = await context.newPage();
+            await routeCaptions(tab);
+            await goto(tab, `/watch/${id}`);
+            await holdCaptions(tab, 'watch-captions-canvas');
+            await expectSharpCaptions(tab, what);
+            await context.close();
+        }
+    });
+
+    test.describe('DPR 2', () => {
+        test.use({ viewport: { width: 1600, height: 900 }, deviceScaleFactor: 2 });
+
+        test('データ放送の小窓の中でも、字幕の画素が見えている大きさ × DPR と合う', async ({
+            page,
+            request,
+        }) => {
+            test.setTimeout(180_000);
+            const { id, libraryPath } = await recordOne(page, request);
+            writeFileSync(
+                `${libraryPath.slice(0, libraryPath.length - extname(libraryPath).length)}.bml.jsonl`,
+                `${fakeDataBroadcast()
+                    .map((message) => JSON.stringify({ at: 0, message }))
+                    .join('\n')}\n`,
+            );
+            await routeCaptions(page);
+            await goto(page, `/watch/${id}`);
+            await holdMedia(page, 'watch-video', 'watch-captions-canvas', 'watch-stage');
+            await holdCaptions(page, 'watch-captions-canvas');
+            await expectSharpCaptions(page, '小窓に入る前');
+
+            await wakeControls(page, 'watch-stage');
+            await page.getByTestId('watch-data-button').click();
+            await expect(page.getByTestId('live-data')).toHaveAttribute('data-state', 'ready', {
+                timeout: 15_000,
+            });
+            await captionsSeenInDataWindow(page);
+            await expectSharpCaptions(page, 'データ放送の小窓の中');
+        });
+    });
+});

@@ -1,5 +1,16 @@
 import { existsSync, rmSync, writeFileSync } from 'node:fs';
-import { expect, goto, reserveSoon, syncEpg, test } from './helpers';
+import {
+    CAPTION_SCREENS,
+    captureSockets,
+    expect,
+    expectSharpCaptions,
+    feedCaption,
+    goto,
+    holdCaptions,
+    reserveSoon,
+    syncEpg,
+    test,
+} from './helpers';
 
 /**
  * 追っかけ再生の入口 (issue #16 の続き)。
@@ -18,11 +29,14 @@ test.describe('追っかけ再生の入口', () => {
     });
 
     test('焼き上がる前の行は追っかけへ行き、焼き上がったら観る画面へ案内する', async ({
+        browser,
         page,
         request,
         stack,
     }) => {
-        test.setTimeout(180_000);
+        test.setTimeout(240_000);
+        // 字幕を流す口 (`feedCaption`)
+        await captureSockets(page);
         await syncEpg(request);
         writeFileSync(stack.failFile, '1');
         const programId = await reserveSoon(page, request, 'BS');
@@ -42,6 +56,25 @@ test.describe('追っかけ再生の入口', () => {
         await expect(page.getByTestId('chase-title')).toBeVisible();
         // まだ焼けていないので、観る画面への案内は出ていない
         await expect(page.getByTestId('chase-encoded')).toHaveCount(0);
+
+        /*
+         * **字幕は、見えている大きさ × 画面の画素で描く** (`CaptionPainter`。ライブと同じ係)。
+         * 偽の放送に字幕は乗っていないので1枚流す。PC (DPR 1・2) とスマホの縦で
+         */
+        await holdCaptions(page, 'chase-captions');
+        await feedCaption(page, 'chase');
+        await expectSharpCaptions(page, '既定の画面');
+        for (const [what, options] of CAPTION_SCREENS) {
+            const context = await browser.newContext(options);
+            const tab = await context.newPage();
+            await captureSockets(tab);
+            await goto(tab, `/chase/${id}`);
+            await expect(tab.getByTestId('chase-title')).toBeAttached();
+            await holdCaptions(tab, 'chase-captions');
+            await feedCaption(tab, 'chase');
+            await expectSharpCaptions(tab, what);
+            await context.close();
+        }
 
         /*
          * **押し方は観る画面と同じ** (`player/keys.ts` と `ts/watch.ts` の `tap`)。

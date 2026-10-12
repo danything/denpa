@@ -3,12 +3,17 @@ import type { Locator } from '@playwright/test';
 import { BS_NO_LOGO, SERVICES } from '../fake/services';
 import {
     airing,
+    CAPTION_SCREENS,
     captionsClearOfBar,
     captionsSeenInDataWindow,
+    captureSockets,
     cellOf,
     expect,
+    expectSharpCaptions,
     fakeDataBroadcast,
+    feedCaption,
     goto,
+    holdCaptions,
     holdMedia,
     overlayTroubles,
     syncEpg,
@@ -592,6 +597,7 @@ test.describe('ライブ視聴', () => {
         await page.getByTestId('live-channel').first().click();
         await expect(page.getByTestId('live-title')).toBeVisible();
         await holdMedia(page, 'live-video', 'live-captions', 'live-frame');
+        await holdCaptions(page, 'live-captions');
         // 下の方の字幕 (帯と重なる)
         await page
             .getByTestId('live-captions')
@@ -617,6 +623,9 @@ test.describe('ライブ視聴', () => {
         }, fakeDataBroadcast());
 
         await captionsSeenInDataWindow(page);
+        // 小窓の中でも見えている大きさで描く (BML の面ごと `scale` で伸ばしてある。ぼやけていた)
+        await feedCaption(page, 'live');
+        await expectSharpCaptions(page, 'データ放送の小窓の中');
     });
 
     /*
@@ -1454,6 +1463,27 @@ test.describe('ライブ視聴', () => {
         // 字幕の来ていない番組で切り替えを出すと、押しても何も起きない操作が並ぶ
         await expect(captions).toHaveAttribute('data-on', 'false');
         await expect(page.getByTestId('live-caption')).toHaveCount(0);
+    });
+
+    /*
+     * **字幕は、見えている大きさ × 画面の画素で描く** (`CaptionPainter`)。描く画素が見えている
+     * 大きさと食い違うと、ブラウザが引き伸ばして字がぼやける。偽の放送に字幕は乗っていないので
+     * 1枚流す (`feedCaption`)。データ放送の小窓の中は上の「小窓へ縮んで見えている」で見る
+     */
+    test('字幕の画素は、PC (DPR 1・2) でもスマホでも見えている大きさ × DPR と合う', async ({ browser }) => {
+        for (const [what, options] of CAPTION_SCREENS) {
+            const context = await browser.newContext(options);
+            const page = await context.newPage();
+            await captureSockets(page);
+            await goto(page, '/live');
+            await page.getByTestId('live-channel').first().click();
+            // 狭い枠では題名を畳むので、出ているかではなく在るかで待つ
+            await expect(page.getByTestId('live-title')).toBeAttached();
+            await holdCaptions(page, 'live-captions');
+            await feedCaption(page, 'live');
+            await expectSharpCaptions(page, what);
+            await context.close();
+        }
     });
 
     /*

@@ -950,13 +950,22 @@
     function place(): void {
         if (video === null) return;
         const rect = fitRect(video.clientWidth, video.clientHeight, video.videoWidth, video.videoHeight);
-        // 字幕も CM の蓋も、映像の絵と同じ場所・同じ大きさに置く
+        /*
+         * 字幕も CM の蓋も、映像の絵と同じ場所・同じ大きさに置く。**画面の画素の境目に揃える** —
+         * 端数の位置に置くと、字幕の canvas が半画素ずれて描かれ、字の縁が滲む。
+         * 端は外へ丸める (CM の蓋が絵の縁を1画素も残さず覆うように)
+         */
+        const dpr = window.devicePixelRatio || 1;
+        const left = Math.floor((video.offsetLeft + rect.left) * dpr) / dpr;
+        const top = Math.floor((video.offsetTop + rect.top) * dpr) / dpr;
+        const right = Math.ceil((video.offsetLeft + rect.left + rect.width) * dpr) / dpr;
+        const bottom = Math.ceil((video.offsetTop + rect.top + rect.height) * dpr) / dpr;
         for (const layer of [overlay, cover]) {
             if (layer === null) continue;
-            layer.style.left = `${video.offsetLeft + rect.left}px`;
-            layer.style.top = `${video.offsetTop + rect.top}px`;
-            layer.style.width = `${rect.width}px`;
-            layer.style.height = `${rect.height}px`;
+            layer.style.left = `${left}px`;
+            layer.style.top = `${top}px`;
+            layer.style.width = `${right - left}px`;
+            layer.style.height = `${bottom - top}px`;
         }
         // 黒塗りの蓋は枠ごと覆う。**まだ絵の大きさが分からない**ことがあるため
         // (開いた直後。`fitRect` は 0 を渡されると当てにならない)
