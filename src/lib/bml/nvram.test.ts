@@ -100,6 +100,41 @@ describe('NVRAM', () => {
         const structure = Array(16).fill('U:1B').join(',');
         expect(make(kept).write('nvram://local/1', structure, Array(16).fill(0))).toBe(16);
     });
+
+    test('BS の事業者の領域 (~) は 0〜15 番・1 ブロック 64 バイト。外れたら失敗にして知らせる (TR-B15 8.2)', () => {
+        const kept = store();
+        const logs: string[] = [];
+        const bs = new Nvram(
+            { get: (k) => kept.get(k) ?? null, set: (k, v) => kept.set(k, v) },
+            () => ({ zipcode: '', prefecture: 255 }),
+            () => ({ originalNetworkId: 4, serviceId: 171 }),
+            (message) => logs.push(message),
+        );
+        // BSテレ東の形: 番号を計算し、64 バイト近い並びを書く (U:1B × 5 + S:19B × 3 = 62 バイト)
+        const structure = 'U:1B,U:1B,U:1B,U:1B,U:1B,S:19B,S:19B,S:19B';
+        const x = 13;
+        const values = [1, 2, 3, 4, 5, 'a', 'b', 'c'];
+        expect(bs.write(`nvram://~/${x + 2}`, structure, values)).toBe(62);
+        expect(bs.read(`nvram://~/${x + 2}`, structure)?.slice(0, 6)).toEqual([
+            1,
+            2,
+            3,
+            4,
+            5,
+            `a${' '.repeat(18)}`,
+        ]);
+        expect(logs).toEqual([]);
+        // 64 バイトちょうどは書ける。超えたら NaN
+        expect(bs.write('nvram://~/0', 'S:64B', ['x'])).toBe(64);
+        expect(bs.write('nvram://~/0', 'S:65B', ['x'])).toBeNaN();
+        // 16 番からは ~/ext (16〜63)
+        expect(bs.write('nvram://~/16', 'S:1B', ['x'])).toBeNaN();
+        expect(bs.read('nvram://~/16', 'S:1B')).toBeNull();
+        expect(bs.write('nvram://~/ext/16', 'S:1B', ['x'])).toBe(1);
+        expect(logs.length).toBe(3);
+        expect(logs[0]).toContain('64 バイト');
+        expect(logs[1]).toContain('~ は 0〜15');
+    });
 });
 
 describe('AIFF', () => {

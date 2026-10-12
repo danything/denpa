@@ -96,6 +96,40 @@ describe('CSS', () => {
         ]);
     });
 
+    test('行の頭の div:focus・p:focus は規則として読む (BS日テレの書き方)', () => {
+        const rules = parseStylesheet(
+            'p { color-index: 1 }\ndiv:focus { color-index: 2 }\np:focus{color-index:3}\n',
+        );
+        expect(rules.map((r) => [r.selector.tag, r.selector.pseudo, r.declarations])).toEqual([
+            ['p', null, [['color-index', '1', false]]],
+            ['div', 'focus', [['color-index', '2', false]]],
+            ['p', 'focus', [['color-index', '3', false]]],
+        ]);
+    });
+
+    test('閉じ忘れ・閉じすぎは壊れた所だけ捨て、後ろの規則は読む', () => {
+        // a の } が抜けている: a は区切りまで読み、div:focus から読み直す。余った } の後ろの p も読む
+        const rules = parseStylesheet(
+            'a { color-index: 1;\ndiv:focus { color-index: 2 } } p { left: 3px }\nspan{top:4px}',
+        );
+        expect(rules.map((r) => [r.selector.tag, r.selector.pseudo, r.declarations])).toEqual([
+            ['a', null, [['color-index', '1', false]]],
+            ['div', 'focus', [['color-index', '2', false]]],
+            ['p', null, [['left', '3px', false]]],
+            ['span', null, [['top', '4px', false]]],
+        ]);
+        // 区切りが無いまま次の { が来たら、壊れた所 (a の中身と b) だけ捨てる
+        const broken = parseStylesheet('a { color-index: 1 b { left: 2px } p { top: 3px }');
+        expect(broken.map((r) => [r.selector.tag, r.declarations.length])).toEqual([
+            ['a', 0],
+            ['p', 1],
+        ]);
+        // @ 規則の入れ子は今までどおり丸ごと読み飛ばす
+        expect(
+            parseStylesheet('@media tv { p { left: 1px } } div { top: 2px }').map((r) => r.selector.tag),
+        ).toEqual(['div']);
+    });
+
     test('url() を解く', () => {
         expect(parseUrl('url("/40/0001/a.clt")')).toBe('/40/0001/a.clt');
         expect(parseUrl('url( b.png )')).toBe('b.png');

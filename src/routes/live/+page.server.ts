@@ -28,6 +28,12 @@ export interface LiveChannel {
     /** 物理チャンネル。これで選局する */
     channel: string;
     /**
+     * 放送の局の番号 (original_network_id と service_id)。データ放送が「この局へ」と言ってきたとき
+     * (epgTune) に、一覧から局を探すのに使う
+     */
+    networkId: number;
+    serviceId: number;
+    /**
      * テレビに出ている番号。**探すときの手掛かりはこれ。**
      *
      * 地上波はリモコン番号 (1〜12)。BS と CS は**サービスID がそのまま3桁番号**
@@ -105,6 +111,8 @@ export function load(event) {
             name: service.name,
             type: service.type,
             channel: service.channel,
+            networkId: service.network_id,
+            serviceId: service.service_id,
             number: channelNumber(service),
             hasLogo: service.has_logo,
             now:

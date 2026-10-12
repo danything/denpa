@@ -1,6 +1,7 @@
 <script lang="ts">
     import { onMount } from 'svelte';
     import { submitting } from '#lib/actions.js';
+    import type { Service } from '#lib/bml/engine.js';
     import ProgramFacts from '#lib/components/ProgramFacts.svelte';
     import AudioMenu from '#lib/components/player/AudioMenu.svelte';
     import { screenAwake } from '#lib/components/player/awake.svelte.js';
@@ -124,6 +125,24 @@
             serviceId: channel.id,
             codec: player.codec,
         });
+    }
+
+    /**
+     * **データ放送が「この局へ」と言ってきた (epgTune)。** 一覧から局を探して、手で選んだのと同じ道
+     * (`select`) で切り替える。データ放送の器は局が変わると作り直されるので、切り替えた先の局の
+     * データ放送が出る。
+     *
+     * 探すのは original_network_id と service_id。service_id はネットワークの中で 1 つに決まる
+     * (局の一覧は transport_stream_id を持っていない)。一覧に無い局 (取り残し・映像の無い局) なら
+     * false — 文書には失敗が返り、文書が自分で案内する
+     */
+    function tuneFromData(service: Service): boolean {
+        const found = channels.find(
+            (c) => c.networkId === service.originalNetworkId && c.serviceId === service.serviceId,
+        );
+        if (found === undefined) return false;
+        select(found);
+        return true;
     }
 
     /**
@@ -325,6 +344,7 @@
                 bind:pressD={dataButton}
                 postal={data.postalCode}
                 network={data.bmlNetwork}
+                tune={tuneFromData}
             />
 
             <!--

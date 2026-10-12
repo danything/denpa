@@ -207,6 +207,44 @@ test.describe('録画を観る', () => {
     });
 
     /**
+     * **録画の再生中は選局できない。** 自前のデータ放送エンジン (`?bml=own`) で、文書が epgTune を
+     * 呼んだら失敗を返し、観ている人には「録画の再生中は選局できません」と知らせる
+     */
+    test('録画のデータ放送が epgTune を呼ぶと、失敗にして知らせる', async ({ page, request }) => {
+        test.setTimeout(180_000);
+        const { id, libraryPath } = await recordOne(page, request);
+        const script =
+            '<script><![CDATA[function tune() { var r = browser.epgTune("arib://7fe7.-1.428"); document.getElementById("r").firstChild.data = "r:" + r; }]]></script>' +
+            '<bevent><beitem type="DataButtonPressed" onoccur="tune();" subscribe="subscribe"/></bevent>' +
+            '<p id="r" style="left:0px;top:0px;width:200px;height:30px;"></p>';
+        writeFileSync(
+            `${libraryPath.slice(0, libraryPath.length - extname(libraryPath).length)}.bml.jsonl`,
+            `${fakeDataBroadcast(script)
+                .map((message) => JSON.stringify({ at: 0, message }))
+                .join('\n')}\n`,
+        );
+        await goto(page, `/watch/${id}?bml=own`);
+        await wakeControls(page, 'watch-stage');
+        await page.getByTestId('watch-data-button').click();
+        await expect(page.getByTestId('live-data')).toHaveAttribute('data-engine', 'own', {
+            timeout: 15_000,
+        });
+        await expect(page.getByText('録画の再生中は選局できません')).toBeVisible({ timeout: 15_000 });
+        // 文書には失敗 (NaN) が返り、後に続く処理も動く
+        await expect
+            .poll(() =>
+                page.evaluate(() => {
+                    for (const host of document.querySelectorAll('[data-testid="live-data"] div')) {
+                        const text = host.shadowRoot?.textContent ?? '';
+                        if (text.includes('r:')) return text.trim();
+                    }
+                    return '';
+                }),
+            )
+            .toBe('r:NaN');
+    });
+
+    /**
      * **Ctrl+C は字幕の切り替えではなく、コピーのまま。** 観ながら番組名や
      * URL を写せなかった (キーの `c` が修飾キーを見ずに横取りして
      * `preventDefault` していた)。素の `c` だけが字幕を切り替えること

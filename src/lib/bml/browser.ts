@@ -4,7 +4,7 @@
  * しない — 放送のアプリはその返事を見て「この機能はありません」と案内する。
  *
  * 動かさないもの: AIT・Hybridcast の起動 (startAITControlledApp など)・外のアプリ・
- * 予約・電話回線 (PPP)・選局 (epgTune は後回し)。
+ * 予約・電話回線 (PPP)。選局 (epgTune) は denpa の画面に頼む (エンジンは「この局へ」と知らせるだけ)。
  */
 
 import type { ProgramInfoMessage } from '#lib/ts/bml-protocol.js';
@@ -56,6 +56,8 @@ export interface BrowserHost {
     now(): number;
     activeDocument(): string | null;
     launch(name: string): Abort | number;
+    /** epgTune。`service` は `arib://<original_network_id>.<transport_stream_id>.<service_id>` */
+    tune(service: string): Abort | number;
     quit(): Abort;
     setTimer(code: string, interval: number, count: number): number;
     timer(id: number, action: 'clear' | 'pause' | 'resume'): boolean;
@@ -70,7 +72,13 @@ export interface BrowserHost {
     log(message: string): void;
 }
 
-/** getBrowserSupport の APIGroup で「ある」と答えるもの */
+/**
+ * getBrowserSupport の APIGroup で「ある」と答えるもの。組の中身は STD-B24 第二編 付属1 表11-2 で、
+ * **ここで動く関数の組だけ**を挙げる。無いと答えるもの: Com.IP.Connect・Com.IP.Params (PPP)・
+ * Ctrl.AppVersion (getResidentAppVersion は null)・Ctrl.startExtraBrowser・AITControlledApp.Start・
+ * EPG.Basic2 (epgTuneToComponent)。EPG.Basic は epgTune が動くので「ある」(予約は失敗を返す。録画の
+ * 再生中は epgTune も失敗)
+ */
 const API_GROUPS = new Set([
     'Class.BinaryTable',
     'EPG.Basic',
@@ -87,8 +95,8 @@ const API_GROUPS = new Set([
     'Ctrl.Cache2',
     'Ctrl.Cache.Ext',
     'Ctrl.Version',
-    'Ctrl.AppVersion',
     'Ctrl.Screen',
+    'Ctrl.Media',
     'Ctrl.Quit',
     'Ctrl.Status',
     'RomSound.Basic',
@@ -389,8 +397,8 @@ export function defineBrowser(host: BrowserHost): HostObject {
     fail('setCacheResourceOverIP', 1);
 
     // 動かさないもの (選局・予約・AIT・外のアプリ・ブックマーク)
+    fn('epgTune', (args) => host.tune(str(args, 0)));
     for (const name of [
-        'epgTune',
         'epgTuneToComponent',
         'epgReserve',
         'epgCancelReservation',

@@ -17,14 +17,27 @@ import type {
     ProgramInfoMessage,
     ResponseMessage,
 } from '#lib/ts/bml-protocol.js';
+import type { ImageSource } from './render';
 
 export interface CarouselFile {
     /** 小文字にそろえた名前 (multipart でないモジュールは '') */
     name: string;
     type: MediaType;
     data: Uint8Array;
-    /** 作った blob: の URL (種類ごと)。モジュールを捨てるときに返す */
-    urls: Map<string, { url: string; width: number | null; height: number | null }>;
+    /** 作った blob: の URL (種類ごと)。モジュールを捨てるときに返す (動く絵はコマごとの URL も) */
+    urls: Map<string, ImageSource>;
+}
+
+/** スキームの付いた名前のうち、データカルーセルを指すもの (arib-dc) のほかで規格にあるもの (STD-B24 第二編 9.2) */
+const KNOWN_SCHEMES = new Set(['arib-dc', 'arib', 'nvram', 'romsound', 'http', 'https', 'ftp']);
+
+/**
+ * 規格に無いスキームの名前 (`bml://` など) なら、そのスキームを返す。扱えないので呼び手が
+ * 「扱えない」と知らせて失敗にする
+ */
+export function unknownScheme(url: string): string | null {
+    const scheme = /^([a-z][a-z0-9+.-]*):/i.exec(url.trim())?.[1]?.toLowerCase();
+    return scheme === undefined || KNOWN_SCHEMES.has(scheme) ? null : scheme;
 }
 
 interface Module {
@@ -192,7 +205,9 @@ export class Resources {
      * 指せない名前 (http: など) は null
      */
     resolve(url: string, base: string | null): Ref | null {
-        let path = url.trim();
+        // 問い合わせ (`?tsid=…`)・断片 (`#…`) はファイルを引くのに使わない。resourceName に `?`・`#` は
+        // 入らない (STD-B24 第二編 9.2.1.2)。文書からは getActiveDocument で読める (engine.ts の launch)
+        let path = url.trim().replace(/[?#][\s\S]*$/, '');
         const dc =
             /^arib-dc:\/\/(-1|[0-9a-f]+)\.(-1|[0-9a-f]+)\.(-1|[0-9a-f]+)(?:;[0-9a-f]+)?(?:\.[0-9a-f]+)?(\/.*)?$/i.exec(
                 path,
@@ -402,7 +417,10 @@ export class Resources {
         const k = key(module.component, module.id);
         if (this.cache.get(k) === module || this.locks.get(k)?.module === module) return;
         for (const file of module.files.values()) {
-            for (const { url } of file.urls.values()) URL.revokeObjectURL(url);
+            for (const made of file.urls.values()) {
+                URL.revokeObjectURL(made.url);
+                for (const frame of made.animation?.frames ?? []) URL.revokeObjectURL(frame.url);
+            }
             file.urls.clear();
         }
     }

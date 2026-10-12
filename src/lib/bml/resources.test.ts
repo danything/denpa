@@ -4,7 +4,7 @@ import type { ResponseMessage } from '#lib/ts/bml-protocol.js';
 import { parseDrcs } from './drcs';
 import { isDrcs } from './euc';
 import { alphaPng, applyClut, crc32 } from './png';
-import { Resources, refToPath } from './resources';
+import { Resources, refToPath, unknownScheme } from './resources';
 import { parseXml } from './xml';
 
 const media = (type: string, subtype: string) => ({
@@ -236,5 +236,44 @@ describe('PNG・DRCS・深い入れ子 (レビューで足したもの)', () => 
         let depth = 0;
         for (let node = doc?.children[0]; node?.kind === 'element'; node = node.children[0]) depth++;
         expect(depth).toBeLessThanOrEqual(64);
+    });
+});
+
+describe('名前の形', () => {
+    test('問い合わせ (?tsid=…) と断片は、ファイルを引くのに使わない', () => {
+        const r = new Resources();
+        expect(r.resolve('/40/0001/Next.bml?tsid=0x7FE1', null)).toEqual({
+            component: 0x40,
+            module: 1,
+            file: 'next.bml',
+        });
+        expect(r.resolve('next.bml?tsid=1&x=2#a', '/40/0002/startup.bml?y=1')).toEqual({
+            component: 0x40,
+            module: 2,
+            file: 'next.bml',
+        });
+        expect(r.resolve('~/0003/a.png?x', '/50/0000/startup.bml')).toEqual({
+            component: 0x50,
+            module: 3,
+            file: 'a.png',
+        });
+    });
+
+    test('規格に無いスキーム (bml:// など) だけを「扱えない」と言う', () => {
+        expect(unknownScheme('bml://startup.bml')).toBe('bml');
+        expect(unknownScheme('BML://x')).toBe('bml');
+        for (const known of [
+            'arib-dc://-1.-1.-1/40/0000',
+            'arib://-1.-1.-1',
+            'nvram://local/0',
+            'romsound://1',
+            'http://a/',
+            'https://a/',
+        ])
+            expect(unknownScheme(known)).toBeNull();
+        expect(unknownScheme('/40/0000/startup.bml')).toBeNull();
+        expect(unknownScheme('next.bml')).toBeNull();
+        // 扱えない名前は解けない (null)
+        expect(new Resources().resolve('bml://startup.bml', '/40/0000/startup.bml')).toBeNull();
     });
 });
