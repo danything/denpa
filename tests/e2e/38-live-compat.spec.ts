@@ -1,6 +1,7 @@
 import { rmSync, writeFileSync } from 'node:fs';
 import type { Page } from '@playwright/test';
-import { expect, goto, reserveSoon, syncEpg, test, wakeControls } from './helpers';
+import { MX } from '../fake/services';
+import { expect, goto, syncEpg, test, wakeControls } from './helpers';
 
 /**
  * **互換モード** — ライブの H.264 / AV1 も canvas に描く (`src/lib/canvas-video.ts`・`src/lib/raw/fmp4.ts`)。
@@ -176,11 +177,18 @@ test.describe('互換モード', () => {
 });
 
 test.describe('互換モードの追っかけ', () => {
+    /** 録っている番組 (止めるのに使う) */
+    let programId: number | null = null;
     test.beforeEach(async ({ request, stack }) => {
         await syncEpg(request);
         writeFileSync(stack.liveFmp4File, '');
     });
-    test.afterEach(async ({ stack }) => {
+    test.afterEach(async ({ request, stack }) => {
+        // 地上波の偽番組は30分あるので、止めないと次のテストまでチューナーを塞ぐ
+        if (programId !== null) {
+            await request.post('/guide?/cancel', { form: { programId: String(programId) } });
+        }
+        programId = null;
         rmSync(stack.liveFmp4File, { force: true });
         rmSync(stack.failFile, { force: true });
     });
@@ -188,8 +196,9 @@ test.describe('互換モードの追っかけ', () => {
     test('追っかけも canvas に描き、速さは出さず、止めた所から再開する', async ({ page, request, stack }) => {
         test.setTimeout(180_000);
         /*
-         * **焼かせない。** BS の番組は 5 秒で録り終わり、焼けると元の TS が無くなって頼み直しが断られる
-         * (25-chase と同じく、偽 ffmpeg の焼きを失敗させて「焼けていない」録画にしておく)
+         * **録っている最中に観る。** 追っかけは録っている最中だけで、録り終えた録画は観る画面へ送られる
+         * (25-chase と同じく、地上波のいまの番組 (偽番組は30分) を録る)。焼きは失敗させておく
+         * (止めたあと焼けると元の TS が無くなり、頼み直しが断られる)
          */
         writeFileSync(stack.failFile, '1');
         // 入れてあり、注意も見せたことにしておく (出し方はライブのテストが見る)
@@ -197,7 +206,13 @@ test.describe('互換モードの追っかけ', () => {
             localStorage.setItem('canvas-video', 'on');
             localStorage.setItem('canvas-drive-notice', '1');
         });
-        await reserveSoon(page, request, 'BS');
+        const services = (await (await request.get('/api/services')).json()) as {
+            id: number;
+            now: { id: number } | null;
+        }[];
+        programId = services.find((s) => s.id === MX.id)?.now?.id ?? null;
+        expect(programId, `${MX.name} にいま放送中の番組が要る`).not.toBeNull();
+        expect((await request.post('/live?/record', { form: { service: String(MX.id) } })).ok()).toBe(true);
         let id = 0;
         await expect(async () => {
             type Item = { id: number; recording: boolean };
