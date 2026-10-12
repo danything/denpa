@@ -66,18 +66,21 @@ export function applyClut(
         trns[i] = a;
     });
     const parts: Uint8Array[] = [SIGNATURE];
+    let placed = false;
     let at = 8;
     while (at + 12 <= png.length) {
         const length = view.getUint32(at);
         const name = String.fromCharCode(...png.subarray(at + 4, at + 8));
         const end = at + 12 + length;
         if (end > png.length) return null;
-        if (name !== 'PLTE' && name !== 'tRNS') parts.push(png.subarray(at, end));
-        if (name === 'IHDR') {
-            // パレット (色の型 3) 以外は運用されない。来たら手を入れない
-            if (png[at + 8 + 9] !== 3) return { data: concat([png]), width, height };
+        // パレット (色の型 3) 以外は運用されない。来たら手を入れない
+        if (name === 'IHDR' && png[at + 8 + 9] !== 3) return { data: concat([png]), width, height };
+        // PLTE・tRNS は最初の IDAT の前に (gAMA などの後ろでよい。PNG の塊の順)
+        if (name === 'IDAT' && !placed) {
             parts.push(chunk('PLTE', plte), chunk('tRNS', trns));
+            placed = true;
         }
+        if (name !== 'PLTE' && name !== 'tRNS') parts.push(png.subarray(at, end));
         at = end;
     }
     return { data: concat(parts), width, height };

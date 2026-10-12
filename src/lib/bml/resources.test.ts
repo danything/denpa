@@ -1,9 +1,11 @@
 import { describe, expect, test } from 'bun:test';
+import { inflateSync } from 'node:zlib';
 import type { ResponseMessage } from '#lib/ts/bml-protocol.js';
 import { parseDrcs } from './drcs';
 import { isDrcs } from './euc';
 import { alphaPng, applyClut, crc32 } from './png';
 import { Resources, refToPath } from './resources';
+import { parseXml } from './xml';
 
 const media = (type: string, subtype: string) => ({
     type,
@@ -172,5 +174,67 @@ describe('押さえ直し', () => {
         expect(new TextDecoder().decode(r.file({ component: 0x40, module: 1, file: 'a.txt' })?.data)).toBe(
             'v2',
         );
+    });
+});
+
+describe('PNG・DRCS・深い入れ子 (レビューで足したもの)', () => {
+    /** PNG の塊の名前の並び */
+    const chunks = (png: Uint8Array): string[] => {
+        const names: string[] = [];
+        const view = new DataView(png.buffer, png.byteOffset, png.byteLength);
+        for (let at = 8; at + 12 <= png.length; at += 12 + view.getUint32(at)) {
+            names.push(String.fromCharCode(...png.subarray(at + 4, at + 8)));
+        }
+        return names;
+    };
+
+    test('mask の PNG は zlib で戻せる (stored のブロックと Adler-32)', () => {
+        const alpha = Uint8Array.from({ length: 40 * 40 }, (_, i) => i & 0xff);
+        const png = alphaPng(40, 40, alpha);
+        const view = new DataView(png.buffer);
+        const idatAt = 8 + 12 + 13;
+        const idat = png.subarray(idatAt + 8, idatAt + 8 + view.getUint32(idatAt));
+        const raw = inflateSync(idat);
+        expect(raw.length).toBe(40 * (1 + 40 * 2));
+        // 2 行目 (y=1) の x=1 の透明度: 行の頭 81 + フィルタ 1 + 灰と透明度 2 × 1 + 灰 1
+        expect(raw[81 + 1 + 2 + 1]).toBe(alpha[41]);
+    });
+
+    test('PLTE・tRNS は最初の IDAT の前 (gAMA の後ろ) に入れる', () => {
+        const ihdr = Uint8Array.of(0, 0, 0, 1, 0, 0, 0, 1, 8, 3, 0, 0, 0);
+        const chunk = (name: string, body: Uint8Array) => {
+            const out = new Uint8Array(12 + body.length);
+            new DataView(out.buffer).setUint32(0, body.length);
+            out.set(new TextEncoder().encode(name), 4);
+            out.set(body, 8);
+            return out;
+        };
+        const parts = [
+            Uint8Array.of(0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a),
+            chunk('IHDR', ihdr),
+            chunk('gAMA', new Uint8Array(4)),
+            chunk('IDAT', new Uint8Array(2)),
+            chunk('IEND', new Uint8Array()),
+        ];
+        const png = new Uint8Array(parts.reduce((n, p) => n + p.length, 0));
+        let at = 0;
+        for (const p of parts) {
+            png.set(p, at);
+            at += p.length;
+        }
+        const fixed = applyClut(png, [[1, 2, 3, 255]]);
+        expect(chunks(fixed!.data)).toEqual(['IHDR', 'gAMA', 'PLTE', 'tRNS', 'IDAT', 'IEND']);
+    });
+
+    test('DRCS が途中で切れていても投げない', () => {
+        expect(() => parseDrcs(Uint8Array.of(2, 0x77, 0x21, 1, 0x11, 2, 16, 16, 0xff))).not.toThrow();
+    });
+
+    test('閉じない要素が延々と続いても、深さの上限で止まる', () => {
+        const doc = parseXml(`<bml><body>${'<div>'.repeat(100000)}x</body></bml>`);
+        expect(doc?.name).toBe('bml');
+        let depth = 0;
+        for (let node = doc?.children[0]; node?.kind === 'element'; node = node.children[0]) depth++;
+        expect(depth).toBeLessThanOrEqual(64);
     });
 });

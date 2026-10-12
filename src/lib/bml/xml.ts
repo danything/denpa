@@ -26,6 +26,9 @@ export interface XmlElement {
 export type XmlNode = XmlElement | XmlText;
 
 /** 中身を持たない要素 */
+/** 入れ子の深さの上限。放送の文書は 10 段にも満たない */
+const MAX_DEPTH = 64;
+
 const VOID = new Set(['br', 'meta', 'link', 'img', 'input']);
 
 const ENTITIES: Record<string, string> = { lt: '<', gt: '>', amp: '&', quot: '"', apos: "'" };
@@ -190,7 +193,8 @@ export function parseXml(source: string): XmlElement | null {
             at = gt === -1 ? source.length : gt + 1;
             continue;
         }
-        open.push(element);
+        // 入れ子の深さに上限 (閉じない要素が延々と続く文書で、読む側・描く側の呼び出しが溢れない)
+        if (open.length < MAX_DEPTH) open.push(element);
     }
     return root.children.find((child): child is XmlElement => child.kind === 'element') ?? null;
 }

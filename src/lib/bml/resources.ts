@@ -319,7 +319,7 @@ export class Resources {
         const k = key(component, module);
         const held = this.locks.get(k);
         if (held !== undefined && held.kind !== kind) return Number.NaN;
-        if (!this.pmt.has(component)) return kind === 'lockEx' ? -3 : -1;
+        if (this.pmtSeen && !this.pmt.has(component)) return kind === 'lockEx' ? -3 : -1;
         if (held !== undefined) {
             // 同じ種類で押さえ直す。待っている途中ならその待ちに任せる (知らせは 1 回)
             if (held.module === null) return 1;
