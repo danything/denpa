@@ -552,6 +552,15 @@ export function blameLiveHw(codec: StreamCodec, hw: LiveHw): void {
 /** 放送の実時刻を配り直す間隔 (ms)。配り続ける理由は `Session.tellClock` */
 const CLOCK_EVERY = 5_000;
 
+/**
+ * 放送の「いま・次」を、変わっていなくても番組表と突き合わせ直す間隔 (ms。`Session.tap`)。
+ *
+ * **番組表を集め直すと、写した p/f が予定の時刻で上書きされることがある** (同じ番組を
+ * schedule が後から運んでくる)。p/f が次に変わるのを待つと、延長の間ずっと予定に戻ったままになる。
+ * 突き合わせは番組2つぶんの主キー引きで、違っていなければ何も書かない
+ */
+const ON_AIR_EVERY = 60_000;
+
 /** 知らせ・データ放送は JSON にして運ぶ */
 function json(value: unknown): Uint8Array {
     return new TextEncoder().encode(JSON.stringify(value));
@@ -624,6 +633,8 @@ class Session {
      * ファイルを読んでいて、流れている p/f は過去のものなので読まない
      */
     private onAir: PresentFollowing | null = null;
+    /** 最後に番組表と突き合わせた時刻 (`ON_AIR_EVERY`) */
+    private followedAt = 0;
     /** 最後に伝えた Hybridcast。**同じものを伝え直さない** */
     private toldApps = '';
     /** 最後に伝えた番組。**同じものを伝え直さない** (`programInfo`) */
@@ -1042,16 +1053,20 @@ class Session {
             if (onAir?.feedPacket(packet) === true) switched = true;
         }
         if (found.length > 0) this.findHybridcast(found);
-        if (switched && onAir !== null) this.followOnAir(onAir);
+        if (onAir !== null && (switched || receivedAt - this.followedAt >= ON_AIR_EVERY)) {
+            this.followOnAir(onAir);
+        }
         return out;
     }
 
     /**
-     * 放送の「いま」と「次」が変わった。**番組表に写す** (`epg.followOnAir`)。
+     * 放送の「いま」と「次」が変わった (か、しばらく突き合わせていない)。
+     * **番組表に写す** (`epg.followOnAir`)。
      *
-     * 書けなくても映像は止めない。番組表が予定のままになるだけで、次に変わったときにまた写す
+     * 書けなくても映像は止めない。番組表が予定のままになるだけで、次の突き合わせでまた写す
      */
     private followOnAir(onAir: PresentFollowing): void {
+        this.followedAt = Date.now();
         const events = [onAir.present, onAir.following].filter((event) => event !== null);
         try {
             followOnAir(events);
