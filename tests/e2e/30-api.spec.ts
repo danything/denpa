@@ -96,7 +96,11 @@ test.describe('外から使う口', () => {
             // 録画の状態 (追っかけの終わりの確かめ)。録れた長さは一覧と同じ。録っている最中のものは
             // 読む間に録り終えて変わりうるので、鍵があることだけ見る
             const state = await (await request.get(`/api/recordings/${rec.id}`)).json();
-            expect(state).toMatchObject({ id: rec.id, encoded: expect.any(Boolean), state: expect.any(String) });
+            expect(state).toMatchObject({
+                id: rec.id,
+                encoded: expect.any(Boolean),
+                state: expect.any(String),
+            });
             expect(state).toHaveProperty('durationMs');
             if (!rec.recording) expect(state.durationMs).toBe(rec.durationMs);
             // CM 飛ばしの行き先 (playback の物差しの秒)。無ければ空の配列
