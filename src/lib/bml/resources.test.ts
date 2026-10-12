@@ -154,3 +154,23 @@ describe('DRCS・PNG', () => {
         expect(fixed?.data.length).toBe(mask.length);
     });
 });
+
+describe('押さえ直し', () => {
+    test('同じ種類で押さえ直すと今の版になり、知らせは 1 回ずつ', async () => {
+        const r = new Resources();
+        r.feed(pmt(0x40));
+        r.feed(dii(0x40, [[1, 1]]));
+        r.feed(module(0x40, 1, 1, [['a.txt', 'v1']]));
+        const statuses: number[] = [];
+        r.lock(0x40, 1, 'lock', (s) => statuses.push(s));
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        r.feed(dii(0x40, [[1, 2]]));
+        r.feed(module(0x40, 1, 2, [['a.txt', 'v2']]));
+        expect(r.lock(0x40, 1, 'lock', (s) => statuses.push(s))).toBe(1);
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        expect(statuses).toEqual([0, 0]);
+        expect(new TextDecoder().decode(r.file({ component: 0x40, module: 1, file: 'a.txt' })?.data)).toBe(
+            'v2',
+        );
+    });
+});

@@ -4,9 +4,11 @@
  * 重ねる順 (後が勝つ):
  *
  * 1. 既定のスタイル (STD-B24 付属2 の既定のスタイルシートのうち、放送が頼るもの)
- * 2. 文書の style 要素・link の規則 (詳細度 → 順番。`!important` は別に重ねて上に)
+ * 2. 文書の style 要素・link の規則 (詳細度 → 順番。`!important` は別に重ねて上に)。フォーカス中は
+ *    `:focus` の規則も同じ並びに入れる (押されている間は `:active`)。`#a` は `p:focus` に勝つ
  * 3. style 属性と、スクリプトが `normalStyle` に書いたもの
- * 4. フォーカス中なら `:focus` の規則と `focusStyle` (押されている間は `:active` と `activeStyle`)
+ * 4. フォーカス中は `focusStyle` に書いたもの (押されている間は `activeStyle`)
+ * 5. 既定のスタイルの `!important` (div・object の padding 0 など)
  *
  * 継ぐもの (色・字・行の高さ・揃え・字間・見える見えない) は親の値を継ぐ。
  */
@@ -101,11 +103,24 @@ const DEFAULTS: Record<string, [string, string][]> = {
     object: [['background-color-index', '8']],
 };
 
+const ZERO_PADDING: [string, string][] = ['top', 'right', 'bottom', 'left'].map((side) => [
+    `padding-${side}`,
+    '0',
+]);
+
 /** span・a は見える見えないを必ず継ぐ (既定のスタイルの `visibility: inherit !important`) */
 const FORCED: Record<string, [string, string][]> = {
-    span: [['visibility', 'inherit']],
-    a: [['visibility', 'inherit']],
-    body: [['visibility', 'visible']],
+    span: [
+        ['visibility', 'inherit'],
+        ['letter-spacing', 'inherit'],
+    ],
+    a: [
+        ['visibility', 'inherit'],
+        ['letter-spacing', 'inherit'],
+    ],
+    body: [['visibility', 'visible'], ...ZERO_PADDING],
+    div: ZERO_PADDING,
+    object: [...ZERO_PADDING, ['border-width', '0'], ['border-style', 'none']],
 };
 
 /** 短い書き方を開く */
@@ -153,8 +168,8 @@ export function declared(node: Cascade, state: State = node.state): Declarations
     };
     for (const [p, v] of DEFAULTS['*']!) put(p, v, false);
     for (const [p, v] of DEFAULTS[node.tag] ?? []) put(p, v, false);
-    for (const [p, v, i] of node.rules.normal) put(p, v, i);
-    if (state !== 'normal') for (const [p, v, i] of node.rules[state]) put(p, v, i);
+    // 状態の規則は、ふつうの規則と詳細度で並べ直したものを持っている (document.ts の applyRules)
+    for (const [p, v, i] of node.rules[state]) put(p, v, i);
     for (const [p, v] of node.inline.normal) put(p, v, false);
     if (state !== 'normal') for (const [p, v] of node.inline[state]) put(p, v, false);
     for (const [p, v] of FORCED[node.tag] ?? []) put(p, v, true);
@@ -188,6 +203,24 @@ function parseNav(value: string | null): number | null {
     return Number.isInteger(n) && n >= 0 && n <= 32767 ? n : null;
 }
 
+/** 枠の線の種類。**列挙のどれかだけ** (放送の文字列をそのまま CSS に入れない) */
+const BORDER_STYLES = new Set([
+    'none',
+    'hidden',
+    'solid',
+    'dashed',
+    'dotted',
+    'double',
+    'groove',
+    'ridge',
+    'inset',
+    'outset',
+]);
+function borderStyle(value: string | null): string {
+    const style = (value ?? 'none').toLowerCase();
+    return BORDER_STYLES.has(style) ? style : 'none';
+}
+
 function hexColor(value: string | null): string | null {
     return value !== null && /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.test(value) ? value : null;
 }
@@ -199,6 +232,13 @@ function unquote(value: string): string {
 /** 決めた見た目。継ぐものは親の決めた見た目から */
 export function compute(node: Cascade, parent: Computed | null, state: State = node.state): Computed {
     const own = declared(node, state);
+    // 継がない特性の inherit は、親の効いている値をそのまま使う
+    for (const [property, value] of own) {
+        if (value.trim().toLowerCase() !== 'inherit' || INHERITED.has(property)) continue;
+        const from = node.parent === null ? null : resolved(node.parent, property);
+        if (from === null) own.delete(property);
+        else own.set(property, from);
+    }
     const get = (property: string): string | null => {
         const value = own.get(property);
         if (value !== undefined && value.trim().toLowerCase() !== 'inherit') return value.trim();
@@ -235,7 +275,7 @@ export function compute(node: Cascade, parent: Computed | null, state: State = n
         backgroundColorIndex: parseIndex(get('background-color-index'), 8),
         grayscale: inherits('grayscale-color-index') ? parent!.grayscale : grayscale(),
         borderWidth: px('border-width', 0),
-        borderStyle: (get('border-style') ?? 'none').toLowerCase(),
+        borderStyle: borderStyle(get('border-style')),
         borderColorIndex: (['top', 'right', 'bottom', 'left'] as const).map((side) =>
             parseIndex(get(`border-${side}-color-index`), 0),
         ) as [number, number, number, number],

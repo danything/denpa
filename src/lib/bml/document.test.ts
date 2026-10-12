@@ -155,3 +155,37 @@ describe('CLUT', () => {
         expect(table[16]).toEqual(DEFAULT_CLUT[16]!);
     });
 });
+
+describe('見直しで足したもの', () => {
+    test('閉じない br は後ろを飲み込まない。script の CDATA は幾つあってもつなぐ', () => {
+        const doc = load(
+            '<bml><head><script><![CDATA[a();]]><!-- x --><![CDATA[b();]]></script></head><body><p id="p">A<br>B</p></body></bml>',
+        );
+        expect(doc.getElementById('p')!.children.map((c) => (c.kind === 'text' ? c.data : c.tag))).toEqual([
+            'A',
+            'br',
+            'B',
+        ]);
+        expect(doc.elements('script')[0]!.text).toBe('a();b();');
+    });
+
+    test(':focus の規則も詳細度で重ねる (#id は p:focus に勝つ)', () => {
+        const doc = load(
+            '<bml><body><p id="a">x</p></body></bml>',
+            '#a { color-index: 2 } p:focus { color-index: 1; font-size: 30px }',
+        );
+        const p = doc.getElementById('a')!;
+        p.setState('focus');
+        expect([p.style().colorIndex, p.style().fontSize]).toEqual([2, 30]);
+    });
+
+    test('div と object の padding は 0、継がない特性の inherit は親の値、枠の線は列挙だけ', () => {
+        const doc = load(
+            '<bml><body><div id="d" style="padding:9px;background-color-index:4"><div id="c" style="background-color-index:inherit;border-style:solid;color:red"></div><p id="p" style="border-style:x;url(y)"></p></div></body></bml>',
+        );
+        expect(doc.getElementById('d')!.style().padding).toEqual([0, 0, 0, 0]);
+        expect(doc.getElementById('c')!.style().backgroundColorIndex).toBe(4);
+        expect(doc.getElementById('c')!.style().borderStyle).toBe('solid');
+        expect(doc.getElementById('p')!.style().borderStyle).toBe('none');
+    });
+});

@@ -81,13 +81,14 @@ export function videoRect(document: BmlDocument): { element: BmlElement; rect: R
         for (let parent = element.parent; parent !== null && parent.tag !== 'body'; parent = parent.parent) {
             const s = parent.style();
             const inset = s.borderStyle === 'none' ? 0 : s.borderWidth;
-            left += s.left + inset + s.padding[3];
-            top += s.top + inset + s.padding[0];
+            // 子は親の枠の内側 (padding の箱) から置く。div の padding は既定のスタイルで 0 に固定
+            left += s.left + inset;
+            top += s.top + inset;
             // 親ははみ出しを切る
-            const right = Math.min(left + width, s.left + inset + s.padding[3] + s.width);
-            const bottom = Math.min(top + height, s.top + inset + s.padding[0] + s.height);
-            left = Math.max(left, s.left + inset + s.padding[3]);
-            top = Math.max(top, s.top + inset + s.padding[0]);
+            const right = Math.min(left + width, s.left + inset + s.width);
+            const bottom = Math.min(top + height, s.top + inset + s.height);
+            left = Math.max(left, s.left + inset);
+            top = Math.max(top, s.top + inset);
             width = Math.max(0, right - left);
             height = Math.max(0, bottom - top);
         }
@@ -153,28 +154,34 @@ export class Renderer {
                 if (!containing.has(element)) before.add(element);
             }
         }
-        const offset = new Map<BmlElement, { left: number; top: number }>();
-        const origin = (element: BmlElement): { left: number; top: number } => {
-            const known = offset.get(element);
-            if (known !== undefined) return known;
+        // 要素の枠の左上 (border-box。画面の座標)。clip-path の基準はここ
+        const corners = new Map<BmlElement, { left: number; top: number }>();
+        const inset = (element: BmlElement): number => {
             const s = element.style();
-            const parent = element.parent === null || element.tag === 'body' ? null : origin(element.parent);
-            const inset = s.borderStyle === 'none' ? 0 : s.borderWidth;
-            const at =
-                parent === null
-                    ? { left: 0, top: 0 }
-                    : {
-                          left: parent.left + s.left + inset + s.padding[3],
-                          top: parent.top + s.top + inset + s.padding[0],
-                      };
-            offset.set(element, at);
+            return element.tag === 'body' || s.borderStyle === 'none' ? 0 : s.borderWidth;
+        };
+        const corner = (element: BmlElement): { left: number; top: number } => {
+            const known = corners.get(element);
+            if (known !== undefined) return known;
+            const parent = element.parent;
+            let at = { left: 0, top: 0 };
+            if (parent !== null && element.tag !== 'body') {
+                // 子は親の枠の内側から置く (div の padding は既定のスタイルで 0 に固定)
+                const p = corner(parent);
+                const s = element.style();
+                at = { left: p.left + inset(parent) + s.left, top: p.top + inset(parent) + s.top };
+            }
+            corners.set(element, at);
             return at;
         };
         for (const [element, view] of this.views) {
             const s = element.style();
             let clip: string | null = null;
             if (video !== null && (before.has(element) || containing.has(element))) {
-                const at = origin(element);
+                // 映像を含む要素は、枠の内側に敷く下敷きに穴を開ける
+                const base = corner(element);
+                const shift = containing.has(element) ? inset(element) : 0;
+                const at = { left: base.left + shift, top: base.top + shift };
                 const local = {
                     ...video.rect,
                     left: video.rect.left - at.left,
@@ -269,7 +276,7 @@ export class Renderer {
             const url = parseUrl(s.backgroundImage);
             const source = url === null ? null : this.host.image(url, 'background', 'image/jpeg');
             if (source !== null) {
-                image = `background-image:url("${source.url}");background-repeat:no-repeat`;
+                image = `background-image:url("${source.url}");background-repeat:${element.tag === 'body' ? 'repeat' : 'no-repeat'}`;
                 // 960x540 の画面では静止画を半分の大きさで描く (960x540 の画像はそのまま)
                 if (source.width !== null && source.height !== null && this.host.resolution().width === 960) {
                     const full = source.width === 960 && source.height === 540;
@@ -284,7 +291,8 @@ export class Renderer {
             css.push(`background-color:${background}`);
             if (image !== null) css.push(image);
         }
-        if (clip !== null && !contains) css.push(`clip-path:${clip}`);
+        // 行内の要素 (span・a) は親の p の clip-path に一緒に切られる
+        if (clip !== null && !contains && block) css.push(`clip-path:${clip}`);
         if (block && s.borderStyle !== 'none' && s.borderWidth > 0) {
             const [t, r, b, l] = s.borderColorIndex.map((i) => cssColor(clut[i]));
             css.push(`border:${s.borderWidth}px ${s.borderStyle === 'solid' ? 'solid' : s.borderStyle}`);
@@ -368,8 +376,12 @@ export class Renderer {
             img.style.width = `${w}px`;
             img.style.height = `${h}px`;
         };
-        if (source.width !== null && source.height !== null) size(source.width, source.height);
-        else img.onload = () => size(img.naturalWidth, img.naturalHeight);
+        if (source.width !== null && source.height !== null) {
+            img.onload = null;
+            size(source.width, source.height);
+        } else {
+            img.onload = () => size(img.naturalWidth, img.naturalHeight);
+        }
     }
 
     /** 字を描く。DRCS は 1 字ずつ mask の span に (色は字の色) */

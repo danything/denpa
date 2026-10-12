@@ -259,14 +259,8 @@ export class Dom {
         for (const [name, [property, writable]] of Object.entries(STYLE_PROPERTIES)) {
             object.define(
                 name,
-                () => {
-                    // 書いた値をそのまま返す (inherit でなければ)。無ければ今の値
-                    const own =
-                        element.inline[state].get(property) ??
-                        (state === 'normal' ? undefined : element.inline.normal.get(property));
-                    if (own !== undefined && own.toLowerCase() !== 'inherit') return own;
-                    return styleValue(element, property, state);
-                },
+                // 効いている値を返す (書いた値が !important や不正な値で効いていなければ、効いているほう)
+                () => styleValue(element, property, state),
                 writable
                     ? (value) => {
                           element.inline[state].set(property, normalizeStyle(property, value));

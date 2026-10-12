@@ -25,6 +25,9 @@ export interface XmlElement {
 
 export type XmlNode = XmlElement | XmlText;
 
+/** 中身を持たない要素 */
+const VOID = new Set(['br', 'meta', 'link', 'img', 'input']);
+
 const ENTITIES: Record<string, string> = { lt: '<', gt: '>', amp: '&', quot: '"', apos: "'" };
 
 /** 実体参照を開く。知らないものはそのまま残す */
@@ -145,6 +148,11 @@ export function parseXml(source: string): XmlElement | null {
                     const valueStart = i;
                     while (i < source.length && !/[\s>]/.test(source[i]!)) i++;
                     value = source.slice(valueStart, i);
+                    // `<x a=b/>` の / は値ではなく、自分で閉じる印
+                    if (value.endsWith('/') && source[i] === '>') {
+                        value = value.slice(0, -1);
+                        selfClosing = true;
+                    }
                 }
             }
             if (attr === '') {
@@ -156,17 +164,28 @@ export function parseXml(source: string): XmlElement | null {
         at = i;
         const element: XmlElement = { kind: 'element', name, attrs, children: [] };
         open.at(-1)!.children.push(element);
-        if (selfClosing) continue;
+        // 中身を持たない要素 (閉じずに書かれても、後ろを飲み込まない)
+        if (selfClosing || VOID.has(name)) continue;
         // script と style の中身は文字のまま (中の < をタグと見ない)
         if (name === 'script' || name === 'style') {
             const closer = new RegExp(`</${name}`, 'ig');
             closer.lastIndex = at;
             const end = closer.exec(source)?.index ?? source.length;
             const body = source.slice(at, end);
-            const cdata = /^\s*<!\[CDATA\[([\s\S]*?)\]\]>\s*$/.exec(body);
-            if (cdata) element.children.push({ kind: 'text', text: cdata[1]!, cdata: true });
-            else if (body !== '')
+            if (body.includes('<![CDATA[')) {
+                // CDATA が幾つあってもつなぐ。外の注釈 (<!-- -->) は捨て、外の字は実体参照を開く
+                const text = body
+                    .split(/(<!\[CDATA\[[\s\S]*?\]\]>)/)
+                    .map((part) =>
+                        part.startsWith('<![CDATA[')
+                            ? part.slice(9, -3)
+                            : decodeEntities(part.replace(/<!--[\s\S]*?-->/g, '')),
+                    )
+                    .join('');
+                element.children.push({ kind: 'text', text, cdata: true });
+            } else if (body !== '') {
                 element.children.push({ kind: 'text', text: decodeEntities(body), cdata: false });
+            }
             const gt = source.indexOf('>', end);
             at = gt === -1 ? source.length : gt + 1;
             continue;

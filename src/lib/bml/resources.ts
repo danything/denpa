@@ -320,6 +320,19 @@ export class Resources {
         const held = this.locks.get(k);
         if (held !== undefined && held.kind !== kind) return Number.NaN;
         if (!this.pmt.has(component)) return kind === 'lockEx' ? -3 : -1;
+        if (held !== undefined) {
+            // 同じ種類で押さえ直す。待っている途中ならその待ちに任せる (知らせは 1 回)
+            if (held.module === null) return 1;
+            // 届いている今の版で押さえ直し、前の版を返す (web-bml の lockCachedModule と同じ)
+            const now = this.cache.get(k);
+            if (now !== undefined && now !== held.module) {
+                const old = held.module;
+                held.module = now;
+                this.release(old);
+            }
+            queueMicrotask(() => done(0));
+            return 1;
+        }
         const dii = this.dii.get(component);
         if (dii !== undefined && !dii.modules.has(module)) {
             if (kind === 'lock') return -1;

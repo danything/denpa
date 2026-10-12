@@ -173,7 +173,12 @@ export class BmlDocument {
             for (const state of ['normal', 'focus', 'active'] as const) element.rules[state] = [];
             for (const rule of sorted) {
                 if (!matches(rule.selector, tag, id, classes)) continue;
-                element.rules[rule.selector.pseudo ?? 'normal'].push(...rule.declarations);
+                // :focus / :active の状態では、ふつうの規則と一緒に詳細度の順で重ねる
+                const pseudo = rule.selector.pseudo;
+                if (pseudo !== null) element.rules[pseudo].push(...rule.declarations);
+                else
+                    for (const state of ['normal', 'focus', 'active'] as const)
+                        element.rules[state].push(...rule.declarations);
             }
         }
         this.touch();
