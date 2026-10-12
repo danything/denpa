@@ -44,6 +44,8 @@ class BitReader {
     ) {}
 
     bits(count: number): number {
+        // 値になるのは 32 ビットまで (U・I・長さ)。書式に大きな長さを書かれても 1 ビットずつ回さない
+        if (count > 32) throw new BinaryError(`${count} ビットは読めません`);
         let value = 0;
         for (let i = 0; i < count; i++, this.position++) {
             value = value * 2 + (((this.data[this.position >> 3] ?? 0) >> (7 - (this.position & 7))) & 1);
@@ -80,9 +82,17 @@ export function readFields(
     const out: Cell[] = [];
     for (const field of fields) {
         switch (field.type) {
-            case 'B':
-                out.push(reader.bits(lengthInBits(field)) !== 0);
+            case 'B': {
+                // 真偽はどのビットかが立っていれば真。長くても、ある分だけを 32 ビットずつ見る
+                const end = reader.position + lengthInBits(field);
+                let set = false;
+                while (reader.position < Math.min(end, data.length * 8)) {
+                    if (reader.bits(Math.min(32, end - reader.position)) !== 0) set = true;
+                }
+                reader.position = end;
+                out.push(set);
                 break;
+            }
             case 'U': {
                 const bits = lengthInBits(field);
                 if (bits > 32) throw new BinaryError('U は 32 ビットまで');
