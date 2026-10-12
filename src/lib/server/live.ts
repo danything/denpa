@@ -2159,17 +2159,24 @@ function openChase(
     });
 
     const path = rec.ts_path;
-    const session = new Session(
-        'chase',
-        `${rec.id}@${Math.round(plan.at)}`,
-        rec.service_id,
-        program,
-        audio,
-        codec,
-        caption,
-        false,
-        () => followFile(path, plan.offset, plan.paceBytesPerSec, () => recordingDone(rec.id), hold),
-    );
+    let session: Session;
+    try {
+        session = new Session(
+            'chase',
+            `${rec.id}@${Math.round(plan.at)}`,
+            rec.service_id,
+            program,
+            audio,
+            codec,
+            caption,
+            false,
+            () => followFile(path, plan.offset, plan.paceBytesPerSec, () => recordingDone(rec.id), hold),
+        );
+    } catch (failure) {
+        // 起こせなかった。取った枠は返す
+        release();
+        throw failure;
+    }
     session.whenStopped(release);
     void session.run();
     session.add(viewer);

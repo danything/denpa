@@ -619,9 +619,16 @@ export async function streamResponse(recording: Recording, query: URLSearchParam
     const release = holdTranscode();
     if (release === null) error(503, BUSY);
     const source = plan.encoded.find((file) => file.codec !== null);
-    const attempts = await (source !== undefined
-        ? Promise.resolve(fileAttempts(source.path, from, audioIndex(query.get('audio')), codec))
-        : tsAttempts(plan, from, pickTrack(plan.tracks, query.get('audio') ?? undefined), codec));
+    let attempts: Attempt[] | null;
+    try {
+        attempts = await (source !== undefined
+            ? Promise.resolve(fileAttempts(source.path, from, audioIndex(query.get('audio')), codec))
+            : tsAttempts(plan, from, pickTrack(plan.tracks, query.get('audio') ?? undefined), codec));
+    } catch (failure) {
+        // TS を読めなかった (消されたなど)。取った枠は返す
+        release();
+        throw failure;
+    }
     if (attempts === null) {
         release();
         error(404, 'この形式では再生できません');
