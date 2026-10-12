@@ -80,6 +80,8 @@ export interface Bml {
     /** 今の文書がその種類の beitem を subscribe しているか */
     listens(type: string): boolean;
     setReceiverInfo(info: Partial<ReceiverInfo>): void;
+    /** 押したままのキーを忘れる (窓のフォーカスが外れて keyup が来ないとき) */
+    releaseKeys(): void;
     readonly plane: Plane;
     /** 切り分け用 (今の文書の名前) */
     readonly path: string | null;
@@ -228,6 +230,10 @@ class Engine implements DomHost, BrowserHost, RenderHost {
 
     setReceiverInfo(info: Partial<ReceiverInfo>): void {
         this.receiver = { ...this.receiver, ...info };
+    }
+
+    releaseKeys(): void {
+        this.held = null;
     }
 
     get plane(): Plane {

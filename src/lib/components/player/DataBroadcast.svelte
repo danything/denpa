@@ -799,7 +799,11 @@
     onDestroy(close);
 </script>
 
-<svelte:window onkeydown={(event) => void key(event, true)} onkeyup={(event) => void key(event, false)} />
+<svelte:window
+    onkeydown={(event) => void key(event, true)}
+    onkeyup={(event) => void key(event, false)}
+    onblur={() => own?.releaseKeys()}
+/>
 
 <!--
     **映像と同じ枠に重ねる。** BML の画面は中で自分の大きさを決めるので、
