@@ -151,6 +151,29 @@ function assign(type: string): number | null {
     return null;
 }
 
+/** 読み手ごとの蹴り口。蹴られた読み手の流れはこれで閉じる (本物と同じく、読み手からは途切れに見える) */
+const kicks = new WeakMap<object, AbortController>();
+
+/**
+ * **空きが無ければ、自分より弱い読み手しかいない本を蹴って使う** (docs/agent.md「選ぶ順の約束」の2)。
+ * ライブが録画に蹴られる場面 (`34-live-yield.spec.ts`) を作るため。
+ *
+ * 本物は空きがあっても順の前の本を蹴るが、ここでは**空きが無いときだけ**にしてある — 偽エージェントは
+ * spec をまたいで共有で、空きがあるのに蹴ると、裏で回っている番組表集めやロゴ集めの見え方まで変わる
+ */
+function preempt(type: string, priority: number): number | null {
+    for (const tuner of TUNERS) {
+        if (!tuner.types.includes(type)) continue;
+        if (busyTuners && tuner.index === 0) continue;
+        const lease = leases.get(tuner.index);
+        if (lease === undefined || !lease.users.every((u) => u.priority < priority)) continue;
+        leases.delete(tuner.index);
+        for (const user of lease.users) kicks.get(user)?.abort();
+        return tuner.index;
+    }
+    return null;
+}
+
 /*
  * 起きたことを知らせる口 (SSE)。本物では `/denpa/events`。
  * denpa はこれを聞いてチューナー画面を更新し、スキャンの進み具合を出す
@@ -209,26 +232,31 @@ function openStream(url: URL, signal: AbortSignal): Response {
         ([, lease]) => lease.type === type && lease.channel === channel,
     )?.[0];
     if (index === undefined) {
-        const picked = assign(type);
+        const picked = assign(type) ?? preempt(type, priority);
         if (picked === null) return json({ error: `${type} のチューナーに空きがありません` }, 409);
         index = picked;
         leases.set(index, { type, channel, users: [] });
     }
     const lease = leases.get(index) as Lease;
     const user = { use, priority };
+    const kick = new AbortController();
+    kicks.set(user, kick);
     lease.users.push(user);
     opens.push({ use, priority, type, channel });
     if (opens.length > OPENS_KEEP) opens.shift();
     emit('tuners');
 
     const at = index;
-    signal.addEventListener('abort', () => {
+    // 頼んだ側が閉じたときと、蹴られたとき
+    const ended = AbortSignal.any([signal, kick.signal]);
+    ended.addEventListener('abort', () => {
         lease.users = lease.users.filter((u) => u !== user);
-        if (lease.users.length === 0) leases.delete(at);
+        // 蹴られたあとの本は別の選局が使っている。そちらは消さない
+        if (lease.users.length === 0 && leases.get(at) === lease) leases.delete(at);
         emit('tuners');
     });
 
-    return new Response(fakeStream(signal, services), {
+    return new Response(fakeStream(ended, services), {
         headers: { 'Content-Type': 'video/MP2T' },
     });
 }

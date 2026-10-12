@@ -556,4 +556,22 @@ describe('HTTP で流す器 (sessionStream)', () => {
         expect(stream.locked).toBe(false);
         void stream.cancel();
     });
+
+    /*
+     * **チューナーから外されたら閉じる。** HTTP で観ているもの (テレビのアプリ) は閉じたら同じ局を
+     * 頼み直す。閉じずに黙ると、何も流れないまま止まりの見張り (10 秒) を待つことになる
+     */
+    test('外された (`lost`) ら閉じる', async () => {
+        let send: ((kind: number, pts: bigint, payload: Uint8Array) => void) | null = null;
+        const stream = sessionStream((viewer) => {
+            send = viewer.connection.send as typeof send;
+            return null;
+        });
+        const reader = stream.getReader();
+        send!(CHANNEL.videoMedia, 0n, new Uint8Array([1, 2, 3]));
+        const notice = { type: 'lost', recording: null };
+        send!(CHANNEL.control, 0n, new TextEncoder().encode(JSON.stringify(notice)));
+        expect((await reader.read()).value).toEqual(new Uint8Array([1, 2, 3]));
+        expect((await reader.read()).done).toBe(true);
+    });
 });
