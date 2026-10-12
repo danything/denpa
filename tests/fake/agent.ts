@@ -68,8 +68,27 @@ function fakeStream(signal: AbortSignal, services: FakeService[]): ReadableStrea
     });
 }
 
+interface FakeChannel {
+    type: string;
+    channel: string;
+}
+
+/** 種別の並び。知らない種別は後ろ (本物の `Config.TypeOrder`) */
+const TYPE_ORDER: Record<string, number> = { GR: 0, BS: 1, CS: 2 };
+
+/** 本物が channels.json に書く順 (種別ごと、その中はチャンネルの文字の順。`Config.SaveChannels`) */
+function sortChannels<T extends FakeChannel>(list: T[]): T[] {
+    const order = (entry: FakeChannel) => TYPE_ORDER[entry.type] ?? 9;
+    return list.sort((a, b) => {
+        const byType = order(a) - order(b);
+        if (byType !== 0) return byType;
+        if (a.channel === b.channel) return 0;
+        return a.channel < b.channel ? -1 : 1;
+    });
+}
+
 /** 預かっているチャンネル。本物では channels.json */
-let saved = channels();
+let saved = sortChannels(channels());
 
 /** チューナー。既定は全部空きにしておく */
 interface FakeTuner {
@@ -81,14 +100,21 @@ interface FakeTuner {
     lnb: string | null;
 }
 
-let TUNERS: FakeTuner[] = [0, 1, 2, 3].map((index) => ({
-    index,
-    name: `adapter${index}`,
-    types: index % 2 === 0 ? ['BS', 'CS'] : ['GR'],
-    disabled: false,
-    device: `/dev/dvb/adapter${index}/frontend0`,
-    lnb: null,
-}));
+/** 刺さっている機材 (本物の自動検出 `DeviceProbe.Detect` に当たるもの)。偶数が衛星、奇数が地上波 */
+const plugged = (): FakeTuner[] =>
+    [0, 1, 2, 3].map((index) => ({
+        index,
+        name: `adapter${index}`,
+        types: index % 2 === 0 ? ['BS', 'CS'] : ['GR'],
+        disabled: false,
+        device: `/dev/dvb/adapter${index}/frontend0`,
+        lnb: null,
+    }));
+
+/** 始めは定義を書いてある状態にしておく (中身は刺さっているものと同じ) */
+let TUNERS: FakeTuner[] = plugged();
+/** 定義が無いので自分で見つけた機材を使っているか (`GET /denpa/tuners` の `detected`) */
+let detected = false;
 
 interface Lease {
     type: string;
@@ -171,7 +197,10 @@ function pick(
     priority: number,
     after: ReadonlySet<string>,
 ): { index: number; join: boolean } | null {
-    const usable = TUNERS.filter((tuner) => tuner.types.includes(type) && !(busyTuners && tuner.index === 0));
+    // 無効な本は使わない (`rank` が null の本。本物の `TunerPool.Pick` も外す)
+    const usable = TUNERS.filter(
+        (tuner) => !tuner.disabled && tuner.types.includes(type) && !(busyTuners && tuner.index === 0),
+    );
     for (const tuner of usable) {
         const lease = leases.get(tuner.index);
         if (lease === undefined) return { index: tuner.index, join: false };
@@ -236,17 +265,8 @@ function openStream(url: URL, signal: AbortSignal): Response {
     const use = url.searchParams.get('use') ?? '不明';
     const priority = Number(url.searchParams.get('priority') ?? 0);
     const after = new Set(url.searchParams.getAll('after'));
-    /*
-     * 知らないチャンネルでも 404 にはしない。**本物は選局を試してから落ちる**ので、
-     * 呼んだ側からは「開けたのに1バイトも来ない」に見える。総当たりのスキャンは
-     * その見え方で「居ない」を判断している
-     */
+    if (type === '' || channel === '') return json({ error: 'type と channel が必要です' }, 400);
     const services = on(type, channel);
-    if (services.length === 0) {
-        return new Response(new ReadableStream({ start: (c) => c.close() }), {
-            headers: { 'Content-Type': 'video/MP2T' },
-        });
-    }
 
     // 自分と同じか強い読み手が同じチャンネルを読んでいれば相乗り (約束の3)。無ければ選ぶ
     let index = [...leases.entries()].find(
@@ -259,6 +279,19 @@ function openStream(url: URL, signal: AbortSignal): Response {
         const picked = pick(type, channel, priority, after);
         if (picked === null) return json({ error: `${type} のチューナーに空きがありません` }, 409);
         index = picked.index;
+        /*
+         * **放送の無いチャンネルは、本を取ってから選局に落ちる** (本物と同じ順)。1バイトも送る前なので、
+         * 理由を付けて 500 で返す (docs/agent.md「選局は、読み手が切るまで終わらない」)。
+         * 空けた本 (蹴った・引き継いだ相手) は戻らない。選局が無いまま空きになる
+         */
+        if (services.length === 0) {
+            emit('tuners');
+            const name = TUNERS[index]?.name ?? `adapter${index}`;
+            return json(
+                { error: `${name}: 同期しませんでした (電波が来ていないか、その周波数に放送がありません)` },
+                500,
+            );
+        }
         if (!picked.join) leases.set(index, { type, channel, users: [] });
     }
     const lease = leases.get(index) as Lease;
@@ -344,39 +377,50 @@ const options: Bun.ServeOptions = {
         if (url.pathname === '/denpa/stream') return openStream(url, request.signal);
         if (url.pathname === '/denpa/events') return eventStream();
         if (url.pathname === '/denpa/tuners' && request.method === 'GET') {
-            return json({ tuners: tunerStatus(), detected: false });
+            return json({ tuners: tunerStatus(), detected });
         }
         if (url.pathname === '/denpa/tuners' && request.method === 'PUT') {
-            return request.json().then((body: { tuners?: Partial<FakeTuner>[] }) => {
-                const list = body.tuners ?? [];
+            return request.json().then((body: { tuners?: unknown }) => {
+                if (!Array.isArray(body.tuners)) return json({ error: 'tuners が必要です' }, 400);
+                const list = body.tuners as Partial<FakeTuner>[];
                 if (list.some((t) => typeof t?.name !== 'string' || t.name === '')) {
                     return json({ error: 'name の無いチューナーがあります' }, 400);
                 }
-                TUNERS = list.map((tuner, index) => ({
-                    index,
-                    name: tuner.name as string,
-                    types: tuner.types ?? [],
-                    disabled: tuner.disabled === true,
-                    device: tuner.device ?? null,
-                    lnb: tuner.lnb ?? null,
-                }));
+                // **空なら定義を消す = 自動検出に戻す** (本物の `Config.SaveTuners`)
+                detected = list.length === 0;
+                TUNERS = detected
+                    ? plugged()
+                    : list.map((tuner, index) => ({
+                          index,
+                          name: tuner.name as string,
+                          types: tuner.types ?? [],
+                          disabled: tuner.disabled === true,
+                          device: tuner.device ?? null,
+                          lnb: tuner.lnb ?? null,
+                      }));
                 leases.clear();
                 emit('tuners');
-                return json({ tuners: tunerStatus(), detected: false });
+                return json({ tuners: tunerStatus(), detected });
             });
         }
         if (url.pathname === '/denpa/channels' && request.method === 'GET') return json(saved);
         if (url.pathname === '/denpa/channels' && request.method === 'PUT') {
-            // 中身を作るのは denpa。こちらは預かって配るだけ
-            return request.json().then((body: { channels?: unknown[]; scanned?: string[] }) => {
-                if (!Array.isArray(body.channels) || body.channels.length === 0) {
-                    return json({ error: 'チャンネルが1件もありません' }, 400);
+            // 中身を作るのは denpa。こちらは預かって配るだけ。断り方と並べ方は本物と同じ
+            return request.json().then((body: { channels?: unknown; scanned?: unknown }) => {
+                if (
+                    !Array.isArray(body.channels) ||
+                    !Array.isArray(body.scanned) ||
+                    body.scanned.length === 0
+                ) {
+                    return json({ error: 'channels と scanned が必要です' }, 400);
                 }
-                const scanned = body.scanned ?? [];
-                saved = [
+                // 1件も無いまま上書きすると、今まで録れていた局まで消える
+                if (body.channels.length === 0) return json({ error: 'チャンネルが1件もありません' }, 400);
+                const scanned = body.scanned as string[];
+                saved = sortChannels([
                     ...saved.filter((c) => !scanned.includes(c.type)),
                     ...(body.channels as typeof saved),
-                ];
+                ]);
                 emit('channels');
                 return json(saved);
             });
