@@ -212,9 +212,9 @@ export function channels() {
  * 1セクションは 4093 バイトまでなので、番組を詰められるだけ詰めて切る。
  * **セグメント (8セクション) の切れ目まで面倒を見る** — denpa は
  * `segment_last_section_number` を見て「もう来ない番号」を判断するので、
- * ここが嘘だと永久に揃わない。
+ * ここが嘘だと永久に揃わない。`tableId` は自局が 0x50、ほかの TS の局 (EIT[schedule other]) が 0x60
  */
-function scheduleSections(service: FakeService, events: SynthEvent[]): Uint8Array[] {
+function scheduleSections(service: FakeService, events: SynthEvent[], tableId = 0x50): Uint8Array[] {
     const groups: SynthEvent[][] = [];
     for (let at = 0; at < events.length; at += 10) groups.push(events.slice(at, at + 10));
     if (groups.length === 0) groups.push([]);
@@ -222,7 +222,7 @@ function scheduleSections(service: FakeService, events: SynthEvent[]): Uint8Arra
     const last = groups.length - 1;
     return groups.map((chunk, index) =>
         eitSection({
-            tableId: 0x50,
+            tableId,
             serviceId: service.serviceId,
             transportStreamId: service.networkId,
             originalNetworkId: service.networkId,
@@ -230,7 +230,7 @@ function scheduleSections(service: FakeService, events: SynthEvent[]): Uint8Arra
             lastSectionNumber: last,
             // このセグメントで実際に使っている最後の番号
             segmentLastSectionNumber: Math.min((index & ~7) + 7, last),
-            lastTableId: 0x50,
+            lastTableId: tableId,
             events: chunk,
         }),
     );
@@ -451,14 +451,25 @@ function tables(services: FakeService[]): Uint8Array {
     return Uint8Array.from(parts);
 }
 
-/** 番組表 (EIT[schedule])。開いたら1回で全部流す */
+/**
+ * 番組表 (EIT[schedule])。開いたら1回で全部流す。
+ *
+ * **衛星は、同じネットワークのほかの TS の局のぶんも流す** (EIT[schedule other])。本物の BS・CS は
+ * どの中継にもネットワーク全局ぶんの番組表 (基本) が流れていて、denpa の全局読み
+ * (`epg-collect.firstSweeps` / `networkSweeps`) はどの中継を開いてもそれで埋まる前提でいる
+ */
 function schedule(services: FakeService[]): Uint8Array {
     const parts: number[] = [];
-    for (const service of services) {
-        const events = programsFor(service);
-        for (const section of scheduleSections(service, events)) {
+    const push = (service: FakeService, tableId: number) => {
+        for (const section of scheduleSections(service, programsFor(service), tableId)) {
             parts.push(...packetize(0x0012, section));
         }
+    };
+    for (const service of services) push(service, 0x50);
+    const here = services.filter((s) => s.type !== 'GR');
+    for (const service of SERVICES) {
+        const sameNetwork = here.some((s) => s.type === service.type && s.networkId === service.networkId);
+        if (sameNetwork && !services.includes(service)) push(service, 0x60);
     }
     return Uint8Array.from(parts);
 }
