@@ -25,6 +25,12 @@ test.describe('追っかけ再生の口', () => {
         expect(rec.chase).toBe(`api/recordings/${rec.id}/chase`);
         // CM の判定はまだ走っていない (null) ので、観はじめに飛ばしてよい
         expect(rec.cmReliable).toBe(true);
+        // 録画の状態: 録っている間は録れた長さが決まっていない (null)。録り終えるのと競うので、録画中と言ったときだけ見る
+        const state = (await (await request.get(`/api/recordings/${rec.id}`)).json()) as {
+            state: string;
+            durationMs: number | null;
+        };
+        if (state.state === 'recording') expect(state.durationMs).toBeNull();
 
         // 元のTS: 頭は同期バイト 0x47。録っている間は伸びたぶんも届き続ける。
         // **一覧に出るのは録り始めた時点で、ファイルにはまだ何も書かれていないことがある** —
