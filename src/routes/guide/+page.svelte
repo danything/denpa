@@ -756,11 +756,11 @@
                         (一覧の `hasFile` と同じ判定)。エンコードする前の元のTSは観る画面が追っかけ (`/chase`) へ送る
                     -->
                     <a class="button" href={resolve(`watch/${recordingId}`)}>再生</a>
-                    <!-- ファイルのエンドポイントへ遷移して落とす (#lib/download) -->
+                    <!-- HEAD で確かめてからファイルのエンドポイントへ遷移して落とす (#lib/download) -->
                     <button
                         type="button"
                         class="secondary outline"
-                        onclick={() => startDownload(recordingId)}
+                        onclick={() => void startDownload(recordingId)}
                     >
                         ダウンロード
                     </button>

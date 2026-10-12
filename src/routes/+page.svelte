@@ -66,9 +66,19 @@
 
     const active = ['scheduled', 'conflict', 'recording'];
 
-    /** ダウンロードはファイルのエンドポイントへ遷移して始める (`#lib/download.js`)。落とし始めたら詳細は畳む */
+    /**
+     * ダウンロードはファイルのエンドポイントへ遷移して始める (`#lib/download.js`)。押したら詳細は畳む。
+     * 断られたら (ログインが切れた・録画が消えた) 遷移せずに知らせる
+     */
     function download(id: number, source?: FileSource): void {
-        startDownload(id, source);
+        void startDownload(id, source).then((ok) => {
+            if (ok) return;
+            downloadNote = {
+                key: `download-${Date.now()}`,
+                kind: 'error',
+                text: 'ダウンロードを始められませんでした。ページを読み直してから試してください',
+            };
+        });
         detail.close();
     }
 
@@ -109,12 +119,16 @@
     /** 端末への保存の結果。フォームではないので自前で持つ */
     let offlineNote = $state<Notice | null>(null);
 
+    /** ダウンロードを始められなかったこと。こちらもフォームではないので自前で持つ */
+    let downloadNote = $state<Notice | null>(null);
+
     /**
      * 閉じた (自分で消えた) 通知は持ち主が捨てる。Toasts は返事 (`form`) が変わると
      * 閉じたことを忘れるので、持ったままだと別のボタンを押すたびに蘇る
      */
     function dropNote(key: string): void {
         if (offlineNote?.key === key) offlineNote = null;
+        if (downloadNote?.key === key) downloadNote = null;
     }
 
     /** 裏で失敗した保存 (Background Fetch)。黙って消えると「無かったことになった」ように見える */
@@ -132,6 +146,7 @@
     const notices = $derived.by(() => {
         const list: Notice[] = [];
         if (offlineNote !== null) list.push(offlineNote);
+        if (downloadNote !== null) list.push(downloadNote);
         list.push(...errorNotice(form, 'dashboard-error'));
         if (form?.reconcile) {
             /*
