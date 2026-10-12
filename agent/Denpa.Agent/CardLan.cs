@@ -170,7 +170,7 @@ public static class CardLan
     /// <summary>
     /// TTL (IPv6 は hop limit) を <paramref name="hops"/> にする。**効いたかを読み直して確かめ、
     /// 効いていなければ投げる** (黙って遠くまで届くより、繋がらないほうがいい)。
-    /// 両方を受けるソケット (dual mode) なら IPv4 の TTL も
+    /// IPv6 のソケットで IPv4 の相手と繋がっている (IPv4 射影) なら、効くのは IPv4 の TTL なのでそちらも
     /// </summary>
     /// <exception cref="IOException">設定できない・読み直すと違う</exception>
     public static void LimitHops(Socket socket, int hops)
@@ -183,7 +183,11 @@ public static class CardLan
             case AddressFamily.InterNetworkV6:
                 // IPv6 の IpTimeToLive は IPV6_UNICAST_HOPS (Socket.Ttl と同じ)
                 socket.SetSocketOption(SocketOptionLevel.IPv6, SocketOptionName.IpTimeToLive, hops);
-                if (socket.DualMode) socket.SetSocketOption(SocketOptionLevel.IP, SocketOptionName.IpTimeToLive, hops);
+                /*
+                 * **DualMode では決めない。** macOS では IPv6 だけで受けた接続でも DualMode が立って見え、
+                 * そこへ IPv4 の TTL を付けると EINVAL で断られる (CI で実際に起きた)
+                 */
+                if (MappedIPv4(socket)) socket.SetSocketOption(SocketOptionLevel.IP, SocketOptionName.IpTimeToLive, hops);
                 break;
             default:
                 throw new IOException($"{socket.AddressFamily} のソケットには TTL を付けられません");
@@ -193,10 +197,14 @@ public static class CardLan
         if (actual != hops) throw new IOException($"TTL を {hops} にできません (読み直すと {actual})");
     }
 
-    /// <summary>いまの TTL (IPv6 は hop limit)</summary>
+    /// <summary>いまの TTL (IPv6 は hop limit。IPv4 射影で繋がっていれば IPv4 の TTL)</summary>
     public static int Hops(Socket socket) => (int)socket.GetSocketOption(
-        socket.AddressFamily == AddressFamily.InterNetworkV6 ? SocketOptionLevel.IPv6 : SocketOptionLevel.IP,
+        socket.AddressFamily == AddressFamily.InterNetworkV6 && !MappedIPv4(socket) ? SocketOptionLevel.IPv6 : SocketOptionLevel.IP,
         SocketOptionName.IpTimeToLive)!;
+
+    private static bool MappedIPv4(Socket socket) =>
+        socket.AddressFamily == AddressFamily.InterNetworkV6 && socket.Connected
+        && socket.RemoteEndPoint is IPEndPoint { Address.IsIPv4MappedToIPv6: true };
 
     /// <summary>
     /// 鍵を配るポートの待ち受け。**IPv4 と IPv6 を別々のソケットで**受ける — 両方を1つで受けると
@@ -272,17 +280,19 @@ public static class CardLan
             }
             if (OperatingSystem.IsMacOS())
             {
-                // struct tcp_connection_info の tcpi_srtt (ms)
+                // struct tcp_connection_info の tcpi_srtt (ms)。刻みが 1ms なので、0 は「1ms 未満」として扱う
+                // (受けた側も SYN-ACK への ACK から測るので、たいていは繋がった時点で測ってある)
                 var length = socket.GetRawSocketOption(IpProtoTcp, MacTcpConnectionInfo, info);
                 if (length < 48) return null;
                 return TimeSpan.FromMilliseconds(MemoryMarshal.Read<uint>(info[44..]));
             }
             if (OperatingSystem.IsWindows())
             {
-                // SIO_TCP_INFO で TCP_INFO_v0 (88 バイト) を読む。RttUs (µs) は 20 バイト目から
+                // SIO_TCP_INFO で TCP_INFO_v0 (88 バイト) を読む。RttUs (µs) は 20 バイト目から。0 はまだ測っていない
                 var output = new byte[88];
                 if (socket.IOControl(WindowsSioTcpInfo, BitConverter.GetBytes(0), output) < 24) return null;
-                return TimeSpan.FromMicroseconds(BitConverter.ToUInt32(output, 20));
+                var rtt = BitConverter.ToUInt32(output, 20);
+                return rtt == 0 ? null : TimeSpan.FromMicroseconds(rtt);
             }
         }
         catch (Exception error) when (error is SocketException or PlatformNotSupportedException or NotSupportedException)
