@@ -148,8 +148,6 @@ export function canvasPlayer(options: CanvasOptions): CanvasPlayer {
     let fed = 0;
     /** 貯めを使い切って止まっているか (読み込み中の輪) */
     let starving = false;
-    /** 前の刻みで鳴っていたか (流れ出したのを知る) */
-    let wasPlaying = false;
 
     const engine = new RawEngine(
         options.host,
@@ -307,12 +305,15 @@ export function canvasPlayer(options: CanvasOptions): CanvasPlayer {
     const ticker = setInterval(() => {
         const playing = engine.playing;
         if (playing) position();
-        // 貯め直して流れ出した (止めているときの再開は、押した側が知っている)
-        if (playing && !wasPlaying && starving) {
+        /*
+         * 貯め直して流れ出した。**流れ出した瞬間ではなく、鳴っているかで見る** — 器の刻みのほうが細かいので、
+         * 使い切ってから流れ出すまでがこの刻みの間に収まると (読み始めの、音がまとめてデコードされてくるとき)
+         * 止まったところを見ないまま、読み込み中の輪が出たままになっていた。止めている間は立てない (`stalled`)
+         */
+        if (playing && starving) {
             starving = false;
             options.waiting(false);
         }
-        wasPlaying = playing;
         options.tick();
     }, TICK);
 

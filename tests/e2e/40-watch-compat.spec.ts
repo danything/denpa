@@ -107,6 +107,12 @@ test.describe('互換モードの観る画面', () => {
         request,
     }) => {
         test.setTimeout(180_000);
+        /*
+         * **エンコードしない録画にする** (流すものは下で差し替えるので、中身は使わない)。エンコードすると CM 検出が
+         * 走り、偽の録画ではロゴの判定に失敗したと覚え書きに残るので、観はじめの CM 飛ばしが切れる
+         * (`skipCmAtStart`)。設定はワーカーのアプリに残るので、前のテストに任せず自分で決める
+         */
+        await setRecording(request, { codecs: [] });
         const { id } = await recordOne(page, request);
         const clip = readClip(new Uint8Array(readFileSync(new URL('../fake/live-av1.mp4', import.meta.url))));
         // 30分の録画のふり。AV1 でエンコードしてある (互換モードは同じ形の詰め替えを選ぶ)
@@ -163,7 +169,8 @@ test.describe('互換モードの観る画面', () => {
         await expect(page.getByTestId('watch-resumed')).toBeVisible();
         expect(await where(page)).toBeGreaterThanOrEqual(600);
 
-        // **CM 飛ばしで飛ぶ。** CM の手前まで来たら、CM の終わりから頼み直す
+        // **CM 飛ばしで飛ぶ。** 観はじめから入っていて、CM の手前まで来たら、CM の終わりから頼み直す
+        await expect(page.getByTestId('watch-skip-cm')).toHaveAttribute('aria-pressed', 'true');
         await expect.poll(() => asked.length, { timeout: 30_000 }).toBeGreaterThan(1);
         expect(asked[1]?.searchParams.get('from')).toBe('640.000');
         await expect(page.getByTestId('watch-skipped')).toBeVisible();
