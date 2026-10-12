@@ -178,13 +178,19 @@ export function load(event) {
     }
 
     /*
-     * **データ放送に渡す郵便番号** (設定画面で入れるもの)。放送のアプリは
+     * **データ放送に渡す郵便番号と都道府県** (設定画面で入れるもの)。放送のアプリは
      * これで天気や地域のニュースをどこの分にするかを決める。受け取るのは
-     * 端末の中 (NVRAM) だが、置き場はサーバにしてある — 家の場所は端末では
+     * エンジン (受信機の設定) だが、置き場はサーバにしてある — 家の場所は端末では
      * 変わらないので、端末ごとに訊き直すのは無駄
      */
     const current = settings();
-    return { channels, start, postalCode: current.postalCode, bmlNetwork: current.bmlNetwork };
+    return {
+        channels,
+        start,
+        postalCode: current.postalCode,
+        prefecture: current.prefecture,
+        bmlNetwork: current.bmlNetwork,
+    };
 }
 
 export const actions = {

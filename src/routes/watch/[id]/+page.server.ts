@@ -56,8 +56,9 @@ export function load({ params, url }) {
     const hasData =
         recording.library_path !== null && existsSync(sidecarPaths(recording.library_path).dataBroadcast);
 
-    // 郵便番号だけ、ライブと同じく器を作る前に NVRAM へ写すのに要る (`DataBroadcast`)
-    return { recording, broadcast: { postalCode: settings().postalCode }, hasData };
+    // 郵便番号と都道府県は、ライブと同じく受信機の設定としてエンジンに渡す (`DataBroadcast`)
+    const { postalCode, prefecture } = settings();
+    return { recording, broadcast: { postalCode, prefecture }, hasData };
 }
 
 export const actions = {

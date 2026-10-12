@@ -1,5 +1,12 @@
 import { describe, expect, test } from 'bun:test';
-import { normalizePostalCode, parseCodecs } from './settings';
+import { mkdtempSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
+const { config } = await import('./config');
+config.dbPath = join(mkdtempSync(join(tmpdir(), 'denpa-settings-')), 'denpa.db');
+
+const { normalizePostalCode, parseCodecs, saveSettings, settings } = await import('./settings');
 
 /*
  * **コーデックは複数選べる。** 両方選ぶと1本の録画を AV1 と H.264 で焼く
@@ -51,5 +58,26 @@ describe('郵便番号', () => {
         expect(normalizePostalCode('')).toBe('');
         // 数字が1つも無いものも同じ
         expect(normalizePostalCode('とうきょう')).toBe('');
+    });
+});
+
+/*
+ * **都道府県は郵便番号と同じくサーバに置く。** 番号は ARIB の県域 (`#lib/prefecture.js`)。
+ * 入れるまでは 255 (未設定) で、放送のアプリには「設定されていない」と見える。
+ */
+describe('都道府県の保存', () => {
+    test('入れるまでは未設定 (255)', () => {
+        expect(settings().prefecture).toBe(255);
+    });
+
+    test('保存した番号を読み返す。未設定にも戻せる', () => {
+        expect(saveSettings({ prefecture: 14 }).prefecture).toBe(14);
+        expect(settings().prefecture).toBe(14);
+        expect(saveSettings({ prefecture: 255 }).prefecture).toBe(255);
+    });
+
+    test('置き場に表に無い値があっても未設定として読む', () => {
+        saveSettings({ prefecture: 99 });
+        expect(settings().prefecture).toBe(255);
     });
 });

@@ -74,7 +74,7 @@ function setup(): Setup {
         realm,
         nvram: new Nvram(
             { get: (k) => kept.get(k) ?? null, set: (k, v) => kept.set(k, v) },
-            () => ({ zipcode: '1000001', prefecture: 13 }),
+            () => ({ zipcode: '1000001', prefecture: 14 }),
             () => ({ originalNetworkId: 1, serviceId: 2 }),
         ),
         sound: new Sound(),

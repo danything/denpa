@@ -1,5 +1,6 @@
 import { eq, sql } from 'drizzle-orm';
 import { HW_CODECS, type HwAllow, type HwCodec, type HwKind } from '../hw';
+import { normalizePrefecture } from '../prefecture';
 import type { CmMode, VideoCodec } from '../types';
 import { isCmMode } from './cm';
 import { config } from './config';
@@ -62,6 +63,13 @@ export interface Settings {
      * **端末ごとに訊き直さずに済ませる**ため — 家の場所は端末では変わらない
      */
     postalCode: string;
+    /**
+     * データ放送に渡す都道府県 (`#lib/prefecture.js` の番号。未設定は 255)。
+     *
+     * 放送のアプリは `nvram://receiverinfo/prefecture` を読んで、地域の情報を
+     * 出し分けることがある。置き場は郵便番号と同じくここ (家の場所は端末で変わらない)
+     */
+    prefecture: number;
     /**
      * データ放送の双方向 (通信系コンテンツ) を使うか。**既定は切。**
      *
@@ -145,6 +153,7 @@ export function settings(): Settings {
         freeOnly: flag('freeOnly', true),
         fpsDetect: flag('fpsDetect', true),
         postalCode: normalizePostalCode(stored('postalCode') ?? ''),
+        prefecture: normalizePrefecture(stored('prefecture')),
         // **入れるまで外へ出ない。** 黙って通信が始まらないようにする
         bmlNetwork: flag('bmlNetwork', false),
     };

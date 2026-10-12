@@ -1231,6 +1231,7 @@
                     bind:press={dataPress}
                     bind:pressD={dataButton}
                     postal={data.broadcast.postalCode}
+                    prefecture={data.broadcast.prefecture}
                     network={false}
                     clock={() => rec.start_at + nowMs()}
                     tune={refuseTune}

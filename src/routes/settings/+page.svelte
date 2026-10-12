@@ -9,6 +9,7 @@
     import { CODEC_LABEL, HW_CODECS, HW_KIND_LABEL, HW_KINDS, hwAllowed } from '#lib/hw.js';
     import { liveUpdates } from '#lib/live-updates.svelte.js';
     import { measure } from '#lib/measure.svelte.js';
+    import { PREFECTURE_UNSET, PREFECTURES } from '#lib/prefecture.js';
     import { EVENT_LABEL } from '#lib/webhook-events.js';
     import type { SubmitFunction } from '$app/forms';
 
@@ -339,23 +340,27 @@
 
     <div class="column">
         <!--
-            **データ放送に渡すもの。** いまは郵便番号だけ。
+            **データ放送に渡すもの。** 郵便番号と都道府県。
 
             テレビの初期設定で必ず訊かれるあれで、放送のアプリはこれを読んで
             天気・地域のニュース・防災情報をどこのものにするかを決める。
-            受け取るのは端末の中 (NVRAM = localStorage) だが、置き場をここに
-            してあるのは**端末ごとに訊き直さずに済ませる**ため
+            受け取るのはエンジン (受信機の設定) だが、置き場をサーバに
+            してあるのは**端末ごとに訊き直さずに済ませる**ため。
+
+            郵便番号から都道府県を引くことはしない (表を抱えることになる)。
+            並べて置いて、両方入れてもらう
         -->
         <section class="panel card">
             <h2>データ放送</h2>
-            <p class="small soft">データ放送 (d ボタン) の地域を、郵便番号で決めます</p>
+            <p class="small soft">データ放送 (d ボタン) の地域を、郵便番号と都道府県で決めます</p>
             <details class="more">
                 <summary>詳しく</summary>
                 <p>
-                    テレビの初期設定で入れる郵便番号です。データ放送の
+                    テレビの初期設定で入れる郵便番号と都道府県です。データ放送の
                     <strong>天気・地域のニュース・防災情報</strong>は、これで地域が決まります。
                 </p>
-                <p>未設定だと「郵便番号が正しく設定されていません」と表示され、その欄は空のままです。</p>
+                <p>郵便番号が未設定だと「郵便番号が正しく設定されていません」と表示され、その欄は空のままです。</p>
+                <p>都道府県で地域の情報を出し分ける局もあります。</p>
             </details>
             <form method="POST" action="?/saveBroadcast" use:submitting={keepValues} class="wrap-form">
                 <label class="field">
@@ -369,8 +374,22 @@
                         data-testid="postal-code"
                     />
                 </label>
+                <!-- 値は ARIB の番号 (JIS の都道府県コードではない。`#lib/prefecture.ts`) -->
+                <label class="field">
+                    <span class="field-label">都道府県</span>
+                    <select name="prefecture" data-testid="prefecture">
+                        <option value={PREFECTURE_UNSET} selected={data.broadcast.prefecture === PREFECTURE_UNSET}>
+                            未設定
+                        </option>
+                        {#each PREFECTURES as prefecture (prefecture.code)}
+                            <option value={prefecture.code} selected={data.broadcast.prefecture === prefecture.code}>
+                                {prefecture.name}
+                            </option>
+                        {/each}
+                    </select>
+                </label>
                 <!-- **空にできる。** 空は「渡さない」という選び方で、危なくない -->
-                <span class="hint full">数字7桁 (ハイフンは有っても無くても可)。空にすると設定しません</span>
+                <span class="hint full">郵便番号は数字7桁 (ハイフンは有っても無くても可)。空にすると設定しません</span>
 
                 <!--
                     **双方向。既定は切。**

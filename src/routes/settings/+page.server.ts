@@ -2,6 +2,7 @@ import { basename } from 'node:path';
 import { fail } from '@sveltejs/kit';
 import { eq, not } from 'drizzle-orm';
 import { HW_CODECS, HW_KINDS, type HwAllow, hwAllowed } from '#lib/hw.js';
+import { normalizePrefecture, PREFECTURE_UNSET } from '#lib/prefecture.js';
 import { isCmMode } from '#lib/server/cm.js';
 import { now, orm } from '#lib/server/db.js';
 import { liveTokens, revokeToken } from '#lib/server/device-auth.js';
@@ -35,8 +36,12 @@ export function load() {
          * promise のまま渡す — 画面は「確認中」を出して待つ
          */
         hw: hw.probed ? forScreen(hw) : probe().then(forScreen),
-        /** データ放送に渡すもの。郵便番号と、双方向の中継を許すか */
-        broadcast: { postalCode: current.postalCode, bmlNetwork: current.bmlNetwork },
+        /** データ放送に渡すもの。郵便番号・都道府県と、双方向の中継を許すか */
+        broadcast: {
+            postalCode: current.postalCode,
+            prefecture: current.prefecture,
+            bmlNetwork: current.bmlNetwork,
+        },
         webhooks: orm().select().from(webhooks).orderBy(webhooks.id).all(),
         /** ペアリングしたテレビ (アプリの鍵。device-auth.ts) */
         devices: liveTokens(),
@@ -105,10 +110,10 @@ export const actions = {
     },
 
     /**
-     * データ放送に渡す郵便番号。
+     * データ放送に渡す郵便番号と都道府県。
      *
-     * **空にできる** (「渡さない」という選択)。空にしても危なくない —
-     * 放送のアプリが地域を決められなくなるだけ
+     * **どちらも空にできる** (「渡さない」という選択。都道府県の未設定は 255)。
+     * 空にしても危なくない — 放送のアプリが地域を決められなくなるだけ
      */
     saveBroadcast: async ({ request }) => {
         const form = await request.formData();
@@ -117,7 +122,13 @@ export const actions = {
         if (raw !== '' && postalCode === '') {
             return fail(400, { message: '郵便番号は数字7桁で入れてください (例 1000001)' });
         }
-        saveSettings({ postalCode, bmlNetwork: form.get('bmlNetwork') === 'on' });
+        // 選ぶ欄なので、表に無い番号は画面の外から来たもの。黙って未設定にせず断る
+        const rawPrefecture = String(form.get('prefecture') ?? PREFECTURE_UNSET).trim();
+        const prefecture = normalizePrefecture(rawPrefecture);
+        if (String(prefecture) !== rawPrefecture) {
+            return fail(400, { message: '都道府県の指定が正しくありません' });
+        }
+        saveSettings({ postalCode, prefecture, bmlNetwork: form.get('bmlNetwork') === 'on' });
         return { success: true, saved: true };
     },
 

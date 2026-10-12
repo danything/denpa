@@ -627,10 +627,10 @@ test.describe('ライブ視聴', () => {
     });
 
     /*
-     * **郵便番号は、設定画面からデータ放送へ渡る。**
+     * **郵便番号と都道府県は、設定画面からデータ放送へ渡る。**
      *
      * 放送のアプリはこれを読んで、天気・地域のニュース・防災情報をどこの
-     * ものにするかを決める (`nvram://receiverinfo/zipcode`)。置き場はサーバ —
+     * ものにするかを決める (`nvram://receiverinfo/zipcode`・`receiverinfo/prefecture`)。置き場はサーバ —
      * 家の場所は端末では変わらないので、端末ごとに訊き直さない。エンジンには
      * 受信機の設定として渡す (`DataBroadcast` の `receiver`)。
      *
@@ -638,12 +638,13 @@ test.describe('ライブ視聴', () => {
      * 読んだものを画面に書く。**web-bml の頃に端末へ直に置いていた鍵** (`denpa_bml_denpa_nvram_…`・
      * `denpa_bml_engine`) が残っていても、読まれないことも見る
      */
-    test('設定した郵便番号が、データ放送に渡る', async ({ page }) => {
+    test('設定した郵便番号と都道府県が、データ放送に渡る', async ({ page }) => {
         const READER = [
             '<p id="zip" style="left:0px;top:0px;width:400px;height:40px;color-index:7;">-</p>',
             '<script><![CDATA[',
             'var zip = browser.readPersistentArray("nvram://receiverinfo/zipcode", "S:7B");',
-            'document.getElementById("zip").firstChild.data = "z" + zip[0];',
+            'var pref = browser.readPersistentArray("nvram://receiverinfo/prefecture", "U:1B");',
+            'document.getElementById("zip").firstChild.data = "z" + zip[0] + "p" + pref[0];',
             ']]></script>',
         ].join('\n');
         const readZip = async (): Promise<string | null | undefined> => {
@@ -671,9 +672,12 @@ test.describe('ライブ視聴', () => {
         });
         // ハイフン付きで入れても、数字7桁として読む
         await page.getByTestId('postal-code').fill('100-0001');
+        // 番号は ARIB の県域。東京都は 14 (JIS の 13 ではない。`#lib/prefecture.ts`)
+        await page.getByTestId('prefecture').selectOption({ label: '東京都' });
         await page.getByTestId('save-broadcast').click();
         await expect(page.getByTestId('postal-code')).toHaveValue('1000001');
-        expect(await readZip()).toBe('z1000001');
+        await expect(page.getByTestId('prefecture')).toHaveValue('14');
+        expect(await readZip()).toBe('z1000001p14');
 
         /*
          * **消したら残さない。** 引っ越したのに前の番号のままだと、
@@ -681,9 +685,12 @@ test.describe('ライブ視聴', () => {
          */
         await goto(page, '/settings');
         await page.getByTestId('postal-code').fill('');
+        await page.getByTestId('prefecture').selectOption('255');
         await page.getByTestId('save-broadcast').click();
         await expect(page.getByTestId('postal-code')).toHaveValue('');
-        expect(await readZip()).toBe('z');
+        await expect(page.getByTestId('prefecture')).toHaveValue('255');
+        // 未設定は 255 (受信機の設定で「設定されていない」)
+        expect(await readZip()).toBe('zp255');
     });
 
     /*

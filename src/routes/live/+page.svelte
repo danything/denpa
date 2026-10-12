@@ -343,6 +343,7 @@
                 bind:press={dataPress}
                 bind:pressD={dataButton}
                 postal={data.postalCode}
+                prefecture={data.prefecture}
                 network={data.bmlNetwork}
                 tune={tuneFromData}
             />

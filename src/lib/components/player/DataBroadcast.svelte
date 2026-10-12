@@ -89,6 +89,11 @@
          */
         postal: string;
         /**
+         * 都道府県 (`#lib/prefecture.js` の番号。未設定は 255)。郵便番号と同じく
+         * 受信機の設定としてエンジンに渡すだけ (放送は `nvram://receiverinfo/prefecture` で読む)
+         */
+        prefecture: number;
+        /**
          * 双方向 (通信系コンテンツ) を使うか。**既定は切**
          * (`server/settings.ts` の `bmlNetwork`)。
          *
@@ -116,6 +121,7 @@
         press = $bindable(null),
         pressD = $bindable(null),
         postal,
+        prefecture,
         network,
         clock = null,
         tune = null,
@@ -483,7 +489,7 @@
             ip,
             store: { get: (key) => read(NVRAM_PREFIX + key), set: (key, value) => write(NVRAM_PREFIX + key, value) },
             clock: () => clock?.() ?? null,
-            receiver: { zipcode: postal },
+            receiver: { zipcode: postal, prefecture },
             onVideoRect: (rect, size) => {
                 videoRect = rect;
                 plane = size;
