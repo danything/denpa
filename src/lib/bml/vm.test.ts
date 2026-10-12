@@ -345,3 +345,45 @@ describe('止まる・打ち切る・区切る', () => {
         expect(result).toEqual({ kind: 'done', value: 5 });
     });
 });
+
+describe('細かい意味', () => {
+    test('配列の sort も EUC-JP の順 (全角英数 0xA3xx は漢字 0xB0xx より前)', async () => {
+        expect(await evaluate('var a = ["亜", "Ａ", "あ"]; a.sort(); var result = a.join("");')).toBe(
+            'ＡあA'.replace('A', '亜'),
+        );
+    });
+
+    test('文字列の Date は日本の時刻で読み、読めない形は NaN', async () => {
+        expect(
+            await evaluate(
+                'var d = new Date("2026/10/12 21:30:00"); var result = [d.getHours(), isNaN(new Date("きのう").getTime())];',
+            ).then(items),
+        ).toEqual([21, true]);
+    });
+
+    test('ループの中で消した名前は for-in に出ない', async () => {
+        expect(
+            await evaluate(
+                'var o = { a: 1, b: 2, c: 3 }; var s = ""; for (var k in o) { delete o.b; s += k; } var result = s;',
+            ),
+        ).toBe('ac');
+    });
+
+    test('文字列の添字の外は undefined、同じ名前の引数は後ろが勝つ、配列の空き、undefined という名前', async () => {
+        expect(
+            await evaluate(`
+                function f(a, a) { var b = 9; return a + b; }
+                var r = [1,,3];
+                var result = ["abc"[5], "abc"[1], f(1, 2), r.length, r[1] == undefined, typeof undefined];
+            `).then(items),
+        ).toEqual([undefined, 'b', 11, 3, true, 'undefined']);
+    });
+
+    test('動いている途中に重ねて始めない', () => {
+        const vm = setup();
+        vm.startProgram(compileScript('var n = 0; for (var i = 0; i < 100000; i++) n++;', 'x'));
+        expect(vm.run(0).kind).toBe('yield');
+        expect(() => vm.startProgram(compileScript('var x = 1;', 'y'))).toThrow();
+        expect(() => vm.resume(1)).toThrow();
+    });
+});

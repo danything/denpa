@@ -70,7 +70,10 @@ export type RunResult =
 /** for-in の列挙。積み上げに置くために物の形をしている */
 class Enumeration extends JSObject {
     at = 0;
-    constructor(readonly keys: string[]) {
+    constructor(
+        readonly object: JSObject | null,
+        readonly keys: string[],
+    ) {
         super(null, 'Enumeration');
     }
 }
@@ -88,6 +91,8 @@ export class Vm {
     private stack: Value[] = [];
     private frames: Frame[] = [];
     private steps = 0;
+    /** 組み込みの返事を待っているか (`resume` を受けるのはこのときだけ) */
+    private waiting = false;
     private readonly limits: VmLimits;
 
     constructor(
@@ -107,6 +112,12 @@ export class Vm {
         this.stack = [];
         this.frames = [];
         this.steps = 0;
+        this.waiting = false;
+    }
+
+    /** 始めてよいか。**動いている途中に重ねて始めない** (待たせる順番は呼び手が持つ) */
+    private idle(): void {
+        if (this.frames.length > 0) throw new Error('VM は動いている途中です');
     }
 
     makeFunction(code: Code, env: Env | null): JSFunction {
@@ -120,6 +131,7 @@ export class Vm {
 
     /** 大域のコード (`<script>` 1 つ) を始める */
     startProgram(code: Code): void {
+        this.idle();
         const global = this.realm.global;
         for (const name of code.globals) if (!global.has(name)) global.put(name, undefined);
         for (const [index, , name] of code.hoisted)
@@ -140,6 +152,7 @@ export class Vm {
         if (!(fn instanceof JSFunction) || fn.call.kind !== 'script') {
             throw new ScriptError(`${toStr(fn)} はスクリプトの関数ではありません`);
         }
+        this.idle();
         this.steps = 0;
         this.stack.push(undefined, fn, ...args);
         this.call(args.length, false);
@@ -147,6 +160,8 @@ export class Vm {
 
     /** `Suspend` で待っていた値を受け取る。続きは `run` */
     resume(value: Value): void {
+        if (!this.waiting) throw new Error('VM は返事を待っていません');
+        this.waiting = false;
         this.stack.push(value);
     }
 
@@ -156,6 +171,7 @@ export class Vm {
      * @param deadline `performance.now()` の値
      */
     run(deadline: number): RunResult {
+        if (this.waiting) throw new Error('VM は返事を待っています (先に resume)');
         try {
             return this.loop(deadline);
         } catch (error) {
@@ -210,7 +226,9 @@ export class Vm {
             vars: new Array<Value>(code.slots).fill(undefined),
             parent: body.env as Env | null,
         };
-        for (let i = 0; i < code.params; i++) env.vars[i] = args[i];
+        code.params.forEach((slot, i) => {
+            env.vars[slot] = args[i];
+        });
         if (code.argumentsSlot >= 0) env.vars[code.argumentsSlot] = new JSArray(this.realm.arrayProto, args);
         for (const [index, slot] of code.hoisted) env.vars[slot] = this.makeFunction(code.funcs[index]!, env);
         let made: JSObject | null = null;
@@ -336,8 +354,12 @@ export class Vm {
                 case OP.GET_ELEM: {
                     const key = toStr(stack.pop());
                     const base = stack.pop();
-                    if (typeof base === 'string' && /^\d+$/.test(key)) stack.push(base.charAt(Number(key)));
-                    else stack.push(this.property(base, key));
+                    if (typeof base === 'string' && /^(0|[1-9]\d*)$/.test(key)) {
+                        const at = Number(key);
+                        stack.push(at < base.length ? base.charAt(at) : undefined);
+                    } else {
+                        stack.push(this.property(base, key));
+                    }
                     break;
                 }
                 case OP.SET_ELEM: {
@@ -363,7 +385,10 @@ export class Vm {
                 case OP.NEW: {
                     const argc = ops[frame.pc++]!;
                     const result = this.call(argc, op === OP.NEW);
-                    if (result instanceof Suspend) return { kind: 'suspend', promise: result.promise };
+                    if (result instanceof Suspend) {
+                        this.waiting = true;
+                        return { kind: 'suspend', promise: result.promise };
+                    }
                     if (result === ABORT || result instanceof Abort) {
                         this.reset();
                         return { kind: 'abort' };
@@ -493,7 +518,7 @@ export class Vm {
                     break;
                 }
                 case OP.OBJECT: {
-                    const keys = JSON.parse(consts[ops[frame.pc++]!] as string) as string[];
+                    const keys = frame.code.shapes[ops[frame.pc++]!]!;
                     const values = stack.splice(stack.length - keys.length, keys.length);
                     const object = new JSObject(this.realm.objectProto);
                     for (let i = 0; i < keys.length; i++) object.put(keys[i]!, values[i]);
@@ -513,13 +538,17 @@ export class Vm {
                             }
                         }
                     }
-                    stack.push(new Enumeration(keys));
+                    stack.push(new Enumeration(isObject(object) ? object : null, keys));
                     break;
                 }
                 case OP.NEXT: {
                     const to = ops[frame.pc++]!;
                     const enumeration = stack[stack.length - 1] as Enumeration;
-                    const key = enumeration.keys[enumeration.at++];
+                    // ループの中で消した名前は出さない
+                    let key = enumeration.keys[enumeration.at++];
+                    while (key !== undefined && enumeration.object !== null && !enumeration.object.has(key)) {
+                        key = enumeration.keys[enumeration.at++];
+                    }
                     if (key === undefined) frame.pc = to;
                     else stack.push(key);
                     break;

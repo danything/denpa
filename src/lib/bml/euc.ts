@@ -23,7 +23,7 @@ import { ADDITIONAL } from '#lib/ts/b24-tables.js';
 
 /** 85 区 1 点の置き場所 */
 export const PUA_ADDITIONAL = 0xe000;
-/** 字の無い 1〜84 区の点の置き場所 */
+/** 字の無い 1〜84 区の点の置き場所。詰めて順に置く (千点ほど。U+F8FF までに収まる) */
 const PUA_EMPTY = 0xe400;
 /** 85〜94 区で 940 点 */
 const ADDITIONAL_POINTS = 10 * 94;
@@ -37,6 +37,8 @@ const GETA = 0xa2ae;
 let forward: string | null = null;
 let additional: string[] | null = null;
 let backward: Map<number, number> | null = null;
+/** 字の無い点を置いた終わり (`table` が決める) */
+let emptyEnd = PUA_EMPTY;
 
 /** 1〜84 区を `TextDecoder` で一度だけ解く */
 function table(): string {
@@ -49,12 +51,14 @@ function table(): string {
     const decoded = new TextDecoder('euc-jp').decode(bytes);
     let out = '';
     let at = 0;
+    let empty = PUA_EMPTY;
     for (let i = 0; i < 84 * 94; i++) {
         const code = decoded.codePointAt(at) ?? 0xfffd;
         at += code > 0xffff ? 2 : 1;
         // 1 単位に収まらない字・読めない点は私用領域に置く (上の説明)
-        out += String.fromCharCode(code === 0xfffd || code > 0xffff ? PUA_EMPTY + i : code);
+        out += String.fromCharCode(code === 0xfffd || code > 0xffff ? empty++ : code);
     }
+    emptyEnd = empty;
     forward = out;
     return out;
 }
@@ -95,7 +99,7 @@ export function decodeEuc(data: Uint8Array): string {
             }
             parts.push(fromPair(byte, trail));
             i++;
-        } else if (byte === 0x8e && i + 1 < data.length) {
+        } else if (byte === 0x8e && (data[i + 1] ?? 0) >= 0xa1 && (data[i + 1] ?? 0) <= 0xdf) {
             // 半角カナ。運用されないが、読めるものは読む
             parts.push(String.fromCharCode(0xff61 + data[i + 1]! - 0xa1));
             i++;
@@ -114,10 +118,6 @@ export function eucCode(unit: number): number {
     if (unit >= PUA_ADDITIONAL && unit < PUA_ADDITIONAL + ADDITIONAL_POINTS) {
         const i = unit - PUA_ADDITIONAL;
         return ((0xa1 + 84 + Math.floor(i / 94)) << 8) | (0xa1 + (i % 94));
-    }
-    if (unit >= PUA_EMPTY && unit < PUA_EMPTY + 84 * 94) {
-        const i = unit - PUA_EMPTY;
-        return ((0xa1 + Math.floor(i / 94)) << 8) | (0xa1 + (i % 94));
     }
     if (unit >= 0xff61 && unit <= 0xff9f) return 0x8e00 | (unit - 0xff61 + 0xa1);
     return reverse().get(unit) ?? GETA;
@@ -173,7 +173,7 @@ export function toDisplay(text: string): string {
     let from = 0;
     for (let i = 0; i < text.length; i++) {
         const unit = text.charCodeAt(i);
-        if (unit < PUA_ADDITIONAL || unit >= PUA_EMPTY + 84 * 94 || isDrcs(unit)) continue;
+        if (unit < PUA_ADDITIONAL || unit >= emptyEnd || isDrcs(unit)) continue;
         out += text.slice(from, i);
         if (unit >= PUA_EMPTY) out += '〓';
         else {

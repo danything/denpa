@@ -521,6 +521,12 @@ class Parser {
                 if (token.value === '[') {
                     const items: Expr[] = [];
                     while (!this.eat(']')) {
+                        // 空き (`[1,,2]`) は undefined
+                        if (this.is(',')) {
+                            this.next();
+                            items.push({ kind: 'unary', op: 'void', arg: { kind: 'num', value: 0 } });
+                            continue;
+                        }
                         items.push(this.assignment());
                         if (!this.is(']')) this.expect(',');
                     }

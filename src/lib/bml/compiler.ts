@@ -70,7 +70,7 @@ export const OP = {
     BNOT: 55,
     TYPEOF: 56,
     ARRAY: 57, // n
-    OBJECT: 58, // k(名前の並び)
+    OBJECT: 58, // shapes の番号
     FORIN: 59,
     NEXT: 60, // to
     SWAP: 62,
@@ -82,7 +82,8 @@ export interface Code {
     ops: number[];
     consts: Value[];
     funcs: Code[];
-    params: number;
+    /** 引数の置き場所 (同じ名前が 2 度あれば同じ場所) */
+    params: number[];
     /** 変数の数 (引数を含む) */
     slots: number;
     /** `arguments` の置き場所 (使わなければ -1) */
@@ -91,6 +92,8 @@ export interface Code {
     hoisted: [number, number, string][];
     /** 大域のコードで宣言した var (入ったときに無ければ undefined を置く) */
     globals: string[];
+    /** オブジェクトのリテラルの名前の並び (OBJECT の引数が指す) */
+    shapes: string[][];
 }
 
 interface Scope {
@@ -278,11 +281,12 @@ class FunctionCompiler {
             ops: [],
             consts: [],
             funcs: [],
-            params: 0,
+            params: [],
             slots: 0,
             argumentsSlot: -1,
             hoisted: [],
             globals: [],
+            shapes: [],
         };
     }
 
@@ -323,7 +327,7 @@ class FunctionCompiler {
         if (this.scope !== null) {
             const names = this.scope.names;
             for (const p of params) if (!names.has(p)) names.set(p, names.size);
-            this.code.params = params.length;
+            this.code.params = params.map((p) => names.get(p)!);
             for (const v of vars) if (!names.has(v)) names.set(v, names.size);
             for (const f of funcs) if (!names.has(f.name)) names.set(f.name, names.size);
             if (!names.has('arguments') && usesArguments(body)) {
@@ -572,7 +576,8 @@ class FunctionCompiler {
                 return;
             case 'object':
                 for (const [, value] of expr.props) this.expression(value);
-                this.emit(OP.OBJECT, this.constant(JSON.stringify(expr.props.map(([k]) => k))));
+                this.emit(OP.OBJECT, this.code.shapes.length);
+                this.code.shapes.push(expr.props.map(([k]) => k));
                 return;
             case 'member':
                 this.expression(expr.object);

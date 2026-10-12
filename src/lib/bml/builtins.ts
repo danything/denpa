@@ -8,7 +8,7 @@
  * - Math・eval・escape・小数は無い (web-bml も外している)
  */
 
-import { eucCode, fromEucCode } from './euc';
+import { compareEuc, eucCode, fromEucCode } from './euc';
 import {
     formatDate,
     isObject,
@@ -17,6 +17,7 @@ import {
     JSFunction,
     JSObject,
     JST,
+    MAX_ARRAY,
     MAX_STRING,
     type NativeImpl,
     ScriptError,
@@ -74,7 +75,10 @@ export function createRealm(options: RealmOptions): Realm {
         proto.put('constructor', fn);
         realm.global.put(name, fn);
     };
-    const array = (items: Value[]): JSArray => new JSArray(realm.arrayProto, items);
+    const array = (items: Value[]): JSArray => {
+        if (items.length > MAX_ARRAY) throw new ScriptError('配列が大きすぎます');
+        return new JSArray(realm.arrayProto, items);
+    };
 
     // Object
     const makeObject = (args: Value[]): Value => (isObject(args[0]) ? args[0] : new JSObject(objectProto));
@@ -129,7 +133,7 @@ export function createRealm(options: RealmOptions): Realm {
             if (b === undefined) return -1;
             const x = toStr(a);
             const y = toStr(b);
-            return x < y ? -1 : x > y ? 1 : 0;
+            return compareEuc(x, y);
         });
         return self;
     });
@@ -168,6 +172,7 @@ export function createRealm(options: RealmOptions): Realm {
         const list = items(self);
         const start = range(list.length, args[0], 0);
         const count = args.length < 2 ? list.length - start : Math.max(0, toNumber(args[1]) || 0);
+        if (list.length - count + args.length - 2 > MAX_ARRAY) throw new ScriptError('配列が大きすぎます');
         return array(list.splice(start, count, ...args.slice(2)));
     });
     method(realm.arrayProto, 'indexOf', (self, args) => items(self).indexOf(args[0]));
@@ -260,7 +265,15 @@ export function createRealm(options: RealmOptions): Realm {
         return radix >= 2 && radix <= 36 ? n.toString(radix) : String(n);
     });
     method(realm.numberProto, 'valueOf', (self) => numeric(self));
-    const boolean = native('Boolean', (_, args) => toBoolean(args[0]));
+    const boolean = native(
+        'Boolean',
+        (_, args) => toBoolean(args[0]),
+        (args) => {
+            const wrapper = new JSObject(realm.booleanProto, 'Boolean');
+            wrapper.put('__primitive__', toBoolean(args[0]));
+            return wrapper;
+        },
+    );
     defineClass('Boolean', boolean, realm.booleanProto);
     method(realm.booleanProto, 'toString', (self) =>
         toStr(isObject(self) ? self.get('__primitive__') : self),
@@ -276,7 +289,7 @@ export function createRealm(options: RealmOptions): Realm {
         if (args.length === 0) {
             time = options.now();
         } else if (args.length === 1) {
-            const n = typeof args[0] === 'string' ? Date.parse(args[0]) : toNumber(args[0]);
+            const n = typeof args[0] === 'string' ? parseDate(args[0]) : toNumber(args[0]);
             time = Number.isFinite(n) ? Math.trunc(n) : Number.NaN;
         } else {
             const parts = args.slice(0, 7).map(toNumber);
@@ -359,6 +372,7 @@ export function createRealm(options: RealmOptions): Realm {
 
     // 大域の関数
     realm.global.put('NaN', Number.NaN);
+    realm.global.put('undefined', undefined);
     realm.global.put(
         'parseInt',
         native('parseInt', (_, args) => {
@@ -372,4 +386,16 @@ export function createRealm(options: RealmOptions): Realm {
         native('isNaN', (_, args) => Number.isNaN(toNumber(args[0]))),
     );
     return realm;
+}
+
+/**
+ * 日付の文字列を日本の時刻で読む (`YYYY/MM/DD hh:mm:ss`・`YYYY-MM-DDThh:mm:ss` と、その頭の方だけ)。
+ * 端末の時間帯で読む `Date.parse` には任せない。読めなければ NaN
+ */
+function parseDate(text: string): number {
+    const match =
+        /^\s*(\d{4})[-/](\d{1,2})[-/](\d{1,2})(?:[T\s]+(\d{1,2}):(\d{1,2})(?::(\d{1,2}))?)?\s*$/.exec(text);
+    if (match === null) return Number.NaN;
+    const [, y, m, d, h = '0', mi = '0', s = '0'] = match;
+    return Date.UTC(Number(y), Number(m) - 1, Number(d), Number(h), Number(mi), Number(s)) - JST;
 }

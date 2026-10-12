@@ -42,3 +42,16 @@ describe('EUC-JP', () => {
         expect(compareEuc('Z', 'あ')).toBeLessThan(0);
     });
 });
+
+describe('EUC-JP の符号 (全角英数・記号・半角カナ・空き点)', () => {
+    test('往復する', () => {
+        for (const code of [0xa3c1, 0xa1aa, 0xa1ef, 0xa3f0, 0x8eb1, 0xf4a7, 0xa9a1]) {
+            expect(eucCode(fromEucCode(code).charCodeAt(0))).toBe(code);
+        }
+    });
+
+    test('全角英数は画面でもそのまま、空き点は 〓', () => {
+        expect(toDisplay(decodeEuc(bytes(0xa3, 0xc1, 0xa1, 0xaa)))).toBe('Ａ！');
+        expect(toDisplay(decodeEuc(bytes(0xa9, 0xa1)))).toBe('〓');
+    });
+});
