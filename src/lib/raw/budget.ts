@@ -16,6 +16,13 @@
  * GC・選局の直後) では戻さない — 戻すと焼き直しで 1秒近く絵が止まるので、
  * 一瞬の詰まりより高くつく。
  *
+ * ## 焼いたものを canvas で描くとき (WebCodecs。`fmp4.ts`)
+ *
+ * 解くのはブラウザの VideoDecoder で、たいてい GPU の道。**1コマの時間は物差しにならない** —
+ * 渡してから出てくるまでに、詰まっていなくても数コマぶん溜めることがある (`timed: false`)。
+ * 代わりに **VideoDecoder の詰まり** (`decodeQueueSize`) を見る: 窓の間ずっと
+ * `QUEUE_STUCK` 枚以上残ったまま (一度も捌けきらない) なら間に合っていない。遅れは同じに数える。
+ *
  * DOM も WASM も触らないので、ここだけ単体で確かめられる。
  */
 
@@ -29,14 +36,22 @@ const SHARE = 0.8;
 const LATE = 0.25;
 /** 窓の中にこれより少なければ数えない (止めている間・選局の直後) */
 const LEAST = 5;
+/** VideoDecoder に渡したまま、窓の間ずっとこれだけ残っていたら詰まっている (枚) */
+export const QUEUE_STUCK = 3;
 
 export class DecodeBudget {
     private samples: number[] = [];
     private from = Number.NaN;
     private worstLate = 0;
+    private leastQueued = Number.POSITIVE_INFINITY;
     private strikes = 0;
     /** 直近の窓の 95 パーセンタイル (ms)。画面に出す */
     p95 = 0;
+
+    /**
+     * @param timed 1コマの時間で判じるか。WebCodecs の道は判じない (上の説明)。時間は画面に出すので数える
+     */
+    constructor(private readonly timed = true) {}
 
     /** 1コマ解いた時間 (ms) */
     record(ms: number): void {
@@ -49,20 +64,24 @@ export class DecodeBudget {
      * @param now いまの時刻 (ms)
      * @param frameMs 1コマの長さ (ms)。29.97 コマなら 33.4
      * @param late 絵が時計からどれだけ遅れているか (秒)。遅れていなければ 0
+     * @param queued 復号器に渡したまま出てきていない枚数 (WebCodecs の `decodeQueueSize`)
      */
-    tick(now: number, frameMs: number, late: number): boolean {
+    tick(now: number, frameMs: number, late: number, queued = 0): boolean {
         if (Number.isNaN(this.from)) this.from = now;
         if (late > this.worstLate) this.worstLate = late;
+        if (queued < this.leastQueued) this.leastQueued = queued;
         if (now - this.from < WINDOW) return false;
         const samples = this.samples;
         const worst = this.worstLate;
+        const least = this.leastQueued;
         this.samples = [];
         this.worstLate = 0;
+        this.leastQueued = Number.POSITIVE_INFINITY;
         this.from = now;
         if (samples.length < LEAST) return false;
         samples.sort((a, b) => a - b);
         this.p95 = samples[Math.min(samples.length - 1, Math.floor(samples.length * 0.95))]!;
-        const bad = this.p95 > frameMs * SHARE || worst > LATE;
+        const bad = (this.timed && this.p95 > frameMs * SHARE) || worst > LATE || least >= QUEUE_STUCK;
         this.strikes = bad ? this.strikes + 1 : 0;
         return this.strikes >= STRIKES;
     }
@@ -72,6 +91,7 @@ export class DecodeBudget {
         this.samples = [];
         this.from = Number.NaN;
         this.worstLate = 0;
+        this.leastQueued = Number.POSITIVE_INFINITY;
         this.strikes = 0;
     }
 }

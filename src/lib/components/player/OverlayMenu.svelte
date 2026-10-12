@@ -29,6 +29,8 @@
         label: string;
         /** いま選ばれているか (`aria-current`) */
         active: boolean;
+        /** 並べるが押せない (互換モードでこの端末が描けない形。`CodecMenu`) */
+        disabled?: boolean;
     }
 
     let {
@@ -139,6 +141,7 @@
             <DropdownMenu.Item
                 class="option"
                 textValue={item.label}
+                disabled={item.disabled === true}
                 onSelect={() => onselect(item.key)}
                 data-testid="{testid}-option"
                 data-active={item.active ? '' : undefined}
@@ -178,6 +181,10 @@
     :global(.overlay-menu .option[data-active]) {
         background: var(--pico-primary-background);
         color: #fff;
+    }
+    :global(.overlay-menu .option[data-disabled]) {
+        cursor: not-allowed;
+        opacity: 0.5;
     }
     :global(.overlay-menu.large) {
         gap: 0.25rem;

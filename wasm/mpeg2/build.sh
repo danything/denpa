@@ -1,15 +1,19 @@
 #!/bin/bash
-# 放送の MPEG-2 と AAC を解く WebAssembly を組む (docs/stream.md §5.5)。
+# 放送の MPEG-2 と AAC (と、画面の canvas で描く道の Opus) を解く WebAssembly を組む (docs/stream.md §5.5)。
 #
 #   build.sh <FFmpeg のソース> <出口>
 #
 # emscripten/emsdk の中で動かす (Dockerfile の `mpeg2wasm` 段)。出口に
 # decoder.mjs (読み込み口) と decoder.wasm ができる。
 #
-# **組むのは mpeg2video の復号器と、絵の区切りを探す parser と、AAC の復号器だけ。**
+# **組むのは mpeg2video の復号器と、絵の区切りを探す parser と、AAC・Opus の復号器だけ。**
 # 他は全部切る (`--disable-everything`)。AAC はブラウザの AudioDecoder に任せていたが、
 # https でしか出てこず iPhone の Safari には iOS 26 まで無いので、こちらで解く。
-# AAC の parser は組まない — ADTS の区切りと時刻は JS (ts/pes.ts の AdtsSplitter) が付ける
+# AAC の parser は組まない — ADTS の区切りと時刻は JS (ts/pes.ts の AdtsSplitter) が付ける。
+#
+# **Opus の復号器も組む** (AV1 と組んで送られてくる fMP4 の音。ライブ・追っかけを canvas で
+# 描く道 — 車載ブラウザなど <video> が止まる端末向け)。Opus の復号器は swresample を当てにする
+# (SILK の 8〜24kHz を 48kHz に揃える) ので、swresample だけは切らずに残す
 #
 # - `--disable-asm` … x86 の手書きアセンブリは wasm では使えない
 # - スレッドも SIMD も使わない。スレッド版は SharedArrayBuffer のために COOP/COEP
@@ -29,8 +33,8 @@ emconfigure "$SRC/configure" \
     --disable-asm --disable-inline-asm --disable-x86asm --disable-stripping \
     --disable-programs --disable-doc --disable-debug --disable-runtime-cpudetect \
     --disable-autodetect --disable-network --disable-pthreads \
-    --disable-avdevice --disable-avformat --disable-avfilter --disable-swresample --disable-swscale \
-    --disable-everything --enable-decoder=mpeg2video,aac --enable-parser=mpegvideo \
+    --disable-avdevice --disable-avformat --disable-avfilter --disable-swscale \
+    --disable-everything --enable-decoder=mpeg2video,aac,opus --enable-parser=mpegvideo \
     --nm=emnm --ar=emar --ranlib=emranlib --cc=emcc --cxx=em++ --objcc=emcc --dep-cc=emcc \
     --extra-cflags=-O3 >configure.log
 emmake make -j"$(nproc)" >make.log 2>&1 || { tail -50 make.log; exit 1; }
@@ -39,7 +43,7 @@ emmake make install >/dev/null
 mkdir -p "$OUT"
 # **読み込み口は ES の module にして、ワーカーの中からだけ読む** (ENVIRONMENT=worker)。
 # ファイルの読み書き (FILESYSTEM) は使わないので外す — それだけで 40KB ほど縮む
-emcc -O3 "$HERE/decoder.c" -I"$PREFIX/include" -L"$PREFIX/lib" -lavcodec -lavutil \
+emcc -O3 "$HERE/decoder.c" -I"$PREFIX/include" -L"$PREFIX/lib" -lavcodec -lswresample -lavutil \
     -sALLOW_MEMORY_GROWTH=1 -sINITIAL_MEMORY=64MB -sMAXIMUM_MEMORY=1GB \
     -sENVIRONMENT=worker -sFILESYSTEM=0 \
     -sMODULARIZE=1 -sEXPORT_ES6=1 -sEXPORT_NAME=createDecoder \

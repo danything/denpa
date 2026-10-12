@@ -1,0 +1,377 @@
+/// <reference lib="webworker" />
+/**
+ * **焼いたもの (fMP4) を canvas に描く**、worker の中の半分 (`messages.ts` の `fmp4`)。
+ *
+ *     fMP4 ─→ 箱を読む (ts/fmp4.ts) ┬→ 映像: WebCodecs の VideoDecoder → 2D で描く
+ *                                   └→ 音声: AAC は ADTS の頭を付けて / Opus はそのまま → WASM (worker.ts)
+ *
+ * **<video> の再生が止まる端末のための道。** テスラの車載ブラウザは停車中でも <video> を
+ * 止めるが、canvas に描くものは止めない。生の MPEG-2 (worker.ts) と同じ考えで、時計は画面が
+ * 鳴らしている音 (`playout.ts`)、ここは番が来たコマを出すだけ。
+ *
+ * MPEG-2 の道との違い:
+ *
+ * - **解くのはブラウザ** (VideoDecoder)。たいてい GPU の道で、解いた絵は VideoFrame
+ *   (GPU の上の絵) として出てくる。**描いたらすぐ閉じる** — 閉じずに持つと、復号器の
+ *   絵の置き場が尽きて止まる (`DECODED_MOST` 枚より先には解かせない)
+ * - 描くのは 2D (`drawImage`)。インタレ解除はサーバが済ませている
+ * - 時刻は MP4 の物差し (0 から数える。一周しない)。字幕・時計の知らせも同じ物差しで来る
+ * - 間に合っているかは VideoDecoder の詰まりと遅れで見る (`budget.ts` の `timed: false`)
+ *
+ * サーバは詰まった客には媒体を捨てる (`server/live.ts` の `hand`) ので、**コマの時刻が
+ * 飛んだら次の鍵のコマまで捨てる** — 参照するコマが欠けたまま渡すと、復号器は崩れた絵を
+ * 出すか転ぶ。転んだら (`error`) 開き直して鍵のコマから入り直し、続けて転ぶなら諦める。
+ */
+
+import { adtsHeader, type Fmp4Track, opusHead, readFragment, readInit } from '#lib/ts/fmp4.js';
+import { CLOCK } from '#lib/ts/pes.js';
+
+/** 番のこれだけ前から解く (90kHz) */
+const AHEAD = 0.3 * CLOCK;
+/** 解けた絵と、渡したまま出てきていない絵を合わせてこれだけまで (VideoFrame は GPU の置き場を使う) */
+const DECODED_MOST = 6;
+/** 圧縮のまま持っておく上限 (90kHz)。止めている間に溜め込まない */
+const PENDING_MOST = 8 * CLOCK;
+/** これだけ遅れたら、解きながら追いつくのをやめて鍵のコマまで飛ぶ (90kHz) */
+const BEHIND_MOST = 0.5 * CLOCK;
+/** 1コマの長さの目安 (90kHz)。59.94 コマ。実際の間隔が分かればそれを使う */
+const FRAME = 1501;
+/** 復号器が転んでも開き直す回数。**これより続けて転んだら諦める** (1コマでも描ければ数え直す) */
+const ERRORS_MOST = 3;
+
+/** 音の1コマを画面へ渡す口 (WASM で解くのは worker.ts) */
+export interface AudioSink {
+    /** 開き直す。`opus` のときは OpusHead を渡す。**開けなければ false** */
+    open(codec: 'aac' | 'opus', config: Uint8Array | null): boolean;
+    /** 1コマ解いて画面へ。時刻は 90kHz */
+    push(data: Uint8Array, pts: number): void;
+}
+
+export interface Fmp4Host {
+    audio: AudioSink;
+    /** 1コマ描いた (小窓へ写す・数える)。`first` は選局し直してから最初の1枚 */
+    drew(first: boolean): void;
+    fail(reason: string): void;
+    /** 1コマを解くのに掛かった時間 (ms。渡してから出てくるまで) */
+    record(ms: number): void;
+}
+
+interface Pending {
+    pts: number;
+    dts: number;
+    duration: number;
+    key: boolean;
+    data: Uint8Array;
+}
+
+/** 90kHz に直す */
+function ticks(value: number, timescale: number): number {
+    return Math.round((value * CLOCK) / timescale);
+}
+
+export class Fmp4Video {
+    private readonly context: OffscreenCanvasRenderingContext2D;
+    private tracks: Fmp4Track[] = [];
+    private video: Fmp4Track | null = null;
+    private decoder: VideoDecoder | null = null;
+    private config: VideoDecoderConfig | null = null;
+    /** 圧縮のまま待たせている映像 (解く順) */
+    private pending: Pending[] = [];
+    /** 解けた絵 (見せる順)。**描いたら閉じる** */
+    private frames: VideoFrame[] = [];
+    /** 鍵のコマを待っているか。開き直した・時刻が飛んだ・選局し直した */
+    private needKey = true;
+    /** 次に来るはずのコマの時刻 (90kHz)。**飛んだら鍵のコマまで捨てる** */
+    private expected: number | null = null;
+    /** 渡した時刻 (µs → performance.now())。解くのに掛かった時間を測る */
+    private readonly started = new Map<number, number>();
+    private errors = 0;
+    private shownSinceReset = false;
+    private lastPts: number | null = null;
+    /** いま出しているコマの時刻 (90kHz) */
+    current: number | null = null;
+    frameTicks = FRAME;
+    dropped = 0;
+
+    constructor(
+        private readonly canvas: OffscreenCanvas,
+        private readonly host: Fmp4Host,
+    ) {
+        const context = canvas.getContext('2d', { alpha: false });
+        if (context === null) throw new Error('2D で描けません');
+        this.context = context;
+    }
+
+    /** 渡したまま出てきていない枚数 (`budget.ts`) */
+    get queued(): number {
+        return this.decoder?.decodeQueueSize ?? 0;
+    }
+
+    /** 解けた絵があるか。**無いまま番を過ぎていれば遅れている** */
+    get waiting(): number {
+        return this.frames.length;
+    }
+
+    /** 箱を1つぶん (init か媒体)。サーバは箱の切れ目で送ってくる */
+    feed(bytes: Uint8Array): void {
+        // init (ftyp + moov)。**来るたびに開き直す** — 選局し直し・音声や形の選び直しで中身が変わる
+        if (bytes.length >= 8 && hasBox(bytes, 'moov')) {
+            this.init(readInit(bytes));
+            return;
+        }
+        if (this.tracks.length === 0) return;
+        for (const sample of readFragment(bytes, this.tracks)) {
+            const track = this.tracks.find((t) => t.id === sample.track);
+            if (track === undefined) continue;
+            const pts = ticks(sample.pts, track.timescale);
+            if (track === this.video) {
+                this.queue({
+                    pts,
+                    dts: ticks(sample.dts, track.timescale),
+                    duration: ticks(sample.duration, track.timescale),
+                    key: sample.key,
+                    data: sample.data,
+                });
+            } else if (track.codec === 'opus') {
+                this.host.audio.push(sample.data, pts);
+            } else {
+                const head = adtsHeader(track.config, sample.data.length);
+                if (head === null) continue;
+                const frame = new Uint8Array(head.length + sample.data.length);
+                frame.set(head);
+                frame.set(sample.data, head.length);
+                this.host.audio.push(frame, pts);
+            }
+        }
+    }
+
+    private init(tracks: Fmp4Track[]): void {
+        this.tracks = tracks;
+        const video = tracks.find((t) => t.kind === 'video') ?? null;
+        const audio = tracks.find((t) => t.kind === 'audio') ?? null;
+        if (audio !== null) {
+            const opus = audio.codec === 'opus';
+            const config = opus ? opusHead(audio.config) : null;
+            if ((opus && config === null) || !this.host.audio.open(opus ? 'opus' : 'aac', config)) {
+                this.host.fail('音声を再生できません');
+                return;
+            }
+        }
+        this.video = video;
+        if (video === null) return;
+        this.config = {
+            codec: video.codec,
+            description: video.config,
+            codedWidth: video.width,
+            codedHeight: video.height,
+            optimizeForLatency: true,
+        };
+        this.open();
+    }
+
+    /** VideoDecoder を開く (開き直す)。**鍵のコマから入り直す** */
+    private open(): void {
+        this.dropFrames();
+        this.started.clear();
+        this.needKey = true;
+        const config = this.config;
+        if (config === null) return;
+        if (this.decoder === null || this.decoder.state === 'closed') {
+            this.decoder = new VideoDecoder({
+                output: (frame) => this.output(frame),
+                error: () => this.broke(),
+            });
+        }
+        try {
+            this.decoder.configure(config);
+        } catch {
+            this.host.fail('この形式を再生できません');
+        }
+    }
+
+    /** 転んだ (壊れたコマ・端末の都合)。**開き直して鍵のコマから入り直す**。続けて転ぶなら諦める */
+    private broke(): void {
+        if (++this.errors > ERRORS_MOST) {
+            this.host.fail('映像を再生できません');
+            return;
+        }
+        // 転んだ復号器は閉じている。作り直す
+        this.decoder = null;
+        this.open();
+    }
+
+    private queue(item: Pending): void {
+        // 時刻が飛んだ (サーバが詰まって捨てた)。**次の鍵のコマまで捨てる** (上の説明)
+        if (this.expected !== null && Math.abs(item.dts - this.expected) > item.duration + 2)
+            this.needKey = true;
+        this.expected = item.dts + item.duration;
+        if (this.needKey) {
+            if (!item.key) return;
+            this.needKey = false;
+        }
+        this.pending.push(item);
+        // 溜め込みすぎ (止めている・裏に回っている)。いちばん新しい鍵から持ち直す
+        if (this.pending.length > 1 && this.pending.at(-1)!.dts - this.pending[0]!.dts > PENDING_MOST) {
+            this.skipTo(Number.POSITIVE_INFINITY);
+        }
+    }
+
+    /**
+     * `target` より手前でいちばん新しい鍵のコマまで飛ぶ。**復号器も開き直す** —
+     * 飛ばしたコマを参照する絵を出させないため
+     */
+    private skipTo(target: number): void {
+        let found = -1;
+        for (let i = 0; i < this.pending.length; i++) {
+            if (this.pending[i]!.dts > target) break;
+            if (this.pending[i]!.key) found = i;
+        }
+        if (found <= 0) return;
+        this.pending = this.pending.slice(found);
+        this.decoder?.reset();
+        this.open();
+        // 開き直しで鍵を待つ印が立つが、頭は鍵のコマなのでそのまま渡せる
+        this.needKey = false;
+    }
+
+    private decode(item: Pending): void {
+        const decoder = this.decoder;
+        if (decoder === null || decoder.state !== 'configured') return;
+        const timestamp = Math.round((item.pts * 1_000_000) / CLOCK);
+        this.started.set(timestamp, performance.now());
+        try {
+            decoder.decode(
+                new EncodedVideoChunk({
+                    type: item.key ? 'key' : 'delta',
+                    timestamp,
+                    duration: Math.round((item.duration * 1_000_000) / CLOCK),
+                    // 届いた ArrayBuffer の一部 (共有のメモリではない)
+                    data: item.data as Uint8Array<ArrayBuffer>,
+                }),
+            );
+        } catch {
+            this.broke();
+        }
+    }
+
+    private output(frame: VideoFrame): void {
+        const began = this.started.get(frame.timestamp);
+        if (began !== undefined) {
+            this.started.delete(frame.timestamp);
+            this.host.record(performance.now() - began);
+        }
+        // 出てくるのは見せる順。念のため並べ直す (同じ時刻の後ろへ)
+        let at = this.frames.length;
+        while (at > 0 && this.frames[at - 1]!.timestamp > frame.timestamp) at--;
+        this.frames.splice(at, 0, frame);
+    }
+
+    /** 刻むたびに: 番の近いものを渡し、番が来たコマを描く。`at` は時計 (90kHz。止まっていれば null) */
+    tick(at: number | null): void {
+        const decoder = this.decoder;
+        if (decoder === null || decoder.state !== 'configured') return;
+
+        // **新しい局の1枚目は、解けたらすぐ出して待つ** (worker.ts の MPEG-2 と同じ理由)
+        if (!this.shownSinceReset) {
+            if (this.frames.length === 0 && decoder.decodeQueueSize === 0 && this.pending.length > 0) {
+                this.decode(this.pending.shift() as Pending);
+            }
+            const first = this.frames.shift();
+            if (first !== undefined) this.draw(first);
+        }
+        if (at === null) return;
+
+        // 大きく遅れている (裏から戻った・止めていた)。解きながら追うより鍵まで飛ぶ
+        const head = this.pending[0];
+        if (head !== undefined && head.dts < at - BEHIND_MOST && this.frames.length === 0) this.skipTo(at);
+
+        while (
+            this.pending.length > 0 &&
+            this.frames.length + decoder.decodeQueueSize < DECODED_MOST &&
+            this.pending[0]!.dts <= at + AHEAD
+        ) {
+            this.decode(this.pending.shift() as Pending);
+        }
+
+        const now = Math.round((at * 1_000_000) / CLOCK);
+        // 次の絵がもう番を迎えているなら、手前の絵は描かずに捨てる
+        while (this.frames.length >= 2 && this.frames[1]!.timestamp <= now) {
+            this.frames.shift()?.close();
+            this.dropped++;
+        }
+        const next = this.frames[0];
+        if (next !== undefined && next.timestamp <= now) this.draw(this.frames.shift() as VideoFrame);
+    }
+
+    /** 1コマ描いて閉じる。**大きさは絵に合わせる** (見せる大きさ。縦横比は絵が持っている) */
+    private draw(frame: VideoFrame): void {
+        const width = frame.displayWidth;
+        const height = frame.displayHeight;
+        if (this.canvas.width !== width || this.canvas.height !== height) {
+            this.canvas.width = width;
+            this.canvas.height = height;
+        }
+        this.context.drawImage(frame, 0, 0, width, height);
+        const pts = Math.round((frame.timestamp * CLOCK) / 1_000_000);
+        frame.close();
+        if (this.lastPts !== null) {
+            const gap = pts - this.lastPts;
+            if (gap > 0 && gap < 3 * FRAME * 2) this.frameTicks = gap;
+        }
+        this.lastPts = pts;
+        this.current = pts;
+        this.errors = 0;
+        const first = !this.shownSinceReset;
+        this.shownSinceReset = true;
+        this.host.drew(first);
+    }
+
+    /** いま出しているコマ (切り抜き)。2D は描いたものが残るので、そのまま写す */
+    async grab(): Promise<ImageBitmap | null> {
+        if (this.current === null) return null;
+        return createImageBitmap(this.canvas);
+    }
+
+    /** 選局し直した。**前の局のものは全部捨てる** (出ている絵は次が出るまで残る) */
+    reset(): void {
+        this.pending = [];
+        this.dropFrames();
+        this.started.clear();
+        this.tracks = [];
+        this.video = null;
+        this.config = null;
+        this.expected = null;
+        this.needKey = true;
+        this.shownSinceReset = false;
+        this.lastPts = null;
+        this.current = null;
+        this.errors = 0;
+        // 次の init で開き直す。開いたままの復号器の中身は捨てる
+        if (this.decoder !== null && this.decoder.state === 'configured') this.decoder.reset();
+    }
+
+    close(): void {
+        this.dropFrames();
+        if (this.decoder !== null && this.decoder.state !== 'closed') this.decoder.close();
+        this.decoder = null;
+    }
+
+    private dropFrames(): void {
+        for (const frame of this.frames) frame.close();
+        this.frames = [];
+    }
+}
+
+/** 頭に並んだ箱の中に `type` があるか (中まで読まない) */
+function hasBox(bytes: Uint8Array, type: string): boolean {
+    const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+    let at = 0;
+    while (at + 8 <= bytes.length) {
+        const size = view.getUint32(at);
+        if (String.fromCharCode(bytes[at + 4]!, bytes[at + 5]!, bytes[at + 6]!, bytes[at + 7]!) === type)
+            return true;
+        if (size < 8) return false;
+        at += size;
+    }
+    return false;
+}

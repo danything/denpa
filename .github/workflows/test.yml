@@ -437,11 +437,11 @@ jobs:
       # **ライブを生で見る道の復号器** (docs/stream.md §5.5)。ブラウザで MPEG-2 を解く WASM は
       # Dockerfile の `mpeg2wasm` 段で組む (emscripten)。E2E はイメージを使わずランナーで
       # 回すので、その段だけ組んで取り出し、`MPEG2_DIR` で denpa に渡す。
-      # 使うのは 28-live-raw だけなので、それを持つ組でだけ組む。中身は FFmpeg の版と
+      # 使うのは 28-live-raw と 38-live-compat (互換モードの音) だけなので、それを持つ組でだけ組む。中身は FFmpeg の版と
       # wasm/mpeg2 が変わらない限り同じなので、2回目からはキャッシュで数秒
       - name: Does this shard need the MPEG-2 decoder?
         id: mpeg2
-        run: echo "needed=$(jq -r --arg s '${{ matrix.shard }}' '.[$s] | index("28-live-raw") != null' tests/e2e/shards.json)" >> "$GITHUB_OUTPUT"
+        run: echo "needed=$(jq -r --arg s '${{ matrix.shard }}' '.[$s] | index("28-live-raw") != null or index("38-live-compat") != null' tests/e2e/shards.json)" >> "$GITHUB_OUTPUT"
 
       - name: Set up Docker Buildx
         if: steps.mpeg2.outputs.needed == 'true'

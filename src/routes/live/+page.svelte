@@ -2,6 +2,8 @@
     import { onMount } from 'svelte';
     import { submitting } from '#lib/actions.js';
     import type { Service } from '#lib/bml/engine.js';
+    import { seeDriveNotice } from '#lib/canvas-video.js';
+    import DriveNotice from '#lib/components/DriveNotice.svelte';
     import ProgramFacts from '#lib/components/ProgramFacts.svelte';
     import AudioMenu from '#lib/components/player/AudioMenu.svelte';
     import { screenAwake } from '#lib/components/player/awake.svelte.js';
@@ -58,7 +60,26 @@
     // 局が入れ替わると読み込み直されるので、値ではなく参照で持つ
     const channels = $derived(data.channels as LiveChannel[]);
 
-    const player = livePlayer();
+    /**
+     * **運転中の注意** (互換モード。`canvas-video.ts`)。UA の既定で互換モードに入っている端末 (テスラ) で、
+     * 初めて canvas で再生する前に出す。**「わかりました」を押すまで再生を始めない** (`livePlayer` の `confirm`)
+     */
+    let driveNotice = $state(false);
+    let noticeWaiters: (() => void)[] = [];
+    const player = livePlayer({
+        confirm: () =>
+            new Promise<void>((done) => {
+                noticeWaiters.push(done);
+                driveNotice = true;
+            }),
+    });
+    function acceptDriveNotice(): void {
+        seeDriveNotice();
+        driveNotice = false;
+        const waiters = noticeWaiters;
+        noticeWaiters = [];
+        for (const done of waiters) done();
+    }
     /** 映像と重ねもの (MediaStack が組む)。bind で受けるので開くまでは null */
     let video = $state<HTMLVideoElement | null>(null);
     /** 切り替えの間、前の絵を貼っておく先 (`live-player` の `freeze`) */
@@ -254,7 +275,7 @@
      */
     const pip = pictureInPicture({
         video: () => video,
-        raw: () => player.raw,
+        raw: () => player.canvas,
         capture: () => player.capture(),
         flow: (on) => player.captureFlow(on),
         paused: () => player.paused,
@@ -290,7 +311,7 @@
 
     function snapshot(): void {
         void shooter.take(
-            () => (player.raw ? grabbedFrame(player.grab()) : videoFrame(video)),
+            () => (player.canvas ? grabbedFrame(player.grab()) : videoFrame(video)),
             // 字幕を出しているときだけ重ねる
             player.captions && player.hasCaptions ? overlay : null,
             current?.now?.name ?? current?.name ?? 'ライブ',
@@ -421,7 +442,7 @@
                         **生で見ている間は出さない** — 遡れるほど持っていない (止めて再開は放送の今から)。
                         録画に譲っている間も出さない (追っかけの帯は放送の今の帯と別物。戻る口は知らせの「ライブに戻る」)
                     -->
-                    {#if !player.raw && player.yielded === null}
+                    {#if !player.canvas && player.yielded === null}
                         <SeekBar
                             value={player.live ? player.newest : player.position}
                             min={player.oldest}
@@ -543,6 +564,7 @@
                             testid="live-codec"
                             codec={player.codec}
                             raw={player.raw}
+                            unavailable={player.unavailable}
                             onselect={(key) => player.setCodec(key)}
                             onraw={() => player.setRaw()}
                         />
@@ -663,7 +685,7 @@
                                     5 秒超え続けたら焼いたものに戻る (`raw/budget.ts`)。
                                     戻る前に余裕がどれだけあるかを読むため
                                 -->
-                                {#if player.raw && player.decodeMs > 0}
+                                {#if player.canvas && player.decodeMs > 0}
                                     ・ <span>デコード {player.decodeMs.toFixed(1)}ms</span>
                                 {/if}
                             {/snippet}
@@ -920,6 +942,9 @@
         pip.dismiss(key);
     }}
 />
+
+<!-- 運転中の注意 (互換モードで初めて再生する前に1回)。押すまで再生を始めない -->
+<DriveNotice open={driveNotice} onaccept={acceptDriveNotice} />
 
 <style>
     /* 右の一覧の列。幅と高さの決めごとは FactsAside と同じ (min-height: 0 が無いと中身の高さで突っ張って巻き取られない) */

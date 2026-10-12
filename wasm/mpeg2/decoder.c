@@ -5,9 +5,10 @@
  * ので、FFmpeg の mpeg2video を WebAssembly に組んで持ち込む。ここはその
  * 薄い口で、JS (src/lib/raw/worker.ts) から呼ぶ。
  *
- * 音 (AAC) も同じ FFmpeg の `aac` で解く (`aac_*`)。WebCodecs の AudioDecoder は
+ * 音 (AAC) も同じ FFmpeg の `aac` で解く (`aac_open` / `audio_push`)。WebCodecs の AudioDecoder は
  * 安全な繋ぎ (https) でしか出てこず、iPhone の Safari には iOS 26 まで無いので、
- * それに頼ると LAN の http と古い iPhone で生の道が使えない。
+ * それに頼ると LAN の http と古い iPhone で生の道が使えない。画面の canvas で描く道 (fMP4) の
+ * Opus も同じ口で解く (`opus_open`)。
  *
  * - `dec_push` … PES の中身 (ES) を渡す。**区切りは FFmpeg の parser に任せる** —
  *   放送はふつう 1 PES = 1 枚だが、決まりではない。PTS も一緒に渡し、
@@ -23,7 +24,9 @@
 #include <emscripten/emscripten.h>
 #include <libavcodec/avcodec.h>
 #include <libavutil/frame.h>
+#include <libavutil/mem.h>
 #include <libavutil/samplefmt.h>
+#include <string.h>
 
 /** 待たせておく絵の上限。**溢れたら古いほうから捨てる** (JS 側が見せ遅れているだけなので) */
 #define QUEUE 24
@@ -163,59 +166,81 @@ EMSCRIPTEN_KEEPALIVE void dec_pop(void) {
 }
 
 /* ---------------------------------------------------------------------------
- * 音 (AAC)。**ADTS の1コマずつ渡して、その場で1コマ受け取る** — 区切りと時刻は
- * JS の AdtsSplitter (ts/pes.ts) が付けているので parser は組まない。ADTS の頭は
- * 復号器が自分で読む (extradata 無しで開くと ADTS として読む決まり)
+ * 音 (AAC と Opus)。**1コマずつ渡して、その場で1コマ受け取る** — 区切りと時刻は JS が
+ * 付けているので parser は組まない。
+ *
+ * - AAC (`aac_open`) … 放送の ADTS をそのまま渡す (ts/pes.ts の AdtsSplitter が切る)。
+ *   ADTS の頭は復号器が自分で読む (extradata 無しで開くと ADTS として読む決まり)。
+ *   画面の canvas で描く道の fMP4 の AAC は、JS が頭を組んで付けてから渡す
+ *   (ts/fmp4.ts の `adtsHeader`)
+ * - Opus (`opus_open`) … AV1 と組んで送られてくる fMP4 の Opus。設定 (OpusHead) を
+ *   extradata として渡して開く (ts/fmp4.ts の `opusHead` が dOps から書き換える)
+ *
+ * どちらも同じ1つの口 (`audio`) で開き、`audio_push` で解く
  * ------------------------------------------------------------------------- */
 
 /** 返せる面の数。AAC は 7.1 (8本) まで */
-#define AAC_PLANES 8
+#define AUDIO_PLANES 8
 
-static AVCodecContext *aac;
-static AVPacket *aac_pkt;
-static AVFrame *aac_frame;
-/** JS へ渡す1コマぶんの控え (aac_push) */
-static int aac_info[3 + AAC_PLANES];
+static AVCodecContext *audio;
+static AVPacket *audio_pkt;
+static AVFrame *audio_frame;
+/** JS へ渡す1コマぶんの控え (audio_push) */
+static int audio_info[3 + AUDIO_PLANES];
 
-/** 開く。**2回目以降は開き直し** — 局を変えた・標本化周波数や本数が変わったときに呼ぶ */
-EMSCRIPTEN_KEEPALIVE int aac_open(void) {
-    const AVCodec *codec = avcodec_find_decoder(AV_CODEC_ID_AAC);
+static int audio_open(enum AVCodecID id, const uint8_t *extra, int len) {
+    const AVCodec *codec = avcodec_find_decoder(id);
     if (codec == NULL) return -1;
-    avcodec_free_context(&aac);
-    aac = avcodec_alloc_context3(codec);
-    if (aac == NULL) return -2;
-    if (avcodec_open2(aac, codec, NULL) < 0) return -3;
-    if (aac_pkt == NULL) aac_pkt = av_packet_alloc();
-    if (aac_frame == NULL) aac_frame = av_frame_alloc();
-    return aac_pkt != NULL && aac_frame != NULL ? 0 : -4;
+    avcodec_free_context(&audio);
+    audio = avcodec_alloc_context3(codec);
+    if (audio == NULL) return -2;
+    if (len > 0) {
+        // 復号器は extradata の後ろに詰め物 (0) があることを当てにして読む
+        audio->extradata = av_mallocz(len + AV_INPUT_BUFFER_PADDING_SIZE);
+        if (audio->extradata == NULL) return -2;
+        memcpy(audio->extradata, extra, len);
+        audio->extradata_size = len;
+    }
+    if (avcodec_open2(audio, codec, NULL) < 0) return -3;
+    if (audio_pkt == NULL) audio_pkt = av_packet_alloc();
+    if (audio_frame == NULL) audio_frame = av_frame_alloc();
+    return audio_pkt != NULL && audio_frame != NULL ? 0 : -4;
+}
+
+/** AAC を開く。**2回目以降は開き直し** — 局を変えた・標本化周波数や本数が変わったときに呼ぶ */
+EMSCRIPTEN_KEEPALIVE int aac_open(void) { return audio_open(AV_CODEC_ID_AAC, NULL, 0); }
+
+/** Opus を開く。`extra` は OpusHead (19 バイト〜)。開き直しも同じ */
+EMSCRIPTEN_KEEPALIVE int opus_open(const uint8_t *extra, int len) {
+    return audio_open(AV_CODEC_ID_OPUS, extra, len);
 }
 
 /**
- * ADTS の1コマ (頭ごと) を解く。**返すのは解けた標本数** (0 は出てこなかった、負は壊れたコマ)。
- * 解けたものは `aac_peek` で読む:
+ * 1コマ解く。**返すのは解けた標本数** (0 は出てこなかった、負は壊れたコマ)。
+ * 解けたものは `audio_peek` で読む:
  *
  *     [0] 本数 [1] 標本化周波数 [2] 標本数 [3..] 各面の番地 (float -1〜1、標本数ぶん)
  *
  * 面の並びは FFmpeg の決まり (5.1ch なら 前左・前右・中央・LFE・後左・後右)。
- * **次の aac_push までしか持たない** (同じ AVFrame を使い回す)
+ * **次の audio_push までしか持たない** (同じ AVFrame を使い回す)
  */
-EMSCRIPTEN_KEEPALIVE int aac_push(const uint8_t *data, int len) {
-    if (aac == NULL) return -1;
-    aac_pkt->data = (uint8_t *)data;
-    aac_pkt->size = len;
-    int sent = avcodec_send_packet(aac, aac_pkt);
+EMSCRIPTEN_KEEPALIVE int audio_push(const uint8_t *data, int len) {
+    if (audio == NULL) return -1;
+    audio_pkt->data = (uint8_t *)data;
+    audio_pkt->size = len;
+    int sent = avcodec_send_packet(audio, audio_pkt);
     if (sent < 0) return sent;
-    av_frame_unref(aac_frame);
-    if (avcodec_receive_frame(aac, aac_frame) != 0) return 0;
-    // `aac` は面ごとの float しか出さない (Web Audio がそのまま受け取る形)。違えば読み違えるので転ばせる
-    if (aac_frame->format != AV_SAMPLE_FMT_FLTP) return -2;
-    int channels = aac_frame->ch_layout.nb_channels;
-    if (channels > AAC_PLANES) channels = AAC_PLANES;
-    aac_info[0] = channels;
-    aac_info[1] = aac_frame->sample_rate;
-    aac_info[2] = aac_frame->nb_samples;
-    for (int i = 0; i < channels; i++) aac_info[3 + i] = (int)(intptr_t)aac_frame->extended_data[i];
-    return aac_frame->nb_samples;
+    av_frame_unref(audio_frame);
+    if (avcodec_receive_frame(audio, audio_frame) != 0) return 0;
+    // `aac` も `opus` も面ごとの float で出す (Web Audio がそのまま受け取る形)。違えば読み違えるので転ばせる
+    if (audio_frame->format != AV_SAMPLE_FMT_FLTP) return -2;
+    int channels = audio_frame->ch_layout.nb_channels;
+    if (channels > AUDIO_PLANES) channels = AUDIO_PLANES;
+    audio_info[0] = channels;
+    audio_info[1] = audio_frame->sample_rate;
+    audio_info[2] = audio_frame->nb_samples;
+    for (int i = 0; i < channels; i++) audio_info[3 + i] = (int)(intptr_t)audio_frame->extended_data[i];
+    return audio_frame->nb_samples;
 }
 
-EMSCRIPTEN_KEEPALIVE int *aac_peek(void) { return aac_info; }
+EMSCRIPTEN_KEEPALIVE int *audio_peek(void) { return audio_info; }

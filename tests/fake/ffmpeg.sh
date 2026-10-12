@@ -114,6 +114,19 @@ if [ "$input" = "pipe:0" ]; then
         printf -- '---\n%s\n' "$(printf '%s\n' "$@")" >> "$FAKE_FFMPEG_ARGS_FILE"
     fi
 
+    # **互換モード (canvas に描く道) の E2E から「本物の映像を流せ」と指示する目印。**
+    # 置いてあれば、本物の ffmpeg に書かせた fMP4 (H.264 + AAC / AV1 + Opus。焼き方はライブと同じ組) を
+    # 時刻を進めながら繰り返し流す (`fmp4-loop.ts`)。置いていなければ今までどおり素通し
+    # (絵の要らないテストは MSE に何も映らなくてよい)
+    if [ -f "${FAKE_FFMPEG_LIVE_FMP4_FILE:-/nonexistent}" ]; then
+        if printf '%s\n' "$@" | grep -qx -- 'libsvtav1'; then
+            exec bun "$(dirname "$0")/fmp4-loop.ts" "$(dirname "$0")/live-av1.mp4"
+        fi
+        if printf '%s\n' "$@" | grep -qx -- 'libx264'; then
+            exec bun "$(dirname "$0")/fmp4-loop.ts" "$(dirname "$0")/live-h264.mp4"
+        fi
+    fi
+
     # **渡された TS の頭を残す。** ライブは1局に絞ってから ffmpeg へ渡すので
     # (`server/live.ts` の pump)、渡ったものの PAT に局が1つしか無いことを
     # テストから確かめられるようにする。**頭だけ** — 全部残すと際限なく太る

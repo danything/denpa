@@ -56,6 +56,11 @@ export interface Stack {
     /** ライブ視聴で偽 ffmpeg に渡された TS の頭。1局に絞れているかを見る */
     liveTsFile: string;
     /**
+     * これを置くとライブの AV1 の偽 ffmpeg が、本物の AV1 + Opus の fMP4 を流す (`tests/fake/fmp4-loop.ts`)。
+     * 互換モード (canvas に描く道) が実際に解いて描くところまで見るのに使う
+     */
+    liveFmp4File: string;
+    /**
      * **偽の GPU の置き場。** ここに `renderD128` のような名前でファイルを置くと、
      * denpa は `HW_DEVICES` (`<ここ>/renderD*`) の口として拾い、偽 ffmpeg は渡された
      * 口が在るのを見て「GPU がある」と答える (QSV / VA-API の試し焼きが通る)。
@@ -141,6 +146,7 @@ export async function boot(index: number): Promise<{ stack: Stack; shutdown: () 
         liveArgsFile: `${root}/live-ffmpeg-args`,
         liveFailFile: `${root}/fail-live`,
         liveTsFile: `${root}/live-ffmpeg-ts`,
+        liveFmp4File: `${root}/live-fmp4`,
         hwDir: `${root}/gpu`,
         encodeArgsFile: `${root}/encode-ffmpeg-args`,
     };
@@ -194,6 +200,7 @@ export async function boot(index: number): Promise<{ stack: Stack; shutdown: () 
             FAKE_FFMPEG_ARGS_FILE: stack.liveArgsFile,
             FAKE_FFMPEG_LIVE_FAIL_FILE: stack.liveFailFile,
             FAKE_FFMPEG_TS_FILE: stack.liveTsFile,
+            FAKE_FFMPEG_LIVE_FMP4_FILE: stack.liveFmp4File,
             // 偽の GPU。denpa には口として、偽 ffmpeg には「ある」印として同じファイルを見せる
             HW_DEVICES: `${stack.hwDir}/renderD*`,
             FAKE_FFMPEG_ENCODE_ARGS_FILE: stack.encodeArgsFile,

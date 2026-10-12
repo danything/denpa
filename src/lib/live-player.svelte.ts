@@ -7,6 +7,7 @@
  */
 
 import type { AudioTrack } from '#lib/arib.js';
+import { canvasVideo, driveNoticeSeen } from '#lib/canvas-video.js';
 import { CAPTION_TEXT_VERSION, type CaptionPage } from '#lib/caption-text.js';
 import { CaptionPainter } from '#lib/components/player/caption-draw.js';
 import { eachFrame } from '#lib/components/player/frames.js';
@@ -19,6 +20,7 @@ import {
     type Command,
     type HybridcastLink,
     LAST_COOKIE,
+    LIVE_CODECS,
     type LiveCodec,
     type Notice,
     SOCKET_PATH,
@@ -26,7 +28,8 @@ import {
     type YieldedRecording,
 } from '#lib/live.js';
 import { RawEngine } from '#lib/raw/engine.js';
-import { rawUnsupported } from '#lib/raw/support.js';
+import type { RawInput } from '#lib/raw/messages.js';
+import { type CanvasSupport, canvasSupport, rawUnsupported } from '#lib/raw/support.js';
 import type { ResponseMessage } from '#lib/ts/bml-protocol.js';
 import { type Cue, currentCue, insertCue, showing, trimCues } from '#lib/ts/captions.js';
 import { pickMediaSource } from '#lib/ts/media-source.js';
@@ -187,7 +190,15 @@ function clearFloor(): void {
     forget(FLOOR_KEY);
 }
 
-export function livePlayer() {
+export interface LivePlayerOptions {
+    /**
+     * 運転中の注意を見せて、「わかりました」を待つ (互換モード。`canvas-video.ts`)。
+     * **まだ見せていない端末で、canvas で描く前に1回だけ呼ぶ。** 押されるまで再生を始めない
+     */
+    confirm?: () => Promise<void>;
+}
+
+export function livePlayer(options: LivePlayerOptions = {}) {
     let state = $state<LiveState>('idle');
     let message = $state('');
     let tuned = $state<Tuned | null>(null);
@@ -354,7 +365,28 @@ export function livePlayer() {
      */
     /** いま生で見ているか。**サーバが `tuned` でそう答えたときだけ** */
     let raw = $state(false);
+    /**
+     * canvas で描いているか (生の MPEG-2 か、互換モードの焼いたものか)。**操作列の出し分けに使う** —
+     * どちらも遡れない (止めて再開は放送の今から)
+     */
+    let canvas = $state(false);
     let engine: RawEngine | null = null;
+    /** いまの器が何を受け取っているか (`raw/messages.ts` の `RawInput`)。器が無ければ null */
+    let engineInput: RawInput | null = null;
+    /*
+     * ---- 互換モード (`canvas-video.ts`) ----
+     *
+     * **焼いたもの (H.264 / AV1) も canvas に描く。** `<video>` の再生が止まる端末 (テスラの
+     * 車載ブラウザ) のため。サーバへの頼み方は変えず、届いた fMP4 を MSE ではなく生の器
+     * (`RawEngine` の `fmp4`) へ流す。**ここでは `<video>` に戻らない** — 描けなくなったら
+     * MPEG-2 へ、それも無理なら理由を出して止まる
+     */
+    /** 互換モードか。**選局のたびに読み直す** (設定画面で入り切りされる) */
+    let compat = $state(false);
+    /** この端末で描ける形 (`raw/support.ts` の `canvasSupport`)。調べるまで null */
+    let compatSupport = $state<CanvasSupport | null>(null);
+    /** 互換モードで描くのを諦めたか。**選び直すまで頼み直さない** (生の `rawGaveUp` と同じ) */
+    let compatGaveUp = false;
     /** 生 (MPEG-2) を選んでいるか。**頼むかどうかの元** — 実際に生になったかは `raw` */
     let rawChosen = false;
     /**
@@ -530,7 +562,7 @@ export function livePlayer() {
      * それは正しい。実際に止まっている
      */
     function freeze(): void {
-        if (raw) {
+        if (canvas) {
             // 生の道では canvas が次の絵まで前の絵を持っている。写さずに「貼っている」ことにする
             // (でないと幕が前の絵を塗り潰す)。剥がすのは新しい局の1枚目 (`shown`)
             if (engine === null) return;
@@ -928,7 +960,7 @@ export function livePlayer() {
          * **途切れたら跳び直す** (`unslipAfter` の下の説明)。測れた遅れ (`slip`) を
          * 待たない — あれは見えないことがある。生の道には要らない (絵は音の時計を追うだけ)
          */
-        if (stalled && element !== null && !raw) unslip(element);
+        if (stalled && element !== null && !canvas) unslip(element);
         const next = nextTarget(
             { target, floor },
             stalled,
@@ -973,7 +1005,7 @@ export function livePlayer() {
     function unmute(): void {
         silenced = false;
         engine?.unmute();
-        if (element === null || raw) return;
+        if (element === null || canvas) return;
         element.muted = false;
         void element.play().catch(() => {
             /* 押したのに断られることはない */
@@ -1003,7 +1035,7 @@ export function livePlayer() {
          * **生の道は、止めたら再開は放送の今から。** 1局 15Mbit/s を遡れるほど持って
          * おけない (5分で 600MB) ので、止めている間に届いたものは捨てる
          */
-        if (raw && engine !== null) {
+        if (canvas && engine !== null) {
             paused = !paused;
             if (paused) engine.pause();
             else {
@@ -1061,8 +1093,8 @@ export function livePlayer() {
 
     /** 放送の今へ追いつく。**追っかけをやめて、見ていたぶんを飛ばす** */
     function goLive(): void {
-        // 生の道はいつも放送の今。止めていたら再開するだけ
-        if (raw) {
+        // canvas で描く道はいつも放送の今。止めていたら再開するだけ
+        if (canvas) {
             if (paused) toggle();
             return;
         }
@@ -1314,8 +1346,11 @@ export function livePlayer() {
      * 器を作るところで断られたら、そう言って H.264 に戻せるようにする (`start`)
      */
     function setCodec(next: LiveCodec): void {
-        // 選び直したなら、前の断り書きは用済み
+        // 互換モードで描けない形は選ばせない (切り替えにも出さない。`unavailable`)
+        if (unavailable().includes(next)) return;
+        // 選び直したなら、前の断り書きは用済み。諦めていた互換モードも試し直す
         warning = '';
+        compatGaveUp = false;
         // 生から焼いたものへ。同じ焼き方でも頼み直す (`swapCodec` は同じなら何もしない)
         if (rawChosen) {
             rawChosen = false;
@@ -1508,6 +1543,48 @@ export function livePlayer() {
         return rawChosen && rawProblem === null && !rawGaveUp;
     }
 
+    /** 互換モードで描けない形。**切り替えで選ばせない** (互換モードでなければ空) */
+    function unavailable(): LiveCodec[] {
+        const support = compatSupport;
+        if (!compat || support === null) return [];
+        return LIVE_CODECS.map((c) => c.id).filter((id) => !support[id]);
+    }
+
+    /**
+     * 互換モードの支度 (`begin` の頭)。**入っていなければ何もしない。**
+     *
+     * 運転中の注意をまだ見せていなければ見せて、押されるまで待つ。描ける形を調べ、選んでいる形が
+     * 描けなければ描けるほうへ寄せる (H.264 → AV1 → MPEG-2)。**`<video>` には戻らない** —
+     * どれも描けなければ理由を出して false (頼まない)
+     */
+    async function prepareCompat(): Promise<boolean> {
+        // 追っかけはまだ `<video>` で観る
+        compat = chase === null && canvasVideo();
+        if (!compat) return true;
+        if (!driveNoticeSeen() && options.confirm !== undefined) await options.confirm();
+        compatSupport ??= await canvasSupport();
+        if (rawProblem === undefined) rawProblem = await rawUnsupported();
+        if (wantsRaw()) return true;
+        const usable = (id: LiveCodec) => !compatGaveUp && compatSupport?.[id] === true;
+        if (usable(codec)) return true;
+        const other = LIVE_CODECS.find((c) => usable(c.id));
+        if (other !== undefined && tuned !== null) {
+            const before = LIVE_CODECS.find((c) => c.id === codec)?.label ?? codec;
+            warning = `${before} を再生できないため、${other.label} に切り替えました`;
+            codec = other.id;
+            tuned = { ...tuned, codec };
+            remember({ ...tuned, raw: rawChosen });
+            return true;
+        }
+        // 焼いたものはどちらも描けない。MPEG-2 なら描ける (覚えはしない — 互換モードを切れば元に戻る)
+        if (rawProblem === null && !rawGaveUp && tuned !== null) {
+            rawChosen = true;
+            return true;
+        }
+        fail('この端末では再生できません');
+        return false;
+    }
+
     /** 繋いで頼む。選局 (`tune`) と追っかけ (`openChase`) の共通の後半 */
     async function begin(video: HTMLVideoElement, keepList: boolean): Promise<void> {
         element = video;
@@ -1525,6 +1602,7 @@ export function livePlayer() {
             if (tuned !== null) remember({ ...tuned, raw: false });
             warning = `MPEG-2 を再生できません: ${rawProblem}`;
         }
+        if (!(await prepareCompat())) return;
         // 数え直す。焼き直しでも器から作り直しになるので、前の数は続きではない
         stalls = 0;
         // 字幕は映した1枚ごとに貼り直す (`follow`)。2度目からは何もしない
@@ -1698,8 +1776,23 @@ export function livePlayer() {
                     audio = notice.audio;
                     codec = notice.codec;
                     if (notice.raw) startRaw(video);
+                    else if (compat && chase === null) startCompat(video, notice.codec);
                     else start(video, notice.codecs, notice.codec);
                 }
+                return;
+            }
+
+            /*
+             * **互換モードの焼いたもの。** MSE ではなく生の器へ、写さずに移す (`RawEngine.feed`)。
+             * **init が来たら中身を捨てて開き直す** (焼く道で SourceBuffer を作り直すのと同じ。
+             * 焼き直すと時刻は 0 から数え直しになるので、前の音や絵の待ちと混ぜない)
+             */
+            if ((kind === CHANNEL.videoInit || kind === CHANNEL.videoMedia) && engineInput === 'fmp4') {
+                if (kind === CHANNEL.videoInit) {
+                    if (fallback !== null || returning) arrived();
+                    engine?.reset();
+                }
+                engine?.feed(data, 9);
                 return;
             }
 
@@ -1883,7 +1976,33 @@ export function livePlayer() {
      * worker と復号器の読み込み (500KB) を選局のたびにやり直さない
      */
     function startRaw(video: HTMLVideoElement): void {
+        if (!openEngine(video, 'ts-mpeg2')) return;
+        raw = true;
+        pickAudio();
+    }
+
+    /**
+     * 互換モードの器を用意する (`tuned` で焼いたものと答えられた)。焼いたもの (fMP4) を MSE でなく
+     * 生の器へ流して canvas に描く。**サーバが別の形に落としてきて** (AV1 を焼けなかった) それが
+     * 描けない形なら、MPEG-2 か理由へ (`fallBack`)
+     */
+    function startCompat(video: HTMLVideoElement, baked: LiveCodec): void {
+        if (compatSupport?.[baked] !== true) {
+            const label = LIVE_CODECS.find((c) => c.id === baked)?.label ?? baked;
+            fallBack(`${label} を再生できません`, 'fmp4');
+            return;
+        }
+        openEngine(video, 'fmp4');
+    }
+
+    /**
+     * 器 (`RawEngine`) を開く。**同じものを受け取る器があれば作り直さず開き直すだけ**、違うもの
+     * (生 ⇔ 焼いたもの) なら作り直す — 描く先の canvas の使い方が違う (WebGL2 ⇔ 2D)。
+     * 開けなければ false
+     */
+    function openEngine(video: HTMLVideoElement, input: RawInput): boolean {
         clear();
+        if (engine !== null && engineInput !== input) stopRaw();
         if (engine === null) {
             // 焼いたものを流していた器は止める。音が二重に鳴らないように
             video.pause();
@@ -1904,20 +2023,26 @@ export function livePlayer() {
                             stalls += 1;
                             lastStall = Date.now();
                         },
-                        gaveUp: (reason) => fallBack(reason),
+                        gaveUp: (reason) => fallBack(reason, input),
                         // ロック画面・車の操作で `<audio>` を直に止められた・再開された
                         remote: (stop) => {
                             if (stop !== paused) toggle();
                         },
                     },
                     playback,
+                    input,
                 );
             } catch (error) {
+                const why = error instanceof Error ? error.message : String(error);
                 fallBack(
-                    `MPEG-2 の再生を始められませんでした (${error instanceof Error ? error.message : String(error)})`,
+                    input === 'fmp4'
+                        ? `再生を始められませんでした (${why})`
+                        : `MPEG-2 の再生を始められませんでした (${why})`,
+                    input,
                 );
-                return;
+                return false;
             }
+            engineInput = input;
             // 押す口は <video> に付いている (`MediaStack`)。見えなくするだけで、そこに残す
             video.style.opacity = '0';
             // 音を消していたなら、生でも消したまま始める
@@ -1925,9 +2050,9 @@ export function livePlayer() {
         } else {
             engine.reset();
         }
-        raw = true;
-        pickAudio();
+        canvas = true;
         if (rawTimer === null) rawTimer = setInterval(rawPace, 20);
+        return true;
     }
 
     /** 選んでいる音声を生の器に伝える。**焼き直さない** (`setAudio`) */
@@ -1942,19 +2067,40 @@ export function livePlayer() {
         rawTimer = null;
         engine?.destroy();
         engine = null;
+        engineInput = null;
         raw = false;
+        canvas = false;
         decodeMs = 0;
         if (element !== null) element.style.opacity = '';
     }
 
     /**
-     * 生を諦めて焼いたものに戻す。**理由は断り書きに残す** (`warning`) — 黙って戻すと、
-     * 設定を入れたのに効いていない理由が分からない
+     * 器を諦める。**理由は断り書きに残す** (`warning`) — 黙って戻すと、設定を入れたのに効いて
+     * いない理由が分からない。
+     *
+     * - 生 (MPEG-2) を諦めた … 焼いたものに戻す。互換モードなら焼いたものも canvas に描く
+     *   (`prepareCompat`)。互換モードで焼いたものも描けなければ、理由を出して止まる
+     * - 互換モードの焼いたものを諦めた … MPEG-2 で描けるならそちらへ、無理なら理由を出して止まる。
+     *   **`<video>` には戻らない** (テスラでは止まってしまう)
      */
-    function fallBack(reason: string): void {
-        rawGaveUp = true;
-        warning = reason;
+    function fallBack(reason: string, input: RawInput): void {
         stopRaw();
+        if (input === 'fmp4') {
+            compatGaveUp = true;
+            if (rawProblem === null && !rawGaveUp && element !== null && tuned !== null) {
+                warning = `${reason}。MPEG-2 に切り替えました`;
+                void tune(element, { ...tuned, raw: true }, true);
+                return;
+            }
+            fail(reason);
+            return;
+        }
+        rawGaveUp = true;
+        if (compat && (compatGaveUp || !LIVE_CODECS.some((c) => compatSupport?.[c.id] === true))) {
+            fail('MPEG-2 の再生を続けられませんでした');
+            return;
+        }
+        warning = reason;
         if (element !== null && tuned !== null) void tune(element, tuned, true);
     }
 
@@ -1995,16 +2141,31 @@ export function livePlayer() {
         get state() {
             return state;
         },
-        /** 生で見ているか (焼いていない)。**操作列の出し分けに使う** — 生では遡れない */
+        /** 生 (MPEG-2) で見ているか (焼いていない)。画質の切り替えが MPEG-2 を指すか */
         get raw() {
             return raw;
+        },
+        /**
+         * canvas で描いているか (生の MPEG-2 か、互換モードの焼いたものか)。**操作列の出し分けに使う** —
+         * どちらも遡れない。切り抜き・小窓も canvas から取る
+         */
+        get canvas() {
+            return canvas;
+        },
+        /** 互換モード (`canvas-video.ts`) で観ているか */
+        get compat() {
+            return compat;
+        },
+        /** この端末で描けない形 (互換モードのとき)。画質の切り替えで選ばせない */
+        get unavailable() {
+            return unavailable();
         },
         /**
          * 生で見ているときの、いま出しているコマ (切り抜き)。**絵は worker の canvas に
          * 居て、`<video>` からは写せない** (`RawEngine.grab`)。生でなければ null
          */
         grab(): Promise<ImageBitmap | null> {
-            return raw && engine !== null ? engine.grab() : Promise.resolve(null);
+            return canvas && engine !== null ? engine.grab() : Promise.resolve(null);
         },
         /**
          * 生で見ているときの絵の流れ (PiP)。**絵は worker の canvas に居て、`<video>` は
@@ -2012,7 +2173,7 @@ export function livePlayer() {
          * 取り方は `RawEngine.pipStream`。生でない・取れない (Firefox) なら null
          */
         capture(): MediaStream | null {
-            return raw && engine !== null ? engine.pipStream() : null;
+            return canvas && engine !== null ? engine.pipStream() : null;
         },
         /** 小窓へ絵を流すか (`RawEngine.pipFlow`)。出していない間は写さない */
         captureFlow(on: boolean): void {

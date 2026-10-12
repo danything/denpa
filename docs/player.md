@@ -26,7 +26,7 @@
 | `MediaStack.svelte` | 映像と重ねもの（前の絵・字幕 canvas）の束。データ放送を出すと、入れ物ごと BML の小窓へ寄せる (字幕も一緒に縮む) |
 | `PlayerVeil.svelte` | 読み込み中・失敗・待ちの幕。前の絵を貼っている間は塗り潰さない |
 | `OverlayMenu.svelte` | 絵の上のドロップダウンの共通部分（選択肢の並びと閉じ方） |
-| `CodecMenu.svelte` / `AudioMenu.svelte` / `SpeedMenu.svelte` | 焼き方・音声・速さのメニュー。トリガーごと共通 |
+| `CodecMenu.svelte` / `AudioMenu.svelte` / `SpeedMenu.svelte` | 焼き方・音声・速さのメニュー。トリガーごと共通。互換モードでこの端末が描けない形は「この端末では表示できません」と出して押せなくする |
 | `EdgeButton.svelte` | 「今」へ張り付くボタン（ライブの「ライブ」・追っかけの「最新」） |
 | `InfoBlock.svelte` | 帯の中の読みもの（二段）。上が「時間帯 ・ 局 ・ 番組名」、下が画面ごとの状態（位置・遅延など） |
 | `FactsAside.svelte` | 右の「番組の中身」の列の枠（観る画面・追っかけ）。中身が長ければここだけ巻き取られ、押すものは外に貼り付く |
@@ -39,7 +39,7 @@
 | `pip.svelte.ts` | 小窓 (ピクチャーインピクチャー)。帯の全画面の左に置き、狭い枠では「ほか」に畳む。iPhone・iPad のホーム画面から開いたもの (PWA) は Safari が小窓を許さないので、ボタンごと出さない。ページから小窓を開かせる口の無いブラウザでも出さない。生 (MPEG-2) で見ているときは worker が描いた絵を別の `<video>` に流して出す (Chrome は worker が直に書き込む。canvas の画面への更新から取ると、窓が隠れたとき絵が止まる。Safari は canvas から取る。Firefox は生の絵を取れないので、生の間はボタンを出さない)。小窓で押した止める・再開はライブと追っかけの帯にも写す。**字幕も小窓に出す** (Chrome・Edge。`compose.ts` がコマごとに字幕の canvas を重ねた流れを作り、別の `<video>` を小窓にする。焼いたものは押した時点で字幕を出しているときだけ・小窓に出している間だけ重ねる。Safari・Firefox は字幕無し)。操作列は小窓に付いていかない。denpa の別の画面 (番組表など) へ移ると、再生ごと止まって小窓も閉じる |
 | `fullscreen.svelte.ts` / `fullscreen.ts` | 全画面の出入り（帯のボタンと `f`）。端末の口で入り方を決める（[下](#全画面は端末の口で入り方を変えます)） |
 | `background.svelte.ts` / `background.ts` | バックグラウンド再生の入り切り（帯のヘッドホン。狭い枠では「ほか」に畳む）。既定は切で、裏に回したら止める（[下](#裏に回したら止めます)） |
-| `shot.svelte.ts` / `snapshot.ts` | いまの1コマを字幕ごと切り抜いて PNG に（`番組名_YYYYMMDD-HHMMSS.png`）。指の端末は共有シート（写真へ保存・そのまま送る）、PC は落としてクリップボードにも置く。生（MPEG-2）で見ているときは worker に1枚貰う（`raw/engine.ts` の `grab`） |
+| `shot.svelte.ts` / `snapshot.ts` | いまの1コマを字幕ごと切り抜いて PNG に（`番組名_YYYYMMDD-HHMMSS.png`）。指の端末は共有シート（写真へ保存・そのまま送る）、PC は落としてクリップボードにも置く。生（MPEG-2）と互換モードで見ているときは worker に1枚貰う（`raw/engine.ts` の `grab`） |
 | `DataBroadcast.svelte` / `Remote.svelte` | データ放送の器と、指で押せるリモコン |
 
 決め方を2箇所に持っていた頃は、観る画面の帯が押したときにしか出ず、隠れた帯の上を

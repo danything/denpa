@@ -11,6 +11,10 @@
  * **時計は画面が持つ** (鳴っている音。`playout.ts`)。ここは届いた時計に合わせて、番が
  * 来たコマを出すだけ。
  *
+ * **焼いたもの (fMP4) を canvas に描く道もここで受ける** (`messages.ts` の `RawInput`)。
+ * <video> の再生が止まる端末 (テスラの車載ブラウザ) のための道で、映像は WebCodecs、音は
+ * 同じ WASM (AAC・Opus) で解く。中身は `fmp4.ts`。時計・小窓・切り抜き・見張りはこことで共有する
+ *
  * ## 貯めるのは解く前
  *
  * 貯め (0.2秒〜) のぶんを解いた絵で持つと、1080 の絵は1枚 3MB あるので 1秒で 90MB になる。
@@ -27,7 +31,8 @@
 
 import { AdtsSplitter, CLOCK, type Pes, PesDemuxer, unwrap } from '#lib/ts/pes.js';
 import { DecodeBudget } from './budget';
-import type { FromWorker, ToWorker } from './messages';
+import { Fmp4Video } from './fmp4';
+import type { FromWorker, RawInput, ToWorker } from './messages';
 import { YuvRenderer } from './render';
 
 const scope = self as unknown as DedicatedWorkerGlobalScope;
@@ -48,8 +53,9 @@ const AUDIO_ERRORS_MOST = 20;
 interface Decoder {
     _dec_open(): number;
     _aac_open(): number;
-    _aac_push(data: number, length: number): number;
-    _aac_peek(): number;
+    _opus_open(extra: number, length: number): number;
+    _audio_push(data: number, length: number): number;
+    _audio_peek(): number;
     _dec_push(data: number, length: number, pts: number): number;
     _dec_count(): number;
     _dec_peek(): number;
@@ -104,7 +110,18 @@ let audioErrors = 0;
 /** 音のコマを WASM のメモリへ写す置き場 (`input` は映像が使う) */
 let audioInput = { pointer: 0, size: 0 };
 
-const budget = new DecodeBudget();
+let budget = new DecodeBudget();
+/** 何を受け取っているか (`messages.ts` の `RawInput`)。`init` で決まる */
+let mode: RawInput = 'ts-mpeg2';
+/** 焼いたもの (fMP4) を描く係。`fmp4` のときだけ (`fmp4.ts`) */
+let fmp4: Fmp4Video | null = null;
+/**
+ * 復号器 (WASM) を読み終える前に届いた fMP4。**読み終えたら順に渡す** — 頭 (init) は選局の直後に
+ * 1回しか来ないので、落とすと以降を1つも読めない。読み終えたら null
+ */
+let early: Uint8Array[] | null = [];
+/** `early` に溜める上限 (箱の数)。1秒に 20 個ほど来るので、読み込みが 10 秒掛かっても足りる */
+const EARLY_MOST = 200;
 let dropped = 0;
 let shown = 0;
 let statsAt = 0;
@@ -199,7 +216,7 @@ function onAudio(pes: Pes): void {
 function decodeAudio(decoder: Decoder, data: Uint8Array, pts: number): void {
     audioInput = ensure(decoder, audioInput, data.length);
     decoder.HEAPU8.set(data, audioInput.pointer);
-    const samples = decoder._aac_push(audioInput.pointer, data.length);
+    const samples = decoder._audio_push(audioInput.pointer, data.length);
     if (samples < 0) {
         if (++audioErrors > AUDIO_ERRORS_MOST) fail('音声を再生できませんでした');
         return;
@@ -207,7 +224,7 @@ function decodeAudio(decoder: Decoder, data: Uint8Array, pts: number): void {
     if (samples === 0) return;
     audioErrors = 0;
     // 解いたあとに読む — メモリが伸びると HEAPU8 の下の ArrayBuffer が替わる
-    const info = decoder._aac_peek() >> 2;
+    const info = decoder._audio_peek() >> 2;
     const heap = decoder.HEAP32;
     const channels = heap[info]!;
     const sampleRate = heap[info + 1]!;
@@ -326,6 +343,10 @@ function toPip(): void {
 function tick(): void {
     if (decoder === null || failed) return;
     schedule();
+    if (fmp4 !== null) {
+        tickFmp4(fmp4);
+        return;
+    }
     const at = now();
 
     /*
@@ -376,10 +397,26 @@ function tick(): void {
         current === null || decoder._dec_count() > 0
             ? 0
             : Math.max(0, (at - current.pts - frameTicks) / CLOCK);
+    watch(late, frameTicks, 0, '再生が追いつかないため、変換した映像に切り替えました');
+}
+
+/** 焼いたもの (fMP4) の刻み。描くのは `fmp4.ts` で、ここは遅れを見張って数を出すだけ */
+function tickFmp4(video: Fmp4Video): void {
+    const at = now();
+    video.tick(at);
+    if (at === null) return;
+    const late =
+        video.current === null || video.waiting > 0
+            ? 0
+            : Math.max(0, (at - video.current - video.frameTicks) / CLOCK);
+    dropped = video.dropped;
+    watch(late, video.frameTicks, video.queued, '再生が追いつきません');
+}
+
+/** 間に合っているかを見張り (`budget.ts`)、1秒ごとに数を出す */
+function watch(late: number, frame: number, queued: number, reason: string): void {
     const wall = performance.now();
-    if (budget.tick(wall, (frameTicks / CLOCK) * 1000, late)) {
-        fail('再生が追いつかないため、変換した映像に切り替えました');
-    }
+    if (budget.tick(wall, (frame / CLOCK) * 1000, late, queued)) fail(reason);
     if (wall - statsAt >= 1000) {
         statsAt = wall;
         post({ type: 'stats', dropped, p95: budget.p95, shown });
@@ -416,7 +453,9 @@ function reset(): void {
     lastFramePts = null;
     shownSinceReset = false;
     budget.reset();
-    decoder?._dec_open();
+    if (fmp4 !== null) fmp4.reset();
+    else decoder?._dec_open();
+    if (early !== null) early = [];
     // 次のコマで開き直す (前の局の持ち越しを捨てる)
     audioConfig = '';
     audioErrors = 0;
@@ -430,24 +469,76 @@ function reset(): void {
 async function grab(id: number): Promise<void> {
     let bitmap: ImageBitmap | null = null;
     try {
-        const image =
-            renderer !== null && current !== null && !Number.isNaN(drawn.field)
-                ? renderer.capture(drawn.field)
-                : null;
-        if (image !== null) bitmap = await createImageBitmap(image);
+        if (fmp4 !== null) bitmap = await fmp4.grab();
+        else {
+            const image =
+                renderer !== null && current !== null && !Number.isNaN(drawn.field)
+                    ? renderer.capture(drawn.field)
+                    : null;
+            if (image !== null) bitmap = await createImageBitmap(image);
+        }
     } catch {
         // 読めなかった。写せないと返す (画面は何もしない)
     }
     post({ type: 'frame', id, bitmap }, bitmap === null ? [] : [bitmap]);
 }
 
-async function init(canvas: OffscreenCanvas, base: string): Promise<void> {
+/**
+ * 焼いたもの (fMP4) の音の口 (`fmp4.ts` の `AudioSink`)。解くのは MPEG-2 の道と同じ WASM —
+ * AAC は ADTS の頭を付けて (`fmp4.ts` が付ける)、Opus は OpusHead を渡して開く
+ */
+function openAudio(codec: 'aac' | 'opus', config: Uint8Array | null): boolean {
+    if (decoder === null) return false;
+    audioErrors = 0;
+    if (codec === 'aac') return decoder._aac_open() === 0;
+    if (config === null) return false;
+    audioInput = ensure(decoder, audioInput, config.length);
+    decoder.HEAPU8.set(config, audioInput.pointer);
+    return decoder._opus_open(audioInput.pointer, config.length) === 0;
+}
+
+function startFmp4(canvas: OffscreenCanvas): boolean {
+    if (typeof VideoDecoder !== 'function') {
+        fail('この端末では表示できません');
+        return false;
+    }
     try {
-        renderer = new YuvRenderer(canvas);
-        surface = canvas;
+        fmp4 = new Fmp4Video(canvas, {
+            audio: {
+                open: openAudio,
+                push: (data, pts) => {
+                    if (decoder !== null) decodeAudio(decoder, data, pts);
+                },
+            },
+            drew: (first) => {
+                shown++;
+                toPip();
+                if (first) post({ type: 'shown' });
+            },
+            fail,
+            record: (ms) => budget.record(ms),
+        });
     } catch (error) {
         fail(`映像を表示できません (${error instanceof Error ? error.message : String(error)})`);
-        return;
+        return false;
+    }
+    // 渡してから出てくるまでの時間は物差しにしない (GPU の道は詰まっていなくても溜める。`budget.ts`)
+    budget = new DecodeBudget(false);
+    return true;
+}
+
+async function init(canvas: OffscreenCanvas, base: string, kind: RawInput): Promise<void> {
+    mode = kind;
+    surface = canvas;
+    if (kind === 'fmp4') {
+        if (!startFmp4(canvas)) return;
+    } else {
+        try {
+            renderer = new YuvRenderer(canvas);
+        } catch (error) {
+            fail(`映像を表示できません (${error instanceof Error ? error.message : String(error)})`);
+            return;
+        }
     }
     try {
         const url = new URL(`${base}/decoder.mjs`, scope.location.origin).href;
@@ -459,9 +550,12 @@ async function init(canvas: OffscreenCanvas, base: string): Promise<void> {
         });
         if (decoder._dec_open() !== 0 || decoder._aac_open() !== 0) throw new Error('開けません');
     } catch {
-        fail('この denpa は MPEG-2 をそのまま再生できません');
+        fail(kind === 'fmp4' ? '音声を再生できません' : 'この denpa は MPEG-2 をそのまま再生できません');
         return;
     }
+    const held = early ?? [];
+    early = null;
+    for (const bytes of held) fmp4?.feed(bytes);
     schedule();
 }
 
@@ -469,11 +563,19 @@ scope.onmessage = (event: MessageEvent<ToWorker>) => {
     const message = event.data;
     switch (message.type) {
         case 'init':
-            void init(message.canvas, message.decoder);
+            void init(message.canvas, message.decoder, message.input);
             break;
         case 'data': {
             if (failed) return;
-            const { pes, changed } = demuxer.feed(new Uint8Array(message.buffer, message.offset));
+            const bytes = new Uint8Array(message.buffer, message.offset);
+            if (mode === 'fmp4') {
+                // 復号器を読み終えるまでは溜めておく (`early`)
+                if (early !== null) {
+                    if (early.length < EARLY_MOST) early.push(bytes);
+                } else fmp4?.feed(bytes);
+                break;
+            }
+            const { pes, changed } = demuxer.feed(bytes);
             if (changed) demuxer.selectAudio(audioIndex);
             for (const item of pes) {
                 if (item.kind === 'video') onVideo(item);
@@ -488,6 +590,8 @@ scope.onmessage = (event: MessageEvent<ToWorker>) => {
             reset();
             break;
         case 'audio':
+            // 焼いたものには選んだ音声1本しか入っていない (選び直すとサーバが焼き直す)
+            if (mode === 'fmp4') break;
             audioIndex = message.index;
             demuxer.selectAudio(message.index);
             adts.reset();

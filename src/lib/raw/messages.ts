@@ -5,6 +5,16 @@
  * (Web Audio は worker から触れない)。時計は画面から worker へ流す (`clock`)。
  */
 
+/**
+ * 何を受け取るか。**worker を作るときに決める** (描く先の canvas の使い方が違うので、途中で替えない)
+ *
+ * - `ts-mpeg2` … 生の TS (`CHANNEL.rawTs`)。MPEG-2 と AAC を WASM で解き、WebGL2 で描く
+ * - `fmp4` … ライブ・追っかけの焼いたもの (`CHANNEL.videoInit` / `videoMedia`)。映像は WebCodecs の
+ *   VideoDecoder で解いて 2D で描き、音 (AAC・Opus) は WASM で解く (`fmp4.ts`)。
+ *   **<video> の再生が止まる端末** (テスラの車載ブラウザ) のための道
+ */
+export type RawInput = 'ts-mpeg2' | 'fmp4';
+
 /** 画面 → worker */
 export type ToWorker =
     | {
@@ -13,8 +23,12 @@ export type ToWorker =
           canvas: OffscreenCanvas;
           /** 復号器の置き場 (`/api/live/mpeg2`)。worker からは絶対 URL で読む */
           decoder: string;
+          input: RawInput;
       }
-    /** 届いた TS。**頭の9バイト (多重化の頭) を飛ばした位置から** */
+    /**
+     * 届いたもの (TS、または fMP4 の init・媒体1つ)。**頭の9バイト (多重化の頭) を飛ばした位置から**。
+     * fMP4 は箱の切れ目で届く (サーバが割ってから送る。`ts/fmp4.ts` の `Fmp4Splitter`)
+     */
     | { type: 'data'; buffer: ArrayBuffer; offset: number }
     /**
      * いま鳴っている PTS (90kHz。伸ばしたもの) と、それが鳴った時刻 (`performance.timeOrigin +

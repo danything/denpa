@@ -1,8 +1,11 @@
 <script lang="ts">
+    import { onMount } from 'svelte';
     import { submitting } from '#lib/actions.js';
     import { arming } from '#lib/arming.svelte.js';
+    import { canvasVideo, chooseCanvas, seeDriveNotice, teslaBrowser } from '#lib/canvas-video.js';
     import ActionButton from '#lib/components/ActionButton.svelte';
     import ArmedDelete from '#lib/components/ArmedDelete.svelte';
+    import DriveNotice from '#lib/components/DriveNotice.svelte';
     import JobProgress from '#lib/components/JobProgress.svelte';
     import Toasts, { errorNotice, type Notice } from '#lib/components/Toasts.svelte';
     import { dateTime, stateLabel } from '#lib/format.js';
@@ -10,6 +13,7 @@
     import { liveUpdates } from '#lib/live-updates.svelte.js';
     import { measure } from '#lib/measure.svelte.js';
     import { PREFECTURE_UNSET, PREFECTURES } from '#lib/prefecture.js';
+    import { type CanvasSupport, canvasSupport } from '#lib/raw/support.js';
     import { EVENT_LABEL } from '#lib/webhook-events.js';
     import type { SubmitFunction } from '$app/forms';
 
@@ -59,6 +63,38 @@
 
     /** 通知先の削除は2回押させる (録画・ルールと同じ。[arming.svelte.ts](../../lib/arming.svelte.ts)) */
     const deleting = arming('[data-testid^="webhook-delete"]');
+
+    /*
+     * **互換モード** (動画を canvas に描く。`canvas-video.ts`)。端末ごとの設定なので、読むのは画面に
+     * 出てから (localStorage・UA・VideoDecoder はサーバでは読めない)
+     */
+    let compat = $state(false);
+    let tesla = $state(false);
+    let support = $state<CanvasSupport | null>(null);
+    /** 入れようとしている (運転中の注意を出している) */
+    let confirming = $state(false);
+    onMount(() => {
+        compat = canvasVideo();
+        tesla = teslaBrowser();
+        void canvasSupport().then((found) => (support = found));
+    });
+
+    /** 入れるときは運転中の注意を先に出し、「わかりました」で入れる。切るのはその場で */
+    function setCompat(on: boolean): void {
+        if (on) {
+            confirming = true;
+            return;
+        }
+        chooseCanvas(false);
+        compat = false;
+    }
+
+    function acceptCompat(): void {
+        seeDriveNotice();
+        chooseCanvas(true);
+        compat = true;
+        confirming = false;
+    }
 </script>
 
 <svelte:window onclick={deleting.stand} />
@@ -639,8 +675,51 @@
                 </p>
             </details>
         </section>
+
+        <!--
+            **互換モード** (`canvas-video.ts`)。`<video>` の再生が止まる端末 (テスラの車載ブラウザ) のため、
+            ライブの動画を canvas に描く。端末ごとの設定なので「画面の高さを見る」と並べる。
+            入れるときは運転中の注意を出し、「わかりました」で入る (`DriveNotice`)。
+            canvas・WebCodecs といった言葉は画面に出さない (docs/screens.md「画面の言葉」)
+        -->
+        <section class="panel card" data-testid="canvas-video">
+            <h2>互換モードで再生</h2>
+            <p class="small soft">動画が止まってしまう端末 (テスラの車載ブラウザなど) 向け</p>
+
+            <label class="check">
+                <input
+                    type="checkbox"
+                    role="switch"
+                    aria-checked={compat || confirming}
+                    checked={compat || confirming}
+                    onchange={(event) => setCompat(event.currentTarget.checked)}
+                    data-testid="canvas-video-toggle"
+                />
+                <span>互換モードで再生する</span>
+            </label>
+
+            <ul class="support small" data-testid="canvas-video-support">
+                <li>H.264: {support === null ? '確認中' : support.h264 ? '使えます' : '使えません'}</li>
+                <li>AV1: {support === null ? '確認中' : support.av1 ? '使えます' : '使えません'}</li>
+                <li>テスラの車載ブラウザ: {tesla ? 'はい' : 'いいえ'}</li>
+            </ul>
+
+            <details class="more">
+                <summary>詳しく</summary>
+                <p>
+                    <strong>この端末だけ</strong>の設定で、サーバにも他の端末にも伝わりません。
+                    テスラの車載ブラウザでは、触らなくても入っています。
+                </p>
+                <p>
+                    ライブを、動画が止まりにくい方法で再生します。使えない画質は選べなくなります。
+                    速さの切り替えと、さかのぼって見ることはできません。
+                </p>
+            </details>
+        </section>
     </div>
 </div>
+
+<DriveNotice open={confirming} onaccept={acceptCompat} oncancel={() => (confirming = false)} />
 
 <style>
     /* 要点の1行と「詳しく」は1つの話。カードの段の間隔 (0.75rem) で離さない */
@@ -651,6 +730,16 @@
         display: block;
         font-size: 0.8rem;
         opacity: 0.7;
+    }
+    /* 互換モードで使えるもの。点は付けずに詰めて並べる */
+    .support {
+        margin: 0;
+        padding: 0;
+        list-style: none;
+    }
+    .support li {
+        margin: 0;
+        list-style: none;
     }
     /* 升目は上でそろえる。背の違う升目を真ん中に寄せると、隣と頭が合わずに浮く */
     .two-col {

@@ -8,12 +8,16 @@
  * `live-player.svelte.ts` からは、MSE の代わりにこれを使う — 器 (`<video>`) の代わりに
  * canvas を1枚、映像の入れ物の中に差し込む。字幕・データ放送・操作列は焼く道と同じもの
  * がそのまま重なる。
+ *
+ * **焼いたもの (fMP4) も同じ口で受ける** (互換モード。`input` が `fmp4`)。<video> の再生が止まる
+ * 端末 (テスラの車載ブラウザ) で、ライブの H.264 / AV1 を canvas に描く。違うのは worker の中だけ
+ * (`fmp4.ts`) で、音・時計・小窓・切り抜きはここのまま
  */
 
 import type { AudioSide } from '#lib/arib.js';
 import { CLOCK, unwrap } from '#lib/ts/pes.js';
 import { resolve } from '$app/paths';
-import type { FromWorker, ToWorker } from './messages';
+import type { FromWorker, RawInput, ToWorker } from './messages';
 import { type Chunk, Playout, type Scheduled } from './playout';
 
 /** 刻み (ms)。音の予約と時計の配り直しをここで回す */
@@ -129,6 +133,7 @@ export class RawEngine {
      * @param host 映像の入れ物。canvas はここに入る (**データ放送が入れ物ごと動かす**ので中に置く)
      * @param before この前に差し込む (字幕の canvas より下に来るように)
      * @param background 「再生する音」だと言うか (`playbackSession`・`route`)。あとから変えるときは `background`
+     * @param input 何を受け取るか (`messages.ts` の `RawInput`)。生の TS か、焼いたもの (fMP4。互換モード)
      */
     constructor(
         host: HTMLElement,
@@ -136,12 +141,14 @@ export class RawEngine {
         target: number,
         private readonly events: RawEvents,
         background = false,
+        readonly input: RawInput = 'ts-mpeg2',
     ) {
         this.playout = new Playout(target);
         this.wanted = background;
         this.canvas = document.createElement('canvas');
         this.canvas.setAttribute('data-testid', 'live-raw');
         this.canvas.setAttribute('aria-hidden', 'true');
+        this.canvas.dataset['input'] = input;
         // 押すのは下の <video> (押し口がそこに付いている。`MediaStack`)
         this.canvas.style.cssText =
             'position:absolute; inset:0; width:100%; height:100%; object-fit:contain; background:#000; pointer-events:none;';
@@ -162,11 +169,13 @@ export class RawEngine {
 
             this.worker = worker = new Worker(new URL('./worker.ts', import.meta.url), { type: 'module' });
             worker.onmessage = (event: MessageEvent<FromWorker>) => this.receive(event.data);
-            worker.onerror = () => this.giveUp('MPEG-2 の再生が止まりました');
+            worker.onerror = () =>
+                this.giveUp(input === 'fmp4' ? '再生が止まりました' : 'MPEG-2 の再生が止まりました');
             const offscreen = this.canvas.transferControlToOffscreen();
-            this.send({ type: 'init', canvas: offscreen, decoder: `${resolve('')}${DECODER.slice(1)}` }, [
-                offscreen,
-            ]);
+            this.send(
+                { type: 'init', canvas: offscreen, decoder: `${resolve('')}${DECODER.slice(1)}`, input },
+                [offscreen],
+            );
         } catch (error) {
             worker?.terminate();
             void context?.close().catch(() => undefined);
@@ -523,7 +532,11 @@ export class RawEngine {
         this.tellClock();
         // 絵は出ているのに音が来ない。**音の出ない生より、焼いたもののほうがいい**
         if (this.shownAt > 0 && this.heardAt === 0 && Date.now() - this.shownAt > NO_AUDIO) {
-            this.giveUp('音声を再生できないため、変換した映像に切り替えました');
+            this.giveUp(
+                this.input === 'fmp4'
+                    ? '音声を再生できません'
+                    : '音声を再生できないため、変換した映像に切り替えました',
+            );
         }
     }
 
