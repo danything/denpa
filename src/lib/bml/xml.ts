@@ -14,6 +14,11 @@ export interface XmlText {
     text: string;
     /** CDATA か (空白の扱いが違う) */
     cdata: boolean;
+    /**
+     * 実体参照を開く前の字 (CDATA でないものだけ)。空白を詰めるのはこちらで見る — `&#x20;` のように
+     * 参照で書いた空白は、詰める対象の「制御符号」ではない
+     */
+    raw?: string;
 }
 
 export interface XmlElement {
@@ -61,8 +66,13 @@ export function parseXml(source: string): XmlElement | null {
     const open: XmlElement[] = [root];
     let at = 0;
     const text = (value: string, cdata: boolean): void => {
-        if (value === '') return;
-        open.at(-1)!.children.push({ kind: 'text', text: cdata ? value : decodeEntities(value), cdata });
+        // 空の CDATA も文字として残す (`<p id="x"><![CDATA[]]></p>` に後からスクリプトが字を入れる)
+        if (value === '' && !cdata) return;
+        open.at(-1)!.children.push(
+            cdata
+                ? { kind: 'text', text: value, cdata }
+                : { kind: 'text', text: decodeEntities(value), cdata, raw: value },
+        );
     };
 
     while (at < source.length) {

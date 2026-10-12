@@ -9,7 +9,7 @@
 
 import { type Declaration, matches, parseDeclarations, type Rule } from './css';
 import { type Cascade, type Computed, compute, type Declarations, expand, type State } from './style';
-import type { XmlElement, XmlNode } from './xml';
+import { decodeEntities, type XmlElement, type XmlNode } from './xml';
 
 /** 持つ要素 */
 const KNOWN = new Set([
@@ -32,6 +32,9 @@ const KNOWN = new Set([
     'input',
     'img',
 ]);
+
+/** 字を持つ要素。中身が空でも文字を 1 つ持たせる (`build`) */
+const HOLDS_TEXT = new Set(['p', 'span', 'a']);
 
 /** 要素の数の上限 (規格は 512。余裕を持たせて、暴走だけ止める) */
 export const MAX_ELEMENTS = 4096;
@@ -195,12 +198,25 @@ export class BmlDocument {
                 if (made !== null) element.children.push(made);
                 return;
             }
-            const text = preserve || child.cdata ? child.text : collapse(child.text, xml, i);
-            if (text === '') return;
+            // 空白は実体参照を開く前の字で詰める (`&#x20;` と書いた空白は残る)
+            const text =
+                preserve || child.cdata
+                    ? child.text
+                    : decodeEntities(collapse(child.raw ?? child.text, xml, i));
+            // 空の CDATA は残す (後からスクリプトが字を入れる先)
+            if (text === '' && !child.cdata) return;
             const node = new BmlText(text, child.cdata);
             node.parent = element;
             element.children.push(node);
         });
+        // 字を持つ要素 (p・span・a) には、空でも文字を 1 つ持たせる。放送のスクリプトは空の p の
+        // `firstChild.data` に字を書き込む (日時・局名・ニュースの文)。文字が無いと firstChild が null で、
+        // 書いたところでスクリプトが止まり、後に続く組み立て (メニュー・天気の表) まで出なくなる
+        if (HOLDS_TEXT.has(element.tag) && element.children.length === 0) {
+            const node = new BmlText('', false);
+            node.parent = element;
+            element.children.push(node);
+        }
         return element;
     }
 }
