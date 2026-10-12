@@ -265,7 +265,7 @@
 
     /**
      * その録画を観る画面。**観られないものには無い。**
-     * 焼いたものは `/watch`、焼く前は生TSを `/chase` で観る (下)。
+     * 録り終えたものは `/watch`、録っている最中は生TSを `/chase` で観る (下)。
      *
      * 消したものと、**録画そのものが失敗したもの**も外す。後者は途中まで書けた
      * ファイルが残っていることはあるが、頭からスクランブルが掛かっていたり
@@ -275,11 +275,12 @@
         if (rec.deleted_at !== null || rec.state === 'failed') return null;
         if (rec.library_path !== null) return resolve(`watch/${rec.id}`);
         /*
-         * **焼き上がる前でも観られる。** 録っている最中はもちろん、録り終えて
-         * CM検出やエンコードを待っている間も、生TSはある。追っかけ再生の器
-         * (`/chase`。ライブと同じくサーバが焼き直して運ぶ) で頭から観られる
+         * **焼き上がる前でも観られる。** 録り終えて CM検出やエンコードを待っている間 (失敗したときも) は
+         * 観る画面がサーバに元の TS をその場で変換させて流す (`server/playback.ts`)。録っている最中だけ
+         * 追っかけ再生の器 (`/chase`。伸びている TS を追い読みする)
          */
-        if (rec.ts_path !== null) return resolve(`chase/${rec.id}`);
+        if (rec.ts_path !== null)
+            return resolve(rec.finished_at !== null ? `watch/${rec.id}` : `chase/${rec.id}`);
         return null;
     }
 

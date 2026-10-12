@@ -1,21 +1,24 @@
 /**
- * **詰め替えた fMP4 を `<video>` に流す** (#503。決め方は `ts/remux.ts`、作り方は `server/remux.ts`)。
+ * **サーバがその場で流す fMP4 を `<video>` に流す** (`/api/recordings/<id>/stream`。決め方は `ts/playback.ts`、
+ * 作り方は `server/playback.ts`)。詰め替え (映像は写すだけ) も、その場の変換も同じ受け方。
  *
  * 観る画面はそれまでどおり `<video>` の `currentTime`・`duration`・`playbackRate` を触るだけで
  * 済むようにする。ここが受け持つのは、跳んだ先が溜まっていなければ**そこから頼み直す**ことと、
  * 先へ溜めすぎないことだけ。
  *
  * - **尺は先に言う** (`duration`)。バーは最初から全長で出て、続きの位置へも跳べる
- * - **流れの時刻はファイルの時刻のまま** (`server/remux.ts`)。字幕・チャプター・データ放送は
+ * - **流れの時刻はページの物差しのまま** (`PlayAxis`)。字幕・チャプター・データ放送は
  *   `currentTime` で引いているので、そのまま合う
  * - 溜めるのは先 `AHEAD` 秒まで、後ろは `BEHIND` 秒まで。iPhone は溜められる量が小さい
  * - `ManagedMediaSource` (iPhone) は**送り込む頃合いをブラウザが言う**。言われていない間は読まない
  * - 切れたら観ていた位置から頼み直す (1秒→2秒→…10秒で頭打ち、続けて8回で諦める)。
  *   観る画面の拾い直し (`recover`) と同じ数
+ * - **サーバが混んでいて断られたら (503) 頼み直さない** (`busy`)。その場の変換の枠が埋まっている
+ *   (`server/transcode.ts`)。待っても空くとは限らないので、画面がほかの形を勧める
  */
 
 import type { PickedMediaSource } from '#lib/ts/media-source.js';
-import { aheadOf, covers, type Ranges } from '#lib/ts/remux.js';
+import { aheadOf, BUSY, covers, type Ranges } from '#lib/ts/playback.js';
 
 /** 先へ溜める上限 (秒) */
 const AHEAD = 60;
@@ -26,26 +29,26 @@ const SLACK = 15;
 /** 続けて頼み直す上限 */
 const RETRIES = 8;
 
-export type RemuxState = 'flowing' | 'retrying' | 'failed';
+export type RemuxState = 'flowing' | 'retrying' | 'failed' | 'busy';
 
 export interface RemuxOptions {
-    /** 頼む先。`from` 秒から、`audio` 本目の音声で */
-    url(from: number, audio: number): string;
-    /** `remuxType` */
+    /** 頼む先。`from` 秒から、`audio` (`playback` の `audios` の `id`) の音声で */
+    url(from: number, audio: string): string;
+    /** MSE に渡す型 (`ts/playback.ts` の `streamType`) */
     codecs: string;
     /** 尺 (秒) */
     duration: number;
     /** 観はじめる位置 (秒。続きから) */
     start: number;
-    /** 何本目の音声で始めるか */
-    audio: number;
-    /** 繋ぎ直している・諦めた・戻った */
+    /** どの音声で始めるか */
+    audio: string;
+    /** 繋ぎ直している・諦めた・戻った・混んでいて断られた */
     state(state: RemuxState): void;
 }
 
 export interface RemuxPlayer {
-    /** 音声を選び直す。**いまの位置から頼み直す** (入れ物の中の1本だけを詰めているため) */
-    setAudio(index: number): void;
+    /** 音声を選び直す。**いまの位置から頼み直す** (選んだ1本だけを流しているため) */
+    setAudio(id: string): void;
     /** 畳む。読んでいる流れを切る (サーバの ffmpeg も止まる) */
     destroy(): void;
 }
@@ -182,6 +185,16 @@ export function remuxPlayer(
                 await update((target) => target.remove(0, Number.POSITIVE_INFINITY), mine);
             if (mine !== run) return;
             const response = await fetch(options.url(from, audio), { signal: abort.signal });
+            /*
+             * **混んでいて断られたら頼み直さない** (その場の変換の枠が埋まっている)。デプロイの最中の 503
+             * (前段が返すもの) とは言い分で見分ける
+             */
+            if (response.status === 503 && (await busyAnswer(response))) {
+                if (mine !== run) return;
+                loadingFrom = null;
+                options.state('busy');
+                return;
+            }
             if (!response.ok || response.body === null) throw new Error(`HTTP ${response.status}`);
             const reader = response.body.getReader();
             for (;;) {
@@ -274,7 +287,7 @@ export function remuxPlayer(
             if (closed) return;
             media.duration = options.duration;
             buffer = media.addSourceBuffer(options.codecs);
-            // 流れの時刻をそのまま使う (ファイルの時刻。`server/remux.ts`)
+            // 流れの時刻をそのまま使う (ページの物差し。`server/playback.ts`)
             buffer.mode = 'segments';
             /*
              * **始める位置を先に言っておく。** まだ何も無いうちに代入した位置は、尺が分かった
@@ -288,9 +301,9 @@ export function remuxPlayer(
     );
 
     return {
-        setAudio(index: number): void {
-            if (index === audio) return;
-            audio = index;
+        setAudio(id: string): void {
+            if (id === audio) return;
+            audio = id;
             void load(video.currentTime);
         },
         destroy(): void {
@@ -305,4 +318,13 @@ export function remuxPlayer(
             media.removeEventListener('startstreaming', nudge);
         },
     };
+}
+
+/** サーバが「混んでいます」と断ったか (`server/playback.ts` の 503) */
+async function busyAnswer(response: Response): Promise<boolean> {
+    try {
+        return ((await response.json()) as { message?: unknown }).message === BUSY;
+    } catch {
+        return false;
+    }
 }

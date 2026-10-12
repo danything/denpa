@@ -5,6 +5,7 @@ import { orm } from '#lib/server/db.js';
 import { deleteRecordingFiles } from '#lib/server/files.js';
 import { sidecarPaths } from '#lib/server/metadata.js';
 import { relative } from '#lib/server/paths.js';
+import { encodedPath, tsPathOf } from '#lib/server/playback.js';
 import { recordingFromForm } from '#lib/server/recording.js';
 import { lastEncodeError, recordings } from '#lib/server/schema.js';
 import { settings } from '#lib/server/settings.js';
@@ -22,12 +23,12 @@ import type { Recording } from '#lib/types.js';
  *   画面から探さずに済む
  * - **URL が残る。** 途中まで観たものを開き直せる。ホーム画面から直接も開ける
  *
- * ## 観るのは焼いたものだけ
+ * ## 録り終えた録画はどれもここで観る
  *
- * 生TSは MPEG-2 で、**ブラウザに復号器が無い** (docs/stream.md §5.5)。
- * 焼いたもの (AV1 か H.264 の Matroska) はそのまま読める。
- * 焼けていない録画は、生TSがあれば追っかけ再生 (`/chase`。サーバが焼き直して運ぶ) へ送る。
- * どちらも無ければ「まだ観られません」と理由を出す。
+ * 何で観るかは開いてから決める (`api/recordings/<id>/playback`。決め方は `ts/playback.ts`)。
+ * エンコード済みがあればそのまま (読めない端末にはサーバが詰め替える)、まだエンコードしていなければ
+ * サーバが元の TS をその場で変換して流す。**録っている最中だけ**追っかけ再生 (`/chase`) へ送る。
+ * エンコード済みも元の TS も無ければ「まだ観られません」と理由を出す。
  */
 
 interface WatchRow extends Recording {
@@ -49,16 +50,27 @@ export function load({ params, url }) {
         .get();
     if (recording === undefined) error(404, '録画が見つかりません');
     if (recording.deleted_at !== null) error(410, 'この録画は削除されています');
-    if (recording.library_path === null && recording.ts_path !== null)
+    const encoded = encodedPath(recording);
+    const ts = tsPathOf(recording);
+    // 録っている最中は追っかけ再生へ (伸びている TS を追い読みする)
+    if (encoded === null && ts !== null && recording.finished_at === null)
         redirect(302, relative(url, `/chase/${id}`));
 
-    // データ放送を焼いてあるか (無い局・古い録画では出さない)。中身は d ボタンで別に取る
-    const hasData =
-        recording.library_path !== null && existsSync(sidecarPaths(recording.library_path).dataBroadcast);
+    /*
+     * データ放送を焼いてあるか (無い局・古い録画では出さない)。中身は d ボタンで別に取る。
+     * **エンコード済みの時刻で書いてある**ので、まだエンコードしていない録画では出さない
+     */
+    const hasData = encoded !== null && existsSync(sidecarPaths(encoded).dataBroadcast);
 
     // 郵便番号と都道府県は、ライブと同じく受信機の設定としてエンジンに渡す (`DataBroadcast`)
     const { postalCode, prefecture } = settings();
-    return { recording, broadcast: { postalCode, prefecture }, hasData };
+    return {
+        recording,
+        /** 観るものがあるか。エンコード済みか、録り終えた元の TS */
+        playable: encoded !== null || ts !== null,
+        broadcast: { postalCode, prefecture },
+        hasData,
+    };
 }
 
 export const actions = {

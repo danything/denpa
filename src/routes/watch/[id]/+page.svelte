@@ -8,6 +8,7 @@
     import { screenAwake } from '#lib/components/player/awake.svelte.js';
     import { backgroundPlayback } from '#lib/components/player/background.svelte.js';
     import CloseLink from '#lib/components/player/CloseLink.svelte';
+    import CodecMenu from '#lib/components/player/CodecMenu.svelte';
     import ControlBar from '#lib/components/player/ControlBar.svelte';
     import ControlButton from '#lib/components/player/ControlButton.svelte';
     import ControlRow from '#lib/components/player/ControlRow.svelte';
@@ -51,6 +52,7 @@
     import { programDetail, recordingFacts } from '#lib/detail.svelte.js';
     import { denpaFontUrl } from '#lib/font.js';
     import { clock, cmNoteWorthShowing, recordedDuration, size } from '#lib/format.js';
+    import { CODEC_LABEL } from '#lib/hw.js';
     import { write as remind, read as stored } from '#lib/keep.js';
     import { loadOffline } from '#lib/offline.svelte.js';
     import type { OfflineVideo } from '#lib/offline-db.js';
@@ -61,7 +63,15 @@
     import { feedFor, type PlacedMessage, replayAt } from '#lib/ts/data-timeline.js';
     import { pickMediaSource } from '#lib/ts/media-source.js';
     import { stepSpeed } from '#lib/ts/pacing.js';
-    import { type MediaFile, type Playback, pickPlayback } from '#lib/ts/remux.js';
+    import {
+        type CodecChoice,
+        codecChoices,
+        type MediaAbility,
+        type Picked,
+        type PlaybackInfo,
+        pickOffer,
+        transcodes,
+    } from '#lib/ts/playback.js';
     import {
         type Chapter,
         chapterAt,
@@ -77,8 +87,8 @@
     let { data, form } = $props();
     const rec = $derived(data.recording);
 
-    /** 焼けているか。**観るのは焼いたものだけ** (`+page.server.ts`) */
-    const ready = $derived(rec.library_path !== null);
+    /** 観るものがあるか。エンコード済みか、録り終えた元の TS (`+page.server.ts`) */
+    const ready = $derived(data.playable);
     /*
      * 端末に保存してあれば**オンラインでもそちらを観る** (docs/offline.md)。
      * サーバから読み直さないので、帯域を使わず、電波が細いところでも途切れない。
@@ -93,25 +103,56 @@
     let localChecked = $state(false);
     let localCopy: OfflineVideo | null = null;
     /**
-     * どれを、どう観るか (`ts/remux.ts` の `pickPlayback`)。**そのまま読めないブラウザでは、
-     * サーバで fMP4 に詰め替えて MSE に流す** (iPhone の Safari で H.264 の録画。#503)。
-     * 中身を聞けなかった (オフライン) ときは、今までどおり主をそのまま渡す
+     * 何で観られるか (`api/recordings/<id>/playback`)。聞けなかった (オフライン) ときは null。
+     * **どれを使うかはこの画面が決める** (`ts/playback.ts` の `pickOffer`): そのまま読めるファイル、
+     * 読めなければサーバが詰め替えて流すもの、まだエンコードしていない録画はサーバがその場で変換して流すもの
      */
-    let playback = $state<Playback>({ way: 'direct', source: 'encoded' });
-    /** 詰め替えて流しているときの器 (`remux-player.ts`) */
+    let info = $state.raw<PlaybackInfo | null>(null);
+    /** いま観ているもの。観られるものが無ければ null */
+    let picked = $state.raw<Picked | null>(null);
+    /**
+     * 人が選んだコーデック (`auto` は端末に合わせる)。**端末ごとに覚える** — 同じ人でも
+     * 手元の端末と居間のテレビで解けるものが違う (速さ・CM 飛ばしと同じ `localStorage`)
+     */
+    let choice = $state<CodecChoice>('auto');
+    const CODEC_KEY = 'watch-codec';
+    /** サーバが混んでいて、その場の変換を断られた (`remux-player.ts` の `busy`) */
+    let busy = $state(false);
+    /** その場で流しているときの器 (`remux-player.ts`) */
     let remux: RemuxPlayer | null = null;
+    /** 選び直したときに続ける位置 (秒)。その場で流す器の始める位置に使う */
+    let switchAt: number | null = null;
+
+    /** ブラウザに聞く口 (`ts/playback.ts`)。DOM が要るので開いてから */
+    function ability(): MediaAbility {
+        return {
+            play: (type) => document.createElement('video').canPlayType(type) !== '',
+            mse: (type) => pickMediaSource()?.Source.isTypeSupported(type) ?? false,
+        };
+    }
+
     onMount(() => {
+        const asked = stored(CODEC_KEY);
+        choice = asked === 'h264' || asked === 'av1' ? asked : 'auto';
         void (async () => {
-            const [held, files] = await Promise.all([loadOffline(rec.id), ready ? loadMedia() : []]);
+            const [held, got] = await Promise.all([loadOffline(rec.id), ready ? loadPlayback() : null]);
             localCopy = held;
-            playback = pickPlayback(files, {
-                play: (type) => document.createElement('video').canPlayType(type) !== '',
-                mse: (type) => pickMediaSource()?.Source.isTypeSupported(type) ?? false,
-            });
-            // 詰め替えるなら端末のコピーは使えない (そのまま読めないのは同じ)
-            if (localCopy?.video !== undefined && playback.way === 'direct') {
+            info = got;
+            /*
+             * 聞けなかった (オフライン) ときは、今までどおりエンコード済みをそのまま渡す。
+             * 端末に保存したものがあればそちら (下)
+             */
+            picked =
+                got !== null
+                    ? pickOffer(got, ability(), choice)
+                    : rec.library_path?.endsWith('.mkv') === true || localCopy?.video !== undefined
+                      ? { way: 'file', codec: 'av1', source: 'encoded' }
+                      : null;
+            // 端末のコピーはエンコード済みの主。そのまま読むときだけ使う (選んだコーデックがあれば選んだほう)
+            if (localCopy?.video !== undefined && picked?.way === 'file' && choice === 'auto') {
                 localSrc = URL.createObjectURL(localCopy.video);
             }
+            if (ready && picked === null) broken = true;
             localChecked = true;
         })();
         return () => {
@@ -120,42 +161,99 @@
         };
     });
 
-    /** 焼いたファイルの中身 (`api/recordings/<id>/media`)。聞けなければ空 (= そのまま渡す) */
-    async function loadMedia(): Promise<MediaFile[]> {
+    /** 何で観られるか (`api/recordings/<id>/playback`)。聞けなければ null */
+    async function loadPlayback(): Promise<PlaybackInfo | null> {
         try {
-            const res = await fetch(resolve(`api/recordings/${rec.id}/media`));
-            return res.ok ? ((await res.json()).files ?? []) : [];
+            const res = await fetch(resolve(`api/recordings/${rec.id}/playback`));
+            return res.ok ? ((await res.json()) as PlaybackInfo) : null;
         } catch {
-            return [];
+            return null;
         }
     }
 
     const src = $derived(
-        localChecked && playback.way === 'direct'
-            ? (localSrc ?? resolve(`api/recordings/${rec.id}/file?source=${playback.source}`))
+        localChecked && picked?.way === 'file'
+            ? (localSrc ?? resolve(`api/recordings/${rec.id}/file?source=${picked.source}`))
             : undefined,
     );
 
-    /** 詰め替えて観るなら、器を作って流しはじめる。**続きの位置から頼む** (頭から読んで捨てない) */
+    /** その場で流すときに頼む音声 (`playback` の `audios` の `id`) */
+    function streamAudio(index: number): string {
+        return info?.audios[index]?.id ?? info?.audios[0]?.id ?? '0';
+    }
+
+    /** その場で流すなら、器を作って流しはじめる。**続きの位置から頼む** (頭から読んで捨てない) */
     $effect(() => {
-        if (!localChecked || playback.way !== 'remux' || video === null || remux !== null) return;
-        const picked = pickMediaSource();
-        if (picked === null) return;
-        const plan = playback;
-        const from = rec.resume_ms === null ? null : resumePoint(rec.resume_ms / 1000, plan.duration);
-        remux = remuxPlayer(video, picked, {
+        const plan = picked;
+        if (!localChecked || plan?.way !== 'stream' || info === null || video === null || remux !== null) return;
+        const source = pickMediaSource();
+        if (source === null) return;
+        const total = info.duration;
+        const from =
+            switchAt ?? (rec.resume_ms === null ? null : resumePoint(rec.resume_ms / 1000, total));
+        switchAt = null;
+        remux = remuxPlayer(video, source, {
             url: (at, audio) =>
                 resolve(
-                    `api/recordings/${rec.id}/remux?source=${plan.source}&from=${at.toFixed(3)}&audio=${audio}`,
+                    `api/recordings/${rec.id}/stream?codec=${plan.codec}&from=${at.toFixed(3)}&audio=${encodeURIComponent(audio)}`,
                 ),
-            codecs: plan.codecs,
-            duration: plan.duration,
+            codecs: plan.type,
+            duration: total,
             start: from ?? 0,
-            audio: audioIndex,
+            audio: streamAudio(audioIndex),
             state: (state) => {
                 resuming = state === 'retrying';
+                busy = state === 'busy';
                 if (state === 'failed') broken = true;
             },
+        });
+    });
+
+    /**
+     * **コーデックを選び直す** (コーデックのメニュー)。選んだものは端末ごとに覚える。
+     * 観られる道が変わるなら、いまの位置から観直す (器を作り直す)
+     */
+    function chooseCodec(next: CodecChoice): void {
+        choice = next;
+        remind(CODEC_KEY, next);
+        controls.stir();
+        if (info === null) return;
+        const fresh = pickOffer(info, ability(), next);
+        if (JSON.stringify(fresh) === JSON.stringify(picked) && !busy) return;
+        const position = video?.currentTime ?? 0;
+        remux?.destroy();
+        remux = null;
+        // 端末のコピーは自動のときだけ (主のエンコード済み)
+        if (localSrc !== null) {
+            URL.revokeObjectURL(localSrc);
+            localSrc = null;
+        }
+        busy = false;
+        broken = false;
+        // ファイルなら尺が分かったところで戻す (`resume`)。その場で流すなら器の始める位置
+        retryAt = position;
+        switchAt = position;
+        picked = fresh;
+    }
+
+    /** メニューに並べるもの。この端末で観られる道があるコーデックが 2 つ以上あるときだけ出す */
+    const codecMenu = $derived.by(() => {
+        if (info === null || !localChecked) return [];
+        const choices = codecChoices(info, ability());
+        if (choices.length < 2) return [];
+        return [
+            { key: 'auto', label: '自動' },
+            ...choices.map((codec) => ({ key: codec, label: CODEC_LABEL[codec] })),
+        ];
+    });
+
+    /** 混んでいて断られたとき、サーバに変換させずに観られるもの (エンコード済み・詰め替え) */
+    const lighter = $derived.by(() => {
+        if (info === null || !busy) return [];
+        const can = ability();
+        return codecChoices(info, can).filter((codec) => {
+            const way = pickOffer(info as PlaybackInfo, can, codec);
+            return way !== null && way.codec === codec && !transcodes(info as PlaybackInfo, way);
         });
     });
 
@@ -618,11 +716,11 @@
     /** いま器が持っている音声トラックを読み直す (`loadedmetadata` と `addtrack` から) */
     function syncAudio(): void {
         /*
-         * **詰め替えて流しているときは、入れ物の音声の名前から並べる。** 流しているのは
+         * **その場で流しているときは、`playback` の音声の名前から並べる。** 流しているのは
          * 選んだ1本だけなので、器 (`audioTracks`) には1本しか出ない (`remux-player.ts`)
          */
-        if (playback.way === 'remux') {
-            audios = playback.audios.map((label, i) => ({ label: label.trim() || `音声 ${i + 1}` }));
+        if (picked?.way === 'stream') {
+            audios = (info?.audios ?? []).map((audio, i) => ({ label: audio.label.trim() || `音声 ${i + 1}` }));
             return;
         }
         const tracks = audioTrackList();
@@ -642,10 +740,10 @@
         audioIndex = enabled;
     }
 
-    /** 音声を選ぶ。**選んだものだけ有効にする** (ブラウザはそれで切り替える)。詰め替えなら頼み直す */
+    /** 音声を選ぶ。**選んだものだけ有効にする** (ブラウザはそれで切り替える)。その場で流しているなら頼み直す */
     function selectAudio(index: number): void {
         if (remux !== null) {
-            remux.setAudio(index);
+            remux.setAudio(streamAudio(index));
             audioIndex = index;
             return;
         }
@@ -696,7 +794,7 @@
     function recover(): void {
         if (video === null) return;
         const code = video.error?.code ?? 0;
-        // 詰め替えて流しているときの切れ目は `remux-player.ts` が拾い直す。ここに来るのは読めない中身
+        // その場で流しているときの切れ目は `remux-player.ts` が拾い直す。ここに来るのは読めない中身
         if (remux !== null || code !== MediaError.MEDIA_ERR_NETWORK || retries >= RETRIES) {
             broken = true;
             resuming = false;
@@ -1110,7 +1208,7 @@
 <!-- **ライブ (`/live`) と同じ形・同じ作り** (PlayerLayout)。映像が左、読むものが右 -->
 <PlayerLayout testid="watch">
         {#if !ready}
-            <!-- 生TSがあれば load が追っかけへ送るので、ここに来るのは焼いたものも生TSも無い録画 -->
+            <!-- 録っている最中は load が追っかけへ送るので、ここに来るのはエンコード済みも元の TS も無い録画 -->
             <div class="panel stack not-ready">
                 <h2>まだ観られません</h2>
                 <p class="small muted">観られるファイルがありません。</p>
@@ -1259,7 +1357,31 @@
                     </div>
                 {/if}
 
-                {#if broken}
+                {#if busy}
+                    <!--
+                        **サーバが混んでいて、その場の変換を断られた** (同時に変換する本数の上限。設定の GPU)。
+                        待っても空くとは限らないので、サーバに変換させずに観られるものを勧める
+                    -->
+                    <div class="broken" data-testid="watch-busy">
+                        <p class="small">サーバが混んでいます</p>
+                        {#if lighter.length > 0}
+                            <div class="cluster">
+                                {#each lighter as codec (codec)}
+                                    <button
+                                        type="button"
+                                        class="small"
+                                        data-testid="watch-busy-switch"
+                                        onclick={() => chooseCodec(codec)}
+                                    >
+                                        {CODEC_LABEL[codec]} で観る
+                                    </button>
+                                {/each}
+                            </div>
+                        {:else}
+                            <p class="small">しばらくしてから開き直してください</p>
+                        {/if}
+                    </div>
+                {:else if broken}
                     <!-- **黙って黒いままにしない。** 観られる先を案内する (外のプレイヤーは相手にしない) -->
                     <div class="broken" data-testid="watch-broken">
                         <p class="small">
@@ -1395,6 +1517,19 @@
                         -->
                         <MoreButton stage={layout} testid="watch-more" />
                         <Extras>
+                        <!--
+                            **コーデックの切り替え** (追っかけ・ライブと同じ部品)。この端末で観られる道が
+                            2つ以上あるときだけ。「自動」は端末に合わせる (`ts/playback.ts` の `pickOffer`)。
+                            エンコード済みと違うものを選ぶと、サーバがその場で変換して流す
+                        -->
+                        {#if codecMenu.length > 0}
+                            <CodecMenu
+                                testid="watch-codec"
+                                choices={codecMenu}
+                                selected={codecMenu.some((item) => item.key === choice) ? choice : 'auto'}
+                                onpick={(key) => chooseCodec(key as CodecChoice)}
+                            />
+                        {/if}
                         <!--
                             **音声トラックの切り替え。** ブラウザが器から2本以上
                             出せたときだけ (二カ国語・二重音声)。`/live` の音声選びと

@@ -132,14 +132,14 @@ function start(from = 100) {
             codecs: 'video/mp4; codecs="avc1.640028,mp4a.40.2"',
             duration: 600,
             start: from,
-            audio: 0,
+            audio: '0',
             state: (state) => states.push(state),
         },
     );
     return { video, player, states, media: () => FakeMediaSource.last! };
 }
 
-describe('詰め替えの流し方 (remuxPlayer)', () => {
+describe('その場で流すものの受け方 (remuxPlayer)', () => {
     test('尺を先に言い、続きの位置から頼んで、尻まで読んだら終わりを言う', async () => {
         const { video, media } = start(100);
         await settle();
@@ -181,7 +181,7 @@ describe('詰め替えの流し方 (remuxPlayer)', () => {
         const { video, player } = start(100);
         await settle();
         video.currentTime = 103;
-        player.setAudio(1);
+        player.setAudio('1');
         await settle();
         expect(requests.at(-1)).toBe('remux?from=103&audio=1');
     });
@@ -193,5 +193,25 @@ describe('詰め替えの流し方 (remuxPlayer)', () => {
         video.currentTime = 400;
         await settle();
         expect(requests).toHaveLength(1);
+    });
+});
+
+describe('混んでいて断られたとき', () => {
+    test('「サーバが混んでいます」の 503 は頼み直さずに知らせる。ほかの 5xx は頼み直す', async () => {
+        let answer: Response = Response.json({ message: 'サーバが混んでいます' }, { status: 503 });
+        globalThis.fetch = (async (url: string) => {
+            requests.push(url);
+            return answer.clone();
+        }) as typeof fetch;
+        const { states } = start(100);
+        await settle();
+        expect(states).toEqual(['busy']);
+        expect(requests).toHaveLength(1);
+
+        answer = new Response('Bad Gateway', { status: 502 });
+        const other = start(100);
+        await settle();
+        expect(other.states).toEqual(['retrying']);
+        other.player.destroy();
     });
 });

@@ -42,6 +42,7 @@
         "01-dashboard",
         "04-external-delete",
         "11-rule-edit",
-        "35-csp"
+        "35-csp",
+        "38-watch-stream"
     ]
 }

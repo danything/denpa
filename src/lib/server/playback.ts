@@ -46,7 +46,6 @@ import {
     type PlayCodec,
     type PlayOffer,
 } from '#lib/ts/playback.js';
-import type { MediaFile } from '#lib/ts/remux.js';
 import { lastVideoPts, type ReadAt, seekTs, sinceHead, tsHead } from '#lib/ts/seek.js';
 import type { Recording } from '#lib/types.js';
 import { programSpec } from './captions';
@@ -54,10 +53,120 @@ import { chapterList } from './cm';
 import { config } from './config';
 import type { LiveHw } from './hwenc';
 import { aribServiceId, audioArgs, blameLiveHw, codecsFor, pickLiveHw, videoArgs } from './live';
-import { probeMedia } from './remux';
 import { settings } from './settings';
+import { run } from './stream';
 import { holdTranscode } from './transcode';
 
+
+/** エンコード済みのファイル 1 本の中身 (ffprobe で読む。`probeMedia`) */
+export interface MediaFile {
+    source: EncodedSource;
+    /** 映像の codecs 文字列 (`avc1.640028` / `av01.0.08M.08`)。読めない・無ければ null */
+    video: string | null;
+    /** 音声の codecs 文字列 (`opus` / `mp4a.40.2`)。読めない・無ければ null */
+    audio: string | null;
+    /** 音声トラックの名前 (入れ物の title)。無名は空文字 */
+    audios: string[];
+    /** 尺 (秒)。読めなければ null */
+    duration: number | null;
+}
+
+interface ProbedStream {
+    codec_type?: string;
+    codec_name?: string;
+    profile?: string;
+    level?: number;
+    pix_fmt?: string;
+    tags?: { title?: string; TITLE?: string };
+}
+
+/** H.264 の profile 名 → codecs の頭 (profile_idc と制約の印) */
+const AVC_PROFILES: Record<string, string> = {
+    Baseline: '4200',
+    'Constrained Baseline': '42e0',
+    Main: '4d00',
+    Extended: '5800',
+    High: '6400',
+    'High 10': '6e00',
+    'High 4:2:2': '7a00',
+    'High 4:4:4 Predictive': 'f400',
+};
+const AV1_PROFILES: Record<string, number> = { Main: 0, High: 1, Professional: 2 };
+
+/** 映像の codecs 文字列。知らないものは null (判断に使わない) */
+function videoCodec(stream: ProbedStream | undefined): string | null {
+    if (stream === undefined) return null;
+    const level = typeof stream.level === 'number' && stream.level > 0 ? stream.level : null;
+    if (stream.codec_name === 'h264') {
+        const head = AVC_PROFILES[stream.profile ?? ''] ?? '6400';
+        return `avc1.${head}${(level ?? 40).toString(16).padStart(2, '0')}`;
+    }
+    if (stream.codec_name === 'av1') {
+        const profile = AV1_PROFILES[stream.profile ?? ''] ?? 0;
+        const depth = /10/.test(stream.pix_fmt ?? '') ? '10' : '08';
+        // tier は ffprobe が言わない。放送の焼き直しは Main tier
+        return `av01.${profile}.${String(level ?? 8).padStart(2, '0')}M.${depth}`;
+    }
+    return null;
+}
+
+/** 音声の codecs 文字列 */
+function audioCodec(stream: ProbedStream | undefined): string | null {
+    if (stream?.codec_name === 'opus') return 'opus';
+    if (stream?.codec_name === 'aac') return 'mp4a.40.2';
+    return null;
+}
+
+/** ffprobe (`-show_streams -show_format` の JSON) から中身を起こす。読めなければ全部 null */
+export function mediaInfo(source: EncodedSource, json: string): MediaFile {
+    let parsed: { streams?: ProbedStream[]; format?: { duration?: string } } = {};
+    try {
+        parsed = JSON.parse(json);
+    } catch {
+        // 読めない。判断に使わない形で返す
+    }
+    const streams = parsed.streams ?? [];
+    const audios = streams.filter((stream) => stream.codec_type === 'audio');
+    const duration = Number(parsed.format?.duration);
+    return {
+        source,
+        video: videoCodec(streams.find((stream) => stream.codec_type === 'video')),
+        audio: audioCodec(audios[0]),
+        audios: audios.map((stream) => stream.tags?.title ?? stream.tags?.TITLE ?? ''),
+        duration: Number.isFinite(duration) && duration > 0 ? duration : null,
+    };
+}
+
+/** 待ち時間の上限。壊れたファイルで居座らせない */
+const TIMEOUT = 15_000;
+
+/** 読んだ中身の控え。開くたびに聞くので、同じファイル (パスと更新時刻) なら読み直さない */
+const probed = new Map<string, { mtime: number; file: MediaFile }>();
+/** 控えの上限。古いものから捨てる */
+const KEEP = 64;
+
+/** 焼いたファイルの中身を読む (見出しだけ。一瞬で返る) */
+export async function probeMedia(source: EncodedSource, path: string): Promise<MediaFile> {
+    let mtime = -1;
+    try {
+        mtime = statSync(path).mtimeMs;
+    } catch {
+        // 無い。読んでも同じなので null で返る
+    }
+    const held = probed.get(path);
+    if (held !== undefined && held.mtime === mtime) return { ...held.file, source };
+    const result = await run(
+        [config.ffprobe, '-v', 'error', '-show_streams', '-show_format', '-print_format', 'json', path],
+        { timeoutMs: TIMEOUT, stdout: true },
+    );
+    const file = mediaInfo(source, result.code === 0 ? new TextDecoder().decode(result.stdout) : '');
+    if (result.code === 0) {
+        probed.delete(path);
+        probed.set(path, { mtime, file });
+        if (probed.size > KEEP) probed.delete(probed.keys().next().value as string);
+    }
+    return file;
+}
 /** エンコード済みのファイル 1 本 */
 interface EncodedFile {
     source: EncodedSource;
@@ -123,7 +232,6 @@ const PROBE_BYTES = 4 * 1024 * 1024;
 
 /** 読んだ TS の控え。開くたびに聞くので、同じファイル (パス・大きさ・更新時刻) なら読み直さない */
 const tsProbed = new Map<string, { key: string; ts: TsFile | null }>();
-const KEEP = 64;
 
 /** 元の TS の頭と尺を読む。読めなければ null */
 export async function probeTs(path: string): Promise<TsFile | null> {

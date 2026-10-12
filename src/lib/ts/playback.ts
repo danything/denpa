@@ -68,3 +68,137 @@ export const ORIGIN_HEADER = 'X-Denpa-Origin';
 
 /** 混んでいて断ったときの言い分 (503) */
 export const BUSY = 'サーバが混んでいます';
+
+/** 画面が選べるコーデック。`auto` は端末に合わせて決める (`pickOffer`) */
+export type CodecChoice = 'auto' | 'h264' | 'av1';
+
+/** ブラウザに聞く口。**試しで差し替えられるように**受け取る */
+export interface MediaAbility {
+    /** `<video>` にそのまま渡して読めるか (`canPlayType` が空でない) */
+    play(type: string): boolean;
+    /** MSE の器が受け取れるか (`isTypeSupported`)。器が無ければ false */
+    mse(type: string): boolean;
+}
+
+/** どれで観るか */
+export type Picked =
+    | { way: 'file'; codec: PlayCodec; source: EncodedSource }
+    | { way: 'stream'; codec: 'h264' | 'av1'; type: string };
+
+/**
+ * そのままのファイルを読めるか。Matroska と WebM の両方で聞く — Chrome は `video/x-matroska` に答えるが、
+ * Safari は WebM としてしか答えない (AV1 の Matroska はそれで読める)。中身が分からないものは false
+ */
+function playsFile(offer: PlayOffer, can: MediaAbility): boolean {
+    if (offer.way !== 'file' || offer.codecs === undefined) return false;
+    return (
+        can.play(`video/x-matroska; codecs="${offer.codecs}"`) ||
+        can.play(`video/webm; codecs="${offer.codecs}"`)
+    );
+}
+
+/** MSE に渡す型 */
+export function streamType(offer: PlayOffer): string {
+    return `video/mp4; codecs="${offer.codecs ?? ''}"`;
+}
+
+function playsStream(offer: PlayOffer, can: MediaAbility): boolean {
+    return offer.way === 'stream' && offer.codecs !== undefined && can.mse(streamType(offer));
+}
+
+function asPicked(offer: PlayOffer): Picked | null {
+    if (offer.way === 'file' && offer.source !== undefined) {
+        return { way: 'file', codec: offer.codec, source: offer.source };
+    }
+    if (offer.way === 'stream' && offer.codec !== 'mpeg2') {
+        return { way: 'stream', codec: offer.codec, type: streamType(offer) };
+    }
+    return null;
+}
+
+/**
+ * **どれで観るか。** 人が選んだコーデックがあれば、それを観られる道 (ファイルそのまま → その場で流す)。
+ * 観られなければ、または `auto` なら端末に合わせる:
+ *
+ * 1. **そのまま読めるファイル** (並びはサーバの順。主 → もう一方)
+ * 2. MSE が受け取れる**詰め替え** (エンコード済みと同じコーデック。サーバは軽い)
+ * 3. MSE が受け取れる**変換** (H.264 → AV1 の順。サーバはその場でエンコードする)
+ * 4. 中身が分からないファイル (ffprobe が読めなかった) をそのまま渡す。読めなければ落とす口を出す
+ *
+ * MPEG-2 (`raw`) はここでは選ばない (そのまま再生する道は画面の設定で別に決める)。何も無ければ null
+ */
+export function pickOffer(info: PlaybackInfo, can: MediaAbility, choice: CodecChoice = 'auto'): Picked | null {
+    const files = info.offers.filter((offer) => offer.way === 'file');
+    const streams = info.offers.filter((offer) => offer.way === 'stream');
+    if (choice !== 'auto') {
+        const file = files.find((offer) => offer.codec === choice && playsFile(offer, can));
+        const stream = streams.find((offer) => offer.codec === choice && playsStream(offer, can));
+        const chosen = file ?? stream;
+        if (chosen !== undefined) return asPicked(chosen);
+    }
+    const order = [
+        ...files.filter((offer) => playsFile(offer, can)),
+        ...streams.filter((offer) => playsStream(offer, can) && files.some((f) => f.codec === offer.codec)),
+        ...streams.filter((offer) => playsStream(offer, can)),
+        ...files,
+    ];
+    const first = order[0];
+    return first === undefined ? null : asPicked(first);
+}
+
+/**
+ * **コーデックのメニューに並べるもの。** この端末で観られる道があるコーデック (H.264 → AV1)
+ */
+export function codecChoices(info: PlaybackInfo, can: MediaAbility): ('h264' | 'av1')[] {
+    return (['h264', 'av1'] as const).filter((codec) =>
+        info.offers.some(
+            (offer) => offer.codec === codec && (playsFile(offer, can) || playsStream(offer, can)),
+        ),
+    );
+}
+
+/** 選んだもので観るとき、サーバがその場でエンコードするか (枠を使う。混んでいると断られる) */
+export function transcodes(info: PlaybackInfo, picked: Picked): boolean {
+    return (
+        picked.way === 'stream' &&
+        !info.offers.some((offer) => offer.way === 'file' && offer.codec === picked.codec)
+    );
+}
+
+/** `TimeRanges` を配列にしたもの (`[始まり, 終わり]` 秒) */
+export type Ranges = readonly (readonly [number, number])[];
+
+/** `t` を含む区間の、`t` から先に溜まっている長さ (秒)。含む区間が無ければ 0 */
+export function aheadOf(ranges: Ranges, t: number): number {
+    for (const [start, end] of ranges) {
+        if (start <= t + GAP && t < end) return end - t;
+    }
+    return 0;
+}
+
+/**
+ * 区間どうしの小さな隙間は無いものと見る (秒)。映像と音声の頭が数十ms ずれるぶん
+ * (音声の頭は AAC の前置きぶん早い) と、ブラウザが跨いで再生する程度の隙間
+ */
+const GAP = 0.5;
+
+/**
+ * 跳んだ先 `t` を、**頼み直さずに待てば届くか。**
+ *
+ * - いま溜まっている区間の中なら、そのまま
+ * - 読んでいる最中 (`from` から頼んだ流れが伸びている) で、その伸びる先の少し先
+ *   (`slack` 秒) までなら待つ。10秒送りのたびに頼み直すと、毎回鍵フレームまで戻って
+ *   詰め直すぶん遅い
+ *
+ * @param from 読んでいる流れの頼んだ位置。読んでいなければ null
+ */
+export function covers(ranges: Ranges, t: number, from: number | null, slack: number): boolean {
+    if (aheadOf(ranges, t) > 0) return true;
+    if (from === null || t < from - GAP) return false;
+    // 頼んだ位置から伸びている区間の尻。まだ何も届いていなければ頼んだ位置
+    let end = from;
+    for (const [start, stop] of ranges) {
+        if (start <= from + GAP && stop >= from) end = Math.max(end, stop);
+    }
+    return t <= end + slack;
+}

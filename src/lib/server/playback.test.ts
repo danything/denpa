@@ -48,6 +48,7 @@ const { holdTranscode, transcodesInUse } = await import('./transcode');
 const {
     copyArgs,
     fileTranscodeArgs,
+    mediaInfo,
     playbackPlan,
     presented,
     streamResponse,
@@ -333,5 +334,49 @@ describe('ffmpeg の出口を本文にする (transcodeBody)', () => {
                 for (;;) if ((await reader.read()).done) return;
             })(),
         ).rejects.toThrow();
+    });
+});
+
+describe('ffprobe の読み (mediaInfo)', () => {
+    const probe = (streams: unknown[], duration = '1800.5') =>
+        JSON.stringify({ streams, format: { duration } });
+
+    test('H.264 High / Level 4.0 と Opus 2本', () => {
+        const json = probe([
+            { codec_type: 'video', codec_name: 'h264', profile: 'High', level: 40 },
+            { codec_type: 'audio', codec_name: 'opus', tags: { title: '主音声' } },
+            { codec_type: 'audio', codec_name: 'opus' },
+            { codec_type: 'subtitle', codec_name: 'arib_caption' },
+        ]);
+        expect(mediaInfo('encoded', json)).toEqual({
+            source: 'encoded',
+            video: 'avc1.640028',
+            audio: 'opus',
+            audios: ['主音声', ''],
+            duration: 1800.5,
+        });
+    });
+
+    test('AV1 Main / Level 4.0 (8)、10bit も読む', () => {
+        const av1 = (pix_fmt: string) =>
+            mediaInfo(
+                'alt',
+                probe([{ codec_type: 'video', codec_name: 'av1', profile: 'Main', level: 8, pix_fmt }]),
+            ).video;
+        expect(av1('yuv420p')).toBe('av01.0.08M.08');
+        expect(av1('yuv420p10le')).toBe('av01.0.08M.10');
+    });
+
+    test('知らない形・読めない出力は null (判断に使わない)', () => {
+        expect(
+            mediaInfo('encoded', probe([{ codec_type: 'video', codec_name: 'mpeg2video' }])).video,
+        ).toBeNull();
+        expect(mediaInfo('encoded', '')).toEqual({
+            source: 'encoded',
+            video: null,
+            audio: null,
+            audios: [],
+            duration: null,
+        });
     });
 });
