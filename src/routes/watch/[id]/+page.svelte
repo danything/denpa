@@ -75,8 +75,10 @@
     import {
         type Chapter,
         chapterAt,
+        cmSpans,
         isCm,
         nextChapterAt,
+        plainMarks,
         prevChapterAt,
         resumePoint,
         skipCmAtStart,
@@ -1154,6 +1156,9 @@
     const current = $derived(chapterAt(chapters, at));
     /** CM の入っている録画でだけ、飛ばす口を出す (押しても何も起きない操作を並べない) */
     const hasCm = $derived(chapters.some((chapter) => isCm(chapter.title)));
+    /** シークバーで琥珀に塗る CM の区間と、それ以外の切れ目 */
+    const cmOnBar = $derived(cmSpans(chapters));
+    const marksOnBar = $derived(plainMarks(chapters));
 
     /**
      * あと何分で終わるか。**倍速のぶんは割る** — 2倍で観ているときに
@@ -1460,15 +1465,19 @@
                 <!-- 下端。帯と押すもの。**ライブと同じ帯** (`ControlBar`) -->
                 <ControlBar shown={controls.shown} testid="watch-controls">
                     <!--
-                        **帯にはチャプターの切れ目を出す。** どこで CM が挟まって
-                        いるかが見えると、送りのボタンを何回押すかが分かる
+                        **帯の CM は琥珀で塗る** (denpa-tv と同じ)。どこで CM が挟まって
+                        いるかが見えると、送りのボタンを何回押すかが分かる。色だけに頼らず、
+                        読み上げでは位置にいまのチャプターの名前を添える (下の時刻の横にも出ている)
                     -->
                     <SeekBar
                         value={at}
                         max={length || 0}
                         step={0.1}
                         onseek={seekTo}
-                        marks={chapters.slice(1).map((chapter) => chapter.start)}
+                        cm={cmOnBar}
+                        marks={marksOnBar}
+                        valuetext={current === null ? undefined : `${clock(at)}、${current.title}`}
+                        testid="watch-seek"
                     />
 
                     <ControlRow testid="watch-buttons">

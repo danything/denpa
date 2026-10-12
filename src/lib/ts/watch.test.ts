@@ -1,10 +1,12 @@
 import { describe, expect, test } from 'bun:test';
 import {
     chapterAt,
+    cmSpans,
     DOUBLE_TAP,
     isCm,
     nextChapterAt,
     parseChapters,
+    plainMarks,
     prevChapterAt,
     resumePoint,
     SKIP,
@@ -349,5 +351,38 @@ describe('観はじめの CM 飛ばし', () => {
         expect(skipCmAtStart(fell, '1')).toBe(false);
         expect(skipCmAtStart(fell, null)).toBe(false);
         expect(skipCmAtStart(fell, '0')).toBe(false);
+    });
+});
+
+describe('シークバーの CM の塗り', () => {
+    const chapters = [
+        { start: 0, end: 8.7, title: 'CM' },
+        { start: 8.7, end: 609.7, title: '本編' },
+        { start: 609.7, end: 624.7, title: 'CM' },
+        { start: 624.7, end: 669.7, title: 'CM' },
+        { start: 669.7, end: 1370.7, title: '本編' },
+    ];
+
+    test('続いている CM は1本の区間にまとめる', () => {
+        expect(cmSpans(chapters)).toEqual([
+            { start: 0, end: 8.7 },
+            { start: 609.7, end: 669.7 },
+        ]);
+    });
+
+    test('CM が無ければ塗らない (引き継いだ録画の名前の違うチャプターも)', () => {
+        expect(cmSpans([{ start: 0, end: 10, title: 'Chapter 1' }])).toEqual([]);
+        expect(cmSpans([])).toEqual([]);
+    });
+
+    test('目盛りは CM の端には打たない (塗りの縁が言う)', () => {
+        expect(plainMarks(chapters)).toEqual([]);
+        const named = [
+            { start: 0, end: 10, title: 'アバン' },
+            { start: 10, end: 20, title: 'Aパート' },
+            { start: 20, end: 30, title: 'CM' },
+            { start: 30, end: 40, title: 'Bパート' },
+        ];
+        expect(plainMarks(named)).toEqual([10]);
     });
 });

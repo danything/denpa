@@ -282,3 +282,44 @@ export function skipCmAtStart(cmNote: string | null, remembered: string | null):
     if (logoUnusable(cmNote)) return false;
     return remembered !== '0';
 }
+
+/** シークバーで塗る区間 (秒) */
+export interface Span {
+    start: number;
+    end: number;
+}
+
+/**
+ * シークバーで塗る **CM の区間**。続いている CM は1本にまとめる (`skipTarget` と同じ考え)。
+ *
+ * 検出は CM を1本ずつ返すことがあり、そのまま塗ると 15 秒ごとに継ぎ目が出る。
+ * 塗りで知りたいのは「どこからどこまでが CM か」なので、継ぎ目は要らない
+ * (denpa-tv の `cmRuns` と同じ)
+ */
+export function cmSpans(chapters: Chapter[]): Span[] {
+    const spans: Span[] = [];
+    for (const chapter of chapters) {
+        if (!isCm(chapter.title)) continue;
+        const last = spans.at(-1);
+        if (last !== undefined && chapter.start <= last.end + 0.01) {
+            last.end = Math.max(last.end, chapter.end);
+        } else {
+            spans.push({ start: chapter.start, end: chapter.end });
+        }
+    }
+    return spans;
+}
+
+/**
+ * シークバーに目盛りを打つ切れ目。**CM の端は塗りの縁が言う**ので、どちらの側も CM でない
+ * 切れ目だけ (引き継いだ録画の、名前の付いたチャプターなど)
+ */
+export function plainMarks(chapters: Chapter[]): number[] {
+    const marks: number[] = [];
+    let before: Chapter | null = null;
+    for (const chapter of chapters) {
+        if (before !== null && !isCm(before.title) && !isCm(chapter.title)) marks.push(chapter.start);
+        before = chapter;
+    }
+    return marks;
+}
