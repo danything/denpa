@@ -4,9 +4,12 @@ import { BS_NO_LOGO, SERVICES } from '../fake/services';
 import {
     airing,
     captionsClearOfBar,
+    captionsSeenInDataWindow,
     cellOf,
     expect,
+    fakeDataBroadcast,
     goto,
+    holdMedia,
     overlayTroubles,
     syncEpg,
     test,
@@ -561,6 +564,59 @@ test.describe('ライブ視聴', () => {
         await wakeControls(page, 'live-frame');
         await page.getByTestId('live-data-button').click();
         await expect(overlay).toHaveAttribute('data-state', 'ready', { timeout: 15_000 });
+    });
+
+    /*
+     * **データ放送を出しても字幕は見えている。テレビと同じで映像と一緒に小窓へ縮む。**
+     *
+     * 借りものは映像の箱ごと BML の小窓へ移すので、字幕の canvas は箱の中に置いてある
+     * (`MediaStack`)。上の確かめでは偽の放送にデータ放送が無く箱が動かないので、ここでは
+     * 小窓を持つ BML を WebSocket に流し (`fakeDataBroadcast`)、本当に動かしてから絵で見る。
+     *
+     * **操作列を出したまま d を押す** — 帯と重なる字幕は持ち上げる (`PlayerStage`) ので、
+     * 持ち上げたぶんが小窓の中に残っていないことも見る (残ると小窓の端で切れる)
+     */
+    test('データ放送を出しても、字幕は映像と一緒に小窓へ縮んで見えている', async ({ page }) => {
+        await page.addInitScript(() => {
+            const seen = window as unknown as { __sockets: WebSocket[] };
+            seen.__sockets = [];
+            const Original = window.WebSocket;
+            window.WebSocket = class extends Original {
+                constructor(url: string | URL, protocols?: string | string[]) {
+                    super(url, protocols);
+                    seen.__sockets.push(this);
+                }
+            };
+        });
+        await goto(page, '/live');
+        await page.getByTestId('live-channel').first().click();
+        await expect(page.getByTestId('live-title')).toBeVisible();
+        await holdMedia(page, 'live-video', 'live-captions', 'live-frame');
+        // 下の方の字幕 (帯と重なる)
+        await page
+            .getByTestId('live-captions')
+            .evaluate((el) => el.setAttribute('data-ink', '0.8000,0.9700'));
+
+        const overlay = page.getByTestId('live-data');
+        await wakeControls(page, 'live-frame');
+        await page.getByTestId('live-data-button').click();
+        await expect(overlay).toHaveAttribute('data-state', 'ready', { timeout: 15_000 });
+        await expect(page.getByTestId('live-controls')).toHaveAttribute('data-shown', 'true');
+
+        // サーバの1式 (番組・PMT) が届いたあとに、小窓を持つ BML を流す (0x30 + 多重化の頭8バイト + JSON)
+        await expect.poll(async () => Number(await overlay.getAttribute('data-handed'))).toBeGreaterThan(0);
+        await page.evaluate((messages) => {
+            const socket = (window as unknown as { __sockets: WebSocket[] }).__sockets.at(-1);
+            for (const message of messages) {
+                const body = new TextEncoder().encode(JSON.stringify(message));
+                const data = new Uint8Array(9 + body.length);
+                data[0] = 0x30;
+                data.set(body, 9);
+                socket?.dispatchEvent(new MessageEvent('message', { data: data.buffer }));
+            }
+        }, fakeDataBroadcast());
+
+        await captionsSeenInDataWindow(page);
     });
 
     /*
