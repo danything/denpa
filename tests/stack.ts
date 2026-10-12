@@ -30,12 +30,6 @@ const BOOT_TIMEOUT = 120_000;
 const BOOT_POLL = 200;
 /** 立ち上がりを訊く1回ぶんの上限。返事の来ない接続に掴まったまま BOOT_TIMEOUT を使い切らないように */
 const BOOT_ASK = 5_000;
-/**
- * 断るだけの denpa (`bootClosed`) の立ち上がりを待つ上限。組んだものを起こすだけなので普段は 0.3 秒で済む。
- * **テストの上限 (120 秒) と同じ BOOT_TIMEOUT にしておくと、詰まったときにテストの上限を使い切り、
- * やり直しまで 2 分待たされる** (31-device が CI でそうなっていた)。早めに諦めてやり直させる
- */
-const CLOSED_BOOT_TIMEOUT = 30_000;
 
 export interface Stack {
     /** このワーカーの作業領域 */
@@ -106,8 +100,8 @@ function start(command: [string, ...string[]], env: Record<string, string>): Sta
     return { proc, output: () => log };
 }
 
-async function waitFor(url: string, started: Started, what: string, timeout = BOOT_TIMEOUT): Promise<void> {
-    const until = Date.now() + timeout;
+async function waitFor(url: string, started: Started, what: string): Promise<void> {
+    const until = Date.now() + BOOT_TIMEOUT;
     /*
      * **最後に何が返ったかを持っておく。** 待ち受けているのに応答しないとき、断られたのか
      * (ECONNREFUSED)、返事が来ないのか (時間切れ)、ok でない状態が返ったのかで、原因が違う。
@@ -123,10 +117,9 @@ async function waitFor(url: string, started: Started, what: string, timeout = BO
             if (res.ok) return;
             last = `HTTP ${res.status} ${(await res.text()).slice(0, 200)}`;
         } catch (error) {
-            // まだ待ち受けていない (ECONNREFUSED) か、返事が来ない
-            const cause = (error as { cause?: { code?: string } }).cause?.code;
-            last = cause === undefined ? String(error) : `${error} (${cause})`;
-            last += ` [cause: ${String((error as { cause?: unknown }).cause)}]`;
+            // まだ待ち受けていない (ECONNREFUSED)・返事が来ない (時間切れ)・fetch が断った (bad port) など。
+            // 何だったかは cause にしか書かれていない
+            last = `${error} (${String((error as { cause?: unknown }).cause)})`;
         }
         await new Promise((resolve) => setTimeout(resolve, BOOT_POLL));
     }
@@ -362,7 +355,14 @@ export async function bootClosed(
     /** 入る道を足して試すとき (TRUSTED_NETWORKS など)。省けば何も設定しない = 全部断る */
     extra: Record<string, string> = {},
 ): Promise<{ appUrl: string; shutdown: () => Promise<void> }> {
-    const port = APP_PORT + index * STRIDE + 7;
+    /*
+     * 帯の +3 (内側は +4)。**+7 にしていた頃は、ワーカー番号 1 で 4190 になり、毎回立ち上がりを
+     * 待ちきれずに落ちていた** — 4190 (ManageSieve) は fetch の仕様の「bad port」で、Node の fetch は
+     * 繋ぎにも行かずに断る (`fetch failed`、cause は `bad port`)。denpa は待ち受けているのに
+     * 2 分待って落ち、別のワーカーでやり直すと通るので、揺れに見えていた (31-device・14-serve)。
+     * 帯の口を足すときは、その番号が bad port に当たらないか確かめること
+     */
+    const port = APP_PORT + index * STRIDE + 3;
     const appUrl = `http://127.0.0.1:${port}`;
     const app = start(['bun', './server.js'], {
         TZ: 'Asia/Tokyo',
@@ -379,7 +379,7 @@ export async function bootClosed(
     const shutdown = async () => stop(app);
     try {
         // 生死確認は入る道が無くても通る (守ると livenessProbe が落ちるため)
-        await waitFor(`${appUrl}/api/health`, app, 'denpa (閉)', CLOSED_BOOT_TIMEOUT);
+        await waitFor(`${appUrl}/api/health`, app, 'denpa (閉)');
     } catch (error) {
         await shutdown();
         throw error;
