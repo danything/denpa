@@ -26,7 +26,7 @@
     {#if learnedAt === null}
         <!-- 見出しは置かない。開いた局の名前 (チューナー画面の `<summary>`) の続きとして読む -->
         <p class="small soft">
-            <span class="broadcast">{serviceName}</span> のロゴはまだ覚えていません。この局の録画を焼くときに、その録画から覚えます。
+            <span class="broadcast">{serviceName}</span> のロゴはまだ覚えていません。この局の録画をエンコードするときに、その録画から覚えます。
         </p>
     {:else}
         <div class="cluster learned">
@@ -45,12 +45,12 @@
                 -->
                 <div class="sub">{dateTime(learnedAt)} に更新</div>
                 <div class="sub">
-                    線の向きが毎コマ揃うところを白く出しています。ロゴの形になっていれば合っています。
+                    線の向きがどのコマでも揃うところを白く表示しています。ロゴの形になっていれば合っています。
                 </div>
                 <!-- 理由は `routes/tuners/+page.server.ts` の `logoForget` -->
                 <form method="POST" action="?/logoForget" use:submitting class="forget">
                     <input type="hidden" name="serviceId" value={serviceId} />
-                    <button type="submit" class="xs ghost"> この絵は違う (消して覚え直す) </button>
+                    <button type="submit" class="xs ghost"> この画像は違う (消して覚え直す) </button>
                 </form>
             </div>
         </div>

@@ -511,7 +511,7 @@ const FORGET_GPU_FAILED = 15 * 60_000;
 let liveTurn = 0;
 
 /** GPU からソフトウェアに降りたときに画面へ出す一行 */
-const GPU_GAVE_UP = 'GPU でエンコードできなかったので、ソフトウェアでエンコードしています';
+const GPU_GAVE_UP = 'GPU でエンコードできないため、ソフトウェアでエンコードしています';
 
 function hwKey(codec: StreamCodec, hw: LiveHw): string {
     return `${codec}:${hw.way.device}:${hw.way.kind}:${hw.full}`;
@@ -2078,7 +2078,7 @@ function openChase(asked: ChaseAsked, viewer: Viewer, hold?: () => boolean): Ses
         return refuse('録画が見つかりません');
     }
     const size = fileSize(rec.ts_path);
-    if (size === null || size === 0) return refuse('まだ何も録れていません');
+    if (size === null || size === 0) return refuse('まだ何も録画されていません');
 
     const finished = rec.finished_at !== null;
     const plan = chasePlan(size, recordedSec(rec), at);

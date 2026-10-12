@@ -99,7 +99,7 @@ export function issueCode(name: string, at = now()): IssuedCode | null {
             if (!String(error).includes('UNIQUE')) throw error;
         }
     }
-    throw new Error('札を作れませんでした');
+    throw new Error('ペアリングコードを作れませんでした');
 }
 
 type CodeState = 'pending' | 'approved' | 'expired' | 'consumed';
@@ -149,7 +149,7 @@ export function approve(userCode: string, by: string, viaToken: boolean, at = no
 /** アプリの鍵で許そうとした (`approve`) */
 export class TokenCannotApprove extends Error {
     constructor() {
-        super('アプリの鍵ではペアリングを許せません');
+        super('アプリの鍵ではペアリングできません');
     }
 }
 

@@ -12,7 +12,7 @@ export function GET({ params }) {
     const serviceId = Number(params.serviceId);
     if (!Number.isInteger(serviceId)) error(400, '局IDが不正です');
     const stream = liveCaptions(serviceId);
-    if (stream === null) error(404, 'その局を生で流していません');
+    if (stream === null) error(404, 'その局はいまライブで流していません');
     return new Response(stream, {
         headers: { 'Content-Type': 'application/octet-stream', 'Cache-Control': 'no-store' },
     });

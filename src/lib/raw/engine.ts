@@ -125,7 +125,7 @@ export class RawEngine {
 
             this.worker = worker = new Worker(new URL('./worker.ts', import.meta.url), { type: 'module' });
             worker.onmessage = (event: MessageEvent<FromWorker>) => this.receive(event.data);
-            worker.onerror = () => this.giveUp('MPEG-2 の復号器が止まりました');
+            worker.onerror = () => this.giveUp('MPEG-2 の再生が止まりました');
             const offscreen = this.canvas.transferControlToOffscreen();
             this.send({ type: 'init', canvas: offscreen, decoder: `${resolve('')}${DECODER.slice(1)}` }, [
                 offscreen,
@@ -382,7 +382,7 @@ export class RawEngine {
         this.tellClock();
         // 絵は出ているのに音が来ない。**音の出ない生より、焼いたもののほうがいい**
         if (this.shownAt > 0 && this.heardAt === 0 && Date.now() - this.shownAt > NO_AUDIO) {
-            this.giveUp('音声を解けないので、焼いたものに戻しました');
+            this.giveUp('音声を再生できないため、変換した映像に切り替えました');
         }
     }
 

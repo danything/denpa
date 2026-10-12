@@ -781,7 +781,7 @@ export async function sweepNow(): Promise<{ started: boolean; message: string }>
     return {
         started: true,
         message:
-            `${targets.length} チャンネルをチューナー ${parallel} 本で取りに行きます。` +
+            `${targets.length} チャンネルをチューナー ${parallel} 本で取得します。` +
             'ロゴが流れてくるまで数分かかります',
     };
 }

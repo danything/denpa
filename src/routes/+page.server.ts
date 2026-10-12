@@ -345,7 +345,7 @@ export const actions = {
         if (recording === undefined) return fail(400, { message: '録画が見つかりません' });
         // 元になるのは生TS。エンコード済みを元に録り直しても画質は戻らない
         if (encodeSource(recording) === null) {
-            return fail(400, { message: '生TSが残っていないため再エンコードできません' });
+            return fail(400, { message: '元のTSが残っていないため再エンコードできません' });
         }
         /*
          * どのコーデックで焼くかは**そのときの設定**。押した人は焼きたいので、
@@ -370,8 +370,7 @@ export const actions = {
         const recording = recordingFromForm(await request.formData());
         if (recording === undefined) return fail(400, { message: '録画が見つかりません' });
         const redo = cmRedo(recording);
-        if (redo.state === 'hidden')
-            return fail(400, { message: 'CMを探す元 (生TS・焼いたもの) がありません' });
+        if (redo.state === 'hidden') return fail(400, { message: 'CM検出に使えるファイルがありません' });
         if (redo.state === 'disabled') return fail(400, { message: redo.reason });
         // 切ったものからは戻せない。生TSはあるので、焼き直しを促す
         if (redo.state === 'prompt') return fail(400, { message: CM_CUT_ALREADY });

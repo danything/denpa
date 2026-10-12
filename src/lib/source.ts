@@ -42,5 +42,5 @@ export function cmRedo(recording: {
     if (!ts && recording.library_path === null) return { state: 'hidden' };
     if (recording.cm_kept === null) return { state: 'ok' };
     if (ts) return { state: 'prompt' };
-    return { state: 'disabled', reason: 'CMを切って焼いた録画で、生TSも残っていないため検出し直せません' };
+    return { state: 'disabled', reason: 'CMをカットした録画で、元のTSも無いため検出し直せません' };
 }

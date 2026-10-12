@@ -60,7 +60,7 @@ export async function GET({ params }) {
     // 字幕を持たない番組のほうが多い (ffmpeg は「その筋は無い」で降りる)
     if (code !== 0 || out.length === 0) error(404, '字幕がありません');
     const pages = pagesFromMkv(out);
-    if (pages === null) error(404, '字幕がありません (絵の字幕 (PGS) は読みません)');
+    if (pages === null) error(404, '字幕がありません (画像の字幕 (PGS) には対応していません)');
 
     return json(pages, {
         // 同じファイルなら中身は変わらない。焼き直せばパスごと変わる

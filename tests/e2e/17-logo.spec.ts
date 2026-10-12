@@ -220,7 +220,7 @@ test.describe('CM検出のロゴ', () => {
         // 絵として読めていること (壊れた PNG だと幅が 0 になる)
         await expect.poll(() => shown.evaluate((img: HTMLImageElement) => img.naturalWidth)).toBe(40);
 
-        await card.getByRole('button', { name: 'この絵は違う' }).click();
+        await card.getByRole('button', { name: 'この画像は違う' }).click();
 
         const done = page.getByTestId('tuner-done');
         await expect(done).toContainText('覚えたロゴを消しました');

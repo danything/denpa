@@ -11,7 +11,7 @@ export function GET({ params, url }) {
     if (!Number.isInteger(id)) error(400, '録画IDが不正です');
     const from = Number(url.searchParams.get('from') ?? 0);
     const stream = recordingCaptions(id, Number.isFinite(from) ? Math.max(0, from) : 0);
-    if (stream === null) error(404, '録画がないか、生TSがありません');
+    if (stream === null) error(404, '録画がないか、元のTSがありません');
     return new Response(stream, {
         headers: { 'Content-Type': 'application/octet-stream', 'Cache-Control': 'no-store' },
     });

@@ -1091,7 +1091,7 @@ test.describe('ライブ視聴', () => {
         await wakeControls(page, 'live-frame');
         await page.getByTestId('live-pip').click();
         await expect(
-            page.getByText('小窓を出せませんでした: ブラウザに断られました (NotAllowedError'),
+            page.getByText('小窓を出せませんでした: ブラウザに許可されませんでした (NotAllowedError'),
         ).toBeVisible();
         await expect(page.getByTestId('live-pip')).toHaveAttribute('aria-pressed', 'false');
     });

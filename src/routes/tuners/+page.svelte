@@ -175,7 +175,7 @@
                     上のボタンが何をするものかは「詳しく」に畳む
                 -->
                 <div class="note-block">
-                    <div class="small soft">1つのチャンネルに複数の局が乗るので、チャンネルと局の数はそろいません</div>
+                    <div class="small soft">1つのチャンネルに複数の局が入っているので、チャンネルと局の数はそろいません</div>
                     <details class="more">
                         <summary>詳しく</summary>
                         <p>番組表はスキャンのあと、局ごとに埋まっていきます。</p>
@@ -504,7 +504,7 @@
                                                 <div class="truncate" data-testid="tuner-user">
                                                     {user.label}
                                                     <span class="muted">
-                                                        (掴む強さ {user.priority})
+                                                        (使う強さ {user.priority})
                                                     </span>
                                                 </div>
                                             {:else}
@@ -651,23 +651,23 @@
                     {#if data.logos.pending > 0}
                         <dd>
                             <ActionButton action="?/logoSweep" class="xs secondary" testid="logo-sweep">
-                                {data.logoSweep.running ? '取得中…' : 'いますぐ取りに行く'}
+                                {data.logoSweep.running ? '取得中…' : 'いますぐ取得'}
                             </ActionButton>
                         </dd>
                     {/if}
                     <dd class="full note-block">
                         <div class="small soft">
-                            番組表を集める選局のついでに拾います
+                            番組表を集めるときに、あわせて取得します
                         </div>
                         <details class="more">
                             <summary>詳しく</summary>
                             <p>
                                 ロゴが放送波に流れるのは数十秒〜数分に一度、<strong>衛星は十数分に一度</strong>です。
-                                ついでに拾うので、ロゴのためにチューナーを使うことはありません。
+                                あわせて取得するので、ロゴのためだけにチューナーを使うことはありません。
                                 取れたロゴも1週間ごとに取り直します。
                             </p>
                             <p>
-                                「いますぐ取りに行く」では衛星も回ります。<strong
+                                「いますぐ取得」では衛星の分も取得します。<strong
                                     >BS と CS のロゴは同じ1つの中継で流れる</strong
                                 >ため、そこだけ最大20分かかります (他の中継は数秒で終わります)。
                             </p>
@@ -721,11 +721,11 @@
                         {data.cmLogoStats.have} / {data.cmLogoStats.total} 局
                     </dd>
                     <dd class="full note-block">
-                        <div class="small soft">録画を焼くときに、その録画から自動で覚えます</div>
+                        <div class="small soft">録画をエンコードするときに、その録画から自動で覚えます</div>
                         <details class="more">
                             <summary>詳しく</summary>
                             <p>
-                                画面の隅で線の向きが毎コマ揃うところをロゴとして覚え、焼くたびに育てます。
+                                画面の隅で線の向きがどのコマでも揃うところをロゴとして覚え、エンコードのたびに精度を上げます。
                                 違うものを覚えていたら、下の一覧から消せば次の録画で覚え直します。
                             </p>
                         </details>

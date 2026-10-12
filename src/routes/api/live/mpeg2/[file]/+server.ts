@@ -47,9 +47,9 @@ function pack(path: string, tag: string) {
 export const GET: RequestHandler = ({ params, request }) => {
     // `constructor` などの継いだ名前を拾わない
     const type = Object.hasOwn(TYPES, params.file) ? TYPES[params.file] : undefined;
-    if (type === undefined) error(404, '無い名前です');
+    if (type === undefined) error(404, 'ファイルが見つかりません');
     const path = join(config.mpeg2Dir, params.file);
-    if (!existsSync(path)) error(404, 'MPEG-2 の復号器が入っていません');
+    if (!existsSync(path)) error(404, 'MPEG-2 の再生に必要なファイルが入っていません');
     /*
      * **持たせてよいが、毎回確かめさせる** (`no-cache` + ETag)。イメージを入れ替えると
      * 中身が変わるのに URL は同じなので、長く持たせると mjs と wasm の版が食い違いうる

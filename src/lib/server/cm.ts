@@ -403,7 +403,7 @@ export async function openCm(input: string, options: CmOptions): Promise<CmReadi
     // 絵の無い録画 (ラジオ。尺は測れて大きさが無い) は音だけ読む。絵の出口を足すと ffmpeg ごと落ちる
     const video = !(Number.isNaN(probed.width) && Number.isFinite(measured));
     /** 支度で分かった、ロゴが使えない理由 (`decide` が尺だけで決めたときの覚え書きに足す) */
-    let opening = video ? '' : '絵がありません';
+    let opening = video ? '' : '映像がありません';
 
     let logo: Exclude<Awaited<ReturnType<typeof openLogo>>, string> | null = null;
     if (video) {
@@ -415,8 +415,8 @@ export async function openCm(input: string, options: CmOptions): Promise<CmReadi
                       signal,
                       timeoutMs: config.cmDetectTimeout,
                   })
-                : '大きさが測れませんでした';
-        if (typeof opened === 'string') opening = `ロゴ判定が失敗: ${opened}`;
+                : '映像の大きさを読み取れませんでした';
+        if (typeof opened === 'string') opening = `ロゴ判定に失敗: ${opened}`;
         else logo = opened;
     }
 
@@ -435,7 +435,7 @@ export async function openCm(input: string, options: CmOptions): Promise<CmReadi
                 ? container - skip
                 : (found.times.at(-1) ?? Number.NaN);
             if (!Number.isFinite(duration) || duration <= 0)
-                return { cm: [], duration: Number.NaN, note: '尺が測れませんでした' };
+                return { cm: [], duration: Number.NaN, note: '長さを読み取れませんでした' };
             const at = (frame: number) => (frame < found.times.length ? found.times[frame]! : duration);
             const material = {
                 duration,
@@ -450,7 +450,7 @@ export async function openCm(input: string, options: CmOptions): Promise<CmReadi
             let current = logo;
             // 絵の読み込みが落ちて音だけ読み直したなら、尺だけで決める (`encoder.ts`)
             if (!read) {
-                why = '絵の読み込みが失敗しました';
+                why = '映像の読み込みに失敗しました';
                 current = null;
             }
             if (current && found.logoFrames !== found.times.length) {
@@ -490,10 +490,10 @@ export async function openCm(input: string, options: CmOptions): Promise<CmReadi
                     if (cm.length === 0) why = 'ロゴの消えている所がありませんでした';
                     // 番組の半分以上がCMになったら、その結果は捨てて尺だけで決め直す (tooMuchCm)
                     else if (tooMuchCm(cm, duration))
-                        why = `番組の ${cmRatio(cm, duration)}% がCMという結果だったので捨てました`;
+                        why = `番組の ${cmRatio(cm, duration)}% がCMと判定されたため、この結果は使いません`;
                     else return { cm, duration, note: LOGO_OK };
                 } else {
-                    why = `ロゴ判定が失敗: ${result.note}`;
+                    why = `ロゴ判定に失敗: ${result.note}`;
                 }
             }
 

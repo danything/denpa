@@ -1044,7 +1044,7 @@ async function runJob(jobId: number): Promise<void> {
     const input = recording === undefined ? null : encodeSource(recording);
 
     if (recording === undefined || input === null) {
-        markFailed(jobId, '元にできる生TSがありません');
+        markFailed(jobId, '元のTSがありません');
         return;
     }
 
@@ -1072,7 +1072,7 @@ async function runJob(jobId: number): Promise<void> {
     let decoded: string | null = null;
     let sourceTs = input;
     if (isScrambled(input)) {
-        setPhase(jobId, 'descramble', 'スクランブルを解いています');
+        setPhase(jobId, 'descramble', 'スクランブルを解除しています');
         const target = `${input}.decoded.m2ts`;
         const result = await descramble(input, target, signal);
         if (!result.ok) {
@@ -1524,7 +1524,7 @@ async function runJob(jobId: number): Promise<void> {
                  * 境目にキーフレームが無かった (無音の真ん中に置いた境目・GPU が頼みを聞かなかった)。
                  * 境目を指して焼き直してから切る
                  */
-                setPhase(jobId, 'encode', `CMの境目にキーフレームを置いて焼き直します (${codec})`);
+                setPhase(jobId, 'encode', `CMの境目にキーフレームを置いてエンコードし直します (${codec})`);
                 const again = await encodeWays(codec, working, {
                     analysis: false,
                     keyframes: (skip) => cutPoints(own(skip).keep, own(skip).duration),
@@ -1577,7 +1577,7 @@ async function runJob(jobId: number): Promise<void> {
     // 主は AV1 (小さいので既定の再生に向く)。無ければ焼いたほう
     const primary = placed.find((p) => p.codec === 'av1') ?? placed[0];
     // 上のループは焼けなければ return しているので、ここに来れば1本はある
-    if (primary === undefined) throw new Error('焼いたものが1本も無いのに置きに来ました');
+    if (primary === undefined) throw new Error('エンコード済みのファイルがありません');
     const alt = placed.find((p) => p.path !== primary.path)?.path ?? null;
     const output = primary.path;
 
@@ -1738,7 +1738,7 @@ async function runCmJob(jobId: number): Promise<void> {
     );
     const input = ts ?? files[0];
     if (input === undefined) {
-        fail(jobId, recording, 'CMを探す元 (生TS・焼いたもの) がありません', what);
+        fail(jobId, recording, 'CM検出に使えるファイルがありません', what);
         return;
     }
     emit('recordings');
@@ -1779,7 +1779,10 @@ async function runCmJob(jobId: number): Promise<void> {
             onStep: (label) => setStep(jobId, label),
         });
         if (canceled.has(jobId)) return finishCanceled(jobId, null);
-        setStep(jobId, `${ts === null ? '焼いたもの' : '生TS'}から無音と場面の切れ目とロゴを読んでいます`);
+        setStep(
+            jobId,
+            `${ts === null ? 'エンコード済みの動画' : '元のTS'}から無音・場面の切れ目・ロゴを読み取っています`,
+        );
         const report = progressReporter(jobId, reading.duration);
         const found = await scan(input, {
             ...reading.want(),
@@ -1853,7 +1856,7 @@ async function runCmJob(jobId: number): Promise<void> {
 const CUT_SHORTER = 5;
 
 /** CM を切って焼いた録画は、焼いたものから CM を戻せない。やり直すなら生TSから焼き直す */
-export const CM_CUT_ALREADY = 'CMを切って焼いた録画です。CMを検出し直すには再エンコードしてください';
+export const CM_CUT_ALREADY = 'CMをカットした録画です。CMを検出し直すには再エンコードしてください';
 
 /**
  * 段階の中の進み具合 (CM 検出だけやり直すとき)。読んだコマの時刻 ÷ 尺。

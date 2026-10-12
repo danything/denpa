@@ -214,7 +214,7 @@ function link(gl: WebGL2RenderingContext): WebGLProgram {
         gl.shaderSource(shader, source);
         gl.compileShader(shader);
         if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
-            throw new Error(`シェーダを組めません: ${gl.getShaderInfoLog(shader)}`);
+            throw new Error(`シェーダを作れません: ${gl.getShaderInfoLog(shader)}`);
         }
         return shader;
     };
@@ -223,7 +223,7 @@ function link(gl: WebGL2RenderingContext): WebGLProgram {
     gl.attachShader(program, compile(gl.FRAGMENT_SHADER, FRAGMENT));
     gl.linkProgram(program);
     if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
-        throw new Error(`シェーダを繋げません: ${gl.getProgramInfoLog(program)}`);
+        throw new Error(`シェーダをリンクできません: ${gl.getProgramInfoLog(program)}`);
     }
     return program;
 }

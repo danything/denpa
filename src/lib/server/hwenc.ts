@@ -419,7 +419,7 @@ export function describeDevice(device: HwDevice): string {
                 .join(' / ')}`,
     );
     if (device.full.length > 0) {
-        parts.push(`ライブは復号から GPU: ${device.full.map((c) => CODEC_LABEL[c]).join(' / ')}`);
+        parts.push(`ライブはデコードから GPU: ${device.full.map((c) => CODEC_LABEL[c]).join(' / ')}`);
     }
     return parts.length > 0
         ? parts.join('、')

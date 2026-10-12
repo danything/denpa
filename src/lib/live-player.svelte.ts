@@ -1522,7 +1522,7 @@ export function livePlayer() {
         if (rawChosen && typeof rawProblem === 'string') {
             rawChosen = false;
             if (tuned !== null) remember({ ...tuned, raw: false });
-            warning = `この端末では MPEG-2 を再生できません: ${rawProblem}`;
+            warning = `MPEG-2 を再生できません: ${rawProblem}`;
         }
         // 数え直す。焼き直しでも器から作り直しになるので、前の数は続きではない
         stalls = 0;
@@ -1787,7 +1787,7 @@ export function livePlayer() {
         const picked = pickMediaSource();
         if (picked === null || !picked.Source.isTypeSupported(codecs)) {
             if (baked !== 'h264') {
-                warning = 'この端末では AV1 を再生できないので、H.264 に戻しました';
+                warning = 'AV1 を再生できないため、H.264 に切り替えました';
                 swapCodec('h264');
                 return;
             }
@@ -1890,7 +1890,7 @@ export function livePlayer() {
             video.load();
             try {
                 const box = host ?? video.parentElement;
-                if (box === null) throw new Error('入れ物が無い');
+                if (box === null) throw new Error('表示先がありません');
                 engine = new RawEngine(
                     box,
                     still,
@@ -1909,7 +1909,7 @@ export function livePlayer() {
                 );
             } catch (error) {
                 fallBack(
-                    `生の器を作れませんでした (${error instanceof Error ? error.message : String(error)})`,
+                    `MPEG-2 の再生を始められませんでした (${error instanceof Error ? error.message : String(error)})`,
                 );
                 return;
             }

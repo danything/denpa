@@ -109,7 +109,7 @@ test.describe('予約の細かい指定', () => {
             await expect(reservation).toHaveCount(1);
             // 予約の行に焼き方の札は出さない。焼くときの設定で決まるので、
             // 立てた時点の値を出すと設定を変えたときに嘘になる
-            await expect(reservation).not.toContainText('生TSも残す');
+            await expect(reservation).not.toContainText('元のTSも残す');
 
             await reservation.getByTestId('cancel-button').click();
             await expect(reservation).toHaveCount(0);

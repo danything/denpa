@@ -141,7 +141,7 @@
                     </label>
                     {#if recording.codecs.length === 0}
                         <span class="hint">
-                            選ばないと<strong>エンコードせず</strong>、生TSのまま残します
+                            選ばないと<strong>エンコードせず</strong>、元のTSのまま残します
                         </span>
                         <details class="more">
                             <summary>詳しく</summary>
@@ -169,7 +169,7 @@
                         'keepOriginal',
                         recording.keepOriginal,
                         'global-keep',
-                        '生TSも残す',
+                        '元のTSも残す',
                         'エンコードしたあとも元のTSを消しません。容量を多く使います',
                     )}
                 </div>
@@ -430,7 +430,7 @@
                 </p>
                 <p>
                     ライブと追っかけも、印の付いたコーデックは GPU でエンコードします。MPEG-2
-                    の復号まで GPU でできるデバイスでは、復号とインタレ解除も GPU で行います。
+                    のデコードまで GPU でできるデバイスでは、デコードとインターレース解除も GPU で行います。
                 </p>
                 <p>
                     GPU が2枚あれば「こちらは AV1、あちらは H.264」のように分けられ、

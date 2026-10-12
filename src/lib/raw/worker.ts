@@ -183,7 +183,7 @@ function onAudio(pes: Pes): void {
         const config = `${frame.sampleRate}/${frame.channels}`;
         if (config !== audioConfig) {
             if (decoder._aac_open() !== 0) {
-                fail('音声を解けませんでした');
+                fail('音声を再生できませんでした');
                 return;
             }
             audioConfig = config;
@@ -201,7 +201,7 @@ function decodeAudio(decoder: Decoder, data: Uint8Array, pts: number): void {
     decoder.HEAPU8.set(data, audioInput.pointer);
     const samples = decoder._aac_push(audioInput.pointer, data.length);
     if (samples < 0) {
-        if (++audioErrors > AUDIO_ERRORS_MOST) fail('音声を解けませんでした');
+        if (++audioErrors > AUDIO_ERRORS_MOST) fail('音声を再生できませんでした');
         return;
     }
     if (samples === 0) return;
@@ -378,7 +378,7 @@ function tick(): void {
             : Math.max(0, (at - current.pts - frameTicks) / CLOCK);
     const wall = performance.now();
     if (budget.tick(wall, (frameTicks / CLOCK) * 1000, late)) {
-        fail('この端末では MPEG-2 を解くのが間に合わないので、焼いたものに戻しました');
+        fail('再生が追いつかないため、変換した映像に切り替えました');
     }
     if (wall - statsAt >= 1000) {
         statsAt = wall;
@@ -446,7 +446,7 @@ async function init(canvas: OffscreenCanvas, base: string): Promise<void> {
         renderer = new YuvRenderer(canvas);
         surface = canvas;
     } catch (error) {
-        fail(`描けません (${error instanceof Error ? error.message : String(error)})`);
+        fail(`映像を表示できません (${error instanceof Error ? error.message : String(error)})`);
         return;
     }
     try {
@@ -459,7 +459,7 @@ async function init(canvas: OffscreenCanvas, base: string): Promise<void> {
         });
         if (decoder._dec_open() !== 0 || decoder._aac_open() !== 0) throw new Error('開けません');
     } catch {
-        fail('この denpa には MPEG-2 の復号器が入っていません');
+        fail('この denpa は MPEG-2 をそのまま再生できません');
         return;
     }
     schedule();

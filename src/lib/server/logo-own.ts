@@ -157,10 +157,10 @@ async function learn(input: string, video: Video, limits: Limits): Promise<LogoM
             }),
         },
     );
-    if (result.code !== 0) return `覚えるためのコマが抜けませんでした (code ${result.code})`;
+    if (result.code !== 0) return `学習用のコマを取り出せませんでした (code ${result.code})`;
 
     const rect = findArea({ top, bottom }, width, height);
-    if (rect === null) return 'ロゴの在り処が割り出せませんでした';
+    if (rect === null) return 'ロゴの位置を特定できませんでした';
     const inTop = rect.y + rect.height <= band;
     const orientation = cropOrientation(inTop ? top : bottom, {
         ...rect,
@@ -183,7 +183,7 @@ interface Tracker {
 
 function tracker(model: LogoModel, video: Video): Tracker | string {
     const template = makeTemplate(model);
-    if (template === null) return 'ロゴの縁が少なすぎて型にできませんでした';
+    if (template === null) return 'ロゴの輪郭が少なすぎて学習できませんでした';
     const { crop } = template;
     const { rect } = model;
     const grow = emptyOrientation(rect.width, rect.height);
@@ -307,7 +307,7 @@ export async function openLogo(
                 const next = tracker(model, video);
                 if (typeof next === 'string') return fail(next);
                 const code = await rescan(next.scan);
-                if (code !== 0) return fail(`コマが抜けませんでした (code ${code})`, code);
+                if (code !== 0) return fail(`コマを取り出せませんでした (code ${code})`, code);
                 current = next;
                 spans = current.spans(fps);
             }

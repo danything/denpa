@@ -193,7 +193,7 @@ export async function cardStatus(): Promise<CardStatus> {
         }
         return readCardStatus(await res.json());
     } catch (error) {
-        return failed(`カードの状態を聞くエージェントに繋がりません: ${error}`);
+        return failed(`カードの状態を確かめるエージェントに繋がりません: ${error}`);
     }
 }
 
@@ -221,7 +221,7 @@ export async function descramble(
     const from = relative(base, input);
     const to = relative(base, output);
     if (from.startsWith('..') || to.startsWith('..')) {
-        return { ok: false, error: `生TSの保存先 (${base}) の外にあるファイルは解除できません` };
+        return { ok: false, error: `元のTSの保存先 (${base}) の外にあるファイルは解除できません` };
     }
 
     try {
@@ -240,7 +240,7 @@ export async function descramble(
             };
         }
     } catch (error) {
-        return { ok: false, error: `解除を頼むエージェントに繋がりません: ${error}` };
+        return { ok: false, error: `解除を依頼するエージェントに繋がりません: ${error}` };
     }
 
     if (isScrambled(output)) {

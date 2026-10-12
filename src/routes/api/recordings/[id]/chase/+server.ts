@@ -24,7 +24,7 @@ export function GET({ params, url }) {
         Number.isFinite(from) ? Math.max(0, from) : 0,
         askedTrack(url.searchParams.get('audio')),
     );
-    if (stream === null) error(404, '録画がないか、まだ何も録れていません');
+    if (stream === null) error(404, '録画がないか、まだ何も録画されていません');
     return new Response(stream, {
         headers: {
             'Content-Type': codec === 'raw' ? 'video/mp2t' : 'video/mp4',

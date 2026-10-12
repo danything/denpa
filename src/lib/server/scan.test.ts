@@ -189,7 +189,7 @@ describe('1チャンネルの読み取り', () => {
         expect(services).toBeNull();
         // 「受信できませんでした」で片付けない。電波は来ているので疑うところが違う
         expect(signal).toBe(true);
-        expect(error).toBe('NIT が来ませんでした');
+        expect(error).toBe('NIT を受信できませんでした');
     });
 
     test('失敗した理由を持ち帰る', async () => {

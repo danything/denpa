@@ -23,7 +23,7 @@ export const GET: RequestHandler = async ({ url }) => {
     try {
         return json(await confirmReachable(to, Number.isFinite(wait) ? wait : 4000));
     } catch (failure) {
-        const why = refusalMessage(failure, '確かめられませんでした');
+        const why = refusalMessage(failure, '確認できませんでした');
         console.warn(`[bml] 疎通を確かめられません: ${to} (${why})`);
         // **届かないことは失敗ではない。** 放送のアプリはそれを見て出し分ける
         return json({ success: false, ipAddress: null, responseTimeMillis: null });

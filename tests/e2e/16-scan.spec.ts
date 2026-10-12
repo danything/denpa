@@ -27,7 +27,7 @@ test.describe('チューナー画面', () => {
         await expect(card.getByTestId('scan-count')).toContainText('50 / 50');
         // 受信できた分だけ数える。信号が無かった分は数に入らない
         await expect(card.getByTestId('scan-found')).toContainText('2');
-        await expect(card.getByTestId('scan-log')).toContainText('2 サービス');
+        await expect(card.getByTestId('scan-log')).toContainText('2 局');
     });
 
     /**
@@ -106,8 +106,8 @@ test.describe('チューナー画面', () => {
          * 「いますぐ集める」の側で見ていた頃は、掴んでいる一瞬を捕まえられずに
          * 落ちていた (上の説明)
          */
-        await expect(using.getByTestId('tuner-user').first()).toContainText('掴む強さ 10');
-        await expect(using.getByTestId('tuner-user').nth(1)).toContainText('掴む強さ 3');
+        await expect(using.getByTestId('tuner-user').first()).toContainText('使う強さ 10');
+        await expect(using.getByTestId('tuner-user').nth(1)).toContainText('使う強さ 3');
 
         // スキャンで見つかった物理チャンネルと、denpa が取り込んだ局名
         const channels = page.getByTestId('channel-list');

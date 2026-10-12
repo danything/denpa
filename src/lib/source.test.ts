@@ -30,6 +30,6 @@ describe('CM検出のやり直し', () => {
         expect(cmRedo({ ts_path: ts, library_path: mkv, cm_kept: kept }).state).toBe('prompt');
         const blocked = cmRedo({ ts_path: null, library_path: mkv, cm_kept: kept });
         expect(blocked.state).toBe('disabled');
-        expect('reason' in blocked && blocked.reason).toContain('生TS');
+        expect('reason' in blocked && blocked.reason).toContain('元のTS');
     });
 });

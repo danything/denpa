@@ -63,7 +63,7 @@ test('ICQ が落ちたら CQP で試し、通ったほうを覚える', async ()
     expect(full?.join(' ')).toContain('-rc_mode CQP -qp 24');
     expect(full?.join(' ')).toContain('deinterlace_vaapi=rate=field');
     expect(device.full).toEqual(['h264']);
-    expect(describeDevice(device)).toBe('VA-API: H.264 (CQP)、ライブは復号から GPU: H.264');
+    expect(describeDevice(device)).toBe('VA-API: H.264 (CQP)、ライブはデコードから GPU: H.264');
     // ライブは復号から GPU の道を、CQP のまま採る
     expect(liveHw('h264', {}, 0, devices)).toEqual({
         way: { device: device.path, kind: 'vaapi', cqp: true },

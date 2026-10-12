@@ -92,7 +92,7 @@
     function sizeLabel(rec: (typeof data.recordings)[number]): string {
         const extra = [
             rec.alt_size === null ? '' : `H.264 ${size(rec.alt_size)}`,
-            rec.raw_size === null ? '' : `生TS ${size(rec.raw_size)}`,
+            rec.raw_size === null ? '' : `元のTS ${size(rec.raw_size)}`,
         ].filter((s) => s !== '');
         return extra.length === 0 ? size(rec.ts_size) : `${size(rec.ts_size)} (${extra.join('、')})`;
     }
@@ -1526,7 +1526,7 @@
                                         onSelect={() => download(rec.id, 'ts')}
                                         data-testid="download-ts-link"
                                     >
-                                        ダウンロード (生TS)
+                                        ダウンロード (元のTS)
                                     </DropdownMenu.Item>
                                 {/if}
                                 <!--

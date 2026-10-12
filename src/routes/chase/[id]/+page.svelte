@@ -402,7 +402,7 @@
             {:else}
                 {#if player.chaseEnded}
                     <!-- 録れているところまで観た。録画が終わっていれば、この先はもう来ない -->
-                    <StageNote testid="chase-ended">録れているところまで観ました</StageNote>
+                    <StageNote testid="chase-ended">録画済みのところまで観ました</StageNote>
                 {/if}
                 {#if player.warning}
                     <!-- 頼まれたとおりにできなかった断り書き (GPU で焼けずにソフトウェアへ降りた、など) -->

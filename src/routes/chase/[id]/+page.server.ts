@@ -21,7 +21,7 @@ export const load: PageServerLoad = ({ params, url }) => {
     if (rec.deleted_at !== null) error(410, 'この録画は削除されています');
     // 焼き上がっているなら観る画面へ。CM飛ばし・チャプター・データ放送が揃い、サーバの焼き直しも要らない
     if (rec.library_path !== null) redirect(302, relative(url, `/watch/${rec.id}`));
-    if (rec.ts_path === null) error(404, 'まだ何も録れていません');
+    if (rec.ts_path === null) error(404, 'まだ何も録画されていません');
 
     return {
         rec: {

@@ -136,10 +136,10 @@ export async function readServices(
     const detail = tail === undefined || tail === '' ? '' : ` (${tail})`;
     if (!signal) return { services: null, error: `受信できませんでした${detail}`, signal };
     if (reader.network === null && reader.transport === null) {
-        return { services: null, error: `TSは来ましたが局情報が読めません${detail}`, signal };
+        return { services: null, error: `受信はできましたが、局の情報を読み取れません${detail}`, signal };
     }
     const missing = reader.network === null ? 'NIT' : 'SDT';
-    return { services: null, error: `${missing} が来ませんでした${detail}`, signal };
+    return { services: null, error: `${missing} を受信できませんでした${detail}`, signal };
 }
 
 /** スキャンで分かったことを1件にまとめる */
@@ -395,7 +395,7 @@ class Scanner {
                 continue;
             }
             if (services === null || services.length === 0) {
-                this.onProgress({ line: `${channel}: 録れるサービスがありません`, ...counts });
+                this.onProgress({ line: `${channel}: 録画できる局がありません`, ...counts });
                 continue;
             }
 
@@ -412,7 +412,7 @@ class Scanner {
 
             this.found.set(`${type}:${channel}`, entry);
             this.events.push(...epg.all());
-            this.onProgress({ line: `${channel}: ${services.length} サービス`, ...counts, channels: 1 });
+            this.onProgress({ line: `${channel}: ${services.length} 局`, ...counts, channels: 1 });
         }
     }
 }

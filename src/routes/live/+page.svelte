@@ -643,7 +643,7 @@
                                     戻る前に余裕がどれだけあるかを読むため
                                 -->
                                 {#if player.raw && player.decodeMs > 0}
-                                    ・ <span>解く {player.decodeMs.toFixed(1)}ms</span>
+                                    ・ <span>デコード {player.decodeMs.toFixed(1)}ms</span>
                                 {/if}
                             {/snippet}
                         </InfoBlock>

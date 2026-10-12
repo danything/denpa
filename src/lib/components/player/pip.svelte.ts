@@ -93,7 +93,8 @@ class Refused extends Error {}
 
 function reason(error: unknown): string {
     if (error instanceof Refused) return error.message;
-    if (error instanceof DOMException) return `ブラウザに断られました (${error.name}: ${error.message})`;
+    if (error instanceof DOMException)
+        return `ブラウザに許可されませんでした (${error.name}: ${error.message})`;
     return String(error);
 }
 
@@ -324,11 +325,11 @@ export function pictureInPicture(options: Options): Pip {
         unprepared = null;
         const stream = options.capture?.() ?? null;
         if (stream === null) {
-            unprepared = new Refused('MPEG-2 の絵を取り出せません (captureStream)');
+            unprepared = new Refused('MPEG-2 の映像を取り出せません (captureStream)');
             return;
         }
         if (stream.getVideoTracks().length === 0) {
-            unprepared = new Refused('MPEG-2 の絵の流れが空です');
+            unprepared = new Refused('MPEG-2 の映像が空です');
             return;
         }
         const video = makeProxy();
@@ -440,9 +441,9 @@ export function pictureInPicture(options: Options): Pip {
         if (raw()) {
             if (unprepared !== null) throw unprepared;
             if (proxy === null || proxy.srcObject === null)
-                throw new Refused('MPEG-2 の絵を用意できていません');
+                throw new Refused('MPEG-2 の映像の準備ができていません');
             if (proxy.readyState < HTMLMediaElement.HAVE_METADATA)
-                throw new Refused('MPEG-2 の絵がまだ届いていません。少し待ってから押し直してください');
+                throw new Refused('MPEG-2 の映像がまだ届いていません。少し待ってからもう一度押してください');
             video = proxy;
             flowing(true);
             if (options.paused?.() === true) video.pause();
@@ -468,7 +469,9 @@ export function pictureInPicture(options: Options): Pip {
             setTimeout(() => {
                 target.removeEventListener('webkitpresentationmodechanged', mark);
                 if (!reached && on !== target)
-                    refuse(new Refused('Safari が小窓に切り替えませんでした (webkitSetPresentationMode)'));
+                    refuse(
+                        new Refused('Safari で小窓に切り替えられませんでした (webkitSetPresentationMode)'),
+                    );
             }, 1000);
         }
     }

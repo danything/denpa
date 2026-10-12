@@ -19,7 +19,7 @@ export function rawUnsupported(): Promise<string | null> {
 function probe(): string | null {
     if (typeof WebAssembly !== 'object') return 'WebAssembly が使えません';
     if (typeof Worker !== 'function') return 'worker が使えません';
-    if (typeof AudioContext !== 'function') return '音を鳴らせません (AudioContext が無い)';
+    if (typeof AudioContext !== 'function') return '音声を再生できません (AudioContext がありません)';
     const canvas = document.createElement('canvas');
     if (typeof canvas.transferControlToOffscreen !== 'function') return 'OffscreenCanvas が使えません';
     // 画面の側で WebGL2 が作れれば、worker の OffscreenCanvas でも作れる (どちらも同じ GPU の道)
