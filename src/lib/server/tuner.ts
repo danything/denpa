@@ -56,7 +56,7 @@ const AGENT_TUNER = object({
      * 使われる前提で数える (`conflict.ts`、docs/agent.md「選ぶ順の約束」)
      */
     rank: nullable(number),
-    /** 選局に使うデバイス。ここからエージェントがコマンドを組み立てる */
+    /** 選局に使うデバイス。エージェントはこれを直に開く */
     device: nullable(string),
     /** 衛星の給電。要る構成だけ */
     lnb: nullable(string),
@@ -142,7 +142,7 @@ export async function tunersDetected(): Promise<boolean> {
 /**
  * 機材の定義を書き換える。
  *
- * **選局コマンドは無い。** エージェントがデバイスと種別から組み立てる
+ * **選局コマンドは無い。** エージェントがデバイスと種別から選局する
  * (渡せると、denpa に入れた人が privileged なチューナー側で好きなコマンドを走らせられる)。
  *
  * **空を渡すと定義そのものが消える** = 自動検出に戻す。

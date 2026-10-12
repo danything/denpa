@@ -167,7 +167,7 @@
     let canvasGaveUp: CanvasCodec[] = [];
     /** 互換モードで観られない理由。出したら `<video>` には戻らずに止まる */
     let canvasProblem = $state<string | null>(null);
-    /** 絵の上に出しておく断り書き (MPEG-2 に切り替えた・保存した録画は互換モードを使わない) */
+    /** 絵の上に出しておく断り書き (MPEG-2 に切り替えた、など) */
     let warning = $state<string | null>(null);
     /** 運転中の注意 (ライブと同じ。`DriveNotice`)。押すまで再生を始めない */
     let driveNotice = $state(false);
@@ -195,7 +195,7 @@
 
     /**
      * 互換モードの支度。運転中の注意をまだ見せていなければ見せて待ち、描ける形を調べて、どれで観るかを決める
-     * (`ts/playback.ts` の `pickCanvas`)。**端末に保存したものは `<video>` で観る** (canvas は流すものしか読めない)
+     * (`ts/playback.ts` の `pickCanvas`)。端末に保存したものがあれば、まずそれを描く (下)
      */
     async function prepareCompat(got: PlaybackInfo | null): Promise<void> {
         if (got === null && localCopy?.video === undefined) {
@@ -457,7 +457,7 @@
             const [held, got] = await Promise.all([localLookup, ready ? loadPlayback() : null]);
             localCopy = held;
             info = got;
-            // 互換モードは canvas に描く (`prepareCompat`)。`<video>` で観るのは端末に保存したものだけ
+            // 互換モードは canvas に描く (`prepareCompat`)。端末に保存したものも canvas に描く
             compat = ready && canvasVideo();
             if (compat) {
                 await prepareCompat(got);
@@ -599,10 +599,10 @@
         if (info === null || !localChecked) return [];
         /*
          * 互換モードは流せるもの (H.264・AV1・MPEG-2) を並べ、**描けない形は押せなくする** (ライブと同じ)。
-         * 端末に保存したものを `<video>` で観ている間は出さない
+         * 端末に保存したものを描いている間は出さない
          */
         if (compat) {
-            if (canvasAbility === null || localSrc !== null || drawingLocal) return [];
+            if (canvasAbility === null || drawingLocal) return [];
             const items = canvasChoices(info, canvasAbility);
             if (items.length < 2) return [];
             return [
@@ -2086,7 +2086,7 @@
                         <StageNote testid="watch-skipped">CMを飛ばしました</StageNote>
                     {/if}
                     {#if warning !== null}
-                        <!-- 互換モードの断り書き (切り替えた理由・保存した録画は互換モードを使わない)。ライブと同じ出し方 -->
+                        <!-- 互換モードの断り書き (切り替えた理由)。ライブと同じ出し方 -->
                         <StageNote testid="watch-warning">{warning}</StageNote>
                     {/if}
                 {/snippet}

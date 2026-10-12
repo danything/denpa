@@ -45,7 +45,7 @@
     /**
      * 追っかけ再生 ([issue #16](https://github.com/danything/denpa/issues/16))。
      * **録画中の録画を頭から観る。** 元のTSはブラウザで読めないので、器はライブと
-     * 同じ (fMP4 → WebSocket → MSE、`live-player.svelte.ts` の chase モード)。
+     * 同じ (fMP4 → WebSocket → MSE、互換モードでは canvas。`live-player.svelte.ts` の chase モード)。
      *
      * ライブとの違いは3つ — 頭から観られる・シークできる・右端が伸びる。
      * シークバーは番組の全長で、右端 (いま録れているところ) は壁時計で伸ばす。

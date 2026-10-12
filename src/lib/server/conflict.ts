@@ -134,7 +134,7 @@ export function capacityOf(
  * **録画中で、もうどれかの本に入っているもの。** なぞり始めの状態になる。
  *
  * 録り始めた予約は割り振り直さないが、終わるまで本を塞ぐ。どの本にいるかは
- * エージェントが知っている (`GET /denpa/tuners` の `users`。scheduler.ts の `recordingHolds`)
+ * エージェントが知っている (`GET /denpa/tuners` の `users`。tuner.ts の `recordingHolds`)
  */
 export interface Busy {
     type: string;

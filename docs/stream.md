@@ -1013,8 +1013,8 @@ E2E（`tests/e2e/38-live-compat`）は偽 ffmpeg が本物の H.264 + AAC・AV1 
 /stream?codec=mpeg2&from=    (元の TS。X-Denpa-Origin)  ─────────────────────────────┴→ RawEngine (worker・Web Audio)
 ```
 
-- **どれで描くか** (`ts/playback.ts` の `pickCanvas`)。使えるのは流すもの (fMP4 と元の TS) だけで、ファイルそのまま
-  (Matroska) は使わない。自動はエンコード済みと同じ形の詰め替え (サーバは軽い) → 変換 (H.264 → AV1) → MPEG-2 の順で、
+- **どれで描くか** (`ts/playback.ts` の `pickCanvas`)。サーバから使えるのは流すもの (fMP4 と元の TS) だけで、ファイルそのまま
+  (Matroska) は使わない (端末に保存したものは下)。自動はエンコード済みと同じ形の詰め替え (サーバは軽い) → 変換 (H.264 → AV1) → MPEG-2 の順で、
   この端末で描けるもの。コーデックのメニューは「自動・H.264・AV1・MPEG-2」(録画が出せるものだけ。描けない形は押せない)
 - **時刻はページの物差し。** fMP4 はサーバが物差しのまま書いてくる。元の TS は放送の PTS なので、応答の
   `X-Denpa-Origin` (物差しの 0 にあたる PTS) を引いて一周の中で取る (`ts/seek.ts` の `sinceHead`)。字幕

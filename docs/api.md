@@ -173,7 +173,7 @@
 
 ## 録画を流す `GET /api/recordings/<id>/stream`
 
-`?codec=h264` / `av1` / `mpeg2`、`?from=<秒>` (物差しの上の位置。既定 0)、`?audio=<id>`。**シークは `from` を変えて頼み直します。**
+`?codec=h264` / `av1` / `mpeg2` (要る。無い・知らない値は 400)、`?from=<秒>` (物差しの上の位置。既定 0)、`?audio=<id>`。**シークは `from` を変えて頼み直します。**
 
 - `h264` / `av1` … fragmented MP4 (`video/mp4`)。塊の時刻 (tfdt) は物差しの時刻のまま書きます (頭を 0 に詰め直さない)。
   詰め替えは `from` の手前の鍵フレームから、変換は元の TS なら `from` の 1 秒手前の映像から始まります
@@ -352,8 +352,8 @@ data: {"recordingId":12,"percent":0.425,"etaMs":600000,"log":"…"}
 
 **ファイルの口 (`file`) だけは 401 ではなく 403 (text/plain)** です。ログインの控えか
 期限付きのリンク (`share`) でも開けるようにしてあり、どれも無ければ言葉で断ります。アプリは Bearer を付けて開きます。
-もう1つ、入る道 (OIDC か `TRUSTED_NETWORKS`) を何も設定していない denpa は、どの口も 403 で断ります
-(ペアリングもできない。[auth.md](auth.md#入る道が無ければ全部断る))。
+もう1つ、入る道 (OIDC か `TRUSTED_NETWORKS`) を何も設定していない denpa は、素通しの口のほかは 403 で断ります
+(札は出せても、許す画面 `/device` が開けないのでペアリングはできない。[auth.md](auth.md#入る道が無ければ全部断る))。
 
 ## ペアリング `POST /api/device/code` → `POST /api/device/token`
 
@@ -381,7 +381,7 @@ OAuth のデバイス認可 (RFC 8628) と同じ形です。どちらも資格�
 
 ## 鍵を止める `POST /api/device/logout`
 
-`Authorization: Bearer` で出している鍵を止めます (アプリの「サーバーから外す」)。`204` を返します。
+`Authorization: Bearer` で出している鍵を止めます (アプリの「サーバーから外す」)。`204` を返します。Bearer が無ければ `401 {"error":"unauthorized"}`。
 ほかの端末の鍵は、設定画面の「テレビのアプリ」から取り消します。
 
 ## 録画の状態 `GET /api/recordings/<id>`

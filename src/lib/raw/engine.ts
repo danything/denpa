@@ -52,7 +52,7 @@ export interface RawEvents {
     shown(): void;
     /** 貯めを使い切って止まった (エンコードする道の `waiting` にあたる) */
     stalled(): void;
-    /** **使えなくなった。エンコードしたものに戻す** (理由は画面に出す) */
+    /** **使えなくなった。** 次の形に移るか止まるかは画面が決める (理由は画面に出す) */
     gaveUp(reason: string): void;
     /**
      * 外から止められた・再開された (`paused`)。**`<audio>` を通している間だけ** —

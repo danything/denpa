@@ -43,7 +43,7 @@ export function fileRecordingId(pathname: string): number | null {
  * - **`/api/health`。** Kubernetes の `livenessProbe` が叩く。守ると**Pod が
  *   再起動を繰り返す** (掛ける範囲を選べるのをやめたときに実際に踏んだ —
  *   E2E のスタックが起動待ちで固まった)。出しているのは
- *   「生きているか・局が何件か・録画が何本か」だけ
+ *   「生きているか・動いている版と新しい版・局が何件か・録画が何本か」だけ
  * - **`/manifest.webmanifest`。** ブラウザは**資格情報を付けずに**取りに行く
  *   ので (`<link rel="manifest">` に `crossorigin` を書かない限り)、守ると
  *   ホーム画面に置けなくなる。static に置いてあった頃は adapter-node が
