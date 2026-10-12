@@ -230,6 +230,7 @@ describe('ffmpeg の引数', () => {
         const joined = args.join(' ');
         expect(joined).toContain('-copyts -f mpegts -i pipe:0 -map 0:p:1024:v:0 -map 0:p:1024:a:0?');
         expect(joined).toContain('-vf bwdif');
+        expect(joined).toContain('-fps_mode passthrough');
         expect(joined).toContain('-af pan=stereo|c0=c1|c1=c1');
         expect(args[args.indexOf('-output_ts_offset') + 1]).toBe('-12345.500000');
     });

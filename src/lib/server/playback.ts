@@ -327,6 +327,9 @@ export function fileTranscodeArgs(
         `0:a:${audio}?`,
         ...(video.filter === '' ? [] : ['-vf', video.filter]),
         ...video.encoder,
+        // 時刻を入口のまま運ぶ (`-copyts`)。既定 (mp4 は cfr) にコマを揃え直させない
+        '-fps_mode',
+        'passthrough',
         ...audioArgs(codec),
         '-avoid_negative_ts',
         'make_non_negative',
@@ -348,7 +351,21 @@ export function presented(pts: number): number {
 /**
  * **TS から変換するときの `-output_ts_offset`。** 流し込む頭の映像の PES の PTS (`pts`) が、物差しで
  * `at` 秒になるように。ffmpeg は `-copyts` で入口の時刻 (`presented`) をそのまま運ぶので、差を足せば
- * 出口が物差しの時刻になる。一周をまたいでも ffmpeg が増え続ける数にしてくれる
+ * 出口が物差しの時刻になる。一周をまたいでも ffmpeg が増え続ける数にしてくれる。
+ *
+ * **`-fps_mode passthrough` が要る。** 既定 (mp4 は cfr) は時刻が負のコマを捨てるので、一周の手前 60 秒から
+ * 流し込むと (`presented` が負) 映像がまるごと消えた。`-t` を出口に置くと `-copyts` の絶対時刻で数えるので
+ * 置かない。
+ *
+ * ffmpeg 9.0.2 で、120 秒の MPEG-2 の TS (頭の PTS が 1000 秒・一周の 30 秒前・40 秒前の 3 本) を
+ * 途中から標準入力へ流して測った頭の tfdt (物差しの時刻からの差):
+ *
+ *     頼んだ位置   映像 (次の鍵フレームから)   音声 (映像より先に多重化されている)
+ *     20 秒        +0.39〜+0.40 秒             -0.43 秒
+ *     70 秒        +0.56〜+0.57 秒             -0.09 秒
+ *
+ * 3 本とも同じ (差は 1 コマ未満)。一周をまたぐところも隙間なく続いた。`-copyts` を付けずに
+ * `-output_ts_offset <物差しの時刻>` だけにすると、映像も音声も 65ms ずれた (流し込んだ頭で変わる)
  */
 export function tsOffset(pts: number, at: number): number {
     return at - presented(pts);
@@ -399,6 +416,9 @@ export function tsTranscodeArgs(
         '-fpsmax',
         '60000/1001',
         ...video.encoder,
+        // 時刻を詰め直させない (`tsOffset` の説明)。既定 (mp4 は cfr) だと負の時刻のコマを捨てる
+        '-fps_mode',
+        'passthrough',
         ...(pan === null ? [] : ['-af', pan]),
         ...audioArgs(codec),
         '-output_ts_offset',
