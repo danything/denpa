@@ -337,7 +337,7 @@ describe('setInterval', () => {
         expect(logs).toEqual([]);
     });
 
-    test('回数を変数で渡しても、その回数だけ動く (放送大学の形)', async () => {
+    test('回数を変数で渡しても、その回数だけ動く (放送大学の書き方)', async () => {
         const { bml } = open();
         const script = `var n = 0, times = 3;
             function start() { browser.setInterval("timeManager();", 5, times); }
@@ -400,7 +400,7 @@ describe('文書の名前', () => {
         expect(inside(bml).ureg[1]).toBe('NaN');
         expect(bml.path).toBe('/40/0000/startup.bml');
         expect(
-            logs.some((line) => line.includes('規格に無い名前の形') && line.includes('bml://menu.bml')),
+            logs.some((line) => line.includes('規格に無いスキーム') && line.includes('bml://menu.bml')),
         ).toBe(true);
     });
 });
@@ -425,7 +425,7 @@ describe('epgTune', () => {
         browser.Ureg[1] = "after:" + r;
     }`;
 
-    test('別の局は呼び手に頼み、受けられたら文書を閉じる (後のスクリプトは動かない)', async () => {
+    test('別の局は呼び手に任せ、受けられたら文書を閉じる (後のスクリプトは動かない)', async () => {
         const asked: Service[] = [];
         const { bml } = open({
             onTune: (service) => {
@@ -439,14 +439,14 @@ describe('epgTune', () => {
         expect(asked).toEqual([{ originalNetworkId: 0x7fe7, transportStreamId: 0x7fe1, serviceId: 0x428 }]);
         await watch(() => false, 50);
         expect(inside(bml).ureg[1]).toBe('');
-        // 局が変わるまでに前の局のモジュールが届き直しても、入口から出直して頼み直さない
+        // 局が変わるまでに前の局のモジュールが届き直しても、入口から出直して選局をリクエストし直さない
         feedAll(bml, carousel([startup('', `var target = "arib://7FE7.-1.0428"; ${script}`)], 2));
         await watch(() => false, 100);
         expect(asked.length).toBe(1);
         expect(bml.path).toBeNull();
     });
 
-    test('呼び手が断る・呼び手が居ない (録画) なら NaN を返して続ける', async () => {
+    test('呼び手が断る・呼び手がいない (録画) なら NaN を返して続ける', async () => {
         for (const onTune of [() => false, undefined]) {
             const { bml, logs } = open(onTune === undefined ? {} : { onTune });
             // BinaryTable の行から引いた値と同じ、ただの文字列
@@ -462,7 +462,7 @@ describe('epgTune', () => {
         }
     });
 
-    test('今の局 (arib://-1.-1.-1) は呼び手に頼まず入口から出直す', async () => {
+    test('今の局 (arib://-1.-1.-1) は呼び手に任せず入口から出直す', async () => {
         const asked: Service[] = [];
         const { bml } = open({ onTune: (service) => asked.push(service) > 0 });
         const restart = `var target = "arib://-1.-1.-1";
@@ -637,7 +637,7 @@ describe('ライブのように流し続けても、持つものと握る時間�
         try {
             // 見張りで止めずに、持つものだけを見る (流す速さはライブの何百倍)。時計はライブと同じ TOT
             const { bml, logs } = open({ clock: () => null, budget: { ratio: 1 } });
-            // 本番の局の形に寄せる: 1 回きりのタイマーを受け手のたびに作り直す (chkRen)、
+            // 本番の局の書き方に寄せる: 1 回きりのタイマーを受け手のたびに作り直す (chkRen)、
             // 版が上がったら押さえ直して字を書き換える、イベントのたびに消さないタイマーを足す (後始末し忘れ)
             const script = `var n = 0, m = 0;
                 function start() { browser.setInterval("chk();", 1, 1); browser.Ureg[1] = "ready"; }

@@ -74,7 +74,7 @@ beforeEach(async () => {
             });
         }
         if (url.endsWith('/keys')) return Response.json({ keys: [{ ...jwk, kid: KID }] });
-        throw new Error(`呼ばれるはずのない口: ${url}`);
+        throw new Error(`呼ばれるはずのないエンドポイント: ${url}`);
     }) as typeof fetch;
 });
 afterEach(() => {
@@ -149,7 +149,7 @@ describe('ID トークンを確かめる', () => {
     });
 
     /*
-     * **`alg: none` を受けない。** 受けると「署名を見ない道」ができ、
+     * **`alg: none` を受けない。** 受けると「署名を見ない抜け道」ができ、
      * 中身を好きに書いたトークンが通る。JWT の実装が繰り返し踏んでいる穴
      */
     test('RS256 以外は受けない', async () => {
@@ -157,8 +157,8 @@ describe('ID トークンを確かめる', () => {
         await expect(verify(`${head}.${encode(base)}.`, 'nonce-1', NOW)).rejects.toThrow('署名方式');
     });
 
-    test('形が違えば通さない', async () => {
-        await expect(verify('これはトークンではない', 'nonce-1', NOW)).rejects.toThrow('形');
+    test('形式が違えば通さない', async () => {
+        await expect(verify('これはトークンではない', 'nonce-1', NOW)).rejects.toThrow('形式');
     });
 });
 

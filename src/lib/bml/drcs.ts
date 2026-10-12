@@ -1,5 +1,5 @@
 /**
- * DRCS (外字)。`browser.loadDRCS("x.drc")` で読む字の絵 (STD-B24 付属3 4.6)。
+ * DRCS (外字)。`browser.loadDRCS("x.drc")` で読む字の画像 (STD-B24 付属3 4.6)。
  *
  * 運用は 4 階調・非圧縮・全角の正方形 (16/20/24/30/36) だけ。1 字を CSS の mask にして、
  * **色は字の色** (currentColor) で塗る。TTF は作らない。中間の 2 階調は透明度で近づける
@@ -19,7 +19,7 @@ export interface Glyph {
     alpha: Uint8Array;
 }
 
-/** DRCS のファイルを読む。[中の字 (私用領域), 字の絵] の並び。字数 0 のファイルは空 */
+/** DRCS のファイルを読む。[中の字 (私用領域), 字の画像] の並び。字数 0 のファイルは空 */
 export function parseDrcs(data: Uint8Array): [number, Glyph][] {
     const out: [number, Glyph][] = [];
     let at = 0;

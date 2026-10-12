@@ -60,7 +60,7 @@ export const SERVICE_TYPE_ORDER = `CASE type WHEN 'GR' THEN 0 WHEN 'BS' THEN 1 E
  * - **終わったチャンネル。** BS103 (旧 NHK BSプレミアム) は 2024年3月で放送を
  *   終えたが、SDT には枠が残っている (局名も消されて「-」)。番組は1つも来ない
  * - **相乗り中のサブチャンネル。** NHK総合2 や Eテレ2/3 は、マルチ編成をして
- *   いないときは本チャンネルと同じ絵を流していて、EIT には**名前の無い番組**が
+ *   いないときは本チャンネルと同じ映像を流していて、EIT には**名前の無い番組**が
  *   並ぶ。**名前が付いていても本チャンネルと同じ番組**のこともある (重なる時間の
  *   本チャンネルの番組と同じ名前)。どちらも相乗りとして外す — 決め方は番組表と同じ
  *   (`splitOf`)
@@ -322,7 +322,7 @@ function forgetMissing(at: number, seen: Set<number>): number {
 /**
  * 局の一覧をエージェントから取り込む。番組表は待たない。
  *
- * **どの局が居るかはスキャンで決まる。** 番組表を集めるのはそのあとで、
+ * **どの局があるかはスキャンで決まる。** 番組表を集めるのはそのあとで、
  * 局によっては数分かかる。局だけ先に出しておかないと、スキャンの直後に
  * 番組表が空のまま何も出ない時間が続く。
  */
@@ -527,7 +527,7 @@ export function followOnAir(events: readonly EitEvent[]): boolean {
     return true;
 }
 
-/** 列の畳み方で DB に渡す形にする。null は null のまま (drizzle がふだん通す形と同じ) */
+/** 列の畳み方で DB に渡す形式にする。null は null のまま (drizzle がふだん通す形式と同じ) */
 function encoded<T>(column: { mapToDriverValue(value: T): unknown }, value: T | null): unknown {
     return value === null ? null : column.mapToDriverValue(value);
 }

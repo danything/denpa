@@ -260,7 +260,7 @@ const DECLINE_WINDOW = 10 * 60 * 1000;
  *
  * 取り消しの記録は `reservations.program_id` (局 + event_id) に付いていて、ルールは
  * `INSERT OR IGNORE` がそれに当たることで「二度と立てない」を成り立たせていた。
- * ところが id が同じでなくなる道が2つあり、どちらも実機で**取り消したはずの回が
+ * ところが id が同じでなくなるケースが2つあり、どちらも実機で**取り消したはずの回が
  * 録れた**として出た。
  *
  * - **枝番違い。** 同じ放送が 23608 と 23609 の両方に載るとき、束ねが一時的に
@@ -474,7 +474,7 @@ export function applyRules(options: { rule?: number } = {}): RuleSync {
         { rule: Rule; program: (typeof programs)[number]; dedupe: boolean; plain: Rule | undefined }
     >();
     /**
-     * **同じ放送は1本だけ。** 同じ物理チャンネルの中で、同じ時刻に同じ題名が
+     * **同じ放送は1本だけ。** 同じ物理チャンネルの中で、同じ時刻に同じ番組名が
      * 流れていたら同じ放送とみなし、いちばん小さい局だけを残す。
      *
      * 局は分割放送のために枝番を持っていて (TOKYO MX なら 23608 / 23609、

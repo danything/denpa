@@ -269,7 +269,7 @@ function pad(n: number, size: number): string {
     return String(Math.abs(n)).padStart(size, '0');
 }
 
-/** Date の文字列 (`YYYY-MM-DDThh:mm:ss`。web-bml と同じ形) */
+/** Date の文字列 (`YYYY-MM-DDThh:mm:ss`。web-bml と同じ形式) */
 export function formatDate(time: number, utc = false): string {
     if (Number.isNaN(time)) return 'Invalid Date';
     const d = new Date(utc ? time : time + JST);

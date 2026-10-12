@@ -13,30 +13,30 @@ namespace Denpa.Agent;
 /// <para>
 /// **IPC は px4-userland と同じ。** asicen-userland は px4-userland の portable IPC を取り込み、
 /// 枠の頭とソケットの置き場だけ変えている (<see cref="Px4Wire.Asicen"/>)。受信機の貸し借り・選局・
-/// TS・内蔵カードは px4d と同じ道 (<see cref="Px4Tuner"/> / <see cref="Px4Card"/>) を通す。
+/// TS・内蔵カードは px4d と同じ経路 (<see cref="Px4Tuner"/> / <see cref="Px4Card"/>) を通す。
 /// 同梱の <c>asicen-ts</c> (1回1チャンネルの CLI) と IFD ハンドラ (<c>libifd-asicen.so</c>) は使わない
 /// (px4-ts と px4-userland の IFD を使わないのと同じ理由。docs/agent.md)。
 /// </para>
 ///
 /// <para>
-/// **USB の serial が無いので、挿し口で見分ける。** PX-W3U3 は1つの筐体に USB 機能が2つあり
-/// (内蔵ハブの <c>.1</c> と <c>.2</c>)、それぞれに衛星と地上波の受信機が1本ずつ。筐体の名前は
-/// 内蔵ハブの挿し口 (<c>1-2</c>) にし、<c>asicend --instance</c> とソケットの置き場にもそのまま使う
-/// (px4-userland の PX-M1UR を挿し口で見分けるのと同じ考え。Px4.cs)。
-/// **挿し口を変えると別のチューナーになる。** 受信機は上流の決まりどおり <c>0:S, 1:T, 2:S, 3:T</c>。
+/// **USB の serial が無いので、ポートで見分ける。** PX-W3U3 は1つの筐体に USB 機能が2つあり
+/// (内蔵ハブの <c>.1</c> と <c>.2</c>)、それぞれに衛星と地上波の受信機が1つずつ。筐体の名前は
+/// 内蔵ハブのポート (<c>1-2</c>) にし、<c>asicend --instance</c> とソケットの置き場にもそのまま使う
+/// (px4-userland の PX-M1UR をポートで見分けるのと同じ考え。Px4.cs)。
+/// **ポートを変えると別のチューナーになる。** 受信機は上流の決まりどおり <c>0:S, 1:T, 2:S, 3:T</c>。
 /// </para>
 ///
 /// <para>
 /// **機材は sysfs で見つける。** 上流の配布物 (bin/ の asicend・asicenctl・asicen-ts) には並べる道具が無く
 /// (<c>asicen-probe</c> は入らない。<c>asicend --list</c> も実機ではまだ並べない)、asicend には USB の
-/// 番地と挿し口を自分で渡す決まりなので、<c>/sys/bus/usb/devices</c> の USB ID と番地を読む
+/// アドレスとポートを自分で渡す決まりなので、<c>/sys/bus/usb/devices</c> の USB ID とアドレスを読む
 /// (siano-userland でカーネルが使っているかを見るのと同じ場所)。見る USB ID は上流の asicend が受け付けるもの
 /// (<c>0b06:0005</c> と、ファームウェア待ちの <c>1738:5211</c> / <c>1738:5216</c>) だけ。
-/// 上流が並べる口を出したら、そちらに聞くよう変える。
+/// 上流が一覧を出す API を用意したら、そちらに聞くよう変える。
 /// </para>
 ///
 /// <para>
-/// 設定の <c>device</c> は <c>asicen:&lt;挿し口&gt;:&lt;受信機&gt;</c> (<c>asicen:1-2:1</c>)。
+/// 設定の <c>device</c> は <c>asicen:&lt;ポート&gt;:&lt;受信機&gt;</c> (<c>asicen:1-2:1</c>)。
 /// 刺さっていれば <see cref="Detect"/> が組み立てるので、普通は書かなくてよい。
 /// </para>
 /// </summary>
@@ -62,7 +62,7 @@ public static class AsicenUserland
     public static string Firmware =>
         Environment.GetEnvironmentVariable("ASICEN_FIRMWARE") ?? Path.Combine(Dir, "firmware", "asicen-loader.bin");
 
-    /// <summary>asicend が socket を置く場所 (この下に <c>asicen-userland/&lt;挿し口&gt;/</c>)</summary>
+    /// <summary>asicend が socket を置く場所 (この下に <c>asicen-userland/&lt;ポート&gt;/</c>)</summary>
     public static string RuntimeDir =>
         Environment.GetEnvironmentVariable("ASICEN_RUNTIME_DIR") ?? "/run/asicen-userland";
 
@@ -78,11 +78,11 @@ public static class AsicenUserland
 
     public static string Device(string id, int receiver) => $"{Scheme}{id}:{receiver}";
 
-    /// <summary><c>asicen:1-2:1</c> を割る。形が違えば null</summary>
+    /// <summary><c>asicen:1-2:1</c> を割る。形式が違えば null</summary>
     public static (string Id, int Receiver)? Parse(string device) => Px4Userland.Parse(device, Scheme, ValidId);
 
     /// <summary>
-    /// 挿し口 (<c>1-2</c>、<c>3-1.4</c>)。筐体の名前もこの形で、asicend の <c>--instance</c> に
+    /// ポート (<c>1-2</c>、<c>3-1.4</c>)。筐体の名前もこの形式で、asicend の <c>--instance</c> に
     /// そのまま通る (英数字と <c>- .</c>、80 文字まで、数字だけの 14・15 桁ではない)
     /// </summary>
     internal static bool ValidId(string id) => id.Length <= 80 && SianoUserland.IsPort(id);
@@ -93,13 +93,13 @@ public static class AsicenUserland
     /// <summary>USB 機能1つ (sysfs のデバイス1つ)</summary>
     public sealed record Function(string Usb, int Bus, int Address, string Port, bool Loader)
     {
-        /// <summary>内蔵ハブの挿し口 (<c>1-2.1</c> → <c>1-2</c>)。ハブの下に無ければ null</summary>
+        /// <summary>内蔵ハブのポート (<c>1-2.1</c> → <c>1-2</c>)。ハブの下に無ければ null</summary>
         public string? Parent => Port.LastIndexOf('.') is var dot and > 0 ? Port[..dot] : null;
 
-        /// <summary>内蔵ハブのどの口か (<c>1-2.1</c> → 1)</summary>
+        /// <summary>内蔵ハブのどのポートか (<c>1-2.1</c> → 1)</summary>
         public int Slot => Port.LastIndexOf('.') is var dot and > 0 && int.TryParse(Port[(dot + 1)..], out var slot) ? slot : 0;
 
-        /// <summary>asicend / asicen-probe に渡す番地 (<c>BUS:ADDR</c>)</summary>
+        /// <summary>asicend / asicen-probe に渡すアドレス (<c>BUS:ADDR</c>)</summary>
         public string Location => $"{Bus}:{Address}";
     }
 
@@ -191,16 +191,16 @@ public static class AsicenUserland
     /// ファームウェア待ちの USB 機能に流し込む。**1つずつ、毎回並べ直して。**
     ///
     /// <para>
-    /// 流し込むと USB の番地が変わり、上流の観測では同じ筐体のもう片方まで抜けて出直す
-    /// (HARDWARE-VALIDATION.md「Sibling impact」)。古い番地に流さないよう、1つ流すたびに並べ直す。
-    /// 同じ挿し口に2度は流さない (上がらなければ諦めて理由を残す。上流も頼み直しはしない)。
+    /// 流し込むと USB のアドレスが変わり、上流の観測では同じ筐体のもう片方まで抜けて出直す
+    /// (HARDWARE-VALIDATION.md「Sibling impact」)。古いアドレスに流さないよう、1つ流すたびに並べ直す。
+    /// 同じポートに2度は流さない (上がらなければ諦めて理由を残す。上流もやり直しはしない)。
     /// **ファームウェアが無ければ流さずに「ファームウェアがありません」と残す。**
     /// 流す道具 (<c>asicen-probe</c>) が配布物に無ければ、そう残す。
     /// </para>
     ///
     /// <para>
-    /// **出直しを待つ間も錠は握ったまま。** わざと。流し込みは筐体の両方の USB 機能を揺らすので、
-    /// その間に別の経路 (<see cref="Detect"/> や asicend を起こす前の並べ直し) が古い番地を読まないよう、
+    /// **出直しを待つ間もロックは握ったまま。** わざと。流し込みは筐体の両方の USB 機能を揺らすので、
+    /// その間に別の経路 (<see cref="Detect"/> や asicend を起こす前の並べ直し) が古いアドレスを読まないよう、
     /// 流し終えて落ち着くまで待たせる。待つのはファームウェア待ちの機材があるときだけで
     /// (無ければ1回並べて抜ける)、上流はいま1台のホストで1筐体まで。
     /// </para>
@@ -248,7 +248,7 @@ public static class AsicenUserland
         }
     }
 
-    /// <summary>刺さっている筐体の受信機を、設定に書いたのと同じ形で</summary>
+    /// <summary>刺さっている筐体の受信機を、設定に書いたのと同じ形式で</summary>
     public static List<TunerSpec> Detect() => Specs(Enclosures());
 
     public static List<TunerSpec> Specs(IEnumerable<Enclosure> enclosures) =>
@@ -262,14 +262,14 @@ public static class AsicenUserland
     /// <summary>設定に出てくる筐体。asicend を起こす相手</summary>
     public static IEnumerable<string> IdsIn(IEnumerable<TunerSpec> specs) => Px4Userland.IdsIn(specs, Parse);
 
-    /// <summary>受信機1本を開く。**受信機の貸し借りと選局は px4d と同じ道** (<see cref="Px4Tuner"/>)</summary>
+    /// <summary>受信機1つを開く。**受信機の貸し借りと選局は px4d と同じ経路** (<see cref="Px4Tuner"/>)</summary>
     public static ITuneDevice Open(string id, int receiver, string? lnb) => new Px4Tuner(
         id, receiver, lnb, RuntimeDir,
         () =>
         {
             var daemon = AsicenDaemon.For(id);
             daemon.Ensure();
-            // 聞けなかったときも上流の決まりの並びで見る。null だと 15V をそのまま頼んで断られる
+            // 聞けなかったときも上流の決まりの並びで見る。null だと 15V をそのまま指定して断られる
             return daemon.Receivers ?? Receivers(4);
         },
         Px4Wire.Asicen, Device(id, receiver), $"asicen-{id} #{receiver}");
@@ -285,14 +285,14 @@ public static class AsicenUserland
 /// <c>asicend</c> 1つ (<see cref="UserlandDaemon"/>。px4d と同じ扱い)。
 ///
 /// <para>
-/// asicend には USB の番地と挿し口を2組とも渡す (<c>--hardware --primary BUS:ADDR --primary-port …
-/// --sibling … --sibling-port …</c>)。番地は挿し直すたびに変わるので、起こす直前に
+/// asicend には USB のアドレスとポートを2組とも渡す (<c>--hardware --primary BUS:ADDR --primary-port …
+/// --sibling … --sibling-port …</c>)。アドレスは挿し直すたびに変わるので、起こす直前に
 /// sysfs で聞き直す (<see cref="AsicenUserland.Scan"/>)。ready は <c>asicenctl list</c> が通ることで見る
 /// (<c>status</c> はカードの様子も要るので、カードが無いと通らない)。
 /// </para>
 ///
 /// <para>
-/// **上流はいま1台のホストで1筐体まで** (筐体の錠が <c>/tmp/asicen-userland-enclosure.lock</c> の1つ)。
+/// **上流はいま1台のホストで1筐体まで** (筐体のロックが <c>/tmp/asicen-userland-enclosure.lock</c> の1つ)。
 /// 2台目の asicend は BUSY (exit 4) で終わり、理由は記録に残る。
 /// </para>
 /// </summary>
@@ -313,7 +313,7 @@ public sealed class AsicenDaemon(string id, string dir, string runtimeDir, Func<
     ///
     /// <para>
     /// **すでに流し込み済み (<c>0b06:0005</c>) の機材でも、ファームウェアが無ければ止める。** わざと。
-    /// 配布物に入っていない状態は「上流のリリースの形が見込みと違う」印なので、記録に
+    /// 配布物に入っていない状態は「上流のリリースの形式が見込みと違う」印なので、記録に
     /// 「ファームウェアがありません」と出して気づけるようにし、半端な配布物のまま動かさない
     /// (電源を入れ直すと結局ファームウェア待ちに戻って使えなくなる)。
     /// </para>
@@ -325,7 +325,7 @@ public sealed class AsicenDaemon(string id, string dir, string runtimeDir, Func<
             throw new IOException($"ファームウェアがありません: {firmware} (asicen-userland の配布物に入っていませんでした)");
         }
         var enclosure = enclosures().FirstOrDefault(found => found.Id == id)
-            ?? throw new IOException($"ASICEN の筐体 {id} が見つかりません (抜けたか、挿し口を変えた?)");
+            ?? throw new IOException($"ASICEN の筐体 {id} が見つかりません (抜けたか、USB ポートを変えた?)");
         return
         [
             "--hardware",
@@ -339,7 +339,7 @@ public sealed class AsicenDaemon(string id, string dir, string runtimeDir, Func<
         if (Running) return;
         var asicend = AsicenUserland.Bin(dir, "asicend");
         if (!File.Exists(asicend)) throw new IOException($"asicen-userland が入っていません: {asicend}");
-        // 機材を並べる (最悪 15 秒 + ファームウェアの流し込み) のは錠の外で
+        // 機材を並べる (最悪 15 秒 + ファームウェアの流し込み) のはロックの外で
         var args = select();
         var listed = "";
         Launch(asicend, [.. args, "--runtime-dir", runtimeDir, "--instance", Id], runtimeDir,

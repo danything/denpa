@@ -13,7 +13,7 @@ namespace Denpa.Agent;
 /// </para>
 ///
 /// <para>
-/// 口は3つある。どれも「開く → 選局 → 流し始める → 読む → 選局し直す」で、
+/// 方式は3つある。どれも「開く → 選局 → 流し始める → 読む → 選局し直す」で、
 /// 違うのは誰がデバイスを持っているか。
 /// </para>
 ///
@@ -36,14 +36,14 @@ public interface ITuneDevice : IDisposable
     /// </summary>
     void Tune(ChannelTable.Tuning tuning, uint streamId);
 
-    /// <summary>TS の読み口。<see cref="Tune"/> のあとで取る (選局し直したら取り直す)</summary>
+    /// <summary>TS の読み出し側。<see cref="Tune"/> のあとで取る (選局し直したら取り直す)</summary>
     Stream Output { get; }
 
     /// <summary>
     /// 前の選局がまだ生きているか。
     ///
     /// <para>
-    /// DVB は一度合わせたら合ったまま。px4-userland は読み手が居なくなると
+    /// DVB は一度合わせたら合ったまま。px4-userland は読み手がいなくなると
     /// TS の流れを畳む (受信機は借りたまま) ので、**同じチャンネルでも選局し直しが要る**ことがある。
     /// TunerPool は「同じチャンネルならそのまま」の前にここを見る。
     /// </para>
@@ -52,10 +52,10 @@ public interface ITuneDevice : IDisposable
 }
 
 /// <summary>
-/// libc の口 (open・ioctl・poll・pipe など。kill だけは Interop.cs)。
+/// libc の関数 (open・ioctl・poll・pipe など。kill だけは Interop.cs)。
 ///
 /// <para>
-/// **macOS でも同じ口で動く** (Mac で px4d から受けた TS / siano-ts の pipe を読むため)。"libc" は
+/// **macOS でも同じ関数で動く** (Mac で px4d から受けた TS / siano-ts の pipe を読むため)。"libc" は
 /// macOS でも <c>/usr/lib/libc.dylib</c> (libSystem の別名) で引ける。ただし**数値が
 /// OS ごとに違うもの** (<c>O_NONBLOCK</c>、errno) は決め打ちにできないので、ここと
 /// <see cref="DeviceStream"/> で OS を見て選ぶ。
@@ -89,7 +89,7 @@ internal static unsafe partial class Sys
     [LibraryImport("libc", EntryPoint = "close")]
     public static partial int Close(int fd);
 
-    /// <summary><c>pipe(int fds[2])</c>。fds[0] が読み口、fds[1] が書き口</summary>
+    /// <summary><c>pipe(int fds[2])</c>。fds[0] が読み出し側、fds[1] が書き込み側</summary>
     [LibraryImport("libc", EntryPoint = "pipe", SetLastError = true)]
     public static partial int Pipe(int* fds);
 
@@ -106,7 +106,7 @@ internal static unsafe partial class Sys
     [LibraryImport("libc", EntryPoint = "fcntl", SetLastError = true)]
     private static partial int FcntlApple(int fd, int command, nint x2, nint x3, nint x4, nint x5, nint x6, nint x7, nint argument);
 
-    /// <summary>書き口を待たない (<c>O_NONBLOCK</c>) にする。Linux と macOS のどちらでも</summary>
+    /// <summary>書き込み側をノンブロッキング (<c>O_NONBLOCK</c>) にする。Linux と macOS のどちらでも</summary>
     public static void SetNonBlocking(int fd)
     {
         var apple = OperatingSystem.IsMacOS() && RuntimeInformation.ProcessArchitecture == Architecture.Arm64;
@@ -114,7 +114,7 @@ internal static unsafe partial class Sys
         var set = flags < 0 ? -1 : apple
             ? FcntlApple(fd, SetFlags, 0, 0, 0, 0, 0, 0, flags | NonBlocking)
             : Fcntl(fd, SetFlags, flags | NonBlocking);
-        if (set < 0) throw new IOException($"待たない書き口にできません ({Marshal.GetLastPInvokeErrorMessage()})");
+        if (set < 0) throw new IOException($"書き込み側をノンブロッキングにできません ({Marshal.GetLastPInvokeErrorMessage()})");
     }
 
     /// <summary><c>F_SETPIPE_SZ</c>。pipe の深さを変える (**Linux だけ**。macOS には無い)</summary>
@@ -155,7 +155,7 @@ internal static unsafe partial class Sys
 }
 
 /// <summary>
-/// デバイスからの読み口。**待っている最中でも畳める。**
+/// デバイスからの読み出し側。**待っている最中でも畳める。**
 ///
 /// <para>
 /// 素直に開いて読むと、<c>read</c> で待っている間は誰にも止められない。
@@ -165,7 +165,7 @@ internal static unsafe partial class Sys
 ///
 /// <para>
 /// **Windows には poll が無い** (子の標準出力の pipe しか読まない。Siano.cs)。そちらは
-/// .NET の <see cref="Stream"/> を裏の1本に読ませ、こちらは同じく 200ms ごとに起きて印を見る
+/// .NET の <see cref="Stream"/> を裏のスレッドに読ませ、こちらは同じく 200ms ごとに起きて印を見る
 /// (<see cref="Background"/>)。
 /// </para>
 /// </summary>
@@ -177,21 +177,21 @@ internal static unsafe partial class Sys
 /// </param>
 internal sealed unsafe class DeviceStream(SafeFileHandle handle, Func<string?>? ended = null) : Stream
 {
-    /// <summary>読み口そのもの。**リングバッファの大きさはここに言う** (<c>DvbTuner.StartFilter</c>)</summary>
+    /// <summary>読み出し側そのもの。**リングバッファの大きさはここに言う** (<c>DvbTuner.StartFilter</c>)</summary>
     public SafeFileHandle Handle => handle;
 
     /// <summary>この間隔で起きて、畳めと言われていないか見る</summary>
     private const int WakeMs = 200;
 
-    /// <summary>Windows の読み口 (<see cref="Background"/>)。あれば fd は使わない</summary>
+    /// <summary>Windows の読み出し側 (<see cref="Background"/>)。あれば fd は使わない</summary>
     private readonly Background? _background;
 
-    /// <summary>Windows で子の標準出力を読む口。fd は無いので、空の (無効な) ハンドルを持たせておく</summary>
+    /// <summary>Windows で子の標準出力を読む部分。fd は無いので、空の (無効な) ハンドルを持たせておく</summary>
     public DeviceStream(Stream pipe, Func<string?>? ended = null)
         : this(new SafeFileHandle(), ended) => _background = new Background(pipe);
 
     /// <summary>
-    /// **読むのは裏の1本、待つのはこちら。** 読みかけの間に読み手が降りても、読めたぶんは
+    /// **読むのは裏のスレッド、待つのはこちら。** 読みかけの間に読み手が降りても、読めたぶんは
     /// 捨てずに次の <see cref="Read(byte[], int, int, Func{bool}?)"/> に渡す
     /// (poll で待ってから読む Unix と同じく、降りた読み手が中身を持ち去らない)
     /// </summary>
@@ -204,8 +204,8 @@ internal sealed unsafe class DeviceStream(SafeFileHandle handle, Func<string?>? 
         private int _left;
 
         /// <summary>
-        /// 読めたバイト数。0 は尽きた、null は降りた。**錠を待つ間も降りる合図を見る** —
-        /// 先の読み手が待っている間、後から来た読み手 (降りたい側) が錠の手前で止まらないように
+        /// 読めたバイト数。0 は尽きた、null は降りた。**ロックを待つ間も降りる合図を見る** —
+        /// 先の読み手が待っている間、後から来た読み手 (降りたい側) がロックの手前で止まらないように
         /// </summary>
         public int? Read(Span<byte> target, Func<bool> giveUp)
         {
@@ -330,15 +330,15 @@ internal sealed unsafe class DeviceStream(SafeFileHandle handle, Func<string?>? 
 
     public void Stop() => _closed = true;
 
-    /// <summary>いま <see cref="Read(byte[], int, int, Func{bool}?)"/> の中に居る読み手の数</summary>
+    /// <summary>いま <see cref="Read(byte[], int, int, Func{bool}?)"/> の中にいる読み手の数</summary>
     private int _reading;
 
-    /// <summary>中に居る読み手の数 (テストが「読み手が入った」「戻った」を見る)</summary>
+    /// <summary>中にいる読み手の数 (テストが「読み手が入った」「戻った」を見る)</summary>
     internal int Readers => Volatile.Read(ref _reading);
 
     /// <summary>
     /// <see cref="Stop"/> のあと、**読みかけの読み手が戻るまで待つ** (長くても <paramref name="most"/>)。
-    /// 止めたあとに始まった Read は fd に触らずに戻るので、見るのは中に居る数だけでよい。
+    /// 止めたあとに始まった Read は fd に触らずに戻るので、見るのは中にいる数だけでよい。
     /// 読み手が先に降りていれば待たない (局替えのたびに固定で寝ていた 300ms がこれで消える)
     /// </summary>
     public void WaitReaders(TimeSpan most)
@@ -367,8 +367,8 @@ internal sealed unsafe class DeviceStream(SafeFileHandle handle, Func<string?>? 
      * <para>
      * 渡さないと、**電波が来ていない間は永久に戻らない** — 0.2秒ごとに起きて
      * 掛け直すだけで、呼んだ側は降りようがない。実機では、蹴られた読み手が
-     * ここで止まったまま次の選局が始まり、**同じ読み口を2本で取り合った**
-     * (復号器を持ち回していた頃は、それでプロセスごと落ちた)。
+     * ここで止まったまま次の選局が始まり、**同じ読み出し側を2本で取り合った**
+     * (デスクランブラを持ち回していた頃は、それでプロセスごと落ちた)。
      * </para>
      * </param>
      */
@@ -479,7 +479,7 @@ internal sealed unsafe class DeviceStream(SafeFileHandle handle, Func<string?>? 
 ///
 /// <para>
 /// 開くものが3つある。<c>frontend</c> が選局、<c>demux</c> が「何を流すか」、
-/// <c>dvr</c> が読み口。選局し直すのに閉じる必要があるのは1つも無い。
+/// <c>dvr</c> が読み出し側。選局し直すのに閉じる必要があるのは1つも無い。
 /// </para>
 ///
 /// <para>
@@ -744,7 +744,7 @@ public sealed class DvbTuner : ITuneDevice
 
     public void Dispose()
     {
-        // 先に読み口を閉じる。demux を止めてから閉じると、dvr で待っている
+        // 先に読み出し側を閉じる。demux を止めてから閉じると、dvr で待っている
         // 読み手が誰にも起こされないまま残る
         _dvr.Dispose();
         _demux.Dispose();

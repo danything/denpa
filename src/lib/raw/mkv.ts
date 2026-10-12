@@ -2,11 +2,11 @@
 /**
  * **端末に保存した録画 (Matroska) を canvas に描く**、worker の中の半分 (`messages.ts` の `mkv`)。
  *
- * 保存してあるのはエンコード済みの mkv (H.264 + AAC か AV1 + Opus。字幕の軌道も入っている)。
- * **fMP4 に組み直さず、読んだコマをそのまま fMP4 の道 (`fmp4.ts` の `Fmp4Video`) へ渡す** — デコードする・描く・
+ * 保存してあるのはエンコード済みの mkv (H.264 + AAC か AV1 + Opus。字幕のトラックも入っている)。
+ * **fMP4 に組み直さず、読んだコマをそのまま fMP4 の経路 (`fmp4.ts` の `Fmp4Video`) へ渡す** — デコードする・描く・
  * 音・時計・飛び先より前を描かない (`floor`) はそちらのまま。ここが受け持つのは:
  *
- * - 軌道の形 (`ts/mkv-media.ts` の `asFmp4Track`) を渡す。音は選んだ1本だけ (`audio`。何本目か)
+ * - トラックの形式 (`ts/mkv-media.ts` の `asFmp4Track`) を渡す。音は選んだ1本だけ (`audio`。何本目か)
  * - **デコードする順の時刻 (dts) を起こす。** Matroska のコマが持つのは見せる時刻だけで、H.264 の B フレームは
  *   順が入れ替わる。デコードする順に並んだコマの先 `REORDER` 枚の見せる時刻のうち、いちばん早いものを
  *   そのコマの dts にする (見せる時刻を並べ直したものに近くなる)。そのぶん渡すのが数コマ遅れるので、
@@ -32,15 +32,15 @@ export class MkvInput {
     private held: MkvBlock[] = [];
 
     /**
-     * @param target 渡す先 (fMP4 の道)
-     * @param audioIndex 何本目の音声を鳴らすか (0 から。音の軌道の並び順)
+     * @param target 渡す先 (fMP4 の経路)
+     * @param audioIndex 何本目の音声を鳴らすか (0 から。音声トラックの並び順)
      */
     constructor(
         private readonly target: Fmp4Video,
         private audioIndex = 0,
     ) {}
 
-    /** 音声を選び直す。**次の頭 (頼み直し) から効く** */
+    /** 音声を選び直す。**次の頭 (リクエストし直し) から効く** */
     selectAudio(index: number): void {
         this.audioIndex = index;
     }

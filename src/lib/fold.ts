@@ -221,7 +221,7 @@ function globChar(ch: string): string {
 }
 
 /**
- * 寄せて小文字にした語 (`server/title.searchable`) を SQL の `GLOB` の形 (`*切れ端*`) にする。
+ * 寄せて小文字にした語 (`server/title.searchable`) を SQL の `GLOB` のパターン (`*切れ端*`) にする。
  * どれも**必ず含むはず**のものなので AND で掛けられる。
  *
  * **LIKE ではなく GLOB。** DB の番組名は放送のとおり全角混じり (「Ｖｅｎｕｅ１０１」) で、

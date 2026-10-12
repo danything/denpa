@@ -1,12 +1,12 @@
 /**
  * **録画の観方を決めて、流す** (`GET /api/recordings/<id>/playback` と `/stream`。取り決めは `ts/playback.ts`)。
  *
- * サーバが決めるのは「何を出せるか・どの形で出すか・時刻の物差し」まで。どれを使うかは画面が決める
+ * サーバが決めるのは「何を出せるか・どの形式で出すか・時刻の物差し」まで。どれを使うかは画面が決める
  * (端末で再生できるか、人が選んだコーデック)。サーバは端末が何かを知らない。
  *
  * ## 何を出すか
  *
- * | 録画にあるもの | 頼まれた形 | 出し方 |
+ * | 録画にあるもの | 求められた形式 | 出し方 |
  * | --- | --- | --- |
  * | エンコード済み (同じコーデック) | H.264 / AV1 | ファイルそのまま (`file`)。そのまま読めない端末には詰め替え (`stream`、映像は写すだけ) |
  * | エンコード済み (違うコーデック) | H.264 / AV1 | **エンコード済みを元に**その場で変換 (`stream`) |
@@ -122,7 +122,7 @@ export function mediaInfo(source: EncodedSource, json: string): MediaFile {
     try {
         parsed = JSON.parse(json);
     } catch {
-        // 読めない。判断に使わない形で返す
+        // 読めない。判断に使わない形式で返す
     }
     const streams = parsed.streams ?? [];
     const audios = streams.filter((stream) => stream.codec_type === 'audio');
@@ -216,7 +216,7 @@ function transcodedCodecs(codec: LiveCodec): string {
     return /codecs="([^"]+)"/.exec(codecsFor(codec))?.[1] ?? '';
 }
 
-/** ファイルを少しずつ読む口 (`ts/seek.ts`) */
+/** ファイルを少しずつ読むリーダー (`ts/seek.ts`) */
 function reader(path: string): ReadAt {
     return async (offset, length) =>
         new Uint8Array(
@@ -269,7 +269,7 @@ function recordedSec(recording: Recording): number {
 /**
  * **何を出せるかを決める。** エンコード済みも元の TS も無ければ null。
  *
- * ffprobe が中身を読めなかったエンコード済み (ffprobe が居ない・壊れている) は、いまの設定の
+ * ffprobe が中身を読めなかったエンコード済み (ffprobe が無い・壊れている) は、いまの設定の
  * コーデックでエンコードしたものとみなしてファイルだけ出す (詰め替えも変換も、中身が分からないと組めない)
  */
 export async function playbackPlan(recording: Recording): Promise<PlaybackPlan | null> {
@@ -353,7 +353,7 @@ const FMP4_OUT = [
     'mp4',
     '-movflags',
     '+empty_moov+default_base_moof+frag_discont+negative_cts_offsets',
-    // 1秒ずつ。鍵フレームごと (数秒) だと、頭の絵が出るまでそのぶん待つ
+    // 1秒ずつ。鍵フレームごと (数秒) だと、頭の映像が出るまでそのぶん待つ
     '-frag_duration',
     '1000000',
     'pipe:1',
@@ -367,7 +367,7 @@ const FMP4_OUT = [
  *
  * - `-ss` を `-i` の前に置く。映像は写すので、`from` の手前の鍵フレームから始まる
  * - `-copyts` で入口の時刻を出口まで運ぶ
- * - mp4 の多重化器は既定で頭を 0 に詰め直す。`frag_discont` で塊の時刻 (tfdt) を
+ * - mp4 の muxerは既定で頭を 0 に詰め直す。`frag_discont` で塊の時刻 (tfdt) を
  *   そのまま書かせ、`negative_cts_offsets` で B フレームのぶんを編集リストに逃がさせない
  *   (逃がすと頭がずれる。ブラウザの MSE は編集リストを当てにできない)
  * - 頭 (`from` = 0) だけは AAC の前置きと B フレームのぶん時刻が負になり、そのままでは
@@ -467,7 +467,7 @@ export function presented(pts: number): number {
  * ffmpeg 9.0.2 で、120 秒の MPEG-2 の TS (頭の PTS が 1000 秒・一周の 30 秒前・40 秒前の 3 本) を
  * 途中から標準入力へ流して測った頭の tfdt (物差しの時刻からの差):
  *
- *     頼んだ位置   映像 (次の鍵フレームから)   音声 (映像より先に多重化されている)
+ *     要求した位置   映像 (次の鍵フレームから)   音声 (映像より先に多重化されている)
  *     20 秒        +0.39〜+0.40 秒             -0.43 秒
  *     70 秒        +0.56〜+0.57 秒             -0.09 秒
  *
@@ -554,7 +554,7 @@ export interface Attempt {
 /**
  * **ffmpeg の出口を応答の本文にする** (`stream.ffmpegBody` に、降りたときの次の手と詰まりの見張りを足したもの)。
  *
- * - 読まれたぶんしか取りに行かない。相手が読まなければ出口が詰まり、ffmpeg も止まる
+ * - 読まれたぶんしか読み出さない。相手が読まなければ出口が詰まり、ffmpeg も止まる
  * - 1 バイトも出さずに降りたら、次の手 (GPU → ソフトウェア) で起こし直す
  * - `IDLE_LIMIT` のあいだ読まれなければ畳む。閉じられた・読み切った・落ちたときも畳む
  * - 畳んだら `done` を呼ぶ (枠を返す)
@@ -675,7 +675,7 @@ function spawnAttempt(attempt: Attempt) {
     };
 }
 
-/** TS を流しはじめる位置を、頼まれた時刻のこれだけ手前にする (秒)。鍵フレームを 1 つ含めるため */
+/** TS を流しはじめる位置を、求められた時刻のこれだけ手前にする (秒)。鍵フレームを 1 つ含めるため */
 const LEAD = 1;
 
 /** `?audio=` の、入れ物の中の何本目か (エンコード済みが元)。読めなければ 0 */
@@ -688,7 +688,7 @@ const MP4_HEADERS = { 'Content-Type': 'video/mp4', 'Cache-Control': 'no-store' }
 
 /**
  * **`GET /api/recordings/<id>/stream` に答える。** `codec` は `h264` / `av1` / `mpeg2`、`from` は物差しの秒、
- * `audio` は `playback` の `audios` の `id`。出せない形は 404、枠が埋まっていれば 503
+ * `audio` は `playback` の `audios` の `id`。出せない形式は 404、枠が埋まっていれば 503
  */
 export async function streamResponse(recording: Recording, query: URLSearchParams): Promise<Response> {
     const asked = query.get('codec');

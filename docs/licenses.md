@@ -51,7 +51,7 @@ denpa-font の `DENPA_COMMIT` を上げて (元に無い字は描き方を足し
 
 ## コンテナイメージ `denpa-agent` に入るもの
 
-[agent/Dockerfile](../agent/Dockerfile)。.NET の Native AOT で 1 本のバイナリにしてあり、
+[agent/Dockerfile](../agent/Dockerfile)。.NET の Native AOT で 1 つのバイナリにしてあり、
 **NuGet の依存は 0** (JSON はランタイムの `System.Text.Json`)。
 
 | 名前 | 何に | 出どころ | ライセンス |
@@ -101,7 +101,7 @@ denpa 本体は上と同じコンテナイメージ `denpa` を、Mac の Docker
 
 `package.json` に runtime の `dependencies` は無く、adapter-node が全部を `build/` に
 畳み込みます (イメージにもそれだけを載せる)。**MIT がほとんどで、例外は Apache-2.0 の
-`drizzle-orm` と、ISC の Lucide** (アイコンの形)。
+`drizzle-orm` と、ISC の Lucide** (アイコンの図形)。
 
 | 名前 | 何に | 出どころ | ライセンス |
 | --- | --- | --- | --- |
@@ -118,7 +118,7 @@ denpa 本体は上と同じコンテナイメージ `denpa` を、Mac の Docker
 BinaryTable の検索の比べ方・既定のスタイルなど一部は web-bml (otya128、MIT) の振る舞いを読んで合わせた
 (2026-10 まではデータ放送を web-bml で描いていた。いまは依存に入っていない)。
 
-### ライブを生で見るときにブラウザへ配る復号器
+### ライブを変換せずに見るときにブラウザへ配るデコーダ
 
 [Dockerfile](../Dockerfile) の `mpeg2wasm` 段で組み、イメージの `/opt/denpa/mpeg2` に置いて
 `/api/live/mpeg2/` から配る WebAssembly ([stream.md](stream.md#55-放送そのままmpeg-2を送る))。
@@ -127,8 +127,8 @@ BinaryTable の検索の比べ方・既定のスタイルなど一部は web-bml
 
 | 名前 | 何に | 出どころ | ライセンス |
 | --- | --- | --- | --- |
-| FFmpeg (libavcodec の mpeg2video・aac 復号器と mpegvideo parser、libavutil だけ) | 放送の MPEG-2 と AAC をブラウザでデコードする | <https://ffmpeg.org> | LGPL-2.1+ |
-| emscripten の読み込み口 (`decoder.mjs` に埋まる実行時の糊) | WASM を worker に読み込む | <https://github.com/emscripten-core/emscripten> | MIT / University of Illinois/NCSA |
+| FFmpeg (libavcodec の mpeg2video・aac デコーダと mpegvideo parser、libavutil だけ) | 放送の MPEG-2 と AAC をブラウザでデコードする | <https://ffmpeg.org> | LGPL-2.1+ |
+| emscripten のローダー (`decoder.mjs` に埋まる実行時の糊) | WASM を worker に読み込む | <https://github.com/emscripten-core/emscripten> | MIT / University of Illinois/NCSA |
 
 ## 使っていないもの (書いておく価値のあるもの)
 
@@ -138,6 +138,6 @@ BinaryTable の検索の比べ方・既定のスタイルなど一部は web-bml
   自前実装にしたもの ([stream.md](stream.md))
 - **@iconify/svelte / lucide-svelte** — アイコンは組むときに埋め込む unplugin-icons にした
   ([player.md](player.md#アイコンは-lucide-を組むときに埋め込みます))。`@iconify/svelte` は既定で
-  Iconify の API から形を取りに行き、LAN だけ・オフラインで開けない
+  Iconify の API からアイコンデータを取りに行き、LAN だけ・オフラインで開けない
 - **OIDC のライブラリ** — 入れていません ([auth.md](auth.md))
 - **recisdb** — 選局は自前で ioctl を叩きます。値の出どころとして上に書いてあります

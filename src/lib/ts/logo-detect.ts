@@ -311,7 +311,7 @@ const PEAK_WINDOW = 1;
 const PEAK_RANK = 3;
 /** これより短い「消えた」は消えていない (秒) */
 const MIN_GAP = 1;
-/** これより短い「出た」は出ていない (秒)。CM の中の似た絵 */
+/** これより短い「出た」は出ていない (秒)。CM の中の似た映像 */
 const MIN_SPAN = 2;
 
 /** 前後 `SMOOTH` コマの中央値 */
@@ -373,7 +373,7 @@ export interface Readings {
  * コマでも点の 9 割が 0.16 未満)。細かい柄 (金網・木の葉) の上でも埋もれる。
  * そこを「消えた」と読むと、本編が明るい場面・柄の場面のたびに切れる。
  *
- * 決め方は2回。どちらも局ごとに決め打ちせず、その録画の絵から決まる。
+ * 決め方は2回。どちらも局ごとに決め打ちせず、その録画の映像から決まる。
  *
  * 1. 明るさの段ごとに点の上位 5% を見て、ON に届かない段は判断しない (前後 2 秒にロゴが
  *    はっきり見えたコマだけで数える。CM にしか出ない後ろを「見えない」と取り違えないように)。
@@ -517,7 +517,7 @@ export function encodeModel(model: LogoModel): Uint8Array {
     return bytes;
 }
 
-/** 読めなければ `null` (形が違う・切れている) */
+/** 読めなければ `null` (形式が違う・切れている) */
 export function decodeModel(bytes: Uint8Array): LogoModel | null {
     if (bytes.length < HEADER) return null;
     if (new TextDecoder().decode(bytes.subarray(0, MAGIC.length)) !== MAGIC) return null;

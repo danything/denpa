@@ -59,9 +59,9 @@ const connectionConfig = {
     /*
      * **繋がらないときに待たせない。**
      *
-     * `Bun.SQL` は**断られても繋ぎ直しに行く**ので、宛先が居ないと既定の30秒を
+     * `Bun.SQL` は**断られても繋ぎ直しに行く**ので、宛先がいないと既定の30秒を
      * 使い切ってから諦める (`mysql2` は ECONNREFUSED をその場で返していた)。
-     * 引き継ぎ元は同じクラスタの中に居るものなので、5秒あれば足りる。
+     * 引き継ぎ元は同じクラスタの中にいるものなので、5秒あれば足りる。
      * 待たせたぶんだけ「押したのに何も起きない」時間が延びるだけ
      */
     connectionTimeout: 5,
@@ -216,7 +216,7 @@ function temporaryPath(dir: string, sourceId: number, extension: string): string
 /**
  * 前の実行が取り残した書きかけを消す。
  *
- * 置き場は元のTSの置き場の直下と、保存先のシリーズのフォルダ (`libraryPath` の形)。
+ * 置き場は元のTSの置き場の直下と、保存先のシリーズのフォルダ (`libraryPath` の形式)。
  * 走るのは一度に1つだけ (`start`) なので、ここで見つかるものは誰も書いていない
  */
 export function sweepTemporaries(): number {

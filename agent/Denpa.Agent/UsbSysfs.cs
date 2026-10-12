@@ -1,7 +1,7 @@
 namespace Denpa.Agent;
 
 /// <summary>
-/// USB デバイスが並ぶ sysfs (Linux)。挿し口ごとのディレクトリに、属性が1つずつファイルで置かれている。
+/// USB デバイスが並ぶ sysfs (Linux)。USB ポートごとのディレクトリに、属性が1つずつファイルで置かれている。
 /// 機材を探すところ (<see cref="AsicenUserland"/>・<see cref="Ccid"/>・<see cref="SianoUserland"/>) で同じ読み方をする
 /// </summary>
 public static class UsbSysfs

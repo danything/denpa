@@ -81,7 +81,7 @@ test.describe('テレビのペアリング', () => {
  * (信頼するネットワークの中なら通るので、ペアリングは要らない)。ログイン画面の HTML に回さない
  */
 test.describe('信頼するネットワークの外から鍵なしで', () => {
-    test('API は 401 の JSON。ペアリングコードの口は資格なしで開いている', async ({ stack }) => {
+    test('API は 401 の JSON。ペアリングコードの API は資格なしで開いている', async ({ stack }) => {
         const closed = await bootClosed(test.info().workerIndex, stack.root, {
             TRUSTED_NETWORKS: '10.10.0.0/16',
         });

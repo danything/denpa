@@ -5,7 +5,7 @@ import { mintShareToken, shareUrl } from '#lib/server/share.js';
 import { parseFileSource } from '#lib/source.js';
 
 /**
- * 期限付きの再生リンクを作る (`share.ts`)。返す `url` は録画のファイルの口に `?token=` を付けたもの。
+ * 期限付きの再生リンクを作る (`share.ts`)。返す `url` は録画のファイルのエンドポイントに `?token=` を付けたもの。
  *
  * **ここは普通の HTTP なので、認証がそのまま効く** — リンクを作れるのは
  * denpa に入れる人だけ。
@@ -13,7 +13,7 @@ import { parseFileSource } from '#lib/source.js';
  * 画面を開いている名前なら、その端末の近くからも引ける見込みがいちばん高い。
  *
  * `?source=` を付けると、配るファイルの名指し (`file/+server.ts` と同じ語彙)
- * ごとリンクに埋め込む (ダウンロードの口が H.264 や元のTSを名指しするとき)。
+ * ごとリンクに埋め込む (ダウンロードのリンクが H.264 や元のTSを名指しするとき)。
  * 知らない値は黙って落とす — リンクはおまかせ (今いいほう) になるだけ
  */
 export function POST({ params, url, request }) {

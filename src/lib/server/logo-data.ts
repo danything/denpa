@@ -23,12 +23,12 @@ import { services } from './schema';
 /**
  * CM検出のために覚えた局ロゴ (`own-logo-<幅>x<高さ>.bin`。`logo-own.ts`) の置き場と、その中身。
  *
- * **これは放送波から拾う局ロゴ (PNG) とは別物。** あちら (`server/logo.ts`) は番組表に
- * 出すための絵で、こちらは「画面のどこにロゴが出ているか」を録画から覚えたもの。
+ * **これは放送波から取得する局ロゴ (PNG) とは別物。** あちら (`server/logo.ts`) は番組表に
+ * 出すための画像で、こちらは「画面のどこにロゴが出ているか」を録画から覚えたもの。
  */
 
 /**
- * 覚えたロゴの置き場。**局ごとに分ける。** 「この絵は違う」で丸ごと捨てられるように
+ * 覚えたロゴの置き場。**局ごとに分ける。** 「この画像は違う」で丸ごと捨てられるように
  */
 export function logoRepo(serviceId: number): string {
     return join(config.cmLogoDir, String(serviceId));
@@ -100,7 +100,7 @@ export function learnedAt(serviceId: number): number | null {
     return newest(serviceId)?.at ?? null;
 }
 
-/** いま覚えているロゴを絵にする (`newest`) */
+/** いま覚えているロゴを画像にする (`newest`) */
 export function readLearnedLogo(serviceId: number): LearnedLogo | null {
     const latest = newest(serviceId);
     if (latest === null) return null;
@@ -152,17 +152,17 @@ export function learned(serviceId: number): boolean {
 }
 
 /**
- * 同じ絵を映している局を1つにまとめる。**局名で束ねる。**
+ * 同じ映像を映している局を1つにまとめる。**局名で束ねる。**
  *
  * 放送局はサブチャンネルの枠を常時流していて、マルチ編成をしていない間は
- * 本チャンネルと同じ絵が出ている。SDT の局名も同じなので、実機では
+ * 本チャンネルと同じ映像が出ている。SDT の局名も同じなので、実機では
  *
  * ```
  * TOKYO MX1   23608 / 23609          フジテレビ   1056 / 1057 / 1058
  * テレビ朝日  1064 / 1065 / 1066     BS-TBS       161 / 162 / 163
  * ```
  *
- * のように並んでいた。**同じ絵なのでロゴは1つ覚えれば足りる。** 束ねずに
+ * のように並んでいた。**同じ映像なのでロゴは1つ覚えれば足りる。** 束ねずに
  * 並べていた頃は、画面に「TOKYO MX1」が2つ並んでいた。
  *
  * 代表は**もう覚えている局を優先**する。無ければ先頭 (呼ぶ側の並び順)。
@@ -181,7 +181,7 @@ export function stations<T extends { id: number; network_id: number; name: strin
     return [...groups.values()];
 }
 
-/** 同じ絵を映している他の局。覚えたロゴを分け合うのに使う。名前の幅は寄せて比べる (`stations`) */
+/** 同じ映像を映している他の局。覚えたロゴを分け合うのに使う。名前の幅は寄せて比べる (`stations`) */
 export function siblings(serviceId: number): number[] {
     const me = orm()
         .select({ network_id: services.network_id, name: services.name })
@@ -200,7 +200,7 @@ export function siblings(serviceId: number): number[] {
 }
 
 /**
- * 覚えたロゴを、同じ絵を映している局にも配る (`copyModel`)。
+ * 覚えたロゴを、同じ映像を映している局にも配る (`copyModel`)。
  *
  * 束ねて1局ぶんしか画面に出さないので (`stations`)、そのままだとサブチャンネルの枠で
  * 録れた番組が一から覚え直すことになる。中身は同じなので写せば足りる。
@@ -213,7 +213,7 @@ export function share(serviceId: number, file: string, replace: boolean): void {
  * 覚えたもの1つ (`file`) を、他の局の入れ物へ写す。
  *
  * **向こうが同じ大きさのものを持っていれば、ふだんは写さない** (自分で育てたほうが確か)。
- * 覚え直した (`replace`。局がロゴを替えた) ときだけは上書きする — 同じ絵なので向こうの型も
+ * 覚え直した (`replace`。局がロゴを替えた) ときだけは上書きする — 同じ映像なので向こうの型も
  * 古く、残すと向こうは古い型で当てて外すか、覚え直しに1本ぶん余計にかかる。
  * 書きかけを読まれないよう、隣に写してから差し替える (`logo-own.save` と同じ)
  */

@@ -1,13 +1,13 @@
 import { expect, reserveSoon, syncEpg, test } from './helpers';
 
 /**
- * 追っかけ再生を HTTP で流す口 (`GET /api/recordings/<id>/chase`)。テレビのアプリ向け。
+ * 追っかけ再生を HTTP で流す API (`GET /api/recordings/<id>/chase`)。テレビのアプリ向け。
  *
  * 録っている最中の録画が一覧 (`GET /api/recordings`) に `recording: true` で出て、
  * その `chase` を開くと、元のTSなら伸びているファイルを追い読みして流し続ける。
- * 再エンコード (`h264`) は画面の追っかけと同じ器を HTTP の fMP4 で流す
+ * 再エンコード (`h264`) は画面の追っかけと同じ fMP4 を HTTP で流す
  */
-test.describe('追っかけ再生の口', () => {
+test.describe('追っかけ再生の API', () => {
     test('録画中の録画が一覧に出て、元のTSを追い読みで流し続ける', async ({ page, request, baseURL }) => {
         test.setTimeout(180_000);
         await syncEpg(request);
@@ -35,7 +35,7 @@ test.describe('追っかけ再生の口', () => {
         // 元のTS: 頭は同期バイト 0x47。録っている間は伸びたぶんも届き続ける。
         // **一覧に出るのは録り始めた時点で、ファイルにはまだ何も書かれていないことがある** —
         // そのあいだ chase は 404 (docs/api.md「まだ何も録れていなければ 404」)。アプリと同じく、
-        // 届きはじめるまで頼み直す
+        // 届きはじめるまでリクエストし直す
         const controller = new AbortController();
         let opened: Response | undefined;
         await expect(async () => {
@@ -59,7 +59,7 @@ test.describe('追っかけ再生の口', () => {
         expect(bytes).toBeGreaterThan(first.value?.length ?? 0);
         controller.abort();
 
-        // 再エンコード: 画面の追っかけと同じ器 (fMP4)
+        // 再エンコード: 画面の追っかけと同じコンテナ (fMP4)
         const encoded = new AbortController();
         const h264 = await fetch(`${baseURL}/${rec.chase}`, { signal: encoded.signal });
         expect(h264.status).toBe(200);

@@ -6,7 +6,7 @@ import { type AgentChannel, twinOf, withoutTwins } from './tuner';
 
 /**
  * 総当たりそのもの (`Scanner`) はここでは試さない。**エージェントに選局を
- * 頼む形**になったので、相手が居ないと動かない。通しで見ているのは
+ * 任せる形**になったので、相手がいないと動かない。通しで見ているのは
  * `tests/e2e/16-scan.spec.ts` で、本物の総当たりが偽の放送に当たっている。
  */
 
@@ -20,7 +20,7 @@ function stream(services: [number, number, string?][], half = false): Uint8Array
     ]);
 }
 
-/** バイト列をそのまま返す読み口。選局の代わり */
+/** バイト列をそのまま返すリーダー。選局の代わり */
 function fromBytes(data: Uint8Array, keepOpen = false): ReadableStream<Uint8Array> {
     return new ReadableStream<Uint8Array>({
         start(controller) {
@@ -205,7 +205,7 @@ describe('1チャンネルの読み取り', () => {
     });
 
     test('揃った時点で打ち切る', async () => {
-        // 居る局で毎回30秒待っていたら総当たりが終わらない。**閉じない読み口**で試す
+        // ある局で毎回30秒待っていたら総当たりが終わらない。**閉じないリーダー**で試す
         const started = Bun.nanoseconds();
         const { error } = await readServices(fromBytes(stream([[1024, 0x01]]), true), 30_000);
         expect(error).toBeNull();

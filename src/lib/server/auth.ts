@@ -3,13 +3,13 @@ import { config } from './config';
 import { enabled as oidcEnabled } from './oidc';
 
 /**
- * 誰を通すか。**どこでも通る道が2つと、口を限った道が2つ。**
+ * 誰を通すか。**どこでも通る方法が2つと、エンドポイントを限った方法が2つ。**
  *
- * | 道 | 何者か |
+ * | 方法 | 何者か |
  * | --- | --- |
  * | `TRUSTED_NETWORKS` | 信頼したネットワークから来た人。何も聞かずに通す |
  * | OIDC のログイン | 画面から入る人 (`docs/auth.md`) |
- * | 期限付きのリンク (`?token=`、share.ts) | 再生リンク・ダウンロード。**ファイルの口だけ** |
+ * | 期限付きのリンク (`?token=`、share.ts) | 再生リンク・ダウンロード。**ファイルのエンドポイントだけ** |
  * | 使い捨てのチケット | ライブ視聴の WebSocket だけ (`tickets.ts`) |
  *
  * **どれも設定していなければ、全部断る** (`configured`)。以前はベーシック認証を
@@ -19,24 +19,24 @@ import { enabled as oidcEnabled } from './oidc';
  * (公開の注意は docs/auth.md)。
  *
  * **プレイヤーはリダイレクトを扱えない。** ログイン画面へ飛ばされたところで
- * 何もできず「再生できません」で終わる。だからファイルの口は、ログインではなく
+ * 何もできず「再生できません」で終わる。だからファイルのエンドポイントは、ログインではなく
  * **URL そのものが資格になる**期限付きのリンクで開ける。
  */
 
 /**
- * 期限付きのリンクとログインの控えで開けられる口 (録画のファイル)。**ここは OIDC のリダイレクトにしない。**
- * **形はここ1つ** — share.ts の突き合わせも同じものを使う
+ * 期限付きのリンクとログインの控えで開けられるエンドポイント (録画のファイル)。**ここは OIDC のリダイレクトにしない。**
+ * **形式はここ1つ** — share.ts の突き合わせも同じものを使う
  */
 const FILE_PATH = /^\/api\/recordings\/(\d+)\/file$/;
 
-/** ファイルの口なら、そのパスが指す録画ID。違えば null */
+/** ファイルのエンドポイントなら、そのパスが指す録画ID。違えば null */
 export function fileRecordingId(pathname: string): number | null {
     const m = FILE_PATH.exec(pathname);
     return m === null ? null : Number(m[1]);
 }
 
 /**
- * 素通しにする口。
+ * 素通しにするエンドポイント。
  *
  * - **ログインの入口。** 守ると入れなくなる (ログイン画面へ行くのにログインが要る)
  * - **`/logout`。** ここも素通し (ログアウトするのにログインを要求しない)
@@ -70,7 +70,7 @@ export function isOpenPath(pathname: string): boolean {
 }
 
 /**
- * 入る道が1つでも設定してあるか。**無ければ全部断る** (fail-closed)。
+ * ログイン方法が1つでも設定してあるか。**無ければ全部断る** (fail-closed)。
  *
  * 分からない状態で開けておくより、閉まっていることが起動ログとエラーページから
  * はっきり分かるほうがいい。以前の「起動時にパスワードを自動生成して掛ける」は、
@@ -80,7 +80,7 @@ export function configured(): boolean {
     return oidcEnabled() || networks(config.trustedNetworks).length > 0;
 }
 
-/** 入る道が無いまま上がったとき (と、TRUSTED_NETWORKS の書き損じ) の案内。起動ログに1度だけ出す */
+/** ログイン方法が無いまま上がったとき (と、TRUSTED_NETWORKS の書き損じ) の案内。起動ログに1度だけ出す */
 export function warnIfClosed(): void {
     // 書き損じは当たらないだけなので、気づけるように知らせる
     for (const entry of unreadable(networks(config.trustedNetworks))) {
@@ -88,13 +88,13 @@ export function warnIfClosed(): void {
     }
     if (configured()) return;
     console.warn(
-        '[boot] 入る道が設定されていないため、すべてのアクセスを断ります。\n' +
+        '[boot] ログイン方法が設定されていないため、すべてのアクセスを断ります。\n' +
             '       OIDC (docs/auth.md) か TRUSTED_NETWORKS (CIDR のカンマ区切り) を設定してください。\n' +
             '       すべて開けるなら TRUSTED_NETWORKS=0.0.0.0/0 (公開時の注意は docs/auth.md)',
     );
 }
 
-/** 入る道が無い相手への返事。理由が分からない 403 にしない */
+/** ログイン方法が無い相手への返事。理由が分からない 403 にしない */
 export function denied(): Response {
     const text = configured()
         ? 'このページは、ログインするか期限付きのリンクからでないと開けません'
@@ -103,14 +103,14 @@ export function denied(): Response {
 }
 
 /**
- * ファイルの口を、**ログイン済みの画面に開けるか**。
+ * ファイルのエンドポイントを、**ログイン済みの画面に開けるか**。
  *
- * 録画をブラウザで観るようになったので、`<video>` がファイルの口を取りに来る。
+ * 録画をブラウザで観るようになったので、`<video>` がファイルのエンドポイントを取りに来る。
  * OIDC で入った人が映像を出そうとした瞬間に断られないように、ログインの控えを
  * ここでも受ける。通る相手が増えるわけではない — 「この denpa に入れる人」のまま
  */
 export function sessionMayRead(loggedIn: boolean): boolean {
-    // ファイルの口かどうかは呼ぶ側 (hooks) が振り分けてから来る
+    // ファイルのエンドポイントかどうかは呼ぶ側 (hooks) が振り分けてから来る
     return loggedIn && oidcEnabled();
 }
 
@@ -148,7 +148,7 @@ export function clientAddress(event: { getClientAddress(): string }): string {
     }
 }
 
-/** OIDC でログインを求めるか (素通しの口とファイルの口は呼ぶ側 (hooks) が先に振り分ける) */
+/** OIDC でログインを求めるか (素通しのエンドポイントとファイルのエンドポイントは呼ぶ側 (hooks) が先に振り分ける) */
 export function needsLogin(): boolean {
     return oidcEnabled();
 }

@@ -26,7 +26,7 @@ public class LeaseReadersTests
     {
         var lease = Make();
         lease.Saw("live GR/T27");
-        // 読み手はもう居ない (Sinks は空のまま) が、居たことは残っている
+        // 読み手はもういない (Sinks は空のまま) が、いたことは残っている
         await Assert.That(lease.Readers()).IsEqualTo("live GR/T27");
     }
 

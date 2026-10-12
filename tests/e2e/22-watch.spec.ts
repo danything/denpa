@@ -21,7 +21,7 @@ import {
 /**
  * 録画をブラウザで観る画面 (`/watch/<id>`)。
  *
- * **絵が出るところまでは見ません。** 偽 ffmpeg が置くのは中身の無いファイルで、
+ * **映像が出るところまでは見ません。** 偽 ffmpeg が置くのは中身の無いファイルで、
  * ブラウザは当然読めない。ここで確かめるのは**画面の作り**のほう —
  * 一覧から1回で来られるか、右に番組の中身が出るか、観たその場で消せるか。
  * 押したときの読み方 (どこでも一時停止・左右2回で10秒・チャプター送り) は
@@ -29,9 +29,9 @@ import {
  */
 
 /**
- * **「このブラウザでは再生できませんでした」の幕を畳む** (絵で字幕を見るテストだけ)。
+ * **「このブラウザでは再生できませんでした」の幕を畳む** (画像で字幕を確かめるテストだけ)。
  * 偽の録画は中身が無く、ブラウザは再生に転んで幕 (`watch-broken`。映像の箱を暗く覆う) を出す。
- * データ放送の小窓に寄せた映像の箱もその下に居るので、塗った字幕が暗く写る。本物の録画では出ない
+ * データ放送の小窓に寄せた映像の箱もその下にあるので、塗った字幕が暗く写る。本物の録画では出ない
  */
 async function hideBroken(page: Page): Promise<void> {
     await page.addStyleTag({ content: '[data-testid="watch-broken"] { display: none !important; }' });
@@ -65,7 +65,7 @@ test.describe('録画を観る', () => {
         await expect(page).toHaveURL(new RegExp(`/watch/${id}$`));
 
         /*
-         * **観るのはエンコードしたものだけ。** 元のTSは MPEG-2 で、ブラウザに復号器が
+         * **観るのはエンコードしたものだけ。** 元のTSは MPEG-2 で、ブラウザにデコーダが
          * 無い (docs/stream.md §5.5)。名指ししていないと、エンコードしている最中は
          * 元のTSが返ってきて何も映らない
          */
@@ -85,7 +85,7 @@ test.describe('録画を観る', () => {
      * この写しだけが頼り — なのに詳細の種を組み直すところで null に潰していて、
      * **1日過ぎた録画だけラベルが消えていた** (実機、2026-09-11)。
      *
-     * 番組表から引き直す口を 404 にして「消えたあと」を作る
+     * 番組表から引き直すエンドポイントを 404 にして「消えたあと」を作る
      */
     test('番組表から消えた録画でも、行のジャンルと音声のラベルが出る', async ({ page, request }) => {
         test.setTimeout(180_000);
@@ -117,7 +117,7 @@ test.describe('録画を観る', () => {
         await page.getByTestId('detail-badges').click();
         await expect(page.getByTestId('watch-delete-confirm')).toHaveCount(0);
 
-        // 右の列は絵から離れた間に引っ込んでいる。起こしてから押す
+        // 右の列は映像から離れた間に引っ込んでいる。起こしてから押す
         await wakeControls(page, 'watch-stage');
         await page.getByTestId('watch-delete').click();
         await page.getByTestId('watch-delete-confirm').click();
@@ -151,7 +151,7 @@ test.describe('録画を観る', () => {
      * **シークバーの CM は琥珀で塗る** (denpa-tv と同じ色と意味)。続いている CM は1本にまとめ、
      * 位置はつまみの往復ぶんを引いて置く (`seek-track.ts`。式は単体試験が持つ)。
      *
-     * 偽の録画にはチャプターも尺も無いので、チャプターは口ごと差し替え、尺は映像の要素に
+     * 偽の録画にはチャプターも尺も無いので、チャプターは API ごと差し替え、尺は映像の要素に
      * 持たせて「読み込めた」と知らせる (中身の無いファイルはブラウザが読めない)
      */
     test('シークバーの CM の区間が琥珀で塗られ、読み上げでも CM と分かる', async ({ page, request }) => {
@@ -198,7 +198,7 @@ test.describe('録画を観る', () => {
     /**
      * **字幕は canvas に描いて重ねる。** ライブ (`/live`) と同じやり方。
      *
-     * 文字を `<track>` に渡す道は放送どおりには出ない (左右の位置・背景の箱・外字が落ちる)。
+     * 文字を `<track>` に渡す方法は放送どおりには出ない (左右の位置・背景の箱・外字が落ちる)。
      * 入れ物に入っている放送の字幕 (`S_ARIBSUB`) をサーバがデコードして文字の配置で渡し
      * (`captions.json`)、画面が描く (`caption-draw.ts`)
      */
@@ -232,7 +232,7 @@ test.describe('録画を観る', () => {
     /**
      * **データ放送を出しても字幕は見えている。テレビと同じで映像と一緒に小窓へ縮む。**
      *
-     * 映像の箱ごと BML の小窓へ寄せる。字幕の canvas が箱の外に居た頃は、映像だけ
+     * 映像の箱ごと BML の小窓へ寄せる。字幕の canvas が箱の外にあった頃は、映像だけ
      * 小窓へ行き、字幕は枠いっぱいのままデータ放送の面の下に隠れていた (実機で「データ放送を
      * 出すと字幕が出なくなる」)。偽の録画にはデータ放送が無いので、小窓を持つ BML を
      * サイドカー (`.bml.jsonl`) に置いてから出す。**操作列を出したまま d を押す**
@@ -340,13 +340,13 @@ test.describe('録画を観る', () => {
         await expect(shot).toBeVisible();
         const name = (await page.getByTestId('watch-name').textContent())?.trim() ?? '';
 
-        // 絵が無いうちは押しても何も起きない (落とすものが無い)。画面も壊れない
+        // コマが無いうちは押しても何も起きない (落とすものが無い)。画面も壊れない
         await wakeControls(page, 'watch-stage');
         await shot.click();
         await expect(page.getByTestId('watch-video')).toBeVisible();
 
         /*
-         * 偽 ffmpeg のエンコードしたものは中身が無く、絵は来ない。**絵が来たことにする** —
+         * 偽 ffmpeg のエンコードしたものは中身が無く、フレームは来ない。**フレームが来たことにする** —
          * 大きささえあれば写せる (中身の無い映像は黒く写る)
          */
         await page.getByTestId('watch-video').evaluate((video) => {
@@ -380,7 +380,7 @@ test.describe('録画を観る', () => {
         const id = await watchable(page, request);
 
         await goto(page, `/watch/${id}`);
-        // 等速の口はメーターの絵だけ (数字は出さない)。速めると絵をやめて数字だけ、読み上げは速さも
+        // 等速のボタンはメーターのアイコンだけ (数字は出さない)。速めるとアイコンをやめて数字だけ、読み上げは速さも
         const speed = page.getByTestId('watch-speed');
         await expect(speed).toHaveText('');
         await expect(speed.locator('svg')).toHaveCount(1);
@@ -403,7 +403,7 @@ test.describe('録画を観る', () => {
     /**
      * **どこまで観たかを覚える。** 端末ではなく DB に置くので、別の端末でも続く。
      *
-     * ここで見るのは「覚える・覚えない」の判断まで。**絵は出ません** —
+     * ここで見るのは「覚える・覚えない」の判断まで。**映像は出ません** —
      * 偽 ffmpeg が置くのは中身の無いファイルで、位置を戻すところまでは行けない
      * (戻す判断は `ts/watch.test.ts` が持っている)
      */
@@ -461,7 +461,7 @@ test.describe('録画を観る', () => {
     });
 
     /**
-     * **形はライブと同じ。** 絵が左、読むものが右で、右は**画面の残りをぜんぶ**
+     * **レイアウトはライブと同じ。** 映像が左、読むものが右で、右は**画面の残りをぜんぶ**
      * 使う。ページごとは動かない。
      *
      * 周りの余白を自分でも足していた頃は、外の `<main>` のぶんと重なって
@@ -516,7 +516,7 @@ test.describe('録画を観る', () => {
      * **右端は「観るのをやめる」ための列。** 閉じる・切り抜く・消すは、
      * 観ながら使う操作 (再生・音・字幕) とは押す頻度も並べる理由も違う。
      *
-     * 1本の操作バーに混ぜていた頃は押すものが12個並び、**番組の名前が入る幅が
+     * 1つの操作バーに混ぜていた頃は押すものが12個並び、**番組の名前が入る幅が
      * 残らなかった** — 実機のタブレットで名前が折り返し、操作バーが二段になっていた
      */
     test('閉じる・切り抜き・削除は右の列。下の操作バーは一段のまま', async ({ page, request }) => {
@@ -529,12 +529,12 @@ test.describe('録画を観る', () => {
         const side = page.getByTestId('watch-side');
         for (const testid of ['watch-close', 'watch-shot', 'watch-delete']) {
             expect(await side.getByTestId(testid).count()).toBe(1);
-            // 下の操作バーには無い。同じことをする口を2つ置かない
+            // 下の操作バーには無い。同じことをするボタンを2つ置かない
             expect(await page.getByTestId('watch-controls').getByTestId(testid).count()).toBe(0);
         }
         /*
          * **押すだけのボタンは「切り替え」と名乗らない** (`aria-pressed` は切り替えにだけ)。
-         * 絵だけのボタンなので、マウスを重ねたときに名前が出る (`title`)
+         * アイコンだけのボタンなので、マウスを重ねたときに名前が出る (`title`)
          */
         for (const testid of ['watch-close', 'watch-shot', 'watch-delete', 'watch-play', 'watch-full']) {
             const button = page.getByTestId(testid);
@@ -572,7 +572,7 @@ test.describe('録画を観る', () => {
      * **バックグラウンド再生は既定で切。** 裏に回すと止め、戻ると止めた所から再開する。
      * OS が勝手に小窓にしないよう `disablePictureInPicture` も立てる (`background.svelte.ts`)。
      *
-     * 偽 ffmpeg の録画は絵が出ない (上) ので、`<video>` の止める・再開を差し替えて、
+     * 偽 ffmpeg の録画は映像が出ない (上) ので、`<video>` の止める・再開を差し替えて、
      * 呼ばれたかだけを見る。裏に回るのは `visibilityState` を差し替えて知らせを送る
      */
     test('バックグラウンド再生は既定で切。裏に回すと止まり、入れると止まらない', async ({
@@ -635,7 +635,7 @@ test.describe('録画を観る', () => {
  * **スマホの縦で、全画面をやめて観る。** 枠は 390x224 しか無い (画面の端から端まで。
  * 余白の内側に置いていた頃は 358x224)。
  *
- * 48px の押すものを全部並べていた頃は、操作バーが折れて絵を覆い、右の縦列 (閉じる・
+ * 48px の押すものを全部並べていた頃は、操作バーが折れて映像を覆い、右の縦列 (閉じる・
  * 切り抜き・削除) がシークバーや再生ボタンに重なっていた (実機の報告)。狭い枠では
  * 40px に縮め、毎回は使わないもの (速さなど) を「ほか」(⋯) に畳み、右の列を右上の
  * 一行に寝かせる (`PlayerStage`)
@@ -688,11 +688,11 @@ test.describe('スマホの縦で観る', () => {
         expect(shape.いちばん小さい).toBeGreaterThanOrEqual(40);
         expect(shape.枠からはみ出す).toBe(false);
         expect(shape.横に動く).toBe(false);
-        // **絵は画面の端から端まで** (余白の内側に置くと 358px に縮み、周りに縁が出る)
+        // **映像は画面の端から端まで** (余白の内側に置くと 358px に縮み、周りに縁が出る)
         expect(shape.枠).toEqual({ left: 0, width: 390 });
         /*
-         * **下の操作バーは絵の下 (枠の外) に出す** (`PlayerStage` の `under`)。390x219 の絵に
-         * 重ねていた頃は絵の半分を覆い、字幕に時刻が重なっていた。字幕の面も絵の中に収まる
+         * **下の操作バーは映像の下 (枠の外) に出す** (`PlayerStage` の `under`)。390x219 の映像に
+         * 重ねていた頃は映像の半分を覆い、字幕に時刻が重なっていた。字幕の面も映像の中に収まる
          */
         await expect(stage).toHaveAttribute('data-under', '');
         const picture = (await page.getByTestId('watch-video').boundingBox())!;
@@ -711,7 +711,7 @@ test.describe('スマホの縦で観る', () => {
         await page.getByTestId('watch-more').tap();
         await expect(page.getByTestId('watch-speed')).toBeVisible();
         await page.getByTestId('watch-speed').tap();
-        // 器は枠の中に収まる (見出しの裏に潜らない)
+        // メニューは枠の中に収まる (見出しの裏に潜らない)
         const menu = page.getByTestId('watch-speed-menu');
         await expect(menu).toBeVisible();
         const inside = await page.evaluate(() => {
@@ -728,7 +728,7 @@ test.describe('スマホの縦で観る', () => {
         await page.getByTestId('watch-speed-option').filter({ hasText: '×1.5' }).tap();
         await expect(page.getByTestId('watch-speed')).toHaveText('1.5');
 
-        // 絵を覆わないので、操作バーは放っておいても引っ込まない (「ほか」も開いたまま)
+        // 映像を覆わないので、操作バーは放っておいても引っ込まない (「ほか」も開いたまま)
         await expect(bar).toHaveAttribute('data-shown', 'false', { timeout: 6000 });
         expect(await bar.evaluate((el) => getComputedStyle(el).opacity)).toBe('1');
         await expect(page.getByTestId('watch-speed')).toBeVisible();
@@ -736,13 +736,13 @@ test.describe('スマホの縦で観る', () => {
 });
 
 /**
- * **横にしたスマホでは絵を画面いっぱいに** (`PlayerLayout`)。見出しと右の列を残すと
- * 絵の枠が 510x280 ほどしか無く、操作バーが二段に折れてシークバーが絵の真ん中に来ていた
+ * **横にしたスマホでは映像を画面いっぱいに** (`PlayerLayout`)。見出しと右の列を残すと
+ * 映像の枠が 510x280 ほどしか無く、操作バーが二段に折れてシークバーが映像の真ん中に来ていた
  */
 test.describe('スマホの横で観る', () => {
     test.use({ hasTouch: true, isMobile: true, viewport: { width: 844, height: 390 } });
 
-    test('見出しを隠して絵が画面の高さいっぱい。操作バーは一段で下端に、右の列は下へ', async ({
+    test('見出しを隠して映像が画面の高さいっぱい。操作バーは一段で下端に、右の列は下へ', async ({
         page,
         request,
     }) => {
@@ -756,7 +756,7 @@ test.describe('スマホの横で観る', () => {
         const stage = page.getByTestId('watch-stage');
         await expect(stage).not.toHaveAttribute('data-pseudo', '');
         await expect(page.locator('.navbar')).toBeHidden();
-        // 枠は絵の形 (16:9) で、高さいっぱい・真ん中。左右の黒帯にボタンを出さない
+        // 枠は映像の形 (16:9) で、高さいっぱい・真ん中。左右の黒帯にボタンを出さない
         await expect
             .poll(async () => roundBox(await stage.boundingBox()))
             .toEqual({ x: 75, y: 0, width: 693, height: 390 });
@@ -770,15 +770,15 @@ test.describe('スマホの横で観る', () => {
         const play = (await page.getByTestId('watch-play').boundingBox())!;
         const full = (await page.getByTestId('watch-full').boundingBox())!;
         expect(Math.abs(play.y - full.y)).toBeLessThan(2);
-        // シークバーは絵の下の方 (真ん中に来ると、絵を押したつもりで位置が飛ぶ)
+        // シークバーは映像の下の方 (真ん中に来ると、映像を押したつもりで位置が飛ぶ)
         const seek = (await bar.getByRole('slider').boundingBox())!;
         expect(seek.y).toBeGreaterThan(390 * 0.6);
-        // どのボタンも重ならず、絵の枠の中に丸ごと見える (右上の3つも)
+        // どのボタンも重ならず、映像の枠の中に丸ごと見える (右上の3つも)
         expect(await overlayTroubles(page, 'watch-stage')).toEqual([]);
-        // 操作バーは絵に重ねるので、下の方の字幕は操作バーの上まで持ち上がる
+        // 操作バーは映像に重ねるので、下の方の字幕は操作バーの上まで持ち上がる
         await captionsClearOfBar(page, 'watch-captions-canvas', 'watch-controls');
 
-        // 右の列 (番組の中身) は消さずに絵の下へ。巻き取れば読める
+        // 右の列 (番組の中身) は消さずに映像の下へ。巻き取れば読める
         const facts = page.getByTestId('watch-facts');
         await facts.scrollIntoViewIfNeeded();
         await expect(facts).toBeInViewport();
@@ -795,17 +795,17 @@ test.describe('指で観る', () => {
     test.use({ hasTouch: true, isMobile: true, viewport: { width: 1024, height: 768 } });
 
     /*
-     * **押した口が開いたまま残り、操作列も引っ込まない。** 実機のタブレットで、
+     * **押したメニューが開いたまま残り、操作列も引っ込まない。** 実機のタブレットで、
      * 速さを押した瞬間にメニューが閉じていた。開いている間は操作列の 2.5 秒の
-     * 時計 (`LINGER`) も止める — 器は操作列の中に居るので、操作列が消えれば
+     * 時計 (`LINGER`) も止める — メニューは操作列の中にあるので、操作列が消えれば
      * 選んでいる最中でもメニューごと消える
      */
-    test('速さの口を押すと開いたまま残り、選ぶまで操作列も消えない', async ({ page, request }) => {
+    test('速さのボタンを押すと開いたまま残り、選ぶまで操作列も消えない', async ({ page, request }) => {
         test.setTimeout(180_000);
         const id = await watchable(page, request);
         await goto(page, `/watch/${id}`);
 
-        // 指は絵を1回押して操作列を出す (マウスのように動かしただけでは出ない)
+        // 指は映像を1回押して操作列を出す (マウスのように動かしただけでは出ない)
         const stage = (await page.getByTestId('watch-stage').boundingBox())!;
         await page.touchscreen.tap(stage.x + stage.width / 2, stage.y + stage.height / 2);
         const bar = page.getByTestId('watch-controls');
@@ -831,7 +831,7 @@ test.describe('指で観る', () => {
  * **iPhone の全画面は、枠を画面いっぱいに広げて代わりにする** (#471。`fullscreen.svelte.ts`)。
  *
  * iPhone の Safari は要素の全画面 (`requestFullscreen` / `webkitRequestFullscreen`) を
- * 持たない。口を消して iPhone の横持ち (844x390) に見立てる。指の端末は開いた時点で
+ * 持たない。API を消して iPhone の横持ち (844x390) に見立てる。指の端末は開いた時点で
  * 全画面に入るので、開いたら広がっていること。出口は同じボタン・Esc・戻る
  */
 test.describe('iPhone で全画面', () => {
@@ -938,7 +938,7 @@ function roundBox(box: { x: number; y: number; width: number; height: number } |
  * **字幕は、見えている大きさ × 画面の画素で描く** (`caption-draw.ts` の `CaptionPainter`)。
  *
  * 実機で「字幕がぼやぁっとしている」— データ放送を出した観る画面で、小窓に入った字幕が
- * 拡大した絵のように滲んでいた。当時は BML の面 (960x540) を原寸で組んで枠いっぱいに
+ * 拡大した画像のように滲んでいた。当時は BML の面 (960x540) を原寸で組んで枠いっぱいに
  * `transform: scale` で伸ばすのに、字幕は CSS の大きさ (面の上の 480x270) の画素で描いていた。
  * いまは面ごと伸ばさないが、CSS の大きさは整数に丸めてあるので、見えている大きさで描くのは変わらない。
  * 偽の録画は中身が無いので、字幕は `captions.json` を差し替えて 0 秒に1枚置く

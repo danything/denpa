@@ -103,7 +103,7 @@ export class Sound {
         return true;
     }
 
-    /** AIFF を鳴らす。読めなければ null。止める口と、鳴り終わりの知らせを返す */
+    /** AIFF を鳴らす。読めなければ null。止める関数と、鳴り終わりの知らせを返す */
     aiff(data: Uint8Array, ended: () => void): (() => void) | null {
         const pcm = decodeAiff(data);
         const context = pcm === null ? null : this.audio();

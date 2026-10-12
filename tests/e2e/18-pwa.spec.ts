@@ -271,7 +271,7 @@ test.describe('PWA', () => {
         const barAfter = (await page.locator('.navbar').boundingBox())!;
         expect(barAfter.height, 'メニューを開くとヘッダーの厚みが変わる').toBe(barBefore.height);
         const themeAfter = (await page.getByTestId('theme-toggle').boundingBox())!;
-        expect(themeAfter.y, 'メニューを開くと隣の口がずれる').toBe(theme.y);
+        expect(themeAfter.y, 'メニューを開くと隣のボタンがずれる').toBe(theme.y);
 
         await menu.getByRole('link', { name: '番組表' }).click();
         await page.waitForURL(/guide/);

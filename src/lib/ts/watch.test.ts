@@ -25,7 +25,7 @@ describe('押された場所', () => {
     });
 
     /**
-     * **真ん中を広く取る。** 3分割にすると、絵の中央付近を押したつもりが
+     * **真ん中を広く取る。** 3分割にすると、映像の中央付近を押したつもりが
      * 送りになる。左右それぞれ3割にして中央に4割残す
      */
     test('真ん中は広めに残す', () => {
@@ -135,7 +135,7 @@ describe('チャプター送り', () => {
         expect(nextChapterAt(CHAPTERS, 60)).toBe(120);
     });
 
-    test('最後のチャプターに居るなら次は無い', () => {
+    test('最後のチャプターにいるなら次は無い', () => {
         expect(nextChapterAt(CHAPTERS, 200)).toBeNull();
     });
 
@@ -148,7 +148,7 @@ describe('チャプター送り', () => {
         expect(prevChapterAt(CHAPTERS, 62)).toBe(0);
     });
 
-    test('1本目の頭に居るなら戻り先は無い', () => {
+    test('1本目の頭にいるなら戻り先は無い', () => {
         expect(prevChapterAt(CHAPTERS, 1)).toBeNull();
     });
 
@@ -175,12 +175,12 @@ describe('CMを自動で飛ばす', () => {
         { start: 105, end: 300, title: '本編' },
     ];
 
-    test('CMの中に居たら、続いているぶんの終わりまで', () => {
+    test('CMの中にいたら、続いているぶんの終わりまで', () => {
         expect(skipTarget(RUN, 65)).toBe(105);
         expect(skipTarget(RUN, 80)).toBe(105);
     });
 
-    test('本編に居るなら飛ばない', () => {
+    test('本編にいるなら飛ばない', () => {
         expect(skipTarget(RUN, 10)).toBeNull();
         expect(skipTarget(RUN, 200)).toBeNull();
     });
@@ -219,7 +219,7 @@ describe('CMを自動で飛ばす', () => {
 });
 
 describe('ffprobe のチャプターを読む', () => {
-    /** 実物の形 (`-show_chapters -print_format json`) */
+    /** 実物の形式 (`-show_chapters -print_format json`) */
     const REAL = JSON.stringify({
         chapters: [
             {
@@ -330,7 +330,7 @@ describe('観終えたか', () => {
 describe('観はじめの CM 飛ばし', () => {
     /** ロゴで当てられた録画。無音検出だけの覚え書きは「失敗」ではない */
     const ok = '無音 8 箇所';
-    /** ロゴが使えず無音検出に落ちた録画 (format.LOGO_UNUSABLE がこの形で入る) */
+    /** ロゴが使えず無音検出に落ちた録画 (format.LOGO_UNUSABLE がこの形式で入る) */
     const fell = '無音 8 箇所 (ロゴは使えず: ロゴの写っているコマがありませんでした)';
 
     test('覚えていなければ入れて始める', () => {

@@ -4,7 +4,7 @@ import { expect, goto, reserveSoon, syncEpg, test } from './helpers';
 /**
  * エンコードの中止。
  *
- * **押したその場で行が変わること**を見る。中止を頼むだけで返していた頃は、
+ * **押したその場で行が変わること**を見る。中止をリクエストするだけで返していた頃は、
  * 押した直後の読み直しが ffmpeg の死ぬ前に届くので、**同じ「エンコード中 60.9%」が
  * そのまま出た** (実機、2026-09-10)。行が変わるのは畳み終わりの知らせ (SSE) が
  * 来たときで、その繋ぎが切れている端末では**リロードするまで永久に変わらない**。
@@ -47,7 +47,7 @@ test.describe('エンコードの中止', () => {
          */
         await goto(page, '/');
         await expect(row.getByTestId('recording-state')).toHaveText('録画済み', { timeout: 1_000 });
-        // 中止の口は消え、再エンコードできる状態に戻っている
+        // 中止のボタンは消え、再エンコードできる状態に戻っている
         await expect(row.getByTestId('encode-cancel')).toHaveCount(0);
     });
 });

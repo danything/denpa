@@ -39,7 +39,7 @@
                 "useLiteralKeys": "off"
             },
             "a11y": {
-                // 字幕は放送が絵で送ってくる。canvas に重ねるので <track> に渡せるものが無い
+                // 字幕は放送が画像として描くものを送ってくる。canvas に重ねるので <track> に渡せるものが無い
                 "useMediaCaption": "off",
                 // 行そのものを押せるようにしていて、中にも押せるものが入っている。<button> は入れ子にできない
                 "useSemanticElements": "off"

@@ -3,13 +3,13 @@
  *
  * ライブ視聴は映像・音声・字幕・データ放送を1本の接続に多重化する作りなので
  * ([docs/stream.md](docs/stream.md) §5.3)、`Request` → `Response` しか扱えない
- * SvelteKit の口では足りない。
+ * SvelteKit の仕組みでは足りない。
  *
  * ## なぜ間に挟まるのか
  *
  * **bun の `node:http` は WebSocket の握手ができない。** `upgrade` は上がるのに、
  * 渡される socket に書いても相手に1バイトも届かない (`write()` は true を返し、
- * コールバックも成功と言う)。adapter-node はその上に居るので、そのままでは通らない。
+ * コールバックも成功と言う)。adapter-node はその上にあるので、そのままでは通らない。
  *
  * `svelte-adapter-bun` に替える手も試したが、**今の SvelteKit では動かない** —
  * kit の生成物を正規表現で書き換えて `websocket` フックを挿し込む作りで、
@@ -39,7 +39,7 @@ const publicHost = process.env.HOST ?? '0.0.0.0';
 
 /**
  * 内側の adapter-node が待つところ。**127.0.0.1 だけ**に開くので、
- * 外から見える口は増えない。
+ * 外から見えるポートは増えない。
  */
 const innerPort = Number(process.env.DENPA_INNER_PORT ?? publicPort + 1);
 
@@ -48,8 +48,8 @@ process.env.PORT = String(innerPort);
 process.env.HOST = '127.0.0.1';
 /*
  * **スキームは常に `x-forwarded-proto` から読む** (選べるオプションにしない)。
- * adapter-node は読めないと https と決め打つので、http で受ける構成 (前段の居ない直結など)
- * で CSRF 判定が食い違って POST が全部 403 になる (前段が居なければ下で入れる)。偽装されても得るものが無い —
+ * adapter-node は読めないと https と決め打つので、http で受ける構成 (前段の無い直結など)
+ * で CSRF 判定が食い違って POST が全部 403 になる (前段が無ければ下で入れる)。偽装されても得るものが無い —
  * ブラウザ経由の CSRF ではこのヘッダを付けられないし、直に付けて来る相手が
  * 変えられるのは自分に返る origin の見た目だけ。`TRUSTED_PROXIES` の前段からだけ読む
  * ようにはしない — 守れるものが無いのに、前段を設定し忘れた構成の POST を全部止める。
@@ -65,14 +65,14 @@ process.env.HOST = '127.0.0.1';
  *
  * 以前は `ADDRESS_HEADER=x-forwarded-for` を渡すと adapter-node が誰から来たヘッダでも
  * 信じていた — :3000 へ直に届く経路があると、ヘッダを付けるだけで信頼ネットワークを
- * 名乗れた。**`ADDRESS_HEADER` はもう読まない** (互換の道は残さない。docs/auth.md の
+ * 名乗れた。**`ADDRESS_HEADER` はもう読まない** (互換の経路は残さない。docs/auth.md の
  * 「前段の後ろに置くとき」)。設定してあれば起動時に1行だけ知らせる
  */
 process.env.PROTOCOL_HEADER = 'x-forwarded-proto';
 const REMOTE_HEADER = 'x-denpa-remote';
 if (process.env.ADDRESS_HEADER && process.env.ADDRESS_HEADER !== REMOTE_HEADER) {
     console.warn(
-        `ADDRESS_HEADER=${process.env.ADDRESS_HEADER} はもう読みません。前段 (リバースプロキシ) の後ろに居るなら ` +
+        `ADDRESS_HEADER=${process.env.ADDRESS_HEADER} はもう読みません。前段 (リバースプロキシ) の後ろにいるなら ` +
             'TRUSTED_PROXIES に前段の住所 (CIDR) を設定してください。設定するまで、前段越しの接続元は前段の住所になります',
     );
 }
@@ -83,7 +83,7 @@ for (const entry of unreadable(proxies)) {
     console.warn(`TRUSTED_PROXIES の「${entry}」は読めないので無視します`);
 }
 await import('./build/index.js');
-// こちらが公開する側なので、元に戻しておく (アプリが自分の口を見るとき用)
+// こちらが公開する側なので、元に戻しておく (アプリが自分のポートを見るとき用)
 process.env.PORT = String(publicPort);
 process.env.HOST = publicHost;
 
@@ -125,16 +125,16 @@ Bun.serve({
          * **JS が1つも動かない** — 画面は SSR のぶんだけ出るのに、押しても
          * 何も起きない出方をする (E2E が50件落ちた)。
          *
-         * 外しておけば内側は生で返すので、食い違いが起きない。無駄に
+         * 外しておけば内側は圧縮せずに返すので、食い違いが起きない。無駄に
          * 圧縮して展開し直す往復も消える。**線の上での圧縮は前段に任せる**
-         * (公開しているところは前段のリバースプロキシが居る)。
+         * (公開しているところは前段のリバースプロキシがいる)。
          */
         const headers = new Headers(request.headers);
         // **消すだけでは効かない。** `fetch` は無ければ自分で付け直すので、
         // 「圧縮しないでくれ」と明示する
         headers.set('accept-encoding', 'identity');
         /*
-         * **前段が居なければ、受けた接続のスキームを `x-forwarded-proto` に入れる。**
+         * **前段が無ければ、受けた接続のスキームを `x-forwarded-proto` に入れる。**
          * adapter-node はこのヘッダが無いと自分を https と決め打つ。`http://<IP>:3000` に
          * 直に繋ぐと、ブラウザの Origin (http) と食い違って POST が全部 CSRF の 403 になり、
          * ライブのチケット (POST) も取れず「繋がりませんでした」になっていた (#437)。

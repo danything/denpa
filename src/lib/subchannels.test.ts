@@ -35,7 +35,7 @@ function layout(programs: Airing[], subs = true, services = [TX, TX2, TX3]) {
     return { columns: columns.map((s) => s.id), cells: cellsOf(columns, programs, main, split) };
 }
 
-/** 見比べやすい形にする: [局, 列, 幅, 開始時, 終了時] */
+/** 見比べやすい形式にする: [局, 列, 幅, 開始時, 終了時] */
 function shape(cells: ReturnType<typeof cellsOf>) {
     return cells.map((c) => [c.program.service_id, c.column, c.span, c.start_at / HOUR, c.end_at / HOUR]);
 }

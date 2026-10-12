@@ -111,7 +111,7 @@ test.describe('キーワードを当てる範囲', () => {
 
     /*
      * **この条件で本当にこれを録りたいのか**は、題名と局と時刻だけでは決められない。
-     * 同じ題名の再放送、傍題の違い、番組の中身は詳細にしか無く、確かめるには
+     * 同じタイトルの再放送、傍題の違い、番組の中身は詳細にしか無く、確かめるには
      * 番組表を別に開いて探し直すことになっていた。予約一覧と同じ詳細をここでも出す
      */
     test('プレビューの行を押すと、番組詳細が出る', async ({ page, request }) => {
@@ -148,7 +148,7 @@ test.describe('キーワードを当てる範囲', () => {
     /*
      * **条件を詰めている途中で「これは録っておきたい」に行き当たる。** 詳細から
      * 予約できなかった頃は、番組表を開いて同じ番組を探し直すことになっていた。
-     * ルールに任せるかどうかとは別の話なので、その番組そのものに口を出す
+     * ルールに任せるかどうかとは別の話なので、その番組そのものに予約ボタンを出す
      */
     test('番組詳細から、その1本だけ予約できる', async ({ page, request }) => {
         await syncEpg(request);
@@ -171,7 +171,7 @@ test.describe('キーワードを当てる範囲', () => {
         const same = page.locator(`[data-testid="preview-row"][data-program-id="${programId}"]`);
         await expect(same.getByTestId('preview-state')).toBeVisible();
 
-        // もう予約は立っているので、開き直しても予約する口は出ない (状態のバッジが出る)
+        // もう予約は立っているので、開き直しても予約ボタンは出ない (状態のバッジが出る)
         await same.getByTestId('preview-open').click();
         await expect(detail.getByTestId('rule-detail-reserve')).toHaveCount(0);
         await expect(detail.getByTestId('rule-detail-state')).toBeVisible();

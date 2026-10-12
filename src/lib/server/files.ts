@@ -132,7 +132,7 @@ const VIDEO = /\.(m2ts|ts|mkv|mp4)$/i;
  * 触らずに置いておく、書きたてのもの。
  *
  * **これから連れ合いになるファイルを巻き添えにしないため。** 名前だけで
- * 「連れ合いが居ない」と決めているので、*まだ出来ていない動画*の付き添いは
+ * 「連れ合いがいない」と決めているので、*まだ出来ていない動画*の付き添いは
  * 全部そう見える。エンコードは出来上がるまで `<最終の名前>.encoding` に書いていて、
  * その `.mkv` はまだどこにも無い (消すと置き換えるところで `ENOENT ... rename` になる)。
  *
@@ -233,7 +233,7 @@ function orphan(path: string, videos: Set<string>): boolean {
     // 作業ファイル。動画の名前をまるごと頭に持つ (`….m2ts.chapters.txt`)
     const trailing = /^(.+\.(?:m2ts|ts|mkv|mp4))\.[^/]+$/i.exec(path);
     if (trailing?.[1] !== undefined) return !videos.has(trailing[1]);
-    // ポスター・データ放送。動画の拡張子を取り替えた形 (metadata.ts の SIDECAR_SUFFIXES)
+    // ポスター・データ放送。動画の拡張子を取り替えた名前 (metadata.ts の SIDECAR_SUFFIXES)
     const base = SIDECAR_ORPHAN.exec(path);
     if (base === null) return false;
     // どの入れ物で置いたかまでは名前から分からないので、当てはまるものを全部見る

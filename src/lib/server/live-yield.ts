@@ -2,19 +2,19 @@
  * **ライブがどの録画にチューナーを譲ったか**を突き止める。
  *
  * ライブは録画にだけ譲る (`config.priority`)。エージェントは録画から見て弱い相手 (ライブを含む) しか
- * いない本も使ってよい本とみなし、要れば蹴る (docs/agent.md「選ぶ順の約束」) ので、ほかに空いている
- * 本があってもライブが蹴られることがある。蹴られたライブは画面が同じ局を頼み直し、それでも入れない
+ * いないチューナーも使ってよいとみなし、要れば蹴る (docs/agent.md「選ぶ順の約束」) ので、ほかに空いている
+ * チューナーがあってもライブが蹴られることがある。蹴られたライブは画面が同じ局をリクエストし直し、それでも入れない
  * ときだけ蹴った録画の追っかけに切り替える (`live-player.svelte.ts`・テレビのアプリ)。ここはその
  * 「蹴った録画」を名指しするところ。
  *
  * **エージェントには訊かない。** エージェントは予約を知らない (知らせる約束にしていない) し、蹴った
- * 相手を教える口も無い。代わりに denpa が自分で読む:
+ * 相手を教える API も無い。代わりに denpa が自分で読む:
  *
- * 1. 使えたら、自分の読み手 (`live <種別>/<チャンネル>`) がいる本を `GET /denpa/tuners` から覚える (`tunerOf`)
- * 2. 蹴られたら、その本の読み手にいる録画 (`rec <録画ID>`。`tuner.recordingUse`) を読む (`recordingOn`)
+ * 1. 使えたら、自分の読み手 (`live <種別>/<チャンネル>`) がいるチューナーを `GET /denpa/tuners` から覚える (`tunerOf`)
+ * 2. 蹴られたら、そのチューナーの読み手にいる録画 (`rec <録画ID>`。`tuner.recordingUse`) を読む (`recordingOn`)
  *
- * 1回の選局の読み手は終わるまで同じ本にいる約束 (同じ節の3) なので、覚えた本は蹴られるまで変わらない。
- * 蹴った録画は、蹴った本に入る — その本に録画の読み手が居れば、それが蹴った相手
+ * 1回の選局の読み手は終わるまで同じチューナーにいる約束 (同じ節の3) なので、覚えたチューナーは蹴られるまで変わらない。
+ * 蹴った録画は、蹴ったチューナーに入る — そのチューナーに録画の読み手がいれば、それが蹴った相手
  */
 
 import { eq } from 'drizzle-orm';
@@ -27,7 +27,7 @@ import { type AgentTuner, getTuners, recordingOf } from './tuner';
 
 type Listed = Pick<AgentTuner, 'index' | 'channel' | 'users'>;
 
-/** その読み手がいる本 (`index`)。居なければ null */
+/** その読み手がいるチューナー (`index`)。いなければ null */
 export function tunerOf(
     tuners: readonly Listed[],
     type: string,
@@ -43,7 +43,7 @@ export function tunerOf(
     return found?.index ?? null;
 }
 
-/** その本にいる録画の ID。録画の読み手が居なければ null (2本いれば先のほう。どちらも同じ本を塞いでいる) */
+/** そのチューナーにいる録画の ID。録画の読み手がいなければ null (2つあれば先のほう。どちらも同じチューナーを塞いでいる) */
 export function recordingOn(tuners: readonly Listed[], index: number): number | null {
     const tuner = tuners.find((t) => t.index === index);
     for (const user of tuner?.users ?? []) {
@@ -56,12 +56,12 @@ export function recordingOn(tuners: readonly Listed[], index: number): number | 
 /**
  * 蹴られてから読み直す回数と間 (ms)。**蹴ることと録画が入ることは、エージェントの中で前後しうる**
  * (蹴られた側が途切れに気付いた時点で、まだ録画の読み手が載っていないことがある)。長くは待たない —
- * 待つ間、画面は前の絵のまま止まっている
+ * 待つ間、画面は前の映像のまま止まっている
  */
 const LOOKS = 5;
 const LOOK_WAIT = 300;
 
-/** 録画の行から、画面に渡す形を作る。消された・無い録画なら null */
+/** 録画の行から、画面に渡す形式を作る。消された・無い録画なら null */
 function lookup(id: number): YieldedRecording | null {
     const rec = orm()
         .select({
@@ -79,8 +79,8 @@ function lookup(id: number): YieldedRecording | null {
 }
 
 /**
- * 覚えておいた本 (`tunerOf`) にいま居る録画。**居なければ null** (録画以外に外された・本を覚えて
- * いなかった・エージェントに訊けなかった)。そのときは画面は頼み直すだけで、追っかけには切り替えない
+ * 覚えておいたチューナー (`tunerOf`) にいまいる録画。**いなければ null** (録画以外に外された・チューナーを覚えて
+ * いなかった・エージェントに訊けなかった)。そのときは画面はリクエストし直すだけで、追っかけには切り替えない
  */
 export async function yieldedTo(
     index: number | null,

@@ -136,7 +136,7 @@ describe('コマ数の決め方', () => {
         expect(Number.isNaN(parseOutFrames('no frames here'))).toBe(true);
     });
 
-    test('同じ絵が並ぶ素材 (生存率が低い) は30コマ', () => {
+    test('同じ画像が並ぶ素材 (生存率が低い) は30コマ', () => {
         // 実測: アニメの本編は 21〜32% (乙女ゲー 21% / 幼女戦記 32%)
         expect(pickSmooth([0.21, 0.32, 0.28], 0.5)).toBe(false);
     });
@@ -146,7 +146,7 @@ describe('コマ数の決め方', () => {
         expect(pickSmooth([0.71, 0.68, 0.75], 0.5)).toBe(true);
     });
 
-    test('毎秒30枚が違う絵のアニメ (中央値 48%) は 30コマ。閾値 50% はそのため', () => {
+    test('毎秒30枚が違う画像のアニメ (中央値 48%) は 30コマ。閾値 50% はそのため', () => {
         // 実測 (2026-08): 39% / 48% / 68% / 72% / 46%
         expect(pickSmooth([0.39, 0.48, 0.68, 0.72, 0.46], 0.5)).toBe(false);
         // 実写 (CM の窓を代わりに) は 5窓の中央値 60〜79%
@@ -180,7 +180,7 @@ describe('コマ数の決め方', () => {
         expect(args).toContain('-preset');
     });
 
-    test('GPU でエンコードするときは口を先に開け、CPU で作った nv12 を渡す', () => {
+    test('GPU でエンコードするときはデバイスを先に開け、CPU で作った nv12 を渡す', () => {
         // QSV は自分で上げるので hwupload は無い。画質は ICQ で、コーデックが違っても同じ 24
         for (const codec of ['av1', 'h264'] as const) {
             const args = buildArgs('/in.m2ts', '/out.mkv', 1, null, codec, {
@@ -203,7 +203,7 @@ describe('コマ数の決め方', () => {
         expect(argValue(va, '-vf')).toBe('bwdif=mode=send_frame,format=nv12,hwupload');
         expect(va).toContain('h264_vaapi');
         expect(argValue(va, '-rc_mode')).toBe('ICQ');
-        // 渡さなければソフトウェア。GPU の口も開けない
+        // 渡さなければソフトウェア。GPU のデバイスも開けない
         expect(buildArgs('/in.m2ts', '/out.mkv', 1, null, 'h264')).not.toContain('-init_hw_device');
     });
 
@@ -387,7 +387,7 @@ describe('encodeProgress', () => {
     });
 
     /*
-     * **実機で踏んだ形** (2026-09、7.4GB の映画)。デマクサだけ先に走って入力を
+     * **実機で踏んだ例** (2026-09、7.4GB の映画)。デマクサだけ先に走って入力を
      * 読み切り、エンコードするほうは半分。読み位置で出していた頃は 99% に貼り付いて
      * 「あと50分」の間ずっと止まって見えた
      */
@@ -518,7 +518,7 @@ describe('CM を切るときのキーフレーム', () => {
         expect(argValue(args, '-vf')).not.toContain('scdet');
     });
 
-    test('QSV は頼まないと IDR にならない', () => {
+    test('QSV は指定しないと IDR にならない', () => {
         const args = buildArgs('/in.m2ts', '/out.mkv', 1, null, 'h264', {
             keyframes: 'scene',
             hardware: { kind: 'qsv', device: '/dev/dri/renderD128' },

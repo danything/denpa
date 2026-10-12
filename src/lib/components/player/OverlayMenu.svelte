@@ -4,14 +4,14 @@
     import { PLAYER_CONTROLS, PLAYER_STAGE, type PlayerControls } from './controls.svelte';
 
     /**
-     * 絵の上に出すドロップダウンの共通部分。**メニュー(選択肢の並び)だけ**を持つ。
+     * 映像の上に出すドロップダウンの共通部分。**メニュー(選択肢の並び)だけ**を持つ。
      *
      * 3画面には、音声・字幕・エンコード方式・速さと、同じ形のドロップダウンが
      * いくつも並ぶ。項目を `{#each}` で敷き、押したら選んで閉じる、選択中は
      * `aria-current`、までが全部同じだった。ここに1つにまとめる。
      *
      * 開け閉めは Bits UI の DropdownMenu (キーボードで辿れる・外を押すと閉じる)。
-     * **器は portal に出さない** — 全画面にしているのは舞台の枠なので、`body` へ
+     * **メニューの枠は portal に出さない** — 全画面にしているのは舞台の枠なので、`body` へ
      * 出すと全画面の間は見えなくなる。
      *
      * **トリガー(押すボタン)は呼び出し側が snippet で渡す。** アイコンの有無・
@@ -19,7 +19,7 @@
      * 名指しで使うので、そこは各画面の持ち物のまま触らない。ボタンは包みの `<span>`
      * の中に入り、押したのが包みまで届いて開く。
      *
-     * 選択肢の `data-testid` は `{testid}-option`、器は `{testid}-menu`。
+     * 選択肢の `data-testid` は `{testid}-option`、枠は `{testid}-menu`。
      * `attrName` を渡すと各選択肢に `data-{attrName}={key}` を付ける (テストが
      * 特定の選択肢を指すのに使う。例: `data-speed="1.5"`)
      */
@@ -29,7 +29,7 @@
         label: string;
         /** いま選ばれているか (`aria-current`) */
         active: boolean;
-        /** 並べるが押せない (互換モードでこの端末が描けない形。`CodecMenu`) */
+        /** 並べるが押せない (互換モードでこの端末が描けない形式。`CodecMenu`) */
         disabled?: boolean;
     }
 
@@ -46,9 +46,9 @@
         trigger: Snippet;
         items: Item[];
         onselect: (key: T) => void;
-        /** 器と選択肢の testid の頭 (`{testid}-menu` / `{testid}-option`) */
+        /** 枠と選択肢の testid の頭 (`{testid}-menu` / `{testid}-option`) */
         testid: string;
-        /** 器を口のどちら端に揃えるか。右端に置く口 (速さ) は `end` */
+        /** メニューをボタンのどちら端に揃えるか。右端に置くボタン (速さ) は `end` */
         align?: 'start' | 'end';
         /** 選択肢の文字の大きさ。速さは数字を大きく真ん中に (`large`) */
         size?: 'normal' | 'large';
@@ -61,8 +61,8 @@
     /**
      * **開いている間は操作列を残す。**
      *
-     * 操作列は触らなくなって 2.5 秒で引っ込む (`controls.svelte.ts`) が、この器は
-     * 操作列の中に居るので、選んでいる最中に**メニューごと消えて**いた。舞台
+     * 操作列は触らなくなって 2.5 秒で引っ込む (`controls.svelte.ts`) が、このメニューは
+     * 操作列の中にあるので、選んでいる最中に**メニューごと消えて**いた。舞台
      * (`PlayerStage`) が context に置いた `controls` に伝える。舞台の外では何もしない
      */
     const controls = getContext<(() => PlayerControls) | undefined>(PLAYER_CONTROLS);
@@ -75,10 +75,10 @@
     });
 
     /**
-     * **器は舞台の枠の中に収める。** 枠の外へ出ると、上はページの見出しの裏に潜り、
+     * **メニューは舞台の枠の中に収める。** 枠の外へ出ると、上はページの見出しの裏に潜り、
      * 全画面では切れる。スマホの縦で全画面をやめると枠は 224px しか無く、速さ (7つ) の
-     * 器が上へはみ出して**等速・×0.75 が見出しの裏に隠れて押せなかった**。
-     * 枠を当たり判定の境にして、入りきらなければ器の中を巻き取る (`max-height`)
+     * メニューが上へはみ出して**等速・×0.75 が見出しの裏に隠れて押せなかった**。
+     * 枠を当たり判定の境にして、入りきらなければメニューの中を巻き取る (`max-height`)
      */
     const stage = getContext<(() => HTMLElement | null) | undefined>(PLAYER_STAGE);
     // 舞台の外 (と、枠がまだ無いうち) は空 — Bits の既定 (画面の端) に任せる
@@ -159,9 +159,9 @@
         display: inline-flex;
     }
     /*
-     * **幅は中身で決める。口より狭くはしない。** 器ごとに決め打ち (音声 13rem・エンコード方式 9rem・
+     * **幅は中身で決める。ボタンより狭くはしない。** メニューごとに決め打ち (音声 13rem・エンコード方式 9rem・
      * 速さ 6rem) にしていた頃は、2 択のエンコード方式にも名前の短い音声にも余白ばかりの箱が出て、
-     * タブレットで目立った。`--bits-floating-anchor-width` は Bits UI が置く口の幅
+     * タブレットで目立った。`--bits-floating-anchor-width` は Bits UI が置くボタンの幅
      */
     :global(.overlay-menu) {
         display: flex;
@@ -198,7 +198,7 @@
     /*
      * **狭い枠では速さを4列に並べる。** 縦に7つ積むと 300px あり、スマホの縦で
      * 全画面をやめた枠 (224px) には入らない — 巻き取らせると2つしか見えず、
-     * 押したい速さを探して器の中を動かすことになる
+     * 押したい速さを探してメニューの中を動かすことになる
      */
     :global(.stage[data-compact] .overlay-menu.large) {
         display: grid;

@@ -1,7 +1,7 @@
 import { expect, goto, test } from './helpers';
 
 /**
- * データ放送の双方向 (通信系コンテンツ) の中継口
+ * データ放送の双方向 (通信系コンテンツ) の中継エンドポイント
  * ([stream.md](../../docs/stream.md#57-双方向通信系コンテンツプロキシ))。
  *
  * **既定では動きません。** 入れるまで denpa のサーバは外へ出ません。
@@ -20,7 +20,7 @@ test.describe('データ放送の双方向', () => {
         expect(post.status()).toBe(403);
     });
 
-    test('入れると口が開くが、内側へは繋がない', async ({ page, request }) => {
+    test('入れるとエンドポイントが開くが、内側へは繋がない', async ({ page, request }) => {
         await goto(page, '/settings');
         await page.getByTestId('bml-network').check();
         await page.getByTestId('save-broadcast').click();
@@ -43,14 +43,14 @@ test.describe('データ放送の双方向', () => {
             expect(res.status(), url).toBe(502);
         }
 
-        // **別の仕組みへ逃がす道は塞ぐ** (http は通す — 放送がそう作られている)
+        // **別の仕組みへ逃がす経路は塞ぐ** (http は通す — 放送がそう作られている)
         const file = await request.get('/api/bml/proxy?url=file%3A%2F%2F%2Fetc%2Fpasswd');
         expect(file.status()).toBe(502);
 
         /*
          * **送るほうも同じ枠で見る。**
          *
-         * 応募・投票の口だが、放送のアプリはここへ投げてみて「繋がって
+         * 応募・投票の窓口だが、放送のアプリはここへ投げてみて「繋がって
          * いるか」を決めることがある (NHK がそう)。だからといって内側へ
          * 投げてよいことにはならない
          */

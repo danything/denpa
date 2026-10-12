@@ -1,6 +1,6 @@
 name: Screenshots
 
-# README・docs の絵を撮る (scripts/capture-docs.ts。docs/development.md「README の絵」)。
+# README・docs の画像を撮る (scripts/capture-docs.ts。docs/development.md「README の画像」)。
 # PR の CI には入れない (手で走らせるか、shots/ の枝に積んだときだけ)。
 # 偽の放送 (作り物の局・番組・ロゴ・映像) の一式を立てて撮り、docs/images の webp を artifact (shots) に上げる。
 # 差し替えるときは artifact の中身を docs/images に置いてコミットする
@@ -22,7 +22,7 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v7
-      # 手元の `docker compose run --rm docs` と同じイメージ (Dockerfile の docs 段。絵に出る字と本物の ffmpeg 入り)
+      # 手元の `docker compose run --rm docs` と同じイメージ (Dockerfile の docs 段。画像に出る字と本物の ffmpeg 入り)
       - name: Build
         run: docker build --target docs -t denpa-docs .
       # node_modules はイメージの中のものを使う (名前の無いボリュームに写る)

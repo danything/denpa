@@ -34,7 +34,7 @@ test.describe('EPGStation からの引き継ぎ', () => {
         await page.getByTestId('migrate-run').click();
         await expect(page.getByTestId('migrate-started')).toBeVisible();
 
-        // EPGStation のDBは居ないので失敗する。SSE で結果が降ってくる
+        // EPGStation のDBは無いので失敗する。SSE で結果が降ってくる
         const progress = page.getByTestId('migrate-progress');
         await expect(progress).toHaveAttribute('data-state', 'failed');
         await expect(page.getByTestId('migrate-state')).toHaveText('失敗');

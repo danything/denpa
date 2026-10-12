@@ -10,8 +10,8 @@ import { eq } from 'drizzle-orm';
  * 画面のライブの録画ボタンとアプリの `POST /api/services/<id>/record` が同じものを使う。
  * `GET /api/services` の `now.reserved` / `now.recording` も `reservationStates` を読む。
  *
- * チューナーの口は手元に立てた偽物 (`tuners` を返すだけ)。予約のあとの数え直し
- * (`resolveConflicts`) がこれを読む。地上波1本にしておけば「予約はできたが録らない」(競合) も作れる
+ * チューナーの API は手元に立てた偽物 (`tuners` を返すだけ)。予約のあとの数え直し
+ * (`resolveConflicts`) がこれを読む。地上波1台にしておけば「予約はできたが録らない」(競合) も作れる
  */
 const tuners = [{ types: ['GR'] }];
 const agent = Bun.serve({
@@ -139,7 +139,7 @@ describe('いま流れている番組を録る', () => {
 
     test('チューナーが足りなければ競合として返す (予約は残る)', async () => {
         reset();
-        // 地上波1本を、先に始まった別の物理チャンネルの予約が使っている
+        // 地上波1台を、先に始まった別の物理チャンネルの予約が使っている
         orm()
             .insert(reservations)
             .values({

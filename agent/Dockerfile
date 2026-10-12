@@ -4,7 +4,7 @@
 # **Native AOT で実行ファイル1個。** 別のPCへ置くときに「まず何かを入れて
 # ください」が要らないことが条件なので、ここは外せない。
 #
-# denpa から見える口は agent/conformance.test.ts が押さえている
+# denpa から見える API は agent/conformance.test.ts が押さえている
 # (本物を起こして HTTP で当てる)。入れ替えはイメージのタグを変えるだけ。
 # ---------------------------------------------------------------------------
 # **arch ごとに、その arch のランナーで組む** (CI は amd64 を ubuntu-latest、arm64 を
@@ -100,9 +100,9 @@ RUN set -eu && cd /tmp && \
 # そこで初めて取ってくる (自動では入れない。renovate.json)。
 #
 # 取ってくるのは px4-userland と同じ名前の付け方を見込んだ配布アーカイブ (上流の
-# scripts/package-linux-variant.py の形: 頭に1段のディレクトリ、bin/ にコマンド3つ、musl の
+# scripts/package-linux-variant.py の形式: 頭に1段のディレクトリ、bin/ にコマンド3つ、musl の
 # 完全静的 ELF)。名前の glibc / musl は同梱の IFD ハンドラ (使わない) の libc の違いで、
-# コマンドはどちらも同じ musl の静的 ELF。名前や形が違えば、版を上げる PR の CI (イメージをビルドする) で落ちて分かる
+# コマンドはどちらも同じ musl の静的 ELF。名前や形式が違えば、版を上げる PR の CI (イメージをビルドする) で落ちて分かる
 # (SHA256SUMS にそのアーカイブの行が無ければ落とす。--ignore-missing は行が無くても通るので使わない)。
 # 受信機もカードも asicend の制御ソケットで直に話すので、asicen-ts と IFD ハンドラは使わない。
 # 上流の第一弾は Linux x86_64 だけなので、arm64 では入れずに先へ進む。

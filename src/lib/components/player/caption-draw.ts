@@ -8,7 +8,7 @@
  * - 字は字の枠の左端をペンの位置にして、**縦は「永」の墨の上下を枠の真ん中に置く**
  *   (あちらが基準線をそう決めている)。横は `scaleX` で縮める
  * - 縁取りは字の外側へ `STROKE_WIDTH`、字より先に塗る
- * - 置き換えられなかった外字は、点の絵を字の枠いっぱいに**なめらかに**引き伸ばす
+ * - 置き換えられなかった外字は、ドット絵を字の枠いっぱいに**なめらかに**引き伸ばす
  *
  * **canvas は画面の画素で敷く。** 全画面にすれば字もそのぶん細かく描き直す (`ResizeObserver`)。
  * 画素は CSS の大きさ (`clientWidth`。整数に丸めてある) ではなく**実際に見えている大きさ**で数える。
@@ -77,7 +77,7 @@ function measureInk(ctx: CanvasRenderingContext2D): Ink {
     return measured;
 }
 
-/** 外字の絵を、その色の点で描いた canvas にする。**色ごとに覚えておく** */
+/** 外字の画像を、その色の点で描いた canvas にする。**色ごとに覚えておく** */
 const drcsCache = new Map<string, HTMLCanvasElement>();
 
 function drcsImage(drcs: CaptionDrcs, color: string): HTMLCanvasElement {
@@ -312,7 +312,7 @@ export class CaptionPainter {
          * **描く画素は、見えている大きさ × 画面の画素。** 面の縦横比のまま CSS の枠に収めた
          * 箱 (`box`) を、実際に見えている倍率 (`kx`/`ky`) で数える。
          *
-         * CSS の大きさ (`clientWidth`) は整数に丸めてあるので、それで数えると端数のぶん絵が
+         * CSS の大きさ (`clientWidth`) は整数に丸めてあるので、それで数えると端数のぶん画像が
          * 引き伸ばされて滲む (スマホの縦・データ放送の小窓の中の `%` の大きさで出る)。
          * `translate` (操作バーの上への持ち上げ) は大きさを変えないので、倍率には入らない。
          * 祖先に掛かるのは `scale` と `translate` だけの前提 (`rotate` だと外接矩形になり合わない)
@@ -325,7 +325,7 @@ export class CaptionPainter {
         const ky = cssHeight > 0 ? shown.height / cssHeight : 1;
         const box = fitRect(cssWidth, cssHeight, page.plane[0], page.plane[1]);
         /*
-         * 箱が枠いっぱい (観る画面は `place` が枠を映像の絵に合わせる。小窓の中も面と同じ 16:9)
+         * 箱が枠いっぱい (観る画面は `place` が枠を映像に合わせる。小窓の中も面と同じ 16:9)
          * なら、見えている大きさそのもので描いて `fill` で敷く — 面を縦と横で別々に伸ばして
          * いても1画素ずつ合う。枠が余る (枠と面の縦横比が違う) ときは `contain` で真ん中に置く
          */

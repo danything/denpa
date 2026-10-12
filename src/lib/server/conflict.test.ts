@@ -24,8 +24,8 @@ function res(over: Partial<Assignable> & { id: number }): Assignable {
 }
 
 /**
- * 'GR+BS+CS' のように、1本ずつ受けられる種別を**エージェントが選ぶ順に**並べる。
- * 同じ並びの本には同じ順位を付ける (エージェントがそう返す約束。docs/agent.md「選ぶ順の約束」)
+ * 'GR+BS+CS' のように、1台ずつ受けられる種別を**エージェントが選ぶ順に**並べる。
+ * 同じ並びのチューナーには同じ順位を付ける (エージェントがそう返す約束。docs/agent.md「選ぶ順の約束」)
  */
 function tuners(...specs: string[]) {
     return capacityOf(specs.map((spec) => ({ types: spec.split('+'), rank: specs.indexOf(spec) })));
@@ -34,7 +34,7 @@ function tuners(...specs: string[]) {
 const GR2 = tuners('GR', 'GR', 'BS+CS', 'BS+CS');
 
 describe('assign', () => {
-    test('チューナー本数に収まるものは全部採用する', () => {
+    test('チューナー台数に収まるものは全部採用する', () => {
         const { accepted, rejected } = assign(
             [res({ id: 1, channel: 'T16' }), res({ id: 2, channel: 'T21' })],
             GR2,
@@ -51,7 +51,7 @@ describe('assign', () => {
         expect(rejected).toHaveLength(0);
     });
 
-    test('本数を超える異なるチャンネルは競合にする', () => {
+    test('台数を超える異なるチャンネルは競合にする', () => {
         const { accepted, rejected } = assign(
             [res({ id: 1, channel: 'T16' }), res({ id: 2, channel: 'T21' }), res({ id: 3, channel: 'T23' })],
             GR2,
@@ -75,7 +75,7 @@ describe('assign', () => {
         expect(rejected[0]!.reservation.priority).toBe(1);
     });
 
-    test('時間が重ならなければ本数を消費しない', () => {
+    test('時間が重ならなければ台数を消費しない', () => {
         const { rejected } = assign(
             [
                 res({ id: 1, channel: 'T16', start_at: 0, end_at: 60 }),
@@ -87,7 +87,7 @@ describe('assign', () => {
         expect(rejected).toHaveLength(0);
     });
 
-    test('種別ごとに本数を数える (GRが埋まっていてもBSは録れる)', () => {
+    test('種別ごとに台数を数える (GRが埋まっていてもBSは録れる)', () => {
         const { rejected } = assign(
             [
                 res({ id: 1, channel: 'T16' }),
@@ -99,7 +99,7 @@ describe('assign', () => {
         expect(rejected).toHaveLength(0);
     });
 
-    test('本数が分からない種別は制限しない', () => {
+    test('台数が分からない種別は制限しない', () => {
         const { rejected } = assign(
             [1, 2, 3, 4].map((id) => res({ id, type: 'CS', channel: `CS${id}` })),
             tuners('GR', 'GR'),
@@ -115,9 +115,9 @@ describe('assign', () => {
         expect(rejected.map((r) => r.reservation.id)).toEqual([2]);
     });
 
-    test('地上波も衛星も受けるチューナー (PX-MLT など) は、どちらかで1本', () => {
+    test('地上波も衛星も受けるチューナー (PX-MLT など) は、どちらかで1台', () => {
         const mixed = tuners('GR', 'GR+BS+CS');
-        // 地上波2つで2本とも埋まるので、衛星は入らない
+        // 地上波2つで2台とも埋まるので、衛星は入らない
         const full = assign(
             [
                 res({ id: 1, channel: 'T16' }),
@@ -127,7 +127,7 @@ describe('assign', () => {
             mixed,
         );
         expect(full.rejected.map((r) => r.reservation.id)).toEqual([3]);
-        // 地上波1つなら、兼用の1本が衛星に回る
+        // 地上波1つなら、兼用の1台が衛星に回る
         const room = assign(
             [res({ id: 1, channel: 'T16' }), res({ id: 2, type: 'BS', channel: 'BS15_0' })],
             mixed,
@@ -189,7 +189,7 @@ describe('assign (前後マージン)', () => {
         expect(whole(later!)).toBe(false);
     });
 
-    test('同じチャンネルならマージンが重なってもチューナーは1本で足りる', () => {
+    test('同じチャンネルならマージンが重なってもチューナーは1台で足りる', () => {
         const { accepted, rejected } = assign(
             [
                 res({ id: 1, start_at: 0, end_at: 100, channel: 'T16' }),
@@ -202,15 +202,15 @@ describe('assign (前後マージン)', () => {
         expect(rejected).toHaveLength(0);
         /*
          * 同じチャンネルで続くなら、マージンを削らずに重ねる。後ろは前の選局に乗るので、
-         * 前が離れても同じ本に居続け、止めてから使う間は生まれない (引き継ぎは要らない)
+         * 前が離れても同じチューナーに居続け、止めてから使う間は生まれない (引き継ぎは要らない)
          */
         const [first, second] = [1, 2].map((id) => accepted.find((a) => a.reservation.id === id));
         expect(first?.to).toBe(115);
         expect(second?.from).toBe(90);
     });
 
-    test('同じチャンネルで続く録画は、前が離れても後ろが同じ本に残る (兼用あり)', () => {
-        // T21 が兼用に入り、同じチャンネルで続く。前が離れても後ろは兼用に居るので、衛星はその後から
+    test('同じチャンネルで続く録画は、前が離れても後ろが同じチューナーに残る (兼用あり)', () => {
+        // T21 が兼用に入り、同じチャンネルで続く。前が離れても後ろは兼用にいるので、衛星はその後から
         const { accepted } = assign(
             [
                 res({ id: 1, channel: 'T16', start_at: 0, end_at: 300 }),
@@ -226,7 +226,7 @@ describe('assign (前後マージン)', () => {
     });
 
     /*
-     * **実機で出た形** (2026-09-02 深夜、地上波 2本)。
+     * **実機で出た例** (2026-09-02 深夜、地上波 2台)。
      *
      *     23:30 ─幼女戦記(MX)─ 00:00
      *     23:45 ────片田舎(テレ朝)──── 00:15
@@ -338,16 +338,16 @@ describe('チューナーの取り合い (プレビュー)', () => {
         expect(against(bs, [cs, gr], tuners('GR', 'GR', 'BS+CS'))).toEqual(['番組2 (局)']);
     });
 
-    test('本数に収まっていれば、重なっていても出さない', () => {
+    test('台数に収まっていれば、重なっていても出さない', () => {
         const mine = occ({ programId: 1, channel: 'T16' });
         const other = occ({ programId: 2, channel: 'T21' });
-        // 地上波2本あるので、別チャンネル2番組は録れる
+        // 地上波2台あるので、別チャンネル2番組は録れる
         expect(against(mine, [other], tuners('GR', 'GR'))).toEqual([]);
-        // 1本しかなければ取り合う
+        // 1台しかなければ取り合う
         expect(against(mine, [other], tuners('GR'))).toEqual(['番組2 (局)']);
     });
 
-    test('同じ物理チャンネルは1本で足りるので数にも名前にも入れない', () => {
+    test('同じ物理チャンネルは1台で足りるので数にも名前にも入れない', () => {
         const mine = occ({ programId: 1, channel: 'T16' });
         const sameCh = occ({ programId: 2, channel: 'T16' });
         expect(against(mine, [sameCh], tuners('GR'))).toEqual([]);
@@ -368,7 +368,7 @@ describe('チューナーの取り合い (プレビュー)', () => {
         expect(against(mine, [a, b], tuners('GR', 'GR'))).toEqual([]);
     });
 
-    test('本数が分からないときは何も言わない', () => {
+    test('台数が分からないときは何も言わない', () => {
         const mine = occ({ programId: 1, channel: 'T16' });
         const other = occ({ programId: 2, channel: 'T21' });
         expect(against(mine, [other], [])).toEqual([]);
@@ -476,7 +476,7 @@ describe('兼用のチューナーがあるとき (#668)', () => {
     });
 
     /*
-     * どの瞬間も2本で足りるが、番組の途中で本を替えずに 22:15 の衛星を録る方法が無い
+     * どの瞬間も2台で足りるが、番組の途中でチューナーを替えずに 22:15 の衛星を録る方法が無い
      */
     test('途中で替えずに割り振る方法が無い組は、チューナー不足にする (ケース2)', () => {
         const { accepted, rejected } = assign(
@@ -528,7 +528,7 @@ describe('兼用のチューナーがあるとき (#668)', () => {
         expect(accepted.find((a) => a.reservation.id === 3)?.from).toBe(at(22));
     });
 
-    test('相乗りの相方が先に抜けても、残ったほうは同じ本に居続ける', () => {
+    test('相乗りの相方が先に抜けても、残ったほうは同じチューナーに居続ける', () => {
         const { accepted } = assign(
             [
                 res({ id: 1, channel: 'T21', start_at: at(20), end_at: at(21) }),
@@ -539,25 +539,25 @@ describe('兼用のチューナーがあるとき (#668)', () => {
             MIXED,
             MARGINS,
         );
-        // T16 は兼用に入り、相方が抜けた後もそこに居る。衛星は T16 が離す 23:00 から
+        // T16 は兼用に入り、相方が抜けた後もそこにいる。衛星は T16 が離す 23:00 から
         expect(accepted.find((a) => a.reservation.id === 4)?.from).toBe(at(23));
     });
 
-    test('録画中のものは、入っている本を終わるまで塞ぐ', () => {
+    test('録画中のものは、入っているチューナーを終わるまで塞ぐ', () => {
         const bs = [res({ id: 1, type: 'BS', channel: 'BS11_0', start_at: at(21), end_at: at(22) })];
-        // 録画中の地上波が兼用の本に居る。専用が空いていても、衛星はそれが終わるまで入れない
+        // 録画中の地上波が兼用のチューナーにいる。専用が空いていても、衛星はそれが終わるまで入れない
         const blocked = assign(bs, MIXED, MARGINS, [
             { type: 'GR', channel: 'T21', rank: 1, until: at(21, 30) },
         ]);
         expect(blocked.accepted[0]?.from).toBe(at(21, 30));
-        // 専用の本に居るなら邪魔しない
+        // 専用のチューナーにいるなら邪魔しない
         const free = assign(bs, MIXED, MARGINS, [{ type: 'GR', channel: 'T21', rank: 0, until: at(21, 30) }]);
         expect(free.accepted.every(whole)).toBe(true);
     });
 
     /*
      * 割り振りは変わるところだけなぞり直して速くしてある (`Timeline`)。通したものを頭から素直に
-     * なぞり直して (`placements`)、全員が最後まで1本の本を使えることを確かめる
+     * なぞり直して (`placements`)、全員が最後まで1台のチューナーを使えることを確かめる
      */
     test('通したものは、約束どおりに頭からなぞっても全員使える', () => {
         let s = 3;
@@ -597,9 +597,9 @@ describe('兼用のチューナーがあるとき (#668)', () => {
         }
     });
 
-    test('順位の分からないエージェントなら、本数不明として何も競合にしない', () => {
+    test('順位の分からないエージェントなら、台数不明として何も競合にしない', () => {
         expect(capacityOf([{ types: ['GR'], rank: 0 }, { types: ['GR', 'BS', 'CS'] }])).toEqual([]);
-        // 無効にした本は順位が無くてよい
+        // 無効にしたチューナーは順位が無くてよい
         expect(
             capacityOf([
                 { types: ['GR'], rank: 0 },
@@ -610,8 +610,8 @@ describe('兼用のチューナーがあるとき (#668)', () => {
 });
 
 /**
- * **兼用の無い構成では、今までと答えが変わらない。** 受けられる本がどれも同じなので、
- * 先にどの本へ入ったかは後に響かず、瞬間ごとの本数を数えるのと同じになる
+ * **兼用の無い構成では、今までと答えが変わらない。** 受けられるチューナーがどれも同じなので、
+ * 先にどのチューナーへ入ったかは後に響かず、瞬間ごとの台数を数えるのと同じになる
  */
 describe('専用だけ・兼用だけの構成', () => {
     /** 決まった種から作る乱数 (落ちたときに同じ場面を再現できるように) */
@@ -625,7 +625,7 @@ describe('専用だけ・兼用だけの構成', () => {
     const CHANNELS = { GR: ['T16', 'T21', 'T22', 'T23'], BS: ['BS11_0', 'BS03_0', 'BS01_0'], CS: ['CS4'] };
     type Span = { reservation: Assignable; from: number; to: number };
 
-    /** 瞬間ごとに、取り合う単位 (`poolOf`) で異なるチャンネルが本数に収まっているか */
+    /** 瞬間ごとに、取り合う単位 (`poolOf`) で異なるチャンネルが台数に収まっているか */
     function fitsEachMoment(spans: Span[], poolOf: (type: string) => string, limits: Record<string, number>) {
         return spans.every(({ from: p }) => {
             const held = new Map<string, Set<string>>();
@@ -656,7 +656,7 @@ describe('専用だけ・兼用だけの構成', () => {
         },
     ];
     for (const { label, capacity, poolOf, limits } of configs) {
-        test(`${label}: 通したものはどの瞬間も本数に収まり、収まる組は丸ごと通る`, () => {
+        test(`${label}: 通したものはどの瞬間も台数に収まり、収まる組は丸ごと通る`, () => {
             const next = random(label.length + 1);
             for (let round = 0; round < 300; round++) {
                 const list = Array.from({ length: 8 }, (_, id) => {
@@ -709,7 +709,7 @@ describe('チューナーの取り合い (プレビュー、兼用のチュー�
         const got = contentions([t16, t21, bs], MIXED, NO_MARGIN);
         expect(got.get(3)).toEqual(['番組2 (局)']);
         expect(got.get(2)).toEqual(['番組3 (局)']);
-        // T16 は取り合いが起きた時刻にはもう居ない
+        // T16 は取り合いが起きた時刻にはもういない
         expect(got.get(1)).toBeUndefined();
     });
 
@@ -734,10 +734,10 @@ describe('チューナーの取り合い (プレビュー、兼用のチュー�
         expect(got.get(1)).toBeUndefined();
     });
 
-    test('録画中のものが入っている本も数える', () => {
+    test('録画中のものが入っているチューナーも数える', () => {
         const bs = occ({ programId: 1, type: 'BS', channel: 'BS11_0', start_at: at(21), end_at: at(22) });
         const busy = [{ type: 'GR', channel: 'T21', rank: 1, until: at(21, 30) }];
-        // 名指しする相手 (番組) は居ないが、入れないことは分かる。予約の側 (`assign`) で頭が欠ける
+        // 名指しする相手 (番組) はいないが、入れないことは分かる。予約の側 (`assign`) で頭が欠ける
         expect(contentions([bs], MIXED, NO_MARGIN, busy).get(1)).toBeUndefined();
         const other = occ({ programId: 2, type: 'CS', channel: 'CS4', start_at: at(21), end_at: at(22) });
         expect(contentions([bs, other], MIXED, NO_MARGIN, [])).toEqual(

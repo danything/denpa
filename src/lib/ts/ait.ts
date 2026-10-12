@@ -8,7 +8,7 @@
  * ```
  * PMT ─ ES に application_signalling_descriptor (0x6F) ─→ その PID に AIT
  * AIT ─ transport_protocol_descriptor (URL の頭)
- *     └ simple_application_location_descriptor (その先の道)  →  アプリのURL
+ *     └ simple_application_location_descriptor (その先のパス)  →  アプリのURL
  * ```
  *
  * **denpa は動かしません。読んで在ることを言うだけです。** 動かすには受信機の
@@ -69,7 +69,7 @@ interface HybridcastApp {
     controlCode: number;
     /** アプリの名前。放送が入れていなければ空 */
     name: string;
-    /** 取りに行く先。`transport_protocol` と `location` を繋いだもの */
+    /** 取得先。`transport_protocol` と `location` を繋いだもの */
     url: string;
 }
 
@@ -103,7 +103,7 @@ export function aitPidsFromPmt(section: Uint8Array): number[] {
  * URL の頭を取り出す (transport_protocol_descriptor)。
  *
  * **通信路で運ぶものだけ見ます。** `protocol_id` が 1 のものは放送のカルーセルで
- * 運ぶアプリ (データ放送と同じ道) で、Hybridcast の話ではありません
+ * 運ぶアプリ (データ放送と同じ経路) で、Hybridcast の話ではありません
  */
 function transportUrl(body: Uint8Array): string | null {
     if (body.length < 3) return null;
@@ -118,7 +118,7 @@ function transportUrl(body: Uint8Array): string | null {
  * 名前を取り出す (application_name_descriptor)。
  *
  * 言語ごとに何本も入っていることがあるので**最初の1本**を採ります。中身は
- * ARIB の8単位符号なので、番組名と同じ道で読みます (`aribtext.ts`)
+ * ARIB の8単位符号なので、番組名と同じ方法で読みます (`aribtext.ts`)
  */
 function applicationName(body: Uint8Array): string {
     // [0..2] ISO_639_language_code, [3] application_name_length

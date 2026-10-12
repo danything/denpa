@@ -6,7 +6,7 @@ import { recordings } from './schema';
 import type { Payload } from './webhook';
 
 /**
- * 知らせ (webhook) に載せる録画の要点。録画とエンコードの節目で同じ形。
+ * 知らせ (webhook) に載せる録画の要点。録画とエンコードの節目で同じ形式。
  * webhook.ts に置かないのは、試験がそちらを差し替える (`disk.test.ts`) ため
  */
 export function recordingSummary(recording: Recording): NonNullable<Payload['recording']> {
@@ -31,7 +31,7 @@ export function recordingFromForm(form: FormData): Recording | undefined {
  * 数字でなければ 400、無ければ 404 をここで投げるので、呼ぶ側は
  * 在る前提で書ける (同じ4行をルートごとに書いていた)。
  *
- * @param deleted 消した行も引くか。**既定は引かない** — 観る・落とす口が
+ * @param deleted 消した行も引くか。**既定は引かない** — 観る・ダウンロードする API が
  *   消したものを返さないように。削除 API だけは「もう消えている」を
  *   見分けたいので true で呼ぶ
  */

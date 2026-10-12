@@ -13,8 +13,8 @@
  * その一部だけで、残り (EIT/SDT/NIT・字幕の PES) は自前で読んでおり
  * ([eit.ts](eit.ts) / [psi.ts](psi.ts) / ffmpeg)、`@chinachu/aribts` も抱えずに済む。
  *
- * **出す形は web-bml の頃のまま** ([bml-protocol.ts](bml-protocol.ts))。録画の隣の
- * `.bml.jsonl` がこの形で残っているので、変えると前に録ったものが読めなくなる。
+ * **出す形式は web-bml の頃のまま** ([bml-protocol.ts](bml-protocol.ts))。録画の隣の
+ * `.bml.jsonl` がこの形式で残っているので、変えると前に録ったものが読めなくなる。
  * モジュールの中身 (multipart) は [multipart.ts](multipart.ts) がデコードする。
  */
 

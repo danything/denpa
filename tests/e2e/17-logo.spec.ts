@@ -12,7 +12,7 @@ import { expect, goto, syncEpg, test } from './helpers';
  * **開くのは物理チャンネル。** その局に要るPIDだけを通す開き方をすると、
  * どの局のPMTにも載っていない CDT (PID 0x0029) はまるごと落ちる。
  * 実機では BS をサービス単位で3分・427MB 読んでも1つも来なかった。
- * 偽エージェントも同じようにしてある (ロゴを載せるのはチャンネル丸ごとの口だけ)。
+ * 偽エージェントも同じようにしてある (ロゴを載せるのはチャンネル丸ごとのエンドポイントだけ)。
  */
 test.describe('局ロゴ', () => {
     /**
@@ -36,10 +36,10 @@ test.describe('局ロゴ', () => {
 
         /*
          * **空いている地上波チューナーの数だけ並べる。** 種別を見ずに
-         * 「1本でも空いていれば」で数えていた頃は、地上波が1本しか空いて
+         * 「1台でも空いていれば」で数えていた頃は、地上波が1台しか空いて
          * いなくても2チャンネルを同時に開きに行っていた
          */
-        await expect(page.getByTestId('tuner-notice')).toContainText('チューナー 2 本');
+        await expect(page.getByTestId('tuner-notice')).toContainText('チューナー 2 台');
 
         /*
          * 押しても何も起きていないように見えないこと。1チャンネルに数分かかるので、
@@ -86,7 +86,7 @@ test.describe('局ロゴ', () => {
         await expect(page.getByTestId('status-logos')).toContainText('局');
 
         /*
-         * 取りに行くものが無くなったら**口も消える**。押しても「もう全部持って
+         * 取りに行くものが無くなったら**ボタンも消える**。押しても「もう全部持って
          * います」と断るだけのボタンを出しておく意味がない。
          *
          * ここで消えるのは、衛星ぶんも同じ一回で拾えているから。地上波と衛星は
@@ -120,7 +120,7 @@ test.describe('衛星の局ロゴ', () => {
         await goto(page, '/tuners');
         /*
          * **番組表を集めるだけでも拾えることがある。** 衛星のチャンネルも
-         * 開くので、そこにカルーセルが流れていれば只で埋まる。押す口が
+         * 開くので、そこにカルーセルが流れていれば只で埋まる。押すボタンが
          * 出ていなければ、もう拾えているということ
          */
         const sweep = page.getByTestId('logo-sweep');
@@ -139,12 +139,12 @@ test.describe('衛星の局ロゴ', () => {
     /**
      * カルーセルに載っていない局を**見切ること**。
      *
-     * 外れの中継 (エンジニアリングサービスが居ない) は PAT を見た時点で分かるので
+     * 外れの中継 (エンジニアリングサービスがいない) は PAT を見た時点で分かるので
      * 数秒で次へ行く。当たりの中継を読み切ってもなお埋まらない局は、そもそも
      * カルーセルに載っていない局なので、そこで諦める。
      *
      * 見切れないと、その局はいつまでも「まだ取れていない」ままになり、
-     * 取りに行く口が消えず、見回りのたびに中継を開き直すことになる。
+     * 取得のボタンが消えず、見回りのたびに中継を開き直すことになる。
      *
      * **中継の当たり外れで数えてはいけない。** CS の中継にはロゴが無いが、
      * CS のロゴは BS の中継から降ってくる。中継で数えていた頃は、取れる
@@ -157,13 +157,13 @@ test.describe('衛星の局ロゴ', () => {
         rmSync(`${stack.root}/logos/${BS_NO_LOGO.id}.png`, { force: true });
 
         await goto(page, '/tuners');
-        // 既に見切ったあとなら口は出ていない。出ていれば押して確かめる
+        // 既に見切ったあとならボタンは出ていない。出ていれば押して確かめる
         const sweep = page.getByTestId('logo-sweep');
         if ((await sweep.count()) > 0) await sweep.click();
 
         /*
          * 取りに行くところが無くなる = 外れの中継を覚えた、ということ。
-         * 覚えられていないと `missing()` に残り続けて口が消えない
+         * 覚えられていないと `missing()` に残り続けてボタンが消えない
          */
         await expect(async () => {
             await goto(page, '/tuners');
@@ -183,11 +183,15 @@ test.describe('衛星の局ロゴ', () => {
  * CM検出のために覚えたロゴ (`LearnedLogo.svelte`)。**番組表に出す局ロゴとは別物。**
  *
  * 覚えるのは録画をエンコードするときで、偽 ffmpeg では覚えられないので、覚えたものは
- * 本物と同じ形で置いておく (`logo-detect.encodeModel`)。見るのは、覚えた局が
- * 「覚えました」と絵で出ること、「この絵は違う」で消せて済んだ色で知らせること
+ * 本物と同じ形式で置いておく (`logo-detect.encodeModel`)。見るのは、覚えた局が
+ * 「覚えました」と画像で出ること、「この画像は違う」で消せて済んだ色で知らせること
  */
 test.describe('CM検出のロゴ', () => {
-    test('覚えた絵を出し、「この絵は違う」で消すと済んだ知らせで出る', async ({ page, request, stack }) => {
+    test('覚えた画像を出し、「この画像は違う」で消すと済んだ知らせで出る', async ({
+        page,
+        request,
+        stack,
+    }) => {
         await syncEpg(request);
 
         // 縁が一筋だけ揃っている 40×20 の枠
@@ -217,7 +221,7 @@ test.describe('CM検出のロゴ', () => {
         await card.locator('summary').first().click();
         const shown = card.getByRole('img', { name: 'いま覚えているロゴ' });
         await expect(shown).toBeVisible();
-        // 絵として読めていること (壊れた PNG だと幅が 0 になる)
+        // 画像として読めていること (壊れた PNG だと幅が 0 になる)
         await expect.poll(() => shown.evaluate((img: HTMLImageElement) => img.naturalWidth)).toBe(40);
 
         await card.getByRole('button', { name: 'この画像は違う' }).click();

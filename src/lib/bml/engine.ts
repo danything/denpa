@@ -249,7 +249,7 @@ class Engine implements DomHost, BrowserHost, RenderHost {
     /** 文書を読み込んでいる間。外から来るイベントは捨てる (onload より前に受け手を動かさない) */
     private preparing = false;
     private readonly budget: Budget;
-    /** 暴れたので止めた。この器ではもう文書を出さない */
+    /** 暴れたので止めた。このエンジンではもう文書を出さない */
     private halted = false;
     /** 続きを次のタスクに回してある (pump・描き直し) */
     private deferred = false;
@@ -955,7 +955,7 @@ class Engine implements DomHost, BrowserHost, RenderHost {
         this.options.log?.(message);
     }
 
-    // ---- DOM の口 ----
+    // ---- DOM 向けの API ----
 
     get realm(): Realm {
         return this.vm!.realm;
@@ -1037,7 +1037,7 @@ class Engine implements DomHost, BrowserHost, RenderHost {
         element.setAttr('streamstatus', 'play');
     }
 
-    // ---- browser の口 ----
+    // ---- browser 向けの API ----
 
     program(): ReturnType<BrowserHost['program']> {
         return this.resources.program;
@@ -1049,7 +1049,7 @@ class Engine implements DomHost, BrowserHost, RenderHost {
 
     launch(name: string): Abort | number {
         if (name.startsWith('#')) return Number.NaN;
-        // 規格に無い名前の形 (`bml://` など) は、今の文書のまま失敗を返す (STD-B24 第二編 7.6.8: 失敗は NaN)
+        // 規格に無いスキーム (`bml://` など) は、今の文書のまま失敗を返す (STD-B24 第二編 7.6.8: 失敗は NaN)
         if (this.unknownName(name)) return Number.NaN;
         void this.load(name);
         return ABORT;
@@ -1059,8 +1059,8 @@ class Engine implements DomHost, BrowserHost, RenderHost {
     private unknownName(name: string): boolean {
         const scheme = unknownScheme(name);
         if (scheme === null) return false;
-        // 描くたびに通る口 (画像) からも来るので、同じ名前は 1 回だけ知らせる
-        this.report(name, `規格に無い名前の形なので扱えません (${scheme}:): ${name}`);
+        // 描くたびに通る経路 (画像) からも来るので、同じ名前は 1 回だけ知らせる
+        this.report(name, `規格に無いスキームなので扱えません (${scheme}:): ${name}`);
         return true;
     }
 
@@ -1078,7 +1078,7 @@ class Engine implements DomHost, BrowserHost, RenderHost {
     /**
      * epgTune (STD-B24 第二編 7.6.1・TR-B14 第二分冊 5.12.6.3)。`-1` は今の局と同じ値。
      * 今の局なら入口から出直す (ブラウザを一度終えて選局し直したのと同じ)。別の局なら denpa の画面に
-     * 頼み (`onTune`)、受けられたら文書を閉じる。後に続くスクリプトは動かさない
+     * 任せ (`onTune`)、受けられたら文書を閉じる。後に続くスクリプトは動かさない
      */
     tune(serviceRef: string): Abort | number {
         const match = /^arib:\/\/(-1|[0-9a-f]{1,4})\.(-1|[0-9a-f]{1,4})\.(-1|[0-9a-f]{1,4})$/i.exec(
@@ -1118,8 +1118,8 @@ class Engine implements DomHost, BrowserHost, RenderHost {
             this.log(`epgTune で選局できません: ${serviceRef}`);
             return Number.NaN;
         }
-        // 選局は画面がやり、局が変わればこの器ごと作り直される。それまでに前の局のモジュールが届いても
-        // 入口から出直さない (入口で epgTune を呼ぶ文書だと、選局を頼み直し続ける)
+        // 選局は画面がやり、局が変わればこのエンジンごと作り直される。それまでに前の局のモジュールが届いても
+        // 入口から出直さない (入口で epgTune を呼ぶ文書だと、選局をリクエストし続ける)
         this.halted = true;
         this.exit();
         return ABORT;
@@ -1305,7 +1305,7 @@ class Engine implements DomHost, BrowserHost, RenderHost {
         this.glyphs.clear();
     }
 
-    // ---- 描く側の口 ----
+    // ---- 描く側の API ----
 
     clut(): readonly Rgba[] {
         return this.table;

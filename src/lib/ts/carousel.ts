@@ -2,8 +2,8 @@
  * データ放送で配ったものを覚えておく。**遅れて繋いだ人に配り直すため。**
  *
  * デコードするのは [bml.ts](bml.ts) で、
- * ここはその出力を受けて「いま出すのに要るもの」だけを持つ。**流れ込む口も
- * 出ていく口も持たない** — 繋ぐのは [server/databroadcast.ts](../server/databroadcast.ts)。
+ * ここはその出力を受けて「いま出すのに要るもの」だけを持つ。**入力も
+ * 出力も持たない** — 繋ぐのは [server/databroadcast.ts](../server/databroadcast.ts)。
  *
  * ## なぜ覚えるのか
  *

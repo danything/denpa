@@ -1,12 +1,12 @@
 /**
- * ブラウザで MPEG-2 と AAC をデコードする WebAssembly を配る (ライブを生で送る道。docs/stream.md §5.5)。
+ * ブラウザで MPEG-2 と AAC をデコードする WebAssembly を配る (ライブを変換せずに送る経路。docs/stream.md §5.5)。
  *
  * **static/ に置かないのは、組むのがイメージの中だから** (Dockerfile の `mpeg2wasm` 段。
- * emscripten で FFmpeg の復号器を組む)。git には入れない — 870KB ほど (wasm 855KB + mjs 14KB) の
+ * emscripten で FFmpeg のデコーダを組む)。git には入れない — 870KB ほど (wasm 855KB + mjs 14KB) の
  * 生成物を抱えると FFmpeg を上げるたびに差し替えが要り、組んだ手順と中身が食い違っても気づけない。
  *
- * 配るのは2つだけ: 読み込み口 (`decoder.mjs`) と中身 (`decoder.wasm`)。**名前は決め打ち** —
- * 置き場の中を好きに読ませる口にはしない。
+ * 配るのは2つだけ: ローダー (`decoder.mjs`) と中身 (`decoder.wasm`)。**名前は決め打ち** —
+ * 置き場の中を好きに読ませるエンドポイントにはしない。
  *
  * 無ければ 404。画面はそれを見てエンコードしたものに戻る (`raw/worker.ts`)
  */
@@ -20,12 +20,12 @@ import type { RequestHandler } from './$types';
 
 const TYPES: Record<string, string> = {
     'decoder.mjs': 'text/javascript; charset=utf-8',
-    // **これでないと `instantiateStreaming` が受け取らない** (読み込み口がそれを使う)
+    // **これでないと `instantiateStreaming` が受け取らない** (ローダーがそれを使う)
     'decoder.wasm': 'application/wasm',
 };
 
 /**
- * **縮めて配る。** wasm は AAC の復号器を足して 855KB になり、縮めれば 3 分の 1 になる
+ * **縮めて配る。** wasm は AAC のデコーダを足して 855KB になり、縮めれば 3 分の 1 になる
  * (brotli 292KB / gzip 364KB。docs/stream.md §5.5)。前段に縮める proxy が無い家が多いので
  * ここで縮める。縮めるのは中身が変わったとき (ETag が変わったとき) の1度だけで、あとは覚えたものを返す
  */

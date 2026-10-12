@@ -3,7 +3,7 @@
  * 作り方は `server/playback.ts`)。詰め替え (映像は写すだけ) も、その場の変換も同じ受け方。
  *
  * 観る画面はそれまでどおり `<video>` の `currentTime`・`duration`・`playbackRate` を触るだけで
- * 済むようにする。ここが受け持つのは、飛んだ先が溜まっていなければ**そこから頼み直す**ことと、
+ * 済むようにする。ここが受け持つのは、飛んだ先が溜まっていなければ**そこからリクエストし直す**ことと、
  * 先へ溜めすぎないことだけ。
  *
  * - **尺は先に言う** (`duration`)。バーは最初から全長で出て、続きの位置へも飛べる
@@ -11,10 +11,10 @@
  *   `currentTime` で引いているので、そのまま合う
  * - 溜めるのは先 `AHEAD` 秒まで、後ろは `BEHIND` 秒まで。iPhone は溜められる量が小さい
  * - `ManagedMediaSource` (iPhone) は**送り込む頃合いをブラウザが言う**。言われていない間は読まない
- * - 切れたら観ていた位置から頼み直す (1秒→2秒→…10秒で頭打ち、続けて8回で諦める)。
+ * - 切れたら観ていた位置からリクエストし直す (1秒→2秒→…10秒で頭打ち、続けて8回で諦める)。
  *   観る画面の拾い直し (`recover`) と同じ数
- * - **サーバが混んでいて断られたら (503) 頼み直さない** (`busy`)。その場の変換の枠が埋まっている
- *   (`server/transcode.ts`)。待っても空くとは限らないので、画面がほかの形を勧める
+ * - **サーバが混んでいて断られたら (503) リクエストし直さない** (`busy`)。その場の変換の枠が埋まっている
+ *   (`server/transcode.ts`)。待っても空くとは限らないので、画面がほかの形式を勧める
  */
 
 import type { PickedMediaSource } from '#lib/ts/media-source.js';
@@ -33,10 +33,10 @@ import {
 const AHEAD = 60;
 /** 後ろに残す長さ (秒)。これより前は捨てる */
 const BEHIND = 30;
-/** 読んでいる流れの尻からこれだけ先までは、頼み直さずに届くのを待つ (秒。`covers`) */
+/** 読んでいる流れの尻からこれだけ先までは、リクエストし直さずに届くのを待つ (秒。`covers`) */
 const SLACK = 15;
 interface RemuxOptions {
-    /** 頼む先。`from` 秒から、`audio` (`playback` の `audios` の `id`) の音声で */
+    /** リクエストする先。`from` 秒から、`audio` (`playback` の `audios` の `id`) の音声で */
     url(from: number, audio: string): string;
     /** MSE に渡す型 (`ts/playback.ts` の `streamType`) */
     codecs: string;
@@ -51,7 +51,7 @@ interface RemuxOptions {
 }
 
 export interface RemuxPlayer {
-    /** 音声を選び直す。**いまの位置から頼み直す** (選んだ1本だけを流しているため) */
+    /** 音声を選び直す。**いまの位置からリクエストし直す** (選んだ1本だけを流しているため) */
     setAudio(id: string): void;
     /** 畳む。読んでいる流れを切る (サーバの ffmpeg も止まる) */
     destroy(): void;
@@ -70,10 +70,10 @@ export function remuxPlayer(
 ): RemuxPlayer {
     const media = new picked.Source();
     let buffer: SourceBuffer | null = null;
-    /** 頼み直すたびに増やす。古い流れの続きを捨てる目印 */
+    /** リクエストし直すたびに増やす。古い流れの続きを捨てる目印 */
     let run = 0;
     let controller: AbortController | null = null;
-    /** 読んでいる流れの頼んだ位置。読んでいなければ null */
+    /** 読んでいる流れのリクエストした位置。読んでいなければ null */
     let loadingFrom: number | null = null;
     let audio = options.audio;
     let retries = 0;
@@ -99,9 +99,9 @@ export function remuxPlayer(
     }
 
     /**
-     * 1つ頼んで、終わるまで待つ。読めない中身なら投げる。
+     * 1つリクエストして、終わるまで待つ。読めない中身なら投げる。
      *
-     * `mine` を渡したら、手が空くのを待つ間に頼み直されていれば (`load`) 何もしない。
+     * `mine` を渡したら、手が空くのを待つ間にリクエストし直されていれば (`load`) 何もしない。
      * 古い流れの残りを、新しい流れの捨てた後へ足さないため
      */
     async function update(job: (target: SourceBuffer) => void, mine?: number): Promise<void> {
@@ -170,7 +170,7 @@ export function remuxPlayer(
         }
     }
 
-    /** `from` 秒から頼み直す。溜まっていたものは捨てる */
+    /** `from` 秒からリクエストし直す。溜まっていたものは捨てる */
     async function load(from: number): Promise<void> {
         const mine = ++run;
         controller?.abort();
@@ -190,7 +190,7 @@ export function remuxPlayer(
             if (mine !== run) return;
             const response = await fetch(options.url(from, audio), { signal: abort.signal });
             /*
-             * **混んでいて断られたら頼み直さない** (その場の変換の枠が埋まっている)。デプロイの最中の 503
+             * **混んでいて断られたらリクエストし直さない** (その場の変換の枠が埋まっている)。デプロイの最中の 503
              * (前段が返すもの) とは言い分で見分ける
              */
             if (response.status === 503 && (await busyAnswer(response))) {
@@ -227,8 +227,8 @@ export function remuxPlayer(
         } catch (error) {
             if (mine !== run || closed) return;
             loadingFrom = null;
-            // 切れた (繋がらない・途中で落ちた・サーバの 5xx) なら頼み直す。読めない中身
-            // (SourceBuffer が断った) と 4xx は何度やっても同じ。画面が落とす口を出す
+            // 切れた (繋がらない・途中で落ちた・サーバの 5xx) ならリクエストし直す。読めない中身
+            // (SourceBuffer が断った) と 4xx は何度やっても同じ。画面がダウンロードの案内を出す
             if (video.error !== null || !retryable(error)) {
                 console.warn('[remux] 流せませんでした', error);
                 options.state('failed');
@@ -238,7 +238,7 @@ export function remuxPlayer(
         }
     }
 
-    /** 切れた。倍々に待って、観ていた位置から頼み直す */
+    /** 切れた。倍々に待って、観ていた位置からリクエストし直す */
     function retry(): void {
         if (retries >= STREAM_RETRIES) {
             options.state('failed');
@@ -253,7 +253,7 @@ export function remuxPlayer(
         }, wait);
     }
 
-    /** 飛んだ先が溜まっておらず、待っても届かないなら、そこから頼み直す */
+    /** 飛んだ先が溜まっておらず、待っても届かないなら、そこからリクエストし直す */
     const onSeeking = (): void => {
         nudge();
         if (buffer === null || retryTimer !== null) return;
@@ -261,7 +261,7 @@ export function remuxPlayer(
     };
     /**
      * 詰まった。読み終えたあとに戻った・ブラウザが捨てた (`ManagedMediaSource`) で
-     * いまの位置が無ければ、頼み直す
+     * いまの位置が無ければ、リクエストし直す
      */
     const onWaiting = (): void => {
         nudge();
@@ -292,7 +292,7 @@ export function remuxPlayer(
             buffer.mode = 'segments';
             /*
              * **始める位置を先に言っておく。** まだ何も無いうちに代入した位置は、尺が分かった
-             * ところで効く。言わないと 0 にいると見なされ、詰まり (`waiting`) で頭から頼み直す
+             * ところで効く。言わないと 0 にいると見なされ、詰まり (`waiting`) で頭からリクエストし直す
              */
             const start = Math.min(Math.max(0, options.start), Math.max(0, options.duration - 1));
             if (start > 0) video.currentTime = start;

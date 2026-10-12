@@ -8,7 +8,7 @@ namespace Denpa.Agent;
  *
  * 3段:
  *
- * - UsbFs.cs … /dev/bus/usb をバルク転送で読み書きする口と、ディスクリプタの読み方
+ * - UsbFs.cs … /dev/bus/usb をバルク転送で読み書きする部分と、ディスクリプタの読み方
  * - Ccid.cs  … CCID の命令 (電源・パラメータ・XfrBlock) と、それを ICardLink にしたもの
  * - T1.cs    … ATR の読み方と、TPDU 単位の読み取り機のための T=1 のブロックのやり取り
  *
@@ -48,7 +48,7 @@ public static class CcidMessage
     public const byte SlotStatus = 0x81;
     public const byte Parameters = 0x82;
 
-    // bError のうち、T=1 でブロックを頼み直せば済むもの
+    // bError のうち、T=1 でブロックを送り直せば済むもの
     public const byte IccMute = 0xFE;
     public const byte ParityError = 0xFD;
     public const byte Overrun = 0xFC;
@@ -107,7 +107,7 @@ public static class CcidMessage
 /// CCID のリーダー1台 (のスロット 0) を <see cref="ICardLink"/> にしたもの。
 ///
 /// <para>
-/// **読み取り機の単位で道が分かれる。** TPDU 単位なら T=1 のブロックをこちらで組み
+/// **読み取り機の単位で方式が分かれる。** TPDU 単位なら T=1 のブロックをこちらで組み
 /// (<see cref="T1Protocol"/>)、APDU 単位なら APDU をそのまま XfrBlock に載せる。
 /// 文字単位は断る。
 /// </para>
@@ -127,7 +127,7 @@ public sealed class CcidLink : ICardLink
     private T1Protocol? _t1;
     private int _bwtMs = 1500;
 
-    /// <summary>この線でもうポートをリセットした (固まったリーダーの立て直しは1回だけ)</summary>
+    /// <summary>この接続でもうポートをリセットした (固まったリーダーの立て直しは1回だけ)</summary>
     private bool _portReset;
 
     /// <summary>電源を入れた (PowerOn を送った)。閉じるときに切る</summary>
@@ -139,7 +139,7 @@ public sealed class CcidLink : ICardLink
     /// <summary>最後に <see cref="Reset"/> で読んだ ATR</summary>
     public Atr? Atr { get; private set; }
 
-    /// <summary>TPDU 単位のとき、S(IFS) で決まったこちらの受け口</summary>
+    /// <summary>TPDU 単位のとき、S(IFS) で決まったこちらの受信バッファの大きさ</summary>
     public int? Ifsd => _t1?.Ifsd;
 
     public CcidLink(string name, IBulkPipe pipe, CcidInterface info)
@@ -268,8 +268,8 @@ public sealed class CcidLink : ICardLink
     }
 
     /// <summary>
-    /// T=1 のブロックを1つ送って1つ受ける (<see cref="T1Protocol"/> の下の口)。
-    /// カードが黙った・化けたは null (T=1 の側で頼み直す)
+    /// T=1 のブロックを1つ送って1つ受ける (<see cref="T1Protocol"/> の下の層)。
+    /// カードが黙った・化けたは null (T=1 の側で送り直す)
     /// </summary>
     private byte[]? Exchange(byte[] block, byte wtx)
     {
@@ -285,7 +285,7 @@ public sealed class CcidLink : ICardLink
 
     /// <summary>
     /// APDU 単位のリーダー。**1メッセージに収まらなければ wLevelParameter で連結する**
-    /// (extended APDU 単位。送るとき 1 = 始め、3 = 続き、2 = 終わり、受けるとき 0x10 で続きを頼む)
+    /// (extended APDU 単位。送るとき 1 = 始め、3 = 続き、2 = 終わり、受けるとき 0x10 で続きを要求する)
     /// </summary>
     private byte[] TransmitApdu(ReadOnlySpan<byte> apdu)
     {
@@ -359,9 +359,9 @@ public sealed class CcidLink : ICardLink
     /// CCID のメッセージを1つ読む。
     ///
     /// <para>
-    /// **長さぴったりに頼む。** メッセージがパケットの大きさの倍数で終わるとき、
-    /// ZLP を送らないリーダーがあり、大きめの受け口で待つと時間切れまで返らない。
-    /// 先に1パケット読んで頭の dwLength を知り、残りをパケットの倍数に切り上げて頼む。
+    /// **長さぴったりで要求する。** メッセージがパケットの大きさの倍数で終わるとき、
+    /// ZLP を送らないリーダーがあり、大きめのバッファで待つと時間切れまで返らない。
+    /// 先に1パケット読んで頭の dwLength を知り、残りをパケットの倍数に切り上げて要求する。
     /// 前のメッセージのあとの ZLP (0 バイト) は読み飛ばす。
     /// </para>
     /// </summary>
@@ -481,7 +481,7 @@ public static class Ccid
 
     /// <summary>
     /// 診断用 (<c>denpa-agent --card</c>)。見つかったリーダーを並べ、最初の1台のカードに
-    /// 電源を入れて ATR と読み取り機の形を書く。**実機で最初に当てるのはここ。**
+    /// 電源を入れて ATR と読み取り機の種類を書く。**実機で最初に当てるのはここ。**
     /// </summary>
     public static string Describe()
     {

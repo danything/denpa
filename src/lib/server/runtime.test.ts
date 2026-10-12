@@ -67,7 +67,7 @@ describe('止まれの合図の受け取り', () => {
         for (const signal of SIGNALS) process.removeAllListeners(signal);
 
         const received: string[] = [];
-        // 1度目。まだ誰も居ないので 0 件
+        // 1度目。まだ誰もいないので 0 件
         expect(takeOverSignals((signal) => received.push(signal))).toBe(0);
 
         // ここで adapter-node が入ってくる
@@ -104,7 +104,7 @@ describe('止まれの合図の受け取り', () => {
         process.emit('SIGTERM');
 
         expect(drains).toBe(1);
-        // 聞き手が居なくなると Node の既定 (その場で終了) に落ちる
+        // 聞き手がいなくなると Node の既定 (その場で終了) に落ちる
         expect(process.listenerCount('SIGTERM')).toBe(1);
     });
 });

@@ -47,12 +47,12 @@ function database(): Database {
 export const MIGRATIONS = 'drizzle';
 
 /**
- * DB を今の形にする。**当てるのは `drizzle/` のマイグレーションだけ** (schema.ts が正)。
+ * DB を今の構成にする。**当てるのは `drizzle/` のマイグレーションだけ** (schema.ts が正)。
  *
  * 当てたぶんは `__drizzle_migrations` に残り、次からは新しいものだけが当たる。
  * 最初のマイグレーション (baseline) は `IF NOT EXISTS` にしてあるので、
  * マイグレーションを持つ前 (1.7.x まで) の DB にもそのまま当たる — あの頃は起動のたびに
- * `CREATE TABLE IF NOT EXISTS` と足りない列の追加で同じ形に整えていた
+ * `CREATE TABLE IF NOT EXISTS` と足りない列の追加で同じ構成に整えていた
  */
 export function bootstrap(db: Database): void {
     migrate(drizzle({ client: db }), { migrationsFolder: MIGRATIONS });
@@ -96,7 +96,7 @@ let typedFor: Database | null = null;
  * `database()` と接続は1つ (WAL や busy_timeout の設定もそのまま効く)。
  * bun:sqlite なので同期のまま — `.get()` / `.all()` / `.run()` を付けて呼ぶ。
  * 組み立てで書けないもの (相関サブクエリ・CASE) は `sql<型>\`…\`` で列を名指しして
- * 挟む。生の SQL の文字列に型を付けて返す口は置かない (キャストになるので)
+ * 挟む。素の SQL の文字列に型を付けて返す関数は置かない (キャストになるので)
  */
 export function orm() {
     const client = database();
@@ -112,7 +112,7 @@ export function orm() {
  *
  * bun の `.run()` は行数を返しているのに、drizzle の型の上では void になる。
  * 1行なら `.returning()` で足りるが、まとめて消す/直すところで全行を返させるのは
- * 無駄なので、組み立てた SQL を生の接続で流して行数を取る。
+ * 無駄なので、組み立てた SQL を素の接続で流して行数を取る。
  *
  * 接続は `orm()` と同じ1本なので、drizzle のトランザクションの中から呼んでも
  * その中で流れる (epg.ts の syncServices → clearBelongings がそれ)

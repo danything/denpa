@@ -1,16 +1,16 @@
 /**
- * 外から来た JSON の形を確かめて、型を付ける。
+ * 外から来た JSON の形式を確かめて、型を付ける。
  *
- * `res.json() as X` はキャストで、相手が本当にその形を返しているかは見ていない。
+ * `res.json() as X` はキャストで、相手が本当にその形式を返しているかは見ていない。
  * 相手が別のもの (チューナーエージェント、OIDC の相手、取り込み元の DB) なら、
- * 境界で1回だけ形を確かめて、以降は型のとおりに触る — DB の列を `schema.ts` の
+ * 境界で1回だけ形式を確かめて、以降は型のとおりに触る — DB の列を `schema.ts` の
  * 読み手で読むのと同じ理屈。ライブラリは入れていない。要るのは下の 10 個で足りる。
  *
- * 形は `object({ ... })` のように書き、型はそこから導く (`Infer<typeof SHAPE>`)。
+ * 形式は `object({ ... })` のように書き、型はそこから導く (`Infer<typeof SHAPE>`)。
  * 型と読み手を別々に書くと、片方だけ直したときに TS は何も言わない。
  *
  * 読めなければ `ShapeError` を投げる。どこが違うかを道筋 (`tuners[0].name`) で言う —
- * 「形が違う」だけでは、相手のどの版と噛み合っていないのか分からない
+ * 「形式が違う」だけでは、相手のどの版と噛み合っていないのか分からない
  */
 
 export class ShapeError extends Error {}
@@ -43,7 +43,7 @@ export const number: Shape<number> = (value, path) =>
 export const boolean: Shape<boolean> = (value, path) =>
     typeof value === 'boolean' ? value : refuse(path, '真偽', value);
 
-/** 何でもよい。形を見ないところ (相手に丸ごと渡すもの) にだけ使う */
+/** 何でもよい。形式を見ないところ (相手に丸ごと渡すもの) にだけ使う */
 export const unknown: Shape<unknown> = (value) => value;
 
 /** 決まった値のどれか。`literal('GR', 'BS')` で `'GR' | 'BS'` */
@@ -75,7 +75,7 @@ export function array<T>(item: Shape<T>): Shape<T[]> {
             : refuse(path, '配列', value);
 }
 
-/** 鍵が決まっていないオブジェクト。値の形だけ見る */
+/** 鍵が決まっていないオブジェクト。値の形式だけ見る */
 export function record<T>(item: Shape<T>): Shape<Record<string, T>> {
     return (value, path) => {
         if (typeof value !== 'object' || value === null || Array.isArray(value)) {
@@ -88,7 +88,7 @@ export function record<T>(item: Shape<T>): Shape<Record<string, T>> {
     };
 }
 
-/** どちらか。先に当たったほうの形になる */
+/** どちらか。先に当たったほうの型になる */
 export function either<A, B>(a: Shape<A>, b: Shape<B>): Shape<A | B> {
     return (value, path) => {
         try {
@@ -105,7 +105,7 @@ export function either<A, B>(a: Shape<A>, b: Shape<B>): Shape<A | B> {
 
 type Fields = Record<string, Shape<unknown>>;
 type OptionalKeys<F extends Fields> = { [K in keyof F]: undefined extends Infer<F[K]> ? K : never }[keyof F];
-/** `optional()` の鍵は省ける形にする (exactOptionalPropertyTypes に合わせて、無ければ鍵ごと無い) */
+/** `optional()` の鍵は省けるようにする (exactOptionalPropertyTypes に合わせて、無ければ鍵ごと無い) */
 type ObjectOf<F extends Fields> = { [K in Exclude<keyof F, OptionalKeys<F>>]: Infer<F[K]> } & {
     [K in OptionalKeys<F>]?: Infer<F[K]>;
 };
@@ -131,30 +131,30 @@ export function object<F extends Fields>(fields: F): Shape<ObjectOf<F>> {
 }
 
 /**
- * 読む。**形が違えば止める。** 失敗の言葉に、何を読んでいたかを添える
- * (`ID トークンの形が違います: exp は数のはずが 無し`)。
+ * 読む。**形式が違えば止める。** 失敗の言葉に、何を読んでいたかを添える
+ * (`ID トークンの形式が違います: exp は数のはずが 無し`)。
  *
- * 止めてよいのは、違う形のまま進むと危ないところ (ID トークン) だけ。相手が
+ * 止めてよいのは、違う形式のまま進むと危ないところ (ID トークン) だけ。相手が
  * 別の版で動いているだけなら止めずに通す (`tolerate`)
  */
 export function read<T>(shape: Shape<T>, value: unknown, what: string): T {
     try {
         return shape(value, '');
     } catch (error) {
-        if (error instanceof ShapeError) throw new ShapeError(`${what}の形が違います: ${error.message}`);
+        if (error instanceof ShapeError) throw new ShapeError(`${what}の形式が違います: ${error.message}`);
         throw error;
     }
 }
 
 /**
- * 警告を出した口 (`what`)。同じ口では繰り返さない — チューナーの状態は何秒か
+ * 警告を出した相手 (`what`)。同じ相手では繰り返さない — チューナーの状態は何秒か
  * おきに読むし、言葉には値が入るので (使っているチャンネルなど)、言葉ごとに
  * 覚えると増え続ける。最初の 1 回で直すべき場所は分かる
  */
 const warned = new Set<string>();
 
 /**
- * 読む。**形が違っても止めない。** 警告を1回だけ出して、来たものをそのまま型にする
+ * 読む。**形式が違っても止めない。** 警告を1回だけ出して、来たものをそのまま型にする
  * (前の `as X` と同じ振る舞い)。
  *
  * 相手 (チューナーエージェント) は別のリポジトリで、版がずれると鍵が増えたり
@@ -168,7 +168,9 @@ export function tolerate<T>(shape: Shape<T>, value: unknown, what: string, warn 
         if (!(error instanceof ShapeError)) throw error;
         if (!warned.has(what)) {
             warned.add(what);
-            warn(`[shape] ${what}の形が違います (相手の版がずれている?)。そのまま使います: ${error.message}`);
+            warn(
+                `[shape] ${what}の形式が違います (相手の版がずれている?)。そのまま使います: ${error.message}`,
+            );
         }
         return value as T;
     }

@@ -5,7 +5,7 @@ import { expect, goto, syncEpg, test } from './helpers';
  *
  * **総当たりを回すのは denpa。** 選局はエージェントに頼むが、NIT と SDT を
  * 読み取って局名を取るのはこちらで、見つけた顔ぶれをエージェントに預ける。
- * ここは 13〜62ch を本当に1本ずつ開いていて、偽の放送に居るのは T16 と T21 だけ。
+ * ここは 13〜62ch を本当に1つずつ開いていて、偽の放送にあるのは T16 と T21 だけ。
  */
 test.describe('チューナー画面', () => {
     test.afterEach(async ({ request, stack }) => {
@@ -31,7 +31,7 @@ test.describe('チューナー画面', () => {
     });
 
     /**
-     * 入れたばかりのとき用の口。
+     * 入れたばかりのとき用のボタン。
      *
      * 普段の周回は録画にもスキャンにもロゴにも譲るので、何か動いていると
      * 番組表がなかなか埋まらない。押されている間は**録画以外より上の優先度**で
@@ -169,10 +169,10 @@ test.describe('チューナーの設定', () => {
 
         const card = page.getByTestId('tuner-config-card');
         const rows = card.getByTestId('tuner-config-row');
-        // 4本ぶん + 足すための空行
+        // 4台ぶん + 足すための空行
         await expect(rows).toHaveCount(5);
 
-        // 1本目を無効にして、名前を消して1本減らす
+        // 1台目を無効にして、名前を消して1台減らす
         await rows.nth(0).locator('input[name="disabled.0"]').check();
         await rows.nth(3).locator('input[name="name.3"]').fill('');
         await card.getByTestId('tuner-config-save').click();

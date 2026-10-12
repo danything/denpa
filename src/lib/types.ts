@@ -12,7 +12,7 @@ import type {
 export type ChannelType = 'GR' | 'BS' | 'CS' | 'SKY';
 
 /**
- * 番組詳細に出す分。番組表・予約一覧・録画一覧のどこから開いても同じ形で見せる。
+ * 番組詳細に出す分。番組表・予約一覧・録画一覧のどこから開いても同じ見た目で見せる。
  * 予約や録画からは局名しか手元に無いので、局IDではなく名前で持つ。
  */
 export interface ProgramDetail {

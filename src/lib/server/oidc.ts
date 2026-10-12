@@ -1,7 +1,7 @@
 /**
  * OIDC (認可コードフロー + PKCE) でのログイン。
  *
- * **ライブラリを入れていません。** 使う口は discovery・authorize・token・jwks の
+ * **ライブラリを入れていません。** 使うエンドポイントは discovery・authorize・token・jwks の
  * 4つだけで、どれも素の HTTP と WebCrypto で足ります。依存を増やすほうが、
  * 認証まわりで「中で何をしているか分からない」を抱えることになります。
  *
@@ -14,12 +14,12 @@
 import { array, either, type Infer, number, object, optional, read, record, string } from '../shape';
 import { config } from './config';
 
-/** 有効かどうか。3つ揃っていなければ、入る道は TRUSTED_NETWORKS だけ (auth.ts) */
+/** 有効かどうか。3つ揃っていなければ、ログインできるのは TRUSTED_NETWORKS だけ (auth.ts) */
 export function enabled(): boolean {
     return config.oidcIssuer !== '' && config.oidcClientId !== '' && config.oidcClientSecret !== '';
 }
 
-/** 相手の口の一覧 (`/.well-known/openid-configuration`)。形はここで確かめる (`shape.ts`) */
+/** 相手のエンドポイントの一覧 (`/.well-known/openid-configuration`)。形式はここで確かめる (`shape.ts`) */
 const DISCOVERY = object({
     issuer: string,
     authorization_endpoint: string,
@@ -29,10 +29,10 @@ const DISCOVERY = object({
 type Discovery = Infer<typeof DISCOVERY>;
 
 /**
- * 相手の口の一覧。**一度読んだら覚えておきます。**
+ * 相手のエンドポイントの一覧。**一度読んだら覚えておきます。**
  *
- * 鍵の入れ替えと違って口の場所は動かないので、毎回取りに行く理由がありません。
- * 取れなかったときは覚えないので、次のログインでもう一度取りに行きます。
+ * 鍵の入れ替えと違ってエンドポイントの場所は動かないので、毎回取得する理由がありません。
+ * 取れなかったときは覚えないので、次のログインでもう一度取得します。
  */
 let discovered: Discovery | null = null;
 
@@ -99,7 +99,7 @@ export function safeReturn(to: string | null): string {
 }
 
 /**
- * 戻ってくる口の住所。**Entra のアプリ登録に、名前ごとに1つずつ足しておくこと。**
+ * 戻ってくる先の URL。**Entra のアプリ登録に、名前ごとに1つずつ足しておくこと。**
  *
  * denpa には名前が2つある (`dp.doany.io` と `dp.l.doany.io`) ので、決め打ちにせず
  * 来たリクエストから組み立てる。**認可のときと引き換えのときで同じ値**を渡す
@@ -149,7 +149,7 @@ export async function start(redirectUri: string, to: string): Promise<{ url: str
  * 受け取ったコードを ID トークンに換える。
  *
  * **秘密はここでしか使いません。** 本文に入れて (`client_secret_post`) 送ります —
- * Entra はどちらも受けますが、ヘッダに入れる形は URL 符号化の解釈が実装で割れるので、
+ * Entra はどちらも受けますが、ヘッダに入れる方式は URL 符号化の解釈が実装で割れるので、
  * 迷いようのないほうにしてあります。
  */
 async function exchange(code: string, redirectUri: string, verifier: string): Promise<string> {
@@ -203,7 +203,7 @@ async function publicKey(kid: string): Promise<CryptoKey> {
 }
 
 /**
- * ID トークンの中身。**形はここで確かめる** (`shape.ts`)。相手が入れてくる
+ * ID トークンの中身。**形式はここで確かめる** (`shape.ts`)。相手が入れてくる
  * 知らないクレームは捨てる (通すかどうかに使うのは下の分だけ)
  */
 const CLAIMS = object({
@@ -246,7 +246,7 @@ export async function verify(token: string, nonce: string, at = Date.now()): Pro
         rawPayload === undefined ||
         rawSignature === undefined
     ) {
-        throw new Error('ID トークンの形が違います');
+        throw new Error('ID トークンの形式が違います');
     }
 
     const header = read(
@@ -255,7 +255,7 @@ export async function verify(token: string, nonce: string, at = Date.now()): Pro
         'ID トークンのヘッダ',
     );
     // alg は相手が決めるものだが、こちらが受けるのは RS256 だけ。
-    // none を受けると署名を見ない道ができてしまう
+    // none を受けると署名を見ない抜け道ができてしまう
     if (header.alg !== 'RS256') throw new Error(`対応していない署名方式です (${header.alg})`);
     if (typeof header.kid !== 'string') throw new Error('ID トークンに鍵の名前がありません');
 
@@ -267,7 +267,7 @@ export async function verify(token: string, nonce: string, at = Date.now()): Pro
     );
     if (!ok) throw new Error('ID トークンの署名が合いません');
 
-    // 署名を見てから開く。形の違いを言うのは、本物だと分かったものにだけ
+    // 署名を見てから開く。形式の違いを言うのは、本物だと分かったものにだけ
     const claims = read(
         CLAIMS,
         JSON.parse(new TextDecoder().decode(decodeBase64Url(rawPayload))),
@@ -291,7 +291,7 @@ export async function verify(token: string, nonce: string, at = Date.now()): Pro
 }
 
 /**
- * 通していい人か。**居るグループか、割り当てられたロールで決めます**
+ * 通していい人か。**入っているグループか、割り当てられたロールで決めます**
  * (誰がログインしたかでは決めない)。
  *
  * `OIDC_GROUP` が空なら、入れた人は全員通します。

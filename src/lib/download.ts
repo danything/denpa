@@ -1,5 +1,5 @@
 /**
- * 録画を**落とす**ときの口。
+ * 録画を**落とす**ときの入口。
  *
  * 押した瞬間に**期限付きの署名URL** (`server/share.ts` の `?token=`) を作り、
  * そこへ遷移して落とす。遷移先は添付 (`Content-Disposition`) なので画面は動かない。
@@ -10,14 +10,14 @@
  * リンクを固定で `href` に置けなくなる (押されてから作る) のが引き換え。
  *
  * 観るほうはブラウザでそのまま再生するので (`routes/watch/[id]`)、ここに
- * 残っているのはダウンロードだけ。外部プレイヤーへ渡す口 (`denpa://`) は廃止済み。
+ * 残っているのはダウンロードだけ。外部プレイヤーへ渡す仕組み (`denpa://`) は廃止済み。
  */
 import { resolve } from '$app/paths';
 import type { FileSource } from './source';
 
 /**
  * 期限付きのリンクを作る (`api/recordings/<id>/share`)。作れなければ (断られた・繋がらない) null。
- * 落とす口と「再生リンクをコピー」で使う
+ * ダウンロードと「再生リンクをコピー」で使う
  */
 export async function mintShareLink(
     id: number,

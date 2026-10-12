@@ -1,9 +1,9 @@
 /**
- * チャンネルスキャン。物理チャンネルを片端から選局して、居る局を探す。
+ * チャンネルスキャン。物理チャンネルを片端から選局して、ある局を探す。
  *
- * **選局はエージェントに頼み、読むのはこちら。** エージェントは中身を読まないので
+ * **選局はエージェントに任せ、読むのはこちら。** エージェントは中身を読まないので
  * ([agent.md](../../../docs/agent.md))、NIT と SDT を読み取って局名を取るのは
- * denpa の仕事になる。局名は ARIB の文字符号で入っていて、その解読器は
+ * denpa の仕事になる。局名は ARIB の文字符号で入っていて、そのデコーダは
  * `ts/aribtext.ts` にしかない。
  *
  * Mirakurun の走査に合わせてある。
@@ -89,7 +89,7 @@ export interface ScanResult {
 /**
  * 流れてくる TS を、NIT と SDT が揃うまで読む。
  *
- * 揃った時点で打ち切る。最後まで読む必要はないし、居ない局で 30 秒待つのは
+ * 揃った時点で打ち切る。最後まで読む必要はないし、無い局で 30 秒待つのは
  * 総当たりだと効いてくる。
  *
  * 失敗の理由は分けて返す。総当たりなので「何も出なかった」と「電波は来ているが
@@ -261,7 +261,7 @@ class Scanner {
          *
          * 種別ごとに順に回していた頃は、地上波を50ch 撃ち終わるまで衛星に
          * 行かなかった。使うチューナーが別なので、待たせている間ずっと
-         * 衛星の本が遊んでいる。1つの列を全チューナーで引けば同時に進む
+         * 衛星のチューナーが遊んでいる。1つの列を全チューナーで引けば同時に進む
          */
         const queue: Job[] = [];
         for (const [type, channels] of targets) {
@@ -275,7 +275,7 @@ class Scanner {
             for (const channel of channels) queue.push({ type, channel });
         }
 
-        /** その本で引けるものが1つでもある本だけ動かす */
+        /** そのチューナーで引けるものが1つでもあるチューナーだけ動かす */
         const wanted = new Set(queue.map((job) => job.type));
         const workers = tuners.filter((tuner) =>
             tuner.types.some((type) => wanted.has(type as ScannableType)),
@@ -324,16 +324,16 @@ class Scanner {
             .map(([, entry]) => entry);
     }
 
-    /** その本で引ける先頭の1件を取り出す。引けないものは飛ばして次を見る */
+    /** そのチューナーで引ける先頭の1件を取り出す。引けないものは飛ばして次を見る */
     private take(queue: Job[], types: ChannelType[]): Job | undefined {
         const at = queue.findIndex((job) => types.includes(job.type));
         return at === -1 ? undefined : queue.splice(at, 1)[0];
     }
 
     /**
-     * チューナー1本ぶんの担当。列が尽きるまで引き続ける。
+     * チューナー1台ぶんの担当。列が尽きるまで引き続ける。
      *
-     * `types` はその本が受けられる種別。地上波の本は地上波の分だけ、衛星の本は
+     * `types` はそのチューナーが受けられる種別。地上波のチューナーは地上波の分だけ、衛星のチューナーは
      * 衛星の分だけを引くので、片方が先に終わってももう片方は止まらない。
      *
      * first が false のときは数え直さない (同じチャンネルを2回数えないため)
@@ -346,7 +346,7 @@ class Scanner {
             const { type, channel } = job;
 
             /*
-             * 1チャンネルごとに切る口を持つ。読み終えたらここで接続を落とし、
+             * 1チャンネルごとに切る手段を持つ。読み終えたらここで接続を落とし、
              * エージェントにチューナーを返す
              */
             const closer = new AbortController();
@@ -453,7 +453,7 @@ async function runScan(targets: [ScannableType, string[]][]): Promise<void> {
         /*
          * 局が入れ替わった。**取り込み直して、番組表を集め直す。**
          *
-         * 番組表を持っているのは denpa なので、**待つ相手が居ない**。
+         * 番組表を持っているのは denpa なので、**待つ相手がいない**。
          * 見つかった局をその場で取り込んで、そのまま集めに行く
          */
         await sync().catch(() => undefined);

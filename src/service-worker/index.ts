@@ -23,7 +23,7 @@ import { self as worker } from '$app/service-worker';
  */
 
 const CACHE = `denpa-${version}`;
-/** 殻だけ。ロゴやサムネイルのような「増えるもの」は入れない。道は base からの相対で来る */
+/** 殻だけ。ロゴやサムネイルのような「増えるもの」は入れない。パスは base からの相対で来る */
 const SHELL = [
     // 組んだ JS/CSS はルートでも static でもないので型の付いた `resolve` に渡せない。頭だけ借りる
     ...immutable.map((file) => `${resolve('')}${file.path}`),
@@ -112,7 +112,7 @@ async function heldFor(event: BackgroundFetchEvent): Promise<OfflineVideo | null
     return held;
 }
 
-/** 失敗として残す (やり直す口になる) */
+/** 失敗として残す (あとでやり直せる) */
 async function markFailed(held: OfflineVideo): Promise<void> {
     held.state = 'failed';
     await videos.put(held);
@@ -155,7 +155,7 @@ worker.addEventListener('backgroundfetchsuccess', (event) => {
  * 失敗と取り消しは同じ扱い — 途中まで運んだものは使えない。
  * **控えは消さずに「失敗」として残す。** ネットが遅くて途中で切れたとき、
  * 消してしまうと開き直したときに何も残らず「無かったことになった」ように
- * 見えていた。残った行が、そのままやり直す口になる
+ * 見えていた。残った行から、そのままやり直せる
  */
 function drop(event: BackgroundFetchEvent): void {
     event.waitUntil(heldFor(event).then((held) => (held === null ? undefined : markFailed(held))));

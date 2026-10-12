@@ -22,7 +22,7 @@ import {
 
 const { bmlPid: BML_PID, downloadId: DOWNLOAD_ID } = BML_TS;
 
-/** モジュール1つぶんの multipart (ファイル1枚の形) */
+/** モジュール1つぶんの multipart (ファイル1枚の形式) */
 const multipart = (body: string) => multipartModule([['/startup.bml', 'text/X-arib-bml', body]]);
 
 /** DII と DDB を並べて、1つのモジュールを配りきる。版ごとに回 (transaction) を変える */
@@ -179,7 +179,7 @@ describe('feedFor', () => {
         expect(feedFor(tl, -1, 20_000)).toEqual({ reset: false, messages: [tl[0]!.message, tl[1]!.message] });
     });
 
-    test('進んだぶんだけ足す (器はそのまま)', () => {
+    test('進んだぶんだけ足す (入れ物はそのまま)', () => {
         expect(feedFor(tl, 20_000, 70_000)).toEqual({ reset: false, messages: [tl[2]!.message] });
     });
 

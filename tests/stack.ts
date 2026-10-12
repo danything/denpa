@@ -18,7 +18,7 @@ export const TEST_ROOT = '/tmp/denpa-e2e';
 
 /*
  * ワーカー番号ごとにずらす幅。
- * 10 ずつ空けておけば、あとで口を1つ2つ増やしても衝突しない
+ * 10 ずつ空けておけば、あとでポートを1つ2つ増やしても衝突しない
  */
 const STRIDE = 10;
 const APP_PORT = 4173;
@@ -59,21 +59,21 @@ export interface Stack {
     liveTsFile: string;
     /**
      * これを置くとライブの AV1 の偽 ffmpeg が、本物の AV1 + Opus の fMP4 を流す (`tests/fake/fmp4-loop.ts`)。
-     * 互換モード (canvas に描く道) が実際にデコードして描くところまで見るのに使う
+     * 互換モード (canvas に描く経路) が実際にデコードして描くところまで見るのに使う
      */
     liveFmp4File: string;
     /**
      * **偽の GPU の置き場。** ここに `renderD128` のような名前でファイルを置くと、
-     * denpa は `HW_DEVICES` (`<ここ>/renderD*`) の口として拾い、偽 ffmpeg は渡された
-     * 口が在るのを見て「GPU がある」と答える (QSV / VA-API の試しのエンコードが通る)。
-     * 消せば、エンコードしようとした GPU の道が本物と同じく初期化で落ちる
+     * denpa は `HW_DEVICES` (`<ここ>/renderD*`) のデバイスとして拾い、偽 ffmpeg は渡された
+     * デバイスが在るのを見て「GPU がある」と答える (QSV / VA-API の試しのエンコードが通る)。
+     * 消せば、エンコードしようとした GPU の経路が本物と同じく初期化で落ちる
      */
     hwDir: string;
     /** エンコードするときに偽 ffmpeg へ渡された引数 (1回ずつ `---` で区切って足される) */
     encodeArgsFile: string;
 }
 
-/** 資格情報を持たずに叩く口。返るのは素の Response */
+/** 資格情報を持たずに叩く関数。返るのは素の Response */
 type Anonymous = (path: string, init?: RequestInit) => Promise<Response>;
 
 interface Started {
@@ -137,7 +137,7 @@ async function stop(started: Started): Promise<void> {
     if (started.proc.exitCode === null) started.proc.kill('SIGKILL');
 }
 
-/** 1式立てる。テストはワーカーごとに下の `stack` から、絵を撮るときは scripts/capture-docs.ts から */
+/** 1式立てる。テストはワーカーごとに下の `stack` から、スクリーンショットを撮るときは scripts/capture-docs.ts から */
 export async function boot(index: number): Promise<{ stack: Stack; shutdown: () => Promise<void> }> {
     const appPort = APP_PORT + index * STRIDE;
     const agentPort = AGENT_PORT + index * STRIDE;
@@ -193,7 +193,7 @@ export async function boot(index: number): Promise<{ stack: Stack; shutdown: () 
             HOST: '127.0.0.1',
             PORT: String(appPort),
             /*
-             * 平文で叩いていることは伝えない。前段の居ない `http://<IP>:3000` と同じく、
+             * 平文で叩いていることは伝えない。前段の無い `http://<IP>:3000` と同じく、
              * server.js が受けた接続から `x-forwarded-proto: http` を入れる (#437)
              */
             DENPA_DB: `${root}/denpa.db`,
@@ -212,7 +212,7 @@ export async function boot(index: number): Promise<{ stack: Stack; shutdown: () 
             FAKE_FFMPEG_LIVE_FAIL_FILE: stack.liveFailFile,
             FAKE_FFMPEG_TS_FILE: stack.liveTsFile,
             FAKE_FFMPEG_LIVE_FMP4_FILE: stack.liveFmp4File,
-            // 偽の GPU。denpa には口として、偽 ffmpeg には「ある」印として同じファイルを見せる
+            // 偽の GPU。denpa にはデバイスとして、偽 ffmpeg には「ある」印として同じファイルを見せる
             HW_DEVICES: `${stack.hwDir}/renderD*`,
             FAKE_FFMPEG_ENCODE_ARGS_FILE: stack.encodeArgsFile,
             /*
@@ -237,7 +237,7 @@ export async function boot(index: number): Promise<{ stack: Stack; shutdown: () 
             SHUTDOWN_WAIT: '0',
             ENCODE_CONCURRENCY: '2',
             // ローカルからの接続は信頼したネットワークとして素通しにする。
-            // 入る道の無い構成 (全部断る) は 14-serve が別の口で確かめる
+            // 認証の手段の無い構成 (全部断る) は 14-serve が別のインスタンスで確かめる
             TRUSTED_NETWORKS: '127.0.0.1',
         });
         started.push(app);
@@ -258,7 +258,7 @@ export async function boot(index: number): Promise<{ stack: Stack; shutdown: () 
 export interface OidcStack {
     /** 偽 Entra。`/__control/groups` で誰を通すか差し替えられる */
     idpUrl: string;
-    /** OIDC を有効にした denpa。普段の `stack.appUrl` とは別の口 */
+    /** OIDC を有効にした denpa。普段の `stack.appUrl` とは別のインスタンス */
     appUrl: string;
     /** 何も聞かずに通すネットワーク (TRUSTED_NETWORKS に入れてある) */
     trustedNetwork: string;
@@ -270,7 +270,7 @@ export interface OidcStack {
  * **OIDC を有効にした一式を、要るテストのときだけ立てる。**
  *
  * 普段の `stack` を OIDC にしてしまうと、全部のテストがログインを通らないと
- * 何もできなくなる。別の口に立てて、そこだけで試す。
+ * 何もできなくなる。別のインスタンスに立てて、そこだけで試す。
  *
  * ポートはワーカーごとの範囲 (STRIDE=10) の中から取るので、並べて流しても衝突しない。
  */
@@ -315,13 +315,13 @@ export async function bootOidc(
              * Node の fetch は `Host` を禁止ヘッダとして**黙って落とす**ので、
              * テストからは名前を差し替えられない (Bun の fetch は通す)。
              * denpa 側が見るのは `event.url.hostname` で、どちらのヘッダから
-             * 組み立てられたかは同じなので、試している道は変わらない
+             * 組み立てられたかは同じなので、試している経路は変わらない
              */
             HOST_HEADER: 'x-forwarded-host',
             DENPA_DB: `${root}/oidc.db`,
             RAW_DIR: `${root}/oidc-recorded`,
             ENCODED_DIR: `${root}/oidc-library`,
-            // 常駐処理は要らない。ログインの道だけ見る
+            // 常駐処理は要らない。ログインの流れだけ見る
             DENPA_AUTOSTART: '0',
             SHUTDOWN_WAIT: '0',
             OIDC_ISSUER: oidc.idpUrl,
@@ -334,7 +334,7 @@ export async function bootOidc(
             TRUSTED_PROXIES: '127.0.0.1',
         });
         started.push(app);
-        // 生死確認は守られていないので、ログインを通さずに待てる
+        // 死活確認は守られていないので、ログインを通さずに待てる
         await waitFor(`${oidc.appUrl}/api/health`, app, 'denpa (OIDC)');
     } catch (error) {
         await shutdown();
@@ -345,14 +345,14 @@ export async function bootOidc(
 }
 
 /**
- * **入る道を何も設定していない denpa。** OIDC も TRUSTED_NETWORKS も無ければ
- * **全部のアクセスを断る**ことを確かめるための口 (`14-serve` だけが使う)。
+ * **認証の手段を何も設定していない denpa。** OIDC も TRUSTED_NETWORKS も無ければ
+ * **全部のアクセスを断る**ことを確かめるためのインスタンス (`14-serve` だけが使う)。
  * 普段の `stack` はローカルを信頼したネットワークにしてあるので、これは別に立てる。
  */
 export async function bootClosed(
     index: number,
     root: string,
-    /** 入る道を足して試すとき (TRUSTED_NETWORKS など)。省けば何も設定しない = 全部断る */
+    /** 認証の手段を足して試すとき (TRUSTED_NETWORKS など)。省けば何も設定しない = 全部断る */
     extra: Record<string, string> = {},
 ): Promise<{ appUrl: string; shutdown: () => Promise<void> }> {
     /*
@@ -378,7 +378,7 @@ export async function bootClosed(
     });
     const shutdown = async () => stop(app);
     try {
-        // 生死確認は入る道が無くても通る (守ると livenessProbe が落ちるため)
+        // 死活確認はログイン方法が無くても通る (守ると livenessProbe が落ちるため)
         await waitFor(`${appUrl}/api/health`, app, 'denpa (閉)');
     } catch (error) {
         await shutdown();
@@ -425,10 +425,10 @@ export const test = base.extend<{ anonymous: Anonymous }, { stack: Stack }>({
     },
 
     /*
-     * **資格情報を持たない口。** 断られることを確かめるためのもの。
+     * **資格情報を持たない fetch。** 断られることを確かめるためのもの。
      *
      * **Playwright の APIRequestContext は使えない。** `newContext` に資格情報を
-     * 渡していなくても認証を通ってしまう — 実測で、素の fetch が 401 を返す同じ口に
+     * 渡していなくても認証を通ってしまう — 実測で、素の fetch が 401 を返す同じエンドポイントに
      * 対して 200 が返った (`test.use({ httpCredentials: undefined })` でも同じ)。
      * 素の fetch なら確実に持たない。
      */

@@ -1,5 +1,5 @@
 /**
- * モジュールの中身を読む。**ヘッダ + 空行 + 本体** の形 (STD-B24 第二編 第9章) で、
+ * モジュールの中身を読む。**ヘッダ + 空行 + 本体** の形式 (STD-B24 第二編 第9章) で、
  * 多くは `multipart/mixed` に BML と画像がまとめて入っている。
  *
  *     Content-Type: multipart/mixed; boundary=XXX
@@ -11,14 +11,14 @@
  *     <?xml ...
  *     --XXX--
  *
- * もとは web-bml の `entity_parser.ts` を借りていた。運用される形は上のとおり狭いので、
+ * もとは web-bml の `entity_parser.ts` を借りていた。運用される形式は上のとおり狭いので、
  * RFC 2068 の字句を全部なぞらず、**ヘッダの行を拾って `Content-Type` をデコードし、
  * 区切りで切る**だけにしてある。
  */
 
 import type { MediaType, MediaTypeParameter } from './bml-protocol';
 
-/** ヘッダ 1 本。名前は小文字にそろえる */
+/** ヘッダ 1 つ。名前は小文字にそろえる */
 export interface EntityHeader {
     name: string;
     value: string;

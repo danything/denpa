@@ -1,7 +1,7 @@
 /**
  * 画面 (`engine.ts`) と worker (`worker.ts`) の取り決め。**両側から読む。**
  *
- * 分け方: TS をデコードする・絵をデコードして描く・音をデコードするのは worker、**音を鳴らすのと時計は画面**
+ * 分け方: TS をデコードする・映像をデコードして描く・音をデコードするのは worker、**音を鳴らすのと時計は画面**
  * (Web Audio は worker から触れない)。時計は画面から worker へ流す (`clock`)。
  */
 
@@ -11,9 +11,9 @@
  * - `ts-mpeg2` … 元の TS (`CHANNEL.rawTs`)。MPEG-2 と AAC を WASM でデコードし、WebGL2 で描く
  * - `fmp4` … ライブ・追っかけのエンコードしたもの (`CHANNEL.videoInit` / `videoMedia`)。映像は WebCodecs の
  *   VideoDecoder でデコードして 2D で描き、音 (AAC・Opus) は WASM でデコードする (`fmp4.ts`)。
- *   **<video> の再生が止まる端末** (テスラの車載ブラウザ) のための道
+ *   **<video> の再生が止まる端末** (テスラの車載ブラウザ) のための経路
  * - `mkv` … 端末に保存した録画 (エンコード済みの Matroska)。互換モードの観る画面で、読んだコマを `fmp4` と
- *   同じ道でデコードして描く (`mkv.ts`)。音は選んだ1本 (`audio` の何本目か)
+ *   同じ経路でデコードして描く (`mkv.ts`)。音は選んだ1本 (`audio` の何本目か)
  */
 export type RawInput = 'ts-mpeg2' | 'fmp4' | 'mkv';
 
@@ -39,13 +39,13 @@ export type ToWorker =
     | { type: 'data'; buffer: ArrayBuffer; offset: number }
     /**
      * いま鳴っている PTS (90kHz。伸ばしたもの) と、それが鳴った時刻 (`performance.timeOrigin +
-     * performance.now()` の ms)。**null は「止まっている」** — 絵もそこで止める
+     * performance.now()` の ms)。**null は「止まっている」** — 映像もそこで止める
      */
     | { type: 'clock'; pts: number | null; at: number }
     /**
      * 選局し直した・録画で飛んだ。**前の局のものは全部捨てる。** `from` (90kHz。届くものの PTS の物差しで、
      * 元の TS なら一周の中) があれば、それより前のコマはデコードするだけで描かない — サーバは飛び先の少し手前
-     * (鍵のコマ・1 秒前) から流すので、手前の絵 (CM を飛ばしたなら CM の絵) を出さないため
+     * (キーフレーム・1 秒前) から流すので、手前の映像 (CM を飛ばしたなら CM の映像) を出さないため
      */
     | { type: 'reset'; from?: number | null }
     /** もう届かない (録画の尻まで読んだ。`engine.ts` の `finish`)。Matroska は待たせているコマを出しきる (`mkv.ts`) */
@@ -53,13 +53,13 @@ export type ToWorker =
     /** 何本目の音声をデコードするか (`AudioTrack.stream`) */
     | { type: 'audio'; index: number }
     /**
-     * いま出しているコマを1枚ください (切り抜き)。**絵は worker の canvas に居て、
+     * いま出しているコマを1枚ください (切り抜き)。**映像は worker の canvas にあって、
      * 画面の側からは画素を読めない** (`transferControlToOffscreen` で渡したので)。
      * `id` は返事 (`frame`) と組にするため
      */
     | { type: 'grab'; id: number }
     /**
-     * 小窓 (PiP) へ出す絵の書き込み口 (`MediaStreamTrackGenerator` の `writable`)。
+     * 小窓 (PiP) へ出す映像の書き込み先 (`MediaStreamTrackGenerator` の `writable`)。
      * **描いた1コマをその場で書き込む** — canvas の画面への更新を待たない (`engine.ts` の `pipStream`)
      */
     | { type: 'pip'; writable: WritableStream<VideoFrame> }
@@ -68,7 +68,7 @@ export type ToWorker =
 
 /** worker → 画面 */
 export type FromWorker =
-    /** 使えなくなった (デコーダが無い・音がデコードできない・間に合わない。`budget.ts`)。**次の形に移るか止まるかは画面が決める** */
+    /** 使えなくなった (デコーダが無い・音がデコードできない・間に合わない。`budget.ts`)。**次の方式に移るか止まるかは画面が決める** */
     | { type: 'fail'; reason: string }
     /**
      * デコードできた音1コマ。面ごとの float (-1〜1)。**時刻は伸ばした PTS** (`pes.unwrap`)
@@ -80,7 +80,7 @@ export type FromWorker =
           sampleRate: number;
           planes: Float32Array[];
       }
-    /** 選局し直してから最初の絵を描いた。**前の局の静止画を剥がす合図** */
+    /** 選局し直してから最初のフレームを描いた。**前の局の静止画を剥がす合図** */
     | { type: 'shown' }
     /** 数字 (1秒ごと)。画面に出すもの */
     | { type: 'stats'; dropped: number; p95: number; shown: number }
@@ -88,6 +88,6 @@ export type FromWorker =
     | { type: 'frame'; id: number; bitmap: ImageBitmap | null }
     /**
      * 抱えきれなくなったので、届いたものを捨て始めた (`follow` のときだけ)。**画面は手元が尽きる前に
-     * 居る場所から頼み直す** (`live-player.svelte.ts` の `starved`)
+     * 再生している位置からリクエストし直す** (`live-player.svelte.ts` の `starved`)
      */
     | { type: 'full' };

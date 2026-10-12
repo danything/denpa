@@ -1,5 +1,5 @@
 /**
- * **偽 ffmpeg の fMP4 の出口** (`ffmpeg.sh` から呼ぶ)。録画をその場で流す口 (`/api/recordings/<id>/stream`。
+ * **偽 ffmpeg の fMP4 の出口** (`ffmpeg.sh` から呼ぶ)。録画をその場で流す API (`/api/recordings/<id>/stream`。
  * `server/playback.ts`) の時刻の運び方を、本物の ffmpeg 無しで試すためのもの。
  *
  * 中身の映像は作らない。出すのは init (ftyp + moov の殻) と、**頭の塊の時刻 (tfdt) だけ正しい** moof + mdat。

@@ -10,7 +10,7 @@ namespace Denpa.Agent;
 /// <para>
 /// Linux では usbfs を直に叩いている (Ccid.cs) が、macOS には usbfs が無く、CCID の
 /// リーダーは OS (CryptoTokenKit の ifd-ccid) が先に開く。横取りするより、OS が
-/// 出している PC/SC の口を借りるほうが素直で、入れてもらうものも増えない。
+/// 出している PC/SC の API を借りるほうが素直で、入れてもらうものも増えない。
 /// T=1 の枠組みも ATR の読み方も向こうが持つので、ここは APDU を渡すだけ。
 /// </para>
 ///
@@ -179,7 +179,7 @@ public sealed partial class PcscLink : ICardLink
         [.. Readers().Select(name => new CardLinkCandidate(name, () => Open(name)))];
 
     /// <summary>
-    /// リーダーの名前を並べる。リーダーが1つも無いと、macOS は PC/SC の口ごと閉じていて
+    /// リーダーの名前を並べる。リーダーが1つも無いと、macOS は PC/SC のサービスごと閉じていて
     /// <c>SCardEstablishContext</c> から断られる (<c>SCARD_E_NO_SERVICE</c>。Windows も Smart Card
     /// サービスが止まっていれば同じ)。それも空として扱う
     /// </summary>

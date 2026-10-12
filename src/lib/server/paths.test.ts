@@ -23,7 +23,7 @@ describe('publicBase', () => {
             'http://denpa.local:3000/api/hassio_ingress/abc',
         );
     });
-    test('/ で始まらないものは使わない (Host を差し替える口にしない)', () => {
+    test('/ で始まらないものは使わない (Host を差し替える抜け道にしない)', () => {
         expect(
             publicBase(new URL('http://h/'), new Headers({ 'x-forwarded-prefix': '//evil.example' })),
         ).toBe('http://h');

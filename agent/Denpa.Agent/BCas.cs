@@ -19,7 +19,7 @@ namespace Denpa.Agent;
 /// </para>
 ///
 /// <para>
-/// **線が切れたら繋ぎ直す。** カードを抜き差しした・リーダーを挿し直した・
+/// **接続が切れたら繋ぎ直す。** カードを抜き差しした・リーダーを挿し直した・
 /// px4d を起こし直した、のどれでも、次の ECM で探し直して INT からやり直す。
 /// 1回繋ぎ直して駄目なら理由を添えて投げる。
 /// </para>
@@ -39,7 +39,7 @@ public sealed class BCas : IKeySource, IDisposable
     private const int InitOk = 0x2100;
 
     /// <summary>
-    /// ECM の応答が短かったときに**同じ線で**送り直す回数。libaribb25 と同じ 2 回。
+    /// ECM の応答が短かったときに**同じ接続で**送り直す回数。libaribb25 と同じ 2 回。
     /// カードがたまに短く返すことがあり、繋ぎ直すまでもなく次は通る
     /// </summary>
     private const int ShortRetries = 2;
@@ -53,7 +53,7 @@ public sealed class BCas : IKeySource, IDisposable
     /// <para>
     /// 探すのはリーダーを全部開いて電源を入れ直すことで、固まったリーダーだと
     /// 数十秒かかる。ECM は何本もの流れから数秒ごとに来るので、そのたびに探すと
-    /// 錠の前に全部の流れが並ぶ。カードを挿し直したなら 10 秒後には読める
+    /// ロックの前に全部の流れが並ぶ。カードを挿し直したなら 10 秒後には読める
     /// </para>
     /// </summary>
     public static readonly TimeSpan RetryAfter = TimeSpan.FromSeconds(10);
@@ -66,8 +66,8 @@ public sealed class BCas : IKeySource, IDisposable
     /// 同じ ECM には同じ鍵。**同じチャンネルを見ている流れが多いほど効く。**
     ///
     /// <para>
-    /// 録画・ライブ・番組表が同じ局に居れば、同じ ECM が同じ時刻に何本も来る。
-    /// カードに聞くのは最初の1本だけで、残りは錠の外で答えを持っていく。
+    /// 録画・ライブ・番組表が同じ局にいれば、同じ ECM が同じ時刻に何本も来る。
+    /// カードに聞くのは最初の1本だけで、残りはロックの外で答えを持っていく。
     /// </para>
     /// </summary>
     private readonly ConcurrentDictionary<string, (EcmAnswer Answer, DateTimeOffset At)> _cache = new();
@@ -171,7 +171,7 @@ public sealed class BCas : IKeySource, IDisposable
                 }
                 if (response.Length < EcmLength)
                 {
-                    // **線は生きている。** 繋ぎ直しても同じ ECM には同じ答えなので、繋ぎ直さない
+                    // **接続は生きている。** 繋ぎ直しても同じ ECM には同じ答えなので、繋ぎ直さない
                     throw new CardRefusedException($"カードが ECM に応答しません (応答 {response.Length} バイト)");
                 }
                 return new EcmAnswer(
@@ -188,7 +188,7 @@ public sealed class BCas : IKeySource, IDisposable
         _cache.TryGetValue(name, out var cached) && _clock.GetUtcNow() - cached.At < CacheFor ? cached.Answer : null;
 
     /// <summary>
-    /// カードに1つ頼む。**線が切れていたら1回だけ繋ぎ直して頼み直す。**
+    /// カードに1つ要求を送る。**接続が切れていたら1回だけ繋ぎ直して送り直す。**
     /// <see cref="_gate"/> を握ったまま呼ぶ
     /// </summary>
     private T Run<T>(Func<ICardLink, T> command)
@@ -266,7 +266,7 @@ public sealed class BCas : IKeySource, IDisposable
     }
 
     /// <summary>
-    /// 開いた線でカードに電源を入れ、INT と IDI を読む。**B-CAS でなければ投げる。**
+    /// 開いた接続でカードに電源を入れ、INT と IDI を読む。**B-CAS でなければ投げる。**
     /// 予備のリーダーを覗くのにも使う (<see cref="Card.Status"/>)
     /// </summary>
     internal static CardInit Read(ICardLink link)
@@ -284,7 +284,7 @@ public sealed class BCas : IKeySource, IDisposable
         }
         catch (Exception error)
         {
-            // もう切れている線を閉じようとして投げることがある。捨てるのが目的なので構わない
+            // もう切れている接続を閉じようとして投げることがある。捨てるのが目的なので構わない
             Log.Write($"カードリーダーを閉じられません: {error.Message}");
         }
         _link = null;
@@ -350,5 +350,5 @@ public sealed class BCas : IKeySource, IDisposable
     }
 }
 
-/// <summary>カードは答えたが、使える答えではなかった。**線の故障ではない**ので繋ぎ直さない</summary>
+/// <summary>カードは答えたが、使える答えではなかった。**接続の故障ではない**ので繋ぎ直さない</summary>
 public sealed class CardRefusedException(string message) : Exception(message);

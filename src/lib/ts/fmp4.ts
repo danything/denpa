@@ -99,11 +99,11 @@ export class Fmp4Splitter {
 
 /*
  * ---------------------------------------------------------------------------
- * 中身を読む (画面の canvas で描く道。`raw/fmp4.ts`)。
+ * 中身を読む (画面の canvas で描く経路。`raw/fmp4.ts`)。
  *
  * MSE に渡すときは割るだけで済んだが、**自分でデコードするときは中身が要る** — moov から
  * 何の映像・音声か (avcC / av1C / esds / dOps) を、moof から1コマずつの時刻と在りかを
- * (tfdt / trun) 読む。読むのは denpa の ffmpeg が出す形 (`server/live.ts` の
+ * (tfdt / trun) 読む。読むのは denpa の ffmpeg が出す形式 (`server/live.ts` の
  * `+empty_moov+default_base_moof`) に要るものだけ:
  *
  * - 中身の在りかは moof の頭から数える (`default-base-is-moof`)。tfhd の
@@ -461,7 +461,7 @@ export function adtsHeader(config: Uint8Array, payload: number): Uint8Array | nu
 }
 
 /**
- * dOps (MP4 の Opus の設定) を、FFmpeg の Opus デコーダが受け取る OpusHead (Ogg の形) に
+ * dOps (MP4 の Opus の設定) を、FFmpeg の Opus デコーダが受け取る OpusHead (Ogg の形式) に
  * 書き換える。並びは同じで、**数の並べ方だけが違う** (dOps は大きい桁が先、OpusHead は
  * 小さい桁が先)。頭に `OpusHead`、版は 1。並べ方が読めなければ null
  */

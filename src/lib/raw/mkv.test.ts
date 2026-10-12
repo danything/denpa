@@ -9,7 +9,7 @@ import { MkvInput } from './mkv';
 /**
  * **尻まで読んだら、待たせているコマを出しきる** (`finish`)。dts を起こすために数コマ待たせるので、
  * 出しきらないと最後の数コマがデコードされないまま終わる。
- * 流すのは作り置きの fMP4 から組んだ Matroska (`tests/fake/mkv-clip.ts`。映像は軌道 1)
+ * 流すのは作り置きの fMP4 から組んだ Matroska (`tests/fake/mkv-clip.ts`。映像はトラック 1)
  */
 const av1 = mkvFromClip(
     new Uint8Array(readFileSync(new URL('../../../tests/fake/live-av1.mp4', import.meta.url))),
@@ -20,7 +20,7 @@ const videoAt = new MkvDemuxer()
     .blocks.filter((b) => b.track === 1)
     .map((b) => b.at);
 
-/** 渡されたコマを控えるだけの受け手 (`Fmp4Video` の口のうち、MkvInput が使うものだけ) */
+/** 渡されたコマを控えるだけの受け手 (`Fmp4Video` のメソッドのうち、MkvInput が使うものだけ) */
 function receiver() {
     const video: Fmp4Sample[] = [];
     const target = {

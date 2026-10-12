@@ -1,10 +1,10 @@
 /**
- * エージェントの適合テスト。**本物のエージェントを起こして、HTTP の口に直接当てる。**
+ * エージェントの適合テスト。**本物のエージェントを起こして、HTTP の API に直接当てる。**
  *
  * denpa の E2E は偽エージェント (`tests/fake/agent.ts`) を相手にしているので、
  * 本物の取り合いも総当たりも1行も通らない。ここがその穴を塞ぐ。
  *
- * **口に当てているので、中身が何語で書かれていても走る。** bun 版から .NET に
+ * **API に当てているので、中身が何語で書かれていても走る。** bun 版から .NET に
  * 書き直したときも、`AGENT_CMD` を差し替えて同じものを通した — それが
  * 「今までと同じように動く」の定義 ([agent.md](../docs/agent.md))。
  *
@@ -35,14 +35,14 @@ const BASE = `http://127.0.0.1:${PORT}`;
 const ROOT = resolve(import.meta.dir, '..');
 
 /**
- * 地上波は**1本だけ**にしてある。
+ * 地上波のチューナーは**1台だけ**にしてある。
  *
- * 偽の放送に居る地上波は T16 と T21 の2本しかないので、チューナーが2本あると
+ * 偽の放送にある地上波は T16 と T21 の2つしかないので、チューナーが2台あると
  * 「空きが無い」も「弱い相手を蹴る」も作れない。総当たりが少し遅くなるだけで
  * 済むほうを取る。
  *
  * 選局は `FAKE_TUNE` で偽物に差し替える (エージェントが `<種別> <チャンネル>` を足して起こす)。
- * 設定ファイルにも画面にもコマンドを書く口は無く、環境変数からだけ入る。
+ * 設定ファイルにも画面にもコマンドを書く場所は無く、環境変数からだけ入る。
  */
 const TUNE = `bun ${ROOT}/tests/fake/tune.ts`;
 const TUNERS = JSON.stringify(
@@ -83,7 +83,7 @@ interface TunerStatus {
     name: string;
     types: string[];
     disabled: boolean;
-    /** 選ぶ順。小さいほど先に使う (docs/agent.md「選ぶ順の約束」)。無効な本は null */
+    /** 選ぶ順。小さいほど先に使う (docs/agent.md「選ぶ順の約束」)。無効なチューナーは null */
     rank: number | null;
     device: string | null;
     lnb: string | null;
@@ -291,7 +291,7 @@ describe('チューナー', () => {
      * ReadableStream を `error()` にしても向こうには**正常終了として届く**
      * (Bun は残りの chunk を打ち切って畳むだけで、接続を壊さない)。
      *
-     * なので口の約束はこうする — **選局は読み手が切るまで終わらない。**
+     * なので API の約束はこうする — **選局は読み手が切るまで終わらない。**
      * 向こうから終わったなら、それは失敗である。読む側 (denpa) は EOF を
      * 「録り終えた」と読んではいけない。この約束なら .NET でも成り立つ
      */
@@ -324,14 +324,14 @@ describe('チューナー', () => {
      * きれいに閉じると「録り終えた」ように届いてしまうため。
      */
     test('送る前に選局が落ちたら、理由を付けて 500 で返す', async () => {
-        // 偽の放送に居ないチャンネル。選局コマンドがすぐ 1 で終わる
+        // 偽の放送に無いチャンネル。選局コマンドがすぐ 1 で終わる
         const res = await get('/denpa/stream?type=GR&channel=T99&use=epg%20T99&priority=3');
         expect(res.status).toBe(500);
         const body = (await res.json()) as { error?: string };
         expect(body.error ?? '').toContain('no signal');
     });
 
-    test('自分より強い相手しか居なければ 409 で断る', async () => {
+    test('自分より強い相手しかいなければ 409 で断る', async () => {
         const strong = await open('type=GR&channel=T16&use=rec%201&priority=10');
         await strong.reader?.read();
 
@@ -342,7 +342,7 @@ describe('チューナー', () => {
     });
 
     test('無効にしたチューナーは使わない', async () => {
-        // GR で使えるのは gr0 だけ。off0 は無効なので、2本目は断られる
+        // GR で使えるのは gr0 だけ。off0 は無効なので、2つ目は断られる
         const a = await open('type=GR&channel=T16&use=a&priority=5');
         await a.reader?.read();
         expect((await open('type=GR&channel=T21&use=b&priority=5')).status).toBe(409);
@@ -388,8 +388,8 @@ describe('チャンネル', () => {
     });
 
     /**
-     * **中身を作るのは denpa。** 総当たりの選局はエージェントに頼むが、
-     * NIT も SDT も解析しないので「何が居たか」は分からない。ここは
+     * **中身を作るのは denpa。** 総当たりの選局はエージェントに任せるが、
+     * NIT も SDT も解析しないので「何があったか」は分からない。ここは
      * 預かって配るだけ ([agent.md](../docs/agent.md))
      */
     test('預かったチャンネルを、探した種別だけ差し替える', async () => {
@@ -424,7 +424,7 @@ describe('チャンネル', () => {
     });
 });
 
-/** `/denpa/card` の形 (agent/Denpa.Agent/Card.cs、読むのは src/lib/server/scramble.ts) */
+/** `/denpa/card` の形式 (agent/Denpa.Agent/Card.cs、読むのは src/lib/server/scramble.ts) */
 type CardReader = {
     name: string;
     card: boolean;
@@ -470,7 +470,7 @@ describe('カードとスクランブル解除', () => {
     test('鍵を配る相手から貰うときは、その相手を返す', async () => {
         /*
          * CARD_URL を立てたもう1つを起こし、こちら (カードの無いエージェント) を
-         * 配り役にする。貰えなくても**形は同じ**で、手元のリーダーは並べない
+         * 配り役にする。貰えなくても**形式は同じ**で、手元のリーダーは並べない
          */
         const port = PORT + 2;
         const room = mkdtempSync(join(tmpdir(), 'denpa-agent-remote-'));
@@ -551,7 +551,7 @@ describe('カードとスクランブル解除', () => {
     });
 });
 
-test('知らない口は 404', async () => {
+test('知らないエンドポイントは 404', async () => {
     expect((await get('/denpa/nope')).status).toBe(404);
 });
 
@@ -592,9 +592,9 @@ describe('機材の定義', () => {
     });
 
     /**
-     * **選ぶ順はエージェントが決めて、`rank` で見せる。** 地上波も衛星も受ける1本
-     * (PX-MLT など) は、先に並んでいても地上波専用より後。兼用の1本を地上波で塞ぐと
-     * 衛星が録れなくなる。受けられる種別がまったく同じ本は同じ順位、無効な本は null。
+     * **選ぶ順はエージェントが決めて、`rank` で見せる。** 地上波も衛星も受ける1台
+     * (PX-MLT など) は、先に並んでいても地上波専用より後。兼用の1台を地上波で塞ぐと
+     * 衛星が録れなくなる。受けられる種別がまったく同じチューナーは同じ順位、無効なチューナーは null。
      *
      * 決まりの中身はエージェントのもの。denpa は順位を読むだけで、自分では決めない
      * (docs/agent.md「選ぶ順の約束」)
@@ -676,14 +676,14 @@ describe('機材の定義', () => {
                     expect((await drain(reader as ReadableStreamDefaultReader)).error).toBeNull();
                     await gone(name);
                 }
-                // 選ばれなかった本の読み手には触らない。まだ読めている
+                // 選ばれなかったチューナーの読み手には触らない。まだ読めている
                 for (const name of step.kept ?? []) {
                     expect((await tuners()).some((t) => t.users.some((u) => u.use === use(name)))).toBe(true);
                     const read = await streams.get(name)?.reader?.read();
                     expect(read?.done).toBe(false);
                 }
             }
-            // 次の場面へ持ち越さない。同じ名前の本は定義を書き換えても選局が残る
+            // 次の場面へ持ち越さない。同じ名前のチューナーは定義を書き換えても選局が残る
             for (const [name, stream] of streams) {
                 stream.close();
                 await gone(name);
@@ -726,7 +726,7 @@ describe('止まれと言われたとき', () => {
                 RAW_DIR: join(room, 'recorded'),
                 FAKE_TUNE: TUNE,
                 FAKE_SLOTS: '4',
-                // 本番は6時間。テストなので短くするが、待つ道は同じ
+                // 本番は6時間。テストなので短くするが、待つ流れは同じ
                 SHUTDOWN_WAIT: '30000',
             },
             stdout: 'ignore',

@@ -14,7 +14,7 @@ public static class Log
 /// JSON の書き方。**組み立ては <c>JsonNode</c> だけでやる。**
 ///
 /// <para>
-/// Native AOT では、型から反射で書き出す道が使えない。読むもの (設定・denpa から来るもの・
+/// Native AOT では、型からリフレクションで書き出す方式が使えない。読むもの (設定・denpa から来るもの・
 /// <c>px4d --list-json</c>) も木のまま読む (Px4.cs の <c>JsonShape</c>)。
 /// </para>
 /// </summary>
@@ -27,7 +27,7 @@ public static class Json
      */
     private static readonly JavaScriptEncoder Relaxed = JavaScriptEncoder.UnsafeRelaxedJsonEscaping;
 
-    /// <summary>控えのファイル用。手で開いて確かめられる形にする</summary>
+    /// <summary>控えのファイル用。手で開いて確かめられる形式にする</summary>
     public static readonly JsonSerializerOptions Pretty = new()
     {
         WriteIndented = true,
@@ -35,7 +35,7 @@ public static class Json
         Encoder = Relaxed,
     };
 
-    /// <summary>口から返すもの。読むのは denpa なので詰めて出す</summary>
+    /// <summary>API から返すもの。読むのは denpa なので詰めて出す</summary>
     public static readonly JsonSerializerOptions Compact = new() { Encoder = Relaxed };
 
     /// <summary>文字列の並びを JSON の配列に</summary>

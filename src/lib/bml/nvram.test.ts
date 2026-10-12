@@ -110,7 +110,7 @@ describe('NVRAM', () => {
             () => ({ originalNetworkId: 4, serviceId: 171 }),
             (message) => logs.push(message),
         );
-        // BSテレ東の形: 番号を計算し、64 バイト近い並びを書く (U:1B × 5 + S:19B × 3 = 62 バイト)
+        // BSテレ東の書き方: 番号を計算し、64 バイト近い並びを書く (U:1B × 5 + S:19B × 3 = 62 バイト)
         const structure = 'U:1B,U:1B,U:1B,U:1B,U:1B,S:19B,S:19B,S:19B';
         const x = 13;
         const values = [1, 2, 3, 4, 5, 'a', 'b', 'c'];

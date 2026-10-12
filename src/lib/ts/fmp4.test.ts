@@ -82,9 +82,9 @@ describe('fMP4 を割る', () => {
 });
 
 /*
- * ---- 中身を読む (画面の canvas で描く道) ----
+ * ---- 中身を読む (画面の canvas で描く経路) ----
  *
- * 箱は手で組む。並びは ISO/IEC 14496-12 と、denpa の ffmpeg が出す形
+ * 箱は手で組む。並びは ISO/IEC 14496-12 と、denpa の ffmpeg が出す形式
  * (`+empty_moov+default_base_moof`) に合わせる
  */
 
@@ -174,7 +174,7 @@ function init(): Uint8Array {
 }
 
 describe('fMP4 の中身を読む', () => {
-    test('moov から映像と音声の形を読む。知らないトラックは飛ばす', () => {
+    test('moov から映像と音声の形式を読む。知らないトラックは飛ばす', () => {
         const tracks = readInit(init());
         expect(tracks.map((t) => [t.id, t.kind, t.codec, t.timescale])).toEqual([
             [1, 'video', 'avc1.640029', 90000],
@@ -286,7 +286,7 @@ describe('ADTS の頭を組む', () => {
         expect(read?.data.length).toBe(107);
     });
 
-    test('ADTS に書けない形は null', () => {
+    test('ADTS に書けない形式は null', () => {
         // HE-AAC (種類 5)
         expect(adtsHeader(Uint8Array.of(0x2b, 0x10), 10)).toBeNull();
         // 標本化周波数を値で書いたもの (番号 15)
@@ -323,7 +323,7 @@ describe('dOps を OpusHead にする', () => {
 
 /*
  * **本物の ffmpeg が書いたもの** (E2E の偽 ffmpeg が流す作り置き。`tests/fake/fmp4-loop.ts` に作り方)。
- * 形はライブと同じ (`+empty_moov+default_base_moof`)。手で組んだ箱と読み方が食い違っていないかを見る
+ * 形式はライブと同じ (`+empty_moov+default_base_moof`)。手で組んだ箱と読み方が食い違っていないかを見る
  */
 describe('ffmpeg が書いた fMP4 を読む', () => {
     const fixture = (name: string) =>

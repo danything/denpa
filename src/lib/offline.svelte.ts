@@ -146,7 +146,7 @@ function watchProgress(reg: BackgroundFetchRegistration, parsed = parseFetchId(r
  * **突き合わせもする。** 控えは「保存中」なのに、ブラウザ側に対応する
  * ダウンロードが無い — ページ主導のフォールバック中にタブを閉じた、
  * SW が受け取りそこねた — なら、それはもう動いていない。失敗に倒して
- * やり直す口にする (「保存中」のまま永遠に張り付かない)
+ * やり直す入口にする (「保存中」のまま永遠に張り付かない)
  */
 async function watchRunning(): Promise<void> {
     try {
@@ -223,7 +223,7 @@ async function ensureRoom(bytes: number): Promise<void> {
         if (error instanceof Error && error.message.startsWith('端末の空き')) throw error;
         // 測れないブラウザでは黙って進む (入らなければ落とすところで転ぶ)
     }
-    // ブラウザの都合で勝手に消されないように頼む。断られても致命ではない
+    // ブラウザの都合で勝手に消されないようにリクエストする。断られても致命ではない
     await navigator.storage.persist?.().catch(() => {});
 }
 
@@ -290,7 +290,7 @@ export async function saveOffline(rec: SaveTarget): Promise<void> {
 
     /*
      * 試みの印。やり直しのたびに変える — Background Fetch は**同じ登録IDが
-     * 生きている間は再登録できない**ので、前回の残骸が居ても必ず登録できる。
+     * 生きている間は再登録できない**ので、前回の残骸があっても必ず登録できる。
      * 残骸の中止の知らせが遅れて届いても、印が違えばこの控えは消されない (SW の drop)
      */
     const attempt = Math.random().toString(36).slice(2, 10);

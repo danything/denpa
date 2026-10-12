@@ -61,7 +61,7 @@ export async function reserve(programId: number): Promise<Reservation> {
  *
  * ルールが作った予約を手で取り消すと、以後ルールは作り直さない
  * (`INSERT OR IGNORE` と、放送単位で当てる `rules.canceledBroadcasts` が弾く)。
- * 気が変わったときに戻す道がここ。
+ * 気が変わったときに戻す方法がここ。
  */
 export async function restore(reservationId: number): Promise<void> {
     const reservation = byId(reservationId);
@@ -114,11 +114,11 @@ export type RecordAiring =
 /**
  * **局でいま流れている番組を録る** (ライブの録画ボタンと、アプリの `POST /api/services/<id>/record`)。
  *
- * 番組表からいま流れている番組を引いて、手動予約と同じ道 ({@link reserve}) に乗せる。
+ * 番組表からいま流れている番組を引いて、手動予約と同じ処理 ({@link reserve}) に通す。
  * 既に始まっている番組の予約は次のスケジューラ周期 (数秒) でそのまま録りはじめる。
  * 既に予約済み・録画中なら upsert されるだけで、二重には録らない (予約は program_id で1本)。
  *
- * **画面とアプリで同じものを使う。** 番組の引き方や断り方が口ごとにずれると、
+ * **画面とアプリで同じものを使う。** 番組の引き方や断り方が入口ごとにずれると、
  * 片方でだけ録れない番組が出る
  */
 export async function recordAiring(serviceId: number, at = now()): Promise<RecordAiring> {

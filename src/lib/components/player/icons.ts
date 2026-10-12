@@ -13,8 +13,8 @@
  * 観る画面だけ。** 切り抜き (`CAMERA`)・情報 (`INFO`)・データ放送 (`DATA`) は
  * **ライブでも使う** (切り抜きとデータ放送は両方に置いた)。
  *
- * **10秒送り・戻しの絵は持たない。** PCは矢印キー、指は左右の端を素早く2回
- * (`ts/watch.ts` の `tap`) でできるので、絵の上に常に2つ置くだけの用が無かった。
+ * **10秒送り・戻しのアイコンは持たない。** PCは矢印キー、指は左右の端を素早く2回
+ * (`ts/watch.ts` の `tap`) でできるので、映像の上に常に2つ置くだけの用が無かった。
  *
  * 並びは名前順 (biome が揃える)
  */
@@ -28,7 +28,7 @@ export type IconShape = Component<SvelteHTMLElements['svg']>;
 /**
  * データ放送。**テレビのリモコンと同じ「d」**。
  *
- * 絵柄では何のことか伝わらないので、字そのものを形にしてある (角丸の四角に d)。
+ * 図柄では何のことか伝わらないので、字そのものを形にしてある (角丸の四角に d)。
  * Lucide に無いので自前 (`src/lib/icons/data.svg`)。線の太さと角は Lucide に揃える
  */
 export { default as DATA } from '~icons/denpa/data';
@@ -43,7 +43,7 @@ export { default as CHECK } from '~icons/lucide/check';
 export { default as RECORD } from '~icons/lucide/circle-dot';
 /**
  * 「ほか」(⋯)。**狭い枠でだけ出す** — 毎回は使わないもの (音声・送り・CM 飛ばし・エンコード方式・速さ・バックグラウンド再生・小窓) を
- * 畳んでおく口 (`Extras.svelte`)
+ * 畳んでおくメニュー (`Extras.svelte`)
  */
 export { default as MORE } from '~icons/lucide/ellipsis';
 /**
@@ -55,7 +55,7 @@ export { default as MORE } from '~icons/lucide/ellipsis';
 export { default as OPEN_OUT } from '~icons/lucide/external-link';
 /**
  * 再生の速さ (`SpeedMenu`)。針の付いたメーター。**等速のときだけ出す** —
- * 速めている間は絵をやめて数字 (「1.25」) だけにする
+ * 速めている間はアイコンをやめて数字 (「1.25」) だけにする
  */
 export { default as SPEED } from '~icons/lucide/gauge';
 /**
@@ -86,9 +86,9 @@ export { default as SOUND_OFF } from '~icons/lucide/volume-off';
 export { default as CLOSE } from '~icons/lucide/x';
 
 /**
- * 絵の上に置くボタンの見た目。**読めるように黒く敷く。**
+ * 映像の上に置くボタンの見た目。**読めるように黒く敷く。**
  *
- * 主題の文字色に任せていた頃 (daisyUI の `btn-ghost`) は、暗い絵と
+ * テーマの文字色に任せていた頃 (daisyUI の `btn-ghost`) は、暗い映像と
  * 下の黒いぼかしに**アイコンが沈んで見えなく**なっていた。
  *
  * **クラスの中身は `ControlButton.svelte` の `<style>` (`:global`)。** 3画面とも
@@ -97,13 +97,13 @@ export { default as CLOSE } from '~icons/lucide/x';
 export const OVERLAY = 'ov';
 
 /**
- * 絵の上に置くボタンの大きさ。**3画面で同じ。**
+ * 映像の上に置くボタンの大きさ。**3画面で同じ。**
  *
  * `btn-sm` (32px) にしていた頃は、**タブレットでもPCでも小さすぎた** —
- * 絵の上に薄く敷くものなので、輪郭で狙うのではなく面で狙うことになる。
+ * 映像の上に薄く敷くものなので、輪郭で狙うのではなく面で狙うことになる。
  *
- * 引き出し (速さ・音声・エンコード方式) の口も同じ大きさで揃える (`OverlayMenu` の
- * 口は ControlButton)。ボタンでない `<a>` (閉じる) にはここの字を直に当てる
+ * 引き出し (速さ・音声・エンコード方式) のボタンも同じ大きさで揃える (`OverlayMenu` の
+ * ボタンは ControlButton)。ボタンでない `<a>` (閉じる) にはここの字を直に当てる
  */
 export const OVERLAY_BTN = 'ov-btn';
 
@@ -115,10 +115,10 @@ export const OVERLAY_ROUND = 'ov-round';
  *
  * 「確定」の文字に差し替えていた頃は、そこだけ幅が変わって**隣のボタンが動いて**
  * いた。聞き返しは同じ場所をもう一度押すものなので、動くと押し直せない。
- * 変えるのは色と絵だけ — 鋏や送りと違い、**赤いレ点は「これでいいか」以外に
+ * 変えるのは色とアイコンだけ — 鋏や送りと違い、**赤いレ点は「これでいいか」以外に
  * 読みようが無い**
  */
 export const OVERLAY_DANGER = 'ov-danger';
 
-/** 押されている間の見た目 (字幕を出しているときなど。ライブに居るときは EdgeButton の OVERLAY_DANGER) */
+/** 押されている間の見た目 (字幕を出しているときなど。ライブにいるときは EdgeButton の OVERLAY_DANGER) */
 export const OVERLAY_ON = 'ov-on';

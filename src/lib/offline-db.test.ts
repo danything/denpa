@@ -11,7 +11,7 @@ describe('Background Fetch の登録ID', () => {
         expect(parseFetchId(fetchId(7, 'alt', 'zz9'))).toEqual({ id: 7, source: 'alt', attempt: 'zz9' });
     });
 
-    test('印の無い古い形も読める (付ける前に預けたぶんの残骸)', () => {
+    test('印の無い古い形式も読める (付ける前に預けたぶんの残骸)', () => {
         expect(parseFetchId('rec-42-encoded')).toEqual({ id: 42, source: 'encoded', attempt: '' });
     });
 
@@ -31,7 +31,7 @@ describe('落とすものの仕分け', () => {
 
     test('URL から種類が分かる', () => {
         expect(kindOf('https://x/api/recordings/42/file?source=encoded')).toBe('video');
-        // 以前の絵の字幕 (PGS) はもう落とさない
+        // 以前の画像字幕 (PGS) はもう落とさない
         expect(kindOf('https://x/api/recordings/42/captions.sup')).toBeNull();
         expect(kindOf('https://x/api/recordings/42/captions.json')).toBe('captionText');
         expect(kindOf('https://x/api/recordings/42/chapters')).toBe('chapters');

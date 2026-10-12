@@ -19,7 +19,7 @@ export interface DetailSeed {
     extended?: Program['extended'];
 }
 
-/** 行の分を番組詳細の形にする。足りないところは既定 (番組表から引けたら差し替わる) */
+/** 行の分を番組詳細の形式にする。足りないところは既定 (番組表から引けたら差し替わる) */
 function filled(seed: DetailSeed): ProgramDetail {
     return {
         description: '',

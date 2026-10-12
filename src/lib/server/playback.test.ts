@@ -265,7 +265,7 @@ describe('流す (streamResponse)', () => {
         expect(sinceHead(pts, origin)).toBeCloseTo(19, 1);
     });
 
-    test('出せない形は 404', async () => {
+    test('出せない形式は 404', async () => {
         const rec = seed({ library_path: h264 });
         await expect(streamResponse(rec, new URLSearchParams({ codec: 'mpeg2' }))).rejects.toMatchObject({
             status: 404,
@@ -367,7 +367,7 @@ describe('ffprobe の読み (mediaInfo)', () => {
         expect(av1('yuv420p10le')).toBe('av01.0.08M.10');
     });
 
-    test('知らない形・読めない出力は null (判断に使わない)', () => {
+    test('知らない形式・読めない出力は null (判断に使わない)', () => {
         expect(
             mediaInfo('encoded', probe([{ codec_type: 'video', codec_name: 'mpeg2video' }])).video,
         ).toBeNull();

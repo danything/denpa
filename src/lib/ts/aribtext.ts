@@ -1,5 +1,5 @@
 /**
- * ARIB STD-B24 の8単位符号を読む。番組名・概要・局名はこの形で流れてくる。
+ * ARIB STD-B24 の8単位符号を読む。番組名・概要・局名はこの形式で流れてくる。
  *
  * ## 仕組み
  *
@@ -267,7 +267,7 @@ function oneByte(code: number, kind: Charset['kind'], half: boolean): string {
             return char === undefined || char === '�' ? '' : char;
         }
         default:
-            // モザイクと DRCS。絵なので文字にはならないが、消えたことは見せる
+            // モザイクと DRCS。画像なので文字にはならないが、消えたことは見せる
             return kind === 'blank' ? '' : UNKNOWN;
     }
 }

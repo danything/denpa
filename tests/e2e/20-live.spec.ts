@@ -70,7 +70,7 @@ function patPrograms(data: Buffer): number[] {
 }
 
 /**
- * 2つが寸分同じ枠に居ること。**組み上がりを待つ。**
+ * 2つが寸分同じ枠にあること。**組み上がりを待つ。**
  *
  * 開いた直後は幅が決まりきっていないので、1回だけ見比べると稀に外れる
  * (実際に flaky で落ちた)
@@ -84,7 +84,7 @@ async function sameBox(a: Locator, b: Locator, expect_: typeof expect): Promise<
 /**
  * ライブ視聴 ([docs/stream.md](../../docs/stream.md) §4)。映像・音声・字幕まで。
  *
- * **絵が出るところまでは見ない。** E2E の ffmpeg は偽物で、流れてくるのも
+ * **映像が出るところまでは見ない。** E2E の ffmpeg は偽物で、流れてくるのも
  * 本物の TS ではないため、MSE が受け取れる fMP4 にはならず、字幕も1枚も出ない。
  * ここで固定するのはその手前まで — **チケットを取り、WebSocket が繋がり、チューナーを
  * 使い、選んだ局が「いま映しているもの」になる**という経路と、**ffmpeg に何を
@@ -116,7 +116,7 @@ test.describe('ライブ視聴', () => {
     });
 
     /*
-     * **映像を見ながら選ぶ画面なので、ページごと動かさない。** 動くと絵が
+     * **映像を見ながら選ぶ画面なので、ページごと動かさない。** 動くと映像が
      * 画面から出ていく。動くのは右の一覧だけ
      */
     test('広い画面ではページごとスクロールしない', async ({ page }) => {
@@ -135,7 +135,7 @@ test.describe('ライブ視聴', () => {
     /*
      * **二段組にする幅は観る画面 (`/watch/<id>`) と同じ 768px。** 映像を左、
      * 一覧を右に置く形は同じなのに、こちらだけ 1024px からにしていた頃は、
-     * **同じ幅で絵の大きさが変わって**いた (縦のiPad 820px で、ライブ 772px に
+     * **同じ幅で映像の大きさが変わって**いた (縦のiPad 820px で、ライブ 772px に
      * 対して観る画面 436px)
      */
     test('縦のタブレットでも横に並べる (観る画面と同じ 768px から)', async ({ page }) => {
@@ -158,10 +158,10 @@ test.describe('ライブ視聴', () => {
     });
 
     /**
-     * **番組の中身は右の列を入れ替えて出す。モーダルにしない** — 絵の上に
+     * **番組の中身は右の列を入れ替えて出す。モーダルにしない** — 映像の上に
      * 被さると観ながら読めない (観る画面と同じ考え方)。
      *
-     * 開く口は**行とは別**に置いてある。行そのものは選局なので、あらすじを
+     * 開くボタンは**行とは別**に置いてある。行そのものは選局なので、あらすじを
      * 見たいだけのときにチャンネルが変わっては困る
      */
     test('右の列で番組の中身を読める。チャンネルは変わらない', async ({ page }) => {
@@ -171,7 +171,7 @@ test.describe('ライブ視聴', () => {
         const tuned = await page.getByTestId('live-title').textContent();
 
         /*
-         * **引き直す前から、行が持っている分は出る。** 番組表から引き直す口を
+         * **引き直す前から、行が持っている分は出る。** 番組表から引き直すエンドポイントを
          * 止めておいて開く。行の分に `description: undefined` が混じると
          * `programDetail` の既定 ('') がそれで潰され、引き直せるまであらすじが
          * 空になる (#43 で型の上では塞いだ)。確かめてから通し、ラベル (ジャンル・音声) は
@@ -259,10 +259,10 @@ test.describe('ライブ視聴', () => {
     });
 
     /*
-     * **押せると分かる形にする。** 平らに並べていた頃は、文字が並んでいるだけに
+     * **押せると分かる見た目にする。** 平らに並べていた頃は、文字が並んでいるだけに
      * 見えて押せると気付けなかった。枠を持たせ、指の形を変える
      */
-    test('チャンネルは押せると分かる形にする', async ({ page }) => {
+    test('チャンネルは押せると分かる見た目にする', async ({ page }) => {
         await goto(page, '/live');
         const row = page.getByTestId('live-channel').first();
         await expect(row).toBeVisible();
@@ -298,7 +298,7 @@ test.describe('ライブ視聴', () => {
      * **番組表で見つけた番組は、その場から観に行ける。**
      *
      * ライブ画面へ移ってから同じ局を一覧で探し直させるのは遠回りで、局が100を
-     * 超える環境では探すほうが手間になる。**局まで名指しで渡す** — 1本の物理
+     * 超える環境では探すほうが手間になる。**局まで名指しで渡す** — 1つの物理
      * チャンネルには複数の局が乗っているので、チャンネルだけでは足りない
      */
     test('番組表の「視聴」から、その局で開く', async ({ page }) => {
@@ -368,16 +368,16 @@ test.describe('ライブ視聴', () => {
     /*
      * **同じ局を押し直したときこそ、答えないといけない。**
      *
-     * 画面側は `tune` のたびに器を捨てて、`tuned` と init が来てから作り直す
+     * 画面側は `tune` のたびにプレイヤーを捨てて、`tuned` と init が来てから作り直す
      * (`live-player.svelte.ts` の `forget`)。サーバが「何も変わらないから」と
-     * 黙っていた頃は、**いま映している局をもう一度押すと絵が死んだ** — 塊は
+     * 黙っていた頃は、**いま映している局をもう一度押すと映像が死んだ** — 塊は
      * 届き続けるので**エラーも出ないまま黒い画面**になり、実機で踏むまで
      * 気付かなかった (押した先が、開いたときに自動で選局した局だった)。
      *
      * 見るのは `tuned` の数。再エンコードは起きないので ffmpeg の数では分からず、
-     * init は器を作り直す合図そのものなので `tuned` の後ろに続く
+     * init はプレイヤーを作り直す合図そのものなので `tuned` の後ろに続く
      */
-    test('いま映している局をもう一度押しても、器を作り直せる', async ({ page }) => {
+    test('いま映している局をもう一度押しても、プレイヤーを作り直せる', async ({ page }) => {
         await page.addInitScript(() => {
             const counted = window as unknown as { __tuned: number };
             counted.__tuned = 0;
@@ -408,7 +408,7 @@ test.describe('ライブ視聴', () => {
         await first.click();
 
         await expect
-            .poll(tuned, { message: '同じ局を押し直したのに答えが来ない (器を作り直せない)' })
+            .poll(tuned, { message: '同じ局を押し直したのに答えが来ない (プレイヤーを作り直せない)' })
             .toBeGreaterThan(before);
     });
 
@@ -416,12 +416,12 @@ test.describe('ライブ視聴', () => {
      * **データ放送 (テレビの d ボタン)。**
      *
      * 描くのはエンジン (`src/lib/bml/`) で、**押されるまで取りに行かない**。作りものの放送にはデータ放送が載って
-     * いないので中身は出ないが、**押して器が立ち上がるところ**までは見られる。
+     * いないので中身は出ないが、**押してエンジンが立ち上がるところ**までは見られる。
      *
-     * サーバに「出す」と伝わっているかも見る — 頼まれてから読み取る作りなので、
+     * サーバに「出す」と伝わっているかも見る — 求められてから読み取る作りなので、
      * ここが抜けると押しても永久に何も来ない
      */
-    test('d ボタンでデータ放送の器が立ち上がり、サーバに伝わる', async ({ page }) => {
+    test('d ボタンでデータ放送のエンジンが立ち上がり、サーバに伝わる', async ({ page }) => {
         await page.addInitScript(() => {
             const seen = window as unknown as { __data: unknown[]; __info: unknown[]; __got: number };
             seen.__data = [];
@@ -462,14 +462,14 @@ test.describe('ライブ視聴', () => {
 
         await wakeControls(page, 'live-frame');
         await page.getByTestId('live-data-button').click();
-        // エンジンを取りに行って、器を立てるまで
+        // エンジンを読み込んで、立ち上がるまで
         await expect(overlay).toHaveAttribute('data-state', 'ready', { timeout: 15_000 });
 
         /*
-         * **器ができたらリモコンを出す。右の列、一覧の上。**
+         * **エンジンが立ち上がったらリモコンを出す。右の列、一覧の上。**
          *
-         * 絵の上に重ねない — 放送の作った画面は枠を下まで塗り潰すので、
-         * 重ねると押すものが放送の絵に埋もれる (操作列で踏んだのと同じ)
+         * 映像の上に重ねない — 放送の作った画面は枠を下まで塗り潰すので、
+         * 重ねると押すものが放送の映像に埋もれる (操作列で踏んだのと同じ)
          */
         await expect(page.getByTestId('live-remote')).toBeVisible();
         await expect(page.getByTestId('live-channels')).toBeVisible();
@@ -480,7 +480,7 @@ test.describe('ライブ視聴', () => {
          * データ放送を出すと、映像の入れ物ごと BML の小窓へ寄せる。
          * 字幕を外に置いていた頃は、**映像だけが小窓へ行き、字幕は枠いっぱいの
          * まま**データ放送の下に隠れた (実機で「データ放送を出すと字幕が消える」)。
-         * 同じ入れ物の中に居れば、テレビと同じで映像と一緒に縮む
+         * 同じ入れ物の中にあれば、テレビと同じで映像と一緒に縮む
          */
         expect(
             await page.evaluate(() => {
@@ -489,8 +489,8 @@ test.describe('ライブ視聴', () => {
                 const still = document.querySelector('[data-testid="live-still"]');
                 return {
                     字幕: captions?.parentElement === video?.parentElement,
-                    前の絵: still?.parentElement === video?.parentElement,
-                    // 重なりは 映像 → 前の絵 → 字幕 の順 (DOM の順がそのまま)
+                    前のコマ: still?.parentElement === video?.parentElement,
+                    // 重なりは 映像 → 前のコマ → 字幕 の順 (DOM の順がそのまま)
                     順番: [...(video?.parentElement?.children ?? [])].map((e) =>
                         e.getAttribute('data-testid'),
                     ),
@@ -498,7 +498,7 @@ test.describe('ライブ視聴', () => {
             }),
         ).toEqual({
             字幕: true,
-            前の絵: true,
+            前のコマ: true,
             順番: ['live-video', 'live-still', 'live-captions'],
         });
         expect(await asked()).toEqual([{ type: 'data', on: true }]);
@@ -530,7 +530,7 @@ test.describe('ライブ視聴', () => {
                     const handed = Number(await overlay.getAttribute('data-handed'));
                     return handed >= got;
                 },
-                { message: '器ができるまでに届いたぶんを捨てている' },
+                { message: 'エンジンが立ち上がるまでに届いたぶんを捨てている' },
             )
             .toBe(true);
 
@@ -538,7 +538,7 @@ test.describe('ライブ視聴', () => {
          * **操作列より下に敷いているか。**
          *
          * データ放送の面は枠いっぱいで、放送の作った画面は下まで塗り潰す。
-         * 上に載せていた頃は出した瞬間に操作列が隠れ、**そこに居る d ボタンごと
+         * 上に載せていた頃は出した瞬間に操作列が隠れ、**そこにある d ボタンごと
          * 見えなくなって、出したら消せなくなった**。面は
          * `pointer-events-none` なので押せてはいる — 押す場所が見えないだけで、
          * 触って確かめる形では捕まらない
@@ -634,7 +634,7 @@ test.describe('ライブ視聴', () => {
      * 家の場所は端末では変わらないので、端末ごとに訊き直さない。エンジンには
      * 受信機の設定として渡す (`DataBroadcast` の `receiver`)。
      *
-     * 確かめるのは放送のアプリと同じ道: 流した BML のスクリプトが `readPersistentArray` で
+     * 確かめるのは放送のアプリと同じ経路: 流した BML のスクリプトが `readPersistentArray` で
      * 読んだものを画面に書く。**web-bml の頃に端末へ直に置いていた鍵** (`denpa_bml_denpa_nvram_…`・
      * `denpa_bml_engine`) が残っていても、読まれないことも見る
      */
@@ -721,7 +721,7 @@ test.describe('ライブ視聴', () => {
 
         await channels.nth(1).click();
         await expect(page.getByTestId('live-title')).toBeVisible();
-        // 局が変われば、器も別のものになっている
+        // 局が変われば、エンジンも別のものになっている
         await expect(overlay).toHaveAttribute('data-state', 'ready', { timeout: 15_000 });
         await expect
             .poll(() => overlay.getAttribute('data-for'), { message: 'データ放送が前の局のまま' })
@@ -741,12 +741,12 @@ test.describe('ライブ視聴', () => {
      * **そのまま終了する**。実機の tvk (T15。tvk1/2/3 + ワンセグ + データで、
      * 局ごとに14本以上のストリーム) では 400KB でも足りずに降りていた。
      *
-     * わざと probesize を下げて T15 で測ると、丸ごと渡す形は 120KB でも
+     * わざと probesize を下げて T15 で測ると、丸ごと渡す方式は 120KB でも
      * 3回中1回しか通らないのに、**1局に絞れば 20KB で3回とも通る**。
      * 絞るのは録画と同じ `ServiceFilter`。
      *
      * ここで見るのは**渡ったものの PAT に局が1つしか無いこと**。絞り忘れても
-     * 絵は出てしまう (実機では出ないことがある、という形の壊れ方をする) ので、
+     * 映像は出てしまう (実機では出ないことがある、という形の壊れ方をする) ので、
      * 渡した中身そのものを見る
      */
     test('ffmpeg に渡すのは、その局だけの TS', async ({ page, stack }) => {
@@ -768,7 +768,7 @@ test.describe('ライブ視聴', () => {
     /*
      * **エンコードできなくなったら、その場で言う。**
      *
-     * ffmpeg が入口で降りても何も伝えていなかった頃は、画面には**前の絵が
+     * ffmpeg が入口で降りても何も伝えていなかった頃は、画面には**前のコマが
      * 貼られたまま6秒たって黒くなる**だけだった (`live-player` の `HOLD_MOST`)。
      * 見た目は「切り替えに6秒かかった」で、実際には失敗しているのに、
      * そうとは分からない出方をする。
@@ -792,12 +792,12 @@ test.describe('ライブ視聴', () => {
     });
 
     /*
-     * **出せない形でも、エンコード方式を選び直す口は残す。**
+     * **出せない形式でも、エンコード方式を選び直すボタンは残す。**
      *
      * 失敗している間は操作列を隠していた頃は、「この端末では再生できない形式です」
-     * と出たきり、別の形 (や生) へ逃げる手立てが無かった
+     * と出たきり、別の形式 (や放送のままの MPEG-2) へ逃げる手立てが無かった
      */
-    test('出せない形でも、操作列からエンコード方式を選び直せる', async ({ page }) => {
+    test('出せない形式でも、操作列からエンコード方式を選び直せる', async ({ page }) => {
         await page.addInitScript(() => {
             MediaSource.isTypeSupported = () => false;
         });
@@ -817,7 +817,7 @@ test.describe('ライブ視聴', () => {
      * **iPhone の Safari には MediaSource が無く、ManagedMediaSource だけがある。**
      *
      * 本物は Chromium に無いので、MediaSource を消して同じものを ManagedMediaSource の
-     * 名前で置く。見るのは「器が開いた」(尺が無限になる) と、**開くのに要る
+     * 名前で置く。見るのは「MediaSource が開いた」(尺が無限になる) と、**開くのに要る
      * `disableRemotePlayback` を立てた**こと
      */
     test('MediaSource が無くても ManagedMediaSource で出す', async ({ page }) => {
@@ -881,8 +881,8 @@ test.describe('ライブ視聴', () => {
         await expect(page.getByTestId('live-play')).toBeVisible();
 
         /*
-         * **放送の今に居る間は右端に張り付く。** 実際には貯めているぶん後ろに
-         * 居るが、そこを描くと溜まりが増えるたびに摘みが左へ動く — 見ている人には
+         * **放送の今にいる間は右端に張り付く。** 実際には貯めているぶん後ろに
+         * いるが、そこを描くと溜まりが増えるたびに摘みが左へ動く — 見ている人には
          * 「勝手に戻っている」としか映らない
          */
         const bar = page.getByTestId('live-seek');
@@ -902,9 +902,9 @@ test.describe('ライブ視聴', () => {
     });
 
     /*
-     * **しばらく触らなければ消える。** 絵の上に居座るものなので、見ている間は
+     * **しばらく触らなければ消える。** 映像の上に居座るものなので、見ている間は
      * 引っ込んでいるほうがいい。**止めていても消えます** — 一時停止するのは
-     * 絵の中の文字をじっくり見るためで、そこに操作バーが残っていては止めた意味が無い
+     * 映像の中の文字をじっくり見るためで、そこに操作バーが残っていては止めた意味が無い
      */
     test('操作列は触らないでいると消え、動かすと戻る', async ({ page }) => {
         await goto(page, '/live');
@@ -932,7 +932,7 @@ test.describe('ライブ視聴', () => {
      * 直後に必ず飛ぶ**。マウスと同じに「出ていったら消す」で扱っていたので、
      * タッチの端末では**触った瞬間に操作列が消えて**いた — 操作バーに触れる間が無い。
      *
-     * 押すまで留めていた時期もあるが、**消したいときに毎回絵を押すことになった**。
+     * 押すまで留めていた時期もあるが、**消したいときに毎回映像を押すことになった**。
      * 出し方は指とマウスで違ってよいが、消え方は同じでいい
      */
     test('指で触ったら出て、しばらくで消える (マウスと同じ長さ)', async ({ browser }) => {
@@ -981,10 +981,10 @@ test.describe('ライブ視聴', () => {
      *
      * 小窓の再生ボタンは `<video>` を直に止めるが、ライブは「止めているか」を player 側で
      * 持っている (`live-player` の `paused`)。合わせないと、小窓で止めたのに操作バーは
-     * 「一時停止」のまま、押すと止まっている絵をもう一度止めることになる。
+     * 「一時停止」のまま、押すと止まっている映像をもう一度止めることになる。
      *
      * 偽の ffmpeg が流すものは MSE が受け取れず再生が始まらない (上) ので、ブラウザの
-     * 小窓の口は差し替えて、押された・出た・閉じたの繋がりだけを見る
+     * 小窓の API は差し替えて、押された・出た・閉じたの繋がりだけを見る
      */
     test('小窓で観られ、小窓で止めると操作バーも止まる', async ({ page }) => {
         await page.addInitScript(() => {
@@ -1037,7 +1037,7 @@ test.describe('ライブ視聴', () => {
 
     /*
      * **断られたら理由を出す。** 黙って何も起きないと、どこで転んだのか端末の上で
-     * 見分けられない (iPhone の Safari で、生のときだけ出なかった)
+     * 見分けられない (iPhone の Safari で、MPEG-2 のときだけ出なかった)
      */
     test('小窓を断られたら、理由をトーストで言う', async ({ page }) => {
         await page.addInitScript(() => {
@@ -1060,14 +1060,14 @@ test.describe('ライブ視聴', () => {
 
     /*
      * **出せない端末ではボタンを出さない。** iPhone・iPad のホーム画面から開いたもの (PWA) は、
-     * 口は有るように見えるのに Safari が小窓を許していない。ページから開かせる口の無いブラウザも出さない
+     * API は有るように見えるのに Safari が小窓を許していない。ページから開かせる API の無いブラウザも出さない
      * (ブラウザ自身の小窓の切り替えは別に使える)
      */
     test('小窓を出せない端末では、小窓のボタンを出さない', async ({ browser }) => {
         for (const script of [
             // iPhone のホーム画面から開いた
             () => Object.defineProperty(Navigator.prototype, 'standalone', { get: () => true }),
-            // ページから開かせる口が無い
+            // ページから開かせる API が無い
             () => Object.defineProperty(Document.prototype, 'pictureInPictureEnabled', { get: () => false }),
         ]) {
             const context = await browser.newContext();
@@ -1082,10 +1082,10 @@ test.describe('ライブ視聴', () => {
 
     /*
      * **iPhone の全画面は、枠を画面いっぱいに広げて代わりにする** (#471。`fullscreen.svelte.ts`)。
-     * 要素の全画面の口を消して iPhone の横持ち (844x390) に見立てる。字幕の面とデータ放送の
+     * 要素の全画面の API を消して iPhone の横持ち (844x390) に見立てる。字幕の面とデータ放送の
      * 入れ物は枠から測るので、広げても映像に重なったまま。出口は同じボタン・Esc・戻る
      */
-    test('全画面の口が無い端末では、枠を画面いっぱいに広げる', async ({ browser }) => {
+    test('全画面の API が無い端末では、枠を画面いっぱいに広げる', async ({ browser }) => {
         const context = await browser.newContext({ viewport: { width: 844, height: 390 } });
         const page = await context.newPage();
         await page.addInitScript(() => {
@@ -1226,7 +1226,7 @@ test.describe('ライブ視聴', () => {
     });
 
     /*
-     * **繋がったことは、使ったチューナーで分かる。** 画面に絵が出ないので、
+     * **繋がったことは、使ったチューナーで分かる。** 画面に映像が出ないので、
      * 「押したら何かが起きた」をこちらで見る。用途に `live` と出るのは
      * ライブ視聴だけなので、これが出ていれば経路は通っている
      */
@@ -1247,8 +1247,8 @@ test.describe('ライブ視聴', () => {
     /*
      * **ffmpeg に渡すのは、放送が名乗っている番号。**
      *
-     * 1本の物理チャンネルに複数の局が乗っているので局を名指しするのだが、
-     * 渡す番号を間違えると ffmpeg はその局を探して見つけられず、**絵も音も
+     * 1つの物理チャンネルに複数の局が乗っているので局を名指しするのだが、
+     * 渡す番号を間違えると ffmpeg はその局を探して見つけられず、**映像も音も
      * 出ない**。denpa の `services.id` は `network_id * 100000 + service_id` の
      * 内部IDで、TS の中には出てこない — 実際にこれを渡して再生できなくなった。
      */
@@ -1274,10 +1274,10 @@ test.describe('ライブ視聴', () => {
      *
      * 選べるものは番組ごとに違う (二カ国語なら主/副/主+副、解説放送なら音声が2本)
      * ので、いま流れている番組から起こす (`arib.audioTracks`)。偽の放送は解説付きの
-     * ステレオ2本 — 実機によくある形で、**どちらも `component_type=3` の日本語**。
+     * ステレオ2本 — 実機によくある構成で、**どちらも `component_type=3` の日本語**。
      *
      * 左右の配り直し (`-af pan=...`) が出ていたら、ステレオをデュアルモノと
-     * 取り違えている — **絵は出るので、気付くのは音を聞いたときだけ**
+     * 取り違えている — **映像は出るので、気付くのは音を聞いたときだけ**
      */
     test('ステレオでは音をいじらず、放送が言う主音声をエンコードする', async ({ page, stack }) => {
         await goto(page, '/live');
@@ -1287,7 +1287,7 @@ test.describe('ライブ視聴', () => {
         const args = await ffmpegArgs(stack.liveArgsFile, expect);
 
         expect(args).not.toContain('-af');
-        // 何も頼まれていないので主音声。何本目かを名指ししていること自体は要る
+        // 何も指定されていないので主音声。何本目かを名指ししていること自体は要る
         expect(args.some((a) => a.endsWith(':a:0'))).toBe(true);
     });
 
@@ -1316,14 +1316,14 @@ test.describe('ライブ視聴', () => {
     /*
      * **エンコード方式は見ながら選べる。**
      *
-     * 絵の中身ではなく「その端末で出るか」の話なので、音声とは別に選ばせる。
-     * AV1 は同じ絵で 15% ほど軽い (実機で 3.3 → 2.8 Mbit/s) が、出ない
+     * 映像の中身ではなく「その端末で出るか」の話なので、音声とは別に選ばせる。
+     * AV1 は同じ映像で 15% ほど軽い (実機で 3.3 → 2.8 Mbit/s) が、出ない
      * ブラウザもある。
      *
      * **選び直したら再エンコードになる。** サーバはエンコード方式ごとに別の ffmpeg を回す
      * ので、渡した引数がそのまま変わる
      */
-    test('エンコード方式を選び直すと、その形で再エンコードする', async ({ page, stack }) => {
+    test('エンコード方式を選び直すと、その形式で再エンコードする', async ({ page, stack }) => {
         rmSync(stack.liveArgsFile, { force: true });
         await goto(page, '/live');
         await page.getByTestId('live-channel').first().click();
@@ -1345,12 +1345,12 @@ test.describe('ライブ視聴', () => {
             ).toBe(true);
         }).toPass({ timeout: 15_000 });
 
-        // 押した形が切り替えに出ている。押しても表示が変わらないと効いたか分からない
+        // 押した形式が切り替えに出ている。押しても表示が変わらないと効いたか分からない
         await expect(page.getByTestId('live-codec')).toContainText('AV1');
     });
 
     /*
-     * **チャンネルを変えても、選んだ形は続く。**
+     * **チャンネルを変えても、選んだ形式は続く。**
      *
      * 音声と違って番組の中身で決まるものではなく、その端末で出るかどうかの話。
      * 局を選び直すたびに H.264 へ戻されては、選んだ意味が無い
@@ -1376,7 +1376,7 @@ test.describe('ライブ視聴', () => {
     });
 
     /*
-     * **切り替えの間、前の絵を貼っておく場所を持っておく。**
+     * **切り替えの間、前のコマを貼っておく場所を持っておく。**
      *
      * 選局にかかる 1.6 秒は削れない (電波の同期待ち 0.65秒 + 放送の MPEG-2 が
      * GOP の頭を待つ 0.75秒)。待ちは変わらないが、その間を真っ黒にしないために
@@ -1385,14 +1385,14 @@ test.describe('ライブ視聴', () => {
      * 貼っていない間は**押す邪魔をしてはいけない** — 映像の上に敷くものなので、
      * 透けているだけでは足りず、当たり判定も抜けている必要がある
      */
-    test('切り替え中に貼る絵は、操作の邪魔をしない', async ({ page }) => {
+    test('切り替え中に貼るコマは、操作の邪魔をしない', async ({ page }) => {
         await goto(page, '/live');
         await page.getByTestId('live-channel').first().click();
 
         const still = page.getByTestId('live-still');
         await expect(still).toHaveAttribute('data-holding', 'false');
         await expect(still).toHaveCSS('pointer-events', 'none');
-        // 映像と同じ場所に重なっていること。ずれていると絵が飛んで見える
+        // 映像と同じ場所に重なっていること。ずれていると映像が飛んで見える
         await sameBox(still, page.getByTestId('live-video'), expect);
     });
 
@@ -1442,19 +1442,19 @@ test.describe('ライブ視聴', () => {
     /*
      * **字幕は映像と同じ ffmpeg がエンコードする。** 出口を2つ持つ1本しか起きない。
      *
-     * **それが時刻を揃える唯一の道だった。** 別々に起こした2本は入口で時刻を
+     * **それが時刻を揃える唯一の方法だった。** 別々に起こした2本は入口で時刻を
      * 0 に寄せる幅が違うので、出てきた時刻を突き合わせても意味を持たない
      * (装置を5通り作って -60〜+450ms とばらけた)。1本なら寄せは1回で、
      * 両方の出口に同じだけ効く — 実機で 1ms 以内に一致した。
      *
-     * ここで固定するのは、間違えても**絵は出てしまう**種類の指定。
+     * ここで固定するのは、間違えても**映像は出てしまう**種類の指定。
      *
-     * - `-copyts` を**付けない** … 付けると放送の絶対時刻が mp4 の多重化器まで
+     * - `-copyts` を**付けない** … 付けると放送の絶対時刻が mp4 のマルチプレクサまで
      *   届き、あれが 0 に詰め直すので受け側から見た 0 の意味が分からなくなる
      * - 字幕は**デコードせずに写す** (`-c:s copy`) … デコードして置き場所を決めるのは denpa
-     *   (`ts/b24caption.ts`)。絵にしていた頃の `-sub_type bitmap` は要らない
-     * - Matroska で受ける … **時刻をコマと一緒に運ばせる**。生の PNG を並べる
-     *   だけでは時刻が乗らず、別の口 (`showinfo`) に喋らせると数が合わずにずれる
+     *   (`ts/b24caption.ts`)。画像にしていた頃の `-sub_type bitmap` は要らない
+     * - Matroska で受ける … **時刻をコマと一緒に運ばせる**。PNG だけを並べる
+     *   だけでは時刻が乗らず、別のフィルタ (`showinfo`) に喋らせると数が合わずにずれる
      */
     test('字幕は映像と同じ ffmpeg で、同じ物差しで取り出す', async ({ page, stack }) => {
         await goto(page, '/live');
@@ -1462,7 +1462,7 @@ test.describe('ライブ視聴', () => {
         await expect(page.getByTestId('live-title')).toBeVisible();
 
         const args = await ffmpegArgs(stack.liveArgsFile, expect);
-        // 映像と字幕が同じ1回の中に居ること
+        // 映像と字幕が同じ1回の中にあること
         expect(args).toContain('libx264');
         expect(args).toContain('pipe:1');
         expect(args).toContain('pipe:3');
@@ -1472,11 +1472,11 @@ test.describe('ライブ視聴', () => {
         expect(args[args.indexOf('-c:s') + 1]).toBe('copy');
         expect(args[args.indexOf('-f', args.indexOf('pipe:1')) + 1]).toBe('matroska');
 
-        // 字幕も局を名指しする。1本の物理チャンネルに複数の局が乗っている
+        // 字幕も局を名指しする。1つの物理チャンネルに複数の局が乗っている
         expect(args[args.lastIndexOf('-map') + 1]).toMatch(/^0:p:\d+:s:0$/);
 
         /*
-         * **別の口には喋らせない。** 時刻と「空かどうか」を `showinfo` に喋らせ、
+         * **別のフィルタには喋らせない。** 時刻と「空かどうか」を `showinfo` に喋らせ、
          * 標準エラーの行と標準出力の PNG を来た順に組にしていた頃は、**数が
          * 合わずにずれていた** (実機で PNG 77枚に対し showinfo 79行)。一度ずれると
          * 戻らず、字幕が1秒ほど遅れて出て、消えるのも遅れる
@@ -1537,7 +1537,7 @@ test.describe('ライブ視聴', () => {
 
     /*
      * **チケットは使い捨て。** URL は履歴にもログにも残るので、拾われても二度目は
-     * 通らない。ここが緩むと、チューナーを使う口が素通しになる
+     * 通らない。ここが緩むと、チューナーを使うエンドポイントが素通しになる
      */
     test('チケットなしでは WebSocket に繋げない', async ({ page }) => {
         await goto(page, '/live');
@@ -1591,14 +1591,14 @@ test.describe('ライブ視聴', () => {
 });
 
 /**
- * **横にしたスマホでは絵を画面いっぱいに** (`PlayerLayout`)。見出しと右の一覧を残すと
- * 絵の枠が 510x280 ほどしか無く、操作バーが二段に折れてシークバーが絵の真ん中に来ていた。
- * 一覧は消さずに絵の下へ回す — 消すと局を選べなくなる
+ * **横にしたスマホでは映像を画面いっぱいに** (`PlayerLayout`)。見出しと右の一覧を残すと
+ * 映像の枠が 510x280 ほどしか無く、操作バーが二段に折れてシークバーが映像の真ん中に来ていた。
+ * 一覧は消さずに映像の下へ回す — 消すと局を選べなくなる
  */
 test.describe('スマホの横でライブ', () => {
     test.use({ hasTouch: true, isMobile: true, viewport: { width: 844, height: 390 } });
 
-    test('見出しを隠して絵が画面の高さいっぱい。操作バーは一段、一覧は下で選べる', async ({ page }) => {
+    test('見出しを隠して映像が画面の高さいっぱい。操作バーは一段、一覧は下で選べる', async ({ page }) => {
         await goto(page, '/live');
         const channels = page.getByTestId('live-channel');
         await channels.first().click();
@@ -1606,7 +1606,7 @@ test.describe('スマホの横でライブ', () => {
 
         const stage = page.getByTestId('live-frame');
         await expect(page.locator('.navbar')).toBeHidden();
-        // 枠は絵の形 (16:9) で、高さいっぱい・真ん中。左右の黒帯にボタンを出さない
+        // 枠は映像の形 (16:9) で、高さいっぱい・真ん中。左右の黒帯にボタンを出さない
         await expect
             .poll(async () => {
                 const box = await stage.boundingBox();
@@ -1624,14 +1624,14 @@ test.describe('スマホの横でライブ', () => {
         const play = (await page.getByTestId('live-play').boundingBox())!;
         const full = (await page.getByTestId('live-full').boundingBox())!;
         expect(Math.abs(play.y - full.y)).toBeLessThan(2);
-        // どのボタンも重ならず、絵の枠の中に丸ごと見える (右上の3つも)
+        // どのボタンも重ならず、映像の枠の中に丸ごと見える (右上の3つも)
         expect(await overlayTroubles(page, 'live-frame')).toEqual([]);
-        // 操作バーは絵に重ねるので、下の方の字幕は操作バーの上まで持ち上がる。操作バーが引っ込めば戻る
+        // 操作バーは映像に重ねるので、下の方の字幕は操作バーの上まで持ち上がる。操作バーが引っ込めば戻る
         await captionsClearOfBar(page, 'live-captions', 'live-controls');
         await expect(bar).toHaveAttribute('data-shown', 'false', { timeout: 6000 });
         await expect(page.getByTestId('live-captions')).toHaveCSS('translate', 'none');
 
-        // 一覧は絵の下。巻き取って別の局を選べ、選んだら絵へ戻る
+        // 一覧は映像の下。巻き取って別の局を選べ、選んだら映像へ戻る
         const second = channels.nth(1);
         await second.scrollIntoViewIfNeeded();
         await expect(stage).not.toBeInViewport({ ratio: 0.9 });

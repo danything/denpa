@@ -27,7 +27,7 @@ export interface Rule {
 
 const SIMPLE = /^(\*|[a-z][a-z0-9-]*)?((?:[.#][a-zA-Z0-9_-]+)*)(?::(focus|active))?$/i;
 
-/** 単純セレクタを読む。使えない形 (子孫など) なら null */
+/** 単純セレクタを読む。使えない書き方 (子孫など) なら null */
 function parseSelector(text: string): Selector | null {
     const match = SIMPLE.exec(text.trim());
     if (match === null || text.trim() === '') return null;

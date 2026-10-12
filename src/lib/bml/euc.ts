@@ -14,7 +14,7 @@
  * - **85〜94 区 (ARIB の追加記号・追加漢字と DRCS) は私用領域 U+E000〜** に置く。
  *   WHATWG の EUC-JP はこの区を IBM の拡張漢字として読むので任せられない。追加記号には
  *   U+1F000 台の字もあり、そのまま持つと 1 字が 2 単位になって `length` や `substring` が
- *   ずれる。描くときに `toDisplay` で本当の字 (または DRCS の絵) に開く
+ *   ずれる。描くときに `toDisplay` で本当の字 (または DRCS の画像) に開く
  * - 1〜84 区で `TextDecoder` が字を返さない点も私用領域 (U+E400〜) に置いて、符号が
  *   往復で失われないようにする
  */
@@ -166,7 +166,7 @@ export function isDrcs(unit: number): boolean {
 
 /**
  * 画面に出す字に開く。追加記号は本当の字に、字の無い点は 〓 に。
- * **DRCS はここでは開かない** (絵は描く側が持つ。`isDrcs` で見分ける)
+ * **DRCS はここでは開かない** (画像は描く側が持つ。`isDrcs` で見分ける)
  */
 export function toDisplay(text: string): string {
     let out = '';

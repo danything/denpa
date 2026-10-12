@@ -1,9 +1,9 @@
 /**
- * README と docs の絵を撮るための**作り物の放送** (`FAKE_PROFILE=docs`。`scripts/capture-docs.ts`)。
+ * README と docs のスクリーンショットを撮るための**作り物の放送** (`FAKE_PROFILE=docs`。`scripts/capture-docs.ts`)。
  *
  * テストの偽放送は局名が本物で (局ごとの癖を試すため)、ロゴも実機から拾ったもの。
- * **絵に本物の局・番組・ロゴを出さない**ので、絵を撮るときだけ局も番組もロゴも全部ここの
- * 作り物に差し替える。並べ方 (中継・サービス種別・カルーセルの載り方) はテストと同じ道を通る
+ * **スクリーンショットに本物の局・番組・ロゴを出さない**ので、撮るときだけ局も番組もロゴも全部ここの
+ * 作り物に差し替える。並べ方 (中継・サービス種別・カルーセルの載り方) はテストと同じ経路を通る
  */
 import { deflateSync } from 'node:zlib';
 import { joinBytes } from '../../src/lib/ts/bytes';
@@ -214,7 +214,7 @@ export function docsProgram(service: FakeService, slot: number) {
 }
 
 /*
- * ロゴ。**放送と同じ形** (8bit のパレット PNG で、色の表を持たない。色は ARIB の
+ * ロゴ。**放送と同じ形式** (8bit のパレット PNG で、色の表を持たない。色は ARIB の
  * 決め打ちの表を受け取った側が入れる) で、局ごとに色を変えた作り物を組む
  */
 
@@ -270,7 +270,7 @@ export function docsLogo(service: FakeService, width: number, height: number): U
 }
 
 /*
- * ライブの絵。偽の放送の映像はマクロブロック (16x16) ごとに1色の MPEG-2 (`synth-av.ts`) なので、
+ * ライブの映像。偽の放送の映像はマクロブロック (16x16) ごとに1色の MPEG-2 (`synth-av.ts`) なので、
  * 16x9 個の升で色帯 (75% のカラーバー) を描く。下の2段の灰色の階段だけ流して、動いているのが分かるようにする
  */
 const BARS: [number, number, number][] = [
@@ -292,7 +292,7 @@ export function docsColor(col: number, row: number, n: number): [number, number,
 }
 
 /*
- * 録画の字幕。**作り物の台詞**を ARIB の字幕 (STD-B24) にして、ffmpeg が書くのと同じ形の
+ * 録画の字幕。**作り物の台詞**を ARIB の字幕 (STD-B24) にして、ffmpeg が書くのと同じ形式の
  * Matroska に入れる (`synth-caption.ts`)。偽 ffmpeg が観る画面にこれを返す
  * (`FAKE_FFMPEG_CAPTIONS`。テストの `captions.mkv` の代わり)
  */

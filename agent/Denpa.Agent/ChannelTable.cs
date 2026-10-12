@@ -37,7 +37,7 @@ public static class ChannelTable
     /// <param name="RelativeTs">衛星で同じ周波数に相乗りしている何本目か。無ければ -1</param>
     /// <param name="Slot">
     /// 衛星のスロット。TSID が分からないときに px4d の TUNE の <c>slot</c> で渡す
-    /// (<see cref="Px4Tuner.TuneRequest"/>)。BS は相対番号そのもの、CS は1本しか乗っていないので 0
+    /// (<see cref="Px4Tuner.TuneRequest"/>)。BS は相対番号そのもの、CS は1つしか入っていないので 0
     /// </param>
     public sealed record Tuning(string Type, int Delivery, uint Frequency, int RelativeTs, int Slot)
     {
@@ -110,7 +110,7 @@ public static class ChannelTable
     /// </summary>
     public static uint StreamId(string name, Tuning tuning, Func<string, int?>? known = null)
     {
-        // CS は1つの中継に1本しか乗っていない。選り分ける必要が無い
+        // CS は1つの中継に1つしか入っていない。選り分ける必要が無い
         if (!tuning.Satellite || tuning.RelativeTs < 0) return NoStreamId;
 
         var scanned = known?.Invoke(name);

@@ -2,7 +2,7 @@ import { config } from './config';
 import { chunks } from './stream';
 
 /**
- * エージェントが起きたことを教えてくれる口 (`GET /denpa/events`, SSE)。
+ * エージェントが起きたことを教えてくれるエンドポイント (`GET /denpa/events`, SSE)。
  *
  * これが使えると、チューナーの様子も局の入れ替わりも「覗きに行く」必要がない。
  * 定期実行は**知らせが途切れたときの保険**として残してある

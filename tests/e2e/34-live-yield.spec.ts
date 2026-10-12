@@ -6,13 +6,13 @@ import { expect, goto, syncEpg, test } from './helpers';
 /**
  * **ライブが録画に蹴られたとき** (docs/stream.md §4「録画に譲る」)。
  *
- * ライブは録画にだけ譲る。蹴られたら画面は同じ局を頼み直し、入れなかったときだけ蹴った録画の
- * 追っかけに切り替える。どの録画に蹴られたかはサーバが読む (覚えておいた本にいる `rec <録画ID>`。
+ * ライブは録画にだけ譲る。蹴られたら画面は同じ局をリクエストし直し、入れなかったときだけ蹴った録画の
+ * 追っかけに切り替える。どの録画に蹴られたかはサーバが読む (覚えておいたチューナーにいる `rec <録画ID>`。
  * `server/live-yield.ts`)。
  *
- * 場面は偽エージェントで作る — 地上波のチューナーを1本だけにして、ライブを観ている間に別の
+ * 場面は偽エージェントで作る — 地上波のチューナーを1台だけにして、ライブを観ている間に別の
  * チャンネルを録る。偽エージェントは空きが無ければ弱い読み手を蹴る (`tests/fake/agent.ts` の `preempt`)。
- * 絵は出ない (偽 ffmpeg) ので、見るのは知らせと、エージェントの読み手の顔ぶれ
+ * 映像は出ない (偽 ffmpeg) ので、見るのは知らせと、エージェントの読み手の顔ぶれ
  */
 
 /** 偽エージェントの既定のチューナー (tests/fake/agent.ts の `TUNERS`)。偶数が衛星、奇数が地上波 */
@@ -25,7 +25,7 @@ const tunerDefs = (count: number) =>
         disabled: false,
     }));
 
-/** 偽エージェントのチューナーを入れ替える。3本 = 地上波は1本だけ、4本 = 既定 */
+/** 偽エージェントのチューナーを入れ替える。3台 = 地上波は1台だけ、4台 = 既定 */
 async function setTuners(stack: Stack, count: number): Promise<void> {
     const res = await fetch(`${stack.agentUrl}/denpa/tuners`, {
         method: 'PUT',
@@ -64,7 +64,7 @@ async function twoChannels(request: APIRequestContext): Promise<[Listed, Listed]
     return [listed(MX), listed(other)];
 }
 
-/** いま放送中の番組を録る (ライブの録画ボタンと同じ口) */
+/** いま放送中の番組を録る (ライブの録画ボタンと同じ API) */
 async function recordNow(request: APIRequestContext, service: Listed): Promise<void> {
     const res = await request.post('/live?/record', { form: { service: String(service.id) } });
     expect(res.ok()).toBe(true);
@@ -85,7 +85,7 @@ test.describe('ライブが録画に蹴られたとき', () => {
     });
 
     /*
-     * **同じチャンネルの録画は相乗りで、蹴られない。** チューナーは増えないので、地上波が1本でも
+     * **同じチャンネルの録画は相乗りで、蹴られない。** チューナーは増えないので、地上波が1台でも
      * ライブはそのまま。切り替えの知らせも出ない
      */
     test('同じチャンネルの録画なら、ライブはそのまま', async ({ page, request, stack }) => {
@@ -96,7 +96,7 @@ test.describe('ライブが録画に蹴られたとき', () => {
 
         await recordNow(request, watched);
         try {
-            // 録画が同じ本に乗る。ライブの読み手も残っている
+            // 録画が同じチューナーに乗る。ライブの読み手も残っている
             await expect
                 .poll(async () => (await grUsers(stack)).some((use) => use.startsWith('rec ')), {
                     timeout: 30_000,
@@ -144,7 +144,7 @@ test.describe('ライブが録画に蹴られたとき', () => {
             const note = page.getByTestId('live-yielded');
             await expect(note).toContainText('録画のためチャンネルを切り替えました', { timeout: 30_000 });
             await expect(note).toContainText('(録画中を再生しています)');
-            // チューナーは録画のもの。ライブは頼み直したが入れなかった
+            // チューナーは録画のもの。ライブはリクエストし直したが入れなかった
             const users = await grUsers(stack);
             expect(users.some((use) => use.startsWith('rec '))).toBe(true);
             expect(users).not.toContain(`live GR/${watched.channel}`);
@@ -166,7 +166,7 @@ test.describe('ライブが録画に蹴られたとき', () => {
             await expect(page.getByTestId('live-title')).toHaveText(yielded.recording.title);
 
             /*
-             * **「ライブに戻る」は頼み直しを試す。** 録画がまだ本を塞いでいるので入れず、追っかけに戻って
+             * **「ライブに戻る」はリクエストし直しを試す。** 録画がまだチューナーを塞いでいるので入れず、追っかけに戻って
              * いつまで待てばいいかを言う
              */
             await page.getByTestId('live-back').click();

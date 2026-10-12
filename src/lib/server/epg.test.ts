@@ -7,7 +7,7 @@ import { count, eq, sql } from 'drizzle-orm';
 /**
  * 局だけの取り込み。
  *
- * どの局が居るかを知っているのは**エージェント** (チャンネルスキャンの結果) で、
+ * どの局があるかを知っているのは**エージェント** (チャンネルスキャンの結果) で、
  * 番組表を集めるのは denpa 自身。集めるほうは1チャンネルに数分かかるので、
  * 局だけ先に取り込めることを確かめる。
  *
@@ -322,7 +322,7 @@ describe('savePrograms', () => {
         ]);
     });
 
-    // 文を使い回す形にしたとき (drizzle の placeholder)、null が文字の "null" になりかけた
+    // 文を使い回すようにしたとき (drizzle の placeholder)、null が文字の "null" になりかけた
     test('空の JSON 列は NULL のまま、中身があれば JSON の文字で入る', async () => {
         offered = [channel(23608, 'ＴＯＫＹＯ　ＭＸ')];
         syncServicesOnly(await getChannels());

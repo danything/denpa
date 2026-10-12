@@ -37,8 +37,8 @@ function broadcastDayStart(at: number): number {
  * 出演者やあらすじ (`extended`)、音声 (`audios`)、ジャンルの中分類
  * (`genre_detail`) は詳細を開いたときにしか使わないのに、BS の 24 時間ぶん
  * (2,171 件) で応答 1.43 MB のうち 41% を占めていた。しかも前日・翌日の先読み
- * (`preloadData`) が同じ形をもう 2 本取るので、開くたびに約 10 MB。
- * 詳細は開いた 1 件だけ `/api/programs/<id>` で取る (予約・録画の一覧と同じ道)
+ * (`preloadData`) が同じ形の応答をもう 2 つ取るので、開くたびに約 10 MB。
+ * 詳細は開いた 1 件だけ `/api/programs/<id>` で取る (予約・録画の一覧と同じ経路)
  */
 interface GridProgram
     extends Pick<Program, 'id' | 'service_id' | 'start_at' | 'end_at' | 'name' | 'description' | 'genres'> {
@@ -48,7 +48,7 @@ interface GridProgram
      * 録画一覧まで戻って同じ番組を探し直させないため
      */
     recording_id: number | null;
-    /** 録画そのものが失敗していれば観る口・落とす口を出さない (一覧の `hasFile` と同じ) */
+    /** 録画そのものが失敗していれば観るボタン・ダウンロードを出さない (一覧の `hasFile` と同じ) */
     recording_state: Recording['state'] | null;
     /** 配信は library_path ?? ts_path を返すので、どちらかがあれば開ける */
     library_path: string | null;
@@ -56,20 +56,20 @@ interface GridProgram
 }
 
 /**
- * 表の中身。**器より後から流す** (SvelteKit の streaming)。
+ * 表の中身。**外枠より後から流す** (SvelteKit の streaming)。
  *
  * 種別のタブ・日送り・検索窓は URL だけで描けるのに、いちばん重い表を待って
- * いたせいで**画面ごと出てこなかった**。器を先に出して、表のところだけ
+ * いたせいで**画面ごと出てこなかった**。外枠を先に出して、表のところだけ
  * 読み込み中にしておけば、放送波を選び直すのも検索を打ち始めるのも待たずにできる。
  *
  * **一度譲ってから引く。** SQLite の読みは同期なので、譲らずに引くと `load` が
- * 返る前に引き終わり、器だけ先に出す意味が無くなる (後から流れるのは、`load` が
+ * 返る前に引き終わり、外枠だけ先に出す意味が無くなる (後から流れるのは、`load` が
  * 返った時点でまだ片が付いていない promise だけ)。
  *
  * **転んでも投げ返さない。** 流して返すぶんの拒否は `load` の外で起きるので
  * SvelteKit のエラー画面にはならず、受け損ねると骨組みのまま永久に止まる。
  * そのうえ**拾い手のいない拒否**になって画面と関係のないところで落ちる —
- * 画面側で受けようにも、拒否は器を組むより先に届くことがあり、先読みしたぶん
+ * 画面側で受けようにも、拒否は外枠を組むより先に届くことがあり、先読みしたぶん
  * (前日・翌日) に至っては誰も読まない。**理由を中身として返す**ほうが確実で、
  * 本当の理由もサーバのログに残せる (画面へ渡るのは短い一行だけ)
  */
@@ -160,7 +160,7 @@ export function load({ url, cookies }) {
     const end = start + WINDOW_HOURS * HOUR;
 
     return {
-        // ここまでが器。URL と設定だけで決まるので、表を待たずに描ける
+        // ここまでが外枠。URL と設定だけで決まるので、表を待たずに描ける
         type,
         start,
         hours: WINDOW_HOURS,

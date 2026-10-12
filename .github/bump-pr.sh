@@ -15,7 +15,7 @@
 # **付ける context は ruleset から引く。** `check` 1つを決め打ちにしていた頃、ruleset に
 # `agent` / `e2e (1)`〜`(4)` / `claude-review` が足された途端に bump の PR が
 # 「Expected」のまま塞がった (#99、2026-09-11)。ruleset で足したものにここが自動で
-# 追いつくようにする。引けなければ `check` だけ (以前の形) に落ちる。
+# 追いつくようにする。引けなければ `check` だけ (以前の方式) に落ちる。
 #
 # **2つのワークフローが同じ手を要る** (build-and-deploy の deploy の印と、release の
 # Chart.yaml の版)。書き写すと片方だけ直したときに食い違うので、ここ1つに置く
@@ -26,14 +26,14 @@
 #   . .github/bump-pr.sh
 #   bump_begin  <枝>                                    # いまの origin/main から枝を切る
 #   …ファイルを書き換える…
-#   bump_finish <枝> <題> <本文> <status の説明> <ファイル>...  # 書き換えが無ければ何もしない
+#   bump_finish <ブランチ> <タイトル> <本文> <status の説明> <ファイル>...  # 書き換えが無ければ何もしない
 #
 # 枝は毎回 **いまの origin/main** から切る。actions/checkout が取るのは「トリガーした
 # コミット」で、2つの run が重なると後発は先発の bump を知らないまま同じ行を書き換え、
 # GitHub には衝突に見えて誰もマージできない (書き換えは入力から一意に決まるので、
 # 何度やっても同じ結果になる)。
 #
-# 題はそのまま squash のコミットの題になる。`[skip ci]` を付けておくと、main に入った
+# タイトルはそのまま squash のコミットのタイトルになる。`[skip ci]` を付けておくと、main に入った
 # ときに他の workflow を動かさない (直接 push していた頃と同じ)
 set -eu
 

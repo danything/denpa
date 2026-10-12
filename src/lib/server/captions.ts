@@ -6,20 +6,20 @@
  *                                     └→ mkv  (字幕そのまま S_ARIBSUB)  → デコードする (ts/b24caption.ts)
  *                                                                        → WebSocket (0x22 JSON) → canvas
  *
- * 放送に絵は流れてこない — 乗っているのは文字と「どこに・どの大きさで・何色で」という
+ * 放送に画像は流れてこない — 乗っているのは文字と「どこに・どの大きさで・何色で」という
  * 指定で、テレビはそれを見て毎回自分で描いている。**置き場所を決めるところまではサーバで、
  * 描くのは受け側で。** 画面の画素で描けるので全画面でも字が粗くならず、
- * 配る量は数百バイト/枚、サーバは絵を描かない (実測は docs/stream.md §5.2)。
+ * 配る量は数百バイト/枚、サーバは画像を描かない (実測は docs/stream.md §5.2)。
  *
- * ## 映像と同じ ffmpeg で受ける。**それが時刻を揃える唯一の道**
+ * ## 映像と同じ ffmpeg で受ける。**それが時刻を揃える唯一の方法**
  *
  * ffmpeg は入口で時刻を 0 に寄せ直すが、その寄せ幅は**プロセスごとに違う** —
- * 別々に起こした2本はエンコードを始めたときのキーフレームが 0〜0.5秒 ずれる (装置を5通り作って
- * -60〜+450ms とばらけた)。`-copyts` で放送の絶対時刻を保っても、**mp4 の多重化器が
+ * 別々に起こした2本はエンコードを始めたときのキーフレームが 0〜0.5秒 ずれる (仕掛けを5通り作って
+ * -60〜+450ms とばらけた)。`-copyts` で放送の絶対時刻を保っても、**mp4 のマルチプレクサが
  * その時刻を 0 に詰め直す**ので、受け側から見た 0 がどの放送時刻かは外から知りようがない。
  * 1本にすれば入口の寄せが1回だけになって両方の出口に効く (実機で 1ms 以内で一致)。
  *
- * 字幕は**デコードせずに写す** (`-c:s copy`)。ffmpeg に字幕の復号器は要らない。
+ * 字幕は**デコードせずに写す** (`-c:s copy`)。ffmpeg に字幕のデコーダは要らない。
  *
  * ## 時刻は字幕と一緒に運ばせる
  *
@@ -40,11 +40,11 @@ const TROUBLE = /error|Error|failed|Failed|Cannot|Unable|No such|Invalid data/;
 /**
  * 放送の欠けにいちいち言われるぶん。**残さない。**
  *
- * 電波の欠けは日常的にあり、復号器はそのたびに「直した」「捨てた」を喋る
+ * 電波の欠けは日常的にあり、デコーダはそのたびに「直した」「捨てた」を喋る
  * (選べる字幕を入口の見出しから拾うためにログは info まで開けてある)。
  * 弱い局では毎秒何行も出て、**本当の失敗がその中に埋もれる**。
  *
- * 消すのは「1パケットぶんの取りこぼし」だけ。組み立てや符号器の失敗
+ * 消すのは「1パケットぶんの取りこぼし」だけ。組み立てやエンコーダの失敗
  * (`Error opening output`, `Error binding filtergraph`) は残る
  */
 const NOISE = /concealing|Error submitting packet to decoder|Decode error rate|Last message repeated/;
@@ -55,10 +55,10 @@ export function worthLogging(line: string): boolean {
 }
 
 /**
- * 字幕を**デコードせずに写す**出口。映像とは別の口 (`pipe:3`) に出す。
+ * 字幕を**デコードせずに写す**出口。映像とは別の出口 (`pipe:3`) に出す。
  *
  * - `-c:s copy` … 字幕の PES の中身をそのまま (`S_ARIBSUB`)。デコードするのは denpa (`CaptionText`)
- * - `matroska` … **時刻をコマと一緒に運ぶ器**。塊の上限を最小にして、
+ * - `matroska` … **時刻をコマと一緒に運ぶコンテナ**。塊の上限を最小にして、
  *   1枚ごとに書き出させる (溜められるとそのぶん遅れる)
  *
  * @param from ffmpeg に渡す局の指定 (`0:p:<局>` か `0`)
@@ -95,7 +95,7 @@ export function programSpec(program: number): string {
  * エンコードの経路で「同じ ffmpeg に両方エンコードさせる」のは、ffmpeg が入口で時刻を 0 に寄せ、その
  * 寄せ幅がプロセスごとに違うからだった (上の説明)。放送そのままの経路では**寄せない** (`-copyts`) —
  * 受け側が合わせる相手は放送の PTS そのもの (ブラウザが自分で PES から読む) なので、
- * 字幕も放送の PTS のまま出せば突き合わせられる。mp4 の多重化器が時刻を 0 に詰め直す
+ * 字幕も放送の PTS のまま出せば突き合わせられる。mp4 のマルチプレクサが時刻を 0 に詰め直す
  * 問題は、字幕の出口 (Matroska) には無い。実機の録画で、出てきた字幕の時刻が元の TS の
  * 字幕 PES の PTS と 1ms 単位で一致した (71759.734333 → 71759.734)。
  *
@@ -128,7 +128,7 @@ export function rawCaptionArgs(program: number, track: number): string[] {
  * 字幕がその放送に無いときに ffmpeg が言うこと。
  *
  * 字幕を持たない局はある (ショッピングやサブチャンネル)。そこに
- * `0:p:X:s:0` を頼むと、ffmpeg は**組み立ての時点で降りる** — つまり
+ * `0:p:X:s:0` を要求すると、ffmpeg は**組み立ての時点で降りる** — つまり
  * **映像も出ない**。そうと分かったら字幕なしで再エンコードする (`Session.run`)。
  *
  * ffmpeg は `Stream map '' matches no streams.` と言う
@@ -182,7 +182,7 @@ function label(index: number, lang: string | null): string {
     return `${head} (${LANGUAGE[lang] ?? lang})`;
 }
 
-/** 文字の配置の1枚と、出す時刻 (ミリ秒。器のコマの時刻そのまま) */
+/** 文字の配置の1枚と、出す時刻 (ミリ秒。コンテナのコマの時刻そのまま) */
 export interface CaptionShown {
     at: number;
     page: CaptionPage;
@@ -199,7 +199,7 @@ export class CaptionText {
 
     /**
      * 出すものが無いコマ (字幕管理データ・送り直し・待ちだけ) なら null。
-     * **読めないコマは捨てて続ける** — 投げると、受けている側 (ライブの字幕の口) ごと止まる
+     * **読めないコマは捨てて続ける** — 投げると、受けている側 (ライブの字幕 API) ごと止まる
      */
     feed(frame: MkvFrame): CaptionShown | null {
         try {
@@ -214,7 +214,7 @@ export class CaptionText {
 }
 
 /**
- * 送る形にする。**中身は JSON** (`CaptionPage`)、頭の時刻は映像と同じ物差し (90kHz。stream.md §5.3)。
+ * 送る形式にする。**中身は JSON** (`CaptionPage`)、頭の時刻は映像と同じ物差し (90kHz。stream.md §5.3)。
  * 前の1枚を丸ごと置き換えるので、消すのも同じ種別 (`runs` が空) で送る
  */
 export function textFrame(shown: CaptionShown): { kind: number; pts: bigint; data: Uint8Array } {
@@ -226,15 +226,15 @@ export function textFrame(shown: CaptionShown): { kind: number; pts: bigint; dat
 }
 
 /**
- * **アプリ向けの字幕の口** (`GET /api/services/<id>/captions`・`GET /api/recordings/<id>/captions`。
- * docs/api.md) の1こま。WebSocket の1こま (stream.md §5.3) の頭に、後ろの長さを足しただけ:
+ * **アプリ向けの字幕 API** (`GET /api/services/<id>/captions`・`GET /api/recordings/<id>/captions`。
+ * docs/api.md) の1フレーム。WebSocket の1フレーム (stream.md §5.3) の頭に、後ろの長さを足しただけ:
  *
  *     [4:後ろの長さ (BE)][1:種別][8:時刻 (90kHz, BE)][中身...]
  *
  * **WebSocket と同じバイトにしたのは、受け側の読み方を1つにするため。** 字幕 (`0x22`) も
  * 知らせ (`0x40`) も JSON のまま。
  *
- * **長さを付けるのは、HTTP には区切りが無いから。** WebSocket はこまの区切りを運んでくれるが、
+ * **長さを付けるのは、HTTP には区切りが無いから。** WebSocket はフレームの区切りを運んでくれるが、
  * チャンク転送のチャンクの区切りは受け側 (HttpURLConnection など) から見えない。
  * Server-Sent Events より、行に割って読む手間が要らないぶん軽い
  */
@@ -248,7 +248,7 @@ export function appFrame(kind: number, pts: bigint, payload: Uint8Array): Uint8A
     return out;
 }
 
-/** 読まれないまま溜まってよい量 (バイト)。超えたら閉じる (受け側は頼み直す) */
+/** 読まれないまま溜まってよい量 (バイト)。超えたら閉じる (受け側はリクエストし直す) */
 export const CAPTION_FEED_BACKLOG = 8 * 1024 * 1024;
 
 /**
@@ -266,9 +266,9 @@ const CAPTION_PING_MS = 20_000;
 
 const PING = new TextEncoder().encode(JSON.stringify({ type: 'ping' }));
 
-/** アプリ向けの字幕の口に流し込む側 (`captionFeed`) */
+/** アプリ向けの字幕 API に流し込む側 (`captionFeed`) */
 export interface CaptionOut {
-    /** WebSocket と同じ形で1こま渡す。**字幕 (文字の配置) と、選べる字幕の知らせだけ通す** */
+    /** WebSocket と同じ形式で1フレーム渡す。**字幕 (文字の配置) と、選べる字幕の知らせだけ通す** */
     send(kind: number, pts: bigint, payload: Uint8Array): void;
     /** 終わり (録画を読み切った・セッションが畳まれた) */
     close(): void;
@@ -277,11 +277,11 @@ export interface CaptionOut {
 }
 
 /**
- * アプリ向けの字幕の口を作る。中身を作る側 (`open`) は、閉じるときの後始末を返す。
+ * アプリ向けの字幕 API を作る。中身を作る側 (`open`) は、閉じるときの後始末を返す。
  *
  * 通すのは字幕 (文字の配置 `0x22`) と、選べる字幕の知らせ (`0x40` の `captions`) だけ。
  * `error` / `ended` の知らせが来たら閉じる。ほかの知らせ・データ放送・映像は捨てる
- * (映像は同じ URL の隣の口 — ライブの `live` や追っかけの `chase` — で受け取っている)
+ * (映像は同じ URL の隣のエンドポイント — ライブの `live` や追っかけの `chase` — で受け取っている)
  */
 export function captionFeed(open: (out: CaptionOut) => () => void): ReadableStream<Uint8Array> {
     let closed = false;
@@ -297,7 +297,7 @@ export function captionFeed(open: (out: CaptionOut) => () => void): ReadableStre
     return new ReadableStream<Uint8Array>(
         {
             start(controller) {
-                // 読まない相手に積み続けない。閉じれば受け側は頼み直す
+                // 読まない相手に積み続けない。閉じれば受け側はリクエストし直す
                 const push = (kind: number, pts: bigint, payload: Uint8Array) => {
                     if ((controller.desiredSize ?? 0) < -CAPTION_FEED_BACKLOG) return out.close();
                     controller.enqueue(appFrame(kind, pts, payload));
@@ -338,8 +338,8 @@ export function captionFeed(open: (out: CaptionOut) => () => void): ReadableStre
 }
 
 /**
- * エンコードしたもの (mkv) から抜いた字幕の軌道をデコードする。**入っているのが ARIB の字幕 (`S_ARIBSUB`) の
- * ときだけ** — 前にエンコードした録画は絵 (PGS) が入っていることがあり、それはもう読まない
+ * エンコードしたもの (mkv) から抜いた字幕のトラックをデコードする。**入っているのが ARIB の字幕 (`S_ARIBSUB`) の
+ * ときだけ** — 前にエンコードした録画は画像 (PGS) が入っていることがあり、それはもう読まない
  * (字幕なしとして扱う。元のTSが残っていれば再エンコードすると ARIB の字幕が入る)
  *
  * @param data ffmpeg に `-map 0:s:0 -c:s copy -f matroska` で抜かせたもの

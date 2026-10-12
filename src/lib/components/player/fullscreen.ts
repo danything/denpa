@@ -1,5 +1,5 @@
 /**
- * 全画面への切り替え方。**端末が持っている口で決める** (#471)。
+ * 全画面への切り替え方。**端末が持っている API で決める** (#471)。
  *
  * - `standard` … `element.requestFullscreen()`。PC・Android・iPadOS 16.4 以降
  * - `webkit` … `element.webkitRequestFullscreen()`。それより前の iPadOS
@@ -8,12 +8,12 @@
  *   あるのは `<video>` だけの `webkitEnterFullscreen` — あれは映像だけを OS の
  *   再生画面に渡すので、字幕・データ放送・操作列が置いていかれる。だから使わない
  *
- * 口があっても `fullscreenEnabled` が偽なら使えない (iframe の許可が無いなど) ので、
+ * API があっても `fullscreenEnabled` が偽なら使えない (iframe の許可が無いなど) ので、
  * そのときも次へ回す
  */
 export type FullscreenMode = 'standard' | 'webkit' | 'pseudo';
 
-/** 前置き付きの口 (古い iPadOS の Safari)。型に無いので自分で書く */
+/** ベンダープレフィックス付きの API (古い iPadOS の Safari)。型に無いので自分で書く */
 interface WebkitElement {
     requestFullscreen?: () => Promise<void>;
     webkitRequestFullscreen?: () => Promise<void> | undefined;
@@ -36,14 +36,14 @@ export function fullscreenMode(element: object, doc: object): FullscreenMode {
     return 'pseudo';
 }
 
-/** いま本物の全画面に入っている要素 (前置き付きも見る)。無ければ null */
+/** いま本物の全画面に入っている要素 (プレフィックス付きも見る)。無ければ null */
 export function nativeFullscreenElement(doc: object): Element | null {
     const d = doc as WebkitDocument;
     return d.fullscreenElement ?? d.webkitFullscreenElement ?? null;
 }
 
 /**
- * 本物の全画面に入る。**転んでも黙る** (押した勢いが切れている・許可が無いなど)。
+ * 本物の全画面に入る。**失敗しても黙る** (押した勢いが切れている・許可が無いなど)。
  * 古い webkit は約束を返さないことがある
  */
 export async function requestNative(element: object, mode: FullscreenMode): Promise<void> {

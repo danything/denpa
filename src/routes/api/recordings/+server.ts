@@ -8,10 +8,10 @@ import { recordings } from '#lib/server/schema.js';
 import { displayTitle } from '#lib/server/title.js';
 
 /**
- * **観られる録画の一覧** (画面の外のもの向けの口。docs/api.md)。新しい順。
+ * **観られる録画の一覧** (画面の外のもの向けの API。docs/api.md)。新しい順。
  *
  * **録画中のものも入れる** (`recording: true`)。画面の一覧と同じく、エンコードする前・録っている最中は
- * 元のTSを追っかけ再生で観る (`chase` の口。`GET api/recordings/<id>/chase`)。
+ * 元のTSを追っかけ再生で観る (`chase` のエンドポイント。`GET api/recordings/<id>/chase`)。
  * `cmReliable` は CM 飛ばしを観はじめに入れてよいか (画面の `skipCmAtStart` と同じ決め方。
  * ロゴでの判定に失敗した録画は無音だけで当てていて外れやすいので、false)。
  *

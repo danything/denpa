@@ -5,21 +5,21 @@
  *     fMP4 ─→ 箱を読む (ts/fmp4.ts) ┬→ 映像: WebCodecs の VideoDecoder → 2D で描く
  *                                   └→ 音声: AAC は ADTS の頭を付けて / Opus はそのまま → WASM (worker.ts)
  *
- * **<video> の再生が止まる端末のための道。** テスラの車載ブラウザは停車中でも <video> を
- * 止めるが、canvas に描くものは止めない。生の MPEG-2 (worker.ts) と同じ考えで、時計は画面が
+ * **<video> の再生が止まる端末のための経路。** テスラの車載ブラウザは停車中でも <video> を
+ * 止めるが、canvas に描くものは止めない。放送のままの MPEG-2 (worker.ts) と同じ考えで、時計は画面が
  * 鳴らしている音 (`playout.ts`)、ここは番が来たコマを出すだけ。
  *
- * MPEG-2 の道との違い:
+ * MPEG-2 の経路との違い:
  *
- * - **デコードするのはブラウザ** (VideoDecoder)。たいてい GPU の道で、デコードした絵は VideoFrame
- *   (GPU の上の絵) として出てくる。**描いたらすぐ閉じる** — 閉じずに持つと、デコーダの
- *   絵の置き場が尽きて止まる (`DECODED_MOST` 枚より先にはデコードさせない)
+ * - **デコードするのはブラウザ** (VideoDecoder)。たいてい GPU 経由で、デコードしたフレームは VideoFrame
+ *   (GPU の上のフレーム) として出てくる。**描いたらすぐ閉じる** — 閉じずに持つと、デコーダの
+ *   フレームの置き場が尽きて止まる (`DECODED_MOST` 枚より先にはデコードさせない)
  * - 描くのは 2D (`drawImage`)。インタレ解除はサーバが済ませている
  * - 時刻は MP4 の物差し (0 から数える。一周しない)。字幕・時計の知らせも同じ物差しで来る
  * - 間に合っているかは VideoDecoder の詰まりと遅れで見る (`budget.ts` の `timed: false`)
  *
  * サーバは詰まった客には媒体を捨てる (`server/live.ts` の `hand`) ので、**コマの時刻が
- * 飛んだら次の鍵のコマまで捨てる** — 参照するコマが欠けたまま渡すと、デコーダは崩れた絵を
+ * 飛んだら次のキーフレームまで捨てる** — 参照するコマが欠けたまま渡すと、デコーダは崩れたフレームを
  * 出すか転ぶ。転んだら (`error`) 開き直して鍵のコマから入り直し、続けて転ぶなら諦める。
  */
 
@@ -35,7 +35,7 @@ import { CLOCK } from '#lib/ts/pes.js';
 
 /** 番のこれだけ前からデコードする (90kHz) */
 const AHEAD = 0.3 * CLOCK;
-/** デコードできた絵と、渡したまま出てきていない絵を合わせてこれだけまで (VideoFrame は GPU の置き場を使う) */
+/** デコードできたフレームと、渡したまま出てきていないフレームを合わせてこれだけまで (VideoFrame は GPU の置き場を使う) */
 const DECODED_MOST = 6;
 /** 圧縮のまま持っておく上限 (90kHz)。止めている間に溜め込まない */
 const PENDING_MOST = 8 * CLOCK;
@@ -46,14 +46,14 @@ const FRAME = 1501;
 /**
  * 追っかけ (`follow`) で圧縮のまま持っておく上限。**時間 (90kHz) とバイト数の小さいほう** —
  * サーバは倍速で送り込んでくるので、観ている先が伸び続ける。超えたら受け取るのをやめて
- * `full` を返し、画面が手元の尽きる前に居る場所から頼み直す (エンコードする道の MSE の `BUDGET` と同じ量)
+ * `full` を返し、画面が手元の尽きる前に再生している位置からリクエストし直す (エンコードする経路の MSE の `BUDGET` と同じ量)
  */
 const FOLLOW_AHEAD_MOST = 120 * CLOCK;
 const FOLLOW_BYTES_MOST = 120 * 1024 * 1024;
 /** デコーダが転んでも開き直す回数。**これより続けて転んだら諦める** (1コマでも描ければ数え直す) */
 const ERRORS_MOST = 3;
 
-/** 音の1コマを画面へ渡す口 (WASM でデコードするのは worker.ts) */
+/** 音の1フレームを画面へ渡す関数 (WASM でデコードするのは worker.ts) */
 export interface AudioSink {
     /** 開き直す。`opus` のときは OpusHead を渡す。**開けなければ false** */
     open(codec: 'aac' | 'opus', config: Uint8Array | null): boolean;
@@ -93,7 +93,7 @@ export class Fmp4Video {
     private config: VideoDecoderConfig | null = null;
     /** 圧縮のまま待たせている映像 (デコードする順) */
     private pending: Pending[] = [];
-    /** デコードできた絵 (見せる順)。**描いたら閉じる** */
+    /** デコードできたフレーム (見せる順)。**描いたら閉じる** */
     private frames: VideoFrame[] = [];
     /** 鍵のコマを待っているか。開き直した・時刻が飛んだ・選局し直した */
     private needKey = true;
@@ -102,13 +102,13 @@ export class Fmp4Video {
     /** 渡した時刻 (µs → performance.now())。デコードするのに掛かった時間を測る */
     private readonly started = new Map<number, number>();
     private errors = 0;
-    /** 追っかけで抱えきれなくなったか。**次の init (頼み直し) まで、届いたものは捨てる** */
+    /** 追っかけで抱えきれなくなったか。**次の init (リクエストし直し) まで、届いたものは捨てる** */
     private overflowed = false;
     /** 圧縮のまま持っているバイト数 (`FOLLOW_BYTES_MOST`) */
     private pendingBytes = 0;
     private shownSinceReset = false;
     /**
-     * 飛び先 (µs。`reset` の `from`)。**これより前に出てきた絵は描かずに閉じる** — 録画のサーバは
+     * 飛び先 (µs。`reset` の `from`)。**これより前に出てきたフレームは描かずに閉じる** — 録画のサーバは
      * 飛び先の手前の鍵のコマから流してくる。最初の1枚を描いたら外す
      */
     private floor: number | null = null;
@@ -137,14 +137,14 @@ export class Fmp4Video {
         return this.decoder?.decodeQueueSize ?? 0;
     }
 
-    /** デコードできた絵があるか。**無いまま番を過ぎていれば遅れている** */
+    /** デコードできたフレームがあるか。**無いまま表示時刻を過ぎていれば遅れている** */
     get waiting(): number {
         return this.frames.length;
     }
 
     /** 箱を1つぶん (init か媒体)。サーバは箱の切れ目で送ってくる */
     feed(bytes: Uint8Array): void {
-        // init (ftyp + moov)。**来るたびに開き直す** — 選局し直し・音声や形の選び直しで中身が変わる
+        // init (ftyp + moov)。**来るたびに開き直す** — 選局し直し・音声やコーデックの選び直しで中身が変わる
         if (bytes.length >= 8 && hasBox(bytes, 'moov')) {
             this.configure(readInit(bytes));
             return;
@@ -154,7 +154,7 @@ export class Fmp4Video {
     }
 
     /**
-     * 読めたコマを渡す (時刻はそのトラックの刻み)。**fMP4 でなくても同じ口** — 端末に保存した録画の
+     * 読めたコマを渡す (時刻はそのトラックの刻み)。**fMP4 でなくても同じ入口** — 端末に保存した録画の
      * Matroska も、読んだコマをここへ渡す (`mkv.ts`)
      */
     push(samples: readonly Fmp4Sample[]): void {
@@ -189,7 +189,7 @@ export class Fmp4Video {
         }
     }
 
-    /** 映像・音声の形を受け取って開き直す (fMP4 の init。Matroska は Tracks から組む) */
+    /** 映像・音声の形式を受け取って開き直す (fMP4 の init。Matroska は Tracks から組む) */
     configure(tracks: Fmp4Track[]): void {
         this.tracks = tracks;
         const video = tracks.find((t) => t.kind === 'video') ?? null;
@@ -276,7 +276,7 @@ export class Fmp4Video {
 
     /**
      * `target` より手前でいちばん新しい鍵のコマまで飛ぶ。**デコーダも開き直す** —
-     * 飛ばしたコマを参照する絵を出させないため
+     * 飛ばしたコマを参照するフレームを出させないため
      */
     private skipTo(target: number): void {
         let found = -1;
@@ -384,7 +384,7 @@ export class Fmp4Video {
         }
 
         const now = Math.round((at * 1_000_000) / CLOCK);
-        // 次の絵がもう番を迎えているなら、手前の絵は描かずに捨てる
+        // 次のフレームがもう表示時刻を迎えているなら、手前のフレームは描かずに捨てる
         while (this.frames.length >= 2 && this.frames[1]!.timestamp <= now) {
             this.frames.shift()?.close();
             this.dropped++;
@@ -393,7 +393,7 @@ export class Fmp4Video {
         if (next !== undefined && next.timestamp <= now) this.draw(this.frames.shift() as VideoFrame);
     }
 
-    /** 1コマ描いて閉じる。**大きさは絵に合わせる** (見せる大きさ。縦横比は絵が持っている) */
+    /** 1コマ描いて閉じる。**大きさはフレームに合わせる** (見せる大きさ。縦横比はフレームが持っている) */
     private draw(frame: VideoFrame): void {
         const width = frame.displayWidth;
         const height = frame.displayHeight;
@@ -425,8 +425,8 @@ export class Fmp4Video {
     }
 
     /**
-     * 選局し直した・録画で飛んだ。**前の局のものは全部捨てる** (出ている絵は次が出るまで残る)。
-     * `from` (90kHz) を渡すと、それより前の絵は描かない (`floor`)
+     * 選局し直した・録画で飛んだ。**前の局のものは全部捨てる** (出ているフレームは次が出るまで残る)。
+     * `from` (90kHz) を渡すと、それより前のフレームは描かない (`floor`)
      */
     reset(from: number | null = null): void {
         this.floor = from === null ? null : Math.round((from * 1_000_000) / CLOCK);

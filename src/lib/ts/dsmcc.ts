@@ -7,7 +7,7 @@
  * - [logo-dsmcc.ts](logo-dsmcc.ts) … 衛星の局ロゴ (ARIB STD-B21)
  * - [bml.ts](bml.ts) … データ放送 (ARIB STD-B24 / TR-B14・TR-B15)
  *
- * ## 道のり
+ * ## 流れ
  *
  * 1. **DII** (table_id 0x3B) が「どのモジュールが何バイトで、何ブロックか」を伝える
  * 2. **DDB** (0x3C) がそのモジュールを `blockSize` ごとに割って何度も流す

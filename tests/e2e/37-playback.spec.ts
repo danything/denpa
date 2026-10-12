@@ -3,7 +3,7 @@ import type { APIRequestContext } from '@playwright/test';
 import { expect, recordOne, setRecording, test } from './helpers';
 
 /**
- * **録画をその場で流す口** (`GET /api/recordings/<id>/playback`・`/stream`。`server/playback.ts`)。
+ * **録画をその場で流す API** (`GET /api/recordings/<id>/playback`・`/stream`。`server/playback.ts`)。
  *
  * エンコードしない設定で録った録画 (元の TS だけ) を使う。偽 ffmpeg は映像を作らず、頭の塊の時刻 (tfdt)
  * だけ本物と同じ決め方で出す (`tests/fake/fmp4-out.ts`)。確かめるのは、サーバが TS の中で飛び先を
@@ -74,7 +74,7 @@ test.describe('録画をその場で流す', () => {
         expect(info.offers.some((offer) => offer.way === 'file')).toBe(false);
 
         /*
-         * 頭の塊は、頼んだ位置の 1 秒手前 (鍵フレームを含めるため) の映像から。偽の放送の映像は
+         * 頭の塊は、リクエストした位置の 1 秒手前 (キーフレームを含めるため) の映像から。偽の放送の映像は
          * 毎コマが鍵フレーム (I フレームだけ) なので、そこから 1 コマ以内
          */
         for (const from of [0, 3]) {
@@ -101,7 +101,7 @@ test.describe('録画をその場で流す', () => {
 
         /*
          * **枠が埋まっていれば断る。** 上限を 1 本にして、流しっぱなしの 1 本 (偽 ffmpeg を長引かせる) を
-         * 開いたまま、もう 1 本頼む。閉じれば枠が返る
+         * 開いたまま、もう 1 本リクエストする。閉じれば枠が返る
          */
         await saveLimit(request, '1');
         writeFileSync(stack.slowFile, '1');

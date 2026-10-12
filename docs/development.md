@@ -25,10 +25,10 @@ docker compose run --rm unit bun run check  # 型 (svelte-check)
 手元だけの上書きは `compose.override.yml` に (Compose が自動で読む。コミットしない)。
 `.env` は使いません。
 
-## README の絵
+## README の画像
 
-`docs/images/` の絵は **偽の放送で撮ります** — 局も番組もロゴも映像も字幕も作り物
-(`tests/fake/docs.ts`)。本物の放送・ロゴ・本番の画面は絵に出しません。
+`docs/images/` の画像は **偽の放送で撮ります** — 局も番組もロゴも映像も字幕も作り物
+(`tests/fake/docs.ts`)。本物の放送・ロゴ・本番の画面は画像に出しません。
 E2E と同じ一式 (denpa + 偽エージェント) を立て、ルール・予約・録画を入れてから撮り、webp にして置きます。
 
 ```sh
@@ -37,12 +37,12 @@ docker compose run --rm docs bun scripts/capture-docs.ts watch live   # 名前�
 ```
 
 手元で回せなければ Actions の **Screenshots** (`.github/workflows/screenshots.yml`) を手で走らせると、
-撮った絵が artifact に上がります。
+撮った画像が artifact に上がります。
 
 撮るイメージ (Dockerfile の `docs` 段) には、本番と同じ字が入っています — 画面の BIZ UDPゴシック
 (OFL 版) と、放送の字の Denpa Font (denpa-font のリリースの woff2)。撮る条件 (1600×900・暗いテーマ・
-ja-JP・Asia/Tokyo。動く絵も同じ広さで撮り、貼るときに 1120×630 へ縮める) は `scripts/capture-docs.ts` の頭に
-あります。見た目を変えたら撮り直してください (古い絵は README を見て入れた人を迷わせます)。
+ja-JP・Asia/Tokyo。動く画像も同じ広さで撮り、貼るときに 1120×630 へ縮める) は `scripts/capture-docs.ts` の頭に
+あります。見た目を変えたら撮り直してください (古い画像は README を見て入れた人を迷わせます)。
 
 ## テストの方針
 
@@ -67,8 +67,8 @@ ja-JP・Asia/Tokyo。動く絵も同じ広さで撮り、貼るときに 1120×6
   動かす。開発サーバを4つ立てるより軽く、本番と同じ出力を試せる
 - API へ直接投げるときは `Origin` を付ける。SvelteKit は Origin の無いフォーム形式の POST を
   別サイトからの送信として断る (3 からは Content-Type の無い POST/PUT/PATCH/DELETE も)。
-  `tests/stack.ts` が付けている。`x-forwarded-proto` は付けない — 前段の居ない平文の接続には
-  server.js が `http` を入れるので、本番の `http://<IP>:3000` と同じ道を試せる
+  `tests/stack.ts` が付けている。`x-forwarded-proto` は付けない — 前段の無い平文の接続には
+  server.js が `http` を入れるので、本番の `http://<IP>:3000` と同じ経路を試せる
 
 **1台ではこれ以上縮みません。** 中身の合計は約3分で大半は偽の放送を待つ時間、
 下限はいちばん長いファイル1本の時間です。
@@ -118,7 +118,7 @@ CI のランナー (4コア) で4つ並べると、チューナーが空くの�
 読み書きは `orm()` (`db.ts`) から。`orm().select().from(recordings).where(eq(recordings.id, id)).get()`
 のように書き、列の名前と型はそこで決まる。組み立てで書けないもの (相関サブクエリ・CASE)
 は `sql` テンプレート (`sql<型>`) で列を名指しして挟む (例: `schema.ts` の `reservationState`)。
-生の SQL の文字列に型を付けて返す口は置かない。それはキャストで、型が嘘をつく元になる。
+生の SQL の文字列に型を付けて返す関数は置かない。それはキャストで、型が嘘をつく元になる。
 
 JSON で持つ列 (ジャンル・音声の構成・ルールの対象の局など) は `schema.ts` の
 `json(名前, 読み手)` で書く。読み書きのときに変換するので、使う側は `JSON.parse` を書かない。
@@ -142,13 +142,13 @@ JSON で持つ列 (ジャンル・音声の構成・ルールの対象の局な�
 - **試験** は `!` でよい。落ちれば試験が落ちる
 
 外から来る JSON (チューナーエージェントの答え、OIDC の相手、取り込み元の DB) は
-`res.json() as X` と書かず、`src/lib/shape.ts` の読み手で形を確かめてから型にする
-(`tolerate(array(AGENT_CHANNEL), await res.json(), 'エージェントの PUT /denpa/channels')`。`tuner.ts`)。型は形から
-導く (`Infer<typeof AGENT_CHANNEL>`) ので、形と型を別々に書かない。
+`res.json() as X` と書かず、`src/lib/shape.ts` の読み手で形式を確かめてから型にする
+(`tolerate(array(AGENT_CHANNEL), await res.json(), 'エージェントの PUT /denpa/channels')`。`tuner.ts`)。型は形式から
+導く (`Infer<typeof AGENT_CHANNEL>`) ので、形式と型を別々に書かない。
 
-読み方は 2 つ。`tolerate` は形が違っても止めず、警告を 1 回出して来たものをそのまま使う
+読み方は 2 つ。`tolerate` は形式が違っても止めず、警告を 1 回出して来たものをそのまま使う
 (エージェントの答え。版がずれただけで録画が止まっては困る)。`read` は止める
-(ID トークン。違う形のまま進むと危ない)。迷ったら `tolerate`。自分のサーバから自分の画面へ
+(ID トークン。違う形式のまま進むと危ない)。迷ったら `tolerate`。自分のサーバから自分の画面へ
 渡すもの (同じリポジトリの中) はキャストのままでよい。
 
 **マイグレーションを持つ前の DB** (1.7.x まで。`CREATE TABLE IF NOT EXISTS` を起動のたびに
@@ -176,7 +176,7 @@ Intel の QSV (libvpl・libmfx-gen・intel-media-va-driver) は amd64 だけに�
 `docker buildx build --platform linux/arm64 -f agent/Dockerfile .` (amd64 の機械では
 QEMU が要り、ffmpeg や AOT はかなり遅い)。
 
-エージェントの口に当てる適合テストは `agent/conformance.test.ts` ([app.md](app.md) のテストの表)。
+エージェントの API に当てる適合テストは `agent/conformance.test.ts` ([app.md](app.md) のテストの表)。
 
 ### 外から持ってくるものは版で固定する
 

@@ -56,7 +56,7 @@ public class B25Tests
             return (byte)next;
         }
 
-        /// <summary>節をパケットに分けて流す (pointer_field は 0、余りは 0xFF で詰める)</summary>
+        /// <summary>セクションをパケットに分けて流す (pointer_field は 0、余りは 0xFF で詰める)</summary>
         public Ts Section(int pid, byte[] section)
         {
             var at = 0;
@@ -174,7 +174,7 @@ public class B25Tests
         return crc;
     }
 
-    /// <summary>1本の番組、映像と音声に番組全体の ECM が掛かっている、よくある形の頭</summary>
+    /// <summary>1本の番組、映像と音声に番組全体の ECM が掛かっている、よくある形式の頭</summary>
     private static Ts Channel() => new Ts()
         .Pat((0x0400, PmtPid))
         .Pmt(PmtPid, 0x0400, Ca(EcmPid), (VideoPid, []), (AudioPid, []));
@@ -228,7 +228,7 @@ public class B25Tests
     }
 
     /// <summary>
-    /// **カードに渡すのは節の頭 8 バイトと CRC を除いた中身。** libaribb25 と同じ切り方で、
+    /// **カードに渡すのはセクションの頭 8 バイトと CRC を除いた中身。** libaribb25 と同じ切り方で、
     /// 拠点を跨いで鍵を貰う線がこれを運んでいる。変わると古いエージェントと通じなくなる
     /// </summary>
     [Test]
@@ -241,7 +241,7 @@ public class B25Tests
         await Assert.That(Convert.ToHexString(cards.Asked[0])).IsEqualTo(Convert.ToHexString(EcmBody(3)));
     }
 
-    /// <summary>節はパケットを跨ぐし、1つのパケットに2つ入ることもある (pointer_field の手前は前の節の尻尾)</summary>
+    /// <summary>セクションはパケットを跨ぐし、1つのパケットに2つ入ることもある (pointer_field の手前は前のセクションの尻尾)</summary>
     [Test]
     public async Task パケットを跨ぐ節も_1つのパケットに並ぶ節も読む()
     {

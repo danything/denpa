@@ -39,7 +39,7 @@ export const GET: RequestHandler = ({ request, url }) => {
         'cache-control': fontCacheControl(url.searchParams.get('v'), installed),
         etag: tag,
     };
-    // 前段の proxy が弱い形 (`W/"…"`) にしたり、いくつも並べたりしても 304 にする
+    // 前段の proxy が弱い形式 (`W/"…"`) にしたり、いくつも並べたりしても 304 にする
     const asked = (request.headers.get('if-none-match') ?? '')
         .split(',')
         .map((t) => t.trim().replace(/^W\//, ''));

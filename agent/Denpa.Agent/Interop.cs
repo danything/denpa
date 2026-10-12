@@ -35,7 +35,7 @@ public static partial class Interop
     ///
     /// <para>
     /// px4-userland の <c>px4d</c> は SIGTERM で LNB を 0V に戻してから終わるので、
-    /// まずこちらで頼み、聞かなければ呼んだ側が SIGKILL にする (Px4.cs / Siano.cs)
+    /// まずこちらで止めるよう伝え、聞かなければ呼んだ側が SIGKILL にする (Px4.cs / Siano.cs)
     /// </para>
     ///
     /// <para>

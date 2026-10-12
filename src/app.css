@@ -108,11 +108,11 @@
  *
  * Pico の焦点の印は主の色を 25% に薄めた影 (`--pico-primary-focus`) だけで、
  * 暗い地では押せるものの縁とほとんど見分けが付かず、Tab で進んでも
- * いまどこに居るのかが読めなかった。線は外側に 2px 離して引くので、
+ * いまどこにいるのかが読めなかった。線は外側に 2px 離して引くので、
  * 塗ったボタンの上でも地の色と混ざらない。
  *
  * 字を打つ欄は外す。マウスで押しても `:focus-visible` になるうえ、
- * 枠の色が変わるので居場所は分かる (線まで引くと押すたびに太い枠が出る)。
+ * 枠の色が変わるのでフォーカスの位置は分かる (線まで引くと押すたびに太い枠が出る)。
  * `:where()` で詳細度を 0 にしてあるので、行や見出しのように内側へ引きたい
  * ところは各画面の <style> で `outline-offset` を書けば勝つ
  */
@@ -451,7 +451,7 @@ td {
  * 欄ごとに続いていた頃は、画面が重く、どれが肝心なのかが読めなかった。
  *
  * Pico の開け閉め (`details summary`) は幅いっぱいの段で、矢印を右端に浮かせる。
- * 文の下に添える小さな口なので、**矢印を字のすぐ後ろに寄せて、押せる幅も字のぶんだけ**にする
+ * 文の下に添える小さな開け閉めなので、**矢印を字のすぐ後ろに寄せて、押せる幅も字のぶんだけ**にする
  */
 details.more > summary {
     display: inline-flex;
@@ -537,12 +537,12 @@ a.button.secondary.outline:hover {
     --pico-border-color: var(--pico-secondary-hover);
 }
 /*
- * **いま居るところを表すリンク** (`<a class="button" aria-current="page">`、番組表の種別)。
+ * **いまいるところを表すリンク** (`<a class="button" aria-current="page">`、番組表の種別)。
  *
  * Pico は「素のリンクの aria-current」を**文字を主の明るい色にする**ことで表す。
  * `role="button"` が付いていないので、ボタンの見た目にしたリンクにもその規則が当たり、
  * 塗ってある主の色の地に、同じ系統の明るい字が乗って読めなくなる。白抜きのままにする
- * (いま居るものは塗ったほうだけ。枠だけのものに aria-current は付けない)
+ * (いま選んでいるものは塗ったほうだけ。枠だけのものに aria-current は付けない)
  */
 a.button[aria-current]:not([aria-current="false"]) {
     --pico-color: var(--pico-primary-inverse);
@@ -742,7 +742,7 @@ button[aria-busy="true"]::before {
     display: none;
 }
 button[aria-busy="true"] > * {
-    /* `currentColor` で塗っていないもの (絵・別に色を持つ印) の保険 */
+    /* `currentColor` で塗っていないもの (画像・別に色を持つ印) の保険 */
     visibility: hidden;
 }
 button[aria-busy="true"]::after {

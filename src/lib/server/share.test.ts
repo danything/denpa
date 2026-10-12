@@ -52,7 +52,7 @@ describe('期限付きの再生リンク', () => {
         expect(verifyShareToken(45, token, 0)).toBe(false);
     });
 
-    test('形が壊れていても落ちずに断る', () => {
+    test('形式が壊れていても落ちずに断る', () => {
         mintShareToken(42, 0);
         expect(verifyShareToken(42, null, 0)).toBe(false);
         expect(verifyShareToken(42, '', 0)).toBe(false);
@@ -60,7 +60,7 @@ describe('期限付きの再生リンク', () => {
         expect(verifyShareToken(42, 'x.y', 0)).toBe(false);
     });
 
-    test('効くのはファイルの口だけ', () => {
+    test('効くのはファイルのエンドポイントだけ', () => {
         // hooks から呼ぶ入口は実時刻で見るので、作りたてのものを使う
         const params = new URLSearchParams({ token: mintShareToken(46).token });
         expect(shareTokenAllows('/api/recordings/46/file', params)).toBe(true);
@@ -72,8 +72,8 @@ describe('期限付きの再生リンク', () => {
     });
 });
 
-/** リンクの形。ファイルの口に、資格と名指しをクエリで (`share/+server.ts`) */
-describe('再生リンクの形', () => {
+/** リンクの形式。ファイルのエンドポイントに、資格と名指しをクエリで (`share/+server.ts`) */
+describe('再生リンクの形式', () => {
     test('資格と名指しはクエリに', () => {
         expect(shareUrl(12, 'https://denpa.example', 'abc', 'alt')).toBe(
             'https://denpa.example/api/recordings/12/file?token=abc&source=alt',

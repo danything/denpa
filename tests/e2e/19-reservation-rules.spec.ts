@@ -5,7 +5,7 @@ import { clearRules, expect, goto, syncEpg, test } from './helpers';
  *
  * ルールが作った予約を手で取り消すと、以後ルールは作り直さない
  * (同じ番組を二度と勝手に立てないため)。気が変わったときの戻し方と、
- * ルールそのものへ辿る道をここで見る。
+ * ルールそのものへ辿る経路をここで見る。
  */
 test.describe('ルールで立った予約', () => {
     test.beforeEach(async ({ page, request }) => {

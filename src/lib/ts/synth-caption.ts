@@ -2,7 +2,7 @@
  * **放送の字幕 (ARIB STD-B24) を組み立てる** (試験用)。読む側は [b24caption.ts](b24caption.ts)。
  *
  * 出来るのは字幕の PES の中身 (データ識別 0x80 から) で、ffmpeg が `-c:s copy` で
- * Matroska に入れたコマと同じ形。TS に載せるなら `synth-av.ts` の `pes(0xbd, …)` で包む。
+ * Matroska に入れたコマと同じ形式。TS に載せるなら `synth-av.ts` の `pes(0xbd, …)` で包む。
  */
 
 import { encodeAribText } from './synth';
@@ -63,7 +63,7 @@ export function text(body: number[]): Uint8Array {
 }
 
 /**
- * 1バイト DRCS (DRCS-1 の面) の定義。`rows` は '#' を点にした絵 (白黒)
+ * 1バイト DRCS (DRCS-1 の面) の定義。`rows` は '#' を点にした図 (白黒)
  *
  * @param code 符号 (0x21〜0x7E)。呼び出すときは `ESC ( 0x20 0x41` で G0 に載せて、この符号を書く
  */
@@ -109,7 +109,7 @@ function element(id: number[], body: number[]): number[] {
 }
 
 /**
- * ffmpeg が `-c:s copy -f matroska` で書くのと同じ骨組みの Matroska (軌道1本・コマごとに塊1つ)。
+ * ffmpeg が `-c:s copy -f matroska` で書くのと同じ骨組みの Matroska (トラック1本・コマごとに塊1つ)。
  * 中身は字幕の PES の中身 (`text(...)` など) をそのまま入れる
  *
  * @param frames [時刻 (ミリ秒。65535 まで), 中身] の並び

@@ -49,7 +49,7 @@ describe('書き出しを読む', () => {
 });
 
 describe('ffmpeg に渡す出口', () => {
-    test('絵は切れ目の点を書き出してからロゴの枠を白黒で切り出し、音は主音声の無音を書き出す', () => {
+    test('映像は切れ目の点を書き出してからロゴの枠を白黒で切り出し、音は主音声の無音を書き出す', () => {
         const args = scanOutputs(
             { video: true, audio: true, logo: { filter: 'crop=10:10:0:0', size: 100, onFrame: () => {} } },
             files,
@@ -69,7 +69,7 @@ describe('ffmpeg に渡す出口', () => {
         ).toBe(true);
     });
 
-    test('音だけなら絵を復号しない', () => {
+    test('音だけなら映像をデコードしない', () => {
         const args = scanOutputs({ video: false, audio: true }, files);
         expect(args.some((a) => a.includes('scdet'))).toBe(false);
         expect(args).not.toContain('pipe:1');

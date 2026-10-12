@@ -44,7 +44,7 @@
 
     /**
      * 追っかけ再生 ([issue #16](https://github.com/danything/denpa/issues/16))。
-     * **録画中の録画を頭から観る。** 元のTSはブラウザで読めないので、器はライブと
+     * **録画中の録画を頭から観る。** 元のTSはブラウザで読めないので、プレイヤーはライブと
      * 同じ (fMP4 → WebSocket → MSE、互換モードでは canvas。`live-player.svelte.ts` の chase モード)。
      *
      * ライブとの違いは3つ — 頭から観られる・シークできる・右端が伸びる。
@@ -69,9 +69,9 @@
 
     /**
      * **エンコードが終わったら観る画面へ案内する。** 録り終えてからエンコードが終わるまでの間
-     * (CM検出・エンコード) もこの器で観られるが、エンコードが終われば普通の観る画面の
+     * (CM検出・エンコード) もこの画面で観られるが、エンコードが終われば普通の観る画面の
      * ほうがよい (CM飛ばし・チャプター・データ放送が揃い、サーバの ffmpeg も要らない)。
-     * 録画の知らせ (SSE) が来るたびに1つの口を読み、エンコードできていれば案内を出す。
+     * 録画の知らせ (SSE) が来るたびに状態の API を読み、エンコードできていれば案内を出す。
      * **勝手には移らない** — 観ている最中に画面が切り替わると位置が飛ぶ。
      * 押して移れば、途中の位置は続き再生 (keepResume) が覚えている
      */
@@ -142,7 +142,7 @@
     }
 
     /**
-     * 選んでいる速さ。**端末ごとに覚え、器を作り直しても当て直す。**
+     * 選んでいる速さ。**端末ごとに覚え、プレイヤーを作り直しても当て直す。**
      *
      * 鍵は観る画面と同じ (`SpeedMenu` の `SPEED_KEY`)。持っておくのは、追っかけのシークが
      * 読み直し (`openChase`) になることがあり、そこで**押した覚えの無いまま
@@ -156,7 +156,7 @@
         remind(SPEED_KEY, String(value));
     }
 
-    /** 器を作り直したあとに当て直す。押されたときは `setSpeed` が先に入れている */
+    /** プレイヤーを作り直したあとに当て直す。押されたときは `setSpeed` が先に入れている */
     $effect(() => {
         if (player.state === 'playing' && player.speed !== want) player.setSpeed(want);
     });
@@ -215,7 +215,7 @@
         snapshot,
         toggleFull: fullscreen.toggle,
         stepSpeed: (by) => setSpeed(stepSpeed(want, by)),
-        // **消音は player 側の印で切り替える。** 絵の要素を直に触ると、繋ぎ直しの
+        // **消音は player 側の印で切り替える。** 映像の要素を直に触ると、繋ぎ直しの
         // たびに `silenced` で上書きされて戻り、ボタンの見た目ともずれる
         toggleMute: () => (player.silenced ? player.unmute() : player.mute()),
     });
@@ -238,7 +238,7 @@
 
 <svelte:window onkeydown={keys} />
 
-<!-- **ライブ・観る画面と同じ形** (PlayerLayout)。映像が左、番組の中身が右 -->
+<!-- **ライブ・観る画面と同じレイアウト** (PlayerLayout)。映像が左、番組の中身が右 -->
 <PlayerLayout>
     <!-- 舞台の配線と映像の束はライブと共通 (PlayerStage / MediaStack) -->
     <PlayerStage {controls} {fullscreen} testid="chase" bind:element={stageEl}>
@@ -295,7 +295,7 @@
                 <!-- エンコード方式・音声と速さは、狭い枠では「ほか」(⋯) に畳む (`Extras`。観る画面と同じ) -->
                 <MoreButton {stage} testid="chase-more" />
                 <Extras>
-                <!-- エンコード方式。ライブと同じ場所・同じ見た目で、選び直すと居た場所から再エンコード -->
+                <!-- エンコード方式。ライブと同じ場所・同じ見た目で、選び直すと再生していた位置から再エンコード -->
                 <CodecMenu
                     testid="chase-codec"
                     codec={player.codec}
@@ -321,7 +321,7 @@
                     **録り終わっていたら出しません。** 「最新」は伸びていく端に
                     張り付くためのもので、録画が終われば端は動かず、ただの
                     「終わりへ飛ぶ」になります。エンコードが終わる前の追っかけでは
-                    録り終えたあともこの画面に居られる (録画済みと出る) ので、
+                    録り終えたあともこの画面にいられる (録画済みと出る) ので、
                     そのとき意味の無いボタンが残っていました
                 -->
                 {#if line !== null && !line.finished}
@@ -371,7 +371,7 @@
         </ControlBar>
 
         {#if player.state !== 'playing'}
-            <!-- 見た目の決まりはライブと共通 (`PlayerVeil`)。前の絵を貼っている間は塗り潰さない -->
+            <!-- 見た目の決まりはライブと共通 (`PlayerVeil`)。前のフレームを貼っている間は塗り潰さない -->
             <PlayerVeil
                 holding={player.holding}
                 busy={player.state !== 'error'}
@@ -391,13 +391,13 @@
         {/if}
         {/snippet}
 
-        <!-- 絵の上の知らせは舞台の列に積む (`PlayerStage` の `notes`)。いくつ出ても重ならない -->
+        <!-- 映像の上の知らせは舞台の列に積む (`PlayerStage` の `notes`)。いくつ出ても重ならない -->
         {#snippet notes()}
             {#if encoded}
                 <!--
                     エンコードが終わった。続きは観る画面で (位置は続き再生が覚えている)。
                     この先はみな観る画面の話になるので、これだけを出す。
-                    StageNote は押せない表示 (`pointer-events: none`) なので、ここだけ押せる形で置く。
+                    StageNote は押せない表示 (`pointer-events: none`) なので、ここだけ押せるように置く。
                     見た目の決まりは同じ (角丸で黒の半透明)
                 -->
                 <span class="encoded" data-testid="chase-encoded">
@@ -415,7 +415,7 @@
                     <StageNote testid="chase-ended">録画済みのところまで観ました</StageNote>
                 {/if}
                 {#if player.warning}
-                    <!-- 頼まれたとおりにできなかった断り書き (GPU でエンコードできずにソフトウェアへ降りた、など) -->
+                    <!-- リクエストどおりにできなかった断り書き (GPU でエンコードできずにソフトウェアへ降りた、など) -->
                     <StageNote testid="chase-warning">{player.warning}</StageNote>
                 {/if}
             {/if}

@@ -22,9 +22,9 @@ export function snapshotter(controls: PlayerControls) {
         },
         /**
          * いまの1コマを字幕ごと切り抜く。
-         * @param frame 写す絵を取りに行く口。**撮れると決まってから呼ぶ** (`busy` の後) — 生で
-         *   見ているときは worker に1枚頼む (`raw/engine.ts` の `grab`) ので、先に呼ぶと
-         *   弾いた押しのぶんの絵 (1080 で 8MB) が誰にも閉じられずに残る
+         * @param frame 写すフレームを取ってくる関数。**撮れると決まってから呼ぶ** (`busy` の後) — MPEG-2 で
+         *   見ているときは worker から1枚もらう (`raw/engine.ts` の `grab`) ので、先に呼ぶと
+         *   弾いた押しのぶんのフレーム (1080 で 8MB) が誰にも閉じられずに残る
          * @param caption 出している字幕の canvas。出していなければ null
          * @param title 番組名 (ファイル名の頭)
          */
@@ -43,7 +43,7 @@ export function snapshotter(controls: PlayerControls) {
                 if (notice !== null) shot = notice;
             } finally {
                 busy = false;
-                // 生で貰った絵 (1080 で 8MB) は写し終えたら手放す。GC 任せだと押すたびに溜まる
+                // MPEG-2 で貰ったフレーム (1080 で 8MB) は写し終えたら手放す。GC 任せだと押すたびに溜まる
                 if (got?.image instanceof ImageBitmap) got.image.close();
             }
         },

@@ -21,7 +21,7 @@ import { send } from '#lib/server/webhook.js';
 import type { VideoCodec } from '#lib/types.js';
 import { EVENTS } from '#lib/webhook-events.js';
 
-/** 画面に渡す形。口ごとの一言 (`summary`) と、testid に使う口の名前 (`port`) を添える */
+/** 画面に渡す形。GPU ごとの一言 (`summary`) と、testid に使う GPU の名前 (`port`) を添える */
 function forScreen(hw: HwEncode) {
     return {
         ...hw,
@@ -91,8 +91,8 @@ export const actions = {
     },
 
     /**
-     * **GPU の口ごとの割り振り。** 画面で触れるのは使えるものの印だけなので、
-     * 使えないもの・いま見えていない口は前の値をそのまま持ち越す (GPU を挿し替えた
+     * **GPU ごとの割り振り。** 画面で触れるのは使えるものの印だけなので、
+     * 使えないもの・いま見えていない GPU は前の値をそのまま持ち越す (GPU を挿し替えた
      * ときにそのまま効く)。使えるものは印のとおりに
      */
     saveHw: async ({ request }) => {

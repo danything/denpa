@@ -53,7 +53,7 @@ public class Px4TunerTests
         /// <summary>制御ソケットに来た型 (来た順)</summary>
         public List<ushort> Received { get; } = [];
 
-        /// <summary>TUNE で頼まれた LNB の電圧 (来た順)</summary>
+        /// <summary>TUNE で指定された LNB の電圧 (来た順)</summary>
         public List<byte> Lnbs { get; } = [];
 
         /// <summary>stream.sock を相手が閉じた回数</summary>
@@ -98,7 +98,7 @@ public class Px4TunerTests
         }
 
         /// <summary>
-        /// 繋いできたものを1本ずつ専用のスレッドで (Px4CardTests と同じ理由で池を使わない)。
+        /// 繋いできたものを1本ずつ専用のスレッドで (Px4CardTests と同じ理由でスレッドプールを使わない)。
         ///
         /// <para>
         /// **Accept で待たない。** Poll で 100ms ずつ待ち、来ているときだけ Accept する。

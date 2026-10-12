@@ -21,7 +21,7 @@ describe('ジャンルの引き継ぎ', () => {
         expect(parseGenres('[7,6]')).toEqual(['7', '6']);
     });
 
-    test('引ける形にならないものは落とす', () => {
+    test('引ける形式にならないものは落とす', () => {
         // 残すと画面のジャンル欄に名前の引けない値が並ぶ
         expect(parseGenres('[null,{"subGenre":1},{"genre":"7"},7]')).toEqual(['7']);
     });

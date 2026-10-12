@@ -1,6 +1,6 @@
 /**
- * PNG を組む道具。**塊の形と CRC だけ。** 中身 (パレット・白黒の絵) は使う側が決める
- * (データ放送の `bml/png.ts`、局ロゴの `logo-palette.ts`、覚えたロゴの絵の `server/logo-data.ts`)
+ * PNG を組む道具。**チャンクの組み立てと CRC だけ。** 中身 (パレット・白黒の画像) は使う側が決める
+ * (データ放送の `bml/png.ts`、局ロゴの `logo-palette.ts`、覚えたロゴの画像の `server/logo-data.ts`)
  */
 
 export const PNG_SIGNATURE = Uint8Array.of(0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a);

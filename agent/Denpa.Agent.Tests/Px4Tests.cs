@@ -8,12 +8,12 @@ namespace Denpa.Agent.Tests;
  * px4-userland の機材 (PX-Q3U4 / PX-MLT5PE / DTV02A-5TS-P …) を使うところ。
  *
  * 本物の筐体は無い。ここで確かめるのは**機材に触らない部分**だけ —
- * px4d --list-json / px4ctl list の読み方、device 文字列の形、TUNE の中身。
+ * px4d --list-json / px4ctl list の読み方、device 文字列の形式、TUNE の中身。
  * 実機で当てるのは `denpa-agent --tune px4:<筐体の番号>:2 T27` (Probe.cs)。
  */
 public class Px4Tests
 {
-    /// <summary>px4-userland 0.1.4 の <c>px4ctl list</c> を Q3U4 に当てたときの形</summary>
+    /// <summary>px4-userland 0.1.4 の <c>px4ctl list</c> を Q3U4 に当てたときの出力</summary>
     private const string Q3u4List = """
         serial=00001205000960 ready=yes usb-present-mask=0x03
         receiver=0 device=1 local=0 system=ISDB-S
@@ -96,7 +96,7 @@ public class Px4Tests
     public async Task 筐体と受信機から設定の形に組み立てる()
     {
         var found = Px4Userland.Specs(Px4Userland.ParseJson(JsonList, _ => { }));
-        // MLT5PE 2本 + Q3U4 2本 + 番号の重なる M1UR / S1UR 1本ずつ
+        // MLT5PE 2つ + Q3U4 2つ + 番号の重なる M1UR / S1UR 1つずつ
         await Assert.That(found.Count).IsEqualTo(6);
         await Assert.That(found[0].Device).IsEqualTo("px4:000000000012345:0");
         await Assert.That(found[0].Name).IsEqualTo("PX-MLT5PE-2345 #0");
@@ -120,7 +120,7 @@ public class Px4Tests
         await Assert.That(Px4Userland.Parse("px4:00001205000960:8")).IsEqualTo(("00001205000960", 8));
         await Assert.That(Px4Userland.Parse("px4:00001205000960:-1")).IsNull();
         await Assert.That(Px4Userland.Parse("px4:0000abc:0")).IsNull();
-        // 番号が重なる筐体は挿し口を足した名前 (px4d の --instance にそのまま使える字だけ)
+        // 番号が重なる筐体は USB ポートを足した名前 (px4d の --instance にそのまま使える字だけ)
         await Assert.That(Px4Userland.Parse("px4:000000000000001_1-2.3:0")).IsEqualTo(("000000000000001_1-2.3", 0));
         await Assert.That(Px4Userland.Parse("px4:000000000000001_1/2:0")).IsNull();
         await Assert.That(Px4Userland.Name("PX-M1UR", "000000000000001_1-2.3", 0)).IsEqualTo("PX-M1UR-USB 1-2.3 #0");
@@ -138,7 +138,7 @@ public class Px4Tests
             new("a", ["GR"], false, "px4:00001205000960:2"),
             new("b", ["BS", "CS"], false, "px4:00001205000960:0"),
             new("c", ["GR", "BS", "CS"], false, "px4:000000000012345:3"),
-            // 止めてある本の筐体は起こさない
+            // 止めてあるチューナーの筐体は起こさない
             new("d", ["GR"], true, "px4:00001205009999:2"),
             new("pt3", ["GR"], false, "/dev/dvb/adapter1/frontend0"),
         };
@@ -163,7 +163,7 @@ public class Px4Tests
         var payload = Px4Tuner.TuneRequest(0x0102030405060708, ChannelTable.Parse("T27")!, ChannelTable.NoStreamId, "15v");
         await Assert.That(payload.Length).IsEqualTo(30);
         // px4-userland の README の例 (T27 = 557142 kHz) と同じ数字になること。
-        // 地上波は stream_id / slot を使わず、帯域 6MHz、LNB は頼まない (15v と書いてあっても)
+        // 地上波は stream_id / slot を使わず、帯域 6MHz、LNB は指定しない (15v と書いてあっても)
         await Assert.That(Tune(payload)).IsEqualTo(((ulong)0x0102030405060708, (byte)1, 557142UL, (ushort)0xffff, (ushort)0xffff, 6_000_000u, (byte)0, 5000u));
     }
 
@@ -177,7 +177,7 @@ public class Px4Tests
         await Assert.That(tune.StreamId).IsEqualTo((ushort)16626);
         await Assert.That(tune.Slot).IsEqualTo((ushort)0xffff);
         await Assert.That(tune.Bandwidth).IsEqualTo(0u);
-        // 15V は設定に書いてある本だけ
+        // 15V は設定に書いてあるチューナーだけ
         await Assert.That(tune.Lnb).IsEqualTo((byte)15);
     }
 
@@ -189,7 +189,7 @@ public class Px4Tests
         await Assert.That(tune.StreamId).IsEqualTo((ushort)0xffff);
         await Assert.That(tune.Lnb).IsEqualTo((byte)0);
 
-        // CS は1本しか乗っていないので slot 0。11v は px4-userland には無い (0V か 15V)。頼まない
+        // CS は1本しか乗っていないので slot 0。11v は px4-userland には無い (0V か 15V)。指定しない
         var cs = Tune(Px4Tuner.TuneRequest(7, ChannelTable.Parse("CS04")!, ChannelTable.NoStreamId, "11v"));
         await Assert.That(cs.Slot).IsEqualTo((ushort)0);
         await Assert.That(cs.Lnb).IsEqualTo((byte)0);
@@ -224,7 +224,7 @@ public class Px4Tests
     }
 
     /// <summary>
-    /// px4-userland 0.1.9 の <c>px4d --list-json</c> の形 (SPEC 4.6 v0.26、px4d_list_format_tests.cpp の期待値)。
+    /// px4-userland 0.1.9 の <c>px4d --list-json</c> の形式 (SPEC 4.6 v0.26、px4d_list_format_tests.cpp の期待値)。
     /// PX-M1UR と PX-S1UR を同時に挿すと、どちらも 000000000000001 で ready の筐体が2つ並ぶ
     /// </summary>
     private const string JsonList = """
@@ -244,7 +244,7 @@ public class Px4Tests
                 ("000000000000001_1-2.3", "PX-M1UR"),
                 ("000000000000001_1-2.4", "PX-S1UR"),
             ], CollectionOrdering.Matching);
-        // 番号が一意なら挿し口は使わない。重なるものは px4d に番号と挿し口を渡す
+        // 番号が一意なら USB ポートは使わない。重なるものは px4d に番号と USB ポートを渡す
         await Assert.That(found[1].UsbPaths.Count).IsEqualTo(0);
         await Assert.That(found[2].Serial).IsEqualTo("000000000000001");
         await Assert.That(found[2].UsbPaths).IsEquivalentTo(["1-2.3"], CollectionOrdering.Matching);
@@ -259,7 +259,7 @@ public class Px4Tests
         await Assert.That(warned[0]).Contains("USB 2-1");
         await Assert.That(warned[1]).Contains("open_failed");
         await Assert.That(warned[1]).Contains("権限");
-        // 形は思っていたとおりなので、版ずれの話はしない
+        // 形式は思っていたとおりなので、版ずれの話はしない
         await Assert.That(warned.Any(w => w.Contains("版"))).IsFalse();
     }
 
@@ -273,7 +273,7 @@ public class Px4Tests
             """,
             warned.Add);
 
-        // 知らない鍵は見ない。serial_unique が無ければ一意とみなす。15V の可否が読めなければ null (頼まれたとおり頼む)
+        // 知らない鍵は見ない。serial_unique が無ければ一意とみなす。15V の可否が読めなければ null (言われたとおり指定する)
         await Assert.That(found.Count).IsEqualTo(1);
         await Assert.That(found[0].Receivers.Select(r => (r.Index, r.Lnb15v))).IsEquivalentTo(
             [(0, (bool?)null), (2, (bool?)null)], CollectionOrdering.Matching);
@@ -330,11 +330,11 @@ public class Px4Tests
         List<Px4Receiver> unknown = [new(0, true, true)];
 
         await Assert.That(Px4Tuner.Lnb(m1ur, 0, bs, "15v")).IsNull();
-        // 出せる・分からない・受信機を聞けていない、は頼まれたとおり
+        // 出せる・分からない・受信機を聞けていない、は言われたとおり
         await Assert.That(Px4Tuner.Lnb(mlt5, 0, bs, "15v")).IsEqualTo("15v");
         await Assert.That(Px4Tuner.Lnb(unknown, 0, bs, "15v")).IsEqualTo("15v");
         await Assert.That(Px4Tuner.Lnb(null, 0, bs, "15v")).IsEqualTo("15v");
-        // 地上波・15V を頼まない本は触らない
+        // 地上波・15V を指定しないチューナーは触らない
         await Assert.That(Px4Tuner.Lnb(m1ur, 0, ChannelTable.Parse("T27")!, "15v")).IsEqualTo("15v");
         await Assert.That(Px4Tuner.Lnb(m1ur, 0, bs, null)).IsNull();
     }
@@ -342,7 +342,7 @@ public class Px4Tests
     [Test]
     public async Task 注意書きは出した本だけが消す()
     {
-        // 設定を変えて開き直すとき、古い本の後始末 (Dispose) が新しい本の出した注意書きを消さない
+        // 設定を変えて開き直すとき、古いチューナーの後始末 (Dispose) が新しいチューナーの出した注意書きを消さない
         const string device = "px4:000000000099999:0";
         object old = new(), fresh = new();
         Px4Userland.SetNotice(device, fresh, "0V で選局しています");

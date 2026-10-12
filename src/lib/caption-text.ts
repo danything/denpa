@@ -1,13 +1,13 @@
 /**
  * **字幕の文字の配置** (第1版)。サーバが放送の字幕 (ARIB STD-B24) をデコードして置き場所まで
- * 決め、受け側 (ブラウザ・テレビのアプリ) はこれを**描くだけ**にする。形の取り決めは
+ * 決め、受け側 (ブラウザ・テレビのアプリ) はこれを**描くだけ**にする。形式の取り決めは
  * [api.md](../../docs/api.md#字幕の文字の配置) に書いてある (ここと同じものを、Kotlin でも読む)。
  *
- * 座標はすべて**字幕の面の単位** (`plane`。ふつう 960x540)。受け側は映像の絵の枠に
+ * 座標はすべて**字幕の面の単位** (`plane`。ふつう 960x540)。受け側は映像の枠に
  * 合わせて縦横それぞれ伸ばす。色は `#rrggbbaa`。
  */
 
-/** 形の版。**互換の無い変え方をしたら上げる** (受け側は知らない版を描かない) */
+/** 形式の版。**互換の無い変え方をしたら上げる** (受け側は知らない版を描かない) */
 export const CAPTION_TEXT_VERSION = 1;
 
 /** 縁取り (ORN) の太さ。面の単位で、字の輪郭の外側へ。libaribcaption の既定 (ffmpeg の `outline_width`) と同じ */
@@ -25,7 +25,7 @@ export interface CaptionPage {
     duration: number | null;
     /** 字の並び。描く順 */
     runs: CaptionRun[];
-    /** 置き換えられなかった外字の絵。`CaptionRun.drcs` で引く */
+    /** 置き換えられなかった外字の画像。`CaptionRun.drcs` で引く */
     drcs?: Record<string, CaptionDrcs>;
 }
 
@@ -51,7 +51,7 @@ export interface CaptionRun {
      */
     scaleX: number;
     text: string;
-    /** 置き換えられなかった外字。`text` は「〓」で、この絵を字の枠いっぱいに描く */
+    /** 置き換えられなかった外字。`text` は「〓」で、この画像を字の枠いっぱいに描く */
     drcs?: string;
     /** 字の色 */
     fg: string;
@@ -70,7 +70,7 @@ export interface CaptionRun {
     ruby?: true;
 }
 
-/** 外字の絵。`data` は base64 で、左上から1画素 `bits` ビットずつ (上の桁から) 詰めたもの */
+/** 外字の画像。`data` は base64 で、左上から1画素 `bits` ビットずつ (上の桁から) 詰めたもの */
 export interface CaptionDrcs {
     w: number;
     h: number;
@@ -79,8 +79,8 @@ export interface CaptionDrcs {
     bits: number;
     data: string;
     /**
-     * 放送の元の絵の MD5。外字の置き換え表 (`b24-tables.ts` の `DRCS_REPLACE`) に足すときに使う。
-     * `data` は送るためになめらかにした絵なので、その MD5 は表と合わない。描くのには使わない
+     * 放送の元の画像の MD5。外字の置き換え表 (`b24-tables.ts` の `DRCS_REPLACE`) に足すときに使う。
+     * `data` は送るためになめらかにした画像なので、その MD5 は表と合わない。描くのには使わない
      */
     md5?: string;
 }

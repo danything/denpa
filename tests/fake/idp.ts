@@ -1,7 +1,7 @@
 /**
  * 偽の Entra ID。
  *
- * denpa の OIDC を通しで試すためだけのもの。OIDC の口は4つしか使っていないので
+ * denpa の OIDC を通しで試すためだけのもの。OIDC のエンドポイントは4つしか使っていないので
  * (discovery / authorize / token / jwks)、そのぶんだけ本物のように振る舞う。
  * 鍵は起動のたびに作る。
  *
@@ -31,7 +31,7 @@ const b64 = (bytes: Uint8Array) =>
         .replace(/=+$/, '');
 const encode = (value: unknown) => b64(new TextEncoder().encode(JSON.stringify(value)));
 
-/** どのグループに居ることにするか。テストから差し替える */
+/** どのグループにいることにするか。テストから差し替える */
 let groups = (process.env['FAKE_IDP_GROUPS'] ?? 'admins').split(',').filter(Boolean);
 /** `groups` そのものを載せない。アプリ登録の設定漏れを再現する */
 let omitGroups = false;
@@ -53,7 +53,7 @@ Bun.serve({
     async fetch(request) {
         const url = new URL(request.url);
 
-        // テストから振る舞いを変える口。本物には無い
+        // テストから振る舞いを変えるエンドポイント。本物には無い
         if (url.pathname === '/__control/groups' && request.method === 'POST') {
             const body = (await request.json()) as {
                 groups?: string[];

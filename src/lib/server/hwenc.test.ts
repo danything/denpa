@@ -21,22 +21,22 @@ const B: HwDevice = {
     full: [],
 };
 
-describe('GPU の道の選び方', () => {
-    test('載っていない口は全部よい。同じ口の中では QSV → VA-API', () => {
+describe('GPU の方式の選び方', () => {
+    test('載っていないデバイスは全部よい。同じデバイスの中では QSV → VA-API', () => {
         expect(hwChain('av1', {}, 0, [A, B])).toEqual([
             { device: A.path, kind: 'qsv' },
             { device: A.path, kind: 'vaapi' },
         ]);
     });
 
-    test('口はジョブごとに回す。両方エンコードできる H.264 は先頭が入れ替わる', () => {
+    test('デバイスはジョブごとに回す。両方エンコードできる H.264 は先頭が入れ替わる', () => {
         const first = hwChain('h264', {}, 0, [A, B]).map((w) => w.device);
         const second = hwChain('h264', {}, 1, [A, B]).map((w) => w.device);
         expect(first).toEqual([A.path, A.path, B.path, B.path]);
         expect(second).toEqual([B.path, B.path, A.path, A.path]);
     });
 
-    test('口ごとに外せる。A は AV1 だけ、B は H.264 だけ、のような割り振り', () => {
+    test('デバイスごとに外せる。A は AV1 だけ、B は H.264 だけ、のような割り振り', () => {
         const allow = {
             [A.path]: { qsv: ['av1' as const], vaapi: [] },
             [B.path]: { qsv: ['h264' as const], vaapi: ['h264' as const] },
@@ -50,7 +50,7 @@ describe('GPU の道の選び方', () => {
         expect(hwChain('av1', { [B.path]: { qsv: ['av1'], vaapi: ['av1'] } }, 0, [B])).toEqual([]);
     });
 
-    test('口は最後の段の * で拾い、名前順', () => {
+    test('デバイスは最後の段の * で拾い、名前順', () => {
         const dir = mkdtempSync(join(tmpdir(), 'dri-'));
         for (const name of ['renderD129', 'renderD128', 'card0']) writeFileSync(join(dir, name), '');
         expect(findDevices(`${dir}/renderD*`)).toEqual([`${dir}/renderD128`, `${dir}/renderD129`]);
@@ -67,7 +67,7 @@ describe('ICQ を持たないドライバ (i965)', () => {
         expect(hwChain('h264', {}, 0, [{ ...A, cqp: ['h264'] }])[0]).toEqual({ device: A.path, kind: 'qsv' });
     });
 
-    test('CQP なら -qp で頼む。値は ICQ と同じ軸', () => {
+    test('CQP なら -qp で指定する。値は ICQ と同じ軸', () => {
         const icq = hwArgs({ device: C.path, kind: 'vaapi' }, 'h264').encoder;
         expect(icq).toEqual(['h264_vaapi', '-rc_mode', 'ICQ', '-global_quality', '24']);
         const cqp = hwArgs({ device: C.path, kind: 'vaapi', cqp: true }, 'h264').encoder;
@@ -85,13 +85,13 @@ describe('ライブを GPU でエンコードする経路', () => {
         expect(liveHw('h264', { [A.path]: { qsv: [], vaapi: [] } }, 0, [A])).toBeNull();
     });
 
-    test('復号から GPU で通せる VA-API を、同じ口の QSV より先に採る', () => {
+    test('デコードから GPU で通せる VA-API を、同じデバイスの QSV より先に採る', () => {
         expect(liveHw('h264', {}, 0, [FULL])).toEqual({ way: { device: A.path, kind: 'vaapi' }, full: true });
         // 通せないコーデックは録画と同じ順 (QSV が先) で、エンコードするところだけ
         expect(liveHw('av1', {}, 0, [FULL])).toEqual({ way: { device: A.path, kind: 'qsv' }, full: false });
     });
 
-    test('VA-API の印を外せば、復号から GPU も使わない', () => {
+    test('VA-API の印を外せば、デコードから GPU も使わない', () => {
         const allow = { [A.path]: { qsv: ['h264' as const], vaapi: [] } };
         expect(liveHw('h264', allow, 0, [FULL])).toEqual({
             way: { device: A.path, kind: 'qsv' },
@@ -114,7 +114,7 @@ describe('ライブを GPU でエンコードする経路', () => {
         );
     });
 
-    test('復号から GPU なら、絵を GPU に置いたままインタレ解除してエンコードする', () => {
+    test('デコードから GPU なら、フレームを GPU に置いたままインタレ解除してエンコードする', () => {
         const full = liveHwArgs({ way: { device: A.path, kind: 'vaapi', cqp: true }, full: true }, 'h264');
         expect(full.input.join(' ')).toBe(
             `-init_hw_device vaapi=va:${A.path} -hwaccel vaapi -hwaccel_output_format vaapi -hwaccel_device va`,

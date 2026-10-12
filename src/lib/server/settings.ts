@@ -30,7 +30,7 @@ export interface Settings {
      */
     codecs: HwCodec[];
     /**
-     * **GPU の口ごとに、GPU でエンコードしてよいコーデック** (`#lib/hw.js` の HwAllow)。使えるかは
+     * **GPU の方式ごとに、GPU でエンコードしてよいコーデック** (`#lib/hw.js` の HwAllow)。使えるかは
      * 別 (`server/hwenc.ts`) で、エンコードするのは「使える かつ 許されている」もの。使えないものの
      * 印は画面から触れないので保存しても残る (GPU を挿し替えればそのまま効く)。JSON で1つの鍵
      */
@@ -46,9 +46,9 @@ export interface Settings {
     /**
      * コマ数 (30/60) を本編映像から実測して決めるか。
      *
-     * 入り: 60p に起こして重複コマの割合を測り、同じ絵が並ぶ素材 (アニメ・
+     * オン: 60p に起こして重複コマの割合を測り、同じコマが並ぶ素材 (アニメ・
      *       フィルム) は 30コマで出す (`encoder.measureSmoothMotion`)。
-     * 切り: 測らず**全部 60コマ**で出す。時間とサイズはかさむが、動きは絶対に落ちない
+     * オフ: 測らず**全部 60コマ**で出す。時間とサイズはかさむが、動きは絶対に落ちない
      */
     fpsDetect: boolean;
     /**
@@ -73,7 +73,7 @@ export interface Settings {
     /**
      * データ放送の双方向 (通信系コンテンツ) を使うか。**既定は切。**
      *
-     * 入れると denpa のサーバが**放送局のサーバへ代理で取りに行き、送りもします**
+     * 入れると denpa のサーバが**放送局のサーバへ代理で取得し、送りもします**
      * (`server/bml-network.ts`)。取得 (GET) だけでなく、放送のアプリが組んだ
      * 応募・投票の送信 (POST = `transmitTextDataOverIP`) もそのまま中継します。
      * 切っている間は `isIPConnected` が 0 を返すので、放送のアプリは
@@ -81,7 +81,7 @@ export interface Settings {
      */
     bmlNetwork: boolean;
     /**
-     * **その場で変換する本数の上限** (`server/transcode.ts`)。録画をエンコード済みと違う形で流す
+     * **その場で変換する本数の上限** (`server/transcode.ts`)。録画をエンコード済みと違う形式で流す
      * (`/api/recordings/<id>/stream`) のと追っかけ再生を数える。null は自動 (GPU が無ければ 2、あれば 4)
      */
     transcodeLimit: number | null;
@@ -128,7 +128,7 @@ export function parseCodecs(value: string | undefined): HwCodec[] {
 }
 
 /**
- * `hwAllow` を読む。壊れていれば空 (= 全部よい)。口ごとに `{ qsv: [...], vaapi: [...] }`
+ * `hwAllow` を読む。壊れていれば空 (= 全部よい)。方式ごとに `{ qsv: [...], vaapi: [...] }`
  */
 function parseHwAllow(value: string | undefined): HwAllow {
     if (value === undefined || value === '') return {};
@@ -181,7 +181,7 @@ export function saveSettings(patch: Partial<Omit<Settings, 'encode'>>): Settings
     orm().transaction((tx) => {
         for (const [key, value] of Object.entries(patch)) {
             if (value === undefined) continue;
-            // 口ごとの GPU の設定だけ入れ子なので JSON。自動 (null) は空。ほかは文字列で足りる
+            // 方式ごとの GPU の設定だけ入れ子なので JSON。自動 (null) は空。ほかは文字列で足りる
             const text =
                 value === null
                     ? ''

@@ -2,10 +2,10 @@ import { BS_NO_LOGO } from '../fake/services';
 import { expect, syncEpg, test } from './helpers';
 
 /**
- * **外から使う口** (docs/api.md)。形を保つと約束しているので、名前と型をここで押さえる
+ * **外から使う API** (docs/api.md)。形式を保つと約束しているので、名前と型をここで押さえる
  */
-test.describe('外から使う口', () => {
-    test('局の一覧と、ライブを HTTP で流す口', async ({ request, baseURL }) => {
+test.describe('外から使う API', () => {
+    test('局の一覧と、ライブを HTTP で流す API', async ({ request, baseURL }) => {
         await syncEpg(request);
         const res = await request.get('/api/services');
         expect(res.status()).toBe(200);
@@ -40,7 +40,7 @@ test.describe('外から使う口', () => {
         expect(now.startAt).toBeLessThanOrEqual(Date.now());
         expect(now.endAt).toBeGreaterThan(Date.now());
 
-        // 生の TS はエンコードせずに流す。頭は同期バイト 0x47
+        // 元の TS はエンコードせずに流す。頭は同期バイト 0x47
         const controller = new AbortController();
         const raw = await fetch(`${baseURL}/${first.live}?codec=raw`, { signal: controller.signal });
         expect(raw.status).toBe(200);
@@ -61,7 +61,7 @@ test.describe('外から使う口', () => {
      * 録れる側 (予約が入る・2度押しても1本) は record-airing.test.ts が押さえる。ここで録らせると、
      * 同じ組の試験がチューナーを取り合う
      */
-    test('いまの番組を録る口は、番組表に無ければ 404 と理由を返す', async ({ request }) => {
+    test('いまの番組を録る API は、番組表に無ければ 404 と理由を返す', async ({ request }) => {
         await syncEpg(request);
         const json = { 'content-type': 'application/json' };
         const missing = await request.post(`/api/services/${BS_NO_LOGO.id}/record`, { headers: json });
@@ -82,7 +82,7 @@ test.describe('外から使う口', () => {
             // 放送の音声の構成 (追っかけの ?audio=<id> で選ぶ)。空にはならない
             expect(rec.audios.length).toBeGreaterThan(0);
             expect(rec.audios[0]).toMatchObject({ id: expect.any(String), stream: expect.any(Number) });
-            // 番組の中身は別の口 (テレビのアプリの詳細)
+            // 番組の中身は別の API (テレビのアプリの詳細)
             const one = await (await request.get(`/api/recordings/${rec.id}/detail`)).json();
             expect(one).toMatchObject({
                 id: rec.id,

@@ -6,18 +6,18 @@
     /**
      * エンコード方式 (コーデック) の切り替え。**ライブ・追っかけ・観る画面で同じもの。**
      *
-     * 絵の中身ではなく「その端末で出るかどうか」の話なので、音声とは別に並べる。
-     * 押すと再エンコードになるので絵が一瞬止まるが、前の絵を貼ったまま差し替わる。
+     * 映像の中身ではなく「その端末で出るかどうか」の話なので、音声とは別に並べる。
+     * 押すと再エンコードになるので映像が一瞬止まるが、前の映像を貼ったまま差し替わる。
      *
      * `onraw` を渡すと (ライブだけ) 末尾に **MPEG-2** が並ぶ。エンコードせずに放送そのままを
-     * この端末でデコードする道 (docs/stream.md §5.5)
+     * この端末でデコードする経路 (docs/stream.md §5.5)
      *
-     * `unavailable` に挙げた形は、並べるが押せない (互換モードでこの端末が描けない形。
+     * `unavailable` に挙げた形式は、並べるが押せない (互換モードでこの端末が描けない形式。
      * `live-player.svelte.ts` の `unavailable`)
      *
      * `choices` を渡すと (観る画面) その並びをそのまま出す。録画ごとに観られるものが違い、
      * 「自動」も並ぶため (`ts/playback.ts` の `codecChoices`)。`disabled` を立てたものは並べるが押せない
-     * (互換モードでこの端末が描けない形。`canvasChoices`)
+     * (互換モードでこの端末が描けない形式。`canvasChoices`)
      */
     let {
         testid,
@@ -33,10 +33,10 @@
         testid: string;
         codec?: LiveCodec;
         onselect?: (codec: LiveCodec) => void;
-        /** いま生で見ているか */
+        /** いま放送のままで見ているか */
         raw?: boolean;
         onraw?: () => void;
-        /** この端末では表示できない形 */
+        /** この端末では表示できない形式 */
         unavailable?: LiveCodec[];
         /** 並べるもの (観る画面)。渡せば LIVE_CODECS の代わりにこれ */
         choices?: { key: string; label: string; disabled?: boolean }[];
@@ -68,7 +68,7 @@
                   ...(onraw ? [{ key: MPEG2, label: 'MPEG-2', active: raw }] : []),
               ],
     );
-    /** 口に出す名前。注記は付けない */
+    /** 読み上げる名前。注記は付けない */
     const shownLabel = $derived(
         choices !== undefined
             ? (choices.find((c) => c.key === selected)?.label ?? choices[0]?.label ?? '')

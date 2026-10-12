@@ -39,11 +39,11 @@ test.describe('追っかけ再生の入口', () => {
         request,
     }) => {
         test.setTimeout(240_000);
-        // 字幕を流す口 (`feedCaption`)
+        // 字幕を流す関数 (`feedCaption`)
         await captureSockets(page);
         await syncEpg(request);
         const programId = await airingProgram(request);
-        // いまの番組を録る (ライブの録画ボタンと同じ口)
+        // いまの番組を録る (ライブの録画ボタンと同じ API)
         expect((await request.post('/live?/record', { form: { service: String(MX.id) } })).ok()).toBe(true);
         let id = '';
         try {
@@ -108,7 +108,7 @@ async function checkChase(page: Page, browser: Browser, id: string): Promise<voi
     /*
      * **押し方は観る画面と同じ** (`player/keys.ts` と `ts/watch.ts` の `tap`)。
      * エンコードする前だけ空白も画面内クリックも効かず、同じ録画なのに押し方が変わっていた。
-     * 絵は出ない (偽 ffmpeg なので) が、止めた・動かしたはボタンの名前に出る
+     * 映像は出ない (偽 ffmpeg なので) が、止めた・動かしたはボタンの名前に出る
      */
     const play = page.getByTestId('chase-play');
     await expect(play).toHaveAttribute('aria-label', '一時停止');
@@ -119,8 +119,8 @@ async function checkChase(page: Page, browser: Browser, id: string): Promise<voi
     await expect(play).toHaveAttribute('aria-label', '一時停止');
 
     /*
-     * 画面内クリックでも切り替わる。**押す口が繋がっているかだけを見る** —
-     * 偽 ffmpeg では絵が出ないので状態の幕 (`chase-status`) が絵を覆ったままで、
+     * 画面内クリックでも切り替わる。**押したときの処理が繋がっているかだけを見る** —
+     * 偽 ffmpeg では映像が出ないので状態の幕 (`chase-status`) が映像を覆ったままで、
      * 本物のマウスの当たり判定はここでは通らない。押された位置の読み分け
      * (端2回で 10秒 など) は `ts/watch.ts` の試験が見ている
      */
@@ -132,7 +132,7 @@ async function checkChase(page: Page, browser: Browser, id: string): Promise<voi
     /*
      * **番組表に無い番組でも、ジャンルと音声のラベルは出る** (観る画面の 22 と同じ)。
      * 右の中身の種を組み直していた頃は、ここだけ行が持っている写しを落としていた。
-     * 番組表から引き直す口を 404 にして作る
+     * 番組表から引き直すエンドポイントを 404 にして作る
      */
     await page.route('/api/programs/*', (route) => route.fulfill({ status: 404, body: '' }));
     // 開き直す (録っている最中なので追っかけのまま)

@@ -159,7 +159,7 @@ export async function load() {
          * 待つと画面が出ない
          *
          * 繋がらなかった理由も一緒に返す。空の一覧だけ渡すと「チューナーが
-         * 1本も無い」と区別が付かない (以前はエージェントの生死を別の行に
+         * 1台も無い」と区別が付かない (以前はエージェントの生死を別の行に
          * 出していたが、見るところが増えるだけだった)
          */
         tuners: answer
@@ -208,7 +208,7 @@ function cmLogoState(): CmLogo[] {
         .where(and(eq(services.service_type, 1), sql.raw(CURRENT_SERVICES)))
         .orderBy(sql`${services.remote_control_key} IS NULL`, services.remote_control_key, services.id)
         .all();
-    // 同じ絵を映しているサブチャンネルの枠は束ねる (実機で「TOKYO MX1」が2つ並んでいた)
+    // 同じ映像を映しているサブチャンネルの枠は束ねる (実機で「TOKYO MX1」が2つ並んでいた)
     return stations(rows).map((service) => ({
         id: service.id,
         name: service.name,
@@ -230,7 +230,7 @@ export const actions = {
         const form = await request.formData();
         const serviceId = Number(form.get('serviceId'));
         if (!Number.isFinite(serviceId)) return fail(400, { message: '局IDが不正です' });
-        // 同じ絵を映しているサブチャンネルの枠にも配ってある (`logo-data.share`)
+        // 同じ映像を映しているサブチャンネルの枠にも配ってある (`logo-data.share`)
         for (const id of [serviceId, ...siblings(serviceId)]) forgetLogoData(id);
         return { success: true, done: '覚えたロゴを消しました。次にこの局を録画したときに覚え直します' };
     },
@@ -308,7 +308,7 @@ export const actions = {
         } catch (error) {
             return fail(502, { message: String(error) });
         }
-        return { success: true, done: `チューナー ${tuners.length} 本を保存しました` };
+        return { success: true, done: `チューナー ${tuners.length} 台を保存しました` };
     },
 
     /** 定義を消して自動検出に戻す。刺さっている機材をエージェントが自分で見つける */

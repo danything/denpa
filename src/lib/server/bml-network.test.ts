@@ -4,7 +4,7 @@ import { allowed, isPublicAddress, Refused } from './bml-network';
 /*
  * **危ないのは繋ぎ先ではなく、繋ぐ範囲。**
  *
- * データ放送の双方向は、放送局のサーバへ取りに行く口。局ごとのドメイン表は
+ * データ放送の双方向は、放送局のサーバへ取りに行く API。局ごとのドメイン表は
  * 持たない (必ず古くなる) 代わりに、**denpa のサーバが内側へ繋がないこと**を
  * ここで固定する ([bml-network.ts](bml-network.ts))。
  */
@@ -43,7 +43,7 @@ describe('繋いでよい住所か', () => {
         expect(isPublicAddress('::ffff:127.0.0.1')).toBe(false);
         expect(isPublicAddress('::ffff:10.1.2.3')).toBe(false);
         expect(isPublicAddress('::ffff:1.1.1.1')).toBe(true);
-        // 16進の綴り (URL が直した後の形) も同じ
+        // 16進の綴り (URL が直した後の形式) も同じ
         expect(isPublicAddress('::ffff:7f00:1')).toBe(false); // 127.0.0.1
         expect(isPublicAddress('::ffff:a01:203')).toBe(false); // 10.1.2.3
         expect(isPublicAddress('::ffff:101:101')).toBe(true); // 1.1.1.1
@@ -66,7 +66,7 @@ describe('取りに行ってよい URL か', () => {
         expect((await allowed('https://example.com/x')).url).toBeInstanceOf(URL);
     });
 
-    test('別の仕組みへ逃がす道は塞ぐ', async () => {
+    test('別の仕組みへ逃がす経路は塞ぐ', async () => {
         expect(allowed('file:///etc/passwd')).rejects.toThrow(Refused);
         expect(allowed('ftp://example.com/x')).rejects.toThrow(Refused);
         expect(allowed('data:text/plain,x')).rejects.toThrow(Refused);

@@ -5,7 +5,7 @@
      * アイコン1つ。**中身は `icons.ts` の部品 (Lucide) をそのまま渡す。**
      *
      * 各画面が同じ `{#snippet icon}` を別々に持っていたのをまとめたもの。
-     * 読み上げはボタンの `aria-label` に任せるので、絵そのものは隠す
+     * 読み上げはボタンの `aria-label` に任せるので、アイコンそのものは隠す
      */
     let { icon: Shape, size = 'size-6' }: { icon: IconShape; size?: string } =
         $props();

@@ -172,7 +172,7 @@ describe('ロゴの大きさ', () => {
     test('64×36 を持っていたら小さいものへは戻さない', () => {
         expect(replacesLogo(0x05, 0x00)).toBe(false);
         expect(replacesLogo(0x05, 0x03)).toBe(false);
-        // 同じ種類は絵が変わったかもしれないので置き換える
+        // 同じ種類は画像が変わったかもしれないので置き換える
         expect(replacesLogo(0x05, 0x05)).toBe(true);
     });
 

@@ -3,7 +3,7 @@ import { remuxPlayer } from './remux-player';
 import type { MediaSourceClass } from './ts/media-source';
 
 /*
- * MSE を真似た最小の器。中身の代わりに「この塊は何秒から何秒か」を Float64 2つで運ぶ。
+ * MSE を真似た最小の入れ物。中身の代わりに「この塊は何秒から何秒か」を Float64 2つで運ぶ。
  * 足す・捨てるは次の刻みで終わる (本物と同じく、その間は `updating`)
  */
 type Range = [number, number];
@@ -85,7 +85,7 @@ class FakeVideo extends EventTarget {
     }
 }
 
-/** 頼まれた位置から、2秒ずつの塊を `count` 個流す。`gate` がデコードできるまで2つ目から先を止められる */
+/** リクエストされた位置から、2秒ずつの塊を `count` 個流す。`gate` がデコードできるまで2つ目から先を止められる */
 let requests: string[] = [];
 let gate: Promise<void> = Promise.resolve();
 const realFetch = globalThis.fetch;
@@ -140,7 +140,7 @@ function start(from = 100) {
 }
 
 describe('その場で流すものの受け方 (remuxPlayer)', () => {
-    test('尺を先に言い、続きの位置から頼んで、尻まで読んだら終わりを言う', async () => {
+    test('尺を先に言い、続きの位置からリクエストして、尻まで読んだら終わりを言う', async () => {
         const { video, media } = start(100);
         await settle();
         expect(media().duration).toBe(600);
@@ -150,7 +150,7 @@ describe('その場で流すものの受け方 (remuxPlayer)', () => {
         expect(media().readyState).toBe('ended');
     });
 
-    test('溜まっている所・読んでいる流れの少し先へは頼み直さない。遠くへ飛べば頼み直して前を捨てる', async () => {
+    test('溜まっている所・読んでいる流れの少し先へはリクエストし直さない。遠くへ飛べばリクエストし直して前を捨てる', async () => {
         const { video, media } = start(100);
         await settle();
         video.currentTime = 104;
@@ -177,7 +177,7 @@ describe('その場で流すものの受け方 (remuxPlayer)', () => {
         expect(media().buffer?.ranges).toEqual([[300, 306]]);
     });
 
-    test('音声を選び直すと、いまの位置から頼み直す', async () => {
+    test('音声を選び直すと、いまの位置からリクエストし直す', async () => {
         const { video, player } = start(100);
         await settle();
         video.currentTime = 103;
@@ -197,7 +197,7 @@ describe('その場で流すものの受け方 (remuxPlayer)', () => {
 });
 
 describe('混んでいて断られたとき', () => {
-    test('「サーバが混んでいます」の 503 は頼み直さずに知らせる。ほかの 5xx は頼み直す', async () => {
+    test('「サーバが混んでいます」の 503 はリクエストし直さずに知らせる。ほかの 5xx はリクエストし直す', async () => {
         let answer: Response = Response.json({ message: 'サーバが混んでいます' }, { status: 503 });
         globalThis.fetch = (async (url: string) => {
             requests.push(url);

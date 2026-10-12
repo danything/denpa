@@ -2,12 +2,12 @@ import { bootOidc, type OidcStack } from '../stack';
 import { test as base, expect } from './helpers';
 
 /**
- * OIDC でのログインと、ネットワークで素通しにする口。
+ * OIDC でのログインと、ネットワークで素通しにする仕組み。
  *
  * **普段の一式とは別に立てます。** `stack` を OIDC にしてしまうと、他の全部の
  * テストがログインを通らないと何もできなくなるため (`bootOidc`)。
  *
- * ブラウザは使いません。ログインの道は HTTP のやり取りそのものが仕様で、
+ * ブラウザは使いません。ログインの流れは HTTP のやり取りそのものが仕様で、
  * 素の `fetch` のほうが「何を送って何が返ったか」をそのまま押さえられます。
  * Playwright の APIRequestContext は資格情報を勝手に足してしまうので使えません。
  */
@@ -63,7 +63,7 @@ function client(oidc: OidcStack, { xff = OUTSIDE, host = 'denpa.test' } = {}) {
     };
 }
 
-/** 認可の口まで行って、戻ってきた callback を叩く */
+/** 認可エンドポイントまで行って、戻ってきた callback を叩く */
 async function login(get: ReturnType<typeof client>) {
     const started = await get('/login');
     const authorize = started.res.headers.get('location') ?? '';
@@ -91,7 +91,7 @@ test.describe('OIDC でのログイン', () => {
         expect(res.status).toBe(401);
     });
 
-    test('認可の口へは PKCE と state / nonce を付けて送る', async ({ oidc }) => {
+    test('認可エンドポイントへは PKCE と state / nonce を付けて送る', async ({ oidc }) => {
         const get = client(oidc);
         const { res, jar } = await get('/login');
         const url = new URL(res.headers.get('location') ?? '');
@@ -212,7 +212,7 @@ test.describe('グループかロールで絞る', () => {
 
     /*
      * アプリ登録で `groupMembershipClaims` を有効にせず、ロールも割り当てていないと
-     * こうなる。「入っていない」と同じ扱いにすると、設定漏れなのか本当に居ないのか
+     * こうなる。「入っていない」と同じ扱いにすると、設定漏れなのか本当にいないのか
      * 分からない
      */
     test('groups も roles も載っていなければ、そう分かる理由を出す', async ({ oidc }) => {
@@ -233,14 +233,14 @@ test.describe('ネットワークで素通し', () => {
     test('ネットワークの中なら、何も聞かずに通す', async ({ oidc }) => {
         const get = client(oidc, { xff: INSIDE });
         expect((await get('/')).res.status).toBe(200);
-        // ファイルの口も。ここが素通しになるのが狙い (404 = 認証は抜けて、録画が無いだけ)
+        // ファイルのエンドポイントも。ここが素通しになるのが狙い (404 = 認証は抜けて、録画が無いだけ)
         expect((await get('/api/recordings/1/file')).res.status).toBe(404);
     });
 
     test('ネットワークの外は通さない', async ({ oidc }) => {
         const get = client(oidc, { xff: OUTSIDE });
         expect((await get('/')).res.status).toBe(302);
-        // ファイルの口は控えの署名リンクかログインの控えだけ。どちらも無ければ
+        // ファイルのエンドポイントは控えの署名リンクかログインの控えだけ。どちらも無ければ
         // 403 で断る (ベーシック認証だった頃は 401 チャレンジを返していた)
         expect((await get('/api/recordings/1/file')).res.status).toBe(403);
     });
@@ -251,7 +251,7 @@ test.describe('ネットワークで素通し', () => {
         expect((await get('/')).res.status).toBe(200);
     });
 
-    test('生死確認はどこからでも通る', async ({ oidc }) => {
+    test('死活確認はどこからでも通る', async ({ oidc }) => {
         // ここを守ると Kubernetes の livenessProbe が落ち、Pod が再起動を繰り返す
         const get = client(oidc, { xff: OUTSIDE });
         const { res } = await get('/api/health', { headers: { accept: 'application/json' } });

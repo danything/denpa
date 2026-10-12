@@ -3,12 +3,12 @@ import { configured, isFilePath, isOpenPath, trusted } from './auth';
 import { config } from './config';
 
 /**
- * どの口をどう守るか。
+ * どのエンドポイントをどう守るか。
  *
- * **プレイヤーが来る口は、期限付きの署名リンクで開ける。** 相手は
+ * **プレイヤーが来るエンドポイントは、期限付きの署名リンクで開ける。** 相手は
  * ログイン画面へのリダイレクトを扱えないので、ここを OIDC にすると再生できなくなる。
  */
-describe('ファイルを取りに来る口', () => {
+describe('ファイルを取りに来るエンドポイント', () => {
     test('録画の配信', () => {
         expect(isFilePath('/api/recordings/12/file')).toBe(true);
     });
@@ -18,7 +18,7 @@ describe('ファイルを取りに来る口', () => {
         expect(isFilePath('/settings')).toBe(false);
         // 同じ録画でも、コマの切り出しは画面から呼ぶもの
         expect(isFilePath('/api/recordings/12/frame')).toBe(false);
-        // 似ているだけの道。前方一致で緩めない
+        // 似ているだけのパス。前方一致で緩めない
         expect(isFilePath('/api/recordings/12/files')).toBe(false);
         expect(isFilePath('/api/recordings/12/file/a')).toBe(false);
         expect(isFilePath('/api/recordings/12/playlist')).toBe(false);
@@ -29,7 +29,7 @@ describe('ファイルを取りに来る口', () => {
  * ログインの入口。**ここを守ると入れなくなる** (ログイン画面へ行くのに
  * ログインが要る、という輪になる)。
  */
-describe('素通しにする口', () => {
+describe('素通しにするエンドポイント', () => {
     test('ログインとログアウト', () => {
         expect(isOpenPath('/login')).toBe(true);
         expect(isOpenPath('/login/callback')).toBe(true);
@@ -38,10 +38,10 @@ describe('素通しにする口', () => {
     });
 
     /*
-     * **生死確認。** Kubernetes の livenessProbe が叩く。守ると Pod が
+     * **死活確認。** Kubernetes の livenessProbe が叩く。守ると Pod が
      * 再起動を繰り返す — 掛ける範囲を選べるのをやめたときに実際に踏んだ
      */
-    test('生死確認', () => {
+    test('死活確認', () => {
         expect(isOpenPath('/api/health')).toBe(true);
     });
 
@@ -64,10 +64,10 @@ describe('素通しにする口', () => {
 });
 
 /**
- * **入る道が1つも無ければ、全部断る** (fail-closed)。OIDC はこのテストでは
+ * **ログイン方法が1つも無ければ、全部断る** (fail-closed)。OIDC はこのテストでは
  * 設定していないので、TRUSTED_NETWORKS の有無がそのまま答えになる。
  */
-describe('入る道が設定してあるか', () => {
+describe('ログイン方法が設定してあるか', () => {
     const original = config.trustedNetworks;
     afterEach(() => {
         config.trustedNetworks = original;

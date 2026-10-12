@@ -27,7 +27,7 @@
  * | 待ち | 10秒 |
  * | 持ち物 | **何も渡さない** (cookie も認証も)。denpa の資格情報が外へ出ない |
  *
- * **全部記録に残します。** 何に繋いだか分からないまま外へ出ていく口を
+ * **全部記録に残します。** 何に繋いだか分からないまま外へ出ていく経路を
  * 作らないためで、切り分けのときにいちばん効きます。
  */
 
@@ -57,13 +57,13 @@ export class Refused extends Error {}
 
 /**
  * 断りの言葉。`Refused` ならその理由、それ以外 (繋がらない・切れた) は
- * 口ごとの言い方 (`fallback`)。3 つの口 (proxy / post / confirm) で同じ形
+ * エンドポイントごとの言い方 (`fallback`)。3 つのエンドポイント (proxy / post / confirm) で同じ形式
  */
 export function refusalMessage(failure: unknown, fallback: string): string {
     return failure instanceof Refused ? failure.message : fallback;
 }
 
-/** 双方向を切ってあるなら 403。3 つの口の入口で同じ */
+/** 双方向を切ってあるなら 403。3 つのエンドポイントの入口で同じ */
 export function requireBmlNetwork(): void {
     if (!settings().bmlNetwork) error(403, 'データ放送の双方向通信はオフになっています');
 }
@@ -193,12 +193,12 @@ export async function allowed(raw: string): Promise<{ url: URL; address: string 
      * すると、双方向を入れても「接続されていません」のまま — 実機で
      * そうなった。
      *
-     * 覗かれる道を開けることは承知の上。ただし**これは放送のアプリの
+     * 覗かれる経路を開けることは承知の上。ただし**これは放送のアプリの
      * 通信**で、denpa の資格情報も利用者の秘密も乗らない (cookie も認証も
      * 渡さない。`doRequest`)。実機のテレビが出す通信と同じもので、それ以上に
      * 危なくはならない。
      *
-     * `file:` や `data:` のような別の仕組みへ逃がす道は塞いだままにする
+     * `file:` や `data:` のような別の仕組みへ逃がす経路は塞いだままにする
      */
     if (url.protocol !== 'https:' && url.protocol !== 'http:') {
         throw new Refused(`http か https のみ使えます (${url.protocol})`);
@@ -290,7 +290,7 @@ export function fetchForBml(raw: string): Promise<Fetched> {
 /**
  * 送る (`browser.transmitTextDataOverIP`)。
  *
- * **「応募・投票」の口だと思っていたら、疎通の判定そのものだった。**
+ * **「応募・投票」の API だと思っていたら、疎通の判定そのものだった。**
  * NHK のデータ放送は `isIPConnected` に 1 と答えても信じず、ここへ一度
  * 投げてみて、返らなければ「インターネットに接続されていません」と案内
  * します (実機で確かめた。`confirmIPNetwork` は呼びに来もしない)。
@@ -329,11 +329,11 @@ async function follow(raw: string, first: 'GET' | 'POST', body: Uint8Array | und
 /**
  * 相手まで届くかを確かめる (`browser.confirmIPNetwork`)。
  *
- * 「相手まで届くか」を訊かれたときに答える口です。**NHK は呼びに来ません**
+ * 「相手まで届くか」を訊かれたときに答える API です。**NHK は呼びに来ません**
  * (実機で確かめた。あちらは `postForBml` の側で判断していた) が、
  * 訊いてくる放送はあるので用意しておきます。
  *
- * **ICMP は使いません。** 器の中から生の socket は開けない (`CAP_NET_RAW` が
+ * **ICMP は使いません。** コンテナの中から raw socket は開けない (`CAP_NET_RAW` が
  * 要る) ので、**443 番へ繋がるか**で代えます。放送局のサーバは https で
  * 待っているので、目的 (相手まで届くか) には十分です。
  *

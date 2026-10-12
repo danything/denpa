@@ -6,7 +6,7 @@ import { addFrame, emptyOrientation, findArea } from './logo-detect';
  * ロゴの在り処の選び方 (`logo-area.pickArea`)。強さは自前のロゴ判定と同じ
  * 「線の向きが毎コマ揃う割合」で測る (`logo-detect.findArea`)。
  *
- * 実物は使わず、**中身が毎コマ変わる絵に半透明の四角を重ねた**ものを作って試す。
+ * 実物は使わず、**中身が毎コマ変わる画像に半透明の四角を重ねた**ものを作って試す。
  * ロゴは**まわりより暗い**場合も混ぜてある (濃さで探していると落ちる)。
  *
  * 実素材での当たりは `docs/encode.md`「在り処の割り出し」に。
@@ -37,7 +37,7 @@ function find(frames: Frame[]): Rect | null {
 const SIN = Float32Array.from({ length: 4096 }, (_, i) => Math.sin((i / 4096) * Math.PI * 2));
 const sin = (a: number) => SIN[Math.floor((a / (Math.PI * 2)) * 4096) & 4095]!;
 
-/** その乱数列。試験のたびに同じ絵が出るように自前で回す */
+/** その乱数列。試験のたびに同じ画像が出るように自前で回す */
 function random(seed: number): () => number {
     let s = seed >>> 0;
     return () => {
@@ -47,7 +47,7 @@ function random(seed: number): () => number {
 }
 
 /**
- * 番組の絵をこしらえる。
+ * 番組の映像をこしらえる。
  *
  * @param logo 重ねる四角。`null` なら重ねない (CM のコマ)
  * @param alpha 重ねの濃さ。0.5 なら振れ幅が半分になる
@@ -58,8 +58,8 @@ function make(count: number, logo: Rect | null, alpha: number, logoValue = 255, 
     for (let n = 0; n < count; n++) {
         const data = new Uint8Array(W * H);
         /*
-         * 中身は毎コマまったく違う (場面が変わる番組のつもり)。**なだらかな絵にする** —
-         * 本物の絵は隣どうしの画素が似ている。画素ごとの乱数だと、どのコマでも
+         * 中身は毎コマまったく違う (場面が変わる番組のつもり)。**なだらかな画像にする** —
+         * 本物の映像は隣どうしの画素が似ている。画素ごとの乱数だと、どのコマでも
          * 至る所に強い縁が立ち、ロゴの縁の向きが揃うこと (`logo-detect.coherence`) が見えない
          */
         const waves = Array.from({ length: 3 }, () => ({
@@ -97,7 +97,7 @@ function paint(data: Uint8Array, rect: Rect, alpha: number, value: number, strip
     }
 }
 
-/** 作った絵に、動かない白い四角をもう1つ重ねる (窓枠やテロップのつもり)。`striped` を外すと塗りつぶし (帯の線) */
+/** 作った画像に、動かない白い四角をもう1つ重ねる (窓枠やテロップのつもり)。`striped` を外すと塗りつぶし (帯の線) */
 function overlay(frames: Frame[], rect: Rect, alpha: number, striped = true): void {
     for (const frame of frames) paint(frame.data, rect, alpha, 255, striped);
 }
@@ -186,7 +186,7 @@ describe('ロゴの在り処', () => {
      * テロップ・セットの縁は、出ていないコマでは線の向きが揃わない (`logo-detect.coherence`)。
      * ロゴは毎コマ同じ所に同じ向きの線を出す
      */
-    test('一部の場面にしか出ない動かない絵には負けない', () => {
+    test('一部の場面にしか出ない動かない図柄には負けない', () => {
         const truth = { x: 786, y: 36, width: 40, height: 16 };
         const frames = make(40, truth, 0.6);
         overlay(frames.slice(0, 24), { x: 648, y: 42, width: 30, height: 14 }, 0.6);

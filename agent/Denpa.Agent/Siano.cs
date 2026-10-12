@@ -9,7 +9,7 @@ namespace Denpa.Agent;
 /// <para>
 /// **カーネルが使っている機材には触らない。** PX-S1UD は mainline の <c>smsusb</c> +
 /// <c>smsdvb</c> で Linux DVB になり、そちらで使える (DvbTuner)。siano-userland は
-/// firmware やモジュールが無くても <c>/dev/bus/usb</c> が見えれば動く別の道だが、
+/// firmware やモジュールが無くても <c>/dev/bus/usb</c> が見えれば動く別の方式だが、
 /// <c>siano-ts</c> は **smsusb が使っていても黙って奪っていた** (作者も unbind の境目で
 /// カーネルの異常を観測している)。0.1.8 からは siano-ts 自身がカーネルの使っている機材を
 /// 断り (終了コード 4)、こちらも自動検出ではどのドライバにも繋がっていない機材だけを並べる。
@@ -54,7 +54,7 @@ public static class SianoUserland
 
     public static bool Is(string? device) => device?.StartsWith(Scheme, StringComparison.Ordinal) == true;
 
-    /// <summary><c>siano:1-2.3</c> からポートを取る。形が違えば null</summary>
+    /// <summary><c>siano:1-2.3</c> からポートを取る。形式が違えば null</summary>
     public static string? Parse(string device)
     {
         if (!Is(device)) return null;
@@ -107,7 +107,7 @@ public static class SianoUserland
     ///
     /// <para>
     /// <c>model=… usb=… bus=… address=… port=… status=ready receivers=N</c> の行のあとに、
-    /// <c>px4ctl list</c> と同じ形の受信機の行が N 行続く (<see cref="Px4Receiver.ParseList"/>)。
+    /// <c>px4ctl list</c> と同じ形式の受信機の行が N 行続く (<see cref="Px4Receiver.ParseList"/>)。
     /// 対応外の機材は <c>rejected …</c> の行で来るので、理由を <paramref name="warn"/> で残す。
     /// ポートが分からない (<c>port=-</c>) 機材は見分けられないので使わない。
     /// </para>
@@ -182,7 +182,7 @@ public static class SianoUserland
     }
 
     /// <summary>
-    /// siano-ts に渡せる機材を、設定に書いたのと同じ形で。
+    /// siano-ts に渡せる機材を、設定に書いたのと同じ形式で。
     ///
     /// <para>
     /// **ドライバに繋がっているものは挙げない。** smsusb が使っていれば
@@ -191,7 +191,7 @@ public static class SianoUserland
     /// </summary>
     public static List<TunerSpec> Detect() => Specs(Sticks());
 
-    /// <summary>機材の一覧から、設定の形に組み立てる (ドライバに繋がっているもの・受けられる方式が無いものは除く)</summary>
+    /// <summary>機材の一覧から、設定の形式に組み立てる (ドライバに繋がっているもの・受けられる方式が無いものは除く)</summary>
     public static List<TunerSpec> Specs(IEnumerable<Stick> sticks)
     {
         var found = new List<TunerSpec>();
@@ -228,12 +228,12 @@ public static class SianoUserland
 /// siano-ts は選局して同期したら stderr に <c>tuned &lt;Hz&gt;</c>、駄目なら
 /// <c>control: tune failed: …</c> を書き、どちらでも生き続ける。USB を取り直さないので、
 /// 番組表の総当たりのようにチャンネルを次々変えるときに速い。TS は選局を跨いで同じ
-/// 標準出力に流れ続けるので、読み口 (<see cref="DeviceStream"/>) も1つを使い回す
+/// 標準出力に流れ続けるので、読み出し側 (<see cref="DeviceStream"/>) も1つを使い回す
 /// (DVB と同じ)。常駐するデーモンは無く、USB を持っているのは走っている siano-ts だけ。
 /// </para>
 ///
 /// <para>
-/// **選局し直す間は、標準出力を読んで捨てる。** siano-ts は1本の輪で「TS を書く →
+/// **選局し直す間は、標準出力を読んで捨てる。** siano-ts は1本のループで「TS を書く →
 /// 標準入力を見る」を回していて、書く先の pipe が埋まると書くところで止まり、
 /// 標準入力を読みに来ない。誰も読んでいない間 (前の読み手が降りてから次の選局まで) に
 /// pipe は埋まるので、読まずに <c>tune</c> を書くと進まない。読んで捨てれば、
@@ -315,7 +315,7 @@ public sealed class SianoTuner : ITuneDevice
     /// 起こすもの。**機材は USB のポートで指す** (<c>--device 1-2.3</c>)。
     ///
     /// <para>
-    /// 選局は起こしたあとに標準入力で頼むので、ここでは周波数を渡さない。
+    /// 選局は起こしたあとに標準入力で指示するので、ここでは周波数を渡さない。
     /// PID は絞らない (全部。B25 と記録は TS 全体を要る)。
     /// </para>
     /// </summary>
@@ -329,7 +329,7 @@ public sealed class SianoTuner : ITuneDevice
         return start;
     }
 
-    /// <summary>選局を頼む1行。周波数は選局表の Hz のまま (地上波の表は Hz)</summary>
+    /// <summary>選局を指示する1行。周波数は選局表の Hz のまま (地上波の表は Hz)</summary>
     public static string TuneCommand(ChannelTable.Tuning tuning)
     {
         if (tuning.Satellite) throw new IOException($"Siano の機材は地上波だけです ({tuning.Type} は受けられません)");
@@ -386,7 +386,7 @@ public sealed class SianoTuner : ITuneDevice
     }
 
     /// <summary>
-    /// 標準入力に書く1本。頼まれた行を順に書く (0.1.8 までの Windows で要った空行の詰め物は、
+    /// 標準入力に書く1本。渡された行を順に書く (0.1.8 までの Windows で要った空行の詰め物は、
     /// 0.1.9 で直ったのでもう無い。siano-userland #13)
     /// </summary>
     private static void Feed(Child child)
@@ -447,7 +447,7 @@ public sealed class SianoTuner : ITuneDevice
             /*
              * **読み捨てが降りきるまで返さない。** 降りないまま返すと、次の読み手と
              * 同じ fd を取り合う。Read は 200ms ごとに起きて印を見るので普通は
-             * すぐ降りるが、降りなければ子ごと捨てる (Drop が読み口を止めて閉じる)
+             * すぐ降りるが、降りなければ子ごと捨てる (Drop が読み出し側を止めて閉じる)
              */
             if (!drain.Wait(TimeSpan.FromSeconds(2)))
             {
@@ -463,12 +463,12 @@ public sealed class SianoTuner : ITuneDevice
     private static string Why(TsChild child, int code) => child.Exited(code) + SianoUserland.Hint(code);
 
     /// <summary>
-    /// 答えを待つ。<c>tuned &lt;頼んだ Hz&gt;</c> なら成功 (null)、駄目なら理由。
+    /// 答えを待つ。<c>tuned &lt;指定した Hz&gt;</c> なら成功 (null)、駄目なら理由。
     ///
     /// <para>
     /// **待ちきれなかったら、その子の答えはもう信じない** (<c>Uncertain</c>)。siano-ts は
     /// まだ前の選局を続けていて、その答え (<c>tuned</c> / <c>tune failed</c>) が次の選局の
-    /// 答えに紛れ込むため。<c>tuned</c> は頼んだ周波数と突き合わせるが、<c>tune failed</c> には
+    /// 答えに紛れ込むため。<c>tuned</c> は指定した周波数と突き合わせるが、<c>tune failed</c> には
     /// 周波数が付かないので、子ごと捨てて起こし直すしかない。答えでない行 (警告など) は飛ばす
     /// </para>
     /// </summary>
@@ -503,7 +503,7 @@ public sealed class SianoTuner : ITuneDevice
     }
 
     /// <summary>
-    /// siano-ts を止める。<c>quit</c> を頼み、聞かなければ SIGTERM、それでも残れば SIGKILL。
+    /// siano-ts を止める。<c>quit</c> を送り、聞かなければ SIGTERM、それでも残れば SIGKILL。
     /// 読み手が降りきってから fd を閉じる (<see cref="ChildTs.ReaderDrain"/>)。
     ///
     /// <para>
@@ -545,7 +545,7 @@ public sealed class SianoTuner : ITuneDevice
             Interop.Terminate(process.Id);
             if (!process.WaitForExit(TimeSpan.FromSeconds(2))) process.Kill();
         }
-        // 書く1本を降ろす。子が居なくなれば pipe が閉じて、書きかけのところからも抜ける
+        // 書く1本を降ろす。子がいなくなれば pipe が閉じて、書きかけのところからも抜ける
         child.Commands.Writer.TryComplete();
         child.Feeding.Wait(TimeSpan.FromSeconds(2));
         var rest = ChildTs.ReaderDrain - stopped.Elapsed;
@@ -559,7 +559,7 @@ public sealed class SianoTuner : ITuneDevice
         }
         catch (IOException)
         {
-            // 子がもう居ないと、書き残した quit を吐き出すところで投げる
+            // 子がもういないと、書き残した quit を吐き出すところで投げる
         }
         process.Dispose();
     }

@@ -12,7 +12,7 @@ import { TS_PROBE } from './ts-probe';
 /**
  * サイドカーの置き場。`foo.mkv` に対して `foo-poster.jpg`。
  *
- * サムネ (`-poster.jpg`) は denpa の画面 (`/api/recordings/<id>/poster`) が配る絵。
+ * サムネ (`-poster.jpg`) は denpa の画面 (`/api/recordings/<id>/poster`) が配る画像。
  *
  * **字幕は置きません。** 入れ物の中に入っていて、抜くのは実測で0.1〜1秒
  * (`api/recordings/<id>/captions.json`)。
@@ -53,7 +53,7 @@ export interface ThumbnailPlace {
  * 位置決めだけだった頃は、CM明けやCMを切った繋ぎ目に当たると黒コマや
  * フェードインのコマを選ぶことがあった。`thumbnail` は候補の中で平均ヒストグラムに
  * いちばん近いコマを返すので、黒コマ (平均から遠い) は自然に外れて、
- * 少し後ろの本編の絵に落ち着く。
+ * 少し後ろの本編のコマに落ち着く。
  *
  * **`limit` があれば、そこで読むのをやめる** (入力の `-t`)。本編の区間の終わりまでにして、
  * 候補にCMのコマを混ぜない。候補が450に届かなくても、読めたぶんの中から選ぶ。
@@ -92,7 +92,7 @@ export function buildThumbnailArgs(
  * サムネをどこから取るか。**`cm` の時刻は全部、入れ物 (元のTS) の頭からの秒** (CM 検出と同じ物差し)。
  *
  * エンコードしたもの (AV1) を復号し直さず、元のTS (MPEG-2/H.264) から取る — AV1 のソフトウェア復号は
- * 数百コマでも重い。選ぶ絵はエンコードしたものから取っていた頃と同じ:
+ * 数百コマでも重い。選ぶコマはエンコードしたものから取っていた頃と同じ:
  *
  * - **CM を切った** (`kept`) … エンコードしたものの頭から `thumbnailPosition` 秒 (短ければ尺の1/3) の所。
  *   残した区間をつないで数え、元のTSの時刻に戻す
@@ -141,7 +141,7 @@ export function thumbnailPlace(
  * 頭はたいてい提供表示やCMなので少し進めた位置から取る。番組が短いときは
  * 尺の1/3の位置にずらす(指定位置が尺を超えると ffmpeg が何も出力しないため)。
  *
- * `from` を渡せば、絵はそちら (元のTS) の `place` から取る (`thumbnailPlace`)。
+ * `from` を渡せば、画像はそちら (元のTS) の `place` から取る (`thumbnailPlace`)。
  * 渡さなければ `videoPath` そのものの頭から (エンコードしない録画・取り込み)。
  * 位置ぴったりのコマではなく、そこからの代表を選ぶ (buildThumbnailArgs)。
  */

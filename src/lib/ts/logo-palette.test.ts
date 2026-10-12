@@ -3,7 +3,7 @@ import { withPalette } from './logo-palette';
 
 const SIGNATURE = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
 
-/** 署名 + IHDR + IDAT + IEND だけの PNG。放送から来るのはこの形 (PLTE が無い) */
+/** 署名 + IHDR + IDAT + IEND だけの PNG。放送から来るのはこの形式 (PLTE が無い) */
 function png(colorType: number): Uint8Array {
     const ihdr = [
         0x00,

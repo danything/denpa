@@ -70,7 +70,7 @@ export function start(): void {
     mkdirSync(config.encodedDir, { recursive: true });
 
     /*
-     * **入る道が無ければ、無いことを起動ログに出す。** 何も設定していなければ
+     * **ログインする方法が無ければ、無いことを起動ログに出す。** 何も設定していなければ
      * 全アクセスを断る作り (auth.configured) なので、閉まっていること自体は安全 —
      * ただし気付けないと「なぜか入れない」にしか見えない。
      *
@@ -177,7 +177,7 @@ export function start(): void {
     });
 
     /*
-     * 切れたログインの控えを片付ける。**入れなくなる人は居ません** — 切れたものは
+     * 切れたログインの控えを片付ける。**入れなくなる人はいません** — 切れたものは
      * 読む側 (`session.find`) が既に無視しているので、消しているのは行だけ
      */
     nowAndEvery(config.reconcileInterval, 'sessions', pruneSessions);
@@ -185,7 +185,7 @@ export function start(): void {
     nowAndEvery(config.reconcileInterval, 'device-codes', pruneCodes);
 
     /*
-     * 局ロゴ。放送波から拾うしかないので、持っていない局のぶんを少しずつ取りに行く。
+     * 局ロゴ。放送波から拾うしかないので、持っていない局のぶんを少しずつ取得する。
      * 開いている選局に相乗りするだけなので、チューナーは増えない
      *
      * 起動のたびに、印 (`has_logo`) とファイルを突き合わせ直す。置き場ごと
@@ -299,7 +299,7 @@ function installShutdownHooks(): void {
     /*
      * **もう一度、あとから引き取り直す。** adapter-node が後始末を登録するのは
      * `build/index.js` の**いちばん最後**で、こちら (`hooks.server.ts`) はその手前なので、
-     * 最初の引き取りでは外す相手がまだ居ない (外す理由は `takeOverSignals`)。
+     * 最初の引き取りでは外す相手がまだいない (外す理由は `takeOverSignals`)。
      * `setImmediate` なら index.js の残りが走り終えたあとになる。
      */
     setImmediate(() => {

@@ -1,6 +1,6 @@
 """
-撮った絵を docs/images へ置く。**止まっている絵はそのままの大きさ (1600×900) で、
-動く絵は 1120×630 に縮めて** WebP にする。動く絵は、同じ絵が続くところを 1 枚に
+撮った画像を docs/images へ置く。**静止画はそのままの大きさ (1600×900) で、
+アニメーションは 1120×630 に縮めて** WebP にする。アニメーションは、同じフレームが続くところを 1 枚に
 まとめてその間だけ長く見せる (押した瞬間だけ変わる画面は、ほとんどのコマが同じ)。
 
     python3 scripts/docs-webp.py              # 撮ってあるぶん全部
@@ -17,7 +17,7 @@ DST = Path("docs/images")
 
 want = sys.argv[1:]
 
-# 止まっている絵。縮めない (README では小さく貼るが、押すと原寸で見られる)
+# 静止画。縮めない (README では小さく貼るが、押すと原寸で見られる)
 for f in sorted(SRC.glob("*.png")):
     name = f.stem
     if want and name not in want:
@@ -39,7 +39,7 @@ for d in sorted(SRC.glob("*.frames")):
         if im.width > 1120:
             im = im.resize((1120, round(im.height * 1120 / im.width)), Image.LANCZOS)
         if frames and ImageChops.difference(frames[-1], im).getbbox() is None:
-            times[-1] += ms          # 同じ絵 → 前のコマを長く
+            times[-1] += ms          # 同じフレーム → 前のコマを長く
         else:
             frames.append(im)
             times.append(ms)

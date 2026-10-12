@@ -3,7 +3,7 @@
 #
 #   irm https://raw.githubusercontent.com/danything/denpa/main/install.ps1 | iex
 #   & ([scriptblock]::Create((irm https://raw.githubusercontent.com/danything/denpa/main/install.ps1))) -Uninstall
-#       引数を渡すときはこの形。-NoOpen (ブラウザを開かない) / -Uninstall (止めて外す。~/denpa・録画・DB は残す) /
+#       引数を渡すときはこの書き方。-NoOpen (ブラウザを開かない) / -Uninstall (止めて外す。~/denpa・録画・DB は残す) /
 #       -AgentOnly (エージェントだけ。denpa 本体は別の Linux で動かす)
 #
 # **エージェントは Windows の上でそのまま動かし** (タスク スケジューラでログオン時に起こす)、**denpa 本体は

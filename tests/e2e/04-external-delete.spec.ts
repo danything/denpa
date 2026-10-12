@@ -36,7 +36,7 @@ test.describe('外で消された録画の反映', () => {
         await row.click();
         await expect(page.getByTestId('detail-error')).toContainText('保存先から消えていました');
 
-        // 消した録画の観る画面 (410) は、理由のカードと一覧へ戻る道を出す (`+error.svelte`)
+        // 消した録画の観る画面 (410) は、理由のカードと一覧へ戻るリンクを出す (`+error.svelte`)
         await goto(page, `/watch/${recordingId}`);
         const card = page.getByTestId('error-card');
         await expect(card).toContainText('この録画は削除されています');

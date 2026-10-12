@@ -12,7 +12,7 @@ import {
     transcodes,
 } from './playback';
 
-/** 答えを表で持つブラウザ。載っていない形は読めない */
+/** 答えを表で持つブラウザ。載っていない形式は読めない */
 function browser(play: string[], mse: string[]): MediaAbility {
     return { play: (type) => play.includes(type), mse: (type) => mse.includes(type) };
 }
@@ -21,7 +21,7 @@ const H264_MP4 = 'video/mp4; codecs="avc1.640028,mp4a.40.2"';
 const H264_LIVE = 'video/mp4; codecs="avc1.640029,mp4a.40.2"';
 const AV1_MP4 = 'video/mp4; codecs="av01.0.08M.08,opus"';
 
-/** H.264 だけエンコードした録画 (サーバの `playbackPlan` が返す形) */
+/** H.264 だけエンコードした録画 (サーバの `playbackPlan` が返す形式) */
 const h264Only: PlaybackInfo = {
     duration: 1800,
     axis: 'encoded',
@@ -81,7 +81,7 @@ describe('どれで観るか (pickOffer)', () => {
         });
     });
 
-    test('選んだコーデックがあれば、それを観られる道で。AV1 の録画で H.264 を選ぶと変換', () => {
+    test('選んだコーデックがあれば、それを観られる方法で。AV1 の録画で H.264 を選ぶと変換', () => {
         expect(pickOffer(av1Only, chrome, 'h264')).toEqual({ way: 'stream', codec: 'h264', type: H264_LIVE });
         expect(transcodes(av1Only, { way: 'stream', codec: 'h264', type: H264_LIVE })).toBe(true);
         expect(transcodes(h264Only, { way: 'stream', codec: 'h264', type: H264_MP4 })).toBe(false);
@@ -107,7 +107,7 @@ describe('どれで観るか (pickOffer)', () => {
 });
 
 describe('コーデックのメニュー (codecChoices)', () => {
-    test('この端末で観られる道があるものだけ', () => {
+    test('この端末で観られる方法があるものだけ', () => {
         expect(codecChoices(av1Only, chrome)).toEqual(['h264', 'av1']);
         expect(codecChoices(av1Only, iphone)).toEqual(['h264', 'av1']);
         expect(codecChoices(tsOnly, browser([], [AV1_MP4]))).toEqual(['av1']);
@@ -127,8 +127,8 @@ describe('溜まり方 (aheadOf / covers)', () => {
         expect(aheadOf(ranges, 99.8)).toBeCloseTo(60.2);
     });
 
-    test('読んでいる流れの少し先までは待つ。外れたら頼み直す', () => {
-        // 100秒から頼んで 160秒まで来ている。10秒送りの 170秒は待てば届く
+    test('読んでいる流れの少し先までは待つ。外れたらリクエストし直す', () => {
+        // 100秒からリクエストして 160秒まで来ている。10秒送りの 170秒は待てば届く
         expect(covers(ranges, 170, 100, 15)).toBe(true);
         expect(covers(ranges, 200, 100, 15)).toBe(false);
         // 戻った先は届かない
@@ -137,7 +137,7 @@ describe('溜まり方 (aheadOf / covers)', () => {
         expect(covers(ranges, 170, null, 15)).toBe(false);
     });
 
-    test('頼んだ直後でまだ何も無くても、頼んだ位置なら待つ', () => {
+    test('リクエストした直後でまだ何も無くても、リクエストした位置なら待つ', () => {
         expect(covers([], 300, 300, 15)).toBe(true);
         expect(covers([], 400, 300, 15)).toBe(false);
     });
@@ -157,7 +157,7 @@ describe('互換モード (canvasChoices / pickCanvas)', () => {
         expect(canvasChoices(av1Only, all).map((item) => item.codec)).toEqual(['h264', 'av1']);
     });
 
-    test('自動は、エンコード済みと同じ形 (詰め替え) → 変換 (H.264 → AV1) → MPEG-2', () => {
+    test('自動は、エンコード済みと同じ形式 (詰め替え) → 変換 (H.264 → AV1) → MPEG-2', () => {
         expect(pickCanvas(withTs, all)).toBe('av1');
         expect(pickCanvas(h264Only, all)).toBe('h264');
         expect(pickCanvas(withTs, { ...all, av1: false })).toBe('h264');
@@ -165,7 +165,7 @@ describe('互換モード (canvasChoices / pickCanvas)', () => {
         expect(pickCanvas(av1Only, { h264: false, av1: false, mpeg2: true })).toBeNull();
     });
 
-    test('選んだものが描ければそれ。描けなければ自動と同じ。諦めた形は避ける', () => {
+    test('選んだものが描ければそれ。描けなければ自動と同じ。諦めた形式は避ける', () => {
         expect(pickCanvas(withTs, all, 'mpeg2')).toBe('mpeg2');
         expect(pickCanvas(withTs, all, 'h264')).toBe('h264');
         expect(pickCanvas(withTs, { ...all, h264: false }, 'h264')).toBe('av1');

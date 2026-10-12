@@ -67,7 +67,7 @@ jobs:
           echo "agent=$AGENT_TAG" >> "$GITHUB_OUTPUT"
           echo "denpa=$DENPA_TAG" >> "$GITHUB_OUTPUT"
 
-      # 貼る名前を決める。**x.y.z の形をしていないタグには版の名前を貼らない** —
+      # 貼る名前を決める。**x.y.z の形式でないタグには版の名前を貼らない** —
       # `nightly` のような名前をそのままイメージに貼ると、版だと思って固定されてしまう。
       #
       # **試し版 (prerelease) には `latest` を貼りません。** compose.prod.yml が
@@ -206,7 +206,7 @@ jobs:
         with:
           dotnet-version: '10.0.401'
 
-      # denpa-agent-1.2.3-windows-x64.zip (中身は denpa-agent.exe 1個) と .sha256 (shasum と同じ形)
+      # denpa-agent-1.2.3-windows-x64.zip (中身は denpa-agent.exe 1個) と .sha256 (shasum と同じ形式)
       - name: Build and attach to the release
         shell: bash
         env:
@@ -245,7 +245,7 @@ jobs:
           tag="${{ github.event.release.tag_name || github.event.inputs.ref }}"
           version="${tag#v}"
           if ! printf '%s' "$version" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+'; then
-            echo "x.y.z の形ではないので chart は出しません: $tag"
+            echo "x.y.z の形式ではないので chart は出しません: $tag"
             echo "skip=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi

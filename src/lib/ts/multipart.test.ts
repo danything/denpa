@@ -60,7 +60,7 @@ describe('readEntity', () => {
         expect(entity?.parts?.map((part) => str(part.body))).toEqual(['A\r\n--bb', 'C']);
     });
 
-    test('中身が空の部品も 1 つとして数える (空行の CRLF が区切りに食われる形も)', () => {
+    test('中身が空の部品も 1 つとして数える (空行の CRLF が区切りに食われる場合も)', () => {
         for (const empty of ['\r\n', '']) {
             const entity = readEntity(
                 bytes(

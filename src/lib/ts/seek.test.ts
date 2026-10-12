@@ -88,7 +88,7 @@ describe('時刻から位置を引く (seekTs)', () => {
     const head = tsHead(bytes) as number;
     const read = readerOf(bytes);
 
-    test('頼んだ時刻の手前でいちばん近い映像の PES', async () => {
+    test('指定した時刻の手前でいちばん近い映像の PES', async () => {
         for (const target of [7.3, 33, 59.99, 101.5]) {
             const mark = await seekTs(read, bytes.length, head, target);
             expect(mark).not.toBeNull();

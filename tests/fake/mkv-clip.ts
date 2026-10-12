@@ -4,7 +4,7 @@
  *
  * 偽 ffmpeg がエンコードする録画は中身が無い (0 が並んでいるだけ) ので、互換モードで描くところまで見るには
  * 本物の映像と音の入った mkv が要る。ffmpeg の Matroska と同じ並びにする — SeekHead (Cues の在りか)・
- * Info・Tracks (CodecPrivate)・Cluster (1 秒ごと、鍵のコマで区切る)・Cues。字幕の軌道は入れない。
+ * Info・Tracks (CodecPrivate)・Cluster (1 秒ごと、キーフレームで区切る)・Cues。字幕トラックは入れない。
  *
  * 大きさは全部 8 バイトで書く (先に大きさを決めずに組めて、位置の計算が楽)。Bun にも Node にも依らない
  */
@@ -76,7 +76,7 @@ interface Frame {
 }
 
 /**
- * `file` (作り置きの fMP4) を `length` 秒ぶん並べて、Matroska にする。映像は軌道 1、音は軌道 2 (名前は `audioName`)
+ * `file` (作り置きの fMP4) を `length` 秒ぶん並べて、Matroska にする。映像はトラック 1、音はトラック 2 (名前は `audioName`)
  */
 export function mkvFromClip(file: Uint8Array, length: number, audioName = '主音声'): Uint8Array {
     const clip = readClip(file);

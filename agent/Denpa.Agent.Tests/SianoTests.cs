@@ -9,7 +9,7 @@ namespace Denpa.Agent.Tests;
  * siano-userland の機材 (PX-S1UD など) を使うところ。
  *
  * 本物の機材は無い。ここで確かめるのは**機材に触らない部分**だけ —
- * siano-ts --list と sysfs の読み方 (とくに「カーネルが使っているものは渡さない」)、device 文字列の形、
+ * siano-ts --list と sysfs の読み方 (とくに「カーネルが使っているものは渡さない」)、device 文字列の形式、
  * siano-ts の起こし方。実機で当てるのは `denpa-agent --tune siano:<ポート> T27` (Probe.cs)。
  */
 public class SianoTests
@@ -34,7 +34,7 @@ public class SianoTests
         return root;
     }
 
-    /// <summary>siano-userland 0.1.7 の <c>siano-ts --list</c> の形</summary>
+    /// <summary>siano-userland 0.1.7 の <c>siano-ts --list</c> の出力</summary>
     private const string List = """
         model=PX-S1UD usb=3275:0080 bus=1 address=4 port=1-2 status=ready receivers=1
         receiver=0 device=1 local=0 system=ISDB-T
@@ -98,7 +98,7 @@ public class SianoTests
     }
 
     [Test]
-    // Linux の置き場の形 (sysfs の名前の「:」、/dev のパス) を見るもの。Windows では作れない
+    // Linux の置き場の形式 (sysfs の名前の「:」、/dev のパス) を見るもの。Windows では作れない
     [ExcludeOn(OS.Windows)]
     public async Task 使っているドライバは_sysfs_のインターフェースで見る()
     {
@@ -161,7 +161,7 @@ public class SianoTests
 
     /// <summary>
     /// 偽の siano-ts --control。起きたらまず前の選局の残りに見立てて **pipe より多く** 書き、
-    /// それから標準入力を読む (本物も「書く → 標準入力を見る」の1本の輪)。
+    /// それから標準入力を読む (本物も「書く → 標準入力を見る」の1本のループ)。
     /// <c>tune 1</c> は同期しない。<c>tune 2</c> は前の選局の答え (別の周波数の <c>tuned</c>) を
     /// 先に吐く。<c>tune 3</c> は答えない。それ以外は少し待ってから (本物の同期待ち)
     /// <c>tuned</c> を返し、次のコマンドが来るまで <c>NEW&lt;Hz&gt;</c> を書き続ける
@@ -220,7 +220,7 @@ public class SianoTests
         await Assert.That(tuner.Tuned).IsTrue();
         await Assert.That(ReadLine(tuner.Output)).IsEqualTo("NEW557142857");
 
-        // 同じ子のまま選局し直す。読み口も同じもの
+        // 同じ子のまま選局し直す。読み出し側も同じもの
         var output = tuner.Output;
         tuner.Tune(ChannelTable.Parse("T13")!, ChannelTable.NoStreamId);
         await Assert.That(tuner.Output).IsSameReferenceAs(output);
@@ -305,7 +305,7 @@ public class SianoTests
         var error = Assert.Throws<IOException>(
             () => tuner.Tune(ChannelTable.Parse("T27")! with { Frequency = 3 }, ChannelTable.NoStreamId));
         await Assert.That(error.Message).Contains("同期しませんでした");
-        // 遅れて来る答えが次の選局に紛れないよう、子はもう居ない
+        // 遅れて来る答えが次の選局に紛れないよう、子はもういない
         await Assert.That(tuner.Tuned).IsFalse();
 
         tuner.Tune(ChannelTable.Parse("T13")!, ChannelTable.NoStreamId);

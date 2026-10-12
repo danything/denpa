@@ -45,7 +45,7 @@ function flush(): void {
  * (土台は画面遷移で作り直されないので、ここが全部の遷移を見ていられる)。
  *
  * これを呼んでいないと、遷移中に持ち越した読み直し (`reload`) を流す者が
- * 居なくなる。
+ * いなくなる。
  */
 export function followNavigation(): void {
     $effect(() => {

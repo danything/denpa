@@ -13,18 +13,18 @@ const found = (id: number): YieldedRecording => ({ id, title: `録画${id}`, ser
 const noWait = () => Promise.resolve();
 
 describe('ライブが譲った録画を名指しする', () => {
-    test('使えたら、自分の読み手がいる本を覚える', () => {
+    test('使えたら、自分の読み手がいるチューナーを覚える', () => {
         const tuners = [tuner(0, 'T16', 'epg T16'), tuner(1, 'T21', 'rec 3', 'live GR/T21')];
         expect(tunerOf(tuners, 'GR', 'T21', 'live GR/T21')).toBe(1);
-        // 同じチャンネルでも読み手が違えば別 (番組表集めだけの本は自分の本ではない)
+        // 同じチャンネルでも読み手が違えば別 (番組表集めだけのチューナーは自分のものではない)
         expect(tunerOf(tuners, 'GR', 'T16', 'live GR/T16')).toBeNull();
     });
 
-    test('蹴られたら、覚えた本にいる録画が相手', () => {
+    test('蹴られたら、覚えたチューナーにいる録画が相手', () => {
         // ライブの読み手は消え、録画が別のチャンネルで入っている
         const after = [tuner(0, 'T16', 'epg T16'), tuner(1, 'T27', 'rec 42')];
         expect(recordingOn(after, 1)).toBe(42);
-        // 録画の居ない本・知らない本なら分からない
+        // 録画のいないチューナー・知らないチューナーなら分からない
         expect(recordingOn(after, 0)).toBeNull();
         expect(recordingOn(after, 7)).toBeNull();
     });
@@ -42,7 +42,7 @@ describe('ライブが譲った録画を名指しする', () => {
         expect(asked).toBe(2);
     });
 
-    test('録画以外に外された・本を覚えていないなら null (画面は頼み直すだけ)', async () => {
+    test('録画以外に外された・チューナーを覚えていないなら null (画面はリクエストし直すだけ)', async () => {
         let asked = 0;
         const list = () => {
             asked++;

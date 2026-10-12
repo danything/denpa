@@ -31,7 +31,7 @@ describe('AIT の在り処', () => {
 });
 
 describe('AIT の中身', () => {
-    test('URL は頭と道を繋いだもの', () => {
+    test('URL は頭とパスを繋いだもの', () => {
         const ait = parseAit(
             aitSection([
                 {
@@ -55,7 +55,7 @@ describe('AIT の中身', () => {
         ]);
     });
 
-    test('道が無ければ頭だけ', () => {
+    test('パスが無ければ頭だけ', () => {
         const ait = parseAit(
             aitSection([{ organisationId: 1, applicationId: 2, base: 'https://example.jp/app' }]),
         );
@@ -77,7 +77,7 @@ describe('AIT の中身', () => {
      * **URL の無いものは出さない。**
      *
      * 放送のカルーセルで運ぶアプリ (protocol_id = 1) は、Hybridcast ではなく
-     * データ放送と同じ道のもの。在ることだけ言われても、こちらには行き先が無い
+     * データ放送と同じ経路のもの。在ることだけ言われても、こちらには行き先が無い
      */
     test('行き先の無いものは出さない', () => {
         const ait = parseAit(aitSection([{ organisationId: 1, applicationId: 2 }]));

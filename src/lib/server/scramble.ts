@@ -15,7 +15,7 @@ import { config } from './config';
  * 代わりにエンコードの前に見て、掛かったままならその場で復号する。
  *
  * 復号するのはエージェント側 (`/denpa/decode`)。カードリーダーを叩くのは
- * あちらなので、カードを持っている側に頼む形にしてある。元のTSの置き場は両方のコンテナに見せてあり、
+ * あちらなので、カードを持っている側に任せるようにしてある。元のTSの置き場は両方のコンテナに見せてあり、
  * やり取りするのはパスだけ。
  */
 
@@ -81,7 +81,7 @@ const CARD_READER = object({
     error: optional(string),
 });
 
-/** エージェントの `/denpa/card` の答え。形はここで確かめる (`shape.ts`) */
+/** エージェントの `/denpa/card` の答え。形式はここで確かめる (`shape.ts`) */
 const CARD_STATUS = object({
     ok: boolean,
     /** 困っているときだけの一言。読めているときは空 */
@@ -121,7 +121,7 @@ function strings(value: unknown): string[] {
     return Array.isArray(value) ? value.filter((v): v is string => typeof v === 'string') : [];
 }
 
-/** 来たままの形。**どの鍵も無いかもしれない**として読む */
+/** 来たままの形式。**どの鍵も無いかもしれない**として読む */
 type Loose<T> = { [K in keyof T]?: unknown };
 
 function stateOf(row: Loose<Infer<typeof CARD_READER>>): CardReaderState {
@@ -131,7 +131,7 @@ function stateOf(row: Loose<Infer<typeof CARD_READER>>): CardReaderState {
 }
 
 /**
- * 画面に渡す形に揃える。**形が違っても止めない** (`tolerate`) ので、ここは来たものを
+ * 画面に渡す形式に揃える。**形式が違っても止めない** (`tolerate`) ので、ここは来たものを
  * 疑って読む。前の版のエージェントは `readers` がリーダーの名前の並びで、
  * 名前と番号は `message` に書いてある — 行は名前だけ出し、状態は「—」にする
  */
@@ -162,7 +162,7 @@ function normalize(raw: unknown): CardStatus {
     };
 }
 
-/** エージェントの答えを読む。**形が違えば1回だけ警告して、読めるだけ読む** */
+/** エージェントの答えを読む。**形式が違えば1回だけ警告して、読めるだけ読む** */
 export function readCardStatus(raw: unknown): CardStatus {
     return normalize(tolerate(CARD_STATUS, raw, 'エージェントの /denpa/card'));
 }

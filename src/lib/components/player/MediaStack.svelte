@@ -3,17 +3,17 @@
      * 映像と重ねものの束 (ライブ・追っかけ)。録画視聴は video の配線が
      * まるで違う (src 再生・続き・CM飛ばし) ので、こちらは使わない。
      *
-     * - `video` … 絵。**備え付けの操作 (`controls`) は出さない** — あれの
+     * - `video` … 映像。**備え付けの操作 (`controls`) は出さない** — あれの
      *   再生位置は「持っている範囲」を尺として描くので絶えず動く
-     * - `still` … 切り替えの間、前の絵を貼っておく canvas (`live-player` の freeze)。
+     * - `still` … 切り替えの間、前の映像を貼っておく canvas (`live-player` の freeze)。
      *   映像より上 (黒を隠す)、字幕より下 (切り替え中も字幕は見えていてほしい)
      * - `overlay` … 放送の字幕。放送の位置・背景の箱・外字のまま描くので canvas に重ねる。
      *   `object-fit` は描く係 (`CaptionPainter`) が `fill` / `contain` に切り替える
      * - 入れ物 (`box`) … データ放送が小窓へ寄せる先 (`DataBroadcast` の `placeVideo`)。
-     *   字幕も中に居るので映像と一緒に縮む
+     *   字幕も中にあるので映像と一緒に縮む
      */
     interface Props {
-        /** 前の絵を貼っているか (`live-player` の holding)。still の見せ方 */
+        /** 前の映像を貼っているか (`live-player` の holding)。still の見せ方 */
         holding: boolean;
         /** 字幕を出しているか。canvas の data-on に写す (見た目はページ側の paint) */
         captionsOn: boolean;

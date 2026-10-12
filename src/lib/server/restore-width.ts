@@ -249,7 +249,7 @@ async function walk(): Promise<RestoreResult> {
     return result;
 }
 
-/** 1本戻す。戻せたら true */
+/** 1件戻す。戻せたら true */
 async function restoreOne(
     row: StoredText & { id: number; program_id: number | null; service_id: number; ts_path: string | null },
 ): Promise<boolean> {

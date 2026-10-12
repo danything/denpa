@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { eq } from 'drizzle-orm';
 
 /**
- * 持ち主の居ない「録画中」を畳むところ。
+ * 持ち主のいない「録画中」を畳むところ。
  *
  * 録っている最中の録画はプロセスの中にしか無い (`active`) ので、**畳む間もなく殺される**と
  * DB の行だけが録画中で残る。その行は**予約の一覧に居座り、録画の一覧には出てこない**
@@ -68,7 +68,7 @@ const rowOf = (id: number) =>
         .where(eq(recordings.id, id))
         .get()!;
 
-describe('持ち主の居ない録画を畳む', () => {
+describe('持ち主のいない録画を畳む', () => {
     test('終了時刻も猶予も過ぎていれば失敗にする。終わった時刻も入る', () => {
         reset();
         recording(1, NOW - 10 * MINUTE);

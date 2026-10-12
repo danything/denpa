@@ -7,7 +7,7 @@ import { reservationStates } from '#lib/server/reservations.js';
 import { programs, services } from '#lib/server/schema.js';
 
 /**
- * **局の一覧** (画面の外のもの向けの口。docs/api.md)。並びはテレビと同じ
+ * **局の一覧** (画面の外のもの向けの API。docs/api.md)。並びはテレビと同じ
  * (種別 → リモコン番号 → サービスID)。ライブは `live` の URL をそのまま開けばよい。
  * `now` はいま放送中の番組 (番組表に無ければ null)。テレビのアプリがライブの列に出す。
  * `now.audios` はその番組で選べる音声 (画面のライブと同じ一覧。`live?audio=<id>` で選ぶ)。

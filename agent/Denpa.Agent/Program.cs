@@ -26,7 +26,7 @@ using Microsoft.AspNetCore.Http.Features;
  */
 if (OperatingSystem.IsWindows()) Console.OutputEncoding = Encoding.UTF8;
 
-// 実機で選局と復号だけ試す口。サーバは立てない (Probe.cs)
+// 実機で選局と復号だけ試す入口。サーバは立てない (Probe.cs)
 if (args.ElementAtOrDefault(0) == "--tune") return Probe.Run(args);
 if (args.ElementAtOrDefault(0) == "--decode-file") return Probe.Decode(args);
 if (args.ElementAtOrDefault(0) == "--card") return Probe.Card();
@@ -37,7 +37,7 @@ var port = int.TryParse(Environment.GetEnvironmentVariable("AGENT_PORT"), out va
 /*
  * 元のTSの置き場。**denpa と同じ変数で決める** (`RAW_DIR`、無ければ `MEDIA_DIR/raw`、どちらも無ければ
  * `/media/raw`)。掛かったまま録れたTSを後から復号する (/denpa/decode) ときに読むので、denpa と
- * 同じ実体を同じ名前で見せる。ここの外のファイルは頼まれても触らない
+ * 同じ実体を同じ名前で見せる。ここの外のファイルは求められても触らない
  */
 var recorded = Path.GetFullPath(
     Environment.GetEnvironmentVariable("RAW_DIR")
@@ -283,7 +283,7 @@ app.MapGet("/denpa/channels", (HttpContext http) => Respond.Write(http, config.L
 /*
  * スキャンの結果を預かる。**書いてくるのは denpa。**
  *
- * 総当たりの選局はこちらに頼まれるが、NIT も SDT も解析しないので「何が居たか」は
+ * 総当たりの選局はこちらに任されるが、NIT も SDT も解析しないので「何があったか」は
  * 分からない。読むのはあちらの仕事で、こちらは控えを持って配るだけ。
  */
 app.MapPut("/denpa/channels", async (HttpContext http) =>
@@ -324,9 +324,9 @@ app.MapPost("/denpa/decode", async (HttpContext http) =>
 });
 
 /*
- * 鍵を配る口。**カードを1枚だけ置いて、他の拠点にも使わせる。**
+ * 鍵を配る API。**カードを1枚だけ置いて、他の拠点にも使わせる。**
  *
- * 拠点ごとにエージェントとチューナーがある形だと、カードは1箇所にしか
+ * 拠点ごとにエージェントとチューナーがある構成だと、カードは1箇所にしか
  * ありません。カードごと持っていく代わりに、ECM を投げて鍵を貰います
  * (CardShare.cs)。重い MULTI2 は各拠点の手元に残ります。
  *
@@ -373,7 +373,7 @@ app.MapFallback((HttpContext http) =>
 
 /*
  * **px4-userland の px4d は背景で起こす。** ready までファームウェアの流し込みで
- * 数秒、駄目な筐体なら 30 秒待つので、ここで待つと HTTP の口 (= PT3 など他の
+ * 数秒、駄目な筐体なら 30 秒待つので、ここで待つと HTTP の API (= PT3 など他の
  * チューナーの提供) まで遅れる。筐体が無ければ何もしない
  */
 _ = Task.Run(PrepareDaemons);
@@ -391,7 +391,7 @@ app.Lifetime.ApplicationStopped.Register(() =>
 });
 
 Log.Write($"listening on :{port} (tuners: {config.TunersFile} / channels: {config.ChannelsFile})");
-Log.Write($"チューナー {pool.Tuners.Count} 本 / チャンネル {config.LoadChannels().Count} 件");
+Log.Write($"チューナー {pool.Tuners.Count} 台 / チャンネル {config.LoadChannels().Count} 件");
 await app.RunAsync();
 return 0;
 
@@ -455,7 +455,7 @@ internal sealed class Drain(TunerPool pool, long waitMs, IHostApplicationLifetim
 
     private void Handle(PosixSignalContext context)
     {
-        // 既定の即死を止める。畳むのはこちらから頼む
+        // 既定の即死を止める。畳むのはこちらから指示する
         context.Cancel = true;
         if (Interlocked.Exchange(ref _stopping, 1) == 1) return;
         _ = Task.Run(WaitThenStop);

@@ -14,7 +14,7 @@ describe('小窓へ字幕を重ねる', () => {
         expect(captionDrawn(null)).toBe(false);
     });
 
-    test('口の無い環境では重ねない (字幕無しの小窓のまま)', () => {
+    test('API の無い環境では重ねない (字幕無しの小窓のまま)', () => {
         expect(canCompose()).toBe(false);
         expect(compose({} as MediaStreamTrack, () => null)).toBeNull();
     });

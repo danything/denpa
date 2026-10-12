@@ -353,7 +353,7 @@ describe('細かい意味', () => {
         );
     });
 
-    test('文字列の Date は日本の時刻で読み、読めない形は NaN', async () => {
+    test('文字列の Date は日本の時刻で読み、読めない形式は NaN', async () => {
         expect(
             await evaluate(
                 'var d = new Date("2026/10/12 21:30:00"); var result = [d.getHours(), isNaN(new Date("きのう").getTime())];',

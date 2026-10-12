@@ -55,7 +55,7 @@ spec:
           env:
             - name: TZ
               value: {{ .Values.denpa.timezone | quote }}
-            # エージェントの居場所も置き場所も、既定値がそのままこの構成になっている
+            # エージェントの場所も置き場所も、既定値がそのままこの構成になっている
             # (src/lib/server/config.ts)。同じ値を書き写すと、片方だけ直したときに
             # どちらが効いているのか分からなくなる。
             # PROTOCOL_HEADER (x-forwarded-proto) は server.js が常に設定する

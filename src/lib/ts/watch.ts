@@ -27,14 +27,14 @@ export const DOUBLE_TAP = 300;
 /**
  * 左右それぞれ、幅のどれだけを端とみなすか。
  *
- * **真ん中は空けておく。** ここまで端にすると、絵の真ん中を押したつもりが
+ * **真ん中は空けておく。** ここまで端にすると、映像の真ん中を押したつもりが
  * 送りになる。3分割よりやや狭くして、中央に余白を残す
  */
 const EDGE = 0.3;
 
 export type Zone = 'left' | 'center' | 'right';
 
-/** 押されたのが左端か右端か真ん中か。`x` は絵の左端からの距離 */
+/** 押されたのが左端か右端か真ん中か。`x` は映像の左端からの距離 */
 export function zoneOf(x: number, width: number): Zone {
     if (width <= 0) return 'center';
     const ratio = x / width;
@@ -115,7 +115,7 @@ export interface Chapter {
 const REWIND_HEAD = 3;
 
 /**
- * 次のチャプターの頭。**無ければ null** (最後のチャプターに居る)。
+ * 次のチャプターの頭。**無ければ null** (最後のチャプターにいる)。
  *
  * CM はチャプターとして入っているので (`docs/encode.md`)、これが
  * **そのままCM飛ばし**になる。
@@ -130,7 +130,7 @@ export function nextChapterAt(chapters: Chapter[], at: number): number | null {
 /**
  * 前のチャプターの頭。**無ければ null**。
  *
- * 頭から `REWIND_HEAD` 秒より後ろに居るなら、**いま観ているものの頭**へ戻す。
+ * 頭から `REWIND_HEAD` 秒より後ろにいるなら、**いま観ているものの頭**へ戻す。
  */
 export function prevChapterAt(chapters: Chapter[], at: number): number | null {
     let head: number | null = null;
@@ -172,7 +172,7 @@ export function isCm(title: string): boolean {
 }
 
 /**
- * いま CM の中に居るなら、**その終わり**。居なければ null。
+ * いま CM の中にいるなら、**その終わり**。いなければ null。
  *
  * **続いている CM はまとめて跨ぐ。** 検出は CM を1本ずつの区間で返すので、
  * 1回ずつ飛ばすと 15秒ごとに何度も飛ぶことになる。
@@ -182,7 +182,7 @@ export function isCm(title: string): boolean {
 export function skipTarget(chapters: Chapter[], at: number, lead = 0): number | null {
     /*
      * **`lead` のぶん先を見ます。** 入ってから飛ぶと、気付くまでのコマが必ず
-     * 見えます (画面は飛ぶまで今の絵を出し続けるため)。**跨ぐ直前に飛べば、
+     * 見えます (画面は飛ぶまで今の映像を出し続けるため)。**跨ぐ直前に飛べば、
      * 最後に映っているのは本編の1コマ**で、CM のコマは1枚も出ません。
      * 早く飛んだぶん本編の末尾が欠けますが、境目は場面の切れ目なので
      * 1コマぶんなら分かりません

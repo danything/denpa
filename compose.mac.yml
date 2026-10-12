@@ -36,7 +36,7 @@ services:
             - denpa-data:/data
             # 元のTSの置き場は**エージェントと同じ OS のフォルダ** (エージェントの RAW_DIR)。
             # 掛かったまま録れたものを後から復号するとき、エージェントが直に読み書きする
-            # (置き場からの相対パスで頼まれる)。HOME はシェルのものなので .env は要らない
+            # (置き場からの相対パスでリクエストされる)。HOME はシェルのものなので .env は要らない
             - ${HOME}/Movies/denpa/recorded:/media/raw
             # 出来上がった録画は Finder からも見える所に
             - ${HOME}/Movies/denpa/library:/media/encoded

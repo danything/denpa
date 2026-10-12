@@ -1,5 +1,5 @@
 /**
- * **端末に保存した録画 (Matroska の Blob) を、canvas に描く器へ流す口** (互換モード。`canvas-player.ts` の `request`)。
+ * **端末に保存した録画 (Matroska の Blob) を、canvas に描くプレイヤーへ流す入口** (互換モード。`canvas-player.ts` の `request`)。
  *
  * サーバの `/stream` の代わりに、Blob を切り出して流す:
  *
@@ -28,9 +28,9 @@ const HEAD_MOST = 32 * 1024 * 1024;
 export interface MkvSource {
     /** 尺 (秒)。書いていなければ null */
     duration: number | null;
-    /** 映像の形 (`h264` / `av1`)。読めなければ null */
+    /** 映像の形式 (`h264` / `av1`)。読めなければ null */
     codec: 'h264' | 'av1' | null;
-    /** 音声の軌道 (並び順)。`request` の `audio` はこの何本目か */
+    /** 音声のトラック (並び順)。`request` の `audio` はこの何本目か */
     audios: MkvTrack[];
     /** `from` 秒から流す (`canvas-player.ts` の `request`) */
     request(from: number): Response;
@@ -40,7 +40,7 @@ async function bytes(blob: Blob, start: number, end: number): Promise<Uint8Array
     return new Uint8Array(await blob.slice(start, end).arrayBuffer());
 }
 
-/** 開く。**Matroska として読めなければ null** (互換モードで描けない。呼ぶ側がほかの道を選ぶ) */
+/** 開く。**Matroska として読めなければ null** (互換モードで描けない。呼ぶ側がほかの方式を選ぶ) */
 export async function openMkv(blob: Blob): Promise<MkvSource | null> {
     let size = HEAD_FIRST;
     let head = readMkvHead(await bytes(blob, 0, size));

@@ -21,7 +21,7 @@ export interface FakeService {
      *
      * **本物は1つの中継にしか載っていない。** 実機の BS はネットワーク4の
      * 26中継のうち `BS15_0` だけで、CS は12中継のどれにも無かった。
-     * 全部の中継に載せてしまうと、外れを見切って次へ行く道が試されない
+     * 全部の中継に載せてしまうと、外れを見切って次へ行く経路が試されない
      */
     carousel?: boolean;
     /**
@@ -107,7 +107,7 @@ const TEST_SERVICES: FakeService[] = [
 ];
 
 /**
- * **絵を撮るときは作り物の局に差し替える** (`FAKE_PROFILE=docs`。`tests/fake/docs.ts`)。
+ * **スクリーンショットを撮るときは作り物の局に差し替える** (`FAKE_PROFILE=docs`。`tests/fake/docs.ts`)。
  * 読むのは偽エージェントの側だけで、テストは下の名指し (MX など) をそのまま使う
  */
 export const SERVICES: FakeService[] = process.env['FAKE_PROFILE'] === 'docs' ? DOCS_SERVICES : TEST_SERVICES;

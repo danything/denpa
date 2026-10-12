@@ -5,9 +5,9 @@ import { join } from 'node:path';
 import { emptyOrientation, encodeModel } from '../ts/logo-detect';
 
 /**
- * 覚えたロゴ (`own-logo-<幅>x<高さ>.bin`) を絵にするところ。
+ * 覚えたロゴ (`own-logo-<幅>x<高さ>.bin`) を画像にするところ。
  *
- * 覚えているものが絵になっていないことがあり (ロゴではない縁を拾った)、それを
+ * 覚えているものが画像になっていないことがあり (ロゴではない縁を拾った)、それを
  * 確かめる手立てが無いと「なぜ当たらないのか」が分からない。
  */
 const { config } = await import('./config');

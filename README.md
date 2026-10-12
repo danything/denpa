@@ -40,7 +40,7 @@ Mirakurun や EDCB、メディアサーバは要りません。番組表から�
 
 - **チューナー** — 挿してあれば自動で見つけ、種別 (地上波 / 衛星) も見分けます
 
-  | チューナー | 口 | ホストに入れるもの |
+  | チューナー | 使う仕組み | ホストに入れるもの |
   | --- | --- | --- |
   | PT2 / PT3、PX-BCUD、PX-S1UD など | Linux DVB | ドライバ |
   | PX-Q3U4 / PX-W3U4 / PX-MLT 系など (px4-userland の対応機種) | px4-userland (同梱) | なし |
@@ -118,13 +118,13 @@ docker compose up -d
 - **ブラウザ** — ホーム画面にも置ける ([docs/player.md](docs/player.md))
 - **テレビ** (Android TV / Fire TV) — [denpa-tv](https://github.com/danything/denpa-tv)。テレビに出る QR をスマホで読めば繋がる
 - **再生リンク** — ログインできない端末向けに、24時間有効の URL を渡す ([docs/library.md](docs/library.md#テレビのアプリと再生リンク))
-- **外から使う口** — 局・録画の一覧、ライブ、音声だけ (Home Assistant やスクリプト向け。[docs/api.md](docs/api.md))
+- **外から使う API** — 局・録画の一覧、ライブ、音声だけ (Home Assistant やスクリプト向け。[docs/api.md](docs/api.md))
 
 ## もっと詳しく
 
 - [docs/install.md](docs/install.md) — **立てる** (入れ方の選択肢・1コンテナ・Helm・前段の後ろに置く)
-- [docs/screens.md](docs/screens.md) — 画面 (実機の絵)
-- [docs/architecture.md](docs/architecture.md) — **なぜこの形なのか** (決めたこと・踏んだ落とし穴)
+- [docs/screens.md](docs/screens.md) — 画面 (実機のスクリーンショット)
+- [docs/architecture.md](docs/architecture.md) — **なぜこの作りなのか** (決めたこと・踏んだ落とし穴)
 - [docs/app.md](docs/app.md) — **どこに何があるか** (ファイル・環境変数・画面・状態遷移)
 - [docs/data.md](docs/data.md) — エージェントに都度聞くもの / denpa が持つもの
 - [docs/agent.md](docs/agent.md) — チューナーを動かすところ (エージェント・取り合い・B-CAS・Mac / Windows)
@@ -135,7 +135,7 @@ docker compose up -d
 - [docs/player.md](docs/player.md) — ホーム画面に置く、LAN でも https で開く
 - [docs/offline.md](docs/offline.md) — 端末に落として電波の無いところで観る
 - [docs/auth.md](docs/auth.md) — **誰を通すか** (OIDC・信頼したネットワーク・ペアリング・期限付きのリンク・画面で動いてよいもの (CSP))
-- [docs/api.md](docs/api.md) — **外から使う口**
+- [docs/api.md](docs/api.md) — **外から使う API**
 - [docs/migrate.md](docs/migrate.md) — **EPGStation からの引き継ぎ**
 - [docs/development.md](docs/development.md) — **手を入れるとき** (開発環境・テスト)
 - [docs/licenses.md](docs/licenses.md) — 借りているもの
@@ -148,7 +148,7 @@ docker compose up -d
 
 - [@Khronos31](https://github.com/Khronos31) — px4-userland / siano-userland で選局できなかったのを、PX-Q3U4 の実機で見つけて直してくれました (#188)。ほかにも不具合を報告してくれました (#195 #376 #377)
 - [@unlimish](https://github.com/unlimish) — ライブ・追っかけ・観る画面に小窓 (PiP) を足してくれました (#431)。非力な機材で複数のライブを観るときの詰まりを実測つきで報告してくれ、ライブを GPU でエンコードできるようになりました (#417)
-- [@fetburner](https://github.com/fetburner) — ルール画面の下見でチューナーの取り合いを数えるところを、時刻順に1回なぞる形にして、全件で 20 倍ほど速くしてくれました (#662)
+- [@fetburner](https://github.com/fetburner) — ルール画面の下見でチューナーの取り合いを数えるところを、時刻順に1回なぞるやり方にして、全件で 20 倍ほど速くしてくれました (#662)
 
 **土台にしている仕事**:
 

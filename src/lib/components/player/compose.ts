@@ -1,5 +1,5 @@
 /**
- * 小窓 (PiP) へ**字幕ごと**出す絵の流れを作る (`pip.svelte.ts`)。
+ * 小窓 (PiP) へ**字幕ごと**出す映像ストリームを作る (`pip.svelte.ts`)。
  *
  * 字幕は `<video>` の上に重ねた canvas に描いている (`paint.ts`) ので、`<video>` を
  * そのまま小窓にすると字幕は付いていかない。流れてくるコマ1枚ずつに、いま画面に
@@ -10,7 +10,7 @@
  * - **字幕が出ていないコマは素通し** (描き直さない)。描いているかは canvas の印で見る
  *   (`caption-draw.ts` の `CaptionPainter` が立てる `data-drawn`)
  * - **コマが来るたびに回す** (`MediaStreamTrackProcessor`)。画面の更新 (`requestAnimationFrame`
- *   や canvas の `captureStream`) に頼ると、窓が隠れたときに絵が止まる (`raw/worker.ts` の `toPip`)
+ *   や canvas の `captureStream`) に頼ると、窓が隠れたときに映像が止まる (`raw/worker.ts` の `toPip`)
  *
  * 使えるのは `MediaStreamTrackProcessor` と `MediaStreamTrackGenerator` を持つブラウザ
  * (Chrome・Edge) だけ。無ければ字幕無しの小窓のまま。
@@ -54,7 +54,7 @@ export interface Composed {
 
 /**
  * `input` のコマに、`overlay` (字幕の canvas) を**コマいっぱいに引き伸ばして**重ねる。
- * 字幕の面は映像の絵のある枠いっぱいに敷いている (`paint.ts` の `fitRect`) ので、これで同じ所に出る。
+ * 字幕の面は映像のある枠いっぱいに敷いている (`paint.ts` の `fitRect`) ので、これで同じ所に出る。
  * 使えない端末では null
  */
 export function compose(input: MediaStreamTrack, overlay: () => HTMLCanvasElement | null): Composed | null {
@@ -93,7 +93,7 @@ export function compose(input: MediaStreamTrack, overlay: () => HTMLCanvasElemen
                 context.drawImage(caption, 0, 0, width, height);
                 composed = new VideoFrame(canvas, { timestamp: frame.timestamp });
             } catch {
-                // 重ねられなかった1枚は字幕無しで出す。捨てると小窓の絵が飛ぶ
+                // 重ねられなかった1枚は字幕無しで出す。捨てると小窓の映像が飛ぶ
                 controller.enqueue(frame);
                 return;
             }

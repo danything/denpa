@@ -59,7 +59,7 @@ import { notify } from './webhook';
  *
  * **国内アニメだけは倍にしない。** 元が毎秒24コマ前後で描かれていて、それを
  * プルダウンして60フィールドに乗せているだけなので、フィールドごとにコマを
- * 起こしても同じ絵が並ぶだけになる。滑らかさは1つも増えず、時間とサイズだけ倍になる。
+ * 起こしても同じ画像が並ぶだけになる。滑らかさは1つも増えず、時間とサイズだけ倍になる。
  */
 export function deinterlace(smooth: boolean): string {
     return smooth ? 'bwdif' : 'bwdif=mode=send_frame';
@@ -84,7 +84,7 @@ export function parseOutFrames(stderr: string): number {
 
 /**
  * 生存率の中央値から 60コマにするか決める。**迷ったら 60コマ。**
- * 本物の 60i を 30コマに落とすと動きが崩れるが、逆は無駄が出るだけで絵は変わらない。
+ * 本物の 60i を 30コマに落とすと動きが崩れるが、逆は無駄が出るだけで映像は変わらない。
  */
 export function pickSmooth(ratios: number[], threshold = config.fpsSurvive): boolean {
     const valid = ratios.filter((r) => Number.isFinite(r) && r > 0);
@@ -133,8 +133,8 @@ async function surviveRatio(input: string, at: number, signal: AbortSignal): Pro
  *
  * 放送の TS に「本当のコマ数」は入っていない — EIT も符号化ヘッダも、素材が 24p の
  * アニメでも**全部 1080i/60 と名乗る** (本番の実測)。それでも、**60コマに
- * 起こして同じ絵が続く割合を数えれば**見分けはつく — アニメ (24p/30p 由来) は
- * 同じ絵が2〜3枚ずつ並ぶので重複を落とすとコマが大きく減り、本物の 60i
+ * 起こして同じ画像が続く割合を数えれば**見分けはつく — アニメ (24p/30p 由来) は
+ * 同じ画像が2〜3枚ずつ並ぶので重複を落とすとコマが大きく減り、本物の 60i
  * (実写・生放送) は全コマ動くので減らない。実測値の表と、idet (縞の検出) が
  * 使えなかった話は [docs/encode.md](../../../docs/encode.md) に。
  *
@@ -188,7 +188,7 @@ function squarePixels(size: { width: number; height: number } | undefined): stri
 function wayName(way: HwWay | undefined): string {
     return way === undefined ? 'ソフトウェア' : `${basename(way.device)} の ${HW_KIND_LABEL[way.kind]}`;
 }
-/** GPU の口を回す番。ジョブごとに先頭の口を入れ替える (hwenc.hwChain) */
+/** GPU のデバイスを回す番。ジョブごとに先頭のデバイスを入れ替える (hwenc.hwChain) */
 let hwTurn = 0;
 
 /**
@@ -201,7 +201,7 @@ export type Keyframes = 'scene' | number[];
 
 /**
  * キーフレームを置かせる引数。どのエンコーダも、印の付いたコマ (`pict_type = I`) を
- * キーフレームにする。**QSV だけは頼まないと IDR にならない** (`-forced_idr`)。IDR でないと
+ * キーフレームにする。**QSV だけは指定しないと IDR にならない** (`-forced_idr`)。IDR でないと
  * 入れ物にキーフレームとして書かれず、そこで切れない
  */
 function keyframeArgs(keyframes: Keyframes | undefined, hardware: HwWay | null): string[] {
@@ -236,7 +236,7 @@ function videoArgs(
         /*
          * **GPU (Intel QSV / VA-API)。** インタレ解除も引き伸ばしも CPU のフィルタで
          * 済ませ、エンコードするところだけ GPU に渡す。引数と画質の決め方は hwenc.hwArgs。
-         * 使うかどうかは `hwChain` (起動時の試しのエンコードと設定)。**落ちたら次の道か
+         * 使うかどうかは `hwChain` (起動時の試しのエンコードと設定)。**落ちたら次の方式か
          * ソフトウェアで再エンコードする** (runJob) ので、ここで保険はかけない
          */
         const hw = hwArgs(hardware, codec);
@@ -311,7 +311,7 @@ interface EncodeOptions {
      * 映像が出るまでの音声だけの区間(秒)。**頭から捨てる長さ** (`probeLeadIn`)。
      *
      * 捨てると映像・音声・字幕が同じ瞬間から始まるので、時刻を読むプレイヤーでも
-     * 1コマ目から数えるプレイヤーでも同じ絵になる。捨てるのは映像がまだ無い
+     * 1コマ目から数えるプレイヤーでも同じ映像になる。捨てるのは映像がまだ無い
      * ところなので、見えるものは減らない
      */
     videoStart?: number;
@@ -330,7 +330,7 @@ interface EncodeOptions {
     /** 入れ物 (mkv) の title に埋め込む番組名 (`title.displayTitle`) */
     mediaTitle?: string;
     /**
-     * GPU でエンコードする経路 (どの口を `qsv` / `vaapi` のどちらで)。使えるかどうかは
+     * GPU でエンコードする経路 (どのデバイスを `qsv` / `vaapi` のどちらで)。使えるかどうかは
      * `hwenc.hwChain` が決めていて、runJob がその順に渡す。落ちたら次、
      * 最後はソフトウェア (undefined)
      */
@@ -422,7 +422,7 @@ export function buildArgs(
     );
 
     const args = ['-y'];
-    // GPU の口。入力より前に開いておくと、エンコーダ (とフィルタ) がこれを使う
+    // GPU のデバイス。入力より前に開いておくと、エンコーダ (とフィルタ) がこれを使う
     args.push(...video.device);
 
     /*
@@ -509,7 +509,7 @@ export function buildArgs(
      * 進捗を key=value 形式で吐かせる。stderr の人間向けログを目視パースするより確実。
      *
      * **出口は fd 3 (専用のパイプ)。** 標準出力は CM 検出のロゴの枠が使い (`analysis`)、標準エラーはログで
-     * 混み合う (ログと進み具合は別のスレッドが書くので、同じ口では行が千切れることがある)。
+     * 混み合う (ログと進み具合は別のスレッドが書くので、同じ出力先では行が千切れることがある)。
      * 人間向けの進み具合の行 (`frame= …`) も止める
      */
     args.push('-nostats', '-progress', 'pipe:3');
@@ -553,7 +553,7 @@ export function enqueue(recordingId: number, kind: EncodeKind = 'encode'): numbe
 }
 
 /**
- * 中止を頼んだジョブが畳み終わるのを待っている人たち。
+ * 中止を指示したジョブが畳み終わるのを待っている人たち。
  * 畳み終わり (`pump` の finally) で呼ばれる
  */
 const stopping = new Map<number, (() => void)[]>();
@@ -592,14 +592,14 @@ function wakeStopping(jobId: number): void {
 /**
  * エンコードを中止する。**畳み終わってから返す。**
  *
- * 頼むだけで返すと、押した直後の読み直しは ffmpeg が死ぬ前に届き、画面が変わらない。
+ * 中止を伝えるだけで返すと、押した直後の読み直しは ffmpeg が死ぬ前に届き、画面が変わらない。
  * ffmpeg は SIGTERM から1秒ほどで終わるので、待ってから返せば押した人の画面は
  * その場で「録画済み」に変わる。**上限つき** (`CANCEL_WAIT_MS`) で、間に合わ
  * なければ諦めて返す (あとは知らせ (SSE) に任せる)
  */
 export async function cancel(jobId: number): Promise<void> {
     canceled.add(jobId);
-    // どの段階に居ても止まるようにする。ffmpeg が回っていない段階もある
+    // どの段階にいても止まるようにする。ffmpeg が回っていない段階もある
     aborts.get(jobId)?.abort();
     procs.get(jobId)?.kill();
 
@@ -625,7 +625,7 @@ export async function cancel(jobId: number): Promise<void> {
 }
 
 /**
- * 中止を頼まれて、まだ畳み終わっていないか。
+ * 中止を指示されて、まだ畳み終わっていないか。
  *
  * 一覧の行に添えて、中止のボタンを**畳み終わるまで回したままにする**ための
  * もの。押した返事 (`cancel`) は上限で切り上げることがあるので、返事だけで
@@ -637,7 +637,7 @@ export function isCanceling(jobId: number): boolean {
 
 /** 段階を進めて画面にも伝える。押しても反応が無いように見えるのを防ぐ */
 function setPhase(jobId: number, phase: EncodePhase, log: string): void {
-    // 中止を頼まれた後は「中止しています」を残す (下の setStep と同じ)
+    // 中止を指示された後は「中止しています」を残す (下の setStep と同じ)
     if (canceled.has(jobId)) return;
     orm()
         .update(encodeJobs)
@@ -652,7 +652,7 @@ function setPhase(jobId: number, phase: EncodePhase, log: string): void {
  *
  * 段階の名前 (「CM検出中」) だけでは、進んでいるのか止まっているのかが分からない。
  *
- * **中止を頼まれた後は書き換えない** — `cancel` が書いた「中止しています」を、
+ * **中止を指示された後は書き換えない** — `cancel` が書いた「中止しています」を、
  * 畳むまでの間に通る段階が上書きしないように
  */
 function setStep(jobId: number, log: string): void {
@@ -703,8 +703,8 @@ export function expectedFrames(
  * 進み具合は**エンコードできたコマ数**から出す (`-progress` の `frame=` ÷ `expectedFrames`)。
  * 残り時間も同じ出どころ (直近30秒で何コマエンコードできたか)。
  *
- * **エンコーダが今どこに居るかを直に数えている**。`out_time_us` (mux が最後に書いた時刻。
- * 疎な字幕で先に飛ぶ) や入力の読み位置 (デマクサの居場所。先に読み切ることがある) は使わない。
+ * **エンコーダが今どこにいるかを直に数えている**。`out_time_us` (mux が最後に書いた時刻。
+ * 疎な字幕で先に飛ぶ) や入力の読み位置 (デマクサの位置。先に読み切ることがある) は使わない。
  * 読み位置は**分母 (尺) が測れなかったときの控え**。経緯は docs/encode.md「進み具合はエンコードできたコマ数から出す」
  */
 export function encodeProgress(totalFrames: number, inputBytes: number) {
@@ -762,7 +762,7 @@ export function encodeProgress(totalFrames: number, inputBytes: number) {
 /**
  * ffmpeg が入力ファイルをどこまで読んだかを /proc から覗く。
  *
- * 子プロセスとは同じ名前空間に居るので、/proc/<pid>/fd から入力ファイルを
+ * 子プロセスとは同じ名前空間にいるので、/proc/<pid>/fd から入力ファイルを
  * 指している fd を探せば、/proc/<pid>/fdinfo/<fd> の pos がそのまま読み位置。
  * Linux 専用だが、本番はコンテナでしか動かさない。読めない環境では
  * 割合が動かなくなるだけで、エンコードしたものには影響しない。
@@ -777,7 +777,7 @@ export function findInputFd(pid: number, path: string): number | null {
             }
         }
     } catch {
-        // プロセスがもう居ないか、/proc の無い環境
+        // プロセスがもういないか、/proc の無い環境
     }
     return null;
 }
@@ -1021,7 +1021,7 @@ function fail(jobId: number, recording: Recording, reason: string, what = 'エ�
  * 中止で終わったときの後始末。
  *
  * 出来かけの作業ファイルだけ捨てて、元の録画には触らない。
- * どの段階で止めても同じ形で畳めるように1か所にまとめてある。
+ * どの段階で止めても同じやり方で畳めるように1か所にまとめてある。
  */
 function finishCanceled(jobId: number, working: string | null): void {
     removeIfExists(working);
@@ -1110,7 +1110,7 @@ async function runJob(jobId: number): Promise<void> {
 
     /*
      * **CM はエンコードしながら探す。** 1本目のコーデックをエンコードする ffmpeg に CM 検出の出口を足して、
-     * TS を1回だけ復号する (`cm-scan.scanReader`)。ここでは支度だけ — 尺を測り、局ロゴを開く
+     * TS を1回だけデコードする (`cm-scan.scanReader`)。ここでは支度だけ — 尺を測り、局ロゴを開く
      * (覚えていなければキーフレームだけ読んで覚える)
      */
     const mode = settings().cmCut;
@@ -1283,7 +1283,7 @@ async function runJob(jobId: number): Promise<void> {
      * 録画開始直後の数百msだけ壊れているケースをここで拾う (buildArgs のコメント)。
      * 別の理由での失敗もここに来るが、もう一度同じ理由で落ちるだけなので無害。
      *
-     * **GPU でエンコードするときは、その2回が駄目なら次の道 (QSV → VA-API → ソフトウェア) で
+     * **GPU でエンコードするときは、その2回が駄目なら次の方式 (QSV → VA-API → ソフトウェア) で
      * 同じ2回をやり直す。** 起動時の試しのエンコードは通っても、素材しだいで落ちることは
      * ありうる (ドライバの対応していない大きさなど)。GPU が駄目なだけで録画が
      * 失敗になるのは避けたい。GPU の失敗は初期化で落ちるので、やり直しは速い
@@ -1297,7 +1297,7 @@ async function runJob(jobId: number): Promise<void> {
         extra: {
             analysis: boolean;
             keyframes?: (skip: number) => Keyframes | undefined;
-            /** GPU を使わない (境目を指して再エンコードするとき。GPU は頼みを聞かないことがある) */
+            /** GPU を使わない (境目を指して再エンコードするとき。GPU は指定を聞かないことがある) */
             software?: boolean;
         },
     ) => {
@@ -1315,7 +1315,7 @@ async function runJob(jobId: number): Promise<void> {
             if (i > 0) {
                 if (canceled.has(jobId)) break;
                 // 数えるのは頭を捨てる再試行だけ (毒ジョブの見立て `encodeMaxAttempts` の物差し)。
-                // GPU から降りるのは、その素材ではその道が使えないというだけで、毒ではない
+                // GPU から降りるのは、その素材ではその方式が使えないというだけで、毒ではない
                 if (attempt.seek !== null) {
                     orm()
                         .update(encodeJobs)
@@ -1364,7 +1364,7 @@ async function runJob(jobId: number): Promise<void> {
             // 落ちた回の書き出しは捨てる (一時ファイルを片付けるだけ)
             reader?.result(result.code, '');
         }
-        /** 絵まで読めたか。探さずに再エンコードしたら音だけ読み直す */
+        /** 映像まで読めたか。探さずに再エンコードしたら音だけ読み直す */
         let video = true;
         if (result.code !== 0 && extra.analysis && reading !== null && !canceled.has(jobId)) {
             setStep(jobId, `CMを探さずにエンコードし直します (${codec})`);
@@ -1379,7 +1379,7 @@ async function runJob(jobId: number): Promise<void> {
                 encodeOptions,
             );
             if (result.code === 0 && !canceled.has(jobId)) {
-                // 音だけ読み直して、CM の尺だけで決める (音の復号だけなので軽い)
+                // 音だけ読み直して、CM の尺だけで決める (音のデコードだけなので軽い)
                 setStep(jobId, '無音を探しています');
                 const audio = await scan(sourceTs, {
                     video: false,
@@ -1495,7 +1495,7 @@ async function runJob(jobId: number): Promise<void> {
             setPhase(jobId, 'cm', 'CMの境目を決めています');
             detection = await decide(reading, done.found, done.skip, done.video);
             /*
-             * 音だけで決めた (絵の読み込みが落ちて探さずに再エンコードした) なら切らない。キーフレームも置いて
+             * 音だけで決めた (映像の読み込みが落ちて探さずに再エンコードした) なら切らない。キーフレームも置いて
              * いないので、切るにはもう1回エンコードすることになる。尺だけの判定で本編を削るより CM を残す
              */
             cuttable = done.video;
@@ -1521,7 +1521,7 @@ async function runJob(jobId: number): Promise<void> {
             let cut = await cutWorking(working, done.skip);
             if (cut === 'keys' && !canceled.has(jobId)) {
                 /*
-                 * 境目にキーフレームが無かった (無音の真ん中に置いた境目・GPU が頼みを聞かなかった)。
+                 * 境目にキーフレームが無かった (無音の真ん中に置いた境目・GPU が指定を聞かなかった)。
                  * 境目を指して再エンコードしてから切る
                  */
                 setPhase(jobId, 'encode', `CMの境目にキーフレームを置いてエンコードし直します (${codec})`);
@@ -1602,10 +1602,10 @@ async function runJob(jobId: number): Promise<void> {
     }
 
     /*
-     * **サムネイルは元のTSから取る** (解除したTSを消す前に)。エンコードした AV1 を復号し直すと
-     * ソフトウェア復号で数百コマぶん重い。元のTSの MPEG-2/H.264 なら軽い。
+     * **サムネイルは元のTSから取る** (解除したTSを消す前に)。エンコードした AV1 をデコードし直すと
+     * ソフトウェアデコードで数百コマぶん重い。元のTSの MPEG-2/H.264 なら軽い。
      * 位置は元のTSの時刻で決める (`thumbnailPlace`): CM を切ったなら残した区間をつないで数え、
-     * CM を残したなら本編の最初の区間から取る (CMの絵を避ける)
+     * CM を残したなら本編の最初の区間から取る (CMの映像を避ける)
      */
     const duration = (recording.end_at - recording.start_at) / 1000;
     const content =
@@ -1624,7 +1624,7 @@ async function runJob(jobId: number): Promise<void> {
         }),
     });
     /*
-     * **もう一方 (H.264) の隣にもポスターを複製しておく** (同じ絵。ffmpeg を
+     * **もう一方 (H.264) の隣にもポスターを複製しておく** (同じ画像。ffmpeg を
      * もう一度は回さない)。主 (AV1) を消すと残ったほうが主に繰り上がるので、
      * そのときも画面のサムネが途切れない
      */
@@ -1703,7 +1703,7 @@ async function runJob(jobId: number): Promise<void> {
  * **CM 検出だけやり直す** (録画の詳細の「その他…」→「CM検出をやり直す」)。再エンコードしない。
  *
  * - 元のTSがあれば元のTSから、無ければエンコードしたもの (mkv) から読む。どちらからでもロゴ・切れ目・無音は取れる
- *   (エンコードしたものは絵の大きさが違うので、ロゴは大きさごとに覚えたものを使う。`logo-own.modelFile`)
+ *   (エンコードしたものは映像の大きさが違うので、ロゴは大きさごとに覚えたものを使う。`logo-own.modelFile`)
  * - 境目は入れ物の頭からの秒で覚える (`cm_ranges`。エンコードするときと同じ物差し)。エンコードしたものから読んだなら
  *   エンコードしたときに捨てた頭 (`encode_skip`) を足して直す
  * - エンコードしたものには CM の扱いの設定どおりにチャプターを書き直す: 「チャプター」「切り取る」なら差し替え、
@@ -1810,7 +1810,7 @@ async function runCmJob(jobId: number): Promise<void> {
 
     /*
      * エンコードしたものにチャプターを書き直す。「何もしない」なら外す。
-     * **全部書き終えてから差し替える** — 2本 (AV1 と H.264) のうち片方だけ新しくなる形を残さない。
+     * **全部書き終えてから差し替える** — 2本 (AV1 と H.264) のうち片方だけ新しくなる状態を残さない。
      * 覚え書き (`cm_ranges`) も差し替えたあとに書く
      */
     const cm = settings().cmCut === 'off' ? [] : shiftRanges(detection.cm, skip);

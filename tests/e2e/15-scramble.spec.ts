@@ -71,7 +71,7 @@ test.describe('スクランブルされたまま録れたとき', () => {
             await expect(page.locator(row).getByTestId('row-body')).toContainText('元のTS');
 
             /*
-             * **両方あるなら、落とす口も2つ出す。**
+             * **両方あるなら、ダウンロードのボタンも2つ出す。**
              *
              * 1つしか無かった頃は、寄越されるのはエンコードしたほうだけで、**元には
              * 手が届かなかった** — 画質を落としていない元が欲しい場面はある。
@@ -81,14 +81,14 @@ test.describe('スクランブルされたまま録れたとき', () => {
             const detail = page.getByTestId('program-detail');
             await expect(detail.getByTestId('download-link')).toHaveText('ダウンロード (エンコード済み)');
             const raw = detail.getByTestId('download-ts-link');
-            // 落とす口は「その他…」の中に畳んである。開けば見える
+            // ダウンロードのボタンは「その他…」の中に畳んである。開けば見える
             await detail.getByTestId('detail-more').click();
             await expect(raw).toBeVisible();
 
             /*
              * **名指しした側が本当に来ること。** 落ちてくる名前で分かる —
              * エンコードしたほうは .mkv、元は .m2ts。ここが同じものを指していたら
-             * 口が2つある意味が無い。押すと期限付きの署名URLが作られるので、
+             * ボタンが2つある意味が無い。押すと期限付きの署名URLが作られるので、
              * その URL を**資格情報なしの Range** で叩いて名前を見る
              * (token だけで通ることの確認も兼ねる)
              */

@@ -2,18 +2,18 @@
  * 住所 (IP アドレス) とネットワーク (CIDR) の小さな道具。
  *
  * **入口の `server.js` とアプリ (`auth.ts`) の両方が使う。** server.js は SvelteKit の
- * 組み立ての外に居る素の JS なので、ここは**何も import しない** (`$lib` も config も
+ * ビルドの外にある素の JS なので、ここは**何も import しない** (`$lib` も config も
  * 引かない)。bun は `.ts` をそのまま読めるので、server.js はこのファイルを直に
  * import する — 本番のイメージにもこの1枚だけ置いてある (Dockerfile)。
  * 同じ判定を2か所に書くと、片方だけ直して食い違うほうが危ない。
  */
 
 /**
- * 住所を正規の形にそろえる。**読めなければ null。**
+ * アドレスを正規の形式にそろえる。**読めなければ null。**
  *
  * - IPv4 はそのまま (`10.0.0.1`)
  * - IPv6 は小文字の省略なしの数として扱い、`::ffff:10.0.0.1` (IPv4 を写した IPv6) は
- *   IPv4 に戻す — Bun は IPv4 の相手をこの形で渡すことがある
+ *   IPv4 に戻す — Bun は IPv4 の相手をこの形式で渡すことがある
  */
 export function normalize(address: string): string | null {
     const parsed = parse(address);
@@ -78,7 +78,7 @@ export function inAny(address: string, entries: readonly string[]): boolean {
  * - 前段なのに `X-Forwarded-For` が無い・読めない項目に当たったら、そこで止めて
  *   それまでに分かった住所 (無ければ相手) を使う — 読めないものの先は信じない
  *
- * 返す住所は `normalize` した形。相手が読めなければ空文字 (どの CIDR にも当たらない)
+ * 返すアドレスは `normalize` した形式。相手が読めなければ空文字 (どの CIDR にも当たらない)
  */
 export function resolveClient(peer: string, forwardedFor: string | null, proxies: readonly string[]): string {
     let client = normalize(peer) ?? '';

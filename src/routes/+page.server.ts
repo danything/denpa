@@ -52,7 +52,7 @@ interface RecordingRow extends Recording {
     job_eta_ms: number | null;
     job_log: string | null;
     /**
-     * 中止を頼んであって、まだ畳み終わっていない。中止のボタンを回したまま
+     * 中止をリクエストしてあって、まだ畳み終わっていない。中止のボタンを回したまま
      * にするための印 (`encoder.isCanceling`)。DB には無く、動いている間だけ
      */
     job_canceling: boolean;
@@ -173,7 +173,7 @@ export function load({ url, cookies }) {
      * 「これから何が録れるか」の中に過去が混ざっていた。
      *
      * **取り消したものは既定では出さない** — 人が押した結果で、驚くことが無い
-     * (「完了分も表示」では出す。戻す口のため)
+     * (「完了分も表示」では出す。戻すボタンのため)
      */
     const r = alias(reservationTable, 'r');
     const rec = alias(recordingTable, 'rec');
@@ -428,7 +428,7 @@ export const actions = {
         const form = await request.formData();
         const id = Number(form.get('id'));
         if (!Number.isFinite(id)) return fail(400, { message: 'IDが不正です' });
-        // 状態も見て消す。録り逃し以外 (これからの予約など) を同じ口で消させない
+        // 状態も見て消す。録り逃し以外 (これからの予約など) を同じアクションで消させない
         const gone = orm()
             .delete(reservationTable)
             .where(

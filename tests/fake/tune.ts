@@ -8,7 +8,7 @@
  *     bun tests/fake/tune.ts GR T16
  *
  * 受信できないチャンネルでは 1 で終わる。総当たりのスキャンは、この落ち方で
- * 「居ない」を判断する。
+ * 「いない」を判断する。
  *
  * つまみ (延長・スクランブル) は `FAKE_CONTROL` の JSON から都度読む。
  * 選局は別プロセスなので、テストからは書き換えるしかない。
@@ -50,7 +50,7 @@ const stop = broadcast(services, knobs, (data) => {
         out.write(data);
         out.flush();
     } catch {
-        // 読み手が居なくなった (エージェントに殺された)。静かに畳む
+        // 読み手がいなくなった (エージェントに殺された)。静かに畳む
         closed = true;
         stop();
     }

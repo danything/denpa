@@ -15,7 +15,7 @@ export type Webhook = typeof webhooks.$inferSelect;
 
 export interface Payload {
     event: WebhookEvent;
-    /** 人が読む1行。Discord や Slack にそのまま出せる形にしておく */
+    /** 人が読む1行。Discord や Slack にそのまま出せる形式にしておく */
     text: string;
     recording?: {
         id: number;

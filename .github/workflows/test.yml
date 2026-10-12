@@ -75,7 +75,7 @@ jobs:
       - name: Unit tests
         run: bun run test:unit
 
-  # チューナーエージェント (.NET)。設定の読み書き・選局表と、口への適合テスト
+  # チューナーエージェント (.NET)。設定の読み書き・選局表と、API への適合テスト
   agent:
     runs-on: ubuntu-latest
     steps:
@@ -100,12 +100,12 @@ jobs:
           dotnet-version: '10.0.401'
 
       # 設定の読み書き、選局表、チューナー自動検出の値の読み取り。
-      # MTP の口 (global.json の test.runner) ではプロジェクトは --project で渡す
+      # MTP の方式 (global.json の test.runner) ではプロジェクトは --project で渡す
       - name: Unit tests (.NET agent)
         run: dotnet test --project agent/Denpa.Agent.Tests/Denpa.Agent.Tests.csproj
 
-      # エージェントの口に直接当てるテスト。**本物をビルドして起こして**、偽の選局
-      # コマンドで流す (bun 版が居た頃は、同じものを2つの実装に通していた)。
+      # エージェントの API に直接当てるテスト。**本物をビルドして起こして**、偽の選局
+      # コマンドで流す (bun 版があった頃は、同じものを2つの実装に通していた)。
       # ビルドするところまで含めて1つの script にしてある — 手元で走らせるときに
       # ビルドし忘れると、消えた既定の置き場を叩いて ENOENT で落ちるだけになる
       - name: Conformance
@@ -114,7 +114,7 @@ jobs:
   # asicen-userland (PX-W3U3。試験的) の模擬の asicend と話す。上流はまだリリースが無いので、
   # 決めたコミットを手元で組んで `asicend --mock` を起こす (AsicenMockTests。機材にもファームウェアにも
   # 触らない)。**必須チェックにはしない** (上流の取得と組み立てで揺れる・必須の context を増やさない)。
-  # 0.1.0 が出たら配布物を取る形に替える (docs/agent.md)
+  # 0.1.0 が出たら配布物を取る方式に替える (docs/agent.md)
   agent-asicen-mock:
     runs-on: ubuntu-latest
     env:
@@ -189,7 +189,7 @@ jobs:
   # Mac (Apple Silicon) で動かすエージェント (docs/agent.md「Mac でチューナーを使う」)。
   #
   # **Native AOT は Linux から macOS 向けにビルドできない** ので、Mac のランナーでビルドして起こす。
-  # 実機は無いので、確かめるのは「ビルドできる・テストが通る・起きて口が答える・入れ方が最後まで通る」まで。
+  # 実機は無いので、確かめるのは「ビルドできる・テストが通る・起動して API が答える・入れ方が最後まで通る」まで。
   #
   # **必須チェックにはしない** (main の ruleset に入れていない)。Mac のランナーは混むと待たされるので、
   # ここで PR を止めない。赤くなったら Mac で壊れたということなので、見て直す
@@ -242,7 +242,7 @@ jobs:
 
       # 入れ方を通しで。エージェントはリリースから取らずにいまビルドしたものを入れ、
       # px4-userland / siano-userland / ファームウェアは本物を取ってきてハッシュを確かめ、
-      # launchd に載せて口が答えるまで。最後に消す。
+      # launchd に載せて API が答えるまで。最後に消す。
       # denpa 本体 (docker compose) は Mac のランナーに Docker が無いので --no-docker で外す
       - name: install.sh end to end
         run: |
@@ -270,7 +270,7 @@ jobs:
   # Windows (x64) で動かすエージェント (docs/agent.md「Windows でチューナーを使う」)。
   #
   # agent-macos と同じく、Native AOT は Linux から Windows 向けにビルドできないので Windows のランナーでビルドして起こす。
-  # 実機は無いので、確かめるのは「ビルドできる・テストが通る・起きて口が答える・入れ方が最後まで通る」まで。
+  # 実機は無いので、確かめるのは「ビルドできる・テストが通る・起動して API が答える・入れ方が最後まで通る」まで。
   # ランナーには wslc (WSL のコンテナ) が無いので、denpa 本体は -AgentOnly で外す。
   # **必須チェックにはしない** (agent-macos と同じ理由)
   agent-windows:
@@ -334,8 +334,8 @@ jobs:
           exit 0
 
       # 入れ方を通しで。エージェントはいまビルドしたものを zip にして入れ、siano-userland と
-      # ファームウェアは本物を取ってきてハッシュを確かめ、タスク スケジューラに載せて口が答えるまで。
-      # 1回目は irm | iex と同じ形 (取ってきた中身を scriptblock にして) で流す。2回目は上げ直し
+      # ファームウェアは本物を取ってきてハッシュを確かめ、タスク スケジューラに載せて API が答えるまで。
+      # 1回目は irm | iex と同じやり方 (取ってきた中身を scriptblock にして) で流す。2回目は上げ直し
       # (動いているエージェントを止めて入れ替える)。最後に外す
       - name: install.ps1 end to end
         shell: powershell
@@ -419,7 +419,7 @@ jobs:
       # ubuntu-latest には chromium の依存 (libnss3, libgbm1, libasound2t64…) が
       # 全部入っていて、新しく入るのは**フォント9つだけ**
       # (fonts-ipafont-gothic, xfonts-* など)。E2E は DOM の文字を見るだけで
-      # 絵は比べていないので、字が豆腐でも結果は変わらない。
+      # 画像は比べていないので、字が豆腐でも結果は変わらない。
       #
       # ランナーの中身が変わってライブラリが欠けたら、ブラウザが起動できずに
       # 落ちる。そのときは足りないものだけを apt で入れる (総当たりに戻さない)
@@ -454,14 +454,14 @@ jobs:
           test -n "$specs"
           echo "files=$(for s in $specs; do printf 'tests/e2e/%s.spec.ts ' "$s"; done)" >> "$GITHUB_OUTPUT"
 
-      # **ライブを生で見る道・互換モードの復号器** (docs/stream.md §5.5)。ブラウザで MPEG-2 と
+      # **ライブを変換せずに見る経路・互換モードのデコーダ** (docs/stream.md §5.5)。ブラウザで MPEG-2 と
       # AAC・Opus をデコードする WASM は Dockerfile の `mpeg2wasm` 段で組む (emscripten)。E2E は
       # イメージを使わずランナーで回すので、その段だけ組んで取り出し、`MPEG2_DIR` で denpa に渡す。
       #
       # **組んだものは actions/cache に置いて使い回す。** 中身が変わるのは段の書き方
       # (emsdk・FFmpeg の版) か wasm/mpeg2 を変えたときだけなので、その2つを鍵にする。
       # 当たれば 1〜2 秒で戻る (前は buildx を立てて層のキャッシュから組み直すのに 15 秒ほど)。
-      # **どの組でも戻す** — 要るスペック (28-live-raw・38-live-compat…) がどの組に居ても、
+      # **どの組でも戻す** — 要るスペック (28-live-raw・38-live-compat…) がどの組にあっても、
       # 組分けを気にせず足せるように。外れたときだけ、その組で組んで置く (外れるのは
       # 上の2つを変えた PR と、それが main に入った直後の1回だけ。組が同時に組んでも
       # 置けるのは1つで、残りは「もうある」と言って置かずに進む)

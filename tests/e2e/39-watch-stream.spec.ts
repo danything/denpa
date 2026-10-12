@@ -6,11 +6,11 @@ import { expect, goto, recordOne, reserveSoon, syncEpg, test, wakeControls } fro
  * **観る画面で、サーバがその場で流すものを観る** (`api/recordings/<id>/playback`・`stream`。
  * 選び方は `ts/playback.ts`、受け方は `remux-player.ts`)。
  *
- * 偽 ffmpeg は映像を作らないので、絵が出るところまでは見ない。見るのは**何を頼むか** —
- * どの形を・どの位置から・どの音声で頼み、飛んだら頼み直し、混んでいると言われたら勧め直すか
+ * 偽 ffmpeg は映像を作らないので、映像が出るところまでは見ない。見るのは**何をリクエストするか** —
+ * どの形式を・どの位置から・どの音声でリクエストし、飛んだらリクエストし直し、混んでいると言われたら勧め直すか
  */
 
-/** 頼んだ `stream` の URL を順に控える */
+/** リクエストした `stream` の URL を順に控える */
 function streamRequests(page: Page): URL[] {
     const seen: URL[] = [];
     page.on('request', (request) => {
@@ -52,7 +52,7 @@ test.describe('観る画面でその場で流す', () => {
         await row.click();
         await expect(page).toHaveURL(new RegExp(`/watch/${id}$`));
 
-        // 頭から、端末が受け取れる形で (Playwright の Chromium は H.264 を持たないので AV1 のことがある)
+        // 頭から、端末が受け取れる形式で (Playwright の Chromium は H.264 を持たないので AV1 のことがある)
         await expect.poll(() => asked.length).toBeGreaterThan(0);
         expect(asked[0]?.searchParams.get('codec')).toMatch(/^(h264|av1)$/);
         expect(asked[0]?.searchParams.get('from')).toBe('0.000');
@@ -65,8 +65,8 @@ test.describe('観る画面でその場で流す', () => {
     });
 
     /**
-     * **コーデックを選べる** (この端末で観られる道が2つ以上あるとき)。エンコード済みと違うものを選ぶと
-     * サーバに変換させて流す。選んだものは端末ごとに覚え、続きの位置から頼む。
+     * **コーデックを選べる** (この端末で観られる方式が2つ以上あるとき)。エンコード済みと違うものを選ぶと
+     * サーバに変換させて流す。選んだものは端末ごとに覚え、続きの位置からリクエストする。
      * サーバが混んでいると言えば、変換させずに観られるものを勧める。
      *
      * 何で観られるかはここで決めて渡す (H.264 のエンコード済みと、AV1 への変換)。Playwright の
@@ -130,7 +130,7 @@ test.describe('観る画面でその場で流す', () => {
         expect(asked[0]?.searchParams.get('audio')).toBe('0');
         await expect(page.getByTestId('watch-codec')).toContainText('AV1');
 
-        // 選んだものは端末ごとに覚える。開き直すと、はじめから変換させて続きの位置から頼む
+        // 選んだものは端末ごとに覚える。開き直すと、はじめから変換させて続きの位置からリクエストする
         const reopened = streamRequests(page);
         await goto(page, `/watch/${id}`);
         await expect.poll(() => reopened.length).toBeGreaterThan(0);
@@ -138,7 +138,7 @@ test.describe('観る画面でその場で流す', () => {
         expect(reopened[0]?.searchParams.get('from')).toBe('600.000');
 
         /*
-         * 飛んだ先からの頼み直しは `remux-player.test.ts` が見ている (偽の流れは中身が空で、
+         * 飛んだ先からのリクエストし直しは `remux-player.test.ts` が見ている (偽の流れは中身が空で、
          * 尺が分からないうちは `<video>` が位置を受け付けない)
          *
          * 混んでいると言われたら、変換させずに観られるもの (H.264 のファイル) を勧める

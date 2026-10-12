@@ -57,7 +57,7 @@ services:
             - tuner-agent
         environment:
             TZ: Asia/Tokyo
-            # エージェントの居場所 (tuner-agent:25252) と置き場所は既定値のまま
+            # エージェントの場所 (tuner-agent:25252) と置き場所は既定値のまま
             # (src/lib/server/config.ts。同じ値を書き写さない)
             ENCODE_CONCURRENCY: '2'
             # **誰を通すか (docs/auth.md)。設定するまで全部のアクセスを断る。**

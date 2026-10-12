@@ -12,12 +12,12 @@ namespace Denpa.Agent;
 ///
 /// <para>
 /// ソケットは <c>&lt;ランタイムディレクトリ&gt;/px4-userland/&lt;筐体の番号&gt;/control.sock</c>。
-/// 1本の接続で頼めるのは同時に1つだけで、順番は <see cref="BCas"/> が守る。
+/// 1本の接続で送れる要求は同時に1つだけで、順番は <see cref="BCas"/> が守る。
 /// </para>
 /// </summary>
 public sealed class Px4Card : ICardLink
 {
-    /// <summary>HELLO で頼む機能。bit 1 = CARD。**頼んでいない型は px4d が断る**</summary>
+    /// <summary>HELLO で要求する機能。bit 1 = CARD。**要求していない型は px4d が断る**</summary>
     private const uint CardCapability = 1 << 1;
 
     /// <summary>
@@ -144,7 +144,7 @@ public sealed class Px4Card : ICardLink
         return answer[4..];
     }
 
-    /// <summary>カードを手放してから閉じる。**リセットはしない** (他の使い手が居るかもしれない)</summary>
+    /// <summary>カードを手放してから閉じる。**リセットはしない** (他の使い手がいるかもしれない)</summary>
     public void Dispose()
     {
         if (_handle != 0 && _control.Connected)

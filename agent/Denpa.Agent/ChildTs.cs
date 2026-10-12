@@ -6,13 +6,13 @@ using Microsoft.Win32.SafeHandles;
 namespace Denpa.Agent;
 
 /// <summary>
-/// 選局した TS を **pipe で受け取る**ときの共通の口。子プロセス (siano-ts) の標準出力を
-/// 読み口にするところ (<see cref="Stdout"/>) と、pipe の扱い (<see cref="WidenPipe"/> /
+/// 選局した TS を **pipe で受け取る**ときの共通部分。子プロセス (siano-ts) の標準出力を
+/// 読み出し側にするところ (<see cref="Stdout"/>) と、pipe の扱い (<see cref="WidenPipe"/> /
 /// <see cref="ReaderDrain"/>)、子の印 (<see cref="TsChild"/>)。px4d から受けた TS を
 /// 流す pipe (Px4Stream。Px4.cs) も、広げ方と閉じ方はここに揃える。
 ///
 /// <para>
-/// **読み口は <see cref="DeviceStream"/> に載せる。** pipe をそのまま fd として poll で待つので、
+/// **読み出し側は <see cref="DeviceStream"/> に載せる。** pipe をそのまま fd として poll で待つので、
 /// 電波が来なくても畳めるし、蹴られた読み手は 200ms で降りる (DVB と同じ振る舞い)。
 /// </para>
 /// </summary>
@@ -32,7 +32,7 @@ internal static class ChildTs
     /// <para>
     /// **1MB も断られることがある。** uid ごとの pipe の合計が上限
     /// (<c>/proc/sys/fs/pipe-user-pages-soft</c>、既定 64MB) を超えていると、CAP_SYS_RESOURCE が無い限り
-    /// 広げる頼みは <c>EPERM</c> になり、新しい pipe は最小 (数 KB) のまま。Home Assistant OS の
+    /// 広げる要求は <c>EPERM</c> になり、新しい pipe は最小 (数 KB) のまま。Home Assistant OS の
     /// アドオンはホスト中の root (Supervisor やほかのアドオン) と uid 0 を分け合うので、ここに当たる
     /// (アドオンの作者が実機の記録で見つけた)。数 KB では読み手が数ミリ秒止まるだけで詰まり、
     /// ライブが SLOW_CONSUMER で切れる。そういう環境では CAP_SYS_RESOURCE を渡してもらう
@@ -46,7 +46,7 @@ internal static class ChildTs
     /// 読み手が降りきるまで待つ上限。<see cref="DeviceStream"/> は 200ms ごとに
     /// 起きて印を見るので、fd を閉じるのは読み手が戻ってから (閉じた番号を
     /// 次の pipe が使い回すと、降りかけの読み手が新しい pipe を読んでしまう)。
-    /// 待つのは読みかけが居るときだけ (<see cref="DeviceStream.WaitReaders"/>)。
+    /// 待つのは読みかけがいるときだけ (<see cref="DeviceStream.WaitReaders"/>)。
     /// siano-ts の後始末 (SianoTuner.Drop) と px4d の TS の後始末 (Px4Stream.Stop) で使う
     /// </summary>
     internal static readonly TimeSpan ReaderDrain = TimeSpan.FromMilliseconds(300);
@@ -54,7 +54,7 @@ internal static class ChildTs
     /// <summary>
     /// 子の標準出力の fd。.NET 10 の Unix では <c>AnonymousPipeClientStream</c>。
     /// 閉じるのは <c>process.StandardOutput</c> を閉じたとき (SianoTuner.Drop)。
-    /// こちらが閉じると読み口が二重に閉じる。
+    /// こちらが閉じると読み出し側が二重に閉じる。
     /// </summary>
     internal static SafeFileHandle StdoutHandle(Process process)
     {
@@ -89,7 +89,7 @@ internal static class ChildTs
     }
 
     /// <summary>
-    /// 子の標準出力を読み口にする (siano-ts)。Unix は fd を poll で待ち (pipe を広げてから)、
+    /// 子の標準出力を読み出し側にする (siano-ts)。Unix は fd を poll で待ち (pipe を広げてから)、
     /// **Windows は .NET の Stream のまま** (<see cref="DeviceStream(Stream, Func{string?}?)"/>)
     /// </summary>
     internal static DeviceStream Stdout(Process process, string name, Func<string?> ended)
@@ -122,7 +122,7 @@ internal class TsChild(string program, Process process)
     }
 
     /// <summary>
-    /// 読み口が尽きたときの理由。**理由の分かる終わり方をする** (DeviceStream)。
+    /// 読み出し側が尽きたときの理由。**理由の分かる終わり方をする** (DeviceStream)。
     /// EOF は子が終わったということなので、終了コードと stderr の末尾を添える
     /// </summary>
     public string? EndReason()

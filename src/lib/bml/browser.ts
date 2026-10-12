@@ -4,7 +4,7 @@
  * しない — 放送のアプリはその返事を見て「この機能はありません」と案内する。
  *
  * 動かさないもの: AIT・Hybridcast の起動 (startAITControlledApp など)・外のアプリ・
- * 予約・電話回線 (PPP)。選局 (epgTune) は denpa の画面に頼む (エンジンは「この局へ」と知らせるだけ)。
+ * 予約・電話回線 (PPP)。選局 (epgTune) は denpa の画面に任せる (エンジンは「この局へ」と知らせるだけ)。
  */
 
 import type { ProgramInfoMessage } from '#lib/ts/bml-protocol.js';
@@ -43,7 +43,7 @@ export interface BmlIp {
     ): Promise<{ success: boolean; ipAddress: string | null; responseTimeMillis: number | null } | null>;
 }
 
-/** browser.* が頼む、エンジンの側の口 */
+/** browser.* が呼ぶ、エンジンの側の API */
 export interface BrowserHost {
     readonly realm: Realm;
     readonly nvram: Nvram;
@@ -155,7 +155,7 @@ function browserSupport(provider: string, name: string, info: string[], ip: BmlI
     return 0;
 }
 
-/** 文字列を `Denbun=` の形に (付属2 7.10。英数と -_.!~*'() のほかは %XX) */
+/** 文字列を `Denbun=` の形式に (付属2 7.10。英数と -_.!~*'() のほかは %XX) */
 function denbun(text: string): Uint8Array {
     let out = 'Denbun=';
     for (const byte of encodeEuc(text)) {

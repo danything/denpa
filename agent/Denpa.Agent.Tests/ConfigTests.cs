@@ -5,7 +5,7 @@ using Denpa.Agent;
 namespace Denpa.Agent.Tests;
 
 /*
- * 取り合いと HTTP の口は `agent/conformance.test.ts` が本物を起こして当てている。
+ * 取り合いと HTTP の API は `agent/conformance.test.ts` が本物を起こして当てている。
  * こちらで見るのは、そこからは届きにくいところ —
  * **設定の読み書き**と、チューナー自動検出の値の読み取り。
  */
@@ -40,7 +40,7 @@ public class TunerSpecTests
     [Test]
     public async Task 空を渡すと定義を消す()
     {
-        // 「1本も無い」を書き込むより、**無い=自分で探す**のほうが後で困らない
+        // 「1台も無い」を書き込むより、**無い=自分で探す**のほうが後で困らない
         var config = Fresh();
         config.SaveTuners([new TunerSpec("a", ["GR"], false, "/dev/null")]);
         await Assert.That(File.Exists(config.TunersFile)).IsTrue();
@@ -110,11 +110,11 @@ public class ChannelStoreTests
     public async Task 局名は逃がさずそのまま書く()
     {
         /*
-         * `channels.json` は人が開いて確かめるもの。既定の符号化器は非ASCIIを
-         * 全部逃がすので、局名が1つも読めなくなる。
+         * `channels.json` は人が開いて確かめるもの。既定のエンコーダは非ASCIIを
+         * 全部エスケープするので、局名が1つも読めなくなる。
          *
-         * **全角空白 (U+3000) だけは逃げたままになる。** .NET のどの符号化器も
-         * ASCII でない空白は必ず逃がす作りで、`JSON.stringify` と揃わない。
+         * **全角空白 (U+3000) だけはエスケープされたままになる。** .NET のどのエンコーダも
+         * ASCII でない空白は必ずエスケープする作りで、`JSON.stringify` と揃わない。
          * JSON としては同じものなので、ここは合わせにいかない
          */
         var config = Fresh();
@@ -148,7 +148,7 @@ public class DeviceProbeTests
         // 実機の PT3。adapter0/2 が ISDB-S(9)、adapter1/3 が ISDB-T(8)
         await Assert.That(DeviceProbe.TypesFor([8])).IsEquivalentTo(["GR"], CollectionOrdering.Matching);
         await Assert.That(DeviceProbe.TypesFor([9])).IsEquivalentTo(["BS", "CS"], CollectionOrdering.Matching);
-        // 1本でどちらも受けられるものもある
+        // 1台でどちらも受けられるものもある
         await Assert.That(DeviceProbe.TypesFor([8, 9])).IsEquivalentTo(["GR", "BS", "CS"], CollectionOrdering.Matching);
     }
 

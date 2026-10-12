@@ -6,9 +6,9 @@ import { exitNative, fullscreenMode, nativeFullscreenElement, requestNative } fr
 /**
  * 舞台 (`PlayerStage`) の全画面。**3画面 (ライブ・追っかけ・録画) で同じもの** (#471)。
  *
- * 全画面への切り替え方は端末の口で決める (`fullscreen.ts`)。本物の全画面 (標準・webkit) が無い
+ * 全画面への切り替え方は端末の API で決める (`fullscreen.ts`)。本物の全画面 (標準・webkit) が無い
  * iPhone の Safari では**枠を画面いっぱいに広げて代わりにする** (以下「広げる」)。
- * 押す口・ボタンの絵・`f` キー (観る画面と追っかけ) はどれでも同じ。
+ * 押すボタン・ボタンのアイコン・`f` キー (観る画面と追っかけ) はどれでも同じ。
  *
  * ## 広げる (iPhone)
  *
@@ -102,7 +102,7 @@ export function stageFullscreen(target: () => HTMLElement | null): StageFullscre
     }
 
     /*
-     * 積めなくても広げたまま (開いた直後で道案内がまだ動いていないなど)。ボタン・Esc で出られる。
+     * 積めなくても広げたまま (開いた直後でルーターがまだ動いていないなど)。ボタン・Esc で出られる。
      * **積み終わる前に出られたら、積んだ段をそこで戻す** — 出た時点では段がまだ無く
      * `exit` は戻さないので、放っておくと何も広げていない段が1つ残る
      */

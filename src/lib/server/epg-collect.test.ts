@@ -39,7 +39,7 @@ describe('どこまで埋まっているか', () => {
     });
 
     /*
-     * エージェントは TS に居る全部の局を返すが、denpa は映像の入っていない局を
+     * エージェントは TS にある全部の局を返すが、denpa は映像の入っていない局を
      * 落とす (`epg.syncServices`)。数に入れていた頃は「0 まで埋まっている =
      * いちばん薄い」と読んで、データ放送を積んでいる地上波が丸ごと毎周回の
      * 対象になっていた
@@ -47,7 +47,7 @@ describe('どこまで埋まっているか', () => {
     test('番組表に出てこない局は数えない', () => {
         const reach = new Map([[serviceKey(NETWORK, 23608), WEEK]]);
 
-        // 23611 はデータ放送。denpa の services には居ない
+        // 23611 はデータ放送。denpa の services には無い
         expect(reachOf(reach, channel('T16', [23608, 23611]))).toBe(WEEK);
     });
 

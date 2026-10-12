@@ -5,14 +5,14 @@ import { expect, goto, reserveSoon, setRecording, syncEpg, test, waitWatchable }
  * GPU でエンコードする (server/hwenc.ts)。
  *
  * **GPU は偽物** — `stack.hwDir` に `renderD128` のような名前でファイルを置くと
- * denpa には口として見え、偽 ffmpeg は渡された口が在るのを見て QSV / VA-API の
- * 試しのエンコードを通す。消せば、エンコードしようとした GPU の道が本物と同じく初期化で落ちる
- * (次の道・ソフトウェアへ倒れる道を試せる)
+ * denpa にはデバイスとして見え、偽 ffmpeg は渡されたデバイスが在るのを見て QSV / VA-API の
+ * 試しのエンコードを通す。消せば、エンコードしようとした GPU の方式が本物と同じく初期化で落ちる
+ * (次の方式・ソフトウェアへ倒れるのを試せる)
  */
 
 /**
  * エンコードするときに偽 ffmpeg へ渡された引数、1回ぶんずつ。**書き途中の名前 (`.encoding`) へ
- * 出しているものだけ** — サムネイルなど、同じ道を通る他の呼び出しは省く。
+ * 出しているものだけ** — サムネイルなど、同じ経路を通る他の呼び出しは省く。
  *
  * **この録画のぶんだけ。** 入力は元のTS (`…-<録画の番号>.m2ts`)。
  * 同じワーカーの前のテストが残した予約が録れてエンコードされると、そのぶんまで混ざっていた (CI)。
@@ -29,7 +29,7 @@ function encodeRuns(file: string, recordingId: string | null): string[][] {
         .filter((run) => run.some((a, i) => run[i - 1] === '-i' && mine.test(a)));
 }
 
-/** 1回ぶんの引数から「どの口を、何でエンコードしたか」。ソフトウェアなら口は無し */
+/** 1回ぶんの引数から「どのデバイスを、何でエンコードしたか」。ソフトウェアならデバイスは無し */
 function wayOf(run: string[]): string {
     const encoder = run.find((a) => /_(qsv|vaapi)$/.test(a) || a === 'libx264' || a === 'libsvtav1') ?? '?';
     const device = run.find((a) => a.startsWith('qsv=') || a.startsWith('vaapi='));
@@ -55,15 +55,15 @@ test.describe('GPU でエンコードする', () => {
         await request.post('/settings?/probeHw', { form: {} });
     });
 
-    test('見つかった GPU には口ごとに自動で印が付き、外した印は残る', async ({ page, stack }) => {
+    test('見つかった GPU にはデバイスごとに自動で印が付き、外した印は残る', async ({ page, stack }) => {
         clearGpus(stack.hwDir);
         await goto(page, '/settings');
-        // GPU が無ければ、口の行も無い
+        // GPU が無ければ、デバイスの行も無い
         await page.getByTestId('hw-probe').click();
         await expect(page.getByTestId('hw-status')).toContainText('GPU が見つかりません');
         await expect(page.getByTestId('hw-device')).toHaveCount(0);
 
-        // 2枚挿した → 確かめ直すと、口が2つ・どちらも4つとも使えて、勝手に印が付く
+        // 2枚挿した → 確かめ直すと、デバイスが2つ・どちらも4つとも使えて、勝手に印が付く
         for (const gpu of GPUS) writeFileSync(`${stack.hwDir}/${gpu}`, '1');
         await page.getByTestId('hw-probe').click();
         await expect(page.getByTestId('hw-status')).toContainText(
@@ -77,7 +77,7 @@ test.describe('GPU でエンコードする', () => {
             }
         }
 
-        // 口ごとに割り振る: 128 は AV1 だけ、129 は H.264 だけ (どちらも QSV/VA-API 両方)
+        // デバイスごとに割り振る: 128 は AV1 だけ、129 は H.264 だけ (どちらも QSV/VA-API 両方)
         await page.getByTestId('hw-renderD128-qsv-h264').uncheck();
         await page.getByTestId('hw-renderD128-vaapi-h264').uncheck();
         await page.getByTestId('hw-renderD129-qsv-av1').uncheck();
@@ -91,7 +91,7 @@ test.describe('GPU でエンコードする', () => {
         await expect(page.getByTestId('hw-renderD129-vaapi-h264')).toBeChecked();
     });
 
-    test('割り振った口でエンコードし、落ちたら次の道へ倒れる', async ({ page, request, stack }) => {
+    test('割り振ったデバイスでエンコードし、落ちたら次の方式へ倒れる', async ({ page, request, stack }) => {
         test.setTimeout(180_000);
         await syncEpg(request);
         // 上の割り振りのまま (128 = AV1、129 = H.264)
@@ -104,7 +104,7 @@ test.describe('GPU でエンコードする', () => {
         let row = page.locator(`[data-testid="recording-row"][data-program-id="${programId}"]`);
         await waitWatchable(page, row);
         let recordingId = await row.getAttribute('data-recording-id');
-        // AV1 は 128 の QSV、H.264 は 129 の QSV (どちらも先頭の道で通る)
+        // AV1 は 128 の QSV、H.264 は 129 の QSV (どちらも先頭の方式で通る)
         expect(encodeRuns(stack.encodeArgsFile, recordingId).map(wayOf)).toEqual([
             'renderD128:av1_qsv',
             'renderD129:h264_qsv',
@@ -112,8 +112,8 @@ test.describe('GPU でエンコードする', () => {
 
         /*
          * **GPU が途中で駄目になっても録画は失敗にならない。** 129 を抜いてから
-         * (確かめ直さずに) H.264 をエンコードさせると、129 の道が初期化で落ちて、
-         * ソフトウェアで再エンコードされる。試す順は 道ごとに 2回 (頭を捨てる分) → 次。
+         * (確かめ直さずに) H.264 をエンコードさせると、129 の方式が初期化で落ちて、
+         * ソフトウェアで再エンコードされる。試す順は 方式ごとに 2回 (頭を捨てる分) → 次。
          * 128 は H.264 を外してあるので、そちらへは行かない
          */
         rmSync(`${stack.hwDir}/renderD129`, { force: true });

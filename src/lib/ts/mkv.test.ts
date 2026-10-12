@@ -7,7 +7,7 @@ import { MkvSplitter } from './mkv';
  * ここに入れてあるのは、実機の ffmpeg に
  * `-f matroska pipe:1` で吐かせた 4 コマ (16x16 の PNG、25コマ/秒)。
  * **パイプへ流させた**ものなので、Segment の大きさが「不明」で書かれている —
- * ファイルに書かせたものとは形が違い、本番で来るのはこちら。
+ * ファイルに書かせたものとは形式が違い、本番で来るのはこちら。
  *
  * ffprobe が読んだ時刻は 0 / 0.04 / 0.08 / 0.12 秒
  */
@@ -38,7 +38,7 @@ const TINY =
 const bytes = () => new Uint8Array(Buffer.from(TINY, 'base64'));
 
 describe('MkvSplitter', () => {
-    test('軌道の種類を読む (録画の字幕が S_ARIBSUB かを見る)', () => {
+    test('トラックの種類を読む (録画の字幕が S_ARIBSUB かを見る)', () => {
         const splitter = new MkvSplitter();
         splitter.feed(bytes());
         expect(splitter.codecs).toEqual(['V_MS/VFW/FOURCC']);

@@ -35,7 +35,7 @@ export const PREFERRED_LOGO_TYPE = 0x05;
 /**
  * ロゴの大きさは**規格で6種類に決まっている** (ARIB STD-B21。logo_type → 幅×高さ)。
  * 局は6種類とも流していて、どれが先に来るかは運。0x00〜0x04 は SD 用・HD の小で、
- * SD 用は画素が正方でない前提の絵なので、そのまま並べると縦横比まで局ごとに違って見える
+ * SD 用は画素が正方でない前提の画像なので、そのまま並べると縦横比まで局ごとに違って見える
  */
 const LOGO_SIZES: readonly (readonly [number, number])[] = [
     [48, 24],
@@ -62,7 +62,7 @@ export function logoTypeOfPng(png: Uint8Array): number | null {
 
 /**
  * いま持っているものを、来たもので置き換えてよいか。**小さいものへは戻さない。**
- * 同じ種類は置き換える (絵が新しくなっているかもしれない)。
+ * 同じ種類は置き換える (画像が新しくなっているかもしれない)。
  * 持っているものの種類が分からなければ (null) 置き換える
  */
 export function replacesLogo(knownType: number | null, nextType: number): boolean {
@@ -85,7 +85,7 @@ export interface LogoData {
  *   logo_type 8 / reserved 7 + logo_id 9 / reserved 4 + logo_version 12 /
  *   data_size 16 / PNG
  *
- * PNG は色の表 (PLTE/tRNS) を抜いた形で流れてくるので、入れ直してから返す
+ * PNG は色の表 (PLTE/tRNS) を抜いた形式で流れてくるので、入れ直してから返す
  * (logo-palette.ts)。抜けたままだとブラウザは何も描かない。
  */
 export function parseCdt(section: Uint8Array): LogoData | null {

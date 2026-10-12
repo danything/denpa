@@ -7,7 +7,7 @@ namespace Denpa.Agent;
  *
  * - Descrambler … TS を読んで ECM を拾い、鍵を貰って MULTI2 で復号する (B25.cs / Multi2.cs)
  * - IKeySource  … ECM を渡すと鍵を返す相手。手元のカード (BCas.cs) か、別の拠点 (CardShare.cs)
- * - ICardLink   … カードと APDU をやり取りする線。USB の CCID リーダーを直に叩く (Ccid.cs。
+ * - ICardLink   … カードと APDU をやり取りする接続。USB の CCID リーダーを直に叩く (Ccid.cs。
  *                 macOS / Windows は OS の PC/SC 越し、Pcsc.cs) か、px4d の内蔵リーダー (Px4Card.cs)
  */
 
@@ -60,8 +60,8 @@ public sealed class CardsUnreadableException(IReadOnlyList<CardsUnreadableExcept
 public sealed record CardLinkCandidate(string Name, Func<ICardLink> Open);
 
 /// <summary>
-/// カードとの線。**APDU の単位**でやり取りする (T=1 の枠組みは線の側が持つ)。
-/// 1本の線を同時に2つから叩かない (呼ぶ側が順番にする)。
+/// カードとの接続。**APDU の単位**でやり取りする (T=1 の枠組みは接続の側が持つ)。
+/// 1本の接続を同時に2つから叩かない (呼ぶ側が順番にする)。
 /// </summary>
 public interface ICardLink : IDisposable
 {

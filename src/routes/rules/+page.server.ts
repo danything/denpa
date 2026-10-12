@@ -45,7 +45,7 @@ interface Row extends Rule {
 const PENDING = and(inArray(reservations.state, ['scheduled', 'conflict']), isNull(reservations.started_at));
 
 /**
- * 条件の読み取り口。**画面から来る道が2つある** — 「この条件で何が録れるか」は
+ * 条件の読み取り。**画面から来る経路が2つある** — 「この条件で何が録れるか」は
  * URL のクエリで、保存はフォームの POST で来る。どちらも `get` / `getAll` を持つ。
  */
 interface Fields {
@@ -103,7 +103,7 @@ function conditionsOf(fields: Fields): Conditions {
  *
  * **送られてこなければ null。** 新しく作るとき (下見・追加) は入れる — 番組表の検索から
  * 来たときと、録画から作るとき。**更新では今の値のまま** — 編集画面は必ず送るが、
- * それ以外の口から来た更新で、入れていないルールが黙って変わらないように
+ * それ以外の経路から来た更新で、入れていないルールが黙って変わらないように
  */
 function dedupeOf(fields: Fields): boolean | null {
     const sent = fields.getAll('dedupe').map(String);
@@ -201,7 +201,7 @@ interface Pending {
     service_name: string;
     /** チャンネル種別 (GR/BS/CS)。チューナーはこの単位で本数が決まる */
     type: string;
-    /** 物理チャンネル。同じチャンネルなら1本のチューナーで足りる */
+    /** 物理チャンネル。同じチャンネルなら1台のチューナーで足りる */
     channel: string;
     start_at: number;
     end_at: number;
@@ -286,14 +286,14 @@ export async function load({ url }) {
      *
      * これから先の番組を**全部**引いて JS で絞るので、実データでは番組表の
      * 24時間ぶんより重い。しかも**番組表の検索窓が飛ばす先はここ**なので、
-     * 待たされるのはたいていこの道。
+     * 待たされるのはたいていこの処理。
      *
      * ここだけ後から流して、条件の枠とルールの一覧は先に出す
      * (番組表と同じ。`guide/+page.server.ts` の `gridOf`)。
      * **転んでも投げ返さない** — 理由も同じ (拾い手のいない拒否になる)
      */
     async function previewOf(): Promise<Preview> {
-        // 器を先に出してから引く。同期のクエリなので、ここで一度譲らないと意味が無い
+        // 外枠を先に出してから引く。同期のクエリなので、ここで一度譲らないと意味が無い
         await new Promise((resolve) => setTimeout(resolve, 0));
         try {
             return { ...readPreview(conditions as Rule), failed: null };
@@ -376,7 +376,7 @@ export async function load({ url }) {
          * 重なりを数える相手。**立っている予約と、この条件で録れる番組の両方。**
          *
          * 予約としか比べていなかった頃は、保存前のルールでは重なりが1件も
-         * 出なかった (比べる相手がまだ居ない)。同じ番組が両方に出てくるので、
+         * 出なかった (比べる相手がまだいない)。同じ番組が両方に出てくるので、
          * 番組IDで1つにまとめる
          */
         const occupants = new Map<number, Occupant>();
@@ -417,7 +417,7 @@ export async function load({ url }) {
                 reservation_state: held?.state ?? null,
                 matched: true,
                 // 重なりは出す 100 件にだけ当てる (下)。スケジューラが既にチューナー
-                // 不足と判断していれば、その理由も添える (何本足りないのかはあちらしか知らない)
+                // 不足と判断していれば、その理由も添える (何台足りないのかはあちらしか知らない)
                 conflicts: [],
                 conflict_reason:
                     held?.state === 'conflict' ? (held.conflict_reason ?? 'チューナーが足りません') : null,
@@ -462,8 +462,8 @@ export async function load({ url }) {
          * だけなので、そこにだけ当てる。
          *
          * **比べる相手は、その 100 件が掛かる時間帯の全部と、そこから誰も使っていない瞬間まで
-         * さかのぼったぶん** (`settled`)。出さない番組とも取り合うので相手は減らせない。どの本に
-         * 入るかはその前に誰がどの本に入ったかで変わる (#668) ので、時間帯の頭からなぞると答えが
+         * さかのぼったぶん** (`settled`)。出さない番組とも取り合うので相手は減らせない。どのチューナーに
+         * 入るかはその前に誰がどのチューナーに入ったかで変わる (#668) ので、時間帯の頭からなぞると答えが
          * 変わる。誰も使っていない瞬間を挟めば振り出しに戻るので、そこより前と、時間帯より後は渡さない。
          *
          * 「競合 N 件」もその 100 件の中の数になる。画面ではそう書く

@@ -301,14 +301,14 @@ export type AudioSide = 'main' | 'sub' | 'both';
 
 /** 選べる音声1つぶん */
 export interface AudioTrack {
-    /** 選ぶときの合言葉。`"0:main"` の形。**画面とサーバの間で渡す** */
+    /** 選ぶときの合言葉。`"0:main"` の形式。**画面とサーバの間で渡す** */
     id: string;
     /** 何本目の音声か。ffmpeg の `-map 0:a:<これ>` に渡す */
     stream: number;
     side: AudioSide;
     /** 「主音声 (日本語)」「音声2 ステレオ (英語)」 */
     label: string;
-    /** 放送が「主音声」と言っているか。**何も頼まれなかったときに選ぶ** */
+    /** 放送が「主音声」と言っているか。**何も指定されなかったときに選ぶ** */
     main?: boolean;
 }
 
@@ -413,7 +413,7 @@ export function parseAudios(row: { audio_type: number | null; audios: Audio[] | 
 }
 
 /**
- * 頼まれたものを選ぶ。**知らないものを頼まれたら主音声。**
+ * 指定されたものを選ぶ。**知らないものを指定されたら主音声。**
  *
  * 番組が変われば音声の構成も変わる (二カ国語の映画が終わればステレオに戻る)。
  * 前の番組の合言葉が残っていても、無いものは選べない。
@@ -427,9 +427,9 @@ export function pickTrack(tracks: AudioTrack[], wanted: string | undefined): Aud
 }
 
 /**
- * 外から頼まれた音声の合言葉 (`AudioTrack.id`) を読む。**形が違えば頼まれなかったことにする。**
+ * 外から指定された音声の合言葉 (`AudioTrack.id`) を読む。**形式が違えば指定されなかったことにする。**
  *
- * HTTP の口 (`?audio=0:sub`。docs/api.md) から来るもの。形が合っていても無いもの
+ * HTTP API (`?audio=0:sub`。docs/api.md) から来るもの。形式が合っていても無いもの
  * (番組が替わって消えた副音声など) は `pickTrack` が主音声に落とすので、ここで断らない
  */
 export function askedTrack(value: string | null): string | undefined {

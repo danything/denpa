@@ -39,14 +39,14 @@ import {
 import { docsColor, docsLogo, docsProgram } from './docs';
 import { type FakeService, SERVICES } from './services';
 
-/** 絵を撮るための作り物の放送 (`tests/fake/docs.ts`)。番組とロゴもそちらに差し替える */
+/** スクリーンショットを撮るための作り物の放送 (`tests/fake/docs.ts`)。番組とロゴもそちらに差し替える */
 const DOCS = process.env['FAKE_PROFILE'] === 'docs';
 
 /**
- * 放送に乗るのと同じ形のロゴ (実機の地上波から拾った 48x24)。
+ * 放送に乗るのと同じ形式のロゴ (実機の地上波から拾った 48x24)。
  *
  * 8bit のパレット PNG だが、**色の表 (PLTE/tRNS) が入っていない。** ARIB では
- * 色が決め打ちなので送らない決まりで、受け取った側が入れて初めて絵になる。
+ * 色が決め打ちなので送らない決まりで、受け取った側が入れて初めて画像になる。
  * ここを普通の PNG にしてしまうと、その入れ直しが抜けていても気づけない
  */
 const LOGO_PNG = Uint8Array.from(
@@ -102,7 +102,7 @@ export const DEFAULT_KNOBS: Knobs = { scrambled: false, extendedMs: 0, noPresent
 /** 1枠の本数。E2E では短くして「数秒後に始まる番組」を作る */
 const SLOTS = Number(process.env['FAKE_SLOTS'] ?? 60);
 
-/** 局のロゴ。絵を撮るときは局ごとに作った作り物、テストは上の2枚 */
+/** 局のロゴ。スクリーンショットを撮るときは局ごとに作った作り物、テストは上の2枚 */
 const logoOf = (service: FakeService, large: boolean): Uint8Array =>
     DOCS ? docsLogo(service, large ? 64 : 48, large ? 36 : 24) : large ? LOGO_PNG_LARGE : LOGO_PNG;
 
@@ -125,7 +125,7 @@ function programsFor(service: FakeService): SynthEvent[] {
     const span = Math.min(DAY, count * slotMs);
     /*
      * 少し過去から始める。全部を過去にすると予約できる番組が1つも無くなる。
-     * 絵を撮るときは前後 30 時間ずつ — いつ撮っても、その日の番組表 (4時〜翌4時) が頭から埋まる
+     * スクリーンショットを撮るときは前後 30 時間ずつ — いつ撮っても、その日の番組表 (4時〜翌4時) が頭から埋まる
      */
     const base = Math.floor((Date.now() - (DOCS ? DAY : span / 3)) / slotMs) * slotMs;
     const programs: SynthEvent[] = [];
@@ -157,7 +157,7 @@ function programsFor(service: FakeService): SynthEvent[] {
                 [14, 0],
             ],
             /*
-             * **音声を2本にしておく。** 本物にもよくある形で (解説放送・二重音声)、
+             * **音声を2本にしておく。** 本物にもよくある構成で (解説放送・二重音声)、
              * どちらも `component_type=3` の日本語なので、**符号だけでは
              * 「ステレオ (日本語)」が2つ並ぶ**。見分けが付くのは放送が付けた
              * 名前だけ — 実機の日テレ「金曜ロードショー[解]」がまさにこれで、
@@ -280,15 +280,15 @@ const pidsOf = (index: number) => ({
  * DII → DDB と辿らないと拾えないので、そこまで作る。本物と同じ道筋にして
  * おかないと、テストだけ通って現物では永久に集まらない。
  *
- * **PAT と PMT は `tables()` のほうに載せる。** 中継に居るかどうかは PAT を
+ * **PAT と PMT は `tables()` のほうに載せる。** 中継にあるかどうかは PAT を
  * 見た時点で決まる (denpa は外れの中継をそこで見切る) ので、あとから別の PAT を
- * 流すと「居ないと分かったのにあとから出てくる」ことになる
+ * 流すと「無いと分かったのにあとから出てくる」ことになる
  */
 const ENGINEERING = { service: 929, pmt: 0x1f0, es: 0x1f1 };
 
 function carouselPackets(services: FakeService[]): Uint8Array {
     /*
-     * テストは1枚を全局で使い回す。絵を撮るときは局ごとに別の絵 (番組表に並ぶので見分けが付くように)
+     * テストは1枚を全局で使い回す。スクリーンショットを撮るときは局ごとに別の画像 (番組表に並ぶので見分けが付くように)
      */
     const module = logoModule(
         0x05,
@@ -375,7 +375,7 @@ function logoPackets(service: FakeService): Uint8Array {
 }
 
 /**
- * 物理チャンネル1本ぶんの表 (PAT / PMT / SDT / NIT)。選局したら真っ先に流れてくる。
+ * 物理チャンネル1つぶんの表 (PAT / PMT / SDT / NIT)。選局したら真っ先に流れてくる。
  *
  * **NIT も出す。** チャンネルスキャンは NIT と SDT が**両方**揃って初めて
  * 「受信できた」とみなす (`ts/psi.ts` の `ServiceReader`)。偽エージェントは
@@ -384,7 +384,7 @@ function logoPackets(service: FakeService): Uint8Array {
  */
 function tables(services: FakeService[]): Uint8Array {
     /*
-     * ロゴを積んでいる中継にはエンジニアリングサービス (929) が居る。
+     * ロゴを積んでいる中継にはエンジニアリングサービス (929) がある。
      * **PAT に載せるかどうかがそのまま「当たり外れ」になる** — denpa は
      * ここを見て、外れの中継を1秒ほどで見切る
      */
@@ -519,9 +519,9 @@ const TICK = 100;
 /**
  * 映像と音声。**本当にデコードできる MPEG-2 と AAC を流す** (`src/lib/ts/synth-av.ts`)。
  *
- * エンコードする道の E2E では ffmpeg も偽物なので中身は何でもよかったが、ライブを生で送る道は
- * **ブラウザが自分でデコードして絵を出す** (docs/stream.md §5.5)。そこを試すにはデコードできるものが要る。
- * 絵は 30 枚を使い回す (1秒で一巡りする縞)。
+ * エンコードする経路の E2E では ffmpeg も偽物なので中身は何でもよかったが、ライブを変換せずに送る経路は
+ * **ブラウザが自分でデコードして映像を出す** (docs/stream.md §5.5)。そこを試すにはデコードできるものが要る。
+ * コマは 30 枚を使い回す (1秒で一巡りする縞)。
  *
  * **PTS は PCR より 0.4 秒先にする。** 本物の放送もそう作ってある (受信機は PTS まで
  * 待って映す。stream.md §4「貯まりより小さく出ることはある」)

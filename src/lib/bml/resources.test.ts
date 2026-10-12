@@ -240,7 +240,7 @@ describe('PNG・DRCS・深い入れ子 (レビューで足したもの)', () => 
     });
 });
 
-describe('名前の形', () => {
+describe('名前の書き方', () => {
     test('問い合わせ (?tsid=…) と断片は、ファイルを引くのに使わない', () => {
         const r = new Resources();
         expect(r.resolve('/40/0001/Next.bml?tsid=0x7FE1', null)).toEqual({

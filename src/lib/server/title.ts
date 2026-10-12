@@ -123,7 +123,7 @@ class Twin {
     }
 }
 
-/** 探すときの形。全角を半角に、外字を昔の書き方に (`fold.ts`)、小文字に */
+/** 探すときの形式。全角を半角に、外字を昔の書き方に (`fold.ts`)、小文字に */
 export function searchable(input: string): string {
     return foldForSearch(toHalfWidth(input)).toLowerCase();
 }
@@ -219,7 +219,7 @@ export function parseTitle(rawName: string): ParsedTitle {
 }
 
 /**
- * ファイル名・ディレクトリ名に使える形に落とす。**全角の英数は半角に寄せる** —
+ * ファイル名・ディレクトリ名に使える形式に落とす。**全角の英数は半角に寄せる** —
  * 番組名を放送のまま持つようになる前に録ったものと、同じ名前に並べるため。
  * ext4 で壊れるのは `/` と NUL だけだが、SMB 経由で覗くことを考えて Windows の禁止文字も落とす。
  */

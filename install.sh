@@ -72,7 +72,7 @@ say() { printf '\033[1m==>\033[0m %s\n' "$*"; }
 die() { printf '\033[31mエラー:\033[0m %s\n' "$*" >&2; exit 1; }
 fetch() { curl -fsSL --retry 3 -o "$2" "$1" || die "ダウンロードできません: $1"; }
 
-# 入れる版。compose ファイルはこの版 (git の ref) から取り、イメージは x.y.z の形のときだけその版に
+# 入れる版。compose ファイルはこの版 (git の ref) から取り、イメージは x.y.z の形式のときだけその版に
 # 揃える (コミットやブランチなら latest)。API を使わず、latest の転送先からタグを読む (API は回数制限がある)
 version() {
   if [ -n "${DENPA_VERSION:-}" ]; then echo "$DENPA_VERSION"; return; fi
@@ -101,7 +101,7 @@ docker_ready() {
 # 残る)。止めてあるものは起こし直さない — 意図して止めた人の genkan を上げ直すたびに復活させたり、
 # 別の場所に入れた genkan の横にもう1つ clone したりしない
 genkan_installed() { docker network inspect genkan >/dev/null 2>&1; }
-# 動いているか (genkan ネットワークに Caddy が居るか)
+# 動いているか (genkan ネットワークに Caddy がいるか)
 genkan_running() {
   genkan_installed && docker ps --filter network=genkan --format '{{.Image}}' | grep -q caddy-docker-proxy
 }
@@ -284,7 +284,7 @@ MAC_DOCKER="Docker Desktop (https://www.docker.com/products/docker-desktop/) か
 # 止める。**録画中なら終わるまで待つ** (エージェントが SIGTERM で録画を待ってから畳む。plist の ExitTimeOut)
 #
 # **消えるまで待つ。** bootout は止まるのに時間の掛かるサービスだと待たずに返る (EINPROGRESS)。
-# そのまま入れ替えると、動いているバイナリを差し替えたうえ bootstrap が衝突して、エージェントが居なくなる
+# そのまま入れ替えると、動いているバイナリを差し替えたうえ bootstrap が衝突して、エージェントがいなくなる
 mac_stop() {
   launchctl print "gui/$(id -u)/$LABEL" >/dev/null 2>&1 || return 0
   say "動いているエージェントを止めます (録画中なら、終わるまでここで待ちます)"

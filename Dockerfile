@@ -9,16 +9,16 @@ COPY package.json bun.lock* ./
 RUN bun install
 
 # ---------------------------------------------------------------------------
-# 放送の MPEG-2 と AAC をブラウザでデコードする WebAssembly (docs/stream.md §5.5「生で送る」)
+# 放送の MPEG-2 と AAC をブラウザでデコードする WebAssembly (docs/stream.md §5.5「放送そのまま（MPEG-2）を送る」)
 #
-# **ブラウザには MPEG-2 の復号器が無い**ので、FFmpeg の mpeg2video と aac だけを組んで
+# **ブラウザには MPEG-2 のデコーダが無い**ので、FFmpeg の mpeg2video と aac だけを組んで
 # 持ち込む。出てくるのは decoder.mjs と decoder.wasm の2つ (wasm 855KB + mjs 14KB で 870KB ほど) で、
 # どの arch で組んでも中身は同じ (wasm なので)。**置き場はアプリの外** (/opt/denpa/mpeg2) —
 # 開発と E2E の compose はソースを /app に被せるので、/app の中に置くと隠れる。
 # 配るのは `/api/live/mpeg2/<名前>` (MPEG2_DIR を読む)。
 #
 # FFmpeg は下の `ffmpeg` 段と同じ版に揃える (Renovate が同じ PR で2か所とも上げる)。
-# 組むのは復号器1つだけなので、1〜2分で終わる
+# 組むのはデコーダ1つだけなので、1〜2分で終わる
 # ---------------------------------------------------------------------------
 FROM docker.io/emscripten/emsdk:6.0.12 AS mpeg2wasm
 # renovate: datasource=github-tags depName=FFmpeg/FFmpeg extractVersion=^n(?<version>.*)$
@@ -30,7 +30,7 @@ RUN mkdir /tmp/ffmpeg && \
     bash /src/mpeg2/build.sh /tmp/ffmpeg /opt/denpa/mpeg2 && \
     rm -rf /tmp/ffmpeg
 
-# 組んだ2つだけを取り出す口。**CI の E2E はイメージを使わずランナーで回す**ので、
+# 組んだ2つだけを取り出す段。**CI の E2E はイメージを使わずランナーで回す**ので、
 # `docker buildx build --target mpeg2wasm-out --output type=local,dest=…` でここだけ手元へ出す
 # (上の段をそのまま出すと emsdk ごと 3GB 出てくる)
 FROM scratch AS mpeg2wasm-out
@@ -43,7 +43,7 @@ COPY --from=mpeg2wasm /opt/denpa/mpeg2 /
 # **留めるのはタグだけ** (Renovate はタグだけ上げればよい)。中身は同じリリースの SHA256SUMS で照らす。
 # 画面はこのタグを URL に付けて1年持たせる (vite.config.ts がこの行を読む)。配る側は VERSION と
 # 照らし、合うときだけ immutable にする (src/lib/server/font.ts)。
-# 段を分けてあるのは、本番イメージと絵を撮るイメージ (下の `docs` 段) の両方に同じものを置くため
+# 段を分けてあるのは、本番イメージと画像を撮るイメージ (下の `docs` 段) の両方に同じものを置くため
 # ---------------------------------------------------------------------------
 FROM docker.io/library/debian:trixie-slim@sha256:a29215f6a35e51e22adffa17f89e9d2ef06214e64a2bad10d765c46aea49f11f AS denpa-font
 # renovate: datasource=github-releases depName=danything/denpa-font
@@ -61,7 +61,7 @@ FROM docker.io/oven/bun:1.4-slim AS dev
 WORKDIR /app
 ENV NODE_ENV=development
 COPY --from=deps /app/node_modules ./node_modules
-# **ライブを生で送る道の復号器** (上の段)。/app の外に置くので bind mount に隠れない
+# **ライブを変換せずに送る経路のデコーダ** (上の段)。/app の外に置くので bind mount に隠れない
 COPY --from=mpeg2wasm /opt/denpa/mpeg2 /opt/denpa/mpeg2
 COPY . .
 EXPOSE 5173
@@ -77,8 +77,8 @@ RUN bunx playwright install --with-deps chromium && \
 CMD ["bun", "run", "test"]
 
 # ---------------------------------------------------------------------------
-# README・docs の絵を撮る (scripts/capture-docs.ts。docs/development.md「README の絵」)。
-# E2E のイメージに、絵に出る字と、作り物の録画を組む本物の ffmpeg を足す
+# README・docs の画像を撮る (scripts/capture-docs.ts。docs/development.md「README の画像」)。
+# E2E のイメージに、画像に出る字と、作り物の録画を組む本物の ffmpeg を足す
 # ---------------------------------------------------------------------------
 FROM test AS docs
 RUN apt-get update && \
@@ -103,7 +103,7 @@ CMD ["bun", "scripts/capture-docs.ts"]
 # ---------------------------------------------------------------------------
 # ffmpeg (自前ビルド。AV1 libsvtav1/dav1d + H.264 x264 + Opus + Intel GPU (VA-API/QSV)。
 # 上流に投げる直しがあれば patches/ から当てる。ARIB 字幕はデコードせずに写すだけなので
-# 復号器 (libaribcaption) は組み込まない — `-c:s copy` に復号器は要らない)
+# デコーダ (libaribcaption) は組み込まない — `-c:s copy` にデコーダは要らない)
 # ---------------------------------------------------------------------------
 # **debian は digest で固定する** (ffmpeg / runtime の2つとも同じもの)。
 # タグ (`trixie-slim`) だけだと月に何度か中身が入れ替わり、CI は `pull: true` なので
@@ -124,7 +124,7 @@ ENV CURL="curl -fsSL --retry 5 --retry-delay 5 --retry-all-errors --connect-time
 # ffmpeg に libvpl (QSV = h264_qsv / av1_qsv) を組み込み、実行イメージにドライバを
 # 入れてある。コンテナから /dev/dri が見えれば、起動時に server/hwenc.ts が試しのエンコードで
 # 見つけて使い、無ければソフトウェア (libsvtav1 / libx264) でエンコードする。
-# **libva は QSV の下に必ず居る** (Linux では libvpl → libmfx-gen → libva → /dev/dri)。
+# **libva は QSV の下に必ずいる** (Linux では libvpl → libmfx-gen → libva → /dev/dri)。
 # vaapi も有効にしてあるのは、QSV が初期化できない機種の逃げ道 (h264_vaapi) のため
 #
 # **QSV (libvpl) は amd64 だけ。** Debian の libvpl / libmfx-gen / intel-media-va-driver は
@@ -216,7 +216,7 @@ COPY --from=ffmpeg /usr/local/bin/ffmpeg /usr/local/bin/ffprobe /usr/local/bin/
 # データ放送と字幕を描くブラウザに渡す字 (Denpa Font。上の `denpa-font` 段)
 COPY --from=denpa-font /usr/share/denpa-font /usr/share/denpa-font
 
-# ライブを生で送るときにブラウザへ配る MPEG-2 と AAC の復号器 (`mpeg2wasm` 段)
+# ライブを変換せずに送るときにブラウザへ配る MPEG-2 と AAC のデコーダ (`mpeg2wasm` 段)
 COPY --from=mpeg2wasm /opt/denpa/mpeg2 /opt/denpa/mpeg2
 
 # **node_modules は載せない。**
@@ -232,7 +232,7 @@ COPY --from=mpeg2wasm /opt/denpa/mpeg2 /opt/denpa/mpeg2
 COPY --from=build /app/build ./build
 COPY --from=build /app/package.json ./package.json
 # DB のマイグレーション (drizzle-kit が出した SQL)。起動時に `drizzle/` を cwd から
-# 読んで当てる (src/lib/server/db.ts)。束ねられないので生のまま置く
+# 読んで当てる (src/lib/server/db.ts)。束ねられないので SQL ファイルのまま置く
 COPY --from=build /app/drizzle ./drizzle
 # ライブ視聴の WebSocket を受ける入口。中身の理由はファイルの頭に書いてある
 COPY --from=build /app/server.js ./server.js

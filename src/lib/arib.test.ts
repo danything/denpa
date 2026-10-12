@@ -181,17 +181,17 @@ describe('audioTracks', () => {
 
 /**
  * **番組が変われば音声の構成も変わる。** 二カ国語の映画が終わればステレオに
- * 戻るので、覚えていた合言葉が選べなくなる。無いものを頼まれたら先頭に落とす —
+ * 戻るので、覚えていた合言葉が選べなくなる。無いものを指定されたら先頭に落とす —
  * 落とさないと、番組が変わった瞬間に音が出なくなる
  */
 describe('pickTrack', () => {
     const tracks = audioTracks([{ componentType: 2, langs: ['jpn', 'eng'] }]);
 
-    test('頼まれたものを選ぶ', () => {
+    test('指定されたものを選ぶ', () => {
         expect(pickTrack(tracks, '0:sub').side).toBe('sub');
     });
 
-    test('無いものを頼まれたら先頭', () => {
+    test('無いものを指定されたら先頭', () => {
         expect(pickTrack(tracks, '1:sub').id).toBe('0:main');
         expect(pickTrack(tracks, undefined).id).toBe('0:main');
     });
@@ -200,7 +200,7 @@ describe('pickTrack', () => {
      * **どれが主音声かは放送が言っている** (`main_component_flag`)。
      * 並び順の1本目が主音声とは限らないので、言っているならそちらに従う
      */
-    test('何も頼まれなければ、放送が言う主音声', () => {
+    test('何も指定されなければ、放送が言う主音声', () => {
         const two = audioTracks([
             { componentType: 3, langs: ['jpn'], text: '解説ステレオ', main: false },
             { componentType: 3, langs: ['jpn'], text: '主音声ステレオ', main: true },
@@ -211,7 +211,7 @@ describe('pickTrack', () => {
 
 /**
  * **古い行には `audios` が無い。** そのときは `audio_type` だけでデュアルモノかを見る。
- * 外から使う口 (`now.audios`・録画の `audios`) も画面のライブ・追っかけと同じ読み方をする
+ * 外から使う API (`now.audios`・録画の `audios`) も画面のライブ・追っかけと同じ読み方をする
  */
 describe('parseAudios', () => {
     test('audios があればそれを使う', () => {
@@ -236,17 +236,17 @@ describe('parseAudios', () => {
 });
 
 /**
- * HTTP の口の `?audio=<id>`。形が違えば頼まれなかったことにする (主音声でエンコードする)。
- * 形が合っていて無いものは `pickTrack` が主音声に落とす
+ * HTTP API の `?audio=<id>`。形式が違えば指定されなかったことにする (主音声でエンコードする)。
+ * 形式が合っていて無いものは `pickTrack` が主音声に落とす
  */
 describe('askedTrack', () => {
-    test('AudioTrack.id の形なら通す', () => {
+    test('AudioTrack.id の形式なら通す', () => {
         expect(askedTrack('0:main')).toBe('0:main');
         expect(askedTrack('1:sub')).toBe('1:sub');
         expect(askedTrack('2:both')).toBe('2:both');
     });
 
-    test('形が違えば undefined', () => {
+    test('形式が違えば undefined', () => {
         expect(askedTrack(null)).toBeUndefined();
         expect(askedTrack('')).toBeUndefined();
         expect(askedTrack('only')).toBeUndefined();

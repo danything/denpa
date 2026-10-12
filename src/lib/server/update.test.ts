@@ -93,7 +93,7 @@ describe('新しい版の知らせ', () => {
         }
     });
 
-    test('繋がらない・形が違うときは、前に分かっていたことを持つ', async () => {
+    test('繋がらない・形式が違うときは、前に分かっていたことを持つ', async () => {
         config.version = 'v1.7.1';
         await checkForUpdate(github(release('v1.8.0')));
         const failing = async () => {

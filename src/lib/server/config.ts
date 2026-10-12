@@ -2,7 +2,7 @@
  * 動かすときに決めるもの。
  *
  * **環境変数にするのは、外から差し替える理由があるものだけ。**
- * 相手の居場所 (チューナーエージェント・ffmpeg・置き場) と、間隔やマージンのように
+ * 相手の場所 (チューナーエージェント・ffmpeg・置き場) と、間隔やマージンのように
  * テストで詰めたいもの。それ以外はここに直に書く。**画面から変えたいものは設定画面** (settings.ts)。
  */
 
@@ -42,7 +42,7 @@ const mediaDir = str('MEDIA_DIR', '/media');
 
 export const config = {
     /**
-     * チューナーエージェントの居場所。
+     * チューナーエージェントの場所。
      *
      * 選局もスクランブル解除もチャンネルスキャンも、全部ここが窓口。
      * B-CASカードのリーダーを叩くのも向こう側。
@@ -109,7 +109,7 @@ export const config = {
     encodeMaxAttempts: num('ENCODE_MAX_ATTEMPTS', 5),
     ffprobe: str('FFPROBE', '/usr/local/bin/ffprobe'),
     /**
-     * GPU の口を探す形 (最後の段に `*`)。当たった口を全部試して、QSV / VA-API が
+     * GPU のデバイスを探すパターン (最後の段に `*`)。当たったデバイスを全部試して、QSV / VA-API が
      * 初期化できたものでエンコードする (server/hwenc.ts)。Pod / コンテナに `/dev/dri` を
      * 渡していなければ1つも無いのが普通
      */
@@ -153,7 +153,7 @@ export const config = {
     bmlDns: str('BML_DNS', '1.1.1.1,8.8.8.8'),
 
     /**
-     * 動いている版 (`v1.8.1` の形)。**リリースのイメージにだけ入る** — リリースのとき、
+     * 動いている版 (`v1.8.1` の形式)。**リリースのイメージにだけ入る** — リリースのとき、
      * main で組んだイメージに 1 層足す (.github/release.Dockerfile)。main (develop) の
      * イメージと手元・試験は `dev` で、そのときは新しい版の知らせを出さない (update.ts)
      */
@@ -165,7 +165,7 @@ export const config = {
 
     /**
      * 30コマとみなす生存率の上限 (encoder.measureSmoothMotion。5窓の中央値)。
-     * アニメ 17〜28% (30枚違う絵の作品で 48%) と実写 60〜79% の間の 50%。
+     * アニメ 17〜28% (30枚違う画像の作品で 48%) と実写 60〜79% の間の 50%。
      * **これ以上は上げないこと** — 実写側の余裕が 3〜10 ポイントしか無い
      * (実測は docs/encode.md「コマ数は本編の映像から測って決める」)
      */
@@ -274,7 +274,7 @@ export const config = {
     oidcClientId: str('OIDC_CLIENT_ID', ''),
     oidcClientSecret: str('OIDC_CLIENT_SECRET', ''),
     /**
-     * **このグループに居る人だけ入れる。** Entra ID の `groups` クレーム
+     * **このグループにいる人だけ入れる。** Entra ID の `groups` クレーム
      * (既定ではグループのオブジェクトID) か `roles` クレーム (アプリロール) と照合する (`oidc.allowed`)。
      *
      * 空にすると「入れた人は全員通す」。誰が入れるかを Entra 側の
@@ -286,7 +286,7 @@ export const config = {
      * (`10.10.0.0/16`)。当たると OIDC も掛からない
      * (どう効くかは `auth.trusted`)。
      *
-     * **前段 (リバースプロキシ) が居るなら `TRUSTED_PROXIES` に前段の住所を書く。**
+     * **前段 (リバースプロキシ) があるなら `TRUSTED_PROXIES` に前段のアドレスを書く。**
      * 書かないと接続元が前段の住所になり、ここが誰にも当たらない。`TRUSTED_PROXIES` は
      * アプリではなく入口の server.js が読む (接続元を決めて `x-denpa-remote` で渡す。
      * `address.resolveClient`) ので、ここには置かない

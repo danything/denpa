@@ -39,9 +39,9 @@ export function submitting(node: HTMLFormElement, submit?: SubmitFunction) {
 
         return async (received) => {
             /*
-             * **送ったあとも今の画面に居る** (`navigate: false`)。SvelteKit 3 の既定は
+             * **送ったあとも今の画面にいる** (`navigate: false`)。SvelteKit 3 の既定は
              * 素のフォーム送信をまねて「アクションの URL」へ移る。そこは**サーバから見た
-             * 道** (`/rules`) なので、前段が接頭辞を剥がしていると接頭辞の外へ出てしまう
+             * パス** (`/rules`) なので、前段が接頭辞を剥がしていると接頭辞の外へ出てしまう
              * (server/paths.ts)。`?edit=` のような今の画面の問い合わせも落ちる。
              * 押したら同じ画面のまま中身だけ変わる、という今までの振る舞いに揃える
              */

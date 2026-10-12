@@ -8,24 +8,24 @@ using TUnit.Core.Enums;
 namespace Denpa.Agent.Tests;
 
 /*
- * デバイスの読み口。
+ * デバイスの読み出し側。
  *
  * ここは**電波が来ていないときの振る舞い**が問題になる。デバイスは選局を
  * 跨いで開いたままなので、読み手のほうから降りられないと、蹴られた読み手が
- * 居座ったまま次の選局が始まる。実機では、そのせいで**同じ復号器を2本の
+ * 居座ったまま次の選局が始まる。実機では、そのせいで**同じ復号の実体を2本の
  * 流れから叩き**、プロセスごと落ちた (`double free or corruption`)。
  *
  * 本物のチューナーは要らない。何も来ないパイプで「来ないときにどうするか」は
  * そのまま試せる。
  */
-// libc の pipe で作る読み口 (poll で待つ道)。Windows の道は下の DeviceStreamPipeTests
+// libc の pipe で作る読み出し側 (poll で待つ方式)。Windows の方式は下の DeviceStreamPipeTests
 [ExcludeOn(OS.Windows)]
 public partial class DeviceStreamTests
 {
     [LibraryImport("libc", EntryPoint = "pipe", SetLastError = true)]
     private static partial int Pipe(Span<int> fds);
 
-    /// <summary>何も書き込まれないパイプ。**永久に来ない読み口**の代わり</summary>
+    /// <summary>何も書き込まれないパイプ。**永久に来ない読み出し側**の代わり</summary>
     private static (DeviceStream Stream, SafeFileHandle Write) Silent()
     {
         Span<int> fds = stackalloc int[2];
@@ -55,7 +55,7 @@ public partial class DeviceStreamTests
 
     /*
      * **止めたあとは、読みかけが戻るまでだけ待つ** (`WaitReaders`)。局替えのたびに
-     * 固定で 300ms 寝ていたのを、読み手が居なければ待たない形にした
+     * 固定で 300ms 寝ていたのを、読み手がいなければ待たないようにした
      */
     [Test]
     public async Task 読み手が居なければ待たず_居れば戻るまで待つ()
@@ -80,7 +80,7 @@ public partial class DeviceStreamTests
                 CancellationToken.None, TaskCreationOptions.LongRunning, TaskScheduler.Default);
             /*
              * **読み手が中に入ったのを見てから止める。** 決め打ちで 100ms 寝ていた頃は、混んだ Mac の
-             * ランナーでまだ入っていないうちに止めてしまい、待つ相手の居ない WaitReaders が
+             * ランナーでまだ入っていないうちに止めてしまい、待つ相手のいない WaitReaders が
              * すぐ戻って落ちた (CI)
              */
             var entering = Stopwatch.StartNew();
@@ -89,7 +89,7 @@ public partial class DeviceStreamTests
             stream.Stop();
             stream.WaitReaders(TimeSpan.FromSeconds(2));
             // poll は 0.2 秒ごとに起きるので、待ち終えた時点で読み手は戻っている。
-            // タスクが「終わった」になるのはその少し後なので、見るのは中に居る数
+            // タスクが「終わった」になるのはその少し後なので、見るのは中にいる数
             await Assert.That(stream.Readers).IsEqualTo(0);
             await Assert.That(await reading.WaitAsync(TimeSpan.FromSeconds(1))).IsEqualTo(0);
         }
@@ -110,7 +110,7 @@ public partial class DeviceStreamTests
         {
             var buffer = new byte[188];
             /*
-             * **専用のスレッドで読む。** 共用の池から借りると、他のテストが池を塞いでいる間は
+             * **専用のスレッドで読む。** 共用のスレッドプールから借りると、他のテストがプールを塞いでいる間は
              * 読み始めることすらできず、書いてから 2 秒待っても返らない (CI で1度落ちた。
              * 手元では2コアに絞っても出ない揺れ)。Px4CardTests の偽の px4d と同じ理由
              */
@@ -140,12 +140,12 @@ public partial class DeviceStreamTests
     private static unsafe partial nint WriteFd(int fd, byte* buffer, nuint count);
 }
 /*
- * Windows の読み口 (.NET の Stream を裏の1本に読ませる道)。どの OS でも同じに動くので、
+ * Windows の読み出し側 (.NET の Stream を裏のスレッドに読ませる方式)。どの OS でも同じに動くので、
  * Linux の CI でもここで見る。何も来ない pipe は .NET の匿名 pipe で作る
  */
 public class DeviceStreamPipeTests
 {
-    /// <summary>読み口と書き口。読み口の側が Windows で子の標準出力にあたる</summary>
+    /// <summary>読み出し側と書き込み側。読み出し側が Windows で子の標準出力にあたる</summary>
     private static (DeviceStream Stream, Stream Write) Silent(Func<string?>? ended = null)
     {
         var read = new AnonymousPipeServerStream(PipeDirection.In);
@@ -177,7 +177,7 @@ public class DeviceStreamPipeTests
     {
         var (stream, write) = Silent(() => "siano-ts が終了しました");
         using var _ = stream;
-        // 書き手 (子) が居なくなった
+        // 書き手 (子) がいなくなった
         write.Dispose();
         var error = Assert.Throws<IOException>(() => stream.Read(new byte[188], 0, 188, () => false));
         await Assert.That(error.Message).Contains("終了しました");

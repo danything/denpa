@@ -13,7 +13,7 @@ playwright-report/
 
 # 偽 ffmpeg が `pipe:1` を出力先と読んで作ってしまう置き土産
 pipe:*
-# 絵を撮ったときのコマ (scripts/capture-docs.ts)
+# 画像を撮ったときのコマ (scripts/capture-docs.ts)
 docs/images/.capture/
 
 # 手元だけの上書き (Compose が自動で読む)

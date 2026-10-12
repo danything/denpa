@@ -21,7 +21,7 @@ import { eq, sql } from 'drizzle-orm';
  * 次の実行はそれを取り込み済みと読んで飛ばしていた。
  *
  * DB が途中で失敗するところは、SQLite のトリガで RAISE させて作る (本物の取り込みを
- * そのまま動かすため、試験用の差し込み口は持たない)。
+ * そのまま動かすため、試験用の差し替えの仕組みは持たない)。
  * 設定は環境変数ではなく設定そのものを書き換える (files.test.ts と同じ理由)。
  */
 const root = mkdtempSync(join(tmpdir(), 'denpa-migrate-'));

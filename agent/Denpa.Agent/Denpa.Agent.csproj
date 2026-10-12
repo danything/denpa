@@ -8,7 +8,7 @@
         出来上がるのは 13MB ほどの実行ファイル1個。
 
         依存を1つも足していない。JSON は System.Text.Json.Nodes で木を直に組み、読む —
-        AOT では反射を使う道が素直に動かない (Json.cs)。
+        AOT ではリフレクションを使う方式が素直に動かない (Json.cs)。
     -->
     <PropertyGroup>
         <TargetFramework>net10.0</TargetFramework>

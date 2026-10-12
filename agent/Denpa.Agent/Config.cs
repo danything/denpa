@@ -3,7 +3,7 @@ using System.Text.Json.Nodes;
 namespace Denpa.Agent;
 
 /// <summary>
-/// 繋いである機材1本ぶん。
+/// 繋いである機材1台ぶん。
 ///
 /// <para>
 /// **選局コマンドそのものは持たない。** 画面から書き換えられるようにした以上、
@@ -69,9 +69,9 @@ public sealed record TunerSpec(
 /// </para>
 ///
 /// <para>
-/// 中身を作るのはどちらもこちらではない。総当たりの選局こそ頼まれるが、NIT も
-/// SDT も解析しないので「何が居たか」は分からない。それでも控えを持つのはこちら側
-/// にする — アンテナに何が映るかも、何本刺さっているかも、機材ごとの話だから。
+/// 中身を作るのはどちらもこちらではない。総当たりの選局こそ任されるが、NIT も
+/// SDT も解析しないので「何があったか」は分からない。それでも控えを持つのはこちら側
+/// にする — アンテナに何が映るかも、何台刺さっているかも、機材ごとの話だから。
 /// </para>
 /// </summary>
 public sealed class Config(string tunersFile, string channelsFile)
@@ -121,7 +121,7 @@ public sealed class Config(string tunersFile, string channelsFile)
     ///
     /// <para>
     /// **空を渡すと設定そのものを消す。** そのまま「自動検出に戻す」になる。
-    /// 1本も無い状態を書き込めるようにしておくより、無い状態=自分で探す、の
+    /// 1台も無い状態を書き込めるようにしておくより、無い状態=自分で探す、の
     /// ほうが後で困らない。
     /// </para>
     /// </summary>
@@ -137,7 +137,7 @@ public sealed class Config(string tunersFile, string channelsFile)
         var list = new JsonArray();
         foreach (var tuner in tuners) list.Add((JsonNode)tuner.ToJson());
         WriteAtomic(TunersFile, new JsonObject { ["tuners"] = list });
-        Log.Write($"チューナーの定義を保存しました: {tuners.Count} 本");
+        Log.Write($"チューナーの定義を保存しました: {tuners.Count} 台");
     }
 
     /// <summary>
@@ -145,7 +145,7 @@ public sealed class Config(string tunersFile, string channelsFile)
     ///
     /// <para>
     /// 自動で分かるのは「刺さっているデバイスと、それが受けられる方式」だけ。
-    /// LNB を足したい・1本だけ止めたい・別PCのぶんを混ぜたい、は人にしか
+    /// LNB を足したい・1台だけ止めたい・別PCのぶんを混ぜたい、は人にしか
     /// 決められないので、そのときは画面から書く。
     /// </para>
     /// </summary>

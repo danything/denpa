@@ -1,5 +1,5 @@
 /**
- * **録画の TS の中で、時刻からバイトの位置を引く** (`/api/recordings/<id>/stream` の TS が元の道)。
+ * **録画の TS の中で、時刻からバイトの位置を引く** (`/api/recordings/<id>/stream` で元の TS を流す経路)。
  *
  * TS には索引が無い。位置を当てるには中を読むしかないが、頭から読むと 1 時間の BS で 7GB になる。
  * そこで**決まった位置の PES の PTS を見て二分探索する** (1 回に読むのは数百KB、30 回ほどで当たる)。
@@ -16,7 +16,7 @@
  * 26.5 時間より短いので、一周をまたいでも差は増え続ける。頭より少し前 (B フレームの並べ替え、
  * 音声と映像の頭のずれ) は負の小さな数にする
  *
- * DOM もファイルも触らない (読む口は受け取る) ので、合成した TS で確かめられる (`seek.test.ts`)
+ * DOM もファイルも触らない (読む関数は受け取る) ので、合成した TS で確かめられる (`seek.test.ts`)
  */
 
 import { CLOCK, readStamp, WRAP } from './pes';
@@ -121,7 +121,7 @@ export function lastVideoPts(bytes: Uint8Array): number | null {
     return last;
 }
 
-/** ファイルを少しずつ読む口。`length` より短く返ってよい (尻) */
+/** ファイルを少しずつ読む関数。`length` より短く返ってよい (尻) */
 export type ReadAt = (offset: number, length: number) => Promise<Uint8Array>;
 
 /** 1 回に読む量。放送の 1 秒ぶん (地上波 17Mbps ≒ 2MB) より短い間に映像の PES は何度も来る */
@@ -149,7 +149,7 @@ async function videoAt(read: ReadAt, offset: number): Promise<PesMark | null> {
  * **頭から `target` 秒のところを読みはじめる位置。** その時刻より前で、いちばん近い映像の PES の頭。
  *
  * 決まった位置を読み、そこから先で最初に来る映像の PES の PTS で比べる二分探索。時刻は映像の
- * PES でしか見ない (音声は映像より 0.数秒ずれて多重化されている)。頭より前を頼まれたら頭から。
+ * PES でしか見ない (音声は映像より 0.数秒ずれて多重化されている)。頭より前を指定されたら頭から。
  * 映像の PES が 1 つも無ければ null
  *
  * @param size ファイルの大きさ (バイト)

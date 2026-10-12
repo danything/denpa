@@ -32,7 +32,7 @@ describe('DecodeBudget', () => {
         expect(second(budget, 10 * WINDOW, 30)).toBe(true);
     });
 
-    test('デコードする時間が軽くても、絵が遅れ続けていれば諦める', () => {
+    test('デコードする時間が軽くても、映像が遅れ続けていれば諦める', () => {
         const budget = new DecodeBudget();
         budget.tick(0, 33.4, 0);
         const results = [1, 2, 3, 4, 5].map((s) => second(budget, s * WINDOW, 5, 0.5));
@@ -46,7 +46,7 @@ describe('DecodeBudget', () => {
     });
 });
 
-describe('DecodeBudget (WebCodecs の道)', () => {
+describe('DecodeBudget (WebCodecs の経路)', () => {
     /** 1秒ぶん。`queued` は刻みごとの詰まり */
     function webSecond(budget: DecodeBudget, at: number, ms: number, queued: number[]): boolean {
         for (let i = 0; i < 30; i++) budget.record(ms);
@@ -56,7 +56,7 @@ describe('DecodeBudget (WebCodecs の道)', () => {
         return result;
     }
 
-    test('1コマの時間が長くても (GPU の道の溜め) 詰まっていなければ諦めない', () => {
+    test('1コマの時間が長くても (GPU 経由の溜め) 詰まっていなければ諦めない', () => {
         const budget = new DecodeBudget(false);
         budget.tick(0, 16.7, 0, 0);
         for (let s = 1; s <= 10; s++) expect(webSecond(budget, s * WINDOW, 60, [2, 0, 1, 2])).toBe(false);

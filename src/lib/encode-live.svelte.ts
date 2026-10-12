@@ -1,7 +1,7 @@
 import type { EncodeProgress } from '#lib/server/events.js';
 
 /**
- * エンコード進捗の**生放送**。SSE の `encode` イベント (中身付き) を録画IDごとに持つ。
+ * エンコード進捗の**リアルタイム表示**。SSE の `encode` イベント (中身付き) を録画IDごとに持つ。
  *
  * 進捗は数秒おきに飛んでくる。`recordings` の「変わったよ」で受けていた頃は
  * そのたびにページ全体を読み直していて、遅い回線では往復ぶん数字が遅れた。
@@ -20,7 +20,7 @@ export const encodeLive = {
     },
 };
 
-/** SSE から届いた中身を仕舞う。形が違うものは黙って捨てる (画面を壊さない) */
+/** SSE から届いた中身を仕舞う。形式が違うものは黙って捨てる (画面を壊さない) */
 export function applyEncodeProgress(payload: unknown): void {
     const p = payload as Partial<EncodeProgress> | null;
     if (p === null || typeof p !== 'object' || typeof p.recordingId !== 'number') return;

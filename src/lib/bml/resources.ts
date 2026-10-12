@@ -24,7 +24,7 @@ export interface CarouselFile {
     name: string;
     type: MediaType;
     data: Uint8Array;
-    /** 作った blob: の URL (種類ごと)。モジュールを捨てるときに返す (動く絵はコマごとの URL も) */
+    /** 作った blob: の URL (種類ごと)。モジュールを捨てるときに返す (アニメーションはコマごとの URL も) */
     urls: Map<string, ImageSource>;
 }
 

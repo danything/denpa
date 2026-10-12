@@ -78,7 +78,7 @@ export function verifyShareToken(
 }
 
 /**
- * 認証 (hooks) から呼ぶ入口。**効くのはファイルの口だけ。**
+ * 認証 (hooks) から呼ぶ入口。**効くのはファイルのエンドポイントだけ。**
  *
  * トークンで開くのは「この録画を期限まで観られる」だけで、画面にも他の API にも
  * 手は届かない。パスの録画IDの控えと突き合わせるので、1本ぶんのリンクを
@@ -89,7 +89,7 @@ export function shareTokenAllows(pathname: string, searchParams: URLSearchParams
     return id !== null && verifyShareToken(id, searchParams.get('token'));
 }
 
-/** 再生リンクの形 (録画のファイルの口)。資格 (`?token=`) と配るファイルの名指し (`?source=`) はクエリに */
+/** 再生リンクの形式 (録画のファイルのエンドポイント)。資格 (`?token=`) と配るファイルの名指し (`?source=`) はクエリに */
 export function shareUrl(
     recordingId: number,
     origin: string,

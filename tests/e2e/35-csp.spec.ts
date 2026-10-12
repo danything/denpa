@@ -15,7 +15,7 @@ import {
  * (Content-Security-Policy。docs/auth.md の「画面で動いてよいもの」、設定は vite.config.ts の `csp`)。
  *
  * 狙いは放送の BML。データ放送のエンジン (`src/lib/bml/`) は `onclick` などを DOM に写さず
- * 自前の VM で動かす。写していないこと、器の `pointer-events: none` を外して押しても
+ * 自前の VM で動かす。写していないこと、外枠の `pointer-events: none` を外して押しても
  * 放送の文字列が denpa の origin で本物の JS として動かないことを見る (CSP は写し漏れへの備え)。
  */
 
@@ -52,7 +52,7 @@ test.describe('CSP', () => {
             expect(policy, path).toMatch(/script-src 'self' 'nonce-[^']+'/);
             expect(policy, path).not.toContain('unsafe-eval');
             await page.locator('[data-hydrated="true"]').waitFor();
-            // app.html の色当て (インラインの1本) も nonce で通っている
+            // app.html の色当て (インラインの1つ) も nonce で通っている
             expect(await page.evaluate(() => document.documentElement.getAttribute('data-theme')), path).toBe(
                 'dark',
             );
@@ -83,7 +83,7 @@ test.describe('CSP', () => {
         await expect.poll(async () => (await dataElement(page, 'span'))?.text).toBe('trap');
 
         /*
-         * **描いた要素に属性は写さない** (見た目の `style` と、絵の `src`・`alt` だけ)。
+         * **描いた要素に属性は写さない** (見た目の `style` と、画像の `src`・`alt` だけ)。
          * エンジンは on* を自前の VM で動かす (`f();` の形だけ) ので、ページの JS にはならない
          */
         const attributes = await page.evaluate(() => {
@@ -97,7 +97,7 @@ test.describe('CSP', () => {
         });
         expect(attributes.filter((name) => name !== 'style' && name !== 'src' && name !== 'alt')).toEqual([]);
 
-        // 押せるようにして (器の pointer-events を外す)、罠の真ん中を本当に押す。キーも打つ
+        // 押せるようにして (外枠の pointer-events を外す)、罠の真ん中を本当に押す。キーも打つ
         const box = await page.evaluate(() => {
             const host = document.querySelector<HTMLElement>('[data-testid="live-data"]');
             if (host !== null) host.style.pointerEvents = 'auto';

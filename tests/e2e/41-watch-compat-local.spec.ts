@@ -7,11 +7,11 @@ import { expect, FAKE_CAPTION, goto, recordOne, test, wakeControls } from './hel
  * **互換モードで、端末に保存した録画も canvas に描く** (`src/lib/mkv-source.ts`・`src/lib/raw/mkv.ts`)。
  *
  * 端末に保存してあるのはエンコード済みの Matroska。互換モードでは `<video>` に渡さず、worker がそのまま
- * 読んで、サーバから流すときと同じ器で描く。飛ぶ位置は Matroska の Cues から引く。
+ * 読んで、サーバから流すときと同じエンジンで描く。飛ぶ位置は Matroska の Cues から引く。
  *
  * 偽 ffmpeg がエンコードする録画は中身が無いので、作り置きの fMP4 (AV1 + Opus) から組んだ Matroska を端末に
  * 保存したことにする (`tests/fake/mkv-clip.ts`。IndexedDB に直に置く。置き方は `offline-db.ts` と同じ)。
- * サーバへは頼まない (`/stream` を1度も読まない) ことも見る
+ * サーバへはリクエストしない (`/stream` を1度も読まない) ことも見る
  */
 
 /** 操作バーの「m:ss / m:ss」の左 (いまの位置。秒) */

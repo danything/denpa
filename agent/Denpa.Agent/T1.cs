@@ -121,20 +121,20 @@ public sealed record Atr(
 ///
 /// <para>
 /// 読み取り機はブロックを1つ送って1つ受けるだけで、順番の番号・連結・再送はこちらが持つ。
-/// 下の口 (<c>exchange</c>) は「送ったブロックと、返ってきたブロック」だけを扱い、
+/// 下の層 (<c>exchange</c>) は「送ったブロックと、返ってきたブロック」だけを扱い、
 /// **返ってこなかった・化けた (カードが黙った、パリティ誤り) は null** で知らせる。
 /// 投げるのは読み取り機そのものが駄目なとき (抜かれた、カードが無い) だけ。
 /// 2つめの引数は WTX で延ばす倍率 (0 なら延ばさない)。
 /// </para>
 ///
 /// <para>
-/// LRC のカードだけ。CRC のカードは断る (B-CAS は LRC。CRC は試せる相手が居ない)。
+/// LRC のカードだけ。CRC のカードは断る (B-CAS は LRC。CRC は試せる相手がいない)。
 /// NAD はいつも 0。
 /// </para>
 /// </summary>
 public sealed class T1Protocol
 {
-    /// <summary>1つのブロックを諦めるまでに再送を頼む回数</summary>
+    /// <summary>1つのブロックを諦めるまでに再送を求める回数</summary>
     private const int MaxRetries = 3;
 
     /// <summary>
@@ -185,7 +185,7 @@ public sealed class T1Protocol
         return block;
     }
 
-    /// <summary>正しい形のブロックなら (PCB, INF)。長さ・LRC が合わなければ null</summary>
+    /// <summary>正しい形式のブロックなら (PCB, INF)。長さ・LRC が合わなければ null</summary>
     public static (byte Pcb, byte[] Inf)? Check(byte[]? block, int ifsd)
     {
         if (block is null || block.Length < 4) return null;
@@ -199,7 +199,7 @@ public sealed class T1Protocol
     }
 
     /// <summary>
-    /// S(IFS) でこちらの受け口を広げる。**答えなければ既定の 32 のまま続ける** (連結で
+    /// S(IFS) でこちらの受信できる大きさを広げる。**答えなければ既定の 32 のまま続ける** (連結で
     /// 受ければ済むので致命的ではない)。ATR の直後に1回だけ呼ぶ
     /// </summary>
     public void NegotiateIfsd(int ifsd)
@@ -222,8 +222,8 @@ public sealed class T1Protocol
     ///
     /// <para>
     /// 送る側の連結: IFSC ごとに切って M を立てた I ブロックで送り、カードの R(次の番号) を待つ。
-    /// 受ける側の連結: M の立った I ブロックが来たら R(次の番号) で続きを頼む。
-    /// 化けた・来なかったときは R ブロックで再送を頼み、カードの R(こちらの番号) には
+    /// 受ける側の連結: M の立った I ブロックが来たら R(次の番号) で続きを求める。
+    /// 化けた・来なかったときは R ブロックで再送を求め、カードの R(こちらの番号) には
     /// 最後の I ブロックを送り直す。
     /// </para>
     /// </summary>
@@ -264,7 +264,7 @@ public sealed class T1Protocol
                 }
                 if (((pcb >> 6) & 1) != _nr)
                 {
-                    // 前に受けたものの繰り返し。もう一度頼み直す
+                    // 前に受けたものの繰り返し。もう一度求め直す
                     if (++errors > MaxRetries) throw new IOException("カードの I ブロックの番号が合いません (T=1)");
                     toSend = Block((byte)(RBlock | (_nr << 4)), []);
                     continue;

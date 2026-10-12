@@ -25,13 +25,13 @@ const RELEASE = object({
 type Release = Infer<typeof RELEASE>;
 
 export interface Available {
-    /** `v1.8.0` の形。そのまま画面に出す */
+    /** `v1.8.0` の形式。そのまま画面に出す */
     version: string;
     /** リリースのページ */
     url: string;
 }
 
-/** 外に出る口。試験で差し替えられるように、fetch の要る分だけ */
+/** 外への通信。試験で差し替えられるように、fetch の要る分だけ */
 type Fetcher = (url: string, init: RequestInit) => Promise<Response>;
 
 let available: Available | null = null;

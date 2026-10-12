@@ -438,7 +438,7 @@ describe('同じ放送は1本だけ', () => {
  * **取り消しは放送単位で効く。**
  *
  * 取り消しの記録は番組の id (局 + event_id) に付いているので、`INSERT OR IGNORE`
- * だけでは id が変わる道をすり抜ける。実機で「取り消したはずの回が録れた」として
+ * だけでは id が変わるケースをすり抜ける。実機で「取り消したはずの回が録れた」として
  * 出たのは枝番違い (取り消していないほうの枝番に立つ) と event_id の変更
  * (局が送り直して番組の行が別 id になる)。どちらも物理チャンネル・題名・開始時刻は
  * 変わらないので、そこで当てる (`canceledBroadcasts`)。
@@ -446,7 +446,7 @@ describe('同じ放送は1本だけ', () => {
 describe('取り消した放送には立てない', () => {
     const MIN = 60 * 1000;
 
-    /** 人が押した取り消し (reservations.cancel と同じ形) */
+    /** 人が押した取り消し (reservations.cancel と同じ形式) */
     function cancel(programId: number): void {
         orm()
             .update(reservationTable)
@@ -735,7 +735,7 @@ describe('同じ回は最初の放送だけ録る', () => {
         expect(reservations()).toEqual([{ program_id: 10, rule_id: 1, state: 'scheduled' }]);
     });
 
-    /** 下見に渡す形 (ルール画面の `readPreview` と同じ列) */
+    /** 下見に渡す形式 (ルール画面の `readPreview` と同じ列) */
     function hit(id: number, serviceId: number, type: string, channel: string) {
         const row = orm().select().from(programs).where(eq(programs.id, id)).get()!;
         return { ...row, service_type: type, service_channel: channel, service_name: String(serviceId) };

@@ -5,7 +5,7 @@ namespace Denpa.Agent.Tests;
 /*
  * B-CAS のコマンド (BCas.cs)。
  *
- * 本物のカードは無い。カードが返す応答の形を作って線に置き、
+ * 本物のカードは無い。カードが返す応答の形式を作って接続に置き、
  * **libaribb25 と同じ値が出るか**と、切れたときの繋ぎ直しを確かめる。
  */
 public class BCasTests
@@ -67,7 +67,7 @@ public class BCasTests
 
     private static readonly byte[] SampleEcm = [.. Enumerable.Range(0, 0x94).Select(b => (byte)(b * 7))];
 
-    /// <summary>頼まれた APDU の頭 (CLA INS) で答えを決める線</summary>
+    /// <summary>送られてきた APDU の頭 (CLA INS) で答えを決める接続</summary>
     private sealed class FakeLink(string name, Func<byte[], byte[]>? ecm = null) : ICardLink
     {
         private int _busy;
@@ -306,7 +306,7 @@ public class BCasTests
         await Task.WhenAll(Enumerable.Range(0, 64).Select(n => Task.Run(() => card.Ecm(ecms[n % ecms.Length]))));
 
         await Assert.That(link.Overlapped).IsEqualTo(0);
-        // 同じ ECM を同時に頼まれても、カードに聞くのは1回ずつ
+        // 同じ ECM を同時に聞かれても、カードに聞くのは1回ずつ
         await Assert.That(EcmsSent(link)).IsEqualTo(ecms.Length);
     }
 

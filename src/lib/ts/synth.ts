@@ -40,7 +40,7 @@ function jisTable(): Map<string, number> {
  * 文字列を ARIB STD-B24 の8単位符号にする。
  *
  * 初期状態 (G0=漢字) から始めて、ASCII のところだけ英数集合へ切り替える。
- * 本物の放送はもっと凝った切り替え方をするが、**読む側が同じ道を通れば足りる**。
+ * 本物の放送はもっと凝った切り替え方をするが、**読む側が同じ経路を通れば足りる**。
  * 文字の大きさは触らない (字幕は呼ぶ側が MSZ などを前に置く)。SI に書くなら `encodeSiText`
  */
 export function encodeAribText(text: string, half = false): number[] {
@@ -66,7 +66,7 @@ export function encodeAribText(text: string, half = false): number[] {
 }
 
 /**
- * 番組名・局名 (SI) に書く形。**ASCII は中型 (MSZ) で挟んで半角で読ませる** — 標準の大きさの
+ * 番組名・局名 (SI) に書く形式。**ASCII は中型 (MSZ) で挟んで半角で読ませる** — 標準の大きさの
  * 英数はテレビが全角で描く (読む側 `aribtext.ts` も全角にする)。全角の英数 (「Ｖｅｎｕｅ」) は
  * 漢字の集合の字として書くので、読めば書いたとおりの文字列に戻る
  */
@@ -74,7 +74,7 @@ function encodeSiText(text: string): number[] {
     return encodeAribText(text, true);
 }
 
-/** 長さ1バイトを頭に付けた文字列。SI の記述子はどこもこの形 */
+/** 長さ1バイトを頭に付けた文字列。SI の記述子はどこもこの形式 */
 const sized = (text: string) => {
     const body = encodeSiText(text);
     return [body.length, ...body];
@@ -435,7 +435,7 @@ export interface DiiModuleSpec {
  *
  * **複数のモジュールを載せられる。** 本物の BS はここに `LOGO-05` と
  * `CS_LOGO-05` を並べて流していて (実機の `BS15_0` で確認)、1つしか
- * 載せられない作りでは CS を取りこぼす道を試せない。
+ * 載せられない作りでは CS を取りこぼす経路を試せない。
  */
 export function diiSection(
     downloadId: number,
@@ -598,7 +598,7 @@ export interface SynthHybridcastApp {
     name?: string;
     /** URL の頭。**通信路で運ぶもの** (protocol_id = 3) として入れる */
     base?: string;
-    /** その先の道 */
+    /** その先のパス */
     path?: string;
 }
 

@@ -70,14 +70,14 @@ export default defineConfig({
                      * 止めたいのはスクリプトで、CSS からできるのは見た目と下の *-src の範囲の読み込みまで
                      */
                     'style-src': ['self', 'unsafe-inline'],
-                    // データ放送の絵は blob: (JPEG・PNG・GIF を作り直したもの) と data: (DRCS の字)
+                    // データ放送の画像は blob: (JPEG・PNG・GIF を作り直したもの) と data: (DRCS の字)
                     'img-src': ['self', 'data:', 'blob:'],
                     'font-src': ['self', 'data:', 'blob:'],
                     // MSE と端末に落とした録画は blob:
                     'media-src': ['self', 'blob:'],
                     // fetch・SSE・ライブの WebSocket はみな自分 ('self' は同じ host の ws:/wss: も含む)
                     'connect-src': ['self'],
-                    // 生で観る道の worker と PWA の ServiceWorker
+                    // 変換せずに観る経路の worker と PWA の ServiceWorker
                     'worker-src': ['self'],
                     'object-src': ['none'],
                     'frame-src': ['none'],
@@ -92,7 +92,7 @@ export default defineConfig({
          * 取りに行く形 (`@iconify/svelte` の既定) は使わない。形は `@iconify-json/*`
          * (開発時だけの依存) から読むので、束に入るのは使ったアイコンの `<svg>` だけ。
          *
-         * `denpa` は Lucide に無い自前の形 (`src/lib/icons/*.svg`。データ放送の d)。
+         * `denpa` は Lucide に無い自前のアイコン (`src/lib/icons/*.svg`。データ放送の d)。
          * 理由は docs/player.md の「アイコン」
          */
         Icons({

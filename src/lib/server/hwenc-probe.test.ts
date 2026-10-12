@@ -58,13 +58,13 @@ test('ICQ が落ちたら CQP で試し、通ったほうを覚える', async ()
     expect(device.qsv).toEqual([]);
     expect(device.vaapi).toEqual(['h264']);
     expect(device.cqp).toEqual(['h264']);
-    // 復号から GPU の試しも CQP で頼んでいる (ICQ で頼むと i965 では落ちる)
+    // デコードから GPU の試しも CQP で指定している (ICQ で指定すると i965 では落ちる)
     const full = calls.find((argv) => argv.includes('-hwaccel'));
     expect(full?.join(' ')).toContain('-rc_mode CQP -qp 24');
     expect(full?.join(' ')).toContain('deinterlace_vaapi=rate=field');
     expect(device.full).toEqual(['h264']);
     expect(describeDevice(device)).toBe('VA-API: H.264 (CQP)、ライブはデコードから GPU: H.264');
-    // ライブは復号から GPU の道を、CQP のまま採る
+    // ライブはデコードから GPU の方式を、CQP のまま採る
     expect(liveHw('h264', {}, 0, devices)).toEqual({
         way: { device: device.path, kind: 'vaapi', cqp: true },
         full: true,
@@ -95,7 +95,7 @@ test('MPEG-2 を GPU でデコードできなければ、エンコードする�
     });
 });
 
-test('試し素材を作れなければ、復号から GPU は試さない', async () => {
+test('試し素材を作れなければ、デコードから GPU は試さない', async () => {
     answer = (argv) => (argv.join(' ').includes('-f mpegts') || argv.join(' ').includes('qsv') ? 1 : 0);
     calls.length = 0;
     const { devices } = await probe();

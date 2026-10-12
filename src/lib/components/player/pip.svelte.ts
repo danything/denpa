@@ -5,35 +5,35 @@ import { type Composed, canCompose, compose } from './compose';
 /**
  * ピクチャーインピクチャー (PiP)。**3画面 (ライブ・追っかけ・観る画面) で同じもの。**
  *
- * 絵だけを小窓にして、他の画面・他のアプリを触りながら観る。操作列は小窓に付いていかない。
+ * 映像だけを小窓にして、他の画面・他のアプリを触りながら観る。操作列は小窓に付いていかない。
  *
  * ## ボタンを出さないところ
  *
  * - **iPhone / iPad のホーム画面から開いたもの (PWA)。** Safari が許していない。
- *   口は有るように見える (`pictureInPictureEnabled` が立つ) のに押しても出ないので、
+ *   API は有るように見える (`pictureInPictureEnabled` が立つ) のに押しても出ないので、
  *   `navigator.standalone` (Apple の端末にしか無い) で見分けて、ボタンごと出さない
- * - **ページから小窓を開かせる口 (`requestPictureInPicture`) が無いブラウザ。** 押しても
+ * - **ページから小窓を開かせる API (`requestPictureInPicture`) が無いブラウザ。** 押しても
  *   何も起きないボタンを並べない。ブラウザ自身の小窓の切り替えは、ページと関係なく使える
- * - **生 (MPEG-2) の絵の流れを取れないブラウザ (Firefox)**。生の間だけ出さない (下)
+ * - **MPEG-2 の映像ストリームを取れないブラウザ (Firefox)**。MPEG-2 の間だけ出さない (下)
  *
- * Safari は標準の口のほかに `webkitSetPresentationMode` を持っていて、古い iOS の
+ * Safari は標準の APIのほかに `webkitSetPresentationMode` を持っていて、古い iOS の
  * Safari にはそちらしか無い。標準が無ければそちらで出す。
  *
- * ## 生 (MPEG-2) で見ているとき
+ * ## MPEG-2 で見ているとき
  *
- * **絵は worker の canvas に居て、`<video>` は空** (`raw/engine.ts`)。そのまま出すと
- * 黒い小窓になる。worker が描いた絵の流れを別の `<video>` に映し、それを小窓にする
+ * **映像は worker の canvas にあって、`<video>` は空** (`raw/engine.ts`)。そのまま出すと
+ * 黒い小窓になる。worker が描いた映像のストリームを別の `<video>` に映し、それを小窓にする
  * (流れの取り方は `RawEngine.pipStream`。Chrome は worker が直に書き込み、Safari は
  * canvas から取る。Firefox はどちらもできない)。音はページ (`AudioContext`) が組み、小窓を出している
  * 間は `<audio>` を通して鳴らす (`RawEngine.route`。Safari は Audio Session)。
  *
- * **代わりの `<video>` は生に入った時点で用意しておく** (`prepare`)。押されてから
+ * **代わりの `<video>` はMPEG-2 に切り替えた時点で用意しておく** (`prepare`)。押されてから
  * 流れを繋いで1枚目を待っていた頃は、iPhone の Safari で必ず断られていた
  * (`NotAllowedError: The request is not triggered by a user activation.`) — 待っている
- * 間に「押された直後」が切れる。小窓を頼むのは押されたその場でなければならず、
+ * 間に「押された直後」が切れる。小窓をリクエストするのは押されたその場でなければならず、
  * そのためには1枚目が既に届いている (`HAVE_METADATA`) 必要がある。
  * 1枚目が届いたら流れを切っておき (`enabled = false`)、押されたら戻す。
- * 小窓に出していない間まで絵を写し続けない
+ * 小窓に出していない間まで映像を写し続けない
  *
  * ## 字幕も小窓に出す
  *
@@ -42,7 +42,7 @@ import { type Composed, canCompose, compose } from './compose';
  * 重ねられるのは Chrome・Edge だけ (`MediaStreamTrackProcessor`)。Safari・Firefox は今までどおり
  * 字幕無しで出す。
  *
- * - **生のとき**: 生の流れに重ねたものを、代わりの `<video>` に用意しておく。字幕が出ていない
+ * - **MPEG-2 のとき**: MPEG-2 の流れに重ねたものを、代わりの `<video>` に用意しておく。字幕が出ていない
  *   コマは素通し
  * - **変換した映像 (ライブ・追っかけ・観る画面)**: 押した時点で字幕を出して再生しているときだけ、
  *   `<video>` から流れを取って (`captureStream`) 重ね、代わりの `<video>` を小窓にする。
@@ -66,17 +66,17 @@ import { type Composed, canCompose, compose } from './compose';
  * バックグラウンド再生を切っている間 (`auto` が false。`background.svelte.ts`) は
  * `disablePictureInPicture` を立てておく。全画面からホームへ戻る (iPhone)・タブを移る
  * (Chrome) だけで勝手に小窓が出て、裏で鳴り続けていた。**押して開く小窓には効かせない** —
- * 頼む直前に下ろし (`enter`)、出している間は下ろしたまま (立てると小窓が閉じる)
+ * リクエストする直前に下ろし (`enter`)、出している間は下ろしたまま (立てると小窓が閉じる)
  */
 
 interface Options {
     /** 映像の `<video>` */
     video: () => HTMLVideoElement | null;
-    /** 生で見ているか。立っている間は `capture` の流れを出す */
+    /** MPEG-2 で見ているか。立っている間は `capture` の流れを出す */
     raw?: () => boolean;
-    /** 生の絵の流れ (`live-player` の `capture`) */
+    /** MPEG-2 の映像ストリーム (`live-player` の `capture`) */
     capture?: () => MediaStream | null;
-    /** 生の絵を流すか (`live-player` の `captureFlow`)。小窓に出していない間は止める */
+    /** MPEG-2 の映像を流すか (`live-player` の `captureFlow`)。小窓に出していない間は止める */
     flow?: (on: boolean) => void;
     /** 止めているか (ライブ・追っかけ)。**小窓で押された止める・再開を合わせる先** */
     paused?: () => boolean;
@@ -110,7 +110,7 @@ export interface Pip {
     dismiss: (key: string) => void;
 }
 
-/** Safari だけの口 */
+/** Safari だけの API */
 type WebkitVideo = HTMLVideoElement & {
     webkitSupportsPresentationMode?: (mode: string) => boolean;
     webkitSetPresentationMode?: (mode: string) => void;
@@ -124,12 +124,12 @@ const FIRST_FRAME = 2_000;
 /** `captureStream` は Chrome・Firefox にある (型には無い) */
 type CapturableVideo = HTMLVideoElement & { captureStream?: () => MediaStream };
 
-/** 標準の口が使えるか */
+/** 標準の APIが使えるか */
 function standard(): boolean {
     return document.pictureInPictureEnabled === true;
 }
 
-/** Safari の口が使えるか (標準が無い古い Safari) */
+/** Safari の APIが使えるか (標準が無い古い Safari) */
 function webkit(video: WebkitVideo): boolean {
     return (
         typeof video.webkitSupportsPresentationMode === 'function' &&
@@ -151,19 +151,19 @@ function shown(video: WebkitVideo): boolean {
 export function pictureInPicture(options: Options): Pip {
     /** 開いた端末で決まる。サーバで組むときは無いので、開いてから測る */
     let able = $state(false);
-    /** 小窓に出している video (本体か、生のときの代わり)。出していなければ null */
+    /** 小窓に出している video (本体か、MPEG-2 のときの代わり)。出していなければ null */
     let on = $state<HTMLVideoElement | null>(null);
-    /** 生のとき・字幕を重ねるときに小窓へ出す代わりの video。要るときに作る */
+    /** MPEG-2 のとき・字幕を重ねるときに小窓へ出す代わりの video。要るときに作る */
     let proxy: HTMLVideoElement | null = null;
-    /** 生の流れに字幕を重ねたもの (`prepare`)。重ねられない端末では null (生の流れをそのまま出す) */
+    /** MPEG-2 の流れに字幕を重ねたもの (`prepare`)。重ねられない端末では null (MPEG-2 の流れをそのまま出す) */
     let rawComposed: Composed | null = null;
-    /** 小窓を頼んでいる最中か (`toggle`) */
+    /** 小窓をリクエストしている最中か (`toggle`) */
     let entering = false;
-    /** 変換した映像に字幕を重ねたもの (`composeBaked`)。**小窓に出している間だけ** 居る */
+    /** 変換した映像に字幕を重ねたもの (`composeBaked`)。**小窓に出している間だけ** ある */
     let baked = $state<Composed | null>(null);
     /**
-     * 用意できなかった理由 (`prepare`)。**立っている間はボタンを出さない** — Firefox は生の
-     * 絵の流れを取れず、押せても必ず断られる
+     * 用意できなかった理由 (`prepare`)。**立っている間はボタンを出さない** — Firefox は MPEG-2 の
+     * 映像ストリームを取れず、押せても必ず断られる
      */
     let unprepared = $state<Refused | null>(null);
     /** 出せなかった理由 */
@@ -204,8 +204,8 @@ export function pictureInPicture(options: Options): Pip {
      * **小窓で押された止める・再開を player に伝える。**
      *
      * 小窓に出している間だけ。それ以外の `pause` まで拾うと、押していないのに止まった
-     * ことになる。**生へ移るときも拾わない** — player は変換したほうの `<video>` を止めるが
-     * (`startRaw`)、`pause` が届くのは小窓が閉じきる前で、まだ `on` に居る。
+     * ことになる。**MPEG-2 へ移るときも拾わない** — player は変換したほうの `<video>` を止めるが
+     * (`startRaw`)、`pause` が届くのは小窓が閉じきる前で、まだ `on` のまま。
      * player が自分で止めた・再開したときは、その時点で `paused` が既に合っているので何もしない
      */
     function follow(video: HTMLVideoElement): () => void {
@@ -255,18 +255,18 @@ export function pictureInPicture(options: Options): Pip {
     });
 
     /**
-     * **生に移った・変換した映像に戻ったら小窓を閉じる。** 出しているほうにはもう絵が
-     * 流れてこない (生では `<video>` は空、戻れば canvas は畳まれる)。黙って残すと、
-     * 止まった絵の小窓が居座る
+     * **MPEG-2 に移った・変換した映像に戻ったら小窓を閉じる。** 出しているほうにはもう映像が
+     * 流れてこない (MPEG-2 では `<video>` は空、戻れば canvas は畳まれる)。黙って残すと、
+     * 止まった映像の小窓が居座る
      */
     $effect(() => {
         const isRaw = raw();
         if (on === null) return;
-        // 字幕を重ねた小窓は変換したほうの絵なので、生のものではない
+        // 字幕を重ねた小窓は変換したほうの映像なので、MPEG-2 のものではない
         if ((on === proxy && baked === null) !== isRaw) leave();
     });
 
-    /** 生に入ったら代わりの video を用意しておく。出たら畳む (canvas ごと無くなる) */
+    /** MPEG-2 に入ったら代わりの video を用意しておく。出たら畳む (canvas ごと無くなる) */
     $effect(() => {
         if (!able || !raw() || !canCapture || options.capture === undefined) return;
         untrack(prepare);
@@ -281,7 +281,7 @@ export function pictureInPicture(options: Options): Pip {
     }
     $effect(guard);
 
-    /** 生のとき、代わりの video も止める・再開を合わせる (押されたのが操作バーのボタンのとき) */
+    /** MPEG-2 のとき、代わりの video も止める・再開を合わせる (押されたのが操作バーのボタンのとき) */
     $effect(() => {
         const paused = options.paused?.() ?? false;
         if (proxy === null || on !== proxy) return;
@@ -290,8 +290,8 @@ export function pictureInPicture(options: Options): Pip {
     });
 
     /*
-     * 画面を離れたら閉じる。player は止まるので、小窓に残しても絵は来ない。
-     * **流れもここで止める** — 生の `$effect` の後始末が先に走るとは限らない
+     * 画面を離れたら閉じる。player は止まるので、小窓に残しても映像は来ない。
+     * **流れもここで止める** — MPEG-2 の `$effect` の後始末が先に走るとは限らない
      */
     $effect(() => () => {
         leave();
@@ -300,7 +300,7 @@ export function pictureInPicture(options: Options): Pip {
         proxy = null;
     });
 
-    /** 代わりの video を用意する。**画面の外に、見えない大きさで置く** (文書に居ないと出せない) */
+    /** 代わりの video を用意する。**画面の外に、見えない大きさで置く** (文書に無いと出せない) */
     function makeProxy(): HTMLVideoElement {
         if (proxy !== null) return proxy;
         const video = document.createElement('video');
@@ -346,14 +346,14 @@ export function pictureInPicture(options: Options): Pip {
         });
     }
 
-    /** 代わりの video へ絵を流すか。**切っても1枚目の大きさは覚えたまま** (`readyState` は下がらない) */
+    /** 代わりの video へ映像を流すか。**切っても1枚目の大きさは覚えたまま** (`readyState` は下がらない) */
     function flowing(flow: boolean): void {
         const stream = proxy?.srcObject;
         if (stream instanceof MediaStream) for (const track of stream.getVideoTracks()) track.enabled = flow;
         options.flow?.(flow);
     }
 
-    /** 代わりの video を畳む。生を出たとき (canvas ごと無くなる) */
+    /** 代わりの video を畳む。MPEG-2 をやめたとき (canvas ごと無くなる) */
     function release(): void {
         rawComposed?.stop();
         rawComposed = null;
@@ -433,7 +433,7 @@ export function pictureInPicture(options: Options): Pip {
     }
 
     /**
-     * 小窓に出す。**頼むまでに `await` を挟まない** — 挟むと Safari は「押された直後」と
+     * 小窓に出す。**リクエストするまでに `await` を挟まない** — 挟むと Safari は「押された直後」と
      * 見なさなくなって断る (`NotAllowedError`)。字幕を重ねるときだけ1枚目を待つ
      * (`composeBaked`。そこへ来るのは待っても断られない Chrome・Edge だけ)
      */
@@ -456,7 +456,7 @@ export function pictureInPicture(options: Options): Pip {
         if (standard()) await video.requestPictureInPicture();
         else if (webkit(video)) {
             /*
-             * Safari の口は断っても何も言わない。切り替わったかを見て言う。
+             * Safari の APIは断っても何も言わない。切り替わったかを見て言う。
              * **一度でも切り替わったかで見る** — 1秒の間に閉じられた・画面を離れたものまで
              * 「切り替わらなかった」と言っていた
              */
@@ -488,7 +488,7 @@ export function pictureInPicture(options: Options): Pip {
         flowing(false);
         // 字幕を重ねて用意したものは、出せなかったなら畳む
         if (on === null) dropBaked();
-        // 頼む前に下ろした印を戻す (`enter`)
+        // リクエストする前に下ろした印を戻す (`enter`)
         guard();
     }
 
@@ -511,7 +511,7 @@ export function pictureInPicture(options: Options): Pip {
         toggle() {
             refused = null;
             if (on !== null) leave();
-            // 字幕を重ねる用意 (1枚目待ち) の間に押し直されたら、二重に頼まない
+            // 字幕を重ねる用意 (1枚目待ち) の間に押し直されたら、二重にリクエストしない
             else if (!entering) {
                 entering = true;
                 void enter()

@@ -6,12 +6,12 @@ import { join } from 'node:path';
 /**
  * 覚えたロゴ (`own-logo-*.bin`) の置き場まわり。
  *
- * 見るのは**覚えたかどうかの判断**と、**同じ絵を映している局の束ね方**。
+ * 見るのは**覚えたかどうかの判断**と、**同じ映像を映している局の束ね方**。
  * 覚え方そのものは `ts/logo-detect.test.ts`。
  *
  * **DB には触らない。** 単体テストは1つのプロセスで走り、DB の繋ぎ先は最初に
  * 開いたものが使い回される。ここで開くと他のファイルが数えている行に混ざる
- * (実際に混ぜて3件落とした)。行を渡すだけで試せる形にしてある。
+ * (実際に混ぜて3件落とした)。行を渡すだけで試せるようにしてある。
  */
 const work = mkdtempSync(join(tmpdir(), 'denpa-logo-data-'));
 const { config } = await import('./config');
@@ -51,7 +51,7 @@ describe('覚えたかどうか', () => {
     });
 });
 
-describe('同じ絵を映している局を束ねる', () => {
+describe('同じ映像を映している局を束ねる', () => {
     test('局名が同じものは1つにする', () => {
         const rows = [
             service(3239123608, 'TOKYO MX1'),
@@ -76,7 +76,7 @@ describe('同じ絵を映している局を束ねる', () => {
     });
 });
 
-describe('同じ絵の局へ写す', () => {
+describe('同じ映像の局へ写す', () => {
     const FILE = 'own-logo-1440x1080.bin';
     function put(id: number, body: string) {
         mkdirSync(logoRepo(id), { recursive: true });

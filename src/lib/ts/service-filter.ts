@@ -62,7 +62,7 @@ function buildPat(transportStreamId: number, version: number, serviceId: number,
         0xc1 | ((version & 0x1f) << 1),
         0x00, // section_number
         0x00, // last_section_number
-        // NIT。番組表を読む側が居るので残す
+        // NIT。番組表を読む側がいるので残す
         0x00,
         0x00,
         0xe0,

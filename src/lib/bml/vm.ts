@@ -67,7 +67,7 @@ export type RunResult =
     | { kind: 'abort' }
     | { kind: 'error'; error: Error };
 
-/** for-in の列挙。積み上げに置くために物の形をしている */
+/** for-in の列挙。積み上げに置くためにオブジェクトの形をしている */
 class Enumeration extends JSObject {
     at = 0;
     constructor(

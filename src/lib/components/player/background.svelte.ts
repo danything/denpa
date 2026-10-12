@@ -3,24 +3,24 @@ import { read, write } from '#lib/keep.js';
 import { BACKGROUND_KEY, step, storedBackground } from './background';
 
 /**
- * バックグラウンド再生。**3画面 (ライブ・追っかけ・観る画面) で同じもの。既定は切。**
+ * バックグラウンド再生。**3画面 (ライブ・追っかけ・観る画面) で同じもの。既定はオフ。**
  *
- * ## 切 (既定)
+ * ## オフ (既定)
  *
  * - **裏に回ったら止める** (`visibilitychange` で `hidden`、または `pagehide`)。戻ってきたら、
  *   こちらが止めたときだけ再開する。ライブは放送の今へ戻り (張り付いていたとき)、
  *   追っかけ・録画は止めた所から
  * - **OS・ブラウザに勝手に小窓にさせない** (`disablePictureInPicture`。`pip.svelte.ts` の `auto`)。
  *   全画面からホームへ戻っただけで小窓が出て、鳴り続けていた
- * - **生 (MPEG-2) の音は「再生する音」として鳴らさない** (Safari は Audio Session を `auto` の
+ * - **MPEG-2 の音は「再生する音」として鳴らさない** (Safari は Audio Session を `auto` の
  *   まま、ほかはページから直に鳴らす。`raw/engine.ts`)
  *
  * **押して開いた小窓はそのまま使える。** 出している間は裏に回っても止めない (観たいと
  * 言われている)。閉じた時点でまだ裏なら、そこで止める。
  *
- * ## 入
+ * ## オン
  *
- * 止めない。生の音は「再生する音」として鳴らし (Safari は Audio Session を `playback`、ほかは
+ * 止めない。MPEG-2 の音は「再生する音」として鳴らし (Safari は Audio Session を `playback`、ほかは
  * `<audio>` を通す。Web Audio のままだと裏で止めるブラウザがある)、OS が勝手に小窓にするのも許す。
  *
  * **端末ごとに覚える** (`keep.ts`。速さ・CM 飛ばしと同じ) — 手元のスマホでは裏で

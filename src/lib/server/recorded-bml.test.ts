@@ -28,7 +28,7 @@ const { loadRecordedBml, saveRecordedBml, withProgramInfo } = await import('./re
  * デコード方法は ts/data-timeline.ts が持つので、ここはファイルの出し入れだけを確かめる。
  */
 
-/** モジュール1つぶんの multipart (ファイル1枚の形) */
+/** モジュール1つぶんの multipart (ファイル1枚の形式) */
 const multipart = (body: string) => multipartModule([['/startup.bml', 'text/X-arib-bml', body]]);
 
 /** PAT・PMT・TDT・カルーセルを1本の TS バイト列にする */

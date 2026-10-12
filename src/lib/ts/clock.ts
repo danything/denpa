@@ -176,7 +176,7 @@ export class BroadcastClock {
  *
  * **これが 0 に寄せたぶん**。`-copyts` を付けていないので、出てくる時刻は
  * 入口の時刻からこれを引いたものになる。映像が音声より遅れて始まっても
- * 映像だけ 0 に詰められることはない (頭は同じ絵で埋まる。docs/stream.md)
+ * 映像だけ 0 に詰められることはない (頭は同じフレームで埋まる。docs/stream.md)
  */
 export function parseStart(line: string): number {
     const match = /\bstart:\s*(-?\d+(?:\.\d+)?)/.exec(line);

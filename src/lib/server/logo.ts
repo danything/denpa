@@ -15,12 +15,12 @@ import { type AgentTuner, getTuners, openChannelStream } from './tuner';
 /**
  * 局ロゴを集める。
  *
- * 放送波の CDT (地上波) とデータカルーセル (衛星) に流れてくるものを拾う。
+ * 放送波の CDT (地上波) とデータカルーセル (衛星) に流れてくるものを取得する。
  * 集め方は Mirakurun と同じで、開いているストリームに相乗りする。
  *
  * ロゴは滅多に変わらないうえ、放送波に流れてくるのは数十秒〜数分に一度なので、
- * 番組表集めや録画の選局に相乗りして拾う (`ride`)。自分でチューナーを開くのは
- * 画面から頼まれたとき (`sweepNow`) だけ。
+ * 番組表集めや録画の選局に相乗りして取得する (`ride`)。自分でチューナーを開くのは
+ * 画面から求められたとき (`sweepNow`) だけ。
  */
 
 /**
@@ -64,14 +64,14 @@ const SATELLITE_QUIET = 15_000;
  */
 const RIDE_TIMEOUT = 3 * 60_000;
 /**
- * ロゴを取りに行くときの優先度。**いちばん下** (並びは `config.priority`)。
+ * ロゴを取得するときの優先度。**いちばん下** (並びは `config.priority`)。
  * ロゴが出なくても番組表は読めるが、番組情報が来なければ何も予約できない
  */
 const SWEEP_PRIORITY = config.priority.logo;
 /**
- * 画面から取りに行くときに同時に開く数。
+ * 画面から取得するときに同時に開く数。
  *
- * 地上波は中継ごとに乗っている局が違うので、1チャンネルずつ数分かけていると
+ * 地上波は中継ごとに入っている局が違うので、1チャンネルずつ数分かけていると
  * 数十チャンネルぶんが何時間もかかる。全部は使わない (録画に残しておく)。
  */
 const SWEEP_TUNERS = 2;
@@ -80,8 +80,8 @@ const SWEEP_TUNERS = 2;
  * ロゴのカルーセルが載っていない中継を、次に確かめ直すまでの間隔。
  *
  * **衛星のロゴは中継1つにしか載っていない。** 実機の BS はネットワーク4の
- * 26中継のうち `BS15_0` だけで、そこにエンジニアリングサービス (929) が居る。
- * **CS の12中継には1つも居ません** — CS のロゴもこの BS の中継から降ってきます
+ * 26中継のうち `BS15_0` だけで、そこにエンジニアリングサービス (929) がいる。
+ * **CS の12中継には1つもいません** — CS のロゴもこの BS の中継から降ってきます
  * (`CS_LOGO-05`)。つまり CS の物理チャンネルは開くだけ無駄。
  *
  * 覚えておかないと、見回りのたびに CS の12中継を開き直すことになる。
@@ -186,7 +186,7 @@ function markRelay(channel: string, hasLogo: boolean): void {
  * 混ぜると**「CS の中継にロゴが無い」=「CS のロゴは取れない」**という誤りになる
  * (CS のロゴは BS の中継から降ってくる)。
  *
- * **局ごとに控える。** 消えたロゴは「控えに無い = まだ取れるはず」になって自然に取りに行く。
+ * **局ごとに控える。** 消えたロゴは「控えに無い = まだ取れるはず」になって自然に取得し直す。
  */
 function markAbsent(): void {
     const known = notes();
@@ -246,7 +246,7 @@ function store(networkId: number, serviceIds: number[], logoType: number, data: 
 }
 
 /**
- * 流れてくるTSからロゴを拾う。
+ * 流れてくるTSからロゴを取得する。
  *
  * 失敗しても黙って諦める。ロゴが無くても番組表は出るし、録画には何の関係も無い。
  */
@@ -263,7 +263,7 @@ function watch(networkId: number): Feed {
             const found = collector.collected();
             if (found.length === 0) return;
 
-            // **開いている間は拾い続ける。** 1つのTSにはその物理チャンネルの局が全部流れていて、ロゴは局ごとに別々に来る
+            // **開いている間は取得し続ける。** 1つのTSにはその物理チャンネルの局が全部流れていて、ロゴは局ごとに別々に来る
             let saved = 0;
             for (const { networkId: network, serviceIds, logo } of found) {
                 // 衛星は他ネットワークの局も混ざる。どのネットワークのぶんかは
@@ -284,7 +284,7 @@ function watch(networkId: number): Feed {
     return feed as Feed;
 }
 
-/** 食わせる口。ついでに「この中継にロゴがあるか」を覗ける */
+/** データを渡す入口。ついでに「この中継にロゴがあるか」を覗ける */
 interface Feed {
     (chunk: Uint8Array): void;
     readonly hasSatelliteLogo: boolean | null;
@@ -295,7 +295,7 @@ interface Feed {
  *
  * この列は「番組表にロゴを出すかどうか」の判断にそのまま使われるので、
  * ファイルが無いのに立っていると番組表に壊れた画像が並ぶ。しかも
- * `missing()` が「もう持っている」とみなして取りに行かなくなるため、
+ * `missing()` が「もう持っている」とみなして取得しなくなるため、
  * 放っておくと永久に埋まらない。
  *
  * 置き場ごと消えることは実際に起きる (PVCの作り直しなど)。
@@ -303,7 +303,7 @@ interface Feed {
  *
  * ついでに、色の表の入っていない古いファイルを直す。放送から拾ったままの
  * PNG はパレットが抜けていて、ブラウザは何も描かない (logo-palette.ts)。
- * 拾い直すと局によっては何時間もかかるので、置いてあるものを直す。
+ * 取得し直すと局によっては何時間もかかるので、置いてあるものを直す。
  */
 export function reconcile(): number {
     const rows = orm().select({ id: services.id, has_logo: services.has_logo }).from(services).all();
@@ -335,7 +335,7 @@ function repaint(serviceId: number): void {
     }
 }
 
-/** ロゴを取りに行く単位。1つの物理チャンネルと、そこに乗っている局 */
+/** ロゴを取得する単位。1つの物理チャンネルと、そこに入っている局 */
 interface Target {
     type: string;
     channel: string;
@@ -346,7 +346,7 @@ interface Target {
  * ロゴを取り直すまでの間隔。局のマークは滅多に変わらないが、変わったときに永久に
  * 古いままなのは困る。取り直しは只ではない (1チャンネルに数分開く) ので長めにしておく。
  *
- * **消してから取りに行くのではない。** 来たものを上書きするだけなので、
+ * **消してから取得するのではない。** 来たものを上書きするだけなので、
  * 取れなければ今のものがそのまま残る。番組表からロゴが消えることはない。
  */
 const LOGO_MAX_AGE = 7 * 24 * 60 * 60_000;
@@ -358,7 +358,7 @@ function storedLogoType(serviceId: number): number | null {
 }
 
 /**
- * その局のロゴを取りに行く必要があるか。無い、古い、**または小さい。**
+ * その局のロゴを取得する必要があるか。無い、古い、**または小さい。**
  *
  * 最初に来た種類 (48×24 など) で閉じると局ごとに大きさが揃わないので、64×36 が来るまでは
  * 足りていないとみなす。
@@ -366,7 +366,7 @@ function storedLogoType(serviceId: number): number | null {
  * 開けるだけ開けて来なかった局 (`gaveUp`) は、次の取り直しの時期まで今のもので足りる。
  *
  * **大きさを見るのは地上波だけ。** 衛星のカルーセル (`LOGO-05`) には 0x05 しか載って
- * いないので小さいものは入りようがなく、来なかったときに控える道 (`gaveUp`) も
+ * いないので小さいものは入りようがなく、来なかったときに控える仕組み (`gaveUp`) も
  * 地上波にしか無い — 衛星まで見ると、万一のときに毎回20分待つことになる
  */
 function needsLogo(service: { id: number; type: string }): boolean {
@@ -385,7 +385,7 @@ function needsLogo(service: { id: number; type: string }): boolean {
 
 /**
  * 地上波を上限いっぱいまで開けて、なお足りない局を控える。
- * **ロゴを1つも持っていない局は控えない** — そちらは今までどおり毎回取りに行く
+ * **ロゴを1つも持っていない局は控えない** — そちらは今までどおり毎回取得する
  */
 function markGaveUp(channel: string): void {
     const known = notes();
@@ -415,7 +415,7 @@ function currentServices(): { id: number; type: string; channel: string; network
 }
 
 /**
- * ロゴを取りに行く物理チャンネル。
+ * ロゴを取得する物理チャンネル。
  *
  * いま選局できる局だけを対象にする。取り残しの局まで見に行くと、
  * もう選局できないチャンネルを1局ずつ開いては諦めることになり、
@@ -430,7 +430,7 @@ function missing(): Target[] {
         targets.set(key, { type: service.type, channel: service.channel, network_id: service.network_id });
     };
 
-    // 地上波は中継ごとに乗っている局が違う。その中継の局が足りないときだけ開く
+    // 地上波は中継ごとに入っている局が違う。その中継の局が足りないときだけ開く
     for (const service of services) {
         if (service.type === 'GR' && needsLogo(service)) add(service);
     }
@@ -485,7 +485,7 @@ function missingSatellites(): number {
 const collecting = new Set<string>();
 
 /**
- * 1つの物理チャンネルを開いて、そこに乗っている局のロゴを拾う。
+ * 1つの物理チャンネルを開いて、そこに入っている局のロゴを取得する。
  *
  * **物理チャンネルを丸ごと開く。** 局を選り分けてしまうと、ロゴを載せている
  * CDT (PID 0x0029) はどの局のPMTにも載っていない都合でまるごと落ちる。
@@ -602,7 +602,7 @@ function openChannels(tuners: AgentTuner[]): Set<string> {
 let riding = false;
 
 /**
- * 取りに行っている最中の様子。画面はこれを見る (1チャンネルに数分かける仕事なので、進み具合を出す)。
+ * 取得している最中の様子。画面はこれを見る (1チャンネルに数分かける仕事なので、進み具合を出す)。
  */
 interface SweepState {
     running: boolean;
@@ -631,7 +631,7 @@ const IDLE: SweepState = {
 };
 
 /**
- * 走っているのは高々1つ。定期実行と画面からの「いますぐ取りに行く」が重なると
+ * 走っているのは高々1つ。定期実行と画面からの「いますぐ取得」が重なると
  * チューナーを食い合う。相乗り (ride) だけは只なので別勘定にしてある
  */
 let state: SweepState = IDLE;
@@ -646,9 +646,9 @@ function update(patch: Partial<SweepState>): void {
 }
 
 /**
- * 順番に開いて拾う。**同時に2つまで。**
+ * 順番に開いて取得する。**同時に2つまで。**
  *
- * 地上波は中継ごとに乗っている局が違うので、1つずつ回っていると数が捌けない。
+ * 地上波は中継ごとに入っている局が違うので、1つずつ回っていると数が捌けない。
  * 衛星は当たりの中継1つで全局ぶんが揃う代わりに1回が長い。
  *
  * 1つ取りかかるたびに空きを見る。録画が始まったのに開きに行くと、使えないまま
@@ -694,7 +694,7 @@ async function drain(
 }
 
 /**
- * **いま開いている選局に相乗りして**ロゴを拾う。
+ * **いま開いている選局に相乗りして**ロゴを取得する。
  *
  * 番組表集めも録画も、物理チャンネルを丸ごと開く。そこへ同じチャンネルを要求すると
  * **エージェントは新しいチューナーを使わずに相乗りさせる**ので、こちらは只で電波を
@@ -734,17 +734,17 @@ export async function ride(): Promise<number> {
  *
  * 番組表集めは全チャンネルを定期的に開くので、その選局へ混ぜてもらえば只で読める
  * (実機では BS の38局ぶんが局調べへの相乗り一度で揃った)。録画とチューナーを取り合う理由がない。
- * すぐ欲しいときは画面の「いますぐ取りに行く」(`sweepNow`) がある。
+ * すぐ欲しいときは画面の「いますぐ取得」(`sweepNow`) がある。
  */
 export async function sweep(): Promise<number> {
-    // 立っているだけでファイルが無い局を先に拾い直す。そうしないと
-    // 「もう持っている」とみなして永久に取りに行かない
+    // 立っているだけでファイルが無い局を先に取得し直す。そうしないと
+    // 「もう持っている」とみなして永久に取得しない
     reconcile();
     return ride();
 }
 
 /**
- * 画面の「いますぐ取りに行く」。残っているぶんを、チューナー2つで一気に取りに行く。
+ * 画面の「いますぐ取得」。残っているぶんを、チューナー2台で一気に取得する。
  *
  * **衛星も混ぜる。** ロゴを運ぶ中継は1つだけで、当たれば BS と CS の全局ぶんが
  * まとめて揃い、外れは PAT を見た時点 (1秒ほど) で次へ行く。当たり外れを
@@ -773,7 +773,7 @@ export async function sweepNow(): Promise<{ started: boolean; message: string }>
     if ([...free.values()].every((count) => count === 0)) {
         return { started: false, message: '空いているチューナーがありません' };
     }
-    // 地上波を先に回す。中継ごとに違う局が乗っているので、数が捌けるのはこちら
+    // 地上波を先に回す。中継ごとに違う局が入っているので、数が捌けるのはこちら
     const ordered = [...targets].sort((a, b) => Number(b.type === 'GR') - Number(a.type === 'GR'));
     const parallel = Math.min(SWEEP_TUNERS, Math.max(...free.values()));
     // 終わるのは数分後。押した人を待たせず、進み具合は画面へ流す
@@ -781,12 +781,12 @@ export async function sweepNow(): Promise<{ started: boolean; message: string }>
     return {
         started: true,
         message:
-            `${targets.length} チャンネルをチューナー ${parallel} 本で取得します。` +
+            `${targets.length} チャンネルをチューナー ${parallel} 台で取得します。` +
             'ロゴが流れてくるまで数分かかります',
     };
 }
 
-/** 走っている取得を外から止めるための口。譲ってもらうときに使う */
+/** 走っている取得を外から止めるための手段。譲ってもらうときに使う */
 let inflight: AbortController | null = null;
 
 /** 止まるのを待つ。開いているストリームを畳むだけなのですぐ終わる */
@@ -860,7 +860,7 @@ async function run(targets: Target[], parallel: number): Promise<void> {
         inflight = null;
         const found = writtenSince(stamps);
         /*
-         * 残りも**局で**数える (画面の「14 / 14 局」と同じ物差し)。取りに行くチャンネルの
+         * 残りも**局で**数える (画面の「14 / 14 局」と同じ物差し)。取得するチャンネルの
          * 数 (`missing`) で「未取得のチャンネルは残り N」と出していた頃は、局の数と並べて
          * 何の数なのか読めなかった。放送に載っていない局は残りに入れない
          */
@@ -884,7 +884,7 @@ async function run(targets: Target[], parallel: number): Promise<void> {
 /**
  * 何局ぶん持っているか。「本当に取れているのか」を画面で確かめられるように。
  *
- * `pending` はこれから取りに行く物理チャンネルの数。0 なら押す口を出さない。
+ * `pending` はこれから取得する物理チャンネルの数。0 ならボタンを出さない。
  *
  * `unavailable` は**カルーセルに載っていないので取れない**衛星の局の数。
  * 数えておかないと「N局ぶん足りない」という表示が永久に残り、こちらの不具合と

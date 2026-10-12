@@ -1,14 +1,14 @@
 /**
  * **チューナーの選び方の場面。エージェントと denpa の両方のテストが同じものを読む。**
  *
- * どの本を使うかはエージェントが決め、denpa はその決まりを前提に予約を割り振る
+ * どのチューナーを使うかはエージェントが決め、denpa はその決まりを前提に予約を割り振る
  * (`src/lib/server/conflict.ts`)。決まりの中身はエージェントだけが持ち、両者の間にあるのは
  * 約束 (docs/agent.md「選ぶ順の約束」) だけ。片方だけ変わって食い違ったら、どちらかが落ちる:
  *
- * - `agent/conformance.test.ts` は本物のエージェントに開かせて、入った本の `rank` を見る
+ * - `agent/conformance.test.ts` は本物のエージェントに開かせて、入ったチューナーの `rank` を見る
  * - `src/lib/server/conflict.test.ts` は denpa のなぞり方 (`placements`) で同じ答えになるかを見る
  *
- * 偽の放送に居るのは地上波 T16・T21、衛星 BS11_0・BS03_0 だけ (`tests/fake/services.ts`)。
+ * 偽の放送にいるのは地上波 T16・T21、衛星 BS11_0・BS03_0 だけ (`tests/fake/services.ts`)。
  */
 
 export interface SceneTuner {
@@ -20,7 +20,7 @@ export interface SceneTuner {
 
 export type SceneStep =
     /**
-     * 開く。`rank` は入るはずの本の順位、null なら断られる (409)。
+     * 開く。`rank` は入るはずのチューナーの順位、null なら断られる (409)。
      * `after` は引き継ぐ読み手 (もう離れたものとして選ぶ)。`ended` は、この選局で正常に
      * 終わらされるはずの読み手 (引き継いだ相手)。denpa から見ると `after` の読み手はこの時点で離れている
      */
@@ -32,7 +32,7 @@ export type SceneStep =
           rank: number | null;
           after?: string[];
           ended?: string[];
-          /** `after` に挙げたが、選ばれなかった本にいるので読み続けているはずの読み手 */
+          /** `after` に挙げたが、選ばれなかったチューナーにいるので読み続けているはずの読み手 */
           kept?: string[];
       }
     /** 読むのをやめる */
@@ -54,7 +54,7 @@ export const scenes: Scene[] = [
          * T16 を兼用、T21 を専用に入れていれば録れたが、エージェントはそうしない
          * (denpa は、そうしないことを前提に予約を割り振る)
          */
-        name: '空いていて受けられる本のうち、順位のいちばん前を使う。先の予定は見ない',
+        name: '空いていて受けられるチューナーのうち、順位のいちばん前を使う。先の予定は見ない',
         tuners: [
             { name: 'mlt9', types: ['GR', 'BS', 'CS'], rank: 1 },
             { name: 'gr9', types: ['GR'], rank: 0 },
@@ -62,13 +62,13 @@ export const scenes: Scene[] = [
         steps: [
             { open: 'a', type: 'GR', channel: 'T16', priority: RECORDING, rank: 0 },
             { open: 'b', type: 'GR', channel: 'T21', priority: RECORDING, rank: 1 },
-            // gr9 が空いても、T21 は mlt9 から移らない (1回の選局の途中で本を替えない)
+            // gr9 が空いても、T21 は mlt9 から移らない (1回の選局の途中でチューナーを替えない)
             { close: 'a' },
             { open: 'c', type: 'BS', channel: 'BS11_0', priority: RECORDING, rank: null },
         ],
     },
     {
-        name: '受けられる種別が同じ本は同じ順位。その順位が埋まってから次へ行く',
+        name: '受けられる種別が同じチューナーは同じ順位。その順位が埋まってから次へ行く',
         tuners: [
             { name: 'bs8', types: ['BS', 'CS'], rank: 1 },
             { name: 'mlt8', types: ['GR', 'BS', 'CS'], rank: 2 },
@@ -84,10 +84,10 @@ export const scenes: Scene[] = [
     },
     {
         /*
-         * 番組表集めが前の本を使っていても、録画は空いている兼用の本へ逃げずに蹴って入る。
-         * 逃げると、あとの衛星の録画が兼用の本を取れない (denpa は予約しか見ていない)
+         * 番組表集めが前のチューナーを使っていても、録画は空いている兼用のチューナーへ逃げずに蹴って入る。
+         * 逃げると、あとの衛星の録画が兼用のチューナーを取れない (denpa は予約しか見ていない)
          */
-        name: '弱い相手しかいない本も空いているとみなす',
+        name: '弱い相手しかいないチューナーも空いているとみなす',
         tuners: [
             { name: 'mlt9', types: ['GR', 'BS', 'CS'], rank: 1 },
             { name: 'gr9', types: ['GR'], rank: 0 },
@@ -100,10 +100,10 @@ export const scenes: Scene[] = [
     },
     {
         /*
-         * 読み手がいなくなって余韻 (5秒) で残っているだけの本は空いている。兼用の本が
-         * 余韻で残っていても、地上波は前の本を使う
+         * 読み手がいなくなって余韻 (5秒) で残っているだけのチューナーは空いている。兼用のチューナーが
+         * 余韻で残っていても、地上波は前のチューナーを使う
          */
-        name: '余韻で残っているだけの本は空いている。それでも順位のいちばん前を使う',
+        name: '余韻で残っているだけのチューナーは空いている。それでも順位のいちばん前を使う',
         tuners: [
             { name: 'mlt9', types: ['GR', 'BS', 'CS'], rank: 1 },
             { name: 'gr9', types: ['GR'], rank: 0 },
@@ -116,7 +116,7 @@ export const scenes: Scene[] = [
         ],
     },
     {
-        name: '同じチャンネルを読んでいる選局があれば、どの本でもそこに乗る',
+        name: '同じチャンネルを読んでいる選局があれば、どのチューナーでもそこに乗る',
         tuners: [
             { name: 'mlt9', types: ['GR', 'BS', 'CS'], rank: 1 },
             { name: 'gr9', types: ['GR'], rank: 0 },
@@ -132,9 +132,9 @@ export const scenes: Scene[] = [
     {
         /*
          * 録画が別のチャンネルへ続くとき。前の録画を止めたことがエージェントに届く前に次が来ても、
-         * `after` で渡せば前の本がまだ塞がって見えない。相乗りしていた番組表集めは蹴られる
+         * `after` で渡せば前のチューナーがまだ塞がって見えない。相乗りしていた番組表集めは蹴られる
          */
-        name: '引き継ぐ読み手はもう離れたものとして選び、その本を選んだら終わらせて選局し直す',
+        name: '引き継ぐ読み手はもう離れたものとして選び、そのチューナーを選んだら終わらせて選局し直す',
         tuners: [
             { name: 'mlt9', types: ['GR', 'BS', 'CS'], rank: 1 },
             { name: 'gr9', types: ['GR'], rank: 0 },
@@ -156,7 +156,7 @@ export const scenes: Scene[] = [
         ],
     },
     {
-        name: '引き継ぐときも、順位のより前の本が空いていればそちらを使い、前の読み手には触らない',
+        name: '引き継ぐときも、順位のより前のチューナーが空いていればそちらを使い、前の読み手には触らない',
         tuners: [
             { name: 'mlt9', types: ['GR', 'BS', 'CS'], rank: 1 },
             { name: 'gr9', types: ['GR'], rank: 0 },
@@ -178,7 +178,7 @@ export const scenes: Scene[] = [
         ],
     },
     {
-        name: '引き継ぐ相手の本が受けられない種別なら、ふつうに選ぶ',
+        name: '引き継ぐ相手のチューナーが受けられない種別なら、ふつうに選ぶ',
         tuners: [
             { name: 'gr9', types: ['GR'], rank: 0 },
             { name: 'bs9', types: ['BS', 'CS'], rank: 1 },
@@ -192,9 +192,9 @@ export const scenes: Scene[] = [
     {
         /*
          * 録画が同じチャンネルで続くとき。後ろは前の選局に乗るだけで、引き継ぐことも選局し直す
-         * ことも無い。前が離れても後ろはその本に居続ける
+         * ことも無い。前が離れても後ろはそのチューナーにい続ける
          */
-        name: '同じチャンネルで続くなら乗るだけ。前が離れても後ろは同じ本に残る',
+        name: '同じチャンネルで続くなら乗るだけ。前が離れても後ろは同じチューナーに残る',
         tuners: [
             { name: 'mlt9', types: ['GR', 'BS', 'CS'], rank: 1 },
             { name: 'gr9', types: ['GR'], rank: 0 },
@@ -206,16 +206,16 @@ export const scenes: Scene[] = [
             { open: 'c', type: 'GR', channel: 'T21', priority: RECORDING, rank: 1 },
             { close: 'b' },
             { close: 'a' },
-            // gr9 が空いても c は mlt9 に居るので、衛星は入れない
+            // gr9 が空いても c は mlt9 にいるので、衛星は入れない
             { open: 'd', type: 'BS', channel: 'BS11_0', priority: RECORDING, rank: null },
         ],
     },
     {
         /*
-         * 弱い読み手 (番組表集め) が広い本で同じチャンネルを読んでいても、録画はそこへ乗らずに
-         * 順位のいちばん前の本へ入る。乗ると、録画の入る本が録画以外に左右される
+         * 弱い読み手 (番組表集め) が広いチューナーで同じチャンネルを読んでいても、録画はそこへ乗らずに
+         * 順位のいちばん前のチューナーへ入る。乗ると、録画の入るチューナーが録画以外に左右される
          */
-        name: '弱い読み手しかいない同じチャンネルには、その本が順位で先頭の組のときだけ乗る',
+        name: '弱い読み手しかいない同じチャンネルには、そのチューナーが順位で先頭の組のときだけ乗る',
         tuners: [
             { name: 'mlt9', types: ['GR', 'BS', 'CS'], rank: 1 },
             { name: 'gr9', types: ['GR'], rank: 0 },

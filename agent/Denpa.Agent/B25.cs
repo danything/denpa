@@ -62,7 +62,7 @@ public sealed class Descrambler(IKeySource source)
     private byte[]? _patLast;
     /// <summary>program_number → PMT の PID</summary>
     private readonly Dictionary<int, int> _programs = [];
-    /// <summary>PMT の PID → 組み立て中の節 (1つの PID に複数の番組が乗ることもある)</summary>
+    /// <summary>PMT の PID → 組み立て中のセクション (1つの PID に複数の番組が乗ることもある)</summary>
     private readonly Dictionary<int, Section> _pmtSections = [];
     /// <summary>program_number → 最後に受けた PMT。CA の方式が変わったら読み直せるように丸ごと持つ</summary>
     private readonly Dictionary<int, byte[]> _pmts = [];
@@ -177,7 +177,7 @@ public sealed class Descrambler(IKeySource source)
     }
 
     /// <summary>
-    /// 1 パケット。節を読み (ECM ならここで鍵を貰う)、溜めている間は溜めの後ろへ、
+    /// 1 パケット。セクションを読み (ECM ならここで鍵を貰う)、溜めている間は溜めの後ろへ、
     /// そうでなければ出口へ写してその場で復号する (**写すのは1回だけ**)
     /// </summary>
     private void Take(ReadOnlySpan<byte> packet, IBufferWriter<byte> output)
@@ -312,8 +312,8 @@ public sealed class Descrambler(IKeySource source)
     }
 
     /// <summary>
-    /// パケットの中身を節に組み立てる。節はパケットを跨ぐし、1つのパケットに
-    /// 幾つも入ることもある (pointer_field が次の節の頭を指す)
+    /// パケットの中身をセクションに組み立てる。セクションはパケットを跨ぐし、1つのパケットに
+    /// 幾つも入ることもある (pointer_field が次のセクションの頭を指す)
     /// </summary>
     private void Feed(Section section, int pid, ReadOnlySpan<byte> payload, bool unitStart)
     {
@@ -324,11 +324,11 @@ public sealed class Descrambler(IKeySource source)
         }
         var pointer = payload[0];
         payload = payload[1..];
-        // pointer_field の手前は前の節の続き。そこで揃わなければ捨てる
+        // pointer_field の手前は前のセクションの続き。そこで揃わなければ捨てる
         if (section.Active && pointer <= payload.Length) Fill(section, pid, payload[..pointer]);
         section.Drop();
         if (pointer > payload.Length) return;
-        // 揃った節は捨てられるので、揃わない節 (次のパケットへ続く) に当たるまで読む。0xFF は詰め物で、その先に節は無い
+        // 揃ったセクションは捨てられるので、揃わないセクション (次のパケットへ続く) に当たるまで読む。0xFF は詰め物で、その先にセクションは無い
         for (payload = payload[pointer..]; !payload.IsEmpty && payload[0] != 0xFF && !section.Active;)
         {
             section.Start();
@@ -336,7 +336,7 @@ public sealed class Descrambler(IKeySource source)
         }
     }
 
-    /// <summary>節に足し、揃ったら読む。取り込んだバイト数を返す</summary>
+    /// <summary>セクションに足し、揃ったら読む。取り込んだバイト数を返す</summary>
     private int Fill(Section section, int pid, ReadOnlySpan<byte> data)
     {
         var taken = section.Append(data);
@@ -348,7 +348,7 @@ public sealed class Descrambler(IKeySource source)
     {
         var bytes = section.Bytes;
         section.Drop();
-        // PAT・PMT・ECM はどれも CRC を持つ形。**化けた節で鍵を聞き直さない**
+        // PAT・PMT・ECM はどれも CRC を持つ形式。**化けたセクションで鍵を聞き直さない**
         if ((bytes[1] & 0x80) == 0 || bytes.Length < 12 || Crc32(bytes) != 0) return;
         if (pid == 0) OnPat(bytes);
         else if (section.Owner is { } ecm) OnEcm(ecm, bytes);
@@ -466,7 +466,7 @@ public sealed class Descrambler(IKeySource source)
 
     /// <summary>
     /// 鍵を貰って入れる。**失敗したら鍵を捨てる** — 古い鍵で復号し続けると化けたものを流す。
-    /// **渡すのは節の頭 8 バイトと末尾の CRC 4 バイトを除いた中身** — libaribb25 と同じ切り方で、
+    /// **渡すのはセクションの頭 8 バイトと末尾の CRC 4 バイトを除いた中身** — libaribb25 と同じ切り方で、
     /// 拠点を跨いで鍵を貰う線 (CardShare.cs) もこれを運ぶ。変えると古いエージェントと話が通じなくなる
     /// </summary>
     private void Ask(Ecm ecm)
@@ -516,7 +516,7 @@ public sealed class Descrambler(IKeySource source)
         _logged = message;
     }
 
-    /// <summary>MPEG-2 の CRC32。節の末尾の CRC まで含めて回すと 0 になる</summary>
+    /// <summary>MPEG-2 の CRC32。セクションの末尾の CRC まで含めて回すと 0 になる</summary>
     private static uint Crc32(ReadOnlySpan<byte> data)
     {
         var crc = 0xFFFFFFFFu;
@@ -553,7 +553,7 @@ public sealed class Descrambler(IKeySource source)
         public int Parity, Next = int.MaxValue, Change = int.MaxValue;
     }
 
-    /// <summary>組み立て中の節。長さは頭 3 バイトで決まる (最長 3 + 4095)。長さが -1 なら組み立てていない</summary>
+    /// <summary>組み立て中のセクション。長さは頭 3 バイトで決まる (最長 3 + 4095)。長さが -1 なら組み立てていない</summary>
     private sealed class Section(Ecm? owner)
     {
         private readonly byte[] _buffer = new byte[3 + 0x0FFF];

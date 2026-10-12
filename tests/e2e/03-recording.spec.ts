@@ -51,7 +51,7 @@ test.describe('録画とエンコード', () => {
          *
          * **切った位置は画面に出さない** — チャプターとして動画に入っているので、
          * 再生すれば分かる。ここでは行の属性から確かめる。
-         * 詳細には「何で見つけたか」だけを出す (ロゴを教える口を出すかの判断にも使う)
+         * 詳細には「何で見つけたか」だけを出す (ロゴを教えるボタンを出すかの判断にも使う)
          */
         expect(await recording.getAttribute('data-cm-ranges')).toContain('300');
         await recording.getByTestId('detail-button').click();
@@ -65,7 +65,7 @@ test.describe('録画とエンコード', () => {
         // 番組表の尺(BSの偽番組は10秒)から大きく外れていないこと
         expect(recorded).toBeLessThan(5 * 60_000);
 
-        // サムネイル (denpa の画面が出す絵) が隣に置かれていること。
+        // サムネイル (denpa の画面が出す画像) が隣に置かれていること。
         // 番組情報の .nfo は書かなくなった (Nova/WebDAV 連携をやめた) ので、無いのが正
         const base = videoPath.replace(/\.mkv$/, '');
         expect(existsSync(`${base}-poster.jpg`)).toBe(true);
@@ -104,7 +104,7 @@ test.describe('録画とエンコード', () => {
          * ダウンロードは押されてから**期限付きの署名URL** (?token=) を作って始める。
          * 資格情報を URL に埋めていた頃は、パスワードがダウンロード履歴に残り続けた。
          *
-         * **口は詳細の中にある。** 一覧の行に並べていた頃は、1行に4つも5つも
+         * **ボタンは詳細の中にある。** 一覧の行に並べていた頃は、1行に4つも5つも
          * ボタンが載って狭い画面で横に流れていた
          */
         await detail.getByTestId('detail-more').click();
@@ -115,7 +115,7 @@ test.describe('録画とエンコード', () => {
         expect(minted.search).toContain('token=');
         expect(minted.search).toContain('download=1');
         expect(download.url()).not.toContain('denpa:');
-        // ファイルの口そのもの (尻に番組名などは付けない)
+        // ファイルのエンドポイントそのもの (尻に番組名などは付けない)
         expect(minted.pathname).toMatch(/\/api\/recordings\/\d+\/file$/);
         await download.cancel();
 
@@ -269,7 +269,7 @@ test.describe('コーデックを両方エンコードする', () => {
          */
         await expect(row).toContainText(/\(H\.264 [\d.]+ ?[KMGT]?B/);
 
-        // ダウンロードの口が AV1 と H.264 の2つに分かれる (「その他…」の中)
+        // ダウンロードのボタンが AV1 と H.264 の2つに分かれる (「その他…」の中)
         await row.getByTestId('detail-button').click();
         const detail = page.getByTestId('program-detail');
         await expect(detail.getByTestId('download-link')).toHaveText('ダウンロード (AV1)');
@@ -309,13 +309,13 @@ test.describe('エンコードしない', () => {
         const path = (await page.locator(row).getAttribute('data-library-path')) ?? '';
         expect(path).toContain('.m2ts');
         await expect(page.locator(row).getByTestId('encode-progress')).toHaveCount(0);
-        // 録画の状態の口も「エンコード済みは無い」と答える。観られるかどうかは state のほう
+        // 録画の状態の API も「エンコード済みは無い」と答える。観られるかどうかは state のほう
         const id = await page.locator(row).getAttribute('data-recording-id');
         const status = await request.get(`/api/recordings/${id}`);
         expect(await status.json()).toMatchObject({ encoded: false, state: 'available' });
 
         /*
-         * 再エンコードする口は出ない。**エンコードしない設定では元のTSがそのまま保存先へ移る**ので、
+         * 再エンコードのボタンは出ない。**エンコードしない設定では元のTSがそのまま保存先へ移る**ので、
          * 元にできるTSがもう無い (「元のTSも残す」はエンコードしたときの話)。
          * エンコードしたくなったらコーデックを選んで録り直すことになる
          */

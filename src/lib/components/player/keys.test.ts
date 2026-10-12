@@ -29,7 +29,7 @@ function press(
     return took;
 }
 
-/** 全部の口を持つ画面 (観る画面・追っかけ)。押されたものを名前で溜める */
+/** 全部の操作を持つ画面 (観る画面・追っかけ)。押されたものを名前で溜める */
 function harness() {
     const done: string[] = [];
     const handler = playerKeys({
@@ -84,7 +84,7 @@ describe('再生画面のキー', () => {
         expect(done).toEqual([]);
     });
 
-    /** 知らないキーと、その画面が持っていない口は素通し */
+    /** 知らないキーと、その画面が持っていない操作は素通し */
     test('割り当ての無いキーは何もしない', () => {
         const done: string[] = [];
         // 再生と送りだけを持つ画面 (字幕も速さも無い)

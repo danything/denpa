@@ -1,19 +1,19 @@
 /**
- * **生で送られてきた TS を見せる**、画面の側の半分 (docs/stream.md §5.5)。
+ * **変換せずに送られてきた TS を見せる**、画面の側の半分 (docs/stream.md §5.5)。
  *
  * デコードして描くのは worker (`worker.ts`)。ここが持つのは、Web Audio でしか触れない
  * **音を鳴らすことと、時計** (`playout.ts`)。時計はいま鳴っている音の PTS で、
- * それを worker へ流して絵を合わせさせる。
+ * それを worker へ流して映像を合わせさせる。
  *
- * `live-player.svelte.ts` からは、MSE の代わりにこれを使う — 器 (`<video>`) の代わりに
- * canvas を1枚、映像の入れ物の中に差し込む。字幕・データ放送・操作列はエンコードする道と同じもの
+ * `live-player.svelte.ts` からは、MSE の代わりにこれを使う — `<video>` の代わりに
+ * canvas を1枚、映像の入れ物の中に差し込む。字幕・データ放送・操作列はエンコードする経路と同じもの
  * がそのまま重なる。
  *
- * **エンコードしたもの (fMP4) も同じ口で受ける** (互換モード。`input` が `fmp4`)。<video> の再生が止まる
+ * **エンコードしたもの (fMP4) も同じ入口で受ける** (互換モード。`input` が `fmp4`)。<video> の再生が止まる
  * 端末 (テスラの車載ブラウザ) で、ライブの H.264 / AV1 を canvas に描く。違うのは worker の中だけ
  * (`fmp4.ts`) で、音・時計・小窓・切り抜きはここのまま。
  *
- * **録画の観る画面も同じ口で描く** (`canvas-player.ts`。互換モード)。`/stream` を fetch で読んで `feed` し、
+ * **録画の観る画面も同じ仕組みで描く** (`canvas-player.ts`。互換モード)。`/stream` を fetch で読んで `feed` し、
  * 飛ぶたびに `reset(from)`、尻まで読んだら `finish`
  */
 
@@ -25,7 +25,7 @@ import { type Chunk, Playout, type Scheduled } from './playout';
 
 /** 刻み (ms)。音の予約と時計の配り直しをここで回す */
 const TICK = 20;
-/** 絵は出ているのに音が来ないまま、これだけたったら諦める (ms) */
+/** 映像は出ているのに音が来ないまま、これだけたったら諦める (ms) */
 const NO_AUDIO = 5_000;
 /** 切り抜きの返事を待つ上限 (ms)。1080 の1枚を読み出して渡すのは数十 ms */
 const GRAB_WAIT = 2_000;
@@ -37,8 +37,8 @@ const DECODER = '/api/live/mpeg2';
  * 流れ (MediaStream) へ出した音は、Web Audio が組んだその場で流れに乗る — ページから直に
  * 鳴らすときの出口の遅れ (`baseLatency + outputLatency`。`latencyHint: 'playback'` で
  * 大きめ) を通らず、代わりに `<audio>` の側の出口を通る。その遅れはページから読めないので
- * 見込みで置く。**少なめに置く** — 外れても「音が絵より遅れる」側に倒れる (人は音が先に
- * 来るほうに気づきやすい)。実測は docs/stream.md §5.5「時計と口合わせ」
+ * 見込みで置く。**少なめに置く** — 外れても「音が映像より遅れる」側に倒れる (人は音が先に
+ * 来るほうに気づきやすい)。実測は docs/stream.md §5.5「時計とリップシンク」
  */
 const STREAM_OUT = 0.03;
 
@@ -48,11 +48,11 @@ interface AudioChunk extends Chunk {
 }
 
 export interface RawEvents {
-    /** 選局し直してから最初の絵が出た */
+    /** 選局し直してから最初のフレームが出た */
     shown(): void;
-    /** 貯めを使い切って止まった (エンコードする道の `waiting` にあたる) */
+    /** 貯めを使い切って止まった (エンコードする経路の `waiting` にあたる) */
     stalled(): void;
-    /** **使えなくなった。** 次の形に移るか止まるかは画面が決める (理由は画面に出す) */
+    /** **使えなくなった。** 次の方式に移るか止まるかは画面が決める (理由は画面に出す) */
     gaveUp(reason: string): void;
     /**
      * 外から止められた・再開された (`paused`)。**`<audio>` を通している間だけ** —
@@ -61,8 +61,8 @@ export interface RawEvents {
      */
     remote(paused: boolean): void;
     /**
-     * 抱えきれなくなって、届いたものを捨て始めた (`follow` のときだけ)。**手元が尽きる前に、居る場所から
-     * 頼み直してもらう**
+     * 抱えきれなくなって、届いたものを捨て始めた (`follow` のときだけ)。**手元が尽きる前に、再生している位置から
+     * リクエストし直してもらう**
      */
     full(): void;
     /** 終わりまで鳴らした (`finish` のあと。録画) */
@@ -72,13 +72,13 @@ export interface RawEvents {
 /**
  * **「再生する音」だと Safari に言う** (Audio Session API。Safari にしか無い)。
  *
- * 生の音はページが Web Audio で鳴らしている。言わずにおくと iOS はこれを効果音と
+ * MPEG-2 の音はページが Web Audio で鳴らしている。言わずにおくと iOS はこれを効果音と
  * 同じに扱い、**Safari を裏へ回すと止める** — 小窓で観ていても音だけ消えた
- * (iPhone 15 Pro Max、iOS 27.2)。エンコードする道は `<video>` が鳴らすので、初めから
+ * (iPhone 15 Pro Max、iOS 27.2)。エンコードする経路は `<video>` が鳴らすので、初めから
  * 再生の音として扱われている。消音スイッチで黙らないのも `<video>` と同じになる。
  * 畳むときは既定 (`auto`) に戻す。
  *
- * **言うのはバックグラウンド再生を入れているときと、押して小窓を開いている間だけ**
+ * **言うのはバックグラウンド再生をオンにしているときと、押して小窓を開いている間だけ**
  * (`RawEngine.background`)。切っているのに言うと、裏で鳴らす音として扱われる
  *
  * これが言える端末 (Safari) では `<audio>` を通さない (`RawEngine.route`)
@@ -113,10 +113,10 @@ export class RawEngine {
     private readonly timer: ReturnType<typeof setInterval>;
     /** 壁時計を時計にしているか。**音を鳴らせない間 (自動再生を断られた) はこちら** */
     private wall: boolean;
-    /** 選局し直してから音が来たか。来ないまま絵だけ出ているなら諦める (`NO_AUDIO`) */
+    /** 選局し直してから音が来たか。来ないまま映像だけ出ているなら諦める (`NO_AUDIO`) */
     private heardAt = 0;
     private shownAt = 0;
-    /** デコードできた音のコマ数 (選局からの通しではなく、器を作ってからの通し) */
+    /** デコードできた音のコマ数 (選局からの通しではなく、このエンジンを作ってからの通し) */
     private heard = 0;
     private gone = false;
     /** デュアルモノのどちらを両耳へ配るか (`AudioTrack.side`) */
@@ -166,7 +166,7 @@ export class RawEngine {
         this.canvas.setAttribute('data-testid', 'live-raw');
         this.canvas.setAttribute('aria-hidden', 'true');
         this.canvas.dataset['input'] = input;
-        // 押すのは下の <video> (押し口がそこに付いている。`MediaStack`)
+        // 押すのは下の <video> (押されたときの処理がそこに付いている。`MediaStack`)
         this.canvas.style.cssText =
             'position:absolute; inset:0; width:100%; height:100%; object-fit:contain; background:#000; pointer-events:none;';
         host.insertBefore(this.canvas, before);
@@ -211,7 +211,7 @@ export class RawEngine {
         this.route();
     }
 
-    /** どれだけ貯めるか (秒)。**決めるのはエンコードする道と同じ `pacing.nextTarget`** (live-player) */
+    /** どれだけ貯めるか (秒)。**決めるのはエンコードする経路と同じ `pacing.nextTarget`** (live-player) */
     set target(seconds: number) {
         this.playout.target = seconds;
     }
@@ -238,7 +238,7 @@ export class RawEngine {
     }
 
     /**
-     * 選局し直した・録画で飛んだ。**前の局の音も絵の待ちも捨てる** (いま出ている絵は、次が出るまで残る)。
+     * 選局し直した・録画で飛んだ。**前の局の音も映像の待ちも捨てる** (いま出ているフレームは、次が出るまで残る)。
      *
      * `from` (90kHz。届くものの PTS の物差し。元の TS なら一周の中) を渡すと、そこから鳴らし・描き始める
      * (録画。`canvas-player.ts`)。サーバは飛び先の少し手前から流すので、手前のコマは描かずに捨て、
@@ -270,7 +270,7 @@ export class RawEngine {
     }
 
     /**
-     * 止める。**再開は放送の今から** (生では遡れるだけ持っていない。stream.md §5.5)。
+     * 止める。**再開は放送の今から** (MPEG-2 では遡れるだけ持っていない。stream.md §5.5)。
      * 追っかけ (`follow`) は止めた所から (`playout.ts`)
      */
     pause(): void {
@@ -305,7 +305,7 @@ export class RawEngine {
         return at === null ? null : at.pts / CLOCK;
     }
 
-    /** 手元にあと何秒ぶん持っているか (エンコードする道の `buffered.end - currentTime`) */
+    /** 手元にあと何秒ぶん持っているか (エンコードする経路の `buffered.end - currentTime`) */
     get lead(): number {
         return this.playout.lead(this.now());
     }
@@ -320,8 +320,8 @@ export class RawEngine {
     }
 
     /**
-     * いま出しているコマを1枚 (切り抜き)。**絵は worker の canvas に居る**ので、
-     * 頼んで返してもらう。返事が来ない (worker が詰まっている) ときは諦めて null
+     * いま出しているコマを1枚 (切り抜き)。**映像は worker の canvas にある**ので、
+     * リクエストして返してもらう。返事が来ない (worker が詰まっている) ときは諦めて null
      */
     grab(): Promise<ImageBitmap | null> {
         if (this.gone) return Promise.resolve(null);
@@ -339,11 +339,11 @@ export class RawEngine {
     }
 
     /**
-     * 小窓 (PiP) へ出す絵の流れ。**Chrome は worker が描いたコマを直に書き込む**
+     * 小窓 (PiP) へ出す映像ストリーム。**Chrome は worker が描いたコマを直に書き込む**
      * (`MediaStreamTrackGenerator`。`worker.ts` の `toPip`)。canvas の画面への更新から取る
-     * (`captureStream`) と、窓が隠れて画面の更新が止まったとき絵も止まる。
+     * (`captureStream`) と、窓が隠れて画面の更新が止まったとき映像も止まる。
      *
-     * 書き込む口が無い Safari は `captureStream` (iPhone で小窓に出せている)。
+     * 書き込む API が無い Safari は `captureStream` (iPhone で小窓に出せている)。
      * Firefox はどちらも無い (worker に渡した canvas からは流れを取れない) ので null
      */
     pipStream(): MediaStream | null {
@@ -366,7 +366,7 @@ export class RawEngine {
         }
     }
 
-    /** 小窓へ書き込むか (`pipStream` の直に書き込む道だけ)。出していない間は写さない */
+    /** 小窓へ書き込むか (`pipStream` の直に書き込む経路だけ)。出していない間は写さない */
     pipFlow(on: boolean): void {
         this.send({ type: 'pipFlow', on });
     }
@@ -389,13 +389,13 @@ export class RawEngine {
     }
 
     /**
-     * **音の出口を決め直す。** バックグラウンド再生を入れているとき・押して小窓を開いている間
+     * **音の出口を決め直す。** バックグラウンド再生をオンにしているとき・押して小窓を開いている間
      * (`wanted`) は、ページから直に鳴らさず、流れ (`createMediaStreamDestination`) にして
      * `<audio>` で鳴らす。
      *
      * Web Audio の音を、ブラウザによっては効果音と同じに扱い、**裏へ回すと止める**
      * (テスラの車載ブラウザ。Chromium 系)。`<audio>` が鳴らしていれば「メディアの再生」で、
-     * エンコードする道の `<video>` と同じ扱いになる — ロック画面・車の操作にも「再生中」と出て、
+     * エンコードする経路の `<video>` と同じ扱いになる — ロック画面・車の操作にも「再生中」と出て、
      * そこで押された止める・再開は `remote` で画面に伝える。
      *
      * - **Safari は通さない** — Audio Session を `playback` にすれば裏でも止まらない
@@ -460,7 +460,7 @@ export class RawEngine {
         };
         audio.addEventListener('pause', sync);
         audio.addEventListener('play', sync);
-        // 操作の口 (`controls`) を出さないので、置いても見えない
+        // 操作 UI (`controls`) を出さないので、置いても見えない
         this.canvas.after(audio);
         return { audio, destination };
     }
@@ -497,8 +497,8 @@ export class RawEngine {
                 this.dropped = message.dropped;
                 this.decodeMs = message.p95;
                 /*
-                 * **外から読める形で出しておく。** 絵は worker の canvas に居て、画面の側からは
-                 * 画素を読めない。描いたコマ数とデコードできた音のコマ数が進んでいれば、生の道は動いている
+                 * **外から読める形で出しておく。** 映像は worker の canvas にあって、画面の側からは
+                 * 画素を読めない。描いたコマ数とデコードできた音のコマ数が進んでいれば、変換しない経路は動いている
                  * (E2E が見る。手元で切り分けるときも DevTools で読める)
                  */
                 this.canvas.dataset['shown'] = String(message.shown);
@@ -579,7 +579,7 @@ export class RawEngine {
             this.events.ended?.();
         }
         this.tellClock();
-        // 絵は出ているのに音が来ない。**音の出ない生より、エンコードしたもののほうがいい**
+        // 映像は出ているのに音が来ない。**音の出ない MPEG-2 より、エンコードしたもののほうがいい**
         if (this.shownAt > 0 && this.heardAt === 0 && Date.now() - this.shownAt > NO_AUDIO) {
             this.giveUp(
                 this.input !== 'ts-mpeg2'
@@ -591,7 +591,7 @@ export class RawEngine {
 
     /**
      * 時計を替える。**鳴っている位置はそのまま。** 自動再生の許しが出たら音へ、音が止められたら
-     * (出口が外れた・OS に止められた) 壁時計へ — 止まった音の時計に絵まで付いて止まらないように
+     * (出口が外れた・OS に止められた) 壁時計へ — 止まった音の時計に映像まで付いて止まらないように
      */
     private follow(): void {
         const wall = this.context.state !== 'running';
@@ -610,7 +610,7 @@ export class RawEngine {
         if (frames === 0) return;
         const buffer = this.context.createBuffer(2, frames, chunk.sampleRate);
         /*
-         * **デュアルモノは片側を両耳へ** (エンコードする道の `pan` と同じ)。
+         * **デュアルモノは片側を両耳へ** (エンコードする経路の `pan` と同じ)。
          *
          * 5.1ch の番組は**頭の2本 (前の左右) だけ**鳴らす。面の並びは FFmpeg の決まりで
          * 分かっている (worker の WASM がデコードする) が、中央と後ろを混ぜる下げ方はまだ持っていない

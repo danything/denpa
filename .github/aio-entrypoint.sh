@@ -20,6 +20,6 @@ wait -n "$agent" "$denpa"
 code=$?
 stop
 wait "$agent" "$denpa"
-# 頼まれて止めたなら 0。自分から落ちたなら、落ちたほうの終了コードを返す
+# 止めるよう言われたなら 0。自分から落ちたなら、落ちたほうの終了コードを返す
 [ "$stopping" = 1 ] && exit 0
 exit "$code"

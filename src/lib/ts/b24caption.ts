@@ -173,14 +173,14 @@ interface Drcs {
     depth: number;
     bits: number;
     pixels: Uint8Array;
-    /** 置き換えられた字。無ければ絵のまま */
+    /** 置き換えられた字。無ければ画像のまま */
     replaced: number | null;
-    /** 元の絵の MD5。置き換え表を引く鍵で、送る絵を覚えておく鍵でもある */
+    /** 元の画像の MD5。置き換え表を引く鍵で、送る画像を覚えておく鍵でもある */
     md5: string;
 }
 
 /**
- * 送る絵 (なめらかにした濃淡。drcs-smooth.ts) を元の絵の MD5 ごとに覚えておく。放送は字幕文のたびに
+ * 送る画像 (なめらかにした濃淡。drcs-smooth.ts) を元の画像の MD5 ごとに覚えておく。放送は字幕文のたびに
  * 同じ外字を定義し直してくるので、定義ごとではなくここで1回だけ作る
  */
 const smoothed = new Map<string, CaptionDrcs>();
@@ -898,7 +898,7 @@ export class B24CaptionDecoder {
 }
 
 /**
- * デコードした1枚を、送る形にする。**同じ見た目で続いている字を1つの並びに束ねる。**
+ * デコードした1枚を、送る形式にする。**同じ見た目で続いている字を1つの並びに束ねる。**
  *
  * libaribcaption の描き手 (region_renderer) が字ごとに計算している置き場所を、ここで
  * 面の単位のまま済ませておく。区画は `floor((字の幅 + 字間) × 倍率)`、字の枠は区画の中で
@@ -948,7 +948,7 @@ function toPage(caption: Caption, plane: [number, number]): CaptionPage | null {
         if (char.flash) run.flash = true;
         if (char.ruby) run.ruby = true;
 
-        // 見た目が同じで、すぐ右に続いていれば束ねる。外字の絵は1字ずつ
+        // 見た目が同じで、すぐ右に続いていれば束ねる。外字の画像は1字ずつ
         const { x: _x, y: _y, text: _t, ...looks } = run;
         const key = JSON.stringify(looks);
         if (

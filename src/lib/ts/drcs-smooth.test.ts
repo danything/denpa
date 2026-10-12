@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { boxDown, collapseDoubled, decodeGrey, type Grey, pack4, scale2x, smoothDrcs } from './drcs-smooth';
 
-/** `size`x`size` の白黒の絵を、放送の詰め方 (1画素1ビット) で作る。`scale` 倍に水増しして送る放送を真似る */
+/** `size`x`size` の白黒の画像を、放送の詰め方 (1画素1ビット) で作る。`scale` 倍に水増しして送る放送を真似る */
 function pack(size: number, on: (x: number, y: number) => boolean, scale = 1): Uint8Array {
     const side = size * scale;
     const bytes = new Uint8Array(Math.ceil((side * side) / 8));
@@ -15,7 +15,7 @@ function pack(size: number, on: (x: number, y: number) => boolean, scale = 1): U
     return bytes;
 }
 
-/** 濃さの絵を作る。`#` は 255、`.` は 0 */
+/** 濃さの画像を作る。`#` は 255、`.` は 0 */
 function grey(rows: string[]): Grey {
     const width = rows[0]?.length ?? 0;
     const pixels = Uint8Array.from(rows.join(''), (c) => (c === '#' ? 255 : 0));
@@ -30,7 +30,7 @@ function rows(g: Grey): string[] {
     );
 }
 
-/** 送る絵を濃さの絵に開き直す */
+/** 送る画像を濃さの画像に開き直す */
 function sent(size: number, on: (x: number, y: number) => boolean, scale = 1): Grey {
     const drcs = smoothDrcs(size * scale, size * scale, 2, 1, pack(size, on, scale));
     expect(drcs).toMatchObject({ depth: 16, bits: 4 });
@@ -55,7 +55,7 @@ describe('decodeGrey', () => {
 });
 
 describe('collapseDoubled', () => {
-    test('縦横 2 倍に水増しされた絵を元の大きさに戻す', () => {
+    test('縦横 2 倍に水増しされた画像を元の大きさに戻す', () => {
         const small = grey(['#..', '.#.', '..#', '##.']);
         const doubled = grey([
             '##....',
@@ -75,7 +75,7 @@ describe('collapseDoubled', () => {
         expect(rows(collapseDoubled(grey(['##..', '..##', '##..'])))).toEqual(['#.', '.#', '#.']);
     });
 
-    test('水増しでない絵はそのまま', () => {
+    test('水増しでない画像はそのまま', () => {
         const g = grey(['#.', '.#']);
         expect(collapseDoubled(g)).toBe(g);
     });
@@ -107,7 +107,7 @@ describe('scale2x', () => {
         expect(rows(scale2x(grey(['##.', '##.'])))).toEqual(['####..', '####..', '####..', '####..']);
     });
 
-    test('縁へ抜ける斜めの線に余計な点を付けない (絵の外は縁で折り返して見る)', () => {
+    test('縁へ抜ける斜めの線に余計な点を付けない (画像の外は縁で折り返して見る)', () => {
         expect(rows(scale2x(grey(['#.', '.#'])))).toEqual(['##..', '##..', '..##', '..##']);
     });
 });
@@ -120,7 +120,7 @@ describe('boxDown', () => {
 
 describe('smoothDrcs', () => {
     test('2 倍で送られた 18x18 の斜めの線は、階段が細かくなり縁に中間の濃さが付く', () => {
-        // (2,2)〜(15,15)。送る絵では 8〜63 の行に載る。両端の丸まったところ (元の1点ぶん) は見ない
+        // (2,2)〜(15,15)。送る画像では 8〜63 の行に載る。両端の丸まったところ (元の1点ぶん) は見ない
         const line = sent(18, (x, y) => x === y && x >= 2 && x < 16, 2);
         expect([line.width, line.height]).toEqual([72, 72]);
         let partial = false;
@@ -142,7 +142,7 @@ describe('smoothDrcs', () => {
         expect(at(line, 63, 8)).toBe(0);
     });
 
-    test('全部塗った絵は縁まで塗ったまま', () => {
+    test('全部塗った画像は縁まで塗ったまま', () => {
         const block = sent(18, () => true, 2);
         expect(new Set(block.pixels)).toEqual(new Set([255]));
     });
@@ -160,7 +160,7 @@ describe('smoothDrcs', () => {
     });
 
     test('一辺 64 に届くまで 2 倍ずつ。256 は超えない', () => {
-        /** 斜めの線 (畳めない) を `size`x`size` で送ったときの、送る絵の大きさ */
+        /** 斜めの線 (畳めない) を `size`x`size` で送ったときの、送る画像の大きさ */
         const sizeOf = (size: number) => {
             const drcs = smoothDrcs(
                 size,
@@ -178,7 +178,7 @@ describe('smoothDrcs', () => {
         expect([wide.w, wide.h]).toEqual([255, 1]);
     });
 
-    test('読めない絵 (大きさ 0・知らない bits) はそのまま渡す', () => {
+    test('読めない画像 (大きさ 0・知らない bits) はそのまま渡す', () => {
         expect(smoothDrcs(0, 0, 2, 1, new Uint8Array())).toEqual({ w: 0, h: 0, depth: 2, bits: 1, data: '' });
         expect(smoothDrcs(2, 2, 8, 3, Uint8Array.from([0xff, 0xff]))).toMatchObject({
             w: 2,

@@ -7,8 +7,8 @@ import { cellOf, expect, syncEpg, test, upcoming } from './helpers';
  * **前段の接頭辞の下でも動く** (server/paths.ts)。
  *
  * Home Assistant の Ingress や k8s の Ingress と同じく、`/sub/denpa` を**剥がしてから**
- * 渡す前段を立てて、その下で主な道を通す。denpa には接頭辞を教えない。
- * 画面の中の URL は `resolve` (SvelteKit がブラウザの居る URL から求める)、転送は相対。
+ * 渡す前段を立てて、その下で主な経路を通す。denpa には接頭辞を教えない。
+ * 画面の中の URL は `resolve` (SvelteKit がブラウザで開いている URL から求める)、転送は相対。
  * どれか1つでも根から書いてあれば、その先で前段の外 (`/guide` など) へ出て 404 になる
  */
 const PREFIX = '/sub/denpa';

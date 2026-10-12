@@ -8,7 +8,7 @@ namespace Denpa.Agent.Tests;
  * USB の CCID リーダーを直に叩くところ。
  *
  * 本物のリーダーは無い。ディスクリプタは Gemalto (Gemplus) PC Twin Reader (08e6:3437) の
- * 値で組み (CCID ドライバの readers/GemPCTwin.txt)、リーダーはバルク転送の口ごと偽物にする。
+ * 値で組み (CCID ドライバの readers/GemPCTwin.txt)、リーダーはバルク転送の入口ごと偽物にする。
  * 偽物は USB の振る舞い (パケットの倍数で終わるメッセージは ZLP が無いと返らない) も真似る。
  * 実機で当てるのは Ccid.Describe() (`denpa-agent --card`)。
  */
@@ -151,7 +151,7 @@ public class CcidTests
         public void Dispose() => Disposed = true;
     }
 
-    /// <summary>応答の形は命令と同じ (頭 10 バイトの 8〜10 バイト目が bmStatus / bError / 3つめ)</summary>
+    /// <summary>応答の形式は命令と同じ (頭 10 バイトの 8〜10 バイト目が bmStatus / bError / 3つめ)</summary>
     private static byte[] Reply(byte type, byte seq, byte status, byte error, ReadOnlySpan<byte> data, byte chain = 0) =>
         CcidMessage.Command(type, seq, data, status, error, chain);
 
@@ -278,7 +278,7 @@ public class CcidTests
     }
 
     [Test]
-    // Linux の置き場の形 (sysfs の名前の「:」、/dev のパス) を見るもの。Windows では作れない
+    // Linux の置き場の形式 (sysfs の名前の「:」、/dev のパス) を見るもの。Windows では作れない
     [ExcludeOn(OS.Windows)]
     public async Task sysfs_から_CCID_のインターフェースだけ拾う()
     {

@@ -9,12 +9,12 @@ import { type FileSource, parseFileSource } from '#lib/source.js';
 
 /**
  * **音声だけ** (`?audio=only`)。音声だけで鳴らすもの (スマートスピーカーへの Cast など) 向け。
- * 元がどれ (元のTS・AV1・H.264) でも同じ形で出せるよう、主音声を AAC に再エンコードして ADTS で流す。
+ * 元がどれ (元のTS・AV1・H.264) でも同じ形式で出せるよう、主音声を AAC に再エンコードして ADTS で流す。
  * 音声だけなので軽い。閉じられたら ffmpeg も止める
  */
 function audioOnly(path: string, request: Request): Response {
     const headers = { 'Content-Type': 'audio/aac', 'Cache-Control': 'no-store' };
-    // HEAD は形だけ答える。再エンコードを起こさない
+    // HEAD はヘッダーだけ答える。再エンコードを起こさない
     if (request.method === 'HEAD') return new Response(null, { headers });
     const body = ffmpegBody(
         [
@@ -70,7 +70,7 @@ function respond(
      * - `encoded` … 主のエンコード済み (両方エンコードしたときは AV1)
      * - `alt` … もう一方 (H.264)。両方エンコードした録画でだけ在る。古いテレビはこちら
      *
-     * 残っているものが複数ある録画では、画面がダウンロードの口を分けて出す
+     * 残っているものが複数ある録画では、画面がダウンロードのリンクを分けて出す
      * (`+page.svelte` の `recordingActions`)。上の「今いいほう」だけだと、
      * **押した先が同じファイル**になってしまう。プレイヤーに渡す URL は
      * 名指ししない — あちらは観られさえすればよく、選ばせるものではない
@@ -97,7 +97,7 @@ function respond(
     );
 }
 
-// HEAD も同じ道 (中身を出すかは serveFile が request.method で決める)
+// HEAD も同じ処理 (中身を出すかは serveFile が request.method で決める)
 export function GET({ params, request, url }) {
     return respond(
         params.id,

@@ -17,7 +17,7 @@ import {
 } from './captions';
 
 describe('字幕の取り出し方', () => {
-    /** 字幕はデコードせずに写す (`S_ARIBSUB`)。デコードするのは denpa なので、ffmpeg に字幕の復号器は要らない */
+    /** 字幕はデコードせずに写す (`S_ARIBSUB`)。デコードするのは denpa なので、ffmpeg に字幕のデコーダは要らない */
     test('デコードせずに写す', () => {
         const args = captionOutput('0:p:1024', 0);
         expect(args.join(' ')).toContain('-map 0:p:1024:s:0 -c:s copy');
@@ -26,7 +26,7 @@ describe('字幕の取り出し方', () => {
     });
 
     /*
-     * **時刻を運べる器で受ける。** 別の口 (`showinfo`) に喋らせて来た順に組にすると数が合わずにずれる
+     * **時刻を運べるコンテナで受ける。** 別の出力 (`showinfo`) に喋らせて来た順に組にすると数が合わずにずれる
      */
     test('時刻はコマと一緒に運ばせる', () => {
         const args = captionOutput('0:p:1024', 0);
@@ -34,8 +34,8 @@ describe('字幕の取り出し方', () => {
         expect(args).not.toContain('showinfo');
     });
 
-    /** **映像とは別の口へ出す。** 同じ ffmpeg なので、口を分けるしかない */
-    test('映像とは別の口へ出す', () => {
+    /** **映像とは別の出口へ出す。** 同じ ffmpeg なので、出口を分けるしかない */
+    test('映像とは別の出口へ出す', () => {
         expect(captionOutput('0:p:1024', 0)).toContain('pipe:3');
     });
 
@@ -64,7 +64,7 @@ describe('放送そのままの経路の字幕', () => {
         expect(args.indexOf('-copyts')).toBeLessThan(args.indexOf('-i'));
         expect(args).not.toContain('libx264');
         expect(args).not.toContain('-vf');
-        // 出口はエンコードの経路と同じ (Matroska を 3 本目の口へ)
+        // 出口はエンコードの経路と同じ (Matroska を 3 番目の出口へ)
         expect(args.slice(-2)).toEqual(['matroska', 'pipe:3']);
         // 字幕はデコードせずに写す (デコードするのは denpa)。字幕を描く指定は要らない
         expect(args.join(' ')).toContain('-map 0:p:1024:s:0 -c:s copy');
@@ -79,7 +79,7 @@ describe('放送そのままの経路の字幕', () => {
 /**
  * **字幕を持たない放送は普通にある** (ショッピングやサブチャンネル)。
  *
- * そこに字幕を頼むと ffmpeg は組み立ての時点で降りる — **映像も出ない**。
+ * そこに字幕を要求すると ffmpeg は組み立ての時点で降りる — **映像も出ない**。
  * そうと分かったら字幕なしで再エンコードするので、その言い分を見分けられること
  */
 describe('字幕が無いと分かる', () => {
@@ -165,7 +165,7 @@ describe('TrackList', () => {
  * **放送の欠けにいちいち言われるぶんは残さない。**
  *
  * 選べる字幕を入口の見出しから拾うために `-loglevel` を info まで開けたので、
- * 復号器の「直した」「捨てた」がそのまま流れてくるようになった。実機の弱い局
+ * デコーダの「直した」「捨てた」がそのまま流れてくるようになった。実機の弱い局
  * では毎秒何行も出て、**本当の失敗がその中に埋もれる**。
  */
 describe('worthLogging', () => {
@@ -182,7 +182,7 @@ describe('worthLogging', () => {
     });
 
     /** 本当にエンコードできないときは残す。ここが消えると「映像が出ない」としか分からない */
-    test('組み立てや符号器の失敗は残す', () => {
+    test('組み立てやエンコーダの失敗は残す', () => {
         for (const line of [
             "Failed to set value '0:p:24632:v:0' for option 'map': Invalid argument",
             'Error binding filtergraph inputs/outputs: Invalid argument',
@@ -200,11 +200,11 @@ describe('worthLogging', () => {
     });
 });
 
-describe('アプリ向けの字幕の口', () => {
+describe('アプリ向けの字幕 API', () => {
     const json = (value: unknown) => new TextEncoder().encode(JSON.stringify(value));
 
-    /** WebSocket の1こまの頭に、後ろの長さを足しただけ (受け側の読み方を1つにする) */
-    test('こまは [4:長さ][1:種別][8:時刻][中身]', () => {
+    /** WebSocket の1フレームの頭に、後ろの長さを足しただけ (受け側の読み方を1つにする) */
+    test('フレームは [4:長さ][1:種別][8:時刻][中身]', () => {
         const out = appFrame(CHANNEL.captionText, 0x1_2345_6789n, new Uint8Array([1, 2, 3]));
         const view = new DataView(out.buffer);
         expect(out.length).toBe(4 + 1 + 8 + 3);
@@ -231,7 +231,7 @@ describe('アプリ向けの字幕の口', () => {
         expect(kinds).toEqual([CHANNEL.control, CHANNEL.captionText]);
     });
 
-    // 映像が終わった (セッションが畳まれた・エンコードできなくなった) ら、字幕の口も閉じる
+    // 映像が終わった (セッションが畳まれた・エンコードできなくなった) ら、字幕 API も閉じる
     test('ended / error の知らせで閉じて後始末する', async () => {
         for (const type of ['ended', 'error']) {
             let left = 0;
@@ -297,7 +297,7 @@ describe('アプリ向けの字幕の口', () => {
 
 /**
  * **録画の字幕を文字の配置で渡す** (`captions.json`)。新しくエンコードした録画には放送の字幕が
- * そのまま (`S_ARIBSUB`) 入っている。ずっと前にエンコードした録画は絵 (PGS) のことがあり、それは読まない (null。字幕なし)
+ * そのまま (`S_ARIBSUB`) 入っている。ずっと前にエンコードした録画は画像 (PGS) のことがあり、それは読まない (null。字幕なし)
  */
 describe('pagesFromMkv', () => {
     test('S_ARIBSUB をデコードして、時刻 (秒) と1枚ずつに', () => {
@@ -315,7 +315,7 @@ describe('pagesFromMkv', () => {
         ]);
     });
 
-    test('絵の字幕 (PGS) なら null', () => {
+    test('画像の字幕 (PGS) なら null', () => {
         expect(pagesFromMkv(mkv([[0, Uint8Array.of(0x50, 0x47)]], 'S_HDMV/PGS'))).toBeNull();
     });
 });

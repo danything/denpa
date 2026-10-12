@@ -40,7 +40,7 @@ test.describe('エンコードの失敗', () => {
         await expect(failed.getByTestId('recording-state')).toHaveText('エンコード失敗');
 
         /*
-         * **観られる。** エンコードできていなくても元のTSは無事で、追っかけ再生の器 (/chase) が
+         * **観られる。** エンコードできていなくても元のTSは無事で、追っかけ再生の画面 (/chase) が
          * サーバで再エンコードして運ぶ (25-chase)。行には再生の印が出て、押すと追っかけへ。
          * 以前は「エンコードできていない = 観られない」で印を消していたが、元のTSがある限り観られる
          */
@@ -50,7 +50,7 @@ test.describe('エンコードの失敗', () => {
         // (観られる行は押すと再生に行くので、詳細は別のボタン)
         await failed.getByTestId('detail-button').click();
         const detail = page.getByTestId('program-detail');
-        // 落とす口も詳細の中。元のTSは無事なのでダウンロードできる
+        // ダウンロードのボタンも詳細の中。元のTSは無事なのでダウンロードできる
         await expect(detail.getByTestId('download-link')).toHaveCount(1);
         // 理由は1つだけ。録画そのものは失敗していないので、出るのはジョブ側の理由だけ
         const note = detail.getByTestId('detail-error');

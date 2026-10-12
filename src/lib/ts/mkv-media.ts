@@ -1,9 +1,9 @@
 /**
  * **Matroska の映像・音声を中身まで読む** (互換モードで、端末に保存した録画を canvas に描く。`raw/mkv.ts`)。
  *
- * 字幕を運ぶための最小の読み (`mkv.ts` の `MkvSplitter`) とは別に置く (EBML の読み方は `mkv.ts` のものを使う)。こちらは軌道ごとの形
- * (CodecPrivate: avcC / av1C / AudioSpecificConfig / OpusHead) と、コマの軌道の番号・鍵のコマの印、
- * 飛ぶ位置の表 (Cues) まで読む。読むのは denpa のエンコードが書く形 (ffmpeg の Matroska) に要るものだけ:
+ * 字幕を運ぶための最小の読み (`mkv.ts` の `MkvSplitter`) とは別に置く (EBML の読み方は `mkv.ts` のものを使う)。こちらはトラックごとの形式
+ * (CodecPrivate: avcC / av1C / AudioSpecificConfig / OpusHead) と、コマのトラック番号・キーフレームの印、
+ * 飛ぶ位置の表 (Cues) まで読む。読むのは denpa のエンコードが書く形式 (ffmpeg の Matroska) に要るものだけ:
  *
  *     Segment > SeekHead > Seek (SeekID・SeekPosition)   Cues の在りか
  *     Segment > Info > TimestampScale・Duration
@@ -76,12 +76,12 @@ function* children(body: Uint8Array): Generator<{ id: number; body: Uint8Array }
     }
 }
 
-/** 読めた軌道。映像・音声のどちらでもないもの (字幕) は `kind: 'other'` */
+/** 読めたトラック。映像・音声のどちらでもないもの (字幕) は `kind: 'other'` */
 export interface MkvTrack {
     number: number;
     kind: 'video' | 'audio' | 'other';
     codecId: string;
-    /** WebCodecs の書き方 (`avc1.640028` / `av01.0.08M.08` / `mp4a.40.2` / `opus`)。読めない形は null */
+    /** WebCodecs の書き方 (`avc1.640028` / `av01.0.08M.08` / `mp4a.40.2` / `opus`)。読めない形式は null */
     codec: string | null;
     /** CodecPrivate (avcC / av1C / AudioSpecificConfig / OpusHead) */
     config: Uint8Array<ArrayBuffer>;
@@ -155,8 +155,8 @@ function readTracks(body: Uint8Array): MkvTrack[] {
 }
 
 /**
- * OpusHead (Matroska の CodecPrivate) を dOps (MP4 の形) に書き換える。`ts/fmp4.ts` の `opusHead` の逆 —
- * デコードする側 (`raw/fmp4.ts`) は dOps を受け取って OpusHead に直すので、形を揃えて渡す
+ * OpusHead (Matroska の CodecPrivate) を dOps (MP4 の形式) に書き換える。`ts/fmp4.ts` の `opusHead` の逆 —
+ * デコードする側 (`raw/fmp4.ts`) は dOps を受け取って OpusHead に直すので、形式を揃えて渡す
  */
 export function opusDops(opus: Uint8Array): Uint8Array<ArrayBuffer> | null {
     if (opus.length < 19) return null;
@@ -174,7 +174,7 @@ export function opusDops(opus: Uint8Array): Uint8Array<ArrayBuffer> | null {
     return out;
 }
 
-/** デコードする側 (`raw/fmp4.ts`) が受け取る形にする。コマの時刻は TimestampScale の刻みで渡す。読めない形なら null */
+/** デコードする側 (`raw/fmp4.ts`) が受け取る形式にする。コマの時刻は TimestampScale の刻みで渡す。読めない形式なら null */
 export function asFmp4Track(track: MkvTrack, scale: number): Fmp4Track | null {
     if (track.codec === null || track.kind === 'other') return null;
     const config = track.codec === 'opus' ? opusDops(track.config) : track.config;
@@ -202,9 +202,9 @@ export interface MkvBlock {
 }
 
 /**
- * **流れてくる Matroska から、軌道の形とコマを取り出す。** 足りないところで止めて続きを待つ。
+ * **流れてくる Matroska から、トラックの形式とコマを取り出す。** 足りないところで止めて続きを待つ。
  * Tracks は丸ごと届いてから読む。Segment・Cluster・BlockGroup は中に入り、知らないものは
- * 大きさぶん飛ばす (SeekHead・Cues・Tags・Chapters・字幕の軌道のコマは読んでも捨てる側が決める)
+ * 大きさぶん飛ばす (SeekHead・Cues・Tags・Chapters・字幕トラックのコマは読んでも捨てる側が決める)
  */
 export class MkvDemuxer {
     private buffer = new Uint8Array(0);
@@ -266,7 +266,7 @@ export class MkvDemuxer {
     }
 
     /**
-     * コマ1つ。`[軌道の番号][頭からの差 (2バイト、符号あり)][旗][中身]`。束ね (lacing) は ffmpeg が映像・音声で
+     * コマ1つ。`[トラック番号][頭からの差 (2バイト、符号あり)][旗][中身]`。束ね (lacing) は ffmpeg が映像・音声で
      * 使わないので読まない (来たら捨てる)
      */
     private block(body: Uint8Array): { track: number; at: number; flags: number; data: Uint8Array } | null {
@@ -351,7 +351,7 @@ export function elementSize(bytes: Uint8Array): number | null {
     return h === null || h.size === UNKNOWN ? null : h.body + h.size;
 }
 
-/** Cues を読む。`track` (映像の軌道) の位置だけ、時刻の順に */
+/** Cues を読む。`track` (映像トラック) の位置だけ、時刻の順に */
 export function readCues(bytes: Uint8Array, scale: number, track: number): MkvCue[] {
     const h = ebmlHead(bytes, 0);
     if (h === null || h.id !== CUES || h.size === UNKNOWN) return [];

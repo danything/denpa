@@ -20,7 +20,7 @@ import {
 } from './values';
 import type { Realm } from './vm';
 
-/** DOM が頼む、エンジンの側の口 */
+/** DOM が呼ぶ、エンジンの側の API */
 export interface DomHost {
     readonly realm: Realm;
     readonly document: BmlDocument;
@@ -44,7 +44,7 @@ interface Accessor {
     set?: (value: Value) => void;
 }
 
-/** 外の物。名前ごとに読み書きの口を持つ */
+/** 外の物。名前ごとに読み書きの関数を持つ */
 export class HostObject extends JSObject {
     readonly accessors = new Map<string, Accessor>();
 
@@ -125,7 +125,7 @@ const STYLE_PROPERTIES: Record<string, [string, boolean]> = {
     displayAspectRatio: ['display-aspect-ratio', false],
 };
 
-/** 特性の今の値を、スクリプトに返す形で */
+/** 特性の今の値を、スクリプトに返す形式で */
 function styleValue(element: BmlElement, property: string, state: State): string {
     const s = element.styleIn(state);
     switch (property) {
@@ -179,7 +179,7 @@ function styleValue(element: BmlElement, property: string, state: State): string
     return '';
 }
 
-/** 書かれた値を確かめて、そのまま持つ形に (px は数で書いてもよい) */
+/** 書かれた値を確かめて、そのまま持つ形式に (px は数で書いてもよい) */
 function normalizeStyle(property: string, value: Value): string {
     const text = toStr(value).trim();
     if (['left', 'top', 'width', 'height', 'font-size'].includes(property) && /^-?\d+$/.test(text))

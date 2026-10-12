@@ -1,12 +1,12 @@
 /**
  * **録画の観方の取り決め** (`GET /api/recordings/<id>/playback` と `/stream`)。画面にもサーバにも依らない。
  *
- * 分担: **サーバは「何を出せるか・どの形で出すか・時刻の物差し」を決める。画面は「どれを使うか」を
+ * 分担: **サーバは「何を出せるか・どの形式で出すか・時刻の物差し」を決める。画面は「どれを使うか」を
  * 決める** (端末で再生できるか、人が選んだコーデック、MPEG-2 をそのまま再生する設定)。サーバは
  * 端末が何かを知らない。決め方は `server/playback.ts`
  */
 
-/** 出せる映像の形 */
+/** 出せる映像の形式 */
 export type PlayCodec = 'h264' | 'av1' | 'mpeg2';
 
 /**
@@ -14,7 +14,7 @@ export type PlayCodec = 'h264' | 'av1' | 'mpeg2';
  *
  * - `file` … エンコード済みのファイルそのまま (`/api/recordings/<id>/file?source=`)。Range で読む
  * - `stream` … サーバがその場で fMP4 にして流す (`/stream?codec=`)。エンコード済みと同じコーデックなら
- *   詰め替えるだけ、違えばエンコードし直す。シークは `from` を変えて頼み直す
+ *   詰め替えるだけ、違えばエンコードし直す。シークは `from` を変えてリクエストし直す
  * - `raw` … 元の TS を飛び先から流す (`/stream?codec=mpeg2`)。画面が自分で再生する
  */
 export type PlayWay = 'file' | 'stream' | 'raw';
@@ -80,7 +80,7 @@ export async function busyAnswer(response: Response): Promise<boolean> {
 
 /*
  * ---------------------------------------------------------------------------
- * 切れたときの頼み直し。**`<video>` でファイルを読むとき (観る画面の `recover`)・MSE で流すとき
+ * 切れたときのリクエストし直し。**`<video>` でファイルを読むとき (観る画面の `recover`)・MSE で流すとき
  * (`remux-player.ts`)・canvas に描くとき (`canvas-player.ts`) で同じ数にする**
  * ---------------------------------------------------------------------------
  */
@@ -88,15 +88,15 @@ export async function busyAnswer(response: Response): Promise<boolean> {
 /** 流しているものの様子。繋ぎ直している・諦めた・戻った・混んでいて断られた */
 export type StreamState = 'flowing' | 'retrying' | 'failed' | 'busy';
 
-/** 続けて頼み直す上限 */
+/** 続けてリクエストし直す上限 */
 export const STREAM_RETRIES = 8;
 
-/** `retries` 回頼み直したあと、次に頼むまで待つ時間 (ms)。倍々に伸ばして 10秒で頭打ち (デプロイの入れ替えは数十秒かかる) */
+/** `retries` 回リクエストし直したあと、次にリクエストするまで待つ時間 (ms)。倍々に伸ばして 10秒で頭打ち (デプロイの入れ替えは数十秒かかる) */
 export function retryWait(retries: number): number {
     return Math.min(10_000, 1000 * 2 ** retries);
 }
 
-/** 頼み直せば直りうる失敗か (繋がらない・途中で落ちた・サーバの 5xx)。4xx・読めない中身は何度やっても同じ */
+/** リクエストし直せば直りうる失敗か (繋がらない・途中で落ちた・サーバの 5xx)。4xx・読めない中身は何度やっても同じ */
 export function retryable(error: unknown): boolean {
     return error instanceof TypeError || /^Error: HTTP 5/.test(String(error));
 }
@@ -104,11 +104,11 @@ export function retryable(error: unknown): boolean {
 /** 画面が選べるコーデック。`auto` は端末に合わせて決める (`pickOffer`) */
 export type CodecChoice = 'auto' | 'h264' | 'av1';
 
-/** ブラウザに聞く口。**試しで差し替えられるように**受け取る */
+/** ブラウザに問い合わせる関数。**試しで差し替えられるように**受け取る */
 export interface MediaAbility {
     /** `<video>` にそのまま渡して読めるか (`canPlayType` が空でない) */
     play(type: string): boolean;
-    /** MSE の器が受け取れるか (`isTypeSupported`)。器が無ければ false */
+    /** MSE が受け取れるか (`isTypeSupported`)。MediaSource が無ければ false */
     mse(type: string): boolean;
 }
 
@@ -149,13 +149,13 @@ function asPicked(offer: PlayOffer): Picked | null {
 }
 
 /**
- * **どれで観るか。** 人が選んだコーデックがあれば、それを観られる道 (ファイルそのまま → その場で流す)。
+ * **どれで観るか。** 人が選んだコーデックがあれば、それを観られる方法 (ファイルそのまま → その場で流す)。
  * 観られなければ、または `auto` なら端末に合わせる:
  *
  * 1. **そのまま読めるファイル** (並びはサーバの順。主 → もう一方)
  * 2. MSE が受け取れる**詰め替え** (エンコード済みと同じコーデック。サーバは軽い)
  * 3. MSE が受け取れる**変換** (H.264 → AV1 の順。サーバはその場でエンコードする)
- * 4. 中身が分からないファイル (ffprobe が読めなかった) をそのまま渡す。読めなければ落とす口を出す
+ * 4. 中身が分からないファイル (ffprobe が読めなかった) をそのまま渡す。読めなければダウンロードのリンクを出す
  *
  * MPEG-2 (`raw`) はここでは選ばない (そのまま再生する道は画面の設定で別に決める)。何も無ければ null
  */
@@ -183,7 +183,7 @@ export function pickOffer(
 }
 
 /**
- * **コーデックのメニューに並べるもの。** この端末で観られる道があるコーデック (H.264 → AV1)
+ * **コーデックのメニューに並べるもの。** この端末で観られる方法があるコーデック (H.264 → AV1)
  */
 export function codecChoices(info: PlaybackInfo, can: MediaAbility): ('h264' | 'av1')[] {
     return (['h264', 'av1'] as const).filter((codec) =>
@@ -197,14 +197,14 @@ export function codecChoices(info: PlaybackInfo, can: MediaAbility): ('h264' | '
  * ---------------------------------------------------------------------------
  * 互換モード (`canvas-video.ts`)。**`<video>` を使わず canvas に描く** (`canvas-player.ts`)。
  * サーバから使えるのは流すもの (`stream` の fMP4 と `raw` の元の TS) だけで、ファイルそのままは使わない
- * (端末に保存した Matroska は別の道で読む。`src/lib/mkv-source.ts`)
+ * (端末に保存した Matroska は別の経路で読む。`src/lib/mkv-source.ts`)
  * ---------------------------------------------------------------------------
  */
 
-/** 互換モードで描く形 */
+/** 互換モードで描く形式 */
 export type CanvasCodec = PlayCodec;
 
-/** この端末で描ける形 (`raw/support.ts` の `canvasSupport` と `rawUnsupported`) */
+/** この端末で描ける形式 (`raw/support.ts` の `canvasSupport` と `rawUnsupported`) */
 export type CanvasAbility = Record<CanvasCodec, boolean>;
 
 /** 互換モードのメニューに並べるもの。**出せるものは描けなくても並べる** (押せなくして、理由を添える) */
@@ -224,11 +224,11 @@ export function canvasChoices(
 /**
  * **互換モードでどれで観るか。** 選んだものが描ければそれ。`auto` か、選んだものが描けなければ:
  *
- * 1. エンコード済みと同じ形の fMP4 (詰め替え。サーバは軽い)
+ * 1. エンコード済みと同じ形式の fMP4 (詰め替え。サーバは軽い)
  * 2. 変換する fMP4 (H.264 → AV1)
  * 3. 元の TS (MPEG-2)
  *
- * `avoid` は諦めた形 (描いている途中で間に合わなくなった)。何も描けなければ null
+ * `avoid` は諦めた形式 (描いている途中で間に合わなくなった)。何も描けなければ null
  */
 export function pickCanvas(
     info: PlaybackInfo,
@@ -247,7 +247,7 @@ export function pickCanvas(
     return [...light, ...usable][0] ?? null;
 }
 
-/** 互換モードで、その形で観るとサーバがその場でエンコードするか (枠を使う。混んでいると断られる) */
+/** 互換モードで、その形式で観るとサーバがその場でエンコードするか (枠を使う。混んでいると断られる) */
 export function canvasTranscodes(info: PlaybackInfo, codec: CanvasCodec): boolean {
     return codec !== 'mpeg2' && !info.offers.some((offer) => offer.way === 'file' && offer.codec === codec);
 }
@@ -278,19 +278,19 @@ export function aheadOf(ranges: Ranges, t: number): number {
 const GAP = 0.5;
 
 /**
- * 飛んだ先 `t` を、**頼み直さずに待てば届くか。**
+ * 飛んだ先 `t` を、**リクエストし直さずに待てば届くか。**
  *
  * - いま溜まっている区間の中なら、そのまま
- * - 読んでいる最中 (`from` から頼んだ流れが伸びている) で、その伸びる先の少し先
- *   (`slack` 秒) までなら待つ。10秒送りのたびに頼み直すと、毎回鍵フレームまで戻って
+ * - 読んでいる最中 (`from` からリクエストした流れが伸びている) で、その伸びる先の少し先
+ *   (`slack` 秒) までなら待つ。10秒送りのたびにリクエストし直すと、毎回キーフレームまで戻って
  *   詰め直すぶん遅い
  *
- * @param from 読んでいる流れの頼んだ位置。読んでいなければ null
+ * @param from 読んでいる流れのリクエストした位置。読んでいなければ null
  */
 export function covers(ranges: Ranges, t: number, from: number | null, slack: number): boolean {
     if (aheadOf(ranges, t) > 0) return true;
     if (from === null || t < from - GAP) return false;
-    // 頼んだ位置から伸びている区間の尻。まだ何も届いていなければ頼んだ位置
+    // リクエストした位置から伸びている区間の尻。まだ何も届いていなければリクエストした位置
     let end = from;
     for (const [start, stop] of ranges) {
         if (start <= from + GAP && stop >= from) end = Math.max(end, stop);

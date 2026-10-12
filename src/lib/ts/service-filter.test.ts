@@ -3,7 +3,7 @@ import { PACKET } from './psi';
 import { ServiceFilter } from './service-filter';
 import { packetize, patSection, programMap } from './synth';
 
-/** MX1 と MX2 が同じ TS に乗っている、実機と同じ形 */
+/** MX1 と MX2 が同じ TS に入っている、実機と同じ構成 */
 const MX1 = 23608;
 const MX2 = 23609;
 const PMT1 = 0x1f0;

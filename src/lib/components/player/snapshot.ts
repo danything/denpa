@@ -1,21 +1,21 @@
 import type { Notice } from '#lib/components/Toasts.svelte';
 import { pad } from '#lib/format.js';
 
-/** 写す1コマ。`<video>` か、生で見ているときに worker から貰った絵 (`raw/engine.ts` の `grab`) */
+/** 写す1コマ。`<video>` か、MPEG-2 で見ているときに worker から貰ったフレーム (`raw/engine.ts` の `grab`) */
 export interface Frame {
     image: CanvasImageSource;
     width: number;
     height: number;
 }
 
-/** いま映している `<video>` の1コマ。まだ絵が来ていなければ null */
+/** いま映している `<video>` の1コマ。まだフレームが来ていなければ null */
 export function videoFrame(video: HTMLVideoElement | null): Frame | null {
     if (video === null || video.videoWidth === 0) return null;
     return { image: video, width: video.videoWidth, height: video.videoHeight };
 }
 
 /**
- * **生で見ているときは worker に1枚貰う。** 絵は worker の canvas に居て、
+ * **MPEG-2 で見ているときは worker に1枚貰う。** 映像は worker の canvas にあって、
  * `<video>` は空のまま (`raw/engine.ts`)
  */
 export async function grabbedFrame(bitmap: Promise<ImageBitmap | null>): Promise<Frame | null> {
@@ -54,7 +54,7 @@ export function shotName(title: string, at: Date): string {
 /**
  * **指の端末では共有に渡す。** スマホで `<a download>` に落とすと「ファイル」の奥に
  * 入るだけで、写真には並ばない (iOS)。共有シートなら「画像を保存」で写真へ、そのまま
- * LINE などへも送れる。PC にも共有の口を持つブラウザがある (Chrome・Safari) が、
+ * LINE などへも送れる。PC にも共有の API を持つブラウザがある (Chrome・Safari) が、
  * あちらは落とすほうが早いので使わない
  */
 function prefersShare(file: File): boolean {
@@ -85,14 +85,14 @@ function download(blob: Blob, name: string): void {
  * 渡し方は端末で分ける:
  *
  * - **指の端末** … 共有シート (`navigator.share`)。断られたら (押した勢いが切れた・
- *   共有できない形) 落とすほうに倒す。閉じられたら何もしない (やめたのは本人)
+ *   共有できない形式) 落とすほうに倒す。閉じられたら何もしない (やめたのは本人)
  * - **PC** … 落とす。**クリップボードにも置く** — そのまま貼りたい用はこちらで
  *   受ける。置けるのは安全な繋ぎ (https) と押した勢いが
  *   あるときだけなので、断られても黙って落とすだけにする
  *
  * 返り値は知らせ (トースト)。撮れなかった・共有に渡した (シートそのものが返事) なら null。
  *
- * @param frame 写す絵。まだ来ていなければ null (何もしない)
+ * @param frame 写すフレーム。まだ来ていなければ null (何もしない)
  * @param caption 重ねる字幕の canvas。消しているとき・持っていないときは null
  * @param title 番組名 (ファイル名の頭)
  */

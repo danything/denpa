@@ -27,7 +27,7 @@ const h264 = mkvFromClip(
 );
 
 describe('readMkvHead', () => {
-    test('頭から軌道の形・尺・Cues の在りか・最初の Cluster を読む', () => {
+    test('頭からトラックの形式・尺・Cues の在りか・最初の Cluster を読む', () => {
         const head = readMkvHead(av1);
         expect(head).not.toBeNull();
         if (head === null) return;
@@ -57,7 +57,7 @@ describe('readMkvHead', () => {
 });
 
 describe('Cues', () => {
-    test('映像の軌道の位置を、時刻の順に読む。飛ぶ先の手前の Cluster を引く', () => {
+    test('映像トラックの位置を、時刻の順に読む。飛ぶ先の手前の Cluster を引く', () => {
         const head = readMkvHead(av1)!;
         const at = head.cues!;
         const length = elementSize(av1.subarray(at, at + 16))!;
@@ -73,7 +73,7 @@ describe('Cues', () => {
 });
 
 describe('MkvDemuxer', () => {
-    test('軌道の形とコマを取り出す。細切れに届いても同じ', () => {
+    test('トラックの形式とコマを取り出す。細切れに届いても同じ', () => {
         const whole = new MkvDemuxer().feed(av1);
         const demuxer = new MkvDemuxer();
         let tracks = null;
@@ -110,7 +110,7 @@ describe('MkvDemuxer', () => {
     });
 });
 
-describe('デコードする側へ渡す形', () => {
+describe('デコードする側へ渡す形式', () => {
     test('OpusHead を dOps に直す (opusHead の逆)', () => {
         const head = readMkvHead(av1)!;
         const opus = head.tracks[1]!;

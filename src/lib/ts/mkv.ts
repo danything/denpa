@@ -1,9 +1,9 @@
 /**
- * Matroska から、コマとその時刻だけを取り出す。**字幕 (`S_ARIBSUB`) を運ぶ器として使う。**
+ * Matroska から、コマとその時刻だけを取り出す。**字幕 (`S_ARIBSUB`) を運ぶコンテナとして使う。**
  *
  * ライブ視聴では ffmpeg 1本で映像と字幕の両方を出す ([stream.md](../../../docs/stream.md) §5.2)。
- * 映像は fMP4、字幕は**この器**で受ける。器が要るのは、**時刻を字幕と一緒に
- * 運ばせるため** — 時刻を別の口 (`showinfo`) に喋らせると、行とコマの数が合わずにずれて戻らない。
+ * 映像は fMP4、字幕は**このコンテナ**で受ける。コンテナが要るのは、**時刻を字幕と一緒に
+ * 運ばせるため** — 時刻を別の経路 (`showinfo`) で出させると、行とコマの数が合わずにずれて戻らない。
  *
  * Matroska を選んだのは、**必要なところだけなら小さいから**。NUT はコマの
  * 見出しを組み立てるのに表を復元する必要があり、mp4 は ARIB の字幕を入れられない。
@@ -33,10 +33,10 @@ const TIMESTAMP_SCALE = 0x2ad7b1;
 const TIMESTAMP = 0xe7;
 const SIMPLE_BLOCK = 0xa3;
 const BLOCK = 0xa1;
-/** 軌道の中身の種類 (`S_ARIBSUB` など)。入っているものを確かめるのに使う */
+/** トラックの中身の種類 (`S_ARIBSUB` など)。入っているものを確かめるのに使う */
 const CODEC_ID = 0x86;
 
-/** 大きさが「不明」の印 (全部 1)。頭だけ書いて流し始める器で出てくる */
+/** 大きさが「不明」の印 (全部 1)。頭だけ書いて流し始めるときに出てくる */
 export const UNKNOWN = -1;
 
 /** 時刻の刻みの既定 (ナノ秒)。1ms */
@@ -79,7 +79,7 @@ export function vint(
 
     const mask = length >= 8 ? 0 : 0xff >> length;
     let value = keepMarker ? first : first & mask;
-    // 印を落とした桁が全部 1 なら「大きさは不明」。頭だけ書いて流す器で出てくる
+    // 印を落とした桁が全部 1 なら「大きさは不明」。頭だけ書いて流すときに出てくる
     let allOnes = (first & mask) === mask;
     for (let i = 1; i < length; i++) {
         value = value * 256 + buffer[at + i]!;
@@ -115,9 +115,9 @@ export class MkvSplitter {
     private buffer = new Uint8Array(0);
     /** 時刻の刻み (ナノ秒)。Info に書いてあれば差し替える */
     private scale = DEFAULT_SCALE;
-    /** いま居る塊の頭の時刻 (刻みの単位) */
+    /** いまいる塊の頭の時刻 (刻みの単位) */
     private base = 0;
-    /** 見出しに書いてあった軌道の種類 (書いてある順) */
+    /** 見出しに書いてあったトラックの種類 (書いてある順) */
     readonly codecs: string[] = [];
 
     feed(chunk: Uint8Array): MkvFrame[] {
@@ -153,7 +153,7 @@ export class MkvSplitter {
     }
 
     /**
-     * コマ1つ。`[軌道の番号(可変長)][頭からの差(2バイト、符号あり)][旗][中身…]`
+     * コマ1つ。`[トラック番号(可変長)][頭からの差(2バイト、符号あり)][旗][中身…]`
      *
      * **束ね (lacing) は来ない。** 1つの塊に複数のコマを詰める書き方だが、
      * ffmpeg は映像では使わない。万一来たら、その塊は捨てる — 変に読むより

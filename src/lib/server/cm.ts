@@ -11,7 +11,7 @@ import { TS_PROBE } from './ts-probe';
 /**
  * CM検出。
  *
- * **1本の ffmpeg で1回だけ復号して材料を取り** (`cm-scan.ts`。無音・場面の切れ目・局ロゴの枠)、
+ * **1本の ffmpeg で1回だけデコードして材料を取り** (`cm-scan.ts`。無音・場面の切れ目・局ロゴの枠)、
  * 境目は TS で決める (`ts/cm-decide.ts`)。
  *
  * - **ロゴの消えている所を CM にする**。境目は近くの「無音 + 切れ目」に寄せる
@@ -138,7 +138,7 @@ export function fields(out: string): Map<string, string> {
     return map;
 }
 
-/** `30000/1001` の形のフレームレートを数に直す。読めなければ NaN */
+/** `30000/1001` の形式のフレームレートを数に直す。読めなければ NaN */
 export function parseFrameRate(value: string | undefined): number {
     const [num = NaN, den] = (value ?? '').trim().split('/').map(Number);
     const fps = den ? num / den : num;
@@ -389,13 +389,13 @@ export interface CmReading {
      *
      * 材料の時刻は**頭を `skip` 秒捨てた ffmpeg の時刻** (エンコードの `-ss` と同じだけ。`before` はその引数)。
      * 返す区間も同じ物差し — つまり**エンコードしたものの時刻**。ロゴを覚え直したときは、枠だけ同じ捨て方で読み直す。
-     * `video` が偽なら絵は読めていない (音だけ読み直した) ので、尺だけで決める
+     * `video` が偽なら映像は読めていない (音だけ読み直した) ので、尺だけで決める
      */
     decide(found: Scan, at: { skip: number; before: string[]; video?: boolean }): Promise<CmDetection>;
 }
 
 /**
- * CM検出の支度。尺と絵の大きさを測り、ロゴを開く (覚えていなければこの録画から覚える。
+ * CM検出の支度。尺と映像の大きさを測り、ロゴを開く (覚えていなければこの録画から覚える。
  * キーフレームだけ読むので速い)。**覚えられなくても続ける** — 無音と切れ目だけで決め直せる
  */
 export async function openCm(input: string, options: CmOptions): Promise<CmReading> {
@@ -405,7 +405,7 @@ export async function openCm(input: string, options: CmOptions): Promise<CmReadi
     const { duration: measured } = probed;
     // フレームレートはロゴの区間をならす窓の幅に使う
     const fps = Number.isFinite(probed.fps) ? probed.fps : config.cmFallbackFps;
-    // 絵の無い録画 (ラジオ。尺は測れて大きさが無い) は音だけ読む。絵の出口を足すと ffmpeg ごと落ちる
+    // 映像の無い録画 (ラジオ。尺は測れて大きさが無い) は音だけ読む。映像の出口を足すと ffmpeg ごと落ちる
     const video = !(Number.isNaN(probed.width) && Number.isFinite(measured));
     /** 支度で分かった、ロゴが使えない理由 (`decide` が尺だけで決めたときの覚え書きに足す) */
     let opening = video ? '' : '映像がありません';
@@ -453,7 +453,7 @@ export async function openCm(input: string, options: CmOptions): Promise<CmReadi
 
             // ロゴの枠とコマの時刻は順番で突き合わせる。数が合わなければ読み落としがあるので使わない
             let current = logo;
-            // 絵の読み込みが落ちて音だけ読み直したなら、尺だけで決める (`encoder.ts`)
+            // 映像の読み込みが落ちて音だけ読み直したなら、尺だけで決める (`encoder.ts`)
             if (!read) {
                 why = '映像の読み込みに失敗しました';
                 current = null;
@@ -483,7 +483,7 @@ export async function openCm(input: string, options: CmOptions): Promise<CmReadi
                 if (result.code === 0) {
                     console.log(`[cm] ロゴ判定: ${result.note}`);
                     /*
-                     * **覚えたものを、同じ絵を映している局にも配る** (`logo-data.share`)。
+                     * **覚えたものを、同じ映像を流している局にも配る** (`logo-data.share`)。
                      * サブチャンネルの枠で録れた番組が一から覚え直さないように
                      */
                     if (result.learned !== null) share(serviceId, result.learned.file, result.learned.again);

@@ -20,7 +20,7 @@ import { parseTitle } from './title';
 import { openChannelStream, recordingUse, type StreamUse } from './tuner';
 import { notify } from './webhook';
 
-/** 録画中のストリームを止めるための口。プロセス内にしか無いので再起動で失われる (起動時に拾い直す: recoverOrphanedRecordings) */
+/** 録画中のストリームを止めるための手段。プロセス内にしか無いので再起動で失われる (起動時に拾い直す: recoverOrphanedRecordings) */
 const active = new Map<number, AbortController>();
 
 export function activeRecordingIds(): number[] {
@@ -144,7 +144,7 @@ export async function startRecording(
     return recording;
 }
 
-/** 読み出しを裏で走らせる。止める口 (`active`) はここで立てる */
+/** 読み出しを裏で走らせる。止める手段 (`active`) はここで立てる */
 function launch(recording: Recording, after: readonly StreamUse[] = []): void {
     const controller = new AbortController();
     active.set(recording.id, controller);
@@ -183,7 +183,7 @@ async function openWithRetry(
 }
 
 /**
- * 放送の延長に追い付く。**録画中のTSに乗っている EIT[p/f] を見る。**
+ * 放送の延長に追い付く。**録画中のTSに入っている EIT[p/f] を見る。**
  *
  * **問い合わせる相手が要らない。**
  * いま録っているチャンネルのTSにそのまま流れてくるので、読むだけで分かる。
@@ -255,7 +255,7 @@ async function pump(
     /*
      * **物理チャンネルを丸ごと開いて、こちらで局を選り分ける。**
      *
-     * エージェントは中身を読まないので、1本の TS にその中継に乗っている局が
+     * エージェントは中身を読まないので、1本の TS にその中継に入っている局が
      * 全部流れてくる。そのまま保存すると1つの録画に複数の番組が入る
      * (実機の TOKYO MX は MX1 と MX2 が同居している)。
      */
@@ -441,7 +441,7 @@ function finish(recordingId: number, size: number): void {
 /**
  * その録画が終わっているべき時刻。**尻を譲っていればそこまで** (`record_to`)。
  *
- * 止めるとき (`scheduler.tick`)・起動時に拾い直すとき・持ち主の居ない行を畳むとき
+ * 止めるとき (`scheduler.tick`)・起動時に拾い直すとき・持ち主のいない行を畳むとき
  * (`failStrayRecordings`) で同じ物差しを使う。書き写していると、片方だけ直したときに
  * 「止めた時刻」と「終わっているはずの時刻」がずれる
  */
@@ -487,7 +487,7 @@ export function recoverOrphanedRecordings(): { resumed: number; failed: number }
 const STRAY_GRACE = 60_000;
 
 /**
- * **持ち主の居ない「録画中」を畳む。**
+ * **持ち主のいない「録画中」を畳む。**
  *
  * 録っている最中の録画はプロセスの中にしか無い (`active`)。**畳む間もなく殺された**とき —
  * k3s ごと落とした、Pod を強制終了した — は、DB の行だけが録画中で残る。
@@ -512,7 +512,7 @@ export function failStrayRecordings(at = now(), owned: ReadonlySet<number> = new
         .filter((rec) => !owned.has(rec.id) && at >= recordingUntil(rec) + STRAY_GRACE);
 
     for (const rec of stray) {
-        console.warn(`[recorder] 録画 ${rec.id}: 録っている者が居ないまま終了時刻を過ぎました。失敗にします`);
+        console.warn(`[recorder] 録画 ${rec.id}: 録っている者がいないまま終了時刻を過ぎました。失敗にします`);
         fail(rec.id, '録画が中断されたまま終了時刻を過ぎました');
     }
     return stray.length;

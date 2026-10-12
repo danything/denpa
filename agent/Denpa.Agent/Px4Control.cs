@@ -11,7 +11,7 @@ namespace Denpa.Agent;
 ///
 /// <para>
 /// ソケットは <c>&lt;ランタイムディレクトリ&gt;/px4-userland/&lt;筐体の番号&gt;/control.sock</c>。
-/// 1本の接続で頼めるのは同時に1つだけ (SPEC 6.2)。順番は使う側が守る。
+/// 1本の接続で送れる要求は同時に1つだけ (SPEC 6.2)。順番は使う側が守る。
 /// 接続を閉じれば、その接続で借りたもの (受信機の lease・カードの handle) は px4d が返す。
 /// </para>
 /// </summary>
@@ -48,7 +48,7 @@ internal sealed class Px4Control : IDisposable
     /// <summary>いまソケットに言ってある受ける上限 (ms)</summary>
     private int _receiveTimeout;
 
-    /// <summary>HELLO で頼んで、px4d が認めた機能 (頼んだものと向こうが持つものの積)</summary>
+    /// <summary>HELLO で要求して、px4d が認めた機能 (要求したものと向こうが持つものの積)</summary>
     public uint Capabilities { get; private set; }
 
     private Px4Control(Socket socket, TimeSpan timeout, Px4Wire wire)
@@ -139,10 +139,10 @@ internal sealed class Px4Control : IDisposable
             SendAll(_socket, Encode(type, 0, id, payload, _wire));
 
             var (answered, flags, answeredId, body) = ReadFrame(_socket, MaxPayload, _wire);
-            // イベントは頼んでいない (HELLO で EVENTS を立てない) ので、来るのは答えだけのはず
+            // イベントは要求していない (HELLO で EVENTS を立てない) ので、来るのは答えだけのはず
             if ((flags & ResponseFlag) == 0 || answered != type || answeredId != id)
             {
-                throw new IOException($"{_wire.Daemon} から頼んでいない答えが来ました (型 0x{answered:x4}、番号 {answeredId})");
+                throw new IOException($"{_wire.Daemon} から要求していない答えが来ました (型 0x{answered:x4}、番号 {answeredId})");
             }
             if ((flags & ErrorFlag) != 0) throw Failed(body, _wire);
             return body;
@@ -208,8 +208,8 @@ internal sealed class Px4Control : IDisposable
     /// <para>
     /// <see cref="ConnectWithin"/> の ConnectAsync で、.NET はソケットを内部で非ブロッキングにする。
     /// そのあとの同期の Receive は .NET の epoll の受け手に起こしてもらう作りで、起こすのがスレッド
-    /// プールに回ると、池が塞がっている間は**答えが届いていても起きない** (CI で、28 バイトの答えが
-    /// 受信バッファにあるまま 4 秒の上限で TimedOut になった)。Poll は poll(2) を直に呼ぶので池に
+    /// プールに回ると、プールが塞がっている間は**答えが届いていても起きない** (CI で、28 バイトの答えが
+    /// 受信バッファにあるまま 4 秒の上限で TimedOut になった)。Poll は poll(2) を直に呼ぶのでプールに
     /// 頼らない。読めると分かってから読めば Receive は待たずに返る
     /// </para>
     /// </summary>
@@ -246,7 +246,7 @@ internal sealed class Px4Control : IDisposable
     /// <summary>エラーの番号の意味 (SPEC 6.5)。STREAM_END の理由にも使う</summary>
     public static string Reason(uint code) => code switch
     {
-        1 => "頼み方が合っていません (INVALID_ARGUMENT)",
+        1 => "要求の内容が合っていません (INVALID_ARGUMENT)",
         2 => "IPC の版が合いません (VERSION_MISMATCH)",
         3 => "見つかりません (NOT_FOUND)",
         4 => "他が使っています (BUSY)",

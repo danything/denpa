@@ -96,7 +96,7 @@ public class Multi2Tests
             .IsEqualTo(EvenEncrypted[..352] + "5e7511322ca057");
     }
 
-    /// <summary>SIMD で並べる道と1つずつの道の境目 (長さ) を跨いでも、掛けて復号すれば戻る</summary>
+    /// <summary>SIMD で並べる経路と1つずつの経路の境目 (長さ) を跨いでも、掛けて復号すれば戻る</summary>
     [Test]
     public async Task どの長さでも掛けて復号すれば戻る()
     {

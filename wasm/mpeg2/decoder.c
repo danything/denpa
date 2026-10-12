@@ -1,22 +1,22 @@
 /*
  * 放送の MPEG-2 映像と AAC 音声を、ブラウザの中でデコードする (docs/stream.md §5.5)。
  *
- * **ブラウザには MPEG-2 の復号器が無い** (MSE も WebCodecs も mp2v を受け取らない)
+ * **ブラウザには MPEG-2 のデコーダが無い** (MSE も WebCodecs も mp2v を受け取らない)
  * ので、FFmpeg の mpeg2video を WebAssembly に組んで持ち込む。ここはその
- * 薄い口で、JS (src/lib/raw/worker.ts) から呼ぶ。
+ * 薄いラッパーで、JS (src/lib/raw/worker.ts) から呼ぶ。
  *
  * 音 (AAC) も同じ FFmpeg の `aac` でデコードする (`aac_open` / `audio_push`)。WebCodecs の AudioDecoder は
  * 安全な繋ぎ (https) でしか出てこず、iPhone の Safari には iOS 26 まで無いので、
  * それに頼ると LAN の http と古い iPhone で元のTSをそのまま再生する経路が使えない。画面の canvas で描く経路 (fMP4) の
- * Opus も同じ口でデコードする (`opus_open`)。
+ * Opus も同じ API でデコードする (`opus_open`)。
  *
  * - `dec_push` … PES の中身 (ES) を渡す。**区切りは FFmpeg の parser に任せる** —
  *   放送はふつう 1 PES = 1 枚だが、決まりではない。PTS も一緒に渡し、
- *   parser が「どの絵のものか」を付け替える
- * - デコードできた絵は**こちらで持っておく** (`queue`)。AVFrame は受け取るたびに使い回されるので、
+ *   parser が「どのフレームのものか」を付け替える
+ * - デコードできたフレームは**こちらで持っておく** (`queue`)。AVFrame は受け取るたびに使い回されるので、
  *   JS が見せる時刻まで待たせるには参照を移して取っておくしかない
  * - `dec_peek` / `dec_pop` … いちばん古い1枚を覗く・捨てる。表示順で並んでいる
- *   (B フレームの並べ替えは復号器が済ませている)
+ *   (B フレームの並べ替えはデコーダが済ませている)
  *
  * スレッドも SIMD も使わない。スレッド版は COOP/COEP (crossOriginIsolated) が要り、
  * 実測でも 1 本で 1080i を実時間の 3 倍でデコードできたので、払う理由が無い (§5.5)。
@@ -28,7 +28,7 @@
 #include <libavutil/samplefmt.h>
 #include <string.h>
 
-/** 待たせておく絵の上限。**溢れたら古いほうから捨てる** (JS 側が見せ遅れているだけなので) */
+/** 待たせておくフレームの上限。**溢れたら古いほうから捨てる** (JS 側が見せ遅れているだけなので) */
 #define QUEUE 24
 
 static AVCodecContext *ctx;
@@ -49,7 +49,7 @@ static void clear_queue(void) {
 }
 
 /**
- * 開く。**2回目以降は開き直し** — 局を変えたときに呼ぶ。参照の絵も待たせている絵も
+ * 開く。**2回目以降は開き直し** — 局を変えたときに呼ぶ。参照フレームも待たせているフレームも
  * parser の持ち越しも捨てる (`avcodec_flush_buffers` だけだと parser に前の局の切れ端が残る)
  */
 EMSCRIPTEN_KEEPALIVE int dec_open(void) {
@@ -88,7 +88,7 @@ static void receive(void) {
 /**
  * ES を渡す。`pts` は 90kHz (無ければ負)。**返すのは待っている枚数。**
  *
- * 1 PES ぶんを丸ごと渡す想定。parser は絵の終わりを次の絵の頭で知るので、
+ * 1 PES ぶんを丸ごと渡す想定。parser はフレームの終わりを次のフレームの頭で知るので、
  * 最後の1枚は次の PES が来たときに出てくる (1 コマ遅れる。貯めの中に収まる)
  */
 EMSCRIPTEN_KEEPALIVE int dec_push(const uint8_t *data, int len, double pts) {
@@ -98,7 +98,7 @@ EMSCRIPTEN_KEEPALIVE int dec_push(const uint8_t *data, int len, double pts) {
         uint8_t *out = NULL;
         int size = 0;
         int used = av_parser_parse2(parser, ctx, &out, &size, data, len, stamp, stamp, 0);
-        // 同じ PTS を2枚目に付けない。parser は渡された時刻を最初の絵に付ける
+        // 同じ PTS を2枚目に付けない。parser は渡された時刻を最初のフレームに付ける
         stamp = AV_NOPTS_VALUE;
         data += used;
         len -= used;
@@ -147,8 +147,8 @@ EMSCRIPTEN_KEEPALIVE int *dec_peek(void) {
 EMSCRIPTEN_KEEPALIVE double dec_peek_pts(void) { return info_pts; }
 
 /**
- * i 枚目 (0 がいちばん古い) の時刻。**見せる番が過ぎた絵を、覗かずに飛ばすため** —
- * 次の絵がもう番を迎えているなら、手前の絵は絵にする (テクスチャに上げる) だけ無駄
+ * i 枚目 (0 がいちばん古い) の時刻。**見せる番が過ぎたフレームを、覗かずに飛ばすため** —
+ * 次のフレームがもう番を迎えているなら、手前のフレームは画像にする (テクスチャに上げる) だけ無駄
  */
 EMSCRIPTEN_KEEPALIVE double dec_pts_at(int i) {
     if (i < 0 || i >= count) return -1;
@@ -170,13 +170,13 @@ EMSCRIPTEN_KEEPALIVE void dec_pop(void) {
  * 付けているので parser は組まない。
  *
  * - AAC (`aac_open`) … 放送の ADTS をそのまま渡す (ts/pes.ts の AdtsSplitter が切る)。
- *   ADTS の頭は復号器が自分で読む (extradata 無しで開くと ADTS として読む決まり)。
- *   画面の canvas で描く道の fMP4 の AAC は、JS が頭を組んで付けてから渡す
+ *   ADTS の頭はデコーダが自分で読む (extradata 無しで開くと ADTS として読む決まり)。
+ *   画面の canvas で描く経路の fMP4 の AAC は、JS が頭を組んで付けてから渡す
  *   (ts/fmp4.ts の `adtsHeader`)
  * - Opus (`opus_open`) … AV1 と組んで送られてくる fMP4 の Opus。設定 (OpusHead) を
  *   extradata として渡して開く (ts/fmp4.ts の `opusHead` が dOps から書き換える)
  *
- * どちらも同じ1つの口 (`audio`) で開き、`audio_push` でデコードする
+ * どちらも同じ1つの入口 (`audio`) で開き、`audio_push` でデコードする
  * ------------------------------------------------------------------------- */
 
 /** 返せる面の数。AAC は 7.1 (8本) まで */
@@ -195,7 +195,7 @@ static int audio_open(enum AVCodecID id, const uint8_t *extra, int len) {
     audio = avcodec_alloc_context3(codec);
     if (audio == NULL) return -2;
     if (len > 0) {
-        // 復号器は extradata の後ろに詰め物 (0) があることを当てにして読む
+        // デコーダは extradata の後ろに詰め物 (0) があることを当てにして読む
         audio->extradata = av_mallocz(len + AV_INPUT_BUFFER_PADDING_SIZE);
         if (audio->extradata == NULL) return -2;
         memcpy(audio->extradata, extra, len);

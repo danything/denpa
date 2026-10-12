@@ -3,7 +3,7 @@
  *
  * **電波の組み立ては `broadcast.ts` に置いてある。** 同じものを本物の
  * エージェントにも食わせているため (`tune.ts`)。こちらが受け持つのは
- * 「denpa から見た口」だけで、取り合いもスキャンも本物らしく見えるだけの作り物。
+ * 「denpa から見た API」だけで、取り合いもスキャンも本物らしく見えるだけの作り物。
  *
  * エージェント自身のふるまい (取り合い・殺し方・スキャンの総当たり) は
  * ここでは試せない。それは `agent/conformance.test.ts` が本物に当てている。
@@ -137,7 +137,7 @@ const OPENS_KEEP = 200;
 
 function tunerStatus() {
     return TUNERS.map((plain) => {
-        // 選ぶ順は定義の順 (下の `pick` は前から空きを取る)。無効な本は使わないので null
+        // 選ぶ順は定義の順 (下の `pick` は前から空きを取る)。無効なチューナーは使わないので null
         const tuner = { ...plain, rank: plain.disabled ? null : plain.index };
         /*
          * 塞がっているのは**衛星のチューナー**にしてある。地上波を塞ぐと、
@@ -167,7 +167,7 @@ function tunerStatus() {
     });
 }
 
-/** 読み手ごとの止め口。蹴るときと引き継ぐときに、こちらから流れを閉じる */
+/** 読み手ごとの止める関数。蹴るときと引き継ぐときに、こちらから流れを閉じる */
 const kicks = new WeakMap<object, AbortController>();
 
 /** 選局を空ける。そこにいた読み手の流れを閉じる */
@@ -180,14 +180,14 @@ function vacate(index: number): void {
 
 /**
  * どのチューナーに載せるか (docs/agent.md「選ぶ順の約束」。`rank` は定義の順にしてある)。
- * 前から見て、受けられて次のどれかに当たる最初の本を使う。
+ * 前から見て、受けられて次のどれかに当たる最初のチューナーを使う。
  *
- * - 空いている本
- * - 引き継ぐ読み手 (`after`) しかいない本。その読み手は正常に終わらせる
- * - 同じチャンネルを弱い読み手しか読んでいない本。選局し直さずに乗る (`join`)
+ * - 空いているチューナー
+ * - 引き継ぐ読み手 (`after`) しかいないチューナー。その読み手は正常に終わらせる
+ * - 同じチャンネルを弱い読み手しか読んでいないチューナー。選局し直さずに乗る (`join`)
  *
- * **空きが無ければ、自分より弱い読み手しかいない本を蹴って使う** (約束の2)。ライブが録画に
- * 蹴られる場面 (`34-live-yield.spec.ts`) を作るため。本物は空きがあっても順の前の本を蹴るが、
+ * **空きが無ければ、自分より弱い読み手しかいないチューナーを蹴って使う** (約束の2)。ライブが録画に
+ * 蹴られる場面 (`34-live-yield.spec.ts`) を作るため。本物は空きがあっても順の前のチューナーを蹴るが、
  * ここでは**空きが無いときだけ**にしてある — 偽エージェントは spec をまたいで共有で、空きがあるのに
  * 蹴ると、裏で回っている番組表集めやロゴ集めの見え方まで変わる
  */
@@ -197,7 +197,7 @@ function pick(
     priority: number,
     after: ReadonlySet<string>,
 ): { index: number; join: boolean } | null {
-    // 無効な本は使わない (`rank` が null の本。本物の `TunerPool.Pick` も外す)
+    // 無効なチューナーは使わない (`rank` が null のチューナー。本物の `TunerPool.Pick` も外す)
     const usable = TUNERS.filter(
         (tuner) => !tuner.disabled && tuner.types.includes(type) && !(busyTuners && tuner.index === 0),
     );
@@ -224,7 +224,7 @@ function pick(
 }
 
 /*
- * 起きたことを知らせる口 (SSE)。本物では `/denpa/events`。
+ * 起きたことを知らせるエンドポイント (SSE)。本物では `/denpa/events`。
  * denpa はこれを聞いてチューナー画面を更新し、スキャンの進み具合を出す
  */
 const listeners = new Set<ReadableStreamDefaultController<Uint8Array>>();
@@ -280,9 +280,9 @@ function openStream(url: URL, signal: AbortSignal): Response {
         if (picked === null) return json({ error: `${type} のチューナーに空きがありません` }, 409);
         index = picked.index;
         /*
-         * **放送の無いチャンネルは、本を取ってから選局に落ちる** (本物と同じ順)。1バイトも送る前なので、
+         * **放送の無いチャンネルは、チューナーを取ってから選局に落ちる** (本物と同じ順)。1バイトも送る前なので、
          * 理由を付けて 500 で返す (docs/agent.md「選局は、読み手が切るまで終わらない」)。
-         * 空けた本 (蹴った・引き継いだ相手) は戻らない。選局が無いまま空きになる
+         * 空けたチューナー (蹴った・引き継いだ相手) は戻らない。選局が無いまま空きになる
          */
         if (services.length === 0) {
             emit('tuners');
@@ -304,11 +304,11 @@ function openStream(url: URL, signal: AbortSignal): Response {
     emit('tuners');
 
     const at = index;
-    // 頼んだ側が閉じたときと、蹴られた・引き継がれたとき
+    // リクエストした側が閉じたときと、蹴られた・引き継がれたとき
     const ended = AbortSignal.any([signal, kick.signal]);
     ended.addEventListener('abort', () => {
         lease.users = lease.users.filter((u) => u !== user);
-        // 蹴られた・引き継がれたあとの本は別の選局が使っている。そちらは消さない
+        // 蹴られた・引き継がれたあとのチューナーは別の選局が使っている。そちらは消さない
         if (lease.users.length === 0 && leases.get(at) === lease) leases.delete(at);
         emit('tuners');
     });
@@ -325,7 +325,7 @@ const options: Bun.ServeOptions = {
     fetch(request) {
         const url = new URL(request.url);
 
-        // --- テスト用の口 -------------------------------------------------
+        // --- テスト用のエンドポイント -------------------------------------------------
         if (url.pathname === '/__control/tuners' && request.method === 'POST') {
             busyTuners = url.searchParams.get('busy') === '1';
             emit('tuners');
@@ -358,7 +358,7 @@ const options: Bun.ServeOptions = {
          * 読み手には EOF として届き (実測)、denpa は前から取り直せていた。
          * 直したかったのは例外で切れたほうなので、本当に接続を壊す。
          *
-         * この応答を返しきってから壊す (返す前に壊すと、頼んだ側が結果を
+         * この応答を返しきってから壊す (返す前に壊すと、リクエストした側が結果を
          * 受け取れない)
          */
         if (url.pathname === '/__control/cut' && request.method === 'POST') {
@@ -373,7 +373,7 @@ const options: Bun.ServeOptions = {
             return json({ scrambled: knobs.scrambled });
         }
 
-        // --- 本物と同じ口 -------------------------------------------------
+        // --- 本物と同じエンドポイント -------------------------------------------------
         if (url.pathname === '/denpa/stream') return openStream(url, request.signal);
         if (url.pathname === '/denpa/events') return eventStream();
         if (url.pathname === '/denpa/tuners' && request.method === 'GET') {

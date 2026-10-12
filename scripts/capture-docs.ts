@@ -1,27 +1,27 @@
 /**
- * README と docs の絵を撮る。**偽の放送 (作り物の局・番組・ロゴ) だけで撮る** —
- * 本物の放送・ロゴ・本番の画面は絵に出さない。
+ * README と docs のスクリーンショットを撮る。**偽の放送 (作り物の局・番組・ロゴ) だけで撮る** —
+ * 本物の放送・ロゴ・本番の画面は画像に出さない。
  *
  *     docker compose run --rm docs                                          # 全部撮って docs/images へ
  *     docker compose run --rm docs bun scripts/capture-docs.ts watch live   # 名前を挙げるとそのぶんだけ
  *
- * CI でも撮れる (`.github/workflows/screenshots.yml`。手で走らせると絵を artifact に上げる)。
+ * CI でも撮れる (`.github/workflows/screenshots.yml`。手で走らせると画像を artifact に上げる)。
  *
  * 中でやること:
  *
  * 1. アプリを組み、E2E と同じ一式 (denpa + 偽エージェント + 偽通知先。`tests/stack.ts`) を
  *    `FAKE_PROFILE=docs` で立てる。局も番組もロゴも作り物に替わる (`tests/fake/docs.ts`)
- * 2. 番組表を集め、ルールと予約を画面と同じ口から入れる
+ * 2. 番組表を集め、ルールと予約を画面と同じ API から入れる
  * 3. 録画は**DB に直接置く** (偽の放送の録画は数秒の作り物で、一覧に並べると尺が嘘になる)。
  *    中身は本物の ffmpeg で組んだ作り物の映像 (色が流れるだけ。台詞は作り物の字幕) とサムネ、CM のチャプター
  * 4. 撮って、`scripts/docs-webp.py` で webp にして docs/images に置く
  *
- * **撮る条件はここに書いてある** (散らばると撮り直しのたびに絵の大きさが揃わない):
+ * **撮る条件はここに書いてある** (散らばると撮り直しのたびに画像の大きさが揃わない):
  * 1600×900 (20インチの画面と同じ 16:9)・暗いテーマ・ja-JP・Asia/Tokyo。
- * 動く絵も同じ広さで動かし、貼るときに 1120×630 まで縮める (組み立ての側)。
+ * アニメーションも同じ広さで動かし、貼るときに 1120×630 まで縮める (組み立ての側)。
  *
  * 字は本番と同じものを使う (イメージの `docs` 段): 画面は BIZ UDPゴシック、放送の字は
- * Denpa Font (`/api/font/denpa-font.woff2`)。どちらも無いと絵の字が別物になるので、
+ * Denpa Font (`/api/font/denpa-font.woff2`)。どちらも無いと画像の字が別物になるので、
  * 無ければ撮らずに止まる
  */
 
@@ -67,7 +67,7 @@ if (process.env['SKIP_BUILD'] !== '1') {
 const { stack, shutdown } = await boot(0);
 const BASE = stack.appUrl;
 
-/** 画面と同じ口へ投げる。SvelteKit は Origin の無いフォームを断る */
+/** 画面と同じエンドポイントへ投げる。SvelteKit は Origin の無いフォームを断る */
 async function post(path: string, body: Record<string, string | string[]> | null): Promise<void> {
     const init: RequestInit = { method: 'POST', redirect: 'manual', headers: { Origin: BASE } };
     if (body !== null) {
@@ -119,7 +119,7 @@ function colorsOf(genre: number): [string, string] {
 /** サムネ (480 幅)。色の流れに番組名。録画の詳細と一覧に出る */
 function poster(path: string, series: string, genre: number, key: string): void {
     const [c0, c1] = colorsOf(genre);
-    // 「ドラマ「…」」の括弧の中だけを大きく書く (小さい絵なので長いと読めない)
+    // 「ドラマ「…」」の括弧の中だけを大きく書く (小さい画像なので長いと読めない)
     const title = series.match(/「(.+)」$/)?.[1] ?? series;
     const size = Math.min(56, Math.floor(440 / [...title].length));
     ffmpeg([
@@ -228,7 +228,7 @@ function stamp(at: number): string {
 }
 
 /**
- * 局ロゴを集める (チューナー画面の「今すぐ取得」と同じ口)。番組表とライブの局の列に出る。
+ * 局ロゴを集める (チューナー画面の「今すぐ取得」と同じ API)。番組表とライブの局の列に出る。
  * 終わるまで待つ — 集めている間はチューナーが塞がり、ライブが映らない
  */
 async function sweepLogos(): Promise<void> {
@@ -243,7 +243,7 @@ async function sweepLogos(): Promise<void> {
 }
 
 async function seed(): Promise<void> {
-    // 番組表。偽エージェントから集める (画面の「今すぐ集める」と同じ口)
+    // 番組表。偽エージェントから集める (画面の「今すぐ集める」と同じ API)
     await post('/api/sync', null);
     await sweepLogos();
     // 1回目で取りこぼした局 (チューナーの取り合いで待ちきれなかったもの) を集め直す
@@ -274,7 +274,7 @@ async function seed(): Promise<void> {
         .all();
     if (programs.length === 0) throw new Error('番組表が空です');
 
-    // 手で入れた予約。これから始まる番組をいくつか (番組表の「予約」と同じ口)
+    // 手で入れた予約。これから始まる番組をいくつか (番組表の「予約」と同じ API)
     const upcoming = programs.filter((p) => p.start_at > now + 60 * 60_000);
     for (const name of ['こども科学クラブ', '港町レシピ帖', 'サッカー中継']) {
         const target = upcoming.find((p) => p.name.startsWith(name));
@@ -448,8 +448,8 @@ async function watching(page: Page): Promise<void> {
 }
 
 /**
- * ライブを「生で見る」(MPEG-2 をブラウザでデコードする) にする。変換する経路は偽 ffmpeg が素通しするだけで
- * 絵にならないが、そのまま送る経路は偽の放送の映像 (カラーバー) をデコードして描ける。選んだものは端末に覚える
+ * ライブを放送のままで見る (MPEG-2 をブラウザでデコードする) ようにする。変換する経路は偽 ffmpeg が素通しするだけで
+ * 映像にならないが、そのまま送る経路は偽の放送の映像 (カラーバー) をデコードして描ける。選んだものは端末に覚える
  */
 async function liveRaw(page: Page): Promise<void> {
     await page.goto(`${BASE}/live`);
@@ -483,7 +483,7 @@ try {
     browser = await chromium.launch({
         args: ['--autoplay-policy=no-user-gesture-required', '--disable-gpu'],
     });
-    /** 観る画面に出す録画。一覧の動く絵で押すのと同じ行 */
+    /** 観る画面に出す録画。一覧のアニメーションで押すのと同じ行 */
     const watched = async (page: Page) => {
         await page.goto(`${BASE}/`);
         await settle(page, 300);
@@ -527,7 +527,7 @@ try {
         await page.context().close();
     }
 
-    // 動く絵 (静止画と同じ 1600×900 で動かす。貼るときの大きさは組み立てで縮める)
+    // アニメーション (静止画と同じ 1600×900 で動かす。貼るときの大きさは組み立てで縮める)
     {
         const page = await open(browser, 1600, 900);
         if (want('home-watch-anim')) {
@@ -609,6 +609,6 @@ try {
     await shutdown();
 }
 
-// 組み立てて docs/images へ (動く絵は縮め、同じコマはまとめる)
+// 組み立てて docs/images へ (アニメーションは縮め、同じコマはまとめる)
 const webp = spawnSync('python3', ['scripts/docs-webp.py', ...only], { stdio: 'inherit' });
 if (webp.status !== 0) throw new Error('webp の組み立てに失敗しました');

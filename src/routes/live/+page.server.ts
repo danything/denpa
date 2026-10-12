@@ -64,9 +64,9 @@ function remembered(
         return {
             channel: found,
             ...(typeof saved['audio'] === 'string' ? { audio: saved['audio'] } : {}),
-            // 覚えていない形を渡さない。知らない値なら既定 (H.264) に落ちる
+            // 覚えていない形式を渡さない。知らない値なら既定 (H.264) に落ちる
             ...(saved['codec'] === 'av1' ? { codec: 'av1' as const } : {}),
-            // 前回は生で見ていた (`TuneCommand.raw`)。画面はそのまま生で頼み、サーバは先回りする
+            // 前回は放送のまま見ていた (`TuneCommand.raw`)。画面はそのまま放送のままでリクエストし、サーバは先回りする
             ...(saved['raw'] === true ? { raw: true } : {}),
         };
     } catch {
@@ -132,7 +132,7 @@ export function load(event) {
      * **どの局で開くかは、ここで決める。**
      *
      * 1. 番組表の「視聴」から名指しで来た局 (`?service=`)。押した人はそれを
-     *    見に来ているので、覚えている前回の局より優先する。**居ない番号は
+     *    見に来ているので、覚えている前回の局より優先する。**無い番号は
      *    使わない** — 局が入れ替わったあとの古いリンクを踏んでも、いつもの
      *    前回の局で開く
      * 2. 画面が覚えている前回の局 (`LAST_COOKIE`)
@@ -163,7 +163,7 @@ export function load(event) {
                    * 局を選び直すたびに H.264 へ戻されては困る
                    */
                   ...(kept?.codec === undefined ? {} : { codec: kept.codec }),
-                  // 生 (MPEG-2) で見るかも同じく引き継ぐ
+                  // 放送のまま (MPEG-2) で見るかも同じく引き継ぐ
                   ...(kept?.raw === true ? { raw: true } : {}),
               };
 
@@ -172,7 +172,7 @@ export function load(event) {
      * WebSocket が繋がるまでの 160ms を、ffmpeg の立ち上がりと重ねる
      */
     if (start !== null) {
-        // **前回が生なら生で温める。** 外れても困らない (来なければ 8秒で畳む)
+        // **前回が放送のままなら、そのままで温める。** 外れても困らない (来なければ 8秒で畳む)
         const raw = start.raw === true;
         warm(start.channelType, start.channel, start.serviceId, start.audio, start.codec, raw);
     }
@@ -195,9 +195,9 @@ export function load(event) {
 
 export const actions = {
     /**
-     * **いま観ている番組を録る** (絵の右上の録画ボタン)。
+     * **いま観ている番組を録る** (映像の右上の録画ボタン)。
      *
-     * 番組表からいま流れている番組を引いて、手動予約と同じ道に乗せる (`recordAiring`)。
+     * 番組表からいま流れている番組を引いて、手動予約と同じ経路に乗せる (`recordAiring`)。
      * 既に予約済み・録画中なら二重には録らない (予約は番組ごとに1本)
      */
     record: async ({ request }) => {
@@ -205,7 +205,7 @@ export const actions = {
         const serviceId = Number(form.get('service'));
         if (!Number.isInteger(serviceId)) return fail(400, { message: '局の指定が不正です' });
 
-        // アプリの `POST /api/services/<id>/record` と同じ道 (`recordAiring`)
+        // アプリの `POST /api/services/<id>/record` と同じ経路 (`recordAiring`)
         const result = await recordAiring(serviceId);
         if (!result.ok) return fail(result.status, { message: result.message });
         return { recorded: result.name };

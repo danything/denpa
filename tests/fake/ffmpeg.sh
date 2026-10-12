@@ -15,20 +15,20 @@ for arg in "$@"; do
     prev="$arg"
 done
 
-# **何を渡されたかを残す** (ライブの FAKE_FFMPEG_ARGS_FILE と同じ形)。エンコードするときに
-# GPU の道 (`h264_qsv` など) を選べているか、落ちたらソフトウェアへ倒れているかを
-# テストから見るため。**どの道でも、落ちる前に**残す。1回ぶんずつ足す
+# **何を渡されたかを残す** (ライブの FAKE_FFMPEG_ARGS_FILE と同じ形式)。エンコードするときに
+# GPU の方式 (`h264_qsv` など) を選べているか、落ちたらソフトウェアへ倒れているかを
+# テストから見るため。**どの方式でも、落ちる前に**残す。1回ぶんずつ足す
 if [ -n "${FAKE_FFMPEG_ENCODE_ARGS_FILE:-}" ]; then
     printf -- '---\n%s\n' "$(printf '%s\n' "$@")" >> "$FAKE_FFMPEG_ENCODE_ARGS_FILE"
 fi
 
-# GPU (QSV / VA-API) の道。`-init_hw_device` が付いていたら、それ。
+# GPU (QSV / VA-API) の方式。`-init_hw_device` が付いていたら、それ。
 #
-# 本物は口 (/dev/dri/renderD128) が無ければ初期化で落ちる。ここでも同じで、
-# **渡された口 (`child_device=…` / `vaapi=va:…`) がファイルとして在れば「GPU がある」**
+# 本物はデバイス (/dev/dri/renderD128) が無ければ初期化で落ちる。ここでも同じで、
+# **渡されたデバイス (`child_device=…` / `vaapi=va:…`) がファイルとして在れば「GPU がある」**
 # ことにする — 起動時の試しのエンコード (server/hwenc.ts、入力は lavfi) は黙って通し、
-# 本番のエンコードはそのまま下の普通の道へ流す。無ければ本物と同じく落ちる
-# (エンコードの途中で GPU が駄目になったときの、次の道への再エンコードもこれで通る)
+# 本番のエンコードはそのまま下の普通の経路へ流す。無ければ本物と同じく落ちる
+# (エンコードの途中で GPU が駄目になったときの、次の方式での再エンコードもこれで通る)
 prev=""
 for arg in "$@"; do
     if [ "$prev" = "-init_hw_device" ]; then
@@ -48,7 +48,7 @@ done
 
 # CM検出 (silencedetect)。300秒と360秒に境界が来るので、300-360 の 60 秒がCMブロックとして検出される。
 # エンコードする出口 (`-f matroska`) があればエンコードに相乗りしている (encoder.ts) ので、材料を出してから
-# 下のエンコードする道へ進む。無ければ検出だけ (ロゴの枠を読み直すとき)
+# 下のエンコードする処理へ進む。無ければ検出だけ (ロゴの枠を読み直すとき)
 mkv=""
 prev=""
 for arg in "$@"; do
@@ -57,7 +57,7 @@ for arg in "$@"; do
 done
 if printf '%s\n' "$@" | grep -q silencedetect; then
     echo "  Duration: 00:10:00.00, start: 0.000000, bitrate: 15000 kb/s" >&2
-    # 無音は ametadata の書き出し先 (`file=`) へ。本物と同じ形 (cm-scan.parseSilences)
+    # 無音は ametadata の書き出し先 (`file=`) へ。本物と同じ形式 (cm-scan.parseSilences)
     silences="$(printf '%s\n' "$@" | grep -o 'ametadata=mode=print:file=[^,]*' | head -1)"
     silences="${silences#ametadata=mode=print:file=}"
     if [ -n "$silences" ]; then
@@ -70,7 +70,7 @@ fi
 # エンコードしたものから字幕をそのまま抜くパス (`api/recordings/<id>/captions.json`)。
 # 本物は入れ物の中の S_ARIBSUB をそのまま出す。ここでは作り置きの mkv を返す
 # (中身は作り物の字幕。本物の ffmpeg に `-map 0:s:0 -c:s copy -f matroska` で書かせたもの)。
-# 絵を撮るときは FAKE_FFMPEG_CAPTIONS の作り物の台詞に替える (scripts/capture-docs.ts)
+# スクリーンショットを撮るときは FAKE_FFMPEG_CAPTIONS の作り物の台詞に替える (scripts/capture-docs.ts)
 if [ "$output" = "pipe:1" ] && printf '%s\n' "$@" | grep -qx -- '-c:s' && printf '%s\n' "$@" | grep -qx -- 'matroska'; then
     cat "${FAKE_FFMPEG_CAPTIONS:-$(dirname "$0")/captions.mkv}"
     exit 0
@@ -84,7 +84,7 @@ if printf '%s\n' "$@" | grep -qx -- '-c' && printf '%s\n' "$@" | grep -qx -- 'co
     exit 0
 fi
 
-# 録画をその場で流す口 (`server/playback.ts`) の fMP4。中身は作らず、頭の塊の時刻だけ本物と同じに出す
+# 録画をその場で流す API (`server/playback.ts`) の fMP4。中身は作らず、頭の塊の時刻だけ本物と同じに出す
 # (`fmp4-out.ts`)。TS を標準入力から変換する (`-output_ts_offset`) か、ファイルを fMP4 で流すもの。
 # ライブ・追っかけ (標準入力から、ずらさない) は下の素通しのまま
 if [ "$output" = "pipe:1" ] && printf '%s\n' "$@" | grep -qx -- 'mp4' &&
@@ -102,15 +102,15 @@ if [ "$input" = "pipe:0" ]; then
     #
     # 実機の tvk (T15) で出た形をそのまま真似る — 局が3つ相乗りしている TS で
     # -probesize が足りず、-map が解決できないまま降りる。**1バイトも出さずに
-    # 降りるので、伝えないと画面は前の絵を貼ったまま6秒たって黒くなるだけ**。
-    # 字幕側は落とさない (映像だけが死ぬ形を試したい)
+    # 降りるので、伝えないと画面は前のコマを貼ったまま6秒たって黒くなるだけ**。
+    # 字幕側は落とさない (映像だけが死ぬ場合を試したい)
     if [ -f "${FAKE_FFMPEG_LIVE_FAIL_FILE:-/nonexistent}" ] &&
         printf '%s\n' "$@" | grep -qx -- 'libx264'; then
         echo "Failed to set value '0:p:24632:v:0' for option 'map': Invalid argument" >&2
         echo "Error opening output files: Invalid argument" >&2
         exit 1
     fi
-    # **何を渡されたかを残す。** エンコード方式の指定は間違えても E2E では絵が要らないぶん
+    # **何を渡されたかを残す。** エンコード方式の指定は間違えても E2E では映像が要らないぶん
     # 素通りするので、テストから中身を見られるようにしておく。
     #
     # **1回ぶんずつ足していく。** 選局のたびに起きるので、上書きにしていると
@@ -122,10 +122,10 @@ if [ "$input" = "pipe:0" ]; then
         printf -- '---\n%s\n' "$(printf '%s\n' "$@")" >> "$FAKE_FFMPEG_ARGS_FILE"
     fi
 
-    # **互換モード (canvas に描く道) の E2E から「本物の映像を流せ」と指示する目印。**
+    # **互換モード (canvas に描く方式) の E2E から「本物の映像を流せ」と指示する目印。**
     # 置いてあれば、本物の ffmpeg に書かせた fMP4 (H.264 + AAC / AV1 + Opus。エンコード方式はライブと同じ組) を
     # 時刻を進めながら繰り返し流す (`fmp4-loop.ts`)。置いていなければ今までどおり素通し
-    # (絵の要らないテストは MSE に何も映らなくてよい)
+    # (映像の要らないテストは MSE に何も映らなくてよい)
     if [ -f "${FAKE_FFMPEG_LIVE_FMP4_FILE:-/nonexistent}" ]; then
         if printf '%s\n' "$@" | grep -qx -- 'libsvtav1'; then
             exec bun "$(dirname "$0")/fmp4-loop.ts" "$(dirname "$0")/live-av1.mp4"

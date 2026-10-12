@@ -4,7 +4,7 @@ using System.Runtime.InteropServices;
 namespace Denpa.Agent;
 
 /// <summary>
-/// CCID のインターフェース1つぶんの形。構成ディスクリプタから読む (<see cref="UsbDescriptors.FindCcid"/>)
+/// CCID のインターフェース1つぶんの情報。構成ディスクリプタから読む (<see cref="UsbDescriptors.FindCcid"/>)
 /// </summary>
 /// <param name="Features">CCID クラスディスクリプタの dwFeatures。やり取りの単位 (TPDU / APDU) もここ</param>
 /// <param name="MaxMessage">dwMaxCCIDMessageLength。10 バイトの頭も込み</param>
@@ -56,7 +56,7 @@ public static class UsbDescriptors
 
     /// <summary>
     /// usbfs の fd を読んだ中身 (デバイスディスクリプタ + 全部の構成ディスクリプタ) から、
-    /// 指した構成・インターフェースの CCID の形を拾う。
+    /// 指した構成・インターフェースの CCID の情報を拾う。
     ///
     /// <para>
     /// **構成は番号で選ぶ** (sysfs のインターフェース名 <c>4-11:1.0</c> の <c>1</c>)。
@@ -120,7 +120,7 @@ public static class UsbDescriptors
     }
 }
 
-/// <summary>1本のバルク転送の口 (OUT に書く、IN から1回読む)。テストでは偽物を挿す</summary>
+/// <summary>1本のバルク転送の経路 (OUT に書く、IN から1回読む)。テストでは偽物を挿す</summary>
 public interface IBulkPipe : IDisposable
 {
     void Write(ReadOnlySpan<byte> data);
@@ -128,7 +128,7 @@ public interface IBulkPipe : IDisposable
     /// <summary>1回のバルク転送で読めただけ返す。0 バイトのこともある (ZLP)</summary>
     int Read(Span<byte> buffer, int timeoutMs);
 
-    /// <summary>USB のポートをリセットして取り直す。できない口 (テストの偽物) は何もしない</summary>
+    /// <summary>USB のポートをリセットして取り直す。できない実装 (テストの偽物) は何もしない</summary>
     void ResetPort() { }
 }
 

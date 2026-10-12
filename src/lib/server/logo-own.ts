@@ -35,7 +35,7 @@ import { run } from './stream';
  *    点を付けて区間にする。ついでに散らしたコマを足して、覚えたものを育てる
  *
  * 覚えたものは局ごとの入れ物に、コマの大きさごとに置く (`logo-data.logoRepo`・`modelFile`)。
- * 「この絵は違う」で入れ物ごと捨てると、次の録画で一から覚える。
+ * 「この画像は違う」で入れ物ごと捨てると、次の録画で一から覚える。
  */
 
 /**
@@ -85,7 +85,7 @@ function overlaps(a: Rect, b: Rect): boolean {
     return a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height;
 }
 
-/** 録画の絵の大きさと尺 (`cm.probeVideo`) */
+/** 録画の映像の大きさと尺 (`cm.probeVideo`) */
 export interface Video {
     width: number;
     height: number;
@@ -226,7 +226,7 @@ export interface LogoResult {
     /** コマごとの点 (同じ並び)。境目でロゴが替わったかを見る (`cm-decide`) */
     scores: Float32Array;
     /**
-     * この回に覚えて持ち帰ったもの (同じ絵の局へ配る合図。`logo-data.share`)。
+     * この回に覚えて持ち帰ったもの (同じ映像の局へ配る合図。`logo-data.share`)。
      * `again` は覚えていたものが当たらず覚え直した (局がロゴを替えた) とき
      */
     learned: { file: string; again: boolean } | null;

@@ -4,7 +4,7 @@ import { packetize, patSection, programMap } from './synth';
 import { AUDIO_TICKS, FRAME_TICKS, mpeg2Frame, packetizePes, pes, silentAac } from './synth-av';
 
 /**
- * 生で送る道の受け口。**ffmpeg がやっていた「TS を PES に戻す」を自前でやる**ので、
+ * 変換せずに送る経路の受け側。**ffmpeg がやっていた「TS を PES に戻す」を自前でやる**ので、
  * 組み立てた放送 (`synth-av.ts`) を食わせて、映像の1枚・音声の1コマが時刻ごと
  * そのまま戻ってくるかを見る。
  */
@@ -61,7 +61,7 @@ describe('PesDemuxer', () => {
         expect(again.map((p) => [p.pid, p.pts])).toEqual([[AUDIO[1], 7000]]);
     });
 
-    test('無い番号の音声を頼まれたら先頭に落とす (番組が変わって減ったとき)', () => {
+    test('無い番号の音声を指定されたら先頭に落とす (番組が変わって減ったとき)', () => {
         const demuxer = new PesDemuxer();
         demuxer.audioIndex = 5;
         demuxer.feed(head());

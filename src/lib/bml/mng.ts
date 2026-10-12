@@ -1,5 +1,5 @@
 /**
- * MNG (`image/X-arib-mng`) をコマの PNG に分ける。**MNG を読める画像の口はブラウザに無い**ので、
+ * MNG (`image/X-arib-mng`) をコマの PNG に分ける。**MNG を読める画像 API はブラウザに無い**ので、
  * コマごとに PNG を組み直し ([png.ts](png.ts) の applyClut で CLUT の色を入れる)、動かすのは描く側
  * ([render.ts](render.ts))。
  *

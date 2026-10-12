@@ -40,7 +40,7 @@ const PACE = 2;
 export interface ChasePlan {
     /** 読み始めるバイト位置 (188 に揃えてある) */
     offset: number;
-    /** 実際に始まる再生位置 (秒)。頼まれた位置を録れている範囲に収めた後 */
+    /** 実際に始まる再生位置 (秒)。リクエストされた位置を録れている範囲に収めた後 */
     at: number;
     /** いま録れている長さ (秒)。シークバーの右端 */
     recordedSec: number;
@@ -53,7 +53,7 @@ export interface ChasePlan {
  *
  * @param size いまのファイルの大きさ (バイト)
  * @param recordedSec いま録れている長さ (秒)。録画中は「録り始めてからの経過」
- * @param atSec 頼まれた再生位置 (秒)
+ * @param atSec リクエストされた再生位置 (秒)
  */
 export function chasePlan(size: number, recordedSec: number, atSec: number): ChasePlan {
     const usable = Math.max(1, recordedSec);
@@ -73,19 +73,19 @@ export function chasePlan(size: number, recordedSec: number, atSec: number): Cha
 }
 
 /**
- * 伸びているファイルを読み続ける口。
+ * 伸びているファイルを読み続けるストリーム。
  *
  * 尻 (EOF) に着いたら書き足されるのを待って読み足す。**録画が終わっていて**
  * 尻に着いたら、それが本当の終わり。
  *
- * **読む側が詰まっていたら読まない。** 受け取る口 (ffmpeg の標準入力・HTTP の応答) が
+ * **読む側が詰まっていたら読まない。** 受け取る側 (ffmpeg の標準入力・HTTP の応答) が
  * 先へ進まない間は、こちらも次を読まずに待つ。待たずに読むと、倍速で送り込むぶんが
  * どこかに溜まり続ける。
  *
  * @param done もう書き足されないか (録画が終わったか)。EOF のたびに訊く
  * @param hold ほかの理由で止めておくか (HTTP の追っかけで、エンコードした先が読まれていないとき。
  *   `live.ts` の `chaseStream`)。省けば止めない
- * @param burst 倍速の縛りを掛けずに読む頭のぶん (バイト)。アプリ向けの字幕の口が、頼まれた位置より
+ * @param burst 倍速の縛りを掛けずに読む頭のぶん (バイト)。アプリ向けの字幕 API が、リクエストされた位置より
  *   手前から読み始めて観ている位置を追い越すのに使う (`live.ts` の `recordingCaptions`)。省けば 0
  */
 export function followFile(

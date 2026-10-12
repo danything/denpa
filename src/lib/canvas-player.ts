@@ -1,9 +1,9 @@
 /**
- * **録画を canvas に描いて観る** (互換モード。`canvas-video.ts`)。観る画面が `<video>` を使わずに観るときの器。
+ * **録画を canvas に描いて観る** (互換モード。`canvas-video.ts`)。観る画面が `<video>` を使わずに観るときのプレイヤー。
  *
- * `<video>` の再生が止まる端末 (テスラの車載ブラウザ) のための道。サーバへの頼み方は `<video>` で
+ * `<video>` の再生が止まる端末 (テスラの車載ブラウザ) のための方式。サーバへのリクエストの仕方は `<video>` で
  * その場で流すとき (`remux-player.ts`) と同じ `/api/recordings/<id>/stream` で、届いたものを MSE ではなく
- * ライブ・追っかけと同じ器 (`raw/engine.ts`) へ流す:
+ * ライブ・追っかけと同じエンジン (`raw/engine.ts`) へ流す:
  *
  * - `fmp4` … H.264 / AV1 の fMP4。時刻はページの物差しのまま (`PlayAxis`)。箱の切れ目で割ってから渡す
  *   (`ts/fmp4.ts` の `Fmp4Splitter`。worker は箱ごとに受け取る)
@@ -15,14 +15,14 @@
  * 決め方は追っかけと同じ `follow` (`raw/playout.ts`) — 止めたら位置を保ち、そこから再開し、今へは飛ばない。
  * 録画のために足したのは:
  *
- * - **飛ぶ** … 持っているものを捨てて、飛び先から頼み直す (`seek`)。サーバは飛び先の少し手前 (鍵のコマ・
- *   1 秒前) から流すので、手前は鳴らさず描かない (`RawEngine.reset` の `from`)。描けるまでは前の絵のまま
+ * - **飛ぶ** … 持っているものを捨てて、飛び先からリクエストし直す (`seek`)。サーバは飛び先の少し手前 (鍵のコマ・
+ *   1 秒前) から流すので、手前は鳴らさず描かない (`RawEngine.reset` の `from`)。描けるまでは前の映像のまま
  * - **先へ読みすぎない** … 手元が `AHEAD` 秒を超えたら読むのを待つ (fetch の流れはそこで詰まり、サーバも
  *   送るのを待つ)。デコードし始める前 (デコーダの読み込み中) はバイト数で区切る (`EARLY_BYTES`)
  * - **終わり** … 尻まで読んだら `finish`。残りを鳴らしきったら `ended`
- * - **切れたら** 観ていた位置から頼み直す (`remux-player.ts` と同じ数)。混んでいて断られたら頼み直さない
+ * - **切れたら** 観ていた位置からリクエストし直す (`remux-player.ts` と同じ数)。混んでいて断られたらリクエストし直さない
  *
- * 速さは等速だけ (音を自前で鳴らしている)。DOM は器 (`RawEngine`) が触る canvas と `<audio>` だけ
+ * 速さは等速だけ (音を自前で鳴らしている)。DOM はエンジン (`RawEngine`) が触る canvas と `<audio>` だけ
  */
 
 import { RawEngine } from '#lib/raw/engine.js';
@@ -49,7 +49,7 @@ const EARLY_BYTES = 8 * 1024 * 1024;
 const WAIT = 100;
 /** 時計を画面へ配る間 (ms)。字幕の貼り直し・CM の跨ぎ・データ放送はこれで回る */
 const TICK = 40;
-/** 尻からこれより手前へ飛んだら、頼まずに終わりにする (秒) */
+/** 尻からこれより手前へ飛んだら、リクエストせずに終わりにする (秒) */
 const END_EDGE = 0.5;
 
 interface CanvasOptions {
@@ -59,11 +59,11 @@ interface CanvasOptions {
     before: Element | null;
     input: RawInput;
     /**
-     * `from` 秒から、`audio` (`playback` の `audios` の `id`) の音声で頼む。サーバの `/stream` は fetch、
+     * `from` 秒から、`audio` (`playback` の `audios` の `id`) の音声でリクエストする。サーバの `/stream` は fetch、
      * 端末に保存した録画は Blob を切り出したもの (`mkv-source.ts`)。どちらも Response で返す
      */
     request(from: number, audio: string, signal: AbortSignal): Promise<Response>;
-    /** 尺 (秒)。**ここまで飛んだら頼まずに終わりにする** (`<video>` が尻へ飛ぶと `ended` になるのと同じ) */
+    /** 尺 (秒)。**ここまで飛んだらリクエストせずに終わりにする** (`<video>` が尻へ飛ぶと `ended` になるのと同じ) */
     duration: number;
     /** 観はじめる位置 (秒) */
     start: number;
@@ -74,7 +74,7 @@ interface CanvasOptions {
     paused: boolean;
     /** 繋ぎ直している・諦めた・戻った・混んでいて断られた */
     state(state: StreamState): void;
-    /** 描けなくなった (間に合わない・デコーダが転び続ける・音が来ない)。**画面がほかの形へ移す** */
+    /** 描けなくなった (間に合わない・デコーダが転び続ける・音が来ない)。**画面がほかの方式へ移す** */
     gaveUp(reason: string): void;
     /** 外 (ロック画面・車の操作) から止められた・再開された */
     remote(paused: boolean): void;
@@ -94,12 +94,12 @@ export interface CanvasPlayer {
     readonly flowing: boolean;
     /** 音を鳴らせていない (自動再生を断られた)。押して `unmute` してもらう */
     readonly blocked: boolean;
-    /** 飛ぶ。**持っているものを捨てて、そこから頼み直す** */
+    /** 飛ぶ。**持っているものを捨てて、そこからリクエストし直す** */
     seek(to: number): void;
     play(): void;
     pause(): void;
     mute(on: boolean): void;
-    /** 音声を選び直す。fMP4 は選んだ1本だけ流れているので頼み直す、元の TS は器の中で選び直す */
+    /** 音声を選び直す。fMP4 は選んだ1本だけ流れているのでリクエストし直す、元の TS はエンジンの中で選び直す */
     setAudio(id: string): void;
     /** 「再生する音」として鳴らすか */
     background(on: boolean): void;
@@ -128,7 +128,7 @@ function own(bytes: Uint8Array): ArrayBuffer {
 }
 
 /**
- * 器を作って、`start` から頼み始める。**器を作れなければ投げる** (呼ぶ側が理由を出す)
+ * エンジンを作って、`start` からリクエストし始める。**エンジンを作れなければ投げる** (呼ぶ側が理由を出す)
  */
 export function canvasPlayer(options: CanvasOptions): CanvasPlayer {
     const { input } = options;
@@ -144,7 +144,7 @@ export function canvasPlayer(options: CanvasOptions): CanvasPlayer {
     let retries = 0;
     let retryTimer: ReturnType<typeof setTimeout> | null = null;
     let closed = false;
-    /** 頼み直してから渡したバイト数 (デコードし始める前の区切り。`EARLY_BYTES`) */
+    /** リクエストし直してから渡したバイト数 (デコードし始める前の区切り。`EARLY_BYTES`) */
     let fed = 0;
     /** 貯めを使い切って止まっているか (読み込み中の輪) */
     let starving = false;
@@ -169,7 +169,7 @@ export function canvasPlayer(options: CanvasOptions): CanvasPlayer {
                 if (stop === paused) return;
                 options.remote(stop);
             },
-            // 抱えきれなくなった (読む側が読みすぎないようにしているので、ふつうは来ない)。居る場所から頼み直す
+            // 抱えきれなくなった (読む側が読みすぎないようにしているので、ふつうは来ない)。いまの位置からリクエストし直す
             full: () => {
                 if (!closed) void load(position());
             },
@@ -198,7 +198,7 @@ export function canvasPlayer(options: CanvasOptions): CanvasPlayer {
         const at = engine.position;
         if (at === null) return time;
         const pts = Math.round(at * CLOCK);
-        // 元の TS の頭の少し前 (音と絵の頭のずれ) は負になる。物差しの頭に揃える
+        // 元の TS の頭の少し前 (音と映像の頭のずれ) は負になる。物差しの頭に揃える
         time = Math.max(0, input === 'ts-mpeg2' ? sinceHead(pts % WRAP, origin) : pts / CLOCK);
         return time;
     }
@@ -213,18 +213,18 @@ export function canvasPlayer(options: CanvasOptions): CanvasPlayer {
         }
     }
 
-    /** `from` 秒から頼み直す。持っていたものは捨てる */
+    /** `from` 秒からリクエストし直す。持っていたものは捨てる */
     async function load(from: number): Promise<void> {
         const mine = ++run;
         controller?.abort();
         if (retryTimer !== null) clearTimeout(retryTimer);
         retryTimer = null;
-        // 飛んだ。前の音はすぐ止める (絵は次が描けるまで前のまま)
+        // 飛んだ。前の音はすぐ止める (映像は次が描けるまで前のまま)
         engine.reset();
         time = from;
         fed = 0;
         /*
-         * **尻 (の手前 `END_EDGE`) へ飛んだら頼まずに終わり** — 最後が CM の録画で CM を飛ばした・シークバーを
+         * **尻 (の手前 `END_EDGE`) へ飛んだらリクエストせずに終わり** — 最後が CM の録画で CM を飛ばした・シークバーを
          * 右端まで動かした。サーバは尻の先からは流せない (`<video>` も尻へ飛ぶと `ended` になる)
          */
         if (from >= options.duration - END_EDGE) {
@@ -247,7 +247,7 @@ export function canvasPlayer(options: CanvasOptions): CanvasPlayer {
             if (input === 'ts-mpeg2') {
                 const header = response.headers.get(ORIGIN_HEADER);
                 const head = header === null ? Number.NaN : Number(header);
-                // 物差しに直せない。何度頼んでも同じ
+                // 物差しに直せない。何度リクエストしても同じ
                 if (!Number.isFinite(head)) throw new Error(`${ORIGIN_HEADER} がありません`);
                 origin = head;
                 start = (((origin + start) % WRAP) + WRAP) % WRAP;
@@ -276,10 +276,10 @@ export function canvasPlayer(options: CanvasOptions): CanvasPlayer {
             // 尻まで読んだ。残りを鳴らしきったら終わり
             engine.finish();
         } catch (error) {
-            // 読みかけの流れは手放す (頼み直すときは新しく読む)
+            // 読みかけの流れは手放す (リクエストし直すときは新しく読む)
             void reader?.cancel().catch(() => undefined);
             if (mine !== run || closed) return;
-            // 繋がらない・途中で落ちた・サーバの 5xx なら頼み直す。4xx・読めない中身は何度やっても同じ
+            // 繋がらない・途中で落ちた・サーバの 5xx ならリクエストし直す。4xx・読めない中身は何度やっても同じ
             if (!retryable(error)) {
                 console.warn('[canvas] 流せませんでした', error);
                 options.state('failed');
@@ -289,7 +289,7 @@ export function canvasPlayer(options: CanvasOptions): CanvasPlayer {
         }
     }
 
-    /** 切れた。倍々に待って、観ていた位置から頼み直す */
+    /** 切れた。倍々に待って、観ていた位置からリクエストし直す */
     function retry(): void {
         if (retries >= STREAM_RETRIES) {
             options.state('failed');
@@ -372,7 +372,7 @@ export function canvasPlayer(options: CanvasOptions): CanvasPlayer {
                 return;
             }
             const track = tsTrack(id);
-            // 保存した録画は軌道を選び直して、いまの位置から読み直す (音のデコーダを開き直すため)
+            // 保存した録画はトラックを選び直して、いまの位置から読み直す (音のデコーダを開き直すため)
             if (input === 'mkv') {
                 engine.selectAudio(track.stream, 'both');
                 void load(position());

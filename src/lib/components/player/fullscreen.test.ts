@@ -4,7 +4,7 @@ import { exitNative, fullscreenMode, nativeFullscreenElement, requestNative } fr
 const noop = async () => {};
 
 describe('全画面への切り替え方', () => {
-    test('標準の口があればそれ (PC・Android・iPadOS 16.4 以降)', () => {
+    test('標準の API があればそれ (PC・Android・iPadOS 16.4 以降)', () => {
         expect(fullscreenMode({ requestFullscreen: noop, webkitRequestFullscreen: noop }, {})).toBe(
             'standard',
         );
@@ -22,7 +22,7 @@ describe('全画面への切り替え方', () => {
         expect(fullscreenMode({}, {})).toBe('pseudo');
     });
 
-    test('口があっても使えないと言われたら次へ回す', () => {
+    test('API があっても使えないと言われたら次へ回す', () => {
         expect(
             fullscreenMode(
                 { requestFullscreen: noop, webkitRequestFullscreen: noop },
@@ -44,7 +44,7 @@ describe('全画面への切り替え方', () => {
         expect(nativeFullscreenElement({})).toBeNull();
     });
 
-    test('入る・出るは選んだ口を呼ぶ。転んでも投げない', async () => {
+    test('入る・出るは選んだ API を呼ぶ。失敗しても投げない', async () => {
         const called: string[] = [];
         const el = {
             requestFullscreen: async () => {

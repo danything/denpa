@@ -7,12 +7,12 @@
  * 枠の組み立て (RFC6455) も ping/pong も詰まり具合の面倒も **bun が見る**。
  * こちらが書くのは、多重化の頭を付けることと、誰に配るかだけ。
  *
- * ## なぜ入口が別に居るのか
+ * ## なぜ入口が別にあるのか
  *
  * bun の `node:http` (adapter-node が乗っている) は WebSocket の握手ができず、
  * `svelte-adapter-bun` も今の kit には挿し込めない (試したことは `server.js` の冒頭)。
  * そこで `server.js` の `Bun.serve` が WebSocket だけ受け、残りは adapter-node へ流す。
- * 入口はアプリの束の外に居るので直に import できない。`globalThis` 越しに渡す。
+ * 入口はアプリの束の外にあるので直に import できない。`globalThis` 越しに渡す。
  */
 
 import type { ServerWebSocket, WebSocketHandler } from 'bun';
@@ -43,7 +43,7 @@ export class Connection {
      *     [1 byte: 種別][8 bytes: PTS (90kHz, BE)][中身...]
      *
      * 時刻は受け側の物差し (エンコードの経路は mp4 の 0 起点、放送そのままの経路は放送の PTS)。運ぶのは
-     * 字幕だけで、映像・データ放送・制御は 0 を渡す — 字幕を絵と同じ物差しに乗せるため。
+     * 字幕だけで、映像・データ放送・制御は 0 を渡す — 字幕を映像と同じ物差しに乗せるため。
      *
      * @param droppable 詰まっているときに捨ててよいか。映像の中身 (fMP4 / そのままの TS) だけ true
      */
@@ -88,7 +88,7 @@ interface Route {
 
 const routes = new Map<string, Route>();
 
-/** この道に来た接続を受け持つ。ライブ視聴が `/api/live/socket` で登録する */
+/** このパスに来た接続を受け持つ。ライブ視聴が `/api/live/socket` で登録する */
 export function serve(pathname: string, route: Route): void {
     routes.set(pathname, route);
 }
@@ -101,7 +101,7 @@ export function serve(pathname: string, route: Route): void {
  * ここに置くのは1回で足りる。
  */
 interface LiveEntry {
-    /** そもそも受け持つ道か。**断り方を変えるために `accept` と分けてある** */
+    /** そもそも受け持つパスか。**断り方を変えるために `accept` と分けてある** */
     handles(url: URL): boolean;
     /** 握手してよいか。ここでチケットを使い切る */
     accept(url: URL): boolean;

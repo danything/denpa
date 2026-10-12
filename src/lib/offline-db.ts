@@ -32,14 +32,14 @@ export interface OfflineVideo {
      * `downloading` は Background Fetch がまだ運んでいる最中。
      * `failed` は**消さずに残す** — 失敗した瞬間の知らせ (トースト) は一瞬で、
      * 控えごと消すと「無かったことになった」ように見える。行に残して、やり直す
-     * 口にする
+     * 入口にする
      */
     state: 'downloading' | 'ready' | 'failed';
     downloadedAt: number;
     /** 動画の実体。downloading の間は無い */
     video?: Blob;
     /**
-     * 字幕 (`captions.json`)。以前は絵の字幕 (PGS) を `captions` に持っていたが、もう読まない
+     * 字幕 (`captions.json`)。以前は画像字幕 (PGS) を `captions` に持っていたが、もう読まない
      * (前に保存した控えに残っていても、使わないだけで害は無い)
      */
     captionText?: unknown;
@@ -58,7 +58,7 @@ export interface OutboxItem {
 
 export interface ResumeItem {
     id: number;
-    /** 再生位置 (秒)。サーバの `POST …/resume` と同じ形 */
+    /** 再生位置 (秒)。サーバの `POST …/resume` と同じ形式 */
     at: number;
     length: number;
     updatedAt: number;
@@ -85,7 +85,7 @@ export function fetchIdPrefix(id: number): string {
 export function parseFetchId(
     value: string,
 ): { id: number; source: 'encoded' | 'alt'; attempt: string } | null {
-    // 印の無い古い形 (rec-42-encoded) も読める。付ける前に預けたぶんが残っていることがある
+    // 印の無い古い形式 (rec-42-encoded) も読める。付ける前に預けたぶんが残っていることがある
     const m = /^rec-(\d+)-(encoded|alt)(?:-([a-z0-9]+))?$/.exec(value);
     if (m === null) return null;
     return { id: Number(m[1]), source: m[2] as 'encoded' | 'alt', attempt: m[3] ?? '' };
@@ -95,7 +95,7 @@ export function parseFetchId(
  * 落とすものの一覧。動画 + 観るのに要る付き添い。
  *
  * **頭 (前段の接頭辞。server/paths.ts) は呼ぶ側 (offline.svelte.ts) が付ける。** ここは
- * Service Worker からも読まれ、道の形で付き添いを見分ける (`kindOf`) ので、根からの道のまま持つ
+ * Service Worker からも読まれ、パスの形で付き添いを見分ける (`kindOf`) ので、ルートからのパスのまま持つ
  */
 export function downloadRequests(id: number, source: 'encoded' | 'alt'): string[] {
     return [

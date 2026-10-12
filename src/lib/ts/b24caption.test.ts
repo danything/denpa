@@ -123,7 +123,7 @@ describe('B24CaptionDecoder', () => {
         ]);
     });
 
-    test('置き換えられない外字は絵で送る (なめらかにした濃淡。drcs-smooth.ts)', () => {
+    test('置き換えられない外字は画像で送る (なめらかにした濃淡。drcs-smooth.ts)', () => {
         const rows = [
             '#.......',
             '.#......',
@@ -145,7 +145,7 @@ describe('B24CaptionDecoder', () => {
         expect(run).toMatchObject({ text: '〓', drcs: String((1 << 16) | 0x21) });
         const drcs = page?.drcs?.[run?.drcs ?? ''];
         expect(drcs).toMatchObject({ w: 64, h: 64, depth: 16, bits: 4 });
-        // 元の絵の MD5 も添える (置き換え表に足すときに使う)
+        // 元の画像の MD5 も添える (置き換え表に足すときに使う)
         const raw = Uint8Array.from([0x80, 0x40, 0x20, 0x10, 0x08, 0x04, 0x02, 0x01]);
         expect(drcs?.md5).toBe(createHash('md5').update(raw).digest('hex'));
         // 8 倍にした斜めの線: 線の上は濃く、離れたところは空く

@@ -14,7 +14,7 @@ set -eu
 # denpa はリポジトリ直下なので、エージェントなど別物のパスを除いて見る。
 # **イメージに入るものは全部並べる** (build-and-deploy.yml の paths と揃える)。漏れると、
 # そこだけの修正がイメージに入らないまま release まで素通りする (server.js で実際に起きた)。
-# wasm はライブを生で見る復号器、drizzle はマイグレーション
+# wasm はライブを変換せずに見るためのデコーダ、drizzle はマイグレーション
 denpa_paths="Dockerfile src static package.json bun.lock vite.config.ts server.js patches wasm drizzle"
 
 AGENT_TAG="sha-$(git log -1 --format=%H -- agent | cut -c1-12)"

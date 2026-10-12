@@ -6,10 +6,10 @@ import { CHANNEL } from '#lib/live.js';
 import { captionMkv, encodeAribText, management, text } from '#lib/ts/synth-caption.js';
 
 /**
- * アプリ向けの字幕の口 (`liveCaptions` / `recordingCaptions`)。
+ * アプリ向けの字幕 API (`liveCaptions` / `recordingCaptions`)。
  *
  * ffmpeg は偽物に差し替える — 入口の見出しを標準エラーへ書き、標準入力を読み切ってから、
- * 字幕を写した Matroska (`S_ARIBSUB`。ffmpeg が `-c:s copy` で書くのと同じ骨組み) を字幕の口 (fd 3) へ流す。
+ * 字幕を写した Matroska (`S_ARIBSUB`。ffmpeg が `-c:s copy` で書くのと同じ骨組み) を字幕の出口 (fd 3) へ流す。
  * DB は一時ファイルへ (encoder-pump.test.ts と同じ理由で、設定そのものを書き換える)
  */
 const dir = mkdtempSync(join(tmpdir(), 'denpa-appcap-'));
@@ -21,7 +21,7 @@ const realFfmpeg = config.ffmpeg;
 const realAgent = config.agentUrl;
 /*
  * 偽のエージェント。選局には 200 を返して、何も流さないまま繋いでおく (セッションが生きたままになる)。
- * ライブの字幕の口は、いま流しているセッションに乗るだけなので、乗る先を作るのに要る
+ * ライブの字幕 API は、いま流しているセッションに相乗りするだけなので、相乗りする先を作るのに要る
  */
 const agent = Bun.serve({
     port: 0,
@@ -148,7 +148,7 @@ describe('録画の字幕 (recordingCaptions)', () => {
         });
 
         const pages = got.filter((f) => f.kind === CHANNEL.captionText);
-        // 時刻は 90kHz (器の 40ms = 3600)。中身は文字の配置の JSON。消す1枚 (runs が空) も来る
+        // 時刻は 90kHz (コンテナの 40ms = 3600)。中身は文字の配置の JSON。消す1枚 (runs が空) も来る
         expect(pages.map((f) => f.pts)).toEqual([3600n, 270_000n]);
         const runs = pages.map((f) =>
             JSON.parse(new TextDecoder().decode(f.payload))
@@ -157,12 +157,12 @@ describe('録画の字幕 (recordingCaptions)', () => {
         );
         expect(runs).toEqual(['字幕', '']);
 
-        // 録り終えた録画は尻まで流し込んで終わる (頭から頼んだので全部)
+        // 録り終えた録画は尻まで流し込んで終わる (頭からリクエストしたので全部)
         expect(Bun.file(FED).size).toBe(188 * 100);
     });
 
     /*
-     * シークのたびに頼み直すので、前の繋ぎが切れたと分かるのが遅れると並ぶ。古いものから畳む
+     * シークのたびにリクエストし直すので、前の繋ぎが切れたと分かるのが遅れると並ぶ。古いものから畳む
      * (録っている最中の録画は書き足しを待ち続けるので、畳まない限り閉じない)
      */
     test('1本の録画に起こす ffmpeg は上限まで。超えたら古いものを畳む', async () => {
@@ -187,8 +187,8 @@ describe('ライブの字幕 (liveCaptions)', () => {
         expect(liveCaptions(SERVICE + 1)).toBeNull();
     });
 
-    // 脇の字幕の口は畳む判断に数えない。字幕のためだけにチューナーを使い続けない
-    test('字幕の口が抜けても映像は続き、映像が抜けたら字幕の口も閉じる', async () => {
+    // 脇の字幕 API は畳む判断に数えない。字幕のためだけにチューナーを使い続けない
+    test('字幕 API が抜けても映像は続き、映像が抜けたら字幕 API も閉じる', async () => {
         const media = liveStream(SERVICE, 'raw')!;
         const first = liveCaptions(SERVICE);
         expect(first).not.toBeNull();
@@ -196,7 +196,7 @@ describe('ライブの字幕 (liveCaptions)', () => {
         // 映像はまだ流れている (同じセッションにもう一度乗れる)
         const second = liveCaptions(SERVICE);
         expect(second).not.toBeNull();
-        // 映像が抜けたら畳まれて、字幕の口も閉じる (読み切れる)
+        // 映像が抜けたら畳まれて、字幕 API も閉じる (読み切れる)
         await media.cancel();
         await new Response(second!).arrayBuffer();
         expect(liveCaptions(SERVICE)).toBeNull();

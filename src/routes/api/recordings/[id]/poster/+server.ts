@@ -11,7 +11,7 @@ import { recordingOr404 } from '#lib/server/recording.js';
  * 作ってあるので、ただ読んで返すだけ。
  *
  * **無い録画もある。** ポスターより前にエンコードしたもの、元のTSしか無いもの、切り出しに
- * 失敗したもの。そのときは 404 を返して、一覧は絵を出さずに済ませる (`+page.svelte`)。
+ * 失敗したもの。そのときは 404 を返して、一覧は画像を出さずに済ませる (`+page.svelte`)。
  */
 export function GET({ params }) {
     const recording = recordingOr404(params.id);
@@ -23,7 +23,7 @@ export function GET({ params }) {
     return new Response(readFileSync(poster), {
         headers: {
             'Content-Type': 'image/jpeg',
-            // エンコードしたら変わらない絵。一覧を開くたびに取り直させない
+            // エンコードしたら変わらない画像。一覧を開くたびに取り直させない
             'Cache-Control': 'private, max-age=86400',
         },
     });

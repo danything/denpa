@@ -39,7 +39,7 @@ export interface ScanLogo {
 
 /** 何を読むか */
 export interface ScanWant {
-    /** 絵を見るか (場面の切れ目とロゴ)。音だけ読み直すとき (絵の読み込みが落ちたとき) は要らない */
+    /** 映像を見るか (場面の切れ目とロゴ)。音だけ読み直すとき (映像の読み込みが落ちたとき) は要らない */
     video: boolean;
     /** ロゴの枠。無ければ切れ目だけ */
     logo?: ScanLogo | null;
@@ -129,16 +129,16 @@ export function parseSilences(text: string, end: number): Range[] {
 }
 
 /**
- * 材料を取る出口 (ffmpeg の引数の、入力より後ろ)。絵と音で2つに分ける。`files` は書き出し先。
- * **エンコードの出口のあとに足しても同じに動く** — `-map` は出口ごとなので、絵の出口は
- * ffmpeg の自動の選び方 (いちばん大きい絵) のまま
+ * 材料を取る出口 (ffmpeg の引数の、入力より後ろ)。映像と音で2つに分ける。`files` は書き出し先。
+ * **エンコードの出口のあとに足しても同じに動く** — `-map` は出口ごとなので、映像の出口は
+ * ffmpeg の自動の選び方 (いちばん大きい映像) のまま
  */
 export function scanOutputs(want: ScanWant, files: { cuts: string; silences: string }): string[] {
     const args: string[] = [];
     if (want.video) {
         /*
-         * 絵は ffmpeg に選ばせる (いちばん大きいもの)。1本の TS に局が何本も乗っていても (TOKYO MX)、
-         * 中身のある絵を拾う。**コマは間引かない・増やさない** — `times` とロゴの枠を順番で突き合わせる。
+         * 映像は ffmpeg に選ばせる (いちばん大きいもの)。1本の TS に局が何本も乗っていても (TOKYO MX)、
+         * 中身のある映像を拾う。**コマは間引かない・増やさない** — `times` とロゴの枠を順番で突き合わせる。
          * `scdet` は点を全部のコマに付ける。閾値を上げておくのはログを出させないため (キーフレームを置く
          * `scdet@key` と名前で分ける)
          */

@@ -7,7 +7,7 @@ namespace Denpa.Agent;
 ///
 /// <para>
 /// デバイスを確保したままの選局は、値が1つ違っても「ioctl は通るが同期しない」という
-/// 出方をする。単体テストでは踏めないので、実機で当てるための口を用意した
+/// 出方をする。単体テストでは踏めないので、実機で当てるための入口を用意した
 /// (チューナー自動検出のときと同じやり方)。
 /// </para>
 ///
@@ -23,7 +23,7 @@ namespace Denpa.Agent;
 /// </code>
 ///
 /// <para>
-/// 見るのは3つ。**同期したか・TS の形をしているか・切り替えに何秒かかるか。**
+/// 見るのは3つ。**同期したか・TS の形式になっているか・切り替えに何秒かかるか。**
 /// 最後は取り直すのと比べてどれだけ短いかで、ここでしか測れない。
 /// </para>
 /// </summary>
@@ -150,7 +150,7 @@ public static class Probe
         return 0;
     }
 
-    /// <summary>読めたバイト数と、それが TS の形をしているか。復号させたなら復号できたか</summary>
+    /// <summary>読めたバイト数と、それが TS の形式になっているか。復号させたなら復号できたか</summary>
     private static void Measure(Stream stream, string name, Descrambler? b25)
     {
         var buffer = new byte[188 * 1024];

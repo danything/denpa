@@ -138,50 +138,50 @@
     const CODEC_KEY = 'watch-codec';
     /** サーバが混んでいて、その場の変換を断られた (`remux-player.ts` の `busy`) */
     let busy = $state(false);
-    /** その場で流しているときの器 (`remux-player.ts`) */
+    /** その場で流しているときのプレイヤー (`remux-player.ts`) */
     let remux: RemuxPlayer | null = null;
-    /** 選び直したときに続ける位置 (秒)。その場で流す器の始める位置に使う */
+    /** 選び直したときに続ける位置 (秒)。その場で流すプレイヤーの開始位置に使う */
     let switchAt: number | null = null;
 
     /*
      * ---- 互換モード (`canvas-video.ts`) ----
      *
      * **`<video>` を使わず canvas に描く** (`canvas-player.ts`)。`<video>` の再生が止まる端末 (テスラの
-     * 車載ブラウザ) のため。頼む先は `<video>` でその場で流すときと同じ `/stream` で、H.264 / AV1 の
-     * fMP4 か元の TS (MPEG-2) を、ライブ・追っかけと同じ器 (`raw/engine.ts`) で描く。
+     * 車載ブラウザ) のため。リクエスト先は `<video>` でその場で流すときと同じ `/stream` で、H.264 / AV1 の
+     * fMP4 か元の TS (MPEG-2) を、ライブ・追っかけと同じエンジン (`raw/engine.ts`) で描く。
      * **ここでは `<video>` に戻らない** — 描けなくなったら MPEG-2 へ、それも無理なら理由を出して止まる
      * (ライブと同じ)。**端末に保存したものは、その Matroska を読んで描く** (`mkv-source.ts`。オフラインでも)
      */
     /** 互換モードか。**開いたときに決める** (設定画面でオン/オフする) */
     let compat = $state(false);
-    /** この端末で描ける形 (`raw/support.ts`)。調べるまで null */
+    /** この端末で描ける形式 (`raw/support.ts`)。調べるまで null */
     let canvasAbility = $state.raw<CanvasAbility | null>(null);
-    /** いま canvas に描いている形。描いていなければ null (`<video>` で観ている・まだ始めていない) */
+    /** いま canvas に描いている形式。描いていなければ null (`<video>` で観ている・まだ始めていない) */
     let canvasCodec = $state<CanvasCodec | null>(null);
-    /** canvas に描く器。`canvasCodec` が決まって、映像の箱ができたら作る */
+    /** canvas に描くプレイヤー。`canvasCodec` が決まって、映像の箱ができたら作る */
     let canvas: CanvasPlayer | null = null;
-    /** canvas の器があるか (`canvas` は畳み直しの都度替わるので、画面の出し分けはこちらで見る) */
+    /** canvas のプレイヤーがあるか (`canvas` は畳み直しの都度替わるので、画面の出し分けはこちらで見る) */
     let drawing = $state(false);
-    /** 端末に保存した録画を描くときの口 (`mkv-source.ts`)。サーバから流しているなら null */
+    /** 端末に保存した録画を描くときの読み込み元 (`mkv-source.ts`)。サーバから流しているなら null */
     let localMkv: MkvSource | null = null;
     /** 端末に保存した録画を canvas に描いているか (操作バーの「端末」の印・メニューの出し分け) */
     let drawingLocal = $state(false);
-    /** 描いている途中で諦めた形。**選び直すまで頼み直さない** (戻しては諦めるを繰り返さない) */
+    /** 描いている途中で諦めた形式。**選び直すまでリクエストし直さない** (戻しては諦めるを繰り返さない) */
     let canvasGaveUp: CanvasCodec[] = [];
     /** 互換モードで観られない理由。出したら `<video>` には戻らずに止まる */
     let canvasProblem = $state<string | null>(null);
-    /** 絵の上に出しておく断り書き (MPEG-2 に切り替えた、など) */
+    /** 映像の上に出しておく断り書き (MPEG-2 に切り替えた、など) */
     let warning = $state<string | null>(null);
     /** 運転中の注意 (互換モード。`drive-gate.svelte.ts`)。押すまで再生を始めない */
     const drive = driveGate();
 
-    /** 形の名前 (メニュー・混んでいるときの勧め) */
+    /** 形式の名前 (メニュー・混んでいるときの勧め) */
     function codecLabel(codec: CanvasCodec): string {
         return codec === 'mpeg2' ? 'MPEG-2' : CODEC_LABEL[codec];
     }
 
     /**
-     * 互換モードの支度。運転中の注意をまだ見せていなければ見せて待ち、描ける形を調べて、どれで観るかを決める
+     * 互換モードの支度。運転中の注意をまだ見せていなければ見せて待ち、描ける形式を調べて、どれで観るかを決める
      * (`ts/playback.ts` の `pickCanvas`)。端末に保存したものがあれば、まずそれを描く (下)
      */
     async function prepareCompat(got: PlaybackInfo | null): Promise<void> {
@@ -194,7 +194,7 @@
         canvasAbility = { ...support, mpeg2: problem === null };
         /*
          * **端末に保存したものがあれば、それを canvas に描く** (オンラインでも。`<video>` と同じ考え)。
-         * 描けない形 (この端末の VideoDecoder がデコードできない) か読めなければ、サーバから流すものへ
+         * 描けない形式 (この端末の VideoDecoder がデコードできない) か読めなければ、サーバから流すものへ
          */
         if (localCopy?.video !== undefined) {
             const source = await openMkv(localCopy.video).catch(() => null);
@@ -213,7 +213,7 @@
         else canvasCodec = codec;
     }
 
-    /** canvas に描く器を作って流しはじめる。**続きの位置から頼む** (選び直し・切り替えならその位置) */
+    /** canvas に描くプレイヤーを作って流しはじめる。**続きの位置からリクエストする** (選び直し・切り替えならその位置) */
     $effect(() => {
         const codec = canvasCodec;
         // 端末に保存したものはオフラインでも描く (`playback` が聞けなくてよい)
@@ -287,7 +287,7 @@
         settle();
     }
 
-    /** canvas の器を畳む (切り替える・諦める) */
+    /** canvas のプレイヤーを畳む (切り替える・諦める) */
     function stopCanvas(): void {
         canvas?.destroy();
         canvas = null;
@@ -309,7 +309,7 @@
         const wasLocal = localMkv !== null;
         stopCanvas();
         /*
-         * 端末に保存した録画を描けなくなった。サーバから流せるならそちらへ (描ける形で)。無理なら理由を出して止まる
+         * 端末に保存した録画を描けなくなった。サーバから流せるならそちらへ (描ける形式で)。無理なら理由を出して止まる
          */
         if (wasLocal) {
             localMkv = null;
@@ -345,7 +345,7 @@
         canvasCodec = next;
     }
 
-    /** canvas の器の刻み。`<video>` の `timeupdate` と映した1枚ごとの追いかけ (`follow`) の代わり */
+    /** canvas のプレイヤーの刻み。`<video>` の `timeupdate` と映した1枚ごとの追いかけ (`follow`) の代わり */
     function canvasTick(): void {
         if (canvas === null) return;
         const now = canvas.currentTime;
@@ -362,16 +362,16 @@
     }
 
     /*
-     * ---- 再生の口 ----
+     * ---- 再生の操作 ----
      *
-     * `<video>` と canvas の器のどちらで観ていても、位置・飛ぶ・止める・再開はここを通す
+     * `<video>` と canvas のプレイヤーのどちらで観ていても、位置・飛ぶ・止める・再開はここを通す
      */
     /** いまの位置 (秒。物差しの上) */
     function mediaTime(): number {
         return canvas?.currentTime ?? video?.currentTime ?? 0;
     }
 
-    /** 飛ぶ。canvas は持っているものを捨てて頼み直す */
+    /** 飛ぶ。canvas は持っているものを捨ててリクエストし直す */
     function seekMedia(to: number): void {
         if (canvas !== null) {
             canvas.seek(to);
@@ -407,7 +407,7 @@
         video?.pause();
     }
 
-    /** 音を消す・出す。canvas は器の音 (自動再生で断られていても、押されたここなら鳴らせる) */
+    /** 音を消す・出す。canvas はプレイヤーの音 (自動再生で断られていても、押されたここなら鳴らせる) */
     function toggleMute(): void {
         if (canvas !== null) {
             muted = !muted;
@@ -417,7 +417,7 @@
         if (video !== null) video.muted = !video.muted;
     }
 
-    /** ブラウザに聞く口 (`ts/playback.ts`)。DOM が要るので開いてから */
+    /** ブラウザへの問い合わせ (`ts/playback.ts`)。DOM が要るので開いてから */
     function ability(): MediaAbility {
         return {
             play: (type) => document.createElement('video').canPlayType(type) !== '',
@@ -483,7 +483,7 @@
             : undefined,
     );
 
-    /** その場で流すもの (`/stream`) を頼む先。`at` 秒から、`audio` (`streamAudio`) の音声で */
+    /** その場で流すもの (`/stream`) のリクエスト先。`at` 秒から、`audio` (`streamAudio`) の音声で */
     function streamUrl(codec: CanvasCodec, at: number, audio: string): string {
         return resolve(
             `api/recordings/${rec.id}/stream?codec=${codec}&from=${at.toFixed(3)}&audio=${encodeURIComponent(audio)}`,
@@ -507,14 +507,14 @@
         setTimeout(() => (continued = false), 4000);
     }
 
-    /** その場で流すときに頼む音声 (`playback` の `audios` の `id`) */
+    /** その場で流すときにリクエストする音声 (`playback` の `audios` の `id`) */
     function streamAudio(index: number): string {
-        // 端末に保存した録画は軌道の何本目か (`mkv-source.ts`)
+        // 端末に保存した録画はトラックの何本目か (`mkv-source.ts`)
         if (localMkv !== null) return String(index);
         return info?.audios[index]?.id ?? info?.audios[0]?.id ?? '0';
     }
 
-    /** その場で流すなら、器を作って流しはじめる。**続きの位置から頼む** (頭から読んで捨てない) */
+    /** その場で流すなら、プレイヤーを作って流しはじめる。**続きの位置からリクエストする** (頭から読んで捨てない) */
     $effect(() => {
         const plan = picked;
         if (!localChecked || plan?.way !== 'stream' || info === null || video === null || remux !== null) return;
@@ -538,7 +538,7 @@
 
     /**
      * **コーデックを選び直す** (コーデックのメニュー)。選んだものは端末ごとに覚える。
-     * 観られる道が変わるなら、いまの位置から観直す (器を作り直す)
+     * 観られる方式が変わるなら、いまの位置から観直す (プレイヤーを作り直す)
      */
     function chooseCodec(next: CodecChoice | 'mpeg2'): void {
         choice = next;
@@ -561,15 +561,15 @@
         }
         busy = false;
         broken = false;
-        // ファイルなら尺が分かったところで戻す (`resume`)。その場で流すなら器の始める位置
+        // ファイルなら尺が分かったところで戻す (`resume`)。その場で流すならプレイヤーの開始位置
         retryAt = position;
         switchAt = position;
         picked = fresh;
     }
 
     /**
-     * 互換モードで選び直す。**選んだものは諦めていても試す** (選び直すまで頼み直さない、の「選び直し」)。
-     * 描く形が変わるなら、いまの位置から器を作り直す
+     * 互換モードで選び直す。**選んだものは諦めていても試す** (選び直すまでリクエストし直さない、の「選び直し」)。
+     * 描く形式が変わるなら、いまの位置からプレイヤーを作り直す
      */
     function chooseCanvas(next: CodecChoice | 'mpeg2'): void {
         if (info === null || canvasAbility === null) return;
@@ -589,11 +589,11 @@
         canvasCodec = fresh;
     }
 
-    /** メニューに並べるもの。この端末で観られる道があるコーデックが 2 つ以上あるときだけ出す */
+    /** メニューに並べるもの。この端末で観られる方式があるコーデックが 2 つ以上あるときだけ出す */
     const codecMenu = $derived.by((): { key: string; label: string; disabled?: boolean }[] => {
         if (info === null || !localChecked) return [];
         /*
-         * 互換モードは流せるもの (H.264・AV1・MPEG-2) を並べ、**描けない形は押せなくする** (ライブと同じ)。
+         * 互換モードは流せるもの (H.264・AV1・MPEG-2) を並べ、**描けない形式は押せなくする** (ライブと同じ)。
          * 端末に保存したものを描いている間は出さない
          */
         if (compat) {
@@ -620,7 +620,7 @@
     /** 混んでいて断られたとき、サーバに変換させずに観られるもの (エンコード済み・詰め替え) */
     const lighter = $derived.by((): CanvasCodec[] => {
         if (info === null || !busy) return [];
-        // 互換モードは描ける形のうち、変換させないもの (詰め替え・元の TS)
+        // 互換モードは描ける形式のうち、変換させないもの (詰め替え・元の TS)
         if (compat) {
             if (canvasAbility === null) return [];
             const plan = info;
@@ -652,17 +652,17 @@
     let showData = $state(false);
     /** 映像を入れる箱。**BML はこれを動かす** (`DataBroadcast` の place) */
     let mediaBox = $state<HTMLElement | null>(null);
-    /** リモコンの押す口と、d を文書へ渡す口 (ライブと同じ。`DataBroadcast` の press / pressD) */
+    /** リモコンのキーを渡す関数と、d を文書へ渡す関数 (ライブと同じ。`DataBroadcast` の press / pressD) */
     let dataPress = $state<((code: number) => void) | null>(null);
     let dataButton = $state<(() => boolean) | null>(null);
     /**
      * データ放送を作り直す合図 (`DataBroadcast` の channel)。**戻ったら変える** —
-     * 器を作り直して、その時点まで積み直す
+     * エンジンを作り直して、その時点まで積み直す
      */
     let dataChannel = $state<string | null>(null);
-    /** 録画のときに取り出しておいた変化ログ。**押されてから取りに行く** (字幕と同じ「頼まれてから」) */
+    /** 録画のときに取り出しておいた変化ログ。**押されてから取りに行く** (字幕と同じ「求められてから」) */
     let dataTimeline: PlacedMessage[] = [];
-    /** エンジンへ流す口。`DataBroadcast` が open のたびに預けてくる */
+    /** エンジンへ流す関数。`DataBroadcast` が open のたびに預けてくる */
     let dataEmit: ((message: ResponseMessage) => void) | null = null;
     /** どこまで流したか (再生位置 ms)。まだなら -1 */
     let dataFed = -1;
@@ -688,12 +688,12 @@
             }
         }
         dataFed = -1;
-        // 器を作らせる。open のあと listenData が呼ばれて、いまの位置まで積み直す
+        // エンジンを作らせる。open のあと listenData が呼ばれて、いまの位置まで積み直す
         dataChannel = `${rec.id}`;
     }
 
     /**
-     * `DataBroadcast` が器の口を預けてくる (作り直すたびに新しいものを)。
+     * `DataBroadcast` がエンジンへの入口を預けてくる (作り直すたびに新しいものを)。
      * **預かった直後に、いまの再生位置まで積んで追いつく** (`replayAt`)
      */
     function listenData(emit: ((message: ResponseMessage) => void) | null): void {
@@ -704,7 +704,7 @@
         dataFed = to;
     }
 
-    /** 再生が進んだぶんのデータ放送を流す。**戻っていたら器を作り直す** */
+    /** 再生が進んだぶんのデータ放送を流す。**戻っていたらエンジンを作り直す** */
     function feedData(): void {
         if (!showData || dataEmit === null) return;
         const to = nowMs();
@@ -723,12 +723,12 @@
     let length = $state(0);
     let muted = $state(false);
     /**
-     * 選べる音声トラック。**ブラウザが器から出せたときだけ。**
+     * 選べる音声トラック。**ブラウザがコンテナから出せたときだけ。**
      *
      * エンコードしたものには主音声・副音声が両方入っている (二カ国語の映画・二重音声の
      * アニメなど)。ブラウザが Matroska の音声を `video.audioTracks` に出せれば、
      * ここで選んだものだけを有効にして切り替える。ライブと違い**サーバはエンコード
-     * 直さない** — 器の中に入っているものを選ぶだけ。
+     * 直さない** — コンテナの中に入っているものを選ぶだけ。
      *
      * **出せない端末では空のまま = 切り替えは出さない。** `audioTracks` は
      * ブラウザ任せで、Matroska の副音声を出さないものもある。押しても効かない
@@ -743,7 +743,7 @@
     let captions = $state(true);
     /**
      * 字幕。**開いた時点で取りに行く** (既定で出すので)。エンコードした録画に入っている放送の字幕を
-     * 文字の配置で受け取る (`captions.json`。ライブと同じ描き方)。ずっと前にエンコードした録画の絵の字幕 (PGS) は読まない。
+     * 文字の配置で受け取る (`captions.json`。ライブと同じ描き方)。ずっと前にエンコードした録画の画像の字幕 (PGS) は読まない。
      *
      * 持っている番組かどうかは**取ってみるまで分からない** — 入れ物から抜くので、
      * 無ければ 404 が返る。ライブと同じで、持っているときだけボタンを出す
@@ -774,7 +774,7 @@
     /**
      * 読み込み待ちで止まっているか。**輪を出す。**
      *
-     * 出さないと、絵が止まったのが**詰まりなのか壊れたのか分かりません**。
+     * 出さないと、映像が止まったのが**詰まりなのか壊れたのか分かりません**。
      * 飛んだ直後や回線が細いときは数秒待つことがある
      */
     let buffering = $state(false);
@@ -789,7 +789,7 @@
     /**
      * 繋ぎが切れて拾い直している最中か。**サーバの入れ替え (デプロイ) 用。**
      *
-     * 器ごと作り直すので、観ている最中に配信が切れる。何もしないと**そこで
+     * コンテナごと作り直すので、観ている最中に配信が切れる。何もしないと**そこで
      * 止まったまま**で、自分で開き直して位置を探し直すことになっていた
      */
     let resuming = $state(false);
@@ -815,8 +815,8 @@
     /**
      * 小窓 (PiP。[pip.svelte.ts](../../../lib/components/player/pip.svelte.ts))。
      *
-     * **互換モードの絵は canvas の器から流れを取って出す** (ライブ・追っかけと同じ口。`raw`/`capture`)。
-     * 小窓で押された止める・再開は `paused`/`toggle` で合わせる — `<video>` で観ているときもこの口で
+     * **互換モードの映像は canvas のプレイヤーからストリームを取って出す** (ライブ・追っかけと同じ方法。`raw`/`capture`)。
+     * 小窓で押された止める・再開は `paused`/`toggle` で合わせる — `<video>` で観ているときもこの経路で
      * 同じに効く (`paused` は位置を持っている側に聞く。`playing` を読むのは、操作バーで止めた・再開したときに
      * 小窓の側も合わせ直させるため)
      */
@@ -880,7 +880,7 @@
      * **跨いでいる間、最後の本編のコマで蓋をする面。**
      *
      * 先読み (`CM_LEAD`) だけでは 0コマにできません。`requestVideoFrameCallback`
-     * は**映したあと**に来るうえ、ブラウザは先のコマを何枚か合成器へ渡し終えて
+     * は**映したあと**に来るうえ、ブラウザは先のコマを何枚かコンポジタへ渡し終えて
      * いるので、そこで位置を変えても**渡し済みのぶんは出てしまいます**。
      * 実機で見えていた「一瞬の CM」はこれです。
      *
@@ -914,14 +914,14 @@
     /**
      * 蓋を外すまでに待つコマ数。
      *
-     * **1コマでは早すぎます。** `requestVideoFrameCallback` は「合成器へ渡した」
+     * **1コマでは早すぎます。** `requestVideoFrameCallback` は「コンポジタへ渡した」
      * ところで呼ばれるもので、渡したコマが画面に出るのはその先です
      * (`expectedDisplayTime` が未来を指しているのはそのため)。さらに Windows の
      * Chrome / Edge は**映像を DOM とは別の面 (DirectComposition の overlay) に
      * 出す**ので、蓋を外す DOM の更新のほうが**映像の面より先に画面へ出ます**。
      *
      * 実機 (Windows Chrome・1.25倍) では、位置も章も本編に入っているのに
-     * **画面だけ CM のまま**という絵が撮れていました。数コマ余分に待てば消えます。
+     * **画面だけ CM のまま**という画面が撮れていました。数コマ余分に待てば消えます。
      * そのぶん本編の頭が止め絵になりますが、4コマ (30コマ/秒で 0.13秒) なので
      * 飛んだ間合いに紛れます。
      *
@@ -1103,7 +1103,7 @@
         return (video as unknown as { audioTracks?: AudioTrackListLike } | null)?.audioTracks ?? null;
     }
 
-    /** トラックの見出し。器に入っている名前 (主音声/副音声) → 言語 → 連番の順で拾う */
+    /** トラックの見出し。コンテナに入っている名前 (主音声/副音声) → 言語 → 連番の順で拾う */
     function audioLabel(track: AudioTrackLike, i: number): string {
         const name = track.label.trim();
         if (name !== '') return name;
@@ -1112,13 +1112,13 @@
         return `音声 ${i + 1}`;
     }
 
-    /** いま器が持っている音声トラックを読み直す (`loadedmetadata` と `addtrack` から) */
+    /** いま `<video>` が持っている音声トラックを読み直す (`loadedmetadata` と `addtrack` から) */
     function syncAudio(): void {
         /*
          * **その場で流しているときは、`playback` の音声の名前から並べる。** 流しているのは
-         * 選んだ1本だけなので、器 (`audioTracks`) には1本しか出ない (`remux-player.ts`)
+         * 選んだ1本だけなので、`audioTracks` には1本しか出ない (`remux-player.ts`)
          */
-        // 端末に保存した録画を canvas に描いているなら、その軌道の名前 (名前 → 言語 → 連番。器から読むときと同じ)
+        // 端末に保存した録画を canvas に描いているなら、そのトラックの名前 (名前 → 言語 → 連番。`<video>` から読むときと同じ)
         if (localMkv !== null) {
             audios = localMkv.audios.map((track, i) => ({
                 label: audioLabel({ label: track.name, language: track.language, enabled: false }, i),
@@ -1146,7 +1146,7 @@
         audioIndex = enabled;
     }
 
-    /** 音声を選ぶ。**選んだものだけ有効にする** (ブラウザはそれで切り替える)。その場で流しているなら頼み直す */
+    /** 音声を選ぶ。**選んだものだけ有効にする** (ブラウザはそれで切り替える)。その場で流しているならリクエストし直す */
     function selectAudio(index: number): void {
         const player = remux ?? canvas;
         if (player !== null) {
@@ -1190,12 +1190,12 @@
     /**
      * 配信が切れたら拾い直す。**サーバの入れ替え (デプロイ) で切れるため。**
      *
-     * `<video>` はファイルを少しずつ取りに来ているので、途中で口が無くなると
+     * `<video>` はファイルを少しずつ取りに来ているので、途中で接続先が消えると
      * そこで止まる。**同じ所から読み直して、観ていた位置へ戻す** — 開き直しでは
      * ないので、覚えている続きの位置 (15秒おき) ではなく、切れた瞬間の位置。
      *
      * **理由を見て決める。** 読めない形式・壊れたファイルは何度やっても同じで、
-     * そちらは今までどおり落とす口を出す (`broken`)。拾い直すのは繋ぎが切れた
+     * そちらは今までどおりダウンロードの案内を出す (`broken`)。拾い直すのは繋ぎが切れた
      * ときだけ
      */
     function recover(): void {
@@ -1233,7 +1233,7 @@
     }
 
     /**
-     * CM飛ばしのオン/オフ。切り替えた時点で、いま CM の中に居れば飛ぶ —
+     * CM飛ばしのオン/オフ。切り替えた時点で、いま CM の中にいれば飛ぶ —
      * 「CMが始まったから押した」がいちばん多い押し方なので
      */
     function toggleSkipCm(): void {
@@ -1247,9 +1247,9 @@
      * CM を跨ぐ**手前**で飛ぶための先読み (秒)。
      *
      * 30コマ/秒で3コマぶん。**入ってから飛ぶと必ず CM のコマが見えます** —
-     * 画面は飛ぶまで今の絵を出し続けるので、気付くのが1コマ遅れれば1コマ映る。
+     * 画面は飛ぶまで今のコマを出し続けるので、気付くのが1コマ遅れれば1コマ映る。
      *
-     * **合成器に渡し済みのコマぶんを見込んで取る。** ブラウザは先のコマを
+     * **コンポジタに渡し済みのコマぶんを見込んで取る。** ブラウザは先のコマを
      * 何枚か渡し終えているので、蓋 (`cover`) を出しても効くのは次の合成から。
      * 1コマぶんの先読みでは間に合わない。本編の末尾 0.1 秒が止め絵になるが、
      * 境目は場面の切れ目なので分からない
@@ -1257,7 +1257,7 @@
     const CM_LEAD = 0.1;
 
     /**
-     * CM の中に居たら、その終わりまで飛ぶ。**判断は `ts/watch.ts` が持つ。**
+     * CM の中にいたら、その終わりまで飛ぶ。**判断は `ts/watch.ts` が持つ。**
      *
      * 続いている CM はまとめて跨ぐので、15秒ごとに何度も飛ぶことはない
      */
@@ -1267,7 +1267,7 @@
         const to = skipTarget(chapters, mediaTime(), CM_LEAD);
         if (to === null) return;
         /*
-         * **canvas は蓋をしない。** 器は飛び先より前の絵を描かずに捨て、描けるまで前の絵 (本編の
+         * **canvas は蓋をしない。** プレイヤーは飛び先より前のフレームを描かずに捨て、描けるまで前のフレーム (本編の
          * 最後のコマ) を出したままにする (`raw/worker.ts` の `floor`)。字幕だけ消しておく
          */
         if (canvas === null) shut();
@@ -1286,7 +1286,7 @@
     /**
      * いま映っているコマを写して蓋をする。**飛ぶ前に呼ぶ。**
      *
-     * **本編に居るときだけ写します。** CM の中で写すと、蓋そのものが CM の
+     * **本編にいるときだけ写します。** CM の中で写すと、蓋そのものが CM の
      * 1コマになる。チャプターがまだ来ていないときも同じ扱い (中身が分からない)。
      * 写せないときは黒で塗って、映像の枠ごと覆う。
      *
@@ -1357,7 +1357,7 @@
     /**
      * 字幕の出し入れ。**canvas に描いて重ねる** — ライブ (`/live`) と同じやり方 (`caption-draw.ts`)。
      *
-     * 文字を `<track>` に渡す道は**放送どおりには出ない** — 左右の位置も、背景の箱も、
+     * 文字を `<track>` に渡す方法は**放送どおりには出ない** — 左右の位置も、背景の箱も、
      * 外字も落ちる。放送が言う置き場所のまま描く
      */
     function toggleCaptions(): void {
@@ -1456,17 +1456,17 @@
     }
 
     /**
-     * 字幕と CM の蓋を**映像の絵が出ているところ**にぴったり重ねる (`fitRect`)
+     * 字幕と CM の蓋を**映像が出ているところ**にぴったり重ねる (`fitRect`)
      */
     function place(): void {
         if (video === null) return;
-        // canvas に描いているときは `<video>` は空なので、放送の 16:9 とみなす (器は絵の縦横比のまま描く)
+        // canvas に描いているときは `<video>` は空なので、放送の 16:9 とみなす (プレイヤーは映像の縦横比のまま描く)
         const [width, height] = drawing ? [16, 9] : [video.videoWidth, video.videoHeight];
         const rect = fitRect(video.clientWidth, video.clientHeight, width, height);
         /*
-         * 字幕も CM の蓋も、映像の絵と同じ場所・同じ大きさに置く。**画面の画素の境目に揃える** —
+         * 字幕も CM の蓋も、映像と同じ場所・同じ大きさに置く。**画面の画素の境目に揃える** —
          * 端数の位置に置くと、字幕の canvas が半画素ずれて描かれ、字の縁が滲む。
-         * 端は外へ丸める (CM の蓋が絵の縁を1画素も残さず覆うように)
+         * 端は外へ丸める (CM の蓋が映像の縁を1画素も残さず覆うように)
          */
         const dpr = window.devicePixelRatio || 1;
         const left = Math.floor((video.offsetLeft + rect.left) * dpr) / dpr;
@@ -1480,7 +1480,7 @@
             layer.style.width = `${right - left}px`;
             layer.style.height = `${bottom - top}px`;
         }
-        // 黒塗りの蓋は枠ごと覆う。**まだ絵の大きさが分からない**ことがあるため
+        // 黒塗りの蓋は枠ごと覆う。**まだ映像の大きさが分からない**ことがあるため
         // (開いた直後。`fitRect` は 0 を渡されると当てにならない)
         if (blanked && cover !== null) {
             cover.style.left = '0';
@@ -1501,7 +1501,7 @@
     });
     /*
      * **映像の箱が変わったら測り直す。** 窓の `resize` も全画面の出入りも無しに変わる
-     * ことがある — スマホの縦は操作バーを絵の下に出す (`PlayerStage` の `under`) ので、
+     * ことがある — スマホの縦は操作バーを映像の下に出す (`PlayerStage` の `under`) ので、
      * 枠の形が開いた直後に一度変わる
      */
     $effect(() => {
@@ -1514,7 +1514,7 @@
 
     /**
      * いまの位置に合う1枚を重ねる。**変わったときだけ描く。**
-     * canvas の箱は `place` が映像の絵に合わせ、中の座標は `CaptionPainter` が放送の面から写す
+     * canvas の箱は `place` が映像に合わせ、中の座標は `CaptionPainter` が放送の面から写す
      */
     function paint(): void {
         // 蓋の下。いま描くと CM の字幕を仕込むことになる
@@ -1542,7 +1542,7 @@
         controls.stir();
     }
 
-    /** 絵を押されたときの読み方は追っかけと同じ (`stage-tap.ts`) */
+    /** 映像を押されたときの読み方は追っかけと同じ (`stage-tap.ts`) */
     const press = stageTap({ toggle: togglePlay, controls: () => controls.toggle(), seekBy });
 
     /**
@@ -1565,7 +1565,7 @@
     }
 
     const current = $derived(chapterAt(chapters, at));
-    /** CM の入っている録画でだけ、飛ばす口を出す (押しても何も起きない操作を並べない) */
+    /** CM の入っている録画でだけ、飛ばすボタンを出す (押しても何も起きない操作を並べない) */
     const hasCm = $derived(chapters.some((chapter) => isCm(chapter.title)));
     /** シークバーで琥珀に塗る CM の区間と、それ以外の切れ目 */
     const cmOnBar = $derived(cmSpans(chapters));
@@ -1614,7 +1614,7 @@
     function snapshot(): void {
         // 字幕を出しているときだけ重ねる
         const drawn = captions && shownPage !== null;
-        // canvas に描いているときは器に1枚貰う (`<video>` は空。ライブ・追っかけと同じ)
+        // canvas に描いているときはプレイヤーから1枚もらう (`<video>` は空。ライブ・追っかけと同じ)
         void shooter.take(
             () => (canvas !== null ? grabbedFrame(canvas.grab()) : videoFrame(video)),
             drawn ? overlay : null,
@@ -1626,7 +1626,7 @@
 <svelte:head><title>{rec.name} - denpa</title></svelte:head>
 <svelte:window onclick={deleting.stand} onkeydown={keys} />
 
-<!-- **ライブ (`/live`) と同じ形・同じ作り** (PlayerLayout)。映像が左、読むものが右 -->
+<!-- **ライブ (`/live`) と同じレイアウト・同じ作り** (PlayerLayout)。映像が左、読むものが右 -->
 <PlayerLayout testid="watch">
         {#if !ready}
             <!-- 録っている最中は load が追っかけへ送るので、ここに来るのはエンコード済みも元の TS も無い録画 -->
@@ -1645,12 +1645,12 @@
             <PlayerStage {controls} {fullscreen} testid="watch-stage" bind:element={stage}>
                 {#snippet children(layout)}
                 <!--
-                    **押すのは絵そのもの。** ボタンを避けて敷くのではなく、
-                    ボタンを上に重ねる (z-index 10)。押す口は自分で繋ぐ (`press` の effect)
+                    **押すのは映像そのもの。** ボタンを避けて敷くのではなく、
+                    ボタンを上に重ねる (z-index 10)。押したときの処理は自分で繋ぐ (`press` の effect)
                 -->
                 <!-- svelte-ignore a11y_media_has_caption -->
                 <!--
-                    **字幕は `<track>` ではない。** 文字を渡す道は放送どおりには出ない
+                    **字幕は `<track>` ではない。** 文字を渡す方法は放送どおりには出ない
                     (左右の位置・背景の箱・外字が落ちる)。放送の置き場所のまま canvas に描いて
                     重ねる — ライブと同じやり方 (下の canvas)
                 -->
@@ -1712,9 +1712,9 @@
                     **放送の字幕は映像と同じ箱の中に置く** (ライブの `MediaStack` と同じ)。
                     データ放送を出すと、この箱ごと BML の小窓へ寄せる。外に置いて
                     いた頃は**映像だけが小窓へ行き、字幕は枠いっぱいのまま**データ放送の面
-                    (`z-index: 5`) の下に隠れていた。中に居れば、テレビと同じで映像と一緒に縮む。
-                    位置と大きさは `place` が映像の絵に合わせて style で書く。
-                    **押す邪魔をしない** (`pointer-events: none`) — 下の絵を押して止められなくなる
+                    (`z-index: 5`) の下に隠れていた。中にあれば、テレビと同じで映像と一緒に縮む。
+                    位置と大きさは `place` が映像に合わせて style で書く。
+                    **押す邪魔をしない** (`pointer-events: none`) — 下の映像を押して止められなくなる
                 -->
                 <canvas
                     bind:this={overlay}
@@ -1758,7 +1758,7 @@
 
                 {#if buffering && !resuming}
                     <!--
-                        **読み込み待ち。** 絵が止まったのが詰まりなのか壊れたのか
+                        **読み込み待ち。** 映像が止まったのが詰まりなのか壊れたのか
                         分からないと、待てばいいのかどうかが決められない。
                         繋ぎ直しの最中はあちらが出るので、重ねない
                     -->
@@ -1912,7 +1912,7 @@
 
                             **10秒送り・戻しは置いていない。** PCは矢印キー、
                             指は左右の端を素早く2回 (`ts/watch.ts` の `tap`) で
-                            できる — 絵の上に常に2つ置いておくほどの用ではない。
+                            できる — 映像の上に常に2つ置いておくほどの用ではない。
                             **閉じる・d・切り抜き・削除は右の列** (上の `watch-side`)
                         -->
                         <ControlButton
@@ -1949,7 +1949,7 @@
                         <MoreButton stage={layout} testid="watch-more" />
                         <Extras>
                         <!--
-                            **コーデックの切り替え** (追っかけ・ライブと同じ部品)。この端末で観られる道が
+                            **コーデックの切り替え** (追っかけ・ライブと同じ部品)。この端末で観られる方式が
                             2つ以上あるときだけ。「自動」は端末に合わせる (`ts/playback.ts` の `pickOffer`)。
                             エンコード済みと違うものを選ぶと、サーバがその場で変換して流す
                         -->
@@ -1962,7 +1962,7 @@
                             />
                         {/if}
                         <!--
-                            **音声トラックの切り替え。** ブラウザが器から2本以上
+                            **音声トラックの切り替え。** ブラウザがコンテナから2本以上
                             出せたときだけ (二カ国語・二重音声)。`/live` の音声選びと
                             同じ見た目。1本しか無ければ出さない
                         -->
@@ -2000,7 +2000,7 @@
 
                         <!--
                             **CM を自動で飛ばす。** チャプターに CM が入っている
-                            録画でだけ出す。押した時点で CM の中に居れば、そこで飛ぶ
+                            録画でだけ出す。押した時点で CM の中にいれば、そこで飛ぶ
                         -->
                         {#if hasCm}
                             <ControlButton
@@ -2063,7 +2063,7 @@
                 </ControlBar>
                 {/snippet}
 
-                <!-- 絵の上の知らせは舞台の列に積む (`PlayerStage` の `notes`)。いくつ出ても重ならない -->
+                <!-- 映像の上の知らせは舞台の列に積む (`PlayerStage` の `notes`)。いくつ出ても重ならない -->
                 {#snippet notes()}
                     {#if continued}
                         <!--
@@ -2115,7 +2115,7 @@
             {recordedDuration(rec)} ・ {size(rec.ts_size)}
         </div>
         <!--
-            **押すものは置かない。** 「一覧へ」は絵の右上の「×」と同じ行き先、
+            **押すものは置かない。** 「一覧へ」は映像の右上の「×」と同じ行き先、
             ダウンロードは録画の詳細の「その他…」にある。観ている横に要らない
         -->
     </FactsAside>

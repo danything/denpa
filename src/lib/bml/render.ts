@@ -5,7 +5,7 @@
  *   使わない** — 字は textContent、見た目は確かめた値 (px の数・CLUT の色・列挙) から組んだ
  *   style だけ。放送の on* や任意の属性がページに出ることは無い
  * - 映像は動かさない。映像の object の場所を `onVideoRect` で知らせ、そこより前に描くものの
- *   背景には穴を開ける (映像は下に居て、穴から見える。web-bml の clipVideoPlane と同じ考え)
+ *   背景には穴を開ける (映像は下にあって、穴から見える。web-bml の clipVideoPlane と同じ考え)
  * - 文書の世代 (`generation`) が変わったときだけ描き直す。変わった style だけ書き換える
  */
 
@@ -40,16 +40,16 @@ export interface RenderHost {
     resolution(): { width: number; height: number };
     /** 文書の中の URL を、描ける URL (blob:) にする。まだ無ければ null (届いたら描き直す) */
     image(url: string, kind: 'background' | 'object', type: string): ImageSource | null;
-    /** DRCS の絵 (mask に使う URL)。無ければ null */
+    /** DRCS の画像 (mask に使う URL)。無ければ null */
     drcs(unit: number, fontSize: number, family: string): string | null;
     /**
-     * 動く絵 (MNG) を決めた回数だけ動かし終えた。streamstatus を pause にし、出しているコマを
+     * アニメーション (MNG) を決めた回数だけ動かし終えた。streamstatus を pause にし、出しているコマを
      * streamposition にするのはエンジン (付属2 4.8.5.3「回し終えたら pause」)
      */
     finished(element: BmlElement, position: number): void;
 }
 
-/** 動く絵のコマ (描ける URL と置き方) */
+/** アニメーションのコマ (描ける URL と置き方) */
 export interface AnimationFrame {
     url: string;
     x: number;
@@ -64,7 +64,7 @@ export interface ImageSource {
     url: string;
     width: number | null;
     height: number | null;
-    /** 動く絵 (MNG)。`url` は 1 コマ目 */
+    /** アニメーション (MNG)。`url` は 1 コマ目 */
     animation?: { frames: AnimationFrame[]; iterations: number };
 }
 

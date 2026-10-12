@@ -6,7 +6,7 @@ import { revokeToken } from '#lib/server/device-auth.js';
  * いま `Authorization: Bearer` で出している鍵だけ (ほかの端末のものは設定画面から)
  */
 export function POST({ locals }) {
-    // 鍵が無い (信頼するネットワークから素で来た) ときも、ほかの口と同じ 401 (docs/api.md)
+    // 鍵が無い (信頼するネットワークから素で来た) ときも、ほかのエンドポイントと同じ 401 (docs/api.md)
     if (locals.token === undefined) {
         return json(
             { error: 'unauthorized' },

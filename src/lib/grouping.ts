@@ -14,7 +14,7 @@
  * だけなので、ふつうの行としてその日付の位置に混ぜる。
  */
 
-/** まとめられる行。録画の行も録り逃しの行も、この形にして渡す */
+/** まとめられる行。録画の行も録り逃しの行も、この形式にして渡す */
 export interface Groupable {
     /** 行の鍵 (`rec-12` / `missed-3`) */
     key: string;
@@ -102,14 +102,14 @@ export function groupLines<T extends Groupable>(
     return lines;
 }
 
-/** まとめないときの行。描き方を1つにするため、同じ形にそろえる */
+/** まとめないときの行。描き方を1つにするため、同じ形式にそろえる */
 export function flatLines<T extends Groupable>(items: T[]): GroupLine<T>[] {
     return items.map((item) => ({ kind: 'row', key: item.key, item, nested: false }));
 }
 
 /**
  * 端末ごとに覚える cookie。**読むのはサーバ** (`+page.server.ts`) — 描く前に
- * どちらの形か分かっていれば、覚えを読むまで枠を隠さずに済む
+ * どちらの表示か分かっていれば、覚えを読むまで枠を隠さずに済む
  */
 export const GROUPED_COOKIE = 'denpa_recordings_grouped';
 

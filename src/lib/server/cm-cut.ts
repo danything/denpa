@@ -160,7 +160,7 @@ export function planCut(keep: Range[], keys: Keyframe[], limits: CutLimits): Cut
     return pieces.length > 0 ? { pieces, errors } : null;
 }
 
-/** パスを concat の一覧に書くときの形。' はエスケープが要る */
+/** パスを concat の一覧に書くときの形式。' はエスケープが要る */
 const quote = (path: string) => `'${path.replace(/'/g, "'\\''")}'`;
 
 /**

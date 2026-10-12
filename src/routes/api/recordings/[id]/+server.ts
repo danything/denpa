@@ -5,7 +5,7 @@ import { encodedPath } from '#lib/server/playback.js';
 import { recordingOr404 } from '#lib/server/recording.js';
 
 /**
- * 録画の状態を返す。**追っかけ再生の画面が「エンコードが終わったか」を聞く口** —
+ * 録画の状態を返す。**追っかけ再生の画面が「エンコードが終わったか」を聞く API** —
  * 開いたまま録り終えても追っかけで観続けられるが、エンコードが終われば普通の観る画面
  * (シークも字幕も揃う) に移りたい。
  * 画面は `recordings` の知らせ (SSE) を受けるたびにここを読む。
@@ -26,7 +26,7 @@ export function GET({ params }) {
 }
 
 /**
- * 録画を消す。**オフライン視聴の後片付けの口** ([docs/offline.md](../../../../../docs/offline.md))。
+ * 録画を消す。**オフライン視聴の後片付けの API** ([docs/offline.md](../../../../../docs/offline.md))。
  *
  * 画面の削除はフォーム (2回クリックの確認つき) で、これは端末側が
  * 「オフラインで消しておいたものを、オンラインに戻ったときにサーバからも消す」

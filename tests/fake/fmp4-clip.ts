@@ -114,7 +114,7 @@ export function readClip(file: Uint8Array): Fmp4Clip {
 
 /**
  * 媒体1つを、時刻を `shift` 秒ずらして写す。**ずらす量はトラックで揃える** (それぞれの刻みで数える)。
- * 揃えないと音と絵が1周ごとにずれていく
+ * 揃えないと音と映像が1周ごとにずれていく
  */
 export function shiftFragment(clip: Fmp4Clip, fragment: Fmp4Fragment, shift: number): Uint8Array {
     const data = fragment.data.slice();
@@ -128,7 +128,7 @@ export function shiftFragment(clip: Fmp4Clip, fragment: Fmp4Fragment, shift: num
 }
 
 /**
- * **`from` 秒から `length` 秒ぶん** を繰り返して並べた fMP4 (頭つき)。録画をその場で流す口
+ * **`from` 秒から `length` 秒ぶん** を繰り返して並べた fMP4 (頭つき)。録画をその場で流す API
  * (`/api/recordings/<id>/stream`) の代わり — 時刻はページの物差しのまま (`from` から始まる)
  */
 export function clipFrom(clip: Fmp4Clip, from: number, length: number): Uint8Array {

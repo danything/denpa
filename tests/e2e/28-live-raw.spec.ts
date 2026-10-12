@@ -3,15 +3,15 @@ import type { Page } from '@playwright/test';
 import { expect, goto, syncEpg, test, wakeControls } from './helpers';
 
 /**
- * ライブを生で見る ([docs/stream.md](../../docs/stream.md) §5.5)。
+ * ライブを MPEG-2 のまま見る ([docs/stream.md](../../docs/stream.md) §5.5)。
  *
- * エンコードする道の E2E (20-live) と違って、**ここは絵が出るところまで見る。** 偽エージェントは
+ * エンコードする経路の E2E (20-live) と違って、**ここは映像が出るところまで見る。** 偽エージェントは
  * 本当にデコードできる MPEG-2 と AAC を流していて (`src/lib/ts/synth-av.ts`)、ブラウザの中の
- * WASM の復号器 (`wasm/mpeg2`、Dockerfile の `mpeg2wasm` 段で組む) がそれをデコードする。
- * 復号器の置き場は `MPEG2_DIR` (CI は組んだものをランナーへ出して渡す)。
+ * WASM のデコーダ (`wasm/mpeg2`、Dockerfile の `mpeg2wasm` 段で組む) がそれをデコードする。
+ * デコーダの置き場は `MPEG2_DIR` (CI は組んだものをランナーへ出して渡す)。
  *
- * 絵は worker の canvas に居て画面から画素を読めないので、**描いたコマ数とデコードできた音の
- * コマ数** (canvas の `data-shown` / `data-audio`) が進むこと、canvas を撮った絵が
+ * 映像は worker の canvas にあって画面から画素を読めないので、**描いたコマ数とデコードできた音の
+ * コマ数** (canvas の `data-shown` / `data-audio`) が進むこと、canvas を撮った画像が
  * 時間とともに変わることを見る。GPU の無いヘッドレス (SwiftShader) でも同じに動く。
  */
 
@@ -31,7 +31,7 @@ function ffmpegRuns(file: string): string[][] {
         .map((run) => run.split('\n'));
 }
 
-test.describe('ライブを生で見る', () => {
+test.describe('ライブを MPEG-2 のまま見る', () => {
     test.beforeEach(async ({ request }) => {
         await syncEpg(request);
     });
@@ -54,12 +54,12 @@ test.describe('ライブを生で見る', () => {
         const first = await shown();
         await expect.poll(shown, { timeout: 15_000 }).toBeGreaterThan(first + 10);
 
-        // **音もデコードできている** (WASM の AAC 復号器が ADTS をデコードした)
+        // **音もデコードできている** (WASM の AAC デコーダが ADTS をデコードした)
         await expect
             .poll(async () => Number((await canvas.getAttribute('data-audio')) ?? 0), { timeout: 15_000 })
             .toBeGreaterThan(0);
 
-        // **絵が動いている。** 縞が流れるので、時間をおいて撮った2枚は違う
+        // **映像が動いている。** 縞が流れるので、時間をおいて撮った2枚は違う
         const one = await canvas.screenshot();
         await expect(async () => {
             const two = await canvas.screenshot();
@@ -83,7 +83,7 @@ test.describe('ライブを生で見る', () => {
          * **エンコードする ffmpeg は起こさない。** 起きるのは字幕だけを描く1本で、放送の時刻のまま
          * 出させる (`-copyts`。`server/captions.ts` の `rawCaptionArgs`)。
          *
-         * MPEG-2 を選ぶまではエンコードしている。見るのは**生で頼んだあと**にエンコードし始めていないこと
+         * MPEG-2 を選ぶまではエンコードしている。見るのは**MPEG-2 のままでリクエストしたあと**にエンコードし始めていないこと
          */
         const runs = ffmpegRuns(stack.liveArgsFile).slice(before);
         const captions = runs.findIndex((run) => run.includes('-copyts'));
@@ -94,7 +94,7 @@ test.describe('ライブを生で見る', () => {
         expect(baked).toBe(false);
     });
 
-    test('局を変えても生のまま、新しい局の絵が出る', async ({ page }) => {
+    test('局を変えても MPEG-2 のまま、新しい局の映像が出る', async ({ page }) => {
         await goto(page, '/live');
         const channels = page.getByTestId('live-channel');
         await channels.first().click();
@@ -106,20 +106,20 @@ test.describe('ライブを生で見る', () => {
 
         await channels.nth(1).click();
         await expect(channels.nth(1)).toHaveAttribute('data-current', 'true');
-        // 切り替えの間も前の局の絵のまま (テレビと同じ)。幕で塗り潰さない
+        // 切り替えの間も前の局の映像のまま (テレビと同じ)。幕で塗り潰さない
         await expect(page.locator('[data-testid="live-status"][data-veiled="true"]')).toHaveCount(0);
-        // 器は作り直さない (同じ canvas のまま、数え続ける)
+        // プレイヤーは作り直さない (同じ canvas のまま、数え続ける)
         const after = await shown();
         await expect.poll(shown, { timeout: 30_000 }).toBeGreaterThan(after + 10);
         await expect(page.getByTestId('live-codec')).toContainText('MPEG-2');
     });
 
     /*
-     * **生で見ている間も切り抜ける。** 絵は worker の canvas に居て `<video>` は空なので、
+     * **MPEG-2 のまま見ている間も切り抜ける。** 映像は worker の canvas にあって `<video>` は空なので、
      * worker に1枚貰う (`raw/engine.ts` の `grab`)。描いたものは残さない作り
      * (`preserveDrawingBuffer` 無し) なので、**描き直さずに読むと真っ黒**になる — 黒くないことまで見る
      */
-    test('生で見ている間も切り抜きは絵ごと PNG に落ちる', async ({ page }) => {
+    test('MPEG-2 のまま見ている間も切り抜きは映像ごと PNG に落ちる', async ({ page }) => {
         await goto(page, '/live');
         await page.getByTestId('live-channel').first().click();
         await expect(page.getByTestId('live-title')).toBeVisible();
@@ -156,15 +156,15 @@ test.describe('ライブを生で見る', () => {
     });
 
     /*
-     * **生でも小窓 (PiP) に絵が出る。** 絵は worker の canvas に居て `<video>` は空なので、
+     * **MPEG-2 のままでも小窓 (PiP) に映像が出る。** 映像は worker の canvas にあって `<video>` は空なので、
      * canvas から流れを取って見えない `<video>` (`pip-raw`) に映し、それを小窓にする。
      *
-     * その `<video>` は生に入った時点で1枚目まで受け取っておく。押されてから待つと、
+     * その `<video>` は MPEG-2 のままに切り替えた時点で1枚目まで受け取っておく。押されてから待つと、
      * iPhone の Safari は「押された直後」と見なさなくなって断った (`NotAllowedError`)。
      * 押す前に1枚目が届いていること、押したら小窓に入ってコマが流れること、
      * 小窓で止めると操作バーも止まることを見る
      */
-    test('生でも小窓に絵が出て、小窓で止めると操作バーも止まる', async ({ page }) => {
+    test('MPEG-2 のままでも小窓に映像が出て、小窓で止めると操作バーも止まる', async ({ page }) => {
         await goto(page, '/live');
         await page.getByTestId('live-channel').first().click();
         await expect(page.getByTestId('live-title')).toBeVisible();
@@ -182,7 +182,7 @@ test.describe('ライブを生で見る', () => {
 
         /*
          * **Chrome は worker が描いたコマを直に書き込む** (`MediaStreamTrackGenerator`)。canvas の
-         * 画面への更新から取っていた頃は、Chrome の窓が小窓の後ろに隠れると絵が止まった (Ubuntu)
+         * 画面への更新から取っていた頃は、Chrome の窓が小窓の後ろに隠れると映像が止まった (Ubuntu)
          */
         expect(
             await proxy.evaluate((v) => {
@@ -217,7 +217,7 @@ test.describe('ライブを生で見る', () => {
         /*
          * **字幕も小窓に出る** (`compose.ts`)。偽の放送に字幕は乗っていないので、画面の字幕の
          * canvas に赤い帯を描いて「描いている」印を立てる (`paint.ts` の `drawOverlay` と同じ)。
-         * 小窓のコマの同じ所が赤くなり、印を下ろせば (字幕を消した) 元の絵に戻る
+         * 小窓のコマの同じ所が赤くなり、印を下ろせば (字幕を消した) 元の映像に戻る
          */
         const captionShown = (on: boolean) =>
             page.getByTestId('live-captions').evaluate((c, on) => {
@@ -268,11 +268,13 @@ test.describe('ライブを生で見る', () => {
     });
 
     /*
-     * **生の絵の流れを取れない端末では、生の間だけ小窓のボタンを出さない。** Firefox は
-     * 書き込む口 (`MediaStreamTrackGenerator`) が無く、worker に渡した canvas からも流れを
+     * **MPEG-2 のままの映像をストリームにできない端末では、その間だけ小窓のボタンを出さない。** Firefox は
+     * 書き込む API (`MediaStreamTrackGenerator`) が無く、worker に渡した canvas からも流れを
      * 取れない。押せても必ず断られる
      */
-    test('生の絵の流れを取れない端末では、生の間は小窓のボタンを出さない', async ({ page }) => {
+    test('MPEG-2 のままの映像をストリームにできない端末では、その間は小窓のボタンを出さない', async ({
+        page,
+    }) => {
         await page.addInitScript(() => {
             Reflect.deleteProperty(globalThis, 'MediaStreamTrackGenerator');
             HTMLCanvasElement.prototype.captureStream = () => {
@@ -301,7 +303,7 @@ test.describe('ライブを生で見る', () => {
      * 車載ブラウザ)。AudioContext の出口を流れにして `<audio>` に渡し、メディアの再生にする。
      *
      * 裏に回すのは別のタブを前に出し、`visibilityState` も差し替えて知らせを送る (ヘッドレスは
-     * タブを移っても `visible` のまま)。裏でも音と絵のコマが進み続けること、`<audio>` が鳴って
+     * タブを移っても `visible` のまま)。裏でも音と映像のコマが進み続けること、`<audio>` が鳴って
      * いること、`<audio>` を外から止める・再開する (ロック画面・車の操作) と操作バーが合うこと、
      * 切れば直に鳴らすのに戻ること、CSP に止められないことを見る
      */

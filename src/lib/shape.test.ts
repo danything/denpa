@@ -25,7 +25,7 @@ const TUNER = object({
 });
 type Tuner = Infer<typeof TUNER>;
 
-describe('外から来た JSON の形', () => {
+describe('外から来た JSON の形式', () => {
     test('合っていればそのまま型が付く', () => {
         const tuner: Tuner = read(
             TUNER,
@@ -50,7 +50,7 @@ describe('外から来た JSON の形', () => {
         expect(() =>
             read(TUNER, { index: 0, name: 'PT3', types: ['SKY'], channel: null }, 'チューナー'),
         ).toThrow(
-            /チューナーの形が違います: types\[0\] は決まった値 \("GR" \/ "BS" \/ "CS"\)のはずが 文字列 "SKY"/,
+            /チューナーの形式が違います: types\[0\] は決まった値 \("GR" \/ "BS" \/ "CS"\)のはずが 文字列 "SKY"/,
         );
         expect(() => read(TUNER, { index: '0', name: 'PT3', types: [], channel: null }, 'x')).toThrow(
             /index は数のはずが 文字列 "0"/,
@@ -85,17 +85,17 @@ describe('外から来た JSON の形', () => {
         const aud = either(string, array(string));
         expect(read(aud, 'a', 'x')).toBe('a');
         expect(read(aud, ['a', 'b'], 'x')).toEqual(['a', 'b']);
-        // どちらでもなければ、最初の形の言い分で断る
+        // どちらでもなければ、最初の形式の言い分で断る
         expect(() => read(aud, 1, 'x')).toThrow(/文字列のはずが number 1/);
     });
 
-    test('record は鍵を決めず、値の形だけ見る', () => {
+    test('record は鍵を決めず、値の形式だけ見る', () => {
         expect(read(record(boolean), { a: true, b: false }, 'x')).toEqual({ a: true, b: false });
         expect(() => read(record(boolean), { a: 1 }, 'x')).toThrow(/a は真偽のはずが number 1/);
         expect(() => read(record(boolean), [], 'x')).toThrow(/オブジェクトのはずが 配列/);
     });
 
-    test('tolerate は形が違っても止めず、1回だけ警告して通す', () => {
+    test('tolerate は形式が違っても止めず、1回だけ警告して通す', () => {
         const warnings: string[] = [];
         const warn = (message: string) => warnings.push(message);
         const odd: unknown = { index: 0, name: 'PT3', types: ['SAT'], channel: null };
@@ -106,10 +106,10 @@ describe('外から来た JSON の形', () => {
         expect(second).toBe(odd);
         expect(warnings).toHaveLength(1);
         expect(warnings[0]).toMatch(
-            /^\[shape\] エージェントの \/denpa\/tunersの形が違います \(相手の版がずれている\?\)。そのまま使います: /,
+            /^\[shape\] エージェントの \/denpa\/tunersの形式が違います \(相手の版がずれている\?\)。そのまま使います: /,
         );
         expect(warnings[0]).toContain('types[0] は決まった値');
-        // 同じ口なら、違いの中身 (値) が変わっても繰り返さない
+        // 同じ相手なら、違いの中身 (値) が変わっても繰り返さない
         tolerate(TUNER, { index: 0, name: 'PT3', types: ['CATV'] }, 'エージェントの /denpa/tuners', warn);
         expect(warnings).toHaveLength(1);
         // 合っていれば黙って読む

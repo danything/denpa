@@ -42,7 +42,7 @@ const flag = (name: string) => integer(name, { mode: 'boolean' });
  * JSON を文字列で持つ列。読むときにデコードし、書くときに畳む。**読み手は列ごとに書く。**
  *
  * drizzle の `{ mode: 'json' }` は使わない。あれは読めない行で例外を投げるが、
- * ここに入っているのは放送から拾ったものや、取り込みの時期によって形が違うもの
+ * ここに入っているのは放送から拾ったものや、取り込みの時期によって形式が違うもの
  * (古い行は `''`、EPGStation から来たジャンルは数の並び) で、1行が読めないせいで
  * 一覧ごと出なくなるのは困る。読めない行はその列を「持っていない」ことにして、
  * 残りは見えるようにする。NULL の行は drizzle が読み手を呼ばない (NULL のまま)
@@ -92,7 +92,7 @@ const objects =
     <T extends object>() =>
     (value: unknown): T[] =>
         Array.isArray(value) ? (value as T[]) : [];
-/** {見出し: 本文}。それ以外の形なら無し */
+/** {見出し: 本文}。それ以外の形式なら無し */
 const record = (value: unknown): Record<string, string> | null =>
     typeof value === 'object' && value !== null && !Array.isArray(value)
         ? (value as Record<string, string>)
@@ -518,7 +518,7 @@ export const apiTokens = sqliteTable('api_tokens', {
 });
 
 /**
- * **ペアリングの途中** (device-auth.ts。OAuth のデバイス認可 (RFC 8628) と同じ形)。
+ * **ペアリングの途中** (device-auth.ts。OAuth のデバイス認可 (RFC 8628) と同じ方式)。
  *
  * 端末が持つ `device_code` は推測できない秘密で、持つのは SHA-256 だけ。QR に載る
  * `user_code` (ABCD-EFGH) は短いので、10分で切れる。開いた人が入れる人なら許したことにし、

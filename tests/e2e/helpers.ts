@@ -14,7 +14,7 @@ export async function goto(page: Page, url: string): Promise<void> {
     await page.goto(url);
     await page.locator('[data-hydrated="true"]').waitFor();
     /*
-     * **番組表は器だけ先に出る。** 表は後から流れてくるので
+     * **番組表は外枠だけ先に出る。** 表は後から流れてくるので
      * (`guide/+page.server.ts` の `gridOf`)、ハイドレーションだけ待って触りに
      * いくと、まだ骨組みしか無いことがある。局が1つも無ければ表の代わりに
      * 「局がありません」が出るので、どちらかが出るまで待つ
@@ -87,7 +87,7 @@ async function cellsOn(page: Page): Promise<Cell[]> {
  *
  * ハイドレーションは済んでいるので、それを待っても即座に抜ける。表は後から流れてきて
  * 少しずつ描くので (`goto` と同じ)、押した直後に数えると**前の日のマス**を拾い、
- * 入れ替わった後には居ないマスを押していた (放送日の終わり際の 3 時台に CI で落ちた)
+ * 入れ替わった後には無いマスを押していた (放送日の終わり際の 3 時台に CI で落ちた)
  */
 async function turnDay(page: Page, which: 'next-day' | 'prev-day'): Promise<void> {
     const before = page.url();
@@ -266,8 +266,8 @@ export async function setRecording(
      *
      * CI で 1回、**中身の空の 400** が返って落ちました (`saveRecording` は
      * 不正な値でしか 400 を出さず、そのときは理由の入ったページを返すので、
-     * 出どころはこちらのフォームではない)。手元では同じ形で走らせても出ず、
-     * 4本並べて走らせている CI でだけ出ています。
+     * 出どころはこちらのフォームではない)。手元では同じ条件で走らせても出ず、
+     * 4つ並べて走らせている CI でだけ出ています。
      *
      * ここは**確かめたいことではなく前準備**なので、1回投げ直す。それでも
      * 駄目なら落とす — 本当に壊れているならどのみち後の assert が落ちる
@@ -557,14 +557,14 @@ export async function holdMedia(page: Page, video: string, captions: string, sta
 }
 
 /**
- * **データ放送を出しても字幕が見えているかを、絵で確かめる。**
+ * **データ放送を出しても字幕が見えているかを、画像で確かめる。**
  *
  * データ放送を出すと、映像の箱ごと BML の小窓へ寄せる (`DataBroadcast` の `placeVideo`)。字幕の
- * canvas がその外に居ると、映像だけ小窓へ行き、字幕は枠いっぱいのままデータ放送の面
+ * canvas がその外にあると、映像だけ小窓へ行き、字幕は枠いっぱいのままデータ放送の面
  * (`z-index: 5`) の下に隠れる (実機で「データ放送を出すと字幕が消える」)。見るのは:
  * - 映像が小窓 (`DATA_WINDOW`) に縮んでいる (流した BML が効いている)
  * - 映像の箱は影の中へ移さない (その場で寄せる)
- * - 字幕の canvas が映像と同じ箱に居て、小窓の中に収まる。持ち上げ (`translate`) も残っていない
+ * - 字幕の canvas が映像と同じ箱に入っていて、小窓の中に収まる。持ち上げ (`translate`) も残っていない
  * - 字幕を目立つ色で塗って画面を撮ると、**小窓の真ん中はその色** (上に何も被っていない)、
  *   小窓の外 (左上) はその色でない (字幕が枠いっぱいに残っていない)
  */
@@ -586,7 +586,7 @@ export async function captionsSeenInDataWindow(page: Page): Promise<void> {
                 translate: getComputedStyle(captions).translate,
             };
         });
-    // 映像が小窓に縮むまで (BML を組むのは器ができてから)
+    // 映像が小窓に縮むまで (BML を組むのはエンジンができてから)
     await expect
         .poll(
             async () => {
@@ -609,7 +609,7 @@ export async function captionsSeenInDataWindow(page: Page): Promise<void> {
         .toBe('none');
     const { video, captions, stage, sameBox, inShadow, translate } = await boxes();
     expect.soft(inShadow, '映像の箱が影の中へ移されている').toBe(false);
-    expect.soft(sameBox, '字幕が映像と同じ箱に居ない (小窓へ一緒に行かない)').toBe(true);
+    expect.soft(sameBox, '字幕が映像と同じ箱に入っていない (小窓へ一緒に行かない)').toBe(true);
     expect.soft(translate, '小窓の中で字幕が持ち上げられたまま').toBe('none');
     // 字幕の面は小窓 (映像の箱) の中に収まる
     expect.soft(captions.x).toBeGreaterThanOrEqual(video.x - 1);
@@ -618,7 +618,7 @@ export async function captionsSeenInDataWindow(page: Page): Promise<void> {
     expect.soft(captions.y + captions.height).toBeLessThanOrEqual(video.y + video.height + 1);
 
     /*
-     * **絵で見る。** 字幕を塗りつぶして撮り、塗った色の画素の割合を数える。字幕を描く係が
+     * **画像で見る。** 字幕を塗りつぶして撮り、塗った色の画素の割合を数える。字幕を描く係が
      * 描き直すと塗りが消えるので、塗るのと撮るのを1組にして待つ
      */
     const share = async (clip: Box): Promise<number> => {
@@ -685,7 +685,7 @@ export async function holdCaptions(page: Page, testid: string): Promise<void> {
  *
  * 描く画素 (`width`/`height` 属性) と、実際に見えている字幕の面 (`getBoundingClientRect`。
  * 祖先の `transform: scale` 込み。`object-fit: contain` なら収めた中身) × `devicePixelRatio` を
- * 比べる。食い違うと、描いた絵がブラウザに引き伸ばされて字がぼやける — データ放送の小窓の中で
+ * 比べる。食い違うと、描いた画像がブラウザに引き伸ばされて字がぼやける — データ放送の小窓の中で
  * 字幕がぼやけていた (面ごと `scale` で伸ばしていた頃と、`%` の大きさで端数が出るとき)。
  * `holdCaptions` で取ってから呼ぶ。描いていない (`data-drawn` が無い) うちは待つ
  */
@@ -733,7 +733,7 @@ export async function captureSockets(page: Page): Promise<void> {
 
 /**
  * **データ放送の知らせを流す** (`CHANNEL.data` = 0x30 + 多重化の頭 8 バイト + JSON。時刻は 0)。
- * `captureSockets` してから開いた画面で、器ができてから呼ぶ (`fakeDataBroadcast` など)
+ * `captureSockets` してから開いた画面で、エンジンができてから呼ぶ (`fakeDataBroadcast` など)
  */
 export async function feedData(page: Page, messages: Record<string, unknown>[]): Promise<void> {
     await page.evaluate((messages) => {
@@ -788,8 +788,8 @@ export const FAKE_CAPTION = {
 /**
  * **字幕を1枚流して描かせる** (ライブ・追っかけ。`prefix` は `live` か `chase`)。
  *
- * 字幕が1本あると知らせ (`CHANNEL.control` = 0x40 の `captions`)、`FAKE_CAPTION` を字幕の口
- * (`CHANNEL.captionText` = 0x22、時刻 0) で渡す。偽の放送は絵が出ず再生位置が進まないので、
+ * 字幕が1本あると知らせ (`CHANNEL.control` = 0x40 の `captions`)、`FAKE_CAPTION` を字幕のチャンネル
+ * (`CHANNEL.captionText` = 0x22、時刻 0) で渡す。偽の放送は映像が出ず再生位置が進まないので、
  * 描くきっかけ (`paint`) は字幕のボタンを2回押して作る (消して出す)。
  * `captureSockets` してから開いた画面で呼ぶ
  */

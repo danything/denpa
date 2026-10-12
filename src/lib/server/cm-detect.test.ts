@@ -36,12 +36,12 @@ describe('CM検出の流れ', () => {
         const found = await detect();
         expect(found.cm).toEqual([{ start: 300, end: 360 }]);
         expect(found.duration).toBe(600);
-        // 絵の大きさが測れない (ffprobe が無い) のでロゴは覚えられない
+        // 映像の大きさが測れない (ffprobe が無い) のでロゴは覚えられない
         expect(found.note).toContain('大きさを読み取れませんでした');
         expect(logoUnusable(found.note)).toBe(true);
     });
 
-    test('絵の読み込みが落ちて音だけ読み直したなら、尺だけで決めて理由を残す', async () => {
+    test('映像の読み込みが落ちて音だけ読み直したなら、尺だけで決めて理由を残す', async () => {
         const found = await detect({ video: false });
         expect(found.cm).toEqual([{ start: 300, end: 360 }]);
         expect(found.note).toContain('映像の読み込みに失敗');

@@ -73,7 +73,7 @@ export function playbackMsAt(
     return Math.round(kept * 1000);
 }
 
-/** 再生位置 (ms) を負ったメッセージ。サイドカーに書くのはこの形 */
+/** 再生位置 (ms) を負ったメッセージ。サイドカーに書くのはこの形式 */
 export interface PlacedMessage {
     /** 動画の再生位置 (ms)。頭の準備 (`at === null`) は 0 に寄せる */
     at: number;
@@ -97,9 +97,9 @@ export function toPlaybackTimeline(
     }));
 }
 
-/** 再生駆動が「次に何をするか」。`reset` なら器を作り直してから `messages` を流す */
+/** 再生駆動が「次に何をするか」。`reset` なら入れ物を作り直してから `messages` を流す */
 export interface Feed {
-    /** 器を作り直すか。**戻ったとき** (先に出した画面を捨てて積み直す) だけ true */
+    /** 入れ物を作り直すか。**戻ったとき** (先に出した画面を捨てて積み直す) だけ true */
     reset: boolean;
     /** エンジン (`Bml.feed`) に順に流すもの */
     messages: ResponseMessage[];
@@ -110,7 +110,7 @@ export interface Feed {
  *
  * **進んだら足すだけ、戻ったら作り直す。** ライブは時間が前にしか進まないので
  * 届いた順に流せばよいが、録画は巻き戻し・シークがある。前に進むぶんはその間に
- * 配られた変化を足せばよい (器は積み上がっている)。**戻ると器には「まだ配られて
+ * 配られた変化を足せばよい (入れ物は積み上がっている)。**戻ると入れ物には「まだ配られて
  * いないはずの先の画面」が残っている**ので、作り直して `toMs` まで積み直す。
  *
  * `fromMs` に負の値 (まだ一度も流していない) を渡せば、頭から `toMs` まで積む。
@@ -118,7 +118,7 @@ export interface Feed {
 export function feedFor(timeline: readonly PlacedMessage[], fromMs: number, toMs: number): Feed {
     // 戻った (シークで巻き戻し)。先に出した画面を捨てて、頭から積み直す
     if (toMs < fromMs) return { reset: true, messages: replayAt(timeline, toMs) };
-    // 進んだ。その間に配られた変化だけ足す (器はそのまま)
+    // 進んだ。その間に配られた変化だけ足す (入れ物はそのまま)
     const messages: ResponseMessage[] = [];
     for (const item of timeline) {
         if (item.at > toMs) break;

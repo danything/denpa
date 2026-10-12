@@ -32,7 +32,7 @@ interface Seen {
     __csp: string[];
 }
 
-/** 流し込む口を控え、CSP の違反も数える (ページのスクリプトより先に) */
+/** 流し込む関数を控え、CSP の違反も数える (ページのスクリプトより先に) */
 async function prepare(page: Page): Promise<void> {
     await captureSockets(page);
     await page.addInitScript(() => {
@@ -131,7 +131,7 @@ test.describe('データ放送のエンジン', () => {
         const text = async () => (await dataElement(page, 'span'))?.text;
         // 出す操作は文書への d の 1 押し (聞いている文書が出てきたら届ける)
         await expect.poll(text, { timeout: 10_000 }).toBe('d1|');
-        // 出ている間の画面の d は、聞いている文書に渡す (器は閉じない)
+        // 出ている間の画面の d は、聞いている文書に渡す (データ放送は閉じない)
         await wakeControls(page, 'live-frame');
         await page.getByTestId('live-data-button').click();
         await expect.poll(text).toBe('d2|');
@@ -175,7 +175,7 @@ test.describe('データ放送のエンジン', () => {
             'true',
             { timeout: 15_000 },
         );
-        // 局が変わったのでデータ放送の器は作り直される (出したまま)
+        // 局が変わったのでデータ放送のエンジンは作り直される (出したまま)
         await expect(page.getByTestId('live-data')).toHaveAttribute('data-for', new RegExp(`/${to.id}$`));
     });
 });

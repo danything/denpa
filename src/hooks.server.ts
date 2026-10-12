@@ -25,10 +25,10 @@ export async function handle({ event, resolve }) {
      * **アプリの鍵** (`Authorization: Bearer denpa_…`、device-auth.ts)。ペアリングで渡したもの。
      * 生きていればログインした人と同じに通す (どこから来ても。家の外の OIDC 越しでも使えるように)。
      *
-     * **出された鍵が駄目なら、ほかの道へ回さずに 401。** 信頼するネットワークの中でも同じ —
+     * **出された鍵が駄目なら、ほかの認証方法へ回さずに 401。** 信頼するネットワークの中でも同じ —
      * 取り消された鍵で黙って通すと、アプリは取り消されたことに気付けず、外へ出た途端に
      * 使えなくなる。401 ならアプリは「ペアリングし直し」と分かる。
-     * `denpa_` で始まらない Bearer (前段の SSO などが付けるもの) は見ずに、いつもの道へ回す
+     * `denpa_` で始まらない Bearer (前段の SSO などが付けるもの) は見ずに、いつもの認証へ回す
      */
     const bearer = bearerToken(event.request.headers.get('authorization'));
     if (bearer !== null) {
@@ -53,7 +53,7 @@ export async function handle({ event, resolve }) {
 
     /*
      * **ログインの控えは先に読む。** 録画をブラウザで観るようになったので、
-     * `<video>` がファイルの口 (`/api/recordings/<id>/file`) を取りに来る。
+     * `<video>` がファイルのエンドポイント (`/api/recordings/<id>/file`) を取りに来る。
      * OIDC で入った人をそこで断らないため (`sessionMayRead`)
      */
     const session = find(event.cookies.get(COOKIE));
@@ -61,7 +61,7 @@ export async function handle({ event, resolve }) {
     if (!open && !isOpenPath(pathname)) {
         if (isFilePath(pathname)) {
             /*
-             * **ファイルの口はログインの控えか、期限付きのリンク** (share.ts)。
+             * **ファイルのエンドポイントはログインの控えか、期限付きのリンク** (share.ts)。
              * プレイヤーはリダイレクトを扱えないので、URL そのものが資格になる
              * リンクで開ける。ベーシック認証は廃止した — パスワードを使う場面が
              * 全部期限付きのリンクに置き換わったため
@@ -94,7 +94,7 @@ export async function handle({ event, resolve }) {
             // 信頼するネットワークの外から、鍵を持たずに来た。アプリはこれで「ペアリングが要る」と分かる
             return needsPairing();
         } else {
-            // 入る道が無い (設定していないか、信頼するネットワークの外の画面)。言葉で返す (auth.denied)
+            // 入る手段が無い (設定していないか、信頼するネットワークの外の画面)。言葉で返す (auth.denied)
             return denied();
         }
     }
@@ -103,7 +103,7 @@ export async function handle({ event, resolve }) {
 }
 
 /**
- * 資格の無い API の呼び出しへの答え。**いつも同じ形の 401 JSON** (docs/api.md)。
+ * 資格の無い API の呼び出しへの答え。**いつも同じ形式の 401 JSON** (docs/api.md)。
  * テレビのアプリは鍵を持たずにまず API を叩き、これが返ればペアリングに進む
  * (信頼するネットワークの中なら通るので、ペアリングは要らない)。HTML のログイン画面へ
  * 回すと、アプリは JSON として読もうとして意味の分からない失敗になる

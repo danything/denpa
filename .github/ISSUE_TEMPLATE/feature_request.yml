@@ -6,7 +6,7 @@ body:
       id: problem
       attributes:
           label: 困りごと・したいこと
-          description: 実装方法より先に「何がしたいか」を。そのほうが良い形を一緒に探せます
+          description: 実装方法より先に「何がしたいか」を。そのほうが良いやり方を一緒に探せます
           placeholder: 〜のとき〜できなくて困る / 〜できるようにしたい
       validations:
           required: true

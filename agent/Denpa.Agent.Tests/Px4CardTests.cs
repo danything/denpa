@@ -8,7 +8,7 @@ namespace Denpa.Agent.Tests;
  * px4d の制御ソケット越しのカード (Px4Card.cs)。
  *
  * px4d は無い。同じ場所に Unix ソケットを開いて px4d のふりをし、
- * **線に乗るバイト列が SPEC 6 節の通りか**を見る。
+ * **やり取りするバイト列が SPEC 6 節の通りか**を見る。
  */
 public class Px4CardTests
 {
@@ -16,7 +16,7 @@ public class Px4CardTests
 
     private sealed record Frame(ushort Type, ushort Flags, uint RequestId, byte[] Payload);
 
-    /// <summary>px4d のふり。頼まれたものを残し、<c>answer</c> が返したものを返す (null なら切る)</summary>
+    /// <summary>px4d のふり。受け取った要求を残し、<c>answer</c> が返したものを返す (null なら切る)</summary>
     private sealed class FakePx4d : IDisposable
     {
         private readonly Socket _listener;
@@ -35,7 +35,7 @@ public class Px4CardTests
             _listener.Bind(new UnixDomainSocketEndPoint(SocketPath));
             _listener.Listen();
             // **専用のスレッドで。** 共用の池は他のテスト (鍵を待って止まる偽のカード) が
-            // 塞ぐことがあり、池から借りると CI の 2 コアで答えが 5 秒に間に合わなかった
+            // 塞ぐことがあり、スレッドプールから借りると CI の 2 コアで答えが 5 秒に間に合わなかった
             _serving = Task.Factory.StartNew(() =>
             {
                 using var client = _listener.Accept();
@@ -91,7 +91,7 @@ public class Px4CardTests
              * Find だけ見るテストでは accept で待ったまま片付けに入る。Linux は待ち受けを
              * 閉じれば accept が起きるが、macOS は起きず、閉じる側 (Dispose) まで止まった
              * (Mac の CI で詰まった)。繋いですぐ切れば、待っていた側は 0 バイトを読んで降りる。
-             * AcceptAsync で止める形にすると、答えるのが共用の池頼みに戻って CI で間に合わなかった
+             * AcceptAsync で止めるやり方にすると、答えるのが共用のスレッドプール頼みに戻って CI で間に合わなかった
              */
             try
             {

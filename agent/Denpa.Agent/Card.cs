@@ -33,7 +33,7 @@ public static class Card
 
     /// <summary>
     /// 走っている確かめに相乗りする。**同時に1本だけ** — 切り上げたあとも確かめは
-    /// 走り続けるので、画面を開き直すたびに足すと錠の前に溜まっていく
+    /// 走り続けるので、画面を開き直すたびに足すとロックの前に溜まっていく
     /// </summary>
     private static Task<CardSurvey> Checking()
     {
@@ -175,8 +175,8 @@ public static class Card
     internal static ReaderState[] Probe(IReadOnlyList<CardLinkCandidate> candidates, TimeSpan within)
     {
         /*
-         * **1つずつ専用のスレッドで。** 固まったリーダーは何秒も塞ぐので、共用の池から
-         * 借りると池が増えるまで他の覗きも待たされ、答えられるものまで「応答しません」になる
+         * **1つずつ専用のスレッドで。** 固まったリーダーは何秒も塞ぐので、共用のスレッドプールから
+         * 借りるとプールが増えるまで他の覗きも待たされ、答えられるものまで「応答しません」になる
          */
         var peeking = candidates.Select(Peeking).ToArray();
         if (peeking.Length > 0 && within > TimeSpan.Zero) Task.WaitAll(peeking, within);
@@ -225,7 +225,7 @@ public static class Card
     }
 
     /// <summary>
-    /// 画面に返す形。**<c>message</c> は困っているときだけ** — リーダーの名前や
+    /// 画面に返す形式。**<c>message</c> は困っているときだけ** — リーダーの名前や
     /// カードの番号は表 (<c>readers</c>) に出るので繰り返さない
     /// </summary>
     internal static JsonObject Report(CardSurvey survey, IReadOnlyList<string> streaming)
@@ -284,7 +284,7 @@ public sealed record CardSurvey(bool Ok, string Message, IReadOnlyList<ReaderSta
 /// 掛かったまま録れたTSを復号する。
 ///
 /// <para>
-/// **こちらの返事だけでは足りない。** 復号できたつもりで掛かったままのものが出来る道が
+/// **こちらの返事だけでは足りない。** 復号できたつもりで掛かったままのものが出来る経路が
 /// 残る (鍵が合わない・ECM が流れていない) ので、出来上がったものを読んで
 /// 確かめるのは呼び出し側 (denpa の <c>scramble.ts</c>)。
 /// </para>

@@ -9,8 +9,8 @@
     /**
      * 操作バーの右端。**3画面 (ライブ・追っかけ・録画) で同じ。**
      *
-     * - **バックグラウンド再生。** 既定は切で、裏に回したら止める。端末ごとに覚える (`background.svelte.ts`)
-     * - **小窓 (PiP)。** ページから出せない端末 (iPhone・iPad のホーム画面から開いたもの・口の無いブラウザ) では
+     * - **バックグラウンド再生。** 既定はオフで、裏に回したら止める。端末ごとに覚える (`background.svelte.ts`)
+     * - **小窓 (PiP)。** ページから出せない端末 (iPhone・iPad のホーム画面から開いたもの・API の無いブラウザ) では
      *   出さない (`pip.svelte.ts`)
      *
      * この2つは狭い枠では「ほか」に畳む。全画面はいつも出す
@@ -28,7 +28,7 @@
 <Extras>
     <ControlButton
         icon={BACKGROUND}
-        label={background.on ? 'バックグラウンド再生をやめる' : 'バックグラウンド再生を入れる'}
+        label={background.on ? 'バックグラウンド再生をやめる' : 'バックグラウンド再生をオンにする'}
         on={background.on}
         testid="{prefix}-background"
         onclick={() => background.toggle()}

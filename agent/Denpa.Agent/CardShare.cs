@@ -13,7 +13,7 @@ namespace Denpa.Agent;
 /// </summary>
 public static class Keys
 {
-    /// <summary>自分に刺さっているカード。**鍵を配る口もこれを使う**</summary>
+    /// <summary>自分に刺さっているカード。**鍵を配る API もこれを使う**</summary>
     public static LocalCard Local { get; } = new();
 
     private static IKeySource? _source;
@@ -80,7 +80,7 @@ public sealed class LocalCard : IKeySource
 /// **カードを持っていない拠点。** 鍵だけ貰いに行く。
 ///
 /// <para>
-/// 拠点ごとにエージェントとチューナーがある形だと、カードは1箇所にしかない。そこで
+/// 拠点ごとにエージェントとチューナーがある構成だと、カードは1箇所にしかない。そこで
 /// **カードごと持っていくのではなく、ECM を投げて鍵を貰う。** ECM は 200 バイトほど、
 /// 返るのは 16 バイトの鍵だけなので拠点を跨いでも安く、重い MULTI2 は各拠点の手元に残る。
 /// </para>
@@ -91,7 +91,7 @@ public sealed class LocalCard : IKeySource
 /// </para>
 ///
 /// <para>
-/// 呼ぶのは復号器のスレッドで、読み手とは別 (TunerPool.cs)。相手が遅くても
+/// 呼ぶのはデスクランブラのスレッドで、読み手とは別 (TunerPool.cs)。相手が遅くても
 /// 間のキュー (64MB) が呑むうちは録画は欠けず、答えが来てから続きを復号する。
 /// </para>
 /// </summary>
@@ -142,7 +142,7 @@ public sealed class RemoteCard(string url) : IKeySource
 }
 
 /// <summary>
-/// 拠点のあいだで鍵をやり取りする形。**前の版のエージェントとも話せる**ように、
+/// 拠点のあいだで鍵をやり取りする形式。**前の版のエージェントとも話せる**ように、
 /// libaribb25 を使っていた頃と同じバイト列にしてある。
 /// </summary>
 public static class CardWire
