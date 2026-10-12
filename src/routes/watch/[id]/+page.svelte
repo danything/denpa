@@ -234,9 +234,13 @@
         untrack(() => startCanvas(codec));
     });
 
-    /** 尺 (秒)。`playback` が聞けなければ、保存した録画に書いてある長さ */
+    /**
+     * 尺 (秒)。**端末に保存したものを描いているなら、そのファイルに書いてある長さ** (描いているのはそのファイル。
+     * 尻の手前へ飛ぶと終わりにするので、違う長さを使うと途中で終わる)。それ以外は `playback`
+     */
     function canvasLength(): number {
-        return info?.duration ?? localMkv?.duration ?? (localCopy?.durationMs ?? 0) / 1000;
+        if (localMkv !== null) return localMkv.duration ?? (localCopy?.durationMs ?? 0) / 1000;
+        return info?.duration ?? 0;
     }
 
     function startCanvas(codec: CanvasCodec): void {

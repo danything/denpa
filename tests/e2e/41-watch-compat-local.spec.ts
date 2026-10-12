@@ -98,7 +98,15 @@ test('端末に保存した録画も canvas に描き、飛ぶ・CM 飛ばし・
     await wakeControls(page, 'watch-stage');
     await expect(page.getByTestId('watch-controls').getByText('端末', { exact: true })).toBeVisible();
 
-    // **CM 飛ばしで跳ぶ** (Cues で CM の終わりの手前の Cluster から読み直す)
+    /*
+     * **CM 飛ばしで跳ぶ** (Cues で CM の終わりの手前の Cluster から読み直す)。偽の録画はロゴでの判定に
+     * 失敗したことになっていて、観はじめは CM 飛ばしが外れている (`skipCmAtStart`)。押して有効にする —
+     * CM の中で押せばその場で、手前で押せば CM に入るところで跳ぶ
+     */
+    const skip = page.getByTestId('watch-skip-cm');
+    await expect(skip).toHaveAttribute('aria-pressed', 'false');
+    await skip.click();
+    await expect(skip).toHaveAttribute('aria-pressed', 'true');
     await expect(page.getByTestId('watch-skipped')).toBeVisible({ timeout: 30_000 });
     await expect.poll(() => where(page), { timeout: 15_000 }).toBeGreaterThanOrEqual(16);
 
