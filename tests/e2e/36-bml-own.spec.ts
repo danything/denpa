@@ -2,8 +2,11 @@ import type { Page } from '@playwright/test';
 import {
     captionsSeenInDataWindow,
     expect,
+    expectSharpCaptions,
     fakeDataBroadcast,
+    feedCaption,
     goto,
+    holdCaptions,
     holdMedia,
     test,
     wakeControls,
@@ -50,6 +53,7 @@ async function openData(page: Page): Promise<void> {
     await page.getByTestId('live-channel').first().click();
     await expect(page.getByTestId('live-title')).toBeVisible();
     await holdMedia(page, 'live-video', 'live-captions', 'live-frame');
+    await holdCaptions(page, 'live-captions');
     await page.getByTestId('live-captions').evaluate((el) => el.setAttribute('data-ink', '0.8000,0.9700'));
     const overlay = page.getByTestId('live-data');
     await wakeControls(page, 'live-frame');
@@ -142,6 +146,9 @@ test.describe('自前のデータ放送エンジン', () => {
         await openData(page);
         await feed(page, '');
         await captionsSeenInDataWindow(page, { moved: false });
+        // 小窓の中でも見えている大きさで描く (`CaptionPainter`)
+        await feedCaption(page, 'live');
+        await expectSharpCaptions(page, '自前のエンジンの小窓の中');
         expect(await page.evaluate(() => (window as unknown as Seen).__csp)).toEqual([]);
     });
 

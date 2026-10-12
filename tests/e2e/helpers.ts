@@ -669,3 +669,151 @@ export async function captionsSeenInDataWindow(page: Page, options: { moved?: bo
         '字幕が枠いっぱいに残っている (映像と一緒に縮んでいない)',
     ).toBeLessThan(0.1);
 }
+
+/** 字幕の canvas を掴んでおく先 (`holdCaptions`)。データ放送の小窓では閉じた影の中に移る */
+interface HeldCaptions {
+    __captions: HTMLCanvasElement;
+}
+
+/** 字幕の canvas を掴んでおく。**d を押す前に呼ぶ** (`holdMedia` と同じ理由) */
+export async function holdCaptions(page: Page, testid: string): Promise<void> {
+    await page.evaluate((id) => {
+        (window as unknown as HeldCaptions).__captions = document.querySelector(
+            `[data-testid="${id}"]`,
+        ) as HTMLCanvasElement;
+    }, testid);
+}
+
+/**
+ * **字幕の canvas は、見えている大きさ × 画面の画素で描いてある** (`caption-draw.ts` の `CaptionPainter`)。
+ *
+ * 描く画素 (`width`/`height` 属性) と、実際に見えている字幕の面 (`getBoundingClientRect`。
+ * 祖先の `transform: scale` 込み。`object-fit: contain` なら収めた中身) × `devicePixelRatio` を
+ * 比べる。食い違うと、描いた絵がブラウザに引き伸ばされて字がぼやける — データ放送の小窓の中で
+ * 字幕がぼやけていた (BML の面ごと `scale` で伸ばすのに、CSS の大きさで描いていた)。
+ * `holdCaptions` で掴んでから呼ぶ。描いていない (`data-drawn` が無い) うちは待つ
+ */
+export async function expectSharpCaptions(page: Page, where: string): Promise<void> {
+    await expect
+        .poll(
+            () =>
+                page.evaluate(() => {
+                    const canvas = (window as unknown as HeldCaptions).__captions;
+                    if (canvas.dataset['drawn'] === undefined) return '描いていない';
+                    const rect = canvas.getBoundingClientRect();
+                    let { width, height } = rect;
+                    if (getComputedStyle(canvas).objectFit === 'contain') {
+                        const scale = Math.min(width / canvas.width, height / canvas.height);
+                        width = canvas.width * scale;
+                        height = canvas.height * scale;
+                    }
+                    const dpr = window.devicePixelRatio;
+                    const shown = [width * dpr, height * dpr];
+                    const sharp =
+                        Math.abs(canvas.width - shown[0]!) <= 1 && Math.abs(canvas.height - shown[1]!) <= 1;
+                    return sharp
+                        ? 'ok'
+                        : `描く画素 ${canvas.width}x${canvas.height} / 見えている大きさ × DPR ${shown.map((n) => n.toFixed(1)).join('x')} (DPR ${dpr})`;
+                }),
+            { message: `${where}: 字幕の canvas の画素が見えている大きさ × DPR と合わない (ぼやける)` },
+        )
+        .toBe('ok');
+}
+
+/** 開いた WebSocket を覚えておく (`feedCaption`)。**開く前に呼ぶ** */
+export async function captureSockets(page: Page): Promise<void> {
+    await page.addInitScript(() => {
+        const seen = window as unknown as { __sockets: WebSocket[] };
+        seen.__sockets = [];
+        const Original = window.WebSocket;
+        window.WebSocket = class extends Original {
+            constructor(url: string | URL, protocols?: string | string[]) {
+                super(url, protocols);
+                seen.__sockets.push(this);
+            }
+        };
+    });
+}
+
+/**
+ * 試しの字幕1枚 (文字の配置。`caption-text.ts` の `CaptionPage`)。面の下の方に白地に黒の字が1行。
+ * 偽の放送にも偽の録画にも字幕は乗っていないので、これを渡して描かせる
+ */
+export const FAKE_CAPTION = {
+    v: 1,
+    plane: [960, 540],
+    duration: null,
+    runs: [
+        {
+            x: 240,
+            y: 450,
+            w: 40,
+            h: 60,
+            fx: 2,
+            fy: 12,
+            size: 36,
+            scaleX: 1,
+            text: '字幕はくっきり',
+            fg: '#000000ff',
+            bg: '#ffffffff',
+        },
+    ],
+};
+
+/**
+ * **字幕を1枚流して描かせる** (ライブ・追っかけ。`prefix` は `live` か `chase`)。
+ *
+ * 字幕が1本あると知らせ (`CHANNEL.control` = 0x40 の `captions`)、`FAKE_CAPTION` を字幕の口
+ * (`CHANNEL.captionText` = 0x22、時刻 0) で渡す。偽の放送は絵が出ず再生位置が進まないので、
+ * 描くきっかけ (`paint`) は字幕のボタンを2回押して作る (消して出す)。
+ * `captureSockets` してから開いた画面で呼ぶ
+ */
+export async function feedCaption(page: Page, prefix: 'live' | 'chase'): Promise<void> {
+    const captions = { type: 'captions', tracks: [{ index: 0, lang: 'jpn', label: '字幕' }], track: 0 };
+    await page.evaluate(
+        ([notice, caption]) => {
+            const socket = (window as unknown as { __sockets: WebSocket[] }).__sockets.at(-1);
+            for (const [kind, json] of [
+                [0x40, notice],
+                [0x22, caption],
+            ] as const) {
+                const body = new TextEncoder().encode(json);
+                const data = new Uint8Array(9 + body.length);
+                data[0] = kind;
+                data.set(body, 9);
+                socket?.dispatchEvent(new MessageEvent('message', { data: data.buffer }));
+            }
+        },
+        [JSON.stringify(captions), JSON.stringify(FAKE_CAPTION)] as const,
+    );
+    // 押すのは要素に直に (操作列が引っ込んでいても、データ放送の面が上に被っていても届く)
+    const button = page.getByTestId(`${prefix}-caption`);
+    await expect(button).toHaveAttribute('aria-pressed', 'true');
+    await button.evaluate((el) => (el as HTMLElement).click());
+    await expect(button).toHaveAttribute('aria-pressed', 'false');
+    await button.evaluate((el) => (el as HTMLElement).click());
+    await expect(button).toHaveAttribute('aria-pressed', 'true');
+}
+
+/**
+ * 字幕のくっきり具合を見る画面の大きさ (`expectSharpCaptions`)。PC (DPR 1 と 2) と
+ * スマホの縦 (DPR 3)。`browser.newContext` にそのまま渡す
+ */
+export const CAPTION_SCREENS = [
+    ['PC 1600x900 (DPR 1)', { viewport: { width: 1600, height: 900 }, deviceScaleFactor: 1 }],
+    ['PC 1600x900 (DPR 2)', { viewport: { width: 1600, height: 900 }, deviceScaleFactor: 2 }],
+    [
+        'スマホ縦 390x844 (DPR 3)',
+        { viewport: { width: 390, height: 844 }, deviceScaleFactor: 3, isMobile: true, hasTouch: true },
+    ],
+] as const;
+
+/**
+ * **観る画面に字幕を1枚渡す。** 偽の録画は中身が無く再生位置は 0 のまま動かないので、
+ * `captions.json` を `FAKE_CAPTION` を 0 秒に置いたものに差し替える。開く前に呼ぶ
+ */
+export async function routeCaptions(page: Page): Promise<void> {
+    await page.route('**/api/recordings/*/captions.json', (route) =>
+        route.fulfill({ json: { v: 1, pages: [{ at: 0, page: FAKE_CAPTION }] } }),
+    );
+}
