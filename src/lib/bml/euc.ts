@@ -28,8 +28,8 @@ const PUA_EMPTY = 0xe400;
 /** 85〜94 区で 940 点 */
 const ADDITIONAL_POINTS = 10 * 94;
 /** DRCS (外字) が入る 87・88 区 (STD-B24 付属1 表13-1。BML では追加記号ではない) */
-export const DRCS_FIRST = PUA_ADDITIONAL + 2 * 94;
-export const DRCS_LAST = PUA_ADDITIONAL + 4 * 94 - 1;
+const DRCS_FIRST = PUA_ADDITIONAL + 2 * 94;
+const DRCS_LAST = PUA_ADDITIONAL + 4 * 94 - 1;
 
 /** 読めない字の代わり (〓)。EUC-JP で 0xA2AE */
 const GETA = 0xa2ae;

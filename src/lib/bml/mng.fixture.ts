@@ -1,6 +1,6 @@
 /** テスト用の小さな MNG を組む (放送のデータは使わない) */
 
-import { crc32 } from './png';
+import { crc32 } from '#lib/ts/png.js';
 
 /** 塊 (長さ・名前・中身・CRC) */
 export function chunk(name: string, body: number[] | Uint8Array): Uint8Array {

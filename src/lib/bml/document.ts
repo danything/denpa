@@ -37,7 +37,7 @@ const KNOWN = new Set([
 const HOLDS_TEXT = new Set(['p', 'span', 'a']);
 
 /** 要素の数の上限 (規格は 512。余裕を持たせて、暴走だけ止める) */
-export const MAX_ELEMENTS = 4096;
+const MAX_ELEMENTS = 4096;
 
 export class BmlText {
     readonly kind = 'text';

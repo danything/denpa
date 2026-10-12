@@ -41,7 +41,7 @@ export interface PesMark {
 }
 
 /** パケットの切れ目を探す。3 つ続けて 0x47 が並ぶところ。無ければ -1 */
-export function findSync(bytes: Uint8Array, from = 0): number {
+function findSync(bytes: Uint8Array, from = 0): number {
     for (let i = from; i + PACKET * 2 < bytes.length; i++) {
         if (bytes[i] === SYNC && bytes[i + PACKET] === SYNC && bytes[i + PACKET * 2] === SYNC) return i;
     }
@@ -134,7 +134,7 @@ const NARROW = PACKET * 256;
 /**
  * `offset` から先で最初の映像の PES。`at` はファイルの頭からの位置。無ければ null
  */
-export async function videoAt(read: ReadAt, offset: number): Promise<PesMark | null> {
+async function videoAt(read: ReadAt, offset: number): Promise<PesMark | null> {
     for (let from = offset; from < offset + SEARCH; from += WINDOW - PACKET * 3) {
         const bytes = await read(from, WINDOW);
         for (const mark of pesMarks(bytes)) {

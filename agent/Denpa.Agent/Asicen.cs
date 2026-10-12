@@ -66,9 +66,6 @@ public static class AsicenUserland
     public static string RuntimeDir =>
         Environment.GetEnvironmentVariable("ASICEN_RUNTIME_DIR") ?? "/run/asicen-userland";
 
-    /// <summary>USB デバイスが並ぶ sysfs</summary>
-    private const string Sysfs = "/sys/bus/usb/devices";
-
     /// <summary>実行ファイルの場所。配布アーカイブは <c>bin/</c> の下、手で組んだもの (テスト) は直下</summary>
     public static string Bin(string dir, string name) =>
         !File.Exists(Path.Combine(dir, "bin", name)) && File.Exists(Path.Combine(dir, name))
@@ -117,7 +114,7 @@ public static class AsicenUserland
     /// PX-W3U3 (<c>0b06:0005</c>) と、ファームウェア待ち (<c>1738:5211</c> / <c>1738:5216</c>)。
     /// 読めないデバイスは黙って飛ばす (抜けかけ・権限)
     /// </summary>
-    public static List<Function> Scan(string root = Sysfs)
+    public static List<Function> Scan(string root = UsbSysfs.Devices)
     {
         if (!Directory.Exists(root)) return [];
         var found = new List<Function>();
@@ -125,26 +122,14 @@ public static class AsicenUserland
         {
             var port = Path.GetFileName(dir);
             if (!ValidId(port)) continue;
-            var vid = Read(dir, "idVendor");
-            var pid = Read(dir, "idProduct");
+            var vid = UsbSysfs.Read(dir, "idVendor");
+            var pid = UsbSysfs.Read(dir, "idProduct");
             var loader = vid == "1738" && (pid is "5211" or "5216");
             if (!(vid == "0b06" && pid == "0005") && !loader) continue;
-            if (!int.TryParse(Read(dir, "busnum"), out var bus) || !int.TryParse(Read(dir, "devnum"), out var address)) continue;
+            if (!int.TryParse(UsbSysfs.Read(dir, "busnum"), out var bus) || !int.TryParse(UsbSysfs.Read(dir, "devnum"), out var address)) continue;
             found.Add(new Function($"{vid}:{pid}", bus, address, port, loader));
         }
         return found;
-    }
-
-    private static string? Read(string dir, string name)
-    {
-        try
-        {
-            return File.ReadAllText(Path.Combine(dir, name)).Trim();
-        }
-        catch (Exception error) when (error is IOException or UnauthorizedAccessException)
-        {
-            return null;
-        }
     }
 
     /// <summary>

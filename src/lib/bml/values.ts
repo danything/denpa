@@ -13,7 +13,7 @@ import { compareEuc } from './euc';
 export type Value = undefined | null | boolean | number | string | JSObject;
 
 /** 無いことの印 (`undefined` が入っているのと区別する) */
-export const ABSENT: unique symbol = Symbol('absent');
+const ABSENT: unique symbol = Symbol('absent');
 export type Lookup = Value | typeof ABSENT;
 
 /** スクリプトの実行時の誤り。**その実行だけを止める** (文書は残る) */

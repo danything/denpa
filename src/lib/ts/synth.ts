@@ -70,7 +70,7 @@ export function encodeAribText(text: string, half = false): number[] {
  * 英数はテレビが全角で描く (読む側 `aribtext.ts` も全角にする)。全角の英数 (「Ｖｅｎｕｅ」) は
  * 漢字の集合の字として書くので、読めば書いたとおりの文字列に戻る
  */
-export function encodeSiText(text: string): number[] {
+function encodeSiText(text: string): number[] {
     return encodeAribText(text, true);
 }
 

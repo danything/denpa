@@ -59,7 +59,7 @@ EPGStation の置き換えとして作ったもので、エンコード設定は
 | `src/lib/ts/drcs-smooth.ts` | 字にできない外字 (DRCS) の白黒の絵を、斜めを丸めた濃淡の絵にしてから送る (引き伸ばしてもジャギジャギにならない) |
 | `src/lib/caption-text.ts` | 字幕の文字の配置の形 (サーバと画面とテレビのアプリの取り決め。[api.md](api.md#字幕の文字の配置)) |
 | `src/lib/ts/captions.ts` | 届いた字幕を、映像に合わせて出す順に並べる (DOM を触らない) |
-| `src/lib/ts/mkv.ts` | Matroska からコマと時刻を取り出す。字幕は時刻をコマに付けて運ぶ (録画の字幕が S_ARIBSUB かも見る) |
+| `src/lib/ts/mkv.ts` | Matroska からコマと時刻を取り出す。字幕は時刻をコマに付けて運ぶ (録画の字幕が S_ARIBSUB かも見る)。EBML の読み方は `mkv-media.ts` もこれを使う |
 | `src/lib/live.ts` | ライブ視聴でサーバと画面が取り決めていること (多重化の種別・指示・知らせ) |
 | `src/lib/live-player.svelte.ts` | ライブ視聴の受け側。WebSocket → MSE、音声の選び直し、切り替え中の絵 |
 | `src/lib/ts/pacing.ts` | ライブの再生位置の決め方 (どれだけ貯めるか。DOM を触らない) |
@@ -67,6 +67,7 @@ EPGStation の置き換えとして作ったもので、エンコード設定は
 | `src/lib/ts/media-source.ts` | MSE の器を選ぶ。無ければ `ManagedMediaSource` (iPhone の Safari) |
 | `src/lib/remux-player.ts` | 観る画面で、サーバがその場で流す fMP4 (詰め替え・変換) を MSE で受ける。飛んだ先が無ければ頼み直す ([library.md](library.md#何で観るかはサーバが出せるものから画面が選ぶ)) |
 | `src/lib/canvas-player.ts` | 観る画面の互換モード。`/stream` を fetch で読んで canvas に描く (`raw/engine.ts`)。飛ぶときは捨てて頼み直し、先へ読みすぎない ([stream.md](stream.md#録画の観る画面も-canvas-に描く)) |
+| `src/lib/drive-gate.svelte.ts` | 互換モードで初めて再生する前の、運転中の注意。押されるまで再生を待たせる (ライブ・追っかけ・観る画面で同じ) |
 | `src/lib/mkv-source.ts` / `src/lib/ts/mkv-media.ts` / `src/lib/raw/mkv.ts` | 互換モードで端末に保存した録画 (Matroska) を描く。頭と Cues を読んで飛び先の Cluster から流し、worker がそのまま読んで fMP4 と同じ経路でデコードする ([stream.md](stream.md#録画の観る画面も-canvas-に描く)) |
 | `src/lib/ts/playback.ts` / `src/lib/server/playback.ts` | 録画の観方。何を出せるか・どの形で出すか・時刻の物差しはサーバが決め、どれを使うかは画面が決める (`api/recordings/<id>/playback`・`stream`。[api.md](api.md#録画の観方-get-apirecordingsidplayback)) |
 | `src/lib/ts/seek.ts` | 録画の TS の中で時刻からバイトの位置を引く (決まった位置の PES の PTS で二分探索。PTS の一周は頭から数えて越える) |
@@ -96,6 +97,7 @@ EPGStation の置き換えとして作ったもので、エンコード設定は
 | `src/lib/ts/logo.ts` | TS から局ロゴを読む (地上波は CDT、衛星は下記) |
 | `src/lib/ts/logo-dsmcc.ts` | 衛星の局ロゴをデータカルーセル (DSM-CC) から読む |
 | `src/lib/ts/logo-palette.ts` | 局ロゴPNGに ARIB の色の表 (PLTE/tRNS) を入れ直す |
+| `src/lib/ts/png.ts` | PNG の塊と CRC。データ放送 (`bml/png.ts`)・局ロゴ・覚えたロゴの絵で同じものを使う |
 | `src/lib/ts/synth.ts` | TS のセクションを組み立てる (テストと偽エージェント用) |
 | `src/lib/server/migrate.ts` | EPGStation からの引き継ぎ ([migrate.md](migrate.md)) |
 | `src/lib/server/share.ts` | 期限付きの再生リンク (プレイヤーへ渡す) |

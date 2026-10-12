@@ -1,7 +1,7 @@
 /**
  * **Matroska の映像・音声を中身まで読む** (互換モードで、端末に保存した録画を canvas に描く。`raw/mkv.ts`)。
  *
- * 字幕を運ぶための最小の読み (`mkv.ts` の `MkvSplitter`) とは別に置く。こちらは軌道ごとの形
+ * 字幕を運ぶための最小の読み (`mkv.ts` の `MkvSplitter`) とは別に置く (EBML の読み方は `mkv.ts` のものを使う)。こちらは軌道ごとの形
  * (CodecPrivate: avcC / av1C / AudioSpecificConfig / OpusHead) と、コマの軌道の番号・鍵のコマの印、
  * 飛ぶ位置の表 (Cues) まで読む。読むのは denpa のエンコードが書く形 (ffmpeg の Matroska) に要るものだけ:
  *
@@ -18,7 +18,8 @@
  * DOM も worker も触らない (`mkv-media.test.ts`)
  */
 
-import { av1Codec, type Fmp4Track } from './fmp4';
+import { aacCodec, av1Codec, avcCodec, type Fmp4Track } from './fmp4';
+import { DEFAULT_SCALE, ebmlHead, UNKNOWN, uint, vint } from './mkv';
 
 const EBML = 0x1a45dfa3;
 const SEGMENT = 0x18538067;
@@ -57,51 +58,6 @@ const CUE_TRACK_POSITIONS = 0xb7;
 const CUE_TRACK = 0xf7;
 const CUE_CLUSTER_POSITION = 0xf1;
 
-/** 大きさが「不明」の印 (全部 1) */
-const UNKNOWN = -1;
-/** 時刻の刻みの既定 (ナノ秒)。1ms */
-const DEFAULT_SCALE = 1_000_000;
-
-interface Head {
-    id: number;
-    size: number;
-    /** 中身の頭の位置 */
-    body: number;
-}
-
-/** EBML の可変長整数 (`mkv.ts` の `vint` と同じ読み方)。足りなければ null */
-function vint(buffer: Uint8Array, at: number, keepMarker: boolean): { value: number; next: number } | null {
-    if (at >= buffer.length) return null;
-    const first = buffer[at]!;
-    if (first === 0) return null;
-    let length = 1;
-    while (length <= 8 && (first & (0x80 >> (length - 1))) === 0) length++;
-    if (length > 8 || at + length > buffer.length) return null;
-    const mask = length >= 8 ? 0 : 0xff >> length;
-    let value = keepMarker ? first : first & mask;
-    let allOnes = (first & mask) === mask;
-    for (let i = 1; i < length; i++) {
-        value = value * 256 + buffer[at + i]!;
-        if (buffer[at + i] !== 0xff) allOnes = false;
-    }
-    if (!keepMarker && allOnes) return { value: UNKNOWN, next: at + length };
-    return { value, next: at + length };
-}
-
-function head(buffer: Uint8Array, at: number): Head | null {
-    const id = vint(buffer, at, true);
-    if (id === null) return null;
-    const size = vint(buffer, id.next, false);
-    if (size === null) return null;
-    return { id: id.value, size: size.value, body: size.next };
-}
-
-function uint(body: Uint8Array): number {
-    let value = 0;
-    for (const byte of body) value = value * 256 + byte;
-    return value;
-}
-
 function float(body: Uint8Array): number {
     const view = new DataView(body.buffer, body.byteOffset, body.byteLength);
     if (body.length === 4) return view.getFloat32(0);
@@ -113,7 +69,7 @@ function float(body: Uint8Array): number {
 function* children(body: Uint8Array): Generator<{ id: number; body: Uint8Array }> {
     let at = 0;
     while (at < body.length) {
-        const h = head(body, at);
+        const h = ebmlHead(body, at);
         if (h === null || h.size === UNKNOWN || h.body + h.size > body.length) return;
         yield { id: h.id, body: body.subarray(h.body, h.body + h.size) };
         at = h.body + h.size;
@@ -182,16 +138,13 @@ function readTrack(body: Uint8Array): MkvTrack {
     return track;
 }
 
-const hex = (value: number) => value.toString(16).padStart(2, '0');
-
 /** CodecID と CodecPrivate から WebCodecs の書き方を起こす (`ts/fmp4.ts` の `readEntry` と同じ決まり) */
 function codecOf(track: MkvTrack): string | null {
     const c = track.config;
-    if (track.codecId === 'V_MPEG4/ISO/AVC' && c.length >= 4)
-        return `avc1.${hex(c[1]!)}${hex(c[2]!)}${hex(c[3]!)}`;
+    if (track.codecId === 'V_MPEG4/ISO/AVC' && c.length >= 4) return avcCodec(c);
     if (track.codecId === 'V_AV1' && c.length >= 4) return av1Codec(c);
     if (track.codecId === 'A_OPUS') return 'opus';
-    if (track.codecId.startsWith('A_AAC') && c.length >= 2) return `mp4a.40.${c[0]! >> 3}`;
+    if (track.codecId.startsWith('A_AAC') && c.length >= 2) return aacCodec(c);
     return null;
 }
 
@@ -270,7 +223,7 @@ export class MkvDemuxer {
         let at = 0;
         for (;;) {
             this.closeGroup(at, blocks);
-            const h = head(buffer, at);
+            const h = ebmlHead(buffer, at);
             if (h === null) break;
             if (h.id === SEGMENT || h.id === CLUSTER || h.size === UNKNOWN) {
                 at = h.body;
@@ -351,9 +304,9 @@ export interface MkvHead {
  * (もっと長く読んで渡し直す)
  */
 export function readMkvHead(bytes: Uint8Array): MkvHead | null {
-    const ebml = head(bytes, 0);
+    const ebml = ebmlHead(bytes, 0);
     if (ebml === null || ebml.id !== EBML || ebml.size === UNKNOWN) return null;
-    const segment = head(bytes, ebml.body + ebml.size);
+    const segment = ebmlHead(bytes, ebml.body + ebml.size);
     if (segment === null || segment.id !== SEGMENT) return null;
     const start = segment.body;
     let scale = DEFAULT_SCALE;
@@ -362,7 +315,7 @@ export function readMkvHead(bytes: Uint8Array): MkvHead | null {
     let cues: number | null = null;
     let at = start;
     for (;;) {
-        const h = head(bytes, at);
+        const h = ebmlHead(bytes, at);
         if (h === null) return null;
         if (h.id === CLUSTER) {
             const duration = rawDuration === null ? null : (rawDuration * scale) / 1e9;
@@ -394,13 +347,13 @@ export function readMkvHead(bytes: Uint8Array): MkvHead | null {
 
 /** 要素の大きさ (頭も含めて)。頭が読めなければ null */
 export function elementSize(bytes: Uint8Array): number | null {
-    const h = head(bytes, 0);
+    const h = ebmlHead(bytes, 0);
     return h === null || h.size === UNKNOWN ? null : h.body + h.size;
 }
 
 /** Cues を読む。`track` (映像の軌道) の位置だけ、時刻の順に */
 export function readCues(bytes: Uint8Array, scale: number, track: number): MkvCue[] {
-    const h = head(bytes, 0);
+    const h = ebmlHead(bytes, 0);
     if (h === null || h.id !== CUES || h.size === UNKNOWN) return [];
     const out: MkvCue[] = [];
     for (const point of children(bytes.subarray(h.body, h.body + h.size))) {

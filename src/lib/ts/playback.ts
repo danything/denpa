@@ -69,6 +69,38 @@ export const ORIGIN_HEADER = 'X-Denpa-Origin';
 /** 混んでいて断ったときの言い分 (503) */
 export const BUSY = 'サーバが混んでいます';
 
+/** サーバが「混んでいます」と断ったか (`server/playback.ts` の 503)。デプロイの最中の 503 (前段が返すもの) とは言い分で見分ける */
+export async function busyAnswer(response: Response): Promise<boolean> {
+    try {
+        return ((await response.json()) as { message?: unknown }).message === BUSY;
+    } catch {
+        return false;
+    }
+}
+
+/*
+ * ---------------------------------------------------------------------------
+ * 切れたときの頼み直し。**`<video>` でファイルを読むとき (観る画面の `recover`)・MSE で流すとき
+ * (`remux-player.ts`)・canvas に描くとき (`canvas-player.ts`) で同じ数にする**
+ * ---------------------------------------------------------------------------
+ */
+
+/** 流しているものの様子。繋ぎ直している・諦めた・戻った・混んでいて断られた */
+export type StreamState = 'flowing' | 'retrying' | 'failed' | 'busy';
+
+/** 続けて頼み直す上限 */
+export const STREAM_RETRIES = 8;
+
+/** `retries` 回頼み直したあと、次に頼むまで待つ時間 (ms)。倍々に伸ばして 10秒で頭打ち (デプロイの入れ替えは数十秒かかる) */
+export function retryWait(retries: number): number {
+    return Math.min(10_000, 1000 * 2 ** retries);
+}
+
+/** 頼み直せば直りうる失敗か (繋がらない・途中で落ちた・サーバの 5xx)。4xx・読めない中身は何度やっても同じ */
+export function retryable(error: unknown): boolean {
+    return error instanceof TypeError || /^Error: HTTP 5/.test(String(error));
+}
+
 /** 画面が選べるコーデック。`auto` は端末に合わせて決める (`pickOffer`) */
 export type CodecChoice = 'auto' | 'h264' | 'av1';
 

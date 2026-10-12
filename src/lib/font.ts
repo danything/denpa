@@ -10,7 +10,7 @@
 import { resolve } from '$app/paths';
 
 /** 組んだときの Denpa Font の版 (`v2.1` など)。読めなければ空 (版なしの URL になる) */
-export const DENPA_FONT_VERSION: string = import.meta.env.DENPA_FONT_VERSION ?? '';
+const DENPA_FONT_VERSION: string = import.meta.env.DENPA_FONT_VERSION ?? '';
 
 /** 字の URL。接頭辞の下でも動くよう、呼ぶたびに `resolve` を通す */
 export function denpaFontUrl(): string {

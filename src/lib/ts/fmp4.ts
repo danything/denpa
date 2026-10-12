@@ -246,9 +246,7 @@ function readEntry(
         if (entry.type === 'avc1') {
             const avcC = child(inner, 'avcC');
             if (avcC === null || avcC.length < 4) return null;
-            // avc1.PPCCLL — profile・互換の印・level (avcC の 1〜3 バイト目)
-            const codec = `avc1.${hex(avcC[1]!)}${hex(avcC[2]!)}${hex(avcC[3]!)}`;
-            return { ...base, ...size, kind: 'video', codec, config: avcC.slice() };
+            return { ...base, ...size, kind: 'video', codec: avcCodec(avcC), config: avcC.slice() };
         }
         const av1C = child(inner, 'av1C');
         if (av1C === null || av1C.length < 4) return null;
@@ -267,9 +265,19 @@ function readEntry(
         const esds = child(inner, 'esds');
         const asc = esds === null ? null : audioSpecificConfig(esds);
         if (asc === null || asc.length < 2) return null;
-        return { ...base, ...sound, kind: 'audio', codec: `mp4a.40.${asc[0]! >> 3}`, config: asc };
+        return { ...base, ...sound, kind: 'audio', codec: aacCodec(asc), config: asc };
     }
     return null;
+}
+
+/** avcC から `avc1.PPCCLL` を起こす — profile・互換の印・level (avcC の 1〜3 バイト目) */
+export function avcCodec(avcC: Uint8Array): string {
+    return `avc1.${hex(avcC[1]!)}${hex(avcC[2]!)}${hex(avcC[3]!)}`;
+}
+
+/** AudioSpecificConfig から `mp4a.40.N` を起こす (N は頭の 5 ビットのオブジェクトの種類) */
+export function aacCodec(asc: Uint8Array): string {
+    return `mp4a.40.${asc[0]! >> 3}`;
 }
 
 /** av1C から `av01.P.LLT.DD` を起こす (AV1 の ISOBMFF の決まり) */

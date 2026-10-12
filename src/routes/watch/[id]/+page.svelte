@@ -3,7 +3,7 @@
     import { submitting } from '#lib/actions.js';
     import { arming } from '#lib/arming.svelte.js';
     import { type CanvasPlayer, canvasPlayer } from '#lib/canvas-player.js';
-    import { canvasVideo, driveNoticeSeen, seeDriveNotice } from '#lib/canvas-video.js';
+    import { canvasVideo, driveNoticeSeen } from '#lib/canvas-video.js';
     import { CAPTION_TEXT_VERSION, type CaptionPage, type CaptionPages } from '#lib/caption-text.js';
     import DriveNotice from '#lib/components/DriveNotice.svelte';
     import ProgramFacts from '#lib/components/ProgramFacts.svelte';
@@ -53,6 +53,7 @@
     import { stageTap } from '#lib/components/player/stage-tap.js';
     import Toasts, { errorNotice, type Notice } from '#lib/components/Toasts.svelte';
     import { programDetail, recordingFacts } from '#lib/detail.svelte.js';
+    import { driveGate } from '#lib/drive-gate.svelte.js';
     import { denpaFontUrl } from '#lib/font.js';
     import { clock, cmNoteWorthShowing, recordedDuration, size } from '#lib/format.js';
     import { CODEC_LABEL } from '#lib/hw.js';
@@ -80,6 +81,8 @@
         type PlaybackInfo,
         pickCanvas,
         pickOffer,
+        retryWait,
+        STREAM_RETRIES,
         transcodes,
     } from '#lib/ts/playback.js';
     import {
@@ -169,24 +172,8 @@
     let canvasProblem = $state<string | null>(null);
     /** 絵の上に出しておく断り書き (MPEG-2 に切り替えた、など) */
     let warning = $state<string | null>(null);
-    /** 運転中の注意 (ライブと同じ。`DriveNotice`)。押すまで再生を始めない */
-    let driveNotice = $state(false);
-    let noticeWaiters: (() => void)[] = [];
-
-    function confirmDrive(): Promise<void> {
-        return new Promise((done) => {
-            noticeWaiters.push(done);
-            driveNotice = true;
-        });
-    }
-
-    function acceptDriveNotice(): void {
-        seeDriveNotice();
-        driveNotice = false;
-        const waiters = noticeWaiters;
-        noticeWaiters = [];
-        for (const done of waiters) done();
-    }
+    /** 運転中の注意 (互換モード。`drive-gate.svelte.ts`)。押すまで再生を始めない */
+    const drive = driveGate();
 
     /** 形の名前 (メニュー・混んでいるときの勧め) */
     function codecLabel(codec: CanvasCodec): string {
@@ -202,7 +189,7 @@
             canvasProblem = 'サーバに繋がらないため再生できません';
             return;
         }
-        if (!driveNoticeSeen()) await confirmDrive();
+        if (!driveNoticeSeen()) await drive.confirm();
         const [support, problem] = await Promise.all([canvasSupport(), rawUnsupported()]);
         canvasAbility = { ...support, mpeg2: problem === null };
         /*
@@ -247,9 +234,7 @@
         const local = localMkv;
         const duration = canvasLength();
         const fresh = switchAt === null;
-        const from =
-            switchAt ?? (rec.resume_ms === null ? null : resumePoint(rec.resume_ms / 1000, duration));
-        switchAt = null;
+        const from = startFrom(duration);
         let made: CanvasPlayer;
         try {
             made = canvasPlayer({
@@ -259,12 +244,7 @@
                 request: (at, audio, signal) =>
                     local !== null
                         ? Promise.resolve(local.request(at))
-                        : fetch(
-                              resolve(
-                                  `api/recordings/${rec.id}/stream?codec=${codec}&from=${at.toFixed(3)}&audio=${encodeURIComponent(audio)}`,
-                              ),
-                              { signal },
-                          ),
+                        : fetch(streamUrl(codec, at, audio), { signal }),
                 duration,
                 start: from ?? 0,
                 audio: streamAudio(audioIndex),
@@ -303,11 +283,7 @@
         controls.stir();
         if (!fresh || resumed) return;
         resumed = true;
-        if (from !== null) {
-            // **黙って途中から始めない** (`<video>` の `resume` と同じ)
-            continued = true;
-            setTimeout(() => (continued = false), 4000);
-        }
+        if (from !== null) showContinued();
         settle();
     }
 
@@ -507,6 +483,30 @@
             : undefined,
     );
 
+    /** その場で流すもの (`/stream`) を頼む先。`at` 秒から、`audio` (`streamAudio`) の音声で */
+    function streamUrl(codec: CanvasCodec, at: number, audio: string): string {
+        return resolve(
+            `api/recordings/${rec.id}/stream?codec=${codec}&from=${at.toFixed(3)}&audio=${encodeURIComponent(audio)}`,
+        );
+    }
+
+    /**
+     * プレイヤーを作るときに始める位置 (秒)。コーデックを切り替えた所か、続きの位置。頭からなら null。
+     * **切り替えた所は1度読んだら忘れる**
+     */
+    function startFrom(duration: number): number | null {
+        const from =
+            switchAt ?? (rec.resume_ms === null ? null : resumePoint(rec.resume_ms / 1000, duration));
+        switchAt = null;
+        return from;
+    }
+
+    /** **黙って途中から始めない。** 続きから始めたと言って、しばらくで引っ込める */
+    function showContinued(): void {
+        continued = true;
+        setTimeout(() => (continued = false), 4000);
+    }
+
     /** その場で流すときに頼む音声 (`playback` の `audios` の `id`) */
     function streamAudio(index: number): string {
         // 端末に保存した録画は軌道の何本目か (`mkv-source.ts`)
@@ -521,14 +521,9 @@
         const source = pickMediaSource();
         if (source === null) return;
         const total = info.duration;
-        const from =
-            switchAt ?? (rec.resume_ms === null ? null : resumePoint(rec.resume_ms / 1000, total));
-        switchAt = null;
+        const from = startFrom(total);
         remux = remuxPlayer(video, source, {
-            url: (at, audio) =>
-                resolve(
-                    `api/recordings/${rec.id}/stream?codec=${plan.codec}&from=${at.toFixed(3)}&audio=${encodeURIComponent(audio)}`,
-                ),
+            url: (at, audio) => streamUrl(plan.codec, at, audio),
             codecs: plan.type,
             duration: total,
             start: from ?? 0,
@@ -1083,9 +1078,7 @@
         const at = rec.resume_ms === null ? null : rec.resume_ms / 1000;
         if (at !== null && resumePoint(at, video.duration) !== null) {
             video.currentTime = at;
-            // **黙って途中から始めない。** 何が起きたか言って、しばらくで引っ込める
-            continued = true;
-            setTimeout(() => (continued = false), 4000);
+            showContinued();
         }
         settle();
     }
@@ -1205,19 +1198,17 @@
      * そちらは今までどおり落とす口を出す (`broken`)。拾い直すのは繋ぎが切れた
      * ときだけ
      */
-    const RETRIES = 8;
     function recover(): void {
         if (video === null) return;
         const code = video.error?.code ?? 0;
         // その場で流しているときの切れ目は `remux-player.ts` が拾い直す。ここに来るのは読めない中身
-        if (remux !== null || code !== MediaError.MEDIA_ERR_NETWORK || retries >= RETRIES) {
+        if (remux !== null || code !== MediaError.MEDIA_ERR_NETWORK || retries >= STREAM_RETRIES) {
             broken = true;
             resuming = false;
             return;
         }
         retryAt = video.currentTime;
-        // 倍々に伸ばして 10秒で頭打ち。入れ替えは数十秒かかる
-        const wait = Math.min(10_000, 1000 * 2 ** retries);
+        const wait = retryWait(retries);
         retries++;
         resuming = true;
         if (retryTimer !== null) clearTimeout(retryTimer);
@@ -2142,7 +2133,7 @@
 />
 
 <!-- 運転中の注意 (互換モードで初めて再生する前に1回。ライブ・追っかけと同じ)。押すまで再生を始めない -->
-<DriveNotice open={driveNotice} onaccept={acceptDriveNotice} />
+<DriveNotice open={drive.open} onaccept={drive.accept} />
 
 <style>
     .not-ready h2 {

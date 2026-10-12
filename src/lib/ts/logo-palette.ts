@@ -10,6 +10,8 @@
  * Mirakurun も同じことをしている (aribts の TsLogo.decode)。
  */
 
+import { pngChunk } from './png';
+
 /**
  * 放送で決まっている色の表。R,G,B,A の順に129色ぶん。
  *
@@ -54,34 +56,6 @@ const CLUT = new Uint8Array([
 ]);
 
 const COLORS = CLUT.length / 4;
-
-/** PNG のかたまりに必要な CRC-32 */
-const CRC_TABLE = (() => {
-    const table = new Uint32Array(256);
-    for (let n = 0; n < 256; n++) {
-        let c = n;
-        for (let k = 0; k < 8; k++) c = (c & 1) === 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
-        table[n] = c >>> 0;
-    }
-    return table;
-})();
-
-function crc32(bytes: Uint8Array): number {
-    let c = 0xffffffff;
-    for (const byte of bytes) c = CRC_TABLE[(c ^ byte) & 0xff]! ^ (c >>> 8);
-    return (c ^ 0xffffffff) >>> 0;
-}
-
-/** 長さ + 種類 + 中身 + CRC。PNG のかたまりの形 */
-export function pngChunk(type: string, data: Uint8Array): Uint8Array {
-    const out = new Uint8Array(12 + data.length);
-    const view = new DataView(out.buffer);
-    view.setUint32(0, data.length);
-    for (let i = 0; i < 4; i++) out[4 + i] = type.charCodeAt(i);
-    out.set(data, 8);
-    view.setUint32(8 + data.length, crc32(out.subarray(4, 8 + data.length)));
-    return out;
-}
 
 /** 署名(8) + IHDR(25)。パレットはこの直後に入れる */
 const AFTER_IHDR = 33;

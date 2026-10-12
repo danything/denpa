@@ -37,10 +37,10 @@ const BLOCK = 0xa1;
 const CODEC_ID = 0x86;
 
 /** 大きさが「不明」の印 (全部 1)。頭だけ書いて流し始める器で出てくる */
-const UNKNOWN = -1;
+export const UNKNOWN = -1;
 
 /** 時刻の刻みの既定 (ナノ秒)。1ms */
-const DEFAULT_SCALE = 1_000_000;
+export const DEFAULT_SCALE = 1_000_000;
 
 /** 取り出した1コマ */
 export interface MkvFrame {
@@ -51,7 +51,7 @@ export interface MkvFrame {
 }
 
 /** 読めた見出し。`body` は中身の先頭位置 */
-interface Header {
+export interface EbmlHead {
     id: number;
     size: number;
     body: number;
@@ -65,7 +65,11 @@ interface Header {
  *
  * @returns 読めなければ null (まだ足りない)
  */
-function vint(buffer: Uint8Array, at: number, keepMarker: boolean): { value: number; next: number } | null {
+export function vint(
+    buffer: Uint8Array,
+    at: number,
+    keepMarker: boolean,
+): { value: number; next: number } | null {
     if (at >= buffer.length) return null;
     const first = buffer[at]!;
     if (first === 0) return null;
@@ -86,10 +90,19 @@ function vint(buffer: Uint8Array, at: number, keepMarker: boolean): { value: num
 }
 
 /** 符号なし整数 (ビッグエンディアン、長さは中身のぶんだけ) */
-function uint(body: Uint8Array): number {
+export function uint(body: Uint8Array): number {
     let value = 0;
     for (const byte of body) value = value * 256 + byte;
     return value;
+}
+
+/** `[ID][大きさ]` の見出しを読む。足りなければ null */
+export function ebmlHead(buffer: Uint8Array, at: number): EbmlHead | null {
+    const id = vint(buffer, at, true);
+    if (id === null) return null;
+    const size = vint(buffer, id.next, false);
+    if (size === null) return null;
+    return { id: id.value, size: size.value, body: size.next };
 }
 
 /**
@@ -116,7 +129,7 @@ export class MkvSplitter {
         const out: MkvFrame[] = [];
         let at = 0;
         for (;;) {
-            const head = this.head(at);
+            const head = ebmlHead(this.buffer, at);
             if (head === null) break;
             // 中に入るものは、見出しだけ食べて先へ進む
             if (DESCEND.has(head.id) || head.size === UNKNOWN) {
@@ -137,14 +150,6 @@ export class MkvSplitter {
         }
         this.buffer = this.buffer.slice(at);
         return out;
-    }
-
-    private head(at: number): Header | null {
-        const id = vint(this.buffer, at, true);
-        if (id === null) return null;
-        const size = vint(this.buffer, id.next, false);
-        if (size === null) return null;
-        return { id: id.value, size: size.value, body: size.next };
     }
 
     /**

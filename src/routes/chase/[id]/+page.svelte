@@ -1,6 +1,5 @@
 <script lang="ts">
     import { onMount } from 'svelte';
-    import { seeDriveNotice } from '#lib/canvas-video.js';
     import DriveNotice from '#lib/components/DriveNotice.svelte';
     import ProgramFacts from '#lib/components/ProgramFacts.svelte';
     import AudioMenu from '#lib/components/player/AudioMenu.svelte';
@@ -34,6 +33,7 @@
     import { stageTap } from '#lib/components/player/stage-tap.js';
     import Toasts, { type Notice } from '#lib/components/Toasts.svelte';
     import { programDetail, recordingFacts } from '#lib/detail.svelte.js';
+    import { driveGate } from '#lib/drive-gate.svelte.js';
     import { clock as clockLabel } from '#lib/format.js';
     import { write as remind } from '#lib/keep.js';
     import { livePlayer } from '#lib/live-player.svelte.js';
@@ -52,23 +52,9 @@
      */
     let { data } = $props();
 
-    /** 運転中の注意 (互換モード。ライブと同じ。`live/+page.svelte`)。押すまで再生を始めない */
-    let driveNotice = $state(false);
-    let noticeWaiters: (() => void)[] = [];
-    const player = livePlayer({
-        confirm: () =>
-            new Promise<void>((done) => {
-                noticeWaiters.push(done);
-                driveNotice = true;
-            }),
-    });
-    function acceptDriveNotice(): void {
-        seeDriveNotice();
-        driveNotice = false;
-        const waiters = noticeWaiters;
-        noticeWaiters = [];
-        for (const done of waiters) done();
-    }
+    /** 運転中の注意 (互換モード。`drive-gate.svelte.ts`)。押すまで再生を始めない */
+    const drive = driveGate();
+    const player = livePlayer({ confirm: drive.confirm });
     /** 映像と重ねもの (MediaStack が組む)。bind で受けるので開くまでは null */
     let video = $state<HTMLVideoElement | null>(null);
     let still = $state<HTMLCanvasElement | null>(null);
@@ -453,7 +439,7 @@
 />
 
 <!-- 運転中の注意 (互換モードで初めて再生する前に1回)。押すまで再生を始めない -->
-<DriveNotice open={driveNotice} onaccept={acceptDriveNotice} />
+<DriveNotice open={drive.open} onaccept={drive.accept} />
 
 <style>
     .rec {
