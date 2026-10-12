@@ -1,5 +1,6 @@
 import { fail } from '@sveltejs/kit';
 import { and, count, eq, sql } from 'drizzle-orm';
+import { config } from '#lib/server/config.js';
 import { orm } from '#lib/server/db.js';
 import { CURRENT_SERVICES } from '#lib/server/epg.js';
 import { collectNow, collectState } from '#lib/server/epg-collect.js';
@@ -65,6 +66,28 @@ function describe(use: string): string {
     if (live !== null) return `ライブ視聴 (${live[1]})`;
 
     return use;
+}
+
+/**
+ * チューナーが足りないときに残る順 (`config.priority` の大きい順) を、画面の言葉で。
+ *
+ * **数字は画面に出さない。** ルールの「優先度」(0〜9。予約どうしを比べる) と並ぶと、
+ * ルールの 2 が番組表の 3 に負けるように読めてしまう (別の物差し)。順番だけ言えば足りる。
+ * 鍵を `config.priority` から取るので、用途を足したら言葉も足さないと型で落ちる
+ */
+const USE_LABEL: Record<keyof typeof config.priority, string> = {
+    recording: '録画',
+    live: 'ライブ視聴',
+    epgNow: '番組表の取得 (「番組表をいますぐ集める」を押したとき)',
+    scan: 'チャンネルスキャン',
+    epg: '番組表の取得 (ふだん)',
+    logo: '局ロゴの取得',
+};
+
+function yieldOrder(): string[] {
+    return (Object.entries(config.priority) as [keyof typeof config.priority, number][])
+        .sort((a, b) => b[1] - a[1])
+        .map(([use]) => USE_LABEL[use]);
 }
 
 function withLabels(tuners: AgentTuner[]): (Omit<AgentTuner, 'users'> & { users: TunerUser[] })[] {
@@ -147,6 +170,8 @@ export async function load() {
             .then((list) => ({ list: withLabels(list), error: null as string | null }))
             .catch((error: unknown) => ({ list: [], error: String(error) })),
         channels: coverage(),
+        // チューナーを譲り合う順。「チューナーの空き」の「詳しく」に出す
+        yieldOrder: yieldOrder(),
         card: cardStatus(),
         /** 番組表を集めている最中の様子。1チャンネルに数分かかる */
         collect: collectState(),

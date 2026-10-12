@@ -338,8 +338,8 @@
             {#if shownTuners.value !== undefined}
                 {@const rows = [...shownTuners.value.list, null]}
                 <form method="POST" action="?/tuners" use:submitting>
-                    <div class="table-wrap config-wrap stack-wrap">
-                        <table class="config stack">
+                    <div class="table-wrap config-wrap row-cards-wrap">
+                        <table class="config row-cards">
                             <thead>
                                 <tr>
                                     <th>名前</th>
@@ -455,8 +455,8 @@
                         チューナーがありません。「チューナーの設定」から追加してください。
                     </p>
                 {:else}
-                    <div class="table-wrap stack-wrap">
-                        <table class="stack">
+                    <div class="table-wrap row-cards-wrap">
+                        <table class="row-cards">
                             <thead>
                                 <tr>
                                     <th>名前</th>
@@ -491,21 +491,22 @@
                                         </td>
                                         <td class="small span" data-label="使っているもの">
                                             <!--
-                                                **「優先度」とは呼ばない。**
+                                                **数字を出さない。** 何に使っているか (録画・ライブ視聴・番組表…)
+                                                が出ていれば、どちらが譲るかは用途で決まる (下の「詳しく」に順番)。
 
-                                                ルール画面の「優先度」は*どの予約を残すか*で、
-                                                こちらは*いま掴んでいる1本を誰に譲るか*。
-                                                別の物差しなのに同じ名前で数字を並べていたので、
-                                                ルールの 2 が番組表の 3 に負けるように見えていた。
-                                                録画は必ず 10 で掴むので、そうはならない
+                                                「使う強さ 10」「掴む強さ 10」は言葉が不自然で、「優先度 10」と
+                                                書くとルール画面の「優先度」(0〜9。*どの予約を残すか*) と同じ名前の
+                                                別の物差しが並び、ルールの 2 が番組表の 3 に負けるように読めていた。
+                                                数は調べるとき用に `data-priority` にだけ残す
                                             -->
                                             <!-- 目印は番号で。同じ用途が2つ乗ることはあり、字を目印にすると落ちる -->
                                             {#each tuner.users as user, i (i)}
-                                                <div class="truncate" data-testid="tuner-user">
+                                                <div
+                                                    class="truncate"
+                                                    data-testid="tuner-user"
+                                                    data-priority={user.priority}
+                                                >
                                                     {user.label}
-                                                    <span class="muted">
-                                                        (使う強さ {user.priority})
-                                                    </span>
                                                 </div>
                                             {:else}
                                                 <span class="muted">—</span>
@@ -518,6 +519,20 @@
                     </div>
                 {/if}
             {/if}
+
+            <!-- 譲り合う順は数字ではなく用途の並びで言う (順番は config.priority から) -->
+            <details class="more" data-testid="tuner-yield">
+                <summary>詳しく</summary>
+                <p class="small">チューナーが足りないときは、上にあるものが先に使い、下のものが譲ります。</p>
+                <ol class="small" data-testid="tuner-yield-order">
+                    {#each data.yieldOrder as use (use)}
+                        <li>{use}</li>
+                    {/each}
+                </ol>
+                <p class="small">
+                    ルールの「優先度」は予約どうしを比べるもので、この順とは別です。
+                </p>
+            </details>
 
             <!--
                 カードリーダー。**同じ機材の話**なのでここに置く。
@@ -563,8 +578,8 @@
                         </div>
                     {/if}
                     {#if card.readers.length > 0}
-                        <div class="table-wrap stack-wrap">
-                            <table class="stack">
+                        <div class="table-wrap row-cards-wrap">
+                            <table class="row-cards">
                                 <thead>
                                     <tr>
                                         <th>カードリーダー</th>
@@ -846,40 +861,42 @@
         padding-inline-end: 2rem;
     }
     /*
-     * **スマートフォンの幅では、表をやめて1行ずつのカードにする** (設定の通知先と同じ形。`.stack`)。
+     * **スマートフォンの幅では、表をやめて1行ずつのカードにする**。
+     * **名前を `.stack` にしない。** app.css の `.stack` (縦に積む flex) が広い画面でも表に当たり、
+     * 表が flex になって見出しと行が別々に詰められ、列がずれていた (#651 で入れたとき)。
      * 横に巻かせていた頃は、チューナーの設定の受信できる種別・LNB・無効、空きの「使っているもの」、
      * カードリーダーの状態が枠の外にあって、横になぞらないと見えなかった (デバイスも途中で切れていた)。
      * 見出しの行は隠し、欄ごとに見出しを上に書く (`data-label`)。
      * 2つずつ並べ、長いもの (`.span`) は1段を使う
      */
-    .stack-wrap {
+    .row-cards-wrap {
         container-type: inline-size;
     }
     @container (max-width: 32rem) {
-        .stack,
-        .stack tbody,
-        .stack td {
+        .row-cards,
+        .row-cards tbody,
+        .row-cards td {
             display: block;
         }
-        .stack thead {
+        .row-cards thead {
             display: none;
         }
-        .stack tr {
+        .row-cards tr {
             display: grid;
             grid-template-columns: repeat(2, minmax(0, 1fr));
             gap: 0.5rem 0.75rem;
             padding-block: 0.75rem;
             border-top: 1px solid var(--dp-base-300);
         }
-        .stack tr:first-child {
+        .row-cards tr:first-child {
             border-top: 0;
         }
-        .table-wrap .stack td {
+        .table-wrap .row-cards td {
             padding: 0;
             border: 0;
             background: transparent;
         }
-        .stack td::before {
+        .row-cards td::before {
             content: attr(data-label);
             display: block;
             margin-bottom: 0.25rem;
@@ -887,7 +904,7 @@
             font-weight: 500;
             opacity: 0.7;
         }
-        .stack .span {
+        .row-cards .span {
             grid-column: 1 / -1;
         }
         .config :is(.w-name, .w-device) {
