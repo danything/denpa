@@ -53,7 +53,12 @@ export function trackLayers(
         const stops = marked.flatMap((at) => {
             const x = trackAt(ratio(at));
             const after = `calc(${x} + 1px)`;
-            return [`transparent ${x}`, `${TICK_COLOR} ${x}`, `${TICK_COLOR} ${after}`, `transparent ${after}`];
+            return [
+                `transparent ${x}`,
+                `${TICK_COLOR} ${x}`,
+                `${TICK_COLOR} ${after}`,
+                `transparent ${after}`,
+            ];
         });
         ticks = `linear-gradient(to right, ${stops.join(', ')})`;
     }
