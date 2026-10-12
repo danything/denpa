@@ -67,6 +67,7 @@
     import type { Bml, BmlIp, Rect } from '#lib/bml/engine.js';
     import { forget, read, write } from '#lib/keep.js';
     import type { ResponseMessage } from '#lib/ts/bml-protocol.js';
+    import { CAPTION_RESCALE } from './caption-draw.js';
     import StageNote from './StageNote.svelte';
 
     interface Props {
@@ -398,6 +399,8 @@
         mount.style.width = `${plane.width}px`;
         mount.style.height = `${plane.height}px`;
         mount.style.transform = `scale(${box.width / plane.width}, ${box.height / plane.height})`;
+        // 小窓の中の字幕に、伸ばしたぶん細かく描き直してもらう (canvas の CSS の大きさは変わらず、気づけない)
+        window.dispatchEvent(new Event(CAPTION_RESCALE));
     }
 
     /**

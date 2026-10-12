@@ -950,13 +950,18 @@
     function place(): void {
         if (video === null) return;
         const rect = fitRect(video.clientWidth, video.clientHeight, video.videoWidth, video.videoHeight);
-        // 字幕も CM の蓋も、映像の絵と同じ場所・同じ大きさに置く
+        /*
+         * 字幕も CM の蓋も、映像の絵と同じ場所・同じ大きさに置く。**画面の画素の境目に揃える** —
+         * 端数の位置に置くと、字幕の canvas が半画素ずれて描かれ、字の縁が滲む
+         */
+        const dpr = window.devicePixelRatio || 1;
+        const snap = (px: number) => `${Math.round(px * dpr) / dpr}px`;
         for (const layer of [overlay, cover]) {
             if (layer === null) continue;
-            layer.style.left = `${video.offsetLeft + rect.left}px`;
-            layer.style.top = `${video.offsetTop + rect.top}px`;
-            layer.style.width = `${rect.width}px`;
-            layer.style.height = `${rect.height}px`;
+            layer.style.left = snap(video.offsetLeft + rect.left);
+            layer.style.top = snap(video.offsetTop + rect.top);
+            layer.style.width = snap(rect.width);
+            layer.style.height = snap(rect.height);
         }
         // 黒塗りの蓋は枠ごと覆う。**まだ絵の大きさが分からない**ことがあるため
         // (開いた直後。`fitRect` は 0 を渡されると当てにならない)

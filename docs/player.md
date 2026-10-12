@@ -20,7 +20,7 @@
 | `awake.svelte.ts` | 観ている間、画面を暗くさせない（Wake Lock）。入り切りは無く、止めている間も掛けたまま（一時停止して絵を見ている間に消えていた） |
 | `frames.ts` | 映した1枚ごとに呼ぶ。字幕の貼り直しと CM の跨ぎがこれに乗る（`timeupdate` は 250ms ごとにしか来ない） |
 | `paint.ts` | 字幕の面を映像の絵が出ている枠に合わせる (`fitRect`。字幕の面と映像の縦横比が違うことがある) |
-| `caption-draw.ts` | 字幕の文字の配置を canvas に描く (ライブ・追っかけ・録画)。画面の画素で描き、全画面の出入りで描き直す。描き方は libaribcaption に揃えてある ([api.md](api.md#字幕の文字の配置)) |
+| `caption-draw.ts` | 字幕の文字の配置を canvas に描く (ライブ・追っかけ・録画)。**見えている大きさ (データ放送の小窓で面ごと伸ばしたぶんも込み) × 画面の画素**で描き、全画面や小窓の出入りで描き直す。描き方は libaribcaption に揃えてある ([api.md](api.md#字幕の文字の配置)) |
 | `PlayerStage.svelte` | 舞台の枠。ポインタ・キー・全画面の配線と、黒地で 16:9 の枠。枠の大きさを測って詰め方を決める（幅 448px 未満か、16:9 より低く抑えられて高さ 300px 未満か、横にしたスマホ = `data-compact`。幅で `compact` で全画面でない = `data-under`: スマホの縦、帯を絵の下へ。高さ 360px 未満 = `data-low`）。絵の上の知らせ (`StageNote`) を積む列 (`notes`) も持つ。帯を絵に重ねている間は、帯と重なる字幕を帯の上まで持ち上げる (字幕の canvas の `data-ink` を見て `translate`) |
 | `Extras.svelte` / `MoreButton.svelte` | 狭い枠で「毎回は使わないもの」（音声・送り・CM 飛ばし・焼き方・速さ・バックグラウンド再生・小窓）を「ほか」(⋯) に畳む。広い枠では何もしない。並べ替えは CSS の `order` だけ（DOM は1か所） |
 | `MediaStack.svelte` | 映像と重ねもの（前の絵・字幕 canvas）の束。BML が触るので class でなく style |
