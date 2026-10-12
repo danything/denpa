@@ -122,6 +122,13 @@ export class Resources {
                         .map((c) => [c.componentId, c]),
                 );
                 this.pmtSeen = true;
+                // PMT から消えた部品のモジュールは捨てる (番組が替わって部品が減ると、ライブでは
+                // 前の番組のモジュールを持ち続けることになる)。押さえたものは押さえた側が持つ
+                for (const [k, module] of this.cache) {
+                    if (this.pmt.has(module.component)) continue;
+                    this.cache.delete(k);
+                    this.release(module);
+                }
                 // PMT に無い部品を待っても来ない
                 this.settle((p) => (this.pmt.has(p.component) ? undefined : null));
                 return [{ type: 'pmt', components: this.pmt, previous }];

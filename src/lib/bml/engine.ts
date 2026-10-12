@@ -142,6 +142,18 @@ function keyGroup(code: number): string | null {
 /** accesskey の字 (付属2 5.4.2.3) */
 const ACCESS_KEYS: Record<number, string> = { 19: 'X', 21: 'B', 22: 'R', 23: 'G', 24: 'Y', 25: 'E', 26: 'F' };
 
+/*
+ * 長く流し続けても増え続けない歯止め。ライブはモジュールの版上げ・イベントメッセージ・TOT が
+ * 止まらずに来る (NHK は 10 分で DII の更新 48 回・イベントメッセージ 4234 件)。文書が
+ * 解き忘れても、エンジンが持つものは一定に収める
+ */
+/** 待っているイベントの上限 (溢れた受け手は捨てる) */
+export const MAX_QUEUE = 512;
+/** 同時に動かすタイマー (setInterval) の上限。超えたら NaN (本番の局は 2 つほど) */
+export const MAX_TIMERS = 64;
+/** 「1 回だけ知らせる」ために覚えておく数 */
+const MAX_REPORTED = 256;
+
 type Job =
     | {
           kind: 'program';
@@ -274,7 +286,11 @@ class Engine implements DomHost, BrowserHost, RenderHost {
 
     feed(message: ResponseMessage): void {
         if (this.destroyed) return;
-        for (const event of this.resources.feed(message)) this.react(event);
+        // 届いたものを捌くのもエンジンの仕事に数える (ライブは止まらずに流れ込み続ける。
+        // モジュールを解く・受け手を探すのを数えないと、10 秒のうち 4 割の見張りから漏れる)
+        this.work(() => {
+            for (const event of this.resources.feed(message)) this.react(event);
+        });
     }
 
     setReceiverInfo(info: Partial<ReceiverInfo>): void {
@@ -524,6 +540,11 @@ class Engine implements DomHost, BrowserHost, RenderHost {
 
     /** 1 秒ごと。時刻指定の TimerFired (absolute) */
     private tick(): void {
+        if (this.doc === null || this.halted) return;
+        this.work(() => this.timerFired());
+    }
+
+    private timerFired(): void {
         const now = this.now();
         for (const beitem of this.beitems('TimerFired')) {
             if (beitem.memo['fired'] === true) continue;
@@ -622,10 +643,14 @@ class Engine implements DomHost, BrowserHost, RenderHost {
         const doc = xml === null ? null : new BmlDocument(xml);
         this.charge(started);
         if (doc === null || token !== this.token) return false;
-        // 要るファイル (link のスタイル・CLUT・script の src) は、文書を替える前に全部そろえる
+        // 要るファイル (link のスタイル・CLUT・script の src) は、文書を替える前に全部そろえる。
+        // 待つ間は数えず、待ちと待ちの間 (スタイルを読む・当てる) は動いた時間に数える
+        started = performance.now();
         const fetchText = async (url: string): Promise<string | null> => {
             const ref = this.resources.resolve(url, path);
+            this.charge(started);
             const data = ref === null ? null : await this.resources.fetch(ref);
+            started = performance.now();
             return data === null ? null : decodeEuc(data.data);
         };
         const rules: Rule[] = [];
@@ -647,7 +672,9 @@ class Engine implements DomHost, BrowserHost, RenderHost {
         const clutUrl = body === null ? null : parseUrl(body.style().clut ?? '');
         if (clutUrl !== null) {
             const ref = this.resources.resolve(clutUrl, path);
+            this.charge(started);
             const data = ref === null ? null : await this.resources.fetch(ref);
+            started = performance.now();
             if (token !== this.token) return false;
             if (data !== null) table = readClut(data.data);
         }
@@ -662,6 +689,9 @@ class Engine implements DomHost, BrowserHost, RenderHost {
             if (token !== this.token) return false;
             scripts.push({ source: source ?? '', name: src });
         }
+        // ここまでの読み込み・当てはめも数える。止めたなら替えない
+        this.charge(started);
+        if (token !== this.token) return false;
 
         // ここから文書を替える (以降は同期で積み終える)
         started = performance.now();
@@ -731,6 +761,15 @@ class Engine implements DomHost, BrowserHost, RenderHost {
 
     private enqueue(job: Job): void {
         if (job.token !== this.token) return;
+        // 待ちの上限。受け手が待ち (sleep・届かないモジュール) で止まっている間もライブの知らせは
+        // 来続けるので、溢れた分の受け手は捨てる (テレビも動いている間の知らせは取りこぼす)。
+        // エンジンの中の続き (native) は捨てない
+        if (job.kind !== 'native' && this.queue.length >= MAX_QUEUE) {
+            // 捨てたタイマーの刻みは、次の刻みで積み直せるように
+            if (job.timer !== undefined) job.timer.queued = false;
+            this.report('#queue', `待っているイベントが ${MAX_QUEUE} を超えたので、溢れた分を捨てます`);
+            return;
+        }
         this.queue.push(job);
         // 動いている・回してある間は、そちらが続けて動かす
         if (this.scheduled || this.running || this.deferred) return;
@@ -1021,11 +1060,19 @@ class Engine implements DomHost, BrowserHost, RenderHost {
         const scheme = unknownScheme(name);
         if (scheme === null) return false;
         // 描くたびに通る口 (画像) からも来るので、同じ名前は 1 回だけ知らせる
-        if (!this.reported.has(name)) {
-            this.reported.add(name);
-            this.log(`規格に無い名前の形なので扱えません (${scheme}:): ${name}`);
-        }
+        this.report(name, `規格に無い名前の形なので扱えません (${scheme}:): ${name}`);
         return true;
+    }
+
+    /**
+     * 同じことは 1 回だけ知らせる。覚えておく数には上限を置く (名前はスクリプトが組むので、
+     * 長く流すと際限なく増えうる。溢れたら忘れて、また 1 回ずつ知らせる)
+     */
+    private report(key: string, message: string): void {
+        if (this.reported.has(key)) return;
+        if (this.reported.size >= MAX_REPORTED) this.reported.clear();
+        this.reported.add(key);
+        this.log(message);
     }
 
     /**
@@ -1086,6 +1133,11 @@ class Engine implements DomHost, BrowserHost, RenderHost {
 
     setTimer(code: string, interval: number, count: number): number {
         if (!(interval > 0)) return Number.NaN;
+        // 消し忘れて積み上がるタイマーを止める (受け手のたびに回数 0 で作り直す文書など)
+        if (this.timers.size >= MAX_TIMERS) {
+            this.report('#timers', `タイマーが ${MAX_TIMERS} を超えるので、これ以上は作りません: ${code}`);
+            return Number.NaN;
+        }
         // `f();` は関数を呼ぶだけ。引数つきの呼び出し (`f(3);`) などは式として読んで、刻みごとに動かす
         // (STD-B24 第二編 7.6.10: 第 1 引数は動かすスクリプトの文字列)。自前の VM で動かすので eval は使わない
         const call = /^\s*([A-Za-z_$][\w$]*)\s*\(\s*\)\s*;?\s*$/.exec(code)?.[1] ?? null;
@@ -1223,6 +1275,7 @@ class Engine implements DomHost, BrowserHost, RenderHost {
             this.resources.fetch(ref).then((file) => {
                 // 待つ間に文書が替わったら、前の文書の外字は入れない
                 if (file === null || token !== this.token) return Number.NaN;
+                const started = performance.now();
                 for (const [unit, glyph] of parseDrcs(file.data)) {
                     const key = `${unit}:${glyph.width}:${glyph.fontId}`;
                     const old = this.glyphs.get(key);
@@ -1235,6 +1288,8 @@ class Engine implements DomHost, BrowserHost, RenderHost {
                     });
                 }
                 this.doc?.touch();
+                // 外字を解くのも動いた時間に数える (待ちの続きなので work の外)
+                this.charge(started);
                 return 1;
             }),
         );
@@ -1328,10 +1383,7 @@ class Engine implements DomHost, BrowserHost, RenderHost {
         let source: ImageSource | null = null;
         if (mng) {
             source = this.mngSource(file.data);
-            if (source === null && !this.reported.has(`mng:${refToPath(ref)}`)) {
-                this.reported.add(`mng:${refToPath(ref)}`);
-                this.log(`MNG が読めません: ${url}`);
-            }
+            if (source === null) this.report(`mng:${refToPath(ref)}`, `MNG が読めません: ${url}`);
         } else if (png) {
             const fixed = applyClut(file.data, this.table);
             if (fixed !== null) {

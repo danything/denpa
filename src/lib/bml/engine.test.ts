@@ -1,6 +1,15 @@
 import { afterEach, describe, expect, test } from 'bun:test';
 import type { ResponseMessage } from '#lib/ts/bml-protocol.js';
-import { type Bml, type BmlOptions, createBml, type Plane, planeArea, type Service } from './engine';
+import {
+    type Bml,
+    type BmlOptions,
+    createBml,
+    MAX_QUEUE,
+    MAX_TIMERS,
+    type Plane,
+    planeArea,
+    type Service,
+} from './engine';
 import { sampleMng } from './mng.fixture';
 import type { ImageSource } from './render';
 
@@ -542,5 +551,196 @@ describe('MNG', () => {
         expect(source?.url).toBe(source?.animation?.frames[0]?.url ?? '');
         // 同じ文書のうちは作り直さない
         expect(inside(bml).image('a.mng', 'object', 'image/x-arib-mng')).toBe(source);
+    });
+});
+
+describe('ライブのように流し続けても、持つものと握る時間が一定に収まる', () => {
+    /** 入口の部品のモジュール 1 つ */
+    const moduleOf = (id: number, version: number, files: [string, string, string][]): ResponseMessage => ({
+        type: 'moduleDownloaded',
+        componentId: 0x40,
+        moduleId: id,
+        version,
+        dataEventId: 1,
+        files: files.map(([name, type, body]) => {
+            const [major = 'text', minor = 'plain'] = type.split('/');
+            return {
+                contentLocation: name,
+                contentType: media(major, minor),
+                dataBase64: Buffer.from(body, 'latin1').toString('base64'),
+            };
+        }),
+    });
+    const diiOf = (modules: [number, number][]): ResponseMessage => ({
+        type: 'moduleListUpdated',
+        componentId: 0x40,
+        modules: modules.map(([id, version]) => ({ id, version, size: 1 })),
+        dataEventId: 1,
+    });
+    const eventOf = (id: number, version: number): ResponseMessage => ({
+        type: 'esEventUpdated',
+        componentId: 0x40,
+        dataEventId: 1,
+        events: [
+            {
+                type: 'immediateEvent',
+                eventMessageGroupId: 0,
+                timeMode: 0,
+                eventMessageType: 0,
+                eventMessageId: (id << 8) | version,
+                privateDataByte: [0x41, 0x42],
+            },
+        ],
+    });
+    const PMT: ResponseMessage = {
+        type: 'pmt',
+        components: [{ pid: 0x140, componentId: 0x40, streamType: 0x0d }],
+    };
+
+    /** 作った blob: の URL のうち、まだ返していないものを数える */
+    function countUrls(): { live: () => number; restore: () => void } {
+        const create = URL.createObjectURL;
+        const revoke = URL.revokeObjectURL;
+        const made = new Set<string>();
+        URL.createObjectURL = (object: Parameters<typeof URL.createObjectURL>[0]) => {
+            const url = create.call(URL, object);
+            made.add(url);
+            return url;
+        };
+        URL.revokeObjectURL = (url: string) => {
+            made.delete(url);
+            revoke.call(URL, url);
+        };
+        return {
+            live: () => made.size,
+            restore: () => {
+                URL.createObjectURL = create;
+                URL.revokeObjectURL = revoke;
+            },
+        };
+    }
+
+    /** エンジンの中で、長く流すと増えうるもの */
+    const engine = (bml: Bml) =>
+        bml as unknown as {
+            ureg: string[];
+            queue: unknown[];
+            timers: Map<number, unknown>;
+            missingImages: Set<string>;
+            reported: Set<string>;
+            halted: boolean;
+            resources: { cache: Map<string, unknown>; pending: unknown[] };
+        };
+
+    test('版上げ・イベントメッセージ・TOT を何千回流しても、増え続けない', async () => {
+        const urls = countUrls();
+        try {
+            // 見張りで止めずに、持つものだけを見る (流す速さはライブの何百倍)。時計はライブと同じ TOT
+            const { bml, logs } = open({ clock: () => null, budget: { ratio: 1 } });
+            // 本番の局の形に寄せる: 1 回きりのタイマーを受け手のたびに作り直す (chkRen)、
+            // 版が上がったら押さえ直して字を書き換える、イベントのたびに消さないタイマーを足す (解き忘れ)
+            const script = `var n = 0, m = 0;
+                function start() { browser.setInterval("chk();", 1, 1); browser.Ureg[1] = "ready"; }
+                function chk() { browser.setInterval("chk();", 1, 1); }
+                function updated() {
+                    n++;
+                    browser.lockModuleOnMemory("/40/0001");
+                    document.getElementById("t").firstChild.data = "u" + n;
+                    browser.Ureg[2] = "" + n;
+                }
+                function locked() { browser.unlockModuleOnMemory("/40/0001"); }
+                function fired() { m++; browser.Ureg[3] = "" + m; browser.setInterval("leak();", 100000, 0); }
+                function leak() {}`;
+            const body = `<object type="image/jpeg" data="/40/0001/img.jpg" style="left:0px;top:0px;width:100px;height:50px"/>
+                <p id="t" style="left:0px;top:60px;width:200px;height:30px"></p>
+                <bevent>
+                <beitem id="u" type="ModuleUpdated" module_ref="/40/0001" subscribe="subscribe" onoccur="updated();"/>
+                <beitem id="l" type="ModuleLocked" module_ref="/40/0001" subscribe="subscribe" onoccur="locked();"/>
+                <beitem id="e" type="EventMessageFired" subscribe="subscribe" onoccur="fired();"/>
+                </bevent>`;
+            feedAll(bml, [
+                PMT,
+                diiOf([
+                    [0, 1],
+                    [1, 0],
+                ]),
+                moduleOf(0, 1, [startup(body, script)]),
+                moduleOf(1, 0, [['img.jpg', 'image/jpeg', 'jpeg0']]),
+            ]);
+            const { done } = await watch(() => engine(bml).ureg[1] === 'ready');
+            expect(done).toBe(true);
+
+            let longest = 0;
+            let last = performance.now();
+            for (let round = 1; round <= 3000; round++) {
+                const version = round & 0xff;
+                feedAll(bml, [
+                    diiOf([
+                        [0, 1],
+                        [1, version],
+                    ]),
+                    moduleOf(1, version, [['img.jpg', 'image/jpeg', `jpeg${round}`]]),
+                    eventOf(round % 200, version),
+                    // ライブは同じセクションが何度も来る
+                    eventOf(round % 200, version),
+                    { type: 'currentTime', timeUnixMillis: Date.UTC(2026, 9, 12, 3) + round * 1000 },
+                ]);
+                if (round % 10 === 0) {
+                    await new Promise((resolve) => setTimeout(resolve, 0));
+                    const now = performance.now();
+                    longest = Math.max(longest, now - last);
+                    last = now;
+                }
+            }
+            await watch(() => false, 300);
+            const inner = engine(bml);
+            // 流れは届いている (受け手が動いた)
+            expect(Number(inner.ureg[2])).toBeGreaterThan(10);
+            expect(Number(inner.ureg[3])).toBeGreaterThan(10);
+            expect(inner.halted).toBe(false);
+            expect(bml.path).toBe('/40/0000/startup.bml');
+            // 持つものは一定
+            expect(inner.queue.length).toBeLessThanOrEqual(MAX_QUEUE);
+            expect(inner.timers.size).toBeLessThanOrEqual(MAX_TIMERS);
+            expect(inner.resources.cache.size).toBeLessThanOrEqual(2);
+            expect(inner.resources.pending.length).toBeLessThanOrEqual(1);
+            expect(inner.missingImages.size).toBeLessThanOrEqual(1);
+            expect(inner.reported.size).toBeLessThan(10);
+            // 画像の URL は今の版のぶんだけ (版が上がるたびに返す)
+            expect(urls.live()).toBeLessThanOrEqual(2);
+            expect(logs.some((line) => line.includes('タイマーが'))).toBe(true);
+            // 手が空かなかった間は短いまま (流し込む側の 10 回ぶんを含めて)
+            expect(longest).toBeLessThan(200);
+        } finally {
+            urls.restore();
+        }
+    }, 120_000);
+
+    test('受け手が届かないモジュールを待って止まっている間に来たイベントは、上限を超えたら捨てる', async () => {
+        const { bml, logs } = open();
+        // モジュール 2 は DII にあるが届かない。BinaryTable で待ったまま、次の受け手が動けない
+        const script = `function start() {
+                browser.Ureg[1] = "waiting";
+                var t = new BinaryTable("/40/0002/x.bin", "0,U:1B");
+                browser.Ureg[1] = "never";
+            }
+            function fired() {}`;
+        const body =
+            '<bevent><beitem id="e" type="EventMessageFired" subscribe="subscribe" onoccur="fired();"/></bevent>';
+        feedAll(bml, [
+            PMT,
+            diiOf([
+                [0, 1],
+                [2, 1],
+            ]),
+            moduleOf(0, 1, [startup(body, script)]),
+        ]);
+        const { done } = await watch(() => engine(bml).ureg[1] === 'waiting');
+        expect(done).toBe(true);
+        for (let i = 0; i < 4000; i++) bml.feed(eventOf(i % 250, (i >> 4) & 0xff));
+        await watch(() => false, 100);
+        expect(engine(bml).ureg[1]).toBe('waiting');
+        expect(engine(bml).queue.length).toBeLessThanOrEqual(MAX_QUEUE);
+        expect(logs.filter((line) => line.includes('溢れた分を捨てます')).length).toBe(1);
     });
 });
