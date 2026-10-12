@@ -384,7 +384,9 @@ export class Renderer {
         const source =
             status === 'stop' || data === '' ? null : this.host.image(data, 'object', 'image/x-arib-mng');
         const animation = source?.animation;
-        const key = animation === undefined ? '' : `${source!.url}\u0000${status}\u0000${position}`;
+        const looping = Math.max(1, Number.parseInt(element.attr('streamlooping') ?? '1', 10) || 1);
+        const key =
+            animation === undefined ? '' : `${source!.url}\u0000${status}\u0000${position}\u0000${looping}`;
         if (key === (view.playing?.key ?? '')) return;
         this.stopAnimation(view);
         if (animation === undefined || animation.frames.length === 0) return;
@@ -408,7 +410,6 @@ export class Renderer {
         let index = Math.min(position, frames.length - 1);
         show(index);
         if (status !== 'play') return;
-        const looping = Math.max(1, Number.parseInt(element.attr('streamlooping') ?? '1', 10) || 1);
         let rounds = animation.iterations * looping;
         const step = (): void => {
             playing.timer = setTimeout(() => {

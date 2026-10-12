@@ -41,11 +41,32 @@ describe('MNG', () => {
         expect(names).toEqual(['IHDR', 'PLTE', 'tRNS', 'IDAT', 'IEND']);
     });
 
+    test('名前の付いた FRAM でも間隔を読む', () => {
+        const named = chunk('FRAM', [1, 0x61, 0x62, 0, 2, 0, 0, 0, ...u32(30)]);
+        expect(parseMng(mng([MHDR, named, ...frame(), chunk('MEND', [])]))?.frames[0]?.delay).toBe(300);
+    });
+
     test('TERM が無ければ 1 回、回数があればその回数。間隔 0 でも下限を置く', () => {
         expect(parseMng(mng([MHDR, fram(1, 0), ...frame(), chunk('MEND', [])]))?.iterations).toBe(1);
         expect(parseMng(mng([MHDR, fram(1, 0), ...frame(), chunk('MEND', [])]))?.frames[0]?.delay).toBe(20);
         const three = mng([MHDR, chunk('TERM', [3, 0, ...u32(0), ...u32(3)]), ...frame(), chunk('MEND', [])]);
         expect(parseMng(three)?.iterations).toBe(3);
+        // 終わり方が 3 (最初から) でなければくり返さない
+        const once = mng([MHDR, chunk('TERM', [0, 0, ...u32(0), ...u32(3)]), ...frame(), chunk('MEND', [])]);
+        expect(parseMng(once)?.iterations).toBe(1);
+        // 場所を省いた DEFI は 0, 0 に戻る
+        const reset = mng([
+            MHDR,
+            defi(5, 6),
+            ...frame(),
+            chunk('DEFI', [0, 0]),
+            ...frame(),
+            chunk('MEND', []),
+        ]);
+        expect(parseMng(reset)?.frames.map((f) => [f.x, f.y])).toEqual([
+            [5, 6],
+            [0, 0],
+        ]);
     });
 
     test('MNG でない・コマが無いものは null', () => {

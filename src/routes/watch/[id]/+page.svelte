@@ -1093,7 +1093,6 @@
     /** 切り抜きの結果。**貼れたかどうかは言う** (黙って何も起きないと分からない) */
     const shooter = snapshotter(controls);
 
-    /** 断られたときだけ知らせる。消せたときは一覧へ戻るので出す先が無い */
     /**
      * **録画の再生中は選局できない。** データ放送が「この局へ」と言ってきたら (epgTune)、文書には失敗を
      * 返し (`DataBroadcast` の tune)、観ている人にはそう知らせる
@@ -1104,6 +1103,7 @@
         return false;
     }
 
+    /** 断られたときだけ知らせる。消せたときは一覧へ戻るので出す先が無い */
     const notices = $derived<Notice[]>([
         ...errorNotice(form, 'watch-delete'),
         ...shooter.notices,

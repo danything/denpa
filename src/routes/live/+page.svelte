@@ -117,14 +117,15 @@
      * **音声は引き継がない。** あちらは番組ごとに構成が変わるもので、局が変われば
      * 前の合言葉はもう指すものが無い (サーバが主音声に落とす)
      */
-    function select(channel: LiveChannel): void {
-        if (video === null) return;
+    function select(channel: LiveChannel): boolean {
+        if (video === null) return false;
         void player.tune(video, {
             channelType: channel.type,
             channel: channel.channel,
             serviceId: channel.id,
             codec: player.codec,
         });
+        return true;
     }
 
     /**
@@ -140,9 +141,8 @@
         const found = channels.find(
             (c) => c.networkId === service.originalNetworkId && c.serviceId === service.serviceId,
         );
-        if (found === undefined) return false;
-        select(found);
-        return true;
+        // 映像がまだ無い (選局できない) なら失敗にする。文書は閉じない
+        return found !== undefined && select(found);
     }
 
     /**

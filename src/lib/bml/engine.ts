@@ -977,7 +977,8 @@ class Engine implements DomHost, BrowserHost, RenderHost {
         const type = (element.attr('type') ?? '').toLowerCase();
         if (type !== 'audio/x-arib-aiff') {
             // MNG は止めるとコマの位置が 0 に戻る (付属2 4.8.5.3 表4-27)
-            if (type === 'image/x-arib-mng' && status === 'stop') element.setAttr('streamposition', '0');
+            if (type === 'image/x-arib-mng' && status.toLowerCase() === 'stop')
+                element.setAttr('streamposition', '0');
             element.setAttr('streamstatus', status);
             return;
         }
@@ -1070,6 +1071,9 @@ class Engine implements DomHost, BrowserHost, RenderHost {
             this.log(`epgTune で選局できません: ${serviceRef}`);
             return Number.NaN;
         }
+        // 選局は画面がやり、局が変わればこの器ごと作り直される。それまでに前の局のモジュールが届いても
+        // 入口から出直さない (入口で epgTune を呼ぶ文書だと、選局を頼み直し続ける)
+        this.halted = true;
         this.exit();
         return ABORT;
     }
@@ -1263,7 +1267,11 @@ class Engine implements DomHost, BrowserHost, RenderHost {
         const frames: AnimationFrame[] = [];
         for (const frame of mng.frames) {
             const fixed = applyClut(frame.png, this.table);
-            if (fixed === null) continue;
+            // 1 コマでも組めなければ読めないものとする (コマの番号と streamposition をずらさない)
+            if (fixed === null) {
+                for (const made of frames) URL.revokeObjectURL(made.url);
+                return null;
+            }
             const url = URL.createObjectURL(new Blob([fixed.data], { type: 'image/png' }));
             frames.push({ url, x: frame.x, y: frame.y, delay: frame.delay, keep: frame.keep });
         }
@@ -1312,7 +1320,9 @@ class Engine implements DomHost, BrowserHost, RenderHost {
         const png = type === 'image/x-arib-png';
         const mng = type === 'image/x-arib-mng';
         // PNG・MNG の色は文書の CLUT で決まるので、文書ごとに作る
-        const variant = png ? `png:${this.current}` : mng ? `mng:${this.current}` : 'raw';
+        // 問い合わせ (`?tsid=…`) は文書の名前の一部だが、CLUT は同じなので作り直さない
+        const page = this.current?.replace(/[?#].*$/, '');
+        const variant = png ? `png:${page}` : mng ? `mng:${page}` : 'raw';
         const made = file.urls.get(variant);
         if (made !== undefined) return made;
         let source: ImageSource | null = null;

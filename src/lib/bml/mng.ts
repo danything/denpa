@@ -70,23 +70,27 @@ export function parseMng(data: Uint8Array): Mng | null {
                 }
                 break;
             case 'FRAM':
-                // 重ね方 (0 は変えない)・名前 (空。終わりの 0)・間隔を変えるか・…・間隔
+                // 重ね方 (0 は変えない)・名前 (0 で終わる。放送は空)・間隔を変えるか・…・間隔
                 if (length >= 1 && data[body] !== 0) mode = data[body]!;
-                if (length >= 10) {
-                    const change = data[body + 2];
-                    const value = view.getUint32(body + 6);
+                if (length >= 2) {
+                    let field = body + 1;
+                    while (field < body + length && data[field] !== 0) field++;
+                    // 名前の終わりの 0 の次から: 間隔を変えるか・時間切れ・切り取り・同期 (各 1)・間隔 (4)
+                    const change = data[field + 1];
+                    if (field + 9 > body + length) break;
+                    const value = view.getUint32(field + 5);
                     if (change === 2) delay = value;
                     else if (change === 1) nextDelay = value;
                 }
                 break;
             case 'DEFI':
-                if (length >= 12) {
-                    x = view.getInt32(body + 4);
-                    y = view.getInt32(body + 8);
-                }
+                // 場所を省いた DEFI は 0, 0 (MNG の既定)
+                x = length >= 12 ? view.getInt32(body + 4) : 0;
+                y = length >= 12 ? view.getInt32(body + 8) : 0;
                 break;
             case 'TERM':
-                if (length >= 10) {
+                // くり返すのは終わり方が 3 (最初から) のときだけ。ほかは 1 回
+                if (length >= 10 && data[body] === 3) {
                     const max = view.getUint32(body + 6);
                     iterations = max === 0x7fffffff ? Number.POSITIVE_INFINITY : Math.max(1, max);
                 }

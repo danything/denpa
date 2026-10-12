@@ -430,6 +430,11 @@ describe('epgTune', () => {
         expect(asked).toEqual([{ originalNetworkId: 0x7fe7, transportStreamId: 0x7fe1, serviceId: 0x428 }]);
         await watch(() => false, 50);
         expect(inside(bml).ureg[1]).toBe('');
+        // 局が変わるまでに前の局のモジュールが届き直しても、入口から出直して頼み直さない
+        feedAll(bml, carousel([startup('', `var target = "arib://7FE7.-1.0428"; ${script}`)], 2));
+        await watch(() => false, 100);
+        expect(asked.length).toBe(1);
+        expect(bml.path).toBeNull();
     });
 
     test('呼び手が断る・呼び手が居ない (録画) なら NaN を返して続ける', async () => {
