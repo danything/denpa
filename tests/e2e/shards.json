@@ -43,6 +43,6 @@
         "04-external-delete",
         "11-rule-edit",
         "35-csp",
-        "38-watch-stream"
+        "39-watch-stream"
     ]
 }
