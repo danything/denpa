@@ -57,6 +57,7 @@
     import { clock, cmNoteWorthShowing, recordedDuration, size } from '#lib/format.js';
     import { CODEC_LABEL } from '#lib/hw.js';
     import { write as remind, read as stored } from '#lib/keep.js';
+    import { type MkvSource, openMkv } from '#lib/mkv-source.js';
     import { loadOffline } from '#lib/offline.svelte.js';
     import type { OfflineVideo } from '#lib/offline-db.js';
     import { canvasSupport, rawUnsupported } from '#lib/raw/support.js';
@@ -114,6 +115,11 @@
     let localChecked = $state(false);
     let localCopy: OfflineVideo | null = null;
     /**
+     * 端末に保存したものを探している最中の約束。**字幕・チャプターも、探し終えてから読む** — 先に読みに行くと
+     * 端末のものを見ずにサーバへ取りに行っていた (オフラインでは CM 飛ばしも字幕も効かなかった)
+     */
+    let localLookup: Promise<OfflineVideo | null> = Promise.resolve(null);
+    /**
      * 何で観られるか (`api/recordings/<id>/playback`)。聞けなかった (オフライン) ときは null。
      * **どれを使うかはこの画面が決める** (`ts/playback.ts` の `pickOffer`): そのまま読めるファイル、
      * 読めなければサーバが詰め替えて流すもの、まだエンコードしていない録画はサーバがその場で変換して流すもの
@@ -141,7 +147,7 @@
      * 車載ブラウザ) のため。頼む先は `<video>` でその場で流すときと同じ `/stream` で、H.264 / AV1 の
      * fMP4 か元の TS (MPEG-2) を、ライブ・追っかけと同じ器 (`raw/engine.ts`) で描く。
      * **ここでは `<video>` に戻らない** — 描けなくなったら MPEG-2 へ、それも無理なら理由を出して止まる
-     * (ライブと同じ)。端末に保存したものだけは `<video>` で観て、そう知らせる (canvas で読めるのは流すものだけ)
+     * (ライブと同じ)。**端末に保存したものは、その Matroska を読んで描く** (`mkv-source.ts`。オフラインでも)
      */
     /** 互換モードか。**開いたときに決める** (設定画面で入り切りされる) */
     let compat = $state(false);
@@ -153,6 +159,10 @@
     let canvas: CanvasPlayer | null = null;
     /** canvas の器があるか (`canvas` は畳み直しの都度替わるので、画面の出し分けはこちらで見る) */
     let drawing = $state(false);
+    /** 端末に保存した録画を描くときの口 (`mkv-source.ts`)。サーバから流しているなら null */
+    let localMkv: MkvSource | null = null;
+    /** 端末に保存した録画を canvas に描いているか (帯の「端末」の印・メニューの出し分け) */
+    let drawingLocal = $state(false);
     /** 描いている途中で諦めた形。**選び直すまで頼み直さない** (戻しては諦めるを繰り返さない) */
     let canvasGaveUp: CanvasCodec[] = [];
     /** 互換モードで観られない理由。出したら `<video>` には戻らずに止まる */
@@ -188,24 +198,29 @@
      * (`ts/playback.ts` の `pickCanvas`)。**端末に保存したものは `<video>` で観る** (canvas は流すものしか読めない)
      */
     async function prepareCompat(got: PlaybackInfo | null): Promise<void> {
-        if (localCopy?.video !== undefined) {
-            localSrc = URL.createObjectURL(localCopy.video);
-            picked = { way: 'file', codec: 'av1', source: 'encoded' };
-            // 言ったら引っ込める (観ている間ずっと絵に被せない。切り替えの断り書きと違い、直すことが無い)
-            const said = '端末に保存した録画は、互換モードを使わずに再生します';
-            warning = said;
-            setTimeout(() => {
-                if (warning === said) warning = null;
-            }, 6000);
-            return;
-        }
-        if (got === null) {
+        if (got === null && localCopy?.video === undefined) {
             canvasProblem = 'サーバに繋がらないため再生できません';
             return;
         }
         if (!driveNoticeSeen()) await confirmDrive();
         const [support, problem] = await Promise.all([canvasSupport(), rawUnsupported()]);
         canvasAbility = { ...support, mpeg2: problem === null };
+        /*
+         * **端末に保存したものがあれば、それを canvas に描く** (オンラインでも。`<video>` と同じ考え)。
+         * 描けない形 (この端末の VideoDecoder が解けない) か読めなければ、サーバから流すものへ
+         */
+        if (localCopy?.video !== undefined) {
+            const source = await openMkv(localCopy.video).catch(() => null);
+            if (source?.codec != null && canvasAbility[source.codec]) {
+                localMkv = source;
+                canvasCodec = source.codec;
+                return;
+            }
+        }
+        if (got === null) {
+            canvasProblem = 'この端末では再生できません';
+            return;
+        }
         const codec = pickCanvas(got, canvasAbility, choice);
         if (codec === null) canvasProblem = 'この端末では再生できません';
         else canvasCodec = codec;
@@ -214,26 +229,39 @@
     /** canvas に描く器を作って流しはじめる。**続きの位置から頼む** (選び直し・切り替えならその位置) */
     $effect(() => {
         const codec = canvasCodec;
-        if (codec === null || info === null || mediaBox === null || canvas !== null) return;
-        untrack(() => startCanvas(codec, info as PlaybackInfo));
+        // 端末に保存したものはオフラインでも描く (`playback` が聞けなくてよい)
+        if (codec === null || (info === null && localMkv === null) || mediaBox === null || canvas !== null) return;
+        untrack(() => startCanvas(codec));
     });
 
-    function startCanvas(codec: CanvasCodec, plan: PlaybackInfo): void {
+    /** 尺 (秒)。`playback` が聞けなければ、保存した録画に書いてある長さ */
+    function canvasLength(): number {
+        return info?.duration ?? localMkv?.duration ?? (localCopy?.durationMs ?? 0) / 1000;
+    }
+
+    function startCanvas(codec: CanvasCodec): void {
+        const local = localMkv;
+        const duration = canvasLength();
         const fresh = switchAt === null;
         const from =
-            switchAt ?? (rec.resume_ms === null ? null : resumePoint(rec.resume_ms / 1000, plan.duration));
+            switchAt ?? (rec.resume_ms === null ? null : resumePoint(rec.resume_ms / 1000, duration));
         switchAt = null;
         let made: CanvasPlayer;
         try {
             made = canvasPlayer({
                 host: mediaBox as HTMLElement,
                 before: overlay,
-                input: codec === 'mpeg2' ? 'ts-mpeg2' : 'fmp4',
-                url: (at, audio) =>
-                    resolve(
-                        `api/recordings/${rec.id}/stream?codec=${codec}&from=${at.toFixed(3)}&audio=${encodeURIComponent(audio)}`,
-                    ),
-                duration: plan.duration,
+                input: local !== null ? 'mkv' : codec === 'mpeg2' ? 'ts-mpeg2' : 'fmp4',
+                request: (at, audio, signal) =>
+                    local !== null
+                        ? Promise.resolve(local.request(at))
+                        : fetch(
+                              resolve(
+                                  `api/recordings/${rec.id}/stream?codec=${codec}&from=${at.toFixed(3)}&audio=${encodeURIComponent(audio)}`,
+                              ),
+                              { signal },
+                          ),
+                duration,
                 start: from ?? 0,
                 audio: streamAudio(audioIndex),
                 background: background.on || pip.active,
@@ -262,7 +290,8 @@
         canvas = made;
         drawing = true;
         if (muted) made.mute(true);
-        length = plan.duration;
+        drawingLocal = local !== null;
+        length = duration;
         at = from ?? 0;
         playing = !made.paused;
         syncAudio();
@@ -283,6 +312,7 @@
         canvas?.destroy();
         canvas = null;
         drawing = false;
+        drawingLocal = false;
         canvasCodec = null;
         playing = false;
         flowing();
@@ -296,7 +326,23 @@
     function canvasFallBack(reason: string): void {
         const failed = canvasCodec;
         const position = mediaTime();
+        const wasLocal = localMkv !== null;
         stopCanvas();
+        /*
+         * 端末に保存した録画を描けなくなった。サーバから流せるならそちらへ (描ける形で)。無理なら理由を出して止まる
+         */
+        if (wasLocal) {
+            localMkv = null;
+            const next = info !== null && canvasAbility !== null ? pickCanvas(info, canvasAbility, choice, canvasGaveUp) : null;
+            if (next === null) {
+                canvasProblem = reason;
+                return;
+            }
+            warning = reason;
+            switchAt = position;
+            canvasCodec = next;
+            return;
+        }
         if (failed !== null) canvasGaveUp = [...canvasGaveUp, failed];
         const usable =
             info === null || canvasAbility === null
@@ -400,10 +446,11 @@
     }
 
     onMount(() => {
+        localLookup = loadOffline(rec.id).catch(() => null);
         const asked = stored(CODEC_KEY);
         choice = asked === 'h264' || asked === 'av1' || asked === 'mpeg2' ? asked : 'auto';
         void (async () => {
-            const [held, got] = await Promise.all([loadOffline(rec.id), ready ? loadPlayback() : null]);
+            const [held, got] = await Promise.all([localLookup, ready ? loadPlayback() : null]);
             localCopy = held;
             info = got;
             // 互換モードは canvas に描く (`prepareCompat`)。`<video>` で観るのは端末に保存したものだけ
@@ -458,6 +505,8 @@
 
     /** その場で流すときに頼む音声 (`playback` の `audios` の `id`) */
     function streamAudio(index: number): string {
+        // 端末に保存した録画は軌道の何本目か (`mkv-source.ts`)
+        if (localMkv !== null) return String(index);
         return info?.audios[index]?.id ?? info?.audios[0]?.id ?? '0';
     }
 
@@ -549,7 +598,7 @@
          * 端末に保存したものを `<video>` で観ている間は出さない
          */
         if (compat) {
-            if (canvasAbility === null || localSrc !== null) return [];
+            if (canvasAbility === null || localSrc !== null || drawingLocal) return [];
             const items = canvasChoices(info, canvasAbility);
             if (items.length < 2) return [];
             return [
@@ -1072,6 +1121,13 @@
          * **その場で流しているときは、`playback` の音声の名前から並べる。** 流しているのは
          * 選んだ1本だけなので、器 (`audioTracks`) には1本しか出ない (`remux-player.ts`)
          */
+        // 端末に保存した録画を canvas に描いているなら、その軌道の名前 (名前 → 言語 → 連番。器から読むときと同じ)
+        if (localMkv !== null) {
+            audios = localMkv.audios.map((track, i) => ({
+                label: audioLabel({ label: track.name, language: track.language, enabled: false }, i),
+            }));
+            return;
+        }
         if (picked?.way === 'stream' || canvas !== null) {
             audios = (info?.audios ?? []).map((audio, i) => ({ label: audio.label.trim() || `音声 ${i + 1}` }));
             return;
@@ -1119,8 +1175,9 @@
      */
     async function loadChapters(): Promise<void> {
         try {
-            // 端末に保存したものがあればそちら (オフラインでもCM飛ばしが効く)
-            const held = localCopy?.chapters as { chapters?: typeof chapters } | undefined;
+            // 端末に保存したものがあればそちら (オフラインでもCM飛ばしが効く)。探し終えるのを待ってから
+            const copy = await localLookup;
+            const held = copy?.chapters as { chapters?: typeof chapters } | undefined;
             if (held?.chapters !== undefined) {
                 chapters = held.chapters;
                 return;
@@ -1325,9 +1382,10 @@
         if (cues.length > 0) return;
         try {
             // 端末に保存したものがあればそちら。**字幕を持たない番組は 404** (ボタンを出さないだけで、異常ではない)
+            const copy = await localLookup;
             const text =
-                localCopy !== null
-                    ? (localCopy.captionText as CaptionPages | undefined)
+                copy !== null
+                    ? (copy.captionText as CaptionPages | undefined)
                     : await fetch(resolve(`api/recordings/${rec.id}/captions.json`)).then((res) =>
                           res.ok ? (res.json() as Promise<CaptionPages>) : undefined,
                       );
@@ -1968,7 +2026,7 @@
                             titleTestid="watch-name"
                         >
                             {#snippet badge()}
-                                {#if localSrc !== null}
+                                {#if localSrc !== null || drawingLocal}
                                     <!-- サーバではなく端末のコピーで観ている印。帯の題名の並びに出す -->
                                     <span class="tag success local">
                                         端末
@@ -1994,7 +2052,7 @@
                             早送り。**ライブの追っかけと同じ並び・同じ見た目。**
                             互換モードで canvas に描いているときは出さない (等速だけ。追っかけと同じ)
                         -->
-                        {#if !compat || localSrc !== null}
+                        {#if !compat}
                             <Extras>
                                 <SpeedMenu
                                     testid="watch-speed"

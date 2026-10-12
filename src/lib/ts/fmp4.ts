@@ -273,7 +273,7 @@ function readEntry(
 }
 
 /** av1C から `av01.P.LLT.DD` を起こす (AV1 の ISOBMFF の決まり) */
-function av1Codec(av1C: Uint8Array): string {
+export function av1Codec(av1C: Uint8Array): string {
     const profile = av1C[1]! >> 5;
     const level = av1C[1]! & 0x1f;
     const tier = av1C[2]! >> 7 ? 'H' : 'M';

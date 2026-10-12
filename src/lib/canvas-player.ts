@@ -9,6 +9,8 @@
  *   (`ts/fmp4.ts` の `Fmp4Splitter`。worker は箱ごとに受け取る)
  * - `ts-mpeg2` … 元の TS (MPEG-2)。時刻は放送の PTS なので、応答の `X-Denpa-Origin` (物差しの 0 にあたる PTS)
  *   を引いて物差しに直す (`ts/seek.ts` の `sinceHead`)
+ * - `mkv` … **端末に保存した録画** (エンコード済みの Matroska)。サーバではなく Blob を切り出して読む
+ *   (`mkv-source.ts`)。時刻はエンコード済みの物差しのまま
  *
  * 決め方は追っかけと同じ `follow` (`raw/playout.ts`) — 止めたら位置を保ち、そこから再開し、今へは跳ばない。
  * 録画のために足したのは:
@@ -34,7 +36,7 @@ import { busyAnswer } from './remux-player';
 /** 鳴らし始めるまでに貯める長さ (秒) */
 const TARGET = 1;
 /** 先へ読む上限 (秒。手元の音の尺)。元の TS は重い (1 秒 2MB ほど) ので短く */
-const AHEAD: Record<RawInput, number> = { fmp4: 30, 'ts-mpeg2': 10 };
+const AHEAD: Record<RawInput, number> = { fmp4: 30, mkv: 30, 'ts-mpeg2': 10 };
 /** 解き始める前に渡しておく上限 (バイト)。復号器を読み終えるまでは、手元の尺で測れない */
 const EARLY_BYTES = 8 * 1024 * 1024;
 /** 読むのを待つときの間 (ms) */
@@ -54,8 +56,11 @@ export interface CanvasOptions {
     /** この前に差し込む (字幕の canvas より下に来るように) */
     before: Element | null;
     input: RawInput;
-    /** 頼む先。`from` 秒から、`audio` (`playback` の `audios` の `id`) の音声で */
-    url(from: number, audio: string): string;
+    /**
+     * `from` 秒から、`audio` (`playback` の `audios` の `id`) の音声で頼む。サーバの `/stream` は fetch、
+     * 端末に保存した録画は Blob を切り出したもの (`mkv-source.ts`)。どちらも Response で返す
+     */
+    request(from: number, audio: string, signal: AbortSignal): Promise<Response>;
     /** 尺 (秒)。**ここまで飛んだら頼まずに終わりにする** (`<video>` が尻へ飛ぶと `ended` になるのと同じ) */
     duration: number;
     /** 観はじめる位置 (秒) */
@@ -192,7 +197,7 @@ export function canvasPlayer(options: CanvasOptions): CanvasPlayer {
         if (at === null) return time;
         const pts = Math.round(at * CLOCK);
         // 元の TS の頭の少し前 (音と絵の頭のずれ) は負になる。物差しの頭に揃える
-        time = Math.max(0, input === 'fmp4' ? pts / CLOCK : sinceHead(pts % WRAP, origin));
+        time = Math.max(0, input === 'ts-mpeg2' ? sinceHead(pts % WRAP, origin) : pts / CLOCK);
         return time;
     }
 
@@ -229,7 +234,7 @@ export function canvasPlayer(options: CanvasOptions): CanvasPlayer {
         controller = abort;
         let reader: ReadableStreamDefaultReader<Uint8Array> | null = null;
         try {
-            const response = await fetch(options.url(from, audio), { signal: abort.signal });
+            const response = await options.request(from, audio, abort.signal);
             if (mine !== run) return;
             if (response.status === 503 && (await busyAnswer(response))) {
                 if (mine === run) options.state('busy');
@@ -365,6 +370,12 @@ export function canvasPlayer(options: CanvasOptions): CanvasPlayer {
                 return;
             }
             const track = tsTrack(id);
+            // 保存した録画は軌道を選び直して、いまの位置から読み直す (音の復号器を開き直すため)
+            if (input === 'mkv') {
+                engine.selectAudio(track.stream, 'both');
+                void load(position());
+                return;
+            }
             engine.selectAudio(track.stream, track.side);
         },
         background(on: boolean): void {

@@ -1035,8 +1035,16 @@ E2E（`tests/e2e/38-live-compat`）は偽 ffmpeg が本物の H.264 + AAC・AV1 
   描けるもの (詰め替え・MPEG-2) を勧める
 - **描けなくなったらライブと同じ順で移る** — H.264 / AV1 を諦めたら MPEG-2 へ、MPEG-2 を諦めたら描ける H.264 / AV1 へ
   (断り書きに理由)。どれも無理なら理由を出して止まる。**`<video>` には戻らない**
-- **端末に保存したもの (オフライン) は `<video>` で観る** (canvas で読めるのは流すものだけ)。互換モードを
-  使わないことを絵の上に出す
+- **端末に保存したもの (オフライン) も canvas に描く** (`mkv-source.ts` → `raw/mkv.ts`)。保存してあるのはエンコード済みの
+  Matroska で、**fMP4 に組み直さず worker がそのまま読み**、読んだコマを fMP4 の道 (`Fmp4Video`) へ渡す
+  (`ts/mkv-media.ts` が Tracks の CodecPrivate — avcC / av1C / AudioSpecificConfig / OpusHead — とコマを読む)。
+  - 飛ぶ位置は Matroska の **Cues** から引く (SeekHead が在りかを言う)。頭 (最初の Cluster まで) に飛び先の手前の
+    Cluster からを繋いで、`Blob.stream` で流す。手前のコマは描かない (`floor`)。Cues が無ければ頭から
+  - Matroska のコマは見せる時刻しか持たないので、解く順の時刻は先の 4 コマの見せる時刻のいちばん早いものにする
+    (H.264 の B フレーム)
+  - 音は選んだ 1 本 (音声のメニューは軌道の名前 → 言語 → 連番。`<video>` で器から読むときと同じ)。選び直すと
+    いまの位置から読み直す
+  - 描けない形 (この端末の VideoDecoder が解けない) か読めなければ、サーバから流すものへ。オフラインなら理由を出して止まる
 
 E2E（`tests/e2e/40-watch-compat`）は、偽 ffmpeg が作り置きの fMP4 を頼まれた位置から並べて出すもの (`fmp4-out.ts`) と、
 偽の放送の MPEG-2 をそのまま描き、元の TS の位置が物差しに直っているかを見る。飛ぶ・CM 飛ばし・字幕・止めて再開は、

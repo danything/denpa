@@ -67,6 +67,7 @@ EPGStation の置き換えとして作ったもので、エンコード設定は
 | `src/lib/ts/media-source.ts` | MSE の器を選ぶ。無ければ `ManagedMediaSource` (iPhone の Safari) |
 | `src/lib/remux-player.ts` | 観る画面で、サーバがその場で流す fMP4 (詰め替え・変換) を MSE で受ける。跳んだ先が無ければ頼み直す ([library.md](library.md#何で観るかはサーバが出せるものから画面が選ぶ)) |
 | `src/lib/canvas-player.ts` | 観る画面の互換モード。`/stream` を fetch で読んで canvas に描く (`raw/engine.ts`)。飛ぶときは捨てて頼み直し、先へ読みすぎない ([stream.md](stream.md#録画の観る画面も-canvas-に描く)) |
+| `src/lib/mkv-source.ts` / `src/lib/ts/mkv-media.ts` / `src/lib/raw/mkv.ts` | 互換モードで端末に保存した録画 (Matroska) を描く。頭と Cues を読んで飛び先の Cluster から流し、worker がそのまま読んで fMP4 と同じ道で解く ([stream.md](stream.md#録画の観る画面も-canvas-に描く)) |
 | `src/lib/ts/playback.ts` / `src/lib/server/playback.ts` | 録画の観方。何を出せるか・どの形で出すか・時刻の物差しはサーバが決め、どれを使うかは画面が決める (`api/recordings/<id>/playback`・`stream`。[api.md](api.md#録画の観方-get-apirecordingsidplayback)) |
 | `src/lib/ts/seek.ts` | 録画の TS の中で時刻からバイトの位置を引く (決まった位置の PES の PTS で二分探索。PTS の一周は頭から数えて越える) |
 | `src/lib/server/transcode.ts` | その場で変換する本数の枠 (録画の変換と追っかけを数え、ライブは数えない。既定は GPU の有無で 2 か 4、設定で変えられる) |

@@ -39,6 +39,7 @@ import { AdtsSplitter, CLOCK, type Pes, PesDemuxer, unwrap } from '#lib/ts/pes.j
 import { DecodeBudget } from './budget';
 import { Fmp4Video } from './fmp4';
 import type { FromWorker, RawInput, ToWorker } from './messages';
+import { MkvInput } from './mkv';
 import { YuvRenderer } from './render';
 
 const scope = self as unknown as DedicatedWorkerGlobalScope;
@@ -142,6 +143,8 @@ let budget = new DecodeBudget();
 let mode: RawInput = 'ts-mpeg2';
 /** 焼いたもの (fMP4) を描く係。`fmp4` のときだけ (`fmp4.ts`) */
 let fmp4: Fmp4Video | null = null;
+/** 端末に保存した録画 (Matroska) を読む係。`mkv` のときだけ (`mkv.ts`)。読んだコマは `fmp4` へ渡す */
+let mkv: MkvInput | null = null;
 /**
  * 復号器 (WASM) を読み終える前に届いた fMP4。**読み終えたら順に渡す** — 頭 (init) は選局の直後に
  * 1回しか来ないので、落とすと以降を1つも読めない。読み終えたら null
@@ -536,6 +539,7 @@ function reset(from: number | null): void {
     lastFramePts = null;
     shownSinceReset = false;
     budget.reset();
+    mkv?.reset();
     if (fmp4 !== null) fmp4.reset(from);
     else decoder?._dec_open();
     if (early !== null) {
@@ -624,8 +628,9 @@ async function init(canvas: OffscreenCanvas, base: string, kind: RawInput, chase
     follow = chase;
     // 録画の生の TS も、復号器を読み終えるまで溜めておく (音を落とすと、鳴らし始めが遅れる)。ライブは今までどおり
     if (kind === 'ts-mpeg2' && !follow) early = null;
-    if (kind === 'fmp4') {
+    if (kind !== 'ts-mpeg2') {
         if (!startFmp4(canvas, follow)) return;
+        if (kind === 'mkv' && fmp4 !== null) mkv = new MkvInput(fmp4, audioIndex);
     } else {
         try {
             renderer = new YuvRenderer(canvas);
@@ -644,7 +649,7 @@ async function init(canvas: OffscreenCanvas, base: string, kind: RawInput, chase
         });
         if (decoder._dec_open() !== 0 || decoder._aac_open() !== 0) throw new Error('開けません');
     } catch {
-        fail(kind === 'fmp4' ? '音声を再生できません' : 'この denpa は MPEG-2 をそのまま再生できません');
+        fail(kind !== 'ts-mpeg2' ? '音声を再生できません' : 'この denpa は MPEG-2 をそのまま再生できません');
         return;
     }
     const held = early ?? [];
@@ -654,10 +659,14 @@ async function init(canvas: OffscreenCanvas, base: string, kind: RawInput, chase
     schedule();
 }
 
-/** 届いたものを読む (fMP4 は箱ごと、TS は PES に組んで) */
+/** 届いたものを読む (fMP4 は箱ごと、Matroska は要素ごと、TS は PES に組んで) */
 function feed(bytes: Uint8Array): void {
     if (mode === 'fmp4') {
         fmp4?.feed(bytes);
+        return;
+    }
+    if (mode === 'mkv') {
+        mkv?.feed(bytes);
         return;
     }
     // 録画で抱えきれなくなった。頼み直し (`reset`) まで受け取らない
@@ -698,6 +707,11 @@ scope.onmessage = (event: MessageEvent<ToWorker>) => {
             break;
         case 'audio':
             // 焼いたものには選んだ音声1本しか入っていない (選び直すとサーバが焼き直す)
+            if (mode === 'mkv') {
+                // 保存した録画は軌道を選び直す (次の頭から効く。画面が頼み直す)
+                mkv?.selectAudio(message.index);
+                break;
+            }
             if (mode === 'fmp4') break;
             audioIndex = message.index;
             demuxer.selectAudio(message.index);

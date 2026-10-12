@@ -133,7 +133,7 @@ Chromium で `canPlayType` が `probably` を返し、実機の録画で再生�
 | 切れたとき | 観ていた位置から頼み直す (待ちは倍々で10秒が頭打ち、続けて8回で諦める) |
 
 **互換モード (設定の「互換モードで再生」) では `<video>` を使いません。** 同じ `/stream` を fetch で読んで canvas に
-描きます (H.264・AV1 の fMP4 か、元の TS の MPEG-2。速さは等速だけ)。端末に保存したものだけは `<video>` で観ます。
+描きます (H.264・AV1 の fMP4 か、元の TS の MPEG-2。速さは等速だけ)。端末に保存したものも、保存した Matroska を読んで canvas に描きます。
 作りは [stream.md](stream.md#録画の観る画面も-canvas-に描く) に。
 
 **iPhone の Safari は H.264 の録画をそのまま読めません** (#503)。Matroska を WebM としてしか読まず、

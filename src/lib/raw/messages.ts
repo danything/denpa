@@ -12,8 +12,10 @@
  * - `fmp4` … ライブ・追っかけの焼いたもの (`CHANNEL.videoInit` / `videoMedia`)。映像は WebCodecs の
  *   VideoDecoder で解いて 2D で描き、音 (AAC・Opus) は WASM で解く (`fmp4.ts`)。
  *   **<video> の再生が止まる端末** (テスラの車載ブラウザ) のための道
+ * - `mkv` … 端末に保存した録画 (エンコード済みの Matroska)。互換モードの観る画面で、読んだコマを `fmp4` と
+ *   同じ道で解いて描く (`mkv.ts`)。音は選んだ1本 (`audio` の何本目か)
  */
-export type RawInput = 'ts-mpeg2' | 'fmp4';
+export type RawInput = 'ts-mpeg2' | 'fmp4' | 'mkv';
 
 /** 画面 → worker */
 export type ToWorker =

@@ -23,7 +23,14 @@
  * 出すか転ぶ。転んだら (`error`) 開き直して鍵のコマから入り直し、続けて転ぶなら諦める。
  */
 
-import { adtsHeader, type Fmp4Track, opusHead, readFragment, readInit } from '#lib/ts/fmp4.js';
+import {
+    adtsHeader,
+    type Fmp4Sample,
+    type Fmp4Track,
+    opusHead,
+    readFragment,
+    readInit,
+} from '#lib/ts/fmp4.js';
 import { CLOCK } from '#lib/ts/pes.js';
 
 /** 番のこれだけ前から解く (90kHz) */
@@ -139,16 +146,25 @@ export class Fmp4Video {
     feed(bytes: Uint8Array): void {
         // init (ftyp + moov)。**来るたびに開き直す** — 選局し直し・音声や形の選び直しで中身が変わる
         if (bytes.length >= 8 && hasBox(bytes, 'moov')) {
-            this.init(readInit(bytes));
+            this.configure(readInit(bytes));
             return;
         }
+        if (this.tracks.length === 0) return;
+        this.push(readFragment(bytes, this.tracks));
+    }
+
+    /**
+     * 読めたコマを渡す (時刻はそのトラックの刻み)。**fMP4 でなくても同じ口** — 端末に保存した録画の
+     * Matroska も、読んだコマをここへ渡す (`mkv.ts`)
+     */
+    push(samples: readonly Fmp4Sample[]): void {
         if (this.tracks.length === 0 || this.overflowed) return;
         if (this.follow && this.overfull()) {
             this.overflowed = true;
             this.host.full();
             return;
         }
-        for (const sample of readFragment(bytes, this.tracks)) {
+        for (const sample of samples) {
             const track = this.tracks.find((t) => t.id === sample.track);
             if (track === undefined) continue;
             const pts = ticks(sample.pts, track.timescale);
@@ -173,7 +189,8 @@ export class Fmp4Video {
         }
     }
 
-    private init(tracks: Fmp4Track[]): void {
+    /** 映像・音声の形を受け取って開き直す (fMP4 の init。Matroska は Tracks から組む) */
+    configure(tracks: Fmp4Track[]): void {
         this.tracks = tracks;
         const video = tracks.find((t) => t.kind === 'video') ?? null;
         const audio = tracks.find((t) => t.kind === 'audio') ?? null;
