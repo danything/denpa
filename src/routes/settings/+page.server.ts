@@ -163,7 +163,6 @@ export const actions = {
         // 何も選ばなければ全部の通知を受け取る
         const events = form.getAll('events').map(String).filter(Boolean);
 
-        // name は廃止したが、列は残してある (既定 '' なので入れなくてよい)
         orm().insert(webhooks).values({ url, events, enabled: true, created_at: now() }).run();
         return { success: true, webhookAdded: true };
     },
