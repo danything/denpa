@@ -601,7 +601,7 @@ public class B25Tests
         var output = Run(descrambler, ts.Wire.ToArray());
 
         await Assert.That(Diff(output, ts.Wire.ToArray())).IsEqualTo(-1);
-        // 復号できなかったのではなく、復号する資格が無い。**解除の失敗には数えない**
+        // 復号できなかったのではなく、復号する資格が無い。**復号の失敗には数えない**
         await Assert.That(descrambler.Unentitled).IsEqualTo(5);
         await Assert.That(descrambler.Undecodable).IsEqualTo(0);
         await Assert.That(descrambler.LastError!).Contains("0x8901");
