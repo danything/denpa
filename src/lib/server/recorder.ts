@@ -299,12 +299,13 @@ async function pump(
 
                 let stream: ReadableStream<Uint8Array>;
                 try {
+                    const leaving = handoff;
+                    handoff = [];
                     stream = await openWithRetry(
                         (signal) =>
-                            openChannelStream(service.type, service.channel, signal, use, undefined, handoff),
+                            openChannelStream(service.type, service.channel, signal, use, undefined, leaving),
                         controller.signal,
                     );
-                    handoff = [];
                 } catch (error) {
                     // **掴み直せなくても諦めない。** エージェントの Pod 入れ替えは
                     // openWithRetry の数十秒を超えることがあり、そこで失敗にすると

@@ -676,6 +676,12 @@ describe('機材の定義', () => {
                     expect((await drain(reader as ReadableStreamDefaultReader)).error).toBeNull();
                     await gone(name);
                 }
+                // 選ばれなかった本の読み手には触らない。まだ読めている
+                for (const name of step.kept ?? []) {
+                    expect((await tuners()).some((t) => t.users.some((u) => u.use === use(name)))).toBe(true);
+                    const read = await streams.get(name)?.reader?.read();
+                    expect(read?.done).toBe(false);
+                }
             }
             // 次の場面へ持ち越さない。同じ名前の本は定義を書き換えても選局が残る
             for (const [name, stream] of streams) {

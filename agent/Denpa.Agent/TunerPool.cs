@@ -781,8 +781,6 @@ internal sealed class Lease(int tuner, string type, string channel)
     public string? Error { get; private set; }
     public int? Pid => _child?.HasExited == false ? _child.Id : null;
 
-    public int Priority => Sinks.Count == 0 ? int.MinValue : Sinks.Max(sink => sink.Priority);
-
     private volatile bool _stopped;
     private Task? _pump;
     /// <summary>解き手が終わった (失敗も含む)。**読み手も降りる** — 残ると読み口を掴んだまま回り続ける</summary>

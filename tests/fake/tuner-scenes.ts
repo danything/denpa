@@ -32,6 +32,8 @@ export type SceneStep =
           rank: number | null;
           after?: string[];
           ended?: string[];
+          /** `after` に挙げたが、選ばれなかった本にいるので読み続けているはずの読み手 */
+          kept?: string[];
       }
     /** 読むのをやめる */
     | { close: string };
@@ -163,7 +165,15 @@ export const scenes: Scene[] = [
             { open: 'a', type: 'GR', channel: 'T16', priority: RECORDING, rank: 0 },
             { open: 'b', type: 'GR', channel: 'T21', priority: RECORDING, rank: 1 },
             { close: 'a' },
-            { open: 'c', type: 'GR', channel: 'T16', priority: RECORDING, rank: 0, after: ['b'] },
+            {
+                open: 'c',
+                type: 'GR',
+                channel: 'T16',
+                priority: RECORDING,
+                rank: 0,
+                after: ['b'],
+                kept: ['b'],
+            },
             { close: 'b' },
         ],
     },
@@ -192,7 +202,8 @@ export const scenes: Scene[] = [
         steps: [
             { open: 'a', type: 'GR', channel: 'T16', priority: RECORDING, rank: 0 },
             { open: 'b', type: 'GR', channel: 'T21', priority: RECORDING, rank: 1 },
-            { open: 'c', type: 'GR', channel: 'T21', priority: RECORDING, rank: 1, after: ['b'] },
+            // b がまだ読んでいるうちに来るので、b の選局に乗る (マージンで前後が重なる)
+            { open: 'c', type: 'GR', channel: 'T21', priority: RECORDING, rank: 1 },
             { close: 'b' },
             { close: 'a' },
             // gr9 が空いても c は mlt9 に居るので、衛星は入れない
