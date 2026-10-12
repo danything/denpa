@@ -57,7 +57,6 @@ import { settings } from './settings';
 import { run } from './stream';
 import { holdTranscode } from './transcode';
 
-
 /** エンコード済みのファイル 1 本の中身 (ffprobe で読む。`probeMedia`) */
 export interface MediaFile {
     source: EncodedSource;

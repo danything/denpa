@@ -127,7 +127,11 @@ function asPicked(offer: PlayOffer): Picked | null {
  *
  * MPEG-2 (`raw`) はここでは選ばない (そのまま再生する道は画面の設定で別に決める)。何も無ければ null
  */
-export function pickOffer(info: PlaybackInfo, can: MediaAbility, choice: CodecChoice = 'auto'): Picked | null {
+export function pickOffer(
+    info: PlaybackInfo,
+    can: MediaAbility,
+    choice: CodecChoice = 'auto',
+): Picked | null {
     const files = info.offers.filter((offer) => offer.way === 'file');
     const streams = info.offers.filter((offer) => offer.way === 'stream');
     if (choice !== 'auto') {

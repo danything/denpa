@@ -71,7 +71,11 @@ describe('どれで観るか (pickOffer)', () => {
     test('元の TS だけの録画は変換。H.264 を先に', () => {
         expect(pickOffer(tsOnly, chrome)).toEqual({ way: 'stream', codec: 'h264', type: H264_LIVE });
         // H.264 を持たない Chromium は AV1
-        expect(pickOffer(tsOnly, browser([], [AV1_MP4]))).toEqual({ way: 'stream', codec: 'av1', type: AV1_MP4 });
+        expect(pickOffer(tsOnly, browser([], [AV1_MP4]))).toEqual({
+            way: 'stream',
+            codec: 'av1',
+            type: AV1_MP4,
+        });
     });
 
     test('選んだコーデックがあれば、それを観られる道で。AV1 の録画で H.264 を選ぶと変換', () => {
@@ -80,7 +84,9 @@ describe('どれで観るか (pickOffer)', () => {
         expect(transcodes(h264Only, { way: 'stream', codec: 'h264', type: H264_MP4 })).toBe(false);
         // 選んだものを観られなければ自動と同じ
         expect(pickOffer(av1Only, iphone, 'av1')).toEqual({ way: 'file', codec: 'av1', source: 'encoded' });
-        expect(pickOffer(h264Only, browser(['video/x-matroska; codecs="avc1.640028,opus"'], []), 'av1')).toEqual({
+        expect(
+            pickOffer(h264Only, browser(['video/x-matroska; codecs="avc1.640028,opus"'], []), 'av1'),
+        ).toEqual({
             way: 'file',
             codec: 'h264',
             source: 'encoded',
@@ -88,7 +94,10 @@ describe('どれで観るか (pickOffer)', () => {
     });
 
     test('中身が分からないファイルは、ほかが無ければそのまま渡す。何も無ければ null', () => {
-        const unknown: PlaybackInfo = { ...h264Only, offers: [{ codec: 'av1', way: 'file', source: 'encoded' }] };
+        const unknown: PlaybackInfo = {
+            ...h264Only,
+            offers: [{ codec: 'av1', way: 'file', source: 'encoded' }],
+        };
         expect(pickOffer(unknown, chrome)).toEqual({ way: 'file', codec: 'av1', source: 'encoded' });
         expect(pickOffer(tsOnly, browser([], []))).toBeNull();
     });

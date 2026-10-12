@@ -72,7 +72,10 @@ test.describe('観る画面でその場で流す', () => {
      * 何で観られるかはここで決めて渡す (H.264 のエンコード済みと、AV1 への変換)。Playwright の
      * Chromium は H.264 を持たないので、H.264 のファイルは読めることにする
      */
-    test('エンコード済みと違うコーデックを選ぶと、続きの位置から変換させて流す', async ({ page, request }) => {
+    test('エンコード済みと違うコーデックを選ぶと、続きの位置から変換させて流す', async ({
+        page,
+        request,
+    }) => {
         test.setTimeout(180_000);
         const { id } = await recordOne(page, request);
         await page.addInitScript(() => {
@@ -105,9 +108,9 @@ test.describe('観る画面でその場で流す', () => {
                 : route.fulfill({ status: 200, contentType: 'video/mp4', body: '' }),
         );
         // 続きの位置 (10 分)
-        expect((await request.post(`/api/recordings/${id}/resume`, { data: { at: 600, length: 1800 } })).ok()).toBe(
-            true,
-        );
+        expect(
+            (await request.post(`/api/recordings/${id}/resume`, { data: { at: 600, length: 1800 } })).ok(),
+        ).toBe(true);
 
         await goto(page, `/watch/${id}`);
         expect(
