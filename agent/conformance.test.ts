@@ -635,19 +635,24 @@ describe('機材の定義', () => {
             // 場面が前提にしている順位で返しているか。違えば、下の答えも当てにならない
             expect(scene.tuners.map((t) => ranks.get(t.name))).toEqual(scene.tuners.map((t) => t.rank));
 
+            // 読み手の名乗りは場面ごとに変える。前の場面の読み手を取り違えないように
+            const use = (name: string) => `scene${scenes.indexOf(scene)} ${name}`;
+            const gone = async (name: string) => {
+                while ((await tuners()).some((t) => t.users.some((u) => u.use === use(name))))
+                    await sleep(50);
+            };
             const streams = new Map<string, Opened>();
             for (const step of scene.steps) {
                 if ('close' in step) {
                     streams.get(step.close)?.close();
                     // 読み手が抜けるのを待つ (選局は余韻で残る)
-                    while ((await tuners()).some((t) => t.users.some((u) => u.use === step.close)))
-                        await sleep(50);
+                    await gone(step.close);
                     continue;
                 }
                 const query = new URLSearchParams({
                     type: step.type,
                     channel: step.channel,
-                    use: step.open,
+                    use: use(step.open),
                     priority: String(step.priority),
                 });
                 const opened = await open(query.toString());
@@ -658,13 +663,17 @@ describe('機材の定義', () => {
                 expect(opened.status).toBe(200);
                 await opened.reader?.read();
                 streams.set(step.open, opened);
-                const on = (await tuners()).find((t) => t.users.some((u) => u.use === step.open));
+                const on = (await tuners()).find((t) => t.users.some((u) => u.use === use(step.open)));
                 expect([step.open, on === undefined ? undefined : ranks.get(on.name)]).toEqual([
                     step.open,
                     step.rank,
                 ]);
             }
-            for (const stream of streams.values()) stream.close();
+            // 次の場面へ持ち越さない。同じ名前の本は定義を書き換えても選局が残る
+            for (const [name, stream] of streams) {
+                stream.close();
+                await gone(name);
+            }
         });
     }
 
