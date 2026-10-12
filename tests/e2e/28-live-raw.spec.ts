@@ -395,6 +395,43 @@ test.describe('ライブを生で見る', () => {
         );
     });
 
+    /*
+     * **`<audio>` の `play()` を断られても黙らせない** (自動再生)。直に鳴らすのに戻し、帯は
+     * 止めたことにしない。断られたことを「外から止められた」と取り違えないことも見る
+     */
+    test('<audio> の再生を断られたら、直に鳴らすまま止めない', async ({ page }) => {
+        await page.addInitScript(() => {
+            const play = HTMLMediaElement.prototype.play;
+            HTMLMediaElement.prototype.play = function (this: HTMLMediaElement) {
+                if (this instanceof HTMLAudioElement) {
+                    return Promise.reject(new DOMException('断る', 'NotAllowedError'));
+                }
+                return play.call(this);
+            };
+        });
+        await goto(page, '/live');
+        await page.getByTestId('live-channel').first().click();
+        await expect(page.getByTestId('live-title')).toBeVisible();
+        await chooseRaw(page);
+        const canvas = page.getByTestId('live-raw');
+        const heard = async () => Number((await canvas.getAttribute('data-audio')) ?? 0);
+        await expect
+            .poll(async () => Number((await canvas.getAttribute('data-shown')) ?? 0), { timeout: 30_000 })
+            .toBeGreaterThan(10);
+
+        await wakeControls(page, 'live-frame');
+        const toggle = page.getByTestId('live-background');
+        await toggle.click();
+        await expect(toggle).toHaveAttribute('aria-pressed', 'true');
+        const audio = page.getByTestId('live-raw-audio');
+        await expect(audio).toHaveCount(1);
+        await page.waitForTimeout(500);
+        expect(await audio.evaluate((a) => (a as HTMLAudioElement).paused)).toBe(true);
+        await expect(page.getByTestId('live-play')).toHaveAttribute('aria-label', '一時停止');
+        const before = await heard();
+        await expect.poll(heard, { timeout: 10_000 }).toBeGreaterThan(before + 20);
+    });
+
     test('選んでいなければ、いつもどおり焼いたものを見る', async ({ page }) => {
         await goto(page, '/live');
         await page.getByTestId('live-channel').first().click();
