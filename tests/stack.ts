@@ -126,6 +126,7 @@ async function waitFor(url: string, started: Started, what: string, timeout = BO
             // まだ待ち受けていない (ECONNREFUSED) か、返事が来ない
             const cause = (error as { cause?: { code?: string } }).cause?.code;
             last = cause === undefined ? String(error) : `${error} (${cause})`;
+            last += ` [cause: ${String((error as { cause?: unknown }).cause)}]`;
         }
         await new Promise((resolve) => setTimeout(resolve, BOOT_POLL));
     }

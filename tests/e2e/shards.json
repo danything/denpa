@@ -31,20 +31,6 @@
         "22-oidc",
         "34-live-yield"
     ],
-    "4": [
-        "01-dashboard",
-        "02-reservation",
-        "05-rules",
-        "11-rule-edit",
-        "15-scramble",
-        "39-watch-stream"
-    ],
-    "5": [
-        "04-external-delete",
-        "17-logo",
-        "26-hwenc",
-        "28-live-raw",
-        "30-api",
-        "38-live-compat"
-    ]
+    "4": ["01-dashboard", "02-reservation", "05-rules", "11-rule-edit", "15-scramble", "39-watch-stream"],
+    "5": ["04-external-delete", "17-logo", "26-hwenc", "28-live-raw", "30-api", "38-live-compat"]
 }

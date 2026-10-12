@@ -495,7 +495,12 @@ jobs:
       - name: E2E tests
         env:
           MPEG2_DIR: ${{ runner.temp }}/mpeg2
-        run: sysctl net.ipv4.ip_local_port_range; bunx playwright test ${{ steps.specs.outputs.files }}
+        run: |
+          (while true; do date +%T; ss -tanp | grep -E ":419[01]" ; sleep 1; done) > "$RUNNER_TEMP/ports.log" 2>&1 &
+          ss -ltnp
+          rc=0; bunx playwright test ${{ steps.specs.outputs.files }} || rc=$?
+          grep -B1 -E "419[01]" "$RUNNER_TEMP/ports.log" | head -300
+          exit $rc
 
       - name: Upload Playwright report
         if: failure()
