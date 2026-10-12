@@ -22,7 +22,8 @@ function firstTfdt(bytes: Uint8Array): number | null {
             if (name === path[0]) {
                 if (path.length === 1) {
                     const version = bytes[at + 8];
-                    const value = version === 1 ? Number(view.getBigUint64(at + 12)) : view.getUint32(at + 12);
+                    const value =
+                        version === 1 ? Number(view.getBigUint64(at + 12)) : view.getUint32(at + 12);
                     return value / 90_000;
                 }
                 return walk(at + 8, at + size, path.slice(1));
@@ -105,7 +106,9 @@ test.describe('録画をその場で流す', () => {
         await saveLimit(request, '1');
         writeFileSync(stack.slowFile, '1');
         const holding = new AbortController();
-        const held = await fetch(`${baseURL}/api/recordings/${id}/stream?codec=av1`, { signal: holding.signal });
+        const held = await fetch(`${baseURL}/api/recordings/${id}/stream?codec=av1`, {
+            signal: holding.signal,
+        });
         expect(held.status).toBe(200);
         const busy = await request.get(`/api/recordings/${id}/stream?codec=h264`);
         expect(busy.status()).toBe(503);

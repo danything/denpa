@@ -72,7 +72,9 @@ function synthTs(start: number, seconds: number): Uint8Array {
     for (let frame = 0; frame * FRAME_TICKS < seconds * CLOCK; frame++) {
         const at = frame * FRAME_TICKS;
         while (audio * AUDIO_TICKS <= at) {
-            parts.push(packetizePes(0x111, pes(0xc0, start + audio * AUDIO_TICKS, new Uint8Array(7)), audio).packets);
+            parts.push(
+                packetizePes(0x111, pes(0xc0, start + audio * AUDIO_TICKS, new Uint8Array(7)), audio).packets,
+            );
             audio++;
         }
         parts.push(packetizePes(0x100, pes(0xe0, start + at, new Uint8Array(200)), frame).packets);
@@ -131,7 +133,9 @@ describe('何を出せるか (playbackPlan)', () => {
     });
 
     test('両方焼いて元の TS も残した録画: どちらも詰め替え、MPEG-2 もそのまま出す', async () => {
-        const plan = await playbackPlan(seed({ library_path: av1, alt_path: h264, ts_path: ts, encode_skip: 0.5 }));
+        const plan = await playbackPlan(
+            seed({ library_path: av1, alt_path: h264, ts_path: ts, encode_skip: 0.5 }),
+        );
         expect(plan?.info.offers).toEqual([
             { codec: 'av1', way: 'file', source: 'encoded', codecs: 'av01.0.08M.08,opus' },
             { codec: 'h264', way: 'file', source: 'alt', codecs: 'avc1.640028,opus' },
@@ -159,7 +163,10 @@ describe('何を出せるか (playbackPlan)', () => {
             { codec: 'av1', way: 'stream', codecs: 'av01.0.08M.08,opus' },
             { codec: 'mpeg2', way: 'raw' },
         ]);
-        expect(plan?.info.duration).toBeCloseTo((Math.ceil((60 * CLOCK) / FRAME_TICKS) - 1) * (FRAME_TICKS / CLOCK), 3);
+        expect(plan?.info.duration).toBeCloseTo(
+            (Math.ceil((60 * CLOCK) / FRAME_TICKS) - 1) * (FRAME_TICKS / CLOCK),
+            3,
+        );
         // 番組表の音声が無ければ「音声」1 つ (`arib.audioTracks`)
         expect(plan?.info.audios).toHaveLength(1);
         expect(plan?.ts?.head).toBe(TS_START);
@@ -251,7 +258,10 @@ describe('流す (streamResponse)', () => {
         });
         // 詰め替えは埋まっていても通る (ffmpeg は起こすだけ。すぐ閉じる)
         config.ffmpeg = 'true';
-        const copy = await streamResponse(seed({ library_path: h264 }), new URLSearchParams({ codec: 'h264' }));
+        const copy = await streamResponse(
+            seed({ library_path: h264 }),
+            new URLSearchParams({ codec: 'h264' }),
+        );
         await copy.body?.cancel();
         held?.();
         expect(transcodesInUse()).toBe(0);

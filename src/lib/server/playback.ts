@@ -111,7 +111,11 @@ function transcodedCodecs(codec: LiveCodec): string {
 /** ファイルを少しずつ読む口 (`ts/seek.ts`) */
 function reader(path: string): ReadAt {
     return async (offset, length) =>
-        new Uint8Array(await Bun.file(path).slice(offset, offset + length).arrayBuffer());
+        new Uint8Array(
+            await Bun.file(path)
+                .slice(offset, offset + length)
+                .arrayBuffer(),
+        );
 }
 
 /** 頭と尻を読む量。頭は映像と音声の最初の PES が必ず入る長さ、尻は最後の映像の PES が入る長さ */
@@ -170,7 +174,7 @@ export async function playbackPlan(recording: Recording): Promise<PlaybackPlan |
         ] as const
     ).filter(
         (entry): entry is readonly [EncodedSource, string] =>
-            entry[1] !== null && entry[1].endsWith('.mkv') && existsSync(entry[1]),
+            entry[1]?.endsWith('.mkv') === true && existsSync(entry[1]),
     );
     const encoded: EncodedFile[] = await Promise.all(
         files.map(async ([source, path]) => {
@@ -369,7 +373,11 @@ export function tsTranscodeArgs(
     const video = videoArgs(codec, hw, true);
     const from = programSpec(program);
     const pan =
-        audio.side === 'main' ? 'pan=stereo|c0=c0|c1=c0' : audio.side === 'sub' ? 'pan=stereo|c0=c1|c1=c1' : null;
+        audio.side === 'main'
+            ? 'pan=stereo|c0=c0|c1=c0'
+            : audio.side === 'sub'
+              ? 'pan=stereo|c0=c1|c1=c1'
+              : null;
     return [
         '-hide_banner',
         '-nostats',
@@ -573,7 +581,14 @@ export async function streamResponse(recording: Recording, query: URLSearchParam
     if (same !== undefined) {
         return new Response(
             transcodeBody(
-                [{ argv: [config.ffmpeg, ...copyArgs(same.path, from, audioIndex(query.get('audio')), codec)] }],
+                [
+                    {
+                        argv: [
+                            config.ffmpeg,
+                            ...copyArgs(same.path, from, audioIndex(query.get('audio')), codec),
+                        ],
+                    },
+                ],
                 `${label} の詰め替え`,
                 () => undefined,
             ),
@@ -595,7 +610,11 @@ export async function streamResponse(recording: Recording, query: URLSearchParam
 }
 
 /** GPU で焼けるなら GPU、駄目ならソフトウェア。GPU が 1 バイトも出せずに降りたら覚える */
-function withFallback(codec: LiveCodec, interlaced: boolean, build: (hw: LiveHw | null) => Attempt): Attempt[] {
+function withFallback(
+    codec: LiveCodec,
+    interlaced: boolean,
+    build: (hw: LiveHw | null) => Attempt,
+): Attempt[] {
     const hw = pickLiveHw(codec, interlaced);
     const software = build(null);
     if (hw === null) return [software];
@@ -655,7 +674,10 @@ export function encodedPath(recording: Pick<Recording, 'library_path'>): string 
  * 録っている最中のものも返す (伸びている)
  */
 export function tsPathOf(recording: Pick<Recording, 'ts_path' | 'library_path'>): string | null {
-    return recording.ts_path ?? (recording.library_path?.endsWith('.mkv') === false ? recording.library_path : null);
+    return (
+        recording.ts_path ??
+        (recording.library_path?.endsWith('.mkv') === false ? recording.library_path : null)
+    );
 }
 
 /**

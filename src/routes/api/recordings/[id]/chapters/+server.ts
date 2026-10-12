@@ -38,7 +38,10 @@ export async function GET({ params }) {
     const path = encodedPath(recording);
     // 焼き上がれば中身が変わるので控えさせない
     if (path === null) {
-        return Response.json({ chapters: await tsChapters(recording) }, { headers: { 'Cache-Control': 'no-store' } });
+        return Response.json(
+            { chapters: await tsChapters(recording) },
+            { headers: { 'Cache-Control': 'no-store' } },
+        );
     }
 
     /*
