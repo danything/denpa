@@ -91,7 +91,8 @@ export class JSArray extends JSObject {
     override getOwn(key: string): Lookup {
         if (key === 'length') return this.items.length;
         const index = arrayIndex(key);
-        if (index >= 0) return index < this.items.length ? this.items[index] : ABSENT;
+        // delete で空けた所は「無い」(値が undefined の要素とは違う)
+        if (index >= 0) return index in this.items ? this.items[index] : ABSENT;
         return super.getOwn(key);
     }
 
@@ -106,7 +107,8 @@ export class JSArray extends JSObject {
             return;
         }
         if (index >= MAX_ARRAY) throw new ScriptError(`配列が大きすぎます (${index})`);
-        while (this.items.length < index) this.items.push(undefined);
+        // 間は空き (`new Array(3)` や `a[5] = 1` と同じ。for-in に出ない)
+        if (this.items.length < index) this.items.length = index;
         this.items[index] = value;
     }
 
@@ -114,14 +116,13 @@ export class JSArray extends JSObject {
         if (!Number.isInteger(length) || length < 0 || length > MAX_ARRAY) {
             throw new ScriptError(`配列の長さが不正です (${length})`);
         }
-        if (length < this.items.length) this.items.length = length;
-        else while (this.items.length < length) this.items.push(undefined);
+        this.items.length = length;
     }
 
     override delete(key: string): boolean {
         const index = arrayIndex(key);
         if (index >= 0 && index < this.items.length) {
-            this.items[index] = undefined;
+            delete this.items[index];
             return true;
         }
         return super.delete(key);
@@ -129,7 +130,7 @@ export class JSArray extends JSObject {
 
     override ownKeys(): string[] {
         const keys: string[] = [];
-        for (let i = 0; i < this.items.length; i++) if (this.items[i] !== undefined) keys.push(String(i));
+        for (let i = 0; i < this.items.length; i++) if (i in this.items) keys.push(String(i));
         return [...keys, ...super.ownKeys()];
     }
 }
@@ -223,9 +224,22 @@ export function toNumber(value: Value): number {
     return toNumber(toPrimitiveString(value));
 }
 
+/** 配列をつなぐ。**長さの上限を、作りながら見る** (作ってから見ると先に巨大な文字列ができる) */
+export function joinItems(items: readonly Value[], separator: string): string {
+    const parts: string[] = [];
+    let size = 0;
+    for (let i = 0; i < items.length; i++) {
+        const item = items[i];
+        const text = item == null ? '' : toStr(item);
+        size += text.length + (i > 0 ? separator.length : 0);
+        if (size > MAX_STRING) throw new ScriptError('文字列が長すぎます');
+        parts.push(text);
+    }
+    return parts.join(separator);
+}
+
 function toPrimitiveString(value: JSObject): string {
-    if (value instanceof JSArray)
-        return value.items.map((item) => (item == null ? '' : toStr(item))).join(',');
+    if (value instanceof JSArray) return joinItems(value.items, ',');
     if (value instanceof JSDate) return formatDate(value.time);
     if (value instanceof JSFunction) return `function ${value.name}() { [native code] }`;
     const primitive = value.props.get('__primitive__');

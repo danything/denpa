@@ -17,6 +17,7 @@ import {
     JSFunction,
     JSObject,
     JST,
+    joinItems,
     MAX_ARRAY,
     MAX_STRING,
     type NativeImpl,
@@ -112,13 +113,8 @@ export function createRealm(options: RealmOptions): Realm {
         if (!(self instanceof JSArray)) throw new ScriptError('配列ではありません');
         return self.items;
     };
-    const join = (self: Value, separator: Value): string => {
-        const text = items(self)
-            .map((item) => (item == null ? '' : toStr(item)))
-            .join(separator === undefined ? ',' : toStr(separator));
-        if (text.length > MAX_STRING) throw new ScriptError('文字列が長すぎます');
-        return text;
-    };
+    const join = (self: Value, separator: Value): string =>
+        joinItems(items(self), separator === undefined ? ',' : toStr(separator));
     method(realm.arrayProto, 'join', (self, args) => join(self, args[0]));
     method(realm.arrayProto, 'toString', (self) => join(self, undefined));
     method(realm.arrayProto, 'reverse', (self) => {
@@ -239,7 +235,14 @@ export function createRealm(options: RealmOptions): Realm {
         const parts = s.split(toStr(args[0]));
         return array(args[1] === undefined ? parts : parts.slice(0, Math.max(0, index(args[1]))));
     });
-    method(realm.stringProto, 'concat', (self, args) => text(self) + args.map(toStr).join(''));
+    method(realm.stringProto, 'concat', (self, args) => {
+        let out = text(self);
+        for (const arg of args) {
+            out += toStr(arg);
+            if (out.length > MAX_STRING) throw new ScriptError('文字列が長すぎます');
+        }
+        return out;
+    });
     method(realm.stringProto, 'toLowerCase', (self) => text(self).replace(/[A-Z]/g, (c) => c.toLowerCase()));
     method(realm.stringProto, 'toUpperCase', (self) => text(self).replace(/[a-z]/g, (c) => c.toUpperCase()));
 
@@ -378,7 +381,8 @@ export function createRealm(options: RealmOptions): Realm {
         native('parseInt', (_, args) => {
             const radix = args[1] === undefined ? 0 : toNumber(args[1]);
             const n = Number.parseInt(toStr(args[0]), Number.isNaN(radix) ? 0 : radix);
-            return Number.isFinite(n) ? n : Number.NaN;
+            // 整数だけの Number に収まらないもの (桁あふれ) は NaN
+            return Number.isSafeInteger(n) ? n : Number.NaN;
         }),
     );
     realm.global.put(

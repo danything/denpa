@@ -387,3 +387,31 @@ describe('細かい意味', () => {
         expect(() => vm.resume(1)).toThrow();
     });
 });
+
+describe('大きさの上限と配列の空き', () => {
+    test('文字列を倍々にしても、上限で誤りにして止める (concat・join)', async () => {
+        await expect(evaluate('var s = "x"; for (var i = 0; i < 30; i++) s = s.concat(s);')).rejects.toThrow(
+            '長すぎ',
+        );
+        await expect(
+            evaluate(
+                'var a = new Array(); var s = "xxxxxxxxxxxxxxxx"; for (var i = 0; i < 16; i++) s = s + s; for (var j = 0; j < 100; j++) a.push(s); a.join("");',
+            ),
+        ).rejects.toThrow('長すぎ');
+    });
+
+    test('delete で空けた要素と、空きのまま作った要素は for-in に出ない。undefined を入れた要素は出る', async () => {
+        expect(
+            await evaluate(`
+                var a = [1, 2, 3]; delete a[1];
+                var b = new Array(2); b[3] = undefined;
+                var s = ""; for (var k in a) s += k; s += "/"; for (var k in b) s += k;
+                var result = [s, a.length, b.length, a[1] == undefined];
+            `).then(items),
+        ).toEqual(['02/3', 3, 4, true]);
+    });
+
+    test('parseInt の桁あふれは NaN', async () => {
+        expect(await evaluate('var result = isNaN(parseInt("99999999999999999999999"));')).toBe(true);
+    });
+});
