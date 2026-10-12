@@ -2,7 +2,7 @@ import { basename } from 'node:path';
 import { fail } from '@sveltejs/kit';
 import { eq, not } from 'drizzle-orm';
 import { HW_CODECS, HW_KINDS, type HwAllow, hwAllowed } from '#lib/hw.js';
-import { normalizePrefecture, PREFECTURE_UNSET } from '#lib/prefecture.js';
+import { parsePrefectureField } from '#lib/prefecture.js';
 import { isCmMode } from '#lib/server/cm.js';
 import { now, orm } from '#lib/server/db.js';
 import { liveTokens, revokeToken } from '#lib/server/device-auth.js';
@@ -123,9 +123,9 @@ export const actions = {
             return fail(400, { message: '郵便番号は数字7桁で入れてください (例 1000001)' });
         }
         // 選ぶ欄なので、表に無い番号は画面の外から来たもの。黙って未設定にせず断る
-        const rawPrefecture = String(form.get('prefecture') ?? PREFECTURE_UNSET).trim();
-        const prefecture = normalizePrefecture(rawPrefecture);
-        if (String(prefecture) !== rawPrefecture) {
+        const field = form.get('prefecture');
+        const prefecture = parsePrefectureField(field === null ? null : String(field));
+        if (prefecture === null) {
             return fail(400, { message: '都道府県の指定が正しくありません' });
         }
         saveSettings({ postalCode, prefecture, bmlNetwork: form.get('bmlNetwork') === 'on' });

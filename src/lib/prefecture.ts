@@ -71,3 +71,15 @@ export function normalizePrefecture(value: string | number | undefined): number 
     const code = typeof value === 'number' ? value : /^\d+$/.test(value?.trim() ?? '') ? Number(value) : NaN;
     return PREFECTURES.some((p) => p.code === code) ? code : PREFECTURE_UNSET;
 }
+
+/**
+ * 設定画面の選ぶ欄から来た値を読む。**表の番号か 255 だけを受け、ほかは null** (断る)。
+ *
+ * 選ぶ欄なので、表に無い番号や `014` のような書き方は画面の外から来たもの。
+ * 黙って未設定にすると、保存したつもりの値が消える。欄が無ければ未設定
+ */
+export function parsePrefectureField(value: string | null): number | null {
+    const raw = (value ?? String(PREFECTURE_UNSET)).trim();
+    const code = normalizePrefecture(raw);
+    return String(code) === raw ? code : null;
+}

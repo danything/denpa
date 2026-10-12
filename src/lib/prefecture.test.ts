@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { normalizePrefecture, PREFECTURE_UNSET, PREFECTURES } from './prefecture';
+import { normalizePrefecture, parsePrefectureField, PREFECTURE_UNSET, PREFECTURES } from './prefecture';
 
 /*
  * **都道府県の番号は ARIB の県域 (STD-B10 付録G 表G-2)。** JIS の都道府県コードではないので、
@@ -40,5 +40,24 @@ describe('都道府県', () => {
         expect(normalizePrefecture('1.5')).toBe(PREFECTURE_UNSET);
         expect(normalizePrefecture('-1')).toBe(PREFECTURE_UNSET);
         expect(normalizePrefecture('とうきょう')).toBe(PREFECTURE_UNSET);
+    });
+});
+
+/*
+ * **設定画面の欄は、表の番号か 255 だけを受ける。** ほかは断る (画面の外から来たもの)。
+ */
+describe('設定画面の欄', () => {
+    test('表の番号と未設定 (255) は受ける。欄が無ければ未設定', () => {
+        expect(parsePrefectureField('14')).toBe(14);
+        expect(parsePrefectureField('255')).toBe(255);
+        expect(parsePrefectureField(null)).toBe(255);
+    });
+
+    test('表に無い番号・書き方の違うものは断る', () => {
+        expect(parsePrefectureField('51')).toBeNull();
+        expect(parsePrefectureField('0')).toBeNull();
+        expect(parsePrefectureField('014')).toBeNull();
+        expect(parsePrefectureField('')).toBeNull();
+        expect(parsePrefectureField('tokyo')).toBeNull();
     });
 });
