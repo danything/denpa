@@ -148,6 +148,54 @@ test.describe('録画を観る', () => {
     });
 
     /**
+     * **シークバーの CM は琥珀で塗る** (denpa-tv と同じ色と意味)。続いている CM は1本にまとめ、
+     * 位置はつまみの往復ぶんを引いて置く (`seek-track.ts`。式は単体試験が持つ)。
+     *
+     * 偽の録画にはチャプターも尺も無いので、チャプターは口ごと差し替え、尺は映像の要素に
+     * 持たせて「読み込めた」と知らせる (中身の無いファイルはブラウザが読めない)
+     */
+    test('シークバーの CM の区間が琥珀で塗られ、読み上げでも CM と分かる', async ({ page, request }) => {
+        test.setTimeout(180_000);
+        const id = await watchable(page, request);
+        await page.route('**/api/recordings/*/chapters', (route) =>
+            route.fulfill({
+                json: {
+                    chapters: [
+                        { start: 0, end: 10, title: 'CM' },
+                        { start: 10, end: 400, title: '本編' },
+                        { start: 400, end: 415, title: 'CM' },
+                        { start: 415, end: 430, title: 'CM' },
+                        { start: 430, end: 1000, title: '本編' },
+                    ],
+                },
+            }),
+        );
+        await goto(page, `/watch/${id}`);
+
+        const seek = page.getByTestId('watch-seek');
+        // 続いている CM (400–415・415–430) は1本の区間
+        await expect(seek).toHaveAttribute('data-cm', '0-10 400-430');
+        // 頭は CM。色だけに頼らず、読み上げる位置にチャプターの名前を添える
+        await expect(seek).toHaveAttribute('aria-valuetext', '0:00、CM');
+
+        await page.getByTestId('watch-video').evaluate((video) => {
+            Object.defineProperty(video, 'duration', { value: 1000 });
+            video.dispatchEvent(new Event('loadedmetadata'));
+        });
+        const layer = (name: string) =>
+            seek.evaluate((input, prop) => getComputedStyle(input).getPropertyValue(prop).trim(), name);
+        const amber = 'rgb(255 179 0 / 0.8)';
+        // 2本目は 400 秒 (0.4) から 430 秒 (0.43) まで。つまみの往復ぶんを引いた位置
+        await expect.poll(() => layer('--cm')).toContain(`${amber} calc(0.5rem + 0.4 * (100% - 1rem))`);
+        const cm = await layer('--cm');
+        expect(cm).toContain(`${amber} calc(0.5rem + 0.43 * (100% - 1rem))`);
+        // 頭の CM は溝の左端から
+        expect(cm).toContain(`${amber} 0%`);
+        // CM の端には目盛りを打たない (塗りの縁が言う)
+        expect(await layer('--ticks')).toBe('none');
+    });
+
+    /**
      * **字幕は canvas に描いて重ねる。** ライブ (`/live`) と同じやり方。
      *
      * 文字を `<track>` に渡す道は放送どおりには出ない (左右の位置・背景の箱・外字が落ちる)。

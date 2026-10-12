@@ -3,18 +3,24 @@
      * 再生位置の帯。**3画面で同じ見た目。**
      *
      * Pico の range は溝を1色で塗るだけで、どこまで進んだかが見えない。進んだぶんを
-     * 主の色で塗る (Firefox は `::-moz-range-progress` が持つ)。
+     * 主の色で塗る。
      *
-     * `marks` は切れ目 (観る画面のチャプター)。どこで CM が挟まっているかが見えると、
-     * 送りのボタンを何回押すかが分かる
+     * `cm` は CM の区間 (観る画面)。**琥珀で塗る** (denpa-tv と同じ色と意味)。どこが CM かが
+     * 見えると、送りのボタンを何回押すか・どこまで飛ばせばよいかが分かる。`marks` は
+     * それ以外の切れ目で、細い目盛りを打つ。塗りも目盛りも溝の background に描く
+     * (`seek-track.ts`)
      */
+    import { trackAt, trackLayers } from './seek-track';
+
     let {
         value,
         min = 0,
         max,
         step,
         onseek,
+        cm = [],
         marks = [],
+        valuetext,
         testid,
     }: {
         value: number;
@@ -22,45 +28,44 @@
         max: number;
         step: number;
         onseek: (value: number) => void;
-        /** 切れ目の位置 (`value` と同じ単位) */
+        /** CM の区間 (`value` と同じ単位。重ならず並んでいること) */
+        cm?: { start: number; end: number }[];
+        /** 目盛りを打つ切れ目の位置 (`value` と同じ単位) */
         marks?: number[];
+        /**
+         * 読み上げで言う位置 (`aria-valuetext`)。**色だけに頼らない** — 「12:34、CM」のように
+         * いまの区間の名前を添える
+         */
+        valuetext?: string | undefined;
         testid?: string;
     } = $props();
 
     const span = $derived(max - min);
+    const fill = $derived(trackAt(span > 0 ? (value - min) / span : 0));
+    const layers = $derived(trackLayers(cm, marks, min, max));
 </script>
 
 <div class="seek">
+    <!-- `data-cm` は塗った区間 (e2e が当てる。塗りは background なので要素からは読めない) -->
     <input
         type="range"
-        style="--fill: {span > 0 ? ((value - min) / span) * 100 : 0}%"
+        style:--fill={fill}
+        style:--cm={layers.cm}
+        style:--ticks={layers.ticks}
         {min}
         {max}
         {step}
         {value}
         oninput={(event) => onseek(Number(event.currentTarget.value))}
         aria-label="再生位置"
+        aria-valuetext={valuetext}
+        data-cm={cm.length > 0 ? cm.map((s) => `${s.start}-${s.end}`).join(' ') : undefined}
         data-testid={testid}
     />
-    {#if marks.length > 0 && span > 0}
-        <div class="marks">
-            <!--
-                **つまみの往復ぶんを引く。** つまみは幅のぶんだけ内側を動く (端で枠から
-                出ないため) ので、切れ目を素の百分率で置くと**つまみとずれます** —
-                実機では、まだ来ていない CM の印が再生位置の左に出ていた。つまみは 1rem
-            -->
-            {#each marks as at (at)}
-                <span class="mark" style="left: calc(0.5rem + {(at - min) / span} * (100% - 1rem))"></span>
-            {/each}
-        </div>
-    {/if}
 </div>
 
 <style>
-    .seek {
-        position: relative;
-    }
-    /* 細い帯。つまみは 1rem (切れ目の位置の計算がこれを前提にしている) */
+    /* 細い帯。つまみは 1rem (塗りの位置の計算 `trackAt` がこれを前提にしている) */
     input {
         --pico-range-thumb-height: 1rem;
         --pico-range-thumb-width: 1rem;
@@ -72,30 +77,28 @@
         margin: 0;
         accent-color: var(--pico-primary-background);
     }
+    /*
+     * 溝の層は上から: 目盛り・観たぶん (主の色)・CM (琥珀)・溝の地。
+     * Firefox も同じ層で描く (`::-moz-range-progress` は使わない) — 目盛りを観たぶんの上に出すため。
+     * 2つのブラウザの擬似要素は1つの規則にまとめられない (知らないほうが規則ごと捨てる)
+     */
     input::-webkit-slider-runnable-track {
         background:
+            var(--ticks, none),
             linear-gradient(var(--pico-primary-background), var(--pico-primary-background)) 0 0 / var(--fill, 0%)
                 100% no-repeat,
+            var(--cm, none),
+            var(--pico-range-border-color);
+    }
+    input::-moz-range-track {
+        background:
+            var(--ticks, none),
+            linear-gradient(var(--pico-primary-background), var(--pico-primary-background)) 0 0 / var(--fill, 0%)
+                100% no-repeat,
+            var(--cm, none),
             var(--pico-range-border-color);
     }
     input::-moz-range-progress {
-        height: var(--pico-range-height);
-        border-radius: var(--pico-border-radius);
-        background: var(--pico-primary-background);
-    }
-    .marks {
-        pointer-events: none;
-        position: absolute;
-        left: 0;
-        right: 0;
-        top: 0;
-        height: 0.25rem;
-    }
-    .mark {
-        position: absolute;
-        top: 0;
-        height: 0.25rem;
-        width: 1px;
-        background: rgb(255 255 255 / 0.7);
+        background: transparent;
     }
 </style>
