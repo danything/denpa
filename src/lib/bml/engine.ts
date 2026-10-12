@@ -365,6 +365,8 @@ class Engine implements DomHost, BrowserHost, RenderHost {
     /** 今の実行を打ち切って入口から出直す */
     private restart(): void {
         this.abandon();
+        // 入口が届くまでのあいだ、古い文書の受け手を動かさない
+        this.preparing = true;
         void this.startup();
     }
 
@@ -506,8 +508,16 @@ class Engine implements DomHost, BrowserHost, RenderHost {
         this.preparing = false;
         if (shown) return;
         this.log(`文書が読めません: ${name}`);
-        if (entry) this.exit();
-        else this.restart();
+        if (entry) {
+            this.exit();
+            return;
+        }
+        // 入口の文書が読めない文書へ移ろうとしたなら、入口のまま止める (出直すと同じ遷移を
+        // 繰り返して回り続ける)。そうでなければ入口から出直す
+        if (this.current === `/${hex(STARTUP_COMPONENT, 2)}/${hex(STARTUP_MODULE, 4)}/startup.bml`) return;
+        setTimeout(() => {
+            if (token === this.token && !this.destroyed) this.restart();
+        }, 0);
     }
 
     private exit(): void {
@@ -636,12 +646,14 @@ class Engine implements DomHost, BrowserHost, RenderHost {
 
     private enqueue(job: Job): void {
         if (job.token !== this.token) return;
+        // 待ちが空のところへ来たものだけ、新しい区切りを始める
+        const fresh = this.queue.length === 0 && !this.running;
         this.queue.push(job);
         if (this.scheduled || this.running) return;
         this.scheduled = true;
         queueMicrotask(() => {
             this.scheduled = false;
-            this.sliceStart = performance.now();
+            if (fresh) this.sliceStart = performance.now();
             this.pump();
         });
     }
@@ -674,7 +686,11 @@ class Engine implements DomHost, BrowserHost, RenderHost {
             }
             if (job.token !== this.token) continue;
             if (job.kind === 'native') {
+                // 中で積んだものは、もう待っているものより先に (積んだ順で) 動かす
+                const rest = this.queue;
+                this.queue = [];
                 job.run();
+                this.queue.push(...rest);
                 continue;
             }
             const vm = this.vm;
@@ -1106,9 +1122,9 @@ class Engine implements DomHost, BrowserHost, RenderHost {
                         );
                     }
                 }
-                // 後から来た keyup より先に動かす (列の頭に入れる)
+                // 後から来た keyup より先に動く (native の中で積んだものは先に動かす。pump)
                 front.push({ kind: 'native', token, run: () => this.afterKeyDown(key) });
-                this.queue.unshift(...front.filter((job): job is Job => job !== null));
+                for (const job of front) if (job !== null) this.enqueue(job);
             },
         });
     }
@@ -1173,7 +1189,7 @@ class Engine implements DomHost, BrowserHost, RenderHost {
                 if (key === KEY.enter && focused.state === 'active') focused.setState('focus');
                 if (!this.accepts(key)) return;
                 const job = this.job(focused, 'onkeyup', { type: 'keyup', keyCode: key });
-                if (job !== null) this.queue.unshift(job);
+                if (job !== null) this.enqueue(job);
             },
         });
     }
