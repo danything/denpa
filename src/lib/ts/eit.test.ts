@@ -1,10 +1,10 @@
 import { describe, expect, test } from 'bun:test';
 import {
     EpgReader,
+    PresentFollowing,
     parseBcdDuration,
     parseEit,
     parseMjdTime,
-    PresentFollowing,
     ScheduleProgress,
 } from './eit';
 import { eitSection, packetize, type SynthEvent } from './synth';
@@ -594,7 +594,8 @@ describe('PresentFollowing', () => {
     test('番組が繰り上がったら変わったと言う', () => {
         const reader = new PresentFollowing(SERVICE);
         feed(reader, [event()]);
-        expect(feed(reader, [event({ eventId: 2, name: '次の番組', startAt: NOON + 30 * 60_000 })])).toBe(true);
+        const next = event({ eventId: 2, name: '次の番組', startAt: NOON + 30 * 60_000 });
+        expect(feed(reader, [next])).toBe(true);
         expect(reader.present?.eventId).toBe(2);
     });
 
