@@ -26,10 +26,19 @@ test.describe('追っかけ再生の口', () => {
         // CM の判定はまだ走っていない (null) ので、観はじめに飛ばしてよい
         expect(rec.cmReliable).toBe(true);
 
-        // 生TS: 頭は同期バイト 0x47。録っている間は伸びたぶんも届き続ける
+        // 生TS: 頭は同期バイト 0x47。録っている間は伸びたぶんも届き続ける。
+        // **一覧に出るのは録り始めた時点で、ファイルにはまだ何も書かれていないことがある** —
+        // そのあいだ chase は 404 (docs/api.md「まだ何も録れていなければ 404」)。アプリと同じく、
+        // 届きはじめるまで頼み直す
         const controller = new AbortController();
-        const raw = await fetch(`${baseURL}/${rec.chase}?codec=raw`, { signal: controller.signal });
-        expect(raw.status).toBe(200);
+        let opened: Response | undefined;
+        await expect(async () => {
+            const res = await fetch(`${baseURL}/${rec.chase}?codec=raw`, { signal: controller.signal });
+            if (res.status !== 200) await res.body?.cancel();
+            expect(res.status).toBe(200);
+            opened = res;
+        }).toPass({ timeout: 30_000, intervals: [200] });
+        const raw = opened!;
         expect(raw.headers.get('content-type')).toBe('video/mp2t');
         const reader = raw.body!.getReader();
         const first = await reader.read();

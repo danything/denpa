@@ -28,6 +28,14 @@ const WEBHOOK_PORT = 8096;
 /** 立ち上がりを待つ上限。ここを短くすると混んでいるマシンで落ちる */
 const BOOT_TIMEOUT = 120_000;
 const BOOT_POLL = 200;
+/** 立ち上がりを訊く1回ぶんの上限。返事の来ない接続に掴まったまま BOOT_TIMEOUT を使い切らないように */
+const BOOT_ASK = 5_000;
+/**
+ * 断るだけの denpa (`bootClosed`) の立ち上がりを待つ上限。組んだものを起こすだけなので普段は 0.3 秒で済む。
+ * **テストの上限 (120 秒) と同じ BOOT_TIMEOUT にしておくと、詰まったときにテストの上限を使い切り、
+ * やり直しまで 2 分待たされる** (31-device が CI でそうなっていた)。早めに諦めてやり直させる
+ */
+const CLOSED_BOOT_TIMEOUT = 30_000;
 
 export interface Stack {
     /** このワーカーの作業領域 */
@@ -98,21 +106,30 @@ function start(command: [string, ...string[]], env: Record<string, string>): Sta
     return { proc, output: () => log };
 }
 
-async function waitFor(url: string, started: Started, what: string): Promise<void> {
-    const until = Date.now() + BOOT_TIMEOUT;
+async function waitFor(url: string, started: Started, what: string, timeout = BOOT_TIMEOUT): Promise<void> {
+    const until = Date.now() + timeout;
+    /*
+     * **最後に何が返ったかを持っておく。** 待ち受けているのに応答しないとき、断られたのか
+     * (ECONNREFUSED)、返事が来ないのか (時間切れ)、ok でない状態が返ったのかで、原因が違う。
+     * 1回ずつ上限を切る — 返事の来ない接続を1つ待ち続けると、BOOT_TIMEOUT を丸ごと使ってしまう
+     */
+    let last = 'まだ一度も訊いていません';
     while (Date.now() < until) {
         if (started.proc.exitCode !== null) {
             throw new Error(`${what} が起動直後に終了しました:\n${started.output()}`);
         }
         try {
-            const res = await fetch(url);
+            const res = await fetch(url, { signal: AbortSignal.timeout(BOOT_ASK) });
             if (res.ok) return;
-        } catch {
-            // まだ待ち受けていない
+            last = `HTTP ${res.status} ${(await res.text()).slice(0, 200)}`;
+        } catch (error) {
+            // まだ待ち受けていない (ECONNREFUSED) か、返事が来ない
+            const cause = (error as { cause?: { code?: string } }).cause?.code;
+            last = cause === undefined ? String(error) : `${error} (${cause})`;
         }
         await new Promise((resolve) => setTimeout(resolve, BOOT_POLL));
     }
-    throw new Error(`${what} が ${url} で応答しませんでした:\n${started.output()}`);
+    throw new Error(`${what} が ${url} で応答しませんでした (最後: ${last}):\n${started.output()}`);
 }
 
 async function stop(started: Started): Promise<void> {
@@ -361,7 +378,7 @@ export async function bootClosed(
     const shutdown = async () => stop(app);
     try {
         // 生死確認は入る道が無くても通る (守ると livenessProbe が落ちるため)
-        await waitFor(`${appUrl}/api/health`, app, 'denpa (閉)');
+        await waitFor(`${appUrl}/api/health`, app, 'denpa (閉)', CLOSED_BOOT_TIMEOUT);
     } catch (error) {
         await shutdown();
         throw error;
