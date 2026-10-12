@@ -9,6 +9,8 @@ spec:
   type: {{ .Values.service.type }}
   selector:
     app: tuner-agent
+  # **鍵を配るポート (CARD_SHARE_PORT) は出さない。** LAN の中だけに配るもので、
+  # Service や NodePort を挟むとアドレスも TTL も効かなくなる (docs/agent.md「鍵を配るのは LAN の中だけ」)
   ports:
     - name: agent
       port: {{ .Values.service.port }}

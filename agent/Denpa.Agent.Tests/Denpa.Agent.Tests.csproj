@@ -30,6 +30,7 @@
         <Compile Include="../Denpa.Agent/Shell.cs" />
         <Compile Include="../Denpa.Agent/UsbSysfs.cs" />
         <Compile Include="../Denpa.Agent/CardShare.cs" />
+        <Compile Include="../Denpa.Agent/CardLan.cs" />
         <Compile Include="../Denpa.Agent/Cas.cs" />
         <Compile Include="../Denpa.Agent/BCas.cs" />
         <Compile Include="../Denpa.Agent/Px4Card.cs" />

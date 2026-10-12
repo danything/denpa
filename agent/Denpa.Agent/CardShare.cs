@@ -1,5 +1,8 @@
 using System.Buffers.Binary;
 using System.Net.Http.Headers;
+using System.Net.Sockets;
+using System.Text.Json;
+using System.Text.Json.Nodes;
 
 namespace Denpa.Agent;
 
@@ -21,9 +24,12 @@ public static class Keys
     /// <summary>ストリームを復号するときに聞く相手。<see cref="Configure"/> するまでは手元のカード</summary>
     public static IKeySource Source => _source ?? Local;
 
-    /// <summary>CARD_URL が書いてあれば、そちらから貰う。**起動したときに1回**</summary>
-    public static void Configure(string? cardUrl) =>
-        _source = cardUrl is { Length: > 0 } ? new RemoteCard(cardUrl) : Local;
+    /// <summary>
+    /// CARD_URL が書いてあれば、そちらから貰う。**起動したときに1回。**
+    /// <paramref name="hops"/> は貰いに行く接続の TTL (<c>CARD_TTL</c>。<see cref="CardLanPolicy"/>)
+    /// </summary>
+    public static void Configure(string? cardUrl, int hops) =>
+        _source = cardUrl is { Length: > 0 } ? new RemoteCard(cardUrl, hops) : Local;
 }
 
 /// <summary>
@@ -94,10 +100,24 @@ public sealed class LocalCard : IKeySource
 /// 呼ぶのはデスクランブラのスレッドで、読み出しとは別 (TunerPool.cs)。相手が遅くても
 /// 間のキュー (64MB) が呑むうちは録画は欠けず、答えが来てから続きを復号する。
 /// </para>
+///
+/// <para>
+/// **繋ぐのは LAN の中だけ。** 接続には TTL を付け (既定 1。<see cref="CardLan.Connect"/>)、
+/// 配る側も LAN の外には配らない (<see cref="CardLanPolicy"/>)。断られたら理由を画面に出す。
+/// </para>
 /// </summary>
-public sealed class RemoteCard(string url) : IKeySource
+public sealed class RemoteCard(string url, int hops) : IKeySource
 {
-    private static readonly HttpClient Http = new() { Timeout = TimeSpan.FromSeconds(10) };
+    private readonly HttpClient _http = new(new SocketsHttpHandler
+    {
+        // ルーターの先に置いた配り役は、TTL で SYN-ACK が戻らず黙る。待ち続けずに理由を出す
+        ConnectTimeout = TimeSpan.FromSeconds(5),
+        ConnectCallback = (context, cancel) => CardLan.Connect(context.DnsEndPoint, hops, cancel),
+    })
+    {
+        Timeout = TimeSpan.FromSeconds(10),
+    };
+
     private readonly string _url = url.TrimEnd('/');
     private CardInit? _init;
 
@@ -108,15 +128,8 @@ public sealed class RemoteCard(string url) : IKeySource
     public CardInit Init() => _init ?? Check();
 
     /// <summary>いま配り役と話せるか。**覚えている素を使わずに聞き直す** (画面の「カードリーダー」行)</summary>
-    public CardInit Check()
-    {
-        using var response = Http.Send(new HttpRequestMessage(HttpMethod.Get, $"{_url}/denpa/card/init"));
-        if (!response.IsSuccessStatusCode)
-        {
-            throw new IOException($"鍵を配る拠点からカードの情報を受け取れません ({(int)response.StatusCode})");
-        }
-        return _init = CardWire.ReadInit(Body(response));
-    }
+    public CardInit Check() =>
+        _init = CardWire.ReadInit(Send(new HttpRequestMessage(HttpMethod.Get, $"{_url}/denpa/card/init"), "カードの情報"));
 
     public EcmAnswer Ecm(ReadOnlySpan<byte> ecm)
     {
@@ -125,20 +138,67 @@ public sealed class RemoteCard(string url) : IKeySource
             Content = new ByteArrayContent(ecm.ToArray()),
         };
         request.Content.Headers.ContentType = new MediaTypeHeaderValue("application/octet-stream");
+        return CardWire.ReadEcm(Send(request, "鍵"));
+    }
+
+    /// <summary>送って中身を受け取る。**受け取れなければ、何が起きたかの分かる文で投げる**</summary>
+    private byte[] Send(HttpRequestMessage request, string what)
+    {
         try
         {
-            using var response = Http.Send(request);
-            if (!response.IsSuccessStatusCode) throw new IOException($"鍵を受け取れません ({(int)response.StatusCode})");
-            return CardWire.ReadEcm(Body(response));
+            using var response = _http.Send(request);
+            var body = response.Content.ReadAsByteArrayAsync().GetAwaiter().GetResult();
+            if (response.IsSuccessStatusCode) return body;
+            throw new IOException(Refused(_url, (int)response.StatusCode, body, what));
         }
         catch (HttpRequestException error)
         {
-            throw new IOException($"鍵を配る拠点に繋がりません: {error.Message}", error);
+            throw new IOException(Unreachable(error), error);
+        }
+        catch (OperationCanceledException error)
+        {
+            throw new IOException("鍵を配る拠点から答えがありません。ルーターを越えた先や LAN の外には届きません (CARD_TTL)", error);
         }
     }
 
-    private static byte[] Body(HttpResponseMessage response) =>
-        response.Content.ReadAsByteArrayAsync().GetAwaiter().GetResult();
+    /// <summary>配り役が答えたが、渡してくれなかった</summary>
+    internal static string Refused(string url, int status, byte[] body, string what)
+    {
+        var reason = Reason(body);
+        return status switch
+        {
+            403 => $"鍵を配る拠点に断られました: {reason ?? "理由は返っていません"}",
+            // 前の版の CARD_URL (普通の API のポート) のまま。鍵を配る API は専用のポートに移った
+            404 => $"{url} では鍵を配っていません (404)。CARD_URL には配る側の CARD_SHARE_PORT のポートを書きます",
+            _ => $"鍵を配る拠点から{what}を受け取れません ({status}{(reason is null ? "" : $": {reason}")})",
+        };
+    }
+
+    /// <summary>配り役が返した <c>{"error": "…"}</c></summary>
+    private static string? Reason(byte[] body)
+    {
+        try
+        {
+            return JsonNode.Parse(body)?["error"]?.GetValue<string>();
+        }
+        catch (Exception error) when (error is JsonException or InvalidOperationException or FormatException)
+        {
+            return null;
+        }
+    }
+
+    private static string Unreachable(HttpRequestException error)
+    {
+        var socket = error.InnerException as SocketException;
+        return socket?.SocketErrorCode switch
+        {
+            SocketError.ConnectionRefused =>
+                $"鍵を配る拠点に繋がりません ({error.Message})。配る側で CARD_SHARE_PORT を開いているか確かめてください",
+            SocketError.TimedOut or SocketError.HostUnreachable or SocketError.NetworkUnreachable =>
+                $"鍵を配る拠点に繋がりません ({error.Message})。ルーターを越えた先や LAN の外には届きません (CARD_TTL)",
+            _ => $"鍵を配る拠点に繋がりません: {error.Message}",
+        };
+    }
 }
 
 /// <summary>

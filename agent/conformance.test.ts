@@ -32,6 +32,9 @@ type ChannelEntry = { type: string; channel: string };
 const AGENT_CMD = (process.env.AGENT_CMD ?? 'agent/publish/denpa-agent').split(' ');
 const PORT = Number(process.env.AGENT_TEST_PORT ?? 40881);
 const BASE = `http://127.0.0.1:${PORT}`;
+/** 鍵を配るポート (CARD_SHARE_PORT)。普通の API とは別 (agent/Denpa.Agent/CardShareServer.cs) */
+const SHARE_PORT = PORT + 3;
+const SHARE_BASE = `http://127.0.0.1:${SHARE_PORT}`;
 const ROOT = resolve(import.meta.dir, '..');
 
 /**
@@ -169,6 +172,8 @@ beforeAll(async () => {
             FAKE_TUNE: TUNE,
             // 番組を作る本数。総当たりの1チャンネルあたりを軽くする
             FAKE_SLOTS: '4',
+            // 鍵も配る。カードは無いので、配る API は理由を付けて 503 を返す
+            CARD_SHARE_PORT: String(SHARE_PORT),
         },
         stdout: 'pipe',
         stderr: 'pipe',
@@ -441,6 +446,8 @@ type CardStatus = {
     ids?: string[];
     tuners?: string[];
     readers: CardReader[];
+    /** 鍵を配っているときの決まり (CARD_SHARE_PORT など。agent/Denpa.Agent/CardLan.cs) */
+    share?: { port: number; networks: string[]; ttl: number; maxRtt: number | null };
 };
 
 function expectReader(reader: CardReader) {
@@ -450,6 +457,43 @@ function expectReader(reader: CardReader) {
     for (const id of reader.ids) expect(id).toMatch(/^\d{16}$/);
     expect(Array.isArray(reader.tuners)).toBe(true);
     if (reader.error !== undefined) expect(typeof reader.error).toBe('string');
+}
+
+/** 別のエージェントを起こして、`/denpa/card` が答えるまで待つ。止めるのは呼んだ側 (`stop`) */
+async function spawnAgent(port: number, env: Record<string, string>) {
+    const room = mkdtempSync(join(tmpdir(), 'denpa-agent-card-'));
+    writeFileSync(join(room, 'tuners.json'), TUNERS);
+    writeFileSync(join(room, 'channels.json'), JSON.stringify(channels(), null, 4));
+    const other = Bun.spawn(AGENT_CMD, {
+        cwd: ROOT,
+        env: {
+            ...process.env,
+            AGENT_PORT: String(port),
+            TUNERS_FILE: join(room, 'tuners.json'),
+            CHANNELS_FILE: join(room, 'channels.json'),
+            RAW_DIR: join(room, 'recorded'),
+            FAKE_TUNE: TUNE,
+            ...env,
+        },
+        stdout: 'ignore',
+        stderr: 'ignore',
+    });
+    const stop = async () => {
+        other.kill('SIGKILL');
+        await other.exited;
+        rmSync(room, { recursive: true, force: true });
+    };
+    for (let i = 0; i < 100; i++) {
+        try {
+            const res = await fetch(`http://127.0.0.1:${port}/denpa/card`);
+            if (res.ok) return { card: (await res.json()) as CardStatus, stop };
+        } catch {
+            // まだ待ち受けていない
+        }
+        await sleep(100);
+    }
+    await stop();
+    throw new Error(`:${port} のエージェントが応答しません`);
 }
 
 describe('カードとスクランブル解除', () => {
@@ -465,53 +509,131 @@ describe('カードとスクランブル解除', () => {
         for (const reader of card.readers) expectReader(reader);
         // 使うカードは1枚だけ
         expect(card.readers.filter((reader) => reader.active).length).toBeLessThanOrEqual(1);
+        // 鍵を配っているので、その決まりも出る。既定は LAN の中だけ・TTL 1・往復時間は見ない
+        expect(card.share).toEqual({
+            port: SHARE_PORT,
+            networks: [
+                '127.0.0.0/8',
+                '10.0.0.0/8',
+                '172.16.0.0/12',
+                '192.168.0.0/16',
+                '::1/128',
+                'fc00::/7',
+                'fe80::/10',
+            ],
+            ttl: 1,
+            maxRtt: null,
+        });
+    });
+
+    test('鍵を配る API は専用のポートにだけある', async () => {
+        // 普通の API のポートには無い
+        expect((await get('/denpa/card/init')).status).toBe(404);
+        expect((await post('/denpa/card/ecm', {})).status).toBe(404);
+
+        // 専用のポート。カードが無いので、理由を付けて 503
+        const init = await fetch(`${SHARE_BASE}/denpa/card/init`);
+        expect(init.status).toBe(503);
+        expect(((await init.json()) as { error: string }).error.length).toBeGreaterThan(0);
+        const empty = await fetch(`${SHARE_BASE}/denpa/card/ecm`, { method: 'POST', body: new Uint8Array() });
+        expect(empty.status).toBe(400);
+        // IPv6 のループバックからも受ける (IPv4 とは別に待ち受けている)
+        expect((await fetch(`http://[::1]:${SHARE_PORT}/denpa/card/init`)).status).toBe(503);
+
+        // 専用のポートでは、普通の API は答えない
+        expect((await fetch(`${SHARE_BASE}/denpa/tuners`)).status).toBe(404);
+        expect((await fetch(`${SHARE_BASE}/denpa/card`)).status).toBe(404);
     });
 
     test('鍵を配る相手から貰うときは、その相手を返す', async () => {
         /*
-         * CARD_URL を立てたもう1つを起こし、こちら (カードの無いエージェント) を
-         * 配り役にする。貰えなくても**形式は同じ**で、手元のリーダーは並べない
+         * CARD_URL を立てたもう1つを起こし、こちら (カードの無いエージェント) の
+         * 鍵を配るポートを配り役にする。貰えなくても**形式は同じ**で、手元のリーダーは並べない
          */
-        const port = PORT + 2;
-        const room = mkdtempSync(join(tmpdir(), 'denpa-agent-remote-'));
-        writeFileSync(join(room, 'tuners.json'), TUNERS);
-        writeFileSync(join(room, 'channels.json'), JSON.stringify(channels(), null, 4));
-        const other = Bun.spawn(AGENT_CMD, {
-            cwd: ROOT,
-            env: {
-                ...process.env,
-                AGENT_PORT: String(port),
-                TUNERS_FILE: join(room, 'tuners.json'),
-                CHANNELS_FILE: join(room, 'channels.json'),
-                RAW_DIR: join(room, 'recorded'),
-                FAKE_TUNE: TUNE,
-                CARD_URL: BASE,
-            },
-            stdout: 'ignore',
-            stderr: 'ignore',
-        });
+        const { card, stop } = await spawnAgent(PORT + 2, { CARD_URL: SHARE_BASE });
         try {
-            let card: CardStatus | undefined;
-            for (let i = 0; i < 100 && card === undefined; i++) {
-                try {
-                    const res = await fetch(`http://127.0.0.1:${port}/denpa/card`);
-                    if (res.ok) card = (await res.json()) as CardStatus;
-                } catch {
-                    // まだ待ち受けていない
-                }
-                if (card === undefined) await sleep(100);
-            }
-            if (card === undefined) throw new Error('CARD_URL を立てたエージェントが応答しません');
             expect(card.source).toBe('remote');
-            expect(card.remote).toBe(BASE);
+            expect(card.remote).toBe(SHARE_BASE);
             expect(typeof card.ok).toBe('boolean');
             expect(Array.isArray(card.ids)).toBe(true);
             expect(Array.isArray(card.tuners)).toBe(true);
             expect(card.readers).toEqual([]);
-            if (!card.ok) expect(card.message.length).toBeGreaterThan(0);
+            // 配る側にカードが無い。何が起きたかを画面に出す
+            if (!card.ok) expect(card.message).toContain('鍵を配る拠点');
+            // 鍵を配っていなければ決まりは出ない
+            expect(card.share).toBeUndefined();
         } finally {
-            other.kill('SIGKILL');
-            await other.exited;
+            await stop();
+        }
+    }, 30_000);
+
+    test('鍵を配る範囲の外には 403 で断り、受け取る側は理由を出す', async () => {
+        /*
+         * ループバックを範囲から外した配り役を起こす。ここから繋ぐと範囲の外になる。
+         * それを CARD_URL にした受け取り役の画面には、断られた理由が出る
+         */
+        const sharePort = PORT + 4;
+        const sharer = await spawnAgent(PORT + 2, {
+            CARD_SHARE_PORT: String(sharePort),
+            CARD_SHARE_NETWORKS: '192.0.2.0/24',
+        });
+        try {
+            const refused = await fetch(`http://127.0.0.1:${sharePort}/denpa/card/init`);
+            expect(refused.status).toBe(403);
+            const { error } = (await refused.json()) as { error: string };
+            expect(error).toContain('127.0.0.1');
+            expect(error).toContain('CARD_SHARE_NETWORKS');
+            expect((await fetch(`http://[::1]:${sharePort}/denpa/card/init`)).status).toBe(403);
+
+            const receiver = await spawnAgent(PORT + 5, { CARD_URL: `http://127.0.0.1:${sharePort}` });
+            try {
+                expect(receiver.card.ok).toBe(false);
+                expect(receiver.card.message).toContain('鍵を配る拠点に断られました');
+                expect(receiver.card.message).toContain('CARD_SHARE_NETWORKS');
+            } finally {
+                await receiver.stop();
+            }
+        } finally {
+            await sharer.stop();
+        }
+    }, 30_000);
+
+    test('往復時間の上限を付けても、近い相手には配る', async () => {
+        // 往復時間は受けた接続のソケットから OS に聞く。読めなければ 403 になるので、ここで届いていることを見る
+        const sharePort = PORT + 4;
+        const { card, stop } = await spawnAgent(PORT + 2, {
+            CARD_SHARE_PORT: String(sharePort),
+            CARD_SHARE_MAX_RTT: '50',
+        });
+        try {
+            expect(card.share?.maxRtt).toBe(50);
+            expect((await fetch(`http://127.0.0.1:${sharePort}/denpa/card/init`)).status).toBe(503);
+        } finally {
+            await stop();
+        }
+    }, 30_000);
+
+    test('読めない設定なら起動しない', async () => {
+        // 書き間違えた範囲を黙って既定に戻さない
+        const room = mkdtempSync(join(tmpdir(), 'denpa-agent-bad-'));
+        try {
+            const bad = Bun.spawn(AGENT_CMD, {
+                cwd: ROOT,
+                env: {
+                    ...process.env,
+                    AGENT_PORT: String(PORT + 2),
+                    TUNERS_FILE: join(room, 'tuners.json'),
+                    CHANNELS_FILE: join(room, 'channels.json'),
+                    RAW_DIR: join(room, 'recorded'),
+                    CARD_SHARE_PORT: String(PORT + 4),
+                    CARD_SHARE_NETWORKS: 'lan',
+                },
+                stdout: 'pipe',
+                stderr: 'ignore',
+            });
+            expect(await bad.exited).not.toBe(0);
+            expect(await new Response(bad.stdout).text()).toContain('CARD_SHARE_NETWORKS');
+        } finally {
             rmSync(room, { recursive: true, force: true });
         }
     }, 30_000);

@@ -48,10 +48,32 @@ var events = new Events();
 var (tuners, detected) = config.ResolveTuners();
 
 /*
+ * 鍵を配る・貰うのは LAN の中だけ (CardLan.cs)。読めない値なら、範囲を勝手に
+ * 決めずに止まる
+ */
+CardLanPolicy cardLan;
+try
+{
+    cardLan = CardLanPolicy.FromEnvironment();
+}
+catch (ArgumentException error)
+{
+    Log.Write(error.Message);
+    return 2;
+}
+if (cardLan.Port == port)
+{
+    Log.Write($"CARD_SHARE_PORT は AGENT_PORT ({port}) と別のポートにします");
+    return 2;
+}
+var sharing = cardLan.Port is { } sharePort ? new CardShareServer(cardLan, sharePort) : null;
+
+/*
  * CARD_URL は「手元にカードが無い拠点」だけ。指定しなければ自分に刺さって
  * いるカードを読む (CardShare.cs)。
  */
-Keys.Configure(Environment.GetEnvironmentVariable("CARD_URL"));
+var cardUrl = Environment.GetEnvironmentVariable("CARD_URL");
+Keys.Configure(cardUrl, cardLan.Hops);
 var tune = new TuneOptions(
     name => config.StreamIds()(name),
     Environment.GetEnvironmentVariable("FAKE_TUNE") is { Length: > 0 } fake ? fake : null);
@@ -70,9 +92,12 @@ void PrepareDaemons()
 }
 
 var builder = WebApplication.CreateSlimBuilder(args);
+// 鍵を配るポートだけは待ち受けを自分で作る (IPv4 と IPv6 を分けて TTL を付ける。CardShareServer.cs)
+if (sharing is { } server) builder.WebHost.UseSockets(sockets => sockets.CreateBoundListenSocket = server.Bind);
 builder.WebHost.ConfigureKestrel(options =>
 {
     options.ListenAnyIP(port);
+    sharing?.Listen(options);
     // 選局は何時間も開きっぱなしになる。既定のまま切られると録画が落ちる
     options.Limits.KeepAliveTimeout = TimeSpan.FromDays(365);
     options.Limits.MinResponseDataRate = null;
@@ -96,6 +121,9 @@ builder.Services.AddSingleton<IHostLifetime>(services =>
     new Drain(pool, shutdownWait, services.GetRequiredService<IHostApplicationLifetime>()));
 
 var app = builder.Build();
+
+// 鍵を配るポートに来たものは、鍵を配る API だけが受ける (普通の API には回さない)
+if (sharing is not null) app.Use(sharing.Serve);
 
 // --- 選局。**エージェントの表看板** ---------------------------------------
 app.MapGet("/denpa/stream", async (HttpContext http) =>
@@ -314,58 +342,22 @@ app.MapPut("/denpa/channels", async (HttpContext http) =>
 });
 
 // --- カードとスクランブル解除 ---------------------------------------------
-app.MapGet("/denpa/card", async (HttpContext http) => await Respond.Write(http, await Task.Run(() => Card.Status(pool.Descrambling))));
+/*
+ * 鍵を配っているなら、その決まり (ポート・相手の範囲・TTL・往復の上限) も返す。
+ * 鍵を配る API そのもの (/denpa/card/init・/denpa/card/ecm) は、このポートには無い (CardShareServer.cs)
+ */
+app.MapGet("/denpa/card", async (HttpContext http) =>
+{
+    var status = await Task.Run(() => Card.Status(pool.Descrambling));
+    if (sharing is not null) status["share"] = cardLan.ToJson();
+    await Respond.Write(http, status);
+});
 
 app.MapPost("/denpa/decode", async (HttpContext http) =>
 {
     var body = await Respond.Read(http);
     var result = Scramble.Decode(recorded, body?["input"]?.GetValue<string>(), body?["output"]?.GetValue<string>());
     await Respond.Write(http, result, result["ok"]!.GetValue<bool>() ? 200 : 500);
-});
-
-/*
- * 鍵を配る API。**カードを1枚だけ置いて、他の拠点にも使わせる。**
- *
- * 拠点ごとにエージェントとチューナーがある構成だと、カードは1箇所にしか
- * ありません。カードごと持っていく代わりに、ECM を投げて鍵を貰います
- * (CardShare.cs)。重い MULTI2 は各拠点の手元に残ります。
- *
- * **自分にカードが刺さっていなければ、ここは 503 を返すだけ**です。
- */
-app.MapGet("/denpa/card/init", async (HttpContext http) =>
-{
-    try
-    {
-        http.Response.ContentType = "application/octet-stream";
-        await http.Response.Body.WriteAsync(CardWire.Pack(await Task.Run(Keys.Local.Check)));
-    }
-    catch (Exception error)
-    {
-        await Respond.Error(http, error.Message, 503);
-    }
-});
-
-app.MapPost("/denpa/card/ecm", async (HttpContext http) =>
-{
-    using var body = new MemoryStream();
-    await http.Request.Body.CopyToAsync(body);
-    if (body.Length is 0 or > 4096)
-    {
-        await Respond.Error(http, "ECM が入っていません", 400);
-        return;
-    }
-
-    try
-    {
-        var ecm = body.ToArray();
-        var answer = await Task.Run(() => Keys.Local.Ecm(ecm));
-        http.Response.ContentType = "application/octet-stream";
-        await http.Response.Body.WriteAsync(CardWire.Pack(answer));
-    }
-    catch (Exception error)
-    {
-        await Respond.Error(http, error.Message, 503);
-    }
 });
 
 app.MapFallback((HttpContext http) =>
@@ -391,6 +383,12 @@ app.Lifetime.ApplicationStopped.Register(() =>
 });
 
 Log.Write($"listening on :{port} (tuners: {config.TunersFile} / channels: {config.ChannelsFile})");
+if (sharing is not null)
+{
+    var limit = cardLan.MaxRoundTrip is { } max ? $"{max.TotalMilliseconds}ms まで" : "見ない";
+    Log.Write($"鍵を :{sharing.Port} で配ります (相手: {string.Join(", ", cardLan.Networks)} / TTL {cardLan.Hops} / 往復時間: {limit})");
+}
+if (cardUrl is { Length: > 0 }) Log.Write($"鍵を {cardUrl} から受け取ります (TTL {cardLan.Hops})");
 Log.Write($"チューナー {pool.Tuners.Count} 台 / チャンネル {config.LoadChannels().Count} 件");
 await app.RunAsync();
 return 0;

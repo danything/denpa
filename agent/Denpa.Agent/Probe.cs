@@ -50,7 +50,7 @@ public static class Probe
             return 2;
         }
 
-        Keys.Configure(Environment.GetEnvironmentVariable("CARD_URL"));
+        Keys.Configure(Environment.GetEnvironmentVariable("CARD_URL"), CardLanPolicy.FromEnvironment().Hops);
         var b25 = new Descrambler(Keys.Source);
         using var input = File.OpenRead(source);
         using var output = File.Create(destination);
@@ -110,7 +110,8 @@ public static class Probe
         var decode = args.Contains("--decode");
         // 手元にカードが無い拠点。鍵だけ貰いに行く (CardShare.cs)
         var cardAt = Array.IndexOf(args, "--card-url");
-        Keys.Configure(cardAt >= 0 ? args.ElementAtOrDefault(cardAt + 1) : null);
+        // 貰いに行く接続の TTL は常駐のときと同じ CARD_TTL (既定 1。CardLan.cs)
+        Keys.Configure(cardAt >= 0 ? args.ElementAtOrDefault(cardAt + 1) : null, CardLanPolicy.FromEnvironment().Hops);
 
         var known = Config.FromEnvironment().StreamIds();
 

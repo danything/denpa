@@ -411,7 +411,9 @@ SQLite が拒むので、事実と状態が食い違いません。文字列で�
 | `agent/Denpa.Agent/Ccid.cs` / `T1.cs` / `UsbFs.cs` | USB の CCID カードリーダーを usbfs で直に扱う (pcscd を使わない) |
 | `agent/Denpa.Agent/Pcsc.cs` | macOS と Windows の USB カードリーダー (OS の PC/SC 越し。PCSC.framework / winscard.dll) |
 | `agent/Denpa.Agent/Px4Card.cs` | px4-userland の内蔵カードリーダーに px4d の control socket で APDU を投げる |
-| `agent/Denpa.Agent/CardShare.cs` | 鍵をどこから貰うか (手元のカード / 別の拠点) と、鍵を他の拠点へ配る API |
+| `agent/Denpa.Agent/CardShare.cs` | 鍵をどこから貰うか (手元のカード / 別の拠点) と、拠点のあいだのやり取りの形式 |
+| `agent/Denpa.Agent/CardShareServer.cs` | 鍵を他の拠点へ配る API (専用のポート `CARD_SHARE_PORT`) |
+| `agent/Denpa.Agent/CardLan.cs` | 鍵を配る・貰うのは LAN の中だけ (相手のアドレス・TTL・往復時間) |
 | `agent/Denpa.Agent/Card.cs` | カードが読めているかと、掛かったまま録れた TS の後からの解除 |
 | `agent/Denpa.Agent/DeviceProbe.cs` | チューナーの自動検出 (DVB は ioctl で受けられる方式を聞き、px4 / siano は `--list` に聞き、asicen は sysfs を読む) |
 | `agent/Denpa.Agent/Config.cs` | `tuners.json` と `channels.json` の読み書き |
@@ -424,10 +426,21 @@ SQLite が拒むので、事実と状態が食い違いません。文字列で�
 人にしか決められない)。聞き方は [agent.md](agent.md#選局コマンドは画面から渡させない)。
 
 環境変数は `AGENT_PORT` (既定 `25252`)・`TUNERS_FILE` / `CHANNELS_FILE` (既定 `/config/` の下)・
-`MEDIA_DIR` / `RAW_DIR` (denpa と同じ。元のTSの置き場)・`CARD_URL` (手元にカードが無い拠点だけ。鍵を貰う先)・
+`MEDIA_DIR` / `RAW_DIR` (denpa と同じ。元のTSの置き場)・`CARD_URL` (手元にカードが無い拠点だけ。鍵を貰う先。配る側の `CARD_SHARE_PORT` を指す)・
+`CARD_SHARE_PORT` (鍵を配る拠点だけ。既定は配らない。例は `25253`)・`CARD_SHARE_NETWORKS` (鍵を配る相手。既定はループバックと LAN の中のアドレス)・
+`CARD_TTL` (鍵のやり取りの TTL。既定 `1`)・`CARD_SHARE_MAX_RTT` (往復時間の上限。既定は見ない)・
 `SHUTDOWN_WAIT` (denpa と同じ)。同梱のドライバの置き場 `PX4_USERLAND_DIR` / `PX4_FIRMWARE` / `PX4_RUNTIME_DIR` /
 `SIANO_USERLAND_DIR` / `SIANO_FIRMWARE` / `ASICEN_USERLAND_DIR` / `ASICEN_FIRMWARE` / `ASICEN_RUNTIME_DIR` はイメージの既定のままでよい (書き換えるのは Mac の `install.sh` (`PX4_*`・`SIANO_*`) と Windows の `install.ps1` (`SIANO_*`) だけ)。
 `FAKE_TUNE` は適合テストだけが使う。
+
+**鍵を配るのは LAN の中だけ** (B-CAS カードを拠点の外から使い回させない)。鍵を配る API は普通の API とは
+別のポート (`CARD_SHARE_PORT`) にあり、ループバックと LAN の中のアドレス以外には 403 で断り、TTL 1 で
+ルーターを越えない。限界は次のとおりで、詳しくと前の版からの移り方は [agent.md](agent.md#鍵を配るのは-lan-の中だけ)。
+
+- VPN でプライベートアドレスを渡された相手は、同じ LAN に見える (往復時間の上限で遠くのものは落とせる)
+- Docker のブリッジはコンテナの出入りで TTL が1つ減る (片方なら `CARD_TTL=2`、両方なら `3`。配る側は `network_mode: host` が確か)
+- Kubernetes でノードをまたぐと TTL 1 では届かない (`hostNetwork` にするか `CARD_TTL` を上げる)
+- 逆プロキシや Docker の userland-proxy を挟むと、相手のアドレスも TTL も効かない (鍵を配るポートの前には何も置かない)
 
 ## テスト
 
