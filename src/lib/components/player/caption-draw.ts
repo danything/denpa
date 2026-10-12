@@ -11,8 +11,7 @@
  * - 置き換えられなかった外字は、点の絵を字の枠いっぱいに**なめらかに**引き伸ばす
  *
  * **canvas は画面の画素で敷く。** 全画面にすれば字もそのぶん細かく描き直す (`ResizeObserver`)。
- * 画素は CSS の大きさではなく**実際に見えている大きさ** (`transform: scale` 込み) で数える —
- * データ放送の小窓の中では、BML の面ごと伸ばして見せている (`DataBroadcast` の `fit`)。
+ * 画素は CSS の大きさ (`clientWidth`。整数に丸めてある) ではなく**実際に見えている大きさ**で数える。
  */
 
 import {
@@ -241,13 +240,6 @@ export function inkSpan(page: CaptionPage): [number, number] {
 }
 
 /**
- * **外から canvas の見える倍率を変えたら、窓へこれを投げる** (`DataBroadcast` の `fit`)。
- * 祖先の `transform: scale` が変わっても canvas の CSS の大きさは変わらないので、
- * `ResizeObserver` は呼ばれない。投げてもらって描き直す
- */
-export const CAPTION_RESCALE = 'denpa:caption-rescale';
-
-/**
  * 1枚の canvas に字幕を出し続ける係。**出すものが変わったら `show` を呼ぶだけ。**
  *
  * - canvas の大きさを画面の画素に合わせ直す (全画面の出入りで描き直す)
@@ -272,9 +264,8 @@ export class CaptionPainter {
     ) {
         this.resize = typeof ResizeObserver === 'function' ? new ResizeObserver(() => this.draw()) : null;
         this.resize?.observe(canvas);
-        // ブラウザのズーム (`devicePixelRatio` が変わる) と、外からの倍率の変わり目 (`CAPTION_RESCALE`)
+        // ブラウザのズーム (`devicePixelRatio` が変わる)
         window.addEventListener('resize', this.rescale);
-        window.addEventListener(CAPTION_RESCALE, this.rescale);
         void loadCaptionFont(font).then(() => {
             ink = null;
             this.draw();
@@ -298,7 +289,6 @@ export class CaptionPainter {
     close(): void {
         this.resize?.disconnect();
         window.removeEventListener('resize', this.rescale);
-        window.removeEventListener(CAPTION_RESCALE, this.rescale);
         if (this.flashTimer !== null) clearInterval(this.flashTimer);
         this.flashTimer = null;
         this.page = null;
@@ -322,10 +312,8 @@ export class CaptionPainter {
          * **描く画素は、見えている大きさ × 画面の画素。** 面の縦横比のまま CSS の枠に収めた
          * 箱 (`box`) を、実際に見えている倍率 (`kx`/`ky`) で数える。
          *
-         * CSS の大きさ (`clientWidth`) だけで数えると、データ放送の小窓の中で字幕がぼやける。
-         * 借りものは BML の面 (960x540) を原寸で組み、枠いっぱいに `transform: scale` で
-         * 伸ばす (`DataBroadcast` の `fit`)。小窓へ移った canvas の CSS の大きさは面の上の
-         * 480x270 のままなので、その画素で描いた絵が枠の大きさに合わせて引き伸ばされていた。
+         * CSS の大きさ (`clientWidth`) は整数に丸めてあるので、それで数えると端数のぶん絵が
+         * 引き伸ばされて滲む (スマホの縦・データ放送の小窓の中の `%` の大きさで出る)。
          * `translate` (帯の上への持ち上げ) は大きさを変えないので、倍率には入らない。
          * 祖先に掛かるのは `scale` と `translate` だけの前提 (`rotate` だと外接矩形になり合わない)
          */

@@ -299,17 +299,15 @@ Deployment に付けた `secrets.infisical.com/auto-reload` で Pod も入れ替
 `csp`、SvelteKit が毎回付ける)。上までは「誰を通すか」ですが、ここは「通した人の画面で、
 **誰が書いたスクリプトを動かすか**」です。
 
-**狙いは放送が書いたスクリプト。** データ放送の借りもの (web-bml) は、BML の
-`onclick` などのイベント属性を**本物の HTML 属性のまま** DOM に入れます (名前を
-付け替えているのは `onload` / `onunload` だけ)。押されると、放送の文字列が
-**denpa の origin で本物の JS として動き**、ログインの控えで API を叩けます。
-器の `pointer-events: none` で押せないのはたまたまで、BML の CSS は絞っていないので
-外せるかもしれません。web-bml は自前の実装に置き換える予定ですが、置き換えたあとも
-「放送のものを本物の JS として動かさない」最後の砦として残します。
+**狙いは放送が書いたスクリプト。** データ放送のエンジン (`src/lib/bml/`) は BML の
+`onclick` などを DOM に写さず、自前の VM で動かします (描く要素に付くのは `style` と絵の
+`src`・`alt` だけ)。それでも写し漏れがあったとき、放送の文字列が **denpa の origin で本物の
+JS として動き**、ログインの控えで API を叩けることになるので、「放送のものを本物の JS として
+動かさない」最後の砦として CSP でも止めます。
 
 | 指令 | 値 | 理由 |
 | --- | --- | --- |
-| `script-src` | `'self'` + nonce | 自分の束 (`_app/`。web-bml の遅延読み込みも) と、SvelteKit の起動・後から流すデータの `<script>` (nonce)。**`'unsafe-inline'` と `'unsafe-eval'` は入れない** |
+| `script-src` | `'self'` + nonce | 自分の束 (`_app/`。データ放送のエンジンの遅延読み込みも) と、SvelteKit の起動・後から流すデータの `<script>` (nonce)。**`'unsafe-inline'` と `'unsafe-eval'` は入れない** |
 | `script-src-attr` | `'none'` | `onclick="…"` などの属性のハンドラを止める (上の穴そのもの) |
 | `style-src` | `'self' 'unsafe-inline'` | 下の「スタイルは止めない」 |
 | `img-src` | `'self' data: blob:` | 局ロゴ・ポスターは自分。データ放送の絵は作り直して blob:、DRCS (外字) は canvas から data: |
@@ -317,7 +315,7 @@ Deployment に付けた `secrets.infisical.com/auto-reload` で Pod も入れ替
 | `media-src` | `'self' blob:` | 録画は自分。ライブの MSE と端末に落とした録画は blob: |
 | `connect-src` | `'self'` | fetch・SSE・データ放送の双方向の中継口 (`/api/bml/…`)・ライブの WebSocket。`'self'` は同じ host の `ws:` / `wss:` も含む |
 | `worker-src` | `'self'` | 生で観る道の worker (`src/lib/raw/worker.ts`) と PWA の ServiceWorker |
-| `object-src` / `frame-src` | `'none'` | どちらも使わない。BML の `<object>` は web-bml が `data` を外して中に `<img>` を置くので読み込まない |
+| `object-src` / `frame-src` | `'none'` | どちらも使わない。BML の `<object>` はエンジンが絵 (`<img>`) か映像の場所の知らせにするので読み込まない |
 | `base-uri` / `form-action` | `'self'` | `<base>` とフォームの送り先は自分だけ |
 | `default-src` | `'self'` | 上に無いもの (マニフェストなど) |
 
@@ -346,9 +344,10 @@ HTML は小さく、重いもの (`_app/immutable/`) は永く持たせたまま
 ### スタイルは止めない
 
 `style-src` には `'unsafe-inline'` を残しています。その場で書くスタイルが多いためです。
-Svelte の遷移と `style:`、web-bml が BML の CSS から作る `<style>` と `style` 属性、
-`+layout.svelte` の @font-face。これらを nonce や hash で通すのは、web-bml が DOM を
-組むたびに作るぶんがあって無理です。
+サーバで組んだ HTML の `style` 属性 (Svelte の `style:` と、観る画面の映像の箱などに直に書いたもの) と、
+`+layout.svelte` の @font-face の `<style>`。属性のスタイルは nonce では通せず、hash で通すには
+`'unsafe-hashes'` と1つずつの hash が要るので見合いません。データ放送のエンジンは
+`element.style` (CSSOM) で書くので、これには頼っていません (CSSOM からの書き込みは CSP に掛からない)。
 
 **CSS からできることは、スクリプトよりずっと少ない。** 見た目を変えることと、
 上の `img-src` / `font-src` の範囲での読み込みまでです (外へは出られない)。denpa の DOM に

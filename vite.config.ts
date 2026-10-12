@@ -1,38 +1,10 @@
 import { readFileSync } from 'node:fs';
-import { dirname, resolve } from 'node:path';
 import adapter from '@sveltejs/adapter-node';
 import { sveltekit } from '@sveltejs/kit/vite';
 import { vitePreprocess } from '@sveltejs/vite-plugin-svelte';
 import { FileSystemIconLoader } from 'unplugin-icons/loaders';
 import Icons from 'unplugin-icons/vite';
-import { defineConfig, type Plugin } from 'vite';
-
-/**
- * `css` (web-bml が BML の CSS を書き換えるのに使う) の source map 対応を、
- * ブラウザ向けの組み上げでは空にする。
- *
- * `css.stringify` は `sourcemap` オプションを渡したときだけ
- * `source-map-support` を `require` する遅延読み込みだが、束ねる側は静的に辿るので
- * `source-map-resolve` → `fs` / `path` / `url` までブラウザ向けに巻き込まれ、
- * 「externalized for browser compatibility」の警告が組むたびに6つ並んでいた。
- * web-bml は sourcemap を渡さない (`transpile_css.ts`) ので、中身は空でよい
- */
-function cssWithoutSourceMaps(): Plugin {
-    const TARGET = /[\\/]css[\\/]lib[\\/]stringify[\\/]source-map-support\.js$/;
-    return {
-        name: 'denpa:css-no-sourcemap',
-        enforce: 'pre',
-        resolveId(source, importer) {
-            if (source !== './source-map-support' || importer === undefined) return null;
-            if (!TARGET.test(resolve(dirname(importer), `${source}.js`))) return null;
-            return '\0denpa:css-no-sourcemap';
-        },
-        load(id) {
-            if (id !== '\0denpa:css-no-sourcemap') return null;
-            return 'export default function () {}';
-        },
-    };
-}
+import { defineConfig } from 'vite';
 
 /**
  * イメージに入れる Denpa Font の版 (Dockerfile の `ARG DENPA_FONT_VERSION`)。
@@ -57,7 +29,6 @@ export default defineConfig({
         'import.meta.env.DENPA_FONT_VERSION': JSON.stringify(denpaFontVersion),
     },
     plugins: [
-        cssWithoutSourceMaps(),
         /*
          * SvelteKit の設定もここに置く (3 から `svelte.config.*` は読まれない)。
          */
@@ -77,10 +48,9 @@ export default defineConfig({
              * 「画面で動いてよいもの」)。
              *
              * いちばんの狙いは**放送が書いたスクリプトを本物の JS として動かさない**こと。
-             * データ放送の借りもの (web-bml) は BML の `onclick` などを本物の属性のまま
-             * DOM に入れるので、押されると放送の文字列が denpa の origin で動く。
-             * `script-src` に `'unsafe-inline'` を入れず、`script-src-attr 'none'` で
-             * 属性のハンドラを止める。`eval` 系も許さない (`'unsafe-eval'` を入れない)。
+             * データ放送のエンジン (`src/lib/bml/`) は放送の `onclick` などを DOM に写さず自前の VM で
+             * 動かすが、写し漏れがあっても本物の JS として動かないよう二重に止める。
+             * `script-src` に `'unsafe-inline'` を入れず、`script-src-attr 'none'` で属性のハンドラを止める。`eval` 系も許さない (`'unsafe-eval'` を入れない)。
              *
              * **nonce にする (hash ではなく)。** 設定画面・チューナーの画面は load から
              * Promise を返して後から流している (SvelteKit のストリーミング) — 流れてくる
@@ -90,12 +60,13 @@ export default defineConfig({
                 mode: 'nonce',
                 directives: {
                     'default-src': ['self'],
-                    // nonce は SvelteKit が足す。束 (`_app/`) と遅延読み込み (web-bml) は 'self'
+                    // nonce は SvelteKit が足す。束 (`_app/`) と遅延読み込み (データ放送のエンジン) は 'self'
                     'script-src': ['self'],
                     'script-src-attr': ['none'],
                     /*
-                     * スタイルはその場で書くものを許す。Svelte の遷移・`style:`、web-bml が BML の
-                     * CSS から作る `<style>` と `style` 属性、`+layout.svelte` の @font-face。
+                     * スタイルはその場で書くものを許す。サーバで組んだ HTML の `style` 属性 (観る画面の
+                     * 映像の箱など)、`+layout.svelte` の @font-face の `<style>`。データ放送のエンジンは
+                     * `element.style` (CSSOM) で書くのでこれには頼らない。
                      * 止めたいのはスクリプトで、CSS からできるのは見た目と下の *-src の範囲の読み込みまで
                      */
                     'style-src': ['self', 'unsafe-inline'],
@@ -146,14 +117,6 @@ export default defineConfig({
         rollupOptions: {
             external: [/^bun:/],
         },
-        /*
-         * 大きさの警告は 700kB から。データ放送 (web-bml のブラウザ本体 + JIS の表)
-         * が1つで 650kB ほどあり、**開いたときだけ落ちてくる遅延読み込み**にしてある
-         * (`DataBroadcast.svelte` の `import()`)。BML のインタプリタはこれ以上
-         * 割れないので、既定の 500kB では組むたびに同じ警告が出るだけだった。
-         * 初期表示に載るものが 500kB を超えたら、こちらは黙らないので気付ける
-         */
-        chunkSizeWarningLimit: 700,
     },
     optimizeDeps: {
         exclude: ['bun:sqlite'],

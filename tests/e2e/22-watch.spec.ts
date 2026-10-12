@@ -29,6 +29,15 @@ import {
  */
 
 /**
+ * **「このブラウザでは再生できませんでした」の幕を畳む** (絵で字幕を見るテストだけ)。
+ * 偽の録画は中身が無く、ブラウザは再生に転んで幕 (`watch-broken`。映像の箱を暗く覆う) を出す。
+ * データ放送の小窓に寄せた映像の箱もその下に居るので、塗った字幕が暗く写る。本物の録画では出ない
+ */
+async function hideBroken(page: Page): Promise<void> {
+    await page.addStyleTag({ content: '[data-testid="watch-broken"] { display: none !important; }' });
+}
+
+/**
  * 読み取りだけのテストは**1本の録画を使い回す**。全テストが `recordOne`
  * (予約→録画→焼き上がり待ちで各15秒前後) を自前でやっていた頃は、この
  * ファイルだけで3分近く掛かり、e2e の一番遅いシャードそのものだった。
@@ -175,7 +184,7 @@ test.describe('録画を観る', () => {
     /**
      * **データ放送を出しても字幕は見えている。テレビと同じで映像と一緒に小窓へ縮む。**
      *
-     * 借りものは映像の箱ごと BML の小窓へ移す。字幕の canvas が箱の外に居た頃は、映像だけ
+     * 映像の箱ごと BML の小窓へ寄せる。字幕の canvas が箱の外に居た頃は、映像だけ
      * 小窓へ行き、字幕は枠いっぱいのままデータ放送の面の下に隠れていた (実機で「データ放送を
      * 出すと字幕が出なくなる」)。偽の録画にはデータ放送が無いので、小窓を持つ BML を
      * サイドカー (`.bml.jsonl`) に置いてから出す。**操作列を出したまま d を押す**
@@ -192,6 +201,7 @@ test.describe('録画を観る', () => {
                 .join('\n')}\n`,
         );
         await goto(page, `/watch/${id}`);
+        await hideBroken(page);
         await holdMedia(page, 'watch-video', 'watch-captions-canvas', 'watch-stage');
         await page
             .getByTestId('watch-captions-canvas')
@@ -207,7 +217,7 @@ test.describe('録画を観る', () => {
     });
 
     /**
-     * **録画の再生中は選局できない。** 自前のデータ放送エンジン (`?bml=own`) で、文書が epgTune を
+     * **録画の再生中は選局できない。** データ放送の文書が epgTune を
      * 呼んだら失敗を返し、観ている人には「録画の再生中は選局できません」と知らせる
      */
     test('録画のデータ放送が epgTune を呼ぶと、失敗にして知らせる', async ({ page, request }) => {
@@ -223,10 +233,10 @@ test.describe('録画を観る', () => {
                 .map((message) => JSON.stringify({ at: 0, message }))
                 .join('\n')}\n`,
         );
-        await goto(page, `/watch/${id}?bml=own`);
+        await goto(page, `/watch/${id}`);
         await wakeControls(page, 'watch-stage');
         await page.getByTestId('watch-data-button').click();
-        await expect(page.getByTestId('live-data')).toHaveAttribute('data-engine', 'own', {
+        await expect(page.getByTestId('live-data')).toHaveAttribute('data-state', 'ready', {
             timeout: 15_000,
         });
         await expect(page.getByText('録画の再生中は選局できません')).toBeVisible({ timeout: 15_000 });
@@ -880,8 +890,9 @@ function roundBox(box: { x: number; y: number; width: number; height: number } |
  * **字幕は、見えている大きさ × 画面の画素で描く** (`caption-draw.ts` の `CaptionPainter`)。
  *
  * 実機で「字幕がぼやぁっとしている」— データ放送を出した観る画面で、小窓に入った字幕が
- * 拡大した絵のように滲んでいた。借りものは BML の面 (960x540) を原寸で組んで枠いっぱいに
+ * 拡大した絵のように滲んでいた。当時は BML の面 (960x540) を原寸で組んで枠いっぱいに
  * `transform: scale` で伸ばすのに、字幕は CSS の大きさ (面の上の 480x270) の画素で描いていた。
+ * いまは面ごと伸ばさないが、CSS の大きさは整数に丸めてあるので、見えている大きさで描くのは変わらない。
  * 偽の録画は中身が無いので、字幕は `captions.json` を差し替えて 0 秒に1枚置く
  */
 test.describe('字幕をくっきり描く', () => {
@@ -920,6 +931,7 @@ test.describe('字幕をくっきり描く', () => {
             );
             await routeCaptions(page);
             await goto(page, `/watch/${id}`);
+            await hideBroken(page);
             await holdMedia(page, 'watch-video', 'watch-captions-canvas', 'watch-stage');
             await holdCaptions(page, 'watch-captions-canvas');
             await expectSharpCaptions(page, '小窓に入る前');

@@ -14,25 +14,18 @@
 
 <script lang="ts">
     /**
-     * データ放送を映像の上に重ねる。**描くのは借りもの** (`BMLBrowser`)。
+     * データ放送を映像の上に重ねる。**描くのはエンジン** (`src/lib/bml/`)。
      *
-     * denpa が作った `ResponseMessage` をそのまま食べさせるだけで、
-     * **映像は denpa のまま**。BML 側には「映像はこの入れ物に居る」とだけ伝える
-     * ([docs/stream.md](../../../../docs/stream.md#56-データ放送の統合))。
+     * denpa が作った `ResponseMessage` をそのまま食べさせるだけで、**映像は denpa のまま**。
+     * エンジンは映像の object の場所を教えるだけで、映像の入れ物をそこへ寄せるのはこちら
+     * (`placeVideo`。[docs/stream.md](../../../../docs/stream.md#56-データ放送の統合))。
      *
      * ## 押されるまで何も読み込まない
      *
-     * 組み上がると 700KB の塊になる。**入れっぱなしにすると、データ放送を
-     * 見ない人のぶんまで毎回落ちてくる**ので、`import()` で押されてから
-     * 取りに行く。どのみち押してからカルーセルが一周するのを待つので、
-     * そこに紛れる。
+     * エンジンは `import()` で押されてから取りに行く。データ放送を見ない人のぶんまで
+     * 毎回落とさない。どのみち押してからカルーセルが一周するのを待つので、そこに紛れる。
      *
-     * ## 借りものが持っていないぶんは、ここでやる
-     *
-     * **`BMLBrowser` は画面の器を持たない。** 上流の単体ページ
-     * (`client/index.ts`。koa と react と hls.js を引き連れていて、denpa の画面とは
-     * 形が違うので使っていない) がやっていたことを、このファイルが肩代わりする。
-     * **どれも抜けると「押しても何も出ない」形で壊れる** — 実機で全部踏んだ。
+     * ## エンジンの外でやること
      *
      * 1. **d を BML に渡す** (`knock`)。出す操作は文書にとっての d の1押しで、
      *    `DataButtonPressed` を受けてアプリがメニューを出す。**器を作っただけでは
@@ -42,33 +35,21 @@
      *    それより前に投げたぶんは誰にも拾われずに消える。**聞いている文書が出て
      *    くるまで見に行き、最初の1つに1回だけ届ける** (2回届けると、開いたメニューを
      *    閉じたり頭に戻したりする局がある)
-     * 2. **隠れている間、映像を元の場所へ戻す** (`place`)。借りものは文書を組むたびに、
-     *    渡された `mediaElement` を BML の `<object>` の**中へ移す**
-     *    (`content.ts` の `videoElementNew.appendChild`)。データ放送が「小窓に映せ」と
-     *    言っているならそれで正しいが、**隠れている間もそのまま**なので、放っておくと
-     *    映像が小窓の形に潰れたまま戻らない
-     * 3. **960x540 を枠に合わせて伸ばす** (`fit`)。向こうは原寸のまま置いて
-     *    100%/150%/200% のボタンを付けている。denpa の枠は端末しだいなので
-     *    `transform: scale()` で合わせる (`load` が寸法を教えてくれる)
-     * 4. **映像の入れ物の大きさを、じかに書く。** 2番で移される先は**閉じた影の中**
-     *    なので、**表の CSS が届かない**。しかも借りものが敷く既定の
-     *    スタイルは `div` に `width:0; height:0` を与えるので、class で書いていると
-     *    **移された瞬間に映像が消える** (`MediaStack.svelte`、`watch/[id]/+page.svelte`)
-     * 5. **「データ取得中」を出す** (`indicator`)。テレビは電波をずっと拾い続けて
+     * 2. **映像の入れ物を小窓へ寄せ、隠れたら戻す** (`placeVideo`)
+     * 3. **960x540 を枠に合わせて伸ばす** (`fit`)。denpa の枠は端末しだいなので
+     *    `transform: scale()` で合わせる (`onLoad` が寸法を教えてくれる)
+     * 4. **「データ取得中」を出す** (`receiving`)。テレビは電波をずっと拾い続けて
      *    いるので押せばすぐ出るが、denpa は**押されてから解きはじめる**ので数秒待つ
      *    (実測で8秒)。入口の文書はほぼ白紙のまま自分で `invisible` を外してくるので、
      *    素直に映すと**その数秒が真っ白**になる
-     * 6. **郵便番号を渡す** (`remember`)。放送はこれで天気・地域のニュース・防災情報の
-     *    場所を決める。**借りものには外から入れる口が無い**ので、NVRAM の置き場へ
-     *    denpa が直に書く
+     * 5. **郵便番号を渡す** (`receiver`)。放送はこれで天気・地域のニュース・防災情報の
+     *    場所を決める
      */
     import { onDestroy } from 'svelte';
-    import type { BMLBrowser, Indicator, IP } from 'web-bml';
     import type { Bml, BmlIp, Rect, Service } from '#lib/bml/engine.js';
     import { type Plane, planeArea } from '#lib/bml/plane.js';
-    import { forget, read, write } from '#lib/keep.js';
+    import { read, write } from '#lib/keep.js';
     import type { ResponseMessage } from '#lib/ts/bml-protocol.js';
-    import { CAPTION_RESCALE } from './caption-draw.js';
     import StageNote from './StageNote.svelte';
 
     interface Props {
@@ -77,12 +58,12 @@
         /**
          * いま映している局。**変わったら作り直す。**
          *
-         * 借りものは一度に一つの放送しか持てない (カルーセルも NVRAM も
-         * 局ごと)。局を変えても作り直さずにいると、**前の局の文書が
-         * 映像を掴んだまま**残り、映像が BML の小窓の形に潰れる
+         * エンジンは一度に一つの放送しか持たない (カルーセルも NVRAM も局ごと)。
+         * 局を変えても作り直さずにいると、**前の局の文書が残り**、映像が前の局の
+         * 小窓の形に寄せられたままになる
          */
         channel: string | null;
-        /** 映像が居る入れ物。**BML はこれを動かす** (`place`) */
+        /** 映像が居る入れ物。**小窓へ寄せるのはこちら** (`placeVideo`) */
         media: HTMLElement | null;
         /** 知らせを受け取る口を預ける。`null` を渡すと外れる */
         listen: (handler: ((message: ResponseMessage) => void) | null) => void;
@@ -103,8 +84,8 @@
         /**
          * 郵便番号 (数字7桁。空なら渡さない)。**放送のアプリが地域を決めるのに読む。**
          *
-         * 置き場はサーバの設定 (`server/settings.ts`) で、ここでは器を作る前に
-         * NVRAM へ写すだけ (`remember`)
+         * 置き場はサーバの設定 (`server/settings.ts`) で、ここでは受信機の設定として
+         * エンジンに渡すだけ (放送は `nvram://receiverinfo/zipcode` で読む)
          */
         postal: string;
         /**
@@ -117,13 +98,10 @@
          * 無言で失敗します
          */
         network: boolean;
-        /**
-         * 放送の時刻 (UNIX ミリ秒)。録画は再生位置から出す。渡さなければ放送の TOT から
-         * (自前のエンジンだけが使う)
-         */
+        /** 放送の時刻 (UNIX ミリ秒)。録画は再生位置から出す。渡さなければ放送の TOT から */
         clock?: (() => number) | null;
         /**
-         * 文書が別の局へ選局したい (epgTune。自前のエンジンだけ)。**選局は画面がやる** — 局を探して
+         * 文書が別の局へ選局したい (epgTune)。**選局は画面がやる** — 局を探して
          * 切り替えたら true、できなければ false (文書に失敗が返る)。ライブは局の一覧から探し、録画は
          * 「録画の再生中は選局できません」と知らせて false を返す。渡さなければいつも失敗
          */
@@ -147,12 +125,10 @@
     const DATA_BUTTON = 20;
 
     /**
-     * 覚えるもの (NVRAM) の名前の頭。**借りものは
-     * `storagePrefix + nvramPrefix + …` で探す**ので、こちらから直に
-     * 置くとき (`remember`) にも同じものが要る
+     * NVRAM の置き場の頭。web-bml を使っていた頃の鍵 (`denpa_bml_denpa_nvram_…`・
+     * `denpa_bml_engine`) とは重ならないので、古い端末に残っていても読まれない
      */
-    const STORAGE_PREFIX = 'denpa_bml_';
-    const NVRAM_PREFIX = 'denpa_nvram_';
+    const NVRAM_PREFIX = 'denpa_bml_own_';
 
     /**
      * 押された d を届けようと見に行く回数と間隔。
@@ -182,8 +158,8 @@
 
     /** 描く場所。BML の画面 (960x540 など) がこの中に入る */
     let host = $state<HTMLDivElement | null>(null);
-    /** いま動いている借りもの */
-    let browser = $state<BMLBrowser | null>(null);
+    /** いま動いているエンジン */
+    let engine = $state<Bml | null>(null);
     /** 読み込み中か。**押してすぐは何も出ないので、そう言う** */
     let loading = $state(false);
     /**
@@ -201,22 +177,11 @@
     let generation = 0;
     /** いま何を出しているか (`channel`)。出していなければ `null` */
     let shown = $state<string | null>(null);
-    /** その回ぶんの入れ物。**毎回作り直す** (`open` の説明) */
+    /** その回ぶんの入れ物。**毎回作り直す** (`makeMount` の説明) */
     let mount: HTMLDivElement | null = null;
-    /**
-     * 映像の元の居場所。**順番まで覚える。**
-     *
-     * 末尾に付け直すと字幕の canvas より上に来てしまう。戻す先は
-     * 「どの親の、どれの前」
-     */
-    let seat: { parent: Node; next: Node | null } | null = null;
-    /** BML の画面の大きさ。`load` で分かる (960x540 / 720x480 など) */
+    /** BML の画面の大きさ。`onLoad` で分かる (960x540 / 720x480 など) */
     let plane: (Omit<Plane, 'aspect'> & { aspect?: Plane['aspect'] }) | null = null;
-    /**
-     * まだ電波から取っている最中か。**借りものが教えてくれる**
-     * (`Indicator.setReceivingStatus`)。テレビの「データ取得中…」と同じ札で、
-     * 入口の部品が載っていない局では立たないようになっている
-     */
+    /** まだ電波から取っている最中か。**エンジンが教えてくれる** (`onReceiving`)。テレビの「データ取得中…」と同じ札 */
     let receiving = $state(false);
     /**
      * 一度でも出し切ったか。
@@ -253,118 +218,54 @@
      * 決まらない (実機で1日それを探した)
      */
     let handed = $state(0);
-
-    /**
-     * **自前のエンジン** (`src/lib/bml/`)。web-bml と並べて試すための切り替えで、**既定は web-bml**。
-     * `?bml=own` で開くと自前になり、端末に覚える (`?bml=web-bml` で戻す)
-     */
-    const ENGINE_KEY = 'denpa_bml_engine';
-    function useOwn(): boolean {
-        const asked = new URL(location.href).searchParams.get('bml');
-        if (asked === 'own' || asked === 'web-bml') write(ENGINE_KEY, asked);
-        return (asked ?? read(ENGINE_KEY)) === 'own';
-    }
-    /** 自前のエンジン (動いている間だけ) */
-    let own = $state<Bml | null>(null);
-    /** 映像の object の場所 (自前のエンジンが教える。画面の座標) */
+    /** 映像の object の場所 (エンジンが教える。画面の座標) */
     let videoRect: Rect | null = null;
     /** 映像の入れ物の元の style。小窓へ寄せる前に覚えて、隠れたら戻す */
     let mediaStyle: string | null = null;
-    /** 自前のエンジンの丸ゴシック (字幕と同じ Denpa Font) */
-    let ownFont: FontFace | null = null;
-    /** キーを AribKeyCode に (自前のエンジンを読み込んだら入る。キーの口で待たずに preventDefault するため) */
-    let ownKey: ((key: string) => number) | null = null;
-    /** 自前のエンジンの NVRAM の置き場の頭 (web-bml のものと混ぜない) */
-    const OWN_PREFIX = 'denpa_bml_own_';
-
     /**
-     * 放送が名指しする字。**字幕を焼いているのと同じフォントを使う。**
-     *
-     * イメージに入れてある Denpa Font (danything/denpa-font) は、BML が要る3つ — **等幅**
-     * (狭い画面で空白を使って組むため、仕様で必須)・**丸ゴシック**・**ARIB の
-     * 外字** — を1本で満たす。借りている側が抱えている Kosugi (4.4MB) は
-     * 外字を持っていないので、こちらのほうが適している。
-     *
-     * **同じ字なので、データ放送と字幕で字形が揃う。**
-     *
-     * 角ゴシックだけは端末のものに任せる — 丸い字で代用すると、放送が
-     * 「ここは角」と言っている意味が消える。手元での開発や、イメージに入っていない
-     * ときのために `local(...)` を後ろに並べてある (`api/font/denpa-font.woff2` は 404 を返す)
+     * 丸ゴシック。**字幕を焼いているのと同じ Denpa Font** (danything/denpa-font)。
+     * BML が要る3つ — **等幅**・**丸ゴシック**・**ARIB の外字** — を1本で満たし、
+     * データ放送と字幕で字形が揃う。角ゴシックは端末のものに任せる (丸い字で代用すると、
+     * 放送が「ここは角」と言っている意味が消える)
      */
-    const FONTS = {
-        roundGothic: {
-            source: `url('${denpaFontUrl()}') format('woff2'), local('Hiragino Maru Gothic ProN'), local('Meiryo')`,
-        },
-        squareGothic: { source: "local('Hiragino Kaku Gothic ProN'), local('Meiryo'), local('MS Gothic')" },
-    };
-
-    /**
-     * テレビが下のほうに出す「データ取得中…」。**借りものが持っている口。**
-     *
-     * 使うのは `setReceivingStatus` だけ。残りは上流の単体ページが画面の縁に
-     * 出していたもの (いま開いている URL・通信中の印・番組名) で、denpa には
-     * 既にそれぞれの置き場がある。
-     *
-     * 取り終わったかどうかは**こちらからは分からない** — 何個のモジュールで
-     * 揃うのかを知っているのは借りている側だけなので、教えてもらうしかない
-     */
-    const indicator: Indicator = {
-        setUrl: () => {},
-        setReceivingStatus: (on: boolean) => {
-            receiving = on;
-            place();
-        },
-        setNetworkingGetStatus: () => {},
-        setNetworkingPostStatus: () => {},
-        setEventName: () => {},
-    };
+    let roundFont: FontFace | null = null;
+    /** キーを AribKeyCode に (エンジンを読み込んだら入る。キーの口で待たずに preventDefault するため) */
+    let toAribKey: ((key: string) => number) | null = null;
 
     /**
      * 双方向 (通信系コンテンツ)。**中継はサーバがやる**
      * (`/api/bml/proxy`。放送局のサーバは CORS を返さないので直には取れない)。
      *
-     * 取る (`get`)・送る (`transmitTextDataOverIP`)・届くか確かめる
-     * (`confirmIPNetwork`) の三つを渡す
+     * 送る (`transmit`)・届くか確かめる (`confirm`) を渡す
      * ([docs/stream.md](../../../../docs/stream.md#57-双方向通信系コンテンツプロキシ))。
      *
      * **送るほうは「応募・投票の口」だと思って外していたが、それでは足りない。**
      * 放送のアプリは `isIPConnected` に 1 と答えても信じず、送る口へ一度
-     * 投げてみて繋がっているかを決めることがある (NHK がそう)。渡さないと
-     * 借りものは「その機能は無い」と答え、双方向を入れていても
-     * 「インターネットに接続されていません」と案内される
+     * 投げてみて繋がっているかを決めることがある (NHK がそう)
      */
-    const ip: IP = {
-        // 403 は「Ethernet で DHCP」。借りものの既定と同じ
-        getConnectionType: () => 403,
-        isIPConnected: () => (network ? 1 : 0),
+    const ip: BmlIp = {
+        connected: () => network,
         /**
-         * **送る。** 中身は借りものが `Denbun=…` まで組んでから渡してくるので、
+         * **送る。** 中身はエンジンが `Denbun=…` まで組んでから渡してくるので、
          * ここは中継口へ素通しするだけ。返りも解かずにそのまま返す
          *
          * `resultCode` は 1 が成功。**断られた (403/502) ときだけ NaN** に
          * する — 相手が 404 を返したのは「送れた」ので、放送のアプリに
          * そのまま渡して判断させる
          */
-        transmitTextDataOverIP: async (uri: string, body: Uint8Array<ArrayBuffer>) => {
+        transmit: async (uri, body) => {
             const response = await fetch(resolve(`api/bml/post?url=${encodeURIComponent(uri)}`), {
                 method: 'POST',
                 headers: { 'content-type': 'application/x-www-form-urlencoded' },
-                body,
+                body: body as Uint8Array<ArrayBuffer>,
             });
             const got = new Uint8Array(await response.arrayBuffer());
             const relayed = response.headers.get('x-bml-relayed') === '1';
-            return {
-                resultCode: relayed ? 1 : Number.NaN,
-                statusCode: String(response.status),
-                response: got,
-            };
+            return { resultCode: relayed ? 1 : Number.NaN, status: String(response.status), body: got };
         },
-        /**
-         * **届くかどうかを確かめる。** NHK は呼びに来ないが、訊いてくる
-         * 放送はある。渡さないと借りものは `null` (非対応) を返す
-         */
-        confirmIPNetwork: async (destination: string, _isICMP: boolean, timeoutMillis: number) => {
-            const params = new URLSearchParams({ to: destination, wait: String(timeoutMillis) });
+        /** **届くかどうかを確かめる。** NHK は呼びに来ないが、訊いてくる放送はある */
+        confirm: async (destination, _icmp, timeout) => {
+            const params = new URLSearchParams({ to: destination, wait: String(timeout) });
             const response = await fetch(resolve(`api/bml/confirm?${params}`));
             if (!response.ok) return { success: false, ipAddress: null, responseTimeMillis: null };
             return (await response.json()) as {
@@ -373,28 +274,12 @@
                 responseTimeMillis: number | null;
             };
         },
-        get: async (uri: string) => {
-            const response = await fetch(resolve(`api/bml/proxy?url=${encodeURIComponent(uri)}`));
-            const body = new Uint8Array(await response.arrayBuffer());
-            return { response: body, headers: response.headers, statusCode: response.status };
-        },
-    };
-
-    /** 自前のエンジンの双方向。中継口は web-bml と同じものを使う */
-    const ownIp: BmlIp = {
-        connected: () => network,
-        transmit: async (uri, body) => {
-            const r = await ip.transmitTextDataOverIP!(uri, body as Uint8Array<ArrayBuffer>);
-            return { resultCode: r.resultCode, status: r.statusCode, body: r.response };
-        },
-        confirm: (destination, icmp, timeout) => ip.confirmIPNetwork!(destination, icmp, timeout),
     };
 
     /**
      * BML の画面を枠いっぱいに伸ばす。
      *
-     * BML は 960x540 のような**決まった大きさ**で組まれていて、借りものは
-     * 原寸のまま置く (上流のアプリには 100%/150%/200% のボタンが付いている)。
+     * BML は 960x540 のような**決まった大きさ**で組まれていて、エンジンは原寸のまま描く。
      * denpa の枠は端末しだいで変わるので、こちらで合わせる。
      *
      * **縦横を別々に伸ばす** — 映像が枠を埋めているのだから、その上に重ねる
@@ -412,19 +297,10 @@
         mount.style.height = `${plane.height}px`;
         mount.style.transform = `scale(${area.width / plane.width}, ${area.height / plane.height})`;
         // 枠いっぱいでない面では、映像を寄せる先も枠の大きさで変わる
-        if (own !== null && plane.aspect === '4:3') placeOwn(visible);
-        // 小窓の中の字幕に、伸ばしたぶん細かく描き直してもらう (canvas の CSS の大きさは変わらず、気づけない)
-        window.dispatchEvent(new Event(CAPTION_RESCALE));
+        if (engine !== null && plane.aspect === '4:3') placeVideo(visible);
     }
 
-    /**
-     * 映像をあるべき場所に置き直す。
-     *
-     * 借りものは文書を組むたびに、渡された入れ物を BML の `<object>` の中へ
-     * **移す** (`content.ts` の `videoElementNew.appendChild`)。データ放送が
-     * 「小窓に映せ」と言えばそれで正しいが、**隠れている間もそのまま**なので、
-     * 放っておくと映像が小窓の形に潰れたまま戻らない
-     */
+    /** 出すかどうかを決め直し、映像の入れ物を寄せる/戻す */
     function place(): void {
         // **出すと決まったら、そこから先は取得中でも出しっぱなし** (`settled`)
         const want = showing && (settled || !receiving);
@@ -433,25 +309,16 @@
         else startWaiting();
         visible = want;
         if (mount !== null) mount.style.opacity = want ? '1' : '0';
-        if (media === null) return;
-        if (own !== null) {
-            placeOwn(want);
-            return;
-        }
-        const box = want ? (browser?.getVideoElement() ?? null) : null;
-        if (box !== null) {
-            if (media.parentNode !== box) box.appendChild(media);
-            return;
-        }
-        if (seat !== null && media.parentNode !== seat.parent) seat.parent.insertBefore(media, seat.next);
+        placeVideo(want);
     }
 
     /**
-     * **自前のエンジンでは映像を動かさない。** 映像の入れ物を、BML の映像の object の場所へ
-     * style で寄せるだけ (入れ物は枠と同じ大きさで、BML の画面も枠いっぱいに伸ばしてある)。
-     * 字幕の canvas は入れ物の中なので一緒に縮む。隠れたら元の style に戻す
+     * **映像は動かさない。** 映像の入れ物を、BML の映像の object の場所へ style で
+     * 寄せるだけ (入れ物は枠と同じ大きさで、BML の画面も枠いっぱいに伸ばしてある)。
+     * 字幕の canvas は入れ物の中なので一緒に縮む (canvas の大きさが変わるので、描く係は
+     * `ResizeObserver` で気づいて描き直す)。隠れたら元の style に戻す
      */
-    function placeOwn(want: boolean): void {
+    function placeVideo(want: boolean): void {
         if (media === null) return;
         if (want && videoRect !== null && plane !== null) {
             mediaStyle ??= media.style.cssText;
@@ -482,9 +349,9 @@
     /**
      * 取得中が終わるのを待つ上限。
      *
-     * **待ち続けて出ないより、白くても出るほうがまし。** 借りものが
-     * 「取得中」を下ろし忘れる局があったとき、`settled` を立てる口が
-     * 他に無いと**d を押しても永久に何も起きない**ことになる
+     * **待ち続けて出ないより、白くても出るほうがまし。** 「取得中」が下りない局が
+     * あったとき、`settled` を立てる口が他に無いと**d を押しても永久に何も起きない**
+     * ことになる
      */
     const SHOW_WAIT = 8000;
     let waiting: ReturnType<typeof setTimeout> | null = null;
@@ -512,30 +379,13 @@
 
     /** 押して離したことにする。**BML は押しっぱなしを嫌う** (離すまで次が来ない) */
     function tap(code: number): void {
-        if (own !== null) {
-            own.key(code, true);
-            own.key(code, false);
-            return;
-        }
-        if (browser === null) return;
-        browser.content.processKeyDown(code);
-        browser.content.processKeyUp(code);
-    }
-
-    /**
-     * いま出ている文書が d を聞いているか。文書の `beitem[type="DataButtonPressed"]` で
-     * 分かる。文書は閉じた影の中だが、器 (`BMLBrowser`) が根を持っている — TS では
-     * private だが実体はただのフィールドなので、そこから覗く (借りものに手を入れずに済ませる)
-     */
-    function listensD(): boolean {
-        if (own !== null) return own.listens('DataButtonPressed');
-        const root = (browser as unknown as { documentElement?: HTMLElement } | null)?.documentElement;
-        return root?.querySelector('beitem[type="DataButtonPressed"][subscribe="subscribe"]') != null;
+        engine?.key(code, true);
+        engine?.key(code, false);
     }
 
     /** 画面の d (`pressD`)。出ている文書が d を聞いていれば押して true */
     function pressData(): boolean {
-        if ((browser === null && own === null) || !visible || !listensD()) return false;
+        if (engine === null || !visible || !engine.listens('DataButtonPressed')) return false;
         tap(DATA_BUTTON);
         return true;
     }
@@ -546,21 +396,21 @@
      * 局の待機ページ (日テレの beat・テレ朝の stream・フジの入口) は自分で出てきて
      * (invisible=false)、d を押されて初めてメニューを開く。NHK は入口が隠れたまま
      * d を待つ。どちらも見えているかは問わないので、聞いているかだけで決める。
-     * 文書ができるたびに見に行き直す (`load`) — 入口はたいてい別の文書へ渡すだけ。
+     * 文書ができるたびに見に行き直す (`loaded`) — 入口はたいてい別の文書へ渡すだけ。
      *
      * **届けたあとは、返事が来るまで押し直す** (`TAP_MOST` の項)。返事は
-     * 「次の文書が出てくること」で、`load` が来たらそこで下ろす
+     * 「次の文書が出てくること」で、`loaded` が来たらそこで下ろす
      */
     function knock(): void {
         knocking = null;
-        if ((browser === null && own === null) || !dueD || knocks <= 0) return;
+        if (engine === null || !dueD || knocks <= 0) return;
         knocks--;
-        if (!listensD()) {
+        if (!engine.listens('DataButtonPressed')) {
             knocking = setTimeout(knock, KNOCK_WAIT);
             return;
         }
         tap(DATA_BUTTON);
-        // 押しただけ数える。**返事があれば `load` が下ろす**ので、ここでは待つだけ
+        // 押しただけ数える。**返事があれば `loaded` が下ろす**ので、ここでは待つだけ
         if (++taps >= TAP_MOST) {
             dueD = false;
             return;
@@ -569,40 +419,15 @@
     }
 
     /**
-     * 郵便番号を NVRAM に置いておく。**器を作る前に。**
-     *
-     * 放送のアプリは `nvram://receiverinfo/zipcode` を数字7桁で読み、
-     * 天気・地域のニュース・防災情報をどこのものにするかを決める。
-     * 借りものはそれを `localStorage` の**この名前**で探す
-     * (借りものの `nvram.ts` の `readNVRAM`)。
-     *
-     * **書ける口が無いので、じかに置く。** 借りものが持っているのは
-     * 「放送のアプリから読み書きさせる」道だけで、受信機の設定として
-     * 外から入れる口は上流の単体ページ側にあった (denpa は借りていない)。
-     *
-     * 空なら**消す** — 入れたものを消したときに、前の番号が残らないように
-     */
-    function remember(): void {
-        const key = `${STORAGE_PREFIX}${NVRAM_PREFIX}prefix=receiverinfo%2Fzipcode`;
-        if (postal.length !== 7) {
-            forget(key);
-            return;
-        }
-        write(key, btoa(postal));
-    }
-
-    /**
      * 描く入れ物を作る。
      *
-     * **毎回まっさらな入れ物を作る。** どちらのエンジンも渡された要素に影 (`attachShadow`) を
+     * **毎回まっさらな入れ物を作る。** エンジンは渡された要素に影 (`attachShadow`) を
      * 張る。影は外せないので、同じ要素に2度目を張ると転ぶ — 消して出し直すたびに
      * 「データ放送が出なくなる」という壊れ方をする。
      *
      * 出せと言われるまでは透明にしておく (`showing` の説明)。**`visibility` では隠せない** —
-     * web-bml の既定のスタイルには `body { visibility : visible !important }` があって、
-     * **子のほうが親の hidden を打ち消す**。実機では「d を押すと、出るまで映像が真っ白に
-     * 覆われる」形で出た。`display:none` にすると寸法が測れなくなる (web-bml は自分で
-     * `offsetLeft` を読む) ので、透明にして場所は残す
+     * エンジンは描く要素ごとに BML の `visibility` を写すので、**子の visible が親の
+     * hidden を打ち消す**
      */
     function makeMount(into: HTMLElement): HTMLDivElement {
         const made = document.createElement('div');
@@ -616,7 +441,7 @@
         return made;
     }
 
-    /** 文書が替わった (`load`)。画面の大きさに合わせ、d を届けに行く */
+    /** 文書が替わった (`onLoad`)。画面の大きさに合わせ、d を届けに行く */
     function loaded(resolution: { width: number; height: number }): void {
         plane = resolution;
         fit();
@@ -635,26 +460,28 @@
         knocking = setTimeout(knock, KNOCK_WAIT);
     }
 
-    /**
-     * 自前のエンジンで開く。映像は動かさず、場所を教えてもらって寄せる (`placeOwn`)。
-     * 郵便番号は NVRAM に書かず、受信機の設定として渡す
-     */
-    async function openOwn(mine: number): Promise<void> {
+    /** 開く。映像は動かさず、場所を教えてもらって寄せる (`placeVideo`) */
+    async function open(): Promise<void> {
+        if (host === null || media === null) return;
+        const mine = ++generation;
+        loading = true;
+        // 押されてから取りに行く (上の説明)
         const { createBml, aribKey } = await import('#lib/bml/engine.js');
-        ownKey = aribKey;
+        toAribKey = aribKey;
+        // 待っている間に離されていたら、作らない
         if (mine !== generation || host === null || media === null) return;
         const into = makeMount(host);
-        seat = { parent: media.parentNode as Node, next: media.nextSibling };
+        // 出す操作は文書にとっての d の1押し。聞く文書が出てきたら届ける (`knock`)
         dueD = true;
         taps = 0;
-        ownFont = new FontFace('denpa-bml-round', `url('${denpaFontUrl()}') format('woff2')`);
-        document.fonts.add(ownFont);
+        roundFont = new FontFace('denpa-bml-round', `url('${denpaFontUrl()}') format('woff2')`);
+        document.fonts.add(roundFont);
         const round = "'denpa-bml-round', 'Hiragino Maru Gothic ProN', 'Meiryo', sans-serif";
         const made = createBml({
             root: into,
             fonts: { round, boldRound: round, square: "'Hiragino Kaku Gothic ProN', 'Meiryo', 'MS Gothic', sans-serif" },
-            ip: ownIp,
-            store: { get: (key) => read(OWN_PREFIX + key), set: (key, value) => write(OWN_PREFIX + key, value) },
+            ip,
+            store: { get: (key) => read(NVRAM_PREFIX + key), set: (key, value) => write(NVRAM_PREFIX + key, value) },
             clock: () => clock?.() ?? null,
             receiver: { zipcode: postal },
             onVideoRect: (rect, size) => {
@@ -679,71 +506,13 @@
             onTune: (service) => tune?.(service) ?? false,
             log: (message) => console.warn(`[bml] ${message}`),
         });
-        own = made;
+        engine = made;
         loading = false;
         watcher = new ResizeObserver(fit);
         watcher.observe(host);
         listen((message) => {
             handed++;
             made.feed(message);
-        });
-        press = tap;
-        pressD = pressData;
-    }
-
-    async function open(): Promise<void> {
-        if (host === null || media === null) return;
-        const mine = ++generation;
-        loading = true;
-        if (useOwn()) {
-            await openOwn(mine);
-            return;
-        }
-        // 押されてから取りに行く (上の説明)
-        const { BMLBrowser } = await import('web-bml');
-        // 待っている間に離されていたら、作らない
-        if (mine !== generation || host === null || media === null) return;
-        const into = makeMount(host);
-        seat = { parent: media.parentNode as Node, next: media.nextSibling };
-
-        // 器ができる前に置く。入口の文書が真っ先に読みに来る
-        remember();
-        // 出す操作は文書にとっての d の1押し。聞く文書が出てきたら届ける (`knock`)
-        dueD = true;
-        taps = 0;
-
-        const made = new BMLBrowser({
-            containerElement: into,
-            mediaElement: media,
-            fonts: FONTS,
-            indicator,
-            ip,
-            // 覚えるもの (NVRAM) は局ごとに分ける。他の使い道と混ざらないように
-            storagePrefix: STORAGE_PREFIX,
-            nvramPrefix: NVRAM_PREFIX,
-            broadcasterDatabasePrefix: 'denpa_bcast_',
-        });
-        browser = made;
-        loading = false;
-
-        made.addEventListener('load', (event) => loaded(event.detail.resolution));
-        /*
-         * **「いま出ているか」を教えてくれる唯一の口。**
-         *
-         * 文書を組み終えた直後に必ず一度飛んでくる (`content.ts` の
-         * `bmlBody.invisible = bmlBody.invisible`)
-         */
-        made.addEventListener('invisible', (event) => {
-            showing = event.detail !== true;
-            place();
-        });
-
-        watcher = new ResizeObserver(fit);
-        watcher.observe(host);
-
-        listen((message) => {
-            handed++;
-            made.emitMessage(message);
         });
         // 指のリモコンにも同じ口を渡す
         press = tap;
@@ -767,20 +536,14 @@
         plane = null;
         watcher?.disconnect();
         watcher = null;
-        /*
-         * **映像を先に戻す。** BML の `<object>` に入ったままの入れ物ごと
-         * 消すと、`<video>` が文書から抜けて画面から映像が消える
-         */
+        // 映像の入れ物を枠いっぱいに戻す
         place();
-        seat = null;
-        browser?.destroy();
-        browser = null;
-        own?.destroy();
-        own = null;
+        engine?.destroy();
+        engine = null;
         videoRect = null;
-        if (ownFont !== null) document.fonts.delete(ownFont);
-        ownFont = null;
-        // 影ごと捨てる (上の説明)
+        if (roundFont !== null) document.fonts.delete(roundFont);
+        roundFont = null;
+        // 影ごと捨てる (`makeMount` の説明)
         mount?.remove();
         mount = null;
     }
@@ -795,40 +558,31 @@
 
     /**
      * リモコンの代わり。**十字・決定・戻る・数字・色・d** をそのまま渡す
-     * (借りものが持っている対応表)。キーの d は文書へそのまま届く — 器の出し入れは
+     * (エンジンの `aribKey`)。キーの d は文書へそのまま届く — 器の出し入れは
      * 画面の d ボタンの側 (`pressD`)
      */
-    async function key(event: KeyboardEvent, down: boolean): Promise<void> {
-        if (own !== null && ownKey !== null) {
-            // 入力欄で打っている字は文書へ渡さない
-            const target = event.target;
-            if (target instanceof HTMLElement && (target.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName))) {
-                return;
-            }
-            // 離すほうは修飾キーを見ない (押しっぱなしの扱いが残らないように)
-            if (down && (event.altKey || event.ctrlKey || event.metaKey)) return;
-            const code = ownKey(event.key);
-            if (code === -1) return;
-            event.preventDefault();
-            own.key(code, down);
+    function key(event: KeyboardEvent, down: boolean): void {
+        if (engine === null || toAribKey === null) return;
+        // 入力欄で打っている字は文書へ渡さない
+        const target = event.target;
+        if (target instanceof HTMLElement && (target.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName))) {
             return;
         }
-        if (browser === null || event.altKey || event.ctrlKey || event.metaKey) return;
-        const { keyCodeToAribKey } = await import('web-bml');
-        const code = keyCodeToAribKey(event.key);
+        // 離すほうは修飾キーを見ない (押しっぱなしの扱いが残らないように)
+        if (down && (event.altKey || event.ctrlKey || event.metaKey)) return;
+        const code = toAribKey(event.key);
         if (code === -1) return;
         event.preventDefault();
-        if (down) browser.content.processKeyDown(code);
-        else browser.content.processKeyUp(code);
+        engine.key(code, down);
     }
 
     onDestroy(close);
 </script>
 
 <svelte:window
-    onkeydown={(event) => void key(event, true)}
-    onkeyup={(event) => void key(event, false)}
-    onblur={() => own?.releaseKeys()}
+    onkeydown={(event) => key(event, true)}
+    onkeyup={(event) => key(event, false)}
+    onblur={() => engine?.releaseKeys()}
 />
 
 <!--
@@ -845,8 +599,7 @@
     class="data"
     hidden={!on}
     data-testid="live-data"
-    data-state={browser !== null || own !== null ? 'ready' : loading ? 'loading' : 'off'}
-    data-engine={own !== null ? 'own' : browser !== null ? 'web-bml' : ''}
+    data-state={engine !== null ? 'ready' : loading ? 'loading' : 'off'}
     data-showing={visible}
     data-receiving={receiving}
     data-for={shown ?? ''}

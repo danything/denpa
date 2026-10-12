@@ -186,7 +186,7 @@
     let dataChannel = $state<string | null>(null);
     /** 焼いておいた変化ログ。**押されてから取りに行く** (字幕と同じ「頼まれてから」) */
     let dataTimeline: PlacedMessage[] = [];
-    /** 借りものへ流す口。`DataBroadcast` が open のたびに預けてくる */
+    /** エンジンへ流す口。`DataBroadcast` が open のたびに預けてくる */
     let dataEmit: ((message: ResponseMessage) => void) | null = null;
     /** どこまで流したか (再生位置 ms)。まだなら -1 */
     let dataFed = -1;
@@ -1033,25 +1033,6 @@
     const press = stageTap({ toggle: togglePlay, controls: () => controls.toggle(), seekBy });
 
     /**
-     * **押す口は自分で繋ぐ** (`onclick={press}` と書かない)。
-     *
-     * データ放送を出すと、借りものは**映像の箱を閉じた影 (`attachShadow`) の中へ
-     * 移します** (`DataBroadcast` の `place`)。Svelte は `onclick` を根に1つだけ
-     * 置いて配る作りで、配り先を `composedPath()` の先頭から辿る — **閉じた影の
-     * 中は composedPath に出てこない**ので、辿り着くのは影の入れ物までです。
-     * 書いたとおりに見えて、**d を出した瞬間だけ絵を押しても止まらなく**なる
-     * (実機で踏んだ。押した先を数えると `watch-video` が light DOM から消えている)。
-     *
-     * 要素に直に付けた口は、要素ごと移されても付いたまま動きます
-     */
-    $effect(() => {
-        const target = video;
-        if (target === null) return;
-        target.addEventListener('click', press);
-        return () => target.removeEventListener('click', press);
-    });
-
-    /**
      * キーでも動かせるようにする。全画面のときはこれがいちばん早い。
      * **割り当ては追っかけと共通** (`player/keys.ts`。修飾キーの扱いもあちら)。
      * データ放送を出している間の十字キーはあちらのカーソル (`DataBroadcast`) なので、送りには使わない
@@ -1155,20 +1136,18 @@
                     重ねる — ライブと同じやり方 (下の canvas)
                 -->
                 <!--
-                    **映像の箱。BML はこれを動かす** (`DataBroadcast` の place)。ライブと同じ。
-                    **class ではなく style で書く** — 影の中へ移されると class が届かず 0 幅になる
-                    (`MediaStack.svelte`)。`pointer-events:auto` は、押すのを通す `live-data` の
-                    影へ移されても**絵を押して止められる**ように
+                    **映像の箱。データ放送はこれを小窓へ寄せる** (`DataBroadcast` の `placeVideo`)。ライブと同じ
                 -->
                 <div
                     bind:this={mediaBox}
-                    style="position:absolute; inset:0; width:100%; height:100%; pointer-events:auto;"
+                    style="position:absolute; inset:0; width:100%; height:100%;"
                 >
                 <video
                     bind:this={video}
                     {src}
                     style="width:100%; height:100%; background:#000;"
                     playsinline
+                    onclick={press}
                     onplay={() => {
                         playing = true;
                         if (video !== null) follow(video);
@@ -1212,11 +1191,10 @@
                 </video>
                 <!--
                     **放送の字幕は映像と同じ箱の中に置く** (ライブの `MediaStack` と同じ)。
-                    データ放送を出すと、借りものはこの箱ごと BML の小窓へ移す。外に置いて
+                    データ放送を出すと、この箱ごと BML の小窓へ寄せる。外に置いて
                     いた頃は**映像だけが小窓へ行き、字幕は枠いっぱいのまま**データ放送の面
                     (`z-index: 5`) の下に隠れていた。中に居れば、テレビと同じで映像と一緒に縮む。
-                    位置と大きさは `place` が映像の絵に合わせて style で書く。ほかも class ではなく
-                    style — 移された先は閉じた影の中で、表の CSS が届かない。
+                    位置と大きさは `place` が映像の絵に合わせて style で書く。
                     **押す邪魔をしない** (`pointer-events: none`) — 下の絵を押して止められなくなる
                 -->
                 <canvas
@@ -1229,10 +1207,9 @@
                 <!--
                     **CM を跨ぐ間の蓋。** 字幕より後ろに置く = 字幕の上に載る
                     (CM の字幕まで隠すため)。帯や報せ (z-index 10) の下には残す。
-                    字幕と同じ理由で箱の中に置き、style で書く (小窓の中でも CM を隠す)。
+                    字幕と同じ理由で箱の中に置く (小窓の中でも CM を隠す)。
                     出し入れは `hidden` のまま — style に式を書くと `hopping` が変わるたびに
                     属性ごと書き直され、`place` が JS で書いた位置と大きさが消える
-                    (`hidden` は UA の CSS なので影の中でも効く)
                 -->
                 <canvas
                     bind:this={cover}
@@ -1243,7 +1220,7 @@
                 </div>
                 <!--
                     **録画のデータ放送。** 焼くときに取り出した変化ログ (`data.hasData`) を、
-                    再生位置に合わせて流す (`feedData`/`listenData`)。描くのはライブと同じ借りもの。
+                    再生位置に合わせて流す (`feedData`/`listenData`)。描くのはライブと同じエンジン。
                     双方向は録画では使わない (`network={false}`) — 送り先が生きていない
                 -->
                 <DataBroadcast
@@ -1283,7 +1260,7 @@
 
                 {#if broken}
                     <!-- **黙って黒いままにしない。** 観られる先を案内する (外のプレイヤーは相手にしない) -->
-                    <div class="broken">
+                    <div class="broken" data-testid="watch-broken">
                         <p class="small">
                             このブラウザでは再生できませんでした。<br
                             />Chrome・Edge か、テレビのアプリ (denpa-tv) で観てください。

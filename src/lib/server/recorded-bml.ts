@@ -30,9 +30,9 @@ import { orm } from './db';
 import { programs, services } from './schema';
 
 /**
- * **番組の名乗り (`programInfo`)。描く側はこれが来るまで入口の BML を開かない**
- * (web-bml の `content.ts` が `getProgramInfoAsync` を待つ) ので、無いと
- * 「データ取得中…」のまま何も出ない。TS からは取り出していない (EIT は解かない) ので、
+ * **番組の名乗り (`programInfo`)。描く側は局の番号をこれで知る** — `arib-dc://` の名前を
+ * 解く・NVRAM を局ごとに分ける (`src/lib/bml/resources.ts`・`nvram.ts`) ので、無いと
+ * 他の局を指す名前と区別できず、覚えるものも局の外へ混ざる。TS からは取り出していない (EIT は解かない) ので、
  * ライブと同じく DB から組み立てる (`live.ts` の `programInfo`)。局の番号は
  * `services`、番組は録画の行が持っている。
  *

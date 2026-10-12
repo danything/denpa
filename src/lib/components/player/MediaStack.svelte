@@ -9,12 +9,8 @@
      *   映像より上 (黒を隠す)、字幕より下 (切り替え中も字幕は見えていてほしい)
      * - `overlay` … 放送の字幕。放送の位置・背景の箱・外字のまま描くので canvas に重ねる。
      *   `object-fit` は描く係 (`CaptionPainter`) が `fill` / `contain` に切り替える
-     * - 入れ物 (`box`) … データ放送に「映像はここ」と伝える先。**枠そのものを
-     *   渡すと親子が循環する** (`DataBroadcast`)
-     *
-     * **class ではなく style で書く** — データ放送を出している間、この入れ物は
-     * BML の閉じた影の中へ移され、表の CSS が届かない。しかも BML の
-     * 既定は div に width:0 を与えるので、class だと映像が消える。
+     * - 入れ物 (`box`) … データ放送が小窓へ寄せる先 (`DataBroadcast` の `placeVideo`)。
+     *   字幕も中に居るので映像と一緒に縮む
      */
     interface Props {
         /** 前の絵を貼っているか (`live-player` の holding)。still の見せ方 */
@@ -39,46 +35,49 @@
         overlay = $bindable(null),
         box = $bindable(null),
     }: Props = $props();
-
-    /**
-     * **押す口は自分で繋ぐ** (`onclick={onclick}` と書かない)。観る画面の `press` と同じ理由 —
-     * Svelte の onclick は根で受けて `composedPath()` を辿って配るが、データ放送を出すと
-     * この入れ物は**閉じた影の中へ移され**、中の video は composedPath に出てこない。
-     * 書いたままだと **d を出している間だけ絵を押しても止まらない**。要素に直に付けた口は、
-     * 要素ごと移されても付いたまま動く。呼ぶのはその時点の `onclick` (差し替えに付いていく)
-     */
-    $effect(() => {
-        const target = video;
-        if (target === null) return;
-        const press = (event: MouseEvent) => onclick(event);
-        target.addEventListener('click', press);
-        return () => target.removeEventListener('click', press);
-    });
 </script>
 
-<div bind:this={box} style="position:absolute; inset:0; width:100%; height:100%;">
-    <!-- svelte-ignore a11y_media_has_caption -->
-    <video
-        bind:this={video}
-        style="width:100%; height:100%; background:#000;"
-        playsinline
-        data-testid="{prefix}-video"
-    ></video>
+<div bind:this={box} class="box">
+    <!-- svelte-ignore a11y_click_events_have_key_events, a11y_media_has_caption -->
+    <video bind:this={video} class="video" playsinline {onclick} data-testid="{prefix}-video"></video>
     <canvas
         bind:this={still}
-        style="position:absolute; inset:0; width:100%; height:100%;
-               object-fit:contain; pointer-events:none;
-               transition:opacity 150ms; opacity:{holding ? 1 : 0};"
+        class="layer still"
+        style:opacity={holding ? 1 : 0}
         data-testid="{prefix}-still"
         data-holding={holding}
         aria-hidden="true"
     ></canvas>
     <canvas
         bind:this={overlay}
-        style="position:absolute; inset:0; width:100%; height:100%;
-               object-fit:contain; pointer-events:none;"
+        class="layer"
         data-testid="{prefix}-captions"
         data-on={captionsOn}
         aria-hidden="true"
     ></canvas>
 </div>
+
+<style>
+    .box {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+    }
+    .video {
+        width: 100%;
+        height: 100%;
+        background: #000;
+    }
+    .layer {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        object-fit: contain;
+        pointer-events: none;
+    }
+    .still {
+        transition: opacity 150ms;
+    }
+</style>

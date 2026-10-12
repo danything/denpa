@@ -153,10 +153,10 @@ docker compose up -d
 **土台にしている仕事**:
 
 - [px4-userland](https://github.com/Khronos31/px4-userland) / [siano-userland](https://github.com/Khronos31/siano-userland) (@Khronos31) — ホストにドライバを入れずにチューナーを使えるのはこれのおかげです。PX-MLT5PE / DTV02A-5TS-P の対応は @siketyan
-- [web-bml](https://github.com/otya128/web-bml) (otya128) — データ放送を描く
+- [web-bml](https://github.com/otya128/web-bml) (otya128) — データ放送は長くこれで描いていました。自前のエンジン (`src/lib/bml/`) は、その振る舞いを手本にしています
 
 ## ライセンス
 
 **AGPL-3.0-or-later** ([LICENSE](LICENSE))。ネットワーク越しに使わせる形で配るなら、その中身も同じ条件で
-渡せるようにしてほしい、という理由で選んでいます。借りているもの (ffmpeg・Denpa Font・web-bml ほか) は
+渡せるようにしてほしい、という理由で選んでいます。借りているもの (ffmpeg・Denpa Font ほか) は
 元のライセンスのままで、一覧は [docs/licenses.md](docs/licenses.md)。

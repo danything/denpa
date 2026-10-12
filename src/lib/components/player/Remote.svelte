@@ -29,10 +29,10 @@
     const { press }: Props = $props();
 
     /**
-     * `AribKeyCode` (借りものの `content.ts`) と同じ値。
+     * `AribKeyCode` (エンジンの `KEY`。`src/lib/bml/engine.ts`) と同じ値。
      *
-     * **番号で書くのは、`content.ts` を読み込まずに済ませるため** — 値として
-     * import すると、このリモコンが載っているだけで借りもの全体 (700KB) が
+     * **番号で書くのは、エンジンを読み込まずに済ませるため** — 値として
+     * import すると、このリモコンが載っているだけでエンジン全体が
      * 落ちてくる。データ放送を出す前から出ている画面なので、それは困る
      */
     /** d (DataButton)。放送の文書に「d が押された」と伝える (`DataBroadcast` の DATA_BUTTON と同じ) */

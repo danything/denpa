@@ -297,7 +297,7 @@ export function fetchForBml(raw: string): Promise<Fetched> {
  * 実装しないという最初の決めでは、双方向を入れても入っていないのと同じ
  * でした。
  *
- * **中身は組み立てません。** 借りものが `Denbun=<EUC-JP か Shift_JIS を
+ * **中身は組み立てません。** エンジン (`src/lib/bml/`) が `Denbun=<EUC-JP か Shift_JIS を
  * %xx にしたもの>` まで作ってから渡してくるので、denpa はそれを
  * `application/x-www-form-urlencoded` として素通しするだけです。
  * 返りも解かずにそのまま返す (どちらの符号かは放送のアプリが知っている)。
@@ -331,8 +331,7 @@ async function follow(raw: string, first: 'GET' | 'POST', body: Uint8Array | und
  *
  * 「相手まで届くか」を訊かれたときに答える口です。**NHK は呼びに来ません**
  * (実機で確かめた。あちらは `postForBml` の側で判断していた) が、
- * 訊いてくる放送はあるので用意しておきます。借りものは実装が無いと `null`
- * (非対応) を返し、`getBrowserSupport(… "Com.IP.confirmIP")` も 0 になります。
+ * 訊いてくる放送はあるので用意しておきます。
  *
  * **ICMP は使いません。** 器の中から生の socket は開けない (`CAP_NET_RAW` が
  * 要る) ので、**443 番へ繋がるか**で代えます。放送局のサーバは https で

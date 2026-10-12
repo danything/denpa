@@ -2,7 +2,7 @@
  * **字の表の字が、取ってくるフォント (Denpa Font) に全部入っているか。**
  *
  * 字幕 (`b24-tables.ts`)・番組表などの外字 (`aribtext-gaiji.ts`)・DRCS の置き換え先・データ放送
- * (web-bml の表) の字を、Dockerfile が留めている版のリリースの ttf の cmap と突き合わせる。
+ * (`src/lib/bml/euc.ts`。1〜84 区は `TextDecoder('euc-jp')`、85 区から先は `ADDITIONAL`) の字を、Dockerfile が留めている版のリリースの ttf の cmap と突き合わせる。
  * 表に字を足したのにフォントに無いと、その字だけ端末の字で出て見た目が揃わない。
  *
  * 落ちたら: danything/denpa-font の `DENPA_COMMIT` を上げて (元に無い字は描き方を足して) 版を出し、
@@ -92,16 +92,23 @@ function tableCodepoints(): Map<number, string> {
         ADDITIONAL,
     };
     for (const [name, value] of Object.entries(strings)) add(value, `b24-tables ${name}`);
-    const { jisToUnicodeMap } = require(
-        join(root, 'node_modules/web-bml/dist/client/jis_to_unicode_map.js'),
-    ) as {
-        jisToUnicodeMap: number[];
+    /*
+     * データ放送の 1〜84 区は `TextDecoder('euc-jp')` が返す字 (`src/lib/bml/euc.ts` と同じ読み方)。
+     * 見るのは JIS X 0208 に字のある区点だけ — WHATWG の EUC-JP は 13 区を NEC 特殊文字
+     * (㍉・㊤ など) として読むが、ARIB の放送はこの区を使わない (同じ字は 90〜94 区の追加記号にあり、
+     * `ADDITIONAL` で見ている)
+     */
+    const decoder = new TextDecoder('euc-jp');
+    const jis0208 = (cell: number): string | null => {
+        if (Math.floor(cell / 94) + 1 === 13) return null;
+        const ch = decoder.decode(Uint8Array.of(0xa1 + Math.floor(cell / 94), 0xa1 + (cell % 94)));
+        return ch === '�' ? null : ch;
     };
-    // JIS の差分は、放送が使う区点 (JIS X 0208 に字のある区点と外字の 85・86・90〜94 区) の分だけ。
-    // 表は JIS X 0213 の字も持っているが、ARIB の放送はその区点を使わない (denpa-font の一覧と同じ)
+    // JIS の差分は、放送が使う区点 (JIS X 0208 に字のある区点と外字の 85・86・90〜94 区) の分だけ
+    // (denpa-font の一覧と同じ)
     const used = (cell: number) => {
         const ku = Math.floor(cell / 94) + 1;
-        return (jisToUnicodeMap[cell] ?? -1) >= 0 || ku === 85 || ku === 86 || (ku >= 90 && ku <= 94);
+        return jis0208(cell) !== null || ku === 85 || ku === 86 || (ku >= 90 && ku <= 94);
     };
     for (const [start, s] of KANJI_DIFF) {
         [...s].forEach((ch, k) => {
@@ -110,10 +117,7 @@ function tableCodepoints(): Map<number, string> {
     }
     for (const c of DRCS_REPLACE.values()) add(String.fromCodePoint(c), 'b24-tables DRCS_REPLACE');
     for (const s of GAIJI.values()) add(s, 'aribtext-gaiji GAIJI');
-    for (const c of jisToUnicodeMap) {
-        // U+EC00〜ECBB は web-bml が自前の DRCS 用フォントで描く
-        if (c >= 0 && !(c >= 0xec00 && c <= 0xecbb)) add(String.fromCodePoint(c), 'web-bml jisToUnicodeMap');
-    }
+    for (let cell = 0; cell < 84 * 94; cell++) add(jis0208(cell) ?? '', 'データ放送 (EUC-JP の 1〜84 区)');
     return out;
 }
 

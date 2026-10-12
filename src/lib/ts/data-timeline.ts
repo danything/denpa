@@ -101,7 +101,7 @@ export function toPlaybackTimeline(
 export interface Feed {
     /** 器を作り直すか。**戻ったとき** (先に出した画面を捨てて積み直す) だけ true */
     reset: boolean;
-    /** `BMLBrowser.emitMessage` に順に流すもの */
+    /** エンジン (`Bml.feed`) に順に流すもの */
     messages: ResponseMessage[];
 }
 

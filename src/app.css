@@ -397,7 +397,7 @@ td {
 /*
  * 放送から来た字は、全角の英数字・記号 (ＢＳ・ＴＶ・！ など。EPG の字はほとんど全角で来る) を詰めて組む (`palt`)。
  * Denpa Font の palt は U+FF01–FF5E だけを詰め、既定の送り幅 (1em) は変えない。保存してある字は変えず、見え方だけ。
- * **字幕 (canvas) とデータ放送 (web-bml) には当てない** — ARIB が字の間と区画を決めている。
+ * **字幕 (canvas) とデータ放送には当てない** — ARIB が字の間と区画を決めている。
  * どちらも `.broadcast` の外で描く (`caption-draw.ts`・`DataBroadcast.svelte`)
  */
 .broadcast {

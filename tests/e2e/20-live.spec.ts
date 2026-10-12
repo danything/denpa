@@ -5,16 +5,16 @@ import {
     airing,
     CAPTION_SCREENS,
     captionsClearOfBar,
-    captionsSeenInDataWindow,
     captureSockets,
     cellOf,
+    dataElement,
     expect,
     expectSharpCaptions,
     fakeDataBroadcast,
     feedCaption,
+    feedData,
     goto,
     holdCaptions,
-    holdMedia,
     overlayTroubles,
     syncEpg,
     test,
@@ -415,8 +415,7 @@ test.describe('ライブ視聴', () => {
     /*
      * **データ放送 (テレビの d ボタン)。**
      *
-     * 描くのは借りもの (`web-bml` の `BMLBrowser`) で 700KB あるので、
-     * **押されるまで取りに行かない**。作りものの放送にはデータ放送が載って
+     * 描くのはエンジン (`src/lib/bml/`) で、**押されるまで取りに行かない**。作りものの放送にはデータ放送が載って
      * いないので中身は出ないが、**押して器が立ち上がるところ**までは見られる。
      *
      * サーバに「出す」と伝わっているかも見る — 頼まれてから解く作りなので、
@@ -463,7 +462,7 @@ test.describe('ライブ視聴', () => {
 
         await wakeControls(page, 'live-frame');
         await page.getByTestId('live-data-button').click();
-        // 700KB を取りに行って、器を立てるまで
+        // エンジンを取りに行って、器を立てるまで
         await expect(overlay).toHaveAttribute('data-state', 'ready', { timeout: 15_000 });
 
         /*
@@ -478,7 +477,7 @@ test.describe('ライブ視聴', () => {
         /*
          * **字幕は映像と一緒に動く。**
          *
-         * データ放送を出すと、借りものは映像の入れ物ごと BML の小窓へ移す。
+         * データ放送を出すと、映像の入れ物ごと BML の小窓へ寄せる。
          * 字幕を外に置いていた頃は、**映像だけが小窓へ行き、字幕は枠いっぱいの
          * まま**データ放送の下に隠れた (実機で「データ放送を出すと字幕が消える」)。
          * 同じ入れ物の中に居れば、テレビと同じで映像と一緒に縮む
@@ -505,9 +504,9 @@ test.describe('ライブ視聴', () => {
         expect(await asked()).toEqual([{ type: 'data', on: true }]);
 
         /*
-         * **番組を伝えているか。** 描く側は入口の BML を開く前にこれを待つ
-         * (`client/content.ts` の `getProgramInfoAsync`)。抜けていると、
-         * モジュールが全部揃っていても**画面が出ない** — 実機で踏んだ
+         * **番組を伝えているか。** 描く側は局の番号をこれで知る (`arib-dc://` の名前を解く・
+         * NVRAM を局ごとに分ける)。web-bml の頃は、抜けているとモジュールが全部揃っていても
+         * **画面が出なかった** (実機で踏んだ)
          */
         await expect
             .poll(() => page.evaluate(() => (window as unknown as { __info: unknown[] }).__info), {
@@ -519,7 +518,7 @@ test.describe('ライブ視聴', () => {
          * **届いたものを1つも落としていないか。**
          *
          * サーバは押された瞬間に、番組・PMT・溜まっているモジュールをまとめて
-         * 送ってくる。ところが描く側は 700KB を落としてから立ち上がるので、
+         * 送ってくる。ところが描く側はエンジンを落としてから立ち上がるので、
          * **その間に来たぶんは宛先が無い**。捨てていた頃は番組が真っ先に
          * 落ちて、実機では「1局目は出ないのに、局を変えると出る」形で出た
          * (2度目は落とし済みで待ちが無いので、間に合っていた)
@@ -562,70 +561,13 @@ test.describe('ライブ視聴', () => {
         ]);
 
         /*
-         * **出し直せること。** 借りている側は渡された要素に**閉じた影**を張る
+         * **出し直せること。** エンジンは渡された要素に**影**を張る
          * ので、同じ要素を渡し直すと2度目で転ぶ。毎回まっさらな入れ物を
          * 作っているのはそのため
          */
         await wakeControls(page, 'live-frame');
         await page.getByTestId('live-data-button').click();
         await expect(overlay).toHaveAttribute('data-state', 'ready', { timeout: 15_000 });
-    });
-
-    /*
-     * **データ放送を出しても字幕は見えている。テレビと同じで映像と一緒に小窓へ縮む。**
-     *
-     * 借りものは映像の箱ごと BML の小窓へ移すので、字幕の canvas は箱の中に置いてある
-     * (`MediaStack`)。上の確かめでは偽の放送にデータ放送が無く箱が動かないので、ここでは
-     * 小窓を持つ BML を WebSocket に流し (`fakeDataBroadcast`)、本当に動かしてから絵で見る。
-     *
-     * **操作列を出したまま d を押す** — 帯と重なる字幕は持ち上げる (`PlayerStage`) ので、
-     * 持ち上げたぶんが小窓の中に残っていないことも見る (残ると小窓の端で切れる)
-     */
-    test('データ放送を出しても、字幕は映像と一緒に小窓へ縮んで見えている', async ({ page }) => {
-        await page.addInitScript(() => {
-            const seen = window as unknown as { __sockets: WebSocket[] };
-            seen.__sockets = [];
-            const Original = window.WebSocket;
-            window.WebSocket = class extends Original {
-                constructor(url: string | URL, protocols?: string | string[]) {
-                    super(url, protocols);
-                    seen.__sockets.push(this);
-                }
-            };
-        });
-        await goto(page, '/live');
-        await page.getByTestId('live-channel').first().click();
-        await expect(page.getByTestId('live-title')).toBeVisible();
-        await holdMedia(page, 'live-video', 'live-captions', 'live-frame');
-        await holdCaptions(page, 'live-captions');
-        // 下の方の字幕 (帯と重なる)
-        await page
-            .getByTestId('live-captions')
-            .evaluate((el) => el.setAttribute('data-ink', '0.8000,0.9700'));
-
-        const overlay = page.getByTestId('live-data');
-        await wakeControls(page, 'live-frame');
-        await page.getByTestId('live-data-button').click();
-        await expect(overlay).toHaveAttribute('data-state', 'ready', { timeout: 15_000 });
-        await expect(page.getByTestId('live-controls')).toHaveAttribute('data-shown', 'true');
-
-        // サーバの1式 (番組・PMT) が届いたあとに、小窓を持つ BML を流す (0x30 + 多重化の頭8バイト + JSON)
-        await expect.poll(async () => Number(await overlay.getAttribute('data-handed'))).toBeGreaterThan(0);
-        await page.evaluate((messages) => {
-            const socket = (window as unknown as { __sockets: WebSocket[] }).__sockets.at(-1);
-            for (const message of messages) {
-                const body = new TextEncoder().encode(JSON.stringify(message));
-                const data = new Uint8Array(9 + body.length);
-                data[0] = 0x30;
-                data.set(body, 9);
-                socket?.dispatchEvent(new MessageEvent('message', { data: data.buffer }));
-            }
-        }, fakeDataBroadcast());
-
-        await captionsSeenInDataWindow(page);
-        // 小窓の中でも見えている大きさで描く (BML の面ごと `scale` で伸ばしてある。ぼやけていた)
-        await feedCaption(page, 'live');
-        await expectSharpCaptions(page, 'データ放送の小窓の中');
     });
 
     /*
@@ -688,34 +630,50 @@ test.describe('ライブ視聴', () => {
      * **郵便番号は、設定画面からデータ放送へ渡る。**
      *
      * 放送のアプリはこれを読んで、天気・地域のニュース・防災情報をどこの
-     * ものにするかを決める (`nvram://receiverinfo/zipcode`)。受け取るのは
-     * 端末の中 (localStorage) だが、置き場はサーバ — 家の場所は端末では
-     * 変わらないので、端末ごとに訊き直さない。
+     * ものにするかを決める (`nvram://receiverinfo/zipcode`)。置き場はサーバ —
+     * 家の場所は端末では変わらないので、端末ごとに訊き直さない。エンジンには
+     * 受信機の設定として渡す (`DataBroadcast` の `receiver`)。
      *
-     * **借りものには外から入れる口が無い**ので、denpa が名前を合わせて直に
-     * 置いている。名前がずれると、入れたのに「設定されていません」と出る
-     * という形で静かに壊れる
+     * 確かめるのは放送のアプリと同じ道: 流した BML のスクリプトが `readPersistentArray` で
+     * 読んだものを画面に書く。**web-bml の頃に端末へ直に置いていた鍵** (`denpa_bml_denpa_nvram_…`・
+     * `denpa_bml_engine`) が残っていても、読まれないことも見る
      */
     test('設定した郵便番号が、データ放送に渡る', async ({ page }) => {
-        const KEY = 'denpa_bml_denpa_nvram_prefix=receiverinfo%2Fzipcode';
-        const kept = () => page.evaluate((key) => localStorage.getItem(key), KEY);
+        const READER = [
+            '<p id="zip" style="left:0px;top:0px;width:400px;height:40px;color-index:7;">-</p>',
+            '<script><![CDATA[',
+            'var zip = browser.readPersistentArray("nvram://receiverinfo/zipcode", "S:7B");',
+            'document.getElementById("zip").firstChild.data = "z" + zip[0];',
+            ']]></script>',
+        ].join('\n');
+        const readZip = async (): Promise<string | null | undefined> => {
+            await goto(page, '/live');
+            await page.getByTestId('live-channel').first().click();
+            await expect(page.getByTestId('live-title')).toBeVisible();
+            const overlay = page.getByTestId('live-data');
+            await wakeControls(page, 'live-frame');
+            await page.getByTestId('live-data-button').click();
+            await expect(overlay).toHaveAttribute('data-state', 'ready', { timeout: 15_000 });
+            await expect
+                .poll(async () => Number(await overlay.getAttribute('data-handed')))
+                .toBeGreaterThan(0);
+            await feedData(page, fakeDataBroadcast(READER));
+            await expect.poll(async () => (await dataElement(page, 'span'))?.text ?? '-').not.toBe('-');
+            return (await dataElement(page, 'span'))?.text;
+        };
+        await captureSockets(page);
 
         await goto(page, '/settings');
+        // web-bml の頃の鍵を残しておく (別の番号。読まれたら食い違う)
+        await page.evaluate(() => {
+            localStorage.setItem('denpa_bml_denpa_nvram_prefix=receiverinfo%2Fzipcode', btoa('9999999'));
+            localStorage.setItem('denpa_bml_engine', 'web-bml');
+        });
         // ハイフン付きで入れても、数字7桁として読む
         await page.getByTestId('postal-code').fill('100-0001');
         await page.getByTestId('save-broadcast').click();
         await expect(page.getByTestId('postal-code')).toHaveValue('1000001');
-
-        await goto(page, '/live');
-        await page.getByTestId('live-channel').first().click();
-        await expect(page.getByTestId('live-title')).toBeVisible();
-        await wakeControls(page, 'live-frame');
-        await page.getByTestId('live-data-button').click();
-        await expect(page.getByTestId('live-data')).toHaveAttribute('data-state', 'ready', {
-            timeout: 15_000,
-        });
-        // 借りものが読む形 (7バイトを base64 で)
-        expect(await kept()).toBe(btoa('1000001'));
+        expect(await readZip()).toBe('z1000001');
 
         /*
          * **消したら残さない。** 引っ越したのに前の番号のままだと、
@@ -725,25 +683,15 @@ test.describe('ライブ視聴', () => {
         await page.getByTestId('postal-code').fill('');
         await page.getByTestId('save-broadcast').click();
         await expect(page.getByTestId('postal-code')).toHaveValue('');
-
-        await goto(page, '/live');
-        await page.getByTestId('live-channel').first().click();
-        await expect(page.getByTestId('live-title')).toBeVisible();
-        await wakeControls(page, 'live-frame');
-        await page.getByTestId('live-data-button').click();
-        await expect(page.getByTestId('live-data')).toHaveAttribute('data-state', 'ready', {
-            timeout: 15_000,
-        });
-        expect(await kept()).toBeNull();
+        expect(await readZip()).toBe('z');
     });
 
     /*
      * **局を変えたら、データ放送も作り直す。**
      *
-     * 借りものは一度に一つの放送しか持てない (カルーセルも覚えるものも局ごと)。
-     * それに、**借りものは映像の入れ物を BML の `<object>` の中へ移す** ので、
-     * 作り直さずにいると**前の局の文書が映像を掴んだまま**になる —
-     * 実機では「d を押したあと局を変えると、映像が左上に潰れる」形で出た
+     * エンジンは一度に一つの放送しか持たない (カルーセルも覚えるものも局ごと)。
+     * 作り直さずにいると**前の局の文書が残り**、映像が前の局の小窓に寄せられたままになる
+     * (web-bml の頃、実機で「d を押したあと局を変えると、映像が左上に潰れる」形で出た)
      */
     test('局を変えたら、データ放送を作り直す', async ({ page }) => {
         await goto(page, '/live');
@@ -772,13 +720,11 @@ test.describe('ライブ視聴', () => {
             .poll(() => overlay.getAttribute('data-for'), { message: 'データ放送が前の局のまま' })
             .toContain(second as string);
 
-        // **映像は枠に戻っている** (BML の小窓に入ったままにしない)
-        expect(
-            await page.evaluate(() => {
-                const video = document.querySelector('[data-testid="live-video"]');
-                return video !== null && video.getRootNode() === document;
-            }),
-        ).toBe(true);
+        // **映像は枠に戻っている** (前の局の小窓に寄せたままにしない。偽の放送には小窓が無い)
+        await expect(page.locator('[data-testid="live-video"]').locator('..')).not.toHaveAttribute(
+            'data-bml-window',
+            '',
+        );
     });
 
     /*

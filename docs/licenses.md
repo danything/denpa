@@ -101,7 +101,7 @@ denpa 本体は上と同じコンテナイメージ `denpa` を、Mac の Docker
 
 `package.json` に runtime の `dependencies` は無く、adapter-node が全部を `build/` に
 畳み込みます (イメージにもそれだけを載せる)。**MIT がほとんどで、例外は Apache-2.0 の
-2 つ** (`drizzle-orm` と `crc-32`) **と、ISC の Lucide** (アイコンの形)。
+`drizzle-orm` と、ISC の Lucide** (アイコンの形)。
 
 | 名前 | 何に | 出どころ | ライセンス |
 | --- | --- | --- | --- |
@@ -109,18 +109,14 @@ denpa 本体は上と同じコンテナイメージ `denpa` を、Mac の Docker
 | Blades (Pico CSS を引き継いだもの) / Bits UI | 見た目の土台と、メニューなどの部品 | <https://blades.ninja> / <https://bits-ui.com> | MIT |
 | Floating UI / runed / svelte-toolbelt / tabbable / style-to-object | Bits UI の依存 (浮かせる枠・フォーカス) | 各上流 | MIT |
 | drizzle-orm | SQLite の読み書き (サーバの束) | <https://github.com/drizzle-team/drizzle-orm> | **Apache-2.0** |
-| web-bml (+ 同梱の es2) | **データ放送 (BML) を描く。** 2026-08 に上流がライブラリ化して npm に出したので、写しをやめて普通の依存にした | <https://github.com/otya128/web-bml> / <https://github.com/otya128/es2> | MIT / MIT |
-| crc-32 | web-bml の PNG / DRCS | <https://github.com/SheetJS/js-crc32> | **Apache-2.0** |
-| css (reworkcss、otya128 の fork。依存なし) | web-bml が BML の CSS を解く | <https://github.com/otya128/reworkcss-css> | MIT |
-| fast-xml-parser (+ strnum) | web-bml の BML → XHTML | <https://github.com/NaturalIntelligence/fast-xml-parser> | MIT |
-| arib-mmt-tlv-ts / fflate | web-bml の依存 | npm の各上流 | MIT |
 | Lucide (`@iconify-json/lucide` から、使ったアイコンの `<svg>` だけ) | 画面のアイコン ([player.md](player.md#アイコンは-lucide-を組むときに埋め込みます)) | <https://lucide.dev> | **ISC** |
 | unplugin-icons / @iconify/utils (組むときだけ。束には入らない) | `~icons/*` を Svelte の部品に変える | <https://github.com/unplugin/unplugin-icons> / <https://github.com/iconify/iconify> | MIT |
 | cookie / devalue / esm-env / clsx | SvelteKit のランタイム (adapter-node 6 は静的ファイルの配りも自前で、依存を持たない) | 各上流 | MIT |
 
-**自前のデータ放送エンジン** (`src/lib/bml/`。web-bml と切り替えて試している段階。[stream.md](stream.md#自前のエンジン-srclibbmlweb-bml-と切り替えて試す段階)) は依存を足していない。
+**データ放送のエンジン** (`src/lib/bml/`。[stream.md](stream.md#56-データ放送の統合)) は自前で、依存を持たない。
 規格 (ARIB STD-B24・TR-B14・TR-B15) を元に書き、NVRAM の領域の表・郵便番号の範囲の読み方・
-BinaryTable の検索の比べ方・既定のスタイルなど一部は web-bml (MIT) の振る舞いを読んで合わせた。
+BinaryTable の検索の比べ方・既定のスタイルなど一部は web-bml (otya128、MIT) の振る舞いを読んで合わせた
+(2026-10 まではデータ放送を web-bml で描いていた。いまは依存に入っていない)。
 
 ### ライブを生で見るときにブラウザへ配る復号器
 
@@ -136,9 +132,8 @@ BinaryTable の検索の比べ方・既定のスタイルなど一部は web-bml
 
 ## 使っていないもの (書いておく価値のあるもの)
 
-- **JS-Interpreter (Google, Apache-2.0)** — web-bml の上流はかつてこれで BML の
-  スクリプトを動かしていました。いまは向こうも es2 に置き換えていて、2026-08 に
-  ファイルごと消えています
+- **web-bml (otya128, MIT)** — 2026-10 までデータ放送を描いていた借りもの。自前のエンジン
+  (`src/lib/bml/`) に置き換えて外した (es2・crc-32・css・fast-xml-parser・arib-mmt-tlv-ts・fflate も一緒に抜けた)
 - **@chinachu/aribts / aribb24.js / mpegts.js / hls.js / shaka-player** — 検討したうえで
   自前実装にしたもの ([stream.md](stream.md))
 - **@iconify/svelte / lucide-svelte** — アイコンは組むときに埋め込む unplugin-icons にした

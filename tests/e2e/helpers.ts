@@ -540,8 +540,7 @@ interface HeldMedia {
 }
 
 /**
- * 映像・字幕・枠の要素を掴んでおく (`captionsSeenInDataWindow` が使う)。**d を押す前に呼ぶ** —
- * 出したあとは映像の箱が閉じた影の中へ移り、`getByTestId` でも `querySelector` でも届かない
+ * 映像・字幕・枠の要素を掴んでおく (`captionsSeenInDataWindow` が使う)。d を押す前に呼ぶ
  */
 export async function holdMedia(page: Page, video: string, captions: string, stage: string): Promise<void> {
     await page.evaluate(
@@ -560,17 +559,16 @@ export async function holdMedia(page: Page, video: string, captions: string, sta
 /**
  * **データ放送を出しても字幕が見えているかを、絵で確かめる。**
  *
- * データ放送を出すと、借りものは映像の箱ごと BML の閉じた影の中 (小窓) へ移す。字幕の
+ * データ放送を出すと、映像の箱ごと BML の小窓へ寄せる (`DataBroadcast` の `placeVideo`)。字幕の
  * canvas がその外に居ると、映像だけ小窓へ行き、字幕は枠いっぱいのままデータ放送の面
  * (`z-index: 5`) の下に隠れる (実機で「データ放送を出すと字幕が消える」)。見るのは:
  * - 映像が小窓 (`DATA_WINDOW`) に縮んでいる (流した BML が効いている)
+ * - 映像の箱は影の中へ移さない (その場で寄せる)
  * - 字幕の canvas が映像と同じ箱に居て、小窓の中に収まる。持ち上げ (`translate`) も残っていない
  * - 字幕を目立つ色で塗って画面を撮ると、**小窓の真ん中はその色** (上に何も被っていない)、
  *   小窓の外 (左上) はその色でない (字幕が枠いっぱいに残っていない)
  */
-export async function captionsSeenInDataWindow(page: Page, options: { moved?: boolean } = {}): Promise<void> {
-    // web-bml は映像の箱を影の中へ移す。自前のエンジンは移さず、箱を小窓へ寄せる
-    const moved = options.moved ?? true;
+export async function captionsSeenInDataWindow(page: Page): Promise<void> {
     type Box = { x: number; y: number; width: number; height: number };
     const boxes = () =>
         page.evaluate(() => {
@@ -610,9 +608,7 @@ export async function captionsSeenInDataWindow(page: Page, options: { moved?: bo
         .poll(async () => (await boxes()).translate, { message: '小窓の中で字幕が持ち上げられたまま' })
         .toBe('none');
     const { video, captions, stage, sameBox, inShadow, translate } = await boxes();
-    expect
-        .soft(inShadow, moved ? '映像の箱が BML の影の中に無い' : '映像の箱が影の中へ移されている')
-        .toBe(moved);
+    expect.soft(inShadow, '映像の箱が影の中へ移されている').toBe(false);
     expect.soft(sameBox, '字幕が映像と同じ箱に居ない (小窓へ一緒に行かない)').toBe(true);
     expect.soft(translate, '小窓の中で字幕が持ち上げられたまま').toBe('none');
     // 字幕の面は小窓 (映像の箱) の中に収まる
@@ -670,12 +666,12 @@ export async function captionsSeenInDataWindow(page: Page, options: { moved?: bo
     ).toBeLessThan(0.1);
 }
 
-/** 字幕の canvas を掴んでおく先 (`holdCaptions`)。データ放送の小窓では閉じた影の中に移る */
+/** 字幕の canvas を掴んでおく先 (`holdCaptions`) */
 interface HeldCaptions {
     __captions: HTMLCanvasElement;
 }
 
-/** 字幕の canvas を掴んでおく。**d を押す前に呼ぶ** (`holdMedia` と同じ理由) */
+/** 字幕の canvas を掴んでおく */
 export async function holdCaptions(page: Page, testid: string): Promise<void> {
     await page.evaluate((id) => {
         (window as unknown as HeldCaptions).__captions = document.querySelector(
@@ -690,7 +686,7 @@ export async function holdCaptions(page: Page, testid: string): Promise<void> {
  * 描く画素 (`width`/`height` 属性) と、実際に見えている字幕の面 (`getBoundingClientRect`。
  * 祖先の `transform: scale` 込み。`object-fit: contain` なら収めた中身) × `devicePixelRatio` を
  * 比べる。食い違うと、描いた絵がブラウザに引き伸ばされて字がぼやける — データ放送の小窓の中で
- * 字幕がぼやけていた (BML の面ごと `scale` で伸ばすのに、CSS の大きさで描いていた)。
+ * 字幕がぼやけていた (面ごと `scale` で伸ばしていた頃と、`%` の大きさで端数が出るとき)。
  * `holdCaptions` で掴んでから呼ぶ。描いていない (`data-drawn` が無い) うちは待つ
  */
 export async function expectSharpCaptions(page: Page, where: string): Promise<void> {
@@ -720,7 +716,7 @@ export async function expectSharpCaptions(page: Page, where: string): Promise<vo
         .toBe('ok');
 }
 
-/** 開いた WebSocket を覚えておく (`feedCaption`)。**開く前に呼ぶ** */
+/** 開いた WebSocket を覚えておく (`feedCaption`・`feedData`)。**開く前に呼ぶ** */
 export async function captureSockets(page: Page): Promise<void> {
     await page.addInitScript(() => {
         const seen = window as unknown as { __sockets: WebSocket[] };
@@ -733,6 +729,35 @@ export async function captureSockets(page: Page): Promise<void> {
             }
         };
     });
+}
+
+/**
+ * **データ放送の知らせを流す** (`CHANNEL.data` = 0x30 + 多重化の頭 8 バイト + JSON。時刻は 0)。
+ * `captureSockets` してから開いた画面で、器ができてから呼ぶ (`fakeDataBroadcast` など)
+ */
+export async function feedData(page: Page, messages: Record<string, unknown>[]): Promise<void> {
+    await page.evaluate((messages) => {
+        const socket = (window as unknown as { __sockets: WebSocket[] }).__sockets.at(-1);
+        for (const message of messages) {
+            const body = new TextEncoder().encode(JSON.stringify(message));
+            const data = new Uint8Array(9 + body.length);
+            data[0] = 0x30;
+            data.set(body, 9);
+            socket?.dispatchEvent(new MessageEvent('message', { data: data.buffer }));
+        }
+    }, messages);
+}
+
+/** データ放送の描いたものから探す (エンジンは開いた影に描く)。見つからなければ null */
+export function dataElement(page: Page, selector: string) {
+    return page.evaluate((query) => {
+        for (const host of document.querySelectorAll('[data-testid="live-data"] div')) {
+            const found = host.shadowRoot?.querySelector(query);
+            if (found)
+                return { text: found.textContent, attributes: [...found.attributes].map((a) => a.name) };
+        }
+        return null;
+    }, selector);
 }
 
 /**

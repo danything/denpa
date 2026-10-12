@@ -58,7 +58,7 @@
               │   ブラウザ (SvelteKit client) │
               │  ・MSE 直接        → 映像音声 │
               │  ・canvas に描く   → 字幕     │
-              │  ・web-bml         → データ放送│
+              │  ・自前のエンジン  → データ放送│
               └──────────────────────────────┘
 ```
 
@@ -111,7 +111,7 @@ libaribcaption にやらせ、絵 (PNG) を配っていた。libaribcaption は�
 | --- | --- | --- |
 | エンコード | FFmpeg (設定の「GPU」カードで印があれば、ライブも録画も GPU で焼く — encode.md「GPU で焼く」) | CLI パイプラインで差し替え可能 |
 | 字幕 | 自前 (`ts/b24caption.ts`。libaribcaption の解き手を写したもの) | ffmpeg は `-c:s copy` で写すだけ。解いて置き場所まで決めるのはサーバ、描くのは受け側 ([§2](#字幕はサーバで解いて描くのは受け側)) |
-| データ放送 | otya128/web-bml | BMLブラウザ。描画側だけ借り、解く側は自前 ([§5.6](#56-データ放送の統合)) |
+| データ放送 | 自前 (`src/lib/bml/`。解く側は `ts/bml.ts`) | 2026-10 まで描く側は otya128/web-bml を借りていた ([§5.6](#56-データ放送の統合)) |
 | 再生 | MSE 直接 (借り物なし) | H.264+AAC (既定) / AV1+Opus の fMP4。mediabunny は候補のまま (§8) |
 
 **TS 整形の `tsreadex` は入れかけて外した。** 挟む理由はどれも ffmpeg 単体で足りた
@@ -662,7 +662,7 @@ channel:
   0x20  (空き)       以前の字幕の絵 (PNG)。もう使わない
   0x21  (空き)       以前の「字幕を消す」。もう使わない
   0x22  字幕の文字の配置  JSON (api.md「字幕の文字の配置」)。前の1枚を丸ごと置き換える
-  0x30  データ放送   web-bml の ResponseMessage (JSON)。時刻は 0
+  0x30  データ放送   ResponseMessage (JSON。`ts/bml-protocol.ts`)。時刻は 0
   0x40  制御         ここだけ双方向の JSON (選局・追っかけ・データ放送の指示 / tuned・字幕一覧・時計 等の知らせ)。時刻は 0
 ```
 
@@ -944,16 +944,17 @@ MPEG-2 と無音の AAC）でしか通していません（AAC の復号器だ�
 
 ### 5.6 データ放送の統合
 
-web-bml は Node.js サーバ + ブラウザクライアント構成。**映像は denpa が持つ。**
+**解く側も描く側も自前です。映像は denpa が持つ。**
 
-サイドカーとして起動して iframe で抱えると、**映像を出すプレイヤーが2つ**になる。
-web-bml は Mirakurun / EPGStation / TSファイルを受け取り、自前の ffmpeg で HLS を作って
-自分の `<video>` に映すので、denpa の貯め方も字幕も焼き方の切り替えもその画面では
-使われない。HLS の遅延は数秒で、denpa の 0.6秒 の絵に重ねることもできない。
+2026-10 までは描く側を otya128/web-bml から借りていた。web-bml は Node.js サーバ + ブラウザ
+クライアント構成で、サイドカーとして起動して iframe で抱えると**映像を出すプレイヤーが2つ**になる
+(web-bml は自前の ffmpeg で HLS を作って自分の `<video>` に映すので、denpa の貯め方も字幕も
+焼き方の切り替えもその画面では使われず、0.6秒 の絵に重ねることもできない)。そこで描画側
+(`BMLBrowser`) だけを npm から引いて抱えていたが、映像の入れ物を BML の影の中へ移す・
+`onclick` を本物の属性のまま DOM に入れる・ES の処理系ごと 700KB ある、といった癖への手当てが
+重なったので、自前のエンジン (`src/lib/bml/`) に置き換えて外した。
 
-**借りるのは描画側だけ。解く側と渡す形は自前です。**
-
-一度は解く側 (`server/decode_ts.ts`) も借りたが、998行のうち denpa が通るのは3割 (DSM-CC と PMT の記述子) で、
+web-bml の解く側 (`server/decode_ts.ts`) も一度は借りたが、998行のうち denpa が通るのは3割 (DSM-CC と PMT の記述子) で、
 残りの EIT/SDT/NIT・字幕は自前のものがある (`ts/eit.ts` / `ts/psi.ts` / ffmpeg)。その3割のために
 `@chinachu/aribts` (2.3MB) を抱えるより書き直すほうを選んだ。
 
@@ -977,7 +978,7 @@ TS を直に読むので、psisiarc も要らない。
 ```
 エージェント → denpa ┬→ ffmpeg     → fMP4 → MSE          (映像・音声)
                      ├→ ffmpeg     → mkv  → 解く → canvas (字幕)
-                     └→ BmlDecoder → 組み立て済みモジュール → web-bml の描画側
+                     └→ BmlDecoder → 組み立て済みモジュール → 画面のエンジン (src/lib/bml/)
 ```
 
 ffmpeg は1本のまま、チューナーも1つのまま、遅延も 0.6秒 のまま。
@@ -1015,9 +1016,8 @@ ffmpeg は1本のまま、チューナーも1つのまま、遅延も 0.6秒 の
 - **`pcr` は出さない。** 毎秒50個ほど来るうえ、denpa では映像そのものが時計です
 - **`programInfo` は解く側から出さない。** 借りていた側は EIT/SDT/NIT から
   組み立てていましたが、denpa は自前の番組表から作るほうが正確で安い
-  (`Session.programInfo`)。**これが無いと画面が出ません。** 描く側は入口の BML を
-  開く前に `getProgramInfoAsync()` で待つので、モジュールが全部揃っていても
-  待ち続けます (実機で踏みました)。
+  (`Session.programInfo`)。描く側は局の番号をこれで知ります (`arib-dc://` の名前を解く・
+  NVRAM を局ごとに分ける)。
   中継の番号 (`transportStreamId`) だけは、絞るときに読む PAT の頭から拾います
   (`ServiceFilter`)。テレ朝の TVerリンクは `browser.getProgramID(4)` でこれを取り、
   TVer のサーバへ機器の識別子と並べて送ります。`null` のままだと文字の "null" が
@@ -1029,80 +1029,47 @@ ffmpeg は1本のまま、チューナーも1つのまま、遅延も 0.6秒 の
   諦めて映像は流し続けます。投げ返すと TS を送り込んでいるところごと落ち、
   映像まで出なくなります (作りものの放送で実際に落ちました)
 
-### 描画側をどう抱えるか
+### 描く側 (`src/lib/bml/`)
 
-**繋ぎ口はぴったり合っている。** `client/bml_browser.ts` の `BMLBrowser` は、
-denpa が作る `ResponseMessage` をそのまま食べる:
+**denpa が作る `ResponseMessage` をそのまま食べる。** Svelte から切り離してあり、画面の器は
+[DataBroadcast.svelte](../src/lib/components/player/DataBroadcast.svelte) が持つ:
 
 ```ts
-const browser = new BMLBrowser({
-    containerElement,        // BML を描く場所
-    mediaElement,            // 映像が居る入れ物。**denpa の <video> をそのまま渡す**
-    videoPlaneModeEnabled,   // BML が指す位置に映像を置き直すか
-});
-browser.emitMessage(msg);    // ← ts/bml.ts が吐くものをそのまま
-browser.destroy();
+const bml = createBml({ root, fonts, ip, store, receiver, clock, onVideoRect, onVisible, onReceiving, onLoad });
+bml.feed(message);        // ← ts/bml.ts が吐くものをそのまま
+bml.key(code, down);      // AribKeyCode (20 が d)
+bml.listens('DataButtonPressed');
+bml.destroy();
 ```
 
-**映像は渡すだけ。** 向こうの `VideoPlayer` (`client/player/*.ts`) は単体ページが hls.js / mpegts.js で自前再生
-するためのもので、`BMLBrowser` は受け取らない。描く側を書き直す道は無い (ES2 の処理系まで抱えることになる)。
-
-#### 持ち込み方 — npm の `web-bml`
-
-**普通の依存として npm から引く** (2026-08 に上流がライブラリ化)。使うのは画面側の入口 (`.`) だけで、
-サーバ側からは引かない (multipart の解体と渡す形の型は自前にした)。`emitMessage(msg)` には自前の
-`ResponseMessage` をそのまま渡せる (向こうの型の部分集合なので、食い違えば型検査が止める)。
-引く依存は5つで追従は Renovate 任せ、koa・react・hls.js・mpegts.js は `BMLBrowser` の木に入らない。
-それまでは 46ファイル・1.2MB を `src/lib/vendor/` に写していた (当時は `exports` が無かった)。移しても束は増えていない。
-
-#### 入れたあと
+依存は持たない。
 
 | | |
 | --- | --- |
-| 束 | 700KB (gzip 前)。押すまで落ちてこない (`import()` で分けてある。どのみちカルーセルの一周を待つので、そこに紛れる) |
-| フォント | 字幕と同じ Denpa Font (danything/denpa-font)。BML が要る等幅・丸ゴシック・ARIB外字を1本で満たす (借りている側の Kosugi 4.4MB は外字を持たない)。イメージにはリリースの woff2 を置き、`/api/font/denpa-font.woff2` で配る |
-| 覚えるもの | NVRAM は端末の localStorage。`denpa_bml_denpa_nvram_` で他と混ざらないようにしてある |
-| 郵便番号 | 設定画面から入れて、器を作る前に NVRAM へ写す (`nvram://receiverinfo/zipcode`)。放送はこれで天気・地域のニュース・防災情報の場所を決め、入れないと「郵便番号が正しく設定されていません」と出る。家の場所は端末で変わらないので、置き場はサーバ |
-| リモコン | 十字・決定・戻る・数字・色・d をそのまま渡す (`keyCodeToAribKey`)。指で押すぶんは自前 (`components/player/Remote.svelte`: 色・十字・決定・戻る・d・数字) で、右の列に置く。放送の画面は枠を下まで塗り潰すので、映像に重ねると埋もれる |
+| 映像 | **動かさない。** object の場所を教えてもらい (`onVideoRect`)、映像の入れ物を style でそこへ寄せる (`placeVideo`)。字幕の canvas は入れ物の中なので一緒に縮む。映像より前に描くものの背景には穴を開ける |
+| 文書 | 自前の寛容な XML の読み手 → 16 の要素の木 → 開いた影の中の絶対配置の div。**innerHTML も属性の写しも無い** (字は textContent、見た目は確かめた値を `element.style` に書くだけ。CSP の `style-src` にも頼らない) |
+| CSS | 自前で重ね合わせ (単純セレクタ・詳細度・継承・:focus/:active)、確かめた値だけ書く |
+| スクリプト | 自前の VM (`vm.ts`)。eval を使わず、CSP の下でそのまま動く。sleep で止まる・launchDocument で打ち切る |
+| 字 | TextDecoder (EUC-JP) と、追加記号は b24-tables。DRCS は 1 字を CSS の mask に |
+| 内蔵音 | WebAudio で合成 |
+| 束 | 押すまで落ちてこない (`import()` で分けてある。どのみちカルーセルの一周を待つので、そこに紛れる) |
+| フォント | 丸ゴシックは字幕と同じ Denpa Font (danything/denpa-font)。BML が要る等幅・丸ゴシック・ARIB外字を1本で満たす。イメージにはリリースの woff2 を置き、`/api/font/denpa-font.woff2` で配る。角ゴシックは端末のもの |
+| 覚えるもの | NVRAM は端末の localStorage。`denpa_bml_own_` で他と混ざらないようにしてある (web-bml の頃の `denpa_bml_denpa_nvram_…` は読まない。古い端末に残っていても害は無い) |
+| 郵便番号 | 設定画面から入れて、受信機の設定としてエンジンに渡す (`nvram://receiverinfo/zipcode`)。放送はこれで天気・地域のニュース・防災情報の場所を決め、入れないと「郵便番号が正しく設定されていません」と出る。家の場所は端末で変わらないので、置き場はサーバ。都道府県 (`receiverinfo/prefecture`) は持たず 255 (未設定) を返す |
+| リモコン | 十字・決定・戻る・数字・色・d をそのまま渡す (`aribKey`)。指で押すぶんは自前 (`components/player/Remote.svelte`: 色・十字・決定・戻る・d・数字) で、右の列に置く。放送の画面は枠を下まで塗り潰すので、映像に重ねると埋もれる |
 | d ボタン | **テレビと同じ振る舞い。** 出す操作を文書への d の1押しとしても届け (`knock`。日テレ・テレ朝・フジの待機ページはこれでメニューを開く)、返事が無ければ 2.5秒おきに押し直す (TOKYO MX の入口は最初の2秒に受けた d を捨てる)。開いたメニューを閉じてしまう局があるので、押すのは3回まで。出ている間の d は、文書が聞いていれば渡し、聞いていなければ器を閉じる (`pressD`)。右の縦列の d ボタンは放送に渡さず、その場で畳む逃げ道 |
 
-**映像の入れ物は、描く場所の親にしてはいけない。** 借りている側は BML の文書を
-組むときに `mediaElement` を動かすので、その中に `containerElement` が居ると
-`appendChild ... contains the parent` で転ぶ。denpa では映像だけを
-`<div>` に入れ、データ放送はその兄弟に置いている。
+**描く場所は毎回作り直す。** エンジンは渡された要素に影 (`attachShadow`) を張る。影は外せないので、
+同じ要素を渡し直すと2度目で転び、消して出し直すと出なくなる。
 
-**描く場所は毎回作り直す。** 借りている側は渡された要素に閉じた影
-(`attachShadow({ mode: "closed" })`) を張る。影は外せないので、同じ要素を
-渡し直すと2度目で転び、消して出し直すと出なくなる。
+**出すまでは透明にしておく** (`opacity`)。入口の文書はほぼ白紙のまま自分で `invisible` を外して
+くるので、本体が揃う (データ取得中が下りる) まで映像のままにする。`visibility` では隠せない —
+エンジンは描く要素ごとに BML の `visibility` を写すので、子の visible が親の hidden を打ち消す。
 
-閉じた影は外から中身が見えないので、切り分けのためだけに
-`data-showing` / `data-receiving` / `data-handed` を外へ出してある
-(ここに1日使った)。
+切り分けのために `data-showing` / `data-receiving` / `data-handed` を外へ出してある
+(「押しても何も出ない」が、届いていないのか描かれないのかを外から見分けるため。ここに1日使った)。
 
-##### 借りものが持っていないぶん
-
-**`BMLBrowser` は画面の器を持っていない。** 向こうの単体ページがやっていたこと（d を渡す・映像を戻す・枠に
-合わせる・映像の入れ物を style で書く・データ取得中を出す・郵便番号を渡す）はこちらでやる。どれも抜けると
-「押しても何も出ない」形で壊れる（実機で全部踏んだ）。中身は
-[DataBroadcast.svelte](../src/lib/components/player/DataBroadcast.svelte) の頭の1箇所だけに置く（両方に書いていた頃、片方だけ古くなった）。
-
-**局を変えたら作り直す。** 借りている側は一度に一つの放送しか持てず
-(カルーセルも覚えるものも局ごと)、前の局の文書が映像を掴んだままになる。
-
-#### 自前のエンジン (`src/lib/bml/`。web-bml と切り替えて試す段階)
-
-web-bml を置き換える自前のエンジンを並べて動かせるようにしてある。**既定はまだ web-bml** で、
-`?bml=own` を付けて開くと自前になり、端末に覚える (`?bml=web-bml` で戻す。`DataBroadcast.svelte` の
-`useOwn`)。依存は足していない。
-
-| | web-bml | 自前 |
-| --- | --- | --- |
-| 映像 | 映像の入れ物を BML の object の**中へ移す** | **動かさない。** object の場所を教えてもらい、入れ物を style でそこへ寄せる (`placeOwn`)。字幕の canvas は入れ物の中なので一緒に縮む。映像より前に描くものの背景には穴を開ける |
-| 文書 | fast-xml-parser → XHTML を innerHTML、属性もそのまま (on* も) | 自前の寛容な XML の読み手 → 16 の要素の木 → 影の中の絶対配置の div。**innerHTML も属性の写しも無い** (字は textContent、見た目は確かめた値の style だけ) |
-| CSS | ブラウザの CSS に書き換えて渡す | 自前で重ね合わせ (単純セレクタ・詳細度・継承・:focus/:active)、確かめた値だけ書く |
-| スクリプト | es2 (JS で書いた ES の処理系) | 自前の VM (`vm.ts`)。eval を使わず、CSP の下でそのまま動く。sleep で止まる・launchDocument で打ち切る |
-| 字 | 内蔵の JIS の表 | TextDecoder (EUC-JP) と、追加記号は b24-tables。DRCS は 1 字を CSS の mask に |
-| 内蔵音 | 出所の分からない MP3 を同梱 | WebAudio で合成 |
+**局を変えたら作り直す。** カルーセルも覚えるものも局ごとなので、前の局の文書を残さない。
 
 **文字は EUC-JP の符号として扱う** (`charCodeAt`・`fromCharCode`・大小)。9 局 16 本の調査で、
 TBS・テレ東が `String.fromCharCode(0xA1A1〜)` を、MX が `charCodeAt` を EUC の範囲と比べる形を
@@ -1116,12 +1083,13 @@ TBS・テレ東が `String.fromCharCode(0xA1A1〜)` を、MX が `charCodeAt` �
 マイクロタスクで入り直すたびに始め直していたので効かなかった)。
 
 `browser.*` は放送が呼ぶ 53 種を全部持ち、動かせないもの (AIT・Hybridcast の起動・予約・
-PPP・外のアプリ・選局) は規格どおり失敗 (NaN / null / 0) を返す。郵便番号は NVRAM に書かず、
+PPP・外のアプリ) は規格どおり失敗 (NaN / null / 0) を返す。選局 (`epgTune`) は画面に頼む
+(ライブは局の一覧から探して切り替え、録画は失敗を返して「録画の再生中は選局できません」と知らせる)。郵便番号は NVRAM に書かず、
 受信機の設定として渡す (`receiverinfo/zipcode`)。録画では再生位置から放送の時刻を出して渡す
 (`clock`)。
 
 まだ無いもの: NPT (PCR を送っていないので、時刻指定のイベントメッセージと NPT の TimerFired は
-起きない)・MNG の動く絵・通信コンテンツへの移動 (http の文書)・選局 (`epgTune`)。
+起きない)・通信コンテンツへの移動 (http の文書)。
 
 ### 5.7 双方向（通信系コンテンツ）プロキシ
 
@@ -1142,7 +1110,7 @@ PPP・外のアプリ・選局) は規格どおり失敗 (NaN / null / 0) を返
 
 **放送のアプリは `isIPConnected` の申告を信じない。** NHK は送る口へ一度投げてみて、
 返らなければ「インターネットに接続されていません」と案内する (実機で確認。
-`confirmIPNetwork` は呼びに来もしない)。渡さないと借りものは「その機能は無い」と
+`confirmIPNetwork` は呼びに来もしない)。渡さないと描く側は「その機能は無い」と
 答えるので、双方向を入れていても入っていないのと同じ画面になっていた。
 
 **既定オフ。** 設定画面の「データ放送の双方向」を入れるまで、この口は 403 を返し、
@@ -1162,7 +1130,7 @@ PPP・外のアプリ・選局) は規格どおり失敗 (NaN / null / 0) を返
 
 | | |
 | --- | --- |
-| 手 | GET と POST。中身は組み立てない。借りものが `Denbun=…` まで作って渡してくるので、`application/x-www-form-urlencoded` として素通しし、返りも解かずに返す |
+| 手 | GET と POST。中身は組み立てない。描く側が `Denbun=…` まで作って渡してくるので、`application/x-www-form-urlencoded` として素通しし、返りも解かずに返す |
 | 相手 | **公開アドレスのみ**。私設・ループバック・リンクローカル (雲のメタデータ)・CGNAT・多重放送は断る |
 | 仕組み | http と https。`file:` などへ逃がす道は塞ぐ |
 | 見方 | 名前ではなく引いた先で見る。`localhost` の別名や、内側を指す公開の名前は綴りでは見分けられない。名前は `BML_DNS` で引く。家庭の DNS フィルタが局のドメインを 0.0.0.0 に落とすと、上の防御が正しく断ってしまう（[app.md](app.md#環境変数)） |
@@ -1176,7 +1144,7 @@ PPP・外のアプリ・選局) は規格どおり失敗 (NaN / null / 0) を返
 | 種別 | 可否 |
 | --- | --- |
 | dボタン、ページ遷移、地域選択、クイズ選択肢 | ○ 受信機内で完結するため動作 |
-| NVRAM への保存・読み出し | ○ web-bml に実装あり |
+| NVRAM への保存・読み出し | ○ 端末の localStorage (`src/lib/bml/nvram.ts`) |
 | 通信系コンテンツの取得（HTTP GET） | ○ 中継口経由 (既定は切) |
 | 応募・投票などのデータ送信（HTTP POST） | ○ 中継口経由 (既定は切)。繋がっているかの判定もここを通る |
 
@@ -1219,8 +1187,8 @@ AIT ─ transport_protocol_descriptor        (URL の頭)
 
 #### できないものを、できる顔で出さない
 
-借りている BML ブラウザは `AITControlledApp.Start` に 0 (できない) と
-答えます。実機の NHK はこれを聞きに来て、その答えでデータ放送側の
+データ放送のエンジンは `getBrowserSupport` の `AITControlledApp` 系に 0 (できない) と
+答えます (`src/lib/bml/browser.ts`)。実機の NHK はこれを聞きに来て、その答えでデータ放送側の
 「Hybridcast」ボタンを死なせています。**ここを 1 にしてはいけません。**
 BML が起動を頼んできて、そのまま返らなくなります。
 
@@ -1287,7 +1255,7 @@ FFmpeg は PR、GStreamer は WIP 段階で、ブラウザ側のデマクサも�
 | --- | --- | --- |
 | Safari の AV1 | Opus in mp4 / AV1 が MSE で通らない | 既定の H.264 + AAC で観る (AV1 は画質メニューで選ぶもの) |
 | 字幕の拡大 | 絵なので、拡大すると文字も引き伸ばされる | `-canvas_size` は 1920x1080 で固定し、受け側が映像の枠に合わせて伸ばす（放送が 1440x1080 でも表示は 16:9 なので辻褄が合う） |
-| web-bml の実装範囲 | STD-B24 / TR-B14 / TR-B15 の部分実装。一部イベント・API 未実装 | 実際のチャンネルで動作確認。完全互換は期待しない |
+| データ放送のエンジンの実装範囲 | STD-B24 / TR-B14 / TR-B15 の部分実装 ([§5.6](#56-データ放送の統合) の「まだ無いもの」) | 実際のチャンネルで動作確認。完全互換は期待しない |
 | 規約面 | 通信系サーバへの非受信機アクセス | 個人の視聴環境の範囲に留める |
 
 リスクとして挙げていて解決済みになったものは、それぞれの節に実測ごと畳んである。
@@ -1300,7 +1268,7 @@ AV1 の負荷は [§5.1](#51-エンコード)、字幕を焼く費用は [§5.2]
 
 | リポジトリ | 用途 |
 | --- | --- |
-| otya128/web-bml | データ放送 |
+| otya128/web-bml | データ放送 (2026-10 まで描く側を借りていた。自前のエンジンの振る舞いの手本) |
 | xqq/libaribcaption | 字幕の解き方と表の写し元（`ts/b24caption.ts`・`ts/b24-tables.ts`。ffmpeg には組み込まない） |
 | Vanilagy/mediabunny | WebCodecs 移行時のデマクサ |
 | kixelated/moq | 低遅延化の候補 |
