@@ -459,7 +459,7 @@ export async function captionsClearOfBar(page: Page, canvas: string, bar: string
  * 位置) に映し、まわりを青で塗る。実際の局の画面と同じく、小窓の外は面に塞がれる。
  *
  * 作りものの放送にはデータ放送が載っていないので、出したときの見え方 (字幕が映像と一緒に
- * 小窓へ縮むか) はこれを流して確かめる。中身は web-bml の `ResponseMessage` そのまま
+ * 小窓へ縮むか) はこれを流して確かめる。中身は `ResponseMessage` (`src/lib/ts/bml-protocol.ts`) そのまま
  * (ライブは WebSocket の 0x30、録画はサイドカーの `.bml.jsonl` で渡す)。
  *
  * `extra` は `<body>` の終わりに足す BML (放送が書くものを試すとき。tests/e2e/35-csp.spec.ts)

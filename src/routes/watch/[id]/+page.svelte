@@ -1,6 +1,5 @@
 <script lang="ts">
     import { onMount } from 'svelte';
-    import type { ResponseMessage } from 'web-bml/protocol';
     import { submitting } from '#lib/actions.js';
     import { arming } from '#lib/arming.svelte.js';
     import { CAPTION_TEXT_VERSION, type CaptionPage, type CaptionPages } from '#lib/caption-text.js';
@@ -57,6 +56,7 @@
     import type { OfflineVideo } from '#lib/offline-db.js';
     import { type RemuxPlayer, remuxPlayer } from '#lib/remux-player.js';
     import { keepResume } from '#lib/resume.js';
+    import type { ResponseMessage } from '#lib/ts/bml-protocol.js';
     import { type Cue, showing as captionShowing, currentCue } from '#lib/ts/captions.js';
     import { feedFor, type PlacedMessage, replayAt } from '#lib/ts/data-timeline.js';
     import { pickMediaSource } from '#lib/ts/media-source.js';

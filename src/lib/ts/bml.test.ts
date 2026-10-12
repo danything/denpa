@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { deflateSync } from 'node:zlib';
-import type { ResponseMessage } from 'web-bml/protocol';
 import { BmlDecoder, inflate, moduleFiles, parseBxmlInfo } from './bml';
+import type { ResponseMessage } from './bml-protocol';
 import type { DiiModuleSpec } from './synth';
 import {
     BML_TS,

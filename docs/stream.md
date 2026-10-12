@@ -927,7 +927,7 @@ web-bml は Mirakurun / EPGStation / TSファイルを受け取り、自前の f
 自分の `<video>` に映すので、denpa の貯め方も字幕も焼き方の切り替えもその画面では
 使われない。HLS の遅延は数秒で、denpa の 0.6秒 の絵に重ねることもできない。
 
-**借りるのは描画側と、渡す形の取り決めだけ。解く側は自前です。**
+**借りるのは描画側だけ。解く側と渡す形は自前です。**
 
 一度は解く側 (`server/decode_ts.ts`) も借りたが、998行のうち denpa が通るのは3割 (DSM-CC と PMT の記述子) で、
 残りの EIT/SDT/NIT・字幕は自前のものがある (`ts/eit.ts` / `ts/psi.ts` / ffmpeg)。その3割のために
@@ -937,8 +937,9 @@ web-bml は Mirakurun / EPGStation / TSファイルを受け取り、自前の f
 (`ts/logo-dsmcc.ts`、DII を読んで DDB を揃える)。共通のところを `ts/dsmcc.ts` に
 括り出し、データ放送の読み方だけを `ts/bml.ts` に足した。
 
-渡す形は借りたまま (`web-bml/protocol` の `ResponseMessage`)。描画側との契約なので、
-自前で詰めても**食い違えば型検査が止めてくれます**:
+渡す形 (`ResponseMessage`) は web-bml の取り決めを写して `ts/bml-protocol.ts` に置いた。
+録画の隣の `.bml.jsonl` がこの形で残るので、**名前と意味は変えない** (足すのはよい)。
+モジュールの中身 (multipart) を切るのも自前 (`ts/multipart.ts`):
 
 | 型 | 中身 |
 | --- | --- |
@@ -1024,9 +1025,9 @@ browser.destroy();
 
 #### 持ち込み方 — npm の `web-bml`
 
-**普通の依存として npm から引く** (2026-08 に上流がライブラリ化)。`exports` に denpa の使う入口
-(`.` / `./entity-parser` / `./protocol`) が揃い、`dist` の `.d.ts` で型が最後まで通る。
-`emitMessage(msg: ResponseMessage)` の食い違いを型検査で止められることが、解く側を自前にした意味そのもの。
+**普通の依存として npm から引く** (2026-08 に上流がライブラリ化)。使うのは画面側の入口 (`.`) だけで、
+サーバ側からは引かない (multipart の解体と渡す形の型は自前にした)。`emitMessage(msg)` には自前の
+`ResponseMessage` をそのまま渡せる (向こうの型の部分集合なので、食い違えば型検査が止める)。
 引く依存は5つで追従は Renovate 任せ、koa・react・hls.js・mpegts.js は `BMLBrowser` の木に入らない。
 それまでは 46ファイル・1.2MB を `src/lib/vendor/` に写していた (当時は `exports` が無かった)。移しても束は増えていない。
 
