@@ -489,6 +489,44 @@ export function savePrograms(events: EitEvent[]): number {
     return count;
 }
 
+/**
+ * **放送が言う「いま」と「次」(EIT[p/f]) を番組表に写す。** ライブで開いている局のぶん
+ * (`server/live.ts`)。
+ *
+ * 番組表は集めた時点の予定なので、**延長・繰り下げがあると、画面がいまの番組を取り違える**
+ * (予定の終わりで次の番組に変わってしまう・延びたぶんが出ない)。ライブで開いている TS には
+ * p/f が流れているので、写せば放送どおりになる。録画が延長に追従するのと同じ元 (`recorder.ts`)。
+ * 延びて重なった後ろの番組は `savePrograms` が消す (局の送り直しで戻ってくる)。
+ *
+ * **番組表と違うときだけ書いて知らせる** (`programs`)。p/f は数秒おきに来るが、番組表と
+ * 食い違うのは延長・繰り下げ・差し替えのときだけ。知らせを受けた画面 (ライブの一覧・
+ * テレビのアプリ) が読み直す
+ *
+ * @returns 書いたか
+ */
+export function followOnAir(events: readonly EitEvent[]): boolean {
+    const differs = events.some((event) => {
+        // 時刻や尺が未定の番組は写せない (`savePrograms` も捨てる)
+        if (event.startAt === null || event.duration === null || event.duration === 0) return false;
+        const row = orm()
+            .select({ start_at: programs.start_at, end_at: programs.end_at, name: programs.name })
+            .from(programs)
+            .where(eq(programs.id, programKey(event.originalNetworkId, event.serviceId, event.eventId)))
+            .get();
+        return (
+            row === undefined ||
+            row.start_at !== event.startAt ||
+            row.end_at !== event.startAt + event.duration ||
+            // 題名の無い回は、入っている題名を消さない (`savePrograms`)。違うとも言わない
+            (event.name !== '' && row.name !== event.name)
+        );
+    });
+    // 知らない局 (チャンネル設定に無い) のぶんは書かれない。書けなければ知らせない
+    if (!differs || savePrograms([...events]) === 0) return false;
+    emit('programs');
+    return true;
+}
+
 /** 列の畳み方で DB に渡す形にする。null は null のまま (drizzle がふだん通す形と同じ) */
 function encoded<T>(column: { mapToDriverValue(value: T): unknown }, value: T | null): unknown {
     return value === null ? null : column.mapToDriverValue(value);

@@ -719,3 +719,65 @@ export class EpgReader {
         return out;
     }
 }
+
+/**
+ * **1局の「いま」と「次」(EIT[p/f]) を追う。** ライブで番組の切り替わりを知るのに使う。
+ *
+ * 番組表 (schedule) は数日先までの予定で、**延長や繰り下げには追いつかない**
+ * (局が送り直してくるのは後になってから)。p/f は放送そのものに追従していて、
+ * 野球が延びれば「いま」の尺が延び、終われば「次」が「いま」に繰り上がる。
+ *
+ * section 0 が「いま」、section 1 が「次」と決まっている (`EpgReader.onAir` と同じ)。
+ *
+ * **中身で比べる。** 書き換われば version が上がるはずだが、上げずに中身だけ替える
+ * 送り手を当てにしないよう、番組の番号・時刻・尺・題名で比べる。p/f は1局ぶん数百バイトが
+ * 数秒おきに来るだけなので、毎回読んでも軽い
+ */
+export class PresentFollowing {
+    private readonly sections = new SectionAssembler(PID_EIT);
+    /** section 0 (いま) と 1 (次) で最後に読んだ番組。来ていなければ null */
+    private readonly held: [EitEvent | null, EitEvent | null] = [null, null];
+    /** 中身の印 (`mark`)。同じものが繰り返し来ても変わったと言わない */
+    private readonly marks: [string | null, string | null] = [null, null];
+
+    /** @param serviceId 追う局 (放送が名乗っている service_id) */
+    constructor(private readonly serviceId: number) {}
+
+    /** いま流れている番組。まだ来ていない・放送が空けているなら null */
+    get present(): EitEvent | null {
+        return this.held[0];
+    }
+
+    /** 次の番組 */
+    get following(): EitEvent | null {
+        return this.held[1];
+    }
+
+    /**
+     * 188 バイトのパケットを1つ。**いまか次のどちらかが変わったら true**。
+     * 最初に読めたときも true (知らなかったものが分かった)
+     */
+    feedPacket(packet: Uint8Array): boolean {
+        let changed = false;
+        for (const raw of this.sections.feed(packet)) {
+            // 番組表 (schedule) と他局の p/f は読まずに捨てる。同じ PID に流れてくる
+            if (raw[0] !== TABLE_PF_ACTUAL || raw.length < 18) continue;
+            if (((raw[3]! << 8) | raw[4]!) !== this.serviceId) continue;
+            const section = parseEit(raw);
+            if (section === null || section.sectionNumber > 1) continue;
+            const slot = section.sectionNumber as 0 | 1;
+            const event = section.events[0] ?? null;
+            const mark = event === null ? '' : markOf(event);
+            if (this.marks[slot] === mark) continue;
+            this.marks[slot] = mark;
+            this.held[slot] = event;
+            changed = true;
+        }
+        return changed;
+    }
+}
+
+/** 変わったかどうかを見る中身。**時刻と題名だけ** — 番組表に写して画面に出るもの */
+function markOf(event: EitEvent): string {
+    return `${event.eventId}:${event.startAt}:${event.duration}:${event.name}`;
+}

@@ -1,6 +1,6 @@
 import { existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import type { Locator } from '@playwright/test';
-import { BS_NO_LOGO, SERVICES } from '../fake/services';
+import { BS_NO_LOGO, BS11, MX, SERVICES } from '../fake/services';
 import {
     airing,
     CAPTION_SCREENS,
@@ -1640,3 +1640,66 @@ test.describe('スマホの横でライブ', () => {
         await expect(stage).toBeInViewport({ ratio: 0.9 });
     });
 });
+
+/**
+ * **観ている間に番組が替わったら、出ている番組も替わる。** 開いた時点の番組のまま残っていた
+ * (次の番組が始まっても操作列の番組名・時間帯と一覧の番組名が前のまま)。
+ *
+ * - 予定どおりの切り替わり … いちばん早く終わる番組の終わりで読み直す
+ * - 延長・繰り下げ … サーバが観ている局の EIT[p/f] を読んで番組表に写し、知らせてくる
+ */
+test.describe('ライブで番組が替わる', () => {
+    test.beforeEach(async ({ request }) => {
+        await syncEpg(request);
+    });
+    test.afterEach(async ({ request, stack }) => {
+        await request.post(`${stack.agentUrl}/__control/extend?ms=0`);
+    });
+
+    test('次の番組が始まると、操作列と一覧の番組名が替わる', async ({ page }) => {
+        await goto(page, `/live?service=${BS11.id}`);
+        const title = page.getByTestId('live-title');
+        await expect(title).toBeVisible();
+        const before = (await title.textContent()) ?? '';
+
+        // BS11 は 5秒ごとに番組が替わる (tests/fake/services.ts)
+        await expect(title).not.toHaveText(before, { timeout: 20_000 });
+        // 一覧の行も同じ番組を出す。次の切り替わりと競らないよう、同じ瞬間に読み比べる
+        const row = page.locator(`[data-testid="live-channel"][data-service="${BS11.id}"]`);
+        await expect
+            .poll(async () => {
+                const now = (await title.textContent()) ?? '';
+                return now !== '' && ((await row.textContent()) ?? '').includes(now);
+            })
+            .toBe(true);
+    });
+
+    test('放送が延びたら、終わりの時刻も延びる。戻れば戻る', async ({ page, request, stack }) => {
+        test.setTimeout(180_000);
+        // MX は 30分枠 (:00 と :30 で替わる)。替わり目の直前なら、替わってから始める
+        const slot = 30 * 60_000;
+        const left = slot - (Date.now() % slot);
+        if (left < 60_000) await page.waitForTimeout(left + 3_000);
+
+        await goto(page, `/live?service=${MX.id}`);
+        const range = page.getByTestId('live-range');
+        await expect(range).toBeVisible();
+        const before = ((await range.textContent()) ?? '').trim();
+        const [start, end] = before.split('〜').map((part) => part.trim());
+
+        // 放送が10分押した。サーバが p/f を読んで番組表を直し、画面に読み直させる
+        await request.post(`${stack.agentUrl}/__control/extend?ms=${10 * 60_000}`);
+        await expect(range).toHaveText(`${start} 〜 ${later(end ?? '', 10)}`);
+
+        // 戻せば元の時刻に戻る
+        await request.post(`${stack.agentUrl}/__control/extend?ms=0`);
+        await expect(range).toHaveText(before);
+    });
+});
+
+/** "HH:MM" の minutes 分あと */
+function later(clock: string, minutes: number): string {
+    const [hours, mins] = clock.split(':').map(Number);
+    const total = ((hours ?? 0) * 60 + (mins ?? 0) + minutes) % (24 * 60);
+    return `${String(Math.floor(total / 60)).padStart(2, '0')}:${String(total % 60).padStart(2, '0')}`;
+}

@@ -320,6 +320,8 @@ data: {"recordingId":12,"percent":0.425,"etaMs":600000,"log":"…"}
 ```
 
 - 名前: `recordings` `services` `programs` `tuners` `encode` ほか (画面向けのもの)。知らない名前は読み捨ててください
+- `programs` は番組表を集めたときのほか、**ライブで開いている局の番組が放送で替わった・延びた**ときにも来ます
+  (EIT[p/f] が番組表と違ったとき)。局の一覧 (`GET /api/services`) の `now` を読み直せば、いまの番組に追いつきます
 - `data` は `encode` と `yielded` だけが中身を運び、ほかは `1`。`encode` は `recordingId` `percent` `etaMs` `log`。`percent` は 0〜1 (名前に反して百分率ではない)。`etaMs` は見積もれなければ `null`
 - `yielded` は**ライブがチューナーを録画に譲った** (蹴られた) ことの知らせ。`serviceId` の局を観ていた人だけが読みます。
   譲った録画が分かったときだけ来ます

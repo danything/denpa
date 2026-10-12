@@ -1,5 +1,12 @@
 import { describe, expect, test } from 'bun:test';
-import { EpgReader, parseBcdDuration, parseEit, parseMjdTime, ScheduleProgress } from './eit';
+import {
+    EpgReader,
+    parseBcdDuration,
+    parseEit,
+    parseMjdTime,
+    PresentFollowing,
+    ScheduleProgress,
+} from './eit';
 import { eitSection, packetize, type SynthEvent } from './synth';
 
 const NETWORK = 32736;
@@ -540,5 +547,68 @@ describe('EpgReader', () => {
             ),
         );
         expect(reader.present.has(SERVICE)).toBe(false);
+    });
+});
+
+describe('PresentFollowing', () => {
+    /** p/f の1節を 188 バイトずつ食わせる。どれかで変わったと言えば true */
+    function feed(
+        reader: PresentFollowing,
+        events: SynthEvent[],
+        options: Record<string, number> = {},
+    ): boolean {
+        const data = packetize(0x0012, section(events, { tableId: 0x4e, ...options }));
+        let changed = false;
+        for (let at = 0; at < data.length; at += 188) {
+            if (reader.feedPacket(data.subarray(at, at + 188))) changed = true;
+        }
+        return changed;
+    }
+
+    test('いまと次を節の番号で分けて読む', () => {
+        const reader = new PresentFollowing(SERVICE);
+        expect(feed(reader, [event({ runningStatus: 4 })])).toBe(true);
+        const next = event({ eventId: 2, name: '次の番組', startAt: NOON + 30 * 60_000 });
+        expect(feed(reader, [next], { sectionNumber: 1 })).toBe(true);
+        expect(reader.present?.name).toBe('テスト番組');
+        expect(reader.following?.name).toBe('次の番組');
+    });
+
+    test('同じものが繰り返し来ても、変わったとは言わない', () => {
+        const reader = new PresentFollowing(SERVICE);
+        feed(reader, [event()]);
+        expect(feed(reader, [event()])).toBe(false);
+    });
+
+    /*
+     * 延長は version を上げて送り直してくるはずだが、**中身で比べる**。
+     * 上げない送り手でも取りこぼさない
+     */
+    test('延びたら (尺が変わったら) 変わったと言う。版が同じでも', () => {
+        const reader = new PresentFollowing(SERVICE);
+        feed(reader, [event()]);
+        expect(feed(reader, [event({ duration: 40 * 60_000 })])).toBe(true);
+        expect(reader.present?.duration).toBe(40 * 60_000);
+    });
+
+    test('番組が繰り上がったら変わったと言う', () => {
+        const reader = new PresentFollowing(SERVICE);
+        feed(reader, [event()]);
+        expect(feed(reader, [event({ eventId: 2, name: '次の番組', startAt: NOON + 30 * 60_000 })])).toBe(true);
+        expect(reader.present?.eventId).toBe(2);
+    });
+
+    test('放送が「いま」を空けたら null', () => {
+        const reader = new PresentFollowing(SERVICE);
+        feed(reader, [event()]);
+        expect(feed(reader, [])).toBe(true);
+        expect(reader.present).toBeNull();
+    });
+
+    test('ほかの局の p/f と番組表 (schedule) は読まない', () => {
+        const reader = new PresentFollowing(SERVICE);
+        expect(feed(reader, [event()], { serviceId: SERVICE + 1 })).toBe(false);
+        expect(feed(reader, [event()], { tableId: 0x50 })).toBe(false);
+        expect(reader.present).toBeNull();
     });
 });

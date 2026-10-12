@@ -24,6 +24,7 @@ import { type Audio, type AudioTrack, audioTracks, parseAudios, pickTrack } from
 import { CHANNEL, type HybridcastLink, type LiveCodec, type Notice } from '#lib/live.js';
 import { type Ait, AitReader, APPLICATION_TYPE_HTML5, CONTROL } from '#lib/ts/ait.js';
 import { BroadcastClock, parseStart } from '#lib/ts/clock.js';
+import { PresentFollowing } from '#lib/ts/eit.js';
 import { Fmp4Splitter } from '#lib/ts/fmp4.js';
 import { MkvSplitter } from '#lib/ts/mkv.js';
 import { BUSY } from '#lib/ts/playback.js';
@@ -46,6 +47,7 @@ import { config } from './config';
 import { DataBroadcast, type ResponseMessage } from './databroadcast';
 import { orm } from './db';
 import { deinterlace } from './encoder';
+import { followOnAir } from './epg';
 import { emit, type Yielded } from './events';
 import { type LiveHw, liveHw, liveHwArgs } from './hwenc';
 import { tunerOf, yieldedTo } from './live-yield';
@@ -614,6 +616,14 @@ class Session {
      * 出したいもの (在るという事実) がそのまま出せなくなります
      */
     private ait: AitReader | null = null;
+    /**
+     * 放送が言う「いま」と「次」(EIT[p/f]) を読む側 (`ts/eit.ts`)。**ライブのときだけ。**
+     *
+     * 番組が切り替わった・延びたのを番組表に写し、画面に読み直させる (`epg.followOnAir`)。
+     * 予定の時刻だけで追うと、延長・繰り下げで取り違える。追っかけ (`source`) は録画の
+     * ファイルを読んでいて、流れている p/f は過去のものなので読まない
+     */
+    private onAir: PresentFollowing | null = null;
     /** 最後に伝えた Hybridcast。**同じものを伝え直さない** */
     private toldApps = '';
     /** 最後に伝えた番組。**同じものを伝え直さない** (`programInfo`) */
@@ -1021,14 +1031,35 @@ class Session {
             this.ait ??= new AitReader(this.program);
             ait = this.ait;
         }
+        if (this.program > 0 && this.source === undefined) this.onAir ??= new PresentFollowing(this.program);
+        const onAir = this.onAir;
+        let switched = false;
         const found: Ait[] = [];
         for (const packet of this.packets.feed(out)) {
             data?.feedPacket(packet);
             this.clock.feedPacket(packet, receivedAt);
             ait?.feedPacket(packet, found);
+            if (onAir?.feedPacket(packet) === true) switched = true;
         }
         if (found.length > 0) this.findHybridcast(found);
+        if (switched && onAir !== null) this.followOnAir(onAir);
         return out;
+    }
+
+    /**
+     * 放送の「いま」と「次」が変わった。**番組表に写す** (`epg.followOnAir`)。
+     *
+     * 書けなくても映像は止めない。番組表が予定のままになるだけで、次に変わったときにまた写す
+     */
+    private followOnAir(onAir: PresentFollowing): void {
+        const events = [onAir.present, onAir.following].filter((event) => event !== null);
+        try {
+            followOnAir(events);
+        } catch (error) {
+            console.warn(
+                `[live] ${this.channelType}:${this.channel}: いまの番組を番組表に写せませんでした: ${error}`,
+            );
+        }
     }
 
     /**
@@ -1885,6 +1916,17 @@ export function warm(
     raw = false,
 ): void {
     if (channelType === '' || channel === '' || !Number.isFinite(serviceId)) return;
+    /*
+     * **誰かがもうこの局を観ていれば温めない。** 画面は番組が切り替わるたびに読み直す
+     * (`routes/live/+page.svelte`) ので、観ている最中にも何度もここへ来る。下の目印は
+     * 音声と字幕まで含むので、番組が替わって主音声の決まり方が変わった・2本目の字幕を
+     * 出している、だけで外れて、**誰も来ない ffmpeg を毎回起こしてしまう**。
+     * 観ている人が居るなら、それは開き直しではなく読み直しのことが多い。別の端末が同じ局を
+     * 別の焼き方で観ているときに開いた人は 160ms 削れなくなるだけで、選局はいつもどおり進む
+     */
+    for (const session of sessions.values()) {
+        if (session.serviceId === serviceId && !session.empty) return;
+    }
 
     const now = nowPlaying(serviceId, audio);
     // 字幕は1本目で温める。**選び直す人は稀**で、そのときは焼き直しになる。

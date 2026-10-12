@@ -53,12 +53,43 @@
     import { programDetail } from '#lib/detail.svelte.js';
     import { SERVICE_TYPE_LABEL, time } from '#lib/format.js';
     import { livePlayer } from '#lib/live-player.svelte.js';
+    import { liveUpdates } from '#lib/live-updates.svelte.js';
+    import { reload } from '#lib/reload.svelte.js';
     import { FLOOR } from '#lib/ts/pacing.js';
     import type { LiveChannel } from './+page.server';
+
+    /** 番組の終わりから読み直すまで置く間 (下の「番組が替わったら読み直す」) */
+    const PROGRAM_END_GRACE = 2_000;
+    /**
+     * 読み直しの間の下限。**端末の時計が進んでいると、終わったはずの番組がサーバではまだ
+     * 流れていて**同じものが返り、すぐまた読み直すことになる。詰めて回さない
+     */
+    const PROGRAM_END_FLOOR = 5_000;
 
     let { data, form } = $props();
     // 局が入れ替わると読み込み直されるので、値ではなく参照で持つ
     const channels = $derived(data.channels as LiveChannel[]);
+
+    /*
+     * **番組が替わったら読み直す。** 局の一覧が持つ「いまの番組」は開いた時点のもので、
+     * 放っておくと次の番組が始まっても操作列の番組名・時間帯・一覧の番組名が前のまま残る。
+     *
+     * 1. **知らせ** (`programs`)。観ている局は、サーバが放送の「いま・次」(EIT[p/f]) を読んで、
+     *    番組表と違えば書き直して知らせてくる (`epg.followOnAir`)。延長・繰り下げはこちらで追う
+     * 2. **いちばん早く終わる番組の終わり**。観ていない局の分は放送を読んでいないので、
+     *    番組表の予定で替える。少し置くのは、終わった直後に読むと時計の差で同じ番組が返るから
+     *
+     * 読み直しても観ているものは変わらない (選局は画面が持っている)
+     */
+    liveUpdates(['programs', 'services']);
+    $effect(() => {
+        const ends = channels.flatMap((channel) => (channel.now === null ? [] : [channel.now.endAt]));
+        if (ends.length === 0) return;
+        const wait = Math.max(Math.min(...ends) - Date.now() + PROGRAM_END_GRACE, PROGRAM_END_FLOOR);
+        // setTimeout は 2^31-1 ms (約24日) を超えると即座に鳴る
+        const timer = setTimeout(reload, Math.min(wait, 2 ** 31 - 1));
+        return () => clearTimeout(timer);
+    });
 
     /**
      * **運転中の注意** (互換モード。`canvas-video.ts`)。UA の既定で互換モードに入っている端末 (テスラ) で、
@@ -607,6 +638,7 @@
                             service={player.yielded?.recording.serviceName ?? current?.name ?? ''}
                             title={player.yielded?.recording.title ?? current?.now?.name ?? null}
                             titleTestid="live-title"
+                            rangeTestid="live-range"
                         >
                             {#snippet status()}
                                 <!--

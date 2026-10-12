@@ -23,6 +23,7 @@
         service,
         title = null,
         titleTestid,
+        rangeTestid,
         badge,
         status,
     }: {
@@ -33,6 +34,8 @@
         /** 番組名 */
         title?: string | null;
         titleTestid?: string;
+        /** 時間帯の目印 (試験が終わりの時刻を読む) */
+        rangeTestid?: string;
         /** 題名の前に置く札 (観る画面の「端末」など) */
         badge?: Snippet;
         /** 下の段。位置・遅延など、画面ごとの読みもの */
@@ -49,7 +52,7 @@
             並びの隙間 (`gap`) が前を受け持つ
         -->
         <span class="keep">
-            {#if range !== null}{time(range.start)} 〜 {time(range.end)}<span class="sep">・</span>{/if}<span
+            {#if range !== null}<span data-testid={rangeTestid}>{time(range.start)} 〜 {time(range.end)}</span><span class="sep">・</span>{/if}<span
                 class="broadcast">{service}</span
             >
         </span>

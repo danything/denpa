@@ -50,8 +50,17 @@ config.agentUrl = `http://127.0.0.1:${server.port}`;
 
 const { orm } = await import('./db');
 const { programs, recordings, reservations, services } = await import('./schema');
-const { airing, savePrograms, SERVICE_ORDER, SERVICE_TYPE_ORDER, settle, syncServicesOnly, widenServices } =
-    await import('./epg');
+const {
+    airing,
+    followOnAir,
+    savePrograms,
+    SERVICE_ORDER,
+    SERVICE_TYPE_ORDER,
+    settle,
+    syncServicesOnly,
+    widenServices,
+} = await import('./epg');
+const { subscribe } = await import('./events');
 const { getChannels } = await import('./tuner');
 
 describe('syncServicesOnly', () => {
@@ -487,6 +496,67 @@ describe('savePrograms', () => {
         expect(orm().select({ name: programs.name }).from(programs).orderBy(programs.start_at).all()).toEqual(
             [{ name: '前の番組' }, { name: '次の番組' }],
         );
+    });
+
+    /**
+     * **ライブで観ている局の「いま・次」(EIT[p/f]) を写す** (`server/live.ts`)。
+     * 番組表と違うときだけ書き、画面に読み直させる (`programs` の知らせ)
+     */
+    describe('followOnAir', () => {
+        /** 写して、書いたかと届いた知らせ (`programs`) の数を返す */
+        function follow(events: ReturnType<typeof event>[]): { wrote: boolean; told: number } {
+            let told = 0;
+            const unsubscribe = subscribe((name) => {
+                if (name === 'programs') told++;
+            });
+            try {
+                return { wrote: followOnAir(events), told };
+            } finally {
+                unsubscribe();
+            }
+        }
+
+        async function fresh(): Promise<number> {
+            offered = [channel(23608, 'ＴＯＫＹＯ　ＭＸ')];
+            syncServicesOnly(await getChannels());
+            orm().delete(programs).run();
+            return Date.now();
+        }
+
+        test('番組表と同じなら書かず、知らせない', async () => {
+            const base = await fresh();
+            savePrograms([event({ eventId: 1, name: '前の番組', startAt: base, duration: 30 * 60_000 })]);
+            const same = event({ eventId: 1, name: '前の番組', startAt: base, duration: 30 * 60_000 });
+            expect(follow([same])).toEqual({ wrote: false, told: 0 });
+        });
+
+        test('延びたら書き直して知らせる。重なった後ろの番組は消える', async () => {
+            const base = await fresh();
+            savePrograms([
+                event({ eventId: 1, name: '野球', startAt: base, duration: 30 * 60_000 }),
+                event({ eventId: 2, name: 'ニュース', startAt: base + 30 * 60_000, duration: 30 * 60_000 }),
+            ]);
+            const extended = event({ eventId: 1, name: '野球', startAt: base, duration: 45 * 60_000 });
+            expect(follow([extended])).toEqual({ wrote: true, told: 1 });
+            const rows = orm().select({ name: programs.name, end_at: programs.end_at }).from(programs).all();
+            expect(rows).toEqual([{ name: '野球', end_at: base + 45 * 60_000 }]);
+        });
+
+        test('番組表に無い番組 (差し替え) は書いて知らせる', async () => {
+            const base = await fresh();
+            const special = event({ eventId: 9, name: '臨時ニュース', startAt: base, duration: 10 * 60_000 });
+            expect(follow([special])).toEqual({ wrote: true, told: 1 });
+            const rows = orm().select({ name: programs.name }).from(programs).all();
+            expect(rows).toEqual([{ name: '臨時ニュース' }]);
+        });
+
+        test('時刻が未定の番組と、知らない局の番組は写さない', async () => {
+            await fresh();
+            const undecided = event({ eventId: 3, duration: null });
+            const stranger = event({ eventId: 4, serviceId: 99 });
+            expect(follow([undecided, stranger])).toEqual({ wrote: false, told: 0 });
+            expect(orm().select({ count: count() }).from(programs).get()?.count).toBe(0);
+        });
     });
 });
 

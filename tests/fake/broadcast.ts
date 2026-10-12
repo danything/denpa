@@ -463,25 +463,41 @@ function schedule(services: FakeService[]): Uint8Array {
     return Uint8Array.from(parts);
 }
 
-/** EIT[p/f]。いま流れている番組。延長はここに乗る */
+/**
+ * EIT[p/f]。いま流れている番組 (section 0) と次の番組 (section 1)。延長はここに乗る。
+ *
+ * **延びたら、次の番組はそのぶん繰り下げて短くする** (終わりは動かさない)。本物でも
+ * ニュースが詰められる形はよくある。終わりを動かさないので、延長を戻せば番組表は
+ * 元の並びに戻る (ライブが写した p/f が、その次の番組まで消してしまわない)
+ */
 function nowOnAir(services: FakeService[], knobs: Knobs): Uint8Array {
     if (knobs.noPresentFollowing) return new Uint8Array(0);
     const parts: number[] = [];
     for (const service of services) {
-        const current = present(programsFor(service));
+        const events = programsFor(service);
+        const current = present(events);
         if (current === undefined) continue;
-        parts.push(
-            ...packetize(
+        const section = (sectionNumber: number, event: SynthEvent) =>
+            packetize(
                 0x0012,
                 eitSection({
                     tableId: 0x4e,
                     serviceId: service.serviceId,
                     transportStreamId: service.networkId,
                     originalNetworkId: service.networkId,
-                    events: [{ ...current, duration: current.duration + knobs.extendedMs, runningStatus: 4 }],
+                    sectionNumber,
+                    lastSectionNumber: 1,
+                    events: [event],
                 }),
-            ),
-        );
+            );
+        const extended = { ...current, duration: current.duration + knobs.extendedMs, runningStatus: 4 };
+        parts.push(...section(0, extended));
+        const next = events[events.indexOf(current) + 1];
+        if (next !== undefined && next.duration > knobs.extendedMs) {
+            const startAt = next.startAt + knobs.extendedMs;
+            const duration = next.duration - knobs.extendedMs;
+            parts.push(...section(1, { ...next, startAt, duration, runningStatus: 1 }));
+        }
     }
     return Uint8Array.from(parts);
 }
