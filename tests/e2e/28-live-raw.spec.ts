@@ -36,7 +36,7 @@ test.describe('ライブを生で見る', () => {
         await syncEpg(request);
     });
 
-    test('MPEG-2 を選ぶと、エンコードせずに放送そのままをデコードして描き、音もデコードする', async ({ page, stack }) => {
+    test('MPEG-2 を選ぶと、エンコードせず放送のままデコードして描き、音も出す', async ({ page, stack }) => {
         const before = ffmpegRuns(stack.liveArgsFile).length;
         await goto(page, '/live');
         await page.getByTestId('live-channel').first().click();

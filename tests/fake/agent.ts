@@ -32,7 +32,7 @@ function unscramble(input: string, output: string): { ok: boolean; error: string
     const from = resolve(RECORDED, input);
     const to = resolve(RECORDED, output);
     if (!from.startsWith(`${RECORDED}/`) || !to.startsWith(`${RECORDED}/`)) {
-        return { ok: false, error: '元のTSの保存先の外にあるファイルは解除できません' };
+        return { ok: false, error: '元のTSの保存先の外にあるファイルは復号できません' };
     }
     if (!existsSync(from)) return { ok: false, error: `${from} が見つかりません` };
 

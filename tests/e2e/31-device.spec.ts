@@ -9,7 +9,7 @@ import { expect, goto, test } from './helpers';
  * スマホ役のブラウザはログインなしで `/device` に入れる (家の LAN と同じ)
  */
 test.describe('テレビのペアリング', () => {
-    test('ペアリングコードを貰い、QR の画面を開くと済み、鍵で API に入れる。取り消すと 401', async ({ page, request }) => {
+    test('コードを貰って QR を開くと済み、鍵で API に入れる。取り消すと 401', async ({ page, request }) => {
         const issued = await request.post('/api/device/code', { data: { name: 'E2E のテレビ' } });
         expect(issued.status()).toBe(200);
         const code = await issued.json();

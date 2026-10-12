@@ -87,7 +87,7 @@ test.describe('録画を観る', () => {
      *
      * 番組表から引き直す口を 404 にして「消えたあと」を作る
      */
-    test('番組表から消えた録画でも、行が持っているジャンルと音声のラベルが出る', async ({ page, request }) => {
+    test('番組表から消えた録画でも、行のジャンルと音声のラベルが出る', async ({ page, request }) => {
         test.setTimeout(180_000);
         const id = await watchable(page, request);
         await page.route('/api/programs/*', (route) => route.fulfill({ status: 404, body: '' }));

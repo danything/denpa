@@ -333,7 +333,7 @@ public static class Scramble
         var target = Inside(recorded, output);
         if (source is null || target is null)
         {
-            return new JsonObject { ["ok"] = false, ["error"] = "元のTSの保存先の外にあるファイルは解除できません" };
+            return new JsonObject { ["ok"] = false, ["error"] = "元のTSの保存先の外にあるファイルは復号できません" };
         }
         if (!File.Exists(source))
         {
