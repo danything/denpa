@@ -48,7 +48,7 @@
     import ServiceLogo from '#lib/components/ServiceLogo.svelte';
     import Toasts, { errorNotice, type Notice } from '#lib/components/Toasts.svelte';
     import { programDetail } from '#lib/detail.svelte.js';
-    import { SERVICE_TYPE_LABEL } from '#lib/format.js';
+    import { SERVICE_TYPE_LABEL, time } from '#lib/format.js';
     import { livePlayer } from '#lib/live-player.svelte.js';
     import { FLOOR } from '#lib/ts/pacing.js';
     import type { LiveChannel } from './+page.server';
@@ -332,7 +332,8 @@
                 逃げ道は焼き方を選び直すこと (別の形か、生) で、その口はこの帯にしか無い。
                 隠していた頃は、出せない端末では選び直す手立てが無かった
             -->
-            {#if player.tuned !== null}
+            <!-- 録画に譲って追っかけを観ている間 (`yielded`) も出す。局を頼むものだけ外す (下) -->
+            {#if player.tuned !== null || player.yielded !== null}
                 <!--
                     **右上の縦列。観る画面と同じ場所・同じ並び** (`watch-side`) —
                     d ボタンと切り抜きが画面ごとに違う場所にあると、押すたびに
@@ -342,19 +343,22 @@
                     <!--
                         **いま観ている番組を録る。** 手動予約と同じ道 (`?/record`) に
                         乗せるだけで、数秒後にはこの番組の録画が始まる。既に録って
-                        いれば二重にはならない (予約は番組ごとに1本)
+                        いれば二重にはならない (予約は番組ごとに1本)。
+                        録画に譲っている間は出さない (観ているのはもう録っている番組)。データ放送も局のもの
                     -->
-                    <form method="POST" action="?/record" use:submitting>
-                        <input type="hidden" name="service" value={player.tuned.serviceId} />
-                        <ControlButton icon={RECORD} label="いまの番組を録画する" submit testid="live-record" />
-                    </form>
-                    <ControlButton
-                        icon={DATA}
-                        label={player.showData ? 'データ放送を消す' : 'データ放送を出す'}
-                        on={player.showData}
-                        testid="live-data-button"
-                        onclick={() => pressD(player.showData, dataButton, (on) => player.setData(on))}
-                    />
+                    {#if player.tuned !== null}
+                        <form method="POST" action="?/record" use:submitting>
+                            <input type="hidden" name="service" value={player.tuned.serviceId} />
+                            <ControlButton icon={RECORD} label="いまの番組を録画する" submit testid="live-record" />
+                        </form>
+                        <ControlButton
+                            icon={DATA}
+                            label={player.showData ? 'データ放送を消す' : 'データ放送を出す'}
+                            on={player.showData}
+                            testid="live-data-button"
+                            onclick={() => pressD(player.showData, dataButton, (on) => player.setData(on))}
+                        />
+                    {/if}
                     <!--
                         **生で見ている間も切り抜ける。** 絵は worker の canvas に居るので、
                         そちらに1枚頼む (`snapshot.grabbedFrame`)
@@ -393,9 +397,10 @@
                     -->
                     <!--
                         帯は3画面共通 (SeekBar)。ライブ中の赤は「ライブ」ボタンが言う。
-                        **生で見ている間は出さない** — 遡れるほど持っていない (止めて再開は放送の今から)
+                        **生で見ている間は出さない** — 遡れるほど持っていない (止めて再開は放送の今から)。
+                        録画に譲っている間も出さない (追っかけの帯は放送の今の帯と別物。戻る口は知らせの「ライブに戻る」)
                     -->
-                    {#if !player.raw}
+                    {#if !player.raw && player.yielded === null}
                         <SeekBar
                             value={player.live ? player.newest : player.position}
                             min={player.oldest}
@@ -539,20 +544,25 @@
                             **文字は焼き方のボタンと同じ大きさ・幅は詰める** —
                             大きいボタンのままだと帯の中でこれだけ太って見えていた
                         -->
-                        <EdgeButton
-                            active={player.live}
-                            label="ライブ"
-                            onclick={() => player.goLive()}
-                            testid="live-edge"
-                        />
+                        {#if player.yielded === null}
+                            <EdgeButton
+                                active={player.live}
+                                label="ライブ"
+                                onclick={() => player.goLive()}
+                                testid="live-edge"
+                            />
+                        {/if}
 
-                        <!-- **読みものは3画面共通の二段** (InfoBlock)。決まりは [ControlBar.svelte](../../lib/components/player/ControlBar.svelte) -->
+                        <!--
+                            **読みものは3画面共通の二段** (InfoBlock)。決まりは [ControlBar.svelte](../../lib/components/player/ControlBar.svelte)。
+                            録画に譲っている間は、観ている録画 (局も番組も、ライブで選んでいたものとは別)
+                        -->
                         <InfoBlock
-                            range={current?.now
+                            range={player.yielded === null && current?.now
                                 ? { start: current.now.startAt, end: current.now.endAt }
                                 : null}
-                            service={current?.name ?? ''}
-                            title={current?.now?.name ?? null}
+                            service={player.yielded?.recording.serviceName ?? current?.name ?? ''}
+                            title={player.yielded?.recording.title ?? current?.now?.name ?? null}
                             titleTestid="live-title"
                         >
                             {#snippet status()}
@@ -692,9 +702,10 @@
                     testid="live-status"
                 >
                     {#snippet actions()}
+                        <!-- 録画に譲っている間のやり直しは「ライブに戻る」と同じ (入れなければ追っかけに戻る) -->
                         <button type="button"
                             class="small secondary"
-                            onclick={() => current && select(current)}
+                            onclick={() => (player.yielded !== null ? player.backToLive() : current && select(current))}
                             data-testid="live-retry">やり直す</button
                         >
                     {/snippet}
@@ -704,6 +715,32 @@
 
             <!-- 絵の上の知らせは舞台の列に積む (`PlayerStage` の `notes`)。幕 (`PlayerVeil`) の文言は真ん中なので重ならない -->
             {#snippet notes()}
+                <!--
+                    **録画に譲った。** ライブのチューナーが録画に蹴られ、頼み直しても入れなかったので、
+                    蹴った録画の追っかけを観ている (`live-player` の `giveWay`)。テレビのアプリも同じ言い方。
+                    StageNote は押せない札なので、「ライブに戻る」を置くこの知らせだけ押せる形で並べる
+                    (見た目は同じ角丸の黒い札。追っかけの「観る画面で」と同じ扱い)
+                -->
+                {#if player.yielded}
+                    {@const yielded = player.yielded}
+                    <span class="yielded" data-testid="live-yielded">
+                        <span class="yielded-text">
+                            録画のためチャンネルを切り替えました: <span class="broadcast">{yielded.recording.title}</span>
+                            (録画中を再生しています)
+                        </span>
+                        <button type="button"
+                            class="back-live"
+                            disabled={player.returning}
+                            onclick={() => player.backToLive()}
+                            data-testid="live-back">ライブに戻る</button
+                        >
+                    </span>
+                    {#if yielded.refused}
+                        <StageNote testid="live-refused"
+                            >録画が終わるまでライブは見られません ({time(yielded.recording.endAt)})</StageNote
+                        >
+                    {/if}
+                {/if}
                 <!--
                     **頼まれたとおりにできなかったときの断り書き。**
 
@@ -903,6 +940,34 @@
     }
     .relearn:hover {
         color: #fff;
+    }
+    /* 録画に譲った知らせ。知らせの列は押せない (`PlayerStage`) ので、この知らせだけ押せるように戻す。札の見た目は StageNote と同じ */
+    .yielded {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        justify-content: center;
+        gap: 0.5rem;
+        max-width: 100%;
+        padding: 0.25rem 0.25rem 0.25rem 0.75rem;
+        border-radius: 1rem;
+        background: rgb(0 0 0 / 0.6);
+        font-size: 0.75rem;
+        color: #fff;
+        pointer-events: auto;
+    }
+    .back-live {
+        width: auto;
+        margin: 0;
+        padding: 0.125rem 0.75rem;
+        border: 1px solid rgb(255 255 255 / 0.6);
+        border-radius: 1rem;
+        background: transparent;
+        color: #fff;
+        font-size: 0.75rem;
+    }
+    .back-live:hover:not(:disabled) {
+        background: rgb(255 255 255 / 0.15);
     }
     .unmute {
         position: absolute;

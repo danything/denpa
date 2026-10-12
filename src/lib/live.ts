@@ -194,7 +194,42 @@ export type Notice =
           type: 'notice';
           message: string;
       }
+    | {
+          /**
+           * **チューナーから外された** (読んでいた流れが、こちらが畳む前に途切れた)。セッションはここで畳む。
+           *
+           * いちばん多いのは録画に蹴られたとき (ライブは録画にだけ譲る。docs/agent.md「選ぶ順の約束」)。
+           * 画面は同じ局を頼み直す — 使ってよい本が空いていればそこに入り、見ているものは変わらない。
+           * **頼み直しても入れなかったときだけ** `recording` の追っかけに切り替える (`live-player.svelte.ts`)。
+           * 蹴った録画が分からない (録画ではなかった・エージェントに訊けなかった) なら null
+           */
+          type: 'lost';
+          recording: YieldedRecording | null;
+      }
     | { type: 'error'; message: string };
+
+/**
+ * **ライブがチューナーを譲った録画** (`Notice` の `lost`、知らせの `yielded`)。
+ *
+ * 読むのはサーバ (`server/live-yield.ts`)。ライブは蹴られる前に自分の読み手がいた本を覚えておき、
+ * 蹴られたあとでその本の読み手にいる録画 (`rec <録画ID>`) を名指しする。エージェントは予約を知らない
+ */
+export interface YieldedRecording {
+    /** 録画ID。追っかけ (`chase` / `GET /api/recordings/<id>/chase`) に渡す */
+    id: number;
+    /** 番組名 (記号を落としたもの。録画の一覧の `title` と同じ) */
+    title: string;
+    serviceName: string;
+    /** 録り終える時刻 (UNIX ミリ秒。終わりのマージン込み)。それまでその本は空かない */
+    endAt: number;
+}
+
+/**
+ * 譲った録画の追っかけを**録れているところの少し手前から**観るときに頼む位置 (秒)。
+ * サーバは録れている範囲に収める (`server/chase.ts` の `chasePlan`)。ライブの代わりに観るので、頭からではなく今に近いところ。
+ * どの録画よりも長い値 (1週間) にしてある
+ */
+export const CHASE_EDGE = 7 * 24 * 60 * 60;
 
 /** 画面に出す Hybridcast のアプリ。**押すと別のタブで開くだけ** */
 export interface HybridcastLink {

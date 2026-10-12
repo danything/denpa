@@ -8,7 +8,8 @@
         "09-behaviour",
         "26-hwenc",
         "29-subpath",
-        "33-recordings-group"
+        "33-recordings-group",
+        "34-live-yield"
     ],
     "2": [
         "22-oidc",
