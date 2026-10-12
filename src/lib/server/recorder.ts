@@ -17,7 +17,7 @@ import { recordingSummary } from './recording';
 import { programs, recordings, reservations, services } from './schema';
 import { chunks } from './stream';
 import { parseTitle } from './title';
-import { openChannelStream } from './tuner';
+import { openChannelStream, recordingUse } from './tuner';
 import { notify } from './webhook';
 
 /** 録画中のストリームを止めるための口。プロセス内にしか無いので再起動で失われる (起動時に拾い直す: recoverOrphanedRecordings) */
@@ -259,7 +259,7 @@ async function pump(recording: Recording, controller: AbortController): Promise<
 
     let written = 0;
     // 何を掴んでいるのかがチューナー画面に出る。番組名は載せず、IDだけ渡して向こうで引く
-    const use = `rec ${recording.id}` as const;
+    const use = recordingUse(recording.id);
 
     try {
         // 追記で開く。再起動をまたいで録画を再開したときに、それまでの分を消さないため

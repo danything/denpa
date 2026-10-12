@@ -4,7 +4,7 @@ import { genreName } from '#lib/arib.js';
 import { SERVICE_TYPE_LABEL } from '#lib/format.js';
 import { parseSearchFields } from '#lib/search.js';
 import { config } from '#lib/server/config.js';
-import { type Capacity, contentions, type Occupant } from '#lib/server/conflict.js';
+import { contentions, type Occupant, settled } from '#lib/server/conflict.js';
 import { now, orm } from '#lib/server/db.js';
 import { CURRENT_SERVICES, watchableServices } from '#lib/server/epg.js';
 import { relative } from '#lib/server/paths.js';
@@ -20,7 +20,7 @@ import {
     prefillFrom,
     previewSkips,
 } from '#lib/server/rules.js';
-import { resolveConflicts, tunerCapacity } from '#lib/server/scheduler.js';
+import { resolveConflicts, tunerState } from '#lib/server/scheduler.js';
 import {
     programs,
     recordings,
@@ -216,7 +216,7 @@ export async function load({ url }) {
      * 取れなければ空 (= 何も競合として出さない)。エージェントが落ちているときに
      * 予約表を赤くしても直しようが無いので、スケジューラもそう振る舞う
      */
-    const capacity = await tunerCapacity().catch((): Capacity => []);
+    const { capacity, busy } = await tunerState();
     // 掴む区間は前後マージンぶん延びる。スケジューラと同じ物差しで数える
     const margins = { start: config.startMargin, end: config.endMargin };
     // ?edit=<id> のときは、そのルールをフォームに読み込んで書き換えられるようにする
@@ -461,15 +461,20 @@ export async function load({ url }) {
          * その間サーバごと止まっていた (SQLite も判定も同期)。画面に出るのは先頭 100 件
          * だけなので、そこにだけ当てる。
          *
-         * **比べる相手は、その 100 件が掛かる時間帯の全部。** 出さない番組とも取り合うので
-         * 相手は減らせないが、競合はその番組と時間が重なる相手だけで決まるので、時間帯の
-         * 外は渡さなくても答えは変わらない (全部を渡すと、なぞるのが番組表まるごとになる)。
+         * **比べる相手は、その 100 件が掛かる時間帯の全部と、そこから誰も掴んでいない瞬間まで
+         * さかのぼったぶん** (`settled`)。出さない番組とも取り合うので相手は減らせない。どの本に
+         * 入るかはその前に誰がどの本に入ったかで変わる (#668) ので、時間帯の頭からなぞると答えが
+         * 変わる。誰も掴んでいない瞬間を挟めば振り出しに戻るので、そこより前と、時間帯より後は渡さない。
          *
          * 「競合 N 件」もその 100 件の中の数になる。画面ではそう書く
          */
         const shown = rows.slice(0, 100);
         const mine = shown.flatMap((row) => (row.skip === null ? (occupants.get(row.id) ?? []) : []));
-        const from = Math.min(...mine.map((o) => o.start_at)) - margins.start;
+        const from = settled(
+            occupants.values(),
+            margins,
+            Math.min(...mine.map((o) => o.start_at)) - margins.start,
+        );
         const to = Math.max(...mine.map((o) => o.end_at)) + margins.end;
         const contended = contentions(
             [...occupants.values()].filter(
@@ -477,6 +482,7 @@ export async function load({ url }) {
             ),
             capacity,
             margins,
+            busy,
         );
         for (const row of shown) {
             if (row.skip === null) row.conflicts = contended.get(row.id) ?? [];

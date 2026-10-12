@@ -1,7 +1,7 @@
 import { and, eq, getTableColumns, gt, inArray, isNull, lte, or, sql } from 'drizzle-orm';
 import type { Reservation } from '../types';
 import { config } from './config';
-import { assign, type Capacity, capacityOf, whole } from './conflict';
+import { assign, type Busy, type Capacity, capacityOf } from './conflict';
 import { affected, now, orm } from './db';
 import { emit } from './events';
 import {
@@ -13,7 +13,7 @@ import {
 } from './recorder';
 import { recordings, reservations, services } from './schema';
 import { isDraining } from './shutdown';
-import { getTuners } from './tuner';
+import { type AgentTuner, getTuners, recordingHolds, recordingOf } from './tuner';
 
 interface Candidate extends Reservation {
     type: string;
@@ -21,20 +21,39 @@ interface Candidate extends Reservation {
 }
 
 /**
- * 動いているチューナーそれぞれが受けられる単位 (`Capacity`)。エージェントに繋がらないときは
- * 空 (「制限なし」) を返し、予約を勝手に conflict にしない(実際に録画が始まるときに
- * あちらが弾くので、予約表を壊すより実行時に失敗させるほうが害が小さい)。
+ * チューナーの様子。**予約の割り振り (`assign`) とルール画面の下見 (`contentions`) が同じものを読む。**
+ *
+ * - `capacity`: 動いているチューナーを、エージェントが選ぶ順 (`rank`) に組にしたもの (`Capacity`)
+ * - `busy`: 録画中の予約が、いまどの本に居て、いつ離すか (tuner.ts の `recordingHolds`)
+ *
+ * エージェントに繋がらないときは空 (「制限なし」) を返し、予約を勝手に conflict にしない(実際に
+ * 録画が始まるときにあちらが弾くので、予約表を壊すより実行時に失敗させるほうが害が小さい)。
  */
-export async function tunerCapacity(): Promise<Capacity> {
+export async function tunerState(): Promise<{ capacity: Capacity; busy: Busy[] }> {
+    let tuners: AgentTuner[];
     try {
-        return capacityOf(await getTuners());
+        tuners = await getTuners();
     } catch {
-        return [];
+        return { capacity: [], busy: [] };
     }
+    const capacity = capacityOf(tuners);
+    if (capacity.length === 0) return { capacity, busy: [] };
+    const ids = tuners.flatMap((t) => t.users.flatMap((u) => recordingOf(u.use) ?? []));
+    const until = new Map(
+        ids.length === 0
+            ? []
+            : orm()
+                  .select({ id: recordings.id, end_at: recordings.end_at, record_to: recordings.record_to })
+                  .from(recordings)
+                  .where(inArray(recordings.id, ids))
+                  .all()
+                  .map((rec) => [rec.id, recordingUntil(rec)] as const),
+    );
+    return { capacity, busy: recordingHolds(tuners, (id) => until.get(id)) };
 }
 
 export async function resolveConflicts(): Promise<{ accepted: number; rejected: number }> {
-    const capacity = await tunerCapacity();
+    const { capacity, busy } = await tunerState();
     const candidates: Candidate[] = orm()
         .select({ ...getTableColumns(reservations), type: services.type, channel: services.channel })
         .from(reservations)
@@ -52,10 +71,15 @@ export async function resolveConflicts(): Promise<{ accepted: number; rejected: 
 
     // 前後のマージンぶんチューナーを掴む時間は延びる。予約表と実行時のズレを無くすため
     // 同じ物差しで数える
-    const { accepted, rejected } = assign(candidates, capacity, {
-        start: config.startMargin,
-        end: config.endMargin,
-    });
+    const { accepted, rejected } = assign(
+        candidates,
+        capacity,
+        {
+            start: config.startMargin,
+            end: config.endMargin,
+        },
+        busy,
+    );
 
     const at = now();
     orm().transaction((tx) => {
@@ -65,11 +89,16 @@ export async function resolveConflicts(): Promise<{ accepted: number; rejected: 
                 .where(and(eq(reservations.id, a.reservation.id), eq(reservations.state, 'conflict')))
                 .run();
             /*
-             * **譲ったぶんを覚える。** 丸ごと入ったものは NULL に戻す —
-             * 前の回で削られていても、相手が消えれば丸ごと録れるようになる
+             * **譲ったぶんを覚える。マージンだけ譲ったものも。** 譲っていなければ NULL に戻す —
+             * 前の回で削られていても、相手が消えれば丸ごと録れるようになる。
+             *
+             * マージンだけのときに NULL にしていた頃は、隣り合う番組で前が終了マージンまで掴み続け、
+             * 後ろが開始マージンから掴みに行っていた。割り振りの通りに離さないと、後ろは別の本に
+             * 入る (兼用の本を塞いで、その後の衛星が録れない) か、空き待ちで頭が欠ける。
+             * 「欠けます」の札はマージンだけなら出ない (`format.clipNote` は番組の時刻と比べる)
              */
-            const from = whole(a) ? null : a.from;
-            const to = whole(a) ? null : a.to;
+            const from = a.from === a.reservation.start_at - config.startMargin ? null : a.from;
+            const to = a.to === a.reservation.end_at + config.endMargin ? null : a.to;
             tx.update(reservations)
                 .set({ record_from: from, record_to: to, updated_at: at })
                 .where(

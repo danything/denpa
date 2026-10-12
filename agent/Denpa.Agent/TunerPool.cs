@@ -150,17 +150,26 @@ public sealed class TunerPool(
 
         lock (_gate)
         {
+            /*
+             * **読んでいる人がいれば、どの本でもそこに乗る** (約束2)。余韻で残っているだけの
+             * 選局には、ここでは乗らない — その本が選ぶ順で先頭のときだけ、`Pick` が選んで下で使い回す
+             */
             foreach (var open in _leases.Values)
             {
-                if (open.Type == type && open.Channel == channel) return Join(open, priority, use);
+                if (open.Type == type && open.Channel == channel && open.Sinks.Count > 0) return Join(open, priority, use);
             }
 
             index = Pick(type, channel, priority)
                 ?? throw new TunerBusyException($"{type} のチューナーに空きがありません");
 
-            // 蹴る相手が居れば先に片付ける。同じチューナーを2つの選局が掴まないように
             if (_leases.TryGetValue(index, out var victim))
             {
+                // 同じチャンネルの余韻なら、選局し直さずにそのまま使い回す
+                if (victim.Sinks.Count == 0 && victim.Type == type && victim.Channel == channel)
+                {
+                    return Join(victim, priority, use);
+                }
+                // 蹴る相手が居れば先に片付ける。同じチューナーを2つの選局が掴まないように
                 Release(victim, "優先度の高い要求に譲りました");
                 kicked = victim;
             }
@@ -394,54 +403,98 @@ public sealed class TunerPool(
     }
 
     /// <summary>
-    /// どのチューナーを使うか決める。
+    /// **選ぶ順** (<c>GET /denpa/tuners</c> の <c>rank</c>)。小さいほど先に使う。無効な本は null。
+    ///
+    /// <para>
+    /// **受けられる種別の少ない本ほど先。** PX-MLT のように地上波も衛星も受ける1本を
+    /// 地上波で塞ぐと、地上波専用が空いていても衛星が録れなくなる。種別の数が同じなら、
+    /// その種別の組が定義に先に出てくるほうが先。**受けられる種別がまったく同じ本には
+    /// 同じ順位を付ける** — どれを使っても後に響かないので、もう合っている本や余韻の本を
+    /// 使い回してよい (<see cref="Pick"/>)。
+    /// </para>
+    ///
+    /// <para>
+    /// **この決まりはエージェントの中にだけある。** denpa は順位を読んで、その順どおりに
+    /// 掴まれる前提で予約を割り振る (src/lib/server/conflict.ts)。両者の約束は
+    /// docs/agent.md「選ぶ順の約束」、同じ場面を両方のテストに通している
+    /// (tests/fake/tuner-scenes.ts)。決まりを変えるなら順位の付け方を変えるだけでよく、
+    /// denpa は直さなくてよい。
+    /// </para>
+    /// </summary>
+    public static int?[] Ranks(IReadOnlyList<TunerSpec> specs)
+    {
+        static string Key(TunerSpec spec) => string.Join(',', spec.Types.Distinct().Order(StringComparer.Ordinal));
+        var groups = specs
+            .Select((spec, index) => (spec, index))
+            .Where(pair => !pair.spec.Disabled)
+            .GroupBy(pair => Key(pair.spec))
+            .OrderBy(group => group.First().spec.Types.Distinct().Count())
+            .ThenBy(group => group.First().index)
+            .Select(group => group.Key)
+            .ToList();
+        return [.. specs.Select(spec => spec.Disabled ? (int?)null : groups.IndexOf(Key(spec)))];
+    }
+
+    /// <summary>
+    /// どのチューナーを使うか決める。**denpa との約束** (docs/agent.md「選ぶ順の約束」):
     ///
     /// <list type="number">
-    /// <item>**もうそのチャンネルに合っているもの**。選局し直さずに済む</item>
-    /// <item>**誰も読んでいないもの** (畳むのを待っているだけ)。いま居る本を使い続ける</item>
-    /// <item>空いているもの</item>
-    /// <item>自分より弱い相手が掴んでいるもの。いちばん弱いところから取る</item>
+    /// <item>
+    /// 使ってよい本 = 空いている本 (選局が無いか、読み手がいなくなって余韻で残っているだけ) と、
+    /// **自分より弱い読み手しかいない本**。録画から見て、ライブや番組表集めの本は空いているのと同じ
+    /// </item>
+    /// <item>そのうち、受けられて**順位 (<see cref="Ranks"/>) がいちばん小さい組**から選ぶ</item>
     /// </list>
     ///
     /// <para>
-    /// **1番目が無いと、戻るたびに選局し直しになる。** 実機で測ると選局し直しは
+    /// **空いている兼用の本へ逃げずに、弱い相手を蹴る。** 逃げると、そのあとの衛星の録画が
+    /// 兼用の本を取れない。denpa は予約しか知らないので、ライブや番組表集めが前の本に
+    /// 居たかどうかで録画の入る本が変わると、予約表で通した組が録れなくなる。
+    /// </para>
+    ///
+    /// <para>組の中 (受けられる種別がまったく同じ本) では、次の順に選ぶ。</para>
+    ///
+    /// <list type="number">
+    /// <item>**同じチャンネルの余韻**。選局し直さずにそのまま使い回す</item>
+    /// <item>**もうそのチャンネルに合っているもの**。選局し直さずに済む</item>
+    /// <item>**ほかの余韻**。1人の視聴で本を2冊塞がない</item>
+    /// <item>空いているもの</item>
+    /// <item>弱い相手が掴んでいるもの。いちばん弱いところから取る</item>
+    /// </list>
+    ///
+    /// <para>
+    /// **2番目が無いと、戻るたびに選局し直しになる。** 実機で測ると選局し直しは
     /// 約 600ms、合っているものを使えば 10ms。合っているかどうかは
     /// <see cref="Held.Channel"/> が覚えている (実体はアダプタごとに開いたまま)。
     /// </para>
     ///
     /// <para>
-    /// **2番目を3番目より先にしてあるのは、1人の視聴で本を2冊塞がないため。**
+    /// **3番目を4番目より先にしてあるのは、1人の視聴で本を2冊塞がないため。**
     /// 畳むのを待っているだけの本を放っておいて空いている本を取ると、余韻の
-    /// 5秒間だけ2冊が埋まる。地上波が2本しかない機材では、その隙に録画が
-    /// 2つ始まると弾かれる。**選局し直しの時間は変わらない** (どちらの本でも
-    /// 同じだけ掛かる) ので、失うのは「直前のチャンネルに合った本が残る」ことだけ。
+    /// 5秒間だけ2冊が埋まる。
     /// </para>
     /// </summary>
     private int? Pick(string type, string channel, int priority)
     {
-        /*
-         * **受けられる種別の少ないものから使う。** PX-MLT のように地上波も衛星も受ける
-         * 1本を地上波で塞ぐと、地上波専用が空いていても衛星が録れなくなる。
-         * サーバの予約の割り振り (conflict.ts の `Capacity`) は兼用の1本を残す前提で数えている
-         */
-        var usable = Enumerable.Range(0, Tuners.Count)
-            .Where(index => !Tuners[index].Disabled && Tuners[index].Types.Contains(type))
-            .OrderBy(index => Tuners[index].Types.Length)
-            .ToList();
-        // 兼用の本は、選局し直しを1回省くためだけには使わない (もっと狭い本が空いているなら)
-        var narrowest = usable.Where(index => !_leases.ContainsKey(index))
-            .Select(index => Tuners[index].Types.Length)
-            .DefaultIfEmpty(int.MaxValue)
-            .Min();
+        var ranks = Ranks(Tuners);
+        bool Idle(int index) => _leases.TryGetValue(index, out var lease) && lease.Sinks.Count == 0;
+        bool Usable(int index) =>
+            !_leases.TryGetValue(index, out var lease) || lease.Sinks.Count == 0 || lease.Priority < priority;
 
-        /*
-         * **既に合っているものを先に採る。** ただし誰かが読んでいる最中のものは
-         * 除く — 同じチャンネルなら相乗りできるが、それは呼ぶ側 (`Open`) の
-         * 別の道で、ここへは来ない
-         */
-        foreach (var index in usable)
+        var usable = Enumerable.Range(0, Tuners.Count)
+            .Where(index => ranks[index] is not null && Tuners[index].Types.Contains(type) && Usable(index))
+            .ToList();
+        if (usable.Count == 0) return null;
+        var best = usable.Min(index => ranks[index]);
+        var group = usable.Where(index => ranks[index] == best).ToList();
+
+        foreach (var index in group)
         {
-            if (_leases.ContainsKey(index) || Tuners[index].Types.Length > narrowest) continue;
+            if (Idle(index) && _leases[index].Type == type && _leases[index].Channel == channel) return index;
+        }
+        foreach (var index in group)
+        {
+            if (_leases.ContainsKey(index)) continue;
             /*
              * 錠の順は `_gate` → `_deviceGate`。`CloseAll` も同じ向きなので
              * 噛み合わない。`Channel` を `held.Gate` 無しで読むのは承知の上で、
@@ -452,26 +505,15 @@ public sealed class TunerPool(
                 if (_held.TryGetValue(index, out var open) && open.Channel == channel) return index;
             }
         }
-        // 畳むのを待っているだけの本を先に使い回す。1人の視聴で2冊塞がないため
-        foreach (var index in usable)
+        foreach (var index in group)
         {
-            if (_leases.TryGetValue(index, out var idle) && idle.Sinks.Count == 0) return index;
+            if (Idle(index)) return index;
         }
-        foreach (var index in usable)
+        foreach (var index in group)
         {
             if (!_leases.ContainsKey(index)) return index;
         }
-
-        int? weakest = null;
-        var lowest = priority;
-        foreach (var index in usable)
-        {
-            if (!_leases.TryGetValue(index, out var held)) continue;
-            if (held.Priority >= lowest) continue;
-            weakest = index;
-            lowest = held.Priority;
-        }
-        return weakest;
+        return group.MinBy(index => _leases[index].Priority);
     }
 
     /// <summary>
@@ -487,6 +529,7 @@ public sealed class TunerPool(
         lock (_gate)
         {
             var list = new JsonArray();
+            var ranks = Ranks(Tuners);
             for (var index = 0; index < Tuners.Count; index++)
             {
                 var spec = Tuners[index];
@@ -507,6 +550,8 @@ public sealed class TunerPool(
                 list.Add((JsonNode)new JsonObject
                 {
                     ["index"] = index,
+                    // 選ぶ順。denpa はこの順どおりに掴まれる前提で予約を割り振る (docs/agent.md「選ぶ順の約束」)
+                    ["rank"] = ranks[index],
                     ["name"] = spec.Name,
                     ["types"] = Json.Strings(spec.Types),
                     ["disabled"] = spec.Disabled,

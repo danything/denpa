@@ -23,6 +23,7 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { SYNC } from '../src/lib/ts/psi';
 import { channels } from '../tests/fake/broadcast';
+import { scenes } from '../tests/fake/tuner-scenes';
 
 /** `/denpa/channels` の1件。ここで見るのは種別とチャンネル名だけ */
 type ChannelEntry = { type: string; channel: string };
@@ -82,6 +83,8 @@ interface TunerStatus {
     name: string;
     types: string[];
     disabled: boolean;
+    /** 選ぶ順。小さいほど先に使う (docs/agent.md「選ぶ順の約束」)。無効な本は null */
+    rank: number | null;
     device: string | null;
     lnb: string | null;
     channel: { type: string; channel: string } | null;
@@ -589,33 +592,81 @@ describe('機材の定義', () => {
     });
 
     /**
-     * **地上波も衛星も受ける1本 (PX-MLT など) は残しておく。** 先に並んでいても、
-     * 地上波専用が空いているならそちらを使う。兼用の1本を地上波で塞ぐと
-     * 衛星が録れなくなる (denpa の予約の割り振りは、残っている前提で数える)
+     * **選ぶ順はエージェントが決めて、`rank` で見せる。** 地上波も衛星も受ける1本
+     * (PX-MLT など) は、先に並んでいても地上波専用より後。兼用の1本を地上波で塞ぐと
+     * 衛星が録れなくなる。受けられる種別がまったく同じ本は同じ順位、無効な本は null。
+     *
+     * 決まりの中身はエージェントのもの。denpa は順位を読むだけで、自分では決めない
+     * (docs/agent.md「選ぶ順の約束」)
      */
-    test('空いていれば、受けられる種別の少ないチューナーから使う', async () => {
+    test('選ぶ順を rank で返す', async () => {
         const put = await request('PUT', '/denpa/tuners', {
             tuners: [
                 { name: 'mlt0', types: ['GR', 'BS', 'CS'] },
                 { name: 'gr0', types: ['GR'] },
+                { name: 'bs0', types: ['BS', 'CS'] },
+                { name: 'gr1', types: ['GR'] },
+                { name: 'off0', types: ['GR'], disabled: true },
             ],
         });
         expect(put.status).toBe(200);
-
-        const gr = await open('type=GR&channel=T16&use=rec%201&priority=10');
-        await gr.reader?.read();
-        const bs = await open('type=BS&channel=BS11_0&use=rec%202&priority=10');
-        await bs.reader?.read();
-
         const status = await tuners();
-        expect(status.map((t) => t.channel)).toEqual([
-            { type: 'BS', channel: 'BS11_0' },
-            { type: 'GR', channel: 'T16' },
+        expect(status.map((t) => [t.name, t.rank])).toEqual([
+            ['mlt0', 2],
+            ['gr0', 0],
+            ['bs0', 1],
+            ['gr1', 0],
+            ['off0', null],
         ]);
-
-        gr.close();
-        bs.close();
     });
+
+    /**
+     * **denpa と同じ場面を通す** (`tests/fake/tuner-scenes.ts`)。denpa は、エージェントが
+     * この順どおりに掴む前提で予約を割り振る (src/lib/server/conflict.ts)。ここで落ちたら、
+     * 約束 (docs/agent.md「選ぶ順の約束」) を破っているか、場面の期待が古い
+     */
+    for (const scene of scenes) {
+        test(`選ぶ順の約束: ${scene.name}`, async () => {
+            const put = await request('PUT', '/denpa/tuners', {
+                tuners: scene.tuners.map(({ name, types }) => ({ name, types })),
+            });
+            expect(put.status).toBe(200);
+            const ranks = new Map((await tuners()).map((t) => [t.name, t.rank]));
+            // 場面が前提にしている順位で返しているか。違えば、下の答えも当てにならない
+            expect(scene.tuners.map((t) => ranks.get(t.name))).toEqual(scene.tuners.map((t) => t.rank));
+
+            const streams = new Map<string, Opened>();
+            for (const step of scene.steps) {
+                if ('close' in step) {
+                    streams.get(step.close)?.close();
+                    // 読み手が抜けるのを待つ (選局は余韻で残る)
+                    while ((await tuners()).some((t) => t.users.some((u) => u.use === step.close)))
+                        await sleep(50);
+                    continue;
+                }
+                const query = new URLSearchParams({
+                    type: step.type,
+                    channel: step.channel,
+                    use: step.open,
+                    priority: String(step.priority),
+                });
+                const opened = await open(query.toString());
+                if (step.rank === null) {
+                    expect(opened.status).toBe(409);
+                    continue;
+                }
+                expect(opened.status).toBe(200);
+                await opened.reader?.read();
+                streams.set(step.open, opened);
+                const on = (await tuners()).find((t) => t.users.some((u) => u.use === step.open));
+                expect([step.open, on === undefined ? undefined : ranks.get(on.name)]).toEqual([
+                    step.open,
+                    step.rank,
+                ]);
+            }
+            for (const stream of streams.values()) stream.close();
+        });
+    }
 
     test('名前の無い定義は断る', async () => {
         const res = await request('PUT', '/denpa/tuners', { tuners: [{ types: ['GR'] }] });

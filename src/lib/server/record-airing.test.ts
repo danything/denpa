@@ -23,6 +23,7 @@ const agent = Bun.serve({
                 name: `T${index}`,
                 types: tuner.types,
                 disabled: false,
+                rank: index,
                 device: null,
                 lnb: null,
                 channel: null,

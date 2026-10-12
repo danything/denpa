@@ -110,7 +110,9 @@ const opens: { use: string; priority: number; type: string; channel: string }[] 
 const OPENS_KEEP = 200;
 
 function tunerStatus() {
-    return TUNERS.map((tuner) => {
+    return TUNERS.map((plain) => {
+        // 選ぶ順は定義の順 (下の `assign` は前から空きを取る)。無効な本は使わないので null
+        const tuner = { ...plain, rank: plain.disabled ? null : plain.index };
         /*
          * 塞がっているのは**衛星のチューナー**にしてある。地上波を塞ぐと、
          * 同時に走っている局ロゴのテストが「地上波の空きが無い」で
@@ -139,7 +141,7 @@ function tunerStatus() {
     });
 }
 
-/** どのチューナーに載せるか。種別が合う空きを1つ取るだけ */
+/** どのチューナーに載せるか。種別が合う空きを前から1つ取るだけ (`rank` は定義の順にしてある) */
 function assign(type: string): number | null {
     for (const tuner of TUNERS) {
         if (!tuner.types.includes(type)) continue;

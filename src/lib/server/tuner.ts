@@ -23,6 +23,7 @@ import {
 } from '../shape';
 import type { ChannelType } from '../types';
 import { config } from './config';
+import type { Busy } from './conflict';
 
 /*
  * **エージェントが返すものの形は、ここで確かめてから型にする** (`shape.ts`)。
@@ -50,6 +51,11 @@ const AGENT_TUNER = object({
     name: string,
     types: array(CHANNEL_TYPE),
     disabled: boolean,
+    /**
+     * エージェントが選ぶ順。小さいほど先に使う。無効な本は null。予約の割り振りはこの順どおりに
+     * 掴まれる前提で数える (`conflict.ts`、docs/agent.md「選ぶ順の約束」)
+     */
+    rank: nullable(number),
     /** 選局に使うデバイス。ここからエージェントがコマンドを組み立てる */
     device: nullable(string),
     /** 衛星の給電。要る構成だけ */
@@ -167,6 +173,54 @@ export type StreamUse =
     | `epg ${string}`
     | `scan ${string}`
     | `live ${string}`;
+
+/** 録画の読み手の名乗り。読むほう (`recordingOf`) と対にしておく */
+export function recordingUse(id: number): StreamUse {
+    return `rec ${id}`;
+}
+
+/**
+ * 録画の読み手 (`recordingUse`) なら、その録画ID。**どの録画がどの本に居るか**を
+ * エージェントの一覧から読むのに使う (`recordingHolds`)
+ */
+export function recordingOf(use: string): number | null {
+    const found = /^rec (\d+)$/.exec(use);
+    return found === null ? null : Number(found[1]);
+}
+
+/**
+ * **録画中の予約が、いまどの本に居るか。** 割り振りのなぞり始めの状態になる。
+ *
+ * 録り始めた予約は割り振り直さない (候補に入れない) が、終わるまで本を塞ぐ。どの本に
+ * 入ったかはエージェントが知っているので、一覧の読み手 (`users`) の `rec <録画ID>`
+ * (`recordingUse`) から拾う。読み手の居る本は今まさに録っている本なので、ここが外れることは無い。
+ *
+ * 録画以外の読み手 (ライブ・番組表集めなど) は入れない。録画には譲る約束なので
+ * (docs/agent.md「選ぶ順の約束」)、予約の割り振りには効かない。
+ * 終わる時刻の分からない録画 (DB に無い) も入れない
+ */
+export function recordingHolds(
+    tuners: readonly Pick<AgentTuner, 'disabled' | 'rank' | 'channel' | 'users'>[],
+    untilOf: (recordingId: number) => number | undefined,
+): Busy[] {
+    return tuners.flatMap((tuner) => {
+        if (tuner.disabled || tuner.rank === null || tuner.channel === null) return [];
+        const ends = tuner.users.flatMap((u) => {
+            const id = recordingOf(u.use);
+            const until = id === null ? undefined : untilOf(id);
+            return until === undefined ? [] : [until];
+        });
+        if (ends.length === 0) return [];
+        return [
+            {
+                type: tuner.channel.type,
+                channel: tuner.channel.channel,
+                rank: tuner.rank,
+                until: Math.max(...ends),
+            },
+        ];
+    });
+}
 
 /**
  * チューナーに空きが無い。**待って掛け直せば通る**ので、他の失敗と分ける。
