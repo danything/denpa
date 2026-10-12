@@ -72,7 +72,10 @@ describe('NVRAM', () => {
         expect(make(kept, 0x7fe2).read('nvram://0a;group/3', 'S:2B')).toEqual(['zz']);
         expect(make(kept).write('nvram://tr_common/32', 'S:2B', ['x'])).toBeNaN();
         expect(make(kept).check('nvram://local/63')).toBe(2);
-        expect(make(kept).write('nvram://constructor/0', 'S:2B', ['x'])).toBeNaN();
+        for (const name of ['constructor', 'toString', '__proto__', 'hasOwnProperty']) {
+            expect(make(kept).write(`nvram://${name}/0`, 'S:2B', ['x'])).toBeNaN();
+            expect(make(kept).read(`nvram://${name}/0`, 'S:2B')).toBeNull();
+        }
     });
 
     test('郵便番号は渡されたものを読む (書いても変わらない)', () => {
@@ -101,5 +104,48 @@ describe('AIFF', () => {
         const decoded = decodeAiff(aiff);
         expect(decoded?.rate).toBe(12000);
         expect([...(decoded?.samples ?? [])]).toEqual([0.5, -0.5]);
+    });
+});
+
+describe('AIFF の不正な中身', () => {
+    test('読めないものは null (投げない)', () => {
+        const form = (body: number[]) =>
+            Uint8Array.from([...Buffer.from('FORM'), 0, 0, 0, body.length, ...body]);
+        expect(decodeAiff(Uint8Array.of(1, 2, 3))).toBeNull();
+        // 大きさが巨大な塊
+        expect(
+            decodeAiff(form([...Buffer.from('AIFC'), ...Buffer.from('COMM'), 0x7f, 0xff, 0xff, 0xff])),
+        ).toBeNull();
+        // 標本化周波数が範囲の外 (1 Hz)
+        const comm = [
+            ...Buffer.from('COMM'),
+            0,
+            0,
+            0,
+            24,
+            0,
+            1,
+            0,
+            0,
+            0,
+            1,
+            0,
+            16,
+            0x3f,
+            0xff,
+            0x80,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            ...Buffer.from('NONE'),
+            0,
+            0,
+        ];
+        const ssnd = [...Buffer.from('SSND'), 0, 0, 0, 10, 0, 0, 0, 0, 0, 0, 0, 0, 1, 2];
+        expect(decodeAiff(form([...Buffer.from('AIFC'), ...comm, ...ssnd]))).toBeNull();
     });
 });

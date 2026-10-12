@@ -108,7 +108,12 @@ export class Sound {
         const pcm = decodeAiff(data);
         const context = pcm === null ? null : this.audio();
         if (pcm === null || context === null) return null;
-        const buffer = context.createBuffer(1, pcm.samples.length, pcm.rate);
+        let buffer: AudioBuffer;
+        try {
+            buffer = context.createBuffer(1, pcm.samples.length, pcm.rate);
+        } catch {
+            return null;
+        }
         buffer.copyToChannel(pcm.samples, 0);
         const source = context.createBufferSource();
         source.buffer = buffer;
@@ -175,7 +180,16 @@ export function decodeAiff(data: Uint8Array): { rate: number; samples: Float32Ar
         }
         at = body + size + (size & 1);
     }
-    if (sound === null || channels !== 1 || bits !== 16 || !(rate > 0) || frames === 0) return null;
+    if (
+        sound === null ||
+        channels !== 1 ||
+        bits !== 16 ||
+        !(rate > 0) ||
+        frames === 0 ||
+        rate < 3000 ||
+        rate > 768000
+    )
+        return null;
     const count = Math.min(frames, sound.length >> 1);
     const samples = new Float32Array(count);
     for (let i = 0; i < count; i++)

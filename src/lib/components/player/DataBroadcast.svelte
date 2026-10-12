@@ -263,6 +263,8 @@
     let mediaStyle: string | null = null;
     /** 自前のエンジンの丸ゴシック (字幕と同じ Denpa Font) */
     let ownFont: FontFace | null = null;
+    /** キーを AribKeyCode に (自前のエンジンを読み込んだら入る。キーの口で待たずに preventDefault するため) */
+    let ownKey: ((key: string) => number) | null = null;
     /** 自前のエンジンの NVRAM の置き場の頭 (web-bml のものと混ぜない) */
     const OWN_PREFIX = 'denpa_bml_own_';
 
@@ -614,7 +616,8 @@
      * 郵便番号は NVRAM に書かず、受信機の設定として渡す
      */
     async function openOwn(mine: number): Promise<void> {
-        const { createBml } = await import('#lib/bml/engine.js');
+        const { createBml, aribKey } = await import('#lib/bml/engine.js');
+        ownKey = aribKey;
         if (mine !== generation || host === null || media === null) return;
         const into = makeMount(host);
         seat = { parent: media.parentNode as Node, next: media.nextSibling };
@@ -770,14 +773,18 @@
      * 画面の d ボタンの側 (`pressD`)
      */
     async function key(event: KeyboardEvent, down: boolean): Promise<void> {
-        if (own !== null) {
-            if (event.altKey || event.ctrlKey || event.metaKey) return;
-            const engine = own;
-            const { aribKey } = await import('#lib/bml/engine.js');
-            const code = aribKey(event.key);
+        if (own !== null && ownKey !== null) {
+            // 入力欄で打っている字は文書へ渡さない
+            const target = event.target;
+            if (target instanceof HTMLElement && (target.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName))) {
+                return;
+            }
+            // 離すほうは修飾キーを見ない (押しっぱなしの扱いが残らないように)
+            if (down && (event.altKey || event.ctrlKey || event.metaKey)) return;
+            const code = ownKey(event.key);
             if (code === -1) return;
             event.preventDefault();
-            engine.key(code, down);
+            own.key(code, down);
             return;
         }
         if (browser === null || event.altKey || event.ctrlKey || event.metaKey) return;
