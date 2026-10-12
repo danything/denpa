@@ -1,6 +1,7 @@
 import { error } from '@sveltejs/kit';
 import { askedTrack } from '#lib/arib.js';
 import { chaseStream } from '#lib/server/live.js';
+import { BUSY } from '#lib/ts/playback.js';
 
 /**
  * **追っかけ再生を HTTP で流す** (画面の外のもの向けの口。docs/api.md)。テレビのアプリが、
@@ -10,7 +11,8 @@ import { chaseStream } from '#lib/server/live.js';
  * fMP4、`raw` は焼かずに生TS (MPEG-2) をそのまま。`?from=<秒>` で頭からの位置を選ぶ
  * (シークは頼み直す)。`?audio=<音声ID>` (一覧の `audios` の `id`) で焼く音声を選ぶ (知らないものは主音声、
  * `raw` では効かない)。伸びているファイルを追い読みし、録り終えて尻まで読んだら閉じる
- * (`live.ts` の `chaseStream`)
+ * (`live.ts` の `chaseStream`)。焼き直しはその場の変換の枠 (`server/transcode.ts`) を使い、
+ * 埋まっていれば 503
  */
 export function GET({ params, url }) {
     const id = Number(params.id);
@@ -25,6 +27,7 @@ export function GET({ params, url }) {
         askedTrack(url.searchParams.get('audio')),
     );
     if (stream === null) error(404, '録画がないか、まだ何も録画されていません');
+    if (stream === 'busy') error(503, BUSY);
     return new Response(stream, {
         headers: {
             'Content-Type': codec === 'raw' ? 'video/mp2t' : 'video/mp4',

@@ -90,18 +90,23 @@ export function shiftRanges(ranges: Range[], by: number): Range[] {
 }
 
 /**
+ * 本編と CM を交互に並べたチャプター。焼いたものに書くもの (`chapterMetadata`) と、
+ * エンコード済みが無い録画の CM 飛ばし (`api/recordings/<id>/chapters`) で同じものを使う
+ */
+export function chapterList(cm: Range[], duration: number): { start: number; end: number; title: string }[] {
+    const keep = invertRanges(cm, duration);
+    return [...keep.map((r) => ({ ...r, title: '本編' })), ...cm.map((r) => ({ ...r, title: 'CM' }))].sort(
+        (a, b) => a.start - b.start,
+    );
+}
+
+/**
  * ffmetadata 形式のチャプター定義。本編とCMを交互のチャプターにして、
  * プレイヤーのチャプター送りでCMを飛ばせるようにする(ファイルは切らない)。
  */
 export function chapterMetadata(cm: Range[], duration: number): string {
-    const keep = invertRanges(cm, duration);
-    const chapters = [
-        ...keep.map((r) => ({ ...r, title: '本編' })),
-        ...cm.map((r) => ({ ...r, title: 'CM' })),
-    ].sort((a, b) => a.start - b.start);
-
     const lines = [';FFMETADATA1'];
-    for (const chapter of chapters) {
+    for (const chapter of chapterList(cm, duration)) {
         lines.push(
             '[CHAPTER]',
             'TIMEBASE=1/1000',

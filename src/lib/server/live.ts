@@ -22,6 +22,7 @@
 import { and, eq, gt, lte } from 'drizzle-orm';
 import { type Audio, type AudioTrack, audioTracks, parseAudios, pickTrack } from '#lib/arib.js';
 import { CHANNEL, type HybridcastLink, type LiveCodec, type Notice } from '#lib/live.js';
+import { BUSY } from '#lib/ts/playback.js';
 import { type Ait, AitReader, APPLICATION_TYPE_HTML5, CONTROL } from '#lib/ts/ait.js';
 import { BroadcastClock, parseStart } from '#lib/ts/clock.js';
 import { Fmp4Splitter } from '#lib/ts/fmp4.js';
@@ -52,6 +53,7 @@ import { programs, recordings, services } from './schema';
 import { settings } from './settings';
 import { chunks, lines } from './stream';
 import { getTuners, openWhenFree, type StreamUse } from './tuner';
+import { holdTranscode } from './transcode';
 import type { Connection } from './ws';
 
 /**
@@ -309,23 +311,33 @@ export function encodeArgs(
  * 非力な機材 (Celeron J4125) では x264 ultrafast で2本目から追いつかなくなるため (issue #417)。
  * GPU が映像を1つも出さずに降りたら、ソフトウェアで焼き直す (`Session.run`)
  *
- * @returns `input` は `-i` より前、`filter` は `-vf`、`encoder` は `-c:v` から
+ * ## 録画をその場で変換するときも同じ焼き方
+ *
+ * `/api/recordings/<id>/stream` (`server/playback.ts`) もここを使う。元がエンコード済み
+ * (インタレ解除が済んでいる) なら `interlaced` を false にする — インタレ解除を挟まず、
+ * GPU も復号からは載せない (`full` は放送の MPEG-2 を GPU で解く道)
+ *
+ * @returns `input` は `-i` より前、`filter` は `-vf` (無ければ空)、`encoder` は `-c:v` から
  */
-function videoArgs(
+export function videoArgs(
     codec: LiveCodec,
     hw: LiveHw | null,
+    interlaced = true,
 ): { input: string[]; filter: string; encoder: string[] } {
     if (hw !== null) {
-        const gpu = liveHwArgs(hw, codec);
+        const gpu = liveHwArgs(interlaced ? hw : { ...hw, full: false }, codec);
         return {
             input: gpu.input,
             // 復号から GPU なら CPU のインタレ解除は挟まない (挟むと絵を降ろすことになる)
-            filter: (hw.full ? gpu.filter : [deinterlace(true), ...gpu.filter]).join(','),
+            filter: (hw.full && interlaced
+                ? gpu.filter
+                : [...(interlaced ? [deinterlace(true)] : []), ...gpu.filter]
+            ).join(','),
             // -g はソフトウェアと揃える。合流の待ちは鍵フレームの間隔で決まる
             encoder: ['-c:v', ...gpu.encoder, '-g', '60'],
         };
     }
-    return { input: [], filter: deinterlace(true), encoder: softwareArgs(codec) };
+    return { input: [], filter: interlaced ? deinterlace(true) : '', encoder: softwareArgs(codec) };
 }
 
 /** ソフトウェアで焼くときの `-c:v` から (上の説明) */
@@ -391,7 +403,7 @@ function softwareArgs(codec: LiveCodec): string[] {
  * どちらも 2ch に落とす。デュアルモノの配り直し (`-af pan=…`) はこの手前で
  * 効いているので、ここへ来るのは既に「出したい音」1本ぶん
  */
-function audioArgs(codec: StreamCodec): string[] {
+export function audioArgs(codec: StreamCodec): string[] {
     return codec === 'av1'
         ? ['-c:a', 'libopus', '-b:a', '256k', '-ac', '2']
         : ['-c:a', 'aac', '-b:a', '256k', '-ac', '2'];
@@ -517,12 +529,22 @@ function hwKey(codec: StreamCodec, hw: LiveHw): string {
     return `${codec}:${hw.way.device}:${hw.way.kind}:${hw.full}`;
 }
 
-/** このセッションを GPU で焼くか。設定の印と試し焼き (`hwenc.liveHw`)、最近落ちたか */
-function pickLiveHw(codec: LiveCodec): LiveHw | null {
-    const hw = liveHw(codec, settings().hwAllow, liveTurn++);
-    if (hw === null) return null;
+/**
+ * このセッションを GPU で焼くか。設定の印と試し焼き (`hwenc.liveHw`)、最近落ちたか。
+ * 録画のその場の変換 (`server/playback.ts`) も使う — 元がエンコード済みなら `interlaced` を false
+ * (復号からは GPU に載せない。`videoArgs`)
+ */
+export function pickLiveHw(codec: LiveCodec, interlaced = true): LiveHw | null {
+    const found = liveHw(codec, settings().hwAllow, liveTurn++);
+    if (found === null) return null;
+    const hw = interlaced ? found : { ...found, full: false };
     const at = gpuFailed.get(hwKey(codec, hw));
     return at !== undefined && Date.now() - at < FORGET_GPU_FAILED ? null : hw;
+}
+
+/** GPU で焼けなかった道を覚える。しばらくは `pickLiveHw` がソフトウェアを返す */
+export function blameLiveHw(codec: StreamCodec, hw: LiveHw): void {
+    gpuFailed.set(hwKey(codec, hw), Date.now());
 }
 
 /** 放送の実時刻を配り直す間隔 (ms)。配り続ける理由は `Session.tellClock` */
@@ -1313,6 +1335,15 @@ class Session {
         viewer.connection.send(CHANNEL.control, 0n, json(notice));
     }
 
+    /** 畳んだときに呼ぶもの (`whenStopped`) */
+    private readonly stopping: (() => void)[] = [];
+
+    /** 畳んだら呼ぶ。追っかけが変換の枠を返すのに使う (`openChase`)。もう畳んでいればその場で */
+    whenStopped(fn: () => void): void {
+        if (this.stopped) fn();
+        else this.stopping.push(fn);
+    }
+
     stop(): void {
         if (this.stopped) return;
         this.stopped = true;
@@ -1323,6 +1354,7 @@ class Session {
         for (const viewer of this.viewers) if (viewer.side === true) this.tellOne(viewer, { type: 'ended' });
         // 選び直しで同じ目印の新しいものが載っていたら、そちらは消さない
         if (sessions.get(this.id) === this) sessions.delete(this.id);
+        for (const fn of this.stopping.splice(0)) fn();
     }
 
     /**
@@ -1563,14 +1595,15 @@ export function liveStream(
  *
  * シークは `at` を変えて頼み直す (画面の追っかけと同じく、位置ごとに立て直す)。
  * `audio` は焼く音声 (`AudioTrack.id`)。無いもの・省けば主音声で、生では効かない。
- * 録画が無い・まだ何も録れていなければ null
+ * 録画が無い・まだ何も録れていなければ null。焼き直しでその場の変換の枠 (`transcode.ts`) が
+ * 埋まっていれば `'busy'`
  */
 export function chaseStream(
     recordingId: number,
     codec: LiveCodec | 'raw',
     at: number,
     audio?: string,
-): ReadableStream<Uint8Array> | null {
+): ReadableStream<Uint8Array> | null | 'busy' {
     const rec = orm().select().from(recordings).where(eq(recordings.id, recordingId)).get();
     if (rec === undefined || rec.deleted_at !== null || rec.ts_path === null) return null;
     const size = fileSize(rec.ts_path);
@@ -1579,8 +1612,10 @@ export function chaseStream(
         const plan = chasePlan(size, recordedSec(rec), at);
         return followFile(rec.ts_path, plan.offset, plan.paceBytesPerSec, () => recordingDone(rec.id));
     }
+    const release = holdTranscode();
+    if (release === null) return 'busy';
     return sessionStream((viewer, held) =>
-        openChase({ type: 'chase', recordingId, at, audio, codec, caption: 0 }, viewer, held),
+        openChase({ type: 'chase', recordingId, at, audio, codec, caption: 0 }, viewer, held, release),
     );
 }
 
@@ -2062,23 +2097,38 @@ export function attend(connection: Connection): void {
  * 載せない (見ている人が選び直すか抜ければ `leave` が畳む)。
  *
  * シークの当たりの付け方は `chasePlan` (chase.ts の冒頭)。
+ *
+ * **その場の変換の枠を 1 つ使う** (`transcode.ts`)。埋まっていれば断る。畳んだら返す。
+ * HTTP の口 (`chaseStream`) は先に取って `held` で渡す (断るのを 503 にするため)
  */
-function openChase(asked: ChaseAsked, viewer: Viewer, hold?: () => boolean): Session | null {
+function openChase(
+    asked: ChaseAsked,
+    viewer: Viewer,
+    hold?: () => boolean,
+    held?: () => void,
+): Session | null {
     const tell = (notice: Notice) => viewer.connection.send(CHANNEL.control, 0n, json(notice));
     const refuse = (text: string): null => {
         tell({ type: 'error', message: text });
         return null;
     };
 
+    const refuseHeld = (text: string): null => {
+        held?.();
+        return refuse(text);
+    };
+
     const { recordingId, at, audio: wanted, codec, caption } = asked;
-    if (!Number.isInteger(recordingId)) return refuse('録画が見つかりません');
+    if (!Number.isInteger(recordingId)) return refuseHeld('録画が見つかりません');
 
     const rec = orm().select().from(recordings).where(eq(recordings.id, recordingId)).get();
     if (rec === undefined || rec.deleted_at !== null || rec.ts_path === null) {
-        return refuse('録画が見つかりません');
+        return refuseHeld('録画が見つかりません');
     }
     const size = fileSize(rec.ts_path);
-    if (size === null || size === 0) return refuse('まだ何も録画されていません');
+    if (size === null || size === 0) return refuseHeld('まだ何も録画されていません');
+    const release = held ?? holdTranscode();
+    if (release === null) return refuse(BUSY);
 
     const finished = rec.finished_at !== null;
     const plan = chasePlan(size, recordedSec(rec), at);
@@ -2120,6 +2170,7 @@ function openChase(asked: ChaseAsked, viewer: Viewer, hold?: () => boolean): Ses
         false,
         () => followFile(path, plan.offset, plan.paceBytesPerSec, () => recordingDone(rec.id), hold),
     );
+    session.whenStopped(release);
     void session.run();
     session.add(viewer);
     return session;
@@ -2200,7 +2251,7 @@ function airingAt(serviceId: number, at: number) {
 }
 
 /** ffmpeg に名指しさせる放送の番号 (ARIB のサービスID)。局が無ければ 0 = 探させない */
-function aribServiceId(serviceId: number): number {
+export function aribServiceId(serviceId: number): number {
     return (
         orm()
             .select({ service_id: services.service_id })

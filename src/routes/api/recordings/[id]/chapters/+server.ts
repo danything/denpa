@@ -1,4 +1,5 @@
 import { config } from '#lib/server/config.js';
+import { encodedPath, tsChapters } from '#lib/server/playback.js';
 import { recordingOr404 } from '#lib/server/recording.js';
 import { run } from '#lib/server/stream.js';
 import { parseChapters } from '#lib/ts/watch.js';
@@ -17,6 +18,11 @@ import { parseChapters } from '#lib/ts/watch.js';
  *
  * **入っているものを読めば、どれも同じ扱いで済む。**
  *
+ * ## まだ焼けていない録画は検出した区間から
+ *
+ * 元の TS にチャプターは入らない (入れ物が持てない)。観る画面は TS の頭を 0 とした時刻で
+ * 流す (`server/playback.ts`) ので、元の TS の頭から数えた `cm_ranges` がそのまま使える (`tsChapters`)
+ *
  * ## 待たせない
  *
  * `-show_chapters` は見出しだけを読むので、中身を舐めない。実機の30分ものでも
@@ -29,11 +35,11 @@ const TIMEOUT = 15_000;
 
 export async function GET({ params }) {
     const recording = recordingOr404(params.id);
-    /*
-     * **観るのは焼いたものだけ。** 生TSにチャプターは入らない (入れ物が持てない)
-     * ので、まだ焼けていない録画では空を返す — 画面はチャプター送りを出さない
-     */
-    if (recording.library_path === null) return Response.json({ chapters: [] });
+    const path = encodedPath(recording);
+    // 焼き上がれば中身が変わるので控えさせない
+    if (path === null) {
+        return Response.json({ chapters: await tsChapters(recording) }, { headers: { 'Cache-Control': 'no-store' } });
+    }
 
     /*
      * **読めなくても空を返す。** ffprobe が居ない・ファイルが壊れている・
@@ -41,7 +47,7 @@ export async function GET({ params }) {
      * ここで転ぶと、**観られるはずの録画が観られなくなる**
      */
     const probed = await run(
-        [config.ffprobe, '-v', 'error', '-show_chapters', '-print_format', 'json', recording.library_path],
+        [config.ffprobe, '-v', 'error', '-show_chapters', '-print_format', 'json', path],
         { timeoutMs: TIMEOUT, stdout: true },
     );
     const out = new TextDecoder().decode(probed.stdout);

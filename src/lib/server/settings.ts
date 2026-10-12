@@ -80,6 +80,21 @@ export interface Settings {
      * 「インターネットに接続されていません」と正しく案内します
      */
     bmlNetwork: boolean;
+    /**
+     * **その場で変換する本数の上限** (`server/transcode.ts`)。録画をエンコード済みと違う形で流す
+     * (`/api/recordings/<id>/stream`) のと追っかけ再生を数える。null は自動 (GPU が無ければ 2、あれば 4)
+     */
+    transcodeLimit: number | null;
+}
+
+/** 本数の上限に選べる幅 */
+export const TRANSCODE_LIMIT_MAX = 16;
+
+/** 本数の上限を読む。1〜`TRANSCODE_LIMIT_MAX` の整数でなければ自動 (null) */
+export function parseTranscodeLimit(value: string | null | undefined): number | null {
+    if (value === undefined || value === null || value.trim() === '') return null;
+    const n = Number(value);
+    return Number.isInteger(n) && n >= 1 && n <= TRANSCODE_LIMIT_MAX ? n : null;
 }
 
 /**
@@ -156,6 +171,7 @@ export function settings(): Settings {
         prefecture: normalizePrefecture(stored('prefecture')),
         // **入れるまで外へ出ない。** 黙って通信が始まらないようにする
         bmlNetwork: flag('bmlNetwork', false),
+        transcodeLimit: parseTranscodeLimit(stored('transcodeLimit')),
     };
 }
 
@@ -165,9 +181,13 @@ export function saveSettings(patch: Partial<Omit<Settings, 'encode'>>): Settings
     orm().transaction((tx) => {
         for (const [key, value] of Object.entries(patch)) {
             if (value === undefined) continue;
-            // 口ごとの GPU の設定だけ入れ子なので JSON。ほかは文字列で足りる
+            // 口ごとの GPU の設定だけ入れ子なので JSON。自動 (null) は空。ほかは文字列で足りる
             const text =
-                typeof value === 'object' && !Array.isArray(value) ? JSON.stringify(value) : String(value);
+                value === null
+                    ? ''
+                    : typeof value === 'object' && !Array.isArray(value)
+                      ? JSON.stringify(value)
+                      : String(value);
             tx.insert(settingsTable)
                 .values({ key, value: text, updated_at: at })
                 .onConflictDoUpdate({

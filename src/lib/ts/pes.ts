@@ -39,7 +39,7 @@ export interface Streams {
 }
 
 /** 5バイトの PTS / DTS を読む (ISO/IEC 13818-1 2.4.3.7) */
-function readStamp(data: Uint8Array, at: number): number {
+export function readStamp(data: Uint8Array, at: number): number {
     return (
         ((data[at]! >> 1) & 0x07) * 2 ** 30 +
         (data[at + 1]! << 22) +

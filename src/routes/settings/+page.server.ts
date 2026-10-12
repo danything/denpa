@@ -9,7 +9,14 @@ import { liveTokens, revokeToken } from '#lib/server/device-auth.js';
 import { describeDevice, type HwEncode, hwEncode, probe } from '#lib/server/hwenc.js';
 import { available as migrateAvailable, source, start, status } from '#lib/server/migrate.js';
 import { webhooks } from '#lib/server/schema.js';
-import { normalizePostalCode, saveSettings, settings } from '#lib/server/settings.js';
+import {
+    normalizePostalCode,
+    parseTranscodeLimit,
+    saveSettings,
+    settings,
+    TRANSCODE_LIMIT_MAX,
+} from '#lib/server/settings.js';
+import { transcodeAuto } from '#lib/server/transcode.js';
 import { send } from '#lib/server/webhook.js';
 import type { VideoCodec } from '#lib/types.js';
 import { EVENTS } from '#lib/webhook-events.js';
@@ -41,6 +48,11 @@ export function load() {
             postalCode: current.postalCode,
             prefecture: current.prefecture,
             bmlNetwork: current.bmlNetwork,
+        },
+        /** その場で変換する本数 (`server/transcode.ts`)。自動のときの本数と、選べる本数 */
+        transcode: {
+            auto: transcodeAuto(),
+            choices: Array.from({ length: TRANSCODE_LIMIT_MAX }, (_, i) => i + 1),
         },
         webhooks: orm().select().from(webhooks).orderBy(webhooks.id).all(),
         /** ペアリングしたテレビ (アプリの鍵。device-auth.ts) */
@@ -100,6 +112,16 @@ export const actions = {
             ) as HwAllow[string];
         }
         saveSettings({ hwAllow: next });
+        return { success: true, saved: true };
+    },
+
+    /** その場で変換する本数の上限。空は自動 (GPU の有無で決める) */
+    saveTranscode: async ({ request }) => {
+        const form = await request.formData();
+        const raw = String(form.get('transcodeLimit') ?? '');
+        const limit = parseTranscodeLimit(raw);
+        if (raw !== '' && limit === null) return fail(400, { message: '本数が不正です' });
+        saveSettings({ transcodeLimit: limit });
         return { success: true, saved: true };
     },
 

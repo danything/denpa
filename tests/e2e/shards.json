@@ -31,7 +31,8 @@
         "05-rules",
         "28-live-raw",
         "38-live-compat",
-        "31-device"
+        "31-device",
+        "37-playback"
     ],
     "4": [
         "27-encode-cancel",

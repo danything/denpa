@@ -1,6 +1,7 @@
 import { error, json } from '@sveltejs/kit';
 import { pagesFromMkv } from '#lib/server/captions.js';
 import { config } from '#lib/server/config.js';
+import { captionArgs } from '#lib/server/playback.js';
 import { recordingOr404 } from '#lib/server/recording.js';
 import { run } from '#lib/server/stream.js';
 
@@ -12,45 +13,33 @@ import { run } from '#lib/server/stream.js';
  * 抜くのは速い (動画を舐めるだけ。実測 0.1〜1秒)。**ずっと前に焼いた録画は絵 (PGS) が
  * 入っている**ことがあり、それは読まずに 404 を返す (字幕なし)。生TSが残っていれば、焼き直すと
  * ARIB の字幕が入る。
+ *
+ * **まだ焼けていない録画は元の TS から抜く** (`playback.captionArgs`)。時刻は観る画面の物差し
+ * (TS の頭を 0) に揃える。TS は丸ごと舐めるので焼いたものより時間がかかる (1 時間の BS で 7GB)
  */
 
-/** 待ち時間の上限。壊れたファイルで居座らせない */
+/** 待ち時間の上限。壊れたファイルで居座らせない。元の TS は大きいぶん長く待つ */
 const TIMEOUT = 30_000;
+const TIMEOUT_TS = 300_000;
 
 /** 溜める量の上限。字幕の筋だけなら1時間で数百KB。壊れたファイルで膨らんでもここで止める */
 const LIMIT = 32 * 1024 * 1024;
 
 export async function GET({ params }) {
     const recording = recordingOr404(params.id);
-    if (recording.library_path === null) error(404, '字幕がありません');
+    const args = await captionArgs(recording);
+    if (args === null) error(404, '字幕がありません');
 
     const parts: Uint8Array[] = [];
     let size = 0;
-    const { code } = await run(
-        [
-            config.ffmpeg,
-            '-v',
-            'error',
-            '-i',
-            recording.library_path,
-            // 字幕1本だけ。**解かずに写す** (解くのは denpa)
-            '-map',
-            '0:s:0',
-            '-c:s',
-            'copy',
-            '-f',
-            'matroska',
-            'pipe:1',
-        ],
-        {
-            timeoutMs: TIMEOUT,
-            onStdout: (chunk) => {
-                if (size + chunk.length > LIMIT) return;
-                parts.push(chunk);
-                size += chunk.length;
-            },
+    const { code } = await run([config.ffmpeg, ...args.argv], {
+        timeoutMs: args.ts ? TIMEOUT_TS : TIMEOUT,
+        onStdout: (chunk) => {
+            if (size + chunk.length > LIMIT) return;
+            parts.push(chunk);
+            size += chunk.length;
         },
-    );
+    });
     const out = new Uint8Array(size);
     let at = 0;
     for (const part of parts) {
@@ -63,7 +52,7 @@ export async function GET({ params }) {
     if (pages === null) error(404, '字幕がありません (画像の字幕 (PGS) には対応していません)');
 
     return json(pages, {
-        // 同じファイルなら中身は変わらない。焼き直せばパスごと変わる
-        headers: { 'Cache-Control': 'private, max-age=3600' },
+        // 同じファイルなら中身は変わらない。焼き直せばパスごと変わる。元の TS は焼き上がると物差しが変わる
+        headers: { 'Cache-Control': args.ts ? 'no-store' : 'private, max-age=3600' },
     });
 }

@@ -543,6 +543,34 @@
                     </div>
                 </form>
             {/await}
+            <!--
+                その場で変換する本数の上限 (`server/transcode.ts`)。GPU の有無で既定が変わるのでここに置く。
+                GPU の無い機械でも変えられるよう、GPU の印のフォームとは分ける
+            -->
+            <form method="POST" action="?/saveTranscode" use:submitting={keepValues} class="stack transcode">
+                <label class="field">
+                    <span class="field-label">同時に変換する本数</span>
+                    <select name="transcodeLimit" data-testid="transcode-limit">
+                        <option value="" selected={recording.transcodeLimit === null}>
+                            自動 ({data.transcode.auto}本)
+                        </option>
+                        {#each data.transcode.choices as n (n)}
+                            <option value={String(n)} selected={recording.transcodeLimit === n}>{n}本</option>
+                        {/each}
+                    </select>
+                    <span class="hint">録画を別の形式で再生するときと、追っかけ再生で使います。ライブは数えません</span>
+                </label>
+                <details class="more">
+                    <summary>詳しく</summary>
+                    <p>
+                        自動では GPU が無ければ 2本、あれば 4本です。埋まっているときに頼まれた再生は断り、
+                        エンコード済みの動画か元のTSでの再生を勧めます。
+                    </p>
+                </details>
+                <div>
+                    <button type="submit" class="small" data-testid="transcode-save">保存</button>
+                </div>
+            </form>
         </section>
 
         <section class="panel card">
@@ -801,6 +829,12 @@
     }
     .actions {
         margin-top: 0.5rem;
+    }
+    /* GPU の印のフォームと、その場の変換の本数を分ける */
+    .transcode {
+        margin-top: 1rem;
+        padding-top: 1rem;
+        border-top: 1px solid var(--dp-base-300);
     }
     .events {
         display: flex;

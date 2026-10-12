@@ -84,6 +84,14 @@ if printf '%s\n' "$@" | grep -qx -- '-c' && printf '%s\n' "$@" | grep -qx -- 'co
     exit 0
 fi
 
+# 録画をその場で流す口 (`server/playback.ts`) の fMP4。中身は作らず、頭の塊の時刻だけ本物と同じに出す
+# (`fmp4-out.ts`)。TS を標準入力から変換する (`-output_ts_offset`) か、ファイルを fMP4 で流すもの。
+# ライブ・追っかけ (標準入力から、ずらさない) は下の素通しのまま
+if [ "$output" = "pipe:1" ] && printf '%s\n' "$@" | grep -qx -- 'mp4' &&
+    { printf '%s\n' "$@" | grep -qx -- '-output_ts_offset' || [ "$input" != "pipe:0" ]; }; then
+    exec bun "$(dirname "$0")/fmp4-out.ts" "$@"
+fi
+
 # ライブ配信(TS): stdin をそのまま stdout に流し続ける。
 # 中身は本物のTSではないが、「切るまで流れ続ける」という性質だけは同じ。
 #
