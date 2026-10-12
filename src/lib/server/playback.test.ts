@@ -319,36 +319,52 @@ describe('ffmpeg の出口を本文にする (transcodeBody)', () => {
         expect(await new Response(body).text()).toBe('流し込んだもの');
     });
 
+    /** 畳まれるまで待つ (上限を超えてから見張りが気づくまでの間がある) */
+    const until = async (ok: () => boolean) => {
+        for (let i = 0; i < 500 && !ok(); i++) await Bun.sleep(10);
+    };
+
     /*
-     * 読みに来て待っているのは「読まれない」ではない。数えていた頃は、ffmpeg の出だしが
+     * 読みに来て待っているのは「読まれない」ではない。分けていなかった頃は、ffmpeg の出だしが
      * 上限より遅いと、待っている相手を `idle` で切っていた (CI で `sh` の起動が 50ms に
-     * 間に合わなかった回に、下の「畳む」のテストが最初の読みで落ちた)
+     * 間に合わなかった回に、下の「読まれない」のテストが最初の読みで落ちた)
      */
-    test('ffmpeg が出すのを待っている間は畳まない', async () => {
+    test('ffmpeg の出だしが上限より短く遅れただけなら畳まない', async () => {
         let done = 0;
         const body = transcodeBody([{ argv: ['sh', '-c', 'sleep 0.3; printf ok'] }], '[試験]', () => done++, {
-            limit: 50,
+            limit: 2000,
             every: 10,
         });
         expect(await new Response(body).text()).toBe('ok');
         expect(done).toBe(1);
     });
 
+    test('待っている間に ffmpeg が何も出さないまま上限を超えたら畳む', async () => {
+        let done = 0;
+        const body = transcodeBody([{ argv: ['sh', '-c', 'exec sleep 30'] }], '[試験]', () => done++, {
+            limit: 200,
+            every: 10,
+        });
+        await expect(body.getReader().read()).rejects.toThrow('stalled');
+        expect(done).toBe(1);
+    });
+
     test('読まれないまま置かれたら畳む', async () => {
         let done = 0;
+        // 上限は `sh` の起動より十分長く (最初の読みが「何も出さない」で切られないように)
         const body = transcodeBody([{ argv: ['sh', '-c', 'yes'] }], '[試験]', () => done++, {
-            limit: 50,
+            limit: 1000,
             every: 10,
         });
         const reader = body.getReader();
         await reader.read();
-        await Bun.sleep(200);
+        await until(() => done > 0);
         expect(done).toBe(1);
         await expect(
             (async () => {
                 for (;;) if ((await reader.read()).done) return;
             })(),
-        ).rejects.toThrow();
+        ).rejects.toThrow('idle');
     });
 });
 

@@ -557,10 +557,10 @@ export interface Attempt {
  * - 読まれたぶんしか読み出さない。相手が読まなければ出口が詰まり、ffmpeg も止まる
  * - 1 バイトも出さずに降りたら、次の手 (GPU → ソフトウェア) で起こし直す
  * - `IDLE_LIMIT` のあいだ読まれなければ畳む。閉じられた・読み切った・落ちたときも畳む
- * - **読みに来て ffmpeg が出すのを待っている間は数えない。** 相手は読んでいて、遅いのは
- *   ffmpeg のほう。数えていた頃は、出だしの遅い ffmpeg を待っている相手を `idle` で
- *   切っていた (単体テストで `sh` の起動が上限の 50ms に間に合わなかった回に落ちた)。
- *   何も出さずに固まった ffmpeg も、相手が待っている間は残る。畳むのは相手が切ったとき (`cancel`)
+ * - **読みに来て ffmpeg が出すのを待っている間は、「読まれない」ではなく「ffmpeg が出さない」として数える。**
+ *   上限は同じ `IDLE_LIMIT`。分けていなかった頃は、出だしの遅い ffmpeg を待っている相手を
+ *   「読まれない」(`idle`) で切っていた (単体テストで `sh` の起動が上限の 50ms に間に合わなかった回に落ちた)。
+ *   何も出さずに固まった ffmpeg は、相手が切らなくても畳む (枠を持ったまま残さない)
  * - 畳んだら `done` を呼ぶ (枠を返す)
  */
 export function transcodeBody(
@@ -574,8 +574,8 @@ export function transcodeBody(
     let sent = false;
     let finished = false;
     let lastRead = Date.now();
-    /** 読みに来ていて、ffmpeg が出すのを待っているところ。この間は詰まりとみなさない */
-    let waiting = false;
+    /** 読みに来て ffmpeg が出すのを待ちはじめた時刻。待っていなければ null */
+    let waitingSince: number | null = null;
     let timer: ReturnType<typeof setInterval> | null = null;
 
     const finish = () => {
@@ -590,22 +590,30 @@ export function transcodeBody(
         start(controller) {
             proc = spawnAttempt(attempts[0]!);
             timer = setInterval(() => {
-                if (waiting || Date.now() - lastRead < idle.limit) return;
-                console.warn(`${what}が読まれないので止めます`);
+                const now = Date.now();
+                // 待っている間は ffmpeg の側、待っていなければ相手の側を見る
+                const stalled = waitingSince !== null && now - waitingSince >= idle.limit;
+                const unread = waitingSince === null && now - lastRead >= idle.limit;
+                if (!stalled && !unread) return;
+                console.warn(
+                    stalled
+                        ? `${what}の ffmpeg が何も出さないので止めます`
+                        : `${what}が読まれないので止めます`,
+                );
                 finish();
                 try {
-                    controller.error(new Error('idle'));
+                    controller.error(new Error(stalled ? 'stalled' : 'idle'));
                 } catch {
                     // もう閉じている
                 }
             }, idle.every);
         },
         async pull(controller) {
-            waiting = true;
+            waitingSince = Date.now();
             try {
                 await fill(controller);
             } finally {
-                waiting = false;
+                waitingSince = null;
                 lastRead = Date.now();
             }
         },
