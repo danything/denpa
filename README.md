@@ -134,7 +134,7 @@ docker compose up -d
 - [docs/stream.md](docs/stream.md) — **ライブ視聴**
 - [docs/player.md](docs/player.md) — ホーム画面に置く、LAN でも https で開く
 - [docs/offline.md](docs/offline.md) — 端末に落として電波の無いところで観る
-- [docs/auth.md](docs/auth.md) — **誰を通すか** (OIDC・信頼したネットワーク・ペアリング・期限付きのリンク)
+- [docs/auth.md](docs/auth.md) — **誰を通すか** (OIDC・信頼したネットワーク・ペアリング・期限付きのリンク・画面で動いてよいもの (CSP))
 - [docs/api.md](docs/api.md) — **外から使う口**
 - [docs/migrate.md](docs/migrate.md) — **EPGStation からの引き継ぎ**
 - [docs/development.md](docs/development.md) — **手を入れるとき** (開発環境・テスト)

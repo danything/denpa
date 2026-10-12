@@ -460,10 +460,12 @@ export async function captionsClearOfBar(page: Page, canvas: string, bar: string
  *
  * 作りものの放送にはデータ放送が載っていないので、出したときの見え方 (字幕が映像と一緒に
  * 小窓へ縮むか) はこれを流して確かめる。中身は web-bml の `ResponseMessage` そのまま
- * (ライブは WebSocket の 0x30、録画はサイドカーの `.bml.jsonl` で渡す)
+ * (ライブは WebSocket の 0x30、録画はサイドカーの `.bml.jsonl` で渡す)。
+ *
+ * `extra` は `<body>` の終わりに足す BML (放送が書くものを試すとき。tests/e2e/35-csp.spec.ts)
  */
 export const DATA_WINDOW = { left: 480, top: 270, width: 480, height: 270 } as const;
-export function fakeDataBroadcast(): Record<string, unknown>[] {
+export function fakeDataBroadcast(extra = ''): Record<string, unknown>[] {
     const { left, top, width, height } = DATA_WINDOW;
     const bml = [
         '<?xml version="1.0" encoding="EUC-JP" ?>',
@@ -472,6 +474,7 @@ export function fakeDataBroadcast(): Record<string, unknown>[] {
         '<bml><head><title>e2e</title></head>',
         '<body style="background-color:#0000ff;">',
         `<object type="video/X-arib-mpeg2" style="left:${left}px;top:${top}px;width:${width}px;height:${height}px;"/>`,
+        extra,
         '</body></bml>',
     ].join('\n');
     const dataEventId = 1;
