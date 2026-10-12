@@ -234,10 +234,9 @@ test.describe('チューナーの設定', () => {
 
         await page.setViewportSize({ width: 390, height: 844 });
         for (const table of tables) {
-            expect(await table.locator('thead').evaluate((el) => getComputedStyle(el).display)).toBe('none');
-            expect(await table.locator('tbody tr').first().evaluate((el) => getComputedStyle(el).display)).toBe(
-                'grid',
-            );
+            const display = (el: Element) => getComputedStyle(el).display;
+            expect(await table.locator('thead').evaluate(display)).toBe('none');
+            expect(await table.locator('tbody tr').first().evaluate(display)).toBe('grid');
         }
         // 欄の見出しはカードの中に書く
         const label = await page
