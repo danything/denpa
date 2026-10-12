@@ -1209,11 +1209,15 @@
                 <!--
                     **CM を跨ぐ間の蓋。** 字幕より後ろに置く = 字幕の上に載る
                     (CM の字幕まで隠すため)。帯や報せ (z-index 10) の下には残す。
-                    字幕と同じ理由で箱の中に置き、style で書く (小窓の中でも CM を隠す)
+                    字幕と同じ理由で箱の中に置き、style で書く (小窓の中でも CM を隠す)。
+                    出し入れは `hidden` のまま — style に式を書くと `hopping` が変わるたびに
+                    属性ごと書き直され、`place` が JS で書いた位置と大きさが消える
+                    (`hidden` は UA の CSS なので影の中でも効く)
                 -->
                 <canvas
                     bind:this={cover}
-                    style="position:absolute; pointer-events:none; display:{hopping ? 'block' : 'none'};"
+                    style="position:absolute; pointer-events:none;"
+                    hidden={!hopping}
                     aria-hidden="true"
                 ></canvas>
                 </div>
