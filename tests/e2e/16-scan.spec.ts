@@ -111,8 +111,8 @@ test.describe('チューナー画面', () => {
         await expect(using.getByTestId('tuner-user').nth(1)).toHaveAttribute('data-priority', '3');
         await expect(tuners).not.toContainText('強さ');
         await expect(tuners).not.toContainText('優先度');
-        // 譲る順は「詳しく」に。録画がいちばん上、局ロゴがいちばん下
-        const order = page.getByTestId('tuner-yield-order').getByRole('listitem');
+        // 譲る順は「詳しく」に。録画がいちばん上、局ロゴがいちばん下 (畳んだままなので役割では引けない。li で)
+        const order = page.getByTestId('tuner-yield-order').locator('li');
         await expect(order.first()).toHaveText('録画');
         await expect(order.nth(1)).toHaveText('ライブ視聴');
         await expect(order.last()).toHaveText('局ロゴの取得');
