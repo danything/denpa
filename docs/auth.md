@@ -292,3 +292,75 @@ Deployment に付けた `secrets.infisical.com/auto-reload` で Pod も入れ替
 (`auth.ts`) がやります。前段から外すときは「denpa 側を設定 → 実機で入れることを確かめる →
 前段から外す」の順にします。逆にすると、OIDC の設定を間違えていたときに、誰も入れないのではなく
 誰でも入れる状態になります。
+
+## 画面で動いてよいもの (CSP)
+
+**画面の HTML には Content-Security-Policy を付けています** (設定は `vite.config.ts` の
+`csp`、SvelteKit が毎回付ける)。上までは「誰を通すか」ですが、ここは「通した人の画面で、
+**誰が書いたスクリプトを動かすか**」です。
+
+**狙いは放送が書いたスクリプト。** データ放送の借りもの (web-bml) は、BML の
+`onclick` などのイベント属性を**本物の HTML 属性のまま** DOM に入れます (名前を
+付け替えているのは `onload` / `onunload` だけ)。押されると、放送の文字列が
+**denpa の origin で本物の JS として動き**、ログインの控えで API を叩けます。
+器の `pointer-events: none` で押せないのはたまたまで、BML の CSS は絞っていないので
+外せるかもしれません。web-bml は自前の実装に置き換える予定ですが、置き換えたあとも
+「放送のものを本物の JS として動かさない」最後の砦として残します。
+
+| 指令 | 値 | 理由 |
+| --- | --- | --- |
+| `script-src` | `'self'` + nonce | 自分の束 (`_app/`。web-bml の遅延読み込みも) と、SvelteKit の起動・後から流すデータの `<script>` (nonce)。**`'unsafe-inline'` と `'unsafe-eval'` は入れない** |
+| `script-src-attr` | `'none'` | `onclick="…"` などの属性のハンドラを止める (上の穴そのもの) |
+| `style-src` | `'self' 'unsafe-inline'` | 下の「スタイルは止めない」 |
+| `img-src` | `'self' data: blob:` | 局ロゴ・ポスターは自分。データ放送の絵は作り直して blob:、DRCS (外字) は canvas から data: |
+| `font-src` | `'self' data: blob:` | Denpa Font は自分 (`/api/font/denpa-font.woff2`)。DRCS は FontFace にバイト列で渡すので URL ではない |
+| `media-src` | `'self' blob:` | 録画は自分。ライブの MSE と端末に落とした録画は blob: |
+| `connect-src` | `'self'` | fetch・SSE・データ放送の双方向の中継口 (`/api/bml/…`)・ライブの WebSocket。`'self'` は同じ host の `ws:` / `wss:` も含む |
+| `worker-src` | `'self'` | 生で観る道の worker (`src/lib/raw/worker.ts`) と PWA の ServiceWorker |
+| `object-src` / `frame-src` | `'none'` | どちらも使わない。BML の `<object>` は web-bml が `data` を外して中に `<img>` を置くので読み込まない |
+| `base-uri` / `form-action` | `'self'` | `<base>` とフォームの送り先は自分だけ |
+| `default-src` | `'self'` | 上に無いもの (マニフェストなど) |
+
+**画面の移動は関わりません。** OIDC のログイン (`/login` が Entra へ 302)・
+Hybridcast (別のタブで開く)・更新のお知らせのリンクは移動なので、上のどれにも掛かりません。
+フォームの送り先 (`form-action 'self'`) は自分だけで、送ったあとに外へ回すフォームはありません
+(ログアウトは `/login/out` へ戻すだけ。期限切れの POST はリダイレクトせず 401)。
+`frame-ancestors` は「denpa を枠に入れて使う」構成を止めるかどうかの別の話なので、
+ここでは決めていません。
+
+**WebSocket を `'self'` で通すのは CSP3 の決まり**で、今のブラウザ (Chrome・Edge・Firefox・Safari)
+は同じ host の `ws:` / `wss:` を `'self'` に含めます。CSP3 より前の作りの古いブラウザ (数年前の Safari など) では
+ライブが繋がりません。`ws:` / `wss:` を足せば通りますが、どこへでも繋げるようになるので足していません。
+
+### nonce にする (hash ではなく)
+
+**設定画面とチューナーの画面は、load から Promise を返して後から流しています**
+(SvelteKit のストリーミング)。流れてくる `<script>` は頭 (ヘッダ) を送ったあとに組まれるので、
+hash を頭に載せられず、hash の方式だと止まります。`app.html` の色当ての1本も
+`nonce="%sveltekit.nonce%"` で通しています。
+
+nonce は毎回変わるので、**画面の HTML は 304 になりません** (中身の指紋が毎回変わる)。
+HTML は小さく、重いもの (`_app/immutable/`) は永く持たせたままなので困りません
+(`hooks.server.ts` の `finish`)。
+
+### スタイルは止めない
+
+`style-src` には `'unsafe-inline'` を残しています。その場で書くスタイルが多いためです。
+Svelte の遷移と `style:`、web-bml が BML の CSS から作る `<style>` と `style` 属性、
+`+layout.svelte` の @font-face。これらを nonce や hash で通すのは、web-bml が DOM を
+組むたびに作るぶんがあって無理です。
+
+**CSS からできることは、スクリプトよりずっと少ない。** 見た目を変えることと、
+上の `img-src` / `font-src` の範囲での読み込みまでです (外へは出られない)。denpa の DOM に
+CSS で抜き出して困る秘密 (属性に入った鍵など) はありません。
+
+**この「外へは出られない」は `img-src` / `font-src` を自分・data:・blob: に絞っているから**
+成り立っています。外のサーバの絵や字を許すと、BML の CSS (属性セレクタ + `url()`) で
+画面の中身を外へ送れるようになるので、そのときはスタイルも絞り直します。
+
+### 増やすとき
+
+新しく読み込み元を足したら (外のサーバの絵・iframe など) ここの表と `vite.config.ts` を一緒に
+直します。止められたものは開発者ツールのコンソールに `Refused to …` と出ます。
+E2E (`tests/e2e/35-csp.spec.ts`) は主な画面を回って違反が1つも出ないこと、
+BML の `onclick` を押しても動かないことを見ています。

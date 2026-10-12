@@ -71,6 +71,49 @@ export default defineConfig({
              * 受けて、それ以外をここの出力へ流している (理由はあちらに書いてある)。
              */
             adapter: adapter(),
+            /*
+             * **画面で動いてよいスクリプトを、自分の束と SvelteKit の起動だけに絞る**
+             * (Content-Security-Policy。方針と、読み込み元を1つずつ洗った表は docs/auth.md の
+             * 「画面で動いてよいもの」)。
+             *
+             * いちばんの狙いは**放送が書いたスクリプトを本物の JS として動かさない**こと。
+             * データ放送の借りもの (web-bml) は BML の `onclick` などを本物の属性のまま
+             * DOM に入れるので、押されると放送の文字列が denpa の origin で動く。
+             * `script-src` に `'unsafe-inline'` を入れず、`script-src-attr 'none'` で
+             * 属性のハンドラを止める。`eval` 系も許さない (`'unsafe-eval'` を入れない)。
+             *
+             * **nonce にする (hash ではなく)。** 設定画面・チューナーの画面は load から
+             * Promise を返して後から流している (SvelteKit のストリーミング) — 流れてくる
+             * `<script>` は頭を送ったあとに組まれるので hash を頭に載せられず、hash では止まる
+             */
+            csp: {
+                mode: 'nonce',
+                directives: {
+                    'default-src': ['self'],
+                    // nonce は SvelteKit が足す。束 (`_app/`) と遅延読み込み (web-bml) は 'self'
+                    'script-src': ['self'],
+                    'script-src-attr': ['none'],
+                    /*
+                     * スタイルはその場で書くものを許す。Svelte の遷移・`style:`、web-bml が BML の
+                     * CSS から作る `<style>` と `style` 属性、`+layout.svelte` の @font-face。
+                     * 止めたいのはスクリプトで、CSS からできるのは見た目と下の *-src の範囲の読み込みまで
+                     */
+                    'style-src': ['self', 'unsafe-inline'],
+                    // データ放送の絵は blob: (JPEG・PNG・GIF を作り直したもの) と data: (DRCS の字)
+                    'img-src': ['self', 'data:', 'blob:'],
+                    'font-src': ['self', 'data:', 'blob:'],
+                    // MSE と端末に落とした録画は blob:
+                    'media-src': ['self', 'blob:'],
+                    // fetch・SSE・ライブの WebSocket はみな自分 ('self' は同じ host の ws:/wss: も含む)
+                    'connect-src': ['self'],
+                    // 生で観る道の worker と PWA の ServiceWorker
+                    'worker-src': ['self'],
+                    'object-src': ['none'],
+                    'frame-src': ['none'],
+                    'base-uri': ['self'],
+                    'form-action': ['self'],
+                },
+            },
         }),
         /*
          * **アイコンは組むときに SVG ごと埋め込む** (`~icons/lucide/play` が Svelte の

@@ -36,8 +36,7 @@ test.describe('PWA', () => {
      * SvelteKit が付けるのは中身の指紋 (`etag`) だけで、どれくらい持って
      * いてよいかは何も言わない。言われなかった端末は自分で決めるので、
      * ホーム画面から入れたアプリを開き直したときに**前に閉じたときの一覧**
-     * が出ることがある。`no-cache` は「持ってよいが出す前に必ず聞く」で、
-     * 指紋はそのままなので変わっていなければ 304 (中身は流れない)
+     * が出ることがある。`no-cache` は「持ってよいが出す前に必ず聞く」
      */
     test('画面の HTML は毎回聞き直させる', async ({ request }) => {
         for (const path of ['/', '/guide', '/settings']) {
@@ -47,26 +46,16 @@ test.describe('PWA', () => {
         }
 
         /*
-         * **指紋が付くのは、最後まで組んでから返す画面だけ。**
-         *
-         * 番組表は器を先に返して表を後から流すので (`guide/+page.server.ts` の
-         * `gridOf`)、返し始める時点で中身が決まっておらず、指紋の出しようがない。
-         * 落ちるのは「変わっていなければ 304」だけで、**溜め込ませない約束
-         * (`no-cache`) は上で見たとおり効いている** — 実機で出た「開き直すと前に
-         * 閉じたときの一覧」はそちらの話なので、ここは守れている。
-         * 番組表の中身は番組が動くたびに変わるので、もともと 304 になる機会も
-         * ほとんど無かった
+         * **304 にはならない。** 画面の HTML には CSP の nonce が入って毎回変わる
+         * (vite.config.ts の `csp`、docs/auth.md の「画面で動いてよいもの」)。中身の指紋
+         * (`etag`) も毎回変わるので、前の指紋で聞かれても中身を返し直す。HTML は小さく、
+         * 重いもの (下の `_app/immutable/`) は永く持たせたままなので困らない
          */
-        for (const path of ['/', '/settings']) {
-            expect((await request.get(path)).headers()['etag'], path).toBeTruthy();
-        }
-
-        // 指紋が付いているものは、変わっていなければ中身を流さない
         const first = await request.get('/');
         const again = await request.get('/', {
             headers: { 'if-none-match': first.headers()['etag'] ?? '' },
         });
-        expect(again.status()).toBe(304);
+        expect(again.status()).toBe(200);
 
         /*
          * **名前に指紋が入っているものには口を出さない。** 永く持たせたい側で、

@@ -10,7 +10,8 @@
         <meta name="theme-color" content="#13171f" />
         <meta name="mobile-web-app-capable" content="yes" />
         <title>denpa</title>
-        <script>
+        <!-- nonce が無いと CSP で止まる (vite.config.ts の csp。毎回 SvelteKit が入れる) -->
+        <script nonce="%sveltekit.nonce%">
             // ハイドレーションを待つと一瞬ちがう色で表示されてしまうので、ここで当てる。
             // 保存が無ければダーク (映像を観るものはダークが基本。端末に合わせるのは選んだときだけ)
             (() => {

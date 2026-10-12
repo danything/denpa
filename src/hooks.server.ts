@@ -125,8 +125,10 @@ function finish(response: Response): Response {
      * 溜めてあった HTML をそのまま出すことがあり、**録画一覧が前に閉じた
      * ときのまま**になる。
      *
-     * `no-cache` は「持っていてよいが、出す前に必ず聞く」。指紋はそのままなので、
-     * 変わっていなければ 304 で中身は流れない — **遅くならずに古くならない**。
+     * `no-cache` は「持っていてよいが、出す前に必ず聞く」。画面の HTML には
+     * CSP の nonce (毎回変わる。vite.config.ts の `csp`) が入るので指紋も毎回変わり、
+     * 304 にはならず中身が流れ直す。HTML は小さく、重いもの (`_app/immutable/`) は
+     * 下のとおり永く持たせたままなので、遅くはならない。
      *
      * 触るのは画面だけ (`x-sveltekit-page`)。`__data.json` は SvelteKit が
      * 自分で `no-store` を付けているし、`_app/immutable/` は名前に指紋が
