@@ -568,7 +568,9 @@ export async function holdMedia(page: Page, video: string, captions: string, sta
  * - 字幕を目立つ色で塗って画面を撮ると、**小窓の真ん中はその色** (上に何も被っていない)、
  *   小窓の外 (左上) はその色でない (字幕が枠いっぱいに残っていない)
  */
-export async function captionsSeenInDataWindow(page: Page): Promise<void> {
+export async function captionsSeenInDataWindow(page: Page, options: { moved?: boolean } = {}): Promise<void> {
+    // web-bml は映像の箱を影の中へ移す。自前のエンジンは移さず、箱を小窓へ寄せる
+    const moved = options.moved ?? true;
     type Box = { x: number; y: number; width: number; height: number };
     const boxes = () =>
         page.evaluate(() => {
@@ -603,8 +605,14 @@ export async function captionsSeenInDataWindow(page: Page): Promise<void> {
             { message: '映像がデータ放送の小窓へ移らない (偽の BML が効いていない)' },
         )
         .toBe(true);
+    // 持ち上げを戻すのは 200ms かけて動く (PlayerStage の transition)。戻り終わるまで待つ
+    await expect
+        .poll(async () => (await boxes()).translate, { message: '小窓の中で字幕が持ち上げられたまま' })
+        .toBe('none');
     const { video, captions, stage, sameBox, inShadow, translate } = await boxes();
-    expect.soft(inShadow, '映像の箱が BML の影の中に無い').toBe(true);
+    expect
+        .soft(inShadow, moved ? '映像の箱が BML の影の中に無い' : '映像の箱が影の中へ移されている')
+        .toBe(moved);
     expect.soft(sameBox, '字幕が映像と同じ箱に居ない (小窓へ一緒に行かない)').toBe(true);
     expect.soft(translate, '小窓の中で字幕が持ち上げられたまま').toBe('none');
     // 字幕の面は小窓 (映像の箱) の中に収まる
@@ -638,7 +646,9 @@ export async function captionsSeenInDataWindow(page: Page): Promise<void> {
             const data = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
             let hit = 0;
             for (let i = 0; i < data.length; i += 4) {
-                if ((data[i] ?? 0) > 200 && (data[i + 1] ?? 255) < 60 && (data[i + 2] ?? 0) > 200) hit++;
+                // 塗った色 (マゼンタ)。読み込み中の幕 (半透明の黒) が被っていても色味で拾う
+                const [r = 0, g = 255, b = 0] = [data[i], data[i + 1], data[i + 2]];
+                if (r > 90 && b > 90 && g * 3 < r && g * 3 < b) hit++;
             }
             return hit / (data.length / 4);
         }, png.toString('base64'));

@@ -1,0 +1,140 @@
+/**
+ * 覚えておく場所 (NVRAM。`browser.readPersistentArray("nvram://local_web/0", "S:16B")`)。
+ *
+ * 放送が使う領域 (地上波は TR-B14 第二分冊 5.2、BS は TR-B15):
+ *
+ * | URI | 誰のものか | ブロック |
+ * | --- | --- | --- |
+ * | `nvram://local/N`・`nvram://local_web/N` | 局 (original_network_id) | 0〜63・0〜31 |
+ * | `nvram://NN;group/N` | 系列 (NN は affiliation_id) | 0〜63 |
+ * | `nvram://tr_common/N` | 地上波の局で共通 | 0〜31 |
+ * | `nvram://~/N`・`nvram://~/ext/N`・`nvram://common/N` | BS の事業者・共通 | 0〜15・16〜63・0〜15 |
+ * | `nvram://receiverinfo/zipcode` など | 受信機の設定 (読むだけ。郵便番号は denpa が渡す) | |
+ *
+ * 1 ブロック 64 バイト。中身は置き場 (`store`) に base64 で置く。BS の事業者の区別
+ * (broadcaster_id) は BIT が要るが denpa は解かないので、サービスごとに分ける (混ざらない側に倒す)。
+ */
+
+import { type Cell, parseStructure, readFields, writeFields } from './binary';
+import { decodeEuc, encodeEuc } from './euc';
+
+export interface Store {
+    get(key: string): string | null;
+    set(key: string, value: string): void;
+}
+
+export interface ReceiverInfo {
+    /** 郵便番号 (数字 7 桁)。無ければ空 */
+    zipcode: string;
+    /** 都道府県の番号 (STD-B10 の地域)。無ければ 255 */
+    prefecture: number;
+}
+
+interface Who {
+    originalNetworkId: number | null;
+    serviceId: number | null;
+}
+
+const BLOCK = 64;
+
+const AREAS: Record<string, { first: number; last: number; scope: 'network' | 'common' | 'service' }> = {
+    local: { first: 0, last: 63, scope: 'network' },
+    local_web: { first: 0, last: 31, scope: 'network' },
+    tr_common: { first: 0, last: 31, scope: 'common' },
+    '~': { first: 0, last: 15, scope: 'service' },
+    '~/ext': { first: 16, last: 63, scope: 'service' },
+    common: { first: 0, last: 15, scope: 'common' },
+};
+
+export class Nvram {
+    constructor(
+        private readonly store: Store,
+        private readonly receiver: () => ReceiverInfo,
+        private readonly who: () => Who,
+    ) {}
+
+    /** 置き場の名前。使えない URI なら null */
+    private key(uri: string): string | null {
+        const match = /^nvram:\/\/(?:([0-9a-f]{2});)?(.+)\/(\d+)$/i.exec(uri.trim());
+        if (match === null) return null;
+        const [, affiliation, prefix, blockText] = match;
+        const block = Number(blockText);
+        if (prefix === 'group') {
+            if (affiliation === undefined || block > 63) return null;
+            return `group:${affiliation.toLowerCase()}:${block}`;
+        }
+        const area = AREAS[prefix!];
+        if (area === undefined || affiliation !== undefined || block < area.first || block > area.last)
+            return null;
+        const who = this.who();
+        let scope = '';
+        if (area.scope === 'network') scope = String(who.originalNetworkId ?? 'unknown');
+        else if (area.scope === 'service')
+            scope = `${who.originalNetworkId ?? 'unknown'}.${who.serviceId ?? 'unknown'}`;
+        return `${prefix}:${scope}:${block}`;
+    }
+
+    private bytes(uri: string): Uint8Array | null {
+        switch (uri.trim()) {
+            case 'nvram://receiverinfo/zipcode': {
+                const zip = this.receiver().zipcode;
+                return new TextEncoder().encode(/^\d{7}$/.test(zip) ? zip : '');
+            }
+            case 'nvram://receiverinfo/prefecture':
+                return Uint8Array.of(this.receiver().prefecture);
+            case 'nvram://receiverinfo/regioncode':
+                return Uint8Array.of(0, 0);
+        }
+        const key = this.key(uri);
+        if (key === null) return null;
+        const out = new Uint8Array(BLOCK);
+        const kept = this.store.get(key);
+        if (kept !== null) {
+            try {
+                const binary = atob(kept);
+                for (let i = 0; i < Math.min(binary.length, BLOCK); i++) out[i] = binary.charCodeAt(i);
+            } catch {}
+        }
+        return out;
+    }
+
+    /** `readPersistentArray`。読めなければ null */
+    read(uri: string, structure: string): Cell[] | null {
+        const fields = parseStructure(structure);
+        const data = this.bytes(uri);
+        if (fields === null || data === null) return null;
+        try {
+            // 郵便番号は 7 バイトに満たないと字が詰まらないので、足りない分は NUL
+            const padded = new Uint8Array(Math.max(data.length, BLOCK));
+            padded.set(data);
+            return readFields(padded, fields, decodeEuc)[0];
+        } catch {
+            return null;
+        }
+    }
+
+    /** `writePersistentArray`。書いたバイト数、書けなければ NaN */
+    write(uri: string, structure: string, values: readonly Cell[]): number {
+        const fields = parseStructure(structure);
+        const key = this.key(uri);
+        if (fields === null || key === null) return Number.NaN;
+        if (fields.filter((field) => field.type !== 'P').length > values.length) return Number.NaN;
+        let data: Uint8Array;
+        try {
+            data = writeFields(values, fields, encodeEuc);
+        } catch {
+            return Number.NaN;
+        }
+        if (data.length > BLOCK) return Number.NaN;
+        let binary = '';
+        for (const byte of data) binary += String.fromCharCode(byte);
+        this.store.set(key, btoa(binary));
+        return data.length;
+    }
+
+    /** `checkAccessInfoOfPersistentArray`。2 読み書き・1 読むだけ・NaN 使えない */
+    check(uri: string): number {
+        if (uri.startsWith('nvram://receiverinfo/')) return uri.endsWith('/zipcode') ? 2 : 1;
+        return this.key(uri) === null ? Number.NaN : 2;
+    }
+}

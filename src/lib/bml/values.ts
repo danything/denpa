@@ -185,7 +185,7 @@ export const ABORT = new Abort();
 export type NativeImpl = (thisValue: Value, args: Value[]) => NativeResult;
 
 export type FunctionBody =
-    | { kind: 'native'; impl: NativeImpl; construct?: (args: Value[]) => Value }
+    | { kind: 'native'; impl: NativeImpl; construct?: (args: Value[]) => NativeResult }
     | { kind: 'script'; code: unknown; env: unknown };
 
 export function isObject(value: Value): value is JSObject {

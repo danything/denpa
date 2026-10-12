@@ -118,6 +118,10 @@ denpa 本体は上と同じコンテナイメージ `denpa` を、Mac の Docker
 | unplugin-icons / @iconify/utils (組むときだけ。束には入らない) | `~icons/*` を Svelte の部品に変える | <https://github.com/unplugin/unplugin-icons> / <https://github.com/iconify/iconify> | MIT |
 | cookie / devalue / esm-env / clsx | SvelteKit のランタイム (adapter-node 6 は静的ファイルの配りも自前で、依存を持たない) | 各上流 | MIT |
 
+**自前のデータ放送エンジン** (`src/lib/bml/`。web-bml と切り替えて試している段階。[stream.md](stream.md#自前のエンジン-srclibbmlweb-bml-と切り替えて試す段階)) は依存を足していない。
+規格 (ARIB STD-B24・TR-B14・TR-B15) を元に書き、NVRAM の領域の表・郵便番号の範囲の読み方・
+BinaryTable の検索の比べ方・既定のスタイルなど一部は web-bml (MIT) の振る舞いを読んで合わせた。
+
 ### ライブを生で見るときにブラウザへ配る復号器
 
 [Dockerfile](../Dockerfile) の `mpeg2wasm` 段で組み、イメージの `/opt/denpa/mpeg2` に置いて

@@ -1065,6 +1065,33 @@ browser.destroy();
 **局を変えたら作り直す。** 借りている側は一度に一つの放送しか持てず
 (カルーセルも覚えるものも局ごと)、前の局の文書が映像を掴んだままになる。
 
+#### 自前のエンジン (`src/lib/bml/`。web-bml と切り替えて試す段階)
+
+web-bml を置き換える自前のエンジンを並べて動かせるようにしてある。**既定はまだ web-bml** で、
+`?bml=own` を付けて開くと自前になり、端末に覚える (`?bml=web-bml` で戻す。`DataBroadcast.svelte` の
+`useOwn`)。依存は足していない。
+
+| | web-bml | 自前 |
+| --- | --- | --- |
+| 映像 | 映像の入れ物を BML の object の**中へ移す** | **動かさない。** object の場所を教えてもらい、入れ物を style でそこへ寄せる (`placeOwn`)。字幕の canvas は入れ物の中なので一緒に縮む。映像より前に描くものの背景には穴を開ける |
+| 文書 | fast-xml-parser → XHTML を innerHTML、属性もそのまま (on* も) | 自前の寛容な XML の読み手 → 16 の要素の木 → 影の中の絶対配置の div。**innerHTML も属性の写しも無い** (字は textContent、見た目は確かめた値の style だけ) |
+| CSS | ブラウザの CSS に書き換えて渡す | 自前で重ね合わせ (単純セレクタ・詳細度・継承・:focus/:active)、確かめた値だけ書く |
+| スクリプト | es2 (JS で書いた ES の処理系) | 自前の VM (`vm.ts`)。eval を使わず、CSP の下でそのまま動く。sleep で止まる・launchDocument で打ち切る・5ms で手を放す |
+| 字 | 内蔵の JIS の表 | TextDecoder (EUC-JP) と、追加記号は b24-tables。DRCS は 1 字を CSS の mask に |
+| 内蔵音 | 出所の分からない MP3 を同梱 | WebAudio で合成 |
+
+**文字は EUC-JP の符号として扱う** (`charCodeAt`・`fromCharCode`・大小)。9 局 16 本の調査で、
+TBS・テレ東が `String.fromCharCode(0xA1A1〜)` を、MX が `charCodeAt` を EUC の範囲と比べる形を
+使っていた。数は整数 (割り算は切り捨て)、Date は日本の時刻。
+
+`browser.*` は放送が呼ぶ 53 種を全部持ち、動かせないもの (AIT・Hybridcast の起動・予約・
+PPP・外のアプリ・選局) は規格どおり失敗 (NaN / null / 0) を返す。郵便番号は NVRAM に書かず、
+受信機の設定として渡す (`receiverinfo/zipcode`)。録画では再生位置から放送の時刻を出して渡す
+(`clock`)。
+
+まだ無いもの: NPT (PCR を送っていないので、時刻指定のイベントメッセージと NPT の TimerFired は
+起きない)・MNG の動く絵・通信コンテンツへの移動 (http の文書)・選局 (`epgTune`)。
+
 ### 5.7 双方向（通信系コンテンツ）プロキシ
 
 放送局の通信系サーバは受信機の専用ネットワークスタックが前提で、CORS ヘッダを返さない。

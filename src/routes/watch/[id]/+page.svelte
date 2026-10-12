@@ -1235,6 +1235,7 @@
                     bind:pressD={dataButton}
                     postal={data.broadcast.postalCode}
                     network={false}
+                    clock={() => rec.start_at + nowMs()}
                 />
 
                 {#if buffering && !resuming}

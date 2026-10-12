@@ -152,10 +152,12 @@
          * 字幕は映像と一緒に小窓の中に居る (帯とは重ならない)。`offsetParent` は影の外へも辿れて
          * しまうが、途中の BML の面は `scale` で縮めてあり、`offsetTop` は縮める前の値なので
          * 帯の上端とは比べられない。比べると小窓の中で字幕を上へずらし、小窓の端 (BML は
-         * `overflow: hidden`) で切れる。影の中かどうかは根 (`getRootNode`) で見分ける
+         * `overflow: hidden`) で切れる。影の中かどうかは根 (`getRootNode`) で見分ける。
+         * 自前のエンジンは箱を影へ移さず、その場で小窓へ寄せて `data-bml-window` を立てる
          */
         const offsetIn = (el: HTMLElement): number | null => {
             if (el.getRootNode() !== stage.getRootNode()) return null;
+            if (el.closest('[data-bml-window]') !== null) return null;
             let y = 0;
             let at: Element | null = el;
             while (at instanceof HTMLElement && at !== stage) {
@@ -194,7 +196,7 @@
          * データ放送の小窓へ出入りしたとき (`childList`) に測り直す
          */
         const inks = new MutationObserver(lift);
-        inks.observe(stage, { subtree: true, childList: true, attributes: true, attributeFilter: ['data-ink'] });
+        inks.observe(stage, { subtree: true, childList: true, attributes: true, attributeFilter: ['data-ink', 'data-bml-window'] });
         const sizes = new ResizeObserver(lift);
         sizes.observe(stage);
         const bar = stage.querySelector(':scope > [data-stage-bar]');

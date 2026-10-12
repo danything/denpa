@@ -64,7 +64,8 @@
      */
     import { onDestroy } from 'svelte';
     import type { BMLBrowser, Indicator, IP } from 'web-bml';
-    import { forget, write } from '#lib/keep.js';
+    import type { Bml, BmlIp, Rect } from '#lib/bml/engine.js';
+    import { forget, read, write } from '#lib/keep.js';
     import type { ResponseMessage } from '#lib/ts/bml-protocol.js';
     import StageNote from './StageNote.svelte';
 
@@ -114,6 +115,11 @@
          * 無言で失敗します
          */
         network: boolean;
+        /**
+         * 放送の時刻 (UNIX ミリ秒)。録画は再生位置から出す。渡さなければ放送の TOT から
+         * (自前のエンジンだけが使う)
+         */
+        clock?: (() => number) | null;
     }
 
     let {
@@ -125,6 +131,7 @@
         pressD = $bindable(null),
         postal,
         network,
+        clock = null,
     }: Props = $props();
 
     /** リモコンの d。`AribKeyCode.DataButton` と同じ値 (番号で書く理由は `Remote.svelte`) */
@@ -239,6 +246,27 @@
     let handed = $state(0);
 
     /**
+     * **自前のエンジン** (`src/lib/bml/`)。web-bml と並べて試すための切り替えで、**既定は web-bml**。
+     * `?bml=own` で開くと自前になり、端末に覚える (`?bml=web-bml` で戻す)
+     */
+    const ENGINE_KEY = 'denpa_bml_engine';
+    function useOwn(): boolean {
+        const asked = new URL(location.href).searchParams.get('bml');
+        if (asked === 'own' || asked === 'web-bml') write(ENGINE_KEY, asked);
+        return (asked ?? read(ENGINE_KEY)) === 'own';
+    }
+    /** 自前のエンジン (動いている間だけ) */
+    let own = $state<Bml | null>(null);
+    /** 映像の object の場所 (自前のエンジンが教える。画面の座標) */
+    let videoRect: Rect | null = null;
+    /** 映像の入れ物の元の style。小窓へ寄せる前に覚えて、隠れたら戻す */
+    let mediaStyle: string | null = null;
+    /** 自前のエンジンの丸ゴシック (字幕と同じ Denpa Font) */
+    let ownFont: FontFace | null = null;
+    /** 自前のエンジンの NVRAM の置き場の頭 (web-bml のものと混ぜない) */
+    const OWN_PREFIX = 'denpa_bml_own_';
+
+    /**
      * 放送が名指しする字。**字幕を焼いているのと同じフォントを使う。**
      *
      * イメージに入れてある Denpa Font (danything/denpa-font) は、BML が要る3つ — **等幅**
@@ -341,6 +369,16 @@
         },
     };
 
+    /** 自前のエンジンの双方向。中継口は web-bml と同じものを使う */
+    const ownIp: BmlIp = {
+        connected: () => network,
+        transmit: async (uri, body) => {
+            const r = await ip.transmitTextDataOverIP!(uri, body as Uint8Array<ArrayBuffer>);
+            return { resultCode: r.resultCode, status: r.statusCode, body: r.response };
+        },
+        confirm: (destination, icmp, timeout) => ip.confirmIPNetwork!(destination, icmp, timeout),
+    };
+
     /**
      * BML の画面を枠いっぱいに伸ばす。
      *
@@ -377,12 +415,42 @@
         visible = want;
         if (mount !== null) mount.style.opacity = want ? '1' : '0';
         if (media === null) return;
+        if (own !== null) {
+            placeOwn(want);
+            return;
+        }
         const box = want ? (browser?.getVideoElement() ?? null) : null;
         if (box !== null) {
             if (media.parentNode !== box) box.appendChild(media);
             return;
         }
         if (seat !== null && media.parentNode !== seat.parent) seat.parent.insertBefore(media, seat.next);
+    }
+
+    /**
+     * **自前のエンジンでは映像を動かさない。** 映像の入れ物を、BML の映像の object の場所へ
+     * style で寄せるだけ (入れ物は枠と同じ大きさで、BML の画面も枠いっぱいに伸ばしてある)。
+     * 字幕の canvas は入れ物の中なので一緒に縮む。隠れたら元の style に戻す
+     */
+    function placeOwn(want: boolean): void {
+        if (media === null) return;
+        if (want && videoRect !== null && plane !== null) {
+            mediaStyle ??= media.style.cssText;
+            // 字幕を帯の上へ持ち上げない印 (`PlayerStage`。小窓の中は帯と重ならない)
+            media.dataset['bmlWindow'] = '';
+            const share = (n: number, of: number): string => `${(n / of) * 100}%`;
+            media.style.inset = 'auto';
+            media.style.left = share(videoRect.left, plane.width);
+            media.style.top = share(videoRect.top, plane.height);
+            media.style.width = share(videoRect.width, plane.width);
+            media.style.height = share(videoRect.height, plane.height);
+            return;
+        }
+        if (mediaStyle !== null) {
+            media.style.cssText = mediaStyle;
+            mediaStyle = null;
+            delete media.dataset['bmlWindow'];
+        }
     }
 
     /**
@@ -418,6 +486,11 @@
 
     /** 押して離したことにする。**BML は押しっぱなしを嫌う** (離すまで次が来ない) */
     function tap(code: number): void {
+        if (own !== null) {
+            own.key(code, true);
+            own.key(code, false);
+            return;
+        }
         if (browser === null) return;
         browser.content.processKeyDown(code);
         browser.content.processKeyUp(code);
@@ -429,13 +502,14 @@
      * private だが実体はただのフィールドなので、そこから覗く (借りものに手を入れずに済ませる)
      */
     function listensD(): boolean {
+        if (own !== null) return own.listens('DataButtonPressed');
         const root = (browser as unknown as { documentElement?: HTMLElement } | null)?.documentElement;
         return root?.querySelector('beitem[type="DataButtonPressed"][subscribe="subscribe"]') != null;
     }
 
     /** 画面の d (`pressD`)。出ている文書が d を聞いていれば押して true */
     function pressData(): boolean {
-        if (browser === null || !visible || !listensD()) return false;
+        if ((browser === null && own === null) || !visible || !listensD()) return false;
         tap(DATA_BUTTON);
         return true;
     }
@@ -453,7 +527,7 @@
      */
     function knock(): void {
         knocking = null;
-        if (browser === null || !dueD || knocks <= 0) return;
+        if ((browser === null && own === null) || !dueD || knocks <= 0) return;
         knocks--;
         if (!listensD()) {
             knocking = setTimeout(knock, KNOCK_WAIT);
@@ -491,40 +565,115 @@
         write(key, btoa(postal));
     }
 
+    /**
+     * 描く入れ物を作る。
+     *
+     * **毎回まっさらな入れ物を作る。** どちらのエンジンも渡された要素に影 (`attachShadow`) を
+     * 張る。影は外せないので、同じ要素に2度目を張ると転ぶ — 消して出し直すたびに
+     * 「データ放送が出なくなる」という壊れ方をする。
+     *
+     * 出せと言われるまでは透明にしておく (`showing` の説明)。**`visibility` では隠せない** —
+     * web-bml の既定のスタイルには `body { visibility : visible !important }` があって、
+     * **子のほうが親の hidden を打ち消す**。実機では「d を押すと、出るまで映像が真っ白に
+     * 覆われる」形で出た。`display:none` にすると寸法が測れなくなる (web-bml は自分で
+     * `offsetLeft` を読む) ので、透明にして場所は残す
+     */
+    function makeMount(into: HTMLElement): HTMLDivElement {
+        const made = document.createElement('div');
+        made.style.position = 'absolute';
+        made.style.left = '0';
+        made.style.top = '0';
+        made.style.transformOrigin = 'top left';
+        made.style.opacity = '0';
+        into.appendChild(made);
+        mount = made;
+        return made;
+    }
+
+    /** 文書が替わった (`load`)。画面の大きさに合わせ、d を届けに行く */
+    function loaded(resolution: { width: number; height: number }): void {
+        plane = resolution;
+        fit();
+        /*
+         * **押したあとに文書が変わったら、それが返事。** そこで下ろす —
+         * これ以上押すと、開いたメニューを閉じることになる
+         */
+        if (taps > 0) {
+            dueD = false;
+            stopKnocking();
+            return;
+        }
+        // 文書ができるたびに見に行き直す (`knock`)。届け終えていれば何もしない
+        stopKnocking();
+        knocks = KNOCK_TRIES;
+        knocking = setTimeout(knock, KNOCK_WAIT);
+    }
+
+    /**
+     * 自前のエンジンで開く。映像は動かさず、場所を教えてもらって寄せる (`placeOwn`)。
+     * 郵便番号は NVRAM に書かず、受信機の設定として渡す
+     */
+    async function openOwn(mine: number): Promise<void> {
+        const { createBml } = await import('#lib/bml/engine.js');
+        if (mine !== generation || host === null || media === null) return;
+        const into = makeMount(host);
+        seat = { parent: media.parentNode as Node, next: media.nextSibling };
+        dueD = true;
+        taps = 0;
+        ownFont = new FontFace('denpa-bml-round', `url('${denpaFontUrl()}') format('woff2')`);
+        document.fonts.add(ownFont);
+        const round = "'denpa-bml-round', 'Hiragino Maru Gothic ProN', 'Meiryo', sans-serif";
+        const made = createBml({
+            root: into,
+            fonts: { round, boldRound: round, square: "'Hiragino Kaku Gothic ProN', 'Meiryo', 'MS Gothic', sans-serif" },
+            ip: ownIp,
+            store: { get: (key) => read(OWN_PREFIX + key), set: (key, value) => write(OWN_PREFIX + key, value) },
+            clock: () => clock?.() ?? null,
+            receiver: { zipcode: postal },
+            onVideoRect: (rect) => {
+                videoRect = rect;
+                place();
+            },
+            onVisible: (on) => {
+                showing = on;
+                place();
+            },
+            onReceiving: (on) => {
+                receiving = on;
+                place();
+            },
+            onLoad: (resolution) => {
+                loaded(resolution);
+                // 映像の場所は画面の大きさが分かってから寄せる
+                place();
+            },
+            log: (message) => console.warn(`[bml] ${message}`),
+        });
+        own = made;
+        loading = false;
+        watcher = new ResizeObserver(fit);
+        watcher.observe(host);
+        listen((message) => {
+            handed++;
+            made.feed(message);
+        });
+        press = tap;
+        pressD = pressData;
+    }
+
     async function open(): Promise<void> {
         if (host === null || media === null) return;
         const mine = ++generation;
         loading = true;
+        if (useOwn()) {
+            await openOwn(mine);
+            return;
+        }
         // 押されてから取りに行く (上の説明)
         const { BMLBrowser } = await import('web-bml');
         // 待っている間に離されていたら、作らない
         if (mine !== generation || host === null || media === null) return;
-
-        /*
-         * **毎回まっさらな入れ物を作る。**
-         *
-         * 借りている側は渡された要素に**閉じた影 (`attachShadow`)** を張る。
-         * 影は外せないので、同じ要素に2度目を張ると転ぶ — 消して出し直すたびに
-         * 「データ放送が出なくなる」という壊れ方をする
-         */
-        mount = document.createElement('div');
-        mount.style.position = 'absolute';
-        mount.style.left = '0';
-        mount.style.top = '0';
-        mount.style.transformOrigin = 'top left';
-        /*
-         * 出せと言われるまでは隠しておく (`showing` の説明)。
-         *
-         * **`visibility` では隠せない。** 借りものの既定のスタイルには
-         * `body { visibility : visible !important }` があって、**子のほうが
-         * 親の hidden を打ち消す** (visibility は継承するが、子で戻せる)。
-         * 実機では「d を押すと、出るまで映像が真っ白に覆われる」形で出た。
-         * `display:none` にすると寸法が測れなくなる (BML は自分で
-         * `offsetLeft` を読む) ので、透明にして場所は残す
-         */
-        mount.style.opacity = '0';
-        host.appendChild(mount);
-
+        const into = makeMount(host);
         seat = { parent: media.parentNode as Node, next: media.nextSibling };
 
         // 器ができる前に置く。入口の文書が真っ先に読みに来る
@@ -534,7 +683,7 @@
         taps = 0;
 
         const made = new BMLBrowser({
-            containerElement: mount,
+            containerElement: into,
             mediaElement: media,
             fonts: FONTS,
             indicator,
@@ -547,23 +696,7 @@
         browser = made;
         loading = false;
 
-        made.addEventListener('load', (event) => {
-            plane = event.detail.resolution;
-            fit();
-            /*
-             * **押したあとに文書が変わったら、それが返事。** そこで下ろす —
-             * これ以上押すと、開いたメニューを閉じることになる
-             */
-            if (taps > 0) {
-                dueD = false;
-                stopKnocking();
-                return;
-            }
-            // 文書ができるたびに見に行き直す (`knock`)。届け終えていれば何もしない
-            stopKnocking();
-            knocks = KNOCK_TRIES;
-            knocking = setTimeout(knock, KNOCK_WAIT);
-        });
+        made.addEventListener('load', (event) => loaded(event.detail.resolution));
         /*
          * **「いま出ているか」を教えてくれる唯一の口。**
          *
@@ -612,6 +745,11 @@
         seat = null;
         browser?.destroy();
         browser = null;
+        own?.destroy();
+        own = null;
+        videoRect = null;
+        if (ownFont !== null) document.fonts.delete(ownFont);
+        ownFont = null;
         // 影ごと捨てる (上の説明)
         mount?.remove();
         mount = null;
@@ -631,6 +769,16 @@
      * 画面の d ボタンの側 (`pressD`)
      */
     async function key(event: KeyboardEvent, down: boolean): Promise<void> {
+        if (own !== null) {
+            if (event.altKey || event.ctrlKey || event.metaKey) return;
+            const engine = own;
+            const { aribKey } = await import('#lib/bml/engine.js');
+            const code = aribKey(event.key);
+            if (code === -1) return;
+            event.preventDefault();
+            engine.key(code, down);
+            return;
+        }
         if (browser === null || event.altKey || event.ctrlKey || event.metaKey) return;
         const { keyCodeToAribKey } = await import('web-bml');
         const code = keyCodeToAribKey(event.key);
@@ -659,7 +807,8 @@
     class="data"
     hidden={!on}
     data-testid="live-data"
-    data-state={browser !== null ? 'ready' : loading ? 'loading' : 'off'}
+    data-state={browser !== null || own !== null ? 'ready' : loading ? 'loading' : 'off'}
+    data-engine={own !== null ? 'own' : browser !== null ? 'web-bml' : ''}
     data-showing={visible}
     data-receiving={receiving}
     data-for={shown ?? ''}
