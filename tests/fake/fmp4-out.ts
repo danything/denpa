@@ -12,6 +12,7 @@
  * 時刻の刻みは 90kHz (映像)
  */
 import { pesMarks } from '../../src/lib/ts/seek';
+import { clipFrom, readClip } from './fmp4-clip';
 
 const args = process.argv.slice(2);
 const after = (flag: string): string | undefined => {
@@ -50,6 +51,20 @@ if (after('-i') === 'pipe:0') {
     seconds = (pts >= WRAP - 60 * CLOCK ? pts - WRAP : pts) / CLOCK + Number(after('-output_ts_offset') ?? 0);
 } else {
     seconds = Number(after('-ss') ?? 0);
+}
+
+/*
+ * **本物の映像を流せという目印** (`FAKE_FFMPEG_LIVE_FMP4_FILE`。ライブの `fmp4-loop.ts` と同じもの)。
+ * 置いてあれば、作り置きの fMP4 (AV1 + Opus / H.264 + AAC) を上の時刻から `CLIP` 秒ぶん並べて出す
+ * (`fmp4-clip.ts`)。互換モードの観る画面 (`40-watch-compat`) が canvas に描くところまで見るため
+ */
+const CLIP = 10;
+if (await Bun.file(process.env['FAKE_FFMPEG_LIVE_FMP4_FILE'] ?? '/nonexistent').exists()) {
+    const name = args.includes('libsvtav1') ? 'live-av1.mp4' : 'live-h264.mp4';
+    const clip = readClip(new Uint8Array(await Bun.file(`${import.meta.dir}/${name}`).arrayBuffer()));
+    // 書き切ってから降りる (`process.stdout.write` のまま降りると、大きいものは尻が落ちる)
+    await Bun.write(Bun.stdout, clipFrom(clip, Math.max(0, seconds), CLIP));
+    process.exit(0);
 }
 
 function box(type: string, ...body: Uint8Array[]): Uint8Array {

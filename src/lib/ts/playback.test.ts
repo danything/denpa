@@ -1,10 +1,13 @@
 import { describe, expect, test } from 'bun:test';
 import {
     aheadOf,
+    canvasChoices,
+    canvasTranscodes,
     codecChoices,
     covers,
     type MediaAbility,
     type PlaybackInfo,
+    pickCanvas,
     pickOffer,
     transcodes,
 } from './playback';
@@ -137,5 +140,41 @@ describe('溜まり方 (aheadOf / covers)', () => {
     test('頼んだ直後でまだ何も無くても、頼んだ位置なら待つ', () => {
         expect(covers([], 300, 300, 15)).toBe(true);
         expect(covers([], 400, 300, 15)).toBe(false);
+    });
+});
+
+describe('互換モード (canvasChoices / pickCanvas)', () => {
+    /** 元の TS も残っている AV1 の録画 */
+    const withTs: PlaybackInfo = { ...av1Only, offers: [...av1Only.offers, { codec: 'mpeg2', way: 'raw' }] };
+    const all = { h264: true, av1: true, mpeg2: true };
+
+    test('流せるものを並べ、描けないものは押せなくする。ファイルそのままは使わない', () => {
+        expect(canvasChoices(withTs, { ...all, h264: false })).toEqual([
+            { codec: 'h264', drawable: false },
+            { codec: 'av1', drawable: true },
+            { codec: 'mpeg2', drawable: true },
+        ]);
+        expect(canvasChoices(av1Only, all).map((item) => item.codec)).toEqual(['h264', 'av1']);
+    });
+
+    test('自動は、エンコード済みと同じ形 (詰め替え) → 変換 (H.264 → AV1) → MPEG-2', () => {
+        expect(pickCanvas(withTs, all)).toBe('av1');
+        expect(pickCanvas(h264Only, all)).toBe('h264');
+        expect(pickCanvas(withTs, { ...all, av1: false })).toBe('h264');
+        expect(pickCanvas(withTs, { h264: false, av1: false, mpeg2: true })).toBe('mpeg2');
+        expect(pickCanvas(av1Only, { h264: false, av1: false, mpeg2: true })).toBeNull();
+    });
+
+    test('選んだものが描ければそれ。描けなければ自動と同じ。諦めた形は避ける', () => {
+        expect(pickCanvas(withTs, all, 'mpeg2')).toBe('mpeg2');
+        expect(pickCanvas(withTs, all, 'h264')).toBe('h264');
+        expect(pickCanvas(withTs, { ...all, h264: false }, 'h264')).toBe('av1');
+        expect(pickCanvas(withTs, all, 'auto', ['av1'])).toBe('h264');
+    });
+
+    test('変換させるか (混んでいると断られる)', () => {
+        expect(canvasTranscodes(withTs, 'av1')).toBe(false);
+        expect(canvasTranscodes(withTs, 'h264')).toBe(true);
+        expect(canvasTranscodes(withTs, 'mpeg2')).toBe(false);
     });
 });

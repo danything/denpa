@@ -161,6 +161,65 @@ export function codecChoices(info: PlaybackInfo, can: MediaAbility): ('h264' | '
     );
 }
 
+/*
+ * ---------------------------------------------------------------------------
+ * 互換モード (`canvas-video.ts`)。**`<video>` を使わず canvas に描く** (`canvas-player.ts`)。
+ * 使えるのは流すもの (`stream` の fMP4 と `raw` の元の TS) だけで、ファイルそのままは使えない
+ * (Matroska を自分で読む作りは持たない)
+ * ---------------------------------------------------------------------------
+ */
+
+/** 互換モードで描く形 */
+export type CanvasCodec = PlayCodec;
+
+/** この端末で描ける形 (`raw/support.ts` の `canvasSupport` と `rawUnsupported`) */
+export type CanvasAbility = Record<CanvasCodec, boolean>;
+
+/** 互換モードのメニューに並べるもの。**出せるものは描けなくても並べる** (押せなくして、理由を添える) */
+export function canvasChoices(
+    info: PlaybackInfo,
+    can: CanvasAbility,
+): { codec: CanvasCodec; drawable: boolean }[] {
+    return (['h264', 'av1', 'mpeg2'] as const)
+        .filter((codec) =>
+            info.offers.some(
+                (offer) => offer.codec === codec && offer.way === (codec === 'mpeg2' ? 'raw' : 'stream'),
+            ),
+        )
+        .map((codec) => ({ codec, drawable: can[codec] }));
+}
+
+/**
+ * **互換モードでどれで観るか。** 選んだものが描ければそれ。`auto` か、選んだものが描けなければ:
+ *
+ * 1. エンコード済みと同じ形の fMP4 (詰め替え。サーバは軽い)
+ * 2. 変換する fMP4 (H.264 → AV1)
+ * 3. 元の TS (MPEG-2)
+ *
+ * `avoid` は諦めた形 (描いている途中で間に合わなくなった)。何も描けなければ null
+ */
+export function pickCanvas(
+    info: PlaybackInfo,
+    can: CanvasAbility,
+    choice: CodecChoice | 'mpeg2' = 'auto',
+    avoid: readonly CanvasCodec[] = [],
+): CanvasCodec | null {
+    const usable = canvasChoices(info, can)
+        .filter((item) => item.drawable && !avoid.includes(item.codec))
+        .map((item) => item.codec);
+    if (choice !== 'auto' && usable.includes(choice)) return choice;
+    const light = usable.filter(
+        (codec) =>
+            codec !== 'mpeg2' && info.offers.some((offer) => offer.way === 'file' && offer.codec === codec),
+    );
+    return [...light, ...usable][0] ?? null;
+}
+
+/** 互換モードで、その形で観るとサーバがその場でエンコードするか (枠を使う。混んでいると断られる) */
+export function canvasTranscodes(info: PlaybackInfo, codec: CanvasCodec): boolean {
+    return codec !== 'mpeg2' && !info.offers.some((offer) => offer.way === 'file' && offer.codec === codec);
+}
+
 /** 選んだもので観るとき、サーバがその場でエンコードするか (枠を使う。混んでいると断られる) */
 export function transcodes(info: PlaybackInfo, picked: Picked): boolean {
     return (

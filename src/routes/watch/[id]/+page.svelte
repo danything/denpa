@@ -1,8 +1,11 @@
 <script lang="ts">
-    import { onMount } from 'svelte';
+    import { onMount, untrack } from 'svelte';
     import { submitting } from '#lib/actions.js';
     import { arming } from '#lib/arming.svelte.js';
+    import { type CanvasPlayer, canvasPlayer } from '#lib/canvas-player.js';
+    import { canvasVideo, driveNoticeSeen, seeDriveNotice } from '#lib/canvas-video.js';
     import { CAPTION_TEXT_VERSION, type CaptionPage, type CaptionPages } from '#lib/caption-text.js';
+    import DriveNotice from '#lib/components/DriveNotice.svelte';
     import ProgramFacts from '#lib/components/ProgramFacts.svelte';
     import AudioMenu from '#lib/components/player/AudioMenu.svelte';
     import { screenAwake } from '#lib/components/player/awake.svelte.js';
@@ -46,7 +49,7 @@
     import StageNote from '#lib/components/player/StageNote.svelte';
     import StageTail from '#lib/components/player/StageTail.svelte';
     import { snapshotter } from '#lib/components/player/shot.svelte.js';
-    import { videoFrame } from '#lib/components/player/snapshot.js';
+    import { grabbedFrame, videoFrame } from '#lib/components/player/snapshot.js';
     import { stageTap } from '#lib/components/player/stage-tap.js';
     import Toasts, { errorNotice, type Notice } from '#lib/components/Toasts.svelte';
     import { programDetail, recordingFacts } from '#lib/detail.svelte.js';
@@ -56,6 +59,7 @@
     import { write as remind, read as stored } from '#lib/keep.js';
     import { loadOffline } from '#lib/offline.svelte.js';
     import type { OfflineVideo } from '#lib/offline-db.js';
+    import { canvasSupport, rawUnsupported } from '#lib/raw/support.js';
     import { type RemuxPlayer, remuxPlayer } from '#lib/remux-player.js';
     import { keepResume } from '#lib/resume.js';
     import type { ResponseMessage } from '#lib/ts/bml-protocol.js';
@@ -64,11 +68,16 @@
     import { pickMediaSource } from '#lib/ts/media-source.js';
     import { stepSpeed } from '#lib/ts/pacing.js';
     import {
+        type CanvasAbility,
+        type CanvasCodec,
         type CodecChoice,
+        canvasChoices,
+        canvasTranscodes,
         codecChoices,
         type MediaAbility,
         type Picked,
         type PlaybackInfo,
+        pickCanvas,
         pickOffer,
         transcodes,
     } from '#lib/ts/playback.js';
@@ -116,7 +125,7 @@
      * 人が選んだコーデック (`auto` は端末に合わせる)。**端末ごとに覚える** — 同じ人でも
      * 手元の端末と居間のテレビで解けるものが違う (速さ・CM 飛ばしと同じ `localStorage`)
      */
-    let choice = $state<CodecChoice>('auto');
+    let choice = $state<CodecChoice | 'mpeg2'>('auto');
     const CODEC_KEY = 'watch-codec';
     /** サーバが混んでいて、その場の変換を断られた (`remux-player.ts` の `busy`) */
     let busy = $state(false);
@@ -124,6 +133,263 @@
     let remux: RemuxPlayer | null = null;
     /** 選び直したときに続ける位置 (秒)。その場で流す器の始める位置に使う */
     let switchAt: number | null = null;
+
+    /*
+     * ---- 互換モード (`canvas-video.ts`) ----
+     *
+     * **`<video>` を使わず canvas に描く** (`canvas-player.ts`)。`<video>` の再生が止まる端末 (テスラの
+     * 車載ブラウザ) のため。頼む先は `<video>` でその場で流すときと同じ `/stream` で、H.264 / AV1 の
+     * fMP4 か元の TS (MPEG-2) を、ライブ・追っかけと同じ器 (`raw/engine.ts`) で描く。
+     * **ここでは `<video>` に戻らない** — 描けなくなったら MPEG-2 へ、それも無理なら理由を出して止まる
+     * (ライブと同じ)。端末に保存したものだけは `<video>` で観て、そう知らせる (canvas で読めるのは流すものだけ)
+     */
+    /** 互換モードか。**開いたときに決める** (設定画面で入り切りされる) */
+    let compat = $state(false);
+    /** この端末で描ける形 (`raw/support.ts`)。調べるまで null */
+    let canvasAbility = $state.raw<CanvasAbility | null>(null);
+    /** いま canvas に描いている形。描いていなければ null (`<video>` で観ている・まだ始めていない) */
+    let canvasCodec = $state<CanvasCodec | null>(null);
+    /** canvas に描く器。`canvasCodec` が決まって、映像の箱ができたら作る */
+    let canvas: CanvasPlayer | null = null;
+    /** canvas の器があるか (`canvas` は畳み直しの都度替わるので、画面の出し分けはこちらで見る) */
+    let drawing = $state(false);
+    /** 描いている途中で諦めた形。**選び直すまで頼み直さない** (戻しては諦めるを繰り返さない) */
+    let canvasGaveUp: CanvasCodec[] = [];
+    /** 互換モードで観られない理由。出したら `<video>` には戻らずに止まる */
+    let canvasProblem = $state<string | null>(null);
+    /** 絵の上に出しておく断り書き (MPEG-2 に切り替えた・保存した録画は互換モードを使わない) */
+    let warning = $state<string | null>(null);
+    /** 運転中の注意 (ライブと同じ。`DriveNotice`)。押すまで再生を始めない */
+    let driveNotice = $state(false);
+    let noticeWaiters: (() => void)[] = [];
+
+    function confirmDrive(): Promise<void> {
+        return new Promise((done) => {
+            noticeWaiters.push(done);
+            driveNotice = true;
+        });
+    }
+
+    function acceptDriveNotice(): void {
+        seeDriveNotice();
+        driveNotice = false;
+        const waiters = noticeWaiters;
+        noticeWaiters = [];
+        for (const done of waiters) done();
+    }
+
+    /** 形の名前 (メニュー・混んでいるときの勧め) */
+    function codecLabel(codec: CanvasCodec): string {
+        return codec === 'mpeg2' ? 'MPEG-2' : CODEC_LABEL[codec];
+    }
+
+    /**
+     * 互換モードの支度。運転中の注意をまだ見せていなければ見せて待ち、描ける形を調べて、どれで観るかを決める
+     * (`ts/playback.ts` の `pickCanvas`)。**端末に保存したものは `<video>` で観る** (canvas は流すものしか読めない)
+     */
+    async function prepareCompat(got: PlaybackInfo | null): Promise<void> {
+        if (localCopy?.video !== undefined) {
+            localSrc = URL.createObjectURL(localCopy.video);
+            picked = { way: 'file', codec: 'av1', source: 'encoded' };
+            // 言ったら引っ込める (観ている間ずっと絵に被せない。切り替えの断り書きと違い、直すことが無い)
+            const said = '端末に保存した録画は、互換モードを使わずに再生します';
+            warning = said;
+            setTimeout(() => {
+                if (warning === said) warning = null;
+            }, 6000);
+            return;
+        }
+        if (got === null) {
+            canvasProblem = 'サーバに繋がらないため再生できません';
+            return;
+        }
+        if (!driveNoticeSeen()) await confirmDrive();
+        const [support, problem] = await Promise.all([canvasSupport(), rawUnsupported()]);
+        canvasAbility = { ...support, mpeg2: problem === null };
+        const codec = pickCanvas(got, canvasAbility, choice);
+        if (codec === null) canvasProblem = 'この端末では再生できません';
+        else canvasCodec = codec;
+    }
+
+    /** canvas に描く器を作って流しはじめる。**続きの位置から頼む** (選び直し・切り替えならその位置) */
+    $effect(() => {
+        const codec = canvasCodec;
+        if (codec === null || info === null || mediaBox === null || canvas !== null) return;
+        untrack(() => startCanvas(codec, info as PlaybackInfo));
+    });
+
+    function startCanvas(codec: CanvasCodec, plan: PlaybackInfo): void {
+        const fresh = switchAt === null;
+        const from =
+            switchAt ?? (rec.resume_ms === null ? null : resumePoint(rec.resume_ms / 1000, plan.duration));
+        switchAt = null;
+        let made: CanvasPlayer;
+        try {
+            made = canvasPlayer({
+                host: mediaBox as HTMLElement,
+                before: overlay,
+                input: codec === 'mpeg2' ? 'ts-mpeg2' : 'fmp4',
+                url: (at, audio) =>
+                    resolve(
+                        `api/recordings/${rec.id}/stream?codec=${codec}&from=${at.toFixed(3)}&audio=${encodeURIComponent(audio)}`,
+                    ),
+                duration: plan.duration,
+                start: from ?? 0,
+                audio: streamAudio(audioIndex),
+                background: background.on || pip.active,
+                paused: false,
+                state: (state) => {
+                    resuming = state === 'retrying';
+                    busy = state === 'busy';
+                    if (state !== 'failed') return;
+                    // 読めない中身・繋ぎ直しを使い切った。理由を出して止まる (`<video>` には戻らない)
+                    stopCanvas();
+                    canvasProblem = '録画を読み込めませんでした';
+                },
+                gaveUp: (reason) => canvasFallBack(reason),
+                remote: (stop) => (stop ? pauseMedia() : playMedia()),
+                waiting: (on) => (on ? stall() : flowing()),
+                ended: () => {
+                    playing = false;
+                    finished();
+                },
+                tick: canvasTick,
+            });
+        } catch (error) {
+            canvasFallBack(`再生を始められませんでした (${error instanceof Error ? error.message : String(error)})`);
+            return;
+        }
+        canvas = made;
+        drawing = true;
+        if (muted) made.mute(true);
+        length = plan.duration;
+        at = from ?? 0;
+        playing = !made.paused;
+        syncAudio();
+        place();
+        controls.stir();
+        if (!fresh || resumed) return;
+        resumed = true;
+        if (from !== null) {
+            // **黙って途中から始めない** (`<video>` の `resume` と同じ)
+            continued = true;
+            setTimeout(() => (continued = false), 4000);
+        }
+        settle();
+    }
+
+    /** canvas の器を畳む (切り替える・諦める) */
+    function stopCanvas(): void {
+        canvas?.destroy();
+        canvas = null;
+        drawing = false;
+        canvasCodec = null;
+        playing = false;
+        flowing();
+    }
+
+    /**
+     * 描くのを諦めた。**理由は断り書きに残す。** ライブと同じ順 (`live-player.svelte.ts` の `fallBack`):
+     * H.264 / AV1 を諦めたら MPEG-2 へ、MPEG-2 を諦めたら描ける H.264 / AV1 へ。どれも無理なら理由を出して止まる
+     * (`<video>` には戻らない)
+     */
+    function canvasFallBack(reason: string): void {
+        const failed = canvasCodec;
+        const position = mediaTime();
+        stopCanvas();
+        if (failed !== null) canvasGaveUp = [...canvasGaveUp, failed];
+        const usable =
+            info === null || canvasAbility === null
+                ? []
+                : canvasChoices(info, canvasAbility).filter(
+                      (item) => item.drawable && !canvasGaveUp.includes(item.codec),
+                  );
+        const next =
+            failed === 'mpeg2'
+                ? (usable.find((item) => item.codec !== 'mpeg2')?.codec ?? null)
+                : usable.some((item) => item.codec === 'mpeg2')
+                  ? 'mpeg2'
+                  : null;
+        if (next === null) {
+            canvasProblem = reason;
+            return;
+        }
+        warning = `${reason}。${codecLabel(next)} に切り替えました`;
+        switchAt = position;
+        canvasCodec = next;
+    }
+
+    /** canvas の器の刻み。`<video>` の `timeupdate` と映した1枚ごとの追いかけ (`follow`) の代わり */
+    function canvasTick(): void {
+        if (canvas === null) return;
+        const now = canvas.currentTime;
+        if (Math.abs(now - at) >= 0.05) at = now;
+        // 自動再生で断られて音を出せていない。消音にしておき、押して出してもらう (ライブと同じ)
+        if (!muted && canvas.blocked && !canvas.paused) muted = true;
+        // 跳んだ先に着いた (流れ出した)。CM の跨ぎを待つのをやめる
+        if (waiting && canvas.flowing && now >= hopTo) {
+            if (++settled >= SETTLED) open();
+        }
+        paint();
+        hopCm();
+        feedData();
+    }
+
+    /*
+     * ---- 再生の口 ----
+     *
+     * `<video>` と canvas の器のどちらで観ていても、位置・飛ぶ・止める・再開はここを通す
+     */
+    /** いまの位置 (秒。物差しの上) */
+    function mediaTime(): number {
+        return canvas?.currentTime ?? video?.currentTime ?? 0;
+    }
+
+    /** 飛ぶ。canvas は持っているものを捨てて頼み直す */
+    function seekMedia(to: number): void {
+        if (canvas !== null) {
+            canvas.seek(to);
+            at = to;
+            paint();
+            feedData();
+            return;
+        }
+        if (video !== null) video.currentTime = to;
+    }
+
+    function mediaPaused(): boolean {
+        return canvas !== null ? canvas.paused : (video?.paused ?? true);
+    }
+
+    function playMedia(): void {
+        if (canvas !== null) {
+            canvas.play();
+            playing = true;
+            controls.stir();
+            return;
+        }
+        void video?.play().catch(() => undefined);
+    }
+
+    function pauseMedia(): void {
+        if (canvas !== null) {
+            canvas.pause();
+            playing = false;
+            flowing();
+            return;
+        }
+        video?.pause();
+    }
+
+    /** 音を消す・出す。canvas は器の音 (自動再生で断られていても、押されたここなら鳴らせる) */
+    function toggleMute(): void {
+        if (canvas !== null) {
+            muted = !muted;
+            canvas.mute(muted);
+            return;
+        }
+        if (video !== null) video.muted = !video.muted;
+    }
 
     /** ブラウザに聞く口 (`ts/playback.ts`)。DOM が要るので開いてから */
     function ability(): MediaAbility {
@@ -135,23 +401,32 @@
 
     onMount(() => {
         const asked = stored(CODEC_KEY);
-        choice = asked === 'h264' || asked === 'av1' ? asked : 'auto';
+        choice = asked === 'h264' || asked === 'av1' || asked === 'mpeg2' ? asked : 'auto';
         void (async () => {
             const [held, got] = await Promise.all([loadOffline(rec.id), ready ? loadPlayback() : null]);
             localCopy = held;
             info = got;
+            // 互換モードは canvas に描く (`prepareCompat`)。`<video>` で観るのは端末に保存したものだけ
+            compat = ready && canvasVideo();
+            if (compat) {
+                await prepareCompat(got);
+                localChecked = true;
+                return;
+            }
             /*
              * 聞けなかった (オフライン) ときは、今までどおりエンコード済みをそのまま渡す。
              * 端末に保存したものがあればそちら (下)
              */
+            // MPEG-2 は互換モードでだけ選べる。互換モードでなければ自動と同じ
+            const wanted = choice === 'mpeg2' ? 'auto' : choice;
             picked =
                 got !== null
-                    ? pickOffer(got, ability(), choice)
+                    ? pickOffer(got, ability(), wanted)
                     : rec.library_path?.endsWith('.mkv') === true || localCopy?.video !== undefined
                       ? { way: 'file', codec: 'av1', source: 'encoded' }
                       : null;
             // 端末のコピーはエンコード済みの主。そのまま読むときだけ使う (選んだコーデックがあれば選んだほう)
-            if (localCopy?.video !== undefined && picked?.way === 'file' && choice === 'auto') {
+            if (localCopy?.video !== undefined && picked?.way === 'file' && wanted === 'auto') {
                 localSrc = URL.createObjectURL(localCopy.video);
             }
             if (ready && picked === null) broken = true;
@@ -160,6 +435,8 @@
         return () => {
             if (localSrc !== null) URL.revokeObjectURL(localSrc);
             remux?.destroy();
+            canvas?.destroy();
+            canvas = null;
         };
     });
 
@@ -215,12 +492,16 @@
      * **コーデックを選び直す** (コーデックのメニュー)。選んだものは端末ごとに覚える。
      * 観られる道が変わるなら、いまの位置から観直す (器を作り直す)
      */
-    function chooseCodec(next: CodecChoice): void {
+    function chooseCodec(next: CodecChoice | 'mpeg2'): void {
         choice = next;
         remind(CODEC_KEY, next);
         controls.stir();
         if (info === null) return;
-        const fresh = pickOffer(info, ability(), next);
+        if (compat) {
+            chooseCanvas(next);
+            return;
+        }
+        const fresh = pickOffer(info, ability(), next === 'mpeg2' ? 'auto' : next);
         if (JSON.stringify(fresh) === JSON.stringify(picked) && !busy) return;
         const position = video?.currentTime ?? 0;
         remux?.destroy();
@@ -238,9 +519,48 @@
         picked = fresh;
     }
 
+    /**
+     * 互換モードで選び直す。**選んだものは諦めていても試す** (選び直すまで頼み直さない、の「選び直し」)。
+     * 描く形が変わるなら、いまの位置から器を作り直す
+     */
+    function chooseCanvas(next: CodecChoice | 'mpeg2'): void {
+        if (info === null || canvasAbility === null) return;
+        const fresh = pickCanvas(info, canvasAbility, next, next === 'auto' ? canvasGaveUp : []);
+        if (fresh === canvasCodec && !busy && canvasProblem === null) return;
+        const position = mediaTime();
+        stopCanvas();
+        busy = false;
+        canvasProblem = null;
+        warning = null;
+        if (fresh === null) {
+            canvasProblem = 'この端末では再生できません';
+            return;
+        }
+        canvasGaveUp = canvasGaveUp.filter((codec) => codec !== fresh);
+        switchAt = position;
+        canvasCodec = fresh;
+    }
+
     /** メニューに並べるもの。この端末で観られる道があるコーデックが 2 つ以上あるときだけ出す */
-    const codecMenu = $derived.by(() => {
+    const codecMenu = $derived.by((): { key: string; label: string; disabled?: boolean }[] => {
         if (info === null || !localChecked) return [];
+        /*
+         * 互換モードは流せるもの (H.264・AV1・MPEG-2) を並べ、**描けない形は押せなくする** (ライブと同じ)。
+         * 端末に保存したものを `<video>` で観ている間は出さない
+         */
+        if (compat) {
+            if (canvasAbility === null || localSrc !== null) return [];
+            const items = canvasChoices(info, canvasAbility);
+            if (items.length < 2) return [];
+            return [
+                { key: 'auto', label: '自動' },
+                ...items.map((item) => ({
+                    key: item.codec,
+                    label: codecLabel(item.codec),
+                    disabled: !item.drawable,
+                })),
+            ];
+        }
         const choices = codecChoices(info, ability());
         if (choices.length < 2) return [];
         return [
@@ -250,8 +570,16 @@
     });
 
     /** 混んでいて断られたとき、サーバに変換させずに観られるもの (エンコード済み・詰め替え) */
-    const lighter = $derived.by(() => {
+    const lighter = $derived.by((): CanvasCodec[] => {
         if (info === null || !busy) return [];
+        // 互換モードは描ける形のうち、変換させないもの (詰め替え・元の TS)
+        if (compat) {
+            if (canvasAbility === null) return [];
+            const plan = info;
+            return canvasChoices(plan, canvasAbility)
+                .filter((item) => item.drawable && !canvasTranscodes(plan, item.codec))
+                .map((item) => item.codec);
+        }
         const can = ability();
         return codecChoices(info, can).filter((codec) => {
             const way = pickOffer(info as PlaybackInfo, can, codec);
@@ -292,7 +620,7 @@
     let dataFed = -1;
 
     function nowMs(): number {
-        return Math.round((video?.currentTime ?? 0) * 1000);
+        return Math.round(mediaTime() * 1000);
     }
 
     /** データ放送を出す/消す。d ボタンの振る舞いは `pressD` (DataBroadcast) */
@@ -437,22 +765,40 @@
     });
 
     /**
-     * 小窓 (PiP。[pip.svelte.ts](../../../lib/components/player/pip.svelte.ts))。小窓で押された
-     * 止める・再開は `<video>` の `play`/`pause` で拾えているので、合わせる口は要らない
+     * 小窓 (PiP。[pip.svelte.ts](../../../lib/components/player/pip.svelte.ts))。
+     *
+     * **互換モードの絵は canvas の器から流れを取って出す** (ライブ・追っかけと同じ口。`raw`/`capture`)。
+     * 小窓で押された止める・再開は `paused`/`toggle` で合わせる — `<video>` で観ているときもこの口で
+     * 同じに効く (`paused` は位置を持っている側に聞く。`playing` を読むのは、帯で止めた・再開したときに
+     * 小窓の側も合わせ直させるため)
      */
     const pip = pictureInPicture({
         video: () => video,
+        raw: () => drawing,
+        capture: () => canvas?.pipStream() ?? null,
+        flow: (on) => canvas?.pipFlow(on),
+        paused: () => {
+            void playing;
+            return mediaPaused();
+        },
+        toggle: togglePlay,
         auto: () => background.on,
         overlay: () => overlay,
         captions: () => captions && hasCaptions,
     });
 
+    // canvas の音を「再生する音」と言うのは、バックグラウンド再生を入れているときと小窓を開いている間だけ (`raw/engine.ts`)
+    $effect(() => {
+        const on = background.on || pip.active;
+        if (drawing) canvas?.background(on);
+    });
+
     /** バックグラウンド再生 ([background.svelte.ts](../../../lib/components/player/background.svelte.ts))。既定は切で、裏に回ったら止め、戻ったら止めた所から */
     const background = backgroundPlayback({
         pip: () => pip.active,
-        paused: () => video?.paused ?? true,
-        pause: () => video?.pause(),
-        resume: () => void video?.play().catch(() => undefined),
+        paused: mediaPaused,
+        pause: pauseMedia,
+        resume: playMedia,
     });
 
     /**
@@ -631,7 +977,12 @@
      * (サーバも同じものを見る)。送り方は追っかけと共通 (`#lib/resume.ts`)
      */
     function remember(leaving = false): void {
-        if (video === null || !ready) return;
+        if (!ready) return;
+        if (canvas !== null) {
+            keepResume(rec.id, canvas.currentTime, length, leaving);
+            return;
+        }
+        if (video === null) return;
         keepResume(rec.id, video.currentTime, video.duration, leaving);
     }
 
@@ -721,7 +1072,7 @@
          * **その場で流しているときは、`playback` の音声の名前から並べる。** 流しているのは
          * 選んだ1本だけなので、器 (`audioTracks`) には1本しか出ない (`remux-player.ts`)
          */
-        if (picked?.way === 'stream') {
+        if (picked?.way === 'stream' || canvas !== null) {
             audios = (info?.audios ?? []).map((audio, i) => ({ label: audio.label.trim() || `音声 ${i + 1}` }));
             return;
         }
@@ -744,8 +1095,9 @@
 
     /** 音声を選ぶ。**選んだものだけ有効にする** (ブラウザはそれで切り替える)。その場で流しているなら頼み直す */
     function selectAudio(index: number): void {
-        if (remux !== null) {
-            remux.setAudio(streamAudio(index));
+        const player = remux ?? canvas;
+        if (player !== null) {
+            player.setAudio(streamAudio(index));
             audioIndex = index;
             return;
         }
@@ -820,6 +1172,8 @@
      * 消してしまうと早く観たいだけの人が黙って観ることになる
      */
     function setSpeed(value: number, remember = true): void {
+        // canvas に描いているときは等速だけ (音を自前で鳴らしている。メニューも出さない)
+        if (drawing) return;
         speed = value;
         if (video !== null) video.playbackRate = value;
         if (remember) remind(SPEED_KEY, String(value));
@@ -857,13 +1211,18 @@
      */
     function hopCm(): void {
         // 跳んだ先を待っている最中。着くまでは何もしない
-        if (waiting || !skipCm || video === null) return;
-        const to = skipTarget(chapters, video.currentTime, CM_LEAD);
+        if (waiting || !skipCm || (video === null && canvas === null)) return;
+        const to = skipTarget(chapters, mediaTime(), CM_LEAD);
         if (to === null) return;
-        shut();
-        video.currentTime = to;
+        /*
+         * **canvas は蓋をしない。** 器は飛び先より前の絵を描かずに捨て、描けるまで前の絵 (本編の
+         * 最後のコマ) を出したままにする (`raw/worker.ts` の `floor`)。字幕だけ消しておく
+         */
+        if (canvas === null) shut();
+        else clearCaptions();
         hopTo = to;
         waiting = true;
+        seekMedia(to);
         // **続きから始めたばかりなら、そちらだけ言う。** 知らせは列に積むので重なりはしないが、
         // 観る人にとって起きたのは「続きから始まった」こと (CM を跨いだのは中の都合)
         if (continued) return;
@@ -939,9 +1298,8 @@
     }
 
     function togglePlay(): void {
-        if (video === null) return;
-        if (video.paused) void video.play().catch(() => undefined);
-        else video.pause();
+        if (mediaPaused()) playMedia();
+        else pauseMedia();
     }
 
     /**
@@ -1049,7 +1407,9 @@
      */
     function place(): void {
         if (video === null) return;
-        const rect = fitRect(video.clientWidth, video.clientHeight, video.videoWidth, video.videoHeight);
+        // canvas に描いているときは `<video>` は空なので、放送の 16:9 とみなす (器は絵の縦横比のまま描く)
+        const [width, height] = drawing ? [16, 9] : [video.videoWidth, video.videoHeight];
+        const rect = fitRect(video.clientWidth, video.clientHeight, width, height);
         /*
          * 字幕も CM の蓋も、映像の絵と同じ場所・同じ大きさに置く。**画面の画素の境目に揃える** —
          * 端数の位置に置くと、字幕の canvas が半画素ずれて描かれ、字の縁が滲む。
@@ -1108,7 +1468,7 @@
         if (hopping) return;
         if (!captions || overlay === null) return;
         // 描き方はライブと同じ (`caption-draw.ts`)
-        const at = video?.currentTime ?? 0;
+        const at = mediaTime();
         const page = captionShowing(currentCue(cues, at), at);
         if (page === shownPage) return;
         shownPage = page;
@@ -1118,14 +1478,14 @@
 
     /** 秒で動かす。**端は超えさせない** (超えると勝手に終わる) */
     function seekBy(by: number): void {
-        if (video === null) return;
-        video.currentTime = Math.min(Math.max(video.currentTime + by, 0), length || video.duration || 0);
+        if (video === null && canvas === null) return;
+        seekMedia(Math.min(Math.max(mediaTime() + by, 0), length || video?.duration || 0));
         controls.stir();
     }
 
     function seekTo(seconds: number | null): void {
-        if (video === null || seconds === null) return;
-        video.currentTime = seconds;
+        if ((video === null && canvas === null) || seconds === null) return;
+        seekMedia(seconds);
         controls.stir();
     }
 
@@ -1144,9 +1504,7 @@
         snapshot: () => void snapshot(),
         toggleFull: fullscreen.toggle,
         stepSpeed: (by) => setSpeed(stepSpeed(speed, by)),
-        toggleMute: () => {
-            if (video !== null) video.muted = !video.muted;
-        },
+        toggleMute,
     });
     function keys(event: KeyboardEvent): void {
         if (showData && event.key.startsWith('Arrow')) return;
@@ -1164,7 +1522,7 @@
      * あと何分で終わるか。**倍速のぶんは割る** — 2倍で観ているときに
      * 「残り30分」と出ても、掛かるのは15分なので当てにならない
      */
-    const remaining = $derived(Math.max(0, (length - at) / (speed || 1)));
+    const remaining = $derived(Math.max(0, (length - at) / (drawing ? 1 : speed || 1)));
 
     /**
      * 右に出す中身。**録画の行が持っているぶんだけ**で組み立てる (追っかけと同じ `recordingFacts`)。
@@ -1203,7 +1561,12 @@
     function snapshot(): void {
         // 字幕を出しているときだけ重ねる
         const drawn = captions && shownPage !== null;
-        void shooter.take(() => videoFrame(video), drawn ? overlay : null, rec.name);
+        // canvas に描いているときは器に1枚貰う (`<video>` は空。ライブ・追っかけと同じ)
+        void shooter.take(
+            () => (canvas !== null ? grabbedFrame(canvas.grab()) : videoFrame(video)),
+            drawn ? overlay : null,
+            rec.name,
+        );
     }
 </script>
 
@@ -1378,13 +1741,21 @@
                                         data-testid="watch-busy-switch"
                                         onclick={() => chooseCodec(codec)}
                                     >
-                                        {CODEC_LABEL[codec]} で観る
+                                        {codecLabel(codec)} で観る
                                     </button>
                                 {/each}
                             </div>
                         {:else}
                             <p class="small">しばらくしてから開き直してください</p>
                         {/if}
+                    </div>
+                {:else if canvasProblem !== null}
+                    <!--
+                        **互換モードで観られない。理由を出して止まる** (`<video>` には戻らない。ライブと同じ)。
+                        ほかのブラウザを勧めない — 互換モードは `<video>` が止まる端末のためのもの
+                    -->
+                    <div class="broken" data-testid="watch-broken">
+                        <p class="small">{canvasProblem}</p>
                     </div>
                 {:else if broken}
                     <!-- **黙って黒いままにしない。** 観られる先を案内する (外のプレイヤーは相手にしない) -->
@@ -1500,9 +1871,7 @@
                         <ControlButton
                             icon={muted ? SOUND_OFF : SOUND_ON}
                             label={muted ? '音を出す' : '音を消す'}
-                            onclick={() => {
-                                if (video !== null) video.muted = !video.muted;
-                            }}
+                            onclick={toggleMute}
                         />
 
                         <!--
@@ -1536,7 +1905,7 @@
                                 testid="watch-codec"
                                 choices={codecMenu}
                                 selected={codecMenu.some((item) => item.key === choice) ? choice : 'auto'}
-                                onpick={(key) => chooseCodec(key as CodecChoice)}
+                                onpick={(key) => chooseCodec(key as CodecChoice | 'mpeg2')}
                             />
                         {/if}
                         <!--
@@ -1621,15 +1990,20 @@
                             {/snippet}
                         </InfoBlock>
 
-                        <!-- 早送り。**ライブの追っかけと同じ並び・同じ見た目** -->
-                        <Extras>
-                            <SpeedMenu
-                                testid="watch-speed"
-                                label="再生の速さ"
-                                {speed}
-                                onselect={(value) => setSpeed(value)}
-                            />
-                        </Extras>
+                        <!--
+                            早送り。**ライブの追っかけと同じ並び・同じ見た目。**
+                            互換モードで canvas に描いているときは出さない (等速だけ。追っかけと同じ)
+                        -->
+                        {#if !compat || localSrc !== null}
+                            <Extras>
+                                <SpeedMenu
+                                    testid="watch-speed"
+                                    label="再生の速さ"
+                                    {speed}
+                                    onselect={(value) => setSpeed(value)}
+                                />
+                            </Extras>
+                        {/if}
 
                         <StageTail prefix="watch" {background} {pip} {fullscreen} />
                     </ControlRow>
@@ -1648,6 +2022,10 @@
                     {#if skipped}
                         <!-- **黙って跳ばない。** 何が起きたか言わないと壊れて見える -->
                         <StageNote testid="watch-skipped">CMを飛ばしました</StageNote>
+                    {/if}
+                    {#if warning !== null}
+                        <!-- 互換モードの断り書き (切り替えた理由・保存した録画は互換モードを使わない)。ライブと同じ出し方 -->
+                        <StageNote testid="watch-warning">{warning}</StageNote>
                     {/if}
                 {/snippet}
             </PlayerStage>
@@ -1700,6 +2078,9 @@
         if (tuneRefused?.key === key) tuneRefused = null;
     }}
 />
+
+<!-- 運転中の注意 (互換モードで初めて再生する前に1回。ライブ・追っかけと同じ)。押すまで再生を始めない -->
+<DriveNotice open={driveNotice} onaccept={acceptDriveNotice} />
 
 <style>
     .not-ready h2 {

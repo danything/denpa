@@ -27,6 +27,16 @@
  * サーバは倍速で送り込んでくる (`server/chase.ts`) ので、溜まりは伸び続けるのが普通。
  * **止めて再開は止めた所から** (止めている間も届いたぶんは捨てない。溢れないようにするのは worker の側)。
  *
+ * ## 録画も同じ決め方に、飛ぶ先と終わりを足す
+ *
+ * 互換モードの観る画面 (`canvas-player.ts`) も `follow` で鳴らす — 止めたら位置を保ち、そこから再開し、
+ * 今へは跳ばない。足すのは2つ:
+ *
+ * - **飛ぶ先** (`reset` の `from`)。サーバは飛び先の少し手前 (鍵のコマ・1 秒前) から流してくるので、
+ *   手前のぶんは鳴らさず、ここから鳴らし始める
+ * - **終わり** (`finish`)。もう届かないと言われたら、貯めが `target` に届かなくても残りを鳴らし、
+ *   使い切ったら貯め直さずに `end` を返す
+ *
  * DOM も Web Audio も触らないので、ここだけ単体で確かめられる (`playout.test.ts`)。
  */
 
@@ -40,6 +50,8 @@ export const DRY = 0.03;
 export const SLACK = 1;
 /** 跳ぶまでに溜まりすぎが続く時間 (秒)。**一瞬の塊では跳ばない** */
 export const SLACK_FOR = 3;
+/** 終わりと言われてから、鳴らすものが1つも来ないまま終わりにするまで (秒。`finish`) */
+export const LAST_WAIT = 2;
 
 /** 音の1コマ。時刻は 90kHz (一周をまたいでも増え続けるもの) */
 export interface Chunk {
@@ -62,7 +74,9 @@ export type Tick<T extends Chunk> =
     /** 使い切って止まった。予約しているものは全部止める */
     | { kind: 'stall' }
     /** 溜まりすぎたので放送の今へ跳んだ。予約しているものを止めて、予約し直す */
-    | { kind: 'jump'; schedule: Scheduled<T>[] };
+    | { kind: 'jump'; schedule: Scheduled<T>[] }
+    /** 終わりまで鳴らした (`finish` のあと)。貯め直さない */
+    | { kind: 'end' };
 
 const end = (chunk: Chunk) => chunk.pts + chunk.duration;
 
@@ -83,8 +97,12 @@ export class Playout<T extends Chunk> {
     target: number;
     /** 放送の今を追わないか (追っかけ。上の説明) */
     follow = false;
-    /** 止めた位置 (`follow` のとき)。再開はここから */
+    /** 止めた位置・飛ぶ先 (`follow` のとき)。鳴らし始めはここから */
     private resumeAt: number | null = null;
+    /** もう届かないか (`finish`)。録画の尻まで読んだ */
+    private finished = false;
+    /** 終わりと言われてから鳴らすものが無いのに気づいた時刻 (時計の秒)。まだなら NaN */
+    private finishedAt = Number.NaN;
 
     constructor(target: number) {
         this.target = target;
@@ -106,11 +124,14 @@ export class Playout<T extends Chunk> {
         return last === undefined ? null : end(last);
     }
 
-    /** 手元にあと何秒ぶん持っているか。**鳴らしていなければ貯まっている尺** */
+    /**
+     * 手元にあと何秒ぶん持っているか。**鳴らしていなければ貯まっている尺** (追っかけは鳴らし始める所から
+     * 数える。飛び先より手前のぶんは鳴らさないので入れない)
+     */
     lead(now: number): number {
         const newest = this.newest;
         if (newest === null) return 0;
-        const from = this.position(now) ?? this.chunks[0]!.pts;
+        const from = this.position(now) ?? this.startFrom();
         return Math.max(0, (newest - from) / CLOCK);
     }
 
@@ -141,7 +162,19 @@ export class Playout<T extends Chunk> {
     /** 刻むたびに呼ぶ。**鳴らし始め・止まり・跳びはここで決まる** */
     tick(now: number): Tick<T> {
         if (!this.running) {
-            if (this.held || this.lead(now) < this.target) return { kind: 'none' };
+            const lead = this.lead(now);
+            /*
+             * もう届かないのに鳴らすものが無い (飛んだ先が尻の先だった)。**少し待ってから** 終わりにする —
+             * 尻まで読んだと言われた時点では、渡したぶんの音がまだ解けて戻ってきていないことがある
+             */
+            if (this.finished && !this.held && lead < DRY) {
+                if (Number.isNaN(this.finishedAt)) this.finishedAt = now;
+                if (now - this.finishedAt < LAST_WAIT) return { kind: 'none' };
+                this.finished = false;
+                return { kind: 'end' };
+            }
+            // 終わりまで届いていれば、貯めが足りなくても残りを鳴らす
+            if (this.held || lead < DRY || (lead < this.target && !this.finished)) return { kind: 'none' };
             return { kind: 'start', schedule: this.startAt(now) };
         }
         // 鳴り終わったものを落とす
@@ -153,7 +186,9 @@ export class Playout<T extends Chunk> {
             this.running = false;
             this.chunks = [];
             this.overSince = Number.NaN;
-            return { kind: 'stall' };
+            if (!this.finished) return { kind: 'stall' };
+            this.finished = false;
+            return { kind: 'end' };
         }
         if (!this.follow && lead > this.target + SLACK) {
             if (Number.isNaN(this.overSince)) this.overSince = now;
@@ -200,21 +235,44 @@ export class Playout<T extends Chunk> {
         this.held = false;
     }
 
-    /** 選局し直したとき。**前の局の音は1つも残さない** */
-    reset(): void {
+    /**
+     * 選局し直したとき・録画で飛んだとき。**前の音は1つも残さない。**
+     * `from` (90kHz。届く音と同じ物差し) を渡すと、追っかけ (`follow`) はそこから鳴らし始める
+     */
+    reset(from: number | null = null): void {
         this.running = false;
         this.chunks = [];
         this.overSince = Number.NaN;
-        this.resumeAt = null;
+        this.resumeAt = from;
+        this.finished = false;
+        this.finishedAt = Number.NaN;
     }
 
-    /** 放送の今から `target` 手前で鳴らし始める。追っかけは止めた所 (無ければいちばん古いもの) から */
+    /**
+     * 鳴らし始める所を決め直す (`reset` の `from` と同じ)。**物差しを届いた音に合わせてから渡すとき** —
+     * 放送の PTS は一周するので、届いた最初のコマの近くに伸ばしてから決める (`engine.ts`)
+     */
+    aim(from: number): void {
+        this.resumeAt = from;
+    }
+
+    /** もう届かない (録画の尻まで読んだ)。残りを鳴らしきったら `end` を返す */
+    finish(): void {
+        this.finished = true;
+        this.finishedAt = Number.NaN;
+    }
+
+    /** 追っかけで鳴らし始める所。止めた所・飛ぶ先 (無ければいちばん古いもの) */
+    private startFrom(): number {
+        const oldest = this.chunks[0]!.pts;
+        return this.follow && this.resumeAt !== null ? Math.max(oldest, this.resumeAt) : oldest;
+    }
+
+    /** 放送の今から `target` 手前で鳴らし始める。追っかけは止めた所・飛ぶ先 (無ければいちばん古いもの) から */
     private startAt(now: number): Scheduled<T>[] {
         const newest = this.newest as number;
         const oldest = this.chunks[0]!.pts;
-        this.origin = this.follow
-            ? Math.max(oldest, this.resumeAt ?? oldest)
-            : Math.max(oldest, newest - this.target * CLOCK);
+        this.origin = this.follow ? this.startFrom() : Math.max(oldest, newest - this.target * CLOCK);
         this.resumeAt = null;
         this.base = now + LEAD;
         this.running = true;

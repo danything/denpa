@@ -11,7 +11,10 @@
  *
  * **焼いたもの (fMP4) も同じ口で受ける** (互換モード。`input` が `fmp4`)。<video> の再生が止まる
  * 端末 (テスラの車載ブラウザ) で、ライブの H.264 / AV1 を canvas に描く。違うのは worker の中だけ
- * (`fmp4.ts`) で、音・時計・小窓・切り抜きはここのまま
+ * (`fmp4.ts`) で、音・時計・小窓・切り抜きはここのまま。
+ *
+ * **録画の観る画面も同じ口で描く** (`canvas-player.ts`。互換モード)。`/stream` を fetch で読んで `feed` し、
+ * 飛ぶたびに `reset(from)`、尻まで読んだら `finish`
  */
 
 import type { AudioSide } from '#lib/arib.js';
@@ -62,6 +65,8 @@ export interface RawEvents {
      * 頼み直してもらう**
      */
     full(): void;
+    /** 終わりまで鳴らした (`finish` のあと。録画) */
+    ended?(): void;
 }
 
 /**
@@ -118,6 +123,8 @@ export class RawEngine {
     private side: AudioSide = 'both';
     /** 最後に知った PTS。字幕や時計の知らせを伸ばすのに使う (`unwrap`) */
     private near: number | null = null;
+    /** 鳴らし始める所 (`reset` の `from`。一周の中)。最初の音のコマで伸ばして `Playout` に渡す */
+    private aim: number | null = null;
     /** 切り抜きの返事待ち (`grab`)。id ごと */
     private readonly grabs = new Map<number, (bitmap: ImageBitmap | null) => void>();
     private grabbed = 0;
@@ -139,8 +146,9 @@ export class RawEngine {
      * @param before この前に差し込む (字幕の canvas より下に来るように)
      * @param background 「再生する音」だと言うか (`playbackSession`・`route`)。あとから変えるときは `background`
      * @param input 何を受け取るか (`messages.ts` の `RawInput`)。生の TS か、焼いたもの (fMP4。互換モード)
-     * @param chase 追っかけ (互換モード)。放送の今を追わない — 溜まっても跳ばず、止めて再開は止めた所から
-     *   (`playout.ts` と worker の `follow`)
+     * @param chase 追っかけ・録画 (互換モード)。放送の今を追わない — 溜まっても跳ばず、止めて再開は止めた所から
+     *   (`playout.ts` と worker の `follow`)。録画 (`canvas-player.ts`) は飛ぶ先 (`reset` の `from`) と終わり
+     *   (`finish`) も使う
      */
     constructor(
         host: HTMLElement,
@@ -229,14 +237,26 @@ export class RawEngine {
         this.send({ type: 'data', buffer, offset }, [buffer]);
     }
 
-    /** 選局し直した。**前の局の音も絵の待ちも捨てる** (いま出ている絵は、次が出るまで残る) */
-    reset(): void {
+    /**
+     * 選局し直した・録画で飛んだ。**前の局の音も絵の待ちも捨てる** (いま出ている絵は、次が出るまで残る)。
+     *
+     * `from` (90kHz。届くものの PTS の物差し。生の TS なら一周の中) を渡すと、そこから鳴らし・描き始める
+     * (録画。`canvas-player.ts`)。サーバは飛び先の少し手前から流すので、手前のコマは描かずに捨て、
+     * 音もそこから鳴らす。一周をまたぐかもしれないので、届いた最初のコマの近くに伸ばしてから決める
+     */
+    reset(from: number | null = null): void {
         this.stopAll();
         this.playout.reset();
+        this.aim = from;
         this.near = null;
         this.heardAt = 0;
         this.shownAt = 0;
-        this.send({ type: 'reset' });
+        this.send({ type: 'reset', from });
+    }
+
+    /** もう届かない (録画の尻まで読んだ)。残りを鳴らしきったら `ended` */
+    finish(): void {
+        this.playout.finish();
     }
 
     /**
@@ -460,6 +480,10 @@ export class RawEngine {
                 this.heard++;
                 const chunk: AudioChunk = message;
                 this.near = message.pts;
+                if (this.aim !== null) {
+                    this.playout.aim(unwrap(this.aim, message.pts));
+                    this.aim = null;
+                }
                 const scheduled = this.playout.push(chunk, this.now());
                 if (scheduled !== null) this.play(scheduled);
                 break;
@@ -549,6 +573,9 @@ export class RawEngine {
         } else if (decided.kind === 'jump') {
             this.stopAll();
             for (const scheduled of decided.schedule) this.play(scheduled);
+        } else if (decided.kind === 'end') {
+            this.stopAll();
+            this.events.ended?.();
         }
         this.tellClock();
         // 絵は出ているのに音が来ない。**音の出ない生より、焼いたもののほうがいい**

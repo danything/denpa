@@ -27,6 +27,12 @@
  * MPEG-2 は I フレームからしか解き始められない。選局の直後や飛ばしたあとは、I が来る
  * まで捨てる (放送の GOP は 0.5 秒)。前の絵を参照するコマを先に渡すと、復号器は灰色の
  * 絵を出してしまう。
+ *
+ * ## 録画は飛び先より前を描かない
+ *
+ * 録画の観る画面 (`canvas-player.ts`) で飛ぶと、サーバは飛び先の少し手前 (I フレーム・1 秒前) から
+ * 流してくる。**飛び先 (`reset` の `from`) より前のコマは、参照に使うため解くだけで描かない** (`floor`)。
+ * 描けるまでは前の絵のまま。録画は捨てて先へ飛ばない (`follow`) ので、圧縮のまま持つ量は読む側が抑える
  */
 
 import { AdtsSplitter, CLOCK, type Pes, PesDemuxer, unwrap } from '#lib/ts/pes.js';
@@ -49,6 +55,15 @@ const BEHIND_MOST = 0.5 * CLOCK;
 const FRAME = 3003;
 /** 音の復号が続けて転んだら諦める回数 */
 const AUDIO_ERRORS_MOST = 20;
+/**
+ * 録画 (`follow`) で圧縮のまま持っておく上限。**時間 (90kHz) とバイト数の小さいほう。** 読む側
+ * (`canvas-player.ts`) が先へ読みすぎないようにしているので、ふつうは届かない。超えたら受け取るのを
+ * やめて `full` を返す (fMP4 の `FOLLOW_AHEAD_MOST` と同じ考え)
+ */
+const FOLLOW_PENDING_MOST = 30 * CLOCK;
+const FOLLOW_BYTES_MOST = 96 * 1024 * 1024;
+/** 飛び先より手前を解いて捨てるとき、1回の刻みで解く上限 (1枚 10〜20ms) */
+const UNDER_PER_TICK = 4;
 
 interface Decoder {
     _dec_open(): number;
@@ -103,6 +118,18 @@ let frameTicks = FRAME;
 let lastFramePts: number | null = null;
 let shownSinceReset = false;
 let failed = false;
+/** 放送の今を追わないか (追っかけ・録画。`messages.ts` の `follow`)。`init` で決まる */
+let follow = false;
+/** 録画で抱えきれなくなったか。**次の `reset` (頼み直し) まで、届いたものは捨てる** */
+let overflowed = false;
+/** 圧縮のまま持っているバイト数 (`FOLLOW_BYTES_MOST`) */
+let pendingBytes = 0;
+/**
+ * 飛び先 (`reset` の `from`)。**これより前のコマは解くだけで描かない。** 届いたものの近くに伸ばすまでは
+ * 一周の中の値 (`floorRaw`) で持つ。最初の1枚を描いたら外す
+ */
+let floorRaw: number | null = null;
+let floor: number | null = null;
 
 /** いま開いている音の形 (`標本化周波数/本数`)。変わったら開き直す */
 let audioConfig = '';
@@ -120,6 +147,8 @@ let fmp4: Fmp4Video | null = null;
  * 1回しか来ないので、落とすと以降を1つも読めない。読み終えたら null
  */
 let early: Uint8Array[] | null = [];
+/** `early` に溜めたバイト数 (録画は `FOLLOW_BYTES_MOST` まで) */
+let earlyBytes = 0;
 /** `early` に溜める上限 (箱の数)。1秒に 20 個ほど来るので、読み込みが 10 秒掛かっても足りる */
 const EARLY_MOST = 200;
 let dropped = 0;
@@ -168,10 +197,47 @@ function onVideo(pes: Pes): void {
     const pts = pes.pts === null ? (last?.pts ?? 0) + frameTicks : extend(pes.pts);
     const dts = pes.dts === null ? pts : extend(pes.dts);
     pending.push({ pts, dts, data: pes.data, intra });
+    pendingBytes += pes.data.length;
+    if (follow) {
+        /*
+         * 録画は捨てて先へ飛ばない (止めた所から再開する)。読む側が読みすぎないようにしているが、
+         * それでも抱えきれなくなったら受け取るのをやめて、居る場所から頼み直してもらう
+         */
+        if (
+            !overflowed &&
+            (pending.at(-1)!.dts - pending[0]!.dts > FOLLOW_PENDING_MOST || pendingBytes > FOLLOW_BYTES_MOST)
+        ) {
+            overflowed = true;
+            post({ type: 'full' });
+        }
+        return;
+    }
     // 溜め込みすぎ (止めている・裏に回っている)。いちばん新しい I から持ち直す
     if (pending.length > 1 && pending.at(-1)!.dts - pending[0]!.dts > PENDING_MOST) {
         skipTo(Number.POSITIVE_INFINITY);
     }
+}
+
+/** 待たせている圧縮の頭を1つ取り出す */
+function shift(): Pending {
+    const item = pending.shift() as Pending;
+    pendingBytes -= item.data.length;
+    return item;
+}
+
+/** 飛び先より前のコマか (`floor`)。**飛び先は、届いたものの物差しに伸ばしてから比べる** */
+function under(pts: number): boolean {
+    if (floorRaw !== null && near !== null) {
+        floor = unwrap(floorRaw, near);
+        floorRaw = null;
+    }
+    return floor !== null && pts < floor;
+}
+
+/** 解けた絵のうち、飛び先より前のものを捨てる (描かない。参照には使い終えている) */
+function dropUnder(): void {
+    if (decoder === null) return;
+    while (decoder._dec_count() > 0 && under(decoder._dec_pts_at(0))) decoder._dec_pop();
 }
 
 /**
@@ -186,6 +252,7 @@ function skipTo(target: number): void {
     }
     if (found <= 0) return;
     pending = pending.slice(found);
+    pendingBytes = pending.reduce((sum, item) => sum + item.data.length, 0);
     decoder?._dec_open();
 }
 
@@ -308,6 +375,9 @@ function draw(field: number): void {
     shown++;
     if (!shownSinceReset) {
         shownSinceReset = true;
+        // 飛び先に着いた。ここから先は番の順に出るので、もう比べない
+        floor = null;
+        floorRaw = null;
         post({ type: 'shown' });
     }
 }
@@ -353,10 +423,18 @@ function tick(): void {
      * **新しい局の1枚目は、解けたらすぐ出して待つ** — 前の局の絵のまま新しい局の音を
      * 聞かせると、見えているものと聞こえるものが食い違う。音の時計が動き出していても
      * 待たない: 放送の絵は音より先に届く (VBV の遅れ) ので、番を待つと 1 枚目が
-     * 0.5〜2 秒遅れていた (本番の実測)。番が来るまではこの1枚のまま止めておく
+     * 0.5〜2 秒遅れていた (本番の実測)。番が来るまではこの1枚のまま止めておく。
+     *
+     * **録画で飛んだあとは、飛び先より前を解いて捨てる** (`floor`)。それまでは前の絵のまま
+     * (CM を飛ばしたなら本編の絵のまま)。1回に解くのは `UNDER_PER_TICK` 枚まで
      */
     if (!shownSinceReset) {
-        while (decoder._dec_count() === 0 && pending.length > 0) decode(pending.shift() as Pending);
+        const limit = floor !== null || floorRaw !== null ? UNDER_PER_TICK : Number.POSITIVE_INFINITY;
+        for (let i = 0; ; i++) {
+            dropUnder();
+            if (decoder._dec_count() > 0 || pending.length === 0 || i >= limit) break;
+            decode(shift());
+        }
         if (decoder._dec_count() > 0) {
             take();
             draw(current?.interlaced === true ? (current.topFirst ? 0 : 1) : -1);
@@ -376,8 +454,9 @@ function tick(): void {
     for (let i = 0; i < 3 && pending.length > 0 && decoder._dec_count() < DECODED_MOST; i++) {
         const next = pending[0]!;
         if (next.dts > at + AHEAD || (i > 0 && next.dts > at)) break;
-        decode(pending.shift() as Pending);
+        decode(shift());
     }
+    dropUnder();
 
     // 次の絵がもう番を迎えているなら、手前の絵は上げずに捨てる
     while (decoder._dec_count() >= 2 && decoder._dec_pts_at(1) <= at) {
@@ -440,11 +519,15 @@ function schedule(): void {
     setTimeout(next, 4);
 }
 
-function reset(): void {
+function reset(from: number | null): void {
     demuxer = new PesDemuxer();
     demuxer.audioIndex = audioIndex;
     adts.reset();
     pending = [];
+    pendingBytes = 0;
+    overflowed = false;
+    floorRaw = from;
+    floor = null;
     started = false;
     near = null;
     clock = null;
@@ -453,9 +536,12 @@ function reset(): void {
     lastFramePts = null;
     shownSinceReset = false;
     budget.reset();
-    if (fmp4 !== null) fmp4.reset();
+    if (fmp4 !== null) fmp4.reset(from);
     else decoder?._dec_open();
-    if (early !== null) early = [];
+    if (early !== null) {
+        early = [];
+        earlyBytes = 0;
+    }
     // 次のコマで開き直す (前の局の持ち越しを捨てる)
     audioConfig = '';
     audioErrors = 0;
@@ -532,9 +618,12 @@ function startFmp4(canvas: OffscreenCanvas, follow: boolean): boolean {
     return true;
 }
 
-async function init(canvas: OffscreenCanvas, base: string, kind: RawInput, follow: boolean): Promise<void> {
+async function init(canvas: OffscreenCanvas, base: string, kind: RawInput, chase: boolean): Promise<void> {
     mode = kind;
     surface = canvas;
+    follow = chase;
+    // 録画の生の TS も、復号器を読み終えるまで溜めておく (音を落とすと、鳴らし始めが遅れる)。ライブは今までどおり
+    if (kind === 'ts-mpeg2' && !follow) early = null;
     if (kind === 'fmp4') {
         if (!startFmp4(canvas, follow)) return;
     } else {
@@ -560,8 +649,25 @@ async function init(canvas: OffscreenCanvas, base: string, kind: RawInput, follo
     }
     const held = early ?? [];
     early = null;
-    for (const bytes of held) fmp4?.feed(bytes);
+    earlyBytes = 0;
+    for (const bytes of held) feed(bytes);
     schedule();
+}
+
+/** 届いたものを読む (fMP4 は箱ごと、TS は PES に組んで) */
+function feed(bytes: Uint8Array): void {
+    if (mode === 'fmp4') {
+        fmp4?.feed(bytes);
+        return;
+    }
+    // 録画で抱えきれなくなった。頼み直し (`reset`) まで受け取らない
+    if (overflowed) return;
+    const { pes, changed } = demuxer.feed(bytes);
+    if (changed) demuxer.selectAudio(audioIndex);
+    for (const item of pes) {
+        if (item.kind === 'video') onVideo(item);
+        else onAudio(item);
+    }
 }
 
 scope.onmessage = (event: MessageEvent<ToWorker>) => {
@@ -573,26 +679,22 @@ scope.onmessage = (event: MessageEvent<ToWorker>) => {
         case 'data': {
             if (failed) return;
             const bytes = new Uint8Array(message.buffer, message.offset);
-            if (mode === 'fmp4') {
-                // 復号器を読み終えるまでは溜めておく (`early`)
-                if (early !== null) {
-                    if (early.length < EARLY_MOST) early.push(bytes);
-                } else fmp4?.feed(bytes);
+            // 復号器を読み終えるまでは溜めておく (`early`)。録画は数ではなくバイト数で区切る (塊の大きさが決まっていない)
+            if (early !== null) {
+                if (follow ? earlyBytes < FOLLOW_BYTES_MOST : early.length < EARLY_MOST) {
+                    early.push(bytes);
+                    earlyBytes += bytes.length;
+                }
                 break;
             }
-            const { pes, changed } = demuxer.feed(bytes);
-            if (changed) demuxer.selectAudio(audioIndex);
-            for (const item of pes) {
-                if (item.kind === 'video') onVideo(item);
-                else onAudio(item);
-            }
+            feed(bytes);
             break;
         }
         case 'clock':
             clock = message.pts === null ? null : { pts: message.pts, at: message.at };
             break;
         case 'reset':
-            reset();
+            reset(message.from ?? null);
             break;
         case 'audio':
             // 焼いたものには選んだ音声1本しか入っていない (選び直すとサーバが焼き直す)

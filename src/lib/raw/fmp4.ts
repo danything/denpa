@@ -100,6 +100,11 @@ export class Fmp4Video {
     /** 圧縮のまま持っているバイト数 (`FOLLOW_BYTES_MOST`) */
     private pendingBytes = 0;
     private shownSinceReset = false;
+    /**
+     * 飛び先 (µs。`reset` の `from`)。**これより前に出てきた絵は描かずに閉じる** — 録画のサーバは
+     * 飛び先の手前の鍵のコマから流してくる。最初の1枚を描いたら外す
+     */
+    private floor: number | null = null;
     private lastPts: number | null = null;
     /** いま出しているコマの時刻 (90kHz) */
     current: number | null = null;
@@ -312,6 +317,11 @@ export class Fmp4Video {
             this.started.delete(frame.timestamp);
             this.host.record(performance.now() - began);
         }
+        // 飛び先より前 (参照に使うため解いただけ)
+        if (this.floor !== null && frame.timestamp < this.floor) {
+            frame.close();
+            return;
+        }
         // 出てくるのは見せる順。念のため並べ直す (同じ時刻の後ろへ)
         let at = this.frames.length;
         while (at > 0 && this.frames[at - 1]!.timestamp > frame.timestamp) at--;
@@ -323,9 +333,20 @@ export class Fmp4Video {
         const decoder = this.decoder;
         if (decoder === null || decoder.state !== 'configured') return;
 
-        // **新しい局の1枚目は、解けたらすぐ出して待つ** (worker.ts の MPEG-2 と同じ理由)
+        /*
+         * **新しい局の1枚目は、解けたらすぐ出して待つ** (worker.ts の MPEG-2 と同じ理由)。
+         * 録画で飛んだあと (`floor`) は、飛び先より前を解いて捨てながら進むので、詰められるだけ渡す
+         */
         if (!this.shownSinceReset) {
-            if (this.frames.length === 0 && decoder.decodeQueueSize === 0 && this.pending.length > 0) {
+            if (this.floor !== null) {
+                while (
+                    this.frames.length === 0 &&
+                    this.pending.length > 0 &&
+                    decoder.decodeQueueSize < DECODED_MOST
+                ) {
+                    this.decode(this.take());
+                }
+            } else if (this.frames.length === 0 && decoder.decodeQueueSize === 0 && this.pending.length > 0) {
                 this.decode(this.take());
             }
             const first = this.frames.shift();
@@ -375,6 +396,8 @@ export class Fmp4Video {
         this.errors = 0;
         const first = !this.shownSinceReset;
         this.shownSinceReset = true;
+        // 飛び先に着いた。ここから先は見せる順に出るので、もう比べない
+        this.floor = null;
         this.host.drew(first);
     }
 
@@ -384,8 +407,12 @@ export class Fmp4Video {
         return createImageBitmap(this.canvas);
     }
 
-    /** 選局し直した。**前の局のものは全部捨てる** (出ている絵は次が出るまで残る) */
-    reset(): void {
+    /**
+     * 選局し直した・録画で飛んだ。**前の局のものは全部捨てる** (出ている絵は次が出るまで残る)。
+     * `from` (90kHz) を渡すと、それより前の絵は描かない (`floor`)
+     */
+    reset(from: number | null = null): void {
+        this.floor = from === null ? null : Math.round((from * 1_000_000) / CLOCK);
         this.pending = [];
         this.pendingBytes = 0;
         this.overflowed = false;
