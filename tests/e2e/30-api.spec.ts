@@ -93,6 +93,27 @@ test.describe('外から使う口', () => {
                 expect(['av1', 'h264', 'mpeg2']).toContain(file.codec);
                 expect(file.url).toBe(`api/recordings/${rec.id}/file?source=${file.source}`);
             }
+            // 録画の状態 (追っかけの終わりの確かめ)。録れた長さは一覧と同じ。録っている最中のものは
+            // 読む間に録り終えて変わりうるので、鍵があることだけ見る
+            const state = await (await request.get(`/api/recordings/${rec.id}`)).json();
+            expect(state).toMatchObject({
+                id: rec.id,
+                encoded: expect.any(Boolean),
+                state: expect.any(String),
+            });
+            expect(state).toHaveProperty('durationMs');
+            if (!rec.recording) expect(state.durationMs).toBe(rec.durationMs);
+            // CM 飛ばしの行き先 (playback の物差しの秒)。無ければ空の配列
+            const { chapters } = await (await request.get(`/api/recordings/${rec.id}/chapters`)).json();
+            expect(Array.isArray(chapters)).toBe(true);
+            for (const chapter of chapters) {
+                expect(chapter).toMatchObject({
+                    start: expect.any(Number),
+                    end: expect.any(Number),
+                    title: expect.any(String),
+                });
+                expect(chapter.end).toBeGreaterThan(chapter.start);
+            }
         }
     });
 });

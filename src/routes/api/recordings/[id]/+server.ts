@@ -8,11 +8,18 @@ import { recordingOr404 } from '#lib/server/recording.js';
  * 録り終えてからエンコードが終わるまでの間 (CM検出・エンコード) も追っかけの器で
  * 観られるが、エンコードが終われば普通の観る画面 (シークも字幕も揃う) に移りたい。
  * 画面は `recordings` の知らせ (SSE) を受けるたびにここを読む。
- * 中身は行そのものではなく、判断に要るもの (エンコードできたか・状態) だけ
+ * 中身は行そのものではなく、判断に要るもの (エンコードできたか・状態・録れた長さ) だけ。
+ * `durationMs` は一覧 (`GET api/recordings`) と同じもの。テレビのアプリの追っかけは、流れが終わったときに
+ * これで「録り終えて最後まで観たか」を確かめる (一覧を丸ごと取り直さずに済む)
  */
 export function GET({ params }) {
     const recording = recordingOr404(params.id);
-    return json({ id: recording.id, encoded: recording.library_path !== null, state: recording.state });
+    return json({
+        id: recording.id,
+        encoded: recording.library_path !== null,
+        state: recording.state,
+        durationMs: recording.duration_ms,
+    });
 }
 
 /**
