@@ -75,6 +75,7 @@ export function isVideo(element: BmlElement): boolean {
 export function videoRect(document: BmlDocument): { element: BmlElement; rect: Rect } | null {
     for (const element of document.root.descendants()) {
         if (!isVideo(element)) continue;
+        // 見える見えないは継いだ結果 (祖先が hidden でも、object が visible と書けば CSS と同じく見える)
         if (!element.style().visible) return null;
         let { left, top } = element.style();
         let { width, height } = element.style();
