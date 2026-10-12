@@ -423,14 +423,13 @@ public sealed class CcidLink : ICardLink
 /// <summary>USB の CCID リーダーを探す</summary>
 public static class Ccid
 {
-    private const string Sysfs = "/sys/bus/usb/devices";
     private const string DevUsb = "/dev/bus/usb";
 
     /// <summary>
     /// 刺さっている CCID のインターフェース (bInterfaceClass 0x0b) を並べる。**開かない。**
     /// sysfs だけを読むので、別のプロセスが使っていても並ぶ (開くときに断られる)
     /// </summary>
-    public static IReadOnlyList<CardLinkCandidate> Find() => Find(Sysfs, DevUsb);
+    public static IReadOnlyList<CardLinkCandidate> Find() => Find(UsbSysfs.Devices, DevUsb);
 
     internal static List<CardLinkCandidate> Find(string sysfs, string devUsb)
     {
@@ -443,23 +442,23 @@ public static class Ccid
             var colon = name.IndexOf(':');
             var dot = name.IndexOf('.', colon + 1);
             if (colon <= 0 || dot < 0 || !int.TryParse(name.AsSpan(colon + 1, dot - colon - 1), out var config)) continue;
-            if (Attribute(entry, "bInterfaceClass") != "0b") continue;
-            if (!int.TryParse(Attribute(entry, "bInterfaceNumber"), System.Globalization.NumberStyles.HexNumber, null, out var number))
+            if (UsbSysfs.Read(entry, "bInterfaceClass") != "0b") continue;
+            if (!int.TryParse(UsbSysfs.Read(entry, "bInterfaceNumber"), System.Globalization.NumberStyles.HexNumber, null, out var number))
             {
                 continue;
             }
 
             var port = name[..colon];
             var device = Path.Combine(sysfs, port);
-            if (!int.TryParse(Attribute(device, "busnum"), out var bus)
-                || !int.TryParse(Attribute(device, "devnum"), out var address)
-                || !int.TryParse(Attribute(device, "idVendor"), System.Globalization.NumberStyles.HexNumber, null, out var vendor)
-                || !int.TryParse(Attribute(device, "idProduct"), System.Globalization.NumberStyles.HexNumber, null, out var product))
+            if (!int.TryParse(UsbSysfs.Read(device, "busnum"), out var bus)
+                || !int.TryParse(UsbSysfs.Read(device, "devnum"), out var address)
+                || !int.TryParse(UsbSysfs.Read(device, "idVendor"), System.Globalization.NumberStyles.HexNumber, null, out var vendor)
+                || !int.TryParse(UsbSysfs.Read(device, "idProduct"), System.Globalization.NumberStyles.HexNumber, null, out var product))
             {
                 continue;
             }
 
-            var label = Label(Attribute(device, "manufacturer"), Attribute(device, "product"), vendor, product);
+            var label = Label(UsbSysfs.Read(device, "manufacturer"), UsbSysfs.Read(device, "product"), vendor, product);
             var where = number == 0 ? port : $"{port}:{config}.{number}";
             var display = $"{label} (usb {where})";
             var path = $"{devUsb}/{bus:000}/{address:000}";
@@ -480,22 +479,6 @@ public static class Ccid
         return $"{manufacturer} {product}";
     }
 
-    private static string? Attribute(string dir, string name)
-    {
-        try
-        {
-            return File.ReadAllText(Path.Combine(dir, name)).Trim();
-        }
-        catch (IOException)
-        {
-            return null;
-        }
-        catch (UnauthorizedAccessException)
-        {
-            return null;
-        }
-    }
-
     /// <summary>
     /// 診断用 (<c>denpa-agent --card</c>)。見つかったリーダーを並べ、最初の1台のカードに
     /// 電源を入れて ATR と読み取り機の形を書く。**実機で最初に当てるのはここ。**
@@ -506,7 +489,7 @@ public static class Ccid
         var found = Find();
         if (found.Count == 0)
         {
-            return $"CCID のカードリーダーが見つかりません ({Sysfs} に bInterfaceClass 0b のインターフェースがありません)";
+            return $"CCID のカードリーダーが見つかりません ({UsbSysfs.Devices} に bInterfaceClass 0b のインターフェースがありません)";
         }
         foreach (var candidate in found) text.AppendLine(candidate.Name);
 

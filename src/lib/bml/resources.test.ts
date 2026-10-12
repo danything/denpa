@@ -1,9 +1,10 @@
 import { describe, expect, test } from 'bun:test';
 import { inflateSync } from 'node:zlib';
 import type { ResponseMessage } from '#lib/ts/bml-protocol.js';
+import { crc32 } from '#lib/ts/png.js';
 import { parseDrcs } from './drcs';
 import { isDrcs } from './euc';
-import { alphaPng, applyClut, crc32 } from './png';
+import { alphaPng, applyClut } from './png';
 import { Resources, refToPath, unknownScheme } from './resources';
 import { parseXml } from './xml';
 

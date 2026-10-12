@@ -17,13 +17,11 @@
 
 import { DsmccLogoCollector } from './logo-dsmcc';
 import { withPalette } from './logo-palette';
-import { descriptors, PacketStream, SectionAssembler, sdtServices } from './psi';
+import { descriptors, PacketStream, PID_SDT, SectionAssembler, sdtServices, TABLE_SDT_ACTUAL } from './psi';
 
 const PID_CDT = 0x0029;
-const PID_SDT = 0x0011;
 
 const TABLE_CDT = 0xc8;
-const TABLE_SDT_ACTUAL = 0x42;
 
 const DATA_TYPE_LOGO = 0x01;
 const DESC_LOGO_TRANSMISSION = 0xcf;

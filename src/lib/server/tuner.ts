@@ -130,13 +130,13 @@ export async function putChannels(found: AgentChannel[], scanned: ChannelType[])
     return tolerate(array(AGENT_CHANNEL), await res.json(), 'エージェントの PUT /denpa/channels');
 }
 
-export async function getTuners(): Promise<AgentTuner[]> {
-    return (await get('/denpa/tuners', TUNERS)).tuners;
+/** 一覧と、定義を書いていないので自分で見つけた状態か (`detected`。チューナー画面に出す) を1度に */
+export function tunerList(): Promise<Infer<typeof TUNERS>> {
+    return get('/denpa/tuners', TUNERS);
 }
 
-/** 定義を書いていないので自分で見つけた状態か。画面に出す */
-export async function tunersDetected(): Promise<boolean> {
-    return (await get('/denpa/tuners', TUNERS)).detected === true;
+export async function getTuners(): Promise<AgentTuner[]> {
+    return (await tunerList()).tuners;
 }
 
 /**

@@ -9,13 +9,7 @@ import { forgetLogoData, learnedAt, stats as learnStats, siblings, stations } fr
 import { refresh, start, stop } from '#lib/server/scan.js';
 import { programs, recordings, services } from '#lib/server/schema.js';
 import { cardStatus } from '#lib/server/scramble.js';
-import {
-    type AgentTuner,
-    getTuners,
-    putTuners,
-    type TunerConfig,
-    tunersDetected,
-} from '#lib/server/tuner.js';
+import { type AgentTuner, putTuners, type TunerConfig, tunerList } from '#lib/server/tuner.js';
 import type { ChannelType } from '#lib/types.js';
 
 /** 局1つぶんの、CM検出ロゴの覚え具合 */
@@ -148,6 +142,8 @@ function coverage(): Coverage[] {
 }
 
 export async function load() {
+    // 一覧と「自動で見つけた状態か」は同じ答えに入っている。1度だけ聞く
+    const answer = tunerList();
     return {
         // スキャンの進み具合。回しているのは denpa 自身 (scan.refresh)
         scan: refresh(),
@@ -157,7 +153,7 @@ export async function load() {
          * 出さないと「画面の内容がどこから来たのか」が分からない — 保存すると
          * それが固定されるので、そこは言っておく必要がある
          */
-        detected: tunersDetected().catch(() => false),
+        detected: answer.then((got) => got.detected === true).catch(() => false),
         /*
          * 以下は相手待ちなので promise のまま返して後から流し込む。
          * 待つと画面が出ない
@@ -166,8 +162,8 @@ export async function load() {
          * 1本も無い」と区別が付かない (以前はエージェントの生死を別の行に
          * 出していたが、見るところが増えるだけだった)
          */
-        tuners: getTuners()
-            .then((list) => ({ list: withLabels(list), error: null as string | null }))
+        tuners: answer
+            .then((got) => ({ list: withLabels(got.tuners), error: null as string | null }))
             .catch((error: unknown) => ({ list: [], error: String(error) })),
         channels: coverage(),
         // チューナーを譲り合う順。「チューナーの空き」の「詳しく」に出す

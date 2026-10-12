@@ -28,7 +28,7 @@ export interface Rule {
 const SIMPLE = /^(\*|[a-z][a-z0-9-]*)?((?:[.#][a-zA-Z0-9_-]+)*)(?::(focus|active))?$/i;
 
 /** 単純セレクタを読む。使えない形 (子孫など) なら null */
-export function parseSelector(text: string): Selector | null {
+function parseSelector(text: string): Selector | null {
     const match = SIMPLE.exec(text.trim());
     if (match === null || text.trim() === '') return null;
     const tag = match[1] === undefined || match[1] === '*' ? null : match[1].toLowerCase();

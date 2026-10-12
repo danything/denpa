@@ -53,7 +53,7 @@ import {
     unknownScheme,
 } from './resources';
 import { Sound } from './sound';
-import { ABORT, type Abort, type NativeResult, ScriptError, Suspend, type Value } from './values';
+import { ABORT, type Abort, JST, type NativeResult, ScriptError, Suspend, type Value } from './values';
 import { type Realm, Vm } from './vm';
 import { parseXml } from './xml';
 
@@ -113,7 +113,7 @@ export interface Bml {
 }
 
 /** AribKeyCode (STD-B24 第二分冊 付属2 表5-9) */
-export const KEY = {
+const KEY = {
     up: 1,
     down: 2,
     left: 3,
@@ -553,7 +553,7 @@ class Engine implements DomHost, BrowserHost, RenderHost {
             const value = beitem.attr('time_value') ?? '';
             const m = /^(\d{4})(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})$/.exec(value);
             if (m === null) continue;
-            const at = Date.UTC(+m[1]!, +m[2]! - 1, +m[3]!, +m[4]!, +m[5]!, +m[6]!) - 9 * 3600_000;
+            const at = Date.UTC(+m[1]!, +m[2]! - 1, +m[3]!, +m[4]!, +m[5]!, +m[6]!) - JST;
             if (at > now) continue;
             beitem.memo['fired'] = true;
             this.handle(beitem, 'onoccur', { type: 'TimerFired', status: 0 });

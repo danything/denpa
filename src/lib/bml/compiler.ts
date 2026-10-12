@@ -760,7 +760,7 @@ class FunctionCompiler {
 }
 
 /** 大域のコード (`<script>` 1 つ) を組む。誤りは投げる */
-export function compileProgram(body: Stmt[], name: string): Code {
+function compileProgram(body: Stmt[], name: string): Code {
     return new FunctionCompiler(name, null).compileBody([], body);
 }
 

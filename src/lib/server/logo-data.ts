@@ -14,7 +14,7 @@ import { and, eq, ne, sql } from 'drizzle-orm';
 import { toHalfWidth } from '../fold';
 import { joinBytes } from '../ts/bytes';
 import { coherence, decodeModel } from '../ts/logo-detect';
-import { pngChunk } from '../ts/logo-palette';
+import { PNG_SIGNATURE, pngChunk } from '../ts/png';
 import { config } from './config';
 import { orm } from './db';
 import { CURRENT_SERVICES } from './epg';
@@ -138,7 +138,7 @@ function encodeGray(gray: Uint8Array, width: number, height: number): Uint8Array
     ihdr[8] = 8; // ビット深度
     ihdr[9] = 0; // 白黒
     const parts = [
-        Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+        PNG_SIGNATURE,
         pngChunk('IHDR', ihdr),
         pngChunk('IDAT', new Uint8Array(deflateSync(raw))),
         pngChunk('IEND', new Uint8Array(0)),

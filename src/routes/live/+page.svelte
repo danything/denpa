@@ -2,7 +2,6 @@
     import { onMount } from 'svelte';
     import { submitting } from '#lib/actions.js';
     import type { Service } from '#lib/bml/engine.js';
-    import { seeDriveNotice } from '#lib/canvas-video.js';
     import DriveNotice from '#lib/components/DriveNotice.svelte';
     import ProgramFacts from '#lib/components/ProgramFacts.svelte';
     import AudioMenu from '#lib/components/player/AudioMenu.svelte';
@@ -51,6 +50,7 @@
     import ServiceLogo from '#lib/components/ServiceLogo.svelte';
     import Toasts, { errorNotice, type Notice } from '#lib/components/Toasts.svelte';
     import { programDetail } from '#lib/detail.svelte.js';
+    import { driveGate } from '#lib/drive-gate.svelte.js';
     import { SERVICE_TYPE_LABEL, time } from '#lib/format.js';
     import { livePlayer } from '#lib/live-player.svelte.js';
     import { liveUpdates } from '#lib/live-updates.svelte.js';
@@ -95,22 +95,8 @@
      * **運転中の注意** (互換モード。`canvas-video.ts`)。UA の既定で互換モードに入っている端末 (テスラ) で、
      * 初めて canvas で再生する前に出す。**「わかりました」を押すまで再生を始めない** (`livePlayer` の `confirm`)
      */
-    let driveNotice = $state(false);
-    let noticeWaiters: (() => void)[] = [];
-    const player = livePlayer({
-        confirm: () =>
-            new Promise<void>((done) => {
-                noticeWaiters.push(done);
-                driveNotice = true;
-            }),
-    });
-    function acceptDriveNotice(): void {
-        seeDriveNotice();
-        driveNotice = false;
-        const waiters = noticeWaiters;
-        noticeWaiters = [];
-        for (const done of waiters) done();
-    }
+    const drive = driveGate();
+    const player = livePlayer({ confirm: drive.confirm });
     /** 映像と重ねもの (MediaStack が組む)。bind で受けるので開くまでは null */
     let video = $state<HTMLVideoElement | null>(null);
     /** 切り替えの間、前の絵を貼っておく先 (`live-player` の `freeze`) */
@@ -976,7 +962,7 @@
 />
 
 <!-- 運転中の注意 (互換モードで初めて再生する前に1回)。押すまで再生を始めない -->
-<DriveNotice open={driveNotice} onaccept={acceptDriveNotice} />
+<DriveNotice open={drive.open} onaccept={drive.accept} />
 
 <style>
     /* 右の一覧の列。幅と高さの決めごとは FactsAside と同じ (min-height: 0 が無いと中身の高さで突っ張って巻き取られない) */

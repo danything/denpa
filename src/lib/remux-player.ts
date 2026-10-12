@@ -18,7 +18,16 @@
  */
 
 import type { PickedMediaSource } from '#lib/ts/media-source.js';
-import { aheadOf, BUSY, covers, type Ranges } from '#lib/ts/playback.js';
+import {
+    aheadOf,
+    busyAnswer,
+    covers,
+    type Ranges,
+    retryable,
+    retryWait,
+    STREAM_RETRIES,
+    type StreamState,
+} from '#lib/ts/playback.js';
 
 /** 先へ溜める上限 (秒) */
 const AHEAD = 60;
@@ -26,12 +35,7 @@ const AHEAD = 60;
 const BEHIND = 30;
 /** 読んでいる流れの尻からこれだけ先までは、頼み直さずに届くのを待つ (秒。`covers`) */
 const SLACK = 15;
-/** 続けて頼み直す上限 */
-const RETRIES = 8;
-
-export type RemuxState = 'flowing' | 'retrying' | 'failed' | 'busy';
-
-export interface RemuxOptions {
+interface RemuxOptions {
     /** 頼む先。`from` 秒から、`audio` (`playback` の `audios` の `id`) の音声で */
     url(from: number, audio: string): string;
     /** MSE に渡す型 (`ts/playback.ts` の `streamType`) */
@@ -43,7 +47,7 @@ export interface RemuxOptions {
     /** どの音声で始めるか */
     audio: string;
     /** 繋ぎ直している・諦めた・戻った・混んでいて断られた */
-    state(state: RemuxState): void;
+    state(state: StreamState): void;
 }
 
 export interface RemuxPlayer {
@@ -225,10 +229,7 @@ export function remuxPlayer(
             loadingFrom = null;
             // 切れた (繋がらない・途中で落ちた・サーバの 5xx) なら頼み直す。読めない中身
             // (SourceBuffer が断った) と 4xx は何度やっても同じ。画面が落とす口を出す
-            if (
-                video.error !== null ||
-                !(error instanceof TypeError || /^Error: HTTP 5/.test(String(error)))
-            ) {
+            if (video.error !== null || !retryable(error)) {
                 console.warn('[remux] 流せませんでした', error);
                 options.state('failed');
                 return;
@@ -239,11 +240,11 @@ export function remuxPlayer(
 
     /** 切れた。倍々に待って、観ていた位置から頼み直す */
     function retry(): void {
-        if (retries >= RETRIES) {
+        if (retries >= STREAM_RETRIES) {
             options.state('failed');
             return;
         }
-        const wait = Math.min(10_000, 1000 * 2 ** retries);
+        const wait = retryWait(retries);
         retries++;
         options.state('retrying');
         retryTimer = setTimeout(() => {
@@ -318,13 +319,4 @@ export function remuxPlayer(
             media.removeEventListener('startstreaming', nudge);
         },
     };
-}
-
-/** サーバが「混んでいます」と断ったか (`server/playback.ts` の 503)。canvas で観るとき (`canvas-player.ts`) も同じ */
-export async function busyAnswer(response: Response): Promise<boolean> {
-    try {
-        return ((await response.json()) as { message?: unknown }).message === BUSY;
-    } catch {
-        return false;
-    }
 }

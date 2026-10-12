@@ -46,9 +46,6 @@ public static class SianoUserland
     public static string Executable(string dir) =>
         Path.Combine(dir, OperatingSystem.IsWindows() ? "siano-ts.exe" : "siano-ts");
 
-    /// <summary>USB デバイスが並ぶ sysfs。カーネルが使っているかをここで見る (<see cref="Driver"/>)</summary>
-    private const string Sysfs = "/sys/bus/usb/devices";
-
     /// <summary>ISDB-T のファームウェア。**同梱してある** (配布アーカイブに入っている。Dockerfile)</summary>
     public static string Firmware =>
         Environment.GetEnvironmentVariable("SIANO_FIRMWARE") ?? Path.Combine(Dir, "firmware", "isdbt_rio.inp");
@@ -102,7 +99,7 @@ public static class SianoUserland
             Log.Write($"siano-userland の機材を挙げられません (siano-ts --list exit {code}: {output})");
             return [];
         }
-        return ParseList(output, port => Driver(Sysfs, port), Log.Write);
+        return ParseList(output, port => Driver(UsbSysfs.Devices, port), Log.Write);
     }
 
     /// <summary>
