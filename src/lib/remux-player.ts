@@ -320,8 +320,8 @@ export function remuxPlayer(
     };
 }
 
-/** サーバが「混んでいます」と断ったか (`server/playback.ts` の 503) */
-async function busyAnswer(response: Response): Promise<boolean> {
+/** サーバが「混んでいます」と断ったか (`server/playback.ts` の 503)。canvas で観るとき (`canvas-player.ts`) も同じ */
+export async function busyAnswer(response: Response): Promise<boolean> {
     try {
         return ((await response.json()) as { message?: unknown }).message === BUSY;
     } catch {

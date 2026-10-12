@@ -40,8 +40,12 @@ export type ToWorker =
      * performance.now()` の ms)。**null は「止まっている」** — 絵もそこで止める
      */
     | { type: 'clock'; pts: number | null; at: number }
-    /** 選局し直した。**前の局のものは全部捨てる** */
-    | { type: 'reset' }
+    /**
+     * 選局し直した・録画で飛んだ。**前の局のものは全部捨てる。** `from` (90kHz。届くものの PTS の物差しで、
+     * 生の TS なら一周の中) があれば、それより前のコマは解くだけで描かない — サーバは飛び先の少し手前
+     * (鍵のコマ・1 秒前) から流すので、手前の絵 (CM を飛ばしたなら CM の絵) を出さないため
+     */
+    | { type: 'reset'; from?: number | null }
     /** 何本目の音声を解くか (`AudioTrack.stream`) */
     | { type: 'audio'; index: number }
     /**

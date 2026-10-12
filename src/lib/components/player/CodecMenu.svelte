@@ -16,7 +16,8 @@
      * `live-player.svelte.ts` の `unavailable`)
      *
      * `choices` を渡すと (観る画面) その並びをそのまま出す。録画ごとに観られるものが違い、
-     * 「自動」も並ぶため (`ts/playback.ts` の `codecChoices`)
+     * 「自動」も並ぶため (`ts/playback.ts` の `codecChoices`)。`disabled` を立てたものは並べるが押せない
+     * (互換モードでこの端末が描けない形。`canvasChoices`)
      */
     let {
         testid,
@@ -38,7 +39,7 @@
         /** この端末では表示できない形 */
         unavailable?: LiveCodec[];
         /** 並べるもの (観る画面)。渡せば LIVE_CODECS の代わりにこれ */
-        choices?: { key: string; label: string }[];
+        choices?: { key: string; label: string; disabled?: boolean }[];
         /** `choices` のうち選ばれているもの */
         selected?: string;
         onpick?: (key: string) => void;
@@ -48,7 +49,12 @@
     const current = $derived(raw ? MPEG2 : codec);
     const items = $derived(
         choices !== undefined
-            ? choices.map((c) => ({ key: c.key, label: c.label, active: c.key === selected }))
+            ? choices.map((c) => ({
+                  key: c.key,
+                  label: c.disabled === true ? `${c.label} (この端末では表示できません)` : c.label,
+                  active: c.key === selected,
+                  disabled: c.disabled === true,
+              }))
             : [
                   ...LIVE_CODECS.map((c) => {
                       const off = unavailable.includes(c.id);

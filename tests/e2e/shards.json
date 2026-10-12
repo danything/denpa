@@ -1,48 +1,36 @@
 {
-    "//": "CI の e2e の組分け (test.yml が読む)。playwright の --shard はテスト数で機械的に割るので、重いスペック (録画完了を実時間で待つもの) が同じ組に固まり、28秒の組と3.6分の組ができていた。実測の所要時間で人が割る。新しいスペックを足したら必ずどこかの組に入れること — 入れ忘れは CI の「組分けの検算」が落として教える",
+    "//": "CI の e2e の組分け (test.yml が読む)。playwright の --shard はテスト数で機械的に割るので、重いスペック (録画完了を実時間で待つもの) が同じ組に固まり、28秒の組と3.6分の組ができていた。実測の所要時間で人が割る (割り方は docs/development.md「並べて流す」)。どの組にも入っていないスペックは 5 組で流す — 足したら CI の結果の所要時間を見て、あとでどこかの組に入れ直せばよい。ここに書いた名前のファイルが無い・2つの組に入っている、は CI の「組分けの検算」が落とす",
     "1": [
-        "36-bml",
-        "17-logo",
-        "16-scan",
-        "13-migrate",
-        "20-onair",
-        "09-behaviour",
-        "26-hwenc",
+        "18-pwa",
+        "22-watch",
+        "24-bml-network",
         "29-subpath",
+        "31-device",
         "33-recordings-group",
-        "34-live-yield"
+        "35-csp",
+        "36-bml",
+        "37-playback"
     ],
     "2": [
-        "22-oidc",
-        "20-live",
+        "03-recording",
         "10-webhook",
-        "24-bml-network",
-        "14-serve",
-        "02-reservation",
+        "12-encode-failure",
+        "13-migrate",
+        "16-scan",
         "25-chase",
-        "30-api",
+        "27-encode-cancel",
         "32-chase-api"
     ],
     "3": [
-        "03-recording",
-        "22-watch",
-        "18-pwa",
-        "12-encode-failure",
-        "05-rules",
-        "28-live-raw",
-        "38-live-compat",
-        "31-device",
-        "37-playback"
-    ],
-    "4": [
-        "27-encode-cancel",
+        "09-behaviour",
+        "14-serve",
         "19-reservation-rules",
+        "20-live",
+        "20-onair",
         "21-onair-fallback",
-        "15-scramble",
-        "01-dashboard",
-        "04-external-delete",
-        "11-rule-edit",
-        "35-csp",
-        "39-watch-stream"
-    ]
+        "22-oidc",
+        "34-live-yield"
+    ],
+    "4": ["01-dashboard", "02-reservation", "11-rule-edit", "15-scramble", "17-logo", "39-watch-stream"],
+    "5": ["04-external-delete", "05-rules", "26-hwenc", "28-live-raw", "30-api", "38-live-compat"]
 }
