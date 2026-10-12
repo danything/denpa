@@ -396,6 +396,7 @@ function readTraf(
             p += 4;
             return value;
         };
+        // data_offset の無い trun (前の trun の続き) は、denpa の ffmpeg は出さない (いつも付ける) ので扱わない
         let position = origin + offset;
         for (let i = 0; i < count; i++) {
             const duration = tflags & 0x100 ? next() : duration0;

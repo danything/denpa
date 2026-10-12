@@ -198,6 +198,13 @@ export class Fmp4Video {
         // 転んだ復号器は閉じている。作り直す
         this.decoder = null;
         this.open();
+        /*
+         * **待たせている圧縮の頭も、次の鍵のコマまで捨てる。** 開き直した復号器に差分のコマから
+         * 渡すと、また転ぶ (`ERRORS_MOST` を使い切って諦めてしまう)。鍵が無ければこれから来るぶんを待つ
+         */
+        const key = this.pending.findIndex((item) => item.key);
+        this.pending = key < 0 ? [] : this.pending.slice(key);
+        this.needKey = key < 0;
     }
 
     private queue(item: Pending): void {
