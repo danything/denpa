@@ -227,6 +227,7 @@ export function canvasPlayer(options: CanvasOptions): CanvasPlayer {
         }
         const abort = new AbortController();
         controller = abort;
+        let reader: ReadableStreamDefaultReader<Uint8Array> | null = null;
         try {
             const response = await fetch(options.url(from, audio), { signal: abort.signal });
             if (mine !== run) return;
@@ -247,7 +248,7 @@ export function canvasPlayer(options: CanvasOptions): CanvasPlayer {
             if (mine !== run) return;
             engine.reset(start);
             const splitter = input === 'fmp4' ? new Fmp4Splitter() : null;
-            const reader = response.body.getReader();
+            reader = response.body.getReader();
             for (;;) {
                 await room(mine);
                 if (mine !== run) {
@@ -268,6 +269,8 @@ export function canvasPlayer(options: CanvasOptions): CanvasPlayer {
             // 尻まで読んだ。残りを鳴らしきったら終わり
             engine.finish();
         } catch (error) {
+            // 読みかけの流れは手放す (頼み直すときは新しく読む)
+            void reader?.cancel().catch(() => undefined);
             if (mine !== run || closed) return;
             // 繋がらない・途中で落ちた・サーバの 5xx なら頼み直す。4xx・読めない中身は何度やっても同じ
             if (!(error instanceof TypeError || /^Error: HTTP 5/.test(String(error)))) {
