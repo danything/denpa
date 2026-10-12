@@ -63,7 +63,8 @@ export class Nvram {
             if (affiliation === undefined || block > 63) return null;
             return `group:${affiliation.toLowerCase()}:${block}`;
         }
-        const area = AREAS[prefix!];
+        // 放送の文字列で引くので、Object.prototype の名前 (constructor など) を拾わない
+        const area = Object.hasOwn(AREAS, prefix!) ? AREAS[prefix!] : undefined;
         if (area === undefined || affiliation !== undefined || block < area.first || block > area.last)
             return null;
         const who = this.who();

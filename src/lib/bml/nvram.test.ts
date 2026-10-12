@@ -72,6 +72,7 @@ describe('NVRAM', () => {
         expect(make(kept, 0x7fe2).read('nvram://0a;group/3', 'S:2B')).toEqual(['zz']);
         expect(make(kept).write('nvram://tr_common/32', 'S:2B', ['x'])).toBeNaN();
         expect(make(kept).check('nvram://local/63')).toBe(2);
+        expect(make(kept).write('nvram://constructor/0', 'S:2B', ['x'])).toBeNaN();
     });
 
     test('郵便番号は渡されたものを読む (書いても変わらない)', () => {
