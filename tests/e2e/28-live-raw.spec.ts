@@ -137,7 +137,9 @@ test.describe('ライブを生で見る', () => {
 
         const png = readFileSync(await file.path()).toString('base64');
         const lit = await page.evaluate(async (data) => {
-            const blob = await (await fetch(`data:image/png;base64,${data}`)).blob();
+            // data: を fetch すると CSP (connect-src 'self') に止められるので、手で解く
+            const bytes = Uint8Array.from(atob(data), (c) => c.charCodeAt(0));
+            const blob = new Blob([bytes], { type: 'image/png' });
             const bitmap = await createImageBitmap(blob);
             const board = new OffscreenCanvas(bitmap.width, bitmap.height);
             const ctx = board.getContext('2d') as OffscreenCanvasRenderingContext2D;
