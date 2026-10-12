@@ -253,10 +253,16 @@ export class Vm {
         if (frame === undefined) return { kind: 'done', value: undefined };
         let ops = frame.code.ops;
         let consts = frame.code.consts;
+        // 前に数えてからの命令の数。256 ごと・組み込みを呼んだすぐ後に、時計と上限を見る
+        // (組み込みは 1 つで重いことがある。待つ (suspend) ときも数を持ち越す — 持ち越さないと、
+        // すぐ返る待ちを挟むループは上限に届かない)
         let count = 0;
+        let check = 256;
         for (;;) {
-            if ((++count & 255) === 0) {
-                this.steps += 256;
+            if (++count >= check) {
+                this.steps += count;
+                count = 0;
+                check = 256;
                 if (this.steps > this.limits.steps) throw new ScriptError('スクリプトが終わりません');
                 if (performance.now() >= deadline) return { kind: 'yield' };
             }
@@ -384,8 +390,10 @@ export class Vm {
                 case OP.CALL:
                 case OP.NEW: {
                     const argc = ops[frame.pc++]!;
+                    const before = this.frames.length;
                     const result = this.call(argc, op === OP.NEW);
                     if (result instanceof Suspend) {
+                        this.steps += count;
                         this.waiting = true;
                         return { kind: 'suspend', promise: result.promise };
                     }
@@ -393,6 +401,8 @@ export class Vm {
                         this.reset();
                         return { kind: 'abort' };
                     }
+                    // 組み込みだった (枠が増えていない) なら、次の命令で時計を見る
+                    if (this.frames.length === before) check = count + 1;
                     frame = this.frames.at(-1)!;
                     ops = frame.code.ops;
                     consts = frame.code.consts;

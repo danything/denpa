@@ -48,6 +48,17 @@ describe('2 進の表', () => {
         expect(zipIncludes(zip, 1000001)).toBe(true);
         expect(zipIncludes(zip, 2000000)).toBe(false);
     });
+
+    test('書式に大きな長さを書かれても、1 ビットずつ回さない', () => {
+        const started = performance.now();
+        // 真偽は長くても、ある分だけ見る。値 (U) は 32 ビットまで
+        expect(readFields(Uint8Array.of(0, 0, 1), parseStructure('B:1000000000B')!, decodeEuc)[0]).toEqual([
+            true,
+        ]);
+        expect(() => new Table(Uint8Array.of(1, 2, 3), '0,S:2000000000V', decodeEuc)).toThrow();
+        expect(() => new Table(Uint8Array.of(1, 2, 3), '9,U:8b', decodeEuc)).toThrow();
+        expect(performance.now() - started).toBeLessThan(100);
+    });
 });
 
 describe('NVRAM', () => {
