@@ -59,8 +59,8 @@ async function openData(page: Page): Promise<void> {
     await expect.poll(async () => Number(await overlay.getAttribute('data-handed'))).toBeGreaterThan(0);
 }
 
-/** 作った BML を流す (0x30 + 多重化の頭 8 バイト + JSON。20-live と同じ) */
-async function feed(page: Page, extra: string): Promise<void> {
+/** 知らせを流す (0x30 + 多重化の頭 8 バイト + JSON。20-live と同じ) */
+async function sendMessages(page: Page, messages: Record<string, unknown>[]): Promise<void> {
     await page.evaluate((messages) => {
         const socket = (window as unknown as Seen).__sockets.at(-1);
         for (const message of messages) {
@@ -70,7 +70,12 @@ async function feed(page: Page, extra: string): Promise<void> {
             data.set(body, 9);
             socket?.dispatchEvent(new MessageEvent('message', { data: data.buffer }));
         }
-    }, fakeDataBroadcast(extra));
+    }, messages);
+}
+
+/** 作った BML を流す */
+async function feed(page: Page, extra: string): Promise<void> {
+    await sendMessages(page, fakeDataBroadcast(extra));
 }
 
 /** 影の中から探す (自前のエンジンは開いた影に描く) */
@@ -88,14 +93,48 @@ function shadow(page: Page, selector: string) {
 /** 文書のスクリプトが書く札。d と、押されたキーを数える */
 const SCRIPTED = [
     '<script><![CDATA[',
-    'var pressed = 0;',
-    'function onData() { pressed++; show("d" + pressed); }',
-    'function onKey() { show("key" + document.currentEvent.keyCode); }',
-    'function show(text) { document.getElementById("msg").firstChild.data = text; }',
+    'var pressed = 0; var log = "";',
+    'function onData() { pressed++; show(); }',
+    'function onKey() { log += "k" + document.currentEvent.keyCode + ","; show(); }',
+    'function onUp() { log += "u" + document.currentEvent.keyCode + ","; show(); }',
+    'function onClick() { log += "c,"; show(); browser.launchDocument("/40/0001/next.bml", "cut"); }',
+    'function show() { document.getElementById("msg").firstChild.data = "d" + pressed + "|" + log; }',
     ']]></script>',
     '<bevent><beitem type="DataButtonPressed" onoccur="onData();" subscribe="subscribe"/></bevent>',
-    '<p id="msg" style="left:0px;top:0px;width:400px;height:40px;nav-index:0;color-index:7;" onkeydown="onKey();">init</p>',
+    '<p id="msg" style="left:0px;top:0px;width:400px;height:40px;nav-index:0;color-index:7;" onkeydown="onKey();" onkeyup="onUp();" onclick="onClick();">init</p>',
 ].join('\n');
+
+/** 次の文書 (映像の object が無い) を 0x40/0001 に載せる */
+function nextDocument(): Record<string, unknown>[] {
+    const bml =
+        '<?xml version="1.0" encoding="EUC-JP" ?><bml><body style="background-color-index:4"><p style="left:0px;top:0px;width:200px;height:30px;">next</p></body></bml>';
+    const type = {
+        type: 'text',
+        originalType: 'text',
+        subtype: 'x-arib-bml',
+        originalSubtype: 'X-arib-bml',
+        parameters: [],
+    };
+    return [
+        {
+            type: 'moduleListUpdated',
+            componentId: 0x40,
+            modules: [
+                { id: 0, version: 1, size: 1 },
+                { id: 1, version: 1, size: bml.length },
+            ],
+            dataEventId: 1,
+        },
+        {
+            type: 'moduleDownloaded',
+            componentId: 0x40,
+            moduleId: 1,
+            version: 1,
+            dataEventId: 1,
+            files: [{ contentLocation: 'next.bml', contentType: type, dataBase64: btoa(bml) }],
+        },
+    ];
+}
 
 test.describe('自前のデータ放送エンジン', () => {
     test('出して、字幕が映像と一緒に小窓へ縮んで見えている', async ({ page }) => {
@@ -106,23 +145,37 @@ test.describe('自前のデータ放送エンジン', () => {
         expect(await page.evaluate(() => (window as unknown as Seen).__csp)).toEqual([]);
     });
 
-    test('d とリモコンが文書のスクリプトに届く', async ({ page }) => {
+    test('d とリモコンが文書のスクリプトに届く。keydown → click → keyup の順', async ({ page }) => {
         await prepare(page);
         await openData(page);
         await feed(page, SCRIPTED);
+        const text = async () => (await shadow(page, 'span'))?.text;
         // 出す操作は文書への d の 1 押し (聞いている文書が出てきたら届ける)
-        await expect.poll(async () => (await shadow(page, 'span'))?.text, { timeout: 10_000 }).toBe('d1');
+        await expect.poll(text, { timeout: 10_000 }).toBe('d1|');
         // 出ている間の画面の d は、聞いている文書に渡す (器は閉じない)
         await wakeControls(page, 'live-frame');
         await page.getByTestId('live-data-button').click();
-        await expect.poll(async () => (await shadow(page, 'span'))?.text).toBe('d2');
+        await expect.poll(text).toBe('d2|');
         await expect(page.getByTestId('live-data')).toHaveAttribute('data-state', 'ready');
-        // 指のリモコンの赤 (22) は、フォーカスのある要素の onkeydown へ
+        // 指のリモコンの赤 (22) は、フォーカスのある要素へ (押して離したことになる)
         await page.getByTestId('live-remote-22').click();
-        await expect.poll(async () => (await shadow(page, 'span'))?.text).toBe('key22');
+        await expect.poll(text).toBe('d2|k22,u22,');
         // キーボードの青も同じ
         await page.keyboard.press('b');
-        await expect.poll(async () => (await shadow(page, 'span'))?.text).toBe('key21');
+        await expect.poll(text).toBe('d2|k22,u22,k21,u21,');
+        // 決定は keydown の後に click (ここで次の文書へ移る)。次の文書には映像が無い
+        await sendMessages(page, nextDocument());
+        await expect(page.locator('[data-testid="live-video"]').locator('..')).toHaveAttribute(
+            'data-bml-window',
+            '',
+        );
+        await page.keyboard.press('Enter');
+        await expect.poll(text).toBe('next');
+        // 映像の object が無い文書へ移ったら、映像は枠いっぱいに戻る
+        await expect(page.locator('[data-testid="live-video"]').locator('..')).not.toHaveAttribute(
+            'data-bml-window',
+            '',
+        );
     });
 
     test('放送の on* はページに出ない', async ({ page }) => {

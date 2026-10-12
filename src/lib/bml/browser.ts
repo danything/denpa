@@ -326,6 +326,10 @@ export function defineBrowser(host: BrowserHost): HostObject {
             host.ip,
         ),
     );
+    fn('formatNumber', (args) => {
+        const n = toNumber(args[0]);
+        return (Number.isNaN(n) ? 0 : n).toLocaleString('en-US');
+    });
     fn('getBrowserVersion', () => array(['denpa', 'denpa', '001', '000']));
     fn('getBrowserStatus', (args) => {
         if (str(args, 0) !== 'TerrP' || str(args, 1) !== 'IRDState') return Number.NaN;
@@ -378,7 +382,7 @@ export function defineBrowser(host: BrowserHost): HostObject {
         fail(name);
     }
     fail('getISPParams', null);
-    fail('getPrefixNumber', null);
+    fail('getPrefixNumber', array(['', '', '', '', '']));
     fail('sendTextData');
     fail('receiveTextData', null);
     fail('vote');
@@ -477,14 +481,15 @@ export function defineBinaryTable(host: BrowserHost): JSFunction {
             conditions.push([toNumber(rest[i]), rest[i + 1], toNumber(rest[i + 2])]);
         const out = rest.at(-1);
         if (!(out instanceof JSArray)) return Number.NaN;
-        const [rows, last] = table.search(
+        const found = table.search(
             toNumber(args[0]),
             conditions,
             Boolean(rest.at(-3)),
             toNumber(rest.at(-2)),
         );
-        out.items = rows.map((row) => array(row.map((value) => (typeof value === 'object' ? true : value))));
-        return last;
+        if (found === null) return Number.NaN;
+        out.items = found[0].map((row) => array(row));
+        return found[1];
     });
     const construct = (args: Value[]): NativeResult => {
         const { promise, resolve } = Promise.withResolvers<Value>();

@@ -630,8 +630,9 @@
             store: { get: (key) => read(OWN_PREFIX + key), set: (key, value) => write(OWN_PREFIX + key, value) },
             clock: () => clock?.() ?? null,
             receiver: { zipcode: postal },
-            onVideoRect: (rect) => {
+            onVideoRect: (rect, size) => {
                 videoRect = rect;
+                plane = size;
                 place();
             },
             onVisible: (on) => {

@@ -68,7 +68,11 @@ export class Nvram {
             return null;
         const who = this.who();
         let scope = '';
-        if (area.scope === 'network') scope = String(who.originalNetworkId ?? 'unknown');
+        // BS・CS (original_network_id 4・6・7) は局どうしで同じ番号なので、局の領域もサービスで分ける
+        const network = who.originalNetworkId;
+        const satellite = network === 4 || network === 6 || network === 7;
+        if (area.scope === 'network' && !satellite) scope = String(network ?? 'unknown');
+        else if (area.scope === 'network') scope = `${network}.${who.serviceId ?? 'unknown'}`;
         else if (area.scope === 'service')
             scope = `${who.originalNetworkId ?? 'unknown'}.${who.serviceId ?? 'unknown'}`;
         return `${prefix}:${scope}:${block}`;
@@ -134,7 +138,8 @@ export class Nvram {
 
     /** `checkAccessInfoOfPersistentArray`。2 読み書き・1 読むだけ・NaN 使えない */
     check(uri: string): number {
-        if (uri.startsWith('nvram://receiverinfo/')) return uri.endsWith('/zipcode') ? 2 : 1;
+        // 受信機の設定は読むだけ (郵便番号は denpa の設定から渡す)
+        if (uri.startsWith('nvram://receiverinfo/')) return 1;
         return this.key(uri) === null ? Number.NaN : 2;
     }
 }

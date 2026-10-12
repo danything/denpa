@@ -110,7 +110,8 @@ export class Renderer {
     private readonly views = new Map<BmlElement, View>();
     private readonly texts = new Map<BmlNode, TextView>();
     private drawn = -1;
-    private lastVideo = '';
+    /** 最後に知らせた映像の場所 (初めの描画では必ず知らせる) */
+    private lastVideo: string | null = null;
     readonly root: HTMLDivElement;
 
     constructor(

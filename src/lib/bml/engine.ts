@@ -193,6 +193,12 @@ class Engine implements DomHost, BrowserHost, RenderHost {
     private readonly waitingImages = new Set<string>();
     private readonly playing = new Map<BmlElement, () => void>();
     private tot: { at: number; received: number } | null = null;
+    /** Ureg を消す目安 (前のサービス) */
+    private service: number | null = null;
+    /** 文書を読み込んでいる間。外から来るイベントは捨てる (onload より前に受け手を動かさない) */
+    private preparing = false;
+    /** 今の区切り (SLICE) の始まり */
+    private sliceStart = 0;
     private receiver: ReceiverInfo = { zipcode: '', prefecture: 255 };
     private ticker: ReturnType<typeof setInterval> | null = null;
 
@@ -270,30 +276,26 @@ class Engine implements DomHost, BrowserHost, RenderHost {
             case 'program': {
                 const service = this.resources.program?.serviceId;
                 // 局 (サービス) が替わったら Ureg を消す (TR-B14 第二分冊 5.12.6.1)
-                if (service != null && this.ureg[0] !== `0x${hex(service, 4)}`) {
+                if (service != null && service !== this.service) {
+                    this.service = service;
                     this.ureg.fill('');
                     this.ureg[0] = `0x${hex(service, 4)}`;
                 }
                 return;
             }
             case 'module':
-                if (
-                    this.doc === null &&
-                    !this.loading &&
-                    event.component === STARTUP_COMPONENT &&
-                    event.module === STARTUP_MODULE
-                ) {
-                    void this.startup();
-                }
+                this.maybeStart();
                 this.drawSoon();
                 return;
             case 'dii':
                 this.moduleUpdated();
                 this.dataEvent(event.component, event.dii, event.previous);
+                this.maybeStart();
                 return;
             case 'pmt':
                 this.moduleUpdated();
                 this.pmtChanged(event.components);
+                this.maybeStart();
                 return;
             case 'es':
                 this.esEvents(event.message);
@@ -326,7 +328,7 @@ class Engine implements DomHost, BrowserHost, RenderHost {
             token: this.token,
             run: () => {
                 this.resources.unlockAll(mine ? undefined : 'lock');
-                void this.startup();
+                this.restart();
             },
         });
     }
@@ -340,8 +342,30 @@ class Engine implements DomHost, BrowserHost, RenderHost {
         const component = this.component();
         if (component !== null && !components.has(component)) {
             this.resources.unlockAll();
-            void this.startup();
+            this.restart();
         }
+    }
+
+    /** 文書が無いときに、入口のモジュールが揃っていれば始める (同じ版が送り直されても始める) */
+    private maybeStart(): void {
+        if (this.doc !== null || this.loading || this.destroyed) return;
+        if (this.resources.pmtSeen && !this.resources.pmt.has(STARTUP_COMPONENT)) return;
+        if (!this.resources.has(STARTUP_COMPONENT, STARTUP_MODULE)) return;
+        void this.startup();
+    }
+
+    /** 今の文書の残り (待っているイベント・タイマー・続き) を捨てる。文書を替える前に同期で */
+    private abandon(): void {
+        this.token++;
+        this.queue = [];
+        this.running = false;
+        this.clearTimers();
+    }
+
+    /** 今の実行を打ち切って入口から出直す */
+    private restart(): void {
+        this.abandon();
+        void this.startup();
     }
 
     /** ModuleUpdated の beitem に、DII と PMT の変わり目を知らせる (付属2 表5-11 の status) */
@@ -453,37 +477,47 @@ class Engine implements DomHost, BrowserHost, RenderHost {
     private async startup(): Promise<void> {
         const base = `/${hex(STARTUP_COMPONENT, 2)}/${hex(STARTUP_MODULE, 4)}`;
         const ref = this.resources.resolve(base, null)!;
+        this.loading = true;
+        const token = this.token;
         await this.resources.fetch({ ...ref, file: 'startup.bml' });
+        // 待つ間に別の文書を読み始めた・止めたなら、そちらに任せる
+        if (token !== this.token || this.destroyed) return;
         const named = this.resources.file({ ...ref, file: 'startup.bml' });
-        if (named !== null) await this.load(`${base}/startup.bml`);
-        else if (this.resources.file(ref) !== null) await this.load(base);
+        if (named !== null) await this.load(`${base}/startup.bml`, true);
+        else if (this.resources.file(ref) !== null) await this.load(base, true);
         else this.exit();
     }
 
-    /** 文書を読んで出す。`name` は文書の中の書き方のまま (今の文書から見た相対でもよい) */
-    private async load(name: string): Promise<void> {
-        const token = ++this.token;
-        this.queue = [];
-        this.running = false;
-        this.clearTimers();
+    /**
+     * 文書を読んで出す。`name` は文書の中の書き方のまま (今の文書から見た相対でもよい)。
+     * 読めなければ入口から出直す (入口が読めなければ止める)
+     */
+    private async load(name: string, entry = false): Promise<void> {
+        this.abandon();
+        const token = this.token;
         this.loading = true;
+        this.preparing = true;
         const ref = this.resources.resolve(name, this.current);
         const file = ref === null || ref.module === null ? null : await this.resources.fetch(ref);
         if (token !== this.token || this.destroyed) return;
+        const shown = file !== null && ref !== null && (await this.show(file, refToPath(ref), token));
+        if (token !== this.token || this.destroyed) return;
         this.loading = false;
-        if (file === null || ref === null) {
-            this.log(`文書がありません: ${name}`);
-            if (this.current !== null && !this.current.endsWith('/startup.bml')) void this.startup();
-            return;
-        }
-        await this.show(file, refToPath(ref), token);
+        this.preparing = false;
+        if (shown) return;
+        this.log(`文書が読めません: ${name}`);
+        if (entry) this.exit();
+        else this.restart();
     }
 
     private exit(): void {
-        this.token++;
-        this.queue = [];
-        this.clearTimers();
+        this.abandon();
+        this.loading = false;
+        this.preparing = false;
         this.resources.unlockAll();
+        for (const stop of this.playing.values()) stop();
+        this.playing.clear();
+        this.unloadDrcs();
         this.renderer?.destroy();
         this.renderer = null;
         this.doc = null;
@@ -495,24 +529,17 @@ class Engine implements DomHost, BrowserHost, RenderHost {
         this.options.onVideoRect?.(null, this.size);
     }
 
-    private async show(file: CarouselFile, path: string, token: number): Promise<void> {
+    /** 文書を組んで出す。スクリプト・onload を積み終えたら true */
+    private async show(file: CarouselFile, path: string, token: number): Promise<boolean> {
         const xml = parseXml(decodeEuc(file.data));
-        if (xml === null) {
-            this.log(`文書が読めません: ${path}`);
-            return;
-        }
-        const previous = this.current === null ? null : this.resources.resolve(this.current, null);
-        const next = this.resources.resolve(path, null);
-        // 別の部品の文書へ移ったら lockModuleOnMemory で押さえたものを外す (TR-B14 第二分冊 表5-11)
-        if (previous !== null && next !== null && previous.component !== next.component)
-            this.resources.unlockAll('lock');
-        for (const stop of this.playing.values()) stop();
-        this.playing.clear();
-        this.unloadDrcs();
-
+        if (xml === null) return false;
         const doc = new BmlDocument(xml);
-        this.current = path;
-        // スタイル (style と link。link は届くのを待つ)
+        // 要るファイル (link のスタイル・CLUT・script の src) は、文書を替える前に全部そろえる
+        const fetchText = async (url: string): Promise<string | null> => {
+            const ref = this.resources.resolve(url, path);
+            const data = ref === null ? null : await this.resources.fetch(ref);
+            return data === null ? null : decodeEuc(data.data);
+        };
         const rules: Rule[] = [];
         for (const element of doc.root.descendants()) {
             let text: string | null = null;
@@ -521,24 +548,45 @@ class Engine implements DomHost, BrowserHost, RenderHost {
                 element.tag === 'link' &&
                 (element.attr('rel') ?? 'stylesheet').toLowerCase().includes('stylesheet')
             ) {
-                const ref = this.resources.resolve(element.attr('href') ?? '', path);
-                const css = ref === null ? null : await this.resources.fetch(ref);
-                if (token !== this.token) return;
-                text = css === null ? null : decodeEuc(css.data);
+                text = await fetchText(element.attr('href') ?? '');
+                if (token !== this.token) return false;
             }
             if (text !== null) rules.push(...parseStylesheet(text, rules.length));
         }
         doc.applyRules(rules);
         const body = doc.body;
-        // CLUT (body の clut)
-        this.table = DEFAULT_CLUT;
+        let table = DEFAULT_CLUT;
         const clutUrl = body === null ? null : parseUrl(body.style().clut ?? '');
         if (clutUrl !== null) {
             const ref = this.resources.resolve(clutUrl, path);
             const data = ref === null ? null : await this.resources.fetch(ref);
-            if (token !== this.token) return;
-            if (data !== null) this.table = readClut(data.data);
+            if (token !== this.token) return false;
+            if (data !== null) table = readClut(data.data);
         }
+        const scripts: { source: string; name: string }[] = [];
+        for (const script of doc.elements('script')) {
+            const src = script.attr('src');
+            if (src === null || src === '') {
+                scripts.push({ source: script.text, name: `${path}#script` });
+                continue;
+            }
+            const source = await fetchText(src);
+            if (token !== this.token) return false;
+            scripts.push({ source: source ?? '', name: src });
+        }
+
+        // ここから文書を替える (以降は同期で積み終える)
+        const previous = this.current === null ? null : this.resources.resolve(this.current, null);
+        const next = this.resources.resolve(path, null);
+        // 別の部品の文書へ移ったら lockModuleOnMemory で押さえたものを外す (TR-B14 第二分冊 表5-11)
+        if (previous !== null && next !== null && previous.component !== next.component) {
+            this.resources.unlockAll('lock');
+        }
+        for (const stop of this.playing.values()) stop();
+        this.playing.clear();
+        this.unloadDrcs();
+        this.current = path;
+        this.table = table;
         const resolution = body?.style().resolution ?? '960x540';
         this.size = resolution === '720x480' ? { width: 720, height: 480 } : { width: 960, height: 540 };
 
@@ -558,10 +606,10 @@ class Engine implements DomHost, BrowserHost, RenderHost {
         this.renderer = new Renderer(this.shadow, doc, this, (rect) =>
             this.options.onVideoRect?.(rect, this.size),
         );
+        this.options.onLoad?.(this.size, path);
         this.setHidden(body?.attr('invisible') === 'invisible');
         this.screenLocked = false;
         this.renderer.draw(true);
-        this.options.onLoad?.(this.size, path);
 
         // フォーカスは onload より前に当たるが、onfocus は onload の後 (付属1 5.1.3)
         const first = this.navIndex(0);
@@ -569,17 +617,8 @@ class Engine implements DomHost, BrowserHost, RenderHost {
             this.focusedElement = first;
             first.setState('focus');
         }
-        for (const script of doc.elements('script')) {
-            const src = script.attr('src');
-            let source = script.text;
-            if (src !== null && src !== '') {
-                const ref = this.resources.resolve(src, path);
-                const data = ref === null ? null : await this.resources.fetch(ref);
-                if (token !== this.token) return;
-                source = data === null ? '' : decodeEuc(data.data);
-            }
-            this.enqueue({ kind: 'program', token, source, name: src ?? `${path}#script` });
-        }
+        this.preparing = false;
+        for (const { source, name } of scripts) this.enqueue({ kind: 'program', token, source, name });
         if (body !== null) this.handle(body, 'onload', { type: 'load' });
         this.enqueue({
             kind: 'native',
@@ -590,6 +629,7 @@ class Engine implements DomHost, BrowserHost, RenderHost {
                     this.handle(this.focusedElement, 'onfocus', { type: 'focus' });
             },
         });
+        return true;
     }
 
     // ---- イベントを順に動かす ----
@@ -601,19 +641,32 @@ class Engine implements DomHost, BrowserHost, RenderHost {
         this.scheduled = true;
         queueMicrotask(() => {
             this.scheduled = false;
+            this.sliceStart = performance.now();
             this.pump();
         });
     }
 
     /** 要素の on* (`f();` の形だけ) を、イベントを添えて動かす */
     private handle(element: BmlElement, attribute: string, event: Record<string, Value>): void {
+        // 文書を読み込んでいる間 (onload より前) に来たものは捨てる
+        if (this.preparing) return;
+        const job = this.job(element, attribute, event);
+        if (job !== null) this.enqueue(job);
+    }
+
+    private job(element: BmlElement, attribute: string, event: Record<string, Value>): Job | null {
         const handler = element.attr(attribute);
-        if (handler === null || /^\s*$/.test(handler)) return;
-        this.enqueue({ kind: 'handler', token: this.token, handler, target: element, event });
+        if (handler === null || /^\s*$/.test(handler)) return null;
+        return { kind: 'handler', token: this.token, handler, target: element, event };
     }
 
     private pump(): void {
         while (!this.running && !this.destroyed) {
+            // 区切りを過ぎたら、続きは次の隙間に (ページを固めない)
+            if (this.queue.length > 0 && performance.now() - this.sliceStart > SLICE) {
+                this.later();
+                return;
+            }
             const job = this.queue.shift();
             if (job === undefined) {
                 this.draw();
@@ -653,7 +706,10 @@ class Engine implements DomHost, BrowserHost, RenderHost {
         const result = vm.run(performance.now() + SLICE);
         switch (result.kind) {
             case 'yield':
-                setTimeout(() => this.step(token, vm), 0);
+                setTimeout(() => {
+                    this.sliceStart = performance.now();
+                    this.step(token, vm);
+                }, 0);
                 return;
             case 'suspend':
                 // 待つ間 (sleep など) に、ここまでの変化を見せる
@@ -661,6 +717,7 @@ class Engine implements DomHost, BrowserHost, RenderHost {
                 void result.promise.then(
                     (value) => {
                         if (token !== this.token || vm !== this.vm) return;
+                        this.sliceStart = performance.now();
                         vm.resume(value);
                         this.step(token, vm);
                     },
@@ -683,7 +740,16 @@ class Engine implements DomHost, BrowserHost, RenderHost {
         this.currentEvent = this.dom?.event({}) ?? null;
         this.screenLocked = false;
         this.draw();
-        this.pump();
+        // 続けて動かす。呼び出しを積み重ねないよう、一度手を放してから
+        queueMicrotask(() => this.pump());
+    }
+
+    /** 続きを次の隙間に */
+    private later(): void {
+        setTimeout(() => {
+            this.sliceStart = performance.now();
+            this.pump();
+        }, 0);
     }
 
     private draw(): void {
@@ -795,7 +861,7 @@ class Engine implements DomHost, BrowserHost, RenderHost {
 
     quit(): Abort {
         this.resources.unlockAll();
-        void this.startup();
+        this.restart();
         return ABORT;
     }
 
@@ -891,9 +957,11 @@ class Engine implements DomHost, BrowserHost, RenderHost {
     loadDrcs(name: string): NativeResult {
         const ref = this.resources.resolve(name, this.current);
         if (ref === null) return Number.NaN;
+        const token = this.token;
         return new Suspend(
             this.resources.fetch(ref).then((file) => {
-                if (file === null) return Number.NaN;
+                // 待つ間に文書が替わったら、前の文書の外字は入れない
+                if (file === null || token !== this.token) return Number.NaN;
                 for (const [unit, glyph] of parseDrcs(file.data)) {
                     const key = `${unit}:${glyph.width}:${glyph.fontId}`;
                     const old = this.glyphs.get(key);
@@ -988,7 +1056,7 @@ class Engine implements DomHost, BrowserHost, RenderHost {
     // ---- キー ----
 
     key(code: number, down: boolean): void {
-        if (this.doc === null || this.destroyed) return;
+        if (this.doc === null || this.destroyed || this.preparing) return;
         if (code === KEY.data) {
             // d は DataButtonPressed だけを起こす
             if (down)
@@ -1023,19 +1091,24 @@ class Engine implements DomHost, BrowserHost, RenderHost {
                 // accesskey: その要素へフォーカスを移し、keyup と決定の keydown が起きたことにする
                 const access = ACCESS_KEYS[code];
                 let key = code;
+                const front: (Job | null)[] = [];
                 if (access !== undefined) {
                     const element = this.doc?.root
                         ? [...this.doc.root.descendants()].find((e) => e.attr('accesskey') === access)
                         : undefined;
                     if (element?.style().visible) {
                         this.focus(element);
-                        this.handle(element, 'onkeyup', { type: 'keyup', keyCode: code });
-                        this.handle(element, 'onkeydown', { type: 'keydown', keyCode: KEY.enter });
                         held.access = true;
                         key = KEY.enter;
+                        front.push(
+                            this.job(element, 'onkeyup', { type: 'keyup', keyCode: code }),
+                            this.job(element, 'onkeydown', { type: 'keydown', keyCode: KEY.enter }),
+                        );
                     }
                 }
-                this.enqueue({ kind: 'native', token, run: () => this.afterKeyDown(key) });
+                // 後から来た keyup より先に動かす (列の頭に入れる)
+                front.push({ kind: 'native', token, run: () => this.afterKeyDown(key) });
+                this.queue.unshift(...front.filter((job): job is Job => job !== null));
             },
         });
     }
@@ -1089,12 +1162,20 @@ class Engine implements DomHost, BrowserHost, RenderHost {
         const held = this.held;
         if (held === null || held.code !== code) return;
         this.held = null;
-        const focused = this.focusedElement;
-        if (focused === null) return;
-        const key = held.access ? KEY.enter : code;
-        if (key === KEY.enter && focused.state === 'active') focused.setState('focus');
-        if (!this.accepts(key)) return;
-        this.handle(focused, 'onkeyup', { type: 'keyup', keyCode: key });
+        // keydown の後始末 (accesskey・決定) が済んでから見る
+        this.enqueue({
+            kind: 'native',
+            token: this.token,
+            run: () => {
+                const focused = this.focusedElement;
+                if (focused === null) return;
+                const key = held.access ? KEY.enter : code;
+                if (key === KEY.enter && focused.state === 'active') focused.setState('focus');
+                if (!this.accepts(key)) return;
+                const job = this.job(focused, 'onkeyup', { type: 'keyup', keyCode: key });
+                if (job !== null) this.queue.unshift(job);
+            },
+        });
     }
 
     private navIndex(index: number): BmlElement | null {

@@ -295,23 +295,38 @@ export class Table {
         this.fields = fields.filter((field) => field.type !== 'P');
     }
 
-    /** 検索 (search)。条件は [列, 比べる値, 演算子] の並び、`or` が真なら どれか、偽なら すべて */
+    /**
+     * 検索 (search)。条件は [列, 比べる値, 演算子] の並び、`or` が真なら どれか、偽なら すべて。
+     * 見つけた行の郵便番号の列は、その列の条件の結果 (条件が無ければ null) にする (web-bml と同じ)。
+     * 列や演算子が型に合わない・件数が 1 未満なら null (呼び手は NaN を返す)
+     */
     search(
         start: number,
         conditions: [number, unknown, number][],
         or: boolean,
         limit: number,
-    ): [Cell[][], number] {
-        const found: Cell[][] = [];
-        for (let i = Math.max(0, start); i < this.rows.length; i++) {
+    ): [(boolean | number | string | null)[][], number] | null {
+        if (!Number.isInteger(start) || start < 0 || !Number.isInteger(limit) || limit < 1) return null;
+        for (const [column, , operator] of conditions) {
+            const field = Number.isInteger(column) ? this.fields[column] : undefined;
+            if (field === undefined || !operatorFits(field.type, operator)) return null;
+        }
+        const found: (boolean | number | string | null)[][] = [];
+        for (let i = start; i < this.rows.length; i++) {
             const row = this.rows[i]!;
             const results = conditions.map(([column, compared, operator]) =>
                 test(row[column], this.fields[column], compared, operator),
             );
-            if (or ? results.some(Boolean) : results.every(Boolean)) {
-                found.push(row);
-                if (found.length >= limit) return [found, i];
-            }
+            if (!(or ? results.some(Boolean) : results.every(Boolean))) continue;
+            found.push(
+                row.map((value, column) => {
+                    if (typeof value !== 'object') return value;
+                    const mine = results.filter((_, k) => conditions[k]![0] === column);
+                    if (mine.length === 0) return null;
+                    return or ? mine.some(Boolean) : mine.every(Boolean);
+                }),
+            );
+            if (found.length >= limit) return [found, i];
         }
         return [found, -1];
     }
@@ -382,5 +397,14 @@ function test(
     }
     if (operator === 96) return zipIncludes(cell, Number(compared));
     if (operator === 97) return !zipIncludes(cell, Number(compared));
+    return false;
+}
+
+/** 演算子が列の型に合うか (付属2 5.5.3.6) */
+function operatorFits(type: FieldType, operator: number): boolean {
+    if (type === 'U' || type === 'I') return operator >= 0 && operator <= 11;
+    if (type === 'S') return operator >= 32 && operator <= 37;
+    if (type === 'B') return operator === 64 || operator === 65;
+    if (type === 'Z') return operator === 96 || operator === 97;
     return false;
 }

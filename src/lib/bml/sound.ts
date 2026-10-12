@@ -175,7 +175,7 @@ export function decodeAiff(data: Uint8Array): { rate: number; samples: Float32Ar
         }
         at = body + size + (size & 1);
     }
-    if (sound === null || channels !== 1 || bits !== 16 || !(rate > 0)) return null;
+    if (sound === null || channels !== 1 || bits !== 16 || !(rate > 0) || frames === 0) return null;
     const count = Math.min(frames, sound.length >> 1);
     const samples = new Float32Array(count);
     for (let i = 0; i < count; i++)

@@ -23,7 +23,10 @@ describe('2 進の表', () => {
             [3, true, 'ab', -1],
             [15, true, 'cd', 5],
         ]);
-        const [found, last] = table.search(0, [[0, 10, 4]], false, 5);
+        const [found, last] = table.search(0, [[0, 10, 4]], false, 5)!;
+        // 型に合わない演算子・件数 0 は使えない
+        expect(table.search(0, [[0, 10, 32]], false, 5)).toBeNull();
+        expect(table.search(0, [[0, 10, 4]], false, 0)).toBeNull();
         expect(found).toEqual([[15, true, 'cd', 5]]);
         expect(last).toBe(-1);
     });
