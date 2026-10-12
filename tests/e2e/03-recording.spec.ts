@@ -309,6 +309,10 @@ test.describe('エンコードしない', () => {
         const path = (await page.locator(row).getAttribute('data-library-path')) ?? '';
         expect(path).toContain('.m2ts');
         await expect(page.locator(row).getByTestId('encode-progress')).toHaveCount(0);
+        // 録画の状態の口も「エンコード済みは無い」と答える。観られるかどうかは state のほう
+        const id = await page.locator(row).getAttribute('data-recording-id');
+        const status = await request.get(`/api/recordings/${id}`);
+        expect(await status.json()).toMatchObject({ encoded: false, state: 'available' });
 
         /*
          * 再エンコードする口は出ない。**エンコードしない設定では元のTSがそのまま保存先へ移る**ので、

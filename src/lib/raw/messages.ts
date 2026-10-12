@@ -48,6 +48,8 @@ export type ToWorker =
      * (鍵のコマ・1 秒前) から流すので、手前の絵 (CM を飛ばしたなら CM の絵) を出さないため
      */
     | { type: 'reset'; from?: number | null }
+    /** もう届かない (録画の尻まで読んだ。`engine.ts` の `finish`)。Matroska は待たせているコマを出しきる (`mkv.ts`) */
+    | { type: 'end' }
     /** 何本目の音声をデコードするか (`AudioTrack.stream`) */
     | { type: 'audio'; index: number }
     /**

@@ -409,11 +409,12 @@ OAuth のデバイス認可 (RFC 8628) と同じ形です。どちらも資格�
 { "id": 12, "encoded": false, "state": "recording", "durationMs": null }
 ```
 
-- `encoded` はエンコードが終わっているか、`state` は録画の状態 (`recording` `recorded` `available` `failed`)。録画が無い・消したものは `404`
+- `encoded` はエンコード済みのファイルがあるか。「エンコードしない」録画は元の TS を置くだけなので、置き終えても `false` のまま
+  (観られるかどうかは `state` で分かる)。`state` は録画の状態 (`recording` `recorded` `available` `failed`)。録画が無い・消したものは `404`
 - `durationMs` は[一覧](#録画の一覧-get-apirecordings)の `durationMs` と同じもの (録れた長さ、ミリ秒)。録画中は `null` です
   (途中で切れて録り直しているものは、それまでに録れた長さ)。
   追っかけの流れが終わったとき、録り終えて最後まで観たのかを確かめるのに使えます (一覧を取り直さずに済む)
-- 追っかけ再生の画面は `recordings` の知らせ ([上記](#変化の知らせ-get-apievents)) のたびにこれを読み、エンコードが終わったら観る画面へ移る
+- 追っかけ再生の画面は `recordings` の知らせ ([上記](#変化の知らせ-get-apievents)) のたびにこれを読み、`encoded` が `true` になったら観る画面への案内を出す
 
 ## 録画を消す `DELETE /api/recordings/<id>`
 

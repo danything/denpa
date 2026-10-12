@@ -152,6 +152,8 @@ let mkv: MkvInput | null = null;
 let early: Uint8Array[] | null = [];
 /** `early` に溜めたバイト数 (録画は `FOLLOW_BYTES_MOST` まで) */
 let earlyBytes = 0;
+/** `early` を溜めている間に尻まで届いた (`end`)。溜めたぶんを渡しきってから出しきる */
+let earlyEnd = false;
 /** `early` に溜める上限 (箱の数)。1秒に 20 個ほど来るので、読み込みが 10 秒掛かっても足りる */
 const EARLY_MOST = 200;
 let dropped = 0;
@@ -545,6 +547,7 @@ function reset(from: number | null): void {
     if (early !== null) {
         early = [];
         earlyBytes = 0;
+        earlyEnd = false;
     }
     // 次のコマで開き直す (前の局の持ち越しを捨てる)
     audioConfig = '';
@@ -656,6 +659,10 @@ async function init(canvas: OffscreenCanvas, base: string, kind: RawInput, chase
     early = null;
     earlyBytes = 0;
     for (const bytes of held) feed(bytes);
+    if (earlyEnd) {
+        earlyEnd = false;
+        mkv?.finish();
+    }
     schedule();
 }
 
@@ -704,6 +711,11 @@ scope.onmessage = (event: MessageEvent<ToWorker>) => {
             break;
         case 'reset':
             reset(message.from ?? null);
+            break;
+        case 'end':
+            // 尻まで読んだ。デコーダを読み終えるまでは溜めたぶんの後ろで (`early`)
+            if (early !== null) earlyEnd = true;
+            else mkv?.finish();
             break;
         case 'audio':
             // エンコードしたものには選んだ音声1本しか入っていない (選び直すとサーバが再エンコードする)

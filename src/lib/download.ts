@@ -15,15 +15,27 @@
 import { resolve } from '$app/paths';
 import type { FileSource } from './source';
 
-export async function startDownload(id: number, source?: FileSource): Promise<boolean> {
+/**
+ * 期限付きのリンクを作る (`api/recordings/<id>/share`)。作れなければ (断られた・繋がらない) null。
+ * 落とす口と「再生リンクをコピー」で使う
+ */
+export async function mintShareLink(
+    id: number,
+    source?: FileSource,
+): Promise<{ url: string; expiresAt: number } | null> {
     const query = source === undefined ? '' : `?source=${source}`;
     try {
         const res = await fetch(resolve(`api/recordings/${id}/share${query}`), { method: 'POST' });
-        if (!res.ok) return false;
-        const { url } = (await res.json()) as { url: string };
-        location.href = `${url}&download=1`;
-        return true;
+        if (!res.ok) return null;
+        return (await res.json()) as { url: string; expiresAt: number };
     } catch {
-        return false;
+        return null;
     }
+}
+
+export async function startDownload(id: number, source?: FileSource): Promise<boolean> {
+    const link = await mintShareLink(id, source);
+    if (link === null) return false;
+    location.href = `${link.url}&download=1`;
+    return true;
 }

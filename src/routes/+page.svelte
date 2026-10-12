@@ -20,7 +20,7 @@
     import ServiceLogo from '#lib/components/ServiceLogo.svelte';
     import Toasts, { errorNotice, type Notice } from '#lib/components/Toasts.svelte';
     import { type DetailSeed, programDetail } from '#lib/detail.svelte.js';
-    import { startDownload } from '#lib/download.js';
+    import { mintShareLink, startDownload } from '#lib/download.js';
     import { applyEncodeProgress, encodeLive } from '#lib/encode-live.svelte.js';
     import {
         badgeClass,
@@ -130,22 +130,20 @@
         if (offlineNote?.key === key) offlineNote = null;
     }
 
-    /** 期限付きの再生リンクを作る (share.ts) */
-    async function mintShareLink(id: number): Promise<{ url: string; expiresAt: number }> {
-        const res = await fetch(resolve(`api/recordings/${id}/share`), { method: 'POST' });
-        return await res.json();
-    }
-
     /**
      * 期限付きの再生リンクを作ってクリップボードへ (`share.ts`)。
      * ログインできない端末でファイルを開くためのもの。パスワードは入っていない
      */
     async function copyShareLink(id: number): Promise<void> {
+        const link = await mintShareLink(id);
+        if (link === null) {
+            noteAction('error', '再生リンクを作れませんでした');
+            return;
+        }
         try {
-            const { url, expiresAt } = await mintShareLink(id);
-            await navigator.clipboard.writeText(url);
+            await navigator.clipboard.writeText(link.url);
             // 有効な長さはサーバの決めごと (share.ts の SHARE_TTL)。文字で固定しない
-            const hours = Math.round((expiresAt - Date.now()) / 3_600_000);
+            const hours = Math.round((link.expiresAt - Date.now()) / 3_600_000);
             noteAction('info', `再生リンクをコピーしました (${hours}時間有効)`);
         } catch {
             // 貼れない繋ぎ (http) ではクリップボードが使えない (切り抜きと同じ制約)

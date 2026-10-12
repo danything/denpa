@@ -257,6 +257,7 @@ export class RawEngine {
     /** もう届かない (録画の尻まで読んだ)。残りを鳴らしきったら `ended` */
     finish(): void {
         this.playout.finish();
+        this.send({ type: 'end' });
     }
 
     /**

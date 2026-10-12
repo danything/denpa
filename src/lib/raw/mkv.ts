@@ -9,7 +9,8 @@
  * - 軌道の形 (`ts/mkv-media.ts` の `asFmp4Track`) を渡す。音は選んだ1本だけ (`audio`。何本目か)
  * - **デコードする順の時刻 (dts) を起こす。** Matroska のコマが持つのは見せる時刻だけで、H.264 の B フレームは
  *   順が入れ替わる。デコードする順に並んだコマの先 `REORDER` 枚の見せる時刻のうち、いちばん早いものを
- *   そのコマの dts にする (見せる時刻を並べ直したものに近くなる)。そのぶん渡すのが数コマ遅れる
+ *   そのコマの dts にする (見せる時刻を並べ直したものに近くなる)。そのぶん渡すのが数コマ遅れるので、
+ *   尻まで読んだら残りを出しきる (`finish`)
  */
 
 import type { Fmp4Sample } from '#lib/ts/fmp4.js';
@@ -85,6 +86,16 @@ export class MkvInput {
                 if (this.held.length > REORDER) samples.push(this.release());
             }
         }
+        if (samples.length > 0) this.target.push(samples);
+    }
+
+    /**
+     * もう届かない (尻まで読んだ)。**待たせているコマを出しきる** — 出さないと最後の `REORDER` 枚が
+     * デコードされないまま終わる。先のコマはもう来ないので、dts は残りの中で決める
+     */
+    finish(): void {
+        const samples: Fmp4Sample[] = [];
+        while (this.held.length > 0) samples.push(this.release());
         if (samples.length > 0) this.target.push(samples);
     }
 

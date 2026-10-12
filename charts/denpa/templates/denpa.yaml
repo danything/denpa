@@ -72,9 +72,10 @@ spec:
             - name: OIDC_CLIENT_SECRET
               valueFrom:
                 secretKeyRef: { name: {{ . }}, key: client-secret }
+            # group は無くてよい (空なら入れた人は全員。docs/auth.md)。無いと Pod が起動しないので optional
             - name: OIDC_GROUP
               valueFrom:
-                secretKeyRef: { name: {{ . }}, key: group }
+                secretKeyRef: { name: {{ . }}, key: group, optional: true }
             {{- end }}
             {{- with .Values.denpa.trustedNetworks }}
             # このネットワークから来たときだけ、何も聞かずに通す (docs/auth.md)
