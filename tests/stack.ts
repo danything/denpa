@@ -28,6 +28,8 @@ const WEBHOOK_PORT = 8096;
 /** 立ち上がりを待つ上限。ここを短くすると混んでいるマシンで落ちる */
 const BOOT_TIMEOUT = 120_000;
 const BOOT_POLL = 200;
+/** 立ち上がりを訊く1回ぶんの上限。返事の来ない接続に掴まったまま BOOT_TIMEOUT を使い切らないように */
+const BOOT_ASK = 5_000;
 
 export interface Stack {
     /** このワーカーの作業領域 */
@@ -100,19 +102,28 @@ function start(command: [string, ...string[]], env: Record<string, string>): Sta
 
 async function waitFor(url: string, started: Started, what: string): Promise<void> {
     const until = Date.now() + BOOT_TIMEOUT;
+    /*
+     * **最後に何が返ったかを持っておく。** 待ち受けているのに応答しないとき、断られたのか
+     * (ECONNREFUSED)、返事が来ないのか (時間切れ)、ok でない状態が返ったのかで、原因が違う。
+     * 1回ずつ上限を切る — 返事の来ない接続を1つ待ち続けると、BOOT_TIMEOUT を丸ごと使ってしまう
+     */
+    let last = 'まだ一度も訊いていません';
     while (Date.now() < until) {
         if (started.proc.exitCode !== null) {
             throw new Error(`${what} が起動直後に終了しました:\n${started.output()}`);
         }
         try {
-            const res = await fetch(url);
+            const res = await fetch(url, { signal: AbortSignal.timeout(BOOT_ASK) });
             if (res.ok) return;
-        } catch {
-            // まだ待ち受けていない
+            last = `HTTP ${res.status} ${(await res.text()).slice(0, 200)}`;
+        } catch (error) {
+            // まだ待ち受けていない (ECONNREFUSED)・返事が来ない (時間切れ)・fetch が断った (bad port) など。
+            // 何だったかは cause にしか書かれていない
+            last = `${error} (${String((error as { cause?: unknown }).cause)})`;
         }
         await new Promise((resolve) => setTimeout(resolve, BOOT_POLL));
     }
-    throw new Error(`${what} が ${url} で応答しませんでした:\n${started.output()}`);
+    throw new Error(`${what} が ${url} で応答しませんでした (最後: ${last}):\n${started.output()}`);
 }
 
 async function stop(started: Started): Promise<void> {
@@ -344,7 +355,14 @@ export async function bootClosed(
     /** 入る道を足して試すとき (TRUSTED_NETWORKS など)。省けば何も設定しない = 全部断る */
     extra: Record<string, string> = {},
 ): Promise<{ appUrl: string; shutdown: () => Promise<void> }> {
-    const port = APP_PORT + index * STRIDE + 7;
+    /*
+     * 帯の +3 (内側は +4)。**+7 にしていた頃は、ワーカー番号 1 で 4190 になり、毎回立ち上がりを
+     * 待ちきれずに落ちていた** — 4190 (ManageSieve) は fetch の仕様の「bad port」で、Node の fetch は
+     * 繋ぎにも行かずに断る (`fetch failed`、cause は `bad port`)。denpa は待ち受けているのに
+     * 2 分待って落ち、別のワーカーでやり直すと通るので、揺れに見えていた (31-device・14-serve)。
+     * 帯の口を足すときは、その番号が bad port に当たらないか確かめること
+     */
+    const port = APP_PORT + index * STRIDE + 3;
     const appUrl = `http://127.0.0.1:${port}`;
     const app = start(['bun', './server.js'], {
         TZ: 'Asia/Tokyo',

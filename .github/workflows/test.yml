@@ -28,8 +28,8 @@ env:
 # 合わせても1分ありません。待っているのは**いちばん遅い1つ**だけでよいので、
 # 中身の関係ない3つを別のランナーに出しています。
 #
-# E2E はさらに4つに割ります (組分けは tests/e2e/shards.json)。ランナーは4コアで
-# 1台3ワーカー (playwright.config.ts) なので、4台で12ワーカーぶん並びます
+# E2E はさらに5つに割ります (組分けは tests/e2e/shards.json)。ランナーは4コアで
+# 1台3ワーカー (playwright.config.ts) なので、5台で15ワーカーぶん並びます
 # (中身は待ち時間が大半なので、割った分だけ効く。
 # docs/development.md「並べて流す」)。
 jobs:
@@ -377,7 +377,9 @@ jobs:
         # 組の中身は tests/e2e/shards.json (実測の所要時間で人が割る)。
         # playwright の --shard はテスト数で機械的に割るので、重いスペックが
         # 同じ組に固まり、28秒の組と3.6分の組ができていた
-        shard: [1, 2, 3, 4]
+        # **組を増やしたら、main の ruleset の必須チェックにも `e2e (n)` を足すこと** (足さないと
+        # 増やした組が落ちていてもマージできてしまう。bump の PR は ruleset から引くので直さなくてよい)
+        shard: [1, 2, 3, 4, 5]
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -426,43 +428,74 @@ jobs:
         timeout-minutes: 4
         run: bunx playwright install chromium
 
-      # **組分けの入れ忘れをここで落とす。** 新しいスペックを shards.json の
-      # どの組にも入れていないと、どの組でも走らないまま緑になってしまう
+      # **組分けの検算と、この組で流すスペック。** shards.json に書いた名前のファイルが無い
+      # (消した・名前を変えた)、2つの組に入っている、は落とす。**どの組にも入っていない
+      # スペックは 5 組で流す** — 落とすと、同じ日に e2e を足す PR どうしが shards.json の
+      # 同じ行を取り合ってぶつかる。足した PR では 5 組に寄るだけなので、所要時間を見て
+      # あとで割り直せばよい (どれが寄ったかは注記に出す)
       - name: 組分けの検算
+        id: specs
+        env:
+          SHARD: ${{ matrix.shard }}
         run: |
-          diff <(ls tests/e2e/*.spec.ts | xargs -n1 basename | sed 's/\.spec\.ts$//' | sort) \
-               <(jq -r 'del(."//") | .[][]' tests/e2e/shards.json | sort)
-          jq -e 'del(."//") | keys == ["1","2","3","4"]' tests/e2e/shards.json > /dev/null
+          ls tests/e2e/*.spec.ts | xargs -n1 basename | sed 's/\.spec\.ts$//' | sort > "$RUNNER_TEMP/all"
+          jq -r 'del(."//") | .[][]' tests/e2e/shards.json | sort > "$RUNNER_TEMP/listed"
+          jq -e 'del(."//") | keys == ["1","2","3","4","5"]' tests/e2e/shards.json > /dev/null
+          dup=$(uniq -d "$RUNNER_TEMP/listed")
+          if [ -n "$dup" ]; then echo "::error::2つの組に入っています: $(echo $dup)"; exit 1; fi
+          gone=$(comm -13 "$RUNNER_TEMP/all" "$RUNNER_TEMP/listed")
+          if [ -n "$gone" ]; then echo "::error::shards.json にあるのにファイルがありません: $(echo $gone)"; exit 1; fi
+          specs=$(jq -r --arg s "$SHARD" '.[$s][]' tests/e2e/shards.json)
+          rest=$(comm -23 "$RUNNER_TEMP/all" "$RUNNER_TEMP/listed")
+          if [ "$SHARD" = 5 ] && [ -n "$rest" ]; then
+            echo "::notice::どの組にも入っていないスペックを 5 組で流します: $(echo $rest)"
+            specs="$specs $rest"
+          fi
+          test -n "$specs"
+          echo "files=$(for s in $specs; do printf 'tests/e2e/%s.spec.ts ' "$s"; done)" >> "$GITHUB_OUTPUT"
 
-      # **ライブを生で見る道の復号器** (docs/stream.md §5.5)。ブラウザで MPEG-2 を解く WASM は
-      # Dockerfile の `mpeg2wasm` 段で組む (emscripten)。E2E はイメージを使わずランナーで
-      # 回すので、その段だけ組んで取り出し、`MPEG2_DIR` で denpa に渡す。
-      # 使うのは 28-live-raw と 38-live-compat (互換モードの音) だけなので、それを持つ組でだけ組む。中身は FFmpeg の版と
-      # wasm/mpeg2 が変わらない限り同じなので、2回目からはキャッシュで数秒
-      - name: Does this shard need the MPEG-2 decoder?
+      # **ライブを生で見る道・互換モードの復号器** (docs/stream.md §5.5)。ブラウザで MPEG-2 と
+      # AAC・Opus を解く WASM は Dockerfile の `mpeg2wasm` 段で組む (emscripten)。E2E は
+      # イメージを使わずランナーで回すので、その段だけ組んで取り出し、`MPEG2_DIR` で denpa に渡す。
+      #
+      # **組んだものは actions/cache に置いて使い回す。** 中身が変わるのは段の書き方
+      # (emsdk・FFmpeg の版) か wasm/mpeg2 を変えたときだけなので、その2つを鍵にする。
+      # 当たれば 1〜2 秒で戻る (前は buildx を立てて層のキャッシュから組み直すのに 15 秒ほど)。
+      # **どの組でも戻す** — 要るスペック (28-live-raw・38-live-compat…) がどの組に居ても、
+      # 組分けを気にせず足せるように。外れたときだけ、その組で組んで置く (外れるのは
+      # 上の2つを変えた PR と、それが main に入った直後の1回だけ。組が同時に組んでも
+      # 置けるのは1つで、残りは「もうある」と言って置かずに進む)
+      - name: Key for the MPEG-2 decoder (WASM)
         id: mpeg2
-        run: echo "needed=$(jq -r --arg s '${{ matrix.shard }}' '.[$s] | index("28-live-raw") != null or index("38-live-compat") != null' tests/e2e/shards.json)" >> "$GITHUB_OUTPUT"
+        run: |
+          stage=$(sed -n '/ AS mpeg2wasm$/,/^COPY --from=mpeg2wasm /p' Dockerfile)
+          test -n "$stage"
+          echo "stage=$(printf '%s' "$stage" | sha256sum | cut -c1-16)" >> "$GITHUB_OUTPUT"
 
-      - name: Set up Docker Buildx
-        if: steps.mpeg2.outputs.needed == 'true'
-        uses: docker/setup-buildx-action@v4
+      - name: Restore the MPEG-2 decoder (WASM)
+        id: mpeg2-cache
+        uses: actions/cache/restore@v6
+        with:
+          path: ${{ runner.temp }}/mpeg2
+          key: mpeg2wasm-${{ steps.mpeg2.outputs.stage }}-${{ hashFiles('wasm/mpeg2/**') }}
 
       - name: Build the MPEG-2 decoder (WASM)
-        if: steps.mpeg2.outputs.needed == 'true'
-        uses: docker/build-push-action@v7
+        if: steps.mpeg2-cache.outputs.cache-hit != 'true'
+        run: docker build --target mpeg2wasm-out --output "type=local,dest=$RUNNER_TEMP/mpeg2" .
+
+      - name: Save the MPEG-2 decoder (WASM)
+        if: steps.mpeg2-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
         with:
-          context: .
-          target: mpeg2wasm-out
-          outputs: type=local,dest=${{ runner.temp }}/mpeg2
-          cache-from: type=gha,scope=mpeg2wasm
-          cache-to: type=gha,mode=min,scope=mpeg2wasm
+          path: ${{ runner.temp }}/mpeg2
+          key: ${{ steps.mpeg2-cache.outputs.cache-primary-key }}
 
       # アプリを1度だけ組んでから、ワーカーの数だけ立てる。
       # 偽エージェント・偽通知先もワーカーごとに1式ずつ (tests/stack.ts)
       - name: E2E tests
         env:
           MPEG2_DIR: ${{ runner.temp }}/mpeg2
-        run: bunx playwright test $(jq -r '."${{ matrix.shard }}"[] | "tests/e2e/\(.).spec.ts"' tests/e2e/shards.json | tr '\n' ' ')
+        run: bunx playwright test ${{ steps.specs.outputs.files }}
 
       - name: Upload Playwright report
         if: failure()
