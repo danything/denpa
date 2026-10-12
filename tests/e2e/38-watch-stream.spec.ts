@@ -66,7 +66,7 @@ test.describe('観る画面でその場で流す', () => {
 
     /**
      * **コーデックを選べる** (この端末で観られる道が2つ以上あるとき)。エンコード済みと違うものを選ぶと
-     * サーバに変換させて流す。選んだものは端末ごとに覚え、続きの位置から頼み、跳べば頼み直す。
+     * サーバに変換させて流す。選んだものは端末ごとに覚え、続きの位置から頼む。
      * サーバが混んでいると言えば、変換させずに観られるものを勧める。
      *
      * 何で観られるかはここで決めて渡す (H.264 のエンコード済みと、AV1 への変換)。Playwright の
@@ -137,17 +137,14 @@ test.describe('観る画面でその場で流す', () => {
         expect(reopened[0]?.searchParams.get('codec')).toBe('av1');
         expect(reopened[0]?.searchParams.get('from')).toBe('600.000');
 
-        // 遠くへ跳ぶと、そこから頼み直す
-        await video.evaluate((el) => {
-            (el as HTMLVideoElement).currentTime = 1200;
-        });
-        await expect.poll(() => reopened.map((url) => url.searchParams.get('from'))).toContain('1200.000');
-
-        // 混んでいると言われたら、変換させずに観られるもの (H.264 のファイル) を勧める
+        /*
+         * 跳んだ先からの頼み直しは `remux-player.test.ts` が見ている (偽の流れは中身が空で、
+         * 尺が分からないうちは `<video>` が位置を受け付けない)
+         *
+         * 混んでいると言われたら、変換させずに観られるもの (H.264 のファイル) を勧める
+         */
         busy = true;
-        await video.evaluate((el) => {
-            (el as HTMLVideoElement).currentTime = 300;
-        });
+        await goto(page, `/watch/${id}`);
         const note = page.getByTestId('watch-busy');
         await expect(note).toContainText('サーバが混んでいます');
         await note.getByTestId('watch-busy-switch').click();
