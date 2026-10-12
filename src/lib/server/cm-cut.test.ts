@@ -2,7 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import { chapterArgs, cutArgs, cutList, cutPoints, parseKeyframes, planCut } from './cm-cut';
 
 /**
- * 焼いたものから CM を切る段取り (`cm-cut.ts`)。ffmpeg は動かさず、キーフレームの拾い方・
+ * エンコードしたものから CM を切る段取り (`cm-cut.ts`)。ffmpeg は動かさず、キーフレームの拾い方・
  * 切る所の決め方・concat に渡す一覧だけを見る
  */
 const frame = 1001 / 30000;
@@ -63,11 +63,11 @@ describe('切る所を決める', () => {
         ]);
     });
 
-    test('CM 側にも無ければ切れない (境目を指して焼き直す)', () => {
+    test('CM 側にも無ければ切れない (境目を指して再エンコードする)', () => {
         expect(planCut([{ start: 190.2, end: 1800 }], [key(0), key(185), key(191.5)], limits)).toBeNull();
     });
 
-    test('焼いたものの時刻のずれ (muxer が頭をずらしたぶん) を足して探す', () => {
+    test('エンコードしたものの時刻のずれ (muxer が頭をずらしたぶん) を足して探す', () => {
         const plan = planCut([{ start: 190.2, end: 1800 }], [key(0), key(190.186)], {
             ...limits,
             offset: -0.014,
@@ -102,7 +102,7 @@ describe('concat に渡す一覧', () => {
         );
     });
 
-    test('繋ぐのもチャプターを足すのも焼き直さない', () => {
+    test('繋ぐのもチャプターを足すのも再エンコードしない', () => {
         expect(cutArgs('/l.ffconcat', '/o.mkv').join(' ')).toContain(
             '-f concat -safe 0 -i /l.ffconcat -map 0 -c copy',
         );

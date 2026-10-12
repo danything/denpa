@@ -64,7 +64,7 @@ describe('録画エンコードの引数', () => {
 });
 
 /**
- * **焼いたものの音声と字幕に名前を入れる** (`arib.audioTitles`)。
+ * **エンコードしたものの音声と字幕に名前を入れる** (`arib.audioTitles`)。
  *
  * 入れていなかった頃は、プレイヤーの切り替えに「Audio 1」「Audio 2」しか
  * 出なかった — 二カ国語や解説放送でどちらがどちらか分からない。
@@ -110,7 +110,7 @@ describe('トラックの名前', () => {
         expect(buildArgs('/in.m2ts', '/out.mkv', 1, null, 'av1', { audioStreams: [] })).toContain('0:a');
     });
 
-    /** 字幕には「字幕」と日本語の札 */
+    /** 字幕には「字幕」と日本語の名前 */
     test('字幕にも名前を入れる', () => {
         const args = buildArgs('/in.m2ts', '/out.mkv', 1, null);
         expect(title(args, '-metadata:s:s:0')).toBe('title=字幕');
@@ -180,7 +180,7 @@ describe('コマ数の決め方', () => {
         expect(args).toContain('-preset');
     });
 
-    test('GPU で焼くときは口を先に開け、CPU で作った nv12 を渡す', () => {
+    test('GPU でエンコードするときは口を先に開け、CPU で作った nv12 を渡す', () => {
         // QSV は自分で上げるので hwupload は無い。画質は ICQ で、コーデックが違っても同じ 24
         for (const codec of ['av1', 'h264'] as const) {
             const args = buildArgs('/in.m2ts', '/out.mkv', 1, null, codec, {
@@ -235,7 +235,7 @@ describe('コマ数の決め方', () => {
     });
 
     test('CMを切っても字幕は落とさない', () => {
-        // 字幕も CM ごと写して、焼いたものと一緒に切る (cm-cut.ts)
+        // 字幕も CM ごと写して、エンコードしたものと一緒に切る (cm-cut.ts)
         const args = buildArgs('/in.m2ts', '/out.mkv', 1, null, 'av1', { keyframes: 'scene' });
         expect(args).not.toContain('-sn');
         expect(argValue(args, '-c:s')).toBe('copy');
@@ -258,7 +258,7 @@ describe('コマ数の決め方', () => {
 
     /**
      * TS は音声のほうが先に始まっていることが多い。実機では映像の1コマ目が
-     * 0.930 秒あとで、焼き上がりも音声だけの区間から始まっていた。
+     * 0.930 秒あとで、エンコードしたものも音声だけの区間から始まっていた。
      * 1コマ目を 0 秒として数えるプレイヤーでは、そのぶん字幕が早く出る。
      *
      * **ずらすのではなく捨てる。** `-output_ts_offset` では直らなかった —
@@ -315,7 +315,7 @@ describe('コマ数の決め方', () => {
 
 describe('inputSkip', () => {
     /*
-     * **焼くほう (`-ss`) と進み具合の分母で同じ値を使う。** 片方だけ変わると、
+     * **エンコードするほう (`-ss`) と進み具合の分母で同じ値を使う。** 片方だけ変わると、
      * 捨てた量と分母から引いた量がずれて、進み具合が最後まで届かなくなる
      */
     test('頭出しと頭捨ての足し算', () => {
@@ -352,7 +352,7 @@ describe('expectedFrames', () => {
         expect(expectedFrames({ duration: 100, fps: 60000 / 1001 }, 0, true)).toBeCloseTo(11988, 0);
     });
 
-    test('頭から捨てるぶんは焼かないので引く', () => {
+    test('頭から捨てるぶんはエンコードしないので引く', () => {
         expect(expectedFrames(hd, 10, false)).toBeCloseTo(2697, 0);
     });
 
@@ -369,7 +369,7 @@ describe('encodeProgress', () => {
     /*
      * out_time_us はわざとほぼ最後を指す値にしてある。実機の TOKYO MX 録画で、
      * 入力を 65% しか読んでいないのに時刻だけ 99.1% に飛んで「あと1秒」のまま
-     * 数分止まって見えた。割合は焼けたコマ数だけを信じ、時刻には釣られないこと
+     * 数分止まって見えた。割合はエンコードできたコマ数だけを信じ、時刻には釣られないこと
      */
     const at = (frame: number) => ({
         progress: 'continue',
@@ -382,16 +382,16 @@ describe('encodeProgress', () => {
     });
     const block = at(0);
 
-    test('焼けたコマ数から割合を出す。ffmpeg の言う時刻には釣られない', () => {
+    test('エンコードできたコマ数から割合を出す。ffmpeg の言う時刻には釣られない', () => {
         expect(encodeProgress(1000, 1000)(0, 0, at(500), 0).percent).toBeCloseTo(0.5, 3);
     });
 
     /*
      * **実機で踏んだ形** (2026-09、7.4GB の映画)。デマクサだけ先に走って入力を
-     * 読み切り、焼くほうは半分。読み位置で出していた頃は 99% に貼り付いて
+     * 読み切り、エンコードするほうは半分。読み位置で出していた頃は 99% に貼り付いて
      * 「あと50分」の間ずっと止まって見えた
      */
-    test('入力を読み切っていても、焼けた量で答える', () => {
+    test('入力を読み切っていても、エンコードできた量で答える', () => {
         const p = encodeProgress(1000, 1000)(0, 1000, at(500), 0);
         expect(p.percent).toBeCloseTo(0.5, 3);
     });
@@ -414,20 +414,20 @@ describe('encodeProgress', () => {
         expect(encodeProgress(NaN, NaN)(0, NaN, { progress: 'end' }, 0.9).percent).toBe(1);
     });
 
-    test('焼き切っても、終わるまでは99%で止める', () => {
-        // 最後のコマを焼いたあとも吐き出しと mux の締めが残っている。100.0% で
+    test('エンコードし切っても、終わるまでは99%で止める', () => {
+        // 最後のコマをエンコードしたあとも吐き出しと mux の締めが残っている。100.0% で
         // 止まって見えるより、99% のまま「まだ終わっていない」と言うほうが正直
         expect(encodeProgress(1000, 1000)(0, 0, at(1000), 0).percent).toBe(0.99);
     });
 
-    test('残り時間は直近の焼き足しから出す。速さが読めないうちは null', () => {
+    test('残り時間は直近にエンコードできたぶんから出す。速さが読めないうちは null', () => {
         const report = encodeProgress(10_000, NaN);
         expect(report(0, NaN, at(1000), 0).etaMs).toBeNull(); // 窓がまだ短い
-        // 5秒で1000コマ焼けた → 残り8000コマは40秒
+        // 5秒で1000コマエンコードできた → 残り8000コマは40秒
         expect(report(5000, NaN, at(2000), 0.1).etaMs).toBe(40_000);
     });
 
-    test('焼くほうが止まったら残り時間を出さない (「あと1秒」で張り付かせない)', () => {
+    test('エンコードするほうが止まったら残り時間を出さない (「あと1秒」で張り付かせない)', () => {
         const report = encodeProgress(10_000, NaN);
         report(0, NaN, at(2000), 0);
         report(31_000, NaN, at(2000), 0.2); // 窓から最初の1点が落ちる
@@ -483,12 +483,12 @@ describe('failureReason', () => {
     });
 });
 
-describe('CM を探しながら焼く', () => {
+describe('CM を探しながらエンコードする', () => {
     const outputs = ['-an', '-vf', 'scdet@cm=threshold=0', '-f', 'null', '-'];
 
-    test('CM 検出の出口は焼く出口のあとに足す', () => {
+    test('CM 検出の出口はエンコードする出口のあとに足す', () => {
         const args = buildArgs('/in.m2ts', '/out.mkv', 1, null, 'av1', { analysis: outputs });
-        // -map は出口ごとなので、焼く出口の指定が検出の出口に効かないよう後ろに置く
+        // -map は出口ごとなので、エンコードする出口の指定が検出の出口に効かないよう後ろに置く
         expect(args.indexOf('/out.mkv')).toBeLessThan(args.indexOf('scdet@cm=threshold=0'));
         expect(args.slice(-outputs.length)).toEqual(outputs);
     });

@@ -2,7 +2,7 @@
  * 録画のデータ放送を**TS から拾う側** (サーバ専用)。
  *
  * [data-timeline.ts](data-timeline.ts) の並べ方・再生の側と分けてある —
- * あちらは観る画面 (ブラウザ) も読み込むが、TS を解く [bml.ts](bml.ts) は
+ * あちらは観る画面 (ブラウザ) も読み込むが、TS をデコードする [bml.ts](bml.ts) は
  * `node:zlib` / `node:buffer` を使うのでブラウザには持ち込めない。
  */
 
@@ -15,7 +15,7 @@ import type { TimedMessage } from './data-timeline';
  *
  * **食べさせ方は呼ぶ側が決める** — 一気に (`captureDataBroadcast`) でも、
  * 読みながら合間に息をつく (`recorded-bml.ts` の `saveRecordedBml`) でも。
- * 中の解き方は同じ
+ * 中のデコード方法は同じ
  */
 export class DataBroadcastCapture {
     private readonly timeline: TimedMessage[] = [];
@@ -48,7 +48,7 @@ export class DataBroadcastCapture {
 }
 
 /**
- * TS を解いて、データ放送の変化を実時刻つきで並べる (一気に食べる形)。
+ * TS をデコードして、データ放送の変化を実時刻つきで並べる (一気に食べる形)。
  *
  * @param chunks 1局に絞った TS のチャンク列
  */

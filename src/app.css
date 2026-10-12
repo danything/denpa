@@ -5,7 +5,7 @@
  * 開いたり閉じたりするメニューは Bits UI の DropdownMenu(見た目は持たないので、ここと各画面で付ける)。
  *
  * **Pico は `pico` の層 (@layer) に入れる。** 層に入らないこちらの規則は、詳細度に関係なく
- * 必ず Pico に勝つ。Pico の強い selector に合わせて同じ強さで書き直す、という張り合いが要らない。
+ * 必ず Pico に勝つ。Pico の強い selector に合わせて同じ詳細度で書き直す、という張り合いが要らない。
  * 各画面の <style> も同じく層の外なので、Pico より必ず勝つ。
  *
  * テーマは暗いのが既定で、明るいのも選べる。app.html と +layout.svelte が <html data-theme> を付け、Pico はそれに従う。
@@ -41,7 +41,7 @@
 	 * **塗るのは「いま動いているもの」と「押すと戻せないもの」だけ。**
 	 * 以前は予約済み(青)・視聴可能(緑)・取消(赤枠)が行ごとに並んでいて、
 	 * 一覧を開くと色の列が3本立ち、どこを見ればよいのか分からなくなっていた。
-	 * ふつうの状態は地の色に混ぜた淡い札にして、目は録画中の赤だけに行くようにする
+	 * ふつうの状態は地の色に混ぜた淡いバッジにして、目は録画中の赤だけに行くようにする
 	 */
     --dp-rec: #d93526; /* red-500 */
     --dp-ok: #00895a; /* jade-500 */
@@ -79,7 +79,7 @@
     --pico-secondary-hover: #2a3140; /* slate-800 */
     --pico-secondary-hover-background: #dfe3eb; /* slate-100 */
     --pico-secondary-hover-border: #b0b9d0; /* slate-250 */
-    /* 淡い札の文字。地が白寄りなので塗り色より一段濃くする */
+    /* 淡いバッジの文字。地が白寄りなので塗り色より一段濃くする */
     --dp-rec-text: #9b2318; /* red-650 */
     --dp-ok-text: #005f3d; /* jade-650 */
     --dp-warn-text: #694d00; /* amber-650 */
@@ -198,7 +198,7 @@ html[data-stage-fullscreen] body {
     --pico-nav-link-spacing-vertical: 0;
     --pico-nav-link-spacing-horizontal: 0;
 }
-/* コード (<code> <pre>)。地を塗った札にしない。字は等幅にするだけ */
+/* コード (<code> <pre>)。地を塗ったバッジにしない。字は等幅にするだけ */
 pre,
 code,
 var,
@@ -296,7 +296,7 @@ td {
 .full {
     width: 100%;
 }
-/* 札を縦に積んだ列。広い画面 (1280px 以上) では2列にする (チューナー・設定) */
+/* カードを縦に積んだ列。広い画面 (1280px 以上) では2列にする (チューナー・設定) */
 .columns {
     display: grid;
     align-items: start;
@@ -412,7 +412,7 @@ td {
 }
 /*
  * 本文の中の色つき文字。**塗り用の色ではなく「文字用」を使う。**
- * 塗り用は白抜きの札を前提に選んでいるので、地の上に文字として置くと
+ * 塗り用は白抜きのバッジを前提に選んでいるので、地の上に文字として置くと
  * 明るいテーマでは薄く、暗いテーマでは沈む
  */
 .text-error {
@@ -612,7 +612,7 @@ button.danger:not(.outline):is(:hover, :active, :focus) {
 /*
  * **つなげたボタンの中のリンク (`<a class="button">`) も、つなぐ側の角を落とす。** Pico は
  * `[role=group]` の中身なら何でもつなぐが、層の外のこちらの `a.button` の角が必ず勝つので、
- * リンクだけ角の丸い札のまま離れて並んでいた (番組表の種別。ライブの `<button>` とずれていた)
+ * リンクだけ角の丸いバッジのまま離れて並んでいた (番組表の種別。ライブの `<button>` とずれていた)
  */
 [role="group"] > a.button {
     margin: 0;
@@ -635,9 +635,9 @@ button.danger:not(.outline):is(:hover, :active, :focus) {
 
 /* ---- タグ ---- */
 /*
- * 状態の札。**既定は淡い地に濃い文字。** 塗るのは `.solid` を付けたものだけで、
+ * 状態のバッジ。**既定は淡い地に濃い文字。** 塗るのは `.solid` を付けたものだけで、
  * それは「いま動いているもの」(録画中・視聴中)に限る。
- * 一覧では 1 行に札が 2〜3 個並ぶので、全部塗ると色の縞になって読めなかった
+ * 一覧では 1 行にバッジが 2〜3 個並ぶので、全部塗ると色の縞になって読めなかった
  */
 .tag {
     display: inline-flex;
@@ -652,7 +652,7 @@ button.danger:not(.outline):is(:hover, :active, :focus) {
     color: inherit;
     border: 1px solid transparent;
 }
-/* 淡い地は、状態の色を地の色 (--dp-surface) に 14% 混ぜる (知らせは 10%)。札と知らせで同じ考え */
+/* 淡い地は、状態の色を地の色 (--dp-surface) に 14% 混ぜる (知らせは 10%)。バッジと知らせで同じ考え */
 .tag.success {
     background: color-mix(in srgb, var(--dp-ok) 14%, var(--dp-surface));
     color: var(--dp-ok-text);
@@ -669,11 +669,11 @@ button.danger:not(.outline):is(:hover, :active, :focus) {
     background: color-mix(in srgb, var(--dp-info) 14%, var(--dp-surface));
     color: var(--dp-info-text);
 }
-/* 枠を足すだけ。色は上の淡い札と同じ(手を止めてほしいもの = 競合・失敗に使う) */
+/* 枠を足すだけ。色は上の淡いバッジと同じ(手を止めてほしいもの = 競合・失敗に使う) */
 .tag.outline {
     border-color: currentColor;
 }
-/* 色の付かない枠だけの札(工程や但し書き)は地も塗らない。ふつうの札と見分けが付かなくなる */
+/* 色の付かない枠だけのバッジ(工程や但し書き)は地も塗らない。ふつうのバッジと見分けが付かなくなる */
 .tag.outline:not(.success, .error, .warning, .info, .solid) {
     background: transparent;
     border-color: var(--dp-base-300);

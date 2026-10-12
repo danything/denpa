@@ -48,7 +48,7 @@ describe('CM検出の流れ', () => {
         expect(logoUnusable(found.note)).toBe(true);
     });
 
-    test('頭を捨てて焼いたなら、尺もそのぶん短い (時刻は焼いたものの物差し)', async () => {
+    test('頭を捨ててエンコードしたなら、尺もそのぶん短い (時刻はエンコードしたものの物差し)', async () => {
         expect((await detect({ skip: 0.5 })).duration).toBe(599.5);
     });
 });

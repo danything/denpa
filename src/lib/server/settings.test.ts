@@ -9,7 +9,7 @@ config.dbPath = join(mkdtempSync(join(tmpdir(), 'denpa-settings-')), 'denpa.db')
 const { normalizePostalCode, parseCodecs, saveSettings, settings } = await import('./settings');
 
 /*
- * **コーデックは複数選べる。** 両方選ぶと1本の録画を AV1 と H.264 で焼く
+ * **コーデックは複数選べる。** 両方選ぶと1本の録画を AV1 と H.264 でエンコードする
  * (`server/encoder.ts`)。カンマ区切りで持ち、1つだけの古い値も読める。
  */
 describe('コーデックの選択', () => {
@@ -24,7 +24,7 @@ describe('コーデックの選択', () => {
         expect(parseCodecs('h264')).toEqual(['h264']);
     });
 
-    test('none や空は「焼かない」= 空の一覧', () => {
+    test('none や空は「エンコードしない」= 空の一覧', () => {
         expect(parseCodecs('none')).toEqual([]);
         expect(parseCodecs('')).toEqual([]);
     });

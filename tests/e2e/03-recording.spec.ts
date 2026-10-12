@@ -83,7 +83,7 @@ test.describe('録画とエンコード', () => {
          */
         await expect(recording.getByTestId('rule-name')).toHaveText('手動予約');
 
-        // 行を押すと番組表と同じ詳細が出る。焼いたもののコマ数の札も付く
+        // 行を押すと番組表と同じ詳細が出る。エンコードしたもののコマ数のラベルも付く
         await recording.getByTestId('detail-button').click();
         const detail = page.getByTestId('program-detail');
         await expect(detail).toBeVisible();
@@ -199,18 +199,18 @@ test.describe('CMの実カット', () => {
         const recording = page.locator(recordingRow);
         expect(await recording.getAttribute('data-cm-ranges')).toContain('300');
 
-        // 字幕も CM ごと焼いて、焼いたものと一緒に切る (cm-cut.ts)。
+        // 字幕も CM ごとエンコードして、エンコードしたものと一緒に切る (cm-cut.ts)。
         // フィルタで切っていた頃は -sn で落とすしかなかった
         const videoPath = (await recording.getAttribute('data-library-path')) ?? '';
         expect(videoPath).toContain('.mkv');
-        // 切るための作業ファイル (焼いたものの隣) は片付いていること。偽の ffmpeg では切れずに CM ごと置かれる
+        // 切るための作業ファイル (エンコードしたものの隣) は片付いていること。偽の ffmpeg では切れずに CM ごと置かれる
         // (ffprobe が無くキーフレームが読めない) が、片付けは同じ
         expect(readdirSync(dirname(videoPath)).filter((name) => /\.(post|ffconcat)$/.test(name))).toEqual([]);
 
         /*
-         * **1本目は場面の切れ目ごとにキーフレームを置いて焼き、境目にキーフレームが無ければ境目を指して
-         * ソフトウェアで焼き直す** (cm-cut.ts)。偽の ffmpeg ではキーフレームが読めない (ffprobe が無い) ので、
-         * 焼き直しまで進み、それでも切れずにチャプターに落ちる。境目 (300 秒・360 秒) を 1ms 手前で指していること
+         * **1本目は場面の切れ目ごとにキーフレームを置いてエンコードし、境目にキーフレームが無ければ境目を指して
+         * ソフトウェアで再エンコードする** (cm-cut.ts)。偽の ffmpeg ではキーフレームが読めない (ffprobe が無い) ので、
+         * 再エンコードまで進み、それでも切れずにチャプターに落ちる。境目 (300 秒・360 秒) を 1ms 手前で指していること
          */
         const id = (await recording.getAttribute('data-recording-id')) ?? '';
         const mine = new RegExp(`-${id}\\.m2ts$`);
@@ -227,13 +227,13 @@ test.describe('CMの実カット', () => {
     });
 });
 
-test.describe('コーデックを両方焼く', () => {
+test.describe('コーデックを両方エンコードする', () => {
     test.afterEach(async ({ request }) => {
         await setRecording(request);
     });
 
     /*
-     * **両方選ぶと1本の録画が2ファイルになる。** 古いテレビは AV1 を解けない
+     * **両方選ぶと1本の録画が2ファイルになる。** 古いテレビは AV1 をデコードできない
      * ので H.264 も置いておくと、同じ録画をどちらの端末でも観られる。主は AV1
      * (`library_path`)、もう一方は H.264 (`alt_path`)。どちらも同じフォルダに
      * 並ぶので、H.264 のほうは名前に印を付けて分ける ([H264])。
@@ -285,9 +285,9 @@ test.describe('エンコードしない', () => {
     /*
      * コーデックはチェックで選ぶ。**どちらも外すと「エンコードしない」** —
      * 別に「エンコードする」のチェックを持たないので、外れていることが
-     * そのまま「焼かない」になる
+     * そのまま「エンコードしない」になる
      */
-    test('コーデックをどちらも外すと、生TSのまま保存先に置く', async ({ page, request }) => {
+    test('コーデックをどちらも外すと、元のTSのまま保存先に置く', async ({ page, request }) => {
         test.setTimeout(180_000);
         await syncEpg(request);
 
@@ -305,24 +305,24 @@ test.describe('エンコードしない', () => {
         const row = `[data-testid="recording-row"][data-program-id="${programId}"]`;
         await waitWatchable(page, page.locator(row));
 
-        // 焼かずに置いたので mkv ではない。エンコードの進み具合も出ない
+        // エンコードせずに置いたので mkv ではない。エンコードの進み具合も出ない
         const path = (await page.locator(row).getAttribute('data-library-path')) ?? '';
         expect(path).toContain('.m2ts');
         await expect(page.locator(row).getByTestId('encode-progress')).toHaveCount(0);
 
         /*
-         * 焼き直す口は出ない。**焼かない設定では生TSがそのまま保存先へ移る**ので、
-         * 元にできるTSがもう無い (「生TSも残す」は焼いたときの話)。
-         * 焼きたくなったらコーデックを選んで録り直すことになる
+         * 再エンコードする口は出ない。**エンコードしない設定では元のTSがそのまま保存先へ移る**ので、
+         * 元にできるTSがもう無い (「元のTSも残す」はエンコードしたときの話)。
+         * エンコードしたくなったらコーデックを選んで録り直すことになる
          */
         await page.locator(row).getByTestId('detail-button').click();
         const detail = page.getByTestId('program-detail');
         await expect(detail).toBeVisible();
         await expect(detail.getByTestId('reencode-button')).toHaveCount(0);
-        // 生TSでも観られるものは落とせる
+        // 元のTSでも観られるものは落とせる
         await expect(detail.getByTestId('download-link')).toHaveCount(1);
 
-        // 後片付け。**焼く設定に戻す** (他のテストや本番の既定に揃える)
+        // 後片付け。**エンコードする設定に戻す** (他のテストや本番の既定に揃える)
         await goto(page, '/settings');
         await page.getByTestId('codec-av1').check();
         await page.getByTestId('save-recording').click();
@@ -336,11 +336,11 @@ test.describe('CM検出のやり直し', () => {
     });
 
     /*
-     * **CM 検出だけやり直す** (詳細の「その他…」)。焼き直さずに CM を探し直して、焼いたもののチャプターを
-     * 書き直す (`encoder.runCmJob`)。CM を探さずに焼いた録画で押せば、探した結果が入る。
-     * 生TSは焼き終えると消える設定 (既定) なので、焼いたものから読む
+     * **CM 検出だけやり直す** (詳細の「その他…」)。再エンコードせずに CM を探し直して、エンコードしたもののチャプターを
+     * 書き直す (`encoder.runCmJob`)。CM を探さずにエンコードした録画で押せば、探した結果が入る。
+     * 元のTSはエンコードし終えると消える設定 (既定) なので、エンコードしたものから読む
      */
-    test('CM検出だけやり直せる (焼き直さない)', async ({ page, request }) => {
+    test('CM検出だけやり直せる (再エンコードしない)', async ({ page, request }) => {
         test.setTimeout(180_000);
         await setRecording(request, { cmCut: 'off' });
         const { id, libraryPath } = await recordOne(page, request);
@@ -354,7 +354,7 @@ test.describe('CM検出のやり直し', () => {
         await detail.getByTestId('detail-more').click();
         await detail.getByTestId('cm-redo-button').click();
 
-        // 焼くジョブと同じ待ち行列に並ぶ。終われば CM が入り、置き場所は変わらない (焼き直していない)
+        // エンコードするジョブと同じ待ち行列に並ぶ。終われば CM が入り、置き場所は変わらない (再エンコードしていない)
         await expect
             .poll(
                 async () => {

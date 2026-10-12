@@ -1,5 +1,5 @@
 /**
- * データ放送 (ARIB STD-B24 の BML) を解く。**1局に絞った TS を食わせると、
+ * データ放送 (ARIB STD-B24 の BML) をデコードする。**1局に絞った TS を食わせると、
  * 組み立て終わったファイルが出てくる。**
  *
  *     TS → PAT → PMT → データ符号化方式記述子 (0xFD) の付いた ES
@@ -15,7 +15,7 @@
  *
  * **出す形は web-bml の頃のまま** ([bml-protocol.ts](bml-protocol.ts))。録画の隣の
  * `.bml.jsonl` がこの形で残っているので、変えると前に録ったものが読めなくなる。
- * モジュールの中身 (multipart) は [multipart.ts](multipart.ts) が解く。
+ * モジュールの中身 (multipart) は [multipart.ts](multipart.ts) がデコードする。
  */
 
 import { Buffer } from 'node:buffer';

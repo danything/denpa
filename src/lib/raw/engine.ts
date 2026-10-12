@@ -1,15 +1,15 @@
 /**
  * **生で送られてきた TS を見せる**、画面の側の半分 (docs/stream.md §5.5)。
  *
- * 解いて描くのは worker (`worker.ts`)。ここが持つのは、Web Audio でしか触れない
+ * デコードして描くのは worker (`worker.ts`)。ここが持つのは、Web Audio でしか触れない
  * **音を鳴らすことと、時計** (`playout.ts`)。時計はいま鳴っている音の PTS で、
  * それを worker へ流して絵を合わせさせる。
  *
  * `live-player.svelte.ts` からは、MSE の代わりにこれを使う — 器 (`<video>`) の代わりに
- * canvas を1枚、映像の入れ物の中に差し込む。字幕・データ放送・操作列は焼く道と同じもの
+ * canvas を1枚、映像の入れ物の中に差し込む。字幕・データ放送・操作列はエンコードする道と同じもの
  * がそのまま重なる。
  *
- * **焼いたもの (fMP4) も同じ口で受ける** (互換モード。`input` が `fmp4`)。<video> の再生が止まる
+ * **エンコードしたもの (fMP4) も同じ口で受ける** (互換モード。`input` が `fmp4`)。<video> の再生が止まる
  * 端末 (テスラの車載ブラウザ) で、ライブの H.264 / AV1 を canvas に描く。違うのは worker の中だけ
  * (`fmp4.ts`) で、音・時計・小窓・切り抜きはここのまま。
  *
@@ -29,7 +29,7 @@ const TICK = 20;
 const NO_AUDIO = 5_000;
 /** 切り抜きの返事を待つ上限 (ms)。1080 の1枚を読み出して渡すのは数十 ms */
 const GRAB_WAIT = 2_000;
-/** 復号器の置き場 (`routes/api/live/mpeg2`) */
+/** デコーダの置き場 (`routes/api/live/mpeg2`) */
 const DECODER = '/api/live/mpeg2';
 /**
  * **`<audio>` を通したとき、出口から耳までの遅れの見込み (秒)** (`RawEngine.route`)。
@@ -50,9 +50,9 @@ interface AudioChunk extends Chunk {
 export interface RawEvents {
     /** 選局し直してから最初の絵が出た */
     shown(): void;
-    /** 貯めを使い切って止まった (焼く道の `waiting` にあたる) */
+    /** 貯めを使い切って止まった (エンコードする道の `waiting` にあたる) */
     stalled(): void;
-    /** **使えなくなった。焼いたものに戻す** (理由は画面に出す) */
+    /** **使えなくなった。エンコードしたものに戻す** (理由は画面に出す) */
     gaveUp(reason: string): void;
     /**
      * 外から止められた・再開された (`paused`)。**`<audio>` を通している間だけ** —
@@ -74,7 +74,7 @@ export interface RawEvents {
  *
  * 生の音はページが Web Audio で鳴らしている。言わずにおくと iOS はこれを効果音と
  * 同じに扱い、**Safari を裏へ回すと止める** — 小窓で観ていても音だけ消えた
- * (iPhone 15 Pro Max、iOS 27.2)。焼いた道は `<video>` が鳴らすので、初めから
+ * (iPhone 15 Pro Max、iOS 27.2)。エンコードする道は `<video>` が鳴らすので、初めから
  * 再生の音として扱われている。消音スイッチで黙らないのも `<video>` と同じになる。
  * 畳むときは既定 (`auto`) に戻す。
  *
@@ -116,7 +116,7 @@ export class RawEngine {
     /** 選局し直してから音が来たか。来ないまま絵だけ出ているなら諦める (`NO_AUDIO`) */
     private heardAt = 0;
     private shownAt = 0;
-    /** 解けた音のコマ数 (選局からの通しではなく、器を作ってからの通し) */
+    /** デコードできた音のコマ数 (選局からの通しではなく、器を作ってからの通し) */
     private heard = 0;
     private gone = false;
     /** デュアルモノのどちらを両耳へ配るか (`AudioTrack.side`) */
@@ -138,15 +138,15 @@ export class RawEngine {
     private held = false;
     /** 描かれずに捨てたコマ (worker が数える) */
     dropped = 0;
-    /** 1コマを解く時間の 95 パーセンタイル (ms) */
+    /** 1コマをデコードする時間の 95 パーセンタイル (ms) */
     decodeMs = 0;
 
     /**
      * @param host 映像の入れ物。canvas はここに入る (**データ放送が入れ物ごと動かす**ので中に置く)
      * @param before この前に差し込む (字幕の canvas より下に来るように)
      * @param background 「再生する音」だと言うか (`playbackSession`・`route`)。あとから変えるときは `background`
-     * @param input 何を受け取るか (`messages.ts` の `RawInput`)。生の TS か、焼いたもの (fMP4。互換モード)
-     * @param chase 追っかけ・録画 (互換モード)。放送の今を追わない — 溜まっても跳ばず、止めて再開は止めた所から
+     * @param input 何を受け取るか (`messages.ts` の `RawInput`)。元の TS か、エンコードしたもの (fMP4。互換モード)
+     * @param chase 追っかけ・録画 (互換モード)。放送の今を追わない — 溜まっても飛ばず、止めて再開は止めた所から
      *   (`playout.ts` と worker の `follow`)。録画 (`canvas-player.ts`) は飛ぶ先 (`reset` の `from`) と終わり
      *   (`finish`) も使う
      */
@@ -171,7 +171,7 @@ export class RawEngine {
             'position:absolute; inset:0; width:100%; height:100%; object-fit:contain; background:#000; pointer-events:none;';
         host.insertBefore(this.canvas, before);
 
-        // 途中で転んだら (呼ぶ側が焼いたものに戻す) 作ったものを残さない
+        // 途中で転んだら (呼ぶ側がエンコードしたものに戻す) 作ったものを残さない
         let context: AudioContext | null = null;
         let worker: Worker | null = null;
         try {
@@ -211,7 +211,7 @@ export class RawEngine {
         this.route();
     }
 
-    /** どれだけ貯めるか (秒)。**決めるのは焼く道と同じ `pacing.nextTarget`** (live-player) */
+    /** どれだけ貯めるか (秒)。**決めるのはエンコードする道と同じ `pacing.nextTarget`** (live-player) */
     set target(seconds: number) {
         this.playout.target = seconds;
     }
@@ -240,7 +240,7 @@ export class RawEngine {
     /**
      * 選局し直した・録画で飛んだ。**前の局の音も絵の待ちも捨てる** (いま出ている絵は、次が出るまで残る)。
      *
-     * `from` (90kHz。届くものの PTS の物差し。生の TS なら一周の中) を渡すと、そこから鳴らし・描き始める
+     * `from` (90kHz。届くものの PTS の物差し。元の TS なら一周の中) を渡すと、そこから鳴らし・描き始める
      * (録画。`canvas-player.ts`)。サーバは飛び先の少し手前から流すので、手前のコマは描かずに捨て、
      * 音もそこから鳴らす。一周をまたぐかもしれないので、届いた最初のコマの近くに伸ばしてから決める
      */
@@ -260,8 +260,8 @@ export class RawEngine {
     }
 
     /**
-     * 音声を選ぶ。**焼き直しにならない** — 生の TS には全部の音声が入っているので、
-     * どれを解くか (worker) と、デュアルモノのどちら側を両耳へ配るか (ここ) を変えるだけ
+     * 音声を選ぶ。**再エンコードにならない** — 元の TS には全部の音声が入っているので、
+     * どれをデコードするか (worker) と、デュアルモノのどちら側を両耳へ配るか (ここ) を変えるだけ
      */
     selectAudio(stream: number, side: AudioSide): void {
         this.side = side;
@@ -304,7 +304,7 @@ export class RawEngine {
         return at === null ? null : at.pts / CLOCK;
     }
 
-    /** 手元にあと何秒ぶん持っているか (焼く道の `buffered.end - currentTime`) */
+    /** 手元にあと何秒ぶん持っているか (エンコードする道の `buffered.end - currentTime`) */
     get lead(): number {
         return this.playout.lead(this.now());
     }
@@ -394,7 +394,7 @@ export class RawEngine {
      *
      * Web Audio の音を、ブラウザによっては効果音と同じに扱い、**裏へ回すと止める**
      * (テスラの車載ブラウザ。Chromium 系)。`<audio>` が鳴らしていれば「メディアの再生」で、
-     * 焼いた道の `<video>` と同じ扱いになる — ロック画面・車の操作にも「再生中」と出て、
+     * エンコードする道の `<video>` と同じ扱いになる — ロック画面・車の操作にも「再生中」と出て、
      * そこで押された止める・再開は `remote` で画面に伝える。
      *
      * - **Safari は通さない** — Audio Session を `playback` にすれば裏でも止まらない
@@ -497,7 +497,7 @@ export class RawEngine {
                 this.decodeMs = message.p95;
                 /*
                  * **外から読める形で出しておく。** 絵は worker の canvas に居て、画面の側からは
-                 * 画素を読めない。描いたコマ数と解けた音のコマ数が進んでいれば、生の道は動いている
+                 * 画素を読めない。描いたコマ数とデコードできた音のコマ数が進んでいれば、生の道は動いている
                  * (E2E が見る。手元で切り分けるときも DevTools で読める)
                  */
                 this.canvas.dataset['shown'] = String(message.shown);
@@ -578,7 +578,7 @@ export class RawEngine {
             this.events.ended?.();
         }
         this.tellClock();
-        // 絵は出ているのに音が来ない。**音の出ない生より、焼いたもののほうがいい**
+        // 絵は出ているのに音が来ない。**音の出ない生より、エンコードしたもののほうがいい**
         if (this.shownAt > 0 && this.heardAt === 0 && Date.now() - this.shownAt > NO_AUDIO) {
             this.giveUp(
                 this.input !== 'ts-mpeg2'
@@ -609,10 +609,10 @@ export class RawEngine {
         if (frames === 0) return;
         const buffer = this.context.createBuffer(2, frames, chunk.sampleRate);
         /*
-         * **デュアルモノは片側を両耳へ** (焼く道の `pan` と同じ)。
+         * **デュアルモノは片側を両耳へ** (エンコードする道の `pan` と同じ)。
          *
          * 5.1ch の番組は**頭の2本 (前の左右) だけ**鳴らす。面の並びは FFmpeg の決まりで
-         * 分かっている (worker の WASM が解く) が、中央と後ろを混ぜる下げ方はまだ持っていない
+         * 分かっている (worker の WASM がデコードする) が、中央と後ろを混ぜる下げ方はまだ持っていない
          */
         const left = chunk.planes[0]!;
         const right = chunk.planes[1] ?? left;

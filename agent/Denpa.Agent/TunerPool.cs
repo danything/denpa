@@ -10,7 +10,7 @@ namespace Denpa.Agent;
 /// </summary>
 /// <param name="StreamIds">チャンネル名から TSID を引く。衛星の選局に要る</param>
 /// <param name="FakeTune">
-/// **適合テスト専用。** 選局を自分で掴む代わりに、このコマンドに
+/// **適合テスト専用。** 自分で選局する代わりに、このコマンドに
 /// <c>&lt;種別&gt; &lt;チャンネル&gt;</c> を足して起こし、標準出力を読む
 /// (<c>tests/fake/tune.ts</c>)。環境変数 <c>FAKE_TUNE</c> からだけ入る —
 /// 設定ファイルにも画面にも、コマンドを書く口は無い。
@@ -34,7 +34,7 @@ public sealed record TuneOptions(Func<string, int?> StreamIds, string? FakeTune 
 /// </list>
 ///
 /// <para>
-/// 選局は**自分で掴む**。B25 も自分で解き、掴んだままチャンネルだけ変える
+/// 選局は**自分でやる**。B25 も自分で復号し、デバイスを確保したままチャンネルだけ変える
 /// (Tuning.cs / B25.cs)。
 /// </para>
 /// </summary>
@@ -70,7 +70,7 @@ public sealed class TunerPool(
     /// <para>
     /// 選局は取り合いの錠を放してからやる (<see cref="Open"/>)。そのぶん、この
     /// 入れ物には錠のかかっていない道から触られることになるので、ここで守る。
-    /// 掴む/手放すだけなので、待たされるのは一瞬。
+    /// 確保する/手放すだけなので、待たされるのは一瞬。
     /// </para>
     /// </summary>
     private readonly Lock _deviceGate = new();
@@ -109,7 +109,7 @@ public sealed class TunerPool(
     ///
     /// <para>
     /// 走っている選局は**そのまま続ける**。名前が変わった・消えた本のものだけ、
-    /// 失敗として畳む — 掴んでいるデバイスが別物になったのに流し続けると、
+    /// 失敗として畳む — 使っているデバイスが別物になったのに流し続けると、
     /// 何が録れているのか分からなくなる。
     /// </para>
     /// </summary>
@@ -125,7 +125,7 @@ public sealed class TunerPool(
                 var now = index < next.Count ? next[index].Name : null;
                 if (was == now && now is not null) continue;
                 Release(lease, "チューナーの設定が変わりました");
-                // 別の機材になったかもしれない。掴み直す
+                // 別の機材になったかもしれない。取り直す
                 Drop(index);
             }
         }
@@ -135,7 +135,7 @@ public sealed class TunerPool(
     public sealed class TunerBusyException(string message) : Exception(message);
 
     /// <summary>
-    /// 選局して読み口を返す。掴めなければ <see cref="TunerBusyException"/>。
+    /// 選局して読み口を返す。確保できなければ <see cref="TunerBusyException"/>。
     ///
     /// <para>同じ物理チャンネルが既に開いていればそこへ混ぜる。**チューナーは増えない。**</para>
     ///
@@ -193,7 +193,7 @@ public sealed class TunerPool(
                 {
                     return Join(victim, priority, use);
                 }
-                // 蹴る相手が居れば先に片付ける。同じチューナーを2つの選局が掴まないように
+                // 蹴る相手が居れば先に片付ける。同じチューナーを2つの選局が使わないように
                 Release(victim, "優先度の高い要求に譲りました");
                 kicked = victim;
             }
@@ -213,7 +213,7 @@ public sealed class TunerPool(
          * **選局は取り合いの錠を放してからやる。**
          *
          * 電波が来ていないチャンネルでは同期待ちに5秒かかる (Tuning.cs)。
-         * 掴んだままにすると、その5秒のあいだ `/denpa/tuners` も、他の本への
+         * 確保したままにすると、その5秒のあいだ `/denpa/tuners` も、他の本への
          * 要求も止まる。実際そうなっていて、
          *
          * - チューナーが2本あっても総当たりは1本ずつしか進まなかった
@@ -236,7 +236,7 @@ public sealed class TunerPool(
 
         try
         {
-            // 自分で掴む。偽の選局を起こすのは適合テストだけ (TuneOptions.FakeTune)
+            // 自分で選局する。偽の選局を起こすのは適合テストだけ (TuneOptions.FakeTune)
             if (_tune.FakeTune is not { } fake)
             {
                 var held = Acquire(index, spec);
@@ -245,7 +245,7 @@ public sealed class TunerPool(
                     /*
                      * **合っていても、生きていなければ選局し直す。** DVB は合ったまま
                      * だが、px4-userland は読み手が居なくなると TS の流れを畳む
-                     * (受信機は借りたまま。Px4.cs)。合っている印だけ残っていて中身が無い、を掴まない
+                     * (受信機は借りたまま。Px4.cs)。合っている印だけ残っていて中身が無い、を信じない
                      */
                     if (held.Channel != channel || !held.Device.Tuned)
                     {
@@ -271,7 +271,7 @@ public sealed class TunerPool(
              * **デバイスは閉じない。** 電波が来ていないチャンネルでは選局が
              * 失敗するのが普通で、そのたびに閉じていると次のチャンネルが
              * 「使用中」で開けなくなる (総当たりのスキャンが1本目以降ぜんぶ
-             * 落ちたのはこれ)。次の選局で掴み直す
+             * 落ちたのはこれ)。次の選局で取り直す
              */
             lock (_gate)
             {
@@ -300,7 +300,7 @@ public sealed class TunerPool(
 
             var held = new Held(device);
             _held[index] = held;
-            Log.Write($"[{spec.Name}] {path} を掴みました");
+            Log.Write($"[{spec.Name}] {path} を確保しました");
             return held;
         }
     }
@@ -311,7 +311,7 @@ public sealed class TunerPool(
     /// <list type="bullet">
     /// <item><c>/dev/dvb/adapterN/frontendM</c> … Linux DVB (Tuning.cs)</item>
     /// <item><c>px4:&lt;筐体の番号&gt;:&lt;受信機&gt;</c> … px4-userland の機材 (Px4.cs)</item>
-    /// <item><c>siano:&lt;USB のポート&gt;</c> … siano-userland の機材 (Siano.cs)。カーネルが掴んでいれば開かない</item>
+    /// <item><c>siano:&lt;USB のポート&gt;</c> … siano-userland の機材 (Siano.cs)。カーネルが使っていれば開かない</item>
     /// <item><c>asicen:&lt;挿し口&gt;:&lt;受信機&gt;</c> … asicen-userland の機材 (Asicen.cs。試験的)</item>
     /// </list>
     ///
@@ -369,7 +369,7 @@ public sealed class TunerPool(
         {
             lock (_gate)
             {
-                // 解き手が別のスレッドで配っているので、入れ物は Sinks の錠の下で触る
+                // 復号器が別のスレッドで配っているので、入れ物は Sinks の錠の下で触る
                 lock (lease.Sinks) lease.Sinks.Remove(leaving);
                 if (lease.Sinks.Count == 0) ScheduleRelease(lease);
             }
@@ -439,7 +439,7 @@ public sealed class TunerPool(
     ///
     /// <para>
     /// **この決まりはエージェントの中にだけある。** denpa は順位を読んで、その順どおりに
-    /// 掴まれる前提で予約を割り振る (src/lib/server/conflict.ts)。両者の約束は
+    /// 確保される前提で予約を割り振る (src/lib/server/conflict.ts)。両者の約束は
     /// docs/agent.md「選ぶ順の約束」、同じ場面を両方のテストに通している
     /// (tests/fake/tuner-scenes.ts)。決まりを変えるなら順位の付け方を変えるだけでよく、
     /// denpa は直さなくてよい。
@@ -484,7 +484,7 @@ public sealed class TunerPool(
     /// <item>**もうそのチャンネルに合っているもの**。選局し直さずに済む</item>
     /// <item>**ほかの余韻**。1人の視聴で本を2冊塞がない</item>
     /// <item>空いているもの</item>
-    /// <item>弱い相手が掴んでいるもの。いちばん弱いところから取る</item>
+    /// <item>弱い相手が使っているもの。いちばん弱いところから取る</item>
     /// </list>
     ///
     /// <para>
@@ -502,7 +502,7 @@ public sealed class TunerPool(
     private int? Pick(string type, string channel, int priority, IReadOnlySet<string> after)
     {
         var ranks = Ranks(Tuners);
-        // 残る読み手の強さ。引き継ぐ相手 (`after`) はもう離れたものとして数えない。誰もいなければ null
+        // 残る読み手の優先度。引き継ぐ相手 (`after`) はもう離れたものとして数えない。誰もいなければ null
         int? Strongest(int index)
         {
             if (!_leases.TryGetValue(index, out var lease)) return null;
@@ -585,7 +585,7 @@ public sealed class TunerPool(
                 list.Add((JsonNode)new JsonObject
                 {
                     ["index"] = index,
-                    // 選ぶ順。denpa はこの順どおりに掴まれる前提で予約を割り振る (docs/agent.md「選ぶ順の約束」)
+                    // 選ぶ順。denpa はこの順どおりに確保される前提で予約を割り振る (docs/agent.md「選ぶ順の約束」)
                     ["rank"] = ranks[index],
                     ["name"] = spec.Name,
                     ["types"] = Json.Strings(spec.Types),
@@ -633,7 +633,7 @@ public sealed class TunerPool(
     }
 
     /// <summary>
-    /// いまカードの鍵で解いているチューナーの名前 (画面の「カードリーダー」の表)。
+    /// いまカードの鍵で復号しているチューナーの名前 (画面の「カードリーダー」の表)。
     /// **カードは1枚を全部で使い回す** (<see cref="Keys"/>) ので、ここに並ぶのは
     /// どれも使用中のカードを使っている
     /// </summary>
@@ -783,24 +783,24 @@ internal sealed class Lease(int tuner, string type, string channel)
 
     private volatile bool _stopped;
     private Task? _pump;
-    /// <summary>解き手が終わった (失敗も含む)。**読み手も降りる** — 残ると読み口を掴んだまま回り続ける</summary>
+    /// <summary>復号器が終わった (失敗も含む)。**読み手も降りる** — 残ると読み口を開いたまま回り続ける</summary>
     private volatile bool _drained;
-    /// <summary>解き手が回っている (<see cref="TunerPool.Descrambling"/>)</summary>
+    /// <summary>復号器が回っている (<see cref="TunerPool.Descrambling"/>)</summary>
     public bool Descrambling => _descrambling;
     private volatile bool _descrambling;
-    /// <summary>読み手と解き手の間に溜まっているバイト数</summary>
+    /// <summary>読み手と復号器の間に溜まっているバイト数</summary>
     private long _queued;
 
     /// <summary>
-    /// 読み手と解き手の間に溜められる量。**64MB** — 地上波で 25 秒、衛星の中継器まるごとでも 10 秒ほど。
-    /// 解き手が止まるのはカードや配り役を待つときで、それぞれ上限がある (CCID は 5 秒で諦め、
+    /// 読み手と復号器の間に溜められる量。**64MB** — 地上波で 25 秒、衛星の中継器まるごとでも 10 秒ほど。
+    /// 復号器が止まるのはカードや配り役を待つときで、それぞれ上限がある (CCID は 5 秒で諦め、
     /// 繋ぎ直しに失敗したら 10 秒は探さずに断り、配り役は 10 秒で切る) ので、その間を丸ごと呑める。
     /// **数ではなくバイトで測る** — 読み口は溜まっているぶんだけ返すので、1回の読みは小さいこともある
     /// </summary>
     private const long QueueLimit = 64 * 1024 * 1024;
 
     /// <summary>
-    /// **掴んだままのデバイスから読んで、解いて配る。** 選局そのものはプールがやる。
+    /// **確保したままのデバイスから読んで、復号して配る。** 選局そのものはプールがやる。
     ///
     /// <para>
     /// デバイスは**チューナーごとに開きっぱなし**で、ここでは閉じない。
@@ -809,10 +809,10 @@ internal sealed class Lease(int tuner, string type, string channel)
     /// </para>
     ///
     /// <para>
-    /// **読み手と解き手は別のスレッドで、間に 64MB のキューを置く** (<see cref="QueueLimit"/>)。
-    /// 解き手は ECM が変わるとその場で鍵を貰うので、カードや配り役が固まると何秒も止まる。
+    /// **読み手と復号器は別のスレッドで、間に 64MB のキューを置く** (<see cref="QueueLimit"/>)。
+    /// 復号器は ECM が変わるとその場で鍵を貰うので、カードや配り役が固まると何秒も止まる。
     /// 読み手がそこで待つとデバイスの溜め (3.5 秒ぶん) が溢れて**録画が欠ける** —
-    /// 欠けたものは後から解いても戻らない。キューが埋まったときだけ読み手も待つ。
+    /// 欠けたものは後から復号しても戻らない。キューが埋まったときだけ読み手も待つ。
     /// </para>
     ///
     /// <para>
@@ -829,7 +829,7 @@ internal sealed class Lease(int tuner, string type, string channel)
         // HTTP の口が、池が増えるまで待たされる
         _pump = Task.Factory.StartNew(
             () => Read(tuner, queue.Writer), CancellationToken.None, TaskCreationOptions.LongRunning, TaskScheduler.Default);
-        // 解き手は待たない (Await)。デバイスに触らず、配り先も畳むときに空になっている
+        // 復号器は待たない (Await)。デバイスに触らず、配り先も畳むときに空になっている
         _ = Task.Factory.StartNew(
             () => Descramble(queue.Reader, onExit), CancellationToken.None, TaskCreationOptions.LongRunning, TaskScheduler.Default);
     }
@@ -859,12 +859,12 @@ internal sealed class Lease(int tuner, string type, string channel)
 
                 if (Interlocked.Add(ref _queued, read) > QueueLimit)
                 {
-                    // 解き手が止まったまま埋まった。空くまで読むのを待つ (まれなので、起きて見に行く形で足りる)
-                    if (!waited) Log.Write($"[{Tuner}] {Channel}: 解くのが追いつかずキューが埋まったので、読むのを待ちます");
+                    // 復号器が止まったまま埋まった。空くまで読むのを待つ (まれなので、起きて見に行く形で足りる)
+                    if (!waited) Log.Write($"[{Tuner}] {Channel}: 復号が追いつかずキューが埋まったので、読むのを待ちます");
                     waited = true;
                     while (Volatile.Read(ref _queued) > QueueLimit && !_stopped && !_drained) Thread.Sleep(10);
                 }
-                // 写す先は借り物。解き手が解き終えたら返す (1回が 192KB なので、毎回確保すると大きな塊の置き場を汚す)
+                // 写す先は借り物。復号器が復号し終えたら返す (1回が 192KB なので、毎回確保すると大きな塊の置き場を汚す)
                 var rented = ArrayPool<byte>.Shared.Rent(read);
                 buffer.AsSpan(0, read).CopyTo(rented);
                 if (!queue.TryWrite((rented, read))) ArrayPool<byte>.Shared.Return(rented);
@@ -882,7 +882,7 @@ internal sealed class Lease(int tuner, string type, string channel)
         queue.TryComplete();
     }
 
-    /// <summary>解き手。キューから取って解き、読み手たちに配る。キューが閉じて空になったら終わる</summary>
+    /// <summary>復号器。キューから取って復号し、読み手たちに配る。キューが閉じて空になったら終わる</summary>
     private void Descramble(ChannelReader<(byte[] Rented, int Length)> queue, Action onExit)
     {
         var b25 = new Descrambler(Keys.Source);
@@ -939,7 +939,7 @@ internal sealed class Lease(int tuner, string type, string channel)
         _drained = true;
         _descrambling = false;
         /*
-         * **解けなかったぶんを残す。** 掛かったまま流したものは、録画が
+         * **復号できなかったぶんを残す。** 掛かったまま流したものは、録画が
          * 成功したように見えて中身が見られない。理由も添える
          */
         if (b25.Undecodable > 0)
@@ -982,12 +982,12 @@ internal sealed class Lease(int tuner, string type, string channel)
              * 数には入れないが、黙って捨てると「本当に落ちていないのか」が
              * 分からなくなるので、そうと分かる言い方で残す
              */
-            if (stale > 0) Log.Write($"[{Tuner}] {Channel}: 選局前に環が {stale} 回溢れていました");
+            if (stale > 0) Log.Write($"[{Tuner}] {Channel}: 選局前にリングバッファが {stale} 回溢れていました");
             return;
         }
         // **空いた時間も出す。** 溜めが効いていないのか読み手が止まっているのかを分ける (DeviceStream.TakeOverflows)
         Log.Write(
-            $"[{Tuner}] {Channel}: 環が {count} 回溢れました "
+            $"[{Tuner}] {Channel}: リングバッファが {count} 回溢れました "
                 + $"(読むのが追いつきません: {Readers()}、いちばん空いたのは {worstGap / 1000.0:0.0}秒)");
     }
 
@@ -1080,7 +1080,7 @@ internal sealed class Lease(int tuner, string type, string channel)
      * **読むのをやめろと言う。待たない。**
      *
      * <para>
-     * 掴んだままのデバイスは閉じない — チューナーごとに開いたままで、次の選局が
+     * 確保したままのデバイスは閉じない — チューナーごとに開いたままで、次の選局が
      * 同じものを使う。ここでやるのは合図だけ。読み口は 200ms ごとに起きて
      * この印を見るので (<c>DeviceStream.Read</c>)、電波が来ていなくても止まる。
      * </para>
@@ -1101,7 +1101,7 @@ internal sealed class Lease(int tuner, string type, string channel)
      * <para>
      * 次の選局は、これが返ってから始める。待たずに始めると**同じ読み口を
      * 2本で取り合い**、前の局のパケットが次の選局に混ざる。待つのは読み手だけ —
-     * 解き手はデバイスに触らず、配り先も畳むときに空になっている (鍵を待っていれば
+     * 復号器はデバイスに触らず、配り先も畳むときに空になっている (鍵を待っていれば
      * 止まるのはその答えのあと)。
      * </para>
      *

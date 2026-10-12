@@ -6,13 +6,13 @@ import { expect, goto, syncEpg, test, wakeControls } from './helpers';
 /**
  * **互換モード** — ライブの H.264 / AV1 も canvas に描く (`src/lib/canvas-video.ts`・`src/lib/raw/fmp4.ts`)。
  *
- * テスラの車載ブラウザは停車中でも `<video>` を止める。互換モードでは焼いたもの (fMP4) を MSE に
- * 渡さず、生の MPEG-2 と同じ worker で解いて canvas に描く。ここは**描くところまで**見る —
+ * テスラの車載ブラウザは停車中でも `<video>` を止める。互換モードではエンコードしたもの (fMP4) を MSE に
+ * 渡さず、生の MPEG-2 と同じ worker でデコードして canvas に描く。ここは**描くところまで**見る —
  * 偽 ffmpeg に目印 (`stack.liveFmp4File`) を置くと、本物の H.264 + AAC・AV1 + Opus の fMP4 を流す
  * (`tests/fake/fmp4-loop.ts`)。映像は VideoDecoder が、音は WASM (`wasm/mpeg2`、28-live-raw と同じ
- * 復号器。AAC は ADTS の頭を付けて、Opus は OpusHead で) が解く。
+ * 復号器。AAC は ADTS の頭を付けて、Opus は OpusHead で) がデコードする。
  *
- * H.264 は、走らせている Chromium の VideoDecoder が解けるときだけ描いて確かめる (解けなければ
+ * H.264 は、走らせている Chromium の VideoDecoder がデコードできるときだけ描いて確かめる (デコードできなければ
  * 切り替えで選べないことを見る)。箱の読み方 (avcC・esds) は単体試験 (`ts/fmp4.test.ts`) が見る
  */
 
@@ -36,7 +36,7 @@ async function expectDrawn(page: Page, prefix = 'live'): Promise<void> {
     await expect.poll(() => count('shown'), { timeout: 30_000 }).toBeGreaterThan(10);
     const first = await count('shown');
     await expect.poll(() => count('shown'), { timeout: 15_000 }).toBeGreaterThan(first + 10);
-    // 音 (AAC・Opus) を WASM で解けている
+    // 音 (AAC・Opus) を WASM でデコードできている
     await expect.poll(() => count('audio'), { timeout: 15_000 }).toBeGreaterThan(0);
     // 絵が動いている (testsrc2 の模様が流れる)
     const one = await canvas.screenshot();
@@ -115,7 +115,7 @@ test.describe('互換モード', () => {
         await wakeControls(page, 'live-frame');
         await play.click();
         await expect(play).toHaveAttribute('aria-label', '一時停止');
-        // 遡れないので帯は出さない
+        // 遡れないのでシークバーは出さない
         await expect(page.getByTestId('live-seek')).toHaveCount(0);
     });
 
@@ -197,8 +197,8 @@ test.describe('互換モードの追っかけ', () => {
         test.setTimeout(180_000);
         /*
          * **録っている最中に観る。** 追っかけは録っている最中だけで、録り終えた録画は観る画面へ送られる
-         * (25-chase と同じく、地上波のいまの番組 (偽番組は30分) を録る)。焼きは失敗させておく
-         * (止めたあと焼けると元の TS が無くなり、頼み直しが断られる)
+         * (25-chase と同じく、地上波のいまの番組 (偽番組は30分) を録る)。エンコードは失敗させておく
+         * (止めたあとエンコードできると元の TS が無くなり、頼み直しが断られる)
          */
         writeFileSync(stack.failFile, '1');
         // 入れてあり、注意も見せたことにしておく (出し方はライブのテストが見る)
@@ -247,11 +247,11 @@ test.describe('互換モードの追っかけ', () => {
         await expect.poll(shown, { timeout: 15_000 }).toBeGreaterThan(paused + 10);
 
         /*
-         * **頼み直したあとも居場所が飛ばない。** 帯を動かすと (溢れの読み直しと同じく) 居る場所から
+         * **頼み直したあとも居場所が飛ばない。** シークバーを動かすと (溢れの読み直しと同じく) 居る場所から
          * 頼み直す。新しい流れの時刻は 0 から数え直しになるので、居場所はサーバが返す頭 (`timeline`) +
          * 新しい流れの中の秒になる。前の流れの秒を足したまま先へ飛んでいないことを見る
          */
-        // 居場所は読みものの「m:ss / m:ss」の左 (帯の値は録れている長さで頭打ちになるので使わない)
+        // 居場所は読みものの「m:ss / m:ss」の左 (シークバーの値は録れている長さで頭打ちになるので使わない)
         const status = page.getByTestId('chase-controls').getByText(/^\d+:\d\d \/ \d+:\d\d$/);
         const where = async () => {
             const text = (await status.textContent()) ?? '';
@@ -260,7 +260,7 @@ test.describe('互換モードの追っかけ', () => {
         };
         await expect.poll(where, { timeout: 30_000 }).toBeGreaterThanOrEqual(8);
         const before = await where();
-        // 帯を動かすのと同じ (`seekBy`)。頭へ戻す。押したボタンに居ると矢印は効かない (`keys.ts`) ので外す
+        // シークバーを動かすのと同じ (`seekBy`)。頭へ戻す。押したボタンに居ると矢印は効かない (`keys.ts`) ので外す
         await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
         await page.keyboard.press('ArrowLeft');
         // 頼んだ所へ戻り、そこから進む。3秒後も、前の居場所より手前に居る (前の流れの秒を足していない)

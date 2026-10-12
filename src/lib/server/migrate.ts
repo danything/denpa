@@ -185,7 +185,7 @@ async function fetchRows(): Promise<Row[]> {
              WHERE r.isRecording = 0
              ORDER BY r.startAt`,
         )) as Row[];
-        // 1つの録画に生TSとエンコード済みが両方あることがある。エンコード済みを優先
+        // 1つの録画に元のTSとエンコード済みが両方あることがある。エンコード済みを優先
         const best = new Map<number, Row>();
         for (const row of rows) {
             const current = best.get(row.id);
@@ -216,7 +216,7 @@ function temporaryPath(dir: string, sourceId: number, extension: string): string
 /**
  * 前の実行が取り残した書きかけを消す。
  *
- * 置き場は生TSの置き場の直下と、保存先のシリーズのフォルダ (`libraryPath` の形)。
+ * 置き場は元のTSの置き場の直下と、保存先のシリーズのフォルダ (`libraryPath` の形)。
  * 走るのは一度に1つだけ (`start`) なので、ここで見つかるものは誰も書いていない
  */
 export function sweepTemporaries(): number {
@@ -326,12 +326,12 @@ export async function importOne(
     const parsed = parseTitle(name);
 
     /*
-     * 生TSは保存先ではなく作業領域へ置く。
+     * 元のTSは保存先ではなく作業領域へ置く。
      *
      * EPGStation の video_file.type は 'ts'(未エンコード) か 'encoded'。
-     * 生TSを保存先に置くと denpa からは「エンコード済み」に見えてしまい、
+     * 元のTSを保存先に置くと denpa からは「エンコード済み」に見えてしまい、
      * 録り直せず、プレイヤーにも巨大な MPEG-2 が並ぶ。denpa 自身が録ったときと
-     * 同じ形 (生TSは raw、完成品は encoded) に揃える
+     * 同じ形 (元のTSは raw、完成品は encoded) に揃える
      */
     const raw = row.fileType !== 'encoded';
     // 拡張子の無い名前で `lastIndexOf('.')` が -1 になると、末尾の1文字を拡張子と読んでしまう
@@ -341,7 +341,7 @@ export async function importOne(
 
     /*
      * 最終の名前は録画IDから決まる (行を入れるまで分からない) が、置くフォルダは
-     * 決まっている (生TSの置き場の直下か、保存先のシリーズのフォルダ)。
+     * 決まっている (元のTSの置き場の直下か、保存先のシリーズのフォルダ)。
      * そこに書きかけを作るので、あとの rename は同じファイルシステムの中で済む
      */
     const dir = dirname(
@@ -570,7 +570,7 @@ async function importRules(connection: SQL, options: MigrateOptions): Promise<vo
             continue;
         }
 
-        // 焼き方は引き継がない。エンコードもCMも全体設定で、焼くときに読む
+        // エンコード方法は引き継がない。エンコードもCMも全体設定で、エンコードするときに読む
         orm()
             .insert(rules)
             .values({
@@ -688,7 +688,7 @@ async function run(options: MigrateOptions): Promise<void> {
 
 /**
  * 設定画面から呼ぶ入口。走り出したことだけ返し、終わるのは待たない。
- * 二重に走ると同じファイルを2つのコピーが掴むので、走っている間は断る。
+ * 二重に走ると同じファイルを2つのコピーが触るので、走っている間は断る。
  */
 export function start(options: MigrateOptions): { started: boolean; message: string } {
     if (status_.state === 'running') {

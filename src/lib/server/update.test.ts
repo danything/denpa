@@ -23,7 +23,7 @@ const release = (tag: string, extra: Record<string, unknown> = {}) => ({
     ...extra,
 });
 
-describe('版の札', () => {
+describe('版のタグ', () => {
     test('v 付きでも無しでも読む。試し版と dev は読めない', () => {
         expect(parseVersion('v1.7.1')).toEqual([1, 7, 1]);
         expect(parseVersion('1.10.0')).toEqual([1, 10, 0]);

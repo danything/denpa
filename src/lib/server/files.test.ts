@@ -173,7 +173,7 @@ describe('実体との照合', () => {
     }
 
     /*
-     * 作業ファイルは `<入力>.…` に置く。生TSを残さない設定だと TS が消えたあとも
+     * 作業ファイルは `<入力>.…` に置く。元のTSを残さない設定だと TS が消えたあとも
      * 付き添いだけが居座り、録るたびに積もる
      */
     test('連れ合いの消えた作業ファイルを片付ける', () => {
@@ -229,10 +229,10 @@ describe('実体との照合', () => {
      */
     test('作りたての空フォルダは畳まない', () => {
         fresh();
-        mkdirSync(join(config.encodedDir, '焼いている番組'), { recursive: true });
+        mkdirSync(join(config.encodedDir, 'エンコードしている番組'), { recursive: true });
 
         expect(reconcile().pruned).toBe(0);
-        expect(existsSync(join(config.encodedDir, '焼いている番組'))).toBe(true);
+        expect(existsSync(join(config.encodedDir, 'エンコードしている番組'))).toBe(true);
     });
 
     /** 動画の残っているフォルダは、当然そのまま */
@@ -258,14 +258,14 @@ describe('実体との照合', () => {
     });
 
     /*
-     * **焼いている途中のものに触らない。**
+     * **エンコードしている途中のものに触らない。**
      *
      * エンコードは出来上がるまで `<最終の名前>.encoding` に書いていて、その `.mkv` は
      * まだどこにも無い。名前だけで見ると「連れ合いの居ない付き添い」そのものなので、
      * 実機では5分ごとの照合がこれを消し、ffmpeg が書き終えて置き換えるところで
      * `ENOENT ... rename` になっていた
      */
-    test('焼いている途中の .encoding は消さない', () => {
+    test('エンコードしている途中の .encoding は消さない', () => {
         fresh();
         const working = put(config.encodedDir, '番組/番組 - 1.mkv.encoding', false);
 
@@ -286,11 +286,11 @@ describe('実体との照合', () => {
         put(config.rawDir, '番組.m2ts');
         put(config.rawDir, '番組.m2ts.cut.m2ts', false);
 
-        // 生TSのほうはDBに無いので1件。書きたての .cut.m2ts は数えない
+        // 元のTSのほうはDBに無いので1件。書きたての .cut.m2ts は数えない
         expect(reconcile().strays).toBe(1);
     });
 
-    /** 両方のコーデックを焼いた録画を1件入れる。返り値は {av1, h264} の実パス */
+    /** 両方のコーデックをエンコードした録画を1件入れる。返り値は {av1, h264} の実パス */
     function twoCodec(): { av1: string; h264: string } {
         const av1 = put(config.encodedDir, '二本立て/二本立て - 1.mkv');
         const h264 = put(config.encodedDir, '二本立て/二本立て - 1 [H264].mkv');
@@ -313,7 +313,7 @@ describe('実体との照合', () => {
     }
 
     /*
-     * **両方焼いた録画の H.264 は「DBに無い動画」ではない。** known 集合に
+     * **両方エンコードした録画の H.264 は「DBに無い動画」ではない。** known 集合に
      * `alt_path` も入れておかないと、もう一方が野良動画として数えられてしまう
      */
     test('もう一方のコーデックは stray に数えない', () => {

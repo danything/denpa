@@ -2,7 +2,7 @@ import { json } from '@sveltejs/kit';
 import { issue } from '#lib/server/tickets.js';
 
 /**
- * ライブ視聴の WebSocket に繋ぐための札を1枚配る。
+ * ライブ視聴の WebSocket に繋ぐためのチケットを1枚配る。
  *
  * **ここは普通の HTTP なので、認証がそのまま効く** (`hooks.server.ts`)。
  * WebSocket の握手にはブラウザが `Authorization` を付けてくれないため、

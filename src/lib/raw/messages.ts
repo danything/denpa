@@ -1,19 +1,19 @@
 /**
  * 画面 (`engine.ts`) と worker (`worker.ts`) の取り決め。**両側から読む。**
  *
- * 分け方: TS を解く・絵を解いて描く・音を解くのは worker、**音を鳴らすのと時計は画面**
+ * 分け方: TS をデコードする・絵をデコードして描く・音をデコードするのは worker、**音を鳴らすのと時計は画面**
  * (Web Audio は worker から触れない)。時計は画面から worker へ流す (`clock`)。
  */
 
 /**
  * 何を受け取るか。**worker を作るときに決める** (描く先の canvas の使い方が違うので、途中で替えない)
  *
- * - `ts-mpeg2` … 生の TS (`CHANNEL.rawTs`)。MPEG-2 と AAC を WASM で解き、WebGL2 で描く
- * - `fmp4` … ライブ・追っかけの焼いたもの (`CHANNEL.videoInit` / `videoMedia`)。映像は WebCodecs の
- *   VideoDecoder で解いて 2D で描き、音 (AAC・Opus) は WASM で解く (`fmp4.ts`)。
+ * - `ts-mpeg2` … 元の TS (`CHANNEL.rawTs`)。MPEG-2 と AAC を WASM でデコードし、WebGL2 で描く
+ * - `fmp4` … ライブ・追っかけのエンコードしたもの (`CHANNEL.videoInit` / `videoMedia`)。映像は WebCodecs の
+ *   VideoDecoder でデコードして 2D で描き、音 (AAC・Opus) は WASM でデコードする (`fmp4.ts`)。
  *   **<video> の再生が止まる端末** (テスラの車載ブラウザ) のための道
  * - `mkv` … 端末に保存した録画 (エンコード済みの Matroska)。互換モードの観る画面で、読んだコマを `fmp4` と
- *   同じ道で解いて描く (`mkv.ts`)。音は選んだ1本 (`audio` の何本目か)
+ *   同じ道でデコードして描く (`mkv.ts`)。音は選んだ1本 (`audio` の何本目か)
  */
 export type RawInput = 'ts-mpeg2' | 'fmp4' | 'mkv';
 
@@ -23,7 +23,7 @@ export type ToWorker =
           type: 'init';
           /** 描く先。`transferControlToOffscreen` で渡す */
           canvas: OffscreenCanvas;
-          /** 復号器の置き場 (`/api/live/mpeg2`)。worker からは絶対 URL で読む */
+          /** デコーダの置き場 (`/api/live/mpeg2`)。worker からは絶対 URL で読む */
           decoder: string;
           input: RawInput;
           /**
@@ -44,11 +44,11 @@ export type ToWorker =
     | { type: 'clock'; pts: number | null; at: number }
     /**
      * 選局し直した・録画で飛んだ。**前の局のものは全部捨てる。** `from` (90kHz。届くものの PTS の物差しで、
-     * 生の TS なら一周の中) があれば、それより前のコマは解くだけで描かない — サーバは飛び先の少し手前
+     * 元の TS なら一周の中) があれば、それより前のコマはデコードするだけで描かない — サーバは飛び先の少し手前
      * (鍵のコマ・1 秒前) から流すので、手前の絵 (CM を飛ばしたなら CM の絵) を出さないため
      */
     | { type: 'reset'; from?: number | null }
-    /** 何本目の音声を解くか (`AudioTrack.stream`) */
+    /** 何本目の音声をデコードするか (`AudioTrack.stream`) */
     | { type: 'audio'; index: number }
     /**
      * いま出しているコマを1枚ください (切り抜き)。**絵は worker の canvas に居て、
@@ -66,10 +66,10 @@ export type ToWorker =
 
 /** worker → 画面 */
 export type FromWorker =
-    /** 使えなくなった (復号器が無い・音が解けない・間に合わない。`budget.ts`)。**画面は焼いたものに戻る** */
+    /** 使えなくなった (デコーダが無い・音がデコードできない・間に合わない。`budget.ts`)。**画面はエンコードしたものに戻る** */
     | { type: 'fail'; reason: string }
     /**
-     * 解けた音1コマ。面ごとの float (-1〜1)。**時刻は伸ばした PTS** (`pes.unwrap`)
+     * デコードできた音1コマ。面ごとの float (-1〜1)。**時刻は伸ばした PTS** (`pes.unwrap`)
      */
     | {
           type: 'audio';

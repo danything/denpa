@@ -9,7 +9,7 @@ COPY package.json bun.lock* ./
 RUN bun install
 
 # ---------------------------------------------------------------------------
-# 放送の MPEG-2 と AAC をブラウザで解く WebAssembly (docs/stream.md §5.5「生で送る」)
+# 放送の MPEG-2 と AAC をブラウザでデコードする WebAssembly (docs/stream.md §5.5「生で送る」)
 #
 # **ブラウザには MPEG-2 の復号器が無い**ので、FFmpeg の mpeg2video と aac だけを組んで
 # 持ち込む。出てくるのは decoder.mjs と decoder.wasm の2つ (wasm 855KB + mjs 14KB で 870KB ほど) で、
@@ -68,7 +68,7 @@ EXPOSE 5173
 CMD ["bun", "run", "dev", "--host", "0.0.0.0", "--port", "5173"]
 
 # ---------------------------------------------------------------------------
-# E2E用。Playwright のブラウザを焼き込む
+# E2E用。Playwright のブラウザを入れる
 # ---------------------------------------------------------------------------
 FROM dev AS test
 ENV CI=1
@@ -102,11 +102,11 @@ CMD ["bun", "scripts/capture-docs.ts"]
 
 # ---------------------------------------------------------------------------
 # ffmpeg (自前ビルド。AV1 libsvtav1/dav1d + H.264 x264 + Opus + Intel GPU (VA-API/QSV)。
-# 上流に投げる直しがあれば patches/ から当てる。ARIB 字幕は解かずに写すだけなので
+# 上流に投げる直しがあれば patches/ から当てる。ARIB 字幕はデコードせずに写すだけなので
 # 復号器 (libaribcaption) は組み込まない — `-c:s copy` に復号器は要らない)
 # ---------------------------------------------------------------------------
 # **debian は digest で固定する** (ffmpeg / runtime の2つとも同じもの)。
-# 札 (`trixie-slim`) だけだと月に何度か中身が入れ替わり、CI は `pull: true` なので
+# タグ (`trixie-slim`) だけだと月に何度か中身が入れ替わり、CI は `pull: true` なので
 # その日の push が — CSS を1行直しただけでも — ffmpeg の組み直し (10分強) に巻き込まれる。
 # 固定しておけば組み直すのは Renovate が digest を上げる PR のときだけになる
 FROM docker.io/library/debian:trixie-slim@sha256:a29215f6a35e51e22adffa17f89e9d2ef06214e64a2bad10d765c46aea49f11f AS ffmpeg
@@ -120,17 +120,17 @@ ARG TARGETARCH
 # 一度これで ffmpeg の取得に失敗してデプロイが止まった
 ENV CURL="curl -fsSL --retry 5 --retry-delay 5 --retry-all-errors --connect-timeout 20"
 
-# libvpl-dev / libva-dev は Intel の GPU (QSV) 向け (docs/encode.md「GPU で焼く」)。
+# libvpl-dev / libva-dev は Intel の GPU (QSV) 向け (docs/encode.md「GPU でエンコードする」)。
 # ffmpeg に libvpl (QSV = h264_qsv / av1_qsv) を組み込み、実行イメージにドライバを
-# 入れてある。コンテナから /dev/dri が見えれば、起動時に server/hwenc.ts が試し焼きで
-# 見つけて使い、無ければソフトウェア (libsvtav1 / libx264) で焼く。
+# 入れてある。コンテナから /dev/dri が見えれば、起動時に server/hwenc.ts が試しのエンコードで
+# 見つけて使い、無ければソフトウェア (libsvtav1 / libx264) でエンコードする。
 # **libva は QSV の下に必ず居る** (Linux では libvpl → libmfx-gen → libva → /dev/dri)。
 # vaapi も有効にしてあるのは、QSV が初期化できない機種の逃げ道 (h264_vaapi) のため
 #
 # **QSV (libvpl) は amd64 だけ。** Debian の libvpl / libmfx-gen / intel-media-va-driver は
 # amd64 にしか無い (Intel の GPU が載る arm の機械は無い)。arm64 では libvpl を外して組み、
-# VA-API だけ残す — 起動時の試し焼き (server/hwenc.ts) で QSV が落ちて、VA-API か
-# ソフトウェアで焼くだけなので、denpa の側は何も変えない
+# VA-API だけ残す — 起動時の試しのエンコード (server/hwenc.ts) で QSV が落ちて、VA-API か
+# ソフトウェアでエンコードするだけなので、denpa の側は何も変えない
 ENV DEV="curl ca-certificates build-essential cmake pkg-config nasm patch zlib1g-dev libopus-dev libx264-dev libdav1d-dev libva-dev"
 
 # renovate: datasource=github-tags depName=FFmpeg/FFmpeg extractVersion=^n(?<version>.*)$
@@ -193,7 +193,7 @@ ENV NODE_ENV=production \
 # 投げる(カードリーダーを叩くのはあちら)。recisdb も libpcsclite も要らない
 # libvpl2 + libmfx-gen1.2 (QSV のランタイム) + libva* + intel-media-va-driver (iHD) は
 # Intel の GPU (QSV / VA-API) 向け (上の ffmpeg 段の説明)。GPU の無い機械でも害は無い
-# (起動時の試し焼きが落ちて、ソフトウェアで焼くだけ)。**Intel の3つは amd64 だけ**
+# (起動時の試しのエンコードが落ちて、ソフトウェアでエンコードするだけ)。**Intel の3つは amd64 だけ**
 # (ffmpeg 段の説明。arm64 の Debian には無い)。libva は arm64 にも入れる
 ARG TARGETARCH
 RUN case "${TARGETARCH}" in \

@@ -89,8 +89,8 @@ test.describe('予約の細かい指定', () => {
      *
      * 番組ごとの指定は置いていないし、**予約にも写さない。** 写していた頃は
      * 予約を立てた時点の値で固まり、設定を変えても直らなかった (実機で、
-     * 「生TSも残す」を ON にしたのに既に立っていた予約24本が OFF のままだった)。
-     * 実際に読むのは**焼くとき** (encoder.ts)。
+     * 「元のTSも残す」を ON にしたのに既に立っていた予約24本が OFF のままだった)。
+     * 実際に読むのは**エンコードするとき** (encoder.ts)。
      */
     test('録画のしかたは設定画面だけで決める。番組ごとの指定は無い', async ({ page, request }) => {
         await setRecording(request, { keepOriginal: true });
@@ -107,7 +107,7 @@ test.describe('予約の細かい指定', () => {
                 `[data-testid="reservation-row"][data-program-id="${target.programId}"]`,
             );
             await expect(reservation).toHaveCount(1);
-            // 予約の行に焼き方の札は出さない。焼くときの設定で決まるので、
+            // 予約の行にコーデックのラベルは出さない。エンコードするときの設定で決まるので、
             // 立てた時点の値を出すと設定を変えたときに嘘になる
             await expect(reservation).not.toContainText('元のTSも残す');
 
@@ -281,9 +281,9 @@ test.describe('予約の細かい指定', () => {
 });
 
 /**
- * **押したつもりが「掴んで動かした」になっていた。**
+ * **押したつもりが「ドラッグして動かした」になっていた。**
  *
- * 番組表は掴んで動かせる (`dragScroll`)。動かしたあとのクリックで番組を開いては
+ * 番組表はドラッグして動かせる (`dragScroll`)。動かしたあとのクリックで番組を開いては
  * 困るので、動いていたら食う作りにしてある。その敷居が 5px しかなく、しかも指と
  * ペンにも掛かっていたため、**スマホでマスを押しても詳細が出なかった** (実機)。
  * 指は押しただけで数px ずれる。
@@ -295,7 +295,7 @@ test.describe('番組表のマスを押す', () => {
         await syncEpg(request);
     });
 
-    test('少しずれても開く。掴んで動かしたときだけ開かない', async ({ page }) => {
+    test('少しずれても開く。ドラッグしたときだけ開かない', async ({ page }) => {
         await goto(page, '/guide?type=GR');
         const [target] = await upcoming(page);
         const cell = cellOf(page, target.programId);
@@ -320,9 +320,9 @@ test.describe('番組表のマスを押す', () => {
         await expect(detail).toHaveCount(0);
 
         /*
-         * はっきり掴んで動かしたときは開かない (動かした先の番組が開いてしまう)。
+         * はっきりドラッグしたときは開かない (動かした先の番組が開いてしまう)。
          *
-         * **送る向きは余地のあるほうへ。** 番組表は 4:00 から翌 4:00 までの帯なので、
+         * **送る向きは余地のあるほうへ。** 番組表は 4:00 から翌 4:00 までの範囲なので、
          * 深夜に走らせると**もう下端まで送られていて、それ以上は動かない** —
          * 上へ送ると決め打っていた頃は 01:37 に落ちた (実際に CI で落ちた)。
          * マウスを上へ動かすと中身は下へ送られる (`scrollTop` が増える)
@@ -340,14 +340,14 @@ test.describe('番組表のマスを押す', () => {
         await page.mouse.up();
         await expect(detail).toHaveCount(0);
         const after = await grid.evaluate((el) => el.scrollTop);
-        if (step < 0) expect(after, '掴んで下へ送れていない').toBeGreaterThan(room.top);
-        else expect(after, '掴んで上へ送れていない').toBeLessThan(room.top);
+        if (step < 0) expect(after, 'ドラッグで下へ送れていない').toBeGreaterThan(room.top);
+        else expect(after, 'ドラッグで上へ送れていない').toBeLessThan(room.top);
     });
 
     /*
      * **指はブラウザに任せる。** これが実機で出ていたほう。
      *
-     * 押しただけのつもりでも指は数px ずれるので、掴んで動かす仕掛けが
+     * 押しただけのつもりでも指は数px ずれるので、ドラッグで動かす仕掛けが
      * タップを食っていた。`touchscreen.tap` はぴたりと押してしまい
      * (ずれないので古い版でも通る)、ずれを作れないので、触った印を自分で流す。
      */

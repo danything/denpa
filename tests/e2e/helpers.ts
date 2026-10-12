@@ -159,7 +159,7 @@ export async function upcoming(page: Page): Promise<[Cell, ...Cell[]]> {
     return atLeastOne(soon, 'これから始まる番組');
 }
 
-/** 番組表のマスをIDで掴む。番組が終わると並びがずれるので位置では追わない */
+/** 番組表のマスをIDで探す。番組が終わると並びがずれるので位置では追わない */
 export function cellOf(page: Page, programId: string) {
     return page.locator(`[data-testid="grid-program"][data-program-id="${programId}"]`);
 }
@@ -243,7 +243,7 @@ export async function recordOne(
 export async function setRecording(
     request: APIRequestContext,
     patch: {
-        /** 焼くコーデック。両方焼くなら `['av1', 'h264']`、焼かないなら `[]`。省けば av1 */
+        /** エンコードするコーデック。両方エンコードするなら `['av1', 'h264']`、エンコードしないなら `[]`。省けば av1 */
         codecs?: string[];
         cmCut?: string;
         keepOriginal?: boolean;
@@ -377,7 +377,7 @@ export async function cancelAllReservations(page: Page): Promise<void> {
 /**
  * 操作列を出し直す。**触らないでいると 2.5 秒で引っ込む**ので
  * ([controls.svelte.ts](../../src/lib/components/player/controls.svelte.ts))、
- * 引っ込んでいる間の帯は押せません (`pointer-events-none`)。
+ * 引っ込んでいる間の操作バーは押せません (`pointer-events-none`)。
  *
  * 開いた直後は出ているため、続けて押すだけのテストは通ってしまいます。
  * **待ちを挟んだ先で押すものは、ここで起こしてから押すこと。**
@@ -435,7 +435,7 @@ export async function overlayTroubles(page: Page, stage: string): Promise<string
 
 /**
  * **字幕は操作列の下に潜らない** (`PlayerStage` の持ち上げ)。字幕の canvas に「下の方に
- * 字が載っている」(`data-ink`。描く係が書くもの) と書き込み、字の下端が帯の上端より
+ * 字が載っている」(`data-ink`。描く係が書くもの) と書き込み、字の下端が操作バーの上端より
  * 上へ来るのを待つ。偽の放送には字幕が乗っていないので、載っている範囲だけを作る
  */
 export async function captionsClearOfBar(page: Page, canvas: string, bar: string): Promise<void> {
@@ -534,13 +534,13 @@ export function fakeDataBroadcast(extra = ''): Record<string, unknown>[] {
     ];
 }
 
-/** 掴んでおいた要素 (`holdMedia`)。ページの中の `window.__media` */
+/** 取っておいた要素 (`holdMedia`)。ページの中の `window.__media` */
 interface HeldMedia {
     __media: { video: HTMLElement; captions: HTMLCanvasElement; stage: HTMLElement };
 }
 
 /**
- * 映像・字幕・枠の要素を掴んでおく (`captionsSeenInDataWindow` が使う)。d を押す前に呼ぶ
+ * 映像・字幕・枠の要素を取っておく (`captionsSeenInDataWindow` が使う)。d を押す前に呼ぶ
  */
 export async function holdMedia(page: Page, video: string, captions: string, stage: string): Promise<void> {
     await page.evaluate(
@@ -666,12 +666,12 @@ export async function captionsSeenInDataWindow(page: Page): Promise<void> {
     ).toBeLessThan(0.1);
 }
 
-/** 字幕の canvas を掴んでおく先 (`holdCaptions`) */
+/** 字幕の canvas を取っておく先 (`holdCaptions`) */
 interface HeldCaptions {
     __captions: HTMLCanvasElement;
 }
 
-/** 字幕の canvas を掴んでおく */
+/** 字幕の canvas を取っておく */
 export async function holdCaptions(page: Page, testid: string): Promise<void> {
     await page.evaluate((id) => {
         (window as unknown as HeldCaptions).__captions = document.querySelector(
@@ -687,7 +687,7 @@ export async function holdCaptions(page: Page, testid: string): Promise<void> {
  * 祖先の `transform: scale` 込み。`object-fit: contain` なら収めた中身) × `devicePixelRatio` を
  * 比べる。食い違うと、描いた絵がブラウザに引き伸ばされて字がぼやける — データ放送の小窓の中で
  * 字幕がぼやけていた (面ごと `scale` で伸ばしていた頃と、`%` の大きさで端数が出るとき)。
- * `holdCaptions` で掴んでから呼ぶ。描いていない (`data-drawn` が無い) うちは待つ
+ * `holdCaptions` で取ってから呼ぶ。描いていない (`data-drawn` が無い) うちは待つ
  */
 export async function expectSharpCaptions(page: Page, where: string): Promise<void> {
     await expect

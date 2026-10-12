@@ -12,10 +12,10 @@ using Microsoft.AspNetCore.Http.Features;
  * - B-CASカード … USB のリーダーも px4d の内蔵リーダーも、こちらが直に叩く (CardLinks.cs。
  *   macOS / Windows の USB リーダーだけは OS の PC/SC 越し)
  * - チューナーデバイス … `/dev/dvb/*` と `/dev/bus/usb` が見えているのはこちらだけ
- * - 選局そのもの … デバイスを掴んで ioctl で選局する (Tuning.cs)。px4-userland /
+ * - 選局そのもの … デバイスを使って ioctl で選局する (Tuning.cs)。px4-userland /
  *   siano-userland の機材は同梱のものに USB を叩かせる (Px4.cs / Siano.cs)
  *
- * **中身は読まない。** NIT も SDT も EIT も解かず、TS をそのまま流す。
+ * **中身は読まない。** NIT も SDT も EIT も解析せず、TS をそのまま流す。
  * 読むのは denpa (`src/lib/ts`) で、局を選り分けるのも番組表を組み立てるのも、
  * チャンネルスキャンで見つかった局を判断するのもあちらの仕事 (docs/agent.md)。
  */
@@ -35,8 +35,8 @@ var port = int.TryParse(Environment.GetEnvironmentVariable("AGENT_PORT"), out va
     ? configured
     : 25252;
 /*
- * 生TSの置き場。**denpa と同じ変数で決める** (`RAW_DIR`、無ければ `MEDIA_DIR/raw`、どちらも無ければ
- * `/media/raw`)。掛かったまま録れたTSを後から解く (/denpa/decode) ときに読むので、denpa と
+ * 元のTSの置き場。**denpa と同じ変数で決める** (`RAW_DIR`、無ければ `MEDIA_DIR/raw`、どちらも無ければ
+ * `/media/raw`)。掛かったまま録れたTSを後から復号する (/denpa/decode) ときに読むので、denpa と
  * 同じ実体を同じ名前で見せる。ここの外のファイルは頼まれても触らない
  */
 var recorded = Path.GetFullPath(
@@ -120,14 +120,14 @@ app.MapGet("/denpa/stream", async (HttpContext http) =>
     }
     catch (TunerPool.TunerBusyException error)
     {
-        // 掴めなかった。**409 で返す**ので、呼んだ側は待って掛け直せる
+        // チューナーを確保できなかった。**409 で返す**ので、呼んだ側は待って掛け直せる
         await Respond.Error(http, error.Message, 409);
         return;
     }
     catch (Exception error)
     {
         /*
-         * 掴めたが選局できなかった (同期しない・デバイスが開けない…)。
+         * 確保できたが選局できなかった (同期しない・デバイスが開けない…)。
          * **理由を必ず残す。** 空の 500 を返していたせいで、総当たりの
          * スキャンが「選局できません (500)」としか言えず、何が起きているのか
          * 分からなかった (docs/agent.md)
@@ -147,7 +147,7 @@ app.MapGet("/denpa/stream", async (HttpContext http) =>
      * 落ちた回をどれも接続を壊して知らせていた頃は、選局が始まった直後に
      * 落ちると**本文どころか状態行すら送っていない**のに接続だけ切れていて、
      * 呼んだ側には `socket connection was closed unexpectedly` としか届かず、
-     * 電波なのか掴み損ねなのか設定なのかが分からなかった。
+     * 電波なのか取り損ねなのか設定なのかが分からなかった。
      */
     var sent = false;
 
@@ -283,7 +283,7 @@ app.MapGet("/denpa/channels", (HttpContext http) => Respond.Write(http, config.L
 /*
  * スキャンの結果を預かる。**書いてくるのは denpa。**
  *
- * 総当たりの選局はこちらに頼まれるが、NIT も SDT も解かないので「何が居たか」は
+ * 総当たりの選局はこちらに頼まれるが、NIT も SDT も解析しないので「何が居たか」は
  * 分からない。読むのはあちらの仕事で、こちらは控えを持って配るだけ。
  */
 app.MapPut("/denpa/channels", async (HttpContext http) =>
@@ -307,7 +307,7 @@ app.MapPut("/denpa/channels", async (HttpContext http) =>
     Log.Write($"チャンネルを保存しました: {found.Count} 件 ({string.Join(", ", types)})");
     /*
      * 局が入れ替わった。denpa は**これを合図に取り込み直す。**
-     * こちらは何も再起動しない (掴んでいる録画も切れない)
+     * こちらは何も再起動しない (録画中のものも切れない)
      */
     events.Emit("channels");
     await Respond.Write(http, merged);

@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { eitSection, packetize, stream } from '../ts/synth';
 
 /**
- * 半角に寄せて取り込んでいた頃の録画を、生TSの EIT から放送のとおりの幅に戻す。
+ * 半角に寄せて取り込んでいた頃の録画を、元のTSの EIT から放送のとおりの幅に戻す。
  * 環境変数ではなく設定そのものを書き換えている (files.test.ts と同じ理由)
  */
 const { config } = await import('./config');
@@ -110,7 +110,7 @@ describe('幅だけ戻す (restoredText)', () => {
     });
 });
 
-describe('生TSの EIT を読む (readBroadcastText)', () => {
+describe('元のTSの EIT を読む (readBroadcastText)', () => {
     test('「次」として流れていた番組も event_id で拾う', async () => {
         expect(await readBroadcastText(tsFile('pf.ts'), 1024, 77, true)).toEqual({
             name: AIRED.name,
@@ -143,7 +143,7 @@ describe('録画を見て回る (restoreWidths)', () => {
         updated_at: at,
     });
 
-    test('生TSから戻す。保存先の名前は動かさない。見た録画は二度と読まない', async () => {
+    test('元のTSから戻す。保存先の名前は動かさない。見た録画は二度と読まない', async () => {
         orm()
             .insert(services)
             .values({
@@ -162,7 +162,7 @@ describe('録画を見て回る (restoreWidths)', () => {
             .insert(recordings)
             .values([
                 row(1, tsFile('rec1.ts')),
-                // 生TSが消えたもの
+                // 元のTSが消えたもの
                 row(2, null),
                 // 取り込み直された番組表から録ったもの (もう全角)
                 row(3, join(dir, 'missing.ts'), { name: AIRED.name, description: AIRED.description }),

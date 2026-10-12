@@ -1,8 +1,8 @@
 /**
- * 偽 ffmpeg のライブの出口 (焼いたもの)。**作り置きの fMP4 を、時刻を進めながら繰り返し流す。**
+ * 偽 ffmpeg のライブの出口 (エンコードしたもの)。**作り置きの fMP4 を、時刻を進めながら繰り返し流す。**
  *
  * 偽 ffmpeg はふだん入ってきた TS をそのまま流すだけで、画面の MSE は何も映さない (絵が要らない
- * テストばかりなので)。互換モード (canvas に描く道。`src/lib/raw/fmp4.ts`) は**実際に解いて描く
+ * テストばかりなので)。互換モード (canvas に描く道。`src/lib/raw/fmp4.ts`) は**実際にデコードして描く
  * ところまで**見たいので、本物の ffmpeg に書かせた fMP4 を流す。組はライブと同じ (H.264 + AAC・AV1 + Opus):
  *
  *     ffmpeg -f lavfi -i testsrc2=size=320x180:rate=30 -f lavfi -i sine=frequency=440:sample_rate=48000 -t 2 \

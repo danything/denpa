@@ -39,7 +39,7 @@ async function hideBroken(page: Page): Promise<void> {
 
 /**
  * 読み取りだけのテストは**1本の録画を使い回す**。全テストが `recordOne`
- * (予約→録画→焼き上がり待ちで各15秒前後) を自前でやっていた頃は、この
+ * (予約→録画→エンコードの完了待ちで各15秒前後) を自前でやっていた頃は、この
  * ファイルだけで3分近く掛かり、e2e の一番遅いシャードそのものだった。
  * 録画を消すテストだけが自分のぶんを録る (使い回しの1本を壊さない)
  */
@@ -65,9 +65,9 @@ test.describe('録画を観る', () => {
         await expect(page).toHaveURL(new RegExp(`/watch/${id}$`));
 
         /*
-         * **観るのは焼いたものだけ。** 生TSは MPEG-2 で、ブラウザに復号器が
-         * 無い (docs/stream.md §5.5)。名指ししていないと、焼いている最中は
-         * 生TSが返ってきて何も映らない
+         * **観るのはエンコードしたものだけ。** 元のTSは MPEG-2 で、ブラウザに復号器が
+         * 無い (docs/stream.md §5.5)。名指ししていないと、エンコードしている最中は
+         * 元のTSが返ってきて何も映らない
          */
         const video = page.getByTestId('watch-video');
         await expect(video).toHaveAttribute('src', `/api/recordings/${id}/file?source=encoded`);
@@ -80,14 +80,14 @@ test.describe('録画を観る', () => {
     });
 
     /*
-     * **番組表から消えても、ジャンルと音声の札は出る。** 録画の行は録り始めに
+     * **番組表から消えても、ジャンルと音声のラベルは出る。** 録画の行は録り始めに
      * 番組表から写している (recorder)。番組表の行は24時間で消えるので、そのあとは
      * この写しだけが頼り — なのに詳細の種を組み直すところで null に潰していて、
-     * **1日過ぎた録画だけ札が消えていた** (実機、2026-09-11)。
+     * **1日過ぎた録画だけラベルが消えていた** (実機、2026-09-11)。
      *
      * 番組表から引き直す口を 404 にして「消えたあと」を作る
      */
-    test('番組表から消えた録画でも、行が持っているジャンルと音声の札が出る', async ({ page, request }) => {
+    test('番組表から消えた録画でも、行が持っているジャンルと音声のラベルが出る', async ({ page, request }) => {
         test.setTimeout(180_000);
         const id = await watchable(page, request);
         await page.route('/api/programs/*', (route) => route.fulfill({ status: 404, body: '' }));
@@ -128,7 +128,7 @@ test.describe('録画を観る', () => {
     });
 
     /**
-     * **チャプターの位置は焼いたものから読む** (`api/recordings/<id>/chapters`)。
+     * **チャプターの位置はエンコードしたものから読む** (`api/recordings/<id>/chapters`)。
      *
      * 偽 ffmpeg が置くファイルにチャプターは入っていないので、ここで見るのは
      * 「無くても落ちない」こと。**取れないだけで観られなくなってはいけない**
@@ -199,7 +199,7 @@ test.describe('録画を観る', () => {
      * **字幕は canvas に描いて重ねる。** ライブ (`/live`) と同じやり方。
      *
      * 文字を `<track>` に渡す道は放送どおりには出ない (左右の位置・背景の箱・外字が落ちる)。
-     * 入れ物に入っている放送の字幕 (`S_ARIBSUB`) をサーバが解いて文字の配置で渡し
+     * 入れ物に入っている放送の字幕 (`S_ARIBSUB`) をサーバがデコードして文字の配置で渡し
      * (`captions.json`)、画面が描く (`caption-draw.ts`)
      */
     test('字幕が届き、持っているときだけボタンが出る', async ({ page, request }) => {
@@ -346,7 +346,7 @@ test.describe('録画を観る', () => {
         await expect(page.getByTestId('watch-video')).toBeVisible();
 
         /*
-         * 偽 ffmpeg の焼いたものは中身が無く、絵は来ない。**絵が来たことにする** —
+         * 偽 ffmpeg のエンコードしたものは中身が無く、絵は来ない。**絵が来たことにする** —
          * 大きささえあれば写せる (中身の無い映像は黒く写る)
          */
         await page.getByTestId('watch-video').evaluate((video) => {
@@ -516,10 +516,10 @@ test.describe('録画を観る', () => {
      * **右端は「観るのをやめる」ための列。** 閉じる・切り抜く・消すは、
      * 観ながら使う操作 (再生・音・字幕) とは押す頻度も並べる理由も違う。
      *
-     * 1本の帯に混ぜていた頃は押すものが12個並び、**番組の名前が入る幅が
-     * 残らなかった** — 実機のタブレットで名前が折り返し、帯が二段になっていた
+     * 1本の操作バーに混ぜていた頃は押すものが12個並び、**番組の名前が入る幅が
+     * 残らなかった** — 実機のタブレットで名前が折り返し、操作バーが二段になっていた
      */
-    test('閉じる・切り抜き・削除は右の列。下の帯は一段のまま', async ({ page, request }) => {
+    test('閉じる・切り抜き・削除は右の列。下の操作バーは一段のまま', async ({ page, request }) => {
         test.setTimeout(180_000);
         const id = await watchable(page, request);
 
@@ -529,7 +529,7 @@ test.describe('録画を観る', () => {
         const side = page.getByTestId('watch-side');
         for (const testid of ['watch-close', 'watch-shot', 'watch-delete']) {
             expect(await side.getByTestId(testid).count()).toBe(1);
-            // 下の帯には無い。同じことをする口を2つ置かない
+            // 下の操作バーには無い。同じことをする口を2つ置かない
             expect(await page.getByTestId('watch-controls').getByTestId(testid).count()).toBe(0);
         }
         /*
@@ -545,13 +545,13 @@ test.describe('録画を観る', () => {
         // 送り・戻しのボタンは置いていない (PCは矢印キー、指は端を素早く2回)
         await expect(page.getByTestId('watch-back')).toHaveCount(0);
         await expect(page.getByTestId('watch-forward')).toHaveCount(0);
-        // 再生停止は下の帯のいちばん左。ライブと同じ並び
+        // 再生停止は下の操作バーのいちばん左。ライブと同じ並び
         await expect(page.getByTestId('watch-controls').getByTestId('watch-play')).toBeVisible();
-        // 小窓 (PiP) も下の帯。並べても一段に収まる (下で見る)
+        // 小窓 (PiP) も下の操作バー。並べても一段に収まる (下で見る)
         await expect(page.getByTestId('watch-controls').getByTestId('watch-pip')).toBeVisible();
 
         /*
-         * **読むものが長くても帯を割らない。** 折り返すかは中身の幅で決まるので、
+         * **読むものが長くても操作バーを割らない。** 折り返すかは中身の幅で決まるので、
          * 縮む指定 (`truncate`) だけでは、縮む前に行が分かれてしまう
          */
         const rowHeight = async (): Promise<number> =>
@@ -635,7 +635,7 @@ test.describe('録画を観る', () => {
  * **スマホの縦で、全画面をやめて観る。** 枠は 390x224 しか無い (画面の端から端まで。
  * 余白の内側に置いていた頃は 358x224)。
  *
- * 48px の押すものを全部並べていた頃は、帯が折れて絵を覆い、右の縦列 (閉じる・
+ * 48px の押すものを全部並べていた頃は、操作バーが折れて絵を覆い、右の縦列 (閉じる・
  * 切り抜き・削除) がシークバーや再生ボタンに重なっていた (実機の報告)。狭い枠では
  * 40px に縮め、毎回は使わないもの (速さなど) を「ほか」(⋯) に畳み、右の列を右上の
  * 一行に寝かせる (`PlayerStage`)
@@ -691,7 +691,7 @@ test.describe('スマホの縦で観る', () => {
         // **絵は画面の端から端まで** (余白の内側に置くと 358px に縮み、周りに縁が出る)
         expect(shape.枠).toEqual({ left: 0, width: 390 });
         /*
-         * **下の帯は絵の下 (枠の外) に出す** (`PlayerStage` の `under`)。390x219 の絵に
+         * **下の操作バーは絵の下 (枠の外) に出す** (`PlayerStage` の `under`)。390x219 の絵に
          * 重ねていた頃は絵の半分を覆い、字幕に時刻が重なっていた。字幕の面も絵の中に収まる
          */
         await expect(stage).toHaveAttribute('data-under', '');
@@ -728,7 +728,7 @@ test.describe('スマホの縦で観る', () => {
         await page.getByTestId('watch-speed-option').filter({ hasText: '×1.5' }).tap();
         await expect(page.getByTestId('watch-speed')).toHaveText('1.5');
 
-        // 絵を覆わないので、帯は放っておいても引っ込まない (「ほか」も開いたまま)
+        // 絵を覆わないので、操作バーは放っておいても引っ込まない (「ほか」も開いたまま)
         await expect(bar).toHaveAttribute('data-shown', 'false', { timeout: 6000 });
         expect(await bar.evaluate((el) => getComputedStyle(el).opacity)).toBe('1');
         await expect(page.getByTestId('watch-speed')).toBeVisible();
@@ -737,12 +737,12 @@ test.describe('スマホの縦で観る', () => {
 
 /**
  * **横にしたスマホでは絵を画面いっぱいに** (`PlayerLayout`)。見出しと右の列を残すと
- * 絵の枠が 510x280 ほどしか無く、帯が二段に折れてシークバーが絵の真ん中に来ていた
+ * 絵の枠が 510x280 ほどしか無く、操作バーが二段に折れてシークバーが絵の真ん中に来ていた
  */
 test.describe('スマホの横で観る', () => {
     test.use({ hasTouch: true, isMobile: true, viewport: { width: 844, height: 390 } });
 
-    test('見出しを隠して絵が画面の高さいっぱい。帯は一段で下端に、右の列は下へ', async ({
+    test('見出しを隠して絵が画面の高さいっぱい。操作バーは一段で下端に、右の列は下へ', async ({
         page,
         request,
     }) => {
@@ -775,7 +775,7 @@ test.describe('スマホの横で観る', () => {
         expect(seek.y).toBeGreaterThan(390 * 0.6);
         // どのボタンも重ならず、絵の枠の中に丸ごと見える (右上の3つも)
         expect(await overlayTroubles(page, 'watch-stage')).toEqual([]);
-        // 帯は絵に重ねるので、下の方の字幕は帯の上まで持ち上がる
+        // 操作バーは絵に重ねるので、下の方の字幕は操作バーの上まで持ち上がる
         await captionsClearOfBar(page, 'watch-captions-canvas', 'watch-controls');
 
         // 右の列 (番組の中身) は消さずに絵の下へ。巻き取れば読める

@@ -162,7 +162,7 @@ public static class DeviceProbe
 
         /*
          * siano-userland の機材 (PX-S1UD など) は、**どのドライバにも繋がっていないものだけ。**
-         * smsusb が掴んでいれば上の /dev/dvb で見つかっている (Siano.cs)
+         * smsusb が使っていれば上の /dev/dvb で見つかっている (Siano.cs)
          */
         found.AddRange(SianoUserland.Detect());
 

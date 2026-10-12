@@ -39,7 +39,7 @@ export function load() {
     return {
         recording: current,
         /**
-         * GPU で焼けるか (server/hwenc.ts)。起動直後の確かめが終わっていなければ
+         * GPU でエンコードできるか (server/hwenc.ts)。起動直後の確かめが終わっていなければ
          * promise のまま渡す — 画面は「確認中」を出して待つ
          */
         hw: hw.probed ? forScreen(hw) : probe().then(forScreen),

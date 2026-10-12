@@ -24,7 +24,7 @@
 ```
 [一覧・詳細] ──押す──▶ ダウンロード (Background Fetch)
      │                     backgroundFetch.fetch() でブラウザに預ける (タブを閉じても続く)
-     │                     動画は端末が解けるコーデック (既定 AV1、無理なら H.264)
+     │                     動画は端末がデコードできるコーデック (既定 AV1、無理なら H.264)
      │                     SW の backgroundfetchsuccess → IndexedDB に blob 保存
      │
      ├─観る──▶ オンライン: /watch が blob を使う (字幕・チャプター・データ放送も)
@@ -71,7 +71,7 @@ DB 名 `denpa-offline`、ストア3つ (実体は [offline-db.ts](../src/lib/off
    `rec-<録画ID>-<source>-<試みの印>`。同じIDが生きている間は再登録できないので
    やり直しのたびに印を変え、前回の残骸は登録前に中止する。遅れて届く残骸の中止の知らせが
    新しい控えを消さないよう、SW 側は印を照合する。
-3. **進み具合は2秒おきに `get()` で掴み直す** (`watchProgress`)。`progress` イベントだけだと、
+3. **進み具合は2秒おきに `get()` で読み直す** (`watchProgress`)。`progress` イベントだけだと、
    遅い回線でブラウザが止めて再開したあとの通知が届かず、割合が張り付く。
 4. SW の `backgroundfetchsuccess` で IndexedDB へ移して `state='ready'`。
    `backgroundfetchfail` / `backgroundfetchabort` は `state='failed'` として残す。
@@ -80,11 +80,11 @@ DB 名 `denpa-offline`、ストア3つ (実体は [offline-db.ts](../src/lib/off
    (タブを開いたまま。進捗は一覧のバッジに出す)。機能検出は
    `'backgroundFetch' in swReg`。仕分けは SW の受け取りと共有 (`storeResponse`)。
 
-### どちらを落とすか — 端末が解けるコーデック
+### どちらを落とすか — 端末がデコードできるコーデック
 
-**既定は AV1** (`library_path`)。端末が AV1 を解けなければ H.264 (`alt_path`) に落とす。
+**既定は AV1** (`library_path`)。端末が AV1 をデコードできなければ H.264 (`alt_path`) に落とす。
 判定は `navigator.mediaCapabilities.decodingInfo()` (`video/mp4; codecs=av01.…` の
-`supported`)。H.264 しか解けない端末で `alt_path` が無い録画は、ダウンロード時に
+`supported`)。H.264 しかデコードできない端末で `alt_path` が無い録画は、ダウンロード時に
 「この端末では再生できない」と断る (落とせても観られないため)。
 
 ### 観る

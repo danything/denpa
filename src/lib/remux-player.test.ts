@@ -85,7 +85,7 @@ class FakeVideo extends EventTarget {
     }
 }
 
-/** 頼まれた位置から、2秒ずつの塊を `count` 個流す。`gate` が解けるまで2つ目から先を止められる */
+/** 頼まれた位置から、2秒ずつの塊を `count` 個流す。`gate` がデコードできるまで2つ目から先を止められる */
 let requests: string[] = [];
 let gate: Promise<void> = Promise.resolve();
 const realFetch = globalThis.fetch;
@@ -150,7 +150,7 @@ describe('その場で流すものの受け方 (remuxPlayer)', () => {
         expect(media().readyState).toBe('ended');
     });
 
-    test('溜まっている所・読んでいる流れの少し先へは頼み直さない。遠くへ跳べば頼み直して前を捨てる', async () => {
+    test('溜まっている所・読んでいる流れの少し先へは頼み直さない。遠くへ飛べば頼み直して前を捨てる', async () => {
         const { video, media } = start(100);
         await settle();
         video.currentTime = 104;
@@ -162,7 +162,7 @@ describe('その場で流すものの受け方 (remuxPlayer)', () => {
         expect(media().buffer?.ranges).toEqual([[300, 306]]);
     });
 
-    test('読んでいる最中に跳んでも、古い流れの残りは新しい流れに混ざらない', async () => {
+    test('読んでいる最中に飛んでも、古い流れの残りは新しい流れに混ざらない', async () => {
         let open!: () => void;
         gate = new Promise((resolve) => {
             open = resolve;

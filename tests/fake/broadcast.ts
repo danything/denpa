@@ -148,7 +148,7 @@ function programsFor(service: FakeService): SynthEvent[] {
              * 実機の NHK の高校野球中継が `[スポーツ, 拡張, 拡張]` で、0xE (拡張) は
              * 分類ではなく局が自分で決めた符号を載せる枠なので、同じものが並ぶ。
              *
-             * 1つずつしか入れていなかった頃は、**同じ札が2つ並ぶと画面が落ちる**のに
+             * 1つずつしか入れていなかった頃は、**同じラベルが2つ並ぶと画面が落ちる**のに
              * 気付けなかった (詳細が開かなくなる。実機で1番組だけ開かなかった)
              */
             genres: [
@@ -161,7 +161,7 @@ function programsFor(service: FakeService): SynthEvent[] {
              * どちらも `component_type=3` の日本語なので、**符号だけでは
              * 「ステレオ (日本語)」が2つ並ぶ**。見分けが付くのは放送が付けた
              * 名前だけ — 実機の日テレ「金曜ロードショー[解]」がまさにこれで、
-             * 番組表の詳細に同じ札が2つ出ていた
+             * 番組表の詳細に同じラベルが2つ出ていた
              */
             audios: [
                 { type: 3, text: '主音声ステレオ' },
@@ -506,10 +506,10 @@ function nowOnAir(services: FakeService[], knobs: Knobs): Uint8Array {
 const TICK = 100;
 
 /**
- * 映像と音声。**本当に解ける MPEG-2 と AAC を流す** (`src/lib/ts/synth-av.ts`)。
+ * 映像と音声。**本当にデコードできる MPEG-2 と AAC を流す** (`src/lib/ts/synth-av.ts`)。
  *
- * 焼く道の E2E では ffmpeg も偽物なので中身は何でもよかったが、ライブを生で送る道は
- * **ブラウザが自分で解いて絵を出す** (docs/stream.md §5.5)。そこを試すには解けるものが要る。
+ * エンコードする道の E2E では ffmpeg も偽物なので中身は何でもよかったが、ライブを生で送る道は
+ * **ブラウザが自分でデコードして絵を出す** (docs/stream.md §5.5)。そこを試すにはデコードできるものが要る。
  * 絵は 30 枚を使い回す (1秒で一巡りする縞)。
  *
  * **PTS は PCR より 0.4 秒先にする。** 本物の放送もそう作ってある (受信機は PTS まで
@@ -609,7 +609,7 @@ export function broadcast(
         }
         /*
          * 映像と音声。局ごとに別のPIDで流す (選り分けを試すため)。**スクランブルが掛かって
-         * いる状態は、解けない中身のまま流す** — 掛かっていれば本物も解けない
+         * いる状態は、復号できない中身のまま流す** — 掛かっていれば本物も復号できない
          */
         for (let index = 0; index < services.length; index++) {
             send(now.scrambled ? payload(pidsOf(index).video, 10, true) : avPackets(index, av[index]!));

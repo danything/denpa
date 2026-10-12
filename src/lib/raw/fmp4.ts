@@ -1,6 +1,6 @@
 /// <reference lib="webworker" />
 /**
- * **焼いたもの (fMP4) を canvas に描く**、worker の中の半分 (`messages.ts` の `fmp4`)。
+ * **エンコードしたもの (fMP4) を canvas に描く**、worker の中の半分 (`messages.ts` の `fmp4`)。
  *
  *     fMP4 ─→ 箱を読む (ts/fmp4.ts) ┬→ 映像: WebCodecs の VideoDecoder → 2D で描く
  *                                   └→ 音声: AAC は ADTS の頭を付けて / Opus はそのまま → WASM (worker.ts)
@@ -11,15 +11,15 @@
  *
  * MPEG-2 の道との違い:
  *
- * - **解くのはブラウザ** (VideoDecoder)。たいてい GPU の道で、解いた絵は VideoFrame
- *   (GPU の上の絵) として出てくる。**描いたらすぐ閉じる** — 閉じずに持つと、復号器の
- *   絵の置き場が尽きて止まる (`DECODED_MOST` 枚より先には解かせない)
+ * - **デコードするのはブラウザ** (VideoDecoder)。たいてい GPU の道で、デコードした絵は VideoFrame
+ *   (GPU の上の絵) として出てくる。**描いたらすぐ閉じる** — 閉じずに持つと、デコーダの
+ *   絵の置き場が尽きて止まる (`DECODED_MOST` 枚より先にはデコードさせない)
  * - 描くのは 2D (`drawImage`)。インタレ解除はサーバが済ませている
  * - 時刻は MP4 の物差し (0 から数える。一周しない)。字幕・時計の知らせも同じ物差しで来る
  * - 間に合っているかは VideoDecoder の詰まりと遅れで見る (`budget.ts` の `timed: false`)
  *
  * サーバは詰まった客には媒体を捨てる (`server/live.ts` の `hand`) ので、**コマの時刻が
- * 飛んだら次の鍵のコマまで捨てる** — 参照するコマが欠けたまま渡すと、復号器は崩れた絵を
+ * 飛んだら次の鍵のコマまで捨てる** — 参照するコマが欠けたまま渡すと、デコーダは崩れた絵を
  * 出すか転ぶ。転んだら (`error`) 開き直して鍵のコマから入り直し、続けて転ぶなら諦める。
  */
 
@@ -33,31 +33,31 @@ import {
 } from '#lib/ts/fmp4.js';
 import { CLOCK } from '#lib/ts/pes.js';
 
-/** 番のこれだけ前から解く (90kHz) */
+/** 番のこれだけ前からデコードする (90kHz) */
 const AHEAD = 0.3 * CLOCK;
-/** 解けた絵と、渡したまま出てきていない絵を合わせてこれだけまで (VideoFrame は GPU の置き場を使う) */
+/** デコードできた絵と、渡したまま出てきていない絵を合わせてこれだけまで (VideoFrame は GPU の置き場を使う) */
 const DECODED_MOST = 6;
 /** 圧縮のまま持っておく上限 (90kHz)。止めている間に溜め込まない */
 const PENDING_MOST = 8 * CLOCK;
-/** これだけ遅れたら、解きながら追いつくのをやめて鍵のコマまで飛ぶ (90kHz) */
+/** これだけ遅れたら、デコードしながら追いつくのをやめて鍵のコマまで飛ぶ (90kHz) */
 const BEHIND_MOST = 0.5 * CLOCK;
 /** 1コマの長さの目安 (90kHz)。59.94 コマ。実際の間隔が分かればそれを使う */
 const FRAME = 1501;
 /**
  * 追っかけ (`follow`) で圧縮のまま持っておく上限。**時間 (90kHz) とバイト数の小さいほう** —
  * サーバは倍速で送り込んでくるので、観ている先が伸び続ける。超えたら受け取るのをやめて
- * `full` を返し、画面が手元の尽きる前に居る場所から頼み直す (焼く道の MSE の `BUDGET` と同じ量)
+ * `full` を返し、画面が手元の尽きる前に居る場所から頼み直す (エンコードする道の MSE の `BUDGET` と同じ量)
  */
 const FOLLOW_AHEAD_MOST = 120 * CLOCK;
 const FOLLOW_BYTES_MOST = 120 * 1024 * 1024;
-/** 復号器が転んでも開き直す回数。**これより続けて転んだら諦める** (1コマでも描ければ数え直す) */
+/** デコーダが転んでも開き直す回数。**これより続けて転んだら諦める** (1コマでも描ければ数え直す) */
 const ERRORS_MOST = 3;
 
-/** 音の1コマを画面へ渡す口 (WASM で解くのは worker.ts) */
+/** 音の1コマを画面へ渡す口 (WASM でデコードするのは worker.ts) */
 export interface AudioSink {
     /** 開き直す。`opus` のときは OpusHead を渡す。**開けなければ false** */
     open(codec: 'aac' | 'opus', config: Uint8Array | null): boolean;
-    /** 1コマ解いて画面へ。時刻は 90kHz */
+    /** 1コマデコードして画面へ。時刻は 90kHz */
     push(data: Uint8Array, pts: number): void;
 }
 
@@ -66,7 +66,7 @@ export interface Fmp4Host {
     /** 1コマ描いた (小窓へ写す・数える)。`first` は選局し直してから最初の1枚 */
     drew(first: boolean): void;
     fail(reason: string): void;
-    /** 1コマを解くのに掛かった時間 (ms。渡してから出てくるまで) */
+    /** 1コマをデコードするのに掛かった時間 (ms。渡してから出てくるまで) */
     record(ms: number): void;
     /** 抱えきれなくなって、届いたものを捨て始めた (`follow` のときだけ) */
     full(): void;
@@ -91,15 +91,15 @@ export class Fmp4Video {
     private video: Fmp4Track | null = null;
     private decoder: VideoDecoder | null = null;
     private config: VideoDecoderConfig | null = null;
-    /** 圧縮のまま待たせている映像 (解く順) */
+    /** 圧縮のまま待たせている映像 (デコードする順) */
     private pending: Pending[] = [];
-    /** 解けた絵 (見せる順)。**描いたら閉じる** */
+    /** デコードできた絵 (見せる順)。**描いたら閉じる** */
     private frames: VideoFrame[] = [];
     /** 鍵のコマを待っているか。開き直した・時刻が飛んだ・選局し直した */
     private needKey = true;
     /** 次に来るはずのコマの時刻 (90kHz)。**飛んだら鍵のコマまで捨てる** */
     private expected: number | null = null;
-    /** 渡した時刻 (µs → performance.now())。解くのに掛かった時間を測る */
+    /** 渡した時刻 (µs → performance.now())。デコードするのに掛かった時間を測る */
     private readonly started = new Map<number, number>();
     private errors = 0;
     /** 追っかけで抱えきれなくなったか。**次の init (頼み直し) まで、届いたものは捨てる** */
@@ -137,7 +137,7 @@ export class Fmp4Video {
         return this.decoder?.decodeQueueSize ?? 0;
     }
 
-    /** 解けた絵があるか。**無いまま番を過ぎていれば遅れている** */
+    /** デコードできた絵があるか。**無いまま番を過ぎていれば遅れている** */
     get waiting(): number {
         return this.frames.length;
     }
@@ -240,11 +240,11 @@ export class Fmp4Video {
             this.host.fail('映像を再生できません');
             return;
         }
-        // 転んだ復号器は閉じている。作り直す
+        // 転んだデコーダは閉じている。作り直す
         this.decoder = null;
         this.open();
         /*
-         * **待たせている圧縮の頭も、次の鍵のコマまで捨てる。** 開き直した復号器に差分のコマから
+         * **待たせている圧縮の頭も、次の鍵のコマまで捨てる。** 開き直したデコーダに差分のコマから
          * 渡すと、また転ぶ (`ERRORS_MOST` を使い切って諦めてしまう)。鍵が無ければこれから来るぶんを待つ
          */
         const key = this.pending.findIndex((item) => item.key);
@@ -275,7 +275,7 @@ export class Fmp4Video {
     }
 
     /**
-     * `target` より手前でいちばん新しい鍵のコマまで飛ぶ。**復号器も開き直す** —
+     * `target` より手前でいちばん新しい鍵のコマまで飛ぶ。**デコーダも開き直す** —
      * 飛ばしたコマを参照する絵を出させないため
      */
     private skipTo(target: number): void {
@@ -334,7 +334,7 @@ export class Fmp4Video {
             this.started.delete(frame.timestamp);
             this.host.record(performance.now() - began);
         }
-        // 飛び先より前 (参照に使うため解いただけ)
+        // 飛び先より前 (参照に使うためデコードしただけ)
         if (this.floor !== null && frame.timestamp < this.floor) {
             frame.close();
             return;
@@ -351,8 +351,8 @@ export class Fmp4Video {
         if (decoder === null || decoder.state !== 'configured') return;
 
         /*
-         * **新しい局の1枚目は、解けたらすぐ出して待つ** (worker.ts の MPEG-2 と同じ理由)。
-         * 録画で飛んだあと (`floor`) は、飛び先より前を解いて捨てながら進むので、詰められるだけ渡す
+         * **新しい局の1枚目は、デコードできたらすぐ出して待つ** (worker.ts の MPEG-2 と同じ理由)。
+         * 録画で飛んだあと (`floor`) は、飛び先より前をデコードして捨てながら進むので、詰められるだけ渡す
          */
         if (!this.shownSinceReset) {
             if (this.floor !== null) {
@@ -371,7 +371,7 @@ export class Fmp4Video {
         }
         if (at === null) return;
 
-        // 大きく遅れている (裏から戻った・止めていた)。解きながら追うより鍵まで飛ぶ
+        // 大きく遅れている (裏から戻った・止めていた)。デコードしながら追うより鍵まで飛ぶ
         const head = this.pending[0];
         if (head !== undefined && head.dts < at - BEHIND_MOST && this.frames.length === 0) this.skipTo(at);
 
@@ -444,7 +444,7 @@ export class Fmp4Video {
         this.lastPts = null;
         this.current = null;
         this.errors = 0;
-        // 次の init で開き直す。開いたままの復号器の中身は捨てる
+        // 次の init で開き直す。開いたままのデコーダの中身は捨てる
         if (this.decoder !== null && this.decoder.state === 'configured') this.decoder.reset();
     }
 

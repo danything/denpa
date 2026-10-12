@@ -10,7 +10,7 @@ import { enabled as oidcEnabled } from './oidc';
  * | `TRUSTED_NETWORKS` | 信頼したネットワークから来た人。何も聞かずに通す |
  * | OIDC のログイン | 画面から入る人 (`docs/auth.md`) |
  * | 期限付きのリンク (`?token=`、share.ts) | 再生リンク・ダウンロード。**ファイルの口だけ** |
- * | 使い捨ての札 | ライブ視聴の WebSocket だけ (`tickets.ts`) |
+ * | 使い捨てのチケット | ライブ視聴の WebSocket だけ (`tickets.ts`) |
  *
  * **どれも設定していなければ、全部断る** (`configured`)。以前はベーシック認証を
  * 起動時に自動で掛けていたが、廃止した — パスワードを使う場面 (プレイヤー登録・
@@ -49,9 +49,9 @@ export function fileRecordingId(pathname: string): number | null {
  *   ホーム画面に置けなくなる。static に置いてあった頃は adapter-node が
  *   hooks より手前で返していて、そもそも掛かっていなかった。出しているのは
  *   アプリの名前とアイコンの場所だけ
- * - **ペアリングの札と鍵の受け取り** (`/api/device/code`・`/api/device/token`)。テレビは
- *   まだ何の資格も持っていない。札を出すだけでは入れず、許すのは `/device` (ここは守る)。
- *   誰でも叩けるので、生きている札の数に上限がある (device-auth.ts の `MAX_PENDING`)
+ * - **ペアリングコードと鍵の受け取り** (`/api/device/code`・`/api/device/token`)。テレビは
+ *   まだ何の資格も持っていない。コードを出すだけでは入れず、許すのは `/device` (ここは守る)。
+ *   誰でも叩けるので、有効なコードの数に上限がある (device-auth.ts の `MAX_PENDING`)
  */
 const OPEN_PATHS = [
     /^\/login(\/|$)/,

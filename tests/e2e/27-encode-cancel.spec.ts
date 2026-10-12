@@ -25,7 +25,7 @@ test.describe('エンコードの中止', () => {
         const programId = await reserveSoon(page, request, 'BS');
         const row = page.locator(`[data-testid="recording-row"][data-program-id="${programId}"]`);
 
-        // 焼き始めるまで待つ (行に「エンコード中」と進み具合が出る)
+        // エンコードし始めるまで待つ (行に「エンコード中」と進み具合が出る)
         await expect(async () => {
             await goto(page, '/');
             await expect(row.getByTestId('recording-state')).toHaveText('エンコード中', { timeout: 1_000 });
@@ -47,7 +47,7 @@ test.describe('エンコードの中止', () => {
          */
         await goto(page, '/');
         await expect(row.getByTestId('recording-state')).toHaveText('録画済み', { timeout: 1_000 });
-        // 中止の口は消え、焼き直せる状態に戻っている
+        // 中止の口は消え、再エンコードできる状態に戻っている
         await expect(row.getByTestId('encode-cancel')).toHaveCount(0);
     });
 });

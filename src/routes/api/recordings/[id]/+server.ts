@@ -4,11 +4,11 @@ import { deleteRecordingFiles } from '#lib/server/files.js';
 import { recordingOr404 } from '#lib/server/recording.js';
 
 /**
- * 録画の状態を返す。**追っかけ再生の画面が「焼き上がったか」を聞く口** —
- * 録り終えてから焼き上がるまでの間 (CM検出・エンコード) も追っかけの器で
- * 観られるが、焼き上がれば普通の観る画面 (シークも字幕も揃う) に移りたい。
+ * 録画の状態を返す。**追っかけ再生の画面が「エンコードが終わったか」を聞く口** —
+ * 録り終えてからエンコードが終わるまでの間 (CM検出・エンコード) も追っかけの器で
+ * 観られるが、エンコードが終われば普通の観る画面 (シークも字幕も揃う) に移りたい。
  * 画面は `recordings` の知らせ (SSE) を受けるたびにここを読む。
- * 中身は行そのものではなく、判断に要るもの (焼けたか・状態) だけ
+ * 中身は行そのものではなく、判断に要るもの (エンコードできたか・状態) だけ
  */
 export function GET({ params }) {
     const recording = recordingOr404(params.id);
@@ -31,7 +31,7 @@ export async function DELETE({ params }) {
     const recording = recordingOr404(params.id, true);
     if (recording.deleted_at !== null) return new Response(null, { status: 204 });
 
-    // 録画中のものは消させない。掴んでいるチューナーと書きかけのファイルが残る
+    // 録画中のものは消させない。使っているチューナーと書きかけのファイルが残る
     if (recording.finished_at === null) error(409, '録画中は消せません');
 
     deleteRecordingFiles(recording, '端末から削除');

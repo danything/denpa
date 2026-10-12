@@ -5,11 +5,11 @@ using Microsoft.Win32.SafeHandles;
 namespace Denpa.Agent;
 
 /// <summary>
-/// デバイスを**掴んだまま**選局する。
+/// デバイスを**確保したまま**選局する。
 ///
 /// <para>
 /// 選局のたびに外のコマンド (<c>recisdb</c>) を起こしていた頃は、チャンネルを
-/// 変えるたびにデバイスが宙に浮き、掴み直す隙間ができた (docs/agent.md)。
+/// 変えるたびにデバイスが宙に浮き、取り直す隙間ができた (docs/agent.md)。
 /// </para>
 ///
 /// <para>
@@ -20,7 +20,7 @@ namespace Denpa.Agent;
 /// <list type="bullet">
 /// <item><see cref="DvbTuner"/> … 標準の Linux DVB v5。PT2/PT3、PX-S1UD、PX-BCUD。カーネルが持つ</item>
 /// <item><see cref="Px4Tuner"/> … px4-userland の機材 (PX-Q3U4 など)。<c>px4d</c> が持ち、受信機を借りたまま制御ソケットで選局し直す (Px4.cs)</item>
-/// <item><see cref="SianoTuner"/> … siano-userland の機材 (PX-S1UD などをカーネルに掴ませていないとき)。<c>siano-ts</c> を起こしたまま標準入力で選局し直す (Siano.cs)</item>
+/// <item><see cref="SianoTuner"/> … siano-userland の機材 (PX-S1UD などをカーネルに使わせていないとき)。<c>siano-ts</c> を起こしたまま標準入力で選局し直す (Siano.cs)</item>
 /// </list>
 ///
 /// <para>
@@ -159,7 +159,7 @@ internal static unsafe partial class Sys
 ///
 /// <para>
 /// 素直に開いて読むと、<c>read</c> で待っている間は誰にも止められない。
-/// TS が来なくなったチューナーを掴んだまま、畳もうとしても畳めない、という
+/// TS が来なくなったチューナーを確保したまま、畳もうとしても畳めない、という
 /// 止まり方をする。<c>poll</c> で待って**時々起きる**ようにしてある。
 /// </para>
 ///
@@ -177,7 +177,7 @@ internal static unsafe partial class Sys
 /// </param>
 internal sealed unsafe class DeviceStream(SafeFileHandle handle, Func<string?>? ended = null) : Stream
 {
-    /// <summary>読み口そのもの。**環の大きさはここに言う** (<c>DvbTuner.StartFilter</c>)</summary>
+    /// <summary>読み口そのもの。**リングバッファの大きさはここに言う** (<c>DvbTuner.StartFilter</c>)</summary>
     public SafeFileHandle Handle => handle;
 
     /// <summary>この間隔で起きて、畳めと言われていないか見る</summary>
@@ -248,7 +248,7 @@ internal sealed unsafe class DeviceStream(SafeFileHandle handle, Func<string?>? 
     private const int EIntr = 4;
 
     /// <summary>
-    /// **読むのが追いつかず、ドライバの環が溢れた。**
+    /// **読むのが追いつかず、ドライバのリングバッファが溢れた。**
     ///
     /// <para>
     /// 溢れたぶんは戻らないが、**選局はそのまま生きている** — 読み続ければ
@@ -276,7 +276,7 @@ internal sealed unsafe class DeviceStream(SafeFileHandle handle, Func<string?>? 
     ///
     /// <para>
     /// **最初の1回の溢れは、この選局のせいではない。** デバイスは選局を跨いで
-    /// 開きっぱなしなので、局を変えている間に環が埋まり、その印が読み始めた
+    /// 開きっぱなしなので、局を変えている間にリングバッファが埋まり、その印が読み始めた
     /// 最初の <c>read</c> で返る。数に入れると**選局のたびに1回**増える。
     /// </para>
     /// </summary>
@@ -286,11 +286,11 @@ internal sealed unsafe class DeviceStream(SafeFileHandle handle, Func<string?>? 
     private int _stale;
 
     /// <summary>
-    /// 前に聞かれてから環が溢れた回数と、**そのとき読み手がどれだけ空いていたか**。
+    /// 前に聞かれてからリングバッファが溢れた回数と、**そのとき読み手がどれだけ空いていたか**。
     ///
     /// <para>
     /// 回数だけでは、溜めが浅いのか読み手が止まっているのかが分けられない。
-    /// 環は 8MB = 地上波で 3.5 秒ぶん (<c>DvrBuffer</c>) なので、**空いた時間が
+    /// リングバッファは 8MB = 地上波で 3.5 秒ぶん (<c>DvrBuffer</c>) なので、**空いた時間が
     /// 3.5 秒に届いていなければ、広げたはずの溜めが効いていない** (カーネルの
     /// 既定 1.8MB のままなら 0.9 秒で溢れる)。届いているなら、溜めの深さでは
     /// なく**読み手が止まる理由**のほうが本題になる。
@@ -443,7 +443,7 @@ internal sealed unsafe class DeviceStream(SafeFileHandle handle, Func<string?>? 
                         continue;
                     }
                     _overflows++;
-                    // 空いた時間も採る。環の深さ (3.5秒ぶん) と突き合わせる (`TakeOverflows`)
+                    // 空いた時間も採る。リングバッファの深さ (3.5秒ぶん) と突き合わせる (`TakeOverflows`)
                     var gap = (int)Stopwatch.GetElapsedTime(_handedAt).TotalMilliseconds;
                     if (gap > _worstGap) _worstGap = gap;
                     // 溢れたぶんは捨てられている。ここからは新しい溜まり方になる
@@ -475,7 +475,7 @@ internal sealed unsafe class DeviceStream(SafeFileHandle handle, Func<string?>? 
 }
 
 /// <summary>
-/// 標準の Linux DVB (v5) で掴む。**実機の PT3 はこちら** (<c>earth_pt3</c>)。
+/// 標準の Linux DVB (v5) で使う。**実機の PT3 はこちら** (<c>earth_pt3</c>)。
 ///
 /// <para>
 /// 開くものが3つある。<c>frontend</c> が選局、<c>demux</c> が「何を流すか」、
@@ -524,18 +524,18 @@ public sealed class DvbTuner : ITuneDevice
     ///
     /// <para>
     /// **いまの流し方では、ここには積まれない** — 全PIDを <c>DMX_OUT_TS_TAP</c> で
-    /// 出すので、中身は dvr の環へ行く (<c>DvrBuffer</c>)。出し方を変えたときに
+    /// 出すので、中身は dvr のリングバッファへ行く (<c>DvrBuffer</c>)。出し方を変えたときに
     /// 既定 (2KB) まで落ちないよう残してあるだけで、溢れの話とは別物
     /// </para>
     /// </summary>
     private const int DemuxBuffer = 8 * 1024 * 1024;
 
     /// <summary>
-    /// **dvr の環の大きさ。溢れるのはこちら。**
+    /// **dvr のリングバッファの大きさ。溢れるのはこちら。**
     ///
     /// <para>
     /// 全PIDを <c>DMX_OUT_TS_TAP</c> で流すと、中身は demux のフィルタではなく
-    /// **dvr の環**に積まれる。`DMX_SET_BUFFER_SIZE` を demux にだけ言っていた
+    /// **dvr のリングバッファ**に積まれる。`DMX_SET_BUFFER_SIZE` を demux にだけ言っていた
     /// 頃は、**大きくしたつもりのものが使われていなかった** — 実際に使われる
     /// のはカーネルの既定 (10 × 188 × 1024 ≒ 1.8MB) で、地上波の 18Mbit/秒 では
     /// **0.9 秒ぶん**しかない。読む側が GC などで一瞬止まるだけで溢れる。

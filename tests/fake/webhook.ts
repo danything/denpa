@@ -11,7 +11,7 @@ const calls: Record<string, unknown>[] = [];
 /**
  * 偽の GitHub (最新のリリース)。denpa が新しい版を見比べに来る先 (`server/update.ts`)。
  * **既定は「リリースが 1 つも無い」(404)** — 置くのはそれを見る試験だけ。
- * 置きっぱなしだとヘッダーに札が出て、他の試験の幅の測りが狂う
+ * 置きっぱなしだとヘッダーにバッジが出て、他の試験の幅の測りが狂う
  */
 let release: unknown = null;
 

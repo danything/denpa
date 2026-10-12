@@ -638,7 +638,7 @@ describe('ライブのように流し続けても、持つものと握る時間�
             // 見張りで止めずに、持つものだけを見る (流す速さはライブの何百倍)。時計はライブと同じ TOT
             const { bml, logs } = open({ clock: () => null, budget: { ratio: 1 } });
             // 本番の局の形に寄せる: 1 回きりのタイマーを受け手のたびに作り直す (chkRen)、
-            // 版が上がったら押さえ直して字を書き換える、イベントのたびに消さないタイマーを足す (解き忘れ)
+            // 版が上がったら押さえ直して字を書き換える、イベントのたびに消さないタイマーを足す (後始末し忘れ)
             const script = `var n = 0, m = 0;
                 function start() { browser.setInterval("chk();", 1, 1); browser.Ureg[1] = "ready"; }
                 function chk() { browser.setInterval("chk();", 1, 1); }

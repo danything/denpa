@@ -47,7 +47,7 @@ describe('シークバーの溝の塗り', () => {
         expect(ticks).toContain('calc(calc(0.5rem + 0.25 * (100% - 1rem)) + 1px)');
     });
 
-    test('幅の無い帯・外れた区間は塗らない', () => {
+    test('幅の無いバー・外れた区間は塗らない', () => {
         expect(trackLayers([{ start: 0, end: 10 }], [5], 0, 0)).toEqual({ cm: 'none', ticks: 'none' });
         expect(trackLayers([{ start: 200, end: 210 }], [0, 100], 0, 100)).toEqual({
             cm: 'none',

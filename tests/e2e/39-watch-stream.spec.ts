@@ -7,7 +7,7 @@ import { expect, goto, recordOne, reserveSoon, syncEpg, test, wakeControls } fro
  * 選び方は `ts/playback.ts`、受け方は `remux-player.ts`)。
  *
  * 偽 ffmpeg は映像を作らないので、絵が出るところまでは見ない。見るのは**何を頼むか** —
- * どの形を・どの位置から・どの音声で頼み、跳んだら頼み直し、混んでいると言われたら勧め直すか
+ * どの形を・どの位置から・どの音声で頼み、飛んだら頼み直し、混んでいると言われたら勧め直すか
  */
 
 /** 頼んだ `stream` の URL を順に控える */
@@ -138,7 +138,7 @@ test.describe('観る画面でその場で流す', () => {
         expect(reopened[0]?.searchParams.get('from')).toBe('600.000');
 
         /*
-         * 跳んだ先からの頼み直しは `remux-player.test.ts` が見ている (偽の流れは中身が空で、
+         * 飛んだ先からの頼み直しは `remux-player.test.ts` が見ている (偽の流れは中身が空で、
          * 尺が分からないうちは `<video>` が位置を受け付けない)
          *
          * 混んでいると言われたら、変換させずに観られるもの (H.264 のファイル) を勧める

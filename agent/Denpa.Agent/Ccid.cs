@@ -428,7 +428,7 @@ public static class Ccid
 
     /// <summary>
     /// 刺さっている CCID のインターフェース (bInterfaceClass 0x0b) を並べる。**開かない。**
-    /// sysfs だけを読むので、別のプロセスが掴んでいても並ぶ (開くときに断られる)
+    /// sysfs だけを読むので、別のプロセスが使っていても並ぶ (開くときに断られる)
     /// </summary>
     public static IReadOnlyList<CardLinkCandidate> Find() => Find(Sysfs, DevUsb);
 

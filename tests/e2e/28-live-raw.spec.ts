@@ -5,12 +5,12 @@ import { expect, goto, syncEpg, test, wakeControls } from './helpers';
 /**
  * ライブを生で見る ([docs/stream.md](../../docs/stream.md) §5.5)。
  *
- * 焼く道の E2E (20-live) と違って、**ここは絵が出るところまで見る。** 偽エージェントは
- * 本当に解ける MPEG-2 と AAC を流していて (`src/lib/ts/synth-av.ts`)、ブラウザの中の
- * WASM の復号器 (`wasm/mpeg2`、Dockerfile の `mpeg2wasm` 段で組む) がそれを解く。
+ * エンコードする道の E2E (20-live) と違って、**ここは絵が出るところまで見る。** 偽エージェントは
+ * 本当にデコードできる MPEG-2 と AAC を流していて (`src/lib/ts/synth-av.ts`)、ブラウザの中の
+ * WASM の復号器 (`wasm/mpeg2`、Dockerfile の `mpeg2wasm` 段で組む) がそれをデコードする。
  * 復号器の置き場は `MPEG2_DIR` (CI は組んだものをランナーへ出して渡す)。
  *
- * 絵は worker の canvas に居て画面から画素を読めないので、**描いたコマ数と解けた音の
+ * 絵は worker の canvas に居て画面から画素を読めないので、**描いたコマ数とデコードできた音の
  * コマ数** (canvas の `data-shown` / `data-audio`) が進むこと、canvas を撮った絵が
  * 時間とともに変わることを見る。GPU の無いヘッドレス (SwiftShader) でも同じに動く。
  */
@@ -36,7 +36,7 @@ test.describe('ライブを生で見る', () => {
         await syncEpg(request);
     });
 
-    test('MPEG-2 を選ぶと、焼かずに放送そのままを解いて描き、音も解く', async ({ page, stack }) => {
+    test('MPEG-2 を選ぶと、エンコードせずに放送そのままをデコードして描き、音もデコードする', async ({ page, stack }) => {
         const before = ffmpegRuns(stack.liveArgsFile).length;
         await goto(page, '/live');
         await page.getByTestId('live-channel').first().click();
@@ -54,7 +54,7 @@ test.describe('ライブを生で見る', () => {
         const first = await shown();
         await expect.poll(shown, { timeout: 15_000 }).toBeGreaterThan(first + 10);
 
-        // **音も解けている** (WASM の AAC 復号器が ADTS を解いた)
+        // **音もデコードできている** (WASM の AAC 復号器が ADTS をデコードした)
         await expect
             .poll(async () => Number((await canvas.getAttribute('data-audio')) ?? 0), { timeout: 15_000 })
             .toBeGreaterThan(0);
@@ -80,10 +80,10 @@ test.describe('ライブを生で見る', () => {
         await expect.poll(shown, { timeout: 15_000 }).toBeGreaterThan(resumed + 10);
 
         /*
-         * **焼く ffmpeg は起こさない。** 起きるのは字幕だけを描く1本で、放送の時刻のまま
+         * **エンコードする ffmpeg は起こさない。** 起きるのは字幕だけを描く1本で、放送の時刻のまま
          * 出させる (`-copyts`。`server/captions.ts` の `rawCaptionArgs`)。
          *
-         * MPEG-2 を選ぶまでは焼いている。見るのは**生で頼んだあと**に焼き始めていないこと
+         * MPEG-2 を選ぶまではエンコードしている。見るのは**生で頼んだあと**にエンコードし始めていないこと
          */
         const runs = ffmpegRuns(stack.liveArgsFile).slice(before);
         const captions = runs.findIndex((run) => run.includes('-copyts'));
@@ -137,7 +137,7 @@ test.describe('ライブを生で見る', () => {
 
         const png = readFileSync(await file.path()).toString('base64');
         const lit = await page.evaluate(async (data) => {
-            // data: を fetch すると CSP (connect-src 'self') に止められるので、手で解く
+            // data: を fetch すると CSP (connect-src 'self') に止められるので、手でデコードする
             const bytes = Uint8Array.from(atob(data), (c) => c.charCodeAt(0));
             const blob = new Blob([bytes], { type: 'image/png' });
             const bitmap = await createImageBitmap(blob);
@@ -162,9 +162,9 @@ test.describe('ライブを生で見る', () => {
      * その `<video>` は生に入った時点で1枚目まで受け取っておく。押されてから待つと、
      * iPhone の Safari は「押された直後」と見なさなくなって断った (`NotAllowedError`)。
      * 押す前に1枚目が届いていること、押したら小窓に入ってコマが流れること、
-     * 小窓で止めると帯も止まることを見る
+     * 小窓で止めると操作バーも止まることを見る
      */
-    test('生でも小窓に絵が出て、小窓で止めると帯も止まる', async ({ page }) => {
+    test('生でも小窓に絵が出て、小窓で止めると操作バーも止まる', async ({ page }) => {
         await goto(page, '/live');
         await page.getByTestId('live-channel').first().click();
         await expect(page.getByTestId('live-title')).toBeVisible();
@@ -254,7 +254,7 @@ test.describe('ライブを生で見る', () => {
         await captionShown(false);
         await expect.poll(pipPixel, { timeout: 5_000 }).toBe(false);
 
-        // 小窓の再生ボタン (代わりの `<video>` を直に止める) で、帯も止まる・再開する
+        // 小窓の再生ボタン (代わりの `<video>` を直に止める) で、操作バーも止まる・再開する
         const play = page.getByTestId('live-play');
         await proxy.evaluate((v) => (v as HTMLVideoElement).pause());
         await expect(play).toHaveAttribute('aria-label', '再生');
@@ -283,7 +283,7 @@ test.describe('ライブを生で見る', () => {
         await page.getByTestId('live-channel').first().click();
         await expect(page.getByTestId('live-title')).toBeVisible();
         await wakeControls(page, 'live-frame');
-        // 焼いたものでは出る
+        // エンコードしたものでは出る
         await expect(page.getByTestId('live-pip')).toBeVisible();
         await chooseRaw(page);
         await expect
@@ -302,7 +302,7 @@ test.describe('ライブを生で見る', () => {
      *
      * 裏に回すのは別のタブを前に出し、`visibilityState` も差し替えて知らせを送る (ヘッドレスは
      * タブを移っても `visible` のまま)。裏でも音と絵のコマが進み続けること、`<audio>` が鳴って
-     * いること、`<audio>` を外から止める・再開する (ロック画面・車の操作) と帯が合うこと、
+     * いること、`<audio>` を外から止める・再開する (ロック画面・車の操作) と操作バーが合うこと、
      * 切れば直に鳴らすのに戻ること、CSP に止められないことを見る
      */
     test('バックグラウンド再生を入れると生の音は <audio> から鳴り、裏でも進み続ける', async ({
@@ -366,13 +366,13 @@ test.describe('ライブを生で見る', () => {
             document.dispatchEvent(new Event('visibilitychange'));
         });
 
-        // `<audio>` を外から止める・再開すると (ロック画面・車の操作)、帯も止まる・再開する
+        // `<audio>` を外から止める・再開すると (ロック画面・車の操作)、操作バーも止まる・再開する
         await audio.evaluate((a) => (a as HTMLAudioElement).pause());
         await expect(play).toHaveAttribute('aria-label', '再生');
         await audio.evaluate((a) => (a as HTMLAudioElement).play());
         await expect(play).toHaveAttribute('aria-label', '一時停止');
         await expect.poll(paused).toBe(false);
-        // 帯から止める・再開すると `<audio>` も止まる・鳴りだす
+        // 操作バーから止める・再開すると `<audio>` も止まる・鳴りだす
         await wakeControls(page, 'live-frame');
         await play.click();
         await expect(play).toHaveAttribute('aria-label', '再生');
@@ -382,7 +382,7 @@ test.describe('ライブを生で見る', () => {
         await expect(play).toHaveAttribute('aria-label', '一時停止');
         await expect.poll(paused).toBe(false);
 
-        // 切れば直に鳴らすのに戻る。音は解け続ける
+        // 切れば直に鳴らすのに戻る。音はデコードでき続ける
         await wakeControls(page, 'live-frame');
         await toggle.click();
         await expect(toggle).toHaveAttribute('aria-pressed', 'false');
@@ -396,7 +396,7 @@ test.describe('ライブを生で見る', () => {
     });
 
     /*
-     * **`<audio>` の `play()` を断られても黙らせない** (自動再生)。直に鳴らすのに戻し、帯は
+     * **`<audio>` の `play()` を断られても黙らせない** (自動再生)。直に鳴らすのに戻し、操作バーは
      * 止めたことにしない。断られたことを「外から止められた」と取り違えないことも見る
      */
     test('<audio> の再生を断られたら、直に鳴らすまま止めない', async ({ page }) => {
@@ -432,7 +432,7 @@ test.describe('ライブを生で見る', () => {
         await expect.poll(heard, { timeout: 10_000 }).toBeGreaterThan(before + 20);
     });
 
-    test('選んでいなければ、いつもどおり焼いたものを見る', async ({ page }) => {
+    test('選んでいなければ、いつもどおりエンコードしたものを見る', async ({ page }) => {
         await goto(page, '/live');
         await page.getByTestId('live-channel').first().click();
         await expect(page.getByTestId('live-title')).toBeVisible();
@@ -440,7 +440,7 @@ test.describe('ライブを生で見る', () => {
         await expect(page.getByTestId('live-raw')).toHaveCount(0);
     });
 
-    test('解けない端末では焼いたものに戻り、理由を出す', async ({ page }) => {
+    test('デコードできない端末ではエンコードしたものに戻り、理由を出す', async ({ page }) => {
         // worker へ描く先を渡せない端末 (OffscreenCanvas の無い古い Safari)
         await page.addInitScript(() => {
             // biome-ignore lint/suspicious/noExplicitAny: 端末に無いことにする
@@ -455,7 +455,7 @@ test.describe('ライブを生で見る', () => {
         await expect(page.getByTestId('live-raw')).toHaveCount(0);
     });
 
-    test('選んだものは焼き方と同じくこの端末に覚える', async ({ page }) => {
+    test('選んだものはエンコード方式と同じくこの端末に覚える', async ({ page }) => {
         await goto(page, '/live');
         await page.getByTestId('live-channel').first().click();
         await expect(page.getByTestId('live-title')).toBeVisible();
@@ -467,7 +467,7 @@ test.describe('ライブを生で見る', () => {
         await expect(page.getByTestId('live-raw')).toBeVisible({ timeout: 30_000 });
         await expect(page.getByTestId('live-codec')).toContainText('MPEG-2');
 
-        // H.264 に戻すと焼いたものになり、それも覚える
+        // H.264 に戻すとエンコードしたものになり、それも覚える
         await wakeControls(page, 'live-frame');
         await page.getByTestId('live-codec').click();
         await page.locator('[data-testid="live-codec-option"][data-codec="h264"]').click();

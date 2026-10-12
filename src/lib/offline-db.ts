@@ -20,7 +20,7 @@ export interface OfflineVideo {
     startAt: number;
     /** 実際に録れた長さ (ms)。無ければ null */
     durationMs: number | null;
-    /** どちらを落としたか。端末が AV1 を解けなければ alt (H.264) */
+    /** どちらを落としたか。端末が AV1 をデコードできなければ alt (H.264) */
     source: 'encoded' | 'alt';
     /**
      * 何回目の試みか (でたらめな文字列)。**やり直しと前回の残骸を見分ける印。**

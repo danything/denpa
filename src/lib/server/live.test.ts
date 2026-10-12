@@ -25,10 +25,10 @@ const dual = (side: AudioSide) => {
 const plain = () => encodeArgs(1024, stereo);
 
 /**
- * **焼き方の指定は、間違えても絵は出る。** 出たうえで見づらいだけなので、
+ * **エンコード方法の指定は、間違えても絵は出る。** 出たうえで見づらいだけなので、
  * 気付くのに時間がかかる。実機で測って分かったものをここで固定する。
  */
-describe('ライブの焼き方', () => {
+describe('ライブのエンコード方法', () => {
     /*
      * **`-flags low_delay` を入れない。**
      *
@@ -56,7 +56,7 @@ describe('ライブの焼き方', () => {
      *     50KB   丸ごと 0/3 通る   1局に絞る 3/3
      *    120KB   丸ごと 1/3 通る   1局に絞る 3/3
      *
-     * 絞れば 20KB でも通る。映像だけを焼いていた頃はそこまで下げてあった
+     * 絞れば 20KB でも通る。映像だけをエンコードしていた頃はそこまで下げてあった
      * (6回ずつ測ると 100KB は最短 474ms、20KB は最短 441ms で、33ms は固定の費用)。
      * **いまは 100KB に戻してある** — 同じ ffmpeg に**字幕まで見つけさせる**ので、
      * 映像だけのときの値では足りない
@@ -85,11 +85,11 @@ describe('ライブの焼き方', () => {
     });
 
     /*
-     * **インタレは常に60コマで解く。** 放送は 1080i なので、解かずに渡すと
+     * **インタレは常に60コマでデコードする。** 放送は 1080i なので、デコードせずに渡すと
      * 動きのある場面が櫛状になる。録画と違い、ライブは映像が来る前に決める
      * しかないので、動きが絶対に落ちない側 (60) に倒す
      */
-    test('インタレを60コマで解く', () => {
+    test('インタレを60コマでデコードする', () => {
         const live = encodeArgs(1024, stereo);
         expect(live[live.indexOf('-vf') + 1]).toBe('bwdif');
     });
@@ -97,7 +97,7 @@ describe('ライブの焼き方', () => {
     /*
      * **局を名指しで選ぶ。** 1本の物理チャンネルに複数の局が乗っているので、
      * `0:v:0` は「最初に見つけた映像」でしかない。実機の T26 には Eテレ1/2/3 と
-     * **ワンセグ** (320x180 の H.264) が並んでいて、それを掴む目まである
+     * **ワンセグ** (320x180 の H.264) が並んでいて、それを選んでしまうこともある
      */
     test('選んだ局の中から映像と音声を採る', () => {
         const args = encodeArgs(1032, stereo);
@@ -162,7 +162,7 @@ describe('ライブの焼き方', () => {
     });
 
     /*
-     * **字幕も同じ ffmpeg で焼く。** 出口を2つ持ち、字幕は `pipe:3` に出す。
+     * **字幕も同じ ffmpeg でエンコードする。** 出口を2つ持ち、字幕は `pipe:3` に出す。
      * 別々に起こすと入口の寄せ幅が違って、時刻を突き合わせられない
      */
     test('字幕は2つ目の出口へ出す', () => {
@@ -171,7 +171,7 @@ describe('ライブの焼き方', () => {
         expect(args).toContain('pipe:3');
         // 映像の出口が先。字幕はそのあと
         expect(args.indexOf('pipe:1')).toBeLessThan(args.indexOf('pipe:3'));
-        // 字幕は解かずに写す。描く指定 (-sub_type) も要らない
+        // 字幕はデコードせずに写す。描く指定 (-sub_type) も要らない
         expect(args.join(' ')).toContain('-map 0:p:1024:s:0 -c:s copy');
         expect(args).not.toContain('-sub_type');
     });
@@ -179,7 +179,7 @@ describe('ライブの焼き方', () => {
     /*
      * **字幕を持たない放送はある** (ショッピングやサブチャンネル)。
      * そこに頼むと ffmpeg は組み立ての時点で降りて**映像も出ない**ので、
-     * 字幕を外して焼き直せる形にしてある (`Session.run`)
+     * 字幕を外して再エンコードできる形にしてある (`Session.run`)
      */
     test('字幕なしでも組める', () => {
         const args = encodeArgs(1024, stereo, 'h264', null);
@@ -209,7 +209,7 @@ describe('ライブの焼き方', () => {
 
     /*
      * **`-loglevel` は下げられない。** 選べる字幕は入口の見出しから拾っていて
-     * (`TrackList`)、あれは info で出る。字幕を映像と同じ ffmpeg で焼くように
+     * (`TrackList`)、あれは info で出る。字幕を映像と同じ ffmpeg でエンコードするように
      * したので、こちらも下げられなくなった。要らない行は読む側で落とす。
      * **数字の進み具合だけは止める** — 毎秒何行も流れるだけで読むものが無い
      */
@@ -221,19 +221,19 @@ describe('ライブの焼き方', () => {
 });
 
 /**
- * **焼き方は見ながら選べる** (`LiveCodec`)。絵の中身ではなく「その端末で出るか」
+ * **エンコード方式は見ながら選べる** (`LiveCodec`)。絵の中身ではなく「その端末で出るか」
  * の話なので、音声とは別に選ばせる。
  *
  * AV1 は設計 (stream.md §1) が最初から狙っていた形。実機は HW エンコーダを
  * 持たないが 44 スレッドあり、同じ電波を 40 秒ずつ通した実測では落ちこぼれない:
  *
- *     x264 veryfast   1バイト目 729ms   焼けた尺 38.5秒/41秒
- *     AV1 preset 12   1バイト目 1177ms  焼けた尺 39.1秒/41秒
+ *     x264 veryfast   1バイト目 729ms   エンコードできた尺 38.5秒/41秒
+ *     AV1 preset 12   1バイト目 1177ms  エンコードできた尺 39.1秒/41秒
  *
- * **量は中身次第。** どちらも品質を指定して焼いているので、ある40秒では
+ * **量は中身次第。** どちらも品質を指定してエンコードしているので、ある40秒では
  * AV1 が 15% 小さく (3.3 → 2.8 Mbit/s)、別の25秒ではほぼ同じ (11.6 → 11.4) だった
  */
-describe('焼き方を選ぶ', () => {
+describe('エンコード方式を選ぶ', () => {
     const av1 = () => encodeArgs(1024, stereo, 'av1');
 
     test('既定は H.264。**どの端末でも出る**', () => {
@@ -241,7 +241,7 @@ describe('焼き方を選ぶ', () => {
         expect(encodeArgs(1024, stereo, 'h264')).toContain('libx264');
     });
 
-    test('AV1 を選ぶと SVT-AV1 で焼く', () => {
+    test('AV1 を選ぶと SVT-AV1 でエンコードする', () => {
         expect(av1()).toContain('libsvtav1');
         expect(av1()).not.toContain('libx264');
     });
@@ -332,7 +332,7 @@ describe('音声も組で決まる', () => {
  *     ultrafast 無劣化    最短 643ms             235.7 Mbit/s
  */
 describe('H.264 は速さを優先する', () => {
-    test('いちばん速い設定で焼く', () => {
+    test('いちばん速い設定でエンコードする', () => {
         expect(plain()[plain().indexOf('-preset') + 1]).toBe('ultrafast');
     });
 
@@ -394,8 +394,8 @@ describe('コマ数の上限', () => {
         expect(encodeArgs(1024, stereo)).not.toContain('-r');
     });
 
-    /** どちらの焼き方でも要る。読み切れないのは入口の話 */
-    test('どちらの焼き方でも付ける', () => {
+    /** どちらのエンコード方式でも要る。読み切れないのは入口の話 */
+    test('どちらのエンコード方式でも付ける', () => {
         for (const codec of ['h264', 'av1'] as const) {
             expect(encodeArgs(1024, stereo, codec)).toContain('-fpsmax');
         }
@@ -403,7 +403,7 @@ describe('コマ数の上限', () => {
 });
 
 /**
- * **掴めなかったことを、画面に出す言葉にする。**
+ * **使えなかったことを、画面に出す言葉にする。**
  *
  * エージェントの言い分 (「電波が来ていないか、その周波数に放送がありません」) は
  * 言い切りとしては正しいが、アンテナや配線を疑う文面になる。実機で「T27 が
@@ -411,7 +411,7 @@ describe('コマ数の上限', () => {
  * いた**だけだった (48時間で10回、全部 01:04〜02:54。番組表では 00:11〜05:00 が
  * 放送休止。窓の外では一発で通り、5秒で 11.3MB 流れてきた)。
  */
-describe('掴めなかった理由', () => {
+describe('使えなかった理由', () => {
     const NOT_LOCKED =
         '選局できません (500) 同期しませんでした (電波が来ていないか、その周波数に放送がありません)';
     // その土地の 05:00。**時計はコンテナの TZ で読む** (`server/library.ts`) ので、
@@ -430,14 +430,14 @@ describe('掴めなかった理由', () => {
      * **言い換えるのは「同期しなかった」ときだけ。** 塞がっていたときや
      * ffmpeg が降りたときに「放送休止です」と出すと、今度はこちらが嘘をつく
      */
-    test('別の理由で掴めなかったときは言い換えない', () => {
+    test('別の理由で使えなかったときは言い換えない', () => {
         expect(whyNotTuned('チューナーに空きがありません', until)).toBe('選局できませんでした');
         expect(whyNotTuned('ffmpeg が終了しました (1)', until)).toBe('選局できませんでした');
     });
 });
 
-describe('音声だけの焼き方 (外から使う口の ?audio=only)', () => {
-    test('映像も字幕も焼かず、AAC だけを fMP4 で出す', () => {
+describe('音声だけのエンコード方式 (外から使う口の ?audio=only)', () => {
+    test('映像も字幕もエンコードせず、AAC だけを fMP4 で出す', () => {
         const args = encodeArgs(1024, stereo, 'audio', 0);
         expect(args).not.toContain('-vf');
         expect(args.some((a) => a.endsWith(':v:0'))).toBe(false);
@@ -455,23 +455,23 @@ describe('外から選ぶ音声 (?audio=<id>)', () => {
     const tracks = audioTracks([{ componentType: 2, langs: ['jpn', 'eng'] }]);
     const chosen = (asked: string | null) => pickTrack(tracks, askedTrack(asked));
 
-    test('デュアルモノの副音声は右だけを両耳に配って焼く', () => {
+    test('デュアルモノの副音声は右だけを両耳に配ってエンコードする', () => {
         const args = encodeArgs(1024, chosen('0:sub'));
         expect(args).toContain('0:p:1024:a:0');
         expect(args[args.indexOf('-af') + 1]).toBe('pan=stereo|c0=c1|c1=c1');
     });
 
-    test('知らないものは主音声で焼く (断らない)', () => {
+    test('知らないものは主音声でエンコードする (断らない)', () => {
         const args = encodeArgs(1024, chosen('3:sub'));
         expect(args[args.indexOf('-af') + 1]).toBe('pan=stereo|c0=c0|c1=c0');
         expect(chosen('only').id).toBe('0:main');
     });
 
     /*
-     * **音声が違えば相乗りしない。** 同じ局を主音声で観ている人の焼いたものに、
-     * 副音声を頼んだ人が乗ると、頼んだ音が出ない。生は全部の音声を送るので分けない
+     * **音声が違えば相乗りしない。** 同じ局を主音声で観ている人のエンコードしたものに、
+     * 副音声を頼んだ人が乗ると、頼んだ音が出ない。放送そのままなら全部の音声を送るので分けない
      */
-    test('焼くものは音声ごとに別のセッション、生は1つ', () => {
+    test('エンコードするものは音声ごとに別のセッション、放送そのままは1つ', () => {
         const main = chosen('0:main');
         const sub = chosen('0:sub');
         expect(key('GR', '27', 1, main, 'h264', 0)).not.toBe(key('GR', '27', 1, sub, 'h264', 0));
@@ -480,17 +480,17 @@ describe('外から選ぶ音声 (?audio=<id>)', () => {
 });
 
 /**
- * **GPU で焼く** (issue #417)。道を選ぶのは `hwenc.liveHw` で、ここは引数の組み立てだけ。
+ * **GPU でエンコードする** (issue #417)。道を選ぶのは `hwenc.liveHw` で、ここは引数の組み立てだけ。
  * 手元に GPU が無いので、**字幕・コマ数の上限・音声がソフトウェアのときと同じに残る**ことを見る
  */
-describe('GPU で焼く', () => {
+describe('GPU でエンコードする', () => {
     const device = '/dev/dri/renderD128';
     const encodeOnly = () =>
         encodeArgs(1024, stereo, 'h264', 0, { way: { device, kind: 'vaapi' }, full: false });
     const full = () => encodeArgs(1024, stereo, 'h264', 0, { way: { device, kind: 'vaapi' }, full: true });
     const before = (args: string[], what: string) => args.indexOf(what) < args.indexOf('-i');
 
-    test('焼くところだけ GPU — インタレ解除は CPU の bwdif のまま、上げてから渡す', () => {
+    test('エンコードするところだけ GPU — インタレ解除は CPU の bwdif のまま、上げてから渡す', () => {
         const args = encodeOnly();
         expect(before(args, '-init_hw_device')).toBe(true);
         expect(args[args.indexOf('-vf') + 1]).toBe('bwdif,format=nv12,hwupload');

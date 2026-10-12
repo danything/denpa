@@ -62,7 +62,7 @@ export type { ReceiverInfo, Store } from './nvram';
 export { type Plane, planeArea } from './plane';
 export type { Fonts, Rect } from './render';
 
-/** 局 (`arib://<original_network_id>.<transport_stream_id>.<service_id>` を解いたもの) */
+/** 局 (`arib://<original_network_id>.<transport_stream_id>.<service_id>` を読み取ったもの) */
 export interface Service {
     originalNetworkId: number;
     transportStreamId: number | null;
@@ -145,7 +145,7 @@ const ACCESS_KEYS: Record<number, string> = { 19: 'X', 21: 'B', 22: 'R', 23: 'G'
 /*
  * 長く流し続けても増え続けない歯止め。ライブはモジュールの版上げ・イベントメッセージ・TOT が
  * 止まらずに来る (NHK は 10 分で DII の更新 48 回・イベントメッセージ 4234 件)。文書が
- * 解き忘れても、エンジンが持つものは一定に収める
+ * 後始末を忘れても、エンジンが持つものは一定に収める
  */
 /** 待っているイベントの上限 (溢れた受け手は捨てる) */
 export const MAX_QUEUE = 512;
@@ -287,7 +287,7 @@ class Engine implements DomHost, BrowserHost, RenderHost {
     feed(message: ResponseMessage): void {
         if (this.destroyed) return;
         // 届いたものを捌くのもエンジンの仕事に数える (ライブは止まらずに流れ込み続ける。
-        // モジュールを解く・受け手を探すのを数えないと、10 秒のうち 4 割の見張りから漏れる)
+        // モジュールをデコードする・受け手を探すのを数えないと、10 秒のうち 4 割の見張りから漏れる)
         this.work(() => {
             for (const event of this.resources.feed(message)) this.react(event);
         });
@@ -1288,7 +1288,7 @@ class Engine implements DomHost, BrowserHost, RenderHost {
                     });
                 }
                 this.doc?.touch();
-                // 外字を解くのも動いた時間に数える (待ちの続きなので work の外)
+                // 外字をデコードするのも動いた時間に数える (待ちの続きなので work の外)
                 this.charge(started);
                 return 1;
             }),

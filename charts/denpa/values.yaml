@@ -29,7 +29,7 @@ imageMarks:
   agent: ""
 
 denpa:
-  # 同時に焼く本数。ffmpeg は 1 本で ~4GB 使う
+  # 同時にエンコードする本数。ffmpeg は 1 本で ~4GB 使う
   encodeConcurrency: 2
   timezone: Asia/Tokyo
   # ログインなしで通すネットワーク (CIDR のカンマ区切り)。docs/auth.md。
@@ -67,9 +67,9 @@ denpa:
   livenessProbe:
     initialDelaySeconds: 20
     periodSeconds: 30
-  # **Intel の GPU で焼く** (docs/encode.md「GPU で焼く」)。イメージには QSV / VA-API の
+  # **Intel の GPU でエンコードする** (docs/encode.md「GPU でエンコードする」)。イメージには QSV / VA-API の
   # ドライバが入っていて、コンテナから /dev/dri が見えれば起動時に見つけて使う
-  # (無ければソフトウェアで焼く)。GPU を挿せば何もしなくても効くように、既定で
+  # (無ければソフトウェアでエンコードする)。GPU を挿せば何もしなくても効くように、既定で
   # /dev/dri を hostPath で渡す。そのぶん Pod は privileged になる
   # (そうしないとデバイスの cgroup が /dev/dri を開かせない)。デバイスプラグイン
   # (intel-device-plugins-for-kubernetes) を使うなら false にして、resources.limits に
@@ -118,7 +118,7 @@ persistence:
   data:
     size: 5Gi
     existingClaim: ""
-  # 生TSの作業領域。エンコードが終われば消えるのでライブラリほど要らない
+  # 元のTSの作業領域。エンコードが終われば消えるのでライブラリほど要らない
   raw:
     size: 300Gi
     existingClaim: ""

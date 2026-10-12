@@ -314,7 +314,7 @@ export class CaptionPainter {
          *
          * CSS の大きさ (`clientWidth`) は整数に丸めてあるので、それで数えると端数のぶん絵が
          * 引き伸ばされて滲む (スマホの縦・データ放送の小窓の中の `%` の大きさで出る)。
-         * `translate` (帯の上への持ち上げ) は大きさを変えないので、倍率には入らない。
+         * `translate` (操作バーの上への持ち上げ) は大きさを変えないので、倍率には入らない。
          * 祖先に掛かるのは `scale` と `translate` だけの前提 (`rotate` だと外接矩形になり合わない)
          */
         const dpr = window.devicePixelRatio || 1;

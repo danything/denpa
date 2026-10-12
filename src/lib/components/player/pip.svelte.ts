@@ -44,7 +44,7 @@ import { type Composed, canCompose, compose } from './compose';
  *
  * - **生のとき**: 生の流れに重ねたものを、代わりの `<video>` に用意しておく。字幕が出ていない
  *   コマは素通し
- * - **焼いたもの (ライブ・追っかけ・観る画面)**: 押した時点で字幕を出して再生しているときだけ、
+ * - **変換した映像 (ライブ・追っかけ・観る画面)**: 押した時点で字幕を出して再生しているときだけ、
  *   `<video>` から流れを取って (`captureStream`) 重ね、代わりの `<video>` を小窓にする。
  *   字幕が無い・消しているときは `<video>` をそのまま出す (重ねるぶん重い)。**用意するのは
  *   小窓に出している間だけ**で、閉じたら畳む。音は今までどおり元の `<video>` から鳴る。
@@ -85,7 +85,7 @@ interface Options {
     auto?: () => boolean;
     /** 字幕を重ねている canvas。**小窓にも重ねる** (`compose.ts`) */
     overlay?: () => HTMLCanvasElement | null;
-    /** 字幕を出しているか (持っていて、消していない)。焼いたものを字幕ごと小窓に出すかを決める */
+    /** 字幕を出しているか (持っていて、消していない)。変換した映像を字幕ごと小窓に出すかを決める */
     captions?: () => boolean;
 }
 
@@ -159,7 +159,7 @@ export function pictureInPicture(options: Options): Pip {
     let rawComposed: Composed | null = null;
     /** 小窓を頼んでいる最中か (`toggle`) */
     let entering = false;
-    /** 焼いたものに字幕を重ねたもの (`composeBaked`)。**小窓に出している間だけ** 居る */
+    /** 変換した映像に字幕を重ねたもの (`composeBaked`)。**小窓に出している間だけ** 居る */
     let baked = $state<Composed | null>(null);
     /**
      * 用意できなかった理由 (`prepare`)。**立っている間はボタンを出さない** — Firefox は生の
@@ -172,7 +172,7 @@ export function pictureInPicture(options: Options): Pip {
     const canCapture =
         typeof HTMLCanvasElement !== 'undefined' && 'captureStream' in HTMLCanvasElement.prototype;
     const raw = (): boolean => options.raw?.() ?? false;
-    /** いま小窓に出すのは代わりの video か (生・字幕を重ねた焼いたもの) */
+    /** いま小窓に出すのは代わりの video か (MPEG-2 をそのまま描くもの、または字幕を重ねた変換映像) */
     const proxied = (): boolean => raw() || baked !== null;
 
     $effect(() => {
@@ -186,7 +186,7 @@ export function pictureInPicture(options: Options): Pip {
             else if (on === video) on = null;
             if (video === proxy && on !== proxy) {
                 flowing(false);
-                // 焼いたものに重ねていたなら畳む。小窓に出していない間まで重ねない
+                // 変換した映像に重ねていたなら畳む。小窓に出していない間まで重ねない
                 dropBaked();
             }
         };
@@ -204,7 +204,7 @@ export function pictureInPicture(options: Options): Pip {
      * **小窓で押された止める・再開を player に伝える。**
      *
      * 小窓に出している間だけ。それ以外の `pause` まで拾うと、押していないのに止まった
-     * ことになる。**生へ移るときも拾わない** — player は焼いたほうの `<video>` を止めるが
+     * ことになる。**生へ移るときも拾わない** — player は変換したほうの `<video>` を止めるが
      * (`startRaw`)、`pause` が届くのは小窓が閉じきる前で、まだ `on` に居る。
      * player が自分で止めた・再開したときは、その時点で `paused` が既に合っているので何もしない
      */
@@ -236,7 +236,7 @@ export function pictureInPicture(options: Options): Pip {
         const unlisten = listen(video);
         const unfollow = follow(video);
         /*
-         * 観る画面で、字幕を重ねた小窓を出している間に帯で止めた・再開した。小窓の
+         * 観る画面で、字幕を重ねた小窓を出している間に操作バーで止めた・再開した。小窓の
          * 再生ボタンの見た目を合わせる (ライブと追っかけは下の `paused` の $effect が合わせる)
          */
         const mirror = () => {
@@ -255,14 +255,14 @@ export function pictureInPicture(options: Options): Pip {
     });
 
     /**
-     * **生に移った・焼いたものに戻ったら小窓を閉じる。** 出しているほうにはもう絵が
+     * **生に移った・変換した映像に戻ったら小窓を閉じる。** 出しているほうにはもう絵が
      * 流れてこない (生では `<video>` は空、戻れば canvas は畳まれる)。黙って残すと、
      * 止まった絵の小窓が居座る
      */
     $effect(() => {
         const isRaw = raw();
         if (on === null) return;
-        // 字幕を重ねた小窓は焼いたほうの絵なので、生のものではない
+        // 字幕を重ねた小窓は変換したほうの絵なので、生のものではない
         if ((on === proxy && baked === null) !== isRaw) leave();
     });
 
@@ -281,7 +281,7 @@ export function pictureInPicture(options: Options): Pip {
     }
     $effect(guard);
 
-    /** 生のとき、代わりの video も止める・再開を合わせる (押されたのが帯のボタンのとき) */
+    /** 生のとき、代わりの video も止める・再開を合わせる (押されたのが操作バーのボタンのとき) */
     $effect(() => {
         const paused = options.paused?.() ?? false;
         if (proxy === null || on !== proxy) return;
@@ -365,7 +365,7 @@ export function pictureInPicture(options: Options): Pip {
     }
 
     /**
-     * 焼いたものに字幕を重ねるか。**押した時点で字幕を出しているときだけ** (上の説明)。
+     * 変換した映像に字幕を重ねるか。**押した時点で字幕を出しているときだけ** (上の説明)。
      * 止めている間も重ねない — `captureStream` は止まった `<video>` からコマを出さないので、
      * 1枚目を待ちきれずに元の `<video>` へ落ちるだけになる
      */
@@ -381,7 +381,7 @@ export function pictureInPicture(options: Options): Pip {
     }
 
     /**
-     * 焼いたものに字幕を重ねて、代わりの video に1枚目まで受け取る。**押されてから作る** —
+     * 変換した映像に字幕を重ねて、代わりの video に1枚目まで受け取る。**押されてから作る** —
      * 重ねられるのは Chrome・Edge だけで、あちらは「押された直後」が数秒続く (Safari と違って
      * 待っても断られない)。小窓に出していない間まで重ね続けないため。
      * 作れなければ null (元の video をそのまま出す)
@@ -423,7 +423,7 @@ export function pictureInPicture(options: Options): Pip {
         return target;
     }
 
-    /** 焼いたものに重ねていたら畳む。**元の流れ (`captureStream`) も止める** */
+    /** 変換した映像に重ねていたら畳む。**元の流れ (`captureStream`) も止める** */
     function dropBaked(): void {
         const composed = baked;
         if (composed === null) return;

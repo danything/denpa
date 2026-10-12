@@ -34,7 +34,7 @@ export function stopRecording(recordingId: number): void {
 function fail(recordingId: number, error: string): void {
     /*
      * 理由を書けば状態は決まる (recordings.state は生成列)。
-     * 掴むのも終わりなので、録り終えた時刻も同時に埋める
+     * チューナーを使うのも終わりなので、録り終えた時刻も同時に埋める
      */
     orm()
         .update(recordings)
@@ -103,7 +103,7 @@ function createRecording(reservation: Reservation): Recording {
             audio_type: program?.audio_type ?? null,
             // 番組表の行は24時間で消える。録り直しのときにも要るので写しておく
             genre_detail: program?.genre_detail ?? null,
-            // 焼いたものの音声トラックに番組表と同じ名前を入れるのに要る (`audioTitles`)
+            // エンコードしたものの音声トラックに番組表と同じ名前を入れるのに要る (`audioTitles`)
             audios: program?.audios ?? null,
             created_at: at,
             updated_at: at,
@@ -126,7 +126,7 @@ function createRecording(reservation: Reservation): Recording {
  * 予約を録画に移す。ストリームの読み出しは待たずにバックグラウンドで走らせ、
  * 呼び出し側(スケジューラのtick)を塞がないようにする。
  *
- * `after` は、同じ見回りで止めた録画の読み手。チューナーを掴むとき、エージェントはそれらを
+ * `after` は、同じ見回りで止めた録画の読み手。チューナーを使うとき、エージェントはそれらを
  * もう離れたものとして選ぶ (引き継ぎ。docs/agent.md「選ぶ順の約束」)
  */
 export async function startRecording(
@@ -157,7 +157,7 @@ function launch(recording: Recording, after: readonly StreamUse[] = []): void {
 /**
  * チューナーが空くのを少し待つ。
  *
- * 掴めない理由は「本当に足りない」だけとは限らない。番組の頭を数秒落としてでも
+ * 使えない理由は「本当に足りない」だけとは限らない。番組の頭を数秒落としてでも
  * 録れたほうがいいので、すぐには諦めない。
  */
 const OPEN_RETRIES = 5;
@@ -268,7 +268,7 @@ async function pump(
     const eventId = recording.program_id === null ? null : recording.program_id % 100000;
 
     let written = 0;
-    // 何を掴んでいるのかがチューナー画面に出る。番組名は載せず、IDだけ渡して向こうで引く
+    // 何を使っているのかがチューナー画面に出る。番組名は載せず、IDだけ渡して向こうで引く
     const use = recordingUse(recording.id);
 
     try {
@@ -276,7 +276,7 @@ async function pump(
         // (MPEG-TS は 188 バイトのパケットの並びなので、そのまま繋げても読める)
         const sink = createWriteStream(path, { flags: 'a' });
         // 実際に受け取っていた時間を測る。番組表の尺は予定でしかなく、
-        // 途中で止めたときや掴むのに手間取ったときは実物と合わない。
+        // 途中で止めたときやチューナーを取るのに手間取ったときは実物と合わない。
         // 再開したときは足していく(ファイルも追記なので合計が実物になる)
         const from = Date.now();
         let savedEpgAt = from;
@@ -285,13 +285,13 @@ async function pump(
         try {
             /*
              * **選局は自分から切るまで終わらない。** 向こうから終わったなら (EOF でも
-             * 例外でも) 蹴られたか切れたかで、終了時刻 (自分の abort) までは掴み直す。
+             * 例外でも) 蹴られたか切れたかで、終了時刻 (自分の abort) までは取り直す。
              * EOF を正常終了と読んでいた頃は、蹴られた録画が尻切れのまま「録れた」に
              * なり (HTTP 越しでは失敗も正常終了に見える。`agent/conformance.test.ts`)、
              * 例外で抜けていた頃はエージェントの Pod を入れ替えただけで番組が丸ごと
              * 失敗した (実機)
              */
-            // 引き継ぎは最初に掴むときだけ。掴み直すころには、止めた録画はもう離れている
+            // 引き継ぎは最初に使うときだけ。取り直すころには、止めた録画はもう離れている
             let handoff = after;
             while (!controller.signal.aborted) {
                 /** 切れた理由。EOF なら null のまま */
@@ -307,14 +307,14 @@ async function pump(
                         controller.signal,
                     );
                 } catch (error) {
-                    // **掴み直せなくても諦めない。** エージェントの Pod 入れ替えは
+                    // **取り直せなくても諦めない。** エージェントの Pod 入れ替えは
                     // openWithRetry の数十秒を超えることがあり、そこで失敗にすると
                     // 「終了時刻まで掛け直す」という上の約束を破って番組を丸ごと
                     // 落とす。終了時刻(=自分での abort)が来るまでは待って掛け直す
                     if (controller.signal.aborted) break;
                     interrupted++;
                     console.warn(
-                        `[recorder] 録画 ${recording.id}: 選局を掴み直せません (${interrupted} 回目: ${error})。` +
+                        `[recorder] 録画 ${recording.id}: 選局を取り直せません (${interrupted} 回目: ${error})。` +
                             `待って掛け直します`,
                     );
                     await Bun.sleep(OPEN_RETRY_WAIT);
@@ -354,7 +354,7 @@ async function pump(
                 interrupted++;
                 console.warn(
                     `[recorder] 録画 ${recording.id}: 選局が切れました (${interrupted} 回目` +
-                        `${broke === null ? '' : `: ${broke}`})。掴み直します`,
+                        `${broke === null ? '' : `: ${broke}`})。取り直します`,
                 );
                 await Bun.sleep(OPEN_RETRY_WAIT);
             }
@@ -426,7 +426,7 @@ function finish(recordingId: number, size: number): void {
         return;
     }
 
-    // エンコードしない設定なら生TSをそのまま保存先へ移す
+    // エンコードしない設定なら元のTSをそのまま保存先へ移す
     const dest = libraryPath(recording, '.m2ts');
     moveFile(recording.ts_path!, dest);
     void writeThumbnail(dest, (recording.end_at - recording.start_at) / 1000);
@@ -453,7 +453,7 @@ export function recordingUntil(rec: { end_at: number; record_to: number | null }
  * プロセスが落ちた時点で録画中だった行を拾い直す。
  *
  * AbortController はメモリ上にしか無いので、再起動すると録画は止まったままになる。
- * まだ放送中のものは録り直しに行く。生TSは追記で開くので、落ちるまでに録れていた分は
+ * まだ放送中のものは録り直しに行く。元のTSは追記で開くので、落ちるまでに録れていた分は
  * そのまま残り、抜けるのは止まっていた間だけになる。
  * 放送が終わってしまったものは、もう取り返せないので失敗に倒す。
  */
@@ -489,7 +489,7 @@ const STRAY_GRACE = 60_000;
 /**
  * **持ち主の居ない「録画中」を畳む。**
  *
- * 掴んでいる録画はプロセスの中にしか無い (`active`)。**畳む間もなく殺された**とき —
+ * 録っている最中の録画はプロセスの中にしか無い (`active`)。**畳む間もなく殺された**とき —
  * k3s ごと落とした、Pod を強制終了した — は、DB の行だけが録画中で残る。
  * 起動時にも同じ片付けをするが (`recoverOrphanedRecordings`)、そのとき**まだ放送中なら
  * 録り直しに行く**ので、再開した先でまた殺されると次の起動まで誰も畳まない。
@@ -498,8 +498,8 @@ const STRAY_GRACE = 60_000;
  * `recordings.state = 'recording'` で決まっている (`routes/+page.server.ts`)。放送は
  * とうに終わっているのに「録画中」と出たままで、取り消す以外に消す手が無い。
  *
- * **掴んでいるものには触らない。** 終了時刻を過ぎたものだけを、起動時と同じ理由で
- * 失敗にする。生TSは消さないので、録れていた分は詳細から焼き直せる。
+ * **録っている最中のものには触らない。** 終了時刻を過ぎたものだけを、起動時と同じ理由で
+ * 失敗にする。元のTSは消さないので、録れていた分は詳細から再エンコードできる。
  *
  * `at` と `owned` を渡せるようにしてあるのは試すため (`recorder-stray.test.ts`)
  */
@@ -512,7 +512,7 @@ export function failStrayRecordings(at = now(), owned: ReadonlySet<number> = new
         .filter((rec) => !owned.has(rec.id) && at >= recordingUntil(rec) + STRAY_GRACE);
 
     for (const rec of stray) {
-        console.warn(`[recorder] 録画 ${rec.id}: 掴んでいる者が居ないまま終了時刻を過ぎました。失敗にします`);
+        console.warn(`[recorder] 録画 ${rec.id}: 録っている者が居ないまま終了時刻を過ぎました。失敗にします`);
         fail(rec.id, '録画が中断されたまま終了時刻を過ぎました');
     }
     return stray.length;

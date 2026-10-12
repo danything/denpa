@@ -1,5 +1,5 @@
 #!/bin/bash
-# 放送の MPEG-2 と AAC (と、画面の canvas で描く道の Opus) を解く WebAssembly を組む (docs/stream.md §5.5)。
+# 放送の MPEG-2 と AAC (と、画面の canvas で描く経路の Opus) をデコードする WebAssembly を組む (docs/stream.md §5.5)。
 #
 #   build.sh <FFmpeg のソース> <出口>
 #
@@ -8,7 +8,7 @@
 #
 # **組むのは mpeg2video の復号器と、絵の区切りを探す parser と、AAC・Opus の復号器だけ。**
 # 他は全部切る (`--disable-everything`)。AAC はブラウザの AudioDecoder に任せていたが、
-# https でしか出てこず iPhone の Safari には iOS 26 まで無いので、こちらで解く。
+# https でしか出てこず iPhone の Safari には iOS 26 まで無いので、こちらでデコードする。
 # AAC の parser は組まない — ADTS の区切りと時刻は JS (ts/pes.ts の AdtsSplitter) が付ける。
 #
 # **Opus の復号器も組む** (AV1 と組んで送られてくる fMP4 の音。ライブ・追っかけを canvas で
@@ -19,7 +19,7 @@
 # - スレッドも SIMD も使わない。スレッド版は SharedArrayBuffer のために COOP/COEP
 #   (crossOriginIsolated) を全ページに要求することになり、denpa の画面 (データ放送の
 #   中継・ロゴ・別オリジンの Hybridcast) と噛み合わない。実測で 1 本でも 1080i を
-#   実時間の 3 倍で解けたので払う理由が無い。SIMD も 1 割ほどしか変わらなかった
+#   実時間の 3 倍でデコードできたので払う理由が無い。SIMD も 1 割ほどしか変わらなかった
 set -euo pipefail
 SRC=$1
 OUT=$2

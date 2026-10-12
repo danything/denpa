@@ -6,7 +6,7 @@ namespace Denpa.Agent.Tests;
  * MULTI2 の答え合わせ。
  *
  * 答えは libaribb25 に同じ鍵と中身を渡して取った値。**今まで録れていたものが
- * 同じように解けること**が肝心なので、仕様書から起こした値ではなくこちらと比べる。
+ * 同じように復号できること**が肝心なので、仕様書から起こした値ではなくこちらと比べる。
  * 鍵と中身はでたらめ (固定の種の LCG) で、意味は無い。
  */
 public class Multi2Tests
@@ -22,7 +22,7 @@ public class Multi2Tests
         "32a59b1b3d107cf778d67fe26df81191297e9395cb12c557ce5af1d41618d719bc045b7e9965f1a29471c42aac6aa938" +
         "c475c7ad3238021f053b2c991afceb15decf68bae07cbcd61e971b9a0b9dbe9763d392fcafdfa28c";
 
-    /// <summary>偶数の鍵で 184 バイト (1 パケットの中身まるごと) を解いた答え</summary>
+    /// <summary>偶数の鍵で 184 バイト (1 パケットの中身まるごと) を復号した答え</summary>
     private const string EvenDecrypted =
         "3fd15add3457b22305c9060ec8e1f4074e84cf3bc847432d9c3eed2c6c615fb3232f2de1578a9ef3783d91290d8daff3" +
         "a94ece918be027661804d9a3ec3d39d6716ae39fac832025fa125aa34276b9a778d2e0e185d5e888b19c29e7bca3dc86" +
@@ -56,11 +56,11 @@ public class Multi2Tests
     }
 
     [Test]
-    public async Task 偶数の鍵で1パケットぶん解ける() =>
+    public async Task 偶数の鍵で1パケットぶん復号できる() =>
         await Assert.That(Decrypt(even: true, 184)).IsEqualTo(EvenDecrypted);
 
     [Test]
-    public async Task 奇数の鍵で1パケットぶん解ける() =>
+    public async Task 奇数の鍵で1パケットぶん復号できる() =>
         await Assert.That(Decrypt(even: false, 184)).IsEqualTo(OddDecrypted);
 
     /// <summary>
@@ -68,7 +68,7 @@ public class Multi2Tests
     /// 尻尾だけが違う値になる
     /// </summary>
     [Test]
-    public async Task 半端な尻尾はOFBで解く()
+    public async Task 半端な尻尾はOFBで復号する()
     {
         await Assert.That(Decrypt(even: true, 183)).IsEqualTo(EvenDecrypted[..352] + "0d1edd8466823f");
         await Assert.That(Decrypt(even: false, 183)).IsEqualTo(OddDecrypted[..352] + "3f9f4389a742a6");
@@ -76,7 +76,7 @@ public class Multi2Tests
 
     /// <summary>丸ごとのブロックが1つも無いと、CBC の初期値を暗号化して XOR するだけ</summary>
     [Test]
-    public async Task 短い中身も解ける()
+    public async Task 短い中身も復号できる()
     {
         await Assert.That(Decrypt(even: true, 8)).IsEqualTo(EvenDecrypted[..16]);
         await Assert.That(Decrypt(even: true, 5)).IsEqualTo("0e577d185d");
@@ -96,9 +96,9 @@ public class Multi2Tests
             .IsEqualTo(EvenEncrypted[..352] + "5e7511322ca057");
     }
 
-    /// <summary>SIMD で並べる道と1つずつの道の境目 (長さ) を跨いでも、掛けて解けば戻る</summary>
+    /// <summary>SIMD で並べる道と1つずつの道の境目 (長さ) を跨いでも、掛けて復号すれば戻る</summary>
     [Test]
-    public async Task どの長さでも掛けて解けば戻る()
+    public async Task どの長さでも掛けて復号すれば戻る()
     {
         var cipher = Cipher();
         var random = new Random(7);

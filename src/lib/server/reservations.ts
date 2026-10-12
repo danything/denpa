@@ -17,8 +17,8 @@ export async function reserve(programId: number): Promise<Reservation> {
     if (program.end_at <= at) throw new Error('この番組は放送が終わっています');
     // 手動で入れたものはルール由来 (既定 1) より上。**予約どうしだけの物差し**
     const priority = 2;
-    // 録画のしかたは全体で1つ。「焼くか否か」だけ予約時に固定する。
-    // 焼き方の細目 (生TSを残すか・CMの扱い・コーデック) は焼くときに settings を見る
+    // 録画のしかたは全体で1つ。「エンコードするか否か」だけ予約時に固定する。
+    // エンコード方法の細目 (元のTSを残すか・CMの扱い・コーデック) はエンコードするときに settings を見る
     const encode = settings().encode;
 
     orm()
@@ -45,7 +45,7 @@ export async function reserve(programId: number): Promise<Reservation> {
                 priority: sql`excluded.priority`,
                 encode: sql`excluded.encode`,
                 state: sql`CASE WHEN ${reservations.state} = 'canceled' THEN 'scheduled' ELSE ${reservations.state} END`,
-                // 取り消しを解いたので、印も消す
+                // 取り消しを解除したので、印も消す
                 canceled_by: null,
                 updated_at: sql`excluded.updated_at`,
             },
@@ -89,7 +89,7 @@ export async function cancel(reservationId: number): Promise<void> {
     const reservation = byId(reservationId);
     if (reservation === undefined) return;
 
-    // 録っている最中なら止める。掴んでいるかどうかを知っているのは録画の行のほう
+    // 録っている最中なら止める。使っているかどうかを知っているのは録画の行のほう
     const recording = orm()
         .select({ id: recordings.id })
         .from(recordings)

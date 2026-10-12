@@ -130,7 +130,7 @@ describe('CSS', () => {
         ).toEqual(['div']);
     });
 
-    test('url() を解く', () => {
+    test('url() の中身を取り出す', () => {
         expect(parseUrl('url("/40/0001/a.clt")')).toBe('/40/0001/a.clt');
         expect(parseUrl('url( b.png )')).toBe('b.png');
         expect(parseUrl('none')).toBeNull();

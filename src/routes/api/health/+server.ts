@@ -18,7 +18,7 @@ export function GET() {
     return json({
         ok: true,
         version: config.version,
-        // 新しい版が出ていれば、その札と場所 (update.ts)。無ければ null
+        // 新しい版が出ていれば、そのタグと場所 (update.ts)。無ければ null
         update: updateAvailable(),
         services: row?.n ?? 0,
         recording: activeRecordingIds().length,

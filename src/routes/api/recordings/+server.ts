@@ -10,13 +10,13 @@ import { displayTitle } from '#lib/server/title.js';
 /**
  * **観られる録画の一覧** (画面の外のもの向けの口。docs/api.md)。新しい順。
  *
- * **録画中のものも入れる** (`recording: true`)。画面の一覧と同じく、焼く前・録っている最中は
- * 生TSを追っかけ再生で観る (`chase` の口。`GET api/recordings/<id>/chase`)。
+ * **録画中のものも入れる** (`recording: true`)。画面の一覧と同じく、エンコードする前・録っている最中は
+ * 元のTSを追っかけ再生で観る (`chase` の口。`GET api/recordings/<id>/chase`)。
  * `cmReliable` は CM 飛ばしを観はじめに入れてよいか (画面の `skipCmAtStart` と同じ決め方。
  * ロゴでの判定に失敗した録画は無音だけで当てていて外れやすいので、false)。
  *
  * `files` は出せるものを全部、コーデック付きで並べる。どれを開くかは呼ぶ側が決める
- * (Cast なら H.264、新しいテレビなら AV1、録画ソフトなら生TS)。URL は denpa の根からの相対。
+ * (Cast なら H.264、新しいテレビなら AV1、録画ソフトなら元のTS)。URL は denpa の根からの相対。
  * `audios` は放送の音声の構成で、追っかけ (`chase?audio=<id>`) で選ぶもの。
  * `?limit=` と `?offset=` で区切れる (既定は全部)
  */
@@ -46,7 +46,7 @@ export function GET({ url }) {
         .where(
             and(
                 ne(recordings.state, 'deleted'),
-                // 録り終えたもの (焼いたか生TSがある) と、いま録っていて生TSが伸びているもの
+                // 録り終えたもの (エンコードしたか元のTSがある) と、いま録っていて元のTSが伸びているもの
                 or(
                     and(
                         isNotNull(recordings.finished_at),
@@ -86,7 +86,7 @@ export function GET({ url }) {
                 // 末尾まで観た時刻 (ms)。まだなら null。null かつ resumeMs も null なら未視聴 (画面の印と同じ)
                 watchedAt: row.watchedAt,
                 recording: row.state === 'recording',
-                // 生TSがある間 (録画中・焼く前) は追っかけで観られる
+                // 元のTSがある間 (録画中・エンコードする前) は追っかけで観られる
                 chase: row.ts === null ? null : `api/recordings/${row.id}/chase`,
                 cmReliable: !logoUnusable(row.cmNote),
                 poster: `api/recordings/${row.id}/poster`,

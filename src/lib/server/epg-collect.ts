@@ -229,7 +229,7 @@ async function collectChannel(
     const startedAt = Date.now();
     update({ active: [...state.active, label] });
     /**
-     * 開けたか。**掴めなかった回は「行った」ことにしない** — 録画に譲って
+     * 開けたか。**使えなかった回は「行った」ことにしない** — 録画に譲って
      * 開けなかっただけの局まで `epgChannelRetry` で休ませると、番組表が古くなる
      */
     let opened = false;
@@ -246,7 +246,7 @@ async function collectChannel(
         if (batch.length === 0) return;
         /*
          * 書けなくても読むのはやめない。読み取りの失敗 (下の catch) と混ざると
-         * 「掴めなかった」と出て、理由が追えなくなる。最後にまとめて書き直すので、
+         * 「使えなかった」と出て、理由が追えなくなる。最後にまとめて書き直すので、
          * 書けなかったぶんは読み手に戻しておく
          */
         try {
@@ -263,7 +263,7 @@ async function collectChannel(
             channel.channel,
             controller.signal,
             `epg ${channel.channel}`,
-            // 押されている間は、開くたびに強いほうで掴む
+            // 押されている間は、開くたびに高い優先度で取る
             boosted ? config.priority.epgNow : config.priority.epg,
         );
         opened = true;
@@ -292,7 +292,7 @@ async function collectChannel(
             if (Date.now() - flushedAt >= FLUSH_EVERY) flush();
         }
     } catch (error) {
-        // 掴めなかった・途中で切れた。**読めたところまでは取り込む** —
+        // 使えなかった・途中で切れた。**読めたところまでは取り込む** —
         // 電波が弱い局で1件も入らないより、半分でも埋まっているほうがいい
         if (!controller.signal.aborted) {
             console.warn(`[epg] ${label} を集められませんでした: ${error}`);
@@ -304,11 +304,11 @@ async function collectChannel(
     }
 
     /*
-     * **どれだけ掴んでいたかと、なぜ離したかを残す。**
+     * **どれだけ使っていたかと、なぜ離したかを残す。**
      *
      * 揃えば早く離すのは denpa だけがやっていることなので (よそは時間で
      * 打ち切る)、そこが効いていないと**黙って1本10分ずつ占有し続ける**。
-     * 実測でチューナーを1本 600 秒 (上限ちょうど) 掴んでいるのを見つけたが、
+     * 実測でチューナーを1本 600 秒 (上限ちょうど) 使っているのを見つけたが、
      * 揃わなかったのか電波が欠けていたのかは記録が無くて追えなかった。
      */
     if (opened) {
@@ -363,7 +363,7 @@ export function collectOnce(): Promise<number> {
  *
  * 入れたばかりのときのためのもの。普段の周回 (`collectOnce`) は録画にも
  * スキャンにもロゴにも譲るので、他が動いていると番組表がなかなか埋まらない。
- * 押されている間は**録画とライブ以外を全部蹴って**掴みに行く (`config.priority.epgNow`)。
+ * 押されている間は**録画とライブ以外を全部蹴って**取りに行く (`config.priority.epgNow`)。
  *
  * **既に回っている最中なら、その回を強くする。** 開くのは1チャンネルずつなので、
  * 次に開くところから効く (待たせて仕切り直すより早い)。

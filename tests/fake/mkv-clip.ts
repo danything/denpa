@@ -2,7 +2,7 @@
  * **作り置きの fMP4 (`live-av1.mp4` / `live-h264.mp4`) から、端末に保存した録画のふりをする Matroska を組む。**
  * 単体試験 (`src/lib/ts/mkv-media.test.ts`) と E2E (`41-watch-compat-local`) が使う。
  *
- * 偽 ffmpeg が焼く録画は中身が無い (0 が並んでいるだけ) ので、互換モードで描くところまで見るには
+ * 偽 ffmpeg がエンコードする録画は中身が無い (0 が並んでいるだけ) ので、互換モードで描くところまで見るには
  * 本物の映像と音の入った mkv が要る。ffmpeg の Matroska と同じ並びにする — SeekHead (Cues の在りか)・
  * Info・Tracks (CodecPrivate)・Cluster (1 秒ごと、鍵のコマで区切る)・Cues。字幕の軌道は入れない。
  *

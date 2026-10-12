@@ -51,7 +51,7 @@ public class CardStatusTests
             Present("PX4 内蔵リーダー", 1),
             new("Gemplus (usb 4-11)", () => throw new InvalidOperationException("使っているリーダーを開き直しました")),
             Failing("空のリーダー (usb 1-2)", new CardAbsentException("空のリーダー にカードが挿さっていません")),
-            Failing("壊れたリーダー (usb 1-3)", new IOException("別のプロセスがリーダーを掴んでいます")),
+            Failing("壊れたリーダー (usb 1-3)", new IOException("別のプロセスがリーダーを使っています")),
         ];
 
         var survey = Card.Local(() => Using, () => "Gemplus (usb 4-11)", () => found, TimeSpan.FromSeconds(5));
@@ -86,7 +86,7 @@ public class CardStatusTests
 
         var broken = rows[3]!;
         await Assert.That(broken["card"]!.GetValue<bool>()).IsFalse();
-        await Assert.That(broken["error"]!.GetValue<string>()).IsEqualTo("別のプロセスがリーダーを掴んでいます");
+        await Assert.That(broken["error"]!.GetValue<string>()).IsEqualTo("別のプロセスがリーダーを使っています");
     }
 
     [Test]
@@ -123,7 +123,7 @@ public class CardStatusTests
     }
 
     /// <summary>
-    /// **INT が通らないときはリーダーを開かない。** 覗きが掴んでいる間は繋ぎ直しが掴めず、
+    /// **INT が通らないときはリーダーを開かない。** 覗きが使っている間は繋ぎ直しがリーダーを開けず、
     /// 画面を開くたびに締め出してカードが二度と読めなくなった (実機)
     /// </summary>
     [Test]

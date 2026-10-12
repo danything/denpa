@@ -1,9 +1,9 @@
 /**
- * カルーセルで届いたファイルを持つ。**解くのはサーバ** ([ts/bml.ts](../ts/bml.ts)) で、ここには
+ * カルーセルで届いたファイルを持つ。**デコードするのはサーバ** ([ts/bml.ts](../ts/bml.ts)) で、ここには
  * 組み上がったモジュールが `ResponseMessage` で届く。
  *
  * - 文書の中の名前 (`/40/0000/startup.bml`・`~/0001/a.png`・`a.png`・`arib-dc://-1.-1.-1/40/0000`)
- *   を「部品・モジュール・ファイル」に解く。**大文字小文字は区別しない** (放送は 16 進の大小を混ぜる)
+ *   を「部品・モジュール・ファイル」に分解する。**大文字小文字は区別しない** (放送は 16 進の大小を混ぜる)
  * - まだ届いていないものは待つ (`fetch`)。待っている間は「データ取得中」
  * - `lockModuleOnMemory(Ex)` で押さえたモジュールは、版が上がっても押さえた版を持ち続ける
  * - DII でモジュールが消えた・版が上がったら古いものを捨てる。データイベントが変わったら部品ごと捨てる
@@ -56,7 +56,7 @@ export interface Dii {
 
 export type LockKind = 'lock' | 'lockEx';
 
-/** 文書の中の名前を解いたもの */
+/** 文書の中の名前を解決したもの */
 export interface Ref {
     component: number;
     /** 部品だけを指す (`~` や `/40`) ときは null */
@@ -91,7 +91,7 @@ const key = (component: number, module: number): string => `${component}/${modul
 
 export const hex = (n: number, size: number): string => n.toString(16).padStart(size, '0');
 
-/** 解いた名前を文書の名前に (`/40/0000/startup.bml`) */
+/** 解決した名前を文書の名前に (`/40/0000/startup.bml`) */
 export function refToPath(ref: Ref): string {
     let out = `/${hex(ref.component, 2)}`;
     if (ref.module !== null) out += `/${hex(ref.module, 4)}`;
@@ -107,7 +107,7 @@ export class Resources {
     private readonly locks = new Map<string, { module: Module | null; kind: LockKind }>();
     private pending: Pending[] = [];
     program: ProgramInfoMessage | null = null;
-    /** 待ちが増えた・減ったとき (データ取得中の札) */
+    /** 待ちが増えた・減ったとき (「データ取得中」の表示) */
     onReceiving: (receiving: boolean) => void = () => {};
     private receiving = false;
 
@@ -208,7 +208,7 @@ export class Resources {
     }
 
     /**
-     * 名前を解く。`base` は今の文書 (`/40/0000/startup.bml`)。部品・モジュールの番号で
+     * 名前を解決する。`base` は今の文書 (`/40/0000/startup.bml`)。部品・モジュールの番号で
      * 指せない名前 (http: など) は null
      */
     resolve(url: string, base: string | null): Ref | null {

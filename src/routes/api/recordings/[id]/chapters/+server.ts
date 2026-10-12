@@ -5,20 +5,20 @@ import { run } from '#lib/server/stream.js';
 import { parseChapters } from '#lib/ts/watch.js';
 
 /**
- * 焼いたものに入っているチャプターを返す。**CM飛ばしの行き先。**
+ * エンコードしたものに入っているチャプターを返す。**CM飛ばしの行き先。**
  *
  * ## DB ではなくファイルから読む
  *
- * `recordings.cm_ranges` にも検出した位置は残っているが、**焼き上がりと
+ * `recordings.cm_ranges` にも検出した位置は残っているが、**エンコードの完了と
  * 食い違うことがある**:
  *
- * - CMを**切って**焼いたものは、切ったぶんだけ後ろが前に詰まっている
+ * - CMを**切って**エンコードしたものは、切ったぶんだけ後ろが前に詰まっている
  * - 引き継いだ録画 (EPGStation) は denpa が検出していないので `cm_ranges` が空。
  *   それでもチャプターは入っている
  *
  * **入っているものを読めば、どれも同じ扱いで済む。**
  *
- * ## まだ焼けていない録画は検出した区間から
+ * ## まだエンコードできていない録画は検出した区間から
  *
  * 元の TS にチャプターは入らない (入れ物が持てない)。観る画面は TS の頭を 0 とした時刻で
  * 流す (`server/playback.ts`) ので、元の TS の頭から数えた `cm_ranges` がそのまま使える (`tsChapters`)
@@ -27,7 +27,7 @@ import { parseChapters } from '#lib/ts/watch.js';
  *
  * `-show_chapters` は見出しだけを読むので、中身を舐めない。実機の30分ものでも
  * 一瞬で返る。**開くたびに呼ぶ**ので、録画ごとに控えを持つほどではない
- * (ファイルが焼き直されたら中身も変わる)。
+ * (ファイルが再エンコードされたら中身も変わる)。
  */
 
 /** 待ち時間の上限。壊れたファイルで居座らせない */
@@ -36,7 +36,7 @@ const TIMEOUT = 15_000;
 export async function GET({ params }) {
     const recording = recordingOr404(params.id);
     const path = encodedPath(recording);
-    // 焼き上がれば中身が変わるので控えさせない
+    // エンコードが終われば中身が変わるので控えさせない
     if (path === null) {
         return Response.json(
             { chapters: await tsChapters(recording) },
@@ -57,7 +57,7 @@ export async function GET({ params }) {
 
     return Response.json(
         { chapters: parseChapters(out) },
-        // 同じファイルなら中身は変わらない。焼き直せばパスごと変わる
+        // 同じファイルなら中身は変わらない。再エンコードすればパスごと変わる
         { headers: { 'Cache-Control': 'private, max-age=3600' } },
     );
 }

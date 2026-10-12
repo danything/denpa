@@ -20,7 +20,7 @@ docker compose run --rm unit bun run check  # 型 (svelte-check)
 ```
 
 依存を足したら `docker compose run --rm unit bun install` を一度回します
-(`node_modules` は名前付きボリュームなので、イメージの焼き直しは要りません)。
+(`node_modules` は名前付きボリュームなので、イメージを作り直す必要はありません)。
 
 手元だけの上書きは `compose.override.yml` に (Compose が自動で読む。コミットしない)。
 `.env` は使いません。
@@ -95,8 +95,8 @@ CI の「組分けの検算」が落とします (`.github/workflows/test.yml`)�
 
 ワーカー数は**手元では CPU の数そのまま (下限2・上限6)、CI (`CI=1`。`docker compose run e2e` も
 そう) では 3 で固定**です。待ち時間が大半なのでコア数ぶん立ててよいのですが、
-CI のランナー (4コア) で4つ並べると、チューナーを掴むのを待つテストが
-30秒待っても掴めずに落ちました (実測は `playwright.config.ts` の頭)。
+CI のランナー (4コア) で4つ並べると、チューナーが空くのを待つテストが
+30秒待っても取れずに落ちました (実測は `playwright.config.ts` の頭)。
 
 混み具合でごく稀にブラウザ側が落ちるので、1回だけやり直します (`retries: 1`)。
 赤くしても直すものがありません。
@@ -121,7 +121,7 @@ CI のランナー (4コア) で4つ並べると、チューナーを掴むの�
 生の SQL の文字列に型を付けて返す口は置かない。それはキャストで、型が嘘をつく元になる。
 
 JSON で持つ列 (ジャンル・音声の構成・ルールの対象の局など) は `schema.ts` の
-`json(名前, 読み手)` で書く。読み書きで解いて畳むので、使う側は `JSON.parse` を書かない。
+`json(名前, 読み手)` で書く。読み書きのときに変換するので、使う側は `JSON.parse` を書かない。
 読み手は列ごとに書き、壊れた行は「持っていない」(空の並び・NULL) にする
 (1行のせいで一覧ごと出なくなるのを避ける)。
 
@@ -158,7 +158,7 @@ JSON で持つ列 (ジャンル・音声の構成・ルールの対象の局な�
 ## イメージ
 
 `Dockerfile` が denpa 本体、`agent/Dockerfile` がチューナー側です。
-CI が両方を焼いて `deploy/` の印を書き戻します。**main は直接 push できない**
+CI が両方をビルドして `deploy/` の印を書き戻します。**main は直接 push できない**
 (ruleset の必須チェック `check` / `agent` / `e2e (1)`〜`(5)` / `claude-review`) ので、
 書き戻しは bot が PR を出し、必須チェックの status を自分で付けてマージします
 (手順と理由は `.github/bump-pr.sh`。release の Chart.yaml の書き戻しも同じ)。
@@ -182,7 +182,7 @@ QEMU が要り、ffmpeg や AOT はかなり遅い)。
 
 ffmpeg・SVT-AV1・emsdk・Denpa Font・px4-userland / siano-userland / asicen-userland は、どれも
 `ARG` / `ENV` に版 (タグかコミット) を書いてから取ってきます。**`master` を
-追っていた頃は、同じコミットから焼いても中身が違いえました** (実機の中身は Pod へ入らないと
+追っていた頃は、同じコミットからビルドしても中身が違いえました** (実機の中身は Pod へ入らないと
 分からなかった)。
 
 上げるのは Renovate 任せで、`# renovate:` の注釈と `renovate.json` の `customManagers` で

@@ -44,7 +44,7 @@ export interface Scene {
     steps: SceneStep[];
 }
 
-/** 録画の強さ (`config.priority.recording`)。denpa が割り振るのはこれだけ */
+/** 録画の優先度 (`config.priority.recording`)。denpa が割り振るのはこれだけ */
 export const RECORDING = 10;
 
 export const scenes: Scene[] = [

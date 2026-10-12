@@ -65,8 +65,8 @@ export function submitting(node: HTMLFormElement, submit?: SubmitFunction) {
 }
 
 /**
- * 掴んで動かせるスクロール。番組表は縦横どちらにも長いので、
- * スクロールバーを掴まずに動かせるほうが早い。
+ * ドラッグで動かせるスクロール。番組表は縦横どちらにも長いので、
+ * スクロールバーを使わずに動かせるほうが早い。
  *
  * 少し動かしただけならクリック扱いにする(番組を開くため)。
  * それ以上動いたらドラッグとみなし、離したときのクリックは無効にする。
@@ -113,7 +113,7 @@ export function dragScroll(node: HTMLElement) {
         dragged = true;
         node.scrollLeft = fromLeft - dx;
         node.scrollTop = fromTop - dy;
-        // ドラッグ中に文字が選択されると掴み心地が悪い
+        // ドラッグ中に文字が選択されると使い心地が悪い
         event.preventDefault();
     };
 
@@ -121,7 +121,7 @@ export function dragScroll(node: HTMLElement) {
         active = false;
     };
 
-    // 掴んで動かした後のクリックで番組を開かない
+    // ドラッグした後のクリックで番組を開かない
     const click = (event: MouseEvent) => {
         if (!dragged) return;
         event.preventDefault();

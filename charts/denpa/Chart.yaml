@@ -1,6 +1,6 @@
 apiVersion: v2
 name: denpa
-description: 地デジ・BS/CS の録画サーバ denpa と、チューナーを掴む tuner-agent の一式
+description: 地デジ・BS/CS の録画サーバ denpa と、チューナーを使う tuner-agent の一式
 type: application
 # chart 自体の版。リリースのたびに CI (release.yml) がリリースの版に書き換える
 version: 1.54.0

@@ -248,7 +248,7 @@ function chunk(type: string, data: Uint8Array): number[] {
     ];
 }
 
-/** 角を落とした色の札に、白い丸と電波の弧を2本。どの局も同じ形で、色だけ違う */
+/** 角を落とした色の四角に、白い丸と電波の弧を2本。どの局も同じ形で、色だけ違う */
 export function docsLogo(service: FakeService, width: number, height: number): Uint8Array {
     const index = DOCS_SERVICES.indexOf(service);
     const color = LOGO_COLORS[(index < 0 ? 0 : index) % LOGO_COLORS.length]!;
@@ -379,7 +379,7 @@ export function docsCaptions(): Uint8Array {
         const lines = LINES[i % LINES.length]!;
         const body: number[] = [0x0c, ...CAPTION_HEAD];
         lines.forEach(([color, line], index) => {
-            // 下から2行目まで (いちばん下は観る画面の操作の帯と重なる)
+            // 下から2行目まで (いちばん下は観る画面の操作バーと重なる)
             const row = 7 - lines.length + index;
             const col = Math.max(0, Math.floor((CAPTION_COLUMNS - [...line].length) / 2));
             body.push(0x1c, 0x40 | row, 0x40 | col, color, ...encodeAribText(line));

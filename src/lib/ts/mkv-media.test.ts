@@ -110,7 +110,7 @@ describe('MkvDemuxer', () => {
     });
 });
 
-describe('解く側へ渡す形', () => {
+describe('デコードする側へ渡す形', () => {
     test('OpusHead を dOps に直す (opusHead の逆)', () => {
         const head = readMkvHead(av1)!;
         const opus = head.tracks[1]!;

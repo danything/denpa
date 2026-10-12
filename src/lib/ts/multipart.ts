@@ -12,7 +12,7 @@
  *     --XXX--
  *
  * もとは web-bml の `entity_parser.ts` を借りていた。運用される形は上のとおり狭いので、
- * RFC 2068 の字句を全部なぞらず、**ヘッダの行を拾って `Content-Type` を解き、
+ * RFC 2068 の字句を全部なぞらず、**ヘッダの行を拾って `Content-Type` をデコードし、
  * 区切りで切る**だけにしてある。
  */
 
@@ -121,7 +121,7 @@ function find(haystack: Uint8Array, needle: Uint8Array, from: number): number {
 
 /**
  * 中身を1つ読む。**ヘッダの終わり (空行) が無いものは null** — どこからが本体か
- * 分からない。`multipart/mixed` なら中まで解く (入れ子も同じ形)。
+ * 分からない。`multipart/mixed` なら中までデコードする (入れ子も同じ形)。
  *
  * @param part multipart の中の部品か。部品はヘッダの行でちょうど終わってよい (下の説明)
  */

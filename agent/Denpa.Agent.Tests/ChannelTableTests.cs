@@ -9,7 +9,7 @@ namespace Denpa.Agent.Tests;
  * ここは**数字が1つ違っても ioctl は通り、ただ同期しないだけ**という出方を
  * するので、値そのものを押さえておく。当てているのは recisdb が持っている表と
  * 同じ数字で、いま実機で選局できているものと揃っているかどうかがすべて
- * (実際に掴めるかは `--tune` で実機に当てる。Probe.cs)。
+ * (実際に受信できるかは `--tune` で実機に当てる。Probe.cs)。
  */
 
 public class ChannelTableTests
@@ -114,7 +114,7 @@ public class StreamIdTests
     }
 
     [Test]
-    public async Task スキャン結果が焼き込んだ表に勝つ()
+    public async Task スキャン結果が埋め込んだ表に勝つ()
     {
         // BS は再編がある。1度でもスキャンしていれば、そちらが必ず新しい
         var bs = ChannelTable.Parse("BS15_0")!;
@@ -125,7 +125,7 @@ public class StreamIdTests
     [Test]
     public async Task 表にも無ければ選り分けない()
     {
-        // 焼き込んだ表に無い相乗り。TSID を指定せずに掴んで、あとは復調器任せ
+        // 埋め込んだ表に無い相乗り。TSID を指定せずに選局して、あとは復調器任せ
         var bs = ChannelTable.Parse("BS15_7")!;
         await Assert.That(ChannelTable.StreamId("BS15_7", bs, _ => null)).IsEqualTo(ChannelTable.NoStreamId);
     }

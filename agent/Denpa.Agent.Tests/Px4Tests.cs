@@ -5,7 +5,7 @@ using Denpa.Agent;
 namespace Denpa.Agent.Tests;
 
 /*
- * px4-userland の機材 (PX-Q3U4 / PX-MLT5PE / DTV02A-5TS-P …) を掴むところ。
+ * px4-userland の機材 (PX-Q3U4 / PX-MLT5PE / DTV02A-5TS-P …) を使うところ。
  *
  * 本物の筐体は無い。ここで確かめるのは**機材に触らない部分**だけ —
  * px4d --list-json / px4ctl list の読み方、device 文字列の形、TUNE の中身。

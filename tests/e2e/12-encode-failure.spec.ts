@@ -22,7 +22,7 @@ test.describe('エンコードの失敗', () => {
         /*
          * 失敗したものは進み具合を出さない。行に残るのは状態だけ。
          *
-         * 出るのは「エンコード失敗」であって「失敗」ではない。落ちたのは焼き直しの
+         * 出るのは「エンコード失敗」であって「失敗」ではない。落ちたのは再エンコードの
          * ほうなので、録画そのものの状態 (録画済み) には手を付けない
          */
         await waitRowState(
@@ -40,9 +40,9 @@ test.describe('エンコードの失敗', () => {
         await expect(failed.getByTestId('recording-state')).toHaveText('エンコード失敗');
 
         /*
-         * **観られる。** 焼けていなくても生TSは無事で、追っかけ再生の器 (/chase) が
-         * サーバで焼き直して運ぶ (25-chase)。行には再生の印が出て、押すと追っかけへ。
-         * 以前は「焼けていない = 観られない」で印を消していたが、生TSがある限り観られる
+         * **観られる。** エンコードできていなくても元のTSは無事で、追っかけ再生の器 (/chase) が
+         * サーバで再エンコードして運ぶ (25-chase)。行には再生の印が出て、押すと追っかけへ。
+         * 以前は「エンコードできていない = 観られない」で印を消していたが、元のTSがある限り観られる
          */
         await expect(failed.getByTestId('play-hint')).toBeVisible();
 
@@ -50,7 +50,7 @@ test.describe('エンコードの失敗', () => {
         // (観られる行は押すと再生に行くので、詳細は別のボタン)
         await failed.getByTestId('detail-button').click();
         const detail = page.getByTestId('program-detail');
-        // 落とす口も詳細の中。生TSは無事なのでダウンロードできる
+        // 落とす口も詳細の中。元のTSは無事なのでダウンロードできる
         await expect(detail.getByTestId('download-link')).toHaveCount(1);
         // 理由は1つだけ。録画そのものは失敗していないので、出るのはジョブ側の理由だけ
         const note = detail.getByTestId('detail-error');

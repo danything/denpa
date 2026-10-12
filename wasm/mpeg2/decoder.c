@@ -1,25 +1,25 @@
 /*
- * 放送の MPEG-2 映像と AAC 音声を、ブラウザの中で解く (docs/stream.md §5.5)。
+ * 放送の MPEG-2 映像と AAC 音声を、ブラウザの中でデコードする (docs/stream.md §5.5)。
  *
  * **ブラウザには MPEG-2 の復号器が無い** (MSE も WebCodecs も mp2v を受け取らない)
  * ので、FFmpeg の mpeg2video を WebAssembly に組んで持ち込む。ここはその
  * 薄い口で、JS (src/lib/raw/worker.ts) から呼ぶ。
  *
- * 音 (AAC) も同じ FFmpeg の `aac` で解く (`aac_open` / `audio_push`)。WebCodecs の AudioDecoder は
+ * 音 (AAC) も同じ FFmpeg の `aac` でデコードする (`aac_open` / `audio_push`)。WebCodecs の AudioDecoder は
  * 安全な繋ぎ (https) でしか出てこず、iPhone の Safari には iOS 26 まで無いので、
- * それに頼ると LAN の http と古い iPhone で生の道が使えない。画面の canvas で描く道 (fMP4) の
- * Opus も同じ口で解く (`opus_open`)。
+ * それに頼ると LAN の http と古い iPhone で元のTSをそのまま再生する経路が使えない。画面の canvas で描く経路 (fMP4) の
+ * Opus も同じ口でデコードする (`opus_open`)。
  *
  * - `dec_push` … PES の中身 (ES) を渡す。**区切りは FFmpeg の parser に任せる** —
  *   放送はふつう 1 PES = 1 枚だが、決まりではない。PTS も一緒に渡し、
  *   parser が「どの絵のものか」を付け替える
- * - 解けた絵は**こちらで持っておく** (`queue`)。AVFrame は受け取るたびに使い回されるので、
+ * - デコードできた絵は**こちらで持っておく** (`queue`)。AVFrame は受け取るたびに使い回されるので、
  *   JS が見せる時刻まで待たせるには参照を移して取っておくしかない
  * - `dec_peek` / `dec_pop` … いちばん古い1枚を覗く・捨てる。表示順で並んでいる
  *   (B フレームの並べ替えは復号器が済ませている)
  *
  * スレッドも SIMD も使わない。スレッド版は COOP/COEP (crossOriginIsolated) が要り、
- * 実測でも 1 本で 1080i を実時間の 3 倍で解けたので、払う理由が無い (§5.5)。
+ * 実測でも 1 本で 1080i を実時間の 3 倍でデコードできたので、払う理由が無い (§5.5)。
  */
 #include <emscripten/emscripten.h>
 #include <libavcodec/avcodec.h>
@@ -36,7 +36,7 @@ static AVCodecParserContext *parser;
 static AVPacket *pkt;
 static AVFrame *queue[QUEUE];
 static int head, count;
-/** 直近の dec_push に掛かった時間 (ms)。**解くのが間に合っているかの物差し** */
+/** 直近の dec_push に掛かった時間 (ms)。**デコードするのが間に合っているかの物差し** */
 static double last_ms;
 /** JS へ渡す1枚ぶんの控え (dec_peek) */
 static int info[12];
@@ -176,7 +176,7 @@ EMSCRIPTEN_KEEPALIVE void dec_pop(void) {
  * - Opus (`opus_open`) … AV1 と組んで送られてくる fMP4 の Opus。設定 (OpusHead) を
  *   extradata として渡して開く (ts/fmp4.ts の `opusHead` が dOps から書き換える)
  *
- * どちらも同じ1つの口 (`audio`) で開き、`audio_push` で解く
+ * どちらも同じ1つの口 (`audio`) で開き、`audio_push` でデコードする
  * ------------------------------------------------------------------------- */
 
 /** 返せる面の数。AAC は 7.1 (8本) まで */
@@ -216,8 +216,8 @@ EMSCRIPTEN_KEEPALIVE int opus_open(const uint8_t *extra, int len) {
 }
 
 /**
- * 1コマ解く。**返すのは解けた標本数** (0 は出てこなかった、負は壊れたコマ)。
- * 解けたものは `audio_peek` で読む:
+ * 1コマデコードする。**返すのはデコードできた標本数** (0 は出てこなかった、負は壊れたコマ)。
+ * デコードできたものは `audio_peek` で読む:
  *
  *     [0] 本数 [1] 標本化周波数 [2] 標本数 [3..] 各面の番地 (float -1〜1、標本数ぶん)
  *

@@ -31,7 +31,7 @@ interface SocketData {
 
 /** 開いている1本。**送るのは binary、受けるのは小さな指示だけ** */
 export class Connection {
-    /** ブラウザからの指示。JSON で解けなかったものは渡さない */
+    /** ブラウザからの指示。JSON でデコードできなかったものは渡さない */
     onmessage: ((message: Record<string, unknown>) => void) | null = null;
     onclose: (() => void) | null = null;
 
@@ -42,10 +42,10 @@ export class Connection {
      *
      *     [1 byte: 種別][8 bytes: PTS (90kHz, BE)][中身...]
      *
-     * 時刻は受け側の物差し (焼く道は mp4 の 0 起点、生の道は放送の PTS)。運ぶのは
+     * 時刻は受け側の物差し (エンコードの経路は mp4 の 0 起点、放送そのままの経路は放送の PTS)。運ぶのは
      * 字幕だけで、映像・データ放送・制御は 0 を渡す — 字幕を絵と同じ物差しに乗せるため。
      *
-     * @param droppable 詰まっているときに捨ててよいか。映像の中身 (fMP4 / 生の TS) だけ true
+     * @param droppable 詰まっているときに捨ててよいか。映像の中身 (fMP4 / そのままの TS) だけ true
      */
     send(kind: number, pts: bigint, payload: Uint8Array, droppable = false): void {
         if (droppable && this.ws.getBufferedAmount() > BACKLOG_LIMIT) return;
@@ -56,7 +56,7 @@ export class Connection {
         this.ws.sendBinary(out);
     }
 
-    /** bun から渡されたものを解く。**JSON 以外は黙って捨てる** */
+    /** bun から渡されたものをデコードする。**JSON 以外は黙って捨てる** */
     receive(message: string | Buffer): void {
         if (typeof message !== 'string') return;
         try {
@@ -103,7 +103,7 @@ export function serve(pathname: string, route: Route): void {
 interface LiveEntry {
     /** そもそも受け持つ道か。**断り方を変えるために `accept` と分けてある** */
     handles(url: URL): boolean;
-    /** 握手してよいか。ここで札を使い切る */
+    /** 握手してよいか。ここでチケットを使い切る */
     accept(url: URL): boolean;
     websocket: WebSocketHandler<SocketData>;
 }

@@ -15,7 +15,7 @@
 # `TARGETARCH` (BuildKit が入れる) から、RID と取ってくる配布物の名前を引く。
 # 名前の付け方は上流ごとにばらばら (amd64 / x86_64 / x64、arm64 / aarch64) なので、
 # 各段の頭で読み替える。それ以外の arch は配布物が無いので、黙って amd64 のものを
-# 入れずにそこで止める。sdk:10.0 の既定がそのまま trixie (`-trixie` という札は無い)
+# 入れずにそこで止める。sdk:10.0 の既定がそのまま trixie (`-trixie` というタグは無い)
 FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 ARG TARGETARCH
 WORKDIR /build
@@ -59,7 +59,7 @@ RUN set -eu && mkdir -p /opt/px4-userland/firmware && cd /tmp && \
     echo "${IT930X_FIRMWARE_SHA256}  /opt/px4-userland/firmware/it930x-firmware.bin" | sha256sum -c - && \
     rm -rf /tmp/*
 
-# PLEX PX-Q3U4 などは px4-userland で掴む (Px4.cs)。**カーネルドライバを入れてもらわない。**
+# PLEX PX-Q3U4 などは px4-userland で動かす (Px4.cs)。**カーネルドライバを入れてもらわない。**
 # px4d / px4ctl は musl の完全静的 ELF。受信機もカードも px4d の制御ソケットで直に話すので
 # (Px4.cs / Px4Card.cs)、配布物の px4-ts と IFD ハンドラ (ifd/*.so、pcscd 用) は使わない。
 # **0.1.9 より下げない。** 筐体は `px4d --list-json` (0.1.9 から) でしか聞かない。
@@ -74,8 +74,8 @@ RUN set -eu && cd /tmp && \
     tar -xzf "${archive}" -C /opt/px4-userland && \
     rm -rf /tmp/*
 
-# PLEX PX-S1UD などの Siano RIO 系は、**カーネルが掴んでいなければ** siano-userland で掴む
-# (Siano.cs)。smsusb が掴んでいれば今までどおり /dev/dvb で使う。こちらからは奪わない。
+# PLEX PX-S1UD などの Siano RIO 系は、**カーネルが使っていなければ** siano-userland で動かす
+# (Siano.cs)。smsusb が使っていれば今までどおり /dev/dvb で動かす。こちらからは奪わない。
 # siano-ts は libusb を静的にリンクした libc 非依存の ELF。**ファームウェア (isdbt_rio.inp) は
 # アーカイブに入っている** (Siano の許諾で無改変なら再配布できる。LICENCE.siano も一緒に置く)。
 # README が示す SHA-256 とも突き合わせる。
@@ -92,7 +92,7 @@ RUN set -eu && cd /tmp && \
     echo "${ISDBT_RIO_SHA256}  /opt/siano-userland/firmware/isdbt_rio.inp" | sha256sum -c - && \
     rm -rf /tmp/*
 
-# PLEX PX-W3U3 などの ASICEN 系は asicen-userland で掴む (Asicen.cs)。**試験的。**
+# PLEX PX-W3U3 などの ASICEN 系は asicen-userland で動かす (Asicen.cs)。**試験的。**
 #
 # **上流がまだリリースを出していないので、いまは何も入らない。** 版の 0.0.0 は
 # 「まだ無い」の印で、この段は空の /opt/asicen-userland を作るだけ (エージェントは
@@ -102,7 +102,7 @@ RUN set -eu && cd /tmp && \
 # 取ってくるのは px4-userland と同じ名前の付け方を見込んだ配布アーカイブ (上流の
 # scripts/package-linux-variant.py の形: 頭に1段のディレクトリ、bin/ にコマンド3つ、musl の
 # 完全静的 ELF)。名前の glibc / musl は同梱の IFD ハンドラ (使わない) の libc の違いで、
-# コマンドはどちらも同じ musl の静的 ELF。名前や形が違えば、版を上げる PR の CI (イメージを焼く) で落ちて分かる
+# コマンドはどちらも同じ musl の静的 ELF。名前や形が違えば、版を上げる PR の CI (イメージをビルドする) で落ちて分かる
 # (SHA256SUMS にそのアーカイブの行が無ければ落とす。--ignore-missing は行が無くても通るので使わない)。
 # 受信機もカードも asicend の制御ソケットで直に話すので、asicen-ts と IFD ハンドラは使わない。
 # 上流の第一弾は Linux x86_64 だけなので、arm64 では入れずに先へ進む。
@@ -111,7 +111,7 @@ RUN set -eu && cd /tmp && \
 # Git には入れず、配布物には入れる)。再配布の権利は確かめられていない。上流が添える
 # licenses/VENDOR-FIRMWARE-NOTICE.txt (権利未確定・元の成果物・大きさ・SHA-256) も一緒に置く。
 # 入っていれば上流の記録 (HARDWARE-VALIDATION.md) の SHA-256 と突き合わせる。
-# 入っていなければ焼くのは止めず、エージェントが「ファームウェアがありません」と記録して
+# 入っていなければビルドは止めず、エージェントが「ファームウェアがありません」と記録して
 # その機材を使わない。
 # renovate: datasource=github-releases depName=Khronos31/asicen-userland extractVersion=^v(?<version>.*)$
 ARG ASICEN_USERLAND_VERSION=0.0.0
@@ -142,7 +142,7 @@ RUN set -eu && mkdir -p /opt/asicen-userland && cd /tmp && \
 FROM docker.io/library/debian:trixie-slim
 
 # **`recisdb` も libaribb25 も pcscd も入れません。** 選局は自分でやり (ioctl)、
-# B25 も自分で解き (B25.cs)、カードリーダーとも自分で話します (Ccid.cs / Px4Card.cs)。
+# B25 も自分で復号し (B25.cs)、カードリーダーとも自分で話します (Ccid.cs / Px4Card.cs)。
 # 入れるのは ca-certificates だけ (CARD_URL を https で指したときの検証。openssl も一緒に入る —
 # .NET の HttpClient は libssl を使う)。時刻はどこも UTC で扱うので TZ も渡さない
 RUN apt-get update && \

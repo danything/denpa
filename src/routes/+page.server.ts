@@ -57,17 +57,17 @@ interface RecordingRow extends Recording {
      */
     job_canceling: boolean;
     /**
-     * 生TSの大きさ。エンコード済みと**両方ある**ときだけ入る。
+     * 元のTSの大きさ。エンコード済みと**両方ある**ときだけ入る。
      *
      * `ts_size` はいま配っているファイルの大きさで、エンコードが終わると
-     * mkv のものに書き換わる。生TSを残す設定だと「消していいのか、どれだけ
+     * mkv のものに書き換わる。元のTSを残す設定だと「消していいのか、どれだけ
      * 空くのか」が画面から分からなかった
      */
     raw_size: number | null;
     /**
-     * もう一方のコーデック (H.264) の大きさ。**両方焼いたときだけ**入る。
+     * もう一方のコーデック (H.264) の大きさ。**両方エンコードしたときだけ**入る。
      *
-     * `ts_size` は主 (AV1) のぶんしか持っていないので、両方焼くと画面に出る
+     * `ts_size` は主 (AV1) のぶんしか持っていないので、両方エンコードすると画面に出る
      * 数字と実際に置き場が使っている量が食い違っていた
      */
     alt_size: number | null;
@@ -90,7 +90,7 @@ interface RecordingRow extends Recording {
 }
 
 /**
- * 「まとめて表示」の単位。**焼いたものを置くシリーズのフォルダと同じ名前でまとめる**
+ * 「まとめて表示」の単位。**エンコードしたものを置くシリーズのフォルダと同じ名前でまとめる**
  * (`library.seriesFolder`)。見出しに出すのは削る前のシリーズ名
  */
 function seriesGroup(series: string, name: string): { group_key: string; group_name: string } {
@@ -343,14 +343,14 @@ export const actions = {
     reencode: async ({ request }) => {
         const recording = recordingFromForm(await request.formData());
         if (recording === undefined) return fail(400, { message: '録画が見つかりません' });
-        // 元になるのは生TS。エンコード済みを元に録り直しても画質は戻らない
+        // 元になるのは元のTS。エンコード済みを元に録り直しても画質は戻らない
         if (encodeSource(recording) === null) {
             return fail(400, { message: '元のTSが残っていないため再エンコードできません' });
         }
         /*
-         * どのコーデックで焼くかは**そのときの設定**。押した人は焼きたいので、
+         * どのコーデックでエンコードするかは**そのときの設定**。押した人はエンコードしたいので、
          * 録ったときの設定を再現したいわけではない。設定が「エンコードしない」
-         * だと焼くものが決まらないので、ここで断る
+         * だとエンコードするものが決まらないので、ここで断る
          */
         if (settings().codec === 'none') {
             return fail(400, {
@@ -363,8 +363,8 @@ export const actions = {
     },
 
     /**
-     * 「CM検出をやり直す」(詳細の「その他…」)。焼き直さず、CM を探し直して焼いたもののチャプターを
-     * 書き直す (`encoder.runCmJob`)。焼くジョブと同じ待ち行列に並び、同じ録画に2つは積まない
+     * 「CM検出をやり直す」(詳細の「その他…」)。再エンコードせず、CM を探し直してエンコードしたもののチャプターを
+     * 書き直す (`encoder.runCmJob`)。エンコードするジョブと同じ待ち行列に並び、同じ録画に2つは積まない
      */
     redetectCm: async ({ request }) => {
         const recording = recordingFromForm(await request.formData());
@@ -372,7 +372,7 @@ export const actions = {
         const redo = cmRedo(recording);
         if (redo.state === 'hidden') return fail(400, { message: 'CM検出に使えるファイルがありません' });
         if (redo.state === 'disabled') return fail(400, { message: redo.reason });
-        // 切ったものからは戻せない。生TSはあるので、焼き直しを促す
+        // 切ったものからは戻せない。元のTSはあるので、再エンコードを促す
         if (redo.state === 'prompt') return fail(400, { message: CM_CUT_ALREADY });
         enqueue(recording.id, 'cm');
         pump();

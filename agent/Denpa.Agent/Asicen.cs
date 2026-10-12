@@ -30,7 +30,7 @@ namespace Denpa.Agent;
 /// **機材は sysfs で見つける。** 上流の配布物 (bin/ の asicend・asicenctl・asicen-ts) には並べる道具が無く
 /// (<c>asicen-probe</c> は入らない。<c>asicend --list</c> も実機ではまだ並べない)、asicend には USB の
 /// 番地と挿し口を自分で渡す決まりなので、<c>/sys/bus/usb/devices</c> の USB ID と番地を読む
-/// (siano-userland でカーネルが掴んでいるかを見るのと同じ場所)。見る USB ID は上流の asicend が受け付けるもの
+/// (siano-userland でカーネルが使っているかを見るのと同じ場所)。見る USB ID は上流の asicend が受け付けるもの
 /// (<c>0b06:0005</c> と、ファームウェア待ちの <c>1738:5211</c> / <c>1738:5216</c>) だけ。
 /// 上流が並べる口を出したら、そちらに聞くよう変える。
 /// </para>
@@ -312,7 +312,7 @@ public static class AsicenUserland
 /// </para>
 /// </summary>
 /// <param name="select">
-/// どの機材を掴むかの引数 (<c>--hardware …</c>)。起こす直前に呼ぶ。駄目なら投げる。
+/// どの機材を使うかの引数 (<c>--hardware …</c>)。起こす直前に呼ぶ。駄目なら投げる。
 /// テストは <c>--mock</c> を返す (上流の模擬の asicend。機材にもファームウェアにも触らない)
 /// </param>
 public sealed class AsicenDaemon(string id, string dir, string runtimeDir, Func<string[]> select)
@@ -323,7 +323,7 @@ public sealed class AsicenDaemon(string id, string dir, string runtimeDir, Func<
         () => Hardware(id, AsicenUserland.Firmware, () => AsicenUserland.Enclosures(_ => { }))));
 
     /// <summary>
-    /// 本物の機材を掴む引数。**ファームウェアが無ければ起こさない** (上流の配布物に入っていなかった)。
+    /// 本物の機材を使う引数。**ファームウェアが無ければ起こさない** (上流の配布物に入っていなかった)。
     /// ファームウェア待ちのものには先に流し込む (<see cref="AsicenUserland.Enclosures"/>)。
     ///
     /// <para>

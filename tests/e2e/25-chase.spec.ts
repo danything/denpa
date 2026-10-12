@@ -17,7 +17,7 @@ import {
  *
  * **追っかけは録っている最中だけ。** 録り終えたら、エンコードを待っている間も観る画面 (`/watch`) で
  * 観る (サーバが元の TS をその場で変換して流す。22-watch・39-watch-stream)。ここでは地上波の
- * いまの番組 (偽番組は30分) を録りはじめて、録っている最中に追っかけを開き、止めて焼き上がったら
+ * いまの番組 (偽番組は30分) を録りはじめて、録っている最中に追っかけを開き、止めてエンコードが終わったら
  * 観る画面へ案内されるところまでを見る
  */
 
@@ -33,7 +33,7 @@ async function airingProgram(request: APIRequestContext): Promise<number> {
 }
 
 test.describe('追っかけ再生の入口', () => {
-    test('録っている最中は追っかけで観られ、録り終えて焼き上がったら観る画面へ案内する', async ({
+    test('録っている最中は追っかけで観られ、録り終えてエンコードが終わったら観る画面へ案内する', async ({
         browser,
         page,
         request,
@@ -69,7 +69,7 @@ test.describe('追っかけ再生の入口', () => {
             await request.post('/guide?/cancel', { form: { programId: String(programId) } });
         }
 
-        // 録り終えて焼き上がると、追っかけの画面に案内が出る
+        // 録り終えてエンコードが終わると、追っかけの画面に案内が出る
         const notice = page.getByTestId('chase-encoded');
         await expect(notice).toBeVisible({ timeout: 90_000 });
         await notice.getByTestId('chase-to-watch').click();
@@ -83,7 +83,7 @@ test.describe('追っかけ再生の入口', () => {
 
 /** 追っかけの画面の作り (字幕の描き方・押し方・番組の中身)。録っている最中に見る */
 async function checkChase(page: Page, browser: Browser, id: string): Promise<void> {
-    // まだ焼けていないので、観る画面への案内は出ていない
+    // まだエンコードできていないので、観る画面への案内は出ていない
     await expect(page.getByTestId('chase-encoded')).toHaveCount(0);
 
     /*
@@ -107,7 +107,7 @@ async function checkChase(page: Page, browser: Browser, id: string): Promise<voi
 
     /*
      * **押し方は観る画面と同じ** (`player/keys.ts` と `ts/watch.ts` の `tap`)。
-     * 焼く前だけ空白も画面内クリックも効かず、同じ録画なのに押し方が変わっていた。
+     * エンコードする前だけ空白も画面内クリックも効かず、同じ録画なのに押し方が変わっていた。
      * 絵は出ない (偽 ffmpeg なので) が、止めた・動かしたはボタンの名前に出る
      */
     const play = page.getByTestId('chase-play');
@@ -130,7 +130,7 @@ async function checkChase(page: Page, browser: Browser, id: string): Promise<voi
     await expect(play).toHaveAttribute('aria-label', '一時停止');
 
     /*
-     * **番組表に無い番組でも、ジャンルと音声の札は出る** (観る画面の 22 と同じ)。
+     * **番組表に無い番組でも、ジャンルと音声のラベルは出る** (観る画面の 22 と同じ)。
      * 右の中身の種を組み直していた頃は、ここだけ行が持っている写しを落としていた。
      * 番組表から引き直す口を 404 にして作る
      */

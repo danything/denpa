@@ -181,13 +181,13 @@ describe('録画の字幕 (recordingCaptions)', () => {
 });
 
 describe('ライブの字幕 (liveCaptions)', () => {
-    // 乗る先 (生のセッション) が無ければ自分では起こさない。チューナーを字幕のためだけに掴まない
-    test('生で流していない局には乗らない', () => {
+    // 乗る先 (放送そのままのセッション) が無ければ自分では起こさない。チューナーを字幕のためだけに使わない
+    test('放送そのままで流していない局には乗らない', () => {
         expect(liveCaptions(SERVICE)).toBeNull();
         expect(liveCaptions(SERVICE + 1)).toBeNull();
     });
 
-    // 脇の字幕の口は畳む判断に数えない。字幕のためだけにチューナーを掴み続けない
+    // 脇の字幕の口は畳む判断に数えない。字幕のためだけにチューナーを使い続けない
     test('字幕の口が抜けても映像は続き、映像が抜けたら字幕の口も閉じる', async () => {
         const media = liveStream(SERVICE, 'raw')!;
         const first = liveCaptions(SERVICE);

@@ -231,7 +231,7 @@ describe('parseTitle (全角の番組名)', () => {
     });
 });
 
-/** 入れ物の title に焼き込む番組名。プレイヤーがURLの代わりに出す */
+/** 入れ物の title に埋め込む番組名。プレイヤーがURLの代わりに出す */
 describe('displayTitle', () => {
     test('装飾記号だけ落とし、話数もサブタイトルも残す', () => {
         expect(displayTitle('【新】転生したらスライムだった件 第4期 #88[字][デ]')).toBe(

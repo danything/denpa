@@ -43,7 +43,7 @@ namespace Denpa.Agent;
 /// </summary>
 public static class Px4Userland
 {
-    /// <summary>設定の <c>device</c> の頭。これで始まっていれば px4-userland で掴む</summary>
+    /// <summary>設定の <c>device</c> の頭。これで始まっていれば px4-userland で使う</summary>
     public const string Scheme = "px4:";
 
     /// <summary>
@@ -151,7 +151,7 @@ public static class Px4Userland
     /// 刺さっている筐体。**<c>px4d --list-json</c> に聞く。**
     ///
     /// <para>
-    /// 読むだけで筐体を掴まないので、px4d が動いていても聞ける。px4-userland が
+    /// 読むだけで筐体を開かないので、px4d が動いていても聞ける。px4-userland が
     /// 入っていない環境 (手元の開発など) では空。
     /// </para>
     ///
@@ -740,7 +740,7 @@ public sealed class Px4Daemon(string id) : UserlandDaemon("px4d", id)
         if (Running) return;
         /*
          * **15V を出せるかは起こす前に一覧で聞いておく。** px4ctl list (LIST) には載らない。
-         * 一覧は筐体を掴まないが、起こしたあとだと OS によっては開けない。錠の外で聞く —
+         * 一覧は筐体を開かないが、起こしたあとだと OS によっては開けない。錠の外で聞く —
          * 一覧は最悪 15 秒待つので、錠の中だとその間 Dispose も選局も待たされる。
          * 使えない筐体の理由は Detect が残すので、ここでは黙る
          */

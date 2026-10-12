@@ -300,7 +300,7 @@ export function fetchForBml(raw: string): Promise<Fetched> {
  * **中身は組み立てません。** エンジン (`src/lib/bml/`) が `Denbun=<EUC-JP か Shift_JIS を
  * %xx にしたもの>` まで作ってから渡してくるので、denpa はそれを
  * `application/x-www-form-urlencoded` として素通しするだけです。
- * 返りも解かずにそのまま返す (どちらの符号かは放送のアプリが知っている)。
+ * 返りもデコードせずにそのまま返す (どちらの符号かは放送のアプリが知っている)。
  *
  * 飛ばされたときの手の変わりかたは web と同じ規則にします —
  * 301/302/303 は GET へ、307/308 は POST のまま。**行き先は毎回確かめ直す**

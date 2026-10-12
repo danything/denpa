@@ -41,7 +41,7 @@ test.describe('自動予約ルール', () => {
             'キーワード・局・ジャンルのいずれかを指定してください',
         );
         await expect(page.getByTestId('rule-row')).toHaveCount(0);
-        // 1件も無いときは、空の札の隅ではなく真ん中に、次にすることまで出す
+        // 1件も無いときは、空のカードの隅ではなく真ん中に、次にすることまで出す
         await expect(page.getByTestId('rule-empty')).toContainText('「追加」すると');
     });
 
@@ -171,7 +171,7 @@ test.describe('キーワードを当てる範囲', () => {
         const same = page.locator(`[data-testid="preview-row"][data-program-id="${programId}"]`);
         await expect(same.getByTestId('preview-state')).toBeVisible();
 
-        // もう予約は立っているので、開き直しても予約する口は出ない (状態の札が出る)
+        // もう予約は立っているので、開き直しても予約する口は出ない (状態のバッジが出る)
         await same.getByTestId('preview-open').click();
         await expect(detail.getByTestId('rule-detail-reserve')).toHaveCount(0);
         await expect(detail.getByTestId('rule-detail-state')).toBeVisible();

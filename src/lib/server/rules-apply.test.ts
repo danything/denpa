@@ -682,7 +682,7 @@ describe('同じ回は最初の放送だけ録る', () => {
         ]);
     });
 
-    test('取り合いが解けたら次の放送は引っ込める。直前 (猶予の内) なら残す', () => {
+    test('取り合いが解消したら次の放送は引っ込める。直前 (猶予の内) なら残す', () => {
         withBs();
         rule(1, 'テストアニメ', true, 1, true);
         program(10, 'テストアニメ #1');
@@ -698,7 +698,7 @@ describe('同じ回は最初の放送だけ録る', () => {
         applyRules();
         expect(reservations().map((r) => r.program_id)).toEqual([10, 11, 12, 13]);
 
-        // 取り合いが解けた。翌日の再放送 (11) は引っ込め、直前の 13 は録っておく
+        // 取り合いが解消した。翌日の再放送 (11) は引っ込め、直前の 13 は録っておく
         orm().update(reservationTable).set({ state: 'scheduled' }).run();
         expect(applyRules()).toMatchObject({ dropped: 1 });
         expect(reservations().map((r) => r.program_id)).toEqual([10, 12, 13]);

@@ -9,7 +9,7 @@ namespace Denpa.Agent;
 /// **選局コマンドそのものは持たない。** 画面から書き換えられるようにした以上、
 /// 自由な文字列を受けると「denpa に入れた人がチューナー側で好きなコマンドを
 /// 走らせられる」ことになる (しかもあちらは機材に触れる。Helm では privileged)。持つのは
-/// **デバイスと種別**だけ。選局は自分で掴む (Tuning.cs)。
+/// **デバイスと種別**だけ。選局は自分でやる (Tuning.cs)。
 /// </para>
 /// </summary>
 public sealed record TunerSpec(
@@ -70,7 +70,7 @@ public sealed record TunerSpec(
 ///
 /// <para>
 /// 中身を作るのはどちらもこちらではない。総当たりの選局こそ頼まれるが、NIT も
-/// SDT も解かないので「何が居たか」は分からない。それでも控えを持つのはこちら側
+/// SDT も解析しないので「何が居たか」は分からない。それでも控えを持つのはこちら側
 /// にする — アンテナに何が映るかも、何本刺さっているかも、機材ごとの話だから。
 /// </para>
 /// </summary>
@@ -178,7 +178,7 @@ public sealed class Config(string tunersFile, string channelsFile)
 
     /// <summary>
     /// チャンネル名から、スキャンで分かった TSID を引く。衛星の選局で相対番号を TSID に直すのに使い、
-    /// 焼き込んだ表より優先する (<see cref="ChannelTable.StreamId"/>)
+    /// 埋め込んだ表より優先する (<see cref="ChannelTable.StreamId"/>)
     /// </summary>
     public Func<string, int?> StreamIds()
     {

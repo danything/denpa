@@ -9,12 +9,12 @@ import { expect, FAKE_CAPTION, goto, recordOne, test, wakeControls } from './hel
  * 端末に保存してあるのはエンコード済みの Matroska。互換モードでは `<video>` に渡さず、worker がそのまま
  * 読んで、サーバから流すときと同じ器で描く。飛ぶ位置は Matroska の Cues から引く。
  *
- * 偽 ffmpeg が焼く録画は中身が無いので、作り置きの fMP4 (AV1 + Opus) から組んだ Matroska を端末に
+ * 偽 ffmpeg がエンコードする録画は中身が無いので、作り置きの fMP4 (AV1 + Opus) から組んだ Matroska を端末に
  * 保存したことにする (`tests/fake/mkv-clip.ts`。IndexedDB に直に置く。置き方は `offline-db.ts` と同じ)。
  * サーバへは頼まない (`/stream` を1度も読まない) ことも見る
  */
 
-/** 帯の「m:ss / m:ss」の左 (いまの位置。秒) */
+/** 操作バーの「m:ss / m:ss」の左 (いまの位置。秒) */
 async function where(page: Page): Promise<number> {
     const text = (await page.getByTestId('watch-clock').textContent()) ?? '';
     const parts = text.split(' / ')[0]!.trim().split(':').map(Number);
@@ -99,9 +99,9 @@ test('端末に保存した録画も canvas に描き、飛ぶ・CM 飛ばし・
     await expect(page.getByTestId('watch-controls').getByText('端末', { exact: true })).toBeVisible();
 
     /*
-     * **CM 飛ばしで跳ぶ** (Cues で CM の終わりの手前の Cluster から読み直す)。偽の録画はロゴでの判定に
+     * **CM 飛ばしで飛ぶ** (Cues で CM の終わりの手前の Cluster から読み直す)。偽の録画はロゴでの判定に
      * 失敗したことになっていて、観はじめは CM 飛ばしが外れている (`skipCmAtStart`)。押して有効にする —
-     * CM の中で押せばその場で、手前で押せば CM に入るところで跳ぶ
+     * CM の中で押せばその場で、手前で押せば CM に入るところで飛ぶ
      */
     const skip = page.getByTestId('watch-skip-cm');
     await expect(skip).toHaveAttribute('aria-pressed', 'false');

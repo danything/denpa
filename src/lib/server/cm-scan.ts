@@ -15,7 +15,7 @@ import { run } from './stream';
  * - **局ロゴの枠** — 枠だけ切り出した白黒のコマを標準出力へ。点を付けるのは呼ぶ側 (`logo-own.ts`)
  * - **無音** — 主音声に `silencedetect`。`ametadata` で一時ファイルへ
  *
- * ふだんは**エンコードと同じ ffmpeg に相乗りする** (`scanReader` の `outputs` を焼く出口のあとに足す。
+ * ふだんは**エンコードと同じ ffmpeg に相乗りする** (`scanReader` の `outputs` をエンコードする出口のあとに足す。
  * `encoder.ts`)。ここの `scan` が自分で ffmpeg を起こすのは、ロゴを覚え直して枠だけ読み直すときと、
  * CM 検出だけやり直すとき。
  *

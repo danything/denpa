@@ -9,9 +9,9 @@ namespace Denpa.Agent;
 ///
 /// <para>
 /// 64 ビットのブロック暗号で、鍵は2段になっている。カードの定数 (システム鍵 32 バイト) と、
-/// ECM から貰う鍵 (8 バイト) を混ぜて作業鍵 8 語を作り、それで 1 パケットの中身を解く。
+/// ECM から貰う鍵 (8 バイト) を混ぜて作業鍵 8 語を作り、それで 1 パケットの中身を復号する。
 /// 作業鍵は**鍵が変わったとき (数秒に1回) に1回だけ作る** — パケットごとに作り直すと、
-/// 解く手間の倍近くがそこに消える。
+/// 復号する手間の倍近くがそこに消える。
 /// </para>
 ///
 /// <para>
@@ -22,8 +22,8 @@ namespace Denpa.Agent;
 ///
 /// <para>
 /// 1つの実体は**1本の流れからしか触らない**。鍵を書き換えている途中に別の流れが
-/// 解くと半端な鍵で解いてしまうが、錠は掛けない (<see cref="Descrambler"/> が
-/// 1本の流れ (解き手) の中で順に呼ぶ)。
+/// 復号すると半端な鍵で復号してしまうが、錠は掛けない (<see cref="Descrambler"/> が
+/// 1本の流れ (復号器) の中で順に呼ぶ)。
 /// </para>
 /// </summary>
 public sealed class Multi2
@@ -55,7 +55,7 @@ public sealed class Multi2
         _ivRight = BinaryPrimitives.ReadUInt32BigEndian(initCbc[4..]);
     }
 
-    /// <summary>鍵が入っているか。**入る前に解くと、でたらめを書く**ので呼ぶ側が見る</summary>
+    /// <summary>鍵が入っているか。**入る前に復号すると、でたらめを書く**ので呼ぶ側が見る</summary>
     public bool HasKeys { get; private set; }
 
     /// <summary>ECM の答えの鍵 (奇数・偶数 8 バイトずつ) から作業鍵を作る</summary>
@@ -67,7 +67,7 @@ public sealed class Multi2
         HasKeys = true;
     }
 
-    /// <summary>鍵を捨てる。**古い鍵で解き続けるより、掛かったまま流すほうが分かりやすい**</summary>
+    /// <summary>鍵を捨てる。**古い鍵で復号し続けるより、掛かったまま流すほうが分かりやすい**</summary>
     public void Clear()
     {
         _odd = default;
@@ -105,7 +105,7 @@ public sealed class Multi2
 
     /*
      * π1〜π4。どれも「片方の半分から作った値を、もう片方へ XOR する」形なので、
-     * **同じ関数を逆の順に当てれば戻る** (解くのに別の関数は要らない)。
+     * **同じ関数を逆の順に当てれば戻る** (復号するのに別の関数は要らない)。
      * π1 は right ^= left だけなので、呼ぶ側に直に書いてある
      */
 
@@ -173,7 +173,7 @@ public sealed class Multi2
     }
 
     /// <summary>
-    /// 1 パケットぶんの中身をその場で解く。
+    /// 1 パケットぶんの中身をその場で復号する。
     /// <paramref name="even"/> は transport_scrambling_control が 0b10 のとき
     /// </summary>
     public void Decrypt(bool even, Span<byte> data)
@@ -183,8 +183,8 @@ public sealed class Multi2
 
         var at = 0;
         /*
-         * **CBC は解く向きならブロックどうしが独立している** (前の暗号文と XOR するのは
-         * 解いた後)。1 パケットの 23 ブロックを SIMD の幅 (AVX2 なら 8 本) で並べて
+         * **CBC は復号する向きならブロックどうしが独立している** (前の暗号文と XOR するのは
+         * 復号した後)。1 パケットの 23 ブロックを SIMD の幅 (AVX2 なら 8 本) で並べて
          * 一度に回す。掛ける向きは前の結果を待つので並べられない
          */
         if (Vector.IsHardwareAccelerated && data.Length >= Vector<uint>.Count * 8)
@@ -212,8 +212,8 @@ public sealed class Multi2
     private const int WideBlocks = 32;
 
     /// <summary>
-    /// 丸ごとのブロックを SIMD で解く。左右の半分を別々の列に並べ直してから回し、
-    /// 書き戻しながら CBC の XOR を掛ける。解き終えたところまでのバイト数を返す
+    /// 丸ごとのブロックを SIMD で復号する。左右の半分を別々の列に並べ直してから回し、
+    /// 書き戻しながら CBC の XOR を掛ける。復号し終えたところまでのバイト数を返す
     /// </summary>
     private static int DecryptWide(Span<byte> data, in Words k, ref uint cbcLeft, ref uint cbcRight)
     {
@@ -324,7 +324,7 @@ public sealed class Multi2
         Tail(data[at..], cbcLeft, cbcRight, k);
     }
 
-    /// <summary>8 バイトに満たない尻尾。**掛けるのも解くのも同じ** (OFB は XOR するだけ)</summary>
+    /// <summary>8 バイトに満たない尻尾。**掛けるのも復号するのも同じ** (OFB は XOR するだけ)</summary>
     private static void Tail(Span<byte> tail, uint left, uint right, in Words k)
     {
         if (tail.IsEmpty) return;

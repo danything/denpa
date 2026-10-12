@@ -68,7 +68,7 @@ export async function resolveConflicts(): Promise<{ accepted: number; rejected: 
         .where(
             and(
                 inArray(reservations.state, ['scheduled', 'conflict']),
-                // 録り始めたものは数え直さない。掴む本数はもう決まっている
+                // 録り始めたものは数え直さない。使う本数はもう決まっている
                 isNull(reservations.started_at),
                 gt(reservations.end_at, now()),
             ),
@@ -76,7 +76,7 @@ export async function resolveConflicts(): Promise<{ accepted: number; rejected: 
         .orderBy(reservations.start_at)
         .all();
 
-    // 前後のマージンぶんチューナーを掴む時間は延びる。予約表と実行時のズレを無くすため
+    // 前後のマージンぶんチューナーを使う時間は延びる。予約表と実行時のズレを無くすため
     // 同じ物差しで数える
     const { accepted, rejected } = assign(
         candidates,
@@ -99,10 +99,10 @@ export async function resolveConflicts(): Promise<{ accepted: number; rejected: 
              * **譲ったぶんを覚える。マージンだけ譲ったものも。** 譲っていなければ NULL に戻す —
              * 前の回で削られていても、相手が消えれば丸ごと録れるようになる。
              *
-             * マージンだけのときに NULL にしていた頃は、隣り合う番組で前が終了マージンまで掴み続け、
-             * 後ろが開始マージンから掴みに行っていた。割り振りの通りに離さないと、後ろは別の本に
+             * マージンだけのときに NULL にしていた頃は、隣り合う番組で前が終了マージンまで使い続け、
+             * 後ろが開始マージンから取りに行っていた。割り振りの通りに離さないと、後ろは別の本に
              * 入る (兼用の本を塞いで、その後の衛星が録れない) か、空き待ちで頭が欠ける。
-             * 「欠けます」の札はマージンだけなら出ない (`format.clipNote` は番組の時刻と比べる)
+             * 「欠けます」のラベルはマージンだけなら出ない (`format.clipNote` は番組の時刻と比べる)
              */
             const from = a.from === a.reservation.start_at - config.startMargin ? null : a.from;
             const to = a.to === a.reservation.end_at + config.endMargin ? null : a.to;
@@ -139,7 +139,7 @@ export async function tick(): Promise<void> {
     const at = now();
 
     // 止めるほうを先にやる。次の番組が始まるときに前の録画がまだチューナーを
-    // 掴んでいると、本数が足りない環境で後続が丸ごと録れない
+    // 使っていると、本数が足りない環境で後続が丸ごと録れない
     /** この見回りで止めた録画の読み手。始める録画に引き継ぎとして渡す (下) */
     const stopped: StreamUse[] = [];
     for (const id of activeRecordingIds()) {
@@ -149,7 +149,7 @@ export async function tick(): Promise<void> {
             .where(eq(recordings.id, id))
             .get();
         if (rec === undefined) continue;
-        // 尻を譲っているならそこで離す (`record_to`)。次の録画がそこから掴む
+        // 尻を譲っているならそこで離す (`record_to`)。次の録画がそこから使う
         if (at < recordingUntil(rec)) continue;
         stopRecording(id);
         stopped.push(recordingUse(id));
@@ -196,7 +196,7 @@ export async function tick(): Promise<void> {
      * 切れた録画は追記で開いてあるので、次の Pod が続きから録る。
      *
      * **譲ったぶんがあれば、そちらを見る** (`record_from`)。チューナーの取り合いで
-     * 頭を譲った予約は、番組の始まりに起こしても掴めない — 相手がまだ掴んでいる
+     * 頭を譲った予約は、番組の始まりに起こしても使えない — 相手がまだ使っている
      */
     const due = orm()
         .select()
@@ -241,7 +241,7 @@ export async function tick(): Promise<void> {
          * **止めた録画を引き継ぎとして渡す** (`after`)。止めたことがエージェントに届くのは
          * 非同期なので、届く前に次の選局が着くと、前の本がまだ塞がって見えて次の順位の本に
          * 入っていた (割り振りと違う本に入り、後の録画が録れない)。渡しておけば、エージェントは
-         * 止めた録画をもう離れたものとして選ぶ。割り振り (`conflict.ts`) も、離すのと掴むのが
+         * 止めた録画をもう離れたものとして選ぶ。割り振り (`conflict.ts`) も、離すのと使うのが
          * 同じ時刻なら離すほうを先に数えているので、それと同じになる。
          *
          * どれとどれを組にするかは決めない。どの本に入るかはエージェントが順位で選ぶので、

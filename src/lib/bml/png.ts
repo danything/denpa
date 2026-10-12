@@ -57,7 +57,7 @@ export function applyClut(
     const view = new DataView(png.buffer, png.byteOffset, png.byteLength);
     const width = view.getUint32(16);
     const height = view.getUint32(20);
-    // 色の数はビット深度まで (多すぎる tRNS を捨てる復号器がある)
+    // 色の数はビット深度まで (多すぎる tRNS を捨てるデコーダがある)
     const colors = clut.slice(0, 2 ** Math.min(8, png[24] ?? 8));
     const plte = new Uint8Array(colors.length * 3);
     const trns = new Uint8Array(colors.length);

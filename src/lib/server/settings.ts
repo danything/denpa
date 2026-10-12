@@ -18,20 +18,20 @@ import { settings as settingsTable } from './schema';
 export interface Settings {
     /**
      * 録画のエンコードに使う映像コーデック。`none` ならエンコードしない。
-     * **主のほう** — 両方焼くときは AV1 (小さいので既定の再生に向く)
+     * **主のほう** — 両方エンコードするときは AV1 (小さいので既定の再生に向く)
      */
     codec: VideoCodec;
     /**
-     * 焼くコーデックの一覧。**両方選べる** (`['av1', 'h264']`)。
+     * エンコードするコーデックの一覧。**両方選べる** (`['av1', 'h264']`)。
      *
-     * 古いテレビは AV1 を解けないので、H.264 も一緒に焼いておくと同じ録画を
+     * 古いテレビは AV1 をデコードできないので、H.264 も一緒にエンコードしておくと同じ録画を
      * どちらの端末でも観られる (`server/encoder.ts`)。`none` (エンコードしない)
      * のときは空。AV1 を先頭に寄せる — 主 (`library_path`) はそちらにする
      */
     codecs: HwCodec[];
     /**
-     * **GPU の口ごとに、GPU で焼いてよいコーデック** (`#lib/hw.js` の HwAllow)。使えるかは
-     * 別 (`server/hwenc.ts`) で、焼くのは「使える かつ 許されている」もの。使えないものの
+     * **GPU の口ごとに、GPU でエンコードしてよいコーデック** (`#lib/hw.js` の HwAllow)。使えるかは
+     * 別 (`server/hwenc.ts`) で、エンコードするのは「使える かつ 許されている」もの。使えないものの
      * 印は画面から触れないので保存しても残る (GPU を挿し替えればそのまま効く)。JSON で1つの鍵
      */
     hwAllow: HwAllow;
@@ -39,7 +39,7 @@ export interface Settings {
     cmCut: CmMode;
     /** エンコードするか。**コーデックの選択から決まる** (`none` 以外なら する) */
     encode: boolean;
-    /** エンコードしたあとも生TSを残すか */
+    /** エンコードしたあとも元のTSを残すか */
     keepOriginal: boolean;
     /** 自動予約で無料放送だけを対象にするか */
     freeOnly: boolean;

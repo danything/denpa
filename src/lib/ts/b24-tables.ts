@@ -1,5 +1,5 @@
 /**
- * 字幕の文字の表。**denpa が手で持つ** (字幕を解くのは [b24caption.ts](b24caption.ts)、番組表の外字は
+ * 字幕の文字の表。**denpa が手で持つ** (字幕をデコードするのは [b24caption.ts](b24caption.ts)、番組表の外字は
  * [aribtext-gaiji.ts](aribtext-gaiji.ts) がここの追加記号を引いて作る)。
  *
  * 元は libaribcaption v1.1.2 の表 (b24_conv_tables.hpp / b24_gaiji_table.hpp / b24_colors.cpp /

@@ -2,7 +2,7 @@ import { error, json } from '@sveltejs/kit';
 import { CODE_TTL_MS, issueCode, POLL_INTERVAL_MS } from '#lib/server/device-auth.js';
 
 /**
- * **ペアリングの札を出す** (device-auth.ts。資格は要らない — テレビはまだ何も持っていない)。
+ * **ペアリングコードを出す** (device-auth.ts。資格は要らない — テレビはまだ何も持っていない)。
  * URL は denpa の根からの相対。テレビは `verificationUriComplete` を QR にして出す
  */
 export async function POST({ request }) {

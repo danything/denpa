@@ -128,7 +128,7 @@ public interface IBulkPipe : IDisposable
     /// <summary>1回のバルク転送で読めただけ返す。0 バイトのこともある (ZLP)</summary>
     int Read(Span<byte> buffer, int timeoutMs);
 
-    /// <summary>USB のポートをリセットして掴み直す。できない口 (テストの偽物) は何もしない</summary>
+    /// <summary>USB のポートをリセットして取り直す。できない口 (テストの偽物) は何もしない</summary>
     void ResetPort() { }
 }
 
@@ -183,7 +183,7 @@ public sealed unsafe class UsbFsPipe : IBulkPipe
     }
 
     /// <summary>
-    /// 開いて、ディスクリプタを確かめ、インターフェースを掴む。
+    /// 開いて、ディスクリプタを確かめ、インターフェースを確保する。
     ///
     /// <para>
     /// **USB の ID も突き合わせる。** 番号 (<c>DDD</c>) は挿し直すたびに振り直されるので、
@@ -269,7 +269,7 @@ public sealed unsafe class UsbFsPipe : IBulkPipe
     /// **USB のポートをリセットする** (<c>USBDEVFS_RESET</c>)。リーダーが途中のやり取りを
     /// 抱えたまま固まったとき (前のエージェントがやり取りの最中に止められた、など)、
     /// USB からは繋がって見えるのに何を送っても応えなくなる。人が unbind / bind していたのを
-    /// ここでやる。リセットで掴みが外れるので掴み直す
+    /// ここでやる。リセットで確保が外れるので取り直す
     /// </summary>
     public void ResetPort()
     {

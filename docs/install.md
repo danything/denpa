@@ -8,12 +8,12 @@ Mac と Windows の入れ方の中身は [agent.md](agent.md#mac-でチューナ
 一覧は [README](../README.md#1-要るもの)。機材ごとの細かいことは agent.md に。
 
 - px4-userland の対応機種 (e-Better / Digibest 系も) — [agent.md](agent.md#px-q3u4-などは-px4-userland-でカーネルドライバは入れてもらわない)
-- PX-S1UD を siano-userland で使うときの blacklist — [agent.md](agent.md#px-s1ud-はカーネルが掴んでいなければ-siano-userland-で)
+- PX-S1UD を siano-userland で使うときの blacklist — [agent.md](agent.md#px-s1ud-はカーネルが使っていなければ-siano-userland-で)
 - PX-W3U3 (試験的) — [agent.md](agent.md#px-w3u3-は-asicen-userland-で-試験的上流のリリース待ち)
 - イメージは amd64 と arm64 を同じタグにまとめてあり、自分のアーキテクチャのものが降ってきます
-- **Intel の GPU** — `/dev/dri` が見えれば起動時に見つけて GPU で焼きます。compose.prod.yml では渡す行をコメントにしてあるので、
+- **Intel の GPU** — `/dev/dri` が見えれば起動時に見つけて GPU でエンコードします。compose.prod.yml では渡す行をコメントにしてあるので、
   `compose.override.yml` で渡します (Helm は既定で渡す)。QSV は amd64 だけで、arm64 は VA-API かソフトウェア
-  ([encode.md](encode.md#gpu-で焼く-intel-qsv--va-api))
+  ([encode.md](encode.md#gpu-でエンコードする-intel-qsv--va-api))
 
 ## 1行で入れる
 
@@ -68,7 +68,7 @@ docker run -d --name denpa --restart unless-stopped --stop-timeout 21900 \
 ```
 
 - エージェントの設定 (`tuners.json` / `channels.json`) は `/config`、DB は `/data`、録画は `/media` の下
-  (生TS は `raw`、焼いたものは `encoded`)。前の版から上げるときは [app.md](app.md#置き場を変えた-前の版から上げるとき)
+  (元のTS は `raw`、エンコードしたものは `encoded`)。前の版から上げるときは [app.md](app.md#置き場を変えた-前の版から上げるとき)
 - `--privileged` は要りません。USB (189) と DVB (212) のデバイスを開く許可と、pipe を広げる
   `SYS_RESOURCE` だけ渡します。デバイスはディレクトリごと見せるので、挿し直しても再起動は要りません
 - 止めるときは録画の終わりを待つので、`--stop-timeout` を長くしておきます (compose の `stop_grace_period` と同じ)。

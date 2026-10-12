@@ -6,7 +6,7 @@ namespace Denpa.Agent;
 /// 実機で選局を確かめる小道具。**サーバを立てずに1本だけ試す。**
 ///
 /// <para>
-/// 掴んだままの選局は、値が1つ違っても「ioctl は通るが同期しない」という
+/// デバイスを確保したままの選局は、値が1つ違っても「ioctl は通るが同期しない」という
 /// 出方をする。単体テストでは踏めないので、実機で当てるための口を用意した
 /// (チューナー自動検出のときと同じやり方)。
 /// </para>
@@ -14,7 +14,7 @@ namespace Denpa.Agent;
 /// <code>
 /// denpa-agent --tune /dev/dvb/adapter1/frontend0 T27
 /// denpa-agent --tune /dev/dvb/adapter0/frontend0 BS15_0 --lnb 15v
-/// denpa-agent --tune /dev/dvb/adapter1/frontend0 T27,T21   # 掴んだまま切り替える
+/// denpa-agent --tune /dev/dvb/adapter1/frontend0 T27,T21   # 確保したまま切り替える
 /// denpa-agent --tune px4:00001205000960:2 T27               # px4-userland の機材。Q3U4 なら受信機 2 は地上波
 /// denpa-agent --tune siano:1-2 T27                          # siano-userland の機材 (smsusb を blacklist した PX-S1UD)
 /// denpa-agent --tune asicen:1-2:1 T27                       # asicen-userland の機材 (PX-W3U3。試験的。受信機 1 は地上波)
@@ -24,7 +24,7 @@ namespace Denpa.Agent;
 ///
 /// <para>
 /// 見るのは3つ。**同期したか・TS の形をしているか・切り替えに何秒かかるか。**
-/// 最後は掴み直すのと比べてどれだけ短いかで、ここでしか測れない。
+/// 最後は取り直すのと比べてどれだけ短いかで、ここでしか測れない。
 /// </para>
 /// </summary>
 public static class Probe
@@ -33,7 +33,7 @@ public static class Probe
     private static readonly TimeSpan Read = TimeSpan.FromSeconds(3);
 
     /// <summary>
-    /// ファイルを1つ解く。**チューナーを使わずに B25 だけ確かめる。**
+    /// ファイルを1つ復号する。**チューナーを使わずに B25 だけ確かめる。**
     ///
     /// <para>
     /// 掛かったまま録れてしまったものを救うのにも使える (denpa からは
@@ -67,7 +67,7 @@ public static class Probe
 
         var before = packets == 0 ? 0 : 100.0 * scrambled / packets;
         Console.WriteLine($"{input.Length} -> {written} バイト  元は {before:F1}% が掛かっていました");
-        Console.WriteLine($"解いた {b25.Decoded} / 掛かったまま {b25.Undecodable} パケット{(b25.LastError is { } why ? $" ({why})" : "")}");
+        Console.WriteLine($"復号した {b25.Decoded} / 掛かったまま {b25.Undecodable} パケット{(b25.LastError is { } why ? $" ({why})" : "")}");
         return 0;
     }
 
@@ -150,7 +150,7 @@ public static class Probe
         return 0;
     }
 
-    /// <summary>読めたバイト数と、それが TS の形をしているか。解かせたなら解けたか</summary>
+    /// <summary>読めたバイト数と、それが TS の形をしているか。復号させたなら復号できたか</summary>
     private static void Measure(Stream stream, string name, Descrambler? b25)
     {
         var buffer = new byte[188 * 1024];
@@ -204,14 +204,14 @@ public static class Probe
         }
 
         var after = outPackets == 0 ? 0 : 100.0 * scrambledOut / outPackets;
-        Console.WriteLine($"    掛かっているパケット {before:F1}% -> 解いたあと {after:F1}% ({outPackets} 個)"
+        Console.WriteLine($"    掛かっているパケット {before:F1}% -> 復号したあと {after:F1}% ({outPackets} 個)"
             + (b25.LastError is { } why ? $"  {why}" : ""));
         if (total == 0) Console.Error.WriteLine($"    {name}: 1バイトも来ていません");
     }
 
     /// <summary>
     /// スクランブルが掛かっているか。**4バイト目の上2ビット** (transport_scrambling_control)。
-    /// 解けていれば 0 になる
+    /// 復号できていれば 0 になる
     /// </summary>
     private static bool Scrambled(ReadOnlySpan<byte> packet) => (packet[3] & 0xC0) != 0;
 }

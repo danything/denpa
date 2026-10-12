@@ -29,7 +29,7 @@ public static class ChannelTable
     public const uint NoStreamId = ~0U;
 
     /// <summary>
-    /// 1つの物理チャンネルを掴むのに要るもの、全部。
+    /// 1つの物理チャンネルを選局するのに要るもの、全部。
     /// </summary>
     /// <param name="Type">denpa の種別 (GR / BS / CS)</param>
     /// <param name="Delivery">DVB の方式 (<see cref="SysIsdbt"/> / <see cref="SysIsdbs"/>)</param>
@@ -104,7 +104,7 @@ public static class ChannelTable
     /// <para>
     /// <paramref name="known"/> には**自分の <c>channels.json</c>** を渡す。
     /// スキャン結果には TSID が入っていて、そちらのほうが必ず新しい —
-    /// BS は再編があるので、焼き込んだ表は古くなる。下の表は
+    /// BS は再編があるので、埋め込んだ表は古くなる。下の表は
     /// **まだ1度もスキャンしていないとき**だけのもの。
     /// </para>
     /// </summary>

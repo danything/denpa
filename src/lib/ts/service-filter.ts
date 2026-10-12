@@ -13,7 +13,7 @@
  * - **PAT** … その局1つだけに**書き直して**出す。丸ごと通すと ffmpeg には
  *   相変わらず複数のプログラムが見える
  * - **PMT と、そこに載っている ES** … 映像・音声・字幕。ECM も (掛かったまま
- *   録れたものを後から解くのに要る)
+ *   録れたものを後から復号するのに要る)
  * - **CAT / NIT / SDT / EIT / TDT** … 局の情報と番組表。EIT は放送の延長を
  *   追うのに使い、録画に残す番組情報の元にもなる
  *
@@ -214,7 +214,7 @@ export class ServiceFilter {
     }
 }
 
-/** CA_descriptor から ECM の PID を拾う。掛かったまま録れたものを後から解くのに要る */
+/** CA_descriptor から ECM の PID を拾う。掛かったまま録れたものを後から復号するのに要る */
 function collectCa(body: Uint8Array, into: Set<number>): void {
     let at = 0;
     while (at + 2 <= body.length) {

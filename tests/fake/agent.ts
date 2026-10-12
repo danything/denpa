@@ -14,7 +14,7 @@ import { broadcast, channels, DEFAULT_KNOBS, type Knobs, on } from './broadcast'
 import type { FakeService } from './services';
 
 const PORT = Number(process.env['FAKE_AGENT_PORT'] ?? 25252);
-/** denpa の生TSの置き場。本物では同じものをエージェント側にも見せてある */
+/** denpa の元のTSの置き場。本物では同じものをエージェント側にも見せてある */
 const RECORDED = resolve(process.env['RAW_DIR'] ?? '/media/raw');
 
 /** テストから切り替えるつまみ。本物では `tune.ts` がファイル越しに読む */
@@ -26,13 +26,13 @@ let busyTuners = false;
  * 偽のスクランブル解除。本物の復号はせず、4バイト目の
  * transport_scrambling_control を落とすだけ。
  *
- * 本物と同じく、渡されるのは生TSの置き場からの相対パス。
+ * 本物と同じく、渡されるのは元のTSの置き場からの相対パス。
  */
 function unscramble(input: string, output: string): { ok: boolean; error: string } {
     const from = resolve(RECORDED, input);
     const to = resolve(RECORDED, output);
     if (!from.startsWith(`${RECORDED}/`) || !to.startsWith(`${RECORDED}/`)) {
-        return { ok: false, error: '生TSの保存先の外にあるファイルは解除できません' };
+        return { ok: false, error: '元のTSの保存先の外にあるファイルは解除できません' };
     }
     if (!existsSync(from)) return { ok: false, error: `${from} が見つかりません` };
 
@@ -100,10 +100,10 @@ interface Lease {
 const leases = new Map<number, Lease>();
 
 /**
- * **開かれた記録。** 誰が、どの強さで掴みに来たか。
+ * **開かれた記録。** 誰が、どの優先度 (`priority`) で取りに来たか。
  *
- * 掴んでいる最中の見た目は一瞬で消える (偽エージェントは本物より速い) ので、
- * 「その強さで掴みに行った」ことを試験から確かめるには記録が要る
+ * 使っている最中の見た目は一瞬で消える (偽エージェントは本物より速い) ので、
+ * 「その優先度で取りに行った」ことを試験から確かめるには記録が要る
  * (`16-scan.spec.ts`)。溜め続けないよう直近だけ持つ
  */
 const opens: { use: string; priority: number; type: string; channel: string }[] = [];
@@ -312,7 +312,7 @@ const options: Bun.ServeOptions = {
             return json({ ok: true, noPresentFollowing: knobs.noPresentFollowing });
         }
         if (url.pathname === '/__control/listeners') return json({ listeners: listeners.size });
-        /* 掴みに来た記録。**掴んでいる一瞬を待たずに確かめるため** */
+        /* 取りに来た記録。**使っている一瞬を待たずに確かめるため** */
         if (url.pathname === '/__control/opens') return json({ opens });
         /*
          * **繋ぎを壊す。Pod を入れ替えたのと同じ形。**
@@ -322,7 +322,7 @@ const options: Bun.ServeOptions = {
          * エージェントの Pod が入れ替わったときと同じ壊れ方。
          *
          * **ストリームを `controller.error()` で壊すのでは足りない。** それだと
-         * 読み手には EOF として届き (実測)、denpa は前から掴み直せていた。
+         * 読み手には EOF として届き (実測)、denpa は前から取り直せていた。
          * 直したかったのは例外で切れたほうなので、本当に接続を壊す。
          *
          * この応答を返しきってから壊す (返す前に壊すと、頼んだ側が結果を

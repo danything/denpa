@@ -19,11 +19,11 @@
 #   ~/denpa (DENPA_HOME)                  denpa.env (コンテナの環境変数。無いときだけ雛形を作り、あれば触らない)・
 #                                         config/・denpa-agent.log
 #   %LOCALAPPDATA%\denpa-agent\           エージェント・siano-userland・起こす .cmd と denpa-start.ps1
-#   ~/Videos/denpa/{recorded,library}     生TS (エージェントとコンテナの両方が見る) と出来上がった録画
+#   ~/Videos/denpa/{recorded,library}     元のTS (エージェントとコンテナの両方が見る) と出来上がった録画
 #   wslc のボリューム denpa-data          DB (Windows のフォルダ越しだと SQLite のロックが当てにならない)
 #
 # 環境変数: DENPA_VERSION (v1.2.3 のように。既定は最新のリリース。CI はコミットを渡す)、DENPA_HOME、
-# DENPA_AGENT_ZIP (手元で焼いたエージェントの zip を絶対パスで。CI と開発用)
+# DENPA_AGENT_ZIP (手元でビルドしたエージェントの zip を絶対パスで。CI と開発用)
 #
 # Windows に最初から入っている PowerShell 5.1 で動くように書く (pwsh でも動く)。
 # `irm | iex` は呼んだ人のセッションでそのまま走るので、exit は使わない (窓ごと閉じる)。
@@ -174,7 +174,7 @@ function Move-FromDocker {
 
 # 起こすスクリプト。**起こすたびに作り直すかを決める**: コンテナから Windows のエージェントへは
 # Hyper-V の Default Switch の IP で届くが (host.docker.internal は無い)、その IP は再起動で変わりうる。
-# 宛先か版か denpa.env が変わっていればコンテナを作り直す (環境変数は作るときに焼き込まれる。
+# 宛先か版か denpa.env が変わっていればコンテナを作り直す (環境変数は作るときに埋め込まれる。
 # DB はボリューム、録画は Windows のフォルダなので消えない)。
 # wslc には restart の指定が無いので、ログオン時のタスクがこれを流す。
 # **ポートは 0.0.0.0 に出す** (既定は 127.0.0.1 だけで、LAN のほかの機器から開けない)

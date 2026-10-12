@@ -18,7 +18,7 @@ public static class Keys
 
     private static IKeySource? _source;
 
-    /// <summary>流れを解くときに聞く相手。<see cref="Configure"/> するまでは手元のカード</summary>
+    /// <summary>流れを復号するときに聞く相手。<see cref="Configure"/> するまでは手元のカード</summary>
     public static IKeySource Source => _source ?? Local;
 
     /// <summary>CARD_URL が書いてあれば、そちらから貰う。**起動したときに1回**</summary>
@@ -91,8 +91,8 @@ public sealed class LocalCard : IKeySource
 /// </para>
 ///
 /// <para>
-/// 呼ぶのは解き手のスレッドで、読み手とは別 (TunerPool.cs)。相手が遅くても
-/// 間のキュー (64MB) が呑むうちは録画は欠けず、答えが来てから続きを解く。
+/// 呼ぶのは復号器のスレッドで、読み手とは別 (TunerPool.cs)。相手が遅くても
+/// 間のキュー (64MB) が呑むうちは録画は欠けず、答えが来てから続きを復号する。
 /// </para>
 /// </summary>
 public sealed class RemoteCard(string url) : IKeySource

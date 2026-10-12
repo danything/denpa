@@ -46,7 +46,7 @@ export function manifest(hostname: string): unknown {
          * 片方がもう片方の入れ直しとして扱われないよう、明示しておく
          */
         // URL は manifest の置き場からの相対。前段の接頭辞の下でも、その中を指す (server/paths.ts)。
-        // 根で動かしていれば前と同じ `/?host=…` に解けるので、入れてある PWA は別物にならない
+        // 根で動かしていれば前と同じ `/?host=…` に解決されるので、入れてある PWA は別物にならない
         id: `./?host=${hostname.toLowerCase()}`,
         start_url: './',
         scope: './',

@@ -6,9 +6,9 @@ name: Publish release tags
 # (compose.prod.yml が指しているのが `latest` なので、入れて使っている人の
 # ところで、こちらの作業中のものが勝手に動かないようにするため)。
 #
-# **焼き直しません。** リリースにしたコミットの中身から出るタグ
-# (`sha-…`) は main への push のときに焼いてあるので、そのイメージに名前を
-# 貼り足すだけです。焼き直すと「試したものとリリースしたものが別」になります。
+# **ビルドし直しません。** リリースにしたコミットの中身から出るタグ
+# (`sha-…`) は main への push のときにビルドしてあるので、そのイメージに名前を
+# 貼り足すだけです。ビルドし直すと「試したものとリリースしたものが別」になります。
 #
 # 貼る名前は3つ。
 #
@@ -59,7 +59,7 @@ jobs:
           fetch-depth: 0
 
       # main の build-and-deploy と同じ出し方 (.github/image-tags.sh)。
-      # ここが食い違うと、焼いたものと違うイメージに名前が付く
+      # ここが食い違うと、ビルドしたものと違うイメージに名前が付く
       - name: Compute image tags
         id: tag
         run: |
@@ -162,8 +162,8 @@ jobs:
           echo "denpa-aio: denpa:${first} + denpa-agent:${{ steps.tag.outputs.agent }} → $names"
 
   # **Mac (Apple Silicon) 用のエージェントをリリースに添える** (install.sh が取りに来る)。
-  # Native AOT は Linux から macOS へ焼けないので、ここだけは Mac のランナーで**焼く**
-  # (イメージのように main で焼いたものを使い回す先が無い)。中身はタグのコミットそのもの
+  # Native AOT は Linux から macOS 向けにビルドできないので、ここだけは Mac のランナーで**ビルドする**
+  # (イメージのように main でビルドしたものを使い回す先が無い)。中身はタグのコミットそのもの
   agent-macos:
     runs-on: macos-26
     steps:
@@ -192,7 +192,7 @@ jobs:
           gh release upload "$tag" "$asset" "$asset.sha256" --clobber
 
   # **Windows (x64) 用のエージェントも添える** (install.ps1 が取りに来る)。Mac と同じく、
-  # Native AOT は Linux から Windows へ焼けないので Windows のランナーで焼く
+  # Native AOT は Linux から Windows 向けにビルドできないので Windows のランナーでビルドする
   agent-windows:
     runs-on: windows-latest
     steps:
@@ -222,11 +222,11 @@ jobs:
 
   # **Helm chart もリリースのたびに出す** (README が案内している `oci://ghcr.io/danything/charts/…`)。
   # chart の版 (Chart.yaml の version) とアプリの版 (appVersion) をリリースの
-  # 版で揃えて焼き、GHCR の OCI レジストリに push する。イメージと同じく、chart 側の
+  # 版で揃えてパッケージにし、GHCR の OCI レジストリに push する。イメージと同じく、chart 側の
   # 既定の image.tag は `latest` なので、chart の版を上げなくても中身は動く —
   # 版で固定したい人は values で `image.denpa.tag` を書く。
   #
-  # **Chart.yaml の版も main に書き戻す** (最後の段)。焼くときは `--version` で
+  # **Chart.yaml の版も main に書き戻す** (最後の段)。パッケージにするときは `--version` で
   # 上書きするので動きには関係ないが、リポジトリの Chart.yaml が古い版のままだと
   # 「どれが出ているのか」が読めない。build-and-deploy がイメージの印を書き戻すのと
   # 同じ手 (PR を出して自分でマージする。理由もそちらに書いてある)

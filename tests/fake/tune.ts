@@ -24,7 +24,7 @@ if (type === undefined || channel === undefined) {
 
 const services = on(type, channel);
 if (services.length === 0) {
-    // 電波を掴めなかったときの落ち方 (非0で終わる)。スキャンはここを見て次へ行く
+    // 電波を受けられなかったときの落ち方 (非0で終わる)。スキャンはここを見て次へ行く
     process.stderr.write(`Cannot tune to ${channel}: no signal\n`);
     process.exit(1);
 }

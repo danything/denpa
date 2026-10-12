@@ -25,7 +25,7 @@ spec:
 {{- end }}
 {{- if not .Values.persistence.raw.existingClaim }}
 ---
-# 生TSの置き場 (denpa と共有できない構成用の自分の分)
+# 元のTSの置き場 (denpa と共有できない構成用の自分の分)
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:

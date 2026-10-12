@@ -8,7 +8,7 @@
  *
  * そこで、エンコードのついでに元TSをもう一度 [bml.ts](bml.ts) に通し、**配る価値の
  * あった変化だけ**を放送の実時刻 (TDT/TOT) つきで並べておく
- * ([data-capture.ts](data-capture.ts) の `captureDataBroadcast`。**TS を解く側は
+ * ([data-capture.ts](data-capture.ts) の `captureDataBroadcast`。**TS をデコードする側は
  * サーバ専用**なので別ファイル — ここは観る画面 (ブラウザ) も読み込む)。
  * 再生時は、再生位置に当たる実時刻までの変化を新しい `Carousel` に流し込めば、
  * **その時点の画面**が復元できる (`replayAt`)。シークもこれで作り直すだけ。

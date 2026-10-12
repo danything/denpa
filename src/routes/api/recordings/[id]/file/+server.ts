@@ -9,12 +9,12 @@ import { type FileSource, parseFileSource } from '#lib/source.js';
 
 /**
  * **音声だけ** (`?audio=only`)。音声だけで鳴らすもの (スマートスピーカーへの Cast など) 向け。
- * 元がどれ (生TS・AV1・H.264) でも同じ形で出せるよう、主音声を AAC に焼き直して ADTS で流す。
+ * 元がどれ (元のTS・AV1・H.264) でも同じ形で出せるよう、主音声を AAC に再エンコードして ADTS で流す。
  * 音声だけなので軽い。閉じられたら ffmpeg も止める
  */
 function audioOnly(path: string, request: Request): Response {
     const headers = { 'Content-Type': 'audio/aac', 'Cache-Control': 'no-store' };
-    // HEAD は形だけ答える。焼き直しを起こさない
+    // HEAD は形だけ答える。再エンコードを起こさない
     if (request.method === 'HEAD') return new Response(null, { headers });
     const body = ffmpegBody(
         [
@@ -57,8 +57,8 @@ function respond(
     /*
      * どのファイルを配るか。
      *
-     * 基本はエンコード済み、無ければ生TS。ただし**エンコードが走っている間は
-     * 生TSのほう**を配る。録り直しの最中は library_path がまだ古いファイルを
+     * 基本はエンコード済み、無ければ元のTS。ただし**エンコードが走っている間は
+     * 元のTSのほう**を配る。録り直しの最中は library_path がまだ古いファイルを
      * 指していて、しかもその古いファイルは終わり際に消えるので、
      * 押した瞬間によって出るものが変わっていた
      */
@@ -66,9 +66,9 @@ function respond(
     /*
      * **どちらを寄越すか、名指しもできる** (`?source=ts` / `encoded` / `alt`)。
      *
-     * - `ts` … 生TS
-     * - `encoded` … 主のエンコード済み (両方焼いたときは AV1)
-     * - `alt` … もう一方 (H.264)。両方焼いた録画でだけ在る。古いテレビはこちら
+     * - `ts` … 元のTS
+     * - `encoded` … 主のエンコード済み (両方エンコードしたときは AV1)
+     * - `alt` … もう一方 (H.264)。両方エンコードした録画でだけ在る。古いテレビはこちら
      *
      * 残っているものが複数ある録画では、画面がダウンロードの口を分けて出す
      * (`+page.svelte` の `recordingActions`)。上の「今いいほう」だけだと、

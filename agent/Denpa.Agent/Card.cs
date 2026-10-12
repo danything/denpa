@@ -74,7 +74,7 @@ public static class Card
         }
     }
 
-    /// <param name="streaming">いま解いているチューナーの名前 (<see cref="TunerPool.Descrambling"/>)</param>
+    /// <param name="streaming">いま復号しているチューナーの名前 (<see cref="TunerPool.Descrambling"/>)</param>
     public static JsonObject Status(Func<IReadOnlyList<string>> streaming)
     {
         /*
@@ -121,7 +121,7 @@ public static class Card
     /// 手元のリーダーを並べる。
     ///
     /// <para>
-    /// **使っているリーダーは開き直さない。** USB のリーダーは掴むと他からは開けない
+    /// **使っているリーダーは開き直さない。** USB のリーダーは開いている間は他から開けない
     /// ので、覗こうとすると断られる (悪くすると流れている鍵の出どころを乱す)。その行は
     /// 鍵の出どころ自身に INT を通させた答え (<paramref name="check"/>) で埋め、
     /// **残りだけ**を開いて覗いて閉じる。
@@ -129,7 +129,7 @@ public static class Card
     ///
     /// <para>
     /// 覗いている間に、使っているカードが落ちて繋ぎ直しが同じ予備を開こうとすると、
-    /// 片方が掴めずに終わる。繋ぎ直しは 10 秒後にまた探すので、そこで拾い直す。
+    /// 片方が開けずに終わる。繋ぎ直しは 10 秒後にまた探すので、そこで拾い直す。
     /// </para>
     /// </summary>
     /// <param name="check">鍵の出どころに INT を1回通させる</param>
@@ -154,8 +154,8 @@ public static class Card
         var found = find();
         /*
          * **INT が通らなかったら覗かない。** 鍵の出どころ自身が全部のリーダーを試して、
-         * リーダーごとの理由を持っている (BCas.Connect)。ここで覗くと、覗きが独占して掴んで
-         * いる間 (固まったリーダーだと待つのをやめたあとも) 繋ぎ直しが掴めず、画面を開くたびに
+         * リーダーごとの理由を持っている (BCas.Connect)。ここで覗くと、覗きが独占して開いて
+         * いる間 (固まったリーダーだと待つのをやめたあとも) 繋ぎ直しが開けず、画面を開くたびに
          * 締め出し続けて、カードが二度と読めなくなる (実機で起きた)
          */
         if (init is null) return Failed(failure!, found);
@@ -219,7 +219,7 @@ public static class Card
 
     /// <summary>
     /// そのリーダーの覗き。**前の覗きが終わっていなければ、それに相乗りする** — 固まった
-    /// リーダーは待つのをやめたあとも掴んだままなので、重ねて開くと自分で締め出す
+    /// リーダーは待つのをやめたあとも開いたままなので、重ねて開くと自分で締め出す
     /// </summary>
     private static Task<ReaderState> Peeking(CardLinkCandidate candidate)
     {
@@ -308,10 +308,10 @@ public sealed record ReaderState(string Name, long[]? Ids, bool Active, string? 
 public sealed record CardSurvey(bool Ok, string Message, IReadOnlyList<ReaderState> Readers, long[] Ids, string? Remote);
 
 /// <summary>
-/// 掛かったまま録れたTSを解く。
+/// 掛かったまま録れたTSを復号する。
 ///
 /// <para>
-/// **こちらの返事だけでは足りない。** 解けたつもりで掛かったままのものが出来る道が
+/// **こちらの返事だけでは足りない。** 復号できたつもりで掛かったままのものが出来る道が
 /// 残る (鍵が合わない・ECM が流れていない) ので、出来上がったものを読んで
 /// 確かめるのは呼び出し側 (denpa の <c>scramble.ts</c>)。
 /// </para>
@@ -326,14 +326,14 @@ public static class Scramble
         return full.StartsWith(root + Path.DirectorySeparatorChar, StringComparison.Ordinal) ? full : null;
     }
 
-    /// <summary>掛かったまま録れてしまったものを、後から解く (<see cref="Descrambler"/>)</summary>
+    /// <summary>掛かったまま録れてしまったものを、後から復号する (<see cref="Descrambler"/>)</summary>
     public static JsonObject Decode(string recorded, string? input, string? output)
     {
         var source = Inside(recorded, input);
         var target = Inside(recorded, output);
         if (source is null || target is null)
         {
-            return new JsonObject { ["ok"] = false, ["error"] = "生TSの保存先の外にあるファイルは解除できません" };
+            return new JsonObject { ["ok"] = false, ["error"] = "元のTSの保存先の外にあるファイルは解除できません" };
         }
         if (!File.Exists(source))
         {
@@ -352,7 +352,7 @@ public static class Scramble
             b25.DecodeAll(reading, writing);
 
             /*
-             * **解けなかったのに成功とは言わない。** カードが無い・ECM が流れていない
+             * **復号できなかったのに成功とは言わない。** カードが無い・ECM が流れていない
              * ときも、掛かったまま全部書き出せてしまう。1% を超えて残ったら断る
              */
             if (b25.Undecodable * 100 > b25.Decoded)

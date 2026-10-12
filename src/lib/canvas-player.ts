@@ -12,13 +12,13 @@
  * - `mkv` … **端末に保存した録画** (エンコード済みの Matroska)。サーバではなく Blob を切り出して読む
  *   (`mkv-source.ts`)。時刻はエンコード済みの物差しのまま
  *
- * 決め方は追っかけと同じ `follow` (`raw/playout.ts`) — 止めたら位置を保ち、そこから再開し、今へは跳ばない。
+ * 決め方は追っかけと同じ `follow` (`raw/playout.ts`) — 止めたら位置を保ち、そこから再開し、今へは飛ばない。
  * 録画のために足したのは:
  *
  * - **飛ぶ** … 持っているものを捨てて、飛び先から頼み直す (`seek`)。サーバは飛び先の少し手前 (鍵のコマ・
  *   1 秒前) から流すので、手前は鳴らさず描かない (`RawEngine.reset` の `from`)。描けるまでは前の絵のまま
  * - **先へ読みすぎない** … 手元が `AHEAD` 秒を超えたら読むのを待つ (fetch の流れはそこで詰まり、サーバも
- *   送るのを待つ)。解き始める前 (復号器の読み込み中) はバイト数で区切る (`EARLY_BYTES`)
+ *   送るのを待つ)。デコードし始める前 (デコーダの読み込み中) はバイト数で区切る (`EARLY_BYTES`)
  * - **終わり** … 尻まで読んだら `finish`。残りを鳴らしきったら `ended`
  * - **切れたら** 観ていた位置から頼み直す (`remux-player.ts` と同じ数)。混んでいて断られたら頼み直さない
  *
@@ -37,7 +37,7 @@ import { busyAnswer } from './remux-player';
 const TARGET = 1;
 /** 先へ読む上限 (秒。手元の音の尺)。元の TS は重い (1 秒 2MB ほど) ので短く */
 const AHEAD: Record<RawInput, number> = { fmp4: 30, mkv: 30, 'ts-mpeg2': 10 };
-/** 解き始める前に渡しておく上限 (バイト)。復号器を読み終えるまでは、手元の尺で測れない */
+/** デコードし始める前に渡しておく上限 (バイト)。デコーダを読み終えるまでは、手元の尺で測れない */
 const EARLY_BYTES = 8 * 1024 * 1024;
 /** 読むのを待つときの間 (ms) */
 const WAIT = 100;
@@ -72,7 +72,7 @@ export interface CanvasOptions {
     paused: boolean;
     /** 繋ぎ直している・諦めた・戻った・混んでいて断られた */
     state(state: CanvasState): void;
-    /** 描けなくなった (間に合わない・復号器が転び続ける・音が来ない)。**画面がほかの形へ移す** */
+    /** 描けなくなった (間に合わない・デコーダが転び続ける・音が来ない)。**画面がほかの形へ移す** */
     gaveUp(reason: string): void;
     /** 外 (ロック画面・車の操作) から止められた・再開された */
     remote(paused: boolean): void;
@@ -142,7 +142,7 @@ export function canvasPlayer(options: CanvasOptions): CanvasPlayer {
     let retries = 0;
     let retryTimer: ReturnType<typeof setTimeout> | null = null;
     let closed = false;
-    /** 頼み直してから渡したバイト数 (解き始める前の区切り。`EARLY_BYTES`) */
+    /** 頼み直してから渡したバイト数 (デコードし始める前の区切り。`EARLY_BYTES`) */
     let fed = 0;
     /** 貯めを使い切って止まっているか (読み込み中の輪) */
     let starving = false;
@@ -201,7 +201,7 @@ export function canvasPlayer(options: CanvasOptions): CanvasPlayer {
         return time;
     }
 
-    /** 先へ読んでよいか。**手元の尺が `AHEAD` を超えたら待つ** (解き始める前はバイト数で) */
+    /** 先へ読んでよいか。**手元の尺が `AHEAD` を超えたら待つ** (デコードし始める前はバイト数で) */
     async function room(mine: number): Promise<void> {
         for (;;) {
             if (mine !== run) return;
@@ -222,7 +222,7 @@ export function canvasPlayer(options: CanvasOptions): CanvasPlayer {
         time = from;
         fed = 0;
         /*
-         * **尻 (の手前 `END_EDGE`) へ飛んだら頼まずに終わり** — 最後が CM の録画で CM を飛ばした・帯を
+         * **尻 (の手前 `END_EDGE`) へ飛んだら頼まずに終わり** — 最後が CM の録画で CM を飛ばした・シークバーを
          * 右端まで動かした。サーバは尻の先からは流せない (`<video>` も尻へ飛ぶと `ended` になる)
          */
         if (from >= options.duration - END_EDGE) {
@@ -370,7 +370,7 @@ export function canvasPlayer(options: CanvasOptions): CanvasPlayer {
                 return;
             }
             const track = tsTrack(id);
-            // 保存した録画は軌道を選び直して、いまの位置から読み直す (音の復号器を開き直すため)
+            // 保存した録画は軌道を選び直して、いまの位置から読み直す (音のデコーダを開き直すため)
             if (input === 'mkv') {
                 engine.selectAudio(track.stream, 'both');
                 void load(position());

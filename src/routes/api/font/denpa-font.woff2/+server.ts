@@ -22,7 +22,7 @@ const FONT = '/usr/share/denpa-font/denpa-font.woff2';
 /** 入っている版 (`v2.1` など。Dockerfile が `DENPA_FONT_VERSION` を書く) */
 const VERSION = '/usr/share/denpa-font/VERSION';
 
-/** 中身の指紋と版。字はイメージに焼いてあり、動いている間は変わらないので1度だけ読む */
+/** 中身の指紋と版。字はイメージに組み込んであり、動いている間は変わらないので1度だけ読む */
 let tag: string | null = null;
 let installed: string | null = null;
 

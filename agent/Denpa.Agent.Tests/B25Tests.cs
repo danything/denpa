@@ -4,7 +4,7 @@ using Denpa.Agent;
 namespace Denpa.Agent.Tests;
 
 /*
- * B25 の解き方 (Descrambler)。
+ * B25 の復号のしかた (Descrambler)。
  *
  * 本物の放送もカードも要らない。PAT・PMT・ECM を自分で組み、中身を MULTI2 で
  * 掛けたパケットを作って流す。鍵はでたらめな「カード」(Cards) が ECM の頭の
@@ -179,7 +179,7 @@ public class B25Tests
         .Pat((0x0400, PmtPid))
         .Pmt(PmtPid, 0x0400, Ca(EcmPid), (VideoPid, []), (AudioPid, []));
 
-    /// <summary>流したあと、掛けた印を下ろした姿。**解けたらこうなる**</summary>
+    /// <summary>流したあと、掛けた印を下ろした姿。**復号できたらこうなる**</summary>
     private static byte[] Expected(Ts ts)
     {
         var plain = ts.Plain.ToArray();
@@ -213,7 +213,7 @@ public class B25Tests
     }
 
     [Test]
-    public async Task 番組全体のECMで解ける()
+    public async Task 番組全体のECMで復号できる()
     {
         var ts = Channel().Ecm(EcmPid, 1).Videos(50, 1);
         var cards = new Cards();
@@ -285,7 +285,7 @@ public class B25Tests
     }
 
     [Test]
-    public async Task どこで区切って渡しても同じに解ける()
+    public async Task どこで区切って渡しても同じに復号できる()
     {
         var ts = Channel().Ecm(EcmPid, 1).Videos(20, 1).Ecm(EcmPid, 2).Videos(20, 2, even: false).Ecm(EcmPid, 2);
         var wire = ts.Wire.ToArray();
@@ -329,14 +329,14 @@ public class B25Tests
     }
 
     [Test]
-    public async Task アダプテーションの後ろだけを解く()
+    public async Task アダプテーションの後ろだけを復号する()
     {
         var ts = Channel().Ecm(EcmPid, 1)
             .Payload(VideoPid, 1, adaptation: 7)
             .Payload(VideoPid, 1, adaptation: 100)
-            // 中身が 1 バイトだけ (丸ごとのブロックが無く、OFB だけで解く)
+            // 中身が 1 バイトだけ (丸ごとのブロックが無く、OFB だけで復号する)
             .Payload(VideoPid, 1, adaptation: 182)
-            // アダプテーションだけ。解くものは無く、印を下ろすだけ
+            // アダプテーションだけ。復号するものは無く、印を下ろすだけ
             .Payload(VideoPid, 1, adaptation: 183);
         var descrambler = new Descrambler(new Cards());
 
@@ -363,11 +363,11 @@ public class B25Tests
     }
 
     /// <summary>
-    /// ECM より先に来た掛かったパケットも、**溜めておいて後から来た鍵で解く**。
+    /// ECM より先に来た掛かったパケットも、**溜めておいて後から来た鍵で復号する**。
     /// 録画の頭が掛かったままにならない
     /// </summary>
     [Test]
-    public async Task 鍵が来るまで溜めて_来たら頭から解く()
+    public async Task 鍵が来るまで溜めて_来たら頭から復号する()
     {
         var before = Channel().Videos(30, 1);
         var ts = before.Ecm(EcmPid, 1).Videos(5, 1);
@@ -387,12 +387,12 @@ public class B25Tests
     }
 
     /// <summary>
-    /// **ECM より前は、ECM を挟んで続く偶奇の並びだけ解く。** その前の並びは
-    /// 前の鍵かもしれない。解くと化けたものを「解けた」として流すので、掛かったまま流す。
+    /// **ECM より前は、ECM を挟んで続く偶奇の並びだけ復号する。** その前の並びは
+    /// 前の鍵かもしれない。復号すると化けたものを「復号できた」として流すので、掛かったまま流す。
     /// 並びは ECM ごとに見る — 音声だけ見ると奇数が続いていても、その間に映像が偶数へ切り替わっている
     /// </summary>
     [Test]
-    public async Task 頭はECMを挟んで続く偶奇の並びだけ解く()
+    public async Task 頭はECMを挟んで続く偶奇の並びだけ復号する()
     {
         var ts = Channel()
             .Payload(AudioPid, 0, even: false).Payload(AudioPid, 0, even: false)
@@ -409,9 +409,9 @@ public class B25Tests
         await Assert.That(Diff(output[run..], Expected(ts)[run..])).IsEqualTo(-1);
     }
 
-    /// <summary>**切り替わった直後に来た ECM は、もう前の鍵を持っていない。** ECM の手前で途切れた並びは解かない</summary>
+    /// <summary>**切り替わった直後に来た ECM は、もう前の鍵を持っていない。** ECM の手前で途切れた並びは復号しない</summary>
     [Test]
-    public async Task ECMの手前で途切れた偶奇の並びは解かない()
+    public async Task ECMの手前で途切れた偶奇の並びは復号しない()
     {
         var ts = Channel().Videos(3, 1, even: true).Ecm(EcmPid, 2).Videos(3, 2, even: false);
         var descrambler = new Descrambler(new Cards());
@@ -423,9 +423,9 @@ public class B25Tests
         await Assert.That(Diff(output[(2 * 188)..(5 * 188)], ts.Wire.ToArray()[(2 * 188)..(5 * 188)])).IsEqualTo(-1);
     }
 
-    /// <summary>**溜めている間に ECM が変わったら、そこで流す。** 溜めた頭は最初の鍵で、後ろは新しい鍵で解く</summary>
+    /// <summary>**溜めている間に ECM が変わったら、そこで流す。** 溜めた頭は最初の鍵で、後ろは新しい鍵で復号する</summary>
     [Test]
-    public async Task 溜めている間にECMが変わっても溜めた頭は最初の鍵で解く()
+    public async Task 溜めている間にECMが変わっても溜めた頭は最初の鍵で復号する()
     {
         const int other = 0x0902;
         // 2本目の ECM が来ないうちに、1本目が変わる
@@ -513,7 +513,7 @@ public class B25Tests
     }
 
     [Test]
-    public async Task 番組がいくつあっても_それぞれのECMで解く()
+    public async Task 番組がいくつあっても_それぞれのECMで復号する()
     {
         const int pmt2 = 0x0102, video2 = 0x0121, ecm2 = 0x0902;
         var ts = new Ts()
@@ -562,7 +562,7 @@ public class B25Tests
 
         var output = Run(descrambler, [.. failed.Wire, .. recovered.Wire]);
 
-        // 失敗したところは掛かったまま (流す姿そのまま)、直ったところから解ける
+        // 失敗したところは掛かったまま (流す姿そのまま)、直ったところから復号できる
         byte[] expected = [.. failed.Wire, .. Expected(recovered)];
         await Assert.That(Diff(output, expected)).IsEqualTo(-1);
         await Assert.That(descrambler.Undecodable).IsEqualTo(5);
@@ -593,7 +593,7 @@ public class B25Tests
     }
 
     [Test]
-    public async Task 契約が無ければ解かずに理由を残す()
+    public async Task 契約が無ければ復号せずに理由を残す()
     {
         var ts = Channel().Ecm(EcmPid, 1).Videos(5, 1);
         var descrambler = new Descrambler(new Cards { Code = 0x8901 });
@@ -601,16 +601,16 @@ public class B25Tests
         var output = Run(descrambler, ts.Wire.ToArray());
 
         await Assert.That(Diff(output, ts.Wire.ToArray())).IsEqualTo(-1);
-        // 解けなかったのではなく、解く資格が無い。**解除の失敗には数えない**
+        // 復号できなかったのではなく、復号する資格が無い。**解除の失敗には数えない**
         await Assert.That(descrambler.Unentitled).IsEqualTo(5);
         await Assert.That(descrambler.Undecodable).IsEqualTo(0);
         await Assert.That(descrambler.LastError!).Contains("0x8901");
     }
 
 
-    /// <summary>**PMT より前に来た掛かったパケットも、溜めておいて、揃ったところで解く**</summary>
+    /// <summary>**PMT より前に来た掛かったパケットも、溜めておいて、揃ったところで復号する**</summary>
     [Test]
-    public async Task PMTより前に来たパケットも解く()
+    public async Task PMTより前に来たパケットも復号する()
     {
         var ts = new Ts().Pat((0x0400, PmtPid)).Videos(3, 1)
             .Pmt(PmtPid, 0x0400, Ca(EcmPid), (VideoPid, []))
@@ -624,11 +624,11 @@ public class B25Tests
     }
 
     /// <summary>
-    /// **ECM が1本しか見えていなくても、PAT の PMT がみな来るまではそれで表に無い ES を解かない。**
+    /// **ECM が1本しか見えていなくても、PAT の PMT がみな来るまではそれで表に無い ES を復号しない。**
     /// 2本目の番組の PMT がまだなだけで、その ES は別の ECM の鍵で掛かっている
     /// </summary>
     [Test]
-    public async Task PMTが揃うまでは1本だけのECMで他の番組を解かない()
+    public async Task PMTが揃うまでは1本だけのECMで他の番組を復号しない()
     {
         const int pmt2 = 0x0102, video2 = 0x0121, ecm2 = 0x0902;
         var ts = new Ts().Pat((0x0400, PmtPid), (0x0401, pmt2))

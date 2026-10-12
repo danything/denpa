@@ -9,8 +9,8 @@ import type { PageServerLoad } from './$types';
  * 追っかけ再生 ([issue #16](https://github.com/danything/denpa/issues/16))。
  * **録画中の録画**を、いま録れているところまで観る画面。
  *
- * 生TSはブラウザで読めないので (MPEG-2)、観るのはライブと同じ器 —
- * サーバが焼き直して WebSocket で運ぶ (`server/live.ts` の `openChase`)。
+ * 元のTSはブラウザで読めないので (MPEG-2)、観るのはライブと同じ器 —
+ * サーバが再エンコードして WebSocket で運ぶ (`server/live.ts` の `openChase`)。
  */
 export const load: PageServerLoad = ({ params, url }) => {
     const id = Number(params.id);

@@ -141,13 +141,13 @@ test.describe('PWA', () => {
     });
 
     /*
-     * **端末でしか出ない縦のはみ出しを、その端末で読むための札。**
+     * **端末でしか出ない縦のはみ出しを、その端末で読むための表示。**
      *
      * 自動運転のブラウザには引っ込むアドレスバーが作れないので、
      * 「手元では出ないが実機では出る」を追う手が要る。ここで見るのは
      * 「付けたときだけ出る」ことと「数がそろっている」ことまで
      */
-    test('?measure を付けたときだけ高さの札が出る', async ({ page }) => {
+    test('?measure を付けたときだけ高さの表示が出る', async ({ page }) => {
         await goto(page, '/guide');
         await expect(page.getByTestId('measure')).toHaveCount(0);
 
@@ -157,7 +157,7 @@ test.describe('PWA', () => {
         await expect(badge).toContainText('はみ出し');
         await expect(badge).toContainText('dvh');
 
-        // 読むための札が、下のものを触れなくしては本末転倒
+        // 読むための表示が、下のものを触れなくしては本末転倒
         expect(await badge.evaluate((el) => getComputedStyle(el).pointerEvents)).toBe('none');
 
         // **URL には居座らせない。** 1回だけ見たいときの手なので、外せば消える
@@ -172,7 +172,7 @@ test.describe('PWA', () => {
      * ホーム画面から開いたアプリでは一生出せない (実機で詰まった)。
      * 覚えるので、**リロードしても消えない** — 見たいのはまさにその後
      */
-    test('高さの札は設定から入れられて、リロードしても消えない', async ({ page }) => {
+    test('高さの表示は設定からオンにできて、リロードしても消えない', async ({ page }) => {
         await goto(page, '/settings');
         await page.getByTestId('measure-toggle').check();
         await expect(page.getByTestId('measure')).toBeVisible();

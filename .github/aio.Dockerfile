@@ -18,6 +18,6 @@ COPY --from=agent /opt/px4-userland /opt/px4-userland
 COPY --from=agent /opt/siano-userland /opt/siano-userland
 COPY --from=agent /opt/asicen-userland /opt/asicen-userland
 COPY --chmod=755 .github/aio-entrypoint.sh /usr/local/bin/denpa-aio
-# エージェントは同じコンテナの中。生TSの置き場は既定が両方 `/media/raw` なので書かない
+# エージェントは同じコンテナの中。元のTSの置き場は既定が両方 `/media/raw` なので書かない
 ENV TUNER_AGENT_URL=http://127.0.0.1:25252
 CMD ["/usr/local/bin/denpa-aio"]

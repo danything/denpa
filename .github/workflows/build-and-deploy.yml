@@ -271,5 +271,5 @@ jobs:
           bump_finish bump-image-marks \
             "chore: bump image marks [skip ci]" \
             "agent: ${AGENT_TAG} / denpa: ${DENPA_TAG}。deploy の印を書き換えるだけ。必須チェックが付いたら自分でマージする" \
-            "deploy の印だけ。イメージはこの run が焼いた" \
+            "deploy の印だけ。イメージはこの run がビルドした" \
             ${FILES}

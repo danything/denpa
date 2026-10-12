@@ -4,12 +4,12 @@ import { expect, goto, test } from './helpers';
 /**
  * **テレビのアプリのペアリング** (docs/auth.md「アプリのペアリング」、device-auth.ts)。
  *
- * テレビが札を貰い、スマホで QR (`device?code=…`) を開くとそのまま済み、テレビは鍵を受け取って
+ * テレビがペアリングコードを貰い、スマホで QR (`device?code=…`) を開くとそのまま済み、テレビは鍵を受け取って
  * `Authorization: Bearer` で API に入る。普段のスタックはローカルを信頼しているので、
  * スマホ役のブラウザはログインなしで `/device` に入れる (家の LAN と同じ)
  */
 test.describe('テレビのペアリング', () => {
-    test('札を貰い、QR の画面を開くと済み、鍵で API に入れる。取り消すと 401', async ({ page, request }) => {
+    test('ペアリングコードを貰い、QR の画面を開くと済み、鍵で API に入れる。取り消すと 401', async ({ page, request }) => {
         const issued = await request.post('/api/device/code', { data: { name: 'E2E のテレビ' } });
         expect(issued.status()).toBe(200);
         const code = await issued.json();
@@ -45,7 +45,7 @@ test.describe('テレビのペアリング', () => {
         const auth = { authorization: `Bearer ${token}` };
         expect((await request.get('/api/recordings', { headers: auth })).status()).toBe(200);
 
-        // アプリの鍵では、別の札を済ませられない (盗まれた鍵で鍵を増やせないように)
+        // アプリの鍵では、別のペアリングコードを済ませられない (盗まれた鍵で鍵を増やせないように)
         const other = await (await request.post('/api/device/code', { data: { name: '鍵から' } })).json();
         const viaToken = await request.get(`/${other.verificationUriComplete}`, { headers: auth });
         expect(await viaToken.text()).toContain('アプリの鍵ではペアリングできません');
@@ -70,7 +70,7 @@ test.describe('テレビのペアリング', () => {
         expect(await revoked.json()).toEqual({ error: 'invalid_token' });
     });
 
-    test('知らない札の画面は、そうと言う', async ({ page }) => {
+    test('知らないペアリングコードの画面は、そうと言う', async ({ page }) => {
         await goto(page, '/device?code=ZZZZ-ZZZZ');
         await expect(page.getByTestId('device-card')).toContainText('見つかりません');
     });
@@ -81,7 +81,7 @@ test.describe('テレビのペアリング', () => {
  * (信頼するネットワークの中なら通るので、ペアリングは要らない)。ログイン画面の HTML に回さない
  */
 test.describe('信頼するネットワークの外から鍵なしで', () => {
-    test('API は 401 の JSON。札の口は資格なしで開いている', async ({ stack }) => {
+    test('API は 401 の JSON。ペアリングコードの口は資格なしで開いている', async ({ stack }) => {
         const closed = await bootClosed(test.info().workerIndex, stack.root, {
             TRUSTED_NETWORKS: '10.10.0.0/16',
         });

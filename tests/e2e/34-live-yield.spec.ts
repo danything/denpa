@@ -162,7 +162,7 @@ test.describe('ライブが録画に蹴られたとき', () => {
             expect(yielded.serviceId).toBe(watched.id);
             expect(yielded.recording.endAt).toBeGreaterThan(Date.now());
             await expect(note).toContainText(yielded.recording.title);
-            // 観ているのは録画のほう (帯の読みものも)
+            // 観ているのは録画のほう (操作バーの読みものも)
             await expect(page.getByTestId('live-title')).toHaveText(yielded.recording.title);
 
             /*

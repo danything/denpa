@@ -94,15 +94,15 @@ const polling = new Set<number>();
 /**
  * ブラウザに預けたダウンロードの進み具合を映す。**イベントとポーリングの両建て。**
  *
- * `progress` イベントだけに任せると、**登録時に掴んだオブジェクトへの通知は
+ * `progress` イベントだけに任せると、**登録時に受け取ったオブジェクトへの通知は
  * 途中で途切れることがある** — 遅い回線でブラウザがダウンロードを止めて
  * 再開すると、その後のイベントが届かず、割合が張り付いたままになっていた
  * (開き直すと取り直すので直る)。かといって訊きに行くだけでは、その間隔でしか
  * 数字が動かない。
  *
- * そこで **2秒おきに get() で新しく掴み直し、掴んだものに毎回 `progress` も
+ * そこで **2秒おきに get() で新しく取り直し、取り直したものに毎回 `progress` も
  * 付ける** — イベントが生きている間はコマ落ちなく動き、黙り込んだ個体は
- * 次の掴み直しが引き取る。終わったかどうかはここでは決めない — 成否は
+ * 次の取り直しが引き取る。終わったかどうかはここでは決めない — 成否は
  * SW の受け取りが伝えてくる
  */
 function watchProgress(reg: BackgroundFetchRegistration, parsed = parseFetchId(reg.id)): void {
@@ -193,7 +193,7 @@ export function startOffline(): void {
     if (navigator.onLine) void flush();
 }
 
-/** 端末が AV1 を解けるか。解けなければ H.264 (`alt`) を落とす */
+/** 端末が AV1 をデコードできるか。デコードできなければ H.264 (`alt`) を落とす */
 async function canPlayAv1(): Promise<boolean> {
     try {
         const info = await navigator.mediaCapabilities.decodingInfo({
@@ -273,7 +273,7 @@ async function probeDownloads(requests: string[]): Promise<{ urls: string[]; tot
 
 /**
  * 端末に保存する。**どちらを落とすかはここで決める** — 既定は AV1、
- * 端末が解けなければ H.264 (両方焼いた録画だけ)。
+ * 端末がデコードできなければ H.264 (両方エンコードした録画だけ)。
  */
 export async function saveOffline(rec: SaveTarget): Promise<void> {
     let source: 'encoded' | 'alt' = 'encoded';

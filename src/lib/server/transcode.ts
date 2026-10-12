@@ -13,7 +13,7 @@
  * ## 上限は GPU の有無で決め、設定で変えられる
  *
  * 既定は **GPU が無ければ 2、あれば 4** (設定の `transcodeLimit` が null のとき)。GPU の口から
- * 「同時に何本焼けるか」を聞く手は無い — denpa が使う Intel QSV / VA-API のドライバはセッション数の
+ * 「同時に何本エンコードできるか」を聞く手は無い — denpa が使う Intel QSV / VA-API のドライバはセッション数の
  * 上限を言わない (NVENC の消費者向けの上限もドライバは公開しない)。機材ごとに違うので設定で変えられる。
  * GPU があるかは録画・ライブと同じ印で見る (`hwenc.liveHw`。印を外していれば無いのと同じ)
  */
@@ -26,7 +26,7 @@ export const TRANSCODE_DEFAULT = { cpu: 2, gpu: 4 } as const;
 
 let used = 0;
 
-/** GPU で焼けるか (H.264 か AV1 のどちらかに印が付いた使える口がある) */
+/** GPU でエンコードできるか (H.264 か AV1 のどちらかに印が付いた使える口がある) */
 function gpuReady(): boolean {
     const allow = settings().hwAllow;
     return liveHw('h264', allow) !== null || liveHw('av1', allow) !== null;

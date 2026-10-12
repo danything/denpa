@@ -130,7 +130,7 @@ export function searchable(input: string): string {
 
 /**
  * 人に見せる用の番組名。[字][デ] のような装飾記号だけ落とし、話数も
- * サブタイトルも ARIB の囲み文字 (🈚🈑) も残す。全角も放送のまま。エンコードの入れ物の title にも焼き込む
+ * サブタイトルも ARIB の囲み文字 (🈚🈑) も残す。全角も放送のまま。エンコードの入れ物の title にも埋め込む
  */
 export function displayTitle(rawName: string): string {
     const cleaned = new Twin(rawName ?? '')

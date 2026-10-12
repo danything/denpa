@@ -2,7 +2,7 @@
     import type { Snippet } from 'svelte';
 
     /**
-     * 下の帯の「押すものの行」。**3画面で同じ並び** — 再生・音・字幕が左から順で、
+     * 下の操作バーの「押すものの行」。**3画面で同じ並び** — 再生・音・字幕が左から順で、
      * 全画面がいちばん右。画面を移っても同じ場所にあると、見ないでも押せる
      */
     let { testid, children }: { testid?: string; children: Snippet } = $props();

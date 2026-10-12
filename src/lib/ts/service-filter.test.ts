@@ -89,7 +89,7 @@ describe('局の選り分け', () => {
         expect(pids(out)).toEqual([0x100, 0x110]);
     });
 
-    test('ECM は残す。掛かったまま録れたものを後から解くのに要る', () => {
+    test('ECM は残す。掛かったまま録れたものを後から復号するのに要る', () => {
         const filter = new ServiceFilter(MX1);
         filter.filter(Uint8Array.from([...pat(), ...pmt1()]));
         expect(pids(filter.filter(payload(0x900)))).toEqual([0x900]);

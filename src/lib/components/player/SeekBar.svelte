@@ -1,6 +1,6 @@
 <script lang="ts">
     /**
-     * 再生位置の帯。**3画面で同じ見た目。**
+     * 再生位置のバー。**3画面で同じ見た目。**
      *
      * Pico の range は溝を1色で塗るだけで、どこまで進んだかが見えない。進んだぶんを
      * 主の色で塗る。
@@ -65,7 +65,7 @@
 </div>
 
 <style>
-    /* 細い帯。つまみは 1rem (塗りの位置の計算 `trackAt` がこれを前提にしている) */
+    /* 細いバー。つまみは 1rem (塗りの位置の計算 `trackAt` がこれを前提にしている) */
     input {
         --pico-range-thumb-height: 1rem;
         --pico-range-thumb-width: 1rem;

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # 偽 ffmpeg。E2E で「エンコードが走って mkv が出来る」ところまでを実 ffmpeg 無しで通す。
-# 本物と同じく stderr に Duration を、-progress の key=value ブロックを fd 3 (焼くほうの `-progress pipe:3`。
+# 本物と同じく stderr に Duration を、-progress の key=value ブロックを fd 3 (エンコードするほうの `-progress pipe:3`。
 # 開いていなければ stdout) に吐く。
 set -uo pipefail
 
@@ -15,7 +15,7 @@ for arg in "$@"; do
     prev="$arg"
 done
 
-# **何を渡されたかを残す** (ライブの FAKE_FFMPEG_ARGS_FILE と同じ形)。焼くときに
+# **何を渡されたかを残す** (ライブの FAKE_FFMPEG_ARGS_FILE と同じ形)。エンコードするときに
 # GPU の道 (`h264_qsv` など) を選べているか、落ちたらソフトウェアへ倒れているかを
 # テストから見るため。**どの道でも、落ちる前に**残す。1回ぶんずつ足す
 if [ -n "${FAKE_FFMPEG_ENCODE_ARGS_FILE:-}" ]; then
@@ -26,9 +26,9 @@ fi
 #
 # 本物は口 (/dev/dri/renderD128) が無ければ初期化で落ちる。ここでも同じで、
 # **渡された口 (`child_device=…` / `vaapi=va:…`) がファイルとして在れば「GPU がある」**
-# ことにする — 起動時の試し焼き (server/hwenc.ts、入力は lavfi) は黙って通し、
-# 本番の焼きはそのまま下の普通の道へ流す。無ければ本物と同じく落ちる
-# (焼きの途中で GPU が駄目になったときの、次の道への焼き直しもこれで通る)
+# ことにする — 起動時の試しのエンコード (server/hwenc.ts、入力は lavfi) は黙って通し、
+# 本番のエンコードはそのまま下の普通の道へ流す。無ければ本物と同じく落ちる
+# (エンコードの途中で GPU が駄目になったときの、次の道への再エンコードもこれで通る)
 prev=""
 for arg in "$@"; do
     if [ "$prev" = "-init_hw_device" ]; then
@@ -47,8 +47,8 @@ for arg in "$@"; do
 done
 
 # CM検出 (silencedetect)。300秒と360秒に境界が来るので、300-360 の 60 秒がCMブロックとして検出される。
-# 焼く出口 (`-f matroska`) があればエンコードに相乗りしている (encoder.ts) ので、材料を出してから
-# 下の焼く道へ進む。無ければ検出だけ (ロゴの枠を読み直すとき)
+# エンコードする出口 (`-f matroska`) があればエンコードに相乗りしている (encoder.ts) ので、材料を出してから
+# 下のエンコードする道へ進む。無ければ検出だけ (ロゴの枠を読み直すとき)
 mkv=""
 prev=""
 for arg in "$@"; do
@@ -67,7 +67,7 @@ if printf '%s\n' "$@" | grep -q silencedetect; then
     output="$mkv"
 fi
 
-# 焼いたものから字幕をそのまま抜くパス (`api/recordings/<id>/captions.json`)。
+# エンコードしたものから字幕をそのまま抜くパス (`api/recordings/<id>/captions.json`)。
 # 本物は入れ物の中の S_ARIBSUB をそのまま出す。ここでは作り置きの mkv を返す
 # (中身は作り物の字幕。本物の ffmpeg に `-map 0:s:0 -c:s copy -f matroska` で書かせたもの)。
 # 絵を撮るときは FAKE_FFMPEG_CAPTIONS の作り物の台詞に替える (scripts/capture-docs.ts)
@@ -76,7 +76,7 @@ if [ "$output" = "pipe:1" ] && printf '%s\n' "$@" | grep -qx -- '-c:s' && printf
     exit 0
 fi
 
-# 焼き直さずに書き直すパス (-c copy。チャプターを足す / CM を切って concat で繋ぐ)。
+# 再エンコードせずに書き直すパス (-c copy。チャプターを足す / CM を切って concat で繋ぐ)。
 # 進捗も Duration も出さず、出力ファイルだけ作って終わる本物と同じ振る舞いにする
 if printf '%s\n' "$@" | grep -qx -- '-c' && printf '%s\n' "$@" | grep -qx -- 'copy'; then
     mkdir -p "$(dirname "$output")"
@@ -96,7 +96,7 @@ fi
 # 中身は本物のTSではないが、「切るまで流れ続ける」という性質だけは同じ。
 #
 # **見分けるのは入口。** 出口 (最後の引数) で見ていた頃は、字幕を同じ ffmpeg で
-# 焼くようにした時点で最後の引数が pipe:3 になり、丸ごと素通りしていた
+# エンコードするようにした時点で最後の引数が pipe:3 になり、丸ごと素通りしていた
 if [ "$input" = "pipe:0" ]; then
     # E2E から「映像側は入口で落ちる」と指示するための目印。
     #
@@ -110,7 +110,7 @@ if [ "$input" = "pipe:0" ]; then
         echo "Error opening output files: Invalid argument" >&2
         exit 1
     fi
-    # **何を渡されたかを残す。** 焼き方の指定は間違えても E2E では絵が要らないぶん
+    # **何を渡されたかを残す。** エンコード方式の指定は間違えても E2E では絵が要らないぶん
     # 素通りするので、テストから中身を見られるようにしておく。
     #
     # **1回ぶんずつ足していく。** 選局のたびに起きるので、上書きにしていると
@@ -123,7 +123,7 @@ if [ "$input" = "pipe:0" ]; then
     fi
 
     # **互換モード (canvas に描く道) の E2E から「本物の映像を流せ」と指示する目印。**
-    # 置いてあれば、本物の ffmpeg に書かせた fMP4 (H.264 + AAC / AV1 + Opus。焼き方はライブと同じ組) を
+    # 置いてあれば、本物の ffmpeg に書かせた fMP4 (H.264 + AAC / AV1 + Opus。エンコード方式はライブと同じ組) を
     # 時刻を進めながら繰り返し流す (`fmp4-loop.ts`)。置いていなければ今までどおり素通し
     # (絵の要らないテストは MSE に何も映らなくてよい)
     if [ -f "${FAKE_FFMPEG_LIVE_FMP4_FILE:-/nonexistent}" ]; then
@@ -161,13 +161,13 @@ if [ -f "${FAKE_FFMPEG_FAIL_FILE:-/nonexistent}" ]; then
     exit 1
 fi
 
-# 進み具合の出口。焼くほうは fd 3 を開いて渡す (`-progress pipe:3`)。開いていなければ stdout
+# 進み具合の出口。エンコードするほうは fd 3 を開いて渡す (`-progress pipe:3`)。開いていなければ stdout
 if { true >&3; } 2>/dev/null; then exec 4>&3; else exec 4>&1; fi
 
 # E2E から「このエンコードを長引かせる」と指示するための目印。走っている最中に
 # 押すもの (エンコード中止) を試すのに要る。**刻みは細かいまま** — 1回の sleep を
 # 長くすると、trap に入るのがそのぶん遅れる (sh は走っている子を待ってから trap を回す)。
-# **長引かせるのは焼く本番だけ** — 焼く前の fps の実測 (`-f null -`、5回呼ぶ) まで
+# **長引かせるのはエンコードする本番だけ** — エンコードする前の fps の実測 (`-f null -`、5回呼ぶ) まで
 # 1回 20 秒に伸びて、「エンコード中」に着くまで 2 分近く掛かっていた
 steps=4
 if [ -f "${FAKE_FFMPEG_SLOW_FILE:-/nonexistent}" ] && [ "$output" != "-" ]; then

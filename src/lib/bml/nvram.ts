@@ -14,7 +14,7 @@
  * 1 ブロック 64 バイト (TR-B15 第一分冊 8.2 表8-1: BS の事業者の領域は 64 バイト × 16 ブロック、
  * 8.2.2: 違う名前で読み書きしたら読むのは null・書くのは NaN)。番号の外・64 バイトを超える書き込みは
  * 失敗にして知らせる。中身は置き場 (`store`) に base64 で置く。BS の事業者の区別
- * (broadcaster_id) は BIT が要るが denpa は解かないので、サービスごとに分ける (混ざらない側に倒す)。
+ * (broadcaster_id) は BIT が要るが denpa はデコードしないので、サービスごとに分ける (混ざらない側に倒す)。
  */
 
 import { type Cell, parseStructure, readFields, writeFields } from './binary';

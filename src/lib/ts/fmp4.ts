@@ -101,7 +101,7 @@ export class Fmp4Splitter {
  * ---------------------------------------------------------------------------
  * 中身を読む (画面の canvas で描く道。`raw/fmp4.ts`)。
  *
- * MSE に渡すときは割るだけで済んだが、**自分で解くときは中身が要る** — moov から
+ * MSE に渡すときは割るだけで済んだが、**自分でデコードするときは中身が要る** — moov から
  * 何の映像・音声か (avcC / av1C / esds / dOps) を、moof から1コマずつの時刻と在りかを
  * (tfdt / trun) 読む。読むのは denpa の ffmpeg が出す形 (`server/live.ts` の
  * `+empty_moov+default_base_moof`) に要るものだけ:
@@ -121,7 +121,7 @@ export interface Fmp4Track {
     /** WebCodecs の書き方の codec (`avc1.640029` / `av01.0.08M.08` / `mp4a.40.2` / `opus`) */
     codec: string;
     /**
-     * 解く道具に渡すもの。映像は avcC / av1C の中身 (VideoDecoder の `description`)、
+     * デコードする道具に渡すもの。映像は avcC / av1C の中身 (VideoDecoder の `description`)、
      * AAC は AudioSpecificConfig、Opus は dOps の中身
      */
     config: Uint8Array<ArrayBuffer>;
@@ -137,12 +137,12 @@ export interface Fmp4Track {
 /** moof から読んだ1コマ。時刻はそのトラックの刻み (`Fmp4Track.timescale`) */
 export interface Fmp4Sample {
     track: number;
-    /** 解く時刻 */
+    /** デコードする時刻 */
     dts: number;
     /** 見せる時刻 (dts + 合成時刻のずれ) */
     pts: number;
     duration: number;
-    /** 単独で解けるコマ (sync sample) か */
+    /** 単独でデコードできるコマ (sync sample) か */
     key: boolean;
     data: Uint8Array;
 }
@@ -424,7 +424,7 @@ function readTraf(
 const ADTS_RATES = [96000, 88200, 64000, 48000, 44100, 32000, 24000, 22050, 16000, 12000, 11025, 8000, 7350];
 
 /**
- * **MP4 の AAC の1コマに付ける ADTS の頭。** 復号器 (`wasm/mpeg2` の `aac_push`) は
+ * **MP4 の AAC の1コマに付ける ADTS の頭。** デコーダ (`wasm/mpeg2` の `aac_push`) は
  * 放送の ADTS を食う作りなので、MP4 の1コマ (頭無し) はそのままでは渡せない。
  * 頭の中身は AudioSpecificConfig (esds) から起こす: 種類 (LC なら 2)・標本化周波数の番号・本数。
  *
@@ -453,7 +453,7 @@ export function adtsHeader(config: Uint8Array, payload: number): Uint8Array | nu
 }
 
 /**
- * dOps (MP4 の Opus の設定) を、FFmpeg の Opus 復号器が受け取る OpusHead (Ogg の形) に
+ * dOps (MP4 の Opus の設定) を、FFmpeg の Opus デコーダが受け取る OpusHead (Ogg の形) に
  * 書き換える。並びは同じで、**数の並べ方だけが違う** (dOps は大きい桁が先、OpusHead は
  * 小さい桁が先)。頭に `OpusHead`、版は 1。並べ方が読めなければ null
  */

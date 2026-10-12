@@ -37,7 +37,7 @@ export function logoRepo(serviceId: number): string {
 /** 覚えたもののファイル名 (`logo-own.modelFile`)。コマの大きさごとに1つ */
 const MODEL = /^own-logo-\d+x\d+\.bin$/;
 
-/** その局の覚えたもの。読めなければ空 (置き場がまだ無い = 1本も焼いていない) */
+/** その局の覚えたもの。読めなければ空 (置き場がまだ無い = 1本もエンコードしていない) */
 function models(serviceId: number): string[] {
     try {
         return readdirSync(logoRepo(serviceId)).filter((name) => MODEL.test(name));
@@ -47,7 +47,7 @@ function models(serviceId: number): string[] {
 }
 
 /**
- * その局の覚えたロゴを捨てる。次にその局の録画を焼くときに一から覚える
+ * その局の覚えたロゴを捨てる。次にその局の録画をエンコードするときに一から覚える
  */
 export function forgetLogoData(serviceId: number): void {
     rmSync(logoRepo(serviceId), { recursive: true, force: true });
@@ -78,7 +78,7 @@ export interface LearnedLogo {
 
 /**
  * いちばん最後に書いたもの。コマの大きさが違うもの (SD と HD) を両方持っていれば、
- * 最後に焼いた録画のほう
+ * 最後にエンコードした録画のほう
  */
 function newest(serviceId: number): { path: string; at: number } | null {
     const dir = logoRepo(serviceId);

@@ -36,7 +36,7 @@ function filled(seed: DetailSeed): ProgramDetail {
 /**
  * 録画の行から出す番組の中身。**観る画面と追っかけの右の列で同じもの。**
  * 開いた時点で `programDetail().open` の種にもそのまま渡す — 別に組み直していた頃は
- * ジャンル・音声を落としていて、番組表から消えた録画で札が出なかった
+ * ジャンル・音声を落としていて、番組表から消えた録画でラベルが出なかった
  */
 export function recordingFacts(rec: Required<DetailSeed>): ProgramDetail {
     const { name, service_name, start_at, end_at, description, extended, genre_detail, audios } = rec;
@@ -76,7 +76,7 @@ export function programDetail() {
              * **既定を先に置いて、行の分で上書きする。** 逆順に書いていた頃は、
              * 行が持っているジャンル・音声・詳細を既定の null で潰していた。
              * 番組表から引けるうちは引き直しで戻るので気付かず、**番組表から
-             * 消えた録画 (24時間過ぎ) だけジャンルの札が出なかった** (実機)
+             * 消えた録画 (24時間過ぎ) だけジャンルのラベルが出なかった** (実機)
              */
             current = filled(seed);
             if (programId === null) return;

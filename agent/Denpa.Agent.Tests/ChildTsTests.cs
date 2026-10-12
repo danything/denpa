@@ -5,7 +5,7 @@ using TUnit.Core.Enums;
 namespace Denpa.Agent.Tests;
 
 /*
- * 子プロセスの標準出力を fd として掴むところ (siano-ts)。
+ * 子プロセスの標準出力を fd として使うところ (siano-ts)。
  *
  * .NET 10 の Unix ではリダイレクトした標準出力が FileStream ではない。
  * FileStream へキャストすると Specified cast is not valid で、
@@ -14,9 +14,9 @@ namespace Denpa.Agent.Tests;
 public class ChildTsTests
 {
     [Test]
-    // Windows は fd を掴まず、.NET の Stream のまま読む (ChildTs.Stdout)
+    // Windows は fd を使わず、.NET の Stream のまま読む (ChildTs.Stdout)
     [ExcludeOn(OS.Windows)]
-    public async Task Unixの標準出力でもfdを掴める()
+    public async Task Unixの標準出力でもfdを使える()
     {
         using var process = Process.Start(new ProcessStartInfo("/bin/sleep")
         {

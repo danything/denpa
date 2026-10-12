@@ -9,19 +9,19 @@ export interface LibraryNameInput {
     series: string;
     subtitle: string;
     start_at: number;
-    /** いま置いてある場所。焼き直しのとき、自分自身を「衝突」と読まないために要る */
+    /** いま置いてある場所。再エンコードのとき、自分自身を「衝突」と読まないために要る */
     library_path?: string | null;
     /** もう一方のコーデックの置き場所。これも「自分自身」なので衝突と読まない */
     alt_path?: string | null;
 }
 
 /**
- * **シリーズのフォルダ名。** 焼いたものはこの名前のフォルダに並ぶ (下の `libraryRelPath`)。
+ * **シリーズのフォルダ名。** エンコードしたものはこの名前のフォルダに並ぶ (下の `libraryRelPath`)。
  *
  * 録画一覧の「まとめて表示」も同じ名前でまとめる。画面だけ別の見分け方をすると、
  * ディスクでは1つのフォルダなのに一覧では2つに割れる (またはその逆) ことが起きる。
  * シリーズ名を持たない行 (録り逃し・古い取り込み) は番組名から切り出す
- * (録るときと同じ `parseTitle`)。**ここだけはディスクと違う** — 焼くときは空のまま
+ * (録るときと同じ `parseTitle`)。**ここだけはディスクと違う** — エンコードするときは空のまま
  * `untitled/` に入るが、一覧で無関係な番組が1つにまとまっても探しにくいだけなので
  */
 export function seriesFolder(series: string, name: string): string {
@@ -52,7 +52,7 @@ function libraryRelPath(rec: LibraryNameInput, ext: string): string {
 /**
  * 絶対パス版。**別の録画のファイルと衝突したら**録画IDを足して避ける。
  *
- * **自分がいま置いてあるファイルは衝突ではない** (数えると、焼き直すたびに素の名前と
+ * **自分がいま置いてあるファイルは衝突ではない** (数えると、再エンコードするたびに素の名前と
  * `[録画ID]` 付きが入れ替わる)。
  */
 export function libraryPath(rec: LibraryNameInput, ext: string): string {
@@ -83,7 +83,7 @@ export function encodedCodec(path: string): 'av1' | 'h264' {
  * この録画が取りうる保存先の候補すべて。
  *
  * コーデック (素 = AV1 / `[H264]`) と、衝突回避の `[録画ID]` の有無で最大4通り。
- * 焼き直す前に、DBの `library_path`/`alt_path` が指していない**はぐれファイル**まで
+ * 再エンコードする前に、DBの `library_path`/`alt_path` が指していない**はぐれファイル**まで
  * 含めて片付けるために使う (残っていると `libraryPath` がそれを「衝突」と読む)。
  */
 export function libraryFamily(rec: LibraryNameInput): string[] {
@@ -91,7 +91,7 @@ export function libraryFamily(rec: LibraryNameInput): string[] {
     return exts.map((ext) => join(config.encodedDir, libraryRelPath(rec, ext)));
 }
 
-/** 生TSの置き場。保存先と違い人が見るものではないので平置きでよい */
+/** 元のTSの置き場。保存先と違い人が見るものではないので平置きでよい */
 export function recordedPath(rec: LibraryNameInput, ext = '.m2ts'): string {
     const d = new Date(rec.start_at);
     const stamp = `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}-${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}`;

@@ -117,7 +117,7 @@ function seed(values: Partial<typeof recordings.$inferInsert>) {
 }
 
 describe('何を出せるか (playbackPlan)', () => {
-    test('H.264 だけ焼いた録画: ファイル・詰め替え・AV1 への変換。物差しはエンコード済み', async () => {
+    test('H.264 だけエンコードした録画: ファイル・詰め替え・AV1 への変換。物差しはエンコード済み', async () => {
         const plan = await playbackPlan(seed({ library_path: h264 }));
         expect(plan?.info).toEqual({
             duration: 1790.5,
@@ -134,7 +134,7 @@ describe('何を出せるか (playbackPlan)', () => {
         });
     });
 
-    test('両方焼いて元の TS も残した録画: どちらも詰め替え、MPEG-2 もそのまま出す', async () => {
+    test('両方エンコードして元の TS も残した録画: どちらも詰め替え、MPEG-2 もそのまま出す', async () => {
         const plan = await playbackPlan(
             seed({ library_path: av1, alt_path: h264, ts_path: ts, encode_skip: 0.5 }),
         );

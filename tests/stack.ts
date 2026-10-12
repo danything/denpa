@@ -28,7 +28,7 @@ const WEBHOOK_PORT = 8096;
 /** 立ち上がりを待つ上限。ここを短くすると混んでいるマシンで落ちる */
 const BOOT_TIMEOUT = 120_000;
 const BOOT_POLL = 200;
-/** 立ち上がりを訊く1回ぶんの上限。返事の来ない接続に掴まったまま BOOT_TIMEOUT を使い切らないように */
+/** 立ち上がりを訊く1回ぶんの上限。返事の来ない接続に捕まったまま BOOT_TIMEOUT を使い切らないように */
 const BOOT_ASK = 5_000;
 
 export interface Stack {
@@ -48,7 +48,7 @@ export interface Stack {
      * **走っている最中に押す**ものを試すのに使う (エンコード中止)
      */
     slowFile: string;
-    /** ライブ視聴で偽 ffmpeg に渡された引数。焼き方の指定を確かめるのに使う */
+    /** ライブ視聴で偽 ffmpeg に渡された引数。エンコード方式の指定を確かめるのに使う */
     liveArgsFile: string;
     /**
      * これを置くとライブ視聴の映像側の偽 ffmpeg が、実機と同じ言い分を残して降りる。
@@ -59,17 +59,17 @@ export interface Stack {
     liveTsFile: string;
     /**
      * これを置くとライブの AV1 の偽 ffmpeg が、本物の AV1 + Opus の fMP4 を流す (`tests/fake/fmp4-loop.ts`)。
-     * 互換モード (canvas に描く道) が実際に解いて描くところまで見るのに使う
+     * 互換モード (canvas に描く道) が実際にデコードして描くところまで見るのに使う
      */
     liveFmp4File: string;
     /**
      * **偽の GPU の置き場。** ここに `renderD128` のような名前でファイルを置くと、
      * denpa は `HW_DEVICES` (`<ここ>/renderD*`) の口として拾い、偽 ffmpeg は渡された
-     * 口が在るのを見て「GPU がある」と答える (QSV / VA-API の試し焼きが通る)。
-     * 消せば、焼こうとした GPU の道が本物と同じく初期化で落ちる
+     * 口が在るのを見て「GPU がある」と答える (QSV / VA-API の試しのエンコードが通る)。
+     * 消せば、エンコードしようとした GPU の道が本物と同じく初期化で落ちる
      */
     hwDir: string;
-    /** 焼くときに偽 ffmpeg へ渡された引数 (1回ずつ `---` で区切って足される) */
+    /** エンコードするときに偽 ffmpeg へ渡された引数 (1回ずつ `---` で区切って足される) */
     encodeArgsFile: string;
 }
 
@@ -272,7 +272,7 @@ export interface OidcStack {
  * 普段の `stack` を OIDC にしてしまうと、全部のテストがログインを通らないと
  * 何もできなくなる。別の口に立てて、そこだけで試す。
  *
- * 港はワーカーの帯 (STRIDE=10) の中から取るので、並べて流しても衝突しない。
+ * ポートはワーカーごとの範囲 (STRIDE=10) の中から取るので、並べて流しても衝突しない。
  */
 export async function bootOidc(
     index: number,
@@ -356,11 +356,11 @@ export async function bootClosed(
     extra: Record<string, string> = {},
 ): Promise<{ appUrl: string; shutdown: () => Promise<void> }> {
     /*
-     * 帯の +3 (内側は +4)。**+7 にしていた頃は、ワーカー番号 1 で 4190 になり、毎回立ち上がりを
+     * 範囲の +3 (内側は +4)。**+7 にしていた頃は、ワーカー番号 1 で 4190 になり、毎回立ち上がりを
      * 待ちきれずに落ちていた** — 4190 (ManageSieve) は fetch の仕様の「bad port」で、Node の fetch は
      * 繋ぎにも行かずに断る (`fetch failed`、cause は `bad port`)。denpa は待ち受けているのに
      * 2 分待って落ち、別のワーカーでやり直すと通るので、揺れに見えていた (31-device・14-serve)。
-     * 帯の口を足すときは、その番号が bad port に当たらないか確かめること
+     * 範囲にポートを足すときは、その番号が bad port に当たらないか確かめること
      */
     const port = APP_PORT + index * STRIDE + 3;
     const appUrl = `http://127.0.0.1:${port}`;

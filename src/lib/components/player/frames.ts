@@ -27,7 +27,7 @@ type WithCallback = HTMLVideoElement & {
  * `requestVideoFrameCallback` を持たないブラウザでは画面の書き換えごとに
  * 代えます (60Hz なら 16ms)。そのときは `frame` が `undefined` — **映した絵の
  * 時刻が分からない**ので、呼ぶ側はそのつもりで受けること (`currentTime` は
- * 位置を代入した時点で跳んだ先を返すので、着いたかどうかの判断には使えない)。
+ * 位置を代入した時点で飛んだ先を返すので、着いたかどうかの判断には使えない)。
  *
  * **止めて見ている間は来ません** (`requestVideoFrameCallback` の決まり)。
  */

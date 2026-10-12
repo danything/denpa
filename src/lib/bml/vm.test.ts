@@ -13,7 +13,7 @@ function setup(): Vm {
     return new Vm(realm);
 }
 
-/** 終わるまで動かす (待ちは即座に解く) */
+/** 終わるまで動かす (待ちはすぐに済ませる) */
 async function finish(vm: Vm, first: RunResult = vm.run(Number.POSITIVE_INFINITY)): Promise<RunResult> {
     let result = first;
     while (result.kind === 'suspend') {

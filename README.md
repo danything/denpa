@@ -23,7 +23,7 @@ Mirakurun や EDCB、メディアサーバは要りません。番組表から�
 ## できること
 
 - **予約** — 番組表から押すか、「ルール」のキーワードで自動で。同じ回は最初の放送だけ録る
-- **録画** — CM を見つけてチャプターにし、AV1 / H.264 の mkv に焼く。字幕は放送の ARIB 字幕のまま入れる。Intel の GPU があれば使う
+- **録画** — CM を見つけてチャプターにし、AV1 / H.264 の mkv にエンコードする。字幕は放送の ARIB 字幕のまま入れる。Intel の GPU があれば使う
 - **ライブ** — 放送から 1 秒ほどで。止めれば追っかけ、二カ国語・解説放送も選べる ([docs/stream.md](docs/stream.md))
 - **データ放送** — テレビと同じ BML がブラウザで動く (d ボタン)。ライブでも録画でも
 - **観る** — 行を押せばその場で再生。CM は1コマも見せずに飛ばし、続きから・倍速 (×1〜×2)・切り抜き (字幕ごと PNG)
@@ -31,7 +31,7 @@ Mirakurun や EDCB、メディアサーバは要りません。番組表から�
 - **端末に落として観る** — 電波の無いところでも ([docs/offline.md](docs/offline.md))
 - **EPGStation から引き継ぐ** — ルール・予約・録画 ([docs/migrate.md](docs/migrate.md))
 
-部品はチャンネルを掴んで素の TS を流す **チューナーエージェント** と、それ以外の全部 (番組表・予約・録画・
+部品はチューナーで選局して素の TS を流す **チューナーエージェント** と、それ以外の全部 (番組表・予約・録画・
 エンコード・配信) をやる **denpa** の2つだけです ([docs/architecture.md](docs/architecture.md))。
 
 ## 立てる
@@ -51,7 +51,7 @@ Mirakurun や EDCB、メディアサーバは要りません。番組表から�
 - **OS** — Linux (amd64 / arm64)、Mac (Apple Silicon)、Windows (x64)
 - **Docker** (Linux・Mac。Compose 込み) か、Windows は WSL (`wsl --update` で入る `wslc`。Docker Desktop は要らない)。
   Kubernetes なら Helm
-- あれば Intel の GPU (`/dev/dri` を渡す。[docs/install.md](docs/install.md#用意するもの))。無ければソフトウェアで焼きます
+- あれば Intel の GPU (`/dev/dri` を渡す。[docs/install.md](docs/install.md#用意するもの))。無ければソフトウェアでエンコードします
 
 ### 2. 入れる
 
@@ -127,7 +127,7 @@ docker compose up -d
 - [docs/architecture.md](docs/architecture.md) — **なぜこの形なのか** (決めたこと・踏んだ落とし穴)
 - [docs/app.md](docs/app.md) — **どこに何があるか** (ファイル・環境変数・画面・状態遷移)
 - [docs/data.md](docs/data.md) — エージェントに都度聞くもの / denpa が持つもの
-- [docs/agent.md](docs/agent.md) — チューナーを掴むところ (エージェント・取り合い・B-CAS・Mac / Windows)
+- [docs/agent.md](docs/agent.md) — チューナーを動かすところ (エージェント・取り合い・B-CAS・Mac / Windows)
 - [docs/encode.md](docs/encode.md) — CM とエンコード (字幕・AV1・CM検出)
 - [docs/logo.md](docs/logo.md) — 局ロゴ (番組表の PNG と CM検出用に覚えたロゴ)
 - [docs/library.md](docs/library.md) — 録画の置き場と配り方 (テレビのアプリ・再生リンク・削除・通知)
@@ -147,7 +147,7 @@ docker compose up -d
 **手を入れてくれた人** (ありがとうございます):
 
 - [@Khronos31](https://github.com/Khronos31) — px4-userland / siano-userland で選局できなかったのを、PX-Q3U4 の実機で見つけて直してくれました (#188)。ほかにも不具合を報告してくれました (#195 #376 #377)
-- [@unlimish](https://github.com/unlimish) — ライブ・追っかけ・観る画面に小窓 (PiP) を足してくれました (#431)。非力な機材で複数のライブを観るときの詰まりを実測つきで報告してくれ、ライブを GPU で焼く道ができました (#417)
+- [@unlimish](https://github.com/unlimish) — ライブ・追っかけ・観る画面に小窓 (PiP) を足してくれました (#431)。非力な機材で複数のライブを観るときの詰まりを実測つきで報告してくれ、ライブを GPU でエンコードできるようになりました (#417)
 - [@fetburner](https://github.com/fetburner) — ルール画面の下見でチューナーの取り合いを数えるところを、時刻順に1回なぞる形にして、全件で 20 倍ほど速くしてくれました (#662)
 
 **土台にしている仕事**:

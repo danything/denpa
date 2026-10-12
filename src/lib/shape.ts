@@ -148,7 +148,7 @@ export function read<T>(shape: Shape<T>, value: unknown, what: string): T {
 
 /**
  * 警告を出した口 (`what`)。同じ口では繰り返さない — チューナーの状態は何秒か
- * おきに読むし、言葉には値が入るので (掴んでいるチャンネルなど)、言葉ごとに
+ * おきに読むし、言葉には値が入るので (使っているチャンネルなど)、言葉ごとに
  * 覚えると増え続ける。最初の 1 回で直すべき場所は分かる
  */
 const warned = new Set<string>();

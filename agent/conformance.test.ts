@@ -10,9 +10,9 @@
  *
  *     bun run test:conformance
  *
- * **`bun run test:unit` には入っていません。** あちらは焼いた実行ファイルが
+ * **`bun run test:unit` には入っていません。** あちらはビルドした実行ファイルが
  * 要らないもの (`src` の下) だけで、こちらは先に `dotnet publish` が要ります。
- * 混ぜていた頃は、焼く前の CI がここで ENOENT を出して落ちていました。
+ * 混ぜていた頃は、ビルドする前の CI がここで ENOENT を出して落ちていました。
  *
  * チューナーの代わりは `tests/fake/tune.ts` (`FAKE_TUNE`)。エージェントから見れば
  * 「起こすと TS を流し続ける子プロセス」で、取り合いと配り方はそのまま通る。
@@ -28,7 +28,7 @@ import { scenes } from '../tests/fake/tuner-scenes';
 /** `/denpa/channels` の1件。ここで見るのは種別とチャンネル名だけ */
 type ChannelEntry = { type: string; channel: string };
 
-/** 既定は焼いたもの。`bun run test:conformance` なら焼くところからやる */
+/** 既定はビルドしたもの。`bun run test:conformance` ならビルドするところからやる */
 const AGENT_CMD = (process.env.AGENT_CMD ?? 'agent/publish/denpa-agent').split(' ');
 const PORT = Number(process.env.AGENT_TEST_PORT ?? 40881);
 const BASE = `http://127.0.0.1:${PORT}`;
@@ -103,7 +103,7 @@ interface Opened {
      * 読むのをやめる。**接続ごと切る。**
      *
      * `reader.cancel()` だけだと HTTP の接続は開いたままで、エージェントには
-     * 「離した」が届かない (掴んだままになる)。本物の denpa も
+     * 「離した」が届かない (確保したままになる)。本物の denpa も
      * `AbortController` で切っている
      */
     close: () => void;
@@ -143,13 +143,13 @@ async function drain(reader: ReadableStreamDefaultReader): Promise<{ bytes: numb
 
 beforeAll(async () => {
     /*
-     * 焼いていないだけなら、そうと言う。素の ENOENT は spawn の行しか出さず、
-     * 「何を焼けばいいのか」がどこにも書かれていない
+     * ビルドしていないだけなら、そうと言う。素の ENOENT は spawn の行しか出さず、
+     * 「何をビルドすればいいのか」がどこにも書かれていない
      */
     if (AGENT_CMD[0].includes('/') && !existsSync(resolve(ROOT, AGENT_CMD[0]))) {
         throw new Error(
             `エージェントが ${AGENT_CMD[0]} にありません。` +
-                '`bun run test:conformance` で焼いてから走らせてください',
+                '`bun run test:conformance` でビルドしてから走らせてください',
         );
     }
 
@@ -201,10 +201,10 @@ beforeAll(async () => {
  * 次のテストへ持ち越さない。
  *
  * 読むのをやめても、それが**エージェントに届くのは少しあと**になる (HTTP を
- * 1枚挟んでいるため)。掴んだままの状態で次のテストが始まると、取り合いの
+ * 1枚挟んでいるため)。確保したままの状態で次のテストが始まると、取り合いの
  * 前提が崩れて何を見ているのか分からなくなる。
  *
- * 掴んでいるチャンネル自体は残ってよい — 誰も読まなくなってから5秒は
+ * 使っているチャンネル自体は残ってよい — 誰も読まなくなってから5秒は
  * わざと離さない作りで、次に開く人はそこへ相乗りするのが正しい。
  */
 afterEach(async () => {
@@ -276,7 +276,7 @@ describe('チューナー', () => {
 
         const status = await tuners();
         expect(status[0].users.map((u) => u.use)).toEqual(['rec 1', 'epg T21']);
-        // 空いているチューナーは掴まれていない
+        // 空いているチューナーは使われていない
         expect(status[1].channel).toBeNull();
 
         a.close();
@@ -318,7 +318,7 @@ describe('チューナー', () => {
      * 落ちても接続だけ切れていて、呼んだ側に届くのは
      * `socket connection was closed unexpectedly` だけだった。実機で
      * 番組表集めが同じ数チャンネルを毎周落とし続けていたが、
-     * **電波なのか掴み損ねなのか設定なのかが記録から分からなかった。**
+     * **電波なのか取り損ねなのか設定なのかが記録から分からなかった。**
      *
      * 送り始めたあとは今まで通り壊す (上のテスト) — 途中まで書いた本文を
      * きれいに閉じると「録り終えた」ように届いてしまうため。
@@ -389,7 +389,7 @@ describe('チャンネル', () => {
 
     /**
      * **中身を作るのは denpa。** 総当たりの選局はエージェントに頼むが、
-     * NIT も SDT も解かないので「何が居たか」は分からない。ここは
+     * NIT も SDT も解析しないので「何が居たか」は分からない。ここは
      * 預かって配るだけ ([agent.md](../docs/agent.md))
      */
     test('預かったチャンネルを、探した種別だけ差し替える', async () => {
@@ -523,15 +523,15 @@ describe('カードとスクランブル解除', () => {
     });
 
     /*
-     * **カードが無ければ解けない。** ここにリーダーは無いので、確かめるのは
-     * 「解けたか」ではなく **黙って壊れないこと** — 解けなければ理由が返り、
-     * 解けたなら掛かっていない TS が出る。
+     * **カードが無ければ復号できない。** ここにリーダーは無いので、確かめるのは
+     * 「復号できたか」ではなく **黙って壊れないこと** — 復号できなければ理由が返り、
+     * 復号できたなら掛かっていない TS が出る。
      *
-     * 解くのもカードを叩くのもエージェントの中なので、外から偽物を差し込めない
-     * (`recisdb` を起こしていた頃はそこを差し替えて試せた)。解き方そのものは
-     * 単体テスト (B25Tests / BCasTests) で、実際に解けることは実機で確かめる (docs/agent.md)。
+     * 復号するのもカードを叩くのもエージェントの中なので、外から偽物を差し込めない
+     * (`recisdb` を起こしていた頃はそこを差し替えて試せた)。復号のしかたそのものは
+     * 単体テスト (B25Tests / BCasTests) で、実際に復号できることは実機で確かめる (docs/agent.md)。
      */
-    test('掛かったままのTSは、解けるか理由が返るかのどちらか', async () => {
+    test('掛かったままのTSは、復号できるか理由が返るかのどちらか', async () => {
         const packet = new Uint8Array(188 * 2);
         for (let i = 0; i < 2; i++) {
             packet[i * 188] = SYNC;
@@ -622,7 +622,7 @@ describe('機材の定義', () => {
 
     /**
      * **denpa と同じ場面を通す** (`tests/fake/tuner-scenes.ts`)。denpa は、エージェントが
-     * この順どおりに掴む前提で予約を割り振る (src/lib/server/conflict.ts)。ここで落ちたら、
+     * この順どおりに確保する前提で予約を割り振る (src/lib/server/conflict.ts)。ここで落ちたら、
      * 約束 (docs/agent.md「選ぶ順の約束」) を破っているか、場面の期待が古い
      */
     for (const scene of scenes) {
@@ -754,7 +754,7 @@ describe('止まれと言われたとき', () => {
 
             other.kill('SIGTERM');
 
-            // **掴んでいる間は落ちない。** ついでに、切られずに読み続けられること
+            // **使っている間は落ちない。** ついでに、切られずに読み続けられること
             await sleep(1500);
             expect(other.killed && other.exitCode !== null).toBe(false);
             const still = await reader.read();

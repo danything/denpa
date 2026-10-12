@@ -131,7 +131,7 @@ public sealed class BCas : IKeySource, IDisposable
     }
 
     /// <summary>
-    /// ECM を1つ解いて鍵を返す。
+    /// ECM を1つ復号して鍵を返す。
     ///
     /// <para>
     /// 渡すのは **ECM セクションの中身**: 8 バイトの見出しの後ろから、末尾の CRC32 の
@@ -235,7 +235,7 @@ public sealed class BCas : IKeySource, IDisposable
     }
 
     /// <summary>
-    /// リーダーを探して、カードが答えた最初の1つを掴む。INT と IDI もここで読む。
+    /// リーダーを探して、カードが答えた最初の1つを使う。INT と IDI もここで読む。
     /// **駄目だったリーダーの理由は全部残す** — 1つ目が空で2つ目が壊れている、を
     /// 「カードが読めません」の1行で済ませると、どこを見ればよいか分からない
     /// </summary>

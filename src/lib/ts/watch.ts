@@ -163,7 +163,7 @@ export function chapterAt(chapters: Chapter[], at: number): Chapter | null {
 /**
  * CM のチャプターか。
  *
- * 焼くときに「本編」と「CM」で入れている (`server/cm.ts` の `chapterMetadata`)。
+ * エンコードするときに「本編」と「CM」で入れている (`server/cm.ts` の `chapterMetadata`)。
  * **引き継いだ録画 (EPGStation) は名前が違う**ことがあるので、そういうものは
  * CM とみなさない — 飛ばし損なうより、本編を飛ばすほうが困る
  */
@@ -175,16 +175,16 @@ export function isCm(title: string): boolean {
  * いま CM の中に居るなら、**その終わり**。居なければ null。
  *
  * **続いている CM はまとめて跨ぐ。** 検出は CM を1本ずつの区間で返すので、
- * 1回ずつ飛ばすと 15秒ごとに何度も跳ぶことになる。
+ * 1回ずつ飛ばすと 15秒ごとに何度も飛ぶことになる。
  *
  * @param at いまの位置 (秒)
  */
 export function skipTarget(chapters: Chapter[], at: number, lead = 0): number | null {
     /*
-     * **`lead` のぶん先を見ます。** 入ってから跳ぶと、気付くまでのコマが必ず
-     * 見えます (画面は跳ぶまで今の絵を出し続けるため)。**跨ぐ直前に跳べば、
+     * **`lead` のぶん先を見ます。** 入ってから飛ぶと、気付くまでのコマが必ず
+     * 見えます (画面は飛ぶまで今の絵を出し続けるため)。**跨ぐ直前に飛べば、
      * 最後に映っているのは本編の1コマ**で、CM のコマは1枚も出ません。
-     * 早く跳んだぶん本編の末尾が欠けますが、境目は場面の切れ目なので
+     * 早く飛んだぶん本編の末尾が欠けますが、境目は場面の切れ目なので
      * 1コマぶんなら分かりません
      */
     const now = chapterAt(chapters, at + lead);
@@ -206,7 +206,7 @@ export function skipTarget(chapters: Chapter[], at: number, lead = 0): number | 
  * あるが、ffprobe が既に直したものを添えてくるのでそちらを採る。
  *
  * 読めない・1つも無いときは空。**チャプターの無い録画はある** — CMを切って
- * 焼いたもの (切ったので位置が無い) と、CM検出が当たらなかったもの
+ * エンコードしたもの (切ったので位置が無い) と、CM検出が当たらなかったもの
  */
 export function parseChapters(json: string): Chapter[] {
     let raw: unknown;
@@ -269,7 +269,7 @@ const RESUME_HEAD = 15;
 /**
  * 観はじめるときに CM 飛ばしを入れておくか。
  *
- * **既定は入れる。** 切らずに焼いた録画 (既定はチャプターを入れるだけ) では、
+ * **既定は入れる。** 切らずにエンコードした録画 (既定はチャプターを入れるだけ) では、
  * 観るたびに送りのボタンを押すことになる。押さずに済むほうを既定にする。
  * 覚えているのは端末ごとで、人が切ったときだけ `'0'` が入っている。
  *

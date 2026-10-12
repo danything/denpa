@@ -9,7 +9,7 @@ namespace Denpa.Agent;
 ///
 /// <para>
 /// Linux では usbfs を直に叩いている (Ccid.cs) が、macOS には usbfs が無く、CCID の
-/// リーダーは OS (CryptoTokenKit の ifd-ccid) が先に掴む。横取りするより、OS が
+/// リーダーは OS (CryptoTokenKit の ifd-ccid) が先に開く。横取りするより、OS が
 /// 出している PC/SC の口を借りるほうが素直で、入れてもらうものも増えない。
 /// T=1 の枠組みも ATR の読み方も向こうが持つので、ここは APDU を渡すだけ。
 /// </para>
@@ -25,13 +25,13 @@ namespace Denpa.Agent;
 /// ポインタの幅 (64bit で 8 バイト)、文字列を取るものは <c>…W</c> (UTF-16) を呼ぶ。
 /// 手順も番号 (共有・プロトコル・エラー) も同じなので、違いは下の <c>Mac</c> / <c>Win</c> と、
 /// それを選ぶ数行だけに閉じ込めてある。Windows も macOS と同じく usbfs が無く、
-/// CCID のリーダーは OS の標準ドライバが先に掴んでいる。
+/// CCID のリーダーは OS の標準ドライバが先に開いている。
 /// </para>
 ///
 /// <para>
-/// **排他で掴む** (<c>SCARD_SHARE_EXCLUSIVE</c>)。Linux の usbfs でもインターフェースを
+/// **排他で開く** (<c>SCARD_SHARE_EXCLUSIVE</c>)。Linux の usbfs でもインターフェースを
 /// 独り占めしている。共有にすると、macOS がカードを覗きに来る (CryptoTokenKit が
-/// 挿したカードに APDU を投げる) ときに INT と ECM の間へ割り込まれうる。掴めなければ
+/// 挿したカードに APDU を投げる) ときに INT と ECM の間へ割り込まれうる。開けなければ
 /// 理由 (共有違反) を返し、BCas が少し置いて探し直す。
 /// </para>
 /// </summary>

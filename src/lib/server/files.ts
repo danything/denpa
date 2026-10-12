@@ -21,7 +21,7 @@ const SIDECAR_ORPHAN = new RegExp(
  */
 
 export function deleteRecordingFiles(recording: Recording, reason: string): void {
-    // 両方のコーデックを焼いていれば2本ある。どちらもサイドカーごと消す
+    // 両方のコーデックをエンコードしていれば2本ある。どちらもサイドカーごと消す
     for (const path of [recording.library_path, recording.alt_path]) {
         if (path === null) continue;
         removeIfExists(path);
@@ -104,7 +104,7 @@ export function reconcile(): {
         if (existsSync(recording.library_path!)) continue;
         /*
          * **主が外から消えても、もう一方が残っていれば繰り上げる。** 両方の
-         * コーデックを焼いた録画で、外からAV1のほうだけ消されたときに録画ごと
+         * コーデックをエンコードした録画で、外からAV1のほうだけ消されたときに録画ごと
          * 消してしまわないため。もう一方も無ければ、いつもどおり削除済みに倒す
          */
         if (recording.alt_path !== null && existsSync(recording.alt_path)) {
@@ -159,7 +159,7 @@ function settling(path: string, at: number): boolean {
  * - `<動画>.…` … 作業ファイル (`.chapters.txt` など)
  * - `<動画から拡張子を取ったもの>-poster.jpg` / `.bml.jsonl` … サムネイルと録画のデータ放送
  *
- * 生TSを残さない設定だと、TS が消えたあとも付き添いだけが居座り、録るたびに積もる。
+ * 元のTSを残さない設定だと、TS が消えたあとも付き添いだけが居座り、録るたびに積もる。
  */
 function sweepLeftovers(): { swept: number; strays: number; pruned: number } {
     const known = new Set(
@@ -183,7 +183,7 @@ function sweepLeftovers(): { swept: number; strays: number; pruned: number } {
         const videos = new Set(files.filter((path) => VIDEO.test(path)));
         for (const path of videos) {
             // 動画は消さない。手で置いたものかもしれないので、数えるだけ。
-            // 焼いている途中の切り出し (`<入力>.cut.m2ts`) を数に入れないよう、書きたては飛ばす
+            // エンコードしている途中の切り出し (`<入力>.cut.m2ts`) を数に入れないよう、書きたては飛ばす
             if (!known.has(path) && !settling(path, at)) strays++;
         }
         for (const path of files) {

@@ -10,7 +10,7 @@
  * VM の文字列はふつうの JS の文字列 (UTF-16) で持ち、**1 字は必ず 1 単位**にする。
  *
  * - JIS X 0208 の 1〜84 区は `TextDecoder('euc-jp')` が返す字 (表は同梱しない。起動して
- *   最初に要ったときに 94×94 字を 1 回だけ解いて作る)
+ *   最初に要ったときに 94×94 字を 1 回だけデコードして作る)
  * - **85〜94 区 (ARIB の追加記号・追加漢字と DRCS) は私用領域 U+E000〜** に置く。
  *   WHATWG の EUC-JP はこの区を IBM の拡張漢字として読むので任せられない。追加記号には
  *   U+1F000 台の字もあり、そのまま持つと 1 字が 2 単位になって `length` や `substring` が
@@ -40,7 +40,7 @@ let backward: Map<number, number> | null = null;
 /** 字の無い点を置いた終わり (`table` が決める) */
 let emptyEnd = PUA_EMPTY;
 
-/** 1〜84 区を `TextDecoder` で一度だけ解く */
+/** 1〜84 区を `TextDecoder` で一度だけデコードする */
 function table(): string {
     if (forward !== null) return forward;
     const bytes = new Uint8Array(84 * 94 * 2);

@@ -34,9 +34,9 @@ const dbPath = str('DENPA_DB', '/data/denpa.db');
 /** DBの隣。運用でいちいち2つ指す意味が無い */
 const dataDir = dirname(dbPath);
 /**
- * 録画の置き場の親。生TS (`raw`) と焼いたもの (`encoded`) をこの下に分けて置く。
+ * 録画の置き場の親。元のTS (`raw`) とエンコードしたもの (`encoded`) をこの下に分けて置く。
  * 別のディスクに分けたいときだけ `RAW_DIR` / `ENCODED_DIR` で片方を差し替える。
- * エージェントも同じ変数で生TSの置き場を決める (掛かったままのTSを後から解くため)
+ * エージェントも同じ変数で元のTSの置き場を決める (掛かったままのTSを後から復号するため)
  */
 const mediaDir = str('MEDIA_DIR', '/media');
 
@@ -51,7 +51,7 @@ export const config = {
     agentUrl: str('TUNER_AGENT_URL', 'http://tuner-agent:25252').replace(/\/+$/, ''),
 
     /**
-     * チューナーの取り合いの強さ。**大きいほうが勝つ。**
+     * チューナーの取り合いでの優先度。**大きいほうが勝つ。**
      *
      * **番号はこちらが全部決める。** 下限も、特別扱いされる値も無い
      * (エージェントは受け取った数の大小しか見ない)。
@@ -84,16 +84,16 @@ export const config = {
     dbPath,
     /** DBと並べて置くもの。放送波から拾った局ロゴと、CM検出のために覚えた局ロゴ */
     dataDir,
-    /** 生TSの置き場。エンコード後は(keep_original でなければ)消える作業領域 */
+    /** 元のTSの置き場。エンコード後は(keep_original でなければ)消える作業領域 */
     rawDir: str('RAW_DIR', join(mediaDir, 'raw')),
     /** エンコード済みの置き場。プレイヤーにはここのファイルを配る */
     encodedDir: str('ENCODED_DIR', join(mediaDir, 'encoded')),
 
     ffmpeg: str('FFMPEG', '/usr/local/bin/ffmpeg'),
     /**
-     * ブラウザで MPEG-2 と AAC を解く WebAssembly の置き場 (ライブを生で送る道。docs/stream.md §5.5)。
+     * ブラウザで MPEG-2 と AAC をデコードする WebAssembly の置き場 (ライブを放送そのままで送る経路。docs/stream.md §5.5)。
      * Dockerfile の `mpeg2wasm` 段が置く。**アプリの外にあるのは、開発の compose がソースを
-     * /app に被せるため** (中に置くと隠れる)。無ければ生の道は使えず、画面は焼いたものに戻る
+     * /app に被せるため** (中に置くと隠れる)。無ければ放送そのままの経路は使えず、画面はエンコードしたものに戻る
      */
     mpeg2Dir: str('MPEG2_DIR', '/opt/denpa/mpeg2'),
     encodeConcurrency: num('ENCODE_CONCURRENCY', 1),
@@ -103,18 +103,18 @@ export const config = {
      * 1つのエンコードを何回まで試すか。**毒ジョブでキューを止めないため。**
      *
      * プロセスごと落とすジョブ (メモリ超過など) は、再起動のたびに running→queued
-     * へ戻され、同時実行1・id順だと毎回先頭に来て永久にキューを塞ぐ。掴むたびに
+     * へ戻され、同時実行1・id順だと毎回先頭に来て永久にキューを塞ぐ。取り出すたびに
      * attempts を数えていて、ここを超えたら諦めて failed にし、後ろを進める
      */
     encodeMaxAttempts: num('ENCODE_MAX_ATTEMPTS', 5),
     ffprobe: str('FFPROBE', '/usr/local/bin/ffprobe'),
     /**
      * GPU の口を探す形 (最後の段に `*`)。当たった口を全部試して、QSV / VA-API が
-     * 初期化できたもので焼く (server/hwenc.ts)。Pod / コンテナに `/dev/dri` を
+     * 初期化できたものでエンコードする (server/hwenc.ts)。Pod / コンテナに `/dev/dri` を
      * 渡していなければ1つも無いのが普通
      */
     hwDevices: str('HW_DEVICES', '/dev/dri/renderD*'),
-    /** GPU の試し焼き1本に待つ上限 (ms)。ドライバが固まっても起動が止まらないように */
+    /** GPU の試しのエンコード1本に待つ上限 (ms)。ドライバが固まっても起動が止まらないように */
     hwProbeTimeout: num('HW_PROBE_TIMEOUT', 20000),
 
     /** 録画エンコードの初期コーデック。設定画面で変えられる */
@@ -126,11 +126,11 @@ export const config = {
     cmLogoDir: `${dataDir}/logos/cm`,
     /** CM検出でロゴの区間をならすときの fps。ffprobe で取れなければこれを使う (地上波・BS は 30000/1001) */
     cmFallbackFps: 30000 / 1001,
-    /** CM検出のために別に回す ffmpeg (ロゴを覚える・枠だけ読み直す) 1回の上限時間(ms)。焼くほうに相乗りする読み込みには掛けない */
+    /** CM検出のために別に回す ffmpeg (ロゴを覚える・枠だけ読み直す) 1回の上限時間(ms)。エンコードするほうに相乗りする読み込みには掛けない */
     cmDetectTimeout: 30 * MIN,
     /**
      * CMを実際に切るとき、境目にキーフレームが無ければ CM 側へ寄せてよい長さ(秒) (`cm-cut.planCut`)。
-     * 寄せたぶん CM の端が残るが、本編を削るよりはいい。これでも届かなければ境目を指して焼き直す
+     * 寄せたぶん CM の端が残るが、本編を削るよりはいい。これでも届かなければ境目を指して再エンコードする
      */
     cmCutMargin: num('CM_CUT_MARGIN', 0.8),
 
@@ -186,7 +186,7 @@ export const config = {
     epgChannelInterval: num('EPG_CHANNEL_INTERVAL', 6 * 60 * MIN),
     /**
      * 集めに行った直後は、どれだけ薄く見えても行き直さない下限 — EIT が1件も来ない
-     * CS の局を 30 分ごとに選び続けないため。**掴めなかった回は数えない**
+     * CS の局を 30 分ごとに選び続けないため。**使えなかった回は数えない**
      * (`collectChannel`)。経緯は docs/data.md
      */
     epgChannelRetry: num('EPG_CHANNEL_RETRY', 2 * 60 * MIN),

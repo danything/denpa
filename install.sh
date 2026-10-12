@@ -16,7 +16,7 @@
 #
 # **Docker は勝手に入れない。** 無い・起きていない・触る権限が無いときは、入れ方を案内して止まる
 # (Mac はエージェントだけ入れてから)。もう一度流せば、そのまま上げ直しになる (pull して up -d)。
-# compose ファイルもイメージも**最新のリリースの版**に揃える (取ってきた compose.yml の札を書き換える)。
+# compose ファイルもイメージも**最新のリリースの版**に揃える (取ってきた compose.yml のタグを書き換える)。
 #
 # **入口は genkan** (https://github.com/danything/genkan。ホスト名でコンテナに振り分けるリバースプロキシ)。
 # 動いていればそれを使い、無ければ 80 と 443 が空いているときだけ ~/genkan に入れて、
@@ -29,10 +29,10 @@
 #   Mac だけ     ~/Library/Application Support/denpa-agent/  エージェント・px4-userland・siano-userland
 #                ~/Library/LaunchAgents/<LABEL>.plist        ログインしたら起こし、落ちたら起こし直す
 #                ~/Library/Logs/denpa-agent.log              エージェントのログ
-#                ~/Movies/denpa/{recorded,library}           生TS (エージェントとコンテナの両方が見る) と出来上がった録画
+#                ~/Movies/denpa/{recorded,library}           元のTS (エージェントとコンテナの両方が見る) と出来上がった録画
 #
 # 環境変数: DENPA_VERSION (v1.2.3 のように。既定は最新のリリース。CI はコミットを渡す)、DENPA_HOME、
-# DENPA_AGENT_TARBALL (Mac: 手元で焼いたエージェントの tar.gz を絶対パスで。CI と開発用)
+# DENPA_AGENT_TARBALL (Mac: 手元でビルドしたエージェントの tar.gz を絶対パスで。CI と開発用)
 #
 # macOS の bash は 3.2 なので、4 以降の書き方 (連想配列・mapfile など) は使わない。
 # ---------------------------------------------------------------------------
@@ -153,7 +153,7 @@ networks:
 compose() { (cd "$DENPA_DIR" && docker compose "$@"); }
 
 # 取ってきた compose ($1。compose.prod.yml か compose.mac.yml) を ~/denpa/compose.yml に置いて起こす。
-# **版は札で揃える** — 取ってきたものの latest をこの版に書き換える (.env は使わない)
+# **版はタグで揃える** — 取ってきたものの latest をこの版に書き換える (.env は使わない)
 start_denpa() {
   say "denpa $2 を $DENPA_DIR に置きます"
   mkdir -p "$DENPA_DIR/config"
@@ -277,7 +277,7 @@ PLIST="$HOME/Library/LaunchAgents/$LABEL.plist"
 LOG="$HOME/Library/Logs/denpa-agent.log"
 # compose.mac.yml の TUNER_AGENT_URL と揃える
 PORT=25252
-# 生TSはエージェント (後から解く) とコンテナ (録る) の両方が読み書きするので、Mac のフォルダに置く
+# 元のTSはエージェント (後から復号する) とコンテナ (録る) の両方が読み書きするので、Mac のフォルダに置く
 MEDIA="$HOME/Movies/denpa"
 MAC_DOCKER="Docker Desktop (https://www.docker.com/products/docker-desktop/) か OrbStack (https://orbstack.dev) を入れてから、もう一度流してください"
 

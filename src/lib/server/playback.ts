@@ -103,7 +103,7 @@ function videoCodec(stream: ProbedStream | undefined): string | null {
     if (stream.codec_name === 'av1') {
         const profile = AV1_PROFILES[stream.profile ?? ''] ?? 0;
         const depth = /10/.test(stream.pix_fmt ?? '') ? '10' : '08';
-        // tier は ffprobe が言わない。放送の焼き直しは Main tier
+        // tier は ffprobe が言わない。放送の再エンコードは Main tier
         return `av01.${profile}.${String(level ?? 8).padStart(2, '0')}M.${depth}`;
     }
     return null;
@@ -144,7 +144,7 @@ const probed = new Map<string, { mtime: number; file: MediaFile }>();
 /** 控えの上限。古いものから捨てる */
 const KEEP = 64;
 
-/** 焼いたファイルの中身を読む (見出しだけ。一瞬で返る) */
+/** エンコードしたファイルの中身を読む (見出しだけ。一瞬で返る) */
 export async function probeMedia(source: EncodedSource, path: string): Promise<MediaFile> {
     let mtime = -1;
     try {
@@ -270,7 +270,7 @@ function recordedSec(recording: Recording): number {
  * **何を出せるかを決める。** エンコード済みも元の TS も無ければ null。
  *
  * ffprobe が中身を読めなかったエンコード済み (ffprobe が居ない・壊れている) は、いまの設定の
- * コーデックで焼いたものとみなしてファイルだけ出す (詰め替えも変換も、中身が分からないと組めない)
+ * コーデックでエンコードしたものとみなしてファイルだけ出す (詰め替えも変換も、中身が分からないと組めない)
  */
 export async function playbackPlan(recording: Recording): Promise<PlaybackPlan | null> {
     const guessed = settings().codecs;
@@ -290,7 +290,7 @@ export async function playbackPlan(recording: Recording): Promise<PlaybackPlan |
         }),
     );
 
-    // 焼かずに置いた録画 (「エンコードしない」) は、置き場の TS が元の TS そのもの
+    // エンコードせずに置いた録画 (「エンコードしない」) は、置き場の TS が元の TS そのもの
     const tsPath = tsPathOf(recording);
     // 録っている最中の TS は伸びている。追っかけ再生 (`/chase`) の受け持ち
     const ts = tsPath !== null && recording.finished_at !== null ? await probeTs(tsPath) : null;
@@ -361,7 +361,7 @@ const FMP4_OUT = [
 
 /**
  * **エンコード済みを詰め替える引数** (映像は写すだけ。音声は H.264 なら AAC、AV1 なら Opus)。
- * `audio` は入れ物の中の何本目の音声か (主・副で分けて焼いてある。`encoder.ts`)。
+ * `audio` は入れ物の中の何本目の音声か (主・副で分けてエンコードしてある。`encoder.ts`)。
  *
  * ## 位置はファイルの時刻のまま出す
  *
@@ -408,7 +408,7 @@ export function copyArgs(path: string, from: number, audio: number, codec: LiveC
 
 /**
  * **エンコード済みを別のコーデックに変換する引数。** 飛び方と時刻の運び方は詰め替え (`copyArgs`) と同じ。
- * 映像の焼き方はライブと同じ (`live.videoArgs`)。インタレ解除は済んでいるので挟まない
+ * 映像のエンコード方法はライブと同じ (`live.videoArgs`)。インタレ解除は済んでいるので挟まない
  */
 export function fileTranscodeArgs(
     path: string,
@@ -483,7 +483,7 @@ export function tsOffset(pts: number, at: number): number {
  *
  * 局と音声は名指しする (`0:p:<局>`。理屈はライブと同じ)。音声は途中から流し込むと探りの間に
  * 見つからないことがあるので `?` を付ける。デュアルモノは選んだ側を両耳へ
- * (`live.encodeArgs` と同じ)。映像の焼き方とインタレ解除もライブと同じ (`live.videoArgs`)
+ * (`live.encodeArgs` と同じ)。映像のエンコード方法とインタレ解除もライブと同じ (`live.videoArgs`)
  *
  * @param offset `tsOffset`
  */
@@ -743,7 +743,7 @@ export async function streamResponse(recording: Recording, query: URLSearchParam
     return new Response(transcodeBody(attempts, `${label} の変換`, release), { headers: MP4_HEADERS });
 }
 
-/** GPU で焼けるなら GPU、駄目ならソフトウェア。GPU が 1 バイトも出せずに降りたら覚える */
+/** GPU でエンコードできるなら GPU、駄目ならソフトウェア。GPU が 1 バイトも出せずに降りたら覚える */
 function withFallback(
     codec: LiveCodec,
     interlaced: boolean,
@@ -804,7 +804,7 @@ export function encodedPath(recording: Pick<Recording, 'library_path'>): string 
 }
 
 /**
- * 元の TS。焼かずに置いた録画 (「エンコードしない」) は置き場の TS がそれ。無ければ null。
+ * 元の TS。エンコードせずに置いた録画 (「エンコードしない」) は置き場の TS がそれ。無ければ null。
  * 録っている最中のものも返す (伸びている)
  */
 export function tsPathOf(recording: Pick<Recording, 'ts_path' | 'library_path'>): string | null {
@@ -830,7 +830,7 @@ export async function tsChapters(
 }
 
 /**
- * **字幕の筋だけを抜く引数** (`api/recordings/<id>/captions.json`)。解かずに写す (解くのは denpa)。
+ * **字幕の筋だけを抜く引数** (`api/recordings/<id>/captions.json`)。デコードせずに写す (デコードするのは denpa)。
  *
  * エンコード済みがあればそこから。無ければ元の TS から抜き、時刻を物差し (TS の頭を 0) に揃える
  * (`-copyts` で放送の PTS を運び、頭のぶん引く。`presented`)。どちらも無ければ null

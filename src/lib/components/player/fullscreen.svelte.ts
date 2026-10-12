@@ -6,7 +6,7 @@ import { exitNative, fullscreenMode, nativeFullscreenElement, requestNative } fr
 /**
  * 舞台 (`PlayerStage`) の全画面。**3画面 (ライブ・追っかけ・録画) で同じもの** (#471)。
  *
- * 入り方は端末の口で決める (`fullscreen.ts`)。本物の全画面 (標準・webkit) が無い
+ * 全画面への切り替え方は端末の口で決める (`fullscreen.ts`)。本物の全画面 (標準・webkit) が無い
  * iPhone の Safari では**枠を画面いっぱいに広げて代わりにする** (以下「広げる」)。
  * 押す口・ボタンの絵・`f` キー (観る画面と追っかけ) はどれでも同じ。
  *
@@ -72,8 +72,8 @@ export function stageFullscreen(target: () => HTMLElement | null): StageFullscre
 
     /*
      * **戻るで畳む。** 積んだ段 (`fullscreen: true`) から降りたら広げたのをやめる。
-     * 見るのは「立っていた札が下りた」ときだけ — 積む前 (`goto` が済むまで) は
-     * 札がまだ無いので、それを「降りた」と取り違えない。
+     * 見るのは「立っていた印が消えた」ときだけ — 積む前 (`goto` が済むまで) は
+     * 印がまだ無いので、それを「降りた」と取り違えない。
      *
      * **こちらが戻した段** (ボタン・Esc で出た) は、もう出ているので畳まない。
      * 戻り切る前に入り直されていれば、そこで改めて積む
@@ -135,7 +135,7 @@ export function stageFullscreen(target: () => HTMLElement | null): StageFullscre
         pseudo = true;
         // 積んでいる・戻している最中なら、済んだところで合わせる (上の effect と push)
         if (pushing || popping) return;
-        // 札が残っている段 (よそから戻ってきた) なら積み増さない。戻ればそのまま下の段へ降りる
+        // 印が残っている段 (よそから戻ってきた) なら積み増さない。戻ればそのまま下の段へ降りる
         if (page.state.fullscreen === true) return;
         push();
     }

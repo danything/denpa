@@ -140,7 +140,7 @@ function poster(path: string, series: string, genre: number, key: string): void 
 /**
  * 観る画面で流す作り物の映像 (30分・10コマ/秒・無音)。色が流れるだけで、左上に「サンプル映像」。
  * 録画はどれもこれを使い回す (番組の中身は字幕で出る。`docsCaptions`)。
- * 5分から1分だけ「ＣＭ」の札が出て、そこが CM のチャプターになる (本物の焼き上がりと同じ入れ方。`cm.chapterMetadata`)
+ * 5分から1分だけ「ＣＭ」のラベルが出て、そこが CM のチャプターになる (本物のエンコードが終わったときと同じ入れ方。`cm.chapterMetadata`)
  */
 const CLIP_SECONDS = 30 * 60;
 const CM = { start: 300, end: 360 };
@@ -448,8 +448,8 @@ async function watching(page: Page): Promise<void> {
 }
 
 /**
- * ライブを「生で見る」(MPEG-2 をブラウザで解く) にする。焼く道は偽 ffmpeg が素通しするだけで
- * 絵にならないが、生の道は偽の放送の映像 (色帯) をそのまま解いて描ける。選んだものは端末に覚える
+ * ライブを「生で見る」(MPEG-2 をブラウザでデコードする) にする。変換する経路は偽 ffmpeg が素通しするだけで
+ * 絵にならないが、そのまま送る経路は偽の放送の映像 (カラーバー) をデコードして描ける。選んだものは端末に覚える
  */
 async function liveRaw(page: Page): Promise<void> {
     await page.goto(`${BASE}/live`);

@@ -28,7 +28,7 @@ export interface MediaSourceScope {
     ManagedMediaSource?: MediaSourceClass;
 }
 
-/** 使える器。**どちらも無ければ null** (この端末では焼いたものを出せない) */
+/** 使える器。**どちらも無ければ null** (この端末ではエンコードしたものを出せない) */
 export function pickMediaSource(
     scope: MediaSourceScope = globalThis as unknown as MediaSourceScope,
 ): PickedMediaSource | null {

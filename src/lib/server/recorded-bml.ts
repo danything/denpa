@@ -3,9 +3,9 @@
  *
  * ライブは今のカルーセルをそのまま流せばよいが、録画は巻き戻し・番組またぎが
  * あるので、**いつ何が変わったか**を再生位置つきで持っておく必要がある
- * (解き方と写し方は [ts/data-timeline.ts](../ts/data-timeline.ts))。
+ * (デコード方法と写し方は [ts/data-timeline.ts](../ts/data-timeline.ts))。
  *
- * ここは**ファイルの出し入れだけ**。エンコードのついでに元TSをもう一度解いて
+ * ここは**ファイルの出し入れだけ**。エンコードのついでに元TSをもう一度デコードして
  * (`saveRecordedBml`)、再生時に読む (`loadRecordedBml`)。中身は1行1メッセージの
  * JSONL で、サムネイルと同じ**録画の隣**に置く (`metadata.sidecarPaths`)。
  *
@@ -31,8 +31,8 @@ import { programs, services } from './schema';
 
 /**
  * **番組の名乗り (`programInfo`)。描く側は局の番号をこれで知る** — `arib-dc://` の名前を
- * 解く・NVRAM を局ごとに分ける (`src/lib/bml/resources.ts`・`nvram.ts`) ので、無いと
- * 他の局を指す名前と区別できず、覚えるものも局の外へ混ざる。TS からは取り出していない (EIT は解かない) ので、
+ * デコードする・NVRAM を局ごとに分ける (`src/lib/bml/resources.ts`・`nvram.ts`) ので、無いと
+ * 他の局を指す名前と区別できず、覚えるものも局の外へ混ざる。TS からは取り出していない (EIT はデコードしない) ので、
  * ライブと同じく DB から組み立てる (`live.ts` の `programInfo`)。局の番号は
  * `services`、番組は録画の行が持っている。
  *
@@ -87,7 +87,7 @@ export function withProgramInfo(timeline: PlacedMessage[], recording: Recording)
 const CHUNK = 1 << 20;
 
 /**
- * TS を 1MB ずつ読んで解く。**丸ごと抱えない** (録画は数GBになる) し、
+ * TS を 1MB ずつ読んでデコードする。**丸ごと抱えない** (録画は数GBになる) し、
  * **読む間も息をつく** (チャンクごとに await)。
  *
  * 前は同期の `readSync` で回していた — 10GB の録画 (2時間の映画) では
@@ -115,7 +115,7 @@ async function capture(path: string): Promise<TimedMessage[]> {
 /**
  * 録画のデータ放送を取り出して、サイドカーに書く。
  *
- * @param tsPath 元の生TS (**CMを切る前のほう**。放送の実時刻 (TDT) が続いている)
+ * @param tsPath 元のTS (**CMを切る前のほう**。放送の実時刻 (TDT) が続いている)
  * @param sidecarPath 書き先 (`metadata.sidecarPaths` の `dataBroadcast`)
  * @param recording 録画の行。`start_at` を再生位置 0 の放送実時刻に、番組の名乗りにも使う
  * @param keep CM を実カットした録画で残した区間 (秒)。off/chapter なら null

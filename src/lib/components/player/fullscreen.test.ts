@@ -3,7 +3,7 @@ import { exitNative, fullscreenMode, nativeFullscreenElement, requestNative } fr
 
 const noop = async () => {};
 
-describe('全画面の入り方', () => {
+describe('全画面への切り替え方', () => {
     test('標準の口があればそれ (PC・Android・iPadOS 16.4 以降)', () => {
         expect(fullscreenMode({ requestFullscreen: noop, webkitRequestFullscreen: noop }, {})).toBe(
             'standard',

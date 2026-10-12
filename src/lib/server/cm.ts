@@ -77,8 +77,8 @@ export function invertRanges(ranges: Range[], duration: number): Range[] {
  * エンコードは頭 (映像が出るまでの音声だけの区間、実機で 0.5〜0.9 秒) を
  * `-ss` で捨てて 0 秒から始める (`encoder.headSkip`)。検出した時刻をそのまま
  * チャプターに書くと**全チャプターがそのぶん遅れて入り**、CMの自動スキップは
- * 毎回そのぶんCMを見せてから跳んで、着地も本編に食い込んでいた
- * (字幕は焼く ffmpeg が映像と一緒に詰める)。
+ * 毎回そのぶんCMを見せてから飛んで、着地も本編に食い込んでいた
+ * (字幕はエンコードする ffmpeg が映像と一緒に詰める)。
  *
  * 詰めた結果ほとんど残らない区間は落とす (invertRanges の 0.5 秒と同じ判断)。
  */
@@ -90,7 +90,7 @@ export function shiftRanges(ranges: Range[], by: number): Range[] {
 }
 
 /**
- * 本編と CM を交互に並べたチャプター。焼いたものに書くもの (`chapterMetadata`) と、
+ * 本編と CM を交互に並べたチャプター。エンコードしたものに書くもの (`chapterMetadata`) と、
  * エンコード済みが無い録画の CM 飛ばし (`api/recordings/<id>/chapters`) で同じものを使う
  */
 export function chapterList(cm: Range[], duration: number): { start: number; end: number; title: string }[] {
@@ -155,7 +155,7 @@ async function probe(input: string, args: string[]): Promise<string> {
  * 尺とフレームレートを先に取る (ffmpeg の stderr の `Duration:` は TS によっては出ない)。
  *
  * **頭出し (`probeLeadIn`) はここに含めない。** あちらは実際に復号してみる
- * ぶんだけ高くつくのに、要るのは焼く前の1回だけ
+ * ぶんだけ高くつくのに、要るのはエンコードする前の1回だけ
  */
 export async function probeVideo(input: string): Promise<{
     duration: number;
@@ -205,7 +205,7 @@ export async function probeVideo(input: string): Promise<{
     return {
         duration: positive(duration),
         fps: positive(fps),
-        // 映像の大きさ (焼き先の大きさ・映像が在るかの見分け・ロゴ探し)
+        // 映像の大きさ (エンコード先の大きさ・映像が在るかの見分け・ロゴ探し)
         width: positive(width),
         height: positive(height),
         /**
@@ -243,13 +243,13 @@ export function liveAudioIndexes(json: string): number[] {
 }
 
 /**
- * 焼くときに拾う音声 (音声の何本目か)。**頭に中身の無い音声は拾わない。**
+ * エンコードするときに拾う音声 (音声の何本目か)。**頭に中身の無い音声は拾わない。**
  *
  * 録画の尻には次の番組の頭が少し入る。次の番組が副音声つきだと、その音声の PID が
  * 最後の十数秒だけ現れ、`-map 0:a` はそれも1本の音声として拾ってしまう
  * (出来上がりに**末尾にしか中身の無い音声トラック**が入る)。
  *
- * **探りの長さは焼くほうと揃える** (`TS_PROBE`)。何本目かで名指しするので、
+ * **探りの長さはエンコードするほうと揃える** (`TS_PROBE`)。何本目かで名指しするので、
  * 見えている音声の並びが食い違うと別の音声を指してしまう。
  *
  * 分からなければ空を返す — 呼ぶ側は今までどおり全部拾う
@@ -273,10 +273,10 @@ export async function probeLiveAudio(input: string): Promise<number[]> {
 }
 
 /**
- * **映像が出るまでの、音声だけの区間 (秒)。焼くときに頭から捨てる長さ。**
+ * **映像が出るまでの、音声だけの区間 (秒)。エンコードするときに頭から捨てる長さ。**
  *
  * TS は音声のほうが先に始まっているのがふつうで、実機では 0.930 秒あった。
- * 残したまま焼くと出来上がりも音声だけの区間から始まり、**1コマ目を 0 秒として
+ * 残したままエンコードすると出来上がりも音声だけの区間から始まり、**1コマ目を 0 秒として
  * 数えるプレイヤー**ではそのぶん字幕が早く出る。ずらす (`-output_ts_offset`) のでは
  * 直らないので捨てる (`encoder.buildArgs` の `-ss`)。
  *
@@ -316,7 +316,7 @@ export async function probeLeadIn(input: string, formatStart: number, packetStar
  *
  * TS の時刻は**放送の時刻そのもの** (PTS) で、頭からの秒数ではない。実機では
  * 62170 のような値が入る。引き算を忘れるとその値がそのまま頭捨ての長さになり、
- * **17時間ぶん読み飛ばして中身の無いものが焼き上がる**。
+ * **17時間ぶん読み飛ばして中身の無いものができあがる**。
  *
  * ずれが数秒を超えたら 0 にする。読み違えているほうが疑わしく、
  * 大きく捨てると壊れ方が派手になる
@@ -379,7 +379,7 @@ export interface CmOptions {
 export interface CmReading {
     /**
      * 1回の復号で何を読むか。エンコードの ffmpeg に `cm-scan.scanReader` の出口を足す。
-     * **復号するたびに呼ぶ** — ロゴの点は読むたびに一から数える (焼き直しで途中までを持ち越さない)
+     * **復号するたびに呼ぶ** — ロゴの点は読むたびに一から数える (再エンコードで途中までを持ち越さない)
      */
     want(): ScanWant;
     /** 入れ物の尺 (秒。ffprobe)。測れなければ NaN */
@@ -388,7 +388,7 @@ export interface CmReading {
      * 読み終えた材料から CM を決める。
      *
      * 材料の時刻は**頭を `skip` 秒捨てた ffmpeg の時刻** (エンコードの `-ss` と同じだけ。`before` はその引数)。
-     * 返す区間も同じ物差し — つまり**焼いたものの時刻**。ロゴを覚え直したときは、枠だけ同じ捨て方で読み直す。
+     * 返す区間も同じ物差し — つまり**エンコードしたものの時刻**。ロゴを覚え直したときは、枠だけ同じ捨て方で読み直す。
      * `video` が偽なら絵は読めていない (音だけ読み直した) ので、尺だけで決める
      */
     decide(found: Scan, at: { skip: number; before: string[]; video?: boolean }): Promise<CmDetection>;

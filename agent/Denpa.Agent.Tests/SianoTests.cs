@@ -6,17 +6,17 @@ using Denpa.Agent;
 namespace Denpa.Agent.Tests;
 
 /*
- * siano-userland の機材 (PX-S1UD など) を掴むところ。
+ * siano-userland の機材 (PX-S1UD など) を使うところ。
  *
  * 本物の機材は無い。ここで確かめるのは**機材に触らない部分**だけ —
- * siano-ts --list と sysfs の読み方 (とくに「カーネルが掴んでいるものは渡さない」)、device 文字列の形、
+ * siano-ts --list と sysfs の読み方 (とくに「カーネルが使っているものは渡さない」)、device 文字列の形、
  * siano-ts の起こし方。実機で当てるのは `denpa-agent --tune siano:<ポート> T27` (Probe.cs)。
  */
 public class SianoTests
 {
     /// <summary>
-    /// 偽の sysfs。ドライバが掴んでいる機材だけ、インターフェース <c>&lt;port&gt;:1.0/driver</c> を
-    /// ドライバの場所へのリンクにする (カーネルが掴んでいるかは sysfs で見る)
+    /// 偽の sysfs。ドライバが使っている機材だけ、インターフェース <c>&lt;port&gt;:1.0/driver</c> を
+    /// ドライバの場所へのリンクにする (カーネルが使っているかは sysfs で見る)
     /// </summary>
     private static string FakeSysfs(params (string Port, string? Driver)[] devices)
     {
@@ -47,7 +47,7 @@ public class SianoTests
         rejected model=Siano-Nova-B usb=187f:0201 bus=1 address=6 port=1-4 status=unsupported
         """;
 
-    // smsusb が掴んでいるのは 1-3 だけ
+    // smsusb が使っているのは 1-3 だけ
     private static List<SianoUserland.Stick> Sticks(List<string>? warned = null) =>
         SianoUserland.ParseList(List, port => port == "1-3" ? "smsusb" : null, message => warned?.Add(message));
 
@@ -71,7 +71,7 @@ public class SianoTests
     {
         await Assert.That(SianoUserland.Specs(Sticks())).IsEquivalentTo(
             [
-                // smsusb が掴んでいる 1-3 は /dev/dvb で見つかる。こちらでは挙げない
+                // smsusb が使っている 1-3 は /dev/dvb で見つかる。こちらでは挙げない
                 new TunerSpec("PX-S1UD 1-2", ["GR"], false, "siano:1-2"),
                 new TunerSpec("Siano-Rio 2-1.4", ["GR"], false, "siano:2-1.4"),
             ],
@@ -81,7 +81,7 @@ public class SianoTests
     [Test]
     public async Task siano_ts_の終了コードに手当てを添える()
     {
-        // 0.1.8 の終了コード。カーネルが掴んでいる・抜けた、は siano-ts が答える
+        // 0.1.8 の終了コード。カーネルが使っている・抜けた、は siano-ts が答える
         await Assert.That(SianoUserland.Hint(3)).Contains("見当たりません");
         await Assert.That(SianoUserland.Hint(10)).Contains("ファームウェア");
         // Windows は開けなければ (WinUSB でなければ) 1 か 4 で落ちる
@@ -100,14 +100,14 @@ public class SianoTests
     [Test]
     // Linux の置き場の形 (sysfs の名前の「:」、/dev のパス) を見るもの。Windows では作れない
     [ExcludeOn(OS.Windows)]
-    public async Task 掴んでいるドライバは_sysfs_のインターフェースで見る()
+    public async Task 使っているドライバは_sysfs_のインターフェースで見る()
     {
         var sysfs = FakeSysfs(("1-2", null), ("1-3", "smsusb"));
         try
         {
             await Assert.That(SianoUserland.Driver(sysfs, "1-2")).IsNull();
             await Assert.That(SianoUserland.Driver(sysfs, "1-3")).IsEqualTo("smsusb");
-            // sysfs が無い (Linux でない) なら、掴んでいるドライバも無い
+            // sysfs が無い (Linux でない) なら、使っているドライバも無い
             await Assert.That(SianoUserland.Driver("/nonexistent/sysfs", "1-2")).IsNull();
         }
         finally

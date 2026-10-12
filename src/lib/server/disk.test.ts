@@ -13,7 +13,7 @@ const posted: { event: string }[] = [];
 mock.module('./webhook', () => ({ notify: (payload: { event: string }) => posted.push(payload) }));
 
 const { config } = await import('./config');
-// 生TSの置き場とエンコード済みの置き場を同じ実在ディレクトリへ。重複は畳まれて1つになる
+// 元のTSの置き場とエンコード済みの置き場を同じ実在ディレクトリへ。重複は畳まれて1つになる
 const dir = mkdtempSync(join(tmpdir(), 'denpa-disk-'));
 config.rawDir = dir;
 config.encodedDir = dir;
@@ -59,7 +59,7 @@ test('0 のときは見張らない', () => {
 
 /**
  * 録画の見出しに出す空きと残り時間 (`capacity`)。時間は**最近の録画が1時間あたりに
- * 置いていった量**で割る。残した生TSも足す
+ * 置いていった量**で割る。残した元のTSも足す
  */
 describe('空きと残り時間', () => {
     const HOUR = 3_600_000;
@@ -90,9 +90,9 @@ describe('空きと残り時間', () => {
         expect(room?.hours).toBeNull();
     });
 
-    test('1時間あたりの量で空きを割る。残した生TSも数え、消したものと短いものは数えない', () => {
+    test('1時間あたりの量で空きを割る。残した元のTSも数え、消したものと短いものは数えない', () => {
         orm().delete(recordings).run();
-        // 1本は生TSも残している (焼いた 1GB + 生TS 3GB)
+        // 1本は元のTSも残している (エンコードした 1GB + 元のTS 3GB)
         const raw = join(dir, 'kept.ts');
         writeFileSync(raw, Buffer.alloc(3 * 1024));
         orm()
@@ -106,7 +106,7 @@ describe('空きと残り時間', () => {
             ])
             .run();
         const room = capacity()!;
-        // 3時間で 3GB (生TSのぶんは ts_size から引いてあるので、足して 3GB ちょうど)
+        // 3時間で 3GB (元のTSのぶんは ts_size から引いてあるので、足して 3GB ちょうど)
         expect(room.hours).toBeCloseTo(room.free / GB, 5);
     });
 });

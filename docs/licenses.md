@@ -25,8 +25,8 @@ Dockerfile の行・`package.json`) を優先し、上流の表示に拠るも�
 | SVT-AV1 (ソースから静的リンク) | AV1 のエンコード | <https://gitlab.com/AOMediaCodec/SVT-AV1> | BSD-3-Clause-Clear + AOM 特許ライセンス |
 | dav1d | AV1 のデコード | <https://code.videolan.org/videolan/dav1d> | BSD-2-Clause |
 | Opus (libopus) | 音声 | <https://opus-codec.org> | BSD-3-Clause |
-| libva / libva-drm | VA-API (GPU で焼く) | <https://github.com/intel/libva> | MIT |
-| libvpl / libmfx-gen | Intel QSV (GPU で焼く) | <https://github.com/intel/libvpl> / <https://github.com/intel/vpl-gpu-rt> | MIT |
+| libva / libva-drm | VA-API (GPU でエンコードする) | <https://github.com/intel/libva> | MIT |
+| libvpl / libmfx-gen | Intel QSV (GPU でエンコードする) | <https://github.com/intel/libvpl> / <https://github.com/intel/vpl-gpu-rt> | MIT |
 | intel-media-va-driver (iHD) | Intel の VA-API ドライバ | <https://github.com/intel/media-driver> | MIT (一部 BSD) |
 | zlib | ffmpeg の依存 | <https://zlib.net> | zlib |
 | [patches/](../patches) | ffmpeg に当てる直しの置き場 (いまは空。denpa が書いたもの。上流に投げる前提) | — | 当てる先と同じ (ffmpeg は LGPL/GPL) |
@@ -58,10 +58,10 @@ denpa-font の `DENPA_COMMIT` を上げて (元に無い字は描き方を足し
 | --- | --- | --- | --- |
 | .NET 10 ランタイム (AOT でバイナリに埋まる) | エージェント本体 | <https://github.com/dotnet/runtime> | MIT |
 | px4-userland (`/opt/px4-userland`) | PLEX PX-Q3U4 / PX-W3U4 / PX-MLT 系、e-Better / Digibest 系のユーザー空間ドライバ。`px4d` / `px4ctl` (配布物に入っている `px4-ts` と pcscd 用 IFD ハンドラは使わない) | <https://github.com/Khronos31/px4-userland> | **GPL-2.0-only** (実行ファイルに静的リンクの libusb 1.0.30 は LGPL-2.1+。配布物の `THIRD_PARTY_NOTICES.md` を同梱のまま置いてある) |
-| IT930x ファームウェア (`/opt/px4-userland/firmware/it930x-firmware.bin`、2,169 バイト) | 挿すたびに流し込む (px4-userland の対応機種で共通) | PLEX 公式の Windows ドライバ (`pxw3u4_BDA_ver1x64.zip` の `PXW3U4.sys`、著作権表示は Digital Warrior Corp.) から焼くときに切り出す (agent/Dockerfile) | **ライセンス無し** (再配布の許諾は誰も持っていない。権利者が動いていない実態に乗る判断。[agent.md](agent.md#px-q3u4-などは-px4-userland-でカーネルドライバは入れてもらわない)) |
+| IT930x ファームウェア (`/opt/px4-userland/firmware/it930x-firmware.bin`、2,169 バイト) | 挿すたびに流し込む (px4-userland の対応機種で共通) | PLEX 公式の Windows ドライバ (`pxw3u4_BDA_ver1x64.zip` の `PXW3U4.sys`、著作権表示は Digital Warrior Corp.) からエンコードするときに切り出す (agent/Dockerfile) | **ライセンス無し** (再配布の許諾は誰も持っていない。権利者が動いていない実態に乗る判断。[agent.md](agent.md#px-q3u4-などは-px4-userland-でカーネルドライバは入れてもらわない)) |
 | siano-userland (`/opt/siano-userland`) | PLEX PX-S1UD など Siano RIO 系のユーザー空間ドライバ。`siano-ts` | <https://github.com/Khronos31/siano-userland> | **GPL-2.0-or-later** (実行ファイルに静的リンクの libusb 1.0.30 は LGPL-2.1+。配布物の `COPYING`・`libusb/COPYING`・`DEPENDENCY-NOTICE.txt` を同梱のまま置いてある) |
 | asicen-userland (`/opt/asicen-userland`。**上流のリリース待ちで、いまは空**) | PLEX PX-W3U3 のユーザー空間ドライバ (試験的)。`asicend` / `asicenctl`、あればファームウェアを流す `asicen-probe` (配布物に入っている `asicen-ts` と pcscd 用 IFD ハンドラは使わない) | <https://github.com/Khronos31/asicen-userland> | **GPL-2.0** (px4-userland 由来の GPL-2.0-only と GPL-2.0-or-later の組み合わせ。静的リンクの libusb は LGPL-2.1+、musl と GCC ランタイムもそれぞれの条件。配布物の `licenses/` を同梱のまま置く) |
-| ASICEN ファームウェア (`/opt/asicen-userland/firmware/asicen-loader.bin`、16,384 バイト。**入るのは上流のリリースから**) | 挿した直後の PX-W3U3 に流し込む | asicen-userland の配布アーカイブに入っているものをそのまま (元は PLEX 公式 Linux ドライバの `loader.ko` の `FirmBin`、SHA-256 `b45d510200a1690b3ca358d93de13f40e1d3567b663c17e773349ad96f597aa8`。焼くときに突き合わせる) | **ライセンス無し・再配布の権利は未確定** (上流 NOTICES.md の判断で配布物に入る。上流が添える `licenses/VENDOR-FIRMWARE-NOTICE.txt` に権利未確定・元の成果物・大きさ・SHA-256 が書いてあり、同じ場所に置いてある。[agent.md](agent.md#px-w3u3-は-asicen-userland-で-試験的上流のリリース待ち)) |
+| ASICEN ファームウェア (`/opt/asicen-userland/firmware/asicen-loader.bin`、16,384 バイト。**入るのは上流のリリースから**) | 挿した直後の PX-W3U3 に流し込む | asicen-userland の配布アーカイブに入っているものをそのまま (元は PLEX 公式 Linux ドライバの `loader.ko` の `FirmBin`、SHA-256 `b45d510200a1690b3ca358d93de13f40e1d3567b663c17e773349ad96f597aa8`。エンコードするときに突き合わせる) | **ライセンス無し・再配布の権利は未確定** (上流 NOTICES.md の判断で配布物に入る。上流が添える `licenses/VENDOR-FIRMWARE-NOTICE.txt` に権利未確定・元の成果物・大きさ・SHA-256 が書いてあり、同じ場所に置いてある。[agent.md](agent.md#px-w3u3-は-asicen-userland-で-試験的上流のリリース待ち)) |
 | Siano ISDB-T ファームウェア (`/opt/siano-userland/firmware/isdbt_rio.inp`、85,840 バイト) | siano-ts が USB で流し込む | siano-userland の配布アーカイブに入っているもの (Siano Mobile Silicon) | **Siano の再配布許諾** (無改変なら再配布可。解析は禁止。許諾の文面 `LICENCE.siano` を同じ場所に置いてある) |
 | ca-certificates / openssl | `CARD_URL` を https で指したときの検証 | Debian | MPL-2.0 / Apache-2.0 |
 
@@ -92,7 +92,7 @@ denpa 本体は上と同じコンテナイメージ `denpa` を、Mac の Docker
 | BS / CS の標準の局の表 | [src/lib/server/channel-seed.json](../src/lib/server/channel-seed.json) | BS・CS の局が無いときに入れる BS 26 + CS 12 TS (`channel-seed.ts`) | Khronos31/hassio-addons の denpa アドオンの `seed/channels.bs.json` | MIT |
 | ARIB ロゴの CLUT (129 色) | [src/lib/ts/logo-palette.ts](../src/lib/ts/logo-palette.ts) | 局ロゴの PNG 化 | node-aribts / @chinachu/aribts の `logo_clut.js` と同じ並び | MIT (上流) |
 | ARIB 外字表 | [src/lib/ts/aribtext-gaiji.ts](../src/lib/ts/aribtext-gaiji.ts) | 番組名の「🈟」「🈑」など | 字は字幕の表 (下の b24-tables.ts) を引く。番組表だけで違える数点 (楽器の略号の文字列・空きの埋め方) は epgdump_py (Yasumasa Murakami, 2011) → ariblib に引き継がれた表から | MIT (libaribcaption・ariblib。上流) |
-| 字幕の文字の表と解き方 | [src/lib/ts/b24-tables.ts](../src/lib/ts/b24-tables.ts) / [b24caption.ts](../src/lib/ts/b24caption.ts) | 字幕を文字の配置にする (表は libaribcaption の b24_conv_tables.hpp / b24_gaiji_table.hpp / b24_colors.cpp / b24_drcs_conv.cpp を写したもので、いまは denpa が手で持つ。解き方は decoder_impl.cpp を TypeScript に写したもの) | libaribcaption (Copyright (C) 2021 magicxqq) | MIT (上流) |
+| 字幕の文字の表とデコード方法 | [src/lib/ts/b24-tables.ts](../src/lib/ts/b24-tables.ts) / [b24caption.ts](../src/lib/ts/b24caption.ts) | 字幕を文字の配置にする (表は libaribcaption の b24_conv_tables.hpp / b24_gaiji_table.hpp / b24_colors.cpp / b24_drcs_conv.cpp を写したもので、いまは denpa が手で持つ。デコードの方法は decoder_impl.cpp を TypeScript に写したもの) | libaribcaption (Copyright (C) 2021 magicxqq) | MIT (上流) |
 | 選局表の値と選局手順 | [agent/Denpa.Agent/ChannelTable.cs](../agent/Denpa.Agent/ChannelTable.cs) / `Tuning.cs` | チャンネル名 → 周波数、DVB の手順 | recisdb-rs の `dvbv5_channels_isdbs.conf` / `dvbv5.rs` を参照 (コードは写していない) | GPL-3.0 (上流) |
 | エンコード再試行の秒数 (0.2) | [src/lib/server/config.ts](../src/lib/server/config.ts) | 値だけ | EPGStation の `enc.js` | MIT (上流) |
 | アイコン類 | [static/](../static) | PWA のアイコン | 自作 | AGPL (denpa と同じ) |
@@ -127,7 +127,7 @@ BinaryTable の検索の比べ方・既定のスタイルなど一部は web-bml
 
 | 名前 | 何に | 出どころ | ライセンス |
 | --- | --- | --- | --- |
-| FFmpeg (libavcodec の mpeg2video・aac 復号器と mpegvideo parser、libavutil だけ) | 放送の MPEG-2 と AAC をブラウザで解く | <https://ffmpeg.org> | LGPL-2.1+ |
+| FFmpeg (libavcodec の mpeg2video・aac 復号器と mpegvideo parser、libavutil だけ) | 放送の MPEG-2 と AAC をブラウザでデコードする | <https://ffmpeg.org> | LGPL-2.1+ |
 | emscripten の読み込み口 (`decoder.mjs` に埋まる実行時の糊) | WASM を worker に読み込む | <https://github.com/emscripten-core/emscripten> | MIT / University of Illinois/NCSA |
 
 ## 使っていないもの (書いておく価値のあるもの)

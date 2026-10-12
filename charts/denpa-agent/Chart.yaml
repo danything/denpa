@@ -1,6 +1,6 @@
 apiVersion: v2
 name: denpa-agent
-description: チューナーを掴む tuner-agent だけ。denpa 本体を別の所 (別ノード・docker compose) で動かすときに
+description: チューナーを使う tuner-agent だけ。denpa 本体を別の所 (別ノード・docker compose) で動かすときに
 type: application
 version: 1.54.0
 appVersion: "1.54.0"

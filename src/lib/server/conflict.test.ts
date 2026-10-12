@@ -183,7 +183,7 @@ describe('assign (前後マージン)', () => {
         );
         expect(rejected).toHaveLength(0);
         const later = accepted.find((a) => a.reservation.id === 2);
-        // 優先度の低いほうが譲る。相手が番組を録り終える 100 から掴む
+        // 優先度の低いほうが譲る。相手が番組を録り終える 100 から使う
         expect(later?.from).toBe(100);
         expect(later?.to).toBe(215);
         expect(whole(later!)).toBe(false);
@@ -202,7 +202,7 @@ describe('assign (前後マージン)', () => {
         expect(rejected).toHaveLength(0);
         /*
          * 同じチャンネルで続くなら、マージンを削らずに重ねる。後ろは前の選局に乗るので、
-         * 前が離れても同じ本に居続け、止めてから掴む間は生まれない (引き継ぎは要らない)
+         * 前が離れても同じ本に居続け、止めてから使う間は生まれない (引き継ぎは要らない)
          */
         const [first, second] = [1, 2].map((id) => accepted.find((a) => a.reservation.id === id));
         expect(first?.to).toBe(115);
@@ -374,13 +374,13 @@ describe('チューナーの取り合い (プレビュー)', () => {
         expect(against(mine, [other], [])).toEqual([]);
     });
 
-    test('長さの無い番組はチューナーを掴まない', () => {
+    test('長さの無い番組はチューナーを使わない', () => {
         const mine = occ({ programId: 1, channel: 'T16', start_at: 0, end_at: 60 });
         const empty = occ({ programId: 2, channel: 'T21', start_at: 30, end_at: 30 });
         expect(against(mine, [empty], tuners('GR'))).toEqual([]);
         expect(against(empty, [mine], tuners('GR'))).toEqual([]);
         /*
-         * 終わりが始まりより前の番組も掴まない。掴んだまま残ると、後ろの番組の
+         * 終わりが始まりより前の番組も使わない。使ったまま残ると、後ろの番組の
          * 取り合いが「同じ単位の答え」の使い回しで消えてしまっていた
          */
         const broken = occ({ programId: 3, channel: 'T21', start_at: 40, end_at: 20 });
@@ -557,9 +557,9 @@ describe('兼用のチューナーがあるとき (#668)', () => {
 
     /*
      * 割り振りは変わるところだけなぞり直して速くしてある (`Timeline`)。通したものを頭から素直に
-     * なぞり直して (`placements`)、全員が最後まで1本の本を掴めることを確かめる
+     * なぞり直して (`placements`)、全員が最後まで1本の本を使えることを確かめる
      */
-    test('通したものは、約束どおりに頭からなぞっても全員掴める', () => {
+    test('通したものは、約束どおりに頭からなぞっても全員使える', () => {
         let s = 3;
         const next = () => {
             s = (s * 1103515245 + 12345) % 2 ** 31;
@@ -748,7 +748,7 @@ describe('チューナーの取り合い (プレビュー、兼用のチュー�
         );
     });
 
-    test('時間帯の頭は、誰も掴んでいない瞬間までさかのぼる', () => {
+    test('時間帯の頭は、誰も使っていない瞬間までさかのぼる', () => {
         const list = [
             occ({ programId: 1, channel: 'T16', start_at: at(21), end_at: at(23) }),
             occ({ programId: 2, channel: 'T21', start_at: at(22), end_at: at(24) }),
@@ -756,7 +756,7 @@ describe('チューナーの取り合い (プレビュー、兼用のチュー�
             occ({ programId: 4, channel: 'T16', start_at: at(25), end_at: at(26) }),
         ];
         expect(settled(list, NO_MARGIN, at(23, 30))).toBe(at(21));
-        // 誰も掴んでいない瞬間なら、そこから
+        // 誰も使っていない瞬間なら、そこから
         expect(settled(list, NO_MARGIN, at(25))).toBe(at(25));
         expect(settled(list, NO_MARGIN, at(20))).toBe(at(20));
     });

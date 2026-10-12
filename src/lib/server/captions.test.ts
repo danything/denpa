@@ -17,8 +17,8 @@ import {
 } from './captions';
 
 describe('字幕の取り出し方', () => {
-    /** 字幕は解かずに写す (`S_ARIBSUB`)。解くのは denpa なので、ffmpeg に字幕の復号器は要らない */
-    test('解かずに写す', () => {
+    /** 字幕はデコードせずに写す (`S_ARIBSUB`)。デコードするのは denpa なので、ffmpeg に字幕の復号器は要らない */
+    test('デコードせずに写す', () => {
         const args = captionOutput('0:p:1024', 0);
         expect(args.join(' ')).toContain('-map 0:p:1024:s:0 -c:s copy');
         expect(args).not.toContain('-sub_type');
@@ -54,19 +54,19 @@ describe('字幕の取り出し方', () => {
 });
 
 /*
- * **生の道の字幕は、放送の時刻のまま出させる** (docs/stream.md §5.5)。受け側の時計は
+ * **放送そのままの経路の字幕は、放送の時刻のまま出させる** (docs/stream.md §5.5)。受け側の時計は
  * 放送の PTS そのもの (自分で PES から読む) なので、ffmpeg に 0 へ寄せさせると合わない
  */
-describe('生の道の字幕', () => {
-    test('放送の時刻を持ち込む (-copyts)。映像は焼かない', () => {
+describe('放送そのままの経路の字幕', () => {
+    test('放送の時刻を持ち込む (-copyts)。映像はエンコードしない', () => {
         const args = rawCaptionArgs(1024, 0);
         expect(args).toContain('-copyts');
         expect(args.indexOf('-copyts')).toBeLessThan(args.indexOf('-i'));
         expect(args).not.toContain('libx264');
         expect(args).not.toContain('-vf');
-        // 出口は焼く道と同じ (Matroska を 3 本目の口へ)
+        // 出口はエンコードの経路と同じ (Matroska を 3 本目の口へ)
         expect(args.slice(-2)).toEqual(['matroska', 'pipe:3']);
-        // 字幕は解かずに写す (解くのは denpa)。字幕を描く指定は要らない
+        // 字幕はデコードせずに写す (デコードするのは denpa)。字幕を描く指定は要らない
         expect(args.join(' ')).toContain('-map 0:p:1024:s:0 -c:s copy');
         expect(args).not.toContain('-sub_type');
     });
@@ -80,7 +80,7 @@ describe('生の道の字幕', () => {
  * **字幕を持たない放送は普通にある** (ショッピングやサブチャンネル)。
  *
  * そこに字幕を頼むと ffmpeg は組み立ての時点で降りる — **映像も出ない**。
- * そうと分かったら字幕なしで焼き直すので、その言い分を見分けられること
+ * そうと分かったら字幕なしで再エンコードするので、その言い分を見分けられること
  */
 describe('字幕が無いと分かる', () => {
     /** 実機で出させたものそのまま */
@@ -181,7 +181,7 @@ describe('worthLogging', () => {
         }
     });
 
-    /** 本当に焼けないときは残す。ここが消えると「映像が出ない」としか分からない */
+    /** 本当にエンコードできないときは残す。ここが消えると「映像が出ない」としか分からない */
     test('組み立てや符号器の失敗は残す', () => {
         for (const line of [
             "Failed to set value '0:p:24632:v:0' for option 'map': Invalid argument",
@@ -231,7 +231,7 @@ describe('アプリ向けの字幕の口', () => {
         expect(kinds).toEqual([CHANNEL.control, CHANNEL.captionText]);
     });
 
-    // 映像が終わった (セッションが畳まれた・焼けなくなった) ら、字幕の口も閉じる
+    // 映像が終わった (セッションが畳まれた・エンコードできなくなった) ら、字幕の口も閉じる
     test('ended / error の知らせで閉じて後始末する', async () => {
         for (const type of ['ended', 'error']) {
             let left = 0;
@@ -296,11 +296,11 @@ describe('アプリ向けの字幕の口', () => {
 });
 
 /**
- * **録画の字幕を文字の配置で渡す** (`captions.json`)。新しく焼いた録画には放送の字幕が
- * そのまま (`S_ARIBSUB`) 入っている。ずっと前に焼いた録画は絵 (PGS) のことがあり、それは読まない (null。字幕なし)
+ * **録画の字幕を文字の配置で渡す** (`captions.json`)。新しくエンコードした録画には放送の字幕が
+ * そのまま (`S_ARIBSUB`) 入っている。ずっと前にエンコードした録画は絵 (PGS) のことがあり、それは読まない (null。字幕なし)
  */
 describe('pagesFromMkv', () => {
-    test('S_ARIBSUB を解いて、時刻 (秒) と1枚ずつに', () => {
+    test('S_ARIBSUB をデコードして、時刻 (秒) と1枚ずつに', () => {
         const pages = pagesFromMkv(
             mkv([
                 [0, management()],
@@ -333,7 +333,7 @@ describe('textFrame', () => {
      * **いつ出すかを添える。** 映像と同じ ffmpeg が付けた mp4 の物差しなので、
      * 受け側は再生位置と直に比べられる。
      *
-     * 添えずに「届いた時点の再生位置」に置いていた頃は、焼く手間のぶん字幕の
+     * 添えずに「届いた時点の再生位置」に置いていた頃は、エンコードする手間のぶん字幕の
      * ほうが先に届くぶんだけ早く出ていた。その量を測って足し引きしようとして
      * 3回外している (docs/stream.md §5.4) — 別々の ffmpeg では測れなかった
      */

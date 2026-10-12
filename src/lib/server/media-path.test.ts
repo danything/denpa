@@ -97,7 +97,7 @@ describe('録画ファイルの場所', () => {
 describe('古い DB の絶対パスを相対に直す (0002_relative-media-paths)', () => {
     const migration = readFileSync(`${MIGRATIONS}/0002_relative-media-paths.sql`, 'utf8');
 
-    test('生TS はファイル名、焼いたものはシリーズとファイル (古い Season フォルダは3段)', () => {
+    test('元のTS はファイル名、エンコードしたものはシリーズとファイル (古い Season フォルダは3段)', () => {
         const { db } = fresh();
         const insert = db.prepare(
             `INSERT INTO recordings (id, service_id, name, start_at, end_at, created_at, updated_at, ts_path, library_path, alt_path)

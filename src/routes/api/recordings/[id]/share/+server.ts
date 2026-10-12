@@ -13,7 +13,7 @@ import { parseFileSource } from '#lib/source.js';
  * 画面を開いている名前なら、その端末の近くからも引ける見込みがいちばん高い。
  *
  * `?source=` を付けると、配るファイルの名指し (`file/+server.ts` と同じ語彙)
- * ごとリンクに焼き込む (ダウンロードの口が H.264 や生TSを名指しするとき)。
+ * ごとリンクに埋め込む (ダウンロードの口が H.264 や元のTSを名指しするとき)。
  * 知らない値は黙って落とす — リンクはおまかせ (今いいほう) になるだけ
  */
 export function POST({ params, url, request }) {

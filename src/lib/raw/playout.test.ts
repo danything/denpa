@@ -47,7 +47,7 @@ describe('Playout', () => {
         expect(DRY).toBeLessThan(0.1);
     });
 
-    test('溜まりすぎが続いたら放送の今へ跳ぶ。一瞬では跳ばない', () => {
+    test('溜まりすぎが続いたら放送の今へ飛ぶ。一瞬では飛ばない', () => {
         const playout = new Playout<ReturnType<typeof chunk>>(0.1);
         for (let n = 0; n < 10; n++) playout.push(chunk(n), 0);
         playout.tick(0);
@@ -80,7 +80,7 @@ describe('Playout', () => {
 });
 
 describe('Playout (追っかけ: 放送の今を追わない)', () => {
-    test('溜まりすぎても跳ばない', () => {
+    test('溜まりすぎても飛ばない', () => {
         const playout = new Playout<ReturnType<typeof chunk>>(0.1);
         playout.follow = true;
         for (let n = 0; n < 10; n++) playout.push(chunk(n), 0);

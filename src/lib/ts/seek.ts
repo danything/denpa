@@ -8,7 +8,7 @@
  * ## 時刻の物差し
  *
  * **頭 (`head`) は入れ物の始まり** — ffmpeg (ffprobe) が `start_time` と呼ぶもの。映像と音声の
- * 最初の PTS のうち早いほうで、CM の区間 (`recordings.cm_ranges`) も焼いたときに捨てた頭
+ * 最初の PTS のうち早いほうで、CM の区間 (`recordings.cm_ranges`) もエンコードしたときに捨てた頭
  * (`encode_skip`) もこれから数えている (`server/cm.ts` の `probeVideo` の `formatStart`)。
  * 同じものを ffprobe 無しで出す (`tsHead`)。
  *

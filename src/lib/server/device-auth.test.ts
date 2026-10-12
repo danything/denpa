@@ -28,15 +28,15 @@ const {
 const { orm } = await import('./db');
 const { apiTokens, deviceCodes } = await import('./schema');
 
-/** 札を出して、テストの間だけ時計を進めて扱う */
+/** コードを出して、テストの間だけ時計を進めて扱う */
 function pair(name = '居間のテレビ', at = 1_000_000) {
     const issued = issueCode(name, at);
-    if (issued === null) throw new Error('札が出ない');
+    if (issued === null) throw new Error('コードが出ない');
     return issued;
 }
 
-describe('札', () => {
-    test('札は見間違えない字だけで ABCD-EFGH の形', () => {
+describe('コード', () => {
+    test('コードは見間違えない字だけで ABCD-EFGH の形', () => {
         for (let i = 0; i < 200; i++) {
             const code = newUserCode();
             expect(code).toMatch(/^[A-Z2-9]{4}-[A-Z2-9]{4}$/);
@@ -44,10 +44,10 @@ describe('札', () => {
         }
     });
 
-    test('URL から来た札は揃えて読む。形が違えば null', () => {
+    test('URL から来たコードは揃えて読む。形が違えば null', () => {
         expect(normalizeUserCode('abcd efgh')).toBe('ABCD-EFGH');
         expect(normalizeUserCode('ABCD-EFG')).toBeNull();
-        // 0 と O は札に使わない字
+        // 0 と O はコードに使わない字
         expect(normalizeUserCode('ABCD-EF0H')).toBeNull();
     });
 
@@ -75,7 +75,7 @@ describe('ペアリングの流れ', () => {
         const token = (got as { token: string }).token;
         expect(token.startsWith(TOKEN_PREFIX)).toBe(true);
 
-        // 2度目は渡さない (使い終えた札)
+        // 2度目は渡さない (使い終えたコード)
         expect(poll(deviceCode, at + 2 * POLL_INTERVAL_MS)).toEqual({ error: 'invalid_grant' });
         expect(viewCode(userCode, at + 3 * POLL_INTERVAL_MS)?.state).toBe('consumed');
 
@@ -127,7 +127,7 @@ describe('ペアリングの流れ', () => {
         });
     });
 
-    test('10分で切れる。切れた札は許せず、端末には expired_token', () => {
+    test('10分で切れる。切れたコードは許せず、端末には expired_token', () => {
         const at = 6_000_000;
         const { deviceCode, userCode } = pair('遅刻', at);
         const later = at + CODE_TTL_MS;
@@ -141,7 +141,7 @@ describe('ペアリングの流れ', () => {
         expect(poll('nope', 7_000_000)).toEqual({ error: 'invalid_grant' });
     });
 
-    test('生きている札が上限に達したら、もう出さない (誰でも叩けるので)', () => {
+    test('有効なコードが上限に達したら、もう出さない (誰でも叩けるので)', () => {
         const at = 8_000_000_000;
         for (let i = 0; i < MAX_PENDING; i++) expect(issueCode(`満員${i}`, at)).not.toBeNull();
         expect(issueCode('あふれ', at)).toBeNull();

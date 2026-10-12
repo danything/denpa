@@ -7,7 +7,7 @@ import { type Fmp4Host, Fmp4Video } from './fmp4';
  * **追っかけで抱えきれなくなったとき** (`follow`)。圧縮のまま持つのが上限を超えたら、受け取るのを
  * やめて `full` を1回だけ返し、以降は捨てる。頼み直し (`reset` → 新しい init) で元に戻る。
  *
- * 映像は解かせない (刻まないので VideoDecoder に渡らない)。VideoDecoder と 2D の口は形だけの偽物。
+ * 映像はデコードさせない (刻まないので VideoDecoder に渡らない)。VideoDecoder と 2D の口は形だけの偽物。
  * 流すのは E2E と同じ作り置き (本物の ffmpeg が書いた AV1 + Opus。`tests/fake/fmp4-loop.ts`)
  */
 

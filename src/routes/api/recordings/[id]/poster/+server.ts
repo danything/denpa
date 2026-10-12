@@ -7,10 +7,10 @@ import { recordingOr404 } from '#lib/server/recording.js';
  * 録画のポスターを返す。**一覧のサムネイル用。**
  *
  * エンコードのときに動画の隣へ置いてある `-poster.jpg` (`server/metadata.ts`)
- * をそのまま配る。`frame` と違って ffmpeg を起こさない — 焼いたときに
+ * をそのまま配る。`frame` と違って ffmpeg を起こさない — エンコードしたときに
  * 作ってあるので、ただ読んで返すだけ。
  *
- * **無い録画もある。** ポスターより前に焼いたもの、生TSしか無いもの、切り出しに
+ * **無い録画もある。** ポスターより前にエンコードしたもの、元のTSしか無いもの、切り出しに
  * 失敗したもの。そのときは 404 を返して、一覧は絵を出さずに済ませる (`+page.svelte`)。
  */
 export function GET({ params }) {
@@ -23,7 +23,7 @@ export function GET({ params }) {
     return new Response(readFileSync(poster), {
         headers: {
             'Content-Type': 'image/jpeg',
-            // 焼いたら変わらない絵。一覧を開くたびに取り直させない
+            // エンコードしたら変わらない絵。一覧を開くたびに取り直させない
             'Cache-Control': 'private, max-age=86400',
         },
     });

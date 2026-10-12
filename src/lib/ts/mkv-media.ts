@@ -203,7 +203,7 @@ function readTracks(body: Uint8Array): MkvTrack[] {
 
 /**
  * OpusHead (Matroska の CodecPrivate) を dOps (MP4 の形) に書き換える。`ts/fmp4.ts` の `opusHead` の逆 —
- * 解く側 (`raw/fmp4.ts`) は dOps を受け取って OpusHead に直すので、形を揃えて渡す
+ * デコードする側 (`raw/fmp4.ts`) は dOps を受け取って OpusHead に直すので、形を揃えて渡す
  */
 export function opusDops(opus: Uint8Array): Uint8Array<ArrayBuffer> | null {
     if (opus.length < 19) return null;
@@ -221,7 +221,7 @@ export function opusDops(opus: Uint8Array): Uint8Array<ArrayBuffer> | null {
     return out;
 }
 
-/** 解く側 (`raw/fmp4.ts`) が受け取る形にする。コマの時刻は TimestampScale の刻みで渡す。読めない形なら null */
+/** デコードする側 (`raw/fmp4.ts`) が受け取る形にする。コマの時刻は TimestampScale の刻みで渡す。読めない形なら null */
 export function asFmp4Track(track: MkvTrack, scale: number): Fmp4Track | null {
     if (track.codec === null || track.kind === 'other') return null;
     const config = track.codec === 'opus' ? opusDops(track.config) : track.config;

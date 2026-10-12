@@ -90,7 +90,7 @@ describe('parseBxmlInfo', () => {
 });
 
 describe('moduleFiles', () => {
-    test('multipart を1ファイルずつに解く', () => {
+    test('multipart を1ファイルずつにデコードする', () => {
         const files = moduleFiles(
             multipart([
                 ['/startup.bml', 'text/X-arib-bml', '<bml/>'],

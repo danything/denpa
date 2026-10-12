@@ -7,18 +7,18 @@ namespace Denpa.Agent;
 /// (PLEX PX-S1UD などの Siano RIO 系。地上波だけ)。
 ///
 /// <para>
-/// **カーネルが掴んでいる機材には触らない。** PX-S1UD は mainline の <c>smsusb</c> +
+/// **カーネルが使っている機材には触らない。** PX-S1UD は mainline の <c>smsusb</c> +
 /// <c>smsdvb</c> で Linux DVB になり、そちらで使える (DvbTuner)。siano-userland は
 /// firmware やモジュールが無くても <c>/dev/bus/usb</c> が見えれば動く別の道だが、
-/// <c>siano-ts</c> は **smsusb が掴んでいても黙って奪っていた** (作者も unbind の境目で
-/// カーネルの異常を観測している)。0.1.8 からは siano-ts 自身がカーネルの掴んでいる機材を
+/// <c>siano-ts</c> は **smsusb が使っていても黙って奪っていた** (作者も unbind の境目で
+/// カーネルの異常を観測している)。0.1.8 からは siano-ts 自身がカーネルの使っている機材を
 /// 断り (終了コード 4)、こちらも自動検出ではどのドライバにも繋がっていない機材だけを並べる。
 /// 使いたい人は smsusb / smsdvb / smsmdtv を blacklist して再起動する (docs/agent.md)。
 /// </para>
 ///
 /// <para>
 /// **機材はポートで指す** (<c>siano-ts --device 1-2.3</c>、0.1.8 から)。番号 (<c>--device N</c>) は
-/// libusb が並べた順で、カーネルが掴んでいる S1UD も入って番号がずれるので使わない。
+/// libusb が並べた順で、カーネルが使っている S1UD も入って番号がずれるので使わない。
 /// </para>
 ///
 /// <para>
@@ -29,12 +29,12 @@ namespace Denpa.Agent;
 /// </summary>
 public static class SianoUserland
 {
-    /// <summary>設定の <c>device</c> の頭。これで始まっていれば siano-userland で掴む</summary>
+    /// <summary>設定の <c>device</c> の頭。これで始まっていれば siano-userland で使う</summary>
     public const string Scheme = "siano:";
 
     /// <summary>
     /// 刺さっている1台。<c>Types</c> は受けられる方式 (siano-ts --list の受信機の行)、
-    /// <c>Driver</c> はどれかのインターフェースを掴んでいるドライバ (無ければ null)
+    /// <c>Driver</c> はどれかのインターフェースを使っているドライバ (無ければ null)
     /// </summary>
     public sealed record Stick(string Port, string Model, string[] Types, string? Driver);
 
@@ -46,7 +46,7 @@ public static class SianoUserland
     public static string Executable(string dir) =>
         Path.Combine(dir, OperatingSystem.IsWindows() ? "siano-ts.exe" : "siano-ts");
 
-    /// <summary>USB デバイスが並ぶ sysfs。カーネルが掴んでいるかをここで見る (<see cref="Driver"/>)</summary>
+    /// <summary>USB デバイスが並ぶ sysfs。カーネルが使っているかをここで見る (<see cref="Driver"/>)</summary>
     private const string Sysfs = "/sys/bus/usb/devices";
 
     /// <summary>ISDB-T のファームウェア。**同梱してある** (配布アーカイブに入っている。Dockerfile)</summary>
@@ -78,16 +78,16 @@ public static class SianoUserland
     public static string Name(string model, string port) => $"{model} {port}";
 
     /// <summary>
-    /// 刺さっている機材。**カーネルが掴んでいるものも挙げる** (<c>Driver</c> で分かる)。
+    /// 刺さっている機材。**カーネルが使っているものも挙げる** (<c>Driver</c> で分かる)。
     ///
     /// <para>
     /// 機材は <c>siano-ts --list</c> に聞く (siano-userland 0.1.7 から)。USB ID の表は持たず、
     /// ポートと受けられる方式も siano-ts が libusb で見たものを使う。デバイスを開かないので、
-    /// 別の siano-ts が掴んでいても聞ける。
+    /// 別の siano-ts が使っていても聞ける。
     /// </para>
     ///
     /// <para>
-    /// **カーネルが掴んでいるかだけは sysfs で見る** (インターフェースの <c>driver</c> のリンク)。
+    /// **カーネルが使っているかだけは sysfs で見る** (インターフェースの <c>driver</c> のリンク)。
     /// <c>--list</c> はそこを教えてくれず、並べると同じ機材が DVB と siano の2本になる。
     /// 選局のときは siano-ts 自身が断るので (0.1.8。終了コード 4)、ここは並べ方のためだけ。
     /// </para>
@@ -169,7 +169,7 @@ public static class SianoUserland
         return found;
     }
 
-    /// <summary>どれかのインターフェースを掴んでいるドライバの名前。誰も掴んでいなければ null</summary>
+    /// <summary>どれかのインターフェースを使っているドライバの名前。誰も使っていなければ null</summary>
     internal static string? Driver(string sysfs, string port)
     {
         // sysfs が無い (Linux でない) ならカーネルのドライバも無い
@@ -188,7 +188,7 @@ public static class SianoUserland
     /// siano-ts に渡せる機材を、設定に書いたのと同じ形で。
     ///
     /// <para>
-    /// **ドライバに繋がっているものは挙げない。** smsusb が掴んでいれば
+    /// **ドライバに繋がっているものは挙げない。** smsusb が使っていれば
     /// <c>/dev/dvb</c> に出ているので、DVB の側で見つかる (DeviceProbe)。
     /// </para>
     /// </summary>
@@ -214,9 +214,9 @@ public static class SianoUserland
     {
         // Windows は libusb が WinUSB 越しにしか開けない。ドライバが違えば開くところで落ちる
         1 or 4 when OperatingSystem.IsWindows() =>
-            " — チューナーのドライバが WinUSB になっていないか、別のプロセスが掴んでいます (Zadig で WinUSB に。docs/agent.md)",
+            " — チューナーのドライバが WinUSB になっていないか、別のプロセスが使っています (Zadig で WinUSB に。docs/agent.md)",
         3 => " — そのポートに Siano の機材が見当たりません (抜けたか、挿し替えた?)",
-        4 => " — カーネルのドライバ (smsusb) か別のプロセスが掴んでいます。/dev/dvb に出ていればそちらで使えます。"
+        4 => " — カーネルのドライバ (smsusb) か別のプロセスが使っています。/dev/dvb に出ていればそちらで使えます。"
             + "siano-userland で使うなら smsusb / smsdvb / smsmdtv を blacklist して再起動してください",
         10 => " — ファームウェアが無いか壊れています",
         _ => "",
@@ -229,7 +229,7 @@ public static class SianoUserland
 /// <para>
 /// 起こすのは最初の選局のときだけで、以降は <c>tune &lt;Hz&gt;</c> を1行書く。
 /// siano-ts は選局して同期したら stderr に <c>tuned &lt;Hz&gt;</c>、駄目なら
-/// <c>control: tune failed: …</c> を書き、どちらでも生き続ける。USB を掴み直さないので、
+/// <c>control: tune failed: …</c> を書き、どちらでも生き続ける。USB を取り直さないので、
 /// 番組表の総当たりのようにチャンネルを次々変えるときに速い。TS は選局を跨いで同じ
 /// 標準出力に流れ続けるので、読み口 (<see cref="DeviceStream"/>) も1つを使い回す
 /// (DVB と同じ)。常駐するデーモンは無く、USB を持っているのは走っている siano-ts だけ。
@@ -246,7 +246,7 @@ public static class SianoUserland
 ///
 /// <para>
 /// **誰も読まなくても siano-ts は死なない。** 書くところで待つだけで、中の溜めが
-/// 溢れたぶんは捨てる。選局は生きている (DVB の環が溢れたときと同じ)。
+/// 溢れたぶんは捨てる。選局は生きている (DVB のリングバッファが溢れたときと同じ)。
 /// </para>
 /// </summary>
 public sealed class SianoTuner : ITuneDevice
@@ -286,7 +286,7 @@ public sealed class SianoTuner : ITuneDevice
             {
                 throw new IOException($"ファームウェアがありません: {SianoUserland.Firmware}");
             }
-            // 抜けた・カーネルが掴んでいる、は siano-ts が終了コードで答える (Hint)
+            // 抜けた・カーネルが使っている、は siano-ts が終了コードで答える (Hint)
             return StartInfo(port, SianoUserland.Dir, SianoUserland.Firmware);
         })
     {

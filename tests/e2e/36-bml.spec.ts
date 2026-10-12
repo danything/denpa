@@ -64,7 +64,7 @@ async function feed(page: Page, extra: string): Promise<void> {
     await feedData(page, fakeDataBroadcast(extra));
 }
 
-/** 文書のスクリプトが書く札。d と、押されたキーを数える */
+/** 文書のスクリプトが書く表示。d と、押されたキーを数える */
 const SCRIPTED = [
     '<script><![CDATA[',
     'var pressed = 0; var log = "";',
@@ -114,7 +114,7 @@ test.describe('データ放送のエンジン', () => {
     test('出して、字幕が映像と一緒に小窓へ縮んで見えている', async ({ page }) => {
         await prepare(page);
         await openData(page);
-        // 操作列を出したまま (帯と重なる字幕を持ち上げたぶんが、小窓の中に残らないことも見る)
+        // 操作列を出したまま (操作バーと重なる字幕を持ち上げたぶんが、小窓の中に残らないことも見る)
         await expect(page.getByTestId('live-controls')).toHaveAttribute('data-shown', 'true');
         await feed(page, '');
         await captionsSeenInDataWindow(page);

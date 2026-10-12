@@ -11,10 +11,10 @@ import { config } from './config';
  * 壊れ方をする。
  *
  * 録画そのものは止めない(電波は二度と戻ってこないので、暗号のままでも残す)。
- * 代わりにエンコードの前に見て、掛かったままならその場で解く。
+ * 代わりにエンコードの前に見て、掛かったままならその場で復号する。
  *
- * 解くのはエージェント側 (`/denpa/decode`)。カードリーダーを叩くのは
- * あちらなので、カードを持っている側に頼む形にしてある。生TSの置き場は両方のコンテナに見せてあり、
+ * 復号するのはエージェント側 (`/denpa/decode`)。カードリーダーを叩くのは
+ * あちらなので、カードを持っている側に頼む形にしてある。元のTSの置き場は両方のコンテナに見せてあり、
  * やり取りするのはパスだけ。
  */
 
@@ -77,7 +77,7 @@ const CARD_READER = object({
     ids: array(string),
     /** 鍵の出どころが使っているリーダー。**使うのは1枚だけ** (他は予備) */
     active: boolean,
-    /** このカードで解いているチューナー */
+    /** このカードで復号しているチューナー */
     tuners: array(string),
     /** 覗けなかった理由。挿さっていないだけなら無い */
     error: optional(string),
@@ -92,7 +92,7 @@ const CARD_STATUS = object({
     source: literal('local', 'remote'),
     /** 鍵を配る相手の URL (`source: 'remote'` のとき) */
     remote: optional(string),
-    /** 配る相手のカードの番号と、それで解いているチューナー (`source: 'remote'` のとき) */
+    /** 配る相手のカードの番号と、それで復号しているチューナー (`source: 'remote'` のとき) */
     ids: optional(array(string)),
     tuners: optional(array(string)),
     readers: array(CARD_READER),
@@ -198,9 +198,9 @@ export async function cardStatus(): Promise<CardStatus> {
 }
 
 /**
- * スクランブルを解く。成功したら output に解けたTSが出来ている。
+ * スクランブルを復号する。成功したら output に復号できたTSが出来ている。
  *
- * 渡すのはパスだけで、TS そのものは流さない。生TSの置き場はエージェント側にも
+ * 渡すのはパスだけで、TS そのものは流さない。元のTSの置き場はエージェント側にも
  * 見せてあるので、読むのも書くのも向こうが直接やる。数十GBになることがあり、
  * HTTP で往復させる意味が無い(そもそも Bun の fetch は送りながら受け取れず、
  * 大きいものを投げると詰まる)。
@@ -213,9 +213,9 @@ export async function descramble(
     signal?: AbortSignal,
 ): Promise<{ ok: boolean; error: string }> {
     /*
-     * 向こうのマウント先はこちらと同じとは限らないので、生TSの置き場からの相対で渡す。
+     * 向こうのマウント先はこちらと同じとは限らないので、元のTSの置き場からの相対で渡す。
      * 掛かったままのTSは必ずここにある(引き継いだ録画も、移行のときに
-     * 未エンコードのものは生TSとしてここへ入る)
+     * 未エンコードのものは元のTSとしてここへ入る)
      */
     const base = config.rawDir;
     const from = relative(base, input);

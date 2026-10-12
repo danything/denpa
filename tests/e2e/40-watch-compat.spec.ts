@@ -14,7 +14,7 @@ import { expect, FAKE_CAPTION, goto, recordOne, setRecording, test, wakeControls
  * - 飛ぶ・CM 飛ばし・字幕・止めて再開は、長い録画のふりをして見る (`playback` を差し替え、`stream` は
  *   作り置きの fMP4 を頼まれた位置から並べて返す。`fmp4-clip.ts`)
  *
- * 映像は AV1 で見る (Playwright の Chromium の VideoDecoder は H.264 を解けないことがある。38-live-compat と同じ)
+ * 映像は AV1 で見る (Playwright の Chromium の VideoDecoder は H.264 をデコードできないことがある。38-live-compat と同じ)
  */
 
 /** 頼んだ `stream` の URL を順に控える */
@@ -35,7 +35,7 @@ async function compatOn(page: Page): Promise<void> {
     });
 }
 
-/** canvas に描いて、音も解けていること (数が進む)。**`<video>` は空** */
+/** canvas に描いて、音もデコードできていること (数が進む)。**`<video>` は空** */
 async function expectDrawn(page: Page, input: 'fmp4' | 'ts-mpeg2'): Promise<void> {
     const canvas = page.locator(`[data-testid="live-raw"][data-input="${input}"]`);
     await expect(canvas).toBeVisible({ timeout: 30_000 });
@@ -47,7 +47,7 @@ async function expectDrawn(page: Page, input: 'fmp4' | 'ts-mpeg2'): Promise<void
     );
 }
 
-/** 帯の「m:ss / m:ss」の左 (いまの位置。秒) */
+/** 操作バーの「m:ss / m:ss」の左 (いまの位置。秒) */
 async function where(page: Page): Promise<number> {
     const text = (await page.getByTestId('watch-clock').textContent()) ?? '';
     const parts = text.split(' / ')[0]!.trim().split(':').map(Number);
@@ -109,7 +109,7 @@ test.describe('互換モードの観る画面', () => {
         test.setTimeout(180_000);
         const { id } = await recordOne(page, request);
         const clip = readClip(new Uint8Array(readFileSync(new URL('../fake/live-av1.mp4', import.meta.url))));
-        // 30分の録画のふり。AV1 で焼いてある (互換モードは同じ形の詰め替えを選ぶ)
+        // 30分の録画のふり。AV1 でエンコードしてある (互換モードは同じ形の詰め替えを選ぶ)
         await page.route(`**/api/recordings/${id}/playback`, (route) =>
             route.fulfill({
                 json: {
@@ -163,7 +163,7 @@ test.describe('互換モードの観る画面', () => {
         await expect(page.getByTestId('watch-resumed')).toBeVisible();
         expect(await where(page)).toBeGreaterThanOrEqual(600);
 
-        // **CM 飛ばしで跳ぶ。** CM の手前まで来たら、CM の終わりから頼み直す
+        // **CM 飛ばしで飛ぶ。** CM の手前まで来たら、CM の終わりから頼み直す
         await expect.poll(() => asked.length, { timeout: 30_000 }).toBeGreaterThan(1);
         expect(asked[1]?.searchParams.get('from')).toBe('640.000');
         await expect(page.getByTestId('watch-skipped')).toBeVisible();

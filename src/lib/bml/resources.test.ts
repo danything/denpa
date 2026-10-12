@@ -56,7 +56,7 @@ function module(
 }
 
 describe('カルーセルのファイル', () => {
-    test('名前を解く (絶対・相対・~・arib-dc・大文字小文字)', () => {
+    test('名前を解決する (絶対・相対・~・arib-dc・大文字小文字)', () => {
         const r = new Resources();
         const base = '/40/0000/startup.bml';
         expect(r.resolve('/40/0001/A.PNG', null)).toEqual({ component: 0x40, module: 1, file: 'a.png' });
@@ -273,7 +273,7 @@ describe('名前の形', () => {
             expect(unknownScheme(known)).toBeNull();
         expect(unknownScheme('/40/0000/startup.bml')).toBeNull();
         expect(unknownScheme('next.bml')).toBeNull();
-        // 扱えない名前は解けない (null)
+        // 扱えない名前は解決できない (null)
         expect(new Resources().resolve('bml://startup.bml', '/40/0000/startup.bml')).toBeNull();
     });
 });

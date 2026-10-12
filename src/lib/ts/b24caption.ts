@@ -1,7 +1,7 @@
 /**
- * 放送の字幕 (ARIB STD-B24 の字幕文) を解いて、**字の置き場所まで決める** ([caption-text.ts](../caption-text.ts))。
+ * 放送の字幕 (ARIB STD-B24 の字幕文) をデコードして、**字の置き場所まで決める** ([caption-text.ts](../caption-text.ts))。
  *
- * libaribcaption の「解く (decoder)」側を写したもの — 置き場所・大きさ・色・外字の置き換えまでは
+ * libaribcaption の「デコードする (decoder)」側を写したもの — 置き場所・大きさ・色・外字の置き換えまでは
  * 同じ計算で、描く (renderer) 手前で止める。描くのは受け側 (ブラウザ・アプリ)。
  *
  * 写したのは日本の放送で要るところだけ: 8単位符号 (JIS)・Profile A (フルセグ)・第1言語。
@@ -198,7 +198,7 @@ function sendable(drcs: Drcs): CaptionDrcs {
     return sent;
 }
 
-/** 解いた1字。libaribcaption の CaptionChar と同じもの */
+/** デコードした1字。libaribcaption の CaptionChar と同じもの */
 interface Char {
     code: number;
     /** 置き換えられなかった外字 */
@@ -222,7 +222,7 @@ interface Char {
     ruby: boolean;
 }
 
-/** 解いた1枚。CS と TIME のあった印つき */
+/** デコードした1枚。CS と TIME のあった印つき */
 interface Caption {
     chars: Char[];
     clear: boolean;
@@ -232,7 +232,7 @@ interface Caption {
 }
 
 /**
- * 字幕の流れ1本ぶんの解き手。**状態を持つ** (書式・位置・色・外字は字幕文を跨いで続く) ので、
+ * 字幕の流れ1本ぶんのデコーダ。**状態を持つ** (書式・位置・色・外字は字幕文を跨いで続く) ので、
  * 流れごとに1つ作って、届いた順に食わせる。
  */
 export class B24CaptionDecoder {
@@ -299,7 +299,7 @@ export class B24CaptionDecoder {
             this.prevGroup = group;
             this.management(body);
         } else {
-            // 第1言語の字幕文だけ (ffmpeg も第1言語で解く)
+            // 第1言語の字幕文だけ (ffmpeg も第1言語でデコードする)
             if (id !== 1) return null;
             this.statement(body);
         }
@@ -898,7 +898,7 @@ export class B24CaptionDecoder {
 }
 
 /**
- * 解いた1枚を、送る形にする。**同じ見た目で続いている字を1つの並びに束ねる。**
+ * デコードした1枚を、送る形にする。**同じ見た目で続いている字を1つの並びに束ねる。**
  *
  * libaribcaption の描き手 (region_renderer) が字ごとに計算している置き場所を、ここで
  * 面の単位のまま済ませておく。区画は `floor((字の幅 + 字間) × 倍率)`、字の枠は区画の中で

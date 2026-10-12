@@ -71,7 +71,7 @@ jobs:
           git diff --exit-code --stat -- drizzle
 
       # denpa 本体だけ。エージェントは .NET なので下の agent ジョブで見る
-      # (`agent/conformance.test.ts` は焼いた実行ファイルが要るので、ここには入れない)
+      # (`agent/conformance.test.ts` はビルドした実行ファイルが要るので、ここには入れない)
       - name: Unit tests
         run: bun run test:unit
 
@@ -104,10 +104,10 @@ jobs:
       - name: Unit tests (.NET agent)
         run: dotnet test --project agent/Denpa.Agent.Tests/Denpa.Agent.Tests.csproj
 
-      # エージェントの口に直接当てるテスト。**本物を焼いて起こして**、偽の選局
+      # エージェントの口に直接当てるテスト。**本物をビルドして起こして**、偽の選局
       # コマンドで流す (bun 版が居た頃は、同じものを2つの実装に通していた)。
-      # 焼くところまで含めて1つの script にしてある — 手元で走らせるときに
-      # 焼き忘れると、消えた既定の置き場を叩いて ENOENT で落ちるだけになる
+      # ビルドするところまで含めて1つの script にしてある — 手元で走らせるときに
+      # ビルドし忘れると、消えた既定の置き場を叩いて ENOENT で落ちるだけになる
       - name: Conformance
         run: bun run test:conformance
 
@@ -188,8 +188,8 @@ jobs:
 
   # Mac (Apple Silicon) で動かすエージェント (docs/agent.md「Mac でチューナーを使う」)。
   #
-  # **Native AOT は Linux から macOS へ焼けない** ので、Mac のランナーで焼いて起こす。
-  # 実機は無いので、確かめるのは「焼ける・テストが通る・起きて口が答える・入れ方が最後まで通る」まで。
+  # **Native AOT は Linux から macOS 向けにビルドできない** ので、Mac のランナーでビルドして起こす。
+  # 実機は無いので、確かめるのは「ビルドできる・テストが通る・起きて口が答える・入れ方が最後まで通る」まで。
   #
   # **必須チェックにはしない** (main の ruleset に入れていない)。Mac のランナーは混むと待たされるので、
   # ここで PR を止めない。赤くなったら Mac で壊れたということなので、見て直す
@@ -240,7 +240,7 @@ jobs:
           if kill -0 "$pid" 2>/dev/null; then echo "SIGTERM で終わりません" >&2; exit 1; fi
           cat agent.log
 
-      # 入れ方を通しで。エージェントはリリースから取らずにいま焼いたものを入れ、
+      # 入れ方を通しで。エージェントはリリースから取らずにいまビルドしたものを入れ、
       # px4-userland / siano-userland / ファームウェアは本物を取ってきてハッシュを確かめ、
       # launchd に載せて口が答えるまで。最後に消す。
       # denpa 本体 (docker compose) は Mac のランナーに Docker が無いので --no-docker で外す
@@ -269,8 +269,8 @@ jobs:
 
   # Windows (x64) で動かすエージェント (docs/agent.md「Windows でチューナーを使う」)。
   #
-  # agent-macos と同じく、Native AOT は Linux から Windows へ焼けないので Windows のランナーで焼いて起こす。
-  # 実機は無いので、確かめるのは「焼ける・テストが通る・起きて口が答える・入れ方が最後まで通る」まで。
+  # agent-macos と同じく、Native AOT は Linux から Windows 向けにビルドできないので Windows のランナーでビルドして起こす。
+  # 実機は無いので、確かめるのは「ビルドできる・テストが通る・起きて口が答える・入れ方が最後まで通る」まで。
   # ランナーには wslc (WSL のコンテナ) が無いので、denpa 本体は -AgentOnly で外す。
   # **必須チェックにはしない** (agent-macos と同じ理由)
   agent-windows:
@@ -333,7 +333,7 @@ jobs:
           # --card exits 1 (no card); do not fail on the last native exit code
           exit 0
 
-      # 入れ方を通しで。エージェントはいま焼いたものを zip にして入れ、siano-userland と
+      # 入れ方を通しで。エージェントはいまビルドしたものを zip にして入れ、siano-userland と
       # ファームウェアは本物を取ってきてハッシュを確かめ、タスク スケジューラに載せて口が答えるまで。
       # 1回目は irm | iex と同じ形 (取ってきた中身を scriptblock にして) で流す。2回目は上げ直し
       # (動いているエージェントを止めて入れ替える)。最後に外す
@@ -455,7 +455,7 @@ jobs:
           echo "files=$(for s in $specs; do printf 'tests/e2e/%s.spec.ts ' "$s"; done)" >> "$GITHUB_OUTPUT"
 
       # **ライブを生で見る道・互換モードの復号器** (docs/stream.md §5.5)。ブラウザで MPEG-2 と
-      # AAC・Opus を解く WASM は Dockerfile の `mpeg2wasm` 段で組む (emscripten)。E2E は
+      # AAC・Opus をデコードする WASM は Dockerfile の `mpeg2wasm` 段で組む (emscripten)。E2E は
       # イメージを使わずランナーで回すので、その段だけ組んで取り出し、`MPEG2_DIR` で denpa に渡す。
       #
       # **組んだものは actions/cache に置いて使い回す。** 中身が変わるのは段の書き方

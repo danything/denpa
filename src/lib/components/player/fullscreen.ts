@@ -1,5 +1,5 @@
 /**
- * 全画面の入り方。**端末が持っている口で決める** (#471)。
+ * 全画面への切り替え方。**端末が持っている口で決める** (#471)。
  *
  * - `standard` … `element.requestFullscreen()`。PC・Android・iPadOS 16.4 以降
  * - `webkit` … `element.webkitRequestFullscreen()`。それより前の iPadOS

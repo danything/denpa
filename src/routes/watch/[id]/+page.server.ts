@@ -32,7 +32,7 @@ import type { Recording } from '#lib/types.js';
  */
 
 interface WatchRow extends Recording {
-    /** 直近のエンコード失敗の理由。焼けていない理由として出す */
+    /** 直近のエンコード失敗の理由。エンコードできていない理由として出す */
     encode_error: string | null;
 }
 
@@ -57,7 +57,7 @@ export function load({ params, url }) {
         redirect(302, relative(url, `/chase/${id}`));
 
     /*
-     * データ放送を焼いてあるか (無い局・古い録画では出さない)。中身は d ボタンで別に取る。
+     * データ放送を取り出してあるか (無い局・古い録画では出さない)。中身は d ボタンで別に取る。
      * **エンコード済みの時刻で書いてある**ので、まだエンコードしていない録画では出さない
      */
     const hasData = encoded !== null && existsSync(sidecarPaths(encoded).dataBroadcast);

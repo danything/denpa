@@ -1,23 +1,23 @@
 /**
- * **この端末で生の TS を解けるか** (docs/stream.md §5.5)。解けなければ理由を返す。
+ * **この端末で元の TS をデコードできるか** (docs/stream.md §5.5)。デコードできなければ理由を返す。
  *
- * 要るのは4つ: WebAssembly (MPEG-2 と AAC の復号器)、worker、worker の中の WebGL2 (描く)、
- * AudioContext (鳴らす)。AAC も WASM で解くので、WebCodecs (AudioDecoder) は要らない —
+ * 要るのは4つ: WebAssembly (MPEG-2 と AAC のデコーダ)、worker、worker の中の WebGL2 (描く)、
+ * AudioContext (鳴らす)。AAC も WASM でデコードするので、WebCodecs (AudioDecoder) は要らない —
  * http で開いた LAN や、AudioDecoder の無い iPhone の Safari (iOS 26 より前) でも生にできる。
  *
- * 1つでも欠けていれば、MPEG-2 を選んでも画面は焼いたものを頼む。
+ * 1つでも欠けていれば、MPEG-2 を選んでも画面はエンコードしたものを頼む。
  *
- * ## 焼いたものを canvas で描けるか (互換モード。`canvasSupport`)
+ * ## エンコードしたものを canvas で描けるか (互換モード。`canvasSupport`)
  *
- * 映像を解くのはブラウザの VideoDecoder (WebCodecs) で、**形ごとに端末次第**。
+ * 映像をデコードするのはブラウザの VideoDecoder (WebCodecs) で、**形ごとに端末次第**。
  * VideoDecoder は安全な繋ぎ (https か localhost) でしか出てこないので、http で開いた LAN では
- * どちらも使えない (MPEG-2 は使える)。音は WASM で解くので、ほかに要るものは生と同じ
+ * どちらも使えない (MPEG-2 は使える)。音は WASM でデコードするので、ほかに要るものは生と同じ
  * (WebGL2 は要らない — 2D で描く)
  */
 
 let answer: string | null | undefined;
 
-/** 解けない理由。解けるなら null。**1回だけ調べて覚える** */
+/** デコードできない理由。デコードできるなら null。**1回だけ調べて覚える** */
 export function rawUnsupported(): Promise<string | null> {
     if (answer === undefined) answer = probe();
     return Promise.resolve(answer);
@@ -48,8 +48,8 @@ export interface CanvasSupport {
 }
 
 /**
- * 問い合わせる形。サーバが焼く形と同じ (`server/live.ts` の `codecsFor`)。
- * 実際に解くときは moov から読んだ形で開く (`ts/fmp4.ts` の `readInit`) — 焼き方が同じなので同じになる
+ * 問い合わせる形。サーバがエンコードする形と同じ (`server/live.ts` の `codecsFor`)。
+ * 実際にデコードするときは moov から読んだ形で開く (`ts/fmp4.ts` の `readInit`) — エンコード方式が同じなので同じになる
  */
 const PROBE = { h264: 'avc1.640029', av1: 'av01.0.08M.08' } as const;
 

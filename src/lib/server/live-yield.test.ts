@@ -13,7 +13,7 @@ const found = (id: number): YieldedRecording => ({ id, title: `録画${id}`, ser
 const noWait = () => Promise.resolve();
 
 describe('ライブが譲った録画を名指しする', () => {
-    test('掴めたら、自分の読み手がいる本を覚える', () => {
+    test('使えたら、自分の読み手がいる本を覚える', () => {
         const tuners = [tuner(0, 'T16', 'epg T16'), tuner(1, 'T21', 'rec 3', 'live GR/T21')];
         expect(tunerOf(tuners, 'GR', 'T21', 'live GR/T21')).toBe(1);
         // 同じチャンネルでも読み手が違えば別 (番組表集めだけの本は自分の本ではない)

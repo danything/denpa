@@ -1,5 +1,5 @@
 /**
- * ブラウザで MPEG-2 と AAC を解く WebAssembly を配る (ライブを生で送る道。docs/stream.md §5.5)。
+ * ブラウザで MPEG-2 と AAC をデコードする WebAssembly を配る (ライブを生で送る道。docs/stream.md §5.5)。
  *
  * **static/ に置かないのは、組むのがイメージの中だから** (Dockerfile の `mpeg2wasm` 段。
  * emscripten で FFmpeg の復号器を組む)。git には入れない — 870KB ほど (wasm 855KB + mjs 14KB) の
@@ -8,7 +8,7 @@
  * 配るのは2つだけ: 読み込み口 (`decoder.mjs`) と中身 (`decoder.wasm`)。**名前は決め打ち** —
  * 置き場の中を好きに読ませる口にはしない。
  *
- * 無ければ 404。画面はそれを見て焼いたものに戻る (`raw/worker.ts`)
+ * 無ければ 404。画面はそれを見てエンコードしたものに戻る (`raw/worker.ts`)
  */
 
 import { existsSync, readFileSync, statSync } from 'node:fs';

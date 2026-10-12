@@ -1,8 +1,8 @@
 /**
  * **1局に絞った TS から、映像と音声の PES を取り出す** (ライブを生で送る道。docs/stream.md §5.5)。
  *
- * 焼く道ではここを ffmpeg がやっていた。生で送ると TS がそのままブラウザへ来るので、
- * 絵も音も WASM の復号器 (`wasm/mpeg2`) に渡す前に、
+ * エンコードする道ではここを ffmpeg がやっていた。生で送ると TS がそのままブラウザへ来るので、
+ * 絵も音も WASM のデコーダ (`wasm/mpeg2`) に渡す前に、
  * こちらで PES に戻す。サーバが1局に絞ってある (`ServiceFilter`) ので、PAT に
  * 載っている局は1つだけ — その PMT を読んで、映像1本と音声 (並んだ順) を拾う。
  *
@@ -87,7 +87,7 @@ export class PesDemuxer {
     private readonly partial = new Map<number, Partial>();
     /** いま分かっている ES。**変わったら `feed` の返りで知らせる** */
     streams: Streams = { video: null, audio: [] };
-    /** 解く音声の PID。**選ばれた1本だけ**組み立てる (他は捨てる) */
+    /** デコードする音声の PID。**選ばれた1本だけ**組み立てる (他は捨てる) */
     audioPid: number | null = null;
     /** 何本目の音声を拾うか (`AudioTrack.stream`)。無ければ先頭に落とす */
     audioIndex = 0;
@@ -198,7 +198,7 @@ export class PesDemuxer {
 const RATES = [96000, 88200, 64000, 48000, 44100, 32000, 24000, 22050, 16000, 12000, 11025, 8000, 7350];
 
 export interface AdtsFrame {
-    /** 頭 (7 か 9 バイト) ごと。WASM の AAC 復号器は ADTS のまま受け取る */
+    /** 頭 (7 か 9 バイト) ごと。WASM の AAC デコーダは ADTS のまま受け取る */
     data: Uint8Array;
     /** 90kHz */
     pts: number;

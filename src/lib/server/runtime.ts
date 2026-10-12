@@ -40,7 +40,7 @@ async function guard(name: string, fn: () => Promise<unknown> | unknown): Promis
 
 function every(ms: number, name: string, fn: () => Promise<unknown> | unknown): void {
     const timer = setInterval(() => void guard(name, fn), ms);
-    // このタイマーがイベントループを掴んだままにする必要はない
+    // このタイマーのためにイベントループを生かしておく必要はない
     timer.unref?.();
     timers.push(timer);
 }
@@ -79,8 +79,8 @@ export function start(): void {
     warnIfClosed();
 
     /*
-     * **GPU で焼けるか、ffmpeg に確かめさせておく** (hwenc.ts)。数秒かかるので
-     * 待たずに進む — 設定画面は終わるまで「確認中」を出し、焼くときは
+     * **GPU でエンコードできるか、ffmpeg に確かめさせておく** (hwenc.ts)。数秒かかるので
+     * 待たずに進む — 設定画面は終わるまで「確認中」を出し、エンコードするときは
      * そのとき分かっている範囲で決める。`DENPA_AUTOSTART=0` でも回す:
      * 触るのは ffmpeg だけで、チューナーには行かない
      */
@@ -88,9 +88,9 @@ export function start(): void {
 
     /*
      * **ライブ視聴の受け口を開ける。** ここは `DENPA_AUTOSTART=0` でも開ける —
-     * 押されたときだけ動くもので、勝手にチューナーを掴みはしない。
+     * 押されたときだけ動くもので、勝手にチューナーを使いはしない。
      *
-     * 認証は使い捨ての札で見る。ブラウザは WebSocket の握手に `Authorization` を
+     * 認証は使い捨てのチケットで見る。ブラウザは WebSocket の握手に `Authorization` を
      * 付けてくれないので、画面が先に `/api/live/ticket` から取ってくる (`tickets.ts`)
      */
     serve(SOCKET_PATH, {
@@ -163,14 +163,14 @@ export function start(): void {
     nowAndEvery(config.reconcileInterval, 'prune', pruneHistory);
 
     /*
-     * 番組名を半角に寄せて取り込んでいた頃の録画を、生TSの EIT から放送のとおりの幅に戻す
+     * 番組名を半角に寄せて取り込んでいた頃の録画を、元のTSの EIT から放送のとおりの幅に戻す
      * (restore-width.ts)。見た録画は覚えるので、2回目からは録り終えた新しいぶんだけ見る
      */
     nowAndEvery(config.reconcileInterval, 'restore-width', async () => {
         const result = await restoreWidths();
         if (result.restored > 0 || result.missed > 0) {
             console.log(
-                `[restore-width] 録画 ${result.seen} 件を見ました: 生TSから戻した ${result.restored} 件 / ` +
+                `[restore-width] 録画 ${result.seen} 件を見ました: 元のTSから戻した ${result.restored} 件 / ` +
                     `もとから放送のとおり ${result.already} 件 / 戻せなかった ${result.missed} 件`,
             );
         }
@@ -181,7 +181,7 @@ export function start(): void {
      * 読む側 (`session.find`) が既に無視しているので、消しているのは行だけ
      */
     nowAndEvery(config.reconcileInterval, 'sessions', pruneSessions);
-    // 切れたペアリングの札も同じく (device-auth.ts)
+    // 切れたペアリングコードも同じく (device-auth.ts)
     nowAndEvery(config.reconcileInterval, 'device-codes', pruneCodes);
 
     /*
@@ -286,7 +286,7 @@ function installShutdownHooks(): void {
     /*
      * **落ちても降りる。** `drain` の中で投げると、`void` で捨てているぶん
      * 誰も拾わず、**プロセスが生きたまま残る** = 入れ替えが止まる。
-     * 拾って、掴んでいるものだけ放して降りる
+     * 拾って、使っているものだけ放して降りる
      */
     const onSignal = (signal: NodeJS.Signals) => {
         drain(signal).catch((error) => {

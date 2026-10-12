@@ -24,7 +24,7 @@
         onclose: () => void;
         notes?: { title: string; text: string }[];
         cmNote?: string | null;
-        /** 焼いたもののコマ数。録画から開いたときだけ入る (ProgramFacts へ素通し) */
+        /** エンコードしたもののコマ数。録画から開いたときだけ入る (ProgramFacts へ素通し) */
         fps?: number | null;
         actions?: Snippet | undefined;
     } = $props();

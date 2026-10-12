@@ -112,7 +112,7 @@ test.describe('接頭辞の下で', () => {
         await page.getByTestId('rule-delete-confirm').click();
         await expect(row).toHaveCount(0);
 
-        // ライブ: 札 (fetch) を取って、接頭辞の中の WebSocket に繋ぎ、TS が届く
+        // ライブ: チケット (fetch) を取って、接頭辞の中の WebSocket に繋ぎ、TS が届く
         let frames = 0;
         let socketUrl = '';
         page.on('websocket', (ws) => {

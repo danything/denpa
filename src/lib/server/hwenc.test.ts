@@ -29,7 +29,7 @@ describe('GPU の道の選び方', () => {
         ]);
     });
 
-    test('口はジョブごとに回す。両方焼ける H.264 は先頭が入れ替わる', () => {
+    test('口はジョブごとに回す。両方エンコードできる H.264 は先頭が入れ替わる', () => {
         const first = hwChain('h264', {}, 0, [A, B]).map((w) => w.device);
         const second = hwChain('h264', {}, 1, [A, B]).map((w) => w.device);
         expect(first).toEqual([A.path, A.path, B.path, B.path]);
@@ -46,7 +46,7 @@ describe('GPU の道の選び方', () => {
             { device: B.path, kind: 'vaapi' },
         ]);
         expect(hwChain('av1', allow, 0, [A, B])).toEqual([{ device: A.path, kind: 'qsv' }]);
-        // 使えないものは許しても出ない (B は AV1 を焼けない)
+        // 使えないものは許しても出ない (B は AV1 をエンコードできない)
         expect(hwChain('av1', { [B.path]: { qsv: ['av1'], vaapi: ['av1'] } }, 0, [B])).toEqual([]);
     });
 
@@ -61,7 +61,7 @@ describe('GPU の道の選び方', () => {
 describe('ICQ を持たないドライバ (i965)', () => {
     const C: HwDevice = { ...B, path: '/dev/dri/renderD130', qsv: [], cqp: ['h264'] };
 
-    test('CQP でだけ焼けた VA-API には印を付けて渡す', () => {
+    test('CQP でだけエンコードできた VA-API には印を付けて渡す', () => {
         expect(hwChain('h264', {}, 0, [C])).toEqual([{ device: C.path, kind: 'vaapi', cqp: true }]);
         // QSV には付けない (CQP に落とすのは VA-API の試しだけ)
         expect(hwChain('h264', {}, 0, [{ ...A, cqp: ['h264'] }])[0]).toEqual({ device: A.path, kind: 'qsv' });
@@ -77,7 +77,7 @@ describe('ICQ を持たないドライバ (i965)', () => {
     });
 });
 
-describe('ライブを GPU で焼く道', () => {
+describe('ライブを GPU でエンコードする経路', () => {
     const FULL: HwDevice = { ...A, full: ['h264'] };
 
     test('印が無ければ (使えなければ) ソフトウェア', () => {
@@ -87,7 +87,7 @@ describe('ライブを GPU で焼く道', () => {
 
     test('復号から GPU で通せる VA-API を、同じ口の QSV より先に採る', () => {
         expect(liveHw('h264', {}, 0, [FULL])).toEqual({ way: { device: A.path, kind: 'vaapi' }, full: true });
-        // 通せないコーデックは録画と同じ順 (QSV が先) で、焼くところだけ
+        // 通せないコーデックは録画と同じ順 (QSV が先) で、エンコードするところだけ
         expect(liveHw('av1', {}, 0, [FULL])).toEqual({ way: { device: A.path, kind: 'qsv' }, full: false });
     });
 
@@ -114,7 +114,7 @@ describe('ライブを GPU で焼く道', () => {
         );
     });
 
-    test('復号から GPU なら、絵を GPU に置いたままインタレ解除して焼く', () => {
+    test('復号から GPU なら、絵を GPU に置いたままインタレ解除してエンコードする', () => {
         const full = liveHwArgs({ way: { device: A.path, kind: 'vaapi', cqp: true }, full: true }, 'h264');
         expect(full.input.join(' ')).toBe(
             `-init_hw_device vaapi=va:${A.path} -hwaccel vaapi -hwaccel_output_format vaapi -hwaccel_device va`,

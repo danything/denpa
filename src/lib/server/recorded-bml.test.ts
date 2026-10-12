@@ -25,7 +25,7 @@ const { loadRecordedBml, saveRecordedBml, withProgramInfo } = await import('./re
 
 /*
  * 録画のデータ放送。**TS から取り出してサイドカーに置き、再生時に読み直す。**
- * 解き方は ts/data-timeline.ts が持つので、ここはファイルの出し入れだけを確かめる。
+ * デコード方法は ts/data-timeline.ts が持つので、ここはファイルの出し入れだけを確かめる。
  */
 
 /** モジュール1つぶんの multipart (ファイル1枚の形) */

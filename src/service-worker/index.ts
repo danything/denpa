@@ -40,7 +40,7 @@ worker.addEventListener('install', (event) => {
     event.waitUntil(
         caches.open(CACHE).then(async (cache) => {
             await cache.addAll(SHELL);
-            // 入口は無くても殻は使える。焼き立てのデプロイ直後などで取れなくても諦める
+            // 入口は無くても殻は使える。デプロイした直後などで取れなくても諦める
             await cache.add(OFFLINE_PAGE).catch(() => {});
         }),
     );

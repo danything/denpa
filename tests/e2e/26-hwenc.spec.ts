@@ -2,21 +2,21 @@ import { existsSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'no
 import { expect, goto, reserveSoon, setRecording, syncEpg, test, waitWatchable } from './helpers';
 
 /**
- * GPU で焼く (server/hwenc.ts)。
+ * GPU でエンコードする (server/hwenc.ts)。
  *
  * **GPU は偽物** — `stack.hwDir` に `renderD128` のような名前でファイルを置くと
  * denpa には口として見え、偽 ffmpeg は渡された口が在るのを見て QSV / VA-API の
- * 試し焼きを通す。消せば、焼こうとした GPU の道が本物と同じく初期化で落ちる
+ * 試しのエンコードを通す。消せば、エンコードしようとした GPU の道が本物と同じく初期化で落ちる
  * (次の道・ソフトウェアへ倒れる道を試せる)
  */
 
 /**
- * 焼くときに偽 ffmpeg へ渡された引数、1回ぶんずつ。**書き途中の名前 (`.encoding`) へ
+ * エンコードするときに偽 ffmpeg へ渡された引数、1回ぶんずつ。**書き途中の名前 (`.encoding`) へ
  * 出しているものだけ** — サムネイルなど、同じ道を通る他の呼び出しは省く。
  *
- * **この録画のぶんだけ。** 入力は生TS (`…-<録画の番号>.m2ts`)。
- * 同じワーカーの前のテストが残した予約が録れて焼かれると、そのぶんまで混ざっていた (CI)。
- * 名前の尻で合わせる — 焼いたものにチャプターを書き足すとき (`-c copy`) の `<生TS>.chapters.txt` を拾わないように
+ * **この録画のぶんだけ。** 入力は元のTS (`…-<録画の番号>.m2ts`)。
+ * 同じワーカーの前のテストが残した予約が録れてエンコードされると、そのぶんまで混ざっていた (CI)。
+ * 名前の尻で合わせる — エンコードしたものにチャプターを書き足すとき (`-c copy`) の `<元のTS>.chapters.txt` を拾わないように
  */
 function encodeRuns(file: string, recordingId: string | null): string[][] {
     if (!existsSync(file)) return [];
@@ -29,7 +29,7 @@ function encodeRuns(file: string, recordingId: string | null): string[][] {
         .filter((run) => run.some((a, i) => run[i - 1] === '-i' && mine.test(a)));
 }
 
-/** 1回ぶんの引数から「どの口を、何で焼いたか」。ソフトウェアなら口は無し */
+/** 1回ぶんの引数から「どの口を、何でエンコードしたか」。ソフトウェアなら口は無し */
 function wayOf(run: string[]): string {
     const encoder = run.find((a) => /_(qsv|vaapi)$/.test(a) || a === 'libx264' || a === 'libsvtav1') ?? '?';
     const device = run.find((a) => a.startsWith('qsv=') || a.startsWith('vaapi='));
@@ -44,7 +44,7 @@ function wayOf(run: string[]): string {
 const GPUS = ['renderD128', 'renderD129'];
 const IDS = ['qsv-av1', 'qsv-h264', 'vaapi-av1', 'vaapi-h264'];
 
-test.describe('GPU で焼く', () => {
+test.describe('GPU でエンコードする', () => {
     const clearGpus = (dir: string) => {
         for (const name of readdirSync(dir)) rmSync(`${dir}/${name}`, { force: true });
     };
@@ -91,7 +91,7 @@ test.describe('GPU で焼く', () => {
         await expect(page.getByTestId('hw-renderD129-vaapi-h264')).toBeChecked();
     });
 
-    test('割り振った口で焼き、落ちたら次の道へ倒れる', async ({ page, request, stack }) => {
+    test('割り振った口でエンコードし、落ちたら次の道へ倒れる', async ({ page, request, stack }) => {
         test.setTimeout(180_000);
         await syncEpg(request);
         // 上の割り振りのまま (128 = AV1、129 = H.264)
@@ -112,8 +112,8 @@ test.describe('GPU で焼く', () => {
 
         /*
          * **GPU が途中で駄目になっても録画は失敗にならない。** 129 を抜いてから
-         * (確かめ直さずに) H.264 を焼かせると、129 の道が初期化で落ちて、
-         * ソフトウェアで焼き直される。試す順は 道ごとに 2回 (頭を捨てる分) → 次。
+         * (確かめ直さずに) H.264 をエンコードさせると、129 の道が初期化で落ちて、
+         * ソフトウェアで再エンコードされる。試す順は 道ごとに 2回 (頭を捨てる分) → 次。
          * 128 は H.264 を外してあるので、そちらへは行かない
          */
         rmSync(`${stack.hwDir}/renderD129`, { force: true });

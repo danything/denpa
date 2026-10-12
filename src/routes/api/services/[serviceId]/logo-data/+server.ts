@@ -18,7 +18,7 @@ export function GET({ params }) {
     return new Response(new Uint8Array(logo.png), {
         headers: {
             'Content-Type': 'image/png',
-            // 焼くたびに書き直す。画面は書いた時刻を URL に付けて取り直す
+            // エンコードするたびに書き直す。画面は書いた時刻を URL に付けて取り直す
             'Cache-Control': 'no-cache',
             'X-Logo-Learned-At': String(logo.learnedAt),
         },

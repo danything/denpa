@@ -4,11 +4,11 @@
  * テレビのアプリ (danything/denpa-tv) は Cookie の控えを持てず、リモコンで OIDC の
  * ログイン画面を操作するのもつらい。そこで OAuth のデバイス認可 (RFC 8628) と同じ形にする:
  *
- * 1. テレビが `POST /api/device/code` で `device_code` (秘密) と `user_code` (QR の URL に入れる短い札) を貰う
- * 2. テレビは QR (`device?code=…`) を出す。スマホで開くと、denpa のいつもの入り方
+ * 1. テレビが `POST /api/device/code` で `device_code` (秘密) と `user_code` (QR の URL に入れる短いコード) を貰う
+ * 2. テレビは QR (`device?code=…`) を出す。スマホで開くと、denpa のいつものログイン方法
  *    (信頼するネットワークか OIDC) を通ったうえで、**そのまま許す** (`/device`)。
  *    「許す / 断る」を聞かないのは家で使う前提だから — QR を読めるのはテレビの前に居る人で、
- *    札は10分で切れ、1度しか使えない。完了の画面には端末の名前を出す (札は出さない。docs/auth.md)
+ *    コードは10分で切れ、1度しか使えない。完了の画面には端末の名前を出す (コードは出さない。docs/auth.md)
  * 3. テレビは `POST /api/device/token` を間を置いて叩き、許されたら鍵を1度だけ受け取る
  * 4. 以後は `Authorization: Bearer <鍵>` で API とファイルの口に入る
  *
@@ -22,12 +22,12 @@ import { affected, now, orm } from './db';
 import { randomToken } from './oidc';
 import { apiTokens, deviceCodes } from './schema';
 
-/** 札の寿命 (秒で返すのは `expiresIn`) */
+/** コードの寿命 (秒で返すのは `expiresIn`) */
 export const CODE_TTL_MS = 10 * 60 * 1000;
 /** 聞きに来てよい間隔 (`interval`) */
 export const POLL_INTERVAL_MS = 5 * 1000;
 /**
- * 生きている札の上限。`/api/device/code` は誰でも叩けるので、溜め込ませない。
+ * 有効なコードの上限。`/api/device/code` は誰でも叩けるので、溜め込ませない。
  * 埋めても10分で切れる (そのあいだペアリングできなくなるだけで、入れるようにはならない)
  */
 export const MAX_PENDING = 20;
@@ -50,14 +50,14 @@ export function sha256(value: string): string {
     return createHash('sha256').update(value).digest('hex');
 }
 
-/** QR の URL に入れる札。`ABCD-EFGH` (RFC 8628 の user_code の形) */
+/** QR の URL に入れるコード。`ABCD-EFGH` (RFC 8628 の user_code の形) */
 export function newUserCode(): string {
     const bytes = crypto.getRandomValues(new Uint8Array(8));
     const chars = [...bytes].map((byte) => ALPHABET[byte % ALPHABET.length]).join('');
     return `${chars.slice(0, 4)}-${chars.slice(4)}`;
 }
 
-/** URL から来た札を揃える (小文字・ハイフン抜け・空白を許す)。形が違えば null */
+/** URL から来たコードを揃える (小文字・ハイフン抜け・空白を許す)。形が違えば null */
 export function normalizeUserCode(input: string): string | null {
     const chars = input.toUpperCase().replace(/[^A-Z0-9]/g, '');
     if (chars.length !== 8 || [...chars].some((c) => !ALPHABET.includes(c))) return null;
@@ -69,7 +69,7 @@ export interface IssuedCode {
     userCode: string;
 }
 
-/** 札を出す。生きている札が上限に達していれば null (呼ぶ側が 429 で返す) */
+/** コードを出す。有効なコードが上限に達していれば null (呼ぶ側が 429 で返す) */
 export function issueCode(name: string, at = now()): IssuedCode | null {
     const alive =
         orm()
@@ -80,7 +80,7 @@ export function issueCode(name: string, at = now()): IssuedCode | null {
     if (alive >= MAX_PENDING) return null;
 
     const deviceCode = randomToken(32);
-    // 札は短いので、まれに重なる。重なったら引き直す (unique で弾かれる)
+    // コードは短いので、まれに重なる。重なったら引き直す (unique で弾かれる)
     for (let attempt = 0; attempt < 5; attempt++) {
         const userCode = newUserCode();
         try {
@@ -117,7 +117,7 @@ function stateOf(row: typeof deviceCodes.$inferSelect, at: number): CodeState {
     return 'pending';
 }
 
-/** 許す画面 (`/device`) に出すもの。札が無ければ null */
+/** 許す画面 (`/device`) に出すもの。コードが無ければ null */
 export function viewCode(userCode: string, at = now()): CodeView | null {
     const row = orm().select().from(deviceCodes).where(eq(deviceCodes.user_code, userCode)).get();
     if (row === undefined) return null;
@@ -126,7 +126,7 @@ export function viewCode(userCode: string, at = now()): CodeView | null {
 
 /**
  * 許す。**何度呼んでも同じ** (画面を読み直しても鍵は2本にならない — 鍵を作るのは
- * 端末が受け取るときで、ここは印を付けるだけ)。札の今の様子を返す (無ければ null)。
+ * 端末が受け取るときで、ここは印を付けるだけ)。コードの今の様子を返す (無ければ null)。
  *
  * **アプリの鍵で入った相手は許せない** (`viaToken`)。盗まれた鍵で別の鍵を作れると、
  * 元の鍵を取り消しても作った鍵が生き残る。許すのはブラウザ (信頼するネットワークか OIDC) だけ
@@ -251,7 +251,7 @@ export function liveTokens() {
         .all();
 }
 
-/** 切れた札を片付ける。使い終えた札も、切れたあとは要らない */
+/** 切れたコードを片付ける。使い終えたコードも、切れたあとは要らない */
 export function pruneCodes(at = now()): number {
     return affected(orm().delete(deviceCodes).where(lte(deviceCodes.expires_at, at)));
 }

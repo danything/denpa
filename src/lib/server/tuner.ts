@@ -4,7 +4,7 @@
  * **相手が返すのは素のTSだけ**で、局も番組も時刻も、意味を持つものは何も
  * 返ってこない。読むのは denpa の仕事 ([agent.md](../../../docs/agent.md))。
  *
- * **掴み方は1つだけ。** 物理チャンネルを丸ごと開く。局を選り分けるのは
+ * **使い方は1つだけ。** 物理チャンネルを丸ごと開く。局を選り分けるのは
  * `ts/service-filter.ts`、番組の切れ目を見るのは `ts/eit.ts`。
  */
 
@@ -53,14 +53,14 @@ const AGENT_TUNER = object({
     disabled: boolean,
     /**
      * エージェントが選ぶ順。小さいほど先に使う。無効な本は null。予約の割り振りはこの順どおりに
-     * 掴まれる前提で数える (`conflict.ts`、docs/agent.md「選ぶ順の約束」)
+     * 使われる前提で数える (`conflict.ts`、docs/agent.md「選ぶ順の約束」)
      */
     rank: nullable(number),
     /** 選局に使うデバイス。ここからエージェントがコマンドを組み立てる */
     device: nullable(string),
     /** 衛星の給電。要る構成だけ */
     lnb: nullable(string),
-    /** いま掴んでいるチャンネル。空いていれば null */
+    /** いま使っているチャンネル。空いていれば null */
     channel: nullable(object({ type: CHANNEL_TYPE, channel: string })),
     users: array(object({ use: string, priority: number })),
     pid: nullable(number),
@@ -194,7 +194,7 @@ export function recordingOf(use: string): number | null {
  * 録り始めた予約は割り振り直さない (候補に入れない) が、終わるまで本を塞ぐ。どの本に
  * 入ったかはエージェントが知っているので、一覧の読み手 (`users`) の `rec <録画ID>`
  * (`recordingUse`) から拾う。読み手の居る本は今まさに録っている本なので、居る本を取り違えることは無い。
- * ただし録り始めたのに、まだ掴めていない (空き待ちで掛け直している) 録画は数えられない。
+ * ただし録り始めたのに、まだ使えていない (空き待ちで掛け直している) 録画は数えられない。
  *
  * 録画以外の読み手 (ライブ・番組表集めなど) は入れない。録画には譲る約束なので
  * (docs/agent.md「選ぶ順の約束」)、予約の割り振りには効かない。
@@ -232,7 +232,7 @@ export function recordingHolds(
 export class TunerBusyError extends Error {}
 
 /**
- * 物理チャンネルを丸ごと開く。**掴み方はこれ1つ。**
+ * 物理チャンネルを丸ごと開く。**使い方はこれ1つ。**
  *
  * 同じチャンネルを誰かが既に開いていれば、エージェントが相乗りさせる
  * (チューナーは増えない)。空きが無ければ 409 が返るので、呼んだ側は待って掛け直す。
@@ -276,7 +276,7 @@ const BUSY_WAIT = 700;
  * 掛け直すのは空き待ちのときだけ — 選局そのものが駄目なら何度やっても同じ。
  *
  * 録画には使わない。録画は自前で掛け直す (`recorder.openWithRetry`。空き待ちに
- * 限らず、終了時刻まで掴み直す)。
+ * 限らず、終了時刻まで取り直す)。
  */
 export function openWhenFree(
     type: string,

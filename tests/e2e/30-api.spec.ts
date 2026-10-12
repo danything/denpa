@@ -40,7 +40,7 @@ test.describe('外から使う口', () => {
         expect(now.startAt).toBeLessThanOrEqual(Date.now());
         expect(now.endAt).toBeGreaterThan(Date.now());
 
-        // 生の TS は焼かずに流す。頭は同期バイト 0x47
+        // 生の TS はエンコードせずに流す。頭は同期バイト 0x47
         const controller = new AbortController();
         const raw = await fetch(`${baseURL}/${first.live}?codec=raw`, { signal: controller.signal });
         expect(raw.status).toBe(200);
@@ -51,8 +51,8 @@ test.describe('外から使う口', () => {
         controller.abort();
 
         /*
-         * 焼くもの (h264 / av1 / ?audio=only) はここでは流さない。偽の ffmpeg は TS をそのまま返すだけで
-         * fMP4 を作らないので、何も届かない。焼き方の引数は live.test.ts が押さえている
+         * エンコードするもの (h264 / av1 / ?audio=only) はここでは流さない。偽の ffmpeg は TS をそのまま返すだけで
+         * fMP4 を作らないので、何も届かない。エンコード方式の引数は live.test.ts が押さえている
          */
         expect((await request.get('/api/services/1/live')).status()).toBe(404);
     });

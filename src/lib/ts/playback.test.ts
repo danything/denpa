@@ -21,7 +21,7 @@ const H264_MP4 = 'video/mp4; codecs="avc1.640028,mp4a.40.2"';
 const H264_LIVE = 'video/mp4; codecs="avc1.640029,mp4a.40.2"';
 const AV1_MP4 = 'video/mp4; codecs="av01.0.08M.08,opus"';
 
-/** H.264 だけ焼いた録画 (サーバの `playbackPlan` が返す形) */
+/** H.264 だけエンコードした録画 (サーバの `playbackPlan` が返す形) */
 const h264Only: PlaybackInfo = {
     duration: 1800,
     axis: 'encoded',
@@ -33,7 +33,7 @@ const h264Only: PlaybackInfo = {
     ],
 };
 
-/** AV1 だけ焼いた録画 */
+/** AV1 だけエンコードした録画 */
 const av1Only: PlaybackInfo = {
     ...h264Only,
     offers: [

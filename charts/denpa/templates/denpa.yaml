@@ -5,7 +5,7 @@ metadata:
   namespace: {{ .Release.Namespace }}
   annotations:
     # **Secret が変わったら Pod を入れ替える。** これが無いと、Infisical で
-    # OIDC_GROUP などを直しても**動いている Pod は古い値を掴んだまま**になる。
+    # OIDC_GROUP などを直しても**動いている Pod は古い値を使ったまま**になる。
     # 実際に起きた: Entra の admins グループを消してアプリロールへ移した際、
     # OIDC_GROUP が消えたグループの ID のまま残り、誰もログインできない状態に
     # 気づかれず置かれていた (2026-09-07)。
@@ -102,7 +102,7 @@ spec:
             initialDelaySeconds: {{ .Values.denpa.livenessProbe.initialDelaySeconds }}
             periodSeconds: {{ .Values.denpa.livenessProbe.periodSeconds }}
           volumeMounts:
-            # 置き場は既定のまま (DB は /data、生TS は /media/raw、焼いたものは /media/encoded)。
+            # 置き場は既定のまま (DB は /data、元のTS は /media/raw、エンコードしたものは /media/encoded)。
             # PVC は前と同じものを、繋ぐ先だけ変えて使う
             - name: denpa-data
               mountPath: /data

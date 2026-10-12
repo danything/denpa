@@ -61,7 +61,7 @@ export function load(repo: string, width: number, height: number): LogoModel | n
 /**
  * 覚えたものを書く。**書けなくても検出は落とさない** (次の録画で覚え直せば済む)。
  * 書きかけを読まれないよう隣に書いてから差し替える。隣の名前はジョブごとに変える
- * (2 本ずつ焼くので、同じ局の録画が同時に書きに来ることがある)
+ * (2 本ずつエンコードするので、同じ局の録画が同時に書きに来ることがある)
  */
 export function save(repo: string, model: LogoModel): void {
     const path = join(repo, modelFile(model.frameWidth, model.frameHeight));
@@ -237,7 +237,7 @@ export interface LogoResult {
 /**
  * ロゴの判定を始める。覚えていれば読み、無ければこの録画から覚える。
  * `scan()` を CM 検出の復号に渡し、読み終えたら `finish` を呼ぶ。復号をやり直すとき (エンコードの
- * 焼き直し) は `scan()` をもう一度呼ぶ — 点は読むたびに一から数える
+ * 再エンコード) は `scan()` をもう一度呼ぶ — 点は読むたびに一から数える
  */
 export async function openLogo(
     input: string,

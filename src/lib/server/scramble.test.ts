@@ -60,12 +60,12 @@ describe('カードリーダーの状態', () => {
                 { name: 'A', card: true, ids: ['0000000000000001'], active: true, tuners: ['PT3-T1'] },
                 { name: 'B', card: true, ids: ['0000000000000002'], active: false, tuners: [] },
                 { name: 'C', card: false, ids: [], active: false, tuners: [] },
-                { name: 'D', card: false, ids: [], active: false, tuners: [], error: '掴めません' },
+                { name: 'D', card: false, ids: [], active: false, tuners: [], error: '使えません' },
             ],
         });
         expect(card.readers.map((r) => r.state)).toEqual(['active', 'standby', 'empty', 'error']);
         expect(card.readers[0]?.tuners).toEqual(['PT3-T1']);
-        expect(card.readers[3]?.error).toBe('掴めません');
+        expect(card.readers[3]?.error).toBe('使えません');
     });
 
     test('前の版のエージェント (名前だけの並び) でも落ちずに名前を出す', () => {

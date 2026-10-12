@@ -11,7 +11,7 @@ describe('sidecarPaths', () => {
 });
 
 describe('buildThumbnailArgs', () => {
-    test('位置ぴったりではなく thumbnail フィルタで代表のコマを選ぶ (CM明けの黒コマを掴まない)', () => {
+    test('位置ぴったりではなく thumbnail フィルタで代表のコマを選ぶ (CM明けの黒コマを選ばない)', () => {
         const args = buildThumbnailArgs('/library/番組/a.mkv', '/library/番組/a-poster.jpg', { at: 130 });
         const i = args.indexOf('-vf');
         // 片方のフィールド → 正方形の画素に縮小 → 選ぶ (候補を全部持つフィルタなので、1080pのままだとGB単位で食う)
@@ -35,7 +35,7 @@ describe('buildThumbnailArgs', () => {
     });
 });
 
-describe('thumbnailPlace (生TSの時刻で決める)', () => {
+describe('thumbnailPlace (元のTSの時刻で決める)', () => {
     const position = config.thumbnailPosition;
 
     test('CM 無し: 頭を捨てた所から数える', () => {
@@ -44,12 +44,12 @@ describe('thumbnailPlace (生TSの時刻で決める)', () => {
         });
         // 短い番組は尺の1/3
         expect(thumbnailPlace(60, { skip: 0.5, kept: null, content: null })).toEqual({ at: 20.5 });
-        // 生TSを渡さない (エンコードしない録画) なら動画の頭から
+        // 元のTSを渡さない (エンコードしない録画) なら動画の頭から
         expect(thumbnailPlace(1800)).toEqual({ at: position });
     });
 
     test('CM を切った: 残した区間をつないで数え、その区間の終わりまで読む', () => {
-        // 焼いたものの頭は 30 秒 (前の CM と捨てた頭は入らない)
+        // エンコードしたものの頭は 30 秒 (前の CM と捨てた頭は入らない)
         const kept = [
             { start: 30, end: 30 + position / 2 },
             { start: 400, end: 1700 },

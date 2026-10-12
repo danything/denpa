@@ -34,7 +34,7 @@ spec:
           volumeMounts:
             - name: agent-config
               mountPath: /config
-            # 掛かったまま録れたTSを解く先。denpa と同じ実体を同じ名前 (既定の /media/raw) で見せる
+            # 掛かったまま録れたTSを復号する先。denpa と同じ実体を同じ名前 (既定の /media/raw) で見せる
             - name: raw
               mountPath: /media/raw
             {{- range .Values.hostDevices }}

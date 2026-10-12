@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { DecodeBudget, QUEUE_STUCK, STRIKES, WINDOW } from './budget';
 
-/** 1秒ぶん、決まった重さで解いたことにする */
+/** 1秒ぶん、決まった重さでデコードしたことにする */
 function second(budget: DecodeBudget, at: number, ms: number, late = 0): boolean {
     for (let i = 0; i < 30; i++) budget.record(ms);
     return budget.tick(at, 33.4, late);
@@ -32,7 +32,7 @@ describe('DecodeBudget', () => {
         expect(second(budget, 10 * WINDOW, 30)).toBe(true);
     });
 
-    test('解く時間が軽くても、絵が遅れ続けていれば諦める', () => {
+    test('デコードする時間が軽くても、絵が遅れ続けていれば諦める', () => {
         const budget = new DecodeBudget();
         budget.tick(0, 33.4, 0);
         const results = [1, 2, 3, 4, 5].map((s) => second(budget, s * WINDOW, 5, 0.5));

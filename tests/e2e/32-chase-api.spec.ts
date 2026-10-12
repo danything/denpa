@@ -4,11 +4,11 @@ import { expect, reserveSoon, syncEpg, test } from './helpers';
  * 追っかけ再生を HTTP で流す口 (`GET /api/recordings/<id>/chase`)。テレビのアプリ向け。
  *
  * 録っている最中の録画が一覧 (`GET /api/recordings`) に `recording: true` で出て、
- * その `chase` を開くと、生TSなら伸びているファイルを追い読みして流し続ける。
- * 焼き直し (`h264`) は画面の追っかけと同じ器を HTTP の fMP4 で流す
+ * その `chase` を開くと、元のTSなら伸びているファイルを追い読みして流し続ける。
+ * 再エンコード (`h264`) は画面の追っかけと同じ器を HTTP の fMP4 で流す
  */
 test.describe('追っかけ再生の口', () => {
-    test('録画中の録画が一覧に出て、生TSを追い読みで流し続ける', async ({ page, request, baseURL }) => {
+    test('録画中の録画が一覧に出て、元のTSを追い読みで流し続ける', async ({ page, request, baseURL }) => {
         test.setTimeout(180_000);
         await syncEpg(request);
         await reserveSoon(page, request, 'BS');
@@ -26,7 +26,7 @@ test.describe('追っかけ再生の口', () => {
         // CM の判定はまだ走っていない (null) ので、観はじめに飛ばしてよい
         expect(rec.cmReliable).toBe(true);
 
-        // 生TS: 頭は同期バイト 0x47。録っている間は伸びたぶんも届き続ける。
+        // 元のTS: 頭は同期バイト 0x47。録っている間は伸びたぶんも届き続ける。
         // **一覧に出るのは録り始めた時点で、ファイルにはまだ何も書かれていないことがある** —
         // そのあいだ chase は 404 (docs/api.md「まだ何も録れていなければ 404」)。アプリと同じく、
         // 届きはじめるまで頼み直す
@@ -53,7 +53,7 @@ test.describe('追っかけ再生の口', () => {
         expect(bytes).toBeGreaterThan(first.value?.length ?? 0);
         controller.abort();
 
-        // 焼き直し: 画面の追っかけと同じ器 (fMP4)
+        // 再エンコード: 画面の追っかけと同じ器 (fMP4)
         const encoded = new AbortController();
         const h264 = await fetch(`${baseURL}/${rec.chase}`, { signal: encoded.signal });
         expect(h264.status).toBe(200);

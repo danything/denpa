@@ -39,7 +39,7 @@ import { config } from './config';
 const flag = (name: string) => integer(name, { mode: 'boolean' });
 
 /**
- * JSON を文字列で持つ列。読むときに解き、書くときに畳む。**読み手は列ごとに書く。**
+ * JSON を文字列で持つ列。読むときにデコードし、書くときに畳む。**読み手は列ごとに書く。**
  *
  * drizzle の `{ mode: 'json' }` は使わない。あれは読めない行で例外を投げるが、
  * ここに入っているのは放送から拾ったものや、取り込みの時期によって形が違うもの
@@ -132,7 +132,7 @@ export function reservationState(
 
 /**
  * 録画の直近のエンコード失敗の理由。**いちばん新しいジョブが失敗していたときだけ**
- * (焼き直して成功したら前の失敗は出さない)
+ * (再エンコードして成功したら前の失敗は出さない)
  */
 export function lastEncodeError(recordingId: AnySQLiteColumn) {
     return sql<string | null>`(
@@ -251,7 +251,7 @@ export const rules = sqliteTable('rules', {
     enabled: flag('enabled').notNull().default(sql`1`),
     /**
      * チューナーが足りないとき、どの予約を残すか。大きいほうが残る (conflict.ts)。
-     * **エージェントに渡すチューナーの取り合いの強さ (`config.priority`) とは別物** (docs/agent.md)。
+     * **エージェントに渡すチューナーの取り合いの優先度 (`config.priority`) とは別物** (docs/agent.md)。
      * ルールは 1、手動予約は 2。比べる相手は予約どうしだけなので小さいところから数える
      */
     priority: integer('priority').notNull().default(1),
@@ -289,8 +289,8 @@ export const reservations = sqliteTable(
         priority: integer('priority').notNull().default(2),
         manual: flag('manual').notNull().default(sql`0`),
         /**
-         * 「焼くか否か」だけは予約した時点で固定する (recorder が読む)。焼き方の細目
-         * (生TSを残すか・CMの扱い・コーデック) は持たず、焼くときに settings を見る
+         * 「エンコードするか否か」だけは予約した時点で固定する (recorder が読む)。エンコード方法の細目
+         * (元のTSを残すか・CMの扱い・コーデック) は持たず、エンコードするときに settings を見る
          */
         encode: flag('encode').notNull().default(sql`1`),
         /** missed = 始まらないまま放送が終わったもの (アプリが止まっていた等) */
@@ -309,7 +309,7 @@ export const reservations = sqliteTable(
         created_at: integer('created_at').notNull(),
         updated_at: integer('updated_at').notNull(),
         /**
-         * **チューナーを掴んでよい区間** (前後マージン込み。NULL = 番組どおり丸ごと)。
+         * **チューナーを使ってよい区間** (前後マージン込み。NULL = 番組どおり丸ごと)。
          * 取り合いが番組の一部でしか起きていないとき、そこだけ譲って残りを録る
          * (`conflict.ts` の「入るところまで録る」)。番組の時刻は動かさない
          */
@@ -344,20 +344,20 @@ export const recordings = sqliteTable(
         start_at: integer('start_at').notNull(),
         end_at: integer('end_at').notNull(),
         audio_type: integer('audio_type'),
-        /** 生TS。生TSの置き場 (`config.rawDir`) からの相対で持つ (`mediaPath`) */
+        /** 元のTS。元のTSの置き場 (`config.rawDir`) からの相対で持つ (`mediaPath`) */
         ts_path: mediaPath('ts_path', () => config.rawDir),
         ts_size: integer('ts_size').notNull().default(0),
         /**
-         * 焼いたもの (再生・ダウンロードで主に使う)。両方のコーデックを焼いたときは
+         * エンコードしたもの (再生・ダウンロードで主に使う)。両方のコーデックをエンコードしたときは
          * **AV1 のほう** (小さいので既定の再生に向く)
          */
         library_path: mediaPath('library_path', () => config.encodedDir),
         /**
-         * もう一方のコーデックで焼いたもの。両方を選んだときだけ入る (AV1 が主なら H.264)。
-         * 古いテレビのように AV1 を解けない相手はこちらを開く
+         * もう一方のコーデックでエンコードしたもの。両方を選んだときだけ入る (AV1 が主なら H.264)。
+         * 古いテレビのように AV1 をデコードできない相手はこちらを開く
          */
         alt_path: mediaPath('alt_path', () => config.encodedDir),
-        /** 録り終えた時刻。NULL なら**まだチューナーを掴んでいる**。「録画中かどうか」を文字列で持たないための、ただ一つの事実 */
+        /** 録り終えた時刻。NULL なら**まだチューナーを使っている**。「録画中かどうか」を文字列で持たないための、ただ一つの事実 */
         finished_at: integer('finished_at'),
         /**
          * 録画そのものが失敗した理由。消したときは削除の理由も入る。
@@ -366,16 +366,16 @@ export const recordings = sqliteTable(
         error: text('error'),
         /** 検出したCM区間の JSON。UIでの確認用 */
         cm_ranges: json('cm_ranges', objects<Range>()),
-        /** 番組表から写したジャンル (JSON: [{lv1, lv2}])。番組詳細のジャンル札に使う */
+        /** 番組表から写したジャンル (JSON: [{lv1, lv2}])。番組詳細のジャンルのラベルに使う */
         genre_detail: json('genre_detail', objects<Genre>()),
         /**
          * 番組表から写した音声の構成 (JSON: `audio_component_descriptor` の配列)。
-         * 焼いたものの音声トラックに**番組表と同じ名前**を入れるのに使う (`arib.audioTitles`)
+         * エンコードしたものの音声トラックに**番組表と同じ名前**を入れるのに使う (`arib.audioTitles`)
          */
         audios: json('audios', objects<Audio>()),
         /** 実際に録れた長さ。番組表の尺 (end_at - start_at) は予定でしかない。取れていなければ NULL (古い行) */
         duration_ms: integer('duration_ms'),
-        /** 焼いたもののコマ数 (30/60)。実測 (fpsDetect) か既定の60。未エンコード・fps記録前の古い行は NULL */
+        /** エンコードしたもののコマ数 (30/60)。実測 (fpsDetect) か既定の60。未エンコード・fps記録前の古い行は NULL */
         fps: integer('fps'),
         /** 消した時刻 (denpa から、または外から)。行は履歴として残す */
         deleted_at: integer('deleted_at'),
@@ -399,17 +399,17 @@ export const recordings = sqliteTable(
          */
         cm_note: text('cm_note'),
         /**
-         * CM を切って焼いたときに**残した区間** (入れ物の頭からの秒)。NULL は切っていない。
+         * CM を切ってエンコードしたときに**残した区間** (入れ物の頭からの秒)。NULL は切っていない。
          * 切ったものからは CM を戻せないので、CM検出のやり直しはこれを見て断る (再エンコードを促す)
          */
         cm_kept: json('cm_kept', objects<Range>()),
         /**
-         * 焼くときに頭から捨てた長さ (秒。`encoder.inputSkip`)。焼いたものの時刻 = 入れ物の頭からの秒 − これ。
-         * 生TSから CM を検出し直して焼いたものにチャプターを書くときに引く。NULL は焼いていない (取り込んだ録画など)
+         * エンコードするときに頭から捨てた長さ (秒。`encoder.inputSkip`)。エンコードしたものの時刻 = 入れ物の頭からの秒 − これ。
+         * 元のTSから CM を検出し直してエンコードしたものにチャプターを書くときに引く。NULL はエンコードしていない (取り込んだ録画など)
          */
         encode_skip: real('encode_skip'),
         /**
-         * **実際に掴めた区間** (前後マージン込み。NULL = 番組どおり丸ごと)。予約から写す。
+         * **実際に使えた区間** (前後マージン込み。NULL = 番組どおり丸ごと)。予約から写す。
          * 一覧で「頭が欠けている」と言うのに要る — **番組の時刻 (`start_at`) は
          * 動かさない**ので、そちらとの差が欠けた幅になる
          */
@@ -446,8 +446,8 @@ const ENCODE_STATES = ['queued', 'running', 'done', 'failed', 'canceled'] as con
 export const ENCODE_PHASES = ['descramble', 'cm', 'cut', 'encode'] as const;
 
 /**
- * ジョブの種類。`encode` は焼く (CM 検出も相乗り)、`cm` は**CM 検出だけやり直す**
- * (焼いたものにはチャプターを書き直すだけ。`encoder.runCmJob`)。同じ待ち行列に並べ、同時に走る本数も一緒に数える
+ * ジョブの種類。`encode` はエンコードする (CM 検出も相乗り)、`cm` は**CM 検出だけやり直す**
+ * (エンコードしたものにはチャプターを書き直すだけ。`encoder.runCmJob`)。同じ待ち行列に並べ、同時に走る本数も一緒に数える
  */
 export const ENCODE_KINDS = ['encode', 'cm'] as const;
 
@@ -523,7 +523,7 @@ export const apiTokens = sqliteTable('api_tokens', {
  * 端末が持つ `device_code` は推測できない秘密で、持つのは SHA-256 だけ。QR に載る
  * `user_code` (ABCD-EFGH) は短いので、10分で切れる。開いた人が入れる人なら許したことにし、
  * 端末が次に聞きに来たときに鍵を作って1度だけ渡し、`consumed_at` を付ける。
- * 断る手順は持たない (家で使う前提。札は10分で切れ、1度しか使えない)
+ * 断る手順は持たない (家で使う前提。コードは10分で切れ、1度しか使えない)
  */
 export const deviceCodes = sqliteTable(
     'device_codes',

@@ -4,21 +4,21 @@ using System.Buffers.Binary;
 namespace Denpa.Agent;
 
 /// <summary>
-/// ARIB STD-B25 を解く。**TS を読んで ECM を拾い、鍵を貰って MULTI2 で解く** (Cas.cs)。
+/// ARIB STD-B25 を復号する。**TS を読んで ECM を拾い、鍵を貰って MULTI2 で復号する** (Cas.cs)。
 ///
 /// <para>
 /// 道筋は PAT → PMT → CA 記述子。CA 記述子 (番組全体、または ES ごと) が「この ES の鍵は
 /// この PID の ECM から」を教えてくれるので、ES の PID から ECM を引く表を作る。
 /// **libaribb25 と同じく、流れの順に1パケットずつ読み、ECM の中身が変わったらその場で鍵を貰う**
-/// (<see cref="IKeySource.Ecm"/>)。後ろのパケットはその鍵で解く。答えを待つあいだ次のパケットへ
+/// (<see cref="IKeySource.Ecm"/>)。後ろのパケットはその鍵で復号する。答えを待つあいだ次のパケットへ
 /// 進まないので、鍵と流れの位置が食い違いようがない。カードが固まっても読み手を止めないのは
-/// 呼ぶ側の仕事 (TunerPool.cs は読み手と別のスレッドで解く)。
+/// 呼ぶ側の仕事 (TunerPool.cs は読み手と別のスレッドで復号する)。
 /// </para>
 ///
 /// <para>
-/// **解けないものは落とさずに素通しする。** 録れないよりまし、で、解けなかったことは
+/// **復号できないものは落とさずに素通しする。** 録れないよりまし、で、復号できなかったことは
 /// <see cref="Undecodable"/> と <see cref="LastError"/> で分かる。鍵の相手が失敗しても投げない —
-/// 鍵を捨てて素通しし (古い鍵で化けたものを「解けた」として流さない)、少し置いて同じ ECM を聞き直す。
+/// 鍵を捨てて素通しし (古い鍵で化けたものを「復号できた」として流さない)、少し置いて同じ ECM を聞き直す。
 /// </para>
 ///
 /// <para>
@@ -72,8 +72,8 @@ public sealed class Descrambler(IKeySource source)
     /// <summary>ES の PID → 鍵。表を引くだけにして、パケットごとの手間を無くす</summary>
     private readonly Ecm?[] _route = new Ecm?[8192];
     /// <summary>
-    /// ECM が1本だけなら、PMT に載っていない PID もそれで解く。**PAT の PMT がみな来てから** —
-    /// 来ていない番組の ES を別の ECM の鍵で解かない
+    /// ECM が1本だけなら、PMT に載っていない PID もそれで復号する。**PAT の PMT がみな来てから** —
+    /// 来ていない番組の ES を別の ECM の鍵で復号しない
     /// </summary>
     private Ecm? _only;
 
@@ -82,13 +82,13 @@ public sealed class Descrambler(IKeySource source)
     private string? _logged;
     private long _decoded, _undecodable, _unentitled, _dropped;
 
-    /// <summary>解いたパケットの数</summary>
+    /// <summary>復号したパケットの数</summary>
     public long Decoded => Volatile.Read(ref _decoded);
 
     /// <summary>掛かっていたのに鍵が無くて**そのまま流した**パケットの数 (契約の無いものは数えない)</summary>
     public long Undecodable => Volatile.Read(ref _undecodable);
 
-    /// <summary>**契約が無くて**そのまま流した数。解けなかったのではなく資格が無い (同じ TS に乗る有料局)</summary>
+    /// <summary>**契約が無くて**そのまま流した数。復号できなかったのではなく資格が無い (同じ TS に乗る有料局)</summary>
     public long Unentitled => Volatile.Read(ref _unentitled);
 
     /// <summary>188 バイトの並びに乗らず捨てたバイト数 (途中から読み始めた頭や、壊れたところ)</summary>
@@ -98,7 +98,7 @@ public sealed class Descrambler(IKeySource source)
     public string? LastError { get; private set; }
 
     /// <summary>
-    /// 読んだぶんを解いて <paramref name="output"/> に書く。入れた長さと出る長さは揃わない —
+    /// 読んだぶんを復号して <paramref name="output"/> に書く。入れた長さと出る長さは揃わない —
     /// 188 バイトに満たない尻尾は次まで残し、頭は揃うまで溜める (<see cref="HoldLimit"/>)
     /// </summary>
     public void Decode(ReadOnlySpan<byte> input, IBufferWriter<byte> output)
@@ -117,8 +117,8 @@ public sealed class Descrambler(IKeySource source)
     }
 
     /// <summary>
-    /// 録れたものを丸ごと解いて書く (<c>/denpa/decode</c> と <c>--decode-file</c>)。書いたバイト数を返す。
-    /// <paramref name="read"/> は読んだそのままの塊を覗く (解く前の掛かり具合を数える)
+    /// 録れたものを丸ごと復号して書く (<c>/denpa/decode</c> と <c>--decode-file</c>)。書いたバイト数を返す。
+    /// <paramref name="read"/> は読んだそのままの塊を覗く (復号する前の掛かり具合を数える)
     /// </summary>
     public long DecodeAll(Stream input, Stream output, Action<ReadOnlySpan<byte>>? read = null)
     {
@@ -178,7 +178,7 @@ public sealed class Descrambler(IKeySource source)
 
     /// <summary>
     /// 1 パケット。節を読み (ECM ならここで鍵を貰う)、溜めている間は溜めの後ろへ、
-    /// そうでなければ出口へ写してその場で解く (**写すのは1回だけ**)
+    /// そうでなければ出口へ写してその場で復号する (**写すのは1回だけ**)
     /// </summary>
     private void Take(ReadOnlySpan<byte> packet, IBufferWriter<byte> output)
     {
@@ -207,7 +207,7 @@ public sealed class Descrambler(IKeySource source)
 
     private Ecm? Route(ReadOnlySpan<byte> packet) => _route[((packet[1] & 0x1F) << 8) | packet[2]] ?? _only;
 
-    /// <summary>掛かっていたら解く。誤りの印が立っているものは触らない</summary>
+    /// <summary>掛かっていたら復号する。誤りの印が立っているものは触らない</summary>
     private void Unscramble(Span<byte> packet, Ecm? ecm, bool usable)
     {
         if ((packet[1] & 0x80) != 0 || packet[3] >> 6 == 0) return;
@@ -222,7 +222,7 @@ public sealed class Descrambler(IKeySource source)
         else if (start < 0 || !usable || ecm?.Cipher is not { HasKeys: true } cipher) _undecodable++;
         else
         {
-            // 0b10 が偶数、0b11 が奇数 (0b01 は使われないが、奇数の鍵で解く)
+            // 0b10 が偶数、0b11 が奇数 (0b01 は使われないが、奇数の鍵で復号する)
             cipher.Decrypt(packet[3] >> 6 == 2, packet[start..]);
             packet[3] &= 0x3F;
             _decoded++;
@@ -250,16 +250,16 @@ public sealed class Descrambler(IKeySource source)
     }
 
     /// <summary>
-    /// 溜めたぶんを最初の鍵で解いておく (出すのは <see cref="Release"/>)。溜めている間に来る中身は
+    /// 溜めたぶんを最初の鍵で復号しておく (出すのは <see cref="Release"/>)。溜めている間に来る中身は
     /// ECM ごとに1つだけ (2つ目が来る前にここへ来る) なので、鍵は取り違えない。
     ///
     /// <para>
-    /// **ECM より前のパケットは、ECM を挟んで続いている偶奇の並びだけ解く。** ECM が持つのは今と次の
-    /// 鍵で、ECM のあとに流れる鍵はそのどちらか。並びが途切れる前は前の鍵かもしれず、解くと化けたものを
-    /// 「解けた」として流す (libaribb25 は溜めた頭を丸ごと解いていた)。ECM の手前で途切れた並びも解かない —
+    /// **ECM より前のパケットは、ECM を挟んで続いている偶奇の並びだけ復号する。** ECM が持つのは今と次の
+    /// 鍵で、ECM のあとに流れる鍵はそのどちらか。並びが途切れる前は前の鍵かもしれず、復号すると化けたものを
+    /// 「復号できた」として流す (libaribb25 は溜めた頭を丸ごと復号していた)。ECM の手前で途切れた並びも復号しない —
     /// 切り替わった直後に来た ECM は、もう前の鍵を持っていない。後ろから読み、ECM ごとに「この先で最初に
     /// 偶奇が変わる位置」を持って、それが ECM のあとの最初のパケット (<see cref="Ecm.After"/>) より後ろなら
-    /// 解く。**並びは ES ごとでなく ECM ごとに見る** — 音声のように疎らな ES だけ見ると、偶奇が行って
+    /// 復号する。**並びは ES ごとでなく ECM ごとに見る** — 音声のように疎らな ES だけ見ると、偶奇が行って
     /// 戻ったのを見逃す
     /// </para>
     /// </summary>
@@ -391,7 +391,7 @@ public sealed class Descrambler(IKeySource source)
 
     /// <summary>
     /// ES → ECM の表を作り直す。PAT か PMT が変わったとき (まれ) だけ。
-    /// 引き続き要る ECM は鍵ごと残す — 作り直すと次の ECM が来るまで解けなくなる
+    /// 引き続き要る ECM は鍵ごと残す — 作り直すと次の ECM が来るまで復号できなくなる
     /// </summary>
     private void Rebuild()
     {
@@ -448,7 +448,7 @@ public sealed class Descrambler(IKeySource source)
     /// <summary>
     /// ECM を受けた。**中身が変わっていたら、その場で鍵を貰う。** 同じ中身なら、貰えなかったものだけ
     /// 少し置いて聞き直す。溜めている間に同じ PID の ECM がもう一度来たら、そこで溜めるのをやめる —
-    /// 1周しても来ない ECM は来ないし、中身が変わる前に溜めを最初の鍵で解いておく (<see cref="Settle"/>)
+    /// 1周しても来ない ECM は来ないし、中身が変わる前に溜めを最初の鍵で復号しておく (<see cref="Settle"/>)
     /// </summary>
     private void OnEcm(Ecm ecm, ReadOnlySpan<byte> section)
     {
@@ -465,7 +465,7 @@ public sealed class Descrambler(IKeySource source)
     }
 
     /// <summary>
-    /// 鍵を貰って入れる。**失敗したら鍵を捨てる** — 古い鍵で解き続けると化けたものを流す。
+    /// 鍵を貰って入れる。**失敗したら鍵を捨てる** — 古い鍵で復号し続けると化けたものを流す。
     /// **渡すのは節の頭 8 バイトと末尾の CRC 4 バイトを除いた中身** — libaribb25 と同じ切り方で、
     /// 拠点を跨いで鍵を貰う線 (CardShare.cs) もこれを運ぶ。変えると古いエージェントと話が通じなくなる
     /// </summary>

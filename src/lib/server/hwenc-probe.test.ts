@@ -4,11 +4,11 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 /**
- * **試し焼きの落とし方** (`hwenc.probe`)。手元にも CI にも GPU は無いので、ffmpeg を
+ * **試しのエンコードの落とし方** (`hwenc.probe`)。手元にも CI にも GPU は無いので、ffmpeg を
  * 起こす `run` だけ差し替えて、ドライバの返事を作って見る。
  *
  * 作る返事は issue #417 の機材 (Gemini Lake・i965) に寄せたもの: QSV は初期化できず、
- * VA-API は ICQ を持たず CQP なら焼け、MPEG-2 は GPU で解ける。AV1 は焼けない
+ * VA-API は ICQ を持たず CQP ならエンコードでき、MPEG-2 は GPU でデコードできる。AV1 はエンコードできない
  */
 const real = await import('./stream');
 /*
@@ -80,7 +80,7 @@ test('ICQ が通れば CQP は試さない', async () => {
     expect(calls.some((argv) => argv.includes('CQP'))).toBe(false);
 });
 
-test('MPEG-2 を GPU で解けなければ、焼くところだけ GPU', async () => {
+test('MPEG-2 を GPU でデコードできなければ、エンコードするところだけ GPU', async () => {
     answer = (argv) => {
         const line = argv.join(' ');
         if (line.includes('qsv') || line.includes('-hwaccel')) return 1;

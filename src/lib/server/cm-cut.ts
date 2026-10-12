@@ -3,14 +3,14 @@ import { config } from './config';
 import { run } from './stream';
 
 /**
- * **焼いたもの (mkv) から CM を切る。** 切るのはキーフレームの所だけで、焼き直さない (`-c copy`)。
+ * **エンコードしたもの (mkv) から CM を切る。** 切るのはキーフレームの所だけで、再エンコードしない (`-c copy`)。
  *
- * CM は焼きながら探す (`encoder.ts`) ので、焼く時点では境目が分からない。そこで切るときは
- * **場面の切れ目ごとにキーフレームを置いて焼く** (`KEY_SCDET`)。CM の境目はほぼ必ず場面の切れ目なので
- * (`cm-decide`)、焼き終えて境目が決まったら、そこにあるキーフレームで切ればコマ単位で合う。
+ * CM はエンコードしながら探す (`encoder.ts`) ので、エンコードする時点では境目が分からない。そこで切るときは
+ * **場面の切れ目ごとにキーフレームを置いてエンコードする** (`KEY_SCDET`)。CM の境目はほぼ必ず場面の切れ目なので
+ * (`cm-decide`)、エンコードし終えて境目が決まったら、そこにあるキーフレームで切ればコマ単位で合う。
  *
  * 境目の近くにキーフレームが無ければ (無音の真ん中に置いた境目など)、CM 側へ `config.cmCutMargin` 秒まで
- * 寄せる (本編を削るより CM が少し残るほうがまし)。それも無ければ、境目の時刻を指して焼き直す (`encoder.ts`)。
+ * 寄せる (本編を削るより CM が少し残るほうがまし)。それも無ければ、境目の時刻を指して再エンコードする (`encoder.ts`)。
  */
 
 /**
@@ -21,7 +21,7 @@ import { run } from './stream';
 const KEY_SCENE = 8;
 
 /**
- * 焼く鎖の頭に足すフィルタ。印 (`lavfi.scd.time`) の付いたコマを `-force_key_frames scd_metadata` が
+ * エンコードする鎖の頭に足すフィルタ。印 (`lavfi.scd.time`) の付いたコマを `-force_key_frames scd_metadata` が
  * キーフレームにする。CM 検出の `scdet@cm` と名前で分ける (どちらも標準エラーに行を出す)
  */
 export const KEY_SCDET = `scdet@key=threshold=${KEY_SCENE}`;
@@ -29,13 +29,13 @@ export const KEY_SCDET = `scdet@key=threshold=${KEY_SCENE}`;
 export interface Keyframe {
     /** 見せる時刻 (秒) */
     pts: number;
-    /** 解く時刻 (秒)。B フレームがあると pts より前 (x264 で 2コマ) */
+    /** デコードする時刻 (秒)。B フレームがあると pts より前 (x264 で 2コマ) */
     dts: number;
 }
 
 /**
  * ffprobe のパケット一覧 (`pts,dts,flags`) から、キーフレームと最初のコマの時刻を拾う。
- * **パケットを読むだけで解かない**ので、30分の録画でも数秒で済む
+ * **パケットを読むだけでデコードしない**ので、30分の録画でも数秒で済む
  */
 export function parseKeyframes(csv: string): { keys: Keyframe[]; first: number } {
     const keys: Keyframe[] = [];
@@ -54,7 +54,7 @@ export function parseKeyframes(csv: string): { keys: Keyframe[]; first: number }
     return { keys, first: Number.isFinite(first) ? first : Number.NaN };
 }
 
-/** 焼いたもののキーフレーム。読めなければ null */
+/** エンコードしたもののキーフレーム。読めなければ null */
 export async function listKeyframes(file: string): Promise<{ keys: Keyframe[]; first: number } | null> {
     const result = await run(
         [
@@ -76,7 +76,7 @@ export async function listKeyframes(file: string): Promise<{ keys: Keyframe[]; f
     return found.keys.length > 0 ? found : null;
 }
 
-/** 残す1切れ (焼いたものの時刻) */
+/** 残す1切れ (エンコードしたものの時刻) */
 export interface Piece {
     /** 頭のキーフレームの pts */
     start: number;
@@ -93,7 +93,7 @@ export interface CutPlan {
 }
 
 export interface CutLimits {
-    /** 焼いたものの時刻 − 境目の物差しの時刻 (秒)。muxer が頭を数ミリ秒ずらす */
+    /** エンコードしたものの時刻 − 境目の物差しの時刻 (秒)。muxer が頭を数ミリ秒ずらす */
     offset: number;
     /** 同じ境目とみなすずれ (秒)。1コマ半 */
     tolerance: number;
@@ -104,8 +104,8 @@ export interface CutLimits {
 }
 
 /**
- * 残す区間 (`keep`) を、焼いたもののキーフレームで切る段取り。**どこか1つでも切れなければ null**
- * (呼ぶ側が境目を指して焼き直す)。
+ * 残す区間 (`keep`) を、エンコードしたもののキーフレームで切る段取り。**どこか1つでも切れなければ null**
+ * (呼ぶ側が境目を指して再エンコードする)。
  *
  * - 境目から `tolerance` 以内のキーフレームがあれば、そこ (切れ目に置いたもの)
  * - 無ければ CM 側へ `margin` まで — 頭は前へ、尻は後ろへ (本編を削らない)
@@ -184,7 +184,7 @@ export function cutList(file: string, pieces: Piece[]): string {
     return `${lines.join('\n')}\n`;
 }
 
-/** 一覧のとおりに繋ぐ。焼き直さない */
+/** 一覧のとおりに繋ぐ。再エンコードしない */
 export function cutArgs(list: string, output: string): string[] {
     return [
         config.ffmpeg,
@@ -207,7 +207,7 @@ export function cutArgs(list: string, output: string): string[] {
     ];
 }
 
-/** チャプターを差し替えて書き直す。焼き直さない。`chapters` が null ならチャプターを外す */
+/** チャプターを差し替えて書き直す。再エンコードしない。`chapters` が null ならチャプターを外す */
 export function chapterArgs(input: string, chapters: string | null, output: string): string[] {
     return [
         config.ffmpeg,

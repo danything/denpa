@@ -19,32 +19,32 @@ import { run } from './stream';
  *
  * `ffmpeg -encoders` に載っているかでは「動くか」は分からないので、`HW_DEVICES`
  * (既定 `/dev/dri/renderD*`) に当たる口を全部拾い、**口ごとに** 道 (QSV / VA-API) ×
- * コーデックの4通りを `nullsrc` で実際に1コマ焼いて確かめる。結果は設定画面の
+ * コーデックの4通りを `nullsrc` で実際に1コマエンコードして確かめる。結果は設定画面の
  * 「GPU」カードに口ごとに出て、使えるものには自動で印が付く (`settings().hwAllow` と
  * 突き合わせるのは `hwChain`)。**QSV を先に、VA-API は逃げ道** — 同じ GPU なら速さは
  * 変わらないが、QSV のほうがレート制御が豊富で Intel が手入れしている。
  *
  * **ライブも同じ印で GPU に載る** (`liveHw`)。設定項目は増やさず、印を外せば CPU に戻る。
- * 全体の話は docs/encode.md「GPU で焼く」
+ * 全体の話は docs/encode.md「GPU でエンコードする」
  */
 
-/** 1つの口 (GPU) で何が焼けるか */
+/** 1つの口 (GPU) で何がエンコードできるか */
 export interface HwDevice {
     /** `/dev/dri/renderD128` のような口 */
     path: string;
     /** 画面に出す名前。`renderD128 (Intel)` のように、口の名前と作り手 */
     label: string;
-    /** QSV で焼けたコーデック */
+    /** QSV でエンコードできたコーデック */
     qsv: HwCodec[];
-    /** VA-API で焼けたコーデック */
+    /** VA-API でエンコードできたコーデック */
     vaapi: HwCodec[];
     /**
-     * VA-API のうち、**ICQ が通らず CQP でだけ焼けた**コーデック。
+     * VA-API のうち、**ICQ が通らず CQP でだけエンコードできた**コーデック。
      * i965 (Gemini Lake などの古いドライバ) は ICQ を持たない (`hwArgs`)
      */
     cqp: HwCodec[];
     /**
-     * VA-API のうち、**放送の MPEG-2 を GPU で解いて、GPU でインタレ解除して焼ける**と
+     * VA-API のうち、**放送の MPEG-2 を GPU でデコードして、GPU でインタレ解除してエンコードできる**と
      * 確かめられたコーデック (`probeFull`)。ライブはこれなら CPU に絵を降ろさない (`liveHwArgs`)
      */
     full: HwCodec[];
@@ -59,11 +59,11 @@ export interface HwEncode {
     message: string;
 }
 
-/** 焼く1回ぶんの道。どの口を、どちらの道で */
+/** エンコードする1回ぶんの道。どの口を、どちらの道で */
 export interface HwWay {
     device: string;
     kind: HwKind;
-    /** VA-API を ICQ ではなく CQP で頼む (`HwDevice.cqp`)。試し焼きの結果から `hwChain` が付ける */
+    /** VA-API を ICQ ではなく CQP で頼む (`HwDevice.cqp`)。試しのエンコードの結果から `hwChain` が付ける */
     cqp?: true;
 }
 
@@ -76,11 +76,11 @@ export function hwEncode(): HwEncode {
 }
 
 /**
- * **このコーデックを GPU で焼くときに試す道、順に。** 使える (試し焼きが通った)
+ * **このコーデックを GPU でエンコードするときに試す道、順に。** 使える (試しのエンコードが通った)
  * かつ設定で外していない (`allow`) もの。空ならソフトウェアだけ。
  *
- * **口は `turn` で回す。** グラボが2枚あって両方が同じコーデックを焼けるなら、
- * ジョブごとに先頭を入れ替えて、2本並べて焼くとき片方に寄らないようにする。
+ * **口は `turn` で回す。** グラボが2枚あって両方が同じコーデックをエンコードできるなら、
+ * ジョブごとに先頭を入れ替えて、2本並べてエンコードするとき片方に寄らないようにする。
  * 同じ口の中では QSV → VA-API
  */
 export function hwChain(codec: HwCodec, allow: HwAllow, turn = 0, devices = state.devices): HwWay[] {
@@ -117,14 +117,14 @@ export function hwChain(codec: HwCodec, allow: HwAllow, turn = 0, devices = stat
  * 値は **24** (H.264 の crf と同じ軸)。**手元に GPU が無いので実測はまだ** —
  * ソフトウェア側の 23 も持ってきていない (あちらは実測で決めた値で、こちらは
  * 1つの値で両コーデックを賄う別の建て付け。測らずに写すと二重に当てずっぽうになる)。
- * ソフトウェアで焼いたものと大きさが違って見えたら、ここを動かす。
+ * ソフトウェアでエンコードしたものと大きさが違って見えたら、ここを動かす。
  * QSV の `-preset medium` は7段 (veryfast〜veryslow) の真ん中。
  *
  * ## ICQ を持たないドライバには CQP で頼む
  *
- * **i965 (Gemini Lake などの VA-API ドライバ) は ICQ を持たない** — 試し焼きが落ちて
- * 「焼けない」に見えていた (issue #417)。ICQ が落ちたら CQP (`-qp`、量子化の幅を固定)
- * でも試し (`probeOnce`)、通ればそちらで焼く (`HwWay.cqp`)。値は ICQ と同じ 24 —
+ * **i965 (Gemini Lake などの VA-API ドライバ) は ICQ を持たない** — 試しのエンコードが落ちて
+ * 「エンコードできない」に見えていた (issue #417)。ICQ が落ちたら CQP (`-qp`、量子化の幅を固定)
+ * でも試し (`probeOnce`)、通ればそちらでエンコードする (`HwWay.cqp`)。値は ICQ と同じ 24 —
  * H.264 の qp は 0〜51 で ICQ と同じ軸。AV1 の qp は 0〜255 なので、比で写して 120。
  * **どちらも実測はまだ** (ICQ と同じく当てずっぽう。CQP は場面に応じて量を
  * 変えないので、動きの多い場面で ICQ より大きく、静かな場面で小さくなるはず)
@@ -160,12 +160,12 @@ export interface LiveHw {
 }
 
 /**
- * **ライブをどの GPU で焼くか。** 無ければ null (ソフトウェア)。
+ * **ライブをどの GPU でエンコードするか。** 無ければ null (ソフトウェア)。
  *
  * 録画と同じ `hwChain` — 設定の印をそのまま使う (項目は増やさない)。そのうえで
- * **復号から GPU で通せる道 (`HwDevice.full`) があれば先に採る。** 焼くところだけ GPU に
+ * **復号から GPU で通せる道 (`HwDevice.full`) があれば先に採る。** エンコードするところだけ GPU に
  * 移しても、CPU に残る復号・bwdif・nv12 への変換で非力な機材は3本目が間に合わない
- * (issue #417 の実測: Celeron J4125 で3本同時、焼くだけ GPU 0.76x / 全部 GPU 1.2x)。
+ * (issue #417 の実測: Celeron J4125 で3本同時、エンコードするだけ GPU 0.76x / 全部 GPU 1.2x)。
  * 同じ口の QSV より VA-API の全部 GPU を上に置くのはそのため
  */
 export function liveHw(codec: HwCodec, allow: HwAllow, turn = 0, devices = state.devices): LiveHw | null {
@@ -179,12 +179,12 @@ export function liveHw(codec: HwCodec, allow: HwAllow, turn = 0, devices = state
 }
 
 /**
- * **ライブで GPU に焼かせる引数。** 録画の `hwArgs` との違いは遅れを作らないこと:
+ * **ライブで GPU にエンコードさせる引数。** 録画の `hwArgs` との違いは遅れを作らないこと:
  *
  * - `-bf 0` … B フレームを作らない。作ると必ず1枚以上待つ (x264 の `zerolatency` と同じ狙い)
  * - `-async_depth 1` … GPU に先積みしない。既定 (VA-API 2・QSV 4) のぶんだけ絵が遅れて出る
  * - QSV は `-preset veryfast`。先読み (`look_ahead`) は既定で切れているので触らない —
- *   書いて名前が変わると、焼けずにソフトウェアへ落ちるだけになる
+ *   書いて名前が変わると、エンコードできずにソフトウェアへ落ちるだけになる
  * - 画質は録画と同じ ICQ 24 (CQP なら同じ値の qp)。x264 ultrafast の既定 (crf 23) と
  *   同じ軸のつもりだが、**手元に GPU が無いので見比べていない**
  *
@@ -192,9 +192,9 @@ export function liveHw(codec: HwCodec, allow: HwAllow, turn = 0, devices = state
  *
  * ## `full` — 復号とインタレ解除も GPU (VA-API だけ)
  *
- * `-hwaccel vaapi -hwaccel_output_format vaapi` で放送の MPEG-2 を GPU で解き、絵を GPU に
+ * `-hwaccel vaapi -hwaccel_output_format vaapi` で放送の MPEG-2 を GPU でデコードし、絵を GPU に
  * 置いたまま `deinterlace_vaapi=rate=field` (フィールドごとに1コマ。bwdif の既定と同じ
- * 59.94p) に通して、そのまま焼く。**CPU のフィルタは1つも挟めない** — 挟むなら
+ * 59.94p) に通して、そのままエンコードする。**CPU のフィルタは1つも挟めない** — 挟むなら
  * `hwdownload` が要り、降ろしたぶんだけ遅くなる。ライブの映像の鎖はインタレ解除だけ
  * なので挟むものは無い (`-fpsmax` はコマを間引くだけでフィルタではなく、字幕と音声は
  * 別の流れ)。インタレ解除の絵は bwdif と変わる — **まだ見比べていない**。
@@ -247,7 +247,7 @@ export function liveHwArgs(
 }
 
 /**
- * 1本だけ試し焼きする。**時間で切る** — ドライバが固まって返ってこないとき
+ * 1本だけ試しにエンコードする。**時間で切る** — ドライバが固まって返ってこないとき
  * (実機で見たことはないが) に起動が止まらないように
  */
 async function tryEncode(args: string[]): Promise<boolean> {
@@ -257,7 +257,7 @@ async function tryEncode(args: string[]): Promise<boolean> {
     return result.code === 0;
 }
 
-/** 試し焼きの素材。小さく短く — 何が使えるかを見るだけで、速さは測らない */
+/** 試しのエンコードの素材。小さく短く — 何が使えるかを見るだけで、速さは測らない */
 const SOURCE = ['-f', 'lavfi', '-i', 'nullsrc=s=256x256:r=30:d=0.2'];
 
 /** PCI の作り手の番号 → 名前。sysfs から読めたときだけ添える */
@@ -320,7 +320,7 @@ async function probeOnce(): Promise<HwEncode> {
                 if (await tryWay({ device: path, kind }, codec)) {
                     device[kind].push(codec);
                 } else if (kind === 'vaapi' && (await tryWay({ device: path, kind, cqp: true }, codec))) {
-                    // ICQ を持たないドライバ (i965)。CQP で焼く (`hwArgs` の説明)
+                    // ICQ を持たないドライバ (i965)。CQP でエンコードする (`hwArgs` の説明)
                     device[kind].push(codec);
                     device.cqp.push(codec);
                 }
@@ -335,22 +335,22 @@ async function probeOnce(): Promise<HwEncode> {
     return next;
 }
 
-/** 録画と同じ引数で1コマ焼いてみる */
+/** 録画と同じ引数で1コマエンコードしてみる */
 function tryWay(way: HwWay, codec: HwCodec): Promise<boolean> {
     const hw = hwArgs(way, codec);
     return tryEncode([...hw.device, ...SOURCE, '-vf', hw.filter.join(','), '-c:v', ...hw.encoder]);
 }
 
 /**
- * **復号から GPU で通せるか** (`HwDevice.full`)。VA-API で焼けたコーデックだけ確かめる。
+ * **復号から GPU で通せるか** (`HwDevice.full`)。VA-API でエンコードできたコーデックだけ確かめる。
  *
  * 素材は放送と同じ **インタレの MPEG-2** を、その場で CPU で作る (`nullsrc` を
  * `mpeg2video` で。一時ファイルに置くのは、`run` が標準入力を渡さないため)。
- * それをライブと同じ引数 (`liveHwArgs` の `full`) で解いて、解除して、焼く。
+ * それをライブと同じ引数 (`liveHwArgs` の `full`) でデコードして、解除して、エンコードする。
  *
- * **GPU で解けなかったら必ず落ちる。** ffmpeg は `-hwaccel` が使えないと黙って CPU で
- * 解くが、その絵は GPU に無いので `deinterlace_vaapi` が受け取れずに降りる。
- * 「通った = GPU で解けた」と読んでよい
+ * **GPU でデコードできなかったら必ず落ちる。** ffmpeg は `-hwaccel` が使えないと黙って CPU で
+ * デコードするが、その絵は GPU に無いので `deinterlace_vaapi` が受け取れずに降りる。
+ * 「通った = GPU でデコードできた」と読んでよい
  */
 async function probeFull(devices: HwDevice[]): Promise<void> {
     if (!devices.some((d) => d.vaapi.length > 0)) return;
@@ -405,7 +405,7 @@ async function probeFull(devices: HwDevice[]): Promise<void> {
 }
 
 /**
- * 口ごとの一言。「QSV: H.264 / AV1、VA-API: H.264 (CQP)」か「焼けません」。
+ * 口ごとの一言。「QSV: H.264 / AV1、VA-API: H.264 (CQP)」か「エンコードできません」。
  * ICQ を持たないドライバで CQP に落としたものには (CQP) を添え、復号から GPU で
  * 通せるもの (ライブで使う) は最後に分けて書く
  */
