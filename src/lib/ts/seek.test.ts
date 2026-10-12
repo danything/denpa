@@ -105,7 +105,7 @@ describe('時刻から位置を引く (seekTs)', () => {
         const first = await seekTs(read, bytes.length, head, 0);
         expect(sinceHead(first!.pts, head)).toBeCloseTo(0.5, 3);
         const last = await seekTs(read, bytes.length, head, 10_000);
-        expect(last!.pts).toBe(lastVideoPts(bytes));
+        expect(last!.pts).toBe(lastVideoPts(bytes)!);
     });
 
     test('PTS が一周をまたぐ録画でも引ける', async () => {

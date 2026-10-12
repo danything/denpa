@@ -23,7 +23,8 @@ const { holdTranscode, TRANSCODE_DEFAULT, transcodeAuto, transcodeLimit, transco
 );
 
 test('既定は GPU の有無で 2 本か 4 本', () => {
-    expect([TRANSCODE_DEFAULT.cpu, TRANSCODE_DEFAULT.gpu]).toContain(transcodeAuto());
+    const defaults: number[] = [TRANSCODE_DEFAULT.cpu, TRANSCODE_DEFAULT.gpu];
+    expect(defaults).toContain(transcodeAuto());
     expect(transcodeLimit()).toBe(transcodeAuto());
 });
 
