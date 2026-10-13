@@ -27,7 +27,7 @@ services:
         # /dev/bus/usb が見えればイメージ同梱の px4-userland が扱う (docs/agent.md)。
         # **privileged にはしない。** 要るのは USB と DVB のデバイスと、pipe を広げる権限だけ
         cap_add:
-            # pipe を 8MB まで広げる (無くても 1MB で動く。agent/Denpa.Agent/ChildTs.cs)
+            # siano-ts の標準出力の pipe を 8MB まで広げる (無くても 1MB で動く。agent/Denpa.Agent/ChildTs.cs)
             - SYS_RESOURCE
         # USB (189) と DVB (212) の文字デバイスを開いてよい。**挿し直しで増えるノードも。**
         # `devices:` だけだと起こした時点のノードしか開けず、挿し直すと再起動まで使えない

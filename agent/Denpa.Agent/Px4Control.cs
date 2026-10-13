@@ -182,24 +182,36 @@ internal sealed class Px4Control : IDisposable
         Socket socket, int maxPayload, Px4Wire? wire = null)
     {
         wire ??= Px4Wire.Px4;
-        var header = new byte[HeaderSize];
+        Span<byte> header = stackalloc byte[HeaderSize];
+        var (type, flags, requestId, length) = ReadHeader(socket, header, maxPayload, wire);
+        var body = new byte[length];
+        Receive(socket, body, wire);
+        return (type, flags, requestId, body);
+    }
+
+    /// <summary>
+    /// 枠の頭 (<see cref="HeaderSize"/> バイト) だけ読んで確かめる。中身 (<c>Length</c> バイト) はまだソケットに残っている —
+    /// TS_DATA は中身を呼んだ側の溜めに直に受ける (<see cref="Px4Stream"/>。枠ごとに byte[] を作らない)
+    /// </summary>
+    public static (ushort Type, ushort Flags, uint RequestId, int Length) ReadHeader(
+        Socket socket, Span<byte> header, int maxPayload, Px4Wire wire)
+    {
+        header = header[..HeaderSize];
         Receive(socket, header, wire);
-        if (!header.AsSpan(0, 4).SequenceEqual(wire.Magic))
+        if (!header[..4].SequenceEqual(wire.Magic))
         {
             throw new IOException($"{wire.Daemon} の答えの頭が {Encoding.ASCII.GetString(wire.Magic)} ではありません");
         }
-        var major = BinaryPrimitives.ReadUInt16LittleEndian(header.AsSpan(4));
-        var minor = BinaryPrimitives.ReadUInt16LittleEndian(header.AsSpan(6));
+        var major = BinaryPrimitives.ReadUInt16LittleEndian(header[4..]);
+        var minor = BinaryPrimitives.ReadUInt16LittleEndian(header[6..]);
         if (major != 1 || minor != 0) throw new IOException($"{wire.Daemon} の IPC の版が {major}.{minor} です (1.0 のはず)");
-        var length = BinaryPrimitives.ReadUInt32LittleEndian(header.AsSpan(16));
+        var length = BinaryPrimitives.ReadUInt32LittleEndian(header[16..]);
         if (length > maxPayload) throw new IOException($"{wire.Daemon} の答えが長すぎます ({length} バイト)");
-        var body = new byte[length];
-        Receive(socket, body, wire);
         return (
-            BinaryPrimitives.ReadUInt16LittleEndian(header.AsSpan(8)),
-            BinaryPrimitives.ReadUInt16LittleEndian(header.AsSpan(10)),
-            BinaryPrimitives.ReadUInt32LittleEndian(header.AsSpan(12)),
-            body);
+            BinaryPrimitives.ReadUInt16LittleEndian(header[8..]),
+            BinaryPrimitives.ReadUInt16LittleEndian(header[10..]),
+            BinaryPrimitives.ReadUInt32LittleEndian(header[12..]),
+            (int)length);
     }
 
     /// <summary>
@@ -213,7 +225,7 @@ internal sealed class Px4Control : IDisposable
     /// 頼らない。読めると分かってから読めば Receive は待たずに返る
     /// </para>
     /// </summary>
-    private static void Receive(Socket socket, Span<byte> into, Px4Wire wire)
+    internal static void Receive(Socket socket, Span<byte> into, Px4Wire wire)
     {
         var limit = socket.ReceiveTimeout;
         while (into.Length > 0)

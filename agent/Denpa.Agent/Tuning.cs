@@ -1,4 +1,6 @@
+using System.Buffers;
 using System.Diagnostics;
+using System.IO.Pipelines;
 using System.Runtime.InteropServices;
 using Microsoft.Win32.SafeHandles;
 
@@ -52,10 +54,10 @@ public interface ITuneDevice : IDisposable
 }
 
 /// <summary>
-/// libc の関数 (open・ioctl・poll・pipe など。kill だけは Interop.cs)。
+/// libc の関数 (open・ioctl・poll など。kill だけは Interop.cs)。
 ///
 /// <para>
-/// **macOS でも同じ関数で動く** (Mac で px4d から受けた TS / siano-ts の pipe を読むため)。"libc" は
+/// **macOS でも同じ関数で動く** (Mac で siano-ts の pipe を読むため)。"libc" は
 /// macOS でも <c>/usr/lib/libc.dylib</c> (libSystem の別名) で引ける。ただし**数値が
 /// OS ごとに違うもの** (<c>O_NONBLOCK</c>、errno) は決め打ちにできないので、ここと
 /// <see cref="DeviceStream"/> で OS を見て選ぶ。
@@ -83,59 +85,14 @@ internal static unsafe partial class Sys
     [LibraryImport("libc", EntryPoint = "fcntl", SetLastError = true)]
     public static partial int Fcntl(int fd, int command, int argument);
 
-    [LibraryImport("libc", EntryPoint = "write", SetLastError = true)]
-    public static partial nint WriteFd(int fd, byte* buffer, nuint count);
-
     [LibraryImport("libc", EntryPoint = "close")]
     public static partial int Close(int fd);
-
-    /// <summary><c>pipe(int fds[2])</c>。fds[0] が読み出し側、fds[1] が書き込み側</summary>
-    [LibraryImport("libc", EntryPoint = "pipe", SetLastError = true)]
-    public static partial int Pipe(int* fds);
-
-    /// <summary><c>F_GETFL</c> / <c>F_SETFL</c>。Linux も macOS も同じ番号</summary>
-    public const int GetFlags = 3;
-    public const int SetFlags = 4;
-
-    /// <summary>
-    /// <c>fcntl</c> を Apple Silicon の決まりで呼ぶ。**fcntl は可変長引数** で、Apple の arm64 では
-    /// 可変長のぶん (3つ目) をレジスタではなくスタックに置く。<see cref="Fcntl"/> のまま呼ぶと
-    /// 3つ目はレジスタに乗り、fcntl はスタックの別の値を読む (O_NONBLOCK が立たずに
-    /// pipe の write で止まった。Mac の CI)。名前つきの8つ (x0〜x7) を埋めて、9つ目をスタックに押し出す
-    /// </summary>
-    [LibraryImport("libc", EntryPoint = "fcntl", SetLastError = true)]
-    private static partial int FcntlApple(int fd, int command, nint x2, nint x3, nint x4, nint x5, nint x6, nint x7, nint argument);
-
-    /// <summary>書き込み側をノンブロッキング (<c>O_NONBLOCK</c>) にする。Linux と macOS のどちらでも</summary>
-    public static void SetNonBlocking(int fd)
-    {
-        var apple = OperatingSystem.IsMacOS() && RuntimeInformation.ProcessArchitecture == Architecture.Arm64;
-        var flags = apple ? FcntlApple(fd, GetFlags, 0, 0, 0, 0, 0, 0, 0) : Fcntl(fd, GetFlags, 0);
-        var set = flags < 0 ? -1 : apple
-            ? FcntlApple(fd, SetFlags, 0, 0, 0, 0, 0, 0, flags | NonBlocking)
-            : Fcntl(fd, SetFlags, flags | NonBlocking);
-        if (set < 0) throw new IOException($"書き込み側をノンブロッキングにできません ({Marshal.GetLastPInvokeErrorMessage()})");
-    }
 
     /// <summary><c>F_SETPIPE_SZ</c>。pipe の深さを変える (**Linux だけ**。macOS には無い)</summary>
     public const int SetPipeSize = 1031;
 
     /// <summary><c>F_GETPIPE_SZ</c>。いまの pipe の深さ (広げられなかったときに記録へ出す)</summary>
     public const int GetPipeSize = 1032;
-
-    /// <summary>
-    /// 書けるようになるか、<paramref name="timeoutMs"/> 経つまで待つ。どちらで起きたかは見ない
-    /// (呼んだ側が書いてみて確かめる)
-    /// </summary>
-    public static void PollOut(int fd, int timeoutMs)
-    {
-        // struct pollfd { int fd; short events; short revents; }。POLLOUT = 4
-        var descriptor = stackalloc byte[8];
-        *(int*)descriptor = fd;
-        *(short*)(descriptor + 4) = 4;
-        *(short*)(descriptor + 6) = 0;
-        Poll(descriptor, 1, timeoutMs);
-    }
 
     /// <summary>開けなければ errno を添えて投げる。デバイスが無い・使用中の区別が要る</summary>
     public static SafeFileHandle Must(string path, int flags)
@@ -189,6 +146,124 @@ internal sealed unsafe class DeviceStream(SafeFileHandle handle, Func<string?>? 
     /// <summary>Windows で子の標準出力を読む部分。fd は無いので、空の (無効な) ハンドルを持たせておく</summary>
     public DeviceStream(Stream pipe, Func<string?>? ended = null)
         : this(new SafeFileHandle(), ended) => _background = new Background(pipe);
+
+    /// <summary>px4d から受けた TS の読み出し側 (<see cref="Piped"/>)。あれば fd は使わない</summary>
+    private readonly Piped? _piped;
+
+    /// <summary>px4d から受けた TS (Px4Stream) を読む部分。fd は無いので、空の (無効な) ハンドルを持たせておく</summary>
+    public DeviceStream(PipeReader reader, Func<string?>? ended = null)
+        : this(new SafeFileHandle(), ended) => _piped = new Piped(reader);
+
+    /// <summary>
+    /// **<see cref="PipeReader"/> から読む。待つのは 200ms ずつ** (fd の poll と同じく、時々起きて印を見る)。
+    ///
+    /// <para>
+    /// 読みかけの間に読む側が抜けても、待っている読み (<c>ReadAsync</c>) は捨てずに次の読む側が引き継ぐ。
+    /// PipeReader は同時に1つしか読めないので、読む側はロックで1つずつ通す (<see cref="Background"/> と同じ)。
+    /// 溜めにあるぶんは <c>TryRead</c> で待たずに取り、無いときだけ待つ (待たない読みは確保をしない)
+    /// </para>
+    /// </summary>
+    private sealed class Piped
+    {
+        private readonly PipeReader _reader;
+        private readonly Lock _gate = new();
+
+        /// <summary>
+        /// 待っている読み。**Task にしない** — 待つたびに Task と待ち合わせの入れ物を作ると、
+        /// 8 本ぶん流したときに秒あたり数千回の確保になる。読みが済んだら <see cref="_ready"/> を立ててもらい、
+        /// それを 200ms ずつ待つ (どちらも使い回す)
+        /// </summary>
+        private ValueTask<ReadResult> _pending;
+        private bool _waiting;
+        private readonly ManualResetEventSlim _ready = new(false);
+        private readonly Action _signal;
+
+        public Piped(PipeReader reader)
+        {
+            _reader = reader;
+            _signal = _ready.Set;
+        }
+
+        /// <summary>読めたバイト数。0 は尽きた、null は降りた</summary>
+        public int? Read(Span<byte> target, Func<bool> giveUp)
+        {
+            while (!_gate.TryEnter(WakeMs))
+            {
+                if (giveUp()) return null;
+            }
+            try
+            {
+                while (true)
+                {
+                    if (giveUp()) return null;
+                    ReadResult result;
+                    if (_waiting)
+                    {
+                        if (!_pending.IsCompleted && !_ready.Wait(WakeMs)) continue;
+                        _waiting = false;
+                        result = _pending.GetAwaiter().GetResult();
+                    }
+                    else if (!_reader.TryRead(out result))
+                    {
+                        var reading = _reader.ReadAsync();
+                        if (!reading.IsCompleted)
+                        {
+                            _ready.Reset();
+                            _pending = reading;
+                            _waiting = true;
+                            reading.GetAwaiter().UnsafeOnCompleted(_signal);
+                            continue;
+                        }
+                        result = reading.GetAwaiter().GetResult();
+                    }
+
+                    var buffer = result.Buffer;
+                    if (buffer.IsEmpty)
+                    {
+                        _reader.AdvanceTo(buffer.Start);
+                        if (result.IsCompleted) return 0;
+                        continue;
+                    }
+                    var count = (int)Math.Min(target.Length, buffer.Length);
+                    buffer.Slice(0, count).CopyTo(target);
+                    _reader.AdvanceTo(buffer.GetPosition(count));
+                    return count;
+                }
+            }
+            finally
+            {
+                _gate.Exit();
+            }
+        }
+
+        /// <summary>
+        /// 読むのをやめる。書く側はもう終わっている (Px4Stream が先に閉じる) ので、待っている読みも戻っている。
+        /// **読む側がまだ中にいれば触らない** (同時に触ると PipeReader が投げる。溜めは GC に任せる)
+        /// </summary>
+        public void Complete()
+        {
+            if (!_gate.TryEnter(WakeMs)) return;
+            try
+            {
+                _reader.CancelPendingRead();
+                if (_waiting && (_pending.IsCompleted || _ready.Wait(WakeMs)))
+                {
+                    // 受けた読みは返してから閉じる (返さないまま閉じると、読んでいる最中だと言われる)
+                    _reader.AdvanceTo(_pending.GetAwaiter().GetResult().Buffer.End);
+                }
+                _waiting = false;
+                _reader.Complete();
+            }
+            catch (Exception error) when (error is InvalidOperationException or AggregateException)
+            {
+                // 読みかけが残っていた
+            }
+            finally
+            {
+                _gate.Exit();
+            }
+        }
+    }
 
     /// <summary>
     /// **読むのは裏のスレッド、待つのはこちら。** 読みかけの間に読む側が抜けても、読めたぶんは
@@ -260,6 +335,9 @@ internal sealed unsafe class DeviceStream(SafeFileHandle handle, Func<string?>? 
     private static readonly int EOverflow = OperatingSystem.IsMacOS() ? 84 : 75;
 
     private volatile bool _closed;
+
+    /// <summary>畳めと言われたか (<see cref="Piped"/> に渡す。使い回す)</summary>
+    private Func<bool>? _stopped;
 
     private int _overflows;
 
@@ -387,6 +465,15 @@ internal sealed unsafe class DeviceStream(SafeFileHandle handle, Func<string?>? 
 
     private int ReadCore(byte[] buffer, int offset, int count, Func<bool>? giveUp)
     {
+        if (_piped is not null)
+        {
+            // 降りる合図を渡されなければ、畳めと言われたかだけを見る (使い回す。読むたびに作ると確保が積もる)
+            var read = _piped.Read(buffer.AsSpan(offset, count), giveUp is null ? (_stopped ??= () => _closed) : () => _closed || giveUp());
+            if (read is null) return 0;
+            if (read > 0) return read.Value;
+            if (ended?.Invoke() is { } reason) throw new IOException(reason);
+            return 0;
+        }
         if (_background is not null)
         {
             var read = _background.Read(buffer.AsSpan(offset, count), () => _closed || giveUp?.Invoke() == true);
@@ -470,6 +557,7 @@ internal sealed unsafe class DeviceStream(SafeFileHandle handle, Func<string?>? 
     {
         _closed = true;
         handle.Dispose();
+        _piped?.Complete();
         base.Dispose(disposing);
     }
 }

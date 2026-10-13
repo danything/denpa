@@ -440,17 +440,19 @@ Q3U4 なら8つで受信機ごとに地上波か衛星か決まっており、ML
   (`RELEASE`) だけです。以前は選局ごとに `px4-ts` を起こしていて、終わるたびに lease が
   返り、最後の受信機なら `px4d` がチューナーの電源を落としていました。次の選局は
   電源投入と全チューナーの初期化からで、局替えが遅かった
-- **TS は別のソケット (`stream.sock`) に TS_DATA の枠で来ます。** 枠をほどいて pipe に
-  書き、その pipe を `DeviceStream` に載せるので (`Px4Stream`)、読む側の振る舞いは
-  DVB と同じです (電波が来なくても畳める・チューナーを取り上げられたら 200ms で抜ける)。pipe は 8MB に
-  広げます (既定の 64KB は地上波で 30ms ぶん)。選局のたびに新しい pipe なので、前の局の
-  TS は混ざりません
-- **pipe を広げるには `CAP_SYS_RESOURCE` を渡します** (compose の `cap_add`、HA のアドオンの
+- **TS は別のソケット (`stream.sock`) に TS_DATA の枠で来ます。** 枠をほどいて
+  エージェントの中の溜め (System.IO.Pipelines の `Pipe`、8MB = 地上波で 3.5 秒ぶん) に書き、その読む側を
+  `DeviceStream` に載せるので (`Px4Stream`)、読む側の振る舞いは DVB と同じです (電波が来なくても畳める・
+  チューナーを取り上げられたら 200ms で抜ける)。枠の中身はソケットから溜めのメモリ (プールのもの) へ直に
+  受け、枠ごとの確保はしません。選局のたびに新しい溜めなので、前の局の TS は混ざりません。
+  どの OS でも同じ作りで、OS の pipe は使わないので深さも OS に左右されません
+  (前は pipe(2) を 8MB に広げていて、`CAP_SYS_RESOURCE` が無いと浅いままでした)
+- **siano-ts の標準出力の pipe を広げるには `CAP_SYS_RESOURCE` を渡します** (compose の `cap_add`、HA のアドオンの
   `privileged: [SYS_RESOURCE]`)。無いと上限 (`pipe-max-size`、既定 1MB) までしか広げられず、
   さらに uid ごとの pipe の合計が上限 (`pipe-user-pages-soft`、既定 64MB) を超えていると
-  **1MB も断られて数 KB のまま**になります (ライブが SLOW_CONSUMER で切れる)。Home Assistant OS の
+  **1MB も断られて数 KB のまま**になります (読む側が少し止まると TS を落とす)。Home Assistant OS の
   アドオンは、ホスト中の root と uid 0 を分け合うのでこれに当たります。広げられなかったときは
-  記録にいまの深さと理由が出ます (`ChildTs.WidenPipe`)
+  記録にいまの深さと理由が出ます (`ChildTs.WidenPipe`)。px4-userland の機材には要りません
 - **同期の判定は TUNE の答え。** `px4d` は同期するまで答えず、5 秒 (`timeout_ms`) で
   諦めて TIMEOUT を返します。そのあと最初の TS が 3 秒以内に来れば成功。**同期しなくても
   受信機は借りたまま**なので、総当たりのスキャンで同期しないチャンネルが続いても電源は
@@ -980,7 +982,8 @@ LaunchAgent の環境変数は、コンテナ既定の置き場を Mac の置き
   usbfs を直接扱えないので、**macOS 標準の PC/SC (PCSC.framework) 越し**に扱います
   (`Pcsc.cs`)。`denpa-agent --card` はそのリーダーを並べます。動いている間はリーダーを
   排他で使うので、他のアプリはカードを使えません
-- pipe を広げられない (`F_SETPIPE_SZ` が無い) ので、px4d / siano-ts から受ける溜めは Linux より浅い
+- pipe を広げられない (`F_SETPIPE_SZ` が無い) ので、siano-ts から受ける溜めは Linux より浅い
+  (px4d から受ける溜めは pipe を使わないので、Linux と同じ 8MB)
 - **Apple Silicon だけ** (Intel Mac 用の px4-userland / siano-userland が無い)
 - **Mac の実機でチューナーとカードを繋いで確かめたことはまだありません。** CI でビルドして起こし、
   入れ方を最後まで流すところまで (`.github/workflows/test.yml` の `agent-macos`。

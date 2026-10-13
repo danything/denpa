@@ -1,10 +1,9 @@
 using System.Buffers.Binary;
 using System.Diagnostics;
+using System.IO.Pipelines;
 using System.Net.Sockets;
-using System.Runtime.InteropServices;
 using System.Text.Json;
 using System.Text.Json.Nodes;
-using Microsoft.Win32.SafeHandles;
 
 namespace Denpa.Agent;
 
@@ -824,13 +823,13 @@ public sealed class Px4Daemon(string id) : UserlandDaemon("px4d", id)
 /// </para>
 ///
 /// <para>
-/// **TS は別のソケット (<c>stream.sock</c>) に来る。** 枠 (TS_DATA) をほどいて pipe に書き、
-/// 読み出し側はその pipe を <see cref="DeviceStream"/> に載せる (<see cref="Px4Stream"/>)。
+/// **TS は別のソケット (<c>stream.sock</c>) に来る。** 枠 (TS_DATA) をほどいて溜め (Pipelines) に書き、
+/// 読み出し側はその読む側を <see cref="DeviceStream"/> に載せる (<see cref="Px4Stream"/>)。
 /// 読む側の振る舞い (電波が来なくても畳める・チューナーを取り上げられたら 200ms で抜ける) は DVB と同じ。
 /// </para>
 ///
 /// <para>
-/// **誰も読まなくなったら TS のストリームを畳む。** pipe が埋まったまま空かなければ、こちらから
+/// **誰も読まなくなったら TS のストリームを畳む。** 溜めが埋まったまま空かなければ、こちらから
 /// stream.sock を閉じる (放っておくと px4d の溜めが溢れて <c>SLOW_CONSUMER</c> になる)。
 /// 受信機は借りたままなので、次の選局が来たら同じ lease で選局し直す (<see cref="Tuned"/> を
 /// TunerPool が見る)。
@@ -914,7 +913,7 @@ public sealed class Px4Tuner : ITuneDevice
         _name = name ?? $"px4-{id[^4..]} #{receiver}";
     }
 
-    /// <summary>読む側がいないまま pipe が空かなければ、この時間で TS のストリームを畳む</summary>
+    /// <summary>読む側がいないまま溜めが空かなければ、この時間で TS のストリームを畳む</summary>
     internal TimeSpan StallLimit { get; init; } = Px4Stream.DefaultStallLimit;
 
     public Stream Output => _stream?.Output ?? throw new InvalidOperationException($"{_name} はまだ選局していません");
@@ -1228,34 +1227,62 @@ internal sealed class Px4StreamError(string message, bool keepsLease) : IOExcept
 /// <para>
 /// <c>stream.sock</c> に繋いで ATTACH_STREAM (lease と nonce) を送ると、あとは px4d が
 /// TS_DATA の枠を送り続け、止めると STREAM_END が来る (SPEC 6.3 / 6.4)。枠をほどいた中身を
-/// pipe に書き、読み出し側はその pipe の読む側 (<see cref="DeviceStream"/>)。pipe は子の標準出力と
-/// 同じく広げる (<see cref="ChildTs.WidenPipe"/>)。
+/// <see cref="Pipe"/> (System.IO.Pipelines) に書き、読み出し側はその読む側 (<see cref="DeviceStream"/>)。
+/// **どの OS でも同じ作り。** 前は pipe(2) に write して poll で待っていたが、Windows には poll が無く、
+/// pipe の深さも OS ごとに違った (Linux は 8MB に広げ、macOS は OS 任せ)。いまは溜めの深さを
+/// <see cref="Depth"/> で決め打つ。
 /// </para>
 ///
 /// <para>
-/// **読む側がいないと pipe が埋まる。** 書けないまま <see cref="DefaultStallLimit"/> 経ったら
+/// **受けるのは溜めのメモリに直に。** TS_DATA の中身はソケットから <see cref="PipeWriter.GetMemory"/>
+/// で取ったメモリ (プールのもの) へそのまま受け、枠ごとの byte[] は作らない。
+/// </para>
+///
+/// <para>
+/// **読む側がいないと溜めが埋まる。** 書けないまま <see cref="DefaultStallLimit"/> 経ったら
 /// stream.sock を閉じて終わる。こちらが読まないままだと px4d の溜め (既定 65,536 パケット、
 /// 地上波で5秒ほど) が溢れて SLOW_CONSUMER になるが、その通知 (STREAM_END) も読まない
 /// ソケットの奥に詰まって届かない。こちらで見切る。
 /// </para>
 /// </summary>
-internal sealed unsafe class Px4Stream
+internal sealed class Px4Stream
 {
-    /// <summary>pipe が空かないまま待つ上限。px4d の溜めが溢れるのと同じくらい</summary>
+    /// <summary>溜めが空かないまま待つ上限。px4d の溜めが溢れるのと同じくらい</summary>
     public static readonly TimeSpan DefaultStallLimit = TimeSpan.FromSeconds(5);
 
     /// <summary>
-    /// TS がこれだけ来なければ終わる。px4-ts と同じ5秒。**pipe に書けずに待っている間は数えない**
+    /// 溜めの深さ。前の Linux の pipe (<c>F_SETPIPE_SZ</c> で広げた 8MB) と同じで、地上波で 3.5 秒ぶん。
+    /// これを超えたら書く側が待つ
+    /// </summary>
+    internal const int Depth = 8 * 1024 * 1024;
+
+    /// <summary>
+    /// TS がこれだけ来なければ終わる。px4-ts と同じ5秒。**溜めに書けずに待っている間は数えない**
     /// (そちらは <see cref="DefaultStallLimit"/>)
     /// </summary>
     private static readonly TimeSpan SilenceLimit = TimeSpan.FromSeconds(5);
+
+    /// <summary>TS_DATA の中身の頭 (u64 sequence, u64 cumulative_drop_count, u32 byte_count)</summary>
+    private const int TsHeaderSize = 20;
 
     private readonly Socket _socket;
     private readonly string _name;
     private readonly TimeSpan _stallLimit;
     private readonly Px4Wire _wire;
     private readonly ManualResetEventSlim _first = new();
-    private SafeFileHandle? _write;
+
+    /// <summary>
+    /// 溜め。待ちは Inline で起こす (スレッドプールに回さない。pump は専用のスレッドで、
+    /// 読む側も 200ms ごとに自分で起きる)
+    /// </summary>
+    private readonly Pipe _pipe = new(new PipeOptions(
+        pauseWriterThreshold: Depth,
+        resumeWriterThreshold: Depth * 3 / 4,
+        minimumSegmentSize: 64 * 1024,
+        readerScheduler: PipeScheduler.Inline,
+        writerScheduler: PipeScheduler.Inline,
+        useSynchronizationContext: false));
+
     private Thread? _pump;
     private volatile bool _stopped;
     private volatile bool _ended;
@@ -1264,11 +1291,11 @@ internal sealed unsafe class Px4Stream
     /// <summary>ATTACH_STREAM が通ったか (px4d の側でストリームが active になった)</summary>
     private bool _attached;
 
-    /// <summary>pipe に1枚でも書けたか (Attach が待つのはこれ)</summary>
+    /// <summary>溜めに1枚でも書けたか (Attach が待つのはこれ)</summary>
     private volatile bool _delivered;
     private ulong _sequence;
 
-    public DeviceStream Output { get; private set; } = null!;
+    public DeviceStream Output { get; }
 
     /// <summary>ストリームが終わった (px4d が止めた・切れた・読む側がいなくて畳んだ・こちらで止めた)</summary>
     public bool Ended => _ended;
@@ -1279,6 +1306,7 @@ internal sealed unsafe class Px4Stream
         _name = name;
         _stallLimit = stallLimit;
         _wire = wire;
+        Output = new DeviceStream(_pipe.Reader, () => _reason);
     }
 
     /// <summary>
@@ -1312,7 +1340,9 @@ internal sealed unsafe class Px4Stream
             stream._attached = true;
             // 待つのは pump のほう。ここからは Poll で起きるので、読むときの上限は途中で詰まったときだけ
             socket.ReceiveTimeout = (int)SilenceLimit.TotalMilliseconds;
-            stream.StartPump();
+            // **専用のスレッドで。** 流れている間ずっと塞ぐ
+            stream._pump = new Thread(stream.Pump) { IsBackground = true, Name = $"{name} TS" };
+            stream._pump.Start();
         }
         catch (Exception error) when (error is IOException or SocketException)
         {
@@ -1335,32 +1365,11 @@ internal sealed unsafe class Px4Stream
         return stream;
     }
 
-    private void StartPump()
-    {
-        var fds = stackalloc int[2];
-        if (Sys.Pipe(fds) < 0) throw new IOException($"pipe を作れません ({Marshal.GetLastPInvokeErrorMessage()})");
-        var read = new SafeFileHandle(fds[0], ownsHandle: true);
-        _write = new SafeFileHandle(fds[1], ownsHandle: true);
-        try
-        {
-            ChildTs.WidenPipe(fds[1], _name);
-            // 書く側は待たない。空きは poll で待ち、その間も止めろと言われていないか見る
-            Sys.SetNonBlocking(fds[1]);
-        }
-        catch
-        {
-            read.Dispose();
-            _write.Dispose();
-            throw;
-        }
-        Output = new DeviceStream(read, () => _reason);
-        // **専用のスレッドで。** 流れている間ずっと塞ぐ
-        _pump = new Thread(Pump) { IsBackground = true, Name = $"{_name} TS" };
-        _pump.Start();
-    }
-
     private void Pump()
     {
+        var writer = _pipe.Writer;
+        Span<byte> header = stackalloc byte[Px4Control.HeaderSize];
+        Span<byte> ts = stackalloc byte[TsHeaderSize];
         try
         {
             var heard = Stopwatch.StartNew();
@@ -1372,24 +1381,38 @@ internal sealed unsafe class Px4Stream
                     End($"{_wire.Daemon} から TS が {SilenceLimit.TotalSeconds:F0} 秒来ません");
                     return;
                 }
-                var (type, flags, _, body) = Px4Control.ReadFrame(_socket, Px4Control.MaxTsPayload, _wire);
-                if (type == Px4Control.StreamEnd && body.Length >= 68)
+                var (type, flags, _, length) = Px4Control.ReadHeader(_socket, header, Px4Control.MaxTsPayload, _wire);
+                if (type != Px4Control.TsData)
                 {
-                    // final counters (u64 × 8) のあとに u32 error_code
-                    var code = BinaryPrimitives.ReadUInt32LittleEndian(body.AsSpan(64));
-                    End(code == 0 ? $"{_wire.Daemon} が TS を止めました" : $"{_wire.Daemon} が TS を止めました ({Px4Control.Reason(code)})");
+                    // TS_DATA 以外 (STREAM_END) は小さい。いつもどおり byte[] で受ける
+                    if (length > Px4Control.MaxPayload)
+                    {
+                        End($"{_wire.Daemon} の枠が長すぎます (型 0x{type:x4}、{length} バイト)");
+                        return;
+                    }
+                    var body = new byte[length];
+                    Px4Control.Receive(_socket, body, _wire);
+                    if (type == Px4Control.StreamEnd && body.Length >= 68)
+                    {
+                        // final counters (u64 × 8) のあとに u32 error_code
+                        var code = BinaryPrimitives.ReadUInt32LittleEndian(body.AsSpan(64));
+                        End(code == 0 ? $"{_wire.Daemon} が TS を止めました" : $"{_wire.Daemon} が TS を止めました ({Px4Control.Reason(code)})");
+                        return;
+                    }
+                    End($"{_wire.Daemon} から知らない枠が来ました (型 0x{type:x4})");
                     return;
                 }
-                if (type != Px4Control.TsData || flags != 0 || body.Length < 20)
+                if (flags != 0 || length < TsHeaderSize)
                 {
                     End($"{_wire.Daemon} から知らない枠が来ました (型 0x{type:x4})");
                     return;
                 }
                 // u64 sequence, u64 cumulative_drop_count, u32 byte_count, bytes
-                var sequence = BinaryPrimitives.ReadUInt64LittleEndian(body);
-                var dropped = BinaryPrimitives.ReadUInt64LittleEndian(body.AsSpan(8));
-                var count = BinaryPrimitives.ReadUInt32LittleEndian(body.AsSpan(16));
-                if (count != body.Length - 20 || count % 188 != 0)
+                Px4Control.Receive(_socket, ts, _wire);
+                var sequence = BinaryPrimitives.ReadUInt64LittleEndian(ts);
+                var dropped = BinaryPrimitives.ReadUInt64LittleEndian(ts[8..]);
+                var count = BinaryPrimitives.ReadUInt32LittleEndian(ts[16..]);
+                if (count != length - TsHeaderSize || count % 188 != 0)
                 {
                     End($"{_wire.Daemon} の TS_DATA の長さが崩れています ({count} バイト)");
                     return;
@@ -1405,7 +1428,11 @@ internal sealed unsafe class Px4Stream
                     return;
                 }
                 _sequence++;
-                if (!Write(body.AsSpan(20))) return;
+                // 中身は溜めのメモリに直に受ける。途中で切れたら渡さずに終わる (Advance しない)
+                var size = (int)count;
+                Px4Control.Receive(_socket, writer.GetMemory(size).Span[..size], _wire);
+                writer.Advance(size);
+                if (!Flush(writer)) return;
                 _delivered = true;
                 _first.Set();
                 heard.Restart();
@@ -1419,45 +1446,51 @@ internal sealed unsafe class Px4Stream
         {
             _ended = true;
             _socket.Dispose();
-            // 読む側はこれで EOF になり、_reason を添えて終わる (DeviceStream の ended)
-            _write?.Dispose();
+            // 読む側はこれで尽き、_reason を添えて終わる (DeviceStream の ended)
+            writer.Complete();
             _first.Set();
         }
     }
 
-    /// <summary>pipe に書き切る。**空かないまま <see cref="_stallLimit"/> 経ったら諦める** (読む側がいない)</summary>
-    private bool Write(ReadOnlySpan<byte> bytes)
+    /// <summary>
+    /// 書いたぶんを読む側に渡す。**溜めが空かないまま <see cref="_stallLimit"/> 経ったら諦める** (読む側がいない)。
+    /// 止めろと言われたらすぐ降りる (50ms ごとに見る)
+    /// </summary>
+    private bool Flush(PipeWriter writer)
     {
-        var fd = (int)_write!.DangerousGetHandle();
-        Stopwatch? stalled = null;
-        while (bytes.Length > 0)
+        var flushing = writer.FlushAsync();
+        FlushResult result;
+        if (flushing.IsCompleted)
         {
-            if (_stopped) return false;
-            nint written;
-            fixed (byte* source = bytes) written = Sys.WriteFd(fd, source, (nuint)bytes.Length);
-            if (written > 0)
-            {
-                bytes = bytes[(int)written..];
-                stalled = null;
-                continue;
-            }
-            var failure = Marshal.GetLastPInvokeError();
-            if (failure == 4) continue;  // EINTR
-            if (failure != (OperatingSystem.IsMacOS() ? 35 : 11))  // EAGAIN
-            {
-                End($"TS を渡せません ({Marshal.GetLastPInvokeErrorMessage()})");
-                return false;
-            }
-            stalled ??= Stopwatch.StartNew();
-            if (stalled.Elapsed >= _stallLimit)
-            {
-                End($"読む側がいないまま {_stallLimit.TotalSeconds:F0} 秒経ったので TS のストリームを閉じました (受信機は借りたまま)");
-                return false;
-            }
-            // 止めろと言われたらすぐ降りたいので短く待つ
-            Sys.PollOut(fd, 50);
+            result = flushing.GetAwaiter().GetResult();
         }
-        return true;
+        else
+        {
+            var waiting = flushing.AsTask();
+            var stalled = Stopwatch.StartNew();
+            while (!waiting.Wait(50))
+            {
+                if (_stopped)
+                {
+                    writer.CancelPendingFlush();
+                    return false;
+                }
+                if (stalled.Elapsed >= _stallLimit)
+                {
+                    writer.CancelPendingFlush();
+                    End($"読む側がいないまま {_stallLimit.TotalSeconds:F0} 秒経ったので TS のストリームを閉じました (受信機は借りたまま)");
+                    return false;
+                }
+            }
+            result = waiting.GetAwaiter().GetResult();
+        }
+        if (result.IsCompleted)
+        {
+            // 読み出し側が閉じた (こちらで止めた。理由は End が残さない)
+            End("TS を渡せません (読み出し側が閉じました)");
+            return false;
+        }
+        return !result.IsCanceled;
     }
 
     /// <summary>終わった理由を残す。**こちらで止めたときは残さない** (読む側には普通の終わり)</summary>
@@ -1469,21 +1502,20 @@ internal sealed unsafe class Px4Stream
     }
 
     /// <summary>
-    /// 止める。pump を降ろして stream.sock を閉じ、読みかけの読む側が戻ってから pipe を閉じる
+    /// 止める。pump を降ろして stream.sock を閉じ、読みかけの読む側が戻ってから溜めを閉じる
     /// (<see cref="DeviceStream.WaitReaders"/>、長くても <see cref="ChildTs.ReaderDrain"/>。
-    /// 閉じた番号を次の pipe が使い回すと、抜けかけの読む側が新しいストリームを読んでしまう)。
-    /// **局替えのたびに通る**ので、固定では待たない
+    /// 抜けかけの読む側が閉じた溜めに触らないように)。**局替えのたびに通る**ので、固定では待たない
     /// </summary>
     public void Stop()
     {
         /*
          * **理由は消さない。** ここから先は End が理由を残さない (_stopped) ので、残っているのは
-         * 止める前に向こうから終わった理由だけ。読む側が pipe の残りを読み切る前に次の選局が
+         * 止める前に向こうから終わった理由だけ。読む側が溜めの残りを読み切る前に次の選局が
          * 来ても、読む側には「px4d が TS を止めました (…)」が届く
          */
         _stopped = true;
         var stopped = Stopwatch.StartNew();
-        Output?.Stop();
+        Output.Stop();
         // pump を今すぐ起こす (Poll の 200ms を待たない)。閉じる向きを言えば Poll が起き、読めば 0 で降りる
         try
         {
@@ -1500,8 +1532,8 @@ internal sealed unsafe class Px4Stream
         }
         _socket.Dispose();
         var rest = ChildTs.ReaderDrain - stopped.Elapsed;
-        if (rest > TimeSpan.Zero) Output?.WaitReaders(rest);
-        Output?.Dispose();
+        if (rest > TimeSpan.Zero) Output.WaitReaders(rest);
+        Output.Dispose();
         _ended = true;
     }
 }

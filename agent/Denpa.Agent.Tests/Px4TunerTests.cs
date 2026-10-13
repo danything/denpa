@@ -2,7 +2,6 @@ using System.Buffers.Binary;
 using System.Diagnostics;
 using System.Net.Sockets;
 using Denpa.Agent;
-using TUnit.Core.Enums;
 
 namespace Denpa.Agent.Tests;
 
@@ -20,7 +19,6 @@ namespace Denpa.Agent.Tests;
  * Timeout が効くのはテストが Task を返してから — 各テストは頭で `await Task.Yield()` して、
  * 同期の処理 (Tune・Dispose) を Task の中に入れる。待つところには打ち切りの合図 (cancel) を渡す
  */
-[ExcludeOn(OS.Windows)]
 [Timeout(60_000)]
 public class Px4TunerTests
 {

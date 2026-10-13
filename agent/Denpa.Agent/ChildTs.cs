@@ -8,8 +8,8 @@ namespace Denpa.Agent;
 /// <summary>
 /// 選局した TS を **pipe で受け取る**ときの共通部分。子プロセス (siano-ts) の標準出力を
 /// 読み出し側にするところ (<see cref="Stdout"/>) と、pipe の扱い (<see cref="WidenPipe"/> /
-/// <see cref="ReaderDrain"/>)、子の印 (<see cref="TsChild"/>)。px4d から受けた TS を
-/// 流す pipe (Px4Stream。Px4.cs) も、広げ方と閉じ方はここに揃える。
+/// <see cref="ReaderDrain"/>)、子の印 (<see cref="TsChild"/>)。px4d から受けた TS の溜め
+/// (Px4Stream。Px4.cs。pipe ではなく Pipelines) も、閉じ方 (<see cref="ReaderDrain"/>) はここに揃える。
 ///
 /// <para>
 /// **読み出し側は <see cref="DeviceStream"/> に載せる。** pipe をそのまま fd として poll で待つので、

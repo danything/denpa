@@ -1,6 +1,5 @@
 using System.Diagnostics;
 using Denpa.Agent;
-using TUnit.Core.Enums;
 
 namespace Denpa.Agent.Tests;
 
@@ -13,8 +12,6 @@ namespace Denpa.Agent.Tests;
  * 合否は「流したぶんが読む側に届いたか」だけで、数字は記録に出す (CI の Unit tests の出力で見る)
  */
 [NotInParallel]
-// 書き換えの前 (pipe(2) の作り) は Windows で動かない
-[ExcludeOn(OS.Windows)]
 [Timeout(120_000)]
 public class Px4StreamBenchTests
 {
