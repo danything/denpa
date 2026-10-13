@@ -622,30 +622,34 @@ describe('カードとスクランブル解除', () => {
         ['CARD_SHARE_NETWORKS', '192.168.1.0/24,203.0.113.0/24'],
         // TTL は 8 まで
         ['CARD_TTL', '9'],
-    ])('読めない設定や広すぎる設定なら起動しない (%s=%s)', async (name, value) => {
-        // 書き間違えた範囲を黙って既定に戻さない
-        const room = mkdtempSync(join(tmpdir(), 'denpa-agent-bad-'));
-        try {
-            const bad = Bun.spawn(AGENT_CMD, {
-                cwd: ROOT,
-                env: {
-                    ...process.env,
-                    AGENT_PORT: String(PORT + 2),
-                    TUNERS_FILE: join(room, 'tuners.json'),
-                    CHANNELS_FILE: join(room, 'channels.json'),
-                    RAW_DIR: join(room, 'recorded'),
-                    CARD_SHARE_PORT: String(PORT + 4),
-                    [name]: value,
-                },
-                stdout: 'pipe',
-                stderr: 'ignore',
-            });
-            expect(await bad.exited).not.toBe(0);
-            expect(await new Response(bad.stdout).text()).toContain(name);
-        } finally {
-            rmSync(room, { recursive: true, force: true });
-        }
-    }, 30_000);
+    ])(
+        '読めない設定や広すぎる設定なら起動しない (%s=%s)',
+        async (name, value) => {
+            // 書き間違えた範囲を黙って既定に戻さない
+            const room = mkdtempSync(join(tmpdir(), 'denpa-agent-bad-'));
+            try {
+                const bad = Bun.spawn(AGENT_CMD, {
+                    cwd: ROOT,
+                    env: {
+                        ...process.env,
+                        AGENT_PORT: String(PORT + 2),
+                        TUNERS_FILE: join(room, 'tuners.json'),
+                        CHANNELS_FILE: join(room, 'channels.json'),
+                        RAW_DIR: join(room, 'recorded'),
+                        CARD_SHARE_PORT: String(PORT + 4),
+                        [name]: value,
+                    },
+                    stdout: 'pipe',
+                    stderr: 'ignore',
+                });
+                expect(await bad.exited).not.toBe(0);
+                expect(await new Response(bad.stdout).text()).toContain(name);
+            } finally {
+                rmSync(room, { recursive: true, force: true });
+            }
+        },
+        30_000,
+    );
 
     test('置き場の外は解除に回さない', async () => {
         const res = await post('/denpa/decode', { input: '../../etc/passwd', output: 'x.ts' });

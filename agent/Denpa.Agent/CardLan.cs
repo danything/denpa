@@ -117,12 +117,34 @@ public sealed record CardLanPolicy(int? Port, IReadOnlyList<IPNetwork> Networks,
 
     /// <summary>
     /// 範囲がまるごと既定の範囲 (<see cref="DefaultNetworks"/>) のどれかに収まるか。同じ種類のアドレスで、
-    /// 既定と同じかより狭く (接頭辞が長い)、先頭のアドレスが既定の中にあれば収まる
+    /// 既定と同じかより狭く (接頭辞が長い)、先頭のアドレスが既定の中にあれば収まる。
+    /// **IPv4 射影の範囲 (::ffff:0:0/96 など) は書けない** — 相手のアドレスは IPv4 に直して比べるので
+    /// 当たることが無く、IPNetwork.Contains の射影の扱いにも頼らない (アドレス1つなら IPv4 に直して読む)。
+    /// 比べるのはビット列そのもの
     /// </summary>
-    public static bool Inside(IPNetwork network) => DefaultNetworks.Any(allowed =>
-        allowed.BaseAddress.AddressFamily == network.BaseAddress.AddressFamily
-        && network.PrefixLength >= allowed.PrefixLength
-        && allowed.Contains(network.BaseAddress));
+    public static bool Inside(IPNetwork network)
+    {
+        var address = network.BaseAddress;
+        if (address.IsIPv4MappedToIPv6) return false;
+        var bytes = address.GetAddressBytes();
+        return DefaultNetworks.Any(allowed =>
+            allowed.BaseAddress.AddressFamily == address.AddressFamily
+            && network.PrefixLength >= allowed.PrefixLength
+            && SamePrefix(allowed.BaseAddress.GetAddressBytes(), bytes, allowed.PrefixLength));
+    }
+
+    /// <summary>先頭の <paramref name="bits"/> ビットが同じか</summary>
+    private static bool SamePrefix(byte[] a, byte[] b, int bits)
+    {
+        for (var i = 0; i < bits / 8; i++)
+        {
+            if (a[i] != b[i]) return false;
+        }
+        var rest = bits % 8;
+        if (rest == 0) return true;
+        var mask = (byte)(0xFF << (8 - rest));
+        return (a[bits / 8] & mask) == (b[bits / 8] & mask);
+    }
 
     /// <summary><c>10.0.0.0/8</c> の形か、アドレス1つ (<c>192.168.1.20</c>)</summary>
     private static IPNetwork Network(string text)
