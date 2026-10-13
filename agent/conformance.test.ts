@@ -622,7 +622,7 @@ describe('カードとスクランブル解除', () => {
         ['CARD_SHARE_NETWORKS', '192.168.1.0/24,203.0.113.0/24'],
         // TTL は 8 まで
         ['CARD_TTL', '9'],
-    ])('読めない設定や LAN の外へ広げる設定なら起動しない (%s=%s)', async (name, value) => {
+    ])('読めない設定や広すぎる設定なら起動しない (%s=%s)', async (name, value) => {
         // 書き間違えた範囲を黙って既定に戻さない
         const room = mkdtempSync(join(tmpdir(), 'denpa-agent-bad-'));
         try {
