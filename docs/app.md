@@ -274,8 +274,9 @@ SQLite が拒むので、事実と状態が食い違いません。文字列で�
 
 ### 録画のダウンロードをいったん無くした (前の版から上げるとき)
 
-**コピー制御の扱いが決まるまで、録画のファイルを外へ持ち出せないようにした**
-([Discussion #760](https://github.com/danything/denpa/discussions/760))。
+**エンコードした録画 (mkv) にはコピー制御の符号が引き継がれないため、扱いが決まるまで録画をファイルとして
+外へ持ち出せないようにした** (元のTSは符号が入ったまま保存していて、取り除いたり書き換えたりはしていない。
+[Discussion #760](https://github.com/danything/denpa/discussions/760))。
 
 - 録画の詳細 (「その他…」) と番組表の詳細から、ダウンロードのボタンが無くなった
 - `/api/recordings/<id>/file` は `?download=1` を読まなくなり、添付 (`Content-Disposition`) を付けない。

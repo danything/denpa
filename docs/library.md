@@ -93,8 +93,9 @@ Chromium で `canPlayType` が `probably` を返し、実機の録画で再生�
 `alt` = もう一方 (H.264)。テレビのアプリと端末に保存も名指しします。再生のためのエンドポイントなので、
 添付 (`Content-Disposition: attachment`) にはしません。
 
-**録画のダウンロードはいったん無くしました** (コピー制御の扱いが決まるまで、録画のファイルを外へ
-持ち出せないようにするため。[Discussion #760](https://github.com/danything/denpa/discussions/760))。
+**録画のダウンロードはいったん無くしました。** エンコードした録画 (mkv) にはコピー制御の符号が
+引き継がれないため、扱いが決まるまでファイルとして外へ持ち出せないようにしています (元のTSは符号が
+入ったまま保存していて、取り除いたり書き換えたりはしていません。[Discussion #760](https://github.com/danything/denpa/discussions/760))。
 端末に保存 ([offline.md](offline.md)) は denpa の中だけで観るもので、こちらは残しています。
 
 **観る画面はファイルを名指しします** (`?source=encoded` か `alt`。下)。エンコードしている最中に
