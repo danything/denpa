@@ -97,7 +97,7 @@ jobs:
       - name: Set up .NET
         uses: actions/setup-dotnet@v6
         with:
-          dotnet-version: '10.0.401'
+          dotnet-version: '10.0.402'
 
       # 設定の読み書き、選局表、チューナー自動検出の値の読み取り。
       # MTP の方式 (global.json の test.runner) ではプロジェクトは --project で渡す
@@ -140,7 +140,7 @@ jobs:
       - name: Set up .NET
         uses: actions/setup-dotnet@v6
         with:
-          dotnet-version: '10.0.401'
+          dotnet-version: '10.0.402'
 
       - name: Unit tests (.NET agent, asicend --mock)
         run: ASICEN_USERLAND_DIR="$PWD/asicen-build" dotnet test --project agent/Denpa.Agent.Tests/Denpa.Agent.Tests.csproj --treenode-filter '/*/*/AsicenMockTests/*'
@@ -204,7 +204,7 @@ jobs:
       - name: Set up .NET
         uses: actions/setup-dotnet@v6
         with:
-          dotnet-version: '10.0.401'
+          dotnet-version: '10.0.402'
 
       # Linux でしか意味の無いテスト (/proc を数える・Linux の pipe の深さに頼る偽物) は中で飛ばしてある。
       # 1本ずつ結果を出して上限を切る。Mac でだけ止まるものがあったとき、どれなのかが残るように
@@ -284,7 +284,7 @@ jobs:
       - name: Set up .NET
         uses: actions/setup-dotnet@v6
         with:
-          dotnet-version: '10.0.401'
+          dotnet-version: '10.0.402'
 
       # Linux でしか意味の無いテスト (sysfs・/dev のパス・libc の pipe・/bin/sh の偽物) は中で飛ばしてある
       - name: Unit tests (.NET agent)
