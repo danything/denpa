@@ -29,6 +29,7 @@ function filled(seed: DetailSeed): ProgramDetail {
         video_type: null,
         video_resolution: null,
         is_free: true,
+        copy_never: false,
         ...seed,
     };
 }

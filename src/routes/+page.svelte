@@ -63,7 +63,7 @@
     // エンコードの進み具合だけは中身ごと届き、読み直さず行の数字を書き換える
     liveUpdates(['recordings', 'reservations'], { encode: applyEncodeProgress });
 
-    const active = ['scheduled', 'conflict', 'recording'];
+    const active = ['scheduled', 'conflict', 'skipped', 'recording'];
 
     /**
      * 置き場の使用量。**主 (AV1) を先に出し、在るものだけ括弧に添える。**

@@ -295,9 +295,31 @@ describe('savePrograms', () => {
             genres: [],
             audios: [],
             video: null,
+            copyNever: false,
             ...overrides,
         } as Parameters<typeof savePrograms>[0][number];
     }
+
+    /*
+     * コピー禁止の印 (docs/data.md「コピー禁止の番組」)。詳細の表は記述子を載せないので
+     * 「言っていない」(null) で来る。そこで外さない
+     */
+    test('コピー禁止の印を持つ。言っていない回 (null) では前のまま', async () => {
+        offered = [channel(23608, 'ＴＯＫＹＯ　ＭＸ')];
+        syncServicesOnly(await getChannels());
+        orm().delete(programs).run();
+        const copyNever = () =>
+            orm().select({ copy_never: programs.copy_never }).from(programs).get()?.copy_never;
+
+        savePrograms([event({ copyNever: null })]);
+        expect(copyNever()).toBe(false);
+        savePrograms([event({ copyNever: true })]);
+        expect(copyNever()).toBe(true);
+        savePrograms([event({ copyNever: null })]);
+        expect(copyNever()).toBe(true);
+        savePrograms([event({ copyNever: false })]);
+        expect(copyNever()).toBe(false);
+    });
 
     test('題名の無い回で、入っている題名を消さない', async () => {
         offered = [channel(23608, 'ＴＯＫＹＯ　ＭＸ')];

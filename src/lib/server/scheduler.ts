@@ -1,4 +1,5 @@
 import { and, eq, getTableColumns, gt, inArray, isNull, lte, or, sql } from 'drizzle-orm';
+import { COPY_NEVER_REASON } from '../format';
 import type { Reservation } from '../types';
 import { config } from './config';
 import { assign, type Busy, type Capacity, capacityOf } from './conflict';
@@ -11,7 +12,7 @@ import {
     startRecording,
     stopRecording,
 } from './recorder';
-import { recordings, reservations, services } from './schema';
+import { programs, recordings, reservations, services } from './schema';
 import { isDraining } from './shutdown';
 import {
     type AgentTuner,
@@ -25,6 +26,8 @@ import {
 interface Candidate extends Reservation {
     type: string;
     channel: string;
+    /** 番組表でコピー禁止と言われているか。番組表から消えていれば false */
+    copy_never: boolean;
 }
 
 /**
@@ -61,13 +64,19 @@ export async function tunerState(): Promise<{ capacity: Capacity; busy: Busy[] }
 
 export async function resolveConflicts(): Promise<{ accepted: number; rejected: number }> {
     const { capacity, busy } = await tunerState();
-    const candidates: Candidate[] = orm()
-        .select({ ...getTableColumns(reservations), type: services.type, channel: services.channel })
+    const all: Candidate[] = orm()
+        .select({
+            ...getTableColumns(reservations),
+            type: services.type,
+            channel: services.channel,
+            copy_never: sql<boolean>`COALESCE(${programs.copy_never}, 0) = 1`.mapWith(Boolean),
+        })
         .from(reservations)
         .innerJoin(services, eq(services.id, reservations.service_id))
+        .leftJoin(programs, eq(programs.id, reservations.program_id))
         .where(
             and(
-                inArray(reservations.state, ['scheduled', 'conflict']),
+                inArray(reservations.state, ['scheduled', 'conflict', 'skipped']),
                 // 録り始めたものは数え直さない。使うチューナーはもう決まっている
                 isNull(reservations.started_at),
                 gt(reservations.end_at, now()),
@@ -75,6 +84,12 @@ export async function resolveConflicts(): Promise<{ accepted: number; rejected: 
         )
         .orderBy(reservations.start_at)
         .all();
+    /*
+     * **コピー禁止の番組はチューナーの割り振りに入れない** — 録らないので取り合わない。
+     * 番組表が書き換わって禁止でなくなったものは、ここで割り振りに戻る
+     */
+    const skipped = all.filter((c) => c.copy_never);
+    const candidates = all.filter((c) => !c.copy_never);
 
     // 前後のマージンぶんチューナーを使う時間は延びる。予約表と実行時のズレを無くすため
     // 同じ物差しで数える
@@ -90,10 +105,21 @@ export async function resolveConflicts(): Promise<{ accepted: number; rejected: 
 
     const at = now();
     orm().transaction((tx) => {
+        for (const s of skipped) {
+            tx.update(reservations)
+                .set({ state: 'skipped', conflict_reason: COPY_NEVER_REASON, updated_at: at })
+                .where(and(eq(reservations.id, s.id), inArray(reservations.state, ['scheduled', 'conflict'])))
+                .run();
+        }
         for (const a of accepted) {
             tx.update(reservations)
                 .set({ state: 'scheduled', conflict_reason: null, updated_at: at })
-                .where(and(eq(reservations.id, a.reservation.id), eq(reservations.state, 'conflict')))
+                .where(
+                    and(
+                        eq(reservations.id, a.reservation.id),
+                        inArray(reservations.state, ['conflict', 'skipped']),
+                    ),
+                )
                 .run();
             /*
              * **譲ったぶんを覚える。マージンだけ譲ったものも。** 譲っていなければ NULL に戻す —
@@ -122,7 +148,12 @@ export async function resolveConflicts(): Promise<{ accepted: number; rejected: 
         for (const r of rejected) {
             tx.update(reservations)
                 .set({ state: 'conflict', conflict_reason: r.reason, updated_at: at })
-                .where(and(eq(reservations.id, r.reservation.id), eq(reservations.state, 'scheduled')))
+                .where(
+                    and(
+                        eq(reservations.id, r.reservation.id),
+                        inArray(reservations.state, ['scheduled', 'skipped']),
+                    ),
+                )
                 .run();
         }
     });
@@ -167,14 +198,15 @@ export async function tick(): Promise<void> {
     }
 
     // 始まらないまま終わってしまった予約を片付ける。
-    // アプリが止まっていた間に放送が終わったものがここに残り続けていた
+    // アプリが止まっていた間に放送が終わったものがここに残り続けていた。
+    // 録らないと決めたもの (コピー禁止) も、理由を持ったまま録り逃しの一覧へ移る
     const expired = affected(
         orm()
             .update(reservations)
             .set({ state: 'missed', updated_at: at })
             .where(
                 and(
-                    inArray(reservations.state, ['scheduled', 'conflict']),
+                    inArray(reservations.state, ['scheduled', 'conflict', 'skipped']),
                     isNull(reservations.started_at),
                     lte(reservations.end_at, at),
                 ),

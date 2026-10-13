@@ -113,7 +113,7 @@ const RECORDING_STATE = `
 /**
  * 画面に出す予約の状態。**録り始めてからは録画の行が決める。**
  *
- * DBに入っているのは `scheduled | conflict | canceled | missed` だけ。
+ * DBに入っているのは `scheduled | conflict | skipped | canceled | missed` だけ。
  * 予約 `r` と、その予約で録れた最新の録画 `rec` を LEFT JOIN した上で使う
  * (一覧と番組表の両方が要るので、式はここにしか置かない)。
  * どちらも `alias()` したものを渡してよい — 列は名指しなので別名がそのまま効く
@@ -213,6 +213,11 @@ export const programs = sqliteTable(
         video_type: text('video_type'),
         /** 1080i / 480i など */
         video_resolution: text('video_resolution'),
+        /**
+         * **コピー禁止の番組か** (EIT のデジタルコピー制御記述子)。禁止の番組は録らない —
+         * 予約は「録画しない」になる (`scheduler.resolveConflicts`)。docs/data.md「コピー禁止の番組」
+         */
+        copy_never: flag('copy_never').notNull().default(sql`0`),
         updated_at: integer('updated_at').notNull(),
     },
     (t) => [
@@ -262,7 +267,7 @@ export const rules = sqliteTable('rules', {
  * 知っているので、画面に出す `recording | done | failed` は録画から引く
  * (`types.ts` の ReservationState、上の `reservationState()`)
  */
-const RESERVATION_STATES = ['scheduled', 'conflict', 'canceled', 'missed'] as const;
+const RESERVATION_STATES = ['scheduled', 'conflict', 'skipped', 'canceled', 'missed'] as const;
 
 export const reservations = sqliteTable(
     'reservations',
@@ -283,7 +288,11 @@ export const reservations = sqliteTable(
          * (元のTSを残すか・CMの扱い・コーデック) は持たず、エンコードするときに settings を見る
          */
         encode: flag('encode').notNull().default(sql`1`),
-        /** missed = 始まらないまま放送が終わったもの (アプリが止まっていた等) */
+        /**
+         * missed = 始まらないまま放送が終わったもの (アプリが止まっていた等)。
+         * skipped = **録らないと決めたもの** (コピー禁止の番組。`scheduler.resolveConflicts`)。
+         * 理由は `conflict_reason` に入る。放送が終われば missed になる (理由はそのまま)
+         */
         state: text('state', { enum: RESERVATION_STATES }).notNull().default('scheduled'),
         /** 録り始めた時刻。NULL なら**まだ始めていない**。二重に録り始めないための鍵でもある (scheduler.tick) */
         started_at: integer('started_at'),
@@ -295,6 +304,7 @@ export const reservations = sqliteTable(
          * 人が押したものとして扱う (余分に録るより、取り消したものを録るほうが困る)
          */
         canceled_by: text('canceled_by', { enum: ['user', 'system'] }),
+        /** 録れない・録らない理由 (チューナー不足の `conflict`、コピー禁止の `skipped`)。画面にそのまま出す */
         conflict_reason: text('conflict_reason'),
         created_at: integer('created_at').notNull(),
         updated_at: integer('updated_at').notNull(),

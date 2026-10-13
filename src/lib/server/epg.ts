@@ -261,7 +261,7 @@ function clearBelongings(at: number, serviceId: number): { programs: number; res
             .where(
                 and(
                     eq(reservations.service_id, serviceId),
-                    inArray(reservations.state, ['scheduled', 'conflict']),
+                    inArray(reservations.state, ['scheduled', 'conflict', 'skipped']),
                     // 録り始めたものは触らない。取り消しても録画は戻らない
                     isNull(reservations.started_at),
                 ),
@@ -382,6 +382,8 @@ export function savePrograms(events: EitEvent[]): number {
         audios: sql`excluded.audios`,
         video_type: sql`excluded.video_type`,
         video_resolution: sql`excluded.video_resolution`,
+        // コピー禁止か。**表が言っていない回 (NULL) は前のまま** (`EitEvent.copyNever`)
+        copy_never: sql`COALESCE(${sql.placeholder('copy_never')}, ${programs.copy_never})`,
         updated_at: sql`excluded.updated_at`,
     };
     /*
@@ -431,6 +433,7 @@ export function savePrograms(events: EitEvent[]): number {
                 audios: sql`${sql.placeholder('audios')}`,
                 video_type: sql.placeholder('video_type'),
                 video_resolution: sql.placeholder('video_resolution'),
+                copy_never: sql`COALESCE(${sql.placeholder('copy_never')}, 0)`,
                 updated_at: sql.placeholder('updated_at'),
             })
             .onConflictDoUpdate({ target: programs.id, set: refresh })
@@ -481,6 +484,7 @@ export function savePrograms(events: EitEvent[]): number {
                 ),
                 video_type: event.video?.type ?? null,
                 video_resolution: event.video?.resolution ?? null,
+                copy_never: event.copyNever,
                 updated_at: at,
             });
             count++;
@@ -554,7 +558,7 @@ function syncReservationTimes(): number {
             .where(
                 and(
                     eq(programs.id, reservations.program_id),
-                    inArray(reservations.state, ['scheduled', 'conflict']),
+                    inArray(reservations.state, ['scheduled', 'conflict', 'skipped']),
                     // 録り始めた予約は動かさない。延長への追従は録画の行のほうでやる
                     isNull(reservations.started_at),
                     or(

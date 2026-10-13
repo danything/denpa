@@ -297,7 +297,7 @@ CM 飛ばしの行き先です。観る画面とテレビのアプリが使っ�
   "genre_detail": [{ "lv1": 7, "lv2": 0 }],
   "audios": [{ "componentType": 3, "langs": ["jpn"], "main": true },
              { "componentType": 3, "langs": ["jpn"], "text": "解説ステレオ" }],
-  "video_type": "mpeg2", "video_resolution": "1080i", "is_free": true }
+  "video_type": "mpeg2", "video_resolution": "1080i", "is_free": true, "copy_never": false }
 ```
 
 - `name` は放送のままの名前 (記号 `[字]` などを含む)。時刻は UNIX ミリ秒
@@ -306,6 +306,8 @@ CM 飛ばしの行き先です。観る画面とテレビのアプリが使っ�
   どれも番組表に無ければ `null`
 - `video_type` (`mpeg2` / `h.264` など)・`video_resolution` (`1080i` / `480i` など) も、無ければ `null`
 - `is_free` は無料放送か
+- `copy_never` はコピー禁止の番組か。禁止の番組は録らない ([data.md](data.md#コピー禁止の番組は録らない))。
+  `POST /api/services/<id>/record` は `400` と「コピー禁止の番組なので録画しません」を返す
 - 番組表は終わった番組を消していくので、**引けないことがあります** (`404`)。そのときは呼ぶ側が持っている分
   (`now` の番組名・時刻など) だけを出してください
 

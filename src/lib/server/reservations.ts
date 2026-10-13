@@ -1,5 +1,6 @@
 import { and, desc, eq, gt, inArray, lte, ne, sql } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/sqlite-core';
+import { COPY_NEVER_REASON } from '../format';
 import type { Reservation, ReservationState } from '../types';
 import { now, orm } from './db';
 import { stopRecording } from './recorder';
@@ -15,6 +16,11 @@ export async function reserve(programId: number): Promise<Reservation> {
     const at = now();
     // 終わった番組を予約しても録れない。予約表に並べても取り消す手間が増えるだけ
     if (program.end_at <= at) throw new Error('この番組は放送が終わっています');
+    /*
+     * **コピー禁止の番組は録らない** (`format.COPY_NEVER_REASON`)。手で押したものも断る —
+     * 予約を立てても「録画しない」になるだけで、押した人には録れたように見えてしまう
+     */
+    if (program.copy_never) throw new Error(COPY_NEVER_REASON);
     // 手動で入れたものはルール由来 (既定 1) より上。**予約どうしだけの物差し**
     const priority = 2;
     // 録画のしかたは全体で1つ。「エンコードするか否か」だけ予約時に固定する。

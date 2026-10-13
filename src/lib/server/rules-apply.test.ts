@@ -682,6 +682,19 @@ describe('同じ回は最初の放送だけ録る', () => {
         ]);
     });
 
+    /* コピー禁止の放送は録らない (`format.COPY_NEVER_REASON`)。弾かれたのと同じで、禁止でない次の放送を録る */
+    test('最初の放送がコピー禁止なら、次の放送も予約する', () => {
+        withBs();
+        rule(1, 'テストアニメ', true, 1, true);
+        program(10, 'テストアニメ #1');
+        orm().update(programs).set({ copy_never: true }).where(eq(programs.id, 10)).run();
+        on(BS11, 11, 'テストアニメ #1', DAY);
+
+        applyRules();
+        // 禁止の放送にも予約は立つ (「録画しない」と理由を出すため。`scheduler.resolveConflicts`)
+        expect(reservations().map((r) => r.program_id)).toEqual([10, 11]);
+    });
+
     test('取り合いが解消したら次の放送は引っ込める。直前 (猶予の内) なら残す', () => {
         withBs();
         rule(1, 'テストアニメ', true, 1, true);

@@ -1,0 +1,1 @@
+ALTER TABLE `programs` ADD `copy_never` integer DEFAULT 0 NOT NULL;

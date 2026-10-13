@@ -5,6 +5,10 @@
 
 エンコード方法そのものは [encode.md](encode.md)、外から一覧を取る API は [api.md](api.md)。
 
+**コピー禁止の番組は録らないので、置き場にも来ません** (市販のレコーダーと同じ。
+[data.md](data.md#コピー禁止の番組は録らない)、[Discussion #760](https://github.com/danything/denpa/discussions/760))。
+置き場にあるものは、端末への保存 (オフライン視聴) を含めてこれまでどおり配ります。
+
 ```text
 /media/encoded/                 ← ENCODED_DIR
 └── テストアニメ/

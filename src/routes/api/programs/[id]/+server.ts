@@ -27,6 +27,7 @@ export function GET({ params }) {
             video_type: programs.video_type,
             video_resolution: programs.video_resolution,
             is_free: programs.is_free,
+            copy_never: programs.copy_never,
             start_at: programs.start_at,
             end_at: programs.end_at,
             service_name: services.name,

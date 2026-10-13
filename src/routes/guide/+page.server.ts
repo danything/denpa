@@ -41,7 +41,10 @@ function broadcastDayStart(at: number): number {
  * 詳細は開いた 1 件だけ `/api/programs/<id>` で取る (予約・録画の一覧と同じ経路)
  */
 interface GridProgram
-    extends Pick<Program, 'id' | 'service_id' | 'start_at' | 'end_at' | 'name' | 'description' | 'genres'> {
+    extends Pick<
+        Program,
+        'id' | 'service_id' | 'start_at' | 'end_at' | 'name' | 'description' | 'genres' | 'copy_never'
+    > {
     reservation_state: ReservationState | null;
     /**
      * その番組で録れたもの。番組表から詳細を開いたときに、そのまま再生できるようにする。
@@ -106,6 +109,8 @@ function readGrid(type: ChannelType, start: number, end: number) {
             description: p.description,
             // マスの色はジャンル (大分類) で決める
             genres: p.genres,
+            // コピー禁止の番組はマスに小さく添える (録らない。`format.COPY_NEVER_REASON`)
+            copy_never: p.copy_never,
             /*
              * 予約の状態は録画の行から引く (reservationState)。r.state をそのまま
              * 出していた頃は、録り終えた番組が「予約済み」のまま並び、

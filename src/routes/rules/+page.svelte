@@ -7,7 +7,7 @@
     import ProgramDetail from '#lib/components/ProgramDetail.svelte';
     import Toasts, { errorNotice, type Notice } from '#lib/components/Toasts.svelte';
     import { programDetail } from '#lib/detail.svelte.js';
-    import { badgeClass, CM_LABEL, dateTime, SERVICE_TYPE_LABEL, stateLabel } from '#lib/format.js';
+    import { badgeClass, CM_LABEL, COPY_NEVER_REASON, dateTime, SERVICE_TYPE_LABEL, stateLabel } from '#lib/format.js';
     import { CODEC_LABEL } from '#lib/hw.js';
     import { matches, Paged, sentinel } from '#lib/paging.svelte.js';
     import { parseSearchFields, SEARCH_FIELD_LABEL, SEARCH_FIELDS, searchFieldLabel } from '#lib/search.js';
@@ -652,7 +652,9 @@
                                         {#if program.skip !== null}
                                             <!-- なぜ録らないのか。どの放送で録るのかまで書けば、確かめに行ける -->
                                             <div class="tiny muted" data-testid="preview-skip-reason">
-                                                {#if program.skip.kind === 'repeat'}
+                                                {#if program.skip.kind === 'copy-never'}
+                                                    {COPY_NEVER_REASON}
+                                                {:else if program.skip.kind === 'repeat'}
                                                     同じ回を <span class="broadcast">{program.skip.service_name}</span>
                                                     ({dateTime(program.skip.start_at)}) で録ります
                                                 {:else}
@@ -865,11 +867,11 @@
                     <input type="hidden" name="reservationId" value={opened.reservation_id} />
                     <button type="submit" class="outline danger" data-testid="rule-detail-cancel">予約取消</button>
                 </form>
-            {:else if opened !== null && opened.reservation_state === null && opened.end_at > clock}
+            {:else if opened !== null && opened.reservation_state === null && opened.end_at > clock && opened.skip?.kind !== 'copy-never'}
                 <!--
                     録画のしかたはここでは選ばせない。設定画面の1箇所で決める
                     (同じ選択肢を予約・ルール・設定に並べると、どれで決まったのか
-                    分からなくなる)
+                    分からなくなる)。コピー禁止の番組には出さない (押しても断るだけ。番組表と同じ)
                 -->
                 <form
                     method="POST"

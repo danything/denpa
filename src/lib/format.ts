@@ -232,6 +232,8 @@ export function badgeClass(state: string): string {
 export const STATE_LABEL: Record<string, string> = {
     scheduled: '予約済み',
     conflict: '競合',
+    // コピー禁止の番組。録らないと決めた予約 (`COPY_NEVER_REASON`)
+    skipped: '録画しない',
     recording: '録画中',
     done: '完了',
     failed: '失敗',
@@ -249,6 +251,13 @@ export const STATE_LABEL: Record<string, string> = {
 export function stateLabel(state: string): string {
     return STATE_LABEL[state] ?? state;
 }
+
+/**
+ * **コピー禁止の番組は録らない** (市販のレコーダーと同じ。docs/data.md「コピー禁止の番組」)。
+ * 予約は「録画しない」(`skipped`) になってこの理由を持ち、手で予約しようとしても
+ * この一文で断る。画面とサーバの両方で使うのでここに置く
+ */
+export const COPY_NEVER_REASON = 'コピー禁止の番組なので録画しません';
 
 export const CM_LABEL: Record<string, string> = {
     off: '何もしない',

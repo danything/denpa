@@ -20,6 +20,12 @@ import { parseTitle } from './title';
 import { openChannelStream, recordingUse, type StreamUse } from './tuner';
 import { notify } from './webhook';
 
+/**
+ * 録り始めてから PMT でコピー禁止と分かり、1バイトも保存しなかった録画の理由
+ * (番組表が古い・無かったとき。ふだんは予約の時点で止まる: `format.COPY_NEVER_REASON`)
+ */
+export const COPY_NEVER_RECORDING = 'コピー禁止の番組なので録画しませんでした';
+
 /** 録画中のストリームを止めるための手段。プロセス内にしか無いので再起動で失われる (起動時に拾い直す: recoverOrphanedRecordings) */
 const active = new Map<number, AbortController>();
 
@@ -268,6 +274,10 @@ async function pump(
     const eventId = recording.program_id === null ? null : recording.program_id % 100000;
 
     let written = 0;
+    /** いまコピー禁止で保存を止めているか (変わり目でだけ言う) */
+    let copyNever = false;
+    /** 一度でもコピー禁止を見たか。1バイトも書けなかったときの理由になる */
+    let sawCopyNever = false;
     // 何を使っているのかがチューナー画面に出る。番組名は載せず、IDだけ渡して向こうで引く
     const use = recordingUse(recording.id);
 
@@ -340,6 +350,37 @@ async function pump(
                         }
 
                         const out = filter.filter(chunk);
+                        /*
+                         * **コピー禁止のあいだは保存しない** (PMT のデジタルコピー制御記述子)。番組表が
+                         * 古い・無いときの備えで、ふだんは予約の時点で止まっている (`format.COPY_NEVER_REASON`)。
+                         * 決めるのは PMT を読んでから — それまでのぶん (PAT・番組表) も書かない
+                         */
+                        if (!filter.ready) continue;
+                        if (filter.copyNever) {
+                            if (!copyNever) {
+                                copyNever = true;
+                                sawCopyNever = true;
+                                console.warn(
+                                    `[recorder] 録画 ${recording.id}: コピー禁止なので保存を止めます`,
+                                );
+                            }
+                            /*
+                             * **始めから禁止なら録画をやめてチューナーを返す。** 番組が始まる前 (開始マージン)
+                             * の PMT は前の番組のものなので、番組が始まるまでは待つ。途中で禁止に
+                             * 変わったときは止めない — そこまでのぶんは残し、戻れば続きを書く
+                             */
+                            if (written === 0 && Date.now() >= recording.start_at) {
+                                controller.abort();
+                                break;
+                            }
+                            continue;
+                        }
+                        if (copyNever) {
+                            copyNever = false;
+                            console.warn(
+                                `[recorder] 録画 ${recording.id}: コピー禁止が解けたので保存を続けます`,
+                            );
+                        }
                         if (out.length === 0) continue;
                         written += out.byteLength;
                         if (!sink.write(out)) await once(sink, 'drain');
@@ -387,7 +428,10 @@ async function pump(
     }
 
     if (size === 0) {
-        fail(recording.id, 'ストリームから1バイトも受信できませんでした');
+        fail(
+            recording.id,
+            sawCopyNever ? COPY_NEVER_RECORDING : 'ストリームから1バイトも受信できませんでした',
+        );
         return;
     }
 

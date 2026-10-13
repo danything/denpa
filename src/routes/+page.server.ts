@@ -180,7 +180,7 @@ export function load({ url, cookies }) {
     const pending = showFinished
         ? not(and(eq(r.state, 'missed'), isNull(r.started_at))!)
         : or(
-              and(inArray(r.state, ['scheduled', 'conflict']), isNull(r.started_at)),
+              and(inArray(r.state, ['scheduled', 'conflict', 'skipped']), isNull(r.started_at)),
               eq(rec.state, 'recording'),
           );
     const reservations: ReservationRow[] = orm()

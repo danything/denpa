@@ -1,6 +1,6 @@
 <script lang="ts">
     import { audioLabel, genreLabel, videoLabel } from '#lib/arib.js';
-    import { dateTime, duration, linkify, time } from '#lib/format.js';
+    import { COPY_NEVER_REASON, dateTime, duration, linkify, time } from '#lib/format.js';
     import type { ProgramDetail } from '#lib/types.js';
 
     /**
@@ -96,6 +96,10 @@
     {/each}
     {#if !program.is_free}
         <span class="tag warning">有料</span>
+    {/if}
+    {#if program.copy_never}
+        <!-- 録らない番組 (`COPY_NEVER_REASON`)。理由は title で添える。観るのはそのままできる -->
+        <span class="tag" title={COPY_NEVER_REASON} data-testid="detail-copy-never">コピー禁止</span>
     {/if}
 </div>
 

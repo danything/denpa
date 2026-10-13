@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { PACKET } from './psi';
 import { ServiceFilter } from './service-filter';
-import { packetize, patSection, programMap } from './synth';
+import { copyControlDescriptor, packetize, patSection, programMap } from './synth';
 
 /** MX1 と MX2 が同じ TS に入っている、実機と同じ構成 */
 const MX1 = 23608;
@@ -155,5 +155,60 @@ describe('局の選り分け', () => {
         const out = filter.filter(Uint8Array.from([...pat(), ...pmt1(), ...pmt2()]));
         expect(pids(out)).toContain(PMT1);
         expect(pids(out)).not.toContain(PMT2);
+    });
+});
+
+/*
+ * **コピー禁止の番組は録らない** (docs/data.md「コピー禁止の番組」)。番組表が古い・無いときの備えに、
+ * 録画は PMT の印を見て保存を止める (`recorder.ts`)。絞り方そのものは変えない (ライブはそのまま観られる)
+ */
+describe('コピー禁止', () => {
+    const pmt = (programInfo: number[], videoInfo: number[] = []) =>
+        packetize(
+            PMT1,
+            programMap(
+                MX1,
+                0x100,
+                [
+                    [0x02, 0x100, videoInfo],
+                    [0x0f, 0x110],
+                ],
+                undefined,
+                programInfo,
+            ),
+        );
+
+    test('PMT を読むまでは禁止と言わない', () => {
+        const filter = new ServiceFilter(MX1);
+        filter.filter(pat());
+        expect(filter.copyNever).toBe(false);
+    });
+
+    test('番組ぜんたいの記述子で禁止なら禁止。1世代のみは禁止ではない', () => {
+        const filter = new ServiceFilter(MX1);
+        filter.filter(Uint8Array.from([...pat(), ...pmt(copyControlDescriptor(0b11))]));
+        expect(filter.copyNever).toBe(true);
+
+        filter.filter(pmt(copyControlDescriptor(0b10)));
+        expect(filter.copyNever).toBe(false);
+    });
+
+    test('ES ごとの記述子で禁止でも禁止', () => {
+        const filter = new ServiceFilter(MX1);
+        filter.filter(Uint8Array.from([...pat(), ...pmt([], copyControlDescriptor(0b11))]));
+        expect(filter.copyNever).toBe(true);
+    });
+
+    test('途中で禁止に変わり、また解ける。絞り方は変わらない', () => {
+        const filter = new ServiceFilter(MX1);
+        filter.filter(Uint8Array.from([...pat(), ...pmt([])]));
+        expect(filter.copyNever).toBe(false);
+
+        filter.filter(pmt(copyControlDescriptor(0b11)));
+        expect(filter.copyNever).toBe(true);
+        expect(pids(filter.filter(payload(0x100)))).toEqual([0x100]);
+
+        filter.filter(pmt([]));
+        expect(filter.copyNever).toBe(false);
     });
 });

@@ -366,10 +366,19 @@ function blockedPrograms(): Set<number> {
  * **同じ回は最初の放送だけ** (ルールの `dedupe`)。録らない番組 → 理由 (`episode.firstAirings`)。
  * 予約を立てるとき (`applyRules`) とルール画面の下見で同じものを使う
  */
-function dedupeSkips<T extends Omit<Airing, 'type'> & { service_type: string }>(list: T[], at: number) {
+function dedupeSkips<T extends Omit<Airing, 'type'> & { service_type: string; copy_never: boolean }>(
+    list: T[],
+    at: number,
+) {
+    /*
+     * **コピー禁止の放送も弾かれているのと同じ。** 録らないので、同じ回の次の放送 (禁止でない局) を録る
+     * (`format.COPY_NEVER_REASON`)
+     */
+    const blocked = blockedPrograms();
+    for (const program of list) if (program.copy_never) blocked.add(program.id);
     return firstAirings(
         list.map((program) => ({ ...program, type: program.service_type })),
-        blockedPrograms(),
+        blocked,
         recordedEpisodes(at),
     );
 }
@@ -379,7 +388,7 @@ function dedupeSkips<T extends Omit<Airing, 'type'> & { service_type: string }>(
  * 立てないので、「最初の放送」の候補に入れない
  */
 export function previewSkips<
-    T extends Omit<Airing, 'type'> & { service_type: string; service_channel: string },
+    T extends Omit<Airing, 'type'> & { service_type: string; service_channel: string; copy_never: boolean },
 >(hits: T[], at: number) {
     const declined = canceledBroadcasts(at);
     return dedupeSkips(
@@ -558,7 +567,7 @@ export function applyRules(options: { rule?: number } = {}): RuleSync {
                   and(
                       eq(reservations.manual, false),
                       isNull(reservations.started_at),
-                      inArray(reservations.state, ['scheduled', 'conflict']),
+                      inArray(reservations.state, ['scheduled', 'conflict', 'skipped']),
                   ),
               )
               .all();

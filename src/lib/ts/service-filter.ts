@@ -21,6 +21,9 @@
  */
 
 import {
+    DESC_DIGITAL_COPY_CONTROL,
+    descriptors,
+    isCopyNever,
     PACKET,
     PacketStream,
     PID_PAT,
@@ -105,12 +108,25 @@ export class ServiceFilter {
     private counter = 0;
     /** PAT に書いてある中継の番号。読むまでは null */
     private tsid: number | null = null;
+    private copyNeverNow = false;
 
     constructor(private readonly serviceId: number) {}
 
     /** その局の PMT を読めたか。読めるまで映像は1バイトも出ない */
     get ready(): boolean {
         return this.own.size > 0;
+    }
+
+    /**
+     * **いま流れているものがコピー禁止か** (最後に読んだ PMT のデジタルコピー制御記述子)。
+     * 番組全体 (1つめのループ) と ES ごと (2つめのループ) のどちらかが禁止なら禁止。
+     * PMT を読むまでは false。
+     *
+     * 録画はこれを見て、禁止のあいだは保存しない (`recorder.ts`)。番組表が古い・無いときの備え。
+     * 絞り方には効かせない — ライブは保存しないので、禁止の番組もそのまま観られる
+     */
+    get copyNever(): boolean {
+        return this.copyNeverNow;
     }
 
     /**
@@ -202,16 +218,28 @@ export class ServiceFilter {
             const pcrPid = ((section[8]! & 0x1f) << 8) | section[9]!;
             if (pcrPid !== PID_NULL) pids.add(pcrPid);
 
-            collectCa(pmtProgramInfo(section), pids);
+            const programInfo = pmtProgramInfo(section);
+            collectCa(programInfo, pids);
+            let copyNever = hasCopyNever(programInfo);
             for (const [, elementaryPid, info] of pmtStreams(section)) {
                 pids.add(elementaryPid);
                 collectCa(info, pids);
+                if (hasCopyNever(info)) copyNever = true;
             }
 
             this.own.clear();
             for (const pid of pids) this.own.add(pid);
+            this.copyNeverNow = copyNever;
         }
     }
+}
+
+/** 記述子の並びに、コピー禁止のデジタルコピー制御記述子があるか (`psi.isCopyNever`) */
+function hasCopyNever(body: Uint8Array): boolean {
+    for (const [tag, data] of descriptors(body)) {
+        if (tag === DESC_DIGITAL_COPY_CONTROL && isCopyNever(data)) return true;
+    }
+    return false;
 }
 
 /** CA_descriptor から ECM の PID を拾う。掛かったまま録れたものを後から復号するのに要る */

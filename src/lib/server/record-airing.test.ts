@@ -41,6 +41,8 @@ config.agentUrl = `http://127.0.0.1:${agent.port}`;
 const { orm } = await import('./db');
 const { programs, recordings, reservations, services } = await import('./schema');
 const { recordAiring, reservationStates } = await import('./reservations');
+const { resolveConflicts } = await import('./scheduler');
+const { COPY_NEVER_REASON } = await import('../format');
 
 const MINUTE = 60_000;
 const NOW = Date.now();
@@ -71,7 +73,7 @@ orm()
     ])
     .run();
 
-function program(id: number, startAt: number, endAt: number, name = `番組${id}`): void {
+function program(id: number, startAt: number, endAt: number, name = `番組${id}`, copyNever = false): void {
     orm()
         .insert(programs)
         .values({
@@ -82,6 +84,7 @@ function program(id: number, startAt: number, endAt: number, name = `番組${id}
             start_at: startAt,
             end_at: endAt,
             name,
+            copy_never: copyNever,
             updated_at: 0,
         })
         .run();
@@ -208,5 +211,71 @@ describe('番組ごとの予約の状態', () => {
         expect(states.has(3)).toBe(false);
         expect(states.has(4)).toBe(false);
         expect(reservationStates([]).size).toBe(0);
+    });
+});
+
+/*
+ * **コピー禁止の番組は録らない** (docs/data.md「コピー禁止の番組」)。市販のレコーダーと同じ。
+ * 手で押したものは断り、ルールが立てた予約は「録画しない」(`skipped`) にして理由を残す
+ */
+describe('コピー禁止の番組', () => {
+    /** ルールが立てたのと同じ形の予約 (手動ではない) */
+    function ruleReservation(programId: number, serviceId: number, startAt: number, endAt: number): void {
+        orm()
+            .insert(reservations)
+            .values({
+                program_id: programId,
+                rule_id: 1,
+                service_id: serviceId,
+                name: `番組${programId}`,
+                start_at: startAt,
+                end_at: endAt,
+                priority: 1,
+                created_at: 0,
+                updated_at: 0,
+            })
+            .run();
+    }
+    const stateOf = (programId: number) =>
+        orm()
+            .select({ state: reservations.state, reason: reservations.conflict_reason })
+            .from(reservations)
+            .where(eq(reservations.program_id, programId))
+            .get();
+
+    test('ライブの録画ボタン (手動) は断って理由を返す。予約は立てない', async () => {
+        reset();
+        program(2, NOW - 10 * MINUTE, NOW + 20 * MINUTE, 'コピー禁止の番組', true);
+        expect(await recordAiring(SERVICE, NOW)).toEqual({
+            ok: false,
+            status: 400,
+            message: COPY_NEVER_REASON,
+        });
+        expect(orm().select().from(reservations).all()).toHaveLength(0);
+    });
+
+    test('ルールが立てた予約は「録画しない」にして理由を残す。チューナーは取り合わない', async () => {
+        reset();
+        // 地上波1台。コピー禁止の番組と同じ時間に、別の物理チャンネルの予約がある
+        program(2, NOW + 10 * MINUTE, NOW + 40 * MINUTE, 'コピー禁止の番組', true);
+        ruleReservation(2, SERVICE, NOW + 10 * MINUTE, NOW + 40 * MINUTE);
+        ruleReservation(99, OTHER, NOW + 10 * MINUTE, NOW + 40 * MINUTE);
+
+        await resolveConflicts();
+        expect(stateOf(2)).toEqual({ state: 'skipped', reason: COPY_NEVER_REASON });
+        // 録らない番組がチューナーを取らないので、裏の予約は録れる
+        expect(stateOf(99)).toEqual({ state: 'scheduled', reason: null });
+    });
+
+    test('番組表で禁止でなくなれば、割り振りに戻る', async () => {
+        reset();
+        program(2, NOW + 10 * MINUTE, NOW + 40 * MINUTE, 'コピー禁止の番組', true);
+        ruleReservation(2, SERVICE, NOW + 10 * MINUTE, NOW + 40 * MINUTE);
+        await resolveConflicts();
+        expect(stateOf(2)?.state).toBe('skipped');
+
+        orm().update(programs).set({ copy_never: false }).where(eq(programs.id, 2)).run();
+        await resolveConflicts();
+        expect(stateOf(2)).toEqual({ state: 'scheduled', reason: null });
     });
 });

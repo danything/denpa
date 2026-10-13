@@ -45,6 +45,15 @@ interface Row extends Rule {
 const PENDING = and(inArray(reservations.state, ['scheduled', 'conflict']), isNull(reservations.started_at));
 
 /**
+ * 下見に出す、立っている予約。**録らないと決めたもの (コピー禁止の `skipped`) も出す** — 行に
+ * 状態と取消を出すため。録らないので、予約数 (`PENDING`) とチューナーの取り合いには数えない
+ */
+const HELD = and(
+    inArray(reservations.state, ['scheduled', 'conflict', 'skipped']),
+    isNull(reservations.started_at),
+);
+
+/**
  * 条件の読み取り。**画面から来る経路が2つある** — 「この条件で何が録れるか」は
  * URL のクエリで、保存はフォームの POST で来る。どちらも `get` / `getAll` を持つ。
  */
@@ -186,9 +195,13 @@ export interface PreviewRow {
     conflict_reason: string | null;
     /**
      * **録らない理由** (同じ回は最初の放送だけ。`episode.firstAirings`)。録るなら null。
-     * `repeat` は同じ回を別の放送で録る (その放送の局と時刻)、`recorded` はもう録ってある
+     * `repeat` は同じ回を別の放送で録る (その放送の局と時刻)、`recorded` はもう録ってある。
+     * `copy-never` はコピー禁止の番組 (`format.COPY_NEVER_REASON`)
      */
-    skip: { kind: 'repeat' | 'recorded'; service_name: string; start_at: number } | null;
+    skip:
+        | { kind: 'repeat' | 'recorded'; service_name: string; start_at: number }
+        | { kind: 'copy-never' }
+        | null;
 }
 
 interface Pending {
@@ -245,7 +258,7 @@ export async function load({ url }) {
         })
         .from(reservations)
         .innerJoin(serviceTable, eq(serviceTable.id, reservations.service_id))
-        .where(PENDING)
+        .where(HELD)
         .orderBy(reservations.start_at)
         .all();
     const reserved = new Map(pending.map((row) => [row.program_id, row]));
@@ -364,8 +377,10 @@ export async function load({ url }) {
         const skips: ReturnType<typeof previewSkips<(typeof hits)[number]>> = conditions.dedupe
             ? previewSkips(hits, now())
             : new Map();
-        const skipOf = (id: number): PreviewRow['skip'] => {
-            const skip = skips.get(id);
+        const skipOf = (p: (typeof hits)[number]): PreviewRow['skip'] => {
+            // コピー禁止の番組は録らない (`format.COPY_NEVER_REASON`)。手動でも同じ
+            if (p.copy_never) return { kind: 'copy-never' };
+            const skip = skips.get(p.id);
             if (skip === undefined) return null;
             return skip.kind === 'repeat'
                 ? { kind: 'repeat', service_name: skip.first.service_name, start_at: skip.first.start_at }
@@ -382,7 +397,7 @@ export async function load({ url }) {
         const occupants = new Map<number, Occupant>();
         for (const p of hits) {
             // 録らないものはチューナーを取り合わない
-            if (skips.has(p.id)) continue;
+            if (skips.has(p.id) || p.copy_never) continue;
             occupants.set(p.id, {
                 programId: p.id,
                 name: p.name,
@@ -394,6 +409,7 @@ export async function load({ url }) {
             });
         }
         for (const row of pending) {
+            if (row.state === 'skipped') continue;
             occupants.set(row.program_id, {
                 programId: row.program_id,
                 name: row.name,
@@ -422,7 +438,7 @@ export async function load({ url }) {
                 conflict_reason:
                     held?.state === 'conflict' ? (held.conflict_reason ?? 'チューナーが足りません') : null,
                 // 引っ込めない予約 (手動・猶予の内) が立っているなら録る。「録らない」とは言わない
-                skip: held !== null && keepsReservation(held, now()) ? null : skipOf(p.id),
+                skip: held !== null && keepsReservation(held, now()) && !p.copy_never ? null : skipOf(p),
             };
         });
 

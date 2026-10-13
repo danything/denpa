@@ -177,6 +177,27 @@ describe('EIT の解析', () => {
         expect(parseEit(section([event({ isFree: false })]))?.events[0]?.isFree).toBe(false);
     });
 
+    /*
+     * コピー禁止の番組は録らない (docs/data.md「コピー禁止の番組」)。記録制御の2ビットが 11 のときだけ。
+     * 1世代のみ (10) は今までどおり録る
+     */
+    test('コピー禁止はデジタルコピー制御記述子の先頭2ビットで分かる', () => {
+        const copyNever = (copyControl?: number) =>
+            parseEit(section([event(copyControl === undefined ? {} : { copyControl })]))?.events[0]
+                ?.copyNever;
+        expect(copyNever(0b11)).toBe(true);
+        expect(copyNever(0b10)).toBe(false);
+        expect(copyNever(0b00)).toBe(false);
+        // 載っていなければ禁止ではない
+        expect(copyNever()).toBe(false);
+    });
+
+    test('詳細の表は記述子を載せないので、コピー禁止かどうかは「言っていない」(null)', () => {
+        expect(parseEit(section([event()], { tableId: 0x58 }))?.events[0]?.copyNever).toBeNull();
+        // p/f は基本と同じく言う
+        expect(parseEit(section([event()], { tableId: 0x4e }))?.events[0]?.copyNever).toBe(false);
+    });
+
     test('他局の番組表 (0x4F / 0x60〜) は読まない', () => {
         expect(parseEit(section([event()], { tableId: 0x4f }))).toBeNull();
         expect(parseEit(section([event()], { tableId: 0x60 }))).toBeNull();
@@ -433,6 +454,19 @@ describe('EpgReader', () => {
         const program = reader.all()[0]!;
         expect(program.name).toBe('テスト番組');
         expect(program.extended).toEqual({ 番組内容: 'あらすじ' });
+    });
+
+    test('詳細だけの表があとから来ても、コピー禁止の印を消さない', () => {
+        const reader = new EpgReader();
+        reader.feed(packets(section([event({ copyControl: 0b11 })])));
+        reader.feed(
+            packets(section([event({ name: '', extended: { 番組内容: 'あらすじ' } })], { tableId: 0x58 })),
+        );
+        expect(reader.all()[0]!.copyNever).toBe(true);
+
+        // 基本の表が「禁止ではない」と言い直せば外れる
+        reader.feed(packets(section([event()])));
+        expect(reader.all()[0]!.copyNever).toBe(false);
     });
 
     test('開始時刻や尺が未定の番組は溜めない。録画の時刻が決まらない', () => {

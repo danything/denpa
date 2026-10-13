@@ -27,6 +27,8 @@ export interface ProgramDetail {
     video_type: string | null;
     video_resolution: string | null;
     is_free: boolean;
+    /** コピー禁止の番組か。禁止の番組は録らない (`format.COPY_NEVER_REASON`) */
+    copy_never: boolean;
 }
 
 /**
@@ -65,7 +67,7 @@ export type Rule = typeof rules.$inferSelect;
 /**
  * 画面に出す予約の状態。
  *
- * DBの列に入っているのは `scheduled | conflict | canceled | missed` だけ
+ * DBの列に入っているのは `scheduled | conflict | skipped | canceled | missed` だけ
  * (`Reservation['state']`)。録り始めてからの `recording | done | failed` は
  * **録画の行から引いた結果**で、一覧を組み立てるときに足す
  * (routes/+page.server.ts で録画の行から引く)。

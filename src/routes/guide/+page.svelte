@@ -179,6 +179,7 @@
             video_type: null,
             video_resolution: null,
             is_free: true,
+            copy_never: false,
         };
         let detail = seed;
         try {
@@ -405,7 +406,7 @@
     }
 
     /** 予約を取り消せるのはこれから録るものだけ。録り終わったものに出しても何も起きない */
-    const CANCELABLE = ['scheduled', 'conflict', 'recording'];
+    const CANCELABLE = ['scheduled', 'conflict', 'skipped', 'recording'];
 </script>
 
 <!--
@@ -692,7 +693,7 @@
                     -->
                         <button type="button"
                             class="program"
-                            class:reserved={program.reservation_state}
+                            class:reserved={program.reservation_state && program.reservation_state !== 'skipped'}
                             data-state={program.reservation_state}
                             data-genre={program.genres?.[0]}
                             onclick={() => void open(program)}
@@ -704,6 +705,10 @@
                                     <span class="broadcast">{program.name}</span>
                                 {:else}
                                     <span class="faint">(番組情報なし)</span>
+                                {/if}
+                                {#if program.copy_never}
+                                    <!-- 録らない番組。控えめに添えるだけ (理由は詳細で) -->
+                                    <span class="copy-never" data-testid="grid-copy-never">コピー禁止</span>
                                 {/if}
                             </span>
                             {#if program.reservation_state}
@@ -818,11 +823,12 @@
                             予約取消
                         </button>
                     </form>
-                {:else if program.reservation_state === null && program.end_at > clock}
+                {:else if program.reservation_state === null && program.end_at > clock && !program.copy_never}
                     <!--
                         録画のしかたはここでは選ばせない。設定画面の1箇所で決める
                         (同じ選択肢を予約・ルール・設定に並べると、どれで決まったのか
-                        分からなくなる)
+                        分からなくなる)。コピー禁止の番組には出さない — 押しても断るだけ
+                        (`reservations.reserve`)。理由は詳細の「コピー禁止」に添えてある
                     -->
                     <form
                         method="POST"
@@ -1195,6 +1201,20 @@
     }
     .program:is([data-state="recording"], [data-state="conflict"]) .state {
         color: var(--dp-rec-text);
+    }
+    /*
+     * **録らないと決めた予約 (コピー禁止) は予約済みの青にしない** — 青だと「録れる」に見える。
+     * 待っているだけで手を止めてほしいものでもないので、字を控えるだけにする
+     */
+    .program[data-state="skipped"] .state {
+        color: inherit;
+        opacity: 0.8;
+    }
+    .copy-never {
+        font-size: 0.625rem;
+        font-weight: normal;
+        opacity: 0.7;
+        white-space: nowrap;
     }
     /* 説明は番組名より一段だけ控える。0.6 まで落とすと淡い下地の上で字が溶けた */
     .desc {

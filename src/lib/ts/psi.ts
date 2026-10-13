@@ -303,6 +303,20 @@ export function* descriptors(data: Uint8Array): Generator<[number, Uint8Array]> 
     }
 }
 
+/** デジタルコピー制御記述子。EIT の番組ごとと PMT に入る */
+export const DESC_DIGITAL_COPY_CONTROL = 0xc1;
+
+/**
+ * デジタルコピー制御記述子の中身 (タグと長さを除いたもの) から、**コピー禁止か**を読む。
+ *
+ * 先頭2ビットの digital_recording_control_data が 11 なら禁止
+ * (00 コピー可、01 事業者定義、10 1世代のみ)。禁止の番組は録らない
+ * ([data.md](../../../docs/data.md)「コピー禁止の番組」)
+ */
+export function isCopyNever(data: Uint8Array): boolean {
+    return data.length >= 1 && data[0]! >> 6 === 0b11;
+}
+
 /**
  * PMT の**番組ぜんたいに掛かる記述子** (program_info)。CA (ECM の PID) はここにも入る
  */

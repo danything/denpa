@@ -17,7 +17,7 @@
 import type { Genre } from '../arib';
 import { decodeAribText } from './aribtext';
 import { joinBytes } from './bytes';
-import { descriptors, PacketStream, SectionAssembler } from './psi';
+import { DESC_DIGITAL_COPY_CONTROL, descriptors, isCopyNever, PacketStream, SectionAssembler } from './psi';
 
 const PID_EIT = 0x0012;
 
@@ -90,6 +90,14 @@ export interface EitEvent {
     genres: Genre[];
     audios: EventAudio[];
     video: { type: string | null; resolution: string | null } | null;
+    /**
+     * **コピー禁止か** (デジタルコピー制御記述子)。禁止の番組は録らない (docs/data.md)。
+     *
+     * `null` は「この表は言っていない」。記述子は基本の表 (と p/f) に載り、詳細の表
+     * (0x58〜) には載らないので、詳細だけ届いた回で「禁止ではない」と上書きしないため
+     * (`EpgReader.merge`)
+     */
+    copyNever: boolean | null;
 }
 
 export interface EitSection {
@@ -287,6 +295,10 @@ function readDescriptors(event: EitEvent, body: Uint8Array): void {
                 });
                 break;
             }
+            case DESC_DIGITAL_COPY_CONTROL: {
+                event.copyNever = isCopyNever(data);
+                break;
+            }
             default:
                 break;
         }
@@ -350,6 +362,8 @@ export function parseEit(section: Uint8Array, options: { other?: boolean } = {})
             genres: [],
             audios: [],
             video: null,
+            // 記述子が無ければ「禁止ではない」。詳細の表はもとから載せないので「言っていない」
+            copyNever: tableId >= SCHEDULE_ACTUAL_EXTENDED ? null : false,
         };
         at += 12 + descriptorsLength;
         if (body.length < descriptorsLength) break;
@@ -625,6 +639,7 @@ export class EpgReader {
             genres: event.genres.length === 0 ? old.genres : event.genres,
             audios: event.audios.length === 0 ? old.audios : event.audios,
             video: event.video ?? old.video,
+            copyNever: event.copyNever ?? old.copyNever,
         });
     }
 

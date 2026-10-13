@@ -145,6 +145,19 @@ export interface SynthEvent {
     isFree?: boolean;
     /** 4 = 放送中。EIT[p/f] で「いま」を表すのに使う */
     runningStatus?: number;
+    /**
+     * デジタルコピー制御記述子の digital_recording_control_data (2ビット)。
+     * 3 がコピー禁止、2 が1世代のみ。省くと記述子を載せない ({@link copyControlDescriptor})
+     */
+    copyControl?: number;
+}
+
+/**
+ * デジタルコピー制御記述子 (0xC1)。EIT の番組と PMT に載る。
+ * 中身は1バイトだけ: 記録制御 (2) 最大ビットレートの有無 (1) 部品ごとの制御の有無 (1) 出力の制御 (4)
+ */
+export function copyControlDescriptor(control: number): number[] {
+    return [0xc1, 0x01, ((control & 0b11) << 6) | 0b0100];
 }
 
 /** 音声1本ぶん。**放送が付けた名前まで持てる** (解説放送の見分けに要る) */
@@ -186,6 +199,8 @@ function eventDescriptors(event: SynthEvent): number[] {
     }
 
     if (event.rawDescriptors !== undefined) out.push(...event.rawDescriptors);
+
+    if (event.copyControl !== undefined) out.push(...copyControlDescriptor(event.copyControl));
 
     if (event.genres !== undefined && event.genres.length > 0) {
         const body = event.genres.flatMap(([lv1, lv2]) => [(lv1 << 4) | lv2, 0xff]);
@@ -373,9 +388,13 @@ export function programMap(
     /** `[種別, PID]`。**3つ目は記述子**の並び (字幕の部品タグなど) */
     streams: ([number, number] | [number, number, number[]])[],
     ecmPid?: number,
+    /** 番組ぜんたいに掛かる記述子 (program_info) に足すもの。コピー制御 ({@link copyControlDescriptor}) など */
+    extra: number[] = [],
 ): Uint8Array {
-    const programInfo =
-        ecmPid === undefined ? [] : [0x09, 0x04, 0x00, 0x05, 0xe0 | (ecmPid >> 8), ecmPid & 0xff];
+    const programInfo = [
+        ...(ecmPid === undefined ? [] : [0x09, 0x04, 0x00, 0x05, 0xe0 | (ecmPid >> 8), ecmPid & 0xff]),
+        ...extra,
+    ];
     const body = [
         0x02,
         0x00,
