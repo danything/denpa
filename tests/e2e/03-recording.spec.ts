@@ -104,6 +104,9 @@ test.describe('録画とエンコード', () => {
         await detail.getByTestId('detail-more').click();
         await expect(detail.getByTestId('detail-more-menu')).toBeVisible();
         await expect(detail.getByTestId('detail-more-menu')).not.toContainText('ダウンロード');
+        // 開いている間は Bits UI がメニューの外の押下を止めるので、Esc で畳んでから閉じる
+        await page.keyboard.press('Escape');
+        await expect(detail.getByTestId('detail-more-menu')).toBeHidden();
         await page.getByTestId('detail-close').click();
         await expect(detail).toHaveCount(0);
 

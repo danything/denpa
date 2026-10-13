@@ -105,7 +105,9 @@
 
 - 時刻は UNIX ミリ秒。`title` は記号 (`[字]` など) を落とした名前、`name` は放送のままの名前
 - `files` は出せるものだけ。**どれを開くかは呼ぶ側が決めます** (Cast なら `h264`、新しいテレビなら `av1`)。
-  エンコードしたものは Matroska (`video/x-matroska`)、元のTSは TS (`video/mp2t`)。Range に応じます
+  エンコードしたものは Matroska (`video/x-matroska`)、元のTSは TS (`video/mp2t`)。Range に応じます。
+  `file` はアプリ (denpa-tv) とブラウザの再生のためのもので、ダウンロード用ではありません (添付は付けない。
+  [Discussion #760](https://github.com/danything/denpa/discussions/760))
 - `audio` は主音声だけを AAC (ADTS、`audio/aac`) で流します。画面の無いスピーカーへの Cast 向け。
   `source` と一緒に渡せば、元にするファイルを選べます
 - `resumeMs` は続きから観る位置 (画面の「続き」と同じもの)。観ていない・観終えたものは `null`
