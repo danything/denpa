@@ -64,6 +64,9 @@
     liveUpdates(['recordings', 'reservations'], { encode: applyEncodeProgress });
 
     const active = ['scheduled', 'conflict', 'skipped', 'recording'];
+    /** 取り消せるか。録画しない (`skipped`) は放送が終われば履歴なので出さない */
+    const cancelable = (res: { state: string; end_at: number }) =>
+        active.includes(res.state) && !(res.state === 'skipped' && res.end_at <= Date.now());
 
     /**
      * 置き場の使用量。**主 (AV1) を先に出し、在るものだけ括弧に添える。**
@@ -1086,7 +1089,7 @@
                                             追っかけ
                                         </a>
                                     {/if}
-                                    {#if active.includes(res.state)}
+                                    {#if cancelable(res)}
                                         <ActionButton action="?/cancel" fields={{ id: res.id }} class="outline danger" testid="cancel-button">
                                             取消
                                         </ActionButton>
@@ -1338,7 +1341,7 @@
             ルールを作る
         </a>
     {/if}
-    {#if detailRes !== null && active.includes(detailRes.state)}
+    {#if detailRes !== null && cancelable(detailRes)}
         <form
             method="POST"
             action="?/cancel"

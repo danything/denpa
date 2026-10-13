@@ -807,7 +807,7 @@
                     ルールを作る
                 </a>
 
-                {#if CANCELABLE.includes(program.reservation_state ?? '')}
+                {#if CANCELABLE.includes(program.reservation_state ?? '') && !(program.reservation_state === 'skipped' && program.end_at <= clock)}
                     <!-- 予約したあと番組表から止められないと、わざわざ予約一覧まで行くことになる -->
                     <form
                         method="POST"

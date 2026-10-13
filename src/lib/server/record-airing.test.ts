@@ -41,7 +41,7 @@ config.agentUrl = `http://127.0.0.1:${agent.port}`;
 const { orm } = await import('./db');
 const { programs, recordings, reservations, services } = await import('./schema');
 const { recordAiring, reservationStates } = await import('./reservations');
-const { resolveConflicts } = await import('./scheduler');
+const { resolveConflicts, tick } = await import('./scheduler');
 const { COPY_NEVER_REASON } = await import('../format');
 
 const MINUTE = 60_000;
@@ -277,5 +277,30 @@ describe('コピー禁止の番組', () => {
         orm().update(programs).set({ copy_never: false }).where(eq(programs.id, 2)).run();
         await resolveConflicts();
         expect(stateOf(2)).toEqual({ state: 'scheduled', reason: null });
+    });
+
+    /*
+     * **放送が終わっても録り逃しにしない。** 意図して録らなかったものが失敗に見えないよう、
+     * 「録画しない」のまま理由ごと残す (録り逃しの一覧・件数は `missed` だけを数える)
+     */
+    test('放送が終わっても「録画しない」のまま理由を残す。始まらなかった予約だけが録り逃しになる', async () => {
+        reset();
+        program(2, NOW + 10 * MINUTE, NOW + 40 * MINUTE, 'コピー禁止の番組', true);
+        ruleReservation(2, SERVICE, NOW + 10 * MINUTE, NOW + 40 * MINUTE);
+        await resolveConflicts();
+        expect(stateOf(2)?.state).toBe('skipped');
+
+        // 放送が終わったことにする。比べる相手として、録り始めないまま終わった予約も置く
+        orm()
+            .update(reservations)
+            .set({ start_at: NOW - 60 * MINUTE, end_at: NOW - 30 * MINUTE })
+            .where(eq(reservations.program_id, 2))
+            .run();
+        ruleReservation(98, OTHER, NOW - 60 * MINUTE, NOW - 30 * MINUTE);
+
+        await tick();
+        expect(stateOf(2)).toEqual({ state: 'skipped', reason: COPY_NEVER_REASON });
+        expect(stateOf(98)?.state).toBe('missed');
+        expect(orm().select().from(recordings).all()).toHaveLength(0);
     });
 });

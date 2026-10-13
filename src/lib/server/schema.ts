@@ -291,7 +291,7 @@ export const reservations = sqliteTable(
         /**
          * missed = 始まらないまま放送が終わったもの (アプリが止まっていた等)。
          * skipped = **録らないと決めたもの** (コピー禁止の番組。`scheduler.resolveConflicts`)。
-         * 理由は `conflict_reason` に入る。放送が終われば missed になる (理由はそのまま)
+         * 理由は `conflict_reason` に入る。放送が終わっても skipped のまま (録り逃しにしない。意図して録らなかったもの)
          */
         state: text('state', { enum: RESERVATION_STATES }).notNull().default('scheduled'),
         /** 録り始めた時刻。NULL なら**まだ始めていない**。二重に録り始めないための鍵でもある (scheduler.tick) */

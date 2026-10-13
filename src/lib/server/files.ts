@@ -273,7 +273,7 @@ export function pruneHistory(): { reservations: number; recordings: number; jobs
 
     /*
      * 録画中や予約中のものは、いつ立てたかに関係なく残す。
-     * 「終わった予約」は**取り消し・録り逃しか、もう録り始めたもの**。
+     * 「終わった予約」は**取り消し・録り逃し・録画しない (コピー禁止) か、もう録り始めたもの**。
      * 録り始めたあとの顛末は録画の行が持っているので、予約側では見ない
      */
     const droppedReservations = affected(
@@ -282,7 +282,7 @@ export function pruneHistory(): { reservations: number; recordings: number; jobs
             .where(
                 and(
                     or(
-                        inArray(reservations.state, ['canceled', 'missed']),
+                        inArray(reservations.state, ['canceled', 'missed', 'skipped']),
                         isNotNull(reservations.started_at),
                     ),
                     lt(reservations.end_at, cutoff),

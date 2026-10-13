@@ -199,14 +199,15 @@ export async function tick(): Promise<void> {
 
     // 始まらないまま終わってしまった予約を片付ける。
     // アプリが止まっていた間に放送が終わったものがここに残り続けていた。
-    // 録らないと決めたもの (コピー禁止) も、理由を持ったまま録り逃しの一覧へ移る
+    // **録らないと決めたもの (コピー禁止の `skipped`) は移さない** — 意図して録らなかったものが
+    // 失敗 (録り逃し) に見えないよう、「録画しない」のまま理由ごと残す
     const expired = affected(
         orm()
             .update(reservations)
             .set({ state: 'missed', updated_at: at })
             .where(
                 and(
-                    inArray(reservations.state, ['scheduled', 'conflict', 'skipped']),
+                    inArray(reservations.state, ['scheduled', 'conflict']),
                     isNull(reservations.started_at),
                     lte(reservations.end_at, at),
                 ),

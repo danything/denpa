@@ -6,6 +6,7 @@ import {
     desc,
     eq,
     getTableColumns,
+    gt,
     inArray,
     isNull,
     ne,
@@ -174,13 +175,17 @@ export function load({ url, cookies }) {
      *
      * **取り消したものは既定では出さない** — 人が押した結果で、驚くことが無い
      * (「完了分も表示」では出す。戻すボタンのため)
+     *
+     * **録画しない (コピー禁止の `skipped`) は放送が終わるまで出す。** 終わったあとも録り逃しには
+     * 移さず (意図して録らなかったものを失敗に見せない)、「完了分も表示」で理由ごと見られる
      */
     const r = alias(reservationTable, 'r');
     const rec = alias(recordingTable, 'rec');
     const pending = showFinished
         ? not(and(eq(r.state, 'missed'), isNull(r.started_at))!)
         : or(
-              and(inArray(r.state, ['scheduled', 'conflict', 'skipped']), isNull(r.started_at)),
+              and(inArray(r.state, ['scheduled', 'conflict']), isNull(r.started_at)),
+              and(eq(r.state, 'skipped'), isNull(r.started_at), gt(r.end_at, now())),
               eq(rec.state, 'recording'),
           );
     const reservations: ReservationRow[] = orm()
@@ -285,6 +290,9 @@ export function load({ url, cookies }) {
      * 録り逃し。**録画の一覧に混ぜて出す** (画面側で放送日順に差し込む)。
      * チューナーが足りずに落とされたものが黙って消えると、録れたつもりのまま
      * 気付かれずに終わる — いちばん知りたいのは「録れなかった」ほうなのに。
+     *
+     * **録画しない (コピー禁止の `skipped`) は入れない。** 意図して録らなかったもので、失敗ではない
+     * (放送が終わっても `skipped` のまま。`scheduler.tick`)
      *
      * 溜まり続けはしない。終わった予約は履歴の片付けで消える
      * (`server/files.ts`。既定で14日)。絞り込みは録画側と同じ言葉を効かせる

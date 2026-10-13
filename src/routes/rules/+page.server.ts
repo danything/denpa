@@ -1,5 +1,18 @@
 import { fail, redirect } from '@sveltejs/kit';
-import { and, desc, eq, getTableColumns, gt, inArray, isNotNull, isNull, not, or, sql } from 'drizzle-orm';
+import {
+    and,
+    desc,
+    eq,
+    getTableColumns,
+    gt,
+    inArray,
+    isNotNull,
+    isNull,
+    ne,
+    not,
+    or,
+    sql,
+} from 'drizzle-orm';
 import { genreName } from '#lib/arib.js';
 import { SERVICE_TYPE_LABEL } from '#lib/format.js';
 import { parseSearchFields } from '#lib/search.js';
@@ -46,12 +59,15 @@ const PENDING = and(inArray(reservations.state, ['scheduled', 'conflict']), isNu
 
 /**
  * 下見に出す、立っている予約。**録らないと決めたもの (コピー禁止の `skipped`) も出す** — 行に
- * 状態と取消を出すため。録らないので、予約数 (`PENDING`) とチューナーの取り合いには数えない
+ * 状態と取消を出すため。録らないので、予約数 (`PENDING`) とチューナーの取り合いには数えない。
+ * 放送が終わった `skipped` は履歴なので出さない (録り逃しには移さず残っている。`scheduler.tick`)
  */
-const HELD = and(
-    inArray(reservations.state, ['scheduled', 'conflict', 'skipped']),
-    isNull(reservations.started_at),
-);
+const stillHeld = () =>
+    and(
+        inArray(reservations.state, ['scheduled', 'conflict', 'skipped']),
+        isNull(reservations.started_at),
+        or(ne(reservations.state, 'skipped'), gt(reservations.end_at, now())),
+    );
 
 /**
  * 条件の読み取り。**画面から来る経路が2つある** — 「この条件で何が録れるか」は
@@ -258,7 +274,7 @@ export async function load({ url }) {
         })
         .from(reservations)
         .innerJoin(serviceTable, eq(serviceTable.id, reservations.service_id))
-        .where(HELD)
+        .where(stillHeld())
         .orderBy(reservations.start_at)
         .all();
     const reserved = new Map(pending.map((row) => [row.program_id, row]));
