@@ -1,4 +1,5 @@
 using System.Buffers.Binary;
+using System.Diagnostics;
 using System.Net.Sockets;
 using Denpa.Agent;
 using TUnit.Core.Enums;
@@ -13,13 +14,13 @@ namespace Denpa.Agent.Tests;
  * ATTACH_STREAM (lease と nonce) で TS_DATA が流れ、STOP_STREAM で STREAM_END。
  * TS の中身は周波数の印 (パケットの2バイト目) にして、どの選局の TS かを見分ける。
  */
-[ExcludeOn(OS.Windows)]
 /*
  * **固まったら失敗にする。** ソケットとスレッドを相手にするので、固まり方を1つ見落とすと
  * CI の Unit tests ごと打ち切られ、どのテストかも分からない (Mac で 8 分止まった)。
  * Timeout が効くのはテストが Task を返してから — 各テストは頭で `await Task.Yield()` して、
  * 同期の処理 (Tune・Dispose) を Task の中に入れる。待つところには打ち切りの合図 (cancel) を渡す
  */
+[ExcludeOn(OS.Windows)]
 [Timeout(60_000)]
 public class Px4TunerTests
 {
@@ -70,6 +71,14 @@ public class Px4TunerTests
 
         /// <summary>最初のストリームだけ、これだけ流したら STREAM_END (この番号) で止める</summary>
         public (int Frames, uint Code)? EndFirstStream { get; init; }
+
+        /// <summary>
+        /// TS を流す速さ (バイト/秒)。null なら1枚ごとに 2ms 寝る (今までどおり)、0 なら寝ずに流せるだけ流す
+        /// </summary>
+        public double? Rate { get; init; }
+
+        /// <summary>これだけ流したら、繋いだまま黙る (読む側が待っているところを作る)</summary>
+        public int? FramesThenSilence { get; init; }
 
         /// <summary>どちらのふりをするか (asicend は枠の頭とソケットの置き場だけ違う。AsicenTests)</summary>
         public Px4Wire Wire { get; }
@@ -266,8 +275,23 @@ public class Px4TunerTests
                     frame[20 + i * 188] = 0x47;
                     frame[20 + i * 188 + 1] = Mark(khz);
                 }
+                // 枠は1度だけ作り、番号だけ書き換えて送る (速さを測るテストで、偽物の確保を数に入れない)
+                var encoded = Px4Control.Encode(Px4Control.TsData, 0, 0, frame, Wire);
+                var paced = Stopwatch.StartNew();
+                long sent = 0;
                 for (ulong sequence = 0; ; sequence++)
                 {
+                    if (FramesThenSilence is { } quiet && (int)sequence >= quiet)
+                    {
+                        bool still;
+                        lock (_gate) still = _active && _attachments == attachment;
+                        if (still)
+                        {
+                            Thread.Sleep(10);
+                            sequence--;
+                            continue;
+                        }
+                    }
                     bool active;
                     lock (_gate) active = _active && _attachments == attachment;
                     var ending = attachment == 1 && EndFirstStream is { } end && (int)sequence == end.Frames;
@@ -281,9 +305,17 @@ public class Px4TunerTests
                         while (client.Receive(new byte[16]) > 0) { }
                         return;
                     }
-                    BinaryPrimitives.WriteUInt64LittleEndian(frame, sequence);
-                    Px4Control.SendAll(client, Px4Control.Encode(Px4Control.TsData, 0, 0, frame, Wire));
-                    Thread.Sleep(2);
+                    BinaryPrimitives.WriteUInt64LittleEndian(encoded.AsSpan(Px4Control.HeaderSize), sequence);
+                    Px4Control.SendAll(client, encoded);
+                    sent += frame.Length - 20;
+                    if (Rate is null)
+                    {
+                        Thread.Sleep(2);
+                    }
+                    else if (Rate > 0)
+                    {
+                        while (sent > Rate * paced.Elapsed.TotalSeconds) Thread.Sleep(1);
+                    }
                 }
             }
             finally
@@ -300,7 +332,12 @@ public class Px4TunerTests
         /// <summary>px4d が落ちたふり。繋がっている制御ソケットを切る</summary>
         public void DropControl()
         {
-            lock (_gate) _controlClient?.Shutdown(SocketShutdown.Both);
+            lock (_gate)
+            {
+                _controlClient?.Shutdown(SocketShutdown.Both);
+                // Windows は閉じる向きを言っただけでは、受けかけの Receive (受け手のスレッド) が起きない。閉じて起こす
+                if (OperatingSystem.IsWindows()) _controlClient?.Dispose();
+            }
         }
 
         public void Dispose()
@@ -372,7 +409,7 @@ public class Px4TunerTests
         await Assert.That(tuner.Tuned).IsTrue();
 
         tuner.Tune(T28, ChannelTable.NoStreamId);
-        // 前の局の TS は混ざらない (選局ごとに新しい pipe)
+        // 前の局の TS は混ざらない (選局ごとに新しい溜め)
         await Assert.That(ReadMark(tuner.Output)).IsEqualTo(Mark(T28.Frequency / 1000));
 
         tuner.Dispose();
@@ -476,7 +513,7 @@ public class Px4TunerTests
         using var tuner = Open(px4d, TimeSpan.FromMilliseconds(300));
         tuner.Tune(T27, ChannelTable.NoStreamId);
 
-        // 誰も読まない。pipe が埋まって空かなければ stream.sock を閉じる
+        // 誰も読まない。溜めが埋まって空かなければ stream.sock を閉じる
         await WaitUntil(() => !tuner.Tuned, cancel, TimeSpan.FromSeconds(20));
         await WaitUntil(() => Volatile.Read(ref px4d.StreamsClosed) == 1, cancel);
 
@@ -506,7 +543,7 @@ public class Px4TunerTests
         await Assert.That(error.Message).Contains("px4d に繋がりません");
     }
 
-    /// <summary>選局し直すたびに pipe と stream.sock を作る。閉じ忘れれば fd が1本ずつ増える</summary>
+    /// <summary>選局し直すたびに stream.sock を作る。閉じ忘れれば fd が1本ずつ増える</summary>
     [Test]
     [NotInParallel]
     public async Task 何度選局し直してもfdが残らない(CancellationToken cancel)
@@ -522,7 +559,7 @@ public class Px4TunerTests
         for (var i = 0; i < 30; i++) tuner.Tune(i % 2 == 0 ? T28 : T27, ChannelTable.NoStreamId);
         // 偽の px4d の後始末 (閉じた stream.sock を向こうが閉じる) が追いつくのを少し待つ
         await Task.Delay(300, cancel);
-        // 漏れていれば選局1回につき pipe と stream.sock で 30 本以上増える。並んで走る他のテストと
+        // 漏れていれば選局1回につき stream.sock で 30 本以上増える。並んで走る他のテストと
         // 偽の px4d の揺れは数本 (CI でちょうど 5 本だったことがある) なので、間を大きく取る
         await Assert.That(Fds() - before).IsLessThan(15);
         await Assert.That(px4d.Count(Px4Control.Acquire)).IsEqualTo(1);
@@ -556,5 +593,92 @@ public class Px4TunerTests
         // 閉じたら消す (設定を変えて開き直したとき、古い注意書きを残さない)
         tuner.Dispose();
         await Assert.That(Px4Userland.Notice(Px4Userland.Device(Id, 2))).IsNull();
+    }
+
+    /// <summary>
+    /// 読む側がいないとき、溜め (8MB) が埋まってから**決めた時間で**畳む。早すぎもしない
+    /// (溜めが埋まるまでは書けているので、畳むのは埋まってから StallLimit 経ったとき)
+    /// </summary>
+    [Test]
+    public async Task 溜めが埋まったら決めた時間で畳む(CancellationToken cancel)
+    {
+        await Task.Yield();
+        using var px4d = new FakePx4d { Rate = 0 };
+        var limit = TimeSpan.FromSeconds(1);
+        using var tuner = Open(px4d, limit);
+        var since = Stopwatch.StartNew();
+        tuner.Tune(T27, ChannelTable.NoStreamId);
+
+        await WaitUntil(() => !tuner.Tuned, cancel, TimeSpan.FromSeconds(20));
+        var took = since.Elapsed;
+        // 溜めは 8MB。流せるだけ流すので埋まるのはすぐ。そこから 1 秒 (と見回りの 50ms) で畳む
+        await Assert.That(took).IsGreaterThanOrEqualTo(limit);
+        await Assert.That(took).IsLessThan(limit + TimeSpan.FromSeconds(4));
+        await Assert.That(px4d.Count(Px4Control.Acquire)).IsEqualTo(1);
+    }
+
+    /// <summary>
+    /// TS が来なくて待っている読む側も、畳めと言われたら 200ms (起きる間隔) ほどで抜ける
+    /// (DeviceStream.Stop の約束。抜けないと、取り上げられたチューナーを読む側が持ったまま次の選局が始まる)
+    /// </summary>
+    [Test]
+    public async Task 待っている読む側は畳めと言われたらすぐ抜ける(CancellationToken cancel)
+    {
+        await Task.Yield();
+        using var px4d = new FakePx4d { FramesThenSilence = 1 };
+        using var tuner = Open(px4d);
+        tuner.Tune(T27, ChannelTable.NoStreamId);
+        var output = (DeviceStream)tuner.Output;
+
+        var buffer = new byte[188 * 1024];
+        long stoppedAt = 0;
+        var reading = Task.Factory.StartNew(() =>
+        {
+            // 1枚目を読み切ったら、次は来ない TS を待つ
+            while (output.Read(buffer, 0, buffer.Length) > 0) { }
+            return Stopwatch.GetElapsedTime(Volatile.Read(ref stoppedAt));
+        }, cancel, TaskCreationOptions.LongRunning, TaskScheduler.Default);
+
+        await WaitUntil(() => output.Readers == 1, cancel);
+        await Task.Delay(300, cancel);
+        Volatile.Write(ref stoppedAt, Stopwatch.GetTimestamp());
+        output.Stop();
+        var left = await reading.WaitAsync(TimeSpan.FromSeconds(5), cancel);
+        await Assert.That(left).IsLessThan(TimeSpan.FromMilliseconds(400));
+    }
+
+    /// <summary>流している最中に止めても、局替え (TS のストリームを畳んで選局し直す) が待たされない</summary>
+    [Test]
+    public async Task 流している最中でもすぐ止まる(CancellationToken cancel)
+    {
+        await Task.Yield();
+        using var px4d = new FakePx4d { Rate = 0 };
+        using var tuner = Open(px4d);
+        tuner.Tune(T27, ChannelTable.NoStreamId);
+        var output = tuner.Output;
+
+        var running = true;
+        var reading = Task.Factory.StartNew(() =>
+        {
+            var buffer = new byte[188 * 1024];
+            try
+            {
+                while (Volatile.Read(ref running) && output.Read(buffer, 0, buffer.Length) > 0) { }
+            }
+            catch (IOException)
+            {
+            }
+        }, cancel, TaskCreationOptions.LongRunning, TaskScheduler.Default);
+        await Task.Delay(500, cancel);
+
+        var since = Stopwatch.StartNew();
+        tuner.Tune(T28, ChannelTable.NoStreamId);
+        var took = since.Elapsed;
+        Volatile.Write(ref running, false);
+        await reading.WaitAsync(TimeSpan.FromSeconds(5), cancel);
+
+        // 畳む (pump を降ろす・読む側を待つ) と STOP_STREAM → TUNE → START_STREAM → ATTACH で、ほぼ通信の往復だけ
+        await Assert.That(took).IsLessThan(TimeSpan.FromSeconds(1));
+        await Assert.That(ReadMark(tuner.Output)).IsEqualTo(Mark(T28.Frequency / 1000));
     }
 }

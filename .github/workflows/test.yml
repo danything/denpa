@@ -102,7 +102,8 @@ jobs:
       # 設定の読み書き、選局表、チューナー自動検出の値の読み取り。
       # MTP の方式 (global.json の test.runner) ではプロジェクトは --project で渡す
       - name: Unit tests (.NET agent)
-        run: dotnet test --project agent/Denpa.Agent.Tests/Denpa.Agent.Tests.csproj
+        # 通ったテストの出力も出す (Px4StreamBenchTests の数字を残すため)
+        run: dotnet test --project agent/Denpa.Agent.Tests/Denpa.Agent.Tests.csproj --output detailed
 
       # エージェントの API に直接当てるテスト。**本物をビルドして起こして**、偽の選局
       # コマンドで流す (bun 版があった頃は、同じものを2つの実装に通していた)。
