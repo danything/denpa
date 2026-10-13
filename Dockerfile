@@ -193,11 +193,12 @@ ENV NODE_ENV=production \
 # 投げる(カードリーダーとやり取りするのはあちら)。recisdb も libpcsclite も要らない
 # libvpl2 + libmfx-gen1.2 (QSV のランタイム) + libva* + intel-media-va-driver (iHD) は
 # Intel の GPU (QSV / VA-API) 向け (上の ffmpeg 段の説明)。GPU の無い機械でも害は無い
-# (起動時の試しのエンコードが落ちて、ソフトウェアでエンコードするだけ)。**Intel の3つは amd64 だけ**
-# (ffmpeg 段の説明。arm64 の Debian には無い)。libva は arm64 にも入れる
+# (起動時の試しのエンコードが落ちて、ソフトウェアでエンコードするだけ)。**Intel の4つは amd64 だけ**
+# (ffmpeg 段の説明。arm64 の Debian には無い)。libva は arm64 にも入れる。
+# i965-va-driver は iHD が対応しない古い世代 (Haswell など) の内蔵 GPU 用。
 ARG TARGETARCH
 RUN case "${TARGETARCH}" in \
-      amd64) intel="libvpl2 intel-media-va-driver libmfx-gen1.2" ;; \
+      amd64) intel="libvpl2 intel-media-va-driver i965-va-driver libmfx-gen1.2" ;; \
       arm64) intel="" ;; \
       *) echo "対応していない arch: ${TARGETARCH}" >&2; exit 1 ;; \
     esac && \
