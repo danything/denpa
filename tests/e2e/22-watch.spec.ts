@@ -75,8 +75,6 @@ test.describe('録画を観る', () => {
         // 右には番組の中身。一覧のモーダルと同じものを枠なしで置いてある
         await expect(page.getByTestId('detail-badges')).toBeVisible();
         await expect(page.getByTestId('watch-meta')).toBeVisible();
-        // 観ている横にダウンロードは置かない (録画の詳細の「その他…」にある)
-        await expect(page.getByTestId('watch-download')).toHaveCount(0);
     });
 
     /*

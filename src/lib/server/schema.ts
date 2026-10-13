@@ -338,7 +338,7 @@ export const recordings = sqliteTable(
         ts_path: mediaPath('ts_path', () => config.rawDir),
         ts_size: integer('ts_size').notNull().default(0),
         /**
-         * エンコードしたもの (再生・ダウンロードで主に使う)。両方のコーデックをエンコードしたときは
+         * エンコードしたもの (再生で主に使う)。両方のコーデックをエンコードしたときは
          * **AV1 のほう** (小さいので既定の再生に向く)
          */
         library_path: mediaPath('library_path', () => config.encodedDir),

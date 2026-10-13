@@ -1,9 +1,8 @@
-import { basename } from 'node:path';
 import { error } from '@sveltejs/kit';
 import { config } from '#lib/server/config.js';
 import { activeEncodeJob } from '#lib/server/encoder.js';
 import { recordingOr404 } from '#lib/server/recording.js';
-import { contentDisposition, serveFile } from '#lib/server/serve.js';
+import { serveFile } from '#lib/server/serve.js';
 import { ffmpegBody } from '#lib/server/stream.js';
 import { type FileSource, parseFileSource } from '#lib/source.js';
 
@@ -43,15 +42,9 @@ function audioOnly(path: string, request: Request): Response {
 
 /**
  * 録画ファイルをそのまま配る。
- * プレイヤーに URL を渡して直接再生させるための口。
+ * プレイヤーに URL を渡して直接再生させるためのエンドポイント。
  */
-function respond(
-    id: string,
-    request: Request,
-    download: boolean,
-    source: FileSource | null,
-    audio = false,
-): Response {
+function respond(id: string, request: Request, source: FileSource | null, audio = false): Response {
     const recording = recordingOr404(id);
 
     /*
@@ -70,10 +63,9 @@ function respond(
      * - `encoded` … 主のエンコード済み (両方エンコードしたときは AV1)
      * - `alt` … もう一方 (H.264)。両方エンコードした録画でだけ在る。古いテレビはこちら
      *
-     * 残っているものが複数ある録画では、画面がダウンロードのリンクを分けて出す
-     * (`+page.svelte` の `recordingActions`)。上の「今いいほう」だけだと、
-     * **押した先が同じファイル**になってしまう。プレイヤーに渡す URL は
-     * 名指ししない — あちらは観られさえすればよく、選ばせるものではない
+     * アプリは録画の一覧 (`api/recordings`) の `files` から再生できるものを選んで名指しする。
+     * 端末に保存も `encoded` / `alt` を名指しする (`offline-db.ts` の `downloadRequests`)。
+     * 名指しが無ければ上の「今いいほう」
      */
     const path =
         source === 'ts'
@@ -88,13 +80,11 @@ function respond(
     if (path === null) error(404, 'ファイルがありません');
     if (audio) return audioOnly(path, request);
 
-    // ?download=1 のときだけ添付にする。プレイヤーは inline のほうが素直に開く
-    return serveFile(
-        path,
-        path.endsWith('.mkv') ? 'video/x-matroska' : 'video/mp2t',
-        request,
-        contentDisposition(basename(path), download),
-    );
+    /*
+     * 再生のためのエンドポイントなので、添付 (`Content-Disposition: attachment`) にはしない。
+     * 録画のダウンロードはいったん無くした (Discussion #760)
+     */
+    return serveFile(path, path.endsWith('.mkv') ? 'video/x-matroska' : 'video/mp2t', request);
 }
 
 // HEAD も同じ処理 (中身を出すかは serveFile が request.method で決める)
@@ -102,7 +92,6 @@ export function GET({ params, request, url }) {
     return respond(
         params.id,
         request,
-        url.searchParams.get('download') === '1',
         parseFileSource(url.searchParams.get('source')),
         url.searchParams.get('audio') === 'only',
     );

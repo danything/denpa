@@ -20,7 +20,6 @@
     import ServiceLogo from '#lib/components/ServiceLogo.svelte';
     import Toasts, { errorNotice, type Notice } from '#lib/components/Toasts.svelte';
     import { type DetailSeed, programDetail } from '#lib/detail.svelte.js';
-    import { startDownload } from '#lib/download.js';
     import { applyEncodeProgress, encodeLive } from '#lib/encode-live.svelte.js';
     import {
         badgeClass,
@@ -51,7 +50,7 @@
     import { clearFailed, offline, removeLocal, saveOffline } from '#lib/offline.svelte.js';
     import { matches, normalize } from '#lib/paging.js';
     import { Paged, sentinel } from '#lib/paging.svelte.js';
-    import { cmRedo, encodeSource, type FileSource } from '#lib/source.js';
+    import { cmRedo, encodeSource } from '#lib/source.js';
     import { resolve } from '$app/paths';
     import ChevronRight from '~icons/lucide/chevron-right';
     import Ellipsis from '~icons/lucide/ellipsis';
@@ -65,27 +64,6 @@
     liveUpdates(['recordings', 'reservations'], { encode: applyEncodeProgress });
 
     const active = ['scheduled', 'conflict', 'recording'];
-
-    /**
-     * ダウンロードはファイルのエンドポイントへ遷移して始める (`#lib/download.js`)。押したら詳細は畳む。
-     * 断られたら (ログインが切れた・録画が消えた) 遷移せずに知らせる
-     */
-    function download(id: number, source?: FileSource): void {
-        void startDownload(id, source).then((ok) => {
-            if (ok) return;
-            downloadNote = {
-                key: `download-${Date.now()}`,
-                kind: 'error',
-                text: 'ダウンロードを始められませんでした。ページを読み直してから試してください',
-            };
-        });
-        detail.close();
-    }
-
-    /** もう一方のコーデック (H.264) もエンコードしてあるか。両方エンコードした録画でだけ在る */
-    function hasAlt(rec: (typeof data.recordings)[number]): boolean {
-        return rec.job_id === null && rec.alt_path !== null;
-    }
 
     /**
      * 置き場の使用量。**主 (AV1) を先に出し、在るものだけ括弧に添える。**
@@ -102,25 +80,8 @@
         return extra.length === 0 ? size(rec.ts_size) : `${size(rec.ts_size)} (${extra.join('、')})`;
     }
 
-    /**
-     * エンコードしたものと元のTSが**両方とも残っている**か。
-     *
-     * 「元のTSも残す」で録ると、エンコードが終わったあとも元が消えずに残る。そのとき
-     * ダウンロードのリンクが1つだと、寄越されるのはエンコードしたほうだけで、**元には手が届かない**
-     * (画質を落としていない元が欲しい場面はある)。
-     *
-     * **エンコードしている最中は数えない。** その間の配信は元のTSのほうを返すので
-     * (`api/recordings/[id]/file`)、2つ並べると押した先が同じものになる
-     */
-    function bothFiles(rec: (typeof data.recordings)[number]): boolean {
-        return rec.job_id === null && rec.library_path !== null && rec.ts_path !== null;
-    }
-
     /** 端末への保存の結果。フォームではないので自前で持つ */
     let offlineNote = $state<Notice | null>(null);
-
-    /** ダウンロードを始められなかったこと。こちらもフォームではないので自前で持つ */
-    let downloadNote = $state<Notice | null>(null);
 
     /**
      * 閉じた (自分で消えた) 通知は持ち主が捨てる。Toasts は返事 (`form`) が変わると
@@ -128,7 +89,6 @@
      */
     function dropNote(key: string): void {
         if (offlineNote?.key === key) offlineNote = null;
-        if (downloadNote?.key === key) downloadNote = null;
     }
 
     /** 裏で失敗した保存 (Background Fetch)。黙って消えると「無かったことになった」ように見える */
@@ -146,7 +106,6 @@
     const notices = $derived.by(() => {
         const list: Notice[] = [];
         if (offlineNote !== null) list.push(offlineNote);
-        if (downloadNote !== null) list.push(downloadNote);
         list.push(...errorNotice(form, 'dashboard-error'));
         if (form?.reconcile) {
             /*
@@ -285,8 +244,8 @@
     }
 
     /**
-     * ファイルを持っているか。**ダウンロードを出すかどうか。**
-     * エンコードの失敗はここに出てこない — 落ちたのは再エンコードのほうで、元のTSは無事なので落とせる
+     * ファイルを持っているか。**端末に保存と「その他…」を出すかどうか。**
+     * エンコードの失敗はここに出てこない — 落ちたのは再エンコードのほうで、元のTSは無事なので観られる
      */
     function hasFile(rec: (typeof data.recordings)[number]): boolean {
         if (rec.deleted_at !== null) return false;
@@ -914,7 +873,7 @@
                         </button>
                     {/if}
                     {#if rec.deleted_at === null}
-                        <!-- ダウンロードと録り直しは詳細の中 (recordingActions) -->
+                        <!-- 録り直しは詳細の中 (recordingActions) -->
                         {#if rec.job_id !== null}
                             <!--
                                 動いている間は中止だけ。この裏で ffmpeg が
@@ -1411,8 +1370,8 @@
             <!--
                 **並べるのはよく押すものだけ** — 端末に保存・ルールを作る。
                 条件が揃うと10個のボタンが同じ見た目で並び、狭い画面では文字の
-                途中で折り返していた。めったに押さないもの (落とす・リンクを
-                コピー・再エンコード) は「その他…」に畳む。
+                途中で折り返していた。めったに押さないもの (視聴済みの付け外し・
+                再エンコード) は「その他…」に畳む。
             -->
             {#if offline.usable && rec.library_path !== null}
                 <!--
@@ -1457,7 +1416,7 @@
             <!--
                 **めったに押さないものの置き場。** 上に開く (フッターは画面の
                 下端にあるので、下に開くと枠から出る)。中身は上から
-                「持ち出す」「渡す」「直す」の順。
+                視聴済みの付け外し、直すもの (再エンコード・CM検出) の順。
 
                 **開閉は Bits UI の DropdownMenu。** 位置は Bits UI が枠に収まるようにずらす。
 
@@ -1471,43 +1430,6 @@
                     {#snippet child({ wrapperProps, props, open })}
                         <div {...wrapperProps}>
                             <div {...props} class="more-menu" hidden={!open} data-testid="detail-more-menu">
-                                <!--
-                                    まだエンコードしていないものや、引き継いだ未エンコードの録画は
-                                    元のTSしか無い。配信は library_path ?? ts_path を返すので、
-                                    どちらかがあれば落とせる。形式が複数あるときはラベルに添えて
-                                    並べる (「AV1」だけのボタンでは、押すと何が起きるのか読めなかった)。
-                                    **押したら閉じる** — 落とし始めたあとも詳細が残っていると、
-                                    押せたのかどうかが分からない
-                                -->
-                                <DropdownMenu.Item
-                                    onSelect={() =>
-                                        download(rec.id, bothFiles(rec) || hasAlt(rec) ? 'encoded' : undefined)}
-                                    data-testid="download-link"
-                                >
-                                    {hasAlt(rec)
-                                        ? 'ダウンロード (AV1)'
-                                        : bothFiles(rec)
-                                          ? 'ダウンロード (エンコード済み)'
-                                          : 'ダウンロード'}
-                                </DropdownMenu.Item>
-                                {#if hasAlt(rec)}
-                                    <!-- 両方のコーデックをエンコードした録画でだけ。AV1 をデコードできない相手はこちら -->
-                                    <DropdownMenu.Item
-                                        onSelect={() => download(rec.id, 'alt')}
-                                        data-testid="download-alt-link"
-                                    >
-                                        ダウンロード (H.264)
-                                    </DropdownMenu.Item>
-                                {/if}
-                                {#if bothFiles(rec)}
-                                    <!-- 元も落とせるように。両方残っているときだけ (`bothFiles`) -->
-                                    <DropdownMenu.Item
-                                        onSelect={() => download(rec.id, 'ts')}
-                                        data-testid="download-ts-link"
-                                    >
-                                        ダウンロード (元のTS)
-                                    </DropdownMenu.Item>
-                                {/if}
                                 <!--
                                     **未視聴の印を付け外しする** (`?/watched`)。末尾まで観れば勝手に外れる
                                     ので、押すのは観直したいときか、よそで観たときくらい。どちらも続きの位置は消す

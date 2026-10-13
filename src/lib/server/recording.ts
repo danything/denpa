@@ -31,7 +31,7 @@ export function recordingFromForm(form: FormData): Recording | undefined {
  * 数字でなければ 400、無ければ 404 をここで投げるので、呼ぶ側は
  * 在る前提で書ける (同じ4行をルートごとに書いていた)。
  *
- * @param deleted 消した行も引くか。**既定は引かない** — 観る・ダウンロードする API が
+ * @param deleted 消した行も引くか。**既定は引かない** — 観る API が
  *   消したものを返さないように。削除 API だけは「もう消えている」を
  *   見分けたいので true で呼ぶ
  */

@@ -50,8 +50,6 @@ test.describe('エンコードの失敗', () => {
         // (観られる行は押すと再生に行くので、詳細は別のボタン)
         await failed.getByTestId('detail-button').click();
         const detail = page.getByTestId('program-detail');
-        // ダウンロードのボタンも詳細の中。元のTSは無事なのでダウンロードできる
-        await expect(detail.getByTestId('download-link')).toHaveCount(1);
         // 理由は1つだけ。録画そのものは失敗していないので、出るのはジョブ側の理由だけ
         const note = detail.getByTestId('detail-error');
         await expect(note).toHaveCount(1);

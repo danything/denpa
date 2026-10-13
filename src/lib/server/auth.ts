@@ -8,7 +8,7 @@ import { enabled as oidcEnabled } from './oidc';
  * | 方法 | 何者か |
  * | --- | --- |
  * | `TRUSTED_NETWORKS` | 信頼したネットワークから来た人。何も聞かずに通す |
- * | OIDC のログイン | 画面から入る人 (`docs/auth.md`)。ブラウザで観る・ダウンロードもこの控え (Cookie) で通る |
+ * | OIDC のログイン | 画面から入る人 (`docs/auth.md`)。ブラウザで観る・端末に保存もこの控え (Cookie) で通る |
  * | アクセストークン (`Bearer denpa_…`) | ペアリングしたアプリ (`device-auth.ts`) |
  * | 使い捨てのチケット | ライブ視聴の WebSocket だけ (`tickets.ts`) |
  *

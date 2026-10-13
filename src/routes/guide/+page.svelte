@@ -4,7 +4,6 @@
     import ProgramDetail from '#lib/components/ProgramDetail.svelte';
     import Icon from '#lib/components/player/Icon.svelte';
     import ServiceLogo from '#lib/components/ServiceLogo.svelte';
-    import { startDownload } from '#lib/download.js';
     import { channelNumber, date, SERVICE_TYPE_LABEL, stateLabel, time } from '#lib/format.js';
     import { reload } from '#lib/reload.svelte.js';
     import { cellsOf, columnsOf, mainOf, SUBCHANNELS_COOKIE, splitOf } from '#lib/subchannels.js';
@@ -742,7 +741,7 @@
             {/if}
             <!--
                 閉じるは**いちばん右で動かさない**。押すものが番組によって増えたり
-                減ったりする (予約する / 取り消す / 再生 / ダウンロード) ので、
+                減ったりする (予約する / 取り消す / 再生 / 視聴) ので、
                 そのたびに位置が変わると、閉じたつもりで別のものを押すことになる
             -->
             <div class="cluster guide-actions">
@@ -759,20 +758,11 @@
                 {/if}
 
                 {#if program.recording_id !== null && program.recording_state !== 'failed' && (program.library_path ?? program.ts_path) !== null}
-                    {@const recordingId = program.recording_id}
                     <!--
                         録れているなら、録画一覧へ戻らずここからそのまま観られるようにする
                         (一覧の `hasFile` と同じ判定)。エンコードする前の元のTSは観る画面が追っかけ (`/chase`) へ送る
                     -->
-                    <a class="button" href={resolve(`watch/${recordingId}`)}>再生</a>
-                    <!-- HEAD で確かめてからファイルのエンドポイントへ遷移して落とす (#lib/download) -->
-                    <button
-                        type="button"
-                        class="secondary outline"
-                        onclick={() => void startDownload(recordingId)}
-                    >
-                        ダウンロード
-                    </button>
+                    <a class="button" href={resolve(`watch/${program.recording_id}`)}>再生</a>
                 {/if}
 
                 {#if program.start_at <= clock && program.end_at > clock && watchable.has(program.service_id)}

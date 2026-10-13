@@ -189,7 +189,7 @@
                         <details class="more">
                             <summary>詳しく</summary>
                             <p>
-                                再生・ダウンロードは既定で AV1 です。テレビごとの設定で H.264 を渡せます。
+                                再生は既定で AV1 です。テレビごとの設定で H.264 を渡せます。
                             </p>
                         </details>
                     {/if}

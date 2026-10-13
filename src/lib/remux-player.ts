@@ -228,7 +228,7 @@ export function remuxPlayer(
             if (mine !== run || closed) return;
             loadingFrom = null;
             // 切れた (繋がらない・途中で落ちた・サーバの 5xx) ならリクエストし直す。読めない中身
-            // (SourceBuffer が断った) と 4xx は何度やっても同じ。画面がダウンロードの案内を出す
+            // (SourceBuffer が断った) と 4xx は何度やっても同じ。画面が観られる先の案内を出す
             if (video.error !== null || !retryable(error)) {
                 console.warn('[remux] 流せませんでした', error);
                 options.state('failed');

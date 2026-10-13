@@ -71,42 +71,20 @@ test.describe('スクランブルされたまま録れたとき', () => {
             await expect(page.locator(row).getByTestId('row-body')).toContainText('元のTS');
 
             /*
-             * **両方あるなら、ダウンロードのボタンも2つ出す。**
-             *
-             * 1つしか無かった頃は、寄越されるのはエンコードしたほうだけで、**元には
-             * 手が届かなかった** — 画質を落としていない元が欲しい場面はある。
-             * 片方しか無い録画では今までどおり1つだけ (03-recording で確かめている)
+             * **名指しした側が本当に来ること** (`file?source=`)。アプリは録画の一覧の `files` から
+             * 選んで名指しする。同じものが返ってきたら、選んだ意味が無い。
+             * エンコードしたほうは Matroska、元は MPEG-TS で返る
              */
-            await page.locator(row).getByTestId('detail-button').click();
-            const detail = page.getByTestId('program-detail');
-            await expect(detail.getByTestId('download-link')).toHaveText('ダウンロード (エンコード済み)');
-            const raw = detail.getByTestId('download-ts-link');
-            // ダウンロードのボタンは「その他…」の中に畳んである。開けば見える
-            await detail.getByTestId('detail-more').click();
-            await expect(raw).toBeVisible();
-
-            /*
-             * **名指しした側が本当に来ること。** 落ちてくる名前で分かる —
-             * エンコードしたほうは .mkv、元は .m2ts。ここが同じものを指していたら
-             * ボタンが2つある意味が無い。落とし始めた URL を Range で呼んで名前を見る
-             */
-            const fetchName = async (testid: string) => {
-                const started = page.waitForEvent('download');
-                await detail.getByTestId(testid).click();
-                const download = await started;
-                const url = new URL(download.url());
-                await download.cancel();
-                const got = await request.get(url.pathname + url.search, {
+            const id = await page.locator(row).getAttribute('data-recording-id');
+            const typeOf = async (source: string) => {
+                const got = await request.get(`/api/recordings/${id}/file?source=${source}`, {
                     headers: { Range: 'bytes=0-99' },
                 });
                 expect(got.status()).toBe(206);
-                return got.headers()['content-disposition'] ?? '';
+                return got.headers()['content-type'];
             };
-            expect(await fetchName('download-ts-link')).toContain('.m2ts');
-            // 落とし始めると詳細が畳まれるので、もう一方は開き直してから
-            await page.locator(row).getByTestId('detail-button').click();
-            await detail.getByTestId('detail-more').click();
-            expect(await fetchName('download-link')).toContain('.mkv');
+            expect(await typeOf('ts')).toBe('video/mp2t');
+            expect(await typeOf('encoded')).toBe('video/x-matroska');
         } finally {
             await setRecording(request);
         }

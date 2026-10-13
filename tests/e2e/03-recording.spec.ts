@@ -100,25 +100,11 @@ test.describe('録画とエンコード', () => {
             await detail.getByTestId('detail-more-menu').evaluate((el) => getComputedStyle(el).display),
         ).toBe('none');
 
-        /*
-         * ダウンロードはファイルのエンドポイントへそのまま遷移して始める。資格は画面と同じ
-         * (信頼したネットワークか、ログインの控えの Cookie) で、URL には何も埋めない。
-         *
-         * **ボタンは詳細の中にある。** 一覧の行に並べていた頃は、1行に4つも5つも
-         * ボタンが載って狭い画面で横に流れていた
-         */
+        // 録画のダウンロードはいったん無くした (Discussion #760)。「その他…」にも出さない
         await detail.getByTestId('detail-more').click();
-        const started = page.waitForEvent('download');
-        await detail.getByTestId('download-link').click();
-        const download = await started;
-        const target = new URL(download.url());
-        expect(target.search).toContain('download=1');
-        expect(download.url()).not.toContain('denpa:');
-        // ファイルのエンドポイントそのもの (尻に番組名などは付けない)
-        expect(target.pathname).toMatch(/\/api\/recordings\/\d+\/file$/);
-        await download.cancel();
-
-        // 落とし始めたら詳細は畳む (押せたかどうかが分かるように)
+        await expect(detail.getByTestId('detail-more-menu')).toBeVisible();
+        await expect(detail.getByTestId('detail-more-menu')).not.toContainText('ダウンロード');
+        await page.getByTestId('detail-close').click();
         await expect(detail).toHaveCount(0);
 
         // ファイルは Range で取りに行ける。プレイヤーはこれでシークするので、
@@ -133,12 +119,10 @@ test.describe('録画とエンコード', () => {
         expect(part.headers()['content-range']).toMatch(/^bytes 0-99\/\d+$/);
         expect((await part.body()).byteLength).toBe(100);
 
-        // 名前を付けないと「file」という拡張子の無いファイルとして落ちてくる。
-        const attached = await request.get(target.pathname + target.search);
-        expect(attached.status()).toBe(200);
-        const disposition = attached.headers()['content-disposition'] ?? '';
-        expect(disposition).toMatch(/^attachment;/);
-        expect(disposition).toContain('.mkv');
+        // 再生のためのエンドポイントなので、前の `?download=1` を付けても添付にはしない
+        const plain = await request.head(`/api/recordings/${id}/file?download=1`);
+        expect(plain.status()).toBe(200);
+        expect(plain.headers()['content-disposition']).toBeUndefined();
 
         // 節目ごとに通知が飛び、どれも番組名と一緒にチャンネル名が入っていること。
         // 番組名だけだと、どの局のものか通知を見ただけでは分からない
@@ -236,7 +220,7 @@ test.describe('コーデックを両方エンコードする', () => {
      * (`library_path`)、もう一方は H.264 (`alt_path`)。どちらも同じフォルダに
      * 並ぶので、H.264 のほうは名前に印を付けて分ける ([H264])。
      */
-    test('AV1 と H.264 の2本ができて、どちらも落とせる', async ({ page, request }) => {
+    test('AV1 と H.264 の2本ができて、どちらも観られる', async ({ page, request }) => {
         test.setTimeout(180_000);
         await syncEpg(request);
         await setRecording(request, { codecs: ['av1', 'h264'] });
@@ -267,11 +251,18 @@ test.describe('コーデックを両方エンコードする', () => {
          */
         await expect(row).toContainText(/\(H\.264 [\d.]+ ?[KMGT]?B/);
 
-        // ダウンロードのボタンが AV1 と H.264 の2つに分かれる (「その他…」の中)
-        await row.getByTestId('detail-button').click();
-        const detail = page.getByTestId('program-detail');
-        await expect(detail.getByTestId('download-link')).toHaveText('ダウンロード (AV1)');
-        await expect(detail.getByTestId('download-alt-link')).toHaveText('ダウンロード (H.264)');
+        // アプリ向けの一覧には両方のコーデックが並ぶ (古いテレビは H.264 を選んで観る)
+        const id = Number(await row.getAttribute('data-recording-id'));
+        const list = (await (await request.get('/api/recordings')).json()) as {
+            id: number;
+            files: { source: string; codec: string }[];
+        }[];
+        expect(list.find((item) => item.id === id)?.files).toEqual(
+            expect.arrayContaining([
+                expect.objectContaining({ source: 'encoded', codec: 'av1' }),
+                expect.objectContaining({ source: 'alt', codec: 'h264' }),
+            ]),
+        );
     });
 });
 
@@ -321,8 +312,6 @@ test.describe('エンコードしない', () => {
         const detail = page.getByTestId('program-detail');
         await expect(detail).toBeVisible();
         await expect(detail.getByTestId('reencode-button')).toHaveCount(0);
-        // 元のTSでも観られるものは落とせる
-        await expect(detail.getByTestId('download-link')).toHaveCount(1);
 
         // 後片付け。**エンコードする設定に戻す** (他のテストや本番の既定に揃える)
         await goto(page, '/settings');

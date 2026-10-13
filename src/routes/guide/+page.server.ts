@@ -48,7 +48,7 @@ interface GridProgram
      * 録画一覧まで戻って同じ番組を探し直させないため
      */
     recording_id: number | null;
-    /** 録画そのものが失敗していれば観るボタン・ダウンロードを出さない (一覧の `hasFile` と同じ) */
+    /** 録画そのものが失敗していれば再生のボタンを出さない (一覧の `hasFile` と同じ) */
     recording_state: Recording['state'] | null;
     /** 配信は library_path ?? ts_path を返すので、どちらかがあれば開ける */
     library_path: string | null;

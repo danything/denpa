@@ -182,7 +182,7 @@ function encodeLabel(job: { state: string; phase: string | null } | null): strin
  * 録画の状態 (`state`) は録画そのものの話しかしない。エンコードは別の仕事なので、
  * 動いていればその段階を、落ちていれば落ちたことを、こちらで足す。
  * エンコードの失敗を録画の状態に書き込んでいた頃は、元のTSが無事なのに
- * 「失敗」と出て再生もダウンロードもできなくなっていた
+ * 「失敗」と出て再生できなくなっていた
  */
 export function rowState(rec: {
     state: string;
