@@ -575,7 +575,7 @@ describe('カードとスクランブル解除', () => {
         const sharePort = PORT + 4;
         const sharer = await spawnAgent(PORT + 2, {
             CARD_SHARE_PORT: String(sharePort),
-            CARD_SHARE_NETWORKS: '192.0.2.0/24',
+            CARD_SHARE_NETWORKS: '10.0.0.0/8',
         });
         try {
             const refused = await fetch(`http://127.0.0.1:${sharePort}/denpa/card/init`);
@@ -613,7 +613,16 @@ describe('カードとスクランブル解除', () => {
         }
     }, 30_000);
 
-    test('読めない設定なら起動しない', async () => {
+    test.each<[string, string]>([
+        // 書き間違い
+        ['CARD_SHARE_NETWORKS', 'lan'],
+        // LAN の外 (グローバルアドレス・CGNAT・全部) は、読めても書けない
+        ['CARD_SHARE_NETWORKS', '0.0.0.0/0'],
+        ['CARD_SHARE_NETWORKS', '100.64.0.0/10'],
+        ['CARD_SHARE_NETWORKS', '192.168.1.0/24,203.0.113.0/24'],
+        // TTL は 8 まで
+        ['CARD_TTL', '9'],
+    ])('読めない設定や LAN の外へ広げる設定なら起動しない (%s=%s)', async (name, value) => {
         // 書き間違えた範囲を黙って既定に戻さない
         const room = mkdtempSync(join(tmpdir(), 'denpa-agent-bad-'));
         try {
@@ -626,13 +635,13 @@ describe('カードとスクランブル解除', () => {
                     CHANNELS_FILE: join(room, 'channels.json'),
                     RAW_DIR: join(room, 'recorded'),
                     CARD_SHARE_PORT: String(PORT + 4),
-                    CARD_SHARE_NETWORKS: 'lan',
+                    [name]: value,
                 },
                 stdout: 'pipe',
                 stderr: 'ignore',
             });
             expect(await bad.exited).not.toBe(0);
-            expect(await new Response(bad.stdout).text()).toContain('CARD_SHARE_NETWORKS');
+            expect(await new Response(bad.stdout).text()).toContain(name);
         } finally {
             rmSync(room, { recursive: true, force: true });
         }

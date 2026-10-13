@@ -11,7 +11,9 @@ namespace Denpa.Agent;
 ///
 /// <para>
 /// B-CAS カードは受信機ごとに貸し出されるもので、拠点の外から使い回せると危ない。
-/// そこで3つ重ねる。どれも設定で変えられるが、既定は安全側。
+/// 鍵を使えるのは同じ世帯の機器だけで、LAN の中に限るのはその近似 (Discussion #760)。
+/// そこで3つ重ねる。どれも設定で変えられるが、既定は安全側で、LAN の外へは広げられない
+/// (アドレスは既定の範囲の中だけ、TTL は <see cref="MaxHops"/> まで)。
 /// </para>
 ///
 /// <list type="number">
@@ -34,8 +36,16 @@ public sealed record CardLanPolicy(int? Port, IReadOnlyList<IPNetwork> Networks,
     public const int DefaultHops = 1;
 
     /// <summary>
+    /// <c>CARD_TTL</c> の上限。Docker のブリッジを両側で使うと 3、Kubernetes でノードをまたぐと
+    /// 3〜4 要る。家の中のルーターを越える余裕を足して 8。**それより大きくは書けない** —
+    /// 64 や 255 にすると、TTL で届く先を絞る意味が無くなるため (docs/agent.md「鍵を配るのは LAN の中だけ」)
+    /// </summary>
+    public const int MaxHops = 8;
+
+    /// <summary>
     /// ループバックと、LAN の中でだけ使うアドレス (RFC 1918・IPv6 の ULA とリンクローカル)。
-    /// **CGNAT (100.64.0.0/10) は入れない** — Tailscale などは拠点の外を同じ網に見せる
+    /// **CGNAT (100.64.0.0/10) は入れない** — Tailscale などは拠点の外を同じ網に見せる。
+    /// <c>CARD_SHARE_NETWORKS</c> に書けるのもこの中の範囲だけ (狭めることはできても、外へは広げられない)
     /// </summary>
     public static IReadOnlyList<IPNetwork> DefaultNetworks { get; } =
     [
@@ -72,14 +82,20 @@ public sealed record CardLanPolicy(int? Port, IReadOnlyList<IPNetwork> Networks,
         {
             networks = [.. networksText.Split([',', ' ', '\t', '\n'], StringSplitOptions.RemoveEmptyEntries).Select(Network)];
             if (networks.Count == 0) throw new ArgumentException("CARD_SHARE_NETWORKS に範囲が1つもありません");
+            if (networks.FirstOrDefault(network => !Inside(network)) is { } outside)
+            {
+                throw new ArgumentException(
+                    $"CARD_SHARE_NETWORKS の「{outside}」は LAN の外を含みます。鍵は同じ世帯の機器にだけ配るので、"
+                    + "ループバック・10.0.0.0/8・172.16.0.0/12・192.168.0.0/16・fc00::/7・fe80::/10 の中の範囲だけを書けます");
+            }
         }
 
         var hops = DefaultHops;
         if (Given(env("CARD_TTL")) is { } hopsText)
         {
-            if (!int.TryParse(hopsText, CultureInfo.InvariantCulture, out hops) || hops is < 1 or > 255)
+            if (!int.TryParse(hopsText, CultureInfo.InvariantCulture, out hops) || hops is < 1 or > MaxHops)
             {
-                throw new ArgumentException($"CARD_TTL は 1〜255 で書きます (いまは「{hopsText}」)");
+                throw new ArgumentException($"CARD_TTL は 1〜{MaxHops} で書きます (いまは「{hopsText}」)");
             }
         }
 
@@ -97,6 +113,15 @@ public sealed record CardLanPolicy(int? Port, IReadOnlyList<IPNetwork> Networks,
     }
 
     private static string? Given(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+
+    /// <summary>
+    /// 範囲がまるごと既定の範囲 (<see cref="DefaultNetworks"/>) のどれかに収まるか。同じ種類のアドレスで、
+    /// 既定と同じかより狭く (接頭辞が長い)、先頭のアドレスが既定の中にあれば収まる
+    /// </summary>
+    public static bool Inside(IPNetwork network) => DefaultNetworks.Any(allowed =>
+        allowed.BaseAddress.AddressFamily == network.BaseAddress.AddressFamily
+        && network.PrefixLength >= allowed.PrefixLength
+        && allowed.Contains(network.BaseAddress));
 
     /// <summary><c>10.0.0.0/8</c> の形か、アドレス1つ (<c>192.168.1.20</c>)</summary>
     private static IPNetwork Network(string text)

@@ -262,6 +262,8 @@
         <section class="panel card" data-testid="devices-card">
             <h2>テレビのアプリ</h2>
             <p class="small soft">QR でペアリングしたテレビです。取り消すと、そのテレビはペアリングし直しになります</p>
+            <!-- 使ってよいのは同じ世帯の中だけ (README「使ってよい範囲」・docs/auth.md) -->
+            <p class="small soft">ログインのアカウントもペアリングするテレビも、同じ世帯の人の分だけにしてください</p>
             {#if data.devices.length === 0}
                 <p class="small muted">まだありません</p>
             {:else}

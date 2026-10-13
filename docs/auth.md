@@ -1,5 +1,9 @@
 # 誰を通すか
 
+**アカウントを作れるのは、同じ世帯の人だけにしてください。** denpa は自分の世帯の中で私的に観るための
+ものです。OIDC のグループ (`OIDC_GROUP`) に入れる人、ペアリングするテレビ、`TRUSTED_NETWORKS` に入れる
+ネットワークも、同じ世帯の人と機器に限ります。考え方は [Discussion #760](https://github.com/danything/denpa/discussions/760) にあります。
+
 **エンドポイントによって守り方が違います。** 録画のファイル (`/api/recordings/<id>/file`) も画面と同じ守り方です。
 
 | エンドポイント | 守り方 |

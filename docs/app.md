@@ -436,15 +436,16 @@ SQLite が拒むので、事実と状態が食い違いません。文字列で�
 
 環境変数は `AGENT_PORT` (既定 `25252`)・`TUNERS_FILE` / `CHANNELS_FILE` (既定 `/config/` の下)・
 `MEDIA_DIR` / `RAW_DIR` (denpa と同じ。元のTSの置き場)・`CARD_URL` (手元にカードが無い拠点だけ。鍵を貰う先。配る側の `CARD_SHARE_PORT` を指す)・
-`CARD_SHARE_PORT` (鍵を配る拠点だけ。既定は配らない。例は `25253`)・`CARD_SHARE_NETWORKS` (鍵を配る相手。既定はループバックと LAN の中のアドレス)・
-`CARD_TTL` (鍵のやり取りの TTL。既定 `1`)・`CARD_SHARE_MAX_RTT` (往復時間の上限。既定は見ない)・
+`CARD_SHARE_PORT` (鍵を配る拠点だけ。既定は配らない。例は `25253`)・`CARD_SHARE_NETWORKS` (鍵を配る相手。既定はループバックと LAN の中のアドレスで、書けるのもその中だけ)・
+`CARD_TTL` (鍵のやり取りの TTL。既定 `1`、1〜8)・`CARD_SHARE_MAX_RTT` (往復時間の上限。既定は見ない)・
 `SHUTDOWN_WAIT` (denpa と同じ)。同梱のドライバの置き場 `PX4_USERLAND_DIR` / `PX4_FIRMWARE` / `PX4_RUNTIME_DIR` /
 `SIANO_USERLAND_DIR` / `SIANO_FIRMWARE` / `ASICEN_USERLAND_DIR` / `ASICEN_FIRMWARE` / `ASICEN_RUNTIME_DIR` はイメージの既定のままでよい (書き換えるのは Mac の `install.sh` (`PX4_*`・`SIANO_*`) と Windows の `install.ps1` (`SIANO_*`) だけ)。
 `FAKE_TUNE` は適合テストだけが使う。
 
-**鍵を配るのは LAN の中だけ** (B-CAS カードを拠点の外から使い回させない)。鍵を配る API は普通の API とは
+**鍵を配るのは LAN の中だけ** (鍵を使えるのは同じ世帯の機器だけ。LAN の中に限るのはその近似)。鍵を配る API は普通の API とは
 別のポート (`CARD_SHARE_PORT`) にあり、ループバックと LAN の中のアドレス以外には 403 で断り、TTL 1 で
-ルーターを越えない。限界は次のとおりで、詳しくと前の版からの移り方は [agent.md](agent.md#鍵を配るのは-lan-の中だけ)。
+ルーターを越えない。設定で狭めることはできても LAN の外へは広げられず、`CARD_SHARE_NETWORKS` に LAN の外の範囲を書いたり
+`CARD_TTL` を 9 以上にしたりすると起動しない。限界は次のとおりで、詳しくと前の版からの移り方は [agent.md](agent.md#鍵を配るのは-lan-の中だけ)。
 
 - VPN でプライベートアドレスを渡された相手は、同じ LAN に見える (往復時間の上限で遠くのものは落とせる)
 - Docker のブリッジはコンテナの出入りで TTL が1つ減る (片方なら `CARD_TTL=2`、両方なら `3`。配る側は `network_mode: host` が確か)

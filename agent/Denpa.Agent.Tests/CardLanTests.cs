@@ -72,15 +72,56 @@ public class CardLanTests
     }
 
     [Test]
-    public async Task 範囲は狭めることも足すこともできる()
+    public async Task 範囲は既定の中で狭められる()
     {
-        var policy = Read(("CARD_SHARE_NETWORKS", "192.168.10.0/24, 100.64.0.0/10 192.168.1.20"));
+        var policy = Read(("CARD_SHARE_NETWORKS", "192.168.10.0/24, fd12:3456::/64 192.168.1.20"));
         await Assert.That(policy.Refuse(IPAddress.Parse("192.168.10.5"), null)).IsNull();
-        await Assert.That(policy.Refuse(IPAddress.Parse("100.100.1.1"), null)).IsNull();
+        await Assert.That(policy.Refuse(IPAddress.Parse("fd12:3456::9"), null)).IsNull();
         await Assert.That(policy.Refuse(IPAddress.Parse("192.168.1.20"), null)).IsNull();
         // 既定の範囲は書いたもので置き換わる
         await Assert.That(policy.Refuse(IPAddress.Parse("192.168.1.21"), null)).IsNotNull();
         await Assert.That(policy.Refuse(IPAddress.Parse("127.0.0.1"), null)).IsNotNull();
+
+        // 既定の範囲そのものや、その中のアドレス1つも書ける
+        var whole = Read(("CARD_SHARE_NETWORKS", "127.0.0.0/8,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,::1/128,fc00::/7,fe80::/10"));
+        await Assert.That(whole.Networks.Count).IsEqualTo(CardLanPolicy.DefaultNetworks.Count);
+        await Assert.That(Read(("CARD_SHARE_NETWORKS", "::1, fe80::1, ::ffff:10.1.2.3, 172.31.0.0/16")).Networks.Count).IsEqualTo(4);
+    }
+
+    [Test]
+    [Arguments("0.0.0.0/0")]
+    [Arguments("::/0")]
+    [Arguments("100.64.0.0/10")] // CGNAT (Tailscale など)
+    [Arguments("100.100.1.1")]
+    [Arguments("8.8.8.8")]
+    [Arguments("203.0.113.0/24")]
+    [Arguments("192.0.2.0/24")]
+    [Arguments("169.254.0.0/16")]
+    [Arguments("2001:db8::/32")]
+    [Arguments("::ffff:0:0/96")] // IPv4 射影の範囲で IPv4 を丸ごと
+    [Arguments("10.0.0.0/7")] // 既定より広い
+    [Arguments("172.16.0.0/11")]
+    [Arguments("fc00::/6")]
+    [Arguments("192.168.1.0/24, 8.8.8.8")] // 1つでも外があれば断る
+    public async Task LAN_の外を含む範囲は書けない(string networks)
+    {
+        var error = Assert.Throws<ArgumentException>(() => Read(("CARD_SHARE_NETWORKS", networks)));
+        await Assert.That(error.Message).Contains("CARD_SHARE_NETWORKS");
+        await Assert.That(error.Message).Contains("LAN の外");
+    }
+
+    [Test]
+    [Arguments("1.0.0.0/8", false)]
+    [Arguments("10.0.0.0/8", true)]
+    [Arguments("10.20.30.0/24", true)]
+    [Arguments("172.16.0.0/12", true)]
+    [Arguments("172.32.0.0/16", false)]
+    [Arguments("fd00::/8", true)]
+    [Arguments("fe80::/64", true)]
+    [Arguments("fec0::/10", false)]
+    public async Task 既定の範囲に収まるかを見る(string network, bool inside)
+    {
+        await Assert.That(CardLanPolicy.Inside(IPNetwork.Parse(network))).IsEqualTo(inside);
     }
 
     [Test]
@@ -90,6 +131,8 @@ public class CardLanTests
         await Assert.That(policy.Port).IsEqualTo(25253);
         await Assert.That(policy.Hops).IsEqualTo(2);
         await Assert.That(policy.MaxRoundTrip).IsEqualTo(TimeSpan.FromMilliseconds(7));
+        // TTL は 8 まで書ける (Docker のブリッジや Kubernetes でノードをまたぐ構成の余裕)
+        await Assert.That(Read(("CARD_TTL", "8")).Hops).IsEqualTo(CardLanPolicy.MaxHops);
 
         // 空や 0 は書いていないのと同じ
         var blank = Read(("CARD_SHARE_PORT", " "), ("CARD_SHARE_NETWORKS", ""), ("CARD_SHARE_MAX_RTT", "0"));
@@ -106,6 +149,8 @@ public class CardLanTests
     [Arguments("CARD_SHARE_NETWORKS", "10.0.0.0/33")]
     [Arguments("CARD_SHARE_NETWORKS", ",")]
     [Arguments("CARD_TTL", "0")]
+    [Arguments("CARD_TTL", "9")]
+    [Arguments("CARD_TTL", "64")]
     [Arguments("CARD_TTL", "256")]
     [Arguments("CARD_TTL", "one")]
     [Arguments("CARD_SHARE_MAX_RTT", "-1")]
