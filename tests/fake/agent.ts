@@ -372,9 +372,12 @@ const options: Bun.ServeOptions = {
             knobs.scrambled = url.searchParams.get('on') === '1';
             return json({ scrambled: knobs.scrambled });
         }
-        /* コピー禁止。番組表 (`eit`) と、流れているもの (`pmt`) を別々に切り替える */
+        /*
+         * コピー禁止。番組表で禁止と言う局 (`eit` に service_id をカンマ区切り。空なら無し) と、
+         * 流れているもの (`pmt=1`) を別々に切り替える
+         */
         if (url.pathname === '/__control/copy-never' && request.method === 'POST') {
-            knobs.eitCopyNever = url.searchParams.get('eit') === '1';
+            knobs.eitCopyNever = (url.searchParams.get('eit') ?? '').split(',').filter(Boolean).map(Number);
             knobs.pmtCopyNever = url.searchParams.get('pmt') === '1';
             return json({ eit: knobs.eitCopyNever, pmt: knobs.pmtCopyNever });
         }

@@ -97,10 +97,11 @@ export interface Knobs {
     /** EIT[p/f] を流さない。延長に追従できない局の見え方を確かめる */
     noPresentFollowing: boolean;
     /**
-     * **番組表 (EIT) でコピー禁止と言う。** 全局の全番組に、コピー禁止のデジタルコピー制御記述子を載せる。
-     * 予約の時点で「録画しない」になるのを確かめる
+     * **番組表 (EIT) でコピー禁止と言う局** (service_id)。その局の全番組に、コピー禁止の
+     * デジタルコピー制御記述子を載せる。予約の時点で「録画しない」になるのを確かめる。
+     * 局を絞るのは、同じワーカーのほかの試験が使う局 (MX・BS) を巻き込まないため
      */
-    eitCopyNever: boolean;
+    eitCopyNever: number[];
     /**
      * **PMT でコピー禁止と言う。** 番組表は言わないまま、流れているものだけが禁止になる
      * (番組表が古い・無いときの備えを確かめる。録り始めてから保存を止める)
@@ -112,13 +113,15 @@ export const DEFAULT_KNOBS: Knobs = {
     scrambled: false,
     extendedMs: 0,
     noPresentFollowing: false,
-    eitCopyNever: false,
+    eitCopyNever: [],
     pmtCopyNever: false,
 };
 
-/** つまみに合わせて、番組表の番組にコピー禁止の印を付ける */
-const withCopyControl = (events: SynthEvent[], knobs: Knobs): SynthEvent[] =>
-    knobs.eitCopyNever ? events.map((event) => ({ ...event, copyControl: 0b11 })) : events;
+/** その局の番組。つまみ (`eitCopyNever`) に入っている局なら、コピー禁止の印を付ける */
+const programsWith = (service: FakeService, knobs: Knobs): SynthEvent[] =>
+    knobs.eitCopyNever.includes(service.serviceId)
+        ? programsFor(service).map((event) => ({ ...event, copyControl: 0b11 }))
+        : programsFor(service);
 
 /** 1枠の本数。E2E では短くして「数秒後に始まる番組」を作る */
 const SLOTS = Number(process.env['FAKE_SLOTS'] ?? 60);
@@ -481,7 +484,7 @@ function tables(services: FakeService[], knobs: Knobs): Uint8Array {
 function schedule(services: FakeService[], knobs: Knobs): Uint8Array {
     const parts: number[] = [];
     const push = (service: FakeService, tableId: number) => {
-        const events = withCopyControl(programsFor(service), knobs);
+        const events = programsWith(service, knobs);
         for (const section of scheduleSections(service, events, tableId)) {
             parts.push(...packetize(0x0012, section));
         }
@@ -506,7 +509,7 @@ function nowOnAir(services: FakeService[], knobs: Knobs): Uint8Array {
     if (knobs.noPresentFollowing) return new Uint8Array(0);
     const parts: number[] = [];
     for (const service of services) {
-        const events = withCopyControl(programsFor(service), knobs);
+        const events = programsWith(service, knobs);
         const current = present(events);
         if (current === undefined) continue;
         const section = (sectionNumber: number, event: SynthEvent) =>

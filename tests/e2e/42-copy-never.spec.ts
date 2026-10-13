@@ -1,5 +1,5 @@
 import type { APIRequestContext } from '@playwright/test';
-import { MX } from '../fake/services';
+import { FUJI } from '../fake/services';
 import { cellOf, clearRules, expect, goto, reserveSoon, syncEpg, test, upcoming } from './helpers';
 
 const REASON = 'コピー禁止の番組なので録画しません';
@@ -27,7 +27,7 @@ async function recollect(request: APIRequestContext): Promise<void> {
  */
 test.describe('コピー禁止の番組', () => {
     test.afterEach(async ({ page, request, stack }) => {
-        await request.post(`${stack.agentUrl}/__control/copy-never?eit=0&pmt=0`);
+        await request.post(`${stack.agentUrl}/__control/copy-never?eit=&pmt=0`);
         await clearRules(page);
         // 番組表の印を外しておく (同じワーカーのあとのファイルが、予約できない番組を引かないように)
         await recollect(request);
@@ -40,12 +40,13 @@ test.describe('コピー禁止の番組', () => {
     }) => {
         test.setTimeout(180_000);
         await syncEpg(request);
-        await request.post(`${stack.agentUrl}/__control/copy-never?eit=1&pmt=0`);
+        await request.post(`${stack.agentUrl}/__control/copy-never?eit=${FUJI.serviceId}&pmt=0`);
         await recollect(request);
 
         // 番組表のマスと詳細に、控えめに出る。予約のボタンは出さない
         await goto(page, '/guide?type=GR');
-        const [target] = await upcoming(page);
+        const target = (await upcoming(page)).find((c) => c.serviceId === String(FUJI.id));
+        if (target === undefined) throw new Error('フジテレビのこれから始まる番組が無い');
         const cell = cellOf(page, target.programId);
         await expect(cell.getByTestId('grid-copy-never')).toHaveText('コピー禁止');
         await cell.getByTestId('program-button').click();
@@ -54,7 +55,7 @@ test.describe('コピー禁止の番組', () => {
         await page.getByTestId('detail-close').click();
 
         // ライブの録画ボタンと同じ処理 (`recordAiring`)。断って理由を返す
-        const recorded = await request.post(`/api/services/${MX.id}/record`, {
+        const recorded = await request.post(`/api/services/${FUJI.id}/record`, {
             headers: { 'content-type': 'application/json' },
         });
         expect(recorded.status()).toBe(400);
@@ -68,15 +69,16 @@ test.describe('コピー禁止の番組', () => {
         await expect(page.getByTestId('rule-row').first()).toBeVisible();
 
         await goto(page, '/');
-        const row = page.getByTestId('reservation-row').filter({ hasText: 'テストアニメ' }).last();
+        const rows = page
+            .getByTestId('reservation-row')
+            .filter({ hasText: 'テストアニメ' })
+            .filter({ hasText: 'フジテレビ' });
+        const row = rows.last();
         await expect(row.getByTestId('reservation-state')).toHaveText('録画しない');
         await expect(row).toContainText(REASON);
         // 予約済みのものは1つも無い (録れるように見せない)
         await expect(
-            page
-                .getByTestId('reservation-row')
-                .filter({ hasText: 'テストアニメ' })
-                .filter({ has: page.getByTestId('reservation-state').getByText('予約済み') }),
+            rows.filter({ has: page.getByTestId('reservation-state').getByText('予約済み') }),
         ).toHaveCount(0);
     });
 
@@ -84,7 +86,7 @@ test.describe('コピー禁止の番組', () => {
         test.setTimeout(180_000);
         await syncEpg(request);
         // 番組表はそのまま (禁止と言わない)。PMT だけ禁止にする
-        await request.post(`${stack.agentUrl}/__control/copy-never?eit=0&pmt=1`);
+        await request.post(`${stack.agentUrl}/__control/copy-never?eit=&pmt=1`);
 
         const programId = await reserveSoon(page, request, 'BS');
         const row = page.locator(`[data-testid="recording-row"][data-program-id="${programId}"]`);
