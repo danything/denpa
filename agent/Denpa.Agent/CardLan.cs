@@ -82,7 +82,8 @@ public sealed record CardLanPolicy(int? Port, IReadOnlyList<IPNetwork> Networks,
         {
             networks = [.. networksText.Split([',', ' ', '\t', '\n'], StringSplitOptions.RemoveEmptyEntries).Select(Network)];
             if (networks.Count == 0) throw new ArgumentException("CARD_SHARE_NETWORKS に範囲が1つもありません");
-            if (networks.FirstOrDefault(network => !Inside(network)) is { } outside)
+            // IPNetwork は struct なので、FirstOrDefault では「無い」が 0.0.0.0/0 になる。null にできる形で探す
+            if (networks.Where(network => !Inside(network)).Cast<IPNetwork?>().FirstOrDefault() is { } outside)
             {
                 throw new ArgumentException(
                     $"CARD_SHARE_NETWORKS の「{outside}」は LAN の外を含みます。鍵は同じ世帯の機器にだけ配るので、"
