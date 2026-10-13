@@ -4,6 +4,7 @@
     import Extras from './Extras.svelte';
     import type { StageFullscreen } from './fullscreen.svelte.js';
     import { BACKGROUND, EXPAND, PIP, SHRINK } from './icons';
+    import MoreButton from './MoreButton.svelte';
     import type { Pip } from './pip.svelte.js';
 
     /**
@@ -12,8 +13,9 @@
      * - **バックグラウンド再生。** 既定はオフで、裏に回したら止める。端末ごとに覚える (`background.svelte.ts`)
      * - **小窓 (PiP)。** ページから出せない端末 (iPhone・iPad のホーム画面から開いたもの・API の無いブラウザ) では
      *   出さない (`pip.svelte.ts`)
+     * - **「ほか」(⋯)。** 畳むときだけ、全画面のすぐ左に出す (`MoreButton`)
      *
-     * この2つは狭い枠では「ほか」に畳む。全画面はいつも出す
+     * バックグラウンドと小窓は畳むときは「ほか」に入れる。全画面はいつも出す
      */
     interface Props {
         /** testid の頭 (`watch` / `chase` / `live`) */
@@ -21,8 +23,10 @@
         background: Background;
         pip: Pip;
         fullscreen: StageFullscreen;
+        /** 舞台 (`PlayerStage`) が渡す畳み方と「ほか」の開け閉め */
+        stage: { fold: boolean; more: boolean; toggleMore: () => void };
     }
-    let { prefix, background, pip, fullscreen }: Props = $props();
+    let { prefix, background, pip, fullscreen, stage }: Props = $props();
 </script>
 
 <Extras>
@@ -45,6 +49,8 @@
         />
     </Extras>
 {/if}
+
+<MoreButton {stage} testid="{prefix}-more" />
 
 <ControlButton
     icon={fullscreen.active ? SHRINK : EXPAND}

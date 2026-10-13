@@ -19,7 +19,6 @@
     import { CAMERA, CAPTION, PAUSE, PLAY, SOUND_OFF, SOUND_ON } from '#lib/components/player/icons.js';
     import { playerKeys } from '#lib/components/player/keys.js';
     import MediaStack from '#lib/components/player/MediaStack.svelte';
-    import MoreButton from '#lib/components/player/MoreButton.svelte';
     import PlayerLayout from '#lib/components/player/PlayerLayout.svelte';
     import PlayerStage from '#lib/components/player/PlayerStage.svelte';
     import PlayerVeil from '#lib/components/player/PlayerVeil.svelte';
@@ -269,13 +268,18 @@
             <SeekBar value={pos} max={total} step={1} onseek={seekTo} />
 
             <!-- **並びはライブと同じ。** 再生・音・字幕、エンコード方式・音声・端 (最新)、読みもの、速さ、全画面 -->
-            <ControlRow>
+            <ControlRow testid="chase-buttons">
                 <ControlButton
                     icon={player.paused ? PLAY : PAUSE}
                     label={player.paused ? '再生' : '一時停止'}
                     testid="chase-play"
                     onclick={() => player.toggle()}
                 />
+                <!--
+                    **畳むとき (狭い枠・一段に入らないとき) に残すのは、再生・最新・読みもの・全画面だけ。**
+                    ここから音声までと速さ・バックグラウンド・小窓は「ほか」(⋯) に入れる (`Extras`。観る画面と同じ)
+                -->
+                <Extras>
                 <ControlButton
                     icon={player.silenced ? SOUND_OFF : SOUND_ON}
                     label={player.silenced ? '音を出す' : '音を消す'}
@@ -292,9 +296,6 @@
                     />
                 {/if}
 
-                <!-- エンコード方式・音声と速さは、狭い枠では「ほか」(⋯) に畳む (`Extras`。観る画面と同じ) -->
-                <MoreButton {stage} testid="chase-more" />
-                <Extras>
                 <!-- エンコード方式。ライブと同じ場所・同じ見た目で、選び直すと再生していた位置から再エンコード -->
                 <CodecMenu
                     testid="chase-codec"
@@ -341,7 +342,7 @@
                     titleTestid="chase-title"
                 >
                     {#snippet status()}
-                        <span>{clockLabel(pos)} / {clockLabel(recorded)}</span>
+                        <span class="clock">{clockLabel(pos)} / {clockLabel(recorded)}</span>
                         {#if line !== null && !line.finished}
                             <!-- 赤はライブの赤丸と同じ出し方。黒帯の上の text-error は沈む -->
                             ・ <span class="rec"><span class="dot"></span>録画中</span>
@@ -366,7 +367,7 @@
                     </Extras>
                 {/if}
 
-                <StageTail prefix="chase" {background} {pip} {fullscreen} />
+                <StageTail prefix="chase" {background} {pip} {fullscreen} {stage} />
             </ControlRow>
         </ControlBar>
 

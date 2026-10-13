@@ -34,7 +34,6 @@
         SOUND_ON,
     } from '#lib/components/player/icons.js';
     import MediaStack from '#lib/components/player/MediaStack.svelte';
-    import MoreButton from '#lib/components/player/MoreButton.svelte';
     import OverlayMenu from '#lib/components/player/OverlayMenu.svelte';
     import PlayerLayout, { PHONE_LANDSCAPE } from '#lib/components/player/PlayerLayout.svelte';
     import PlayerStage from '#lib/components/player/PlayerStage.svelte';
@@ -471,13 +470,20 @@
                     {/if}
 
                     <!-- **並びは観る画面と同じ。** 再生・音・字幕が左から順で、全画面が右端 -->
-                    <ControlRow>
+                    <ControlRow testid="live-buttons">
                         <ControlButton
                             icon={player.paused ? PLAY : PAUSE}
                             label={player.paused ? '再生' : '一時停止'}
                             testid="live-play"
                             onclick={() => player.toggle()}
                         />
+                        <!--
+                            **畳むとき (狭い枠・一段に入らないとき) に残すのは、再生・ライブ・読みもの・全画面だけ。**
+                            ここから音声までと速さ・バックグラウンド・小窓は「ほか」(⋯) に入れる (`Extras`)。
+                            音を出していないときは映像の上に「音を出す」が別に出る。
+                            広い枠では包みは何もしないので、並びは今までどおり (観る画面と同じ)
+                        -->
+                        <Extras>
                         <ControlButton
                             icon={player.silenced ? SOUND_OFF : SOUND_ON}
                             label={player.silenced ? '音を出す' : '音を消す'}
@@ -507,12 +513,6 @@
                             />
                         {/if}
 
-                        <!--
-                            **ここから音声までと速さは、狭い枠では「ほか」(⋯) に畳む** (`Extras`)。
-                            広い枠では包みは何もしないので、並びは今までどおり (観る画面と同じ)
-                        -->
-                        <MoreButton {stage} testid="live-more" />
-                        <Extras>
                         <!--
                         データ放送 (d) と切り抜きは**右上の縦列** (`live-side`) —
                         観る画面と同じ場所に揃えてある。
@@ -727,7 +727,7 @@
                             </Extras>
                         {/if}
 
-                        <StageTail prefix="live" {background} {pip} {fullscreen} />
+                        <StageTail prefix="live" {background} {pip} {fullscreen} {stage} />
                     </ControlRow>
                 </ControlBar>
             {/if}

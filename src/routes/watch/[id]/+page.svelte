@@ -38,7 +38,6 @@
         TRASH,
     } from '#lib/components/player/icons.js';
     import { playerKeys } from '#lib/components/player/keys.js';
-    import MoreButton from '#lib/components/player/MoreButton.svelte';
     import PlayerLayout from '#lib/components/player/PlayerLayout.svelte';
     import PlayerStage from '#lib/components/player/PlayerStage.svelte';
     import { fitRect } from '#lib/components/player/paint.js';
@@ -1927,32 +1926,35 @@
                             testid="watch-play"
                             onclick={togglePlay}
                         />
-                        <ControlButton
-                            icon={muted ? SOUND_OFF : SOUND_ON}
-                            label={muted ? '音を出す' : '音を消す'}
-                            onclick={toggleMute}
-                        />
-
                         <!--
-                            **字幕を持っている録画でだけ出す。** 持っていないほうが
-                            多い (字幕の無い番組・この仕組みより前にエンコードしたもの) ので、
-                            押しても何も起きない操作を並べない。`/live` と同じ扱い
+                            **畳むとき (狭い枠・一段に入らないとき) に残すのは、再生・チャプター送り・
+                            時刻・全画面だけ。** 音・字幕・コーデック・音声・CM 飛ばし・速さ・バックグラウンド・
+                            小窓は「ほか」(⋯) に入れる (`Extras`)。広い枠では包みは何もしないので、並びは今までどおり
                         -->
-                        {#if hasCaptions}
+                        <Extras>
                             <ControlButton
-                                icon={CAPTION}
-                                label={captions ? '字幕を消す' : '字幕を出す'}
-                                on={captions}
-                                testid="watch-captions"
-                                onclick={toggleCaptions}
+                                icon={muted ? SOUND_OFF : SOUND_ON}
+                                label={muted ? '音を出す' : '音を消す'}
+                                testid="watch-sound"
+                                onclick={toggleMute}
                             />
-                        {/if}
 
-                        <!--
-                            **ここから CM 飛ばしまでと速さは、狭い枠では「ほか」(⋯) に畳む** (`Extras`)。
-                            広い枠では包みは何もしないので、並びは今までどおり
-                        -->
-                        <MoreButton stage={layout} testid="watch-more" />
+                            <!--
+                                **字幕を持っている録画でだけ出す。** 持っていないほうが
+                                多い (字幕の無い番組・この仕組みより前にエンコードしたもの) ので、
+                                押しても何も起きない操作を並べない。`/live` と同じ扱い
+                            -->
+                            {#if hasCaptions}
+                                <ControlButton
+                                    icon={CAPTION}
+                                    label={captions ? '字幕を消す' : '字幕を出す'}
+                                    on={captions}
+                                    testid="watch-captions"
+                                    onclick={toggleCaptions}
+                                />
+                            {/if}
+                        </Extras>
+
                         <Extras>
                         <!--
                             **コーデックの切り替え** (追っかけ・ライブと同じ部品)。この端末で観られる方式が
@@ -1983,11 +1985,13 @@
                                 onselect={(key) => selectAudio(key)}
                             />
                         {/if}
+                        </Extras>
 
                         <!--
                             **チャプター送りは、入っているときだけ出す。**
                             CMを切ってエンコードしたものには入っていないので、出しても
-                            押せない操作が並ぶだけになる
+                            押せない操作が並ぶだけになる。**畳むときも残す** — 録画の中を
+                            前後に飛ぶ唯一のボタンで、CM や本編の頭へ毎回のように使う
                         -->
                         {#if chapters.length > 1}
                             <ControlButton
@@ -2004,6 +2008,7 @@
                             />
                         {/if}
 
+                        <Extras>
                         <!--
                             **CM を自動で飛ばす。** チャプターに CM が入っている
                             録画でだけ出す。押した時点で CM の中にいれば、そこで飛ぶ
@@ -2038,13 +2043,14 @@
                                 <!--
                                     **残りも出す。** 「あと何分で終わるか」は、途中で
                                     観るのをやめるかどうかを決めるのに要る。倍速のときは
-                                    **実際に掛かる時間**にする (1.5倍なら残りも1.5で割る)
+                                    **実際に掛かる時間**にする (1.5倍なら残りも1.5で割る)。
+                                    狭い枠では位置と長さだけにする (`.long` を省く。`InfoBlock`)
                                 -->
-                                <span data-testid="watch-clock">
-                                    {clock(at)} / {clock(length)} 残り {clock(remaining)}
+                                <span class="clock" data-testid="watch-clock">
+                                    {clock(at)} / {clock(length)}<span class="long"> 残り {clock(remaining)}</span>
                                 </span>
                                 {#if current !== null}
-                                    ・ <span>{current.title}</span>
+                                    <span class="long">・ <span>{current.title}</span></span>
                                 {/if}
                             {/snippet}
                         </InfoBlock>
@@ -2064,7 +2070,7 @@
                             </Extras>
                         {/if}
 
-                        <StageTail prefix="watch" {background} {pip} {fullscreen} />
+                        <StageTail prefix="watch" {background} {pip} {fullscreen} stage={layout} />
                     </ControlRow>
                 </ControlBar>
                 {/snippet}

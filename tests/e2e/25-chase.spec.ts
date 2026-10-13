@@ -8,6 +8,8 @@ import {
     feedCaption,
     goto,
     holdCaptions,
+    leaveFullscreen,
+    oneRowTroubles,
     syncEpg,
     test,
 } from './helpers';
@@ -102,6 +104,43 @@ async function checkChase(page: Page, browser: Browser, id: string): Promise<voi
         await holdCaptions(tab, 'chase-captions');
         await feedCaption(tab, 'chase');
         await expectSharpCaptions(tab, what);
+        await context.close();
+    }
+
+    /*
+     * **スマホの縦 (360px・320px) でも、操作バーのボタンは1行** (観る画面・ライブと同じ)。
+     * 残すのは再生・最新・読みもの・全画面と「ほか」だけで、畳んだ音は「ほか」から押せる
+     */
+    for (const width of [360, 320]) {
+        const context = await browser.newContext({
+            viewport: { width, height: 780 },
+            isMobile: true,
+            hasTouch: true,
+        });
+        const tab = await context.newPage();
+        await goto(tab, `/chase/${id}`);
+        await expect(tab.getByTestId('chase-play')).toBeVisible();
+        await leaveFullscreen(tab);
+        await expect(tab.getByTestId('chase')).toHaveAttribute('data-under', '');
+
+        expect(await oneRowTroubles(tab, 'chase-buttons'), `${width}px`).toEqual([]);
+        await expect(tab.getByTestId('chase-edge')).toBeVisible();
+        await expect(tab.getByTestId('chase-full')).toBeVisible();
+        await tab.screenshot({ path: test.info().outputPath(`chase-${width}.png`) });
+
+        const sound = tab.getByTestId('chase-sound');
+        await expect(sound).toBeHidden();
+        await tab.getByTestId('chase-more').tap();
+        await expect(sound).toBeVisible();
+        const label = (await sound.getAttribute('aria-label')) ?? '';
+        await sound.tap();
+        await expect(sound).not.toHaveAttribute('aria-label', label);
+        await tab.screenshot({ path: test.info().outputPath(`chase-${width}-more.png`) });
+
+        // 閉じれば1行に戻る
+        await tab.getByTestId('chase-more').tap();
+        await expect(sound).toBeHidden();
+        expect(await oneRowTroubles(tab, 'chase-buttons'), `${width}px (閉じたあと)`).toEqual([]);
         await context.close();
     }
 

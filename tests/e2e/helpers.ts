@@ -447,6 +447,48 @@ export async function overlayTroubles(page: Page, stage: string): Promise<string
 }
 
 /**
+ * **操作バーのボタンが1行に並んでいるか** (`ControlRow`。狭い幅で見る)。見えているボタン (`.ov-btn`) の
+ * 上端がそろい、行の高さが1段ぶん (いちばん高いボタンと同じ)、行からはみ出したものが無く、
+ * どれも 40px 以上あること。畳んだもの (幅 0) は数えない。返すのは困りごとの一覧 (空なら良し)
+ */
+export async function oneRowTroubles(page: Page, row: string): Promise<string[]> {
+    return page.evaluate((testid) => {
+        const root = document.querySelector(`[data-testid="${testid}"]`);
+        if (root === null) return [`${testid} がありません`];
+        const frame = root.getBoundingClientRect();
+        const name = (el: Element) =>
+            el.getAttribute('data-testid') ?? el.getAttribute('aria-label') ?? el.textContent ?? '';
+        const buttons = [...root.querySelectorAll('.ov-btn')]
+            .map((el) => ({ el, r: el.getBoundingClientRect() }))
+            .filter(({ r }) => r.width > 0 && r.height > 0);
+        if (buttons.length === 0) return ['ボタンが1つも見えていない'];
+        const top = Math.min(...buttons.map(({ r }) => r.top));
+        const tallest = Math.max(...buttons.map(({ r }) => r.height));
+        const troubles: string[] = [];
+        for (const { el, r } of buttons) {
+            if (r.top - top > 1.5)
+                troubles.push(`${name(el)} が別の行 (上端が ${Math.round(r.top - top)}px 下)`);
+            if (r.left < frame.left - 0.5 || r.right > frame.right + 0.5)
+                troubles.push(`${name(el)} が行からはみ出す`);
+            if (Math.min(r.width, r.height) < 39.5) troubles.push(`${name(el)} が 40px より小さい`);
+        }
+        if (frame.height > tallest + 1.5) {
+            troubles.push(`行の高さが ${Math.round(frame.height)}px (1段は ${Math.round(tallest)}px)`);
+        }
+        return troubles;
+    }, row);
+}
+
+/**
+ * **全画面をやめる。** 指の端末の観る画面は、開いた時点で全画面に入る。狭い枠のまま
+ * (操作バーを映像の下に出した形) を見るときに呼ぶ
+ */
+export async function leaveFullscreen(page: Page): Promise<void> {
+    await page.evaluate(() => document.fullscreenElement && document.exitFullscreen());
+    await expect.poll(() => page.evaluate(() => document.fullscreenElement === null)).toBe(true);
+}
+
+/**
  * **字幕は操作列の下に潜らない** (`PlayerStage` の持ち上げ)。字幕の canvas に「下の方に
  * 字が載っている」(`data-ink`。描く係が書くもの) と書き込み、字の下端が操作バーの上端より
  * 上へ来るのを待つ。偽の放送には字幕が乗っていないので、載っている範囲だけを作る

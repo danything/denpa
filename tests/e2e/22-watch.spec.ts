@@ -11,6 +11,8 @@ import {
     goto,
     holdCaptions,
     holdMedia,
+    leaveFullscreen,
+    oneRowTroubles,
     overlayTroubles,
     recordOne,
     routeCaptions,
@@ -730,6 +732,46 @@ test.describe('スマホの縦で観る', () => {
         await expect(bar).toHaveAttribute('data-shown', 'false', { timeout: 6000 });
         expect(await bar.evaluate((el) => getComputedStyle(el).opacity)).toBe('1');
         await expect(page.getByTestId('watch-speed')).toBeVisible();
+    });
+
+    /*
+     * **いちばん狭いスマホ (360px・320px) でも、操作バーのボタンは1行。** 折り返していた頃は、
+     * 時刻が押すものの上に一行を取って操作バーが二段になっていた。残すのは再生・チャプター送り・
+     * 時刻・全画面と「ほか」だけで、時刻は短い形 (残りを省く)。畳んだもの (音など) は「ほか」から押せる
+     */
+    test('幅 360px・320px でも操作バーのボタンは1行で、畳んだ音は「ほか」から押せる', async ({
+        page,
+        request,
+    }) => {
+        test.setTimeout(180_000);
+        const id = await watchable(page, request);
+        for (const width of [360, 320]) {
+            await page.setViewportSize({ width, height: 780 });
+            await goto(page, `/watch/${id}`);
+            await leaveFullscreen(page);
+            await expect(page.getByTestId('watch-stage')).toHaveAttribute('data-under', '');
+            await expect(page.getByTestId('watch-play')).toBeVisible();
+
+            expect(await oneRowTroubles(page, 'watch-buttons'), `${width}px`).toEqual([]);
+            await expect(page.getByTestId('watch-full')).toBeVisible();
+            await expect(page.getByTestId('watch-clock')).toBeVisible();
+            await expect(page.getByTestId('watch-clock').locator('.long')).toBeHidden();
+            await page.screenshot({ path: test.info().outputPath(`watch-${width}.png`) });
+
+            const sound = page.getByTestId('watch-sound');
+            await expect(sound).toBeHidden();
+            await page.getByTestId('watch-more').tap();
+            await expect(sound).toBeVisible();
+            const label = (await sound.getAttribute('aria-label')) ?? '';
+            await sound.tap();
+            await expect(sound).not.toHaveAttribute('aria-label', label);
+            await page.screenshot({ path: test.info().outputPath(`watch-${width}-more.png`) });
+
+            // 閉じれば1行に戻る
+            await page.getByTestId('watch-more').tap();
+            await expect(sound).toBeHidden();
+            expect(await oneRowTroubles(page, 'watch-buttons'), `${width}px (閉じたあと)`).toEqual([]);
+        }
     });
 });
 

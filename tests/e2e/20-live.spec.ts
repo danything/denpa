@@ -15,6 +15,8 @@ import {
     feedData,
     goto,
     holdCaptions,
+    leaveFullscreen,
+    oneRowTroubles,
     overlayTroubles,
     syncEpg,
     test,
@@ -1638,6 +1640,45 @@ test.describe('スマホの横でライブ', () => {
         await second.tap();
         await expect(second).toHaveAttribute('data-current', 'true');
         await expect(stage).toBeInViewport({ ratio: 0.9 });
+    });
+});
+
+/**
+ * **スマホの縦 (360px・320px) でも、操作バーのボタンは1行。** 残すのは再生・ライブ・読みもの・全画面と
+ * 「ほか」だけ。音・字幕・エンコード方式などは「ほか」に畳み、そこから押せる
+ */
+test.describe('スマホの縦でライブ', () => {
+    test.use({ hasTouch: true, isMobile: true, viewport: { width: 360, height: 780 } });
+
+    test('幅 360px・320px でも操作バーのボタンは1行で、畳んだ音は「ほか」から押せる', async ({ page }) => {
+        for (const width of [360, 320]) {
+            await page.setViewportSize({ width, height: 780 });
+            await goto(page, '/live');
+            await page.getByTestId('live-channel').first().click();
+            await expect(page.getByTestId('live-play')).toBeVisible();
+            await leaveFullscreen(page);
+            await expect(page.getByTestId('live-frame')).toHaveAttribute('data-under', '');
+
+            expect(await oneRowTroubles(page, 'live-buttons'), `${width}px`).toEqual([]);
+            await expect(page.getByTestId('live-edge')).toBeVisible();
+            await expect(page.getByTestId('live-full')).toBeVisible();
+            await page.screenshot({ path: test.info().outputPath(`live-${width}.png`) });
+
+            const sound = page.getByTestId('live-sound');
+            await expect(sound).toBeHidden();
+            await page.getByTestId('live-more').tap();
+            await expect(sound).toBeVisible();
+            await expect(page.getByTestId('live-codec')).toBeVisible();
+            const label = (await sound.getAttribute('aria-label')) ?? '';
+            await sound.tap();
+            await expect(sound).not.toHaveAttribute('aria-label', label);
+            await page.screenshot({ path: test.info().outputPath(`live-${width}-more.png`) });
+
+            // 閉じれば1行に戻る
+            await page.getByTestId('live-more').tap();
+            await expect(sound).toBeHidden();
+            expect(await oneRowTroubles(page, 'live-buttons'), `${width}px (閉じたあと)`).toEqual([]);
+        }
     });
 });
 

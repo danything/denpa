@@ -46,6 +46,10 @@
     .dot.active {
         background: #fff;
     }
+    /* 狭い枠では余白を詰める (押す的の高さは 40px のまま) */
+    :global(.stage[data-compact]) .edge {
+        padding: 0 0.5rem;
+    }
     .label {
         font-size: 0.75rem;
         font-weight: 600;

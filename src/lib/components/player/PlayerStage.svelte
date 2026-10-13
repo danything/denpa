@@ -33,8 +33,10 @@
         notes?: Snippet;
     }
     interface StageApi {
-        /** 狭い枠か (スマホの縦)。**押すものを減らして「ほか」に畳む** */
+        /** 狭い枠か (スマホの縦)。押すものを 40px に縮める */
         compact: boolean;
+        /** 毎回は使わないものを「ほか」(⋯) に畳むか。狭い枠か、押すものが一段に収まらないとき */
+        fold: boolean;
         /** 「ほか」を開いているか */
         more: boolean;
         toggleMore: () => void;
@@ -63,8 +65,8 @@
      * いた (実機の報告「全画面じゃないと操作ボタンがおかしくなる」)。
      *
      * - `compact` (幅 448px 未満か、16:9 より低く抑えられて高さ 300px 未満か、横にしたスマホ) … 押すものを 40px に縮め、毎回は使わないもの
-     *   (音声・送り・エンコード方式・速さなど) を「ほか」(⋯) に畳む。読みものは
-     *   一行にして押すものの上へ。スマホの縦は枠が画面の幅そのまま (端まで
+     *   (音・字幕・音声・エンコード方式・速さなど) を「ほか」(⋯) に畳む。読みもの (時刻) は
+     *   押すものの間に残して短くし、押すものの行は一段のまま (`InfoBlock`)。スマホの縦は枠が画面の幅そのまま (端まで
      *   広げる。下の `@media`) で、いちばん広いもので 430px。
      *   縦の iPad (映像が 476px) はここに入れない — あちらは 48px の9個が一段に
      *   収まるように幅を決めてある。
@@ -124,6 +126,78 @@
         return () => {
             watcher.disconnect();
             phone.removeEventListener('change', measure);
+        };
+    });
+
+    /**
+     * **広い枠でも、押すものが一段に収まらなければ畳む** (`crowded`)。
+     *
+     * 押すものの行 (`ControlRow`) は折り返さない。狭い枠 (`compact`) はいつも畳むが、
+     * それより広くても一段に入るとは限らない — 並ぶものは番組しだい (字幕・音声の本数・
+     * チャプター・Hybridcast) で、縦の iPad の二段組 (映像 476px) に全部載ると 48px が
+     * 11個で 570px を超える。幅の線では決められないので、**畳まずに並べたらはみ出すか**を測る。
+     *
+     * 測るときだけ印 (`data-measuring`) を立てて畳んだものを並べ、いちばん右 (全画面) が
+     * 行の右端を越えるかを読んで、すぐ外す。同じ処理の中で読むだけなので、画面には出ない。
+     * 「ほか」のボタンは測るときも残すので、広げるには畳んだときよりボタン1つぶん広さが要る
+     * (幅の境目で行ったり来たりしない)
+     */
+    let crowded = $state(false);
+    const fold = $derived(compact || crowded);
+    $effect(() => {
+        const target = element;
+        if (target === null) return;
+        // 狭い枠ではいつも畳む。測るのは 48px で並べているときだけ (40px で測ると少なく見積もる)
+        if (compact) {
+            crowded = false;
+            return;
+        }
+        let row: HTMLElement | null = null;
+        const measure = () => {
+            if (row === null) {
+                crowded = false;
+                return;
+            }
+            target.setAttribute('data-measuring', '');
+            const last = row.lastElementChild;
+            const over =
+                last !== null && last.getBoundingClientRect().right > row.getBoundingClientRect().right + 0.5;
+            target.removeAttribute('data-measuring');
+            crowded = over;
+        };
+        const sizes = new ResizeObserver(measure);
+        sizes.observe(target);
+        /*
+         * 押すものが出入りしたら (字幕・音声のボタンなど) 測り直す。**文字だけの入れ替えは見ない** —
+         * 時計は毎秒書き換わるので、そのたびに測ることになる
+         */
+        const inner = new MutationObserver((records) => {
+            const isElement = (node: Node) => node.nodeType === Node.ELEMENT_NODE;
+            if (records.some((r) => [...r.addedNodes].some(isElement) || [...r.removedNodes].some(isElement))) measure();
+        });
+        const attach = () => {
+            const next = target.querySelector<HTMLElement>(':scope > [data-stage-bar] [data-stage-row]');
+            if (next === row) return;
+            if (row !== null) sizes.unobserve(row);
+            inner.disconnect();
+            row = next;
+            if (row !== null) {
+                sizes.observe(row);
+                inner.observe(row, { childList: true, subtree: true });
+            }
+        };
+        // 操作バーそのものが出入りする (ライブは選局するまで出さない)
+        const outer = new MutationObserver(() => {
+            attach();
+            measure();
+        });
+        outer.observe(target, { childList: true });
+        attach();
+        measure();
+        return () => {
+            sizes.disconnect();
+            inner.disconnect();
+            outer.disconnect();
         };
     });
 
@@ -204,7 +278,7 @@
      */
     let more = $state(false);
     $effect(() => {
-        if ((!controls.shown && !under) || !compact) more = false;
+        if ((!controls.shown && !under) || !fold) more = false;
     });
 </script>
 
@@ -220,6 +294,7 @@
     class:quiet={!controls.shown}
     data-compact={compact ? '' : undefined}
     data-low={low || compact ? '' : undefined}
+    data-fold={fold ? '' : undefined}
     data-more={more ? '' : undefined}
     data-under={under ? '' : undefined}
     data-pseudo={fullscreen.pseudo ? '' : undefined}
@@ -243,6 +318,7 @@
 >
     {@render children({
         compact,
+        fold,
         more,
         toggleMore: () => (more = !more),
     })}
