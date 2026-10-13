@@ -38,7 +38,7 @@ denpa は、**自分の B-CAS カードで、自分の世帯の中で、私的�
 - **データ放送** — テレビと同じ BML がブラウザで動く (d ボタン)。ライブでも録画でも
 - **観る** — 行を押せばその場で再生。CM は1コマも見せずに飛ばし、続きから・倍速 (×1〜×2)・切り抜き (字幕ごと PNG)
 - **字幕と放送の字** — 字幕は放送どおりの位置に描き、番組名・局名も含めて Denpa Font で外字まで崩さない
-- **端末に落として観る** — 電波の無いところでも ([docs/offline.md](docs/offline.md))
+- **端末に保存して観る** — 電波の無いところでも ([docs/offline.md](docs/offline.md))
 - **EPGStation から引き継ぐ** — ルール・予約・録画 ([docs/migrate.md](docs/migrate.md))
 
 部品はチューナーで選局して素の TS を流す **チューナーエージェント** と、それ以外の全部 (番組表・予約・録画・
@@ -142,7 +142,7 @@ docker compose up -d
 - [docs/library.md](docs/library.md) — 録画の置き場と配り方 (テレビのアプリ・削除・通知)
 - [docs/stream.md](docs/stream.md) — **ライブ視聴**
 - [docs/player.md](docs/player.md) — ホーム画面に置く、LAN でも https で開く
-- [docs/offline.md](docs/offline.md) — 端末に落として電波の無いところで観る
+- [docs/offline.md](docs/offline.md) — 端末に保存して電波の無いところで観る
 - [docs/auth.md](docs/auth.md) — **誰を通すか** (OIDC・信頼したネットワーク・ペアリング・画面で動いてよいもの (CSP))
 - [docs/api.md](docs/api.md) — **外から使う API**
 - [docs/migrate.md](docs/migrate.md) — **EPGStation からの引き継ぎ**

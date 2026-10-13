@@ -169,7 +169,7 @@ OIDC_GROUP=6f1b2c3d-4e5f-6789-abcd-ef0123456789
 ## ネットワークの中なら、何も聞かない
 
 **`TRUSTED_NETWORKS` に当たると、OIDC も掛かりません。**
-LAN のテレビのアプリ (denpa-tv) に、資格情報 (ペアリングやリンク) なしで使わせるためのものです。
+LAN のテレビのアプリ (denpa-tv) に、ログインもペアリングもなしで使わせるためのものです。
 
 ```sh
 TRUSTED_NETWORKS=10.10.0.0/16
@@ -301,7 +301,7 @@ JS として動き**、ログインの控えで API を呼べることになる�
 | `style-src` | `'self' 'unsafe-inline'` | 下の「スタイルは止めない」 |
 | `img-src` | `'self' data: blob:` | 局ロゴ・ポスターは自分。データ放送の画像は作り直して blob:、DRCS (外字) は canvas から data: |
 | `font-src` | `'self' data: blob:` | Denpa Font は自分 (`/api/font/denpa-font.woff2`)。DRCS は FontFace にバイト列で渡すので URL ではない |
-| `media-src` | `'self' blob:` | 録画は自分。ライブの MSE と端末に落とした録画は blob: |
+| `media-src` | `'self' blob:` | 録画は自分。ライブの MSE と端末に保存した録画は blob: |
 | `connect-src` | `'self'` | fetch・SSE・データ放送の双方向の中継 (`/api/bml/…`)・ライブの WebSocket。`'self'` は同じ host の `ws:` / `wss:` も含む |
 | `worker-src` | `'self'` | 変換せずに観る経路の worker (`src/lib/raw/worker.ts`) と PWA の ServiceWorker |
 | `object-src` / `frame-src` | `'none'` | どちらも使わない。BML の `<object>` はエンジンが画像 (`<img>`) か映像の場所の目印にするので読み込まない |

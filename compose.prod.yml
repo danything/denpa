@@ -45,7 +45,7 @@ services:
             - /dev/dvb:/dev/dvb
         ports:
             - '25252:25252'
-            # 鍵を LAN の中の別の拠点へ配るなら (docs/agent.md「鍵を配るのは LAN の中だけ」)、
+            # 鍵を同じ世帯の別の機器 (LAN の中) へ配るなら (docs/agent.md「鍵を配るのは LAN の中だけ」)、
             # compose.override.yml でこのポートを IPv4 だけで出し、environment に
             # CARD_SHARE_PORT: '25253' と CARD_TTL: '2' (ブリッジの出入りで1つ減る) を書く。既定では配らない
             # - '0.0.0.0:25253:25253'

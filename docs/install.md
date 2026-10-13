@@ -1,7 +1,7 @@
 # 立てる
 
 README の手順の細かいところ。用意するもの、入れ方 (1行・Compose・1コンテナ・Helm)、前段 (リバースプロキシ) の後ろに置くとき。
-Mac と Windows の入れ方の中身は [agent.md](agent.md#mac-でチューナーを使う) に。
+Mac と Windows の入れ方の中身は [agent.md](agent.md#mac-でチューナーを使う) に。使う前に [使ってよい範囲](../README.md#使ってよい範囲) を読んでください。
 
 ## 用意するもの
 

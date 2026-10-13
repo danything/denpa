@@ -39,7 +39,7 @@
 | `pip.svelte.ts` | 小窓 (ピクチャーインピクチャー)。操作バーの全画面の左に置き、狭い枠では「ほか」に畳む。iPhone・iPad のホーム画面から開いたもの (PWA) は Safari が小窓を許さないので、ボタンごと出さない。ページから小窓を開かせる API の無いブラウザでも出さない。放送のままの MPEG-2 で見ているときは worker が描いたフレームを別の `<video>` に流して出す (Chrome は worker が直に書き込む。canvas の画面への更新から取ると、窓が隠れたとき映像が止まる。Safari は canvas から取る。Firefox は放送のままの MPEG-2 の映像を取れないので、その間はボタンを出さない)。小窓で押した止める・再開は操作バーにも反映する (3画面とも。観る画面の互換モードも worker が描いたフレームを同じ方法で出す)。**字幕も小窓に出す** (Chrome・Edge。`compose.ts` がコマごとに字幕の canvas を重ねた流れを作り、別の `<video>` を小窓にする。エンコードしたものは押した時点で字幕を出しているときだけ・小窓に出している間だけ重ねる。Safari・Firefox は字幕無し)。操作列は小窓に付いていかない。denpa の別の画面 (番組表など) へ移ると、再生ごと止まって小窓も閉じる |
 | `fullscreen.svelte.ts` / `fullscreen.ts` | 全画面の出入り（操作バーのボタンと `f`）。端末で全画面にする方法を決める（[下](#全画面にする方法は端末で変えます)） |
 | `background.svelte.ts` / `background.ts` | バックグラウンド再生のオン/オフ（操作バーのヘッドホン。狭い枠では「ほか」に畳む）。既定はオフで、裏に回したら止める（[下](#裏に回したら止めます)） |
-| `shot.svelte.ts` / `snapshot.ts` | いまの1コマを字幕ごと切り抜いて PNG に（`番組名_YYYYMMDD-HHMMSS.png`）。指の端末は共有シート（写真へ保存・そのまま送る）、PC は落としてクリップボードにも置く。放送のままの MPEG-2 と互換モードで見ているときは worker に1枚貰う（`raw/engine.ts` の `grab`） |
+| `shot.svelte.ts` / `snapshot.ts` | いまの1コマを字幕ごと切り抜いて PNG に（`番組名_YYYYMMDD-HHMMSS.png`）。指の端末は共有シート（写真へ保存・そのまま送る）、PC はファイルに保存してクリップボードにも置く。放送のままの MPEG-2 と互換モードで見ているときは worker に1枚貰う（`raw/engine.ts` の `grab`） |
 | `DataBroadcast.svelte` / `Remote.svelte` | データ放送の表示枠と、指で押せるリモコン |
 
 決め方を2箇所に持っていた頃は、観る画面の操作バーが押したときにしか出ず、隠れた操作バーの上を
@@ -107,7 +107,7 @@ iPhone は要素の全画面を持たず、あるのは `<video>` だけの `web
 [unplugin-icons](https://github.com/unplugin/unplugin-icons) で組むときに Svelte の部品へ
 変える**やり方です（`import Play from '~icons/lucide/play'`。`vite.config.ts`）。
 
-- **実行中に取りに行かない。** denpa は家の LAN だけ・オフラインでも開くものなので、
+- **実行中に取得しない。** denpa は家の LAN だけ・オフラインでも開くものなので、
   Iconify の API からアイコンデータを取る `@iconify/svelte` の既定の使い方は採りません。束に入るのは
   使ったアイコンの `<svg>` だけで、SSR でもそのまま出ます（後からアイコンが差し込まれてずれることもない）。
   service worker が持つのも普通の JS の束です

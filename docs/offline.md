@@ -1,6 +1,6 @@
 # オフライン視聴 (PWA)
 
-「録画を端末に落として、電波の届かないところ (出先・機内) で観る。`/offline` で消したら、
+「録画を端末に保存して、電波の届かないところ (出先・機内) で観る。`/offline` で消したら、
 次にオンラインへ戻ったときサーバ側の録画も自動で消える」の設計と実装の覚え書き。
 **消す判断は端末で済ませ、戻ってからもう一度消す二度手間をなくす。**
 
@@ -50,9 +50,9 @@
 
 DB 名 `denpa-offline`、ストア3つ (実体は [offline-db.ts](../src/lib/offline-db.ts) の型が正):
 
-- `videos` (key: 録画ID) … 落とした録画1本。`video: Blob` と付き添い
+- `videos` (key: 録画ID) … 保存した録画1本。`video: Blob` と付属のデータ
   (`captionText`: `captions.json` の JSON・`poster: Blob`・`chapters`/`databroadcast`: JSON) を1行にまとめ、
-  名前・局名・開始時刻・尺・どちらを落としたか (`source: 'encoded' | 'alt'`)、
+  名前・局名・開始時刻・尺・どちらを保存したか (`source: 'encoded' | 'alt'`)、
   試みの印 (`attempt`)、状態 (`state`) を持つ。
 - `outbox` (key: 録画ID) … オンライン復帰で処理する予約 (`{op: 'delete', name, queuedAt}`)。
 - `resume` (key: 録画ID) … オフライン中に進んだ視聴位置。復帰時にまとめて
@@ -62,14 +62,14 @@ DB 名 `denpa-offline`、ストア3つ (実体は [offline-db.ts](../src/lib/off
 通知 (トースト) は一瞬なので、控えごと消すと無かったことに見える。残った行がそのまま
 「保存をやり直す」の入口になる。進み具合 (%) は IndexedDB に置かず、画面側のメモリだけで持つ (下記)。
 
-一覧・視聴の UI はこの `videos` を参照して「DL 済みか」を分岐する。
+一覧・視聴の UI はこの `videos` を参照して「保存済みか」を分岐する。
 
 ## 主要な流れ
 
 ### ダウンロード — Background Fetch API を使う
 
 1. **HEAD で下見してから預ける** (`probeDownloads`)。Background Fetch は
-   404 が1つでも混ざると全体が失敗になる (`failureReason: bad-status`) ので、付き添いは
+   404 が1つでも混ざると全体が失敗になる (`failureReason: bad-status`) ので、付属のデータは
    在るものだけに絞る。`downloadTotal` を超えても打ち切られるので、HEAD の実測合計 (+2%) を渡す。
    どちらも実機の Edge で踏んだ。
 2. `backgroundFetch.fetch(id, urls, {title, downloadTotal})` でブラウザに預ける (タブを
@@ -86,22 +86,22 @@ DB 名 `denpa-offline`、ストア3つ (実体は [offline-db.ts](../src/lib/off
    (タブを開いたまま。進捗は一覧のバッジに出す)。機能検出は
    `'backgroundFetch' in swReg`。仕分けは SW の受け取りと共有 (`storeResponse`)。
 
-### どちらを落とすか — 端末がデコードできるコーデック
+### どちらを保存するか — 端末がデコードできるコーデック
 
-**既定は AV1** (`library_path`)。端末が AV1 をデコードできなければ H.264 (`alt_path`) に落とす。
+**既定は AV1** (`library_path`)。端末が AV1 をデコードできなければ H.264 (`alt_path`) を保存する。
 判定は `navigator.mediaCapabilities.decodingInfo()` (`video/mp4; codecs=av01.…` の
 `supported`)。H.264 しかデコードできない端末で `alt_path` が無い録画は、ダウンロード時に
-「この端末では再生できない」と断る (落とせても観られないため)。
+「この端末では再生できない」と断る (保存できても観られないため)。
 
 ### 観る
 
 - **オンラインの `/watch`** は、`videos` に `ready` があり、ファイルをそのまま読む方式を自動で選んだときは
   `URL.createObjectURL(blob)` を `src` にする (コーデックを選んだときや、サーバが流すものを選んだときはサーバから)。
   src を差し替えるだけなので操作
-  (チャプター・CM飛ばし・速度・字幕・データ放送) はそのままで、付き添いも端末のものを読む。
+  (チャプター・CM飛ばし・速度・字幕・データ放送) はそのままで、付属のデータも端末のものを読む。
   互換モードでは保存した Matroska をそのまま canvas に描く (`mkv-source.ts`。[stream.md](stream.md#録画の観る画面も-canvas-に描く))。
 - **オフラインの `/offline`** は素の `<video controls>` で、動画だけを流す
-  (字幕・チャプター・データ放送は落としてあっても使わない)。位置は5秒ごとに `resume` ストアへ。
+  (字幕・チャプター・データ放送は保存してあっても使わない)。位置は5秒ごとに `resume` ストアへ。
 - 使い終わったら `URL.revokeObjectURL` する。
 
 ### 削除とサーバ同期
@@ -123,6 +123,6 @@ DB 名 `denpa-offline`、ストア3つ (実体は [offline-db.ts](../src/lib/off
 
 - **削除の API: `DELETE /api/recordings/[id]`。** 認証はほかの API と同じ。録画中は 409、
   消し済みは 204、行が無ければ 404 (何度呼んでも同じところに落ちる)。
-- **容量: 落とす前に確かめる** (30分で約300MB)。`navigator.storage.estimate()` の空きが
+- **容量: 保存する前に確かめる** (30分で約300MB)。`navigator.storage.estimate()` の空きが
   HEAD で測った合計の 1.2 倍に満たなければ断り、`navigator.storage.persist()` で
   ブラウザに勝手に消させない。
