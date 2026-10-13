@@ -4,7 +4,7 @@
 **JSON の形式は保ちます。** 足すことはあっても、名前を変えたり消したりはしません。
 
 - **認証は画面と同じです** ([下記](#認証))。`TRUSTED_NETWORKS` に入っている相手はそのまま通ります
-  (家の LAN の Home Assistant や Cast 端末)。それ以外はログインか、アクセストークンが要ります
+  (家の LAN の Home Assistant など)。それ以外はログインか、アクセストークンが要ります
 - **書き込み (POST・DELETE) には `Content-Type: application/json` を付けます** (本文が無い DELETE でも)。
   付けないと、SvelteKit の CSRF の守りが「よそのサイトからのフォーム送信」とみなして 403 を返します
   (アプリは Origin を付けないため)。テレビのアプリの削除がこれで失敗していました
@@ -52,11 +52,11 @@
 
 | `codec` | 中身 | Content-Type | 向いている相手 |
 |---|---|---|---|
-| (なし) / `h264` | H.264 / AAC の fragmented MP4 | `video/mp4` | Cast・テレビ (いちばん広く再生できる) |
+| (なし) / `h264` | H.264 / AAC の fragmented MP4 | `video/mp4` | ブラウザ・テレビのアプリ (いちばん広く再生できる) |
 | `av1` | AV1 / Opus の fragmented MP4 | `video/mp4` | AV1 をデコードできる新しい端末 |
 | `raw` | エンコードせずに1局に絞っただけの TS (MPEG-2) | `video/mp2t` | テレビのアプリ (いちばん軽い。MPEG-2 をハードでデコードできる端末) |
 
-`?audio=only` で音声だけ (AAC の fragmented MP4、`audio/mp4`)。画面の無いスピーカーへの Cast 向け。
+`?audio=only` で音声だけ (AAC の fragmented MP4、`audio/mp4`)。音声だけを聴くとき向け。
 映像をエンコードしないので軽い。録画の `audio` と同じ書き方です。`codec` と一緒に渡すと、`audio=only` が勝ちます。
 
 `?audio=<id>` (`now.audios` の `id`) でエンコードする音声を選びます。デュアルモノの `main` / `sub` は片側を両耳に配ってエンコードします。
@@ -108,7 +108,7 @@
   エンコードしたものは Matroska (`video/x-matroska`)、元のTSは TS (`video/mp2t`)。Range に応じます。
   `file` はアプリ (denpa-tv) とブラウザの再生のためのもので、ダウンロード用ではありません (添付は付けない。
   [Discussion #760](https://github.com/danything/denpa/discussions/760))
-- `audio` は主音声だけを AAC (ADTS、`audio/aac`) で流します。画面の無いスピーカーへの Cast 向け。
+- `audio` は主音声だけを AAC (ADTS、`audio/aac`) で流します。音声だけを聴くとき向け。
   `source` と一緒に渡せば、元にするファイルを選べます
 - `resumeMs` は続きから観る位置 (画面の「続き」と同じもの)。観ていない・観終えたものは `null`
 - `watchedAt` は末尾まで観た時刻 (ms)。まだなら `null`。`watchedAt` も `resumeMs` も `null` なら未視聴 (画面の一覧の印と同じ)。
