@@ -53,8 +53,8 @@ denpa は、**自分の B-CAS カードで、自分の世帯の中で、私的�
   | チューナー | 使う仕組み | ホストに入れるもの |
   | --- | --- | --- |
   | PT2 / PT3、PX-BCUD、PX-S1UD など | Linux DVB | ドライバ |
-  | PX-Q3U4 / PX-W3U4 / PX-MLT 系など (px4-userland の対応機種) | px4-userland (同梱) | なし |
-  | PX-S1UD (smsusb を blacklist したとき。Windows も) | siano-userland (同梱) | なし |
+  | PX-Q3U4 / PX-W3U4 / PX-MLT 系など (px4-userland の対応機種。Windows も) | px4-userland (同梱) | なし (Windows はドライバを WinUSB に) |
+  | PX-S1UD (smsusb を blacklist したとき。Windows も) | siano-userland (同梱) | なし (Windows はドライバを WinUSB に) |
   | PX-W3U3 | asicen-userland (**試験的**。上流のリリース待ちで、まだ入らない) | なし |
 
 - **B-CASカード** と PC/SC のカードリーダー (px4-userland の機材は内蔵リーダーでもよい)
@@ -82,7 +82,7 @@ irm https://raw.githubusercontent.com/danything/denpa/main/install.ps1 | iex
 - **Linux** — エージェントも本体も Docker Compose のコンテナ (`~/denpa/compose.yml`)
 - **Mac** — エージェントは Mac の上で直接 (LaunchAgent)、本体は Docker。USB をコンテナに渡せないため
 - **Windows** — エージェントは Windows の上で直接 (タスク スケジューラ)、本体は `wslc` のコンテナ。
-  チューナーは siano-userland の機材だけで、ドライバを WinUSB にしておく
+  チューナーは px4-userland と siano-userland の機材で、ドライバを WinUSB にしておく
 
 Linux で Compose を手で置くなら、これだけです (エージェントは `tuner-agent` として一緒に立つ)。
 

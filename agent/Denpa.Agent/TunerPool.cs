@@ -320,12 +320,13 @@ public sealed class TunerPool(
     public static ITuneDevice OpenDevice(string path, string? lnb)
     {
         /*
-         * **Windows は siano-userland の機材だけ。** DVB は無く、px4-userland は Windows を出していない。
+         * **Windows は siano-userland と px4-userland の機材だけ。** DVB は無く、asicen-userland は Windows を出していない。
          * 書いてあっても開かない (開けば libc を呼びにいって落ちる)
          */
-        if (OperatingSystem.IsWindows() && !SianoUserland.Is(path))
+        if (OperatingSystem.IsWindows() && !SianoUserland.Is(path) && Px4Userland.Parse(path) is null)
         {
-            throw new IOException($"{path} は Windows では使えません (Windows で使えるのは {SianoUserland.Scheme}<USB のポート> だけ)");
+            throw new IOException(
+                $"{path} は Windows では使えません (Windows で使えるのは {Px4Userland.Scheme}<筐体の番号>:<受信機> と {SianoUserland.Scheme}<USB のポート> だけ)");
         }
         if (Px4Userland.Parse(path) is { } px4) return new Px4Tuner(px4.Id, px4.Receiver, lnb);
         if (SianoUserland.Parse(path) is { } port) return new SianoTuner(port);

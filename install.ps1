@@ -9,8 +9,8 @@
 # **エージェントは Windows の上でそのまま動かし** (タスク スケジューラでログオン時に起こす)、**denpa 本体は
 # WSL のコンテナ (wslc) で動かす。** Docker Desktop は要らない (WSL に入っているので `wsl --update` だけで使える)。
 # コンテナには USB を渡せないので、チューナーとカードに触るエージェントはコンテナに入れられない。
-# **Windows で使えるチューナーは siano-userland の機材 (PX-S1UD など) だけ** (px4-userland は
-# Windows を出しておらず、DVB も無い)。ドライバを WinUSB にするのは人の手で (Zadig。docs/agent.md)。
+# **Windows で使えるチューナーは px4-userland の機材 (PX-Q3U4 など) と siano-userland の機材 (PX-S1UD など)**
+# (DVB は無い)。ドライバを WinUSB にするのは人の手で (Zadig。docs/agent.md)。
 #
 # **WSL は勝手に入れない。** wslc が無いときはエージェントだけ入れて、入れ方を言って終わる。
 # もう一度流せば上げ直し。イメージは**エージェントと同じリリースの版**に揃える。
@@ -18,7 +18,9 @@
 # 置き場:
 #   ~/denpa (DENPA_HOME)                  denpa.env (コンテナの環境変数。無いときだけ雛形を作り、あれば触らない)・
 #                                         config/・denpa-agent.log
-#   %LOCALAPPDATA%\denpa-agent\           エージェント・siano-userland・起こす .cmd と denpa-start.ps1
+#   %LOCALAPPDATA%\denpa-agent\           エージェント・px4-userland (px4d.exe・px4ctl.exe・切り出したファームウェア)・
+#                                         siano-userland・起こす .cmd と denpa-start.ps1
+#   C:\denpa-run                          px4d のソケットの置き場 (本人だけが書ける。px4d がそう決めている)
 #   ~/Videos/denpa/{recorded,library}     元のTS (エージェントとコンテナの両方が見る) と出来上がった録画
 #   wslc のボリューム denpa-data          DB (Windows のフォルダ越しだと SQLite のロックが当てにならない)
 #
@@ -35,11 +37,25 @@ param([switch]$NoOpen, [switch]$Uninstall, [switch]$AgentOnly)
 # renovate: datasource=github-releases depName=Khronos31/siano-userland extractVersion=^v(?<version>.*)$
 $SianoUserlandVersion = '0.1.10'
 $IsdbtRioSha256 = '054520642d5d09cb7ab7d08dbd6fd9ba9365de56adf2e7d7d06927f9845ff818'
+# px4-userland の版も同じ。**0.2.1 より下げない** (Windows 対応は 0.2.0 から、--runtime-dir を明示したときの
+# 起動の不具合が直ったのが 0.2.1)
+# renovate: datasource=github-releases depName=Khronos31/px4-userland extractVersion=^v(?<version>.*)$
+$Px4UserlandVersion = '0.2.1'
+# IT930x のファームウェアは PLEX 公式ドライバから切り出す。3つのハッシュは agent/Dockerfile・install.sh と同じ
+$PlexDriverSha256 = 'bdf3b4eb84b69ccbacb4ba3df2f59c93c803ef6d3f61e7a90a531c22c301a200'
+$Pxw3u4SysSha256 = '8c7b526e2c92f9b42440b55b99b309c33f2011f4e11de310acf0c1da58038722'
+$It930xFirmwareSha256 = '5213a5a38872661277a2cc1b2dfdfe88faf06f41205f460f3b51857f0568b484'
+# 配布 zip から取り出すもの。**使うのは px4d.exe と px4ctl.exe だけ** (受信機もカードも px4d の制御ソケットで直に話す)。
+# px4-ts.exe と WinSCard.dll (B25 のアプリの横に置く代わりの DLL) は置かない。残りはライセンスの文書
+$Px4Keep = @('px4d.exe', 'px4ctl.exe', 'LICENSE', 'DEPENDENCY-NOTICE.txt', 'THIRD_PARTY_NOTICES.md', 'libusb/*', 'toolchain/*')
 
 $Repo = 'danything/denpa'
 $Url = 'http://localhost:3000'
 $DenpaDir = if ($env:DENPA_HOME) { $env:DENPA_HOME } else { Join-Path $env:USERPROFILE 'denpa' }
 $Prefix = Join-Path $env:LOCALAPPDATA 'denpa-agent'
+# px4d のソケットの置き場。**ユーザーのフォルダの下にしない** — ソケットのパスは UTF-8 で 108 バイトまでで、
+# 日本語のユーザー名だとすぐ溢れる。非 ASCII のパスだと px4d の ready の行も途切れる (px4-userland #52)
+$Px4Runtime = 'C:\denpa-run'
 $Media = Join-Path $env:USERPROFILE 'Videos\denpa'
 $Log = Join-Path $DenpaDir 'denpa-agent.log'
 $TaskName = 'denpa-agent'
@@ -88,8 +104,10 @@ function Test-Recording {
 
 # エージェントを止める。**録画中なら終わるまで待つ** (Windows はエージェントに「止まれ」を伝える手が無く、
 # 止めればその場で落ちる。Mac のように録画を待ってから畳むことができないので、ここで待つ)。
-# 起こした conhost・.cmd・エージェント・siano-ts を、コマンドラインに置き場が入っているもので見つけて落とす
-# (タスクを止めても、.cmd の下で起きたものまでは止まらない)
+# 起こした conhost・.cmd・エージェント・siano-ts・px4d を、コマンドラインに置き場が入っているもので見つけて落とす
+# (タスクを止めても、.cmd の下で起きたものまでは止まらない)。**px4d は先に落とさない** — エージェントが
+# 終われば px4d は標準入力が閉じたのを見て、後片付け (LNB を 0V に戻す・ソケットを消す) をして自分で終わる。
+# 10 秒待っても残っていれば落とす
 function Stop-Agent {
     if (-not (Get-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue)) { return }
     if (Test-Recording) {
@@ -99,11 +117,12 @@ function Stop-Agent {
     Stop-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue
     for ($i = 0; $i -lt 30; $i++) {
         $left = @(Get-CimInstance Win32_Process | Where-Object {
-                $_.Name -in 'conhost.exe', 'cmd.exe', 'denpa-agent.exe', 'siano-ts.exe' -and $_.CommandLine -and
+                $_.Name -in 'conhost.exe', 'cmd.exe', 'denpa-agent.exe', 'siano-ts.exe', 'px4d.exe', 'px4ctl.exe' -and $_.CommandLine -and
                 $_.CommandLine.IndexOf("$Prefix\", [StringComparison]::OrdinalIgnoreCase) -ge 0
             })
         if ($left.Count -eq 0) { return }
-        $left | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
+        $left | Where-Object { $i -ge 10 -or $_.Name -ne 'px4d.exe' } |
+            ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
         Start-Sleep -Seconds 1
     }
     throw "エージェントが止まりません ($Prefix の下のプロセスをタスク マネージャーで止めてから、もう一度流してください)"
@@ -290,6 +309,129 @@ function Show-Tuner {
     }
 }
 
+# zip を開く (PowerShell 5.1 でも。中身を1つずつ取り出すのに使う)
+function Open-Zip([string]$Path) {
+    Add-Type -AssemblyName System.IO.Compression.FileSystem
+    return [IO.Compression.ZipFile]::OpenRead($Path)
+}
+
+# px4-userland (PX-Q3U4 など) を $To に置く。**要るものだけ取り出す** ($Px4Keep)。
+# ファームウェアは Mac と同じく PLEX 公式ドライバから切り出す (再配布の許諾は誰も持っていない。docs/agent.md)
+function Get-Px4Userland([string]$Work, [string]$To) {
+    Say "px4-userland $Px4UserlandVersion"
+    $base = "https://github.com/Khronos31/px4-userland/releases/download/v$Px4UserlandVersion"
+    $name = "px4-userland-$Px4UserlandVersion-windows-x86_64.zip"
+    Get-Url "$base/$name" "$Work\$name"
+    Get-Url "$base/SHA256SUMS" "$Work\px4.sums"
+    $line = Get-Content -LiteralPath "$Work\px4.sums" | Where-Object { ($_ -split '\s+')[1] -in $name, "*$name" }
+    if (-not $line) { throw "SHA256SUMS に $name が載っていません" }
+    Assert-Hash "$Work\$name" (($line -split '\s+')[0])
+    $zip = Open-Zip "$Work\$name"
+    try {
+        foreach ($entry in $zip.Entries) {
+            $path = $entry.FullName.Replace('\', '/')
+            # 置き場の外に出る名前 (..) は取り出さない
+            if ($path.EndsWith('/') -or $path.Split('/') -contains '..' -or -not ($Px4Keep | Where-Object { $path -like $_ })) { continue }
+            $target = Join-Path $To $path.Replace('/', '\')
+            New-Item -ItemType Directory -Force -Path (Split-Path -Parent $target) | Out-Null
+            [IO.Compression.ZipFileExtensions]::ExtractToFile($entry, $target, $true)
+        }
+    } finally {
+        $zip.Dispose()
+    }
+    Remove-Item -Force -LiteralPath "$Work\$name"
+    foreach ($exe in 'px4d.exe', 'px4ctl.exe') {
+        if (-not (Test-Path -LiteralPath "$To\$exe")) { throw "$name に $exe が入っていません" }
+    }
+
+    Say 'IT930x のファームウェアを PLEX のドライバから切り出します'
+    Get-Url 'https://plex-net.co.jp/plex/pxw3u4/pxw3u4_BDA_ver1x64.zip' "$Work\plex.zip"
+    Assert-Hash "$Work\plex.zip" $PlexDriverSha256
+    $zip = Open-Zip "$Work\plex.zip"
+    try {
+        $entry = $zip.GetEntry('pxw3u4_BDA_ver1x64/PXW3U4.sys')
+        if (-not $entry) { throw 'PLEX のドライバに PXW3U4.sys が見当たりません' }
+        [IO.Compression.ZipFileExtensions]::ExtractToFile($entry, "$Work\PXW3U4.sys", $true)
+    } finally {
+        $zip.Dispose()
+    }
+    Assert-Hash "$Work\PXW3U4.sys" $Pxw3u4SysSha256
+    $sys = [IO.File]::ReadAllBytes("$Work\PXW3U4.sys")
+    $firmware = New-Object byte[] 2169
+    [Array]::Copy($sys, 0x287d0, $firmware, 0, 2169)
+    New-Item -ItemType Directory -Force -Path "$To\firmware" | Out-Null
+    [IO.File]::WriteAllBytes("$To\firmware\it930x-firmware.bin", $firmware)
+    Assert-Hash "$To\firmware\it930x-firmware.bin" $It930xFirmwareSha256
+    Remove-Item -Force -LiteralPath "$Work\plex.zip", "$Work\PXW3U4.sys"
+}
+
+# px4d のソケットの置き場を作って整える。**持ち主は本人、書けるのは本人・SYSTEM・Administrators だけ**
+# (保護された DACL。親の C:\ から引き継ぐと Authenticated Users も書けてしまい、px4d が使ってくれない)
+function Set-Px4Runtime {
+    if (-not (Test-Path -LiteralPath $Px4Runtime)) { New-Item -ItemType Directory -Path $Px4Runtime | Out-Null }
+    # C:\ の直下はほかのユーザーも作れる。リンク (junction など) なら、リンク先の持ち主と権限を書き換えてしまうので止める
+    if ((Get-Item -LiteralPath $Px4Runtime -Force).Attributes -band [IO.FileAttributes]::ReparsePoint) {
+        throw "$Px4Runtime がリンクになっています。中身を確かめて消してから、もう一度流してください"
+    }
+    $me = [Security.Principal.WindowsIdentity]::GetCurrent().User
+    $acl = New-Object Security.AccessControl.DirectorySecurity
+    $acl.SetOwner($me)
+    $acl.SetAccessRuleProtection($true, $false)
+    foreach ($sid in $me, (New-Object Security.Principal.SecurityIdentifier 'S-1-5-18'), (New-Object Security.Principal.SecurityIdentifier 'S-1-5-32-544')) {
+        $acl.AddAccessRule((New-Object Security.AccessControl.FileSystemAccessRule $sid, 'FullControl', 'ContainerInherit, ObjectInherit', 'None', 'Allow'))
+    }
+    # Set-Acl は SACL まで書きにいって、2回目から SeSecurityPrivilege が要ると断られる。持ち主と DACL だけを書く
+    # (PowerShell 5.1 は DirectoryInfo のメソッド、7 は拡張メソッド)
+    $info = Get-Item -LiteralPath $Px4Runtime
+    try {
+        if ($info.PSObject.Methods['SetAccessControl']) { $info.SetAccessControl($acl) }
+        else { [IO.FileSystemAclExtensions]::SetAccessControl($info, $acl) }
+    } catch {
+        throw "$Px4Runtime の持ち主と権限を整えられません。ほかのユーザーが作ったものなら、管理者で消してから流し直してください ($($_.Exception.Message))"
+    }
+}
+
+# px4-userland のチューナーが WinUSB で使えるかを、px4d に聞いて言う (機種の表は持たない)。
+# **エージェントを止めている間に** — px4d が使っている機材は開けず、一覧に出ない
+function Show-Px4 {
+    Use-Continue
+    $px4d = "$Prefix\px4-userland\px4d.exe"
+    $json = & $px4d --list-json 2>$null | Where-Object { $_ -like '{*' } | Select-Object -First 1
+    if ($LASTEXITCODE -ne 0 -or -not $json) {
+        Say 'px4-userland のチューナーを挙げられませんでした (px4d --list-json)'
+        return
+    }
+    $list = ConvertFrom-Json $json
+    $enclosures = @($list.enclosures)
+    $devices = @($list.ungrouped_usb_devices)
+    foreach ($enclosure in $enclosures) {
+        if ($enclosure.status -eq 'ready') {
+            Say "$($enclosure.model) ($($enclosure.serial)): WinUSB で使えます"
+        } else {
+            Say "$($enclosure.model) ($($enclosure.serial)): 使えません ($($enclosure.status))"
+        }
+    }
+    foreach ($device in $devices) {
+        if ($device.status -ne 'open_failed') {
+            Say "$($device.model) ($($device.usb)): 使えません ($($device.status))"
+            continue
+        }
+        $id = $device.usb -split ':'
+        $pnp = @(Get-PnpDevice -PresentOnly -ErrorAction SilentlyContinue |
+                Where-Object { $_.InstanceId -match "^USB\\VID_$($id[0])&PID_$($id[1])\\" }) | Select-Object -First 1
+        if ($pnp -and $pnp.Service -eq 'WinUSB') {
+            Say "$($device.model) (USB $($device.port)): WinUSB ですが開けません。ほかのソフト (TVTest など) が使っていないか見てください"
+            continue
+        }
+        $why = if ($pnp -and $pnp.Service) { "ドライバが $($pnp.Service) なので" } else { 'ドライバが入っていないので' }
+        Say ("$($device.model) (USB $($device.port)): ${why}開けません。Zadig (https://zadig.akeo.ie) で WinUSB にしてください " +
+            '(PX-Q3U4 / PX-W3U4 は USB の機材が2つ並ぶので両方。PLEX のドライバで TVTest などから使っていたなら、そちらからは見えなくなります。docs/agent.md)')
+    }
+    if ($enclosures.Count -eq 0 -and $devices.Count -eq 0) {
+        Say 'px4-userland のチューナー (PX-Q3U4 など) は見当たりません。挿したら、Zadig でドライバを WinUSB にしてください (docs/agent.md)'
+    }
+}
+
 function Install-Agent([string]$Ref) {
     $work = Join-Path ([IO.Path]::GetTempPath()) "denpa-install-$([Guid]::NewGuid().ToString('N'))"
     New-Item -ItemType Directory -Force -Path "$work\new" | Out-Null
@@ -321,6 +463,9 @@ function Install-Agent([string]$Ref) {
         Assert-Hash "$work\$siano" (($line -split '\s+')[0])
         Expand-Archive -Force -LiteralPath "$work\$siano" -DestinationPath "$work\new\siano-userland"
         Assert-Hash "$work\new\siano-userland\firmware\isdbt_rio.inp" $IsdbtRioSha256
+
+        # --- px4-userland (PX-Q3U4 など) ---
+        Get-Px4Userland $work "$work\new\px4-userland"
         # ブラウザで落とした zip を手で渡されたときの「インターネットから来た」印を外す (SmartScreen に止められないように)
         Get-ChildItem -Recurse -File "$work\new" | Unblock-File
 
@@ -329,13 +474,17 @@ function Install-Agent([string]$Ref) {
         foreach ($dir in $Prefix, "$DenpaDir\config", "$Media\recorded", "$Media\library") {
             New-Item -ItemType Directory -Force -Path $dir | Out-Null
         }
-        foreach ($part in 'bin', 'siano-userland') {
+        foreach ($part in 'bin', 'px4-userland', 'siano-userland') {
             if (Test-Path -LiteralPath "$Prefix\$part") { Remove-Item -Recurse -Force -LiteralPath "$Prefix\$part" }
             Move-Item -LiteralPath "$work\new\$part" -Destination "$Prefix\$part"
         }
     } finally {
         Remove-Item -Recurse -Force -LiteralPath $work -ErrorAction SilentlyContinue
     }
+
+    # px4d のソケットの置き場 (エージェントが止まっている間に。持ち主と権限を整える)
+    Set-Px4Runtime
+    Show-Px4
 
     # 起こす .cmd。環境変数はコンテナで既定にしている置き場を Windows の置き場に向け直すものだけ (Mac の plist と同じ)。
     # **落ちたら5秒置いて起こし直す** (タスク スケジューラの「失敗したら再起動」は、終了コードでは効かない)。
@@ -345,6 +494,8 @@ function Install-Agent([string]$Ref) {
     $vars = [ordered]@{
         AGENT_PORT = $Port; TUNERS_FILE = "$DenpaDir\config\tuners.json"; CHANNELS_FILE = "$DenpaDir\config\channels.json"
         SIANO_USERLAND_DIR = "$Prefix\siano-userland"; SIANO_FIRMWARE = "$Prefix\siano-userland\firmware\isdbt_rio.inp"
+        PX4_USERLAND_DIR = "$Prefix\px4-userland"; PX4_FIRMWARE = "$Prefix\px4-userland\firmware\it930x-firmware.bin"
+        PX4_RUNTIME_DIR = $Px4Runtime
         RAW_DIR = "$Media\recorded"
     }
     $lines = @('@chcp 65001 >nul', '@echo off', 'rem Written by install.ps1 (denpa). Re-run the installer instead of editing this file.')
@@ -396,12 +547,18 @@ function Invoke-Main([switch]$NoOpen, [switch]$Uninstall, [switch]$AgentOnly) {
         Stop-Agent
         Unregister-ScheduledTask -TaskName $TaskName -Confirm:$false -ErrorAction SilentlyContinue
         if (Test-Path -LiteralPath $Prefix) { Remove-Item -Recurse -Force -LiteralPath $Prefix }
+        if (Test-Path -LiteralPath $Px4Runtime) {
+            $runtime = Get-Item -LiteralPath $Px4Runtime -Force
+            # リンクならリンクだけを消す (中までたどって、リンク先を消さない)
+            if ($runtime.Attributes -band [IO.FileAttributes]::ReparsePoint) { $runtime.Delete() }
+            else { Remove-Item -Recurse -Force -LiteralPath $Px4Runtime }
+        }
         Say '外しました。残してあるもの (要らなければ手で消してください):'
         Say "  設定とログ $DenpaDir / 録画 $Media / DB は wslc volume rm $Volume"
         return
     }
 
-    if ($env:PROCESSOR_ARCHITECTURE -ne 'AMD64') { throw '対応しているのは x64 の Windows だけです (siano-userland に ARM 用がありません)' }
+    if ($env:PROCESSOR_ARCHITECTURE -ne 'AMD64') { throw '対応しているのは x64 の Windows だけです (px4-userland / siano-userland に ARM 用がありません)' }
 
     $ref = if ($env:DENPA_AGENT_ZIP) { '' } else { Get-Version }
     Install-Agent $ref

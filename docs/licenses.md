@@ -76,9 +76,12 @@ denpa 本体は上と同じコンテナイメージ `denpa` を、Mac の Docker
 
 ### Windows に入れるもの (`install.ps1`)
 
-リリースに添えた `denpa-agent-<版>-windows-x64.zip` (`denpa-agent.exe` 1個) と、siano-userland の
-**Windows 版** (`windows-x64`)・同じファームウェア。px4-userland と asicen-userland は入れません (Windows 版が無い)。
-カードリーダーは Windows の WinSCard (`winscard.dll`。OS の一部) を呼びます。
+リリースに添えた `denpa-agent-<版>-windows-x64.zip` (`denpa-agent.exe` 1個) と、px4-userland / siano-userland の
+**Windows 版** (`windows-x86_64` / `windows-x64`)・同じファームウェア (IT930x のものは Mac と同じく手元で切り出す)。
+px4-userland の配布 zip から置くのは `px4d.exe`・`px4ctl.exe` と、ライセンスの文書 (`LICENSE`・`DEPENDENCY-NOTICE.txt`・
+`THIRD_PARTY_NOTICES.md`・`libusb/COPYING`・`toolchain/` の下の MinGW-w64 などのもの) だけで、`px4-ts.exe` と
+`WinSCard.dll` は置きません。libusb 1.0.30 (LGPL-2.1+) が `px4d.exe` に静的リンクなのは上と同じです。
+asicen-userland は入れません (Windows 版が無い)。カードリーダーは Windows の WinSCard (`winscard.dll`。OS の一部) を呼びます。
 
 ### `denpa-aio`
 

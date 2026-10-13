@@ -67,6 +67,12 @@ public static class Px4Userland
 
         /// <summary>番号が重なるときだけ。px4d の <c>--usb-path</c> に渡す (dev 1 / dev 2 の順)</summary>
         public IReadOnlyList<string> UsbPaths { get; init; } = UsbPaths ?? [];
+
+        /// <summary>
+        /// 筐体の USB の位置 (ポート、分からなければ <c>BUS:ADDRESS</c>)。px4d が使っている間、その USB が一覧で
+        /// <c>open_failed</c> と出ても黙るため (<see cref="ParseJson"/>)
+        /// </summary>
+        public IReadOnlyList<string> Places { get; init; } = [];
     }
 
     /// <summary>
@@ -96,9 +102,101 @@ public static class Px4Userland
     public static string Firmware =>
         Environment.GetEnvironmentVariable("PX4_FIRMWARE") ?? Path.Combine(Dir, "firmware", "it930x-firmware.bin");
 
-    /// <summary>px4d が socket を置く場所</summary>
+    /// <summary>px4d / px4ctl の実行ファイル。Windows だけ <c>.exe</c> が付く (配布 zip の中身のまま)</summary>
+    public static string Executable(string dir, string name) =>
+        Path.Combine(dir, OperatingSystem.IsWindows() ? $"{name}.exe" : name);
+
+    /// <summary>
+    /// px4d が socket を置く場所 (ランタイムルート)。
+    ///
+    /// <para>
+    /// **Windows は <c>C:\denpa-run</c>** (install.ps1 が作る)。px4d はここを、持ち主が本人で、本人・SYSTEM・
+    /// Administrators のほかに書ける人がいないときだけ使う。ユーザーのフォルダ (<c>%LOCALAPPDATA%</c>) の下に
+    /// しないのは、ソケットのパスが UTF-8 で 108 バイトまでで、日本語のユーザー名だとすぐ溢れるのと、
+    /// 非 ASCII のパスだと px4d の ready の行が途切れる (px4-userland #52) から (<see cref="RuntimeProblem"/>)
+    /// </para>
+    /// </summary>
     public static string RuntimeDir =>
-        Environment.GetEnvironmentVariable("PX4_RUNTIME_DIR") ?? "/run/px4-userland";
+        Environment.GetEnvironmentVariable("PX4_RUNTIME_DIR")
+        ?? (OperatingSystem.IsWindows() ? @"C:\denpa-run" : "/run/px4-userland");
+
+    /// <summary>
+    /// ソケットのパスの上限 (UTF-8、末尾の NUL を入れて)。<c>sockaddr_un.sun_path</c> の大きさで、
+    /// Linux と Windows は 108、macOS は 104
+    /// </summary>
+    private static int SocketPathLimit => OperatingSystem.IsMacOS() ? 104 : 108;
+
+    /// <summary>
+    /// px4d を起こす前に、ランタイムルートが使えるか確かめる。駄目なら理由 (使えれば null)。
+    ///
+    /// <para>
+    /// **ソケットのパスの長さ** (どの OS でも)。超えると px4d は INVALID_ARGUMENT とだけ言って起きない。
+    /// **Windows は持ち主と権限も** (px4-userland の windows_ipc.cpp と同じ決まり。<see cref="AclProblem"/>)。
+    /// 合わなければ px4d が同じく INVALID_ARGUMENT で起きないので、先に理由を言う
+    /// </para>
+    /// </summary>
+    public static string? RuntimeProblem(string runtimeDir, string id)
+    {
+        var endpoint = Px4Control.Endpoint(runtimeDir, id, "control.sock");
+        var bytes = System.Text.Encoding.UTF8.GetByteCount(endpoint);
+        if (bytes + 1 > SocketPathLimit)
+        {
+            return $"ソケットのパスが長すぎます ({endpoint} は {bytes} バイト。{SocketPathLimit - 1} バイトまで)。"
+                + "PX4_RUNTIME_DIR を短いパスにしてください";
+        }
+        return OperatingSystem.IsWindows() ? WindowsRuntimeProblem(runtimeDir) : null;
+    }
+
+    [System.Runtime.Versioning.SupportedOSPlatform("windows")]
+    private static string? WindowsRuntimeProblem(string runtimeDir)
+    {
+        var info = new DirectoryInfo(runtimeDir);
+        if (!info.Exists) return $"{runtimeDir} がありません (install.ps1 を流し直すと作ります)";
+        if (info.Attributes.HasFlag(FileAttributes.ReparsePoint)) return $"{runtimeDir} がリンクになっています (普通のフォルダにしてください)";
+        var me = System.Security.Principal.WindowsIdentity.GetCurrent().User?.Value ?? "";
+        var security = info.GetAccessControl(
+            System.Security.AccessControl.AccessControlSections.Owner | System.Security.AccessControl.AccessControlSections.Access);
+        var owner = security.GetOwner(typeof(System.Security.Principal.SecurityIdentifier))?.Value;
+        var aces = security.GetAccessRules(true, true, typeof(System.Security.Principal.SecurityIdentifier))
+            .OfType<System.Security.AccessControl.FileSystemAccessRule>()
+            .Select(rule => (rule.IdentityReference.Value,
+                rule.AccessControlType == System.Security.AccessControl.AccessControlType.Allow, (uint)rule.FileSystemRights));
+        return AclProblem(me, owner, aces) is { } problem
+            ? $"{runtimeDir} の権限が px4d の決まりに合いません ({problem})。install.ps1 を流し直すと整えます"
+            : null;
+    }
+
+    /// <summary>
+    /// 書き込みに当たる権限 (px4-userland の <c>kUntrustedWriteMask</c> と同じ)。
+    /// GENERIC_WRITE・GENERIC_ALL・DELETE・WRITE_DAC・WRITE_OWNER・FILE_WRITE_DATA・FILE_APPEND_DATA・
+    /// FILE_WRITE_EA・FILE_WRITE_ATTRIBUTES・FILE_DELETE_CHILD
+    /// </summary>
+    private const uint WriteMask = 0x40000000 | 0x10000000 | 0x10000 | 0x40000 | 0x80000 | 0x2 | 0x4 | 0x10 | 0x100 | 0x40;
+
+    /// <summary>本人のほかに書いてよい人 (SYSTEM・Administrators・CREATOR OWNER・OWNER RIGHTS)</summary>
+    private static readonly HashSet<string> TrustedSids = ["S-1-5-18", "S-1-5-32-544", "S-1-3-0", "S-1-3-4"];
+
+    /// <summary>
+    /// ランタイムルートの持ち主と ACL が px4d の決まりに合うか (px4-userland の <c>verify_runtime_parent</c>)。
+    /// 合わなければ理由。**持ち主が本人、許可の ACE だけ、本人が書ける、本人と <see cref="TrustedSids"/> のほかは
+    /// 書けない。** OS を見ないので、どこでもテストできる
+    /// </summary>
+    internal static string? AclProblem(string me, string? owner, IEnumerable<(string Sid, bool Allow, uint Mask)> aces)
+    {
+        if (owner != me) return $"持ち主が本人ではありません ({owner ?? "不明"})";
+        var writable = false;
+        foreach (var (sid, allow, mask) in aces)
+        {
+            if (!allow) return $"拒否の設定があります ({sid})";
+            if (sid == me)
+            {
+                writable |= (mask & WriteMask) != 0;
+                continue;
+            }
+            if (!TrustedSids.Contains(sid) && (mask & WriteMask) != 0) return $"ほかの人 ({sid}) も書けます";
+        }
+        return writable ? null : "本人が書けません";
+    }
 
     public static string Device(string id, int receiver) => $"{Scheme}{id}:{receiver}";
 
@@ -164,7 +262,7 @@ public static class Px4Userland
     public static List<Enclosure> Enclosures(Action<string>? warn = null)
     {
         warn ??= Log.Write;
-        var px4d = Path.Combine(Dir, "px4d");
+        var px4d = Executable(Dir, "px4d");
         if (!File.Exists(px4d)) return [];
         var (code, output) = Shell.Run(px4d, ["--list-json"], TimeSpan.FromSeconds(15));
         if (code != 0)
@@ -174,7 +272,7 @@ public static class Px4Userland
         }
         try
         {
-            return ParseJson(output, warn);
+            return ParseJson(output, warn, Px4Daemon.Owned());
         }
         catch (Exception error) when (error is JsonException or FormatException)
         {
@@ -201,16 +299,28 @@ public static class Px4Userland
     /// 出力は stdout と stderr を繋げたもの (<see cref="Shell.Run"/>) なので、<c>{</c> で始まる最初の行を
     /// 文書とみなす。libusb が stderr に何か言っても読めるように。
     /// </para>
+    ///
+    /// <para>
+    /// **px4d が使っている筐体を足す** (<paramref name="running"/>)。Windows の libusb は WinUSB の機材を
+    /// 1つのプロセスでしか開けず、px4d が使っている筐体は一覧で <c>open_failed</c> になる (px4-userland の
+    /// Windows の実機記録)。そのままだと、動いている間に自動検出し直すと筐体が顔ぶれから消える。
+    /// 動いている px4d の筐体は起こしたときのものを使い、その USB の <c>open_failed</c> は記録しない。
+    /// 同じ番号の筐体の片方の px4d が動いていると、もう片方は一覧で番号が一意に見えるので、
+    /// **動いている px4d と番号が同じなら重なっているとみなす**
+    /// </para>
     /// </summary>
+    /// <param name="running">いま px4d が使っている筐体 (<see cref="Px4Daemon.Owned"/>)</param>
     /// <exception cref="JsonException">JSON として読めない</exception>
     /// <exception cref="FormatException">文書が無い・object でない</exception>
-    public static List<Enclosure> ParseJson(string output, Action<string> warn)
+    public static List<Enclosure> ParseJson(string output, Action<string> warn, IReadOnlyList<Enclosure>? running = null)
     {
         var line = output.Split('\n').Select(raw => raw.Trim()).FirstOrDefault(raw => raw.StartsWith('{'))
             ?? throw new FormatException("JSON の文書がありません");
         var root = JsonNode.Parse(line) as JsonObject ?? throw new FormatException("JSON の文書が object ではありません");
         var shape = new JsonShape();
         var found = new List<Enclosure>();
+        running ??= [];
+        var claimed = running.SelectMany(enclosure => enclosure.Places).ToHashSet(StringComparer.Ordinal);
 
         foreach (var item in shape.Array(root, "enclosures", ""))
         {
@@ -245,6 +355,7 @@ public static class Px4Userland
              */
             IReadOnlyList<string> paths = [];
             var alias = id;
+            if (unique && running.Any(other => other.Serial == id && other.UsbPaths.Count > 0)) unique = false;
             if (!unique && status == "ready" && Digits(id))
             {
                 var places = devices.Select(device =>
@@ -281,7 +392,10 @@ public static class Px4Userland
                     var lnb = shape.Flag(receiver, "lnb_15v_supported", "receivers[]");
                     if (Px4Receiver.From(number.Value, system, lnb, warn) is { } known) receivers.Add(known);
                 }
-                found.Add(new Enclosure(alias, model, receivers, id, paths));
+                found.Add(new Enclosure(alias, model, receivers, id, paths)
+                {
+                    Places = [.. devices.Select(device => Place(device.Port, device.Bus, device.Address)).OfType<string>()],
+                });
             }
         }
 
@@ -292,15 +406,22 @@ public static class Px4Userland
                 shape.Skew("ungrouped_usb_devices[] が object ではない");
                 continue;
             }
+            var port = shape.Text(device, "port", "ungrouped_usb_devices[]", optional: true);
+            var bus = shape.Number(device, "bus", "ungrouped_usb_devices[]", optional: true);
+            var address = shape.Number(device, "address", "ungrouped_usb_devices[]", optional: true);
+            var status = shape.Text(device, "status", "ungrouped_usb_devices[]") ?? "";
+            // px4d が使っているから開けないだけ (Windows)。理由として残すと見当違いになる
+            if (status == "open_failed" && Place(port, bus, address) is { } place && claimed.Contains(place)) continue;
             Rejected(
                 shape.Text(device, "model", "ungrouped_usb_devices[]"),
                 shape.Text(device, "usb", "ungrouped_usb_devices[]"),
-                shape.Text(device, "status", "ungrouped_usb_devices[]") ?? "",
-                Where([(shape.Text(device, "port", "ungrouped_usb_devices[]", optional: true),
-                    shape.Number(device, "bus", "ungrouped_usb_devices[]", optional: true),
-                    shape.Number(device, "address", "ungrouped_usb_devices[]", optional: true))]),
+                status,
+                Where([(port, bus, address)]),
                 warn);
         }
+
+        // 一覧に出なかった (px4d が使っていて開けなかった) 筐体は、起こしたときのものを使う
+        found.AddRange(running.Where(enclosure => found.All(other => other.Id != enclosure.Id)));
 
         if (shape.Notes.Count > 0)
         {
@@ -410,7 +531,14 @@ public static class Px4Userland
     /// <summary>まとめられなかった USB デバイスの理由を残す。権限が無いときに黙って「チューナーが無い」にならないように</summary>
     private static void Rejected(string? model, string? usb, string status, string where, Action<string> warn) =>
         warn($"{model} ({usb}) を使えません: {status}{where}"
-            + (status == "open_failed" ? " (/dev/bus/usb を開く権限が無いかもしれません)" : ""));
+            + (status != "open_failed" ? ""
+                // Windows の libusb は WinUSB の機材しか開けず、開けるのも1つのプロセスだけ
+                : OperatingSystem.IsWindows() ? $" ({WinUsbHint})"
+                : " (/dev/bus/usb を開く権限が無いかもしれません)"));
+
+    /// <summary>Windows で筐体を開けないときの手当て</summary>
+    private const string WinUsbHint =
+        "ドライバが WinUSB になっていないか、別のソフト (TVTest など) が使っています。Zadig で WinUSB に (docs/agent.md)";
 
     /// <summary>
     /// USB の場所を理由に添えるようにする (<c>, USB 1-2.3</c>)。同じ番号のものが並んだとき、どれの話か分かるように。
@@ -418,12 +546,28 @@ public static class Px4Userland
     /// </summary>
     private static string Where(IEnumerable<(string? Port, int? Bus, int? Address)> places)
     {
-        var named = places
-            .Select(place => place.Port ?? (place.Bus is { } bus && place.Address is { } address ? $"{bus}:{address}" : null))
-            .OfType<string>()
-            .ToArray();
+        var named = places.Select(place => Place(place.Port, place.Bus, place.Address)).OfType<string>().ToArray();
         return named.Length == 0 ? "" : $", USB {string.Join(" / ", named)}";
     }
+
+    /// <summary>USB の位置。ポート、分からなければ <c>BUS:ADDRESS</c>、どちらも無ければ null</summary>
+    private static string? Place(string? port, int? bus, int? address) =>
+        port ?? (bus is { } b && address is { } a ? $"{b}:{a}" : null);
+
+    /// <summary>
+    /// px4d の終了コード (px4-userland README) に、どうすればいいかを添える。分からないコードは何も足さない
+    /// (<see cref="SianoUserland.Hint"/> と同じ作り)
+    /// </summary>
+    public static string Hint(int code) => code switch
+    {
+        2 => " — 引数かランタイムルートが合いません (同じ番号の筐体が並んでいる・ソケットのパスが長い・権限が合わない)",
+        3 when OperatingSystem.IsWindows() => $" — 筐体が見つからないか開けません。抜けたか、{WinUsbHint}",
+        3 => " — 筐体が見つからないか開けません (抜けたか、別のプロセスが使っている?)",
+        4 => " — 同じ筐体の px4d がほかに動いています",
+        7 => " — USB の読み書きに失敗しました (抜けた?)。次の選局で起こし直します",
+        10 => " — ファームウェアを受け付けません (入れ直してください)",
+        _ => "",
+    };
 
     /// <summary>刺さっている筐体の受信機を、設定に書いたのと同じ形式で</summary>
     public static List<TunerSpec> Detect() => Specs(Enclosures());
@@ -568,10 +712,16 @@ public abstract class UserlandDaemon(string name, string id)
     /// <summary>ready を待つ上限。ファームウェアの流し込みは数秒で済む</summary>
     private static readonly TimeSpan ReadyTimeout = TimeSpan.FromSeconds(30);
 
+    /// <summary>止めるときに後片付けを待つ上限。過ぎたら Kill</summary>
+    private static readonly TimeSpan StopGrace = TimeSpan.FromSeconds(10);
+
     protected string Id { get; } = id;
     private readonly Lock _gate = new();
     private Process? _process;
     private volatile string _stderr = "";
+
+    /// <summary>いまの常駐を標準入力で止めるか (<see cref="Launch"/> の <c>stopByStdin</c>)</summary>
+    private bool _stopByStdin;
 
     public bool Running => _process is { HasExited: false };
 
@@ -593,6 +743,12 @@ public abstract class UserlandDaemon(string name, string id)
             }
             return (T)daemon;
         }
+    }
+
+    /// <summary>登録してある <typeparamref name="T"/> のうち、いま動いているもの</summary>
+    protected static List<T> Live<T>() where T : UserlandDaemon
+    {
+        lock (Registry) return [.. All.Values.OfType<T>().Where(daemon => daemon.Running)];
     }
 
     /// <summary>
@@ -629,7 +785,14 @@ public abstract class UserlandDaemon(string name, string id)
     /// 起こして、<paramref name="ready"/> が通るまで待つ。<paramref name="runtimeDir"/> (ランタイムルート) は
     /// 呼ぶ側が用意する決まり (常駐は下の階層しか作らない)
     /// </summary>
-    protected void Launch(string program, IReadOnlyList<string> args, string runtimeDir, Func<bool> ready, Action onReady)
+    /// <param name="stopByStdin">
+    /// **標準入力で止める** (Windows の px4d。<c>--exit-on-stdin-eof</c>)。標準入力は何も書かずに開けたまま持ち、
+    /// 止めるときに閉じる。エージェントが落ちても (Kill されても) 書く側が閉じるので、常駐は後片付けをして終わる
+    /// </param>
+    /// <param name="hint">終了コードに添える手当て (<see cref="Px4Userland.Hint"/>)</param>
+    internal void Launch(
+        string program, IReadOnlyList<string> args, string runtimeDir, Func<bool> ready, Action onReady,
+        bool stopByStdin = false, Func<int, string>? hint = null)
     {
         lock (_gate)
         {
@@ -645,12 +808,16 @@ public abstract class UserlandDaemon(string name, string id)
 
             var start = new ProcessStartInfo(program, args)
             {
+                RedirectStandardInput = stopByStdin,
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
+                // px4d の診断は UTF-8 (パスに日本語が入りうる)
+                StandardErrorEncoding = System.Text.Encoding.UTF8,
                 UseShellExecute = false,
             };
             var process = Process.Start(start) ?? throw new IOException($"{name} を起動できません");
             _process = process;
+            _stopByStdin = stopByStdin;
             _stderr = "";
             _ = Task.Run(async () =>
             {
@@ -669,7 +836,7 @@ public abstract class UserlandDaemon(string name, string id)
             {
                 if (process.HasExited)
                 {
-                    throw new IOException($"{name} が終了しました (exit {process.ExitCode}: {_stderr})");
+                    throw new IOException($"{name} が終了しました (exit {process.ExitCode}: {_stderr}){hint?.Invoke(process.ExitCode)}");
                 }
                 if (ready())
                 {
@@ -699,8 +866,8 @@ public abstract class UserlandDaemon(string name, string id)
     }
 
     /// <summary>
-    /// 止める。**SIGTERM で。** px4d / asicend は合図を受けると後片付け (LNB を 0V に戻す・
-    /// socket を消す) をしてから終わる。SIGKILL だとそこが保証されない
+    /// 止める。**SIGTERM で** (Windows の px4d は標準入力を閉じて)。px4d / asicend は合図を受けると
+    /// 後片付け (LNB を 0V に戻す・socket を消す) をしてから終わる。Kill だとそこが保証されない
     /// </summary>
     public void Stop()
     {
@@ -711,8 +878,26 @@ public abstract class UserlandDaemon(string name, string id)
             if (process is null) return;
             if (!process.HasExited)
             {
-                Interop.Terminate(process.Id);
-                if (!process.WaitForExit(TimeSpan.FromSeconds(10))) process.Kill();
+                if (_stopByStdin)
+                {
+                    try
+                    {
+                        process.StandardInput.Close();
+                    }
+                    catch (IOException)
+                    {
+                        // もう終わりかけている
+                    }
+                }
+                else
+                {
+                    Interop.Terminate(process.Id);
+                }
+                if (!process.WaitForExit(StopGrace))
+                {
+                    Write($"{StopGrace.TotalSeconds:F0} 秒で終わらないので落とします");
+                    process.Kill();
+                }
             }
             process.Dispose();
         }
@@ -733,6 +918,16 @@ public abstract class UserlandDaemon(string name, string id)
 public sealed class Px4Daemon(string id) : UserlandDaemon("px4d", id)
 {
     public static Px4Daemon For(string id) => For(id, () => new Px4Daemon(id));
+
+    /// <summary>
+    /// 起こしたときの筐体 (一覧で聞いたもの)。動いている間、一覧に出なくなっても (Windows では px4d が使っている
+    /// 筐体は開けない) これを使う (<see cref="Owned"/>)
+    /// </summary>
+    private Px4Userland.Enclosure? _enclosure;
+
+    /// <summary>いま px4d が使っている筐体 (<see cref="Px4Userland.ParseJson"/> が一覧に足す)</summary>
+    public static IReadOnlyList<Px4Userland.Enclosure> Owned() =>
+        [.. Live<Px4Daemon>().Select(daemon => daemon._enclosure).OfType<Px4Userland.Enclosure>()];
 
     public override void Ensure()
     {
@@ -755,10 +950,13 @@ public sealed class Px4Daemon(string id) : UserlandDaemon("px4d", id)
         }
         if (!File.Exists(Px4Userland.Firmware))
         {
-            throw new IOException($"ファームウェアがありません: {Px4Userland.Firmware}");
+            throw new IOException($"ファームウェアがありません: {Px4Userland.Firmware}"
+                + (OperatingSystem.IsWindows() ? " (install.ps1 を流し直すと切り出します)" : ""));
         }
-        var px4d = Path.Combine(Px4Userland.Dir, "px4d");
+        var px4d = Px4Userland.Executable(Px4Userland.Dir, "px4d");
         if (!File.Exists(px4d)) throw new IOException($"px4-userland が入っていません: {px4d}");
+        // ランタイムルートが px4d の決まりに合わなければ、px4d の分かりにくい INVALID_ARGUMENT の前に理由を言う
+        if (Px4Userland.RuntimeProblem(Px4Userland.RuntimeDir, Id) is { } problem) throw new IOException(problem);
 
         Launch(px4d,
             [
@@ -771,10 +969,32 @@ public sealed class Px4Daemon(string id) : UserlandDaemon("px4d", id)
                  * `15v` と書いてあるチューナーだけ。Px4Tuner.TuneRequest)
                  */
                 "--allow-lnb-power",
+                /*
+                 * Windows には SIGTERM が無い。標準入力が閉じたら後片付けして終わってもらう (px4-userland 0.2.0 から)。
+                 * エージェントが落ちても px4d が USB を持ったまま残らない
+                 */
+                .. OperatingSystem.IsWindows() ? ["--exit-on-stdin-eof"] : Array.Empty<string>(),
             ],
             Px4Userland.RuntimeDir,
             () => Control("status", TimeSpan.FromSeconds(5)).Code == 0,
-            () => Receivers = WithLnb(AskReceivers(), listed));
+            () =>
+            {
+                _enclosure = enclosure;
+                Receivers = WithLnb(AskReceivers(), listed);
+            },
+            stopByStdin: OperatingSystem.IsWindows(),
+            hint: Px4Userland.Hint);
+    }
+
+    /// <summary>
+    /// 筐体が抜けた (DISCONNECTED / USB_IO) と言われたのに px4d がまだ動いていれば止める。次に要ったときに起こし直す
+    /// (px4-userland は「同じ px4d のままの USB の繋ぎ直しは確かめていない」と言っている)
+    /// </summary>
+    public void Lost()
+    {
+        if (!Running) return;
+        Write("筐体が抜けたと言われたので止めます。次の選局で起こし直します");
+        Stop();
     }
 
     /// <summary>
@@ -786,7 +1006,7 @@ public sealed class Px4Daemon(string id) : UserlandDaemon("px4d", id)
         : ["--device", Id];
 
     private (int Code, string Output) Control(string command, TimeSpan timeout) => Shell.Run(
-        Path.Combine(Px4Userland.Dir, "px4ctl"),
+        Px4Userland.Executable(Px4Userland.Dir, "px4ctl"),
         // USB ポートで起こした筐体は、ソケットの置き場の名前で呼ぶ (番号で呼ぶと別の筐体に繋がりうる)
         [Id.Contains('_') ? "--instance" : "--device", Id, "--runtime-dir", Px4Userland.RuntimeDir, command],
         timeout);
@@ -866,6 +1086,9 @@ public sealed class Px4Tuner : ITuneDevice
 
     /// <summary>設定の <c>device</c> (注意書きの鍵。<see cref="Px4Userland.Notice"/>)</summary>
     private readonly string _device;
+
+    /// <summary>筐体が抜けたと言われたときに呼ぶ (px4d を止めて、次の選局で起こし直す。<see cref="Px4Daemon.Lost"/>)</summary>
+    private readonly Action? _lost;
     private readonly Lock _gate = new();
 
     /// <summary>受信機を借りている制御ソケット。null なら借りていない</summary>
@@ -888,7 +1111,7 @@ public sealed class Px4Tuner : ITuneDevice
             var daemon = Px4Daemon.For(id);
             daemon.Ensure();
             return daemon.Receivers;
-        })
+        }, lost: () => Px4Daemon.For(id).Lost())
     {
     }
 
@@ -899,10 +1122,12 @@ public sealed class Px4Tuner : ITuneDevice
     /// <param name="wire">話す相手。省けば px4d。asicen-userland の機材は <see cref="Px4Wire.Asicen"/> (Asicen.cs)</param>
     /// <param name="device">設定の <c>device</c>。省けば <c>px4:&lt;番号&gt;:&lt;受信機&gt;</c></param>
     /// <param name="name">記録に出す名前。省けば <c>px4-&lt;番号の末尾4桁&gt; #&lt;受信機&gt;</c></param>
+    /// <param name="lost">筐体が抜けた (DISCONNECTED / USB_IO) と言われたときに呼ぶ。省けば何もしない</param>
     internal Px4Tuner(
         string id, int receiver, string? lnb, string runtimeDir, Func<IReadOnlyList<Px4Receiver>?> prepare,
-        Px4Wire? wire = null, string? device = null, string? name = null)
+        Px4Wire? wire = null, string? device = null, string? name = null, Action? lost = null)
     {
+        _lost = lost;
         _id = id;
         _receiver = receiver;
         _lnb = lnb;
@@ -1053,6 +1278,7 @@ public sealed class Px4Tuner : ITuneDevice
         catch (IOException error) when (!Keeps(error))
         {
             Close();
+            if (error is Px4Error { Code: Px4Error.UsbIo or Px4Error.Disconnected }) _lost?.Invoke();
             throw;
         }
     }

@@ -488,7 +488,7 @@ Q3U4 なら8つで受信機ごとに地上波か衛星か決まっており、ML
 
 **ファームウェアは同梱しています。** IT930x は挿すたびにホストから RAM へ
 ファームウェアを流し込み、px4-userland は受理する版を SHA-256 で1つに固定して
-います。イメージをビルドするときに、PLEX 公式の Windows ドライバ
+います。イメージをビルドするとき (Mac と Windows は install.sh / install.ps1 が入れるとき) に、PLEX 公式の Windows ドライバ
 (`pxw3u4_BDA_ver1x64.zip` の `PXW3U4.sys`、著作権表示は Digital Warrior Corp.) から
 切り出します (0x287d0 から 2,169 バイト)。配布 zip・`.sys`・切り出したものの3つを
 ハッシュで確かめます。
@@ -1036,33 +1036,80 @@ irm https://raw.githubusercontent.com/danything/denpa/main/install.ps1 | iex
 
 - **WSL は勝手に入れません。** wslc が無いときは、エージェントだけ入れて `wsl --update` (WSL が無ければ
   管理者で `wsl --install --no-distribution`) を流すよう言って終わります
-- ドライバは入れません (下)。刺さっている Siano のチューナーが WinUSB でなければ、そう言います
+- ドライバは入れません (下)。刺さっているチューナーが WinUSB でなければ、そう言います
+  (px4-userland の機材は `px4d --list-json` に聞くので、機種の表は持ちません)
 - genkan (`http://denpa.localhost`) には繋ぎません (genkan は Docker のネットワークにいて、wslc のコンテナからは入れない)
 
 | 置き場 | 中身 |
 | --- | --- |
 | `~/denpa/` (`DENPA_HOME`) | `denpa.env` (コンテナの環境変数。手で足すならここ。無いときだけ雛形を作る)・`config/`・エージェントのログ `denpa-agent.log` |
-| `%LOCALAPPDATA%\denpa-agent\` | エージェント・siano-userland・起こす `denpa-agent.cmd` と `denpa-start.ps1` |
+| `%LOCALAPPDATA%\denpa-agent\` | エージェント・px4-userland (`px4d.exe`・`px4ctl.exe`・切り出したファームウェア・ライセンスの文書)・siano-userland・起こす `denpa-agent.cmd` と `denpa-start.ps1` |
+| `C:\denpa-run` | px4d のソケットの置き場 (下) |
 | `~/Videos/denpa/recorded` | 元のTS。エージェントとコンテナ (`/media/raw`) の両方に見せる |
 | `~/Videos/denpa/library` | 出来上がった録画 (コンテナの `/media/encoded`。エクスプローラーから見える) |
 | wslc のボリューム `denpa-data` | DB |
 
 **使えるもの。**
 
-- **チューナーは siano-userland の機材だけ** (PX-S1UD など。地上波)。siano-userland の Windows 版
-  (`siano-ts.exe` と libusb) は、ドライバを WinUSB にすれば動きます。WinUSB には
-  [Zadig](https://zadig.akeo.ie) でします (Options → List All Devices → チューナーを選んで WinUSB → Replace Driver)。
+- **px4-userland の機材** (PX-Q3U4 / PX-M1UR / PX-S1UR など)。px4-userland の Windows 版 (0.2.0 から。
+  入れるのは 0.2.1) は、ドライバを WinUSB にすれば動きます。Linux・Mac と同じく px4d の制御ソケットで
+  受信機を使い、内蔵カードリーダーも読みます (IPC は Windows でも AF_UNIX)。配布 zip のうち使うのは
+  `px4d.exe` と `px4ctl.exe` だけで、`px4-ts.exe` と `WinSCard.dll` (B25 のアプリの横に置く代わりの DLL) は
+  置きません — エージェントは USB のリーダーを OS の winscard.dll で読むので、横に置くとそちらを引いてしまう。
+  ファームウェアは Mac と同じく PLEX 公式ドライバから切り出します (下の「ファームウェアは同梱しています」)
+- **siano-userland の機材** (PX-S1UD など。地上波)。siano-userland の Windows 版 (`siano-ts.exe` と libusb) も、
+  ドライバを WinUSB にすれば動きます
+- WinUSB には [Zadig](https://zadig.akeo.ie) でします (Options → List All Devices → チューナーを選んで WinUSB → Replace Driver)。
+  **PX-Q3U4 / PX-W3U4 は USB の機材が2つ並ぶので、両方とも。** PLEX のドライバで TVTest などから使っていた
+  機材は、WinUSB にするとそちらからは見えなくなります (戻すときはデバイス マネージャーでドライバを戻す)。
   installer はドライバを入れ替えません (ほかのソフトで使っていた機材を黙って奪わない)。
-  WinUSB でないまま選局すると、siano-ts が開けずに落ち、そう添えて返します
+  WinUSB でないまま、またはほかのソフトが使っているまま選局すると、開けずに落ち、そう添えて返します
+  (Windows の libusb は WinUSB の機材しか開けず、開けるのも1つのプロセスだけ)
+- px4 と Siano の機材は同時に挿して使えます (別の USB の機材を別のプロセスが開く)
 - **カードリーダー**: USB のリーダーを Windows の PC/SC (winscard.dll) 越しに扱います (`Pcsc.cs`。
   Mac と同じ作りで、違うのはハンドルの幅と関数の名前だけ)。ドライバは Windows 標準で足ります。
-  `denpa-agent --card` がリーダーを並べ、動いている間はリーダーを独り占めします
+  `denpa-agent --card` がリーダーを並べ、動いている間はリーダーを独り占めします。px4-userland の内蔵リーダーも
+  並びます (USB のリーダーが先)
+
+**px4-userland の機材で Windows だけ違うところ。**
+
+- **px4d は標準入力で止めます** (`--exit-on-stdin-eof`)。Windows には SIGTERM が無いので、エージェントは px4d の
+  標準入力を何も書かずに開けたまま持ち、止めるときに閉じます。px4d はそれを見て後片付け (LNB を 0V に戻す・
+  ソケットを消す) をしてから終わります。**エージェントが落ちても (止められても) 書く側が閉じるので、px4d が
+  USB を持ったまま残りません** (残ると、起こし直したエージェントの px4d が起きられない)。install.ps1 も
+  エージェントを先に止め、px4d が自分で終わるのを待ってから残りを落とします
+- **ソケットの置き場は `C:\denpa-run`** (`PX4_RUNTIME_DIR`)。px4d は、持ち主が本人で、本人・SYSTEM・Administrators の
+  ほかに書ける人がいないフォルダしか使いません。install.ps1 が作って、保護された ACL (本人・SYSTEM・Administrators に
+  フルコントロール) にします。ユーザーのフォルダ (`%LOCALAPPDATA%`) の下にしないのは、ソケットのパスが UTF-8 で
+  108 バイトまでで、日本語のユーザー名 (1 文字 3 バイト) だとすぐ溢れるのと、非 ASCII のパスだと px4d の
+  ready の行が途切れる ([px4-userland #52](https://github.com/Khronos31/px4-userland/issues/52)) から。
+  エージェントは px4d を起こす前に、持ち主・ACL・パスの長さを確かめ、合わなければ理由を言います
+  (px4d に任せると INVALID_ARGUMENT としか言わない)。決まった1か所なので、**1台の PC でエージェントを動かせるのは
+  1人のユーザーだけ**です (USB を開けるのも1つのプロセスだけなので、もともと分けられない)
+- **px4d が使っている筐体は、一覧 (`px4d --list-json`) で開けない機材 (`open_failed`) に見えます。** エージェントは
+  起こしたときの筐体を覚えていて、動いている間はそれを顔ぶれに残し、その USB の `open_failed` は記録しません
+  (でないと、画面でチューナーの定義を消して自動に戻したときに筐体が消える)。同じ番号の PX-M1UR と PX-S1UR を
+  同時に挿したときも、片方の px4d が動いていればもう片方は番号が一意に見えるので、動いている px4d と番号が同じなら
+  USB ポートで見分けます。**同じ番号の筐体を `--usb-path` で分けて起こすのは、px4-userland も Windows では
+  確かめていません**
+- USB を抜くと px4d は終わり (USB_IO)、次の選局で起こし直します。px4d が DISCONNECTED / USB_IO を返したのに
+  動き続けていたら、エージェントが止めて起こし直します (同じ px4d のままの繋ぎ直しは px4-userland が確かめていない)
+
+px4-userland の README の対応表のうち Windows の行です (v0.2.1。そのまま写しています)。機種では絞らず、px4-userland が
+ready と言った筐体は使います。
+
+| OS / 環境 | 対象model/profile | build-tested | tuner-hardware-verified | card-core-hardware-verified | native-card-adapter-verified | 備考 |
+|---|---|:---:|:---:|:---:|:---:|---|
+| Windows 11 x64（Phase 1/2） | PX-Q3U4 | 完了 | 検証済み | 検証済み | 限定smoke確認 | native libusb（WinUSB）。0.2.0 candidateでE17の8 receiver受信、card hotplug/APDU、USB再接続後のdaemon再起動、2時間soak、全局受信を確認（[検証記録](https://github.com/Khronos31/px4-userland/blob/v0.2.1/docs/platforms/validation-results.md#2026-10-10-v020-candidate-e17-windows-11-x64-実機試験q3u4必須matrix-pass--soak注記付き受入)）。既知の制限: 非ASCII endpoint pathでready行が途切れる（[Issue #52](https://github.com/Khronos31/px4-userland/issues/52)）。0.2.1ではx64 B25 application用の限定WinSCard.dllを同梱し、application-localでQ3U4実機のreader列挙・接続・状態取得・正常解放を限定smoke確認（[v0.2.1 evidence](https://github.com/Khronos31/px4-userland/blob/v0.2.1/docs/platforms/validation-results.md#2026-10-12-v021-candidate-e17-windows-winscard-smoke限定実機確認)）。一般WinSCard/B25 application互換性は未認定（[API scope](https://github.com/Khronos31/px4-userland/blob/v0.2.1/docs/platforms/windows-winscard.md#windows-application-local-winscard)）。PC/SC IFDシステム登録は未対応 |
+| Windows 11 x64（Phase 1） | PX-M1UR / PX-S1UR | 完了 | 検証済み | 検証済み | 該当なし（N/A） | native libusb（WinUSB）。0.2.0 candidateでprofile別30分連続受信（受信中の直接APDU 300/300）、機種固有T/S（M1UR ISDB-S 0V・15V拒否、S1UR ISDB-S拒否）、stop/reopen、card抜去/再挿入、USB切断・再接続後のdaemon再起動による復旧、同時接続時のlist/JSONと曖昧serial拒否を確認。同一lease retune、同一daemonの自動USB再接続、衝突中の`--usb-path`による個別起動は未認定。既知の制限: [Issue #52](https://github.com/Khronos31/px4-userland/issues/52)。PC/SCはPhase 2 |
+| Windows 11 x64（Phase 1） | その他のmodel/profile | 完了 | 未検証（hardware-unverified） | 未検証（hardware-unverified） | 該当なし（N/A） | 実機evidenceなし |
+
+denpa が使うのは px4d の制御ソケット (受信機と内蔵カード) だけで、表の WinSCard.dll と PC/SC の列は関係しません。
 
 **使えないもの。**
 
-- **PX-Q3U4 / PX-W3U4 / PX-MLT などの px4-userland の機材** — px4-userland は Windows を出していません
-  (方針として)
 - **PT2/PT3 などの DVB の機材** — Windows に DVB はありません
+- **PX-W3U3 (asicen-userland)** — Windows 版がありません
 - **止めるときに録画を待てません。** Windows には「止まれ」を伝える手 (SIGTERM) が無く、
   止めればその場で落ちます。上げ直し・外すときは install.ps1 が録画の終わりを待ってから止めますが、
   ログオフ・再起動・シャットダウンでは待たずに切れます (録画中に Windows を落とさないこと)。
@@ -1072,16 +1119,19 @@ irm https://raw.githubusercontent.com/danything/denpa/main/install.ps1 | iex
 
 - 子の標準出力は poll できないので、裏のスレッドに読ませて 200ms ごとに起きます (`DeviceStream`)。
   pipe は広げられず 4KB ほどで、読む側が少し止まったぶんは siano-ts の中の溜め
-  (16KB × 256) が吸う
+  (16KB × 256) が吸う。px4d から受ける TS は pipe を使わないので、Linux・Mac と同じ 8MB の溜め
 - タスクの優先度は普通にしてあります (既定の「低い」だと、denpa のコンテナがエンコードで CPU を食う間
-  siano-ts が後回しにされる)
+  siano-ts や px4d が後回しにされる)
 - ログは cmd がファイルへ足すだけで、回しません (Mac と同じ)
 - LAN のほかの機械からエージェントに繋ぐとき (`-AgentOnly`) は、Windows ファイアウォールでポート 25252 を
   許します (初めて起きたときに確認の窓が出ることがある)。wslc のコンテナからは要りません
 - **Windows の実機でチューナーとカードを繋いで確かめたことはまだありません。** CI (`agent-windows`) で
-  ビルドして起こし、API が応答することと入れ方 (`-AgentOnly`) を最後まで流すところまで。ランナーには wslc が
-  無いので、denpa 本体を wslc で起こすところは手元の Windows 11 (wslc 3.0.1) で確かめました
-  (入れる・この PC と LAN から開ける・エージェントに繋がる・起こし直し・外す。Docker Desktop からの移行は未確認)
+  ビルドして起こし、API が応答することと入れ方 (`-AgentOnly`) を最後まで流すところまで。px4-userland は
+  偽の px4d (AF_UNIX のソケット) を相手に受信機と内蔵カードの IPC・TS の受け渡し・標準入力で止めるところを
+  流し、本物の `px4d.exe` / `px4ctl.exe` は引数を受けて「筐体が無い」と答えるところまで (ランナーにチューナーが無い)。
+  ランナーには wslc が無いので、denpa 本体を wslc で起こすところは手元の Windows 11 (wslc 3.0.1) で確かめました
+  (入れる・この PC と LAN から開ける・エージェントに繋がる・起こし直し・外す。Docker Desktop からの移行は未確認)。
+  実機で当てるのは `denpa-agent --tune px4:<筐体の番号>:2 T27` と `denpa-agent --card`
 
 ## B-CASカードとデスクランブル
 

@@ -334,7 +334,7 @@ jobs:
           # --card exits 1 (no card); do not fail on the last native exit code
           exit 0
 
-      # 入れ方を通しで。エージェントはいまビルドしたものを zip にして入れ、siano-userland と
+      # 入れ方を通しで。エージェントはいまビルドしたものを zip にして入れ、px4-userland・siano-userland と
       # ファームウェアは本物を取ってきてハッシュを確かめ、タスク スケジューラに載せて API が答えるまで。
       # 1回目は irm | iex と同じやり方 (取ってきた中身を scriptblock にして) で流す。2回目は上げ直し
       # (動いているエージェントを止めて入れ替える)。最後に外す
@@ -353,6 +353,32 @@ jobs:
           "siano-ts --list: exit $LASTEXITCODE"
           Get-Content "$prefix\denpa-agent.cmd"
 
+          # px4-userland: only px4d.exe / px4ctl.exe / firmware / license files, no px4-ts.exe or WinSCard.dll.
+          # No tuner on the runner, so check that the real binaries run and take our arguments
+          $px4 = "$prefix\px4-userland"
+          foreach ($file in 'px4d.exe', 'px4ctl.exe', 'firmware\it930x-firmware.bin', 'LICENSE', 'DEPENDENCY-NOTICE.txt') {
+            if (-not (Test-Path "$px4\$file")) { throw "px4-userland: $file missing" }
+          }
+          foreach ($file in 'px4-ts.exe', 'winscard') {
+            if (Test-Path "$px4\$file") { throw "px4-userland: $file should not be installed" }
+          }
+          $ErrorActionPreference = 'Continue'
+          $json = & "$px4\px4d.exe" --list-json
+          "px4d --list-json: exit $LASTEXITCODE $json"
+          if ($LASTEXITCODE -ne 0 -or $json -notmatch '"enclosures"') { throw 'px4d --list-json failed' }
+          & "$px4\px4d.exe" --device 00000000000000 --firmware "$px4\firmware\it930x-firmware.bin" --runtime-dir C:\denpa-run --allow-lnb-power --exit-on-stdin-eof
+          "px4d without a tuner: exit $LASTEXITCODE"
+          if ($LASTEXITCODE -ne 3) { throw 'px4d should say NOT_FOUND (exit 3)' }
+          & "$px4\px4ctl.exe" --device 00000000000000 --runtime-dir C:\denpa-run status
+          "px4ctl status without px4d: exit $LASTEXITCODE"
+          if ($LASTEXITCODE -eq 0) { throw 'px4ctl status should fail without px4d' }
+          $ErrorActionPreference = 'Stop'
+          # C:\denpa-run: owned by the user, protected DACL with the user, SYSTEM and Administrators only
+          $acl = Get-Acl C:\denpa-run
+          $acl.Access | Format-Table IdentityReference, FileSystemRights, IsInherited -AutoSize
+          if ($acl.Owner -ne [Security.Principal.WindowsIdentity]::GetCurrent().Name) { throw "C:\denpa-run owner is $($acl.Owner)" }
+          if (-not $acl.AreAccessRulesProtected -or @($acl.Access).Count -ne 3) { throw 'C:\denpa-run DACL is not the expected one' }
+
           & $script -AgentOnly -NoOpen
           $tuners = Invoke-RestMethod http://127.0.0.1:25252/denpa/tuners
           if ($null -eq $tuners.tuners) { throw 'agent does not answer after the upgrade' }
@@ -360,6 +386,7 @@ jobs:
           & $script -Uninstall
           if (Get-ScheduledTask -TaskName denpa-agent -ErrorAction SilentlyContinue) { throw 'task left' }
           if (Test-Path $prefix) { throw "$prefix left" }
+          if (Test-Path C:\denpa-run) { throw 'C:\denpa-run left' }
           if (Get-Process denpa-agent -ErrorAction SilentlyContinue) { throw 'agent still running' }
           # keeps ~/denpa/config
           if (-not (Test-Path "$env:USERPROFILE\denpa\config")) { throw '~/denpa/config removed' }

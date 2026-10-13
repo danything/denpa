@@ -258,7 +258,8 @@ public class Px4Tests
         await Assert.That(warned[0]).Contains("status=incomplete");
         await Assert.That(warned[0]).Contains("USB 2-1");
         await Assert.That(warned[1]).Contains("open_failed");
-        await Assert.That(warned[1]).Contains("権限");
+        // Windows では「WinUSB になっていない・別のソフトが使っている」
+        await Assert.That(warned[1]).Contains(OperatingSystem.IsWindows() ? "WinUSB" : "権限");
         // 形式は思っていたとおりなので、版ずれの話はしない
         await Assert.That(warned.Any(w => w.Contains("版"))).IsFalse();
     }

@@ -440,7 +440,7 @@ SQLite が拒むので、事実と状態が食い違いません。文字列で�
 `CARD_SHARE_PORT` (鍵を配る拠点だけ。既定は配らない。例は `25253`)・`CARD_SHARE_NETWORKS` (鍵を配る相手。既定はループバックと LAN の中のアドレスで、書けるのもその中だけ)・
 `CARD_TTL` (鍵のやり取りの TTL。既定 `1`、1〜8)・`CARD_SHARE_MAX_RTT` (往復時間の上限。既定は見ない)・
 `SHUTDOWN_WAIT` (denpa と同じ)。同梱のドライバの置き場 `PX4_USERLAND_DIR` / `PX4_FIRMWARE` / `PX4_RUNTIME_DIR` /
-`SIANO_USERLAND_DIR` / `SIANO_FIRMWARE` / `ASICEN_USERLAND_DIR` / `ASICEN_FIRMWARE` / `ASICEN_RUNTIME_DIR` はイメージの既定のままでよい (書き換えるのは Mac の `install.sh` (`PX4_*`・`SIANO_*`) と Windows の `install.ps1` (`SIANO_*`) だけ)。
+`SIANO_USERLAND_DIR` / `SIANO_FIRMWARE` / `ASICEN_USERLAND_DIR` / `ASICEN_FIRMWARE` / `ASICEN_RUNTIME_DIR` はイメージの既定のままでよい (書き換えるのは Mac の `install.sh` (`PX4_*`・`SIANO_*`) と Windows の `install.ps1` (`PX4_*`・`SIANO_*`。Windows の `PX4_RUNTIME_DIR` は `C:\denpa-run`) だけ)。
 `FAKE_TUNE` は適合テストだけが使う。
 
 **鍵を配るのは LAN の中だけ** (鍵を使えるのは同じ世帯の機器だけ。LAN の中に限るのはその近似)。鍵を配る API は普通の API とは

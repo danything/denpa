@@ -15,7 +15,7 @@
       ]
     },
     {
-      "description": "入れ方 (install.sh は Mac で px4-userland / siano-userland を、install.ps1 は Windows で siano-userland を取ってくる) の `# renovate:` 付きの変数 (sh は `NAME=1.2.3`、PowerShell は `$Name = '1.2.3'`)。Dockerfile と同じ px4-userland / siano-userland を指していて、同じ依存なので1つの PR で揃って上がる",
+      "description": "入れ方 (install.sh は Mac で px4-userland / siano-userland を、install.ps1 は Windows で px4-userland / siano-userland を取ってくる) の `# renovate:` 付きの変数 (sh は `NAME=1.2.3`、PowerShell は `$Name = '1.2.3'`)。Dockerfile と同じ px4-userland / siano-userland を指していて、同じ依存なので1つの PR で揃って上がる",
       "customType": "regex",
       "managerFilePatterns": [
         "/^install\\.(sh|ps1)$/"
