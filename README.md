@@ -158,6 +158,7 @@ docker compose up -d
 - [@Khronos31](https://github.com/Khronos31) — px4-userland / siano-userland で選局できなかったのを、PX-Q3U4 の実機で見つけて直してくれました (#188)。ほかにも不具合を報告してくれました (#195 #376 #377)
 - [@unlimish](https://github.com/unlimish) — ライブ・追っかけ・観る画面に小窓 (PiP) を足してくれました (#431)。非力な機材で複数のライブを観るときの詰まりを実測つきで報告してくれ、ライブを GPU でエンコードできるようになりました (#417)
 - [@fetburner](https://github.com/fetburner) — ルール画面の下見でチューナーの取り合いを数えるところを、時刻順に1回なぞるやり方にして、全件で 20 倍ほど速くしてくれました (#662)
+- [@sirius128](https://github.com/sirius128) — 古い Intel の内蔵 GPU (Haswell など) でも GPU でエンコードできるように、イメージに i965 のドライバを足してくれました。Pentium G3250 と PT3 の実機で確かめてくれています (#775)
 
 **土台にしている仕事**:
 
