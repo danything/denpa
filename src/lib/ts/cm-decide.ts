@@ -115,7 +115,7 @@ const STILL_PENALTY = 1.5;
  * 無ければロゴの出入りにいちばん近い無音の、いちばん強い切れ目。継ぎ目の無音に切れ目が2つあるとき
  * (番組の映像 → 番宣のフェード)、強いほうではなくロゴが替わったほうが境目。
  * 切れ目の無い無音 (真ん中を置いたもの) は、切れ目のあるものより遠いとみなす (CM の継ぎ目にはふつう切れ目がある)。
- * 近くに無音が無ければ (無音を挟まずに CM へ入る) ロゴの出入りそのもの (`snapped` が偽)
+ * 近くに無音が無ければロゴの出入りそのもの (`snapped` が偽)。番組の間では、そこを CM の端にはしない (`arrange`)
  */
 function snap(
     at: number,
@@ -311,6 +311,7 @@ const CREDIT_TOLERANCE = 0.4;
  *
  * - **ロゴが遅れて出る・先に消える**所は CM ではない。片側から CM の尺でたどった並びが
  *   反対側の手前で止まり、残りが CM の尺に足りなければ、そこは番組 (アイキャッチ・ロゴの無い頭)
+ * - **番組の間では、無音の無いロゴの出入りを CM の端にしない。** CM は途切れの中の境目から境目まで
  * - **提供は番組に残す。** 番組に接する所、または番組の終わりから CM の並びをたどった先にある
  *   10 秒は提供 (CM は 15 秒の倍数)。番組の映像に字を重ねていることが多く、削ると番組が欠ける。
  *   番組が戻る手前の並びの中の 10 秒は局の番宣
@@ -325,6 +326,19 @@ function arrange(
     let start = from.at;
     let end = to.at;
     const marks = all.filter((t) => t >= start - 0.5 && t <= end + 0.5);
+    /*
+     * 番組の間で、近くに無音も切れ目も無いロゴの出入りは CM の端にしない。ロゴが場面の途中で消えただけ
+     * (背景に紛れてロゴが判定できなくなった) のことがある (実機の TOKYO MX で、本編の 16 秒が CM になっていた)。
+     * CM は途切れの中の最初の境目から始まり、最後の境目で終わる。境目が無ければ途切れごと番組。
+     * 録画の頭と尻の途切れは、無音が無くてもロゴの出入りから (前後の番組との境目は無音を挟まないことがある)
+     */
+    if (afterProgram && beforeProgram && (!from.snapped || !to.snapped)) {
+        const inside = marks.filter((t) => t >= start && t <= end);
+        if (inside.length === 0) return [];
+        if (!from.snapped) start = inside[0]!;
+        if (!to.snapped) end = inside.at(-1)!;
+        if (end - start < GAP_MIN) return [];
+    }
     // たどり始めるのは無音の切れ目から (寄せられなかったロゴの出入りからは、尺がたまたま合っても数えない)
     const forward = afterProgram && from.snapped ? chain(start, end, 1, marks) : start;
     const backward = beforeProgram && to.snapped ? chain(end, start, -1, marks) : end;
