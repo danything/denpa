@@ -176,6 +176,11 @@ Intel の QSV (libvpl・libmfx-gen・intel-media-va-driver) は amd64 だけに�
 `docker buildx build --platform linux/arm64 -f agent/Dockerfile .` (amd64 の機械では
 QEMU が要り、ffmpeg や AOT はかなり遅い)。
 
+**エージェントのイメージの土台は distroless** (`gcr.io/distroless/cc-debian13`) で、シェルも apt も
+coreutils もありません。`kubectl exec deploy/tuner-agent -- denpa-agent --tune …` のように
+実行ファイルを直に呼ぶのは今までどおり動きます。コンテナの中を見たいときは、`kubectl debug -it <Pod> --image=busybox --target=tuner-agent`
+のようにシェルのあるコンテナを横に付けます。
+
 エージェントの API に当てる適合テストは `agent/conformance.test.ts` ([app.md](app.md) のテストの表)。
 
 ### 外から持ってくるものは版で固定する
