@@ -1051,6 +1051,26 @@ class Engine implements DomHost, BrowserHost, RenderHost {
         if (name.startsWith('#')) return Number.NaN;
         // 規格に無いスキーム (`bml://` など) は、今の文書のまま失敗を返す (STD-B24 第二編 7.6.8: 失敗は NaN)
         if (this.unknownName(name)) return Number.NaN;
+        // 移れると決まるまで今の文書を捨てない。捨ててから読めないと入口から出直すことになり、
+        // 入口が invisible のまま d を待つ局 (NHK) ではデータ放送が閉じたように見える
+        const ref = this.resources.resolve(name, this.current);
+        if (ref === null || ref.module === null) {
+            const remote = /^(https?|ftp):/i.test(name.trim());
+            this.report(
+                `#launch ${name}`,
+                remote
+                    ? `通信の文書にはまだ移れないので、今の文書のまま失敗を返します: ${name}`
+                    : `放送の中の文書として読めない名前なので、今の文書のまま失敗を返します: ${name}`,
+            );
+            return Number.NaN;
+        }
+        if (this.resources.missing(ref)) {
+            this.report(
+                `#launch ${name}`,
+                `移る先のモジュールが放送に無いので、今の文書のまま失敗を返します: ${name}`,
+            );
+            return Number.NaN;
+        }
         void this.load(name);
         return ABORT;
     }
