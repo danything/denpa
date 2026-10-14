@@ -51,7 +51,8 @@ denpa-font の `DENPA_COMMIT` を上げて (元に無い字は描き方を足し
 
 ## コンテナイメージ `denpa-agent` に入るもの
 
-[agent/Dockerfile](../agent/Dockerfile)。.NET の Native AOT で 1 つのバイナリにしてあり、
+[agent/Dockerfile](../agent/Dockerfile)。土台は distroless (`gcr.io/distroless/cc-debian13`。Debian 13 のパッケージから要るものだけを置いたもの)。
+.NET の Native AOT で 1 つのバイナリにしてあり、
 **NuGet の依存は 0** (JSON はランタイムの `System.Text.Json`)。
 
 | 名前 | 何に | 出どころ | ライセンス |
@@ -63,7 +64,7 @@ denpa-font の `DENPA_COMMIT` を上げて (元に無い字は描き方を足し
 | asicen-userland (`/opt/asicen-userland`。**上流のリリース待ちで、いまは空**) | PLEX PX-W3U3 のユーザー空間ドライバ (試験的)。`asicend` / `asicenctl`、あればファームウェアを流す `asicen-probe` (配布物に入っている `asicen-ts` と pcscd 用 IFD ハンドラは使わない) | <https://github.com/Khronos31/asicen-userland> | **GPL-2.0** (px4-userland 由来の GPL-2.0-only と GPL-2.0-or-later の組み合わせ。静的リンクの libusb は LGPL-2.1+、musl と GCC ランタイムもそれぞれの条件。配布物の `licenses/` を同梱のまま置く) |
 | ASICEN ファームウェア (`/opt/asicen-userland/firmware/asicen-loader.bin`、16,384 バイト。**入るのは上流のリリースから**) | 挿した直後の PX-W3U3 に流し込む | asicen-userland の配布アーカイブに入っているものをそのまま (元は PLEX 公式 Linux ドライバの `loader.ko` の `FirmBin`、SHA-256 `b45d510200a1690b3ca358d93de13f40e1d3567b663c17e773349ad96f597aa8`。イメージを組むときに突き合わせる) | **ライセンス無し・再配布の権利は未確定** (上流 NOTICES.md の判断で配布物に入る。上流が添える `licenses/VENDOR-FIRMWARE-NOTICE.txt` に権利未確定・元の成果物・大きさ・SHA-256 が書いてあり、同じ場所に置いてある。[agent.md](agent.md#px-w3u3-は-asicen-userland-で-試験的上流のリリース待ち)) |
 | Siano ISDB-T ファームウェア (`/opt/siano-userland/firmware/isdbt_rio.inp`、85,840 バイト) | siano-ts が USB で流し込む | siano-userland の配布アーカイブに入っているもの (Siano Mobile Silicon) | **Siano の再配布許諾** (無改変なら再配布可。解析は禁止。許諾の文面 `LICENCE.siano` を同じ場所に置いてある) |
-| ca-certificates / openssl | `CARD_URL` を https で指したときの検証 | Debian | MPL-2.0 / Apache-2.0 |
+| 土台 (glibc・libssl・ca-certificates・libstdc++・tzdata) | エージェントを動かす。libssl と ca-certificates は `CARD_URL` を https で指したときの検証 | <https://github.com/GoogleContainerTools/distroless> (中身は Debian のパッケージ) | 組み方は Apache-2.0。中身はパッケージごと: glibc は LGPL-2.1+、OpenSSL は Apache-2.0、ca-certificates は MPL-2.0、libstdc++ は GPL-3.0+ (GCC Runtime Library Exception)、tzdata はパブリックドメイン |
 
 ### Mac に入れるもの (`install.sh`)
 

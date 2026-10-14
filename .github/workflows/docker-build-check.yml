@@ -27,6 +27,7 @@ on:
       - 'bun.lock'
       - '.dockerignore'
       - '.github/workflows/docker-build-check.yml'
+      - '.github/image-smoke.sh'
   workflow_dispatch: {}
 
 concurrency:
@@ -79,3 +80,18 @@ jobs:
           push: false
           pull: true
           cache-from: type=gha,scope=${{ matrix.image.scope }}-${{ matrix.arch.name }}
+          # 下の起動の確かめに使う。push はしないので、名前はこのジョブの中だけのもの
+          load: true
+          tags: smoke/${{ matrix.image.name }}
+
+      # 組めても起こすと落ちることがある (共有ライブラリの欠け・土台の入れ替え)。
+      # CI のテストはイメージを使わないので、中の ffmpeg とエージェントが動くかはここで見る
+      - name: Smoke test
+        run: bash .github/image-smoke.sh "${{ matrix.image.name }}" "smoke/${{ matrix.image.name }}"
+
+      # 大きさを残す (展開後と、push したときに近い gzip の大きさ)。増減を PR で比べるため
+      - name: Size
+        run: |
+          image="smoke/${{ matrix.image.name }}"
+          echo "展開後: $(docker image inspect -f '{{.Size}}' "$image" | numfmt --to=si)B"
+          echo "gzip: $(docker save "$image" | gzip | wc -c | numfmt --to=si)B"

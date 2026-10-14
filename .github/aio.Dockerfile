@@ -3,8 +3,9 @@
 # チューナーを挿した機械でそのまま全部動かすとき (NAS・Home Assistant のアドオンなど) 用。
 # 組み直さない — main で組んだ `denpa` に、`denpa-agent` の実行ファイルと
 # px4-userland / siano-userland / asicen-userland を写すだけ (増えるのは数 MB)。RUN が無いので、
-# arm64 もエミュレーション無しで数秒で組める。どちらの土台も Debian trixie-slim なので、
-# エージェントが要るもの (setsid) は本体の側にもある。
+# arm64 もエミュレーション無しで数秒で組める。エージェントの土台 (distroless/cc-debian13) も
+# 本体の土台 (trixie-slim) も Debian 13 なので、エージェントが要るもの (glibc・libssl・ca-certificates) は
+# 本体の側にもある。
 #
 # 起こし方と止め方は aio-entrypoint.sh。置き場は既定のまま両方で同じ: DB は `/data`、
 # エージェントの設定 (`tuners.json` / `channels.json`) は `/config`、録画は `/media` の下

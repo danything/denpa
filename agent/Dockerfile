@@ -139,15 +139,21 @@ RUN set -eu && mkdir -p /opt/asicen-userland && cd /tmp && \
     rm -rf /tmp/*
 
 # ---------------------------------------------------------------------------
-FROM docker.io/library/debian:trixie-slim
-
+# **土台は distroless (Debian 13 = trixie。組む段の sdk:10.0 と同じ版なので glibc も合う)。**
+# 入っているのは glibc・libssl・ca-certificates・libstdc++ と tzdata くらいで、シェルも apt も無い。
+# エージェントが要るのはこれで全部: 実行ファイルが直に繋ぐのは libc と libm だけ、
+# CARD_URL を https で指したときは .NET の HttpClient が libssl を読み、証明書は ca-certificates で確かめる。
+# 子プロセスは px4d / px4ctl / siano-ts (どれも libc に依らない静的な ELF) をシェルを通さずに起こす。
+# シェル (`setsid sh -c`) を使うのは適合テストの偽の選局 (`FAKE_TUNE`) だけで、これはホストで組んだ
+# 実行ファイルで回すのでイメージには要らない。時刻はどこも UTC で扱うので TZ も渡さない。
+#
 # **`recisdb` も libaribb25 も pcscd も入れません。** 選局は自分でやり (ioctl)、
 # B25 も自分で復号し (B25.cs)、カードリーダーとも自分で話します (Ccid.cs / Px4Card.cs)。
-# 入れるのは ca-certificates だけ (CARD_URL を https で指したときの検証。openssl も一緒に入る —
-# .NET の HttpClient は libssl を使う)。時刻はどこも UTC で扱うので TZ も渡さない
-RUN apt-get update && \
-    apt-get -y --no-install-recommends install ca-certificates && \
-    apt-get clean && rm -rf /var/lib/apt/lists/*
+#
+# **`latest` (root で動く) を使う。`nonroot` にはしない。** USB と DVB のデバイスを開き、
+# px4d のソケットを /run/px4-userland に作るので、今までどおり root で動かす
+FROM gcr.io/distroless/cc-debian13:latest
+
 COPY --from=fetch /opt/ /opt/
 
 # 設定は PVC (/config) に置く。**どちらも denpa の画面が書く。**
