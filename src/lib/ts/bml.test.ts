@@ -206,6 +206,40 @@ describe('BmlDecoder', () => {
         expect(out.filter((message) => message.type === 'moduleListUpdated')).toHaveLength(1);
     });
 
+    /**
+     * **DII に載ったのに来ないモジュールは諦める。** 受け側は DII に在るモジュールを待ち続ける
+     * (「データ取得中」のまま)。DII が何度も繰り返し、カルーセルが何周も流れても来なければ、
+     * 外した一覧を配り直す (受け側はそれで「もう来ない」と決める)
+     */
+    const twoModules = (here: Uint8Array) =>
+        packetize(
+            BML_PID,
+            diiSection(DOWNLOAD_ID, 4066, [
+                { moduleId: 1, moduleSize: here.length, moduleVersion: 1, contentType: 'multipart/mixed' },
+                { moduleId: 2, moduleSize: 100, moduleVersion: 1, contentType: 'multipart/mixed' },
+            ]),
+        );
+    const lists = (out: ResponseMessage[]) =>
+        out.flatMap((message) =>
+            message.type === 'moduleListUpdated' ? [message.modules.map((module) => module.id)] : [],
+        );
+
+    test('DII に載ったのに何周しても来ないモジュールは、外した一覧を配り直す', () => {
+        const here = multipart([['/startup.bml', 'text/X-arib-bml', 'x'.repeat(2000)]]);
+        const round = [twoModules(here), ...carousel(here).slice(1)];
+        const out = decode(...head, ...Array.from({ length: 6 }, () => round).flat());
+        expect(lists(out)).toEqual([[1, 2], [1]]);
+        // 来たほうは1回だけ配る
+        expect(out.filter((message) => message.type === 'moduleDownloaded')).toHaveLength(1);
+    });
+
+    /** DII の繰り返しはカルーセルの一周より短いことがある。DII が繰り返しただけでは諦めない */
+    test('カルーセルが流れていなければ、DII が繰り返しても諦めない', () => {
+        const here = multipart([['/startup.bml', 'text/X-arib-bml', 'x'.repeat(2000)]]);
+        const out = decode(...head, ...Array.from({ length: 10 }, () => twoModules(here)));
+        expect(lists(out)).toEqual([[1, 2]]);
+    });
+
     /** 版が上がれば中身が変わっている。**配り直さないと古い画面のまま** */
     test('版が上がれば配り直す', () => {
         const first = multipart([['/startup.bml', 'text/X-arib-bml', '<bml>1</bml>']]);
