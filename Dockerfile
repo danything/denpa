@@ -150,7 +150,7 @@ COPY patches/ /patches/
 # ライブラリは /usr/local/lib に置き、`--enable-rpath` で ffmpeg / ffprobe にその場所を書き込む
 # (ld.so の既定の検索先ではないので、ldconfig や LD_LIBRARY_PATH に頼らない)。
 # 実行イメージへ運ぶものは /out にまとめる。.so の版の symlink は運ばず、実行時に読まれる
-# SONAME の名前 (libavcodec.so.62 など) の実体だけを置く — COPY で symlink を辿ると同じ中身が並ぶため
+# SONAME の名前 (libavcodec.so.63 など) の実体だけを置く — COPY で symlink を辿ると同じ中身が並ぶため
 RUN case "${TARGETARCH}" in \
       amd64) qsv_dev=libvpl-dev qsv_flag=--enable-libvpl ;; \
       arm64) qsv_dev="" qsv_flag="" ;; \
