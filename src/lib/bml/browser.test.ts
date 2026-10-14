@@ -29,7 +29,7 @@ interface Setup {
     run(source: string): Promise<Value>;
 }
 
-function setup(): Setup {
+function setup(active = '/40/0000/startup.bml'): Setup {
     const xml = parseXml(BML);
     if (xml === null) throw new Error();
     const doc = new BmlDocument(xml);
@@ -69,6 +69,7 @@ function setup(): Setup {
             body: Uint8Array.from([...new TextDecoder().decode(body)].map((c) => c.charCodeAt(0))),
         }),
         confirm: async () => null,
+        get: async () => null,
     };
     const browserHost: BrowserHost = {
         realm,
@@ -94,7 +95,7 @@ function setup(): Setup {
             networkId: 0x7fe1,
         }),
         now: () => Date.UTC(2026, 9, 12, 3),
-        activeDocument: () => '/40/0000/startup.bml',
+        activeDocument: () => active,
         launch: (name) => {
             launched.push(name);
             return ABORT;
@@ -196,6 +197,24 @@ describe('browser.*', () => {
         `);
         // Ctrl.Media は isSupportedMedia が答えるのと揃える。PPP・常駐アプリ・外のブラウザ・AIT は無い
         expect(items(result)).toEqual([1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 1, null]);
+    });
+
+    test('通信の文書からは NVRAM の局の領域を使えない (local_web と受信機の設定を読むことだけ)', async () => {
+        const s = setup('https://www.example.com/a.bml');
+        const result = await s.run(`
+            var result = [
+                browser.writePersistentArray("nvram://local_web/0", "S:4B", new Array("ok")),
+                browser.readPersistentArray("nvram://local_web/0", "S:4B")[0],
+                browser.readPersistentArray("nvram://receiverinfo/zipcode", "S:7B")[0],
+                browser.writePersistentArray("nvram://local/0", "S:4B", new Array("ng")),
+                browser.readPersistentArray("nvram://local/0", "S:4B"),
+                browser.readPersistentArray("nvram://tr_common/0", "S:4B"),
+                browser.checkAccessInfoOfPersistentArray("nvram://local/0"),
+                browser.checkAccessInfoOfPersistentArray("nvram://local_web/0"),
+                browser.checkAccessInfoOfPersistentArray("nvram://receiverinfo/zipcode")
+            ];
+        `);
+        expect(items(result)).toEqual([4, 'ok  ', '1000001', Number.NaN, null, null, Number.NaN, 2, 1]);
     });
 
     test('launchDocument は戻らない', async () => {

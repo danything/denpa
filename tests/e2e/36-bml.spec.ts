@@ -157,8 +157,12 @@ test.describe('データ放送のエンジン', () => {
         );
     });
 
-    test('通信の文書・放送に無い文書へ移ろうとしても、データ放送は閉じずに失敗を返す', async ({ page }) => {
+    test('取れない通信の文書・放送に無い文書へ移ろうとしても、データ放送は閉じずに失敗を返す', async ({
+        page,
+    }) => {
         await prepare(page);
+        // 中継が断る (双方向がオンでもオフでも、通信の文書は取れずに NaN が返る)
+        await page.route('**/api/bml/proxy**', (route) => route.fulfill({ status: 502, body: 'refused' }));
         await openData(page);
         // d が届いたら、移れない文書へ順に移ろうとして、返ってきた値を出す
         await feed(

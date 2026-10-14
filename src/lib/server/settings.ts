@@ -71,9 +71,10 @@ export interface Settings {
      */
     prefecture: number;
     /**
-     * データ放送の双方向 (通信系コンテンツ) を使うか。**既定は切。**
+     * データ放送の双方向 (通信系コンテンツ) を使うか。**既定はオン** (テレビと同じく通信の項目が開く。
+     * 一度保存した人は、保存した値のまま)。
      *
-     * 入れると denpa のサーバが**放送局のサーバへ代理で取得し、送りもします**
+     * オンだと denpa のサーバが**放送局のサーバへ代理で取得し、送りもします**
      * (`server/bml-network.ts`)。取得 (GET) だけでなく、放送のアプリが組んだ
      * 応募・投票の送信 (POST = `transmitTextDataOverIP`) もそのまま中継します。
      * 切っている間は `isIPConnected` が 0 を返すので、放送のアプリは
@@ -169,8 +170,8 @@ export function settings(): Settings {
         fpsDetect: flag('fpsDetect', true),
         postalCode: normalizePostalCode(stored('postalCode') ?? ''),
         prefecture: normalizePrefecture(stored('prefecture')),
-        // **入れるまで外へ出ない。** 黙って通信が始まらないようにする
-        bmlNetwork: flag('bmlNetwork', false),
+        // テレビと同じく通信できるのが既定。設定画面の説明の1行目で、視聴の記録が送られうることを出す
+        bmlNetwork: flag('bmlNetwork', true),
         transcodeLimit: parseTranscodeLimit(stored('transcodeLimit')),
     };
 }
