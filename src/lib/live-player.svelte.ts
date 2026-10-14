@@ -93,6 +93,8 @@ const HOLD_MOST = 6_000;
  */
 const RETRY_FIRST = 1_000;
 const RETRY_MOST = 10_000;
+/** 番組が替わって作り直す (`restart`) のが、これより短い間に続いたら待つ (ms) */
+const RESTART_CALM = 30_000;
 /**
  * 映像だけがこれだけ遅れたら飛び直す (秒)。**口の動きが合わなくなる境目。**
  *
@@ -514,6 +516,8 @@ export function livePlayer(options: LivePlayerOptions = {}) {
      * サーバが帰ってくるのを待っているのだから、繋がらないのは当たり前
      */
     let attempts = $state(0);
+    /** 最後に作り直しを受けた時刻 (`restart`。`RESTART_CALM`) */
+    let restartedAt = 0;
     /** 画面を離れた。**もう繋ぎ直さない** */
     let left = false;
     /** 最後に詰まった時刻。無事が続いたかを見る */
@@ -1745,9 +1749,14 @@ export function livePlayer(options: LivePlayerOptions = {}) {
                 } else if (notice.type === 'restart') {
                     /*
                      * **番組が替わって音声・字幕の構成が変わった。** サーバは畳んだので、同じ局をすぐリクエストし直す
-                     * (音声を選び直したときと同じ。待たずに、前のフレームは貼ったまま)
+                     * (音声を選び直したときと同じ。待たずに、前のフレームは貼ったまま)。
+                     * **続けて来たら待つ** — 切り替わりの前後で並びが行き来する局で、作り直しを連打しない。
+                     * いつもの繋ぎ直し (待ちが倍々) に乗せる
                      */
-                    if (tuned !== null && element !== null) void tune(element, tuned, true);
+                    const now = Date.now();
+                    if (now - restartedAt < RESTART_CALM) reconnect();
+                    else if (tuned !== null && element !== null) void tune(element, tuned, true);
+                    restartedAt = now;
                 } else if (notice.type === 'notice') {
                     // 映像は出ている。断り書きに残す (GPU でエンコードできずにソフトウェアへ降りた、など)
                     warning = notice.message;
