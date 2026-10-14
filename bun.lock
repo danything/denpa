@@ -7,7 +7,7 @@
       "devDependencies": {
         "@anyblades/blades": "3.0.0",
         "@biomejs/biome": "^2.5.15",
-        "@iconify-json/lucide": "^1.2.143",
+        "@iconify-json/lucide": "^1.2.144",
         "@playwright/test": "^1.64.0",
         "@sveltejs/adapter-node": "^6.0.0",
         "@sveltejs/kit": "^3.0.1",
@@ -111,7 +111,7 @@
 
     "@floating-ui/utils": ["@floating-ui/utils@0.2.12", "", {}, "sha512-HpCo8tmWzLVad5s2d19EhAz5zqrrQ6s69qd6moPMQvkOuSwDT1YgRfWSVuc4ennqrgv3OHppiOGMQ7oC13yIww=="],
 
-    "@iconify-json/lucide": ["@iconify-json/lucide@1.2.143", "", { "dependencies": { "@iconify/types": "*" } }, "sha512-YSggiBVmSY5IvLoKS5pUBoNYkon5g5bac0/JvYCIaFbhTfsTfkIHG2nCXWSk03tu5C4IEmyZ4qwfwbO9CXqLag=="],
+    "@iconify-json/lucide": ["@iconify-json/lucide@1.2.144", "", { "dependencies": { "@iconify/types": "*" } }, "sha512-b1+e91RGPd4lLck6nTXeoQFiu8z/G3pXNl/tbsqfleTSzDdI9hUzKYQSGiA6T86NmaI0FtrCDM9MjMhoCwtTMg=="],
 
     "@iconify/types": ["@iconify/types@2.0.0", "", {}, "sha512-+wluvCrRhXrhyOmRDJ3q8mux9JkKy5SJ/v8ol2tu4FVjyYvtEzkc/3pK15ET6RKg4b4w4BmTk1+gsCUhf21Ykg=="],
 
