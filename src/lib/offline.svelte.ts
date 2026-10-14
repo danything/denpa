@@ -23,6 +23,7 @@ import {
     storeResponse,
     videos,
 } from './offline-db';
+import type { PlayAxis } from './ts/playback';
 
 /** 画面に映すぶんだけ。blob はここに持たない (要るときに IndexedDB から) */
 export interface OfflineEntry {
@@ -404,8 +405,13 @@ export async function loadOffline(id: number): Promise<OfflineVideo | null> {
 }
 
 /** オフライン中に進んだ視聴位置を覚えておく。復帰時に flush がまとめて送る */
-export async function rememberResume(id: number, at: number, length: number): Promise<void> {
-    await resumeQueue.put({ id, at, length, updatedAt: Date.now() });
+export async function rememberResume(
+    id: number,
+    at: number,
+    length: number,
+    axis: PlayAxis | undefined,
+): Promise<void> {
+    await resumeQueue.put({ id, at, length, ...(axis === undefined ? {} : { axis }), updatedAt: Date.now() });
 }
 
 /**
@@ -427,7 +433,7 @@ async function flush(): Promise<void> {
             const res = await fetch(resolve(`api/recordings/${item.id}/resume`), {
                 method: 'POST',
                 headers: { 'content-type': 'application/json' },
-                body: JSON.stringify({ at: item.at, length: item.length }),
+                body: JSON.stringify({ at: item.at, length: item.length, source: item.axis }),
             });
             if (res.ok || res.status === 404) await resumeQueue.remove(item.id);
         } catch {

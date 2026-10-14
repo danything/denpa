@@ -5,10 +5,11 @@ import { orm } from '#lib/server/db.js';
 import { deleteRecordingFiles } from '#lib/server/files.js';
 import { sidecarPaths } from '#lib/server/metadata.js';
 import { relative } from '#lib/server/paths.js';
-import { encodedPath, tsPathOf } from '#lib/server/playback.js';
+import { encodedPath, rulerOf, tsPathOf } from '#lib/server/playback.js';
 import { recordingFromForm } from '#lib/server/recording.js';
 import { lastEncodeError, recordings } from '#lib/server/schema.js';
 import { settings } from '#lib/server/settings.js';
+import { fromTsTime } from '#lib/ts/watch.js';
 import type { Recording } from '#lib/types.js';
 
 /**
@@ -61,6 +62,13 @@ export function load({ params, url }) {
      * **エンコード済みの時刻で書いてある**ので、まだエンコードしていない録画では出さない
      */
     const hasData = encoded !== null && existsSync(sidecarPaths(encoded).dataBroadcast);
+
+    // 続きの位置は元の TS の物差しで覚えている。この画面の物差し (`playbackPlan` の `axis`) に直して渡す
+    if (recording.resume_ms !== null) {
+        recording.resume_ms = Math.round(
+            fromTsTime(recording.resume_ms / 1000, rulerOf(recording, null)) * 1000,
+        );
+    }
 
     // 郵便番号と都道府県は、ライブと同じく受信機の設定としてエンジンに渡す (`DataBroadcast`)
     const { postalCode, prefecture } = settings();

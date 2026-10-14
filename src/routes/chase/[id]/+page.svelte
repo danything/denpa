@@ -167,7 +167,8 @@
      */
     function sendResume(leaving = false): void {
         if (line === null || pos <= 0) return;
-        keepResume(data.rec.id, pos, total, leaving);
+        // 追っかけは元の TS を流す
+        keepResume(data.rec.id, pos, total, 'ts', leaving);
     }
 
     /** 操作列の出し入れ。ライブ・観る画面と同じ */

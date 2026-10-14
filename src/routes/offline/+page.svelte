@@ -74,7 +74,8 @@
         const at = video.currentTime;
         if (Math.abs(at - lastKept) < 5) return;
         lastKept = at;
-        void rememberResume(playing.id, at, video.duration || 0);
+        // 落としたものはエンコードしたもの
+        void rememberResume(playing.id, at, video.duration || 0, 'encoded');
     }
 
     async function remove(item: OfflineVideo): Promise<void> {

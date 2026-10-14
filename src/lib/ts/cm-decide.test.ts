@@ -144,10 +144,116 @@ describe('ロゴで決める', () => {
         expect(round(decideCm(recording(1800, promo, lit)))[1]).toEqual({ start: 600, end: 675 });
     });
 
+    test('近くに無音の無いロゴの消え際は CM の端にしない (途切れの中に境目が無ければ番組)', () => {
+        // 番組の途中 1000 でロゴが判定できなくなり、1016.4 の無音から先はまた出ている
+        const broken = [
+            { start: 10.2, end: 1000 },
+            { start: 1016.4, end: 1789.7 },
+        ];
+        const cm = decideCm(recording(1800, [10, 1016.4, 1790, 1805], broken));
+        expect(round(cm)).toEqual([
+            { start: 0, end: 10 },
+            { start: 1790, end: 1800 },
+        ]);
+    });
+
+    test('近くに無音の無いロゴの消え際からは、途切れの中の最初の境目から CM', () => {
+        // ロゴは 590 で消える (無音は無い)。CM は 600 の無音から 660 まで
+        const early = [{ start: 10.2, end: 590 }, logo[1]!];
+        expect(round(decideCm(recording(1800, joints, early)))[1]).toEqual({ start: 600, end: 660 });
+    });
+
+    test('録画の尻に接する消え際は、近くに無音が無くてもそこから CM (次の番組との境目)', () => {
+        const tail = [logo[0]!, { start: 660.3, end: 1780 }];
+        expect(round(decideCm(recording(1800, joints.slice(0, -2), tail))).at(-1)).toEqual({
+            start: 1780,
+            end: 1800,
+        });
+    });
+
     test('番組が戻る直前の 10 秒も提供', () => {
         const credits = [10, ...every15(600, 645), 655, 1790, 1805];
         const lit = [logo[0]!, { start: 655.3, end: 1789.7 }];
         expect(round(decideCm(recording(1800, credits, lit)))[1]).toEqual({ start: 600, end: 645 });
+    });
+});
+
+describe('実機の並び (TOKYO MX の 30 分番組の後半)', () => {
+    /*
+     * 実機の録画で、ロゴの途切れ・無音・切れ目の時刻を写したもの (秒は入れ物の頭から)。
+     * ロゴは 1527.99 で場面の途中で消え (近くに無音も切れ目も無い)、1544.41 の無音から 1558.46 まで出る。
+     * 1559.93 から CM、1618.42〜1628.43 はロゴの出ている提供、そこから録画の尻まで CM
+     */
+    const duration = 1825.657;
+    const silences: Range[] = [
+        { start: 8.0, end: 8.9 },
+        ...every15(142.4, 202.4).map((t) => ({ start: t - 0.5, end: t + 0.5 })),
+        ...every15(932.4, 992.4).map((t) => ({ start: t - 0.5, end: t + 0.5 })),
+        { start: 1454.581, end: 1455.121 },
+        { start: 1542.702, end: 1544.433 },
+        // 切れ目の無い無音 (番組の終わりの黒)
+        { start: 1556.632, end: 1558.934 },
+        { start: 1559.884, end: 1560.244 },
+        { start: 1587.758, end: 1588.929 },
+        { start: 1602.911, end: 1604.48 },
+        { start: 1617.888, end: 1618.475 },
+        { start: 1627.25, end: 1628.938 },
+        { start: 1642.865, end: 1643.952 },
+        { start: 1646.773, end: 1647.535 },
+        { start: 1672.759, end: 1673.951 },
+        { start: 1702.847, end: 1703.943 },
+        { start: 1717.907, end: 1718.963 },
+        { start: 1732.903, end: 1733.889 },
+        { start: 1747.81, end: 1748.921 },
+        { start: 1762.903, end: 1763.922 },
+        { start: 1777.921, end: 1778.944 },
+        { start: 1792.893, end: 1793.933 },
+        { start: 1807.861, end: 1808.982 },
+    ];
+    const cuts = [
+        8.44,
+        ...every15(142.4, 202.4),
+        ...every15(932.4, 992.4),
+        1454.386,
+        1544.41,
+        1559.925,
+        1588.42,
+        1588.921,
+        1603.435,
+        1604.436,
+        1618.417,
+        1628.427,
+        1643.442,
+        1647.479,
+        1673.438,
+        1703.435,
+        1718.417,
+        1733.432,
+        1748.413,
+        1763.428,
+        1778.443,
+        1793.425,
+        1808.44,
+    ];
+    const logo = [
+        { start: 8.6, end: 142.2 },
+        { start: 202.6, end: 932.2 },
+        { start: 992.458, end: 1460.526 },
+        { start: 1474.807, end: 1481.247 },
+        { start: 1493.626, end: 1527.993 },
+        { start: 1544.41, end: 1558.457 },
+        { start: 1618.484, end: 1628.427 },
+    ];
+
+    test('場面の途中でロゴが消えた所は番組。CM は無音のある所から', () => {
+        const cm = decideCm({ duration, silences, ...frames(duration, cuts), logo });
+        expect(round(cm)).toEqual([
+            { start: 0, end: 8.43 },
+            { start: 142.4, end: 202.4 },
+            { start: 932.4, end: 992.4 },
+            { start: 1559.93, end: 1618.43 },
+            { start: 1628.43, end: 1825.66 },
+        ]);
     });
 });
 

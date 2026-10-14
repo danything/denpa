@@ -3,6 +3,7 @@ import {
     chapterAt,
     cmSpans,
     DOUBLE_TAP,
+    fromTsTime,
     isCm,
     nextChapterAt,
     parseChapters,
@@ -13,6 +14,7 @@ import {
     skipCmAtStart,
     skipTarget,
     tap,
+    toTsTime,
     watchedToEnd,
     zoneOf,
 } from './watch';
@@ -280,6 +282,56 @@ describe('ffprobe のチャプターを読む', () => {
             ],
         });
         expect(parseChapters(shuffled).map((c) => c.start)).toEqual([0, 60]);
+    });
+});
+
+describe('続きの位置の物差し', () => {
+    // 元の TS の 10〜100 秒と 160〜300 秒を残し、100〜160 秒の CM を切った
+    const cut = {
+        kept: [
+            { start: 10, end: 100 },
+            { start: 160, end: 300 },
+        ],
+        skip: 3,
+    };
+    const plain = { kept: null, skip: 3 };
+
+    test('CM を切ったものは、残した区間をつないで数える', () => {
+        expect(fromTsTime(50, cut)).toBe(40);
+        expect(fromTsTime(200, cut)).toBe(130);
+        expect(toTsTime(40, cut)).toBe(50);
+        expect(toTsTime(130, cut)).toBe(200);
+    });
+
+    /** 元の TS (追っかけ) で CM の途中まで観たら、エンコードしたものでは CM の後の本編から */
+    test('切った CM の中は、その後の本編の頭へ寄せる', () => {
+        expect(fromTsTime(120, cut)).toBe(90);
+        expect(fromTsTime(5, cut)).toBe(0);
+        expect(fromTsTime(400, cut)).toBe(230);
+        expect(toTsTime(500, cut)).toBe(300);
+    });
+
+    test('切っていないものは、捨てた頭のぶんだけずらす', () => {
+        expect(fromTsTime(50, plain)).toBe(47);
+        expect(toTsTime(47, plain)).toBe(50);
+        expect(fromTsTime(1, plain)).toBe(0);
+    });
+
+    test('区間の終わりちょうどは次の区間の頭。往復すると元に戻る', () => {
+        expect(fromTsTime(100, cut)).toBe(90);
+        expect(toTsTime(90, cut)).toBe(160);
+        for (const at of [10, 50, 99, 160, 250]) expect(toTsTime(fromTsTime(at, cut), cut)).toBe(at);
+        for (const at of [0, 40, 90, 200]) expect(fromTsTime(toTsTime(at, cut), cut)).toBe(at);
+    });
+
+    test('残した区間が空なら、切っていないものと同じ', () => {
+        expect(fromTsTime(50, { kept: [], skip: 3 })).toBe(47);
+        expect(toTsTime(47, { kept: [], skip: 3 })).toBe(50);
+    });
+
+    test('元の TS で観るときはそのまま', () => {
+        expect(fromTsTime(120, null)).toBe(120);
+        expect(toTsTime(120, null)).toBe(120);
     });
 });
 

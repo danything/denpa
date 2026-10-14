@@ -1032,11 +1032,11 @@
     function remember(leaving = false): void {
         if (!ready) return;
         if (canvas !== null) {
-            keepResume(rec.id, canvas.currentTime, length, leaving);
+            keepResume(rec.id, canvas.currentTime, length, info?.axis, leaving);
             return;
         }
         if (video === null) return;
-        keepResume(rec.id, video.currentTime, video.duration, leaving);
+        keepResume(rec.id, video.currentTime, video.duration, info?.axis, leaving);
     }
 
     /**

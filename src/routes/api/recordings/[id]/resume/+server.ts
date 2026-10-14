@@ -2,9 +2,11 @@ import { error } from '@sveltejs/kit';
 import { eq } from 'drizzle-orm';
 import { now, orm } from '#lib/server/db.js';
 import { emit } from '#lib/server/events.js';
+import { rulerOf } from '#lib/server/playback.js';
 import { recordingOr404 } from '#lib/server/recording.js';
 import { recordings } from '#lib/server/schema.js';
-import { RESUME_EDGE, resumePoint, watchedToEnd } from '#lib/ts/watch.js';
+import { parseFileSource } from '#lib/source.js';
+import { RESUME_EDGE, resumePoint, toTsTime, watchedToEnd } from '#lib/ts/watch.js';
 
 /**
  * どこまで観たかを覚える。**続きから観るためだけの目印。**
@@ -18,6 +20,12 @@ import { RESUME_EDGE, resumePoint, watchedToEnd } from '#lib/ts/watch.js';
  * 端に来たぶんは消して、頭から出し直す (境目は `ts/watch.ts`)。
  * 代わりに**観終えた時刻を書く** (`watched_at`)。一覧の「未視聴」の印はこれで外れる
  *
+ * ## 元の TS の物差しで覚える
+ *
+ * 送られてくる位置は、観ているファイル (`source`。無ければ観る画面と同じ決め方) の物差し。覚えるのは
+ * 元の TS の物差しに直したもの (`ts/watch.ts` の `Ruler`)。CM を切ってエンコードしたものと元の TS (追っかけ) で
+ * 同じ続きを指せるように。答えの `resume` は送られてきた物差しのまま
+ *
  * ## 通知は出さない
  *
  * 15秒おきに呼ばれるので、`emit('recordings')` すると一覧が繋いでいる人の
@@ -30,12 +38,15 @@ export async function POST({ params, request }) {
 
     let at: unknown;
     let length: unknown;
+    let source: unknown;
     try {
-        ({ at, length } = await request.json());
+        ({ at, length, source } = await request.json());
     } catch {
         error(400, 'リクエストの本文を読めませんでした');
     }
     if (typeof at !== 'number' || !Number.isFinite(at) || at < 0) error(400, '位置が不正です');
+    const named = typeof source === 'string' ? parseFileSource(source) : null;
+    if (source !== undefined && named === null) error(400, 'source が不正です');
 
     const seconds = typeof length === 'number' && Number.isFinite(length) ? length : 0;
     const keep = resumePoint(at, seconds);
@@ -45,7 +56,7 @@ export async function POST({ params, request }) {
     orm()
         .update(recordings)
         .set({
-            resume_ms: keep === null ? null : Math.round(keep * 1000),
+            resume_ms: keep === null ? null : Math.round(toTsTime(keep, rulerOf(recording, named)) * 1000),
             ...(finished ? { watched_at: now() } : {}),
             updated_at: now(),
         })

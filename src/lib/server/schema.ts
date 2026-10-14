@@ -418,7 +418,8 @@ export const recordings = sqliteTable(
         /**
          * どこまで観たか (ms)。**続きから観るためだけの目印。** まだ観ていない・観終えたものは NULL。
          * 端末に持たせず DB に置くのは、居間のタブレットで観たものを机の PC で
-         * 続けられるようにするため (`api/recordings/<id>/resume`)
+         * 続けられるようにするため (`api/recordings/<id>/resume`)。**元の TS の物差し** (入れ物の頭から) で覚え、
+         * エンコードしたもので観るときに直す (`ts/watch.ts` の `Ruler`。CM を切ったものと追っかけで同じ場面を指すため)
          */
         resume_ms: integer('resume_ms'),
         /**

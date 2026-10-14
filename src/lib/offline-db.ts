@@ -8,6 +8,8 @@
  * - `resume` … オフライン中に進んだ視聴位置。復帰時にまとめて送る
  */
 
+import type { PlayAxis } from './ts/playback';
+
 const DB = 'denpa-offline';
 const VERSION = 1;
 
@@ -61,6 +63,8 @@ export interface ResumeItem {
     /** 再生位置 (秒)。サーバの `POST …/resume` と同じ形式 */
     at: number;
     length: number;
+    /** `at` の物差し (`POST …/resume` の `source`)。無ければサーバの既定 (観る画面と同じ決め方) */
+    axis?: PlayAxis;
     updatedAt: number;
 }
 
