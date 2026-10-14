@@ -406,6 +406,34 @@ describe('文書の名前', () => {
 });
 
 describe('移れない文書へ移ろうとしても閉じない', () => {
+    test('DII に載っていてまだ届いていないモジュールへは、届くのを待って移る', async () => {
+        const { bml } = open();
+        const [pmt, , entry] = carousel([
+            startup('', 'function start() { browser.launchDocument("/40/0001/next.bml", "cut"); }'),
+        ]);
+        const list: ResponseMessage = {
+            type: 'moduleListUpdated',
+            componentId: 0x40,
+            modules: [
+                { id: 0, version: 1, size: 1 },
+                { id: 1, version: 1, size: 1 },
+            ],
+            dataEventId: 1,
+        };
+        feedAll(bml, [PROGRAM, pmt!, list, entry!]);
+        const [, , next] = carousel([
+            bmlFile('next.bml', '', 'function start() { browser.Ureg[1] = browser.getActiveDocument(); }'),
+        ]);
+        await watch(() => bml.path === '/40/0000/startup.bml');
+        // 入口の launchDocument が先に走り、モジュールを待っているところへ届ける
+        await new Promise((resolve) => setTimeout(resolve, 50));
+        expect(bml.path).toBe('/40/0000/startup.bml');
+        bml.feed({ ...(next as Extract<ResponseMessage, { type: 'moduleDownloaded' }>), moduleId: 1 });
+        const { done } = await watch(() => inside(bml).ureg[1] !== '');
+        expect(done).toBe(true);
+        expect(inside(bml).ureg[1]).toBe('/40/0001/next.bml');
+    });
+
     /**
      * 入口は invisible のまま次の文書へ渡し、次の文書が出てくる (NHK と同じ形)。入口から出直すと
      * 入口の invisible で隠れ、データ放送が閉じたように見える
