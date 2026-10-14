@@ -1060,7 +1060,7 @@ class Engine implements DomHost, BrowserHost, RenderHost {
                 `#launch ${name}`,
                 remote
                     ? `通信の文書にはまだ移れないので、今の文書のまま失敗を返します: ${name}`
-                    : `放送の中の文書を指していないので、今の文書のまま失敗を返します: ${name}`,
+                    : `放送の中の文書として読めない名前なので、今の文書のまま失敗を返します: ${name}`,
             );
             return Number.NaN;
         }
